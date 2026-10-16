@@ -1,96 +1,76 @@
-using System.Globalization;
 using System.Text.Json.Nodes;
 
 namespace Cqrs.Vermessung;
 
 /// <summary>
-/// Die Parameter eines Laufs — fest, damit jede Messung dieselbe ist (§0.1). Über die Kommandozeile wählbar sind nur Art, Anlass, Spalte,
-/// Szenarien und Wiederholungen; <c>--probe</c> verkürzt alles für einen Funktionstest des Treibers (Ergebnis nicht im Repo).
+/// Die Parameter eines Laufs — fest, damit jede Messung dieselbe ist (docs/12 §12.4). Über die Kommandozeile wählbar sind nur der Anlass und
+/// die Art (Leistung oder <c>--stoerung</c>).
 /// </summary>
 internal sealed class Optionen
 {
-    public string Art { get; private set; } = "messung";
+    public bool Stoerung { get; private set; }
     public string Anlass { get; private set; } = "";
-    public string? Spalte { get; private set; }
-    public HashSet<string> Szenarien { get; private set; } = new() { "S1", "S2", "S3", "S4", "S5" };
-    public int Wiederholungen { get; private set; } = 1;
-    public bool Probe { get; private set; }
-    /// <summary><c>--art leerlauf</c>: die Messung mit Zeitreihen statt Leerlauf-Fenster (vor der Last, danach, nach einem Neustart) — eine
-    /// Diagnose (PF-14), kein Messlauf; das Ergebnis liegt wie bei <c>--probe</c> im Temp-Verzeichnis.</summary>
-    public bool Diagnose => Art == "leerlauf";
-    /// <summary>Diagnose: Länge der Zeitreihen (leer, nach der Last, nach dem Neustart) und ihr Takt.</summary>
-    public TimeSpan ZeitreiheLeer => TimeSpan.FromSeconds(60);
-    public TimeSpan ZeitreiheNachLast => TimeSpan.FromSeconds(300);
-    public TimeSpan ZeitreiheNeustart => TimeSpan.FromSeconds(150);
-    public TimeSpan ZeitreiheTakt => TimeSpan.FromSeconds(10);
+    public string Art => Stoerung ? "stoerung" : "leistung";
 
-    // ── feste Parameter (Höchstlast, Plan §0.1) ──
-    /// <summary>Wie lange ein Volllast-Block sendet.</summary>
-    public TimeSpan Fenster => Probe ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(15);
-    /// <summary>Wie lange der Rückstand nach dem Fenster höchstens abgebaut wird, bevor der Block als „nicht abgebaut“ gilt.</summary>
+    /// <summary>Jeder Lastblock läuft so oft im selben Host (frische Aggregate, wachsendes Log) — die Tabelle zeigt Median und Spanne.</summary>
+    public int Wiederholungen => 3;
+    /// <summary>Wie lange ein Block höchstens sendet (meist endet er früher an seiner Höchstzahl).</summary>
+    public TimeSpan Fenster => TimeSpan.FromSeconds(15);
+    /// <summary>Wie lange der Rückstand nach dem Senden höchstens abgebaut wird, bevor der Block als „nicht abgebaut“ gilt.</summary>
     public TimeSpan AbbauFrist => TimeSpan.FromSeconds(120);
-    /// <summary>S1/S2: so viele TIFF-Paare auf einmal ins Quell-Verzeichnis (ein Stoß).</summary>
-    public int StossS1 => Probe ? 100 : 600;
-    public int StossS2 => Probe ? 50 : 200;
-    /// <summary>Gleichzeitige Sender je Block.</summary>
-    public int[] SenderS3 => [8, 64];
-    public int[] SenderS5 => [1, 8, 64];
-    /// <summary>Höchstzahl Vorgänge je Block: unter Höchstlast nimmt der Eingang weit mehr an, als dahinter durchkommt — ohne Deckel wüchse
-    /// der Rückstand auf zehntausende und der Abbau dauerte Stunden.</summary>
-    public int MaxS3 => Probe ? 500 : 2000;
-    public int MaxS5 => Probe ? 1000 : 3000;
-    /// <summary>Das Leerlauf-Fenster: zwei ganze Poll-Perioden (30 s), damit jeder periodische Takt gleich oft hineinfällt (PF-14).</summary>
-    public TimeSpan Leerlauf => Probe ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(60);
-    /// <summary>Wie lange der Leerlauf höchstens auf das Ende des Nachlaufs wartet (alle Konsumenten am Kopf des Logs), bevor er trotzdem misst.</summary>
-    public TimeSpan NachlaufFrist => Probe ? TimeSpan.FromSeconds(90) : TimeSpan.FromSeconds(180);
+    /// <summary>Bildeingang: so viele TIFF-Paare auf einmal ins Quell-Verzeichnis (ein Stoß).</summary>
+    public int Bildpaare => 600;
+    /// <summary>Heißer Schreiber: so viele Teile, von <see cref="Sender"/> Sendern, an EINEN Sammelvorgang.</summary>
+    public int Teile => 2000;
+    /// <summary>Verteilt: Vorgänge der Prüfdomäne — ruhig mit einem Sender, an der Decke mit <see cref="Sender"/>.</summary>
+    public int VorgaengeRuhig => 1000;
+    public int VorgaengeDecke => 3000;
+    public int Sender => 64;
+    /// <summary>Leerlauf-Fenster: zwei ganze Poll-Perioden (30 s), damit jeder periodische Takt gleich oft hineinfällt (PF-14).</summary>
+    public TimeSpan Leerlauf => TimeSpan.FromSeconds(60);
+    /// <summary>Wie lange der Leerlauf höchstens auf das Ende des Nachlaufs wartet (alle Konsumenten am Kopf des Logs).</summary>
+    public TimeSpan NachlaufFrist => TimeSpan.FromSeconds(180);
+    /// <summary>Wie lange der Neuaufbau höchstens dauern darf.</summary>
+    public TimeSpan NeuaufbauFrist => TimeSpan.FromSeconds(300);
     /// <summary>
-    /// Ruhe nach dem ersten Start eines Hosts, bevor gemessen wird (nicht nach einem Neustart im Störungslauf): der JIT stuft heiße Methoden
-    /// erst nach und nach hoch. Ohne sie misst der erste Block kalten Code — gemessen S3-8 −28 % Durchsatz. Früher bekam der Host diese Zeit
-    /// zufällig: auf einer frischen DB meldete <c>/health</c> erst gesund, wenn der Prozess-Poll nach 30 s die Event-Tabellen angelegt hatte.
+    /// Ruhe nach dem ersten Start eines Hosts, bevor gemessen wird: der JIT stuft heiße Methoden erst nach und nach hoch. Ohne sie misst der
+    /// erste Block kalten Code (gemessen: −28 % Durchsatz am heißen Schreiber).
     /// </summary>
-    public TimeSpan Warmlauf => Probe ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(30);
+    public TimeSpan Warmlauf => TimeSpan.FromSeconds(30);
 
     public static Optionen Lies(string[] args)
     {
         var o = new Optionen();
         for (var i = 0; i < args.Length; i++)
         {
-            string Wert() => i + 1 < args.Length ? args[++i] : throw new ArgumentException($"{args[i]} braucht einen Wert");
             switch (args[i])
             {
-                case "--art": o.Art = Wert(); break;
-                case "--anlass": o.Anlass = Wert(); break;
-                case "--spalte": o.Spalte = Wert(); break;
-                case "--szenarien": o.Szenarien = Wert().Split(',').Select(s => s.Trim().ToUpperInvariant()).ToHashSet(); break;
-                case "--wiederholungen": o.Wiederholungen = int.Parse(Wert(), CultureInfo.InvariantCulture); break;
-                case "--probe": o.Probe = true; break;
-                default: throw new ArgumentException($"unbekannte Option {args[i]}");
+                case "--anlass": o.Anlass = i + 1 < args.Length ? args[++i] : throw new ArgumentException("--anlass braucht einen Wert"); break;
+                case "--stoerung": o.Stoerung = true; break;
+                default: throw new ArgumentException($"unbekannte Option {args[i]} (nur --anlass <a> und --stoerung)");
             }
         }
-        if (o.Anlass.Length == 0) throw new ArgumentException("--anlass fehlt (z. B. baseline, phase-1)");
+        if (o.Anlass.Length == 0) throw new ArgumentException("--anlass fehlt (z. B. server-leistung)");
         return o;
     }
 
     public JsonObject Json() => new()
     {
-        ["szenarien"] = new JsonArray(Szenarien.Order().Select(s => (JsonNode)s).ToArray()),
         ["wiederholungen"] = Wiederholungen,
-        ["probe"] = Probe,
         ["fenster_s"] = Fenster.TotalSeconds,
         ["abbau_frist_s"] = AbbauFrist.TotalSeconds,
         ["warmlauf_s"] = Warmlauf.TotalSeconds,
-        ["s1_stoss_paare"] = StossS1,
-        ["s2_stoss_paare"] = StossS2,
-        ["s3_sender"] = new JsonArray(SenderS3.Select(n => (JsonNode)n).ToArray()),
-        ["s3"] = "je Block ein Sammelvorgang (N = 1 000 000, die Barriere wird nicht erreicht); je Teil StarteTeilauftrag + SchließeTeilauftragAb",
-        ["s5_sender"] = new JsonArray(SenderS5.Select(n => (JsonNode)n).ToArray()),
-        ["s3_hoechstens_teile_je_block"] = MaxS3,
-        ["s5_hoechstens_vorgaenge_je_block"] = MaxS5,
-        ["s5_muster"] = "je 10 Vorgänge: 8 Aufträge ok, 1 Auftrag gegen volles Kontingent (Kompensation), 1 Verteilung auf 4 Ziele; 50 Posten, 20 Ziele",
+        ["bildeingang"] = $"Stoß von {Bildpaare} TIFF-Paaren (96 × 64), ein Sender",
+        ["heiss"] = $"{Teile} Teile von {Sender} Sendern an EINEN Sammelvorgang (N = 1 000 000), je Teil StarteTeilauftrag + SchließeTeilauftragAb",
+        ["verteilt"] = $"Prüfdomäne, ruhig: 1 Sender, höchstens {VorgaengeRuhig} Vorgänge; Decke: {Sender} Sender, höchstens {VorgaengeDecke} Vorgänge; "
+                       + "je 10 Vorgänge 8 Aufträge, 1 Auftrag gegen ein volles Kontingent (Kompensation), 1 Verteilung auf 4 Ziele; 50 Posten, 20 Ziele",
+        ["neuaufbau"] = "Host gestoppt, der gespeicherte Projektions-Stand gelöscht (wirkt wie eine Code-Änderung in Sim), Host gestartet: alle Projektionen "
+                        + "lesen das Log ab 0; Dauer vom ersten Abbau bis kein Rückstand (/monitoring/metrics, alle 200 ms)",
         ["leerlauf_s"] = Leerlauf.TotalSeconds,
         ["leerlauf"] = "erst nach dem Nachlauf (alle Poll-Cursor und Projektions-Positionen am Kopf des Logs, höchstens nachlauf_frist_s), dann das Fenster",
         ["nachlauf_frist_s"] = NachlaufFrist.TotalSeconds,
-        ["sichtbar"] = "S1/S2: Query GetImagePair je offenem Paar (komplett), alle 100 ms; S3: TeilVerbucht im Log; S4: Query HoleDatensatz; S5: ProzessBeendet im Log",
+        ["sichtbar"] = "Bildeingang: Query GetImagePair je offenem Paar (komplett), alle 100 ms; Heiß: TeilVerbucht im Log; Verteilt: ProzessBeendet im Log",
         ["transaktionen"] = "COMMITs aus pg_stat_statements (track = top); Queries = übrige Statements ohne BEGIN/COMMIT/ROLLBACK/DISCARD/SET/SHOW; ohne die Lese-Rolle des Treibers",
+        ["cpu_ms_je_vorgang"] = "mittlere CPU des Hosts im Fenster × Dauer des Fensters / Vorgänge",
     };
 }

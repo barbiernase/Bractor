@@ -1,14 +1,12 @@
 #!/usr/bin/env bash
-# E2E-Messung (docs/plan-garantien-und-durchsatz.md §0.1/§0.2): ein Befehl, feste Parameter, echte Hosts, echte Eingänge, Exactly-once-Prüfung.
+# Ebene 3 der Test-Suite — Ende zu Ende (docs/12 §12.4): ein Befehl, feste Parameter, echte Hosts, echte Eingänge, Exactly-once-Prüfung.
 #
-#   scripts/vermessung-e2e.sh --anlass baseline --spalte Baseline                     Höchstlast S1–S5 (≈ 5 min)
-#   scripts/vermessung-e2e.sh --anlass phase-1 --spalte "Phase 1"                     dieselbe Messung nach einer Phase
-#   scripts/vermessung-e2e.sh --art stoerung --anlass baseline-stoerung               Störungslauf (≈ 3 min)
-#   scripts/vermessung-e2e.sh --anlass probe --probe                                   Funktionstest des Treibers: verkürzt, kein
-#                                                                                      Messlauf — Ergebnis im Temp-Verzeichnis, nicht im Repo
+#   scripts/vermessung-e2e.sh --anlass server-leistung              Leistungsmessung (≈ 7 min)
+#   scripts/vermessung-e2e.sh --stoerung --anlass server-stoerung    Störungslauf (≈ 4 min)
 #
+# Gemessen wird auf dem Messserver: scripts/server.sh lauf scripts/vermessung-e2e.sh … (der Lauf holt den Ergebnis-Ordner zurück).
 # Ergebnis: vermessung/ergebnisse/<datum>_<commit>_<anlass>/ — mit committen; danach scripts/vermessung-tabelle.sh --schreibe.
-# Nie gleichzeitig mit den Integrations-Suiten oder der Werkbank-Abnahme laufen lassen (docs/12 §12.7).
+# Nie gleichzeitig mit ./pruefe.sh alles oder einer anderen Messung laufen lassen (docs/12 §12.6).
 set -euo pipefail
 
 WURZEL="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"

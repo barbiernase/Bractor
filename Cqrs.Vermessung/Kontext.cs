@@ -2,7 +2,7 @@ using System.Text.Json.Nodes;
 
 namespace Cqrs.Vermessung;
 
-/// <summary>Eine Exactly-once-Prüfung (docs/plan-garantien-und-durchsatz.md §0.2): Soll gegen Ist aus Queries und Log.</summary>
+/// <summary>Eine Exactly-once-Prüfung (docs/11 §11.14): Soll gegen Ist aus Queries und Log.</summary>
 internal sealed record Pruefung(string Name, bool Ok, string Soll, string Ist)
 {
     public static Pruefung Gleich(string name, long soll, long ist) => new(name, soll == ist, soll.ToString(), ist.ToString());
@@ -48,6 +48,7 @@ internal sealed class Messfenster
             ["tx_je_vorgang"] = vorgaenge > 0 ? (double)tx / vorgaenge : double.NaN,
             ["queries_je_vorgang"] = vorgaenge > 0 ? (double)q / vorgaenge : double.NaN,
             ["cpu_prozent"] = cpu, ["rss_mb"] = rss, ["xact_je_s_info"] = xact,
+            ["cpu_ms_je_vorgang"] = vorgaenge > 0 ? cpu / 100 * (bis - Von).TotalMilliseconds / vorgaenge : double.NaN,
             ["rss_ende_mb"] = rssEnde, ["rss_lauf_max_mb"] = rssHoechst, ["rss_ende_anteil"] = rssEnde / rssHoechst,
             ["aktive_actors"] = actors, ["aktive_actors_hoechst"] = _lauf?.HoechstActors ?? double.NaN,
         };
@@ -82,19 +83,11 @@ internal sealed class Umgebungsdatei
     public int GrpcPort => (int)Json["Transport"]!["GrpcPort"]!;
     public string RedisEndpunkt => (string)Json["VersionIndex"]!["Endpunkt"]!;
     public int RedisDatenbank => (int)Json["VersionIndex"]!["Datenbank"]!;
-    public string Python => Ersetze((string?)Json["Umgebung"]!["Python"] ?? "python3");
     public string? Quellpfad => Json["Quellen"]?["DateiErkannt"]?["Pfad"] is { } p ? Ersetze((string)p!) : null;
     public string? Ausgabepfad => Json["Konfig"]?["BildaufbereitungKonfig"]?["AusgabePfad"] is { } p ? Ersetze((string)p!) : null;
 
     public static Umgebungsdatei Lies(string wurzel, string name)
         => new() { Name = name, Json = JsonNode.Parse(File.ReadAllText(Path.Combine(wurzel, "umgebungen", $"umgebung.{name}.json")))! };
-
-    /// <summary>Der Worker-Block einer Funktion (Skript, Argumente, Token) mit ersetzten <c>${env:X}</c>.</summary>
-    public (string Skript, List<string> Argumente, string Token) Worker(string wurzel, string funktion)
-    {
-        var w = Json["Funktionen"]![funktion]!["Worker"]!;
-        return (Path.Combine(wurzel, (string)w["Skript"]!), w["Argumente"]!.AsArray().Select(a => Ersetze((string)a!)).ToList(), (string)w["Token"]!);
-    }
 
     public static string Ersetze(string s) => System.Text.RegularExpressions.Regex.Replace(s, @"\$\{env:([A-Za-z0-9_]+)\}",
         m => Environment.GetEnvironmentVariable(m.Groups[1].Value) ?? throw new InvalidOperationException($"${{env:{m.Groups[1].Value}}} fehlt"));

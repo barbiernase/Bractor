@@ -54,6 +54,18 @@ internal sealed class Eingang : IDisposable
         catch (Exception e) when (e is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException) { return double.NaN; }
     }
 
+    /// <summary>Rückstand des Batch-Konsums (<c>/monitoring/metrics</c>: relevante Events jenseits der Positionen, Summe über die
+    /// Projektionen); −1, wenn der Host nicht antwortet.</summary>
+    public async Task<long> KonsumRueckstandAsync()
+    {
+        try
+        {
+            var m = JsonNode.Parse(await _http.GetStringAsync("/monitoring/metrics"));
+            return m?["konsumRueckstand"]?.GetValue<long>() ?? -1;
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException or InvalidOperationException) { return -1; }
+    }
+
     /// <summary>Stellt eine Query; liefert <c>antwort</c> (<c>{typ, daten}</c>) oder null.</summary>
     public async Task<JsonNode?> QueryAsync(string typ, JsonObject daten, string? token, CancellationToken ct = default)
     {

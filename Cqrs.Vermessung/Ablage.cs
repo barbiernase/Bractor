@@ -7,7 +7,7 @@ using System.Text.Json.Nodes;
 namespace Cqrs.Vermessung;
 
 /// <summary>
-/// Der Ergebnis-Ordner eines Laufs (docs/plan-garantien-und-durchsatz.md §0.1): <c>vermessung/ergebnisse/&lt;JJJJ-MM-TT_HHMM&gt;_&lt;commit&gt;_&lt;anlass&gt;/</c>
+/// Der Ergebnis-Ordner eines Laufs (docs/12 §12.4): <c>vermessung/ergebnisse/&lt;JJJJ-MM-TT_HHMM&gt;_&lt;commit&gt;_&lt;anlass&gt;/</c>
 /// mit <c>ergebnis.json</c>, <c>latenzen/&lt;szenario&gt;.csv[.gz]</c>, <c>pg_stat_statements.csv</c>, <c>host.csv</c>, <c>zusammenfassung.md</c>.
 /// Nur anhängen: existiert der Ordner schon, bricht der Lauf ab. Host-Logs landen im Scratch-Verzeichnis (nicht im Repo), nur ihr Ende im Ordner.
 /// </summary>
@@ -19,12 +19,10 @@ internal sealed class Ablage
     private readonly Dictionary<string, StreamWriter> _latenzen = new();
     private readonly StreamWriter _statements;
 
-    /// <param name="probe">Funktionstest des Treibers (<c>--probe</c>) oder Diagnose (<c>--art leerlauf</c>): kein Messlauf — der Ordner liegt
-    /// im Temp-Verzeichnis, nicht im Repo.</param>
-    public Ablage(string wurzel, string anlass, string commit, bool probe)
+    public Ablage(string wurzel, string anlass, string commit)
     {
         var name = $"{DateTime.Now:yyyy-MM-dd_HHmm}_{commit}_{Bereinige(anlass)}";
-        Ordner = probe ? Path.Combine(Path.GetTempPath(), "cqrs-vermessung-probe", name) : Path.Combine(wurzel, "vermessung", "ergebnisse", name);
+        Ordner = Path.Combine(wurzel, "vermessung", "ergebnisse", name);
         if (Directory.Exists(Ordner)) throw new InvalidOperationException($"Ergebnis-Ordner existiert schon (nur anhängen): {Ordner}");
         Directory.CreateDirectory(Path.Combine(Ordner, "latenzen"));
         ScratchLogs = Path.Combine(Path.GetTempPath(), "cqrs-vermessung-logs", name);

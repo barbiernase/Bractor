@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 namespace Cqrs.Vermessung;
 
 /// <summary>
-/// Störungslauf (§0.2), etwa drei Minuten: S1 (zwei Paare je Sekunde) und S5 (8 Sender) gleichzeitig, dabei Störungen — Host der
+/// Störungslauf (docs/11 §11.14), etwa vier Minuten: Bildeingang (zwei Paare je Sekunde) und Verteilt (8 Sender) gleichzeitig, dabei Störungen — Host der
 /// Beispieldomäne hart beenden und neu starten, Redis (Versions-Index) 10 s stoppen, Host der Prüfdomäne hart beenden. Jeder harte Abbruch
 /// verliert alle Signale im Flug (der Broker läuft im Host). Clients wiederholen mit derselben CommandId (§11.3). Danach dieselbe
 /// Exactly-once-Prüfung wie in der Messung.
@@ -13,17 +13,17 @@ internal static class Stoerungslauf
 {
     public static async Task<JsonObject> LaufeAsync(Kontext k)
     {
-        var dauer = k.Optionen.Probe ? TimeSpan.FromSeconds(40) : TimeSpan.FromSeconds(90);
-        Console.WriteLine($"Störungslauf {dauer.TotalSeconds:0} s: S1 2 Paare/s, S5 8 Sender");
+        var dauer = TimeSpan.FromSeconds(90);
+        Console.WriteLine($"Störungslauf {dauer.TotalSeconds:0} s: Bildeingang 2 Paare/s, Verteilt 8 Sender");
         k.Ressourcen.Abschnitt("stoerung");
-        var beispiel = await Anwendungslauf.StarteAsync(k, k.Beispiel, "Host.Grpc", "host", "stoerung-beispiel", true, null, "prozess_gestartet");
-        var pruef = await Anwendungslauf.StarteAsync(k, k.Pruef, "Host.Pruefdomaene", "host-pruef", "stoerung-pruefdomaene", true, null, "posten_reserviert");
-        await using var bild = new Bildeingang(beispiel.Eingang, k.Beispiel.Quellpfad!, 2030, 1);
+        var beispiel = await Anwendungslauf.StarteAsync(k, k.Beispiel, "Host.Grpc", "host", "stoerung-beispiel", true, "prozess_gestartet");
+        var pruef = await Anwendungslauf.StarteAsync(k, k.Pruef, "Host.Pruefdomaene", "host-pruef", "stoerung-pruefdomaene", true, "posten_reserviert");
+        await using var bild = new Bildeingang(beispiel.Eingang, k.Beispiel.Quellpfad!, 2031, 1);
         var pd = new Pruefdomaene(pruef.Eingang, pruef.Log, pruef.Uhrversatz) { Wiederholen = true };
         await pd.EinrichtenAsync();
 
-        // S1: eine Kamera mit zwei Paaren je Sekunde; S5: 8 Sender so schnell wie angenommen (mit Wiederholung über Host-Abbrüche hinweg).
-        var s1 = new List<Vorgang>();
+        // Bildeingang: eine Kamera mit zwei Paaren je Sekunde; Verteilt: 8 Sender so schnell wie angenommen (mit Wiederholung über Host-Abbrüche hinweg).
+        var bilder = new List<Vorgang>();
         var kamera = Task.Run(async () =>
         {
             var sw = Stopwatch.StartNew();
@@ -32,13 +32,13 @@ internal static class Stoerungslauf
                 var warte = TimeSpan.FromSeconds(i / 2.0) - sw.Elapsed;
                 if (warte > TimeSpan.Zero) await Task.Delay(warte);
                 var v = new Vorgang { Schluessel = i.ToString(), Phase = "stoerung" };
-                s1.Add(v);
+                bilder.Add(v);
                 await bild.StarteAsync(v, default);
             }
         });
         // Abbau nach Fortschritt (höchstens 10 min, Hänger = 60 s ohne fertigen Vorgang): geprüft wird Lebendigkeit, nicht Tempo — in Phase 1
         //   brauchte der langsamste Vorgang schon 201 s, eine feste Frist von 3 min machte einen schnelleren Eingang (mehr Rückstand) rot.
-        var last5 = Volllast.LaufeAsync(pd, "stoerung", 8, dauer, TimeSpan.FromMinutes(10), ohneFortschritt: TimeSpan.FromSeconds(60));
+        var lastVerteilt = Volllast.LaufeAsync(pd, "stoerung", 8, dauer, TimeSpan.FromMinutes(10), ohneFortschritt: TimeSpan.FromSeconds(60));
 
         var protokoll = new JsonArray();
         var uhr = Stopwatch.StartNew();
@@ -63,17 +63,17 @@ internal static class Stoerungslauf
             pruef.Host.Toete(); await Task.Delay(3000); await pruef.Host.StarteAsync();
         });
         await kamera;
-        var (b5, v5) = await last5;
-        var ok1 = await Volllast.LeerlaufenAsync(s1, TimeSpan.FromMinutes(5));
-        await Messung.WarteAufReaktionAsync(pruef);
-        foreach (var v in s1) k.Ablage.Latenz("S1-stoerung", 1, v);
-        foreach (var v in v5) k.Ablage.Latenz("S5-stoerung", 1, v);
+        var (verteilt, verteiltVorgaenge) = await lastVerteilt;
+        var bilderOk = await Volllast.LeerlaufenAsync(bilder, TimeSpan.FromMinutes(5));
+        await Leistung.WarteAufReaktionAsync(pruef);
+        foreach (var v in bilder) k.Ablage.Latenz("Bildeingang-stoerung", 1, v);
+        foreach (var v in verteiltVorgaenge) k.Ablage.Latenz("Verteilt-stoerung", 1, v);
 
         var pruefungen = new List<Pruefung>
         {
-            new("S1: alle Paare nach den Störungen sichtbar", ok1, "ja", ok1 ? "ja" : $"{s1.Count(v => v.Sichtbar == null)} offen"),
-            new("S5: alle Vorgänge nach den Störungen beendet", b5.Abgebaut, "ja", b5.Abgebaut ? "ja" : $"{v5.Count(v => v.Sichtbar == null)} offen"),
-            Pruefung.Gleich("S5: kein Eingang endgültig gescheitert", 0, b5.Fehler),
+            new("Bildeingang: alle Paare nach den Störungen sichtbar", bilderOk, "ja", bilderOk ? "ja" : $"{bilder.Count(v => v.Sichtbar == null)} offen"),
+            new("Verteilt: alle Vorgänge nach den Störungen beendet", verteilt.Abgebaut, "ja", verteilt.Abgebaut ? "ja" : $"{verteiltVorgaenge.Count(v => v.Sichtbar == null)} offen"),
+            Pruefung.Gleich("Verteilt: kein Eingang endgültig gescheitert", 0, verteilt.Fehler),
         };
         pruefungen.AddRange(await bild.PruefeAsync(beispiel.Db, 2 * bild.Paare.Count));
         pruefungen.AddRange(await pd.PruefeAsync(pruef.Db));
@@ -87,9 +87,9 @@ internal static class Stoerungslauf
             ["stoerungen"] = protokoll,
             ["kennzahlen"] = new JsonObject
             {
-                ["vorgaenge_s1"] = s1.Count, ["vorgaenge_s5"] = b5.Angenommen,
-                ["s1_p99_ms"] = Ablage.Zahl(Statistik.Perzentil(s1.Select(v => v.LatenzMs).Where(x => !double.IsNaN(x)).ToList(), 99)),
-                ["s5_p99_ms"] = Ablage.Zahl(b5.P99),
+                ["bildpaare"] = bilder.Count, ["vorgaenge"] = verteilt.Angenommen, ["abbau_s"] = Ablage.Zahl(verteilt.AbbauS),
+                ["bildeingang_p99_ms"] = Ablage.Zahl(Statistik.Perzentil(bilder.Select(v => v.LatenzMs).Where(x => !double.IsNaN(x)).ToList(), 99)),
+                ["verteilt_p99_ms"] = Ablage.Zahl(verteilt.P99),
             },
             ["exactly_once"] = new JsonArray(pruefungen.Select(p => (JsonNode)p.Json()).ToArray()),
             ["exactly_once_ok"] = pruefungen.All(p => p.Ok),

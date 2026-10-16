@@ -7,9 +7,9 @@ using Domain.ImagePair;
 namespace Cqrs.Vermessung;
 
 /// <summary>
-/// S1/S2 Bildeingang (Beispieldomäne): je Vorgang ein TIFF-Paar (<c>_DC0</c>, <c>_DC2</c>) ins Quell-Verzeichnis — erst in einen
+/// Bildeingang (Beispieldomäne): je Vorgang ein TIFF-Paar (<c>_DC0</c>, <c>_DC2</c>) ins Quell-Verzeichnis — erst in einen
 /// Zwischenordner geschrieben, dann hineinverschoben, dann die Fertig-Marke (Quelle <c>Fertig:Marker</c>). Sichtbar ist der Vorgang, wenn die
-/// Query <c>GetImagePair</c> das Paar als komplett liefert — Fluss (Deutung, Paar, Verkleinerung, Ausgleich) und Projektion durchlaufen. S2 ist derselbe Eingang mit den Bild-Funktionen im Python-Worker (Laufort Extern).
+/// Query <c>GetImagePair</c> das Paar als komplett liefert — Fluss (Deutung, Paar, Verkleinerung, Ausgleich) und Projektion durchlaufen. 
 /// </summary>
 internal sealed class Bildeingang : ILast, IAsyncDisposable
 {
@@ -26,7 +26,7 @@ internal sealed class Bildeingang : ILast, IAsyncDisposable
     private readonly Task _beobachter;
     private long _n;
 
-    /// <param name="jahr">Trennt die Paare der Szenarien im Log (S1: 2030, S2: 2031); <paramref name="wiederholung"/> den Tag.</param>
+    /// <param name="jahr">Trennt die Paare der Läufe im Log (Messung 2030, Störungslauf 2031); <paramref name="wiederholung"/> den Tag.</param>
     public Bildeingang(Eingang eingang, string quelle, int jahr, int wiederholung)
     {
         _eingang = eingang;
@@ -112,14 +112,24 @@ internal sealed class Bildeingang : ILast, IAsyncDisposable
             P("je Paar genau ein ImagePairKomplett", ids.Length,
                 await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'image_pair_komplett' and stream_id = any(@ids)", ("ids", ids))),
         };
-        // Erst das Read-Model, dann der Log: der Log wächst nur, also gilt Read-Model ≤ Log auch bei offenem Rückstand; gleich erst nach dem Abbau.
-        var stat = await _eingang.QueryAsync("GetImagePairStatistik", new JsonObject(), TokenInspekteur);
-        long rmKomplett = (long?)stat?["daten"]?["Komplett"] ?? -1, rmGesamt = (long?)stat?["daten"]?["Gesamt"] ?? -1;
-        p.Add(P("Read-Model: komplette Paare = ImagePairKomplett im Log",
-            await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'image_pair_komplett'"), rmKomplett));
-        p.Add(P("Read-Model: Paare = ImagePairErstellt im Log",
-            await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'image_pair_erstellt'"), rmGesamt));
+        p.AddRange(await ReadModelAsync(_eingang, db, vollstaendig));
         return p;
+    }
+
+    /// <summary>Read-Model = Log über alle Paare (auch nach einem Neuaufbau): erst das Read-Model, dann der Log — der Log wächst nur, also gilt
+    /// Read-Model ≤ Log auch bei offenem Rückstand; gleich erst nach dem Abbau.</summary>
+    public static async Task<List<Pruefung>> ReadModelAsync(Eingang eingang, Datenbank db, bool vollstaendig = true)
+    {
+        var s = db.Schema;
+        var stat = await eingang.QueryAsync("GetImagePairStatistik", new JsonObject(), TokenInspekteur);
+        long rmKomplett = (long?)stat?["daten"]?["Komplett"] ?? -1, rmGesamt = (long?)stat?["daten"]?["Gesamt"] ?? -1;
+        return
+        [
+            Pruefung.Erwartet("Read-Model: komplette Paare = ImagePairKomplett im Log",
+                await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'image_pair_komplett'"), rmKomplett, vollstaendig),
+            Pruefung.Erwartet("Read-Model: Paare = ImagePairErstellt im Log",
+                await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'image_pair_erstellt'"), rmGesamt, vollstaendig),
+        ];
     }
 
     public async ValueTask DisposeAsync()

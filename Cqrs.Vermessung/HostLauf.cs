@@ -13,21 +13,19 @@ internal sealed class HostLauf : IAsyncDisposable
     private readonly string _dll;
     private readonly string _umgebung;
     private readonly int _einblickPort;
-    private readonly IReadOnlyDictionary<string, string> _umgebungsVariablen;
     private readonly string _logDatei;
     private Process? _prozess;
     private StreamWriter? _log;
 
-    public HostLauf(string dll, string umgebung, int einblickPort, string logDatei, IReadOnlyDictionary<string, string>? variablen = null)
+    public HostLauf(string dll, string umgebung, int einblickPort, string logDatei)
     {
         _dll = dll;
         _umgebung = umgebung;
         _einblickPort = einblickPort;
         _logDatei = logDatei;
-        _umgebungsVariablen = variablen ?? new Dictionary<string, string>();
     }
 
-    /// <summary>Alle gestarteten Prozesse (Hosts, Worker): endet der Treiber unerwartet (Strg-C, Abbruch), werden sie mitbeendet.</summary>
+    /// <summary>Alle gestarteten Prozesse (Hosts): endet der Treiber unerwartet (Strg-C, Abbruch), werden sie mitbeendet.</summary>
     public static readonly System.Collections.Concurrent.ConcurrentBag<Process> Kinder = new();
 
     static HostLauf()
@@ -49,10 +47,9 @@ internal sealed class HostLauf : IAsyncDisposable
         };
         psi.Environment["DOTNET_ENVIRONMENT"] = "Production";
         psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
-        foreach (var (k, v) in _umgebungsVariablen) psi.Environment[k] = v;
         Directory.CreateDirectory(Path.GetDirectoryName(_logDatei)!);
         _log ??= new StreamWriter(_logDatei, append: true, Encoding.UTF8) { AutoFlush = true };   // ein Neustart schreibt weiter in dieselbe Datei
-        await _log.WriteLineAsync($"===== Start {DateTimeOffset.Now:O} {_dll} --umgebung {_umgebung} {string.Join(' ', _umgebungsVariablen.Select(kv => kv.Key + "=" + kv.Value))}");
+        await _log.WriteLineAsync($"===== Start {DateTimeOffset.Now:O} {_dll} --umgebung {_umgebung}");
         _prozess = Process.Start(psi)!;
         Kinder.Add(_prozess);
         var log = _log;
@@ -102,58 +99,6 @@ internal sealed class HostLauf : IAsyncDisposable
     {
         await StoppeAsync();
         _log?.Dispose();
-    }
-}
-
-/// <summary>Ein externer Funktions-Worker (Python), so gestartet wie von der Werkbank (<c>Werkbank/Server/Worker.cs</c>).</summary>
-internal sealed class WorkerLauf : IAsyncDisposable
-{
-    private readonly Process _prozess;
-    private readonly TaskCompletionSource _bereit = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-    public WorkerLauf(string python, string skript, IEnumerable<string> argumente, int grpcPort, string token, string logDatei)
-    {
-        var psi = new ProcessStartInfo(python)
-        {
-            WorkingDirectory = Path.GetDirectoryName(skript)!, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false,
-        };
-        psi.ArgumentList.Add(skript);
-        foreach (var a in argumente) psi.ArgumentList.Add(a);
-        psi.Environment["CQRS_GRPC_HOST"] = "127.0.0.1";
-        psi.Environment["CQRS_GRPC_PORT"] = grpcPort.ToString();
-        psi.Environment["CQRS_AKTEUR_TOKEN"] = token;
-        psi.Environment["PYTHONUNBUFFERED"] = "1";
-        var log = new StreamWriter(logDatei, append: true, Encoding.UTF8) { AutoFlush = true };
-        _prozess = Process.Start(psi)!;
-        HostLauf.Kinder.Add(_prozess);
-        void Zeile(string? z)
-        {
-            if (z == null) return;
-            lock (log) log.WriteLine(z);
-            if (z.Contains("angeboten")) _bereit.TrySetResult();
-        }
-        _prozess.OutputDataReceived += (_, e) => Zeile(e.Data);
-        _prozess.ErrorDataReceived += (_, e) => Zeile(e.Data);
-        _prozess.BeginOutputReadLine();
-        _prozess.BeginErrorReadLine();
-    }
-
-    public Process Prozess => _prozess;
-
-    public async Task BereitAsync(TimeSpan frist)
-    {
-        var t = await Task.WhenAny(_bereit.Task, Task.Delay(frist));
-        if (t != _bereit.Task) throw new TimeoutException("Python-Worker hat seine Funktionen nicht angeboten.");
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        if (!_prozess.HasExited)
-        {
-            Werkzeuge.Laufe("kill", $"-TERM {_prozess.Id}");
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            try { await _prozess.WaitForExitAsync(cts.Token); } catch (OperationCanceledException) { _prozess.Kill(true); }
-        }
     }
 }
 
@@ -235,14 +180,6 @@ internal sealed class Ressourcen : IAsyncDisposable
             if (letzte is null) return (double.NaN, double.NaN);
             return (letzte.RssMb, _proben.Where(x => x.Pid == letzte.Pid && x.Zeit <= bis).Max(x => x.RssMb));
         }
-    }
-
-    /// <summary>Summe der mittleren CPU aller Rollen mit dem Präfix (z. B. die Worker) im Fenster; NaN ohne Proben.</summary>
-    public double Summe(string praefix, DateTimeOffset von, DateTimeOffset bis)
-    {
-        List<Probe> p;
-        lock (_proben) p = _proben.Where(x => x.Rolle.StartsWith(praefix) && x.Zeit >= von && x.Zeit <= bis).ToList();
-        return p.Count == 0 ? double.NaN : p.GroupBy(x => x.Rolle).Sum(g => g.Average(x => x.CpuProzent));
     }
 
     public async ValueTask DisposeAsync()

@@ -5,7 +5,7 @@ using Abstractions;
 namespace Cqrs.Vermessung;
 
 /// <summary>
-/// S5 Prüfdomäne: Vorgänge über den JSON-Eingang, im festen Muster je zehn — acht Aufträge, die gelingen (Diamant: Posten reservieren und
+/// Verteilt (Prüfdomäne): Vorgänge über den JSON-Eingang, im festen Muster je zehn — acht Aufträge, die gelingen (Diamant: Posten reservieren und
 /// Kontingent belegen, Bestätigung am Join), ein Auftrag gegen ein volles Kontingent (Ablehnung → Kompensation der Reservierung) und eine
 /// Verteilung (Fan-out auf vier Ziele, Count-Join). Jede Reservierung unter dem Mindestbestand löst die Reaktion
 /// <c>NachschubBeiMindestbestand</c> aus (Emittent auf den langlebigen Posten-Streams). Sichtbar ist ein Vorgang mit seinem
@@ -37,6 +37,7 @@ internal sealed class Pruefdomaene : ILast
     }
 
     public IReadOnlyCollection<double> ReaktionMs => _reaktionMs;
+    public void LeereReaktion() => _reaktionMs.Clear();
 
     /// <summary>Störungslauf: gescheiterte Sendungen mit derselben CommandId wiederholen.</summary>
     public bool Wiederholen { get; init; }

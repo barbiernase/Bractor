@@ -1,69 +1,83 @@
 #!/usr/bin/env bash
-# Die fortlaufenden Messtabellen (docs/12 §12.5, docs/plan-garantien-und-durchsatz.md §0.1) — erzeugt aus den Ergebnis-Ordnern, nie von Hand.
+# Die Leistungstabelle (docs/12 §12.4) — erzeugt aus den Ergebnis-Ordnern, nie von Hand.
 #
-#   scripts/vermessung-tabelle.sh             druckt die Tabellen (Markdown)
-#   scripts/vermessung-tabelle.sh --schreibe  ersetzt sie in docs/12 zwischen den Markern <!-- vermessung-tabelle:<rechner>:anfang/ende -->
+#   scripts/vermessung-tabelle.sh             druckt die Tabelle (Markdown)
+#   scripts/vermessung-tabelle.sh --schreibe  ersetzt sie in docs/12 zwischen <!-- vermessung-tabelle:anfang --> und <!-- …:ende -->
 #
-# Je Rechner eine Tabelle mit eigener Baseline — Werte verschiedener Rechner sind nicht vergleichbar. Zu welcher Tabelle ein Lauf gehört, sagt
-# das Feld "rechner" seiner ergebnis.json (Muster in TABELLEN).
-# Spalten: jeder Ergebnis-Ordner, dessen ergebnis.json eine "spalte" trägt (Baseline, Phase 1, …) und "gueltig": true ist; gibt es zu einer
-# Spalte mehrere Läufe, gilt der jüngste (Ordnername = Zeitstempel). Zeilen: die Vereinigung der "zusammenfassung"-Einträge
-# ({szenario, kennzahl, einheit, wert}) in der Reihenfolge ihres ersten Auftretens. Die letzte Spalte ist das Verhältnis der jüngsten
-# Spalte zur Baseline — bewertet werden Verhältnisse (§0.1). Ungültige Läufe bleiben gespeichert, erscheinen aber nicht als Spalte.
+# Grundlage: alle gültigen Läufe im Format 2 (ergebnis.json "format": 2) auf dem Messserver ("rechner" enthält Ubuntu), davon die des jüngsten
+# Commits. Last und Ruhe: je Szenario Median und Spanne über alle Wiederholungen aller Leistungsläufe dieses Commits; Störung: je Lauf eine
+# Zeile. Die Spalten nennt der Treiber selbst ("spalten" im Ergebnis). Ältere Läufe (Format 1, S1–S5) stehen eingefroren im Anhang
+# docs/12-anhang-messarchiv.md.
 set -euo pipefail
-
 WURZEL="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
-ORDNER="$WURZEL/vermessung/ergebnisse"
-DOKU="$WURZEL/docs/12-tests-und-vermessung.md"
+exec python3 - "$WURZEL" "${1:-}" <<'PY'
+import glob, json, os, re, statistics, sys
 
-# Tabelle → Muster auf "rechner" (jq-Regex).
-TABELLEN=("mac:Darwin" "messserver:Ubuntu")
+wurzel, modus = sys.argv[1], sys.argv[2]
+doku = os.path.join(wurzel, "docs", "12-tests-und-vermessung.md")
+laeufe = []
+for f in sorted(glob.glob(os.path.join(wurzel, "vermessung", "ergebnisse", "*", "ergebnis.json"))):
+    e = json.load(open(f, encoding="utf-8"))
+    if e.get("format") == 2 and e.get("gueltig") and "Ubuntu" in e.get("rechner", ""):
+        e["_ordner"] = os.path.basename(os.path.dirname(f))
+        laeufe.append(e)
+if not laeufe:
+    tabelle = "(noch kein gültiger Lauf im Format 2)"
+else:
+    commit = laeufe[-1]["commit"]
+    jetzt = [e for e in laeufe if e["commit"] == commit]
+    leistung = [e for e in jetzt if e["art"] == "leistung"]
+    stoerung = [e for e in jetzt if e["art"] == "stoerung"]
 
-# Alle gültigen Läufe mit Spalte eines Rechners, ältester zuerst; je Spalte der jüngste.
-laeufe() {
-  for f in "$ORDNER"/*/ergebnis.json; do
-    jq -c --arg ordner "$(basename "$(dirname "$f")")" --arg muster "$1" \
-      'select(.spalte != null and .gueltig == true and (.rechner | test($muster))) | {ordner: $ordner, spalte, zusammenfassung}' "$f"
-  done | jq -sc 'sort_by(.ordner) | group_by(.spalte) | map(last) | sort_by(.ordner)'
-}
+    def zahl(d):
+        return f"{round(d):,}".replace(",", " ") if abs(d) >= 100 else f"{d:.1f}".replace(".", ",")
 
-tabelle() {
-  jq -r '
-  def zahl: if . == null then "–" elif (type == "number") then (if . >= 100 then (. | round | tostring) else ((. * 10 | round) / 10 | tostring) end) else tostring end;
-  . as $l
-  | ($l | map(.zusammenfassung[] | {szenario, kennzahl, einheit}) | reduce .[] as $z ([]; if any(.[]; . == $z) then . else . + [$z] end)) as $zeilen
-  | ($l | map(select(.spalte == "Baseline")) | first) as $basis
-  | ($l | last) as $letzte
-  | "| Szenario | Kennzahl | " + ($l | map("\(.spalte) ([\(.ordner)](../vermessung/ergebnisse/\(.ordner)/))") | join(" | "))
-      + (if $basis != null and ($l | length) > 1 then " | \($letzte.spalte) / Baseline |" else " |" end),
-    "|---|---|" + ($l | map("---:") | join("|")) + (if $basis != null and ($l | length) > 1 then "|---:|" else "|" end),
-    ($zeilen[] as $z
-      | ($l | map([.zusammenfassung[] | select(.szenario == $z.szenario and .kennzahl == $z.kennzahl) | .wert] | first)) as $werte
-      | "| \($z.szenario) | \($z.kennzahl) (\($z.einheit)) | " + ($werte | map(zahl) | join(" | "))
-        + (if $basis != null and ($l | length) > 1 then
-             ([$basis.zusammenfassung[] | select(.szenario == $z.szenario and .kennzahl == $z.kennzahl) | .wert] | first) as $b
-             | ($werte | last) as $n
-             | " | " + (if ($b == null or $n == null or $b == 0) then "–" else "\((($n / $b) * 100 | round) / 100)×" end) + " |"
-           else " |" end))
-  ' <<<"$1"
-}
+    def zelle(werte):
+        werte = [w for w in werte if w is not None]
+        if not werte:
+            return "–"
+        m, lo, hi = statistics.median(werte), min(werte), max(werte)
+        return f"{zahl(m)} ({zahl(lo)}–{zahl(hi)})" if hi - lo > 0.05 * abs(m) else zahl(m)
 
-for t in "${TABELLEN[@]}"; do
-  name="${t%%:*}"
-  l="$(laeufe "${t#*:}")"
-  if [ "$(jq length <<<"$l")" -eq 0 ]; then tab="(noch keine Spalte)"; else tab="$(tabelle "$l")"; fi
-  if [[ "${1:-}" == "--schreibe" ]]; then
-    grep -q "<!-- vermessung-tabelle:$name:anfang -->" "$DOKU" || { echo "Marker vermessung-tabelle:$name fehlt in $DOKU" >&2; exit 1; }
-    NAME="$name" TABELLE="$tab" python3 - "$DOKU" <<'EOF'
-import os, re, sys
-pfad, name = sys.argv[1], os.environ["NAME"]
-text = open(pfad, encoding="utf-8").read()
-neu = f"<!-- vermessung-tabelle:{name}:anfang -->\n" + os.environ["TABELLE"] + f"\n<!-- vermessung-tabelle:{name}:ende -->"
-text = re.sub(rf"<!-- vermessung-tabelle:{name}:anfang -->.*?<!-- vermessung-tabelle:{name}:ende -->", lambda _: neu, text, flags=re.S)
-open(pfad, "w", encoding="utf-8").write(text)
-EOF
-    echo "Tabelle $name in $DOKU geschrieben ($(jq length <<<"$l") Spalten)."
-  else
-    printf '## %s\n%s\n\n' "$name" "$tab"
-  fi
-done
+    def link(e):
+        return f"[{e['_ordner']}](../vermessung/ergebnisse/{e['_ordner']}/)"
+
+    zeilen = [f"Commit `{commit}`, Messserver; Leistung: {', '.join(link(e) for e in leistung) or '–'} "
+              f"(je Zelle Median über {sum(e['parameter']['wiederholungen'] for e in leistung)} Wiederholungen, in Klammern die Spanne, "
+              f"wenn sie 5 % übersteigt); Störung: {', '.join(link(e) for e in stoerung) or '–'}.", ""]
+    if leistung:
+        spalten = leistung[-1]["spalten"]
+        reihenfolge = list(leistung[-1]["szenarien"].keys())
+        for tab in ("last", "ruhe"):
+            sp = [s for s in spalten if s["tabelle"] == tab]
+            namen = [n for n in reihenfolge if any(
+                k["kennzahlen"].get(s["key"]) is not None for e in leistung for k in e["szenarien"].get(n, {}).get("wiederholungen", []) for s in sp)]
+            if not namen:
+                continue
+            zeilen.append("| Szenario | " + " | ".join(s["titel"] for s in sp) + " |")
+            zeilen.append("|---|" + "---:|" * len(sp))
+            for n in namen:
+                wd = [k["kennzahlen"] for e in leistung for k in e["szenarien"].get(n, {}).get("wiederholungen", [])]
+                titel = leistung[-1]["szenarien"][n]["titel"]
+                zeilen.append(f"| {titel} | " + " | ".join(zelle([w.get(s["key"]) for w in wd]) for s in sp) + " |")
+            zeilen.append("")
+    if stoerung:
+        zeilen.append("| Störungslauf | Vorgänge Prüfdomäne | Bildpaare | Abbau nach der Last (s) | p99 Prüfdomäne (ms) | Exactly-once |")
+        zeilen.append("|---|---:|---:|---:|---:|:-:|")
+        for e in stoerung:
+            k = e.get("kennzahlen", {})
+            zeilen.append(f"| {link(e)} | {zahl(k.get('vorgaenge', 0))} | {zahl(k.get('bildpaare', 0))} | {zahl(k.get('abbau_s') or 0)} | "
+                          f"{zahl(k.get('verteilt_p99_ms') or 0)} | {'grün' if e.get('exactly_once_ok') else 'ROT'} |")
+    tabelle = "\n".join(zeilen).rstrip()
+
+if modus == "--schreibe":
+    text = open(doku, encoding="utf-8").read()
+    if "<!-- vermessung-tabelle:anfang -->" not in text:
+        sys.exit(f"Marker vermessung-tabelle fehlt in {doku}")
+    neu = "<!-- vermessung-tabelle:anfang -->\n" + tabelle + "\n<!-- vermessung-tabelle:ende -->"
+    text = re.sub(r"<!-- vermessung-tabelle:anfang -->.*?<!-- vermessung-tabelle:ende -->", lambda _: neu, text, flags=re.S)
+    open(doku, "w", encoding="utf-8").write(text)
+    print(f"Tabelle in {doku} geschrieben.")
+else:
+    print(tabelle)
+PY
