@@ -159,8 +159,8 @@ Nachweis-Test. Jede offene Lücke hat einen Test, der sie zeigt (Skip `G-n offen
 Geschlossen: **G-1** Fristverlust, **G-7** Tombstones legen den Poll still, der Emittenten-Anteil von **G-2** (Phase 1); **G-3** Actor nach
 Append-Konflikt (Phase 2); **G-4** Projektions-Checkpoint ohne Versionsprüfung (Phase 3, Batch-Konsum); **G-8** Prozess-Poll ohne bestätigte
 Weckung (Phase 5, `ProzessPollGarantieTests`); **G-2** Inbox-Fenster (Phase 4, Inbox als Tabelle: Fenster → Horizont); **G-9** eine lange
-offene Transaktion überholt die Positionen (Horizont der Vollständigkeit statt Karenz, `SequenceGapPostgresTests.Eine_lange_offene_Transaktion…`).
-Offen außerdem: **G-10** Zeitlimits rechnen ab dem Event-Zeitstempel (Uhr des Hosts) gegen die DB-Uhr.
+offene Transaktion überholt die Positionen (Horizont der Vollständigkeit statt Karenz, `SequenceGapPostgresTests.Eine_lange_offene_Transaktion…`); **G-10** Zeitlimits rechneten ab dem Event-Zeitstempel (Uhr des Hosts)
+gegen die DB-Uhr (jetzt setzt die Datenbank den Zeitstempel mit derselben Uhr, `EventZeitPostgresTests`).
 
 ## 11.14 Wie die Garantien geprüft werden
 

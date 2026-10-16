@@ -23,7 +23,7 @@ public sealed class MartenDbClock : IDbClock
             await conn.OpenAsync(ct);
 
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "select now()";
+        cmd.CommandText = $"select {EventZeit.Uhr(_store)}";   // dieselbe Uhr wie der Event-Zeitstempel (G-10)
         var wert = await cmd.ExecuteScalarAsync(ct);
 
         return wert switch

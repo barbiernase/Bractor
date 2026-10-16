@@ -388,7 +388,12 @@ Projektionen × Partitionen).
 Transaktionsnummern von Postgres ersetzt (docs/13 §13.6). Eine länger als 3 s offene Transaktion wurde vorher überholt (neuer Test gegen den
 alten Code rot). Prüfstand, Garantie-Suite und Integration grün; **noch nicht gemessen** — auf dem Messserver zu prüfen: Durchsatz und Queries
 je Vorgang S1/S5 (die Positionen liegen nur noch Millisekunden hinter dem Kopf, die Partitions-Reads durchsuchen ein kürzeres Fenster),
-Leerlauf L1/L5 (eine Probe je Poll statt einer Zeit-Abfrage). Neu offen: G-10 (Zeitlimit mischt Host- und DB-Uhr).
+Leerlauf L1/L5 (eine Probe je Poll statt einer Zeit-Abfrage).
+
+**Nachtrag G-10 Eine Uhr** (2026-10-16, auf Tobis Wort): den Event-Zeitstempel setzt die Datenbank mit der Uhr, die `IDbClock` liest (in Sim samt
+Versatz) — Zeitlimits, Warte-Knoten und Fristen vergleichen nur noch Zeit aus einer Quelle; nebenbei behoben: nach einem Zeitsprung der Sim
+standen neue Events in der ungesprungenen Zeit (docs/13 §13.6). Prüfstand, Integration, Prüfdomäne, Werkbank-Abnahme grün; nicht gemessen
+(Kosten: eine Regel je eingefügtem Event, erwartet im Rauschen).
 
 **Phase 5** (umgesetzt, 2026-10-15, auf Tobis Wort vor Phase 4; Code `22632bc`…`ffaeaea`, gemessen auf dem Messserver, docs/12 §12.6):
 - *Umgesetzt:* PF-4 — `ProzessPoll` liest seitenweise (`ReadPartitionAsync`) und routet die geladenen Events, Starts nur für neue oder offene

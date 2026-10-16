@@ -62,6 +62,7 @@ public sealed class MartenEventBatchWriter : IEventBatchWriter
 
     public async Task WriteBatchAsync(IReadOnlyList<BatchAppend> batch, CancellationToken ct)
     {
+        await EventZeit.SicherAsync(_store, ct);   // den Zeitstempel setzt die Datenbank-Uhr (G-10)
         await using var session = _store.LightweightSession();
 
         var eventCount = 0;

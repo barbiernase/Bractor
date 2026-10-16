@@ -200,6 +200,7 @@ public static class CqrsServiceExtensions
             // Die Inbox der Schreibseite (docs/04 §4.4): je Command eine Quittung, eindeutig je CommandId, in derselben Transaktion wie
             // seine Events — Exactly-once innerhalb des Horizonts (InboxAufraeumer).
             InboxTabelle.Registriere(options);
+            EventZeit.Registriere(options, builder.DbUhr);
 
             // Durabler Poll-Backstop-Cursor pro Pull-Pfad der Emittenten: der Poller setzt nach
             // einem Neustart hier wieder auf, statt beim Boot die ganze Historie zu re-scannen.
@@ -626,6 +627,12 @@ public class CqrsFrameworkBuilder
     /// wiederholte CommandId garantiert nicht erneut; ältere Quittungen räumt der <see cref="Persistence.InboxAufraeumer"/> ab.
     /// </summary>
     public TimeSpan InboxHorizont { get; set; } = TimeSpan.FromDays(30);
+
+    /// <summary>
+    /// Die Uhr der Datenbank als SQL-Ausdruck (G-10): dieselbe für <c>IDbClock</c> und den Event-Zeitstempel (<see cref="Persistence.EventZeit"/>).
+    /// Die Umgebung setzt sie (in Sim samt Versatz, <c>UmgebungsDbClock.Ausdruck</c>); ohne Umgebung die Zeit der Datenbank.
+    /// </summary>
+    public string DbUhr { get; set; } = Persistence.EventZeit.Datenbankzeit;
 
     /// <summary>Leerlauf bis zur Passivierung je Actor-Art (PF-5, Umgebung <c>Lebenszyklus</c>); Standard 10/2/10 min.</summary>
     public Infrastructure.Lebenszyklus.Passivierung Passivierung { get; set; } = Infrastructure.Lebenszyklus.Passivierung.Standard;

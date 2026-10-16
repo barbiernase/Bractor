@@ -81,6 +81,7 @@ public class MartenEventStore : IEventStoreRepository
         if (teile.All(t => t.Events.Count == 0))
             return;
 
+        await EventZeit.SicherAsync(_store, default);   // den Zeitstempel setzt die Datenbank-Uhr (G-10)
         await using var session = _store.LightweightSession();
         var item = new BatchAppend(aggregateId, expectedVersion, teile, aggregateType);
         MartenEventBatchWriter.Stage(session, item);

@@ -236,8 +236,9 @@ Damit kann ein Sim-Host nie in die Prod-DB schreiben und umgekehrt. Die Tabelle 
 ### 4.4 Uhr
 
 `IDbClock.JetztAsync` liefert in Sim `now() + versatz`; der Versatz steht in der Tabelle `<schema>.uhr` (kein Abschnitt der Umgebungs-Datei).
-In Prod liest die Uhr keinen Versatz, und ein Prod-Host setzt ihn beim Start auf 0. Es betrifft nur Code, der die Zeit über `IDbClock` liest
-(Zeitlimits, Warte-Knoten, Fristen). Treiber-Intervalle laufen in Echtzeit.
+In Prod liest die Uhr keinen Versatz, und ein Prod-Host setzt ihn beim Start auf 0. Es betrifft Code, der die Zeit über `IDbClock` liest
+(Zeitlimits, Warte-Knoten, Fristen), und den Zeitstempel jedes Events: ihn setzt die Datenbank mit derselben Uhr (G-10) — nach einem Zeitsprung
+stehen neue Events in der gesprungenen Zeit. Treiber-Intervalle laufen in Echtzeit.
 
 ### 4.5 Infrastruktur
 

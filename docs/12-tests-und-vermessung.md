@@ -72,6 +72,7 @@ Prüfstand kommt von den expandierten `[Theory]`-Fällen.
 | `GeteilteDokumentePostgresTests`, `SchreibRegelPostgresTests` | 4 + 5 | Single-Writer je Dokument, OCC bei geteilten Dokumenten zwischen zwei bzw. vier Partitions-Lesern, Trennen und Wiederholung |
 | `SequenceGapPostgresTests` | 4 | `seq_id`-Lücke; eine lange offene Transaktion (4 s) wird nicht überholt (Horizont, G-9); der Batch-Leser überholt einen Nachzügler nicht und wendet jedes Event genau einmal an |
 | `Garantien/AnhaengeReihenfolgePostgresTests` | 1 | Wächter des Horizonts: Marten (`Quick`) schreibt die Stream-Zeile vor den Events |
+| `Garantien/EventZeitPostgresTests` | 2 | eine Uhr (G-10): den Event-Zeitstempel setzt die Datenbank-Uhr, ein Zeitsprung der Sim verschiebt Zeitstempel und Uhr gemeinsam |
 | `MetadataPostgresTests` | 3 | Header-Readback |
 | `DeadlineStorePostgresTests` | 2 | durabler Fristplan |
 | `PollerBackstopPostgresTests` | 2 | Poll-Cursor der Emittenten heilt verlorene Signale; der Batch-Leser holt ein Event mit verlorenem Signal beim nächsten Poll nach (auch eines, das während des Durchlaufs kam) |

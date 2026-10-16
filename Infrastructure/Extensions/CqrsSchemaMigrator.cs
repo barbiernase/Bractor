@@ -28,5 +28,7 @@ public static class CqrsSchemaMigrator
         // IMartenStorage-Ebene nimmt nur den optionalen AutoCreate-Override (keinen CancellationToken).
         // CreateOrUpdate erzwingt das eager Anlegen unabhängig von der konfigurierten AutoCreate-Stufe.
         await store.Storage.ApplyAllConfiguredChangesToDatabaseAsync(AutoCreate.CreateOrUpdate);
+        // Die Regel für den Event-Zeitstempel (G-10) ist kein Weasel-Objekt (Weasel kennt keine Trigger): eigens anlegen.
+        await Infrastructure.Persistence.EventZeit.AnlegenAsync(store, CancellationToken.None);
     }
 }

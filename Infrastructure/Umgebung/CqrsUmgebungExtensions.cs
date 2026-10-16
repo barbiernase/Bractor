@@ -89,6 +89,7 @@ public static class CqrsUmgebungExtensions
             o.AppendDrainParallelism = u.Schreibpfad.Drain;
             o.SnapshotThreshold = u.Schreibpfad.SnapshotSchwelle;
             o.InboxHorizont = TimeSpan.FromDays(u.Schreibpfad.InboxHorizontTage);
+            o.DbUhr = UmgebungsDbClock.Ausdruck(u);   // eine Uhr: IDbClock und Event-Zeitstempel (G-10)
             o.BuendelGroesse = u.Schreibpfad.BuendelGroesse;
             o.Passivierung = Infrastructure.Lebenszyklus.Passivierung.Aus(u.Lebenszyklus);
             o.Konsum = Infrastructure.Projections.Konsum.Aus(u.Konsum);

@@ -163,6 +163,9 @@ nicht aus Namespaces (`CommandAggregateMapGenerator`).
   Der `InboxAufraeumer` (je Knoten, alle 10 min, seitenweise, Lease über einen Transaktions-Advisory-Lock) löscht Quittungen älter als
   `Schreibpfad.InboxHorizontTage` (Standard 30, E2): innerhalb des Horizonts wirkt ein Command genau einmal.
 - **OCC**: `EventStreamUnexpectedMaxEventIdException` und die Doppel-Erstellung werden zu `ConcurrencyException`.
+- **Zeitstempel** (G-10): den setzt die Datenbank beim Einfügen, mit derselben Uhr, die `IDbClock` liest (`EventZeit`, Regel `before insert` auf
+  `mt_events`; Ausdruck `UmgebungsDbClock.Ausdruck`, in Sim samt Versatz). Marten schickt die Uhr des Hosts mit, die Regel ersetzt sie. Angelegt
+  vor dem ersten Schreiben je Store bzw. vom Migrator (Weasel kennt keine Trigger); ein Mitglied ohne Schema-Recht prüft nur, dass sie da ist.
 - **Metadaten** in **derselben** Transaktion: `CorrelationId`, `CausationId` und die Header
   - `aggregate_type` — der Aggregat-Typ,
   - `akteur` — der Akteur der Kette (`ImAuftrag.Header`; reist mit den Events zu Flüssen, Prozessen, Fristen),
