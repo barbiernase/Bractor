@@ -389,6 +389,17 @@ zwei. Messung `…_0309_7a1f9f9_server-nachlauf` (gültig, grün), Störungsläu
 2,6 und 1,5 % — **E5-Ziel Leerlauf erreicht**; Nachlauf L1 48 s, L5 15 s; Lastblöcke im Band der Läufe davor. Neu: PF-15 (die Grundlast wächst mit
 Projektionen × Partitionen).
 
+**Nachtrag Tests und Vermessung** (2026-10-16, auf Tobis Auftrag, Branch `claude/tests-und-messung`, Messserver): die Test-Suite auf drei
+Ebenen mit je einem Befehl verschlankt (`./pruefe.sh schnell|alles`, `scripts/vermessung-e2e.sh`), Garantie-Suite und Trait ersetzt durch die
+Nachweis-Spalte von docs/11 und `GarantieMatrixTests`; 43 Testfälle weniger, keine Garantie ohne Nachweis; Gegenproben (Partitions-Checkpoint ohne
+Revision, Konflikt ohne Wiederholung, zufällige Emit-Id, nicht idempotente Ablehnung, falscher Name in docs/11) je rot. Messtreiber auf sechs
+Szenarien mit je drei Wiederholungen, Neuaufbau neu, wenige Kennzahlen, eigene Tabelle (docs/12 §12.5); S2, S3-8, S4, S5-8, Diagnose, Probe und
+`vermessung-postgres.sh` entfallen, die alten Tabellen stehen im Messarchiv. Messung `…_1255_d394352_server-leistung-5`, `…_1301_…-6` (gültig,
+grün), Störungsläufe `…_1249_…-stoerung-4`, `…_1252_…-5` (grün, 56 673 und 56 069 Vorgänge); abgelegt und ungültig: `…_0930_…-leistung-1`
+(Dateiprüfung zählte über die Wiederholungen), `…_0949_…-stoerung-1` (Prüf-Abfrage sprengte das Shared Memory des Containers), `…_0958_…`/`…_1002_…`
+(ohne `ergebnis.json`: die Zusammenfassung warf); gültig, aber nicht in der Tabelle (älterer Treiber-Stand): `…_0937_…-leistung-2`, `…_0943_…-3`,
+`…_1005_…-4`. Einschätzung in docs/12 §12.5, Kurzfassung docs/13 §13.1; neu PF-16, erledigt VM-1.
+
 **Phase 5** (umgesetzt, 2026-10-15, auf Tobis Wort vor Phase 4; Code `22632bc`…`ffaeaea`, gemessen auf dem Messserver, docs/12 §12.6):
 - *Umgesetzt:* PF-4 — `ProzessPoll` liest seitenweise (`ReadPartitionAsync`) und routet die geladenen Events, Starts nur für neue oder offene
   Vorgänge (`StreamsVorhandenAsync`), Marke je Seite; Backstop mit Fristen im Offen-Index (`ProzessOffen.Frist`, Sekundentakt, geschrieben erst
@@ -464,27 +475,21 @@ Phase 5 damit erreicht (L1 und L5)**; S5-64 1,69 × Baseline. Offen: PF-13, PF-4
 7. `--probe` (verkürzter Funktionstest des Treibers) schreibt nicht nach `vermessung/ergebnisse/` — Probeläufe während der Entwicklung des
    Treibers sind keine Messläufe.
 
-## 9 · Übergabe an den nächsten Agenten (Stand 2026-10-16, nach Phase 4, zwei Nachträgen und PF-14)
+## 9 · Übergabe an den nächsten Agenten (Stand 2026-10-16, nach der Vereinfachung von Tests und Vermessung)
 
-- **Neu seit der letzten Übergabe:** PF-14 geklärt und erledigt (§8, Nachtrag PF-14 Leerlauf): Nachlauf, keine Grundlast; der Leerlauf wird erst
-  nach dem Nachlauf gemessen, ein Poll-Read ohne Neues kostet eine Abfrage. Server-Tabelle §12.5, letzte Spalte „Nachlauf“
-  (`…_0309_7a1f9f9_server-nachlauf`). Für Leerlauf-Fragen gibt es die Diagnose `scripts/vermessung-e2e.sh --art leerlauf` (Zeitreihe, kein
-  Messlauf, Ordner im Temp-Verzeichnis des Servers, per `scp` holen).
-- **Offen:** Tobis Abnahme von Phase 4, der Haltepunkt aus Phase 3 (Punkt 0 in §8, unverändert), PF-13, PF-4b, PF-15; danach Phase 6.
-
-- **Wo es steht:** Phase 0, 1, 2 fertig und abgenommen; Phase 3 umgesetzt und gemessen, **nicht abgenommen** (S1-Ziel verfehlt, die Decke von S1 ist
-  der Datei-Treiber, PF-10); Phase 5 (PF-4, G-8) umgesetzt und gemessen, mit dem Nachtrag PF-12 E5-Ziel erreicht (L1 und L5 unter 10 Queries/s und 5 % CPU; der scheinbare
-  Rückfall seit „Korreliert lesen“ war Nachlauf im Messfenster, PF-14 erledigt); Phase 4 (G-2, PF-3) umgesetzt und gemessen, Abnahme bei Tobi;
-  offen PF-4b, PF-13, PF-15. Gemessen wird
-  seit 2026-10-15 auf dem Messserver (`scripts/server.sh`, docs/12 §12.6) mit eigener Tabelle; die Mac-Tabelle endet mit Phase 3.
-  **Haltepunkt (offen):** Tobi entscheidet über den Vorschlag in §8 („Plan-Änderungen aus Phase 3“, Punkt 0: E5-Ziel für S1 neu fassen).
-- **Danach:** Phase 6 (PF-6, G-5, PF-7) nach §3; daneben PF-13 (Reaktion unter S5-64), PF-15 (Grundlast je Projektion) und PF-4b.
-- **Messen je Phase:** auf dem Messserver (`scripts/server.sh lauf scripts/vermessung-e2e.sh --anlass server-<phase> --spalte "<Phase>"`),
-  Höchstlast ≈ 4 min, Störungslauf ≈ 5–8 min, Tabelle per Skript (Tabelle „messserver“). A-B-B-A über einen Worktree des alten Stands auf dem Server. Code committen, dann messen, dann Ergebnis committen. Nicht auf Abkühlung oder Fremdlast warten (Tobi), Fremdlast im Bericht nennen.
-- **Vor jedem Commit:** `dotnet build`; Prüfstand; Garantie-Suite (Prüfstand, dann nacheinander Integration und Prüfdomäne); die vollen
-  Integrations-Suiten; `GraphExtractor -- --check`; `./codegen.sh --check`; bei Generator-Änderungen das Generat inspizieren; bei Umgebungs- oder
-  Editor-Änderungen die Werkbank-Abnahme. Commits ohne Co-Authored-By; nicht pushen ohne Tobis Wort.
-- **Fallen:** Nach einer Gegenprobe mit sabotiertem Fix alle Testprojekte neu bauen. Läufe direkt hintereinander verlieren auf dem MacBook Air
-  Durchsatz (Wärme) — Vergleiche lieber A-B-B-A. Integrations-Tests gegen langlebige Schemata: ein frischer Projektions-Schlüssel beginnt am Kopf
-  des Logs (`BatchHilfe.StarteAmKopfAsync`); Karenz-0-Tests warten den Uhrenversatz ab. `git stash` nimmt neue Dateien nicht mit — nicht zum
-  Zählen „vorher“ benutzen.
+- **Neu seit der letzten Übergabe:** Tests und Messung vereinfacht (§8, Nachtrag Tests und Vermessung): drei Ebenen — `./pruefe.sh schnell`
+  (≈ 1½ min), `./pruefe.sh alles` (≈ 5 min, Integration, Prüfdomäne, Werkbank-Abnahme nacheinander), `scripts/vermessung-e2e.sh` (Leistung
+  ≈ 6 min, `--stoerung` ≈ 4 min). Die Garantie-Matrix ist die Nachweis-Spalte von docs/11, `GarantieMatrixTests` hält sie; eine Garantie-Suite
+  gibt es nicht mehr. Messwerte und Einschätzung: docs/12 §12.5 (Tabelle per `scripts/vermessung-tabelle.sh --schreibe`), Archiv der Phasen:
+  docs/12-anhang-messarchiv.md.
+- **Wo es steht:** Phase 0, 1, 2 abgenommen; Phase 3 umgesetzt, **nicht abgenommen** (S1-Ziel, die Decke des Bildeingangs ist heute die Maschine
+  bzw. der Datei-Treiber, PF-10/PF-16); Phase 5 mit Nachtrag PF-12 erreicht; Phase 4 umgesetzt, **Abnahme bei Tobi**. **Haltepunkt (offen):** Tobi
+  entscheidet über den Vorschlag in §8 („Plan-Änderungen aus Phase 3“, Punkt 0: E5-Ziel für den Bildeingang neu fassen) — das neue Szenario
+  „Neuaufbau“ misst inzwischen, was Phase 3 geändert hat (Projektionen: gut 50 000 Events/s, keine Decke).
+- **Danach:** Phase 6 (PF-6, G-5, PF-7) nach §3; daneben PF-13, PF-15, PF-16 und PF-4b.
+- **Arbeitsweise:** lokal committen, auf `pruef/<name>` pushen, auf dem Server `./pruefe.sh alles` (und Gegenproben, Messung), erst grün den
+  eigentlichen Zweig pushen und den Prüfzweig löschen. Messen: `scripts/server.sh lauf scripts/vermessung-e2e.sh --anlass server-<anlass>`, für
+  einen Vergleich zwei Läufe je Stand. Nicht auf Abkühlung oder Fremdlast warten, Fremdlast im Bericht nennen. Commits ohne Co-Authored-By.
+- **Fallen:** Prüf-Abfragen des Treibers mit zehntausenden Ids laufen ohne parallele Pläne (sonst 53100, Shared Memory des Containers 64 MB);
+  `dotnet test` schreibt auf dem Server englisch; nach einer Gegenprobe neu bauen (bin/obj überleben `git clean`); ein frischer Projektions-Schlüssel
+  in Integrationstests beginnt am Kopf des Logs (`BatchHilfe.StarteAmKopfAsync`), Karenz-0-Tests warten den Uhrenversatz ab.

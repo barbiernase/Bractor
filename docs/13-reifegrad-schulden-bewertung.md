@@ -1,7 +1,7 @@
 # 13 — Reifegrad, Schulden & Bewertung
 
 **Die eine Quelle für „offen“.** Andere Dokumente (`CLAUDE.md`, Kapitel 01–12, Konzepte) nennen Schulden höchstens kurz und verweisen
-hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz und PF-14. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
+hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz, PF-14 und der Vereinfachung von Tests und Vermessung. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
 (`docs/konzept-werkbank.md` §2). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
 
 ## 13.0 Offen auf einen Blick
@@ -13,7 +13,7 @@ hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz und P
 | PF-13 | Unter S5-64: Reaktion p99 2–3,5 s (p50 5 ms) — ihr Nachschub wartet am heißen Posten hinter den Reservierungen (der S3-64-Rückgang ist mit „korreliert lesen“ erledigt: 1,85 × Baseline) | P3 |
 | PF-4b | Rest von PF-4: keine Lease für den Prozess-Backstop im Cluster (jeder Knoten heilt alle offenen Vorgänge); Abnahme „S3 Zeit je Teil konstant über N“ und „10 000 offene Vorgänge im Leerlauf“ ohne Szenario im Treiber | P3 |
 | PF-10 | Datei-Treiber meldet eine Datei nach der anderen ins Log (Rückstau): das Melde-Tempo ist die Decke von S1 — Entscheidung offen | P2 |
-| VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
+| PF-16 | Bildeingang: 117 ms Host-CPU je Bildpaar (≈ 10 Kerne bei 83 Paaren/s, der Rechner ist voll) — wohin sie geht, ist ohne Profil ungeklärt | P3 |
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16 | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
@@ -48,6 +48,13 @@ generiertes typbasiertes Dispatching, ein Emit-Weg, scharfe Durabilitätsgrenze,
 durchgezogen — bis in den Multi-Node-Transport, die Clients (Blazor und Python mit Vertrag) und die Werkbank. Die Compile-Zeit-Guards
 (62 Diagnose-IDs in 12 Analyzern und den Generatoren, dazu Boot-Guards) und die ehrliche Test-Kultur („nie faken, was man nicht besitzt“)
 heben es über typische Eigenbau-Frameworks.
+
+**Leistung (Kurzfassung, docs/12 §12.5, Messserver, 2026-10-16):** Ende zu Ende etwa 1 100–1 200 verteilte Prozess-Vorgänge je Sekunde, etwa
+1 000 Teile (je zwei Commands) je Sekunde an einem einzelnen heißen Aggregat, 83 Bildpaare je Sekunde; ein Vorgang ohne Warteschlange in 17 ms (p99 45 ms); ein
+Neuaufbau aller Projektionen mit gut 50 000 Events/s; ohne Eingang 2,5–3,8 Queries/s und 2–3 % eines Kerns; unter zwei harten Abbrüchen und
+Redis-Ausfall 56 000 Vorgänge genau einmal. Die Decke ist bei verteilter Last und beim Bildeingang die Maschine (12,5 bzw. 14 von 14 Kernen), am
+heißen Aggregat der Single-Writer; die Garantie-Mechanik kostet 5–19 % der Datenbank-Zeit. Ungemessen: mehrere Knoten, Datenbank über das Netz,
+Dauerbetrieb, große Logs.
 
 **Der Kern ist solide und gemessen grün.** Die offenen Punkte liegen fast durchweg an zwei Stellen: an den **Rändern** (Transport-Sicherheit,
 Multi-Node-Betrieb) und an der **Allgemeingültigkeit** (W2/W10/W11): Komposition und Werkzeuge kennen die Projekte der Beispieldomäne beim Namen,
@@ -92,10 +99,11 @@ In S1 ist genau das die Decke: je Sekunde werden halb so viele Paare komplett, w
 die Leseseite hält in Echtzeit mit. Das Ziel „S1 ≥ 3 × Baseline“ (Plan E5) ist deshalb mit dem Konsum nicht zu erreichen. *Optionen (Tobi):* in
 Bündeln melden (mehrere `StartStream` in einer Transaktion, Rückstau je Bündel; „genau einmal je Kennung“ bleibt) oder das S1-Ziel neu fassen.
 
-**VM-1 · Zählung im Treiber.** `Cqrs.Vermessung/Pruefdomaene.cs` zählt etwa „je Reservierung unter dem Mindestbestand genau ein Nachschub“ als
-zwei Abfragen; baut der Host noch ab (Rückstand bei Fristende), kann Ist Soll überholen (Phase 3: 21 648 gegen 21 646, im Ruhezustand 21 927 =
-21 927). *Empfehlung:* die Prüfungen erst nach dem Anhalten der Hosts zählen oder Soll und Ist in einer Abfrage.
-
+**PF-16 · CPU je Bildpaar.** Der Bildeingang kostet 117 ms Host-CPU, 21 Transaktionen und 146 Queries je Paar (docs/12 §12.5); bei 83 Paaren/s
+sind das ≈ 10 Kerne Host und 14 Kerne Rechner — die Maschine ist voll, nicht erst der Datei-Treiber (PF-10). Beteiligt sind vier Funktionen auf
+96 × 64-Bildern, der Dirigent, fünf Projektionen und die 100-ms-Abfragen des Messtreibers auf `GetImagePair` (27 je Paar); in der Datenbank fallen
+die Weckungen der Batch-Leser unter tröpfelndem Eingang auf (je Weckung „gesetzte Sequenz“ und Seite, ≈ 2,3 ms DB-Zeit, gut sechs Weckungen je
+Paar). *Empfehlung:* ein CPU-Profil des Hosts unter dem Bildeingang, bevor PF-10 entschieden wird.
 
 **W10-1 · Reflection in Werkzeugen.** `Cqrs.Codegen` liest die gebauten Domänen-DLLs per `MetadataLoadContext` und erzeugt daraus `domain.proto`,
 die STJ-Kontexte und die Python-Generate (`vertraege.py`, `funktionen.py`, `funktions_tabelle.py`, `nutzlast_tabelle.py`). Daneben existiert mit `Proto.SourceGeneration` ein
@@ -297,6 +305,15 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **Tests und Vermessung vereinfacht (2026-10-16, Messserver; docs/12 §12.1, §12.5):** drei Ebenen mit je einem Befehl (`./pruefe.sh schnell`,
+  `./pruefe.sh alles`, `scripts/vermessung-e2e.sh`) statt Prüfstand, zwei Integrations-Suiten, Garantie-Suite, Gate und Werkzeug-Aufrufen einzeln;
+  Ordner nach Thema statt nach Plan-Phase; 43 Testfälle weniger (726 → 683: Doppel, Smoke-Tests, Tests von Test-Doubles und vom toten `ReaktionsId`), ohne dass
+  eine Garantie ihren Nachweis verlor — die Nachweis-Spalte von docs/11 hält `GarantieMatrixTests` gegen den Code. Leistungsmessung mit sechs
+  Szenarien statt zehn Blöcken, je drei Wiederholungen, wenigen Kennzahlen (Durchsatz, Latenz, Kosten je Vorgang, Leerlauf, Neuaufbau) und einer
+  kleinen Tabelle; die alten Tabellen im Messarchiv. Ebene 2 auf dem Server 4:42 min samt Werkbank-Abnahme (Integration und Prüfdomäne 2:00
+  statt 3:08). Dabei erledigt: **VM-1** (Soll und Ist der Reaktions-Prüfung in einer Abfrage), fünf Integrationstests schrieben ins
+  Standard-Schema `es` (jetzt eigene Schemata).
 
 - **Leerlauf: Nachlauf statt Grundlast (früher PF-14, 2026-10-16, Messserver; docs/04 §4.1.3, docs/12 §12.5):** L1 ≈ 30 und L5 ≈ 113
   Queries/s im Leerlauf waren keine bleibende Last, sondern der erste Poll-Takt nach der Last, den das 15-s-Fenster traf: unter Höchstlast rücken

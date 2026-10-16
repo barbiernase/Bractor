@@ -87,7 +87,115 @@ Datei-Treiber über einen Neustart), `ZweiKnotenTests` (Command-Dispatch und PID
 
 ## 12.5 Messwerte
 
-(NEU)
+### Messverfahren (Ebene 3)
+
+Gemessen wird der echte Host im Release-Build (`Host.Grpc` in `umgebungen/umgebung.vermessung.json`, `Host.Pruefdomaene` in
+`umgebung.vermessung-pruefdomaene.json`, je eigene, frische DB, eigener Redis `cqrs-vermessung-redis`). Last kommt nur über die echten Eingänge
+(Datei-Quelle, JSON-Eingang mit Akteur-Token), gezählt wird bis zum fachlich sichtbaren Ergebnis. Nach 30 s Warmlauf läuft jeder Lastblock
+**dreimal** im selben Host (frische Aggregate, wachsendes Log); die Tabelle zeigt je Zelle den Median, in Klammern die Spanne, wenn sie 5 % übersteigt.
+
+| Szenario | Last | deckt ab | sichtbar, wenn |
+|---|---|---|---|
+| Bildeingang | Stoß von 600 TIFF-Paaren (96 × 64) ins Quell-Verzeichnis | Quelle (Datei-Treiber), Fluss mit vier Funktionen, Projektionen, Query | `GetImagePair` liefert das Paar komplett (je offenes Paar alle 100 ms) |
+| Heißer Schreiber | 2 000 Teile von 64 Sendern an **einen** Sammelvorgang (je Teil `StarteTeilauftrag` + `SchließeTeilauftragAb`) | Single-Writer, Bündel, Prozess je Teil | `TeilVerbucht` im Log |
+| Verteilt ruhig | Prüfdomäne, 1 Sender, 1 000 Vorgänge | Latenz eines Vorgangs ohne Warteschlange | `ProzessBeendet` im Log |
+| Verteilt an der Decke | Prüfdomäne, 64 Sender, 3 000 Vorgänge; je zehn 8 Aufträge (Diamant), 1 Auftrag gegen ein volles Kontingent (Kompensation), 1 Verteilung (Fan-out 4, Count-Join); fast jede Reservierung weckt die Reaktion `NachschubBeiMindestbestand` | Schreiben verteilt, Prozess-Maschine, Reaktion | `ProzessBeendet` im Log; die Reaktion gesondert (Reservierung → Nachschub) |
+| Neuaufbau | nach den Blöcken: Host stoppen, gespeicherten Projektions-Stand löschen (wirkt in Sim wie eine Code-Änderung), Host starten — alle 5 Projektionen × 8 Partitionen lesen das Log ab 0; dreimal | Decke der Projektionen (Batch-Konsum) | Rückstand in `/monitoring/metrics` = 0 (alle 50 ms gefragt) |
+| Leerlauf (je Anwendung) | ohne Eingang: erst der Nachlauf, bis alle Poll-Cursor und Projektions-Positionen am Kopf des Logs stehen (höchstens 180 s), dann 60 s (zwei Poll-Perioden) | Grundlast | – |
+
+Kennzahlen: **Durchsatz** = Vorgänge durch die Zeit vom ersten Start bis zum letzten sichtbaren; **Schreiben angenommen** = so schnell nimmt
+der Eingang an (je Vorgang ein beantworteter Command bzw. eine Datei); **Latenz** p50/p99 vom Start bis sichtbar (unter einem Stoß ist das
+überwiegend Warteschlange — die Latenz ohne Warteschlange zeigt „Verteilt ruhig“); **Reaktion** p99 = Reservierung bis Nachschub im Log;
+**Kosten je Vorgang** = Transaktionen (COMMITs) und Queries aus `pg_stat_statements` (ohne die Lese-Rolle des Treibers) und CPU-Millisekunden des
+Hosts; ohne Eingang Queries je Sekunde, CPU in Prozent eines Kerns, Dauer des Nachlaufs, RSS. Weitere Werte (Rückstand, Abbauzeit, CPU des ganzen
+Rechners, aktive Actors, RSS-Verlauf) stehen in `ergebnis.json`. Nach jedem Block die Exactly-once-Prüfung ([11](11-garantien.md) §11.14), je
+Anwendung die globale; ein Fehlschlag macht den Lauf ungültig. Der **Störungslauf** (`--stoerung`, ≈ 4 min): 90 s Bildeingang (2 Paare/s) und
+Prüfdomäne (8 Sender, Wiederholung mit derselben CommandId) gleichzeitig, dabei der Host der Beispieldomäne hart beendet und nach 3 s neu
+gestartet, Redis 10 s gestoppt, der Host der Prüfdomäne hart beendet; danach dieselbe Prüfung. Ablage: `vermessung/ergebnisse/<datum>_<commit>_<anlass>/`
+(nur anhängen); die Tabelle erzeugt `scripts/vermessung-tabelle.sh --schreibe` aus den gültigen Läufen des jüngsten Commits.
+
+### Stand
+
+<!-- vermessung-tabelle:anfang -->
+Commit `d394352`, Messserver; Leistung: [2026-10-16_1255_d394352_server-leistung-5](../vermessung/ergebnisse/2026-10-16_1255_d394352_server-leistung-5/), [2026-10-16_1301_d394352_server-leistung-6](../vermessung/ergebnisse/2026-10-16_1301_d394352_server-leistung-6/) (je Zelle Median über 6 Wiederholungen, in Klammern die Spanne, wenn sie 5 % übersteigt); Störung: [2026-10-16_1249_d394352_server-stoerung-4](../vermessung/ergebnisse/2026-10-16_1249_d394352_server-stoerung-4/), [2026-10-16_1252_d394352_server-stoerung-5](../vermessung/ergebnisse/2026-10-16_1252_d394352_server-stoerung-5/).
+
+| Szenario | Durchsatz (/s) | Schreiben angenommen (/s) | Latenz p50 (ms) | Latenz p99 (ms) | Reaktion p99 (ms) | Transaktionen je Vorgang | Queries je Vorgang | CPU je Vorgang (ms) |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Bildeingang: Quelle, Fluss, Projektion (Paare) | 82,8 (79,9–85,7) | 3 586 (3 092–4 737) | 3 633 (3 481–3 843) | 7 026 (6 752–7 317) | – | 20,9 | 146 | 117 (111–122) |
+| Heißer Schreiber: ein Sammelvorgang, 64 Sender (Teile) | 1 039 (846–1 371) | 3 006 (1 740–3 208) | 822 (625–1 165) | 1 174 (863–1 529) | – | 1,1 (1,0–1,2) | 16,7 | 5,3 (3,4–6,1) |
+| Verteilt ruhig: Prüfdomäne, 1 Sender (Vorgänge) | 298 (281–309) | 299 (282–311) | 16,6 (14,7–22,8) | 45,0 (34,4–831) | – | 6,9 (5,6–7,4) | 35,4 (31,9–38,2) | 17,8 (13,4–19,3) |
+| Verteilt an der Decke: Prüfdomäne, 64 Sender (Vorgänge) | 1 126 (1 077–1 239) | 3 485 (2 896–3 884) | 1 028 (845–1 182) | 1 784 (1 545–1 906) | 266 (102–808) | 1,4 (0,8–1,7) | 27,2 (26,5–28,3) | 6,8 (6,3–8,3) |
+
+| Szenario | Queries (/s) | CPU (% eines Kerns) | Nachlauf (s) | RSS am Ende (MB) | Neuaufbau (Events/s) | Neuaufbau (s) | Neuaufbau (Events) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Leerlauf Beispieldomäne | 3,8 | 3,3 | 61,8 | 2 116 (2 048–2 183) | – | – | – |
+| Leerlauf Prüfdomäne | 2,5 | 1,6 | 12,1 (11,0–13,1) | 1 266 | – | – | – |
+| Neuaufbau aller Projektionen | – | 163 (144–191) | – | – | 56 776 (42 197–59 318) | 0,3 (0,2–0,3) | 14 480 |
+
+| Störungslauf | Vorgänge Prüfdomäne | Bildpaare | Abbau nach der Last (s) | p99 Prüfdomäne (ms) | Exactly-once |
+|---|---:|---:|---:|---:|:-:|
+| [2026-10-16_1249_d394352_server-stoerung-4](../vermessung/ergebnisse/2026-10-16_1249_d394352_server-stoerung-4/) | 56 673 | 181 | 10,0 | 2 459 | grün |
+| [2026-10-16_1252_d394352_server-stoerung-5](../vermessung/ergebnisse/2026-10-16_1252_d394352_server-stoerung-5/) | 56 069 | 181 | 10,3 | 3 087 | grün |
+<!-- vermessung-tabelle:ende -->
+
+### Einschätzung
+
+Stand 2026-10-16, Commit `d394352`, Messserver (Intel i5-13500: 14 Kerne, 20 Threads), ohne Fremdlast; zwei Leistungsläufe mit je drei
+Wiederholungen, zwei Störungsläufe. Der Code von Framework und Hosts ist derselbe wie in der letzten Spalte des Archivs („Nachlauf“, `7a1f9f9`) —
+dazwischen haben sich nur Tests und Messtreiber geändert.
+
+**Was das System heute schafft.** Ende zu Ende etwa **1 100–1 200 verteilte Prozess-Vorgänge je Sekunde** (je Vorgang ein Auftrag oder eine
+Verteilung über drei bis sechs Aggregate, Prozess-Manager, Kompensation, Reaktion), **etwa 1 000 Teile je Sekunde an einem einzigen heißen
+Aggregat** (Spanne 850–1 370) und **83 Bildpaare je Sekunde** durch Datei-Quelle, Fluss mit vier Funktionen und Projektionen. Ein Vorgang ohne
+Warteschlange ist nach **17 ms** fertig (p99 45 ms; einzelne Wiederholungen mit Ausreißern bis 0,8 s). Die Schreibseite nimmt an der Decke **3 500 Vorgänge
+je Sekunde** an (je einer ein Command), am heißen Schreiber 3 000 Teile (6 000 Commands), und kippt unter einem Stoß nicht; die Latenzen der Stoß-Szenarien (≈ 1 s bzw. 3,6 s im Median) sind Warteschlange, keine
+Bearbeitungszeit. Ein **Neuaufbau aller fünf Projektionen** liest gut **50 000 Projektions-Events je Sekunde** (14 480 Events in 0,3 s — wegen der
+Kürze nur auf etwa ±20 % genau). **Ohne Eingang** ist der Host still: 3,8 bzw. 2,5 Queries je Sekunde, 2–3 % eines Kerns. **Unter Störung**
+(zwei harte Host-Abbrüche, 10 s ohne Redis) wirkten 56 000 Vorgänge und 181 Bildpaare je Lauf genau einmal; der Rückstand war 10 s nach dem
+Ende der Last abgebaut.
+
+**Wo die Decken liegen und warum** (CPU in Kernen, Median; „Rechner“ = alle Prozesse samt Postgres, aus `ergebnis.json`):
+
+| Szenario | Host | Rechner | Decke |
+|---|---:|---:|---|
+| Verteilt an der Decke | 7,3 | 12,5 | **die Maschine.** Die Schreibseite nähme dreimal mehr an; jeder Vorgang zieht im Prozess-Manager acht bis zehn Folge-Commands nach sich, 6,8 ms Host-CPU und 27 Queries. Mehr Durchsatz heißt weniger Arbeit je Vorgang oder mehr Knoten (ungemessen). |
+| Heißer Schreiber | 4,8 | 8,3 | **ein Single-Writer**, nicht die CPU: die Commits eines Aggregats laufen nacheinander, das Bündel (bis 64 Commands je Append) macht daraus 1,1 Transaktionen je Teil. Die große Spanne zeigt, wie empfindlich das Bündeln am Zeitpunkt hängt. |
+| Bildeingang | 9,8 | 14,1 | **die Maschine** — und ein teurer Vorgang: 117 ms Host-CPU, 21 Transaktionen und 146 Queries je Bildpaar. Wohin die CPU geht (vier Funktionen auf 96 × 64-Bildern, Dirigent, fünf Projektionen, 27 Query-Abfragen des Treibers je Paar), ist ungeklärt (PF-16); dazu meldet der Datei-Treiber eine Datei nach der anderen (PF-10). |
+| Neuaufbau | 1,6 | 2,2 | **keine Decke**: die Projektionen lesen schneller, als alle Szenarien Events erzeugen. |
+
+**Was die Garantien kosten.** Die Mechanik, die „genau einmal“ und „nichts bleibt liegen“ trägt — Inbox-Quittung, Emittenten-Cursor,
+Offen-Index der Vorgänge, Guards und Checkpoints der Projektionen —, macht 5–19 % der Datenbank-Zeit aus (Bildeingang 5 %, heißer Schreiber 10 %,
+Verteilt an der Decke 13 %, ruhig 19 %; aus `pg_stat_statements.csv`); den Rest kosten Events schreiben und lesen. Unter Last teilen sich die
+Vorgänge ihre Commits (Group-Commit, Bündel): an der Decke 1,4 Transaktionen und 6,8 ms CPU je Vorgang, ruhig 6,9 Transaktionen und 17,8 ms — ein
+einzelner Vorgang ist also gut doppelt so teuer wie einer im Gedränge. Das ist der Preis der Einzel-Commits, nicht der Garantien.
+
+**Gegen die Server-Baseline und die letzte Messung davor** (Archiv, gleiche Szenarien unter altem Namen):
+
+| Kennzahl | Baseline (15.10., `ee5fced`) | „Nachlauf“ (16.10., `7a1f9f9`) | jetzt | jetzt / Baseline |
+|---|---:|---:|---:|---:|
+| Bildeingang, Paare/s (S1) | 57,8 | 82,6 | 82,8 | 1,4 × |
+| Heißer Schreiber, Teile/s (S3-64) | 229 | 1 172 | 1 039 (846–1 371) | 4,5 × |
+| Verteilt ruhig, Vorgänge/s · Latenz p50 (S5-1) | 224 · 37 ms | 296 · 16 ms | 298 · 17 ms | 1,3 × · 0,45 × |
+| Verteilt an der Decke, Vorgänge/s (S5-64) | 206 | 1 281 | 1 126 (1 077–1 239) | 5,5 × |
+| Reaktion p99 an der Decke | 52 ms | 330 ms | 266 ms | – |
+| Leerlauf Queries/s Beispiel · Prüfdomäne (L1 · L5) | 351 · 2 293 | 3,8 · 2,6 | 3,8 · 2,5 | 0,01 × · 0,001 × |
+
+Heißer Schreiber und Verteilt an der Decke liegen 0,9 × unter der Spalte „Nachlauf“, bei gleichem Code: gemessen wird jetzt dreimal im selben
+Host mit wachsendem Log statt eines Blocks nach dem Zwischenpunkt mit 8 Sendern; die Spanne der neuen Läufe reicht über die alten Werte. Das ist
+Messverfahren und Streuung, keine Regression.
+
+**Was ungemessen bleibt:** mehr als ein Knoten und eine Datenbank über das Netz (alle Zahlen sind ein Rechner, Postgres lokal); Dauerbetrieb
+(Speicher über Stunden, Passivierung nach 120–600 s, Aufräumen der Inbox über den Horizont); große Logs (Neuaufbau und Polls über Millionen
+Events); viele offene Vorgänge im Leerlauf (PF-4b); der Durchsatz externer Python-Worker (seine Richtigkeit prüft die Integration); die CPU von
+Postgres getrennt vom Rest des Rechners; die Kosten des Read-your-writes-Index (PF-6) für sich.
+
+### Weitere Messwerte
+
+- **Werkbank (2026-10-12/13):** warmes Lesen nach Text-Änderung p50 224 ms (`GraphExtractor -- --warm`); Geste p50 unter Fremdlast 346–470 ms
+  (Ziel 300 ms, WB-1).
+- **Negativ-Befunde, die nicht erneut untersucht werden müssen** (Schreibpfad, 2026-08): Serialisierung ist für den Durchsatz irrelevant (der
+  STJ-Source-Gen-Serializer bleibt opt-in, `Schreibpfad.GeneriertesJson`); synchroner Redis-Zugriff im Command-Turn ist bei localhost-Redis
+  irrelevant. Alle übrigen Messungen bis 2026-10-16 (Phasen, Postgres-Grundgrößen, A-B-B-A-Vergleiche): [Messarchiv](12-anhang-messarchiv.md).
 
 **Als korrekt verifiziert (Backend-Audit 2026-08, nicht erneut jagen):** Versionsarithmetik inkl. Noop- und Ablehnungs-Marken; OCC-Skip auf dem
 `AnyVersion`-Pfad; Append vor State-Mutation; Shard-Hash-Konsistenz Subscribe ↔ gezieltes Publish; Pre-Dispatch-Guard des Adapters je Stream (heute `EmittentenAdapter`);
