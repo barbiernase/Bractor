@@ -386,14 +386,14 @@ Projektionen × Partitionen).
 
 **Nachtrag G-9 Horizont der Vollständigkeit** (2026-10-16, auf Tobis Wort): die Karenz von 3 s (Uhr) ist durch den Horizont aus den
 Transaktionsnummern von Postgres ersetzt (docs/13 §13.6). Eine länger als 3 s offene Transaktion wurde vorher überholt (neuer Test gegen den
-alten Code rot). Prüfstand, Garantie-Suite und Integration grün; **noch nicht gemessen** — auf dem Messserver zu prüfen: Durchsatz und Queries
-je Vorgang S1/S5 (die Positionen liegen nur noch Millisekunden hinter dem Kopf, die Partitions-Reads durchsuchen ein kürzeres Fenster),
-Leerlauf L1/L5 (eine Probe je Poll statt einer Zeit-Abfrage).
+alten Code rot). Prüfstand, Garantie-Suite und Integration grün. Gemessen zusammen mit G-10 (unten).
 
 **Nachtrag G-10 Eine Uhr** (2026-10-16, auf Tobis Wort): den Event-Zeitstempel setzt die Datenbank mit der Uhr, die `IDbClock` liest (in Sim samt
 Versatz) — Zeitlimits, Warte-Knoten und Fristen vergleichen nur noch Zeit aus einer Quelle; nebenbei behoben: nach einem Zeitsprung der Sim
-standen neue Events in der ungesprungenen Zeit (docs/13 §13.6). Prüfstand, Integration, Prüfdomäne, Werkbank-Abnahme grün; nicht gemessen
-(Kosten: eine Regel je eingefügtem Event, erwartet im Rauschen).
+standen neue Events in der ungesprungenen Zeit (docs/13 §13.6). Prüfstand, Integration, Prüfdomäne, Werkbank-Abnahme grün.
+Messung beider Nachträge `…_1620_a78c21d_server-horizont-uhr` (gültig, grün), Störungsläufe `…_1628_…`/`…_1631_…` (grün): S1 Datenbankzeit je
+Paar 20,3 → 9,5 ms, Durchsatz im Band (S1 1,13 ×, S5 0,93–1,08 ×), Leerlauf unter dem E5-Ziel (L1 5,2, L5 2,6 Queries/s). Neu: PF-16 (Kosten der
+Proben und der Zeitstempel-Regel in Sim).
 
 **Phase 5** (umgesetzt, 2026-10-15, auf Tobis Wort vor Phase 4; Code `22632bc`…`ffaeaea`, gemessen auf dem Messserver, docs/12 §12.6):
 - *Umgesetzt:* PF-4 — `ProzessPoll` liest seitenweise (`ReadPartitionAsync`) und routet die geladenen Events, Starts nur für neue oder offene
