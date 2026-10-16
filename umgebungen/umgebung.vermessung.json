@@ -17,8 +17,10 @@
     "Praefix": "vermessung:"
   },
   "Cluster": {
-    "Art": "Einzelknoten",
-    "Name": "cqrs-vermessung"
+    "Art": "Consul",
+    "Name": "cqrs-vermessung",
+    "Consul": "localhost:8500",
+    "AdvertisedHost": "localhost"
   },
   "Transport": {
     "GrpcPort": 5201,
@@ -38,20 +40,17 @@
     "DateiErkannt": {
       "Pfad": "${env:HOME}/cqrs-vermessung/DateiErkannt",
       "Muster": [ "*.tiff" ],
-      "Erkennung": "EreignisUndAbfrage",
       "Intervall": "00:00:01",
-      "Fertig": {
-        "Art": "Marker",
-        "Endung": ".fertig"
-      },
-      "Kennung": "PfadGroesseZeit",
-      "Laufmodus": "EinmalImCluster"
+      "Fertig": { "Art": "Stabil", "Fenster": "00:00:01" },
+      "Kennung": "NameGroesse",
+      "Laufmodus": "EinmalImCluster",
+      "Webhook": "/webhook/datei"
     }
   },
   "Funktionen": {
     "IBildVerkleinerung": {
       "Laufort": "Host",
-      "Slots": 8,
+      "Slots": 2,
       "Wiederholungen": 1,
       "Worker": {
         "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
@@ -59,7 +58,7 @@
           "--funktionen",
           "IBildVerkleinerung",
           "--slots",
-          "8",
+          "2",
           "--konfig",
           "AusgabePfad=${env:HOME}/cqrs-vermessung/preprocessed"
         ],
@@ -68,7 +67,7 @@
     },
     "IHistogrammAusgleich": {
       "Laufort": "Host",
-      "Slots": 8,
+      "Slots": 2,
       "Wiederholungen": 1,
       "Worker": {
         "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
@@ -76,7 +75,7 @@
           "--funktionen",
           "IHistogrammAusgleich",
           "--slots",
-          "8",
+          "2",
           "--konfig",
           "AusgabePfad=${env:HOME}/cqrs-vermessung/preprocessed"
         ],

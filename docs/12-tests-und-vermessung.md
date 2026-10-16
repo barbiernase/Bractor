@@ -157,8 +157,11 @@ Folgerungen (Verhältnisse):
 §0.1).** Gemessen wird der echte Host im Release-Build (`Host.Grpc` in `umgebungen/umgebung.vermessung.json`, `Host.Pruefdomaene` in
 `umgebung.vermessung-pruefdomaene.json`, je eigene DB, eigener Redis `cqrs-vermessung-redis`), Last nur über die echten Eingänge, gezählt bis zum
 fachlich sichtbaren Ergebnis. Beide Umgebungen sind **Art Prod** — im Host läuft derselbe Code wie im Betrieb (seit 2026-10-16, Spalte „Art Prod“;
-vorher Sim: die Uhr las je Event den Versatz, und Spur-Hinweise wurden geschrieben). Anders als `umgebung.prod.json` bleiben Einzelknoten, 8 Slots je
-Bildfunktion und die Fertig-Marke der Datei-Quelle; der JSON-Eingang ist an (über ihn treibt der Treiber die Prüfdomäne an). Jeder Block sendet höchstens 15 s so schnell, wie der Eingang annimmt, dann baut der Rückstand ab:
+vorher Sim: die Uhr las je Event den Versatz, und Spur-Hinweise wurden geschrieben) — und folgen seit 2026-10-17 (Spalte „Prod-Konfig“) der
+Konfiguration von `umgebung.prod.json`: Cluster über Consul (ein Knoten), 2 Slots je Bildfunktion, Datei fertig nach 1 s Stabilität, Erkennung per
+Abfrage, Kennung Name und Größe, Webhook. Bewusst anders: das Muster `*.tiff` (der Treiber legt Fertig-Marken daneben), der JSON-Eingang ist an
+(über ihn treibt der Treiber S3–S5 an), ein eigener Redis (der Störungslauf stoppt ihn), die Worker-Abschnitte für S2 (Prod rechnet im Host), und
+Treiber, Host und Postgres teilen einen Rechner. Jeder Block sendet höchstens 15 s so schnell, wie der Eingang annimmt, dann baut der Rückstand ab:
 
 | Block | Eingang | sichtbar, wenn |
 |---|---|---|

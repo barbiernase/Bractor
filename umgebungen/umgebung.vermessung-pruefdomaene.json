@@ -16,8 +16,10 @@
     "Praefix": "vermessung-pruefdomaene:"
   },
   "Cluster": {
-    "Art": "Einzelknoten",
-    "Name": "cqrs-vermessung-pruefdomaene"
+    "Art": "Consul",
+    "Name": "cqrs-vermessung-pruefdomaene",
+    "Consul": "localhost:8500",
+    "AdvertisedHost": "localhost"
   },
   "Transport": {
     "GrpcPort": 5211,
