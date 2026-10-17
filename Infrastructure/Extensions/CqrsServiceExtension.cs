@@ -206,32 +206,13 @@ public static class CqrsServiceExtensions
             InboxTabelle.Registriere(options);
             EventZeit.Registriere(options, builder.DbUhr);
 
-            // Durabler Poll-Backstop-Cursor pro Pull-Pfad der Emittenten: der Poller setzt nach
-            // einem Neustart hier wieder auf, statt beim Boot die ganze Historie zu re-scannen.
-            options.Schema.For<PollCursor>().Identity(x => x.Id);
-
-            // Emittenten-Cursor (P4): best-effort Fortschritt eines EMITTIERENDEN Konsumenten
-            // (Reaktion / Pipeline-Event) pro Partition — kein Co-Commit, Verlust heilt der Voll-Fold.
-            options.Schema.For<EmittentenCursorDoc>().Identity(x => x.Id);
-
-            // Durabler Offen-Index der Prozesse (§3-Backstop): eine kleine O(offen)-Menge, aus der ein
-            // periodischer Scan hängende Prozesse (verlorene terminale/kompensierende Selbst-Weckung) heilt.
-            options.Schema.For<ProzessOffen>().Identity(x => x.Id);
-
-            // Dead-Letter-Queue (§5): nicht zustellbare ausgehende Pipeline-Commands, beobachtbar + replay-bar.
-            options.Schema.For<DeadLetter>().Identity(x => x.Id).DatabaseSchemaName("dlq");
-
-            // Durabler Fristplan (Feature-Strom, Deadlines): eine Frist je offener Deadline; der
-            // DB-Uhr-getriebene Scheduler feuert die fälligen und entfernt sie danach.
-            options.Schema.For<Frist>().Identity(x => x.Id);
+            // Die Dokumente des Frameworks (Cursor, Offen-Index, Dead-Letter, Fristplan, Marking) — eine Quelle, auch für die Plan-Tests.
+            FrameworkDokumente.Registriere(options);
 
             // ★ Snapshots (docs/03-schreibseite.md): ein jsonb-Dokument je Aggregat-Typ
             //   (Snapshot<Konto> → es.mt_doc_snapshot_konto). Registrierung generiert, reflection-frei.
             Anwendung.Aktuell.RegistriereSnapshots(options);
 
-            // ★ P5b: der Prozess-Marking-Cursor (docs/04-konsum-und-prozess-maschine.md §4.5): ein jsonb-Dokument je
-            //   Korrelation, abgeleiteter Cache des gefalteten Markings → Tail-Fold statt Voll-Fold (O(N²)→O(N)).
-            options.Schema.For<Persistence.ProzessMarkingDoc>().Identity(x => x.Id);
         });
         // Anm. Multi-Node-Cold-Start (GELÖST): Marten legt die Snapshot-Tabelle eines Aggregat-Typs sonst erst
         //   beim ERSTEN Zugriff LAZY an (ohne Advisory-Lock) → gleichzeitige Node-Aktivierung rennt auf

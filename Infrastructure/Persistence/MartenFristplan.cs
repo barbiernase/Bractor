@@ -28,8 +28,12 @@ public sealed class MartenFristplan : IFristplan
     public async Task<IReadOnlyList<Frist>> FälligeAsync(DateTimeOffset jetzt, CancellationToken ct = default)
     {
         await using var session = _store.QuerySession();
-        return await session.Query<Frist>().Where(f => f.Fällig <= jetzt).ToListAsync(ct);
+        return await FaelligeAbfrage(session, jetzt).ToListAsync(ct);
     }
+
+    /// <summary>Die Abfrage der fälligen Fristen (je Takt des Schedulers) — eine Quelle für den Index und den Plan-Test.</summary>
+    public static IQueryable<Frist> FaelligeAbfrage(IQuerySession session, DateTimeOffset jetzt)
+        => session.Query<Frist>().Where(f => f.Fällig <= jetzt);
 
     public async Task EntferneAsync(Guid id, CancellationToken ct = default)
     {

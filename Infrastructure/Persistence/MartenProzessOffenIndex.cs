@@ -47,6 +47,10 @@ public sealed class MartenProzessOffenIndex : IProzessOffenIndex
     public async Task<IReadOnlyList<Guid>> ListeFaelligeAsync(DateTimeOffset bis, CancellationToken ct)
     {
         await using var session = _store.QuerySession();
-        return await session.Query<ProzessOffen>().Where(x => x.Frist != null && x.Frist <= bis).Select(x => x.Id).ToListAsync(ct);
+        return await FaelligeAbfrage(session, bis).ToListAsync(ct);
     }
+
+    /// <summary>Die Abfrage der fälligen Vorgänge (jede Sekunde vom Backstop) — eine Quelle für den Index und den Plan-Test.</summary>
+    public static IQueryable<Guid> FaelligeAbfrage(IQuerySession session, DateTimeOffset bis)
+        => session.Query<ProzessOffen>().Where(x => x.Frist != null && x.Frist <= bis).Select(x => x.Id);
 }

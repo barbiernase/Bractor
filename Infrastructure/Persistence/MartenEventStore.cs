@@ -210,9 +210,7 @@ public class MartenEventStore : IEventStoreRepository
         var schema = _store.Options.Events.DatabaseSchemaName;
         await using var conn = _store.Storage.Database.CreateConnection();
         await conn.OpenAsync(ct);
-        await using var cmd = new Npgsql.NpgsqlCommand(
-            $"select data, type, id, stream_id, version, timestamp, {MetadatenSpalten}, seq_id from {schema}.mt_events "
-            + $"where {bedingung} and is_archived = false {ordnung}", conn);
+        await using var cmd = new Npgsql.NpgsqlCommand(EventStoreAbfragen.Events(schema, MetadatenSpalten(_store), bedingung, ordnung), conn);
         foreach (var w in werte) cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = w });
 
         var serializer = _store.Options.Serializer();
@@ -241,16 +239,13 @@ public class MartenEventStore : IEventStoreRepository
     /// schaltet alle ein, manche Test-Stores nicht) — eine fehlende liest das SQL als <c>null</c>, wie Martens LINQ sie dann auslässt. Von den
     /// Kopfzeilen nur die sechs, die ein <see cref="EventEnvelope"/> trägt, als Text (Aggregat-Typ, Akteur, Spur).
     /// </summary>
-    private string MetadatenSpalten
+    public static string MetadatenSpalten(IDocumentStore store)
     {
-        get
-        {
-            var m = ((StoreOptions)_store.Options).Events.MetadataConfig;
-            var kopf = new[] { "aggregate_type", ImAuftrag.Header, Spur.UrsacheHeader, Spur.WirkerHeader, Spur.UeberHeader, Spur.StandHeader }
-                .Select(k => m.HeadersEnabled ? $"headers->>'{k}'" : "null::text");
-            return (m.CorrelationIdEnabled ? "correlation_id" : "null::varchar") + ", "
-                 + (m.CausationIdEnabled ? "causation_id" : "null::varchar") + ", " + string.Join(", ", kopf);
-        }
+        var m = ((StoreOptions)store.Options).Events.MetadataConfig;
+        var kopf = new[] { "aggregate_type", ImAuftrag.Header, Spur.UrsacheHeader, Spur.WirkerHeader, Spur.UeberHeader, Spur.StandHeader }
+            .Select(k => m.HeadersEnabled ? $"headers->>'{k}'" : "null::text");
+        return (m.CorrelationIdEnabled ? "correlation_id" : "null::varchar") + ", "
+             + (m.CausationIdEnabled ? "causation_id" : "null::varchar") + ", " + string.Join(", ", kopf);
     }
 
     /// <summary>Marten speichert die Platzhalter gescheiterter Appends unter diesem Diskriminator (G-7).</summary>
@@ -325,10 +320,10 @@ public class MartenEventStore : IEventStoreRepository
         // Festes SQL statt Martens LINQ (PF-22) — dieselbe Bedingung, die Marten erzeugte: Partition, nicht schon erledigt, jenseits der Position,
         //   optional nur die abonnierten Typen, geordnet nach Sequenz, höchstens limit Zeilen.
         var (events, zeilen) = typen is null
-            ? await LeseEventsAsync($"seq_id > $1 and {PartitionsAusdruck.Sql("stream_id")} % $2 = $3 and not (seq_id = any($4))",
-                "order by seq_id limit $5", ct, nach, partitionen, partition, ausser.ToArray(), limit)
-            : await LeseEventsAsync($"seq_id > $1 and {PartitionsAusdruck.Sql("stream_id")} % $2 = $3 and not (seq_id = any($4)) and type = any($6)",
-                "order by seq_id limit $5", ct, nach, partitionen, partition, ausser.ToArray(), limit, typen.ToArray());
+            ? await LeseEventsAsync(EventStoreAbfragen.PartitionsBedingung(false), EventStoreAbfragen.PartitionsOrdnung, ct,
+                nach, partitionen, partition, ausser.ToArray(), limit)
+            : await LeseEventsAsync(EventStoreAbfragen.PartitionsBedingung(true), EventStoreAbfragen.PartitionsOrdnung, ct,
+                nach, partitionen, partition, ausser.ToArray(), limit, typen.ToArray());
         return new PartitionsSeite(events, gesetzt, zeilen >= limit);
     }
 
@@ -364,7 +359,7 @@ public class MartenEventStore : IEventStoreRepository
                 $"select case when is_called then last_value else 0 end from {schema}.mt_events_sequence"));
             var zweite = new Npgsql.NpgsqlBatchCommand(
                 "select pg_current_xact_id()::text, pg_snapshot_xmin(pg_current_snapshot())::text, "
-                + $"exists(select 1 from {schema}.mt_events where seq_id > $1)");
+                + EventStoreAbfragen.Dahinter(schema));
             zweite.Parameters.Add(new Npgsql.NpgsqlParameter { Value = nach });
             probe.BatchCommands.Add(zweite);
             probe.BatchCommands.Add(new Npgsql.NpgsqlBatchCommand("commit"));
@@ -383,7 +378,7 @@ public class MartenEventStore : IEventStoreRepository
         {
             await using var pruefung = new Npgsql.NpgsqlCommand(
                 "select pg_snapshot_xmin(pg_current_snapshot())::text, "
-                + $"exists(select 1 from {schema}.mt_events where seq_id > $1)", conn);
+                + EventStoreAbfragen.Dahinter(schema), conn);
             pruefung.Parameters.Add(new Npgsql.NpgsqlParameter { Value = nach });
             await using var r = await pruefung.ExecuteReaderAsync(ct);
             await r.ReadAsync(ct);
@@ -476,11 +471,10 @@ public class MartenEventStore : IEventStoreRepository
         var conn = (Npgsql.NpgsqlConnection)session.Connection!;
         if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync(ct);
         await using var cmd = conn.CreateCommand();
-        cmd.CommandText = $"select seq_id, stream_id from {schema}.mt_events where seq_id > @nach and "
-                          + (typen is null ? "type <> 'tombstone'" : "type = any(@typen)") + " order by seq_id limit @limit";
-        cmd.Parameters.AddWithValue("nach", afterGlobalSequence);
-        cmd.Parameters.AddWithValue("limit", limit);
-        if (typen is not null) cmd.Parameters.AddWithValue("typen", typen.ToArray());
+        cmd.CommandText = EventStoreAbfragen.GeaenderteStreams(schema, typen is not null);
+        cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = afterGlobalSequence });
+        cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = limit });
+        if (typen is not null) cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = typen.ToArray() });
 
         var streams = new List<Guid>();
         var gesehen = new HashSet<Guid>();
