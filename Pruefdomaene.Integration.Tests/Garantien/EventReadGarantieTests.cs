@@ -4,6 +4,7 @@ using Infrastructure.Aggregate;
 using Infrastructure.Persistence;
 using JasperFx.Events;
 using Marten;
+using Marten.Linq.MatchesSql;
 using Microsoft.Extensions.Logging.Abstractions;
 using Pruefdomaene.Posten;
 using Anwendung = Infrastructure.Komposition.Anwendung;
@@ -109,6 +110,46 @@ public class EventReadGarantieTests : IClassFixture<EventReadGarantieTests.Fixtu
             (await es.ReadStreamAsync(tombstoneStream, 0, default)).Should().BeEmpty();
         }
         Gleich(await es.ReadStreamAsync(konflikt, 0, default), await SollAsync(konflikt, _ => true), "Stream nach dem Konflikt");
+    }
+
+    [Fact]
+    public async Task Seiten_der_Projektionen_lesen_dasselbe_wie_Martens_LINQ()
+    {
+        var es = Es;
+        var anfang = (await es.ReadChangedStreamsAsync(0, null, int.MaxValue, default)).HighWaterMark;
+        var streams = Enumerable.Range(0, 8).Select(_ => Guid.NewGuid()).ToList();
+        foreach (var s in streams)
+        {
+            await es.AppendEventsAsync(s, 0, new IEvent[] { new PostenEroeffnet(10), new PostenReserviert(1) }, "K", "C", "Posten");
+            using (Spur.Von("u:1", "decide:Posten/GibPostenFrei", null))
+                await es.AppendEventsAsync(s, 2, new IEvent[] { new PostenFreigegeben(1) }, "K", "C2", "Posten", "Disponent");
+        }
+        long[] erledigt;
+        await using (var q = _fx.Store.QuerySession())
+            erledigt = (await q.Events.QueryAllRawEvents().Where(e => e.Sequence > anfang).OrderBy(e => e.Sequence).ToListAsync())
+                .Select(e => e.Sequence).Where((_, i) => i % 5 == 0).ToArray();
+
+        foreach (var partition in new[] { 0, 1 })
+        foreach (var typen in new[] { null, new[] { "posten_reserviert", "posten_freigegeben" } })
+        foreach (var ausser in new[] { Array.Empty<long>(), erledigt })
+        foreach (var limit in new[] { 3, 500 })
+        {
+            var ist = await es.ReadPartitionAsync(anfang, partition, 2, typen, ausser, limit, default);
+            // Das Soll: dieselbe Abfrage über Martens LINQ (so las ReadPartitionAsync vor PF-22).
+            await using var q = _fx.Store.QuerySession();
+            var anfrage = q.Events.QueryAllRawEvents().Where(e => e.Sequence > anfang)
+                .Where(e => e.MatchesSql($"{PartitionsAusdruck.Sql("d.stream_id")} % ? = ? and not (d.seq_id = any(?))", 2, partition, ausser));
+            if (typen is not null) anfrage = anfrage.Where(e => typen.Contains(e.EventTypeName));
+            var roh = await anfrage.OrderBy(e => e.Sequence).Take(limit).ToListAsync();
+            var fall = $"Partition {partition}, Typen {(typen is null ? "alle" : "zwei")}, {ausser.Length} erledigt, Grenze {limit}";
+            ist.Voll.Should().Be(roh.Count >= limit, fall);
+            ist.Events.Select(e => e.Sequenz).Should().Equal(roh.Where(e => e.Data is not Tombstone).Select(e => e.Sequence), fall);
+            foreach (var e in ist.Events)
+            {
+                var soll = await SollAsync(e.Event.AggregateId, x => x.Version == e.Event.AggregateVersion);
+                e.Event.Should().BeEquivalentTo(soll.Single(), o => o.PreferringRuntimeMemberTypes(), fall);
+            }
+        }
     }
 
     public sealed class Fixture : IDisposable

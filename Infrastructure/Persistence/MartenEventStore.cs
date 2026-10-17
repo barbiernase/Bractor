@@ -3,7 +3,6 @@ using Infrastructure.Serialization;
 using JasperFx.Events;
 using Marten;
 using Marten.Exceptions;
-using Marten.Linq.MatchesSql;
 using Microsoft.Extensions.Logging;
 using Infrastructure.Komposition;
 using IEvent = Abstractions.IEvent;
@@ -197,45 +196,60 @@ public class MartenEventStore : IEventStoreRepository
     /// dazu die generierte Registrierung, mit der Marten die Typen auch schreibt (<see cref="EventTypen"/>) — keine Reflection.
     /// </summary>
     private async Task<IReadOnlyList<EventEnvelope>> LeseStreamAsync(string bedingung, CancellationToken ct, params object[] werte)
+        => (await LeseEventsAsync(bedingung, "order by version", ct, werte)).Events.Select(e => e.Event).ToList();
+
+    /// <summary>
+    /// Liest Events aus <c>mt_events</c> mit festem SQL (<paramref name="bedingung"/>, <paramref name="ordnung"/> samt Grenze, Werte als $1, $2 …);
+    /// immer ohne archivierte Streams, wie Martens LINQ. Kopfzeilen kommen als Text-Spalten (<c>headers->>'…'</c>) statt als Wörterbuch (PF-22).
+    /// Zeilen = gelesene Zeilen samt Tombstones (für „Seite voll“).
+    /// </summary>
+    private async Task<(List<PartitionsEvent> Events, int Zeilen)> LeseEventsAsync(string bedingung, string ordnung, CancellationToken ct,
+        params object[] werte)
     {
         await EventTabellenAsync(_store, ct);
         var schema = _store.Options.Events.DatabaseSchemaName;
         await using var conn = _store.Storage.Database.CreateConnection();
         await conn.OpenAsync(ct);
         await using var cmd = new Npgsql.NpgsqlCommand(
-            $"select data, type, id, stream_id, version, timestamp, {MetadatenSpalten} from {schema}.mt_events "
-            + $"where {bedingung} and is_archived = false order by version", conn);
+            $"select data, type, id, stream_id, version, timestamp, {MetadatenSpalten}, seq_id from {schema}.mt_events "
+            + $"where {bedingung} and is_archived = false {ordnung}", conn);
         foreach (var w in werte) cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = w });
 
         var serializer = _store.Options.Serializer();
-        var ergebnis = new List<EventEnvelope>();
+        var ergebnis = new List<PartitionsEvent>();
+        var zeilen = 0;
+        string? T(System.Data.Common.DbDataReader r, int i) => r.IsDBNull(i) ? null : r.GetString(i);
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
         {
+            zeilen++;
             var diskriminator = r.GetString(1);
             if (diskriminator == TombstoneDiskriminator) continue;   // G-7: Platzhalter eines gescheiterten Appends, kein Fakt
             if (!EventTypen.TryGetValue(diskriminator, out var typ))
                 throw new InvalidOperationException($"Event-Typ „{diskriminator}“ ist nicht registriert (GeneratedEventUpcasting.Registrierungen).");
             var daten = serializer.FromJson(typ, r, 0);
-            var headers = r.IsDBNull(8) ? null : serializer.FromJson<Dictionary<string, object>>(r, 8);
-            ergebnis.AddRange(Materialisiere(daten, r.GetGuid(2), r.GetGuid(3), r.GetInt64(4), r.GetFieldValue<DateTimeOffset>(5),
-                r.IsDBNull(6) ? null : r.GetString(6), r.IsDBNull(7) ? null : r.GetString(7), headers));
+            var sequenz = r.GetInt64(14);
+            foreach (var env in Materialisiere(daten, r.GetGuid(2), r.GetGuid(3), r.GetInt64(4), r.GetFieldValue<DateTimeOffset>(5), T(r, 6), T(r, 7),
+                         T(r, 8), T(r, 9), T(r, 10), T(r, 11), T(r, 12), T(r, 13)))
+                ergebnis.Add(new PartitionsEvent(sequenz, env));
         }
-        return ergebnis;
+        return (ergebnis, zeilen);
     }
 
     /// <summary>
     /// Korrelation, Kausalität und Kopfzeilen sind Spalten, die Marten nur anlegt, wenn sie in der Konfiguration eingeschaltet sind (der Host
-    /// schaltet alle ein, manche Test-Stores nicht) — eine fehlende liest das SQL als <c>null</c>, wie Martens LINQ sie dann auslässt.
+    /// schaltet alle ein, manche Test-Stores nicht) — eine fehlende liest das SQL als <c>null</c>, wie Martens LINQ sie dann auslässt. Von den
+    /// Kopfzeilen nur die sechs, die ein <see cref="EventEnvelope"/> trägt, als Text (Aggregat-Typ, Akteur, Spur).
     /// </summary>
     private string MetadatenSpalten
     {
         get
         {
             var m = ((StoreOptions)_store.Options).Events.MetadataConfig;
+            var kopf = new[] { "aggregate_type", ImAuftrag.Header, Spur.UrsacheHeader, Spur.WirkerHeader, Spur.UeberHeader, Spur.StandHeader }
+                .Select(k => m.HeadersEnabled ? $"headers->>'{k}'" : "null::text");
             return (m.CorrelationIdEnabled ? "correlation_id" : "null::varchar") + ", "
-                 + (m.CausationIdEnabled ? "causation_id" : "null::varchar") + ", "
-                 + (m.HeadersEnabled ? "headers" : "null::jsonb");
+                 + (m.CausationIdEnabled ? "causation_id" : "null::varchar") + ", " + string.Join(", ", kopf);
         }
     }
 
@@ -253,20 +267,10 @@ public class MartenEventStore : IEventStoreRepository
     /// Split — mehreren materialisierten Events. Alle teilen dieselbe AggregateVersion, tragen aber aufsteigende SubIndex 0,1,… → der
     /// Dedup-/Exactly-once-Schlüssel append-artiger Projektionen (AggregateId, AggregateVersion, SubIndex) bleibt eindeutig.
     /// </summary>
-    private static IEnumerable<EventEnvelope> Materialisiere(JasperFx.Events.IEvent e)
-        => Materialisiere(e.Data, e.Id, e.StreamId, e.Version, e.Timestamp, e.CorrelationId, e.CausationId, e.Headers);
-
     private static IEnumerable<EventEnvelope> Materialisiere(object daten, Guid id, Guid streamId, long version, DateTimeOffset zeit,
-        string? correlationId, string? causationId, IReadOnlyDictionary<string, object>? headers)
+        string? correlationId, string? causationId, string? aggregateType, string? akteur, string? ursache, string? wirker, string? ueber,
+        string? stand)
     {
-        var aggregateType = headers != null
-            && headers.TryGetValue("aggregate_type", out var at)
-                ? at?.ToString() ?? string.Empty
-                : string.Empty;
-        // Der Akteur der Kette (Header „akteur") — fehlt er (Alt-Events, reine Automation), bleibt der Default.
-        var akteur = headers != null && headers.TryGetValue(ImAuftrag.Header, out var ak) ? ak?.ToString() : null;
-        var (ursache, wirker, ueber, stand) = SpurHeader.Lies(headers);
-
         var materialisiert = Anwendung.Upcasting.Aufwerten(daten);
         for (int si = 0; si < materialisiert.Count; si++)
         {
@@ -279,7 +283,7 @@ public class MartenEventStore : IEventStoreRepository
                 CreatedAtUtc     = zeit,
                 CorrelationId    = correlationId ?? string.Empty,
                 CausationId      = causationId  ?? string.Empty,
-                AggregateType    = aggregateType,
+                AggregateType    = aggregateType ?? string.Empty,
                 UserId           = akteur ?? ImAuftrag.Ohne,
                 Ursache          = ursache,
                 Wirker           = wirker,
@@ -315,30 +319,17 @@ public class MartenEventStore : IEventStoreRepository
         CancellationToken ct)
     {
         await EventTabellenAsync(_store, ct);
-        await using var session = _store.LightweightSession();
-
         var (gesetzt, dahinter) = await GesetztAsync(nach, ct);
         if (!dahinter) return new PartitionsSeite(Array.Empty<PartitionsEvent>(), gesetzt, false);
 
-        var schonErledigt = ausser.ToArray();
-        var anfrage = session.Events.QueryAllRawEvents()
-            .Where(e => e.Sequence > nach)
-            .Where(e => e.MatchesSql($"{PartitionsAusdruck.Sql("d.stream_id")} % ? = ? and not (d.seq_id = any(?))", partitionen, partition, schonErledigt));
-        if (typen is not null)
-        {
-            var typListe = typen.ToArray();
-            anfrage = anfrage.Where(e => typListe.Contains(e.EventTypeName));
-        }
-        var raw = await anfrage.OrderBy(e => e.Sequence).Take(limit).ToListAsync(ct);
-
-        var events = new List<PartitionsEvent>(raw.Count);
-        foreach (var e in raw)
-        {
-            if (IstTombstone(e)) continue;
-            foreach (var env in Materialisiere(e))
-                events.Add(new PartitionsEvent(e.Sequence, env));
-        }
-        return new PartitionsSeite(events, gesetzt, raw.Count >= limit);
+        // Festes SQL statt Martens LINQ (PF-22) — dieselbe Bedingung, die Marten erzeugte: Partition, nicht schon erledigt, jenseits der Position,
+        //   optional nur die abonnierten Typen, geordnet nach Sequenz, höchstens limit Zeilen.
+        var (events, zeilen) = typen is null
+            ? await LeseEventsAsync($"seq_id > $1 and {PartitionsAusdruck.Sql("stream_id")} % $2 = $3 and not (seq_id = any($4))",
+                "order by seq_id limit $5", ct, nach, partitionen, partition, ausser.ToArray(), limit)
+            : await LeseEventsAsync($"seq_id > $1 and {PartitionsAusdruck.Sql("stream_id")} % $2 = $3 and not (seq_id = any($4)) and type = any($6)",
+                "order by seq_id limit $5", ct, nach, partitionen, partition, ausser.ToArray(), limit, typen.ToArray());
+        return new PartitionsSeite(events, gesetzt, zeilen >= limit);
     }
 
     /// <summary>
@@ -508,11 +499,4 @@ public class MartenEventStore : IEventStoreRepository
         var hochwasser = voll ? Math.Min(gesetzt, letzte) : gesetzt;
         return new StreamChanges(streams, Math.Max(afterGlobalSequence, hochwasser), voll);
     }
-
-    /// <summary>
-    /// G-7: scheitert ein Append (Versionskonflikt, isolierte Wiederholung im Batch, DB-Fehler im <c>SaveChanges</c>), füllt Marten die schon
-    /// reservierten Sequenzen mit <see cref="Tombstone"/>-Events in einem eigenen Stream. Sie sind keine Fakten, haben keinen Upcasting-Pfad
-    /// und dürfen keinen Leser wecken oder anhalten.
-    /// </summary>
-    private static bool IstTombstone(JasperFx.Events.IEvent e) => e.Data is Tombstone;
 }
