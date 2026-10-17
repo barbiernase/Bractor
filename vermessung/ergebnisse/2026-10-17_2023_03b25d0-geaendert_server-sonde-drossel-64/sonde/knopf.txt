@@ -1,0 +1,15 @@
+drossel-64
+synchronous_commit = on
+diff --git a/Infrastructure/PubSub/CommandEmitter.cs b/Infrastructure/PubSub/CommandEmitter.cs
+index 923613d..7bfb9cd 100644
+--- a/Infrastructure/PubSub/CommandEmitter.cs
++++ b/Infrastructure/PubSub/CommandEmitter.cs
+@@ -151,7 +151,7 @@ public sealed class EmitDrossel
+ {
+     /// <summary>Gleichzeitige Sends je Ziel-Aggregat und Knoten. Ein Aggregat arbeitet seriell; mehr als ein paar Sends in seiner
+     /// Mailbox erhöhen nur die Wartezeit jedes einzelnen bis an die Sendefrist.</summary>
+-    public const int StandardJeZiel = 8;
++    public const int StandardJeZiel = 64;
+ 
+     /// <summary>Die Drossel aller Live-Emitter eines Prozesses.</summary>
+     public static EmitDrossel Gemeinsam { get; } = new();

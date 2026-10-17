@@ -715,6 +715,39 @@ ganz durch (nicht gewertet). S4 1 942 und 1 847 Paare/s, Range 0,1 s, Einfrieren
 beiden laufen dieselben Wege von S4 zum ersten Mal; nur in Sim hat der Abgleich der Leseseite die Read-Model-Typen beim Start schon benutzt.
 Seitdem misst S4 mit Aufwärmrunde (Spalten davor für S4 nicht vergleichbar).
 
+**Engpass-Sonden (2026-10-17, Messserver, `03b25d0`, Diagnose, nicht in der Tabelle):** neben dem unveränderten Treiber schreibt
+`scripts/sonde-engpass.py` die CPU je Prozessgruppe (Host, Postgres-Backends, WAL-Writer, Treiber, Redis, Consul) und je logischem Kern, den
+CPU- und IO-Druck des Kernels (PSI „some“: Anteil der Zeit, in der mindestens ein Thread auf CPU bzw. IO wartete), die heißen Host-Threads,
+alle 100 ms `pg_stat_activity` (Zustand und Wartegrund je Verbindung), jede Sekunde `pg_stat_wal` und über `dotnet-counters` Threadpool und
+Npgsql-Pool mit; `scripts/sonde-engpass.sh --anlass … [--knopf …]` startet S3 und S5 mit drei Wiederholungen und legt Rohdaten und Auswertung je
+Abschnitt unter `sonde/` in den Ergebnis-Ordner, `scripts/sonde-auswertung.py --vergleich <ordner …>` stellt Läufe nebeneinander. Je Lauf genau
+ein Knopf; Werte sind Mediane über drei Wiederholungen (S3-64 und S5-64 dauern je nur 2–3 s, die Einzelwerte streuen um ± 10 %).
+- *Ohne Knopf* (`…_server-sonde-keiner-2`): **S5-64 ist durch die CPU des Rechners begrenzt.** 1 240 Vorgänge/s; Host 7,1 und Postgres-Backends
+  5,4 Kerne, in der Spitze 80 % aller logischen Kerne bei CPU-Druck bis 0,26 (auf den sechs P-Kernen laufen beide Hyperthreads; Mittel 68 %,
+  0,19). Gerechnet je Vorgang ≈ 5–7 ms Host-CPU und 3,5–5,5 ms Postgres-CPU; bei ≈ 13 nutzbaren Kernen liegt die Decke damit bei ≈ 1 300/s.
+  Npgsql-Pool (24 von 100 belegt, keine wartende Anfrage), Threadpool (Warteschlange kurz bis 109), Sperren (keine Verbindung wartet auf eine
+  Sperre) und Redis (< 0,1 Kern) sind es nicht. **S3 ist nicht durch ein Betriebsmittel begrenzt** (39–42 % Auslastung, CPU-Druck ≤ 0,07,
+  2,9–4,1 aktive Postgres-Verbindungen), sondern durch die Kette am einen heißen Aggregat (siehe Knöpfe). Je Vorgang führt Postgres nur
+  0,8–1,7 ms Anweisungen aus (`pg_stat_statements`), verbraucht aber 2,8–5,5 ms CPU — rund zwei Drittel außerhalb der Ausführung.
+- *synchronous_commit aus* (`…_sync-aus`, Obergrenze für das Warten aufs fsync): S5-1 288 → 449 (1,56 ×), S3-8 679 → 962 (1,42 ×), S3-64
+  1 130 → 1 400 (1,24 ×), Latenz p50 0,6–0,8 × — die seriellen Ketten (ein Sender; der eine Schreiber am heißen Aggregat) warten auf die Platte.
+  S5-8 0,97 ×, S5-64 0,75 × (931 statt 1 240): der Eingang nimmt schneller an (bis 8 600/s), die Arbeit bleibt dieselbe, der Abbau dauert länger —
+  an der CPU-Decke verschiebt das nur Arbeit nach vorn.
+- *Drossel je Ziel 8 → 64* (`…_drossel-64`): **S3-64 1 130 → 2 020 Teile/s (1,79 ×), sichtbar im Fenster 336 → 1 460 (4,3 ×), Latenz p50 793 →
+  137 ms**; S3-8 und S5 unverändert (dort bindet die Drossel nicht). Am heißen Sammelvorgang konkurrieren 64 Sender des Eingangs mit den höchstens
+  8 Sends des Prozess-Managers um die Bündel des einen Schreibers — der Manager bekam etwa ein Achtel.
+- *Max Auto Prepare=20* (`…_auto-prepare-20`, Npgsql bereitet die häufigsten Anweisungen je Verbindung vor): **Postgres-Backend-CPU 0,5–0,7 ×**
+  (S5-64 5,4 → 3,1 Kerne, S5-8 4,3 → 2,1, S5-1 2,3 → 1,3); Durchsatz S5-64 1 240 → 1 400 (1,13 ×), S5-8 1,14 ×, S5-1 1,17 ×, S3-8 1,15 ×,
+  S3-64 1,11 ×; CPU-Druck in S5-64 0,19 → 0,11. Die Hälfte der Postgres-CPU war Parsen und Planen (PF-20).
+- *Drain 4 → 8* (`…_drain-8`, parallele Commit-Schleifen des Group-Commits): S3-8 1,10 ×, S3-64 1,13 ×, S5-1 1,09 ×, S5-8 und S5-64 1,0 ×;
+  mehr Verbindungen warten auf WAL (S5-64 1,0 → 2,4), die Last steigt — eine kleine Wirkung nur auf den seriellen Ketten.
+- *Driftkontrolle* (`…_2103_…_server-sonde-keiner`, derselbe Code am Ende der Kette): gegen den ersten Lauf ohne Knopf 0,97–1,01 × — die
+  Wirkungen oben liegen über der Drift.
+- **Folgerung (Decke):** S5-64 steht an der CPU des einen Rechners, den Host und Postgres teilen; die größten Posten sind die Host-CPU je Vorgang
+  (5–7 ms, noch nicht aufgeschlüsselt) und das Parsen und Planen in Postgres (PF-20). S3 steht am einen Schreiber des heißen Aggregats: wie viel
+  davon der Prozess-Manager bekommt, regelt die Drossel je Ziel (Schritt „Drossel und Bündel“), wie schnell die Kette läuft, das fsync je Commit.
+  Die Läufe `…_drossel-64`, `…_auto-prepare-20` und `…_drain-8` tragen „-geaendert“ im Namen: der Knopf änderte den Checkout (`sonde/knopf.txt`).
+
 **Als korrekt verifiziert (Backend-Audit 2026-08, nicht erneut jagen):** Versionsarithmetik inkl. Noop- und Ablehnungs-Marken; OCC-Skip auf dem
 `AnyVersion`-Pfad; Append vor State-Mutation; Shard-Hash-Konsistenz Subscribe ↔ gezieltes Publish; Pre-Dispatch-Guard des Adapters je Stream (heute `EmittentenAdapter`);
 Signal→Wake-Mapping; Kompensations-Dedup und Count-Join ohne verfrühtes Feuern; Snapshot-Schema-Gating; Metadaten-Readback.
@@ -746,6 +779,8 @@ vorgegebener CommandId, Modus `Emittiert`).
 kein Messlauf: dieselben Blöcke, der Leerlauf aber als Zeitreihe in 10-s-Scheiben (vor der Last 60 s, danach 300 s, nach einem Neustart des Hosts
 auf demselben Bestand 150 s) mit Statements und Konsumenten-Ständen je Scheibe (`zeitreihe.csv`, `zeitreihe_statements.csv`, Ordner im
 Temp-Verzeichnis wie bei `--probe`); `--szenarien S1,S3,S4,S5` lässt S2 weg.
+Engpass-Diagnose (nur Messserver): `scripts/sonde-engpass.sh --anlass server-sonde-<x> [--knopf sync-aus|drossel-64|auto-prepare-20|drain-8]`
+— der Treiber mit S3/S5 und drei Wiederholungen, daneben die Sonde (§12.5 „Engpass-Sonden“); kein Messlauf für die Tabelle.
 Danach `scripts/vermessung-tabelle.sh --schreibe` und den Ordner mitcommitten. Das Skript schaltet `pg_stat_statements` und `max_connections = 300`
 am Postgres-Container ein (einmaliger Neustart) und startet den Redis der Vermessung.
 
