@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Abstractions;
+using Infrastructure.PubSub;
 
 namespace Infrastructure.Prozess;
 
@@ -24,8 +25,8 @@ namespace Infrastructure.Prozess;
 /// </summary>
 public sealed class DetachedProzessSend
 {
-    private readonly Func<Guid, ICommand, Guid, CancellationToken, Task<EmitAusgang>> _emit;
-    private readonly Func<Guid, Guid, Guid, CancellationToken, Task> _danach;
+    private readonly Func<Guid, ICommand, Guid, CancellationToken, Task<EmitErgebnis>> _emit;
+    private readonly Func<Guid, Guid, Guid, int, CancellationToken, Task> _danach;
     private readonly Func<int, TimeSpan> _backoff;
     private readonly Func<TimeSpan, CancellationToken, Task> _warte;
 
@@ -36,14 +37,15 @@ public sealed class DetachedProzessSend
     /// <param name="danach">
     /// Weckt den Manager neu (out-of-turn), damit er Fortschritt, Terminal oder Fehlschlag aus dem Fold liest. Nötig, weil (a) das
     /// Ergebnis-Event der letzten Transition Auslöser keiner Regel ist — sein Signal abonniert der Router nicht — und (b) die Ablehnungs-Marke
-    /// (<see cref="IProzessIntern"/>) kein Signal erzeugt. Bekommt (Korrelation, Ziel-Stream, Vorgang): der Manager liest genau den Ziel-Stream
-    /// nach, und nichts, wenn er den Ausgang des Vorgangs schon kennt. Idempotent.
+    /// (<see cref="IProzessIntern"/>) kein Signal erzeugt. Bekommt (Korrelation, Ziel-Stream, Vorgang, ab Version): der Manager liest genau den
+    /// Ziel-Stream nach — ab der Version, an der dieser Send den Ausgang geschrieben hat (<see cref="EmitErgebnis.ErsteVersion"/>, 0 = unbekannt) —
+    /// und nichts, wenn er den Ausgang des Vorgangs schon kennt. Idempotent.
     /// </param>
     /// <param name="backoff">Wartezeit vor der n-ten Wiederholung (n ≥ 1); Standard <see cref="StandardBackoff"/>.</param>
     /// <param name="warte">Die Wartenaht (live <see cref="Task.Delay(TimeSpan, CancellationToken)"/>).</param>
     public DetachedProzessSend(
-        Func<Guid, ICommand, Guid, CancellationToken, Task<EmitAusgang>> emit,
-        Func<Guid, Guid, Guid, CancellationToken, Task> danach,
+        Func<Guid, ICommand, Guid, CancellationToken, Task<EmitErgebnis>> emit,
+        Func<Guid, Guid, Guid, int, CancellationToken, Task> danach,
         Func<int, TimeSpan>? backoff = null,
         Func<TimeSpan, CancellationToken, Task>? warte = null)
     {
@@ -81,18 +83,20 @@ public sealed class DetachedProzessSend
 
     private async Task LaufeAsync(Guid korrelation, ICommand cmd, Guid vorgang, CancellationToken ct)
     {
-        EmitAusgang ausgang;
+        EmitErgebnis ergebnis;
         try
         {
-            ausgang = await _emit(korrelation, cmd, vorgang, ct);
+            ergebnis = await _emit(korrelation, cmd, vorgang, ct);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[DetachedProzessSend] Send fehlgeschlagen ({cmd.GetType().Name}): {ex.Message}");
-            ausgang = EmitAusgang.Unbekannt;
+            ergebnis = EmitErgebnis.Unbekannt;
         }
+        // Wo der Ausgang steht, weiß nur ein entschiedener Send, der ihn selbst geschrieben hat; sonst liest der Manager wie bisher.
+        var abVersion = ergebnis.Ausgang.IstEntschieden() ? ergebnis.ErsteVersion : 0;
 
-        if (ausgang.IstEntschieden())
+        if (ergebnis.Ausgang.IstEntschieden())
         {
             lock (_vorgaenge) _vorgaenge.Remove(vorgang);
         }
@@ -110,7 +114,7 @@ public sealed class DetachedProzessSend
             if (ct.IsCancellationRequested) return;
         }
 
-        try { await _danach(korrelation, cmd.AggregateId, vorgang, ct); }
+        try { await _danach(korrelation, cmd.AggregateId, vorgang, abVersion, ct); }
         catch (Exception ex)
         {
             Console.WriteLine($"[DetachedProzessSend] Selbst-Weckung fehlgeschlagen ({korrelation}): {ex.Message}");

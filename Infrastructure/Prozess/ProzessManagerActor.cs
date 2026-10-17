@@ -105,14 +105,14 @@ public sealed class ProzessManagerActor : IActor
 
     /// <summary>
     /// Nach dem Send (bzw. seinem Backoff): DIESE Manager-Instanz neu wecken (Fortschritt/Terminal/Fehlschlag aus dem Fold), mit Ziel-Stream
-    /// und Vorgang als Quelle.
+    /// und Vorgang als Quelle und — wenn bekannt — der Version, ab der der Ausgang im Ziel-Stream steht.
     /// </summary>
-    private async Task WeckeSelbst(Guid korrelation, Guid ziel, Guid vorgang, CancellationToken ct)
+    private async Task WeckeSelbst(Guid korrelation, Guid ziel, Guid vorgang, int abVersion, CancellationToken ct)
     {
         var identity = ClusterIdentity.Create(korrelation.ToString(), KindName);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(5));
-        try { await _cluster.RequestAsync<WakeAck>(identity, new ProzessWake(ziel, 0, null, Vorgang: vorgang), cts.Token); }
+        try { await _cluster.RequestAsync<WakeAck>(identity, new ProzessWake(ziel, abVersion, null, Vorgang: vorgang), cts.Token); }
         catch (OperationCanceledException) { /* Poll-Backstop heilt */ }
     }
 
@@ -121,6 +121,6 @@ public sealed class ProzessManagerActor : IActor
     /// vorgegebene CommandId → der Fold matcht den durablen Ausgang über <c>CausationId == vorgang</c>, ohne
     /// Quittung. Korrelation → Ziel-Event-Metadatum (Router weckt daraus). Bounded, at-least-once, Empfänger-Inbox.
     /// </summary>
-    private Task<EmitAusgang> EmittiereAnZiel(Guid korrelation, ICommand cmd, Guid vorgang, CancellationToken ct)
+    private Task<EmitErgebnis> EmittiereAnZiel(Guid korrelation, ICommand cmd, Guid vorgang, CancellationToken ct)
         => _emitter!.EmitAsync(cmd, commandId: vorgang, korrelation: korrelation, ct);
 }

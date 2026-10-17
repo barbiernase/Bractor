@@ -38,7 +38,7 @@ public class FristGarantieTests
 
     /// <summary>Feuert die Frist so, wie der <see cref="FristScheduler"/> es live tut: über das eine Emit-Primitiv.</summary>
     private static Func<Frist, Task<EmitAusgang>> FeuereUeber(CommandEmitter emitter)
-        => f => emitter.EmitAsync(new MeldeTeilFertig(f.ZielAggregatId), FristId.FürZustellung(f.Id), f.Id, CancellationToken.None);
+        => async f => (await emitter.EmitAsync(new MeldeTeilFertig(f.ZielAggregatId), FristId.FürZustellung(f.Id), f.Id, CancellationToken.None)).Ausgang;
 
     [Fact]
     public async Task Emit_Timeout_laesst_die_Frist_liegen()

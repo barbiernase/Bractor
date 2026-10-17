@@ -567,7 +567,7 @@ public abstract class AggregateActorBase<TState> : IActor
                     e.Ergebnis = new CommandResult
                     {
                         Success = false, Abgelehnt = true, AggregateId = _id, RejectionEvent = e.Ablehnung, ErrorMessage = e.Ablehnung.ToString(),
-                        NewVersion = e.VersionNachher,
+                        NewVersion = e.VersionNachher, ErsteVersion = e.VersionVorher + 1,
                     };
                 }
                 else
@@ -579,7 +579,10 @@ public abstract class AggregateActorBase<TState> : IActor
                         try { await PublishEventsAsync(e.Persistent, e.Env, e.VersionVorher); }
                         catch (Exception ex) { _logger?.LogWarning(ex, "[Actor] Signale nach dem Commit nicht veröffentlicht"); }
                     }
-                    e.Ergebnis = new CommandResult { Success = true, AggregateId = _id, Events = e.Persistent, NewVersion = e.VersionNachher };
+                    e.Ergebnis = new CommandResult
+                    {
+                        Success = true, AggregateId = _id, Events = e.Persistent, NewVersion = e.VersionNachher, ErsteVersion = e.VersionVorher + 1,
+                    };
                 }
             }
             if (e.An is { } an) context.Send(an, e.Ergebnis!);
@@ -855,7 +858,8 @@ public abstract class AggregateActorBase<TState> : IActor
                     Success = true,
                     AggregateId = _id,
                     Events = persistentEvents,
-                    NewVersion = _state.Version
+                    NewVersion = _state.Version,
+                    ErsteVersion = expectedVersion + 1,
                 });
             }
             catch (Exception postAppendEx)

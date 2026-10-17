@@ -82,11 +82,13 @@ public sealed class FristScheduler : IHostedService
     {
         _cts = new CancellationTokenSource();
         var emitter = new CommandEmitter(_system.Cluster(), _logger);
-        Func<Frist, Task<EmitAusgang>> feuere = frist =>
+        Func<Frist, Task<EmitAusgang>> feuere = async frist =>
         {
-            // Die Frist feuert im Auftrag dessen, in dessen Kette sie geplant wurde.
+            // Die Frist feuert im Auftrag dessen, in dessen Kette sie geplant wurde (der Envelope entsteht synchron vor dem ersten await).
+            Task<EmitErgebnis> send;
             using (Infrastructure.Akteure.AkteurHerkunft.Aus(frist.Akteur))
-                return emitter.EmitAsync(_baueCommand(frist), FristId.FürZustellung(frist.Id), frist.Id, _cts!.Token);
+                send = emitter.EmitAsync(_baueCommand(frist), FristId.FürZustellung(frist.Id), frist.Id, _cts!.Token);
+            return (await send).Ausgang;
         };
 
         _loop = LoopAsync(feuere, _cts.Token);

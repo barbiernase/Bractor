@@ -62,6 +62,10 @@ public sealed class ProzessManager
     //   alle Kandidaten-Streams neu zu lesen → DB-Roundtrips von O(N²) auf ~O(1) pro Weckung. Kaltstart
     //   (Hot-Miss) liest voll (die Wahrheit rekonstruieren) — Invariante 1 gewahrt.
     private readonly Dictionary<Guid, HashSet<Guid>> _dirty = new();
+    // Je Korrelation und Ziel-Stream die Vorgänge, die DIESE Aktivierung dorthin gefeuert hat. Liest der Fold einen Ziel-Stream ab einem
+    //   Hinweis (der Version, an der ein Send seinen Ausgang geschrieben hat), überspringt er die Lücke davor; den Cursor darf er darüber nur
+    //   vorrücken, wenn dort nichts Eigenes mehr aussteht — in einem frischen Vorgang genau dann, wenn alle hierher gefeuerten aufgelöst sind.
+    private readonly Dictionary<Guid, Dictionary<Guid, HashSet<Guid>>> _gefeuert = new();
     // ★ P5b (docs/04 §4.5, ProzessMarkingThreshold): das Marking wird NICHT bei jeder Weckung durabel geschrieben.
     //   Der HOT-Cache trägt die Korrektheit über die Weckungen EINER Aktivierung; der durable Write ist nur der
     //   Kaltstart-Beschleuniger (Passivierung/Crash). Jede Weckung zu schreiben tauschte O(N²) Event-Reads gegen
@@ -332,6 +336,9 @@ public sealed class ProzessManager
         {
             if (!_dirty.TryGetValue(korrelation, out var set)) { set = new HashSet<Guid>(); _dirty[korrelation] = set; }
             set.Add(cmd.AggregateId);
+            if (!_gefeuert.TryGetValue(korrelation, out var jeStream)) _gefeuert[korrelation] = jeStream = new Dictionary<Guid, HashSet<Guid>>();
+            if (!jeStream.TryGetValue(cmd.AggregateId, out var vorgaenge)) jeStream[cmd.AggregateId] = vorgaenge = new HashSet<Guid>();
+            vorgaenge.Add(vorgang);
         }
         return _dispatch(korrelation, cmd, vorgang, ct);
     }
@@ -399,7 +406,8 @@ public sealed class ProzessManager
         if (!CursorAktiv)
         {
             // Voll-Fold: frisches, leeres Marking → jeder Ziel-Stream ab 0 (das frühere Verhalten, unverändert).
-            var (_, kandidatenVoll, _) = await FalteAsync(korrelation, mz, regeln, new MarkingKompakt(), nurDirty: null, nieGeseheneLeer: false, ct);
+            var (_, kandidatenVoll, _) = await FalteAsync(korrelation, mz, regeln, new MarkingKompakt(), nurDirty: null, nieGeseheneLeer: false,
+                hinweis: null, ct);
             return kandidatenVoll;
         }
 
@@ -411,6 +419,8 @@ public sealed class ProzessManager
         //   • weckt der Router wegen eines Events, dessen Stream (nichts, wenn der Cursor schon so weit ist);
         //   • ohne Quelle die Streams, in die gefeuert wurde und deren Ergebnis aussteht (dirty), und nie gesehene (in einem frischen Vorgang
         //     sind die sicher leer).
+        //   Nennt die Weckung nach einem Send die Version, an der der Send den Ausgang geschrieben hat (quellVersion > 0), liest der Fold den
+        //   Ziel-Stream erst ab dort (Hinweis) — nicht ab seinem Cursor, der in einem viel beschriebenen Stream weit hinten stehen kann.
         // KALT (Store-Load/neu) und Backstop: voll lesen — die Wahrheit rekonstruieren (nurDirty = null).
         var dirty = _dirty.TryGetValue(korrelation, out var d) ? d : (_dirty[korrelation] = new HashSet<Guid>());
         var nichts = new HashSet<Guid>();
@@ -419,7 +429,9 @@ public sealed class ProzessManager
             : vorgang != Guid.Empty ? (marking.Vorgänge.ContainsKey(vorgang.ToString()) ? nichts : new HashSet<Guid> { quelle })
             : marking.StreamCursor.TryGetValue(quelle, out var c) && c >= quellVersion ? nichts
             : new HashSet<Guid> { quelle };
-        var (_, kandidaten, mitErgebnis) = await FalteAsync(korrelation, mz, regeln, marking, nurDirty, nieGeseheneLeer: frisch, ct);
+        (Guid Stream, int Ab)? hinweis = nurDirty is not null && vorgang != Guid.Empty && quellVersion > 0 && quelle != Guid.Empty
+            ? (quelle, quellVersion) : null;
+        var (_, kandidaten, mitErgebnis) = await FalteAsync(korrelation, mz, regeln, marking, nurDirty, nieGeseheneLeer: frisch, hinweis, ct);
         // Aus „dirty“ fällt nur, wessen Ergebnis jetzt gefaltet ist: ein zu früh gelesener Ziel-Stream (die Weckung eines anderen Vorgangs kam
         //   vor dem Ergebnis) bleibt, bis es da ist — sonst fände ein Noop oder eine Ablehnung (kein Signal) nur noch der Backstop.
         dirty.ExceptWith(mitErgebnis);
@@ -437,10 +449,16 @@ public sealed class ProzessManager
     /// Äquivalenz: Ziel-Streams sind append-only, Cursor rücken nur vor. Ein auf einem Präfix gefaltetes Marking +
     /// der Tail darauf ergibt dieselben akkumulierten Achsen wie ein Fold aller Events ab 0 (Monotonie) → dieselben
     /// Kandidaten, dieselbe Feuer-Entscheidung. Ein leeres <paramref name="marking"/> ist der Voll-Fold ab 0.
+    ///
+    /// <paramref name="hinweis"/>: in diesem Stream steht der Ausgang eines Vorgangs ab dieser Version (der Send hat ihn dort geschrieben). Der
+    /// Fold liest ihn ab dort; die Events eines Befehls stehen zusammenhängend, also ist das erste gelesene eigene Event auch seine erste Wirkung.
+    /// Die übersprungene Lücke kann Ausgänge anderer, noch offener Vorgänge derselben Korrelation enthalten — den Cursor rückt der Fold deshalb
+    /// nur darüber, wenn dort nichts mehr aussteht; sonst bleibt er stehen, und ein späterer Read ohne Hinweis liest die Lücke (Wiederholung
+    /// verpufft: die Marken sind idempotent).
     /// </summary>
     private async Task<(List<Token> Tokens, List<Kandidat> Kandidaten, HashSet<Guid> MitErgebnis)> FalteAsync(
         Guid korrelation, ManagerStatus mz, ProzessRegeln regeln, MarkingKompakt marking,
-        HashSet<Guid>? nurDirty, bool nieGeseheneLeer, CancellationToken ct)
+        HashSet<Guid>? nurDirty, bool nieGeseheneLeer, (Guid Stream, int Ab)? hinweis, CancellationToken ct)
     {
         // In DIESER Weckung schon bis Head integrierte Streams (ein Read je Stream pro Weckung, wie das alte Lies).
         var integriert = new HashSet<Guid>();
@@ -449,7 +467,8 @@ public sealed class ProzessManager
         async Task Integriere(Guid s)
         {
             if (!integriert.Add(s)) return;
-            var von = marking.StreamCursor.TryGetValue(s, out var c) ? c + 1 : 0;
+            var abCursor = marking.StreamCursor.TryGetValue(s, out var c) ? c + 1 : 0;
+            var von = hinweis is { } h && h.Stream == s && h.Ab > abCursor ? h.Ab : abCursor;
             // Nur die eigenen Events: jede Wirkung, Noop- und Ablehnungs-Marke eines Befehls dieses Vorgangs trägt seine Korrelation (der
             //   Manager setzt sie beim Feuern, der Ausführer bei Funktionsergebnissen). In einem viel beschriebenen Ziel-Stream (ein Posten,
             //   auf den Hunderte Vorgänge reservieren) waren die meisten gelesenen Events fremd — gelesen, ausgepackt, verworfen. Der Cursor
@@ -473,9 +492,16 @@ public sealed class ProzessManager
                 // sonst (KommandoVerarbeitet-Noop u. a. IProzessIntern): nur „aufgelöst" (Schlüssel-Präsenz).
             }
             // Auch ohne eigenes Event ist der Stream jetzt gesehen (bis von−1): ohne Feuern dorthin kann sich das nicht ändern — die nächste
-            //   warme Weckung liest ihn nicht erneut.
-            marking.StreamCursor[s] = Math.Max(maxV, Math.Max(von - 1, 0));
+            //   warme Weckung liest ihn nicht erneut. Nach einem Read ab Hinweis nur, wenn in der Lücke davor nichts Eigenes mehr aussteht.
+            if (von == abCursor || LueckeErledigt(s))
+                marking.StreamCursor[s] = Math.Max(maxV, Math.Max(von - 1, 0));
         }
+
+        // In einem frischen Vorgang kam jedes eigene Event eines Ziel-Streams aus einem Feuern dieser Aktivierung dorthin: sind alle diese
+        //   Vorgänge aufgelöst, steht in der Lücke nichts mehr, was der Fold nicht schon kennt.
+        bool LueckeErledigt(Guid s)
+            => nieGeseheneLeer && _gefeuert.TryGetValue(korrelation, out var jeStream) && jeStream.TryGetValue(s, out var vorgaenge)
+               && vorgaenge.All(v => marking.Vorgänge.ContainsKey(v.ToString()));
 
         // Wurzel-Token: das Auslöse-Event. Einmalig gelesen und im Marking zwischengehalten (unveränderlich).
         if (marking.AuslöserPayload is null)
@@ -692,6 +718,7 @@ public sealed class ProzessManager
         _hotMarking.Remove(korrelation);
         _seitSchreib.Remove(korrelation);
         _dirty.Remove(korrelation);
+        _gefeuert.Remove(korrelation);
         if (_markingStore is null || !_markingDurabel.Remove(korrelation)) return;
         try { await _markingStore.LöscheAsync(korrelation, ct); }
         catch (Exception ex) { Console.WriteLine($"[Prozess-Marking] Löschen fehlgeschlagen ({korrelation}): {ex.Message}"); }

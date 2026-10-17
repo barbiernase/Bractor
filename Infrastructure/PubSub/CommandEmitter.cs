@@ -59,25 +59,26 @@ public sealed class CommandEmitter : ICommandEmitter
         _drossel = drossel ?? new EmitDrossel();
     }
 
-    public Task<EmitAusgang> EmitAsync(ICommand cmd, EmitKausalität k, CancellationToken ct)
-        => SendeAsync(cmd, EmitId.Ableiten(k, cmd.AggregateId), k.Korrelation, ct);
+    public async Task<EmitAusgang> EmitAsync(ICommand cmd, EmitKausalität k, CancellationToken ct)
+        => (await SendeAsync(cmd, EmitId.Ableiten(k, cmd.AggregateId), k.Korrelation, ct)).Ausgang;
 
     /// <summary>
     /// EM-1-Überladung für den Prozess-Manager (Treiber-Fold) und den Fristplaner: eine VORGEGEBENE CommandId — beim Prozess der
     /// deterministische <c>vorgang</c> (aus <c>ProzessId.FürTransition</c>/<c>FürKompensation</c>), sodass der Fold-Match (Ziel-Event/-Marke
     /// mit <c>CausationId == vorgang</c>) unverändert bleibt. Die Korrelation reist explizit (→ Ziel-Event-Metadatum, Poll-Routing). Sonst
-    /// identisch: bounded (W2), <see cref="CommandModus.Emittiert"/> (KEINE Version, §4.2), Ausgang an den Aufrufer.
+    /// identisch: bounded (W2), <see cref="CommandModus.Emittiert"/> (KEINE Version, §4.2), Ausgang an den Aufrufer — dazu, wo der Ausgang im
+    /// Ziel-Stream steht, wenn dieser Send ihn geschrieben hat (<see cref="EmitErgebnis.ErsteVersion"/>).
     /// </summary>
-    public Task<EmitAusgang> EmitAsync(ICommand cmd, Guid commandId, Guid korrelation, CancellationToken ct)
+    public Task<EmitErgebnis> EmitAsync(ICommand cmd, Guid commandId, Guid korrelation, CancellationToken ct)
         => SendeAsync(cmd, commandId, korrelation, ct);
 
-    private async Task<EmitAusgang> SendeAsync(ICommand cmd, Guid commandId, Guid korrelation, CancellationToken ct)
+    private async Task<EmitErgebnis> SendeAsync(ICommand cmd, Guid commandId, Guid korrelation, CancellationToken ct)
     {
         if (!Anwendung.Pipelines.CommandAggregateTypes.TryGetValue(cmd.GetType(), out var aggregateType))
         {
             // Ein Command ohne Aggregat verhindert der Build (CQRS010); kommt es trotzdem vor, ist nichts gewirkt.
             _logger.LogError("[Emit] keine AggregateType-Zuordnung für {Command} — nicht routbar", cmd.GetType().Name);
-            return EmitAusgang.Unbekannt;
+            return EmitErgebnis.Unbekannt;
         }
 
         // Der Envelope entsteht SYNCHRON vor dem ersten await: Spur und Akteur sind AsyncLocal-Bereiche des Aufrufers.
@@ -103,7 +104,7 @@ public sealed class CommandEmitter : ICommandEmitter
         if (platz is null)
         {
             _logger.LogDebug("[Emit] Drossel an {AggregateType}/{AggregateId} voll — nicht gesendet", aggregateType, cmd.AggregateId);
-            return EmitAusgang.Unbekannt;
+            return EmitErgebnis.Unbekannt;
         }
 
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -116,31 +117,41 @@ public sealed class CommandEmitter : ICommandEmitter
         catch (OperationCanceledException)
         {
             _logger.LogDebug("[Emit] Frist an {AggregateType}/{AggregateId} abgelaufen — Ausgang unbekannt", aggregateType, cmd.AggregateId);
-            return EmitAusgang.Unbekannt;
+            return EmitErgebnis.Unbekannt;
         }
         catch (Exception ex)
         {
             // Transportfehler (Identität nicht auflösbar, Dead-Letter, Knoten weg): ob das Ziel gewirkt hat, ist offen.
             _logger.LogDebug(ex, "[Emit] Send an {AggregateType}/{AggregateId} gescheitert — Ausgang unbekannt", aggregateType, cmd.AggregateId);
-            return EmitAusgang.Unbekannt;
+            return EmitErgebnis.Unbekannt;
         }
 
         return ergebnis switch
         {
-            null => EmitAusgang.Unbekannt,                     // Proto.Cluster liefert null, wenn die Frist abläuft
-            { Success: true } => EmitAusgang.Zugestellt,
-            { Abgelehnt: true } => EmitAusgang.Abgelehnt,
+            null => EmitErgebnis.Unbekannt,                    // Proto.Cluster liefert null, wenn die Frist abläuft
+            { Success: true } => new EmitErgebnis(EmitAusgang.Zugestellt, ergebnis.ErsteVersion),
+            { Abgelehnt: true } => new EmitErgebnis(EmitAusgang.Abgelehnt, ergebnis.ErsteVersion),
             _ => Technisch(ergebnis, aggregateType, cmd),
         };
     }
 
-    private EmitAusgang Technisch(CommandResult ergebnis, string aggregateType, ICommand cmd)
+    private EmitErgebnis Technisch(CommandResult ergebnis, string aggregateType, ICommand cmd)
     {
         // Ein technischer Fehler im Ziel (DB weg, Append gescheitert): die Wirkung ist offen — wiederholen, die Inbox klärt es.
         _logger.LogWarning("[Emit] {Command} an {AggregateType}/{AggregateId} technisch gescheitert ({Fehler}) — Ausgang unbekannt",
             cmd.GetType().Name, aggregateType, cmd.AggregateId, ergebnis.ErrorMessage);
-        return EmitAusgang.Unbekannt;
+        return EmitErgebnis.Unbekannt;
     }
+}
+
+/// <summary>
+/// Der Ausgang eines Sends (<see cref="EmitAusgang"/>) und, wenn DIESER Send den Ausgang geschrieben hat, die Version seines ersten Events im
+/// Ziel-Stream (<see cref="CommandResult.ErsteVersion"/>; 0 = unbekannt, etwa bei einer als Wiederholung erkannten CommandId). Ein Hinweis für
+/// den Prozess-Fold, wo er lesen muss — nie eine Aussage über die Wirkung.
+/// </summary>
+public readonly record struct EmitErgebnis(EmitAusgang Ausgang, int ErsteVersion)
+{
+    public static readonly EmitErgebnis Unbekannt = new(EmitAusgang.Unbekannt, 0);
 }
 
 /// <summary>

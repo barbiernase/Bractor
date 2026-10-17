@@ -23,7 +23,8 @@ namespace Pruefdomaene.Integration.Tests;
 /// <c>kalt</c> — nach dem Start übernimmt eine neue Aktivierung (Store-Load statt frischem Vorgang); <c>mitRouter</c> — vor jeder
 /// Selbst-Weckung weckt der Router mit dem geschriebenen Event als Quelle (gezielte Weckung, docs/04 §4.5); <c>verzögert</c> — das Ziel führt
 /// den Command erst nach einer Weckung ohne Quelle aus (sie liest den Ziel-Stream zu früh), danach weckt der Send wie im Host mit Ziel und
-/// Vorgang.
+/// Vorgang; <c>mitHinweis</c> — jede Selbst-Weckung nennt wie im Host die Version, an der der Send den Ausgang geschrieben hat, und der Fold
+/// liest den Ziel-Stream erst ab dort.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequivalenzTests.Fixture>
@@ -36,10 +37,10 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
 
     /// <summary>Treibt einen Vorgang sequentiell (Starte + Wake bis Terminal) gegen den echten Marten-Store.</summary>
     private static async Task<Lauf> TreibeAsync(IDocumentStore marten, string prozess, Guid auslöserStream, Func<Welt, Task> seed,
-        IProzessMarkingStore? marking, bool kalt = false, bool mitRouter = false, bool verzögert = false)
+        IProzessMarkingStore? marking, bool kalt = false, bool mitRouter = false, bool verzögert = false, bool mitHinweis = false)
     {
         var store = new ZählenderStore(new MartenEventStore(marten, new Pruefdomaene.AggregateHandlerFactory(), NullLogger<MartenEventStore>.Instance));
-        var welt = new Welt(store) { Verzögert = verzögert };
+        var welt = new Welt(store) { Verzögert = verzögert, MitHinweis = mitHinweis };
         var korrelation = ProzessId.Für(prozess, auslöserStream, 1);
         welt.Korrelation = korrelation;
         await seed(welt);
@@ -54,16 +55,20 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         var schutz = 0;
         while (!(await mgr.LadeStatusAsync(korrelation, default)).Beendet)
         {
-            var ausgefuehrt = new List<(Guid Ziel, Guid Vorgang)>();
+            var ausgefuehrt = new List<(Guid Ziel, Guid Vorgang, int ErsteVersion)>();
             if (verzögert)
             {
                 await mgr.WakeAsync(korrelation, default);   // zu früh: das Ergebnis steht noch nicht im Ziel-Stream
                 while (welt.Ausstehend.TryDequeue(out var a)) ausgefuehrt.Add(await welt.FuehreAusAsync(a.Korrelation, a.Cmd, a.Vorgang));
             }
+            else
+                while (welt.Ausgefuehrt.TryDequeue(out var a)) ausgefuehrt.Add(a);
             if (mitRouter)
                 while (welt.Routen.TryDequeue(out var r)) await mgr.WakeAsync(korrelation, default, quelle: r.Stream, quellVersion: r.Version);
-            if (verzögert)
-                foreach (var (ziel, vorgang) in ausgefuehrt) await mgr.WakeAsync(korrelation, default, quelle: ziel, vorgang: vorgang);
+            // Die Selbst-Weckung nach dem Send (wie im Host): mit Ziel und Vorgang, mit Hinweis auch mit der Version des Ausgangs.
+            if (verzögert || (mitHinweis && ausgefuehrt.Count > 0))
+                foreach (var (ziel, vorgang, erste) in ausgefuehrt)
+                    await mgr.WakeAsync(korrelation, default, quelle: ziel, quellVersion: mitHinweis ? erste : 0, vorgang: vorgang);
             else
                 await mgr.WakeAsync(korrelation, default);
             if (++schutz > 1_000) throw new InvalidOperationException("Der Vorgang erreichte kein Terminal (Livelock?).");
@@ -73,10 +78,11 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
     }
 
     private async Task<(Lauf Aus, Lauf An)> BeideAsync(string prozess, Guid auslöser, Func<Welt, Task> seed, IProzessMarkingStore? an = null,
-        bool kalt = false, bool mitRouter = false, bool verzögert = false)
+        bool kalt = false, bool mitRouter = false, bool verzögert = false, bool mitHinweis = false)
     {
         var aus = await TreibeAsync(_fx.Aus, prozess, auslöser, seed, marking: null);
-        var mit = await TreibeAsync(_fx.An, prozess, auslöser, seed, an ?? new MartenProzessMarkingStore(_fx.An), kalt, mitRouter, verzögert);
+        var mit = await TreibeAsync(_fx.An, prozess, auslöser, seed, an ?? new MartenProzessMarkingStore(_fx.An), kalt, mitRouter, verzögert,
+            mitHinweis);
         mit.Feuerungen.Should().Equal(aus.Feuerungen,
             "der Cursor-Fold muss bei jeder Weckung dieselbe (Command, Ziel, Vorgang)-Entscheidung treffen wie der Voll-Fold");
         mit.Beendet.Should().Be(aus.Beendet);
@@ -180,6 +186,57 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         an.Abfragen.Should().BeLessThan(aus.Abfragen / 2, $"Cursor {an.Abfragen} Abfragen, Voll-Fold {aus.Abfragen}");
     }
 
+    [Theory, InlineData(1, false, false, false), InlineData(2, true, false, false), InlineData(3, false, true, false), InlineData(4, false, false, true)]
+    public async Task Mit_Hinweis_gleich_Cursor_aus(int n, bool kalt, bool mitRouter, bool verzögert)
+    {
+        // Diamant mit Kompensation und Fan-out mit Count-Join: jede Selbst-Weckung nennt die Version des Ausgangs.
+        Guid posten = G("a8a8a8a8", 10 * n + 1), kontingent = G("a8a8a8a8", 10 * n + 2), auftrag = G("a8a8a8a8", 10 * n + 3);
+        var (aus, _) = await BeideAsync(nameof(AuftragsProzess), auftrag, async w =>
+        {
+            await w.AnlegenAsync(new EroeffnePosten(posten, 10));
+            await w.AnlegenAsync(new RichteKontingentEin(kontingent, 1));   // reicht nicht → Ablehnung → Kompensation in denselben Posten
+            await w.AnlegenAsync(new StarteAuftrag(auftrag, posten, kontingent, 3));
+        }, kalt: kalt, mitRouter: mitRouter, verzögert: verzögert, mitHinweis: true);
+        aus.Erfolg.Should().BeFalse();
+
+        var quelle = G("a9a9a9a9", 100 * n);
+        var verteilung = G("a9a9a9a9", 100 * n + 1);
+        var ziele = Enumerable.Range(10, 6).Select(i => G("a9a9a9a9", 100 * n + i)).ToList();
+        var (ausV, _) = await BeideAsync(nameof(VerteilProzess), verteilung, async w =>
+        {
+            await w.AnlegenAsync(new EroeffnePosten(quelle, 1000));
+            foreach (var z in ziele) await w.AnlegenAsync(new EroeffnePosten(z, 0));
+            await w.AnlegenAsync(new StarteVerteilung(verteilung, quelle, ziele, 5));
+        }, kalt: kalt, mitRouter: mitRouter, verzögert: verzögert, mitHinweis: true);
+        ausV.Erfolg.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Langer_Ziel_Stream_mit_Hinweis_liest_nur_den_Ausgang()
+    {
+        // Ein Posten, auf den vorher 300 andere Vorgänge reserviert haben (fremde Korrelationen): ohne Hinweis liest der Fold eines frischen
+        //   Vorgangs den Posten ab 0 und verwirft das Fremde; mit Hinweis liest er ab dem eigenen Ausgang.
+        const int fremde = 300;
+        async Task<Lauf> Lauf(string präfix, bool mitHinweis)
+        {
+            Guid posten = G(präfix, 1), kontingent = G(präfix, 2), auftrag = G(präfix, 3);
+            var (_, an) = await BeideAsync(nameof(AuftragsProzess), auftrag, async w =>
+            {
+                await w.AnlegenAsync(new EroeffnePosten(posten, 10_000));
+                for (var i = 0; i < fremde; i++) await w.FremdAsync(new ReservierePosten(posten, 1));
+                await w.AnlegenAsync(new RichteKontingentEin(kontingent, 5));
+                await w.AnlegenAsync(new StarteAuftrag(auftrag, posten, kontingent, 3));
+            }, mitHinweis: mitHinweis);
+            an.Erfolg.Should().BeTrue();
+            return an;
+        }
+        var ohne = await Lauf("b9b9b9b9", mitHinweis: false);
+        var mit = await Lauf("c9c9c9c9", mitHinweis: true);
+        ohne.GeleseneEvents.Should().BeGreaterThan(fremde, "ohne Hinweis liest der frische Vorgang den Posten ab 0");
+        mit.GeleseneEvents.Should().BeLessThan(ohne.GeleseneEvents - fremde + 20,
+            $"mit Hinweis liest der Fold den Posten erst ab dem eigenen Ausgang (mit {mit.GeleseneEvents}, ohne {ohne.GeleseneEvents} Events)");
+    }
+
     /// <summary>Ein Store, der ein Marking mit falschem RegelHash und absichtlich kaputtem Inhalt liefert — der Manager MUSS es verwerfen.</summary>
     private sealed class FalscherHashStore : IProzessMarkingStore
     {
@@ -225,6 +282,9 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         /// <summary>Verzögert: ein Command wird erst ausgeführt, wenn der Test es sagt (<see cref="FuehreAusAsync"/>).</summary>
         public bool Verzögert { get; init; }
         public Queue<(Guid Korrelation, ICommand Cmd, Guid Vorgang)> Ausstehend { get; } = new();
+        /// <summary>Mit Hinweis: was sofort ausgeführt wurde (Ziel, Vorgang, erste geschriebene Version) — die Test-Schleife weckt damit wie der Send.</summary>
+        public bool MitHinweis { get; init; }
+        public Queue<(Guid Ziel, Guid Vorgang, int ErsteVersion)> Ausgefuehrt { get; } = new();
 
         public Welt(IEventStoreRepository store) => _store = store;
 
@@ -258,14 +318,26 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         public async Task DispatchAsync(Guid korr, ICommand cmd, Guid vorgang, CancellationToken ct)
         {
             if (Verzögert) { Ausstehend.Enqueue((korr, cmd, vorgang)); return; }
-            await FuehreAusAsync(korr, cmd, vorgang);
+            var a = await FuehreAusAsync(korr, cmd, vorgang);
+            if (MitHinweis) Ausgefuehrt.Enqueue(a);
         }
 
-        public async Task<(Guid Ziel, Guid Vorgang)> FuehreAusAsync(Guid korr, ICommand cmd, Guid vorgang)
+        /// <summary>Ein Befehl eines FREMDEN Vorgangs (eigene Korrelation): füllt den Ziel-Stream, zählt nicht als Feuerung.</summary>
+        public async Task FremdAsync(ICommand cmd)
+        {
+            var (s, h, _) = _aggregate[cmd.AggregateId];
+            var evs = h.HandleCommand(cmd).Where(e => e is not ITransientEvent).ToList();
+            await _store.AppendEventsAsync(cmd.AggregateId, s.Version, evs, Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), Typ(cmd));
+            foreach (var e in evs) { h.ApplyEvent(e); s.Version++; }
+        }
+
+        /// <summary>Führt den Befehl aus wie der Actor; liefert die Version des ersten geschriebenen Events (0 = als Wiederholung verworfen).</summary>
+        public async Task<(Guid Ziel, Guid Vorgang, int ErsteVersion)> FuehreAusAsync(Guid korr, ICommand cmd, Guid vorgang)
         {
             var (s, h, erledigt) = _aggregate[cmd.AggregateId];
-            if (!erledigt.Add(vorgang)) return (cmd.AggregateId, vorgang);   // Inbox-Dedup des Actors
+            if (!erledigt.Add(vorgang)) return (cmd.AggregateId, vorgang, 0);   // Inbox-Dedup des Actors
             Feuerungen.Add((cmd.GetType().Name, cmd.AggregateId, vorgang));
+            var erste = s.Version + 1;
 
             var alle = h.HandleCommand(cmd).ToList();
             var persistent = alle.Where(e => e is not ITransientEvent).ToList();
@@ -280,7 +352,7 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
                 s.Version++;
                 if (e is not IProzessIntern) Routen.Enqueue((cmd.AggregateId, s.Version));
             }
-            return (cmd.AggregateId, vorgang);
+            return (cmd.AggregateId, vorgang, erste);
         }
     }
 

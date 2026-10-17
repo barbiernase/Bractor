@@ -22,8 +22,8 @@ public class EmitGarantieTests
 {
     private static readonly CancellationToken Ct = CancellationToken.None;
 
-    private static Task<EmitAusgang> Sende(CommandEmitter emitter, Guid ziel)
-        => emitter.EmitAsync(new MeldeTeilFertig(ziel), Guid.NewGuid(), Guid.NewGuid(), Ct);
+    private static async Task<EmitAusgang> Sende(CommandEmitter emitter, Guid ziel)
+        => (await emitter.EmitAsync(new MeldeTeilFertig(ziel), Guid.NewGuid(), Guid.NewGuid(), Ct)).Ausgang;
 
     [Theory]
     [InlineData("erfolg", EmitAusgang.Zugestellt)]
@@ -104,8 +104,8 @@ public class EmitGarantieTests
         public Takt()
         {
             Sender = new DetachedProzessSend(
-                (_, _, vorgang, _) => { lock (Gesendet) Gesendet.Add(vorgang); return Task.FromResult(Antwort); },
-                (korrelation, _, _, _) => { lock (Geweckt) Geweckt.Add(korrelation); return Task.CompletedTask; },
+                (_, _, vorgang, _) => { lock (Gesendet) Gesendet.Add(vorgang); return Task.FromResult(new EmitErgebnis(Antwort, 0)); },
+                (korrelation, _, _, _, _) => { lock (Geweckt) Geweckt.Add(korrelation); return Task.CompletedTask; },
                 backoff: n => TimeSpan.FromSeconds(n),
                 warte: (t, _) => { lock (Gewartet) Gewartet.Add(t); return Warten.Task; });
         }

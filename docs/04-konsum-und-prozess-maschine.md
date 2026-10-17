@@ -331,7 +331,15 @@ Vorgangs-Marken statt roher Tokens:
   hat, ist sicher leer;
 - **gezielte Reads** (warm): weckt der Router wegen eines Events, liest der Manager nur dessen Stream — und gar nichts, wenn sein Cursor schon so
   weit ist; nach einem Send bzw. einem Funktions-Ergebnis (`ProzessWake.Vorgang`) nur den Ziel-Stream — und gar nichts, wenn der Ausgang des
-  Vorgangs schon gefaltet ist; ohne Quelle die Streams, in die er gefeuert hat und deren Ergebnis noch aussteht (`dirty`). Ein gelesener
+  Vorgangs schon gefaltet ist; ohne Quelle die Streams, in die er gefeuert hat und deren Ergebnis noch aussteht (`dirty`).
+- **Lesen ab dem Ausgang** (Hinweis): hat der Send den Ausgang selbst geschrieben, nennt die Antwort des Aggregats dessen erste Version
+  (`CommandResult.ErsteVersion`, über `EmitErgebnis` und die Selbst-Weckung als `ProzessWake.QuellVersion`); der Fold liest den Ziel-Stream dann
+  erst ab dort statt ab seinem Cursor — in einem viel beschriebenen Stream (ein heißer Sammelvorgang, ein Posten) stand der Cursor eines frischen
+  Vorgangs bei 0, und die Datenbank las jede fremde Zeile, um sie am Korrelationsfilter zu verwerfen. Die Events eines Befehls stehen
+  zusammenhängend, das erste gelesene eigene ist also seine erste Wirkung. Über die übersprungene Lücke rückt der Cursor nur, wenn dort nichts
+  Eigenes mehr aussteht: in einem frischen Vorgang, wenn alle Vorgänge, die diese Aktivierung in den Stream gefeuert hat, aufgelöst sind (der
+  Manager feuert ohnehin nur den ersten offenen Command); sonst bleibt er stehen, und ein späterer Read liest die Lücke. Ohne Hinweis (eine als
+  Wiederholung erkannte CommandId, ein unbekannter Ausgang, ein Funktions-Ergebnis) liest der Fold wie bisher. Ein gelesener
   Ziel-Stream ohne eigenes Event gilt als gesehen (Cursor bis zur gelesenen Version) und wird nicht „auf Verdacht“ erneut gelesen. Dass dabei
   nichts verloren geht, trägt das erneute Feuern: jede Weckung feuert den ersten offenen Command wieder (der Send-Takt verwirft das Duplikat) und
   markiert damit seinen Ziel-Stream;

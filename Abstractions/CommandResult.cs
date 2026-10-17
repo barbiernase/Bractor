@@ -13,7 +13,14 @@ public class CommandResult : IWireMessage
     /// Bleibt 0 bei Fehlern oder wenn kein Event erzeugt wurde.
     /// </summary>
     public int NewVersion { get; set; }
-    
+
+    /// <summary>
+    /// Version des ersten Events, das DIESER Aufruf geschrieben hat (Wirkung, Noop- oder Ablehnungs-Marke) — sein Ausgang steht im Stream genau
+    /// in <c>ErsteVersion … NewVersion</c>. 0, wenn der Aufruf nichts geschrieben hat (als Wiederholung erkannt, Fehler): dann ist unbekannt, wo
+    /// der Ausgang steht. Ein Hinweis für Leser, die den Ausgang im Log suchen (Prozess-Fold); die Wahrheit bleibt der Log.
+    /// </summary>
+    public int ErsteVersion { get; set; }
+
     public IReadOnlyList<IEvent> Events { get; set; } = new List<IEvent>();
 
     /// <summary>

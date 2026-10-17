@@ -12,6 +12,7 @@ namespace Infrastructure.Prozess;
 /// (PF-4) und räumt den Eintrag eines beendeten Vorgangs ab.
 /// </summary>
 /// <see cref="Vorgang"/>: die Weckung nach einem Send bzw. einem Funktions-Ergebnis — der Ausgang dieses Vorgangs liegt in
-/// <see cref="QuellStream"/> (oder kommt noch); kennt der Fold ihn schon, liest der Manager nichts.
+/// <see cref="QuellStream"/> (oder kommt noch); kennt der Fold ihn schon, liest der Manager nichts. <see cref="QuellVersion"/> ist dann ein
+/// Hinweis: ab dieser Version steht der Ausgang (der Send hat ihn dort geschrieben); 0 = unbekannt.
 public sealed record ProzessWake(Guid QuellStream, int QuellVersion, string? ProzessNameFürStart, bool VomBackstop = false, Guid Vorgang = default)
     : IWireMessage;
