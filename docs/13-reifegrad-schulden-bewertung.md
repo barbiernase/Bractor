@@ -16,7 +16,7 @@ hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz und P
 | VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16 | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
-| PF-19 | Marten erzeugt und kompiliert den Code je Dokumenttyp beim ersten Gebrauch zur Laufzeit (`GeneratedCodeMode` Standard): die erste Nutzung nach dem Start kostet je Typ ≈ 0,05–0,1 s (gemessen: S4 ohne Aufwärmen 0,3 statt 0,1/0,2 s; mit Aufwärmrunde wie Sim) — Entscheidung offen | P2 |
+| PF-19 | Marten erzeugt und kompiliert den Code je Dokumenttyp beim ersten Gebrauch zur Laufzeit (`GeneratedCodeMode` Standard): die erste Nutzung nach dem Start kostet je Typ ≈ 0,05–0,1 s (gemessen: S4 ohne Aufwärmen 0,3 statt 0,1/0,2 s; mit Aufwärmrunde wie Sim) — Marten bleibt im Standard-Modus (Tobi, 2026-10-17); offen nur, ob beim Start vorgewärmt wird | P3 |
 | PF-17 | Kosten von Horizont und Zeitstempel-Regel (G-9, G-10): je Probe bzw. Prüfung ≈ 0,45 ms (S1 3 ms je Paar, mehr als erwartet), je Event-Insert ≈ 7–10 µs (Prod) bzw. 20–35 µs (Sim, Versatz je Zeile aus `uhr`) | P3 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
