@@ -16,7 +16,7 @@ hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz und P
 | VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16 | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
-| PF-17 | Kosten von Horizont und Zeitstempel-Regel (G-9, G-10): je Probe bzw. Prüfung ≈ 0,45 ms (S1 3 ms je Paar, mehr als erwartet), je Event-Insert ≈ 7–10 µs (Prod) bzw. 20–35 µs (Sim, Versatz je Zeile aus `uhr`) | P3 |
+| PF-17 | Horizont-Probe: `exists(… seq_id > $1)` durchsucht die Tabelle von vorn — unter Last bei veralteter Statistik (S1 0,74 ms), mit vorbereiteter Anweisung (allgemeiner Plan) immer, linear mit der Tabelle (3,4 ms bei 11 000 Events); dazu die Zeitstempel-Regel in Sim | P1 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
 | W10-2 | Reflektive Serialisierung zur Laufzeit (Marten-Default, Marking-Store, Snapshot-`Clone`, HTTP-Antworten); kein Reflection-Verbot im Build | P1 |
@@ -220,11 +220,13 @@ Fehler selbst; erreichbar ist der Pfad nur über einen werfenden Applier — der
 Dead-Letter). *Empfehlung:* entweder den Pfad auf den Applier-Fall zurückschneiden oder einen Prüfstand-Test mit einem Actor über eine
 werfende Applier-Naht.
 
-**PF-17 · Kosten von Horizont und Zeitstempel-Regel.** Gemessen (docs/12 §12.5, „Horizont + Uhr“): eine Probe bzw. Prüfung des Horizonts kostet
-≈ 0,45 ms Ausführungszeit — für `pg_current_snapshot()` und ein `exists` über den Primärschlüssel viel; Ursache offen (Verdacht: einzelne lange
-Aufrufe, wenn die Position weit zurückliegt). Die Zeitstempel-Regel kostet in Sim ≈ 20–35 µs je eingefügtem Event, weil sie je Zeile den Versatz
-aus `uhr` liest. *Optionen:* den Versatz je Transaktion einmal lesen (`set_config(…, true)`), in Prod misst nur die Datenbankzeit; für die Proben
-`EXPLAIN ANALYZE` unter Last. Wirkung Ende zu Ende im Band der Einzelläufe.
+**PF-17 · Kosten von Horizont und Zeitstempel-Regel.** Diagnose (docs/12 §12.5, „Diagnose der Horizont-Probe“): teuer ist allein „steht
+hinter der Position etwas?“ (`exists(select 1 from mt_events where seq_id > $1)`). Postgres durchsucht dafür die Tabelle von vorn, statt über den
+Index an die Position zu springen — während S1, weil die Statistik der wachsenden Tabelle veraltet ist (0,74 ms, 480 Puffer), und seit PF-20
+immer, weil die vorbereitete Anweisung einen allgemeinen Plan bekommt (3,1–3,6 ms bei 11 000 Events, linear mit der Tabelle — im Betrieb mit
+Millionen Events Sekunden je Probe, daher P1). Zählerstand und älteste Transaktion kosten 0,01–0,04 ms. *Empfehlung:* die Frage so stellen, dass jeder
+Plan den Index nimmt (`order by seq_id limit 1`), oder sie aus dem Zählerstand beantworten, den die Probe ohnehin liest. Die Zeitstempel-Regel
+kostet in Sim ≈ 20–35 µs je eingefügtem Event (Versatz je Zeile aus `uhr`); in Prod misst sie nur die Datenbankzeit.
 
 **G-5 · Versionszählung bei Split-Upcasts.** `AggregateRehydrator` zählt `Version++` je materialisiertem Event; ein Split-Upcast liefert aus
 einer gespeicherten Position mehrere Events (`MartenEventStore`, `SubIndex`), die Version läuft dem Log davon, und jeder Append scheitert.

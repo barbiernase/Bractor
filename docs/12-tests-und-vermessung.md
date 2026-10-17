@@ -799,6 +799,20 @@ S3-64 0,91 × (Einzelwert; S3-64 streut zwischen Läufen desselben Codes um ± 1
 grün, ein Störungslauf grün. Gegen „Auto-Prepare“ (je ein Lauf): Durchsatz S3-8 1,17 ×, S5-64 1,06 × (2 771 Vorgänge/s), übrige 1,00–1,03 ×;
 Host-CPU im Fenster S5-64 7,2 → 5,6 Kerne, S5-8 6,1 → 4,8, S2 2,4 → 2,1 — die erwartete kleine Entlastung, im Durchsatz meist im Band.
 
+**Diagnose der Horizont-Probe (PF-17, 2026-10-18, Messserver, `…_server-sonde-horizont-2`, S1 und L1):** `scripts/sonde-engpass.sh --horizont
+cqrs_vermessung` misst jede Sekunde die Teile der Probe einzeln mit `EXPLAIN (ANALYZE, BUFFERS)`, das `exists(… seq_id > X)` mit X knapp hinter
+dem Kopf (50) und weit zurück (2 000), einmal mit zugeschnittenem, einmal mit allgemeinem Plan (wie ihn eine vorbereitete Anweisung nach einigen
+Aufrufen nimmt). Gemessen:
+- *Zählerstand, älteste Transaktion:* 0,01–0,04 ms — nicht die Ursache.
+- *`exists` knapp hinter dem Kopf, während S1 die Tabelle füllt:* auch der zugeschnittene Plan durchsucht die Tabelle von vorn (Seq Scan,
+  Median 0,74 ms, 480 Puffer) — die Statistik der frisch wachsenden Tabelle ist veraltet, Postgres hält sie für klein. Das sind die 0,4–0,57 ms je
+  Probe aus „Horizont + Uhr“.
+- *Danach, mit frischer Statistik:* zugeschnitten über den Index (Index Only Scan, 0,15 ms, 3 Puffer); **mit allgemeinem Plan weiter Seq Scan:
+  3,1–3,6 ms, 790 Puffer bei 11 000 Events** — linear mit der Größe der Tabelle. Das ist die Probe im Leerlauf seit „Auto-Prepare“ (3,4 ms): Npgsql
+  bereitet sie vor, Postgres wechselt zum allgemeinen Plan. Bei Millionen Events wären das Sekunden je Probe.
+Folgerung: die Abfrage so stellen, dass jeder Plan den Index nimmt — etwa `select seq_id … where seq_id > $1 order by seq_id limit 1` statt
+`exists(…)`; oder „steht dahinter etwas?“ aus dem Zählerstand beantworten, den die Probe ohnehin liest (PF-17).
+
 **Als korrekt verifiziert (Backend-Audit 2026-08, nicht erneut jagen):** Versionsarithmetik inkl. Noop- und Ablehnungs-Marken; OCC-Skip auf dem
 `AnyVersion`-Pfad; Append vor State-Mutation; Shard-Hash-Konsistenz Subscribe ↔ gezieltes Publish; Pre-Dispatch-Guard des Adapters je Stream (heute `EmittentenAdapter`);
 Signal→Wake-Mapping; Kompensations-Dedup und Count-Join ohne verfrühtes Feuern; Snapshot-Schema-Gating; Metadaten-Readback.

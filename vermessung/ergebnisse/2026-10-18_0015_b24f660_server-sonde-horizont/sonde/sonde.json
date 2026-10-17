@@ -1,0 +1,843 @@
+{
+ "L1-nachlauf-w1": {
+  "von": "2026-10-17T22:16:02.576588+00:00",
+  "bis": "2026-10-17T22:16:52.704695+00:00",
+  "dauer_s": 50.128107,
+  "cpu_kerne": {
+   "host-beispiel": 0.14,
+   "pg-backend": 0.08,
+   "sonst": 0.06,
+   "python": 0.04,
+   "treiber": 0.03,
+   "consul": 0.02,
+   "pg-backend-treiber": 0.02,
+   "cqrs-vermessung-redis": 0.01,
+   "cqrs-redis": 0.01
+  },
+  "rechner": {
+   "auslastung_prozent": 2.3,
+   "iowait_prozent": 0.0,
+   "cpu_druck": 0.003,
+   "io_druck": 0.001,
+   "kerne_ueber_90_prozent": 0.0,
+   "je_kern_prozent": [
+    3,
+    2,
+    4,
+    1,
+    4,
+    1,
+    4,
+    2,
+    4,
+    1,
+    4,
+    2,
+    2,
+    2,
+    2,
+    2,
+    1,
+    1,
+    1,
+    1
+   ],
+   "p_kerne_prozent": 2.7,
+   "e_kerne_prozent": 1.6
+  },
+  "threads": {
+   "ueber_5_prozent": 34,
+   "hoechster_einzelwert_prozent": 25.9,
+   "heisseste": [
+    {
+     "name": ".NET TP Worker",
+     "mittel_prozent": 0.5,
+     "hoechst_prozent": 25.9
+    },
+    {
+     "name": ".NET TP Worker",
+     "mittel_prozent": 0.5,
+     "hoechst_prozent": 23.9
+    },
+    {
+     "name": ".NET TP Worker",
+     "mittel_prozent": 0.5,
+     "hoechst_prozent": 23.9
+    },
+    {
+     "name": ".NET TP Worker",
+     "mittel_prozent": 0.4,
+     "hoechst_prozent": 20.9
+    },
+    {
+     "name": ".NET TP Worker",
+     "mittel_prozent": 0.4,
+     "hoechst_prozent": 17.9
+    },
+    {
+     "name": ".NET TP Worker",
+     "mittel_prozent": 0.4,
+     "hoechst_prozent": 10.9
+    }
+   ]
+  },
+  "postgres": {
+   "proben": 500,
+   "verbindungen_je_zustand": {
+    "idle": 47.97,
+    "active CPU": 0.02,
+    "active LWLock:WALWrite": 0.01
+   },
+   "verbindungen_gesamt": 48.0,
+   "aktiv": 0.03,
+   "idle_in_transaction": 0.0,
+   "anweisungen": []
+  },
+  "wal_je_s": {
+   "wal_records": 224.8,
+   "wal_bytes": 37370.4,
+   "wal_write": 16.5,
+   "wal_sync": 16.3
+  },
+  "counters": {
+   "host-beispiel · db.client.commands.bytes_read (By / 1 sec)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20]": {
+    "mittel": 158061.58,
+    "hoechst": 3940801.0
+   },
+   "host-beispiel · db.client.commands.bytes_read (By / 1 sec)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung]": {
+    "mittel": 133.34,
+    "hoechst": 226.0
+   },
+   "host-beispiel · db.client.commands.bytes_written (By / 1 sec)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20]": {
+    "mittel": 9362.86,
+    "hoechst": 362599.0
+   },
+   "host-beispiel · db.client.commands.bytes_written (By / 1 sec)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung]": {
+    "mittel": 102.66,
+    "hoechst": 174.0
+   },
+   "host-beispiel · db.client.commands.duration (s)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20;Percentile=50]": {
+    "mittel": 0.001,
+    "hoechst": 0.003
+   },
+   "host-beispiel · db.client.commands.duration (s)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20;Percentile=95]": {
+    "mittel": 0.002,
+    "hoechst": 0.015
+   },
+   "host-beispiel · db.client.commands.duration (s)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20;Percentile=99]": {
+    "mittel": 0.002,
+    "hoechst": 0.017
+   },
+   "host-beispiel · db.client.commands.duration (s)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Percentile=50]": {
+    "mittel": 0.001,
+    "hoechst": 0.001
+   },
+   "host-beispiel · db.client.commands.duration (s)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Percentile=95]": {
+    "mittel": 0.001,
+    "hoechst": 0.001
+   },
+   "host-beispiel · db.client.commands.duration (s)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Percentile=99]": {
+    "mittel": 0.001,
+    "hoechst": 0.001
+   },
+   "host-beispiel · db.client.commands.executing ({command})[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20]": {
+    "mittel": 0.02,
+    "hoechst": 1.0
+   },
+   "host-beispiel · db.client.commands.executing ({command})[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "host-beispiel · db.client.commands.prepared_ratio[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20]": {
+    "mittel": 9.374,
+    "hoechst": 100.0
+   },
+   "host-beispiel · db.client.commands.prepared_ratio[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "host-beispiel · db.client.connections.max ({connection})[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20]": {
+    "mittel": 100.0,
+    "hoechst": 100.0
+   },
+   "host-beispiel · db.client.connections.max ({connection})[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung]": {
+    "mittel": 100.0,
+    "hoechst": 100.0
+   },
+   "host-beispiel · db.client.connections.usage ({connection})[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20;state=idle]": {
+    "mittel": 39.98,
+    "hoechst": 40.0
+   },
+   "host-beispiel · db.client.connections.usage ({connection})[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20;state=used]": {
+    "mittel": 0.02,
+    "hoechst": 1.0
+   },
+   "host-beispiel · db.client.connections.usage ({connection})[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;state=idle]": {
+    "mittel": 5.98,
+    "hoechst": 6.0
+   },
+   "host-beispiel · db.client.connections.usage ({connection})[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;state=used]": {
+    "mittel": 0.02,
+    "hoechst": 1.0
+   },
+   "host-beispiel · dotnet.assembly.count ({assembly})": {
+    "mittel": 239.0,
+    "hoechst": 239.0
+   },
+   "host-beispiel · dotnet.exceptions ({exception} / 1 sec)[error.type=TaskCanceledException]": {
+    "mittel": 0.78,
+    "hoechst": 33.0
+   },
+   "host-beispiel · dotnet.gc.collections ({collection} / 1 sec)[gc.heap.generation=gen0]": {
+    "mittel": 0.04,
+    "hoechst": 1.0
+   },
+   "host-beispiel · dotnet.gc.collections ({collection} / 1 sec)[gc.heap.generation=gen1]": {
+    "mittel": 0.02,
+    "hoechst": 1.0
+   },
+   "host-beispiel · dotnet.gc.collections ({collection} / 1 sec)[gc.heap.generation=gen2]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "host-beispiel · dotnet.gc.heap.total_allocated (By / 1 sec)": {
+    "mittel": 2063734.72,
+    "hoechst": 16370184.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen0]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen1]": {
+    "mittel": 36780.0,
+    "hoechst": 49680.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen2]": {
+    "mittel": 1694952.0,
+    "hoechst": 1694952.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=loh]": {
+    "mittel": 1197464.0,
+    "hoechst": 1197464.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=poh]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen0]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen1]": {
+    "mittel": 2142515.68,
+    "hoechst": 3005840.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen2]": {
+    "mittel": 34517712.0,
+    "hoechst": 34517712.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=loh]": {
+    "mittel": 5202976.0,
+    "hoechst": 5202976.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=poh]": {
+    "mittel": 387224.0,
+    "hoechst": 387224.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.memory.committed_size (By)": {
+    "mittel": 123043840.0,
+    "hoechst": 123043840.0
+   },
+   "host-beispiel · dotnet.gc.pause.time (s / 1 sec)": {
+    "mittel": 0.0,
+    "hoechst": 0.007
+   },
+   "host-beispiel · dotnet.jit.compilation.time (s / 1 sec)": {
+    "mittel": 0.008,
+    "hoechst": 0.069
+   },
+   "host-beispiel · dotnet.jit.compiled_il.size (By / 1 sec)": {
+    "mittel": 2044.76,
+    "hoechst": 26809.0
+   },
+   "host-beispiel · dotnet.jit.compiled_methods ({method} / 1 sec)": {
+    "mittel": 23.56,
+    "hoechst": 249.0
+   },
+   "host-beispiel · dotnet.monitor.lock_contentions ({contention} / 1 sec)": {
+    "mittel": 0.14,
+    "hoechst": 6.0
+   },
+   "host-beispiel · dotnet.process.cpu.count ({cpu})": {
+    "mittel": 20.0,
+    "hoechst": 20.0
+   },
+   "host-beispiel · dotnet.process.cpu.time (s / 1 sec)[cpu.mode=system]": {
+    "mittel": 0.015,
+    "hoechst": 0.283
+   },
+   "host-beispiel · dotnet.process.cpu.time (s / 1 sec)[cpu.mode=user]": {
+    "mittel": 0.044,
+    "hoechst": 0.796
+   },
+   "host-beispiel · dotnet.process.memory.working_set (By)": {
+    "mittel": 1361669980.16,
+    "hoechst": 1392328704.0
+   },
+   "host-beispiel · dotnet.thread_pool.queue.length ({work_item} / 1 sec)": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "host-beispiel · dotnet.thread_pool.thread.count ({thread} / 1 sec)": {
+    "mittel": -0.42,
+    "hoechst": 4.0
+   },
+   "host-beispiel · dotnet.thread_pool.work_item.count ({work_item} / 1 sec)": {
+    "mittel": 138.7,
+    "hoechst": 3281.0
+   },
+   "host-beispiel · dotnet.timer.count ({timer})": {
+    "mittel": 1865.34,
+    "hoechst": 1866.0
+   },
+   "treiber · dotnet.assembly.count ({assembly})": {
+    "mittel": 46.0,
+    "hoechst": 46.0
+   },
+   "treiber · dotnet.exceptions ({exception} / 1 sec)[error.type=HttpRequestException]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "treiber · dotnet.exceptions ({exception} / 1 sec)[error.type=SocketException]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "treiber · dotnet.exceptions ({exception} / 1 sec)[error.type=TaskCanceledException]": {
+    "mittel": 0.02,
+    "hoechst": 1.0
+   },
+   "treiber · dotnet.gc.collections ({collection} / 1 sec)[gc.heap.generation=gen0]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "treiber · dotnet.gc.collections ({collection} / 1 sec)[gc.heap.generation=gen1]": {
+    "mittel": 0.06,
+    "hoechst": 1.0
+   },
+   "treiber · dotnet.gc.collections ({collection} / 1 sec)[gc.heap.generation=gen2]": {
+    "mittel": 0.02,
+    "hoechst": 1.0
+   },
+   "treiber · dotnet.gc.heap.total_allocated (By / 1 sec)": {
+    "mittel": 769960.48,
+    "hoechst": 11037640.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen0]": {
+    "mittel": 59.04,
+    "hoechst": 984.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen1]": {
+    "mittel": 701345.76,
+    "hoechst": 11451656.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen2]": {
+    "mittel": 12605282.56,
+    "hoechst": 13887424.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=loh]": {
+    "mittel": 2193940.64,
+    "hoechst": 2593152.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=poh]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen0]": {
+    "mittel": 20396.16,
+    "hoechst": 339936.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen1]": {
+    "mittel": 5252047.68,
+    "hoechst": 12582912.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen2]": {
+    "mittel": 16009310.56,
+    "hoechst": 16139920.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=loh]": {
+    "mittel": 2961973.12,
+    "hoechst": 2971808.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=poh]": {
+    "mittel": 24528.0,
+    "hoechst": 24528.0
+   },
+   "treiber · dotnet.gc.last_collection.memory.committed_size (By)": {
+    "mittel": 44569477.12,
+    "hoechst": 45182976.0
+   },
+   "treiber · dotnet.gc.pause.time (s / 1 sec)": {
+    "mittel": 0.001,
+    "hoechst": 0.013
+   },
+   "treiber · dotnet.jit.compilation.time (s / 1 sec)": {
+    "mittel": 0.007,
+    "hoechst": 0.077
+   },
+   "treiber · dotnet.jit.compiled_il.size (By / 1 sec)": {
+    "mittel": 1746.8,
+    "hoechst": 40836.0
+   },
+   "treiber · dotnet.jit.compiled_methods ({method} / 1 sec)": {
+    "mittel": 20.24,
+    "hoechst": 524.0
+   },
+   "treiber · dotnet.monitor.lock_contentions ({contention} / 1 sec)": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "treiber · dotnet.process.cpu.count ({cpu})": {
+    "mittel": 20.0,
+    "hoechst": 20.0
+   },
+   "treiber · dotnet.process.cpu.time (s / 1 sec)[cpu.mode=system]": {
+    "mittel": 0.006,
+    "hoechst": 0.018
+   },
+   "treiber · dotnet.process.cpu.time (s / 1 sec)[cpu.mode=user]": {
+    "mittel": 0.022,
+    "hoechst": 0.14
+   },
+   "treiber · dotnet.process.memory.working_set (By)": {
+    "mittel": 137508782.08,
+    "hoechst": 141246464.0
+   },
+   "treiber · dotnet.thread_pool.queue.length ({work_item} / 1 sec)": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "treiber · dotnet.thread_pool.thread.count ({thread} / 1 sec)": {
+    "mittel": -0.36,
+    "hoechst": 0.0
+   },
+   "treiber · dotnet.thread_pool.work_item.count ({work_item} / 1 sec)": {
+    "mittel": 47.42,
+    "hoechst": 435.0
+   },
+   "treiber · dotnet.timer.count ({timer})": {
+    "mittel": 7.0,
+    "hoechst": 7.0
+   }
+  }
+ },
+ "L1-w1": {
+  "von": "2026-10-17T22:16:52.707168+00:00",
+  "bis": "2026-10-17T22:17:56.870323+00:00",
+  "dauer_s": 64.163155,
+  "cpu_kerne": {
+   "sonst": 0.05,
+   "pg-backend": 0.05,
+   "python": 0.04,
+   "host-beispiel": 0.03,
+   "consul": 0.02,
+   "treiber": 0.01,
+   "cqrs-vermessung-redis": 0.01,
+   "cqrs-redis": 0.01
+  },
+  "rechner": {
+   "auslastung_prozent": 1.4,
+   "iowait_prozent": 0.0,
+   "cpu_druck": 0.002,
+   "io_druck": 0.0,
+   "kerne_ueber_90_prozent": 0.0,
+   "je_kern_prozent": [
+    3,
+    0,
+    3,
+    0,
+    3,
+    0,
+    2,
+    2,
+    3,
+    0,
+    3,
+    0,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1,
+    1
+   ],
+   "p_kerne_prozent": 1.7,
+   "e_kerne_prozent": 0.8
+  },
+  "threads": {
+   "ueber_5_prozent": 0,
+   "hoechster_einzelwert_prozent": 0,
+   "heisseste": []
+  },
+  "postgres": {
+   "proben": 639,
+   "verbindungen_je_zustand": {
+    "idle": 47.97,
+    "idle in transaction": 0.04
+   },
+   "verbindungen_gesamt": 48.0,
+   "aktiv": 0.01,
+   "idle_in_transaction": 0.04,
+   "anweisungen": []
+  },
+  "wal_je_s": {
+   "wal_records": 2.4,
+   "wal_bytes": 169.0,
+   "wal_write": 0.1,
+   "wal_sync": 0.1
+  },
+  "counters": {
+   "host-beispiel · db.client.commands.bytes_read (By / 1 sec)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20]": {
+    "mittel": 407.587,
+    "hoechst": 9333.0
+   },
+   "host-beispiel · db.client.commands.bytes_read (By / 1 sec)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung]": {
+    "mittel": 129.143,
+    "hoechst": 226.0
+   },
+   "host-beispiel · db.client.commands.bytes_written (By / 1 sec)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20]": {
+    "mittel": 525.587,
+    "hoechst": 7729.0
+   },
+   "host-beispiel · db.client.commands.bytes_written (By / 1 sec)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung]": {
+    "mittel": 99.429,
+    "hoechst": 174.0
+   },
+   "host-beispiel · db.client.commands.duration (s)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20;Percentile=50]": {
+    "mittel": 0.001,
+    "hoechst": 0.005
+   },
+   "host-beispiel · db.client.commands.duration (s)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20;Percentile=95]": {
+    "mittel": 0.001,
+    "hoechst": 0.007
+   },
+   "host-beispiel · db.client.commands.duration (s)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20;Percentile=99]": {
+    "mittel": 0.001,
+    "hoechst": 0.008
+   },
+   "host-beispiel · db.client.commands.duration (s)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Percentile=50]": {
+    "mittel": 0.001,
+    "hoechst": 0.001
+   },
+   "host-beispiel · db.client.commands.duration (s)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Percentile=95]": {
+    "mittel": 0.001,
+    "hoechst": 0.001
+   },
+   "host-beispiel · db.client.commands.duration (s)[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Percentile=99]": {
+    "mittel": 0.001,
+    "hoechst": 0.001
+   },
+   "host-beispiel · db.client.commands.executing ({command})[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "host-beispiel · db.client.commands.executing ({command})[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "host-beispiel · db.client.commands.prepared_ratio[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20]": {
+    "mittel": 26.476,
+    "hoechst": 100.0
+   },
+   "host-beispiel · db.client.commands.prepared_ratio[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "host-beispiel · db.client.connections.max ({connection})[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20]": {
+    "mittel": 100.0,
+    "hoechst": 100.0
+   },
+   "host-beispiel · db.client.connections.max ({connection})[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung]": {
+    "mittel": 100.0,
+    "hoechst": 100.0
+   },
+   "host-beispiel · db.client.connections.usage ({connection})[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20;state=idle]": {
+    "mittel": 40.0,
+    "hoechst": 40.0
+   },
+   "host-beispiel · db.client.connections.usage ({connection})[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;Command Timeout=30;No Reset On Close=True;Max Auto Prepare=20;state=used]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "host-beispiel · db.client.connections.usage ({connection})[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;state=idle]": {
+    "mittel": 6.0,
+    "hoechst": 6.0
+   },
+   "host-beispiel · db.client.connections.usage ({connection})[pool.name=Host=localhost;Port=5432;Username=postgres;Database=cqrs_vermessung;state=used]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "host-beispiel · dotnet.assembly.count ({assembly})": {
+    "mittel": 239.0,
+    "hoechst": 239.0
+   },
+   "host-beispiel · dotnet.exceptions ({exception} / 1 sec)[error.type=OperationCanceledException]": {
+    "mittel": 0.5,
+    "hoechst": 2.0
+   },
+   "host-beispiel · dotnet.exceptions ({exception} / 1 sec)[error.type=SocketException]": {
+    "mittel": 0.5,
+    "hoechst": 2.0
+   },
+   "host-beispiel · dotnet.exceptions ({exception} / 1 sec)[error.type=TaskCanceledException]": {
+    "mittel": 0.206,
+    "hoechst": 4.0
+   },
+   "host-beispiel · dotnet.gc.collections ({collection} / 1 sec)[gc.heap.generation=gen0]": {
+    "mittel": 0.032,
+    "hoechst": 1.0
+   },
+   "host-beispiel · dotnet.gc.collections ({collection} / 1 sec)[gc.heap.generation=gen1]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "host-beispiel · dotnet.gc.collections ({collection} / 1 sec)[gc.heap.generation=gen2]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "host-beispiel · dotnet.gc.heap.total_allocated (By / 1 sec)": {
+    "mittel": 1231998.984,
+    "hoechst": 1563776.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen0]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen1]": {
+    "mittel": 64598.095,
+    "hoechst": 76728.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen2]": {
+    "mittel": 1694952.0,
+    "hoechst": 1694952.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=loh]": {
+    "mittel": 1197464.0,
+    "hoechst": 1197464.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=poh]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen0]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen1]": {
+    "mittel": 4358166.984,
+    "hoechst": 5155880.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen2]": {
+    "mittel": 34517712.0,
+    "hoechst": 34517712.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=loh]": {
+    "mittel": 5202976.0,
+    "hoechst": 5202976.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=poh]": {
+    "mittel": 387224.0,
+    "hoechst": 387224.0
+   },
+   "host-beispiel · dotnet.gc.last_collection.memory.committed_size (By)": {
+    "mittel": 123043840.0,
+    "hoechst": 123043840.0
+   },
+   "host-beispiel · dotnet.gc.pause.time (s / 1 sec)": {
+    "mittel": 0.0,
+    "hoechst": 0.005
+   },
+   "host-beispiel · dotnet.jit.compilation.time (s / 1 sec)": {
+    "mittel": 0.003,
+    "hoechst": 0.03
+   },
+   "host-beispiel · dotnet.jit.compiled_il.size (By / 1 sec)": {
+    "mittel": 732.54,
+    "hoechst": 13225.0
+   },
+   "host-beispiel · dotnet.jit.compiled_methods ({method} / 1 sec)": {
+    "mittel": 9.333,
+    "hoechst": 225.0
+   },
+   "host-beispiel · dotnet.monitor.lock_contentions ({contention} / 1 sec)": {
+    "mittel": 0.095,
+    "hoechst": 5.0
+   },
+   "host-beispiel · dotnet.process.cpu.count ({cpu})": {
+    "mittel": 20.0,
+    "hoechst": 20.0
+   },
+   "host-beispiel · dotnet.process.cpu.time (s / 1 sec)[cpu.mode=system]": {
+    "mittel": 0.008,
+    "hoechst": 0.029
+   },
+   "host-beispiel · dotnet.process.cpu.time (s / 1 sec)[cpu.mode=user]": {
+    "mittel": 0.019,
+    "hoechst": 0.055
+   },
+   "host-beispiel · dotnet.process.memory.working_set (By)": {
+    "mittel": 1344688583.111,
+    "hoechst": 1344925696.0
+   },
+   "host-beispiel · dotnet.thread_pool.queue.length ({work_item} / 1 sec)": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "host-beispiel · dotnet.thread_pool.thread.count ({thread} / 1 sec)": {
+    "mittel": -0.016,
+    "hoechst": 7.0
+   },
+   "host-beispiel · dotnet.thread_pool.work_item.count ({work_item} / 1 sec)": {
+    "mittel": 60.635,
+    "hoechst": 218.0
+   },
+   "host-beispiel · dotnet.timer.count ({timer})": {
+    "mittel": 1865.048,
+    "hoechst": 1866.0
+   },
+   "treiber · dotnet.assembly.count ({assembly})": {
+    "mittel": 46.0,
+    "hoechst": 46.0
+   },
+   "treiber · dotnet.exceptions ({exception} / 1 sec)[error.type=HttpRequestException]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "treiber · dotnet.exceptions ({exception} / 1 sec)[error.type=IOException]": {
+    "mittel": 0.627,
+    "hoechst": 32.0
+   },
+   "treiber · dotnet.exceptions ({exception} / 1 sec)[error.type=SocketException]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "treiber · dotnet.exceptions ({exception} / 1 sec)[error.type=TaskCanceledException]": {
+    "mittel": 0.016,
+    "hoechst": 1.0
+   },
+   "treiber · dotnet.gc.collections ({collection} / 1 sec)[gc.heap.generation=gen0]": {
+    "mittel": 0.016,
+    "hoechst": 1.0
+   },
+   "treiber · dotnet.gc.collections ({collection} / 1 sec)[gc.heap.generation=gen1]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "treiber · dotnet.gc.collections ({collection} / 1 sec)[gc.heap.generation=gen2]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "treiber · dotnet.gc.heap.total_allocated (By / 1 sec)": {
+    "mittel": 198833.125,
+    "hoechst": 342456.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen0]": {
+    "mittel": 900.0,
+    "hoechst": 960.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen1]": {
+    "mittel": 14928.0,
+    "hoechst": 14928.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=gen2]": {
+    "mittel": 12771144.0,
+    "hoechst": 12771144.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=loh]": {
+    "mittel": 2199840.0,
+    "hoechst": 2199840.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.fragmentation.size (By)[gc.heap.generation=poh]": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen0]": {
+    "mittel": 174157.5,
+    "hoechst": 185768.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen1]": {
+    "mittel": 4715416.0,
+    "hoechst": 4715416.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=gen2]": {
+    "mittel": 16139920.0,
+    "hoechst": 16139920.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=loh]": {
+    "mittel": 2971808.0,
+    "hoechst": 2971808.0
+   },
+   "treiber · dotnet.gc.last_collection.heap.size (By)[gc.heap.generation=poh]": {
+    "mittel": 24528.0,
+    "hoechst": 24528.0
+   },
+   "treiber · dotnet.gc.last_collection.memory.committed_size (By)": {
+    "mittel": 45182976.0,
+    "hoechst": 45182976.0
+   },
+   "treiber · dotnet.gc.pause.time (s / 1 sec)": {
+    "mittel": 0.0,
+    "hoechst": 0.003
+   },
+   "treiber · dotnet.jit.compilation.time (s / 1 sec)": {
+    "mittel": 0.001,
+    "hoechst": 0.031
+   },
+   "treiber · dotnet.jit.compiled_il.size (By / 1 sec)": {
+    "mittel": 371.547,
+    "hoechst": 7770.0
+   },
+   "treiber · dotnet.jit.compiled_methods ({method} / 1 sec)": {
+    "mittel": 4.922,
+    "hoechst": 79.0
+   },
+   "treiber · dotnet.monitor.lock_contentions ({contention} / 1 sec)": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "treiber · dotnet.process.cpu.count ({cpu})": {
+    "mittel": 20.0,
+    "hoechst": 20.0
+   },
+   "treiber · dotnet.process.cpu.time (s / 1 sec)[cpu.mode=system]": {
+    "mittel": 0.005,
+    "hoechst": 0.01
+   },
+   "treiber · dotnet.process.cpu.time (s / 1 sec)[cpu.mode=user]": {
+    "mittel": 0.008,
+    "hoechst": 0.038
+   },
+   "treiber · dotnet.process.memory.working_set (By)": {
+    "mittel": 137764928.0,
+    "hoechst": 138399744.0
+   },
+   "treiber · dotnet.thread_pool.queue.length ({work_item} / 1 sec)": {
+    "mittel": 0.0,
+    "hoechst": 0.0
+   },
+   "treiber · dotnet.thread_pool.thread.count ({thread} / 1 sec)": {
+    "mittel": 0.0,
+    "hoechst": 6.0
+   },
+   "treiber · dotnet.thread_pool.work_item.count ({work_item} / 1 sec)": {
+    "mittel": 18.219,
+    "hoechst": 52.0
+   },
+   "treiber · dotnet.timer.count ({timer})": {
+    "mittel": 6.406,
+    "hoechst": 7.0
+   }
+  }
+ }
+}
