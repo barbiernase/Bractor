@@ -1,0 +1,250 @@
+{
+  "art": "stoerung",
+  "anlass": "server-reads-sql-stoerung-1",
+  "spalte": null,
+  "skript": "scripts/vermessung-e2e.sh --art stoerung --anlass server-reads-sql-stoerung-1",
+  "zeit": "2026-10-17T20:08:53.4638445+00:00",
+  "commit": "83f0375",
+  "branch": "HEAD",
+  "arbeitsbaum": "sauber",
+  "rechner": "Ubuntu-noble-latest-amd64-base, Ubuntu 24.04.4 LTS, 13th Gen Intel(R) Core(TM) i5-13500, 20 Kerne, 62 GiB",
+  "umgebungen": [
+    "vermessung",
+    "vermessung-pruefdomaene"
+  ],
+  "parameter": {
+    "szenarien": [
+      "S1",
+      "S2",
+      "S3",
+      "S4",
+      "S5"
+    ],
+    "wiederholungen": 1,
+    "probe": false,
+    "fenster_s": 15,
+    "abbau_frist_s": 120,
+    "warmlauf_s": 30,
+    "s1_stoss_paare": 600,
+    "s2_stoss_paare": 200,
+    "s3_sender": [
+      8,
+      64
+    ],
+    "s3": "je Block ein Sammelvorgang (N = 1 000 000, die Barriere wird nicht erreicht); je Teil StarteTeilauftrag + SchließeTeilauftragAb",
+    "s5_sender": [
+      1,
+      8,
+      64
+    ],
+    "s3_hoechstens_teile_je_block": 2000,
+    "s5_hoechstens_vorgaenge_je_block": 3000,
+    "s5_muster": "je 10 Vorgänge: 8 Aufträge ok, 1 Auftrag gegen volles Kontingent (Kompensation), 1 Verteilung auf 4 Ziele; 50 Posten, 20 Ziele",
+    "leerlauf_s": 60,
+    "leerlauf": "erst nach dem Nachlauf (alle Poll-Cursor und Projektions-Positionen am Kopf des Logs, höchstens nachlauf_frist_s), dann das Fenster",
+    "nachlauf_frist_s": 180,
+    "sichtbar": "S1/S2: Query GetImagePair je offenem Paar (komplett), alle 100 ms; S3: TeilVerbucht im Log; S4: Query HoleDatensatz; S5: ProzessBeendet im Log",
+    "transaktionen": "COMMITs aus pg_stat_statements (track = top); Queries = übrige Statements ohne BEGIN/COMMIT/ROLLBACK/DISCARD/SET/SHOW; ohne die Lese-Rolle des Treibers"
+  },
+  "fremdlast_vorher": "Last 1.79 2.06 2.20 1/683 2384519\n · CPU-stärkste: 48.2 dotnet; 2.0 consul; 1.2 redis-server; 1.2 redis-server; 0.5 dotnet",
+  "fremdlast_nachher": "Last 7.96 4.52 3.07 1/699 2389257\n · CPU-stärkste: 32.8 dotnet;22.1 dotnet;16.0 postgres;13.6 postgres; 3.3 redis-server",
+  "stoerungen": [
+    {
+      "zeit_s": 18,
+      "stoerung": "Host Beispieldomäne hart beendet (SIGKILL), Neustart nach 3 s"
+    },
+    {
+      "zeit_s": 41,
+      "stoerung": "Redis (Versions-Index) 10 s gestoppt"
+    },
+    {
+      "zeit_s": 63,
+      "stoerung": "Host Prüfdomäne hart beendet (SIGKILL), Neustart nach 3 s"
+    }
+  ],
+  "kennzahlen": {
+    "vorgaenge_s1": 181,
+    "vorgaenge_s5": 68392,
+    "s1_p99_ms": 14158.331,
+    "s5_p99_ms": 165.953
+  },
+  "exactly_once": [
+    {
+      "name": "S1: alle Paare nach den Störungen sichtbar",
+      "ok": true,
+      "soll": "ja",
+      "ist": "ja"
+    },
+    {
+      "name": "S5: alle Vorgänge nach den Störungen beendet",
+      "ok": true,
+      "soll": "ja",
+      "ist": "ja"
+    },
+    {
+      "name": "S5: kein Eingang endgültig gescheitert",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "je Datei genau eine Quell-Nachricht im Log",
+      "ok": true,
+      "soll": "362",
+      "ist": "362"
+    },
+    {
+      "name": "keine Datei zweimal gemeldet",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "je Paar genau ein ImagePairErstellt",
+      "ok": true,
+      "soll": "181",
+      "ist": "181"
+    },
+    {
+      "name": "BildVerfuegbar genau einmal je Bild (2 je Paar)",
+      "ok": true,
+      "soll": "362",
+      "ist": "362"
+    },
+    {
+      "name": "kein Paar mit mehr als 2 BildVerfuegbar",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "je Paar genau ein ImagePairKomplett",
+      "ok": true,
+      "soll": "181",
+      "ist": "181"
+    },
+    {
+      "name": "Read-Model: komplette Paare = ImagePairKomplett im Log",
+      "ok": true,
+      "soll": "181",
+      "ist": "181"
+    },
+    {
+      "name": "Read-Model: Paare = ImagePairErstellt im Log",
+      "ok": true,
+      "soll": "181",
+      "ist": "181"
+    },
+    {
+      "name": "je Vorgang genau ein ProzessBeendet",
+      "ok": true,
+      "soll": "68392",
+      "ist": "68392"
+    },
+    {
+      "name": "kein Vorgang mit mehr als einem ProzessBeendet",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "gelingende Vorgänge enden mit Erfolg",
+      "ok": true,
+      "soll": "61553",
+      "ist": "61553"
+    },
+    {
+      "name": "abgelehnte Aufträge enden ohne Erfolg",
+      "ok": true,
+      "soll": "6839",
+      "ist": "6839"
+    },
+    {
+      "name": "jede Kompensation genau einmal (PostenFreigegeben je abgelehntem Auftrag)",
+      "ok": true,
+      "soll": "6839",
+      "ist": "6839"
+    },
+    {
+      "name": "je gelingendem Auftrag genau ein AuftragBestaetigt",
+      "ok": true,
+      "soll": "54714",
+      "ist": "54714"
+    },
+    {
+      "name": "je Verteilung jedes Ziel genau einmal zugebucht",
+      "ok": true,
+      "soll": "27356",
+      "ist": "27356"
+    },
+    {
+      "name": "je Verteilung genau ein VerteilungAbgeschlossen",
+      "ok": true,
+      "soll": "6839",
+      "ist": "6839"
+    },
+    {
+      "name": "Reaktion: je Reservierung unter dem Mindestbestand genau ein Nachschub",
+      "ok": true,
+      "soll": "61324",
+      "ist": "61324"
+    },
+    {
+      "name": "Reaktion: je Reaktions-Command genau eine Wirkung (Ziel-Events je Ursache = 1)",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "Beispieldomäne: keine CommandId zweimal gewirkt (Events je CommandId in genau einer Transaktion)",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "Beispieldomäne: keine CommandId zweimal noop-markiert",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "Beispieldomäne: keine CommandId zweimal abgelehnt-markiert",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "Beispieldomäne: kein Stream mit doppelter Version",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "Prüfdomäne: keine CommandId zweimal gewirkt (Events je CommandId in genau einer Transaktion)",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "Prüfdomäne: keine CommandId zweimal noop-markiert",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "Prüfdomäne: keine CommandId zweimal abgelehnt-markiert",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "Prüfdomäne: kein Stream mit doppelter Version",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    }
+  ],
+  "exactly_once_ok": true,
+  "gueltig": true,
+  "begruendung": []
+}

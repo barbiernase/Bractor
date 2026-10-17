@@ -176,8 +176,11 @@ nicht aus Namespaces (`CommandAggregateMapGenerator`).
   - die Spur `ursache` (`Stream:Version` des auslösenden Log-Eintrags), `wirker` (Karten-Id des schreibenden Bausteins, z. B.
     `decide:Leihvorgang/LeiheAus`), `ueber` (der Absender des Commands), `stand` (Code-Stand des Hosts) — geschrieben an einer Stelle
     (`Infrastructure/Persistence/SpurHeader.cs`, Konstanten in `Abstractions/Spur/Spur.cs`), fehlende Werte werden weggelassen.
-- **Read** (`ReadStreamAsync`): `Where(StreamId == && Version >= from).OrderBy(Version)`, materialisiert `EventEnvelope` (Akteur aus dem
-  Header als `UserId`). Dabei läuft jedes Event durch die Upcasting-Naht `GeneratedEventUpcasting.Aufwerten` (1:1 oder 1:N mit
+- **Read** (`ReadStreamAsync`, `ReadKorreliertAsync`, `ReadEventAsync`): festes SQL auf `mt_events` (`stream_id = $1 and version >= $2`, beim
+  korrelierten Read dazu `correlation_id = $3`, beim Einzel-Read `version = $2`; immer `is_archived = false`, geordnet nach Version) statt Martens
+  LINQ, das jede Abfrage neu übersetzte und dabei die eingefangenen Werte kompilierte (PF-21). Den .NET-Typ zur Spalte `type` nennt die generierte
+  Registrierung, mit der Marten die Typen auch schreibt; Daten und Kopfzeilen liest Martens Serializer; Spalten, die Marten nach seiner
+  Metadaten-Konfiguration nicht führt, liest das SQL als `null`. Materialisiert wird ein `EventEnvelope` (Akteur aus dem Header als `UserId`). Dabei läuft jedes Event durch die Upcasting-Naht `GeneratedEventUpcasting.Aufwerten` (1:1 oder 1:N mit
   `SubIndex`) — eine Backend-Primitive für Prod (`IUpcast`), die heute keine Domäne nutzt; ohne Upcast ist sie ein Durchreichen.
 - **Horizont der Vollständigkeit** (`Horizont`, G-9): bis zu welcher globalen Sequenz `seq_id` jedes Event endgültig ist — committet und
   sichtbar oder nie (zurückgerollt). Postgres zieht die Sequenz im Insert innerhalb der Transaktion; nebenläufige Commits werden in umgekehrter
