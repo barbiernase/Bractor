@@ -774,6 +774,22 @@ S5-64 gerechnet ≈ 9 → 3 ms. Was jetzt oben steht: Npgsql 29 % (Senden über 
 (Schreiben), Proto.Actor 5 %, Redis 4 %; einzelne Posten `Dictionary.Resize` 8 %, `Materialisiere` 5 %, MD5 5 % und SHA256 2 % (deterministische
 Ids), `Guid.NewGuid` 3 %. Der Rechner steht in S5-64 bei 60 % mit CPU-Druck 0,28 — Host und Postgres-Backends (4,3 Kerne) teilen ihn weiter.
 
+**Wo Marten noch bremst (2026-10-17, Messserver, Profile `…_server-sonde-profil-reads-sql` (S5) und `…_server-sonde-profil-s1-s3`
+(S1, S3; 40 s), Diagnose):** eine Stichprobe zählt als „in Martens LINQ“, wenn sie in der Übersetzung rechnet (`Marten.Linq`,
+`FastExpressionCompiler`, dynamische Methoden); zugeordnet wird sie der eigenen Methode direkt über der Übersetzung (tiefere Stacks enthalten
+oft fremde Fortsetzungen, die nach einer Datenbank-Antwort im selben Thread weiterlaufen). Gemessen, Anteil an der Arbeit des Hosts:
+- *Martens LINQ:* S5 0,3 %; S1/S3 7,6 %, davon 7,2 % `ReadPartitionAsync` (Seiten der Projektionen) — alles übrige (Offen-Index, Fristplan,
+  Startup) unter 0,1 %. Laden per Id (`LoadAsync`) übersetzt nichts.
+- *Alles unterhalb eines Marten-Aufrufs* (Laden, Speichern, Anhängen, Sitzungen): S5 21 %, S1/S3 28 %. Davon rechnet Marten selbst (Marten,
+  Weasel, JasperFx an der Spitze) 1 % bzw. 7 % (fast ganz die LINQ-Übersetzung oben); der Rest ist Npgsql und das Senden über den Socket,
+  Laufzeit (Tasks, Wörterbücher) und JSON — das bliebe mit eigenem SQL.
+- *Kopfzeilen beim Lesen:* in S5 8,5 % in `SystemTextJsonSerializer.FromJson` mit `Dictionary.Resize` an der Spitze — das Deserialisieren der
+  Kopfzeilen zu `Dictionary<string, object>` in den eigenen Event-Reads (dasselbe tat Martens LINQ-Weg vorher).
+- *Datenbankseite* (`pg_stat_statements`, „Reads ohne LINQ“): Marten fügt je Event eine Anweisung ein und schreibt den Stream-Kopf einzeln (S5-64
+  6,8 + 5,2 Anweisungen je Vorgang, S1 18 + 17); Postgres parst und plant jede (PF-20) — unabhängig davon, wer das SQL baut.
+Folgerung: alles nach SQL zu übersetzen lohnt nicht; es lohnen `ReadPartitionAsync` als festes SQL wie die übrigen Event-Reads und die
+Kopfzeilen direkt als Spalten (`headers->>'…'`) statt als Wörterbuch (PF-22). Auf der Datenbankseite ist der Hebel PF-20.
+
 **Als korrekt verifiziert (Backend-Audit 2026-08, nicht erneut jagen):** Versionsarithmetik inkl. Noop- und Ablehnungs-Marken; OCC-Skip auf dem
 `AnyVersion`-Pfad; Append vor State-Mutation; Shard-Hash-Konsistenz Subscribe ↔ gezieltes Publish; Pre-Dispatch-Guard des Adapters je Stream (heute `EmittentenAdapter`);
 Signal→Wake-Mapping; Kompensations-Dedup und Count-Join ohne verfrühtes Feuern; Snapshot-Schema-Gating; Metadaten-Readback.

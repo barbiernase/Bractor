@@ -16,6 +16,7 @@ hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz und P
 | VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16 | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
+| PF-22 | Rest von PF-21: `ReadPartitionAsync` (Projektionen) liest noch über Martens LINQ (S1/S3 7 % der Host-Arbeit); die Event-Reads deserialisieren die Kopfzeilen zu einem Wörterbuch (S5 8,5 %) | P2 |
 | PF-20 | Postgres parst und plant jede Anweisung neu: die Hälfte der Backend-CPU; mit vorbereiteten Anweisungen (Npgsql `Max Auto Prepare`) S5-64 1,13 × — Entscheidung offen | P2 |
 | PF-17 | Kosten von Horizont und Zeitstempel-Regel (G-9, G-10): je Probe bzw. Prüfung ≈ 0,45 ms (S1 3 ms je Paar, mehr als erwartet), je Event-Insert ≈ 7–10 µs (Prod) bzw. 20–35 µs (Sim, Versatz je Zeile aus `uhr`) | P3 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
@@ -220,6 +221,13 @@ rehydriert und Erfolg quittiert, hat keinen Test. Abgleich Phase 2: die Schritte
 Fehler selbst; erreichbar ist der Pfad nur über einen werfenden Applier — der bricht dann auch die Rehydration (vergiftetes Aggregat,
 Dead-Letter). *Empfehlung:* entweder den Pfad auf den Applier-Fall zurückschneiden oder einen Prüfstand-Test mit einem Actor über eine
 werfende Applier-Naht.
+
+**PF-22 · Rest der Marten-Bremse beim Lesen.** Geprüft, wo Marten noch bremst (docs/12 §12.5, „Wo Marten noch bremst“): Martens LINQ kostet
+nur noch in `ReadPartitionAsync` (Seiten der Projektionen; S1/S3 7,2 % der Host-Arbeit), Laden per Id übersetzt nichts, und unter allen übrigen
+Marten-Aufrufen rechnet Marten selbst ≈ 1 % — dort liegen Npgsql, Socket, Laufzeit und JSON, die eigenes SQL nicht spart. Dazu kommt das
+Deserialisieren der Kopfzeilen zu `Dictionary<string, object>` in den Event-Reads (S5 8,5 %). *Empfehlung:* `ReadPartitionAsync` als festes SQL
+wie die übrigen Event-Reads; die Kopfzeilen als Spalten lesen (`headers->>'aggregate_type'`, `'akteur'`, Spur) statt als Wörterbuch. Den Rest
+nicht nach SQL übersetzen (Schreibweg, Dokumente): wenig Ersparnis, Eingriff in Martens Arbeitsweise.
 
 **PF-20 · Parsen und Planen jeder Anweisung.** Gemessen (docs/12 §12.5, „Engpass-Sonden“): je Vorgang führt Postgres 0,8–1,7 ms Anweisungen
 aus, verbraucht dafür aber 2,8–5,5 ms CPU in den Backends; unter S5-64 sind das 5,4 Kerne neben 7,1 Kernen des Hosts auf einem Rechner, der damit
