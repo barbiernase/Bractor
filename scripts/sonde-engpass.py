@@ -53,7 +53,7 @@ class Prozesse:
     """Ordnet PIDs einer Gruppe zu (einmal je PID und Startzeit) und liest ihre CPU-Zeit."""
 
     def __init__(self):
-        self.gruppe = {}      # (pid, start) → gruppe
+        self.gruppe = {}      # (pid, start, comm) → gruppe; comm, weil ein exec (Skript → dotnet) die PID behält
         self.container = container_namen()
 
     def klassifiziere(self, pid, comm):
@@ -104,7 +104,7 @@ class Prozesse:
             # Felder ab state (Index 0): utime = 11, stime = 12, starttime = 19
             ticks = int(felder[11]) + int(felder[12])
             pid = int(name)
-            schluessel = (pid, felder[19])
+            schluessel = (pid, felder[19], comm)
             g = self.gruppe.get(schluessel)
             if g is None:
                 g = self.gruppe[schluessel] = self.klassifiziere(pid, comm)
