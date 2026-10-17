@@ -230,11 +230,11 @@ aus `uhr` liest. *Optionen:* den Versatz je Transaktion einmal lesen (`set_confi
 **PF-19 · Marten-Code zur Laufzeit.** Marten erzeugt den Speicher-Code eines Dokumenttyps beim ersten Gebrauch und kompiliert ihn mit Roslyn
 (`StoreOptions.GeneratedCodeMode` im Standard). In Sim fasst der Abgleich der Leseseite beim Start jeden Read-Model-Typ an; in Prod geschieht es
 im Verkehr. Gemessen (docs/12 §12.5): S4 ohne Aufwärmen 962–1 019 Paare/s, mit einer Aufwärmrunde 1 847–1 942 — die erste Nutzung nach dem Start
-kostet je Dokumenttyp ≈ 0,05–0,1 s, danach nichts. Betrifft jeden Host nach jedem Start (Deploy, Absturz) einmal je Typ. *Verworfen (Tobi,
-2026-10-17):* Martens Code beim Build erzeugen (`TypeLoadMode.Static` über `codegen write`) — das Werkzeug liest die Typen per Reflection (W10).
-*Offen:* je Read-Model ein generiertes, typisiertes Vorwärmen beim Start (ohne Reflection; der Kaltstart wandert in den Hochlauf, Martens
-Laufzeit-Code-Erzeugung bleibt Teil von W10-2), oder hinnehmen. Ganz ohne Laufzeit-Code-Erzeugung ginge es nur mit einem eigenen Roslyn-Generator
-für Martens Speicher-Code — eine Grundsatzfrage zu Marten (W10-2), kein Einzelschritt.
+kostet je Dokumenttyp ≈ 0,05–0,1 s, danach nichts. Betrifft jeden Host nach jedem Start (Deploy, Absturz) einmal je Typ. *Entschieden (Tobi,
+2026-10-17):* Martens Arbeitsweise bleibt, wie sie ist — der Laufzeit-Modus ist Martens Standard und der am breitesten getestete Weg; Martens Code
+beim Build zu erzeugen (`TypeLoadMode.Static` über `codegen write`) wäre ein Sonderweg für einen Gewinn, der nur einmal je Start anfällt (und das
+Werkzeug liest die Typen per Reflection, W10). *Offen:* je Read-Model ein generiertes, typisiertes Vorwärmen beim Start (ändert Marten nicht, ohne
+Reflection; der Kaltstart wandert in den Hochlauf), oder hinnehmen.
 
 **G-5 · Versionszählung bei Split-Upcasts.** `AggregateRehydrator` zählt `Version++` je materialisiertem Event; ein Split-Upcast liefert aus
 einer gespeicherten Position mehrere Events (`MartenEventStore`, `SubIndex`), die Version läuft dem Log davon, und jeder Append scheitert.
