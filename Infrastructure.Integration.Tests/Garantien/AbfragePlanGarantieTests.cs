@@ -101,6 +101,8 @@ public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.F
         {
             await Store.Advanced.Clean.CompletelyRemoveAllAsync();
             await Store.Storage.ApplyAllConfiguredChangesToDatabaseAsync();
+            foreach (var typ in new[] { typeof(JasperFx.Events.IEvent), typeof(ProzessOffen), typeof(Frist) })
+                await Store.Storage.Database.EnsureStorageExistsAsync(typ);
             // Veraltete Statistik wie unter Last: ANALYZE, solange die Tabellen fast leer sind, danach füllen; kein Autovacuum dazwischen.
             await SqlAsync($"""
                 alter table {Schema}.mt_events set (autovacuum_enabled = false);
