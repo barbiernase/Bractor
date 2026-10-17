@@ -308,17 +308,31 @@ HORIZONT_ABFRAGEN = [
 
 
 def horizont_schleife(aus, db):
-    """Diagnose PF-17: jede Sekunde die Teile der Horizont-Probe einzeln, mit EXPLAIN ANALYZE, gegen die echte DB unter Last."""
-    psql = subprocess.Popen(["docker", "exec", "-i", "cqrs-postgres", "psql", "-U", "postgres", "-d", db, "-At", "-q", "-v", "ON_ERROR_STOP=0"],
-                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+    """Diagnose PF-17: jede Sekunde die Teile der Horizont-Probe einzeln, mit EXPLAIN ANALYZE, gegen die echte DB unter Last. Der Treiber
+    löscht die DB beim Start (die Sitzung endet) — dann verbindet sich die Schleife neu."""
+    psql = None
+
+    def verbinde():
+        return subprocess.Popen(["docker", "exec", "-i", "cqrs-postgres", "psql", "-U", "postgres", "-d", db, "-At", "-q", "-v", "ON_ERROR_STOP=0"],
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
 
     def frage(sql):
-        psql.stdin.write(sql + "\nSELECT '#ENDE';\n")
-        psql.stdin.flush()
+        nonlocal psql
+        try:
+            if psql is None or psql.poll() is not None:
+                psql = verbinde()
+            psql.stdin.write(sql + "\nSELECT '#ENDE';\n")
+            psql.stdin.flush()
+        except (BrokenPipeError, OSError):
+            psql = None
+            return ""
         zeilen = []
         while True:
             z = psql.stdout.readline()
-            if not z or z.strip() == "#ENDE":
+            if not z:
+                psql = None
+                return ""
+            if z.strip() == "#ENDE":
                 return "\n".join(zeilen)
             zeilen.append(z.rstrip("\n"))
 
@@ -327,9 +341,10 @@ def horizont_schleife(aus, db):
         f.write("zeit_utc,kopf,abfrage,ms,knoten,puffer_hit,puffer_read\n")
         vorbereitet = False
         while not STOP.wait(1.0):
+            war = psql
             kopf = frage("select coalesce(max(seq_id), 0) from es.mt_events;").strip().splitlines()
-            if not kopf or not kopf[-1].lstrip("-").isdigit():
-                vorbereitet = False   # DB neu angelegt oder noch ohne Tabelle
+            if psql is not war or not kopf or not kopf[-1].lstrip("-").isdigit():
+                vorbereitet = False   # neue Sitzung, DB neu angelegt oder noch ohne Tabelle
                 continue
             kopf = int(kopf[-1])
             if not vorbereitet:
@@ -354,8 +369,9 @@ def horizont_schleife(aus, db):
             f.write(f"{z},{kopf},xact_id_rundlauf,{(time.monotonic() - t0) * 1000:.3f},psql-Rundlauf,0,0\n")
             f.flush()
     try:
-        psql.stdin.close()
-        psql.wait(5)
+        if psql is not None:
+            psql.stdin.close()
+            psql.wait(5)
     except Exception:
         psql.kill()
 
