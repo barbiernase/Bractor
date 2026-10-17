@@ -38,7 +38,37 @@ public static class ClusterExtensions
         ArgumentNullException.ThrowIfNull(messageType);
         
         var managerIdentity = BrokerIdentity.Manager(messageType);
-        await cluster.RequestAsync<Ack>(managerIdentity, new Activate(), ct);
+        await MitWiederholungAsync(c => cluster.RequestAsync<Ack>(managerIdentity, new Activate(), c), $"Broker {messageType.Name} aktivieren", ct);
+    }
+
+    /// <summary>Wie lange eine Anfrage an den Broker höchstens wiederholt wird, bevor sie laut scheitert.</summary>
+    public static readonly TimeSpan WiederholungsFrist = TimeSpan.FromSeconds(60);
+
+    /// <summary>
+    /// Eine Anfrage an einen virtuellen Broker-Actor, wiederholt mit Backoff bis <see cref="WiederholungsFrist"/> (P1-3). Ein gerade hart beendeter
+    /// Knoten steht noch einige Sekunden in der Mitgliederliste (Consul: TTL 3 s), der Cluster legt Aktivierungen auf ihn, und die Anfrage läuft in
+    /// den Timeout; sobald die Mitgliedschaft stimmt, gelingt sie. Auch für einen Knoten, der in einem Cluster gerade gestorben ist.
+    /// </summary>
+    public static async Task MitWiederholungAsync(Func<CancellationToken, Task> anfrage, string was, CancellationToken ct)
+    {
+        var start = System.Diagnostics.Stopwatch.GetTimestamp();
+        var pause = TimeSpan.FromMilliseconds(250);
+        for (var versuch = 1; ; versuch++)
+        {
+            try
+            {
+                await anfrage(ct);
+                if (versuch > 1) Console.WriteLine($"  ✓ {was} im {versuch}. Versuch");
+                return;
+            }
+            catch (Exception ex) when (ex is TimeoutException or DeadLetterException && !ct.IsCancellationRequested
+                                       && System.Diagnostics.Stopwatch.GetElapsedTime(start) < WiederholungsFrist)
+            {
+                Console.WriteLine($"  … {was}: {ex.GetType().Name} — Mitgliedschaft noch nicht eingeschwungen, nächster Versuch in {pause.TotalMilliseconds:0} ms");
+                await Task.Delay(pause, ct);
+                if (pause < TimeSpan.FromSeconds(2)) pause *= 2;
+            }
+        }
     }
 
     /// <summary>

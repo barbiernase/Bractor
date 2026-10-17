@@ -41,7 +41,8 @@ public class BrokerSubscription
         var shardIdentity = BrokerIdentity.ShardFor(messageType, _subscriberId);
         var message = new Subscribe(_subscriberId, _subscriberPid);
         
-        await _cluster.RequestAsync<Ack>(shardIdentity, message, ct);
+        await Extensions.ClusterExtensions.MitWiederholungAsync(
+            c => _cluster.RequestAsync<Ack>(shardIdentity, message, c), $"{_subscriberId} abonniert {messageType.Name}", ct);
         
         if (!_subscribedTypes.Contains(messageType))
             _subscribedTypes.Add(messageType);
