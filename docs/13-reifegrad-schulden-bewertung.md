@@ -16,7 +16,7 @@ hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz und P
 | VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16 | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
-| PF-17 | Horizont-Probe: `exists(… seq_id > $1)` durchsucht die Tabelle von vorn — unter Last bei veralteter Statistik (S1 0,74 ms), mit vorbereiteter Anweisung (allgemeiner Plan) immer, linear mit der Tabelle (3,4 ms bei 11 000 Events); dazu die Zeitstempel-Regel in Sim | P1 |
+| PF-17 | Rest: die Zeitstempel-Regel kostet in Sim ≈ 20–35 µs je eingefügtem Event (Versatz je Zeile aus `uhr`); in Prod nur die Datenbankzeit | P3 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
 | W10-2 | Reflektive Serialisierung zur Laufzeit (Marten-Default, Marking-Store, Snapshot-`Clone`, HTTP-Antworten); kein Reflection-Verbot im Build | P1 |
@@ -220,13 +220,9 @@ Fehler selbst; erreichbar ist der Pfad nur über einen werfenden Applier — der
 Dead-Letter). *Empfehlung:* entweder den Pfad auf den Applier-Fall zurückschneiden oder einen Prüfstand-Test mit einem Actor über eine
 werfende Applier-Naht.
 
-**PF-17 · Kosten von Horizont und Zeitstempel-Regel.** Diagnose (docs/12 §12.5, „Diagnose der Horizont-Probe“): teuer ist allein „steht
-hinter der Position etwas?“ (`exists(select 1 from mt_events where seq_id > $1)`). Postgres durchsucht dafür die Tabelle von vorn, statt über den
-Index an die Position zu springen — während S1, weil die Statistik der wachsenden Tabelle veraltet ist (0,74 ms, 480 Puffer), und seit PF-20
-immer, weil die vorbereitete Anweisung einen allgemeinen Plan bekommt (3,1–3,6 ms bei 11 000 Events, linear mit der Tabelle — im Betrieb mit
-Millionen Events Sekunden je Probe, daher P1). Zählerstand und älteste Transaktion kosten 0,01–0,04 ms. *Empfehlung:* die Frage so stellen, dass jeder
-Plan den Index nimmt (`order by seq_id limit 1`), oder sie aus dem Zählerstand beantworten, den die Probe ohnehin liest. Die Zeitstempel-Regel
-kostet in Sim ≈ 20–35 µs je eingefügtem Event (Versatz je Zeile aus `uhr`); in Prod misst sie nur die Datenbankzeit.
+**PF-17 · Rest: Zeitstempel-Regel in Sim.** Die Horizont-Probe ist erledigt (§13.6). Offen bleibt: die Zeitstempel-Regel kostet in Sim
+≈ 20–35 µs je eingefügtem Event, weil sie je Zeile den Versatz aus `uhr` liest; in Prod misst sie nur die Datenbankzeit. *Option:* den Versatz je
+Transaktion einmal lesen (`set_config(…, true)`).
 
 **G-5 · Versionszählung bei Split-Upcasts.** `AggregateRehydrator` zählt `Version++` je materialisiertem Event; ein Split-Upcast liefert aus
 einer gespeicherten Position mehrere Events (`MartenEventStore`, `SubIndex`), die Version läuft dem Log davon, und jeder Append scheitert.
@@ -306,6 +302,15 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **PF-17 · Horizont-Probe und fällige Abfragen über den Index (2026-10-18; docs/12 §12.5):** die Frage „steht hinter der Position etwas?“
+  (`exists(… seq_id > $1)`) durchsuchte die Tabelle von vorn — bei veralteter Statistik einer wachsenden Tabelle und seit PF-20 immer, weil die
+  vorbereitete Anweisung einen allgemeinen Plan bekam (linear mit dem Log; bei Millionen Events Sekunden je Probe). Jetzt `order by seq_id limit 1`
+  (jeder Plan nimmt den Index); dieselbe Falle hatten die fälligen Vorgänge des Backstops (jede Sekunde, ganze Tabelle der offenen) und die
+  fälligen Fristen: Marten-Index auf das Feld, Abfrage sortiert und je Takt auf die frühesten 1 000 begrenzt. Die SQL-Texte der häufigen Abfragen
+  stehen an einer Stelle (`EventStoreAbfragen`). Gemessen: Horizont-Abfrage S1 26 statt 474 µs, Datenbankzeit je Paar 0,67 ×. Nachweis: I
+  `AbfragePlanGarantieTests` (500 000 Events, je 200 000 Dokumente; zugeschnittener und allgemeiner Plan, veraltete und frische Statistik; vor dem
+  Umbau rot gesehen).
 
 - **PF-22 · Rest der Marten-Bremse beim Lesen (2026-10-18; docs/03 §3.3, docs/12 §12.5):** der Check „wo bremst Marten noch“ fand Martens LINQ
   nur noch in `ReadPartitionAsync` (S1/S3 7 % der Host-Arbeit) und das Deserialisieren der Kopfzeilen zu einem Wörterbuch (S5 8,5 %); unter
