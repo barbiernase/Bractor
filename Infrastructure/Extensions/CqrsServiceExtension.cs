@@ -147,11 +147,15 @@ public static class CqrsServiceExtensions
             // Kein DISCARD ALL bei der Rückgabe einer Verbindung an den Pool: es war ein Drittel aller Anweisungen und verwarf jedes Mal die
             //   vorbereiteten Pläne. Gefahrlos, weil nichts im System Sitzungszustand setzt (keine SET-, LISTEN- oder Sitzungs-Locks, die
             //   offen bleiben; Martens Migrations-Lock gibt sich selbst frei).
+            // Vorbereitete Anweisungen (PF-20): Npgsql bereitet je physischer Verbindung die häufigsten SQL-Texte vor (ab dem fünften Gebrauch),
+            //   danach parst und plant Postgres sie nicht bei jedem Aufruf neu — gemessen die Hälfte der Backend-CPU. Sie überleben die Rückgabe an
+            //   den Pool (NoResetOnClose). Gefahrlos, weil im Verkehr kein Schema entsteht (PF-18). Ein Wert in der Verbindung der Umgebung gilt.
             var eventStoreConn = new Npgsql.NpgsqlConnectionStringBuilder(builder.EventStoreConnectionString)
             {
                 CommandTimeout = builder.CommandTimeoutSeconds,
                 NoResetOnClose = true,
             };
+            if (eventStoreConn.MaxAutoPrepare == 0) eventStoreConn.MaxAutoPrepare = 20;
             options.Connection(eventStoreConn.ConnectionString);
             options.Events.DatabaseSchemaName = builder.EventStoreSchema;
             options.DatabaseSchemaName = builder.EventStoreSchema;
