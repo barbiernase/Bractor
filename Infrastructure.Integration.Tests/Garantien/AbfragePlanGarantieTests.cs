@@ -68,8 +68,16 @@ public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.F
                      ("Fristplan: fällige Fristen", MartenFristplan.FaelligeAbfrage(s, jetzt).ToCommand(FetchType.FetchMany)),
                  })
             foreach (var allgemein in new[] { false, true })
-                (await _fx.BloeckeAsync(cmd.CommandText, cmd.Parameters.Select(p => p.Value!).ToArray(), allgemein)).Should().BeLessThan(HoechstBloecke,
+                (await _fx.BloeckeAsync(Positional(cmd), cmd.Parameters.Select(p => p.Value!).ToArray(), allgemein)).Should().BeLessThan(HoechstBloecke,
                     $"„{name}“ mit {(allgemein ? "allgemeinem" : "zugeschnittenem")} Plan, {(frischeStatistik ? "frischer" : "veralteter")} Statistik");
+    }
+
+    /// <summary>Marten benennt Parameter (<c>:p0</c>); PREPARE braucht die Position (<c>$1</c>).</summary>
+    private static string Positional(NpgsqlCommand cmd)
+    {
+        var namen = cmd.Parameters.Select((p, i) => (p.ParameterName.TrimStart(':', '@'), i + 1)).ToDictionary(x => x.Item1, x => x.Item2);
+        return System.Text.RegularExpressions.Regex.Replace(cmd.CommandText, @"(?<!:)[:@](\w+)\b",
+            m => namen.TryGetValue(m.Groups[1].Value, out var i) ? "$" + i : m.Value);
     }
 
     public sealed class Fixture : IAsyncLifetime
