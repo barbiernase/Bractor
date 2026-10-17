@@ -16,7 +16,6 @@ hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz und P
 | VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16 | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
-| PF-22 | Rest von PF-21: `ReadPartitionAsync` (Projektionen) liest noch über Martens LINQ (S1/S3 7 % der Host-Arbeit); die Event-Reads deserialisieren die Kopfzeilen zu einem Wörterbuch (S5 8,5 %) | P2 |
 | PF-17 | Kosten von Horizont und Zeitstempel-Regel (G-9, G-10): je Probe bzw. Prüfung ≈ 0,45 ms (S1 3 ms je Paar, mehr als erwartet), je Event-Insert ≈ 7–10 µs (Prod) bzw. 20–35 µs (Sim, Versatz je Zeile aus `uhr`) | P3 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
@@ -221,13 +220,6 @@ Fehler selbst; erreichbar ist der Pfad nur über einen werfenden Applier — der
 Dead-Letter). *Empfehlung:* entweder den Pfad auf den Applier-Fall zurückschneiden oder einen Prüfstand-Test mit einem Actor über eine
 werfende Applier-Naht.
 
-**PF-22 · Rest der Marten-Bremse beim Lesen.** Geprüft, wo Marten noch bremst (docs/12 §12.5, „Wo Marten noch bremst“): Martens LINQ kostet
-nur noch in `ReadPartitionAsync` (Seiten der Projektionen; S1/S3 7,2 % der Host-Arbeit), Laden per Id übersetzt nichts, und unter allen übrigen
-Marten-Aufrufen rechnet Marten selbst ≈ 1 % — dort liegen Npgsql, Socket, Laufzeit und JSON, die eigenes SQL nicht spart. Dazu kommt das
-Deserialisieren der Kopfzeilen zu `Dictionary<string, object>` in den Event-Reads (S5 8,5 %). *Empfehlung:* `ReadPartitionAsync` als festes SQL
-wie die übrigen Event-Reads; die Kopfzeilen als Spalten lesen (`headers->>'aggregate_type'`, `'akteur'`, Spur) statt als Wörterbuch. Den Rest
-nicht nach SQL übersetzen (Schreibweg, Dokumente): wenig Ersparnis, Eingriff in Martens Arbeitsweise.
-
 **PF-17 · Kosten von Horizont und Zeitstempel-Regel.** Gemessen (docs/12 §12.5, „Horizont + Uhr“): eine Probe bzw. Prüfung des Horizonts kostet
 ≈ 0,45 ms Ausführungszeit — für `pg_current_snapshot()` und ein `exists` über den Primärschlüssel viel; Ursache offen (Verdacht: einzelne lange
 Aufrufe, wenn die Position weit zurückliegt). Die Zeitstempel-Regel kostet in Sim ≈ 20–35 µs je eingefügtem Event, weil sie je Zeile den Versatz
@@ -312,6 +304,12 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **PF-22 · Rest der Marten-Bremse beim Lesen (2026-10-18; docs/03 §3.3, docs/12 §12.5):** der Check „wo bremst Marten noch“ fand Martens LINQ
+  nur noch in `ReadPartitionAsync` (S1/S3 7 % der Host-Arbeit) und das Deserialisieren der Kopfzeilen zu einem Wörterbuch (S5 8,5 %); unter
+  allen übrigen Marten-Aufrufen rechnet Marten selbst ≈ 1 % — alles nach SQL zu übersetzen lohnt nicht. Jetzt liest auch die Seite festes SQL,
+  und die sechs Kopfzeilen eines Envelopes kommen als Text-Spalten. Gemessen: Host-CPU in S5-8/S5-64 ≈ 0,8 ×, S3-8 1,17 ×. Nachweis: PD
+  `EventReadGarantieTests.Seiten_der_Projektionen_lesen_dasselbe_wie_Martens_LINQ` (mit falscher Grenze rot gesehen).
 
 - **PF-20 · Vorbereitete Anweisungen (2026-10-17, Entscheidung Tobi; docs/12 §12.5):** Postgres parste und plante jede Anweisung neu — gemessen
   die Hälfte der Backend-CPU. Jetzt setzt das Framework in der Event-Store-Verbindung `MaxAutoPrepare = 20` (Npgsql bereitet je Verbindung die
