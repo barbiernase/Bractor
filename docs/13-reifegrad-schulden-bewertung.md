@@ -16,7 +16,6 @@ hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz und P
 | VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16 | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
-| PF-19 | Marten erzeugt und kompiliert den Code je Dokumenttyp beim ersten Gebrauch zur Laufzeit (`GeneratedCodeMode` Standard): die erste Nutzung nach dem Start kostet je Typ ≈ 0,05–0,1 s (gemessen: S4 ohne Aufwärmen 0,3 statt 0,1/0,2 s; mit Aufwärmrunde wie Sim) — Marten bleibt im Standard-Modus (Tobi, 2026-10-17); offen nur, ob beim Start vorgewärmt wird | P3 |
 | PF-17 | Kosten von Horizont und Zeitstempel-Regel (G-9, G-10): je Probe bzw. Prüfung ≈ 0,45 ms (S1 3 ms je Paar, mehr als erwartet), je Event-Insert ≈ 7–10 µs (Prod) bzw. 20–35 µs (Sim, Versatz je Zeile aus `uhr`) | P3 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
@@ -227,15 +226,6 @@ Aufrufe, wenn die Position weit zurückliegt). Die Zeitstempel-Regel kostet in S
 aus `uhr` liest. *Optionen:* den Versatz je Transaktion einmal lesen (`set_config(…, true)`), in Prod misst nur die Datenbankzeit; für die Proben
 `EXPLAIN ANALYZE` unter Last. Wirkung Ende zu Ende im Band der Einzelläufe.
 
-**PF-19 · Marten-Code zur Laufzeit.** Marten erzeugt den Speicher-Code eines Dokumenttyps beim ersten Gebrauch und kompiliert ihn mit Roslyn
-(`StoreOptions.GeneratedCodeMode` im Standard). In Sim fasst der Abgleich der Leseseite beim Start jeden Read-Model-Typ an; in Prod geschieht es
-im Verkehr. Gemessen (docs/12 §12.5): S4 ohne Aufwärmen 962–1 019 Paare/s, mit einer Aufwärmrunde 1 847–1 942 — die erste Nutzung nach dem Start
-kostet je Dokumenttyp ≈ 0,05–0,1 s, danach nichts. Betrifft jeden Host nach jedem Start (Deploy, Absturz) einmal je Typ. *Entschieden (Tobi,
-2026-10-17):* Martens Arbeitsweise bleibt, wie sie ist — der Laufzeit-Modus ist Martens Standard und der am breitesten getestete Weg; Martens Code
-beim Build zu erzeugen (`TypeLoadMode.Static` über `codegen write`) wäre ein Sonderweg für einen Gewinn, der nur einmal je Start anfällt (und das
-Werkzeug liest die Typen per Reflection, W10). *Offen:* je Read-Model ein generiertes, typisiertes Vorwärmen beim Start (ändert Marten nicht, ohne
-Reflection; der Kaltstart wandert in den Hochlauf), oder hinnehmen.
-
 **G-5 · Versionszählung bei Split-Upcasts.** `AggregateRehydrator` zählt `Version++` je materialisiertem Event; ein Split-Upcast liefert aus
 einer gespeicherten Position mehrere Events (`MartenEventStore`, `SubIndex`), die Version läuft dem Log davon, und jeder Append scheitert.
 Latent: heute gibt es keinen Split-Upcast. *Empfehlung:* je gespeicherter Position zählen (`AggregateVersion`), Prüfstand-Test mit Split.
@@ -314,6 +304,12 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **PF-19 · Marten-Code zur Laufzeit — bewusst hingenommen (Tobi, 2026-10-17; docs/12 §12.5):** Marten erzeugt und kompiliert den Speicher-Code
+  eines Dokumenttyps beim ersten Gebrauch nach dem Start (Standard-Modus). Gemessen: S4 ohne Aufwärmrunde 962–1 019 Paare/s, mit 1 847–1 942 —
+  je Typ ≈ 0,05–0,1 s, einmal je Start, danach nichts. Die Messung misst den warmen Zustand (Start, Warmlauf, ungewertete Aufwärmrunde je Szenario,
+  seit `9188b87` auch vor S4). Martens Arbeitsweise bleibt: der Standard-Modus ist der am breitesten getestete Weg; Code beim Build (`TypeLoadMode.Static`)
+  und ein Vorwärmen beim Start sind verworfen.
 
 - **P1-3 · Neustart mit Consul nach hartem Abbruch (2026-10-17, Messserver; docs/12 §12.5):** nach einem harten Abbruch führte Consul den toten
   Knoten noch einige Sekunden als Mitglied (`ConsulProviderConfig`: TTL 3 s, Abmeldung nach 10 s), der Cluster legte Broker-Aktivierungen auf ihn,
