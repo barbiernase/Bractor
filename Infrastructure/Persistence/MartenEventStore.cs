@@ -203,7 +203,7 @@ public class MartenEventStore : IEventStoreRepository
         await using var conn = _store.Storage.Database.CreateConnection();
         await conn.OpenAsync(ct);
         await using var cmd = new Npgsql.NpgsqlCommand(
-            $"select data, type, id, stream_id, version, timestamp, correlation_id, causation_id, headers from {schema}.mt_events "
+            $"select data, type, id, stream_id, version, timestamp, {MetadatenSpalten} from {schema}.mt_events "
             + $"where {bedingung} and is_archived = false order by version", conn);
         foreach (var w in werte) cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = w });
 
@@ -222,6 +222,21 @@ public class MartenEventStore : IEventStoreRepository
                 r.IsDBNull(6) ? null : r.GetString(6), r.IsDBNull(7) ? null : r.GetString(7), headers));
         }
         return ergebnis;
+    }
+
+    /// <summary>
+    /// Korrelation, Kausalität und Kopfzeilen sind Spalten, die Marten nur anlegt, wenn sie in der Konfiguration eingeschaltet sind (der Host
+    /// schaltet alle ein, manche Test-Stores nicht) — eine fehlende liest das SQL als <c>null</c>, wie Martens LINQ sie dann auslässt.
+    /// </summary>
+    private string MetadatenSpalten
+    {
+        get
+        {
+            var m = ((StoreOptions)_store.Options).Events.MetadataConfig;
+            return (m.CorrelationIdEnabled ? "correlation_id" : "null::varchar") + ", "
+                 + (m.CausationIdEnabled ? "causation_id" : "null::varchar") + ", "
+                 + (m.HeadersEnabled ? "headers" : "null::jsonb");
+        }
     }
 
     /// <summary>Marten speichert die Platzhalter gescheiterter Appends unter diesem Diskriminator (G-7).</summary>
