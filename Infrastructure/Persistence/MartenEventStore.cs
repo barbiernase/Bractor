@@ -180,44 +180,58 @@ public class MartenEventStore : IEventStoreRepository
     /// ★ Phase 1: CorrelationId/CausationId/AggregateType werden jetzt aus den
     ///   Log-Metadaten rekonstruiert (beim Append gestempelt) — nicht mehr leer.
     /// </summary>
-    public async Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(
-        Guid streamId, int fromVersion, CancellationToken ct)
-    {
-        await using var session = _store.LightweightSession();
+    public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(Guid streamId, int fromVersion, CancellationToken ct)
+        => LeseStreamAsync("stream_id = $1 and version >= $2", ct, streamId, (long)fromVersion);
 
-        var raw = await session.Events
-            .QueryAllRawEvents()
-            .Where(e => e.StreamId == streamId && e.Version >= fromVersion)
-            .OrderBy(e => e.Version)
-            .ToListAsync(ct);
-
-        var result = new List<EventEnvelope>(raw.Count);
-        foreach (var e in raw)
-        {
-            if (IstTombstone(e)) continue;                  // G-7: Platzhalter eines gescheiterten Appends, kein Fakt
-            result.AddRange(Materialisiere(e));
-        }
-        return result;
-    }
-
-    public async Task<IReadOnlyList<EventEnvelope>> ReadKorreliertAsync(Guid streamId, int fromVersion, string korrelation, CancellationToken ct)
-    {
-        await using var session = _store.LightweightSession();
-        var raw = await session.Events.QueryAllRawEvents()
-            .Where(e => e.StreamId == streamId && e.Version >= fromVersion && e.MatchesSql("d.correlation_id = ?", korrelation))
-            .OrderBy(e => e.Version)
-            .ToListAsync(ct);
-        return raw.Where(e => !IstTombstone(e)).SelectMany(Materialisiere).ToList();
-    }
+    public Task<IReadOnlyList<EventEnvelope>> ReadKorreliertAsync(Guid streamId, int fromVersion, string korrelation, CancellationToken ct)
+        => LeseStreamAsync("stream_id = $1 and version >= $2 and correlation_id = $3", ct, streamId, (long)fromVersion, korrelation);
 
     public async Task<EventEnvelope?> ReadEventAsync(Guid streamId, int version, CancellationToken ct)
+        => (await LeseStreamAsync("stream_id = $1 and version = $2", ct, streamId, (long)version)).FirstOrDefault();
+
+    /// <summary>
+    /// Die Event-Reads eines Streams als festes SQL statt über Martens LINQ (PF-21): Marten übersetzte <c>QueryAllRawEvents().Where(…)</c> bei
+    /// jedem Aufruf neu und kompilierte dabei die eingefangenen Werte — unter Last über die Hälfte der arbeitenden Host-Threads, und das Erzeugen
+    /// dynamischer Methoden läuft in der Laufzeit über eine Sperre. Das SQL ist dasselbe, das Marten erzeugte (samt <c>is_archived = false</c>);
+    /// Tabellen, Format und Serializer bleiben Martens. Den Typ eines Events nennt die Spalte <c>type</c> (Speicher-Diskriminator), den .NET-Typ
+    /// dazu die generierte Registrierung, mit der Marten die Typen auch schreibt (<see cref="EventTypen"/>) — keine Reflection.
+    /// </summary>
+    private async Task<IReadOnlyList<EventEnvelope>> LeseStreamAsync(string bedingung, CancellationToken ct, params object[] werte)
     {
-        await using var session = _store.LightweightSession();
-        var raw = await session.Events.QueryAllRawEvents()
-            .Where(e => e.StreamId == streamId && e.Version == version)
-            .ToListAsync(ct);
-        return raw.Where(e => !IstTombstone(e)).SelectMany(Materialisiere).FirstOrDefault();
+        await EventTabellenAsync(_store, ct);
+        var schema = _store.Options.Events.DatabaseSchemaName;
+        await using var conn = _store.Storage.Database.CreateConnection();
+        await conn.OpenAsync(ct);
+        await using var cmd = new Npgsql.NpgsqlCommand(
+            $"select data, type, id, stream_id, version, timestamp, correlation_id, causation_id, headers from {schema}.mt_events "
+            + $"where {bedingung} and is_archived = false order by version", conn);
+        foreach (var w in werte) cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = w });
+
+        var serializer = _store.Options.Serializer();
+        var ergebnis = new List<EventEnvelope>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            var diskriminator = r.GetString(1);
+            if (diskriminator == TombstoneDiskriminator) continue;   // G-7: Platzhalter eines gescheiterten Appends, kein Fakt
+            if (!EventTypen.TryGetValue(diskriminator, out var typ))
+                throw new InvalidOperationException($"Event-Typ „{diskriminator}“ ist nicht registriert (GeneratedEventUpcasting.Registrierungen).");
+            var daten = serializer.FromJson(typ, r, 0);
+            var headers = r.IsDBNull(8) ? null : serializer.FromJson<Dictionary<string, object>>(r, 8);
+            ergebnis.AddRange(Materialisiere(daten, r.GetGuid(2), r.GetGuid(3), r.GetInt64(4), r.GetFieldValue<DateTimeOffset>(5),
+                r.IsDBNull(6) ? null : r.GetString(6), r.IsDBNull(7) ? null : r.GetString(7), headers));
+        }
+        return ergebnis;
     }
+
+    /// <summary>Marten speichert die Platzhalter gescheiterter Appends unter diesem Diskriminator (G-7).</summary>
+    private const string TombstoneDiskriminator = "tombstone";
+
+    /// <summary>Speicher-Diskriminator → .NET-Typ, aus derselben generierten Tabelle, mit der <see cref="MartenEventTypeRegistration"/> die Typen
+    /// bei Marten anmeldet (aktuelle und frühere Gestalten).</summary>
+    private static readonly Lazy<IReadOnlyDictionary<string, Type>> EventTypenLazy = new(() =>
+        Anwendung.Upcasting.Registrierungen.ToDictionary(r => r.Diskriminator, r => r.Typ));
+    private static IReadOnlyDictionary<string, Type> EventTypen => EventTypenLazy.Value;
 
     /// <summary>
     /// Ein gespeichertes Event als EventEnvelope(s). Upcasting-Seam: eine Stored-Position wird zu einem (1:1) oder — bei einem künftigen
@@ -225,27 +239,31 @@ public class MartenEventStore : IEventStoreRepository
     /// Dedup-/Exactly-once-Schlüssel append-artiger Projektionen (AggregateId, AggregateVersion, SubIndex) bleibt eindeutig.
     /// </summary>
     private static IEnumerable<EventEnvelope> Materialisiere(JasperFx.Events.IEvent e)
+        => Materialisiere(e.Data, e.Id, e.StreamId, e.Version, e.Timestamp, e.CorrelationId, e.CausationId, e.Headers);
+
+    private static IEnumerable<EventEnvelope> Materialisiere(object daten, Guid id, Guid streamId, long version, DateTimeOffset zeit,
+        string? correlationId, string? causationId, IReadOnlyDictionary<string, object>? headers)
     {
-        var aggregateType = e.Headers != null
-            && e.Headers.TryGetValue("aggregate_type", out var at)
+        var aggregateType = headers != null
+            && headers.TryGetValue("aggregate_type", out var at)
                 ? at?.ToString() ?? string.Empty
                 : string.Empty;
         // Der Akteur der Kette (Header „akteur") — fehlt er (Alt-Events, reine Automation), bleibt der Default.
-        var akteur = e.Headers != null && e.Headers.TryGetValue(ImAuftrag.Header, out var ak) ? ak?.ToString() : null;
-        var (ursache, wirker, ueber, stand) = SpurHeader.Lies(e.Headers);
+        var akteur = headers != null && headers.TryGetValue(ImAuftrag.Header, out var ak) ? ak?.ToString() : null;
+        var (ursache, wirker, ueber, stand) = SpurHeader.Lies(headers);
 
-        var materialisiert = Anwendung.Upcasting.Aufwerten(e.Data);
+        var materialisiert = Anwendung.Upcasting.Aufwerten(daten);
         for (int si = 0; si < materialisiert.Count; si++)
         {
             yield return new EventEnvelope
             {
-                EventId          = e.Id,
-                AggregateId      = e.StreamId,
-                AggregateVersion = (int)e.Version,
+                EventId          = id,
+                AggregateId      = streamId,
+                AggregateVersion = (int)version,
                 SubIndex         = si,
-                CreatedAtUtc     = e.Timestamp,
-                CorrelationId    = e.CorrelationId ?? string.Empty,
-                CausationId      = e.CausationId  ?? string.Empty,
+                CreatedAtUtc     = zeit,
+                CorrelationId    = correlationId ?? string.Empty,
+                CausationId      = causationId  ?? string.Empty,
                 AggregateType    = aggregateType,
                 UserId           = akteur ?? ImAuftrag.Ohne,
                 Ursache          = ursache,
