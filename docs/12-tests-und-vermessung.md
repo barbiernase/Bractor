@@ -709,6 +709,12 @@ legt; der Start versucht es genau einmal und bricht ab (Exit 134). Mit dem Einze
 Aktivieren und Abonnieren der Broker mit Backoff: zwei Störungsläufe mit Consul grün (`…_server-consul-neustart-stoerung-1/2`: 53 019 und 52 756
 Vorgänge; beim Host der Prüfdomäne gelang je eine Aktivierung im zweiten Versuch).
 
+**S4 mit Aufwärmrunde (PF-19, 2026-10-17, Messserver, `9188b87`, nur S1/S4, Prod-Konfig):** vor dem gewerteten Datensatz läuft ein eigener einmal
+ganz durch (nicht gewertet). S4 1 942 und 1 847 Paare/s, Range 0,1 s, Einfrieren 0,2 s (ohne Aufwärmen in Prod 962–1 019, je 0,3 s; in Sim 1 683–1 728)
+— die Verlangsamung war die erste Nutzung nach dem Start. Dass es Martens Code-Erzeugung zur Laufzeit ist, folgt aus dem Unterschied Sim/Prod: in
+beiden laufen dieselben Wege von S4 zum ersten Mal; nur in Sim hat der Abgleich der Leseseite die Read-Model-Typen beim Start schon benutzt.
+Seitdem misst S4 mit Aufwärmrunde (Spalten davor für S4 nicht vergleichbar).
+
 **Als korrekt verifiziert (Backend-Audit 2026-08, nicht erneut jagen):** Versionsarithmetik inkl. Noop- und Ablehnungs-Marken; OCC-Skip auf dem
 `AnyVersion`-Pfad; Append vor State-Mutation; Shard-Hash-Konsistenz Subscribe ↔ gezieltes Publish; Pre-Dispatch-Guard des Adapters je Stream (heute `EmittentenAdapter`);
 Signal→Wake-Mapping; Kompensations-Dedup und Count-Join ohne verfrühtes Feuern; Snapshot-Schema-Gating; Metadaten-Readback.
