@@ -179,8 +179,9 @@ nicht aus Namespaces (`CommandAggregateMapGenerator`).
 - **Read** (`ReadStreamAsync`, `ReadKorreliertAsync`, `ReadEventAsync`): festes SQL auf `mt_events` (`stream_id = $1 and version >= $2`, beim
   korrelierten Read dazu `correlation_id = $3`, beim Einzel-Read `version = $2`; immer `is_archived = false`, geordnet nach Version) statt Martens
   LINQ, das jede Abfrage neu übersetzte und dabei die eingefangenen Werte kompilierte (PF-21). Den .NET-Typ zur Spalte `type` nennt die generierte
-  Registrierung, mit der Marten die Typen auch schreibt; Daten und Kopfzeilen liest Martens Serializer; Spalten, die Marten nach seiner
-  Metadaten-Konfiguration nicht führt, liest das SQL als `null`. Materialisiert wird ein `EventEnvelope` (Akteur aus dem Header als `UserId`). Dabei läuft jedes Event durch die Upcasting-Naht `GeneratedEventUpcasting.Aufwerten` (1:1 oder 1:N mit
+  Registrierung, mit der Marten die Typen auch schreibt; die Daten liest Martens Serializer, von den Kopfzeilen nur die sechs, die ein Envelope
+  trägt, als Text-Spalten (`headers->>'aggregate_type'`, `'akteur'`, Spur; PF-22); Spalten, die Marten nach seiner Metadaten-Konfiguration nicht
+  führt, liest das SQL als `null`. Materialisiert wird ein `EventEnvelope` (Akteur aus dem Header als `UserId`). Dabei läuft jedes Event durch die Upcasting-Naht `GeneratedEventUpcasting.Aufwerten` (1:1 oder 1:N mit
   `SubIndex`) — eine Backend-Primitive für Prod (`IUpcast`), die heute keine Domäne nutzt; ohne Upcast ist sie ein Durchreichen.
 - **Horizont der Vollständigkeit** (`Horizont`, G-9): bis zu welcher globalen Sequenz `seq_id` jedes Event endgültig ist — committet und
   sichtbar oder nie (zurückgerollt). Postgres zieht die Sequenz im Insert innerhalb der Transaktion; nebenläufige Commits werden in umgekehrter
@@ -197,7 +198,7 @@ nicht aus Namespaces (`CommandAggregateMapGenerator`).
   in umgekehrter Reihenfolge sichtbare Commits, auch gegen eine Transaktion, die lange offen ist.
 - **Partitions-Seite** (`ReadPartitionAsync`, Batch-Konsum der Projektionen): erst die gesetzte Sequenz (der Horizont, in derselben Runde wie
   „steht dahinter etwas?“), dann die Events einer Partition (`PartitionsAusdruck`: `get_byte(uuid_send(stream_id), 15) % P`) jenseits der Position, nur die abonnierten
-  Typen samt Upcasting-Herkunft, ohne schon Erledigtes, `order by seq_id limit N`; materialisiert wie `ReadStreamAsync`
+  Typen samt Upcasting-Herkunft, ohne schon Erledigtes, `order by seq_id limit N` — festes SQL wie die Event-Reads (PF-22); materialisiert wie `ReadStreamAsync`
   ([04](04-konsum-und-prozess-maschine.md) §4.1.1).
 
 ## 3.4 Group-Commit-Batching + paralleler Drain

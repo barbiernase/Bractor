@@ -116,7 +116,11 @@ public class EventReadGarantieTests : IClassFixture<EventReadGarantieTests.Fixtu
     public async Task Seiten_der_Projektionen_lesen_dasselbe_wie_Martens_LINQ()
     {
         var es = Es;
+        // Die Startposition muss auf einem echten Event stehen — sonst sähe der Test eine falsche Grenze (> gegen >=) nicht.
+        await es.AppendEventsAsync(Guid.NewGuid(), 0, new IEvent[] { new PostenEroeffnet(1) }, "K", "C", "Posten");
         var anfang = (await es.ReadChangedStreamsAsync(0, null, int.MaxValue, default)).HighWaterMark;
+        await using (var q = _fx.Store.QuerySession())
+            (await q.Events.QueryAllRawEvents().Where(e => e.Sequence == anfang).ToListAsync()).Should().ContainSingle("an der Startposition steht ein Event");
         var streams = Enumerable.Range(0, 8).Select(_ => Guid.NewGuid()).ToList();
         foreach (var s in streams)
         {
