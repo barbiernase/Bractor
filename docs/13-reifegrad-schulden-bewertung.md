@@ -16,12 +16,14 @@ hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz und P
 | VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16 | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
+| PF-19 | Marten erzeugt und kompiliert den Code je Dokumenttyp beim ersten Gebrauch zur Laufzeit (`GeneratedCodeMode` Standard): vermutet als Ursache von S4 0,3 statt 0,1/0,2 s in Prod; in Sim verdeckt | P2 |
 | PF-17 | Kosten von Horizont und Zeitstempel-Regel (G-9, G-10): je Probe bzw. Prüfung ≈ 0,45 ms (S1 3 ms je Paar, mehr als erwartet), je Event-Insert ≈ 7–10 µs (Prod) bzw. 20–35 µs (Sim, Versatz je Zeile aus `uhr`) | P3 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
 | W10-2 | Reflektive Serialisierung zur Laufzeit (Marten-Default, Marking-Store, Snapshot-`Clone`, HTTP-Antworten); kein Reflection-Verbot im Build | P1 |
 | LLM-1 | 🤖-Rümpfe sind nur „baut und regelkonform“ geprüft, nicht fachlich: keine Beispiele je Slot, `Cqrs.Testing` nicht an Editor/🤖 angebunden | P1 |
 | P1-1 | Multi-Node nur container-erprobt, Consul im `-dev`-Modus | P1 |
+| P1-3 | Neustart mit Consul nach hartem Abbruch scheitert: der tote Knoten gilt noch als Mitglied, die Broker-Aktivierung beim Start läuft in den Timeout und bricht den Start ab (Störungsläufe „Prod-Konfig“ ungültig) | P1 |
 | P1-2 | Transport-Sicherheit: kein TLS; Identitäten für Prod fehlen | P1 |
 | P1-7 | Deploy-Skripte veraltet (starten die Hosts ohne Umgebung, alte Konfig-Schlüssel) | P1 |
 | W2-1 | Rest der Projektstruktur: Client-Framework hängt am Server-Framework, Generat-Namespaces, Identitäten aus einfachen Namen | P2 |
@@ -225,6 +227,19 @@ werfende Applier-Naht.
 Aufrufe, wenn die Position weit zurückliegt). Die Zeitstempel-Regel kostet in Sim ≈ 20–35 µs je eingefügtem Event, weil sie je Zeile den Versatz
 aus `uhr` liest. *Optionen:* den Versatz je Transaktion einmal lesen (`set_config(…, true)`), in Prod misst nur die Datenbankzeit; für die Proben
 `EXPLAIN ANALYZE` unter Last. Wirkung Ende zu Ende im Band der Einzelläufe.
+
+**P1-3 · Neustart mit Consul nach hartem Abbruch.** Gemessen in den Störungsläufen mit der Konfiguration von `umgebung.prod.json`
+(docs/12 §12.5): der neu gestartete Host bricht beim Start ab (`TimeoutException` in `ClusterExtensions.ActivateBrokerAsync`, aus
+`PubSubStartupService`). Consul führt den hart beendeten Knoten noch als Mitglied (Standardwerte des `ConsulProviderConfig`), der Cluster legt
+Broker-Aktivierungen auf ihn, und der Start versucht jede genau einmal. *Optionen:* die Aktivierung beim Start mit Backoff wiederholen, bis die
+Mitgliedschaft stimmt (Frist z. B. 60 s), und/oder TTL und Abmeldung kritischer Dienste in Consul kurz einstellen; dann die Störungsläufe mit
+Consul wiederholen.
+
+**PF-19 · Marten-Code zur Laufzeit.** Marten erzeugt den Speicher-Code eines Dokumenttyps beim ersten Gebrauch und kompiliert ihn mit Roslyn
+(`StoreOptions.GeneratedCodeMode` im Standard). In Sim fasst der Abgleich der Leseseite beim Start jeden Read-Model-Typ an; in Prod geschieht es
+im Verkehr — vermutet als Ursache, dass S4 in Prod 0,3 statt 0,1/0,2 s braucht (S4 hat keine Aufwärmrunde; Datenbank-Anweisungen gleich).
+*Optionen:* den Code beim Build vorab erzeugen (`TypeLoadMode.Static`, passt zu Inv. 4 und W10-2), oder je Read-Model ein generiertes Vorwärmen
+beim Start (eine typisierte Abfrage, ohne Reflection). Prüfung: S4 mit Aufwärmrunde bzw. mit vorab erzeugtem Code.
 
 **G-5 · Versionszählung bei Split-Upcasts.** `AggregateRehydrator` zählt `Version++` je materialisiertem Event; ein Split-Upcast liefert aus
 einer gespeicherten Position mehrere Events (`MartenEventStore`, `SubIndex`), die Version läuft dem Log davon, und jeder Append scheitert.

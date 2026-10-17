@@ -1,0 +1,200 @@
+info: Infrastructure.PubSub.Actors.BrokerShardActor[0]
+      [Shard StateChangeViaBildVerkleinert_0] Started
+info: Infrastructure.PubSub.Actors.BrokerShardActor[0]
+      [Shard StateChangeViaHistogrammAusgeglichen_0] Started
+info: Infrastructure.PubSub.Actors.BrokerShardActor[0]
+      [Shard StateChangeViaEinfrierenAngefordert_0] Started
+info: Infrastructure.PubSub.Actors.BrokerShardActor[0]
+      [Shard StateChangeViaMitgliederEingefroren_0] Started
+info: Infrastructure.PubSub.Actors.BrokerShardActor[0]
+      [Shard StateChangeViaRangeAngefordert_0] Started
+info: Infrastructure.PubSub.Actors.BrokerShardActor[0]
+      [Shard StateChangeViaRangeGefunden_0] Started
+info: Infrastructure.PubSub.Actors.BrokerShardActor[0]
+      [Shard StateChangeViaTrainingBegonnen_0] Started
+
+=== Prozess-Manager (generisch): 6 Prozess(e), Router auf 12 Signal-Typen (+ Poll 30s, ab HWM 0, + Backstop: Fristen 1s, Heilung ab 15s Stille) ===
+  ✓ TeilFertigProzess (Auslöser TeilauftragAbgeschlossen, 1 Regeln)
+  ✓ Benchmark (Auslöser BenchPing, 0 Regeln)
+  ✓ Bildeingang (Auslöser DateiErkannt, 6 Regeln)
+  ✓ DatensatzEinfrieren (Auslöser EinfrierenAngefordert, 2 Regeln)
+  ✓ DatensatzRangeAufloesung (Auslöser RangeAngefordert, 2 Regeln)
+  ✓ TrainingWaechter (Auslöser TrainingBegonnen, 2 Regeln)
+
+
+=== Pull-Pfad (generiert) ===
+
+info: Infrastructure.Deadlines.FristScheduler[0]
+      Deadline-Scheduler gestartet (Intervall 5s, DB-Uhr)
+  ⛲ Quelle DateiErkannt (Datei, EinmalImCluster) /root/cqrs-vermessung/DateiErkannt → Bildeingang
+warn: Microsoft.AspNetCore.Server.Kestrel[64]
+      HTTP/2 is not enabled for [::]:5202. The endpoint is configured to use HTTP/1.1 and HTTP/2, but TLS is not enabled. HTTP/2 requires TLS application protocol negotiation. Connections to this endpoint will use HTTP/1.1.
+info: Infrastructure.Quellen.QuellenDienst[0]
+      Quelle DateiErkannt beobachtet /root/cqrs-vermessung/DateiErkannt: 0 Dateien, davon 0 schon im Log
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://[::]:5201
+info: Microsoft.Hosting.Lifetime[14]
+      Now listening on: http://[::]:5202
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Production
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: /opt/bractor/Host.Grpc/bin/Release/net9.0
+info: Infrastructure.PubSub.Actors.BrokerShardActor[0]
+      [Shard StateChangeViaImagePairErstellt_1] Started
+info: Infrastructure.PubSub.Actors.BrokerShardActor[0]
+      [Shard StateChangeViaImagePairErstellt_2] Started
+info: Infrastructure.PubSub.Actors.BrokerShardActor[0]
+      [Shard StateChangeViaBildVerfuegbar_2] Started
+info: Infrastructure.PubSub.Actors.BrokerShardActor[0]
+      [Shard StateChangeViaBildVerfuegbar_1] Started
+info: Infrastructure.PubSub.Actors.BrokerShardActor[0]
+      [Shard StateChangeViaImagePairKomplett_2] Started
+info: Infrastructure.PubSub.Actors.BrokerShardActor[0]
+      [Shard StateChangeViaImagePairKomplett_1] Started
+===== SIGKILL 2026-10-17T02:18:44.9635983+02:00
+===== Start 2026-10-17T02:18:47.9646758+02:00 /opt/bractor/Host.Grpc/bin/Release/net9.0/Host.Grpc.dll --umgebung vermessung 
+
+==========================================================
+              CQRS Framework - Service Registration        
+==========================================================
+
+[CQRS] Registriere Infrastruktur...
+[Marten] 53 Event-Typen registriert (from GeneratedEventUpcasting, inkl. früherer Versionen):
+  → BenchPing → bench_ping
+  → BildNichtLesbar → bild_nicht_lesbar
+  → BildPaarDurchKiKlassifiziert → bild_paar_durch_ki_klassifiziert
+  → BildPaarGelabelt → bild_paar_gelabelt
+  → BildRegionGelabelt → bild_region_gelabelt
+  → BildVerfuegbar → bild_verfuegbar
+  → BildVerkleinert → bild_verkleinert
+  → DateiErkannt → datei_erkannt
+  → DateinameUnbekannt → dateiname_unbekannt
+  → DatensatzEingefroren → datensatz_eingefroren
+  → DatensatzErstellt → datensatz_erstellt
+  → EinfrierenAngefordert → einfrieren_angefordert
+  → EinzelBildDurchKiKlassifiziert → einzel_bild_durch_ki_klassifiziert
+  → EinzelBildGelabelt → einzel_bild_gelabelt
+  → HistogrammAusgeglichen → histogramm_ausgeglichen
+  → ImagePairDateiGedeutet → image_pair_datei_gedeutet
+  → ImagePairErstellt → image_pair_erstellt
+  → ImagePairInspiziert → image_pair_inspiziert
+  → ImagePairKomplett → image_pair_komplett
+  → KeinMitgliedAuffindbar → kein_mitglied_auffindbar
+  → KommandoAbgelehnt → kommando_abgelehnt
+  → KommandoVerarbeitet → kommando_verarbeitet
+  → MitgliederEingefroren → mitglieder_eingefroren
+  → ModellAktiviert → modell_aktiviert
+  → ModellArchiviert → modell_archiviert
+  → ModellRegistriert → modell_registriert
+  → PaarAufgenommen → paar_aufgenommen
+  → PaarEntfernt → paar_entfernt
+  → PaareAufgenommen → paare_aufgenommen
+  → PhysischesProduktGelabelt → physisches_produkt_gelabelt
+  → ProzessBeendet → prozess_beendet
+  → ProzessGestartet → prozess_gestartet
+  → QuellStrom → quell_strom
+  → RangeAngefordert → range_angefordert
+  → RangeGefunden → range_gefunden
+  → RangeOhneTreffer → range_ohne_treffer
+  → SammelvorgangAbgeschlossen → sammelvorgang_abgeschlossen
+  → SammelvorgangGestartet → sammelvorgang_gestartet
+  → SchrittAbgelehnt → schritt_abgelehnt
+  → SchrittGescheitert → schritt_gescheitert
+  → SchrittUmgeleitet → schritt_umgeleitet
+  → SplitGesetzt → split_gesetzt
+  → TeilVerbucht → teil_verbucht
+  → TeilauftragAbgeschlossen → teilauftrag_abgeschlossen
+  → TeilauftragGestartet → teilauftrag_gestartet
+  → TrainingAbgebrochen → training_abgebrochen
+  → TrainingAbgeschlossen → training_abgeschlossen
+  → TrainingAngefordert → training_angefordert
+  → TrainingBegonnen → training_begonnen
+  → TrainingFortschritt → training_fortschritt
+  → TrainingGescheitert → training_gescheitert
+  → TrainingHaengengeblieben → training_haengengeblieben
+  → ZeitlimitAbgelaufen → zeitlimit_abgelaufen
+  + IEventStoreRepository (Marten/PostgreSQL) + Group-Commit-Batching (max 256)
+    Schema: es
+  + IVersionTracker (Redis)
+    Endpoint: localhost:6390, DB: 0
+
+[CQRS] Registriere Aggregates...
+  + Aggregate-Components (generiert)
+
+[CQRS] Registriere Deps-Index-Naht...
+
+[CQRS] Registriere PubSub...
+  + BrokerPublisher (lazy)
+
+[CQRS] Registriere ActorSystem...
+  Cluster: cqrs-vermessung
+  Consul:  localhost:8500
+  Advertised Host: localhost
+  + IAggregateDispatcher
+
+[CQRS] Registriere Query Infrastructure...
+  + ReadModelDepsReader
+
+[Setup] Registriere gRPC Client Services...
+  ✓ ProtoMessageMapper
+  ✓ TriggerHandlerRegistry
+  ✓ QueryHandlerRegistry
+  ✓ CqrsClientServiceImpl
+  ✓ MessageTypeMapping
+[CQRS] Registriere Hosted Services...
+  + ClusterStartupService
+  + PubSubStartupService
+  + PipelineStartupService
+  + TriggerStartupService
+
+[CQRS] Dienste: IImageResizer → ImageResizer, IHistogramEqualizer → HistogramEqualizer · Konfig: BildaufbereitungKonfig
+[Setup] gRPC Endpoint gemappt: CqrsClientService
+  ⛲ Quelle DateiErkannt: Webhook POST :5202/webhook/datei
+
+  CQRS/ES Host · Umgebung vermessung (Prod) · gRPC :5201 · Einblick :5202 (+ JSON-Eingang) · DB cqrs_vermessung · Cluster cqrs-vermessung (Consul)
+
+  + 6 Aggregate-Kinds registriert
+  + 0 Pipeline-Kinds registriert
+  + 8 Adapter-Kinds registriert
+  + ActorSystem erstellt (+ Wire-Serializer id=100)
+[CQRS] Umgebung vermessung (Prod) · DB cqrs_vermessung · Cluster cqrs-vermessung — Siegel ok
+[CQRS] Schema vollständig angelegt (541 ms)
+
+=== Cluster Startup ===
+  → Starte Cluster-Member...
+  ✓ Cluster gestartet (2 Member)
+
+
+=== Broker Activation ===
+[MessageTypeMapping] Initialized:
+  Events: 80
+  Commands: 31
+  Queries: 17
+  QueryResponses: 21
+  Triggers: 0
+  Aktiviere Broker für 80 Event-Typen...
+fail: Microsoft.Extensions.Hosting.Internal.Host[11]
+      Hosting failed to start
+      System.TimeoutException: Request timed out
+         at Proto.Cluster.DefaultClusterContext.<RequestAsync>g__TimeoutOrThrow|9_1[T](<>c__DisplayClass9_0`1&)
+         at Proto.Cluster.DefaultClusterContext.RequestAsync[T](ClusterIdentity clusterIdentity, Object message, ISenderContext context, CancellationToken ct)
+         at Infrastructure.PubSub.Extensions.ClusterExtensions.ActivateBrokerAsync(Cluster cluster, Type messageType, CancellationToken ct) in /opt/bractor/Infrastructure/PubSub/Extensions/ClusterExtensions.cs:line 41
+         at Infrastructure.PubSub.Startup.PubSubStartupService.StartAsync(CancellationToken ct) in /opt/bractor/Infrastructure/PubSub/Startup/PubsubStartupService.cs:line 36
+         at Microsoft.Extensions.Hosting.Internal.Host.<StartAsync>b__14_1(IHostedService service, CancellationToken token)
+         at Microsoft.Extensions.Hosting.Internal.Host.ForeachService[T](IEnumerable`1 services, CancellationToken token, Boolean concurrent, Boolean abortOnFirstException, List`1 exceptions, Func`3 operation)
+ERR CQRS-BOOT {"text":"Request timed out","karte":null,"art":"TimeoutException"}
+ERR Unhandled exception. System.TimeoutException: Request timed out
+ERR    at Proto.Cluster.DefaultClusterContext.<RequestAsync>g__TimeoutOrThrow|9_1[T](<>c__DisplayClass9_0`1&)
+ERR    at Proto.Cluster.DefaultClusterContext.RequestAsync[T](ClusterIdentity clusterIdentity, Object message, ISenderContext context, CancellationToken ct)
+ERR    at Infrastructure.PubSub.Extensions.ClusterExtensions.ActivateBrokerAsync(Cluster cluster, Type messageType, CancellationToken ct) in /opt/bractor/Infrastructure/PubSub/Extensions/ClusterExtensions.cs:line 41
+ERR    at Infrastructure.PubSub.Startup.PubSubStartupService.StartAsync(CancellationToken ct) in /opt/bractor/Infrastructure/PubSub/Startup/PubsubStartupService.cs:line 36
+ERR    at Microsoft.Extensions.Hosting.Internal.Host.<StartAsync>b__14_1(IHostedService service, CancellationToken token)
+ERR    at Microsoft.Extensions.Hosting.Internal.Host.ForeachService[T](IEnumerable`1 services, CancellationToken token, Boolean concurrent, Boolean abortOnFirstException, List`1 exceptions, Func`3 operation)
+ERR    at Microsoft.Extensions.Hosting.Internal.Host.StartAsync(CancellationToken cancellationToken)
+ERR    at Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(IHost host, CancellationToken token)
+ERR    at Microsoft.Extensions.Hosting.HostingAbstractionsHostExtensions.RunAsync(IHost host, CancellationToken token)
+ERR    at Infrastructure.Umgebung.CqrsUmgebungExtensions.LaufeAsync(WebApplication app, UmgebungKonfig u) in /opt/bractor/Infrastructure/Umgebung/CqrsUmgebungExtensions.cs:line 143
+ERR    at Program.<Main>$(String[] args) in /opt/bractor/Host.Grpc/Program.cs:line 13
+ERR    at Program.<Main>(String[] args)
