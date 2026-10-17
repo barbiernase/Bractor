@@ -5,6 +5,7 @@
 #
 #   scripts/sonde-engpass.sh --anlass server-sonde-a1 [--knopf <k>] [--szenarien S3,S5] [--wiederholungen 3] [--profil S5-8-w1]
 #
+# --horizont <db>: zusätzlich jede Sekunde die Teile der Horizont-Probe einzeln mit EXPLAIN ANALYZE (PF-17), nach sonde/horizont.csv.
 # --profil <abschnitt>: zusätzlich ein CPU-Profil des Hosts für 15 s ab dem Beginn des Abschnitts (dotnet-trace), ausgewertet mit
 #   scripts/sonde-profil.py nach sonde/profil.md.
 #
@@ -21,7 +22,7 @@ set -euo pipefail
 WURZEL="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 cd "$WURZEL"
 
-ANLASS="" KNOPF=keiner SZENARIEN=S3,S5 WIEDERHOLUNGEN=3 PROFIL=""
+ANLASS="" KNOPF=keiner SZENARIEN=S3,S5 WIEDERHOLUNGEN=3 PROFIL="" HORIZONT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --anlass) ANLASS="$2"; shift 2 ;;
@@ -29,6 +30,7 @@ while [ $# -gt 0 ]; do
     --szenarien) SZENARIEN="$2"; shift 2 ;;
     --wiederholungen) WIEDERHOLUNGEN="$2"; shift 2 ;;
     --profil) PROFIL="$2"; shift 2 ;;
+    --horizont) HORIZONT="$2"; shift 2 ;;
     *) echo "unbekannte Option $1" >&2; exit 2 ;;
   esac
 done
@@ -77,7 +79,7 @@ SONDE="$(mktemp -d)"
 echo "== Sonde: Knopf $KNOPF, Rohdaten in $SONDE"
 
 vorher="$(ls vermessung/ergebnisse/ 2>/dev/null | sort)"
-python3 scripts/sonde-engpass.py --aus "$SONDE" ${PROFIL:+--profil "$PROFIL"} &
+python3 scripts/sonde-engpass.py --aus "$SONDE" ${PROFIL:+--profil "$PROFIL"} ${HORIZONT:+--horizont "$HORIZONT"} &
 SONDE_PID=$!
 set +e
 scripts/vermessung-e2e.sh --anlass "$ANLASS" --szenarien "$SZENARIEN" --wiederholungen "$WIEDERHOLUNGEN"

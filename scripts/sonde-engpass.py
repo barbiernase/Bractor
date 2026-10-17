@@ -296,6 +296,70 @@ def counters_schleife(aus):
             k.kill()
 
 
+HORIZONT_ABFRAGEN = [
+    # (Name, SQL mit {kopf}; jede als EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON))
+    ("exists_nah_eigen", "select exists(select 1 from es.mt_events where seq_id > {kopf} - 50)"),
+    ("exists_weit_eigen", "select exists(select 1 from es.mt_events where seq_id > {kopf} - 2000)"),
+    ("exists_nah_allgemein", "execute h_exists({kopf} - 50)"),
+    ("exists_weit_allgemein", "execute h_exists({kopf} - 2000)"),
+    ("snapshot_xmin", "select pg_snapshot_xmin(pg_current_snapshot())::text"),
+    ("zaehlerstand", "select case when is_called then last_value else 0 end from es.mt_events_sequence"),
+]
+
+
+def horizont_schleife(aus, db):
+    """Diagnose PF-17: jede Sekunde die Teile der Horizont-Probe einzeln, mit EXPLAIN ANALYZE, gegen die echte DB unter Last."""
+    psql = subprocess.Popen(["docker", "exec", "-i", "cqrs-postgres", "psql", "-U", "postgres", "-d", db, "-At", "-q", "-v", "ON_ERROR_STOP=0"],
+                            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+
+    def frage(sql):
+        psql.stdin.write(sql + "\nSELECT '#ENDE';\n")
+        psql.stdin.flush()
+        zeilen = []
+        while True:
+            z = psql.stdout.readline()
+            if not z or z.strip() == "#ENDE":
+                return "\n".join(zeilen)
+            zeilen.append(z.rstrip("\n"))
+
+    import json as _json
+    with open(os.path.join(aus, "horizont.csv"), "w") as f:
+        f.write("zeit_utc,kopf,abfrage,ms,knoten,puffer_hit,puffer_read\n")
+        vorbereitet = False
+        while not STOP.wait(1.0):
+            kopf = frage("select coalesce(max(seq_id), 0) from es.mt_events;").strip().splitlines()
+            if not kopf or not kopf[-1].lstrip("-").isdigit():
+                vorbereitet = False   # DB neu angelegt oder noch ohne Tabelle
+                continue
+            kopf = int(kopf[-1])
+            if not vorbereitet:
+                frage("deallocate all; set plan_cache_mode = force_generic_plan; "
+                      "prepare h_exists(bigint) as select exists(select 1 from es.mt_events where seq_id > $1);")
+                vorbereitet = True
+            z = jetzt()
+            for name, sql in HORIZONT_ABFRAGEN:
+                roh = frage("explain (analyze, buffers, format json) " + sql.format(kopf=kopf) + ";")
+                try:
+                    plan = _json.loads(roh[roh.index("["):])[0]
+                except (ValueError, IndexError):
+                    continue
+                def knoten(n):
+                    return n["Node Type"] + ("(" + "+".join(knoten(k) for k in n.get("Plans", [])) + ")" if n.get("Plans") else "")
+                p = plan["Plan"]
+                f.write(f"{z},{kopf},{name},{plan.get('Execution Time', 0):.3f},{knoten(p)},{p.get('Shared Hit Blocks', 0)},"
+                        f"{p.get('Shared Read Blocks', 0)}\n")
+            # eigene Transaktionsnummer (wie die Probe: in einer Transaktion, die damit eine Nummer bekommt)
+            t0 = time.monotonic()
+            frage("begin; select pg_current_xact_id(); rollback;")
+            f.write(f"{z},{kopf},xact_id_rundlauf,{(time.monotonic() - t0) * 1000:.3f},psql-Rundlauf,0,0\n")
+            f.flush()
+    try:
+        psql.stdin.close()
+        psql.wait(5)
+    except Exception:
+        psql.kill()
+
+
 def profil_schleife(aus, ergebnisse, abschnitt, dauer):
     """Wartet, bis der Treiber den Abschnitt beginnt (neuester Ergebnis-Ordner, host.csv), und zeichnet dann den Host auf."""
     werkzeug = shutil.which("dotnet-trace") or os.path.expanduser("~/.dotnet/tools/dotnet-trace")
@@ -331,6 +395,7 @@ def main():
     ap.add_argument("--profil", default="", help="Abschnitt des Treibers (z. B. S5-8-w1), ab dessen Beginn der Host aufgezeichnet wird")
     ap.add_argument("--profil-dauer", type=int, default=int(os.environ.get("SONDE_PROFIL_DAUER", "15")))
     ap.add_argument("--ergebnisse", default="vermessung/ergebnisse")
+    ap.add_argument("--horizont", default="", help="DB, in der die Teile der Horizont-Probe jede Sekunde gemessen werden (PF-17)")
     a = ap.parse_args()
     os.makedirs(a.aus, exist_ok=True)
     # dotnet-counters schreibt Ortszeit ohne Zone — die Auswertung rechnet mit diesem Versatz nach UTC um.
@@ -340,6 +405,8 @@ def main():
         signal.signal(s, lambda *_: STOP.set())
     faeden = [threading.Thread(target=cpu_schleife, args=(a.aus, 0.5)), threading.Thread(target=thread_schleife, args=(a.aus,)),
               threading.Thread(target=pg_schleife, args=(a.aus, 0.1)), threading.Thread(target=counters_schleife, args=(a.aus,))]
+    if a.horizont:
+        faeden.append(threading.Thread(target=horizont_schleife, args=(a.aus, a.horizont)))
     if a.profil:
         faeden.append(threading.Thread(target=profil_schleife, args=(a.aus, a.ergebnisse, a.profil, a.profil_dauer)))
     for f in faeden:
