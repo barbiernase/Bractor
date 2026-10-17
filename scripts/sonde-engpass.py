@@ -12,6 +12,8 @@ Was sie mitschreibt (nur Linux, nur Standardbibliothek):
                     Anfang der Anweisung — über eine einzige psql-Sitzung im Container
   pg_wal.csv        jede Sekunde: pg_stat_wal (Records, Bytes, Writes, Syncs)
   counters-<rolle>-<pid>.csv  dotnet-counters (System.Runtime, Npgsql) je Host- und Treiber-Prozess, jede Sekunde
+  profil.nettrace / profil.speedscope.json  mit --profil <abschnitt>: dotnet-trace (Stacks aller .NET-Threads, ~100 Hz) des Hosts für
+                    --profil-dauer Sekunden ab dem Beginn des Abschnitts (der Treiber schreibt ihn in host.csv); Auswertung scripts/sonde-profil.py
 
 Ende per SIGTERM/SIGINT oder nach --dauer Sekunden. Auswertung: scripts/sonde-auswertung.py.
 """
@@ -294,10 +296,41 @@ def counters_schleife(aus):
             k.kill()
 
 
+def profil_schleife(aus, ergebnisse, abschnitt, dauer):
+    """Wartet, bis der Treiber den Abschnitt beginnt (neuester Ergebnis-Ordner, host.csv), und zeichnet dann den Host auf."""
+    werkzeug = shutil.which("dotnet-trace") or os.path.expanduser("~/.dotnet/tools/dotnet-trace")
+    beginn = time.time()
+    while not STOP.wait(0.2):
+        try:
+            ordner = [os.path.join(ergebnisse, d) for d in os.listdir(ergebnisse)]
+            ordner = [d for d in ordner if os.path.getmtime(d) >= beginn - 5 and os.path.exists(os.path.join(d, "host.csv"))]
+        except OSError:
+            continue
+        if not ordner:
+            continue
+        csvdatei = os.path.join(max(ordner, key=os.path.getmtime), "host.csv")
+        with open(csvdatei, encoding="utf-8-sig") as f:
+            if not any(f",{abschnitt}," in z for z in f):
+                continue
+        rolle = "host-pruefdomaene" if abschnitt.startswith(("S5", "L5")) else "host-beispiel"
+        pid = next((p for p, r in host_pids().items() if r == rolle), None)
+        if pid is None:
+            continue
+        with open(os.path.join(aus, "profil.txt"), "w") as f:
+            f.write(f"{abschnitt} {rolle} {pid} ab {jetzt()} für {dauer} s\n")
+        subprocess.run([werkzeug, "collect", "--process-id", str(pid), "--profile", "dotnet-common,dotnet-sampled-thread-time",
+                        "--duration", f"00:00:00:{int(dauer):02d}", "--format", "Speedscope", "--output", os.path.join(aus, "profil.nettrace")],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, timeout=dauer + 120)
+        return
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--aus", required=True)
     ap.add_argument("--dauer", type=float, default=0, help="Sekunden; 0 = bis SIGTERM")
+    ap.add_argument("--profil", default="", help="Abschnitt des Treibers (z. B. S5-8-w1), ab dessen Beginn der Host aufgezeichnet wird")
+    ap.add_argument("--profil-dauer", type=int, default=15)
+    ap.add_argument("--ergebnisse", default="vermessung/ergebnisse")
     a = ap.parse_args()
     os.makedirs(a.aus, exist_ok=True)
     # dotnet-counters schreibt Ortszeit ohne Zone — die Auswertung rechnet mit diesem Versatz nach UTC um.
@@ -307,6 +340,8 @@ def main():
         signal.signal(s, lambda *_: STOP.set())
     faeden = [threading.Thread(target=cpu_schleife, args=(a.aus, 0.5)), threading.Thread(target=thread_schleife, args=(a.aus,)),
               threading.Thread(target=pg_schleife, args=(a.aus, 0.1)), threading.Thread(target=counters_schleife, args=(a.aus,))]
+    if a.profil:
+        faeden.append(threading.Thread(target=profil_schleife, args=(a.aus, a.ergebnisse, a.profil, a.profil_dauer)))
     for f in faeden:
         f.daemon = True
         f.start()
@@ -315,7 +350,7 @@ def main():
         if a.dauer and time.monotonic() - beginn >= a.dauer:
             STOP.set()
     for f in faeden:
-        f.join(20)
+        f.join(150 if a.profil else 20)
 
 
 if __name__ == "__main__":

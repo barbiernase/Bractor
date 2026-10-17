@@ -3,7 +3,10 @@
 # und Kern, Host-Threads, pg_stat_activity alle 100 ms, WAL und dotnet-counters mit; die Auswertung je Abschnitt landet im Ergebnis-Ordner
 # unter sonde/. Optional genau ein Knopf — eine Diagnose, kein Messlauf (ohne --spalte, erscheint in keiner Tabelle).
 #
-#   scripts/sonde-engpass.sh --anlass server-sonde-a1 [--knopf <k>] [--szenarien S3,S5] [--wiederholungen 3]
+#   scripts/sonde-engpass.sh --anlass server-sonde-a1 [--knopf <k>] [--szenarien S3,S5] [--wiederholungen 3] [--profil S5-8-w1]
+#
+# --profil <abschnitt>: zusätzlich ein CPU-Profil des Hosts für 15 s ab dem Beginn des Abschnitts (dotnet-trace), ausgewertet mit
+#   scripts/sonde-profil.py nach sonde/profil.md.
 #
 # Knöpfe (wirken nur auf den Checkout des Messservers, der vor jedem Lauf gesäubert wird; knopf.txt hält die Änderung fest):
 #   keiner            Stand des Commits
@@ -18,13 +21,14 @@ set -euo pipefail
 WURZEL="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 cd "$WURZEL"
 
-ANLASS="" KNOPF=keiner SZENARIEN=S3,S5 WIEDERHOLUNGEN=3
+ANLASS="" KNOPF=keiner SZENARIEN=S3,S5 WIEDERHOLUNGEN=3 PROFIL=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --anlass) ANLASS="$2"; shift 2 ;;
     --knopf) KNOPF="$2"; shift 2 ;;
     --szenarien) SZENARIEN="$2"; shift 2 ;;
     --wiederholungen) WIEDERHOLUNGEN="$2"; shift 2 ;;
+    --profil) PROFIL="$2"; shift 2 ;;
     *) echo "unbekannte Option $1" >&2; exit 2 ;;
   esac
 done
@@ -73,7 +77,7 @@ SONDE="$(mktemp -d)"
 echo "== Sonde: Knopf $KNOPF, Rohdaten in $SONDE"
 
 vorher="$(ls vermessung/ergebnisse/ 2>/dev/null | sort)"
-python3 scripts/sonde-engpass.py --aus "$SONDE" &
+python3 scripts/sonde-engpass.py --aus "$SONDE" ${PROFIL:+--profil "$PROFIL"} &
 SONDE_PID=$!
 set +e
 scripts/vermessung-e2e.sh --anlass "$ANLASS" --szenarien "$SZENARIEN" --wiederholungen "$WIEDERHOLUNGEN"
@@ -88,6 +92,11 @@ ziel="vermessung/ergebnisse/$neu/sonde"
 mkdir -p "$ziel"
 cp "$SONDE"/* "$ziel"/
 python3 scripts/sonde-auswertung.py "vermessung/ergebnisse/$neu" || echo "Auswertung fehlgeschlagen (Rohdaten liegen in $ziel)" >&2
+if [ -f "$ziel/profil.speedscope.json" ]; then
+  python3 scripts/sonde-profil.py "$ziel/profil.speedscope.json" > "$ziel/profil.md" || echo "Profil-Auswertung fehlgeschlagen" >&2
+  cat "$ziel/profil.md"
+  rm -f "$ziel/profil.nettrace"; gzip -9 "$ziel/profil.speedscope.json"
+fi
 gzip -9 "$ziel"/*.csv
 rm -rf "$SONDE"
 exit $rc
