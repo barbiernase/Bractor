@@ -17,7 +17,6 @@ hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz und P
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16 | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
 | PF-22 | Rest von PF-21: `ReadPartitionAsync` (Projektionen) liest noch über Martens LINQ (S1/S3 7 % der Host-Arbeit); die Event-Reads deserialisieren die Kopfzeilen zu einem Wörterbuch (S5 8,5 %) | P2 |
-| PF-20 | Postgres parst und plant jede Anweisung neu: die Hälfte der Backend-CPU; mit vorbereiteten Anweisungen (Npgsql `Max Auto Prepare`) S5-64 1,13 × — Entscheidung offen | P2 |
 | PF-17 | Kosten von Horizont und Zeitstempel-Regel (G-9, G-10): je Probe bzw. Prüfung ≈ 0,45 ms (S1 3 ms je Paar, mehr als erwartet), je Event-Insert ≈ 7–10 µs (Prod) bzw. 20–35 µs (Sim, Versatz je Zeile aus `uhr`) | P3 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
@@ -229,15 +228,6 @@ Deserialisieren der Kopfzeilen zu `Dictionary<string, object>` in den Event-Read
 wie die übrigen Event-Reads; die Kopfzeilen als Spalten lesen (`headers->>'aggregate_type'`, `'akteur'`, Spur) statt als Wörterbuch. Den Rest
 nicht nach SQL übersetzen (Schreibweg, Dokumente): wenig Ersparnis, Eingriff in Martens Arbeitsweise.
 
-**PF-20 · Parsen und Planen jeder Anweisung.** Gemessen (docs/12 §12.5, „Engpass-Sonden“): je Vorgang führt Postgres 0,8–1,7 ms Anweisungen
-aus, verbraucht dafür aber 2,8–5,5 ms CPU in den Backends; unter S5-64 sind das 5,4 Kerne neben 7,1 Kernen des Hosts auf einem Rechner, der damit
-an seiner CPU-Decke steht. Npgsql schickt jede Anweisung ungeparst (kein vorbereiteter Plan), Postgres parst und plant sie jedes Mal. Mit
-`Max Auto Prepare=20` in der Verbindung (Npgsql bereitet je physischer Verbindung die 20 häufigsten Anweisungen vor; seit „Ohne Reset“ überleben sie
-die Rückgabe an den Pool) fällt die Backend-CPU auf 0,5–0,7 ×, der Durchsatz steigt in allen S3/S5-Blöcken um 11–17 %. *Entscheidung offen
-(Tobi):* die Einstellung gehört zur Verbindung, die Marten benutzt (`CqrsServiceExtension`, neben `NoResetOnClose`); Martens Arbeitsweise ändert
-sie nicht. Zu klären: Wert (20 oder mehr), Verhalten nach einer Schemaänderung im laufenden Betrieb (vorbereitete Pläne werden ungültig; seit
-PF-18 entsteht im Verkehr kein Schema mehr).
-
 **PF-17 · Kosten von Horizont und Zeitstempel-Regel.** Gemessen (docs/12 §12.5, „Horizont + Uhr“): eine Probe bzw. Prüfung des Horizonts kostet
 ≈ 0,45 ms Ausführungszeit — für `pg_current_snapshot()` und ein `exists` über den Primärschlüssel viel; Ursache offen (Verdacht: einzelne lange
 Aufrufe, wenn die Position weit zurückliegt). Die Zeitstempel-Regel kostet in Sim ≈ 20–35 µs je eingefügtem Event, weil sie je Zeile den Versatz
@@ -322,6 +312,11 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **PF-20 · Vorbereitete Anweisungen (2026-10-17, Entscheidung Tobi; docs/12 §12.5):** Postgres parste und plante jede Anweisung neu — gemessen
+  die Hälfte der Backend-CPU. Jetzt setzt das Framework in der Event-Store-Verbindung `MaxAutoPrepare = 20` (Npgsql bereitet je Verbindung die
+  häufigsten Texte vor; ein Wert in der Verbindung der Umgebung gilt). Gemessen: S5-64 1,32 × (2 619 Vorgänge/s), S5-8 1,39 ×, S4 1,56 ×; ein
+  Störungslauf grün. Gefahrlos, weil im Verkehr kein Schema entsteht (PF-18).
 
 - **PF-21 · Event-Reads ohne Martens LINQ (2026-10-17; docs/03 §3.3, docs/12 §12.5):** das CPU-Profil des Hosts unter S5 zeigte 58 % der
   arbeitenden Stichproben in Martens LINQ-Übersetzung (`ReduceToConstant`) und 17 % im Kompilieren dynamischer Methoden — `QueryAllRawEvents().Where(…)`
