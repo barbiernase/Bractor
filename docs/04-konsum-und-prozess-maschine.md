@@ -350,7 +350,8 @@ Vorgangs-Marken statt roher Tokens:
   nur, wenn es geschrieben oder geladen wurde;
 - **Kaltstart, Backstop oder geänderter `RegelHash` (`ProzessRegelHash`) → Voll-Fold ab 0** (Invariante 1). Der Cache ist nicht-autoritativ;
   ein veralteter Stand kann höchstens erneut feuern, was an der Empfänger-Inbox verpufft. Den Beweis „gleiche Feuer-Entscheidung wie der
-  Voll-Fold“ führt `MarkingCursorAequivalenzTests` gegen echtes Marten, auch kalt, mit Router-Weckungen und mit verzögerter Ausführung.
+  Voll-Fold“ führt `MarkingCursorAequivalenzTests` gegen echtes Marten, auch kalt, mit Router-Weckungen, mit verzögerter Ausführung und mit
+  Hinweis (Lesen ab dem Ausgang; ein langer Ziel-Stream wird dann nicht ab 0 gelesen — gegen den Stand davor rot gesehen).
 
 **Zeitlimit und Frist.** Ein offener Aufruf, dessen Limit seit seiner Aktivierung (jüngstes gematchtes Event, DB-Zeit aus dem Log) gegen
 `IDbClock` abgelaufen ist, scheitert wie eine Ablehnung. Damit der Ablauf auch im Ruhezustand entdeckt wird, schreibt der Manager die **Frist**

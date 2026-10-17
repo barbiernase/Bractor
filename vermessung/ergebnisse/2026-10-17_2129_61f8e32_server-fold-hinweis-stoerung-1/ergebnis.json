@@ -1,0 +1,55 @@
+{
+  "art": "stoerung",
+  "anlass": "server-fold-hinweis-stoerung-1",
+  "spalte": null,
+  "skript": "scripts/vermessung-e2e.sh --art stoerung --anlass server-fold-hinweis-stoerung-1",
+  "zeit": "2026-10-17T19:29:31.8610456+00:00",
+  "commit": "61f8e32",
+  "branch": "HEAD",
+  "arbeitsbaum": "sauber",
+  "rechner": "Ubuntu-noble-latest-amd64-base, Ubuntu 24.04.4 LTS, 13th Gen Intel(R) Core(TM) i5-13500, 20 Kerne, 62 GiB",
+  "umgebungen": [
+    "vermessung",
+    "vermessung-pruefdomaene"
+  ],
+  "parameter": {
+    "szenarien": [
+      "S1",
+      "S2",
+      "S3",
+      "S4",
+      "S5"
+    ],
+    "wiederholungen": 1,
+    "probe": false,
+    "fenster_s": 15,
+    "abbau_frist_s": 120,
+    "warmlauf_s": 30,
+    "s1_stoss_paare": 600,
+    "s2_stoss_paare": 200,
+    "s3_sender": [
+      8,
+      64
+    ],
+    "s3": "je Block ein Sammelvorgang (N = 1 000 000, die Barriere wird nicht erreicht); je Teil StarteTeilauftrag + SchließeTeilauftragAb",
+    "s5_sender": [
+      1,
+      8,
+      64
+    ],
+    "s3_hoechstens_teile_je_block": 2000,
+    "s5_hoechstens_vorgaenge_je_block": 3000,
+    "s5_muster": "je 10 Vorgänge: 8 Aufträge ok, 1 Auftrag gegen volles Kontingent (Kompensation), 1 Verteilung auf 4 Ziele; 50 Posten, 20 Ziele",
+    "leerlauf_s": 60,
+    "leerlauf": "erst nach dem Nachlauf (alle Poll-Cursor und Projektions-Positionen am Kopf des Logs, höchstens nachlauf_frist_s), dann das Fenster",
+    "nachlauf_frist_s": 180,
+    "sichtbar": "S1/S2: Query GetImagePair je offenem Paar (komplett), alle 100 ms; S3: TeilVerbucht im Log; S4: Query HoleDatensatz; S5: ProzessBeendet im Log",
+    "transaktionen": "COMMITs aus pg_stat_statements (track = top); Queries = übrige Statements ohne BEGIN/COMMIT/ROLLBACK/DISCARD/SET/SHOW; ohne die Lese-Rolle des Treibers"
+  },
+  "fremdlast_vorher": "Last 1.79 1.58 1.42 1/680 2326386\n · CPU-stärkste: 22.8 dotnet; 2.0 consul; 1.4 redis-server; 1.2 redis-server; 0.5 dotnet",
+  "fremdlast_nachher": "Last 12.24 5.68 2.94 3/1056 2330583\n · CPU-stärkste: 554 dotnet;51.9 dotnet;19.4 dotnet;15.5 dotnet; 2.7 redis-server",
+  "gueltig": false,
+  "begruendung": [
+    "PostgresException: 53100: could not resize shared memory segment \"/PostgreSQL.2651519776\" to 4312640 bytes: No space left on device"
+  ]
+}

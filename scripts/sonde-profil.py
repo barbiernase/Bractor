@@ -3,9 +3,11 @@
 
   scripts/sonde-profil.py <profil.speedscope.json[.gz]>   → Markdown auf stdout
 
-dotnet-trace tastet alle .NET-Threads ab (~100 Hz). Ein Stack, dessen Spitze .NET-Code ist, rechnet (CPU_TIME); steht der Thread in nativem
-Code, steht dort UNMANAGED_CODE_TIME — das sind vor allem Warten (Monitor, Sockets, Threadpool im Leerlauf), aber auch GC und Systemaufrufe.
-Gezählt wird deshalb getrennt; die Tabellen der Methoden zählen nur rechnende Stichproben.
+dotnet-trace tastet alle .NET-Threads ab (~100 Hz); jede Stichprobe öffnet in der Speedscope-Datei („evented“) einen Spitzen-Rahmen CPU_TIME
+oder UNMANAGED_CODE_TIME — gezählt werden diese Öffnungen (je Stichprobe ≈ 10 ms eines Threads). Auf Linux ist fast jede Stichprobe als
+UNMANAGED_CODE_TIME markiert, auch mitten in Marten; Rechnen und Warten trennt deshalb der innerste .NET-Rahmen: steht er in einer
+Warte-Methode (Semaphore, Monitor, Ereignis, Schlaf, Socket-Ereignisschleife), wartet der Thread, sonst arbeitet er (rechnet oder steht in
+einem Systemaufruf bzw. einer Sperre der Laufzeit — „arbeitend“ ist also eine Obergrenze der CPU).
 
 Je Stichprobe:
   - Bibliothek: das Modul des innersten Rahmens, der nicht zur Laufzeit (System.*, Microsoft.*, CoreLib) gehört — wer die Arbeit verursacht;
@@ -17,6 +19,10 @@ import sys
 from collections import Counter
 
 LAUFZEIT = ("System.", "Microsoft.", "System!", "Microsoft!")
+WARTEN = ("LowLevelLifoSemaphore.Wait", "Monitor.Wait", "WaitHandle.WaitOne", "ManualResetEventSlim.Wait", "SemaphoreSlim.Wait", "Thread.Sleep",
+          "WaitForSocketEvents", "SocketAsyncEngine.EventLoop", "DedicatedThreadPoolPipeScheduler.RunWorkLoop", "TimerQueue.TimerThread",
+          "ThreadPoolWorkerThreadWait", "Heartbeat.TimerLoop", "CounterGroup.PollForValues", "GC.RunFinalizers", "Interop+Sys.Read",
+          "WorkerThread.WorkerThreadStart", "Task.SpinThenBlockingWait", "Task.InternalWait")
 
 
 def lade(pfad):
@@ -26,20 +32,19 @@ def lade(pfad):
 
 
 def stichproben(d):
-    """→ Liste (stack als Liste von Rahmen-Namen, Wurzel zuerst; Gewicht in ms) über alle Threads."""
+    """→ (stack als Liste von Rahmen-Namen, Wurzel zuerst, Spitze CPU_TIME bzw. UNMANAGED_CODE_TIME; Gewicht 1 = eine Stichprobe)."""
     namen = [f["name"] for f in d["shared"]["frames"]]
     for p in d["profiles"]:
         if p["type"] == "sampled":
-            for s, w in zip(p["samples"], p["weights"]):
-                yield [namen[i] for i in s], w
-        else:   # evented: Öffnen/Schließen von Rahmen; die Zeit zwischen zwei Ereignissen gehört dem aktuellen Stack
-            stack, zuletzt = [], None
+            for s in p["samples"]:
+                yield [namen[i] for i in s], 1
+        else:   # evented: jede Stichprobe öffnet ihren Spitzen-Rahmen (CPU_TIME / UNMANAGED_CODE_TIME) neu
+            stack = []
             for e in p["events"]:
-                if zuletzt is not None and stack and e["at"] > zuletzt:
-                    yield list(stack), e["at"] - zuletzt
-                zuletzt = e["at"]
                 if e["type"] == "O":
                     stack.append(namen[e["frame"]])
+                    if stack[-1] in ("CPU_TIME", "UNMANAGED_CODE_TIME"):
+                        yield list(stack), 1
                 elif stack:
                     stack.pop()
 
@@ -61,11 +66,11 @@ def main():
     for stack, w in stichproben(d):
         gesamt += w
         spitze = stack[-1] if stack else "?"
-        leaf[spitze.split("!")[-1] if spitze in ("CPU_TIME", "UNMANAGED_CODE_TIME") else "managed"] += w
-        if spitze == "CPU_TIME" or (spitze not in ("UNMANAGED_CODE_TIME",) and "CPU_TIME" not in spitze):
-            rahmen = [r for r in stack if r not in ("CPU_TIME", "UNMANAGED_CODE_TIME") and not r.startswith("Thread (")]
-            if rahmen:
-                cpu.append((rahmen, w))
+        leaf[spitze] += w
+        # ohne die Wurzel-Rahmen der Aufzeichnung (Prozess, „(Non-Activities)“, „Threads“, „Thread (…)“)
+        rahmen = [r for r in stack[:-1] if "!" in r]
+        if rahmen and not any(m in rahmen[-1] for m in WARTEN):
+            cpu.append((rahmen, w))
     cpu_ms = sum(w for _, w in cpu)
     bibl, selbst, inkl = Counter(), Counter(), Counter()
     for rahmen, w in cpu:
@@ -77,9 +82,10 @@ def main():
         bibl[verursacher] += w
 
     z = ["# CPU-Profil des Hosts", "",
-         f"Abgetastete Thread-Zeit {gesamt / 1000:.1f} s, davon rechnend (.NET-Code an der Spitze) {cpu_ms / 1000:.1f} s; "
-         + ", ".join(f"{k} {v / 1000:.1f} s" for k, v in leaf.most_common()), "",
-         "## Rechnende Zeit nach Bibliothek (innerster Rahmen außerhalb der Laufzeit)", "", "| Bibliothek | Anteil |", "|---|---:|"]
+         f"Stichproben {gesamt:.0f} (≈ 10 ms je Thread), davon arbeitend (innerster Rahmen keine Warte-Methode) {cpu_ms:.0f} "
+         f"≈ {cpu_ms / 100:.1f} Thread-Sekunden; Markierung: " + ", ".join(f"{k} {v:.0f}" for k, v in leaf.most_common(3)), "",
+         "Die Anteile beziehen sich auf die arbeitenden Stichproben.", "",
+         "## Arbeit nach Bibliothek (innerster Rahmen außerhalb der Laufzeit)", "", "| Bibliothek | Anteil |", "|---|---:|"]
     z += [f"| {k} | {v / cpu_ms * 100:.1f} % |" for k, v in bibl.most_common(20)]
     z += ["", "## Methoden selbst (exklusiv)", "", "| Methode | Anteil |", "|---|---:|"]
     z += [f"| `{k}` | {v / cpu_ms * 100:.1f} % |" for k, v in selbst.most_common(30)]

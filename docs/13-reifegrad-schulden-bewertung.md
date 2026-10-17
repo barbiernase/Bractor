@@ -16,6 +16,7 @@ hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz und P
 | VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16 | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
+| PF-21 | Die Event-Reads (`ReadKorreliertAsync`, `ReadStreamAsync`, `ReadEventAsync`) gehen über Martens LINQ, das je Aufruf Ausdrücke kompiliert: über die Hälfte der arbeitenden Host-Threads unter S5 — Entscheidung offen | P1 |
 | PF-20 | Postgres parst und plant jede Anweisung neu: die Hälfte der Backend-CPU; mit vorbereiteten Anweisungen (Npgsql `Max Auto Prepare`) S5-64 1,13 × — Entscheidung offen | P2 |
 | PF-17 | Kosten von Horizont und Zeitstempel-Regel (G-9, G-10): je Probe bzw. Prüfung ≈ 0,45 ms (S1 3 ms je Paar, mehr als erwartet), je Event-Insert ≈ 7–10 µs (Prod) bzw. 20–35 µs (Sim, Versatz je Zeile aus `uhr`) | P3 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
@@ -221,6 +222,15 @@ Fehler selbst; erreichbar ist der Pfad nur über einen werfenden Applier — der
 Dead-Letter). *Empfehlung:* entweder den Pfad auf den Applier-Fall zurückschneiden oder einen Prüfstand-Test mit einem Actor über eine
 werfende Applier-Naht.
 
+**PF-21 · LINQ-Übersetzung je Event-Read.** Gemessen (docs/12 §12.5, „CPU-Profil des Hosts unter S5“): 58 % der arbeitenden Stichproben des
+Hosts stehen in `Marten.Linq.Parsing.LinqInternalExtensions.ReduceToConstant`, dazu 17 % im Kompilieren dynamischer Methoden — Marten übersetzt
+`QueryAllRawEvents().Where(e => e.StreamId == … && e.Version >= … && e.MatchesSql(…))` bei jedem Aufruf neu und kompiliert dabei die
+eingefangenen Werte. Aufrufer: die drei Event-Reads des `MartenEventStore`, die der Prozess-Manager, der Router und die Rehydration je Weckung
+brauchen. Unter S5 arbeiten ≈ 30 Threads bei ≈ 7 Kernen CPU — vermutet: sie warten auf die Sperre der Laufzeit beim Erzeugen dynamischer Methoden,
+das wäre neben der CPU auch eine Serialisierung. *Optionen (Tobi):* die drei Reads als eigenes SQL hinter der Event-Store-Naht (wie
+`ReadPartitionAsync` und `ReadChangedStreamsAsync` schon), ohne Martens LINQ — die Tabellen und das Materialisieren bleiben Martens; oder Martens
+kompilierte Abfragen (`ICompiledQuery`). Erwartung: Host-CPU je Vorgang deutlich kleiner, S5-64 über die heutige CPU-Decke.
+
 **PF-20 · Parsen und Planen jeder Anweisung.** Gemessen (docs/12 §12.5, „Engpass-Sonden“): je Vorgang führt Postgres 0,8–1,7 ms Anweisungen
 aus, verbraucht dafür aber 2,8–5,5 ms CPU in den Backends; unter S5-64 sind das 5,4 Kerne neben 7,1 Kernen des Hosts auf einem Rechner, der damit
 an seiner CPU-Decke steht. Npgsql schickt jede Anweisung ungeparst (kein vorbereiteter Plan), Postgres parst und plant sie jedes Mal. Mit
@@ -314,6 +324,13 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **Prozess-Fold liest ab dem Ausgang (2026-10-17; docs/04 §4.5, docs/12 §12.5):** der korrelierte Read eines frischen Vorgangs las einen viel
+  beschriebenen Ziel-Stream ab Version 0 (S3/S5: 29–42 % der Datenbankzeit). Jetzt nennt die Antwort des Aggregats die erste geschriebene Version
+  (`CommandResult.ErsteVersion` → `EmitErgebnis` → `ProzessWake.QuellVersion`), der Fold liest ab dort; den Cursor rückt er über die Lücke nur,
+  wenn dort nichts Eigenes aussteht. Gemessen: 31–66 µs statt 186–417 µs je Read, Datenbankzeit je Vorgang 0,68–0,80 ×, Durchsatz im Band.
+  Nachweis: PD `MarkingCursorAequivalenzTests.Mit_Hinweis_gleich_Cursor_aus` (Diamant mit Kompensation, Fan-out; kalt, Router, verzögert),
+  `…Langer_Ziel_Stream_mit_Hinweis_liest_nur_den_Ausgang` (gegen den Stand davor rot gesehen).
 
 - **PF-19 · Marten-Code zur Laufzeit — bewusst hingenommen (Tobi, 2026-10-17; docs/12 §12.5):** Marten erzeugt und kompiliert den Speicher-Code
   eines Dokumenttyps beim ersten Gebrauch nach dem Start (Standard-Modus). Gemessen: S4 ohne Aufwärmrunde 962–1 019 Paare/s, mit 1 847–1 942 —
