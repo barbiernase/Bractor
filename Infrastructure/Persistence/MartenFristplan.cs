@@ -31,9 +31,15 @@ public sealed class MartenFristplan : IFristplan
         return await FaelligeAbfrage(session, jetzt).ToListAsync(ct);
     }
 
-    /// <summary>Die Abfrage der fälligen Fristen (je Takt des Schedulers) — eine Quelle für den Index und den Plan-Test.</summary>
+    /// <summary>
+    /// Die Abfrage der fälligen Fristen (je Takt des Schedulers) — eine Quelle für den Index und den Plan-Test. Sortiert und begrenzt, damit auch
+    /// der allgemeine Plan den Index nimmt; den Rest holt der nächste Takt.
+    /// </summary>
     public static IQueryable<Frist> FaelligeAbfrage(IQuerySession session, DateTimeOffset jetzt)
-        => session.Query<Frist>().Where(f => f.Fällig <= jetzt);
+        => session.Query<Frist>().Where(f => f.Fällig <= jetzt).OrderBy(f => f.Fällig).Take(HoechstensJeTakt);
+
+    /// <summary>So viele fällige Fristen liefert eine Abfrage höchstens (die frühesten).</summary>
+    public const int HoechstensJeTakt = 1000;
 
     public async Task EntferneAsync(Guid id, CancellationToken ct = default)
     {

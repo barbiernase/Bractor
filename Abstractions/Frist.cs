@@ -30,7 +30,8 @@ public interface IFristplan
     /// <summary>Legt eine Frist an (idempotent über <see cref="Frist.Id"/> — erneutes Planen überschreibt).</summary>
     Task PlaneAsync(Frist frist, CancellationToken ct = default);
 
-    /// <summary>Alle Fristen, deren <see cref="Frist.Fällig"/> ≤ <paramref name="jetzt"/> (die DB-Uhr) ist.</summary>
+    /// <summary>Die fälligen Fristen (<see cref="Frist.Fällig"/> ≤ <paramref name="jetzt"/>, die DB-Uhr), die frühesten zuerst; eine Ablage darf
+    /// je Aufruf begrenzen — der Scheduler fragt jeden Takt erneut.</summary>
     Task<IReadOnlyList<Frist>> FälligeAsync(DateTimeOffset jetzt, CancellationToken ct = default);
 
     /// <summary>Entfernt eine gefeuerte/stornierte Frist. Folgenlos, wenn es sie nicht (mehr) gibt.</summary>

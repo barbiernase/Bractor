@@ -16,14 +16,15 @@ public static class FrameworkDokumente
         //   Co-Commit, Verlust heilt der Voll-Fold.
         options.Schema.For<EmittentenCursorDoc>().Identity(x => x.Id);
 
-        // Durabler Offen-Index der Prozesse (§3-Backstop): eine O(offen)-Menge, aus der ein periodischer Scan hängende Prozesse heilt.
-        options.Schema.For<ProzessOffen>().Identity(x => x.Id);
+        // Durabler Offen-Index der Prozesse (§3-Backstop): eine O(offen)-Menge, aus der ein periodischer Scan hängende Prozesse heilt. Der Index
+        //   über die Frist trägt die Abfrage der fälligen jede Sekunde (sonst die ganze Tabelle, PF-17; AbfragePlanGarantieTests).
+        options.Schema.For<ProzessOffen>().Identity(x => x.Id).Index(x => x.Frist);
 
         // Dead-Letter-Queue (§5): nicht zustellbare ausgehende Pipeline-Commands, beobachtbar + replay-bar.
         options.Schema.For<DeadLetter>().Identity(x => x.Id).DatabaseSchemaName("dlq");
 
         // Durabler Fristplan (Deadlines): eine Frist je offener Deadline; der DB-Uhr-getriebene Scheduler feuert die fälligen und entfernt sie.
-        options.Schema.For<Frist>().Identity(x => x.Id);
+        options.Schema.For<Frist>().Identity(x => x.Id).Index(x => x.Fällig);
 
         // Der Prozess-Marking-Cursor (docs/04 §4.5): ein jsonb-Dokument je Korrelation, abgeleiteter Cache des gefalteten Markings.
         options.Schema.For<ProzessMarkingDoc>().Identity(x => x.Id);

@@ -50,7 +50,14 @@ public sealed class MartenProzessOffenIndex : IProzessOffenIndex
         return await FaelligeAbfrage(session, bis).ToListAsync(ct);
     }
 
-    /// <summary>Die Abfrage der fälligen Vorgänge (jede Sekunde vom Backstop) — eine Quelle für den Index und den Plan-Test.</summary>
+    /// <summary>
+    /// Die Abfrage der fälligen Vorgänge (jede Sekunde vom Backstop) — eine Quelle für den Index und den Plan-Test. Sortiert nach der Frist und
+    /// begrenzt: nur so nimmt auch der allgemeine Plan einer vorbereiteten Anweisung den Index (bei <c>Frist &lt;= $1</c> allein läse er die
+    /// ganze Tabelle); den Rest holt der nächste Takt.
+    /// </summary>
     public static IQueryable<Guid> FaelligeAbfrage(IQuerySession session, DateTimeOffset bis)
-        => session.Query<ProzessOffen>().Where(x => x.Frist != null && x.Frist <= bis).Select(x => x.Id);
+        => session.Query<ProzessOffen>().Where(x => x.Frist != null && x.Frist <= bis).OrderBy(x => x.Frist).Take(HoechstensJeTakt).Select(x => x.Id);
+
+    /// <summary>So viele fällige Vorgänge liefert eine Abfrage höchstens (die frühesten).</summary>
+    public const int HoechstensJeTakt = 1000;
 }

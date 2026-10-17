@@ -29,7 +29,8 @@ public interface IProzessOffenIndex
     /// </summary>
     Task SetzeFristAsync(Guid korrelation, DateTimeOffset? frist, CancellationToken ct) => Task.CompletedTask;
 
-    /// <summary>Die offenen Korrelationen, deren Frist bis <paramref name="bis"/> (DB-Zeit) fällig ist.</summary>
+    /// <summary>Die offenen Korrelationen, deren Frist bis <paramref name="bis"/> (DB-Zeit) fällig ist, die frühesten zuerst; eine Ablage darf je
+    /// Aufruf begrenzen — der Backstop fragt jede Sekunde erneut.</summary>
     Task<IReadOnlyList<Guid>> ListeFaelligeAsync(DateTimeOffset bis, CancellationToken ct)
         => Task.FromResult<IReadOnlyList<Guid>>(Array.Empty<Guid>());
 }
