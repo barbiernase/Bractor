@@ -23,7 +23,6 @@ hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz und P
 | W10-2 | Reflektive Serialisierung zur Laufzeit (Marten-Default, Marking-Store, Snapshot-`Clone`, HTTP-Antworten); kein Reflection-Verbot im Build | P1 |
 | LLM-1 | 🤖-Rümpfe sind nur „baut und regelkonform“ geprüft, nicht fachlich: keine Beispiele je Slot, `Cqrs.Testing` nicht an Editor/🤖 angebunden | P1 |
 | P1-1 | Multi-Node nur container-erprobt, Consul im `-dev`-Modus | P1 |
-| P1-3 | Neustart mit Consul nach hartem Abbruch scheitert: der tote Knoten gilt noch als Mitglied, die Broker-Aktivierung beim Start läuft in den Timeout und bricht den Start ab (Störungsläufe „Prod-Konfig“ ungültig) | P1 |
 | P1-2 | Transport-Sicherheit: kein TLS; Identitäten für Prod fehlen | P1 |
 | P1-7 | Deploy-Skripte veraltet (starten die Hosts ohne Umgebung, alte Konfig-Schlüssel) | P1 |
 | W2-1 | Rest der Projektstruktur: Client-Framework hängt am Server-Framework, Generat-Namespaces, Identitäten aus einfachen Namen | P2 |
@@ -228,13 +227,6 @@ Aufrufe, wenn die Position weit zurückliegt). Die Zeitstempel-Regel kostet in S
 aus `uhr` liest. *Optionen:* den Versatz je Transaktion einmal lesen (`set_config(…, true)`), in Prod misst nur die Datenbankzeit; für die Proben
 `EXPLAIN ANALYZE` unter Last. Wirkung Ende zu Ende im Band der Einzelläufe.
 
-**P1-3 · Neustart mit Consul nach hartem Abbruch.** Gemessen in den Störungsläufen mit der Konfiguration von `umgebung.prod.json`
-(docs/12 §12.5): der neu gestartete Host bricht beim Start ab (`TimeoutException` in `ClusterExtensions.ActivateBrokerAsync`, aus
-`PubSubStartupService`). Consul führt den hart beendeten Knoten noch als Mitglied (Standardwerte des `ConsulProviderConfig`), der Cluster legt
-Broker-Aktivierungen auf ihn, und der Start versucht jede genau einmal. *Optionen:* die Aktivierung beim Start mit Backoff wiederholen, bis die
-Mitgliedschaft stimmt (Frist z. B. 60 s), und/oder TTL und Abmeldung kritischer Dienste in Consul kurz einstellen; dann die Störungsläufe mit
-Consul wiederholen.
-
 **PF-19 · Marten-Code zur Laufzeit.** Marten erzeugt den Speicher-Code eines Dokumenttyps beim ersten Gebrauch und kompiliert ihn mit Roslyn
 (`StoreOptions.GeneratedCodeMode` im Standard). In Sim fasst der Abgleich der Leseseite beim Start jeden Read-Model-Typ an; in Prod geschieht es
 im Verkehr — vermutet als Ursache, dass S4 in Prod 0,3 statt 0,1/0,2 s braucht (S4 hat keine Aufwärmrunde; Datenbank-Anweisungen gleich).
@@ -319,6 +311,13 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **P1-3 · Neustart mit Consul nach hartem Abbruch (2026-10-17, Messserver; docs/12 §12.5):** nach einem harten Abbruch führte Consul den toten
+  Knoten noch einige Sekunden als Mitglied (`ConsulProviderConfig`: TTL 3 s, Abmeldung nach 10 s), der Cluster legte Broker-Aktivierungen auf ihn,
+  und der Start versuchte jede genau einmal — `TimeoutException` aus `PubSubStartupService`, Abbruch (Störungsläufe „Prod-Konfig“ ungültig). Jetzt
+  wiederholen Aktivieren und Abonnieren der Broker Timeouts mit Backoff bis 60 s (`ClusterExtensions.MitWiederholungAsync`); andere Fehler gehen
+  sofort durch. Gemessen: zwei Störungsläufe mit Consul grün (53 019 und 52 756 Vorgänge), in beiden gelang beim Host der Prüfdomäne eine Aktivierung
+  im zweiten Versuch. Nachweis: P `BrokerWiederholungTests`.
 
 - **PF-18 · Schema lazy im Betrieb (2026-10-17; docs/03 §3.3):** ein Standalone-Host legte Tabellen und Funktionen eines Dokumenttyps erst beim
   ersten Zugriff an, mitten im Verkehr (gemessen: S4 in Art Prod 0,2 s länger; in Sim verdeckt, weil der Abgleich der Leseseite beim Start alle

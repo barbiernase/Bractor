@@ -705,7 +705,9 @@ Erklärung oben (Schema) war falsch. Vermutet: Marten erzeugt und kompiliert den
 fasst der Abgleich der Leseseite beim Start jeden Read-Model-Typ an, in Prod geschieht es mitten in S4, das keine Aufwärmrunde hat (PF-19).
 **Störungsläufe ungültig** (`…_server-prod-konfig-stoerung-1/2`): nach dem harten Abbruch startet der Host der Beispieldomäne nicht wieder — die
 Aktivierung der Broker beim Start läuft in den Timeout, weil Consul den toten Knoten noch als Mitglied führt und der Cluster Aktivierungen auf ihn
-legt; der Start versucht es genau einmal und bricht ab (Exit 134). Mit dem Einzelknoten gab es das nicht (P1-3).
+legt; der Start versucht es genau einmal und bricht ab (Exit 134). Mit dem Einzelknoten gab es das nicht (P1-3). Seit `edbab04` wiederholen
+Aktivieren und Abonnieren der Broker mit Backoff: zwei Störungsläufe mit Consul grün (`…_server-consul-neustart-stoerung-1/2`: 53 019 und 52 756
+Vorgänge; beim Host der Prüfdomäne gelang je eine Aktivierung im zweiten Versuch).
 
 **Als korrekt verifiziert (Backend-Audit 2026-08, nicht erneut jagen):** Versionsarithmetik inkl. Noop- und Ablehnungs-Marken; OCC-Skip auf dem
 `AnyVersion`-Pfad; Append vor State-Mutation; Shard-Hash-Konsistenz Subscribe ↔ gezieltes Publish; Pre-Dispatch-Guard des Adapters je Stream (heute `EmittentenAdapter`);
