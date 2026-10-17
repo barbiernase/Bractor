@@ -3,6 +3,7 @@
 
   scripts/sonde-auswertung.py <ergebnis-ordner>        liest <ordner>/host.csv (Abschnitte des Treibers) und <ordner>/sonde/*.csv(.gz),
                                                        schreibt <ordner>/sonde/sonde.md und sonde.json
+  scripts/sonde-auswertung.py --vergleich <ordner …>   je Block den Median über die Wiederholungen, eine Spalte je Lauf (Knopf)
 
 Je Abschnitt (S3-…, S5-…, L1, L5): mittlere CPU je Prozessgruppe in Kernen, Auslastung des Rechners, CPU- und IO-Druck, die heißesten
 Host-Threads, die mittlere Zahl der Postgres-Verbindungen je Zustand und Wartegrund, die häufigsten laufenden Anweisungen, WAL-Raten und
@@ -247,13 +248,84 @@ def markdown(ordner, erg):
     return "\n".join(z)
 
 
+BLOECKE = ["S3-8", "S3-64", "S5-1", "S5-8", "S5-64"]
+UEBERSICHT = [
+    ("Durchsatz bis sichtbar (/s)", lambda e, w: e.get("durchsatz_je_s")),
+    ("angenommen (/s)", lambda e, w: e.get("angenommen_je_s")),
+    ("sichtbar im Fenster (/s)", lambda e, w: e.get("sichtbar_je_s")),
+    ("Latenz p50 (ms)", lambda e, w: e.get("latenz_p50_ms")),
+    ("CPU Host (Kerne)", lambda e, w: next((v for g, v in w["cpu_kerne"].items() if g.startswith("host-")), None)),
+    ("CPU Postgres-Backends (Kerne)", lambda e, w: w["cpu_kerne"].get("pg-backend")),
+    ("Rechner ausgelastet (%)", lambda e, w: w.get("rechner", {}).get("auslastung_prozent")),
+    ("CPU-Druck (Anteil)", lambda e, w: w.get("rechner", {}).get("cpu_druck")),
+    ("Postgres aktiv (Verbindungen)", lambda e, w: w["postgres"]["aktiv"]),
+    ("davon auf CPU", lambda e, w: w["postgres"]["verbindungen_je_zustand"].get("active CPU", 0)),
+    ("davon WAL (Sync, Write, Insert)", lambda e, w: round(sum(v for k, v in w["postgres"]["verbindungen_je_zustand"].items()
+                                                            if "WAL" in k), 2)),
+    ("davon Sperren (Lock)", lambda e, w: round(sum(v for k, v in w["postgres"]["verbindungen_je_zustand"].items() if " Lock:" in k), 2)),
+    ("idle in transaction", lambda e, w: w["postgres"]["idle_in_transaction"]),
+    ("WAL-Syncs (/s)", lambda e, w: w.get("wal_je_s", {}).get("wal_sync")),
+    ("Npgsql belegt (Mittel)", lambda e, w: next((v["mittel"] for k, v in w["counters"].items()
+                                                  if "connections.usage" in k and "state=used" in k and "Command Timeout" in k), None)),
+    ("Threadpool-Warteschlange (höchst)", lambda e, w: next((v["hoechst"] for k, v in w["counters"].items()
+                                                             if k.startswith("host-") and "queue.length" in k), None)),
+]
+
+
+def median(xs):
+    xs = sorted(x for x in xs if x is not None)
+    if not xs:
+        return None
+    m = len(xs) // 2
+    return xs[m] if len(xs) % 2 else (xs[m - 1] + xs[m]) / 2
+
+
+def uebersicht(ordner):
+    """Block → Kennzahl → Median über die Wiederholungen (Treiber-Kennzahlen aus ergebnis.json, Sonde aus sonde.json)."""
+    e = json.load(open(os.path.join(ordner, "ergebnis.json"), encoding="utf-8-sig"))
+    s = json.load(open(os.path.join(ordner, "sonde", "sonde.json"), encoding="utf-8"))
+    erg = {}
+    for b in BLOECKE:
+        laeufe = e.get("szenarien", {}).get(b, {}).get("wiederholungen", [])
+        werte_b = defaultdict(list)
+        for i, l in enumerate(laeufe, 1):
+            w = s.get(f"{b}-w{i}")
+            if w is None:
+                continue
+            for name, f in UEBERSICHT:
+                werte_b[name].append(f(l["kennzahlen"], w))
+        erg[b] = {name: median(v) for name, v in werte_b.items()}
+    return erg
+
+
+def vergleich(ordner_liste):
+    spalten = []
+    for o in ordner_liste:
+        kp = os.path.join(o, "sonde", "knopf.txt")
+        knopf = open(kp, encoding="utf-8").readline().strip() if os.path.exists(kp) else "?"
+        spalten.append((f"{knopf} ({os.path.basename(o.rstrip('/'))[:15]})", uebersicht(o)))
+    z = ["| Block | Kennzahl | " + " | ".join(n for n, _ in spalten) + " |", "|---|---|" + "---:|" * len(spalten)]
+    for b in BLOECKE:
+        for name, _ in UEBERSICHT:
+            werte_z = [u.get(b, {}).get(name) for _, u in spalten]
+            z.append(f"| {b} | {name} | " + " | ".join("–" if v is None else f"{v:.3g}" if isinstance(v, float) else str(v) for v in werte_z) + " |")
+    return "\n".join(z)
+
+
 def main():
+    if sys.argv[1] == "--vergleich":
+        print(vergleich(sys.argv[2:]))
+        return
     ordner = sys.argv[1]
     erg = werte(ordner)
     sonde = os.path.join(ordner, "sonde")
     with open(os.path.join(sonde, "sonde.json"), "w", encoding="utf-8") as f:
         json.dump(erg, f, ensure_ascii=False, indent=1)
     md = markdown(ordner, erg)
+    try:
+        md = "## Übersicht (Median über die Wiederholungen)\n\n" + vergleich([ordner]) + "\n\n" + md
+    except Exception as ex:
+        md = f"(keine Übersicht: {ex})\n\n" + md
     with open(os.path.join(sonde, "sonde.md"), "w", encoding="utf-8") as f:
         f.write(md + "\n")
     print(md)

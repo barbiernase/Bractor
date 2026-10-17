@@ -66,6 +66,9 @@ internal sealed class Datenbank
     public async Task ZuruecksetzenAsync()
     {
         await AusfuehrenAsync("postgres", $"drop database if exists {Name} with (force)");
+        // „with (force)“ beendet auch die gepoolten Verbindungen des Treibers auf die alte DB — ohne Leeren der Pools nähme die nächste
+        //   Wiederholung eine davon und scheiterte mit 57P01.
+        NpgsqlConnection.ClearAllPools();
         await AusfuehrenAsync("postgres", $"create database {Name}");
         await AusfuehrenAsync(Name, $"""
             create schema if not exists {Schema};
