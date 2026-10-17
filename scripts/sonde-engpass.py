@@ -300,6 +300,9 @@ def main():
     ap.add_argument("--dauer", type=float, default=0, help="Sekunden; 0 = bis SIGTERM")
     a = ap.parse_args()
     os.makedirs(a.aus, exist_ok=True)
+    # dotnet-counters schreibt Ortszeit ohne Zone — die Auswertung rechnet mit diesem Versatz nach UTC um.
+    with open(os.path.join(a.aus, "uhr.txt"), "w") as f:
+        f.write(f"{int(datetime.now().astimezone().utcoffset().total_seconds())}\n")
     for s in (signal.SIGTERM, signal.SIGINT):
         signal.signal(s, lambda *_: STOP.set())
     faeden = [threading.Thread(target=cpu_schleife, args=(a.aus, 0.5)), threading.Thread(target=thread_schleife, args=(a.aus,)),

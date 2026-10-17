@@ -69,8 +69,11 @@ def lade_csv(pfad, trenner=","):
 
 
 def counters(sonde):
-    """dotnet-counters-CSV je (rolle, pid) → Liste (zeit, name, wert). Zeitstempel in Ortszeit des Servers (dort UTC)."""
+    """dotnet-counters-CSV je (rolle, pid) → Liste (zeit, name, wert). Zeitstempel in Ortszeit des Servers (Versatz in uhr.txt)."""
     erg = []
+    versatz = 0
+    if os.path.exists(os.path.join(sonde, "uhr.txt")):
+        versatz = int(open(os.path.join(sonde, "uhr.txt")).read().strip() or 0)
     for pfad in sorted(glob.glob(os.path.join(sonde, "counters-*.csv*"))):
         m = re.match(r"counters-(.+)-(\d+)\.csv", os.path.basename(pfad))
         if not m:
@@ -81,9 +84,16 @@ def counters(sonde):
             for z in csv.reader(f):
                 if len(z) < 5 or z[0] == "Timestamp":
                     continue
+                t = None
+                for muster in ("%m/%d/%Y %H:%M:%S", "%m/%d/%Y %I:%M:%S %p", "%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S"):
+                    try:
+                        t = datetime.strptime(z[0].split(".")[0], muster).replace(tzinfo=timezone.utc) - timedelta(seconds=versatz)
+                        break
+                    except ValueError:
+                        pass
                 try:
-                    t = datetime.strptime(z[0], "%m/%d/%Y %H:%M:%S").replace(tzinfo=timezone.utc)
-                    erg.append((rolle, t, z[2], float(z[4])))
+                    if t is not None:
+                        erg.append((rolle, t, z[2], float(z[4])))
                 except ValueError:
                     continue
     return erg
@@ -138,6 +148,9 @@ def werte(ordner):
                 "io_druck": round(mittel([float(z["psi_io_some"]) for z in kz]), 3),
                 "kerne_ueber_90_prozent": round(mittel([sum(1 for i in range(n) if float(z[f"k{i}"]) > 90) for z in kz]), 1),
                 "je_kern_prozent": [round(mittel([float(z[f"k{i}"]) for z in kz])) for i in range(n)],
+                # i5-13500: logische Kerne 0–11 = sechs P-Kerne mit Hyperthreading, 12–19 = acht E-Kerne (lscpu -e)
+                "p_kerne_prozent": round(mittel([float(z[f"k{i}"]) for z in kz for i in range(min(12, n))]), 1),
+                "e_kerne_prozent": round(mittel([float(z[f"k{i}"]) for z in kz for i in range(12, n)]), 1) if n > 12 else None,
             }
 
         th = defaultdict(list)
@@ -210,7 +223,8 @@ def markdown(ordner, erg):
         r = w.get("rechner")
         if r:
             z.append(f"- Rechner: {r['auslastung_prozent']} % ausgelastet, iowait {r['iowait_prozent']} %, CPU-Druck {r['cpu_druck']}, "
-                     f"IO-Druck {r['io_druck']}, Kerne über 90 %: {r['kerne_ueber_90_prozent']}; je Kern {r['je_kern_prozent']}")
+                     f"IO-Druck {r['io_druck']}, Kerne über 90 %: {r['kerne_ueber_90_prozent']}, P-Kerne {r['p_kerne_prozent']} %, "
+                     f"E-Kerne {r['e_kerne_prozent']} %; je Kern {r['je_kern_prozent']}")
         t = w["threads"]
         z.append(f"- Host-Threads über 5 %: {t['ueber_5_prozent']}, höchster Einzelwert {t['hoechster_einzelwert_prozent']} %; heißeste: "
                  + ", ".join(f"{x['name']} {x['mittel_prozent']} %" for x in t["heisseste"]))
