@@ -329,7 +329,7 @@ def main():
     ap.add_argument("--aus", required=True)
     ap.add_argument("--dauer", type=float, default=0, help="Sekunden; 0 = bis SIGTERM")
     ap.add_argument("--profil", default="", help="Abschnitt des Treibers (z. B. S5-8-w1), ab dessen Beginn der Host aufgezeichnet wird")
-    ap.add_argument("--profil-dauer", type=int, default=15)
+    ap.add_argument("--profil-dauer", type=int, default=int(os.environ.get("SONDE_PROFIL_DAUER", "15")))
     ap.add_argument("--ergebnisse", default="vermessung/ergebnisse")
     a = ap.parse_args()
     os.makedirs(a.aus, exist_ok=True)
