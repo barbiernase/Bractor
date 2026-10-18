@@ -352,9 +352,10 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
     }
 
     /// <summary>
-    /// Je abweichendem Stream (höchstens fünf): Guard, Events mit Sequenz, Transaktion und Commit-Zeit, und je nicht angewandtem Event der erste
-    /// Partitions-Commit, der die Position darüber schob — committete das Event erst danach, rückte die Partition über eine noch unsichtbare
-    /// Transaktion (Horizont), sonst über ein sichtbares Event (Batch-Leser).
+    /// Welche Events fehlen (oder doppelt wirken) und warum. Ein Historien-Eintrag trägt die Zeit seines Events (<c>CreatedAtUtc</c>): Events des
+    /// Logs ohne Eintrag gleicher Zeit fehlen, Einträge ohne Event darüber hinaus sind doppelt. Je fehlendem Event zählt das Urteil: der erste
+    /// Partitions-Commit, dessen Position darüber reichte — committete das Event erst nach ihm, rückte die Partition über eine noch unsichtbare
+    /// Transaktion (Horizont); war es vorher committet, über ein sichtbares Event (Batch-Leser). Im Einzelnen höchstens fünf Streams mit je fünf Events.
     /// </summary>
     private async Task<string> DiagnoseAsync(List<(Guid Stream, int Ist, int Soll)> abweichend, string proj, ConcurrentQueue<Commit> commits)
     {
@@ -365,40 +366,55 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
         await using (var cmd = new NpgsqlCommand("select current_setting('track_commit_timestamp') = 'on'", c))
             commitZeit = (bool)(await cmd.ExecuteScalarAsync())!;
         var log = commits.ToList();
-        foreach (var (stream, ist, soll) in abweichend.Take(5))
+        var historie = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
+        var urteile = new Dictionary<string, int>();
+        static long Mikro(DateTimeOffset t) => t.UtcTicks / 10;
+
+        var einzeln = 0;
+        foreach (var (stream, ist, soll) in abweichend)
         {
             var guard = await BatchHilfe.GuardAsync(_fx.Store, proj, stream);
             var p = Partitionierung.Von(stream, Partitionen);
-            sb.AppendLine($"Stream {stream} (Partition {p}): {ist} statt {soll} Einträge, Guard v{guard}");
             await using var cmd = new NpgsqlCommand(
                 $"select version, seq_id, xmin::text, {(commitZeit ? "pg_xact_commit_timestamp(xmin)" : "null::timestamptz")}, timestamp "
-                + $"from {Fixture.Schema}.mt_events where stream_id = $1 order by version", c);
+                + $"from {Fixture.Schema}.mt_events where stream_id = $1 and type <> 'tombstone' order by version", c);
             cmd.Parameters.Add(new NpgsqlParameter { Value = stream });
             var zeilen = new List<(long Version, long Seq, string Xid, DateTimeOffset? Commit, DateTimeOffset Zeit)>();
             await using (var r = await cmd.ExecuteReaderAsync())
                 while (await r.ReadAsync())
                     zeilen.Add((r.GetInt64(0), r.GetInt64(1), r.GetString(2),
                         r.IsDBNull(3) ? null : r.GetFieldValue<DateTimeOffset>(3), r.GetFieldValue<DateTimeOffset>(4)));
+
+            // Multimenge der angewandten Zeiten: was das Log nicht abdeckt, ist doppelt; was im Log keinen Eintrag hat, fehlt.
+            var angewandt = ((await historie.GetByPairIdAsync(stream))?.Eintraege ?? new()).GroupBy(e => Mikro(e.Zeitpunkt))
+                .ToDictionary(g => g.Key, g => g.Count());
+            var fehlend = new List<(long Version, long Seq, string Xid, DateTimeOffset? Commit, DateTimeOffset Zeit)>();
             foreach (var z in zeilen)
             {
-                sb.Append($"  v{z.Version} seq {z.Seq} xid {z.Xid} commit {z.Commit:HH:mm:ss.ffffff} zeit {z.Zeit:HH:mm:ss.ffffff}");
-                if (z.Version > guard)
-                {
-                    var ueber = log.Where(k => k.Partition == p && k.Position >= z.Seq).OrderBy(k => k.Ende).FirstOrDefault();
-                    if (ueber is null) sb.Append(" — kein Commit der Partition reichte darüber");
-                    else
-                    {
-                        var urteil = z.Commit is not { } ct ? "Commit-Zeit unbekannt"
-                            : ct > ueber.Ende ? "Partition rückte über eine noch UNSICHTBARE Transaktion (Horizont)"
-                            : ct < ueber.Beginn ? "Event war vor dem Commit sichtbar (Batch-Leser)"
-                            : "Commit des Events fiel in den Partitions-Commit (unentschieden)";
-                        sb.Append($" — Position {ueber.Position} committet {ueber.Beginn:HH:mm:ss.ffffff}…{ueber.Ende:HH:mm:ss.ffffff}: {urteil}");
-                    }
-                }
-                sb.AppendLine();
+                if (angewandt.TryGetValue(Mikro(z.Zeit), out var n) && n > 0) angewandt[Mikro(z.Zeit)] = n - 1;
+                else fehlend.Add(z);
+            }
+            var doppelt = angewandt.Values.Sum();
+
+            var zeigen = einzeln++ < 5;
+            if (zeigen)
+                sb.AppendLine($"Stream {stream} (Partition {p}): {ist} statt {soll} Einträge, Guard v{guard}, {fehlend.Count} fehlend, {doppelt} doppelt");
+            foreach (var (z, k) in fehlend.Select((z, k) => (z, k)))
+            {
+                var ueber = log.Where(e => e.Partition == p && e.Position >= z.Seq).OrderBy(e => e.Ende).FirstOrDefault();
+                var urteil = ueber is null ? "kein Commit der Partition reichte darüber"
+                    : z.Commit is not { } ct ? "Commit-Zeit unbekannt"
+                    : ct > ueber.Ende ? "Horizont (Partition rückte über eine noch unsichtbare Transaktion)"
+                    : ct < ueber.Beginn ? "Batch-Leser (Event war vor dem Commit sichtbar)"
+                    : "unentschieden (Commit des Events fiel in den Partitions-Commit)";
+                urteile[urteil] = urteile.GetValueOrDefault(urteil) + 1;
+                if (zeigen && k < 5)
+                    sb.AppendLine($"  fehlt v{z.Version} seq {z.Seq} xid {z.Xid} commit {z.Commit:HH:mm:ss.ffffff}"
+                        + (ueber is null ? "" : $"; Position {ueber.Position} committet {ueber.Beginn:HH:mm:ss.ffffff}…{ueber.Ende:HH:mm:ss.ffffff}")
+                        + $": {urteil}");
             }
         }
-        return sb.ToString();
+        return $"Urteile über alle fehlenden Events: {string.Join("; ", urteile.Select(u => $"{u.Key}: {u.Value}"))}\n{sb}";
     }
 
     private sealed class KeineFabrik : IAggregateHandlerFactory
