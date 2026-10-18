@@ -43,10 +43,10 @@ public sealed class BackendMetrics : IBackendMetrics
 
     public async Task<BackendMetrik> ErfasseAsync(CancellationToken ct = default)
     {
-        var offene = await _offen.ListeOffeneAsync(ct);
+        var offene = await _offen.ZaehleOffeneAsync(ct);   // nur die Zahl — die Liste wächst mit den offenen Vorgängen
         var dlq = await _dlq.CountAsync(ct);
         var konsum = _konsum is null ? [] : await _konsum.ErfasseAsync(ct);
-        return new BackendMetrik(offene.Count, dlq, _system?.ProcessRegistry.ProcessCount ?? 0,
+        return new BackendMetrik(offene, dlq, _system?.ProcessRegistry.ProcessCount ?? 0,
             konsum.Sum(k => k.Rueckstand), konsum.Sum(k => k.Geparkt));
     }
 }

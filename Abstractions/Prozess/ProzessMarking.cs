@@ -120,6 +120,11 @@ public sealed class VorgangMarke
     /// <summary>Zeitpunkt (DB-Zeit) des Downstream-Tokens — für das Zeitlimit nachfolgender Transitionen.</summary>
     public DateTimeOffset TokenZeit { get; set; }
 
+    /// <summary>
+    /// Nur für einen Warte-Knoten: bis zu welcher Version er den Strom seiner Quelle schon geprüft hat — die nächste Weckung liest dahinter.
+    /// </summary>
+    public int Gelesen { get; set; }
+
     public VorgangMarke Kopie() => new()
     {
         Wirkung = Wirkung,
@@ -129,6 +134,7 @@ public sealed class VorgangMarke
         TokenVersion = TokenVersion,
         TokenPayload = TokenPayload,
         TokenZeit = TokenZeit,
+        Gelesen = Gelesen,
     };
 }
 

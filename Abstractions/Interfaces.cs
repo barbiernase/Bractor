@@ -207,10 +207,20 @@ public interface IAggregateRepository
         /// Die Events eines Streams ab <paramref name="fromVersion"/>, aber nur die mit der Korrelation <paramref name="korrelation"/> — für den
         /// Prozess-Manager, der in einem viel beschriebenen Ziel-Stream nur die Wirkungen seiner eigenen Befehle braucht. Die Datenbank liest den
         /// Rest weiter über den Stream-Index, liefert aber nur die eigenen Zeilen (keine fremden Daten über die Leitung, nichts auszupacken).
-        /// Ohne eigene Ablage (Prüfstand) über <see cref="ReadStreamAsync"/>.
+        ///
+        /// Dazu der Kopf des Streams (seine höchste Version, gelesen vor den Events): bis dorthin hat der Leser alles Eigene gesehen — jedes
+        /// Anhängen an einen Stream wartet auf das vorige (Versionsprüfung an seinem Kopf), ein sichtbares Event hat also keine unsichtbaren davor.
+        /// Ohne Cursor (<paramref name="fromVersion"/> = 0) liest der Store erst ab dem ersten Event, das nach dem ersten Event von
+        /// <paramref name="beginn"/> geschrieben wurde (dem Start des Vorgangs in seinem eigenen Log): davor kann es nichts Eigenes geben, und die
+        /// Geschichte des Streams von vor dem Vorgang kostet nichts. <see cref="KorrelierteEvents.Ab"/> nennt die Version, ab der er las.
+        /// Ohne eigene Ablage (Prüfstand) über <see cref="ReadStreamAsync"/>, ab <paramref name="fromVersion"/>.
         /// </summary>
-        async Task<IReadOnlyList<EventEnvelope>> ReadKorreliertAsync(Guid streamId, int fromVersion, string korrelation, CancellationToken ct)
-            => (await ReadStreamAsync(streamId, fromVersion, ct)).Where(e => e.CorrelationId == korrelation).ToList();
+        async Task<KorrelierteEvents> ReadKorreliertAsync(Guid streamId, int fromVersion, string korrelation, Guid beginn, CancellationToken ct)
+        {
+            var alle = await ReadStreamAsync(streamId, fromVersion, ct);
+            var kopf = alle.Count == 0 ? Math.Max(fromVersion - 1, 0) : alle.Max(e => e.AggregateVersion);
+            return new KorrelierteEvents(alle.Where(e => e.CorrelationId == korrelation).ToList(), kopf, fromVersion);
+        }
 
         /// <summary>
         /// Leseprimitiv des Batch-Konsums (docs/04 §4.1): eine Seite der Partition <paramref name="partition"/> von
@@ -233,6 +243,12 @@ public interface IAggregateRepository
         Task<IReadOnlyCollection<Guid>> StreamsVorhandenAsync(IReadOnlyCollection<Guid> streams, CancellationToken ct)
             => Task.FromResult<IReadOnlyCollection<Guid>>(Array.Empty<Guid>());
     }
+
+    /// <summary>
+    /// Ergebnis von <see cref="IEventStoreRepository.ReadKorreliertAsync"/>: die eigenen Events, der Kopf des Streams beim Lesen (bis dorthin ist
+    /// alles Eigene dabei) und die Version, ab der der Store tatsächlich las (≥ der verlangten).
+    /// </summary>
+    public sealed record KorrelierteEvents(IReadOnlyList<EventEnvelope> Events, int Kopf, int Ab);
 
     /// <summary>Ein Event einer Partitions-Seite mit seiner globalen Sequenz.</summary>
     public sealed record PartitionsEvent(long Sequenz, EventEnvelope Event);

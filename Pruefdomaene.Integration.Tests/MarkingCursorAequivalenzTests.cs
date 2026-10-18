@@ -212,10 +212,10 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
     }
 
     [Fact]
-    public async Task Langer_Ziel_Stream_mit_Hinweis_liest_nur_den_Ausgang()
+    public async Task Langer_Ziel_Stream_liest_weder_mit_noch_ohne_Hinweis_die_Geschichte()
     {
-        // Ein Posten, auf den vorher 300 andere Vorgänge reserviert haben (fremde Korrelationen): ohne Hinweis liest der Fold eines frischen
-        //   Vorgangs den Posten ab 0 und verwirft das Fremde; mit Hinweis liest er ab dem eigenen Ausgang.
+        // Ein Posten, auf den vorher 300 andere Vorgänge reserviert haben (fremde Korrelationen): mit Hinweis liest der Fold ab dem eigenen
+        //   Ausgang, ohne Hinweis ab dem Beginn des Vorgangs (davor gibt es nichts Eigenes) — in beiden Fällen nicht die 300 davor.
         const int fremde = 300;
         async Task<Lauf> Lauf(string präfix, bool mitHinweis)
         {
@@ -232,9 +232,104 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         }
         var ohne = await Lauf("b9b9b9b9", mitHinweis: false);
         var mit = await Lauf("c9c9c9c9", mitHinweis: true);
-        ohne.GeleseneEvents.Should().BeGreaterThan(fremde, "ohne Hinweis liest der frische Vorgang den Posten ab 0");
-        mit.GeleseneEvents.Should().BeLessThan(ohne.GeleseneEvents - fremde + 20,
-            $"mit Hinweis liest der Fold den Posten erst ab dem eigenen Ausgang (mit {mit.GeleseneEvents}, ohne {ohne.GeleseneEvents} Events)");
+        ohne.GeleseneEvents.Should().BeLessThan(fremde, $"ohne Hinweis liest der Fold ab dem Beginn des Vorgangs ({ohne.GeleseneEvents} Events)");
+        mit.GeleseneEvents.Should().BeLessThan(fremde, $"mit Hinweis ab dem eigenen Ausgang ({mit.GeleseneEvents} Events)");
+    }
+
+    // ── Wachstum: was ein Vorgang liest, hängt nicht an der Geschichte seiner Ziel-Streams (docs/13 PF-23/PF-24) ──
+
+    /// <summary>Ein Marking-Store, der nichts behält — wie ein Neustart, bevor der Stand je durabel geschrieben wurde.</summary>
+    private sealed class VergesslicherStore : IProzessMarkingStore
+    {
+        public Task<ProzessMarking?> LadeAsync(Guid k, CancellationToken ct) => Task.FromResult<ProzessMarking?>(null);
+        public Task SchreibeAsync(ProzessMarking m, CancellationToken ct) => Task.CompletedTask;
+        public Task LöscheAsync(Guid k, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    /// <summary>Ein Auftrag, dessen Kontingent nicht reicht (→ Kompensation in den Posten), auf einem Posten mit <paramref name="fremde"/> fremden Events davor.</summary>
+    private async Task<Lauf> KompensationAufLangemPostenAsync(string präfix, int fremde, IProzessMarkingStore marking, bool kalt)
+    {
+        Guid posten = G(präfix, 1), kontingent = G(präfix, 2), auftrag = G(präfix, 3);
+        var an = await TreibeAsync(_fx.An, nameof(AuftragsProzess), auftrag, async w =>
+        {
+            await w.AnlegenAsync(new EroeffnePosten(posten, 1_000_000));
+            await w.FremdVieleAsync(new ReservierePosten(posten, 1), fremde);
+            await w.AnlegenAsync(new RichteKontingentEin(kontingent, 1));   // reicht nicht → Ablehnung → Kompensation in den Posten
+            await w.AnlegenAsync(new StarteAuftrag(auftrag, posten, kontingent, 3));
+        }, marking, kalt: kalt, mitHinweis: true);
+        an.Erfolg.Should().BeFalse();
+        an.Feuerungen.Select(f => f.Cmd).Should().Contain(nameof(GibPostenFrei));
+        return an;
+    }
+
+    [Fact]
+    public async Task Eine_Kompensation_liest_nicht_die_Geschichte_des_Ziel_Streams()
+    {
+        // Früher las die Prüfung „ist der Gegenzug schon erledigt?“ den ganzen Ziel-Stream ab 0 — bei einem heißen Posten wuchs jede Kompensation
+        //   mit seiner Geschichte. Jetzt steht das Ergebnis im Marking.
+        var kurz = await KompensationAufLangemPostenAsync("ab01ab01", 10, new MartenProzessMarkingStore(_fx.An), kalt: false);
+        var lang = await KompensationAufLangemPostenAsync("ab02ab02", 2_000, new MartenProzessMarkingStore(_fx.An), kalt: false);
+        (lang.GeleseneEvents - kurz.GeleseneEvents).Should().BeLessThan(50,
+            $"die Kompensation liest gleich viel, ob der Posten 10 oder 2 000 fremde Events trägt ({kurz.GeleseneEvents} gegen {lang.GeleseneEvents})");
+    }
+
+    [Fact]
+    public async Task Ein_kalter_Vorgang_ohne_gespeicherten_Stand_liest_nur_was_seit_seinem_Beginn_geschrieben_wurde()
+    {
+        // Nach einem Neustart, bevor der Stand je durabel war: der Fold beginnt ohne Cursor — früher ab Version 0 jedes Ziel-Streams.
+        var kurz = await KompensationAufLangemPostenAsync("ab03ab03", 10, new VergesslicherStore(), kalt: true);
+        var lang = await KompensationAufLangemPostenAsync("ab04ab04", 2_000, new VergesslicherStore(), kalt: true);
+        (lang.GeleseneEvents - kurz.GeleseneEvents).Should().BeLessThan(50,
+            $"ein kalter Vorgang liest gleich viel, ob der Posten 10 oder 2 000 Events Geschichte hat ({kurz.GeleseneEvents} gegen {lang.GeleseneEvents})");
+    }
+
+    /// <summary>Ein Auftrag, dessen Reservierung ausgeführt ist und dessen Belegung aussteht (der Vorgang wartet) — mit eigenem Manager.</summary>
+    private async Task<(ProzessManager Manager, ZählenderStore Store, Welt Welt, Guid Korrelation, Guid Posten, Func<ProzessManager> Neu)>
+        WartenderAuftragAsync(string präfix, int markingSchreibIntervall)
+    {
+        Guid posten = G(präfix, 1), kontingent = G(präfix, 2), auftrag = G(präfix, 3);
+        var store = new ZählenderStore(new MartenEventStore(_fx.An, new Pruefdomaene.AggregateHandlerFactory(), NullLogger<MartenEventStore>.Instance));
+        var korrelation = ProzessId.Für(nameof(AuftragsProzess), auftrag, 1);
+        var welt = new Welt(store) { Verzögert = true, Korrelation = korrelation };
+        await welt.AnlegenAsync(new EroeffnePosten(posten, 1_000_000));
+        await welt.AnlegenAsync(new RichteKontingentEin(kontingent, 5));
+        await welt.AnlegenAsync(new StarteAuftrag(auftrag, posten, kontingent, 3));
+        var registry = new Dictionary<string, ProzessRegeln> { [nameof(AuftragsProzess)] = Anwendung.Prozesse[nameof(AuftragsProzess)] };
+        var marking = new MartenProzessMarkingStore(_fx.An);
+        ProzessManager Neu() => new(store, registry, welt.DispatchAsync, markingStore: marking, markingSchreibIntervall: markingSchreibIntervall);
+        var mgr = Neu();
+        await mgr.StarteAsync(korrelation, nameof(AuftragsProzess), auftrag, 1, default);
+        while (welt.Ausstehend.TryDequeue(out var a) && a.Cmd is ReservierePosten) await welt.FuehreAusAsync(a.Korrelation, a.Cmd, a.Vorgang);
+        return (mgr, store, welt, korrelation, posten, Neu);
+    }
+
+    [Fact]
+    public async Task Fremde_Events_hinter_dem_eigenen_Ausgang_liest_ein_Vorgang_nur_einmal()
+    {
+        // Andere schreiben viel in den Posten, während der Vorgang wartet: der Cursor rückt bis zum Kopf des Streams, nicht nur bis zum letzten
+        //   eigenen Event — sonst läse jede Weckung alles Fremde dahinter erneut.
+        var (mgr, store, welt, korrelation, posten, _) = await WartenderAuftragAsync("ab05ab05", markingSchreibIntervall: 1);
+        await mgr.WakeAsync(korrelation, default);   // die Reservierung ist gefaltet, die Belegung steht aus
+        await welt.FremdVieleAsync(new ReservierePosten(posten, 1), 1_000);
+        store.Gelesen = 0;
+        for (var i = 0; i < 5; i++) await mgr.WakeAsync(korrelation, default, vomBackstop: true);
+        store.Gelesen.Should().BeLessThan(1_100, $"die 1 000 fremden Events einmal, nicht je Weckung ({store.Gelesen} gelesen)");
+        (await mgr.LadeStatusAsync(korrelation, default)).Beendet.Should().BeFalse("die Belegung steht noch aus");
+    }
+
+    [Fact]
+    public async Task Beim_Passivieren_sichert_der_Manager_seinen_Stand()
+    {
+        // Selten durabel geschrieben (alle 32 Weckungen): ohne Sichern begänne die nächste Aktivierung beim Beginn des Vorgangs und läse alles,
+        //   was seither in den Posten kam.
+        var (mgr, store, welt, korrelation, posten, neu) = await WartenderAuftragAsync("ab06ab06", markingSchreibIntervall: 32);
+        await welt.FremdVieleAsync(new ReservierePosten(posten, 1), 1_000);
+        await mgr.WakeAsync(korrelation, default);   // liest den Posten einmal bis zum Kopf
+        await mgr.SichereMarkingAsync(korrelation, default);
+        var kalt = neu();
+        store.Gelesen = 0;
+        await kalt.WakeAsync(korrelation, default);
+        store.Gelesen.Should().BeLessThan(100, $"die neue Aktivierung liest ab dem gesicherten Stand ({store.Gelesen} gelesen)");
     }
 
     /// <summary>Ein Store, der ein Marking mit falschem RegelHash und absichtlich kaputtem Inhalt liefert — der Manager MUSS es verwerfen.</summary>
@@ -331,6 +426,17 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
             foreach (var e in evs) { h.ApplyEvent(e); s.Version++; }
         }
 
+        /// <summary>Viele Befehle fremder Vorgänge in einem Append (die Geschichte eines heißen Streams, schnell angelegt).</summary>
+        public async Task FremdVieleAsync(ICommand cmd, int anzahl)
+        {
+            var (s, h, _) = _aggregate[cmd.AggregateId];
+            var evs = new List<IEvent>();
+            for (var i = 0; i < anzahl; i++)
+                foreach (var e in h.HandleCommand(cmd).Where(e => e is not ITransientEvent)) { h.ApplyEvent(e); evs.Add(e); }
+            await _store.AppendEventsAsync(cmd.AggregateId, s.Version, evs, Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), Typ(cmd));
+            s.Version += evs.Count;
+        }
+
         /// <summary>Führt den Befehl aus wie der Actor; liefert die Version des ersten geschriebenen Events (0 = als Wiederholung verworfen).</summary>
         public async Task<(Guid Ziel, Guid Vorgang, int ErsteVersion)> FuehreAusAsync(Guid korr, ICommand cmd, Guid vorgang)
         {
@@ -356,7 +462,10 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         }
     }
 
-    /// <summary>Zählt die gelesenen Events (Beleg, dass der Cursor nur den Tail liest).</summary>
+    /// <summary>
+    /// Zählt die gelesenen Events (Beleg, dass der Cursor nur den Tail liest). Ein korrelierter Read zählt jede Zeile, die Postgres dabei im
+    /// Stream übergeht (vom Beginn des Reads bis zum Kopf — die Korrelation hat keinen Index), nicht nur die gelieferten.
+    /// </summary>
     private sealed class ZählenderStore : IEventStoreRepository
     {
         private readonly IEventStoreRepository _innen;
@@ -376,6 +485,20 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         {
             var r = await _innen.ReadStreamAsync(streamId, fromVersion, ct);
             Interlocked.Add(ref Gelesen, r.Count);
+            Interlocked.Increment(ref Abfragen);
+            return r;
+        }
+        public async Task<KorrelierteEvents> ReadKorreliertAsync(Guid streamId, int fromVersion, string korrelation, Guid beginn, CancellationToken ct)
+        {
+            var r = await _innen.ReadKorreliertAsync(streamId, fromVersion, korrelation, beginn, ct);
+            Interlocked.Add(ref Gelesen, Math.Max(0, r.Kopf - r.Ab + 1));
+            Interlocked.Increment(ref Abfragen);
+            return r;
+        }
+        public async Task<EventEnvelope?> ReadEventAsync(Guid streamId, int version, CancellationToken ct)
+        {
+            var r = await _innen.ReadEventAsync(streamId, version, ct);
+            Interlocked.Add(ref Gelesen, r is null ? 0 : 1);
             Interlocked.Increment(ref Abfragen);
             return r;
         }

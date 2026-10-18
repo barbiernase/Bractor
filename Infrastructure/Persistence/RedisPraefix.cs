@@ -13,3 +13,13 @@ public sealed record RedisPraefix(string Wert)
     public static IDatabase Db(IConnectionMultiplexer redis, RedisPraefix? praefix)
         => praefix is { Wert.Length: > 0 } p ? redis.GetDatabase().WithKeyPrefix(p.Wert) : redis.GetDatabase();
 }
+
+/// <summary>
+/// Wie lange ein Schlüssel des Version-Index ohne neuen Schreibvorgang lebt (Umgebung <c>VersionIndex.HaltbarkeitStunden</c>). Der Index trägt
+/// nur „Read your writes“ für Sekunden; ohne Ablauf wüchse Redis mit jedem Aggregat und jedem Read-Model, das es je gab, bis der Speicher voll
+/// ist. Ein abgelaufener Schlüssel ist wie ein Redis-Ausfall: keine Information, niemand wartet.
+/// </summary>
+public sealed record VersionIndexHaltbarkeit(TimeSpan Dauer)
+{
+    public static VersionIndexHaltbarkeit Standard { get; } = new(TimeSpan.FromHours(24));
+}

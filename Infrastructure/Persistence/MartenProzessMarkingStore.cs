@@ -84,6 +84,7 @@ public sealed class MartenProzessMarkingStore : IProzessMarkingStore
         LogVersion = m.LogVersion,
         UpdatedAt = m.UpdatedAt,
         Auslöser = SerialisierePayload(m.Marking.AuslöserPayload),
+        AuslöserZeit = m.Marking.AuslöserZeit,
         StreamCursor = m.Marking.StreamCursor.Select(kv => new StreamCursorDto { Stream = kv.Key, Version = kv.Value }).ToList(),
         Vorgänge = m.Marking.Vorgänge.Select(kv => new VorgangDto
         {
@@ -94,6 +95,8 @@ public sealed class MartenProzessMarkingStore : IProzessMarkingStore
             TokenStream = kv.Value.TokenStream,
             TokenVersion = kv.Value.TokenVersion,
             TokenPayload = SerialisierePayload(kv.Value.TokenPayload),
+            TokenZeit = kv.Value.TokenZeit,
+            Gelesen = kv.Value.Gelesen,
         }).ToList(),
     };
 
@@ -102,6 +105,7 @@ public sealed class MartenProzessMarkingStore : IProzessMarkingStore
         var kompakt = new MarkingKompakt
         {
             AuslöserPayload = DeserialisierePayload(d.Auslöser),
+            AuslöserZeit = d.AuslöserZeit,
             StreamCursor = (d.StreamCursor ?? new()).ToDictionary(x => x.Stream, x => x.Version),
             Vorgänge = (d.Vorgänge ?? new()).ToDictionary(v => v.VorgangId, v => new VorgangMarke
             {
@@ -111,6 +115,8 @@ public sealed class MartenProzessMarkingStore : IProzessMarkingStore
                 TokenStream = v.TokenStream,
                 TokenVersion = v.TokenVersion,
                 TokenPayload = DeserialisierePayload(v.TokenPayload),
+                TokenZeit = v.TokenZeit,
+                Gelesen = v.Gelesen,
             }),
         };
         return new ProzessMarking { Id = d.Id, RegelHash = d.RegelHash, LogVersion = d.LogVersion, UpdatedAt = d.UpdatedAt, Marking = kompakt };
@@ -141,6 +147,8 @@ public sealed class ProzessMarkingDoc
     public int LogVersion { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public PayloadDto? Auslöser { get; set; }
+    /// <summary>DB-Zeit des Auslösers (Basis der Zeitlimits) — ohne sie begänne ein kalt geladener Vorgang seine Zeitlimits ohne Zeit.</summary>
+    public DateTimeOffset AuslöserZeit { get; set; }
     public List<StreamCursorDto> StreamCursor { get; set; } = new();
     public List<VorgangDto> Vorgänge { get; set; } = new();
 }
@@ -160,6 +168,9 @@ public sealed class VorgangDto
     public Guid TokenStream { get; set; }
     public int TokenVersion { get; set; }
     public PayloadDto? TokenPayload { get; set; }
+    public DateTimeOffset TokenZeit { get; set; }
+    /// <summary>Warte-Knoten: bis wohin der Strom geprüft ist (<see cref="VorgangMarke.Gelesen"/>).</summary>
+    public int Gelesen { get; set; }
 }
 
 /// <summary>Ein Event-Payload als (Typ-Name, JSON) — löst das polymorphe <see cref="IEvent"/> aus dem Dokument.</summary>

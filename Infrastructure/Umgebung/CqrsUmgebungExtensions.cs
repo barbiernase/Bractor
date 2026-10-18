@@ -63,6 +63,7 @@ public static class CqrsUmgebungExtensions
         // Das Siegel ZUERST (Hosted Services starten in Registrierungs-Reihenfolge): passt die DB nicht zur Umgebung, startet nichts.
         if (u.Cluster.Rolle != KnotenRolle.Migrator) s.AddHostedService<UmgebungsSiegel>();
         s.AddSingleton(new RedisPraefix(u.VersionIndex.Praefix));
+        s.AddSingleton(new VersionIndexHaltbarkeit(TimeSpan.FromHours(Math.Max(1, u.VersionIndex.HaltbarkeitStunden))));
 
         s.AddCqrsFramework(o =>
         {

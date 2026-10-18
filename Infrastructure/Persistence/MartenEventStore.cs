@@ -182,8 +182,28 @@ public class MartenEventStore : IEventStoreRepository
     public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(Guid streamId, int fromVersion, CancellationToken ct)
         => LeseStreamAsync("stream_id = $1 and version >= $2", ct, streamId, (long)fromVersion);
 
-    public Task<IReadOnlyList<EventEnvelope>> ReadKorreliertAsync(Guid streamId, int fromVersion, string korrelation, CancellationToken ct)
-        => LeseStreamAsync("stream_id = $1 and version >= $2 and correlation_id = $3", ct, streamId, (long)fromVersion, korrelation);
+    public async Task<KorrelierteEvents> ReadKorreliertAsync(Guid streamId, int fromVersion, string korrelation, Guid beginn, CancellationToken ct)
+    {
+        await EventTabellenAsync(_store, ct);
+        var schema = _store.Options.Events.DatabaseSchemaName;
+        await using var conn = _store.Storage.Database.CreateConnection();
+        await conn.OpenAsync(ct);
+        await using var cmd = new Npgsql.NpgsqlCommand(EventStoreAbfragen.Korreliert(schema, MetadatenSpalten(_store)), conn);
+        foreach (var w in new object[] { streamId, (long)fromVersion, korrelation, beginn })
+            cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = w });
+
+        var serializer = _store.Options.Serializer();
+        var events = new List<PartitionsEvent>();
+        long kopf = 0, ab = fromVersion;
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            kopf = r.GetInt64(0);
+            ab = r.GetInt64(1);
+            if (!r.IsDBNull(3)) LeseZeile(r, 2, serializer, events);   // ohne eigenes Event: eine Zeile mit leeren Event-Spalten
+        }
+        return new KorrelierteEvents(events.Select(e => e.Event).ToList(), (int)kopf, (int)ab);
+    }
 
     public async Task<EventEnvelope?> ReadEventAsync(Guid streamId, int version, CancellationToken ct)
         => (await LeseStreamAsync("stream_id = $1 and version = $2", ct, streamId, (long)version)).FirstOrDefault();
@@ -216,22 +236,31 @@ public class MartenEventStore : IEventStoreRepository
         var serializer = _store.Options.Serializer();
         var ergebnis = new List<PartitionsEvent>();
         var zeilen = 0;
-        string? T(System.Data.Common.DbDataReader r, int i) => r.IsDBNull(i) ? null : r.GetString(i);
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
         {
             zeilen++;
-            var diskriminator = r.GetString(1);
-            if (diskriminator == TombstoneDiskriminator) continue;   // G-7: Platzhalter eines gescheiterten Appends, kein Fakt
-            if (!EventTypen.TryGetValue(diskriminator, out var typ))
-                throw new InvalidOperationException($"Event-Typ „{diskriminator}“ ist nicht registriert (GeneratedEventUpcasting.Registrierungen).");
-            var daten = serializer.FromJson(typ, r, 0);
-            var sequenz = r.GetInt64(14);
-            foreach (var env in Materialisiere(daten, r.GetGuid(2), r.GetGuid(3), r.GetInt64(4), r.GetFieldValue<DateTimeOffset>(5), T(r, 6), T(r, 7),
-                         T(r, 8), T(r, 9), T(r, 10), T(r, 11), T(r, 12), T(r, 13)))
-                ergebnis.Add(new PartitionsEvent(sequenz, env));
+            LeseZeile(r, 0, serializer, ergebnis);
         }
         return (ergebnis, zeilen);
+    }
+
+    /// <summary>
+    /// Eine Event-Zeile ab Spalte <paramref name="o"/> (Daten, Typ, Identität, Stream, Version, Zeit, die acht Metadaten-Spalten, Sequenz)
+    /// materialisieren; Tombstones überspringen.
+    /// </summary>
+    private void LeseZeile(System.Data.Common.DbDataReader r, int o, Marten.ISerializer serializer, List<PartitionsEvent> ergebnis)
+    {
+        string? T(int i) => r.IsDBNull(o + i) ? null : r.GetString(o + i);
+        var diskriminator = r.GetString(o + 1);
+        if (diskriminator == TombstoneDiskriminator) return;   // G-7: Platzhalter eines gescheiterten Appends, kein Fakt
+        if (!EventTypen.TryGetValue(diskriminator, out var typ))
+            throw new InvalidOperationException($"Event-Typ „{diskriminator}“ ist nicht registriert (GeneratedEventUpcasting.Registrierungen).");
+        var daten = serializer.FromJson(typ, r, o);
+        var sequenz = r.GetInt64(o + 14);
+        foreach (var env in Materialisiere(daten, r.GetGuid(o + 2), r.GetGuid(o + 3), r.GetInt64(o + 4), r.GetFieldValue<DateTimeOffset>(o + 5),
+                     T(6), T(7), T(8), T(9), T(10), T(11), T(12), T(13)))
+            ergebnis.Add(new PartitionsEvent(sequenz, env));
     }
 
     /// <summary>

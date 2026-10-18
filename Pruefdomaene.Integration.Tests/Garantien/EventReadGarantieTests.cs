@@ -60,16 +60,30 @@ public class EventReadGarantieTests : IClassFixture<EventReadGarantieTests.Fixtu
         // Version 2–3: Korrelation K1, mit Akteur und Spur in den Kopfzeilen; Version 4: K2, ohne Spur; Version 5: eine Noop-Marke.
         using (Spur.Von("u-stream:1", "decide:Posten/ReservierePosten", "regel:AuftragsProzess/0"))
             await es.AppendEventsAsync(a, 1, new IEvent[] { new PostenReserviert(3), new PostenReserviert(4) }, "K1", "C1", "Posten", "Disponent");
+        // Ein Vorgang beginnt nach Version 3 (das erste Event seines Logs): vor ihm kann es im Stream nichts von ihm geben.
+        var beginn = Guid.NewGuid();
+        await es.AppendEventsAsync(beginn, 0, new IEvent[] { new PostenEroeffnet(1) }, "K2", "C0", "ProzessManager");
         await es.AppendEventsAsync(a, 3, new IEvent[] { new PostenFreigegeben(2) }, "K2", "C2", "Posten");
         await es.AppendEventsAsync(a, 4, new IEvent[] { new KommandoVerarbeitet(Guid.NewGuid()) }, "K2", "C3", "Posten");
 
         Gleich(await es.ReadStreamAsync(a, 0, default), await SollAsync(a, _ => true), "ganzer Stream ab 0");
         Gleich(await es.ReadStreamAsync(a, 3, default), await SollAsync(a, e => e.Version >= 3), "ab Version 3");
         Gleich(await es.ReadStreamAsync(a, 99, default), await SollAsync(a, e => e.Version >= 99), "hinter dem Kopf");
-        Gleich(await es.ReadKorreliertAsync(a, 0, "K1", default), await SollAsync(a, e => e.CorrelationId == "K1"), "korreliert K1");
-        Gleich(await es.ReadKorreliertAsync(a, 4, "K2", default), await SollAsync(a, e => e.Version >= 4 && e.CorrelationId == "K2"),
-            "korreliert K2 ab 4");
-        Gleich(await es.ReadKorreliertAsync(a, 0, "gibt-es-nicht", default), await SollAsync(a, _ => false), "fremde Korrelation");
+        var ohneLog = Guid.NewGuid();   // ein Beginn ohne Events: keine Grenze, ab 1
+        var k1 = await es.ReadKorreliertAsync(a, 0, "K1", ohneLog, default);
+        Gleich(k1.Events, await SollAsync(a, e => e.CorrelationId == "K1"), "korreliert K1");
+        (k1.Kopf, k1.Ab).Should().Be((5, 1), "der Kopf steht bei 5; ohne Log beginnt der Read bei 1");
+        var k2 = await es.ReadKorreliertAsync(a, 4, "K2", beginn, default);
+        Gleich(k2.Events, await SollAsync(a, e => e.Version >= 4 && e.CorrelationId == "K2"), "korreliert K2 ab 4");
+        k2.Ab.Should().Be(4);
+        Gleich((await es.ReadKorreliertAsync(a, 0, "gibt-es-nicht", ohneLog, default)).Events, await SollAsync(a, _ => false), "fremde Korrelation");
+        // Ohne Cursor beginnt der Read hinter dem letzten Event vor dem Beginn des Vorgangs — die Geschichte davor liest er nicht.
+        var abBeginn = await es.ReadKorreliertAsync(a, 0, "K2", beginn, default);
+        Gleich(abBeginn.Events, await SollAsync(a, e => e.CorrelationId == "K2"), "korreliert K2 ab dem Beginn");
+        (abBeginn.Kopf, abBeginn.Ab).Should().Be((5, 4), "der Vorgang begann nach Version 3");
+        (await es.ReadKorreliertAsync(a, 0, "K1", beginn, default)).Events.Should().BeEmpty("vor dem Beginn gibt es nichts Eigenes");
+        var leer = await es.ReadKorreliertAsync(Guid.NewGuid(), 0, "K", beginn, default);
+        (leer.Events.Count, leer.Kopf).Should().Be((0, 0), "ein Stream ohne Events hat den Kopf 0");
         foreach (var v in new[] { 1, 2, 5, 99 })
         {
             var ist = await es.ReadEventAsync(a, v, default);

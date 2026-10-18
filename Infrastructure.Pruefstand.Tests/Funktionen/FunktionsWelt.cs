@@ -75,6 +75,9 @@ internal sealed class LogImSpeicher : IEventStoreRepository
     public List<(Guid Stream, IReadOnlyList<IEvent> Events, IReadOnlyList<Beilage> Beilagen)> Appends { get; } = new();
     public DateTimeOffset Jetzt { get; set; } = new(2026, 10, 7, 12, 0, 0, TimeSpan.Zero);
 
+    /// <summary>Gelesene Events je Stream (über alle Reads) — die Tests prüfen, dass ein Leser nicht immer wieder dasselbe liest.</summary>
+    public Dictionary<Guid, long> Gelesen { get; } = new();
+
     public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(Guid streamId, int fromVersion, CancellationToken ct)
     {
         lock (_lock)
@@ -82,6 +85,7 @@ internal sealed class LogImSpeicher : IEventStoreRepository
             IReadOnlyList<EventEnvelope> res = _streams.TryGetValue(streamId, out var evs)
                 ? evs.Where(e => e.AggregateVersion >= fromVersion).ToList()
                 : Array.Empty<EventEnvelope>();
+            Gelesen[streamId] = Gelesen.GetValueOrDefault(streamId) + res.Count;
             return Task.FromResult(res);
         }
     }

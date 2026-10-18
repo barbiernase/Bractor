@@ -157,7 +157,7 @@ public sealed class ProzessManager
         }
         _akteurVon[korrelation] = mz.Akteur;
 
-        var kandidaten = await FaltMarkingMitCursorAsync(korrelation, mz, regeln, vomBackstop, quelle, quellVersion, vorgang, ct);
+        var (kandidaten, ein) = await FaltMarkingMitCursorAsync(korrelation, mz, regeln, vomBackstop, quelle, quellVersion, vorgang, ct);
         await PflegeFristAsync(korrelation, mz, kandidaten, vomBackstop, ct);
 
         // ── Treiber-Fold (EM-1, §4/§7.3): einen im Fold gesehenen Fehlschlag DURABEL machen. Eine
@@ -228,7 +228,8 @@ public sealed class ProzessManager
         }
 
         // ── Kompensation: die Erfolgs-Transitionen mit Gegenzug rückwärts (reverse Regel-Reihenfolge) ausgleichen ──
-        var (komp, unvollziehbar) = await NächsteKompensationAsync(korrelation, kandidaten, mz.Gescheitert, ct);
+        var (komp, unvollziehbar) = await NächsteKompensationAsync(korrelation, kandidaten, mz.Gescheitert, ein, ct);
+        if (CursorAktiv && _dirty.TryGetValue(korrelation, out var dirtyK)) dirtyK.ExceptWith(ein.MitErgebnis);
         if (komp is not null)
         {
             await FeuereAsync(korrelation, komp.Cmd, komp.Vorgang, SpurVon(komp.Von, regeln), ct);
@@ -399,16 +400,16 @@ public sealed class ProzessManager
     /// schreibt es best-effort fort. Beide Wege liefern per Konstruktion DIESELBEN Kandidaten (der Fold ist
     /// identisch; nur die Startbedingung — leeres vs. fortgeschriebenes Marking + Cursor — unterscheidet sie).
     /// </summary>
-    private async Task<List<Kandidat>> FaltMarkingMitCursorAsync(
+    private async Task<(List<Kandidat> Kandidaten, Einarbeitung Einarbeitung)> FaltMarkingMitCursorAsync(
         Guid korrelation, ManagerStatus mz, ProzessRegeln regeln, bool vomBackstop, Guid quelle, int quellVersion, Guid vorgang,
         CancellationToken ct)
     {
         if (!CursorAktiv)
         {
-            // Voll-Fold: frisches, leeres Marking → jeder Ziel-Stream ab 0 (das frühere Verhalten, unverändert).
-            var (_, kandidatenVoll, _) = await FalteAsync(korrelation, mz, regeln, new MarkingKompakt(), nurDirty: null, nieGeseheneLeer: false,
+            // Voll-Fold: frisches, leeres Marking → jeder Ziel-Stream ohne Cursor (ab dem Beginn des Vorgangs).
+            var (_, kandidatenVoll, einVoll) = await FalteAsync(korrelation, mz, regeln, new MarkingKompakt(), nurDirty: null, nieGeseheneLeer: false,
                 hinweis: null, ct);
-            return kandidatenVoll;
+            return (kandidatenVoll, einVoll);
         }
 
         var regelHash = ProzessRegelHash.Berechne(regeln);
@@ -431,18 +432,20 @@ public sealed class ProzessManager
             : new HashSet<Guid> { quelle };
         (Guid Stream, int Ab)? hinweis = nurDirty is not null && vorgang != Guid.Empty && quellVersion > 0 && quelle != Guid.Empty
             ? (quelle, quellVersion) : null;
-        var (_, kandidaten, mitErgebnis) = await FalteAsync(korrelation, mz, regeln, marking, nurDirty, nieGeseheneLeer: frisch, hinweis, ct);
+        var (_, kandidaten, ein) = await FalteAsync(korrelation, mz, regeln, marking, nurDirty, nieGeseheneLeer: frisch, hinweis, ct);
         // Aus „dirty“ fällt nur, wessen Ergebnis jetzt gefaltet ist: ein zu früh gelesener Ziel-Stream (die Weckung eines anderen Vorgangs kam
         //   vor dem Ergebnis) bleibt, bis es da ist — sonst fände ein Noop oder eine Ablehnung (kein Signal) nur noch der Backstop.
-        dirty.ExceptWith(mitErgebnis);
+        dirty.ExceptWith(ein.MitErgebnis);
 
-        await SchreibeMarkingAsync(korrelation, regelHash, mz.Version, marking, frisch, ct);
-        return kandidaten;
+        // Vom Backstop geweckt heißt: der Vorgang ist still geworden — sein Stand geht jetzt durabel, damit eine spätere kalte Weckung
+        //   (Passivierung, Neustart) nicht wieder vom Beginn liest.
+        await SchreibeMarkingAsync(korrelation, regelHash, mz.Version, marking, frisch, sofort: vomBackstop, ct);
+        return (kandidaten, ein);
     }
 
     /// <summary>
-    /// Der EINE Fold — Voll wie inkrementell. Er liest je Ziel-Stream ab <c>StreamCursor[s]+1</c> (fehlt der Cursor
-    /// → ab 0) und arbeitet die gelesenen Events in das <paramref name="marking"/> ein (mutierend): je Kausalität
+    /// Der EINE Fold — Voll wie inkrementell. Er liest je Ziel-Stream ab <c>StreamCursor[s]+1</c> (fehlt der Cursor → ab dem Beginn des
+    /// Vorgangs, <see cref="Einarbeitung"/>) und arbeitet die gelesenen Events in das <paramref name="marking"/> ein (mutierend): je Kausalität
     /// (Vorgang) die drei Achsen aufgelöst/Wirkung/abgelehnt + der von einer Wirkung erzeugte Downstream-Token.
     /// Der Fixpunkt zieht dann — rein in-memory, ohne weitere I/O — aus dem Marking die Kandidaten und die Tokens.
     ///
@@ -456,52 +459,11 @@ public sealed class ProzessManager
     /// nur darüber, wenn dort nichts mehr aussteht; sonst bleibt er stehen, und ein späterer Read ohne Hinweis liest die Lücke (Wiederholung
     /// verpufft: die Marken sind idempotent).
     /// </summary>
-    private async Task<(List<Token> Tokens, List<Kandidat> Kandidaten, HashSet<Guid> MitErgebnis)> FalteAsync(
+    private async Task<(List<Token> Tokens, List<Kandidat> Kandidaten, Einarbeitung Einarbeitung)> FalteAsync(
         Guid korrelation, ManagerStatus mz, ProzessRegeln regeln, MarkingKompakt marking,
         HashSet<Guid>? nurDirty, bool nieGeseheneLeer, (Guid Stream, int Ab)? hinweis, CancellationToken ct)
     {
-        // In DIESER Weckung schon bis Head integrierte Streams (ein Read je Stream pro Weckung, wie das alte Lies).
-        var integriert = new HashSet<Guid>();
-        var mitErgebnis = new HashSet<Guid>();   // Streams, in denen diese Weckung ein eigenes Event fand
-        var eigeneKorrelation = korrelation.ToString();
-        async Task Integriere(Guid s)
-        {
-            if (!integriert.Add(s)) return;
-            var abCursor = marking.StreamCursor.TryGetValue(s, out var c) ? c + 1 : 0;
-            var von = hinweis is { } h && h.Stream == s && h.Ab > abCursor ? h.Ab : abCursor;
-            // Nur die eigenen Events: jede Wirkung, Noop- und Ablehnungs-Marke eines Befehls dieses Vorgangs trägt seine Korrelation (der
-            //   Manager setzt sie beim Feuern, der Ausführer bei Funktionsergebnissen). In einem viel beschriebenen Ziel-Stream (ein Posten,
-            //   auf den Hunderte Vorgänge reservieren) waren die meisten gelesenen Events fremd — gelesen, ausgepackt, verworfen. Der Cursor
-            //   rückt bis zum letzten eigenen Event; fremde danach liest die Datenbank erneut, liefert sie aber nicht.
-            var evs = await _store.ReadKorreliertAsync(s, von, eigeneKorrelation, ct);
-            var maxV = marking.StreamCursor.TryGetValue(s, out var alt) ? alt : -1;
-            if (evs.Count > 0) mitErgebnis.Add(s);
-            foreach (var e in evs)   // aufsteigend (Vertrag: geordnet) → „erste Wirkung" = niedrigste Version
-            {
-                if (e.AggregateVersion > maxV) maxV = e.AggregateVersion;
-                var cid = e.CausationId ?? "";
-                if (!marking.Vorgänge.TryGetValue(cid, out var vm)) { vm = new VorgangMarke(); marking.Vorgänge[cid] = vm; }
-                // „Abgelehnt": die durable KommandoAbgelehnt-Marke (Treiber-Fold/EM-1).
-                if (e.Payload is Infrastructure.Aggregate.KommandoAbgelehnt ka) { vm.Abgelehnt = true; vm.Grund = ka.Grund; }
-                // „Wirkung": ein DOMÄNEN-Event (kein IProzessIntern), NUR das erste je Vorgang (wie das alte FirstOrDefault).
-                else if (e.Payload is not IProzessIntern && !vm.Wirkung)
-                {
-                    vm.Wirkung = true; vm.TokenStream = s; vm.TokenVersion = e.AggregateVersion; vm.TokenPayload = e.Payload;
-                    vm.TokenZeit = e.CreatedAtUtc;
-                }
-                // sonst (KommandoVerarbeitet-Noop u. a. IProzessIntern): nur „aufgelöst" (Schlüssel-Präsenz).
-            }
-            // Auch ohne eigenes Event ist der Stream jetzt gesehen (bis von−1): ohne Feuern dorthin kann sich das nicht ändern — die nächste
-            //   warme Weckung liest ihn nicht erneut. Nach einem Read ab Hinweis nur, wenn in der Lücke davor nichts Eigenes mehr aussteht.
-            if (von == abCursor || LueckeErledigt(s))
-                marking.StreamCursor[s] = Math.Max(maxV, Math.Max(von - 1, 0));
-        }
-
-        // In einem frischen Vorgang kam jedes eigene Event eines Ziel-Streams aus einem Feuern dieser Aktivierung dorthin: sind alle diese
-        //   Vorgänge aufgelöst, steht in der Lücke nichts mehr, was der Fold nicht schon kennt.
-        bool LueckeErledigt(Guid s)
-            => nieGeseheneLeer && _gefeuert.TryGetValue(korrelation, out var jeStream) && jeStream.TryGetValue(s, out var vorgaenge)
-               && vorgaenge.All(v => marking.Vorgänge.ContainsKey(v.ToString()));
+        var ein = new Einarbeitung(this, korrelation, marking, nurDirty, nieGeseheneLeer, hinweis);
 
         // Wurzel-Token: das Auslöse-Event. Einmalig gelesen und im Marking zwischengehalten (unveränderlich).
         if (marking.AuslöserPayload is null)
@@ -541,7 +503,7 @@ public sealed class ProzessManager
                     // Pipeline-Fluss (§14): ein WARTEN ruft nichts — es liest den Strom der Quelle nach dem ersten passenden Event.
                     if (regel.WartetAuf.Count > 0)
                     {
-                        var (k, neu) = await WarteAsync(korrelation, regel, ri, match, bereit, mz, ct);
+                        var (k, neu) = await WarteAsync(korrelation, regel, ri, match, bereit, mz, marking, ct);
                         kandidaten.Add(k);
                         if (neu is not null && !tokens.Any(t => t.Stream == neu.Stream && t.Version == neu.Version && t.Herkunft == neu.Herkunft))
                         {
@@ -574,8 +536,8 @@ public sealed class ProzessManager
                         // ★ Feuer-gerichtet (warm): NUR befeuerte (dirty) oder nie-gesehene Streams lesen; für alle
                         //   anderen trägt das gecachte Marking die Wahrheit (ihr Ergebnis kann sich nicht geändert
                         //   haben). nurDirty == null (Kaltstart/Voll-Fold) → jeden Stream lesen (Fallback).
-                        if (nurDirty is null || nurDirty.Contains(zielStream) || (!nieGeseheneLeer && !marking.StreamCursor.ContainsKey(zielStream)))
-                            await Integriere(zielStream);
+                        if (ein.MussLesen(zielStream))
+                            await ein.IntegriereAsync(zielStream, ct);
                         var marke = marking.Vorgänge.GetValueOrDefault(vorgang.ToString());
                         var aufgeloest = marke is not null;                 // irgendein Ziel-Event mit dieser Kausalität
                         var wirkung = marke?.Wirkung ?? false;               // ein Domänen-Event → kompensierbar + Join
@@ -615,17 +577,83 @@ public sealed class ProzessManager
                 }
             }
         }
-        return (tokens, kandidaten, mitErgebnis);
+        return (tokens, kandidaten, ein);
     }
 
     /// <summary>
-    /// Ein WARTE-Knoten (§14): das erste der erwarteten Events im Strom der Quelle NACH ihrer Version. Kein Cursor, kein Marking —
-    /// der Strom wird bei jeder Weckung frisch gelesen (offene Warte-Knoten sind selten und warten lange; der §3-Backstop weckt sie).
-    /// Ein Event, das erst NACH dem Zeitlimit geschrieben wurde, zählt nicht: das Rennen gewinnt, wer zuerst da war (DB-Zeit).
+    /// Das Einarbeiten der Ziel-Streams EINER Weckung in das Marking — geteilt vom Fold und von der Kompensation (dieselben Regeln, derselbe
+    /// Cursor). Je Stream höchstens ein Read je Weckung; er liest nur die eigenen Events (Korrelation) ab dem Cursor, ab einem Hinweis oder —
+    /// ohne Cursor — ab dem Beginn des Vorgangs (der Store grenzt das ab, <see cref="IEventStoreRepository.ReadKorreliertAsync"/>).
+    /// </summary>
+    private sealed class Einarbeitung(
+        ProzessManager m, Guid korrelation, MarkingKompakt marking, HashSet<Guid>? nurDirty, bool nieGeseheneLeer, (Guid Stream, int Ab)? hinweis)
+    {
+        private readonly HashSet<Guid> _integriert = new();
+        private readonly string _eigeneKorrelation = korrelation.ToString();
+
+        public MarkingKompakt Marking => marking;
+        /// <summary>Streams, in denen diese Weckung ein eigenes Event fand.</summary>
+        public HashSet<Guid> MitErgebnis { get; } = new();
+
+        /// <summary>
+        /// Muss der Stream in dieser Weckung gelesen werden? Kalt bzw. vom Backstop jeder; warm nur befeuerte (dirty) oder — außer in einem
+        /// frischen Vorgang, wo sie sicher leer sind — nie gesehene; für alle anderen trägt das Marking die Wahrheit (ihr Ergebnis kann sich ohne
+        /// Feuern dorthin nicht geändert haben).
+        /// </summary>
+        public bool MussLesen(Guid s)
+            => nurDirty is null || nurDirty.Contains(s) || (!nieGeseheneLeer && !marking.StreamCursor.ContainsKey(s));
+
+        public async Task IntegriereAsync(Guid s, CancellationToken ct)
+        {
+            if (!_integriert.Add(s)) return;
+            var abCursor = marking.StreamCursor.TryGetValue(s, out var c) ? c + 1 : 0;
+            var von = hinweis is { } h && h.Stream == s && h.Ab > abCursor ? h.Ab : abCursor;
+            // Nur die eigenen Events: jede Wirkung, Noop- und Ablehnungs-Marke eines Befehls dieses Vorgangs trägt seine Korrelation (der
+            //   Manager setzt sie beim Feuern, der Ausführer bei Funktionsergebnissen). In einem viel beschriebenen Ziel-Stream (ein Posten,
+            //   auf den Hunderte Vorgänge reservieren) waren die meisten gelesenen Events fremd — gelesen, ausgepackt, verworfen.
+            var gelesen = await m._store.ReadKorreliertAsync(s, von, _eigeneKorrelation, korrelation, ct);
+            var maxV = marking.StreamCursor.TryGetValue(s, out var alt) ? alt : -1;
+            if (gelesen.Events.Count > 0) MitErgebnis.Add(s);
+            foreach (var e in gelesen.Events)   // aufsteigend (Vertrag: geordnet) → „erste Wirkung" = niedrigste Version
+            {
+                if (e.AggregateVersion > maxV) maxV = e.AggregateVersion;
+                var cid = e.CausationId ?? "";
+                if (!marking.Vorgänge.TryGetValue(cid, out var vm)) { vm = new VorgangMarke(); marking.Vorgänge[cid] = vm; }
+                // „Abgelehnt": die durable KommandoAbgelehnt-Marke (Treiber-Fold/EM-1).
+                if (e.Payload is Infrastructure.Aggregate.KommandoAbgelehnt ka) { vm.Abgelehnt = true; vm.Grund = ka.Grund; }
+                // „Wirkung": ein DOMÄNEN-Event (kein IProzessIntern), NUR das erste je Vorgang (wie das alte FirstOrDefault).
+                else if (e.Payload is not IProzessIntern && !vm.Wirkung)
+                {
+                    vm.Wirkung = true; vm.TokenStream = s; vm.TokenVersion = e.AggregateVersion; vm.TokenPayload = e.Payload;
+                    vm.TokenZeit = e.CreatedAtUtc;
+                }
+                // sonst (KommandoVerarbeitet-Noop u. a. IProzessIntern): nur „aufgelöst" (Schlüssel-Präsenz).
+            }
+            // Der Stream ist jetzt bis zu seinem Kopf gesehen: alles Eigene bis dorthin war im Read (ein sichtbares Event hat keine unsichtbaren
+            //   davor), fremde Events dahinter liest die nächste Weckung nicht noch einmal. Nach einem Read ab Hinweis nur, wenn in der Lücke davor
+            //   nichts Eigenes mehr aussteht.
+            if (von == abCursor || LueckeErledigt(s))
+                marking.StreamCursor[s] = Math.Max(maxV, Math.Max(gelesen.Kopf, Math.Max(von - 1, 0)));
+        }
+
+        // In einem frischen Vorgang kam jedes eigene Event eines Ziel-Streams aus einem Feuern dieser Aktivierung dorthin: sind alle diese
+        //   Vorgänge aufgelöst, steht in der Lücke nichts mehr, was der Fold nicht schon kennt.
+        private bool LueckeErledigt(Guid s)
+            => nieGeseheneLeer && m._gefeuert.TryGetValue(korrelation, out var jeStream) && jeStream.TryGetValue(s, out var vorgaenge)
+               && vorgaenge.All(v => marking.Vorgänge.ContainsKey(v.ToString()));
+    }
+
+    /// <summary>
+    /// Ein WARTE-Knoten (§14): das erste der erwarteten Events im Strom der Quelle NACH ihrer Version. Der Strom gehört nicht dem Vorgang (fremde
+    /// Events, keine Korrelation): der Knoten merkt sich im Marking, bis wohin er ihn geprüft hat (<see cref="VorgangMarke.Gelesen"/>), und
+    /// liest bei der nächsten Weckung nur dahinter — ein langes Warten auf einem viel beschriebenen Strom kostet so je Weckung nur das Neue, nicht
+    /// alles seit dem Auslöser. Den Treffer hält die Marke wie eine Wirkung fest. Ein Event, das erst NACH dem Zeitlimit geschrieben wurde,
+    /// zählt nicht: das Rennen gewinnt, wer zuerst da war (DB-Zeit); geprüfte Events zählen auch später nicht, der Zeiger darf über sie.
     /// Ein umgeleiteter Ablauf (⏳ verdrahtet) wird zum Token <see cref="ZeitlimitAbgelaufen"/>.
     /// </summary>
     private async Task<(Kandidat Kandidat, Token? Neu)> WarteAsync(
-        Guid korrelation, Regel regel, int ri, IReadOnlyList<Token> match, DateTimeOffset bereit, ManagerStatus mz, CancellationToken ct)
+        Guid korrelation, Regel regel, int ri, IReadOnlyList<Token> match, DateTimeOffset bereit, ManagerStatus mz, MarkingKompakt marking,
+        CancellationToken ct)
     {
         var primär = match[0];
         var strom = (QuellStrom)primär.Payload;
@@ -637,14 +665,30 @@ public sealed class ProzessManager
             return (new Kandidat(regel, ri, match, null, null, vorgang, true, false, false, "", bereit, teile),
                 new Token(new ZeitlimitAbgelaufen(umleitung.Grund), vorgang, -1, umleitung.Zeit, herkunft, teile));
 
-        var frist = regel.Zeitlimit is { } z && bereit != default ? bereit + z : (DateTimeOffset?)null;
-        var treffer = (await _store.ReadStreamAsync(strom.Id, strom.Version + 1, ct))
-            .FirstOrDefault(e => e.AggregateVersion > strom.Version
+        var schluessel = vorgang.ToString();
+        var marke = marking.Vorgänge.GetValueOrDefault(schluessel);
+        if (marke is not { Wirkung: true })
+        {
+            var frist = regel.Zeitlimit is { } z && bereit != default ? bereit + z : (DateTimeOffset?)null;
+            var ab = Math.Max(strom.Version, marke?.Gelesen ?? 0) + 1;
+            var gelesen = await _store.ReadStreamAsync(strom.Id, ab, ct);
+            var treffer = gelesen.FirstOrDefault(e => e.AggregateVersion >= ab
                 && regel.WartetAuf.Any(t => t.IsInstanceOfType(e.Payload))
                 && (frist is null || e.CreatedAtUtc <= frist));
-        var kandidat = new Kandidat(regel, ri, match, null, null, vorgang, treffer is not null, treffer is not null, false, "", bereit, teile);
-        return (kandidat, treffer is null ? null
-            : new Token(treffer.Payload, strom.Id, treffer.AggregateVersion, treffer.CreatedAtUtc, herkunft, teile));
+            if (gelesen.Count > 0)
+            {
+                if (marke is null) marking.Vorgänge[schluessel] = marke = new VorgangMarke();
+                marke.Gelesen = Math.Max(marke.Gelesen, gelesen.Max(e => e.AggregateVersion));
+                if (treffer is not null)
+                {
+                    marke.Wirkung = true; marke.TokenStream = strom.Id; marke.TokenVersion = treffer.AggregateVersion;
+                    marke.TokenPayload = treffer.Payload; marke.TokenZeit = treffer.CreatedAtUtc;
+                }
+            }
+        }
+        var da = marke is { Wirkung: true };
+        var kandidat = new Kandidat(regel, ri, match, null, null, vorgang, da, da, false, "", bereit, teile);
+        return (kandidat, da ? new Token(marke!.TokenPayload!, strom.Id, marke.TokenVersion, marke.TokenZeit, herkunft, teile) : null);
     }
 
     // ── P5b: Marking-Cache laden/schreiben (best-effort; ein Fehler kostet nur Tempo, nie Korrektheit) ──
@@ -686,14 +730,30 @@ public sealed class ProzessManager
     /// gedrosselt (alle <see cref="_markingSchreibIntervall"/> Weckungen) durabel in den Store (best-effort).
     /// So bleibt der durable Write O(N²/K) statt O(N²) — ohne die Warm-Korrektheit anzutasten.
     /// </summary>
-    private async Task SchreibeMarkingAsync(Guid korrelation, string regelHash, int logVersion, MarkingKompakt marking, bool frisch, CancellationToken ct)
+    private async Task SchreibeMarkingAsync(Guid korrelation, string regelHash, int logVersion, MarkingKompakt marking, bool frisch, bool sofort,
+        CancellationToken ct)
     {
         _hotMarking[korrelation] = (regelHash, marking, frisch);
 
         var seit = _seitSchreib.GetValueOrDefault(korrelation) + 1;
-        if (seit < _markingSchreibIntervall) { _seitSchreib[korrelation] = seit; return; }
+        if (seit < _markingSchreibIntervall && !sofort) { _seitSchreib[korrelation] = seit; return; }
         _seitSchreib[korrelation] = 0;
+        await SchreibeDurabelAsync(korrelation, regelHash, logVersion, marking, ct);
+    }
 
+    /// <summary>
+    /// Vor dem Passivieren (der Actor stoppt): was diese Aktivierung seit dem letzten durablen Write gefaltet hat, durabel ablegen — sonst
+    /// begänne die nächste Aktivierung eines noch offenen Vorgangs beim letzten Write (oder ohne einen beim Beginn des Vorgangs). Best-effort.
+    /// </summary>
+    public async Task SichereMarkingAsync(Guid korrelation, CancellationToken ct = default)
+    {
+        if (!CursorAktiv || _seitSchreib.GetValueOrDefault(korrelation) == 0 || !_hotMarking.TryGetValue(korrelation, out var hot)) return;
+        _seitSchreib[korrelation] = 0;
+        await SchreibeDurabelAsync(korrelation, hot.RegelHash, _status.GetValueOrDefault(korrelation)?.Version ?? 0, hot.Marking, ct);
+    }
+
+    private async Task SchreibeDurabelAsync(Guid korrelation, string regelHash, int logVersion, MarkingKompakt marking, CancellationToken ct)
+    {
         _markingDurabel.Add(korrelation);
         try
         {
@@ -746,7 +806,7 @@ public sealed class ProzessManager
     /// entscheidet <c>Unvollziehbar != null</c> zwischen sauberem Fehlschlag-Terminal und KlärungNötig (#12).
     /// </summary>
     private async Task<(Kompensation? Naechste, Kompensation? Unvollziehbar)> NächsteKompensationAsync(
-        Guid korrelation, List<Kandidat> kandidaten, IReadOnlyDictionary<Guid, string> gescheitert, CancellationToken ct)
+        Guid korrelation, List<Kandidat> kandidaten, IReadOnlyDictionary<Guid, string> gescheitert, Einarbeitung ein, CancellationToken ct)
     {
         Kompensation? unvollziehbar = null;
         // Erfolgreiche Vorwärts-Transitionen, die einen Gegenzug tragen — rückwärts durch den DAG
@@ -765,17 +825,18 @@ public sealed class ProzessManager
                 // Schon ausgeglichen? Der Gegenzug ist erledigt, wenn sein Ergebnis auf dem Ziel-Stream liegt —
                 // ABER nur ein Ergebnis, das KEINE Ablehnung ist (eine Wirkung ODER die KommandoVerarbeitet-Noop-
                 // Marke). Eine KommandoAbgelehnt-Marke zählt NICHT als erledigt (der Gegenzug wurde abgelehnt).
-                var zielEvents = await _store.ReadStreamAsync(cmd.AggregateId, 0, ct);
-                var erledigt = zielEvents.Any(e =>
-                    e.CausationId == vorgang.ToString() && e.Payload is not Infrastructure.Aggregate.KommandoAbgelehnt);
+                // Das Ergebnis trägt die Korrelation des Vorgangs wie jedes andere: es steht im Marking, sobald der Ziel-Stream eingearbeitet
+                //   ist — nach denselben Regeln wie im Fold (Cursor, Hinweis, dirty), nie mehr der ganze Ziel-Stream ab 0.
+                if (ein.MussLesen(cmd.AggregateId)) await ein.IntegriereAsync(cmd.AggregateId, ct);
+                var marke = ein.Marking.Vorgänge.GetValueOrDefault(vorgang.ToString());
+                var erledigt = marke is not null && (marke.Wirkung || !marke.Abgelehnt);
                 if (erledigt) continue;
                 // ★ Audit-Fix #12 + Treiber-Fold: Der Gegenzug wurde SELBST abgelehnt — als durable
                 //   KommandoAbgelehnt-Marke auf dem Ziel-Stream (der Fold ersetzt die frühere Quittung; nach
                 //   Entfall des Quittungs-Pfads ist der Marker die Wahrheit). NICHT neu feuern (sonst enger
                 //   Kompensations-Livelock: „erledigt" wird er nie) — als unvollziehbar merken und weitersuchen.
                 //   (gescheitert.ContainsKey bleibt als zweite Quelle stehen: harmlos, deckt Alt-/Boot-Zustände.)
-                var abgelehnt = zielEvents.Any(e =>
-                    e.CausationId == vorgang.ToString() && e.Payload is Infrastructure.Aggregate.KommandoAbgelehnt);
+                var abgelehnt = marke?.Abgelehnt ?? false;
                 if (abgelehnt || gescheitert.ContainsKey(vorgang)) { unvollziehbar ??= new Kompensation(cmd, vorgang, k); continue; }
                 return (new Kompensation(cmd, vorgang, k), unvollziehbar);
             }

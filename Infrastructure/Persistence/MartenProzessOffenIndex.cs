@@ -36,6 +36,23 @@ public sealed class MartenProzessOffenIndex : IProzessOffenIndex
         return await session.Query<ProzessOffen>().Select(x => x.Id).ToListAsync(ct);
     }
 
+    public async Task<IReadOnlySet<Guid>> OffeneAusAsync(IReadOnlyCollection<Guid> kandidaten, CancellationToken ct)
+    {
+        if (kandidaten.Count == 0) return new HashSet<Guid>();
+        await using var session = _store.QuerySession();
+        return (await OffeneAusAbfrage(session, kandidaten.ToArray()).ToListAsync(ct)).ToHashSet();
+    }
+
+    /// <summary>Die Abfrage „welche dieser Korrelationen sind offen?“ (je Seite des Prozess-Polls) — eine Quelle für den Index und den Plan-Test.</summary>
+    public static IQueryable<Guid> OffeneAusAbfrage(IQuerySession session, Guid[] kandidaten)
+        => session.Query<ProzessOffen>().Where(x => kandidaten.Contains(x.Id)).Select(x => x.Id);
+
+    public async Task<int> ZaehleOffeneAsync(CancellationToken ct)
+    {
+        await using var session = _store.QuerySession();
+        return await session.Query<ProzessOffen>().CountAsync(ct);
+    }
+
     /// <summary>Patch statt Store: ein inzwischen beendeter (gelöschter) Eintrag entsteht nicht neu.</summary>
     public async Task SetzeFristAsync(Guid korrelation, DateTimeOffset? frist, CancellationToken ct)
     {

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using FluentAssertions;
@@ -34,6 +35,32 @@ public class BatchLeserTests
         await leser.LaufAsync(Ct);
         db.Partitionen["p:0"].Version.Should().Be(2);
         db.Partitionen["p:0"].Position.Should().Be(6, "nach dem Poll-Intervall wird die Lese-Position durabel");
+    }
+
+    [Fact]
+    public async Task Steht_der_Horizont_bleibt_die_Liste_der_Erledigten_begrenzt_und_nichts_geht_verloren()
+    {
+        // Eine lange offene Transaktion hält die gesetzte Sequenz an: alles danach ist sichtbar, aber nicht gesetzt. Der Leser wendet Jüngeres
+        //   trotzdem an und merkt es sich — ohne Grenze wüchse die Liste mit jedem Event und ginge mit jeder Seite an die Datenbank.
+        var log = new PartitionsLog();
+        var db = new SpeicherKonsum();
+        var tracker = new SpeicherTracker(db);
+        var konsum = new Konsum(Partitionen: 1, BatchGroesse: 100);
+        var leser = new BatchLeser(log, tracker, "p", 0, konsum, null,
+            (e, _) => { tracker.Wende(e.AggregateId, e.AggregateVersion); return Task.CompletedTask; });
+        const int n = 3 * BatchLeser.ErledigtHoechstens;
+        var eintraege = new List<PartitionsLog.Eintrag>();
+        for (var i = 1; i <= n; i++) eintraege.Add(log.Haenge(Guid.NewGuid(), 1, gesetzt: false));
+        for (var w = 0; w < 5; w++) await leser.LaufAsync(Ct);   // fünf Weckungen, der Horizont steht
+
+        log.GroessteAusschlussliste.Should().BeLessThanOrEqualTo(BatchLeser.ErledigtHoechstens + konsum.BatchGroesse,
+            "die Liste der Erledigten ist gedeckelt — eine Seite kostet nicht mehr, je länger der Horizont steht");
+        db.Angewandt.Count.Should().BeLessThan(n, "jenseits der Grenze wartet der Leser, bis die Position nachrückt");
+
+        foreach (var e in eintraege) e.Gesetzt = true;   // die Transaktion endet
+        for (var w = 0; w < 3; w++) await leser.LaufAsync(Ct);
+        db.Angewandt.Should().HaveCount(n, "jedes Event genau einmal").And.OnlyHaveUniqueItems();
+        db.Partitionen["p:0"].Position.Should().Be(n);
     }
 
     [Fact]

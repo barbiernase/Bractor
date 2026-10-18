@@ -43,14 +43,17 @@ public class ReadModelDepsWriter : IReadModelDepsSink
     internal const string ReadModelKeyPrefix = "rm:";
 
     private readonly Infrastructure.Persistence.RedisPraefix? _praefix;
+    private readonly TimeSpan _haltbarkeit;
 
     public ReadModelDepsWriter(
         IConnectionMultiplexer redis,
         IVersionTracker versionTracker,
         ILogger<ReadModelDepsWriter> logger,
-        Infrastructure.Persistence.RedisPraefix? praefix = null)
+        Infrastructure.Persistence.RedisPraefix? praefix = null,
+        Infrastructure.Persistence.VersionIndexHaltbarkeit? haltbarkeit = null)
     {
         _praefix = praefix;
+        _haltbarkeit = (haltbarkeit ?? Infrastructure.Persistence.VersionIndexHaltbarkeit.Standard).Dauer;
         _redis = redis ?? throw new ArgumentNullException(nameof(redis));
         _versionTracker = versionTracker ?? throw new ArgumentNullException(nameof(versionTracker));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -152,8 +155,9 @@ public class ReadModelDepsWriter : IReadModelDepsSink
                 }
                 else
                 {
-                    // Aggregat nicht im VersionTracker (noch nie getrackt oder Redis-Ausfall)
-                    _logger.LogWarning(
+                    // Aggregat nicht im VersionTracker (noch nie getrackt, länger als die Haltbarkeit unverändert, oder Redis-Ausfall) — dann
+                    //   gibt es nichts, worauf ein Leser warten müsste.
+                    _logger.LogDebug(
                         "Lookup-Ref for {AggregateType}/{AggregateId} not found in VersionTracker. " +
                         "Skipping dep for ReadModel '{ReadModelId}'.",
                         track.AggregateType.Name, track.Id, result.ReadModelId);
@@ -200,6 +204,8 @@ public class ReadModelDepsWriter : IReadModelDepsSink
             }
 
             tasks.Add(batch.HashSetAsync(key, entries));
+            // Lebt so lange wie der letzte Schreibvorgang plus die Haltbarkeit — ein Read-Model, das niemand mehr ändert, verschwindet aus Redis.
+            tasks.Add(batch.KeyExpireAsync(key, _haltbarkeit));
         }
 
         batch.Execute();

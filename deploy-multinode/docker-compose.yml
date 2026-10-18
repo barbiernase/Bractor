@@ -63,6 +63,9 @@ services:
 
   redis:
     image: redis:7-alpine
+    # Der Version-Index ist verlierbar (Read your writes): Schlüssel laufen ab (VersionIndex.HaltbarkeitStunden), und wird es doch eng,
+    #   verdrängt Redis die ältesten mit Ablauf, statt den Speicher des Rechners zu füllen.
+    command: redis-server --maxmemory 512mb --maxmemory-policy volatile-lru
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

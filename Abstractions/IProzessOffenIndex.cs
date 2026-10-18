@@ -23,6 +23,21 @@ public interface IProzessOffenIndex
     Task<IReadOnlyList<Guid>> ListeOffeneAsync(CancellationToken ct);
 
     /// <summary>
+    /// Welche der <paramref name="kandidaten"/> offen sind — eine Abfrage über den Schlüssel, die Kosten hängen an der Zahl der Kandidaten, nicht
+    /// an der Zahl der offenen Vorgänge. Der Prozess-Poll fragt so je Seite nach den Korrelationen ihrer Events. Ohne eigene Ablage über
+    /// <see cref="ListeOffeneAsync"/>.
+    /// </summary>
+    async Task<IReadOnlySet<Guid>> OffeneAusAsync(IReadOnlyCollection<Guid> kandidaten, CancellationToken ct)
+    {
+        if (kandidaten.Count == 0) return new HashSet<Guid>();
+        var gesucht = kandidaten as IReadOnlySet<Guid> ?? new HashSet<Guid>(kandidaten);
+        return (await ListeOffeneAsync(ct)).Where(gesucht.Contains).ToHashSet();
+    }
+
+    /// <summary>Wie viele Vorgänge offen sind (Kennzahl) — nur die Zahl, nicht die Liste. Ohne eigene Ablage über <see cref="ListeOffeneAsync"/>.</summary>
+    async Task<int> ZaehleOffeneAsync(CancellationToken ct) => (await ListeOffeneAsync(ct)).Count;
+
+    /// <summary>
     /// Die Frist eines offenen Prozesses: bis wann ihn der Backstop wecken muss, auch wenn kein Event kommt (ein Zeitlimit läuft ab, ein
     /// Warte-Knoten liest seinen Strom nach). <c>null</c> = keine. Gleicher Status wie der Index: ein verlorener Eintrag kostet höchstens
     /// die Genauigkeit des Zeitlimits bis zur nächsten Heil-Weckung, nie Korrektheit. Ohne Ablage (Prüfstand) folgenlos.

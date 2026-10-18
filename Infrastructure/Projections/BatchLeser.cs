@@ -34,6 +34,15 @@ public sealed class BatchLeser
 {
     private const int KonfliktVersuche = 5;
 
+    /// <summary>
+    /// So viele erledigte Sequenzen jenseits der Lese-Position merkt sich eine Aktivierung höchstens. Steht die Position — der Horizont steht
+    /// (eine lange offene Transaktion irgendwo im selben Postgres, etwa eine Sicherung) oder ein Stream hängt —, wüchse die Liste sonst mit jedem
+    /// Event und ginge mit jeder Seite an die Datenbank, die alle Erledigten erneut übergeht: die Kosten wüchsen quadratisch mit der Dauer. Ist
+    /// sie voll, wendet der Leser nur noch an, was bis zur gesetzten Sequenz reicht (das Übrige wartet, bis die Position nachrückt), und parkt
+    /// einen hängenden Stream, statt hinter ihm weiter zu sammeln.
+    /// </summary>
+    public const int ErledigtHoechstens = 5_000;
+
     private readonly IEventStoreRepository _eventStore;
     private readonly IProjectionTracker _tracker;
     private readonly string _projektionsId;
@@ -54,6 +63,7 @@ public sealed class BatchLeser
     private readonly HashSet<long> _erledigt = new();
     private DateTimeOffset _letzterCommit = DateTimeOffset.MinValue;
     private DateTimeOffset _naechsterParkVersuch = DateTimeOffset.MinValue;
+    private DateTimeOffset _letzteVollWarnung = DateTimeOffset.MinValue;
 
     /// <param name="typen">Speicher-Diskriminatoren der abonnierten Typen samt Upcasting-Vorgängern (<see cref="TypenAus"/>); null = ohne Typfilter.</param>
     /// <param name="absturzVorCommit">Prüf-Naht: läuft nach dem Dispatch eines Batches, vor seinem Commit (Absturz mitten im Batch, zweite Aktivierung).</param>
@@ -187,6 +197,29 @@ public sealed class BatchLeser
                 return angewandt;
             }
 
+            // Die Liste der Erledigten ist voll: nur noch anwenden, was bis zur gesetzten Sequenz reicht — dorthin darf die Position, dann
+            //   schrumpft die Liste. Reicht nichts so weit, wartet die Partition, bis der Horizont nachrückt (eine Seite je Weckung, gedeckelt).
+            if (_erledigt.Count >= ErledigtHoechstens)
+            {
+                var bisGesetzt = events.Where(e => e.Sequenz <= seite.Gesetzt).ToList();
+                if (bisGesetzt.Count == 0)
+                {
+                    Rueckevor(seite.Gesetzt);
+                    if (_erledigt.Count < ErledigtHoechstens) continue;
+                    if (_jetzt() - _letzteVollWarnung >= Konsum.PollIntervall)
+                    {
+                        _letzteVollWarnung = _jetzt();
+                        _logger?.LogWarning("[Konsum] {Projektion}/{Partition}: {N} Events jenseits der gesetzten Sequenz {Gesetzt} angewandt — die Partition "
+                            + "wartet, bis der Horizont nachrückt (eine lange offene Transaktion?)", _projektionsId, _partition, _erledigt.Count, seite.Gesetzt);
+                    }
+                    return angewandt;
+                }
+                // Reichte die volle Seite nicht bis zur gesetzten Sequenz, darf die Position nur bis zu ihrem Ende.
+                var bis = seite.Voll && bisGesetzt.Count == events.Count ? Math.Min(seite.Gesetzt, events[^1].Sequenz) : seite.Gesetzt;
+                angewandt += await VerarbeiteSeiteAsync(bisGesetzt, bis, ct);
+                continue;
+            }
+
             // Bis wohin die Position nach dieser Seite darf: nie über die gesetzte Sequenz, bei voller Seite nie über ihr Ende.
             var grenze = seite.Gesetzt;
             if (seite.Voll) grenze = Math.Min(grenze, events[^1].Sequenz);
@@ -244,6 +277,16 @@ public sealed class BatchLeser
             var r = await VersucheAsync(events, teil, guards, geparkt, _lese, ct);
             if (r.Ok) angewandt += r.Angewandt;
             else await FehlschlagAsync(teil, r);
+        }
+
+        // Hängt ein Stream, während die Liste der Erledigten voll ist, wird er geparkt (je Poll-Intervall einzeln versucht wie ein Poison-Stream),
+        //   statt die Position weiter aufzuhalten und hinter ihm zu sammeln.
+        if (haengend.Count > 0 && _erledigt.Count + events.Count >= ErledigtHoechstens)
+        {
+            foreach (var h in haengend)
+                Parke(h, guards, new InvalidOperationException(
+                    $"hängt an Konflikten am geteilten Dokument, während {ErledigtHoechstens} spätere Events warten"), geparkt);
+            haengend.Clear();
         }
 
         // Abschluss: Position (nie über das erste Event eines hängenden Streams) und Geparkt in einem Commit.

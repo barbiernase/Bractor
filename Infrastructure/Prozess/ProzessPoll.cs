@@ -68,7 +68,9 @@ public sealed class ProzessPoll
                 return geweckt;
             }
 
-            var offene = new HashSet<Guid>(await _offenIndex.ListeOffeneAsync(ct));
+            // Offen oder nicht fragt der Poll nur für die Korrelationen dieser Seite (eine Abfrage über den Schlüssel) — nie die ganze Liste der
+            //   offenen Vorgänge, die mit dem Bestand wächst (bei 200 000 offenen las sonst jede Seite alle).
+            var offene = await _offenIndex.OffeneAusAsync(ProzessPollFilter.Kandidaten(events.Select(e => e.Event), _auslöserZuProzess), ct);
             var kandidaten = events
                 .Select(e => (e.Sequenz, Weckung: ProzessPollFilter.Weckung(e.Event, _auslöserZuProzess, offene)))
                 .Where(x => x.Weckung is not null)

@@ -16,8 +16,8 @@ namespace Infrastructure.Persistence;
 ///
 /// Ein von Marten verwaltetes Schema-Objekt (<c>Storage.ExtendedSchemaObjects</c>): Marten legt Tabelle und Index an (Migrator eager, sonst beim
 /// ersten Schreiben über <c>QueueSqlCommand</c> bzw. über <see cref="SicherAsync"/>) und Weasel pflegt sie — eigene Indizes auf Martens Tabellen
-/// würde Weasel beim Abgleich löschen. Der Zeit-Index ist BRIN: die Zeilen kommen in Zeitordnung, der Index kostet beim Einfügen fast nichts
-/// und reicht dem <see cref="InboxAufraeumer"/>.
+/// würde Weasel beim Abgleich löschen. Der Zeit-Index ist ein B-Baum: die Zeit wächst nur, neue Einträge kommen an seinen rechten Rand (billig
+/// wie der Index auf <c>seq_id</c>), und der <see cref="InboxAufraeumer"/> findet die ältesten, ohne die Tabelle zu durchsuchen (PF-27).
 /// </summary>
 public static class InboxTabelle
 {
@@ -35,7 +35,7 @@ public static class InboxTabelle
         t.AddColumn<Guid>("stream_id").NotNull();
         t.AddColumn<bool>("abgelehnt").NotNull();
         t.AddColumn("zeit", "timestamptz").NotNull().DefaultValueByExpression("now()");
-        t.Indexes.Add(new IndexDefinition($"ix_{Tabelle}_zeit") { Columns = ["zeit"], Method = IndexMethod.brin });
+        t.Indexes.Add(new IndexDefinition($"ix_{Tabelle}_zeit") { Columns = ["zeit"] });
         options.Storage.ExtendedSchemaObjects.Add(t);
 
         options.ConfigurePolly(b => b.AddRetry(new()

@@ -29,6 +29,8 @@ public sealed class PartitionsLog : IEventStoreRepository
     public bool DoppeltUndUngeordnet { get; set; }
 
     public int Lesungen { get; private set; }
+    /// <summary>Die längste Liste erledigter Sequenzen, die ein Leser je mit einer Seite schickte (sie ginge im Betrieb an die Datenbank).</summary>
+    public int GroessteAusschlussliste { get; private set; }
 
     public Eintrag Haenge(Guid stream, int version, bool sichtbar = true, bool gesetzt = true)
     {
@@ -47,6 +49,7 @@ public sealed class PartitionsLog : IEventStoreRepository
         lock (_log)
         {
             Lesungen++;
+            GroessteAusschlussliste = Math.Max(GroessteAusschlussliste, ausser.Count);
             var sichtbar = _log.Where(e => e.Sichtbar && e.Seq > nach).ToList();
             var gesetzt = sichtbar.Where(e => e.Gesetzt).Select(e => e.Seq).DefaultIfEmpty(nach).Max();
             var seite = sichtbar

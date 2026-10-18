@@ -56,6 +56,8 @@ public sealed class VersionIndexKonfig
     public int Datenbank { get; set; } = 1;
     /// <summary>Schlüssel-Präfix — zwei Umgebungen auf einem Redis dürfen sich nie mischen.</summary>
     public string Praefix { get; set; } = "";
+    /// <summary>Wie lange ein Schlüssel ohne neuen Schreibvorgang lebt (Stunden). Der Index trägt nur „Read your writes“ für Sekunden.</summary>
+    public int HaltbarkeitStunden { get; set; } = 24;
 }
 
 /// <summary>Der Cluster (Proto.Actor).</summary>

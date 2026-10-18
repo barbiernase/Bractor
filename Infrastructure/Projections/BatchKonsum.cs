@@ -123,15 +123,31 @@ public interface IKonsumRueckstand
     Task<IReadOnlyList<KonsumStand>> ErfasseAsync(CancellationToken ct);
 }
 
-/// <summary>Rückstand einer Projektion: Events jenseits der Positionen ihrer Partitionen und geparkte Streams.</summary>
-public sealed record KonsumStand(string ProjektionsId, long Rueckstand, int Geparkt);
+/// <summary>
+/// Rückstand einer Projektion: Events ihrer Typen jenseits der Positionen ihrer Partitionen (gezählt höchstens bis
+/// <see cref="KonsumRueckstand.ZaehlGrenze"/>; <paramref name="Gekappt"/> = es sind mehr) und geparkte Streams.
+/// </summary>
+public sealed record KonsumStand(string ProjektionsId, long Rueckstand, int Geparkt, bool Gekappt = false);
 
 /// <summary>
 /// Liest den Rückstand aus dem Log und den Partitions-Checkpoints: je Projektion eine Abfrage — Events ihrer Typen, deren Sequenz über der
-/// Position ihrer Partition liegt.
+/// Position ihrer Partition liegt. Gezählt wird nur über die ersten <see cref="ZaehlGrenze"/> Events hinter der kleinsten Position: steht eine
+/// Partition weit zurück (oder hat noch keinen Checkpoint), läse ein volles <c>count(*)</c> bei jedem Abruf von <c>/health</c> das ganze Log.
 /// </summary>
 public sealed class KonsumRueckstand(IDocumentStore marten, IEnumerable<BatchRegistrierung> registrierungen, Konsum konsum) : IKonsumRueckstand
 {
+    /// <summary>So viele Events hinter der kleinsten Position sieht sich die Zählung höchstens an.</summary>
+    public const int ZaehlGrenze = 1_000;
+
+    /// <summary>
+    /// Die Zählung (eine Quelle für den Store und den Plan-Test): unter den ersten $4 Events hinter $1 die, die hinter der Position ihrer
+    /// Partition liegen ($2 Positionen, $3 Partitionen), optional nur die Typen $5; dazu, wie viele Events angesehen wurden.
+    /// </summary>
+    public static string Abfrage(string schema, bool mitTypen)
+        => $"select count(*) filter (where seq_id > ($2::bigint[])[{Infrastructure.Persistence.PartitionsAusdruck.Sql("stream_id")} % $3 + 1]"
+           + (mitTypen ? " and type = any($5)" : "") + "), count(*) "
+           + $"from (select seq_id, stream_id, type from {schema}.mt_events where seq_id > $1 order by seq_id limit $4) x";
+
     public async Task<IReadOnlyList<KonsumStand>> ErfasseAsync(CancellationToken ct)
     {
         var ergebnis = new List<KonsumStand>();
@@ -144,13 +160,21 @@ public sealed class KonsumRueckstand(IDocumentStore marten, IEnumerable<BatchReg
             var positionen = new long[konsum.Partitionen];
             foreach (var p in partitionen.Where(p => p.Partition < konsum.Partitionen)) positionen[p.Partition] = p.Position;
             var typen = BatchLeser.TypenAus(reg.EventTypes)?.ToArray();
-            var sql = $"select count(*) from {schema}.mt_events where seq_id > ? and seq_id > (?::bigint[])[{Infrastructure.Persistence.PartitionsAusdruck.Sql("stream_id")} % ? + 1]"
-                      + (typen is null ? "" : " and type = any(?)");
-            object[] parameter = typen is null
-                ? [positionen.Min(), positionen, konsum.Partitionen]
-                : [positionen.Min(), positionen, konsum.Partitionen, typen];
-            var zahl = (await s.QueryAsync<long>(sql, ct, parameter)).FirstOrDefault();
-            ergebnis.Add(new KonsumStand(reg.ProjektionsId, zahl, partitionen.Sum(p => p.Geparkt.Count)));
+            await using var conn = marten.Storage.Database.CreateConnection();
+            await conn.OpenAsync(ct);
+            await using var cmd = new Npgsql.NpgsqlCommand(Abfrage(schema, typen is not null), conn);
+            foreach (var w in typen is null
+                         ? new object[] { positionen.Min(), positionen, konsum.Partitionen, ZaehlGrenze }
+                         : new object[] { positionen.Min(), positionen, konsum.Partitionen, ZaehlGrenze, typen })
+                cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = w });
+            long zahl, angesehen;
+            await using (var r = await cmd.ExecuteReaderAsync(ct))
+            {
+                await r.ReadAsync(ct);
+                zahl = r.GetInt64(0);
+                angesehen = r.GetInt64(1);
+            }
+            ergebnis.Add(new KonsumStand(reg.ProjektionsId, zahl, partitionen.Sum(p => p.Geparkt.Count), Gekappt: angesehen >= ZaehlGrenze));
         }
         return ergebnis;
     }

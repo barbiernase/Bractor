@@ -68,10 +68,15 @@ public sealed class ProzessManagerActor : IActor
 
     public async Task ReceiveAsync(IContext context)
     {
-        // PF-5: ein Vorgang ohne Nachricht passiviert; offene Vorgänge weckt der Backstop ohnehin regelmäßig (sie bleiben aktiv).
+        // PF-5: ein Vorgang ohne Nachricht passiviert. Ein offener, stiller Vorgang wird nur noch selten geheilt (Abstand bis 1 h) — beim
+        //   Stoppen geht sein Stand deshalb durabel, damit die nächste Aktivierung dort weiterliest statt beim Beginn des Vorgangs.
         if (Infrastructure.Lebenszyklus.Passivierung.Behandle(context, _leerlauf)) return;
         switch (context.Message)
         {
+            case Stopping when _manager is not null:
+                await _manager.SichereMarkingAsync(_korrelation, CancellationToken.None);
+                break;
+
             case Started:
                 var identity = context.ClusterIdentity()?.Identity;
                 if (identity != null && Guid.TryParse(identity, out var korr))

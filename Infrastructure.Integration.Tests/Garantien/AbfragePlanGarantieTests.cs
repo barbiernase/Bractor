@@ -49,6 +49,14 @@ public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.F
                 [nah, 8, 3, Array.Empty<long>(), 500, new[] { "posten_reserviert" }]),
             ("Stream ab Version", EventStoreAbfragen.Events(S, MartenEventStore.MetadatenSpalten(_fx.Store), "stream_id = $1 and version >= $2",
                 "order by version"), [stream, 5L]),
+            // Der Prozess-Manager in einem Ziel-Stream mit 100 000 Events Geschichte: ohne Cursor ab dem Beginn des Vorgangs, mit Cursor ab dort.
+            ("Prozess: eigene Events ohne Cursor", EventStoreAbfragen.Korreliert(S, MartenEventStore.MetadatenSpalten(_fx.Store)),
+                [Fixture.Lang, 0L, Fixture.Korrelation, Fixture.Vorgang]),
+            ("Prozess: eigene Events ab Cursor", EventStoreAbfragen.Korreliert(S, MartenEventStore.MetadatenSpalten(_fx.Store)),
+                [Fixture.Lang, (long)(Fixture.LangVorher + Fixture.LangNachher - 10), Fixture.Korrelation, Fixture.Vorgang]),
+            // Rückstand in /health, eine Partition noch ohne Checkpoint (Position 0): gezählt wird nur über die ersten Events dahinter.
+            ("Rückstand ab Position 0", Infrastructure.Projections.KonsumRueckstand.Abfrage(S, true),
+                [0L, new long[8], 8, Infrastructure.Projections.KonsumRueckstand.ZaehlGrenze, new[] { "posten_reserviert" }]),
         };
         foreach (var (name, sql, werte) in faelle)
             foreach (var allgemein in new[] { false, true })
@@ -57,7 +65,7 @@ public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.F
     }
 
     [Theory, InlineData(false), InlineData(true)]
-    public async Task Die_Fristen_des_Backstops_und_des_Fristplans_lesen_ueber_den_Index(bool frischeStatistik)
+    public async Task Die_Abfragen_des_Offen_Index_lesen_ueber_den_Index(bool frischeStatistik)
     {
         await _fx.StatistikAsync(frischeStatistik);
         await using var s = _fx.Store.QuerySession();
@@ -66,6 +74,8 @@ public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.F
                  {
                      ("Backstop: fällige Vorgänge", MartenProzessOffenIndex.FaelligeAbfrage(s, jetzt).ToCommand(FetchType.FetchMany)),
                      ("Fristplan: fällige Fristen", MartenFristplan.FaelligeAbfrage(s, jetzt).ToCommand(FetchType.FetchMany)),
+                     ("Prozess-Poll: offene einer Seite", MartenProzessOffenIndex.OffeneAusAbfrage(s,
+                         Enumerable.Range(0, 20).Select(_ => Guid.NewGuid()).Append(_fx.EinOffener).ToArray()).ToCommand(FetchType.FetchMany)),
                  })
             foreach (var allgemein in new[] { false, true })
                 (await _fx.BloeckeAsync(Positional(cmd), cmd.Parameters.Select(p => p.Value!).ToArray(), allgemein)).Should().BeLessThan(HoechstBloecke,
@@ -84,6 +94,11 @@ public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.F
     {
         public const string Schema = "plan_it";
         public const int Events = 500_000, Streams = 50_000, Dokumente = 200_000, Faellige = 20;
+        /// <summary>Ein Ziel-Stream mit langer Geschichte: so viele Events vor dem Beginn des Vorgangs, so viele eigene danach.</summary>
+        public const int LangVorher = 100_000, LangNachher = 100;
+        public static readonly Guid Lang = StreamIdAus("lang"), Vorgang = StreamIdAus("vorgang");
+        public const string Korrelation = "K-plan";
+        public Guid EinOffener { get; private set; }
         public static readonly DateTimeOffset Jetzt = new(2026, 10, 18, 12, 0, 0, TimeSpan.Zero);
 
         public IDocumentStore Store { get; } = DocumentStore.For(opts =>
@@ -102,8 +117,11 @@ public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.F
         });
 
         /// <summary>Dieselbe Id wie <c>md5('s' || n)::uuid</c> in Postgres (die Hex-Zeichen in Textreihenfolge).</summary>
-        public static Guid StreamId(int n)
-            => Guid.Parse(Convert.ToHexString(System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes("s" + n))));
+        public static Guid StreamId(int n) => StreamIdAus("s" + n);
+
+        /// <summary>Dieselbe Id wie <c>md5(text)::uuid</c> in Postgres.</summary>
+        public static Guid StreamIdAus(string text)
+            => Guid.Parse(Convert.ToHexString(System.Security.Cryptography.MD5.HashData(System.Text.Encoding.UTF8.GetBytes(text))));
 
         public async Task InitializeAsync()
         {
@@ -127,6 +145,19 @@ public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.F
                   select nextval('{Schema}.mt_events_sequence'), md5('e' || g)::uuid, md5('s' || (g % {Streams}))::uuid, g / {Streams} + 1, jsonb_build_object(),
                          case when g % 3 = 0 then 'posten_reserviert' else 'posten_eroeffnet' end, now(), false
                   from generate_series(1000, {Events - 1}) g;
+                insert into {Schema}.mt_streams (id, type, version) values (md5('lang')::uuid, 'posten', {LangVorher + LangNachher}),
+                  (md5('vorgang')::uuid, 'prozess', 1);
+                insert into {Schema}.mt_events (seq_id, id, stream_id, version, data, type, timestamp, is_archived, correlation_id)
+                  select nextval('{Schema}.mt_events_sequence'), md5('l' || g)::uuid, md5('lang')::uuid, g, jsonb_build_object(), 'posten_reserviert',
+                         now(), false, 'fremd-' || g
+                  from generate_series(1, {LangVorher}) g;
+                insert into {Schema}.mt_events (seq_id, id, stream_id, version, data, type, timestamp, is_archived, correlation_id)
+                  values (nextval('{Schema}.mt_events_sequence'), md5('v1')::uuid, md5('vorgang')::uuid, 1, jsonb_build_object(), 'prozess_gestartet',
+                          now(), false, '{Korrelation}');
+                insert into {Schema}.mt_events (seq_id, id, stream_id, version, data, type, timestamp, is_archived, correlation_id)
+                  select nextval('{Schema}.mt_events_sequence'), md5('l' || g)::uuid, md5('lang')::uuid, g, jsonb_build_object(), 'posten_reserviert',
+                         now(), false, case when g % 10 = 0 then '{Korrelation}' else 'fremd-' || g end
+                  from generate_series({LangVorher + 1}, {LangVorher + LangNachher}) g;
                 """);
             // Die Dokumente schreibt Marten selbst (COPY), damit ihr JSON genau so aussieht wie im Betrieb: wenige fällig, die meisten später
             //   bzw. (Offen-Index) ohne Frist.
@@ -135,7 +166,9 @@ public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.F
                 Id = Guid.NewGuid(), ProzessName = "Plan", SeitUtc = Jetzt.AddHours(-1),
                 Frist = i < Faellige ? Jetzt.AddSeconds(-i) : i % 2 == 0 ? Jetzt.AddHours(1) : null,
             });
-            await Store.BulkInsertDocumentsAsync(offen);
+            var offenListe = offen.ToList();
+            EinOffener = offenListe[Dokumente / 2].Id;
+            await Store.BulkInsertDocumentsAsync(offenListe);
             var fristen = Enumerable.Range(0, Dokumente)
                 .Select(i => new Frist(Guid.NewGuid(), i < Faellige ? Jetzt.AddSeconds(-i) : Jetzt.AddHours(1 + i % 100), Guid.NewGuid(), "plan"));
             await Store.BulkInsertDocumentsAsync(fristen);
@@ -189,6 +222,7 @@ public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.F
             DateTime d => $"'{d:O}'::timestamptz",
             string s => $"'{s.Replace("'", "''")}'",
             long[] a => $"array[{string.Join(",", a)}]::bigint[]",
+            Guid[] a => $"array[{string.Join(",", a.Select(x => $"'{x}'"))}]::uuid[]",
             string[] a => $"array[{string.Join(",", a.Select(x => $"'{x}'"))}]::text[]",
             _ => throw new NotSupportedException($"Parameter vom Typ {w.GetType().Name}"),
         };

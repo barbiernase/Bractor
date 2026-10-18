@@ -25,6 +25,24 @@ public static class EventStoreAbfragen
         => $"select data, type, id, stream_id, version, timestamp, {metadatenSpalten}, seq_id from {schema}.mt_events "
            + $"where {bedingung} and is_archived = false {ordnung}";
 
+    /// <summary>
+    /// Die eigenen Events eines Vorgangs im Stream $1 (Korrelation $3) ab Version $2, in einer Anweisung (eine Momentaufnahme) mit dem Kopf des
+    /// Streams und der Version, ab der gelesen wurde — die ersten beiden Spalten jeder Zeile; ohne eigenes Event genau eine Zeile mit leeren
+    /// Event-Spalten. Ist $2 = 0 (kein Cursor), beginnt der Read hinter dem letzten Event, das vor dem Start des Vorgangs geschrieben wurde: vor
+    /// dem ersten Event seines Logs $4 (kleinere Sequenz) gibt es nichts Eigenes. Diese Grenze sucht Postgres rückwärts vom Kopf über den
+    /// Stream-Index; das kostet nur die Events seit dem Start, nie die Geschichte davor. Ohne Event vor dem Start (oder ohne Log) ab 1.
+    /// </summary>
+    public static string Korreliert(string schema, string metadatenSpalten)
+        => "with g as materialized (select "
+           + $"(select coalesce(max(version), 0) from {schema}.mt_events where stream_id = $1) as kopf, "
+           + "greatest($2, case when $2 > 0 then 0 else coalesce(("
+           + $"select v.version from {schema}.mt_events v where v.stream_id = $1 and v.seq_id < ("
+           + $"select b.seq_id from {schema}.mt_events b where b.stream_id = $4 order by b.version limit 1) "
+           + "order by v.version desc limit 1), 0) + 1 end) as ab) "
+           + $"select g.kopf, g.ab, data, type, id, stream_id, version, timestamp, {metadatenSpalten}, seq_id from g left join lateral ("
+           + $"select * from {schema}.mt_events e where e.stream_id = $1 and e.version >= g.ab and e.correlation_id = $3 and e.is_archived = false"
+           + ") e on true order by version";
+
     /// <summary>Die Seite einer Partition (Batch-Konsum): jenseits $1, Partition $3 von $2, ohne die erledigten $4, optional nur die Typen $6.</summary>
     public static string PartitionsBedingung(bool mitTypen)
         => $"seq_id > $1 and {PartitionsAusdruck.Sql("stream_id")} % $2 = $3 and not (seq_id = any($4))" + (mitTypen ? " and type = any($6)" : "");

@@ -118,8 +118,8 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
     public Task<EventEnvelope?> ReadEventAsync(Guid streamId, int version, CancellationToken ct)
         => _inner.ReadEventAsync(streamId, version, ct);
 
-    public Task<IReadOnlyList<EventEnvelope>> ReadKorreliertAsync(Guid streamId, int fromVersion, string korrelation, CancellationToken ct)
-        => _inner.ReadKorreliertAsync(streamId, fromVersion, korrelation, ct);
+    public Task<KorrelierteEvents> ReadKorreliertAsync(Guid streamId, int fromVersion, string korrelation, Guid beginn, CancellationToken ct)
+        => _inner.ReadKorreliertAsync(streamId, fromVersion, korrelation, beginn, ct);
 
     public Task<PartitionsSeite> ReadPartitionAsync(
         long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit, CancellationToken ct)

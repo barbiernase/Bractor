@@ -15,12 +15,7 @@ namespace Infrastructure.Persistence;
 ///   Field: "v"    → Version (int)
 ///   Field: "t"    → AggregateType (string)
 ///   Field: "ts"   → UpdatedAt (Unix-Ticks, long)
-/// 
-/// Sekundärer Index (Redis Set):
-///   Key:   "agg_idx:{aggregateType}"
-///   Value: aggregateId (Guid als String)
-///   → Wird nur bei Version 1 hinzugefügt (erstes Tracking)
-///   → Ermöglicht: "Zeige alle Aggregate vom Typ Lagerartikel"
+///   Ablauf: <see cref="VersionIndexHaltbarkeit"/> nach dem letzten Track (ohne Ablauf wüchse Redis mit jedem Aggregat, das es je gab).
 /// 
 /// Graceful Degradation:
 ///   Alle Operationen fangen RedisConnectionException ab.
@@ -34,7 +29,6 @@ public class RedisVersionTracker : IVersionTracker
 
     // Redis Key-Prefixe
     private const string AggregateKeyPrefix = "agg:";
-    private const string IndexKeyPrefix = "agg_idx:";
 
     // Hash-Felder
     private const string FieldVersion = "v";
@@ -42,23 +36,24 @@ public class RedisVersionTracker : IVersionTracker
     private const string FieldTimestamp = "ts";
 
     private readonly RedisPraefix? _praefix;
+    private readonly TimeSpan _haltbarkeit;
 
     public RedisVersionTracker(
         IConnectionMultiplexer redis,
         ILogger<RedisVersionTracker> logger,
-        RedisPraefix? praefix = null)
+        RedisPraefix? praefix = null,
+        VersionIndexHaltbarkeit? haltbarkeit = null)
     {
         _praefix = praefix;
+        _haltbarkeit = (haltbarkeit ?? VersionIndexHaltbarkeit.Standard).Dauer;
         _redis = redis ?? throw new ArgumentNullException(nameof(redis));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
 
     /// <summary>
     /// Aktualisiert die Version eines Aggregats in Redis.
-    /// 
-    /// Befüllt zusätzlich den sekundären Index „alle Aggregate vom Typ X" — bei JEDEM Track (idempotentes
-    /// SADD), damit auch Aggregate mit Erstversion ≠1 (Multi-Event/Reaktion) erfasst werden (Audit-Fix #6).
-    /// Nutzt Redis-Pipeline für atomares Schreiben (Hash + SADD).
+    /// Hash und Ablauf in einem Batch (ein Roundtrip). Einen Index „alle Aggregate vom Typ X“ gibt es nicht mehr: niemand las ihn, und er
+    /// wuchs mit jedem Aggregat, das es je gab.
     /// </summary>
     public async Task TrackAsync(Guid aggregateId, string aggregateType, int newVersion)
     {
@@ -78,20 +73,13 @@ public class RedisVersionTracker : IVersionTracker
                 new HashEntry(FieldTimestamp, now)
             });
 
-            // Sekundärer Index „alle Aggregate vom Typ X".
-            // ★ Audit-Fix #6: bei JEDEM Track befüllen, nicht nur bei Version 1. Die alte Annahme
-            //   „erstes Event → Version 1" verfehlte Aggregate, deren erstes Command mehrere Events erzeugt
-            //   (Version ≥2) ODER deren erstes Command nur eine Noop-/Ablehnungs-Marke hinterließ — sie tauchten NIE im Index auf
-            //   (stiller Vollständigkeitsfehler).
-            //   SetAddAsync ist idempotent → ein Re-Add ist folgenlos, also schlicht immer indexen (O(1)-SADD
-            //   im selben Batch). Der Index bleibt abgeleitet/nicht-autoritativ (Wahrheit ist der Log).
-            var indexKey = IndexKey(aggregateType);
-            var indexTask = batch.SetAddAsync(indexKey, aggregateId.ToString());
+            // Ablauf im selben Batch: lebt so lange wie der letzte Track plus die Haltbarkeit.
+            var ablaufTask = batch.KeyExpireAsync(key, _haltbarkeit);
 
             batch.Execute();
 
             await hashTask;
-            await indexTask;
+            await ablaufTask;
 
             _logger.LogDebug(
                 "Tracked {AggregateType}/{AggregateId} → Version {Version}",
@@ -210,8 +198,6 @@ public class RedisVersionTracker : IVersionTracker
     private static string AggregateKey(Guid aggregateId)
         => $"{AggregateKeyPrefix}{aggregateId}";
 
-    private static string IndexKey(string aggregateType)
-        => $"{IndexKeyPrefix}{aggregateType}";
 
     private static AggregateVersionInfo? ParseHash(HashEntry[] hash)
     {

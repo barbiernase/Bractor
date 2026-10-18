@@ -148,6 +148,7 @@ public sealed record LaufFertig(string Modell) : IEvent;
 public sealed record LaufAbgebrochen : IEvent;
 public sealed record MarkiereHaengend(Guid AggregateId) : ICommand;
 public sealed record HaengendMarkiert : IEvent;
+public sealed record LaufFortschritt(int Schritt) : IEvent;
 
 /// <summary>Wächter: endet der Lauf nicht binnen 6 h (Fertig ODER Abgebrochen im SELBEN Strom), wird er als hängend markiert.</summary>
 public sealed class LaufWaechter : IPipeline
@@ -177,7 +178,7 @@ internal sealed class FlussWelt
     private readonly Func<IAuftrag, IEvent> _funktionen;
     private readonly ConcurrentQueue<Guid> _weckungen = new();
 
-    public FlussWelt(IPipeline pipeline, Func<IAuftrag, IEvent> funktionen)
+    public FlussWelt(IPipeline pipeline, Func<IAuftrag, IEvent> funktionen, IProzessMarkingStore? marking = null)
     {
         _name = pipeline.GetType().Name;
         _funktionen = funktionen;
@@ -189,6 +190,7 @@ internal sealed class FlussWelt
         Manager = new ProzessManager(Log,
             new Dictionary<string, ProzessRegeln> { [_name] = pipeline.Fluss.Regeln },
             DispatchAsync,
+            markingStore: marking,
             rufe: (k, a, v, akt, ct) => NieAusfuehren.Contains(a.GetType()) ? Task.CompletedTask : Ausfuehrer.BeauftrageAsync(k, a, v, akt, ct),
             jetzt: _ => Task.FromResult(Log.Jetzt));
     }
@@ -462,6 +464,29 @@ public class PipelineFlussTests
 
         st.Erfolg.Should().BeTrue("⏳ ist verdrahtet");
         w.Gesendete<MarkiereHaengend>().Should().ContainSingle().Which.AggregateId.Should().Be(lauf, "quelle.Strom() trägt die Stream-Id");
+    }
+
+    [Fact]
+    public async Task Ein_wartender_Knoten_liest_seinen_Strom_je_Weckung_nur_hinter_dem_zuletzt_geprueften_Event()
+    {
+        // Der Strom der Quelle wird während des Wartens viel beschrieben (fremde Events): je Weckung nur das Neue lesen, nicht alles seit dem
+        //   Auslöser — sonst wüchse jede Weckung mit der Wartezeit.
+        var w = new FlussWelt(new LaufWaechter(), a => throw new NotSupportedException(), new MarkingImSpeicher());
+        var lauf = await w.StarteAsync(new LaufBegonnen());
+        const int jeRunde = 200, runden = 5;
+        for (var r = 0; r < runden; r++)
+        {
+            for (var i = 0; i < jeRunde; i++)
+                await w.Log.AppendEventsAsync(lauf, w.Log.Stream(lauf).Count, new IEvent[] { new LaufFortschritt(i) }, Guid.NewGuid().ToString(), null, "Lauf");
+            for (var weckung = 0; weckung < 3; weckung++) await w.Manager.WakeAsync(w.Korrelation, vomBackstop: weckung == 0);
+        }
+        w.Log.Gelesen[lauf].Should().BeLessThan(runden * jeRunde + 50,
+            "jedes Event des Stroms höchstens einmal gelesen (ohne Zeiger: jede der 15 Weckungen ab dem Auslöser)");
+
+        await w.Log.AppendEventsAsync(lauf, w.Log.Stream(lauf).Count, new IEvent[] { new LaufFertig("m.pt") }, Guid.NewGuid().ToString(), null, "Lauf");
+        var st = await w.TreibeAsync();
+        st.Erfolg.Should().BeTrue();
+        w.Gesendet.Should().BeEmpty("das Ende kam vor dem Zeitlimit");
     }
 
     [Fact]

@@ -29,6 +29,18 @@ public static class ProzessPollFilter
             : null;
     }
 
+    /// <summary>Die Korrelationen, nach denen <see cref="Weckung"/> für diese Events im Offen-Index fragt (Starts und fremde Korrelationen).</summary>
+    public static HashSet<Guid> Kandidaten(IEnumerable<EventEnvelope> events, IReadOnlyDictionary<Type, string> auslöserZuProzess)
+    {
+        var k = new HashSet<Guid>();
+        foreach (var env in events)
+        {
+            if (auslöserZuProzess.TryGetValue(env.Payload.GetType(), out var prozess)) k.Add(ProzessId.Für(prozess, env.AggregateId, env.AggregateVersion));
+            else if (Guid.TryParse(env.CorrelationId, out var korr)) k.Add(korr);
+        }
+        return k;
+    }
+
     /// <summary>Ein Start weckt, wenn der Vorgang offen ist oder es seinen Stream noch nicht gibt.</summary>
     public static bool StartNoetig(Guid korrelation, IReadOnlySet<Guid> offene, IReadOnlySet<Guid> vorhanden)
         => offene.Contains(korrelation) || !vorhanden.Contains(korrelation);
