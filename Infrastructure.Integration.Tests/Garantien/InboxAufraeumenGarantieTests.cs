@@ -18,8 +18,11 @@ namespace Infrastructure.Integration.Tests.Garantien;
 [Trait("Kategorie", "Garantie")]
 public class InboxAufraeumenGarantieTests : IClassFixture<InboxAufraeumenGarantieTests.Fixture>
 {
-    /// <summary>Eine Seite von 100 Quittungen löschen kostet einige hundert Blöcke (Index und Zeilen); ein Durchsuchen der Tabelle läse Tausende.</summary>
-    private const long HoechstBloecke = 2_000;
+    /// <summary>
+    /// Eine Seite von 100 Quittungen löschen kostet einige hundert Blöcke (gemessen ≈ 600: Index und Zeilen); BRIN las hier ≈ 10 000, ein
+    /// B-Baum ohne Untergrenze ≈ 2 000 (er geht über die toten Einträge der gelöschten Hälfte).
+    /// </summary>
+    private const long HoechstBloecke = 1_000;
     private const int MessSeite = 100;
 
     private readonly Fixture _fx;

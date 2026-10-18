@@ -86,6 +86,9 @@ public sealed class InboxAufraeumer(IDocumentStore store, TimeSpan horizont, ILo
                 await r.ReadAsync(ct);
                 frei = r.GetBoolean(0);
                 weg = r.GetInt64(1);
+                // Die nächste Seite beginnt hinter dieser (die ältesten gingen zuerst) — sonst ginge jede Seite eines langen Durchlaufs wieder
+                //   über die toten Einträge aller vorigen.
+                if (!r.IsDBNull(2)) _untergrenze = r.GetFieldValue<DateTimeOffset>(2) - Spielraum;
             }
             summe += (int)weg;
             if (!frei) return summe;   // ein anderer Knoten räumt — die Untergrenze bleibt
@@ -99,15 +102,16 @@ public sealed class InboxAufraeumer(IDocumentStore store, TimeSpan horizont, ILo
 
     /// <summary>
     /// Eine Seite löschen — eine Anweisung = eine Transaktion: Lease nehmen ($1, bis zum Ende der Anweisung), dann höchstens $4 Quittungen mit
-    /// Zeit in [$2, $3), die ältesten zuerst (über den Index), löschen; ohne Lease nichts. Liefert, ob die Lease frei war, und wie viele weg sind.
+    /// Zeit in [$2, $3), die ältesten zuerst (über den Index), löschen; ohne Lease nichts. Liefert, ob die Lease frei war, wie viele weg sind
+    /// und die jüngste gelöschte Zeit.
     /// Eine Quelle für den Aufräumer und den Plan-Test.
     /// </summary>
     public static string Abfrage(string tabelle) => $"""
         with lease as (select pg_try_advisory_xact_lock($1) as frei),
         weg as (delete from {tabelle} where command_id in (
           select i.command_id from {tabelle} i, lease where lease.frei and i.zeit >= coalesce($2, '-infinity'::timestamptz) and i.zeit < $3
-          order by i.zeit limit $4) returning 1)
-        select (select frei from lease), (select count(*) from weg)
+          order by i.zeit limit $4) returning zeit)
+        select (select frei from lease), (select count(*) from weg), (select max(zeit) from weg)
         """;
 
     /// <summary>Die Werte zu <see cref="Abfrage"/>: Lease, die Untergrenze dieses Aufräumers, die Grenze, die Seitengröße.</summary>
