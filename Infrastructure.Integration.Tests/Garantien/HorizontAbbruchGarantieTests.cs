@@ -27,9 +27,9 @@ namespace Infrastructure.Integration.Tests.Garantien;
 ///     Transaktion ein <c>pg_sleep</c>), und beliebige Schreiber mitten in ihrer Transaktion (auch im Group-Commit).</item>
 /// </list>
 /// Das Soll ist das Log: je Stream so viele Historien-Einträge, wie Events in <c>mt_events</c> stehen (ein Schreiber weiß nach einem Abbruch
-/// nicht sicher, ob sein Commit durchkam). Fehlt etwas, nennt die Meldung je fehlendem Event seine Transaktion und Commit-Zeit und den Commit, der
-/// die Partition darüber schob — so ist ablesbar, ob die Partition über eine noch unsichtbare Transaktion rückte (Horizont) oder über ein
-/// sichtbares Event (Batch-Leser).
+/// nicht sicher, ob sein Commit durchkam). Fehlt etwas, nennt die Meldung je fehlendem Event seine Transaktion und Commit-Zeit, den Commit, der
+/// die Partition darüber schob, und die Seite, die sie davor las — so ist ablesbar, ob die Partition über eine noch unsichtbare Transaktion
+/// rückte (Horizont) oder über ein sichtbares Event (Batch-Leser).
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGarantieTests.Fixture>
@@ -132,6 +132,8 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
 
         // ── Leser: je Partition ein Batch-Leser mit langsamen Stellen und Neustarts; jeder Commit wird mitgeschrieben ──
         var commits = new ConcurrentQueue<Commit>();
+        var lesungen = new ConcurrentQueue<Lesung>();
+        var esLeser = new LeseMitschreiber(es, lesungen);
         var leser = Enumerable.Range(0, Partitionen).Select(p => Task.Run(async () =>
         {
             var zufall = new Random(1000 + p);
@@ -139,7 +141,7 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
             {
                 // Je Aktivierung ein eigener Co-Commit-Store (er puffert die Effekte eines Batches) — wie im Host.
                 var store = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
-                return new BatchLeser(es, new Mitschreiber(store, p, commits), proj, p, konsum,
+                return new BatchLeser(esLeser, new Mitschreiber(store, p, commits), proj, p, konsum,
                     BatchLeser.TypenAus(ImagePairHistorieProjektion.SubscribedTypes),
                     BatchHilfe.HistorieDispatch(store, async _ => { if (zufall.Next(200) == 0) await Task.Delay(zufall.Next(50, 400)); }),
                     absturzVorCommit: async () => { if (zufall.Next(30) == 0) await Task.Delay(zufall.Next(50, 600)); });
@@ -201,7 +203,7 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
         stand.Should().OnlyContain(s => s!.Position >= kopf, "alle Partitionen haben den Kopf erreicht (sonst misst der Test nur Rückstand)");
         if (abweichend.Count > 0)
             abweichend.Should().BeEmpty($"jedes Event genau einmal ({events} Events in {soll.Count} Streams, Kopf {kopf}; {st}). "
-                + $"{abweichend.Count} Streams abweichend:\n{await DiagnoseAsync(abweichend, proj, commits)}");
+                + $"{abweichend.Count} Streams abweichend:\n{await DiagnoseAsync(abweichend, proj, commits, lesungen)}");
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -331,6 +333,29 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
     }
 
     private sealed record Commit(int Partition, DateTimeOffset Beginn, DateTimeOffset Ende, long Position);
+    private sealed record Lesung(int Partition, DateTimeOffset Beginn, DateTimeOffset Ende, long Nach, long Gesetzt);
+
+    /// <summary>Reicht an den Event-Store durch und schreibt jede Partitions-Seite mit (Zeit vor und nach dem Lesen, gesetzte Sequenz).</summary>
+    private sealed class LeseMitschreiber(IEventStoreRepository innen, ConcurrentQueue<Lesung> log) : IEventStoreRepository
+    {
+        public async Task<PartitionsSeite> ReadPartitionAsync(long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen,
+            IReadOnlyCollection<long> ausser, int limit, CancellationToken ct)
+        {
+            var beginn = DateTimeOffset.UtcNow;
+            var seite = await innen.ReadPartitionAsync(nach, partition, partitionen, typen, ausser, limit, ct);
+            log.Enqueue(new Lesung(partition, beginn, DateTimeOffset.UtcNow, nach, seite.Gesetzt));
+            return seite;
+        }
+
+        public Task AppendEventsAsync(Guid aggregateId, int expectedVersion, IReadOnlyList<IEvent> events, string? correlationId = null,
+            string? causationId = null, string? aggregateType = null, string? akteur = null, IReadOnlyList<Beilage>? beilagen = null)
+            => innen.AppendEventsAsync(aggregateId, expectedVersion, events, correlationId, causationId, aggregateType, akteur, beilagen);
+        public Task<StreamChanges> ReadChangedStreamsAsync(long afterGlobalSequence, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct)
+            => innen.ReadChangedStreamsAsync(afterGlobalSequence, typen, limit, ct);
+        public Task<TState?> LoadStateAsync<TState>(Guid aggregateId) where TState : class, IState, new() => innen.LoadStateAsync<TState>(aggregateId);
+        public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(Guid streamId, int fromVersion, CancellationToken ct)
+            => innen.ReadStreamAsync(streamId, fromVersion, ct);
+    }
 
     /// <summary>Reicht an den Store durch und schreibt jeden gelungenen Partitions-Commit mit (Zeit vor und nach dem Commit, neue Position).</summary>
     private sealed class Mitschreiber(IProjectionTracker innen, int partition, ConcurrentQueue<Commit> log) : IProjectionTracker
@@ -354,10 +379,12 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
     /// <summary>
     /// Welche Events fehlen (oder doppelt wirken) und warum. Ein Historien-Eintrag trägt die Zeit seines Events (<c>CreatedAtUtc</c>): Events des
     /// Logs ohne Eintrag gleicher Zeit fehlen, Einträge ohne Event darüber hinaus sind doppelt. Je fehlendem Event zählt das Urteil: der erste
-    /// Partitions-Commit, dessen Position darüber reichte — committete das Event erst nach ihm, rückte die Partition über eine noch unsichtbare
-    /// Transaktion (Horizont); war es vorher committet, über ein sichtbares Event (Batch-Leser). Im Einzelnen höchstens fünf Streams mit je fünf Events.
+    /// Partitions-Commit, dessen Position darüber reichte, und die letzte Seite, die die Partition davor las — committete das Event erst nach
+    /// diesem Lesen, war es unsichtbar und die gesetzte Sequenz ließ die Partition darüber rücken (Horizont); war es vorher committet, lag es
+    /// sichtbar auf der Seite und wurde nicht angewandt (Batch-Leser). Im Einzelnen höchstens fünf Streams mit je fünf Events.
     /// </summary>
-    private async Task<string> DiagnoseAsync(List<(Guid Stream, int Ist, int Soll)> abweichend, string proj, ConcurrentQueue<Commit> commits)
+    private async Task<string> DiagnoseAsync(List<(Guid Stream, int Ist, int Soll)> abweichend, string proj, ConcurrentQueue<Commit> commits,
+        ConcurrentQueue<Lesung> lesungen)
     {
         var sb = new StringBuilder();
         await using var c = new NpgsqlConnection(Fixture.Beispiel(AppAbbrecher));
@@ -366,6 +393,7 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
         await using (var cmd = new NpgsqlCommand("select current_setting('track_commit_timestamp') = 'on'", c))
             commitZeit = (bool)(await cmd.ExecuteScalarAsync())!;
         var log = commits.ToList();
+        var gelesen = lesungen.ToList();
         var historie = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
         var urteile = new Dictionary<string, int>();
         static long Mikro(DateTimeOffset t) => t.UtcTicks / 10;
@@ -402,15 +430,19 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
             foreach (var (z, k) in fehlend.Select((z, k) => (z, k)))
             {
                 var ueber = log.Where(e => e.Partition == p && e.Position >= z.Seq).OrderBy(e => e.Ende).FirstOrDefault();
+                var seite = ueber is null ? null
+                    : gelesen.Where(l => l.Partition == p && l.Beginn <= ueber.Beginn).OrderBy(l => l.Beginn).LastOrDefault();
                 var urteil = ueber is null ? "kein Commit der Partition reichte darüber"
+                    : seite is null ? "keine Seite vor dem Commit"
                     : z.Commit is not { } ct ? "Commit-Zeit unbekannt"
-                    : ct > ueber.Ende ? "Horizont (Partition rückte über eine noch unsichtbare Transaktion)"
-                    : ct < ueber.Beginn ? "Batch-Leser (Event war vor dem Commit sichtbar)"
-                    : "unentschieden (Commit des Events fiel in den Partitions-Commit)";
+                    : ct > seite.Ende ? "Horizont (beim Lesen unsichtbar, die gesetzte Sequenz reichte darüber)"
+                    : ct < seite.Beginn ? "Batch-Leser (beim Lesen sichtbar, nicht angewandt)"
+                    : "unentschieden (Commit des Events fiel in das Lesen der Seite)";
                 urteile[urteil] = urteile.GetValueOrDefault(urteil) + 1;
                 if (zeigen && k < 5)
                     sb.AppendLine($"  fehlt v{z.Version} seq {z.Seq} xid {z.Xid} commit {z.Commit:HH:mm:ss.ffffff}"
-                        + (ueber is null ? "" : $"; Position {ueber.Position} committet {ueber.Beginn:HH:mm:ss.ffffff}…{ueber.Ende:HH:mm:ss.ffffff}")
+                        + (seite is null ? "" : $"; Seite nach {seite.Nach} gesetzt {seite.Gesetzt} gelesen {seite.Beginn:HH:mm:ss.ffffff}…{seite.Ende:HH:mm:ss.ffffff}")
+                        + (ueber is null ? "" : $"; Position {ueber.Position} committet {ueber.Beginn:HH:mm:ss.ffffff}")
                         + $": {urteil}");
             }
         }
