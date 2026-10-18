@@ -34,13 +34,13 @@ public static class EventStoreAbfragen
     /// </summary>
     public static string Korreliert(string schema, string metadatenSpalten)
         => "with g as materialized (select "
-           + $"(select coalesce(max(version), 0) from {schema}.mt_events where stream_id = $1) as kopf, "
-           + "greatest($2, case when $2 > 0 then 0 else coalesce(("
-           + $"select v.version from {schema}.mt_events v where v.stream_id = $1 and v.seq_id < ("
-           + $"select b.seq_id from {schema}.mt_events b where b.stream_id = $4 order by b.version limit 1) "
+           + $"(select coalesce(max(version), 0) from {schema}.mt_events where stream_id = $1::uuid) as kopf, "
+           + "greatest($2::bigint, case when $2::bigint > 0 then 0 else coalesce(("
+           + $"select v.version from {schema}.mt_events v where v.stream_id = $1::uuid and v.seq_id < ("
+           + $"select b.seq_id from {schema}.mt_events b where b.stream_id = $4::uuid order by b.version limit 1) "
            + "order by v.version desc limit 1), 0) + 1 end) as ab) "
            + $"select g.kopf, g.ab, data, type, id, stream_id, version, timestamp, {metadatenSpalten}, seq_id from g left join lateral ("
-           + $"select * from {schema}.mt_events e where e.stream_id = $1 and e.version >= g.ab and e.correlation_id = $3 and e.is_archived = false"
+           + $"select * from {schema}.mt_events e where e.stream_id = $1::uuid and e.version >= g.ab and e.correlation_id = $3::text and e.is_archived = false"
            + ") e on true order by version";
 
     /// <summary>Die Seite einer Partition (Batch-Konsum): jenseits $1, Partition $3 von $2, ohne die erledigten $4, optional nur die Typen $6.</summary>

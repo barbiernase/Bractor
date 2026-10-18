@@ -69,6 +69,7 @@ public class InboxAufraeumenGarantieTests : IClassFixture<InboxAufraeumenGaranti
 
         public async Task InitializeAsync()
         {
+            await SqlAsync($"drop schema if exists {Schema} cascade");   // die Inbox ist ein Schema-Objekt, das Martens Aufräumen nicht kennt
             await Store.Advanced.Clean.CompletelyRemoveAllAsync();
             await Store.Storage.ApplyAllConfiguredChangesToDatabaseAsync();
             await InboxTabelle.SicherAsync(Store, default);
