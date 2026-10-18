@@ -333,9 +333,9 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
     }
 
     private sealed record Commit(int Partition, DateTimeOffset Beginn, DateTimeOffset Ende, long Position);
-    private sealed record Lesung(int Partition, DateTimeOffset Beginn, DateTimeOffset Ende, long Nach, long Gesetzt);
+    private sealed record Lesung(int Partition, DateTimeOffset Beginn, DateTimeOffset Ende, long Nach, long Gesetzt, long[] Sequenzen);
 
-    /// <summary>Reicht an den Event-Store durch und schreibt jede Partitions-Seite mit (Zeit vor und nach dem Lesen, gesetzte Sequenz).</summary>
+    /// <summary>Reicht an den Event-Store durch und schreibt jede Partitions-Seite mit (Zeit vor und nach dem Lesen, gesetzte Sequenz, gelieferte Sequenzen).</summary>
     private sealed class LeseMitschreiber(IEventStoreRepository innen, ConcurrentQueue<Lesung> log) : IEventStoreRepository
     {
         public async Task<PartitionsSeite> ReadPartitionAsync(long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen,
@@ -343,7 +343,7 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
         {
             var beginn = DateTimeOffset.UtcNow;
             var seite = await innen.ReadPartitionAsync(nach, partition, partitionen, typen, ausser, limit, ct);
-            log.Enqueue(new Lesung(partition, beginn, DateTimeOffset.UtcNow, nach, seite.Gesetzt));
+            log.Enqueue(new Lesung(partition, beginn, DateTimeOffset.UtcNow, nach, seite.Gesetzt, seite.Events.Select(e => e.Sequenz).ToArray()));
             return seite;
         }
 
@@ -378,10 +378,10 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
 
     /// <summary>
     /// Welche Events fehlen (oder doppelt wirken) und warum. Ein Historien-Eintrag trägt die Zeit seines Events (<c>CreatedAtUtc</c>): Events des
-    /// Logs ohne Eintrag gleicher Zeit fehlen, Einträge ohne Event darüber hinaus sind doppelt. Je fehlendem Event zählt das Urteil: der erste
-    /// Partitions-Commit, dessen Position darüber reichte, und die letzte Seite, die die Partition davor las — committete das Event erst nach
-    /// diesem Lesen, war es unsichtbar und die gesetzte Sequenz ließ die Partition darüber rücken (Horizont); war es vorher committet, lag es
-    /// sichtbar auf der Seite und wurde nicht angewandt (Batch-Leser). Im Einzelnen höchstens fünf Streams mit je fünf Events.
+    /// Logs ohne Eintrag gleicher Zeit fehlen, Einträge ohne Event darüber hinaus sind doppelt. Je fehlendem Event zählt das Urteil, ohne Uhr:
+    /// lieferte eine Seite der Partition seine Sequenz je, lag es sichtbar vor und wurde nicht angewandt (Batch-Leser); lieferte keine es, rückte die
+    /// Position über es, solange es unsichtbar war (Horizont). Die Commit-Zeit ist nur Anzeige — Postgres stempelt sie vor dem Warten auf die
+    /// Platte, sichtbar wird die Transaktion erst danach. Im Einzelnen höchstens fünf Streams mit je fünf Events.
     /// </summary>
     private async Task<string> DiagnoseAsync(List<(Guid Stream, int Ist, int Soll)> abweichend, string proj, ConcurrentQueue<Commit> commits,
         ConcurrentQueue<Lesung> lesungen)
@@ -394,6 +394,7 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
             commitZeit = (bool)(await cmd.ExecuteScalarAsync())!;
         var log = commits.ToList();
         var gelesen = lesungen.ToList();
+        var geliefert = gelesen.GroupBy(l => l.Partition).ToDictionary(g => g.Key, g => g.SelectMany(l => l.Sequenzen).ToHashSet());
         var historie = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
         var urteile = new Dictionary<string, int>();
         static long Mikro(DateTimeOffset t) => t.UtcTicks / 10;
@@ -432,12 +433,9 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
                 var ueber = log.Where(e => e.Partition == p && e.Position >= z.Seq).OrderBy(e => e.Ende).FirstOrDefault();
                 var seite = ueber is null ? null
                     : gelesen.Where(l => l.Partition == p && l.Beginn <= ueber.Beginn).OrderBy(l => l.Beginn).LastOrDefault();
-                var urteil = ueber is null ? "kein Commit der Partition reichte darüber"
-                    : seite is null ? "keine Seite vor dem Commit"
-                    : z.Commit is not { } ct ? "Commit-Zeit unbekannt"
-                    : ct > seite.Ende ? "Horizont (beim Lesen unsichtbar, die gesetzte Sequenz reichte darüber)"
-                    : ct < seite.Beginn ? "Batch-Leser (beim Lesen sichtbar, nicht angewandt)"
-                    : "unentschieden (Commit des Events fiel in das Lesen der Seite)";
+                var urteil = geliefert.GetValueOrDefault(p)?.Contains(z.Seq) == true ? "Batch-Leser (gelesen, nicht angewandt)"
+                    : ueber is null ? "nie gelesen, kein Commit der Partition reichte darüber"
+                    : "Horizont (nie gelesen, die Position rückte darüber)";
                 urteile[urteil] = urteile.GetValueOrDefault(urteil) + 1;
                 if (zeigen && k < 5)
                     sb.AppendLine($"  fehlt v{z.Version} seq {z.Seq} xid {z.Xid} commit {z.Commit:HH:mm:ss.ffffff}"
