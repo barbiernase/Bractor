@@ -92,7 +92,12 @@ public class InboxAufraeumenGarantieTests : IClassFixture<InboxAufraeumenGaranti
             await using var c = await VerbindungAsync();
             async Task Sql(string t) { await using var x = new NpgsqlCommand(t, c); await x.ExecuteNonQueryAsync(); }
             DateTimeOffset jetzt;
-            await using (var n = new NpgsqlCommand("select now()", c)) jetzt = (DateTimeOffset)(await n.ExecuteScalarAsync())!;
+            await using (var n = new NpgsqlCommand("select now()", c))
+            await using (var r = await n.ExecuteReaderAsync())
+            {
+                await r.ReadAsync();
+                jetzt = r.GetFieldValue<DateTimeOffset>(0);
+            }
             var werte = aufraeumer.Werte(jetzt - Horizont + Spaeter, MessSeite);
             await Sql("begin");
             await Sql($"set local plan_cache_mode = {(allgemein ? "force_generic_plan" : "force_custom_plan")}");

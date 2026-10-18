@@ -70,7 +70,11 @@ public sealed class InboxAufraeumer(IDocumentStore store, TimeSpan horizont, ILo
         await conn.OpenAsync(ct);
         DateTimeOffset grenze;
         await using (var jetzt = new Npgsql.NpgsqlCommand("select now()", (Npgsql.NpgsqlConnection)conn))
-            grenze = (DateTimeOffset)(await jetzt.ExecuteScalarAsync(ct))! - horizont;
+        await using (var r = await jetzt.ExecuteReaderAsync(ct))
+        {
+            await r.ReadAsync(ct);
+            grenze = r.GetFieldValue<DateTimeOffset>(0) - horizont;
+        }
         while (true)
         {
             await using var cmd = new Npgsql.NpgsqlCommand(sql, (Npgsql.NpgsqlConnection)conn);
