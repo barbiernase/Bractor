@@ -1,0 +1,200 @@
+      Redis unavailable. Deps read returning null for [imagepair-projektion].
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HGETALL vermessung:rm:imagepair-projektion:c28aa86b-05fc-9ea3-7378-6d6e720d52ae; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=1,Free=32766,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=0,CompletedItems=34380,Timers=249), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Projections.ReadModelDepsReader.ReadAsync(String subscriberId, IReadOnlyList`1 readModelIds) in /opt/bractor/Infrastructure/Projections/ReadModelDepsReader.cs:line 71
+warn: Infrastructure.Persistence.RedisVersionTracker[0]
+      Redis unavailable. Version tracking skipped for 435d1ea5-5ed0-697c-d9e3-577ce8cda8d1. Will catch up on next successful command.
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HMSET vermessung:agg:435d1ea5-5ed0-697c-d9e3-577ce8cda8d1; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=9,Free=32758,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=3,CompletedItems=34512,Timers=258), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Persistence.RedisVersionTracker.TrackAsync(Guid aggregateId, String aggregateType, Int32 newVersion)
+warn: Infrastructure.Projections.ReadModelDepsWriter[0]
+      Redis unavailable. Deps write skipped for [imagepair-projektion]. ReadModels will have stale deps until next event.
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HMSET vermessung:rm:imagepair-projektion:435d1ea5-5ed0-697c-d9e3-577ce8cda8d1; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=5,Free=32762,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=1,CompletedItems=34554,Timers=258), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Projections.ReadModelDepsWriter.WriteBatchAsync(String subscriberId, List`1 results) in /opt/bractor/Infrastructure/Projections/ReadModelDepsWriter.cs:line 205
+         at Infrastructure.Projections.ReadModelDepsWriter.WriteAsync(String subscriberId, EventEnvelope envelope, IReadOnlyList`1 results, CancellationToken ct) in /opt/bractor/Infrastructure/Projections/ReadModelDepsWriter.cs:line 79
+warn: Infrastructure.Projections.ReadModelDepsWriter[0]
+      Redis unavailable. Deps write skipped for [imagepair-historie]. ReadModels will have stale deps until next event.
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HMSET vermessung:rm:imagepair-historie:435d1ea5-5ed0-697c-d9e3-577ce8cda8d1; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=5,Free=32762,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=1,CompletedItems=34557,Timers=257), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Projections.ReadModelDepsWriter.WriteBatchAsync(String subscriberId, List`1 results) in /opt/bractor/Infrastructure/Projections/ReadModelDepsWriter.cs:line 205
+         at Infrastructure.Projections.ReadModelDepsWriter.WriteAsync(String subscriberId, EventEnvelope envelope, IReadOnlyList`1 results, CancellationToken ct) in /opt/bractor/Infrastructure/Projections/ReadModelDepsWriter.cs:line 79
+warn: Infrastructure.Persistence.RedisVersionTracker[0]
+      Redis unavailable. Version tracking skipped for 435d1ea5-5ed0-697c-d9e3-577ce8cda8d1. Will catch up on next successful command.
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HMSET vermessung:agg:435d1ea5-5ed0-697c-d9e3-577ce8cda8d1; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=8,Free=32759,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=1,CompletedItems=34571,Timers=255), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Persistence.RedisVersionTracker.TrackAsync(Guid aggregateId, String aggregateType, Int32 newVersion)
+warn: Infrastructure.Projections.ReadModelDepsReader[0]
+      Redis unavailable. Deps read returning null for [imagepair-projektion].
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HGETALL vermessung:rm:imagepair-projektion:435d1ea5-5ed0-697c-d9e3-577ce8cda8d1; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=2,Free=32765,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=0,CompletedItems=34612,Timers=256), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Projections.ReadModelDepsReader.ReadAsync(String subscriberId, IReadOnlyList`1 readModelIds) in /opt/bractor/Infrastructure/Projections/ReadModelDepsReader.cs:line 71
+warn: Infrastructure.Projections.ReadModelDepsReader[0]
+      Redis unavailable. Deps read returning null for [imagepair-projektion].
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HGETALL vermessung:rm:imagepair-projektion:c28aa86b-05fc-9ea3-7378-6d6e720d52ae; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=5,Free=32762,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=0,CompletedItems=34621,Timers=254), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Projections.ReadModelDepsReader.ReadAsync(String subscriberId, IReadOnlyList`1 readModelIds) in /opt/bractor/Infrastructure/Projections/ReadModelDepsReader.cs:line 71
+warn: Infrastructure.Persistence.RedisVersionTracker[0]
+      Redis unavailable. Version tracking skipped for 435d1ea5-5ed0-697c-d9e3-577ce8cda8d1. Will catch up on next successful command.
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HMSET vermessung:agg:435d1ea5-5ed0-697c-d9e3-577ce8cda8d1; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=4,Free=32763,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=5,CompletedItems=34655,Timers=257), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Persistence.RedisVersionTracker.TrackAsync(Guid aggregateId, String aggregateType, Int32 newVersion)
+warn: Infrastructure.Projections.ReadModelDepsWriter[0]
+      Redis unavailable. Deps write skipped for [imagepair-historie]. ReadModels will have stale deps until next event.
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HMSET vermessung:rm:imagepair-historie:435d1ea5-5ed0-697c-d9e3-577ce8cda8d1; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=4,Free=32763,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=0,CompletedItems=34694,Timers=254), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Projections.ReadModelDepsWriter.WriteBatchAsync(String subscriberId, List`1 results) in /opt/bractor/Infrastructure/Projections/ReadModelDepsWriter.cs:line 205
+         at Infrastructure.Projections.ReadModelDepsWriter.WriteAsync(String subscriberId, EventEnvelope envelope, IReadOnlyList`1 results, CancellationToken ct) in /opt/bractor/Infrastructure/Projections/ReadModelDepsWriter.cs:line 79
+warn: Infrastructure.Projections.ReadModelDepsWriter[0]
+      Redis unavailable. Deps write skipped for [imagepair-projektion]. ReadModels will have stale deps until next event.
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HMSET vermessung:rm:imagepair-projektion:435d1ea5-5ed0-697c-d9e3-577ce8cda8d1; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=3,Free=32764,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=0,CompletedItems=34696,Timers=253), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Projections.ReadModelDepsWriter.WriteBatchAsync(String subscriberId, List`1 results) in /opt/bractor/Infrastructure/Projections/ReadModelDepsWriter.cs:line 205
+         at Infrastructure.Projections.ReadModelDepsWriter.WriteAsync(String subscriberId, EventEnvelope envelope, IReadOnlyList`1 results, CancellationToken ct) in /opt/bractor/Infrastructure/Projections/ReadModelDepsWriter.cs:line 79
+warn: Infrastructure.Persistence.RedisVersionTracker[0]
+      Redis unavailable. Version tracking skipped for 435d1ea5-5ed0-697c-d9e3-577ce8cda8d1. Will catch up on next successful command.
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HMSET vermessung:agg:435d1ea5-5ed0-697c-d9e3-577ce8cda8d1; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=3,Free=32764,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=11,CompletedItems=34716,Timers=263), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Persistence.RedisVersionTracker.TrackAsync(Guid aggregateId, String aggregateType, Int32 newVersion)
+warn: Infrastructure.Projections.ReadModelDepsWriter[0]
+      Redis unavailable. Deps write skipped for [imagepair-historie]. ReadModels will have stale deps until next event.
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HMSET vermessung:rm:imagepair-historie:435d1ea5-5ed0-697c-d9e3-577ce8cda8d1; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=2,Free=32765,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=1,CompletedItems=34762,Timers=253), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Projections.ReadModelDepsWriter.WriteBatchAsync(String subscriberId, List`1 results) in /opt/bractor/Infrastructure/Projections/ReadModelDepsWriter.cs:line 205
+         at Infrastructure.Projections.ReadModelDepsWriter.WriteAsync(String subscriberId, EventEnvelope envelope, IReadOnlyList`1 results, CancellationToken ct) in /opt/bractor/Infrastructure/Projections/ReadModelDepsWriter.cs:line 79
+warn: Infrastructure.Projections.ReadModelDepsWriter[0]
+      Redis unavailable. Deps write skipped for [imagepair-historie]. ReadModels will have stale deps until next event.
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HMSET vermessung:rm:imagepair-historie:435d1ea5-5ed0-697c-d9e3-577ce8cda8d1; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=2,Free=32765,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=1,CompletedItems=34762,Timers=253), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Projections.ReadModelDepsWriter.WriteBatchAsync(String subscriberId, List`1 results) in /opt/bractor/Infrastructure/Projections/ReadModelDepsWriter.cs:line 205
+         at Infrastructure.Projections.ReadModelDepsWriter.WriteAsync(String subscriberId, EventEnvelope envelope, IReadOnlyList`1 results, CancellationToken ct) in /opt/bractor/Infrastructure/Projections/ReadModelDepsWriter.cs:line 79
+warn: Infrastructure.Projections.ReadModelDepsWriter[0]
+      Redis unavailable. Deps write skipped for [imagepair-projektion]. ReadModels will have stale deps until next event.
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HMSET vermessung:rm:imagepair-projektion:435d1ea5-5ed0-697c-d9e3-577ce8cda8d1; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=2,Free=32765,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=2,CompletedItems=34762,Timers=252), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Projections.ReadModelDepsWriter.WriteBatchAsync(String subscriberId, List`1 results) in /opt/bractor/Infrastructure/Projections/ReadModelDepsWriter.cs:line 205
+         at Infrastructure.Projections.ReadModelDepsWriter.WriteAsync(String subscriberId, EventEnvelope envelope, IReadOnlyList`1 results, CancellationToken ct) in /opt/bractor/Infrastructure/Projections/ReadModelDepsWriter.cs:line 79
+warn: Infrastructure.Projections.ReadModelDepsWriter[0]
+      Redis unavailable. Deps write skipped for [imagepair-projektion]. ReadModels will have stale deps until next event.
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HMSET vermessung:rm:imagepair-projektion:435d1ea5-5ed0-697c-d9e3-577ce8cda8d1; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=2,Free=32765,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=2,CompletedItems=34762,Timers=252), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Projections.ReadModelDepsWriter.WriteBatchAsync(String subscriberId, List`1 results) in /opt/bractor/Infrastructure/Projections/ReadModelDepsWriter.cs:line 205
+         at Infrastructure.Projections.ReadModelDepsWriter.WriteAsync(String subscriberId, EventEnvelope envelope, IReadOnlyList`1 results, CancellationToken ct) in /opt/bractor/Infrastructure/Projections/ReadModelDepsWriter.cs:line 79
+warn: Infrastructure.Projections.ReadModelDepsReader[0]
+      Redis unavailable. Deps read returning null for [imagepair-projektion].
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HGETALL vermessung:rm:imagepair-projektion:435d1ea5-5ed0-697c-d9e3-577ce8cda8d1; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=1,Free=32766,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=0,CompletedItems=34774,Timers=253), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Projections.ReadModelDepsReader.ReadAsync(String subscriberId, IReadOnlyList`1 readModelIds) in /opt/bractor/Infrastructure/Projections/ReadModelDepsReader.cs:line 71
+warn: Infrastructure.Projections.ReadModelDepsReader[0]
+      Redis unavailable. Deps read returning null for [imagepair-projektion].
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HGETALL vermessung:rm:imagepair-projektion:c28aa86b-05fc-9ea3-7378-6d6e720d52ae; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=2,Free=32765,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=2,CompletedItems=34774,Timers=252), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Projections.ReadModelDepsReader.ReadAsync(String subscriberId, IReadOnlyList`1 readModelIds) in /opt/bractor/Infrastructure/Projections/ReadModelDepsReader.cs:line 71
+warn: Infrastructure.Projections.ReadModelDepsReader[0]
+      Redis unavailable. Deps read returning null for [imagepair-projektion].
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HGETALL vermessung:rm:imagepair-projektion:c28aa86b-05fc-9ea3-7378-6d6e720d52ae; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=1,Free=32766,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=0,CompletedItems=34788,Timers=252), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Projections.ReadModelDepsReader.ReadAsync(String subscriberId, IReadOnlyList`1 readModelIds) in /opt/bractor/Infrastructure/Projections/ReadModelDepsReader.cs:line 71
+warn: Infrastructure.Projections.ReadModelDepsReader[0]
+      Redis unavailable. Deps read returning null for [imagepair-projektion].
+      StackExchange.Redis.RedisConnectionException: No connection is active/available to service this operation: HGETALL vermessung:rm:imagepair-projektion:c28aa86b-05fc-9ea3-7378-6d6e720d52ae; UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328, mc: 1/1/0, mgr: 10 of 10 available, clientName: Ubuntu-noble-latest-amd64-base(SE.Redis-v2.10.14.64328), IOCP: (Busy=0,Free=1000,Min=1,Max=1000), WORKER: (Busy=1,Free=32766,Min=20,Max=32767), POOL: (Threads=11,QueuedItems=0,CompletedItems=34792,Timers=252), v: 2.10.14.64328
+       ---> StackExchange.Redis.RedisConnectionException: UnableToConnect on localhost:6390/Interactive, Initializing/NotStarted, last: HGETALL, origin: BeginConnectAsync, outstanding: 0, last-read: 0s ago, last-write: 0s ago, keep-alive: 60s, state: Connecting, mgr: 8 of 10 available, last-heartbeat: never, last-mbeat: 0s ago, global: 0s ago, v: 2.10.14.64328
+         --- End of inner exception stack trace ---
+         at StackExchange.Redis.RedisBatch.Execute() in /_/src/StackExchange.Redis/RedisBatch.cs:line 31
+         at Infrastructure.Projections.ReadModelDepsReader.ReadAsync(String subscriberId, IReadOnlyList`1 readModelIds) in /opt/bractor/Infrastructure/Projections/ReadModelDepsReader.cs:line 71
+info: Marten.IDocumentStore[1177694754]
+      Executed schema update SQL:
+      DO $$
+      BEGIN    IF NOT EXISTS(
+              SELECT schema_name
+                FROM information_schema.schemata
+                WHERE schema_name = 'es'
+            )
+          THEN
+            EXECUTE 'CREATE SCHEMA es';
+          END IF;
+      
+      END
+      $$;
+      
+      
+      CREATE TABLE IF NOT EXISTS es.mt_doc_prozessmarkingdoc (
+          id                  uuid                        NOT NULL,
+          data                jsonb                       NOT NULL,
+          mt_last_modified    timestamp with time zone    NULL DEFAULT (transaction_timestamp()),
+          mt_version          uuid                        NOT NULL DEFAULT (md5(random()::text || clock_timestamp()::text)::uuid),
+          mt_dotnet_type      varchar                     NULL,
+      CONSTRAINT pkey_mt_doc_prozessmarkingdoc_id PRIMARY KEY (id)
+      );
+      
+      CREATE OR REPLACE FUNCTION es.mt_upsert_prozessmarkingdoc(doc JSONB, docDotNetType varchar, docId uuid, docVersion uuid) RETURNS UUID LANGUAGE plpgsql SECURITY INVOKER AS $function$
+      DECLARE
+        final_version uuid;
+      BEGIN
+      INSERT INTO es.mt_doc_prozessmarkingdoc ("data", "mt_dotnet_type", "id", "mt_version", mt_last_modified) VALUES (doc, docDotNetType, docId, docVersion, transaction_timestamp())
+        ON CONFLICT (id)
+        DO UPDATE SET "data" = doc, "mt_dotnet_type" = docDotNetType, "mt_version" = docVersion, mt_last_modified = transaction_timestamp();
+      
+        SELECT mt_version FROM es.mt_doc_prozessmarkingdoc into final_version WHERE id = docId ;
+        RETURN final_version;
+      END;
+      $function$;
+      
+      
+      CREATE OR REPLACE FUNCTION es.mt_insert_prozessmarkingdoc(doc JSONB, docDotNetType varchar, docId uuid, docVersion uuid) RETURNS UUID LANGUAGE plpgsql SECURITY INVOKER AS $function$
+      BEGIN
+      INSERT INTO es.mt_doc_prozessmarkingdoc ("data", "mt_dotnet_type", "id", "mt_version", mt_last_modified) VALUES (doc, docDotNetType, docId, docVersion, transaction_timestamp());
+      
+        RETURN docVersion;
+      END;
+      $function$;
+      
+      
+      CREATE OR REPLACE FUNCTION es.mt_update_prozessmarkingdoc(doc JSONB, docDotNetType varchar, docId uuid, docVersion uuid) RETURNS UUID LANGUAGE plpgsql SECURITY INVOKER AS $function$
+      DECLARE
+        final_version uuid;
+      BEGIN
+        UPDATE es.mt_doc_prozessmarkingdoc SET "data" = doc, "mt_dotnet_type" = docDotNetType, "mt_version" = docVersion, mt_last_modified = transaction_timestamp() where id = docId;
+      
+        SELECT mt_version FROM es.mt_doc_prozessmarkingdoc into final_version WHERE id = docId ;
+        RETURN final_version;
+      END;
+      $function$;
+      
+      
