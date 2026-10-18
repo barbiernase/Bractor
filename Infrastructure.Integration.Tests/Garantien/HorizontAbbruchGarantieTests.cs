@@ -48,8 +48,8 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
         public int NachNextval, MittenDrin, SchreibFehler, ZweiterNeustarts, ZweiterBackendsMitTransaktion, ZweiterBackends, Weggeworfen;
         public override string ToString() =>
             $"Beispiel-Seite: {NachNextval} Abbrüche nach nextval, {MittenDrin} mitten in der Transaktion, {SchreibFehler} Schreibfehler; "
-            + $"zweiter Prozess: {ZweiterNeustarts} harte Neustarts, {ZweiterBackends} Backends beendet ({ZweiterBackendsMitTransaktion} mit "
-            + $"offener Schreib-Transaktion), {Weggeworfen} weggeworfene Transaktionen";
+            + $"zweiter Prozess: {ZweiterNeustarts} harte Neustarts, {ZweiterBackendsMitTransaktion} Backends mit offener Schreib-Transaktion und "
+            + $"{ZweiterBackends} übrige beendet, {Weggeworfen} weggeworfene Transaktionen";
     }
 
     [Fact]
