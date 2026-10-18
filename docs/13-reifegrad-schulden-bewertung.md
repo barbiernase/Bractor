@@ -96,10 +96,20 @@ Die Reihe **PF** sind Kosten der Garantien ([11](11-garantien.md) §11.12): die 
 **G-11 · Projektion übersprang Events im Störungslauf** (gemessen einmal, `vermessung/ergebnisse/2026-10-18_0405_5e2d293_server-wachstum-stoerung-1`).
 In S1 fehlte im Read-Model ein komplettes Paar: für seinen Stream standen die Guards beider Bildpaar-Projektionen auf Version 3, die Versionen 4
 (`BildVerfuegbar`) und 5 (`ImagePairKomplett`) waren nie angewandt, alle Partitionen standen am Kopf des Logs, nichts geparkt. Die drei Events
-entstanden in der Sekunde, in der der Treiber Redis für 10 s anhielt. Der Wiederholungslauf und etwa 20 Störungsläufe davor waren grün. Den
-Batch-Leser hat der Umbau zu PF-28 nur an einer Obergrenze geändert, die bei 3 258 Events nicht greift. *Vermutet:* eine Lücke im Horizont
-(die Position rückte über Sequenzen, deren Transaktion noch unsichtbar war) oder ein Weg, auf dem Sequenzen als erledigt gelten, ohne angewandt
-oder geparkt zu sein. *Nächster Schritt:* Test, der es zeigt; eigene Aufgabe.
+entstanden um 02:08:07 — laut `host.csv` drei Sekunden nachdem der Treiber den Prüfdomänen-Host hart beendet und neu gestartet hatte, fast
+20 s nach dem Redis-Neustart (eine erste Lesart der Zeitachse, „während Redis stand“, war falsch). Beide Projektionen übersprangen dieselben
+Events; gemeinsam ist ihnen der Horizont (einer je Host-Prozess) und die Seite derselben Partition. Den Batch-Leser hat der Umbau zu PF-28 nur
+an einer Obergrenze geändert, die bei 3 258 Events nicht greift.
+- *Geprüft, ohne Befund:* die Sequenz hat Cache 1; die Freigabe-Regel des Horizonts und die Reihenfolge Stream-Zeile vor `nextval` (auch für
+  gemischte Group-Commits, `AnhaengeReihenfolgePostgresTests`); der Host öffnet je Partitions-Leser einen eigenen Store. Neu: I
+  `HorizontStressGarantieTests` (16 Schreiber über Group-Commit und Bündel, ≈ 250 000 Events in 40 s, langsame Batch-Leser mit Neustarts —
+  jedes Event genau einmal; zweimal grün). Eine erste Fassung teilte einen Store unter allen Lesern und verlor dadurch Effekte — ein Fehler
+  des Tests, nicht des Hosts.
+- *Gemessen:* nach dem Löschen allen Rest-Zustands (Mess- und Test-Datenbanken, Redis, Host-Logs) fünf Störungsläufe grün
+  (`…_05*_server-g11-stoerung-1` bis `-5`); insgesamt 1 rot zu 27 grün.
+- *Vermutet:* Rest-Zustand auf dem Server (Tobi), eine Lücke im Horizont beim harten Ende eines anderen Hosts am selben Postgres, oder ein
+  Weg, auf dem Sequenzen als erledigt gelten, ohne angewandt zu sein. *Nächster Schritt:* `scripts/stoerungsserie.sh <N>` sichert beim
+  nächsten roten Lauf Transaktionen und Commit-Zeiten der betroffenen Events (Commit-Zeitstempel sind auf dem Server eingeschaltet).
 
 **PF-10 · Datei-Treiber meldet seriell.** Der Datei-Treiber meldet die nächste Datei erst, wenn die vorige im Log steht (Rückstau, docs/11 §11.8).
 In S1 ist genau das die Decke: je Sekunde werden halb so viele Paare komplett, wie Dateien gemeldet werden (Phase-2- und Phase-3-Code gleich);
