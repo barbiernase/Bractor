@@ -198,9 +198,8 @@ public class MartenEventStore : IEventStoreRepository
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
         {
-            kopf = r.GetInt64(0);
-            ab = r.GetInt64(1);
-            if (!r.IsDBNull(3)) LeseZeile(r, 2, serializer, events);   // ohne eigenes Event: eine Zeile mit leeren Event-Spalten
+            if (!r.IsDBNull(0)) { kopf = r.GetInt64(0); ab = r.GetInt64(1); }   // die Kopfzeile (zuerst)
+            else LeseZeile(r, 2, serializer, events);
         }
         return new KorrelierteEvents(events.Select(e => e.Event).ToList(), (int)kopf, (int)ab);
     }

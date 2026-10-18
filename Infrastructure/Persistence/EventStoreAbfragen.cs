@@ -27,26 +27,30 @@ public static class EventStoreAbfragen
 
     /// <summary>
     /// Die eigenen Events eines Vorgangs im Stream $1 (Korrelation $3) ab Version $2, in einer Anweisung (eine Momentaufnahme) mit dem Kopf des
-    /// Streams und der Version, ab der gelesen wurde — die ersten beiden Spalten jeder Zeile; ohne eigenes Event genau eine Zeile mit leeren
-    /// Event-Spalten. Ist $2 = 0 (kein Cursor), beginnt der Read hinter dem letzten Event, das vor dem Start des Vorgangs geschrieben wurde: vor
-    /// dem ersten Event seines Logs $4 (kleinere Sequenz) gibt es nichts Eigenes. Diese Grenze sucht Postgres rückwärts vom Kopf über den
-    /// Stream-Index; das kostet nur die Events seit dem Start, nie die Geschichte davor. Ohne Event vor dem Start (oder ohne Log) ab 1.
+    /// Streams: die erste Zeile trägt nur den Kopf und die Version, ab der gelesen wurde (Spalten 1 und 2), die übrigen die Events (ab Spalte 3,
+    /// wie <see cref="Events"/>). Ist $2 = 0 (kein Cursor), beginnt der Read hinter dem letzten Event, das vor dem Start des Vorgangs geschrieben
+    /// wurde: vor dem ersten Event seines Logs $4 (kleinere Sequenz) gibt es nichts Eigenes. Diese Grenze sucht Postgres rückwärts vom Kopf über
+    /// den Stream-Index; das kostet nur die Events seit dem Start, nie die Geschichte davor. Ohne Event vor dem Start (oder ohne Log) ab 1.
     ///
     /// So gebaut, dass jeder Plan den Stream-Index nur im nötigen Bereich liest, auch mit veralteter Statistik (Plan-Test): der Kopf als
-    /// „sortiert, nur der erste“ (ein <c>max(version)</c> lief dann als Aggregat über den ganzen Stream), die eigenen Events als eigene
-    /// Teilabfrage, deren Untergrenze ein vorab berechneter Wert ist und damit Index-Bedingung (ein lateraler Join wurde zum Join-Filter und las
-    /// den ganzen Stream).
+    /// „sortiert, nur der erste“ (ein <c>max(version)</c> lief dann als Aggregat über den ganzen Stream), die Untergrenze als Ausdruck in der
+    /// Bedingung der Events (ein lateraler Join machte sie zum Join-Filter und las den ganzen Stream). Zwei einfache Teile statt Hilfstabellen
+    /// (CTE): halb so teuer in der Ausführung, ein Viertel im Planen.
     /// </summary>
     public static string Korreliert(string schema, string metadatenSpalten)
-        => "with g as materialized (select "
-           + $"coalesce((select k.version from {schema}.mt_events k where k.stream_id = $1::uuid order by k.version desc limit 1), 0) as kopf, "
-           + "greatest($2::bigint, case when $2::bigint > 0 then 0 else coalesce(("
-           + $"select v.version from {schema}.mt_events v where v.stream_id = $1::uuid and v.seq_id < ("
-           + $"select b.seq_id from {schema}.mt_events b where b.stream_id = $4::uuid order by b.version limit 1) "
-           + "order by v.version desc limit 1), 0) + 1 end) as ab), "
-           + $"e as materialized (select data, type, id, stream_id, version, timestamp, {metadatenSpalten}, seq_id from {schema}.mt_events "
-           + "where stream_id = $1::uuid and version >= (select ab from g) and correlation_id = $3::text and is_archived = false) "
-           + "select g.kopf, g.ab, e.* from g left join e on true order by e.version";
+    {
+        var ab = "greatest($2::bigint, case when $2::bigint > 0 then 0 else coalesce(("
+                 + $"select v.version from {schema}.mt_events v where v.stream_id = $1::uuid and v.seq_id < ("
+                 + $"select b.seq_id from {schema}.mt_events b where b.stream_id = $4::uuid order by b.version limit 1) "
+                 + "order by v.version desc limit 1), 0) + 1 end)";
+        // Kopfzeile: Kopf, Ab und so viele leere Spalten wie eine Event-Zeile (Daten, Typ, Id, Stream, Version, Zeit, acht Metadaten, Sequenz).
+        var leer = string.Join(", ", Enumerable.Repeat("null", 15));
+        return $"select coalesce((select k.version from {schema}.mt_events k where k.stream_id = $1::uuid order by k.version desc limit 1), 0), "
+               + $"{ab}, {leer} union all ("
+               + $"select null, null, data, type, id, stream_id, version, timestamp, {metadatenSpalten}, seq_id from {schema}.mt_events "
+               + $"where stream_id = $1::uuid and correlation_id = $3::text and is_archived = false and version >= {ab}) "
+               + "order by 7 nulls first";
+    }
 
     /// <summary>Die Seite einer Partition (Batch-Konsum): jenseits $1, Partition $3 von $2, ohne die erledigten $4, optional nur die Typen $6.</summary>
     public static string PartitionsBedingung(bool mitTypen)
