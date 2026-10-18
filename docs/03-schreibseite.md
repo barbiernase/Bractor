@@ -156,12 +156,14 @@ nicht aus Namespaces (`CommandAggregateMapGenerator`).
   `ProzessBeendet`, [04 §4.5](04-konsum-und-prozess-maschine.md)). Ein Weg für Einzel-Append und Group-Commit; die Quittungen eines Batches
   gehen in eine Anweisung, die Dokumente als Operationen derselben Session.
 - **Inbox** (`InboxTabelle`): Tabelle `cqrs_inbox` im Event-Schema (`command_id` Primärschlüssel, `stream_id`, `abgelehnt`, `zeit` =
-  `now()` der schreibenden Transaktion, BRIN-Index auf `zeit`), ein von Marten verwaltetes Schema-Objekt (`Storage.ExtendedSchemaObjects`).
+  `now()` der schreibenden Transaktion, B-Baum auf `zeit`), ein von Marten verwaltetes Schema-Objekt (`Storage.ExtendedSchemaObjects`).
   Trägt der Append eine `Quittung`, schreibt `QueueSqlCommand` sie in derselben Transaktion (Marten führt sie nach den Events aus); eine
   Schlüsselverletzung auf `cqrs_inbox` wird zu `KommandoSchonEntschiedenException`. Martens Wiederholungs-Policy (Polly) nimmt
   Eindeutigkeitsverletzungen aus — sie sind deterministisch und liefen sonst viermal mit Rollback. `AusgangAsync` liest per Primärschlüssel.
   Der `InboxAufraeumer` (je Knoten, alle 10 min, seitenweise, Lease über einen Transaktions-Advisory-Lock) löscht Quittungen älter als
-  `Schreibpfad.InboxHorizontTage` (Standard 30, E2): innerhalb des Horizonts wirkt ein Command genau einmal.
+  `Schreibpfad.InboxHorizontTage` (Standard 30, E2): innerhalb des Horizonts wirkt ein Command genau einmal. Er sucht über den Index, die
+  ältesten zuerst, und erst ab der Grenze, bis zu der er zuletzt gelöscht hat (abzüglich 5 min) — so kostet eine Seite, was sie löscht, nicht die
+  Größe der Tabelle und nicht die toten Einträge früherer Seiten (PF-27; BRIN verfiel, sobald VACUUM Seiten für neue Quittungen freigab).
 - **OCC**: `EventStreamUnexpectedMaxEventIdException` und die Doppel-Erstellung werden zu `ConcurrencyException`.
 - **Zeitstempel** (G-10): den setzt die Datenbank beim Einfügen, mit derselben Uhr, die `IDbClock` liest (`EventZeit`, Regel `before insert` auf
   `mt_events`; Ausdruck `UmgebungsDbClock.Ausdruck`, in Sim samt Versatz). Marten schickt die Uhr des Hosts mit, die Regel ersetzt sie. Angelegt
@@ -177,7 +179,9 @@ nicht aus Namespaces (`CommandAggregateMapGenerator`).
     `decide:Leihvorgang/LeiheAus`), `ueber` (der Absender des Commands), `stand` (Code-Stand des Hosts) — geschrieben an einer Stelle
     (`Infrastructure/Persistence/SpurHeader.cs`, Konstanten in `Abstractions/Spur/Spur.cs`), fehlende Werte werden weggelassen.
 - **Read** (`ReadStreamAsync`, `ReadKorreliertAsync`, `ReadEventAsync`): festes SQL auf `mt_events` (`stream_id = $1 and version >= $2`, beim
-  korrelierten Read dazu `correlation_id = $3`, beim Einzel-Read `version = $2`; immer `is_archived = false`, geordnet nach Version) statt Martens
+  korrelierten Read dazu `correlation_id = $3` und in derselben Anweisung der **Kopf** des Streams — bis dorthin hat der Leser alles Eigene
+  gesehen, denn jedes Anhängen wartet am Stream-Kopf auf das vorige —, ohne Cursor beginnt er hinter dem letzten Event vor dem Start des Vorgangs
+  (vor dem ersten Event seines Logs gibt es nichts Eigenes; PF-24); beim Einzel-Read `version = $2`; immer `is_archived = false`, geordnet nach Version) statt Martens
   LINQ, das jede Abfrage neu übersetzte und dabei die eingefangenen Werte kompilierte (PF-21). Den .NET-Typ zur Spalte `type` nennt die generierte
   Registrierung, mit der Marten die Typen auch schreibt; die Daten liest Martens Serializer, von den Kopfzeilen nur die sechs, die ein Envelope
   trägt, als Text-Spalten (`headers->>'aggregate_type'`, `'akteur'`, Spur; PF-22); Spalten, die Marten nach seiner Metadaten-Konfiguration nicht
@@ -226,8 +230,10 @@ Messwerte: [12](12-tests-und-vermessung.md).
 ## 3.5 Redis Version-Index (nicht-autoritativ)
 
 `Infrastructure/Persistence/RedisVersionTracker.cs`: schneller verteilter Index für Stale-Detection auf der Leseseite (Wahrheit bleibt
-der Log). Datenmodell: Hash `agg:{id}` (Felder `v`/`t`/`ts`) + Sekundär-Set `agg_idx:{type}`, mit Schlüssel-Präfix je Umgebung
-(`VersionIndex.Praefix`). Geschrieben **nach** erfolgreichem Append, per Redis-Pipeline, bei **jedem** Track indexiert. Graceful
+der Log). Datenmodell: Hash `agg:{id}` (Felder `v`/`t`/`ts`), mit Schlüssel-Präfix je Umgebung (`VersionIndex.Praefix`) und Ablauf
+(`VersionIndex.HaltbarkeitStunden`, Standard 24 — ohne Ablauf wuchs Redis mit jedem Aggregat, das es je gab; das Sekundär-Set `agg_idx:{type}`
+las niemand, es entfiel, PF-30). Geschrieben **nach** erfolgreichem Append, Hash und Ablauf in einer Redis-Pipeline. Ein abgelaufener Schlüssel
+gilt wie ein Ausfall: keine Information, niemand wartet. Graceful
 Degradation: `RedisConnectionException`/`TimeoutException` → nur Warning, der Command-Flow bricht nicht. Ganz abschaltbar über
 `VersionIndex.Betrieb = Aus` in der Umgebung → `NullVersionTracker`.
 

@@ -54,7 +54,10 @@ Horizont der Vollständigkeit aus den Transaktionsnummern von Postgres, ohne Uhr
 Poll der Emittenten). Die Position rückt nie darüber hinaus, bei voller Seite nie über deren Ende und
 nie über das erste Event eines hängenden Streams (unten). Jüngere Events werden trotzdem angewandt (Latenz); welche schon erledigt sind, merkt
 sich die Aktivierung und schließt sie beim nächsten Lesen aus, nach einer Neuaktivierung fängt der Guard sie ab. So überholt die Position keine
-noch unsichtbare kleinere Sequenz. Gesetzte Sequenz und „steht dahinter überhaupt ein Event?“ kommen aus **einer** Abfrage; steht hinter der
+noch unsichtbare kleinere Sequenz. Die Liste der Erledigten ist gedeckelt (`BatchLeser.ErledigtHoechstens`, 5 000, PF-28): steht der Horizont
+(eine lange offene Transaktion irgendwo im selben Postgres) oder hängt ein Stream, wüchse sie sonst mit jedem Event und ginge mit jeder Seite
+an die Datenbank. Ist sie voll, wendet der Leser nur noch an, was bis zur gesetzten Sequenz reicht, und wartet sonst; ein hängender Stream wird
+dann geparkt statt hinter ihm weiter zu sammeln. Gesetzte Sequenz und „steht dahinter überhaupt ein Event?“ kommen aus **einer** Abfrage; steht hinter der
 Position nichts, entfällt die Seite — eine Weckung ohne Neues kostet eine Abfrage statt zwei (PF-14; ebenso der Prozess-Poll und der Poll der
 Emittenten). Gelesen wird ab einer Lese-Position im Speicher: durabel wird sie mit jedem Commit eines Batches; über fremde
 Events hinweg (leere Seite) höchstens einmal je Poll-Intervall — sonst committete unter Last jede Weckung nur eine Zahl. Eine Transaktion, die
@@ -80,7 +83,8 @@ verlorene Signale; einen Heil-Poll je Stream gibt es für Projektionen nicht meh
 Partitionen davon, der Poll weckt sie ohnehin).
 
 **Rückstand.** `/health` und `/monitoring/metrics` melden über alle Projektionen die relevanten Events jenseits der Positionen
-(`KonsumRueckstand`, eine Abfrage je Projektion) und die geparkten Streams.
+(`KonsumRueckstand`, eine Abfrage je Projektion, gezählt über höchstens die ersten 1 000 Events hinter der kleinsten Position — darüber
+„mehr“, PF-29; ein volles `count(*)` las bei einer Partition ohne Checkpoint je Abruf das ganze Log) und die geparkten Streams.
 
 ### 4.1.2 Emittenten je Stream
 
@@ -289,7 +293,8 @@ früher Vorgänge liegen, die niemand weckte). Der `ProzessManagerStartupService
 - den **Prozess-Poll** (`ProzessPoll`, 30 s, PF-4): er liest das Log seitenweise ab seiner Hochwassermarke (`ReadPartitionAsync`, eine
   Partition, 500 Events) und routet die geladenen Events direkt (`ProzessPollFilter`) — ein Auslöser startet seinen Vorgang nur, wenn es ihn
   noch nicht gibt oder er offen ist (`StreamsVorhandenAsync`, eine Abfrage je Seite), jedes andere Event weckt nur über die Korrelation eines
-  offenen Vorgangs. Die Weckungen sind bestätigt (WakeAck, 10 s, parallel bis 32); die Marke rückt nur bis vor die erste unbestätigte (G-8) und
+  offenen Vorgangs — ob offen, fragt er je Seite nur für deren Korrelationen ab (`OffeneAusAsync`, über den Schlüssel; früher las jede Seite die
+  ganze Liste der offenen Vorgänge, PF-25). Die Weckungen sind bestätigt (WakeAck, 10 s, parallel bis 32); die Marke rückt nur bis vor die erste unbestätigte (G-8) und
   wird je Seite gespeichert;
 - den **§3-Backstop** über den durablen `IProzessOffenIndex`: jede Sekunde weckt er die Vorgänge mit fälliger **Frist** (Zeitlimit,
   Warte-Knoten, s. u.), alle 15 s gleicht er den **Heil-Plan** (`Heilplan`, im Speicher des Knotens) mit den offenen Vorgängen ab: eine
@@ -298,7 +303,10 @@ früher Vorgänge liegen, die niemand weckte). Der `ProzessManagerStartupService
   10 s). Im Cluster betreibt jeder Knoten seinen Backstop (eine Lease fehlt noch, docs/13 PF-4).
 
 **Fold.** Je Ziel-Stream ab `StreamCursor[s]+1` nur die Events der eigenen Korrelation lesen (`ReadKorreliertAsync`: jede Wirkung, Noop- und
-Ablehnungs-Marke eines Befehls und jedes Funktionsergebnis trägt sie; in viel beschriebenen Streams waren sonst fast alle gelesenen Events fremd), in `MarkingKompakt` einarbeiten, ein Fixpunkt zieht die Kandidaten. Drei getrennte
+Ablehnungs-Marke eines Befehls und jedes Funktionsergebnis trägt sie; in viel beschriebenen Streams waren sonst fast alle gelesenen Events fremd), in `MarkingKompakt` einarbeiten, ein Fixpunkt zieht die Kandidaten.
+Der Cursor rückt bis zum **Kopf** des Streams, den der Read mitliefert — fremde Events dahinter liest die nächste Weckung nicht noch einmal;
+ohne Cursor (kalt ohne gespeicherten Stand, oder ein nie gelesener Stream) liest der Store erst ab dem Beginn des Vorgangs (PF-24): was ein
+Vorgang liest, hängt nie an der Geschichte seiner Ziel-Streams, nur an dem, was seit seinem Start bzw. seit der letzten Weckung dazukam. Drei getrennte
 Ergebnis-Achsen je Vorgang:
 - **ErgebnisDa** = aufgelöst (irgendein Ziel-Event, auch Noop-Marke) → nicht mehr feuern;
 - **WirkungDa** = ein Domänen-Event (kein `IProzessIntern`) → kompensierbar, aktiviert Joins;
@@ -309,7 +317,8 @@ Ohne die dritte Achse läse der Vorwärtszweig eine Ablehnung als „aufgelöst�
 **Ein Schritt je Weckung** (`WakeAsync`): Marking falten → neue Ablehnungen und abgelaufene Zeitlimits durabel als `SchrittGescheitert`
 (im Fluss bei verdrahtetem Fehler-Port als `SchrittUmgeleitet`, §4.6) → ohne Fehlschlag: alle offenen Funktions-Aufträge anbieten
 (parallel, ohne Selbst-Weckung — der Ausführer weckt mit dem Ergebnis), den ersten offenen Command feuern (sequenziell), sind keine Aufrufe
-offen: `ProzessBeendet(true)` → mit Fehlschlag: **Kompensation** rückwärts über die erfolgreichen Regeln mit Gegenzug; ist ein Gegenzug selbst
+offen: `ProzessBeendet(true)` → mit Fehlschlag: **Kompensation** rückwärts über die erfolgreichen Regeln mit Gegenzug (ob ein Gegenzug schon
+erledigt ist, steht im Marking: sein Ergebnis trägt die Korrelation wie jedes andere; früher las die Prüfung den ganzen Ziel-Stream ab 0, PF-23); ist ein Gegenzug selbst
 abgelehnt, endet der Vorgang als `ProzessBeendet(false, KlärungNötig: true)` mit einem best-effort Dead-Letter-Eintrag (kein endloses
 Neufeuern) — sonst `ProzessBeendet(false)`.
 
@@ -321,8 +330,9 @@ höchstens 30 s, gestreut). Solange der Send eines Vorgangs läuft oder sein Bac
 ihn erneut. Mit der Drossel je Ziel (§4.4) baut ein überlastetes Aggregat seinen Rückstau ab, statt dass Wiederholungen ihn vervielfachen.
 
 **Passivierung** (PF-5): ein Manager ohne Nachricht stoppt nach `Lebenszyklus.ProzessManagerLeerlaufSekunden` (Standard 600). Ein still
-wartender Vorgang passiviert; ihn wecken seine Frist, ein Event oder die nächste Heil-Weckung. Der Kaltstart liest den Marking-Cursor bzw. faltet
-voll.
+wartender Vorgang passiviert; ihn wecken seine Frist, ein Event oder die nächste Heil-Weckung. Beim Stoppen und bei jeder Weckung durch den
+Backstop (der Vorgang ist still geworden) legt der Manager sein Marking durabel ab — samt der Zeiten von Auslöser und Tokens, an denen die
+Zeitlimits hängen; der Kaltstart liest dort weiter, ohne gespeicherten Stand ab dem Beginn des Vorgangs.
 
 **Marking-Cursor (P5b).** `MarkingKompakt` (`Abstractions/Prozess/ProzessMarking.cs`) hält je Ziel-Stream einen `StreamCursor` und verdichtete
 Vorgangs-Marken statt roher Tokens:
@@ -403,7 +413,8 @@ Kern `FlussBelegung` (`Abstractions/Prozess/FlussBelegung.cs`), den auch das `Fl
   Fehlschlag, sondern im Log als `SchrittUmgeleitet` vermerkt und im Dirigenten zum Token `ZeitlimitAbgelaufen` bzw. `SchrittAbgelehnt`
   (beide `IProzessIntern`, nie im Log) — der Fluss läuft auf dem verdrahteten Zweig weiter.
 - **Warte:** ein Warte-Knoten liest den Strom der Quelle nach ihrer Version; das erste erwartete Event vor Ablauf (DB-Zeit) gewinnt, sonst
-  entsteht `ZeitlimitAbgelaufen`.
+  entsteht `ZeitlimitAbgelaufen`. Er merkt sich im Marking, bis wohin er den Strom geprüft hat (`VorgangMarke.Gelesen`), und liest bei der nächsten
+  Weckung nur dahinter (PF-26) — sonst wüchse jede Weckung mit der Wartezeit.
 - **Quell-Einstieg:** `QuellEingang.NimmAufAsync` (`Infrastructure/Quellen/Quellen.cs`) hängt eine Quell-Nachricht als erstes Event eines
   Vorgangs-Streams an, dessen Id deterministisch aus Typ und `Kennung` folgt (Version 0 → **genau einmal** im Log, auch bei Neustart oder
   zweitem Knoten), und weckt dann jede Pipeline, die mit `p.Quelle<T>()` beginnt; eine verlorene Weckung heilt der Poll des

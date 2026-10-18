@@ -1,13 +1,14 @@
 # 13 — Reifegrad, Schulden & Bewertung
 
 **Die eine Quelle für „offen“.** Andere Dokumente (`CLAUDE.md`, Kapitel 01–12, Konzepte) nennen Schulden höchstens kurz und verweisen
-hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz und PF-14. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
+hierher. Stand: 2026-10-18, nach Phase 4 des Plans Garantien und Durchsatz, PF-14 und der Analyse wachsender Bestände (PF-23 bis PF-32). Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
 (`docs/konzept-werkbank.md` §2). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
 
 ## 13.0 Offen auf einen Blick
 
 | ID | Kurz | Prio |
 |---|---|:--:|
+| G-11 | Im Störungslauf übersprang eine Projektion einmal zwei Events eines Streams (Partition am Kopf, Guard dahinter) — Ursache und Test offen | P1 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
 | PF-13 | Unter S5-64: Reaktion p99 2–3,5 s (p50 5 ms) — ihr Nachschub wartet am heißen Posten hinter den Reservierungen (der S3-64-Rückgang ist mit „korreliert lesen“ erledigt: 1,85 × Baseline) | P3 |
@@ -15,7 +16,11 @@ hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz und P
 | PF-10 | Datei-Treiber meldet eine Datei nach der anderen ins Log (Rückstau): das Melde-Tempo ist die Decke von S1 — Entscheidung offen | P2 |
 | VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16 | P3 |
-| PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
+| PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar (Schlüssel laufen seit PF-30 ab) | P2 |
+| PF-25 | Rest: der Backstop gleicht alle 15 s den Heil-Plan im Speicher mit der ganzen Liste der offenen Vorgänge ab; nach einem Neustart weckt er alle auf einmal | P2 |
+| PF-31 | Entscheidung offen: ein Wechsel der Snapshot-Schema-Version faltet heiße Aggregate einmal voll; ein neuer Emittent liest die Geschichte ab 0 | P3 |
+| PF-26 | Rest: offene Warte-Knoten weckt der Takt alle 15 s; der Backstop deckelt bei 1 000 Weckungen pro Sekunde (≈ 15 000 Wartende) | P3 |
+| PF-32 | Wachstum ohne Laufzeit-Risiko: Guards und Emittenten-Cursor je Stream nie gelöscht, DLQ ohne Aufräumen und Index, Einblick-Scans, Kopfzeilen 140 Byte je Event | P3 |
 | PF-17 | Rest: die Zeitstempel-Regel kostet in Sim ≈ 20–35 µs je eingefügtem Event (Versatz je Zeile aus `uhr`); in Prod nur die Datenbankzeit | P3 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
@@ -87,6 +92,14 @@ Keine offenen P0-Befunde (G-1 und G-7 erledigt in Phase 1 des Plans Garantien un
 ### P1
 
 Die Reihe **PF** sind Kosten der Garantien ([11](11-garantien.md) §11.12): die Garantie bleibt, der Mechanismus ist teurer als nötig.
+
+**G-11 · Projektion übersprang Events im Störungslauf** (gemessen einmal, `vermessung/ergebnisse/2026-10-18_0405_5e2d293_server-wachstum-stoerung-1`).
+In S1 fehlte im Read-Model ein komplettes Paar: für seinen Stream standen die Guards beider Bildpaar-Projektionen auf Version 3, die Versionen 4
+(`BildVerfuegbar`) und 5 (`ImagePairKomplett`) waren nie angewandt, alle Partitionen standen am Kopf des Logs, nichts geparkt. Die drei Events
+entstanden in der Sekunde, in der der Treiber Redis für 10 s anhielt. Der Wiederholungslauf und etwa 20 Störungsläufe davor waren grün. Den
+Batch-Leser hat der Umbau zu PF-28 nur an einer Obergrenze geändert, die bei 3 258 Events nicht greift. *Vermutet:* eine Lücke im Horizont
+(die Position rückte über Sequenzen, deren Transaktion noch unsichtbar war) oder ein Weg, auf dem Sequenzen als erledigt gelten, ohne angewandt
+oder geparkt zu sein. *Nächster Schritt:* Test, der es zeigt; eigene Aufgabe.
 
 **PF-10 · Datei-Treiber meldet seriell.** Der Datei-Treiber meldet die nächste Datei erst, wenn die vorige im Log steht (Rückstau, docs/11 §11.8).
 In S1 ist genau das die Decke: je Sekunde werden halb so viele Paare komplett, wie Dateien gemeldet werden (Phase-2- und Phase-3-Code gleich);
@@ -206,6 +219,18 @@ Namen verglichen. Die Sonde deckt `SendeJe`, Count-Join, Kompensation, `IMensch`
 aber verlierbar zugestellt), `als` im Envelope bei mehreren verkörperten Akteuren, Zusagen über C#-Clients (CQRS094), Anmeldung je Person; kein
 Boot-Check, ob `Clients:<Name>:Token` die Akteure des Vertrags verkörpert.
 
+**PF-25 · Rest: Heil-Plan über die ganze Liste.** Seit PF-25 fragt der Prozess-Poll je Seite nur die eigenen Korrelationen ab, `/health` zählt
+nur. Der Backstop liest aber alle 15 s die ganze Liste der offenen Vorgänge (`ListeOffeneAsync`) und hält je Knoten den Heil-Plan im Speicher;
+nach einem Neustart ist er leer, und jeder offene Vorgang bekommt nach 15 s eine Heil-Weckung (bei 32 gleichzeitig). *Gerechnet:* bei 200 000
+offenen Vorgängen ≈ 6 000 Blöcke und 3 MB je Abgleich. *Empfehlung:* die Heilung als zweite Frist im Offen-Index (Feld „nächste Heilung“ mit
+Index, gesetzt beim Start in derselben Transaktion, verdoppelt nach jeder Heil-Weckung; Abfrage „die frühesten 1 000“ wie die Frist) — dann
+entfallen Abgleich, Plan und Sturm. Offen: ob ein Send den Abstand zurücksetzt (ein Patch je Send).
+
+**PF-31 · Volles Falten nach Schema-Wechsel, Emittent ab 0.** Passt die Schema-Version eines Snapshots nicht, faltet die erste Aktivierung den
+ganzen Stream (bei einem heißen Aggregat Millionen Events, Minuten); ein neu hinzugefügter Emittent liest jeden abonnierten Stream ab 0.
+*Entscheidung offen:* hinnehmen und beim Start warnen (Stream ohne gültigen Snapshot länger als N Events), bzw. fachlich festlegen, ob eine neue
+Reaktion die Geschichte nachholt.
+
 **PF-6 · Read-your-writes-Index.** `ReadModelDepsWriter` schreibt je Event und Projektion nach Redis, für eine Garantie, die nur best-effort ist.
 *Empfehlung:* je Projektion abschaltbar, an nur für Projektionen, auf die Clients warten.
 
@@ -247,6 +272,15 @@ generieren); `VersionTracker.reset()` wird nie aufgerufen; `proxy._detect_route(
 Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 
 ### P3
+
+- **PF-26 · Rest: Warte-Knoten im Takt.** Ein offener Warte-Knoten liest seit PF-26 nur noch das Neue, wird aber weiter alle 15 s über seine Frist
+  geweckt; ab ≈ 15 000 Wartenden reicht die Grenze des Backstops (1 000 je Sekunde) nicht, dann kämen auch fremde Zeitlimits zu spät. *Option:*
+  über das Signal des Quell-Streams wecken (ein Verzeichnis „wer wartet auf Stream X“), der Takt nur als Netz mit wachsendem Abstand.
+- **PF-32 · Wachstum ohne Laufzeit-Risiko** (Analyse 2026-10-18, docs/12 §12.5): Guards `ProjectionCheckpoint` je (Projektion, Stream) und
+  Emittenten-Cursor je (Konsument, Stream) werden nie gelöscht (Zugriff über den Schlüssel; das Zurücksetzen löscht ohne Index auf
+  `ProjectionId`); die Dead-Letter-Tabelle wird nie geleert und je `/health` gezählt, ohne Index sortiert; der Einblick (Sim) durchsucht je
+  Vorgangsliste das ganze Log; die Beispieldomäne blättert mit `OFFSET` und lädt für Statistiken ganze Tabellen; Kopfzeilen kosten ≈ 140 Byte
+  je Event, die Daten ≈ 70; Postgres auf dem Messserver läuft mit `shared_buffers = 160 MB`.
 
 - **P3-1 · Mojibake** in `Domain.SourceGeneration/AggregateHandlerGenerator.cs`, `Infrastructure/Projections/ReadModelDepsReader.cs`,
   `Infrastructure/Serialization/ProtoMapper.cs`.
@@ -302,6 +336,35 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **PF-23, PF-24, PF-25 (Teil), PF-26 (Teil), PF-27 bis PF-30 · Kosten, die mit der Datenmenge wuchsen (2026-10-18, Messserver; docs/12 §12.5,
+  docs/03 §3.3, docs/04 §4.1/§4.5):** die Analyse wachsender Bestände fand Laufzeitpfade, deren Kosten mit der Geschichte statt mit der Last wuchsen.
+  - **PF-23 Kompensation:** „ist der Gegenzug schon erledigt?“ las den ganzen Ziel-Stream ab 0 — in der Prüfdomäne die teuerste Abfrage (276 000
+    Aufrufe, 105 Zeilen, 108 von 252 s Datenbankzeit eines Laufs). Jetzt aus dem Marking. Nachweis PD
+    `MarkingCursorAequivalenzTests.Eine_Kompensation_liest_nicht…` (10 gegen 2 000 fremde Events im Posten; sabotiert: 3 980 Zeilen mehr).
+  - **PF-24 kalter Fold:** ohne gespeicherten Stand las der Fold jeden Ziel-Stream ab 0, ohne Index auf der Korrelation über den ganzen Stream;
+    der Cursor blieb am letzten eigenen Event, fremde dahinter las jede Weckung neu; das Marking ging nur alle 32 Weckungen durabel, beim
+    Passivieren nie. Jetzt liefert der korrelierte Read den Kopf des Streams (Cursor bis dorthin) und liest ohne Cursor ab dem Beginn des
+    Vorgangs; das Marking geht beim Stillwerden und beim Stoppen durabel, samt Auslöser- und Token-Zeit (ohne sie verlor ein kalt geladener
+    Vorgang seine Zeitlimits). Nachweis PD `…Ein_kalter_Vorgang_ohne_gespeicherten_Stand…`, `…Fremde_Events_hinter_dem_eigenen_Ausgang…`,
+    `…Beim_Passivieren_sichert…`, `EventReadGarantieTests` (Kopf, Untergrenze), I `AbfragePlanGarantieTests` (Stream mit 100 000 Events Geschichte:
+    20 Blöcke; eine erste Form mit Hilfstabellen las mit veralteter Statistik 5 243); je sabotiert rot.
+  - **PF-25 (Teil):** der Prozess-Poll las je Seite alle offenen Vorgänge, `/health` lud sie zum Zählen. Jetzt je Seite nur die Korrelationen der
+    Seite (`OffeneAusAsync`, über den Schlüssel), `/health` zählt. Nachweis I `AbfragePlanGarantieTests` (200 000 offene; sabotiert rot). Rest: PF-25.
+  - **PF-26 (Teil) Warte-Knoten:** las alle 15 s den Strom ab dem Auslöser; jetzt nur hinter dem zuletzt geprüften Event. P
+    `PipelineFlussTests.Ein_wartender_Knoten…` (sabotiert 9 001 statt ≈ 1 000 Zeilen). Rest: PF-26.
+  - **PF-27 Inbox:** BRIN auf `zeit` verfiel nach dem ersten Aufräumen (wiederverwendete Seiten, tote Zeilen); jetzt B-Baum, Aufräumen ab der
+    letzten Grenze, die ältesten zuerst. I `InboxAufraeumenGarantieTests` (eine Million Quittungen: 606 Blöcke je Seite; BRIN 9 957, B-Baum ohne
+    Untergrenze 1 994). Dabei gefunden: der Aufräumer las die DB-Zeit mit falschem Typ.
+  - **PF-28 Ausschlussliste:** stand der Horizont, wuchs die Liste der Erledigten mit jedem Event und ging mit jeder Seite an die Datenbank
+    (quadratisch). Jetzt höchstens 5 000; voll nur bis zur gesetzten Sequenz, hängende Streams werden geparkt. P
+    `BatchLeserTests.Steht_der_Horizont…` (sabotiert 15 000 statt ≤ 5 100).
+  - **PF-29 Rückstand:** `count(*)` ab der kleinsten Position, je Abruf von `/health`; jetzt über höchstens 1 000 Events. I `AbfragePlanGarantieTests`
+    (sabotiert 11 565 Blöcke).
+  - **PF-30 Redis:** keine Ablaufzeit, keine Speichergrenze, ein nie gelesenes Set `agg_idx` je Aggregat. Jetzt Ablauf
+    (`VersionIndex.HaltbarkeitStunden`, 24), `agg_idx` entfällt, `maxmemory` in den Compose-Dateien.
+  - Gemessen (E2E, gegen einen frischen Lauf des Ausgangsstands): Durchsatz 0,91–1,15 ×, Leerlauf unverändert, Exactly-once grün; der korrelierte
+    Read kostet ≈ 30–40 µs mehr je Aufruf (Kopf und Untergrenze). Ein Störungslauf rot (G-11), der Wiederholungslauf grün.
 
 - **PF-17 · Horizont-Probe und fällige Abfragen über den Index (2026-10-18; docs/12 §12.5):** die Frage „steht hinter der Position etwas?“
   (`exists(… seq_id > $1)`) durchsuchte die Tabelle von vorn — bei veralteter Statistik einer wachsenden Tabelle und seit PF-20 immer, weil die
