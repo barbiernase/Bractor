@@ -11,6 +11,7 @@
 # ({szenario, kennzahl, einheit, wert}) in der Reihenfolge ihres ersten Auftretens. Die letzte Spalte ist das Verhältnis der jüngsten
 # Spalte zur Baseline — bewertet werden Verhältnisse (§0.1). Ungültige Läufe bleiben gespeichert, erscheinen aber nicht als Spalte.
 set -euo pipefail
+shopt -s nullglob
 
 WURZEL="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 ORDNER="$WURZEL/vermessung/ergebnisse"

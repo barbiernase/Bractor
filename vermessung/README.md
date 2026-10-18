@@ -1,8 +1,13 @@
 # Vermessung
 
-Ablage aller Messergebnisse (`docs/plan-garantien-und-durchsatz.md` §0.1). Jeder Lauf hat einen eigenen Ordner
-`ergebnisse/<JJJJ-MM-TT_HHMM>_<commit>_<anlass>/` und wird committet; nur anhängen, nie überschreiben oder löschen — auch ungültige Läufe
-(die Begründung steht in `ergebnis.json`). Ein Commit mit dem Zusatz `-geaendert` wurde auf einem nicht committeten Arbeitsbaum gemessen.
+Ablage der Messergebnisse. Jeder Lauf hat einen eigenen Ordner `ergebnisse/<JJJJ-MM-TT_HHMM>_<commit>_<anlass>/` und wird committet,
+auch ungültige Läufe (die Begründung steht in `ergebnis.json`). Ein Commit mit dem Zusatz `-geaendert` wurde auf einem nicht committeten
+Arbeitsbaum gemessen.
+
+**Schnitt (2026-10-18):** Alle Läufe davor sind gelöscht; ihre Erkenntnisse stehen in der Doku, die Rohdaten im Git-Tag
+`vermessung-vor-schnitt` (`git show vermessung-vor-schnitt:vermessung/ergebnisse/<ordner>/zusammenfassung.md`). Hier liegen nur Läufe,
+die für den aktuellen Code etwas aussagen: die Referenz (Spalte „Baseline“) und die Messungen dagegen. Überholte Läufe dürfen bei einem
+neuen Schnitt wieder gehen.
 
 - `ergebnis.json`: Metadaten (Rechner, Commit, Branch, Umgebungen, Parameter, Fremdlast vorher/nachher und je Szenario, Anlass, Spalte),
   bei E2E-Läufen je Block die Kennzahlen und die Exactly-once-Prüfungen; `gueltig` und `begruendung`;
@@ -48,10 +53,3 @@ scripts/vermessung-tabelle.sh --schreibe                               # Tabelle
 - **Nie** gleichzeitig mit einer Integrations-Suite, der Werkbank-Abnahme oder einem Build; keine Mehrstunden-Läufe (Tobi, 2026-10-15).
 - Fremdlast steht im Ergebnis; Läufe auf dem MacBook Air vergleichen **Verhältnisse** zur Baseline, nicht absolute Zahlen. Bei starker Fremdlast
   lieber wiederholen.
-- Baseline: `ergebnisse/2026-10-15_0429_3cfec32_baseline` und `…_0433_3cfec32_baseline-stoerung` (Commit `3cfec32`).
-- Phase 1: `ergebnisse/2026-10-15_0539_b955d40_phase-1` und `…_0542_b955d40_phase-1-stoerung` (Commit `b955d40`).
-- Phase 2: `ergebnisse/2026-10-15_0745_4caa176_phase-2` und `…_1119_860cb7a_phase-2-stoerung`.
-- Phase 3: `ergebnisse/2026-10-15_1312_0b02802_phase-3`, Störungsläufe `…_1333_0b02802_phase-3-stoerung` (ungültig: nicht abgebaut, PF-4) und
-  `…_phase-3-stoerung-2` (gültig); A-B-B-A S1/S5 gegen Phase 2 `…phase-3-ab-s1s5-{a1,b1,b2,a2}` — A wurde in einem `git worktree` auf `ee401da`
-  gemessen und hierher kopiert (so misst man einen älteren Code-Stand).
-

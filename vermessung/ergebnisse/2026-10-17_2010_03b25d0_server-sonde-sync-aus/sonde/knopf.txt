@@ -1,2 +1,0 @@
-sync-aus
-synchronous_commit = off
