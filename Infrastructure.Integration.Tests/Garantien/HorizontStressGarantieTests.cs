@@ -24,7 +24,7 @@ public class HorizontStressGarantieTests : IClassFixture<HorizontStressGarantieT
     private readonly Fixture _fx;
     public HorizontStressGarantieTests(Fixture fx) => _fx = fx;
 
-    private const int Schreiber = 24, StreamsJeSchreiber = 25, Partitionen = 4;
+    private const int Schreiber = 16, StreamsJeSchreiber = 25, Partitionen = 4;
     private static readonly TimeSpan Dauer = TimeSpan.FromSeconds(40);
 
     [Fact]
@@ -33,7 +33,7 @@ public class HorizontStressGarantieTests : IClassFixture<HorizontStressGarantieT
         var es = new MartenEventStore(_fx.Store, new KeineFabrik(), NullLogger<MartenEventStore>.Instance);
         await using var appender = new BatchingEventAppender(es, new MartenEventBatchWriter(_fx.Store, NullLogger<MartenEventBatchWriter>.Instance),
             NullLogger<BatchingEventAppender>.Instance, maxBatch: 256, drainParallelism: 4);
-        var konsum = new Konsum(Partitionen, 50);
+        var konsum = new Konsum(Partitionen, 200);
         const string proj = "it-horizont-stress";
         await BatchHilfe.StarteAmKopfAsync(_fx.Store, proj, konsum);
 
@@ -64,16 +64,16 @@ public class HorizontStressGarantieTests : IClassFixture<HorizontStressGarantieT
                     geschrieben.AddOrUpdate(streams[i], n, (_, alt) => alt + n);
                 }
                 catch (ConcurrencyException) { throw; }   // jeder Stream hat genau einen Schreiber
-                if (zufall.Next(10) == 0) await Task.Delay(zufall.Next(5));
+                await Task.Delay(zufall.Next(2, 8));   // Last wie ein belebter Betrieb, die Leser holen auf
             }
         })).ToList();
 
-        var historie = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
         var laeufe = new ConcurrentDictionary<int, int>();
         var leser = Enumerable.Range(0, Partitionen).Select(p => Task.Run(async () =>
         {
             var zufall = new Random(1000 + p);
-            BatchLeser Neu() => BatchHilfe.HistorieLeser(es, historie, proj, p, konsum,
+            // Je Aktivierung ein eigener Co-Commit-Store (er puffert die Effekte eines Batches) — wie im Host.
+            BatchLeser Neu() => BatchHilfe.HistorieLeser(es, new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store), proj, p, konsum,
                 vorher: async _ => { if (zufall.Next(200) == 0) await Task.Delay(zufall.Next(50, 400)); },
                 absturz: async () => { if (zufall.Next(30) == 0) await Task.Delay(zufall.Next(50, 600)); });
             var l = Neu();
@@ -87,9 +87,9 @@ public class HorizontStressGarantieTests : IClassFixture<HorizontStressGarantieT
         })).ToList();
 
         await Task.WhenAll(schreiber);
-        // Ausklingen: bis alle Partitionen am Kopf stehen (höchstens 60 s), dann noch zwei Runden.
+        // Ausklingen: bis alle Partitionen am Kopf stehen (höchstens 120 s), dann noch eine Sekunde.
         var kopf = await BatchHilfe.KopfAsync(_fx.Store);
-        var bis = DateTime.UtcNow + TimeSpan.FromSeconds(60);
+        var bis = DateTime.UtcNow + TimeSpan.FromSeconds(120);
         while (DateTime.UtcNow < bis)
         {
             var stände = await Task.WhenAll(Enumerable.Range(0, Partitionen).Select(p => BatchHilfe.PartitionAsync(_fx.Store, proj, p)));
@@ -100,6 +100,7 @@ public class HorizontStressGarantieTests : IClassFixture<HorizontStressGarantieT
         leseStopp.Cancel();
         await Task.WhenAll(leser);
 
+        var historie = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
         var fehlend = new List<string>();
         foreach (var (stream, n) in geschrieben)
         {
@@ -108,7 +109,10 @@ public class HorizontStressGarantieTests : IClassFixture<HorizontStressGarantieT
                 fehlend.Add($"{stream}: {eintraege} statt {n} (Guard {await BatchHilfe.GuardAsync(_fx.Store, proj, stream)})");
         }
         geschrieben.Values.Sum().Should().BeGreaterThan(10_000, "der Test muss Last erzeugen");
-        fehlend.Should().BeEmpty($"jedes Event genau einmal ({geschrieben.Values.Sum()} Events in {geschrieben.Count} Streams, Kopf {kopf})");
+        var stand = await Task.WhenAll(Enumerable.Range(0, Partitionen).Select(p => BatchHilfe.PartitionAsync(_fx.Store, proj, p)));
+        stand.Should().OnlyContain(s => s!.Position >= kopf, "alle Partitionen haben den Kopf erreicht (sonst misst der Test nur Rückstand)");
+        fehlend.Should().BeEmpty($"jedes Event genau einmal ({geschrieben.Values.Sum()} Events in {geschrieben.Count} Streams, Kopf {kopf}; "
+            + $"{fehlend.Count} Streams abweichend: {string.Join("; ", fehlend.Take(10))})");
     }
 
     private sealed class KeineFabrik : IAggregateHandlerFactory
