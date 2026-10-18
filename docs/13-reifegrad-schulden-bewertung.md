@@ -8,7 +8,7 @@ hierher. Stand: 2026-10-18, nach Phase 4 des Plans Garantien und Durchsatz, PF-1
 
 | ID | Kurz | Prio |
 |---|---|:--:|
-| G-11 | Im Störungslauf übersprang eine Projektion einmal zwei Events eines Streams (Partition am Kopf, Guard dahinter) — Ursache und Test offen | P1 |
+| G-11 | Einmal unter harten Abbrüchen beobachtet, nicht reproduzierbar: eine Projektion übersprang zwei Events eines Streams (Partition am Kopf, Guard dahinter); Sicherheitsnetz vorgeschlagen | P2 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
 | PF-13 | Unter S5-64: Reaktion p99 2–3,5 s (p50 5 ms) — ihr Nachschub wartet am heißen Posten hinter den Reservierungen (der S3-64-Rückgang ist mit „korreliert lesen“ erledigt: 1,85 × Baseline) | P3 |
@@ -93,24 +93,6 @@ Keine offenen P0-Befunde (G-1 und G-7 erledigt in Phase 1 des Plans Garantien un
 
 Die Reihe **PF** sind Kosten der Garantien ([11](11-garantien.md) §11.12): die Garantie bleibt, der Mechanismus ist teurer als nötig.
 
-**G-11 · Projektion übersprang Events im Störungslauf** (gemessen einmal, `vermessung/ergebnisse/2026-10-18_0405_5e2d293_server-wachstum-stoerung-1`).
-In S1 fehlte im Read-Model ein komplettes Paar: für seinen Stream standen die Guards beider Bildpaar-Projektionen auf Version 3, die Versionen 4
-(`BildVerfuegbar`) und 5 (`ImagePairKomplett`) waren nie angewandt, alle Partitionen standen am Kopf des Logs, nichts geparkt. Die drei Events
-entstanden um 02:08:07 — laut `host.csv` drei Sekunden nachdem der Treiber den Prüfdomänen-Host hart beendet und neu gestartet hatte, fast
-20 s nach dem Redis-Neustart (eine erste Lesart der Zeitachse, „während Redis stand“, war falsch). Beide Projektionen übersprangen dieselben
-Events; gemeinsam ist ihnen der Horizont (einer je Host-Prozess) und die Seite derselben Partition. Den Batch-Leser hat der Umbau zu PF-28 nur
-an einer Obergrenze geändert, die bei 3 258 Events nicht greift.
-- *Geprüft, ohne Befund:* die Sequenz hat Cache 1; die Freigabe-Regel des Horizonts und die Reihenfolge Stream-Zeile vor `nextval` (auch für
-  gemischte Group-Commits, `AnhaengeReihenfolgePostgresTests`); der Host öffnet je Partitions-Leser einen eigenen Store. Neu: I
-  `HorizontStressGarantieTests` (16 Schreiber über Group-Commit und Bündel, ≈ 250 000 Events in 40 s, langsame Batch-Leser mit Neustarts —
-  jedes Event genau einmal; zweimal grün). Eine erste Fassung teilte einen Store unter allen Lesern und verlor dadurch Effekte — ein Fehler
-  des Tests, nicht des Hosts.
-- *Gemessen:* nach dem Löschen allen Rest-Zustands (Mess- und Test-Datenbanken, Redis, Host-Logs) fünf Störungsläufe grün
-  (`…_05*_server-g11-stoerung-1` bis `-5`); insgesamt 1 rot zu 27 grün.
-- *Vermutet:* Rest-Zustand auf dem Server (Tobi), eine Lücke im Horizont beim harten Ende eines anderen Hosts am selben Postgres, oder ein
-  Weg, auf dem Sequenzen als erledigt gelten, ohne angewandt zu sein. *Nächster Schritt:* `scripts/stoerungsserie.sh <N>` sichert beim
-  nächsten roten Lauf Transaktionen und Commit-Zeiten der betroffenen Events (Commit-Zeitstempel sind auf dem Server eingeschaltet).
-
 **PF-10 · Datei-Treiber meldet seriell.** Der Datei-Treiber meldet die nächste Datei erst, wenn die vorige im Log steht (Rückstau, docs/11 §11.8).
 In S1 ist genau das die Decke: je Sekunde werden halb so viele Paare komplett, wie Dateien gemeldet werden (Phase-2- und Phase-3-Code gleich);
 die Leseseite hält in Echtzeit mit. Das Ziel „S1 ≥ 3 × Baseline“ (Plan E5) ist deshalb mit dem Konsum nicht zu erreichen. *Optionen (Tobi):* in
@@ -192,6 +174,35 @@ je Person fehlt. *Empfehlung:* TLS (h2) bzw. mTLS, Identitäten für Prod, Tor a
 eine Umgebung als Heredoc neben `umgebungen/*.json`. *Empfehlung:* Deploy auf `umgebungen/umgebung.prod.json` + Umgebungsvariablen umstellen.
 
 ### P2
+
+**G-11 · Projektion übersprang Events im Störungslauf — einmal unter harten Abbrüchen beobachtet, nicht reproduzierbar** (gemessen einmal,
+`vermessung/ergebnisse/2026-10-18_0405_5e2d293_server-wachstum-stoerung-1`; bis 2026-10-18 P1). In S1 fehlte im Read-Model ein komplettes Paar: für
+seinen Stream standen die Guards beider Bildpaar-Projektionen auf Version 3, die Versionen 4 (`BildVerfuegbar`) und 5 (`ImagePairKomplett`)
+waren nie angewandt, alle Partitionen standen am Kopf des Logs, nichts geparkt, kein Dead-Letter. Die Events v3–v5 entstanden um 02:08:07,
+drei Sekunden nachdem der Treiber den Prüfdomänen-Host am selben Postgres hart beendet und neu gestartet hatte, fast 20 s nach dem
+Redis-Neustart. Gemeinsam ist beiden Projektionen der Horizont (einer je Host-Prozess) und die Seite derselben Partition.
+- *Geprüft, ohne Befund:* Sequenz-Cache 1; die Freigaberegel des Horizonts (auch über Datenbanken hinweg: Transaktionsnummern und
+  `pg_snapshot_xmin` gelten im ganzen Cluster, eine Transaktion der Prüfdomänen-DB hält den Horizont der Beispiel-DB an, statt ihn freizugeben);
+  die Reihenfolge Stream-Zeile vor `nextval` (I `AnhaengeReihenfolgePostgresTests`); je Partitions-Leser ein eigener Store.
+- *Gemessen, Tests:* I `HorizontStressGarantieTests` (16 Schreiber, Group-Commit und Bündel, langsame Leser mit Neustarts) zweimal grün;
+  I `HorizontAbbruchGarantieTests` dreimal grün (je ≈ 216 000 Events; dazu ein zweiter „Prozess“ in eigener Datenbank, der 16-mal hart endet,
+  `pg_terminate_backend` auf ≈ 97 offene Schreib-Transaktionen samt Group-Commits, ≈ 70 weggeworfene hängende Transaktionen; auf der
+  Beispiel-Seite ≈ 55 Abbrüche nach `nextval` und 22 mitten in der Transaktion). Rot gesehen per Sabotage: mit naivem Horizont nannte die
+  Diagnose alle 272 fehlenden Events „Horizont“, mit einem Leser, der jedes 997. Event übergeht, alle 218 „Batch-Leser“ — der Test fängt beide
+  Fehlerklassen und unterscheidet sie ohne Uhr (hat eine Seite die Sequenz je geliefert?).
+- *Gemessen, E2E:* nach dem Löschen allen Rest-Zustands 5 Störungsläufe grün (`…_05*_server-g11-stoerung-1` bis `-5`), dann die Serie
+  `scripts/stoerungsserie.sh 20`: alle 20 gültig und grün (`2026-10-18_1000_4b3b34d_server-serie-stoerung-1` bis
+  `2026-10-18_1102_4b3b34d_server-serie-stoerung-20`). Insgesamt 1 rot zu 47 grün.
+- *Gerechnet:* lag die Wahrscheinlichkeit je Lauf bei 1/28 wie im ersten Stand, wären 25 grüne Läufe in Folge mit ≈ 40 % zu erwarten — die Serie
+  schließt einen seltenen Fehler nicht aus, macht einen häufigen aber unwahrscheinlich (bei 1/10 je Lauf ≈ 7 %).
+- *Vermutet:* Rest-Zustand auf dem Server vor dem Löschen (früherer Code, nicht aufgeräumte Datenbanken); offen bleibt, ob v3–v5 eine
+  Transaktion waren (ein Bündel — dann hätte ein Fehler des Horizonts alle drei verborgen, nicht nur v4/v5, und der Fehler läge im Leser) —
+  die Daten des roten Laufs sind gelöscht. Die Störungsserie sichert beim nächsten roten Lauf Transaktion, Commit-Zeit und Guard-Zeit.
+- *Vorschlag (nicht gebaut), Sicherheitsnetz „Guard hinter seinem Stream“:* je Partitions-Leser einmal je Poll-Intervall für das Fenster
+  zwischen der zuletzt geprüften und der jetzigen Position die Streams der Partition mit ihrer höchsten Version der abonnierten Typen lesen
+  (nur `stream_id`, `max(version)`, über den Sequenz-Index, ohne Daten) und mit den Guards vergleichen (`LadeGuardsAsync`); steht ein Guard
+  dahinter, eine Warnung mit Stream, Guard und Sequenzen, und der Stream holt ab dem Guard nach wie ein geparkter (`ReadStreamAsync`, ein
+  Commit). Kosten: eine Abfrage je Partition und Poll über die Events des Fensters; ein Fehler bliebe nicht mehr still und heilte sich.
 
 **W11-1 · Doppelte Wege.** Ohne Domänen-Nutzer, aber verdrahtet: die `IPipelineHandler`-Maschinerie (`PipelineActorBase`, `PipelineEventPullBridge`,
 `PipelineDispatchGenerator`, `GeneratedPipelines`), die Trigger-Welt (`IPipelineTrigger`, `ITriggerRegistration`, `TimerTrigger`, `WebhookTrigger`,

@@ -85,6 +85,7 @@ Prüfstand kommt von den expandierten `[Theory]`-Fällen.
 | `Garantien/GarantiePostgresTests` | 7 | ein Append ganz oder gar nicht, zwei Schreiber ohne verlorenes Update, Poison-Stream hält die HWM des Emittenten-Polls ohne andere zu blockieren, ein gescheiterter Append (Tombstones) legt den Poll nicht still; Batch-Konsum: zwei Aktivierungen einer Partition wenden nichts doppelt an (G-4), ein Poison-Stream wird geparkt und holt nach, ein Neuaufbau nimmt einem laufenden Leser den Commit |
 | `Garantien/AbfragePlanGarantieTests` | 4 | die häufigen Abfragen (Horizont „dahinter?“, Poll geänderter Streams, Seite einer Partition, Stream ab Version, korrelierter Read eines Vorgangs mit und ohne Cursor in einem Stream mit 100 000 Events Geschichte, Rückstand ab Position 0, fällige Vorgänge des Backstops, fällige Fristen, offene Vorgänge einer Poll-Seite) lesen bei 500 000 Events und je 200 000 Dokumenten weniger als 200 Blöcke — mit zugeschnittenem und allgemeinem Plan (vorbereitete Anweisung), mit veralteter und frischer Statistik; SQL aus derselben Quelle wie der Store (`EventStoreAbfragen`, `KonsumRueckstand.Abfrage`, die Marten-Abfragen des Offen-Index) |
 | `Garantien/HorizontStressGarantieTests` | 1 | G-11: 16 Schreiber über Group-Commit (paralleler Drain) und Bündel, langsame Batch-Leser mit Neustarts; nach dem Ausklingen am Kopf ist jedes Event genau einmal angewandt (≈ 2 min) |
+| `Garantien/HorizontAbbruchGarantieTests` | 1 | G-11 unter harten Abbrüchen: dieselbe Last (8 Partitionen), dazu ein zweiter „Prozess“ in einer eigenen Datenbank am selben Postgres (Schema-Anlage beim Start, Group-Commit, Bündel, hängende Transaktionen, die nie abgewartet werden), der alle 1–4 s per `pg_terminate_backend` mitten in seinen Transaktionen endet und neu startet, und Abbrüche der Beispiel-Schreiber nach `nextval` (Append, dann `pg_sleep` in derselben Transaktion) und mitten im Group-Commit. Soll ist das Log (Events je Stream in `mt_events`); fehlt etwas, urteilt die Meldung je Event ohne Uhr: hat eine Seite seine Sequenz je geliefert (Batch-Leser) oder nie (Horizont). Je Lauf ≈ 216 000 Events, ≈ 55 Abbrüche nach `nextval`, 22 mitten in der Transaktion, 16 harte Neustarts mit ≈ 97 beendeten Schreib-Transaktionen (≈ 1,5 min). Rot gesehen mit naivem Horizont (alle fehlenden Events „Horizont“) und mit einem Leser, der jedes 997. Event übergeht (alle „Batch-Leser“) |
 | `Garantien/InboxAufraeumenGarantieTests` | 1 | das Aufräumen der Inbox kostet je Seite, was es löscht: eine Million Quittungen über 60 Tage, nach dem ersten Durchlauf (tote Zeilen) und nach VACUUM und Nachfüllen (wiederverwendete Seiten) unter 1 000 Blöcken je Seite von 100 (PF-27) |
 | `EingangE2ETests.Client_wiederholt_mit_derselben_CommandId…` | 1 | Client-Wiederholung über den JSON-Eingang wirkt genau einmal |
 | Handle-Welt: `PipelineWebhookHttpTests`, `TimerTriggerSchedulingTests` | 2 | Trigger-Pfade ohne Domänen-Nutzer (`docs/13` W11-1) |
@@ -844,8 +845,12 @@ teurer wird. Bestandsaufnahme aus Code, `pg_stat_statements` und `pg_stat_user_t
   (im Band der Einzelläufe); Leerlauf L1/L5 unverändert. Der korrelierte Read kostet ≈ 30–40 µs mehr je Aufruf (S5-1: Datenbankzeit 1,16 ×); in
   S5 sparen die Kompensationen dafür die Stream-Reads (S5-64 Stream-Reads 938 → 196 ms). Der erste Lauf des Ausgangsstands war ungültig (S4
   nach 300 s nicht vollständig, `…_0350_229e39a_…-basis`), der zweite gültig.
-- *Störungslauf:* `…_0405_…-stoerung-1` rot — eine Projektion übersprang zwei Events eines Streams, während Redis angehalten war (G-11, docs/13);
-  `…_0417_…-stoerung-2` grün.
+- *Störungslauf:* `…_0405_…-stoerung-1` rot — beide Bildpaar-Projektionen übersprangen zwei Events eines Streams; sie entstanden drei Sekunden
+  nach dem harten Neustart des Prüfdomänen-Hosts am selben Postgres, fast 20 s nach dem Redis-Neustart (G-11, docs/13; eine erste Lesart
+  „während Redis stand“ war falsch); `…_0417_…-stoerung-2` grün. Nach dem Löschen allen Rest-Zustands fünf Störungsläufe grün
+  (`…_05*_server-g11-stoerung-1…5`), dann die Serie `scripts/stoerungsserie.sh 20` (65 min, Commit `4b3b34d`): alle 20 gültig und
+  Exactly-once grün (`2026-10-18_1000_4b3b34d_server-serie-stoerung-1` bis `…_1102_…-20`). Insgesamt 1 rot zu 47 grün; G-11 ist auf P2
+  herabgestuft (docs/13).
 - Lokal einmal gesehen, nicht reproduziert: der volle Prüfstand hing in `PipelineFlussTests.Bestellung_Oder…(karte)`, während daneben gebaut
   wurde; zwölf Wiederholungen der Fluss- und Garantie-Tests und zwei volle Läufe danach grün.
 
