@@ -196,6 +196,8 @@ public sealed class BausteinFunktionRaw
     public List<(string Typ, string Name)> Konstruktor = new();
     /// <summary>Bei einer Schnittstelle: die Klassen der Domänen-Quellen, die sie implementieren (Umsetzungen im Host).</summary>
     public List<string> UmsetzungenFull = new();
+    /// <summary>Je Umsetzung ihr Konstruktor (Typ wie geschrieben, Name) — ein Dienst darin ist die Kante Funktion → Dienst.</summary>
+    public Dictionary<string, List<(string Typ, string Name)>> UmsetzungsKonstruktoren = new(StringComparer.Ordinal);
     public string? Doku, Datei;
 }
 
@@ -530,7 +532,7 @@ public sealed partial class DomainExtractor
     private readonly List<Compilation> _comps;
     private readonly List<INamedTypeSymbol> _types;
 
-    private readonly INamedTypeSymbol? _iState, _iCommand, _iCreation, _iCommandZiel, _iEvent, _iTransient,
+    private readonly INamedTypeSymbol? _iState, _iCommand, _iCreation, _iCommandZiel, _iEvent, _iTransient, _frist,
         _iSubscriber, _iPull, _iAppend, _iReader, _iQuery, _iQueryResponse, _iReadModel, _iGeteilt,
         _iPipelineHandler, _iPipelineTrigger, _iSelfMessage, _iProzessDef, _iPayload, _iPipelineOutput;
 
@@ -562,6 +564,7 @@ public sealed partial class DomainExtractor
         _iCommandZiel = Get(Vertrag.ICommandZiel);
         _iEvent = Get(Vertrag.IEvent);
         _iTransient = Get(Vertrag.ITransientEvent);
+        _frist = Get("Abstractions.Frist`1");
         _iSubscriber = Get(Vertrag.ISubscriber);
         _iPull = Get(Vertrag.IPullSubscriber);
         _iAppend = Get(Vertrag.IAppendProjektion);
@@ -973,16 +976,24 @@ public sealed partial class DomainExtractor
                 if (a.Parameter[i].Art == "faehigkeit") e.Faehigkeiten.Add((Geschrieben(a.Methode, i, a.Methode.Parameters[i].Type), a.Methode.Parameters[i].Name));
             f.Eingaenge.Add(e);
         }
-        if (!form.Draussen && Infrastructure.SourceGeneration.Ctorbindung.Konstruktor(t) is { } k)
-        {
-            var ks = k.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).FirstOrDefault();
-            var ps = (ks as ConstructorDeclarationSyntax)?.ParameterList.Parameters ?? (ks as TypeDeclarationSyntax)?.ParameterList?.Parameters;
-            f.Konstruktor = k.Parameters.Select((p, i) => (ps?.ElementAtOrDefault(i)?.Type?.ToString() ?? p.Type.Name, p.Name)).ToList();
-        }
+        if (!form.Draussen) f.Konstruktor = KonstruktorWieGeschrieben(t);
         if (form.Draussen)
-            f.UmsetzungenFull = _types.Where(c => c.TypeKind == TypeKind.Class && !c.IsAbstract && c.AllInterfaces.Contains(t, SymbolEqualityComparer.Default))
-                .Select(c => c.Fq()).OrderBy(x => x, StringComparer.Ordinal).ToList();
+        {
+            var umsetzungen = _types.Where(c => c.TypeKind == TypeKind.Class && !c.IsAbstract && c.AllInterfaces.Contains(t, SymbolEqualityComparer.Default))
+                .OrderBy(c => c.Fq(), StringComparer.Ordinal).ToList();
+            f.UmsetzungenFull = umsetzungen.Select(c => c.Fq()).ToList();
+            foreach (var c in umsetzungen) f.UmsetzungsKonstruktoren[c.Fq()] = KonstruktorWieGeschrieben(c);
+        }
         return f;
+    }
+
+    /// <summary>Der bindende Konstruktor einer Klasse (Ctorbindung, wie die Laufzeit ihn wählt): Typ wie geschrieben und Name je Parameter.</summary>
+    private static List<(string Typ, string Name)> KonstruktorWieGeschrieben(INamedTypeSymbol t)
+    {
+        if (Infrastructure.SourceGeneration.Ctorbindung.Konstruktor(t) is not { } k) return new();
+        var ks = k.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).FirstOrDefault();
+        var ps = (ks as ConstructorDeclarationSyntax)?.ParameterList.Parameters ?? (ks as TypeDeclarationSyntax)?.ParameterList?.Parameters;
+        return k.Parameters.Select((p, i) => (ps?.ElementAtOrDefault(i)?.Type?.ToString() ?? p.Type.Name, p.Name)).ToList();
     }
 
     private EnumRaw ReadEnum(INamedTypeSymbol t)
@@ -1373,7 +1384,7 @@ public sealed partial class DomainExtractor
                     agg.DecideOrte[cmd.Name] = Ort.Von(md);
                     agg.DecideParams[cmdFull] = method.Parameters[0].Name;
                     var ausgaenge = UniverseEvents(method.ReturnType).ToList();
-                    agg.DecideOutcomes[cmdFull] = ausgaenge.Select(e => e.Fq()).ToList();
+                    agg.DecideOutcomes[cmdFull] = DecideAusgaenge(method.ReturnType);
                     foreach (var reject in ausgaenge.Where(e => Sym.Implements(e, _iTransient)))
                         agg.Rejects.Add((cmdFull, reject.Fq()));
                     var db = MethodBody(method);
@@ -2018,6 +2029,23 @@ public sealed partial class DomainExtractor
             .AddMiscellaneousOptions(SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier));
 
     /// <summary>Alle Event-Typen aus einem Decide-Rückgabetyp <c>IEnumerable&lt;OneOf&lt;…&gt;&gt;</c> / <c>IEnumerable&lt;E&gt;</c> in Signatur-Reihenfolge.</summary>
+    /// <summary>
+    /// Die Ausgänge einer Entscheidung in Deklarations-Reihenfolge: Events und Hinweise voll qualifiziert, eine Frist als <c>Frist&lt;Command&gt;</c>
+    /// (Code-Fakt: <c>Abstractions.Frist&lt;TCmd&gt;</c> im OneOf, Plan §3.1) — die Uhr macht aus ihr den Command an dasselbe Aggregat.
+    /// </summary>
+    private List<string> DecideAusgaenge(ITypeSymbol returnType)
+    {
+        var l = new List<string>();
+        if (returnType is not INamedTypeSymbol enumerable || enumerable.TypeArguments.Length != 1) return l;
+        if (enumerable.TypeArguments[0] is not INamedTypeSymbol element) return l;
+        foreach (var ta in Vertrag.IstOneOf(element) ? element.TypeArguments.ToList() : new List<ITypeSymbol> { element })
+            if (ta is INamedTypeSymbol f && _frist != null && SymbolEqualityComparer.Default.Equals(f.OriginalDefinition, _frist))
+                l.Add($"Frist<{f.TypeArguments[0].Fq()}>");
+            else if (ta is INamedTypeSymbol et && Sym.Implements(et, _iEvent))
+                l.Add(et.Fq());
+        return l;
+    }
+
     private IEnumerable<INamedTypeSymbol> UniverseEvents(ITypeSymbol returnType)
     {
         if (returnType is not INamedTypeSymbol enumerable || enumerable.TypeArguments.Length != 1) yield break;

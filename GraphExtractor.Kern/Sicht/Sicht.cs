@@ -238,6 +238,14 @@ public sealed partial class Sicht
         var t = typ.Trim().TrimEnd('?');
         return _dienste.FirstOrDefault(d => S(d, "name") == t);
     }
+    /// <summary>Die Funktion in Baustein-Form dieses Namens — oder null.</summary>
+    internal JsonObject? BausteinFunktion(string name) => _bausteinFunktionen.FirstOrDefault(x => S(x, "name") == name);
+    /// <summary>Die Konstruktor-Parameter einer Funktion in Baustein-Form: der Klasse, bzw. aller Umsetzungen einer Schnittstelle.</summary>
+    internal static IEnumerable<JsonObject> BausteinKonstruktor(JsonObject f) =>
+        Alle(f["konstruktor"]).Concat(Alle(f["umsetzungen"]).SelectMany(u => Alle(u["konstruktor"])));
+    /// <summary>Die Funktionen in Baustein-Form, deren Klasse oder Umsetzung den Dienst im Konstruktor nimmt.</summary>
+    internal IEnumerable<JsonObject> BausteinDienstNutzer(JsonObject d) =>
+        _bausteinFunktionen.Where(f => BausteinKonstruktor(f).Any(p => ReferenceEquals(DienstZu(S(p, "typ")), d)));
     /// <summary>Die Funktionen, deren Implementierung den Dienst im Konstruktor nimmt.</summary>
     internal IEnumerable<JsonObject> DienstNutzer(JsonObject d) =>
         _funktionen.Where(f => Alle(f["konstruktor"]).Any(p => ReferenceEquals(DienstZu(S(p, "typ")), d)));
@@ -325,6 +333,7 @@ public sealed partial class Sicht
             {
                 if (IstRec(nm)) P("akt:" + S(a, "_id"), Rec(nm));
                 else if (_funktionen.FirstOrDefault(x => S(x, "name") == nm) is { } fk) P("akt:" + S(a, "_id"), "fk:" + S(fk, "_id"));
+                else if (BausteinFunktion(nm) is { } fb) P("akt:" + S(a, "_id"), "fb:" + S(fb, "_id"));
             }
         foreach (var (a, r, _, id) in VertragsZusagen())
         {
@@ -378,6 +387,18 @@ public sealed partial class Sicht
             foreach (var p in Alle(f["faehigkeiten"])) if (LeseFnZu(S(p, "typ")) is { } z) P(fid, "fn:" + S(z.Fn, "_id"));
             // konzept-werkbank §12.3 E11: ein Dienst im Konstruktor der Implementierung (Kante Funktion → Dienst).
             foreach (var p in Alle(f["konstruktor"])) if (DienstZu(S(p, "typ")) is { } dz) P(fid, "dn:" + S(dz, "_id"));
+        }
+        // Funktionen in Baustein-Form (Plan §3.3): Eingang → Funktion → Ausgaben, Lese-Fähigkeit, Dienst im Konstruktor (der Klasse bzw. einer Umsetzung).
+        foreach (var f in _bausteinFunktionen)
+        {
+            var fid = "fb:" + S(f, "_id");
+            foreach (var ein in Alle(f["eingaenge"]))
+            {
+                if (IstRec(S(ein, "eingang"))) P(Rec(S(ein, "eingang")), fid);
+                foreach (var a in L(ein, "ausgaben")) if (IstRec(a)) P(fid, Rec(a));
+                foreach (var p in Alle(ein["faehigkeiten"])) if (LeseFnZu(S(p, "typ")) is { } z) P(fid, "fn:" + S(z.Fn, "_id"));
+            }
+            foreach (var p in BausteinKonstruktor(f)) if (DienstZu(S(p, "typ")) is { } dz) P(fid, "dn:" + S(dz, "_id"));
         }
         // … und Dienst → Dienst, wenn eine Implementierung einen anderen im Konstruktor nimmt.
         foreach (var d in _dienste)

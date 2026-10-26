@@ -5,7 +5,8 @@ using Core;
 //
 // Viele Messwerte, wenige Fakten: ein Sensor zählt Überschreitungen seines Grenzwerts hintereinander (Zähl-Aggregat) und löst nach N den
 // Alarm aus; ein Messwert im Rahmen ändert nichts. Der Alarm öffnet eine Störung (je Sensor ein Störungsfall, die Leitstelle quittiert).
-// Heute kommt jeder Messwert als Command an den Sensor; im Zielbild ist er ein Hinweis, den eine Funktion hört (Plan §3.1, §3.4).
+// Ein Messwert kommt als Command an den Sensor oder als Hinweis, den eine Funktion hört (Plan §3.1, §3.4); der Alarm öffnet die Störung
+// über eine gleichbleibende Funktion, deren Ziel-Id die des Sensors ist (Herkunft.Stream).
 
 namespace Anlagen.Messung;
 
@@ -90,16 +91,10 @@ public partial class Stoerungsfall : IState
     }
 }
 
-// Reaktion: der Alarm öffnet die Störung desselben Sensors.
-public partial class StoerungBeiAlarm : ISubscriber, IPullSubscriber
+// Der Alarm öffnet die Störung desselben Sensors (dieselbe Id wie der Stream des Alarms).
+public sealed class StoerungBeiAlarm : IFunktion
 {
-    public string SubscriberId => "stoerung-bei-alarm";
-
-    public async IAsyncEnumerable<OeffneStoerung> Handle(AlarmAusgeloest evt, IAggregateEnvelope envelope, ProjectionWriter writer)
-    {
-        await Task.CompletedTask;
-        yield return new OeffneStoerung(new(envelope.AggregateId), evt.Wert);
-    }
+    public OeffneStoerung Auf(AlarmAusgeloest e, Herkunft h) => new(new Id<Stoerungsfall>(h.Stream), e.Wert);
 }
 
 // Funktion auf einem Hinweis (Plan §3.4, Phase 3): das Sensornetz schickt jeden Rohwert als Hinweis (verlierbar, höchstens einmal); eine
@@ -121,8 +116,4 @@ public sealed record Schichtleitung : IMensch, IDarf<RichteSensorEin>, IDarf<Qui
 
 public interface ISensorGateway : IClientVertrag, ISendet<MeldeMesswert>, ISendet<MesswertGemessen> { }
 
-public interface ILeitstand : IClientVertrag, ISendet<RichteSensorEin>, ISendet<QuittiereStoerung>
-{
-    void Auf(AlarmAusgeloest e);
-    void Auf(StoerungGeoeffnet e);
-}
+public interface ILeitstand : IClientVertrag, ISendet<RichteSensorEin>, ISendet<QuittiereStoerung>, IHoert<AlarmAusgeloest>, IHoert<StoerungGeoeffnet> { }

@@ -387,10 +387,17 @@ public sealed record BausteinFunktion
     public IReadOnlyList<BausteinEingang> Eingaenge { get; init; } = [];
     /// <summary>Konstruktor der Klasse (Dienste, Konfig-Records, Logger).</summary>
     public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
-    /// <summary>Bei einer Schnittstelle: ihre Umsetzungen im Host (Klassennamen).</summary>
-    public IReadOnlyList<string> Umsetzungen { get; init; } = [];
+    /// <summary>Bei einer Schnittstelle: ihre Umsetzungen im Host (Klasse und Konstruktor).</summary>
+    public IReadOnlyList<FunktionsUmsetzung> Umsetzungen { get; init; } = [];
     public string? Doku { get; init; }
     public string? Datei { get; init; }
+}
+
+/// <summary>Eine Umsetzung einer Funktion im Host: die Klasse und ihr Konstruktor (ein Dienst darin ist die Kante Funktion → Dienst).</summary>
+public sealed record FunktionsUmsetzung
+{
+    public required string Name { get; init; }
+    public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
 }
 
 /// <summary>Ein Eingang (ein <c>Auf</c>): Eingangstyp, ob Hinweis, ob mit Herkunft, ob Strom, Lese-Fähigkeiten, Ausgaben (einfache Namen).</summary>

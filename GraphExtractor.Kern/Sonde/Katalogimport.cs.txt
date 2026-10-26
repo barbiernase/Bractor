@@ -6,7 +6,7 @@ using Core;
 // EINE Quell-Nachricht (eine abgelegte Katalog-Datei) wird zu vielen Fakten: der Import-Vorgang ist ein Aggregat, ein Import-Dienst draußen
 // liest die Datei und gibt als STROM je Zeile einen Artikel und zwischendurch den Fortschritt aus; die Leseseite zeigt den Stand. Der Strom ist
 // eine Funktion draußen (Plan §2.2, Phase 3): Position und Fortschritt hält das Framework — nach einem Absturz geht es bei der nächsten Zeile
-// weiter; die Artikel-Ids leitet sie aus der Herkunft ab (R13). Welcher Client sie trägt (ITraegt), kommt mit Phase 7.
+// weiter; die Artikel-Ids leitet sie aus der Herkunft ab (R13). Getragen wird sie vom Import-Werk (ITraegt), das der Import-Dienst verkörpert.
 
 namespace Warenkatalog.Import;
 
@@ -82,14 +82,10 @@ public partial class Artikel : IState
     }
 }
 
-// Die Quell-Nachricht startet den Import-Vorgang; seine Id ist die des Vorgangs-Streams der Quelle (Strom).
-public sealed class Katalogeingang : IPipeline
+// Die Quell-Nachricht startet den Import-Vorgang; seine Id ist die des Streams der Quelle.
+public sealed class Katalogeingang : IFunktion
 {
-    public PipelineFluss Fluss => PipelineFluss.Definiere(p =>
-    {
-        var datei = p.Quelle<KatalogDateiAbgelegt>();
-        var start = p.Alle(datei, datei.Strom()).Sende<StarteImport>((d, strom) => new StarteImport(new(strom.Id), d.Pfad));
-    });
+    public StarteImport Auf(KatalogDateiAbgelegt d, Herkunft h) => new(new Id<Importlauf>(h.Stream), d.Pfad);
 }
 
 // Der Strom: je Zeile ein Artikel, zwischendurch der Fortschritt, am Ende der Abschluss — eine Funktion draußen.
@@ -151,8 +147,8 @@ public partial class Importauskunft : IReader<Importfortschritt>
 public sealed record Ablage : IMaschine, IDarf<KatalogDateiAbgelegt>;
 public sealed record Katalogpflege : IMensch, IDarf<HoleImportstand>;
 
-public interface IKatalogpflegeOberflaeche : IClientVertrag, IFragt<HoleImportstand>
-{
-    void Auf(ImportFortgeschritten e);
-    void Auf(ImportAbgeschlossen e);
-}
+public interface IKatalogpflegeOberflaeche : IClientVertrag, IFragt<HoleImportstand>, IHoert<ImportFortgeschritten>, IHoert<ImportAbgeschlossen> { }
+
+// Draußen: der Import-Dienst rechnet den Strom, sein Client trägt die Funktion.
+public sealed record Importdienst : IMaschine, IDarf<IImportLauf>;
+public interface IImportWerk : IClientVertrag, ITraegt<IImportLauf> { }

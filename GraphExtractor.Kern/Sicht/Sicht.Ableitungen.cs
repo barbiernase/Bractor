@@ -225,6 +225,11 @@ public sealed partial class Sicht
                 break;
             case "dienst":
                 foreach (var f in DienstNutzer(r)) Add(AkteureId("fk:" + S(f, "_id")));
+                foreach (var f in BausteinDienstNutzer(r)) Add(AkteureId("fb:" + S(f, "_id")));
+                break;
+            case "bausteinfunktion":
+                foreach (var a in _akteure.Where(a => L(a, "darf").Contains(name))) Add([S(a, "name")]);
+                foreach (var e in Alle(r["eingaenge"])) Add(MengeListe(S(e, "eingang")));
                 break;
             case "auftrag":
                 if (_funktionen.FirstOrDefault(x => S(x, "auftrag") == name) is { } fa) Add(AkteureId("fk:" + S(fa, "_id")));
@@ -438,7 +443,9 @@ public sealed partial class Sicht
             case "flussknoten": return _domaene[n.Id] = FlussPraefix + S(n.Besitzer!.Ref, "_id");
             case "akteur":
             {
-                var eig = L(n.Ref, "darf").Concat(Alle(n.Ref["vertrag"]).Select(r => S(r, "eingang")))
+                // Was er hineingibt: seine Befugnisse; bei einer Funktion, die er rechnen darf, deren Ausgaben.
+                var eig = L(n.Ref, "darf").SelectMany(nm => BausteinFunktion(nm) is { } fb ? Alle(fb["eingaenge"]).SelectMany(e => L(e, "ausgaben")) : [nm])
+                    .Concat(Alle(n.Ref["vertrag"]).Select(r => S(r, "eingang")))
                     .Select(nm => KarteVon.GetValueOrDefault("rec:" + nm)).Where(x => x != null).Select(x => Domaene(x!)).Distinct().ToList();
                 eig.Sort(DomOrd);
                 var ds = eig.Count > 0 ? eig : AkteurDomaenen(n.Name);

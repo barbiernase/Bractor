@@ -1,9 +1,13 @@
 using Abstractions;
 using Leihwesen.Ausleihe;
 
-// SONDE — ZWEI Aggregate im SELBEN Namespace + Saga mit expliziter Interface-Implementierung und Block-Lambda,
-//         dazu eine KATALOG-FUNKTION (IFunktion) mit eigenem Auftrag, die die Saga per Rufe<F> mit Zeitlimit ruft — ihre C#-Implementierung
-//         nimmt einen DOMÄNEN-DIENST (IDienst) im Konstruktor, dessen Implementierung einen Konfig-Record nimmt (konzept-werkbank §12.3 E11).
+// SONDE — ZWEI Aggregate im SELBEN Namespace, Decider in eigener Datei (Mahnvorgang.Decider.cs.txt), dazu der Ablauf zwischen ihnen aus
+//         FUNKTIONEN (Plan §3.3; früher eine Saga mit expliziter Interface-Implementierung):
+//         · eine GLEICHBLEIBENDE Funktion im Host (Klasse, kein Dienst, keine Lese-Fähigkeit), die aus der Herkunft eine neue Id ableitet (R13)
+//           und auf einem Teil der Fälle nichts ausgibt (T?);
+//         · eine Funktion als SCHNITTSTELLE mit einer Umsetzung im Host, die einen DOMÄNEN-DIENST (IDienst) im Konstruktor nimmt — ihre Ausgabe
+//           ist ein Event (persistent, ohne Aggregat) oder ein Hinweis (flüchtig); der Laufort steht in der Umgebung;
+//         · eine zweite gleichbleibende Funktion, die das Event der ersten hört und den Command an das andere Aggregat gibt.
 
 namespace Leihwesen.Gebuehren;
 
@@ -15,14 +19,20 @@ public record EroeffneMahnung(Id<Mahnvorgang> AggregateId, decimal Betrag) : ICo
 public record MahnungEroeffnet(decimal Betrag) : IEvent;
 public record MahnungExistiert(Id<Mahnvorgang> Id) : ITransientEvent;
 
-// Katalog-Funktion: der Auftrag bindet sich per IAuftrag<F> an genau sie; die Ergebnisse sind persistente Events.
-public sealed record SchaetzeSchaden(Guid LeserId, decimal Neuwert) : IAuftrag<ISchadensSchaetzung>;
-public record SchadenGeschaetzt(decimal Betrag) : IEvent;
-public record NichtSchaetzbar(string Grund) : IEvent;
+// Gleichbleibend: nur ein beschädigt zurückgegebenes Medium ist ein Schadensfall — je Rückgabe genau einer (Id aus der Herkunft).
+public sealed class SchadenBeiRueckgabe : IFunktion
+{
+    public MeldeSchaden? Auf(Zurueckgegeben e, Herkunft h) =>
+        e.Zustand == Zustand.Beschaedigt ? new MeldeSchaden(h.NeueId<Schadensfall>(), e.LeserId) : null;
+}
+
+// Die Schätzung: ihre Ergebnisse sind ein Event der Funktion (kein Aggregat, kein Apply) oder ein Hinweis.
+public record SchadenGeschaetzt(Guid LeserId, decimal Betrag) : IEvent;
+public record NichtSchaetzbar(string Grund) : ITransientEvent;
 
 public interface ISchadensSchaetzung : IFunktion
 {
-    Task<OneOf<SchadenGeschaetzt, NichtSchaetzbar>> RufeAsync(SchaetzeSchaden auftrag, IAusfuehrung x);
+    Task<OneOf<SchadenGeschaetzt, NichtSchaetzbar>> Auf(SchadenGemeldet e, Herkunft h);
 }
 
 // Domänen-Dienst: die Technik hinter der Funktion — ein Interface mit IDienst, eine Implementierung mit Konfig-Record (Werte aus Konfig:<Record>).
@@ -47,11 +57,17 @@ public sealed class LineareWertTabelle(WertTabellenKonfig konfig) : IWertTabelle
 
 public sealed class Schadensschaetzer(IWertTabelle tabelle) : ISchadensSchaetzung
 {
-    public async Task<OneOf<SchadenGeschaetzt, NichtSchaetzbar>> RufeAsync(SchaetzeSchaden auftrag, IAusfuehrung x)
+    public async Task<OneOf<SchadenGeschaetzt, NichtSchaetzbar>> Auf(SchadenGemeldet e, Herkunft h)
     {
-        if (!await tabelle.IstSchaetzbarAsync(auftrag.LeserId)) return new NichtSchaetzbar("unbekannter Leser");
-        return new SchadenGeschaetzt(tabelle.Restwert(auftrag.Neuwert, 2));
+        if (!await tabelle.IstSchaetzbarAsync(e.LeserId)) return new NichtSchaetzbar("unbekannter Leser");
+        return new SchadenGeschaetzt(e.LeserId, tabelle.Restwert(25m, 2));
     }
+}
+
+// Gleichbleibend: aus der Schätzung wird die Mahnung (ein Vorgang je Schätzung).
+public sealed class MahnungNachSchaetzung : IFunktion
+{
+    public EroeffneMahnung Auf(SchadenGeschaetzt g, Herkunft h) => new(h.NeueId<Mahnvorgang>(), g.Betrag);
 }
 
 public partial class Schadensfall : IState
@@ -76,20 +92,4 @@ public partial class Schadensfall : IState
 public partial class Mahnvorgang : IState
 {
     public decimal Betrag { get; set; }
-}
-
-public sealed class SchadenBeiRueckgabe : IProzessDefinition
-{
-    ProzessRegeln IProzessDefinition.Regeln => Prozess<Zurueckgegeben>.Definiere(p =>
-    {
-        p.Auf<Zurueckgegeben>()
-         .Sende<MeldeSchaden>(e => new MeldeSchaden(new(Guid.NewGuid()), e.LeserId));
-
-        p.Auf<SchadenGemeldet>()
-         .Rufe<ISchadensSchaetzung>(s => new SchaetzeSchaden(s.LeserId, 25m))
-         .Zeitlimit(TimeSpan.FromMinutes(5));
-
-        p.Auf<SchadenGeschaetzt>()
-         .Sende<EroeffneMahnung>(g => new EroeffneMahnung(new(Guid.NewGuid()), g.Betrag));
-    });
 }

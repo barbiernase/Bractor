@@ -5,7 +5,7 @@ using Leihwesen.Ausleihe.Befehle;
 using Leihwesen.Gebuehren;
 
 // SONDE — Leseseite mit FREIEN Namen (keine Namenskonvention), class-ReadModel, OneOf-Antwort,
-// Konstanten-Id, Reaktion, Pipeline mit Konfig-Record. Handle-Verträge: WAS aus der Signatur (auch eine deklarierte,
+// Konstanten-Id. Handle-Verträge: WAS aus der Signatur (auch eine deklarierte,
 // nie ausgegebene Variante), WELCHE Store-Fns aus den Fähigkeits-Parametern. Verschleierung: Fähigkeit über eine
 // Hilfsmethode, über einen Delegate, über ein fremdes Objekt, in einem nie ausgeführten Lambda — die Kanten bleiben exakt,
 // weil sie nur aus der Signatur kommen. Kein Rumpf-Fakt (kein Guard).
@@ -98,17 +98,6 @@ public partial class LeihAuskunftLeser : IReader<Leihliste>
     }
 }
 
-public partial class MahnungBeiSchaden : ISubscriber, IPullSubscriber
-{
-    public string SubscriberId => "mahnung-bei-schaden";
-
-    public async IAsyncEnumerable<EroeffneMahnung> Handle(SchadenGemeldet evt, IAggregateEnvelope envelope, ProjectionWriter writer)
-    {
-        await Task.CompletedTask;
-        yield return new EroeffneMahnung(new(Guid.NewGuid()), 5m);
-    }
-}
-
 // Akteure: frei benannt; die Befugnis steht NUR in der Basisliste (IDarf<T>) — Reihenfolge = Deklaration. Kein Name verrät
 // die Rolle (keine *Akteur-/*Rolle-Endung); eine Query zu dürfen ist dasselbe Wort wie ein Command.
 public sealed record Theke : IAkteur, IDarf<LeiheAus>, IDarf<GibZurueck>, IDarf<OffeneAusleihen>;
@@ -116,22 +105,17 @@ public sealed record Theke : IAkteur, IDarf<LeiheAus>, IDarf<GibZurueck>, IDarf<
 // Eine KI als Akteur (frei benannt, Art in der Basisliste).
 public sealed record Gutachterin : IKi, IDarf<EroeffneMahnung>;
 
-// Ein Akteur, der DRAUSSEN reagiert (Vertrag, docs/konzept-akteure.md §3): frei benannt — weder der Akteur noch sein Vertrag
-// verraten über den Namen, was zusammengehört (IAkteurVertrag<A> ist der einzige Anker). Ein Akteur ohne IDarf: was er als
-// Zusage hineingibt, steht in der Signatur — einzeln (konkreter Typ), als Strom, und eine Zusage nur zur Kenntnis.
-public sealed record Archiv : IMaschine;
-public interface IRegal : IAkteurVertrag<Archiv>
+// Ein Akteur, der DRAUSSEN rechnet (docs/konzept-akteure.md, Plan §2.7): frei benannt — die Funktion ist eine Schnittstelle (läuft draußen),
+// der Akteur darf sie rechnen (IDarf<IRegal>: ihre Ausgaben gibt er hinein). Zwei Eingänge: einer einzeln, einer als Strom.
+public sealed record Archiv : IMaschine, IDarf<IRegal>;
+public interface IRegal : IFunktion
 {
-    MeldeSchaden Auf(Zurueckgegeben e);
-    IAsyncEnumerable<OneOf<EroeffneMahnung, MeldeSchaden>> Auf(SchadenGemeldet e);
-    void Auf(Ausgeliehen e);
+    MeldeSchaden Auf(Zurueckgegeben e, Herkunft h);
+    IAsyncEnumerable<OneOf<EroeffneMahnung, MeldeSchaden>> Auf(SchadenGemeldet e, Herkunft h);
 }
 
 // Clients (docs/konzept-akteure.md §4): frei benannt — IClientVertrag ist der einzige Anker. EIN Client verkörpert ZWEI Akteure
-// (das Archiv über seinen Vertrag, die Theke über ISendet/IFragt), und ein Akteur läuft über ZWEI Clients (das Archiv: Lesesaal + Depot).
-// Eigene Kenntnis (void Auf) gehört dem Client, nicht einem Akteur.
-public interface ILesesaal : IClientVertrag, IRegal, ISendet<LeiheAus>, IFragt<OffeneAusleihen>
-{
-    void Auf(MahnungEroeffnet e);
-}
-public interface IDepot : IClientVertrag, IRegal { }
+// (das Archiv über die getragene Funktion, die Theke über ISendet/IFragt), und ein Akteur läuft über ZWEI Clients (das Archiv: Lesesaal + Depot).
+// Kenntnis (IHoert) gehört dem Client, nicht einem Akteur.
+public interface ILesesaal : IClientVertrag, ITraegt<IRegal>, ISendet<LeiheAus>, IFragt<OffeneAusleihen>, IHoert<MahnungEroeffnet> { }
+public interface IDepot : IClientVertrag, ITraegt<IRegal>, IHoert<Ausgeliehen> { }

@@ -210,7 +210,7 @@ public static class Sonde
                     + (e["hinweis"]?.GetValue<bool>() == true ? " hinweis" : "") + (e["herkunft"]?.GetValue<bool>() == true ? " herkunft" : "")
                     + " -> " + (e["strom"]?.GetValue<bool>() == true ? "strom " : "") + string.Join("; ", A(e, "ausgaben").Select(x => (string?)x))
                     + (A(e, "faehigkeiten").Any() ? " liest " + string.Join(", ", A(e, "faehigkeiten").Select(p => $"{S(p, "typ")} {S(p, "name")}")) : "")))
-                + (A(f, "umsetzungen").Any() ? " umsetzung " + string.Join(", ", A(f, "umsetzungen").Select(x => (string?)x)) : ""));
+                + (A(f, "umsetzungen").Any() ? " umsetzung " + string.Join(", ", A(f, "umsetzungen").Select(u => S(u, "name") + Konstruktor(u))) : ""));
         // Domänen-Dienste (konzept-werkbank §12.3 E11): Signatur (Methoden) und Implementierungen mit Konstruktor.
         foreach (var d in A(b, "dienste").Where(Sonde))
             z.Add($"dienst {S(d, "namespace")}.{S(d, "name")} | "

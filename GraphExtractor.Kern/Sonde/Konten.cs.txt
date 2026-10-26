@@ -5,7 +5,7 @@ using Abstractions;
 // „Keine zwei Benutzer mit derselben Adresse“ ist eine Invariante über viele Benutzer — sie gehört in EIN Aggregat: die Adresse selbst
 // (Eindeutigkeits-Aggregat, Id aus der normalisierten Adresse abgeleitet). Der Benutzer beantragt, die Adresse reserviert oder sagt ab;
 // die Absage ist ein FAKT (der Modellierer entscheidet über den Typ), weil der Ablauf an ihr weitergeht. Die Zugehörigkeit zum Benutzer
-// ist ein fachliches Feld im Event (Plan A2). Heute verbindet ein Prozess die beiden Aggregate; im Zielbild eine Funktion.
+// ist ein fachliches Feld im Event (Plan A2). Eine gleichbleibende Funktion verbindet die beiden Aggregate (je Eingangstyp ein Auf, R2).
 
 namespace Kundenportal.Konten;
 
@@ -98,21 +98,14 @@ public static class Adressschluessel
     }
 }
 
-public sealed class Registrierung : IProzessDefinition
+public sealed class Registrierung : IFunktion
 {
-    ProzessRegeln IProzessDefinition.Regeln => Prozess<RegistrierungBeantragt>.Definiere(p =>
-    {
-        p.Auf<RegistrierungBeantragt>().Sende<ReserviereAdresse>(r => new ReserviereAdresse(Adressschluessel.Id(r.Email), r.Email, r.BenutzerId));
-        p.Auf<AdresseReserviert>().Sende<BestaetigeBenutzer>(a => new BestaetigeBenutzer(a.BenutzerId));
-        p.Auf<AdresseVergeben>().Sende<LehneRegistrierungAb>(v => new LehneRegistrierungAb(v.BenutzerId, "Adresse vergeben"));
-    });
+    public ReserviereAdresse Auf(RegistrierungBeantragt r) => new(Adressschluessel.Id(r.Email), r.Email, r.BenutzerId);
+    public BestaetigeBenutzer Auf(AdresseReserviert a) => new(a.BenutzerId);
+    public LehneRegistrierungAb Auf(AdresseVergeben v) => new(v.BenutzerId, "Adresse vergeben");
 }
 
 // Wer hineingibt: ein Mensch am Registrierungs-Formular; der Client hört, wie es ausgeht.
 public sealed record Besucher : IMensch, IDarf<RegistriereBenutzer>;
 
-public interface IRegistrierungsseite : IClientVertrag, ISendet<RegistriereBenutzer>
-{
-    void Auf(BenutzerBestaetigt e);
-    void Auf(RegistrierungAbgelehnt e);
-}
+public interface IRegistrierungsseite : IClientVertrag, ISendet<RegistriereBenutzer>, IHoert<BenutzerBestaetigt>, IHoert<RegistrierungAbgelehnt> { }

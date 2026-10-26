@@ -21,7 +21,8 @@ public static class ModellMapper
     {
         var simpleEvt = dom.Events.ToDictionary(kv => kv.Key, kv => kv.Value.Simple, StringComparer.Ordinal);
         var simpleCmd = dom.Commands.ToDictionary(kv => kv.Key, kv => kv.Value.Simple, StringComparer.Ordinal);
-        string Evt(string full) => simpleEvt.TryGetValue(full, out var s) ? s : Kurz(full);
+        string Evt(string full) => full.StartsWith("Frist<", StringComparison.Ordinal) ? $"Frist<{Cmd(full[6..^1])}>"
+            : simpleEvt.TryGetValue(full, out var s) ? s : Kurz(full);
         string? Rel(string? abs) => Relativ(dom.Wurzel, abs);
         string Cmd(string full) => simpleCmd.TryGetValue(full, out var s) ? s : Kurz(full);
 
@@ -169,7 +170,11 @@ public static class ModellMapper
                     Ausgaben = e.AusgabenFull.Select(Kurz).ToList(),
                 }).ToList(),
                 Konstruktor = f.Konstruktor.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
-                Umsetzungen = f.UmsetzungenFull.Select(Kurz).ToList(),
+                Umsetzungen = f.UmsetzungenFull.Select(u => new FunktionsUmsetzung
+                {
+                    Name = Kurz(u),
+                    Konstruktor = f.UmsetzungsKonstruktoren.GetValueOrDefault(u, []).Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
+                }).ToList(),
             }).ToList(),
             Dienste = dom.Dienste.Select(d => new Dienst
             {

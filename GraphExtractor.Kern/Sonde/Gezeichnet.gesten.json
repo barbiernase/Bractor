@@ -1,95 +1,178 @@
 {
-  "_zweck": "Im Editor GEZEICHNET, als Gesten-Skript (Werkbank P7.3): jede Geste ist ein Karten-Delta wie aus dem Browser; die Sonde schreibt sie über den Gesten-Motor (GraphExtractor.Kern/Schreiben/Gesten) in den Fork und liest nach jeder Geste neu — spätere Gesten verweisen auf die Ids, die der Code-Stand vergibt (wf:/rf: der Store-Funktionen). Leseseite: neuer Store mit einer im Panel benannten und einer abgeleiteten Fähigkeit, Projektion, Reaktion, Reader, Query/Response/ReadModel. Akteur mit Vertrag + Client. Eine Funktion mit C#-Implementierung, die einen neuen Dienst nimmt (konzept-werkbank §12.3 E11). Zwei Pipelines als Fluss ohne Lambda (nur die Zuordnung): Event-Quelle → Funktion (mit Zeitlimit) → Command am Ergebnis-Port; Frist als Rennen über Strom und ⏳.",
+  "_zweck": "Im Editor GEZEICHNET, als Gesten-Skript (Werkbank P7.3): jede Geste ist ein Karten-Delta wie aus dem Browser; die Sonde schreibt sie über den Gesten-Motor (GraphExtractor.Kern/Schreiben/Gesten) in den Fork und liest nach jeder Geste neu — spätere Gesten verweisen auf die Ids, die der Code-Stand vergibt (wf:/rf: der Store-Funktionen). Leseseite: neuer Store mit einer im Panel benannten und einer abgeleiteten Fähigkeit, Projektion, Reader, Query/Response/ReadModel. Akteur, der eine Funktion draußen rechnen darf, und ein Client, der sie trägt (ITraegt) und Kenntnis hört (IHoert). Ein Domänen-Dienst mit Implementierung (konzept-werkbank §12.3 E11). Funktionen in Baustein-Form zeichnet der Editor noch nicht (Plan E4).",
   "gesten": [
     {
       "titel": "Leseseite: Query, Antwort, Read Model, Store",
       "karten": {
         "records": [
-          { "name": "Vormerkungen", "kind": "query", "namespace": "Leihwesen.Lesen", "felder": [ { "name": "LeserId", "typ": "Guid" } ] },
-          { "name": "VormerkungenAntwort", "kind": "queryresponse", "namespace": "Leihwesen.Lesen", "felder": [ { "name": "Anzahl", "typ": "int" } ] }
+          {
+            "name": "Vormerkungen",
+            "kind": "query",
+            "namespace": "Leihwesen.Lesen",
+            "felder": [
+              {
+                "name": "LeserId",
+                "typ": "Guid"
+              }
+            ]
+          },
+          {
+            "name": "VormerkungenAntwort",
+            "kind": "queryresponse",
+            "namespace": "Leihwesen.Lesen",
+            "felder": [
+              {
+                "name": "Anzahl",
+                "typ": "int"
+              }
+            ]
+          }
         ],
         "readModels": [
-          { "name": "Vormerkung", "namespace": "Leihwesen.Lesen", "felder": [ { "name": "Id", "typ": "Guid" }, { "name": "LeserId", "typ": "Guid" } ] }
+          {
+            "name": "Vormerkung",
+            "namespace": "Leihwesen.Lesen",
+            "felder": [
+              {
+                "name": "Id",
+                "typ": "Guid"
+              },
+              {
+                "name": "LeserId",
+                "typ": "Guid"
+              }
+            ]
+          }
         ],
         "stores": [
           {
-            "name": "IVormerkbuch", "namespace": "Leihwesen.Lesen",
-            "writeFns": [ { "name": "MerkeVorAsync", "faehigkeit": "INotiereVormerkung", "params": [ { "name": "v", "typ": "Vormerkung" } ] } ],
-            "readFns": [ { "name": "ZaehleAsync", "params": [ { "name": "leserId", "typ": "Guid" } ], "rueckgabe": "int" } ]
+            "name": "IVormerkbuch",
+            "namespace": "Leihwesen.Lesen",
+            "writeFns": [
+              {
+                "name": "MerkeVorAsync",
+                "faehigkeit": "INotiereVormerkung",
+                "params": [
+                  {
+                    "name": "v",
+                    "typ": "Vormerkung"
+                  }
+                ]
+              }
+            ],
+            "readFns": [
+              {
+                "name": "ZaehleAsync",
+                "params": [
+                  {
+                    "name": "leserId",
+                    "typ": "Guid"
+                  }
+                ],
+                "rueckgabe": "int"
+              }
+            ]
           }
         ]
       }
     },
     {
-      "titel": "Projektion, Reaktion, Reader an den Store",
+      "titel": "Projektion und Reader an den Store",
       "karten": {
         "projektionen": [
-          { "name": "Vormerkliste", "namespace": "Leihwesen.Lesen", "subscriberId": "vormerkliste", "pull": true,
-            "handles": [ { "event": "Ausgeliehen", "fns": [ "wf:IVormerkbuch.MerkeVorAsync" ] } ] }
-        ],
-        "reaktionen": [
-          { "name": "Schadenpruefung", "namespace": "Leihwesen.Lesen", "subscriberId": "schadenpruefung", "pull": true,
-            "handles": [ { "event": "Zurueckgegeben", "sends": [ "MeldeSchaden" ] } ] }
+          {
+            "name": "Vormerkliste",
+            "namespace": "Leihwesen.Lesen",
+            "subscriberId": "vormerkliste",
+            "pull": true,
+            "handles": [
+              {
+                "event": "Ausgeliehen",
+                "fns": [
+                  "wf:IVormerkbuch.MerkeVorAsync"
+                ]
+              }
+            ]
+          }
         ],
         "reader": [
-          { "name": "VormerkAuskunft", "namespace": "Leihwesen.Lesen", "projektion": "Vormerkliste", "trackDeps": true,
-            "handles": [ { "query": "Vormerkungen", "fns": [ "rf:IVormerkbuch.ZaehleAsync" ], "responses": [ "VormerkungenAntwort" ] } ] }
+          {
+            "name": "VormerkAuskunft",
+            "namespace": "Leihwesen.Lesen",
+            "projektion": "Vormerkliste",
+            "trackDeps": true,
+            "handles": [
+              {
+                "query": "Vormerkungen",
+                "fns": [
+                  "rf:IVormerkbuch.ZaehleAsync"
+                ],
+                "responses": [
+                  "VormerkungenAntwort"
+                ]
+              }
+            ]
+          }
         ]
       }
     },
     {
-      "titel": "Akteur mit Vertrag, Client",
+      "titel": "Akteur und Client",
       "karten": {
         "akteure": [
-          { "name": "Mahnstelle", "namespace": "Leihwesen.Gebuehren", "darf": [ "EroeffneMahnung", "Vormerkungen" ],
-            "vertrag": [ { "eingang": "MahnungEroeffnet", "ausgaenge": [] }, { "eingang": "SchadenGemeldet", "ausgaenge": [ "EroeffneMahnung" ] } ] }
+          {
+            "name": "Mahnstelle",
+            "namespace": "Leihwesen.Gebuehren",
+            "darf": [
+              "EroeffneMahnung",
+              "Vormerkungen",
+              "ISchadensSchaetzung"
+            ]
+          }
         ],
         "clients": [
-          { "name": "IMahnportal", "namespace": "Leihwesen.Gebuehren", "traegt": [ "IMahnstelle" ], "sendet": [ "EroeffneMahnung" ],
-            "fragt": [ "Vormerkungen" ], "kenntnis": [ "Zurueckgegeben" ] }
-        ]
-      }
-    },
-    {
-      "titel": "Funktion mit C#-Implementierung und neuem Dienst",
-      "karten": {
-        "records": [
-          { "name": "PruefeGeraet", "kind": "auftrag", "funktion": "IGeraetePruefung", "namespace": "Leihwesen.Pruefung", "felder": [ { "name": "Seriennummer", "typ": "string" } ] },
-          { "name": "GeraetGeprueft", "kind": "event", "namespace": "Leihwesen.Pruefung", "felder": [ { "name": "Ok", "typ": "bool" } ] }
-        ],
-        "dienste": [
-          { "name": "IPruefgeraet", "namespace": "Leihwesen.Pruefung",
-            "methoden": [ { "name": "Messe", "rueckgabe": "bool", "parameter": [ { "typ": "string", "name": "seriennummer" } ] } ],
-            "implementierungen": [ { "name": "Pruefgeraet" } ] }
-        ],
-        "funktionen": [
-          { "name": "IGeraetePruefung", "namespace": "Leihwesen.Pruefung", "auftrag": "PruefeGeraet", "ergebnisse": [ "GeraetGeprueft" ], "entwurf": "",
-            "konstruktor": [ { "typ": "IPruefgeraet", "name": "geraet" } ] }
-        ]
-      }
-    },
-    {
-      "titel": "Pipelines als Fluss",
-      "karten": {
-        "fluesse": [
           {
-            "name": "MahnungBeiRueckgabe", "namespace": "Leihwesen.Gebuehren",
-            "knoten": [
-              { "name": "rueckgabe", "art": "auf", "typ": "Zurueckgegeben" },
-              { "name": "schaetzung", "art": "funktion", "typ": "ISchadensSchaetzung", "zeitlimit": "TimeSpan.FromMinutes(1)",
-                "eingaenge": [ { "draehte": [ { "von": "rueckgabe" } ], "argumente": [ "rueckgabe.LeserId", "50m" ] } ] },
-              { "name": "mahnung", "art": "command", "typ": "EroeffneMahnung",
-                "eingaenge": [ { "draehte": [ { "von": "schaetzung", "fall": "SchadenGeschaetzt" } ], "argumente": [ "new(Guid.NewGuid())", "schaetzung.Betrag" ] } ] }
+            "name": "IMahnportal",
+            "namespace": "Leihwesen.Gebuehren",
+            "traegt": [
+              "ISchadensSchaetzung"
+            ],
+            "sendet": [
+              "EroeffneMahnung"
+            ],
+            "fragt": [
+              "Vormerkungen"
+            ],
+            "kenntnis": [
+              "Zurueckgegeben"
             ]
-          },
+          }
+        ]
+      }
+    },
+    {
+      "titel": "Domänen-Dienst mit Implementierung",
+      "karten": {
+        "dienste": [
           {
-            "name": "Rueckgabefrist", "namespace": "Leihwesen.Gebuehren",
-            "knoten": [
-              { "name": "ausgeliehen", "art": "auf", "typ": "Ausgeliehen" },
-              { "name": "rueckgabe", "art": "warte", "typ": "Zurueckgegeben", "warteAuf": [ "Zurueckgegeben" ], "zeitlimit": "TimeSpan.FromDays(28)",
-                "eingaenge": [ { "draehte": [ { "von": "ausgeliehen", "port": "strom" } ] } ] },
-              { "name": "mahnung", "art": "command", "typ": "EroeffneMahnung",
-                "eingaenge": [ { "draehte": [ { "von": "rueckgabe", "port": "zeitlimit" }, { "von": "ausgeliehen", "port": "strom" } ], "argumente": [ "new(ausgeliehenStrom.Id)", "0m" ] } ] }
+            "name": "IPruefgeraet",
+            "namespace": "Leihwesen.Pruefung",
+            "methoden": [
+              {
+                "name": "Messe",
+                "rueckgabe": "bool",
+                "parameter": [
+                  {
+                    "typ": "string",
+                    "name": "seriennummer"
+                  }
+                ]
+              }
+            ],
+            "implementierungen": [
+              {
+                "name": "Pruefgeraet"
+              }
             ]
           }
         ]

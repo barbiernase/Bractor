@@ -1,7 +1,8 @@
 using Abstractions;
 using Leihwesen.Ausleihe.Befehle;
 
-// SONDE — Aggregat mit Commands in eigenem Sub-Namespace, Property-Records, if/else-Guards, alles in EINER Datei.
+// SONDE — Aggregat mit Commands in eigenem Sub-Namespace, Property-Records, if/else-Guards, alles in EINER Datei. Die Ausleihe setzt eine
+//         FRIST (Plan §3.1): die Uhr schickt nach Ablauf der Leihdauer die Mahnung an DENSELBEN Leihvorgang; ist er schon zurück, wirkt sie nicht.
 
 namespace Leihwesen.Ausleihe.Befehle
 {
@@ -13,6 +14,8 @@ namespace Leihwesen.Ausleihe.Befehle
         public Id<Leihvorgang> AggregateId { get; init; }
         public Zustand Zustand { get; init; }
     }
+
+    public record MahneRueckgabe(Id<Leihvorgang> AggregateId) : ICommand<Leihvorgang>;
 }
 
 namespace Leihwesen.Ausleihe
@@ -29,6 +32,8 @@ namespace Leihwesen.Ausleihe
         public Zustand Zustand { get; init; }
     }
 
+    public record RueckgabeAngemahnt(Guid LeserId) : IEvent;
+
     public record BereitsAusgeliehen(Id<Leihvorgang> AusleiheId) : ITransientEvent;
     public record NichtAusgeliehen(Id<Leihvorgang> AusleiheId) : ITransientEvent;
 
@@ -39,7 +44,7 @@ namespace Leihwesen.Ausleihe
 
         public partial class Decider : IDecider<Leihvorgang>
         {
-            public IEnumerable<OneOf<Ausgeliehen, BereitsAusgeliehen>> Decide(LeiheAus befehl)
+            public IEnumerable<OneOf<Ausgeliehen, BereitsAusgeliehen, Frist<MahneRueckgabe>>> Decide(LeiheAus befehl)
             {
                 if (this.State.Offen)
                 {
@@ -48,7 +53,14 @@ namespace Leihwesen.Ausleihe
                 else
                 {
                     yield return new Ausgeliehen(befehl.Medium, befehl.LeserId, befehl.Tage);
+                    yield return new Frist<MahneRueckgabe>(new MahneRueckgabe(befehl.AggregateId), TimeSpan.FromDays(befehl.Tage));
                 }
+            }
+
+            public IEnumerable<OneOf<RueckgabeAngemahnt>> Decide(MahneRueckgabe befehl)
+            {
+                if (!this.State.Offen) yield break;
+                yield return new RueckgabeAngemahnt(this.State.LeserId);
             }
 
             public IEnumerable<OneOf<Zurueckgegeben, NichtAusgeliehen>> Decide(GibZurueck befehl)
@@ -74,6 +86,8 @@ namespace Leihwesen.Ausleihe
             {
                 this.State.Offen = false;
             }
+
+            public void Apply(RueckgabeAngemahnt e) { }
         }
     }
 
