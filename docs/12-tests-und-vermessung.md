@@ -37,6 +37,12 @@ Werkbank-Abnahme **1/1** sequentiell (≈ 110 s), `Client.Infrastructure.Collect
 gesehen) sequentiell (≈ 2 min); Garantie-Suite Prüfstand 179 + 1, Integration 50 + 0 (ein Lauf davor rot an
 `SequenceGapPostgresTests.Eine_lange_offene_Transaktion…` mit einem Marten-Befehlsfehler, einzeln und im Wiederholungslauf grün), Prüfdomäne 46 + 0;
 `--sonde` grün mit den drei fremden Szenarien (226 Soll-Fakten, Lage-Soll 80 Typen); Client 30/30.
+**Stand 2026-10-26 (Plan Pub/Sub-Neustrukturierung, Phase 1 — typisierte Ids, `3011d8a`):** Prüfstand **620 grün + 1 übersprungen** (G-5),
+davon Garantie 184 + 1; Integration **69/69** (≈ 6 min, davon 50 Garantie); Prüfdomäne **52/52** (davon 47 Garantie, neu
+`SchreibGarantieTests.Ein_Command_an_eine_fremde_Identitaet…`); Verhaltens-Netz **13 grün + 3 übersprungen** (G-12, G-13, G-14, unverändert);
+Client 30/30, Python SDK 34/34, Worker 21/21; `codegen --check`, `--check`, `--sonde` und `./pruefe-checkout.sh` grün. Neu im Prüfstand:
+`Ids/TypisierteIdTests` (Ziel im Typ, Log/Wire/Leitung als UUID, abweichende Hülle abgelehnt), CQRS013 in `ModellAnalyzerTests`, Routing aus dem
+Typ in `BuildGarantieTests`.
 
 Statisch gezählt (2026-10-15):
 
