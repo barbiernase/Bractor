@@ -103,7 +103,7 @@ public class UhrTests
         var beginn = TaktTreiber.IntervallBeginn(zeit, TimeSpan.FromMinutes(15));
         beginn.Should().Be(new DateTimeOffset(2026, 10, 26, 12, 30, 0, TimeSpan.Zero));
         TaktTreiber.Kennung(beginn).Should().Be("2026-10-26T12:30:00Z");
-        TaktTreiber.IntervallBeginn(zeit.AddMinutes(7), TimeSpan.FromMinutes(15)).Should().Be(beginn.AddMinutes(15));
+        TaktTreiber.IntervallBeginn(zeit.AddMinutes(10), TimeSpan.FromMinutes(15)).Should().Be(beginn.AddMinutes(15), "12:47 liegt im nächsten Intervall");
     }
 
     [Fact]
