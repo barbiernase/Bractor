@@ -15,6 +15,7 @@ oder umgeschrieben. Die Befunde der Actor-Praxis vom 2026-10-18 stehen im Plan �
 |---|---|:--:|
 | G-11 | Im Störungslauf übersprang eine Projektion einmal zwei Events eines Streams (Partition am Kopf, Guard dahinter) — Ursache und Test offen | P1 |
 | G-12 | Eine fachliche Ablehnung erreicht den Client nie, wenn sein Vertrag ihren Typ nicht hört (der Arbeitsplatz hört keine): er wiederholt dreimal und meldet „unbestätigt“ | P1 |
+| G-14 | Read-your-writes greift nicht für ein eben angelegtes Objekt: ohne Eintrag im Versions-Index gilt die Antwort als frisch („nicht gefunden“ gleich nach der Quittung) | P2 |
 | G-13 | Zwei Knoten vergeben dieselben Sitzungs-Kennungen (Zähler je Prozess), der Broker überschreibt: eine gezielte Antwort kann bei der Sitzung des anderen Knotens landen | P1 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
@@ -133,6 +134,14 @@ Kennung (`SubscriberRegistry`). Die ersten Sitzungen zweier Knoten heißen beide
 `CommandFailed`) für die eine geht an die zuletzt angemeldete. In einem Test mit zwei Knoten im selben Prozess bliebe das unsichtbar (der Zähler
 ist geteilt). Nachweis: `Verhalten.Tests/ZweiKnotenTests.Eine_Ablehnung_landet_bei_zwei_Knoten_an_der_richtigen_Sitzung` (zwei Host-Prozesse,
 Skip G-13). Behebt der Plan mit Phase 7 (Sitzungs-Id nennt den Knoten, Verteiler je Knoten).
+
+**G-14 · Read-your-writes nach dem Anlegen** (gefunden beim Verhaltens-Netz, Phase 0). Die Query-Brücke des Clients schickt die zuletzt
+beschriebenen Ids mit (`expected_fresh_ids`), der Query-Dienst liest für sie die Stände der Projektion aus dem Versions-Index, und der Client
+fragt nur nach, wenn ein Stand HINTER der ihm bekannten Version liegt (`QueryBridge.IstReadModelZurueck`). Für ein eben angelegtes Objekt hat
+die Projektion noch keinen Eintrag geschrieben — kein Stand gilt als frisch, die Antwort ist „nicht gefunden“ (gemessen: `ErstelleDatensatz`,
+Quittung, sofort `HoleDatensatz` → `DatensatzNichtGefunden`). Für Änderungen eines bekannten Objekts greift der Mechanismus. docs/11 §11.5
+nennt read-your-writes ohnehin nur best-effort; Nachweis `Verhalten.Tests/ClientVerhaltenTests.Nach_dem_Anlegen_kennt_die_naechste_Query…`
+(Skip G-14). Behebt der Plan mit Phase 7 („mindestens S auf v“: der Reader wartet begrenzt auf den Fortschritt seiner Projektion für S).
 
 **PF-10 · Datei-Treiber meldet seriell.** Der Datei-Treiber meldet die nächste Datei erst, wenn die vorige im Log steht (Rückstau, docs/11 §11.8).
 In S1 ist genau das die Decke: je Sekunde werden halb so viele Paare komplett, wie Dateien gemeldet werden (Phase-2- und Phase-3-Code gleich);
