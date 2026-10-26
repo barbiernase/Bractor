@@ -1269,14 +1269,19 @@ public static class Scaffolder
 
         var menge = new SortedSet<string>(basis.Concat(explizit), StringComparer.Ordinal);
         foreach (var typ in typen)
+        {
+            // Eine typisierte Id (Id<TAggregat>) ist ein Typ des Vertrags — auch in Wertobjekten und Leseseiten-Records.
+            if (IdTyp.IsMatch(typ ?? "")) menge.Add(modell.Rahmen.VertragsNamespace);
             foreach (System.Text.RegularExpressions.Match m in Bezeichner.Matches(typ ?? ""))
                 if (nsVon.TryGetValue(m.Value, out var andere) && andere != ns) menge.Add(andere);
+        }
         menge.Remove(ns);
         // Vertrags-Namespace zuerst (Hausstil), dann alphabetisch.
         return menge.OrderBy(u => u == modell.Rahmen.VertragsNamespace ? 0 : 1).ThenBy(u => u, StringComparer.Ordinal).ToList();
     }
 
     private static readonly System.Text.RegularExpressions.Regex Bezeichner = new(@"[A-Za-z_][A-Za-z0-9_]*");
+    private static readonly System.Text.RegularExpressions.Regex IdTyp = new($@"(?<![A-Za-z0-9_.]){Id}<");
 
     private static string Parameter(IReadOnlyList<Feld> felder) =>
         string.Join(", ", felder.Select(f =>

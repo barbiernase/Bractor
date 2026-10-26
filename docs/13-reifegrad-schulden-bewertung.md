@@ -177,8 +177,8 @@ DtoMapper, `Clientvertragslesart`, Lesart des `FunktionsGenerator`); Wirte: warm
   ein schlankes Leitungs-Framework.
 - Framework-Code im Domänen-Projekt: der generische `funktions_worker.py` in `Domain.Client.Worker.Python.ML`.
 - Generate der Komposition tragen noch Framework-Namespaces (`Infrastructure.Mapping.GeneratedTypeRegistry` u. a. in `Domain.Laufzeit`).
-- Identitäten aus einfachen Typnamen (`BrokerIdentity`, `GeneratedAkteurRechte`); der Client darf das Cluster-Kind eines Commands
-  (`AggregateType`) selbst setzen (`CqrsClientService.cs`, `AggregateDispatcher.cs:75`).
+- Identitäten aus einfachen Typnamen (`BrokerIdentity`, `GeneratedAkteurRechte`). (Das vom Client gesetzte Cluster-Kind ist seit Phase 1 des
+  Plans Pub/Sub-Neustrukturierung erledigt: Ziel und Aggregat folgen `ICommand<TAggregat>`, eine abweichende Hülle wird an der Leitung abgelehnt.)
 *Empfehlung:* Leitungs-Framework für Client und Server, Generat-Namespaces = Komposition; unabhängig davon
 `AggregateType` serverseitig aus der Routing-Tabelle, Identitäten aus vollen Typnamen.
 *Plan (2026-10-14, noch nicht umgesetzt):*
@@ -340,7 +340,7 @@ Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 
 Keine bekannten aktiven Korrektheits-Bugs mehr (G-1, G-7, G-3, G-4, G-2 erledigt, §13.6). **G-5** ist latent. Jede offene G-Lücke hat einen Test, der sie zeigt (Skip `G-n offen`, [11](11-garantien.md) §11.13).
 Korrektheitsnah sind außerdem: **LLM-1** (vom LLM
-geschriebene Logik nur auf „baut“ geprüft), **W10-1** (möglicher Hash-Unterschied zwischen Python-Basis und Server beim Handshake), **W2-1** (vom Client gesetztes Cluster-Kind) und **WZ-1** (Prüfungen, die grün sind, ohne es zu beweisen). Alles andere ist Reifegrad,
+geschriebene Logik nur auf „baut“ geprüft), **W10-1** (möglicher Hash-Unterschied zwischen Python-Basis und Server beim Handshake) und **WZ-1** (Prüfungen, die grün sind, ohne es zu beweisen). Alles andere ist Reifegrad,
 Allgemeingültigkeit oder Hygiene.
 
 ## 13.5 Empfohlene Reihenfolge

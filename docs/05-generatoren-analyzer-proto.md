@@ -25,7 +25,8 @@ Alles Dispatchende wird zur Compile-Zeit erzeugt, ohne Runtime-Reflection (Invar
 
 `Core.SourceGeneration` und `Abstractions.SourceGeneration` werden in `Infrastructure.SourceGeneration` per Link mitkompiliert. Ebenso
 hängen die **Verträge** als verlinkte Quelle in Generator und Laufzeit — eine Regel, eine Datei: `Abstractions/Aggregatvertrag.cs`,
-`Akteurvertrag.cs`, `Dienstvertrag.cs`, `Quellen/Treibervertrag.cs`, `Kodehash.cs`, `Spur/WirkerId.cs`, `Projektstruktur.cs` (docs/07), dazu
+`Akteurvertrag.cs`, `Dienstvertrag.cs`, `Idvertrag.cs` (typisierte Ids und Command-Ziel), `Quellen/Treibervertrag.cs`, `Kodehash.cs`,
+`Spur/WirkerId.cs`, `Projektstruktur.cs` (docs/07), dazu
 `Infrastructure.SourceGeneration/Clientvertragslesart.cs` (dieselbe Lesart für Server und C#-Client), `Ctorbindung.cs` und
 `Domain.SourceGeneration/Lageart.cs` (WAS ein Typ für die Lage-Prüfung ist; dieselbe Lesart für CQRS098 und `--check`).
 
@@ -69,7 +70,7 @@ Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein Prozess fä
 ### Infrastructure.SourceGeneration (Symbol)
 | Generator | Input | Output | Zweck |
 |---|---|---|---|
-| `CommandAggregateMapGenerator` | jede `IDecider<T>.Decide(TCommand)` + OneOf-Rückgaben | `GeneratedCommandRouting` (ns `Infrastructure.Mapping`) | **Dispatch-Kern**: `CommandToAggregate`, `CommandToEvents`, `Produziert()` (CQRS010/011) |
+| `CommandAggregateMapGenerator` | jeder `ICommand<TAggregat>` (Ziel) + `IDecider<T>.Decide(TCommand)` mit OneOf-Rückgaben | `GeneratedCommandRouting` (ns `Infrastructure.Mapping`) | **Dispatch-Kern**: `CommandToAggregate` (aus dem Typ), `CommandToEvents`, `Produziert()` (CQRS010 Decide außerhalb des Ziels, CQRS011) |
 | `AggregateActorGenerator` | `IState` | `AggregateActors`, `GeneratedAggregates` | Proto.Actor-Actor + Cluster-Kinds |
 | `PullPathGenerator` | `ISubscriber` & `IPullSubscriber` | `GeneratedPullPaths` | Pull-Pfad je Konsument; Achse B aus den Schreib-Fähigkeiten der Handles (CQRS052, [04 §4.2](04-konsum-und-prozess-maschine.md)) |
 | `SignalFactoryGenerator` | `IStateChangeSignal` | `GeneratedSignalFactory`, `GeneratedSignalRoutes` | Event → Signal ohne Reflection |
@@ -97,7 +98,7 @@ Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein Prozess fä
 |---|---|---|
 | `HandleMethodGenerator` | `Handle(TEvent, MessageContext)` | Store-/Handler-Dispatch nach Rückgabetyp |
 | `ModuleRegistryGenerator` | `IUiModule` | DI-Registrierung (`GeneratedModuleRegistry`) |
-| `WiringGenerator` | Syntax + referenzierte Assemblies, `[assembly: IstClient<IX>]` | `GeneratedWiring_{Assembly}`: DI, Abos, Vertrag + Hash, Commands/Queries aus dem Vertrag (CQRS093/094) |
+| `WiringGenerator` | Syntax + referenzierte Assemblies, `[assembly: IstClient<IX>]` | `GeneratedWiring_{Assembly}`: DI, Abos, Vertrag + Hash, Commands/Queries aus dem Vertrag, Ziel-Aggregat je Command aus `ICommand<TAggregat>` (CQRS093/094) |
 | `ViewModelGenerator` | `IViewModel` | ungenutzt (docs/13 P3-2) |
 
 ## 5.3 Die Regeln: Analyzer, Generator-Diagnosen, Boot-Guards
@@ -109,7 +110,7 @@ aus den Analyzern der warmen Compilations und hängt sie an die Karte (`Werkbank
 
 | Bereich | IDs | Ort |
 |---|---|---|
-| Schreibseite & Routing | CQRS010/011 · CQRS020/021 · CQRS050 · CQRS057 · CQRS079–083 | `CommandAggregateMapGenerator` · `CommandEmitAnalyzer` · `AusgabeVertragAnalyzer` · `HandlerFormAnalyzer` · `ModellAnalyzer` (Apply fehlt, Faltung, Enum-Wert 0, Command ab verlierbarem Eingang, Konsument mit Zustand) |
+| Schreibseite & Routing | CQRS010/011 · CQRS013 · CQRS020/021 · CQRS050 · CQRS057 · CQRS079–083 | `CommandAggregateMapGenerator` · `ModellAnalyzer` (Command ohne typisiertes Ziel) · `CommandEmitAnalyzer` · `AusgabeVertragAnalyzer` · `HandlerFormAnalyzer` · `ModellAnalyzer` (Apply fehlt, Faltung, Enum-Wert 0, Command ab verlierbarem Eingang, Konsument mit Zustand) |
 | Prozess & Fluss | CQRS001–003 · CQRS012, 072 · CQRS073–078 · CQRS099 | `ProzessRegelDiagnosticGenerator` · `ProzessRegelnGenerator` · `FlussAnalyzer` · `ProzessVerbundGenerator` |
 | Projektstruktur | CQRS098 | `LageAnalyzer` (Ordner, Namespace, Datei prüft `--check`, docs/07) |
 | Leseseite & Store | CQRS051, 054, 055 · CQRS052 · CQRS053 · CQRS066/067 | `FaehigkeitAnalyzer` · `PullPathGenerator` · `ProjectionServicesGenerator` · `StoreZugriffAnalyzer` |
@@ -131,9 +132,12 @@ Funktion, Dienst-Bindung (fehlend, mehrdeutig, Kreis, Konfig), Umgebungs-Datei.
 
 ## 5.4 Der Dispatch-Kern
 
-**`GeneratedCommandRouting`** ist die Routing-Wahrheit. Input: **jede `IDecider<TState>.Decide(TCommand)`-Signatur** (`TCommand` gehört
-strukturell zu `TState`, nicht per Namespace). Output: `CommandToAggregate`, `CommandToEvents` (aus den OneOf-Rückgaben, transiente
-gefiltert) und `Produziert()` — die präzise Command→Event-Kantenmenge, die den Azyklizitäts-Boot-Guard speist.
+**`GeneratedCommandRouting`** ist die Routing-Wahrheit. Input: **jeder Command-Typ** mit seinem Ziel aus `ICommand<TAggregat>` (Plan
+Pub/Sub-Neustrukturierung §2.5: das Ziel steht im Typ, nicht im Namespace und nicht im Decider) und **jede `IDecider<TState>.Decide(TCommand)`-
+Signatur** (muss im Ziel-Aggregat stehen, sonst CQRS010). Output: `CommandToAggregate`, `CommandToEvents` (aus den OneOf-Rückgaben, transiente
+gefiltert) und `Produziert()` — die präzise Command→Event-Kantenmenge, die den Azyklizitäts-Boot-Guard speist. Ein Command ohne typisiertes Ziel
+baut nicht: `ICommand` verlangt `Ziel`, `ICommand<TAggregat>` liefert es aus `Id<TAggregat> AggregateId`; den Umweg über eine handgeschriebene
+`Guid` meldet CQRS013. Dieselbe Ziel-Lesart nutzen das Client-Wiring und der Editor-Extractor.
 
 `AggregateActorGenerator` und `CommandAggregateMapGenerator` berechnen die Aggregat-Identität unabhängig; dass sie übereinstimmen, ist nur
 per Kommentar vereinbart (docs/13 P2-9).
@@ -207,8 +211,11 @@ vom Wire-Generator selbst serialisiert) und `IProzessIntern`-Typen (Maschinerie 
 Schuld: das Werkzeug liest per Reflection (`MetadataLoadContext`), und der Python-Vertrags-Emitter liest Verträge anders als
 `Clientvertragslesart` (der Handshake-Hash kann abweichen, docs/13 W10-1).
 
-**Proto an der gRPC-Grenze:** `Guid` und `decimal` reisen als `string`, `DateTimeOffset` als `int64` (Unix-Millisekunden); nullable
-Werttypen als proto3 `optional`. Die interne Actor-Ebene nutzt dagegen den Wire-/Event-JSON-Pfad.
+**Proto an der gRPC-Grenze:** `Guid`, typisierte Ids (`Id<T>`) und `decimal` reisen als `string`, `DateTimeOffset` als `int64`
+(Unix-Millisekunden); nullable Werttypen als proto3 `optional`. Die interne Actor-Ebene nutzt dagegen den Wire-/Event-JSON-Pfad; dort ist eine
+`Id<T>` ebenfalls ein UUID-String: der Codegen trägt je verwendetem `Id<X>` einen geschlossenen `IdJsonKonverter<X>` in beide STJ-Kontexte ein
+(der STJ-Quellgenerator kennt keine offenen generischen Konverter), und Martens Serializer bekommt dieselben Konverter
+(`Infrastructure/Persistence/IdSerialisierung.cs`) — ohne Reflection.
 
 ## 5.8 Offen
 

@@ -16,8 +16,9 @@ kommentiert. Die Schalter des Schreibpfads stehen für Nutzer in der Umgebungs-D
   ordnet am Handshake das Token (Header `akteur-token`) einem Akteur zu; jeder Command wird gegen dessen `IDarf`-Menge geprüft, der Akteur
   wird vom Tor in den Envelope gestempelt, nicht vom Client behauptet. Ohne konfigurierte Identitäten ist das Tor offen; dann folgt der
   Akteur dem Modell (der eine `IDarf`-Halter). Eine Zusage von außen (Antwort auf ein Event, mit Kausalität) bekommt eine aus der Ursache
-  abgeleitete CommandId und den Modus `Emittiert`; mit Vertrag muss die Antwort im Vertrag stehen. Fehlt der `AggregateType`, löst ihn der
-  Server aus der generierten Command→Aggregat-Map auf. Dann `_dispatcher.Dispatch(envelope)`, fire-and-forget.
+  abgeleitete CommandId und den Modus `Emittiert`; mit Vertrag muss die Antwort im Vertrag stehen. Ziel-Id und Aggregat-Typ folgen dem Command
+  (`ICommand<TAggregat>`, unten): nennt die Hülle der Leitung eine andere Id oder ein anderes Aggregat, wird der Command abgelehnt, bevor er
+  irgendwohin geht (`ProtoMessageMapper`). Dann `_dispatcher.Dispatch(envelope)`, fire-and-forget.
 - **JSON-Eingang** (Werkbank, nur Einblick-Port, nur mit `Transport.JsonEingang`): `POST /eingang/command`
   (`Infrastructure/Eingang/JsonEingang.cs`). Derselbe Weg wie gRPC — Token → Akteur-Tor → Befugnis, Akteur im Envelope, Wirker
   `akteur:<A>` — nur ohne Proto: Typ über die generierte Registry, Felder über den generierten Wire-Kontext. Anders als gRPC wartet er
@@ -31,6 +32,8 @@ Quell-Nachrichten gehen nicht durch einen Decider: der Treiber hängt sie als er
 an (`StartStream`, genau einmal je Kennung, `Infrastructure/Quellen/Quellen.cs`).
 
 **(b) Routing — Dispatcher zu Cluster-Identität.**
+Das Ziel eines Commands steht in seinem Typ: `record … : ICommand<TAggregat>` mit `Id<TAggregat> AggregateId` (Plan Pub/Sub-Neustrukturierung
+§2.5). Die Framework-Sicht ist `ICommand.Ziel` (die Stream-Id), der `CommandEnvelope` leitet seine `AggregateId` daraus ab — keine zweite Angabe.
 `ProtoActorAggregateDispatcher.Dispatch` (`Infrastructure/Aggregate/ActorSystem/AggregateDispatcher.cs`) baut die Ziel-Identität
 typbasiert: `ClusterIdentity.Create(guid, envelope.AggregateType)`. Der Send ist `cluster.RequestAsync<CommandResult>(identity, envelope, ct)`
 mit bounded Token (10 s je Versuch, 3 Versuche). Sind die Versuche erschöpft: LogError, durabler Dead-Letter und ein targeted
@@ -41,8 +44,11 @@ löst den Aggregat-Typ aus der generierten Map (`GeneratedPipelines.CommandAggre
 `CommandAggregateMapGenerator`) — statt aus einem Magic String.
 
 **(c) Aggregat-Actor — der Kern.**
-`AggregateActorBase.ReceiveAsync`: das erste `CommandEnvelope` löst `InitializeAsync` aus (Rehydration aus dem Log, ggf. ab Snapshot);
-dann reiht der Actor den Command ein. Jeder Command bekommt **immer** eine Antwort an seinen Absender — sonst wiederholt der Aufrufer.
+`AggregateActorBase.ReceiveAsync`: die Id des Actors ist seine **Cluster-Identität** (beim `Started` gelesen), nicht die des ersten Envelopes.
+Ein Command, dessen Ziel nicht diese Identität ist (falsch geroutet), wird abgelehnt, **bevor etwas geladen ist** (technischer Fehler an den
+Absender und gezielt an die Sitzung) — sonst lüde die Aktivierung den fremden Stream unter ihrer Identität. Das erste passende `CommandEnvelope`
+löst `InitializeAsync` aus (Rehydration aus dem Log, ggf. ab Snapshot); dann reiht der Actor den Command ein. Jeder Command bekommt **immer**
+eine Antwort an seinen Absender — sonst wiederholt der Aufrufer.
 
 **Bündel** (Normalweg, `StarteBuendelAsync`): während ein Commit läuft, nimmt der Actor weitere Commands an und sammelt sie
 (`context.ReenterAfter` — die Mailbox ist nicht blockiert). Ist der Commit durch, nimmt er bis zu `Schreibpfad.BuendelGroesse` (Standard 64)
@@ -62,20 +68,19 @@ Last ist ein Bündel meist ein Command; ein heißes Aggregat teilt sich Commits 
 - `Client c` → OCC gegen `c.ExpectedVersion`, idempotent (Inbox vor OCC)
 - `Emittiert` → keine behauptete Version (`expectedVersion = _state.Version`), idempotent
 
-Der gemeinsame Kern `HandleCommandCoreAsync`:
-1. Guard: falsche AggregateId → Fehler.
-2. **Vorprüfung** (`CommandVorpruefung.Prüfe`): erst der Inbox-Cache des Actors — bereits verarbeitete `CommandId` → idempotenter Erfolg,
+Der gemeinsame Kern `HandleCommandCoreAsync` (das Ziel ist schon beim Empfang geprüft):
+1. **Vorprüfung** (`CommandVorpruefung.Prüfe`): erst der Inbox-Cache des Actors — bereits verarbeitete `CommandId` → idempotenter Erfolg,
    bereits abgelehnte → dieselbe Ablehnung —, dann OCC (`_state.Version != expectedVersion` → Versionskonflikt). Vor einem Versionskonflikt
    schlägt der Actor in der Inbox-Tabelle nach (`AusgangAsync`): eine Client-Wiederholung, die der Cache nicht mehr kennt, sieht eine
    weitergerückte Version. Die Reihenfolge sorgt dafür, dass ein wiederholt zugestellter Command (Emittiert immer, Client bei Wiederholung nach
    verlorenem Ack) dasselbe Ergebnis liefert statt eines Versionskonflikts.
-3. **Decider**: `_handler.HandleCommand(payload).ToList()`.
-4. **Noop** (keine Events) → trotzdem eine `KommandoVerarbeitet`-Marke co-committen (sonst bliebe ein Prozess-Schritt ewig offen: der
+2. **Decider**: `_handler.HandleCommand(payload).ToList()`.
+3. **Noop** (keine Events) → trotzdem eine `KommandoVerarbeitet`-Marke co-committen (sonst bliebe ein Prozess-Schritt ewig offen: der
    Prozess-Fold erkennt den Ausgang an der Kausalität im Ziel-Stream).
-5. Trennung persistenter Events von Ablehnungen (`ITransientEvent`); ein *gemischtes* Ergebnis oder mehrere Ablehnungen werfen laut.
-6. **Reine Ablehnung** → kein Append der Ablehnung, kein Apply; eine `KommandoAbgelehnt`-Marke wird co-committet, die Ablehnung geht
+4. Trennung persistenter Events von Ablehnungen (`ITransientEvent`); ein *gemischtes* Ergebnis oder mehrere Ablehnungen werfen laut.
+5. **Reine Ablehnung** → kein Append der Ablehnung, kein Apply; eine `KommandoAbgelehnt`-Marke wird co-committet, die Ablehnung geht
    targeted an den Aufrufer und als verlierbarer Hinweis an die Spur.
-7. **Erfolg**: `AppendeAsync` schreibt die Events — ohne Marke; die Quittung des Commands (`Quittung`, Ausgang gewirkt) reist in derselben
+6. **Erfolg**: `AppendeAsync` schreibt die Events — ohne Marke; die Quittung des Commands (`Quittung`, Ausgang gewirkt) reist in derselben
    Transaktion in die Inbox-Tabelle (§3.3). Jeder der drei Appends (Effekt, Noop-Marke, Ablehnungs-Marke) trägt so eine Quittung.
    **Kennt die Inbox die `CommandId` schon** (eine Wiederholung, die der Cache nicht kannte — nach Passivierung, Neustart oder jenseits des
    Caches), scheitert der Append am Schlüssel, nichts ist geschrieben (`KommandoSchonEntschiedenException`), und der Actor quittiert den
@@ -85,7 +90,7 @@ Der gemeinsame Kern `HandleCommandCoreAsync`:
    quittiert (mehrdeutiger Commit, kein falsches Negativ, P10), die Signale gehen nachträglich hinaus. Sonst ist sicher nichts geschrieben:
    der Command wird **einmal** auf dem frischen Stand neu entschieden (ein Client-Command mit veralteter Version scheitert dabei regulär an der
    Vorprüfung); scheitert auch das, kommt ein technischer Fehler zurück.
-8. **Post-Append-Grenze**: ab dem Commit ist der Command durabel. Applier mutiert `_state` in-memory (Marken werden nur in der Version
+7. **Post-Append-Grenze**: ab dem Commit ist der Command durabel. Applier mutiert `_state` in-memory (Marken werden nur in der Version
    mitgezählt), Redis-Track, Snapshot ab Schwelle, Publish. Wirft etwas davon, rehydriert der `catch` frisch aus dem Log und quittiert
    trotzdem **Erfolg** (kein falsches Negativ).
 
@@ -104,13 +109,13 @@ Beispiel aus der Agnostik-Sonde (`GraphExtractor.Kern/Sonde/Ausleihe.cs.txt`, Do
 Applier dürfen auch in eigenen Dateien liegen (`Mahnvorgang.Decider.cs.txt`):
 
 ```csharp
-// Commands — Record mit Guid AggregateId : ICommand; ein erzeugender Command ist ICreationCommand
-// (der C#-Client sendet ihn mit erwarteter Version 0).
-public record LeiheAus(Guid AggregateId, Signatur Medium, Guid LeserId, int Tage = 14) : ICreationCommand;
+// Commands — Record mit Id<TAggregat> AggregateId : ICommand<TAggregat> (das Ziel steht im Typ); ein erzeugender Command ist zusätzlich
+// ICreationCommand (der C#-Client sendet ihn mit erwarteter Version 0).
+public record LeiheAus(Id<Leihvorgang> AggregateId, Signatur Medium, Guid LeserId, int Tage = 14) : ICommand<Leihvorgang>, ICreationCommand;
 
-// Events — persistent : IEvent ; Ablehnung : ITransientEvent (nie im Log).
+// Events — persistent : IEvent ; Ablehnung : ITransientEvent (nie im Log). Verweise auf Aggregate sind Id<T>.
 public record Ausgeliehen(Signatur Medium, Guid LeserId, int Tage) : IEvent;
-public record BereitsAusgeliehen(Guid AusleiheId) : ITransientEvent;
+public record BereitsAusgeliehen(Id<Leihvorgang> AusleiheId) : ITransientEvent;
 
 // State — nur fachliche Properties. Id/Version werden generiert.
 public partial class Leihvorgang : IState
@@ -139,8 +144,9 @@ public partial class Leihvorgang : IState
 **Wie der Fachcode rein bleibt:** `this.State` und der Konstruktor `Decider(Leihvorgang state)` (`Domain.SourceGeneration/Generator.cs`)
 sowie `Id`/`Version` (`StateGenerator`) sind generiert. OCC, Signal, Cursor, Idempotenz und Spur erscheinen ausschließlich im Framework.
 Die Marken für Noop und Ablehnung (`KommandoVerarbeitet`/`KommandoAbgelehnt`, `Infrastructure/Aggregate/KommandoVerarbeitet.cs`) sind
-`IProzessIntern`, werden beim Falten übersprungen (aber versionsgezählt) — der Decider sieht sie nie; die Inbox ist eine Tabelle des Stores. Command → Aggregat folgt aus den Decide-Signaturen,
-nicht aus Namespaces (`CommandAggregateMapGenerator`).
+`IProzessIntern`, werden beim Falten übersprungen (aber versionsgezählt) — der Decider sieht sie nie; die Inbox ist eine Tabelle des Stores. Command → Aggregat folgt aus
+`ICommand<TAggregat>`, nicht aus Namespaces; das Decide muss im Ziel-Aggregat stehen (CQRS010), ein Command ohne typisiertes Ziel baut nicht
+(CQRS013, `CommandAggregateMapGenerator`, `ModellAnalyzer`).
 
 ## 3.3 Event-Store (Marten)
 
@@ -268,4 +274,4 @@ aus der Zeit vor dem Generator (docs/13 P3-2).
 ## 3.8 Schulden im Schreibpfad
 
 Offenes steht in einer Quelle, [13 §13.0](13-reifegrad-schulden-bewertung.md): der parallele Drain skaliert sublinear (P2-6), Split-Upcasts verschieben die Version (G-5), der Snapshot-`Clone` ist ein JSON-Round-Trip (W10-2), der tote
-Lesepfad `LoadStateAsync` neben `AggregateRehydrator` (P2-9), der Client darf den `AggregateType` selbst setzen (W2-1).
+Lesepfad `LoadStateAsync` neben `AggregateRehydrator` (P2-9).

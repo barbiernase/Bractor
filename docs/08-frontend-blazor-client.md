@@ -34,7 +34,8 @@ public interface IArbeitsplatz : IClientVertrag,
 
 - **Generiert** (`WiringGenerator`, Klasse `GeneratedWiring_<Assembly>`): `Vertrag` (Handshake-Name = Interface ohne führendes `I`),
   `VertragHash` (gleiche Lesart wie der Server, `Infrastructure.SourceGeneration/Clientvertragslesart.cs` per Link), `ServerEventTypes`
-  (= Kenntnis `void Auf(E)`), `CommandTypes` (= `ISendet<C>`), `RegisterQueries` (= `IFragt<Q>`), dazu `CommandAggregateTypes`,
+  (= Kenntnis `void Auf(E)`), `CommandTypes` (= `ISendet<C>`), `RegisterQueries` (= `IFragt<Q>`), dazu `CommandAggregateTypes` (das Ziel-Aggregat
+  jedes gesendeten Commands aus `ICommand<TAggregat>`, dieselbe Identität wie am Server),
   `HydrationStores`, `SubscribeAll`/`UnsubscribeAll`, `AddClientDomain_<Assembly>`.
 - **Handshake ohne Selbstauskunft:** der Client schickt im `CapabilitiesRequest` nur Vertrag + Hash; Fähigkeiten und Abos nimmt der Server
   aus **seiner** Tabelle (`GeneratedClientVertraege`), wirksam ist Vertrag ∩ Token. Nimmt der Server den Vertrag nicht an, bricht der
@@ -153,7 +154,8 @@ in `Domain.Client.Modules.Blazor/` (Galerie, Kuratieren, Datensätze, Training-D
    die andere Stores sind, definieren den Store-Baum (Subscription-Reihenfolge).
 4. **RefreshHandler** (feuert Queries nach Kontextwechsel) und **IntentHandler** (Client-Event → Command, `IEnumerable<object> Handle(…)`).
 5. Commands/Queries/Events werden **nicht** im Client deklariert — sie kommen aus den referenzierten Domänen-Assemblies; was der Client
-   davon senden, fragen und hören darf, sagt der Vertrag (CQRS095–097).
+   davon senden, fragen und hören darf, sagt der Vertrag (CQRS095–097). Verweise auf Aggregate sind auch im Client-Zustand typisierte Ids
+   (`Id<T>`; kurze Namen in `Domain.Client.Modules.Blazor/Kennungen.cs`); neue Ids würfelt der Client mit `Id<T>.Neu()`.
 
 Beispiel Lesen: `PaarlistenPanel.razor` bindet eine `<VirtualList>` an `Store.VirtualImagePairs` + `Store.Cursor` und fordert Seiten über die
 im Store hinterlegte `baueQuery` nach; der `PaarlisteRefreshHandler` feuert nach jedem Kontextwechsel die Query. Beispiel Schreiben: die View
