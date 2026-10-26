@@ -193,6 +193,8 @@ record Anlagen.Messung.RichteSensorEin command erzeugung aggregat=Sensor | Aggre
 record Anlagen.Messung.SensorEingerichtet event aggregat=Sensor | Ort:string, Grenzwert:double, AlarmNach:int
 record Anlagen.Messung.SensorUnbekannt rejection aggregat=Sensor | SensorId:Id<Sensor>
 record Anlagen.Messung.MeldeMesswert command aggregat=Sensor | AggregateId:Id<Sensor>, Wert:double, GemessenAm:DateTimeOffset
+record Anlagen.Messung.MesswertGemessen rejection | SensorId:Id<Sensor>, Wert:double, GemessenAm:DateTimeOffset
+funktion-auf Anlagen.Messung.Messwertpruefung klasse() | MesswertGemessen hinweis -> MeldeMesswert
 record Anlagen.Messung.GrenzwertUeberschritten event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset, Hintereinander:int
 record Anlagen.Messung.AlarmAusgeloest event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset
 record Anlagen.Messung.WertWiederImRahmen event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset
@@ -216,9 +218,9 @@ apply Stoerungsfall.StoerungGeoeffnet
 apply Stoerungsfall.StoerungQuittiert
 reaktion Anlagen.Messung.StoerungBeiAlarm id=stoerung-bei-alarm | AlarmAusgeloest -> sendet OeffneStoerung
 ausgang StoerungBeiAlarm.AlarmAusgeloest strom | command:OeffneStoerung
-akteur Anlagen.Messung.Sensornetz Maschine | darf MeldeMesswert
+akteur Anlagen.Messung.Sensornetz Maschine | darf MeldeMesswert, MesswertGemessen
 akteur Anlagen.Messung.Schichtleitung Mensch | darf RichteSensorEin, QuittiereStoerung
-client Anlagen.Messung.ISensorGateway | traegt ; sendet MeldeMesswert; fragt ; hoert
+client Anlagen.Messung.ISensorGateway | traegt ; sendet MeldeMesswert, MesswertGemessen; fragt ; hoert
 client Anlagen.Messung.ILeitstand | traegt ; sendet RichteSensorEin, QuittiereStoerung; fragt ; hoert AlarmAusgeloest, StoerungGeoeffnet
 sicht Anlagen.Messung.StoerungBeiAlarm reaktion domaene=Anlagen.Messung block=§geteilt
 sicht Anlagen.Messung.Sensornetz akteur domaene=Anlagen.Messung block=§akteure
@@ -252,11 +254,9 @@ apply Importlauf.ImportFortgeschritten
 apply Importlauf.ImportAbgeschlossen
 apply Artikel.ArtikelAngelegt
 fluss Warenkatalog.Import.Katalogeingang bauer=p | datei=quelle:KatalogDateiAbgelegt; start=command:StarteImport <- datei+datei.strom λ{(d, strom) => new StarteImport(new(strom.Id), d.Pfad)}
-akteur Warenkatalog.Import.Importdienst Maschine | darf
-vertrag Warenkatalog.Import.IImportLauf akteur=Importdienst | ImportGestartet -> strom LegeArtikelAn, MeldeImportFortschritt, SchliesseImportAb
+funktion-auf Warenkatalog.Import.IImportLauf schnittstelle | ImportGestartet herkunft -> strom LegeArtikelAn; MeldeImportFortschritt; SchliesseImportAb
 akteur Warenkatalog.Import.Ablage Maschine | darf KatalogDateiAbgelegt
 akteur Warenkatalog.Import.Katalogpflege Mensch | darf HoleImportstand
-client Warenkatalog.Import.IImportWorker | traegt IImportLauf; sendet ; fragt ; hoert
 client Warenkatalog.Import.IKatalogpflegeOberflaeche | traegt ; sendet ; fragt HoleImportstand; hoert ImportFortgeschritten, ImportAbgeschlossen
 readmodel Warenkatalog.Import.Importstand store=IImportUebersicht | Id:Guid { get; set; }, Pfad:string="" { get; set; }, Zeilen:int { get; set; }, Fertig:bool { get; set; }
 store Warenkatalog.Import.IImportUebersicht | schreibt BeginneAsync(importId:Guid, pfad:string), SetzeAsync(importId:Guid, zeilen:int, fertig:bool) | liest FindeAsync(importId:Guid):Importstand?
@@ -276,7 +276,6 @@ sicht Warenkatalog.Import.Importstand readmodel domaene=Warenkatalog.Import bloc
 sicht Warenkatalog.Import.IImportUebersicht store domaene=Warenkatalog.Import block=Importlauf
 sicht Warenkatalog.Import.Importfortschritt projektion domaene=Warenkatalog.Import block=Importlauf
 sicht Warenkatalog.Import.Importauskunft reader domaene=Warenkatalog.Import block=Importlauf
-sicht Warenkatalog.Import.Importdienst akteur domaene=Warenkatalog.Import block=§akteure
 sicht Warenkatalog.Import.Ablage akteur domaene=Warenkatalog.Import block=§akteure
 sicht Warenkatalog.Import.Katalogpflege akteur domaene=Warenkatalog.Import block=§akteure
 
@@ -343,9 +342,8 @@ lage Besucher -> Domain.Akteure
 lage HoleImportstand -> Domain.Projections
 lage IBeginneImportstand -> Domain.Projections
 lage IFindeImportstand -> Domain.Projections
-lage IImportLauf -> Domain.Akteure
+lage IImportLauf -> Domain.Pipeline
 lage IImportUebersicht -> Domain.Projections
-lage IImportWorker -> Domain.Akteure
 lage IKatalogpflegeOberflaeche -> Domain.Akteure
 lage ILeitstand -> Domain.Akteure
 lage IRegistrierungsseite -> Domain.Akteure
@@ -353,7 +351,6 @@ lage ISensorGateway -> Domain.Akteure
 lage ISetzeImportstand -> Domain.Projections
 lage ImportUnbekannt -> Domain.Projections
 lage Importauskunft -> Domain.Projections
-lage Importdienst -> Domain.Akteure
 lage Importfortschritt -> Domain.Projections
 lage Importstand -> Domain.Projections
 lage ImportstandAntwort -> Domain.Projections
@@ -362,3 +359,4 @@ lage Katalogpflege -> Domain.Akteure
 lage Schichtleitung -> Domain.Akteure
 lage Sensornetz -> Domain.Akteure
 lage StoerungBeiAlarm -> Domain.Projections
+lage Messwertpruefung -> Domain.Pipeline

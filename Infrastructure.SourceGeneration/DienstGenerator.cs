@@ -39,7 +39,8 @@ namespace Infrastructure.SourceGeneration
 
             bool Implementiert(INamedTypeSymbol k, INamedTypeSymbol i) => k.AllInterfaces.Contains(i, SymbolEqualityComparer.Default);
             var dienstImpls = dienste.Select(d => (Dienst: d, Impls: klassen.Where(k => Implementiert(k, d)).ToList())).ToList();
-            var funktionsImpls = klassen.Where(k => funktionen.Any(f => Implementiert(k, f))).ToList();
+            // Funktions-Implementierungen: Klassen einer Funktions-Schnittstelle (beider Formen) und Funktionen als Klasse (Baustein-Form, im Host).
+            var funktionsImpls = klassen.Where(k => funktionen.Any(f => Implementiert(k, f)) || Funktionsform.IstBaustein(k)).ToList();
 
             // Was die Konstruktoren brauchen — und daraus die Konfig-Records (nur die, die eine Implementierung wirklich nimmt).
             var nutzer = dienstImpls.SelectMany(x => x.Impls).Concat(funktionsImpls).Distinct(SymbolEqualityComparer.Default).Cast<INamedTypeSymbol>()

@@ -25,6 +25,8 @@
         <!-- Die Lesart der Implementierungs-Konstruktoren (eine Quelle mit dem DienstGenerator). -->
         <Compile Include="..\Infrastructure.SourceGeneration\Ctorbindung.cs" Link="Vertrag\Ctorbindung.cs" />
         <Compile Include="..\Infrastructure.SourceGeneration\Vertragsassemblies.cs" Link="Vertrag\Vertragsassemblies.cs" />
+        <!-- Die Lesart der Funktionen in Baustein-Form (eine Quelle mit FunktionsBausteinGenerator, Lage-Regeln und Extractor). -->
+        <Compile Include="..\Infrastructure.SourceGeneration\Funktionsform.cs" Link="Vertrag\Funktionsform.cs" />
         <Compile Include="..\Abstractions\Quellen\Treibervertrag.cs" Link="Vertrag\Treibervertrag.cs" />
         <Compile Include="..\Abstractions\Kodehash.cs" Link="Vertrag\Kodehash.cs" />
         <Compile Include="..\Abstractions\Spur\WirkerId.cs" Link="Vertrag\WirkerId.cs" />

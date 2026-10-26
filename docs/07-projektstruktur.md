@@ -22,7 +22,7 @@
 |---|---|---|
 | `Domain` | Aggregate (State, Decider, Applier), Commands, Events, Ablehnungen, Wertobjekte, Enums, Quellen-Typen, Prozesse | Abstractions, Core |
 | `Domain.Projections` | ReadModels, Queries, Antworten, Store-Fähigkeiten und -Bündel, Projektionen, Reaktionen, Reader | Domain |
-| `Domain.Pipeline` | Flüsse, Katalog-Funktionen (Schnittstelle, Auftrag, Ergebnis-Events, Implementierung), Domänen-Dienste (Schnittstelle, Implementierung), Konfig-Records | Domain, Domain.Projections |
+| `Domain.Pipeline` | Flüsse, Funktionen — als Klasse (im Host) oder Schnittstelle (draußen) mit `Auf`, samt ihren Ausgabe-Events —, Katalog-Funktionen bis Phase 4 des Plans (Schnittstelle, Auftrag, Ergebnis-Events, Implementierung), Domänen-Dienste (Schnittstelle, Implementierung), Konfig-Records | Domain, Domain.Projections |
 | `Domain.Akteure` | Akteure, Akteur-Verträge, Client-Verträge | Domain, Domain.Projections, Domain.Pipeline |
 | `Domain.Infrastructure` | Store-Implementierungen | Domain, Domain.Projections |
 | `Domain.Leitung` | die Domänen-DTOs der Leitung (`domain.proto`, vom Codegen) und ihr Nutzlast-Mapper (`GeneratedNutzlast`) — nichts Handgeschriebenes | Domain, Domain.Projections, Domain.Pipeline |
@@ -64,7 +64,8 @@ Vertrag hört auf beliebige Events, auch auf Ergebnis-Events von Funktionen.
 | | `<Projektion>.cs`, `<Reaktion>.cs`, `<Reader>.cs` | je Klasse eine Datei |
 | `Domain.Akteure/` | `Akteure.cs`, `Clients.cs` | Akteure mit ihren Verträgen; Client-Verträge |
 | `Domain.Pipeline/<Bereich>/` | `<Fluss>.cs` | ein Fluss je Datei |
-| | `Funktionen.cs`, `Auftraege.cs`, `Events.cs` | Funktions-Schnittstellen; Aufträge; Ergebnis-Events |
+| | `Funktionen.cs`, `Auftraege.cs`, `Events.cs` | Funktions-Schnittstellen (draußen); Aufträge; Ausgabe- bzw. Ergebnis-Events der Funktionen |
+| | `<Funktion>.cs` | je Funktion als Klasse (im Host, Primitive `HostFunktion`) eine Datei |
 | | `<Implementierung>.cs` | je Funktions- bzw. Dienst-Implementierung eine Datei |
 | | `I<Dienst>.cs`, `Konfigs.cs` | Dienst-Schnittstelle; Konfig-Records |
 | `Domain.Infrastructure/<Bereich>/` | `<Store>.cs`, `<Store>.Lesen.cs` | Store-Implementierung (Schreib- und Leseteil) |
@@ -87,7 +88,8 @@ Primitive ist, liegt im Bereichs-Ordner seines Projekts und erscheint im Editor 
 | `--sonde` | die fremde Sonden-Domäne liegt absichtlich in einem Projekt: die Lage-Prüfung muss jeden ihrer Typen ins Projekt seiner Rolle weisen (`soll.txt`, `lage …`) | `GraphExtractor.Kern/Sonde.cs` |
 
 WAS ein Typ ist (die Primitive), bestimmt `Domain.SourceGeneration/Lageart.cs` nur aus Markern und Signaturen (Ergebnis-Events aus der
-Funktions-Signatur, Konfig-Records aus dem Implementierungs-Konstruktor, Fähigkeiten aus dem Bündel) — dieselbe Lesart für Analyzer und `--check`.
+Funktions-Signatur — bei der Baustein-Form die Fälle jedes `Auf`, gelesen über `Infrastructure.SourceGeneration/Funktionsform.cs`, dieselbe Lesart
+wie Generator und Extractor —, eine Klasse mit `IFunktion` und `Auf` ist eine Funktion im Host, Konfig-Records aus dem Implementierungs-Konstruktor, Fähigkeiten aus dem Bündel) — dieselbe Lesart für Analyzer und `--check`.
 
 ## 7.6 Offen
 

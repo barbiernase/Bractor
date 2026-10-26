@@ -128,7 +128,13 @@ namespace Infrastructure.SourceGeneration
                 "IReadOnlyDictionary<Type, Type> AuftragZuFunktion", "IReadOnlyDictionary<Type, Type[]> Ergebnisse", "IReadOnlyDictionary<Type, Type[]> Faehigkeiten",
                 "IReadOnlyDictionary<string, Type> Namen", "IReadOnlyList<global::Infrastructure.Funktionen.FunktionsImplementierung> Implementierungen",
                 "IReadOnlyDictionary<Type, Action<IServiceCollection>> Extern",
-            }, new[] { "Task<IEvent> RufeAsync(IServiceProvider sp, IAuftrag auftrag, IAusfuehrung x) => {0}.RufeAsync(sp, auftrag, x)" });
+            }, new[]
+            {
+                "Task<IEvent> RufeAsync(IServiceProvider sp, IAuftrag auftrag, IAusfuehrung x) => {0}.RufeAsync(sp, auftrag, x)",
+                "IReadOnlyList<global::Infrastructure.Funktionen.FunktionsBaustein> Bausteine => global::Infrastructure.Funktionen.GeneratedFunktionsBausteine.Alle",
+                "IReadOnlyDictionary<Type, string[]> Weckplan => global::Infrastructure.Funktionen.GeneratedFunktionsBausteine.Weckplan",
+                "IReadOnlyDictionary<Type, string[]> Hinweisplan => global::Infrastructure.Funktionen.GeneratedFunktionsBausteine.Hinweisplan",
+            });
             Tabelle(sb, "DienstTabelle", "IDienstTabelle", "global::Infrastructure.Dienste.GeneratedDienste", new[]
             {
                 "IReadOnlyDictionary<string, Type> Namen", "IReadOnlyList<global::Infrastructure.Dienste.DienstImplementierung> Implementierungen",

@@ -71,11 +71,12 @@ public sealed class DienstAnalyzer : DiagnosticAnalyzer
         var t = (INamedTypeSymbol)ctx.Symbol;
         var vertraege = t.AllInterfaces.Where(i => IstDienst(i, iDienst)
             || (!SymbolEqualityComparer.Default.Equals(i, iFunktion) && i.AllInterfaces.Contains(iFunktion, SymbolEqualityComparer.Default))).ToList();
-        var istImpl = t.TypeKind == TypeKind.Class && !t.IsAbstract && vertraege.Count > 0;
+        // Eine Funktion als Klasse (Baustein-Form, Funktionsform) ist ihre eigene Implementierung: ihr Konstruktor nimmt Dienste wie jede andere.
+        var istImpl = t.TypeKind == TypeKind.Class && !t.IsAbstract && (vertraege.Count > 0 || Funktionsform.IstBaustein(t));
 
         // CQRS092: eine Implementierung, die die generierte Bindung nicht bauen kann.
         if (istImpl && !Ctorbindung.Baubar(t))
-            ctx.ReportDiagnostic(Diagnostic.Create(Baubar, t.Locations.FirstOrDefault(), t.Name, vertraege[0].Name,
+            ctx.ReportDiagnostic(Diagnostic.Create(Baubar, t.Locations.FirstOrDefault(), t.Name, vertraege.FirstOrDefault()?.Name ?? iFunktion.Name,
                 t.IsGenericType ? "generisch" : "nicht öffentlich"));
 
         // CQRS089: ein Dienst an jeder anderen Stelle als im Konstruktor einer Implementierung (Felder/Eigenschaften dort halten ihn nur).

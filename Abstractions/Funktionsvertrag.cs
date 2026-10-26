@@ -13,6 +13,20 @@ public static class Funktionsvertrag
 {
     public const string Methode = "RufeAsync";
 
+    // ── Baustein-Form (Plan Pub/Sub-Neustrukturierung §3.3): je Eingangstyp ein Auf, freie Ausgabe in der Signatur ──
+
+    /// <summary>Die Methode einer Funktion in Baustein-Form: <c>Auf(TEingang e[, Herkunft h][, Lese-Fähigkeiten…][, CancellationToken])</c>.</summary>
+    public const string Auf = "Auf";
+
+    /// <summary>Der volle Name der <c>Herkunft</c> (optionaler Parameter eines <see cref="Auf"/>).</summary>
+    public const string Herkunft = "Abstractions.Herkunft";
+
+    /// <summary>Das Cluster-Kind des Funktions-Actors einer Funktion (Identität = Partition).</summary>
+    public static string Kind(string funktion) => "funktion-" + funktion;
+
+    /// <summary>Die Id des Stands einer Funktion (Position je Partition, wie bei Projektionen <c>&lt;Id&gt;:&lt;Partition&gt;</c>).</summary>
+    public static string StandId(string funktion) => "funktion:" + funktion;
+
     // ── Python (Laufort Extern, konzept-werkbank §12.3 E13): die generierte Basis und wo die Implementierung liegt ──
 
     /// <summary>Die Methode, die eine Python-Implementierung füllt (<c>async def rufe(self, auftrag, x)</c>).</summary>

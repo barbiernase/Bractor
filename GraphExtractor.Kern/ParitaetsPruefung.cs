@@ -182,6 +182,7 @@ public static class ParitaetsPruefung
         Vergleiche("Value Object", soll.ValueObjects, BoardRecords(RecordArt.ValueObject), befunde);
         Vergleiche("Auftrag", soll.Auftraege, BoardRecords(RecordArt.Auftrag), befunde);
         Vergleiche("Funktion", soll.Funktionen, BoardListe("funktion"), befunde);
+        Vergleiche("Funktion (Auf)", soll.BausteinFunktionen, BoardListe("bausteinfunktion"), befunde);
         Vergleiche("Dienst", soll.Dienste, BoardListe("dienst"), befunde);
         Vergleiche("Konfiguration", soll.Konfigs, BoardRecords("konfig"), befunde);
         Vergleiche("Store", soll.Stores, BoardListe("store"), befunde);
@@ -282,7 +283,7 @@ public static class ParitaetsPruefung
         public HashSet<string> Commands = new(), Events = new(), Ablehnungen = new(), ValueObjects = new(),
             Queries = new(), Responses = new(), Enums = new(), ReadModels = new(), Readers = new(),
             Pipelines = new(), Subscriber = new(), Konfigs = new(), Stores = new(), Akteure = new(), Funktionen = new(), Auftraege = new(),
-            Fluesse = new(), Dienste = new();
+            Fluesse = new(), Dienste = new(), BausteinFunktionen = new();
         /// <summary>Akteur → seine IDarf-Ziele (einfache Namen) — aus der Basisliste, unabhängig vom DomainExtractor.</summary>
         public Dictionary<string, HashSet<string>> AkteurRechte = new(StringComparer.Ordinal);
         /// <summary>Akteur → seine Zusagen „Event&gt;Ausgabe,…[*]" aus den Vertrags-Interfaces (IAkteurVertrag&lt;A&gt;, alle Teile).</summary>
@@ -338,6 +339,12 @@ public static class ParitaetsPruefung
                         if (t.ContainingType == null)
                             inv.Deklarationen.Add((full, tree.FilePath, decl.Span.Start, decl.Span.End, decl.GetLocation().GetLineSpan().StartLinePosition.Line + 1));
                         if (decl is EnumDeclarationSyntax) { inv.Enums.Add(full); continue; }
+                        // Funktion in Baustein-Form (IFunktion mit Auf): Klasse im Host oder Schnittstelle draußen — ein eigener Baustein.
+                        if (t.ContainingType == null && Infrastructure.SourceGeneration.Funktionsform.IstBaustein(t))
+                        {
+                            inv.BausteinFunktionen.Add(full);
+                            if (t.TypeKind == TypeKind.Interface) continue;   // eine Klasse zählt unten weiter (Konfig im Konstruktor)
+                        }
                         if (decl is InterfaceDeclarationSyntax)
                         {
                             // Katalog-Funktion (IFunktion): ein eigener Baustein — nur ihre Signatur.

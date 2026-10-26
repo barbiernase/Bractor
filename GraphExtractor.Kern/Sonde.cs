@@ -203,6 +203,14 @@ public static class Sonde
             z.Add($"funktion {S(f, "namespace")}.{S(f, "name")} | {S(f, "auftrag")} -> {string.Join("; ", A(f, "ergebnisse").Select(x => (string?)x))}"
                 + (A(f, "faehigkeiten").Any() ? " liest " + string.Join(", ", A(f, "faehigkeiten").Select(p => $"{S(p, "typ")} {S(p, "name")}")) : "")
                 + (f["implementierung"] is { } im ? $" impl {im}{Konstruktor(f)}" : ""));
+        // Funktionen in Baustein-Form: Klasse oder Schnittstelle, je Eingang Herkunft/Hinweis, Ausgaben (Strom), Lese-Fähigkeiten; Konstruktor, Umsetzungen.
+        foreach (var f in A(b, "bausteinFunktionen").Where(Sonde))
+            z.Add($"funktion-auf {S(f, "namespace")}.{S(f, "name")} {(f["klasse"]?.GetValue<bool>() == true ? "klasse" + Konstruktor(f) : "schnittstelle")} | "
+                + string.Join(" || ", A(f, "eingaenge").Select(e => S(e, "eingang")
+                    + (e["hinweis"]?.GetValue<bool>() == true ? " hinweis" : "") + (e["herkunft"]?.GetValue<bool>() == true ? " herkunft" : "")
+                    + " -> " + (e["strom"]?.GetValue<bool>() == true ? "strom " : "") + string.Join("; ", A(e, "ausgaben").Select(x => (string?)x))
+                    + (A(e, "faehigkeiten").Any() ? " liest " + string.Join(", ", A(e, "faehigkeiten").Select(p => $"{S(p, "typ")} {S(p, "name")}")) : "")))
+                + (A(f, "umsetzungen").Any() ? " umsetzung " + string.Join(", ", A(f, "umsetzungen").Select(x => (string?)x)) : ""));
         // Domänen-Dienste (konzept-werkbank §12.3 E11): Signatur (Methoden) und Implementierungen mit Konstruktor.
         foreach (var d in A(b, "dienste").Where(Sonde))
             z.Add($"dienst {S(d, "namespace")}.{S(d, "name")} | "

@@ -1,14 +1,20 @@
 namespace Abstractions;
 
 /// <summary>
-/// Marker einer KATALOG-FUNKTION: eine Schnittstelle mit genau EINER Methode
-/// <c>Task&lt;OneOf&lt;Ergebnis…&gt;&gt; RufeAsync(TAuftrag auftrag, IAusfuehrung x)</c> (CQRS068). Die Funktion ist der
-/// Inhalt, nicht die Hülle: sie kennt weder Actor noch Mailbox noch Wiederholung — die Ausführung (Ausführer, Slots,
-/// Ausführungs-Id, Ergebnis im Log) liefert das Framework. Ein Prozess ruft sie mit <c>Rufe&lt;TFunktion&gt;</c> genau so
-/// auf, wie er ein Aggregat mit <c>Sende&lt;TCmd&gt;</c> ruft — ob sie 50 ms oder Stunden braucht, ist nur ein Zeitlimit.
-///
-/// Ergebnisse sind persistente Events (kein <see cref="ITransientEvent"/>): der Ausführer schreibt den gewählten
-/// OneOf-Fall in den Ausführungs-Stream, und der Prozess faltet ihn wie das Event eines Aggregats.
+/// Marker einer FUNKTION (Plan Pub/Sub-Neustrukturierung §2.2, §3.3). Zwei Formen, unterschieden nur an der Methode (Code-Fakt,
+/// <see cref="Funktionsvertrag"/>):
+/// <list type="bullet">
+/// <item><b>Baustein</b> (<see cref="Funktionsvertrag.Auf"/>): je Eingangstyp eine Methode <c>Auf(TEingang e[, Herkunft h][, Lese-Fähigkeiten…][,
+///   CancellationToken])</c> mit freier Ausgabe in der Signatur — ein konkreter Typ, <c>OneOf&lt;…&gt;</c>, <c>T?</c> (nichts), ein Strom
+///   (<c>IEnumerable</c>/<c>IAsyncEnumerable</c>), je auch als <c>Task&lt;…&gt;</c>. Als <b>Klasse</b> läuft sie im Host (Dienste im Konstruktor), als
+///   <b>Schnittstelle</b> draußen (Worker, Client, Hand) oder mit einer Implementierung im Host — der Laufort steht in der Umgebung. Eingang ist ein
+///   Event (auch eine Quell-Nachricht) oder ein Hinweis; ausgegeben werden Commands, Events und Hinweise. Position, Fortschritt, Gleichzeitigkeit,
+///   Wiederholung und das Festhalten der Ausgabe (R12) trägt der Funktions-Actor des Frameworks.</item>
+/// <item><b>Katalog-Funktion</b> (<see cref="Funktionsvertrag.Methode"/>, bis Phase 4): eine Schnittstelle mit genau EINER Methode
+///   <c>Task&lt;OneOf&lt;Ergebnis…&gt;&gt; RufeAsync(TAuftrag auftrag, IAusfuehrung x)</c> (CQRS068), gerufen aus Prozess und Fluss
+///   (<c>Rufe&lt;TFunktion&gt;</c>); Ergebnisse sind persistente Events im Ausführungs-Stream.</item>
+/// </list>
+/// Beide Formen in einem Typ sind ein Fehler (CQRS100).
 /// </summary>
 public interface IFunktion { }
 

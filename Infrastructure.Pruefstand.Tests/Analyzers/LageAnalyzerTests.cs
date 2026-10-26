@@ -62,6 +62,24 @@ public class LageAnalyzerTests
         (await Befunde("Leihwesen", Funktion)).Should().HaveCount(3, "Auftrag, Ergebnis-Event und Schnittstelle gehören nach Leihwesen.Pipeline");
     }
 
+    private const string Bausteine = """
+        public record Ueberfaellig(int Tage) : IEvent;
+        public record Gemahnt(int Stufe) : IEvent;
+        public sealed class Mahnwesen : IFunktion { public Gemahnt? Auf(Ueberfaellig e) => null; }
+        public interface IPruefung : IFunktion { Gemahnt Auf(Ueberfaellig e); }
+        """;
+
+    [Fact]
+    public async Task Eine_Funktion_als_Klasse_oder_Schnittstelle_gehoert_mit_ihren_Ausgaben_in_die_Ablaeufe()
+    {
+        (await Befunde("Leihwesen", Bausteine)).Should().HaveCount(3, "Klasse, Schnittstelle und Ausgabe-Event gehören nach Leihwesen.Pipeline")
+            .And.Contain(b => b.Contains("'Mahnwesen' ist eine Funktion im Host"))
+            .And.Contain(b => b.Contains("'IPruefung' ist eine Funktion (Schnittstelle)"))
+            .And.Contain(b => b.Contains("'Gemahnt' ist ein Ergebnis-Event einer Funktion"));
+        // Der Eingang ist ein Event der Schreibseite.
+        (await Befunde("Leihwesen.Pipeline", Bausteine)).Should().ContainSingle().Which.Should().Contain("'Ueberfaellig' ist ein Event");
+    }
+
     [Fact]
     public async Task Leseseite_und_Akteure_haben_ihre_Projekte()
     {

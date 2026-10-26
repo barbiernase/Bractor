@@ -29,7 +29,7 @@ static class Projektstruktur
         Schreibseite,
         /// <summary><c>&lt;Wurzel&gt;.Projections</c>: ReadModels, Queries, Antworten, Store-Fähigkeiten, Projektionen, Reaktionen, Reader.</summary>
         Leseseite,
-        /// <summary><c>&lt;Wurzel&gt;.Pipeline</c>: Flüsse, Katalog-Funktionen, Domänen-Dienste, Konfig-Records.</summary>
+        /// <summary><c>&lt;Wurzel&gt;.Pipeline</c>: Flüsse, Funktionen (Klasse im Host, Schnittstelle draußen), Domänen-Dienste, Konfig-Records.</summary>
         Ablaeufe,
         /// <summary><c>&lt;Wurzel&gt;.Akteure</c>: Akteure, Akteur-Verträge, Client-Verträge — der äußerste Ring.</summary>
         Akteure,
@@ -47,6 +47,8 @@ static class Projektstruktur
         Aggregat, Decider, Applier, Command, Event, Quelle, Prozess, Wertobjekt, Enum,
         ReadModel, Query, Antwort, StoreBuendel, StoreFaehigkeit, Projektion, Reader,
         Fluss, Funktion, Auftrag, FunktionsErgebnis, FunktionsImplementierung, Dienst, DienstImplementierung, Konfig,
+        /// <summary>Eine Funktion als Klasse (Baustein-Form, <c>Auf</c>): sie läuft im Host; als Schnittstelle ist sie <see cref="Funktion"/> (draußen).</summary>
+        HostFunktion,
         Akteur, AkteurVertrag, ClientVertrag,
         StoreImplementierung,
         /// <summary>Kein Rollen-Marker: liegt im Bereichs-Ordner seines Projekts, in eigener Datei oder einer Sammeldatei des Projekts.</summary>
@@ -166,6 +168,7 @@ static class Projektstruktur
                 return new[] { Rolle.Leseseite };
             case Primitive.Fluss: case Primitive.Funktion: case Primitive.Auftrag: case Primitive.FunktionsErgebnis:
             case Primitive.FunktionsImplementierung: case Primitive.Dienst: case Primitive.DienstImplementierung: case Primitive.Konfig:
+            case Primitive.HostFunktion:
                 return new[] { Rolle.Ablaeufe };
             case Primitive.Akteur: case Primitive.AkteurVertrag: case Primitive.ClientVertrag:
                 return new[] { Rolle.Akteure };
@@ -280,7 +283,8 @@ static class Projektstruktur
             case Primitive.Projektion: return "eine Projektion/Reaktion";
             case Primitive.Reader: return "ein Reader";
             case Primitive.Fluss: return "ein Fluss";
-            case Primitive.Funktion: return "eine Katalog-Funktion";
+            case Primitive.Funktion: return "eine Funktion (Schnittstelle)";
+            case Primitive.HostFunktion: return "eine Funktion im Host";
             case Primitive.Auftrag: return "ein Auftrag";
             case Primitive.FunktionsErgebnis: return "ein Ergebnis-Event einer Funktion";
             case Primitive.FunktionsImplementierung: return "eine Funktions-Implementierung";

@@ -32,6 +32,7 @@
       <Compile Include="../Domain.SourceGeneration/Lageart.cs" Link="Vertrag/Lageart.cs" />
       <Compile Include="../Infrastructure.SourceGeneration/Ctorbindung.cs" Link="Vertrag/Ctorbindung.cs" />
       <Compile Include="../Infrastructure.SourceGeneration/Vertragsassemblies.cs" Link="Vertrag/Vertragsassemblies.cs" />
+      <Compile Include="../Infrastructure.SourceGeneration/Funktionsform.cs" Link="Vertrag/Funktionsform.cs" />
     </ItemGroup>
 
     <ItemGroup>

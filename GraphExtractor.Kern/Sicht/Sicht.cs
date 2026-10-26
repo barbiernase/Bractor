@@ -27,7 +27,7 @@ public sealed partial class Sicht
 
     private readonly JsonObject _board;
     private readonly List<JsonObject> _records, _enums, _aggregate, _decider, _applier, _sagas, _states, _transitions, _funktionen, _dienste, _fluesse,
-        _akteure, _clients, _readModels, _stores, _projektionen, _reader, _reaktionen, _codeKarten;
+        _akteure, _clients, _readModels, _stores, _projektionen, _reader, _reaktionen, _codeKarten, _bausteinFunktionen;
     private readonly Dictionary<string, (HashSet<string> Direkt, HashSet<string> Kette)> _mengen = new(StringComparer.Ordinal);
 
     public IReadOnlyList<SichtKarte> Karten { get; }
@@ -43,6 +43,7 @@ public sealed partial class Sicht
         _applier = Liste("applier"); _sagas = Liste("sagas"); _funktionen = Liste("funktionen"); _dienste = Liste("dienste"); _fluesse = Liste("fluesse");
         _akteure = Liste("akteure"); _clients = Liste("clients"); _readModels = Liste("readModels"); _stores = Liste("stores");
         _projektionen = Liste("projektionen"); _reader = Liste("reader"); _reaktionen = Liste("reaktionen"); _codeKarten = Liste("codeKarten");
+        _bausteinFunktionen = Liste("bausteinFunktionen");
         // Wie der Editor das Board liest: je Prozess-Regel eine Transition (Prozess, Wenn, ein Dann), je Aggregat mit State eine State-Karte.
         _transitions = _sagas.SelectMany(s => Alle(s["schritte"]).Select(st => Transition(s, st))).ToList();
         _states = _aggregate.Where(a => Alle(a["state"]).Any()).Select(a => new JsonObject { ["_id"] = "state:" + S(a, "name"), ["aggregat"] = S(a, "name") }).ToList();
@@ -170,6 +171,8 @@ public sealed partial class Sicht
             k.Add(new("tr:" + S(t, "_id"), "transition",
                 string.Join(", ", Alle(t["dann"]).Select(d => S(d, "rufe") is { Length: > 0 } r ? r : S(d, "sende")).Where(x => x.Length > 0)), t));
         foreach (var f in _funktionen) k.Add(new("fk:" + S(f, "_id"), "funktion", S(f, "name"), f));
+        // Funktionen in Baustein-Form: eine Karte je Funktion (Darstellung und Kanten kommen mit der Editor-Arbeit, Plan E4).
+        foreach (var f in _bausteinFunktionen) k.Add(new("fb:" + S(f, "_id"), "bausteinfunktion", S(f, "name"), f));
         foreach (var d in _dienste) k.Add(new("dn:" + S(d, "_id"), "dienst", S(d, "name"), d));
         foreach (var rm in _readModels) k.Add(new("rm:" + S(rm, "_id"), "readmodel", S(rm, "name"), rm));
         foreach (var s in _stores) k.Add(new("sto:" + S(s, "_id"), "store", S(s, "name"), s));

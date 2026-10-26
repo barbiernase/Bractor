@@ -27,10 +27,14 @@ internal sealed class Lageart
         if (!Bereit) return;
         foreach (var t in typen)
         {
-            // Ergebnis-Events: die OneOf-Argumente im Rückgabetyp jeder Funktions-Schnittstelle (CQRS068).
+            // Ergebnis-Events: die Ausgaben jeder Funktion — der Katalog-Form (OneOf in RufeAsync, CQRS068) und der Baustein-Form (die Fälle
+            //   jedes Auf, Funktionsform). Commands unter ihnen bleiben Commands (Command wird vor Event erkannt).
             if (IstFunktion(t))
                 foreach (var m in t.GetMembers(Funktionsvertrag.Methode).OfType<IMethodSymbol>())
                     foreach (var e in Blaetter(m.ReturnType)) _ergebnisse.Add(Name(e));
+            if (Infrastructure.SourceGeneration.Funktionsform.IstBaustein(t))
+                foreach (var a in Infrastructure.SourceGeneration.Funktionsform.Lies(t).Aufs)
+                    foreach (var e in a.Ausgaben) _ergebnisse.Add(Name(e));
             // Konfig-Records: was der Konstruktor einer Funktions-/Dienst-Implementierung als Konfig bindet (Ctorbindung, CQRS090).
             if (t.TypeKind == TypeKind.Class && !t.IsAbstract && (Hat(t, "IFunktion") || Hat(t, Dienst)))
                 foreach (var p in Infrastructure.SourceGeneration.Ctorbindung.Konstruktor(t)?.Parameters ?? Enumerable.Empty<IParameterSymbol>())
@@ -76,7 +80,8 @@ internal sealed class Lageart
         if (Hat(t, "ISubscriber")) return Projektstruktur.Primitive.Projektion;
         if (Hat(t, "IReader`1")) return Projektstruktur.Primitive.Reader;
         if (Hat(t, "IAuftrag`1")) return Projektstruktur.Primitive.Auftrag;
-        if (Hat(t, "IFunktion")) return Projektstruktur.Primitive.FunktionsImplementierung;
+        if (Hat(t, "IFunktion"))
+            return Infrastructure.SourceGeneration.Funktionsform.IstBaustein(t) ? Projektstruktur.Primitive.HostFunktion : Projektstruktur.Primitive.FunktionsImplementierung;
         if (Hat(t, Dienst)) return Projektstruktur.Primitive.DienstImplementierung;
         if (Hat(t, "IAkteur")) return Projektstruktur.Primitive.Akteur;
         if (Hat(t, "IStore") || Hat(t, "IReadStore") || Hat(t, "IWriteStore")) return Projektstruktur.Primitive.StoreImplementierung;

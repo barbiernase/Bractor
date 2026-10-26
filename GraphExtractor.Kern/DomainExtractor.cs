@@ -41,6 +41,8 @@ public sealed class DomainModel
     public List<FunktionRaw> Funktionen { get; } = new();
     /// <summary>Aufträge (<c>IAuftrag&lt;F&gt;</c>): der eine Eingang je Katalog-Funktion.</summary>
     public List<RecordRaw> Auftraege { get; } = new();
+    /// <summary>Funktionen in Baustein-Form (<c>Auf</c>, Plan Pub/Sub-Neustrukturierung §3.3): je Eingang die Ausgaben aus der Signatur.</summary>
+    public List<BausteinFunktionRaw> BausteinFunktionen { get; } = new();
     /// <summary>Domänen-Dienste (<c>interface IX : IDienst</c>, konzept-werkbank §12.3 E11): Signatur + Implementierungen.</summary>
     public List<DienstRaw> Dienste { get; } = new();
     /// <summary>
@@ -177,6 +179,33 @@ public sealed class FunktionRaw
     /// <summary>Lese-Fähigkeiten nach IAusfuehrung (Typ wie geschrieben, Name).</summary>
     public List<(string Typ, string Name)> Faehigkeiten = new();
     public string? Doku, Datei;
+}
+
+/// <summary>
+/// Eine Funktion in Baustein-Form (Plan Pub/Sub-Neustrukturierung §3.3): als Klasse im Host, als Schnittstelle draußen. Gelesen wird nur die
+/// Signatur (<see cref="Infrastructure.SourceGeneration.Funktionsform"/>, dieselbe Lesart wie der Generator): je <c>Auf</c> Eingang, Herkunft,
+/// Lese-Fähigkeiten, Ausgaben, Strom. Nur gelesen — die Editor-Oberfläche dafür ist zurückgestellt (Plan E4).
+/// </summary>
+public sealed class BausteinFunktionRaw
+{
+    public string Name = "", Full = "", Namespace = "";
+    /// <summary>Als Klasse deklariert (läuft im Host); sonst Schnittstelle (draußen).</summary>
+    public bool Klasse;
+    public List<BausteinEingangRaw> Eingaenge = new();
+    /// <summary>Konstruktor der Klasse (Typ wie geschrieben, Name): Dienste, Konfig-Records, Logger.</summary>
+    public List<(string Typ, string Name)> Konstruktor = new();
+    /// <summary>Bei einer Schnittstelle: die Klassen der Domänen-Quellen, die sie implementieren (Umsetzungen im Host).</summary>
+    public List<string> UmsetzungenFull = new();
+    public string? Doku, Datei;
+}
+
+/// <summary>Ein Eingang (ein <c>Auf</c>) einer Funktion in Baustein-Form.</summary>
+public sealed class BausteinEingangRaw
+{
+    public string EingangFull = "";
+    public bool Hinweis, Herkunft, Strom;
+    public List<(string Typ, string Name)> Faehigkeiten = new();
+    public List<string> AusgabenFull = new();
 }
 
 /// <summary>
@@ -766,6 +795,8 @@ public sealed partial class DomainExtractor
                 m.Enums.Add(ReadEnum(t));
                 continue;
             }
+            // Funktion in Baustein-Form (Auf): Klasse im Host oder Schnittstelle draußen — nur ihre Signatur zählt.
+            if (Infrastructure.SourceGeneration.Funktionsform.IstBaustein(t)) { m.BausteinFunktionen.Add(ReadBausteinFunktion(t)); continue; }
             // Katalog-Funktion: ein Interface mit IFunktion — nur seine Signatur (Auftrag → Ergebnisse) zählt.
             if (t.TypeKind == TypeKind.Interface && _iFunktion != null && Sym.Implements(t, _iFunktion)) { if (ReadFunktion(t) is { } f) m.Funktionen.Add(f); continue; }
             // Domänen-Dienst (konzept-werkbank §12.3 E11): ein Interface mit IDienst — Signatur; die Implementierungen hängt LinkDienstImpls an.
@@ -819,6 +850,7 @@ public sealed partial class DomainExtractor
         m.SelbstNachrichten.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Triggers.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Funktionen.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
+        m.BausteinFunktionen.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Auftraege.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Dienste.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
     }
@@ -937,6 +969,42 @@ public sealed partial class DomainExtractor
         };
     }
 
+    /// <summary>Die Signatur einer Funktion in Baustein-Form (Funktionsform: dieselbe Lesart wie der FunktionsBausteinGenerator).</summary>
+    private BausteinFunktionRaw ReadBausteinFunktion(INamedTypeSymbol t)
+    {
+        var form = Infrastructure.SourceGeneration.Funktionsform.Lies(t);
+        var decl = QuellDeklarationen(t).FirstOrDefault();
+        string Geschrieben(IMethodSymbol m, int i, ITypeSymbol typ) =>
+            m.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).OfType<MethodDeclarationSyntax>().FirstOrDefault()
+                ?.ParameterList.Parameters.ElementAtOrDefault(i)?.Type?.ToString() ?? typ.Name;
+        var f = new BausteinFunktionRaw
+        {
+            Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq(), Klasse = !form.Draussen,
+            Doku = decl == null ? null : Summary(decl), Datei = decl?.SyntaxTree.FilePath,
+        };
+        foreach (var a in form.Aufs)
+        {
+            var e = new BausteinEingangRaw
+            {
+                EingangFull = a.Eingang.Fq(), Hinweis = a.Hinweis, Herkunft = a.MitHerkunft, Strom = a.Strom,
+                AusgabenFull = a.Ausgaben.Select(x => x.Fq()).ToList(),
+            };
+            for (var i = 0; i < a.Methode.Parameters.Length; i++)
+                if (a.Parameter[i].Art == "faehigkeit") e.Faehigkeiten.Add((Geschrieben(a.Methode, i, a.Methode.Parameters[i].Type), a.Methode.Parameters[i].Name));
+            f.Eingaenge.Add(e);
+        }
+        if (!form.Draussen && Infrastructure.SourceGeneration.Ctorbindung.Konstruktor(t) is { } k)
+        {
+            var ks = k.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).FirstOrDefault();
+            var ps = (ks as ConstructorDeclarationSyntax)?.ParameterList.Parameters ?? (ks as TypeDeclarationSyntax)?.ParameterList?.Parameters;
+            f.Konstruktor = k.Parameters.Select((p, i) => (ps?.ElementAtOrDefault(i)?.Type?.ToString() ?? p.Type.Name, p.Name)).ToList();
+        }
+        if (form.Draussen)
+            f.UmsetzungenFull = _types.Where(c => c.TypeKind == TypeKind.Class && !c.IsAbstract && c.AllInterfaces.Contains(t, SymbolEqualityComparer.Default))
+                .Select(c => c.Fq()).OrderBy(x => x, StringComparer.Ordinal).ToList();
+        return f;
+    }
+
     private EnumRaw ReadEnum(INamedTypeSymbol t)
     {
         var e = new EnumRaw { Name = t.Name, Full = t.Fq(), Meta = Meta(t, mitZusatz: false) };
@@ -974,6 +1042,9 @@ public sealed partial class DomainExtractor
         var storeImpls = m.Stores.SelectMany(s => s.ImplsFull).ToHashSet(StringComparer.Ordinal);
         // Funktions- und Dienst-Implementierungen (konzept-werkbank §12.3 E11): ihre Konstruktor-Records sind Konfig aus Konfig:<Record>.
         storeImpls.UnionWith(m.Funktionen.Where(f => f.ImplFull != null).Select(f => f.ImplFull!));
+        // Funktionen in Baustein-Form: die Klasse selbst bzw. die Umsetzungen der Schnittstelle.
+        storeImpls.UnionWith(m.BausteinFunktionen.Where(f => f.Klasse).Select(f => f.Full));
+        storeImpls.UnionWith(m.BausteinFunktionen.SelectMany(f => f.UmsetzungenFull));
         storeImpls.UnionWith(m.Dienste.SelectMany(d => d.Impls).Select(i => i.Full));
         var injiziert = new HashSet<string>(StringComparer.Ordinal);
         foreach (var t in _types)

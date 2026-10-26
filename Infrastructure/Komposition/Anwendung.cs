@@ -132,6 +132,13 @@ public interface IFunktionsTabelle
     IReadOnlyList<FunktionsImplementierung> Implementierungen { get; }
     IReadOnlyDictionary<Type, Action<IServiceCollection>> Extern { get; }
     Task<IEvent> RufeAsync(IServiceProvider sp, IAuftrag auftrag, IAusfuehrung x);
+
+    /// <summary>Die Funktionen in Baustein-Form (<c>Auf</c>, Plan Pub/Sub-Neustrukturierung Phase 3, GeneratedFunktionsBausteine).</summary>
+    IReadOnlyList<FunktionsBaustein> Bausteine { get; }
+    /// <summary>Weckplan-Einträge der Funktionen: Event-Typ → Cluster-Kinds der Funktions-Actors, die ihn hören.</summary>
+    IReadOnlyDictionary<Type, string[]> Weckplan { get; }
+    /// <summary>Hinweis-Typ → Funktions-Actors, die ihn hören.</summary>
+    IReadOnlyDictionary<Type, string[]> Hinweisplan { get; }
 }
 
 public interface IDienstTabelle

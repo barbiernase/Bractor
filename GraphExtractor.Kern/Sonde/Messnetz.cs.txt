@@ -102,11 +102,21 @@ public partial class StoerungBeiAlarm : ISubscriber, IPullSubscriber
     }
 }
 
+// Funktion auf einem Hinweis (Plan §3.4, Phase 3): das Sensornetz schickt jeden Rohwert als Hinweis (verlierbar, höchstens einmal); eine
+// gleichbleibende Funktion im Host macht aus einem verwertbaren Wert den Command an den Sensor — ein unlesbarer Wert ergibt nichts (T?).
+public record MesswertGemessen(Id<Sensor> SensorId, double Wert, DateTimeOffset GemessenAm) : ITransientEvent;
+
+public sealed class Messwertpruefung : IFunktion
+{
+    public MeldeMesswert? Auf(MesswertGemessen m) =>
+        double.IsNaN(m.Wert) || double.IsInfinity(m.Wert) ? null : new MeldeMesswert(m.SensorId, m.Wert, m.GemessenAm);
+}
+
 // Wer hineingibt: das Sensornetz (Maschine) meldet Messwerte, die Schichtleitung richtet ein und quittiert.
-public sealed record Sensornetz : IMaschine, IDarf<MeldeMesswert>;
+public sealed record Sensornetz : IMaschine, IDarf<MeldeMesswert>, IDarf<MesswertGemessen>;
 public sealed record Schichtleitung : IMensch, IDarf<RichteSensorEin>, IDarf<QuittiereStoerung>;
 
-public interface ISensorGateway : IClientVertrag, ISendet<MeldeMesswert> { }
+public interface ISensorGateway : IClientVertrag, ISendet<MeldeMesswert>, ISendet<MesswertGemessen> { }
 
 public interface ILeitstand : IClientVertrag, ISendet<RichteSensorEin>, ISendet<QuittiereStoerung>
 {

@@ -62,7 +62,8 @@ namespace Infrastructure.SourceGeneration
 
             var schnitt = Ctorbindung.Interfaces(c);
             var funktionen = schnitt
-                .Where(t => t.AllInterfaces.Contains(iFunktion, SymbolEqualityComparer.Default))
+                // Nur die Katalog-Form (RufeAsync); die Baustein-Form (Auf) liest der FunktionsBausteinGenerator.
+                .Where(t => t.AllInterfaces.Contains(iFunktion, SymbolEqualityComparer.Default) && Funktionsform.IstKatalog(t))
                 .OrderBy(t => t.ToDisplayString(), System.StringComparer.Ordinal)
                 .ToList();
 

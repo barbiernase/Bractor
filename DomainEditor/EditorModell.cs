@@ -43,6 +43,11 @@ public sealed record EditorModell
     /// </summary>
     public IReadOnlyList<Dienst> Dienste { get; init; } = [];
     /// <summary>
+    /// Funktionen in Baustein-Form (Plan Pub/Sub-Neustrukturierung §3.3): je Eingang ein <c>Auf</c> mit freier Ausgabe; als Klasse im Host, als
+    /// Schnittstelle draußen. Nur gelesen — Gesten und Darstellung dafür kommen mit der Editor-Arbeit (Plan E4); der Scaffolder schreibt sie nicht.
+    /// </summary>
+    public IReadOnlyList<BausteinFunktion> BausteinFunktionen { get; init; } = [];
+    /// <summary>
     /// Pipelines als FLUSS (docs/konzept-editor-pipelines.md §14): eine Quelle, Katalog-Funktionen und Commands, frei verdrahtet
     /// (<c>class X : IPipeline { PipelineFluss Fluss =&gt; PipelineFluss.Definiere(p =&gt; { var a = …; }) }</c>). Jede Geste im
     /// Editor ist genau ein Code-Fakt dieser Form — entwerfbar auf leerem Board, 1:1 zurückgelesen.
@@ -370,6 +375,33 @@ public sealed record Funktion
     /// Nur Spiegel der Datei (✎/🤖 am Rumpf über PythonSync), nie Teil der Signatur.
     /// </summary>
     public FunktionPython? Python { get; init; }
+}
+
+/// <summary>Eine Funktion in Baustein-Form (nur gelesen, Plan E4): Klasse (im Host) oder Schnittstelle (draußen), je Eingang die Signatur.</summary>
+public sealed record BausteinFunktion
+{
+    public required string Name { get; init; }
+    public required string Namespace { get; init; }
+    /// <summary>Als Klasse deklariert: läuft im Host. Sonst Schnittstelle: draußen oder mit einer Umsetzung im Host (Laufort aus der Umgebung).</summary>
+    public bool Klasse { get; init; }
+    public IReadOnlyList<BausteinEingang> Eingaenge { get; init; } = [];
+    /// <summary>Konstruktor der Klasse (Dienste, Konfig-Records, Logger).</summary>
+    public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
+    /// <summary>Bei einer Schnittstelle: ihre Umsetzungen im Host (Klassennamen).</summary>
+    public IReadOnlyList<string> Umsetzungen { get; init; } = [];
+    public string? Doku { get; init; }
+    public string? Datei { get; init; }
+}
+
+/// <summary>Ein Eingang (ein <c>Auf</c>): Eingangstyp, ob Hinweis, ob mit Herkunft, ob Strom, Lese-Fähigkeiten, Ausgaben (einfache Namen).</summary>
+public sealed record BausteinEingang
+{
+    public required string Eingang { get; init; }
+    public bool Hinweis { get; init; }
+    public bool Herkunft { get; init; }
+    public bool Strom { get; init; }
+    public IReadOnlyList<Parameter> Faehigkeiten { get; init; } = [];
+    public IReadOnlyList<string> Ausgaben { get; init; } = [];
 }
 
 /// <summary>Die Python-Implementierung einer Funktion: Datei (relativ zur Solution), Klasse, die Methode <c>rufe</c> mit der Signatur der Basis.</summary>

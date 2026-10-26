@@ -112,6 +112,9 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
             if (t.TypeKind == TypeKind.Interface && iFunktion != null && IstT(t, iFunktion) && !SymbolEqualityComparer.Default.Equals(t, iFunktion))
                 foreach (var m in t.GetMembers().OfType<IMethodSymbol>().Where(m => m.IsAbstract))
                     erzeugt.UnionWith(Faelle(m.ReturnType));
+            // Eine Funktion als Klasse (Baustein-Form): die Fälle jedes Auf.
+            if (t.TypeKind == TypeKind.Class && Funktionsform.IstBaustein(t))
+                foreach (var a in Funktionsform.Lies(t).Aufs) erzeugt.UnionWith(a.Ausgaben);
             if (IstT(t, iAkteur))
                 erzeugt.UnionWith(t.AllInterfaces.Where(i => iDarf != null && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iDarf)).Select(i => i.TypeArguments[0]));
             if (t.TypeKind == TypeKind.Interface && IstT(t, iClient))
@@ -204,6 +207,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         while (t is INamedTypeSymbol { TypeArguments.Length: 1 } h
                && (h.Name == "Task" || h.Name == "ValueTask" || h.Name == "IEnumerable" || h.Name == "IAsyncEnumerable"))
             t = h.TypeArguments[0];
+        if (t is INamedTypeSymbol { Name: "Nullable", TypeArguments.Length: 1 } n) t = n.TypeArguments[0];
         if (t is INamedTypeSymbol { Name: "OneOf" } o && o.ContainingNamespace?.ToDisplayString() == "Abstractions") return o.TypeArguments;
         if (t.SpecialType == SpecialType.System_Void || t is INamedTypeSymbol { Name: "Task", TypeArguments.Length: 0 }) return Enumerable.Empty<ITypeSymbol>();
         return new[] { t };
