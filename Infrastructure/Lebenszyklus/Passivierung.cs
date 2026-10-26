@@ -1,12 +1,11 @@
-using Proto;
-
 namespace Infrastructure.Lebenszyklus;
 
 /// <summary>
 /// Passivierung der virtuellen Actors (PF-5, docs/04 §4.1/§4.5, Umgebung <c>Lebenszyklus</c>): erhält ein Actor so lange keine Nachricht, stoppt er
 /// sich selbst; der Cluster vergisst die Aktivierung, die nächste Nachricht aktiviert ihn frisch. Der durable Zustand liegt nie im Actor —
 /// Aggregat (Log, Snapshot beim Stoppen), Adapter (Marke bzw. Cursor), Prozess-Manager (Log, Marking-Cursor) — deshalb ist das folgenlos für die
-/// Garantien und hält den Speicher im Dauerbetrieb flach. <see cref="TimeSpan.Zero"/> = nie passivieren.
+/// Garantien und hält den Speicher im Dauerbetrieb flach. <see cref="TimeSpan.Zero"/> = nie passivieren. Die Regel selbst trägt der Rahmen
+/// jedes Actors (<see cref="RahmenActor"/>): stoppen nach dem Leerlauf, nie während er beschäftigt ist.
 /// </summary>
 public sealed record Passivierung(TimeSpan Aggregat, TimeSpan Adapter, TimeSpan ProzessManager)
 {
@@ -30,24 +29,5 @@ public sealed record Passivierung(TimeSpan Aggregat, TimeSpan Adapter, TimeSpan 
                 + $"{MindestProzessManager.TotalSeconds:0} s (4 × Backstop) — offene Vorgänge würden zwischen zwei Backstop-Weckungen passiviert "
                 + "und bei jeder Weckung kalt gefaltet. 0 (nie) oder mindestens 60.");
         return new(TimeSpan.FromSeconds(k.AggregatLeerlaufSekunden), TimeSpan.FromSeconds(k.AdapterLeerlaufSekunden), manager);
-    }
-
-    /// <summary>
-    /// Die eine Regel für alle drei Actor-Arten: bei <see cref="Started"/> den Leerlauf-Wecker stellen, bei <see cref="ReceiveTimeout"/> stoppen.
-    /// Liefert true, wenn die Nachricht damit erledigt ist.
-    /// </summary>
-    public static bool Behandle(IContext context, TimeSpan leerlauf)
-    {
-        switch (context.Message)
-        {
-            case Started when leerlauf > TimeSpan.Zero:
-                context.SetReceiveTimeout(leerlauf);
-                return false;   // Started behandelt der Actor weiter selbst
-            case ReceiveTimeout:
-                context.Stop(context.Self);
-                return true;
-            default:
-                return false;
-        }
     }
 }

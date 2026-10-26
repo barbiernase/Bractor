@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Abstractions;
+using Infrastructure.Lebenszyklus;
 using Infrastructure.Projections;   // IClusterKindContributor, WakeAck
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -56,6 +57,7 @@ public sealed class ProzessManagerStartupService : IHostedService
     private const string RouterId = "prozess-manager-router";
 
     private readonly ActorSystem _system;
+    private Bote? _bote;
     private readonly IEventStoreRepository _store;
     private readonly IReadOnlyDictionary<string, ProzessRegeln> _registry;
     private readonly IPollCursorStore _pollCursors;
@@ -92,20 +94,6 @@ public sealed class ProzessManagerStartupService : IHostedService
         _logger = logger;
     }
 
-    /// <summary>Prozess-Wake fire-and-forget, aber Fehler gefangen + geloggt (nicht als unbeobachtete Task-Exception).</summary>
-    private async Task ProzessWakeBeobachtetAsync(ClusterIdentity identity, ProzessWake wake, CancellationToken c)
-    {
-        try
-        {
-            await _system.Cluster().RequestAsync<WakeAck>(identity, wake, c);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogDebug(ex,
-                "[Prozess] Wake an {Identity} fehlgeschlagen — verlierbar, §3-Backstop heilt.", identity.Identity);
-        }
-    }
-
     public async Task StartAsync(CancellationToken ct)
     {
         if (_registry.Count == 0)
@@ -113,6 +101,7 @@ public sealed class ProzessManagerStartupService : IHostedService
             Console.WriteLine("=== Prozess-Manager: keine IProzessDefinition — nichts zu verdrahten ===");
             return;
         }
+        var bote = _bote = new Bote(_system.Cluster(), _logger);
 
         // ★ Audit-Fix (fail-fast): Azyklizitäts-Boot-Guard (docs/04 §4.5). Jetzt AKTIV — er speist sich aus der
         //   PRÄZISEN Command→Event-Map (GeneratedCommandRouting.CommandToEvents, aus den Decide-OneOf-Rückgaben),
@@ -142,15 +131,13 @@ public sealed class ProzessManagerStartupService : IHostedService
         }
         var signalTypes = KorrelationsRouter.SignalTypesFor(alleTeilnehmende);
 
-        // Signal → ProzessWake an (prozess-manager, Korrelation), fire-and-forget (ein Signal darf verloren gehen, der Poll heilt).
+        // Signal → ProzessWake an (prozess-manager, Korrelation), gemeldet (ein Signal darf verloren gehen, der Poll heilt).
         Func<Guid, Guid, int, string?, CancellationToken, Task> wecke =
             (korr, quellStream, quellVersion, prozessNameFürStart, c) =>
             {
                 _heilplan.Aktiv(korr, DateTimeOffset.UtcNow);
-                var identity = ClusterIdentity.Create(korr.ToString(), ProzessManagerActor.KindName);
-                // ★ Härtung (Multi-Node): fire-and-forget, Send-Fehler beobachtet (nicht still verschluckt).
-                _ = ProzessWakeBeobachtetAsync(
-                    identity, new ProzessWake(quellStream, quellVersion, prozessNameFürStart), c);
+                bote.Melde(ClusterIdentity.Create(korr.ToString(), ProzessManagerActor.KindName),
+                    new ProzessWake(quellStream, quellVersion, prozessNameFürStart));
                 return Task.CompletedTask;
             };
 
@@ -196,20 +183,17 @@ public sealed class ProzessManagerStartupService : IHostedService
         }
     }
 
-    /// <summary>Eine bestätigte Weckung des Polls (G-8): wartet bounded auf das WakeAck; kein Ack = unbestätigt.</summary>
+    /// <summary>
+    /// Eine bestätigte Weckung des Polls (G-8): eine Frage mit Frist; kein Ack oder „nicht aufgeholt“ (die Weckung scheiterte im Manager) =
+    /// unbestätigt.
+    /// </summary>
     private async Task<bool> WeckeBestaetigtAsync(ProzessPollWeckung w, CancellationToken ct)
     {
-        var identity = ClusterIdentity.Create(w.Korrelation.ToString(), ProzessManagerActor.KindName);
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(WeckFrist);
-        try
-        {
-            var ack = await _system.Cluster().RequestAsync<WakeAck>(identity, new ProzessWake(w.Stream, w.Version, w.ProzessNameFürStart), cts.Token);
-            if (ack is null) return false;
-            _heilplan.Aktiv(w.Korrelation, DateTimeOffset.UtcNow);
-            return true;
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return false; }
+        var ack = await _bote!.FrageAsync<WakeAck>(ClusterIdentity.Create(w.Korrelation.ToString(), ProzessManagerActor.KindName),
+            new ProzessWake(w.Stream, w.Version, w.ProzessNameFürStart), WeckFrist, ct);
+        if (ack is not { Aufgeholt: true }) return false;
+        _heilplan.Aktiv(w.Korrelation, DateTimeOffset.UtcNow);
+        return true;
     }
 
     /// <summary>
@@ -253,10 +237,8 @@ public sealed class ProzessManagerStartupService : IHostedService
             await drossel.WaitAsync(ct);
             try
             {
-                var identity = ClusterIdentity.Create(korrelation.ToString(), ProzessManagerActor.KindName);
-                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                cts.CancelAfter(WeckFrist);
-                await _system.Cluster().RequestAsync<WakeAck>(identity, new ProzessWake(Guid.Empty, 0, null, VomBackstop: true), cts.Token);
+                await _bote!.FrageAsync<WakeAck>(ClusterIdentity.Create(korrelation.ToString(), ProzessManagerActor.KindName),
+                    new ProzessWake(Guid.Empty, 0, null, VomBackstop: true), WeckFrist, ct);
             }
             finally { drossel.Release(); }
         }

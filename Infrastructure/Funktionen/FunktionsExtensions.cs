@@ -1,4 +1,5 @@
 using Abstractions;
+using Infrastructure.Lebenszyklus;
 using Infrastructure.Projections;   // WakeAck
 using Infrastructure.Prozess;       // ProzessManagerActor, ProzessWake
 using Microsoft.Extensions.DependencyInjection;
@@ -73,11 +74,9 @@ public static class FunktionsExtensions
     /// </summary>
     private static async Task WeckeProzessAsync(ActorSystem system, Guid korrelation, Guid stream, Guid vorgang, CancellationToken ct)
     {
-        var identity = ClusterIdentity.Create(korrelation.ToString(), ProzessManagerActor.KindName);
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(5));
-        try { await system.Cluster().RequestAsync<WakeAck>(identity, new ProzessWake(stream, 0, null, Vorgang: vorgang), cts.Token); }
-        catch (OperationCanceledException) { /* Backstop heilt */ }
+        // Ohne Antwort heilt der Backstop.
+        await new Bote(system.Cluster()).FrageAsync<WakeAck>(ClusterIdentity.Create(korrelation.ToString(), ProzessManagerActor.KindName),
+            new ProzessWake(stream, 0, null, Vorgang: vorgang), TimeSpan.FromSeconds(5), ct);
     }
 
     /// <summary>

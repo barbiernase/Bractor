@@ -1,5 +1,6 @@
 using System.Linq;
 using Abstractions;
+using Infrastructure.Lebenszyklus;
 using Infrastructure.PubSub;
 using Microsoft.Extensions.Logging;
 using Proto;
@@ -20,8 +21,11 @@ namespace Infrastructure.Pipeline;
 /// Kein Versionsargument und kein OCC-Retry: Commands gehen über <see cref="CommandEmitter"/> als
 /// <see cref="CommandModus.Emittiert"/> (deterministische CommandId → Empfänger-Inbox dedupliziert,
 /// bounded Token) — die alte „Version 0 → Conflict → Retry"-Strategie ist mit P3/EM-1 entfallen (W1/W2).
+///
+/// Lebenszyklus aus dem Rahmen (<see cref="RahmenActor"/>): der Fähigkeits-Bereich der Handles gehört der Aktivierung und wird mit ihr frei;
+/// beim Stoppen meldet der Actor seine Abos ab, ohne zu warten.
 /// </summary>
-public abstract class PipelineActorBase<THandler> : IActor
+public abstract class PipelineActorBase<THandler> : RahmenActor
     where THandler : IPipelineHandler
 {
     protected readonly THandler _logic;
@@ -47,9 +51,11 @@ public abstract class PipelineActorBase<THandler> : IActor
     protected PipelineActorBase(
         THandler logic,
         Cluster cluster,
+        IFaehigkeitsFabrik faehigkeiten,
         Infrastructure.PubSub.BrokerPublisher? publisher = null,
         ILogger? logger = null,
         Infrastructure.Deadlines.FristPlaner? fristPlaner = null)
+        : base(logger, faehigkeiten: faehigkeiten)
     {
         _fristPlaner = fristPlaner;
         _logic = logic ?? throw new ArgumentNullException(nameof(logic));
@@ -59,16 +65,12 @@ public abstract class PipelineActorBase<THandler> : IActor
         _logger = logger;
     }
 
-    public async Task ReceiveAsync(IContext context)
+    protected override async Task BehandleAsync(IContext context)
     {
         try
         {
             switch (context.Message)
             {
-                case Started:
-                    await OnStartedAsync(context);
-                    break;
-
                 // Kanal 0: Self-Messages (Selbst<T>-Ausgang → eigene Mailbox)
                 case IPipelineSelfMessage selfMsg:
                 {
@@ -89,16 +91,12 @@ public abstract class PipelineActorBase<THandler> : IActor
                 // Kanal 2: seit P6.2 nur noch TRANSIENTE Events via Push-Broker (persistierte laufen über Pull).
                 case IAggregateEnvelope envelope:
                     using (Infrastructure.Akteure.AkteurHerkunft.Aus(envelope.UserId))
-                        await OnEnvelopeAsync(envelope, context, context.CancellationToken);
+                        await OnEnvelopeAsync(envelope, context, Stopp);
                     break;
 
                 // Aktivierung durch den PipelineStartupService (Started ist schon gelaufen): nur quittieren.
                 case PipelineAktivieren:
                     context.Respond(new PipelineAck(Accepted: true));
-                    break;
-
-                case Stopping:
-                    await OnStoppingAsync();
                     break;
             }
         }
@@ -106,12 +104,24 @@ public abstract class PipelineActorBase<THandler> : IActor
         {
             _logger?.LogError(ex, "[Pipeline:{PipelineId}] Unhandled error", _logic.PipelineId);
 
-            // Trigger erwartet eine Antwort — sonst Retry
+            // Trigger erwartet eine Antwort — sonst Retry. Beantwortet: kein Neustart.
             if (context.Message is IPipelineTrigger)
             {
                 context.Respond(new PipelineAck(Accepted: false));
             }
         }
+    }
+
+    protected override async Task BeginneAsync(IContext context)
+    {
+        try { await OnStartedAsync(context); }
+        catch (Exception ex) { _logger?.LogError(ex, "[Pipeline:{PipelineId}] Unhandled error", _logic.PipelineId); }
+    }
+
+    protected override async Task BeimStoppenAsync(IContext context)
+    {
+        try { await OnStoppingAsync(); }
+        catch (Exception ex) { _logger?.LogError(ex, "[Pipeline:{PipelineId}] Unhandled error", _logic.PipelineId); }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -134,7 +144,7 @@ public abstract class PipelineActorBase<THandler> : IActor
                 context.System.Cluster(), _logic.PipelineId, context.Self);
             foreach (var type in transienteTypen)
             {
-                await _subscription.SubscribeAsync(type);
+                await _subscription.SubscribeAsync(type, Stopp);
                 _logger?.LogDebug("[Pipeline:{PipelineId}] (transient) subscribed {EventType}", _logic.PipelineId, type.Name);
             }
         }
@@ -150,8 +160,7 @@ public abstract class PipelineActorBase<THandler> : IActor
     {
         _logger?.LogInformation("[Pipeline:{PipelineId}] Stopping", _logic.PipelineId);
         await _logic.OnShutdownAsync();
-        if (_subscription != null)
-            await _subscription.UnsubscribeAllAsync();
+        _subscription?.AlleAbmelden();
         _logger?.LogInformation("[Pipeline:{PipelineId}] Stopped", _logic.PipelineId);
     }
 
@@ -168,7 +177,7 @@ public abstract class PipelineActorBase<THandler> : IActor
         try
         {
             await DispatchTriggerAsync(trigger, ctx,
-                cmd => SendCommandAsync(cmd, ctx, context.CancellationToken),
+                cmd => SendCommandAsync(cmd, ctx, Stopp),
                 trig => SendTriggerAsync(trig, ctx.CorrelationId),
                 te => BroadcastTransientAsync(te, ctx),
                 p => PlaneAsync(p, context));
@@ -258,7 +267,7 @@ public abstract class PipelineActorBase<THandler> : IActor
                 });
                 return Task.CompletedTask;
             case FristAuftrag f when _fristPlaner != null:
-                return _fristPlaner.PlaneAsync(f, actorCtx.CancellationToken);
+                return _fristPlaner.PlaneAsync(f, Stopp);
             case FristAuftrag f:
                 throw new InvalidOperationException($"[Pipeline:{_logic.PipelineId}] Frist '{f.Kontext}' geplant, aber kein FristPlaner registriert.");
             default:
@@ -298,7 +307,7 @@ public abstract class PipelineActorBase<THandler> : IActor
         try
         {
             await DispatchSelfAsync(selfMsg, ctx,
-                cmd => SendCommandAsync(cmd, ctx, context.CancellationToken),
+                cmd => SendCommandAsync(cmd, ctx, Stopp),
                 trig => SendTriggerAsync(trig, ctx.CorrelationId),
                 te => BroadcastTransientAsync(te, ctx),
                 p => PlaneAsync(p, context));
@@ -330,14 +339,14 @@ public abstract class PipelineActorBase<THandler> : IActor
     /// Publiziert ein ITransientEvent über den BrokerPublisher.
     /// Kein Aggregat-Roundtrip — direkt ans PubSub.
     /// </summary>
-    private async Task BroadcastTransientAsync(ITransientEvent evt, PipelineContext ctx)
+    private Task BroadcastTransientAsync(ITransientEvent evt, PipelineContext ctx)
     {
         if (_publisher == null)
         {
             _logger?.LogError(
                 "[Pipeline:{PipelineId}] BrokerPublisher not available for transient broadcast",
                 _logic.PipelineId);
-            return;
+            return Task.CompletedTask;
         }
 
         var envelope = new EventEnvelope
@@ -350,8 +359,9 @@ public abstract class PipelineActorBase<THandler> : IActor
             UserId = ImAuftrag.Akteur ?? ImAuftrag.Ohne,
         };
 
-        await _publisher.PublishAsync(envelope);
+        _publisher.Melde(envelope);   // verlierbar (Inv. 6)
         _logger?.LogDebug("[Pipeline:{PipelineId}] ✔ Broadcast {Event}", _logic.PipelineId, evt.GetType().Name);
+        return Task.CompletedTask;
     }
 
     // ═══════════════════════════════════════════════════════

@@ -8,19 +8,21 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Lebenszyklus;
 
 /// <summary>
-/// Die eine Passivierungs-Regel (PF-5): ein Actor ohne Nachricht stoppt nach dem Leerlauf; jede Nachricht schiebt den Leerlauf hinaus; 0 heißt nie.
+/// Die eine Passivierungs-Regel (PF-5, im Rahmen jedes Actors, <see cref="RahmenActor"/>): ein Actor ohne Nachricht stoppt nach dem Leerlauf;
+/// jede Nachricht schiebt den Leerlauf hinaus; 0 heißt nie.
 /// Lokales <see cref="ActorSystem"/> ohne Cluster — dass Aggregat und Adapter nach der Reaktivierung denselben Stand haben, prüft die Prüfdomäne
 /// (<c>LebenszyklusGarantieTests</c>). Zeitkritisch (echte Leerlauf-Uhr): läuft nicht parallel zu den übrigen Tests.
 /// </summary>
 [Collection(Zeitkritisch.Name)]
 public class PassivierungTests
 {
-    private sealed class Probe(TimeSpan leerlauf, TaskCompletionSource gestoppt) : IActor
+    private sealed class Probe(TimeSpan leerlauf, TaskCompletionSource gestoppt) : RahmenActor(leerlauf: leerlauf)
     {
-        public Task ReceiveAsync(IContext context)
+        protected override Task BehandleAsync(IContext context) => Task.CompletedTask;
+
+        protected override Task BeimStoppenAsync(IContext context)
         {
-            if (Passivierung.Behandle(context, leerlauf)) return Task.CompletedTask;
-            if (context.Message is Stopped) gestoppt.TrySetResult();
+            gestoppt.TrySetResult();
             return Task.CompletedTask;
         }
     }

@@ -1,103 +1,68 @@
 namespace Infrastructure.PubSub;
 
-using Abstractions;
+using Infrastructure.Lebenszyklus;
 using Infrastructure.PubSub.Messages;
 using Proto;
 using Proto.Cluster;
 
 /// <summary>
-/// Hilfsklasse für Subscriptions
+/// Die Abonnements eines Subscribers beim Broker, über den <see cref="Bote"/>: Anmelden ist eine <c>Frage</c> (die Quittung zählt, begrenzt
+/// wiederholt), Abmelden beim Stoppen eine <c>Meldung</c> (verlierbar — ein vergessenes Abo zeigt auf eine tote PID, der Broker stellt
+/// dorthin ins Leere).
 /// </summary>
 public class BrokerSubscription
 {
-    private readonly Cluster _cluster;
+    private readonly Bote _bote;
     private readonly string _subscriberId;
     private readonly PID _subscriberPid;
     private readonly List<Type> _subscribedTypes = new();
 
     public BrokerSubscription(Cluster cluster, string subscriberId, PID subscriberPid)
     {
-        _cluster = cluster ?? throw new ArgumentNullException(nameof(cluster));
+        ArgumentNullException.ThrowIfNull(cluster);
+        _bote = new Bote(cluster);
         _subscriberId = subscriberId ?? throw new ArgumentNullException(nameof(subscriberId));
         _subscriberPid = subscriberPid ?? throw new ArgumentNullException(nameof(subscriberPid));
     }
 
-    /// <summary>
-    /// Abonniert einen Message-Typ
-    /// </summary>
-    public Task SubscribeAsync<T>(CancellationToken ct = default) 
-        where T : IMessagePayload
-    {
-        return SubscribeAsync(typeof(T), ct);
-    }
-
-    /// <summary>
-    /// Abonniert einen Message-Typ
-    /// </summary>
+    /// <summary>Abonniert einen Message-Typ; scheitert laut, wenn der Shard in der Wiederholungsfrist nicht quittiert.</summary>
     public async Task SubscribeAsync(Type messageType, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(messageType);
-        
-        var shardIdentity = BrokerIdentity.ShardFor(messageType, _subscriberId);
-        var message = new Subscribe(_subscriberId, _subscriberPid);
-        
-        await Extensions.ClusterExtensions.MitWiederholungAsync(
-            c => _cluster.RequestAsync<Ack>(shardIdentity, message, c), $"{_subscriberId} abonniert {messageType.Name}", ct);
-        
+        await Extensions.ClusterExtensions.FrageMitWiederholungAsync<Ack>(_bote, BrokerIdentity.ShardFor(messageType, _subscriberId),
+            new Subscribe(_subscriberId, _subscriberPid), $"{_subscriberId} abonniert {messageType.Name}", ct);
         if (!_subscribedTypes.Contains(messageType))
             _subscribedTypes.Add(messageType);
     }
 
-    /// <summary>
-    /// Abonniert mehrere Message-Typen
-    /// </summary>
+    /// <summary>Abonniert mehrere Message-Typen.</summary>
     public async Task SubscribeAsync(IEnumerable<Type> messageTypes, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(messageTypes);
-        
         foreach (var type in messageTypes)
-        {
             await SubscribeAsync(type, ct);
-        }
     }
 
     /// <summary>
-    /// Beendet ein Abonnement
+    /// Beendet ein Abonnement und wartet (begrenzt) auf die Quittung — für eine Sitzung, die gleich wieder abonnieren kann: das Abmelden darf
+    /// ein späteres Anmelden nicht überholen. True = der Shard hat quittiert.
     /// </summary>
-    public Task UnsubscribeAsync<T>(CancellationToken ct = default) 
-        where T : IMessagePayload
-    {
-        return UnsubscribeAsync(typeof(T), ct);
-    }
-
-    /// <summary>
-    /// Beendet ein Abonnement
-    /// </summary>
-    public async Task UnsubscribeAsync(Type messageType, CancellationToken ct = default)
+    public async Task<bool> UnsubscribeAsync(Type messageType, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(messageType);
-        
-        var shardIdentity = BrokerIdentity.ShardFor(messageType, _subscriberId);
-        var message = new Unsubscribe(_subscriberId);
-        
-        await _cluster.RequestAsync<Ack>(shardIdentity, message, ct);
-        
         _subscribedTypes.Remove(messageType);
+        return await _bote.FrageAsync<Ack>(BrokerIdentity.ShardFor(messageType, _subscriberId), new Unsubscribe(_subscriberId),
+            Extensions.ClusterExtensions.VersuchsFrist, ct) is not null;
     }
 
-    /// <summary>
-    /// Beendet alle Abonnements
-    /// </summary>
-    public async Task UnsubscribeAllAsync(CancellationToken ct = default)
+    /// <summary>Meldet alle Abonnements ab, ohne zu warten (beim Stoppen eines Actors).</summary>
+    public void AlleAbmelden()
     {
-        foreach (var type in _subscribedTypes.ToList())
-        {
-            await UnsubscribeAsync(type, ct);
-        }
+        foreach (var type in _subscribedTypes)
+            _bote.Melde(BrokerIdentity.ShardFor(type, _subscriberId), new Unsubscribe(_subscriberId));
+        _subscribedTypes.Clear();
     }
 
-    /// <summary>
-    /// Liste der abonnierten Typen
-    /// </summary>
+    /// <summary>Liste der abonnierten Typen</summary>
     public IReadOnlyList<Type> SubscribedTypes => _subscribedTypes;
 }

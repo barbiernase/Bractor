@@ -20,7 +20,8 @@ namespace Infrastructure.Eingang;
 /// <list type="bullet">
 /// <item><c>POST /eingang/command</c>, <c>/eingang/query</c> — als Akteur: Token im Header <c>akteur-token</c> → <see cref="AkteurTor"/> →
 ///   Aggregat bzw. Reader. Derselbe Weg wie gRPC (Befugnis, Akteur im Envelope, Wirker <c>akteur:A</c>), nur ohne Proto: der Typ kommt über
-///   die generierte Registry, die Felder über den generierten Wire-Kontext (keine Reflection).</item>
+///   die generierte Registry, die Felder über den generierten Wire-Kontext (keine Reflection). Die Antwort auf einen Command nennt Ausgang und
+///   Versionen; mit <c>"zeigeEvents": true</c> dazu die geschriebenen Events, gelesen aus dem Log.</item>
 /// <item><c>GET /eingang/auftraege</c>, <c>POST /eingang/ergebnis</c> — Laufort <c>Hand</c>: die Werkbank beantwortet Aufträge
 ///   (<see cref="HandAusfuehrer"/>).</item>
 /// </list>
@@ -80,6 +81,10 @@ public static class JsonEingang
             var ergebnis = await ProtoActorAggregateDispatcher.FrageAsync(system, envelope, CommandZeitlimit, ct);
             if (ergebnis is null)
                 return Results.Json(new { ok = false, fehler = $"keine Antwort von {aggregat}/{cmd.Ziel} nach {CommandZeitlimit.TotalSeconds:0} s" }, Json, statusCode: 504);
+            // Die Events, die dieser Command geschrieben hat, nur auf Wunsch — aus dem Log, nicht aus der Antwort (sie nennt nur den Bereich):
+            //   ein Lesezugriff je Command, den ein Treiber unter Last nicht braucht.
+            var zeige = body.TryGetProperty("zeigeEvents", out var z) && z.ValueKind == JsonValueKind.True;
+            var events = zeige ? await GeschriebenAsync(sp, cmd.Ziel, ergebnis, ct) : null;
             return Results.Json(new
             {
                 ok = ergebnis.Success,
@@ -88,7 +93,8 @@ public static class JsonEingang
                 aggregatId = cmd.Ziel,
                 korrelation = envelope.CorrelationId,
                 version = ergebnis.NewVersion,
-                events = ergebnis.Events.Select(Darstellung),
+                ersteVersion = ergebnis.ErsteVersion,
+                events,
                 ablehnung = ergebnis.RejectionEvent is { } r ? Darstellung(r) : null,
                 fehler = ergebnis.ErrorMessage,
             }, Json);
@@ -156,6 +162,20 @@ public static class JsonEingang
             return Results.Json(new { ok = ausgang is ErgebnisAusgang.Geschrieben or ErgebnisAusgang.Abgelehnt, ausgang = ausgang.ToString() }, Json,
                 statusCode: ausgang is ErgebnisAusgang.Unbekannt ? 404 : ausgang is ErgebnisAusgang.NichtGeschrieben ? 503 : 200);
         });
+    }
+
+    /// <summary>
+    /// Die fachlichen Events, die ein gewirkter Command geschrieben hat: der Bereich <c>ErsteVersion … NewVersion</c> seines Streams aus dem Log,
+    /// ohne die Marken des Frameworks (Noop, Ablehnung). Leer, wenn er nichts geschrieben hat (Wiederholung, Ablehnung, Fehler).
+    /// </summary>
+    private static async Task<IEnumerable<object>> GeschriebenAsync(IServiceProvider sp, Guid stream, CommandResult ergebnis, CancellationToken ct)
+    {
+        if (!ergebnis.Success || ergebnis.ErsteVersion <= 0) return [];
+        var gelesen = await sp.GetRequiredService<IEventStoreRepository>().ReadStreamAsync(stream, ergebnis.ErsteVersion, ct);
+        return gelesen
+            .Where(e => e.AggregateVersion <= ergebnis.NewVersion && e.Payload is not (Infrastructure.Aggregate.KommandoVerarbeitet or Infrastructure.Aggregate.KommandoAbgelehnt))
+            .Select(e => Darstellung(e.Payload))
+            .ToList();
     }
 
     private static IReadOnlyCollection<Type> Ergebnisse(Type funktion)

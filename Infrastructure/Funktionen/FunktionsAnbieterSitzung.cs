@@ -38,7 +38,7 @@ public sealed class FunktionsAnbieterSitzung : IAsyncDisposable
     private readonly string _sitzung;
     private readonly Func<string, Type?> _loese;
     private readonly Func<Type, IReadOnlyCollection<Type>> _ergebnisse;
-    private readonly Func<Type, HoleArbeit, CancellationToken, Task<ArbeitZugeteilt>> _hole;
+    private readonly Func<Type, HoleArbeit, CancellationToken, Task<ArbeitZugeteilt?>> _hole;
     private readonly Func<Type, object, Task> _melde;
     private readonly Func<AuftragAnbieten, Type, Task> _sende;
     private readonly Func<Guid, Guid, IEvent, string?, string, CancellationToken, Task<bool>> _schreibe;
@@ -61,7 +61,7 @@ public sealed class FunktionsAnbieterSitzung : IAsyncDisposable
         string sitzung,
         Func<string, Type?> loese,
         Func<Type, IReadOnlyCollection<Type>> ergebnisse,
-        Func<Type, HoleArbeit, CancellationToken, Task<ArbeitZugeteilt>> hole,
+        Func<Type, HoleArbeit, CancellationToken, Task<ArbeitZugeteilt?>> hole,
         Func<Type, object, Task> melde,
         Func<AuftragAnbieten, Type, Task> sende,
         Func<Guid, Guid, IEvent, string?, string, CancellationToken, Task<bool>> schreibe,

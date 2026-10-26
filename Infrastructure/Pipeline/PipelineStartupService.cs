@@ -1,4 +1,5 @@
 using Abstractions;
+using Infrastructure.Lebenszyklus;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Proto;
@@ -76,20 +77,10 @@ public class PipelineStartupService : IHostedService
 
     private async Task<bool> AktiviereAsync(string pipelineId, CancellationToken ct)
     {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(Frist);
-        try
-        {
-            var ack = await _actorSystem.Cluster().RequestAsync<PipelineAck>(
-                PipelineTriggerSender.Identitaet(pipelineId), new PipelineAktivieren(), cts.Token);
-            return ack?.Accepted == true;
-        }
-        catch (Exception ex) when (!ct.IsCancellationRequested)
-        {
-            _logger?.LogDebug(ex, "[Pipeline:{PipelineId}] Aktivierung unbestätigt — nächster Durchlauf wiederholt", pipelineId);
-            return false;
-        }
-        catch (OperationCanceledException) { return false; }
+        // Ohne Antwort ist die Aktivierung unbestätigt — der nächste Durchlauf wiederholt.
+        var ack = await new Bote(_actorSystem.Cluster(), _logger).FrageAsync<PipelineAck>(
+            PipelineTriggerSender.Identitaet(pipelineId), new PipelineAktivieren(), Frist, ct);
+        return ack?.Accepted == true;
     }
 
     public async Task StopAsync(CancellationToken ct)

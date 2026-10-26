@@ -1,4 +1,5 @@
 using Abstractions;
+using Infrastructure.Lebenszyklus;
 using Microsoft.Extensions.Logging;
 using Proto;
 using Proto.Cluster;
@@ -10,76 +11,53 @@ namespace Infrastructure.Projections;
 /// Partition. Der Cluster hält genau eine Aktivierung je Partition; fällt das bei einer Netzstörung kurz aus, verliert die zweite Aktivierung
 /// ihren Commit an der Version des Partitions-Checkpoints (G-4).
 ///
-/// <b>Weckung, zusammengefasst:</b> <see cref="Wake"/> (Signal oder Poll) wird sofort quittiert. Läuft schon ein Durchlauf, merkt sich der
-/// Actor „noch einmal“ — beliebig viele Weckungen während eines Durchlaufs ergeben genau einen weiteren. Der Durchlauf läuft neben der Mailbox
-/// (<c>ReenterAfter</c>), damit Weckungen ihn nicht stauen. Scheitert er (Datenbank weg), heilt die nächste Weckung, spätestens der Poll.
+/// <b>Weckung, zusammengefasst</b> (Rahmen, <see cref="RahmenActor.Wecke"/>): <see cref="Wake"/> (Signal oder Poll) wird sofort quittiert.
+/// Läuft schon ein Durchlauf, merkt sich der Actor „noch einmal“ — beliebig viele Weckungen während eines Durchlaufs ergeben genau einen
+/// weiteren. Der Durchlauf läuft neben der Mailbox, damit Weckungen ihn nicht stauen. Scheitert er (Datenbank weg), heilt die nächste Weckung,
+/// spätestens der Poll. Der Fähigkeits-Bereich (Store-Instanz, Co-Commit-Puffer) gehört der Aktivierung: beim Stopp bricht der Durchlauf ab, der
+/// Bereich wird erst frei, wenn er geendet hat.
 ///
 /// Kein Leerlauf-Stopp: es gibt nur Projektionen × Partitionen dieser Actors, und der Poll weckt jede Partition ohnehin alle 30 s.
 /// </summary>
-public sealed class BatchLeserActor : IActor
+public sealed class BatchLeserActor : RahmenActor
 {
-    private readonly Func<int, (BatchLeser Leser, IDisposable? Bereich)> _fabrik;
+    private readonly Func<int, IFaehigkeiten, BatchLeser> _fabrik;
     private readonly ILogger? _logger;
-
     private BatchLeser? _leser;
-    private IDisposable? _bereich;
-    private bool _laeuft;
-    private bool _nochmal;
-    private readonly CancellationTokenSource _stopp = new();
 
-    /// <param name="fabrik">Partition → Leser samt seinem Fähigkeits-Bereich (eine Store-Instanz je Aktivierung, Co-Commit-Puffer).</param>
-    public BatchLeserActor(Func<int, (BatchLeser, IDisposable?)> fabrik, ILogger? logger = null)
+    /// <param name="fabrik">Partition und Fähigkeits-Bereich der Aktivierung → Leser (eine Store-Instanz je Aktivierung, Co-Commit-Puffer).</param>
+    /// <param name="faehigkeiten">öffnet den Bereich der Aktivierung.</param>
+    public BatchLeserActor(Func<int, IFaehigkeiten, BatchLeser> fabrik, IFaehigkeitsFabrik faehigkeiten, ILogger? logger = null)
+        : base(logger, faehigkeiten: faehigkeiten)
     {
         _fabrik = fabrik;
         _logger = logger;
     }
 
-    public Task ReceiveAsync(IContext context)
+    protected override Task BeginneAsync(IContext context)
     {
-        switch (context.Message)
+        if (int.TryParse(context.ClusterIdentity()?.Identity, out var partition))
+            _leser = _fabrik(partition, Bereich);
+        return Task.CompletedTask;
+    }
+
+    protected override Task BehandleAsync(IContext context)
+    {
+        if (context.Message is Wake)
         {
-            case Started:
-                if (int.TryParse(context.ClusterIdentity()?.Identity, out var partition))
-                    (_leser, _bereich) = _fabrik(partition);
-                break;
-
-            case Wake:
-                context.Respond(new WakeAck());
-                Starte(context);
-                break;
-
-            case Stopping:
-                _stopp.Cancel();
-                break;
-
-            case Stopped:
-                _bereich?.Dispose();
-                break;
+            context.Respond(new WakeAck());
+            if (_leser is { } leser) Wecke(context, stopp => LaufAsync(leser, stopp));
         }
         return Task.CompletedTask;
     }
 
-    private void Starte(IContext context)
-    {
-        if (_leser is null) return;
-        if (_laeuft) { _nochmal = true; return; }
-        _laeuft = true;
-        _nochmal = false;
-        context.ReenterAfter(LaufAsync(_leser), _ =>
-        {
-            _laeuft = false;
-            if (_nochmal && !_stopp.IsCancellationRequested) Starte(context);
-            return Task.CompletedTask;
-        });
-    }
-
-    private async Task LaufAsync(BatchLeser leser)
+    private async Task LaufAsync(BatchLeser leser, CancellationToken stopp)
     {
         try
         {
-            await leser.LaufAsync(_stopp.Token);
+            await leser.LaufAsync(stopp);
         }
-        catch (OperationCanceledException) when (_stopp.IsCancellationRequested) { }
+        catch (OperationCanceledException) when (stopp.IsCancellationRequested) { }
         catch (Exception ex)
         {
             _logger?.LogWarning(ex, "[Konsum] Durchlauf gescheitert — die nächste Weckung (spätestens der Poll) versucht es erneut");

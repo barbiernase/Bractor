@@ -1,4 +1,5 @@
 using Abstractions;
+using Infrastructure.Lebenszyklus;
 using Infrastructure.Projections;   // IClusterKindContributor
 using Infrastructure.Quellen.Treiber.Datei;
 using Microsoft.Extensions.Configuration;
@@ -42,22 +43,16 @@ public sealed class QuellenDienst(IServiceProvider sp, IEnumerable<Konfigurierte
     {
         var system = sp.GetRequiredService<ActorSystem>();
         var knoten = system.Id;
+        var bote = new Bote(system.Cluster());
         CancellationTokenSource? lauf = null;
         Task? treiber = null;
         try
         {
             while (!ct.IsCancellationRequested)
             {
-                var haelt = false;
-                try
-                {
-                    using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                    cts.CancelAfter(TimeSpan.FromSeconds(5));
-                    var antwort = await system.Cluster().RequestAsync<QuelleGehalten>(QuellenHalterActor.Identitaet(q.Typ), new HalteQuelle(knoten), cts.Token);
-                    haelt = antwort?.Haelt == true;
-                }
-                catch (Exception ex) when (ex is OperationCanceledException or TimeoutException && !ct.IsCancellationRequested)
-                { /* Cluster gerade nicht erreichbar: lieber anhalten als doppelt laufen */ }
+                // Ohne Antwort (Cluster gerade nicht erreichbar): lieber anhalten als doppelt laufen.
+                var antwort = await bote.FrageAsync<QuelleGehalten>(QuellenHalterActor.Identitaet(q.Typ), new HalteQuelle(knoten), TimeSpan.FromSeconds(5), ct);
+                var haelt = antwort?.Haelt == true;
 
                 if (haelt && treiber == null)
                 {

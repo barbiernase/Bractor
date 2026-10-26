@@ -1,5 +1,6 @@
 namespace Infrastructure.PubSub.Extensions;
 
+using Infrastructure.Lebenszyklus;
 using Infrastructure.PubSub.Actors;
 using Infrastructure.PubSub.Messages;
 using Microsoft.Extensions.Logging;
@@ -12,12 +13,12 @@ public static class ClusterExtensions
     /// Registriert die Broker-Kinds im Cluster
     /// </summary>
     public static ClusterConfig WithBrokerKinds(
-        this ClusterConfig config, 
+        this ClusterConfig config,
         ILoggerFactory? loggerFactory = null)
     {
         var shardLogger = loggerFactory?.CreateLogger<BrokerShardActor>();
         var managerLogger = loggerFactory?.CreateLogger<BrokerManagerActor>();
-        
+
         return config
             .WithClusterKind(
                 PubSubConfiguration.ShardKind,
@@ -30,44 +31,46 @@ public static class ClusterExtensions
     /// <summary>
     /// Aktiviert den Broker für einen Message-Typ
     /// </summary>
-    public static async Task ActivateBrokerAsync(
-        this Cluster cluster, 
+    public static Task ActivateBrokerAsync(
+        this Cluster cluster,
         Type messageType,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(messageType);
-        
-        var managerIdentity = BrokerIdentity.Manager(messageType);
-        await MitWiederholungAsync(c => cluster.RequestAsync<Ack>(managerIdentity, new Activate(), c), $"Broker {messageType.Name} aktivieren", ct);
+        return new Bote(cluster).FrageMitWiederholungAsync<Ack>(BrokerIdentity.Manager(messageType), new Activate(),
+            $"Broker {messageType.Name} aktivieren", ct);
     }
 
     /// <summary>Wie lange eine Anfrage an den Broker höchstens wiederholt wird, bevor sie laut scheitert.</summary>
     public static readonly TimeSpan WiederholungsFrist = TimeSpan.FromSeconds(60);
 
+    /// <summary>Die Frist eines Versuchs.</summary>
+    public static readonly TimeSpan VersuchsFrist = TimeSpan.FromSeconds(10);
+
     /// <summary>
-    /// Eine Anfrage an einen virtuellen Broker-Actor, wiederholt mit Backoff bis <see cref="WiederholungsFrist"/> (P1-3). Ein gerade hart beendeter
-    /// Knoten steht noch einige Sekunden in der Mitgliederliste (Consul: TTL 3 s), der Cluster legt Aktivierungen auf ihn, und die Anfrage läuft in
-    /// den Timeout; sobald die Mitgliedschaft stimmt, gelingt sie. Auch für einen Knoten, der in einem Cluster gerade gestorben ist.
+    /// Eine Frage an einen virtuellen Broker-Actor, wiederholt mit Backoff bis <see cref="WiederholungsFrist"/> (P1-3): ein gerade hart beendeter
+    /// Knoten steht noch einige Sekunden in der Mitgliederliste (Consul: TTL 3 s), der Cluster legt Aktivierungen auf ihn, und der Versuch bleibt
+    /// ohne Antwort; sobald die Mitgliedschaft stimmt, gelingt er. Jeder Versuch hat seine Frist (<see cref="VersuchsFrist"/>); bleibt jeder ohne
+    /// Antwort, scheitert die Frage laut (<see cref="TimeoutException"/>).
     /// </summary>
-    public static async Task MitWiederholungAsync(Func<CancellationToken, Task> anfrage, string was, CancellationToken ct)
+    public static async Task<T> FrageMitWiederholungAsync<T>(this Bote bote, ClusterIdentity ziel, object nachricht, string was, CancellationToken ct)
+        where T : class
     {
         var start = System.Diagnostics.Stopwatch.GetTimestamp();
         var pause = TimeSpan.FromMilliseconds(250);
         for (var versuch = 1; ; versuch++)
         {
-            try
+            if (await bote.FrageAsync<T>(ziel, nachricht, VersuchsFrist, ct) is { } antwort)
             {
-                await anfrage(ct);
                 if (versuch > 1) Console.WriteLine($"  ✓ {was} im {versuch}. Versuch");
-                return;
+                return antwort;
             }
-            catch (Exception ex) when (ex is TimeoutException or DeadLetterException && !ct.IsCancellationRequested
-                                       && System.Diagnostics.Stopwatch.GetElapsedTime(start) < WiederholungsFrist)
-            {
-                Console.WriteLine($"  … {was}: {ex.GetType().Name} — Mitgliedschaft noch nicht eingeschwungen, nächster Versuch in {pause.TotalMilliseconds:0} ms");
-                await Task.Delay(pause, ct);
-                if (pause < TimeSpan.FromSeconds(2)) pause *= 2;
-            }
+            ct.ThrowIfCancellationRequested();
+            if (System.Diagnostics.Stopwatch.GetElapsedTime(start) >= WiederholungsFrist)
+                throw new TimeoutException($"{was}: keine Antwort in {WiederholungsFrist.TotalSeconds:0} s");
+            Console.WriteLine($"  … {was}: keine Antwort — Mitgliedschaft noch nicht eingeschwungen, nächster Versuch in {pause.TotalMilliseconds:0} ms");
+            await Task.Delay(pause, ct);
+            if (pause < TimeSpan.FromSeconds(2)) pause *= 2;
         }
     }
 
@@ -90,7 +93,7 @@ public static class ClusterExtensions
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(messageTypes);
-        
+
         foreach (var type in messageTypes)
         {
             await cluster.ActivateBrokerAsync(type, ct);

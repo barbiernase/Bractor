@@ -1,4 +1,5 @@
 using Abstractions;
+using Infrastructure.Lebenszyklus;
 using Infrastructure.PubSub;
 using Proto;
 using Proto.Cluster;
@@ -17,9 +18,9 @@ namespace Infrastructure.Projections;
 /// (echtes Single-Writer-Sharding) kommt in Phase 4.
 ///
 /// Verlust/Duplikat/Wettrennen sind folgenlos: die Wahrheit liegt im Log-Read des
-/// Adapters, nicht im Signal (Invariante 2).
+/// Adapters, nicht im Signal (Invariante 2). Beim Stoppen meldet er sich ab, ohne zu warten (Rahmen, <see cref="Bote.Melde"/>).
 /// </summary>
-public sealed class SignalReceiverActor : IActor
+public sealed class SignalReceiverActor : RahmenActor
 {
     private readonly string _subscriberId;
     private readonly IReadOnlyList<Type> _signalTypes;
@@ -36,24 +37,21 @@ public sealed class SignalReceiverActor : IActor
         _receiver = receiver;
     }
 
-    public async Task ReceiveAsync(IContext context)
+    protected override async Task BeginneAsync(IContext context)
     {
-        switch (context.Message)
-        {
-            case Started:
-                _subscription = new BrokerSubscription(
-                    context.System.Cluster(), _subscriberId, context.Self);
-                await _subscription.SubscribeAsync(_signalTypes);
-                break;
+        _subscription = new BrokerSubscription(context.System.Cluster(), _subscriberId, context.Self);
+        await _subscription.SubscribeAsync(_signalTypes, Stopp);
+    }
 
-            case SignalEnvelope env:
-                await _receiver.OnSignalAsync(env.Signal, context.CancellationToken);
-                break;
+    protected override async Task BehandleAsync(IContext context)
+    {
+        if (context.Message is SignalEnvelope env)
+            await _receiver.OnSignalAsync(env.Signal, Stopp);
+    }
 
-            case Stopping:
-                if (_subscription != null)
-                    await _subscription.UnsubscribeAllAsync();
-                break;
-        }
+    protected override Task BeimStoppenAsync(IContext context)
+    {
+        _subscription?.AlleAbmelden();
+        return Task.CompletedTask;
     }
 }

@@ -1,4 +1,5 @@
 using Abstractions;
+using Infrastructure.Lebenszyklus;
 using Infrastructure.PubSub;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -16,21 +17,20 @@ namespace Infrastructure.Aggregate.ActorSystem;
 ///   selbst; ERREICHT der Command nach erschöpfter Platzierung nie einen Actor, publiziert
 ///   HIER der Dispatcher das CommandFailed (docs/08 §8.4), damit der auslösende Client nicht still hängt.
 ///
-/// ★ Härtung: der eigentliche Send läuft mit BESCHRÄNKTEM Token + bounded Retry. Ein
-/// <c>CancellationToken.None</c> ließ <c>RequestAsync</c> bei noch nicht konvergierter Cluster-
-/// Topologie (Cold-Boot, PartitionIdentityLookup noch nicht gesetzt) UNENDLICH still retryen —
-/// der Command hing dann für immer, ohne Log. Jetzt: pro Versuch ein bounded Token; bleibt die
-/// Platzierung aus, wird der Versuch beendet und erneut probiert (die Topologie bekommt weitere
+/// ★ Härtung: der eigentliche Send ist eine <c>Frage</c> des <see cref="Bote"/> (Pflicht-Frist) mit begrenzter Wiederholung. Ohne Frist
+/// wiederholt Proto.Cluster bei noch nicht konvergierter Topologie (Cold-Boot, PartitionIdentityLookup noch nicht gesetzt) UNENDLICH still —
+/// der Command hinge für immer, ohne Log. Bleibt die Antwort aus, wird der Versuch beendet und erneut probiert (die Topologie bekommt weitere
 /// Chancen); nach allen Versuchen wird LAUT geloggt statt lautlos zu hängen.
 /// </summary>
 public class ProtoActorAggregateDispatcher : IAggregateDispatcher
 {
     private readonly Proto.ActorSystem _actorSystem;
+    private Bote? _bote;                              // erst beim ersten Senden: der Cluster ist bei der Registrierung noch nicht fertig
     private readonly ILogger _logger;
     private readonly IDeadLetterSink? _deadLetters;   // ★ Audit-Fix #1: nicht-zustellbaren Command durabel machen
     private readonly BrokerPublisher? _publisher;     // ★ CommandFailed an den Client bei erschöpfter Platzierung
 
-    /// <summary>Timeout pro Sende-Versuch (begrenzt die interne Placement-Retry-Schleife von Proto.Cluster).</summary>
+    /// <summary>Frist pro Sende-Versuch (begrenzt die interne Placement-Retry-Schleife von Proto.Cluster).</summary>
     private static readonly TimeSpan AttemptTimeout = TimeSpan.FromSeconds(10);
 
     /// <summary>Anzahl Versuche, bevor der Command als nicht-zustellbar geloggt und verworfen wird.</summary>
@@ -62,20 +62,13 @@ public class ProtoActorAggregateDispatcher : IAggregateDispatcher
     }
 
     /// <summary>
-    /// Der Client-Pfad MIT Antwort (Werkbank-JSON-Eingang, P5): ein Versuch, bounded, das <see cref="CommandResult"/> zurück — Erfolg mit
-    /// Events, Ablehnungs-Event oder Fehler. <c>null</c> = keine Antwort im Zeitlimit (der Command kann trotzdem gewirkt haben).
+    /// Der Client-Pfad MIT Antwort (Werkbank-JSON-Eingang, P5): ein Versuch, eine <c>Frage</c> mit dem Zeitlimit als Frist, das
+    /// <see cref="CommandResult"/> zurück — Ausgang, Versionen, Ablehnung. <c>null</c> = keine Antwort im Zeitlimit (der Command kann trotzdem
+    /// gewirkt haben).
     /// </summary>
-    public static async Task<CommandResult?> FrageAsync(Proto.ActorSystem system, CommandEnvelope envelope, TimeSpan zeitlimit, CancellationToken ct)
-    {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(zeitlimit);
-        try
-        {
-            return await system.Cluster().RequestAsync<CommandResult>(
-                ClusterIdentity.Create(envelope.AggregateId.ToString(), envelope.AggregateType), envelope, cts.Token);
-        }
-        catch (Exception e) when (e is OperationCanceledException or TimeoutException) { return null; }
-    }
+    public static Task<CommandResult?> FrageAsync(Proto.ActorSystem system, CommandEnvelope envelope, TimeSpan zeitlimit, CancellationToken ct)
+        => new Bote(system.Cluster()).FrageAsync<CommandResult>(
+            ClusterIdentity.Create(envelope.AggregateId.ToString(), envelope.AggregateType), envelope, zeitlimit, ct);
 
     private async Task DispatchWithRetryAsync(CommandEnvelope envelope)
     {
@@ -83,42 +76,20 @@ public class ProtoActorAggregateDispatcher : IAggregateDispatcher
             envelope.AggregateId.ToString(),
             envelope.AggregateType);
 
-        var grund = "keine Antwort (Cluster nicht routbar)";   // ★ #1: letzter Fehlergrund für den Dead-Letter
+        var grund = $"keine Antwort in {AttemptTimeout.TotalSeconds:0} s (Cluster evtl. nicht routbar, Topologie nicht gesetzt)";   // ★ #1: für den Dead-Letter
 
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
-            try
-            {
-                using var cts = new CancellationTokenSource(AttemptTimeout);
-                var result = await _actorSystem.Cluster()
-                    .RequestAsync<CommandResult>(identity, envelope, cts.Token);
+            // Eine Antwort ⇒ der Actor hat den Command verarbeitet (Erfolg ODER fachliche Ablehnung — das Feedback fließt über Events). In
+            //   beiden Fällen ist er ZUGESTELLT → fertig.
+            _bote ??= new Bote(_actorSystem.Cluster(), _logger);
+            if (await _bote.FrageAsync<CommandResult>(identity, envelope, AttemptTimeout, CancellationToken.None) is not null)
+                return;
 
-                // Nicht-null ⇒ der Actor hat den Command verarbeitet (Erfolg ODER fachliche Ablehnung —
-                // das Feedback fließt über Events). In beiden Fällen ist er ZUGESTELLT → fertig.
-                if (result != null)
-                    return;
-
-                grund = "keine Antwort (Cluster evtl. noch nicht routbar)";
-                _logger.LogWarning(
-                    "[Dispatcher] Keine Antwort für {Command} an {Type}/{Id} (Versuch {Attempt}/{Max}) — " +
-                    "Cluster evtl. noch nicht routbar, erneuter Versuch.",
-                    envelope.Payload.GetType().Name, envelope.AggregateType, envelope.AggregateId, attempt, MaxAttempts);
-            }
-            catch (OperationCanceledException)
-            {
-                grund = $"Timeout beim Platzieren nach {AttemptTimeout.TotalSeconds:0}s (Cluster-Topologie evtl. nicht gesetzt)";
-                _logger.LogWarning(
-                    "[Dispatcher] Timeout beim Platzieren von {Type}/{Id} (Versuch {Attempt}/{Max}) — " +
-                    "Cluster-Topologie evtl. noch nicht gesetzt.",
-                    envelope.AggregateType, envelope.AggregateId, attempt, MaxAttempts);
-            }
-            catch (Exception ex)
-            {
-                grund = $"{ex.GetType().Name}: {ex.Message}";
-                _logger.LogWarning(ex,
-                    "[Dispatcher] Fehler beim Senden von {Command} an {Type}/{Id} (Versuch {Attempt}/{Max}).",
-                    envelope.Payload.GetType().Name, envelope.AggregateType, envelope.AggregateId, attempt, MaxAttempts);
-            }
+            _logger.LogWarning(
+                "[Dispatcher] Keine Antwort für {Command} an {Type}/{Id} in {Frist} s (Versuch {Attempt}/{Max}) — " +
+                "Cluster evtl. noch nicht routbar, erneuter Versuch.",
+                envelope.Payload.GetType().Name, envelope.AggregateType, envelope.AggregateId, AttemptTimeout.TotalSeconds, attempt, MaxAttempts);
         }
 
         // Alle Versuche erschöpft: LAUT melden statt lautlos zu verschlucken. Der Aufrufer bekam
@@ -138,39 +109,29 @@ public class ProtoActorAggregateDispatcher : IAggregateDispatcher
         // ★ Zusätzlich den auslösenden Client benachrichtigen. Der Command hat nie einen Actor
         //   erreicht → NIEMAND publiziert sonst ein CommandFailed (das tut normal der Actor). Ohne dies
         //   hinge der Client still (kein Ack, kein Nack). Targeted über OriginSessionId, wie der Actor.
-        await TryPublishCommandFailedAsync(envelope, grund);
+        MeldeCommandFailed(envelope, grund);
     }
 
     /// <summary>
-    /// Publiziert ein <see cref="CommandFailed"/> targeted an die <c>OriginSessionId</c> — spiegelt
-    /// das Actor-Muster (<c>AggregateActorBase.TryPublishCommandFailedAsync</c>), für den Fall, dass
-    /// der Command mangels routbarem Cluster nie einen Actor erreicht hat. Best-effort: ohne Publisher
-    /// oder ohne OriginSessionId folgenlos; Fehler beim Publish werden nur geloggt, nie geworfen.
+    /// Meldet ein <see cref="CommandFailed"/> targeted an die <c>OriginSessionId</c> (verlierbar) — spiegelt
+    /// das Actor-Muster (<c>AggregateActorBase.MeldeCommandFailed</c>), für den Fall, dass
+    /// der Command mangels routbarem Cluster nie einen Actor erreicht hat. Ohne Publisher
+    /// oder ohne OriginSessionId folgenlos.
     /// </summary>
-    private async Task TryPublishCommandFailedAsync(CommandEnvelope envelope, string grund)
+    private void MeldeCommandFailed(CommandEnvelope envelope, string grund)
     {
         var failed = BaueCommandFailed(envelope, grund, MaxAttempts);
         if (_publisher is null || failed is null)
             return;
-
-        try
-        {
-            await _publisher.PublishAsync(failed);
-            _logger.LogDebug("[Dispatcher] CommandFailed an '{Session}' publiziert (nicht zugestellt).",
-                envelope.OriginSessionId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "[Dispatcher] CommandFailed-Publish fehlgeschlagen für {Type}/{Id}.",
-                envelope.AggregateType, envelope.AggregateId);
-        }
+        _publisher.Melde(failed);
+        _logger.LogDebug("[Dispatcher] CommandFailed an '{Session}' gemeldet (nicht zugestellt).", envelope.OriginSessionId);
     }
 
     /// <summary>
     /// Reine Konstruktion des targeted <see cref="CommandFailed"/>-EventEnvelopes für den
     /// Nicht-zugestellt-Fall (store-/cluster-frei, Ebene-1-testbar). Gibt <c>null</c> zurück, wenn keine
     /// <c>OriginSessionId</c> vorliegt — dann gibt es kein Ziel für die Targeted Delivery. Spiegelt
-    /// die Feldbelegung von <c>AggregateActorBase.TryPublishCommandFailedAsync</c>.
+    /// die Feldbelegung von <c>AggregateActorBase.MeldeCommandFailed</c>.
     /// </summary>
     public static EventEnvelope? BaueCommandFailed(CommandEnvelope envelope, string grund, int maxAttempts)
     {

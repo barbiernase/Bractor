@@ -184,7 +184,7 @@ public class SubscriptionTracker : IAsyncDisposable
             {
                 try
                 {
-                    await subscription.UnsubscribeAsync(eventType);
+                    subscription.AlleAbmelden();   // Sitzungsende: verlierbar, ohne zu warten
                 }
                 catch (Exception ex)
                 {

@@ -1,4 +1,5 @@
 using Abstractions;
+using Infrastructure.Lebenszyklus;
 using Microsoft.Extensions.Logging;
 using Proto.Cluster;
 using Infrastructure.Komposition;
@@ -34,15 +35,10 @@ public static class PipelineTriggerSender
 
         var identity = Identitaet(targetPipelineId);
 
-        using var cts = new CancellationTokenSource(Frist);
-        PipelineAck? ack;
-        try
+        var ack = await new Bote(cluster, logger).FrageAsync<PipelineAck>(identity, trigger, Frist, default);
+        if (ack is null)
         {
-            ack = await cluster.RequestAsync<PipelineAck>(identity, trigger, cts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            logger?.LogWarning("[PipelineTrigger] {TriggerType} → {Target} Timeout ({Frist}s) — Re-Wake heilt",
+            logger?.LogWarning("[PipelineTrigger] {TriggerType} → {Target} ohne Antwort in {Frist} s — Re-Wake heilt",
                 triggerType.Name, targetPipelineId, Frist.TotalSeconds);
             return;
         }

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Abstractions;
+using Infrastructure.Lebenszyklus;
 using Infrastructure.Projections;   // WakeAck
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -65,17 +66,13 @@ public sealed class HandAusfuehrer : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         if (_funktionen.Count == 0) return;
-        var cluster = _system.Cluster();
+        var bote = new Bote(_system.Cluster(), _logger);
         _sitzung = new FunktionsAnbieterSitzung(
             $"{_system.Address}/hand",
             name => FunktionsAnbieterSitzung.LoeseImKatalog(name, _funktionen),
             f => Anwendung.Funktionen.Ergebnisse.TryGetValue(f, out var e) ? e : Array.Empty<Type>(),
-            (f, anfrage, ct) => cluster.RequestAsync<ArbeitZugeteilt>(FunktionsVermittlerActor.Identitaet(f), anfrage, ct),
-            async (f, nachricht) =>
-            {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                await cluster.RequestAsync<WakeAck>(FunktionsVermittlerActor.Identitaet(f), nachricht, cts.Token);
-            },
+            FunktionsAnbieter.Hole(bote),
+            FunktionsAnbieter.Melde(bote),
             (a, f) =>
             {
                 _ablage.TryAdd(a.Vorgang, new HandAuftrag(a, f, DateTimeOffset.UtcNow));

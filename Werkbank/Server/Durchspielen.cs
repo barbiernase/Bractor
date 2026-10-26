@@ -23,6 +23,12 @@ public sealed partial class Durchspielen(WerkbankServer werkbank)
             return (409, $$"""{"ok":false,"fehler":"In {{u.Umgebung.Name}} ist der JSON-Eingang aus (Transport:JsonEingang)."}""");
         using var req = new HttpRequestMessage(new HttpMethod(methode), $"http://localhost:{u.Transport.EinblickPort}/eingang/{pfad}");
         if (!string.IsNullOrEmpty(token)) req.Headers.Add("akteur-token", token);
+        // Die Oberfläche zeigt, was ein Command geschrieben hat: der Host liest es auf Wunsch aus dem Log (die Antwort nennt nur den Bereich).
+        if (inhalt != null && pfad == "command" && Objekt(inhalt) is { } befehl)
+        {
+            befehl["zeigeEvents"] = true;
+            inhalt = befehl.ToJsonString();
+        }
         if (inhalt != null) req.Content = new StringContent(inhalt, System.Text.Encoding.UTF8, "application/json");
         try
         {
@@ -30,6 +36,13 @@ public sealed partial class Durchspielen(WerkbankServer werkbank)
             return ((int)antwort.StatusCode, await antwort.Content.ReadAsStringAsync(ct));
         }
         catch (HttpRequestException e) { return (502, new JsonObject { ["ok"] = false, ["fehler"] = "Host nicht erreichbar: " + e.Message }.ToJsonString()); }
+    }
+
+    /// <summary>Der Rumpf als JSON-Objekt; kein Objekt (oder kein JSON) geht unverändert weiter — der Host meldet den Fehler.</summary>
+    private static JsonObject? Objekt(string inhalt)
+    {
+        try { return JsonNode.Parse(inhalt) as JsonObject; }
+        catch (System.Text.Json.JsonException) { return null; }
     }
 
     /// <summary>Die Sim-Tokens der gewählten Umgebung (Abschnitt <c>Identitaeten</c>): Token → Akteur(e), gelesen wie im Host.</summary>

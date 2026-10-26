@@ -1,4 +1,5 @@
 using Abstractions;
+using Infrastructure.Lebenszyklus;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Proto;
@@ -57,23 +58,10 @@ public sealed class GenericPullStartupService : IHostedService
         _logger = logger;
     }
 
-    /// <summary>Signal-Wake fire-and-forget, aber Fehler gefangen + geloggt (nicht als unbeobachtete Task-Exception).</summary>
-    private async Task SignalWakeBeobachtetAsync(ClusterIdentity identity, CancellationToken c)
-    {
-        try
-        {
-            await _system.Cluster().RequestAsync<WakeAck>(identity, new Wake(), c);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogDebug(ex,
-                "[Pull] Signal-Wake an {Identity} fehlgeschlagen — verlierbar, Poll-Backstop heilt.", identity.Identity);
-        }
-    }
-
     public async Task StartAsync(CancellationToken ct)
     {
         _pollCts = new CancellationTokenSource();
+        var bote = new Bote(_system.Cluster(), _logger);
 
         Console.WriteLine();
         Console.WriteLine("=== Pull-Pfad (generiert) ===");
@@ -88,13 +76,9 @@ public sealed class GenericPullStartupService : IHostedService
             // verloren gehen (Invariante 2) → fire-and-forget; es läuft im Receiver-Actor-Turn
             // und darf ihn nicht blockieren. Zusammengefasst je Stream (PF-12): ein Adapter liest
             // bei einer Weckung alles ab seinem Cursor — viele Signale brauchen eine Weckung, nicht viele.
-            var weckungen = new Weckungen<Guid>(async streamId =>
-            {
-                // ★ Härtung (Multi-Node): der Send-Fehler wird BEOBACHTET (nicht als unbeobachtete Task-Exception
-                //   verschluckt). Debug-Level, weil Signalverlust per Design normal ist — der Poll-Backstop heilt.
-                using var frist = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                await SignalWakeBeobachtetAsync(ClusterIdentity.Create(streamId.ToString(), kindName), frist.Token);
-            });
+            var weckungen = new Weckungen<Guid>(streamId =>
+                // Verlierbar (der Poll-Backstop heilt); die Quittung abwarten, damit je Stream höchstens eine Weckung unterwegs ist.
+                bote.FrageAsync<WakeAck>(ClusterIdentity.Create(streamId.ToString(), kindName), new Wake(), TimeSpan.FromSeconds(10), default));
             Func<Guid, CancellationToken, Task> signalWake = (streamId, _) =>
             {
                 weckungen.Wecke(streamId);
@@ -107,17 +91,8 @@ public sealed class GenericPullStartupService : IHostedService
             // HWM und re-scannt beim nächsten Durchlauf, statt einen unverarbeiteten (terminalen)
             // Stream still zu überspringen. Läuft im Poll-Loop (kein Actor-Turn) → awaiten ist ok.
             Func<Guid, CancellationToken, Task<bool>> pollWake = async (streamId, c) =>
-            {
-                var identity = ClusterIdentity.Create(streamId.ToString(), kindName);
-                using var cts = CancellationTokenSource.CreateLinkedTokenSource(c);
-                cts.CancelAfter(TimeSpan.FromSeconds(10));
-                try
-                {
-                    var ack = await _system.Cluster().RequestAsync<WakeAck>(identity, new Wake(), cts.Token);
-                    return ack is { Aufgeholt: true };
-                }
-                catch { return false; }
-            };
+                await bote.FrageAsync<WakeAck>(ClusterIdentity.Create(streamId.ToString(), kindName), new Wake(), TimeSpan.FromSeconds(10), c)
+                    is { Aufgeholt: true };
 
             var receiver = new SignalReceiver(signalWake);
             var pid = _system.Root.Spawn(Props.FromProducer(() =>

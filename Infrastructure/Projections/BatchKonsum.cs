@@ -1,4 +1,5 @@
 using Abstractions;
+using Infrastructure.Lebenszyklus;
 using Marten;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -97,20 +98,17 @@ public sealed class BatchKonsumStartupService : IHostedService
     /// Weckt die Partitionen einer Projektion, zusammengefasst (<see cref="Weckungen{TKey}"/>): je Partition höchstens eine Weckung unterwegs
     /// und eine hinterher.
     /// </summary>
-    private sealed class Weckung(ActorSystem system, string kind, ILogger? logger)
+    private sealed class Weckung
     {
-        private readonly Weckungen<int> _weckungen = new(async partition =>
+        private readonly Weckungen<int> _weckungen;
+
+        public Weckung(ActorSystem system, string kind, ILogger? logger)
         {
-            try
-            {
-                using var frist = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                await system.Cluster().RequestAsync<WakeAck>(ClusterIdentity.Create(partition.ToString(), kind), new Wake(), frist.Token);
-            }
-            catch (Exception ex)
-            {
-                logger?.LogDebug(ex, "[Konsum] Weckung {Kind}/{Partition} verloren — der Poll heilt", kind, partition);
-            }
-        });
+            var bote = new Bote(system.Cluster(), logger);
+            // Verlierbar (der Poll heilt); die Quittung abwarten, damit je Partition höchstens eine Weckung unterwegs ist.
+            _weckungen = new Weckungen<int>(p =>
+                bote.FrageAsync<WakeAck>(ClusterIdentity.Create(p.ToString(), kind), new Wake(), TimeSpan.FromSeconds(10), default));
+        }
 
         public void Wecke(int partition) => _weckungen.Wecke(partition);
     }

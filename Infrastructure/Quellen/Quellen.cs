@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Abstractions;
+using Infrastructure.Lebenszyklus;
 using Infrastructure.Akteure;       // AkteurHerkunft
 using Infrastructure.Projections;   // WakeAck
 using Infrastructure.Prozess;       // ProzessManagerActor, ProzessWake
@@ -109,12 +110,9 @@ public sealed class QuellEingang
 
     private static async Task WeckeAsync(ActorSystem system, Guid korrelation, Guid stream, int version, string name, CancellationToken ct)
     {
-        var identity = ClusterIdentity.Create(korrelation.ToString(), ProzessManagerActor.KindName);
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(10));
-        try { await system.Cluster().RequestAsync<WakeAck>(identity, new ProzessWake(stream, version, name), cts.Token); }
-        catch (Exception ex) when (ex is OperationCanceledException or TimeoutException)
-        { /* der Poll des Korrelations-Routers startet den Vorgang nach */ }
+        // Ohne Antwort startet der Poll des Korrelations-Routers den Vorgang nach.
+        await new Bote(system.Cluster()).FrageAsync<WakeAck>(ClusterIdentity.Create(korrelation.ToString(), ProzessManagerActor.KindName),
+            new ProzessWake(stream, version, name), TimeSpan.FromSeconds(10), ct);
     }
 }
 

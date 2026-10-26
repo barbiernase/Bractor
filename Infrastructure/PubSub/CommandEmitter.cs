@@ -1,5 +1,6 @@
 using Abstractions;
 using Infrastructure.Aggregate;
+using Infrastructure.Lebenszyklus;
 using Infrastructure.Pipeline;   // Anwendung.Pipelines.CommandAggregateTypes
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -11,8 +12,8 @@ namespace Infrastructure.PubSub;
 /// <summary>
 /// Das EINE Emit-Primitiv (EM-1). Genau hier — und nur hier — wird ein Command an ein Fremd-Aggregat
 /// geschickt: deterministische CommandId (<see cref="EmitId"/> → W1: der Empfänger dedupliziert eine
-/// wiederholte Zustellung), <see cref="CommandModus.Emittiert"/> (KEINE Version, §4.2) und ein
-/// <b>bounded</b> Token (W2: kein <c>CancellationToken.None</c>, kein Infinit-Hang). At-least-once auf
+/// wiederholte Zustellung), <see cref="CommandModus.Emittiert"/> (KEINE Version, §4.2) und eine
+/// <c>Frage</c> des <see cref="Bote"/> mit Pflicht-Frist (W2: kein Infinit-Hang). At-least-once auf
 /// dem Draht, exactly-once-wirksam über die Empfänger-Inbox.
 ///
 /// Der Aufrufer bekommt den <see cref="EmitAusgang"/> (docs/11 §11.3): „zugestellt“ und „abgelehnt“ sind entschieden,
@@ -24,27 +25,30 @@ namespace Infrastructure.PubSub;
 /// Knoten). Ein heißes Ziel arbeitet seine Mailbox in der Frist ab, statt dass sich Timeouts und Wiederholungen aufschaukeln; der
 /// Rückstau liegt vor dem Send, nicht in der Mailbox des Ziels.
 ///
-/// Context-frei: der <see cref="Cluster"/> kommt aus dem ActorSystem, nicht aus einem per-Message-Context
-/// → aus dem Pull-Adapter (Reaktion), dem Prozess-Manager und dem Fristplaner nutzbar. Der Ziel-Send ist ein
-/// <see cref="SendeSeam"/> — live der <c>cluster.RequestAsync</c>, im Prüfstand ein Fake (ohne echten Cluster).
+/// Context-frei: der <see cref="Bote"/> hängt am Cluster des ActorSystems, nicht an einem per-Message-Context
+/// → aus dem Pull-Adapter (Reaktion), dem Prozess-Manager und dem Fristplaner nutzbar. Im Prüfstand ist der Ziel-Send ein
+/// <see cref="SendeSeam"/> (ein Fake ohne echten Cluster), eingesetzt als Anfrage des Boten.
 /// </summary>
 public sealed class CommandEmitter : ICommandEmitter
 {
-    /// <summary>Der einzige Cluster-Berührungspunkt — live gebunden, im Test injiziert.</summary>
+    /// <summary>Naht/Test: der Ziel-Send ohne Cluster.</summary>
     public delegate Task<CommandResult?> SendeSeam(ClusterIdentity ziel, CommandEnvelope envelope, CancellationToken ct);
 
-    private readonly SendeSeam _send;
+    private readonly Bote _bote;
     private readonly ILogger _logger;
     private readonly TimeSpan _sendeFrist;
     private readonly EmitDrossel _drossel;
 
     private static readonly TimeSpan StandardFrist = TimeSpan.FromSeconds(5);
 
-    /// <summary>Live: bindet den Send an den Cluster; alle Live-Emitter eines Knotens teilen eine Drossel.</summary>
+    /// <summary>Live: fragt über den Cluster; alle Live-Emitter eines Knotens teilen eine Drossel.</summary>
     public CommandEmitter(Cluster cluster, ILogger? logger = null, TimeSpan? sendeFrist = null)
+        : this(new Bote(cluster ?? throw new ArgumentNullException(nameof(cluster)), logger), logger, sendeFrist) { }
+
+    /// <summary>Live: über einen vorhandenen Boten; alle Live-Emitter eines Knotens teilen eine Drossel.</summary>
+    public CommandEmitter(Bote bote, ILogger? logger = null, TimeSpan? sendeFrist = null)
     {
-        if (cluster is null) throw new ArgumentNullException(nameof(cluster));
-        _send = (id, env, ct) => cluster.RequestAsync<CommandResult>(id, env, ct);
+        _bote = bote ?? throw new ArgumentNullException(nameof(bote));
         _logger = logger ?? NullLogger.Instance;
         _sendeFrist = sendeFrist ?? StandardFrist;
         _drossel = EmitDrossel.Gemeinsam;
@@ -53,7 +57,8 @@ public sealed class CommandEmitter : ICommandEmitter
     /// <summary>Naht/Test: injizierter Send (Fake-Cluster in-memory), eigene Drossel, wenn keine übergeben.</summary>
     public CommandEmitter(SendeSeam send, ILogger? logger = null, TimeSpan? sendeFrist = null, EmitDrossel? drossel = null)
     {
-        _send = send ?? throw new ArgumentNullException(nameof(send));
+        ArgumentNullException.ThrowIfNull(send);
+        _bote = new Bote(async (ziel, nachricht, ct) => await send(ziel, (CommandEnvelope)nachricht, ct), logger);
         _logger = logger ?? NullLogger.Instance;
         _sendeFrist = sendeFrist ?? StandardFrist;
         _drossel = drossel ?? new EmitDrossel();
@@ -106,28 +111,12 @@ public sealed class CommandEmitter : ICommandEmitter
             return EmitErgebnis.Unbekannt;
         }
 
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(_sendeFrist);                           // bounded (W2)
-        CommandResult? ergebnis;
-        try
-        {
-            ergebnis = await _send(identity, envelope, cts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            _logger.LogDebug("[Emit] Frist an {AggregateType}/{AggregateId} abgelaufen — Ausgang unbekannt", aggregateType, cmd.Ziel);
-            return EmitErgebnis.Unbekannt;
-        }
-        catch (Exception ex)
-        {
-            // Transportfehler (Identität nicht auflösbar, Dead-Letter, Knoten weg): ob das Ziel gewirkt hat, ist offen.
-            _logger.LogDebug(ex, "[Emit] Send an {AggregateType}/{AggregateId} gescheitert — Ausgang unbekannt", aggregateType, cmd.Ziel);
-            return EmitErgebnis.Unbekannt;
-        }
-
+        // Frage mit Pflicht-Frist (W2): keine Antwort in der Frist (abgelaufen, Identität nicht auflösbar, Knoten weg, Abbruch) heißt: ob
+        //   das Ziel gewirkt hat, ist offen.
+        var ergebnis = await _bote.FrageAsync<CommandResult>(identity, envelope, _sendeFrist, ct);
         return ergebnis switch
         {
-            null => EmitErgebnis.Unbekannt,                    // Proto.Cluster liefert null, wenn die Frist abläuft
+            null => EmitErgebnis.Unbekannt,
             { Success: true } => new EmitErgebnis(EmitAusgang.Zugestellt, ergebnis.ErsteVersion),
             { Abgelehnt: true } => new EmitErgebnis(EmitAusgang.Abgelehnt, ergebnis.ErsteVersion),
             _ => Technisch(ergebnis, aggregateType, cmd),

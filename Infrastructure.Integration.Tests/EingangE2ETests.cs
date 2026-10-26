@@ -85,12 +85,14 @@ public class EingangE2ETests
             rechte.GetProperty("queries").EnumerateArray().Select(x => x.GetString()).Should().Contain("HoleDatensatz");
 
             var ds = Guid.NewGuid();
-            var erstellt = await Sende("/eingang/command", new { typ = "ErstelleDatensatz", daten = new { AggregateId = ds, Name = "Werkbank" } }, "t-ki");
+            // Die geschriebenen Events zeigt der Eingang auf Wunsch — gelesen aus dem Log (die Antwort des Aggregats nennt nur den Bereich).
+            var erstellt = await Sende("/eingang/command", new { typ = "ErstelleDatensatz", daten = new { AggregateId = ds, Name = "Werkbank" }, zeigeEvents = true }, "t-ki");
             erstellt.StatusCode.Should().Be(HttpStatusCode.OK);
             var e1 = await Lies(erstellt);
             e1.GetProperty("ok").GetBoolean().Should().BeTrue(e1.ToString());
             e1.GetProperty("akteur").GetString().Should().Be("KIOperator");
             e1.GetProperty("events")[0].GetProperty("typ").GetString().Should().Be("DatensatzErstellt");
+            e1.GetProperty("ersteVersion").GetInt32().Should().Be(1);
 
             var es = app.Services.GetRequiredService<IEventStoreRepository>();
             var log = await es.ReadStreamAsync(ds, 0, default);
@@ -99,6 +101,7 @@ public class EingangE2ETests
 
             var nochmal = await Lies(await Sende("/eingang/command", new { typ = "ErstelleDatensatz", daten = new { AggregateId = ds, Name = "Werkbank" } }, "t-ki"));
             nochmal.GetProperty("ablehnung").GetProperty("typ").GetString().Should().Be("DatensatzExistiertBereits");
+            nochmal.GetProperty("events").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null, "ohne Wunsch liest der Eingang das Log nicht");
             // Einblick (Werkbank P6): der abgelehnte Command von außen ist ein gescheiterter Vorgang; seine Marke trägt den Akteur als Absender.
             var leser = new SpurLeser(u);
             var gescheitert = (await leser.VorgaengeAsync(50, default)).Single(v => v.Korrelation == nochmal.GetProperty("korrelation").GetString());

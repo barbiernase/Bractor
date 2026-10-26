@@ -232,11 +232,10 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("        // Typfilter der Seiten: die Speicher-Diskriminatoren der abonnierten Typen samt Upcasting-Vorgängern.");
             sb.AppendLine($"        var typen = BatchLeser.TypenAus({p.ToDisplayString()}.SubscribedTypes);");
             sb.AppendLine("        return new ClusterKind(KindName, Props.FromProducer(() =>");
-            sb.AppendLine("            new BatchLeserActor(partition =>");
+            sb.AppendLine("            new BatchLeserActor((partition, faehigkeiten) =>");
             sb.AppendLine("            {");
-            sb.AppendLine("                // Ein Fähigkeits-Bereich je Partitions-Leser: jede Fähigkeit eines Stores liefert DIESELBE Instanz");
-            sb.AppendLine("                //   (Co-Commit: Effekte, Guards und Partition in einer Transaktion).");
-            sb.AppendLine("                var faehigkeiten = provider.GetRequiredService<IFaehigkeitsFabrik>().Oeffne();");
+            sb.AppendLine("                // Der Fähigkeits-Bereich der Aktivierung (Rahmen): jede Fähigkeit eines Stores liefert DIESELBE Instanz");
+            sb.AppendLine("                //   (Co-Commit: Effekte, Guards und Partition in einer Transaktion); frei, wenn die Aktivierung endet.");
             EmitKonstruktion(sb, p, "                ");
             var holen = schreibFaehigkeiten.Select(f => $"faehigkeiten.Hole<{f.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}>()");
             sb.AppendLine($"                var trackers = new object[] {{ {string.Join(", ", holen)} }}.OfType<IProjectionTracker>().Distinct().ToList();");
@@ -251,8 +250,8 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("                    (e, writer) => projection.DispatchAsync(e, writer, BatchLeser.KeineAusgabe, faehigkeiten);");
             sb.AppendLine("                var leser = new BatchLeser(eventStore, trackers[0], projection.SubscriberId, partition, konsum, typen, dispatch,");
             sb.AppendLine("                    depsSink, deadLetter, logger);");
-            sb.AppendLine("                return (leser, (IDisposable?)faehigkeiten);");
-            sb.AppendLine("            }, logger)));");
+            sb.AppendLine("                return leser;");
+            sb.AppendLine("            }, provider.GetRequiredService<IFaehigkeitsFabrik>(), logger)));");
             sb.AppendLine("    }");
             sb.AppendLine("}");
             sb.AppendLine();
@@ -269,9 +268,8 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("    {");
             sb.AppendLine("        var eventStore = provider.GetRequiredService<IEventStoreRepository>();");
             sb.AppendLine("        return new ClusterKind(KindName, Props.FromProducer(() =>");
-            sb.AppendLine("            new SignalAdapterActor(eventStore, () =>");
+            sb.AppendLine("            new SignalAdapterActor(eventStore, faehigkeiten =>");
             sb.AppendLine("            {");
-            sb.AppendLine("                var faehigkeiten = provider.GetRequiredService<IFaehigkeitsFabrik>().Oeffne();");
             EmitKonstruktion(sb, p, "                ");
             sb.AppendLine();
             sb.AppendLine("                // Achse B (P4): ohne Schreib-Fähigkeit ist der Konsument EMITTIEREND (Reaktion) und bekommt den");
@@ -288,7 +286,8 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("                Func<EventEnvelope, ProjectionWriter, EmitAusgaenge, Task> dispatch =");
             sb.AppendLine("                    (e, writer, ausgaenge) => projection.DispatchAsync(e, writer, router.EmitFor(e, ausgaenge), faehigkeiten);");
             sb.AppendLine("                return (projection.SubscriberId, emittentenCursor, dispatch);");
-            sb.AppendLine("            }, provider.GetService<IReadModelDepsSink>(), provider.GetService<global::Infrastructure.Lebenszyklus.Passivierung>())));");
+            sb.AppendLine("            }, provider.GetRequiredService<IFaehigkeitsFabrik>(), provider.GetService<IReadModelDepsSink>(),");
+            sb.AppendLine("                provider.GetService<global::Infrastructure.Lebenszyklus.Passivierung>())));");
             sb.AppendLine("    }");
             sb.AppendLine("}");
             sb.AppendLine();

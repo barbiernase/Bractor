@@ -1,4 +1,5 @@
 using Abstractions;
+using Infrastructure.Lebenszyklus;
 using Infrastructure.Projections;   // IClusterKindContributor
 using Proto;
 using Proto.Cluster;
@@ -33,13 +34,13 @@ public sealed class QuellenLease(TimeSpan dauer)
 }
 
 /// <summary>Cluster-Identität <c>quelle/&lt;Typ&gt;</c>: hält die Lease einer Quelle; wandert bei Ausfall eines Knotens mit.</summary>
-public sealed class QuellenHalterActor : IActor
+public sealed class QuellenHalterActor : RahmenActor
 {
     public const string KindName = "quelle";
     public static readonly TimeSpan Dauer = TimeSpan.FromSeconds(15);
     private readonly QuellenLease _lease = new(Dauer);
 
-    public Task ReceiveAsync(IContext context)
+    protected override Task BehandleAsync(IContext context)
     {
         if (context.Message is HalteQuelle h) context.Respond(_lease.Halte(h.Knoten, DateTimeOffset.UtcNow));
         return Task.CompletedTask;

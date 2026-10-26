@@ -1,163 +1,54 @@
 namespace Infrastructure.PubSub.Actors;
 
+using Infrastructure.Lebenszyklus;
 using Infrastructure.PubSub.Messages;
 using Microsoft.Extensions.Logging;
 using Proto;
 using Proto.Cluster;
 
 /// <summary>
-/// Verwaltet den Lifecycle der Shards für einen Message-Typ.
-/// Identity: "{MessageTypeName}"
+/// Aktiviert die Shards eines Message-Typs beim Start (Identity: "{MessageTypeName}"): je Shard eine <c>Frage</c> mit Frist — sie platziert
+/// den virtuellen Shard-Actor. Ein Shard, der später mit seinem Knoten stirbt, wird bei der nächsten Anfrage (Publish, Subscribe) wieder
+/// aktiviert; sein Abo-Verzeichnis war ohnehin im Speicher (die Sitzungen melden sich neu an, Projektionen heilt der Poll).
 /// </summary>
-public class BrokerManagerActor : IActor
+public class BrokerManagerActor : RahmenActor
 {
+    /// <summary>Frist je Shard-Aktivierung.</summary>
+    private static readonly TimeSpan AktivierFrist = TimeSpan.FromSeconds(10);
+
     private readonly ILogger<BrokerManagerActor>? _logger;
-    private readonly PID?[] _shardPids = new PID?[PubSubConfiguration.ShardCount];
-    
     private string _typeName = string.Empty;
-    private Cluster? _cluster;
+    private Bote? _bote;
     private bool _activated;
 
-    public BrokerManagerActor(ILogger<BrokerManagerActor>? logger = null)
+    public BrokerManagerActor(ILogger<BrokerManagerActor>? logger = null) : base(logger)
     {
         _logger = logger;
     }
 
-    public async Task ReceiveAsync(IContext context)
-    {
-        switch (context.Message)
-        {
-            case Started:
-                OnStarted(context);
-                break;
-                
-            case Activate:
-                await OnActivateAsync(context);
-                break;
-                
-            case Terminated msg:
-                await OnTerminatedAsync(context, msg.Who);
-                break;
-                
-            case GetStatus:
-                await OnGetStatusAsync(context);
-                break;
-        }
-    }
-
-    private void OnStarted(IContext context)
+    protected override Task BeginneAsync(IContext context)
     {
         _typeName = context.ClusterIdentity()?.Identity ?? "unknown";
-        _cluster = context.Cluster();
-        
+        _bote = new Bote(context.Cluster(), _logger);
         _logger?.LogInformation("[Manager {Type}] Started", _typeName);
+        return Task.CompletedTask;
     }
 
-    private async Task OnActivateAsync(IContext context)
+    protected override async Task BehandleAsync(IContext context)
     {
-        if (_activated)
+        if (context.Message is not Activate) return;
+        if (!_activated)
         {
-            context.Respond(new Ack());
-            return;
+            _logger?.LogInformation("[Manager {Type}] Activating {Count} shards...", _typeName, PubSubConfiguration.ShardCount);
+            for (var i = 0; i < PubSubConfiguration.ShardCount; i++)
+            {
+                var shard = ClusterIdentity.Create($"{_typeName}_{i}", PubSubConfiguration.ShardKind);
+                if (await _bote!.FrageAsync<SubscriberCountResponse>(shard, new GetSubscriberCount(), AktivierFrist, Stopp) is null)
+                    _logger?.LogError("[Manager {Type}] Shard {Index} nicht in {Frist} s aktiviert", _typeName, i, AktivierFrist.TotalSeconds);
+            }
+            _activated = true;
+            _logger?.LogInformation("[Manager {Type}] All shards activated", _typeName);
         }
-
-        _logger?.LogInformation(
-            "[Manager {Type}] Activating {Count} shards...", 
-            _typeName, PubSubConfiguration.ShardCount);
-
-        for (int i = 0; i < PubSubConfiguration.ShardCount; i++)
-        {
-            await ActivateShardAsync(context, i);
-        }
-
-        _activated = true;
-        
-        _logger?.LogInformation("[Manager {Type}] All shards activated", _typeName);
-        
         context.Respond(new Ack());
-    }
-
-    private async Task ActivateShardAsync(IContext context, int index)
-    {
-        var identity = ClusterIdentity.Create(
-            $"{_typeName}_{index}", 
-            PubSubConfiguration.ShardKind
-        );
-
-        try
-        {
-            var pid = await _cluster!.GetAsync(identity, CancellationToken.None);
-            
-            if (pid != null)
-            {
-                _shardPids[index] = pid;
-                context.Watch(pid);
-                
-                _logger?.LogDebug(
-                    "[Manager {Type}] Shard {Index} activated", 
-                    _typeName, index);
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogError(ex, 
-                "[Manager {Type}] Failed to activate shard {Index}", 
-                _typeName, index);
-        }
-    }
-
-    private async Task OnTerminatedAsync(IContext context, PID who)
-    {
-        var index = Array.FindIndex(_shardPids, p => p?.Equals(who) == true);
-        
-        if (index < 0)
-            return;
-
-        _logger?.LogWarning(
-            "[Manager {Type}] Shard {Index} terminated, restarting...", 
-            _typeName, index);
-
-        _shardPids[index] = null;
-        
-        await Task.Delay(100);
-        await ActivateShardAsync(context, index);
-    }
-
-    private async Task OnGetStatusAsync(IContext context)
-    {
-        var shards = new List<ShardInfo>();
-
-        for (int i = 0; i < PubSubConfiguration.ShardCount; i++)
-        {
-            var isAlive = _shardPids[i] != null;
-            var count = 0;
-
-            if (isAlive)
-            {
-                try
-                {
-                    var identity = ClusterIdentity.Create(
-                        $"{_typeName}_{i}", 
-                        PubSubConfiguration.ShardKind
-                    );
-                    
-                    var response = await _cluster!.RequestAsync<SubscriberCountResponse>(
-                        identity, 
-                        new GetSubscriberCount(), 
-                        CancellationToken.None
-                    );
-                    
-                    count = response?.Count ?? 0;
-                }
-                catch
-                {
-                    // Ignore
-                }
-            }
-
-            shards.Add(new ShardInfo(i, isAlive, count));
-        }
-
-        context.Respond(new BrokerStatus(typeof(object), PubSubConfiguration.ShardCount, shards));
     }
 }

@@ -19,7 +19,7 @@ namespace Infrastructure.Integration.Tests;
 /// <c>PartitionIdentityLookup</c> platziert jede Aggregat-Identität auf GENAU einem Node (Single-Activation);
 /// bei zwei Membern landet rund die Hälfte der Ids fremd. Wir senden eine Charge distinkter Ids von Node A
 /// per <c>RequestAsync&lt;CommandResult&gt;</c>: die Anfrage (<c>CommandEnvelope</c>) UND die Antwort
-/// (<c>CommandResult</c> inkl. polymorpher Event-Liste) müssen über die Leitung serialisieren.
+/// (<c>CommandResult</c>: Ausgang, Versionen, polymorphe Ablehnung) müssen über die Leitung serialisieren.
 ///
 /// Beweiskraft: Ohne registrierten Wire-Serializer schlägt jeder cross-node-Hop fehl (Proto findet keinen
 /// Serializer für die rohen CLR-Records). Dass ALLE Ids einer Charge von N=12 lokal blieben, ist praktisch
@@ -61,8 +61,9 @@ public class TwoNodeCommandDispatchTests
                 // Version 1: nur das Fakt (ImagePairErstellt) — die Quittung des Commands steht in der Inbox-Tabelle, nicht im Stream
                 //   (docs/04 §4.4); seit T2b (docs/08 §8.4) ist auch der Client-Pfad idempotent (AggregateActorBase.HandleClientCommand).
                 result.NewVersion.Should().Be(1);
-                result.Events.Should().ContainSingle()
-                    .Which.Should().BeOfType<ImagePairErstellt>();
+                result.ErsteVersion.Should().Be(1, "der Command schrieb genau Version 1");
+                (await hostA.Services.GetRequiredService<IEventStoreRepository>().ReadStreamAsync(pairId, 1, default))
+                    .Should().ContainSingle().Which.Payload.Should().BeOfType<ImagePairErstellt>();
             }
 
             // Gegenprobe: ein zweiter Command auf dieselbe Id (Client-OCC gegen Version 1) belastet den

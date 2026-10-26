@@ -62,17 +62,14 @@ public sealed class HandlerOutputRouter
             }
         };
 
-    private async Task PublishReactiveAsync(IEvent evt, IAggregateEnvelope trigger, CancellationToken ct)
+    private Task PublishReactiveAsync(IEvent evt, IAggregateEnvelope trigger, CancellationToken ct)
     {
-        try { await PublishAsync(evt, trigger, ct); }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            // Verlierbar (Inv. 6): ein reaktives Event ist kein durabler Ausgang, der Konsument rückt trotzdem vor.
-            _logger.LogWarning(ex, "[{Subscriber}] reaktives Event {Event} nicht veröffentlicht", _subscriberId, evt.GetType().Name);
-        }
+        // Verlierbar (Inv. 6): ein reaktives Event ist kein durabler Ausgang, der Konsument rückt trotzdem vor.
+        Melde(evt, trigger);
+        return Task.CompletedTask;
     }
 
-    private async Task PublishAsync(IEvent evt, IAggregateEnvelope trigger, CancellationToken ct)
+    private void Melde(IEvent evt, IAggregateEnvelope trigger)
     {
         if (_publisher == null)
         {
@@ -91,7 +88,7 @@ public sealed class HandlerOutputRouter
             UserId = trigger.UserId
         };
 
-        await _publisher.PublishAsync(newEnvelope, ct);
+        _publisher.Melde(newEnvelope);
         _logger.LogDebug("[{Subscriber}] → reaktives Event: {Event}", _subscriberId, evt.GetType().Name);
         // Spur: ein reaktives Event geht nur über den Broker (verlierbar) — als Hinweis an die Werkbank.
         Infrastructure.Einblick.SpurHinweise.Melde(Infrastructure.Einblick.SpurHinweise.Transient, _wirker,

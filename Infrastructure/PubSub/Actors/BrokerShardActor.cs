@@ -4,6 +4,7 @@ namespace Infrastructure.PubSub.Actors;
 
 using Abstractions;
 using Infrastructure.PubSub.Messages;
+using Infrastructure.Lebenszyklus;
 using Microsoft.Extensions.Logging;
 using Proto;
 
@@ -15,7 +16,7 @@ using Proto;
 /// - Broadcast (default): Event geht an alle Subscriber
 /// - Targeted: Event geht nur an einen spezifischen Subscriber (via TargetSubscriberId)
 /// </summary>
-public class BrokerShardActor : IActor
+public class BrokerShardActor : RahmenActor
 {
     private readonly ILogger<BrokerShardActor>? _logger;
     private readonly SubscriberRegistry _registry = new();
@@ -23,19 +24,21 @@ public class BrokerShardActor : IActor
     private string _typeName = string.Empty;
     private int _shardIndex;
 
-    public BrokerShardActor(ILogger<BrokerShardActor>? logger = null)
+    public BrokerShardActor(ILogger<BrokerShardActor>? logger = null) : base(logger)
     {
         _logger = logger;
     }
 
-    public Task ReceiveAsync(IContext context)
+    protected override Task BeginneAsync(IContext context)
+    {
+        OnStarted(context);
+        return Task.CompletedTask;
+    }
+
+    protected override Task BehandleAsync(IContext context)
     {
         switch (context.Message)
         {
-            case Started:
-                OnStarted(context);
-                break;
-                
             case Subscribe msg:
                 OnSubscribe(context, msg);
                 break;

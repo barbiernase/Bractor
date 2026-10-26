@@ -73,7 +73,7 @@ public class SignalDeliveryClusterTests : IClassFixture<PostgresFixture>
 
             // Signal veröffentlichen (das täte sonst der Aggregat-Actor nach dem Commit).
             var publisher = new BrokerPublisher(cluster);
-            await publisher.PublishAsync(new SignalEnvelope
+            publisher.Melde(new SignalEnvelope
             {
                 Signal = new StateChangeViaImagePairInspiziert(streamId, 1)
             });

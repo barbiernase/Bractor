@@ -183,14 +183,11 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"    public {actorName}(");
                 sb.AppendLine($"        {name} logic,");
                 sb.AppendLine($"        Cluster cluster,");
-                sb.AppendLine($"        IFaehigkeiten faehigkeiten,");
+                sb.AppendLine($"        IFaehigkeitsFabrik faehigkeiten,");
                 sb.AppendLine($"        Infrastructure.PubSub.BrokerPublisher? publisher = null,");
                 sb.AppendLine($"        ILogger<{actorName}>? logger = null,");
                 sb.AppendLine($"        Infrastructure.Deadlines.FristPlaner? fristPlaner = null)");
-                sb.AppendLine($"        : base(logic, cluster, publisher, logger, fristPlaner) {{ _faehigkeiten = faehigkeiten; }}");
-                sb.AppendLine();
-                sb.AppendLine($"    /// <summary>Fähigkeits-Bereich dieses Actors: die Store-Funktionen, die die Handles als Parameter verlangen.</summary>");
-                sb.AppendLine($"    private readonly IFaehigkeiten _faehigkeiten;");
+                sb.AppendLine($"        : base(logic, cluster, faehigkeiten, publisher, logger, fristPlaner) {{ }}");
                 sb.AppendLine();
 
                 // GetSubscribedEventTypes
@@ -215,7 +212,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"        Func<IPipelineTrigger, Task> sendTrigger,");
                 sb.AppendLine($"        Func<ITransientEvent, Task> broadcastTransient,");
                 sb.AppendLine($"        Func<IPlanung, Task> plane)");
-                sb.AppendLine($"        => _logic.DispatchTriggerAsync(trigger, ctx, sendCommand, sendTrigger, broadcastTransient, plane, _faehigkeiten);");
+                sb.AppendLine($"        => _logic.DispatchTriggerAsync(trigger, ctx, sendCommand, sendTrigger, broadcastTransient, plane, Bereich);");
                 sb.AppendLine();
 
                 // DispatchEventAsync
@@ -225,7 +222,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"        Func<IPipelineTrigger, Task> sendTrigger,");
                 sb.AppendLine($"        Func<ITransientEvent, Task> broadcastTransient,");
                 sb.AppendLine($"        Func<IPlanung, Task> plane)");
-                sb.AppendLine($"        => _logic.DispatchEventAsync(envelope, ctx, sendCommand, sendTrigger, broadcastTransient, plane, _faehigkeiten);");
+                sb.AppendLine($"        => _logic.DispatchEventAsync(envelope, ctx, sendCommand, sendTrigger, broadcastTransient, plane, Bereich);");
                 sb.AppendLine();
 
                 // DispatchSelfAsync
@@ -235,7 +232,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"        Func<IPipelineTrigger, Task> sendTrigger,");
                 sb.AppendLine($"        Func<ITransientEvent, Task> broadcastTransient,");
                 sb.AppendLine($"        Func<IPlanung, Task> plane)");
-                sb.AppendLine($"        => _logic.DispatchSelfAsync(selfMsg, ctx, sendCommand, sendTrigger, broadcastTransient, plane, _faehigkeiten);");
+                sb.AppendLine($"        => _logic.DispatchSelfAsync(selfMsg, ctx, sendCommand, sendTrigger, broadcastTransient, plane, Bereich);");
 
                 sb.AppendLine("}");
                 sb.AppendLine();
@@ -360,7 +357,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"                    var cluster = system.Cluster();");
                 sb.AppendLine($"                    var publisher = provider.GetRequiredService<Infrastructure.PubSub.BrokerPublisher>();");
                 sb.AppendLine($"                    var logger = provider.GetService<ILogger<{actorName}>>();");
-                sb.AppendLine($"                    return new {actorName}(handler_{name}, cluster, provider.GetRequiredService<IFaehigkeitsFabrik>().Oeffne(), publisher, logger, provider.GetService<Infrastructure.Deadlines.FristPlaner>());");
+                sb.AppendLine($"                    return new {actorName}(handler_{name}, cluster, provider.GetRequiredService<IFaehigkeitsFabrik>(), publisher, logger, provider.GetService<Infrastructure.Deadlines.FristPlaner>());");
                 sb.AppendLine($"                }})");
                 sb.AppendLine($"            ));");
                 sb.AppendLine($"        }}");
@@ -453,7 +450,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine("        var eventStore = provider.GetRequiredService<IEventStoreRepository>();");
                 sb.AppendLine("        var depsSink = provider.GetService<IReadModelDepsSink>();");
                 sb.AppendLine("        return new ClusterKind(KindName, Props.FromProducer(() =>");
-                sb.AppendLine("            new SignalAdapterActor(eventStore, () =>");
+                sb.AppendLine("            new SignalAdapterActor(eventStore, faehigkeiten =>");
                 sb.AppendLine("            {");
                 sb.AppendLine($"                var handler = provider.GetRequiredService<{n}>();");
                 sb.AppendLine("                var cluster = system.Cluster();");
@@ -465,13 +462,12 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine("                    (ev, ausgaenge) => router.EmitFor(ev, ausgaenge);");
                 sb.AppendLine("                Func<IPipelineTrigger, string, Task> sendTrigger =");
                 sb.AppendLine("                    (trig, _) => PipelineTriggerSender.SendAsync(cluster, trig, null);");
-                sb.AppendLine("                var faehigkeiten = provider.GetRequiredService<IFaehigkeitsFabrik>().Oeffne();");
                 sb.AppendLine("                var fristPlaner = provider.GetService<Infrastructure.Deadlines.FristPlaner>();");
                 sb.AppendLine("                var dispatch = PipelineEventPullBridge.Wrap(");
                 sb.AppendLine("                    (env, ctx, sc, st, bt, pl) => handler.DispatchEventAsync(env, ctx, sc, st, bt, pl, faehigkeiten),");
                 sb.AppendLine("                    emitFactory, sendTrigger, fristPlaner == null ? null : new Func<FristAuftrag, Task>(f => fristPlaner.PlaneAsync(f)));");
                 sb.AppendLine("                return (handler.PipelineId, emittentenCursor, dispatch);");
-                sb.AppendLine("            }, depsSink, provider.GetService<global::Infrastructure.Lebenszyklus.Passivierung>())));");
+                sb.AppendLine("            }, provider.GetRequiredService<IFaehigkeitsFabrik>(), depsSink, provider.GetService<global::Infrastructure.Lebenszyklus.Passivierung>())));");
                 sb.AppendLine("    }");
                 sb.AppendLine("}");
                 sb.AppendLine();

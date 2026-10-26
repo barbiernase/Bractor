@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Abstractions;
+using Infrastructure.Lebenszyklus;
 using Infrastructure.Projections;   // WakeAck
 using Infrastructure.PubSub;        // CommandEmitter
 using Proto;
@@ -27,7 +28,7 @@ namespace Infrastructure.Prozess;
 /// (A)-Fix: <c>system.Cluster()</c> wird in der SPAWN-Factory aufgelöst (siehe Wiring), NICHT bei der
 /// Kind-Registrierung; der Ziel-Send ist bounded (kein <c>None</c>-Infinit-Retry).
 /// </summary>
-public sealed class ProzessManagerActor : IActor
+public sealed class ProzessManagerActor : RahmenActor
 {
     public const string KindName = "prozess-manager";
 
@@ -39,9 +40,9 @@ public sealed class ProzessManagerActor : IActor
     private readonly IProzessMarkingStore? _markingStore;   // ★ P5b: nicht-autoritativer Marking-Cursor (optional)
     private readonly Func<Guid, IAuftrag, Guid, string?, CancellationToken, Task>? _rufe;   // Rufe<F>: Auftrag an den Vermittler
     private readonly IDbClock? _uhr;                                                // Zeitlimit gegen die DB-Uhr
-    private readonly TimeSpan _leerlauf;                                            // PF-5: Passivierung (Marking-Cursor bleibt durabel)
     private Guid _korrelation;
     private ProzessManager? _manager;
+    private Bote? _bote;
     private CommandEmitter? _emitter;
 
     public ProzessManagerActor(
@@ -53,9 +54,10 @@ public sealed class ProzessManagerActor : IActor
         IProzessMarkingStore? markingStore = null,
         Func<Guid, IAuftrag, Guid, string?, CancellationToken, Task>? rufe = null,
         IDbClock? uhr = null,
-        Infrastructure.Lebenszyklus.Passivierung? passivierung = null)
+        Passivierung? passivierung = null)
+        // PF-5: ein Vorgang ohne Nachricht passiviert (Marking-Cursor bleibt durabel).
+        : base(leerlauf: (passivierung ?? Passivierung.Standard).ProzessManager)
     {
-        _leerlauf = (passivierung ?? Infrastructure.Lebenszyklus.Passivierung.Standard).ProzessManager;
         _rufe = rufe;
         _uhr = uhr;
         _eventStore = eventStore;
@@ -66,39 +68,46 @@ public sealed class ProzessManagerActor : IActor
         _markingStore = markingStore;
     }
 
-    public async Task ReceiveAsync(IContext context)
+    protected override Task BeginneAsync(IContext context)
     {
-        // PF-5: ein Vorgang ohne Nachricht passiviert. Ein offener, stiller Vorgang wird nur noch selten geheilt (Abstand bis 1 h) — beim
-        //   Stoppen geht sein Stand deshalb durabel, damit die nächste Aktivierung dort weiterliest statt beim Beginn des Vorgangs.
-        if (Infrastructure.Lebenszyklus.Passivierung.Behandle(context, _leerlauf)) return;
-        switch (context.Message)
+        var identity = context.ClusterIdentity()?.Identity;
+        if (identity != null && Guid.TryParse(identity, out var korr))
+            _korrelation = korr;
+        // Das EINE Emit-Primitiv, an den Cluster gebunden (Cluster ist zur Spawn-Zeit fertig — (A)-Fix).
+        _bote = new Bote(_cluster);
+        _emitter = new CommandEmitter(_bote);
+        _manager = new ProzessManager(_eventStore, _registry, ErzeugeDispatch(), _offenIndex, _deadLetters, _markingStore,
+            rufe: _rufe,
+            jetzt: _uhr is null ? null : _uhr.JetztAsync);
+        return Task.CompletedTask;
+    }
+
+    protected override async Task BehandleAsync(IContext context)
+    {
+        if (context.Message is not ProzessWake w) return;
+        if (_manager is not null)
         {
-            case Stopping when _manager is not null:
-                await _manager.SichereMarkingAsync(_korrelation, CancellationToken.None);
-                break;
-
-            case Started:
-                var identity = context.ClusterIdentity()?.Identity;
-                if (identity != null && Guid.TryParse(identity, out var korr))
-                    _korrelation = korr;
-                // Das EINE Emit-Primitiv, an den Cluster gebunden (Cluster ist zur Spawn-Zeit fertig — (A)-Fix).
-                _emitter = new CommandEmitter(_cluster);
-                _manager = new ProzessManager(_eventStore, _registry, ErzeugeDispatch(), _offenIndex, _deadLetters, _markingStore,
-                    rufe: _rufe,
-                    jetzt: _uhr is null ? null : _uhr.JetztAsync);
-                break;
-
-            case ProzessWake w:
-                if (_manager is not null)
-                {
-                    if (w.ProzessNameFürStart is string name)
-                        await _manager.StarteAsync(_korrelation, name, w.QuellStream, w.QuellVersion, context.CancellationToken);
-                    else
-                        await _manager.WakeAsync(_korrelation, context.CancellationToken, w.VomBackstop, w.QuellStream, w.QuellVersion, w.Vorgang);
-                }
-                context.Respond(new WakeAck());
-                break;
+            if (w.ProzessNameFürStart is string name)
+                await _manager.StarteAsync(_korrelation, name, w.QuellStream, w.QuellVersion, Stopp);
+            else
+                await _manager.WakeAsync(_korrelation, Stopp, w.VomBackstop, w.QuellStream, w.QuellVersion, w.Vorgang);
         }
+        context.Respond(new WakeAck());
+    }
+
+    /// <summary>Eine gescheiterte Weckung ist nicht bestätigt — der Poll hält seine Marke, der Backstop weckt erneut.</summary>
+    protected override object? Fehlerantwort(object nachricht, Exception fehler)
+        => nachricht is ProzessWake ? new WakeAck(Aufgeholt: false) : null;
+
+    /// <summary>
+    /// Ein offener, stiller Vorgang wird nur noch selten geheilt (Abstand bis 1 h) — beim Stoppen geht sein Stand deshalb durabel, damit die
+    /// nächste Aktivierung dort weiterliest statt beim Beginn des Vorgangs. Gebunden: ein Stopp wartet nicht ohne Ende auf die Datenbank.
+    /// </summary>
+    protected override async Task BeimStoppenAsync(IContext context)
+    {
+        if (_manager is null) return;
+        using var frist = new CancellationTokenSource(StandardAbwarten);
+        await _manager.SichereMarkingAsync(_korrelation, frist.Token);
     }
 
     /// <summary>
@@ -113,13 +122,9 @@ public sealed class ProzessManagerActor : IActor
     /// und Vorgang als Quelle und — wenn bekannt — der Version, ab der der Ausgang im Ziel-Stream steht.
     /// </summary>
     private async Task WeckeSelbst(Guid korrelation, Guid ziel, Guid vorgang, int abVersion, CancellationToken ct)
-    {
-        var identity = ClusterIdentity.Create(korrelation.ToString(), KindName);
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(5));
-        try { await _cluster.RequestAsync<WakeAck>(identity, new ProzessWake(ziel, abVersion, null, Vorgang: vorgang), cts.Token); }
-        catch (OperationCanceledException) { /* Poll-Backstop heilt */ }
-    }
+        // verloren → der Poll-Backstop heilt
+        => await _bote!.FrageAsync<WakeAck>(ClusterIdentity.Create(korrelation.ToString(), KindName),
+            new ProzessWake(ziel, abVersion, null, Vorgang: vorgang), TimeSpan.FromSeconds(5), ct);
 
     /// <summary>
     /// Der Ziel-Send über das EINE Emit-Primitiv (§5 Weg a): der deterministische <c>vorgang</c> IST die

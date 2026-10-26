@@ -1,5 +1,6 @@
 using Abstractions;
 using Infrastructure.Aggregate;
+using Infrastructure.Lebenszyklus;
 using Infrastructure.Mapping;
 using Infrastructure.PubSub;
 using Microsoft.Extensions.Logging;
@@ -19,13 +20,14 @@ namespace Infrastructure.Aggregate.ActorSystem;
 /// 
 /// ★ OneOf-Migration: Decider wirft keine Exceptions mehr für Domänen-Ablehnungen.
 ///   Stattdessen yieldet er ITransientEvent (z.B. BestandNichtAusreichend).
-///   Der Actor trennt persistent/transient und sendet Ablehnungen per Targeted Delivery.
+///   Der Actor trennt persistent/transient und meldet Ablehnungen per Targeted Delivery (verlierbar, ohne zu warten).
 ///   CommandFailed bleibt für technische Fehler (catch-Block).
 ///
 /// ★ Phase 4: IVersionTracker (optional) für Redis-basierte Stale Detection.
-/// ★ Phase 4: CommandResult.NewVersion wird nach Apply gesetzt.
+/// ★ Das <see cref="CommandResult"/> trägt nur Ausgang, Versionen und Ablehnung; die Events stehen im Log.
+/// ★ Lebenszyklus aus dem Rahmen (<see cref="RahmenActor"/>): Passivierung nur, wenn kein Commit läuft und kein Command wartet.
 /// </summary>
-public abstract class AggregateActorBase<TState> : IActor
+public abstract class AggregateActorBase<TState> : RahmenActor
     where TState : class, IState, new()
 {
     private readonly IAggregateHandlerFactory _handlerFactory;
@@ -46,9 +48,6 @@ public abstract class AggregateActorBase<TState> : IActor
     //   → beobachtbar machen (Dead-Letter), aber nur EINMAL je Aktivierung statt per-Command-Spam.
     private readonly IDeadLetterSink? _deadLetters;
     private bool _vergiftetGemeldet;
-
-    // PF-5: Leerlauf bis zur Passivierung (Snapshot beim Stoppen, die nächste Nachricht rehydriert).
-    private readonly TimeSpan _leerlauf;
 
     private IAggregateHandler? _handler;  // Wird nach State-Load erstellt!
     private TState? _state;
@@ -86,9 +85,10 @@ public abstract class AggregateActorBase<TState> : IActor
         string? snapshotSchemaVersion = null,
         SnapshotOptions? snapshotOptions = null,
         IDeadLetterSink? deadLetters = null,
-        Infrastructure.Lebenszyklus.Passivierung? passivierung = null)
+        Passivierung? passivierung = null)
+        // PF-5: Leerlauf bis zur Passivierung (Snapshot beim Stoppen, die nächste Nachricht rehydriert).
+        : base(logger, (passivierung ?? Passivierung.Standard).Aggregat)
     {
-        _leerlauf = (passivierung ?? Infrastructure.Lebenszyklus.Passivierung.Standard).Aggregat;
         _handlerFactory = handlerFactory;
         _eventStore = eventStore;
         _versionTracker = versionTracker;
@@ -104,60 +104,50 @@ public abstract class AggregateActorBase<TState> : IActor
         _deadLetters = deadLetters;
     }
 
-    public async Task ReceiveAsync(IContext context)
+    /// <summary>Kein Passivieren, solange ein Commit läuft oder Commands warten — sie bekämen sonst nie eine Antwort.</summary>
+    protected override bool Beschaeftigt => base.Beschaeftigt || _imCommit || _wartend.Count > 0;
+
+    protected override Task BeginneAsync(IContext context)
     {
-        // Kein Passivieren, solange ein Commit läuft oder Commands warten — sie bekämen sonst nie eine Antwort.
-        if (context.Message is ReceiveTimeout && (_imCommit || _wartend.Count > 0)) return;
-        if (Infrastructure.Lebenszyklus.Passivierung.Behandle(context, _leerlauf)) return;
+        _identitaetGueltig = Guid.TryParse(context.ClusterIdentity()?.Identity, out _id);
+        _logger?.LogDebug("[Actor] Started {Type}/{Id}", typeof(TState).Name, _id);
+        return Task.CompletedTask;
+    }
+
+    protected override Task BeimStoppenAsync(IContext context)
+    {
+        _logger?.LogDebug("[Actor] Stopping for ID: {Id}", _id);
+        // ★ Snapshot bei Deaktivierung (best-effort): wenn seit dem letzten Snapshot Events
+        //   kamen, den aktuellen State festhalten. Fire-and-forget — Stopping darf nicht blocken. Nie mitten in einem Bündel:
+        //   dann trüge der State noch nicht committete Entscheidungen.
+        if (!_imCommit) TryWriteSnapshot();
+        return Task.CompletedTask;
+    }
+
+    protected override async Task BehandleAsync(IContext context)
+    {
+        if (context.Message is not CommandEnvelope envelope) return;
         try
         {
-            switch (context.Message)
+            if (!_identitaetGueltig || envelope.AggregateId != _id)
             {
-                case Started:
-                    _identitaetGueltig = Guid.TryParse(context.ClusterIdentity()?.Identity, out _id);
-                    _logger?.LogDebug("[Actor] Started {Type}/{Id}", typeof(TState).Name, _id);
-                    break;
-
-                case CommandEnvelope envelope:
-                    if (!_identitaetGueltig || envelope.AggregateId != _id)
-                    {
-                        await LehneFremdeIdAbAsync(context, envelope);
-                        break;
-                    }
-                    if (!_initialized)
-                    {
-                        await InitializeAsync();
-                    }
-                    _wartend.Enqueue((envelope, context.Sender));
-                    if (!_imCommit) await StarteBuendelAsync(context);
-                    break;
-
-                case Stopping:
-                    _logger?.LogDebug("[Actor] Stopping for ID: {Id}", _id);
-                    // ★ Snapshot bei Deaktivierung (best-effort): wenn seit dem letzten Snapshot Events
-                    //   kamen, den aktuellen State festhalten. Fire-and-forget — Stopping darf nicht blocken. Nie mitten in einem Bündel:
-                    //   dann trüge der State noch nicht committete Entscheidungen.
-                    if (!_imCommit) TryWriteSnapshot();
-                    break;
+                LehneFremdeIdAb(context, envelope);
+                return;
             }
+            if (!_initialized)
+            {
+                await InitializeAsync();
+            }
+            _wartend.Enqueue((envelope, context.Sender));
+            if (!_imCommit) await StarteBuendelAsync(context);
         }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "[Actor] Error in ReceiveAsync");
 
-            // WICHTIG: Auch bei Fehler antworten, sonst Retry!
-            if (context.Message is CommandEnvelope envelope)
-            {
-                // CommandFailed für technische Fehler
-                await TryPublishCommandFailedAsync(envelope, ex.Message);
-                
-                context.Respond(new CommandResult 
-                { 
-                    Success = false, 
-                    ErrorMessage = ex.Message,
-                    AggregateId = _id
-                });
-            }
+            // WICHTIG: Auch bei Fehler antworten, sonst Retry! Der Fehler ist beantwortet — kein Neustart.
+            MeldeCommandFailed(envelope, ex.Message);
+            context.Respond(new CommandResult { Success = false, ErrorMessage = ex.Message });
         }
     }
 
@@ -165,12 +155,12 @@ public abstract class AggregateActorBase<TState> : IActor
     /// Ein Command, dessen Ziel nicht die Identität dieses Actors ist (falsch geroutet oder eine fremde Id): abgelehnt, bevor geladen wird —
     /// technischer Fehler an den Absender und gezielt an die Sitzung, nichts gelesen, nichts geschrieben.
     /// </summary>
-    private async Task LehneFremdeIdAbAsync(IContext context, CommandEnvelope envelope)
+    private void LehneFremdeIdAb(IContext context, CommandEnvelope envelope)
     {
         var grund = $"Command an {typeof(TState).Name}/{envelope.AggregateId} erreichte die Identität '{context.ClusterIdentity()?.Identity}' — abgelehnt";
         _logger?.LogWarning("[Actor] {Grund}", grund);
-        await TryPublishCommandFailedAsync(envelope, grund);
-        context.Respond(new CommandResult { Success = false, ErrorMessage = grund, AggregateId = envelope.AggregateId });
+        MeldeCommandFailed(envelope, grund);
+        context.Respond(new CommandResult { Success = false, ErrorMessage = grund });
     }
 
     private async Task InitializeAsync()
@@ -238,8 +228,8 @@ public abstract class AggregateActorBase<TState> : IActor
             }
             catch (AppendGescheitertException ex)
             {
-                await TryPublishCommandFailedAsync(cmdEnvelope, ex.InnerException?.Message ?? ex.Message);
-                Antworte(context, new CommandResult { Success = false, ErrorMessage = ex.InnerException?.Message ?? ex.Message, AggregateId = _id });
+                MeldeCommandFailed(cmdEnvelope, ex.InnerException?.Message ?? ex.Message);
+                Antworte(context, new CommandResult { Success = false, ErrorMessage = ex.InnerException?.Message ?? ex.Message });
                 return;
             }
         }
@@ -316,8 +306,8 @@ public abstract class AggregateActorBase<TState> : IActor
     /// <summary>Die Quittung für einen Command, der laut Log schon entschieden ist (nach einem mehrdeutigen Commit).</summary>
     private void QuittiereEntschieden(IContext context, AppendErgebnis ergebnis)
         => Antworte(context, ergebnis == AppendErgebnis.SchonAbgelehnt
-            ? new CommandResult { Success = false, Abgelehnt = true, AggregateId = _id, ErrorMessage = "Vorgang bereits abgelehnt (Framework-Inbox)", NewVersion = _state!.Version }
-            : new CommandResult { Success = true, AggregateId = _id, NewVersion = _state!.Version });
+            ? new CommandResult { Success = false, Abgelehnt = true, ErrorMessage = "Vorgang bereits abgelehnt (Framework-Inbox)", NewVersion = _state!.Version }
+            : new CommandResult { Success = true, NewVersion = _state!.Version });
 
     /// <summary>Antwortet dem Absender des Commands, den der Einzel-Pfad gerade behandelt.</summary>
     private void Antworte(IContext context, CommandResult ergebnis)
@@ -374,8 +364,8 @@ public abstract class AggregateActorBase<TState> : IActor
                 // Nicht rehydrierbar (vergiftet): jeder Command bekommt den Fehler, die nächste Nachricht versucht es erneut.
                 foreach (var (env, an) in buendel)
                 {
-                    await TryPublishCommandFailedAsync(env, ex.Message);
-                    if (an is not null) context.Send(an, new CommandResult { Success = false, ErrorMessage = ex.Message, AggregateId = _id });
+                    MeldeCommandFailed(env, ex.Message);
+                    if (an is not null) context.Send(an, new CommandResult { Success = false, ErrorMessage = ex.Message });
                 }
                 continue;
             }
@@ -422,7 +412,7 @@ public abstract class AggregateActorBase<TState> : IActor
                         foreach (var e in entscheidungen.Where(e => !e.Beantwortet && e.An is not null))
                             context.Send(e.An!, e.Ergebnis ?? e.Sofort ?? new CommandResult
                             {
-                                Success = e.Ausgang == KommandoAusgang.Gewirkt, Abgelehnt = e.Ausgang == KommandoAusgang.Abgelehnt, AggregateId = _id,
+                                Success = e.Ausgang == KommandoAusgang.Gewirkt, Abgelehnt = e.Ausgang == KommandoAusgang.Abgelehnt,
                                 NewVersion = e.VersionNachher,
                             });
                     }
@@ -473,24 +463,24 @@ public abstract class AggregateActorBase<TState> : IActor
                     _state!.Version, expectedVersion))
         {
             case CommandVorpruefung.Ergebnis.IdempotenterErfolg:
-                e.Sofort = new CommandResult { Success = true, AggregateId = _id, NewVersion = _state.Version };
+                e.Sofort = new CommandResult { Success = true, NewVersion = _state.Version };
                 return;
             case CommandVorpruefung.Ergebnis.IdempotenteAblehnung:
                 e.Sofort = new CommandResult
                 {
-                    Success = false, Abgelehnt = true, AggregateId = _id, ErrorMessage = "Vorgang bereits abgelehnt (Framework-Inbox)", NewVersion = _state.Version,
+                    Success = false, Abgelehnt = true, ErrorMessage = "Vorgang bereits abgelehnt (Framework-Inbox)", NewVersion = _state.Version,
                 };
                 return;
             case CommandVorpruefung.Ergebnis.VersionsKonflikt:
                 if (await NachgeschlagenAsync(env.CommandId, wiederholung: true) is { } schon)
                 {
                     e.Sofort = schon == AppendErgebnis.SchonAbgelehnt
-                        ? new CommandResult { Success = false, Abgelehnt = true, AggregateId = _id, ErrorMessage = "Vorgang bereits abgelehnt (Framework-Inbox)", NewVersion = _state.Version }
-                        : new CommandResult { Success = true, AggregateId = _id, NewVersion = _state.Version };
+                        ? new CommandResult { Success = false, Abgelehnt = true, ErrorMessage = "Vorgang bereits abgelehnt (Framework-Inbox)", NewVersion = _state.Version }
+                        : new CommandResult { Success = true, NewVersion = _state.Version };
                     return;
                 }
                 e.Fehler = $"Concurrency conflict: expected version {expectedVersion}, actual {_state.Version}";
-                e.Sofort = new CommandResult { Success = false, ErrorMessage = e.Fehler, AggregateId = _id, NewVersion = _state.Version };
+                e.Sofort = new CommandResult { Success = false, ErrorMessage = e.Fehler, NewVersion = _state.Version };
                 return;
         }
 
@@ -502,7 +492,7 @@ public abstract class AggregateActorBase<TState> : IActor
         catch (Exception ex)
         {
             e.Fehler = ex.Message;
-            e.Sofort = new CommandResult { Success = false, ErrorMessage = ex.Message, AggregateId = _id };
+            e.Sofort = new CommandResult { Success = false, ErrorMessage = ex.Message };
             return;
         }
         var persistent = alle.Where(x => x is not ITransientEvent).ToList();
@@ -512,7 +502,7 @@ public abstract class AggregateActorBase<TState> : IActor
         {
             e.Fehler = $"Decider für {env.Payload.GetType().Name} lieferte ein ungültiges gemischtes Ergebnis: {persistent.Count} persistente(s) " +
                        $"Event(s) + {ablehnungen.Count} Ablehnung(en). Eine Ablehnung (ITransientEvent) muss das einzige zurückgegebene Event sein.";
-            e.Sofort = new CommandResult { Success = false, ErrorMessage = e.Fehler, AggregateId = _id };
+            e.Sofort = new CommandResult { Success = false, ErrorMessage = e.Fehler };
             return;
         }
 
@@ -565,7 +555,7 @@ public abstract class AggregateActorBase<TState> : IActor
                 }
                 else if (e.Sofort is { } sofort)
                 {
-                    if (e.Fehler is { } fehler) await TryPublishCommandFailedAsync(e.Env, fehler);
+                    if (e.Fehler is { } fehler) MeldeCommandFailed(e.Env, fehler);
                     e.Ergebnis = sofort;
                 }
                 else if (e.Ausgang == KommandoAusgang.Abgelehnt)
@@ -575,10 +565,10 @@ public abstract class AggregateActorBase<TState> : IActor
                     // Spur: eine Ablehnung als verlierbarer Hinweis an die Werkbank.
                     Infrastructure.Einblick.SpurHinweise.Melde(Infrastructure.Einblick.SpurHinweise.Ablehnung, e.Spur?.Wirker, e.Env.Ursache,
                         e.Env.CorrelationId, $"{e.Env.Payload.GetType().Name} abgelehnt: {e.Ablehnung!.GetType().Name}");
-                    await TryPublishRejectionAsync(e.Env, e.Ablehnung);
+                    MeldeAblehnung(e.Env, e.Ablehnung);
                     e.Ergebnis = new CommandResult
                     {
-                        Success = false, Abgelehnt = true, AggregateId = _id, RejectionEvent = e.Ablehnung, ErrorMessage = e.Ablehnung.ToString(),
+                        Success = false, Abgelehnt = true, RejectionEvent = e.Ablehnung, ErrorMessage = e.Ablehnung.ToString(),
                         NewVersion = e.VersionNachher, ErsteVersion = e.VersionVorher + 1,
                     };
                 }
@@ -593,7 +583,7 @@ public abstract class AggregateActorBase<TState> : IActor
                     }
                     e.Ergebnis = new CommandResult
                     {
-                        Success = true, AggregateId = _id, Events = e.Persistent, NewVersion = e.VersionNachher, ErsteVersion = e.VersionVorher + 1,
+                        Success = true, NewVersion = e.VersionNachher, ErsteVersion = e.VersionVorher + 1,
                     };
                 }
             }
@@ -627,8 +617,8 @@ public abstract class AggregateActorBase<TState> : IActor
             catch (Exception ex)
             {
                 _logger?.LogError(ex, "[Actor] Einzel-Pfad für {Command} gescheitert", env.Payload.GetType().Name);
-                await TryPublishCommandFailedAsync(env, ex.Message);
-                Antworte(context, new CommandResult { Success = false, ErrorMessage = ex.Message, AggregateId = _id });
+                MeldeCommandFailed(env, ex.Message);
+                Antworte(context, new CommandResult { Success = false, ErrorMessage = ex.Message });
             }
             finally
             {
@@ -670,7 +660,7 @@ public abstract class AggregateActorBase<TState> : IActor
                         expectedVersion))
             {
                 case CommandVorpruefung.Ergebnis.IdempotenterErfolg:
-                    Antworte(context, new CommandResult { Success = true, AggregateId = _id, NewVersion = _state.Version });
+                    Antworte(context, new CommandResult { Success = true, NewVersion = _state.Version });
                     return;
 
                 case CommandVorpruefung.Ergebnis.IdempotenteAblehnung:
@@ -678,7 +668,6 @@ public abstract class AggregateActorBase<TState> : IActor
                     {
                         Success = false,
                         Abgelehnt = true,
-                        AggregateId = _id,
                         ErrorMessage = "Vorgang bereits abgelehnt (Framework-Inbox)",
                         NewVersion = _state.Version
                     });
@@ -694,12 +683,11 @@ public abstract class AggregateActorBase<TState> : IActor
                     }
                     var errorMsg = $"Concurrency conflict: expected version {expectedVersion}, actual {_state.Version}";
                     _logger?.LogDebug("[Actor] {ErrorMsg}", errorMsg);
-                    await TryPublishCommandFailedAsync(cmdEnvelope, errorMsg);
+                    MeldeCommandFailed(cmdEnvelope, errorMsg);
                     Antworte(context, new CommandResult
                     {
                         Success = false,
                         ErrorMessage = errorMsg,
-                        AggregateId = _id,
                         NewVersion = _state.Version  // Pipeline braucht die aktuelle Version für Retry
                     });
                     return;
@@ -728,8 +716,6 @@ public abstract class AggregateActorBase<TState> : IActor
                 Antworte(context, new CommandResult
                 {
                     Success = true,
-                    AggregateId = _id,
-                    Events = allEvents,
                     NewVersion = _state.Version
                 });
                 return;
@@ -785,13 +771,12 @@ public abstract class AggregateActorBase<TState> : IActor
                 }
 
                 // Targeted Delivery — nur an den Aufrufer
-                await TryPublishRejectionAsync(cmdEnvelope, rejection);
+                MeldeAblehnung(cmdEnvelope, rejection);
 
                 Antworte(context, new CommandResult
                 {
                     Success = false,
                     Abgelehnt = true,
-                    AggregateId = _id,
                     RejectionEvent = rejection,
                     ErrorMessage = rejection.ToString()
                 });
@@ -854,8 +839,6 @@ public abstract class AggregateActorBase<TState> : IActor
                 Antworte(context, new CommandResult
                 {
                     Success = true,
-                    AggregateId = _id,
-                    Events = persistentEvents,
                     NewVersion = _state.Version,
                     ErsteVersion = expectedVersion + 1,
                 });
@@ -880,7 +863,6 @@ public abstract class AggregateActorBase<TState> : IActor
                 Antworte(context, new CommandResult
                 {
                     Success = true,
-                    AggregateId = _id,
                     NewVersion = _state?.Version ?? (expectedVersion + persistentEvents.Count)
                 });
             }
@@ -891,13 +873,12 @@ public abstract class AggregateActorBase<TState> : IActor
             // (DB-Timeout, Null-Referenz, etc. — nicht für Domänen-Ablehnungen)
             _logger?.LogError(ex, "[Actor] Technical error: {Message}", ex.Message);
 
-            await TryPublishCommandFailedAsync(cmdEnvelope, ex.Message);
+            MeldeCommandFailed(cmdEnvelope, ex.Message);
             
             Antworte(context, new CommandResult 
             { 
                 Success = false, 
-                ErrorMessage = ex.Message,
-                AggregateId = _id
+                ErrorMessage = ex.Message
             });
         }
     }
@@ -954,7 +935,6 @@ public abstract class AggregateActorBase<TState> : IActor
                 Id = Guid.NewGuid(),
                 Quelle = "aggregate-rehydrate",
                 CommandType = "(Rehydration)",
-                AggregateId = _id,
                 AggregateType = typeof(TState).Name,
                 Grund = $"Aggregat nicht rehydrierbar (Applier/Fold wirft deterministisch): {ursache.GetType().Name}: {ursache.Message}",
                 Versuche = 0,
@@ -1080,7 +1060,7 @@ public abstract class AggregateActorBase<TState> : IActor
         //   und der Per-Stream-Command-Durchsatz hängt nicht mehr an 6 Broker-Round-Trips/Event.
         foreach (var eventEnvelope in envelopes)
         {
-            _publisher!.PublishFireAndForget(eventEnvelope);
+            _publisher!.Melde(eventEnvelope);
 
             // ★ Phase 1 (1c): zusätzlich das typisierte Signal veröffentlichen (docs/03 §3.6).
             //   Best-effort — ein Signal ist nur ein Weckruf und DARF verloren gehen
@@ -1089,7 +1069,7 @@ public abstract class AggregateActorBase<TState> : IActor
                 eventEnvelope.Payload, eventEnvelope.AggregateId, eventEnvelope.AggregateVersion);
             if (signal != null)
             {
-                _publisher.PublishFireAndForget(new SignalEnvelope
+                _publisher.Melde(new SignalEnvelope
                 {
                     Signal = signal,
                     CorrelationId = eventEnvelope.CorrelationId,
@@ -1102,11 +1082,10 @@ public abstract class AggregateActorBase<TState> : IActor
     }
 
     /// <summary>
-    /// ★ NEU: Publiziert ein Ablehnungs-Event per Targeted Delivery an den Aufrufer.
-    /// Verwendet OriginSessionId für die direkte Zustellung.
-    /// Das Ablehnungs-Event ist das typisierte Domänen-Event (z.B. BestandNichtAusreichend).
+    /// Meldet ein Ablehnungs-Event per Targeted Delivery an den Aufrufer (verlierbar, Invariante 6; der Turn wartet nicht auf die Shards).
+    /// Verwendet OriginSessionId für die direkte Zustellung. Das Ablehnungs-Event ist das typisierte Domänen-Event (z.B. BestandNichtAusreichend).
     /// </summary>
-    private async Task TryPublishRejectionAsync(CommandEnvelope cmdEnvelope, IEvent rejection)
+    private void MeldeAblehnung(CommandEnvelope cmdEnvelope, IEvent rejection)
     {
         if (_publisher == null || string.IsNullOrEmpty(cmdEnvelope.OriginSessionId))
         {
@@ -1114,35 +1093,25 @@ public abstract class AggregateActorBase<TState> : IActor
             return;
         }
 
-        try
+        _publisher.Melde(new EventEnvelope
         {
-            var envelope = new EventEnvelope
-            {
-                AggregateId = _id,
-                AggregateVersion = _state?.Version ?? 0,
-                AggregateType = typeof(TState).Name,
-                CorrelationId = cmdEnvelope.CorrelationId,
-                CausationId = cmdEnvelope.CommandId.ToString(),
-                UserId = cmdEnvelope.UserId,
-                Payload = rejection,
-                TargetSubscriberId = cmdEnvelope.OriginSessionId  // Targeted Delivery!
-            };
-
-            await _publisher.PublishAsync(envelope);
-            _logger?.LogDebug("[Actor] Published rejection {Rejection} to '{Session}'", rejection.GetType().Name, cmdEnvelope.OriginSessionId);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "[Actor] Failed to publish rejection");
-        }
+            AggregateId = _id,
+            AggregateVersion = _state?.Version ?? 0,
+            AggregateType = typeof(TState).Name,
+            CorrelationId = cmdEnvelope.CorrelationId,
+            CausationId = cmdEnvelope.CommandId.ToString(),
+            UserId = cmdEnvelope.UserId,
+            Payload = rejection,
+            TargetSubscriberId = cmdEnvelope.OriginSessionId  // Targeted Delivery!
+        });
+        _logger?.LogDebug("[Actor] Rejection {Rejection} an '{Session}' gemeldet", rejection.GetType().Name, cmdEnvelope.OriginSessionId);
     }
 
     /// <summary>
-    /// Publiziert ein CommandFailed Event für technische Fehler.
-    /// Verwendet Targeted Delivery über die OriginSessionId.
-    /// ★ Jetzt nur noch für technische Fehler — Domänen-Ablehnungen nutzen TryPublishRejectionAsync.
+    /// Meldet ein CommandFailed Event für technische Fehler (verlierbar, Targeted Delivery über die OriginSessionId).
+    /// Nur für technische Fehler — Domänen-Ablehnungen nutzen <see cref="MeldeAblehnung"/>.
     /// </summary>
-    private async Task TryPublishCommandFailedAsync(CommandEnvelope cmdEnvelope, string reason)
+    private void MeldeCommandFailed(CommandEnvelope cmdEnvelope, string reason)
     {
         if (_publisher == null || string.IsNullOrEmpty(cmdEnvelope.OriginSessionId))
         {
@@ -1150,29 +1119,20 @@ public abstract class AggregateActorBase<TState> : IActor
             return;
         }
 
-        try
+        _publisher.Melde(new EventEnvelope
         {
-            var failedEvent = new EventEnvelope
-            {
-                AggregateId = _id,
-                AggregateVersion = _state?.Version ?? 0,
-                AggregateType = typeof(TState).Name,
-                CorrelationId = cmdEnvelope.CorrelationId,
-                CausationId = cmdEnvelope.CommandId.ToString(),
-                UserId = cmdEnvelope.UserId,
-                Payload = new CommandFailed(
-                    cmdEnvelope.Payload.GetType().Name,
-                    reason,
-                    _id.ToString()),
-                TargetSubscriberId = cmdEnvelope.OriginSessionId
-            };
-
-            await _publisher.PublishAsync(failedEvent);
-            _logger?.LogDebug("[Actor] Published CommandFailed to '{Session}'", cmdEnvelope.OriginSessionId);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "[Actor] Failed to publish CommandFailed");
-        }
+            AggregateId = _id,
+            AggregateVersion = _state?.Version ?? 0,
+            AggregateType = typeof(TState).Name,
+            CorrelationId = cmdEnvelope.CorrelationId,
+            CausationId = cmdEnvelope.CommandId.ToString(),
+            UserId = cmdEnvelope.UserId,
+            Payload = new CommandFailed(
+                cmdEnvelope.Payload.GetType().Name,
+                reason,
+                _id.ToString()),
+            TargetSubscriberId = cmdEnvelope.OriginSessionId
+        });
+        _logger?.LogDebug("[Actor] CommandFailed an '{Session}' gemeldet", cmdEnvelope.OriginSessionId);
     }
 }

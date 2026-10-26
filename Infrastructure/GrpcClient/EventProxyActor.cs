@@ -1,6 +1,7 @@
 // REPO-PFAD: Infrastructure/GrpcClient/EventProxyActor.cs  (MODIFIZIERT)
 using Abstractions;
 using Grpc.Core;
+using Infrastructure.Lebenszyklus;
 using Infrastructure.Serialization;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -51,7 +52,7 @@ internal record ServerNachrichtMsg(Cqrs.Leitung.ServerMessage Nachricht);
 /// - Keine Response-Korrelation (macht CqrsClientServiceImpl)
 /// - Kein State außer Stream-Referenz
 /// </summary>
-public class EventProxyActor : IActor
+public class EventProxyActor : RahmenActor
 {
     private readonly IServerStreamWriter<Cqrs.Leitung.ServerMessage> _responseStream;
     private readonly ProtoMessageMapper _mapper;
@@ -63,6 +64,7 @@ public class EventProxyActor : IActor
         ProtoMessageMapper mapper,
         string sessionId,
         ILogger? logger = null)
+        : base(logger)
     {
         _responseStream = responseStream ?? throw new ArgumentNullException(nameof(responseStream));
         _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
@@ -70,14 +72,22 @@ public class EventProxyActor : IActor
         _logger = logger ?? NullLogger.Instance;
     }
 
-    public async Task ReceiveAsync(IContext context)
+    protected override Task BeginneAsync(IContext context)
+    {
+        _logger.LogDebug("[EventProxy-{Session}] Started", _sessionId);
+        return Task.CompletedTask;
+    }
+
+    protected override Task BeimStoppenAsync(IContext context)
+    {
+        _logger.LogDebug("[EventProxy-{Session}] Stopping", _sessionId);
+        return Task.CompletedTask;
+    }
+
+    protected override async Task BehandleAsync(IContext context)
     {
         switch (context.Message)
         {
-            case Started:
-                _logger.LogDebug("[EventProxy-{Session}] Started", _sessionId);
-                break;
-
             case EventEnvelope envelope:
                 await HandleEventEnvelopeAsync(envelope);
                 break;
@@ -94,13 +104,6 @@ public class EventProxyActor : IActor
                 await HandleServerNachrichtAsync(nachricht);
                 break;
 
-            case Stopping:
-                _logger.LogDebug("[EventProxy-{Session}] Stopping", _sessionId);
-                break;
-
-            case Stopped:
-                _logger.LogDebug("[EventProxy-{Session}] Stopped", _sessionId);
-                break;
         }
     }
 

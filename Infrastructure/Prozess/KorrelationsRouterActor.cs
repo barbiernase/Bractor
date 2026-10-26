@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Abstractions;
 using Infrastructure.Projections;   // SignalEnvelope kommt aus Abstractions; BrokerSubscription aus PubSub
+using Infrastructure.Lebenszyklus;
 using Infrastructure.PubSub;
 using Proto;
 using Proto.Cluster;
@@ -16,7 +17,7 @@ namespace Infrastructure.Prozess;
 /// abonniert er die <c>StateChangeVia{Event}</c>-Signale aller teilnehmenden Prozess-Events; jedes
 /// eintreffende Signal reicht er an den Router, der daraus den zuständigen Prozess-Manager weckt.
 /// </summary>
-public sealed class KorrelationsRouterActor : IActor
+public sealed class KorrelationsRouterActor : RahmenActor
 {
     private readonly string _subscriberId;
     private readonly IReadOnlyList<Type> _signalTypes;
@@ -26,7 +27,6 @@ public sealed class KorrelationsRouterActor : IActor
     //   Nacheinander hielt der Read je Signal die Mailbox an: unter Last staute sie sich bis in den Leerlauf.
     private const int Gleichzeitig = 32;
     private readonly SemaphoreSlim _plaetze = new(Gleichzeitig);
-    private readonly CancellationTokenSource _ende = new();
 
     public KorrelationsRouterActor(string subscriberId, IReadOnlyList<Type> signalTypes, KorrelationsRouter router)
     {
@@ -35,33 +35,31 @@ public sealed class KorrelationsRouterActor : IActor
         _router = router;
     }
 
-    public async Task ReceiveAsync(IContext context)
+    protected override async Task BeginneAsync(IContext context)
     {
-        switch (context.Message)
-        {
-            case Started:
-                _subscription = new BrokerSubscription(context.System.Cluster(), _subscriberId, context.Self);
-                await _subscription.SubscribeAsync(_signalTypes);
-                break;
+        _subscription = new BrokerSubscription(context.System.Cluster(), _subscriberId, context.Self);
+        await _subscription.SubscribeAsync(_signalTypes, Stopp);
+    }
 
-            case SignalEnvelope env:
-                _ = RouteAsync(env.Signal);
-                break;
+    protected override Task BehandleAsync(IContext context)
+    {
+        if (context.Message is SignalEnvelope env)
+            _ = RouteAsync(env.Signal);
+        return Task.CompletedTask;
+    }
 
-            case Stopping:
-                _ende.Cancel();
-                if (_subscription != null)
-                    await _subscription.UnsubscribeAllAsync();
-                break;
-        }
+    protected override Task BeimStoppenAsync(IContext context)
+    {
+        _subscription?.AlleAbmelden();
+        return Task.CompletedTask;
     }
 
     private async Task RouteAsync(IStateChangeSignal signal)
     {
         try
         {
-            await _plaetze.WaitAsync(_ende.Token);
-            try { await _router.OnSignalAsync(signal, _ende.Token); }
+            await _plaetze.WaitAsync(Stopp);
+            try { await _router.OnSignalAsync(signal, Stopp); }
             finally { _plaetze.Release(); }
         }
         catch (OperationCanceledException) { /* Stopp */ }

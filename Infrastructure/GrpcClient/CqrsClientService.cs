@@ -1,6 +1,7 @@
 // REPO-PFAD: Infrastructure/GrpcClient/CqrsClientService.cs  (MODIFIZIERT)
 using System.Collections.Concurrent;
 using Abstractions;
+using Infrastructure.Lebenszyklus;
 using Infrastructure.Akteure;
 using Grpc.Core;
 using Infrastructure.Extensions;
@@ -37,6 +38,9 @@ namespace Infrastructure.GrpcClient;
 /// </summary>
 public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientServiceBase
 {
+    /// <summary>Wie lange ein Client-Trigger höchstens auf das Ack seiner Pipeline wartet (sie sendet dabei womöglich Commands).</summary>
+    private static readonly TimeSpan TriggerFrist = TimeSpan.FromSeconds(30);
+
     private readonly ActorSystem _actorSystem;
     private readonly ProtoMessageMapper _mapper;
     private readonly IAggregateDispatcher _dispatcher;
@@ -526,7 +530,7 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
                     if (string.IsNullOrWhiteSpace(envelope.AggregateType))
                         envelope = envelope with { AggregateType = AggregateDispatcherExtensions.ResolveAggregateType(envelope.Payload) };
                     if (AkteurVerweigerung.Baue(envelope, akteur.Name) is { } verweigert)
-                        await _publisher.PublishAsync(verweigert);
+                        _publisher.Melde(verweigert);
                     return;
                 }
             }
@@ -563,7 +567,7 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
                     if (string.IsNullOrWhiteSpace(envelope.AggregateType))
                         envelope = envelope with { AggregateType = AggregateDispatcherExtensions.ResolveAggregateType(envelope.Payload) };
                     if (AkteurVerweigerung.Baue(envelope, $"{vertrag.Name} (Vertrag: keine Antwort auf {c.CausationType})") is { } verweigert)
-                        await _publisher.PublishAsync(verweigert);
+                        _publisher.Melde(verweigert);
                     return;
                 }
                 envelope = envelope with
@@ -688,9 +692,8 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
                 return;
             }
 
-            var identity = ClusterIdentity.Create(pipelineId, $"Pipeline-{pipelineId}");
-            var ack = await _actorSystem.Cluster().RequestAsync<PipelineAck>(
-                identity, trigger, ct);
+            var ack = await new Bote(_actorSystem.Cluster(), _logger).FrageAsync<PipelineAck>(
+                PipelineTriggerSender.Identitaet(pipelineId), trigger, TriggerFrist, ct);
 
             await SendTriggerAckAsync(responseStream,
                 ack?.Accepted ?? false,
@@ -861,7 +864,7 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
             else if (!ImAuftrag.IstAkteur(envelope.UserId) && Infrastructure.Akteure.AkteurHerkunft.EindeutigerHalter(envelope.Payload.GetType()) is { } halter)
                 envelope = envelope with { UserId = halter };   // Tor aus: Herkunft laut Modell (der eine Akteur mit IDarf)
 
-            await _publisher.PublishAsync(envelope, ct);
+            _publisher.Melde(envelope);
 
             _logger.LogDebug("{Session} TransientEvent published: {Payload}", sessionId, envelope.Payload.GetType().Name);
         }
@@ -1058,17 +1061,13 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
     /// </summary>
     private FunktionsAnbieterSitzung BaueAnbieterSitzung(string sessionId, PID proxyPid, FunktionsAusfuehrer ausfuehrer)
     {
-        var cluster = _actorSystem.Cluster();
+        var bote = new Bote(_actorSystem.Cluster(), _logger);
         return new FunktionsAnbieterSitzung(
             $"{_actorSystem.Address}/{sessionId}",   // Arbeiter-Name am Vermittler: eindeutig über Knoten hinweg
             name => FunktionsAnbieterSitzung.LoeseImKatalog(name, Anwendung.Funktionen.Ergebnisse.Keys),
             f => Anwendung.Funktionen.Ergebnisse.TryGetValue(f, out var e) ? e : Array.Empty<Type>(),
-            (f, anfrage, ct) => cluster.RequestAsync<ArbeitZugeteilt>(FunktionsVermittlerActor.Identitaet(f), anfrage, ct),
-            async (f, nachricht) =>
-            {
-                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-                await cluster.RequestAsync<WakeAck>(FunktionsVermittlerActor.Identitaet(f), nachricht, cts.Token);
-            },
+            FunktionsAnbieter.Hole(bote),
+            FunktionsAnbieter.Melde(bote),
             (a, f) =>
             {
                 _actorSystem.Root.Send(proxyPid, new ServerNachrichtMsg(new Cqrs.Leitung.ServerMessage

@@ -1,4 +1,5 @@
 using Abstractions;
+using Infrastructure.Lebenszyklus;
 using Infrastructure.Projections;   // IClusterKindContributor, WakeAck
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -14,7 +15,7 @@ namespace Infrastructure.Funktionen;
 /// <see cref="FunktionsVermittlung"/>; eine <see cref="HoleArbeit"/>-Anfrage ohne Arbeit PARKT er bis zur Wartezeit
 /// (Long-Poll) und bedient sie, sobald ein Angebot kommt — so wartet kein Ausführer im Takt, und neue Arbeit geht sofort raus.
 /// </summary>
-public sealed class FunktionsVermittlerActor : IActor
+public sealed class FunktionsVermittlerActor : RahmenActor
 {
     public const string KindName = "funktions-vermittler";
 
@@ -31,14 +32,16 @@ public sealed class FunktionsVermittlerActor : IActor
         _jetzt = jetzt ?? (() => DateTimeOffset.UtcNow);
     }
 
-    public Task ReceiveAsync(IContext context)
+    protected override Task BeginneAsync(IContext context)
+    {
+        PlaneTick(context);
+        return Task.CompletedTask;
+    }
+
+    protected override Task BehandleAsync(IContext context)
     {
         switch (context.Message)
         {
-            case Started:
-                PlaneTick(context);
-                break;
-
             case AuftragAnbieten a:
                 _kern.Biete(a);
                 Bediene(context);
@@ -111,8 +114,12 @@ public sealed class FunktionsVermittlerActor : IActor
         }
     }
 
-    private static void PlaneTick(IContext context)
-        => context.ReenterAfter(Task.Delay(TimeSpan.FromSeconds(1)), () => context.Send(context.Self, new Tick()));
+    private void PlaneTick(IContext context)
+        => Neben(context, stopp => Task.Delay(TimeSpan.FromSeconds(1), stopp), _ =>
+        {
+            if (!Stopp.IsCancellationRequested) context.Send(context.Self, new Tick());
+            return Task.CompletedTask;
+        });
 
     /// <summary>Die Cluster-Identität des Vermittlers einer Funktion.</summary>
     public static ClusterIdentity Identitaet(Type funktion) => ClusterIdentity.Create(funktion.FullName ?? funktion.Name, KindName);
@@ -138,16 +145,26 @@ public static class FunktionsAnbieter
     {
         if (!Anwendung.Funktionen.AuftragZuFunktion.TryGetValue(auftrag.GetType(), out var funktion))
             throw new InvalidOperationException($"Der Auftrag {auftrag.GetType().Name} gehört zu keiner Funktion (IAuftrag<F>).");
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(5));
-        try
-        {
-            await system.Cluster().RequestAsync<WakeAck>(FunktionsVermittlerActor.Identitaet(funktion),
-                new AuftragAnbieten(vorgang, korrelation, akteur, auftrag, Spur.Aktuell?.Ursache, Spur.Aktuell?.Wirker), cts.Token);
-        }
-        catch (Exception ex) when (ex is OperationCanceledException or TimeoutException)
-        { /* der Dirigent bietet bei der nächsten Weckung erneut an (Backstop) */ }
+        // Ohne Antwort bietet der Dirigent bei der nächsten Weckung erneut an (Backstop).
+        await new Bote(system.Cluster()).FrageAsync<WakeAck>(FunktionsVermittlerActor.Identitaet(funktion),
+            new AuftragAnbieten(vorgang, korrelation, akteur, auftrag, Spur.Aktuell?.Ursache, Spur.Aktuell?.Wirker), TimeSpan.FromSeconds(5), ct);
     }
+
+    /// <summary>
+    /// Der Hol-Weg einer Anbieter-Sitzung zum Vermittler: eine Frage, deren Frist die Wartezeit des Long-Polls und Luft für die Antwort ist;
+    /// ohne Antwort holt die Sitzung erneut.
+    /// </summary>
+    public static Func<Type, HoleArbeit, CancellationToken, Task<ArbeitZugeteilt?>> Hole(Bote bote)
+        => (f, anfrage, ct) => bote.FrageAsync<ArbeitZugeteilt>(FunktionsVermittlerActor.Identitaet(f), anfrage,
+            TimeSpan.FromMilliseconds(Math.Max(0, anfrage.WarteMs)) + TimeSpan.FromSeconds(5), ct);
+
+    /// <summary>Der Melde-Weg einer Anbieter-Sitzung (Lebenszeichen, Erledigt): verlierbar, die Lease heilt.</summary>
+    public static Func<Type, object, Task> Melde(Bote bote)
+        => (f, nachricht) =>
+        {
+            bote.Melde(FunktionsVermittlerActor.Identitaet(f), nachricht);
+            return Task.CompletedTask;
+        };
 
     /// <summary>
     /// Einblick (Werkbank P4.7): die offenen Aufträge je Funktion — vom Vermittler jeder Funktion, bounded. Ein Vermittler, der nicht antwortet,
@@ -156,13 +173,9 @@ public static class FunktionsAnbieter
     public static async Task<IReadOnlyDictionary<string, IReadOnlyList<OffenerAuftrag>>> ListeOffeneAsync(
         ActorSystem system, IEnumerable<Type> funktionen, CancellationToken ct)
     {
+        var bote = new Bote(system.Cluster());
         var anfragen = funktionen.Distinct().Select(async f =>
-        {
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromSeconds(3));
-            try { return (f.Name, (await system.Cluster().RequestAsync<OffeneAuftraege>(FunktionsVermittlerActor.Identitaet(f), new ListeOffene(), cts.Token)).Auftraege); }
-            catch (Exception ex) when (ex is OperationCanceledException or TimeoutException) { return (f.Name, (IReadOnlyList<OffenerAuftrag>?)null); }
-        });
+            (f.Name, (await bote.FrageAsync<OffeneAuftraege>(FunktionsVermittlerActor.Identitaet(f), new ListeOffene(), TimeSpan.FromSeconds(3), ct))?.Auftraege));
         return (await Task.WhenAll(anfragen)).Where(x => x.Item2 != null).ToDictionary(x => x.Item1, x => x.Item2!);
     }
 }
@@ -177,7 +190,10 @@ public sealed class FunktionsAbholer : BackgroundService
     private static readonly TimeSpan LebenszeichenAlle = TimeSpan.FromSeconds(10);
     // Long-Poll unter dem Request-Timeout des Clusters (Standard 5 s) — sonst wiederholt der Cluster die Anfrage, während sie geparkt ist.
     private const int WarteMs = 4_000;
+    /// <summary>Frist einer Abhol-Frage: die Wartezeit des Long-Polls und Luft für die Antwort.</summary>
+    private static readonly TimeSpan HoleFrist = TimeSpan.FromMilliseconds(WarteMs) + TimeSpan.FromSeconds(5);
     private readonly ActorSystem _system;
+    private Bote? _bote;
     private readonly FunktionsAusfuehrer _ausfuehrer;
     private readonly IReadOnlyList<FunktionsBindung> _bindungen;
     private readonly ILogger<FunktionsAbholer>? _logger;
@@ -192,7 +208,10 @@ public sealed class FunktionsAbholer : BackgroundService
     }
 
     protected override Task ExecuteAsync(CancellationToken stoppingToken)
-        => Task.WhenAll(_bindungen.Select(b => HoleSchleifeAsync(b, stoppingToken)));
+    {
+        _bote = new Bote(_system.Cluster(), _logger);
+        return Task.WhenAll(_bindungen.Select(b => HoleSchleifeAsync(b, stoppingToken)));
+    }
 
     private async Task HoleSchleifeAsync(FunktionsBindung b, CancellationToken ct)
     {
@@ -210,8 +229,7 @@ public sealed class FunktionsAbholer : BackgroundService
                 ArbeitZugeteilt? zugeteilt = null;
                 try
                 {
-                    zugeteilt = await _system.Cluster().RequestAsync<ArbeitZugeteilt>(
-                        identitaet, new HoleArbeit(arbeiter, frei, WarteMs), ct);
+                    zugeteilt = await _bote!.FrageAsync<ArbeitZugeteilt>(identitaet, new HoleArbeit(arbeiter, frei, WarteMs), HoleFrist, ct);
                 }
                 finally
                 {
@@ -230,13 +248,8 @@ public sealed class FunktionsAbholer : BackgroundService
         }
     }
 
-    /// <summary>Lebenszeichen/Erledigt an den Vermittler — bounded, verlierbar (die Lease heilt).</summary>
-    private async Task MeldeAsync(ClusterIdentity identitaet, object nachricht)
-    {
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        try { await _system.Cluster().RequestAsync<WakeAck>(identitaet, nachricht, cts.Token); }
-        catch (Exception ex) when (ex is OperationCanceledException or TimeoutException) { }
-    }
+    /// <summary>Lebenszeichen/Erledigt an den Vermittler — verlierbar (die Lease heilt).</summary>
+    private void Melde(ClusterIdentity identitaet, object nachricht) => _bote!.Melde(identitaet, nachricht);
 
     private async Task FuehreAusAsync(AuftragAnbieten a, string arbeiter, ClusterIdentity identitaet, SemaphoreSlim slots, CancellationToken ct)
     {
@@ -246,14 +259,14 @@ public sealed class FunktionsAbholer : BackgroundService
             while (!lebt.IsCancellationRequested)
             {
                 try { await Task.Delay(LebenszeichenAlle, lebt.Token); } catch (OperationCanceledException) { return; }
-                await MeldeAsync(identitaet, new ArbeitLebt(a.Vorgang, arbeiter));
+                Melde(identitaet, new ArbeitLebt(a.Vorgang, arbeiter));
             }
         });
         try
         {
             using (Spur.Von(a.Ursache, a.Wirker))   // die Spur des Absenders (Regel/Fluss-Knoten), wie beim Anbieten
                 await _ausfuehrer.FuehreAusAsync(a.Korrelation, a.Auftrag, a.Vorgang, a.Akteur, ct);
-            await MeldeAsync(identitaet, new ArbeitErledigt(a.Vorgang));
+            Melde(identitaet, new ArbeitErledigt(a.Vorgang));
         }
         catch (Exception ex)
         {

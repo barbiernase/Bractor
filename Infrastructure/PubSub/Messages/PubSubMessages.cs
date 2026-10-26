@@ -13,9 +13,6 @@ public record Ack : IWireMessage;
 
 // Control Plane
 public record Activate : IWireMessage;
-public record GetStatus;   // node-lokaler Control-Pfad — NICHT über den Plane
-public record BrokerStatus(Type MessageType, int ShardCount, IReadOnlyList<ShardInfo> Shards);  // trägt System.Type → NIE Wire
-public record ShardInfo(int Index, bool IsAlive, int SubscriberCount);
 
 // Internal
 public record GetSubscriberCount : IWireMessage;
