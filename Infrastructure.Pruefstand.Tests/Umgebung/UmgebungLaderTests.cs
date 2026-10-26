@@ -164,8 +164,8 @@ public class UmgebungLaderTests
         if (name == "sim-main")
         {
             u.Transport.JsonEingang.Should().BeTrue("Sim: die Werkbank handelt als Akteur");
-            u.Funktionen["IBildVerkleinerung"].Worker!.Skript.Should().EndWith("funktions_worker.py");
-            u.Funktionen["IBildVerkleinerung"].Worker!.Argumente.Should().Contain(a => a.EndsWith("/cqrs-sim/main/preprocessed"));
+            u.Funktionen["IBildaufbereitung"].Worker!.Skript.Should().EndWith("funktions_worker.py");
+            u.Funktionen["IBildaufbereitung"].Worker!.Argumente.Should().Contain(a => a.EndsWith("/cqrs-sim/main/preprocessed"));
         }
         else u.Transport.JsonEingang.Should().BeFalse("Prod: kein JSON-Eingang");
     }
@@ -175,10 +175,14 @@ public class UmgebungLaderTests
         => FluentActions.Invoking(() => Gebunden(new() { ["IC"] = new() })).Should().Throw<InvalidOperationException>().WithMessage("*IC*");
 
     [Fact]
-    public void Die_generierte_Tabelle_kennt_alle_Funktionen_des_Bestands_mit_genau_einer_Implementierung()
+    public void Die_generierte_Tabelle_kennt_die_Funktionen_des_Bestands_mit_ihrem_Laufort_aus_der_Form()
     {
-        GeneratedFunktionen.Namen.Keys.Should().Contain(["IBildVerkleinerung", "IHistogrammAusgleich", "IDateinameDeutung", "IRangeSuche", "IMitgliederEinfrieren"]);
-        foreach (var (name, typ) in GeneratedFunktionen.Namen)
-            GeneratedFunktionen.Implementierungen.Count(i => i.Funktion == typ).Should().Be(1, $"{name} hat im Bestand genau eine Implementierung");
+        var b = GeneratedFunktionsBausteine.Alle.ToDictionary(x => x.Name);
+        b.Keys.Should().Contain(["IBildaufbereitung", "IBildpaarBeurteilung", "ITraining", "Bildeingang", "RangeAufloesung", "MitgliederEinfrieren"]);
+        b["IBildaufbereitung"].Draussen.Should().BeTrue("eine Schnittstelle");
+        b["IBildaufbereitung"].Umsetzungen.Select(u => u.Name).Should().Equal(["OpenCvBildaufbereitung"], "genau eine Umsetzung im Host");
+        b["IBildpaarBeurteilung"].Umsetzungen.Should().BeEmpty("nur draußen getragen (ITraegt)");
+        b["Bildeingang"].Gleichbleibend.Should().BeTrue("eine Klasse ohne Dienst und Lese-Fähigkeit");
+        b["RangeAufloesung"].Liest.Should().BeTrue("mit Lese-Fähigkeit: läuft im Host und hält fest");
     }
 }

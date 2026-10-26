@@ -201,10 +201,11 @@ public sealed class DomainEditorAkteurTests
     {
         var text = Scaffolder.ClientInterface(Laden);
         text.Should().Contain("public interface ILaden : IClientVertrag,")
-            .And.Contain("IKasse").And.Contain("ISendet<Bestelle>").And.Contain("IFragt<Bestellungen>")
-            .And.Contain("void Auf(Bestellt2 e);");
+            .And.Contain("ITraegt<IKasse>").And.Contain("ISendet<Bestelle>").And.Contain("IFragt<Bestellungen>")
+            .And.Contain("IHoert<Bestellt2>").And.NotContain("void Auf");
         Scaffolder.IstClientBasis("ISendet<Bestelle>", new HashSet<string>()).Should().BeTrue();
-        Scaffolder.IstClientBasis("IKasse", new HashSet<string> { "IKasse" }).Should().BeTrue();
+        Scaffolder.IstClientBasis("ITraegt<IKasse>", new HashSet<string>()).Should().BeTrue();
+        Scaffolder.IstClientBasis("IHoert<Bestellt2>", new HashSet<string>()).Should().BeTrue();
         Scaffolder.IstClientBasis("IDisposable", new HashSet<string> { "IKasse" }).Should().BeFalse("fremde Basistypen gehören dem Code");
         var dateien = Scaffolder.Generiere(MitClients(Laden));
         dateien.Should().Contain(d => d.Inhalt.Contains("public interface ILaden : IClientVertrag"));

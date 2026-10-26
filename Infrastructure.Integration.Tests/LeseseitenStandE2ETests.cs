@@ -35,8 +35,7 @@ public class LeseseitenStandE2ETests
         Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = 0 },
         Funktionen = new(StringComparer.Ordinal)
         {
-            ["IBildVerkleinerung"] = new() { Slots = 1 }, ["IHistogrammAusgleich"] = new() { Slots = 1 }, ["IDateinameDeutung"] = new() { Slots = 1 },
-            ["IRangeSuche"] = new() { Slots = 1 }, ["IMitgliederEinfrieren"] = new() { Slots = 1 },
+            ["IBildaufbereitung"] = new() { Slots = 1 },
         },
     };
 

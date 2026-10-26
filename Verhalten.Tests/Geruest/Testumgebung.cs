@@ -102,8 +102,7 @@ public sealed class Testumgebung
         JsonObject ImHost(int slots) => new() { ["Laufort"] = "Host", ["Slots"] = slots, ["Wiederholungen"] = 1 };
         json["Funktionen"] = new JsonObject
         {
-            ["IBildVerkleinerung"] = ImHost(2), ["IHistogrammAusgleich"] = ImHost(2), ["IDateinameDeutung"] = ImHost(4),
-            ["IRangeSuche"] = ImHost(2), ["IMitgliederEinfrieren"] = ImHost(2),
+            ["IBildaufbereitung"] = ImHost(2),
         };
         json["Konfig"] = new JsonObject { ["BildaufbereitungKonfig"] = new JsonObject { ["AusgabePfad"] = Path.Combine(Verzeichnis, "aufbereitet") } };
         return json;

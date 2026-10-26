@@ -36,7 +36,7 @@ public partial class ProbeZiel : IState { public int Version { get; set; } publi
     public sealed record Passiert(Guid Id) : IEvent;
     public sealed record Anders(Guid Id) : IEvent;
     public sealed record Gast : IMensch, IDarf<Mach>, IDarf<Frag>;
-    public interface IPult : IClientVertrag, ISendet<Mach>, IFragt<Frag> { void Auf(Passiert e); }
+    public interface IPult : IClientVertrag, ISendet<Mach>, IFragt<Frag>, IHoert<Passiert> { }
     public sealed record Getippt : IClientEvent;
 }
 ";
@@ -114,16 +114,17 @@ public partial class ProbeZiel : IState { public int Version { get; set; } publi
     }
 
     [Fact]
-    public void Ein_CSharp_Client_traegt_keine_Vertrags_Teile_CQRS094()
+    public void Ein_CSharp_Client_traegt_keine_Funktionen_CQRS094()
     {
         var comp = Probe(Handler + @"
 namespace Probe {
-    public interface IGastTeil : IAkteurVertrag<Gast> { OneOf<Mach> Auf(Anders e); }
-    public interface IPultMitTeil : IClientVertrag, IGastTeil { void Auf(Passiert e); }
+    public interface IGastPruefung : IFunktion { Mach Auf(Anders e); }
+    public sealed record Rechner : IMaschine, IDarf<IGastPruefung>;
+    public interface IPultMitTeil : IClientVertrag, ITraegt<IGastPruefung>, IHoert<Passiert> { }
 }", vertrag: "Probe.IPultMitTeil");
         var (_, diag) = Generiert(comp, new WiringGenerator().AsSourceGenerator());
         diag.Select(d => d.Id).Should().Equal("CQRS094");
-        diag[0].GetMessage().Should().Contain("PultMitTeil").And.Contain("Gast");
+        diag[0].GetMessage().Should().Contain("PultMitTeil").And.Contain("IGastPruefung");
     }
 
     private static string Abschnitt(string generat, string name)

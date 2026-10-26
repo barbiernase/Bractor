@@ -71,13 +71,14 @@ public class SchreibGarantieTests
     }
 
     [Fact]
-    public async Task Eine_Wiederholung_nach_dem_Neustart_wirkt_nicht_erneut_auch_nicht_als_Ablehnung()
+    public async Task Eine_Wiederholung_nach_dem_Neustart_wirkt_nicht_erneut_weder_Absage_noch_Ablehnung()
     {
         // Nach dem Neustart kennt kein Actor-Cache etwas, und der Stand ist weitergegangen: eine Wiederholung der ersten Reservierung würde jetzt
-        //   abgelehnt (Bestand erschöpft), eine Wiederholung der Ablehnung würde jetzt wirken (Bestand zugebucht). Beide bekommen den Ausgang
-        //   des ersten Mals, keine schreibt etwas.
+        //   abgesagt (Bestand erschöpft), eine Wiederholung der Absage (ein Fakt, Plan §3.1) würde jetzt wirken (Bestand zugebucht), eine Wiederholung
+        //   der Ablehnung (ein Hinweis: Posten unbekannt) würde jetzt wirken (Posten eröffnet). Alle bekommen den Ausgang des ersten Mals, keine
+        //   schreibt etwas.
         var schema = "pruef_inbox_neustart";
-        Guid p, gewirkt = Guid.NewGuid(), abgelehnt = Guid.NewGuid();
+        Guid p, q = Guid.NewGuid(), gewirkt = Guid.NewGuid(), abgesagt = Guid.NewGuid(), abgelehnt = Guid.NewGuid();
         using (var host = Cluster("garantie-neustart-1", schema: schema))
         {
             await host.StartAsync();
@@ -85,9 +86,12 @@ public class SchreibGarantieTests
             {
                 p = await PostenAsync(host, bestand: 5);
                 (await FrageAsync(host, new ReservierePosten(new(p), 5, Beleg.Ohne), gewirkt))!.Success.Should().BeTrue();
-                var erst = await FrageAsync(host, new ReservierePosten(new(p), 3, Beleg.Ohne), abgelehnt);
+                (await FrageAsync(host, new ReservierePosten(new(p), 3, Beleg.Ohne), abgesagt))!.Success.Should().BeTrue("die Absage ist ein Fakt");
+                var erst = await FrageAsync(host, new ReservierePosten(new(q), 1, Beleg.Ohne), abgelehnt);
                 erst!.Success.Should().BeFalse();
                 erst.Abgelehnt.Should().BeTrue();
+                (await host.Services.GetRequiredService<IEventStoreRepository>().ReadStreamAsync(p, 0, default))
+                    .Count(e => e.Payload is ReservierungAbgelehnt).Should().Be(1);
             }
             finally { await host.StopAsync(); }
         }
@@ -98,17 +102,23 @@ public class SchreibGarantieTests
             try
             {
                 (await FrageAsync(host, new BuchePostenZu(new(p), 10, Beleg.Ohne), Guid.NewGuid()))!.Success.Should().BeTrue();   // jetzt reichte der Bestand
+                (await FrageAsync(host, new EroeffnePosten(new(q), 10), Guid.NewGuid()))!.Success.Should().BeTrue();                // jetzt gibt es den Posten
                 var store = host.Services.GetRequiredService<IEventStoreRepository>();
-                var vorher = (await store.ReadStreamAsync(p, 0, default)).Count;
+                var vorherP = (await store.ReadStreamAsync(p, 0, default)).Count;
+                var vorherQ = (await store.ReadStreamAsync(q, 0, default)).Count;
 
                 var w1 = await FrageAsync(host, new ReservierePosten(new(p), 5, Beleg.Ohne), gewirkt);
-                var w2 = await FrageAsync(host, new ReservierePosten(new(p), 3, Beleg.Ohne), abgelehnt);
+                var w2 = await FrageAsync(host, new ReservierePosten(new(p), 3, Beleg.Ohne), abgesagt);
+                var w3 = await FrageAsync(host, new ReservierePosten(new(q), 1, Beleg.Ohne), abgelehnt);
 
                 w1!.Success.Should().BeTrue("die erste Reservierung hat gewirkt");
-                w2!.Success.Should().BeFalse("die zweite war abgelehnt — auch wenn sie jetzt wirken könnte");
-                w2.Abgelehnt.Should().BeTrue();
-                (await store.ReadStreamAsync(p, 0, default)).Count.Should().Be(vorher, "eine Wiederholung schreibt nichts");
+                w2!.Success.Should().BeTrue("die zweite wurde abgesagt — als Fakt, und der wird nicht noch einmal entschieden");
+                w3!.Success.Should().BeFalse("die dritte war abgelehnt — auch wenn sie jetzt wirken könnte");
+                w3.Abgelehnt.Should().BeTrue();
+                (await store.ReadStreamAsync(p, 0, default)).Count.Should().Be(vorherP, "eine Wiederholung schreibt nichts");
+                (await store.ReadStreamAsync(q, 0, default)).Count.Should().Be(vorherQ, "auch eine wiederholte Ablehnung schreibt nichts");
                 (await Zustand<PostenState>(host.Services, p)).Reserviert.Should().Be(5);
+                (await Zustand<PostenState>(host.Services, q)).Reserviert.Should().Be(0);
             }
             finally { await host.StopAsync(); }
         }
@@ -199,7 +209,7 @@ public class SchreibGarantieTests
     [Fact]
     public async Task Im_Buendel_entscheidet_jeder_Command_auf_dem_Stand_nach_dem_vorigen()
     {
-        // Der Bestand reicht für die Hälfte: genau die Hälfte wirkt, der Rest wird abgelehnt — auch wenn alle im selben Bündel liegen.
+        // Der Bestand reicht für die Hälfte: genau die Hälfte reserviert, der Rest wird abgesagt (ein Fakt) — auch wenn alle im selben Bündel liegen.
         using var host = Cluster("garantie-buendel-stand");
         await host.StartAsync();
         try
@@ -207,9 +217,10 @@ public class SchreibGarantieTests
             var p = await PostenAsync(host, bestand: 40);
             var ergebnisse = await Task.WhenAll(Enumerable.Range(0, 80).Select(_ => FrageAsync(host, new ReservierePosten(new(p), 1, Beleg.Ohne), Guid.NewGuid())));
 
-            ergebnisse.Count(r => r!.Success).Should().Be(40);
-            ergebnisse.Count(r => !r!.Success && r.Abgelehnt).Should().Be(40);
+            ergebnisse.Should().OnlyContain(r => r!.Success, "Reservierung und Absage sind beide Fakten");
             (await ReserviertImLog(host, p)).Should().Be(40);
+            (await host.Services.GetRequiredService<IEventStoreRepository>().ReadStreamAsync(p, 0, default))
+                .Count(e => e.Payload is ReservierungAbgelehnt).Should().Be(40);
             var zustand = await Zustand<PostenState>(host.Services, p);
             zustand.Reserviert.Should().Be(40);
             zustand.Verfuegbar.Should().Be(0);

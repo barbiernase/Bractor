@@ -45,9 +45,7 @@ public class EingangE2ETests
             Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = FreierPort(), JsonEingang = true },
             Funktionen = new(StringComparer.Ordinal)
             {
-                ["IDateinameDeutung"] = new() { Laufort = FunktionsLaufort.Hand },
-                ["IBildVerkleinerung"] = new() { Slots = 1 }, ["IHistogrammAusgleich"] = new() { Slots = 1 },
-                ["IRangeSuche"] = new() { Slots = 1 }, ["IMitgliederEinfrieren"] = new() { Slots = 1 },
+                ["IBildaufbereitung"] = new() { Laufort = FunktionsLaufort.Hand },
             },
         };
         var verz = Directory.CreateTempSubdirectory("eingang-it-").FullName;
@@ -122,7 +120,7 @@ public class EingangE2ETests
             }, TimeSpan.FromSeconds(30), "Die Projektion hat den Datensatz nicht geliefert.");
             antwort.GetProperty("antwort").GetProperty("daten").GetProperty("Name").GetString().Should().Be("Werkbank");
 
-            // ── Laufort Hand: die Dateinamen-Deutung beantwortet ein Mensch ──
+            // ── Laufort Hand: die Bildaufbereitung (Funktion als Schnittstelle) beantwortet ein Mensch ──
             var t = new DateTimeOffset(2026, 10, 12, 9, 0, 0, Random.Shared.Next(0, 999), TimeSpan.Zero).AddMinutes(Random.Shared.Next(0, 100000));
             var dateiname = $"{t:yyyy_MM_dd_HH_mm_ss_fff}_DC0.tiff";
             var vorgang = await QuellEingang.Live(app.Services).NimmAufAsync(new DateiErkannt
@@ -131,38 +129,48 @@ public class EingangE2ETests
                 Kennung = dateiname + "|1",
             }, default);
 
-            JsonElement auftrag = default;
+            JsonElement eingang = default;
             await Warte(async () =>
             {
-                var a = await Lies(await http.GetAsync("/eingang/auftraege"));
-                a.GetProperty("funktionen").EnumerateArray().Select(x => x.GetString()).Should().Equal("IDateinameDeutung");
-                var liste = a.GetProperty("auftraege").EnumerateArray().ToList();
+                var liste = (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").EnumerateArray().ToList();
                 if (liste.Count == 0) return false;
-                auftrag = liste.Single();
+                eingang = liste.Single();
                 return true;
-            }, TimeSpan.FromSeconds(30), "Der Auftrag an die Hand-Funktion kam nicht an.");
-            auftrag.GetProperty("funktion").GetString().Should().Be("IDateinameDeutung");
-            auftrag.GetProperty("auftrag").GetProperty("typ").GetString().Should().Be("DeuteDateiname");
-            auftrag.GetProperty("auftrag").GetProperty("daten").GetProperty("Dateiname").GetString().Should().Be(dateiname);
-            auftrag.GetProperty("ergebnisse").EnumerateArray().Select(x => x.GetString()).Should().BeEquivalentTo("ImagePairDateiGedeutet", "DateinameUnbekannt");
-            var vg = auftrag.GetProperty("vorgang").GetString();
+            }, TimeSpan.FromSeconds(30), "Der Eingang an die Hand-Funktion kam nicht an.");
+            eingang.GetProperty("funktion").GetString().Should().Be("IBildaufbereitung");
+            eingang.GetProperty("eingang").GetProperty("typ").GetString().Should().Be("DateiErkannt");
+            eingang.GetProperty("eingang").GetProperty("daten").GetProperty("Name").GetString().Should().Be(dateiname);
+            eingang.GetProperty("ausgaben").EnumerateArray().Select(x => x.GetString()).Should().BeEquivalentTo("BildAufbereitet", "BildNichtLesbar");
+            var vg = eingang.GetProperty("vorgang").GetString();
 
-            (await Sende("/eingang/ergebnis", new { vorgang = vg, typ = "BildVerkleinert", daten = new { } }, null))
-                .StatusCode.Should().Be(HttpStatusCode.BadRequest, "nur ein Ergebnis-Fall der Funktion");
+            (await Sende("/eingang/ergebnis", new { vorgang = vg, ausgaben = new[] { new { typ = "NimmBildAuf", daten = new { } } } }, null))
+                .StatusCode.Should().Be(HttpStatusCode.BadRequest, "nur eine Ausgabe aus der Signatur der Funktion");
 
-            var paar = Guid.NewGuid();
             var antwortHand = await Lies(await Sende("/eingang/ergebnis", new
             {
-                vorgang = vg, typ = "ImagePairDateiGedeutet",
-                daten = new { PaarId = paar, PairKey = "HAND-" + paar.ToString("N")[..6], Version = "Dc0", ProduziertAm = t, Pfad = Path.Combine(verz, dateiname) },
+                vorgang = vg,
+                ausgaben = new[]
+                {
+                    new
+                    {
+                        typ = "BildAufbereitet",
+                        daten = (object)new
+                        {
+                            Dateiname = dateiname, Pfad = Path.Combine(verz, dateiname), Groesse = 1L, ErkanntAm = t,
+                            Vorschau = Path.Combine(verz, "hand.png"), BreitePixel = 4, HoehePixel = 2, ErstelltAm = t,
+                        },
+                    },
+                },
             }, null));
             antwortHand.GetProperty("ausgang").GetString().Should().Be("Geschrieben", antwortHand.ToString());
 
-            await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is ImagePairErstellt), TimeSpan.FromSeconds(30),
-                "Nach der Antwort von Hand lief der Fluss nicht weiter (kein ImagePairErstellt).");
-            var ergebnis = (await es.ReadStreamAsync(Guid.Parse(vg!), 0, default)).Single();
-            ergebnis.Wirker.Should().Be("funktion:IDateinameDeutung", "das Ergebnis schreibt die Funktion — wo gerechnet wurde, ist eine Bindung");
-            (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("auftraege").GetArrayLength().Should().Be(0);
+            var paar = ImagePairFileName.Resolve(dateiname)!.AggregateId;
+            await Warte(async () => (await es.ReadStreamAsync(paar.Wert, 0, default)).Any(e => e.Payload is ImagePairErstellt), TimeSpan.FromSeconds(30),
+                "Nach der Antwort von Hand lief es nicht weiter (kein ImagePairErstellt über den Bildeingang).");
+            var festgehalten = await es.ReadStreamAsync(Infrastructure.Funktionen.FunktionsIds.Festhalten("IBildaufbereitung", vorgang, 1), 0, default);
+            festgehalten.Should().ContainSingle(e => e.Payload is Domain.Pipeline.Bildaufbereitung.BildAufbereitet);
+            festgehalten.Should().OnlyContain(e => e.Wirker == "funktion:IBildaufbereitung", "die Ausgabe schreibt die Funktion — wo gerechnet wurde, ist eine Bindung");
+            (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").GetArrayLength().Should().Be(0);
             vorgang.Should().NotBe(Guid.Empty);
 
             // ── Webhook aus der Konfig (konzept-werkbank §12.3 E12): POST auf die Route startet genau einen Vorgang — zweimal gesendet, derselbe Vorgang ──
@@ -218,8 +226,7 @@ public class EingangE2ETests
             Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = FreierPort(), JsonEingang = true },
             Funktionen = new(StringComparer.Ordinal)
             {
-                ["IDateinameDeutung"] = new() { Slots = 1 }, ["IBildVerkleinerung"] = new() { Slots = 1 }, ["IHistogrammAusgleich"] = new() { Slots = 1 },
-                ["IRangeSuche"] = new() { Slots = 1 }, ["IMitgliederEinfrieren"] = new() { Slots = 1 },
+                ["IBildaufbereitung"] = new() { Slots = 1 },
             },
         };
         var verz = Directory.CreateTempSubdirectory("wiederholung-it-").FullName;

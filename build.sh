@@ -144,11 +144,7 @@ cat > "$OUTPUT/grpc/umgebungen/umgebung.linux.json" << EOF
     "DateiErkannt": { "Pfad": "${GRPC_WATCH_PATH}", "Kennung": "NameGroesse", "Laufmodus": "EinmalImCluster"${GRPC_WEBHOOK_JSON} }
   },
   "Funktionen": {
-    "IBildVerkleinerung": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 },
-    "IHistogrammAusgleich": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 },
-    "IDateinameDeutung": { "Laufort": "Host", "Slots": 8 },
-    "IRangeSuche": { "Laufort": "Host", "Slots": 2 },
-    "IMitgliederEinfrieren": { "Laufort": "Host", "Slots": 2 }
+    "IBildaufbereitung": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 }
   },
   "Clients": {
     "Arbeitsplatz": {

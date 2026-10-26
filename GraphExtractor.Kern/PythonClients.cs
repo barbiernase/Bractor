@@ -51,9 +51,9 @@ public static class PythonClients
     }
 
     /// <summary>
-    /// Die PYTHON-Implementierungen der Katalog-Funktionen (Laufort Extern, konzept-werkbank §12.3 E13) — Code-Fakt wie bei den Clients: die generierte
+    /// Die PYTHON-Implementierungen der Funktionen draußen (Laufort Extern) — Code-Fakt wie bei den Clients: die generierte
     /// <c>…/generated/funktionen.py</c> nennt je Funktion ihre Basis; jede Klasse im Python-Projekt, die sie erbt, ist eine Implementierung
-    /// (die erste nach Datei), ihr <c>rufe</c>-Rumpf ist der Python-Rumpf der Funktion. Funktion (Interface-Name) → Implementierung.
+    /// (die erste nach Datei), der Rumpf ihrer ersten Eingangs-Methode ist der Python-Rumpf der Funktion. Funktion (Interface-Name) → Implementierung.
     /// </summary>
     public static Dictionary<string, FunktionPython> Funktionen(string wurzel)
     {
@@ -73,8 +73,7 @@ public static class PythonClients
                         erg[b.Funktion] = new FunktionPython
                         {
                             Datei = Path.GetRelativePath(wurzel, py).Replace('\\', '/'), Klasse = k.Name, Basis = b.Basis,
-                            Methode = Abstractions.Funktionsvertrag.PythonMethode, Signatur = b.Def,
-                            Rumpf = PythonQuelle.Rumpf(text, k.Name, Abstractions.Funktionsvertrag.PythonMethode),
+                            Methode = b.Methode, Signatur = b.Def, Rumpf = PythonQuelle.Rumpf(text, k.Name, b.Methode),
                         };
             }
         }
