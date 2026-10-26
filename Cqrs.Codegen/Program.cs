@@ -95,7 +95,8 @@ return 0;
 int Erzeuge(string wurzel)
 {
     // Nur die Rollen-Projekte, die es in dieser Anwendung gibt (eine Test-Anwendung hat z. B. nur die Schreibseite).
-    var targetProjects = Struktur.CodegenProjekte(wurzel).Where(p => Directory.Exists(Path.Combine(solutionDir, p))).ToArray();
+    // Ein Projekt ist, was eine .csproj hat — ein liegengebliebener bin-Ordner eines gelöschten Projekts (Checkout ohne git clean -x) ist keins.
+    var targetProjects = Struktur.CodegenProjekte(wurzel).Where(p => File.Exists(Path.Combine(solutionDir, p, p + ".csproj"))).ToArray();
     var artefakte = Artefakte(solutionDir, wurzel);
     string Pfad(Art art) => Path.Combine(solutionDir, artefakte.Single(a => a.Art == art).Pfad);
     bool Hat(Art art) => artefakte.Any(a => a.Art == art);
