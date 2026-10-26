@@ -25,7 +25,7 @@ und VM-1 erledigt (§13.6); PF-6, PF-7, PF-10, PF-13 und AK-1 werden mit den sp�
 | FB-1 | Ein Hinweis (`ITransientEvent`) als Eingang einer Funktion steht im generierten Hinweisplan, wird zur Laufzeit aber noch nicht zugestellt (schneller Kanal kommt mit Plan Phase 6) | P2 |
 | FB-5 | Kreise Funktion ↔ Aggregat: keine Build-Prüfung (R6 des Plans). Ein Kreis ist der Normalfall eines Ablaufs (Vorgang → Funktion → Vorgang); ob und wie ein Kreis ohne fortschreitenden Zustand erkannt werden soll, ist offen | P3 |
 | FB-6 | Quell-Nachricht vom Client nur über den JSON-Eingang: das Trigger-Protokoll der Leitung ist entfernt, der gRPC-Weg (und die SDKs) kommt mit Plan Phase 7 | P2 |
-| FB-7 | Eine Funktion draußen ohne verbundenen Träger staut ihre Eingänge still im Log (Rückstand in `/health`, aber keine eigene Meldung „kein Träger“) | P3 |
+| FB-7 | Eine Funktion draußen ohne verbundenen Träger staut ihre Eingänge still im Log (Rückstand in `/health`, aber keine eigene Meldung „kein Träger“); ein Träger, der Eingänge annimmt und nicht beantwortet, hält bei einem Slot je Partition die übrigen Streams der Partition bis zum Ablauf der Lease (30 s) auf | P3 |
 | FB-4 | Werkzeuge: Extractor und Karten zeigen `Frist<TCmd>` als Ausgang eines Decide nicht als Kante zur Uhr; das Werkbank-Schema kennt nur die Datei-Konfig (Takt fehlt); Editor-Oberfläche zurückgestellt (Plan E4) | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar (Schlüssel laufen seit PF-30 ab) | P2 |
 | PF-31 | Entscheidung offen: ein Wechsel der Snapshot-Schema-Version faltet heiße Aggregate einmal voll; eine neue Funktion liest die Geschichte ab 0 | P3 |
@@ -228,7 +228,8 @@ Vorgangs-Aggregat ist ein Kreis (Auftrag → `Auftragsabwicklung` → Posten →
 Design-Entscheidungen warnen. Mit dem Dirigenten sind GR-ZYKLUS (CQRS088) und GR-GARANTIE (CQRS082) entfallen; eine Erkennung „Kreis ohne
 fortschreitenden Zustand“ bräuchte mehr als Signaturen. **FB-6:** die Quell-Nachricht vom Client hatte über gRPC das Trigger-Protokoll; es ist mit
 der Handle-Welt entfernt, der neue Weg kommt mit der Leitung aus Phase 7. **FB-7:** eine getragene Funktion ohne verbundenen Client arbeitet nichts
-ab; der Rückstand steht in `/health`, eine eigene Meldung fehlt.
+ab; der Rückstand steht in `/health`, eine eigene Meldung fehlt. Nimmt ein Träger Eingänge an und antwortet nicht, wartet die Partition (bei einem Slot)
+bis zum Ablauf der Lease; gesehen im Verhaltens-Netz, dort trägt die Umgebung deshalb acht Slots.
 
 **W3-1 · Ableitungen im Editor-JS.** `graphNodes` baut Karten-Ids parallel zu `Sicht.BaueKarten` (Transition-Id weicht bei fehlender `_id` ab);
 `akteurHoert`, `flParameter`, `faehigkeitVorschlag` (weicht bei Namenskollision von `BoardLeseseite` ab), Auto-Zuordnung (`autoArgs`,

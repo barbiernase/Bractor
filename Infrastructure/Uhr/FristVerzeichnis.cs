@@ -60,9 +60,13 @@ public sealed class FristVerzeichnis(IDocumentStore store) : IFaelligkeiten
             streams.ToArray(), versionen.ToArray(), nach.ToArray(), befehle.ToArray(), daten.ToArray(), akteure.ToArray());
     }
 
-    /// <summary>Die fälligen Fristen gegen die Uhr des Stores, die frühesten zuerst, höchstens <c>$1</c> — liest über den Index auf <c>faellig</c>.</summary>
+    /// <summary>
+    /// Die fälligen Fristen gegen die Uhr des Stores, die frühesten zuerst, höchstens <c>$1</c> — liest über den Index auf <c>faellig</c>. Die Uhr steht
+    /// als skalare Unterabfrage: sie ist volatil (<c>clock_timestamp()</c>), als Vergleich je Zeile wäre sie keine Index-Bedingung, und Postgres
+    /// liefe den Index in Fälligkeits-Reihenfolge bis zum Ende durch, um <c>$1</c> Treffer zu finden (das ganze Verzeichnis je Takt).
+    /// </summary>
     public static string FaelligeAbfrage(IDocumentStore store) =>
-        $"select stream_id, version, befehl, daten, akteur from {Name(store)} where faellig <= {Persistence.EventZeit.Uhr(store)} order by faellig limit $1";
+        $"select stream_id, version, befehl, daten, akteur from {Name(store)} where faellig <= (select {Persistence.EventZeit.Uhr(store)}) order by faellig limit $1";
 
     public async Task<IReadOnlyList<FaelligeFrist>> FaelligeAsync(int hoechstens, CancellationToken ct)
     {

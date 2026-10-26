@@ -103,6 +103,9 @@ public sealed class Testumgebung
         json["Funktionen"] = new JsonObject
         {
             ["IBildaufbereitung"] = ImHost(2),
+            // Draußen getragen (ITraegt): mehrere Eingänge je Partition zugleich. Die rohen Träger der Client-Tests übernehmen beim Anbieten auch
+            //   Eingänge früherer Tests, die sie nie beantworten; mit einem Slot sperrte jeder davon seine Partition bis zum Ablauf der Lease (30 s).
+            ["IBildpaarBeurteilung"] = new JsonObject { ["Laufort"] = "Extern", ["Slots"] = 8 },
         };
         json["Konfig"] = new JsonObject { ["BildaufbereitungKonfig"] = new JsonObject { ["AusgabePfad"] = Path.Combine(Verzeichnis, "aufbereitet") } };
         return json;

@@ -48,7 +48,7 @@ public class LageAnalyzerTests
         (await Befunde("Leihwesen", Bausteine)).Should().HaveCount(3, "Klasse, Schnittstelle und Ausgabe-Event gehören nach Leihwesen.Pipeline")
             .And.Contain(b => b.Contains("'Mahnwesen' ist eine Funktion im Host"))
             .And.Contain(b => b.Contains("'IPruefung' ist eine Funktion (Schnittstelle)"))
-            .And.Contain(b => b.Contains("'Gemahnt' ist ein Ergebnis-Event einer Funktion"));
+            .And.Contain(b => b.Contains("'Gemahnt' ist ein Event einer Funktion"));
         // Der Eingang ist ein Event der Schreibseite.
         (await Befunde("Leihwesen.Pipeline", Bausteine)).Should().ContainSingle().Which.Should().Contain("'Ueberfaellig' ist ein Event");
     }

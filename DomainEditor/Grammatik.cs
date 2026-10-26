@@ -1,7 +1,7 @@
 namespace DomainEditor;
 
 /// <summary>
-/// Die GRAMMATIK der Kompositions-Sprache (<c>docs/konzept-editor-komposition.md</c> §3) als EINE Quelle: welche Nachrichtensorte
+/// Die GRAMMATIK der Kompositions-Sprache (Plan Pub/Sub-Neustrukturierung §3) als EINE Quelle: welche Nachrichtensorte
 /// in welchen Baustein-Eingang darf (mit Kardinalität), welcher Baustein welche Sorten erzeugen darf, und die Zusatzregeln — je
 /// Regel mit ihrem Gegenstück im Build (Analyzer-/Generator-ID, Compiler, Boot-Guard oder „offen").
 ///
@@ -21,7 +21,7 @@ public static class Grammatik
 
     // ── Alphabet: Bausteine (die Knoten) ─────────────────────────────────────────────────────────────────────────────
     public const string Aggregat = "aggregat", Projektion = "projektion", Reader = "reader", Store = "store", Aussenwelt = "aussenwelt",
-        Akteur = "akteur", Client = "client", Funktion = "funktion", DienstImpl = "dienstimpl";
+        Akteur = "akteur", Client = "client", Funktion = "funktion", DienstImpl = "dienstimpl", Uhr = "uhr";
 
     /// <summary>Kardinalität eines Konsum-Eingangs.</summary>
     public const string GenauEins = "eins", Beliebig = "beliebig";
@@ -38,12 +38,12 @@ public static class Grammatik
 
     public static readonly IReadOnlyList<SorteInfo> Sorten =
     [
-        new(Command, "Command", "▶", "wie der Absender (ab Event idempotent)", "Absicht an genau ein Aggregat"),
-        new(Event, "Event", "◆", "durabel", "Fakt im Log"),
-        new(Transient, "Transientes Event", "◇", "verlierbar", "Hinweis, Ablehnung"),
-        new(Frist, "Frist", "⏳", "durabel", "Zeit, dauerhaft (aus dem Decide eines Aggregats) → Command an dasselbe Aggregat"),
-        new(Query, "Query", "?", "synchron", "Lesen"),
-        new(Response, "Response", "↩", "synchron", "Antwort eines Readers"),
+        new(Command, "Command", "▶", "wirkt genau einmal (Command-Id, Inbox)", "Absicht an genau ein Aggregat"),
+        new(Event, "Event", "◆", "durabel; wirkt bei jedem Hörer genau einmal", "Fakt im Log"),
+        new(Transient, "Hinweis", "◇", "höchstens einmal (verlierbar)", "flüchtig: Ablehnung, Fortschritt, Live-Anzeige (ITransientEvent)"),
+        new(Frist, "Frist", "⏳", "durabel; feuert mindestens einmal, wirkt genau einmal", "Zeit aus dem Decide eines Aggregats — die Uhr macht daraus den Command an dasselbe Aggregat"),
+        new(Query, "Query", "?", "synchron, wirkt nicht", "Frage"),
+        new(Response, "Antwort", "↩", "synchron", "Rückgabe eines Readers"),
         new(Faehigkeit, "Fähigkeit", "⚙", "im Handle-Aufruf", "Store-Funktion (Lesen/Schreiben)"),
         new(Quelle, "Quell-Nachricht", "⛲", "durabel (genau einmal je Kennung)", "Anstoß von außen (Datei, Webhook …) — ein Event, das Funktionen und Projektionen hören"),
         new(Dienst, "Dienst", "🧩", "im Konstruktor (gebunden nach der Umgebung)", "Technik hinter einer Funktion (IDienst) — keine Nachricht, eine Abhängigkeit"),
@@ -56,6 +56,8 @@ public static class Grammatik
         new(Akteur, "Akteur", false), new(Client, "Client", false), new(Funktion, "Funktion", false),
         // Domänen-Dienst (konzept-werkbank §12.3 E11): seine Implementierung nimmt selbst Dienste im Konstruktor.
         new(DienstImpl, "Dienst-Implementierung", false),
+        // Eingebaut: die Uhr sendet fällige Fristen als Command an das Aggregat, das sie setzte.
+        new(Uhr, "Uhr", false),
     ];
 
     // ── Regeln (Id = der Name, unter dem Build-Diagnosen und Editor sie nennen) ──────────────────────────────────────────────
@@ -71,25 +73,31 @@ public static class Grammatik
             [Comp("ICommand verlangt Ziel; ICommand<TAggregat> liefert es aus Id<TAggregat> AggregateId"), An("CQRS013", "Domain.SourceGeneration/ModellAnalyzer.cs (Command ohne typisiertes Ziel)"),
              Gen("CQRS010", "Infrastructure.SourceGeneration/CommandAggregateMapGenerator.cs (Decide außerhalb des Ziel-Aggregats)"),
              An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Command ohne Decider)")]),
-        new("GR-EVENT", "Event → beliebig viele Konsumenten", "Ein persistentes Event hören Projektionen und Funktionen (beliebig viele); gefaltet wird es im eigenen Aggregat.", "error",
-            [Comp("Handle-/Auf-Parameter : IEvent"), An("CQRS057", "Domain.SourceGeneration (HandlerFormAnalyzer)")]),
+        new("GR-EVENT", "Event → beliebig viele Konsumenten", "Ein persistentes Event (auch eine Quell-Nachricht) hören Projektionen und Funktionen "
+            + "(beliebig viele) und Clients zur Kenntnis (IHoert); gefaltet wird es im eigenen Aggregat.", "error",
+            [Comp("Handle-/Auf-Parameter : IEvent"), An("CQRS057", "Domain.SourceGeneration (HandlerFormAnalyzer)"),
+             Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Eingang einer Funktion)")]),
         new("GR-FALTUNG", "Event → genau ein Aggregat faltet", "Ein Event faltet genau ein Aggregat (Applier) — das, das es entscheidet.", "warning",
             [An("CQRS080", "Domain.SourceGeneration/ModellAnalyzer.cs (Apply ohne Decide)"), An("CQRS079", "Domain.SourceGeneration/ModellAnalyzer.cs (Decide ohne Apply)")]),
-        new("GR-TRANSIENT", "Transientes Event → Projektion/Funktion", "Ein transientes Event (Hinweis, Ablehnung) hören Projektionen und Funktionen — kein Aggregat.", "error",
-            [Comp("Handle-/Auf-Parameter : ITransientEvent"), An("CQRS057", "Domain.SourceGeneration (HandlerFormAnalyzer)")]),
-        new("GR-FRIST", "Frist → Command an genau ein Aggregat", "Eine Frist wird fällig als Command an genau ein Aggregat — die Frist eines Aggregats "
-            + "(Frist<TCmd> aus seinem Decide) an sich selbst (R5).", "error",
+        new("GR-TRANSIENT", "Hinweis → Funktion/Client", "Einen Hinweis (ITransientEvent: Ablehnung, Fortschritt) hören Funktionen (höchstens einmal) "
+            + "und Clients (IHoert) — nie eine Projektion, nie ein Aggregat. Ist eine Ablehnung für einen Ablauf wichtig, ist sie ein Event.", "error",
+            [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Hinweisplan)"),
+             Offen("Zustellung an Funktionen (schneller Kanal) mit Plan Phase 6, docs/13 FB-1")]),
+        new("GR-FRIST", "Frist → Uhr → Command an dasselbe Aggregat", "Eine Frist (Frist<TCmd> aus dem Decide eines Aggregats) nimmt die Uhr; fällig "
+            + "sendet sie den Command an das Aggregat, das sie setzte (R5) — mindestens einmal, mit der Id aus dem Frist-Event.", "error",
             [Gen("CQRS010", "Infrastructure.SourceGeneration/CommandAggregateMapGenerator.cs"),
-             new("laufzeit", null, "Infrastructure/Aggregate/ActorSystem/AggregateActorBase.cs (Fristen: eine fremde Frist schreibt nichts)")]),
+             new("laufzeit", null, "Infrastructure/Aggregate/ActorSystem/AggregateActorBase.cs (Fristen: eine fremde Frist schreibt nichts)"),
+             new("laufzeit", null, "Infrastructure/Uhr/UhrActor.cs (fällig senden, nach entschiedenem Ausgang austragen)")]),
         new("GR-QUERY", "Query → genau ein Reader", "Eine Query beantwortet genau ein Reader.", "error",
             [An("CQRS084", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (mehrere Reader)"), An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (kein Reader)")]),
         new("GR-FAEHIGKEIT", "Fähigkeit → genau ein Store", "Eine Fähigkeit (Interface mit genau einer Funktion) implementiert genau eine Store-Klasse.", "error",
             [Gen("CQRS053", "Projections.SourceGeneration/ProjectionServicesGenerator.cs"), An("CQRS051", "Domain.SourceGeneration (FaehigkeitAnalyzer)")]),
         // Erzeugung: Baustein-Ausgang → Sorte
-        new("GR-AUS-AGGREGAT", "Aggregat erzeugt Events", "Ein Aggregat (Decide) erzeugt persistente Events, Ablehnungen (transient) und Fristen — sonst nichts.", "error",
+        new("GR-AUS-AGGREGAT", "Aggregat erzeugt Events", "Ein Aggregat (Decide) erzeugt Events, Hinweise und Fristen — keine Commands.", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)")]),
-        new("GR-AUS-PROJEKTION", "Projektion erzeugt nur Transientes", "Eine Projektion schreibt über Fähigkeiten und veröffentlicht höchstens transiente Events — kein Command, kein Fakt.", "error",
-            [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)"), Gen("CQRS052", "Infrastructure.SourceGeneration/PullPathGenerator.cs (ein Store je Konsument)")]),
+        new("GR-AUS-PROJEKTION", "Projektion erzeugt keine Nachricht", "Eine Projektion wirkt nur in ihrem Store (Schreib-Fähigkeiten genau eines Stores) "
+            + "und gibt nichts aus (Rückgabe Task) — was auf ein Event hin etwas sendet, ist eine Funktion.", "error",
+            [An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Rückgabe Task)"), Gen("CQRS052", "Infrastructure.SourceGeneration/PullPathGenerator.cs (ein Store je Projektion)")]),
         new("GR-AUS-READER", "Reader erzeugt Responses", "Ein Reader antwortet mit Responses (OneOf) und liest über Lese-Fähigkeiten.", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)")]),
         // Funktion als Baustein und die Regeln der Wiederholbarkeit (Plan Pub/Sub-Neustrukturierung §3.6, Phase 3).
@@ -135,8 +143,12 @@ public static class Grammatik
         // Zusatzregeln
         new("GR-AUSGANG-GESCHLOSSEN", "Geschlossener Ausgang", "Ausgänge sind konkrete Typen im OneOf — zeichnen heißt Typ wählen.", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)")]),
-        new("GR-HANDLE-FORM", "Handle-Form folgt dem Inhalt", "Keine Ausgabe ⇒ Task, sonst Strom mit OneOf.", "error",
-            [An("CQRS057", "Domain.SourceGeneration (HandlerFormAnalyzer)")]),
+        new("GR-HANDLE-FORM", "Handle-Form ist die, die der Dispatch ruft", "Eine Projektion bzw. ein Reader hat Handle(Eingang, Kontext, …Fähigkeiten) "
+            + "an fester Stelle — sonst wäre die Methode im Editor sichtbar, zur Laufzeit tot.", "error",
+            [An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs")]),
+        new("GR-KREIS", "Kreise Funktion ↔ Aggregat", "Ein Ablauf ist ein Kreis (Vorgang → Funktion → anderes Aggregat → Funktion → Vorgang); er endet, "
+            + "weil das Decide des Vorgangs fortschreitenden Zustand trägt. Einen Kreis ohne Fortschritt erkennt der Build nicht (R6 des Plans).", "info",
+            [Offen("docs/13 FB-5: aus Signaturen allein nicht von einem Ablauf zu unterscheiden")]),
         new("GR-ZUSTAND", "Regel Z: Zustand nur in Aggregaten und Lesemodellen", "Projektionen sind zustandslose Übersetzer; Gedächtnis gehört in ein Aggregat.", "warning",
             [An("CQRS083", "Domain.SourceGeneration/ModellAnalyzer.cs (Instanzfelder, die Zustand halten)")]),
         new("GR-AKTEUR", "Akteur → nur, was er darf", "Ein Akteur gibt nur hinein, was er per IDarf<T> darf: Command, Query, Quell-Nachricht, "
@@ -181,13 +193,13 @@ public static class Grammatik
         new(Command, Aggregat, GenauEins, "GR-COMMAND"),
         new(Event, Projektion, Beliebig, "GR-EVENT"), new(Event, Funktion, Beliebig, "GR-EVENT"),
         new(Event, Aggregat, GenauEins, "GR-FALTUNG"),
-        new(Transient, Projektion, Beliebig, "GR-TRANSIENT"), new(Transient, Funktion, Beliebig, "GR-TRANSIENT"),
-        new(Frist, Aggregat, GenauEins, "GR-FRIST"),
+        new(Transient, Funktion, Beliebig, "GR-TRANSIENT"),
         new(Query, Reader, GenauEins, "GR-QUERY"),
         new(Faehigkeit, Projektion, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Reader, Beliebig, "GR-FAEHIGKEIT"),
         new(Faehigkeit, Funktion, Beliebig, "GR-FUNKTION-FORM"),
         new(Dienst, Funktion, Beliebig, "GR-DIENST"), new(Dienst, DienstImpl, Beliebig, "GR-DIENST"),
-        new(Event, Client, Beliebig, "GR-CLIENT"), new(Transient, Client, Beliebig, "GR-CLIENT"),
+        new(Event, Client, Beliebig, "GR-EVENT"), new(Transient, Client, Beliebig, "GR-TRANSIENT"),
+        new(Frist, Uhr, GenauEins, "GR-FRIST"),
     ];
 
     /// <summary>Wer welche Sorten erzeugen darf (§2.2 Spalte „Ausgänge").</summary>
@@ -195,7 +207,6 @@ public static class Grammatik
     [
         new(Aggregat, Event, "GR-AUS-AGGREGAT"), new(Aggregat, Transient, "GR-AUS-AGGREGAT"), new(Aggregat, Frist, "GR-AUS-AGGREGAT"),
         new(Funktion, Command, "GR-FUNKTION-FORM"), new(Funktion, Event, "GR-FUNKTION-FORM"), new(Funktion, Transient, "GR-FUNKTION-FORM"),
-        new(Projektion, Transient, "GR-AUS-PROJEKTION"),
         new(Reader, Response, "GR-AUS-READER"),
         new(Store, Faehigkeit, "GR-FAEHIGKEIT"),
         new(DienstImpl, Dienst, "GR-DIENST"),
@@ -203,6 +214,8 @@ public static class Grammatik
         new(Akteur, Command, "GR-AKTEUR"), new(Akteur, Query, "GR-AKTEUR"), new(Akteur, Transient, "GR-AKTEUR"),
         new(Akteur, Quelle, "GR-AKTEUR"), new(Aussenwelt, Quelle, "GR-QUELLE"),
         new(Client, Command, "GR-CLIENT-BEFUGT"), new(Client, Query, "GR-CLIENT-BEFUGT"), new(Client, Transient, "GR-CLIENT-BEFUGT"),
+        new(Client, Quelle, "GR-CLIENT-BEFUGT"), new(Client, Event, "GR-CLIENT-BEFUGT"),   // Quell-Nachricht (JSON-Eingang); Events als Ausgabe getragener Funktionen
+        new(Uhr, Command, "GR-FRIST"),
     ];
 
     /// <summary>

@@ -54,6 +54,12 @@ public sealed class DomainEditorKompositionTests
         Grammatik.KonsumVon(Grammatik.Event, Grammatik.Funktion)!.Kardinalitaet.Should().Be(Grammatik.Beliebig);
         Grammatik.KonsumVon(Grammatik.Command, Grammatik.Funktion).Should().BeNull("ein Command geht nur an sein Aggregat");
         Grammatik.ErzeugungVon(Grammatik.Projektion, Grammatik.Event).Should().BeNull("eine Projektion schreibt keine Fakten");
+        // Plan §3.4/§3.5: ein Hinweis geht nie in eine Projektion, eine Projektion erzeugt keine Nachricht, die Frist nimmt die Uhr.
+        Grammatik.KonsumVon(Grammatik.Transient, Grammatik.Projektion).Should().BeNull("Hinweise hören Funktionen und Clients");
+        Grammatik.Erzeugungen.Should().NotContain(e => e.Baustein == Grammatik.Projektion);
+        Grammatik.KonsumVon(Grammatik.Frist, Grammatik.Uhr)!.Kardinalitaet.Should().Be(Grammatik.GenauEins);
+        Grammatik.ErzeugungVon(Grammatik.Uhr, Grammatik.Command).Should().NotBeNull();
+        Grammatik.ErzeugungVon(Grammatik.Aggregat, Grammatik.Command).Should().BeNull("ein Aggregat sendet keine Commands");
         // Fürs Board: die Editor-Port-Abbildung reist mit (das JS kodiert nichts hart).
         var json = System.Text.Json.JsonSerializer.Serialize(Grammatik.AlsJson(), EditorModell.JsonOptionen);
         json.Should().Contain("\"portBaustein\"").And.Contain("\"recordSorte\"").And.Contain("CQRS010");
