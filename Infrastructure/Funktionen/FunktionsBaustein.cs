@@ -38,7 +38,7 @@ public sealed record FunktionsUmsetzung(string Name, Type Typ, Func<IServiceProv
 /// </summary>
 /// <param name="Draussen">Als Schnittstelle deklariert: sie rechnet draußen (Worker, Client, Hand) oder mit einer Implementierung im Host.</param>
 /// <param name="Gleichbleibend">Nachweislich gleichbleibend (R12): eine Klasse ohne Konstruktor-Parameter und ohne Lese-Fähigkeit — derselbe
-/// Eingang ergibt dieselbe Ausgabe (Uhr und Zufall verbietet CQRS102). Nur sie darf ihre Ausgabe ohne Festhalten senden.</param>
+/// Eingang ergibt dieselbe Ausgabe (Uhr und Zufall verbietet CQRS103). Nur sie darf ihre Ausgabe ohne Festhalten senden.</param>
 /// <param name="Dienste">Was der Konstruktor der Klasse braucht (Dienste, Konfig-Records) — für die Boot-Prüfung der Bindung.</param>
 public sealed record FunktionsBaustein(
     Type Typ,

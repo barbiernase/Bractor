@@ -90,8 +90,10 @@ public static class Grammatik
             [Offen("PipelineActorGenerator: bei zwei Pipelines gewinnt heute die letzte still")]),
         new("GR-SELBST", "Selbst → dieselbe Pipeline", "Eine Selbst-Nachricht kommt nur in der Pipeline an, die sie plant.", "error",
             [Offen("PipelineActorBase.PlaneAsync schickt an sich selbst; keine Diagnose für fremde Selbst-Handles")]),
-        new("GR-FRIST", "Frist → Command an genau ein Aggregat", "Eine Frist wird fällig als Command an genau ein Aggregat.", "error",
-            [An("CQRS056", "Domain.SourceGeneration (Fristen-Router)"), Gen("CQRS010", "Infrastructure.SourceGeneration/CommandAggregateMapGenerator.cs")]),
+        new("GR-FRIST", "Frist → Command an genau ein Aggregat", "Eine Frist wird fällig als Command an genau ein Aggregat — die Frist eines Aggregats "
+            + "(Frist<TCmd> aus seinem Decide) an sich selbst (R5).", "error",
+            [An("CQRS056", "Domain.SourceGeneration (Fristen-Router)"), Gen("CQRS010", "Infrastructure.SourceGeneration/CommandAggregateMapGenerator.cs"),
+             new("laufzeit", null, "Infrastructure/Aggregate/ActorSystem/AggregateActorBase.cs (Fristen: eine fremde Frist schreibt nichts)")]),
         new("GR-QUERY", "Query → genau ein Reader", "Eine Query beantwortet genau ein Reader.", "error",
             [An("CQRS084", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (mehrere Reader)"), An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (kein Reader)")]),
         new("GR-FAEHIGKEIT", "Fähigkeit → genau ein Store", "Eine Fähigkeit (Interface mit genau einer Funktion) implementiert genau eine Store-Klasse.", "error",
@@ -119,6 +121,29 @@ public static class Grammatik
              new("boot", null, "Infrastructure/Funktionen/FunktionsExtensions.cs (PrüfeBindungen: nicht AddExterneFunktion)")]),
         new("GR-FUNKTION-GEBUNDEN", "Gerufene Funktion ist gebunden", "Jede Funktion, die ein Prozess ruft, braucht im Host eine Bindung (AddFunktion<F, Impl>) — sonst bricht der Start.", "error",
             [new("boot", null, "Infrastructure/Funktionen/FunktionsExtensions.cs (PrüfeBindungen)")]),
+        // Funktion als Baustein und die Regeln der Wiederholbarkeit (Plan Pub/Sub-Neustrukturierung §3.6, Phase 3) — die Grammatik selbst
+        //   wird in Phase 4 auf den Plan umgestellt; bis dahin stehen die neuen Regeln neben den alten.
+        new("GR-FUNKTION-FORM", "Funktion: je Eingang ein Auf, freie Ausgabe", "Eine Funktion hat je Eingang (Event, Quell-Nachricht oder Hinweis) ein Auf "
+            + "mit optional Herkunft, Lese-Fähigkeiten und Abbruch; ausgegeben werden Commands, Events und Hinweise (konkret, OneOf, T?, Strom, je auch als "
+            + "Task) — vollständig in der Signatur. Als Klasse läuft sie im Host, als Schnittstelle draußen (Laufort aus der Umgebung); eine Schnittstelle "
+            + "ohne eindeutige Umsetzung braucht eine Bindung, eine Funktion mit Lese-Fähigkeit läuft nur im Host.", "error",
+            [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Form der Funktion)"),
+             new("boot", null, "Infrastructure/Funktionen/FunktionsBausteinWiring.cs (BindungVon: Laufort, Umsetzung, Lese-Fähigkeit nur im Host)")]),
+        new("GR-EIN-EINGANG", "Je Baustein und Eingangstyp eine Methode", "Ein Baustein nimmt jeden Eingangstyp mit höchstens einer Methode — ein Auf "
+            + "einer Funktion, ein Handle einer Projektion, Reaktion oder eines Readers (R2).", "error",
+            [An("CQRS101", "Domain.SourceGeneration/EinEingangAnalyzer.cs"), Gen("CQRS101", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs")]),
+        new("GR-GLEICH-RECHNEN", "Aggregat und Projektion rechnen gleich", "Aggregate und Projektionen rechnen bei gleicher Eingabe gleich: keine Uhr, "
+            + "kein Zufall, kein Lesen fremder Daten — Zeit kommt aus dem Event bzw. der Herkunft (R11).", "error",
+            [An("CQRS102", "Domain.SourceGeneration/GleichbleibendAnalyzer.cs")]),
+        new("GR-FESTHALTEN", "Funktion hält ihre Ausgabe fest", "Eine Funktion hält ihre Ausgabe im Log fest, bevor sie wirkt; ohne Festhalten sendet nur "
+            + "eine nachweislich gleichbleibende — eine Klasse ohne Dienst und ohne Lese-Fähigkeit, deren Rumpf weder Uhr noch Zufall noch fremde Daten "
+            + "nutzt (R12).", "error",
+            [An("CQRS103", "Domain.SourceGeneration/GleichbleibendAnalyzer.cs (gleichbleibend heißt ohne Uhr und Zufall)"),
+             new("generator", null, "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Gleichbleibend aus der Signatur)")]),
+        new("GR-NEUE-ID", "Neue Ids nur abgeleitet", "Auf der Server-Seite (Aggregat, Projektion, Reader, Funktion im Host) entstehen neue Ids nur "
+            + "abgeleitet (Herkunft.NeueId), nie mit Guid.NewGuid() oder Id<T>.Neu() — eine Wiederholung bekäme sonst ein anderes Ziel (R13). Clients "
+            + "würfeln.", "error",
+            [An("CQRS104", "Domain.SourceGeneration/GleichbleibendAnalyzer.cs")]),
         // Domänen-Dienste (konzept-werkbank §12.3 E11): Abhängigkeiten der Implementierungen, gebunden nach der Umgebung.
         new("GR-DIENST", "Dienst nur im Konstruktor einer Implementierung", "Ein Dienst (interface IX : IDienst) steht nur im Konstruktor einer "
             + "Funktions- oder Dienst-Implementierung — nie als Parameter, Feld oder Eigenschaft im Fachcode (Aggregat, Projektion, Reaktion, Reader): "

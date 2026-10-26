@@ -213,7 +213,7 @@ namespace Infrastructure.SourceGeneration
 
         /// <summary>
         /// Nachweislich gleichbleibend (R12, aus der Signatur): eine Klasse ohne Konstruktor-Parameter, deren <c>Auf</c> keine Lese-Fähigkeit nimmt.
-        /// Dass ihr Rumpf weder Uhr noch Zufall nutzt, prüft CQRS102.
+        /// Dass ihr Rumpf weder Uhr noch Zufall nutzt, prüft CQRS103.
         /// </summary>
         public static bool Gleichbleibend(Form f) =>
             !f.Draussen && f.Aufs.All(a => a.Faehigkeiten.Count == 0)
