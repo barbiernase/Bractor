@@ -21,7 +21,8 @@ exactly-once-Wirkung schon ([04](04-konsum-und-prozess-maschine.md) §4.3).
 **Nachweis** (Spalte in jeder Tabelle): der Test bzw. Analyzer, der die Garantie beweist — unter Störung, wo eine Störung sie brechen könnte
 (§11.14). Kürzel: **P** Prüfstand (`Infrastructure.Pruefstand.Tests`, store-frei über Seams), **I** Integration (`Infrastructure.Integration.Tests`,
 echtes Marten), **PD** Prüfdomäne (`Pruefdomaene.Integration.Tests`, echter Cluster), **E2E** die Exactly-once-Prüfung jedes Laufs von
-`scripts/vermessung-e2e.sh`. *Skip G-n* = der Test zeigt die offene Lücke G-n und ist bis zu ihrer Schließung übersprungen; eine Garantie ohne
+`scripts/vermessung-e2e.sh`, **VT** das Verhaltens-Netz (`Verhalten.Tests`: echte Hosts als Prozesse, nur von außen angesprochen — es muss
+den Umbau unverändert überstehen). *Skip G-n* = der Test zeigt die offene Lücke G-n und ist bis zu ihrer Schließung übersprungen; eine Garantie ohne
 Nachweis ist eine Lücke in [13](13-reifegrad-schulden-bewertung.md).
 
 ## 11.2 Schreibseite (Command → Events)
@@ -156,7 +157,9 @@ Kostenlos zur Laufzeit sind die Garantien aus §11.10 (Build und Start) sowie Si
 ## 11.13 Lücken
 
 Stehen nur in [13](13-reifegrad-schulden-bewertung.md) §13.0: **G-5** Versionszählung bei Split-Upcasts, **G-6** Garantien ohne eigenen
-Nachweis-Test, **G-11** eine Projektion übersprang in einem Störungslauf zwei Events (einmal beobachtet, Ursache und Test offen). Jede offene Lücke hat einen Test, der sie zeigt (Skip `G-n offen (docs/13)`); geschlossen ist sie erst, wenn ihr Test grün ist.
+Nachweis-Test, **G-11** eine Projektion übersprang in einem Störungslauf zwei Events (einmal beobachtet, Ursache und Test offen), **G-12** eine
+fachliche Ablehnung erreicht einen Client nie, dessen Vertrag ihren Typ nicht hört, **G-13** zwei Knoten vergeben dieselben Sitzungs-Kennungen
+(gezielte Antworten können bei der falschen Sitzung landen). Jede offene Lücke hat einen Test, der sie zeigt (Skip `G-n offen (docs/13)`); geschlossen ist sie erst, wenn ihr Test grün ist.
 Geschlossen: **G-1** Fristverlust, **G-7** Tombstones legen den Poll still, der Emittenten-Anteil von **G-2** (Phase 1); **G-3** Actor nach
 Append-Konflikt (Phase 2); **G-4** Projektions-Checkpoint ohne Versionsprüfung (Phase 3, Batch-Konsum); **G-8** Prozess-Poll ohne bestätigte
 Weckung (Phase 5, `ProzessPollGarantieTests`); **G-2** Inbox-Fenster (Phase 4, Inbox als Tabelle: Fenster → Horizont); **G-9** eine lange

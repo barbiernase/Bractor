@@ -100,9 +100,6 @@ public sealed class Arbeitsplatz : IAsyncDisposable
                                    + string.Join(", ", _empfangen.Select(x => $"{x.Nachricht.GetType().Name}[{x.Kontext.CorrelationId}]")));
     }
 
-    public async ValueTask DisposeAsync()
-    {
-        await _sp.GetRequiredService<ConnectionModule>().DisposeAsync();
-        await _sp.DisposeAsync();
-    }
+    // Der Container gibt das Verbindungs-Modul frei (ein zweites DisposeAsync des Moduls wirft: es ist nicht idempotent).
+    public ValueTask DisposeAsync() => _sp.DisposeAsync();
 }
