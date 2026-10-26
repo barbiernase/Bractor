@@ -35,6 +35,8 @@ public class RahmenActorTests
         public bool HoertAufStopp { get; init; }
         /// <summary>Konnte der Durchlauf nach dem Tor seinen Bereich noch benutzen?</summary>
         public bool? BereichBenutzbar;
+        /// <summary>War der Actor schon im Stopp (Token abgebrochen), als das Tor aufging?</summary>
+        public bool? GestopptAmTor;
 
         public async Task DurchlaufAsync(IFaehigkeiten bereich, CancellationToken stopp)
         {
@@ -48,6 +50,7 @@ public class RahmenActorTests
                     catch (OperationCanceledException) { Abgebrochen.TrySetResult(); }
                 }
                 await Tor.Task;
+                GestopptAmTor = stopp.IsCancellationRequested;
                 try { bereich.Hole<ZaehlFabrik.Bereich>(); BereichBenutzbar = true; }
                 catch (ObjectDisposedException) { BereichBenutzbar = false; }
             }
@@ -116,6 +119,7 @@ public class RahmenActorTests
 
         w.Tor.SetResult();
         await w.Fabrik.Frei.Task.WaitAsync(Geduld);
+        w.GestopptAmTor.Should().BeFalse("während des Durchlaufs passiviert der Actor nicht — er stoppt erst danach");
         w.BereichBenutzbar.Should().BeTrue();
         await system.ShutdownAsync();
     }
