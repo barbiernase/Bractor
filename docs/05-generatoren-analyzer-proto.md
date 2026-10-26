@@ -1,6 +1,6 @@
 # 05 — Generatoren, Analyzer & Codegen
 
-Stand 2026-10-13, gegen den Code geprüft. Maßstab: docs/konzept-werkbank.md.
+Stand 2026-10-13, gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
 
 Alles Dispatchende wird zur Compile-Zeit erzeugt, ohne Runtime-Reflection (Invariante 4). Drei Bausteine tragen das, alle laufen bei jedem
 `dotnet build` mit:

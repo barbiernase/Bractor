@@ -6,6 +6,11 @@ hierher. Stand: 2026-10-18, nach Phase 4 des Plans Garantien und Durchsatz, PF-1
 
 ## 13.0 Offen auf einen Blick
 
+**Umbau (2026-10-26):** [plan-pubsub-neustrukturierung.md](plan-pubsub-neustrukturierung.md) löst Broker, Signale, Prozess-Manager, Fluss- und
+Prozess-Sprache, Handle-/Trigger-Welt und den Redis-Versionsindex ab. Viele Punkte unten (u. a. PF-4b, PF-6, PF-7, PF-10, PF-13, PF-25, PF-26,
+W11-1, W11-2, AK-1, P2-5, P3-3) erledigen sich damit oder bekommen eine neue Form; sie werden mit der jeweiligen Phase des Plans abgeschlossen
+oder umgeschrieben. Die Befunde der Actor-Praxis vom 2026-10-18 stehen im Plan §1.7.
+
 | ID | Kurz | Prio |
 |---|---|:--:|
 | G-11 | Im Störungslauf übersprang eine Projektion einmal zwei Events eines Streams (Partition am Kopf, Guard dahinter) — Ursache und Test offen | P1 |

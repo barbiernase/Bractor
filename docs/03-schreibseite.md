@@ -1,6 +1,6 @@
 # 03 — Die Schreibseite (Command → Decider → Event → Store)
 
-Stand 2026-10-13, gegen den Code geprüft. Maßstab: docs/konzept-werkbank.md.
+Stand 2026-10-13, gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
 
 Der Schreibpfad ist das dichte Zentrum des Frameworks. `AggregateActorBase`
 (`Infrastructure/Aggregate/ActorSystem/AggregateActorBase.cs`) trägt fast alle Invarianten und Audit-Fixes und ist ausführlich

@@ -1,6 +1,6 @@
 # 11 — Garantien
 
-Stand 2026-10-16, gegen den Code geprüft. Maßstab: docs/konzept-werkbank.md.
+Stand 2026-10-16, gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
 
 Dieses Kapitel ist die **eine Quelle für „was garantiert das Framework?“** — je Weg die Garantie, der Mechanismus, der sie trägt, und die
 Bedingung, unter der sie gilt. Wie die Mechanik im Einzelnen läuft, steht in [03](03-schreibseite.md) (Schreibseite) und

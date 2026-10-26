@@ -1,6 +1,6 @@
 # 09 — Python-SDK und Worker
 
-Stand 2026-10-13, gegen den Code geprüft. Maßstab: docs/konzept-werkbank.md.
+Stand 2026-10-13, gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
 
 Zwei Teile, streng getrennt (W11):
 

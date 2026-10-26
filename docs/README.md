@@ -1,82 +1,46 @@
 # Dokumentation — CQRS/Event-Sourcing-Framework
 
-Stand 2026-10-13, gegen den Code geprüft. Maßstab: [konzept-werkbank.md](konzept-werkbank.md).
+Stand 2026-10-26, Zweig `pubsub_neustrukturierung`. Für die Dauer des Umbaus ist
+[plan-pubsub-neustrukturierung.md](plan-pubsub-neustrukturierung.md) der **Maßstab** (Zielbild, Grammatik, Garantien, Schritte); die Kapitel
+unten beschreiben den **Ist-Zustand** des Codes, den der Umbau ablöst. Wo beides widerspricht, gilt der Plan als Ziel und der Code als Ist.
 
-Dieser Wegweiser sagt nur, **wo** etwas steht. Reifegrad und Offenes stehen in [13](13-reifegrad-schulden-bewertung.md)
-(§13.0 Index, §13.1 Einschätzung), Zahlen und Messwerte in [12](12-tests-und-vermessung.md).
+## Lesepfad für den Umbau
 
-## Was ist das?
+1. [plan-pubsub-neustrukturierung.md](plan-pubsub-neustrukturierung.md) — was, warum, in welcher Reihenfolge.
+2. [11](11-garantien.md) — was heute garantiert ist und welcher Test es beweist (muss grün bleiben).
+3. [12](12-tests-und-vermessung.md) — wie getestet und gemessen wird (vor jedem Test lesen).
+4. Ist-Zustand der betroffenen Teile: [03](03-schreibseite.md) (bleibt weitgehend), [04](04-konsum-und-prozess-maschine.md) (Konsum- und
+   Prozess-Maschine, wird umgebaut), [05](05-generatoren-analyzer-proto.md), [06](06-transport-multinode-betrieb.md),
+   [konzept-akteure.md](konzept-akteure.md) → [08](08-frontend-blazor-client.md) → [09](09-python-sdk.md).
+5. [13](13-reifegrad-schulden-bewertung.md) — offene Lücken (besonders G-11).
 
-Ein selbstgebautes, signalbasiertes **CQRS-/Event-Sourcing-Framework** auf .NET 9, Proto.Actor (virtuelle Cluster-Actors),
-Marten/PostgreSQL (Event-Store = einzige Wahrheit) und Redis (nicht-autoritativer Versions-Index). Alles Dispatchende ist generiert,
-ohne Reflection. Darauf sitzen Clients mit Vertrag (Blazor, Python) und die **Werkbank**: eine Oberfläche, auf der eine Anwendung
-entworfen, als Code erzeugt, gebaut, im echten Host durchgespielt und über die Spur nachvollzogen wird. Kurzfassung: [01](01-ueberblick.md).
+## Dokumente
 
-## Lesepfade
-
-**Einstieg (30 Min.):** [01](01-ueberblick.md) → [konzept-werkbank.md](konzept-werkbank.md) §0–§2 → [02](02-design-prinzipien.md).
-
-**Bewertung:** [01](01-ueberblick.md) → [02](02-design-prinzipien.md) → [11](11-garantien.md) → [13](13-reifegrad-schulden-bewertung.md) →
-[12](12-tests-und-vermessung.md).
-
-**Architektur:** [01](01-ueberblick.md) → [03](03-schreibseite.md) → [04](04-konsum-und-prozess-maschine.md) →
-[05](05-generatoren-analyzer-proto.md) → [06](06-transport-multinode-betrieb.md).
-
-**Werkbank und Editor:** [konzept-werkbank.md](konzept-werkbank.md), Detail-Referenzen in der Konzept-Tabelle unten.
-
-**Neuer Baustein:** [10](10-entwickler-api.md) („Wie schreibe ich X?“), rückverweisend auf die Architektur-Kapitel.
-
-**Clients:** [konzept-akteure.md](konzept-akteure.md) (Akteure, Verträge, Clients) → [08](08-frontend-blazor-client.md) (Blazor) →
-[09](09-python-sdk.md) (Python).
-
-**Betrieb:** [06](06-transport-multinode-betrieb.md), Umgebungen in [konzept-werkbank.md](konzept-werkbank.md) §4.
-
-## Kapitel
-
-| # | Datei | Inhalt |
+| Datei | Inhalt | Rolle im Umbau |
 |---|---|---|
-| 01 | [01-ueberblick.md](01-ueberblick.md) | das System in einem Absatz, die sechs Invarianten (eine Quelle), Projekt-Landkarte, Gesamt-Datenfluss |
-| 02 | [02-design-prinzipien.md](02-design-prinzipien.md) | aus dem Code abgeleitete Prinzipien mit Belegen |
-| 03 | [03-schreibseite.md](03-schreibseite.md) | Command → Decide → Event → Log: Aggregat-Actor, Batching, Signal, Inbox |
-| 04 | [04-konsum-und-prozess-maschine.md](04-konsum-und-prozess-maschine.md) | vier Konsumenten, eine Pull-/Signal-Schleife; Prozess-Manager als Dirigent; Marking-Cursor |
-| 05 | [05-generatoren-analyzer-proto.md](05-generatoren-analyzer-proto.md) | Generatoren, Analyzer, Boot-Guards, Codegen im Build (Proto, STJ-Kontexte, Python-Basen) |
-| 06 | [06-transport-multinode-betrieb.md](06-transport-multinode-betrieb.md) | Wire-Serializer, Cluster, Multi-Node, Deploy, Monitoring |
-| 07 | [07-projektstruktur.md](07-projektstruktur.md) | feste Projekt- und Ordnerstruktur einer Anwendung: wo liegt was, wie heißt es (Entwurf) |
-| 08 | [08-frontend-blazor-client.md](08-frontend-blazor-client.md) | Blazor-Client: Bus/Store-Stack, Modul-System, Client mit Vertrag |
-| 09 | [09-python-sdk.md](09-python-sdk.md) | Python-SDK `cqrs_client` und Python-Worker |
-| 10 | [10-entwickler-api.md](10-entwickler-api.md) | „Wie schreibe ich X?“ für alle Bausteine |
-| 11 | [11-garantien.md](11-garantien.md) | Garantien je Weg: Wirkung, Zustellung, Ordnung, Bedingungen; Lücken als Reihe G in 13 |
-| 12 | [12-tests-und-vermessung.md](12-tests-und-vermessung.md) | Test-Ebenen, Zahlen, Messwerte, Fallstricke |
-| 13 | [13-reifegrad-schulden-bewertung.md](13-reifegrad-schulden-bewertung.md) | Reifegrad, Stärken, offene Befunde mit IDs, Erledigtes |
+| [plan-pubsub-neustrukturierung.md](plan-pubsub-neustrukturierung.md) | Zielbild, Grammatik, Garantien, Phasen | **Maßstab**, wird nach dem Umbau eingearbeitet und gelöscht |
+| [03-schreibseite.md](03-schreibseite.md) | Command → Decide → Event → Log: Aggregat-Actor, Bündel, Group-Commit, Inbox, Horizont | Ist; bleibt im Kern |
+| [04-konsum-und-prozess-maschine.md](04-konsum-und-prozess-maschine.md) | Batch-Leser, Emittenten, Prozess-Manager, Fluss, Funktionen, Spur | Ist; Batch-Leser bleibt, der Rest wird abgelöst |
+| [05-generatoren-analyzer-proto.md](05-generatoren-analyzer-proto.md) | Generatoren, Analyzer, Boot-Guards, Codegen im Build | Ist; Generatoren ändern sich |
+| [06-transport-multinode-betrieb.md](06-transport-multinode-betrieb.md) | Wire-Serializer, Cluster, Multi-Node, Umgebung, Monitoring | Ist; Grundlage für Verteiler je Knoten |
+| [07-projektstruktur.md](07-projektstruktur.md) | feste Projekt- und Ordnerstruktur (eine Quelle mit `Abstractions/Projektstruktur.cs`) | gilt; neue Primitive ⇒ Tabelle + `Lageart.cs` |
+| [08-frontend-blazor-client.md](08-frontend-blazor-client.md) | Blazor-Client: Transport, Bus, Store, Versionen | Ist; Clients werden umgebaut |
+| [09-python-sdk.md](09-python-sdk.md) | Python-SDK und Worker | Ist; Verträge werden umgebaut |
+| [11-garantien.md](11-garantien.md) | Garantien je Weg mit Nachweis-Tests | gilt; muss nach jeder Phase grün sein |
+| [12-tests-und-vermessung.md](12-tests-und-vermessung.md) | Test-Ebenen, Messverfahren, Messwerte (Tabellen schreibt `scripts/vermessung-tabelle.sh`) | gilt |
+| [13-reifegrad-schulden-bewertung.md](13-reifegrad-schulden-bewertung.md) | offene Befunde (§13.0), Erledigtes | gilt; die eine Quelle für „offen“ |
+| [konzept-akteure.md](konzept-akteure.md) | Akteure, Akteur-Verträge, Clients | Ist; Verträge werden zu `ISendet`/`IFragt`/`IHoert`/`ITraegt` |
+| [../vermessung/README.md](../vermessung/README.md) | Ablage der Messläufe | gilt |
 
-## Konzepte und Referenzen
+**Gelöscht** (veraltet oder für den Umbau nicht nötig; Stand im Git-Verlauf bei Commit `861ea7f`): `01-ueberblick.md`,
+`02-design-prinzipien.md`, `10-entwickler-api.md` (entsteht nach dem Umbau neu), `konzept-werkbank.md` (Leitsätze W1–W12 in Kurzform in
+`CLAUDE.md`; Editor zurückgestellt), `konzept-editor-komposition.md`, `konzept-editor-pipelines.md`, `konzept-llm-minimalkontext.md`,
+`plan-garantien-und-durchsatz.md`. Verweise in Kapiteln und Code-Kommentaren auf diese Dateien zeigen dorthin; sie werden in Phase 11 des Plans
+nachgezogen.
 
-| Datei | Thema | Status |
-|---|---|---|
-| [konzept-werkbank.md](konzept-werkbank.md) | Werkbank und Editor: Code als einzige Wahrheit, Gesten als Patch, Umgebungen, Durchspielen im echten Host, Spur | **kanonisch** |
-| [konzept-akteure.md](konzept-akteure.md) | Akteure, Akteur-Verträge (Zusagen, Kenntnisse), Clients | Detail-Referenz |
-| [konzept-editor-pipelines.md](konzept-editor-pipelines.md) | Pipeline als Fluss (§12–§14) | Detail-Referenz Fluss, umgesetzt |
-| [konzept-llm-minimalkontext.md](konzept-llm-minimalkontext.md) | LLM-Füllung von Rümpfen, Kontext nur aus Code und Graph | Detail-Referenz |
-| [konzept-editor-komposition.md](konzept-editor-komposition.md) | Editor als Kompositions-Sprache (Grammatik, Kapselung, Muster) | Sprache, Detail-Referenz |
-| [plan-garantien-und-durchsatz.md](plan-garantien-und-durchsatz.md) | Garantie-Lücken (G) und Durchsatz (PF) in Phasen, gemessen Ende-zu-Ende an den realen Domänen: Emittenten-Cursor, Passivierung, Batch-Konsum, Inbox-Tabelle | **Plan**, wird nach Umsetzung gelöscht |
+## Konventionen
 
-Die Beispieldomäne im Repo ist Prüfling, nicht Architektur (konzept-werkbank W11); sie hat keine eigenen Dokumente.
-Frühere Konzepte, Pläne und Archive sind gelöscht; ihre Historie liegt im Git-Verlauf.
-
-## Konventionen dieser Doku
-
-- **Eine Quelle je Thema.** Andere Dokumente nennen ein Thema höchstens kurz und verweisen:
-
-  | Thema | Quelle |
-  |---|---|
-  | Invarianten | [01](01-ueberblick.md) §1.2 |
-  | Werkbank, Editor, Umgebungen, Spur | [konzept-werkbank.md](konzept-werkbank.md) |
-  | Konsum-Maschine | [04](04-konsum-und-prozess-maschine.md) |
-  | Garantien | [11](11-garantien.md) |
-  | Offenes und Schulden | [13](13-reifegrad-schulden-bewertung.md) (§13.0) |
-  | Zahlen und Messwerte | [12](12-tests-und-vermessung.md) |
-  | Regeln (was womit verbunden werden darf) | der Code (Analyzer, Generator-Diagnosen, Boot-Guards) und `dotnet run --project GraphExtractor -- --grammatik` |
-  | Umgebungs-Schema | `Abstractions/Umgebung/UmgebungKonfig.cs` |
-
-- **Gegenwart:** Kapitel beschreiben den Ist-Zustand des Codes. Belege als Datei/Klasse, nicht als Zeilennummer.
-- **Sprache:** Deutsch (Projektkonvention).
+- **Eine Quelle je Thema:** Ziel und Grammatik → Plan; Garantien → 11; Offenes → 13 §13.0; Zahlen → 12; Projektstruktur → 07 und
+  `Abstractions/Projektstruktur.cs`; Regeln im Build → der Code (Analyzer, Generator-Diagnosen, Boot-Guards).
+- **Gegenwart:** Kapitel beschreiben den Ist-Zustand; Belege als Datei/Klasse.
+- **Sprache:** Deutsch.

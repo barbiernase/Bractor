@@ -1,8 +1,10 @@
 # CLAUDE.md
 
 Projektgedächtnis für Claude Code — bewusst schlank, nur Wissen, kein Changelog (Historie steht in Git).
-**Maßstab ist `docs/konzept-werkbank.md`** (Zielbild, umgesetzt 2026-10-13); wo etwas widerspricht, gilt es. Wegweiser: `docs/README.md`.
+**Maßstab im Zweig `pubsub_neustrukturierung` ist `docs/plan-pubsub-neustrukturierung.md`** (Zielbild, Grammatik, Garantien, Phasen des
+Umbaus; noch nicht umgesetzt). Wo etwas widerspricht, gilt der Plan als Ziel und der Code als Ist. Wegweiser: `docs/README.md`.
 Offenes und Schulden: `docs/13-reifegrad-schulden-bewertung.md` §13.0. Zahlen und Messwerte: `docs/12-tests-und-vermessung.md`.
+Das Bild unten („Das tragende Bild“) beschreibt den **Ist-Zustand**, den der Umbau ablöst.
 
 ## Was das Projekt ist
 
@@ -22,7 +24,9 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 6. Persistent genau dann, wenn ein durabler Konsument abhängt. Verlierbares (Tick, Ablehnung, UI-Feedback, Kenntnis-Push an Clients) bleibt
    auf dem schnellen Kanal. Quell-Nachrichten (z. B. vom Datei-Treiber) sind durabel: genau einmal je Kennung im Log.
 
-## Werkbank-Leitsätze (Kurzform von `docs/konzept-werkbank.md`)
+Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er darf verloren, doppelt, ungeordnet sein“ (Plan §2.3).
+
+## Werkbank-Leitsätze (Kurzform; das ausführliche Werkbank-Konzept liegt im Git-Verlauf, die Editor-Oberfläche ist im Umbau zurückgestellt)
 
 - **W1** Code ist die einzige Wahrheit; gespeichert wird nur die Ansicht (`.werkbank/ansicht.json`). Unfertiges = Code, der nicht baut.
 - **W2** Der Graph kommt aus dem Code über Roslyn: WAS etwas ist, sagen nur Code-Fakten (Marker, Attribute, Symbole, Signaturen), keine Domänen-Namen
@@ -38,7 +42,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - **W11** Allgemeines Framework: eine Primitive bleibt, wenn sie allgemein gebraucht wird — nicht, weil die Beispieldomäne sie nutzt. Je Absicht ein Weg.
 - **W12** Keine GUIs im Editor (Clients nur als Vertrag), keine Schema-Evolution im Editor (`IUpcast` bleibt als Backend-Primitive), kein Deploy.
 
-## Das tragende Bild
+## Das tragende Bild (Ist-Zustand vor dem Umbau)
 
 - **Schreibseite:** Command → Aggregat-Actor (Single-Writer, Inbox-Dedup) → `Decide` → Events → Group-Commit → Signal.
 - **Vier durable Konsumenten, eine Maschine:** Projektion, Reaktion, Prozess, Fluss. Projektionen laufen im **Batch-Konsum** (`BatchLeser` je
@@ -109,7 +113,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - Werkbank-Abnahme (echte Werkbank auf einer Kopie, eigene Sim-DB, sequentiell, nach `dotnet build`):
   `dotnet test Werkbank.Abnahme.Tests/Werkbank.Abnahme.Tests.csproj`
 - Werkbank: `dotnet run --project Werkbank` → http://localhost:5178/editor/ (in `.claude/launch.json` als „Werkbank“). ⟳ baut und startet den echten
-  Host in der gewählten Umgebung; Bedienung (Palette, ⊕, ✎, 🤖, ↶, Spur): `docs/konzept-werkbank.md` §6–§8.
+  Host in der gewählten Umgebung (Oberfläche im Umbau zurückgestellt, Plan E4).
 - Hosts: `dotnet run --project Host.Grpc -- --umgebung sim-main` bzw. `Host.Blazor -- --umgebung sim-main` (Sim-DB `cqrs_sim_<branch>` über `CQRS_BRANCH`).
 - Multi-Node (3 Nodes + Consul): `docker compose -f deploy-multinode/docker-compose.yml up -d --build` (`docs/06-transport-multinode-betrieb.md`).
 - Gate „frischer Checkout baut“ (vor jedem Push): `./pruefe-checkout.sh` (Worktree des Commits: ignorierte Quellen, Build, Drift, Prüfstand)
@@ -117,20 +121,18 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - Agnostik-Sonde (fremde Domäne + Gesten-Skript + Fixpunkt): `dotnet run --project GraphExtractor -- --sonde`
 - Grammatik als Liste „Regel → Build-Gegenstück“: `dotnet run --project GraphExtractor -- --grammatik`
 - Warmer Workspace messen: `dotnet run --project GraphExtractor -- --warm`
-- LLM-Kontexte: `dotnet run --project GraphExtractor -- --kontexte <verz>` bzw. `--kontext <Disc>`, Slots: `--slots` (`docs/konzept-llm-minimalkontext.md`)
+- LLM-Kontexte: `dotnet run --project GraphExtractor -- --kontexte <verz>` bzw. `--kontext <Disc>`, Slots: `--slots`
 
 ## Wo steht was
 
 | Frage | Dokument |
 |---|---|
-| Zielbild, Leitsätze, Bedienung der Werkbank | `docs/konzept-werkbank.md` |
-| Wie schreibe ich X? | `docs/10-entwickler-api.md` |
-| Warum? | `docs/02-design-prinzipien.md` |
-| Was ist garantiert (Wirkung, Ordnung, Zustellung)? | `docs/11-garantien.md` |
-| Akteure, Verträge, Clients | `docs/konzept-akteure.md` |
-| Fluss (Pipeline) im Detail | `docs/konzept-editor-pipelines.md` §14 |
+| Ziel des Umbaus, neue Grammatik, Garantien, Schritte | `docs/plan-pubsub-neustrukturierung.md` |
+| Was ist heute garantiert (Wirkung, Ordnung, Zustellung)? | `docs/11-garantien.md` |
+| Wie funktioniert es heute? | `docs/03` (Schreibseite), `docs/04` (Konsum, Prozess, Fluss), `docs/05` (Generatoren), `docs/06` (Transport) |
+| Akteure, Verträge, Clients | `docs/konzept-akteure.md`, `docs/08` (Blazor), `docs/09` (Python) |
 | Offen, Schulden | `docs/13-reifegrad-schulden-bewertung.md` §13.0 |
 | Tests, Zahlen, Messwerte | `docs/12-tests-und-vermessung.md` |
 
-**Hinweis (2026-10-13):** Die Doku wird gerade gegen das Zielbild aufgeräumt; Kapitel 01–11 enthalten noch veraltete Stellen
-(z. B. gelöschte Beispiel-Domänen, „Ctor-Stores“, manueller Proto-Schritt). Für Fakten gilt der Code, für das Ziel `docs/konzept-werkbank.md`.
+**Hinweis (2026-10-26):** Für den Umbau wurden veraltete und nicht benötigte Dokumente gelöscht (Liste in `docs/README.md`, Stand im Git-Verlauf
+bei `861ea7f`). Verweise darauf in Kapiteln und Code-Kommentaren werden in Phase 11 des Plans nachgezogen. Für Fakten gilt der Code.

@@ -1,6 +1,6 @@
 # 06 — Transport, Multi-Node & Betrieb
 
-Stand 2026-10-13, gegen den Code geprüft. Maßstab: docs/konzept-werkbank.md.
+Stand 2026-10-13, gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
 
 Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses Kapitel verweisen.
 

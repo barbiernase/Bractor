@@ -1,6 +1,6 @@
 # 04 — Konsum- & Prozess-Maschine (vier Konsumenten, eine Maschine)
 
-Stand 2026-10-16 (Batch-Konsum, Horizont der Vollständigkeit), gegen den Code geprüft. Maßstab: docs/konzept-werkbank.md.
+Stand 2026-10-16 (Batch-Konsum, Horizont der Vollständigkeit), gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
 
 Projektion, Reaktion, Prozess und Fluss sind **vier durable Konsumenten des Logs**. Sie folgen demselben Muster: ein Signal weckt
 schnell, ein Poll heilt verlorene Signale, gelesen wird geordnet aus dem Event-Store (Invariante 1), der Fortschritt liegt durabel im
