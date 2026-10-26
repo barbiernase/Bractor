@@ -61,6 +61,10 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(ArbeitErledigt))]
 [JsonSerializable(typeof(ListeOffene))]
 [JsonSerializable(typeof(OffeneAuftraege))]
+[JsonSerializable(typeof(EingangAnbieten))]
+[JsonSerializable(typeof(HoleEingaenge))]
+[JsonSerializable(typeof(EingaengeZugeteilt))]
+[JsonSerializable(typeof(EingangBeantwortet))]
 [JsonSerializable(typeof(HalteQuelle))]
 [JsonSerializable(typeof(QuelleGehalten))]
 // ── Framework: Ergebnis-/Prozess-/Inbox-Events (reisen im Wire) ──
@@ -74,6 +78,8 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(Abstractions.QuellStrom))]
 [JsonSerializable(typeof(KommandoVerarbeitet))]
 [JsonSerializable(typeof(KommandoAbgelehnt))]
+[JsonSerializable(typeof(BefehlFestgehalten))]
+[JsonSerializable(typeof(AusgabeFestgehalten))]
 // ── Domänen-Commands/Events/Trigger/Aufträge/Queries (Domain.*) (gescannt) ──
 [JsonSerializable(typeof(global::Domain.Benchmark.BenchPing))]
 [JsonSerializable(typeof(global::Domain.Datensatz.DatensatzBereitsEingefroren))]

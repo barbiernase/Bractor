@@ -14,6 +14,9 @@ namespace Infrastructure.Funktionen;
 /// <summary>Ein Auftrag, der auf eine menschliche Antwort wartet: der Auftrag, seine Funktion und seit wann er hier liegt.</summary>
 public sealed record HandAuftrag(AuftragAnbieten Auftrag, Type Funktion, DateTimeOffset Seit);
 
+/// <summary>Ein Eingang einer Funktion in Baustein-Form, der auf eine menschliche Antwort wartet.</summary>
+public sealed record HandEingang(EingangAnbieten Eingang, FunktionsBaustein Funktion, DateTimeOffset Seit);
+
 /// <summary>
 /// Laufort <c>Hand</c> (docs/konzept-werkbank.md §6, Werkbank P5.2): ein MENSCH beantwortet die Aufträge einer Funktion — die Werkbank ist
 /// der Ausführer. Derselbe Weg wie ein Python-Worker: eine <see cref="FunktionsAnbieterSitzung"/> holt die Aufträge beim Vermittler (Pull),
@@ -35,14 +38,43 @@ public sealed class HandAusfuehrer : BackgroundService
     private readonly ILogger<HandAusfuehrer>? _logger;
     private readonly ConcurrentDictionary<Guid, HandAuftrag> _ablage = new();
     private FunktionsAnbieterSitzung? _sitzung;
+    // Funktionen in Baustein-Form mit Laufort Hand (Plan Pub/Sub-Neustrukturierung Phase 3): dieselbe Rolle, eine eigene Sitzung.
+    private readonly IReadOnlyList<FunktionsBaustein> _bausteine;
+    private readonly IAusgabeAblage? _ausgaben;
+    private readonly Projections.Konsum _konsum;
+    private readonly ConcurrentDictionary<Guid, HandEingang> _eingaenge = new();
+    private BausteinSitzung? _bausteinSitzung;
 
     public HandAusfuehrer(ActorSystem system, FunktionsAusfuehrer ausfuehrer, IEnumerable<FunktionsBindung> bindungen,
-        ILogger<HandAusfuehrer>? logger = null)
+        ILogger<HandAusfuehrer>? logger = null, IEnumerable<BausteinBindung>? bausteinBindungen = null, IAusgabeAblage? ausgaben = null,
+        Projections.Konsum? konsum = null)
     {
         _system = system;
         _ausfuehrer = ausfuehrer;
         _funktionen = bindungen.Where(b => b.Hand).Select(b => b.Funktion).Distinct().ToList();
         _logger = logger;
+        var hand = (bausteinBindungen ?? []).Where(b => b.Laufort == FunktionsLaufort.Hand).Select(b => b.Funktion).ToHashSet(StringComparer.Ordinal);
+        _bausteine = Anwendung.Funktionen.Bausteine.Where(b => hand.Contains(b.Name)).ToList();
+        _ausgaben = ausgaben;
+        _konsum = konsum ?? Projections.Konsum.Standard;
+    }
+
+    /// <summary>Die Funktionen in Baustein-Form mit Laufort Hand.</summary>
+    public IReadOnlyList<FunktionsBaustein> Bausteine => _bausteine;
+
+    /// <summary>Die wartenden Eingänge (Baustein-Form), älteste zuerst.</summary>
+    public IReadOnlyList<HandEingang> OffeneEingaenge => _eingaenge.Values.OrderBy(a => a.Seit).ToList();
+
+    /// <summary>
+    /// Die Antwort des Menschen auf einen Eingang (Baustein-Form): die Ausgaben der Funktion (nur Typen ihrer Signatur) oder ein Fehler. Festgehalten wird
+    /// unter „F, X“ — eine andere, schnellere Antwort gewinnt (<see cref="ErgebnisAusgang.Ueberholt"/>).
+    /// </summary>
+    public async Task<ErgebnisAusgang> AntworteAsync(Guid vorgang, IReadOnlyList<IPipelineOutput>? ausgaben, string? fehler, CancellationToken ct)
+    {
+        if (_bausteinSitzung is null || !_eingaenge.ContainsKey(vorgang)) return ErgebnisAusgang.Unbekannt;
+        var ausgang = await _bausteinSitzung.AntwortAsync(vorgang, ausgaben, fehler, ct);
+        _eingaenge.TryRemove(vorgang, out _);
+        return ausgang;
     }
 
     /// <summary>Die Funktionen mit Laufort Hand.</summary>
@@ -65,8 +97,44 @@ public sealed class HandAusfuehrer : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (_funktionen.Count == 0) return;
+        if (_funktionen.Count == 0 && _bausteine.Count == 0) return;
         var bote = new Bote(_system.Cluster(), _logger);
+        if (_bausteine.Count > 0 && _ausgaben is not null)
+        {
+            _bausteinSitzung = new BausteinSitzung($"{_system.Address}/hand",
+                name => _bausteine.FirstOrDefault(b => b.Name == name),
+                (b, anfrage, ct) => bote.FrageAsync<EingaengeZugeteilt>(FunktionsVermittlerActor.Identitaet(b.Typ), anfrage,
+                    TimeSpan.FromMilliseconds(Math.Max(0, anfrage.WarteMs)) + TimeSpan.FromSeconds(5), ct),
+                (b, nachricht) => { bote.Melde(FunktionsVermittlerActor.Identitaet(b.Typ), nachricht); return Task.CompletedTask; },
+                (e, b) =>
+                {
+                    _eingaenge.TryAdd(e.Vorgang, new HandEingang(e, b, DateTimeOffset.UtcNow));
+                    _logger?.LogInformation("[Funktion] {Funktion}: Eingang {Stream}:{Version} wartet auf eine Antwort von Hand", b.Name, e.Stream, e.Version);
+                    return Task.CompletedTask;
+                },
+                _ausgaben,
+                (b, e, fehler) =>
+                {
+                    bote.Melde(FunktionsActor.Identitaet(b, Partitionierung.Von(e.Stream, _konsum.Partitionen)), new EingangBeantwortet(e.Vorgang, fehler));
+                    return Task.CompletedTask;
+                },
+                _logger);
+            _bausteinSitzung.Biete(_bausteine.Select(b => (b.Name, Slots)));
+        }
+        if (_funktionen.Count == 0)
+        {
+            try
+            {
+                while (!stoppingToken.IsCancellationRequested)
+                {
+                    await Task.Delay(LebenszeichenAlle, stoppingToken);
+                    foreach (var v in _eingaenge.Keys) await _bausteinSitzung!.LebtAsync(v);
+                }
+            }
+            catch (OperationCanceledException) { }
+            finally { if (_bausteinSitzung is not null) await _bausteinSitzung.DisposeAsync(); }
+            return;
+        }
         _sitzung = new FunktionsAnbieterSitzung(
             $"{_system.Address}/hand",
             name => FunktionsAnbieterSitzung.LoeseImKatalog(name, _funktionen),
@@ -90,10 +158,15 @@ public sealed class HandAusfuehrer : BackgroundService
             {
                 await Task.Delay(LebenszeichenAlle, stoppingToken);
                 foreach (var v in _ablage.Keys) await _sitzung.LebtAsync(v);
+                if (_bausteinSitzung is not null) foreach (var v in _eingaenge.Keys) await _bausteinSitzung.LebtAsync(v);
             }
         }
         catch (OperationCanceledException) { }
-        finally { await _sitzung.DisposeAsync(); }
+        finally
+        {
+            await _sitzung.DisposeAsync();
+            if (_bausteinSitzung is not null) await _bausteinSitzung.DisposeAsync();
+        }
     }
 }
 

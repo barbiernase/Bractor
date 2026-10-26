@@ -21,14 +21,19 @@ public sealed class FunktionsVermittlerActor : RahmenActor
 
     private sealed record Tick;
     private sealed record Geparkt(PID Antwort, HoleArbeit Anfrage, DateTimeOffset Bis);
+    private sealed record GeparktEingang(PID Antwort, HoleEingaenge Anfrage, DateTimeOffset Bis);
 
     private readonly FunktionsVermittlung _kern;
+    // Eingänge der Baustein-Form (Plan Pub/Sub-Neustrukturierung §2.2): dieselbe Mechanik, eigene Schlange — ein Vermittler je Funktion.
+    private readonly Vermittlung<EingangAnbieten> _eingaenge;
     private readonly Func<DateTimeOffset> _jetzt;
     private readonly LinkedList<Geparkt> _geparkt = new();
+    private readonly LinkedList<GeparktEingang> _geparktEingang = new();
 
     public FunktionsVermittlerActor(TimeSpan lease, Func<DateTimeOffset>? jetzt = null)
     {
         _kern = new FunktionsVermittlung(lease);
+        _eingaenge = new Vermittlung<EingangAnbieten>(lease);
         _jetzt = jetzt ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -67,25 +72,61 @@ public sealed class FunktionsVermittlerActor : RahmenActor
                 }
                 break;
 
+            case EingangAnbieten a:
+                _eingaenge.Biete(a);
+                BedieneEingaenge(context);
+                context.Respond(new WakeAck());
+                break;
+
+            case HoleEingaenge h:
+                var eingaenge = _eingaenge.Hole(h.Arbeiter, Math.Max(0, h.Max), _jetzt());
+                if (eingaenge.Count > 0 || h.WarteMs <= 0 || context.Sender is null)
+                    context.Respond(new EingaengeZugeteilt(eingaenge));
+                else
+                {
+                    for (var n = _geparktEingang.First; n is not null;)
+                    {
+                        var weiter = n.Next;
+                        if (n.Value.Anfrage.Arbeiter == h.Arbeiter) _geparktEingang.Remove(n);
+                        n = weiter;
+                    }
+                    _geparktEingang.AddLast(new GeparktEingang(context.Sender, h, _jetzt().AddMilliseconds(h.WarteMs)));
+                }
+                break;
+
             case ArbeitLebt l:
                 _kern.Lebenszeichen(l.Vorgang, l.Arbeiter, _jetzt());
+                _eingaenge.Lebenszeichen(l.Vorgang, l.Arbeiter, _jetzt());
                 context.Respond(new WakeAck());
                 break;
 
             case ArbeitErledigt e:
                 _kern.Erledigt(e.Vorgang);
+                _eingaenge.Erledigt(e.Vorgang);
                 context.Respond(new WakeAck());
                 break;
 
             case ListeOffene:
-                context.Respond(new OffeneAuftraege(_kern.Offen()));
+                context.Respond(new OffeneAuftraege(_kern.Offen().Concat(_eingaenge.Offen()).ToList()));
                 break;
 
             case Tick:
                 // abgelaufene Leases zurückgeben (und neu verteilen), abgelaufene Wartende leer beantworten
                 _kern.GibAbgelaufeneZurück(_jetzt());
+                _eingaenge.GibAbgelaufeneZurück(_jetzt());
                 Bediene(context);
+                BedieneEingaenge(context);
                 var jetzt = _jetzt();
+                for (var n = _geparktEingang.First; n is not null;)
+                {
+                    var weiter = n.Next;
+                    if (n.Value.Bis <= jetzt)
+                    {
+                        context.Send(n.Value.Antwort, new EingaengeZugeteilt(Array.Empty<EingangAnbieten>()));
+                        _geparktEingang.Remove(n);
+                    }
+                    n = weiter;
+                }
                 for (var n = _geparkt.First; n is not null;)
                 {
                     var weiter = n.Next;
@@ -111,6 +152,18 @@ public sealed class FunktionsVermittlerActor : RahmenActor
             if (los.Count == 0) break;
             _geparkt.RemoveFirst();
             context.Send(n.Value.Antwort, new ArbeitZugeteilt(los));
+        }
+    }
+
+    /// <summary>Geparkte Hol-Anfragen nach Eingängen der Reihe nach bedienen, solange Arbeit da ist.</summary>
+    private void BedieneEingaenge(IContext context)
+    {
+        while (_geparktEingang.First is { } n && _eingaenge.Wartend > 0)
+        {
+            var los = _eingaenge.Hole(n.Value.Anfrage.Arbeiter, n.Value.Anfrage.Max, _jetzt());
+            if (los.Count == 0) break;
+            _geparktEingang.RemoveFirst();
+            context.Send(n.Value.Antwort, new EingaengeZugeteilt(los));
         }
     }
 

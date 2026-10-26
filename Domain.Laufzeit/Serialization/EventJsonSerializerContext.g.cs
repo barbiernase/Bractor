@@ -33,6 +33,9 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(Abstractions.QuellStrom))]
 [JsonSerializable(typeof(KommandoVerarbeitet))]
 [JsonSerializable(typeof(KommandoAbgelehnt))]
+// ── Framework: festgehaltene Ausgabe der Funktionen (Plan Pub/Sub-Neustrukturierung Phase 3) ──
+[JsonSerializable(typeof(Infrastructure.Funktionen.BefehlFestgehalten))]
+[JsonSerializable(typeof(Infrastructure.Funktionen.AusgabeFestgehalten))]
 // ── Domänen-Events (Domain.*, persistierbar) (gescannt) ──
 [JsonSerializable(typeof(global::Domain.Benchmark.BenchPing))]
 [JsonSerializable(typeof(global::Domain.Datensatz.DatensatzEingefroren))]

@@ -12,8 +12,46 @@ namespace Infrastructure.Funktionen;
 // Auftrag bei jeder Weckung erneut an (§3-Backstop alle 15 s), und der Vermittler baut sich daraus wieder auf.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
+/// <summary>Was ein Vermittler verteilt: eine Arbeit mit Schlüssel (<see cref="Vorgang"/>), ihr Inhalt (Typname) und ihre Ursache — für den Einblick.</summary>
+public interface IArbeit
+{
+    Guid Vorgang { get; }
+    Guid Korrelation { get; }
+    string Inhalt { get; }
+    string? Ursache { get; }
+}
+
 /// <summary>Ein angebotener Auftrag: wer ihn will (Korrelation des Vorgangs), seine Ausführungs-Id (Vorgang) und der Inhalt.</summary>
-public sealed record AuftragAnbieten(Guid Vorgang, Guid Korrelation, string? Akteur, IAuftrag Auftrag, string? Ursache = null, string? Wirker = null) : IWireMessage;
+public sealed record AuftragAnbieten(Guid Vorgang, Guid Korrelation, string? Akteur, IAuftrag Auftrag, string? Ursache = null, string? Wirker = null)
+    : IWireMessage, IArbeit
+{
+    string IArbeit.Inhalt => Auftrag.GetType().Name;
+}
+
+/// <summary>
+/// Ein Eingang einer Funktion in Baustein-Form, die draußen rechnet (Plan Pub/Sub-Neustrukturierung §2.2): Schlüssel „F, X“ (<see cref="Vorgang"/>,
+/// der Stream des Festhaltens), Funktion, der Eingang selbst und seine Herkunft. Wer antwortet, hält die Ausgabe unter dem Schlüssel fest — die
+/// erste Antwort gewinnt; gesendet wird beim Funktions-Actor.
+/// </summary>
+public sealed record EingangAnbieten(Guid Vorgang, string Funktion, IEvent Eingang, Guid Stream, int Version, DateTimeOffset Zeit,
+    string? KorrelationsText, string? Akteur, string? Ursache = null, string? Wirker = null) : IWireMessage, IArbeit
+{
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Guid Korrelation => Guid.TryParse(KorrelationsText, out var k) ? k : Stream;
+    string IArbeit.Inhalt => Eingang.GetType().Name;
+}
+
+/// <summary>Ein Ausführer holt bis zu <paramref name="Max"/> Eingänge (Baustein-Form); ist keiner da, wartet die Anfrage bis zu <paramref name="WarteMs"/>.</summary>
+public sealed record HoleEingaenge(string Arbeiter, int Max, int WarteMs) : IWireMessage;
+
+/// <summary>Die zugeteilten Eingänge (leer, wenn die Wartezeit ohne Arbeit verstrich).</summary>
+public sealed record EingaengeZugeteilt(IReadOnlyList<EingangAnbieten> Eingaenge) : IWireMessage;
+
+/// <summary>
+/// An den Funktions-Actor: die Antwort auf den Eingang mit diesem Schlüssel liegt vor (festgehalten), oder draußen ist er gescheitert
+/// (<paramref name="Fehler"/>). Verlierbar — der Actor sieht nach einer Geduld ohnehin nach.
+/// </summary>
+public sealed record EingangBeantwortet(Guid Schluessel, string? Fehler = null) : IWireMessage;
 
 /// <summary>Ein Ausführer holt bis zu <paramref name="Max"/> Aufträge; ist keiner da, wartet die Anfrage bis zu <paramref name="WarteMs"/>.</summary>
 public sealed record HoleArbeit(string Arbeiter, int Max, int WarteMs) : IWireMessage;
@@ -36,23 +74,27 @@ public sealed record OffenerAuftrag(Guid Vorgang, Guid Korrelation, string Auftr
 /// <summary>Die Antwort auf <see cref="ListeOffene"/>.</summary>
 public sealed record OffeneAuftraege(IReadOnlyList<OffenerAuftrag> Auftraege) : IWireMessage;
 
+/// <summary>Der Kern eines Vermittlers für Katalog-Aufträge (<see cref="AuftragAnbieten"/>).</summary>
+public sealed class FunktionsVermittlung(TimeSpan lease, int erinnerung = 10_000) : Vermittlung<AuftragAnbieten>(lease, erinnerung);
+
 /// <summary>
 /// Der reine Kern eines Vermittlers (je Funktion): Warteschlange, Leases, Lebenszeichen, kürzlich Erledigtes. Ohne Uhr und
-/// ohne Transport — die Zeit kommt als Argument; im Prüfstand vollständig beweisbar.
+/// ohne Transport — die Zeit kommt als Argument; im Prüfstand vollständig beweisbar. Dieselbe Mechanik für Katalog-Aufträge und für
+/// Eingänge der Baustein-Form (<see cref="EingangAnbieten"/>).
 /// </summary>
-public sealed class FunktionsVermittlung
+public class Vermittlung<TArbeit> where TArbeit : class, IArbeit
 {
     private readonly TimeSpan _lease;
     private readonly int _erinnerung;
     private readonly LinkedList<Guid> _warteschlange = new();
-    private readonly Dictionary<Guid, AuftragAnbieten> _offen = new();
-    private readonly Dictionary<Guid, (AuftragAnbieten Auftrag, string Arbeiter, DateTimeOffset Bis)> _vergeben = new();
+    private readonly Dictionary<Guid, TArbeit> _offen = new();
+    private readonly Dictionary<Guid, (TArbeit Auftrag, string Arbeiter, DateTimeOffset Bis)> _vergeben = new();
     private readonly HashSet<Guid> _erledigt = new();
     private readonly Queue<Guid> _erledigtReihenfolge = new();
 
     /// <param name="lease">Wie lange ein geholter Auftrag einem Ausführer gehört, ohne Lebenszeichen.</param>
     /// <param name="erinnerung">Wie viele erledigte Aufträge der Vermittler sich merkt (gegen erneute Angebote aus alten Weckungen).</param>
-    public FunktionsVermittlung(TimeSpan lease, int erinnerung = 10_000)
+    public Vermittlung(TimeSpan lease, int erinnerung = 10_000)
     {
         _lease = lease;
         _erinnerung = erinnerung;
@@ -62,7 +104,7 @@ public sealed class FunktionsVermittlung
     public int Vergeben => _vergeben.Count;
 
     /// <summary>Nimmt ein Angebot auf. Bekannt (wartend, vergeben, gerade erledigt) → ignoriert. Liefert, ob es neu war.</summary>
-    public bool Biete(AuftragAnbieten a)
+    public bool Biete(TArbeit a)
     {
         if (_offen.ContainsKey(a.Vorgang) || _vergeben.ContainsKey(a.Vorgang) || _erledigt.Contains(a.Vorgang)) return false;
         _offen[a.Vorgang] = a;
@@ -71,10 +113,10 @@ public sealed class FunktionsVermittlung
     }
 
     /// <summary>Teilt bis zu <paramref name="max"/> Aufträge zu (älteste zuerst); abgelaufene Leases kommen vorher zurück in die Schlange.</summary>
-    public IReadOnlyList<AuftragAnbieten> Hole(string arbeiter, int max, DateTimeOffset jetzt)
+    public IReadOnlyList<TArbeit> Hole(string arbeiter, int max, DateTimeOffset jetzt)
     {
         GibAbgelaufeneZurück(jetzt);
-        var los = new List<AuftragAnbieten>();
+        var los = new List<TArbeit>();
         while (los.Count < max && _warteschlange.First is { } knoten)
         {
             _warteschlange.RemoveFirst();
@@ -106,10 +148,10 @@ public sealed class FunktionsVermittlung
 
     /// <summary>Die offenen Aufträge: zuerst die vergebenen, dann die wartenden in Schlangen-Reihenfolge.</summary>
     public IReadOnlyList<OffenerAuftrag> Offen()
-        => _vergeben.Values.Select(v => new OffenerAuftrag(v.Auftrag.Vorgang, v.Auftrag.Korrelation, v.Auftrag.Auftrag.GetType().Name,
+        => _vergeben.Values.Select(v => new OffenerAuftrag(v.Auftrag.Vorgang, v.Auftrag.Korrelation, v.Auftrag.Inhalt,
                                                            v.Auftrag.Ursache, v.Arbeiter, v.Bis))
             .Concat(_warteschlange.Where(_offen.ContainsKey).Select(g => _offen[g])
-                .Select(a => new OffenerAuftrag(a.Vorgang, a.Korrelation, a.Auftrag.GetType().Name, a.Ursache, null, null)))
+                .Select(a => new OffenerAuftrag(a.Vorgang, a.Korrelation, a.Inhalt, a.Ursache, null, null)))
             .ToList();
 
     /// <summary>Abgelaufene Leases zurück an den ANFANG der Schlange (sie warten am längsten).</summary>

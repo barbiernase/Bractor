@@ -30,7 +30,10 @@ namespace Infrastructure.Serialization;
         typeof(IStateChangeSignalJsonConverter),
         typeof(IMessageEnvelopeJsonConverter),
         typeof(PidJsonConverter),
+        typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Abrechnung.Kundenkonto>),
+        typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Abrechnung.Rechnung>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Auftrag.Auftrag>),
+        typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Import.Importauftrag>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Kontingent.Kontingent>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Posten.Posten>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Verteilung.Verteilung>),
@@ -59,6 +62,10 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(ArbeitErledigt))]
 [JsonSerializable(typeof(ListeOffene))]
 [JsonSerializable(typeof(OffeneAuftraege))]
+[JsonSerializable(typeof(EingangAnbieten))]
+[JsonSerializable(typeof(HoleEingaenge))]
+[JsonSerializable(typeof(EingaengeZugeteilt))]
+[JsonSerializable(typeof(EingangBeantwortet))]
 [JsonSerializable(typeof(HalteQuelle))]
 [JsonSerializable(typeof(QuelleGehalten))]
 // ── Framework: Ergebnis-/Prozess-/Inbox-Events (reisen im Wire) ──
@@ -72,13 +79,36 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(Abstractions.QuellStrom))]
 [JsonSerializable(typeof(KommandoVerarbeitet))]
 [JsonSerializable(typeof(KommandoAbgelehnt))]
+[JsonSerializable(typeof(BefehlFestgehalten))]
+[JsonSerializable(typeof(AusgabeFestgehalten))]
 // ── Domänen-Commands/Events/Trigger/Aufträge/Queries (Domain.*) (gescannt) ──
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.BezahleRechnung))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.BucheGutschrift))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.GibRechnungFrei))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.GutschriftGebucht))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.MahnungVermerkt))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.PruefeZahlung))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.RechnungBezahlt))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.RechnungExistiert))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.RechnungFreigegeben))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.RechnungGesperrt))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.RechnungGestellt))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.RechnungUnbekannt))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.SperreRechnung))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.StelleRechnung))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.VermerkeMahnung))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.ZahlungUeberfaellig))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.AuftragBestaetigt))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.AuftragExistiertBereits))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.AuftragGestartet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.AuftragNichtGefunden))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.BestaetigeAuftrag))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.StarteAuftrag))]
+[JsonSerializable(typeof(global::Pruefdomaene.Import.ImportExistiert))]
+[JsonSerializable(typeof(global::Pruefdomaene.Import.ImportGestartet))]
+[JsonSerializable(typeof(global::Pruefdomaene.Import.ImportStandGemeldet))]
+[JsonSerializable(typeof(global::Pruefdomaene.Import.MeldeImportStand))]
+[JsonSerializable(typeof(global::Pruefdomaene.Import.StarteImport))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.BelegeKontingent))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.EntlasteKontingent))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentBelegt))]
@@ -88,6 +118,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentExistiertBereits))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentNichtGefunden))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.RichteKontingentEin))]
+[JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Abrechnung.MahnungUnnoetig))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.BuchePostenZu))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.EroeffnePosten))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.GibPostenFrei))]

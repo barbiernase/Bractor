@@ -16,7 +16,10 @@ namespace Infrastructure.Serialization;
     GenerationMode = JsonSourceGenerationMode.Metadata,
     Converters = new System.Type[]
     {
+        typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Abrechnung.Kundenkonto>),
+        typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Abrechnung.Rechnung>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Auftrag.Auftrag>),
+        typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Import.Importauftrag>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Kontingent.Kontingent>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Posten.Posten>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Verteilung.Verteilung>),
@@ -31,9 +34,21 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(Abstractions.QuellStrom))]
 [JsonSerializable(typeof(KommandoVerarbeitet))]
 [JsonSerializable(typeof(KommandoAbgelehnt))]
+// ── Framework: festgehaltene Ausgabe der Funktionen (Plan Pub/Sub-Neustrukturierung Phase 3) ──
+[JsonSerializable(typeof(Infrastructure.Funktionen.BefehlFestgehalten))]
+[JsonSerializable(typeof(Infrastructure.Funktionen.AusgabeFestgehalten))]
 // ── Domänen-Events (Domain.*, persistierbar) (gescannt) ──
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.GutschriftGebucht))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.MahnungVermerkt))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.RechnungBezahlt))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.RechnungFreigegeben))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.RechnungGesperrt))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.RechnungGestellt))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.ZahlungUeberfaellig))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.AuftragBestaetigt))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.AuftragGestartet))]
+[JsonSerializable(typeof(global::Pruefdomaene.Import.ImportGestartet))]
+[JsonSerializable(typeof(global::Pruefdomaene.Import.ImportStandGemeldet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentBelegt))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentEingerichtet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentEntlastet))]

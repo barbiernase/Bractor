@@ -276,7 +276,9 @@ public static class GeneratedProzesse
         // Der Ausführer der Katalog-Funktionen (Rufe<F>); die Funktionen selbst bindet der Host mit AddFunktion<F, Impl>().
         services.AddSingleton(Infrastructure.Funktionen.FunktionsExtensions.BaueAusfuehrer);
         // Vermittler je Funktion (Cluster-Kind) + der Abholer dieses Knotens für die hier in C# gebundenen Funktionen.
-        services.AddSingleton<IClusterKindContributor, Infrastructure.Funktionen.FunktionsVermittlerKind>();
+        // Ein Kind je Cluster: die Funktionen in Baustein-Form melden den Vermittler womöglich schon an.
+        if (!services.Any(d => d.ImplementationType == typeof(Infrastructure.Funktionen.FunktionsVermittlerKind)))
+            services.AddSingleton<IClusterKindContributor, Infrastructure.Funktionen.FunktionsVermittlerKind>();
         services.AddHostedService<Infrastructure.Funktionen.FunktionsAbholer>();
         services.AddHostedService<ProzessManagerStartupService>();
         return services;

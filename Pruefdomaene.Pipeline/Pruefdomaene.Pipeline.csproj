@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Die ABLÄUFE der Prüfdomäne (docs/07, Rolle Ablaeufe): Funktionen in Baustein-Form (Plan Pub/Sub-Neustrukturierung Phase 3) — eine
+       gleichbleibende (ohne Festhalten), eine mit Dienst (festhaltend), eine mit Strom-Ausgabe und Fortschritt, eine draußen (Schnittstelle) —
+       und ihre Dienste. Domänenneutral, nur für Framework-Tests. -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
+    <ProjectReference Include="..\Core\Core.csproj" />
+    <ProjectReference Include="..\Pruefdomaene\Pruefdomaene.csproj" />
+    <ProjectReference Include="..\Pruefdomaene.Projections\Pruefdomaene.Projections.csproj" />
+    <ProjectReference Include="..\Domain.SourceGeneration\Domain.SourceGeneration.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

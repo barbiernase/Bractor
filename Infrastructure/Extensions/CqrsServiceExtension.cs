@@ -119,6 +119,9 @@ public static class CqrsServiceExtensions
         
         // 9. Hosted Services
         services.AddCqrsHostedServices();
+
+        // 10. Funktionen in Baustein-Form (Plan Pub/Sub-Neustrukturierung Phase 3): Funktions-Actors, Weckung, Festhalten, Stand.
+        Infrastructure.Funktionen.FunktionsBausteinWiring.AddFunktionsBausteine(services);
         
         return services;
     }

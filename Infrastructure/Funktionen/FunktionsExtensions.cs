@@ -121,8 +121,17 @@ public static class FunktionsLaufortExtensions
     /// eine Funktion mit Lese-Fähigkeit läuft nie extern. Eine gerufene, aber nicht gebundene Funktion meldet der Boot-Guard.
     /// </summary>
     public static IServiceCollection BindeFunktionen(this IServiceCollection services, IReadOnlyDictionary<string, Abstractions.FunktionsKonfig> konfig)
-        => services.BindeFunktionen(konfig, Anwendung.Funktionen.Namen, Anwendung.Funktionen.Implementierungen, Anwendung.Funktionen.Extern,
-            Anwendung.Funktionen.Faehigkeiten);
+    {
+        // Funktionen in Baustein-Form (Plan Pub/Sub-Neustrukturierung Phase 3): ihre Bindung prüft und liest der Funktions-Actor (BindungVon).
+        var bausteine = Anwendung.Funktionen.Bausteine.Select(b => b.Name).ToHashSet(StringComparer.Ordinal);
+        foreach (var (name, k) in konfig.Where(kv => bausteine.Contains(kv.Key)))
+        {
+            services.AddSingleton(new BausteinBindung(name, k.Laufort, k.Implementierung, Math.Max(1, k.Slots), Math.Max(0, k.Wiederholungen)));
+            if (k.Laufort == Abstractions.FunktionsLaufort.Hand) services.AddHandAusfuehrer();
+        }
+        return services.BindeFunktionen(konfig.Where(kv => !bausteine.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value),
+            Anwendung.Funktionen.Namen, Anwendung.Funktionen.Implementierungen, Anwendung.Funktionen.Extern, Anwendung.Funktionen.Faehigkeiten);
+    }
 
     public static IServiceCollection BindeFunktionen(this IServiceCollection services, IReadOnlyDictionary<string, Abstractions.FunktionsKonfig> konfig,
         IReadOnlyDictionary<string, Type> namen, IReadOnlyList<FunktionsImplementierung> implementierungen,

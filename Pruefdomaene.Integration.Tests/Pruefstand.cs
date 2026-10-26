@@ -40,6 +40,11 @@ internal static class Pruefstand
         GeneratedPipelines.RegisterAllPipelines(builder.Services);
         builder.Services.AddGeneratedPullPaths();
         builder.Services.AddGeneratedProzesse();
+        // Die Dienste der Funktionen wie im Host ohne Wahl in der Umgebung: je Dienst die eine Implementierung (Tests ersetzen sie über dienste).
+        Infrastructure.Dienste.DienstExtensions.BindeDienste(builder.Services, new Dictionary<string, DienstKonfig>(),
+            new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build().GetSection(Dienstvertrag.KonfigAbschnitt),
+            Infrastructure.Komposition.Anwendung.Dienste.Namen, Infrastructure.Komposition.Anwendung.Dienste.Implementierungen,
+            Infrastructure.Komposition.Anwendung.Dienste.Braucht, Infrastructure.Komposition.Anwendung.Dienste.Konfigs);
         dienste?.Invoke(builder.Services);
         return builder.Build();
     }

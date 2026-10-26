@@ -16,6 +16,8 @@ public enum ErgebnisAusgang
     Abgelehnt,
     /// <summary>Nicht schreibbar (Store) — nicht „erledigt“ gemeldet; die Lease läuft ab, der Auftrag geht neu raus.</summary>
     NichtGeschrieben,
+    /// <summary>Baustein-Form: eine andere Antwort war zuerst festgehalten — sie gilt, diese verfällt.</summary>
+    Ueberholt,
 }
 
 /// <summary>

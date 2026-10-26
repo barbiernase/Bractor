@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Die KOMPOSITION der Prüfdomäne (docs/07, Rolle Komposition): Framework + ihre Rollen-Projekte (Schreibseite, Leseseite mit der Reaktion). Hier laufen
+  <!-- Die KOMPOSITION der Prüfdomäne (docs/07, Rolle Komposition): Framework + ihre Rollen-Projekte (Schreibseite, Leseseite mit der Reaktion, Abläufe mit den Funktionen). Hier laufen
        die Laufzeit-Generatoren (Infrastructure.SourceGeneration) — ohne Stores, Akteure, Funktionen und Leitung emittieren sie leer,
        aber kompilierbar. Die STJ-Kontexte (Serialization/*.g.cs) schreibt der Codegen-Prepass hierher; ohne Leitungs-Projekt hängt der
        Prepass an der Komposition. -->
@@ -15,6 +15,7 @@
     <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
     <ProjectReference Include="..\Pruefdomaene\Pruefdomaene.csproj" />
     <ProjectReference Include="..\Pruefdomaene.Projections\Pruefdomaene.Projections.csproj" />
+    <ProjectReference Include="..\Pruefdomaene.Pipeline\Pruefdomaene.Pipeline.csproj" />
     <ProjectReference Include="..\Infrastructure.SourceGeneration\Infrastructure.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 

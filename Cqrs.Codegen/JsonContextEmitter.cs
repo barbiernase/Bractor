@@ -62,6 +62,9 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(Abstractions.QuellStrom))]
         [JsonSerializable(typeof(KommandoVerarbeitet))]
         [JsonSerializable(typeof(KommandoAbgelehnt))]
+        // ── Framework: festgehaltene Ausgabe der Funktionen (Plan Pub/Sub-Neustrukturierung Phase 3) ──
+        [JsonSerializable(typeof(Infrastructure.Funktionen.BefehlFestgehalten))]
+        [JsonSerializable(typeof(Infrastructure.Funktionen.AusgabeFestgehalten))]
         """;
 
     // ── FRAMEWORK-Kopf: Cross-Node-Wire-Kontext ─────────────────────────────────────────────
@@ -124,6 +127,10 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(ArbeitErledigt))]
         [JsonSerializable(typeof(ListeOffene))]
         [JsonSerializable(typeof(OffeneAuftraege))]
+        [JsonSerializable(typeof(EingangAnbieten))]
+        [JsonSerializable(typeof(HoleEingaenge))]
+        [JsonSerializable(typeof(EingaengeZugeteilt))]
+        [JsonSerializable(typeof(EingangBeantwortet))]
         [JsonSerializable(typeof(HalteQuelle))]
         [JsonSerializable(typeof(QuelleGehalten))]
         // ── Framework: Ergebnis-/Prozess-/Inbox-Events (reisen im Wire) ──
@@ -137,6 +144,8 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(Abstractions.QuellStrom))]
         [JsonSerializable(typeof(KommandoVerarbeitet))]
         [JsonSerializable(typeof(KommandoAbgelehnt))]
+        [JsonSerializable(typeof(BefehlFestgehalten))]
+        [JsonSerializable(typeof(AusgabeFestgehalten))]
         """;
 
     public static (string EventContext, string WireContext, string Stats) Emit(

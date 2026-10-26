@@ -25,9 +25,10 @@ public delegate IAsyncEnumerable<(int Index, IPipelineOutput Ausgabe)> Funktions
 /// <summary>Ein Eingang einer Funktion (ein <c>Auf</c>): sein Typ, ob er ein Hinweis ist, ob die Ausgabe ein Strom ist, was herauskommen kann.</summary>
 /// <param name="Hinweis">Der Eingang ist ein Hinweis (verlierbar, nicht im Log): höchstens einmal, keine Position.</param>
 /// <param name="Strom">Die Ausgabe ist ein Strom (viele Ausgaben je Eingang, Fortschritt beim Framework).</param>
+/// <param name="MitEvents">Unter den Ausgaben sind Events für das Log (keine Hinweise) — sie stehen dann immer im festgehaltenen Eintrag.</param>
 /// <param name="Ausgaben">Die konkreten Ausgabe-Typen (die Fälle der Signatur).</param>
 /// <param name="Faehigkeiten">Die Lese-Fähigkeiten des <c>Auf</c> (eine solche Funktion läuft nur im Host).</param>
-public sealed record FunktionsEingang(Type Typ, bool Hinweis, bool Strom, IReadOnlyList<Type> Ausgaben, IReadOnlyList<Type> Faehigkeiten);
+public sealed record FunktionsEingang(Type Typ, bool Hinweis, bool Strom, bool MitEvents, IReadOnlyList<Type> Ausgaben, IReadOnlyList<Type> Faehigkeiten);
 
 /// <summary>Eine Umsetzung, die im Host rechnen kann: die Klasse selbst bzw. eine Implementierung der Schnittstelle, gebaut per generierter Fabrik.</summary>
 public sealed record FunktionsUmsetzung(string Name, Type Typ, Func<IServiceProvider, object> Baue);

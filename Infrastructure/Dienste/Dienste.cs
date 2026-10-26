@@ -111,6 +111,13 @@ public static class DienstExtensions
 
         // 3. Vom Bedarf der gebundenen Funktions-Implementierungen aus, transitiv; ein Kreis über Dienste ist ein Fehler.
         var start = services.Select(d => d.ImplementationInstance).OfType<FunktionsBindung>().Where(b => b.Impl != null).Select(b => b.Impl!).Distinct().ToList();
+        // Funktionen in Baustein-Form, die im Host laufen: ihre Umsetzung (die Klasse selbst bzw. die gewählte Implementierung der Schnittstelle).
+        var bausteinBindungen = services.Select(d => d.ImplementationInstance).OfType<BausteinBindung>().ToList();
+        foreach (var b in Anwendung.Funktionen.Bausteine)
+            if (FunktionsBausteinWiring.Gebunden(b, bausteinBindungen) is { Laufort: FunktionsLaufort.Host } bindung
+                && b.Umsetzungen.Where(u => bindung.Umsetzung is null || u.Name == bindung.Umsetzung).ToList() is [var umsetzung])
+                start.Add(umsetzung.Typ);
+        start = start.Distinct().ToList();
         var gebunden = new Dictionary<Type, DienstImplementierung>();
         var konfigGebunden = new HashSet<Type>();
         var stapel = new List<Type>();

@@ -71,7 +71,7 @@ public interface IPost : IDienst { Task SendeAsync(string an); }
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty();
         quelle.Should().Contain("new FunktionsBaustein(typeof(global::Probe.Mahnwesen), \"Mahnwesen\", Draussen: false, Gleichbleibend: true,");
-        quelle.Should().Contain("new FunktionsEingang(typeof(global::Probe.Ueberfaellig), Hinweis: false, Strom: false, "
+        quelle.Should().Contain("new FunktionsEingang(typeof(global::Probe.Ueberfaellig), Hinweis: false, Strom: false, MitEvents: false, "
             + "new Type[] { typeof(global::Probe.Mahne), typeof(global::Probe.Unnoetig) }, new Type[] {  })");
         quelle.Should().Contain("case global::Probe.Ueberfaellig e: return Ausgaben.Einzeln(f.Auf(e, h), y => y.Value);");
         quelle.Should().Contain("[typeof(global::Probe.Ueberfaellig)] = new[] { \"funktion-Mahnwesen\" }", "der Weckplan nennt den Funktions-Actor");
@@ -105,6 +105,7 @@ public interface IPost : IDienst { Task SendeAsync(string an); }
         quelle.Should().Contain("return Ausgaben.StromAsync(f.Auf(e, h, ct), y => y.Value, ct);");
         quelle.Should().Contain("return Ausgaben.StromAsync(f.Auf(e), y => y, ct);", "ein Strom im Task ist ein Strom");
         quelle.Should().Contain("Strom: true", "ein Strom bekommt Fortschritt beim Framework");
+        quelle.Should().Contain("MitEvents: true", "ein Event in der Ausgabe steht immer im festgehaltenen Eintrag");
     }
 
     [Fact]
