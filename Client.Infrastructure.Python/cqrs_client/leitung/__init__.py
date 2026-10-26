@@ -216,9 +216,9 @@ class TriggerResult(betterproto.Message):
 @dataclass(eq=False, repr=False)
 class FunktionenAnbieten(betterproto.Message):
     """
-    Katalog-Funktionen extern ausführen (docs/konzept-editor-pipelines.md §14.5): ein Worker bietet Funktionen an,
-     der Server holt für ihn Aufträge beim Vermittler (Pull, Slots = Gleichzeitigkeit), reicht sie weiter und schreibt
-     das Ergebnis genau einmal in den Ausführungs-Stream.
+    Funktionen draußen ausführen (Plan Pub/Sub-Neustrukturierung §2.2, §2.7: ITraegt): ein Client bietet Funktionen an, die er trägt; der Server
+     holt für ihn Eingänge beim Vermittler (Pull, Slots = Gleichzeitigkeit, Lease), reicht sie weiter und hält die Antwort unter „Funktion, Eingang“
+     fest — die erste gewinnt. Gesendet wird beim Funktions-Actor; der Client ist nur die Hand.
     """
 
     angebote: List["FunktionsAngebot"] = betterproto.message_field(1)
@@ -228,7 +228,7 @@ class FunktionenAnbieten(betterproto.Message):
 class FunktionsAngebot(betterproto.Message):
     funktion: str = betterproto.string_field(1)
     """
-    Einfacher Name der Funktions-Schnittstelle, z. B. "IBildVerkleinerung".
+    Einfacher Name der Funktions-Schnittstelle, z. B. "IBildaufbereitung".
     """
 
     slots: int = betterproto.int32_field(2)
@@ -236,29 +236,45 @@ class FunktionsAngebot(betterproto.Message):
 
 @dataclass(eq=False, repr=False)
 class ArbeitsAuftrag(betterproto.Message):
-    vorgang: str = betterproto.string_field(1)
     """
-    Ausführungs-Id (deterministisch je Prozess-Transition) — Schlüssel für Ergebnis und Lebenszeichen.
+    Ein Eingang einer Funktion: der Schlüssel „Funktion, Eingang“ (vorgang), die Funktion, das Event und seine Herkunft; ab = so viele Ausgaben
+     (Strom) sind schon festgehalten — ein neuer Träger lässt sie aus und macht beim nächsten Stück weiter.
     """
 
+    vorgang: str = betterproto.string_field(1)
     korrelation: str = betterproto.string_field(2)
     funktion: str = betterproto.string_field(3)
-    auftrag: "Nutzlast" = betterproto.message_field(4)
+    eingang: "Nutzlast" = betterproto.message_field(4)
     akteur: str = betterproto.string_field(5)
+    stream: str = betterproto.string_field(6)
+    version: int = betterproto.int32_field(7)
+    zeit_utc: int = betterproto.int64_field(8)
+    ab: int = betterproto.int32_field(9)
+
+
+@dataclass(eq=False, repr=False)
+class FunktionsAusgabe(betterproto.Message):
+    """
+    Eine Ausgabe in der Reihenfolge der Funktion: ein Command, ein Event oder ein Hinweis.
+    """
+
+    command: "Nutzlast" = betterproto.message_field(1, group="art")
+    event: "Nutzlast" = betterproto.message_field(2, group="art")
+    hinweis: "Nutzlast" = betterproto.message_field(3, group="art")
 
 
 @dataclass(eq=False, repr=False)
 class ArbeitsErgebnis(betterproto.Message):
-    vorgang: str = betterproto.string_field(1)
-    ergebnis: "EventEnvelopeDto" = betterproto.message_field(2)
     """
-    Der gewählte OneOf-Fall der Funktion als Event (nur die Nutzlast zählt).
+    Die Antwort auf einen Eingang — ganz oder (Strom) in Stücken: ab = Stelle der ersten Ausgabe dieses Stücks, fertig = der Lauf ist vollständig.
+     Nicht leeres fehler = die Funktion ist draußen gescheitert (zählt gegen die Wiederholungen des Eingangs).
     """
 
-    fehler: str = betterproto.string_field(3)
-    """
-    Nicht leer = die Funktion ist gescheitert → durable Fehlschlag-Marke statt Ergebnis.
-    """
+    vorgang: str = betterproto.string_field(1)
+    ausgaben: List["FunktionsAusgabe"] = betterproto.message_field(2)
+    ab: int = betterproto.int32_field(3)
+    fertig: bool = betterproto.bool_field(4)
+    fehler: str = betterproto.string_field(5)
 
 
 @dataclass(eq=False, repr=False)
@@ -294,15 +310,6 @@ class CommandEnvelopeDto(betterproto.Message):
     correlation_id: str = betterproto.string_field(6)
     user_id: str = betterproto.string_field(7)
     origin_session_id: str = betterproto.string_field(8)
-    causation_stream_id: str = betterproto.string_field(9)
-    """
-    Kausalität einer Zusage von außen (Akteur-Konzept §5.3): auf welches Event (Stream + Version + Typ) und als wievielte Ausgabe
-     der Reaktion — daraus leitet der Server eine deterministische CommandId ab (doppelt zugestellt ≠ doppelt wirksam).
-    """
-
-    causation_version: int = betterproto.int32_field(10)
-    causation_type: str = betterproto.string_field(11)
-    causation_index: int = betterproto.int32_field(12)
     payload: "Nutzlast" = betterproto.message_field(20)
     """
     Die Domänen-Nachricht: Typname + Bytes (Proto der Anwendung, docs/06).

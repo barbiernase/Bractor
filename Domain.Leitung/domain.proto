@@ -151,11 +151,6 @@ message ImagePairFilterDto {
     int32 seiten_groesse = 11;
 }
 
-message StateChangeViaBenchPingDto {
-    string stream_id = 1;
-    int32 version = 2;
-}
-
 message StateChangeViaDatensatzEingefrorenDto {
     string stream_id = 1;
     int32 version = 2;
@@ -266,47 +261,12 @@ message StateChangeViaModellRegistriertDto {
     int32 version = 2;
 }
 
+message StateChangeViaBildAufbereitetDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
 message StateChangeViaBildNichtLesbarDto {
-    string stream_id = 1;
-    int32 version = 2;
-}
-
-message StateChangeViaBildVerkleinertDto {
-    string stream_id = 1;
-    int32 version = 2;
-}
-
-message StateChangeViaHistogrammAusgeglichenDto {
-    string stream_id = 1;
-    int32 version = 2;
-}
-
-message StateChangeViaKeinMitgliedAuffindbarDto {
-    string stream_id = 1;
-    int32 version = 2;
-}
-
-message StateChangeViaMitgliederEingefrorenDto {
-    string stream_id = 1;
-    int32 version = 2;
-}
-
-message StateChangeViaRangeGefundenDto {
-    string stream_id = 1;
-    int32 version = 2;
-}
-
-message StateChangeViaRangeOhneTrefferDto {
-    string stream_id = 1;
-    int32 version = 2;
-}
-
-message StateChangeViaDateinameUnbekanntDto {
-    string stream_id = 1;
-    int32 version = 2;
-}
-
-message StateChangeViaImagePairDateiGedeutetDto {
     string stream_id = 1;
     int32 version = 2;
 }
@@ -417,14 +377,6 @@ message SetzeSplitDto {
     int32 seed = 5;
 }
 
-message ErstelleImagePairDto {
-    string aggregate_id = 1;
-    string pair_key = 2;
-    int64 produziert_am = 3;
-    int64 aufgenommen_am = 4;
-    string ursprungs_pfad = 5;
-}
-
 message KlassifiziereBildPaarDurchKiDto {
     string aggregate_id = 1;
     int32 label = 2;
@@ -464,11 +416,15 @@ message MarkiereAlsInspiziertDto {
     string aggregate_id = 1;
 }
 
-message MeldeBildVerfuegbarDto {
+message NimmBildAufDto {
     string aggregate_id = 1;
-    int32 version = 2;
-    BildMetaDto meta = 3;
-    string pfad = 4;
+    string pair_key = 2;
+    int64 produziert_am = 3;
+    int64 aufgenommen_am = 4;
+    string ursprungs_pfad = 5;
+    int32 version = 6;
+    BildMetaDto meta = 7;
+    string pfad = 8;
 }
 
 message ArchiviereModellDto {
@@ -549,10 +505,6 @@ message CommandFailedDto {
     string command_type = 1;
     string reason = 2;
     string aggregate_id = 3;
-}
-
-message BenchPingDto {
-    int32 seq = 1;
 }
 
 message DatensatzBereitsEingefrorenDto {
@@ -678,10 +630,6 @@ message ImagePairErstelltDto {
     string ursprungs_pfad = 5;
 }
 
-message ImagePairExistiertBereitsDto {
-    string pair_id = 1;
-}
-
 message ImagePairInspiziertDto {
     // Keine Parameter
 }
@@ -740,35 +688,24 @@ message ModellRegistriertDto {
     ModellMetrikenDto metriken = 6;
 }
 
+message BildAufbereitetDto {
+    string dateiname = 1;
+    string pfad = 2;
+    int64 groesse = 3;
+    int64 erkannt_am = 4;
+    string vorschau = 5;
+    int32 breite_pixel = 6;
+    int32 hoehe_pixel = 7;
+    int64 erstellt_am = 8;
+}
+
 message BildNichtLesbarDto {
     string pfad = 1;
     string grund = 2;
 }
 
-message BildVerkleinertDto {
-    string pfad = 1;
-    int32 breite_pixel = 2;
-    int32 hoehe_pixel = 3;
-}
-
-message HistogrammAusgeglichenDto {
-    string pfad = 1;
-    int32 breite_pixel = 2;
-    int32 hoehe_pixel = 3;
-    int64 erstellt_am = 4;
-}
-
 message KeinMitgliedAuffindbarDto {
     int32 angefragt = 1;
-}
-
-message MitgliederEingefrorenDto {
-    repeated DatensatzMitgliedDto mitglieder = 1;
-}
-
-message RangeGefundenDto {
-    repeated string image_pair_ids = 1;
-    RangeHerkunftDto herkunft = 2;
 }
 
 message RangeOhneTrefferDto {
@@ -777,14 +714,6 @@ message RangeOhneTrefferDto {
 
 message DateinameUnbekanntDto {
     string dateiname = 1;
-}
-
-message ImagePairDateiGedeutetDto {
-    string paar_id = 1;
-    string pair_key = 2;
-    int32 version = 3;
-    int64 produziert_am = 4;
-    string pfad = 5;
 }
 
 message SammelvorgangAbgeschlossenDto {
@@ -1112,31 +1041,5 @@ message TrainingslaufListeDto {
 
 message TrainingslaufNichtGefundenAntwortDto {
     string trainingslauf_id = 1;
-}
-
-// ============================================================================
-// AUFTRAG PAYLOADS
-// ============================================================================
-message GleicheHistogrammAusDto {
-    string quell_pfad = 1;
-}
-
-message VerkleinereBildDto {
-    string quell_pfad = 1;
-    int32 hoehe = 2;
-}
-
-message FriereMitgliederEinDto {
-    repeated string mitglieder = 1;
-    SplitKonfigDto split = 2;
-}
-
-message SucheRangeDto {
-    RangeKriterienDto kriterien = 1;
-}
-
-message DeuteDateinameDto {
-    string dateiname = 1;
-    string pfad = 2;
 }
 

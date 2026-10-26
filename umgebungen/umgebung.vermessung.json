@@ -48,7 +48,7 @@
     }
   },
   "Funktionen": {
-    "IBildVerkleinerung": {
+    "IBildaufbereitung": {
       "Laufort": "Host",
       "Slots": 2,
       "Wiederholungen": 1,
@@ -56,7 +56,7 @@
         "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
         "Argumente": [
           "--funktionen",
-          "IBildVerkleinerung",
+          "IBildaufbereitung",
           "--slots",
           "2",
           "--konfig",
@@ -64,35 +64,6 @@
         ],
         "Token": "vermessung-bildrechner"
       }
-    },
-    "IHistogrammAusgleich": {
-      "Laufort": "Host",
-      "Slots": 2,
-      "Wiederholungen": 1,
-      "Worker": {
-        "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
-        "Argumente": [
-          "--funktionen",
-          "IHistogrammAusgleich",
-          "--slots",
-          "2",
-          "--konfig",
-          "AusgabePfad=${env:HOME}/cqrs-vermessung/preprocessed"
-        ],
-        "Token": "vermessung-bildrechner"
-      }
-    },
-    "IDateinameDeutung": {
-      "Laufort": "Host",
-      "Slots": 8
-    },
-    "IRangeSuche": {
-      "Laufort": "Host",
-      "Slots": 2
-    },
-    "IMitgliederEinfrieren": {
-      "Laufort": "Host",
-      "Slots": 2
     }
   },
   "Konfig": {

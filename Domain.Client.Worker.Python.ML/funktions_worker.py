@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # REPO-PFAD: Domain.Client.Worker.Python.ML/funktions_worker.py
 """
-Der GENERISCHE Funktions-Worker (konzept-werkbank §12.3 E13): bietet Katalog-Funktionen mit Laufort Extern über gRPC an. Er kennt keine Domäne — welche
+Der GENERISCHE Funktions-Worker (konzept-werkbank §12.3 E13): trägt Funktionen mit Laufort Extern über gRPC. Er kennt keine Domäne — welche
 Funktionen es gibt und wo ihre Implementierung liegt, sagt die generierte Tabelle (domain_client/generated/funktions_tabelle.py:
-Funktion → Basis, Modul, Klasse); die Implementierungen stehen in funktionen/<modul>.py (Klasse erbt die generierte Basis, füllt `rufe`).
+Funktion → Basis, Modul, Klasse); die Implementierungen stehen in funktionen/<modul>.py (Klasse erbt die generierte Basis, füllt `auf_…`).
 Gestartet von der Werkbank („▶ Worker starten" an der Funktions-Karte, Umgebung: Funktionen:<F>:Worker) oder von Hand:
 
-    python funktions_worker.py --funktionen IBildVerkleinerung,IHistogrammAusgleich [--slots 2] [--konfig AusgabePfad=<verz> …] [--pfad <verz>]
+    python funktions_worker.py --funktionen IBildaufbereitung [--slots 2] [--konfig AusgabePfad=<verz> …] [--pfad <verz>]
 
 Adresse und Akteur kommen aus CQRS_GRPC_HOST / CQRS_GRPC_PORT / CQRS_AKTEUR_TOKEN (die Werkbank setzt sie). Der Akteur des Tokens braucht
 IDarf<F> für jede angebotene Funktion. `--konfig NAME=WERT` sind die Werte der Implementierungen (self.konfig), `--pfad` legt ein Verzeichnis
@@ -65,12 +65,12 @@ class Leer:
 
 
 class FunktionsWorker(CqrsClient[Leer]):
-    """Kein Handler, keine Commands — nur ein Anbieter von Katalog-Funktionen."""
+    """Kein Handler, keine Commands — nur ein Träger von Funktionen."""
 
 
 def main(argv: list[str] | None = None) -> None:
-    a = argparse.ArgumentParser(description="Generischer Worker für Katalog-Funktionen (Laufort Extern)")
-    a.add_argument("--funktionen", required=True, help="kommagetrennt, z. B. IBildVerkleinerung,IHistogrammAusgleich")
+    a = argparse.ArgumentParser(description="Generischer Worker für Funktionen draußen (Laufort Extern)")
+    a.add_argument("--funktionen", required=True, help="kommagetrennt, z. B. IBildaufbereitung")
     a.add_argument("--slots", type=int, default=2)
     a.add_argument("--konfig", action="append", default=[], help="NAME=WERT (mehrfach) — die Werte der Implementierungen")
     a.add_argument("--pfad", action="append", default=[], help="Verzeichnis mit eigenen Implementierungen (Paket funktionen), vor dem Projekt")

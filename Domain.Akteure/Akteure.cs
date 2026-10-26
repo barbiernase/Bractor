@@ -1,5 +1,7 @@
 using Abstractions;
 using Domain.Pipeline.Bildaufbereitung;
+using Domain.Pipeline.ImagePair;
+using Domain.Pipeline.Trainingslauf;
 using Domain.Datensatz;
 using Domain.ImagePair;
 using Domain.Modell;
@@ -15,14 +17,10 @@ using Domain.Projections.Trainingslauf;
 namespace Domain.Akteure;
 
 // Die Akteure der Domäne — Domänen-Experten, von denen alles kommt, was hineingeht (docs/konzept-akteure.md §2).
-// Deklariert wird nur, was ein Akteur SELBST hineingibt (IDarf<T>). Was eine Pipeline, ein Prozess oder eine Frist daraus
-// erzeugt (NimmRangeAuf, ErstelleImagePair, MarkiereAlsHaengengeblieben …), trägt den Akteur der Kette — es steht hier
-// bewusst NICHT: am Tor käme es so nie durch („nie von der GUI" ist ein Typ-Fakt). Ein Command darf bei mehreren Akteuren
-// stehen. Hier liegen sie, weil dieses Projekt Commands, Queries UND Pipeline-Trigger sieht.
-//
-// IDarf ist das SPONTANE (der Mensch klickt, der Worker fragt von sich aus). Was ein Akteur draußen als ZUSAGE auf ein Event
-// hineingibt, steht in seinem Vertrag (IAkteurVertrag<A>, docs/konzept-akteure.md §3): Auf(Event) mit dem Ausgabe-Vertrag als Rückgabetyp. Daraus
-// entstehen die Client-Basis (Python), die Rechte (Befugt = IDarf ∪ Ausgaben, Hört = Eingänge) und die Kante im Editor.
+// Deklariert wird nur, was ein Akteur SELBST hineingibt (IDarf<T>) — ein Command, eine Query, eine Quell-Nachricht oder die Ausgaben einer
+// Funktion, deren Code er draußen rechnet (IDarf<IFunktion-Typ>). Was eine Funktion oder eine Frist daraus erzeugt (NimmRangeAuf, NimmBildAuf,
+// MarkiereAlsHaengengeblieben …), trägt den Akteur der Kette — es steht hier bewusst NICHT: am Tor käme es so nie durch („nie von der GUI" ist
+// ein Typ-Fakt). Ein Command darf bei mehreren Akteuren stehen. Welche Software für welche Akteure an der Leitung spricht, steht in Clients.cs.
 
 // ── Maschinen ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -32,42 +30,19 @@ public sealed record KameraSystem : IMaschine,
 
 /// <summary>Rechnet die Bildaufbereitung außerhalb des Hosts (Python-Worker <c>funktions_worker.py</c>, Laufort <c>Extern</c>).</summary>
 public sealed record Bildrechner : IMaschine,
-    IDarf<IBildVerkleinerung>, IDarf<IHistogrammAusgleich>;
+    IDarf<IBildaufbereitung>;
 
-/// <summary>GPU-Worker: trainiert auf einer eingefrorenen Datensatz-Version und meldet den Fortschritt.</summary>
+/// <summary>GPU-Worker: trainiert auf einer eingefrorenen Datensatz-Version und meldet den Fortschritt (Funktion <see cref="ITraining"/>).</summary>
 public sealed record TrainingsSystem : IMaschine,
-    IDarf<HoleDatensatzSamples>;
-
-/// <summary>Worauf das TrainingsSystem reagiert (Python-Worker <c>training_worker.py</c>).</summary>
-public interface ITrainingsSystem : IAkteurVertrag<TrainingsSystem>
-{
-    /// <summary>Trainiert langlaufend und meldet über die Zeit Beginn, Fortschritt (×N) und Ende bzw. Scheitern.</summary>
-    IAsyncEnumerable<OneOf<MeldeTrainingBegonnen, MeldeFortschritt, MeldeTrainingAbgeschlossen, MeldeTrainingGescheitert>>
-        Auf(TrainingAngefordert e);
-
-    /// <summary>Bricht ein laufendes Training kooperativ ab (der Lauf steht schon auf „abgebrochen").</summary>
-    void Auf(TrainingAbgebrochen e);
-}
+    IDarf<ITraining>, IDarf<HoleDatensatzSamples>;
 
 // ── KI ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/// <summary>Beurteilt Bildpaare und Einzelbilder mit dem aktiven Modell (Strang 1).</summary>
+/// <summary>Beurteilt Bildpaare (Funktion <see cref="IBildpaarBeurteilung"/>) und Einzelbilder mit dem aktiven Modell (Strang 1).</summary>
 public sealed record Klassifizierer : IKi,
+    IDarf<IBildpaarBeurteilung>,
     IDarf<KlassifiziereEinzelBildDurchKi>,
     IDarf<HoleAktivesModell>;
-
-/// <summary>Worauf der Klassifizierer reagiert (Python-Worker <c>classifier.py</c>).</summary>
-public interface IKlassifizierer : IAkteurVertrag<Klassifizierer>
-{
-    /// <summary>Beide Bilder sind da → das Paar mit dem aktiven Modell beurteilen.</summary>
-    OneOf<KlassifiziereBildPaarDurchKi> Auf(ImagePairKomplett e);
-
-    /// <summary>Nur zur Kenntnis: den Pfad des Bildes merken (das Paar wird erst bei Komplett beurteilt).</summary>
-    void Auf(BildVerfuegbar e);
-
-    /// <summary>Nur zur Kenntnis: das neu freigegebene Modell laden.</summary>
-    void Auf(ModellAktiviert e);
-}
 
 // ── Menschen ───────────────────────────────────────────────────────────────────────────────────────────────────────
 

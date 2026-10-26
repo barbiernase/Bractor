@@ -4,7 +4,7 @@ Kategorisiert betterproto-generierte Domänen-DTOs nach ihrer Nachrichtenkategor
 (EVENT, COMMAND, TRIGGER, QUERY, QUERY_RESPONSE).
 
 Auf der Leitung trägt eine Nutzlast nur ihren Typnamen — die Kategorie steht nicht im Proto. Sie kommt aus
-den generierten Verträgen (vertraege.py: Zusagen, Ausgänge, Spontan, Fragt — die Vertragsbasis ergänzt die
+den generierten Verträgen (vertraege.py: Hört, Spontan, Fragt — die Vertragsbasis ergänzt die
 Registry selbst) bzw. aus einer handgepflegten Aufzählung (domain_registry.py).
 
 Danach nur noch O(1)-Lookups: type → category.

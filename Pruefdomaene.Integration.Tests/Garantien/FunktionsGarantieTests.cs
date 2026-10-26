@@ -205,11 +205,11 @@ public class FunktionsGarantieTests
             await using var zweiter = new BausteinSitzung("zweiter-worker", n => n == baustein.Name ? baustein : null,
                 (_, _, _) => Task.FromResult<EingaengeZugeteilt?>(new EingaengeZugeteilt(new[] { offen!.Eingang })),
                 (b, nachricht) => { bote.Melde(FunktionsVermittlerActor.Identitaet(b.Typ), nachricht); return Task.CompletedTask; },
-                (_, _) => Task.CompletedTask, host.Services.GetRequiredService<IAusgabeAblage>(),
-                (b, e, fehler) =>
+                (_, _, _) => Task.CompletedTask, host.Services.GetRequiredService<IAusgabeAblage>(),
+                (b, e, fehler, teil) =>
                 {
                     bote.Melde(FunktionsActor.Identitaet(b, Partitionierung.Von(e.Stream, Infrastructure.Projections.Konsum.Standard.Partitionen)),
-                        new EingangBeantwortet(e.Vorgang, fehler));
+                        new EingangBeantwortet(e.Vorgang, fehler, teil));
                     return Task.CompletedTask;
                 });
             zweiter.Biete(new[] { (baustein.Name, 1) });

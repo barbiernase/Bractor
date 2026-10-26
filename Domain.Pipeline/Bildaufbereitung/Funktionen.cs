@@ -1,23 +1,21 @@
 using Abstractions;
+using Domain.ImagePair;
 
 namespace Domain.Pipeline.Bildaufbereitung;
 
 // ═══════════════════════════════════════════════════
-// KATALOG-FUNKTIONEN der Bildaufbereitung
+// FUNKTIONEN der Bildaufbereitung (Plan Pub/Sub-Neustrukturierung §3.3)
 //
-// Jede Funktion: EIN Auftrag hinein, OneOf-Ergebnis-Events heraus (CQRS068). Sie kennt weder Aggregat noch Prozess —
-// ein Fluss ruft sie mit Rufe<F>, die Implementierung (OpenCV, Python, extern) bindet die Umgebung (Funktionen:<F>:Laufort).
-// Bilder reisen als Dateipfade: das Ergebnis nennt die geschriebene Datei, nicht ihre Bytes.
+// Eine Funktion als Schnittstelle läuft draußen ODER im Host mit einer Implementierung — welche, sagt die Umgebung (Funktionen:<F>:Laufort):
+// im Host OpenCV (OpenCvBildaufbereitung), draußen ein Python-Worker, der sie trägt. Bilder reisen als Dateipfade: das Ergebnis nennt die
+// geschriebene Datei, nicht ihre Bytes. Was herauskommt, hält der Funktions-Actor fest, bevor es wirkt.
 // ═══════════════════════════════════════════════════
 
-/// <summary>Bild auf eine Zielhöhe verkleinern (Seitenverhältnis bleibt).</summary>
-public interface IBildVerkleinerung : IFunktion
+/// <summary>
+/// Eine erkannte Datei aufbereiten: auf die Vorschau-Höhe verkleinern und im Kontrast ausgleichen; das Ergebnis nennt die Datei und ihre Vorschau
+/// (die Zugehörigkeit ist ein fachliches Feld, A2) — der <see cref="Domain.Pipeline.ImagePair.Bildeingang"/> macht daraus das Bild des Paars.
+/// </summary>
+public interface IBildaufbereitung : IFunktion
 {
-    Task<OneOf<BildVerkleinert, BildNichtLesbar>> RufeAsync(VerkleinereBild auftrag, IAusfuehrung x);
-}
-
-/// <summary>Histogramm-Ausgleich (Kontrast) und als Vorschau-PNG ablegen.</summary>
-public interface IHistogrammAusgleich : IFunktion
-{
-    Task<OneOf<HistogrammAusgeglichen, BildNichtLesbar>> RufeAsync(GleicheHistogrammAus auftrag, IAusfuehrung x);
+    Task<OneOf<BildAufbereitet, BildNichtLesbar>> Auf(DateiErkannt e);
 }

@@ -26,15 +26,6 @@ from .versioning import VersionTracker
 log = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class Kausalitaet:
-    """Worauf eine Ausgabe antwortet: das Event (Stream + Version + Typ) und ihr Index in der Zusage."""
-    stream_id: str
-    version: int
-    typ: str
-    index: int
-
-
 @dataclass
 class MessageContext:
     """
@@ -82,7 +73,7 @@ class MessageRouter:
         """
         Hauptschleife — läuft bis die Verbindung abbricht.
 
-        `on_arbeit` (optional): nimmt einen ArbeitsAuftrag (Katalog-Funktion) entgegen — er läuft entkoppelt,
+        `on_arbeit` (optional): nimmt einen ArbeitsAuftrag (Eingang einer getragenen Funktion) entgegen — er läuft entkoppelt,
         die Schleife wartet nicht auf ihn (FunktionsLaeufer.nimm).
 
         Verarbeitet drei Arten von Messages aus der event_queue:
@@ -164,17 +155,9 @@ class MessageRouter:
             envelope.aggregate_id[:8] if envelope.aggregate_id else "?"
         )
 
-        # Dispatch + Output-Routing. Jede Ausgabe trägt ihre Kausalität (dieses Event + Index in der Zusage) —
-        # der Server leitet daraus eine deterministische CommandId ab (docs/konzept-akteure.md §5.3).
-        index = 0
+        # Dispatch + Output-Routing (ein Handler ohne Vertrag darf von sich aus Commands senden; Kenntnis eines Vertrags gibt nichts aus).
         async for output in handle.receive(instance, payload, ctx, state):
-            await self._route_output(output, ctx, proxy, mapper, registry,
-                                     causation=Kausalitaet(
-                                         stream_id=envelope.aggregate_id,
-                                         version=envelope.aggregate_version,
-                                         typ=envelope.payload.typ,
-                                         index=index))
-            index += 1
+            await self._route_output(output, ctx, proxy, mapper, registry)
 
     # ═══════════════════════════════════════════════════
     # TRIGGER FORWARD HANDLING
@@ -274,7 +257,6 @@ class MessageRouter:
         proxy: GrpcProxy,
         mapper: PayloadMapper,
         registry: CategoryRegistry,
-        causation: "Kausalitaet | None" = None,
     ) -> None:
         """
         Routet einen yielded Output basierend auf CategoryRegistry.
@@ -297,18 +279,14 @@ class MessageRouter:
                 log.error("Command %s has no aggregate_id", type(output).__name__)
                 return
 
-            # Aus einem Event-Handler gelieferte Commands sind ZUSAGEN, keine Client-Commands
-            # mit behaupteter Version: sie werden im Emittiert-Modus (docs/03 §3.1) gesendet — keine OCC,
-            # die Empfaenger-Inbox dedupliziert. Sonst scheitern sie am co-committeten
-            # KommandoVerarbeitet-Marker (der Stream steht eine Version hoeher als das Event, auf
-            # das reagiert wurde). Sentinel: expected_version < 0 -> der Server mappt auf Emittiert.
+            # Ein Command aus einem Event-Handler kennt die Version des Ziels nicht: ohne Versionsprüfung (Sentinel expected_version < 0,
+            # der Server sendet im Modus Emittiert — die Inbox des Ziels dedupliziert über die Command-Id).
             envelope = mapper.wrap_command(
                 output,
                 aggregate_id=agg_id,
                 expected_version=-1,
                 correlation_id=ctx.correlation_id,
                 session_id=proxy.session_id,
-                causation=causation,
             )
             await proxy.send_command(envelope)
             log.info("→ Command: %s (agg=%s)", type(output).__name__, str(agg_id)[:8])

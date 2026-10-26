@@ -186,22 +186,6 @@ public sealed class DomainEditorAkteurTests
         anteile.Eingaenge.Should().OnlyContain(e => anteile.AkteureVon(e.Nachricht).Count > 0, "jeder Eingang kommt von einem Akteur (GR-HERKUNFT)");
     }
 
-    [Fact]
-    public void Scaffolder_schreibt_den_Vertrag_neben_den_Akteur()
-    {
-        var a = Kasse with
-        {
-            Vertrag = [new() { Eingang = "Bestellt", Ausgaenge = ["Storniere", "Bestelle"], Strom = true }, new() { Eingang = "Bestellt" }],
-        };
-        a.VertragTyp.Should().Be("IKasse");
-        var text = Scaffolder.VertragsInterface(a);
-        text.Should().Contain("public interface IKasse : IAkteurVertrag<Kasse>")
-            .And.Contain("IAsyncEnumerable<OneOf<Storniere, Bestelle>> Auf(Bestellt e);")
-            .And.Contain("void Auf(Bestellt e);");
-        Scaffolder.VertragsRueckgabe(new() { Eingang = "X", Ausgaenge = ["Y"] }).Should().Be("OneOf<Y>");
-        (a with { VertragName = "IRegal" }).VertragTyp.Should().Be("IRegal");
-    }
-
     // ── Clients (docs/konzept-akteure.md §4): ein Vertrag je Client, n:m zu Akteuren ──
 
     private static DomainEditor.Client Laden => new()

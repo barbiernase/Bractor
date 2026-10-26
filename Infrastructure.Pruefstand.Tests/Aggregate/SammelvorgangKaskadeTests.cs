@@ -1,52 +1,78 @@
 using System;
 using Abstractions;
 using Cqrs.Testing;
+using FluentAssertions;
+using Domain.Pipeline.Sammelvorgang;
 using Domain.Sammelvorgang;
 using Domain.Teilauftrag;
+using Domain.Trainingslauf;
 using Xunit;
 
 namespace Infrastructure.Pruefstand.Aggregate;
 
 /// <summary>
-/// End-to-end (store-frei, echte generierte Logik über <see cref="SagaSzenario"/>): Fan-out → Fan-in.
+/// End-to-end (store-frei, echte generierte Logik über die Ablauf-DSL <see cref="Ablauf"/>): Fan-out → Fan-in.
 ///
 /// So SETZT man die Barriere ein:
-///   1. Fan-out (Client/Pipeline): <c>StarteSammelvorgang(N)</c> + N × <c>StarteTeilauftrag(…, batch)</c>.
-///   2. Jeder Worker wird fertig → <see cref="TeilFertigProzess"/> mappt das auf <c>MeldeTeilFertig</c>.
-///   3. Das Zähl-Aggregat feuert <c>SammelvorgangAbgeschlossen</c> erst beim N-ten Teil (N = Laufzeitwert).
+///   1. Fan-out (Client): <c>StarteSammelvorgang(N)</c> + N × <c>StarteTeilauftrag(…, sammelvorgang)</c>.
+///   2. Jeder Teil wird fertig → die Funktion <see cref="TeilFertigMeldung"/> macht daraus <c>MeldeTeilFertig</c>.
+///   3. Das Zähl-Aggregat schließt erst beim N-ten Teil ab (N = Laufzeitwert).
+/// Dazu der Trainings-Wächter als Frist des Aggregats: der Beginn setzt sie, die Uhr feuert sie, ein Ende davor macht sie wirkungslos.
 /// </summary>
 public class SammelvorgangKaskadeTests
 {
     private static readonly IAggregateHandlerFactory Fabrik = new Domain.AggregateHandlerFactory();
 
+    private static AblaufBauer Welt() => Ablauf.Mit(Fabrik)
+        .Aggregat<Sammelvorgang>().Aggregat<Teilauftrag>()
+        .Funktion<TeilauftragAbgeschlossen>(nameof(TeilFertigMeldung), (e, h) => new TeilFertigMeldung().Auf(e));
+
     [Fact]
     public void Fanout_dann_Fanin_Barriere_feuert_erst_beim_letzten_Teil()
     {
-        var batch = Guid.NewGuid();
+        var sammel = Guid.NewGuid();
         var w1 = Guid.NewGuid();
         var w2 = Guid.NewGuid();
         var w3 = Guid.NewGuid();
+        var welt = Welt();
 
-        var bauer = SagaSzenario.Mit(Fabrik, new TeilFertigProzess());
+        // 1) Fan-out — N=3 (Laufzeitwert) + drei Teilaufträge, alle an denselben Sammelvorgang gebunden.
+        welt.Wenn(new StarteSammelvorgang(new(sammel), 3));
+        welt.Wenn(new StarteTeilauftrag(new(w1), new(sammel)));
+        welt.Wenn(new StarteTeilauftrag(new(w2), new(sammel)));
+        welt.Wenn(new StarteTeilauftrag(new(w3), new(sammel)));
 
-        // 1) Fan-out — N=3 (Laufzeitwert) + drei Teilaufträge, alle an dieselbe Barriere gebunden.
-        bauer.Wenn(new StarteSammelvorgang(new(batch), 3));
-        bauer.Wenn(new StarteTeilauftrag(new(w1), new(batch)));
-        bauer.Wenn(new StarteTeilauftrag(new(w2), new(batch)));
-        bauer.Wenn(new StarteTeilauftrag(new(w3), new(batch)));
+        // 2) Zwei Teile fertig → die Funktion meldet je MeldeTeilFertig; Barriere noch NICHT erreicht.
+        welt.Wenn(new SchließeTeilauftragAb(new(w1)))
+            .Feuert<MeldeTeilFertig>(1).AllesGeroutet()
+            .EndzustandVon<Sammelvorgang>(sammel, s => !s.Abgeschlossen && s.Fertig == 1, "1 von 3");
+        welt.Wenn(new SchließeTeilauftragAb(new(w2)))
+            .EndzustandVon<Sammelvorgang>(sammel, s => !s.Abgeschlossen && s.Fertig == 2, "2 von 3");
 
-        // 2) Zwei Teile fertig → Prozess feuert je MeldeTeilFertig; Barriere noch NICHT erreicht.
-        bauer.Wenn(new SchließeTeilauftragAb(new(w1)))
-             .Feuert<MeldeTeilFertig>()
-             .EndzustandVon<Sammelvorgang>(batch, s => !s.Abgeschlossen && s.Fertig == 1, "1 von 3");
+        // 3) Der dritte Teil schließt die Barriere.
+        welt.Wenn(new SchließeTeilauftragAb(new(w3)))
+            .Feuert<MeldeTeilFertig>(1)
+            .EndzustandVon<Sammelvorgang>(sammel, s => s.Abgeschlossen && s.Fertig == 3, "erst beim 3. (letzten) Teil ist die Barriere erreicht");
+    }
 
-        bauer.Wenn(new SchließeTeilauftragAb(new(w2)))
-             .EndzustandVon<Sammelvorgang>(batch, s => !s.Abgeschlossen && s.Fertig == 2, "2 von 3");
+    [Fact]
+    public void Ein_stilles_Training_bleibt_nach_der_Frist_haengen_ein_beendetes_nie()
+    {
+        var still = Guid.NewGuid();
+        var beendet = Guid.NewGuid();
+        var welt = Ablauf.Mit(Fabrik).Aggregat<Trainingslauf>();
+        foreach (var lauf in new[] { still, beendet })
+        {
+            welt.Wenn(new StarteTraining(new(lauf), new(Guid.NewGuid()), 1, new Hyperparameter(1, 0.1, 8, "klein", 1)));
+            welt.Wenn(new MeldeTrainingBegonnen(new(lauf)));
+        }
+        welt.OffeneFristen.Should().HaveCount(2, "jeder Beginn setzt den Wächter");
+        welt.Wenn(new MeldeTrainingGescheitert(new(beendet), "vorher zu Ende"));
 
-        // 3) Der dritte Teil schließt die Barriere — hier feuert SammelvorgangAbgeschlossen.
-        bauer.Wenn(new SchließeTeilauftragAb(new(w3)))
-             .Feuert<MeldeTeilFertig>()
-             .EndzustandVon<Sammelvorgang>(batch, s => s.Abgeschlossen && s.Fertig == 3,
-                 "erst beim 3. (letzten) Teil ist die Barriere erreicht");
+        var uhr = welt.Fristen();
+        uhr.Feuert<MarkiereAlsHaengengeblieben>(2)
+            .EndzustandVon<Trainingslauf>(still, s => s.Status == TrainingsStatus.Haengengeblieben, "still → hängengeblieben")
+            .EndzustandVon<Trainingslauf>(beendet, s => s.Status == TrainingsStatus.Gescheitert, "ein Ende vor der Frist bleibt");
+        uhr.Events<Trainingslauf, TrainingHaengengeblieben>(beendet).Should().BeEmpty();
     }
 }

@@ -66,7 +66,6 @@ public record ImagePairInspiziert() : IEvent;
 // ABLEHNUNGS-EVENTS (ITransientEvent)
 // ═══════════════════════════════════════════════════
 
-public record ImagePairExistiertBereits(Id<ImagePair> PairId) : ITransientEvent;
 public record ImagePairNichtGefunden(Id<ImagePair> PairId) : ITransientEvent;
 public record BildVersionBereitsVerfuegbar(BildVersion Version) : ITransientEvent;
 public record BildNichtVerfuegbar(BildVersion Version) : ITransientEvent;

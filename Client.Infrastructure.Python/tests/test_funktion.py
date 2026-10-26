@@ -1,9 +1,10 @@
 """
-Katalog-Funktionen in Python anbieten (docs/konzept-editor-pipelines.md §14.5) — domänenfrei, mit minimalen betterproto-Fakes.
+Funktionen draußen tragen (Plan Pub/Sub-Neustrukturierung §2.2, §2.7: ITraegt) — domänenfrei, mit minimalen betterproto-Fakes.
 
-Bewiesen wird der FunktionsLaeufer des SDK: Anmelden (Funktion + Slots), Auftrag auspacken, `rufe` höchstens SLOTS-mal
-gleichzeitig, Lebenszeichen während langer Läufe, Ergebnis-Vertrag (falscher Typ oder Ausnahme → Fehler statt Ergebnis),
-Ergebnis als EventEnvelopeDto mit Nutzlast (typ + Bytes) — und der Weg vom Read-Loop über die Verarbeitungsschleife zum Läufer.
+Bewiesen wird der FunktionsLaeufer des SDK: Anbieten (Funktion + Slots), Eingang auspacken, `auf_<eingang>(e, h)` höchstens SLOTS-mal
+gleichzeitig, Lebenszeichen während langer Läufe, Signatur (falscher Typ, zwei Ausgaben ohne Strom oder Ausnahme → Fehler statt Antwort),
+die Antwort als geordnete Ausgaben mit Art (Command/Event/Hinweis), ein Strom in Stücken mit Stelle (und ab einer schon festgehaltenen Stelle
+weiter) — und der Weg vom Read-Loop über die Verarbeitungsschleife zum Läufer.
 """
 
 import asyncio
@@ -13,7 +14,7 @@ from types import SimpleNamespace
 import betterproto
 import pytest
 
-from cqrs_client import Ausfuehrung, FunktionsBasis, FunktionsLaeufer
+from cqrs_client import Ausgabe, Eingang, FunktionsBasis, FunktionsLaeufer, Herkunft
 from cqrs_client.client import CqrsClient
 from cqrs_client.leitung import ArbeitsAuftrag, Nutzlast, ServerMessage
 from cqrs_client.mapper import PayloadMapper
@@ -21,13 +22,12 @@ from cqrs_client.router import MessageRouter
 
 
 @dataclass
-class SkaliereDto(betterproto.Message):
+class DateiDto(betterproto.Message):
     pfad: str = betterproto.string_field(1)
-    hoehe: int = betterproto.int32_field(2)
 
 
 @dataclass
-class SkaliertDto(betterproto.Message):
+class SkalierteDto(betterproto.Message):
     pfad: str = betterproto.string_field(1)
 
 
@@ -37,19 +37,28 @@ class UnlesbarDto(betterproto.Message):
 
 
 @dataclass
+class MeldeDto(betterproto.Message):
+    n: int = betterproto.int32_field(1)
+
+
+@dataclass
 class FremdDto(betterproto.Message):
     x: int = betterproto.int32_field(1)
 
 
 # Die „generierte Nutzlast-Tabelle“ (domain_client/generated/nutzlast_tabelle.py). Hüllen und ServerMessage kommen aus der echten Leitung.
-GEN = {"Skaliere": SkaliereDto, "Skaliert": SkaliertDto, "Unlesbar": UnlesbarDto, "Fremd": FremdDto}
+GEN = {"Datei": DateiDto, "Skalierte": SkalierteDto, "Unlesbar": UnlesbarDto, "Melde": MeldeDto, "Fremd": FremdDto}
 
 
 class SkalierungBasis(FunktionsBasis):
     """So sieht die generierte Basis aus (domain_client/generated/funktionen.py)."""
     FUNKTION = "ISkalierung"
-    AUFTRAG = SkaliereDto
-    ERGEBNISSE = (SkaliertDto, UnlesbarDto)
+    EINGAENGE = {DateiDto: Eingang("auf_datei", {SkalierteDto: Ausgabe.EVENT, UnlesbarDto: Ausgabe.EVENT})}
+
+
+class StromBasis(FunktionsBasis):
+    FUNKTION = "IZaehlung"
+    EINGAENGE = {DateiDto: Eingang("auf_datei", {MeldeDto: Ausgabe.COMMAND}, strom=True)}
 
 
 class Skalierer(SkalierungBasis):
@@ -61,19 +70,25 @@ class Skalierer(SkalierungBasis):
         self.liefere = liefere
         self.gleichzeitig = 0
         self.max_gleichzeitig = 0
-        self.gesehen: list[tuple[SkaliereDto, Ausfuehrung]] = []
+        self.gesehen: list[tuple[DateiDto, Herkunft]] = []
 
-    async def rufe(self, auftrag, x):
-        self.gesehen.append((auftrag, x))
+    async def auf_datei(self, e, h):
+        self.gesehen.append((e, h))
         self.gleichzeitig += 1
         self.max_gleichzeitig = max(self.max_gleichzeitig, self.gleichzeitig)
         try:
             await asyncio.sleep(self.dauer)
             if self.liefere is not None:
-                return self.liefere(auftrag)
-            return SkaliertDto(pfad=auftrag.pfad + ".klein")
+                return self.liefere(e)
+            return SkalierteDto(pfad=e.pfad + ".klein")
         finally:
             self.gleichzeitig -= 1
+
+
+class Zaehler(StromBasis):
+    async def auf_datei(self, e, h):
+        for n in range(3):
+            yield MeldeDto(n=n)
 
 
 class FakeProxy:
@@ -85,16 +100,16 @@ class FakeProxy:
     async def send_funktionen_anbieten(self, angebote):
         self.angebote.append(list(angebote))
 
-    async def send_arbeits_ergebnis(self, vorgang, ergebnis_envelope=None, fehler=""):
-        self.ergebnisse.append((vorgang, ergebnis_envelope, fehler))
+    async def send_arbeits_ergebnis(self, vorgang, ausgaben=None, ab=0, fertig=True, fehler=""):
+        self.ergebnisse.append((vorgang, list(ausgaben or []), ab, fertig, fehler))
 
     async def send_arbeit_lebt(self, vorgang):
         self.lebt.append(vorgang)
 
 
-def _auftrag(vorgang="v1", funktion="ISkalierung", pfad="/roh/a.tiff"):
-    return ArbeitsAuftrag(vorgang=vorgang, korrelation="k1", funktion=funktion,
-                          auftrag=Nutzlast(typ="Skaliere", daten=bytes(SkaliereDto(pfad=pfad, hoehe=512))), akteur="KameraSystem")
+def _eingang(vorgang="v1", funktion="ISkalierung", pfad="/roh/a.tiff", ab=0):
+    return ArbeitsAuftrag(vorgang=vorgang, korrelation="k1", funktion=funktion, eingang=Nutzlast(typ="Datei", daten=bytes(DateiDto(pfad=pfad))),
+                          akteur="KameraSystem", stream="s1", version=3, zeit_utc=1_700_000_000_000, ab=ab)
 
 
 def sync(fn):
@@ -119,66 +134,91 @@ async def test_anbieten_nennt_funktion_und_slots():
 
 
 @sync
-async def test_auftrag_wird_gerufen_und_das_ergebnis_geht_als_event_envelope_zurueck():
+async def test_eingang_wird_mit_herkunft_gerufen_und_die_antwort_geht_mit_art_zurueck():
     f = Skalierer()
     laeufer, proxy = _laeufer(f)
 
-    await laeufer.nimm(_auftrag())
+    await laeufer.nimm(_eingang())
 
-    auftrag, x = f.gesehen[0]
-    assert auftrag == SkaliereDto(pfad="/roh/a.tiff", hoehe=512)
-    assert x == Ausfuehrung(ausfuehrungs_id="v1", korrelation="k1", akteur="KameraSystem")
-    vorgang, envelope, fehler = proxy.ergebnisse[0]
-    assert (vorgang, fehler) == ("v1", "")
-    assert envelope.payload.typ == "Skaliert"
-    assert SkaliertDto().parse(envelope.payload.daten) == SkaliertDto(pfad="/roh/a.tiff.klein")
-    assert envelope.aggregate_id == "v1" and envelope.correlation_id == "k1"
+    e, h = f.gesehen[0]
+    assert e == DateiDto(pfad="/roh/a.tiff")
+    assert (h.stream, h.version, h.akteur, h.korrelation, h.schluessel) == ("s1", 3, "KameraSystem", "k1", "v1")
+    vorgang, ausgaben, ab, fertig, fehler = proxy.ergebnisse[0]
+    assert (vorgang, ab, fertig, fehler) == ("v1", 0, True, "")
+    [(art, nutzlast)] = ausgaben
+    assert art == Ausgabe.EVENT and nutzlast.typ == "Skalierte"
+    assert SkalierteDto().parse(nutzlast.daten) == SkalierteDto(pfad="/roh/a.tiff.klein")
     assert laeufer.laufend == 0
 
 
 @sync
-async def test_ergebnis_ausserhalb_des_vertrags_und_ausnahme_werden_zum_fehler():
-    falsch = Skalierer(liefere=lambda a: FremdDto(x=1))
-    laeufer, proxy = _laeufer(falsch)
-    await laeufer.nimm(_auftrag("v1"))
-
-    def wirft(a):
-        raise IOError("Datei gesperrt")
-    laeufer2, proxy2 = _laeufer(Skalierer(liefere=wirft))
-    await laeufer2.nimm(_auftrag("v2"))
-
-    assert proxy.ergebnisse[0][1] is None and "FunktionsVerletzung" in proxy.ergebnisse[0][2] and "FremdDto" in proxy.ergebnisse[0][2]
-    assert proxy2.ergebnisse[0][1] is None and "Datei gesperrt" in proxy2.ergebnisse[0][2]
+async def test_nichts_ist_eine_leere_fertige_antwort():
+    laeufer, proxy = _laeufer(Skalierer(liefere=lambda e: None))
+    await laeufer.nimm(_eingang())
+    assert proxy.ergebnisse == [("v1", [], 0, True, "")]
 
 
 @sync
-async def test_hoechstens_slots_gleichzeitig_und_derselbe_vorgang_laeuft_nur_einmal():
+async def test_ausgabe_ausserhalb_der_signatur_und_ausnahme_werden_zum_fehler():
+    laeufer, proxy = _laeufer(Skalierer(liefere=lambda e: FremdDto(x=1)))
+    await laeufer.nimm(_eingang("v1"))
+
+    def wirft(e):
+        raise IOError("Datei gesperrt")
+    laeufer2, proxy2 = _laeufer(Skalierer(liefere=wirft))
+    await laeufer2.nimm(_eingang("v2"))
+
+    assert proxy.ergebnisse[0][1] == [] and "FunktionsVerletzung" in proxy.ergebnisse[0][4] and "FremdDto" in proxy.ergebnisse[0][4]
+    assert proxy2.ergebnisse[0][1] == [] and "Datei gesperrt" in proxy2.ergebnisse[0][4]
+
+
+@sync
+async def test_ein_strom_geht_stueckweise_mit_stelle_und_endet_fertig():
+    laeufer, proxy = _laeufer(Zaehler())
+    await laeufer.nimm(_eingang(funktion="IZaehlung"))
+
+    assert [(ab, fertig, [MeldeDto().parse(n.daten).n for _, n in aus]) for _, aus, ab, fertig, _ in proxy.ergebnisse] == \
+        [(0, False, [0]), (1, False, [1]), (2, False, [2]), (3, True, [])]
+    assert all(art == Ausgabe.COMMAND for _, aus, _, _, _ in proxy.ergebnisse for art, _ in aus)
+
+
+@sync
+async def test_ein_strom_setzt_bei_der_schon_festgehaltenen_stelle_fort():
+    laeufer, proxy = _laeufer(Zaehler())
+    await laeufer.nimm(_eingang(funktion="IZaehlung", ab=2))   # zwei Stücke hielt ein früherer Träger schon fest
+
+    assert [(ab, fertig) for _, _, ab, fertig, _ in proxy.ergebnisse] == [(2, False), (3, True)]
+    assert MeldeDto().parse(proxy.ergebnisse[0][1][0][1].daten).n == 2
+
+
+@sync
+async def test_hoechstens_slots_gleichzeitig_und_derselbe_eingang_laeuft_nur_einmal():
     f = Skalierer(slots=2, dauer=0.03)
     laeufer, proxy = _laeufer(f)
 
-    tasks = [laeufer.nimm(_auftrag(f"v{i}")) for i in range(5)]
-    assert laeufer.nimm(_auftrag("v0")) is tasks[0], "erneut zugestellt → kein zweiter Lauf"
+    tasks = [laeufer.nimm(_eingang(f"v{i}")) for i in range(5)]
+    assert laeufer.nimm(_eingang("v0")) is tasks[0], "erneut zugeteilt → kein zweiter Lauf"
     await laeufer.warte_auf_alle()
 
     assert f.max_gleichzeitig == 2
-    assert sorted(v for v, _, _ in proxy.ergebnisse) == [f"v{i}" for i in range(5)]
+    assert sorted(v for v, *_ in proxy.ergebnisse) == [f"v{i}" for i in range(5)]
 
 
 @sync
 async def test_lebenszeichen_waehrend_langer_laeufe_und_danach_keins_mehr():
     laeufer, proxy = _laeufer(Skalierer(dauer=0.08), lebenszeichen_s=0.02)
-    await laeufer.nimm(_auftrag("lang"))
+    await laeufer.nimm(_eingang("lang"))
     n = len(proxy.lebt)
     assert n >= 2 and set(proxy.lebt) == {"lang"}
     await asyncio.sleep(0.06)
-    assert len(proxy.lebt) == n, "nach dem Ergebnis kein Lebenszeichen mehr"
+    assert len(proxy.lebt) == n, "nach der Antwort kein Lebenszeichen mehr"
 
 
 @sync
-async def test_auftrag_fuer_nicht_angebotene_funktion_wird_nicht_gerechnet():
+async def test_eingang_fuer_nicht_angebotene_funktion_wird_nicht_gerechnet():
     f = Skalierer()
     laeufer, proxy = _laeufer(f)
-    assert laeufer.nimm(_auftrag(funktion="IAndere")) is None
+    assert laeufer.nimm(_eingang(funktion="IAndere")) is None
     await asyncio.sleep(0)
     assert f.gesehen == [] and proxy.ergebnisse == []
 
@@ -188,19 +228,17 @@ def test_nur_generierte_basen_und_keine_doppelten():
         FunktionsLaeufer([object()], FakeProxy(), PayloadMapper(GEN))
     with pytest.raises(ValueError):
         FunktionsLaeufer([Skalierer(), Skalierer()], FakeProxy(), PayloadMapper(GEN))
-    with pytest.raises(TypeError):
-        SkalierungBasis()   # abstrakt: ohne rufe nicht instanziierbar
 
 
 @sync
-async def test_read_loop_und_verarbeitungsschleife_reichen_den_auftrag_an_den_laeufer():
+async def test_read_loop_und_verarbeitungsschleife_reichen_den_eingang_an_den_laeufer():
     f = Skalierer()
     client = CqrsClient(registry=SimpleNamespace(), nutzlast=GEN, funktionen=[f])
     proxy = client._proxy
     client._funktionen._proxy = fake = FakeProxy()
     assert client.funktionen.angebote == [("ISkalierung", 2)]
 
-    nachrichten = [ServerMessage(arbeits_auftrag=_auftrag("v9")), None]
+    nachrichten = [ServerMessage(arbeits_auftrag=_eingang("v9")), None]
 
     class Strom:
         async def recv_message(self):
@@ -222,5 +260,5 @@ async def test_read_loop_und_verarbeitungsschleife_reichen_den_auftrag_an_den_la
     verarbeiten.cancel()
     await asyncio.gather(lesen, verarbeiten, return_exceptions=True)
 
-    assert [v for v, _, fehler in fake.ergebnisse if not fehler] == ["v9"]
+    assert [v for v, _, _, _, fehler in fake.ergebnisse if not fehler] == ["v9"]
     assert f.gesehen[0][0].pfad == "/roh/a.tiff"

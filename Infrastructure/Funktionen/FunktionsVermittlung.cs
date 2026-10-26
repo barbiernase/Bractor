@@ -49,9 +49,10 @@ public sealed record EingaengeZugeteilt(IReadOnlyList<EingangAnbieten> Eingaenge
 
 /// <summary>
 /// An den Funktions-Actor: die Antwort auf den Eingang mit diesem Schlüssel liegt vor (festgehalten), oder draußen ist er gescheitert
-/// (<paramref name="Fehler"/>). Verlierbar — der Actor sieht nach einer Geduld ohnehin nach.
+/// (<paramref name="Fehler"/>); mit <paramref name="Teil"/> nur ein Stück eines Stroms — es kommt noch mehr. Verlierbar — der Actor sieht nach einer
+/// Geduld ohnehin nach.
 /// </summary>
-public sealed record EingangBeantwortet(Guid Schluessel, string? Fehler = null) : IWireMessage;
+public sealed record EingangBeantwortet(Guid Schluessel, string? Fehler = null, bool Teil = false) : IWireMessage;
 
 /// <summary>Ein Ausführer holt bis zu <paramref name="Max"/> Aufträge; ist keiner da, wartet die Anfrage bis zu <paramref name="WarteMs"/>.</summary>
 public sealed record HoleArbeit(string Arbeiter, int Max, int WarteMs) : IWireMessage;

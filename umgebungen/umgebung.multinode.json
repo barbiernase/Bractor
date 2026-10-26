@@ -13,11 +13,7 @@
     "DateiErkannt": { "Pfad": "/data/input", "Kennung": "PfadGroesseZeit", "Laufmodus": "EinmalImCluster", "Webhook": "/webhook/datei" }
   },
   "Funktionen": {
-    "IBildVerkleinerung": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 },
-    "IHistogrammAusgleich": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 },
-    "IDateinameDeutung": { "Laufort": "Host", "Slots": 8 },
-    "IRangeSuche": { "Laufort": "Host", "Slots": 2 },
-    "IMitgliederEinfrieren": { "Laufort": "Host", "Slots": 2 }
+    "IBildaufbereitung": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 }
   },
   "Clients": {
     "Arbeitsplatz": {

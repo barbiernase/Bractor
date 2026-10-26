@@ -1,18 +1,19 @@
 """
 Der TrainingWorker offline: kein Server, kein Torch. Der Proxy-Query wird gefaked
-(liefert DatensatzSamples), dann wird auf_training_angefordert als Async-Generator getrieben
-und die zurückgemeldeten Commands gesammelt.
+(liefert DatensatzSamples), dann wird die getragene Funktion ITraining (`training`) als Async-Generator
+getrieben und die zurückgemeldeten Commands gesammelt.
 
 Beweist die Akzeptanz: „der TrainingWorker zieht Samples per query() und meldet
 Fortschritt zurück."
 """
 
 import asyncio
-from types import SimpleNamespace
+from datetime import datetime, timezone
 from uuid import uuid4
 
 import domain_client.generated as g
 from domain_client.generated.nutzlast_tabelle import TABELLE as NUTZLAST
+from cqrs_client.funktion import Herkunft
 from cqrs_client.leitung import Nutzlast, QueryResponse
 from domain_client.domain_registry import create_registry
 from domain_client.training_worker import TrainingWorker, TrainingState
@@ -52,9 +53,9 @@ def _samples_response(n: int, seite: int = 1, gesamt: int | None = None):
 
 async def _treibe(worker, event, patch_send_query):
     worker._proxy.send_query = patch_send_query
-    ctx = SimpleNamespace(aggregate_id=uuid4())
+    h = Herkunft(stream=str(uuid4()), version=1, zeit=datetime.now(timezone.utc))
     outputs = []
-    async for cmd in worker.auf_training_angefordert(event, ctx, worker.state):
+    async for cmd in worker.training(event, h, worker.state):
         outputs.append(cmd)
     return outputs
 
@@ -123,3 +124,13 @@ def test_samples_werden_durchpaginiert():
     assert gesehene_seiten == [1, 2]   # zwei Query-Roundtrips
     assert isinstance(outputs[0], g.MeldeTrainingBegonnenDto)
     assert isinstance(outputs[-1], g.MeldeTrainingAbgeschlossenDto)
+
+
+# ═══════════════════════════════════════════════════
+# Vertrag — trägt ITraining, hört TrainingAbgebrochen
+# ═══════════════════════════════════════════════════
+
+def test_der_worker_traegt_das_training_und_hoert_den_abbruch():
+    worker = _worker()
+    assert worker.funktionen.angebote == [("ITraining", 1)]
+    assert worker.handle.registered_types == {g.TrainingAbgebrochenDto}

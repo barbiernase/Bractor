@@ -23,12 +23,18 @@ public partial class ProtoMessageMapper
         return _tabelle.PackeAuftrag(auftrag);
     }
 
+    /// <summary>Der Eingang einer Funktion draußen als Nutzlast (ein Event aus dem Log, eine Quell-Nachricht, ein Hinweis).</summary>
+    public Nutzlast MapToDto(IEvent eingang) => _tabelle.PackeEvent(eingang);
+
     /// <summary>
-    /// Nur die Nutzlast eines Ergebnis-Envelopes — die Metadaten (Stream, Korrelation, Akteur) stempelt der Server selbst,
-    /// ein externer Ausführer muss sie nicht (und darf sie nicht) setzen.
+    /// Eine Ausgabe einer Funktion draußen — nur die Nutzlast; Stream, Korrelation und Akteur stempelt der Funktions-Actor selbst, ein Träger
+    /// muss sie nicht (und darf sie nicht) setzen.
     /// </summary>
-    public IEvent MapErgebnis(EventEnvelopeDto dto)
+    public IPipelineOutput Ausgabe(FunktionsAusgabe a) => a.ArtCase switch
     {
-        return _tabelle.Event(dto.Payload);
-    }
+        FunktionsAusgabe.ArtOneofCase.Command => _tabelle.Command(a.Command),
+        FunktionsAusgabe.ArtOneofCase.Event => _tabelle.Event(a.Event),
+        FunktionsAusgabe.ArtOneofCase.Hinweis => _tabelle.Event(a.Hinweis),
+        _ => throw new MappingException("Eine Ausgabe ohne Art (Command, Event oder Hinweis)."),
+    };
 }

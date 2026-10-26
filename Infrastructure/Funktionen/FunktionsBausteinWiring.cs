@@ -27,7 +27,8 @@ public sealed record BausteinBindung(string Funktion, FunktionsLaufort Laufort =
 ///   der Takt (30 s) jede Partition — bis der Wecker am Flush kommt (Phase 6). Ihr Stand liegt im selben Dokument wie der einer Projektion, so zählt
 ///   <c>/health</c> ihren Rückstand mit;</item>
 /// <item>das Festhalten im Log (<see cref="LogAusgabeAblage"/>) und der Stand im Dokument-Store (<see cref="MartenFunktionsStand"/>);</item>
-/// <item>für Funktionen draußen der Vermittler (Lease) — die Hand-Seite über den <see cref="HandAusfuehrer"/>.</item>
+/// <item>für Funktionen draußen der Vermittler (Lease) — die Hand-Seite über den <see cref="HandAusfuehrer"/>, die Leitung (Laufort Extern) über die
+///   Sitzung des Clients, der sie trägt (<c>CqrsClientService</c>).</item>
 /// </list>
 /// </summary>
 public static class FunktionsBausteinWiring
@@ -36,7 +37,7 @@ public static class FunktionsBausteinWiring
     {
         var bausteine = Anwendung.Funktionen.Bausteine;
         if (bausteine.Count == 0) return services;
-        services.TryAddSingleton<IAusgabeAblage>(sp => new LogAusgabeAblage(sp.GetRequiredService<IEventStoreRepository>()));
+        services.TryAddSingleton<IAusgabeAblage>(sp => new LogAusgabeAblage(sp.GetRequiredService<IEventStoreRepository>(), sp.GetService<BrokerPublisher>()));
         services.TryAddSingleton<IFunktionsStand>(sp => new MartenFunktionsStand(sp.GetRequiredService<Marten.IDocumentStore>()));
         foreach (var b in bausteine)
         {
@@ -57,25 +58,32 @@ public static class FunktionsBausteinWiring
 
     /// <summary>
     /// Die Bindung einer Funktion ohne Prüfung: die letzte registrierte, sonst der Standard — eine Klasse läuft im Host, eine Schnittstelle mit genau
-    /// einer Umsetzung ebenso (wie ein Dienst mit einer Implementierung); sonst keine.
+    /// einer Umsetzung ebenso (wie ein Dienst mit einer Implementierung); eine Schnittstelle ohne Umsetzung, die ein Client trägt
+    /// (<c>ITraegt&lt;F&gt;</c>), läuft draußen (Laufort Extern); sonst keine.
     /// </summary>
     public static BausteinBindung? Gebunden(FunktionsBaustein b, IEnumerable<BausteinBindung> bindungen) =>
-        bindungen.LastOrDefault(x => x.Funktion == b.Name) ?? (!b.Draussen || b.Umsetzungen.Count == 1 ? new BausteinBindung(b.Name) : null);
+        bindungen.LastOrDefault(x => x.Funktion == b.Name)
+        ?? (!b.Draussen || b.Umsetzungen.Count == 1 ? new BausteinBindung(b.Name)
+            : b.Umsetzungen.Count == 0 && Getragen(b) ? new BausteinBindung(b.Name, FunktionsLaufort.Extern)
+            : null);
+
+    /// <summary>Trägt irgendein Client die Funktion (<c>ITraegt&lt;F&gt;</c> in einem Client-Vertrag)?</summary>
+    public static bool Getragen(FunktionsBaustein b) => Anwendung.Akteure.ClientVertraege.Values.Any(c => c.Traegt.Contains(b.Typ));
 
     /// <summary>
-    /// Die geprüfte Bindung einer Funktion (<see cref="Gebunden"/>). Eine Funktion draußen ohne Bindung und ohne eindeutige Umsetzung ist ein
-    /// Boot-Fehler (R17: sie braucht einen Träger oder eine Bindung), ebenso eine Funktion mit Lese-Fähigkeit, die nicht im Host läuft.
+    /// Die geprüfte Bindung einer Funktion (<see cref="Gebunden"/>). Eine Funktion draußen ohne Bindung, ohne eindeutige Umsetzung und ohne Träger
+    /// ist ein Boot-Fehler (R17: sie braucht einen Träger oder eine Bindung), ebenso eine Funktion mit Lese-Fähigkeit, die nicht im Host läuft.
     /// </summary>
     public static BausteinBindung BindungVon(FunktionsBaustein b, IEnumerable<BausteinBindung> bindungen)
     {
         var bindung = Gebunden(b, bindungen)
-            ?? throw new Infrastructure.Umgebung.BootFehler($"Die Funktion '{b.Name}' ist eine Schnittstelle (läuft draußen) und hat keine Bindung — in der "
-                + $"Umgebung fehlt Funktionen:{b.Name} (Laufort Hand, oder Host mit Implementierung).", "funktion:" + b.Name);
+            ?? throw new Infrastructure.Umgebung.BootFehler($"Die Funktion '{b.Name}' ist eine Schnittstelle (läuft draußen), hat keine Bindung und keinen "
+                + $"Träger — in der Umgebung fehlt Funktionen:{b.Name} (Laufort Hand oder Extern, oder Host mit Implementierung), oder ein Client-Vertrag "
+                + $"trägt sie nicht (ITraegt<{b.Name}>).", "funktion:" + b.Name);
         if (bindung.Laufort != FunktionsLaufort.Host && b.Liest)
             throw new Infrastructure.Umgebung.BootFehler($"Funktionen:{b.Name}: eine Funktion mit Lese-Fähigkeit läuft nur im Host (Laufort Host).", "funktion:" + b.Name);
-        if (bindung.Laufort == FunktionsLaufort.Extern)
-            throw new Infrastructure.Umgebung.BootFehler($"Funktionen:{b.Name}: Laufort Extern (Worker, Client über die Leitung) kommt für Funktionen in Baustein-Form mit "
-                + "ITraegt (Plan Pub/Sub-Neustrukturierung Phase 7) — heute Host oder Hand.", "funktion:" + b.Name);
+        if (bindung.Laufort == FunktionsLaufort.Extern && !b.Draussen)
+            throw new Infrastructure.Umgebung.BootFehler($"Funktionen:{b.Name}: Laufort Extern braucht eine Schnittstelle — eine Klasse rechnet im Host.", "funktion:" + b.Name);
         if (bindung.Laufort == FunktionsLaufort.Host)
         {
             var passend = b.Umsetzungen.Where(u => bindung.Umsetzung is null || u.Name == bindung.Umsetzung).ToList();

@@ -181,34 +181,50 @@ message TriggerResult {
     string error_message = 3;
 }
 
-// Katalog-Funktionen extern ausführen (docs/konzept-editor-pipelines.md §14.5): ein Worker bietet Funktionen an,
-// der Server holt für ihn Aufträge beim Vermittler (Pull, Slots = Gleichzeitigkeit), reicht sie weiter und schreibt
-// das Ergebnis genau einmal in den Ausführungs-Stream.
+// Funktionen draußen ausführen (Plan Pub/Sub-Neustrukturierung §2.2, §2.7: ITraegt): ein Client bietet Funktionen an, die er trägt; der Server
+// holt für ihn Eingänge beim Vermittler (Pull, Slots = Gleichzeitigkeit, Lease), reicht sie weiter und hält die Antwort unter „Funktion, Eingang“
+// fest — die erste gewinnt. Gesendet wird beim Funktions-Actor; der Client ist nur die Hand.
 message FunktionenAnbieten {
     repeated FunktionsAngebot angebote = 1;
 }
 
 message FunktionsAngebot {
-    // Einfacher Name der Funktions-Schnittstelle, z. B. "IBildVerkleinerung".
+    // Einfacher Name der Funktions-Schnittstelle, z. B. "IBildaufbereitung".
     string funktion = 1;
     int32 slots = 2;
 }
 
+// Ein Eingang einer Funktion: der Schlüssel „Funktion, Eingang“ (vorgang), die Funktion, das Event und seine Herkunft; ab = so viele Ausgaben
+// (Strom) sind schon festgehalten — ein neuer Träger lässt sie aus und macht beim nächsten Stück weiter.
 message ArbeitsAuftrag {
-    // Ausführungs-Id (deterministisch je Prozess-Transition) — Schlüssel für Ergebnis und Lebenszeichen.
     string vorgang = 1;
     string korrelation = 2;
     string funktion = 3;
-    Nutzlast auftrag = 4;
+    Nutzlast eingang = 4;
     string akteur = 5;
+    string stream = 6;
+    int32 version = 7;
+    int64 zeit_utc = 8;
+    int32 ab = 9;
 }
 
+// Eine Ausgabe in der Reihenfolge der Funktion: ein Command, ein Event oder ein Hinweis.
+message FunktionsAusgabe {
+    oneof art {
+        Nutzlast command = 1;
+        Nutzlast event = 2;
+        Nutzlast hinweis = 3;
+    }
+}
+
+// Die Antwort auf einen Eingang — ganz oder (Strom) in Stücken: ab = Stelle der ersten Ausgabe dieses Stücks, fertig = der Lauf ist vollständig.
+// Nicht leeres fehler = die Funktion ist draußen gescheitert (zählt gegen die Wiederholungen des Eingangs).
 message ArbeitsErgebnis {
     string vorgang = 1;
-    // Der gewählte OneOf-Fall der Funktion als Event (nur die Nutzlast zählt).
-    EventEnvelopeDto ergebnis = 2;
-    // Nicht leer = die Funktion ist gescheitert → durable Fehlschlag-Marke statt Ergebnis.
-    string fehler = 3;
+    repeated FunktionsAusgabe ausgaben = 2;
+    int32 ab = 3;
+    bool fertig = 4;
+    string fehler = 5;
 }
 
 message ArbeitLebtMeldung {
@@ -245,12 +261,6 @@ message CommandEnvelopeDto {
     string correlation_id = 6;
     string user_id = 7;
     string origin_session_id = 8;
-    // Kausalität einer Zusage von außen (Akteur-Konzept §5.3): auf welches Event (Stream + Version + Typ) und als wievielte Ausgabe
-    // der Reaktion — daraus leitet der Server eine deterministische CommandId ab (doppelt zugestellt ≠ doppelt wirksam).
-    string causation_stream_id = 9;
-    int32 causation_version = 10;
-    string causation_type = 11;
-    int32 causation_index = 12;
 
     // Die Domänen-Nachricht: Typname + Bytes (Proto der Anwendung, docs/06).
     Nutzlast payload = 20;

@@ -50,7 +50,35 @@ public sealed class FunktionsArbeit
     private readonly ILogger? _logger;
     private readonly int _stueck;
     private readonly TimeSpan _geduld;
-    private readonly ConcurrentDictionary<Guid, TaskCompletionSource<string?>> _antworten = new();
+    private readonly ConcurrentDictionary<Guid, Antworten> _antworten = new();
+    /// <summary>Wie viele festgehaltene Ausgaben eines Eingangs draußen schon gesendet sind (nur ein Merker gegen Doppelsenden; nach einem
+    /// Neustart sendet der Actor alles noch einmal — dieselben Ids, die Inbox verwirft es).</summary>
+    private readonly ConcurrentDictionary<Guid, int> _gesendet = new();
+
+    /// <summary>Die Meldungen der Sitzung zu einem Eingang draußen: ein Stück (Strom), das Ende oder ein Fehler — ein Kanal, ein Leser.</summary>
+    private sealed class Antworten
+    {
+        private readonly System.Threading.Channels.Channel<string?> _kanal =
+            System.Threading.Channels.Channel.CreateUnbounded<string?>(new() { SingleReader = true });
+        private string? _fehler;
+
+        public string? Fehler => Volatile.Read(ref _fehler);
+
+        public void Melde(string? fehler)
+        {
+            if (fehler is not null) Interlocked.CompareExchange(ref _fehler, fehler, null);
+            _kanal.Writer.TryWrite(fehler);
+        }
+
+        /// <summary>Wartet auf die nächste Meldung, höchstens <paramref name="geduld"/>; liefert, ob eine kam (alle wartenden zählen als eine).</summary>
+        public async Task<bool> WarteAsync(TimeSpan geduld, CancellationToken ct)
+        {
+            try { await _kanal.Reader.WaitToReadAsync(ct).AsTask().WaitAsync(geduld, ct); }
+            catch (TimeoutException) { return false; }
+            while (_kanal.Reader.TryRead(out _)) { }
+            return true;
+        }
+    }
 
     /// <param name="funktion">Baut bzw. liefert die Umsetzung im Host; null = die Funktion rechnet draußen (dann <paramref name="bieteAn"/>).</param>
     /// <param name="sende">Command, Command-Id, Korrelation → Ausgang (live der <c>CommandEmitter</c>, eine Frage mit Pflicht-Frist).</param>
@@ -80,10 +108,13 @@ public sealed class FunktionsArbeit
     public bool OhneFesthalten(FunktionsEingang eingang) =>
         _b.Gleichbleibend && !Draussen && !eingang.MitEvents;
 
-    /// <summary>Die Antwort für den Eingang mit diesem Schlüssel liegt vor (Meldung der Sitzung; <paramref name="fehler"/> = draußen gescheitert).</summary>
-    public void Beantwortet(Guid schluessel, string? fehler)
+    /// <summary>
+    /// Die Antwort für den Eingang mit diesem Schlüssel liegt vor (Meldung der Sitzung; <paramref name="fehler"/> = draußen gescheitert,
+    /// <paramref name="teil"/> = ein Stück eines Stroms, es kommt noch mehr).
+    /// </summary>
+    public void Beantwortet(Guid schluessel, string? fehler, bool teil = false)
     {
-        if (_antworten.TryGetValue(schluessel, out var tcs)) tcs.TrySetResult(fehler);
+        if (_antworten.TryGetValue(schluessel, out var a)) a.Melde(fehler);
     }
 
     public static FunktionsEingabe EingabeVon(FunktionsBaustein b, EventEnvelope e) =>
@@ -175,24 +206,40 @@ public sealed class FunktionsArbeit
         return fest.Abgeschlossen ? await SendeAsync(eingabe, fest.Ausgaben, 0, ct) : null;
     }
 
-    /// <summary>Draußen: anbieten und auf die Antwort warten (begrenzt); kommt sie, aus dem Festgehaltenen senden.</summary>
+    /// <summary>
+    /// Draußen: anbieten und auf die Antwort warten; jedes festgehaltene Stück (Strom) sofort senden, bevor das nächste kommt. Kommt in der Geduld
+    /// nichts, heißt der Eingang „später“ — der Actor bietet ihn nach dem Backoff erneut an (beim Vermittler, der die Lease eines laufenden Workers
+    /// kennt, ein Nichts), und die Arbeit sendet weiter, was inzwischen festgehalten ist.
+    /// </summary>
     private async Task<EingangsAusgang> DraussenAsync(EventEnvelope e, FunktionsEingabe eingabe, CancellationToken ct)
     {
-        var tcs = _antworten.GetOrAdd(eingabe.Schluessel, _ => new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously));
+        var antworten = _antworten.GetOrAdd(eingabe.Schluessel, _ => new Antworten());
         try
         {
             await _bieteAn!(new EingangAnbieten(eingabe.Schluessel, _b.Name, e.Payload, e.AggregateId, e.AggregateVersion, e.CreatedAtUtc,
                 e.CorrelationId, ImAuftrag.IstAkteur(e.UserId) ? e.UserId : null, Spur.Aktuell?.Ursache, Spur.Aktuell?.Wirker), ct);
-            string? fehler = null;
-            try { fehler = await tcs.Task.WaitAsync(_geduld, ct); }
-            catch (TimeoutException) { /* nachsehen: die Meldung der Sitzung ist verlierbar */ }
-            if (fehler is not null)
+            while (true)
             {
-                _logger?.LogWarning("[Funktion] {Funktion}: draußen gescheitert für {Stream}:{Version}: {Fehler}", _b.Name, e.AggregateId, e.AggregateVersion, fehler);
-                return EingangsAusgang.Fehler;
+                var gemeldet = await antworten.WarteAsync(_geduld, ct);   // die Meldung der Sitzung ist verlierbar: ohne sie nachsehen
+                if (antworten.Fehler is { } fehler)
+                {
+                    _logger?.LogWarning("[Funktion] {Funktion}: draußen gescheitert für {Stream}:{Version}: {Fehler}", _b.Name, e.AggregateId, e.AggregateVersion, fehler);
+                    return EingangsAusgang.Fehler;
+                }
+                var fest = await _ablage.LiesAsync(eingabe, ct);
+                var schon = _gesendet.GetValueOrDefault(eingabe.Schluessel);
+                if (fest.Ausgaben.Count > schon)
+                {
+                    if (await SendeAsync(eingabe, fest.Ausgaben.Skip(schon).ToList(), schon, ct) != EingangsAusgang.Fertig) return EingangsAusgang.Spaeter;
+                    _gesendet[eingabe.Schluessel] = fest.Ausgaben.Count;
+                }
+                if (fest.Abgeschlossen)
+                {
+                    _gesendet.TryRemove(eingabe.Schluessel, out _);
+                    return EingangsAusgang.Fertig;
+                }
+                if (!gemeldet) return EingangsAusgang.Spaeter;
             }
-            var fest = await _ablage.LiesAsync(eingabe, ct);
-            return fest.Abgeschlossen ? await SendeAsync(eingabe, fest.Ausgaben, 0, ct) : EingangsAusgang.Spaeter;
         }
         finally
         {

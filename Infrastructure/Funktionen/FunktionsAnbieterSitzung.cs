@@ -5,21 +5,6 @@ using Microsoft.Extensions.Logging;
 
 namespace Infrastructure.Funktionen;
 
-/// <summary>Was mit einem gemeldeten Ergebnis eines externen Ausführers geschah.</summary>
-public enum ErgebnisAusgang
-{
-    /// <summary>Der Vorgang läuft in dieser Sitzung nicht (schon erledigt, nie zugeteilt, alte Sitzung) — nichts geschrieben.</summary>
-    Unbekannt,
-    /// <summary>Das Ergebnis-Event liegt im Ausführungs-Stream.</summary>
-    Geschrieben,
-    /// <summary>Gescheitert (Fehler gemeldet oder Ergebnis außerhalb des Vertrags) — die Fehlschlag-Marke liegt im Stream.</summary>
-    Abgelehnt,
-    /// <summary>Nicht schreibbar (Store) — nicht „erledigt“ gemeldet; die Lease läuft ab, der Auftrag geht neu raus.</summary>
-    NichtGeschrieben,
-    /// <summary>Baustein-Form: eine andere Antwort war zuerst festgehalten — sie gilt, diese verfällt.</summary>
-    Ueberholt,
-}
-
 /// <summary>
 /// Die Anbieter-Seite EINER gRPC-Sitzung (docs/konzept-editor-pipelines.md §14.5): ein externer Worker (Python) meldet „ich biete
 /// Funktion F mit n Slots“; der Server holt für ihn Aufträge beim Vermittler (Pull — so viele, wie Slots frei sind), reicht sie

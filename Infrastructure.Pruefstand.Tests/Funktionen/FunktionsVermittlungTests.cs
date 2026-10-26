@@ -2,7 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Abstractions;
-using Domain.Pipeline.Bildaufbereitung;
+using Domain.Trainingslauf;
 using FluentAssertions;
 using Infrastructure.Funktionen;
 using Infrastructure.Serialization;
@@ -12,19 +12,20 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Funktionen;
 
 /// <summary>
-/// Ebene 1 — die VERMITTLUNG der Katalog-Funktionen (docs/konzept-editor-pipelines.md §14.5): Ausführer holen sich Arbeit (Pull),
+/// Ebene 1 — die VERMITTLUNG der Funktionen draußen (Plan Pub/Sub-Neustrukturierung §2.2): Ausführer holen sich Eingänge (Pull),
 /// jede Zuteilung hat eine Lease, Lebenszeichen verlängern sie, Abgelaufenes geht neu raus, Erledigtes verpufft bei erneutem
 /// Angebot. Dazu der Vermittler-Actor (Long-Poll) auf einem lokalen ActorSystem und der Draht-Round-trip eines Auftrags.
 /// </summary>
 public class FunktionsVermittlungTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 10, 7, 12, 0, 0, TimeSpan.Zero);
-    private static AuftragAnbieten Angebot(string pfad) => new(Guid.NewGuid(), Guid.NewGuid(), "KameraSystem", new VerkleinereBild(pfad, 512));
+    private static EingangAnbieten Angebot(string _) =>
+        new(Guid.NewGuid(), "ITraining", new TrainingAbgebrochen(), Guid.NewGuid(), 3, T0, null, "KIOperator");
 
     [Fact]
     public void Doppelte_Angebote_werden_ignoriert_und_Hole_teilt_hoechstens_Max_zu()
     {
-        var v = new FunktionsVermittlung(TimeSpan.FromSeconds(30));
+        var v = new Vermittlung<EingangAnbieten>(TimeSpan.FromSeconds(30));
         var a = Angebot("a"); var b = Angebot("b"); var c = Angebot("c");
         v.Biete(a).Should().BeTrue();
         v.Biete(a).Should().BeFalse("derselbe Vorgang zweimal angeboten (zweite Weckung) ist kein neuer Auftrag");
@@ -41,7 +42,7 @@ public class FunktionsVermittlungTests
     [Fact]
     public void Abgelaufene_Lease_geht_an_den_naechsten_Ausfuehrer_Lebenszeichen_haelt_sie()
     {
-        var v = new FunktionsVermittlung(TimeSpan.FromSeconds(30));
+        var v = new Vermittlung<EingangAnbieten>(TimeSpan.FromSeconds(30));
         var lang = Angebot("training"); var kurz = Angebot("bild");
         v.Biete(lang); v.Biete(kurz);
         v.Hole("gpu", 2, T0).Should().HaveCount(2);
@@ -58,7 +59,7 @@ public class FunktionsVermittlungTests
     [Fact]
     public void Erledigtes_verpufft_bei_erneutem_Angebot()
     {
-        var v = new FunktionsVermittlung(TimeSpan.FromSeconds(30), erinnerung: 2);
+        var v = new Vermittlung<EingangAnbieten>(TimeSpan.FromSeconds(30), erinnerung: 2);
         var a = Angebot("a");
         v.Biete(a); v.Hole("w", 1, T0); v.Erledigt(a.Vorgang);
         v.Biete(a).Should().BeFalse();
@@ -73,14 +74,15 @@ public class FunktionsVermittlungTests
     public void Auftrag_reist_polymorph_ueber_den_Wire()
     {
         var a = Angebot("/roh/a.tiff");
-        var zugeteilt = new ArbeitZugeteilt(new[] { a });
+        var zugeteilt = new EingaengeZugeteilt(new[] { a });
 
-        var back = (ArbeitZugeteilt)GeneratedWire.Deserialize(GeneratedWire.Serialize(zugeteilt), GeneratedWire.TypeName(zugeteilt));
+        var back = (EingaengeZugeteilt)GeneratedWire.Deserialize(GeneratedWire.Serialize(zugeteilt), GeneratedWire.TypeName(zugeteilt));
 
-        back.Auftraege.Should().ContainSingle();
-        back.Auftraege[0].Vorgang.Should().Be(a.Vorgang);
-        back.Auftraege[0].Akteur.Should().Be("KameraSystem");
-        back.Auftraege[0].Auftrag.Should().Be(new VerkleinereBild("/roh/a.tiff", 512));
+        back.Eingaenge.Should().ContainSingle();
+        back.Eingaenge[0].Vorgang.Should().Be(a.Vorgang);
+        back.Eingaenge[0].Akteur.Should().Be("KIOperator");
+        back.Eingaenge[0].Eingang.Should().Be(new TrainingAbgebrochen());
+        (back.Eingaenge[0].Stream, back.Eingaenge[0].Version).Should().Be((a.Stream, 3));
     }
 
     [Fact]
@@ -91,17 +93,17 @@ public class FunktionsVermittlungTests
         {
             var pid = system.Root.Spawn(Props.FromProducer(() => new FunktionsVermittlerActor(TimeSpan.FromSeconds(30))));
 
-            var wartend = system.Root.RequestAsync<ArbeitZugeteilt>(pid, new HoleArbeit("w1", 2, 5_000), TimeSpan.FromSeconds(10));
+            var wartend = system.Root.RequestAsync<EingaengeZugeteilt>(pid, new HoleEingaenge("w1", 2, 5_000), TimeSpan.FromSeconds(10));
             await Task.Delay(100);
             wartend.IsCompleted.Should().BeFalse("ohne Arbeit wartet die Anfrage (Long-Poll)");
 
             var a = Angebot("a");
             await system.Root.RequestAsync<object>(pid, a, TimeSpan.FromSeconds(5));
-            (await wartend).Auftraege.Should().ContainSingle().Which.Vorgang.Should().Be(a.Vorgang);
+            (await wartend).Eingaenge.Should().ContainSingle().Which.Vorgang.Should().Be(a.Vorgang);
 
             // ohne Arbeit und mit kurzer Wartezeit kommt eine leere Antwort (spätestens beim nächsten Takt)
-            var leer = await system.Root.RequestAsync<ArbeitZugeteilt>(pid, new HoleArbeit("w2", 1, 200), TimeSpan.FromSeconds(5));
-            leer.Auftraege.Should().BeEmpty();
+            var leer = await system.Root.RequestAsync<EingaengeZugeteilt>(pid, new HoleEingaenge("w2", 1, 200), TimeSpan.FromSeconds(5));
+            leer.Eingaenge.Should().BeEmpty();
         }
         finally { await system.ShutdownAsync(); }
     }
@@ -115,14 +117,14 @@ public class FunktionsVermittlungTests
         try
         {
             var pid = system.Root.Spawn(Props.FromProducer(() => new FunktionsVermittlerActor(TimeSpan.FromSeconds(30))));
-            var alt = system.Root.RequestAsync<ArbeitZugeteilt>(pid, new HoleArbeit("w1", 1, 5_000), TimeSpan.FromSeconds(10));
+            var alt = system.Root.RequestAsync<EingaengeZugeteilt>(pid, new HoleEingaenge("w1", 1, 5_000), TimeSpan.FromSeconds(10));
             await Task.Delay(50);
-            var neu = system.Root.RequestAsync<ArbeitZugeteilt>(pid, new HoleArbeit("w1", 1, 5_000), TimeSpan.FromSeconds(10));
+            var neu = system.Root.RequestAsync<EingaengeZugeteilt>(pid, new HoleEingaenge("w1", 1, 5_000), TimeSpan.FromSeconds(10));
             await Task.Delay(50);
 
             var a = Angebot("a");
             await system.Root.RequestAsync<object>(pid, a, TimeSpan.FromSeconds(5));
-            (await neu).Auftraege.Should().ContainSingle().Which.Vorgang.Should().Be(a.Vorgang);
+            (await neu).Eingaenge.Should().ContainSingle().Which.Vorgang.Should().Be(a.Vorgang);
             alt.IsCompleted.Should().BeFalse("die ersetzte Anfrage bekommt nichts");
 
             var offen = await system.Root.RequestAsync<OffeneAuftraege>(pid, new ListeOffene(), TimeSpan.FromSeconds(5));

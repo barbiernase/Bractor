@@ -16,8 +16,8 @@ z. B. Domain.Leitung/domain.proto) reisen darin als Nutzlast(typ, daten) — Pay
 """
 
 from .client import CqrsClient
-from .vertrag import AkteurVertragBasis, Zusage, VertragsVerletzung
-from .funktion import Ausfuehrung, FunktionsBasis, FunktionsLaeufer, FunktionsVerletzung
+from .vertrag import ClientVertragBasis, VertragsVerletzung
+from .funktion import Ausgabe, Eingang, FunktionsBasis, FunktionsLaeufer, FunktionsVerletzung, GetrageneFunktion, Herkunft
 from .dispatch import HandleDescriptor, HandlerBase, handle
 from .leitung import Nutzlast
 from .mapper import NutzlastTabelle, PayloadMapper, UnbekannteNutzlast
@@ -26,13 +26,15 @@ from .router import MessageContext
 from .versioning import VersionTracker
 
 __all__ = [
-    "AkteurVertragBasis",
-    "Ausfuehrung",
+    "Ausgabe",
+    "ClientVertragBasis",
+    "Eingang",
     "FunktionsBasis",
     "FunktionsLaeufer",
     "FunktionsVerletzung",
+    "GetrageneFunktion",
+    "Herkunft",
     "CqrsClient",
-    "Zusage",
     "VertragsVerletzung",
     "CategoryRegistry",
     "HandleDescriptor",

@@ -12,11 +12,16 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <!-- EINE Lesart des Client-Vertrags mit dem Server-Generator (Name, Hash, Sendet/Fragt/Kenntnis) — per Link, in beiden internal. -->
-        <Compile Include="..\Abstractions\Akteurvertrag.cs" Link="Vertrag\Akteurvertrag.cs" />
+        <!-- EINE Lesart des Client-Vertrags mit dem Server-Generator (Name, Hash, Trägt/Sendet/Fragt/Hört) — per Link, in beiden internal;
+             die getragenen Funktionen liest sie mit der EINEN Lesart einer Funktion (Funktionsform). -->
+        <Compile Include="..\Abstractions\Clientvertragsregeln.cs" Link="Vertrag\Clientvertragsregeln.cs" />
         <Compile Include="..\Abstractions\Idvertrag.cs" Link="Vertrag\Idvertrag.cs" />
         <Compile Include="..\Infrastructure.SourceGeneration\Clientvertragslesart.cs" Link="Vertrag\Clientvertragslesart.cs" />
         <Compile Include="..\Infrastructure.SourceGeneration\Vertragsassemblies.cs" Link="Vertrag\Vertragsassemblies.cs" />
+        <Compile Include="..\Infrastructure.SourceGeneration\Funktionsform.cs" Link="Vertrag\Funktionsform.cs" />
+        <Compile Include="..\Abstractions\Funktionsvertrag.cs" Link="Vertrag\Funktionsvertrag.cs" />
+        <Compile Include="..\Infrastructure.SourceGeneration\Ctorbindung.cs" Link="Vertrag\Ctorbindung.cs" />
+        <Compile Include="..\Abstractions\Dienstvertrag.cs" Link="Vertrag\Dienstvertrag.cs" />
     </ItemGroup>
 
     <ItemGroup>

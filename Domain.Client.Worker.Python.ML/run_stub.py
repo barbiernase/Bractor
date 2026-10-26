@@ -19,6 +19,7 @@ from uuid import UUID
 sys.path.insert(0, str(Path(__file__).parent.parent / "Client.Infrastructure.Python"))
 
 import logging
+from cqrs_client.funktion import Herkunft
 from domain_client.domain_registry import create_registry
 from domain_client.generated import (
     BildVerfuegbarDto,
@@ -60,17 +61,16 @@ class StubClassifier(KlassifikationsWorkerBasis[StubState]):
         state.bilder[agg][event.version] = event.pfad
         log.info("📥 BildVerfuegbar #%d: %s %s → %s", state.events, str(agg)[:8], v, event.pfad)
 
-    async def auf_image_pair_komplett(self, event: ImagePairKomplettDto, ctx, state: StubState):
+    async def bildpaar_beurteilung(self, event: ImagePairKomplettDto, h: Herkunft, state: StubState):
         state.events += 1
-        agg = ctx.aggregate_id
+        agg = UUID(h.stream)
         pfade = state.bilder.get(agg, {})
         log.info("📥 ImagePairKomplett #%d: %s", state.events, agg)
         for v, pfad in pfade.items():
             log.info("   %s: %s", VERSION_NAMES.get(v, "?"), pfad)
         log.info("📤 → KlassifiziereBildPaarDurchKi(label=0=KeineAnomalie)")
 
-        yield KlassifiziereBildPaarDurchKiDto(aggregate_id=str(agg), label=0)
-        log.info("✅ Gesendet!")
+        return KlassifiziereBildPaarDurchKiDto(aggregate_id=str(agg), label=0)
 
     async def auf_modell_aktiviert(self, event: ModellAktiviertDto, ctx, state: StubState):
         log.info("📥 ModellAktiviert: %s (%s) — Stub lädt nichts", event.name, event.pfad)

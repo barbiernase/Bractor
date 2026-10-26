@@ -6,16 +6,17 @@ namespace Domain.ImagePair;
 // LIFECYCLE
 // ═══════════════════════════════════════════════════
 
-public record ErstelleImagePair(
+/// <summary>
+/// Ein Bild eines Paars ist da (vom Bildeingang): legt das Paar an, wenn es noch nicht existiert, und ergänzt das Bild — „anlegen oder ergänzen“
+/// in EINEM Command, damit die zweite Datei eines Paars keine Ablehnung braucht, um weiterzukommen. Die Paar-Id ist aus dem PairKey abgeleitet
+/// (<see cref="ImagePairFileName"/>), beide Dateien treffen dasselbe Aggregat.
+/// </summary>
+public record NimmBildAuf(
     Id<ImagePair> AggregateId,
     string PairKey,
     DateTimeOffset ProduziertAm,
     DateTimeOffset AufgenommenAm,
-    string UrsprungsPfad
-) : ICommand<ImagePair>, ICreationCommand;
-
-public record MeldeBildVerfuegbar(
-    Id<ImagePair> AggregateId,
+    string UrsprungsPfad,
     BildVersion Version,
     BildMeta Meta,
     string Pfad

@@ -10,32 +10,16 @@ public partial class ImagePair
         // LIFECYCLE
         // ═══════════════════════════════════════════════════
 
-        public IEnumerable<OneOf<ImagePairErstellt, ImagePairExistiertBereits>> Decide(
-            ErstelleImagePair cmd)
+        /// <summary>
+        /// Anlegen oder ergänzen: beim ersten Bild entsteht das Paar, jedes Bild einer Version kommt genau einmal hinzu, mit dem zweiten ist das
+        /// Paar komplett. Ein Bild derselben Version noch einmal ist nur ein Hinweis.
+        /// </summary>
+        public IEnumerable<OneOf<ImagePairErstellt, BildVerfuegbar, ImagePairKomplett, BildVersionBereitsVerfuegbar>> Decide(NimmBildAuf cmd)
         {
-            if (this.State.Version > 0)
-            {
-                yield return new ImagePairExistiertBereits(cmd.AggregateId);
-                yield break;
-            }
-
-            yield return new ImagePairErstellt(
-                cmd.AggregateId, cmd.PairKey,
-                cmd.ProduziertAm, cmd.AufgenommenAm,
-                cmd.UrsprungsPfad);
-        }
-
-        public IEnumerable<OneOf<BildVerfuegbar, ImagePairKomplett, ImagePairNichtGefunden, BildVersionBereitsVerfuegbar>> Decide(
-            MeldeBildVerfuegbar cmd)
-        {
-            // 🤖 Prompt: wir brauchen eine initiationslogik der vorab schaut, ob wirklich alles leer ist.
-            if (this.State.Version == 0)
-            {
-                yield return new ImagePairNichtGefunden(cmd.AggregateId);
-                yield break;
-            }
-
-            if (this.State.GetBild(cmd.Version) != null)
+            var neu = this.State.Version == 0;
+            if (neu)
+                yield return new ImagePairErstellt(cmd.AggregateId, cmd.PairKey, cmd.ProduziertAm, cmd.AufgenommenAm, cmd.UrsprungsPfad);
+            else if (this.State.GetBild(cmd.Version) != null)
             {
                 yield return new BildVersionBereitsVerfuegbar(cmd.Version);
                 yield break;
@@ -56,7 +40,7 @@ public partial class ImagePair
             yield return new BildVerfuegbar(cmd.Version, cmd.Meta, cmd.Pfad, regionen);
 
             var andereVersion = cmd.Version == BildVersion.Dc0 ? BildVersion.Dc2 : BildVersion.Dc0;
-            if (this.State.GetBild(andereVersion) != null)
+            if (!neu && this.State.GetBild(andereVersion) != null)
                 yield return new ImagePairKomplett();
         }
 

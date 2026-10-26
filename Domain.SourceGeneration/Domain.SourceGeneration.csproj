@@ -20,7 +20,7 @@
         <!-- Die Aggregat-Namensregel aus dem Vertrag (eine Quelle mit dem Domänen-Extractor). -->
         <Compile Include="..\Abstractions\Aggregatvertrag.cs" Link="Vertrag\Aggregatvertrag.cs" />
         <Compile Include="..\Abstractions\Idvertrag.cs" Link="Vertrag\Idvertrag.cs" />
-        <Compile Include="..\Abstractions\Akteurvertrag.cs" Link="Vertrag\Akteurvertrag.cs" />
+        <Compile Include="..\Abstractions\Clientvertragsregeln.cs" Link="Vertrag\Clientvertragsregeln.cs" />
         <Compile Include="..\Abstractions\Dienstvertrag.cs" Link="Vertrag\Dienstvertrag.cs" />
         <!-- Die Lesart der Implementierungs-Konstruktoren (eine Quelle mit dem DienstGenerator). -->
         <Compile Include="..\Infrastructure.SourceGeneration\Ctorbindung.cs" Link="Vertrag\Ctorbindung.cs" />

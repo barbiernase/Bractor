@@ -1,30 +1,25 @@
 using Abstractions;
 using Domain.Datensatz;
 using Domain.ImagePair;      // Klassifikation
-using Domain.Projections;    // ImagePairFilter, ImagePairReadModel
-using Microsoft.Extensions.Logging;
+using Domain.Projections;    // ImagePairReadModel
 using Domain.Projections.ImagePair;
 
 namespace Domain.Pipeline.Datensatz;
 
 /// <summary>
-/// <see cref="IMitgliederEinfrieren"/>: je (autoritativem) Mitglied Label-Stand + Bildpfade aus dem Read-Model, Split deterministisch
-/// und stratifiziert (<see cref="SplitZuteiler"/>), Snapshot in stabiler Reihenfolge.
+/// Ein angefordertes Einfrieren abschließen: je (autoritativem) Mitglied Label-Stand + Bildpfade aus dem Read-Model, Split deterministisch und
+/// stratifiziert (<see cref="SplitZuteiler"/>), Snapshot in stabiler Reihenfolge. Fehlt ein Mitglied im Read-Model, wird es übersprungen.
 /// </summary>
-public sealed class MitgliederEinfrieren(ILogger<MitgliederEinfrieren> logger) : IMitgliederEinfrieren
+public sealed class MitgliederEinfrieren : IFunktion
 {
-    public async Task<OneOf<MitgliederEingefroren, KeinMitgliedAuffindbar>> RufeAsync(FriereMitgliederEin auftrag, IAusfuehrung x, IFindImagePair finde)
+    public async Task<OneOf<SchliesseEinfrierenAb, KeinMitgliedAuffindbar>> Auf(EinfrierenAngefordert e, Herkunft h, IFindImagePair finde)
     {
         var modelle = new Dictionary<Guid, ImagePairReadModel>();
-        foreach (var pid in auftrag.Mitglieder)
-        {
-            x.Abbruch.ThrowIfCancellationRequested();
+        foreach (var pid in e.Mitglieder)
             if (await finde.FindByIdAsync(pid.Wert) is { } ip) modelle[pid.Wert] = ip;
-            else logger.LogWarning("Einfrieren {Id}: ImagePair {Pid} fehlt im Read-Model — übersprungen", x.AusfuehrungsId, pid);
-        }
-        if (modelle.Count == 0) return new KeinMitgliedAuffindbar(auftrag.Mitglieder.Count);
+        if (modelle.Count == 0) return new KeinMitgliedAuffindbar(e.Mitglieder.Count);
 
-        var splits = SplitZuteiler.Zuteilen(modelle.Select(kv => (kv.Key, BestimmeLabel(kv.Value))).ToList(), auftrag.Split);
+        var splits = SplitZuteiler.Zuteilen(modelle.Select(kv => (kv.Key, BestimmeLabel(kv.Value))).ToList(), e.Split);
         var mitglieder = modelle
             .OrderBy(kv => kv.Key)
             .Select(kv => new DatensatzMitglied(
@@ -34,8 +29,7 @@ public sealed class MitgliederEinfrieren(ILogger<MitgliederEinfrieren> logger) :
                 Dc0Pfad: kv.Value.Dc0Pfad ?? "",
                 Dc2Pfad: kv.Value.Dc2Pfad ?? ""))
             .ToList();
-        logger.LogInformation("Einfrieren {Id}: {Count} Mitglieder", x.AusfuehrungsId, mitglieder.Count);
-        return new MitgliederEingefroren(mitglieder);
+        return new SchliesseEinfrierenAb(new Id<Domain.Datensatz.Datensatz>(h.Stream), mitglieder);
     }
 
     /// <summary>

@@ -129,10 +129,7 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
             }
         }
         foreach (var a in modell.Akteure.Where(a => a.Datei != null && Herkunft.Geaendert(a.Herkunft, Herkunft.Von(a))))
-        {
             Datei(a.Datei!, $"akteur {a.Namespace}.{a.Name}", t => AkteurBefugnisse(t, a));
-            Datei(a.VertragDatei ?? a.Datei!, $"vertrag {a.Namespace}.{a.VertragTyp}", t => AkteurVertrag(t, a));
-        }
         foreach (var c in modell.Clients.Where(c => c.Datei != null && Herkunft.Geaendert(c.Herkunft, Herkunft.Von(c))))
             Datei(c.Datei!, $"client {c.Namespace}.{c.Name}", t => ClientVertrag(t, c));
 
@@ -731,84 +728,20 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
         return (MitNamespaces(Anwenden(text, [(at, at, " : " + neu)]), a.Darf), "Befugnisse");
     }
 
-    // ── Akteur-Vertrag (docs/konzept-akteure.md §3): das Interface hat keine Rümpfe — seine Auf-Signaturen gehören dem Modell.
-    //    Fehlende Zusagen anhängen, geänderte Rückgaben ersetzen, entfernte streichen; fehlt das Interface, hinter den Akteur. ──
-    private (string, string)? AkteurVertrag(string text, Akteur a)
-    {
-        var root = Parse(text);
-        a = a with { Vertrag = a.Vertrag.Where(r => r.Teil == null).ToList() };   // weitere Vertrags-Teile schreibt der Editor nicht
-        var typen = a.Vertrag.SelectMany(r => r.Ausgaenge.Append(r.Eingang)).ToList();
-        var decl = root.DescendantNodes().OfType<InterfaceDeclarationSyntax>().FirstOrDefault(i => i.Identifier.Text == a.VertragTyp);
-        if (decl == null)
-        {
-            if (a.Vertrag.Count == 0) return null;
-            if (Typ(root, a.Name, a.Namespace) is not { } akt) return (text, $"Akteur {a.Name} nicht gefunden — Vertrag nicht geschrieben");
-            var neu = "\n\n" + Scaffolder.VertragsInterface(a).TrimEnd('\n', '\r');
-            return (MitNamespaces(Anwenden(text, [(akt.Span.End, akt.Span.End, neu)]), typen), "Vertrag angelegt");
-        }
-        var edits = new List<(int, int, string)>();
-        var vorhanden = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var m in decl.Members.OfType<MethodDeclarationSyntax>()
-                     .Where(m => m.Identifier.Text == Abstractions.Akteurvertrag.Auf && m.ParameterList.Parameters.Count == 1))
-        {
-            var ein = ErsterTyp(m) ?? "";
-            vorhanden.Add(ein);
-            if (a.Vertrag.FirstOrDefault(r => r.Eingang == ein) is not { } soll) edits.Add((m.FullSpan.Start, m.FullSpan.End, ""));
-            // Nur eine Zusage mit ANDEREN Ausgängen bekommt die kanonische Rückgabe — eine unberührte bleibt wörtlich (auch die Einzelform
-            //   `T Auf(E e)` statt `OneOf<T>`), wie der Extractor sie liest.
-            else if (!ZusageGleich(m.ReturnType, soll))
-                edits.Add((m.ReturnType.SpanStart, m.ReturnType.Span.End, Scaffolder.VertragsRueckgabe(soll)));
-        }
-        var fehlend = a.Vertrag.Where(r => !vorhanden.Contains(r.Eingang)).Select(r => $"\n    {Scaffolder.VertragsMethode(r)};\n").ToList();
-        if (fehlend.Count > 0) edits.Add((decl.CloseBraceToken.SpanStart, decl.CloseBraceToken.SpanStart, string.Concat(fehlend)));
-        return edits.Count == 0 ? null : (MitNamespaces(Anwenden(text, edits), typen), "Zusagen");
-    }
-
-    /// <summary>
-    /// Trägt die Rückgabe dieselben Ausgänge wie die Soll-Zusage? Gelesen wie im Extractor: <c>void</c> = keine, <c>T</c>/<c>OneOf&lt;…&gt;</c> =
-    /// einzeln, <c>(Async)Enumerable&lt;…&gt;</c> = Strom; verglichen werden die einfachen Typnamen in Reihenfolge.
-    /// </summary>
-    private static bool ZusageGleich(TypeSyntax rueckgabe, AkteurZusage soll)
-    {
-        static string Einfach(TypeSyntax t) => t switch
-        {
-            GenericNameSyntax g => g.Identifier.Text, QualifiedNameSyntax q => Einfach(q.Right), SimpleNameSyntax n => n.Identifier.Text,
-            _ => t.ToString(),
-        };
-        var t = rueckgabe;
-        var strom = false;
-        if (t is PredefinedTypeSyntax p && p.Keyword.IsKind(SyntaxKind.VoidKeyword)) return soll.Ausgaenge.Count == 0;
-        if (t is GenericNameSyntax g && g.Identifier.Text is "IAsyncEnumerable" or "IEnumerable" && g.TypeArgumentList.Arguments.Count == 1)
-        { strom = true; t = g.TypeArgumentList.Arguments[0]; }
-        var aus = t is GenericNameSyntax o && o.Identifier.Text == OneOf ? o.TypeArgumentList.Arguments.Select(Einfach).ToList() : [Einfach(t)];
-        return strom == soll.Strom && aus.SequenceEqual(soll.Ausgaenge, StringComparer.Ordinal);
-    }
-
-    // ── Client-Vertrag (docs/konzept-akteure.md §4): die Basisliste (Teile, ISendet, IFragt) und die Kenntnis-Methoden gehören dem
-    //    Modell; fremde Basistypen (z. B. ein geerbter Client-Vertrag) bleiben stehen. Fehlende Kenntnis anhängen, entfernte streichen. ──
+    // ── Client-Vertrag (docs/konzept-akteure.md §4): die Basisliste (ITraegt, ISendet, IFragt, IHoert) gehört dem Modell; fremde Basistypen
+    //    (z. B. ein geerbter Client-Vertrag) bleiben stehen. ──
     private (string, string)? ClientVertrag(string text, Client c)
     {
         var root = Parse(text);
         if (root.DescendantNodes().OfType<InterfaceDeclarationSyntax>().FirstOrDefault(i => i.Identifier.Text == c.Name) is not { } decl)
             return (text, $"Client {c.Name} nicht gefunden");
-        var teile = modell.Akteure.SelectMany(a => a.Vertrag.Select(r => r.Teil ?? a.VertragTyp)).ToHashSet(StringComparer.Ordinal);
-        teile.UnionWith(c.Traegt);
+        var teile = c.Traegt.ToHashSet(StringComparer.Ordinal);
         var edits = new List<(int, int, string)>();
         var soll = Scaffolder.ClientBasen(c);
         var fremd = decl.BaseList?.Types.Select(t => t.ToString().Trim()).Where(t => !Scaffolder.IstClientBasis(t, teile)).ToList() ?? [];
         var neu = string.Join(", ", soll.Take(1).Concat(fremd).Concat(soll.Skip(1)));
         if (decl.BaseList is { } bl && N(string.Join(",", bl.Types.Select(t => t.ToString()))) != N(neu))
             edits.Add((bl.Types[0].SpanStart, bl.Types[^1].Span.End, neu));
-        var vorhanden = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var m in decl.Members.OfType<MethodDeclarationSyntax>()
-                     .Where(m => m.Identifier.Text == Abstractions.Akteurvertrag.Auf && m.ParameterList.Parameters.Count == 1))
-        {
-            var ein = ErsterTyp(m) ?? "";
-            vorhanden.Add(ein);
-            if (!c.Kenntnis.Contains(ein)) edits.Add((m.FullSpan.Start, m.FullSpan.End, ""));
-        }
-        var fehlend = c.Kenntnis.Where(e => !vorhanden.Contains(e)).Select(e => $"\n    {Scaffolder.KenntnisMethode(e)};\n").ToList();
-        if (fehlend.Count > 0) edits.Add((decl.CloseBraceToken.SpanStart, decl.CloseBraceToken.SpanStart, string.Concat(fehlend)));
         return edits.Count == 0 ? null : (MitNamespaces(Anwenden(text, edits), c.Traegt.Concat(c.Sendet).Concat(c.Fragt).Concat(c.Kenntnis).ToList()), "Client-Vertrag");
     }
 

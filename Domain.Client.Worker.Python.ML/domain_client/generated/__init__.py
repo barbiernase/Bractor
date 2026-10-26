@@ -174,12 +174,6 @@ class ImagePairFilterDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class StateChangeViaBenchPingDto(betterproto.Message):
-    stream_id: str = betterproto.string_field(1)
-    version: int = betterproto.int32_field(2)
-
-
-@dataclass(eq=False, repr=False)
 class StateChangeViaDatensatzEingefrorenDto(betterproto.Message):
     stream_id: str = betterproto.string_field(1)
     version: int = betterproto.int32_field(2)
@@ -312,55 +306,13 @@ class StateChangeViaModellRegistriertDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class StateChangeViaBildAufbereitetDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
 class StateChangeViaBildNichtLesbarDto(betterproto.Message):
-    stream_id: str = betterproto.string_field(1)
-    version: int = betterproto.int32_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class StateChangeViaBildVerkleinertDto(betterproto.Message):
-    stream_id: str = betterproto.string_field(1)
-    version: int = betterproto.int32_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class StateChangeViaHistogrammAusgeglichenDto(betterproto.Message):
-    stream_id: str = betterproto.string_field(1)
-    version: int = betterproto.int32_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class StateChangeViaKeinMitgliedAuffindbarDto(betterproto.Message):
-    stream_id: str = betterproto.string_field(1)
-    version: int = betterproto.int32_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class StateChangeViaMitgliederEingefrorenDto(betterproto.Message):
-    stream_id: str = betterproto.string_field(1)
-    version: int = betterproto.int32_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class StateChangeViaRangeGefundenDto(betterproto.Message):
-    stream_id: str = betterproto.string_field(1)
-    version: int = betterproto.int32_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class StateChangeViaRangeOhneTrefferDto(betterproto.Message):
-    stream_id: str = betterproto.string_field(1)
-    version: int = betterproto.int32_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class StateChangeViaDateinameUnbekanntDto(betterproto.Message):
-    stream_id: str = betterproto.string_field(1)
-    version: int = betterproto.int32_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class StateChangeViaImagePairDateiGedeutetDto(betterproto.Message):
     stream_id: str = betterproto.string_field(1)
     version: int = betterproto.int32_field(2)
 
@@ -495,15 +447,6 @@ class SetzeSplitDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class ErstelleImagePairDto(betterproto.Message):
-    aggregate_id: str = betterproto.string_field(1)
-    pair_key: str = betterproto.string_field(2)
-    produziert_am: int = betterproto.int64_field(3)
-    aufgenommen_am: int = betterproto.int64_field(4)
-    ursprungs_pfad: str = betterproto.string_field(5)
-
-
-@dataclass(eq=False, repr=False)
 class KlassifiziereBildPaarDurchKiDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
     label: int = betterproto.int32_field(2)
@@ -550,11 +493,15 @@ class MarkiereAlsInspiziertDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class MeldeBildVerfuegbarDto(betterproto.Message):
+class NimmBildAufDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
-    version: int = betterproto.int32_field(2)
-    meta: "BildMetaDto" = betterproto.message_field(3)
-    pfad: str = betterproto.string_field(4)
+    pair_key: str = betterproto.string_field(2)
+    produziert_am: int = betterproto.int64_field(3)
+    aufgenommen_am: int = betterproto.int64_field(4)
+    ursprungs_pfad: str = betterproto.string_field(5)
+    version: int = betterproto.int32_field(6)
+    meta: "BildMetaDto" = betterproto.message_field(7)
+    pfad: str = betterproto.string_field(8)
 
 
 @dataclass(eq=False, repr=False)
@@ -653,11 +600,6 @@ class CommandFailedDto(betterproto.Message):
     command_type: str = betterproto.string_field(1)
     reason: str = betterproto.string_field(2)
     aggregate_id: str = betterproto.string_field(3)
-
-
-@dataclass(eq=False, repr=False)
-class BenchPingDto(betterproto.Message):
-    seq: int = betterproto.int32_field(1)
 
 
 @dataclass(eq=False, repr=False)
@@ -808,11 +750,6 @@ class ImagePairErstelltDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class ImagePairExistiertBereitsDto(betterproto.Message):
-    pair_id: str = betterproto.string_field(1)
-
-
-@dataclass(eq=False, repr=False)
 class ImagePairInspiziertDto(betterproto.Message):
     pass
 
@@ -884,40 +821,26 @@ class ModellRegistriertDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class BildAufbereitetDto(betterproto.Message):
+    dateiname: str = betterproto.string_field(1)
+    pfad: str = betterproto.string_field(2)
+    groesse: int = betterproto.int64_field(3)
+    erkannt_am: int = betterproto.int64_field(4)
+    vorschau: str = betterproto.string_field(5)
+    breite_pixel: int = betterproto.int32_field(6)
+    hoehe_pixel: int = betterproto.int32_field(7)
+    erstellt_am: int = betterproto.int64_field(8)
+
+
+@dataclass(eq=False, repr=False)
 class BildNichtLesbarDto(betterproto.Message):
     pfad: str = betterproto.string_field(1)
     grund: str = betterproto.string_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class BildVerkleinertDto(betterproto.Message):
-    pfad: str = betterproto.string_field(1)
-    breite_pixel: int = betterproto.int32_field(2)
-    hoehe_pixel: int = betterproto.int32_field(3)
-
-
-@dataclass(eq=False, repr=False)
-class HistogrammAusgeglichenDto(betterproto.Message):
-    pfad: str = betterproto.string_field(1)
-    breite_pixel: int = betterproto.int32_field(2)
-    hoehe_pixel: int = betterproto.int32_field(3)
-    erstellt_am: int = betterproto.int64_field(4)
-
-
-@dataclass(eq=False, repr=False)
 class KeinMitgliedAuffindbarDto(betterproto.Message):
     angefragt: int = betterproto.int32_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class MitgliederEingefrorenDto(betterproto.Message):
-    mitglieder: List["DatensatzMitgliedDto"] = betterproto.message_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class RangeGefundenDto(betterproto.Message):
-    image_pair_ids: List[str] = betterproto.string_field(1)
-    herkunft: "RangeHerkunftDto" = betterproto.message_field(2)
 
 
 @dataclass(eq=False, repr=False)
@@ -928,15 +851,6 @@ class RangeOhneTrefferDto(betterproto.Message):
 @dataclass(eq=False, repr=False)
 class DateinameUnbekanntDto(betterproto.Message):
     dateiname: str = betterproto.string_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class ImagePairDateiGedeutetDto(betterproto.Message):
-    paar_id: str = betterproto.string_field(1)
-    pair_key: str = betterproto.string_field(2)
-    version: int = betterproto.int32_field(3)
-    produziert_am: int = betterproto.int64_field(4)
-    pfad: str = betterproto.string_field(5)
 
 
 @dataclass(eq=False, repr=False)
@@ -1330,37 +1244,3 @@ class TrainingslaufListeDto(betterproto.Message):
 @dataclass(eq=False, repr=False)
 class TrainingslaufNichtGefundenAntwortDto(betterproto.Message):
     trainingslauf_id: str = betterproto.string_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class GleicheHistogrammAusDto(betterproto.Message):
-    """
-    ============================================================================
-     AUFTRAG PAYLOADS
-     ============================================================================
-    """
-
-    quell_pfad: str = betterproto.string_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class VerkleinereBildDto(betterproto.Message):
-    quell_pfad: str = betterproto.string_field(1)
-    hoehe: int = betterproto.int32_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class FriereMitgliederEinDto(betterproto.Message):
-    mitglieder: List[str] = betterproto.string_field(1)
-    split: "SplitKonfigDto" = betterproto.message_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class SucheRangeDto(betterproto.Message):
-    kriterien: "RangeKriterienDto" = betterproto.message_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class DeuteDateinameDto(betterproto.Message):
-    dateiname: str = betterproto.string_field(1)
-    pfad: str = betterproto.string_field(2)

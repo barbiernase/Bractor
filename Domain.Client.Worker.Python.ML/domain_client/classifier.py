@@ -2,9 +2,10 @@
 """
 KI-Classifier für industrielle Bildinspektion — der Client KlassifikationsWorker (verkörpert den Akteur Klassifizierer).
 
-Programmiert gegen seinen Client-Vertrag (Domain.Akteure.IKlassifikationsWorker, docs/konzept-akteure.md §4), der den
-Akteur-Vertrag IKlassifizierer trägt: die generierte Basis `KlassifikationsWorkerBasis` verdrahtet den Dispatch, prüft jede
-Ausgabe gegen den Vertrag und meldet Client + Hash am Handshake. Fehlt eine `auf_…`-Methode, startet der Worker nicht.
+Programmiert gegen seinen Client-Vertrag (Domain.Akteure.IKlassifikationsWorker, docs/konzept-akteure.md §4): er TRÄGT die Funktion
+IBildpaarBeurteilung (der Server bietet ihm jedes komplette Paar an, hält seine Antwort fest und sendet sie) und HÖRT BildVerfuegbar und
+ModellAktiviert. Die generierte Basis `KlassifikationsWorkerBasis` bietet die Funktion an, verdrahtet den Dispatch, prüft jede Ausgabe gegen die
+Signatur und meldet Client + Hash am Handshake. Fehlt eine Methode, startet der Worker nicht.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ from uuid import UUID
 
 import torch
 
+from cqrs_client.funktion import Herkunft
 from domain_client.generated import (
     BildVerfuegbarDto,
     ImagePairKomplettDto,
@@ -80,10 +82,10 @@ class ImageClassifier(KlassifikationsWorkerBasis[ClassifierState]):
         )
         log.info("BildVerfuegbar: %s %s", str(agg_id)[:8], version_name)
 
-    async def auf_image_pair_komplett(
-        self, event: ImagePairKomplettDto, ctx, state: ClassifierState
-    ):
-        agg_id = ctx.aggregate_id
+    async def bildpaar_beurteilung(
+        self, event: ImagePairKomplettDto, h: Herkunft, state: ClassifierState
+    ) -> KlassifiziereBildPaarDurchKiDto | None:
+        agg_id = UUID(h.stream)
         pair_bilder = state.bilder.get(agg_id, {})
         log.info("ImagePairKomplett: %s", agg_id)
 
@@ -110,12 +112,12 @@ class ImageClassifier(KlassifikationsWorkerBasis[ClassifierState]):
         elif tensors:
             label = KEINE_ANOMALIE
         else:
-            log.error("  Keine Bilder geladen")
-            return
+            # Ohne Bilder lässt sich nicht urteilen: ein Fehler — der Funktions-Actor wiederholt den Eingang später.
+            raise RuntimeError(f"Paar {agg_id}: keine Bilder geladen")
 
         state.pairs_klassifiziert += 1
         log.info("  → Klassifikation: %d [#%d]", label, state.pairs_klassifiziert)
-        yield KlassifiziereBildPaarDurchKiDto(aggregate_id=str(agg_id), label=label)
+        return KlassifiziereBildPaarDurchKiDto(aggregate_id=str(agg_id), label=label)
 
     async def auf_modell_aktiviert(
         self, event: ModellAktiviertDto, ctx, state: ClassifierState

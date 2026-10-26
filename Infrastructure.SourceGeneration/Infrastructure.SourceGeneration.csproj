@@ -17,7 +17,7 @@
     <Compile Include="..\Abstractions\Idvertrag.cs" Link="Vertrag\Idvertrag.cs" />
     <Compile Include="..\Abstractions\Funktionsvertrag.cs" Link="Vertrag\Funktionsvertrag.cs" />
     <Compile Include="..\Abstractions\Dienstvertrag.cs" Link="Vertrag\Dienstvertrag.cs" />
-    <Compile Include="..\Abstractions\Akteurvertrag.cs" Link="Vertrag\Akteurvertrag.cs" />
+    <Compile Include="..\Abstractions\Clientvertragsregeln.cs" Link="Vertrag\Clientvertragsregeln.cs" />
     <Compile Include="..\Abstractions\Quellen\Treibervertrag.cs" Link="Vertrag\Treibervertrag.cs" />
     <Compile Include="..\Abstractions\Projektstruktur.cs" Link="Vertrag\Projektstruktur.cs" />
   </ItemGroup>

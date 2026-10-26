@@ -9,8 +9,9 @@ namespace Verhalten.Tests.Geruest;
 
 /// <summary>
 /// Die Leitung ohne Client-Stack (<c>Cqrs.Leitung/cqrs.proto</c>): ein Handshake mit Vertrag und Token, danach jede Server-Nachricht
-/// unverändert gesammelt. Für das, was der C#-Client nicht kann oder verdeckt: eine Zusage mit Ursache beantworten (wie die Python-Basen,
-/// docs/konzept-akteure.md §5.3), einen Command mit behaupteter Version schicken, und ALLES sehen, was eine Sitzung bekommt.
+/// unverändert gesammelt. Für das, was der C#-Client nicht kann oder verdeckt: eine getragene Funktion anbieten und ihre Eingänge beantworten
+/// (wie die Python-Basen, Plan Pub/Sub-Neustrukturierung §2.7), einen Command mit behaupteter Version schicken, und ALLES sehen, was eine
+/// Sitzung bekommt.
 /// </summary>
 public sealed class RoheLeitung : IAsyncDisposable
 {
@@ -84,9 +85,8 @@ public sealed class RoheLeitung : IAsyncDisposable
                                    + string.Join(", ", Events.Select(e => $"{e.Payload.Typ}[{e.CorrelationId}]")));
     }
 
-    /// <summary>Ein Command auf der Leitung. Version &lt; 0 = ohne behauptete Version; <paramref name="ursache"/> macht ihn zur Zusage-Antwort.</summary>
-    public async Task SendeAsync(ICommand command, string aggregatTyp, int erwarteteVersion, string korrelation,
-        (EventEnvelopeDto Event, int Index)? ursache = null)
+    /// <summary>Ein Command auf der Leitung. Version &lt; 0 = ohne behauptete Version.</summary>
+    public async Task SendeAsync(ICommand command, string aggregatTyp, int erwarteteVersion, string korrelation)
     {
         var dto = new CommandEnvelopeDto
         {
@@ -98,15 +98,47 @@ public sealed class RoheLeitung : IAsyncDisposable
             CorrelationId = korrelation,
             Payload = Tabelle.PackeCommand(command),
         };
-        if (ursache is { } u)
+        await SchreibeAsync(new ClientMessage { Command = new CommandRequest { Envelope = dto } });
+    }
+
+    // ── Funktionen tragen (ITraegt): anbieten, Eingänge sehen, beantworten ──
+
+    /// <summary>Bietet eine getragene Funktion an (der Server holt dann Eingänge für diese Sitzung beim Vermittler).</summary>
+    public Task BieteAnAsync(string funktion, int slots = 1) =>
+        SchreibeAsync(new ClientMessage { FunktionenAnbieten = new FunktionenAnbieten { Angebote = { new FunktionsAngebot { Funktion = funktion, Slots = slots } } } });
+
+    /// <summary>Die Eingänge, die diese Sitzung bekommen hat.</summary>
+    public IEnumerable<ArbeitsAuftrag> Eingaenge => _empfangen.Where(m => m.ArbeitsAuftrag != null).Select(m => m.ArbeitsAuftrag);
+
+    /// <summary>Die Fehler, die der Server dieser Sitzung meldete (Code).</summary>
+    public IEnumerable<string> Fehler => _empfangen.Where(m => m.Error != null).Select(m => m.Error.Code);
+
+    public static IEvent Eingang(ArbeitsAuftrag a) => Tabelle.Event(a.Eingang);
+
+    public async Task<ArbeitsAuftrag> WarteAufEingangAsync(Func<ArbeitsAuftrag, bool> bedingung, TimeSpan frist, string meldung)
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.Elapsed < frist)
         {
-            dto.CausationStreamId = u.Event.AggregateId;
-            dto.CausationVersion = u.Event.AggregateVersion;
-            dto.CausationType = u.Event.Payload.Typ;
-            dto.CausationIndex = u.Index;
+            if (Eingaenge.FirstOrDefault(bedingung) is { } a) return a;
+            await Task.Delay(50);
         }
+        throw new TimeoutException($"{meldung} (nach {frist.TotalSeconds:0} s, Sitzung {SitzungsId}); Eingänge: "
+                                   + string.Join(", ", Eingaenge.Select(a => $"{a.Funktion}:{a.Eingang.Typ}@{a.Stream}")));
+    }
+
+    /// <summary>Beantwortet einen Eingang mit Commands (ganz, <c>fertig</c>).</summary>
+    public Task AntworteAsync(ArbeitsAuftrag eingang, params ICommand[] ausgaben)
+    {
+        var e = new ArbeitsErgebnis { Vorgang = eingang.Vorgang, Fertig = true };
+        foreach (var c in ausgaben) e.Ausgaben.Add(new FunktionsAusgabe { Command = Tabelle.PackeCommand(c) });
+        return SchreibeAsync(new ClientMessage { ArbeitsErgebnis = e });
+    }
+
+    private async Task SchreibeAsync(ClientMessage m)
+    {
         await _schreiben.WaitAsync();
-        try { await _ruf.RequestStream.WriteAsync(new ClientMessage { Command = new CommandRequest { Envelope = dto } }); }
+        try { await _ruf.RequestStream.WriteAsync(m); }
         finally { _schreiben.Release(); }
     }
 

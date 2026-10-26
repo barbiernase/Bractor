@@ -63,7 +63,7 @@ public class LeseseitenStandE2ETests
                 host.Services.GetRequiredService<IAggregateDispatcher>().Dispatch(new CommandEnvelope
                 {
                     AggregateType = "ImagePair", Modus = new CommandModus.Client(0),
-                    Payload = new ErstelleImagePair(new(paar), "PAIR-STAND", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "/stand"),
+                    Payload = new NimmBildAuf(new(paar), "PAIR-STAND", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "/stand", BildVersion.Dc0, new BildMeta("dc0.tiff", 1, 1, 1, DateTimeOffset.UtcNow), "/stand" + ".png"),
                 });
                 var marten = host.Services.GetRequiredService<IDocumentStore>();
                 await Warte(async () => { await using var s = marten.QuerySession(); return await s.LoadAsync<ImagePairReadModel>(paar) != null; },

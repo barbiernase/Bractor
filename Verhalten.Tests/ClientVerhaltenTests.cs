@@ -139,32 +139,48 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
         await verbinden.Should().ThrowAsync<Exception>();
     }
 
+    /// <summary>
+    /// Ein Client, der eine Funktion trägt (IKlassifikationsWorker: ITraegt&lt;IBildpaarBeurteilung&gt;), beantwortet ihren Eingang — die Antwort
+    /// wirkt genau einmal: noch einmal geschickt, nach dem Neuverbinden oder von einem zweiten Träger, der den Eingang nicht hält, ändert sie nichts.
+    /// (Phase 4: früher hörte der Client das Event und schickte eine Zusage mit Ursache; jetzt reicht der Funktions-Actor den Eingang über die
+    /// Vermittlung mit Lease weiter, hält die erste Antwort fest und sendet sie selbst. Das fachliche Soll — genau eine Klassifikation je Paar —
+    /// ist dasselbe.)
+    /// </summary>
     [Fact]
-    public async Task Eine_Zusage_Antwort_wirkt_genau_einmal_auch_doppelt_von_zwei_Traegern_und_nach_dem_Neuverbinden()
+    public async Task Die_Antwort_eines_Traegers_wirkt_genau_einmal_auch_doppelt_von_zwei_Traegern_und_nach_dem_Neuverbinden()
     {
-        // Zwei Clients tragen den Vertrag des Klassifizierers (IKlassifizierer: ImagePairKomplett → KlassifiziereBildPaarDurchKi).
         var eins = await RoheLeitung.VerbindeAsync(b.Host, "KlassifikationsWorker", Testumgebung.TokenKlassifizierer);
         await using var zwei = await RoheLeitung.VerbindeAsync(b.Host, "KlassifikationsWorker", Testumgebung.TokenKlassifizierer);
+        // Viele Slots: Paare früherer Tests dieser Klasse warten (ohne Träger) beim Vermittler und werden zuerst vergeben.
+        await eins.BieteAnAsync("IBildpaarBeurteilung", slots: 100);
+        await zwei.BieteAnAsync("IBildpaarBeurteilung", slots: 100);
         var paar = await b.KomplettesPaarAsync();
-        bool Komplett(Cqrs.Leitung.EventEnvelopeDto e) => e.AggregateId == paar.Id.ToString() && e.Payload.Typ == nameof(ImagePairKomplett);
-        var e1 = await eins.WarteAufEventAsync(Komplett, Kurz, "Träger 1 hört ImagePairKomplett nicht");
-        var e2 = await zwei.WarteAufEventAsync(Komplett, Kurz, "Träger 2 hört ImagePairKomplett nicht");
+        bool Fuer(Cqrs.Leitung.ArbeitsAuftrag a) => a.Stream == paar.Id.ToString() && a.Eingang.Typ == nameof(ImagePairKomplett);
+        await Warte.BisAsync(() => Task.FromResult(eins.Eingaenge.Any(Fuer) || zwei.Eingaenge.Any(Fuer)), Kurz, "kein Träger bekam das komplette Paar", b.Host);
+        var (traeger, anderer) = eins.Eingaenge.Any(Fuer) ? (eins, zwei) : (zwei, eins);
+        var eingang = traeger.Eingaenge.First(Fuer);
+        RoheLeitung.Eingang(eingang).Should().BeOfType<ImagePairKomplett>();
 
         var antwort = new KlassifiziereBildPaarDurchKi(new(paar.Id), Klassifikation.Anomalie);
-        await eins.SendeAsync(antwort, "ImagePair", -1, e1.CorrelationId, (e1, 0));
-        await eins.SendeAsync(antwort, "ImagePair", -1, e1.CorrelationId, (e1, 0));   // dasselbe Event noch einmal beantwortet
-        await zwei.SendeAsync(antwort, "ImagePair", -1, e2.CorrelationId, (e2, 0));   // der zweite Träger antwortet auch
-        await eins.DisposeAsync();
-        await using var wieder = await RoheLeitung.VerbindeAsync(b.Host, "KlassifikationsWorker", Testumgebung.TokenKlassifizierer);
-        await wieder.SendeAsync(antwort, "ImagePair", -1, e1.CorrelationId, (e1, 0));   // nach dem Neuverbinden noch einmal
+        await traeger.AntworteAsync(eingang, antwort);
+        await traeger.AntworteAsync(eingang, antwort);                                                      // noch einmal geschickt
+        await anderer.AntworteAsync(eingang, new KlassifiziereBildPaarDurchKi(new(paar.Id), Klassifikation.KeineAnomalie));   // ohne Lease
+        if (ReferenceEquals(traeger, eins))
+        {
+            await eins.DisposeAsync();
+            await using var wieder = await RoheLeitung.VerbindeAsync(b.Host, "KlassifikationsWorker", Testumgebung.TokenKlassifizierer);
+            await wieder.AntworteAsync(eingang, antwort);                                                   // nach dem Neuverbinden
+            await Warte.NachlaufAsync();
+        }
+        else await Warte.NachlaufAsync();
 
-        await Warte.BisAsync(async () => await b.Log.ZahlAsync<BildPaarDurchKiKlassifiziert>(paar.Id) >= 1, Kurz, "die Zusage wirkte nicht", b.Host);
+        await Warte.BisAsync(async () => await b.Log.ZahlAsync<BildPaarDurchKiKlassifiziert>(paar.Id) >= 1, Kurz, "die Antwort wirkte nicht", b.Host);
         await Warte.NachlaufAsync();
-        (await b.Log.ZahlAsync<BildPaarDurchKiKlassifiziert>(paar.Id)).Should().Be(1, "dieselbe Antwort auf dasselbe Event wirkt genau einmal");
-
-        // Gegenprobe: eine ANDERE Ausgabe derselben Zusage wirkt.
-        await wieder.SendeAsync(antwort, "ImagePair", -1, e1.CorrelationId, (e1, 1));
-        await Warte.BisAsync(async () => await b.Log.ZahlAsync<BildPaarDurchKiKlassifiziert>(paar.Id) == 2, Kurz, "die zweite Ausgabe wirkte nicht", b.Host);
+        (await b.Log.ZahlAsync<BildPaarDurchKiKlassifiziert>(paar.Id)).Should().Be(1, "eine Antwort auf einen Eingang wirkt genau einmal");
+        var daten = await b.Log.DatenAsync<BildPaarDurchKiKlassifiziert>(paar.Id);
+        daten.Single().Should().Contain(((int)Klassifikation.Anomalie).ToString(), "es wirkt die Antwort des Trägers, der den Eingang hielt");
+        anderer.Fehler.Should().Contain("ARBEIT_UNBEKANNT", "wer den Eingang nicht hält, kann ihn nicht beantworten");
+        if (ReferenceEquals(traeger, zwei)) await eins.DisposeAsync();
     }
 
     [Fact]

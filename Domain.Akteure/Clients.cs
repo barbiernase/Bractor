@@ -2,6 +2,8 @@ using Abstractions;
 using Domain.Datensatz;
 using Domain.ImagePair;
 using Domain.Modell;
+using Domain.Pipeline.ImagePair;
+using Domain.Pipeline.Trainingslauf;
 using Domain.Projections;
 using Domain.Trainingslauf;
 using Domain.Projections.Datensatz;
@@ -13,30 +15,32 @@ namespace Domain.Akteure;
 
 // Die CLIENTS — die Software an der Leitung (docs/konzept-akteure.md §4). Ein Client ist nicht ein Akteur: er kann mehrere
 // Akteure verkörpern (der Arbeitsplatz: Inspekteur, Produktprüfer, KIOperator, Modellfreigeber), und ein Akteur kann über mehrere
-// Clients laufen. Je Client EIN Vertrag: was über SEINE Leitung geht — getragene Akteur-Vertrags-Teile (Zusagen im Namen des
-// jeweiligen Akteurs), ISendet/IFragt (spontan, muss ein Akteur dürfen) und eigene Kenntnis (void Auf). Die client-INTERNEN
-// Commands/Events (Blazor-Intents, ClientEvents, Python-State) stehen hier nie.
+// Clients laufen. Je Client EIN Vertrag: was über SEINE Leitung geht — ITraegt (Funktionen, deren Code er ausführt), ISendet/IFragt (von
+// sich aus, muss ein Akteur dürfen) und IHoert (Kenntnis, verlierbar). Die client-INTERNEN Commands/Events (Blazor-Intents, ClientEvents,
+// Python-State) stehen hier nie.
 //
 // Welche Akteure ein Client verkörpert, wird abgeleitet; am Handshake gilt Vertrag ∩ Akteure des Tokens. Daraus generiert:
-// GeneratedClientVertraege (Server), je Client eine Python-Basis (domain_client/generated/vertraege.py), die Rahmen im Editor.
+// GeneratedClientVertraege (Server), je Client eine Python-Basis (domain_client/generated/vertraege.py), das Blazor-Wiring.
 
 /// <summary>
 /// Python-Worker <c>classifier.py</c> (bzw. <c>run_stub.py</c>): beurteilt Bildpaare mit dem aktiven Modell.
 /// </summary>
 public interface IKlassifikationsWorker : IClientVertrag,
-    IKlassifizierer,
+    ITraegt<IBildpaarBeurteilung>,
     ISendet<KlassifiziereEinzelBildDurchKi>,
-    IFragt<HoleAktivesModell>
-{ }
+    IFragt<HoleAktivesModell>,
+    // Kenntnis: den Pfad jedes Bildes merken (beurteilt wird das Paar), das neu freigegebene Modell laden.
+    IHoert<BildVerfuegbar>, IHoert<ModellAktiviert>;
 
 /// <summary>
 /// Python-Worker <c>training_worker.py</c> (bzw. <c>run_train_stub.py</c>): trainiert auf einer eingefrorenen Datensatz-Version und zieht
 /// die Samples über den Query-Kanal.
 /// </summary>
 public interface ITrainingsWorker : IClientVertrag,
-    ITrainingsSystem,
-    IFragt<HoleDatensatzSamples>
-{ }
+    ITraegt<ITraining>,
+    IFragt<HoleDatensatzSamples>,
+    // Kenntnis: ein laufendes Training kooperativ abbrechen (der Lauf steht schon auf „abgebrochen").
+    IHoert<TrainingAbgebrochen>;
 
 /// <summary>
 /// Blazor-Arbeitsplatz (<c>Host.Blazor</c> + <c>Domain.Client.Modules.Blazor</c>, <c>[assembly: IstClient&lt;IArbeitsplatz&gt;]</c>): ein Client,
@@ -57,34 +61,14 @@ public interface IArbeitsplatz : IClientVertrag,
     IFragt<HoleDatensaetze>, IFragt<HoleDatensatz>, IFragt<HoleDatensatzPaare>, IFragt<HoleDatensaetzeFuerPaar>,
     IFragt<HoleTrainingslaeufe>, IFragt<HoleTrainingslauf>, IFragt<HoleModelle>, IFragt<HoleDatensatzSamples>,
     // ── Modellfreigeber ──
-    ISendet<SetzeModellAktiv>, ISendet<ArchiviereModell>
-{
-    // Kenntnis: Live-Aktualisierung der Stores (Galerie, Statistik, Kuratieren).
-    void Auf(ImagePairErstellt e);
-    void Auf(BildVerfuegbar e);
-    void Auf(ImagePairKomplett e);
-    void Auf(BildPaarGelabelt e);
-    void Auf(EinzelBildGelabelt e);
-    void Auf(BildPaarDurchKiKlassifiziert e);
-    void Auf(EinzelBildDurchKiKlassifiziert e);
-    void Auf(PhysischesProduktGelabelt e);
-    void Auf(ImagePairInspiziert e);
-    void Auf(PaarAufgenommen e);
-    void Auf(PaareAufgenommen e);
-    void Auf(PaarEntfernt e);
-    // Kenntnis: Datensätze (Liste, Komposition) und Modelle.
-    void Auf(DatensatzErstellt e);
-    void Auf(SplitGesetzt e);
-    void Auf(DatensatzEingefroren e);
-    void Auf(ModellRegistriert e);
-    void Auf(ModellAktiviert e);
-    void Auf(ModellArchiviert e);
-    // Kenntnis: Trainingsläufe (Liste, Dashboard mit Live-Kurve aus TrainingFortschritt).
-    void Auf(TrainingAngefordert e);
-    void Auf(TrainingBegonnen e);
-    void Auf(TrainingFortschritt e);
-    void Auf(TrainingAbgeschlossen e);
-    void Auf(TrainingGescheitert e);
-    void Auf(TrainingAbgebrochen e);
-    void Auf(TrainingHaengengeblieben e);
-}
+    ISendet<SetzeModellAktiv>, ISendet<ArchiviereModell>,
+    // ── Kenntnis: Live-Aktualisierung der Stores (Galerie, Statistik, Kuratieren) ──
+    IHoert<ImagePairErstellt>, IHoert<BildVerfuegbar>, IHoert<ImagePairKomplett>, IHoert<BildPaarGelabelt>, IHoert<EinzelBildGelabelt>,
+    IHoert<BildPaarDurchKiKlassifiziert>, IHoert<EinzelBildDurchKiKlassifiziert>, IHoert<PhysischesProduktGelabelt>, IHoert<ImagePairInspiziert>,
+    IHoert<PaarAufgenommen>, IHoert<PaareAufgenommen>, IHoert<PaarEntfernt>,
+    // ── Kenntnis: Datensätze (Liste, Komposition) und Modelle ──
+    IHoert<DatensatzErstellt>, IHoert<SplitGesetzt>, IHoert<DatensatzEingefroren>,
+    IHoert<ModellRegistriert>, IHoert<ModellAktiviert>, IHoert<ModellArchiviert>,
+    // ── Kenntnis: Trainingsläufe (Liste, Dashboard mit Live-Kurve aus TrainingFortschritt) ──
+    IHoert<TrainingAngefordert>, IHoert<TrainingBegonnen>, IHoert<TrainingFortschritt>, IHoert<TrainingAbgeschlossen>, IHoert<TrainingGescheitert>,
+    IHoert<TrainingAbgebrochen>, IHoert<TrainingHaengengeblieben>;

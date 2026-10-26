@@ -50,7 +50,8 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
     private readonly QueryHandlerRegistry _queryHandlerRegistry;
     private readonly BrokerPublisher _publisher;
     private readonly AkteurTor? _akteurTor;
-    private readonly FunktionsAusfuehrer? _funktionsAusfuehrer;
+    private readonly IAusgabeAblage? _ausgaben;
+    private readonly Konsum _konsum;
     private readonly ILogger _logger;
 
     /// <summary>
@@ -96,7 +97,8 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         BrokerPublisher publisher,
         AkteurTor? akteurTor = null,
         ILogger<CqrsClientServiceImpl>? logger = null,
-        FunktionsAusfuehrer? funktionsAusfuehrer = null)
+        IAusgabeAblage? ausgaben = null,
+        Konsum? konsum = null)
     {
         _actorSystem = actorSystem ?? throw new ArgumentNullException(nameof(actorSystem));
         _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
@@ -106,7 +108,8 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         _queryHandlerRegistry = queryHandlerRegistry ?? throw new ArgumentNullException(nameof(queryHandlerRegistry));
         _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
         _akteurTor = akteurTor; // null = Akteure nicht konfiguriert → Pfad offen wie bisher (opt-in)
-        _funktionsAusfuehrer = funktionsAusfuehrer; // null = keine Prozess-/Funktions-Maschinerie → Anbieten wird abgewiesen
+        _ausgaben = ausgaben;   // null = keine Funktion draußen in dieser Anwendung → Anbieten wird abgewiesen
+        _konsum = konsum ?? Konsum.Standard;
         _logger = logger ?? NullLogger<CqrsClientServiceImpl>.Instance;
         _capabilitiesHandler = new CapabilitiesHandler();
     }
@@ -136,8 +139,8 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         }
 
         PID? proxyPid = null;
-        FunktionsAnbieterSitzung? anbieter = null;
-        // Wer diese Session ist: vom Tor (Token), ggf. erst am Handshake vom Akteur-Vertrag festgelegt (Akteur-Konzept §5.2).
+        BausteinSitzung? anbieter = null;
+        // Wer diese Session ist: vom Tor (Token), ggf. erst am Handshake vom Client-Vertrag festgelegt (Akteur-Konzept §5.2).
         var sitzung = new AkteurSitzung(akteur);
 
         try
@@ -149,9 +152,9 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
 
             _logger.LogDebug("{Session} EventProxy spawned: {Pid}", sessionId, proxyPid);
 
-            // 1b. Funktions-Anbieter (Katalog-Funktionen extern, §14.5): Hol-Schleifen starten erst, wenn der Worker anbietet.
-            if (_funktionsAusfuehrer != null)
-                anbieter = BaueAnbieterSitzung(sessionId, proxyPid, _funktionsAusfuehrer);
+            // 1b. Funktionen draußen (ITraegt, Laufort Extern): Hol-Schleifen starten erst, wenn der Client anbietet.
+            if (_ausgaben != null)
+                anbieter = BaueAnbieterSitzung(sessionId, proxyPid, _ausgaben);
 
             // 2. SubscriptionTracker erstellen (await using = automatisches Cleanup)
             await using var subscriptionTracker = new SubscriptionTracker(
@@ -211,8 +214,8 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
             // 4. Cleanup: Registrierungen entfernen, pending Forwards abbrechen, Actor stoppen
             // SubscriptionTracker.DisposeAsync() wird automatisch aufgerufen (await using)
 
-            // Funktions-Anbieter: Hol-Schleifen beenden; Laufendes nicht erledigt melden — die Leases laufen ab, der
-            // Vermittler gibt die Aufträge neu aus (anderer Worker, oder dieser nach Reconnect).
+            // Funktionen draußen: Hol-Schleifen beenden; Laufendes nicht erledigt melden — die Leases laufen ab, der Vermittler gibt die
+            // Eingänge neu aus (anderer Träger, oder dieser nach Reconnect), und der Funktions-Actor sendet nur, was festgehalten ist.
             if (anbieter != null)
             {
                 try { await anbieter.DisposeAsync(); }
@@ -276,7 +279,7 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         SubscriptionTracker subscriptionTracker,
         PID proxyPid,
         AkteurSitzung sitzung,
-        FunktionsAnbieterSitzung? anbieter,
+        BausteinSitzung? anbieter,
         string sessionId,
         CancellationToken ct)
     {
@@ -326,7 +329,7 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
                     break;
 
                 // ═════════════════════════════════════════
-                // Katalog-Funktionen extern (§14.5)
+                // Funktionen draußen (ITraegt, Laufort Extern)
                 // ═════════════════════════════════════════
 
                 case Cqrs.Leitung.ClientMessage.MessageOneofCase.FunktionenAnbieten:
@@ -371,10 +374,9 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         string sessionId,
         CancellationToken ct)
     {
-        // 0. Akteur-Vertrag (docs/konzept-akteure.md §5.2): „ich bin Vertrag X" — geprüft gegen die generierte Tabelle (mit Tor:
-        //    das Token muss ihn verkörpern; abweichender Hash = Warnung bzw. im strengen Modus Ablehnung). Ohne Tor sagt der Vertrag,
-        //    wer da ist: die Session bekommt seine Befugnisse.
-        var vp = AkteurVertragsPruefung.Pruefe(request.Vertrag, request.VertragHash, sitzung.Akteur, Anwendung.Akteure.Rechte,
+        // 0. Client-Vertrag (docs/konzept-akteure.md §5.2): „ich bin Client X" — geprüft gegen die generierte Tabelle (wirksam ist Vertrag ∩
+        //    Token; abweichender Hash = Warnung bzw. im strengen Modus Ablehnung). Ohne Tor sagt der Vertrag, wer da ist.
+        var vp = ClientVertragsPruefung.Pruefe(request.Vertrag, request.VertragHash, sitzung.Akteur, Anwendung.Akteure.Rechte,
             _akteurTor?.VertragStreng ?? false, Anwendung.Akteure.ClientVertraege);
         if (vp.Ablehnung is { } ablehnung)
         {
@@ -387,11 +389,10 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         if (vp.Vertrag is { } vertrag)
         {
             sitzung.Vertrag = vertrag;
-            // Client-Vertrag: die Schnittmenge Vertrag ∩ Token IST die Befugnis der Session (docs/konzept-akteure.md §4.3).
-            if (vp.Client != null) sitzung.Akteur = vertrag;
-            else sitzung.Akteur ??= vertrag;
-            _logger.LogInformation("{Session} Vertrag {Vertrag} ({Typ}) angenommen{Akteure}", sessionId, vertrag.Name, vertrag.VertragTyp?.Name,
-                vp.Client != null ? $" — verkörpert {string.Join(", ", vertrag.Teile.Select(t => t.Name))}" : "");
+            // Die Schnittmenge Vertrag ∩ Token IST die Befugnis der Session (docs/konzept-akteure.md §4.3).
+            sitzung.Akteur = vertrag;
+            _logger.LogInformation("{Session} Client {Vertrag} ({Typ}) angenommen — verkörpert {Akteure}", sessionId, vertrag.Name, vertrag.VertragTyp?.Name,
+                string.Join(", ", vertrag.Teile.Select(t => t.Name)));
         }
         var akteur = sitzung.Akteur;
 
@@ -420,7 +421,7 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
                                                     || _triggerHandlerRegistry.GetHandler(n) is { } t && !t.Equals(proxyPid);
             if (sitzung.Vertrag is { } v)
             {
-                var abweichung = AkteurVertragsPruefung.Wende(result, v, loese, internBedient, schonVergeben);
+                var abweichung = ClientVertragsPruefung.Wende(result, v, loese, internBedient, schonVergeben);
                 if (abweichung.Count > 0)
                     _logger.LogInformation("{Session} Vertrag {Vertrag} statt Selbstauskunft: [{Abweichung}]",
                         sessionId, v.Name, string.Join(", ", abweichung));
@@ -543,45 +544,12 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
             if (string.IsNullOrWhiteSpace(envelope.AggregateType))
                 envelope = envelope with { AggregateType = AggregateDispatcherExtensions.ResolveAggregateType(envelope.Payload) };
 
-            // Emittiert-Modus über die gRPC-Grenze (§4.2): ein externer Zusage-Treiber — der
-            // Python-Worker reagiert auf TrainingAngefordert und emittiert Melde*-Commands — ist
-            // semantisch wie der Backend-Baustein Reaktion (emittierend), kein Client mit behaupteter Version. OCC würde ihn an jeder
-            // Version scheitern lassen, die ein anderer Schreiber inzwischen gesetzt hat. Der Wire kennt nur expected_version; negativ = Sentinel für Emittiert
-            // (keine Version, Empfänger-Inbox dedupliziert) — dieselbe Semantik wie der interne
-            // CommandEmitter. Positive Versionen bleiben strikt Client (OCC), z. B. die Blazor-GUI.
+            // Ohne Versionsprüfung (negativ = Sentinel, wie der interne CommandEmitter): ein Client, der den Stand des Ziels nicht kennt und keine
+            //   OCC will (ein Worker, der von sich aus sendet), schickt den Command im Modus Emittiert — die Inbox des Ziels dedupliziert über
+            //   die Command-Id. Positive Versionen bleiben strikt Client (OCC), z. B. die Blazor-GUI.
             if (request.Envelope.ExpectedVersion < 0)
                 envelope = envelope with { Modus = new CommandModus.Emittiert() };
 
-            // Zusage von außen mit Kausalität (Akteur-Konzept §5.3): der Client nennt das Event, auf das er antwortet. Mit Vertrag muss die
-            // Antwort darin stehen (Auf(Event) → dieser Command); die CommandId wird deterministisch abgeleitet — doppelt
-            // zugestellt ≠ doppelt wirksam (die Inbox des Ziels dedupliziert, Emittiert-Modus wie beim internen Emit).
-            var c = request.Envelope;
-            if (!string.IsNullOrEmpty(c.CausationStreamId) && Guid.TryParse(c.CausationStreamId, out var ursache))
-            {
-                var cmdTyp = envelope.Payload.GetType();
-                if (sitzung.Vertrag is { } vertrag
-                    && !(MessageTypeMapping.Resolve(c.CausationType).Type is { } ausloeser && vertrag.Zugesagt(ausloeser, cmdTyp)))
-                {
-                    _logger.LogWarning("{Session} {Command} ist laut Vertrag {Vertrag} keine Antwort auf {Ausloeser}",
-                        sessionId, cmdTyp.Name, vertrag.Name, c.CausationType);
-                    if (string.IsNullOrWhiteSpace(envelope.AggregateType))
-                        envelope = envelope with { AggregateType = AggregateDispatcherExtensions.ResolveAggregateType(envelope.Payload) };
-                    if (AkteurVerweigerung.Baue(envelope, $"{vertrag.Name} (Vertrag: keine Antwort auf {c.CausationType})") is { } verweigert)
-                        _publisher.Melde(verweigert);
-                    return;
-                }
-                envelope = envelope with
-                {
-                    CommandId = AkteurVertragsPruefung.CommandId(envelope.CorrelationId, ursache, c.CausationVersion, c.CausationType,
-                        c.CausationIndex, cmdTyp, envelope.AggregateId),
-                    Modus = new CommandModus.Emittiert(),
-                };
-                // Im Namen des Akteurs, dessen getragener Vertrag diese Antwort vorsieht (ein Client kann mehrere Akteure tragen).
-                if (sitzung.Vertrag is { } v2 && MessageTypeMapping.Resolve(c.CausationType).Type is { } ausl)
-                    envelope = envelope with { UserId = v2.AkteurFuerZusage(ausl, cmdTyp) };
-                // Spur: die Zusage antwortet auf ein Event im Log — das ist die Ursache ihres Commands.
-                envelope = envelope with { Ursache = Spur.Ursache(ursache, c.CausationVersion) };
-            }
             // Spur: von außen schreibt der Akteur (Wirker akteur:<A>); ohne Akteur bleibt der Wirker leer.
             if (ImAuftrag.IstAkteur(envelope.UserId))
                 envelope = envelope with { Wirker = WirkerId.FuerAkteur(envelope.UserId) };
@@ -1052,45 +1020,55 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
     }
 
     // =========================================================================
-    // KATALOG-FUNKTIONEN EXTERN (docs/konzept-editor-pipelines.md §14.5)
+    // FUNKTIONEN DRAUSSEN (Plan Pub/Sub-Neustrukturierung §2.2, §2.7: ITraegt, Laufort Extern)
     // =========================================================================
 
     /// <summary>
-    /// Die Anbieter-Sitzung dieser Verbindung, live verdrahtet: Hol-/Melde-Wege zum Vermittler im Cluster, Weiterreichen über
-    /// den EventProxyActor (EIN Schreiber am Stream), Schreiben über den Ausführer (genau ein Ergebnis + Weckung).
+    /// Die Anbieter-Sitzung dieser Verbindung, live verdrahtet: Hol-/Melde-Wege zum Vermittler im Cluster, Weiterreichen über den EventProxyActor
+    /// (EIN Schreiber am Stream), Festhalten der Antwort unter „Funktion, Eingang“ und die Meldung an den Funktions-Actor der Partition, der sendet.
     /// </summary>
-    private FunktionsAnbieterSitzung BaueAnbieterSitzung(string sessionId, PID proxyPid, FunktionsAusfuehrer ausfuehrer)
+    private BausteinSitzung BaueAnbieterSitzung(string sessionId, PID proxyPid, IAusgabeAblage ausgaben)
     {
         var bote = new Bote(_actorSystem.Cluster(), _logger);
-        return new FunktionsAnbieterSitzung(
+        var draussen = Anwendung.Funktionen.Bausteine.Where(b => b.Draussen).ToList();
+        return new BausteinSitzung(
             $"{_actorSystem.Address}/{sessionId}",   // Arbeiter-Name am Vermittler: eindeutig über Knoten hinweg
-            name => FunktionsAnbieterSitzung.LoeseImKatalog(name, Anwendung.Funktionen.Ergebnisse.Keys),
-            f => Anwendung.Funktionen.Ergebnisse.TryGetValue(f, out var e) ? e : Array.Empty<Type>(),
-            FunktionsAnbieter.Hole(bote),
-            FunktionsAnbieter.Melde(bote),
-            (a, f) =>
+            name => draussen.FirstOrDefault(b => b.Name == name),
+            (b, anfrage, ct) => bote.FrageAsync<EingaengeZugeteilt>(FunktionsVermittlerActor.Identitaet(b.Typ), anfrage,
+                TimeSpan.FromMilliseconds(Math.Max(0, anfrage.WarteMs)) + TimeSpan.FromSeconds(5), ct),
+            (b, nachricht) => { bote.Melde(FunktionsVermittlerActor.Identitaet(b.Typ), nachricht); return Task.CompletedTask; },
+            (e, b, ab) =>
             {
                 _actorSystem.Root.Send(proxyPid, new ServerNachrichtMsg(new Cqrs.Leitung.ServerMessage
                 {
                     ArbeitsAuftrag = new Cqrs.Leitung.ArbeitsAuftrag
                     {
-                        Vorgang = a.Vorgang.ToString(),
-                        Korrelation = a.Korrelation.ToString(),
-                        Funktion = f.Name,
-                        Auftrag = _mapper.MapToDto(a.Auftrag),
-                        Akteur = a.Akteur ?? ""
+                        Vorgang = e.Vorgang.ToString(),
+                        Korrelation = e.KorrelationsText ?? "",
+                        Funktion = b.Name,
+                        Eingang = _mapper.MapToDto(e.Eingang),
+                        Akteur = e.Akteur ?? "",
+                        Stream = e.Stream.ToString(),
+                        Version = e.Version,
+                        ZeitUtc = e.Zeit.ToUnixTimeMilliseconds(),
+                        Ab = ab,
                     }
                 }));
                 return Task.CompletedTask;
             },
-            ausfuehrer.SchreibeErgebnisAsync,
+            ausgaben,
+            (b, e, fehler, teil) =>
+            {
+                bote.Melde(FunktionsActor.Identitaet(b, Partitionierung.Von(e.Stream, _konsum.Partitionen)), new EingangBeantwortet(e.Vorgang, fehler, teil));
+                return Task.CompletedTask;
+            },
             _logger);
     }
 
     private async Task HandleFunktionenAnbietenAsync(
         Cqrs.Leitung.FunktionenAnbieten request,
         IServerStreamWriter<Cqrs.Leitung.ServerMessage> responseStream,
-        FunktionsAnbieterSitzung? anbieter,
+        BausteinSitzung? anbieter,
         AkteurSitzung sitzung,
         string sessionId,
         CancellationToken ct)
@@ -1098,51 +1076,51 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         if (anbieter == null)
         {
             await SendErrorAsync(responseStream, "FUNKTIONEN_NICHT_VERFUEGBAR",
-                "Dieser Host führt keine Katalog-Funktionen aus (kein Funktions-Ausführer konfiguriert)", "", ct);
+                "Dieser Host hat keine Funktion, die draußen rechnet", "", ct);
             return;
         }
-        // Akteur-Tor: mit angemeldetem Akteur nur, was er rechnen darf (IDarf<F>); ohne Tor/Akteur offen wie jede andere Nachricht.
+        // Akteur-Tor: mit angemeldetem Akteur nur, was er rechnen darf (IDarf<F>, bei einem Client ∩ ITraegt); ohne Tor/Akteur offen.
         var akteur = sitzung.Akteur;
         var unbekannt = anbieter.Biete(request.Angebote.Select(a => (a.Funktion, a.Slots)),
             akteur is null ? null : akteur.DarfRechnen, out var nichtBefugt);
         if (nichtBefugt.Count > 0)
             await SendErrorAsync(responseStream, "FUNKTION_NICHT_BEFUGT",
-                $"{akteur!.Name} darf nicht rechnen: {string.Join(", ", nichtBefugt)} (IDarf<…> am Akteur fehlt)", "", ct);
+                $"{akteur!.Name} darf nicht rechnen: {string.Join(", ", nichtBefugt)} (IDarf<…> am Akteur bzw. ITraegt<…> im Client-Vertrag fehlt)", "", ct);
         if (unbekannt.Count > 0)
         {
             _logger.LogWarning("{Session} bietet unbekannte Funktionen an: [{Unbekannt}]", sessionId, string.Join(", ", unbekannt));
             await SendErrorAsync(responseStream, "FUNKTION_UNBEKANNT",
-                $"Unbekannte Funktion(en): {string.Join(", ", unbekannt)}", "", ct);
+                $"Unbekannte Funktion(en) (keine Funktion draußen dieses Namens): {string.Join(", ", unbekannt)}", "", ct);
         }
     }
 
     private async Task HandleArbeitsErgebnisAsync(
         Cqrs.Leitung.ArbeitsErgebnis request,
         IServerStreamWriter<Cqrs.Leitung.ServerMessage> responseStream,
-        FunktionsAnbieterSitzung? anbieter,
+        BausteinSitzung? anbieter,
         string sessionId,
         CancellationToken ct)
     {
         if (anbieter == null || !Guid.TryParse(request.Vorgang, out var vorgang))
         {
             await SendErrorAsync(responseStream, "ARBEITS_ERGEBNIS_UNGUELTIG",
-                $"Ergebnis ohne gültigen Vorgang oder ohne Funktions-Ausführer: '{request.Vorgang}'", request.Vorgang, ct);
+                $"Antwort ohne gültigen Eingang oder ohne Funktion draußen: '{request.Vorgang}'", request.Vorgang, ct);
             return;
         }
 
         var fehler = string.IsNullOrEmpty(request.Fehler) ? null : request.Fehler;
-        IEvent? ergebnis = null;
-        if (fehler == null && request.Ergebnis != null)
+        List<IPipelineOutput>? ausgaben = null;
+        if (fehler == null)
         {
-            try { ergebnis = _mapper.MapErgebnis(request.Ergebnis); }
-            catch (Exception ex) { fehler = $"Ergebnis nicht lesbar: {ex.Message}"; }
+            try { ausgaben = request.Ausgaben.Select(_mapper.Ausgabe).ToList(); }
+            catch (Exception ex) { fehler = $"Antwort nicht lesbar: {ex.Message}"; }
         }
 
-        var ausgang = await anbieter.ErgebnisAsync(vorgang, ergebnis, fehler, ct);
-        _logger.LogDebug("{Session} Ergebnis {Vorgang}: {Ausgang}", sessionId, vorgang, ausgang);
+        var ausgang = await anbieter.AntwortAsync(vorgang, ausgaben, fehler, ct, request.Ab, request.Fertig);
+        _logger.LogDebug("{Session} Antwort {Vorgang} (ab {Ab}, fertig {Fertig}): {Ausgang}", sessionId, vorgang, request.Ab, request.Fertig, ausgang);
         if (ausgang == ErgebnisAusgang.Unbekannt)
             await SendErrorAsync(responseStream, "ARBEIT_UNBEKANNT",
-                $"Vorgang {vorgang} läuft in dieser Sitzung nicht (Lease abgelaufen oder schon erledigt)", request.Vorgang, ct);
+                $"Eingang {vorgang} läuft in dieser Sitzung nicht (Lease abgelaufen oder schon erledigt)", request.Vorgang, ct);
     }
 
     private static async Task SendErrorAsync(

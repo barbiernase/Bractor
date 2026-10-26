@@ -311,9 +311,9 @@ public class WiringGenerator : IIncrementalGenerator
                 context.ReportDiagnostic(Diagnostic.Create(ClientVertragDiagnosen.OhneVertrag, Location.None, assemblyName));
             vertrag = ClientVertragInfo.Leer;
         }
-        else if (vertrag.Teile.Count > 0)
+        else if (vertrag.Traegt.Count > 0)
             context.ReportDiagnostic(Diagnostic.Create(ClientVertragDiagnosen.TeileImCSharpClient, Location.None, vertrag.Name,
-                string.Join(", ", vertrag.Teile)));
+                string.Join(", ", vertrag.Traegt)));
 
         var suffix = Sanitize(assemblyName);
         var className = $"GeneratedWiring_{suffix}";
@@ -328,9 +328,9 @@ public class WiringGenerator : IIncrementalGenerator
         var syncHandlers = handleClasses.Where(h => !h.IsStore && h.HasSyncHandlers).ToList();
         var asyncHandlers = handleClasses.Where(h => !h.IsStore && h.HasAsyncHandlers).ToList();
 
-        // Der Rand ist der Vertrag: gesendet wird nur ISendet, gefragt nur IFragt, abonniert nur Kenntnis + Zusage-Eingänge.
+        // Der Rand ist der Vertrag: gesendet wird nur ISendet, gefragt nur IFragt, abonniert nur IHoert.
         var commands = vertrag.Sendet.Select(f => new WiringDomainTypeInfo(f, DomainTypeKind.Command)).ToList();
-        var serverEvents = vertrag.Eingaenge.Select(f => new WiringDomainTypeInfo(f, DomainTypeKind.ServerEvent)).ToList();
+        var serverEvents = vertrag.Hoert.Select(f => new WiringDomainTypeInfo(f, DomainTypeKind.ServerEvent)).ToList();
         var queries = vertrag.Fragt.Select(f => new WiringDomainTypeInfo(f, DomainTypeKind.Query)).ToList();
         var states = domainTypes.Where(d => d.Kind == DomainTypeKind.State).ToList();
 
@@ -382,7 +382,7 @@ public class WiringGenerator : IIncrementalGenerator
 
         sb.AppendLine($"    /// <summary>Handshake-Name des Client-Vertrags ({vertrag.Typ}).</summary>");
         sb.AppendLine($"    public const string Vertrag = \"{vertrag.Name}\";");
-        sb.AppendLine("    /// <summary>Vertrags-Hash (Abstractions.Akteurvertrag.ClientKanon) — derselbe wie am Server.</summary>");
+        sb.AppendLine("    /// <summary>Vertrags-Hash (Abstractions.Clientvertragsregeln.ClientKanon) — derselbe wie am Server.</summary>");
         sb.AppendLine($"    public const string VertragHash = \"{vertrag.Hash}\";");
         sb.AppendLine();
         GenerateAddClient(sb, stores, syncHandlers, asyncHandlers, viewModels, className, methodName);

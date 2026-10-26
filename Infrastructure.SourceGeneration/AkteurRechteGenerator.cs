@@ -20,10 +20,10 @@ namespace Infrastructure.SourceGeneration
     /// (2) alle Events, die die Projektion hinter einer erlaubten Query behandelt (Query → Reader-Handle →
     ///     <c>IReader&lt;TProjektion&gt;</c> → Projektions-Handle mit <c>IAggregateEnvelope</c>) — „du hörst, was du
     ///     sowieso lesen darfst".</para>
-    /// <para><b>Vertrag</b> (<c>IAkteurVertrag&lt;A&gt;</c>, docs/konzept-akteure.md §3): je <c>Auf(TEvent)</c> die erlaubten Ausgaben.
-    /// Hat ein Akteur einen Vertrag, gilt <b>Befugt = IDarf ∪ Ausgaben(Vertrag)</b> und <b>Hört = Eingänge(Vertrag) ∪ (2)</b> — exakt
-    /// das, worauf er reagiert, statt der groben Regel (1). Dazu der Vertrags-Hash (<c>Abstractions.Akteurvertrag</c>), gegen den
-    /// der Handshake prüft.</para>
+    /// <para><b>Funktionen</b>: die Funktionen draußen, die er rechnen darf (<c>IDarf&lt;IFunktion-Typ&gt;</c>) — ein Client, der ihn verkörpert,
+    /// darf sie tragen.</para>
+    /// <para><b>Clients</b> (<c>GeneratedClientVertraege</c>, docs/konzept-akteure.md §4): je <c>IClientVertrag</c> was er trägt, sendet, fragt
+    /// und hört, die verkörperten Akteure und der Client-Hash (<c>Abstractions.Clientvertragsregeln</c>), gegen den der Handshake prüft.</para>
     /// </summary>
     [Generator]
     public class AkteurRechteGenerator : ISourceGenerator
@@ -62,23 +62,11 @@ namespace Infrastructure.SourceGeneration
 
             var alle = new List<INamedTypeSymbol>();
             CollectTypes(c.GlobalNamespace, alle);
-            var iVertrag = c.GetTypeByMetadataName("Abstractions.IAkteurVertrag`1");
             var iClient = c.GetTypeByMetadataName("Abstractions.IClientVertrag");
             var schnitt = new List<INamedTypeSymbol>();
             CollectInterfaces(c.GlobalNamespace, schnitt);
             schnitt = schnitt.OrderBy(x => x.ToDisplayString(), System.StringComparer.Ordinal).ToList();
             bool IstClient(INamedTypeSymbol t) => iClient != null && t.AllInterfaces.Contains(iClient, SymbolEqualityComparer.Default);
-            // Akteur → seine Vertrags-TEILE (Interfaces mit IAkteurVertrag<A>, ohne Client-Verträge, die Teile nur erben). Der ganze
-            //   Vertrag ist die Vereinigung ihrer Auf-Methoden; je Event höchstens eine (CQRS061).
-            var teile = new Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>>(SymbolEqualityComparer.Default);
-            if (iVertrag != null)
-                foreach (var v in schnitt.Where(x => !IstClient(x)))
-                    foreach (var i in v.AllInterfaces.Where(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iVertrag)))
-                        if (i.TypeArguments[0] is INamedTypeSymbol akt)
-                        {
-                            if (!teile.TryGetValue(akt, out var l)) teile[akt] = l = new List<INamedTypeSymbol>();
-                            if (!l.Contains(v, SymbolEqualityComparer.Default)) l.Add(v);
-                        }
 
             // ── Graph: Command → Aggregat, Aggregat → Events (aus den Decide-Signaturen) ──
             var cmdZuAgg = new Dictionary<INamedTypeSymbol, INamedTypeSymbol>(SymbolEqualityComparer.Default);
@@ -118,8 +106,7 @@ namespace Infrastructure.SourceGeneration
             }
 
             // ── Akteure ──
-            // Akteur = ein Record/eine Klasse mit IAkteur (Domänen-Experte). Ein Dienst ist nie Akteur — er gehört einem
-            //   (IAkteurDienst<A>, docs/konzept-akteure.md §2); Interfaces zählen daher nicht.
+            // Akteur = ein Record/eine Klasse mit IAkteur (Domänen-Experte); Interfaces zählen nicht.
             var akteure = alle.Where(t => Implementiert(t, iAkteur))
                 .OrderBy(t => t.Name, System.StringComparer.Ordinal).ToList();
             string ArtVon(INamedTypeSymbol t) =>
@@ -153,25 +140,12 @@ namespace Infrastructure.SourceGeneration
                 var queries = darf.Where(t => Implementiert(t, iQuery)).ToList();
                 var trigger = darf.Where(t => Implementiert(t, iTrigger) || Implementiert(t, iQuelle)).ToList();
                 var transient = darf.Where(t => Implementiert(t, iTransient)).ToList();
-                // Katalog-Funktionen, die er rechnen (= deren Ergebnisse er hineingeben) darf.
+                // Funktionen draußen, die er rechnen (= deren Ausgaben er hineingeben) darf.
                 var funktionen = darf.Where(t => t.TypeKind == TypeKind.Interface && Implementiert(t, iFunktion)).ToList();
 
-                // Vertrag: je Auf(Event) die Ausgaben (konkrete Commands; die Form prüft CQRS061/062) — über ALLE Teile des Akteurs.
-                teile.TryGetValue(a, out var aTeile);
-                var zusagen = Zusagen(aTeile ?? new List<INamedTypeSymbol>(), iCommand);
-                // Der Vertrags-Typ (Handshake per Akteur-Name, Übergang): der Teil, der alle Zusagen sieht (eigene + geerbte), sonst der erste.
-                var vertrag = aTeile == null ? null
-                    : aTeile.FirstOrDefault(t => Zusagen(new List<INamedTypeSymbol> { t }.Concat(t.AllInterfaces.Where(x => aTeile.Contains(x, SymbolEqualityComparer.Default))).ToList(), iCommand).Count == zusagen.Count)
-                      ?? aTeile[0];
-                foreach (var t in zusagen.SelectMany(r => r.Aus))
-                    if (!cmds.Contains(t, SymbolEqualityComparer.Default)) cmds.Add(t);   // Befugt = IDarf ∪ Ausgaben(Vertrag)
-
                 var hoert = new SortedSet<string>(System.StringComparer.Ordinal);
-                if (vertrag != null)
-                    foreach (var r in zusagen) hoert.Add(r.Ein.ToDisplayString(fq));   // exakt: worauf er reagiert
-                else
-                    foreach (var cmd in cmds)
-                        if (cmdZuAgg.TryGetValue(cmd, out var agg) && aggEvents.TryGetValue(agg, out var evs)) hoert.UnionWith(evs);
+                foreach (var cmd in cmds)
+                    if (cmdZuAgg.TryGetValue(cmd, out var agg) && aggEvents.TryGetValue(agg, out var evs)) hoert.UnionWith(evs);
                 foreach (var q in queries)
                     if (queryZuProj.TryGetValue(q, out var p) && projEvents.TryGetValue(p, out var evs)) hoert.UnionWith(evs);
 
@@ -181,26 +155,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"            Trigger: {Menge(trigger.Select(t => t.ToDisplayString(fq)))},");
                 sb.AppendLine($"            TransientEvents: {Menge(transient.Select(t => t.ToDisplayString(fq)))},");
                 sb.AppendLine($"            Hoert: {Menge(hoert)},");
-                var funktionsMenge = Menge(funktionen.Select(t => t.ToDisplayString(fq)));
-                if (vertrag == null)
-                {
-                    sb.AppendLine($"            Art: \"{ArtVon(a)}\") {{ Funktionen = {funktionsMenge} }},");
-                    continue;
-                }
-                var kanon = Abstractions.Akteurvertrag.Kanon(a.Name, zusagen.Select(r =>
-                    new Abstractions.Akteurvertrag.Zusage(r.Ein.Name, r.Aus.Select(x => x.Name).ToList(), r.Strom)));
-                sb.AppendLine($"            Art: \"{ArtVon(a)}\")");
-                sb.AppendLine("        {");
-                sb.AppendLine($"            Funktionen = {funktionsMenge},");
-                sb.AppendLine($"            VertragTyp = typeof({vertrag.ToDisplayString(fq)}),");
-                sb.AppendLine($"            VertragHash = \"{Abstractions.Akteurvertrag.Hash(kanon)}\",");
-                sb.AppendLine("            Vertrag = new Dictionary<Type, IReadOnlySet<Type>>");
-                sb.AppendLine("            {");
-                foreach (var r in zusagen.OrderBy(r => r.Ein.Name, System.StringComparer.Ordinal))
-                    sb.AppendLine($"                [typeof({r.Ein.ToDisplayString(fq)})] = {Menge(r.Aus.Select(t => t.ToDisplayString(fq)))},");
-                sb.AppendLine("            },");
-                sb.AppendLine($"            Stroeme = {Menge(zusagen.Where(r => r.Strom).Select(r => r.Ein.ToDisplayString(fq)))},");
-                sb.AppendLine("        },");
+                sb.AppendLine($"            Art: \"{ArtVon(a)}\") {{ Funktionen = {Menge(funktionen.Select(t => t.ToDisplayString(fq)))} }},");
             }
             sb.AppendLine("    };");
             sb.AppendLine("}");
@@ -209,15 +164,15 @@ namespace Infrastructure.SourceGeneration
             // ── Clients (docs/konzept-akteure.md §4) ──
             var clients = schnitt.Where(IstClient).ToList();
             var akteurNamen = new HashSet<string>(akteure.Select(x => x.Name), System.StringComparer.Ordinal);
-            foreach (var g in clients.GroupBy(x => Abstractions.Akteurvertrag.ClientName(x.Name)).Where(g => g.Count() > 1 || akteurNamen.Contains(g.Key)))
+            foreach (var g in clients.GroupBy(x => Abstractions.Clientvertragsregeln.ClientName(x.Name)).Where(g => g.Count() > 1 || akteurNamen.Contains(g.Key)))
                 context.ReportDiagnostic(Diagnostic.Create(NameKollision, g.First().Locations.FirstOrDefault() ?? Location.None,
                     g.Key, string.Join(", ", g.Select(x => x.ToDisplayString(fq)).Concat(akteure.Where(x => x.Name == g.Key).Select(x => x.ToDisplayString(fq))))));
             context.AddSource("GeneratedClientVertraege.g.cs", ClientTabelle(c, clients, akteure, iDarf, fq));
         }
 
         /// <summary>
-        /// <c>GeneratedClientVertraege</c>: je <c>IClientVertrag</c> die getragenen Zusagen je Akteur, Sendet/Fragt/Kenntnis, die
-        /// verkörperten Akteure und der Client-Hash (<c>Abstractions.Akteurvertrag.ClientKanon</c>).
+        /// <c>GeneratedClientVertraege</c>: je <c>IClientVertrag</c> die getragenen Funktionen, Sendet/Fragt/Hört, die verkörperten Akteure und der
+        /// Client-Hash (<c>Abstractions.Clientvertragsregeln.ClientKanon</c>).
         /// </summary>
         private static string ClientTabelle(Compilation c, List<INamedTypeSymbol> clients, List<INamedTypeSymbol> akteure,
             INamedTypeSymbol iDarf, SymbolDisplayFormat fq)
@@ -235,36 +190,21 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("    /// <summary>Client-Name (Interface ohne führendes I) → Vertrag.</summary>");
             sb.AppendLine("    public static IReadOnlyDictionary<string, ClientVertrag> Alle { get; } = new Dictionary<string, ClientVertrag>(StringComparer.Ordinal)");
             sb.AppendLine("    {");
-            foreach (var cl in clients.GroupBy(x => Abstractions.Akteurvertrag.ClientName(x.Name)).Select(g => g.First()))
+            foreach (var cl in clients.GroupBy(x => Abstractions.Clientvertragsregeln.ClientName(x.Name)).Select(g => g.First()))
             {
-                // EINE Lesart mit dem Client-Generator (Clientvertragslesart): Name, getragene Teile, Sendet/Fragt/Kenntnis, Hash.
+                // EINE Lesart mit dem Client-Generator (Clientvertragslesart): Name, Trägt/Sendet/Fragt/Hört, Hash.
                 var v = Clientvertragslesart.Lies(cl, c);
-                var name = v.Name;
-                var jeAkteur = v.Traegt;
-                var sendet = v.Sendet;
-                var fragt = v.Fragt;
-                var kenntnis = v.Kenntnis;
-                // verkörpert: EINE Regel (Abstractions.Akteurvertrag.Verkoerpert) — Teil-Akteure, eindeutige IDarf-Halter, mehrdeutige nur bei Bedarf.
-                var verk = Abstractions.Akteurvertrag.Verkoerpert(jeAkteur.Select(x => x.Akteur.Name), sendet.Concat(fragt).Select(t =>
+                var traegt = v.Traegt.Select(x => x.Funktion).ToList();
+                // verkörpert: EINE Regel (Abstractions.Clientvertragsregeln.Verkoerpert) — eindeutige IDarf-Halter, mehrdeutige nur bei Bedarf.
+                var verk = Abstractions.Clientvertragsregeln.Verkoerpert(traegt.Concat(v.Sendet).Concat(v.Fragt).Select(t =>
                     akteure.Where(a => a.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iDarf)
                                                               && SymbolEqualityComparer.Default.Equals(i.TypeArguments[0], t))).Select(a => a.Name)));
 
-                sb.AppendLine($"        [\"{name}\"] = new ClientVertrag(\"{name}\", typeof({cl.ToDisplayString(fq)}), \"{v.Hash}\",");
-                sb.AppendLine("            Traegt: new Dictionary<string, IReadOnlyDictionary<Type, IReadOnlySet<Type>>>(StringComparer.Ordinal)");
-                sb.AppendLine("            {");
-                foreach (var (akt, rs) in jeAkteur)
-                {
-                    sb.AppendLine($"                [\"{akt.Name}\"] = new Dictionary<Type, IReadOnlySet<Type>>");
-                    sb.AppendLine("                {");
-                    foreach (var r in rs.OrderBy(r => r.Ein.Name, System.StringComparer.Ordinal))
-                        sb.AppendLine($"                    [typeof({r.Ein.ToDisplayString(fq)})] = {Menge(r.Aus.Select(t => t.ToDisplayString(fq)))},");
-                    sb.AppendLine("                },");
-                }
-                sb.AppendLine("            },");
-                sb.AppendLine($"            Stroeme: {Menge(jeAkteur.SelectMany(x => x.Zusagen).Where(r => r.Strom).Select(r => r.Ein.ToDisplayString(fq)))},");
-                sb.AppendLine($"            Sendet: {Menge(sendet.Select(t => t.ToDisplayString(fq)))},");
-                sb.AppendLine($"            Fragt: {Menge(fragt.Select(t => t.ToDisplayString(fq)))},");
-                sb.AppendLine($"            Kenntnis: {Menge(kenntnis.Select(t => t.ToDisplayString(fq)))},");
+                sb.AppendLine($"        [\"{v.Name}\"] = new ClientVertrag(\"{v.Name}\", typeof({cl.ToDisplayString(fq)}), \"{v.Hash}\",");
+                sb.AppendLine($"            Traegt: {Menge(traegt.Select(t => t.ToDisplayString(fq)))},");
+                sb.AppendLine($"            Sendet: {Menge(v.Sendet.Select(t => t.ToDisplayString(fq)))},");
+                sb.AppendLine($"            Fragt: {Menge(v.Fragt.Select(t => t.ToDisplayString(fq)))},");
+                sb.AppendLine($"            Hoert: {Menge(v.Hoert.Select(t => t.ToDisplayString(fq)))},");
                 sb.AppendLine($"            Verkoerpert: new[] {{ {string.Join(", ", verk.Select(x => $"\"{x}\""))} }}),");
             }
             sb.AppendLine("    };");
@@ -306,8 +246,6 @@ namespace Infrastructure.SourceGeneration
         }
 
         private static bool Implementiert(INamedTypeSymbol t, INamedTypeSymbol? iface) => Clientvertragslesart.Implementiert(t, iface);
-        private static List<VertragsZusage> Zusagen(List<INamedTypeSymbol> teile, INamedTypeSymbol? iCommand) =>
-            Clientvertragslesart.Zusagen(teile, iCommand);
 
         private static void CollectTypes(INamespaceSymbol ns, List<INamedTypeSymbol> results)
         {

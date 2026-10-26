@@ -34,7 +34,8 @@ public sealed class QuellenDienst(IServiceProvider sp, IEnumerable<Konfigurierte
         foreach (var q in liste)
             Console.WriteLine($"  ⛲ Quelle {q.Typ.Abschnitt} ({q.Typ.Treiber}, {q.Konfig.Laufmodus}) "
                 + (q.Konfig is DateiQuellKonfig d ? d.Pfad : q.Konfig is TaktQuellKonfig t ? $"alle {t.Intervall}" : "") + " → "
-                + string.Join(", ", eingang.PipelinesFür(q.Typ.Typ).DefaultIfEmpty("(keine Pipeline)")));
+                + string.Join(", ", Infrastructure.Komposition.Anwendung.Funktionen.Bausteine.Where(b => b.Eingang(q.Typ.Typ) is not null)
+                    .Select(b => b.Name).DefaultIfEmpty("(keine Funktion hört sie)")));
         return Task.WhenAll(liste.Select(q => q.Konfig.Laufmodus == QuellLaufmodus.JederKnoten
             ? LaufeAsync(q, eingang, stoppingToken)
             : MitLeaseAsync(q, eingang, stoppingToken)));

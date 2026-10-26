@@ -3,8 +3,7 @@ using System.Text;
 using Abstractions;
 using Infrastructure.Lebenszyklus;
 using Infrastructure.Akteure;       // AkteurHerkunft
-using Infrastructure.Projections;   // WakeAck
-using Infrastructure.Prozess;       // ProzessManagerActor, ProzessWake
+using Infrastructure.PubSub;       // BrokerPublisher, Commitmeldung
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -19,9 +18,10 @@ namespace Infrastructure.Quellen;
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 // QUELLEN = fest codierte Treiber + Konfig (docs/konzept-werkbank.md §3). Eine Domäne benennt ihre Quelle nur als Typ
 // (`sealed record DateiErkannt : DateiGemeldet;`); der Treiber (hier: Datei) liest, die Konfig der Umgebung (`Quellen:<Typ>`) sagt wie.
-// Jede Nachricht wird das erste Event eines VORGANGS-Streams — Id deterministisch aus Typ + Kennung, geschrieben per StartStream.
-// Dieselbe Nachricht zweimal (Neustart, zweiter Knoten, Re-Scan) startet den Vorgang also genau einmal. Danach wird jede Pipeline
-// geweckt, die mit p.Quelle<T>() beginnt; geht die Weckung verloren, heilt der Poll des Korrelations-Routers.
+// Jede Nachricht wird das erste Event ihres Streams — Id deterministisch aus Typ + Kennung, geschrieben per StartStream (oder, mit „ein Stream je
+// Schlüssel“, am Kopf mit Kennungs-Verzeichnis). Dieselbe Nachricht zweimal (Neustart, zweiter Knoten, Re-Scan) steht also genau einmal im Log.
+// Danach meldet der Eingang den Commit wie ein Aggregat (Commitmeldung: Push + Signal) — die Funktionen, die den Typ hören, sehen ihn sofort;
+// geht die Meldung verloren, holt sie der Takt.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 /// <summary>Was ein Datei-Treiber über eine fertige Datei weiß — die Fabrik eines Quellen-Typs baut daraus die Nachricht.</summary>
@@ -65,47 +65,40 @@ public static class QuellVorgang
 }
 
 /// <summary>
-/// Der transport-freie Kern: Nachricht genau einmal ins Log, dann die Pipelines wecken, die damit beginnen. Im Prüfstand mit
-/// einem Log im Speicher beweisbar; live über <see cref="QuellenDienst"/> an Marten und den Cluster gebunden.
+/// Der transport-freie Kern: Nachricht genau einmal ins Log, dann den Commit melden. Store-Semantik wird gegen echtes Marten geprüft; live über
+/// <see cref="QuellenDienst"/> an Marten und den Cluster gebunden.
 /// </summary>
 public sealed class QuellEingang
 {
+    /// <summary>Den Commit melden: Events, Stream, Aggregat-Typ, Version davor, Korrelation, Ursache, Akteur (live <see cref="Commitmeldung"/>).</summary>
+    public delegate void Gemeldet(IReadOnlyList<IEvent> events, Guid stream, string aggregatTyp, int vorher, string? korrelation, string? ursache, string? akteur);
+
     private readonly IEventStoreRepository _store;
-    private readonly IReadOnlyDictionary<Type, IReadOnlyList<string>> _pipelinesJeTyp;
-    private readonly Func<Guid, Guid, int, string, CancellationToken, Task> _wecke;
+    private readonly Gemeldet? _melde;
     private readonly Func<Type, string?> _akteur;
     private readonly IStreamBestand? _bestand;
 
-    /// <param name="registry">Die Regel-Registry (Prozesse und Pipeline-Flüsse) — daraus: welche beginnen mit welchem Typ.</param>
-    /// <param name="wecke">(Korrelation, Stream, Version, Pipeline-Name) → Start-Weckung des Dirigenten.</param>
+    /// <param name="melde">Meldet den Commit an die Hörer (Push + Signal); null = niemand wird geweckt (der Takt holt es).</param>
     /// <param name="akteur">Der Akteur, der diesen Nachrichtentyp liefert (IDarf), oder null.</param>
-    public QuellEingang(IEventStoreRepository store, IReadOnlyDictionary<string, ProzessRegeln> registry,
-        Func<Guid, Guid, int, string, CancellationToken, Task> wecke, Func<Type, string?>? akteur = null, IStreamBestand? bestand = null)
+    public QuellEingang(IEventStoreRepository store, Gemeldet? melde = null, Func<Type, string?>? akteur = null, IStreamBestand? bestand = null)
     {
         _store = store;
-        _wecke = wecke;
+        _melde = melde;
         _akteur = akteur ?? (_ => null);
         _bestand = bestand;
-        _pipelinesJeTyp = registry
-            .GroupBy(kv => kv.Value.AuslöserTyp)
-            .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(kv => kv.Key).OrderBy(n => n).ToList());
     }
 
-    /// <summary>Der Eingang live: Marten-Log, Regel-Registry, Weckung über den Cluster, Akteur aus den IDarf-Befugnissen.</summary>
+    /// <summary>Der Eingang live: Marten-Log, Commit-Meldung über den Broker, Akteur aus den IDarf-Befugnissen.</summary>
     public static QuellEingang Live(IServiceProvider sp)
     {
-        var system = sp.GetRequiredService<ActorSystem>();
-        return new QuellEingang(sp.GetRequiredService<IEventStoreRepository>(), sp.GetRequiredService<IReadOnlyDictionary<string, ProzessRegeln>>(),
-            (korr, stream, version, name, ct) => WeckeAsync(system, korr, stream, version, name, ct),
+        var publisher = sp.GetService<BrokerPublisher>();
+        return new QuellEingang(sp.GetRequiredService<IEventStoreRepository>(),
+            (events, stream, typ, vorher, korrelation, ursache, akteur) => Commitmeldung.Melde(publisher, events, stream, typ, vorher, korrelation, ursache, akteur),
             AkteurHerkunft.EindeutigerHalter, sp.GetService<IStreamBestand>() ?? new Infrastructure.Persistence.MartenStreamBestand(sp.GetRequiredService<Marten.IDocumentStore>()));
     }
 
-    /// <summary>Welche Pipelines eine Nachricht dieses Typs startet (leer = niemand hört zu, die Nachricht wird trotzdem protokolliert).</summary>
-    public IReadOnlyList<string> PipelinesFür(Type nachricht)
-        => _pipelinesJeTyp.TryGetValue(nachricht, out var p) ? p : Array.Empty<string>();
-
     /// <summary>
-    /// Nimmt eine Quell-Nachricht auf: genau einmal ins Log, dann jede startende Pipeline wecken. Liefert den Vorgang (die Id aus Typ und Kennung).
+    /// Nimmt eine Quell-Nachricht auf: genau einmal ins Log, dann den Commit melden. Liefert den Vorgang (die Id aus Typ und Kennung).
     /// Ohne <paramref name="schluessel"/> wird sie das erste Event ihres eigenen Streams (Version 0 — der Stream ist der Vorgang); mit Schlüssel geht
     /// sie in den Stream des Schlüssels, und die Kennung steht in derselben Transaktion im Kennungs-Verzeichnis (<see cref="QuellKennung"/>).
     /// <paramref name="akteur"/>: wer sie hineingab (das Tor des Eingangs); sonst der eine Akteur mit <c>IDarf</c>.
@@ -126,11 +119,11 @@ public sealed class QuellEingang
             }
             catch (Exception)
             {
-                // Schon aufgenommen (Neustart, anderer Knoten)? Dann läuft der Vorgang bereits — die Weckung unten ist idempotent.
+                // Schon aufgenommen (Neustart, anderer Knoten)? Dann steht sie im Log und ist gemeldet worden (oder der Takt holt sie).
                 if ((await _store.ReadStreamAsync(vorgang, 0, ct)).Count == 0) throw;
+                return vorgang;
             }
-            foreach (var name in PipelinesFür(typ))
-                await _wecke(ProzessId.Für(name, vorgang, 1), vorgang, 1, name, ct);
+            _melde?.Invoke(new IEvent[] { nachricht }, vorgang, $"Quelle:{typ.Name}", 0, vorgang.ToString(), vorgang.ToString(), wer);
             return vorgang;
         }
 
@@ -143,6 +136,7 @@ public sealed class QuellEingang
             {
                 await _store.AppendEventsAsync(stream, kopf, new IEvent[] { nachricht }, correlationId: vorgang.ToString(),
                     causationId: vorgang.ToString(), aggregateType: $"Quelle:{typ.Name}", akteur: wer, beilagen: [new QuellKennung(vorgang)]);
+                _melde?.Invoke(new IEvent[] { nachricht }, stream, $"Quelle:{typ.Name}", kopf, vorgang.ToString(), vorgang.ToString(), wer);
                 return vorgang;
             }
             catch (Exception) when (!ct.IsCancellationRequested)
@@ -154,12 +148,6 @@ public sealed class QuellEingang
         }
     }
 
-    private static async Task WeckeAsync(ActorSystem system, Guid korrelation, Guid stream, int version, string name, CancellationToken ct)
-    {
-        // Ohne Antwort startet der Poll des Korrelations-Routers den Vorgang nach.
-        await new Bote(system.Cluster()).FrageAsync<WakeAck>(ClusterIdentity.Create(korrelation.ToString(), ProzessManagerActor.KindName),
-            new ProzessWake(stream, version, name), TimeSpan.FromSeconds(10), ct);
-    }
 }
 
 public static partial class QuellenExtensions

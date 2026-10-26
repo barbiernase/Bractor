@@ -313,7 +313,7 @@ public static class ParitaetsPruefung
             var iReader = Get(Vertrag.IReader); var iDecider = Get(Vertrag.IDecider); var iApplier = Get(Vertrag.IApplier);
             var iWStore = Get(Vertrag.IWriteStore); var iRStore = Get(Vertrag.IReadStore); var iStore = Get(Vertrag.IStore);
             var iWert = Get(Vertrag.IWertobjekt); var iEnv = Get(Vertrag.IAggregateEnvelope);
-            var iAkteur = Get(Vertrag.IAkteur); var iDarf = Get(Vertrag.IDarf); var iVertrag = Get(Vertrag.IAkteurVertrag);
+            var iAkteur = Get(Vertrag.IAkteur); var iDarf = Get(Vertrag.IDarf); var iHoert = Get(Vertrag.IHoert); var iTraegt = Get(Vertrag.ITraegt);
             var iClient = Get(Vertrag.IClientVertrag); var iSendet = Get(Vertrag.ISendet); var iFragt = Get(Vertrag.IFragt);
             var iFunktion = Get(Vertrag.IFunktion); var iAuftrag = Get(Vertrag.IAuftrag); var iDienst = Get(Abstractions.Dienstvertrag.Marker);
             var iFluss = Get(Vertrag.IPipeline);
@@ -351,8 +351,7 @@ public static class ParitaetsPruefung
                             if (iFunktion != null && Sym.Implements(t, iFunktion)) { inv.Funktionen.Add(full); continue; }
                             // Domänen-Dienst (IDienst, konzept-werkbank §12.3 E11): ein eigener Baustein — Signatur + Implementierungen.
                             if (iDienst != null && Sym.Implements(t, iDienst)) { inv.Dienste.Add(full); continue; }
-                            // Client-Vertrag (IClientVertrag): sein Rand aus der Basisliste (direkt) und den eigenen Auf-Methoden. Er erbt
-                            //   Vertrags-Teile, ist aber selbst keiner (darum vor dem Akteur-Vertrag).
+                            // Client-Vertrag (IClientVertrag): sein Rand aus der Basisliste (direkt): ITraegt, ISendet, IFragt, IHoert.
                             if (iClient != null && Sym.Implements(t, iClient))
                             {
                                 bool G(INamedTypeSymbol i, INamedTypeSymbol? g) => g != null && i.OriginalDefinition.Fq() == g.Fq();
@@ -360,28 +359,11 @@ public static class ParitaetsPruefung
                                 foreach (var b in t.Interfaces)
                                     if (G(b, iSendet)) rand.Add("S:" + b.TypeArguments[0].Name);
                                     else if (G(b, iFragt)) rand.Add("F:" + b.TypeArguments[0].Name);
-                                    else if (iVertrag != null && !Sym.Implements(b, iClient) && b.AllInterfaces.Any(i => i.OriginalDefinition.Fq() == iVertrag.Fq()))
-                                        rand.Add("T:" + b.Name);
-                                foreach (var m in t.GetMembers(Abstractions.Akteurvertrag.Auf).OfType<IMethodSymbol>().Where(m => m.Parameters.Length == 1))
-                                    rand.Add("K:" + m.Parameters[0].Type.Name);
+                                    else if (G(b, iTraegt)) rand.Add("T:" + b.TypeArguments[0].Name);
+                                    else if (G(b, iHoert)) rand.Add("K:" + b.TypeArguments[0].Name);
                                 inv.Clients[full] = rand;
                                 continue;
                             }
-                            // Akteur-Vertrag: je Auf(E) die Zusage — Ausgänge aus dem Rückgabetyp (void / T / OneOf / Strom); über alle Teile.
-                            if (iVertrag != null && t.AllInterfaces.FirstOrDefault(i => i.OriginalDefinition.Fq() == iVertrag.Fq()) is { } vi
-                                && vi.TypeArguments[0] is INamedTypeSymbol vAkt)
-                                (inv.AkteurVertraege.TryGetValue(vAkt.Fq(), out var schon) ? schon : inv.AkteurVertraege[vAkt.Fq()] = new(StringComparer.Ordinal))
-                                .UnionWith(t.GetMembers(Abstractions.Akteurvertrag.Auf).OfType<IMethodSymbol>()
-                                    .Where(m => m.Parameters.Length == 1).Select(m =>
-                                    {
-                                        ITypeSymbol el = m.ReturnType;
-                                        var strom = el is INamedTypeSymbol { TypeArguments.Length: 1, Name: "IEnumerable" or "IAsyncEnumerable" };
-                                        if (strom) el = ((INamedTypeSymbol)el).TypeArguments[0];
-                                        var aus = el.SpecialType == SpecialType.System_Void ? []
-                                            : el is INamedTypeSymbol { Name: "OneOf" } o ? o.TypeArguments.Select(x => x.Name) : new[] { el.Name };
-                                        return Zusage(m.Parameters[0].Type.Name, aus, strom);
-                                    }));
-                            // Ein Akteur-Dienst (IAkteurDienst<A>) ist kein Akteur — er ist Teil von A (nicht gezählt).
                             // Store = jedes Bündel (IStore), plus jede Fähigkeit OHNE Bündel (dann ihr eigener Store).
                             if (Sym.Implements(t, iStore)
                                 || (Sym.Implements(t, iWStore) || Sym.Implements(t, iRStore))

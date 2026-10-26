@@ -5,7 +5,7 @@ namespace Abstractions;
 /// steht in der Basisliste (<see cref="IMensch"/>, <see cref="IMaschine"/>, <see cref="IKi"/>), was er selbst hineingeben
 /// darf als <see cref="IDarf{T}"/> — Code-Fakten, die Generator, Extractor und Editor aus der Signatur lesen:
 /// <code>public sealed record Inspekteur : IMensch, IDarf&lt;LabelBildPaar&gt;, IDarf&lt;GetImagePair&gt;;</code>
-/// Ein Command darf bei mehreren Akteuren stehen. Was eine Pipeline, ein Prozess oder eine Frist daraus erzeugt, trägt
+/// Ein Command darf bei mehreren Akteuren stehen. Was eine Funktion oder eine Frist daraus erzeugt, trägt
 /// den Akteur der Kette — dafür gibt es kein weiteres Wort. Ein Akteur ist immer ein Record, nie ein Dienst.
 /// </summary>
 public interface IAkteur { }
@@ -20,49 +20,25 @@ public interface IMaschine : IAkteur { }
 public interface IKi : IAkteur { }
 
 /// <summary>
-/// Ein DIENST, mit dem <typeparamref name="TAkteur"/> drinnen entscheidet — der Dienst ist kein Akteur, er gehört einem:
-/// <code>public interface IGutachten : IAkteurDienst&lt;Gutachter&gt; { … }</code>
-/// Ein Pipeline-Handle, der ihn als Parameter nimmt, entscheidet im Auftrag von <typeparamref name="TAkteur"/> (der
-/// einzige Akteur-Wechsel mitten in einer Kette); seine Ausgaben muss <typeparamref name="TAkteur"/> dürfen (CQRS060).
-/// Damit steht fest, wer den Dienst benutzt: der Akteur — und genau die Handles mit diesem Parameter.
-/// </summary>
-public interface IAkteurDienst<TAkteur> where TAkteur : IAkteur { }
-
-/// <summary>
-/// Der VERTRAG eines Akteurs, der draußen auf Events reagiert (<c>docs/konzept-akteure.md</c> §3) — ein Interface in der Domäne,
-/// gegen das der Client (Python-Worker, später Blazor) programmiert:
-/// <code>public interface IKlassifizierer : IAkteurVertrag&lt;Klassifizierer&gt; { OneOf&lt;KlassifiziereBildPaarDurchKi&gt; Auf(ImagePairKomplett e); void Auf(BildVerfuegbar e); }</code>
-/// Je Methode <c>Auf(TEvent)</c> eine Zusage; der Rückgabetyp ist der Ausgabe-Vertrag (<c>void</c>, ein konkreter Command,
-/// <c>OneOf&lt;…&gt;</c> oder ein Strom <c>IAsyncEnumerable&lt;OneOf&lt;…&gt;&gt;</c>). Was ein Akteur als Zusage hineingibt, darf er damit
-/// (kein zweites <c>IDarf</c>), und er hört genau die Events seiner <c>Auf</c>-Methoden (CQRS061/062).
-/// <para>Ein Akteur darf seinen Vertrag in <b>Teile</b> schneiden (mehrere Interfaces mit <c>IAkteurVertrag&lt;A&gt;</c>, auch geerbt):
-/// über alle Teile höchstens eine Zusage je Event. Ein Teil ist der Baustein, den ein Client trägt (<see cref="IClientVertrag"/>);
-/// der ganze Vertrag des Akteurs ist die Vereinigung seiner Teile.</para>
-/// Server, Editor und Handshake kennen damit jede Zusage als Code-Fakt; implementiert wird er nur draußen.
-/// </summary>
-public interface IAkteurVertrag<TAkteur> where TAkteur : IAkteur { }
-
-/// <summary>
 /// Der VERTRAG eines CLIENTS — der Software, die an der Leitung hängt (Python-Worker, Blazor-Arbeitsplatz …),
 /// <c>docs/konzept-akteure.md</c> §4. Ein Client ist nicht ein Akteur: er kann mehrere Akteure verkörpern, und ein Akteur
-/// kann über mehrere Clients laufen. Der Client-Vertrag ist ein Interface, das zusammenstellt, was über SEINE Leitung geht:
-/// <code>public interface IMlWorker : IClientVertrag, IKlassifizierer, ITrainingsSystem, ISendet&lt;KlassifiziereEinzelBildDurchKi&gt;, IFragt&lt;HoleAktivesModell&gt; { void Auf(ModellAktiviert e); }</code>
+/// kann über mehrere Clients laufen. Der Client-Vertrag ist ein Interface, das zusammenstellt, was über SEINE Leitung geht
+/// (Plan Pub/Sub-Neustrukturierung §2.7):
+/// <code>public interface IMlWorker : IClientVertrag, ITraegt&lt;IBildpaarBeurteilung&gt;, ISendet&lt;KlassifiziereEinzelBildDurchKi&gt;, IFragt&lt;HoleAktivesModell&gt;, IHoert&lt;ModellAktiviert&gt;;</code>
 /// <list type="bullet">
-/// <item>erbt <b>Akteur-Vertrags-Teile</b> (<see cref="IAkteurVertrag{TAkteur}"/>) → trägt deren Zusagen, im Namen des jeweiligen Akteurs;</item>
-/// <item><see cref="ISendet{T}"/> / <see cref="IFragt{T}"/> → was er von sich aus hineingibt bzw. fragt (muss ein Akteur dürfen);</item>
-/// <item>eigene Methoden nur <c>void Auf(TEvent e)</c> → Kenntnis (UI-Aktualisierung), nie eine Ausgabe.</item>
+/// <item><see cref="ITraegt{TFunktion}"/> → Funktionen, deren Code er ausführt (draußen gerechnet, die Garantie bleibt beim Funktions-Actor);</item>
+/// <item><see cref="ISendet{T}"/> / <see cref="IFragt{T}"/> → was er von sich aus hineingibt bzw. fragt;</item>
+/// <item><see cref="IHoert{T}"/> → Kenntnis (UI-Aktualisierung, verlierbar), nie eine Ausgabe.</item>
 /// </list>
-/// Welche Akteure er verkörpert, wird abgeleitet: die Akteure der Teile, dazu je Sendet/Fragt die <c>IDarf</c>-Halter, falls keiner der
-/// Teil-Akteure den Typ schon darf. Wirksam ist am Handshake
-/// die Schnittmenge mit den Akteuren des Tokens. Die client-INTERNEN Commands/Events (Intents, ClientEvents, Python-State) stehen hier
-/// nie — der Vertrag ist nur der Rand (CQRS063–065).
+/// Was er trägt, sendet oder fragt, muss ein verkörperter Akteur dürfen (<c>IDarf</c>); welche Akteure er verkörpert, wird daraus abgeleitet
+/// (<see cref="Clientvertragsregeln.Verkoerpert"/>). Wirksam ist am Handshake die Schnittmenge mit den Akteuren des Tokens. Die client-INTERNEN
+/// Commands/Events (Intents, ClientEvents, Python-State) stehen hier nie — der Vertrag ist nur der Rand (CQRS063–065).
 /// </summary>
 public interface IClientVertrag { }
 
 /// <summary>
 /// Diese Client-Assembly IST der Client <typeparamref name="TVertrag"/> (<c>[assembly: IstClient&lt;IArbeitsplatz&gt;]</c>, docs/konzept-akteure.md §4):
-/// der Client-Generator nimmt Handshake-Name, Vertrags-Hash und die abonnierten Events aus dem Vertrag (Kenntnis + Eingänge der getragenen
-/// Zusagen), leitet nur die Commands seines <see cref="ISendet{T}"/> weiter und stellt nur die Queries seines <see cref="IFragt{T}"/>. Der
+/// der Client-Generator nimmt Handshake-Name, Vertrags-Hash und die abonnierten Events aus dem Vertrag (<see cref="IHoert{T}"/>), leitet nur die Commands seines <see cref="ISendet{T}"/> weiter und stellt nur die Queries seines <see cref="IFragt{T}"/>. Der
 /// Analyzer hält den Client-Code dagegen: ein erzeugter Command/eine Query ohne Vertrag, ein Handle auf ein Server-Event ohne Kenntnis ist
 /// ein Build-Fehler (CQRS093–097).
 /// </summary>
@@ -71,7 +47,7 @@ public sealed class IstClientAttribute<TVertrag> : Attribute where TVertrag : IC
 
 /// <summary>
 /// Am Client-Vertrag (<see cref="IClientVertrag"/>): der Client gibt <typeparamref name="T"/> von sich aus hinein — ein Command, ein
-/// Trigger oder ein Transient-Event. Ein verkörperter Akteur muss <c>IDarf&lt;T&gt;</c> haben (CQRS064): der Client-Vertrag schneidet aus
+/// eine Quell-Nachricht oder ein Hinweis. Ein verkörperter Akteur muss <c>IDarf&lt;T&gt;</c> haben (CQRS064): der Client-Vertrag schneidet aus
 /// der Befugnis, er erweitert sie nie.
 /// </summary>
 public interface ISendet<T> { }
@@ -83,17 +59,30 @@ public interface ISendet<T> { }
 public interface IFragt<T> { }
 
 /// <summary>
+/// Am Client-Vertrag (<see cref="IClientVertrag"/>): der Client hört <typeparamref name="T"/> — Kenntnis, verlierbar (Plan §2.7, §3.4): ein Event
+/// oder ein Hinweis, gepusht, ohne Garantie und ohne Ausgabe. Verlässlich liest ein Client nur über „lies das Log ab Position“ (Plan Phase 7).
+/// </summary>
+public interface IHoert<T> { }
+
+/// <summary>
+/// Am Client-Vertrag (<see cref="IClientVertrag"/>): der Client TRÄGT die Funktion <typeparamref name="TFunktion"/> — er führt ihren Code aus
+/// (Plan §2.7, §3.3: eine Funktion, als Schnittstelle deklariert, läuft draußen). Er holt ihre Eingänge über die Vermittlung mit Lease, antwortet
+/// mit den Ausgaben ihrer Signatur; festgehalten und gesendet wird beim Funktions-Actor, die erste Antwort gewinnt. Ein verkörperter Akteur muss
+/// <c>IDarf&lt;TFunktion&gt;</c> haben; eine getragene Funktion ohne Bindung in der Umgebung läuft dort (Laufort Extern).
+/// </summary>
+public interface ITraegt<TFunktion> where TFunktion : IFunktion { }
+
+/// <summary>
 /// Der Akteur darf <typeparamref name="T"/> in das System hineingeben — EIN Wort für alles, was hineingeht:
-/// Command (auslösen), Query (fragen bzw. als Zuständiger beantworten), Trigger (starten bzw. verarbeiten), Transient-Event.
+/// Command (auslösen), Query (fragen), Quell-Nachricht, Hinweis, und die Ausgaben einer Funktion, deren Code er draußen rechnet (<c>IDarf&lt;IFunktion-Typ&gt;</c>).
 /// Andere <typeparamref name="T"/> meldet der Analyzer CQRS058.
 /// </summary>
 public interface IDarf<T> { }
 
 /// <summary>
-/// „Im Auftrag von": der Akteur, für den gerade entschieden wird — gesetzt vom GENERIERTEN Pipeline-Dispatch um einen
-/// Handle, der einen Akteur-Dienst als Parameter nimmt (<c>Handle(evt, ctx, IGutachten g)</c> → „Gutachter“), gelesen vom
-/// Emit-Primitiv (stempelt ihn als <c>UserId</c>). Fluss-lokal (<see cref="System.Threading.AsyncLocal{T}"/>): er reist
-/// durch die awaits des Handle-Aufrufs und endet mit ihm. Der Fachcode sieht ihn nie.
+/// „Im Auftrag von": der Akteur der Kette — gesetzt um die Arbeit eines Konsumenten (Funktion, Uhr) aus dem Akteur seines Eingangs, gelesen vom
+/// Emit-Primitiv (stempelt ihn als <c>UserId</c>). Fluss-lokal (<see cref="System.Threading.AsyncLocal{T}"/>): er reist durch die awaits und
+/// endet mit dem Aufruf. Der Fachcode sieht ihn nie.
 /// </summary>
 public static class ImAuftrag
 {

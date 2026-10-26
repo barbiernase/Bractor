@@ -163,7 +163,7 @@ public class UmgebungE2ETests
             hostA.Services.GetRequiredService<IAggregateDispatcher>().Dispatch(new CommandEnvelope
             {
                 AggregateType = "ImagePair", Modus = new CommandModus.Client(0),
-                Payload = new ErstelleImagePair(new(paar), "PAIR-UMGEBUNG", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "/umgebung/a"),
+                Payload = new NimmBildAuf(new(paar), "PAIR-UMGEBUNG", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "/umgebung/a", BildVersion.Dc0, new BildMeta("dc0.tiff", 1, 1, 1, DateTimeOffset.UtcNow), "/umgebung/a" + ".png"),
             });
             var esA = hostA.Services.GetRequiredService<IEventStoreRepository>();
             var esB = hostB.Services.GetRequiredService<IEventStoreRepository>();

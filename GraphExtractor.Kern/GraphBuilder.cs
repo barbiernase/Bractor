@@ -241,44 +241,25 @@ public sealed class GraphBuilder
             });
             foreach (var d in a.Darf)
                 if (NachrichtId(d) is { } ziel) kanten.Add((aid, ziel, EdgeKind.darf, null));
-            if (vid == null) continue;
-            var kanon = Abstractions.Akteurvertrag.Kanon(a.Name, a.Vertrag.Select(r => new Abstractions.Akteurvertrag.Zusage(r.Eingang, r.Ausgaenge, r.Strom)));
-            Add(new Node
-            {
-                Id = vid, Kind = NodeKind.vertrag, Name = a.VertragName!, Namespace = a.Namespace,
-                Vertrag = new VertragInfo
-                {
-                    Akteur = a.Name, Hash = Abstractions.Akteurvertrag.Hash(kanon),
-                    Zusagen = a.Vertrag.Select(r => new VertragsZusage { Eingang = r.Eingang, Ausgaenge = r.Ausgaenge.ToList(), Strom = r.Strom }).ToList(),
-                },
-            });
-            kanten.Add((aid, vid, EdgeKind.hatVertrag, null));
-            foreach (var r in a.Vertrag)
-            {
-                if (NachrichtId(r.Eingang) is { } ein) kanten.Add((ein, vid, EdgeKind.zusageAuf, r.Eingang));
-                foreach (var aus in r.Ausgaenge)
-                    if (NachrichtId(aus) is { } ziel) kanten.Add((vid, ziel, EdgeKind.zusageGibt, r.Eingang));
-            }
         }
-        // Clients (docs/konzept-akteure.md §4): client:X —traegt→ vertrag, —sendet→ Command, —fragt→ Query, Event —hoert→ client,
+        // Clients (docs/konzept-akteure.md §4, Plan §2.7): client:X —traegt→ Funktion, —sendet→ Command, —fragt→ Query, Event —hoert→ client,
         //   client —verkoerpert→ akteur (abgeleitet wie AkteurRechteGenerator).
-        string? TeilAkteur(string teil) => _dom.Akteure.FirstOrDefault(a => a.VertragName == teil || a.Vertrag.Any(r => r.Teil == teil))?.Name;
         foreach (var c in _dom.Clients)
         {
             var cid = $"client:{c.Name}";
-            var verk = Abstractions.Akteurvertrag.Verkoerpert(c.Traegt.Select(TeilAkteur).OfType<string>(),
-                c.Sendet.Concat(c.Fragt).Select(t => _dom.Akteure.Where(a => a.Darf.Contains(t)).Select(a => a.Name)));
+            var verk = Abstractions.Clientvertragsregeln.Verkoerpert(
+                c.Traegt.Concat(c.Sendet).Concat(c.Fragt).Select(t => _dom.Akteure.Where(a => a.Darf.Contains(t)).Select(a => a.Name)));
             Add(new Node
             {
                 Id = cid, Kind = NodeKind.client, Name = c.Name, FullName = c.Full, Namespace = c.Namespace,
                 Client = new ClientInfo
                 {
-                    Handshake = Abstractions.Akteurvertrag.ClientName(c.Name), Traegt = c.Traegt.ToList(), Sendet = c.Sendet.ToList(),
+                    Handshake = Abstractions.Clientvertragsregeln.ClientName(c.Name), Traegt = c.Traegt.ToList(), Sendet = c.Sendet.ToList(),
                     Fragt = c.Fragt.ToList(), Kenntnis = c.Kenntnis.ToList(), Verkoerpert = verk.ToList(),
                 },
             });
             foreach (var t in c.Traegt)
-                if (_dom.Akteure.FirstOrDefault(a => a.Name == TeilAkteur(t))?.VertragName is { } vn) kanten.Add((cid, $"vertrag:{vn}", EdgeKind.traegt, t));
+                if (_dom.BausteinFunktionen.FirstOrDefault(f => f.Name == t) is { } f) kanten.Add((cid, $"funktion:{f.Name}", EdgeKind.traegt, t));
             foreach (var s in c.Sendet) if (NachrichtId(s) is { } ziel) kanten.Add((cid, ziel, EdgeKind.sendet, null));
             foreach (var q in c.Fragt) if (NachrichtId(q) is { } ziel) kanten.Add((cid, ziel, EdgeKind.fragt, null));
             foreach (var e in c.Kenntnis) if (NachrichtId(e) is { } ein) kanten.Add((ein, cid, EdgeKind.hoert, null));

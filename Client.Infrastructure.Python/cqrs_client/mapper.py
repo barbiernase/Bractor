@@ -3,7 +3,7 @@
 Nutzlast und Hüllen: packt Domänen-DTOs in die Leitung des Frameworks und wieder aus.
 
 Die Leitung (Cqrs.Leitung/cqrs.proto → cqrs_client.leitung) kennt keinen Domänen-Typ. Jede Domänen-Nachricht
-(Command, Event, Query, Antwort, Trigger, Auftrag) reist als `Nutzlast`:
+(Command, Event, Query, Antwort, Trigger, Eingang und Ausgaben einer Funktion) reist als `Nutzlast`:
 
     typ   = Proto-Name des DTO ohne „Dto“ (z. B. "ErstelleDatensatz")
     daten = die {typ}Dto-Message des Anwendungs-Protos, protobuf-kodiert (betterproto: bytes(dto))
@@ -30,7 +30,7 @@ class UnbekannteNutzlast(ValueError):
 class NutzlastTabelle:
     """
     typ → DTO-Klasse, wie sie der Codegen erzeugt (domain_client/generated/nutzlast_tabelle.py: TABELLE). `packe` und `entpacke`
-    sind die beiden einzigen Wege zwischen DTO und Leitung; `typ` ist der Nutzlast-Typ einer DTO-Klasse (Capabilities, Kausalität).
+    sind die beiden einzigen Wege zwischen DTO und Leitung; `typ` ist der Nutzlast-Typ einer DTO-Klasse (Capabilities).
     """
 
     def __init__(self, tabelle: Mapping[str, type]):
@@ -80,9 +80,9 @@ class PayloadMapper:
     """
     Zwischen Domänen-DTOs und der Leitung.
 
-    Auspacken (Server → Client): Event-Hülle, TriggerForward, QueryForward, ArbeitsAuftrag, QueryResponse → DTO.
-    Verpacken (Client → Server): Command → CommandEnvelopeDto, Event → EventEnvelopeDto (Transient / Funktions-Ergebnis),
-    Query, Query-Antwort, Trigger → Nutzlast.
+    Auspacken (Server → Client): Event-Hülle, TriggerForward, QueryForward, ArbeitsAuftrag (Eingang), QueryResponse → DTO.
+    Verpacken (Client → Server): Command → CommandEnvelopeDto, Hinweis → EventEnvelopeDto, Query, Query-Antwort, Trigger, Ausgaben einer
+    Funktion → Nutzlast.
     """
 
     def __init__(self, nutzlast: Mapping[str, type]):
@@ -114,10 +114,6 @@ class PayloadMapper:
         """Die Query aus QueryForward.payload."""
         return self.entpacke(nutzlast)
 
-    def extract_auftrag_payload(self, nutzlast: Nutzlast) -> betterproto.Message:
-        """Der Auftrag einer Katalog-Funktion aus ArbeitsAuftrag.auftrag."""
-        return self.entpacke(nutzlast)
-
     def extract_query_response(self, query_response: leitung.QueryResponse) -> betterproto.Message:
         """Die TYPISIERTE Antwort aus einem QueryResponse (Server → Client) — die Ask-Seite (docs/09 §9.4)."""
         return self.entpacke(query_response.payload)
@@ -134,13 +130,8 @@ class PayloadMapper:
         aggregate_type: str = "",
         correlation_id: str = "",
         session_id: str = "",
-        causation=None,
     ) -> CommandEnvelopeDto:
-        """
-        Ein Command in einer CommandEnvelopeDto-Hülle. `causation` (router.Kausalitaet): die Zusage antwortet auf ein
-        Event — Stream + Version + Typ + Index reisen mit, der Server leitet daraus die CommandId deterministisch ab
-        (doppelt zugestellt ≠ doppelt wirksam, docs/konzept-akteure.md §5.3).
-        """
+        """Ein Command in einer CommandEnvelopeDto-Hülle (expected_version < 0: ohne Versionsprüfung, die Inbox des Ziels dedupliziert)."""
         envelope = CommandEnvelopeDto(
             command_id=str(uuid4()),
             aggregate_id=str(aggregate_id),
@@ -151,11 +142,6 @@ class PayloadMapper:
             origin_session_id=session_id,
             payload=self.packe(command),
         )
-        if causation is not None:
-            envelope.causation_stream_id = causation.stream_id
-            envelope.causation_version = causation.version
-            envelope.causation_type = causation.typ
-            envelope.causation_index = causation.index
         return envelope
 
     def wrap_transient_event(
@@ -171,21 +157,6 @@ class PayloadMapper:
             created_at_utc=int(time.time() * 1_000),
             correlation_id=correlation_id or str(uuid4()),
             payload=self.packe(event),
-        )
-
-    def wrap_ergebnis(self, ergebnis: betterproto.Message, vorgang: str, korrelation: str = "") -> EventEnvelopeDto:
-        """
-        Das Ergebnis einer Katalog-Funktion (einer ihrer OneOf-Fälle, ein Event) als EventEnvelopeDto für
-        ArbeitsErgebnis.ergebnis. Der Server liest nur die Nutzlast und stempelt Stream/Korrelation/Akteur selbst;
-        Stream = Vorgang (Ausführungs-Stream) steht nur zur Lesbarkeit drin.
-        """
-        return EventEnvelopeDto(
-            event_id=str(uuid4()),
-            aggregate_id=vorgang,
-            created_at_utc=int(time.time() * 1_000),
-            causation_id=vorgang,
-            correlation_id=korrelation,
-            payload=self.packe(ergebnis),
         )
 
     def wrap_query(self, query: betterproto.Message) -> Nutzlast:

@@ -2,13 +2,10 @@
 """
 TrainingWorker — der out-of-process Trainings-Job.
 
-Derselbe Event→Command-Reaktor wie der Classifier, nur LANGLAUFEND mit Fortschritt — der Akteur
-TrainingsSystem, programmiert gegen seinen Vertrag (ITrainingsSystem: die Zusage auf TrainingAngefordert
-ist ein Strom, docs/konzept-akteure.md §3):
-subscribed `TrainingAngefordert`, zieht die eingefrorene Sample-Liste über den typisierten
-Query-Kanal (`self.query(HoleDatensatzSamples…)`), fährt das Training in
-`asyncio.to_thread` (Event-Loop bleibt frei) und **yieldet über die Zeit mehrfach** Commands
-zurück:
+Der Client TrainingsWorker (verkörpert den Akteur TrainingsSystem) — er TRÄGT die Funktion ITraining (Plan Pub/Sub-Neustrukturierung
+§2.7): der Server bietet ihm jedes angeforderte Training an; er zieht die eingefrorene Sample-Liste über den typisierten Query-Kanal
+(`self.query(HoleDatensatzSamples…)`), fährt das Training in `asyncio.to_thread` (Event-Loop bleibt frei) und **yieldet über die Zeit
+mehrfach** Ausgaben — ein Strom: jedes Stück hält der Server fest und sendet es, bevor das nächste kommt:
 
     MeldeTrainingBegonnen                         → TrainingBegonnen
     MeldeFortschritt(epoche, loss, genauigkeit) ×N → TrainingFortschritt   (Live-Kurve)
@@ -34,6 +31,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable
 
+from cqrs_client.funktion import Herkunft
 from domain_client.generated import (
     TrainingAngefordertDto,
     TrainingAbgebrochenDto,
@@ -59,7 +57,7 @@ class TrainingState:
 
 
 class TrainingWorker(TrainingsWorkerBasis[TrainingState]):
-    """Der Akteur TrainingsSystem — programmiert gegen seinen Vertrag (Domain.Akteure.ITrainingsSystem)."""
+    """Der Client TrainingsWorker — programmiert gegen seinen Vertrag (Domain.Akteure.ITrainingsWorker: trägt ITraining, hört TrainingAbgebrochen)."""
 
     # Seiten-Größe beim Ziehen der Samples (paginiert, wie SucheImagePairs).
     SEITEN_GROESSE = 500
@@ -75,10 +73,10 @@ class TrainingWorker(TrainingsWorkerBasis[TrainingState]):
     # HAUPT-HANDLER — der langlaufende Trainings-Job
     # ═══════════════════════════════════════════════════
 
-    async def auf_training_angefordert(
-        self, event: TrainingAngefordertDto, ctx, state: TrainingState
+    async def training(
+        self, event: TrainingAngefordertDto, h: Herkunft, state: TrainingState
     ):
-        training_id = str(ctx.aggregate_id)
+        training_id = str(h.stream)
         state.laeufe += 1
         log.info(
             "Training %s angefordert: Datensatz %s v%d, %d Epochen",

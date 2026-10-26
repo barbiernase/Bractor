@@ -21,9 +21,10 @@ internal sealed class ClientVertragInfo
     public string Hash { get; private set; } = "";
     public List<string> Sendet { get; private set; } = new List<string>();
     public List<string> Fragt { get; private set; } = new List<string>();
-    public List<string> Eingaenge { get; private set; } = new List<string>();
-    /// <summary>Getragene Akteur-Vertrags-Teile — über eine C#-Leitung gibt es (noch) keine Zusagen (CQRS094).</summary>
-    public List<string> Teile { get; private set; } = new List<string>();
+    /// <summary>Was der Client hört (<c>IHoert&lt;T&gt;</c>) — genau das wird abonniert.</summary>
+    public List<string> Hoert { get; private set; } = new List<string>();
+    /// <summary>Getragene Funktionen (<c>ITraegt&lt;F&gt;</c>) — ein C#-Client trägt (noch) keine (CQRS094).</summary>
+    public List<string> Traegt { get; private set; } = new List<string>();
 
     public static readonly ClientVertragInfo Leer = new ClientVertragInfo();
 
@@ -46,8 +47,8 @@ internal sealed class ClientVertragInfo
             Hash = v.Hash,
             Sendet = v.Sendet.Select(t => t.ToDisplayString()).OrderBy(x => x, System.StringComparer.Ordinal).ToList(),
             Fragt = v.Fragt.Select(t => t.ToDisplayString()).OrderBy(x => x, System.StringComparer.Ordinal).ToList(),
-            Eingaenge = v.Eingaenge.Select(t => t.ToDisplayString()).OrderBy(x => x, System.StringComparer.Ordinal).ToList(),
-            Teile = v.Traegt.Select(t => t.Akteur.Name).ToList(),
+            Hoert = v.Hoert.Select(t => t.ToDisplayString()).OrderBy(x => x, System.StringComparer.Ordinal).ToList(),
+            Traegt = v.Traegt.Select(t => t.Funktion.Name).ToList(),
         };
     }
 }
@@ -63,9 +64,9 @@ internal static class ClientVertragDiagnosen
         Kategorie, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor TeileImCSharpClient = new DiagnosticDescriptor(
-        "CQRS094", "C#-Client trägt Akteur-Vertrags-Teile",
-        "Der Client-Vertrag '{0}' trägt Vertrags-Teile ({1}) — Zusagen (Antwort auf ein Event mit Kausalität) beantworten heute nur die "
-        + "generierten Python-Basen; ein C#-Client nennt nur ISendet/IFragt und eigene Kenntnis",
+        "CQRS094", "C#-Client trägt Funktionen",
+        "Der Client-Vertrag '{0}' trägt Funktionen ({1}) — draußen trägt sie heute nur das Python-SDK (generierte Basen); ein C#-Client nennt "
+        + "ISendet/IFragt/IHoert",
         Kategorie, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor CommandOhneSendet = new DiagnosticDescriptor(
@@ -81,7 +82,7 @@ internal static class ClientVertragDiagnosen
 
     public static readonly DiagnosticDescriptor EventOhneKenntnis = new DiagnosticDescriptor(
         "CQRS097", "Server-Event nicht im Client-Vertrag",
-        "'{2}.Handle({0})' hört ein Server-Event, das der Vertrag '{1}' nicht kennt (void Auf({0} e)) — abonniert wird nur, was im "
+        "'{2}.Handle({0})' hört ein Server-Event, das der Vertrag '{1}' nicht hört (IHoert<{0}>) — abonniert wird nur, was im "
         + "Vertrag steht; der Handler liefe nie",
         Kategorie, DiagnosticSeverity.Error, isEnabledByDefault: true);
 }
@@ -113,7 +114,7 @@ public sealed class ClientVertragAnalyzer : DiagnosticAnalyzer
             var ctx = c.GetTypeByMetadataName("Client.Infrastructure.Abstractions.MessageContext");
             var sendet = new HashSet<ISymbol>(v.Sendet, SymbolEqualityComparer.Default);
             var fragt = new HashSet<ISymbol>(v.Fragt, SymbolEqualityComparer.Default);
-            var eingaenge = new HashSet<ISymbol>(v.Eingaenge, SymbolEqualityComparer.Default);
+            var eingaenge = new HashSet<ISymbol>(v.Hoert, SymbolEqualityComparer.Default);
 
             start.RegisterOperationAction(o =>
             {

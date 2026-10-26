@@ -58,12 +58,12 @@ public class TwoNodeCommandDispatchTests
 
                 result.Should().NotBeNull($"Command für {pairId} muss (ggf. cross-node) zugestellt werden.");
                 result!.Success.Should().BeTrue($"Aggregat muss {pairId} erfolgreich anlegen.");
-                // Version 1: nur das Fakt (ImagePairErstellt) — die Quittung des Commands steht in der Inbox-Tabelle, nicht im Stream
+                // Version 1: nur das Fakt (DatensatzErstellt) — die Quittung des Commands steht in der Inbox-Tabelle, nicht im Stream
                 //   (docs/04 §4.4); seit T2b (docs/08 §8.4) ist auch der Client-Pfad idempotent (AggregateActorBase.HandleClientCommand).
                 result.NewVersion.Should().Be(1);
                 result.ErsteVersion.Should().Be(1, "der Command schrieb genau Version 1");
                 (await hostA.Services.GetRequiredService<IEventStoreRepository>().ReadStreamAsync(pairId, 1, default))
-                    .Should().ContainSingle().Which.Payload.Should().BeOfType<ImagePairErstellt>();
+                    .Should().ContainSingle().Which.Payload.Should().BeOfType<Domain.Datensatz.DatensatzErstellt>();
             }
 
             // Gegenprobe: ein zweiter Command auf dieselbe Id (Client-OCC gegen Version 1) belastet den
@@ -84,17 +84,12 @@ public class TwoNodeCommandDispatchTests
     {
         var envelope = new CommandEnvelope
         {
-            AggregateType = "ImagePair",   // MUSS mit dem ClusterKind übereinstimmen
+            AggregateType = "Datensatz",   // MUSS mit dem ClusterKind übereinstimmen
             Modus = new CommandModus.Client(expectedVersion),
-            Payload = new ErstelleImagePair(
-                new(pairId),
-                PairKey: "PAIR-P8-" + pairId.ToString("N")[..6],
-                ProduziertAm: DateTimeOffset.UtcNow,
-                AufgenommenAm: DateTimeOffset.UtcNow,
-                UrsprungsPfad: "/p8/twonode"),
+            Payload = new Domain.Datensatz.ErstelleDatensatz(new(pairId), "P8-" + pairId.ToString("N")[..6]),
         };
 
-        var identity = ClusterIdentity.Create(pairId.ToString(), "ImagePair");
+        var identity = ClusterIdentity.Create(pairId.ToString(), "Datensatz");
 
         // Bounded Retry wie im Dispatcher: die Topologie braucht evtl. ein paar Anläufe.
         for (var attempt = 0; attempt < 5; attempt++)

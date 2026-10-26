@@ -54,7 +54,7 @@ public static class Schema
         // Clients (docs/konzept-akteure.md §4): je Client-Vertrag (Handshake-Name) Token, Adresse, URLs und Datei-Verzeichnisse.
         var clients = new JsonObject();
         foreach (var c in Liste(board?["clients"]))
-            clients[Abstractions.Akteurvertrag.ClientName((string?)c["name"] ?? "?")] = Klasse(typeof(ClientKonfig));
+            clients[Abstractions.Clientvertragsregeln.ClientName((string?)c["name"] ?? "?")] = Klasse(typeof(ClientKonfig));
         aus[UmgebungsAbschnitte.Clients] = new JsonObject
         {
             ["art"] = "je", ["schluessel"] = "Client", ["wert"] = Klasse(typeof(ClientKonfig)), ["eintraege"] = clients,

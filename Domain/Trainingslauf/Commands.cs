@@ -51,7 +51,7 @@ public record MeldeTrainingGescheitert(
 // ═══════════════════════════════════════════════════
 
 /// <summary>
-/// Vom Frist-Mechanismus ausgelöst, wenn ein begonnenes Training nicht rechtzeitig
+/// Die Frist des Beginns (die Uhr sendet ihn), wenn ein begonnenes Training nicht rechtzeitig
 /// abschließt. Auf ein bereits beendetes Training wirkungslos (idempotent).
 /// </summary>
 public record MarkiereAlsHaengengeblieben(

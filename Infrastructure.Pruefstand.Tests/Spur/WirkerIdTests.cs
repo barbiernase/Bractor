@@ -46,17 +46,6 @@ public class WirkerIdTests
             .Should().Equal("datei", "meldeFertig", "meldeFertig2", "meldeFertig2");
 
     [Fact]
-    public void Die_Laufzeit_kennt_die_Namen_der_Domaene()
-    {
-        var bild = Domain.Pipeline.Prozess.GeneratedProzessRegeln.Alle["Bildeingang"];
-        bild.KnotenNamen.Should().Equal("datei", "deuten", "paar", "vorschau", "kontrast", "melden");
-        bild.Wirker(0).Should().StartWith("fluss:Bildeingang#");
-        var teil = Domain.Prozess.GeneratedProzessRegeln.Alle["TeilFertigProzess"];
-        teil.RegelNamen.Should().Equal("TeilauftragAbgeschlossen→MeldeTeilFertig");
-        teil.Wirker(0).Should().Be("prozess:TeilFertigProzess#TeilauftragAbgeschlossen→MeldeTeilFertig");
-    }
-
-    [Fact]
     public void Generator_benennt_Fluss_und_Prozess_aus_dem_Quelltext()
     {
         var (quelle, diag) = Generiere(@"

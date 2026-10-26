@@ -1,114 +1,173 @@
 # REPO-PFAD: Client.Infrastructure.Python/cqrs_client/funktion.py
 """
-Katalog-Funktionen in Python ANBIETEN (docs/konzept-editor-pipelines.md §14.5).
+Funktionen draußen TRAGEN (Plan Pub/Sub-Neustrukturierung §2.2, §2.7: `ITraegt<F>`, Laufort Extern).
 
-Eine Funktion ist ein Vertrag (C#, eine Quelle), der Laufort eine Bindung:
+Eine Funktion ist ein Vertrag in der Domäne (C#, eine Quelle) — als Schnittstelle deklariert, läuft sie draußen:
 
-    public interface IBildVerkleinerung : IFunktion
+    public interface IBildaufbereitung : IFunktion
     {
-        Task<OneOf<BildVerkleinert, BildNichtLesbar>> RufeAsync(VerkleinereBild auftrag, IAusfuehrung x);
+        Task<OneOf<BildAufbereitet, BildNichtLesbar>> Auf(DateiErkannt e);
     }
 
-`Cqrs.Codegen` erzeugt daraus `domain_client/generated/funktionen.py` mit einer Basis je Funktion
-(`BildVerkleinerungBasis`). Der Worker erbt sie und implementiert genau `rufe`:
+`Cqrs.Codegen` erzeugt daraus `domain_client/generated/funktionen.py` mit einer Basis je Funktion (`BildaufbereitungBasis`) und je `Auf` einer
+abstrakten Methode `auf_<eingang>(e, h)`. Der Worker erbt sie und füllt die Methoden:
 
-    class Verkleinerer(BildVerkleinerungBasis):
+    class Bildaufbereitung(BildaufbereitungBasis):
         SLOTS = 4
-        async def rufe(self, auftrag: VerkleinereBildDto, x: Ausfuehrung):
+        async def auf_datei_erkannt(self, e: DateiErkanntDto, h: Herkunft):
             ...
-            return BildVerkleinertDto(pfad=ziel, breite_pixel=w, hoehe_pixel=h)
+            return BildAufbereitetDto(...)
 
-    client = MeinClient(registry, TABELLE, funktionen=[Verkleinerer()])   # TABELLE: generated/nutzlast_tabelle.py
+Ein Client mit Vertrag (`ITraegt<F>` im Client-Vertrag) bekommt die getragenen Funktionen als Methoden seiner generierten Client-Basis
+(`vertrag.py`) — dieselbe Mechanik, nur mit Zugriff auf seinen Zustand.
 
 Was das SDK übernimmt — der Worker schreibt nichts davon von Hand:
-  - Anmelden: nach dem Handshake (und nach jedem Reconnect) `FunktionenAnbieten` (Funktion + Slots);
-  - Pull: der Server holt für ihn Aufträge beim Vermittler, höchstens so viele wie Slots — hier laufen höchstens
-    SLOTS gleichzeitig;
-  - Lebenszeichen: alle 10 s `ArbeitLebtMeldung`, solange `rufe` läuft (lange Läufe verlieren ihre Lease nicht);
-  - Ergebnis-Vertrag: das Ergebnis muss einer der ERGEBNISSE sein, sonst geht ein Fehler hinaus (der Prozess sieht
-    einen gescheiterten Schritt); eine Ausnahme in `rufe` ebenso;
-  - Genau einmal: der Server schreibt das Ergebnis in den Ausführungs-Stream (der Erste gewinnt). `x.ausfuehrungs_id`
-    ist deterministisch — eine Wiederholung nach Absturz trägt dieselbe Id (Außenwirkung darüber deduplizieren).
+  - Anbieten: nach dem Handshake (und nach jedem Reconnect) `FunktionenAnbieten` (Funktion + Slots);
+  - Pull: der Server holt Eingänge beim Vermittler, höchstens so viele wie Slots — hier laufen höchstens SLOTS gleichzeitig;
+  - Lebenszeichen: alle 10 s `ArbeitLebtMeldung`, solange `auf_…` läuft (lange Läufe verlieren ihre Lease nicht);
+  - Signatur: jede Ausgabe muss ein Fall der Signatur sein, sonst geht ein Fehler hinaus; eine Ausnahme in `auf_…` ebenso;
+  - Strom: ein `async for`-Generator (Training) schickt jede Ausgabe sofort als Stück — der Server hält es fest und sendet es, bevor das nächste
+    kommt; nach einem Abbruch übernimmt ein anderer Träger beim nächsten nicht festgehaltenen Stück;
+  - Genau einmal: festgehalten wird beim Server unter „Funktion, Eingang“ — die erste Antwort gewinnt. Wirkungen nach außen (Dateien, Mails)
+    sollten über `h.schluessel` (gleich bei jeder Wiederholung) deduplizieren.
 """
 
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any, ClassVar
+from abc import ABC
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import Any, AsyncIterator, Callable, ClassVar
 
 log = logging.getLogger(__name__)
 
 LEBENSZEICHEN_S = 10.0
 
 
+class Ausgabe:
+    """Die Art einer Ausgabe auf der Leitung (FunktionsAusgabe): ein Command, ein Event für das Log oder ein Hinweis."""
+    COMMAND = "command"
+    EVENT = "event"
+    HINWEIS = "hinweis"
+
+
 @dataclass(frozen=True)
-class Ausfuehrung:
-    """Was jede Ausführung mitbekommt (Gegenstück zu IAusfuehrung): deterministische Id, Korrelation des Vorgangs, Akteur der Kette."""
-    ausfuehrungs_id: str
-    korrelation: str
+class Eingang:
+    """Ein `Auf` einer Funktion: die Methode, die erlaubten Ausgaben (DTO-Typ → Art) und ob die Ausgabe ein Strom ist."""
+    methode: str
+    ausgaben: dict = field(default_factory=dict)
+    strom: bool = False
+
+
+@dataclass(frozen=True)
+class Herkunft:
+    """Woher der Eingang kommt (Gegenstück zu `Abstractions.Herkunft`): Stream, Version, Log-Zeit, Akteur der Kette; dazu Korrelation und der
+    Schlüssel „Funktion, Eingang“ (gleich bei jeder Wiederholung — zum Deduplizieren von Wirkungen nach außen)."""
+    stream: str
+    version: int
+    zeit: datetime
     akteur: str = ""
+    korrelation: str = ""
+    schluessel: str = ""
 
 
 class FunktionsVerletzung(TypeError):
-    """Eine Funktion liefert etwas, das ihr Vertrag nicht erlaubt (kein Fall ihres OneOf)."""
+    """Eine Funktion liefert etwas, das ihre Signatur nicht erlaubt (kein Fall, oder mehr als eine Ausgabe ohne Strom)."""
 
 
 class FunktionsBasis(ABC):
     """
     Basis der generierten Funktions-Klassen. Die generierte Unterklasse setzt:
-        FUNKTION   — Name der Funktions-Schnittstelle (z. B. "IBildVerkleinerung"), so meldet sich der Worker an;
-        AUFTRAG    — der betterproto-Typ des Auftrags;
-        ERGEBNISSE — die erlaubten Ergebnis-Events (betterproto-Typen, die OneOf-Fälle).
-    Der Worker setzt SLOTS (wie viele Aufträge gleichzeitig) — als Klassenattribut oder `slots=` im Konstruktor — und gibt die
-    Werte der Implementierung als `konfig=` mit (Name → Text, z. B. ein Ausgabe-Verzeichnis; der generische Worker liest sie aus
-    `--konfig NAME=WERT`, die Werkbank aus den Worker-Argumenten der Umgebung).
+        FUNKTION  — Name der Funktions-Schnittstelle (z. B. "IBildaufbereitung"), so meldet sich der Worker an;
+        EINGAENGE — Eingangs-DTO → Eingang (Methode `auf_<eingang>`, erlaubte Ausgaben, Strom).
+    Der Worker setzt SLOTS (wie viele Eingänge gleichzeitig) — als Klassenattribut oder `slots=` im Konstruktor — und gibt die Werte der
+    Implementierung als `konfig=` mit (Name → Text, z. B. ein Ausgabe-Verzeichnis).
     """
 
     FUNKTION: ClassVar[str] = ""
-    AUFTRAG: ClassVar[type | None] = None
-    ERGEBNISSE: ClassVar[tuple[type, ...]] = ()
+    EINGAENGE: ClassVar[dict] = {}
     SLOTS: ClassVar[int] = 1
 
     def __init__(self, slots: int | None = None, konfig: dict[str, str] | None = None):
         self.slots = max(1, slots if slots is not None else self.SLOTS)
         self.konfig: dict[str, str] = dict(konfig or {})
 
-    @abstractmethod
-    async def rufe(self, auftrag: Any, x: Ausfuehrung) -> Any:
-        """Rechnet den Auftrag und liefert GENAU EIN Ergebnis (einer der ERGEBNISSE)."""
+    def eingang(self, typ: type) -> Eingang:
+        e = self.EINGAENGE.get(typ)
+        if e is None:
+            erlaubt = ", ".join(t.__name__ for t in self.EINGAENGE)
+            raise FunktionsVerletzung(f"{self.FUNKTION} hört {typ.__name__} nicht (Eingänge: {erlaubt})")
+        return e
 
-    def pruefe(self, ergebnis: Any) -> None:
-        """Ergebnis-Vertrag: genau einer der OneOf-Fälle der Funktion."""
-        if ergebnis is None or not isinstance(ergebnis, self.ERGEBNISSE):
-            erlaubt = ", ".join(t.__name__ for t in self.ERGEBNISSE)
+    def rufe(self, e: Any, h: Herkunft) -> Any:
+        """Ruft das `Auf` des Eingangs (Wert, None, Coroutine oder Strom)."""
+        return getattr(self, self.eingang(type(e)).methode)(e, h)
+
+    def pruefe(self, eingang: Eingang, ausgabe: Any) -> str:
+        """Signatur: die Ausgabe ist ein Fall des Eingangs — liefert ihre Art (command/event/hinweis)."""
+        art = eingang.ausgaben.get(type(ausgabe))
+        if art is None:
+            erlaubt = ", ".join(t.__name__ for t in eingang.ausgaben) or "nichts"
             raise FunktionsVerletzung(
-                f"{type(self).__name__}.rufe: liefert {type(ergebnis).__name__} — "
-                f"die Funktion {self.FUNKTION} erlaubt: {erlaubt}")
+                f"{type(self).__name__}.{eingang.methode}: liefert {type(ausgabe).__name__} — die Funktion {self.FUNKTION} erlaubt: {erlaubt}")
+        return art
+
+
+class GetrageneFunktion(FunktionsBasis):
+    """Eine Funktion, die ein Client-Vertrag trägt: die Methoden stehen am Client (mit seinem Zustand), nicht in einer eigenen Klasse."""
+
+    def __init__(self, funktion: str, eingaenge: dict, rufe: Callable[[str, Any, Herkunft], Any], slots: int | None = None):
+        super().__init__(slots=slots)
+        self.FUNKTION = funktion
+        self.EINGAENGE = eingaenge
+        self._rufe = rufe
+
+    def rufe(self, e: Any, h: Herkunft) -> Any:
+        return self._rufe(self.eingang(type(e)).methode, e, h)
+
+
+async def _ausgaben(ergebnis) -> AsyncIterator[Any]:
+    """Async-/Sync-Generator, Coroutine oder Wert → die Ausgaben (None = nichts)."""
+    if inspect.isasyncgen(ergebnis):
+        async for x in ergebnis:
+            if x is not None:
+                yield x
+    elif inspect.isawaitable(ergebnis):
+        x = await ergebnis
+        if x is not None:
+            yield x
+    elif inspect.isgenerator(ergebnis):
+        for x in ergebnis:
+            if x is not None:
+                yield x
+    elif ergebnis is not None:
+        yield ergebnis
 
 
 class FunktionsLaeufer:
     """
-    Führt die angebotenen Funktionen eines Clients aus — transport-frei: gesendet wird über `proxy`
-    (`send_funktionen_anbieten`, `send_arbeits_ergebnis`, `send_arbeit_lebt`), verpackt über `mapper`
-    (`extract_auftrag_payload`: Nutzlast → Auftrag-DTO, `wrap_ergebnis`: Ergebnis-DTO → EventEnvelopeDto mit Nutzlast).
+    Führt die angebotenen Funktionen eines Clients aus — transport-frei: gesendet wird über `proxy` (`send_funktionen_anbieten`,
+    `send_arbeits_ergebnis`, `send_arbeit_lebt`), verpackt über `mapper` (`entpacke`: Nutzlast → DTO, `packe`: DTO → Nutzlast).
     """
 
     def __init__(self, funktionen, proxy, mapper, lebenszeichen_s: float = LEBENSZEICHEN_S):
         self._funktionen: dict[str, FunktionsBasis] = {}
         for f in funktionen or ():
-            if not isinstance(f, FunktionsBasis) or not f.FUNKTION:
-                raise TypeError(f"{type(f).__name__} ist keine generierte Funktions-Basis (FUNKTION fehlt)")
-            if f.FUNKTION in self._funktionen:
-                raise ValueError(f"Funktion {f.FUNKTION} doppelt angeboten")
-            self._funktionen[f.FUNKTION] = f
+            self.nimm_auf(f)
         self._proxy = proxy
         self._mapper = mapper
         self._lebenszeichen_s = lebenszeichen_s
-        self._slots = {name: asyncio.Semaphore(f.slots) for name, f in self._funktionen.items()}
         self._laufend: dict[str, asyncio.Task] = {}
+
+    def nimm_auf(self, f: FunktionsBasis) -> None:
+        if not isinstance(f, FunktionsBasis) or not f.FUNKTION:
+            raise TypeError(f"{type(f).__name__} ist keine generierte Funktions-Basis (FUNKTION fehlt)")
+        if f.FUNKTION in self._funktionen:
+            raise ValueError(f"Funktion {f.FUNKTION} doppelt angeboten")
+        self._funktionen[f.FUNKTION] = f
 
     @property
     def angebote(self) -> list[tuple[str, int]]:
@@ -126,14 +185,14 @@ class FunktionsLaeufer:
         log.info("Funktionen angeboten: %s", ", ".join(f"{n} ({s} Slots)" for n, s in self.angebote))
 
     def nimm(self, auftrag_msg) -> asyncio.Task | None:
-        """Ein ArbeitsAuftrag vom Server: läuft entkoppelt (blockiert die Verarbeitungsschleife nicht)."""
+        """Ein ArbeitsAuftrag (ein Eingang) vom Server: läuft entkoppelt (blockiert die Verarbeitungsschleife nicht)."""
         vorgang = auftrag_msg.vorgang
         if auftrag_msg.funktion not in self._funktionen:
             # Nie angeboten → nicht unsere Arbeit; die Lease läuft ab, der Vermittler gibt sie anderen.
-            log.error("Auftrag %s für %s — hier nicht angeboten", vorgang, auftrag_msg.funktion)
+            log.error("Eingang %s für %s — hier nicht angeboten", vorgang, auftrag_msg.funktion)
             return None
         if vorgang in self._laufend:
-            return self._laufend[vorgang]   # derselbe Vorgang erneut zugestellt: läuft schon
+            return self._laufend[vorgang]   # derselbe Eingang erneut zugeteilt: läuft schon
         task = asyncio.ensure_future(self._fuehre_aus(auftrag_msg))
         self._laufend[vorgang] = task
         task.add_done_callback(lambda _t: self._laufend.pop(vorgang, None))
@@ -143,44 +202,57 @@ class FunktionsLaeufer:
         while self._laufend:
             await asyncio.gather(*list(self._laufend.values()), return_exceptions=True)
 
+    def _slots(self, name: str) -> asyncio.Semaphore:
+        if not hasattr(self, "_semaphoren"):
+            self._semaphoren: dict[str, asyncio.Semaphore] = {}
+        if name not in self._semaphoren:
+            self._semaphoren[name] = asyncio.Semaphore(self._funktionen[name].slots)
+        return self._semaphoren[name]
+
     async def _fuehre_aus(self, msg) -> None:
         f = self._funktionen[msg.funktion]
-        x = Ausfuehrung(ausfuehrungs_id=msg.vorgang, korrelation=msg.korrelation, akteur=msg.akteur)
-        async with self._slots[msg.funktion]:
+        h = Herkunft(stream=msg.stream, version=msg.version,
+                     zeit=datetime.fromtimestamp(msg.zeit_utc / 1000, tz=timezone.utc),
+                     akteur=msg.akteur, korrelation=msg.korrelation, schluessel=msg.vorgang)
+        async with self._slots(msg.funktion):
             herz = asyncio.ensure_future(self._lebenszeichen(msg.vorgang))
+            # Ein Strom, den ein früherer Träger begonnen hat: so viele Ausgaben sind schon festgehalten — sie werden ausgelassen.
+            schon = getattr(msg, "ab", 0) or 0
+            gesendet = 0
             try:
-                ergebnis, fehler = None, ""
                 try:
-                    auftrag = self._mapper.extract_auftrag_payload(msg.auftrag)
-                    if f.AUFTRAG is not None and not isinstance(auftrag, f.AUFTRAG):
-                        raise FunktionsVerletzung(
-                            f"{f.FUNKTION} erwartet {f.AUFTRAG.__name__}, bekam {type(auftrag).__name__}")
-                    ergebnis = await f.rufe(auftrag, x)
-                    f.pruefe(ergebnis)
+                    e = self._mapper.entpacke(msg.eingang)
+                    eingang = f.eingang(type(e))
+                    puffer = []
+                    async for aus in _ausgaben(f.rufe(e, h)):
+                        art = f.pruefe(eingang, aus)
+                        if eingang.strom and gesendet < schon:
+                            gesendet += 1
+                            continue
+                        if eingang.strom:
+                            # Ein Strom: jedes Stück sofort — der Server hält es fest und sendet es, bevor das nächste kommt.
+                            await self._proxy.send_arbeits_ergebnis(msg.vorgang, [(art, self._mapper.packe(aus))], ab=gesendet, fertig=False)
+                            gesendet += 1
+                        else:
+                            puffer.append((art, self._mapper.packe(aus)))
+                            if len(puffer) > 1:
+                                raise FunktionsVerletzung(f"{type(f).__name__}.{eingang.methode}: mehr als eine Ausgabe — die Signatur ist kein Strom")
+                    await self._proxy.send_arbeits_ergebnis(msg.vorgang, puffer, ab=gesendet, fertig=True)
+                    log.info("→ Antwort %s (%s): %d Ausgabe(n)", msg.vorgang[:8], f.FUNKTION, gesendet + len(puffer))
                 except asyncio.CancelledError:
                     raise
-                except Exception as e:   # Fehlschlag der Funktion → Fehler-Marke im Log (Zweig/Kompensation im Prozess)
-                    log.warning("Funktion %s (%s) gescheitert: %s", f.FUNKTION, msg.vorgang, e)
-                    ergebnis, fehler = None, f"{type(e).__name__}: {e}"
+                except Exception as fehler:   # gescheitert → zählt beim Funktions-Actor gegen die Wiederholungen
+                    log.warning("Funktion %s (%s) gescheitert: %s", f.FUNKTION, msg.vorgang, fehler)
+                    try:
+                        await self._proxy.send_arbeits_ergebnis(msg.vorgang, [], fehler=f"{type(fehler).__name__}: {fehler}")
+                    except Exception as e2:
+                        log.warning("Fehler zu %s nicht zustellbar: %s", msg.vorgang, e2)
             finally:
                 herz.cancel()
                 try:
                     await herz
                 except asyncio.CancelledError:
                     pass
-
-        envelope = None
-        if not fehler:
-            try:
-                envelope = self._mapper.wrap_ergebnis(ergebnis, vorgang=msg.vorgang, korrelation=msg.korrelation)
-            except Exception as e:
-                fehler = f"Ergebnis nicht verpackbar: {e}"
-        try:
-            await self._proxy.send_arbeits_ergebnis(msg.vorgang, envelope, fehler)
-            log.info("→ Ergebnis %s: %s", msg.vorgang[:8], fehler or type(ergebnis).__name__)
-        except Exception as e:
-            # Verbindung weg: die Lease läuft ab, der Vermittler gibt den Auftrag neu aus (genau einmal bleibt gewahrt).
-            log.warning("Ergebnis %s nicht zustellbar: %s", msg.vorgang, e)
 
     async def _lebenszeichen(self, vorgang: str) -> None:
         while True:
@@ -191,4 +263,4 @@ class FunktionsLaeufer:
                 log.debug("Lebenszeichen %s verloren: %s", vorgang, e)
 
 
-__all__ = ["Ausfuehrung", "FunktionsBasis", "FunktionsLaeufer", "FunktionsVerletzung", "LEBENSZEICHEN_S"]
+__all__ = ["Ausgabe", "Eingang", "Herkunft", "FunktionsBasis", "GetrageneFunktion", "FunktionsLaeufer", "FunktionsVerletzung", "LEBENSZEICHEN_S"]

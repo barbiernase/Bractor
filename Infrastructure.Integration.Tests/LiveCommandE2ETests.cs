@@ -17,7 +17,7 @@ namespace Infrastructure.Integration.Tests;
 ///
 /// Fährt einen In-Process-Host mit GENAU der Host.Grpc-Verdrahtung hoch
 /// (AddCqrsFramework + Pipelines + Pull-Pfad), schickt einen echten
-/// <see cref="ErstelleImagePair"/>-Command über den <see cref="IAggregateDispatcher"/>
+/// <see cref="NimmBildAuf"/>-Command über den <see cref="IAggregateDispatcher"/>
 /// und prüft, dass die Historie in Postgres wächst.
 ///
 /// Damit läuft die GANZE Kette produktiv:
@@ -68,12 +68,7 @@ public class LiveCommandE2ETests
             {
                 AggregateType = "ImagePair",   // MUSS mit dem ClusterKind übereinstimmen
                 Modus = new CommandModus.Client(0),
-                Payload = new ErstelleImagePair(
-                    new(pairId),
-                    PairKey: "PAIR-LIVE",
-                    ProduziertAm: DateTimeOffset.UtcNow,
-                    AufgenommenAm: DateTimeOffset.UtcNow,
-                    UrsprungsPfad: "/live/e2e")
+                Payload = new NimmBildAuf(new(pairId), "PAIR-LIVE", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "/live/e2e", BildVersion.Dc0, new BildMeta("dc0.tiff", 1, 1, 1, DateTimeOffset.UtcNow), "/live/e2e" + ".png")
             });
 
             // Command → Event+Signal → Broker → Receiver → Adapter → Co-Commit ist asynchron.

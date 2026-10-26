@@ -540,7 +540,7 @@ public sealed partial class DomainExtractor
     /// <summary>Die globalen usings der Domänen-Compilations (ImplicitUsings + global using) + der Vertrags-Namespace — nie „explizit".</summary>
     private readonly HashSet<string> _impliziteUsings;
     private readonly INamedTypeSymbol? _iDecider, _iApplier, _iAggEnvelope, _pipelineContext,
-        _iWriteStore, _iReadStore, _iStore, _iWertobjekt, _prozessTyp, _iAkteur, _iDarf, _iAkteurDienst, _iAkteurVertrag,
+        _iWriteStore, _iReadStore, _iStore, _iWertobjekt, _prozessTyp, _iAkteur, _iDarf, _iHoert, _iTraegt,
         _iClient, _iSendet, _iFragt, _iFunktion, _iAuftrag, _iDienst;
     /// <summary>State-FullName → die Typen, die <c>IDecider&lt;State&gt;</c> bzw. <c>IApplier&lt;State&gt;</c> implementieren (egal wo deklariert).</summary>
     private readonly Dictionary<string, List<INamedTypeSymbol>> _deciderJeState = new(StringComparer.Ordinal), _applierJeState = new(StringComparer.Ordinal);
@@ -584,8 +584,8 @@ public sealed partial class DomainExtractor
         _iReadStore = Get(Vertrag.IReadStore);
         _iStore = Get(Vertrag.IStore);
         _iAkteur = Get(Vertrag.IAkteur);
-        _iAkteurDienst = Get(Vertrag.IAkteurDienst);
-        _iAkteurVertrag = Get(Vertrag.IAkteurVertrag);
+        _iHoert = Get(Vertrag.IHoert);
+        _iTraegt = Get(Vertrag.ITraegt);
         _iClient = Get(Vertrag.IClientVertrag);
         _iSendet = Get(Vertrag.ISendet);
         _iFragt = Get(Vertrag.IFragt);
@@ -786,8 +786,6 @@ public sealed partial class DomainExtractor
 
     private void CatalogDomainTypes(DomainModel m)
     {
-        var dienstZu = new List<(string, string)>();   // (Dienst-Vertrag, Akteur-Full) aus IAkteurDienst<A>
-        var vertragZu = new List<(INamedTypeSymbol, string)>();   // (Vertrag, Akteur-Full) aus IAkteurVertrag<A>
         foreach (var t in DomainQuellTypen())
         {
             if (t.TypeKind == TypeKind.Enum)
@@ -801,18 +799,13 @@ public sealed partial class DomainExtractor
             if (t.TypeKind == TypeKind.Interface && _iFunktion != null && Sym.Implements(t, _iFunktion)) { if (ReadFunktion(t) is { } f) m.Funktionen.Add(f); continue; }
             // Domänen-Dienst (konzept-werkbank §12.3 E11): ein Interface mit IDienst — Signatur; die Implementierungen hängt LinkDienstImpls an.
             if (t.TypeKind == TypeKind.Interface && _iDienst != null && Sym.Implements(t, _iDienst)) { m.Dienste.Add(ReadDienst(t)); continue; }
-            // Akteur-Dienst: ein Vertrag (Interface) mit IAkteurDienst<A> — kein Akteur, er gehört A (wird unten zugeordnet).
-            if (t.TypeKind == TypeKind.Interface && AkteurVonDienst(t) is { } dienstVon) { dienstZu.Add((t.Name, dienstVon.Fq())); continue; }
-            // Client-Vertrag (IClientVertrag): die Software an der Leitung — vor dem Akteur-Vertrag, denn er ERBT Vertrags-Teile.
+            // Client-Vertrag (IClientVertrag): die Software an der Leitung.
             if (t.TypeKind == TypeKind.Interface && IstClient(t)) { m.Clients.Add(ReadClient(t)); continue; }
-            // Akteur-Vertrag: worauf ein Akteur draußen reagiert (IAkteurVertrag<A>) — gehört A (wird unten zugeordnet).
-            if (t.TypeKind == TypeKind.Interface && AkteurVonVertrag(t) is { } vertragVon) { vertragZu.Add((t, vertragVon.Fq())); continue; }
             // Geschachtelte Typen gehören zum Handcode ihres Containers (Zusatz), keine eigenen Bausteine.
             if (t.ContainingType != null || t.TypeKind is not (TypeKind.Class or TypeKind.Struct) || t.IsStatic || t.IsAbstract) continue;
 
             var raw = new RecordRaw { Name = t.Name, Full = t.Fq(), Fields = Felder(t), Meta = Meta(t) };
             if (_iAkteur != null && Sym.Implements(t, _iAkteur)) m.Akteure.Add(ReadAkteur(t));
-            else if (t.AllInterfaces.Any(i => AkteurVonDienst(i) != null)) { }   // Implementierung eines Akteur-Dienstes: Dienst, kein Wert
             else if (Sym.Implements(t, _iQueryResponse)) m.Responses.Add(raw);
             else if (Sym.Implements(t, _iReadModel)) { raw.Geteilt = _iGeteilt != null && Sym.Implements(t, _iGeteilt); m.ReadModels.Add(raw); }
             else if (Sym.Implements(t, _iPipelineTrigger)) m.Triggers.Add(raw);
@@ -829,19 +822,6 @@ public sealed partial class DomainExtractor
         }
         m.Enums.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Akteure.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
-        foreach (var (dienst, akteur) in dienstZu.OrderBy(x => x.Item1, StringComparer.Ordinal))
-            m.Akteure.FirstOrDefault(a => a.Full == akteur)?.Dienste.Add(dienst);
-        // Vertrags-Teile je Akteur (CQRS061): der Haupt-Vertrag ist der Teil, der alle anderen erbt (sonst der erste nach Name); die
-        //   Zusagen der übrigen Teile kommen mit ihrem Teil-Namen dazu (der Editor liest sie, schreibt nur den Haupt-Vertrag).
-        foreach (var g in vertragZu.GroupBy(x => x.Item2))
-        {
-            if (m.Akteure.FirstOrDefault(a => a.Full == g.Key) is not { } a) continue;
-            var teile = g.Select(x => x.Item1).OrderBy(x => x.Name, StringComparer.Ordinal).ToList();
-            var haupt = teile.FirstOrDefault(t => teile.All(x => SymbolEqualityComparer.Default.Equals(x, t)
-                                                                 || t.AllInterfaces.Contains(x, SymbolEqualityComparer.Default))) ?? teile[0];
-            ReadVertrag(a, haupt, null);
-            foreach (var t in teile.Where(t => !SymbolEqualityComparer.Default.Equals(t, haupt))) ReadVertrag(a, t, t.Name);
-        }
         m.Clients.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.ValueObjects.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Responses.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
@@ -1073,56 +1053,11 @@ public sealed partial class DomainExtractor
         m.Konfigs.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
     }
 
-    /// <summary>Ein Akteur-Dienst (<c>interface X : IAkteurDienst&lt;A&gt;</c>) → A; sonst null. Der Dienst ist kein Akteur.</summary>
-    private INamedTypeSymbol? AkteurVonDienst(INamedTypeSymbol i) =>
-        _iAkteurDienst == null || i.TypeKind != TypeKind.Interface ? null
-            : (i.OriginalDefinition.Fq() == _iAkteurDienst.Fq() ? i : i.AllInterfaces.FirstOrDefault(x => x.OriginalDefinition.Fq() == _iAkteurDienst.Fq()))
-                ?.TypeArguments.FirstOrDefault() as INamedTypeSymbol;
-
-    /// <summary>Ein Akteur-Vertrag (<c>interface X : IAkteurVertrag&lt;A&gt;</c>) → A; sonst null.</summary>
-    private INamedTypeSymbol? AkteurVonVertrag(INamedTypeSymbol i) =>
-        _iAkteurVertrag == null || i.TypeKind != TypeKind.Interface ? null
-            : i.AllInterfaces.FirstOrDefault(x => x.OriginalDefinition.Fq() == _iAkteurVertrag.Fq())?.TypeArguments.FirstOrDefault() as INamedTypeSymbol;
-
-    /// <summary>
-    /// Der Vertrag: je <c>Auf(E e)</c> (Deklarations-Reihenfolge) Eingang + Ausgänge aus dem RÜCKGABETYP — <c>void</c> keine, <c>T</c>/<c>OneOf&lt;…&gt;</c>
-    /// eine, <c>(Async)Enumerable&lt;…&gt;</c> ein Strom. Nur die Signatur zählt (der Rumpf lebt draußen im Client).
-    /// </summary>
-    private void ReadVertrag(AkteurRaw a, INamedTypeSymbol vertrag, string? teil)
-    {
-        var decl = QuellDeklarationen(vertrag).FirstOrDefault();
-        if (!a.VertragTypen.Contains(vertrag.Fq())) a.VertragTypen.Add(vertrag.Fq());
-        if (teil == null)
-        {
-            a.VertragName = vertrag.Name;
-            a.VertragDatei = decl?.SyntaxTree.FilePath;
-        }
-        foreach (var m in vertrag.GetMembers(Abstractions.Akteurvertrag.Auf).OfType<IMethodSymbol>().Where(m => m.Parameters.Length == 1)
-                     .OrderBy(m => m.Locations.FirstOrDefault()?.SourceSpan.Start ?? 0))
-        {
-            if (a.Vertrag.Any(x => x.Eingang == m.Parameters[0].Type.Name)) continue;   // je Event einmal über alle Teile (CQRS061)
-            var r = new AkteurZusageRaw { Eingang = m.Parameters[0].Type.Name, Teil = teil };
-            ITypeSymbol el = m.ReturnType;
-            if (el.SpecialType != SpecialType.System_Void)
-            {
-                if (el is INamedTypeSymbol { TypeArguments.Length: 1 } en && en.Name is "IEnumerable" or "IAsyncEnumerable")
-                {
-                    r.Strom = true;
-                    el = en.TypeArguments[0];
-                }
-                r.Ausgaenge.AddRange(el is INamedTypeSymbol { Name: "OneOf" } o ? o.TypeArguments.Select(x => x.Name) : [el.Name]);
-            }
-            var mDecl = m.DeclaringSyntaxReferences.Select(x => x.GetSyntax()).OfType<MethodDeclarationSyntax>().FirstOrDefault();
-            r.Doku = mDecl == null ? null : Summary(mDecl);
-            a.Vertrag.Add(r);
-        }
-    }
-
     private bool IstClient(INamedTypeSymbol t) => _iClient != null && Sym.Implements(t, _iClient);
 
     /// <summary>
-    /// Ein Client-Vertrag — nur Code-Fakten der Basisliste und der Signaturen: direkt geerbte Akteur-Vertrags-Teile (→ <c>Traegt</c>),
-    /// <c>ISendet&lt;T&gt;</c>/<c>IFragt&lt;T&gt;</c>, eigene <c>Auf(E)</c> (→ Kenntnis). Geerbte Client-Verträge liest der Editor nicht auf.
+    /// Ein Client-Vertrag — nur Code-Fakten der Basisliste: <c>ITraegt&lt;F&gt;</c> (→ <c>Traegt</c>), <c>ISendet&lt;T&gt;</c>/<c>IFragt&lt;T&gt;</c>,
+    /// <c>IHoert&lt;T&gt;</c> (→ Kenntnis). Geerbte Client-Verträge liest der Editor nicht auf.
     /// </summary>
     private ClientRaw ReadClient(INamedTypeSymbol t)
     {
@@ -1131,12 +1066,10 @@ public sealed partial class DomainExtractor
         return new ClientRaw
         {
             Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(),
-            Traegt = t.Interfaces.Where(i => !IstClient(i) && AkteurVonVertrag(i) != null && i.OriginalDefinition.Fq() != _iAkteurVertrag?.Fq())
-                .Select(i => i.Name).ToList(),
+            Traegt = t.Interfaces.Where(i => Gen(i, _iTraegt)).Select(i => i.TypeArguments[0].Name).ToList(),
             Sendet = t.Interfaces.Where(i => Gen(i, _iSendet)).Select(i => i.TypeArguments[0].Name).ToList(),
             Fragt = t.Interfaces.Where(i => Gen(i, _iFragt)).Select(i => i.TypeArguments[0].Name).ToList(),
-            Kenntnis = t.GetMembers(Abstractions.Akteurvertrag.Auf).OfType<IMethodSymbol>().Where(x => x.Parameters.Length == 1)
-                .OrderBy(x => x.Locations.FirstOrDefault()?.SourceSpan.Start ?? 0).Select(x => x.Parameters[0].Type.Name).ToList(),
+            Kenntnis = t.Interfaces.Where(i => Gen(i, _iHoert)).Select(i => i.TypeArguments[0].Name).ToList(),
             Datei = decl?.SyntaxTree.FilePath, Doku = decl == null ? null : Summary(decl),
         };
     }
@@ -1930,9 +1863,6 @@ public sealed partial class DomainExtractor
             if (trigs.Count > 0) pipe.HandleEmitsTriggers[input.Fq()] = trigs;
             var fs = FaehigkeitenVon(method);
             if (fs.Count > 0) pipe.HandleFaehigkeiten[input.Fq()] = fs;
-            // Im Auftrag eines Akteurs über seinen Dienst (Parameter-Typ : IAkteurDienst<A> → A; CQRS060: höchstens einer).
-            if (method.Parameters.Select(p => p.Type).OfType<INamedTypeSymbol>().Select(AkteurVonDienst).FirstOrDefault(a => a != null) is { } akteur)
-                pipe.HandleAkteur[input.Fq()] = akteur.Name;
             pipe.HandleSigs[input.Fq()] = LiesHandleSig(method, 1);
         }
         pipe.Quelle = LiesKlasse(t, handles.Where(h => h.Parameters.Length >= 1 && h.Parameters[0].Type is INamedTypeSymbol));

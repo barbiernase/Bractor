@@ -11,13 +11,15 @@ import cv2
 import numpy as np
 import pytest
 
+from datetime import datetime, timezone
+
 import domain_client.generated as g
 import funktions_worker as worker
-from cqrs_client import Ausfuehrung
+from cqrs_client import Herkunft
 from domain_client.generated import funktionen as basen
 from domain_client.generated.funktions_tabelle import TABELLE
 
-X = Ausfuehrung(ausfuehrungs_id="a-1", korrelation="k-1")
+H = Herkunft(stream="s-1", version=1, zeit=datetime.now(timezone.utc), schluessel="a-1")
 
 
 def test_tabelle_nennt_je_funktion_eine_generierte_basis():
@@ -29,9 +31,9 @@ def test_tabelle_nennt_je_funktion_eine_generierte_basis():
 
 
 def test_worker_laedt_die_implementierung_aus_der_tabelle_mit_slots_und_konfig(tmp_path):
-    f = worker.lade("IBildVerkleinerung", 3, {"AusgabePfad": str(tmp_path)})
-    assert isinstance(f, basen.BildVerkleinerungBasis)
-    assert (f.FUNKTION, f.slots, f.konfig) == ("IBildVerkleinerung", 3, {"AusgabePfad": str(tmp_path)})
+    f = worker.lade("IBildaufbereitung", 3, {"AusgabePfad": str(tmp_path)})
+    assert isinstance(f, basen.BildaufbereitungBasis)
+    assert (f.FUNKTION, f.slots, f.konfig) == ("IBildaufbereitung", 3, {"AusgabePfad": str(tmp_path)})
 
 
 def test_unbekannte_funktion_und_fehlende_implementierung_brechen_den_start():
@@ -49,21 +51,17 @@ def test_konfig_paare():
         worker.werte(["kaputt"])
 
 
-def test_bild_verkleinerung_und_histogramm_ausgleich_rechnen_ein_echtes_bild(tmp_path):
+def test_bildaufbereitung_rechnet_ein_echtes_bild(tmp_path):
     quelle = tmp_path / "2026_10_13_10_00_00_000_DC0.png"
-    cv2.imwrite(str(quelle), (np.random.default_rng(1).random((400, 600, 3)) * 255).astype(np.uint8))
+    cv2.imwrite(str(quelle), (np.random.default_rng(1).random((1024, 1536, 3)) * 255).astype(np.uint8))
     ausgabe = tmp_path / "aus"
+    f = worker.lade("IBildaufbereitung", 1, {"AusgabePfad": str(ausgabe)})
 
-    klein = asyncio.run(worker.lade("IBildVerkleinerung", 1, {"AusgabePfad": str(ausgabe)})
-                        .rufe(g.VerkleinereBildDto(quell_pfad=str(quelle), hoehe=100), X))
-    assert isinstance(klein, g.BildVerkleinertDto)
-    assert (klein.breite_pixel, klein.hoehe_pixel) == (150, 100)
-    assert Path(klein.pfad).name == quelle.stem + "_klein.png" and Path(klein.pfad).exists()
+    aus = asyncio.run(f.auf_datei_erkannt(g.DateiErkanntDto(name=quelle.name, pfad=str(quelle), groesse=7, erkannt_am=1), H))
+    assert isinstance(aus, g.BildAufbereitetDto)
+    assert (aus.breite_pixel, aus.hoehe_pixel) == (768, 512)
+    assert Path(aus.vorschau).name == quelle.stem + "_vorschau.png" and Path(aus.vorschau).exists()
+    assert (aus.dateiname, aus.pfad, aus.groesse, aus.erkannt_am) == (quelle.name, str(quelle), 7, 1)
 
-    aus = asyncio.run(worker.lade("IHistogrammAusgleich", 1, {"AusgabePfad": str(ausgabe)})
-                      .rufe(g.GleicheHistogrammAusDto(quell_pfad=str(quelle)), X))
-    assert isinstance(aus, g.HistogrammAusgeglichenDto) and Path(aus.pfad).exists()
-
-    nicht = asyncio.run(worker.lade("IBildVerkleinerung", 1, {"AusgabePfad": str(ausgabe)})
-                        .rufe(g.VerkleinereBildDto(quell_pfad=str(tmp_path / "fehlt.png"), hoehe=100), X))
+    nicht = asyncio.run(f.auf_datei_erkannt(g.DateiErkanntDto(name="fehlt.png", pfad=str(tmp_path / "fehlt.png")), H))
     assert isinstance(nicht, g.BildNichtLesbarDto)

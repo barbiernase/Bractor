@@ -1082,30 +1082,10 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             streamHeadVersion: _state.Version,
             spur: Spur.Aktuell);
 
-        // ★ Perf: Publish ist reine Benachrichtigung — der Command ist bereits im Log committet
-        //   (Schritt 5). Zustellung ist best-effort (Invariante 2); die durablen Konsumenten
-        //   heilen über Log-Read + Poll-Backstop. Darum NICHT im Single-Writer-Turn auf die
-        //   Shard-Acks warten, sondern fire-and-forget feuern — der Turn kehrt sofort zurück
-        //   und der Per-Stream-Command-Durchsatz hängt nicht mehr an 6 Broker-Round-Trips/Event.
-        foreach (var eventEnvelope in envelopes)
-        {
-            _publisher!.Melde(eventEnvelope);
-
-            // ★ Phase 1 (1c): zusätzlich das typisierte Signal veröffentlichen (docs/03 §3.6).
-            //   Best-effort — ein Signal ist nur ein Weckruf und DARF verloren gehen
-            //   (Invariante 2); der Poll-Backstop holt es nach.
-            var signal = Anwendung.Signale.Create(
-                eventEnvelope.Payload, eventEnvelope.AggregateId, eventEnvelope.AggregateVersion);
-            if (signal != null)
-            {
-                _publisher.Melde(new SignalEnvelope
-                {
-                    Signal = signal,
-                    CorrelationId = eventEnvelope.CorrelationId,
-                    UserId = eventEnvelope.UserId
-                });
-            }
-        }
+        // ★ Perf: Publish ist reine Benachrichtigung — der Command ist bereits im Log committet (Schritt 5). Zustellung ist best-effort
+        //   (Invariante 2); die durablen Konsumenten heilen über Log-Read + Takt. Darum NICHT im Single-Writer-Turn auf die Shards warten.
+        //   Dieselbe Meldung wie jeder andere Schreiber (Quelle, festgehaltene Ausgabe einer Funktion): Envelope + Signal je Event.
+        PubSub.Commitmeldung.Melde(_publisher!, envelopes);
 
         return Task.CompletedTask;
     }

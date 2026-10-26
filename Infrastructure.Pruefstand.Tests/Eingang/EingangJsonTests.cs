@@ -17,7 +17,7 @@ namespace Infrastructure.Pruefstand.Eingang;
 
 /// <summary>
 /// Der JSON-Eingang der Werkbank (Werkbank P5, konzept-werkbank §12.3 E5), store-frei: Name → Typ über die generierte Registry, Felder über den generierten
-/// Wire-Kontext (keine Reflection), Enums als Namen — für Commands, Queries, Antworten und die Ergebnisse von Hand-Funktionen.
+/// Wire-Kontext (keine Reflection), Enums als Namen — für Commands, Queries, Antworten und die Ausgaben von Funktionen.
 /// </summary>
 public class EingangJsonTests
 {
@@ -26,12 +26,12 @@ public class EingangJsonTests
     [Fact]
     public void Command_mit_Enum_als_Name_und_Werte_Objekt()
     {
-        MessageTypeMapping.Resolve("MeldeBildVerfuegbar").Should().Be((typeof(MeldeBildVerfuegbar), MessageCategory.Command));
+        MessageTypeMapping.Resolve("NimmBildAuf").Should().Be((typeof(NimmBildAuf), MessageCategory.Command));
         var id = Guid.NewGuid();
-        var cmd = (MeldeBildVerfuegbar)EingangJson.Lies(J($$"""
-            { "AggregateId": "{{id}}", "Version": "Dc2", "Pfad": "/x.png",
+        var cmd = (NimmBildAuf)EingangJson.Lies(J($$"""
+            { "AggregateId": "{{id}}", "PairKey": "P", "Version": "Dc2", "Pfad": "/x.png",
               "Meta": { "OriginalDateiname": "a.tiff", "DateigroesseBytes": 7, "BreitePixel": 3, "HoehePixel": 2, "ErstelltAm": "2026-10-12T10:00:00+00:00" } }
-            """), typeof(MeldeBildVerfuegbar));
+            """), typeof(NimmBildAuf));
         cmd.AggregateId.Wert.Should().Be(id);
         cmd.Version.Should().Be(BildVersion.Dc2);
         cmd.Meta.BreitePixel.Should().Be(3);
@@ -53,19 +53,19 @@ public class EingangJsonTests
     }
 
     [Fact]
-    public void Ergebnisse_von_Funktionen_sind_lesbar()
+    public void Ausgaben_von_Funktionen_sind_lesbar()
     {
-        foreach (var ergebnis in GeneratedFunktionen.Ergebnisse.Values.SelectMany(e => e).Distinct())
-            Infrastructure.Serialization.CqrsWireJsonContext.Default.GetTypeInfo(ergebnis).Should().NotBeNull($"{ergebnis.Name} fehlt im Wire-Kontext");
-        var e = (BildVerkleinert)EingangJson.Lies(J("""{ "Pfad": "/k.png", "BreitePixel": 4, "HoehePixel": 3 }"""), typeof(BildVerkleinert));
-        e.Should().Be(new BildVerkleinert("/k.png", 4, 3));
+        foreach (var ausgabe in Infrastructure.Komposition.Anwendung.Funktionen.Bausteine.SelectMany(b => b.Eingaenge).SelectMany(e => e.Ausgaben).Distinct())
+            Infrastructure.Serialization.CqrsWireJsonContext.Default.GetTypeInfo(ausgabe).Should().NotBeNull($"{ausgabe.Name} fehlt im Wire-Kontext");
+        var e = (BildNichtLesbar)EingangJson.Lies(J("""{ "Pfad": "/k.tiff", "Grund": "kaputt" }"""), typeof(BildNichtLesbar));
+        e.Should().Be(new BildNichtLesbar("/k.tiff", "kaputt"));
     }
 
     [Fact]
     public void Fehlende_Daten_gelten_als_leeres_Objekt_und_Unsinn_ist_ein_Fehler()
     {
         EingangJson.Lies(default, typeof(HoleDatensaetze)).Should().BeOfType<HoleDatensaetze>();
-        FluentActions.Invoking(() => EingangJson.Lies(J("""{ "Hoehe": "hoch" }"""), typeof(VerkleinereBild))).Should().Throw<JsonException>();
+        FluentActions.Invoking(() => EingangJson.Lies(J("""{ "BreitePixel": "breit" }"""), typeof(BildAufbereitet))).Should().Throw<JsonException>();
         FluentActions.Invoking(() => EingangJson.Lies(J("{}"), typeof(EingangJsonTests))).Should().Throw<NotSupportedException>().WithMessage("*Wire-Kontext*");
     }
 }

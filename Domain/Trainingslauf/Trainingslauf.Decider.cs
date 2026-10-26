@@ -27,7 +27,11 @@ public partial class Trainingslauf
         // PYTHON — Fortschritt
         // ═══════════════════════════════════════════════════
 
-        public IEnumerable<OneOf<TrainingBegonnen, TrainingslaufNichtGefunden, TrainingBereitsBeendet>> Decide(
+        /// <summary>
+        /// Das Training läuft — und der Wächter dazu: meldet es binnen <see cref="Waechterfrist"/> kein Ende, bekommt das Aggregat
+        /// <see cref="MarkiereAlsHaengengeblieben"/> (eine Frist, Plan Pub/Sub-Neustrukturierung §3.1; ein Ende davor macht sie wirkungslos).
+        /// </summary>
+        public IEnumerable<OneOf<TrainingBegonnen, Frist<MarkiereAlsHaengengeblieben>, TrainingslaufNichtGefunden, TrainingBereitsBeendet>> Decide(
             MeldeTrainingBegonnen cmd)
         {
             if (!this.State.Existiert)
@@ -47,7 +51,11 @@ public partial class Trainingslauf
                 yield break;
 
             yield return new TrainingBegonnen();
+            yield return new Frist<MarkiereAlsHaengengeblieben>(new MarkiereAlsHaengengeblieben(cmd.AggregateId), Waechterfrist);
         }
+
+        /// <summary>So lange darf ein begonnenes Training schweigen, bevor es als hängengeblieben gilt.</summary>
+        public static readonly TimeSpan Waechterfrist = TimeSpan.FromHours(6);
 
         public IEnumerable<OneOf<TrainingFortschritt, TrainingslaufNichtGefunden, TrainingNichtAktiv, TrainingBereitsBeendet>> Decide(
             MeldeFortschritt cmd)

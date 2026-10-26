@@ -1,69 +1,74 @@
-# GENERIERT von Cqrs.Codegen aus den Katalog-Funktionen der Domäne (IFunktion, docs/konzept-editor-pipelines.md §14.5).
+# GENERIERT von Cqrs.Codegen aus den Funktionen draußen der Domäne (IFunktion mit Auf, Plan Pub/Sub-Neustrukturierung §2.7).
 # Nicht von Hand ändern — ./codegen.sh --force erzeugt die Datei neu, ./codegen.sh --check prüft auf Drift.
 #
-# Je Funktion eine abstrakte Basis: der Worker erbt sie, implementiert `rufe(auftrag, x)` und übergibt eine Instanz
-# an seinen Client (`funktionen=[…]`). Das SDK meldet sie am Handshake an (Funktion + Slots), nimmt Aufträge an,
-# sendet Lebenszeichen und prüft, dass das Ergebnis einer der ERGEBNISSE ist; der Server schreibt es genau einmal.
+# Je Funktion eine abstrakte Basis: der Worker erbt sie, füllt je Eingang `auf_<eingang>(e, h)` und übergibt eine Instanz an seinen
+# Client (`funktionen=[…]`). Das SDK bietet sie am Handshake an (Funktion + Slots), nimmt Eingänge an, sendet Lebenszeichen und prüft
+# jede Ausgabe gegen die Signatur; der Server hält die Antwort fest (die erste gewinnt) und sendet sie.
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import ClassVar
+from typing import AsyncIterator, ClassVar
 
-from cqrs_client.funktion import Ausfuehrung, FunktionsBasis
+from cqrs_client.funktion import Ausgabe, Eingang, FunktionsBasis, Herkunft
 
 from . import (
+    BildAufbereitetDto,
     BildNichtLesbarDto,
-    BildVerkleinertDto,
-    DateinameUnbekanntDto,
-    DeuteDateinameDto,
-    GleicheHistogrammAusDto,
-    HistogrammAusgeglichenDto,
-    ImagePairDateiGedeutetDto,
-    VerkleinereBildDto,
+    DateiErkanntDto,
+    ImagePairKomplettDto,
+    KlassifiziereBildPaarDurchKiDto,
+    MeldeFortschrittDto,
+    MeldeTrainingAbgeschlossenDto,
+    MeldeTrainingBegonnenDto,
+    MeldeTrainingGescheitertDto,
+    TrainingAngefordertDto,
 )
 
 
-class BildVerkleinerungBasis(FunktionsBasis):
-    """Funktion Domain.Pipeline.Bildaufbereitung.IBildVerkleinerung: VerkleinereBild → BildVerkleinert | BildNichtLesbar."""
+class BildaufbereitungBasis(FunktionsBasis):
+    """Funktion Domain.Pipeline.Bildaufbereitung.IBildaufbereitung: DateiErkannt → BildAufbereitet | BildNichtLesbar."""
 
-    FUNKTION: ClassVar[str] = "IBildVerkleinerung"
-    AUFTRAG: ClassVar[type] = VerkleinereBildDto
-    ERGEBNISSE: ClassVar[tuple] = (BildVerkleinertDto, BildNichtLesbarDto)
+    FUNKTION: ClassVar[str] = "IBildaufbereitung"
+    EINGAENGE: ClassVar[dict] = {
+        DateiErkanntDto: Eingang("auf_datei_erkannt", {BildAufbereitetDto: Ausgabe.EVENT, BildNichtLesbarDto: Ausgabe.EVENT}),
+    }
 
     @abstractmethod
-    async def rufe(self, auftrag: VerkleinereBildDto, x: Ausfuehrung) -> BildVerkleinertDto | BildNichtLesbarDto:
-        """Task<OneOf<BildVerkleinert, BildNichtLesbar>> RufeAsync(VerkleinereBild auftrag, IAusfuehrung x) — genau ein Ergebnis."""
+    async def auf_datei_erkannt(self, e: DateiErkanntDto, h: Herkunft) -> BildAufbereitetDto | BildNichtLesbarDto | None:
+        """OneOf<BildAufbereitet, BildNichtLesbar> Auf(DateiErkannt e) — höchstens eine Ausgabe"""
         ...
 
 
-class HistogrammAusgleichBasis(FunktionsBasis):
-    """Funktion Domain.Pipeline.Bildaufbereitung.IHistogrammAusgleich: GleicheHistogrammAus → HistogrammAusgeglichen | BildNichtLesbar."""
+class BildpaarBeurteilungBasis(FunktionsBasis):
+    """Funktion Domain.Pipeline.ImagePair.IBildpaarBeurteilung: ImagePairKomplett → KlassifiziereBildPaarDurchKi."""
 
-    FUNKTION: ClassVar[str] = "IHistogrammAusgleich"
-    AUFTRAG: ClassVar[type] = GleicheHistogrammAusDto
-    ERGEBNISSE: ClassVar[tuple] = (HistogrammAusgeglichenDto, BildNichtLesbarDto)
+    FUNKTION: ClassVar[str] = "IBildpaarBeurteilung"
+    EINGAENGE: ClassVar[dict] = {
+        ImagePairKomplettDto: Eingang("auf_image_pair_komplett", {KlassifiziereBildPaarDurchKiDto: Ausgabe.COMMAND}),
+    }
 
     @abstractmethod
-    async def rufe(self, auftrag: GleicheHistogrammAusDto, x: Ausfuehrung) -> HistogrammAusgeglichenDto | BildNichtLesbarDto:
-        """Task<OneOf<HistogrammAusgeglichen, BildNichtLesbar>> RufeAsync(GleicheHistogrammAus auftrag, IAusfuehrung x) — genau ein Ergebnis."""
+    async def auf_image_pair_komplett(self, e: ImagePairKomplettDto, h: Herkunft) -> KlassifiziereBildPaarDurchKiDto | None:
+        """KlassifiziereBildPaarDurchKi Auf(ImagePairKomplett e) — höchstens eine Ausgabe"""
         ...
 
 
-class DateinameDeutungBasis(FunktionsBasis):
-    """Funktion Domain.Pipeline.ImagePair.IDateinameDeutung: DeuteDateiname → ImagePairDateiGedeutet | DateinameUnbekannt."""
+class TrainingBasis(FunktionsBasis):
+    """Funktion Domain.Pipeline.Trainingslauf.ITraining: TrainingAngefordert → MeldeTrainingBegonnen | MeldeFortschritt | MeldeTrainingAbgeschlossen | MeldeTrainingGescheitert (Strom)."""
 
-    FUNKTION: ClassVar[str] = "IDateinameDeutung"
-    AUFTRAG: ClassVar[type] = DeuteDateinameDto
-    ERGEBNISSE: ClassVar[tuple] = (ImagePairDateiGedeutetDto, DateinameUnbekanntDto)
+    FUNKTION: ClassVar[str] = "ITraining"
+    EINGAENGE: ClassVar[dict] = {
+        TrainingAngefordertDto: Eingang("auf_training_angefordert", {MeldeTrainingBegonnenDto: Ausgabe.COMMAND, MeldeFortschrittDto: Ausgabe.COMMAND, MeldeTrainingAbgeschlossenDto: Ausgabe.COMMAND, MeldeTrainingGescheitertDto: Ausgabe.COMMAND}, strom=True),
+    }
 
     @abstractmethod
-    async def rufe(self, auftrag: DeuteDateinameDto, x: Ausfuehrung) -> ImagePairDateiGedeutetDto | DateinameUnbekanntDto:
-        """Task<OneOf<ImagePairDateiGedeutet, DateinameUnbekannt>> RufeAsync(DeuteDateiname auftrag, IAusfuehrung x) — genau ein Ergebnis."""
+    async def auf_training_angefordert(self, e: TrainingAngefordertDto, h: Herkunft) -> AsyncIterator[MeldeTrainingBegonnenDto | MeldeFortschrittDto | MeldeTrainingAbgeschlossenDto | MeldeTrainingGescheitertDto]:
+        """IAsyncEnumerable<OneOf<MeldeTrainingBegonnen, MeldeFortschritt, MeldeTrainingAbgeschlossen, MeldeTrainingGescheitert>> Auf(TrainingAngefordert e) — Strom: beliebig viele yields"""
         ...
 
 
 __all__ = [
-    "BildVerkleinerungBasis",
-    "HistogrammAusgleichBasis",
-    "DateinameDeutungBasis",
+    "BildaufbereitungBasis",
+    "BildpaarBeurteilungBasis",
+    "TrainingBasis",
 ]

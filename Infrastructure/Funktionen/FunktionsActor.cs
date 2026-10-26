@@ -84,7 +84,7 @@ public sealed class FunktionsActor : RahmenActor
                 Lies(context);
                 break;
             case EingangBeantwortet b:
-                _arbeit.Beantwortet(b.Schluessel, b.Fehler);
+                _arbeit.Beantwortet(b.Schluessel, b.Fehler, b.Teil);
                 if (context.Sender is not null) context.Respond(new WakeAck());
                 break;
             case Erneut e:

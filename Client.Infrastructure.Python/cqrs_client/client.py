@@ -84,8 +84,8 @@ class CqrsClient(HandlerBase, Generic[S]):
             nutzlast: Die generierte Nutzlast-Tabelle typ → DTO-Klasse (domain_client.generated.nutzlast_tabelle.TABELLE);
                       die Leitung kommt aus cqrs_client.leitung
             config: Optionale Konfiguration für die Subklasse
-            funktionen: Katalog-Funktionen, die dieser Client ANBIETET (generierte <Funktion>Basis-Unterklassen);
-                        nach jedem Handshake meldet er sie an, der Server holt für ihn Aufträge (§14.5)
+            funktionen: Funktionen, die dieser Client TRÄGT (generierte <Funktion>Basis-Unterklassen bzw. die getragenen Funktionen seines
+                        Client-Vertrags); nach jedem Handshake meldet er sie an, der Server holt für ihn Eingänge
         """
         self._registry = registry
         self._config = config or {}
@@ -112,7 +112,7 @@ class CqrsClient(HandlerBase, Generic[S]):
 
     @property
     def funktionen(self) -> FunktionsLaeufer:
-        """Die angebotenen Katalog-Funktionen und ihre laufenden Aufträge."""
+        """Die angebotenen Funktionen und ihre laufenden Eingänge."""
         return self._funktionen
 
     @property
@@ -299,7 +299,7 @@ class CqrsClient(HandlerBase, Generic[S]):
     def _resolve_state_type(self) -> type | None:
         """
         Extrahiert den State-Typ aus CqrsClient[S] — auch über Zwischenklassen (z. B. eine generierte
-        Vertragsbasis: class Worker(KlassifiziererBasis[MeinState])): die erste konkrete Typ-Angabe in der MRO.
+        Vertragsbasis: class Worker(KlassifikationsWorkerBasis[MeinState])): die erste konkrete Typ-Angabe in der MRO.
         """
         for klasse in type(self).__mro__:
             for base in klasse.__dict__.get('__orig_bases__', ()):

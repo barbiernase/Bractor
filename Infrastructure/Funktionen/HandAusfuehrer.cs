@@ -106,16 +106,16 @@ public sealed class HandAusfuehrer : BackgroundService
                 (b, anfrage, ct) => bote.FrageAsync<EingaengeZugeteilt>(FunktionsVermittlerActor.Identitaet(b.Typ), anfrage,
                     TimeSpan.FromMilliseconds(Math.Max(0, anfrage.WarteMs)) + TimeSpan.FromSeconds(5), ct),
                 (b, nachricht) => { bote.Melde(FunktionsVermittlerActor.Identitaet(b.Typ), nachricht); return Task.CompletedTask; },
-                (e, b) =>
+                (e, b, _) =>
                 {
                     _eingaenge.TryAdd(e.Vorgang, new HandEingang(e, b, DateTimeOffset.UtcNow));
                     _logger?.LogInformation("[Funktion] {Funktion}: Eingang {Stream}:{Version} wartet auf eine Antwort von Hand", b.Name, e.Stream, e.Version);
                     return Task.CompletedTask;
                 },
                 _ausgaben,
-                (b, e, fehler) =>
+                (b, e, fehler, teil) =>
                 {
-                    bote.Melde(FunktionsActor.Identitaet(b, Partitionierung.Von(e.Stream, _konsum.Partitionen)), new EingangBeantwortet(e.Vorgang, fehler));
+                    bote.Melde(FunktionsActor.Identitaet(b, Partitionierung.Von(e.Stream, _konsum.Partitionen)), new EingangBeantwortet(e.Vorgang, fehler, teil));
                     return Task.CompletedTask;
                 },
                 _logger);

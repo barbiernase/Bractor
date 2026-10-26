@@ -16,7 +16,8 @@ namespace Infrastructure.SourceGeneration;
 /// <item>CQRS084 (GR-QUERY) — eine Query beantwortet genau ein Reader.</item>
 /// <item>CQRS085 (GR-MODUL-AUSGANG-OFFEN, UNUSED-EVENT; Warnung) — ein Event, eine Ablehnung oder eine Response, die niemand erzeugt.</item>
 /// <item>CQRS086 (GR-MODUL-EINGANG-OFFEN; Warnung) — ein Command ohne Decider, eine Query ohne Reader.</item>
-/// <item>CQRS087 (GR-GETRAGEN; Warnung) — sobald es Clients gibt: eine Zusage mit Ausgabe, deren Vertrags-Teil kein Client trägt.</item>
+/// <item>CQRS087 (GR-GETRAGEN; Warnung) — eine Funktion als Schnittstelle ohne Umsetzung im Host, die kein Client trägt (<c>ITraegt</c>): sie läuft
+///   nur mit einer Bindung von Hand (R17), sonst ist sie ein Boot-Fehler.</item>
 /// <item>CQRS088 (GR-ZYKLUS; Warnung) — ein Kreis ohne Zustandsschritt: Projektionen/Reaktionen, die sich über transiente Events gegenseitig
 ///   wecken (alle übrigen Wege laufen durch ein Aggregat, einen Prozess oder einen Fluss).</item>
 /// </list>
@@ -37,8 +38,9 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         "'{0}' ({1}) erzeugt niemand — {2} (GR-MODUL-AUSGANG-OFFEN)", DiagnosticSeverity.Warning);
     private static readonly DiagnosticDescriptor EingangOffen = D(EingangOffenId, "Eingang ohne Konsument",
         "'{0}' ({1}) nimmt niemand an — {2} (GR-MODUL-EINGANG-OFFEN)", DiagnosticSeverity.Warning);
-    private static readonly DiagnosticDescriptor Getragen = D(GetragenId, "Zusage ohne Client",
-        "'{0}': die Zusage Auf({1}) → {2} trägt kein Client — die Kette bricht hier ab (GR-GETRAGEN)", DiagnosticSeverity.Warning);
+    private static readonly DiagnosticDescriptor Getragen = D(GetragenId, "Funktion ohne Träger",
+        "'{0}': die Funktion hat keine Umsetzung im Host und kein Client trägt sie (ITraegt<{0}>) — sie läuft nur mit einer Bindung von Hand (GR-GETRAGEN)",
+        DiagnosticSeverity.Warning);
     private static readonly DiagnosticDescriptor Zyklus = D(ZyklusId, "Kreis ohne Zustandsschritt",
         "'{0}': Kreis ohne Aggregat, Prozess oder Fluss über transiente Events: {1} (GR-ZYKLUS)", DiagnosticSeverity.Warning);
 
@@ -65,7 +67,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         INamedTypeSymbol? G(string n) => c.GetTypeByMetadataName("Abstractions." + n);
         var (iEvent, iTransient, iCommand, iQuery, iResponse) = (G("IEvent"), G("ITransientEvent"), G("ICommand"), G("IQuery"), G("IQueryResponse"));
         var (iDecider, iReader, iSubscriber, iFunktion, iAkteur, iDarf) = (G("IDecider`1"), G("IReader`1"), G("ISubscriber"), G("IFunktion"), G("IAkteur"), G("IDarf`1"));
-        var (iVertrag, iClient, iSendet, iQuelle) = (G("IAkteurVertrag`1"), G("IClientVertrag"), G("ISendet`1"), G("IQuellNachricht"));
+        var (iClient, iSendet, iTraegt, iQuelle) = (G("IClientVertrag"), G("ISendet`1"), G("ITraegt`1"), G("IQuellNachricht"));
         if (iEvent == null || iCommand == null || iDecider == null) return;
         var rollen = DomaenenRollen.Select(G).Where(x => x != null).Select(x => x!).ToList();
 
@@ -148,19 +150,14 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                 ctx.ReportDiagnostic(Diagnostic.Create(AusgangOffen, Location.None, t.Name, "Response", "kein Reader-Handle nennt sie in seiner Signatur"));
         }
 
-        // GR-GETRAGEN: sobald es Clients gibt, trägt jede Zusage mit Ausgabe ein Client.
-        var clients = typen.Where(t => t.TypeKind == TypeKind.Interface && IstT(t, iClient)).ToList();
-        if (clients.Count > 0 && iVertrag != null)
-        {
-            var getragen = new HashSet<ITypeSymbol>(clients.SelectMany(cl => cl.AllInterfaces), SymbolEqualityComparer.Default);
-            foreach (var teil in typen.Where(t => t.TypeKind == TypeKind.Interface && Generisch(t, iVertrag) && !IstT(t, iClient) && !getragen.Contains(t)))
-                foreach (var m in teil.GetMembers(Abstractions.Akteurvertrag.Auf).OfType<IMethodSymbol>().Where(m => m.Parameters.Length == 1))
-                {
-                    var aus = Faelle(m.ReturnType).ToList();
-                    if (aus.Count > 0)
-                        ctx.ReportDiagnostic(Diagnostic.Create(Getragen, Location.None, teil.Name, m.Parameters[0].Type.Name, string.Join(", ", aus.Select(a => a.Name))));
-                }
-        }
+        // GR-GETRAGEN: eine Funktion als Schnittstelle braucht eine Umsetzung im Host oder einen Träger (sonst nur eine Bindung von Hand).
+        var getragen = new HashSet<ITypeSymbol>(typen.Where(t => t.TypeKind == TypeKind.Interface && IstT(t, iClient))
+            .SelectMany(cl => cl.AllInterfaces.Where(i => iTraegt != null && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iTraegt)))
+            .Select(i => i.TypeArguments[0]), SymbolEqualityComparer.Default);
+        var umgesetzt = new HashSet<ITypeSymbol>(typen.Where(t => t.TypeKind == TypeKind.Class && !t.IsAbstract).SelectMany(Funktionsform.Umsetzt),
+            SymbolEqualityComparer.Default);
+        foreach (var f in typen.Where(t => t.TypeKind == TypeKind.Interface && Funktionsform.IstBaustein(t) && !getragen.Contains(t) && !umgesetzt.Contains(t)))
+            ctx.ReportDiagnostic(Diagnostic.Create(Getragen, Location.None, f.Name));
 
         // GR-ZYKLUS: Projektionen/Reaktionen, die sich über transiente Events wecken (starke Zusammenhangskomponenten).
         var kanten = new Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>>(SymbolEqualityComparer.Default);

@@ -18,8 +18,9 @@ using Domain.Projections.Modell;
 namespace Infrastructure.Pruefstand.Akteure;
 
 /// <summary>
-/// Client-Verträge (<c>docs/konzept-akteure.md</c> §4): die generierte Tabelle, die Schnittmenge Vertrag ∩ Token, der Handshake je
-/// Client, der Akteur je Antwort bei einem Client mit mehreren Akteuren und die Hash-Gleichheit mit dem Python-Generat — rein, ohne gRPC.
+/// Client-Verträge (<c>docs/konzept-akteure.md</c> §4, Plan Pub/Sub-Neustrukturierung §2.7: ITraegt, ISendet, IFragt, IHoert): die generierte
+/// Tabelle, die Schnittmenge Vertrag ∩ Token, der Handshake je Client (Hört statt Selbstauskunft, getragene Funktionen nur mit Befugnis) und die
+/// Hash-Gleichheit mit dem Python-Generat — rein, ohne gRPC.
 /// </summary>
 public class ClientVertragTests
 {
@@ -31,7 +32,10 @@ public class ClientVertragTests
     {
         GeneratedClientVertraege.Alle.Keys.Should().BeEquivalentTo("KlassifikationsWorker", "TrainingsWorker", "Arbeitsplatz");
         C("KlassifikationsWorker").Verkoerpert.Should().Equal("Klassifizierer");
+        C("KlassifikationsWorker").Traegt.Should().BeEquivalentTo(new[] { typeof(Domain.Pipeline.ImagePair.IBildpaarBeurteilung) });
+        C("KlassifikationsWorker").Hoert.Should().BeEquivalentTo(new[] { typeof(BildVerfuegbar), typeof(ModellAktiviert) });
         C("TrainingsWorker").Verkoerpert.Should().Equal("TrainingsSystem");
+        C("TrainingsWorker").Traegt.Should().BeEquivalentTo(new[] { typeof(Domain.Pipeline.Trainingslauf.ITraining) });
     }
 
     [Fact]
@@ -39,14 +43,14 @@ public class ClientVertragTests
     {
         var ap = C("Arbeitsplatz");
         ap.Verkoerpert.Should().BeEquivalentTo("Inspekteur", "KIOperator", "Modellfreigeber", "Produktpruefer");
-        ap.Traegt.Should().BeEmpty("der Arbeitsplatz handelt spontan, er trägt keine Zusage mit Ausgabe");
-        ap.Kenntnis.Should().Contain(typeof(ImagePairKomplett)).And.Contain(typeof(PhysischesProduktGelabelt));
+        ap.Traegt.Should().BeEmpty("der Arbeitsplatz handelt spontan, er trägt keine Funktion");
+        ap.Hoert.Should().Contain(typeof(ImagePairKomplett)).And.Contain(typeof(PhysischesProduktGelabelt));
     }
 
     [Fact]
     public void Verkoerpert_nimmt_nur_Akteure_hinzu_die_der_Client_braucht()
         => C("KlassifikationsWorker").Verkoerpert.Should().NotContain("Modellfreigeber",
-            "HoleAktivesModell darf auch der Modellfreigeber — der Klassifizierer aus dem getragenen Teil darf es schon");
+            "HoleAktivesModell darf auch der Modellfreigeber — der Klassifizierer (eindeutiger Halter der getragenen Funktion) darf es schon");
 
     [Fact]
     public void Der_Rand_schneidet_aus_der_Befugnis()
@@ -76,59 +80,72 @@ public class ClientVertragTests
     }
 
     [Fact]
-    public void Handshake_nennt_den_Client_und_abonniert_genau_seine_Eingaenge()
+    public void Handshake_nennt_den_Client_und_abonniert_genau_was_er_hoert()
     {
-        var e = AkteurVertragsPruefung.Pruefe("KlassifikationsWorker", C("KlassifikationsWorker").Hash, null, GeneratedAkteurRechte.Alle,
+        var e = ClientVertragsPruefung.Pruefe("KlassifikationsWorker", C("KlassifikationsWorker").Hash, null, GeneratedAkteurRechte.Alle,
             streng: true, GeneratedClientVertraege.Alle);
         e.Ablehnung.Should().BeNull();
         e.Client!.Name.Should().Be("KlassifikationsWorker");
 
         var wunsch = new CapabilitiesResult { SubscribedEvents = { "TrainingAngefordert" } };
-        AkteurVertragsPruefung.Wende(wunsch, e.Vertrag!, Loese, _ => false, _ => false);
-        wunsch.SubscribedEvents.Should().BeEquivalentTo("BildVerfuegbar", "ImagePairKomplett", "ModellAktiviert");
-        wunsch.AllowedCommands.Should().BeEquivalentTo("KlassifiziereBildPaarDurchKi", "KlassifiziereEinzelBildDurchKi");
+        var abweichung = ClientVertragsPruefung.Wende(wunsch, e.Vertrag!, Loese, _ => false, _ => false);
+        wunsch.SubscribedEvents.Should().BeEquivalentTo("BildVerfuegbar", "ModellAktiviert");
+        wunsch.AllowedCommands.Should().BeEquivalentTo("KlassifiziereEinzelBildDurchKi");
+        abweichung.Should().Contain("hört laut Vertrag nicht: TrainingAngefordert");
+        e.Vertrag!.DarfRechnen(typeof(Domain.Pipeline.ImagePair.IBildpaarBeurteilung)).Should().BeTrue("die getragene Funktion darf er anbieten");
+        e.Vertrag!.DarfRechnen(typeof(Domain.Pipeline.Trainingslauf.ITraining)).Should().BeFalse("die trägt ein anderer Client");
+    }
+
+    [Fact]
+    public void Ohne_Vertrag_bleibt_alles_wie_bisher_ein_unbekannter_Client_wird_abgelehnt()
+    {
+        ClientVertragsPruefung.Pruefe("", "", null, GeneratedAkteurRechte.Alle, true, GeneratedClientVertraege.Alle)
+            .Should().Be(new ClientVertragsPruefung.Ergebnis(null, null, null));
+        ClientVertragsPruefung.Pruefe("Klassifizierer", "x", null, GeneratedAkteurRechte.Alle, false, GeneratedClientVertraege.Alle)
+            .Ablehnung.Should().Contain("unbekannt", "ein Akteur ist kein Client — der Akteur-Vertrag mit Auf ist entfallen");
     }
 
     [Fact]
     public void Handshake_lehnt_Token_ohne_passenden_Akteur_und_streng_einen_falschen_Hash_ab()
     {
-        AkteurVertragsPruefung.Pruefe("Arbeitsplatz", C("Arbeitsplatz").Hash, A("TrainingsSystem"), GeneratedAkteurRechte.Alle, false,
+        ClientVertragsPruefung.Pruefe("Arbeitsplatz", C("Arbeitsplatz").Hash, A("TrainingsSystem"), GeneratedAkteurRechte.Alle, false,
             GeneratedClientVertraege.Alle).Ablehnung.Should().Contain("keinen der Akteure des Clients Arbeitsplatz");
-        AkteurVertragsPruefung.Pruefe("Arbeitsplatz", "0000000000000000", null, GeneratedAkteurRechte.Alle, true, GeneratedClientVertraege.Alle)
+        ClientVertragsPruefung.Pruefe("Arbeitsplatz", "0000000000000000", null, GeneratedAkteurRechte.Alle, true, GeneratedClientVertraege.Alle)
             .Ablehnung.Should().Contain("anderen Domänen-Stand");
-        AkteurVertragsPruefung.Pruefe("Arbeitsplatz", "0000000000000000", null, GeneratedAkteurRechte.Alle, false, GeneratedClientVertraege.Alle)
+        ClientVertragsPruefung.Pruefe("Arbeitsplatz", "0000000000000000", null, GeneratedAkteurRechte.Alle, false, GeneratedClientVertraege.Alle)
             .Warnung.Should().Contain("anderen Domänen-Stand");
     }
 
+    /// <summary>Ein Client, der beide ML-Funktionen trägt (wie ein Worker auf einer GPU-Maschine): er verkörpert beide Akteure und darf beide rechnen.</summary>
     [Fact]
-    public void Der_Akteur_Vertrag_per_Akteur_Name_bleibt_als_Uebergang()
-        => AkteurVertragsPruefung.Pruefe("Klassifizierer", A("Klassifizierer").VertragHash, null, GeneratedAkteurRechte.Alle, true,
-            GeneratedClientVertraege.Alle).Vertrag!.Name.Should().Be("Klassifizierer");
-
-    /// <summary>Ein Client, der Klassifizierer UND TrainingsSystem trägt (wie ein ML-Worker auf einer GPU-Maschine): jede Antwort im Namen
-    /// des Akteurs, dessen Teil sie vorsieht — nicht des ersten, der den Command darf.</summary>
-    [Fact]
-    public void Ein_Client_mit_zwei_Akteuren_antwortet_je_Zusage_im_richtigen_Namen()
+    public void Ein_Client_mit_zwei_getragenen_Funktionen_verkoerpert_beide_Akteure()
     {
-        var k = A("Klassifizierer");
-        var t = A("TrainingsSystem");
         var ml = new ClientVertrag("MlWorker", typeof(object), "h",
-            new Dictionary<string, IReadOnlyDictionary<Type, IReadOnlySet<Type>>> { ["Klassifizierer"] = k.Vertrag, ["TrainingsSystem"] = t.Vertrag },
-            t.Stroeme, new HashSet<Type>(), new HashSet<Type> { typeof(HoleDatensatzSamples) }, new HashSet<Type>(), ["Klassifizierer", "TrainingsSystem"]);
+            new HashSet<Type> { typeof(Domain.Pipeline.ImagePair.IBildpaarBeurteilung), typeof(Domain.Pipeline.Trainingslauf.ITraining) },
+            new HashSet<Type>(), new HashSet<Type> { typeof(HoleDatensatzSamples) }, new HashSet<Type> { typeof(TrainingAbgebrochen) },
+            ["Klassifizierer", "TrainingsSystem"]);
         var r = ml.Rechte(GeneratedAkteurRechte.Alle, null)!;
 
-        r.AkteurFuerZusage(typeof(ImagePairKomplett), typeof(KlassifiziereBildPaarDurchKi)).Should().Be("Klassifizierer");
-        r.AkteurFuerZusage(typeof(TrainingAngefordert), typeof(MeldeFortschritt)).Should().Be("TrainingsSystem");
-        r.Zugesagt(typeof(TrainingAngefordert), typeof(KlassifiziereBildPaarDurchKi)).Should().BeFalse();
-        r.Hoert.Should().Contain(typeof(ImagePairKomplett)).And.Contain(typeof(TrainingAbgebrochen));
+        r.DarfRechnen(typeof(Domain.Pipeline.ImagePair.IBildpaarBeurteilung)).Should().BeTrue();
+        r.DarfRechnen(typeof(Domain.Pipeline.Trainingslauf.ITraining)).Should().BeTrue();
+        r.Hoert.Should().BeEquivalentTo(new[] { typeof(TrainingAbgebrochen) });
         r.DarfHinein(typeof(HoleDatensatzSamples)).Should().BeTrue();
-
-        var wunsch = new CapabilitiesResult();
-        AkteurVertragsPruefung.Wende(wunsch, r, Loese, _ => false, _ => false);
-        wunsch.SubscribedEvents.Should().BeEquivalentTo("BildVerfuegbar", "ImagePairKomplett", "ModellAktiviert", "TrainingAbgebrochen", "TrainingAngefordert");
+        ml.Rechte(GeneratedAkteurRechte.Alle, A("Klassifizierer"))!.DarfRechnen(typeof(Domain.Pipeline.Trainingslauf.ITraining))
+            .Should().BeFalse("Vertrag ∩ Token: das Token verkörpert nur den Klassifizierer");
     }
 
-    /// <summary>Beide Generate aus derselben Quelle (Akteurvertrag.ClientKanon) — der Python-Client meldet so den Server-Hash.</summary>
+    [Fact]
+    public void Der_Client_Hash_kommt_aus_der_kanonischen_Form()
+    {
+        var kanon = Abstractions.Clientvertragsregeln.ClientKanon("KlassifikationsWorker",
+            [new("IBildpaarBeurteilung", [new Abstractions.Clientvertragsregeln.Eingang("ImagePairKomplett", ["KlassifiziereBildPaarDurchKi"], false)])],
+            ["KlassifiziereEinzelBildDurchKi"], ["HoleAktivesModell"], ["ModellAktiviert", "BildVerfuegbar"]);
+        kanon.Should().Be("KlassifikationsWorker|T:IBildpaarBeurteilung:ImagePairKomplett>KlassifiziereBildPaarDurchKi"
+            + "|S:KlassifiziereEinzelBildDurchKi|F:HoleAktivesModell|H:BildVerfuegbar,ModellAktiviert");
+        C("KlassifikationsWorker").Hash.Should().Be(Abstractions.Clientvertragsregeln.Hash(kanon)).And.HaveLength(16);
+    }
+
+    /// <summary>Beide Generate aus derselben Quelle (Clientvertragsregeln.ClientKanon) — der Python-Client meldet so den Server-Hash.</summary>
     [Fact]
     public void Python_Generat_traegt_dieselben_Client_Hashes_wie_der_Server()
     {
