@@ -12,27 +12,27 @@ public partial class Posten
             yield return new PostenEroeffnet(cmd.Bestand, cmd.Mindestbestand);
         }
 
-        public IEnumerable<OneOf<PostenReserviert, PostenNichtGefunden, PostenReichtNicht>> Decide(ReservierePosten cmd)
+        public IEnumerable<OneOf<PostenReserviert, ReservierungAbgelehnt, PostenNichtGefunden>> Decide(ReservierePosten cmd)
         {
             if (!this.State.Existiert) { yield return new PostenNichtGefunden(cmd.AggregateId); yield break; }
             if (this.State.Verfuegbar < cmd.Menge)
             {
-                yield return new PostenReichtNicht(cmd.AggregateId, this.State.Verfuegbar, cmd.Menge);
+                yield return new ReservierungAbgelehnt(this.State.Verfuegbar, cmd.Menge, cmd.Beleg);
                 yield break;
             }
-            yield return new PostenReserviert(cmd.Menge, Math.Max(0, this.State.Mindestbestand - (this.State.Verfuegbar - cmd.Menge)));
+            yield return new PostenReserviert(cmd.Menge, Math.Max(0, this.State.Mindestbestand - (this.State.Verfuegbar - cmd.Menge)), cmd.Beleg);
         }
 
         public IEnumerable<OneOf<PostenFreigegeben, PostenNichtGefunden>> Decide(GibPostenFrei cmd)
         {
             if (!this.State.Existiert) { yield return new PostenNichtGefunden(cmd.AggregateId); yield break; }
-            yield return new PostenFreigegeben(cmd.Menge);
+            yield return new PostenFreigegeben(cmd.Menge, cmd.Beleg);
         }
 
         public IEnumerable<OneOf<PostenZugebucht, PostenNichtGefunden>> Decide(BuchePostenZu cmd)
         {
             if (!this.State.Existiert) { yield return new PostenNichtGefunden(cmd.AggregateId); yield break; }
-            yield return new PostenZugebucht(cmd.Menge);
+            yield return new PostenZugebucht(cmd.Menge, cmd.Beleg);
         }
     }
 }

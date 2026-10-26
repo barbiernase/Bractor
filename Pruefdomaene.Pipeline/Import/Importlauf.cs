@@ -21,7 +21,7 @@ public sealed class Importlauf(IZeilenquelle quelle) : IFunktion
         for (var i = 0; i < e.Zeilen; i++)
         {
             var bestand = await quelle.LiesAsync(h.Stream, i, ct);
-            yield return new EroeffnePosten(h.NeueId<Posten.Posten>(i), bestand);
+            yield return new EroeffnePosten(h.NeueId<Pruefdomaene.Posten.Posten>(i), bestand);
             if ((i + 1) % StandAlle == 0 || i + 1 == e.Zeilen) yield return new MeldeImportStand(new(h.Stream), i + 1);
         }
     }

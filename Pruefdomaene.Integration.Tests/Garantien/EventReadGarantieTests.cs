@@ -58,12 +58,12 @@ public class EventReadGarantieTests : IClassFixture<EventReadGarantieTests.Fixtu
             await s.SaveChangesAsync();
         }
         // Version 2–3: Korrelation K1, mit Akteur und Spur in den Kopfzeilen; Version 4: K2, ohne Spur; Version 5: eine Noop-Marke.
-        using (Spur.Von("u-stream:1", "decide:Posten/ReservierePosten", "regel:AuftragsProzess/0"))
-            await es.AppendEventsAsync(a, 1, new IEvent[] { new PostenReserviert(3), new PostenReserviert(4) }, "K1", "C1", "Posten", "Disponent");
+        using (Spur.Von("u-stream:1", "decide:Posten/ReservierePosten", "funktion:Auftragsabwicklung"))
+            await es.AppendEventsAsync(a, 1, new IEvent[] { new PostenReserviert(3, 0, Beleg.Ohne), new PostenReserviert(4, 0, Beleg.Ohne) }, "K1", "C1", "Posten", "Disponent");
         // Ein Vorgang beginnt nach Version 3 (das erste Event seines Logs): vor ihm kann es im Stream nichts von ihm geben.
         var beginn = Guid.NewGuid();
         await es.AppendEventsAsync(beginn, 0, new IEvent[] { new PostenEroeffnet(1) }, "K2", "C0", "ProzessManager");
-        await es.AppendEventsAsync(a, 3, new IEvent[] { new PostenFreigegeben(2) }, "K2", "C2", "Posten");
+        await es.AppendEventsAsync(a, 3, new IEvent[] { new PostenFreigegeben(2, Beleg.Ohne) }, "K2", "C2", "Posten");
         await es.AppendEventsAsync(a, 4, new IEvent[] { new KommandoVerarbeitet(Guid.NewGuid()) }, "K2", "C3", "Posten");
 
         Gleich(await es.ReadStreamAsync(a, 0, default), await SollAsync(a, _ => true), "ganzer Stream ab 0");
@@ -112,7 +112,7 @@ public class EventReadGarantieTests : IClassFixture<EventReadGarantieTests.Fixtu
         // Ein Versionskonflikt lässt Marten die reservierten Sequenzen mit Tombstones in einem eigenen Stream füllen (G-7).
         var konflikt = Guid.NewGuid();
         await es.AppendEventsAsync(konflikt, 0, new IEvent[] { new PostenEroeffnet(5) }, "K", "C", "Posten");
-        try { await es.AppendEventsAsync(konflikt, 0, new IEvent[] { new PostenReserviert(1), new PostenReserviert(1) }, "K", "C", "Posten"); }
+        try { await es.AppendEventsAsync(konflikt, 0, new IEvent[] { new PostenReserviert(1, 0, Beleg.Ohne), new PostenReserviert(1, 0, Beleg.Ohne) }, "K", "C", "Posten"); }
         catch (ConcurrencyException) { }
         Guid tombstoneStream;
         await using (var s = _fx.Store.QuerySession())
@@ -138,9 +138,9 @@ public class EventReadGarantieTests : IClassFixture<EventReadGarantieTests.Fixtu
         var streams = Enumerable.Range(0, 8).Select(_ => Guid.NewGuid()).ToList();
         foreach (var s in streams)
         {
-            await es.AppendEventsAsync(s, 0, new IEvent[] { new PostenEroeffnet(10), new PostenReserviert(1) }, "K", "C", "Posten");
+            await es.AppendEventsAsync(s, 0, new IEvent[] { new PostenEroeffnet(10), new PostenReserviert(1, 0, Beleg.Ohne) }, "K", "C", "Posten");
             using (Spur.Von("u:1", "decide:Posten/GibPostenFrei", null))
-                await es.AppendEventsAsync(s, 2, new IEvent[] { new PostenFreigegeben(1) }, "K", "C2", "Posten", "Disponent");
+                await es.AppendEventsAsync(s, 2, new IEvent[] { new PostenFreigegeben(1, Beleg.Ohne) }, "K", "C2", "Posten", "Disponent");
         }
         long[] erledigt;
         await using (var q = _fx.Store.QuerySession())

@@ -78,7 +78,7 @@ public class SnapshotTests : IClassFixture<SnapshotTests.Fixture>
             {
                 await Warte(async () => (await Zustand<PostenState>(host.Services, id)).Bestand == soll, TimeSpan.FromSeconds(60),
                     $"Schritt {i}: Bestand {soll} nicht erreicht (Cluster-Boot?).");
-                d.Dispatch(new BuchePostenZu(new(id), menge), expectedVersion: (await Zustand<PostenState>(host.Services, id)).Version);
+                d.Dispatch(new BuchePostenZu(new(id), menge, Beleg.Ohne), expectedVersion: (await Zustand<PostenState>(host.Services, id)).Version);
                 soll += menge;
             }
             await Warte(async () => (await Zustand<PostenState>(host.Services, id)).Bestand == 16, TimeSpan.FromSeconds(30), "Bestand 16 nicht erreicht.");

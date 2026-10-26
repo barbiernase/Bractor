@@ -8,6 +8,7 @@ public partial class Posten
     {
         public void Apply(PostenEroeffnet evt) { this.State.Bestand = evt.AnfangsBestand; this.State.Mindestbestand = evt.Mindestbestand; }
         public void Apply(PostenReserviert evt) => this.State.Reserviert += evt.Menge;
+        public void Apply(ReservierungAbgelehnt evt) { }
         public void Apply(PostenFreigegeben evt) => this.State.Reserviert -= evt.Menge;
         public void Apply(PostenZugebucht evt) => this.State.Bestand += evt.Menge;
     }

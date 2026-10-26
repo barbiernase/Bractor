@@ -93,10 +93,6 @@ internal static class Pruefstand
         => (await AggregateRehydrator.LoadAsync<T>(id, null, sp.GetRequiredService<IEventStoreRepository>(),
             sp.GetRequiredService<IAggregateHandlerFactory>(), null, default)).State;
 
-    /// <summary>Ist der Vorgang <paramref name="korrelation"/> beendet (Manager-Log), mit dem erwarteten Ausgang?</summary>
-    public static async Task<bool> Beendet(IEventStoreRepository store, Guid korrelation, bool erfolg)
-        => (await store.ReadStreamAsync(korrelation, 0, default)).Any(e => e.Payload is ProzessBeendet b && b.Erfolg == erfolg);
-
     public static async Task Warte(Func<Task<bool>> bedingung, TimeSpan frist, string meldung)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();

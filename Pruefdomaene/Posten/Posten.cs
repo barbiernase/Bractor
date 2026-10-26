@@ -3,8 +3,8 @@ using Abstractions;
 namespace Pruefdomaene.Posten;
 
 /// <summary>
-/// Aggregat <see cref="Posten"/> — ein Bestand, von dem reserviert, freigegeben und auf den zugebucht wird. Ziel beider Prozesse
-/// (Diamant-Zweig A, Fan-out-Quelle und -Ziele), der Reaktion (Nachschub) und Prüfling für Snapshot und Upcasting.
+/// Aggregat <see cref="Posten"/> — ein Bestand, von dem reserviert, freigegeben und auf den zugebucht wird. Ziel des Auftrags
+/// (Reservierung, Gegenzug), der Verteilung (Quelle und Ziele) und des Nachschubs; Prüfling für Snapshot und Upcasting.
 /// </summary>
 public partial class Posten : IState
 {

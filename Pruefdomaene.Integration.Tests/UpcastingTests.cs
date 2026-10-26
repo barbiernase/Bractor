@@ -23,7 +23,7 @@ public class UpcastingTests : IClassFixture<UpcastingTests.Fixture>
     public void Nicht_evolviertes_Event_behaelt_den_Basis_Diskriminator()
     {
         var snake = Anwendung.Typen.PersistableEvents.First(e => e.Type == typeof(PostenReserviert)).SnakeCaseName;
-        Anwendung.Upcasting.Diskriminator(new PostenReserviert(1)).Should().Be(snake).And.Be("posten_reserviert");
+        Anwendung.Upcasting.Diskriminator(new PostenReserviert(1, 0, Beleg.Ohne)).Should().Be(snake).And.Be("posten_reserviert");
     }
 
     [Fact]
@@ -42,7 +42,7 @@ public class UpcastingTests : IClassFixture<UpcastingTests.Fixture>
             .Which.Should().BeOfType<PostenEroeffnet>().Which.AnfangsBestand.Should().Be(42, "die Wandlung übernimmt Bestand → AnfangsBestand");
         Anwendung.Upcasting.Aufwerten(new PostenEroeffnet_V1(7)).Should().ContainSingle()
             .Which.Should().BeOfType<PostenEroeffnet>().Which.AnfangsBestand.Should().Be(7);
-        var aktuell = new PostenReserviert(3);
+        var aktuell = new PostenReserviert(3, 0, Beleg.Ohne);
         Anwendung.Upcasting.Aufwerten(aktuell).Should().ContainSingle().Which.Should().BeSameAs(aktuell);
         var akt = () => Anwendung.Upcasting.Materialisiere("gibts_nicht", "{}");
         akt.Should().Throw<NotSupportedException>();
