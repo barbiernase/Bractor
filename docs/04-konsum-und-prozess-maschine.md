@@ -1,6 +1,6 @@
 # 04 — Konsum- & Prozess-Maschine (vier Konsumenten, eine Maschine)
 
-Stand 2026-10-16 (Batch-Konsum, Horizont der Vollständigkeit), gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
+Stand 2026-10-26 (Batch-Konsum, Horizont der Vollständigkeit; Plan Phase 3: Funktion als Baustein, Uhr), gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
 
 Projektion, Reaktion, Prozess und Fluss sind **vier durable Konsumenten des Logs**. Sie folgen demselben Muster: ein Signal weckt
 schnell, ein Poll heilt verlorene Signale, gelesen wird geordnet aus dem Event-Store (Invariante 1), der Fortschritt liegt durabel im
@@ -13,6 +13,7 @@ Fähigkeits-Parameter, Rückgabetyp). Konkret laufen drei Schleifen:
 | Reaktion | `ISubscriber, IPullSubscriber`; `Handle` ohne Schreib-Fähigkeit, gibt Commands aus | `EmittentenAdapter` je (Konsument, Stream) | `IEmittentenCursor`, vorgerückt nach bestätigtem Emit | emittierend |
 | Prozess | `IProzessDefinition`, `Prozess<T>.Definiere(…)` | Dirigent (`ProzessManager`) je Vorgang | Fold aus dem Log (+ Marking-Cursor) | emittierend |
 | Fluss | `IPipeline`, `PipelineFluss.Definiere(…)` | derselbe Dirigent | wie Prozess | emittierend |
+| Funktion (Baustein, neben dem Alten) | `IFunktion` mit `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])` | `FunktionsActor` je (Funktion, Partition) | Funktions-Stand (Position, Revision) und festgehaltene Ausgabe je Eingang | emittierend (§4.6a) |
 
 Ein Fluss wird in Prozess-Regeln übersetzt; Prozess und Fluss sind damit zwei Schreibweisen auf einem Dirigenten (§4.6). Wie man die
 Bausteine schreibt: [10](10-entwickler-api.md).
@@ -444,8 +445,57 @@ Eine Funktion mit Lese-Fähigkeit läuft nur im Host. Details: `docs/konzept-edi
 **Altlast: die Handle-Pipeline.** Daneben ist noch die frühere Pipeline-Maschinerie verdrahtet, ohne Domänen-Nutzer: `IPipelineHandler` mit
 `PipelineActorBase`, `PipelineEventPullBridge` (persistierte Events über den Pull-Pfad, emittierend), `PipelineStartupService`, die
 Trigger-Welt (`IPipelineTrigger`, `ITriggerRegistration`, `TimerTrigger`, `WebhookTrigger`) und `Selbst<T>`/`Frist<TCmd>`/`FristStorno<TCmd>` als
-Handle-Ausgang (durabler Fristplaner `FristScheduler`/`MartenFristplan`; er entfernt eine Frist erst bei entschiedenem Emit-Ausgang, ein
+Handle-Ausgang (dort heißt die Frist seit Phase 3 `FristPlanung<TCmd>`, damit `Frist<TCmd>` der Ausgabe eines Decide gehört, §4.6a; durabler Fristplaner `FristScheduler`/`MartenFristplan`; er entfernt eine Frist erst bei entschiedenem Emit-Ausgang, ein
 unbekannter lässt sie für den nächsten Tick liegen). Sie ist kein Weg für neuen Code; Rückbau offen (docs/13 W11-1).
+
+## 4.6a Funktion als Baustein und Uhr (Plan Phase 3, neben dem Alten)
+
+Der Plan löst Reaktion, Prozess und Fluss durch **Funktion** und **Uhr** ab. Bis zum Umbau der Beispieldomäne (Phase 4) laufen beide Welten
+nebeneinander; die neue ist an der Prüfdomäne (`Pruefdomaene.Pipeline`) und der Sonde belegt.
+
+**Form.** Eine Funktion ist eine Klasse (läuft im Host) oder eine Schnittstelle (läuft draußen, ihre Umsetzungen sind Klassen) `: IFunktion`
+mit Methoden `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])` — je Eingangstyp genau eine (R2, CQRS101). Was herauskommen kann, steht in der
+Rückgabe: ein konkreter Typ, `OneOf<…>`, `T?`, `IEnumerable<…>` oder `IAsyncEnumerable<…>` (auch in `Task<…>`); erlaubt sind Commands und
+Events. `Herkunft` nennt Stream, Version, Zeit und Akteur des Eingangs und leitet neue Ids ab (`h.NeueId<T>(…)`, R13). Dieselbe Marke
+`IFunktion` trägt bis Phase 4 auch die Katalog-Form (`RufeAsync`, §4.6); welche gemeint ist, sagt der Methodenname (`Funktionsform`).
+Der `FunktionsBausteinGenerator` erzeugt Dispatch, Seiten-Form und den **Weckplan** (welche Log-Typen welche Funktion wecken) als Tabelle
+`GeneratedFunktionsBausteine` (CQRS100). Lage: Klasse in der Rolle Abläufe (`HostFunktion`), Schnittstelle wie bisher (`Funktion`).
+
+**Funktions-Actor** (`Infrastructure/Funktionen/FunktionsActor.cs`, ein `RahmenActor` je Funktion und Partition): liest seine Seite ab der
+Position aus dem Log, startet so viele Eingänge, wie Slots frei sind (Standard 1), je Stream höchstens einen (`FunktionsLauf`), und rückt die
+Position nur bis vor den ersten laufenden Eingang und nie über die gesetzte Sequenz (Horizont wie §4.1.1). Der Stand liegt im Dokument
+`FunktionsStand` mit Revision (zwei Aktivierungen: die zweite bekommt einen Konflikt und lädt neu). Ein Eingang, der wirft, wartet im Backoff
+1 … 30 s; nach den eingestellten Wiederholungen wird sein Stream geparkt (Dead-Letter) und je Poll-Intervall einzeln versucht.
+
+**Festhalten** (`FunktionsArbeit`, `Festhalten.cs`). Eine **gleichbleibende** Funktion — Klasse ohne Konstruktor-Parameter und ohne
+Fähigkeiten, die nur Commands ausgibt — rechnet beim Wiederholen dasselbe (R12, CQRS103 verbietet Uhr, Zufall, Datei, Netz); sie sendet
+direkt, mit abgeleiteten Command-Ids (Funktion, Eingang, Stelle, Typ, Ziel). Jede andere **hält ihre Ausgabe fest**, bevor etwas wirkt: ein
+Stream je (Funktion, Eingang) nimmt die Events der Ausgabe, je Command ein `BefehlFestgehalten` und als Ende `AusgabeFestgehalten`. Wer
+zuerst festhält, gewinnt (Anhängen ab der erwarteten Version); ein zweiter Lauf verwirft seine Rechnung und sendet das Festgehaltene. Ein
+Strom wird in Stücken zu 100 festgehalten, ein Abbruch setzt bei der nächsten Ausgabe fort. Hinweise (`ITransientEvent`) schickt nur der
+Lauf, der festhielt. Commands gehen immer über den `CommandEmitter`; ein unbekannter Ausgang heißt „später“, die Position bleibt.
+
+**Laufort.** Wie bei der Katalog-Form aus der Umgebung (`Funktionen:<F>:Laufort`). Ohne Bindung läuft eine Klasse im Host, eine
+Schnittstelle mit genau einer Umsetzung ebenso. `Hand`: der Actor bietet den Eingang über den Vermittler an (`EingangAnbieten`, Lease),
+eine `BausteinSitzung` nimmt die Antwort an, prüft sie gegen die Signatur und hält sie fest; die Garantie bleibt beim Actor (wartet er
+vergeblich, heißt der Eingang „später“). `Extern` (gRPC-Worker) für diese Form kommt mit Phase 7 und ist bis dahin ein Boot-Fehler.
+
+**Wecken.** Bis Phase 6 über die vorhandene Maschine: jede Funktion meldet sich wie eine Projektion beim `BatchKonsumStartupService` an
+(Signal der Aggregate schnell, Poll alle 30 s). Events aus Funktionen, Quellen und der Uhr senden selbst kein Signal und erreichen die
+Funktion über den Poll — ein halber eigener Wecker vor Phase 6 wäre ein zweiter Weg, der wieder verschwände.
+
+**Uhr** (`Abstractions/Uhr.cs`, `Infrastructure/Uhr/`). Ein Decide gibt `Frist<TCmd>(Befehl, Nach)` aus; der generierte Handler macht
+daraus das Event `FristGesetzt` (des Frameworks, `IProzessIntern`: zählt in der Version, der Applier überspringt es), und der Actor legt in
+derselben Transaktion eine Beilage ins Fälligkeits-Verzeichnis `cqrs_fristen` (fällig = Zeitstempel des Events + Dauer, Datenbank-Uhr).
+Die Uhr ist ein Actor einmal im Cluster (`uhr/0`), jeder Knoten tickt sie jede Sekunde an (`UhrTakt`, verlierbar). Sie sendet Fälliges mit
+der Command-Id aus Stream und Version des Frist-Events und trägt es erst nach entschiedenem Ausgang aus — doppelt gefeuert wirkt es über
+die Inbox des Ziels einmal.
+
+**Quellen.** Neben dem Datei-Treiber gibt es den **Takt-Treiber** (`TaktGemeldet`, Konfig `Intervall` ≥ 1 s; Kennung = Beginn des
+Intervalls, gleich auf jedem Knoten) und die **Quell-Nachricht vom Client** (`ClientGemeldet`, JSON-Eingang `/eingang/quelle`, Kennung =
+Command-Id des Clients). Je Quelle wählt die Konfig `Strom`: `JeNachricht` (ein Stream je Kennung, wie bisher) oder `JeSchluessel` (ein
+Stream je Schlüssel; die Kennung steht in derselben Transaktion im Kennungs-Verzeichnis `cqrs_quell_kennungen`, angehängt wird am Kopf mit
+Versionsprüfung).
 
 ## 4.7 Dead-Letter & Snapshots
 
@@ -467,6 +517,8 @@ und Wirker in den Command-Envelope, das Ziel-Aggregat schreibt mit `wirker = dec
   bzw. `fluss:<P>#<Knoten>` (`ProzessRegeln.Wirker`).
 - **Funktion:** die Spur reist im `AuftragAnbieten`; `FunktionsAusfuehrer` schreibt das Ergebnis mit `funktion:<F>`, der Absender steht als
   `ueber`.
+- **Funktion als Baustein:** Ursache = der Eingang, Wirker `funktion:<F>`; der Akteur der Kette reist mit.
+- **Uhr:** Ursache = das Frist-Event, Wirker `uhr` (ohne Karte).
 - **Quelle:** `QuellEingang` schreibt mit `quelle:<Typ>` und ohne Ursache (Wurzel).
 - **Projektion** schreibt nie ins Log; `projektion:<Typ>` ist nur Karten-Id.
 

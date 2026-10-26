@@ -23,7 +23,11 @@ oder umgeschrieben. Die Befunde der Actor-Praxis vom 2026-10-18 stehen im Plan �
 | PF-4b | Rest von PF-4: keine Lease für den Prozess-Backstop im Cluster (jeder Knoten heilt alle offenen Vorgänge); Abnahme „S3 Zeit je Teil konstant über N“ und „10 000 offene Vorgänge im Leerlauf“ ohne Szenario im Treiber | P3 |
 | PF-10 | Datei-Treiber meldet eine Datei nach der anderen ins Log (Rückstau): das Melde-Tempo ist die Decke von S1 — Entscheidung offen | P2 |
 | VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
-| PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16 | P3 |
+| PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16; seit Phase 3 dazu die Uhr (eine Abfrage je Sekunde) und je Funktion und Partition ein Poll | P3 |
+| FB-1 | Ein Hinweis (`ITransientEvent`) als Eingang einer Funktion steht im generierten Hinweisplan, wird zur Laufzeit aber noch nicht zugestellt (schneller Kanal kommt mit Plan Phase 6) | P2 |
+| FB-2 | Funktion als Baustein: Laufort Extern (gRPC, Python-Worker) fehlt — Boot-Fehler bis Plan Phase 7; die Quell-Nachricht vom Client gibt es nur über den JSON-Eingang, nicht über gRPC und die SDKs | P2 |
+| FB-3 | Events aus Funktionen, Quellen und der Uhr senden kein Signal: eine Funktion, die auf sie hört, sieht sie erst mit dem Poll (bis 30 s) — eigener Wecker mit Plan Phase 6 | P3 |
+| FB-4 | Werkzeuge: Extractor und Karten zeigen `Frist<TCmd>` als Ausgang eines Decide nicht als Kante zur Uhr; das Werkbank-Schema kennt nur die Datei-Konfig (Takt fehlt); Editor-Oberfläche zurückgestellt (Plan E4) | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar (Schlüssel laufen seit PF-30 ab) | P2 |
 | PF-25 | Rest: der Backstop gleicht alle 15 s den Heil-Plan im Speicher mit der ganzen Liste der offenen Vorgänge ab; nach einem Neustart weckt er alle auf einmal | P2 |
 | PF-31 | Entscheidung offen: ein Wechsel der Snapshot-Schema-Version faltet heiße Aggregate einmal voll; ein neuer Emittent liest die Geschichte ab 0 | P3 |
@@ -39,7 +43,7 @@ oder umgeschrieben. Die Befunde der Actor-Praxis vom 2026-10-18 stehen im Plan �
 | P1-7 | Deploy-Skripte veraltet (starten die Hosts ohne Umgebung, alte Konfig-Schlüssel) | P1 |
 | W2-1 | Rest der Projektstruktur: Client-Framework hängt am Server-Framework, Generat-Namespaces, Identitäten aus einfachen Namen | P2 |
 | W11-1 | Doppelte Wege: Handle-Pipeline/Trigger/`[Ingress]` ohne Nutzer, Prozess- vs. Fluss-DSL | P2 |
-| W11-2 | Fristplaner hängt an der Handle-Welt (die Zeitlimits des Dirigenten laufen seit PF-4 über die Frist im Offen-Index) | P2 |
+| W11-2 | Fristplaner hängt an der Handle-Welt (die Zeitlimits des Dirigenten laufen seit PF-4 über die Frist im Offen-Index); seit Phase 3 steht die Uhr (`Frist<TCmd>` aus dem Decide) daneben, die Handle-Frist heißt `FristPlanung<TCmd>` — Rückbau mit dem Alten | P2 |
 | W3-1 | Ableitungen im Editor-JS (Karten-Ids, Hör-Menge, Lambda-Parameter, Auto-Zuordnung, Kardinalität) | P2 |
 | WB-1 | Werkbank: Geste p50 unter Fremdlast 346–470 ms (Ziel 300 ms), LLM-Kontexte kalt, CLI `--schreiben`, Renamer ohne String-Literale | P2 |
 | WB-4 | Die Werkbank kennt genau eine Anwendung (`StandardWurzel`, `ServerHost`); eine Anwendung anlegen ist nicht beschrieben — Entscheidung offen | P2 |
@@ -236,6 +240,14 @@ Rumpf-Schreibweg ist seit 2026-10-15 weg, §13.6.)
 **W11-2 · Zeitlimits.** Ein Zeitlimit im Dirigenten wird nur entdeckt, wenn der Backstop alle offenen Vorgänge weckt (alle 15 s) — Genauigkeit
 15 s, Aufwand O(offene Vorgänge). Der durable Fristplaner mit Fälligkeits-Index (`FristScheduler`, `MartenFristplan`) existiert, hängt aber an der
 Handle-Welt. *Empfehlung:* Fristplaner als Weck-Quelle der Zeitlimits in den Dirigenten.
+
+**FB-1 … FB-4 · Funktion als Baustein und Uhr, bewusst offen nach Plan Phase 3** (2026-10-26). Phase 3 baut Funktion, Uhr und die neuen
+Quellen neben das Alte; was erst spätere Phasen tragen, ist mit Absicht nicht vorgezogen, weil jede Vorab-Lösung ein zweiter Weg wäre, der
+wieder verschwände. **FB-1:** der Generator kennt Hinweise als Eingang (`GeneratedFunktionsBausteine.Hinweisplan`), es fehlt der Zusteller —
+das ist der schnelle Kanal aus Phase 6. **FB-2:** die Baustein-Form braucht für einen externen Worker einen Vertrag über Eingang und
+Ausgaben auf der Leitung (`ITraegt`, Phase 7); bis dahin weist der Start `Laufort = Extern` für sie ab. Hand läuft schon über denselben
+Vermittler (`BausteinSitzung`). **FB-3:** wer auf ein Event einer Funktion, Quelle oder der Uhr hört, wartet bis zum Poll; die Prüfdomäne
+misst das nicht als Fehler, die Latenz ist aber spürbar. **FB-4:** reine Darstellungs-Lücken der Werkzeuge; die Garantien hängen nicht daran.
 
 **W3-1 · Ableitungen im Editor-JS.** `graphNodes` baut Karten-Ids parallel zu `Sicht.BaueKarten` (Transition-Id weicht bei fehlender `_id` ab);
 `akteurHoert`, `flParameter`, `faehigkeitVorschlag` (weicht bei Namenskollision von `BoardLeseseite` ab), Auto-Zuordnung (`autoArgs`,

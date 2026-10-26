@@ -1,6 +1,6 @@
 # 11 — Garantien
 
-Stand 2026-10-26 (Plan Pub/Sub-Neustrukturierung, Phase 2), gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
+Stand 2026-10-26 (Plan Pub/Sub-Neustrukturierung, Phase 3: Funktion als Baustein, Uhr, Quellen vom Client), gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
 
 Dieses Kapitel ist die **eine Quelle für „was garantiert das Framework?“** — je Weg die Garantie, der Mechanismus, der sie trägt, und die
 Bedingung, unter der sie gilt. Wie die Mechanik im Einzelnen läuft, steht in [03](03-schreibseite.md) (Schreibseite) und
@@ -91,7 +91,12 @@ Nachweis ist eine Lücke in [13](13-reifegrad-schulden-bewertung.md).
 | Prozess-Regeln sind azyklisch | Boot-Guard (`ProzessAzyklizität`) | – | P `FunktionsAufrufTests.Der_Azyklizitaets_Guard…` |
 | Zeitlimits im Dirigenten feuern | Frist im Offen-Index, Backstop im Sekundentakt (PF-4) | Auflösung etwa 1 s; geht das Schreiben der Frist verloren, entdeckt die nächste Heil-Weckung den Ablauf | P `ProzessFristGarantieTests` (Frist = Ablauf, einmal geschrieben, fällig genau zum Ablauf, Aufräumen), `FunktionsAufrufTests.Ein_Zeitlimit_laesst_einen_haengenden_Aufruf_scheitern…`, `PipelineFlussTests.Bestellung_Zeitlimit_Port…`; I `PipelineFlussE2ETests` (Trainings-Wächter, Warten über die Frist) |
 | eine Katalog-Funktion wird **mindestens einmal** ausgeführt | Laufort Extern: Lease 30 s beim `FunktionsVermittler`, nach Ausfall des Workers neu vergeben | **Funktionsrümpfe müssen idempotent sein**; ein Ergebnis nach Ablauf der Lease wird abgewiesen | P `FunktionsVermittlungTests.Abgelaufene_Lease…`, `…Erledigtes_verpufft…`; E2E S2 |
-| **Fristen** (`IFristplan`) feuern mindestens einmal | `FristScheduler`: erst feuern, entfernt nur bei entschiedenem Ausgang (zugestellt oder abgelehnt); ein unbekannter Ausgang lässt die Frist für den nächsten Tick liegen | – | P `FristSchedulerTests`, `FristGarantieTests` (zugestellt, abgelehnt, Timeout, technischer Fehlschlag, doppeltes Feuern); I `DeadlineStorePostgresTests` |
+| **Funktion als Baustein** (`IFunktion` mit `Auf`): jede Ausgabe zu einem Eingang wirkt **genau einmal**, auch wenn die Funktion zweimal rechnet | ein Funktions-Actor je (Funktion, Partition) hält Position und Stand (`FunktionsStand`, Revision wie der Partitions-Checkpoint); Command-Ids sind abgeleitet aus (Funktion, Eingang, Stelle, Typ, Ziel); eine nicht gleichbleibende Funktion (Dienst, Lese-Fähigkeit, Laufort draußen) **hält ihre Ausgabe fest**, bevor sie wirkt — ein Stream je (Funktion, Eingang), wer zuerst schreibt, gewinnt (Versionsprüfung); gesendet wird nur aus dem Festgehaltenen. Eine gleichbleibende Funktion (Klasse ohne Dienste, ohne Fähigkeiten, nur Commands) rechnet beim Wiederholen dasselbe und sendet ohne Festhalten | Rümpfe müssen nicht idempotent sein — wohl aber ihre Wirkung draußen (der Dienst selbst); Hinweise schickt nur der Lauf, der festhielt (verlierbar). Laufort Extern für diese Form erst mit Phase 7 (Boot-Fehler) | P `FunktionsArbeitTests` (Festhalten, Abbruch, zwei Läufe, Strom, unbekannter Emit-Ausgang, zwei Worker), `FunktionsLaufTests`; PD `FunktionsBausteinE2ETests`, `FunktionsGarantieTests` (Abbruch nach dem Festhalten vor den Commands, Abbruch nach den Commands vor der Position, zwei Aktivierungen derselben Partition, zwei Worker mit verschiedenen Antworten) |
+| Eingänge eines Streams laufen bei einer Funktion **nacheinander**, verschiedene Streams parallel bis zur Zahl der Slots; der Rückstand liegt im Log, nicht im Speicher | `FunktionsLauf`: je Stream höchstens ein Eingang in Arbeit, die Position rückt nur bis vor den ersten laufenden Eingang und nie über die gesetzte Sequenz | eine Liste der fertigen Eingänge vor der Position ist gedeckelt (5 000); ist sie voll, startet nur, was die Position nicht überholt | P `FunktionsLaufTests` |
+| eine scheiternde Funktion hält keinen anderen Stream auf | Backoff 1 … 30 s je Eingang; nach den eingestellten Wiederholungen wird der Stream **geparkt** (Dead-Letter zur Beobachtung) und je Poll-Intervall einmal einzeln versucht | ein geparkter Stream wartet bis zum nächsten erfolgreichen Einzelversuch | P `FunktionsLaufTests.Ein_geparkter_Stream…` |
+| ein Eingang erreicht seine Funktion, auch wenn das Signal verloren geht | bis Phase 6 über die vorhandene Maschine: Signal der Aggregate schnell, dazu ein Poll alle 30 s (`BatchKonsumStartupService`); Events, die selbst keine Signale senden (aus Funktionen, Quellen, der Uhr), nur über den Poll | Latenz bis 30 s für Eingänge ohne Signal | PD `FunktionsBausteinE2ETests`, `QuellenE2ETests` |
+| **Frist** (`Frist<TCmd>` als Ausgabe eines Decide) feuert **mindestens einmal** und wirkt **genau einmal** | das Framework schreibt sie als Event `FristGesetzt` in den Stream des Aggregats und in derselben Transaktion als Beilage ins Fälligkeits-Verzeichnis (`cqrs_fristen`, fällig = Zeitstempel des Events + Dauer); die Uhr (ein Actor im Cluster, Takt etwa 1 s) sendet fällige Fristen mit der Command-Id aus (Stream, Version) des Frist-Events und trägt sie erst nach entschiedenem Ausgang aus | Auflösung etwa 1 s; ein Absturz zwischen Feuern und Austragen feuert noch einmal mit derselben Id, die Inbox des Ziels macht daraus eine Wirkung | P `UhrTests` (Abbildung, entschieden/unbekannt, Absturz zwischen Feuern und Austragen); PD `UhrE2ETests` (fällige Frist kommt mit ihrer Id, bezahlt vor der Fälligkeit, doppelt gefeuert) |
+| **Fristen** (`IFristplan`, alte Handle-Welt) feuern mindestens einmal | `FristScheduler`: erst feuern, entfernt nur bei entschiedenem Ausgang (zugestellt oder abgelehnt); ein unbekannter Ausgang lässt die Frist für den nächsten Tick liegen | – | P `FristSchedulerTests`, `FristGarantieTests` (zugestellt, abgelehnt, Timeout, technischer Fehlschlag, doppeltes Feuern); I `DeadlineStorePostgresTests` |
 
 ## 11.8 Quellen
 
@@ -101,6 +106,9 @@ Nachweis ist eine Lücke in [13](13-reifegrad-schulden-bewertung.md).
 | kein eigener Treiber-Stand, Neustart idempotent | beim Start fragt der Treiber den Log (`IStreamBestand`) | P `DateiTreiberTests.Schon_im_Log_bekannte_Dateien…`; I `PipelineFlussE2ETests.Datei_Treiber…_Neustart`; E2E Störungslauf |
 | Rückstau | die nächste Meldung erst, wenn die vorige im Log steht | P `DateiTreiberTests.Rueckstau_die_naechste_Datei_erst…` |
 | einmal im Cluster | Lease bei der Cluster-Identität `quelle/<Typ>` (`EinmalImCluster`) | P `DateiTreiberTests.Lease_hat_genau_einen_Halter…` |
+| **Takt-Quelle:** je Intervall genau eine Meldung, auf jedem Knoten dieselbe Kennung | Kennung = Beginn des Intervalls (UTC, aus der Datenbank-Uhr), Intervall mindestens 1 s; danach wie jede Quelle (Kennung im Log) | P `UhrTests.Der_Intervall_Beginn…`, `…Je_Intervall_genau_eine_Meldung_auch_nach_einem_Neustart…`, `…Ein_Intervall_unter_einer_Sekunde…` |
+| **Quell-Nachricht vom Client** (`ClientGemeldet`): genau einmal im Log je Kennung | die Kennung ist die Command-Id des Clients; eine Wiederholung mit derselben Id trifft denselben Stream (JSON-Eingang `/eingang/quelle`, nur mit `IDarf` für den Typ) | PD `QuellenE2ETests.Eine_Quell_Nachricht_vom_Client…` |
+| **ein Stream je Schlüssel** (Konfig `Strom = JeSchluessel`): jede Kennung genau einmal, auch bei gleichzeitigen Meldern | Anhängen an den Kopf mit Versionsprüfung und Wiederholung; die Kennung steht in derselben Transaktion im Kennungs-Verzeichnis (`cqrs_quell_kennungen`, Primärschlüssel) | PD `QuellenE2ETests.Ein_Stream_je_Schluessel…` (auch vier gleichzeitige Melder) |
 
 „Gleich“ heißt gleiche **Kennung**; was als gleich gilt, legt die Konfig fest (`PfadGroesseZeit`, `NameGroesse`,
 [konzept-werkbank.md](konzept-werkbank.md) §3.5).
@@ -127,13 +135,19 @@ Nachweis ist eine Lücke in [13](13-reifegrad-schulden-bewertung.md).
 | Store-Zugriff nur über Fähigkeiten, Konsumenten ohne eigenen Zustand | CQRS051–055, CQRS066/067, CQRS083 | P `FaehigkeitAnalyzerTests` (051, 054, 055), `BuildGarantieTests` (052, 053), `StoreZugriffAnalyzerTests`, `ModellAnalyzerTests` (083) |
 | jeder Wire-Typ ist serialisierbar, ohne Reflection | Generatoren (namentliche Kontext-Referenz), `WireSerializerBootCheck` | P `BuildGarantieTests.Jeder_Wire_Typ_der_Anwendung_ist_serialisierbar` |
 | Akteur-Rechte, Dienst- und Funktions-Bindung, Umgebungs-Schema, Quellen-Konfig | Boot-Guards ([02](02-design-prinzipien.md) P9) | P `AkteurRechteTests`, `DienstBindungTests`, `UmgebungLaderTests`, `DateiTreiberTests.Konfig_…` |
+| eine Funktion hat genau die Form `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])` mit Ausgaben in der Signatur; je Eingang höchstens ein `Auf` bzw. `Handle` (R2) | CQRS100, CQRS101 (Generator und `EinEingangAnalyzer`) | P `FunktionsBausteinGeneratorTests`, `WiederholungAnalyzerTests.R2…` |
+| Aggregat und Projektion rechnen beim Wiederholen dasselbe: keine Uhr, kein Zufall, keine Datei, kein Netz, keine Umgebungsvariable (R11) | CQRS102 | P `WiederholungAnalyzerTests.R11…` |
+| eine gleichbleibende Funktion (ohne Festhalten) rechnet ebenso gleich (R12); mit Dienst hält das Framework fest und die Regel entfällt | CQRS103 | P `WiederholungAnalyzerTests.R12…` |
+| neue Ids in Funktion, Aggregat, Projektion und Reader sind abgeleitet (`Herkunft.NeueId`), nie gewürfelt (R13); ein Client würfelt | CQRS104 | P `WiederholungAnalyzerTests.R13…`, `FunktionsBausteinGeneratorTests.Neue_Ids_sind_abgeleitet…` |
+| eine Frist steht nur in einem Decide und zielt auf einen Command | Generator (Ausgabe `Frist<TCmd>`), R5-Prüfung beim Schreiben im Actor | P `UhrTests.Eine_Frist_aus_dem_Decide…` |
 | eine Datenbank gehört genau einer Umgebung | `UmgebungsSiegel` | I `UmgebungE2ETests.Sim_Host_startet_nicht_gegen_eine_Datenbank_mit_Siegel_Prod` |
 
 ## 11.11 Was daraus für den Fachcode folgt
 
 1. Eine echte Invariante gehört in **ein** Aggregat. Was über mehrere Aggregate gilt, ist eventual und braucht im Fehlerfall eine Kompensation.
 2. Projektionen nehmen keine Ordnung über Streams an.
-3. Funktionsrümpfe und Seiteneffekte in Reaktionen sind idempotent.
+3. Seiteneffekte in Reaktionen und in Katalog-Funktionen (`RufeAsync`) sind idempotent. Eine Funktion als Baustein (`Auf`) muss es nicht
+   sein: das Framework hält ihre Ausgabe fest; idempotent sein muss nur die Wirkung ihres Dienstes draußen.
 4. Clients wiederholen mit derselben CommandId; ohne Wiederholung gilt für sie höchstens einmal.
 5. Handler von replaybaren Projektionen sind deterministisch, sonst ist ein Neuaufbau nicht derselbe Stand.
 
@@ -155,6 +169,8 @@ die Kosten wachsen.
 | Vorgang wirkt genau einmal und sieht jedes eigene Ergebnis (§11.7) | Fold je Ziel-Stream ab dem Cursor, nur die eigene Korrelation, Cursor bis zum Kopf; ohne Cursor ab dem Beginn des Vorgangs; die Kompensation liest aus dem Marking; Marking durabel beim Stillwerden und beim Stoppen (PF-23, PF-24) | Events, die seit dem Start bzw. seit der letzten Weckung in die Ziel-Streams kamen — nicht ihre Geschichte | – (umgesetzt) |
 | Read-your-writes, best-effort (§11.5) | ein Redis-Write je Event und Projektion (`ReadModelDepsWriter`), Schlüssel mit Ablauf (Standard 24 h, PF-30) | Events × Projektionen; der Speicher mit den in der Haltbarkeit geschriebenen Aggregaten und Read-Models | je Projektion abschaltbar (PF-6) |
 | Serialisierbar je Aggregat (§11.2) | der Actor wartet in jedem Turn auf seinen Commit | Commit-Latenz begrenzt den Durchsatz **eines** Streams | grundsätzlich; Abhilfe ist Modellierung (keine heißen Aggregate), Pipelining wäre ein eigener Entwurf |
+| Funktion wirkt genau einmal (§11.7) | gleichbleibend: nichts außer dem Stand je Partition (gedrosselt, höchstens einmal je Sekunde); nicht gleichbleibend: je Eingang ein Festhalte-Stream (Events + ein Event je Command + Endmarke) in einer Transaktion, ein Strom in Stücken zu 100 | Eingänge × Ausgaben, nur bei Funktionen mit Dienst oder draußen | gleichbleibend schreiben (Klasse ohne Dienst) |
+| Frist feuert genau einmal (§11.7) | eine Beilage je Frist, die Uhr fragt jede Sekunde nach Fälligem (eine Abfrage) | eine Abfrage je Sekunde Grundlast, unabhängig von der Zahl der Fristen | – |
 | Quelle genau einmal je Kennung (§11.8) | ein Stream je Quell-Nachricht, ein Vorgang je Stream | Quell-Nachrichten: je Nachricht ein Stream, Dirigent und Actors | Designentscheidung, keine reine Optimierung: Dedup-Tabelle je Kennung und Sammel-Streams verlören „ein Vorgang je Meldung“ (PF-7) |
 
 Kostenlos zur Laufzeit sind die Garantien aus §11.10 (Build und Start) sowie Signal, Publish und Snapshot (fire-and-forget bzw. best-effort).
@@ -185,7 +201,9 @@ gegen die DB-Uhr (jetzt setzt die Datenbank den Zeitstempel mit derselben Uhr, `
   Dokumenten zwischen Partitionen (`SchreibRegelPostgresTests`, `GeteilteDokumentePostgresTests`), Passivierung und Reaktivierung
   (`LebenszyklusGarantieTests`), alte CommandId jenseits des Inbox-Caches und der Horizont der Inbox (`SchreibGarantieTests`), zwei Aktivierungen und Neuaufbau gegen einen laufenden
   Leser (`GarantiePostgresTests`, `BatchKonsumGarantieTests`), Poison-Stream und gescheiterter Append (`GarantiePostgresTests`,
-  `BatchKonsumGarantieTests`), Neustart des Hosts (`AblaufGarantieTests`, `RehydrationGarantieTests`).
+  `BatchKonsumGarantieTests`), Neustart des Hosts (`AblaufGarantieTests`, `RehydrationGarantieTests`), Abbruch einer Funktion nach dem Festhalten, nach den Commands, zwei
+  Aktivierungen und zwei Worker mit verschiedenen Antworten (`FunktionsGarantieTests`, `FunktionsArbeitTests`), eine doppelt gefeuerte Frist
+  und ein Absturz zwischen Feuern und Austragen (`UhrE2ETests`, `UhrTests`), gleichzeitige Melder einer Quelle je Schlüssel (`QuellenE2ETests`).
 - **Ende zu Ende:** jeder Lauf von `scripts/vermessung-e2e.sh` zählt nach dem Lauf über Queries und den Log nach, dass jede Wirkung genau
   einmal eingetreten ist (je Szenario, dazu global: keine CommandId zweimal gewirkt, keine Version doppelt; mit offenem Rückstand „höchstens
   einmal“); der **Störungslauf** tut das nach harten Host-Abbrüchen und einem Redis-Ausfall ([12](12-tests-und-vermessung.md) §12.5). Ein Fehlschlag macht den Lauf ungültig.
