@@ -32,7 +32,7 @@ public class EingangJsonTests
             { "AggregateId": "{{id}}", "Version": "Dc2", "Pfad": "/x.png",
               "Meta": { "OriginalDateiname": "a.tiff", "DateigroesseBytes": 7, "BreitePixel": 3, "HoehePixel": 2, "ErstelltAm": "2026-10-12T10:00:00+00:00" } }
             """), typeof(MeldeBildVerfuegbar));
-        cmd.AggregateId.Should().Be(id);
+        cmd.AggregateId.Wert.Should().Be(id);
         cmd.Version.Should().Be(BildVersion.Dc2);
         cmd.Meta.BreitePixel.Should().Be(3);
         EingangJson.Schreibe(cmd).GetProperty("Version").GetString().Should().Be("Dc2", "die Werkbank zeigt Enums als Namen");

@@ -41,7 +41,8 @@ public record Eroeffnet() : IEvent;
 public record Geschlossen() : IEvent;
 public record Fremd() : IEvent;
 public record SchonOffen() : ITransientEvent;
-public record Mahne(Id<ProbeZiel> AggregateId) : ICommand<ProbeZiel>;\npublic partial class ProbeZiel : IState { public int Version { get; set; } public Guid Id { get; set; } }
+public record Mahne(Id<ProbeZiel> AggregateId) : ICommand<ProbeZiel>;
+public partial class ProbeZiel : IState { public int Version { get; set; } public Guid Id { get; set; } }
 ";
 
     private const string Konto = @"

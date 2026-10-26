@@ -104,13 +104,16 @@ public sealed class P : IProzessDefinition
         diag.Should().Contain("CQRS072");
     }
 
+    /// <summary>Das Ziel-Aggregat der Proben-Commands (ein Command nennt sein Ziel im Typ).</summary>
+    private const string ProbeZiel = "public partial class ProbeZiel : IState { public int Version { get; set; } public Guid Id { get; set; } }\n";
+
     private static (string Quelle, string[] Diagnosen) Generiere(string code)
     {
         var refs = AppDomain.CurrentDomain.GetAssemblies().Concat(new[] { typeof(IProzessDefinition).Assembly }).Distinct()
             .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
             .Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location)).ToImmutableArray();
         var comp = CSharpCompilation.Create("Probe",
-            new[] { CSharpSyntaxTree.ParseText("using System; using Abstractions; namespace Probe {\n" + code + "\n}") }, refs,
+            new[] { CSharpSyntaxTree.ParseText("using System; using Abstractions; namespace Probe {\n" + ProbeZiel + code + "\n}") }, refs,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         comp.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).Should().BeEmpty("die Probe selbst muss kompilieren");
         var lauf = CSharpGeneratorDriver.Create(new ProzessRegelnGenerator()).RunGenerators(comp).GetRunResult();

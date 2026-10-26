@@ -25,7 +25,8 @@ namespace Probe
     public sealed record Kaputt(string Name) : IEvnt;
     public record Teilweise(int Wert) : IEvent, IFehlt;
     public sealed record DateiDa(string Pfad) : IQuellNachricht { public string Kennung => Pfad; }
-    public sealed record Melde(Id<ProbeZiel> AggregateId, string Pfad) : ICommand<ProbeZiel>;\n    public partial class ProbeZiel : IState { public int Version { get; set; } public Guid Id { get; set; } }
+    public sealed record Melde(Id<ProbeZiel> AggregateId, string Pfad) : ICommand<ProbeZiel>;
+    public partial class ProbeZiel : IState { public int Version { get; set; } public Guid Id { get; set; } }
     public sealed class ProbeFluss : IPipeline
     {
         public PipelineFluss Fluss => PipelineFluss.Definiere(p =>

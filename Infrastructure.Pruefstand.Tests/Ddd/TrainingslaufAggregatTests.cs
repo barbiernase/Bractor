@@ -60,7 +60,7 @@ public class TrainingslaufAggregatTests
         f.Wende(new StarteTraining(new(f.Id), new(datensatzId), 3, StdHp));
 
         f.Lauf.Status.Should().Be(TrainingsStatus.Angefordert);
-        f.Lauf.DatensatzId.Should().Be(datensatzId);
+        f.Lauf.DatensatzId.Wert.Should().Be(datensatzId);
         f.Lauf.DatensatzVersion.Should().Be(3);
         f.Lauf.Hyperparameter.Should().Be(StdHp);
     }

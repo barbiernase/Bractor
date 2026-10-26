@@ -148,10 +148,10 @@ public partial class Akte : IState
             new() { Name = "datei", Art = FlussArt.Quelle, Typ = "DateiDa" },
             new() { Name = "deuten", Art = FlussArt.Funktion, Typ = "INameDeuten", Eingaenge = [E(D("datei")) with { Argumente = ["datei.Name"] }] },
             new() { Name = "melden", Art = FlussArt.Command, Typ = "MeldeBild",
-                    Eingaenge = [E(D("deuten", "Bilddatei"), D("datei")) with { Argumente = ["deuten.PaarId"] }] },
+                    Eingaenge = [E(D("deuten", "Bilddatei"), D("datei")) with { Argumente = ["new(deuten.PaarId)"] }] },
         };
         if (unbekanntVerdrahtet)
-            knoten.Add(new() { Name = "fehler", Art = FlussArt.Command, Typ = "MeldeBild", Eingaenge = [E(D("deuten", "Unbekannt")) with { Argumente = ["System.Guid.Empty"] }] });
+            knoten.Add(new() { Name = "fehler", Art = FlussArt.Command, Typ = "MeldeBild", Eingaenge = [E(D("deuten", "Unbekannt")) with { Argumente = ["default"] }] });
         return new EditorModell
         {
             Rahmen = new Rahmen { Verzeichnisse = new Dictionary<string, string> { [ns] = "Kamera/Eingang" } },

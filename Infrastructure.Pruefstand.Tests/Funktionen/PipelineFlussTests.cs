@@ -274,7 +274,7 @@ public class PipelineFlussTests
         w.Aufträge<GleicheAus>().Should().ContainSingle().Which.Pfad.Should().Be("/roh/a.tiff_512.png");
         // ∧ über drei Drähte (inkl. Kontext aus dem Deuten): genau eine Meldung mit den richtigen Pfaden.
         var meldung = w.Gesendete<MeldeBild>().Should().ContainSingle().Subject;
-        meldung.AggregateId.Should().Be(Paar);
+        meldung.AggregateId.Wert.Should().Be(Paar);
         meldung.Vorschau.Should().Be("/roh/a.tiff_512.png_kontrast.png");
         meldung.Daumen.Should().Be("/roh/a.tiff_128.png");
     }
@@ -463,7 +463,7 @@ public class PipelineFlussTests
         var st = await w.TreibeAsync();
 
         st.Erfolg.Should().BeTrue("⏳ ist verdrahtet");
-        w.Gesendete<MarkiereHaengend>().Should().ContainSingle().Which.AggregateId.Should().Be(lauf, "quelle.Strom() trägt die Stream-Id");
+        w.Gesendete<MarkiereHaengend>().Should().ContainSingle().Which.AggregateId.Wert.Should().Be(lauf, "quelle.Strom() trägt die Stream-Id");
     }
 
     [Fact]

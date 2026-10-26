@@ -31,7 +31,8 @@ public class AkteurAnalyzerTests
 
     private const string Vorspann = @"
 using System; using System.Collections.Generic; using Abstractions;
-namespace Probe {\npublic partial class ProbeZiel : IState { public int Version { get; set; } public Guid Id { get; set; } }
+namespace Probe {
+public partial class ProbeZiel : IState { public int Version { get; set; } public Guid Id { get; set; } }
 public record Buche(Id<ProbeZiel> AggregateId) : ICommand<ProbeZiel>;
 public record Gebucht() : IEvent;
 public record Hinweis() : ITransientEvent;

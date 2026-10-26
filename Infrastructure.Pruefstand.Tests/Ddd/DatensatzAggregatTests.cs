@@ -89,7 +89,7 @@ public class DatensatzAggregatTests
         f.NimmRange(a, b);        // Range 1
         f.NimmRange(b, c);        // Range 2 — b überlappt
 
-        f.Datensatz.DraftMitglieder.Should().BeEquivalentTo(new[] { a, b, c },
+        f.Datensatz.DraftMitglieder.Select(i => i.Wert).Should().BeEquivalentTo(new[] { a, b, c },
             "die Vereinigung dedupliziert das überlappende Paar b");
         f.Datensatz.AnzahlDraftMitglieder.Should().Be(3);
         f.Datensatz.Ranges.Should().HaveCount(2, "beide Ranges bleiben als Provenienz erhalten");
@@ -168,7 +168,7 @@ public class DatensatzAggregatTests
 
         var angefordert = events.Should().ContainSingle()
             .Which.Should().BeOfType<EinfrierenAngefordert>().Subject;
-        angefordert.Mitglieder.Should().BeEquivalentTo(new[] { p1, p2 },
+        angefordert.Mitglieder.Select(i => i.Wert).Should().BeEquivalentTo(new[] { p1, p2 },
             "die autoritative Mitgliedschaft reist mit (Invariante 1)");
         angefordert.Split.Should().Be(new SplitKonfig(80, 10, 10, 7),
             "die Split-Konfig reist mit");

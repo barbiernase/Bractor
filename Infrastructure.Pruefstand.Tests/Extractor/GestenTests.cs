@@ -289,7 +289,7 @@ public sealed class GestenTests : IDisposable
         bericht.Patch.Select(p => p.Datei).Should().Equal("Leihwesen/Fluss.cs");
         Text("Fluss.cs").Should().NotContain("mahnung.BeiAbgelehnt()")
             .And.Contain("var seiten = eingang.Je(e => e.Seiten);")
-            .And.Contain(".Oder(schnell.BeiZeitlimit(), z => new EroeffneMahnung(Guid.Empty, 0m));", "unveränderte Lambdas bleiben wortgetreu");
+            .And.Contain(".Oder(schnell.BeiZeitlimit(), z => new EroeffneMahnung(default, 0m));", "unveränderte Lambdas bleiben wortgetreu");
     }
 
     [Fact]
@@ -303,7 +303,7 @@ public sealed class GestenTests : IDisposable
         alt.Should().Be("EroeffneMahnung");
         patch.Select(p => p.Datei).Should().Contain(["Leihwesen/Gebuehren.cs", "Leihwesen/Fluss.cs", "Leihwesen/Lesen.cs"]);
         patch.Should().OnlyContain(p => !p.Nachher!.Contains("EroeffneMahnung"));
-        patch.Single(p => p.Datei == "Leihwesen/Fluss.cs").Nachher.Should().Contain(".Sende<OeffneMahnung>((g, e) => new OeffneMahnung(e.LeserId, g.Betrag))");
+        patch.Single(p => p.Datei == "Leihwesen/Fluss.cs").Nachher.Should().Contain(".Sende<OeffneMahnung>((g, e) => new OeffneMahnung(new(e.LeserId), g.Betrag))");
     }
 
     [Fact]
@@ -365,10 +365,10 @@ public sealed class GestenTests : IDisposable
         var mahnung = fluss["knoten"]!.AsArray().OfType<JsonObject>().First(k => (string?)k["name"] == "mahnung");
 
         // Eingang 1 = das ∨ (Oder) — der zweite Lambda der Anweisung.
-        RumpfGeste(OrtVon(mahnung["_ort"]!, 1), "z => new EroeffneMahnung(Guid.Empty, 1m)", "z => new EroeffneMahnung(Guid.Empty, 0m)");
+        RumpfGeste(OrtVon(mahnung["_ort"]!, 1), "z => new EroeffneMahnung(default, 1m)", "z => new EroeffneMahnung(default, 0m)");
 
-        Text("Fluss.cs").Should().Contain(".Oder(schnell.BeiZeitlimit(), z => new EroeffneMahnung(Guid.Empty, 1m));")
-            .And.Contain(".Sende<EroeffneMahnung>((g, e) => new EroeffneMahnung(e.LeserId, g.Betrag))", "der Haupt-Lambda bleibt wortgetreu");
+        Text("Fluss.cs").Should().Contain(".Oder(schnell.BeiZeitlimit(), z => new EroeffneMahnung(default, 1m));")
+            .And.Contain(".Sende<EroeffneMahnung>((g, e) => new EroeffneMahnung(new(e.LeserId), g.Betrag))", "der Haupt-Lambda bleibt wortgetreu");
     }
 
     [Fact]

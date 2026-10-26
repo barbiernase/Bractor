@@ -80,6 +80,9 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
   nie Projektnamen tippen, sondern die Tabelle lesen. Falscher Ort = CQRS098 bzw. `--check` „Lage“; neue Primitive ⇒ `Lageart.cs` + Tabelle.
   Die Sonde muss alle allgemeinen Primitive abdecken, nicht nur die der Beispieldomäne.
 - **Neue Dispatch-Logik = Generator erweitern**, nie Handschalter, nie Reflection.
+- **Typisierte Ids:** ein Command ist `record … : ICommand<TAggregat>` mit `Id<TAggregat> AggregateId` (das Ziel steht im Typ; Framework-Sicht
+  `ICommand.Ziel`, CQRS013/CQRS010); Verweise auf Aggregate in Events, Queries, Antworten sind `Id<T>` (UUID auf Leitung, Log, Wire; Namensregel
+  `Abstractions/Idvertrag.cs`). Read-Models und Store-Fähigkeiten bleiben bis zur neuen Projektionsform (Plan Phase 8) bei `Guid`.
 - **Ausgabe-Vertrag in der Signatur (CQRS050):** Decide und jedes Handle geben einen konkreten Typ oder `OneOf<…>` konkreter Typen zurück.
   WAS entstehen kann, lesen Generatoren/Extractor/Editor NUR aus der Signatur; Rümpfe liefern nichts.
 - **Fähigkeiten statt Rumpf-Analyse:** ein Handle bekommt die Store-Funktionen als Parameter (`: IWriteStore`/`: IReadStore`, genau eine Funktion,

@@ -44,7 +44,7 @@ public class UmgezogeneFluesseTests
 
         lauf.Vorgänge.Should().ContainSingle().Which.Should().Match<FlussVorgang>(v => v.Pipeline == nameof(DatensatzRangeAufloesung) && v.Erfolg);
         var aufnehmen = lauf.Schritte.Single(s => s.Nachricht is NimmRangeAuf);
-        ((NimmRangeAuf)aufnehmen.Nachricht).AggregateId.Should().Be(ds, "angefordert.Strom().Id ist der Datensatz, der die Range anforderte");
+        ((NimmRangeAuf)aufnehmen.Nachricht).AggregateId.Wert.Should().Be(ds, "angefordert.Strom().Id ist der Datensatz, der die Range anforderte");
         aufnehmen.Ergebnis.Should().BeOfType<PaareAufgenommen>();
     }
 
@@ -89,7 +89,7 @@ public class UmgezogeneFluesseTests
         var ergebnis = w.Fahre(new MeldeTrainingBegonnen(new(lauf)), a => new FlussAntwort.Zeitlimit());
 
         var markieren = ergebnis.Schritte.Single(s => s.Nachricht is MarkiereAlsHaengengeblieben);
-        ((MarkiereAlsHaengengeblieben)markieren.Nachricht).AggregateId.Should().Be(lauf);
+        ((MarkiereAlsHaengengeblieben)markieren.Nachricht).AggregateId.Wert.Should().Be(lauf);
         markieren.Ergebnis.Should().BeOfType<TrainingHaengengeblieben>();
     }
 }

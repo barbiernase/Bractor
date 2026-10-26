@@ -27,7 +27,7 @@ public sealed class DomainEditorLeseseiteTests
         Records =
         [
             new() { Name = "Gemacht", Kind = RecordArt.Event, Namespace = "Probe", Felder = [new() { Name = "Wert", Typ = "int" }] },
-            new() { Name = "MachWeiter", Kind = RecordArt.Command, Namespace = "Probe", Felder = [new() { Name = "AggregateId", Typ = "Guid" }] },
+            new() { Name = "MachWeiter", Kind = RecordArt.Command, Namespace = "Probe", Aggregat = "Ding", Felder = [new() { Name = "AggregateId", Typ = "Guid" }] },
             new() { Name = "HoleZeile", Kind = RecordArt.Query, Namespace = "Probe", Felder = [new() { Name = "Id", Typ = "Guid" }] },
             new() { Name = "ZeileAntwort", Kind = RecordArt.Antwort, Namespace = "Probe", Felder = [new() { Name = "Wert", Typ = "int" }] },
             new() { Name = "KeineZeile", Kind = RecordArt.Antwort, Namespace = "Probe" },
@@ -80,7 +80,7 @@ public sealed class DomainEditorLeseseiteTests
                     Handles =
                     [
                         new() { Eingang = "Pruefe", Parameter = "pruefe", Ausgaenge = ["MachWeiter", "Selbst<Tick>"], Faehigkeiten = [new() { Typ = "IFindeZeile", Name = "finde" }],
-                            Rumpf = "if (await finde.FindeAsync(pruefe.Id) is null) yield break;\nyield return new MachWeiter(pruefe.Id);" },
+                            Rumpf = "if (await finde.FindeAsync(pruefe.Id) is null) yield break;\nyield return new MachWeiter(new(pruefe.Id));" },
                         new() { Eingang = "Tick", Parameter = "tick", Ausgaenge = ["MachWeiter"] },
                     ],
                 },
@@ -219,7 +219,12 @@ public sealed class DomainEditorLeseseiteTests
         var refs = AppDomain.CurrentDomain.GetAssemblies()
             .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
             .Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location)).ToImmutableArray();
-        var trees = Scaffolder.Generiere(Modell()).Select(d => CSharpSyntaxTree.ParseText(d.Inhalt, path: d.Pfad))
+        // Das Ziel-Aggregat von MachWeiter (ein Command nennt es im Typ); Id und Version schreibt sonst der State-Generator.
+        var modell = Modell() with
+        {
+            Aggregate = [new() { Name = "Ding", Namespace = "Probe", StateZusatz = "public int Version { get; set; }\npublic Guid Id { get; set; }" }],
+        };
+        var trees = Scaffolder.Generiere(modell).Select(d => CSharpSyntaxTree.ParseText(d.Inhalt, path: d.Pfad))
             .Append(CSharpSyntaxTree.ParseText("global using System; global using System.Collections.Generic; global using System.Threading.Tasks;"))
             .ToList();
         var comp = CSharpCompilation.Create("LeseseiteProbe", trees, refs,
