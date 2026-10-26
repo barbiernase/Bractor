@@ -43,6 +43,12 @@ davon Garantie 184 + 1; Integration **69/69** (≈ 6 min, davon 50 Garantie); Pr
 Client 30/30, Python SDK 34/34, Worker 21/21; `codegen --check`, `--check`, `--sonde` und `./pruefe-checkout.sh` grün. Neu im Prüfstand:
 `Ids/TypisierteIdTests` (Ziel im Typ, Log/Wire/Leitung als UUID, abweichende Hülle abgelehnt), CQRS013 in `ModellAnalyzerTests`, Routing aus dem
 Typ in `BuildGarantieTests`.
+**Stand 2026-10-26 (Plan Pub/Sub-Neustrukturierung, Phase 2 — Actor-Lebenszyklus und zwei Verben, `1cc53e9`):** Prüfstand **638 grün + 1
+übersprungen** (G-5), davon Garantie 202 + 1; neu 18 Tests in `Lebenszyklus/` (`RahmenActorTests`, `BoteTests`, `LebenszyklusImClusterTests`),
+Gegenprobe je Mechanismus per `sed` im Server-Lauf rot gesehen (Freigabe ohne Warten, kein Zusammenfassen, keine Fehlerantwort, Frage ohne Frist,
+Passivierung trotz Arbeit). Integration **69/69** (50 Garantie), Prüfdomäne **52/52** (47 Garantie), Verhaltens-Netz **13 grün + 3 übersprungen**
+(G-12, G-13, G-14, Tests unverändert), Client 30/30, Python SDK 34/34, Worker 21/21, Werkbank-Abnahme 1/1; `codegen --check`, `--check`, `--sonde`
+und `./pruefe-checkout.sh` grün. Keine Messung (der heiße Pfad ist bis auf gebundene Fristen unverändert).
 
 Statisch gezählt (2026-10-15):
 
