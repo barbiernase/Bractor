@@ -6,6 +6,8 @@ namespace Cqrs.Vermessung;
 /// <summary>
 /// Die Parameter eines Laufs — fest, damit jede Messung dieselbe ist (§0.1). Über die Kommandozeile wählbar sind nur Art, Anlass, Spalte,
 /// Szenarien und Wiederholungen; <c>--probe</c> verkürzt alles für einen Funktionstest des Treibers (Ergebnis nicht im Repo).
+/// Für Diagnosen (Profil unter einer bestimmten Last) lassen sich Sender, Fenster und Obergrenze je Block ändern (<c>--sender</c>,
+/// <c>--fenster</c>, <c>--hoechstens</c>) — ein solcher Lauf ist keine Messung und bekommt keine Spalte.
 /// </summary>
 internal sealed class Optionen
 {
@@ -26,19 +28,24 @@ internal sealed class Optionen
 
     // ── feste Parameter (Höchstlast, Plan §0.1) ──
     /// <summary>Wie lange ein Volllast-Block sendet.</summary>
-    public TimeSpan Fenster => Probe ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(15);
+    public TimeSpan Fenster => _fenster ?? (Probe ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(15));
+    private TimeSpan? _fenster;
     /// <summary>Wie lange der Rückstand nach dem Fenster höchstens abgebaut wird, bevor der Block als „nicht abgebaut“ gilt.</summary>
     public TimeSpan AbbauFrist => TimeSpan.FromSeconds(120);
     /// <summary>S1/S2: so viele TIFF-Paare auf einmal ins Quell-Verzeichnis (ein Stoß).</summary>
     public int StossS1 => Probe ? 100 : 600;
     public int StossS2 => Probe ? 50 : 200;
     /// <summary>Gleichzeitige Sender je Block.</summary>
-    public int[] SenderS3 => [8, 64];
-    public int[] SenderS5 => [1, 8, 64];
+    public int[] SenderS3 { get; private set; } = [8, 64];
+    public int[] SenderS5 { get; private set; } = [1, 8, 64];
     /// <summary>Höchstzahl Vorgänge je Block: unter Höchstlast nimmt der Eingang weit mehr an, als dahinter durchkommt — ohne Deckel wüchse
     /// der Rückstand auf zehntausende und der Abbau dauerte Stunden.</summary>
-    public int MaxS3 => Probe ? 500 : 2000;
-    public int MaxS5 => Probe ? 1000 : 3000;
+    public int MaxS3 => _maxS3 ?? (Probe ? 500 : 2000);
+    public int MaxS5 => _maxS5 ?? (Probe ? 1000 : 3000);
+    private int? _maxS3, _maxS5;
+    /// <summary>Ein Diagnose-Lauf mit geänderten Block-Parametern (keine Messung, keine Spalte).</summary>
+    public bool Geaendert => _fenster != null || _maxS3 != null || _maxS5 != null || _senderGeaendert;
+    private bool _senderGeaendert;
     /// <summary>Das Leerlauf-Fenster: zwei ganze Poll-Perioden (30 s), damit jeder periodische Takt gleich oft hineinfällt (PF-14).</summary>
     public TimeSpan Leerlauf => Probe ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(60);
     /// <summary>Wie lange der Leerlauf höchstens auf das Ende des Nachlaufs wartet (alle Konsumenten am Kopf des Logs), bevor er trotzdem misst.</summary>
@@ -64,11 +71,38 @@ internal sealed class Optionen
                 case "--szenarien": o.Szenarien = Wert().Split(',').Select(s => s.Trim().ToUpperInvariant()).ToHashSet(); break;
                 case "--wiederholungen": o.Wiederholungen = int.Parse(Wert(), CultureInfo.InvariantCulture); break;
                 case "--probe": o.Probe = true; break;
+                case "--fenster": o._fenster = TimeSpan.FromSeconds(int.Parse(Wert(), CultureInfo.InvariantCulture)); break;
+                case "--sender":
+                    foreach (var (block, werte) in JeBlock(Wert()))
+                    {
+                        var sender = werte.Split('+').Select(x => int.Parse(x, CultureInfo.InvariantCulture)).ToArray();
+                        if (block == "S3") o.SenderS3 = sender; else o.SenderS5 = sender;
+                    }
+                    o._senderGeaendert = true;
+                    break;
+                case "--hoechstens":
+                    foreach (var (block, wert) in JeBlock(Wert()))
+                        if (block == "S3") o._maxS3 = int.Parse(wert, CultureInfo.InvariantCulture); else o._maxS5 = int.Parse(wert, CultureInfo.InvariantCulture);
+                    break;
                 default: throw new ArgumentException($"unbekannte Option {args[i]}");
             }
         }
         if (o.Anlass.Length == 0) throw new ArgumentException("--anlass fehlt (z. B. baseline, phase-1)");
+        if (o.Geaendert && o.Spalte != null)
+            throw new ArgumentException("--sender/--fenster/--hoechstens ändern die festen Parameter: das ist eine Diagnose, keine Messung — ohne --spalte");
         return o;
+    }
+
+    /// <summary><c>S3=64,S5=1+64</c> → (S3, "64"), (S5, "1+64"); nur S3 und S5 haben Sender und Obergrenzen.</summary>
+    private static IEnumerable<(string Block, string Wert)> JeBlock(string text)
+    {
+        foreach (var teil in text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var kv = teil.Split('=', 2);
+            var block = kv[0].ToUpperInvariant();
+            if (kv.Length != 2 || block is not ("S3" or "S5")) throw new ArgumentException($"'{teil}': erwartet S3=… oder S5=…");
+            yield return (block, kv[1]);
+        }
     }
 
     public JsonObject Json() => new()
@@ -76,6 +110,7 @@ internal sealed class Optionen
         ["szenarien"] = new JsonArray(Szenarien.Order().Select(s => (JsonNode)s).ToArray()),
         ["wiederholungen"] = Wiederholungen,
         ["probe"] = Probe,
+        ["geaendert"] = Geaendert,
         ["fenster_s"] = Fenster.TotalSeconds,
         ["abbau_frist_s"] = AbbauFrist.TotalSeconds,
         ["warmlauf_s"] = Warmlauf.TotalSeconds,

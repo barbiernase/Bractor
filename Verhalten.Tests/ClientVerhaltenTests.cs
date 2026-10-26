@@ -1,0 +1,193 @@
+using Abstractions;
+using Client.Infrastructure.Connection;
+using Domain.Datensatz;
+using Microsoft.Extensions.DependencyInjection;
+using Domain.ImagePair;
+using Domain.Projections.Datensatz;
+
+namespace Verhalten.Tests;
+
+/// <summary>Ein echter Host der Beispieldomäne für alle Client-Tests einer Klasse.</summary>
+public sealed class BeispielHost : IAsyncLifetime
+{
+    public Testumgebung Umgebung { get; private set; } = null!;
+    public Hostlauf Host { get; private set; } = null!;
+    public JsonEingang Eingang { get; private set; } = null!;
+    public Log Log { get; private set; } = null!;
+    public Bildpaare Bilder { get; private set; } = null!;
+
+    public async Task InitializeAsync()
+    {
+        Umgebung = await Testumgebung.NeuAsync(Anwendung.Beispiel, "verhalten-client");
+        Host = await Hostlauf.StarteAsync(Umgebung);
+        Eingang = new JsonEingang(Host);
+        Log = new Log(Umgebung);
+        Bilder = new Bildpaare(Umgebung);
+    }
+
+    /// <summary>Ein Bildpaar über das Quell-Verzeichnis, fertig, wenn es im Log komplett ist.</summary>
+    public async Task<Bildpaare.Paar> KomplettesPaarAsync()
+    {
+        var paar = await Bilder.LegeAbAsync();
+        await Warte.BisAsync(async () => await Log.ZahlAsync<ImagePairKomplett>(paar.Id) == 1, TimeSpan.FromSeconds(90),
+            $"Paar {paar.Schluessel} wird nicht komplett", Host);
+        return paar;
+    }
+
+    public async Task DisposeAsync()
+    {
+        Eingang.Dispose();
+        await Host.DisposeAsync();
+    }
+}
+
+/// <summary>
+/// Das Verhalten an der Leitung, wie es ein Client erlebt (Plan §6, Phase 0) — gefahren mit dem echten Client-Stack des Blazor-Arbeitsplatzes
+/// bzw. der rohen Leitung gegen einen echten Host. Muss den Umbau von Broker, Sitzung und Verteiler (Phasen 5–7) unverändert überstehen.
+/// </summary>
+[Trait("Kategorie", "Garantie")]
+public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<BeispielHost>
+{
+    private static readonly TimeSpan Kurz = TimeSpan.FromSeconds(15);
+    private static readonly HashSet<string> Gehoert =
+        GeneratedWiring_Domain_Client_Modules_Blazor.ServerEventTypes.Select(t => t.Name.ToLowerInvariant()).ToHashSet();
+
+    [Fact]
+    public async Task Ein_Client_sieht_jedes_gehoerte_Event_seines_Aggregats_und_kennt_den_Kopf_des_Streams()
+    {
+        await using var ap = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenArbeitsplatz);
+        var paar = await b.KomplettesPaarAsync();
+
+        // Jedes Event des Streams, das der Vertrag hört, kommt genau einmal an — mit der Version, die es im Log hat.
+        var stream = await b.Log.StreamAsync(paar.Id);
+        var soll = stream.Where(e => Gehoert.Contains(e.Typ)).Select(e => (e.Version, e.Typ)).ToList();
+        soll.Should().HaveCountGreaterThanOrEqualTo(4, "ImagePairErstellt, zweimal BildVerfuegbar, ImagePairKomplett");
+        await ap.WarteAufAsync(e => e.Kontext.AggregateId == paar.Id && e.Nachricht is ImagePairKomplett, Kurz, "ImagePairKomplett kam nicht an");
+        var ist = ap.Alles.Where(e => e.Kontext.AggregateId == paar.Id && e.Nachricht is IEvent and not CommandFailed)
+            .Select(e => (e.Kontext.AggregateVersion, e.Nachricht.GetType().Name.ToLowerInvariant())).OrderBy(x => x.AggregateVersion).ToList();
+        ist.Should().Equal(soll, "der Client sieht jedes gehörte Event seines Aggregats genau einmal, mit seiner Version");
+
+        // Der Client kennt den Kopf des Streams — und der Server nimmt einen Command mit dieser Version an.
+        ap.Versionen.GetVersion(paar.Id).Should().Be(stream.Max(e => e.Version), "die Version aus den Pushes ist der Kopf des Streams");
+        var quittung = await ap.QuittungAsync(ap.Sende(new LabelBildPaar(paar.Id, Klassifikation.Anomalie)), Kurz);
+        quittung.Nachricht.Should().BeOfType<BildPaarGelabelt>("mit der Version aus den Pushes entscheidet das Aggregat, statt einen Konflikt zu melden");
+        (await b.Log.ZahlAsync<BildPaarGelabelt>(paar.Id)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Die_Quittung_eines_Commands_erreicht_den_Client_ueber_die_Korrelation_bevor_er_wiederholt()
+    {
+        await using var ap = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenArbeitsplatz);
+        var datensatz = Guid.NewGuid();
+        var gesendet = DateTimeOffset.UtcNow;
+        var quittung = await ap.QuittungAsync(ap.Sende(new ErstelleDatensatz(datensatz, "Quittung")), Kurz);
+
+        quittung.Nachricht.Should().BeOfType<DatensatzErstellt>();
+        (quittung.Zeit - gesendet).Should().BeLessThan(TimeSpan.FromSeconds(4), "binnen der Frist des Clients (5 s), sonst schickt er noch einmal");
+        await Task.Delay(TimeSpan.FromSeconds(6));
+        ap.Alles.Where(e => e.Nachricht is CommandUnbestaetigt or CommandSendFailed).Should().BeEmpty("der Ausgang ist bekannt");
+        (await b.Log.ZahlAsync<DatensatzErstellt>(datensatz)).Should().Be(1);
+    }
+
+    /// <summary>
+    /// Auch eine fachliche Ablehnung ist ein bekannter Ausgang: der Client muss sie über die Korrelation bekommen (docs/08 §8.4). Heute kommt
+    /// sie nie an — der Broker stellt die gezielte Ablehnung nur zu, wenn die Sitzung ihren Typ abonniert hat, und der Vertrag des Arbeitsplatzes
+    /// nennt keine Ablehnungen; der Client wiederholt dreimal und meldet „unbestätigt“.
+    /// </summary>
+    [Fact(Skip = "G-12 offen (docs/13)")]
+    public async Task Eine_fachliche_Ablehnung_quittiert_den_Command_beim_Client()
+    {
+        await using var ap = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenArbeitsplatz);
+        var datensatz = Guid.NewGuid();
+        await ap.QuittungAsync(ap.Sende(new ErstelleDatensatz(datensatz, "leer")), Kurz);
+
+        var quittung = await ap.QuittungAsync(ap.Sende(new FriereEin(datensatz)), TimeSpan.FromSeconds(4));   // leer → abgelehnt
+
+        quittung.Nachricht.Should().BeOfType<DatensatzLeer>();
+        await Task.Delay(TimeSpan.FromSeconds(12));
+        ap.Alles.Where(e => e.Nachricht is CommandUnbestaetigt).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Ein_Client_darf_und_hoert_nur_was_Vertrag_und_Token_gemeinsam_erlauben()
+    {
+        var paar = await b.KomplettesPaarAsync();
+        // Das Token verkörpert vom Arbeitsplatz nur den Inspekteur.
+        await using var ap = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenInspekteur);
+        await using var roh = await RoheLeitung.VerbindeAsync(b.Host, "Arbeitsplatz", Testumgebung.TokenInspekteur);
+
+        (await ap.QuittungAsync(ap.Sende(new LabelBildPaar(paar.Id, Klassifikation.KeineAnomalie)), Kurz))
+            .Nachricht.Should().BeOfType<BildPaarGelabelt>("Labeln darf der Inspekteur");
+
+        var datensatz = Guid.NewGuid();
+        (await ap.QuittungAsync(ap.Sende(new ErstelleDatensatz(datensatz, "verboten")), Kurz))
+            .Nachricht.Should().BeOfType<CommandFailed>("Datensätze legt der KI-Operator an — der steckt im Vertrag, aber nicht im Token");
+        (await ap.FrageAsync(new HoleDatensaetze(), Kurz, typeof(DatensatzListe)))
+            .Should().BeOfType<QueryFailed>("auch fragen darf er nur, was der Inspekteur darf");
+
+        // Hören: Events außerhalb des Vertrags kommen nie an, Events im Vertrag schon (Gegenprobe am Paar).
+        var sammelvorgang = Guid.NewGuid();
+        await b.Eingang.MussAsync("StarteSammelvorgang", new() { ["AggregateId"] = sammelvorgang.ToString(), ["Anzahl"] = 1 }, Testumgebung.TokenDisponent);
+        var zweites = await b.KomplettesPaarAsync();
+        await roh.WarteAufEventAsync(e => e.AggregateId == zweites.Id.ToString() && e.Payload.Typ == nameof(ImagePairKomplett), Kurz,
+            "das gehörte ImagePairKomplett kam nicht an");
+        roh.Events.Should().NotContain(e => e.AggregateId == sammelvorgang.ToString(), "SammelvorgangGestartet steht nicht im Vertrag des Arbeitsplatzes");
+        (await b.Log.ZahlAsync<DatensatzErstellt>(datensatz)).Should().Be(0);
+
+        // Ein Token, das keinen Akteur des Clients verkörpert, kommt gar nicht erst an die Leitung.
+        var verbinden = () => RoheLeitung.VerbindeAsync(b.Host, "Arbeitsplatz", Testumgebung.TokenDisponent);
+        await verbinden.Should().ThrowAsync<Exception>();
+    }
+
+    [Fact]
+    public async Task Eine_Zusage_Antwort_wirkt_genau_einmal_auch_doppelt_von_zwei_Traegern_und_nach_dem_Neuverbinden()
+    {
+        // Zwei Clients tragen den Vertrag des Klassifizierers (IKlassifizierer: ImagePairKomplett → KlassifiziereBildPaarDurchKi).
+        var eins = await RoheLeitung.VerbindeAsync(b.Host, "KlassifikationsWorker", Testumgebung.TokenKlassifizierer);
+        await using var zwei = await RoheLeitung.VerbindeAsync(b.Host, "KlassifikationsWorker", Testumgebung.TokenKlassifizierer);
+        var paar = await b.KomplettesPaarAsync();
+        bool Komplett(Cqrs.Leitung.EventEnvelopeDto e) => e.AggregateId == paar.Id.ToString() && e.Payload.Typ == nameof(ImagePairKomplett);
+        var e1 = await eins.WarteAufEventAsync(Komplett, Kurz, "Träger 1 hört ImagePairKomplett nicht");
+        var e2 = await zwei.WarteAufEventAsync(Komplett, Kurz, "Träger 2 hört ImagePairKomplett nicht");
+
+        var antwort = new KlassifiziereBildPaarDurchKi(paar.Id, Klassifikation.Anomalie);
+        await eins.SendeAsync(antwort, "ImagePair", -1, e1.CorrelationId, (e1, 0));
+        await eins.SendeAsync(antwort, "ImagePair", -1, e1.CorrelationId, (e1, 0));   // dasselbe Event noch einmal beantwortet
+        await zwei.SendeAsync(antwort, "ImagePair", -1, e2.CorrelationId, (e2, 0));   // der zweite Träger antwortet auch
+        await eins.DisposeAsync();
+        await using var wieder = await RoheLeitung.VerbindeAsync(b.Host, "KlassifikationsWorker", Testumgebung.TokenKlassifizierer);
+        await wieder.SendeAsync(antwort, "ImagePair", -1, e1.CorrelationId, (e1, 0));   // nach dem Neuverbinden noch einmal
+
+        await Warte.BisAsync(async () => await b.Log.ZahlAsync<BildPaarDurchKiKlassifiziert>(paar.Id) >= 1, Kurz, "die Zusage wirkte nicht", b.Host);
+        await Warte.NachlaufAsync();
+        (await b.Log.ZahlAsync<BildPaarDurchKiKlassifiziert>(paar.Id)).Should().Be(1, "dieselbe Antwort auf dasselbe Event wirkt genau einmal");
+
+        // Gegenprobe: eine ANDERE Ausgabe derselben Zusage wirkt.
+        await wieder.SendeAsync(antwort, "ImagePair", -1, e1.CorrelationId, (e1, 1));
+        await Warte.BisAsync(async () => await b.Log.ZahlAsync<BildPaarDurchKiKlassifiziert>(paar.Id) == 2, Kurz, "die zweite Ausgabe wirkte nicht", b.Host);
+    }
+
+    [Fact]
+    public async Task Nach_dem_eigenen_Command_sieht_die_naechste_Query_des_Clients_die_Aenderung()
+    {
+        await using var ap = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenArbeitsplatz);
+        var datensatz = Guid.NewGuid();
+        await ap.QuittungAsync(ap.Sende(new ErstelleDatensatz(datensatz, "Lesen nach Schreiben")), Kurz);
+        (await ap.FrageAsync(new HoleDatensatz(datensatz), Kurz, typeof(DatensatzAntwort), typeof(DatensatzNichtGefunden)))
+            .Should().BeOfType<DatensatzAntwort>("gleich nach der Quittung kennt die Leseseite den neuen Datensatz");
+
+        var paare = new List<Guid>();
+        for (var i = 0; i < 5; i++)
+        {
+            var paar = Guid.NewGuid();
+            paare.Add(paar);
+            (await ap.QuittungAsync(ap.Sende(new NimmPaarAuf(datensatz, paar)), Kurz)).Nachricht.Should().BeOfType<PaarAufgenommen>();
+            var antwort = (DatensatzAntwort)await ap.FrageAsync(new HoleDatensatz(datensatz), Kurz, typeof(DatensatzAntwort), typeof(DatensatzNichtGefunden));
+            antwort.Mitglieder.Should().BeEquivalentTo(paare, $"Query {i + 1} direkt nach der Quittung zeigt den eigenen Stand");
+        }
+
+        await ap.QuittungAsync(ap.Sende(new SetzeSplit(datensatz, 80, 10, 10, 7)), Kurz);
+        var nachSplit = (DatensatzAntwort)await ap.FrageAsync(new HoleDatensatz(datensatz), Kurz, typeof(DatensatzAntwort), typeof(DatensatzNichtGefunden));
+        (nachSplit.Split.TrainProzent, nachSplit.Split.Seed).Should().Be((80, 7));
+    }
+}

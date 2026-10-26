@@ -4,7 +4,8 @@
 #   scripts/server.sh einrichten [--netz proxy]  Server einrichten (idempotent, scripts/server-einrichten.sh): Checkout, .NET-SDK wie lokal,
 #                                             Python der Worker, Infrastruktur-Container (Standard im Host-Netzwerk, ohne docker-proxy)
 #   scripts/server.sh lauf <befehl …>         HEAD auf dem Server auschecken, <befehl> dort in tmux ausführen (übersteht SSH-Abbrüche), die
-#                                             Ausgabe mitlesen, neue Ordner aus vermessung/ergebnisse/ zurückholen; Exit-Code = der des Befehls
+#                                             Ausgabe mitlesen, die Ordner, die DIESER Lauf in vermessung/ergebnisse/ anlegte, zurückholen;
+#                                             Exit-Code = der des Befehls
 #   scripts/server.sh lauf --los <befehl …>   dasselbe, ohne zu warten (später: warte)
 #   scripts/server.sh warte                   den laufenden bzw. letzten Lauf mitlesen, Ergebnisse holen
 #   scripts/server.sh status                  läuft etwas? letzte Läufe, Last, Container
@@ -16,7 +17,8 @@
 #
 # Ein Lauf zur Zeit (Messungen nie parallel, docs/12 §12.7). Ziel: CQRS_SERVER (Standard root@136.243.92.101).
 # Auf dem Server: Checkout /opt/bractor (detached auf dem Commit), Läufe /opt/bractor-laeufe/<id>.{sh,log,exit}, Ergebnis-Archiv
-# /opt/bractor-laeufe/ergebnisse/ (der Checkout wird vor jedem Lauf gesäubert).
+# /opt/bractor-laeufe/ergebnisse/ (der Checkout wird vor jedem Lauf gesäubert), die Ordner eines Laufs in <id>.ordner — zurück kommen nur sie,
+# nie das ganze Archiv (lokal gelöschte Läufe, etwa nach einem Schnitt, kämen sonst wieder).
 set -euo pipefail
 
 ZIEL="${CQRS_SERVER:-root@136.243.92.101}"
@@ -48,13 +50,13 @@ auschecken() {
     cd $CO && git fetch -q origin && git checkout -qf --detach $SHA && git clean -fdq"
 }
 
-ergebnisse_holen() {
+ergebnisse_holen() {   # $1 = Lauf-Id
+  local ordner d
+  ordner="$(fern "cat $LAEUFE/$1.ordner 2>/dev/null")" || ordner=""
+  [ -n "$ordner" ] || return 0
   mkdir -p "$WURZEL/vermessung/ergebnisse"
-  local neu
-  neu=$(rsync -a --ignore-existing --out-format='%n' -e "ssh ${SSH_OPT[*]}" "$ZIEL:$LAEUFE/ergebnisse/" "$WURZEL/vermessung/ergebnisse/" \
-    | grep -v '/$' | cut -d/ -f1 | sort -u || true)
-  [ -n "$neu" ] && echo "Ergebnisse geholt: $(echo "$neu" | tr '\n' ' ')"
-  return 0
+  for d in $ordner; do rsync -a -e "ssh ${SSH_OPT[*]}" "$ZIEL:$LAEUFE/ergebnisse/$d" "$WURZEL/vermessung/ergebnisse/"; done
+  echo "Ergebnisse geholt: $(echo "$ordner" | tr '\n' ' ')"
 }
 
 warte() {
@@ -71,7 +73,7 @@ warte() {
     sleep 10
   done
   rm -f "$stueck"
-  ergebnisse_holen
+  ergebnisse_holen "$id"
   return "$rc"
 }
 
@@ -99,7 +101,9 @@ cd @CO@ && . /etc/profile.d/bractor.sh
   echo "\$ $(cat @LAEUFE@/@ID@.befehl)"
   eval "$(cat @LAEUFE@/@ID@.befehl)"
   rc=$?
-  for d in $(git ls-files --others --exclude-standard vermessung/ergebnisse | cut -d/ -f3 | sort -u); do cp -r vermessung/ergebnisse/$d @LAEUFE@/ergebnisse/; done
+  for d in $(git ls-files --others --exclude-standard vermessung/ergebnisse | cut -d/ -f3 | sort -u); do
+    cp -r vermessung/ergebnisse/$d @LAEUFE@/ergebnisse/ && echo "$d" >> @LAEUFE@/@ID@.ordner
+  done
   echo "== $(date -Is) · Exit $rc"
 } > @LAEUFE@/@ID@.log 2>&1
 echo $rc > @LAEUFE@/@ID@.exit

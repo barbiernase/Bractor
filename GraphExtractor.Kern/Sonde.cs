@@ -29,8 +29,16 @@ namespace GraphExtractor;
 /// </summary>
 public static class Sonde
 {
-    /// <summary>Der Wurzel-Namespace der Sonden-Domäne — nur die Sonde selbst kennt ihn.</summary>
-    private const string Wurzel = "Leihwesen";
+    /// <summary>
+    /// Die Wurzel-Namespaces der Sonde — gelesen aus ihren eigenen Quelltexten (erstes Segment jeder Namespace-Deklaration), nie getippt:
+    /// neben „Leihwesen“ liegen fremde Szenarien in eigenen Wurzeln (Plan Pub/Sub-Neustrukturierung §6, Phase 0), damit das Modell nicht
+    /// auf eine Beispieldomäne passt.
+    /// </summary>
+    private static readonly IReadOnlySet<string> Wurzeln = Quellen()
+        .SelectMany(q => CSharpSyntaxTree.ParseText(q.Text).GetRoot().DescendantNodes().OfType<BaseNamespaceDeclarationSyntax>())
+        .Select(n => n.Name.ToString().Split('.')[0]).ToHashSet(StringComparer.Ordinal);
+
+    private static bool InSonde(string? ns) => ns != null && Wurzeln.Contains(ns.Split('.')[0]);
 
     public static async Task<int> PruefeAsync(Solution solution, Projektlage lage, string solutionDir, bool zeigeIst, string? boardAusgabe = null)
     {
@@ -41,7 +49,7 @@ public static class Sonde
         foreach (var (name, text) in Quellen())
             fork = fork.AddDocument(DocumentId.CreateNewId(ziel.Id), name, text, folders: new[] { "__sonde" },
                 filePath: Path.Combine(Path.GetDirectoryName(ziel.FilePath)!, "__sonde", name));
-        Console.WriteLine($"   Sonde „{Wurzel}\" ({Quellen().Count()} Dateien) im Speicher in {ziel.Name} gelegt.");
+        Console.WriteLine($"   Sonde „{string.Join("“, „", Wurzeln.Order(StringComparer.Ordinal))}\" ({Quellen().Count()} Dateien) im Speicher in {ziel.Name} gelegt.");
 
         // ── GEZEICHNET = Gesten (Werkbank P7.3): je Geste ein Karten-Delta wie aus dem Browser, geschrieben vom Gesten-Motor in den Fork
         //    (Scaffolder für Neues, Abgleich für Geändertes), danach neu gelesen — die nächste Geste sieht den neuen Code-Stand wie in der Werkbank. ──
@@ -142,7 +150,7 @@ public static class Sonde
     private static List<string> Inventar(JsonObject b)
     {
         var z = new List<string>();
-        bool Sonde(JsonNode? n) => ((string?)n?["namespace"])?.StartsWith(Wurzel, StringComparison.Ordinal) == true;
+        bool Sonde(JsonNode? n) => InSonde((string?)n?["namespace"]);
         string S(JsonNode? n, string k) => (string?)n?[k] ?? "";
         IEnumerable<JsonNode> A(JsonNode? n, string k) => (n?[k] as JsonArray)?.Where(x => x != null).Select(x => x!) ?? [];
         string Felder(JsonNode? n, string k = "felder") => string.Join(", ", A(n, k).Select(f =>

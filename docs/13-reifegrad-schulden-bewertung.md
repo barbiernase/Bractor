@@ -14,6 +14,8 @@ oder umgeschrieben. Die Befunde der Actor-Praxis vom 2026-10-18 stehen im Plan �
 | ID | Kurz | Prio |
 |---|---|:--:|
 | G-11 | Im Störungslauf übersprang eine Projektion einmal zwei Events eines Streams (Partition am Kopf, Guard dahinter) — Ursache und Test offen | P1 |
+| G-12 | Eine fachliche Ablehnung erreicht den Client nie, wenn sein Vertrag ihren Typ nicht hört (der Arbeitsplatz hört keine): er wiederholt dreimal und meldet „unbestätigt“ | P1 |
+| G-13 | Zwei Knoten vergeben dieselben Sitzungs-Kennungen (Zähler je Prozess), der Broker überschreibt: eine gezielte Antwort kann bei der Sitzung des anderen Knotens landen | P1 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
 | PF-13 | Unter S5-64: Reaktion p99 2–3,5 s (p50 5 ms) — ihr Nachschub wartet am heißen Posten hinter den Reservierungen (der S3-64-Rückgang ist mit „korreliert lesen“ erledigt: 1,85 × Baseline) | P3 |
@@ -115,6 +117,22 @@ an einer Obergrenze geändert, die bei 3 258 Events nicht greift.
 - *Vermutet:* Rest-Zustand auf dem Server (Tobi), eine Lücke im Horizont beim harten Ende eines anderen Hosts am selben Postgres, oder ein
   Weg, auf dem Sequenzen als erledigt gelten, ohne angewandt zu sein. *Nächster Schritt:* `scripts/stoerungsserie.sh <N>` sichert beim
   nächsten roten Lauf Transaktionen und Commit-Zeiten der betroffenen Events (Commit-Zeitstempel sind auf dem Server eingeschaltet).
+
+**G-12 · Fachliche Ablehnungen erreichen den Client nicht** (gefunden beim Verhaltens-Netz, Plan Pub/Sub-Neustrukturierung Phase 0). Das Aggregat
+schickt eine Ablehnung gezielt an die Sitzung des Absenders (`AggregateActorBase.TryPublishRejectionAsync`, `TargetSubscriberId`), der Broker
+stellt sie aber nur einer Sitzung zu, die den TYP abonniert hat (`BrokerShardActor`: je Typ eine Abonnenten-Tabelle). Die Sitzung abonniert
+genau die Eingänge ihres Vertrags (`AkteurVertragsPruefung.Wende`) und immer `CommandFailed` — keine Ablehnungs-Typen. Der Blazor-Arbeitsplatz
+bekommt deshalb auf einen abgelehnten Command (z. B. `FriereEin` auf einen leeren Datensatz → `DatensatzLeer`) keine Antwort, sendet dieselbe
+Hülle dreimal (je 5 s) und meldet `CommandUnbestaetigt`, obwohl der Ausgang feststeht (docs/08 §8.4 sagt anderes). Nachweis:
+`Verhalten.Tests/ClientVerhaltenTests.Eine_fachliche_Ablehnung_quittiert_den_Command_beim_Client` (Skip G-12). Behebt der Plan mit Phase 5
+(Ablehnung als Hinweis an die Sitzung) und Phase 7 (Sitzung als Actor, gezielt über den Verteiler des Knotens).
+
+**G-13 · Sitzungs-Kennungen kollidieren zwischen Knoten** (gefunden beim Verhaltens-Netz, Phase 0). `CqrsClientServiceImpl` vergibt
+`session-NNNN` aus einem statischen Zähler je Prozess; die Abonnenten-Tabelle der Broker-Shards ist clusterweit und überschreibt bei gleicher
+Kennung (`SubscriberRegistry`). Die ersten Sitzungen zweier Knoten heißen beide `session-0001`: eine gezielte Nachricht (Ablehnung,
+`CommandFailed`) für die eine geht an die zuletzt angemeldete. In einem Test mit zwei Knoten im selben Prozess bliebe das unsichtbar (der Zähler
+ist geteilt). Nachweis: `Verhalten.Tests/ZweiKnotenTests.Eine_Ablehnung_landet_bei_zwei_Knoten_an_der_richtigen_Sitzung` (zwei Host-Prozesse,
+Skip G-13). Behebt der Plan mit Phase 7 (Sitzungs-Id nennt den Knoten, Verteiler je Knoten).
 
 **PF-10 · Datei-Treiber meldet seriell.** Der Datei-Treiber meldet die nächste Datei erst, wenn die vorige im Log steht (Rückstau, docs/11 §11.8).
 In S1 ist genau das die Decke: je Sekunde werden halb so viele Paare komplett, wie Dateien gemeldet werden (Phase-2- und Phase-3-Code gleich);

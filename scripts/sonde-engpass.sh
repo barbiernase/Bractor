@@ -3,11 +3,14 @@
 # und Kern, Host-Threads, pg_stat_activity alle 100 ms, WAL und dotnet-counters mit; die Auswertung je Abschnitt landet im Ergebnis-Ordner
 # unter sonde/. Optional genau ein Knopf — eine Diagnose, kein Messlauf (ohne --spalte, erscheint in keiner Tabelle).
 #
-#   scripts/sonde-engpass.sh --anlass server-sonde-a1 [--knopf <k>] [--szenarien S3,S5] [--wiederholungen 3] [--profil S5-8-w1]
+#   scripts/sonde-engpass.sh --anlass server-sonde-a1 [--knopf <k>] [--szenarien S3,S5] [--wiederholungen 3] [--profil S5-8-w1] [-- <Treiber-Optionen>]
+#
+# Hinter „--“ gehen Optionen unverändert an den Treiber (Cqrs.Vermessung), z. B. ein Block mit gehaltener Last für ein Profil:
+#   -- --sender S5=64 --fenster 120 --hoechstens S5=1000000     (S5 nur mit 64 Sendern, 120 s lang, ohne Deckel)
 #
 # --horizont <db>: zusätzlich jede Sekunde die Teile der Horizont-Probe einzeln mit EXPLAIN ANALYZE (PF-17), nach sonde/horizont.csv.
-# --profil <abschnitt>: zusätzlich ein CPU-Profil des Hosts für 15 s ab dem Beginn des Abschnitts (dotnet-trace), ausgewertet mit
-#   scripts/sonde-profil.py nach sonde/profil.md.
+# --profil <abschnitt>: zusätzlich ein CPU-Profil des Hosts ab dem Beginn des Abschnitts (dotnet-trace; Dauer SONDE_PROFIL_DAUER, Standard
+#   15 s), ausgewertet mit scripts/sonde-profil.py nach sonde/profil.md.
 #
 # Knöpfe (wirken nur auf den Checkout des Messservers, der vor jedem Lauf gesäubert wird; knopf.txt hält die Änderung fest):
 #   keiner            Stand des Commits
@@ -23,8 +26,10 @@ WURZEL="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 cd "$WURZEL"
 
 ANLASS="" KNOPF=keiner SZENARIEN=S3,S5 WIEDERHOLUNGEN=3 PROFIL="" HORIZONT=""
+TREIBER=()
 while [ $# -gt 0 ]; do
   case "$1" in
+    --) shift; TREIBER=("$@"); break ;;
     --anlass) ANLASS="$2"; shift 2 ;;
     --knopf) KNOPF="$2"; shift 2 ;;
     --szenarien) SZENARIEN="$2"; shift 2 ;;
@@ -82,7 +87,7 @@ vorher="$(ls vermessung/ergebnisse/ 2>/dev/null | sort)"
 python3 scripts/sonde-engpass.py --aus "$SONDE" ${PROFIL:+--profil "$PROFIL"} ${HORIZONT:+--horizont "$HORIZONT"} &
 SONDE_PID=$!
 set +e
-scripts/vermessung-e2e.sh --anlass "$ANLASS" --szenarien "$SZENARIEN" --wiederholungen "$WIEDERHOLUNGEN"
+scripts/vermessung-e2e.sh --anlass "$ANLASS" --szenarien "$SZENARIEN" --wiederholungen "$WIEDERHOLUNGEN" ${TREIBER[@]+"${TREIBER[@]}"}
 rc=$?
 set -e
 kill -TERM "$SONDE_PID" 2>/dev/null || true

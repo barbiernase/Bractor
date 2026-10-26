@@ -12,6 +12,7 @@ Die Teststrategie folgt den Invarianten „die Wahrheit ist der Log“ und „ni
 | 1 — Prüfstand | `Infrastructure.Pruefstand.Tests` | in-memory, **store-frei** | Decider/Applier, Fold, Routing, Signale, Wire, Analyzer und Generatoren (über eine eigene `CSharpCompilation`), Extractor/Gesten/Sicht, Funktionen, Akteure, Quellen-Treiber, Umgebung, Spur | ja |
 | 2 — Integration | `Infrastructure.Integration.Tests` | **echtes** Marten/Postgres, Consul, Redis, Kestrel | Store-Semantik und Ende-zu-Ende-Verhalten im Cluster (Beispielanwendung) | **nein** (sequentiell erzwungen) |
 | 2 — Prüfdomäne | `Pruefdomaene.Integration.Tests` | **echtes** Marten/Postgres, Consul, Redis; eigene Schemata `pruef_*` | Framework-Verhalten domänenneutral an der zweiten Anwendung `Pruefdomaene`: Prozess-Diamant, Kompensation, Fan-out + Count-Join, Snapshot, Upcasting, Marking-Cursor-Äquivalenz | **nein** (sequentiell erzwungen; nie gleichzeitig mit der anderen Integrations-Suite) |
+| Verhaltens-Netz | `Verhalten.Tests` | **echte** Hosts als Prozesse (`Host.Grpc`, `Host.Pruefdomaene`) in einer eigenen Umgebung je Klasse (Art Sim, eigene DB, eigenes Quell-Verzeichnis, bei Bedarf zwei Knoten über Consul) — angesprochen nur von außen: gRPC-Leitung mit dem Client-Stack des Blazor-Arbeitsplatzes bzw. roh, JSON-Eingang, Quell-Verzeichnis, Queries | das Verhalten, das der Umbau (Plan Pub/Sub-Neustrukturierung) nicht ändern darf: was ein Client sieht, darf, quittiert bekommt, liest; Exactly-once je Ablauf als fachliches Soll im Log — nie Prozess-Events, Marken oder Framework-Verdrahtung | **nein** (sequentiell; nie gleichzeitig mit den anderen Integrations-Suiten oder einer Messung) |
 | Client (C#) | `Client.Infrastructure.CollectionTests` | in-memory | `VirtualCollection`, `PendingCommandTracker` | ja |
 | Client (Python) | `Client.Infrastructure.Python/tests`, `Domain.Client.Worker.Python.ML/tests` | pytest | SDK (Vertrag, Funktion, Query, Reconnect, Mapper), Worker (Verträge, Funktionen, generischer Worker) | ja |
 | Werkbank-Abnahme | `Werkbank.Abnahme.Tests` | **echte** Werkbank (Prozess) auf einer Kopie des Arbeitsbaums, echter Host in `sim`, eigene Sim-DB, Python-Worker | ⟳ (alle Schritte, Stände), JSON-Eingang als Akteur, Projektion, Spur, „▶ Worker“ bis zum Fakt, Geste/↶ byte-gleich, Daten-Prüfung meldet ein entferntes Feld | **nein** (sequentiell; nie gleichzeitig mit den anderen Integrations-Suiten) |
@@ -901,6 +902,16 @@ Es meldet zuerst lokal vorhandene Dateien, die eine Ignore-Regel schluckt (mit d
 Cache-Ausgaben, `deploy-*/` aus `build.sh` und die bewusst ignorierten Altdateien sind ausgenommen), baut dann den Commit `HEAD` in einem
 temporären `git worktree` (nur committete Dateien — nicht committete Änderungen prüft es nicht), fährt dort `./codegen.sh --check` und den
 Prüfstand und verlangt, dass der Build den Checkout nicht verändert. Der Worktree wird immer entfernt; Exit-Code 0 = grün. Dauer ≈ 2½ min (144 s auf `e26bc15`).
+
+**Verhaltens-Netz (`Verhalten.Tests`, Plan Pub/Sub-Neustrukturierung Phase 0):** jede Klasse schreibt sich eine Umgebung
+(`Geruest/Testumgebung.cs`, `umgebung.verhalten-….json` im Temp-Verzeichnis, gefunden über `CQRS_UMGEBUNGEN`), löscht ihre Datenbank und
+startet die gebauten Hosts als Prozesse (`Geruest/Hostlauf.cs`; Ports je Prozess über `Transport__GrpcPort`/`__EinblickPort`, so teilen zwei
+Knoten eine Umgebung). Gesprochen wird nur über äußere Wege: `Geruest/Arbeitsplatz.cs` (Bus, Verbindung, Query-Brücke, Versionen und das
+generierte Wiring des Blazor-Arbeitsplatzes, ohne Stores), `Geruest/RoheLeitung.cs` (die Leitung ohne Client-Stack: Zusage mit Ursache,
+Command mit behaupteter Version, alles sehen, was eine Sitzung bekommt), `Geruest/JsonEingang.cs`, `Geruest/Bildpaare.cs` (TIFF-Paare ins
+Quell-Verzeichnis). Geprüft wird das fachliche Soll im Log (`Geruest/Log.cs`, `mt_events` je Stream und Typ) und in Antworten. Zeit über die
+Uhr der Sim (`Testumgebung.StelleUhrVorAsync`), nicht über Warten. Läuft nur auf dem Messserver:
+`scripts/server.sh lauf dotnet test Verhalten.Tests/Verhalten.Tests.csproj` (braucht Postgres, Redis, Consul).
 
 **Werkbank-Abnahme (Ebene 2, `Werkbank.Abnahme.Tests`):** braucht vorher `dotnet build` (startet die gebaute Werkbank-DLL als Prozess, Black-Box über
 HTTP). `Werkbanklauf` kopiert alle Quell-Dateien (`git ls-files -co --exclude-standard`, also auch nicht committete Änderungen) in ein Temp-Verzeichnis,

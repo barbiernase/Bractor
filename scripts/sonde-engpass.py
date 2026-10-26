@@ -376,6 +376,13 @@ def horizont_schleife(aus, db):
         psql.kill()
 
 
+def trace_dauer(sekunden):
+    """dotnet-trace erwartet dd:hh:mm:ss — Sekunden über 59 müssen in Minuten und Stunden aufgehen."""
+    m, s = divmod(int(sekunden), 60)
+    h, m = divmod(m, 60)
+    return f"{h // 24:02d}:{h % 24:02d}:{m:02d}:{s:02d}"
+
+
 def profil_schleife(aus, ergebnisse, abschnitt, dauer):
     """Wartet, bis der Treiber den Abschnitt beginnt (neuester Ergebnis-Ordner, host.csv), und zeichnet dann den Host auf."""
     werkzeug = shutil.which("dotnet-trace") or os.path.expanduser("~/.dotnet/tools/dotnet-trace")
@@ -399,7 +406,7 @@ def profil_schleife(aus, ergebnisse, abschnitt, dauer):
         with open(os.path.join(aus, "profil.txt"), "w") as f:
             f.write(f"{abschnitt} {rolle} {pid} ab {jetzt()} für {dauer} s\n")
         subprocess.run([werkzeug, "collect", "--process-id", str(pid), "--profile", "dotnet-common,dotnet-sampled-thread-time",
-                        "--duration", f"00:00:00:{int(dauer):02d}", "--format", "Speedscope", "--output", os.path.join(aus, "profil.nettrace")],
+                        "--duration", trace_dauer(dauer), "--format", "Speedscope", "--output", os.path.join(aus, "profil.nettrace")],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, timeout=dauer + 120)
         return
 
@@ -433,7 +440,7 @@ def main():
         if a.dauer and time.monotonic() - beginn >= a.dauer:
             STOP.set()
     for f in faeden:
-        f.join(150 if a.profil else 20)
+        f.join(a.profil_dauer + 150 if a.profil else 20)   # das Profil darf zu Ende schreiben (dotnet-trace braucht nach der Dauer noch Zeit)
 
 
 if __name__ == "__main__":

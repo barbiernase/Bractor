@@ -152,6 +152,134 @@ sicht Leihwesen.Gebuehren.Mahnstelle akteur domaene=Leihwesen.Ausleihe block=§a
 sicht Leihwesen.Lesen.Gutachterin akteur domaene=Leihwesen.Gebuehren block=§akteure
 sicht Leihwesen.Lesen.Archiv akteur domaene=Leihwesen.Ausleihe block=§akteure
 
+# ══ FREMDE SZENARIEN (Plan Pub/Sub-Neustrukturierung §6, Phase 0) — eigene Wurzeln neben „Leihwesen“, damit das Modell nicht auf eine
+#    Beispieldomäne passt. Geschrieben im heutigen Wortschatz; der Umbau schreibt sie in die neue Grammatik um (Phase 4). ══
+
+# ── Kundenportal (Konten.cs.txt): Benutzer mit EINDEUTIGER E-Mail — die Adresse ist das Eindeutigkeits-Aggregat, die Absage ein Fakt,
+#    der Benutzer steht als fachliches Feld im Event (A2); ein Prozess verbindet die beiden Aggregate; Hilfscode leitet die Id ab. ──
+record Kundenportal.Konten.RegistriereBenutzer command erzeugung aggregat=Benutzer | AggregateId:Guid, Email:string, Name:string
+record Kundenportal.Konten.RegistrierungBeantragt event aggregat=Benutzer | BenutzerId:Guid, Email:string, Name:string
+record Kundenportal.Konten.BenutzerExistiert rejection aggregat=Benutzer | Id:Guid
+record Kundenportal.Konten.BestaetigeBenutzer command aggregat=Benutzer | AggregateId:Guid
+record Kundenportal.Konten.BenutzerBestaetigt event aggregat=Benutzer | Email:string
+record Kundenportal.Konten.LehneRegistrierungAb command aggregat=Benutzer | AggregateId:Guid, Grund:string
+record Kundenportal.Konten.RegistrierungAbgelehnt event aggregat=Benutzer | Grund:string
+record Kundenportal.Konten.ReserviereAdresse command aggregat=Adresse | AggregateId:Guid, Email:string, BenutzerId:Guid
+record Kundenportal.Konten.AdresseReserviert event aggregat=Adresse | Email:string, BenutzerId:Guid
+record Kundenportal.Konten.AdresseVergeben event aggregat=Adresse | BenutzerId:Guid, Inhaber:Guid
+enum Kundenportal.Konten.Kontostatus | Beantragt = 1, Aktiv = 2, Abgelehnt = 3
+aggregat Kundenportal.Konten.Benutzer | Email:string="", Status:Kontostatus
+aggregat Kundenportal.Konten.Adresse | Inhaber:Guid
+decide Benutzer.RegistriereBenutzer -> RegistrierungBeantragt; BenutzerExistiert
+decide Benutzer.BestaetigeBenutzer -> BenutzerBestaetigt
+decide Benutzer.LehneRegistrierungAb -> RegistrierungAbgelehnt
+decide Adresse.ReserviereAdresse -> AdresseReserviert; AdresseVergeben
+apply Benutzer.RegistrierungBeantragt
+apply Benutzer.BenutzerBestaetigt
+apply Benutzer.RegistrierungAbgelehnt
+apply Adresse.AdresseReserviert
+apply Adresse.AdresseVergeben
+saga Kundenportal.Konten.Registrierung auslöser=RegistrierungBeantragt | wenn RegistrierungBeantragt -> sende ReserviereAdresse; wenn AdresseReserviert -> sende BestaetigeBenutzer; wenn AdresseVergeben -> sende LehneRegistrierungAb
+akteur Kundenportal.Konten.Besucher Mensch | darf RegistriereBenutzer
+client Kundenportal.Konten.IRegistrierungsseite | traegt ; sendet RegistriereBenutzer; fragt ; hoert BenutzerBestaetigt, RegistrierungAbgelehnt
+code Kundenportal.Konten.Adressschluessel class teile=1 domaene=Kundenportal.Konten block=§geteilt
+sicht Kundenportal.Konten.Kontostatus enum domaene=Kundenportal.Konten block=Benutzer
+sicht Kundenportal.Konten.Registrierung saga domaene=Kundenportal.Konten block=§geteilt
+sicht Kundenportal.Konten.Besucher akteur domaene=Kundenportal.Konten block=§akteure
+
+# ── Anlagen (Messnetz.cs.txt): SENSOR-STROM MIT ALARM — der Sensor zählt Überschreitungen hintereinander (Zähl-Aggregat, zwei Fakten aus
+#    einem Messwert), ein Messwert im Rahmen ist ein Noop; eine Reaktion öffnet die Störung desselben Sensors (gleiche Id). ──
+record Anlagen.Messung.RichteSensorEin command erzeugung aggregat=Sensor | AggregateId:Guid, Ort:string, Grenzwert:double, AlarmNach:int
+record Anlagen.Messung.SensorEingerichtet event aggregat=Sensor | Ort:string, Grenzwert:double, AlarmNach:int
+record Anlagen.Messung.SensorUnbekannt rejection aggregat=Sensor | SensorId:Guid
+record Anlagen.Messung.MeldeMesswert command aggregat=Sensor | AggregateId:Guid, Wert:double, GemessenAm:DateTimeOffset
+record Anlagen.Messung.GrenzwertUeberschritten event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset, Hintereinander:int
+record Anlagen.Messung.AlarmAusgeloest event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset
+record Anlagen.Messung.WertWiederImRahmen event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset
+record Anlagen.Messung.OeffneStoerung command aggregat=Stoerungsfall | AggregateId:Guid, Wert:double
+record Anlagen.Messung.StoerungGeoeffnet event aggregat=Stoerungsfall | Wert:double
+record Anlagen.Messung.StoerungLaeuftSchon rejection aggregat=Stoerungsfall | SensorId:Guid
+record Anlagen.Messung.QuittiereStoerung command aggregat=Stoerungsfall | AggregateId:Guid, Von:string
+record Anlagen.Messung.StoerungQuittiert event aggregat=Stoerungsfall | Von:string
+record Anlagen.Messung.KeineStoerung rejection aggregat=Stoerungsfall | SensorId:Guid
+aggregat Anlagen.Messung.Sensor | Grenzwert:double, AlarmNach:int, Hintereinander:int, Alarm:bool
+aggregat Anlagen.Messung.Stoerungsfall | Offen:bool
+decide Sensor.RichteSensorEin -> SensorEingerichtet
+decide Sensor.MeldeMesswert -> GrenzwertUeberschritten; AlarmAusgeloest; WertWiederImRahmen; SensorUnbekannt
+decide Stoerungsfall.OeffneStoerung -> StoerungGeoeffnet; StoerungLaeuftSchon
+decide Stoerungsfall.QuittiereStoerung -> StoerungQuittiert; KeineStoerung
+apply Sensor.SensorEingerichtet
+apply Sensor.GrenzwertUeberschritten
+apply Sensor.AlarmAusgeloest
+apply Sensor.WertWiederImRahmen
+apply Stoerungsfall.StoerungGeoeffnet
+apply Stoerungsfall.StoerungQuittiert
+reaktion Anlagen.Messung.StoerungBeiAlarm id=stoerung-bei-alarm | AlarmAusgeloest -> sendet OeffneStoerung
+ausgang StoerungBeiAlarm.AlarmAusgeloest strom | command:OeffneStoerung
+akteur Anlagen.Messung.Sensornetz Maschine | darf MeldeMesswert
+akteur Anlagen.Messung.Schichtleitung Mensch | darf RichteSensorEin, QuittiereStoerung
+client Anlagen.Messung.ISensorGateway | traegt ; sendet MeldeMesswert; fragt ; hoert
+client Anlagen.Messung.ILeitstand | traegt ; sendet RichteSensorEin, QuittiereStoerung; fragt ; hoert AlarmAusgeloest, StoerungGeoeffnet
+sicht Anlagen.Messung.StoerungBeiAlarm reaktion domaene=Anlagen.Messung block=§geteilt
+sicht Anlagen.Messung.Sensornetz akteur domaene=Anlagen.Messung block=§akteure
+sicht Anlagen.Messung.Schichtleitung akteur domaene=Anlagen.Messung block=§akteure
+
+# ── Warenkatalog (Katalogimport.cs.txt): MASSEN-IMPORT MIT FORTSCHRITT — EINE Quell-Nachricht (Datei-Treiber) startet über einen Fluss den
+#    Import-Vorgang (Id = Strom der Quelle), ein Import-Dienst draußen antwortet als STROM (Artikel je Zeile, Fortschritt, Abschluss),
+#    die Leseseite zeigt den Stand. ──
+record Warenkatalog.Import.KatalogDateiAbgelegt event typart=public sealed record treiber=Datei | Name:string { get; init; } required, Pfad:string { get; init; } required, RelativerPfad:string { get; init; } required, Groesse:long { get; init; } required, GeaendertAm:DateTimeOffset { get; init; } required, ErkanntAm:DateTimeOffset { get; init; } required, Kennung:string { get; init; } required
+record Warenkatalog.Import.StarteImport command erzeugung aggregat=Importlauf | AggregateId:Guid, Pfad:string
+record Warenkatalog.Import.ImportGestartet event aggregat=Importlauf | ImportId:Guid, Pfad:string
+record Warenkatalog.Import.ImportLaeuftSchon rejection aggregat=Importlauf | ImportId:Guid
+record Warenkatalog.Import.MeldeImportFortschritt command aggregat=Importlauf | AggregateId:Guid, Zeilen:int
+record Warenkatalog.Import.ImportFortgeschritten event aggregat=Importlauf | Zeilen:int
+record Warenkatalog.Import.SchliesseImportAb command aggregat=Importlauf | AggregateId:Guid, Zeilen:int, Fehler:int
+record Warenkatalog.Import.ImportAbgeschlossen event aggregat=Importlauf | Zeilen:int, Fehler:int
+record Warenkatalog.Import.LegeArtikelAn command erzeugung aggregat=Artikel | AggregateId:Guid, Nummer:string, Bezeichnung:string, Preis:decimal
+record Warenkatalog.Import.ArtikelAngelegt event aggregat=Artikel | Nummer:string, Bezeichnung:string, Preis:decimal
+record Warenkatalog.Import.ArtikelExistiert rejection aggregat=Artikel | ArtikelId:Guid
+record Warenkatalog.Import.HoleImportstand query | ImportId:Guid
+record Warenkatalog.Import.ImportstandAntwort queryresponse | Zeilen:int, Fertig:bool
+record Warenkatalog.Import.ImportUnbekannt queryresponse |
+aggregat Warenkatalog.Import.Importlauf | Zeilen:int, Fertig:bool
+aggregat Warenkatalog.Import.Artikel | Nummer:string="", Preis:decimal
+decide Importlauf.StarteImport -> ImportGestartet; ImportLaeuftSchon
+decide Importlauf.MeldeImportFortschritt -> ImportFortgeschritten
+decide Importlauf.SchliesseImportAb -> ImportAbgeschlossen
+decide Artikel.LegeArtikelAn -> ArtikelAngelegt; ArtikelExistiert
+apply Importlauf.ImportGestartet
+apply Importlauf.ImportFortgeschritten
+apply Importlauf.ImportAbgeschlossen
+apply Artikel.ArtikelAngelegt
+fluss Warenkatalog.Import.Katalogeingang bauer=p | datei=quelle:KatalogDateiAbgelegt; start=command:StarteImport <- datei+datei.strom λ{(d, strom) => new StarteImport(strom.Id, d.Pfad)}
+akteur Warenkatalog.Import.Importdienst Maschine | darf
+vertrag Warenkatalog.Import.IImportLauf akteur=Importdienst | ImportGestartet -> strom LegeArtikelAn, MeldeImportFortschritt, SchliesseImportAb
+akteur Warenkatalog.Import.Ablage Maschine | darf KatalogDateiAbgelegt
+akteur Warenkatalog.Import.Katalogpflege Mensch | darf HoleImportstand
+client Warenkatalog.Import.IImportWorker | traegt IImportLauf; sendet ; fragt ; hoert
+client Warenkatalog.Import.IKatalogpflegeOberflaeche | traegt ; sendet ; fragt HoleImportstand; hoert ImportFortgeschritten, ImportAbgeschlossen
+readmodel Warenkatalog.Import.Importstand store=IImportUebersicht | Id:Guid { get; set; }, Pfad:string="" { get; set; }, Zeilen:int { get; set; }, Fertig:bool { get; set; }
+store Warenkatalog.Import.IImportUebersicht | schreibt BeginneAsync(importId:Guid, pfad:string), SetzeAsync(importId:Guid, zeilen:int, fertig:bool) | liest FindeAsync(importId:Guid):Importstand?
+faehigkeit Warenkatalog.Import.IBeginneImportstand schreibt IImportUebersicht.BeginneAsync
+faehigkeit Warenkatalog.Import.ISetzeImportstand schreibt IImportUebersicht.SetzeAsync
+faehigkeit Warenkatalog.Import.IFindeImportstand liest IImportUebersicht.FindeAsync
+projektion Warenkatalog.Import.Importfortschritt id=importfortschritt pull | ImportGestartet -> IImportUebersicht.BeginneAsync; ImportFortgeschritten -> IImportUebersicht.SetzeAsync; ImportAbgeschlossen -> IImportUebersicht.SetzeAsync
+reader Warenkatalog.Import.Importauskunft projektion=Importfortschritt trackDeps=false | HoleImportstand -> IImportUebersicht.FindeAsync => ImportstandAntwort|ImportUnbekannt
+ausgang Importfortschritt.ImportGestartet nichts | storefn:IImportUebersicht.BeginneAsync
+ausgang Importfortschritt.ImportFortgeschritten nichts | storefn:IImportUebersicht.SetzeAsync
+ausgang Importfortschritt.ImportAbgeschlossen nichts | storefn:IImportUebersicht.SetzeAsync
+ausgang Importauskunft.HoleImportstand einzeln | response:ImportstandAntwort; response:ImportUnbekannt; storefn:IImportUebersicht.FindeAsync
+sicht Warenkatalog.Import.HoleImportstand query domaene=Warenkatalog.Import block=Importlauf
+sicht Warenkatalog.Import.ImportstandAntwort queryresponse domaene=Warenkatalog.Import block=Importlauf
+sicht Warenkatalog.Import.ImportUnbekannt queryresponse domaene=Warenkatalog.Import block=Importlauf
+sicht Warenkatalog.Import.Importstand readmodel domaene=Warenkatalog.Import block=Importlauf
+sicht Warenkatalog.Import.IImportUebersicht store domaene=Warenkatalog.Import block=Importlauf
+sicht Warenkatalog.Import.Importfortschritt projektion domaene=Warenkatalog.Import block=Importlauf
+sicht Warenkatalog.Import.Importauskunft reader domaene=Warenkatalog.Import block=Importlauf
+sicht Warenkatalog.Import.Importdienst akteur domaene=Warenkatalog.Import block=§akteure
+sicht Warenkatalog.Import.Ablage akteur domaene=Warenkatalog.Import block=§akteure
+sicht Warenkatalog.Import.Katalogpflege akteur domaene=Warenkatalog.Import block=§akteure
+
 # ── Lage (docs/07): die Sonde liegt ABSICHTLICH in einem Projekt (der Schreibseite) — die Lage-Prüfung muss jede Primitive in ihr
 #    Rollen-Projekt weisen (Typ -> Zielprojekt). Wurzel der Tabelle ist die der Solution; Ordner/Namespace/Datei prüft LageAnalyzerTests. ──
 lage Archiv -> Domain.Akteure
@@ -210,3 +338,27 @@ lage Vormerkungen -> Domain.Projections
 lage VormerkungenAntwort -> Domain.Projections
 lage WertTabellenKonfig -> Domain.Pipeline
 lage ZaehleOffene -> Domain.Pipeline
+lage Ablage -> Domain.Akteure
+lage Besucher -> Domain.Akteure
+lage HoleImportstand -> Domain.Projections
+lage IBeginneImportstand -> Domain.Projections
+lage IFindeImportstand -> Domain.Projections
+lage IImportLauf -> Domain.Akteure
+lage IImportUebersicht -> Domain.Projections
+lage IImportWorker -> Domain.Akteure
+lage IKatalogpflegeOberflaeche -> Domain.Akteure
+lage ILeitstand -> Domain.Akteure
+lage IRegistrierungsseite -> Domain.Akteure
+lage ISensorGateway -> Domain.Akteure
+lage ISetzeImportstand -> Domain.Projections
+lage ImportUnbekannt -> Domain.Projections
+lage Importauskunft -> Domain.Projections
+lage Importdienst -> Domain.Akteure
+lage Importfortschritt -> Domain.Projections
+lage Importstand -> Domain.Projections
+lage ImportstandAntwort -> Domain.Projections
+lage Katalogeingang -> Domain.Pipeline
+lage Katalogpflege -> Domain.Akteure
+lage Schichtleitung -> Domain.Akteure
+lage Sensornetz -> Domain.Akteure
+lage StoerungBeiAlarm -> Domain.Projections

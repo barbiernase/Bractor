@@ -1,0 +1,114 @@
+using Abstractions;
+
+// SONDE — fremdes Szenario 2 (Plan Pub/Sub-Neustrukturierung §6, Phase 0): SENSOR-STROM MIT ALARM.
+//
+// Viele Messwerte, wenige Fakten: ein Sensor zählt Überschreitungen seines Grenzwerts hintereinander (Zähl-Aggregat) und löst nach N den
+// Alarm aus; ein Messwert im Rahmen ändert nichts. Der Alarm öffnet eine Störung (je Sensor ein Störungsfall, die Leitstelle quittiert).
+// Heute kommt jeder Messwert als Command an den Sensor; im Zielbild ist er ein Hinweis, den eine Funktion hört (Plan §3.1, §3.4).
+
+namespace Anlagen.Messung;
+
+public record RichteSensorEin(Guid AggregateId, string Ort, double Grenzwert, int AlarmNach) : ICreationCommand;
+public record SensorEingerichtet(string Ort, double Grenzwert, int AlarmNach) : IEvent;
+public record SensorUnbekannt(Guid SensorId) : ITransientEvent;
+
+public record MeldeMesswert(Guid AggregateId, double Wert, DateTimeOffset GemessenAm) : ICommand;
+public record GrenzwertUeberschritten(double Wert, DateTimeOffset GemessenAm, int Hintereinander) : IEvent;
+public record AlarmAusgeloest(double Wert, DateTimeOffset GemessenAm) : IEvent;
+public record WertWiederImRahmen(double Wert, DateTimeOffset GemessenAm) : IEvent;
+
+public partial class Sensor : IState
+{
+    public double Grenzwert { get; set; }
+    public int AlarmNach { get; set; }
+    public int Hintereinander { get; set; }
+    public bool Alarm { get; set; }
+
+    public partial class Decider : IDecider<Sensor>
+    {
+        public IEnumerable<OneOf<SensorEingerichtet>> Decide(RichteSensorEin c)
+        {
+            if (this.State.Version > 0) yield break;
+            yield return new SensorEingerichtet(c.Ort, c.Grenzwert, c.AlarmNach);
+        }
+
+        public IEnumerable<OneOf<GrenzwertUeberschritten, AlarmAusgeloest, WertWiederImRahmen, SensorUnbekannt>> Decide(MeldeMesswert c)
+        {
+            if (this.State.Version == 0) { yield return new SensorUnbekannt(c.AggregateId); yield break; }
+            if (c.Wert <= this.State.Grenzwert)
+            {
+                if (this.State.Hintereinander > 0) yield return new WertWiederImRahmen(c.Wert, c.GemessenAm);
+                yield break;
+            }
+            yield return new GrenzwertUeberschritten(c.Wert, c.GemessenAm, this.State.Hintereinander + 1);
+            if (!this.State.Alarm && this.State.Hintereinander + 1 >= this.State.AlarmNach) yield return new AlarmAusgeloest(c.Wert, c.GemessenAm);
+        }
+    }
+
+    public partial class Applier : IApplier<Sensor>
+    {
+        public void Apply(SensorEingerichtet e) { this.State.Grenzwert = e.Grenzwert; this.State.AlarmNach = e.AlarmNach; }
+        public void Apply(GrenzwertUeberschritten e) { this.State.Hintereinander = e.Hintereinander; }
+        public void Apply(AlarmAusgeloest e) { this.State.Alarm = true; }
+        public void Apply(WertWiederImRahmen e) { this.State.Hintereinander = 0; this.State.Alarm = false; }
+    }
+}
+
+public record OeffneStoerung(Guid AggregateId, double Wert) : ICommand;
+public record StoerungGeoeffnet(double Wert) : IEvent;
+public record StoerungLaeuftSchon(Guid SensorId) : ITransientEvent;
+
+public record QuittiereStoerung(Guid AggregateId, string Von) : ICommand;
+public record StoerungQuittiert(string Von) : IEvent;
+public record KeineStoerung(Guid SensorId) : ITransientEvent;
+
+// Je Sensor ein Störungsfall (dieselbe Id wie der Sensor): offen oder nicht — eine Störung läuft höchstens einmal zugleich.
+public partial class Stoerungsfall : IState
+{
+    public bool Offen { get; set; }
+
+    public partial class Decider : IDecider<Stoerungsfall>
+    {
+        public IEnumerable<OneOf<StoerungGeoeffnet, StoerungLaeuftSchon>> Decide(OeffneStoerung c)
+        {
+            if (this.State.Offen) { yield return new StoerungLaeuftSchon(c.AggregateId); yield break; }
+            yield return new StoerungGeoeffnet(c.Wert);
+        }
+
+        public IEnumerable<OneOf<StoerungQuittiert, KeineStoerung>> Decide(QuittiereStoerung c)
+        {
+            if (!this.State.Offen) { yield return new KeineStoerung(c.AggregateId); yield break; }
+            yield return new StoerungQuittiert(c.Von);
+        }
+    }
+
+    public partial class Applier : IApplier<Stoerungsfall>
+    {
+        public void Apply(StoerungGeoeffnet e) { this.State.Offen = true; }
+        public void Apply(StoerungQuittiert e) { this.State.Offen = false; }
+    }
+}
+
+// Reaktion: der Alarm öffnet die Störung desselben Sensors.
+public partial class StoerungBeiAlarm : ISubscriber, IPullSubscriber
+{
+    public string SubscriberId => "stoerung-bei-alarm";
+
+    public async IAsyncEnumerable<OeffneStoerung> Handle(AlarmAusgeloest evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+    {
+        await Task.CompletedTask;
+        yield return new OeffneStoerung(envelope.AggregateId, evt.Wert);
+    }
+}
+
+// Wer hineingibt: das Sensornetz (Maschine) meldet Messwerte, die Schichtleitung richtet ein und quittiert.
+public sealed record Sensornetz : IMaschine, IDarf<MeldeMesswert>;
+public sealed record Schichtleitung : IMensch, IDarf<RichteSensorEin>, IDarf<QuittiereStoerung>;
+
+public interface ISensorGateway : IClientVertrag, ISendet<MeldeMesswert> { }
+
+public interface ILeitstand : IClientVertrag, ISendet<RichteSensorEin>, ISendet<QuittiereStoerung>
+{
+    void Auf(AlarmAusgeloest e);
+    void Auf(StoerungGeoeffnet e);
+}
