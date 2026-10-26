@@ -317,8 +317,11 @@ public class ConnectionModule : IAsyncDisposable
     // DISPOSE
     // ═══════════════════════════════════════════════════════════
 
+    private int _freigegeben;
+
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _freigegeben, 1) == 1) return;
         foreach (var sub in _subscriptions)
             sub.Dispose();
         _subscriptions.Clear();

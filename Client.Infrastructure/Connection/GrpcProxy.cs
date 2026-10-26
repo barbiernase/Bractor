@@ -392,12 +392,16 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
         Console.WriteLine($"[GrpcProxy] State: {newState}");
     }
 
+    private int _freigegeben;
+
+    /// <summary>Idempotent: ein Container, der den Proxy unter Klasse und Schnittstelle kennt, gibt ihn zweimal frei.</summary>
     public async ValueTask DisposeAsync()
     {
+        if (Interlocked.Exchange(ref _freigegeben, 1) == 1) return;
         await DisconnectAsync();
         
-        _events.Writer.Complete();
-        _stateChanges.Writer.Complete();
+        _events.Writer.TryComplete();
+        _stateChanges.Writer.TryComplete();
         
         _readCts?.Dispose();
         _writeLock.Dispose();
