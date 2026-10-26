@@ -1,4 +1,5 @@
 using Abstractions;
+using Core;
 
 // SONDE — fremdes Szenario 2 (Plan Pub/Sub-Neustrukturierung §6, Phase 0): SENSOR-STROM MIT ALARM.
 //
