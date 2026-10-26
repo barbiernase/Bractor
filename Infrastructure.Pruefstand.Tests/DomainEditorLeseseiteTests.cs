@@ -326,7 +326,7 @@ public sealed class DomainEditorLeseseiteTests
                 public async IAsyncEnumerable<OneOf<MachWeiter, Selbst<Tick>>> Handle(Pruefe pruefe, PipelineContext ctx, IFindeZeile finde)
                 {
                     if (await finde.FindeAsync(pruefe.Id) is null) yield break;
-                    yield return new MachWeiter(pruefe.Id);
+                    yield return new MachWeiter(new(pruefe.Id));
                 }
 
                 public IAsyncEnumerable<OneOf<MachWeiter>> Handle(Tick tick, PipelineContext ctx)

@@ -98,7 +98,7 @@ namespace Probe.B { public interface ILiesZahl : IReadStore { Task<int> LiesAsyn
         var fluss = Alle(board, "fluesse").Should().ContainSingle(f => (string?)f["name"] == "ProbeFluss").Subject;
         Alle(fluss, "knoten").Select(k => (string?)k["art"]).Should().Equal("quelle", "command");
         Alle(board, "lesebefunde").Should().Contain(b => (string?)b["code"] == "LESEN-FLUSS" && (string?)b["karte"] == "pipeline:ProbeFluss"
-                                                        && ((string?)b["text"])!.Contains("var zahl = 1;") && (int?)b["zeile"] == 14);
+                                                        && ((string?)b["text"])!.Contains("var zahl = 1;") && (int?)b["zeile"] == 15);
     }
 
     [Fact]

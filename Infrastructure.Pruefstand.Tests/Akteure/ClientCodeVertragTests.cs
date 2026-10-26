@@ -65,7 +65,7 @@ public partial class ProbeZiel : IState { public int Version { get; set; } publi
 
     private const string Handler = @"namespace Probe.Ui {
     public partial class PultHandler {
-        IEnumerable<object> Handle(Probe.Passiert e, MessageContext c) { yield return new Probe.Mach(Guid.Empty); yield return new Probe.Frag(); }
+        IEnumerable<object> Handle(Probe.Passiert e, MessageContext c) { yield return new Probe.Mach(default); yield return new Probe.Frag(); }
         IEnumerable<object> Handle(Probe.Getippt e, MessageContext c) { yield break; }
     }
 }";
@@ -79,7 +79,7 @@ public partial class ProbeZiel : IState { public int Version { get; set; } publi
     {
         var b = await Befunde(@"namespace Probe.Ui {
     public partial class Daneben {
-        IEnumerable<object> Handle(Probe.Anders e, MessageContext c) { yield return new Probe.Verboten(Guid.Empty); yield return new Probe.FragNicht(); }
+        IEnumerable<object> Handle(Probe.Anders e, MessageContext c) { yield return new Probe.Verboten(default); yield return new Probe.FragNicht(); }
     }
 }");
         b.Should().HaveCount(3);
