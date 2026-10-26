@@ -24,10 +24,24 @@ public sealed class DateiFertig
 }
 
 /// <summary>
+/// Was jede Quellen-Konfig hat (Abschnitt <c>Quellen:&lt;Typ&gt;</c> der Umgebung), gleich welcher Treiber: wo die Schleife läuft und ob ein Webhook
+/// ein zweiter Weg in dieselbe Quelle ist. Die Felder des Treibers stehen in seiner Konfig (<see cref="DateiQuellKonfig"/>, <see cref="TaktQuellKonfig"/>).
+/// </summary>
+public abstract class QuellKonfig
+{
+    public QuellLaufmodus Laufmodus { get; set; } = QuellLaufmodus.EinmalImCluster;
+    /// <summary>
+    /// Ein zweiter Weg in dieselbe Quelle (konzept-werkbank §12.3 E12): <c>POST {Webhook}</c> auf dem Einblick-Port mit der Nachricht als JSON — genau einmal ins
+    /// Log, Vorgang gestartet (dieselbe Nachricht zweimal → derselbe Vorgang). Leer = kein Webhook. Die Route ist Betrieb, nicht Domäne.
+    /// </summary>
+    public string? Webhook { get; set; }
+}
+
+/// <summary>
 /// Die Konfig einer Datei-Quelle (Abschnitt <c>Quellen:&lt;Typ&gt;</c> der Umgebung, docs/konzept-werkbank.md §3.4). Gebunden über den
 /// Configuration-Binding-Source-Generator; unbekannte Felder sind ein Fehler. Die Treiber-Wahl steht NICHT hier — sie ist der Basistyp.
 /// </summary>
-public sealed class DateiQuellKonfig
+public sealed class DateiQuellKonfig : QuellKonfig
 {
     public string Pfad { get; set; } = "";
     /// <summary>Dateimuster (z. B. <c>*.tiff</c>); leer = alle Dateien.</summary>
@@ -37,12 +51,6 @@ public sealed class DateiQuellKonfig
     public TimeSpan Intervall { get; set; } = TimeSpan.FromSeconds(1);
     public DateiFertig Fertig { get; set; } = new();
     public DateiKennungArt Kennung { get; set; } = DateiKennungArt.PfadGroesseZeit;
-    public QuellLaufmodus Laufmodus { get; set; } = QuellLaufmodus.EinmalImCluster;
-    /// <summary>
-    /// Ein zweiter Weg in dieselbe Quelle (konzept-werkbank §12.3 E12): <c>POST {Webhook}</c> auf dem Einblick-Port mit der Nachricht als JSON — genau einmal ins
-    /// Log, Vorgang gestartet (dieselbe Nachricht zweimal → derselbe Vorgang). Leer = kein Webhook. Die Route ist Betrieb, nicht Domäne.
-    /// </summary>
-    public string? Webhook { get; set; }
 
     /// <summary>Die wirksamen Muster (leer → alle).</summary>
     public IReadOnlyList<string> WirksameMuster => Muster is { Length: > 0 } ? Muster : ["*"];

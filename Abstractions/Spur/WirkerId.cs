@@ -33,6 +33,9 @@ static class WirkerId
     public const string Reaktion = "reaktion";
     public const string Akteur = "akteur";
 
+    /// <summary>Der Wirker der Uhr des Frameworks (sie sendet fällige Fristen; eine Karte hat sie nicht, Plan Pub/Sub-Neustrukturierung §5).</summary>
+    public const string Uhr = "uhr";
+
     /// <summary>Die acht Arten in fester Reihenfolge.</summary>
     public static readonly string[] Arten = { Decide, Fluss, Prozess, Funktion, Quelle, Projektion, Reaktion, Akteur };
 

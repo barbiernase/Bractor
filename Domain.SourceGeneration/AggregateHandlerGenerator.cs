@@ -56,7 +56,8 @@ namespace Domain.SourceGeneration
             var commandCases = string.Join("\n", model.DecideMethods.Select(m =>
             {
                 if (m.ReturnsOneOf)
-                    return $"                case {m.CommandType} cmd: return _decider.Decide(cmd).Select(o => (IEvent)o.Value);";
+                    // Eine Frist (Frist<TCmd>, Plan Pub/Sub-Neustrukturierung Phase 3) geht als FristGesetzt ins Log; jedes andere Element ist ein Event.
+                    return $"                case {m.CommandType} cmd: return _decider.Decide(cmd).Select(o => global::Abstractions.Entscheidungsausgabe.Als(o.Value));";
                 else
                     return $"                case {m.CommandType} cmd: return _decider.Decide(cmd);";
             }));

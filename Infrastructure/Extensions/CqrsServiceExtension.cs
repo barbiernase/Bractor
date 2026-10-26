@@ -122,6 +122,9 @@ public static class CqrsServiceExtensions
 
         // 10. Funktionen in Baustein-Form (Plan Pub/Sub-Neustrukturierung Phase 3): Funktions-Actors, Weckung, Festhalten, Stand.
         Infrastructure.Funktionen.FunktionsBausteinWiring.AddFunktionsBausteine(services);
+
+        // 11. Die Uhr: fällige Fristen der Aggregate als Commands (Plan Pub/Sub-Neustrukturierung Phase 3).
+        Infrastructure.Uhr.UhrExtensions.AddUhr(services);
         
         return services;
     }
@@ -208,6 +211,8 @@ public static class CqrsServiceExtensions
             // Die Inbox der Schreibseite (docs/04 §4.4): je Command eine Quittung, eindeutig je CommandId, in derselben Transaktion wie
             // seine Events — Exactly-once innerhalb des Horizonts (InboxAufraeumer).
             InboxTabelle.Registriere(options);
+            // Das Fälligkeits-Verzeichnis der Uhr (Plan Pub/Sub-Neustrukturierung Phase 3): je Frist eine Zeile, geschrieben mit ihrem Event.
+            Infrastructure.Uhr.FristVerzeichnis.Registriere(options);
             EventZeit.Registriere(options, builder.DbUhr);
 
             // Die Dokumente des Frameworks (Cursor, Offen-Index, Dead-Letter, Fristplan, Marking) — eine Quelle, auch für die Plan-Tests.

@@ -28,11 +28,15 @@ namespace Infrastructure.Quellen;
 public sealed record DateiDaten(string Name, string Pfad, string RelativerPfad, long Groesse, DateTimeOffset GeaendertAm,
     DateTimeOffset ErkanntAm, string Kennung);
 
+/// <summary>Was der Takt-Treiber über einen erreichten Zeitpunkt weiß (Beginn des Intervalls und seine Kennung).</summary>
+public sealed record TaktDaten(DateTimeOffset Zeitpunkt, string Kennung);
+
 /// <summary>
 /// Ein Quellen-Typ aus der generierten Tabelle <c>GeneratedQuellen.Alle</c>: Typ, Treiber, Konfig-Abschnitt (= Typname), Wirker-Id
-/// und die reflexionsfreie Fabrik des Datei-Treibers.
+/// und die reflexionsfreie Fabrik seines Treibers (genau eine ist gesetzt).
 /// </summary>
-public sealed record QuellTyp(Type Typ, string Treiber, string Abschnitt, string WirkerId, Func<DateiDaten, IQuellNachricht> DateiFabrik);
+public sealed record QuellTyp(Type Typ, string Treiber, string Abschnitt, string WirkerId, Func<DateiDaten, IQuellNachricht>? DateiFabrik,
+    Func<TaktDaten, IQuellNachricht>? TaktFabrik = null);
 
 /// <summary>Deterministische Vorgangs-Ids der Quellen.</summary>
 public static class QuellVorgang

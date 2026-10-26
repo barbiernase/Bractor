@@ -21,7 +21,7 @@ public sealed class QuellenTypAnalyzer : DiagnosticAnalyzer
         FormId,
         "Quellen-Typ hat nicht die feste Form",
         "Quellen-Typ '{0}' ({1}-Treiber): {2}. Form: public sealed record {0} : {3}; — ohne eigene Member, ohne Parameterliste. "
-        + "Die Felder befüllt der Treiber; die Werte (Pfad, Muster, Fertig-Erkennung …) stehen in der Konfig (Quellen:{0}).",
+        + "Die Felder befüllt der Treiber; die Werte (Pfad, Muster, Intervall …) stehen in der Konfig (Quellen:{0}).",
         "CQRS.Quelle",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true);
@@ -34,13 +34,15 @@ public sealed class QuellenTypAnalyzer : DiagnosticAnalyzer
         context.EnableConcurrentExecution();
         context.RegisterCompilationStartAction(start =>
         {
-            var dateiBasis = start.Compilation.GetTypeByMetadataName(Abstractions.Treibervertrag.DateiBasis);
-            if (dateiBasis == null) return;
-            start.RegisterSymbolAction(ctx => Pruefe(ctx, dateiBasis), SymbolKind.NamedType);
+            var basen = Abstractions.Treibervertrag.Basen
+                .Select(b => (Basis: start.Compilation.GetTypeByMetadataName(b[0]), Treiber: b[1]))
+                .Where(b => b.Basis != null).Select(b => (b.Basis!, b.Treiber)).ToList();
+            if (basen.Count == 0) return;
+            start.RegisterSymbolAction(ctx => { foreach (var (basis, treiber) in basen) Pruefe(ctx, basis, treiber); }, SymbolKind.NamedType);
         });
     }
 
-    private static void Pruefe(SymbolAnalysisContext ctx, INamedTypeSymbol basis)
+    private static void Pruefe(SymbolAnalysisContext ctx, INamedTypeSymbol basis, string treiber)
     {
         var t = (INamedTypeSymbol)ctx.Symbol;
         if (t.IsAbstract || SymbolEqualityComparer.Default.Equals(t, basis)) return;
@@ -62,7 +64,7 @@ public sealed class QuellenTypAnalyzer : DiagnosticAnalyzer
             }
         }
         if (grund != null)
-            ctx.ReportDiagnostic(Diagnostic.Create(Form, t.Locations.FirstOrDefault(), t.Name, Abstractions.Treibervertrag.Datei, grund, basis.Name));
+            ctx.ReportDiagnostic(Diagnostic.Create(Form, t.Locations.FirstOrDefault(), t.Name, treiber, grund, basis.Name));
     }
 
     private static string Name(MemberDeclarationSyntax m) => m switch

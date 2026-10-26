@@ -140,7 +140,7 @@ public class DateiTreiberTests
             ["Quellen:DateiErkannt:Kennung"] = "NameGroesse",
             ["Quellen:DateiErkannt:Laufmodus"] = "JederKnoten",
         });
-        var k = s.BuildServiceProvider().GetRequiredService<KonfigurierteQuelle>().Konfig;
+        var k = (DateiQuellKonfig)s.BuildServiceProvider().GetRequiredService<KonfigurierteQuelle>().Konfig;
         k.Pfad.Should().Be("/mnt/kamera");
         k.WirksameMuster.Should().Equal("*.tiff");
         k.Unterordner.Should().BeTrue();

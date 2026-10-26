@@ -30,6 +30,12 @@ public sealed record VorgangOffen(Guid Korrelation, string ProzessName) : Beilag
 public sealed record VorgangBeendet(Guid Korrelation) : Beilage;
 
 /// <summary>
+/// Eine Frist für das Fälligkeits-Verzeichnis der Uhr (Plan Pub/Sub-Neustrukturierung Phase 3): das <see cref="FristGesetzt"/> an
+/// <paramref name="Version"/> des Streams, sein Command (Diskriminator und Wire-JSON), die Dauer ab seiner Log-Zeit und der Akteur der Kette.
+/// </summary>
+public sealed record FristFaellig(int Version, string Befehl, string Daten, TimeSpan Nach, string? Akteur) : Beilage;
+
+/// <summary>
 /// Der Append trug eine Quittung, deren CommandId die Inbox schon kennt: nichts ist geschrieben. Den Ausgang des ersten Mals liefert
 /// <see cref="IEventStoreRepository.AusgangAsync"/>.
 /// </summary>

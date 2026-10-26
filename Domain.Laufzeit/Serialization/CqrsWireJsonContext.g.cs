@@ -80,6 +80,8 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(KommandoAbgelehnt))]
 [JsonSerializable(typeof(BefehlFestgehalten))]
 [JsonSerializable(typeof(AusgabeFestgehalten))]
+[JsonSerializable(typeof(FristGesetzt))]
+[JsonSerializable(typeof(Infrastructure.Uhr.UhrTick))]
 // ── Domänen-Commands/Events/Trigger/Aufträge/Queries (Domain.*) (gescannt) ──
 [JsonSerializable(typeof(global::Domain.Benchmark.BenchPing))]
 [JsonSerializable(typeof(global::Domain.Datensatz.DatensatzBereitsEingefroren))]

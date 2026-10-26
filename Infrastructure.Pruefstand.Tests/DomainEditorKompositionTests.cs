@@ -114,7 +114,7 @@ public sealed class DomainEditorKompositionTests
             Lesen = m.Lesen! with
             {
                 Stores = [new() { Name = "IBuch", Namespace = "Shop.Lesen", Fns = [new() { Name = "IFinde", Methode = "FindeAsync", Lesen = true }] }],
-                Pipelines = [new() { Name = "Mahner", Namespace = "Shop.Mahnung", Handles = [new() { Eingang = "Bestellt", Ausgaenge = ["Frist<Versende>"], Faehigkeiten = [new() { Typ = "IFinde", Name = "finde" }] }] }],
+                Pipelines = [new() { Name = "Mahner", Namespace = "Shop.Mahnung", Handles = [new() { Eingang = "Bestellt", Ausgaenge = ["FristPlanung<Versende>"], Faehigkeiten = [new() { Typ = "IFinde", Name = "finde" }] }] }],
             },
         };
         var mo = Module.Ableiten(m).ToDictionary(x => x.Namespace);

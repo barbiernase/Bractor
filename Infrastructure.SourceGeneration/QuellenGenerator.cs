@@ -25,10 +25,12 @@ namespace Infrastructure.SourceGeneration
             // Nur die Laufzeit (sie kennt QuellEingang/DateiDaten) bekommt die Tabelle.
             if (!Laufzeitprojekt.Ist(c)) return;
             var dateiBasis = c.GetTypeByMetadataName(Abstractions.Treibervertrag.DateiBasis);
+            var taktBasis = c.GetTypeByMetadataName(Abstractions.Treibervertrag.TaktBasis);
             if (dateiBasis == null) return;
 
             var quellen = Vertragsassemblies.Typen(c)
-                .Where(t => t.TypeKind == TypeKind.Class && t.ContainingType == null && !t.IsAbstract && ErbtVon(t, dateiBasis))
+                .Where(t => t.TypeKind == TypeKind.Class && t.ContainingType == null && !t.IsAbstract
+                            && (ErbtVon(t, dateiBasis) || (taktBasis != null && ErbtVon(t, taktBasis))))
                 .OrderBy(t => t.ToDisplayString(), System.StringComparer.Ordinal)
                 .ToList();
 
@@ -45,6 +47,12 @@ namespace Infrastructure.SourceGeneration
             foreach (var q in quellen)
             {
                 var name = q.Name;
+                if (taktBasis != null && ErbtVon(q, taktBasis))
+                {
+                    sb.AppendLine($"            new QuellTyp(typeof({q.ToDisplayString(fq)}), \"{Abstractions.Treibervertrag.Takt}\", \"{name}\", \"quelle:{name}\", null,");
+                    sb.AppendLine($"                t => new {q.ToDisplayString(fq)} {{ Zeitpunkt = t.Zeitpunkt, Kennung = t.Kennung }}),");
+                    continue;
+                }
                 sb.AppendLine($"            new QuellTyp(typeof({q.ToDisplayString(fq)}), \"{Abstractions.Treibervertrag.Datei}\", \"{name}\", \"quelle:{name}\",");
                 sb.AppendLine($"                d => new {q.ToDisplayString(fq)} {{ Name = d.Name, Pfad = d.Pfad, RelativerPfad = d.RelativerPfad, Groesse = d.Groesse, "
                     + "GeaendertAm = d.GeaendertAm, ErkanntAm = d.ErkanntAm, Kennung = d.Kennung }),");

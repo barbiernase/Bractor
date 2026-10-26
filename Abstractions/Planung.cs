@@ -3,7 +3,7 @@ namespace Abstractions;
 /// <summary>
 /// Eine PLANUNG als Pipeline-Ausgang — wie ein Command oder Trigger steht sie im <c>OneOf</c> der Signatur
 /// (CQRS050), nicht als Aufruf im Rumpf. Der generierte Dispatch reicht sie an die Framework-Senke weiter:
-/// <see cref="Selbst{T}"/> an die eigene Mailbox, <see cref="Frist{TCmd}"/>/<see cref="FristStorno{TCmd}"/> an den
+/// <see cref="Selbst{T}"/> an die eigene Mailbox, <see cref="FristPlanung{TCmd}"/>/<see cref="FristStorno{TCmd}"/> an den
 /// durablen Fristplan. So sieht jeder Leser (Generator, Graph, Editor) WAS eine Pipeline plant, ohne den Rumpf zu lesen.
 /// </summary>
 public interface IPlanung : IPipelineOutput { }
@@ -32,18 +32,19 @@ public static class Selbst
 }
 
 /// <summary>
-/// Plant eine durable Frist: nach <see cref="Dauer"/> (gegen die DB-Uhr) wird <typeparamref name="TCmd"/> an
-/// <see cref="ZielAggregatId"/> zugestellt. Der Command-Typ steht im Typ — der Fristen-Router ist generiert
-/// (<typeparamref name="TCmd"/> braucht einen Konstruktor mit genau der Ziel-Id). Erneutes Planen überschreibt
-/// idempotent (Frist-Id deterministisch aus Command-Typ + Ziel).
+/// Plant eine durable Frist aus der Handle-Welt (Altlast, entfällt mit Phase 4 des Plans Pub/Sub-Neustrukturierung): nach <see cref="Dauer"/>
+/// (gegen die DB-Uhr) wird <typeparamref name="TCmd"/> an <see cref="ZielAggregatId"/> zugestellt. Der Command-Typ steht im Typ — der
+/// Fristen-Router ist generiert (<typeparamref name="TCmd"/> braucht einen Konstruktor mit genau der Ziel-Id). Erneutes Planen überschreibt
+/// idempotent (Frist-Id deterministisch aus Command-Typ + Ziel). Hieß bis Phase 3 <c>Frist&lt;TCmd&gt;</c> — der Name gehört jetzt der Frist
+/// eines Aggregats (<see cref="Frist{TCmd}"/>, die Uhr).
 /// </summary>
-public sealed record Frist<TCmd>(Guid ZielAggregatId, TimeSpan Dauer) : IPlanung where TCmd : ICommand;
+public sealed record FristPlanung<TCmd>(Guid ZielAggregatId, TimeSpan Dauer) : IPlanung where TCmd : ICommand;
 
 /// <summary>Räumt die Frist <typeparamref name="TCmd"/> für <see cref="ZielAggregatId"/> ab (folgenlos, wenn schon gefeuert).</summary>
 public sealed record FristStorno<TCmd>(Guid ZielAggregatId) : IPlanung where TCmd : ICommand;
 
 /// <summary>
-/// Die vom generierten Dispatch aufgelöste Form einer Frist-Planung: der Kontext ist der voll qualifizierte
+/// Die vom generierten Dispatch aufgelöste Form einer Frist-Planung (<see cref="FristPlanung{TCmd}"/>): der Kontext ist der voll qualifizierte
 /// Command-Typname (vom Generator als Konstante eingesetzt, keine Reflection). <see cref="Dauer"/> null = Storno.
 /// <see cref="Ab"/> = die Basis der Fälligkeit: die Log-Zeit (DB) des auslösenden Events, wenn es eines gibt — so ergibt
 /// jedes erneute Lesen desselben Events (Poll ab 0, Redelivery) dieselbe Fälligkeit, statt die Frist nach hinten zu

@@ -83,7 +83,7 @@ public static class Vertrag
     public static readonly string TrackDeps = nameof(Abstractions.ProjectionReaderAttribute.TrackDeps);
     // ── Planungs-Ausgänge (generische Vertrags-Typen, Metadatenname mit Stelligkeit) ──
     public static readonly string SelbstTyp = typeof(Selbst<>).Name;
-    public static readonly string FristTyp = typeof(Frist<>).Name;
+    public static readonly string FristTyp = typeof(FristPlanung<>).Name;
     public static readonly string FristStornoTyp = typeof(FristStorno<>).Name;
 
     // ── Aggregat-Namensregel des Framework-Generators (EINE Quelle: Abstractions.Aggregatvertrag) ──

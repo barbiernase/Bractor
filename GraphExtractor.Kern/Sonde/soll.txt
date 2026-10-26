@@ -195,6 +195,7 @@ record Anlagen.Messung.SensorUnbekannt rejection aggregat=Sensor | SensorId:Id<S
 record Anlagen.Messung.MeldeMesswert command aggregat=Sensor | AggregateId:Id<Sensor>, Wert:double, GemessenAm:DateTimeOffset
 record Anlagen.Messung.MesswertGemessen rejection | SensorId:Id<Sensor>, Wert:double, GemessenAm:DateTimeOffset
 funktion-auf Anlagen.Messung.Messwertpruefung klasse() | MesswertGemessen hinweis -> MeldeMesswert
+record Anlagen.Messung.Messzyklus event typart=public sealed record treiber=Takt | Zeitpunkt:DateTimeOffset { get; init; } required, Kennung:string { get; init; } required
 record Anlagen.Messung.GrenzwertUeberschritten event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset, Hintereinander:int
 record Anlagen.Messung.AlarmAusgeloest event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset
 record Anlagen.Messung.WertWiederImRahmen event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset

@@ -112,6 +112,9 @@ public sealed class Messwertpruefung : IFunktion
         double.IsNaN(m.Wert) || double.IsInfinity(m.Wert) ? null : new MeldeMesswert(m.SensorId, m.Wert, m.GemessenAm);
 }
 
+// Ein Takt als Quelle (Plan Phase 3, statt Timer-Trigger): je Intervall genau eine Quell-Nachricht; wie oft, sagt die Konfig (Quellen:Messzyklus).
+public sealed record Messzyklus : TaktGemeldet;
+
 // Wer hineingibt: das Sensornetz (Maschine) meldet Messwerte, die Schichtleitung richtet ein und quittiert.
 public sealed record Sensornetz : IMaschine, IDarf<MeldeMesswert>, IDarf<MesswertGemessen>;
 public sealed record Schichtleitung : IMensch, IDarf<RichteSensorEin>, IDarf<QuittiereStoerung>;

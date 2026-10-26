@@ -72,8 +72,8 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
         var iCommandType = context.SemanticModel.Compilation
             .GetTypeByMetadataName("Abstractions.ICommand");
 
-        // Planungs-Typen über das Symbol (nicht über den Namen): Frist<TCmd> / FristStorno<TCmd>.
-        var fristTyp = context.SemanticModel.Compilation.GetTypeByMetadataName("Abstractions.Frist`1");
+        // Planungs-Typen über das Symbol (nicht über den Namen): FristPlanung<TCmd> / FristStorno<TCmd>.
+        var fristTyp = context.SemanticModel.Compilation.GetTypeByMetadataName("Abstractions.FristPlanung`1");
         var stornoTyp = context.SemanticModel.Compilation.GetTypeByMetadataName("Abstractions.FristStorno`1");
 
         if (pipelineContextType == null || iPipelineTriggerType == null ||
@@ -167,7 +167,7 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
             if (kind is { } k)
             {
                 var info = new PipelineHandlerInfo(inputTypeName, k, new List<string>());
-                // Frist<TCmd>/FristStorno<TCmd>: der Kontext (Command-Typname) wird hier als Konstante eingesetzt.
+                // FristPlanung<TCmd>/FristStorno<TCmd>: der Kontext (Command-Typname) wird hier als Konstante eingesetzt.
                 foreach (var a in ((INamedTypeSymbol)folge.TypeArguments[0]).TypeArguments.OfType<INamedTypeSymbol>())
                 {
                     var istFrist = SymbolEqualityComparer.Default.Equals(a.OriginalDefinition, fristTyp);

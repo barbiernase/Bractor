@@ -50,6 +50,8 @@ public static class JsonContextEmitter
             GenerationMode = JsonSourceGenerationMode.Metadata,
             Converters = new System.Type[]
             {
+                // Der Command einer Frist (FristGesetzt, Plan Pub/Sub-Neustrukturierung Phase 3) — über die generierten Tabellen, ohne Reflection.
+                typeof(ICommandJsonConverter),
         /*ID-KONVERTER*/
             })]
         // ── Framework: Prozess-intern + Aggregat-Inbox (IEvent → persistiert) ──
@@ -65,6 +67,8 @@ public static class JsonContextEmitter
         // ── Framework: festgehaltene Ausgabe der Funktionen (Plan Pub/Sub-Neustrukturierung Phase 3) ──
         [JsonSerializable(typeof(Infrastructure.Funktionen.BefehlFestgehalten))]
         [JsonSerializable(typeof(Infrastructure.Funktionen.AusgabeFestgehalten))]
+        // ── Framework: die Frist eines Aggregats (Uhr) ──
+        [JsonSerializable(typeof(Abstractions.FristGesetzt))]
         """;
 
     // ── FRAMEWORK-Kopf: Cross-Node-Wire-Kontext ─────────────────────────────────────────────
@@ -146,6 +150,8 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(KommandoAbgelehnt))]
         [JsonSerializable(typeof(BefehlFestgehalten))]
         [JsonSerializable(typeof(AusgabeFestgehalten))]
+        [JsonSerializable(typeof(FristGesetzt))]
+        [JsonSerializable(typeof(Infrastructure.Uhr.UhrTick))]
         """;
 
     public static (string EventContext, string WireContext, string Stats) Emit(

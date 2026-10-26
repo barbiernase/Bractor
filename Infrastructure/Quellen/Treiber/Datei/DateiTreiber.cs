@@ -62,7 +62,7 @@ public sealed class DateiTreiber
                     foreach (var d in scan.Fertige(sicht, _zeit.GetUtcNow()))
                     {
                         var daten = new DateiDaten(d.Name, d.Pfad, d.RelativerPfad, d.Groesse, d.GeaendertAm, _zeit.GetUtcNow(), scan.Kennung(d));
-                        await _melde(_quelle.DateiFabrik(daten), ct);
+                        await _melde(_quelle.DateiFabrik!(daten), ct);
                         scan.Gemeldet(d);
                         _zustand.Gemeldet(_quelle.Abschnitt);
                     }

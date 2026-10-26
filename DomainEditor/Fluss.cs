@@ -37,7 +37,7 @@ public sealed class Fluss
 
     public const string AussenId = "aussen";
     private static readonly string SelbstName = typeof(Selbst<>).Name.Split('`')[0];
-    private static readonly string FristName = typeof(Frist<>).Name.Split('`')[0];
+    private static readonly string FristName = typeof(FristPlanung<>).Name.Split('`')[0];
     private static readonly string StartName = nameof(PipelineGestartet);
 
     /// <summary>Den Nachrichtenfluss aus dem Modell ableiten.</summary>

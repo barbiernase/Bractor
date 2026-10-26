@@ -254,7 +254,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     /// entscheidet einmal neu.
     /// </summary>
     private async Task<AppendErgebnis> AppendeAsync(CommandEnvelope cmdEnvelope, int expectedVersion, IReadOnlyList<IEvent> events,
-        KommandoAusgang ausgang)
+        KommandoAusgang ausgang, IReadOnlyList<Beilage>? zusatz = null)
     {
         try
         {
@@ -266,7 +266,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                 causationId: cmdEnvelope.CommandId.ToString(),
                 aggregateType: typeof(TState).Name,
                 akteur: cmdEnvelope.UserId,   // Kausalkette: der Akteur reist mit den Events zu Pipelines/Prozessen/Fristen
-                beilagen: [new Quittung(cmdEnvelope.CommandId, ausgang)]);
+                beilagen: [new Quittung(cmdEnvelope.CommandId, ausgang), .. zusatz ?? Array.Empty<Beilage>()]);
             return AppendErgebnis.Geschrieben;
         }
         catch (KommandoSchonEntschiedenException)
@@ -282,6 +282,26 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             await InitializeAsync();   // wirft sie, bleibt _initialized false: die nächste Nachricht initialisiert neu
             return await NachgeschlagenAsync(cmdEnvelope.CommandId, wiederholung: false) ?? throw new AppendGescheitertException(ex);
         }
+    }
+
+    /// <summary>
+    /// Die Fristen einer Entscheidung (Plan Pub/Sub-Neustrukturierung Phase 3): je <see cref="FristGesetzt"/> die Beilage für das
+    /// Fälligkeits-Verzeichnis der Uhr an der Version, die das Event im Stream bekommt (ab <paramref name="versionVorher"/>) — in derselben
+    /// Transaktion wie die Events. Eine Frist zielt auf einen Command DIESES Aggregats (R5); eine fremde ist ein Fehler, nichts wird geschrieben.
+    /// </summary>
+    private IReadOnlyList<Beilage> Fristen(IReadOnlyList<IEvent> events, int versionVorher, string? akteur)
+    {
+        List<Beilage>? fristen = null;
+        for (var i = 0; i < events.Count; i++)
+        {
+            if (events[i] is not FristGesetzt f) continue;
+            if (f.Befehl.Ziel != _id)
+                throw new InvalidOperationException($"{typeof(TState).Name}: die Frist {f.Befehl.GetType().Name} zielt auf {f.Befehl.Ziel}, nicht auf dieses "
+                    + $"Aggregat ({_id}) — eine Frist geht an einen Command des eigenen Aggregats (R5).");
+            var form = Infrastructure.Funktionen.Befehlsform.Schreibe(f.Befehl);
+            (fristen ??= new()).Add(new FristFaellig(versionVorher + 1 + i, form.Typ, form.Daten, f.Nach, ImAuftrag.IstAkteur(akteur) ? akteur : null));
+        }
+        return fristen ?? (IReadOnlyList<Beilage>)Array.Empty<Beilage>();
     }
 
     /// <summary>
@@ -507,6 +527,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         }
 
         IReadOnlyList<IEvent> schreibe;
+        IReadOnlyList<Beilage> fristen = Array.Empty<Beilage>();
         e.VersionVorher = _state.Version;
         if (alle.Count == 0)
         {
@@ -524,6 +545,13 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         }
         else
         {
+            try { fristen = Fristen(persistent, _state.Version, env.UserId); }
+            catch (Exception ex)
+            {
+                e.Fehler = ex.Message;
+                e.Sofort = new CommandResult { Success = false, ErrorMessage = ex.Message };
+                return;
+            }
             e.Ausgang = KommandoAusgang.Gewirkt;
             e.Persistent.AddRange(persistent);
             schreibe = persistent;
@@ -535,7 +563,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         }
         e.VersionNachher = _state.Version;
         e.Teil = new AppendTeil(schreibe, env.CorrelationId, env.CommandId.ToString(), env.UserId, e.Spur,
-            [new Quittung(env.CommandId, e.Ausgang)]);
+            [new Quittung(env.CommandId, e.Ausgang), .. fristen]);
     }
 
     /// <summary>
@@ -787,7 +815,8 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             //    ★ Phase 1: Metadaten mit ins Log stempeln (nach Log-Read verfügbar).
             //    ★ Inbox: die Quittung reist in DERSELBEN Transaktion wie der Effekt (Inbox-Tabelle) → exactly-once-wirksam, crash-fest.
             //      Eine Marke im Stream braucht die Wirkung nicht: ihr erstes Event trägt causation_id = CommandId, das liest der Prozess-Fold.
-            var append = await AppendeAsync(cmdEnvelope, expectedVersion, persistentEvents, KommandoAusgang.Gewirkt);
+            var append = await AppendeAsync(cmdEnvelope, expectedVersion, persistentEvents, KommandoAusgang.Gewirkt,
+                Fristen(persistentEvents, expectedVersion, cmdEnvelope.UserId));
             if (append != AppendErgebnis.Geschrieben)
             {
                 // Mehrdeutiger Commit (G-3): die Events stehen im Log, der Actor hat sie beim Rehydrieren schon gefaltet. Die Signale

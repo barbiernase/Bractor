@@ -26,7 +26,7 @@ namespace DomainEditor;
 public static class BoardLeseseite
 {
     private static readonly string Selbst = typeof(Selbst<>).Name.Split('`')[0];
-    private static readonly string Frist = typeof(Frist<>).Name.Split('`')[0];
+    private static readonly string Frist = typeof(FristPlanung<>).Name.Split('`')[0];
     private static readonly string FristStorno = typeof(FristStorno<>).Name.Split('`')[0];
     private static readonly string OneOf = typeof(OneOf<>).Name.Split('`')[0];
 

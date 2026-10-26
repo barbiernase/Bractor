@@ -12,6 +12,12 @@ internal sealed class BeilagenSchreiber
 {
     private List<Guid>? _commands, _streams;
     private List<bool>? _abgelehnt;
+    // Fristen für das Fälligkeits-Verzeichnis der Uhr (Plan Pub/Sub-Neustrukturierung Phase 3).
+    private List<Guid>? _fristStreams;
+    private List<int>? _fristVersionen;
+    private List<TimeSpan>? _fristNach;
+    private List<string>? _fristBefehle, _fristDaten;
+    private List<string?>? _fristAkteure;
 
     public void Lege(IDocumentSession session, Guid streamId, IReadOnlyList<Beilage>? beilagen)
     {
@@ -31,6 +37,14 @@ internal sealed class BeilagenSchreiber
                 case VorgangBeendet e:
                     session.Delete<ProzessOffen>(e.Korrelation);
                     break;
+                case FristFaellig f:
+                    (_fristStreams ??= new()).Add(streamId);
+                    (_fristVersionen ??= new()).Add(f.Version);
+                    (_fristNach ??= new()).Add(f.Nach);
+                    (_fristBefehle ??= new()).Add(f.Befehl);
+                    (_fristDaten ??= new()).Add(f.Daten);
+                    (_fristAkteure ??= new()).Add(f.Akteur);
+                    break;
             }
         }
     }
@@ -39,6 +53,8 @@ internal sealed class BeilagenSchreiber
     public void Abschliessen(IDocumentSession session, IDocumentStore store)
     {
         if (_commands is not null) InboxTabelle.Quittiere(session, InboxTabelle.Name(store), _commands, _streams!, _abgelehnt!);
+        if (_fristStreams is not null)
+            Infrastructure.Uhr.FristVerzeichnis.Lege(session, store, _fristStreams, _fristVersionen!, _fristNach!, _fristBefehle!, _fristDaten!, _fristAkteure!);
     }
 
     /// <summary>Die CommandIds der Quittungen (für die Ausnahme einer Wiederholung).</summary>

@@ -2,7 +2,8 @@ using Abstractions;
 
 namespace Pruefdomaene.Abrechnung;
 
-public record StelleRechnung(Id<Rechnung> AggregateId, Id<Kundenkonto> Konto, decimal Betrag) : ICommand<Rechnung>, ICreationCommand;
+/// <summary>Stellt die Rechnung; mit einem Zahlungsziel (&gt; 0 Sekunden) prüft die Uhr danach, ob sie bezahlt ist.</summary>
+public record StelleRechnung(Id<Rechnung> AggregateId, Id<Kundenkonto> Konto, decimal Betrag, int ZahlungszielSekunden = 0) : ICommand<Rechnung>, ICreationCommand;
 public record GibRechnungFrei(Id<Rechnung> AggregateId) : ICommand<Rechnung>;
 public record SperreRechnung(Id<Rechnung> AggregateId, string Grund) : ICommand<Rechnung>;
 public record BezahleRechnung(Id<Rechnung> AggregateId) : ICommand<Rechnung>;

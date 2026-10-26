@@ -2,6 +2,7 @@ using Abstractions;
 using Infrastructure.Lebenszyklus;
 using Infrastructure.Projections;   // IClusterKindContributor
 using Infrastructure.Quellen.Treiber.Datei;
+using Infrastructure.Quellen.Treiber.Takt;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -12,8 +13,8 @@ using Infrastructure.Komposition;
 
 namespace Infrastructure.Quellen;
 
-/// <summary>Eine konfigurierte Quelle: Typ aus der generierten Tabelle + Werte aus der Konfig.</summary>
-public sealed record KonfigurierteQuelle(QuellTyp Typ, DateiQuellKonfig Konfig);
+/// <summary>Eine konfigurierte Quelle: Typ aus der generierten Tabelle + Werte aus der Konfig (die Konfig ihres Treibers).</summary>
+public sealed record KonfigurierteQuelle(QuellTyp Typ, QuellKonfig Konfig);
 
 /// <summary>
 /// Läuft im Host: je konfigurierter Quelle ihren Treiber. <c>EinmalImCluster</c> (Default) läuft nur auf dem Knoten, der die Lease
@@ -31,7 +32,8 @@ public sealed class QuellenDienst(IServiceProvider sp, IEnumerable<Konfigurierte
         if (liste.Count == 0) return Task.CompletedTask;
         var eingang = QuellEingang.Live(sp);
         foreach (var q in liste)
-            Console.WriteLine($"  ⛲ Quelle {q.Typ.Abschnitt} ({q.Typ.Treiber}, {q.Konfig.Laufmodus}) {q.Konfig.Pfad} → "
+            Console.WriteLine($"  ⛲ Quelle {q.Typ.Abschnitt} ({q.Typ.Treiber}, {q.Konfig.Laufmodus}) "
+                + (q.Konfig is DateiQuellKonfig d ? d.Pfad : q.Konfig is TaktQuellKonfig t ? $"alle {t.Intervall}" : "") + " → "
                 + string.Join(", ", eingang.PipelinesFür(q.Typ.Typ).DefaultIfEmpty("(keine Pipeline)")));
         return Task.WhenAll(liste.Select(q => q.Konfig.Laufmodus == QuellLaufmodus.JederKnoten
             ? LaufeAsync(q, eingang, stoppingToken)
@@ -84,10 +86,20 @@ public sealed class QuellenDienst(IServiceProvider sp, IEnumerable<Konfigurierte
         {
             try
             {
-                var treiber = new DateiTreiber(q.Typ, q.Konfig, (n, c) => eingang.NimmAufAsync(n, c),
-                    bestand.BekannteAsync, zustand, logger: logger);
-                await treiber.LaufeAsync(ct);
-                return;
+                switch (q.Konfig)
+                {
+                    case DateiQuellKonfig datei:
+                        await new DateiTreiber(q.Typ, datei, (n, c) => eingang.NimmAufAsync(n, c), bestand.BekannteAsync, zustand, logger: logger)
+                            .LaufeAsync(ct);
+                        return;
+                    case TaktQuellKonfig takt:
+                        var uhr = sp.GetRequiredService<IDbClock>();
+                        await new TaktTreiber(q.Typ, takt, (n, c) => eingang.NimmAufAsync(n, c), c => uhr.JetztAsync(c), zustand, logger)
+                            .LaufeAsync(ct);
+                        return;
+                    default:
+                        throw new NotSupportedException($"Quelle {q.Typ.Abschnitt}: kein Treiber für {q.Konfig.GetType().Name}.");
+                }
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
             catch (Exception ex)
@@ -123,16 +135,30 @@ public static partial class QuellenExtensions
 
         foreach (var t in typen)
         {
-            DateiQuellKonfig? k;
-            try { k = abschnitt.GetSection(t.Abschnitt).Get<DateiQuellKonfig>(o => o.ErrorOnUnknownConfiguration = true); }
+            // Die Konfig des Treibers (der Basistyp der Quelle wählt ihn, nie ein Name aus der Konfig).
+            QuellKonfig? k;
+            try
+            {
+                k = t.Treiber == Treibervertrag.Takt
+                    ? abschnitt.GetSection(t.Abschnitt).Get<TaktQuellKonfig>(o => o.ErrorOnUnknownConfiguration = true)
+                    : abschnitt.GetSection(t.Abschnitt).Get<DateiQuellKonfig>(o => o.ErrorOnUnknownConfiguration = true);
+            }
             catch (InvalidOperationException e) { throw new Infrastructure.Umgebung.BootFehler($"Konfig {Treibervertrag.KonfigAbschnitt}:{t.Abschnitt}: {e.Message}", "quelle:" + t.Abschnitt); }
             if (k == null) throw new Infrastructure.Umgebung.BootFehler($"Konfig {Treibervertrag.KonfigAbschnitt}:{t.Abschnitt} ist leer.", "quelle:" + t.Abschnitt);
             if (k.Webhook is { Length: > 0 } w && !w.Trim().StartsWith('/'))
                 throw new Infrastructure.Umgebung.BootFehler($"Konfig {Treibervertrag.KonfigAbschnitt}:{t.Abschnitt}:Webhook = '{w}' ist keine Route (beginnt mit /).", "quelle:" + t.Abschnitt);
-            if (string.IsNullOrWhiteSpace(k.Pfad))
-                throw new Infrastructure.Umgebung.BootFehler($"Konfig {Treibervertrag.KonfigAbschnitt}:{t.Abschnitt}:Pfad fehlt.", "quelle:" + t.Abschnitt);
-            if (!Directory.Exists(k.Pfad))
-                Console.WriteLine($"  ⚠ Quelle {t.Abschnitt}: Verzeichnis {k.Pfad} beim Start nicht erreichbar — der Treiber versucht es weiter.");
+            switch (k)
+            {
+                case DateiQuellKonfig d:
+                    if (string.IsNullOrWhiteSpace(d.Pfad))
+                        throw new Infrastructure.Umgebung.BootFehler($"Konfig {Treibervertrag.KonfigAbschnitt}:{t.Abschnitt}:Pfad fehlt.", "quelle:" + t.Abschnitt);
+                    if (!Directory.Exists(d.Pfad))
+                        Console.WriteLine($"  ⚠ Quelle {t.Abschnitt}: Verzeichnis {d.Pfad} beim Start nicht erreichbar — der Treiber versucht es weiter.");
+                    break;
+                case TaktQuellKonfig takt when takt.Intervall < TimeSpan.FromSeconds(1):
+                    throw new Infrastructure.Umgebung.BootFehler($"Konfig {Treibervertrag.KonfigAbschnitt}:{t.Abschnitt}:Intervall = {takt.Intervall} — mindestens eine Sekunde.",
+                        "quelle:" + t.Abschnitt);
+            }
             services.AddSingleton(new KonfigurierteQuelle(t, k));
         }
 
