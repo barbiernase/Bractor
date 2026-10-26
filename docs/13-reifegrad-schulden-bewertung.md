@@ -19,6 +19,7 @@ und VM-1 erledigt (§13.6); PF-6, PF-7, PF-10, PF-13 und AK-1 werden mit den sp�
 | G-13 | Zwei Knoten vergeben dieselben Sitzungs-Kennungen (Zähler je Prozess), der Broker überschreibt: eine gezielte Antwort kann bei der Sitzung des anderen Knotens landen | P1 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
+| PF-33 | Funktionen laufen ohne Eintrag in der Umgebung mit einem Slot je Partition: S5-8/S5-64 fallen auf ≈ 300 Vorgänge/s (0,22 × bzw. 0,13 × der Basis); mit 16 Slots 1,18 × bzw. 0,56 × — Standard und Rest bei 64 Sendern offen | P1 |
 | PF-13 | Unter S5-64: der Nachschub (früher Reaktion, seit Phase 4 die Funktion `Nachschub`) wartet am heißen Posten hinter den Reservierungen — p99 im Sekundenbereich (Zahlen docs/12) | P3 |
 | PF-10 | Datei-Treiber meldet eine Datei nach der anderen ins Log (Rückstau): das Melde-Tempo ist die Decke von S1 — Entscheidung offen | P2 |
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16; seit Phase 3 dazu die Uhr (eine Abfrage je Sekunde) und je Funktion und Partition ein Poll | P3 |
@@ -220,6 +221,13 @@ eine Umgebung als Heredoc neben `umgebungen/*.json`. *Empfehlung:* Deploy auf `u
 
 ### P2
 
+**PF-33 · Slots der Funktionen** (Messung Phase 4, docs/12 §12.5). Ein Funktions-Actor startet je Partition höchstens so viele Eingänge, wie die
+Umgebung Slots nennt (Standard 1), und jeder Eingang wartet auf seinen Emit (eine Frage an das Ziel-Aggregat). Ein Ablauf über mehrere Aggregate
+hat mehrere Kanten, also mehrere Eingänge je Vorgang: mit einem Slot tragen acht Partitionen in der Prüfdomäne ≈ 300 Vorgänge/s, der Dirigent
+vorher bis 2 326. Mit 16 Slots S5-8 1,18 × der Basis, S5-64 0,56 ×. *Entscheidung offen:* höherer Standard für gleichbleibende Funktionen (sie
+halten nichts fest, Slots kosten nur gleichzeitige Emits) oder Slots je Umgebung setzen; danach den Rest bei 64 Sendern untersuchen (Kandidat: je
+Stream nacheinander auf den 50 heißen Posten-Streams, auf denen `Nachschub` und `Auftragsabwicklung` hören).
+
 **FB-1, FB-4 … FB-7 · Funktionen und Uhr, bewusst offen nach Plan Phase 4** (2026-10-26). Was erst spätere Phasen tragen, ist mit Absicht nicht
 vorgezogen, weil jede Vorab-Lösung ein zweiter Weg wäre, der wieder verschwände. **FB-1:** der Generator kennt Hinweise als Eingang
 (`GeneratedFunktionsBausteine.Hinweisplan`), es fehlt der Zusteller — das ist der schnelle Kanal aus Phase 6. **FB-4:** reine Darstellungs-Lücken
@@ -229,7 +237,8 @@ Design-Entscheidungen warnen. Mit dem Dirigenten sind GR-ZYKLUS (CQRS088) und GR
 fortschreitenden Zustand“ bräuchte mehr als Signaturen. **FB-6:** die Quell-Nachricht vom Client hatte über gRPC das Trigger-Protokoll; es ist mit
 der Handle-Welt entfernt, der neue Weg kommt mit der Leitung aus Phase 7. **FB-7:** eine getragene Funktion ohne verbundenen Client arbeitet nichts
 ab; der Rückstand steht in `/health`, eine eigene Meldung fehlt. Nimmt ein Träger Eingänge an und antwortet nicht, wartet die Partition (bei einem Slot)
-bis zum Ablauf der Lease; gesehen im Verhaltens-Netz, dort trägt die Umgebung deshalb acht Slots.
+bis zum Ablauf der Lease; gesehen im Verhaltens-Netz, dort trägt die Umgebung deshalb acht Slots. In der Messung hält dieselbe Lage die
+Position der Funktion `IBildpaarBeurteilung` fest (kein Klassifizierer gestartet): L1 wird nie still.
 
 **W3-1 · Ableitungen im Editor-JS.** `graphNodes` baut Karten-Ids parallel zu `Sicht.BaueKarten` (Transition-Id weicht bei fehlender `_id` ab);
 `akteurHoert`, `flParameter`, `faehigkeitVorschlag` (weicht bei Namenskollision von `BoardLeseseite` ab), Auto-Zuordnung (`autoArgs`,
