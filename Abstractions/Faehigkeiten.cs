@@ -12,7 +12,7 @@ public interface IFaehigkeiten
     T Hole<T>() where T : class;
 }
 
-/// <summary>Ein Auflöse-Bereich (je Pull-Actor, je Pipeline-Actor, je Query) — beim Ende freigeben.</summary>
+/// <summary>Ein Auflöse-Bereich (je Aktivierung eines Actors — der Rahmen des Actors gibt ihn frei —, je Query, je Funktionsaufruf) — beim Ende freigeben.</summary>
 public interface IFaehigkeitsBereich : IFaehigkeiten, IDisposable { }
 
 /// <summary>Öffnet Bereiche. Die Infrastruktur implementiert sie über den DI-Container.</summary>

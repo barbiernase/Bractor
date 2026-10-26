@@ -32,7 +32,8 @@ Neuaufbau (er gehört zum Stand der Leseseite, §4.3).
 
 **Partitions-Leser** (`Infrastructure/Projections/BatchLeser.cs`, als `BatchLeserActor` ein virtueller Cluster-Actor, Kind
 `batch-<Projektion>`, Identität = Partition). Der Cluster hält eine Aktivierung je Partition; fällt das bei einer Netzstörung kurz aus, schützt
-die Versionsprüfung des Partitions-Checkpoints (G-4, unten). Ein Durchlauf:
+die Versionsprüfung des Partitions-Checkpoints (G-4, unten). Der Fähigkeits-Bereich (Store-Instanz, Co-Commit-Puffer) gehört der Aktivierung
+(Rahmen, [03](03-schreibseite.md) §3.7): beim Stopp bricht der Durchlauf ab, der Bereich wird erst frei, wenn er geendet hat. Ein Durchlauf:
 1. **Stand laden:** `PartitionsCheckpoint { Id = "<projektion>:<p>", Position (globale Sequenz), Version, Geparkt }` über den Store
    (`IProjectionTracker.LadePartitionAsync`).
 2. **Seite lesen:** `IEventStoreRepository.ReadPartitionAsync` — Events mit `seq_id` jenseits der Position, nur Partition `p`, nur die
@@ -78,7 +79,7 @@ hier eine Karenz von 3 s gegen den Event-Zeitstempel; eine länger offene Transa
 **Weckung** (`Infrastructure/Projections/BatchKonsum.cs`, `BatchKonsumStartupService`). Ein `SignalReceiverActor` je Projektion abonniert die
 `StateChangeVia…`-Signale ihrer Event-Typen und weckt die Partition des Streams (`Wake` an `batch-<Projektion>/<p>`). Je Partition ist höchstens
 eine Weckung unterwegs, was währenddessen kommt, wird zu genau einer weiteren; der Actor quittiert sofort und merkt sich während eines
-Durchlaufs „noch einmal“ (der Durchlauf läuft neben der Mailbox, `ReenterAfter`). Der **Poll** weckt alle 30 s jede Partition — das Netz für
+Durchlaufs „noch einmal“ (der Durchlauf läuft neben der Mailbox; das Zusammenfassen ist die Regel des Rahmens, `RahmenActor.Wecke`). Der **Poll** weckt alle 30 s jede Partition — das Netz für
 verlorene Signale; einen Heil-Poll je Stream gibt es für Projektionen nicht mehr. Die Batch-Leser passivieren nicht (es gibt nur Projektionen ×
 Partitionen davon, der Poll weckt sie ohnehin).
 
@@ -104,13 +105,15 @@ und Poll gleich:
 **Transport** (`Infrastructure/Projections/PullPath.cs`): ein `SignalReceiverActor` weckt die Cluster-Identität `(pull-<Typ>, StreamId)`; der
 **Poll** (`Poller`, 30 s) liest über `ReadChangedStreamsAsync` seitenweise (1 000 Events) die Streams, die jenseits der Hochwassermarke ein
 Event der **abonnierten Typen** bekommen haben (Diskriminatoren samt Upcasting-Herkunft, `BatchLeser.TypenAus`; nur Sequenz und Stream, keine
-Daten), und rückt sie je Seite **nur** vor, wenn jede Weckung als `WakeAck(Aufgeholt: true)` zurückkommt (bounded 10 s) — kein terminaler,
-unverarbeiteter Stream wird still übersprungen. Ein Stream ohne abonniertes Event weckt keinen Adapter (PF-12: früher bekam jeder geänderte
+Daten), und rückt sie je Seite **nur** vor, wenn jede Weckung als `WakeAck(Aufgeholt: true)` zurückkommt (eine Frage mit 10 s Frist; eine
+Weckung, die im Adapter scheitert, beantwortet er ehrlich mit `Aufgeholt: false`) — kein terminaler, unverarbeiteter Stream wird still
+übersprungen. Ein Stream ohne abonniertes Event weckt keinen Adapter (PF-12: früher bekam jeder geänderte
 Stream des Logs einen Cursor). Der
 Signal-Weckungen sind je Stream zusammengefasst (`Weckungen<TKey>`: höchstens eine unterwegs, eine hinterher; dieselbe Klasse weckt die
 Partitionen des Batch-Konsums) — ohne das wurde unter Last jedes Signal ein eigener Read des Adapters (PF-12). Der
 `SignalAdapterActor` je Stream serialisiert beide Quellen über seine Mailbox (Single-Writer je Stream) und passiviert nach
-`Lebenszyklus.AdapterLeerlaufSekunden` (Standard 120; PF-5) — der Cursor liegt durabel im Store.
+`Lebenszyklus.AdapterLeerlaufSekunden` (Standard 120; PF-5) — der Cursor liegt durabel im Store, der Fähigkeits-Bereich wird mit der
+Aktivierung frei.
 
 **Tombstones:** scheitert ein Append, füllt Marten die reservierten Sequenzen mit `Tombstone`-Events in einem eigenen Stream.
 `MartenEventStore` meldet diesen Stream nicht als geändert und liest keine Tombstones (G-7, erledigt); Poll und Partitions-Leser laufen über sie
@@ -224,7 +227,7 @@ Der **Rückgabetyp** (konkret oder `OneOf<…>`, CQRS050) sagt, was entstehen ka
 Jeder Command geht durch das **eine** Emit-Primitiv `CommandEmitter.EmitAsync` (`Infrastructure/PubSub/CommandEmitter.cs`):
 - deterministische `CommandId` aus `EmitKausalität` (Korrelation + auslösender Stream + Position/Command-Typ) → stabil über Re-Wakes,
 - `CommandModus.Emittiert()` = **keine erwartete Version**,
-- **bounded** (`_sendeFrist`, Standard 5 s), at-least-once, ohne eigenen Retry;
+- eine **Frage** des Boten mit Pflicht-Frist (`_sendeFrist`, Standard 5 s; [03](03-schreibseite.md) §3.7), at-least-once, ohne eigenen Retry;
 - liefert den **Ausgang** (`EmitAusgang`): `Zugestellt` (Erfolg, auch als erkannte Wiederholung), `Abgelehnt` (fachlich, durabel als Marke —
   `CommandResult.Abgelehnt`), `Unbekannt` (Frist abgelaufen, technischer Fehler, Transportfehler). Keine Ausnahme verlässt den Emitter. Wer
   „unbekannt“ bekommt, wiederholt an seinem durablen Punkt mit derselben CommandId: der Emittenten-Cursor bleibt stehen (§4.1), die Frist liegt
@@ -244,8 +247,8 @@ häufige Wiederholung kurz nach dem ersten Mal schon **vor** der OCC-Prüfung. E
 fachliche Ablehnung die Marke `KommandoAbgelehnt(CommandId, Grund)` (`Infrastructure/Aggregate/KommandoVerarbeitet.cs`, `IProzessIntern`:
 der Applier sieht sie nie, die Version zählt sie). Was daraus garantiert ist: [11](11-garantien.md).
 
-**Analyzer-Zwang** (`CommandEmitAnalyzer`): **CQRS020** (rohes `RequestAsync<CommandResult>` außerhalb von Emitter/Dispatcher),
-**CQRS021** (Command-Send mit `CancellationToken.None`/`default`). Der generierte Pull-Emit-Pfad reicht das Token der Weckung durch
+**Analyzer-Zwang** (`CommandEmitAnalyzer`): **CQRS020** (`RequestAsync<CommandResult>` oder `FrageAsync<CommandResult>` außerhalb von
+Emitter/Dispatcher), **CQRS021** (roher Command-Send mit `CancellationToken.None`/`default`; eine Frage hat ihre Frist ohnehin). Der generierte Pull-Emit-Pfad reicht das Token der Weckung durch
 (`EmitAusgaenge.Token`).
 
 ## 4.5 Prozess-Maschine (der Dirigent)

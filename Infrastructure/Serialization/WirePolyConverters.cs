@@ -9,7 +9,7 @@ namespace Infrastructure.Serialization;
 
 /// <summary>
 /// Polymorphe STJ-Converter für die Interface-Payloads, die GESCHACHTELT in einer Wire-Hülle reisen
-/// (<c>CommandEnvelope.Payload : ICommand</c>, <c>CommandResult.Events/RejectionEvent : IEvent</c>).
+/// (<c>CommandEnvelope.Payload : ICommand</c>, <c>CommandResult.RejectionEvent : IEvent</c>).
 ///
 /// Reflexionsfrei (Invariante 4): der Diskriminator ist der Typ-Name (PascalCase, identisch zu den
 /// <c>GeneratedTypeRegistry</c>-Schlüsseln); der konkrete Typ wird über den source-gen

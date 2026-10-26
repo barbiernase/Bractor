@@ -177,6 +177,10 @@ Keine Prometheus-Exposition, kein OpenTelemetry (docs/13 P2-10).
 5. **Domänen-Reinheit im Transport** — nur Transporthüllen tragen `IWireMessage`.
 6. **Umgebungen unterscheiden sich nur in Konfig** (W7) — derselbe Host, dieselben einkompilierten Implementierungen; Einzelknoten in Sim,
    Consul im Cluster.
+7. **Keine Cluster-Nachricht ohne Frist** — der `Bote` (`Infrastructure/Lebenszyklus/Bote.cs`) kennt zwei Verben: `Melde` (verlierbar,
+   ohne Antwort, intern gebunden) und `FrageAsync<T>` (Antwort mit Pflicht-Frist, ohne Antwort `null`). Ohne Frist wiederholt Proto.Cluster eine
+   Anfrage unbegrenzt — bei einem toten oder noch nicht eingeschwungenen Knoten hinge der Aufrufer still. Die Antwort auf einen Command
+   (`CommandResult`) trägt nur Ausgang, Versionen und Ablehnung, nicht die Events: über die Leitung reist so wenig wie möglich.
 
 ## 6.8 Offen
 

@@ -22,11 +22,13 @@ kommentiert. Die Schalter des Schreibpfads stehen für Nutzer in der Umgebungs-D
 - **JSON-Eingang** (Werkbank, nur Einblick-Port, nur mit `Transport.JsonEingang`): `POST /eingang/command`
   (`Infrastructure/Eingang/JsonEingang.cs`). Derselbe Weg wie gRPC — Token → Akteur-Tor → Befugnis, Akteur im Envelope, Wirker
   `akteur:<A>` — nur ohne Proto: Typ über die generierte Registry, Felder über den generierten Wire-Kontext. Anders als gRPC wartet er
-  auf das `CommandResult` (`ProtoActorAggregateDispatcher.FrageAsync`, ein Versuch, bounded). Ohne angegebene Version läuft der Command
-  im Modus `Emittiert`.
+  auf das `CommandResult` (`ProtoActorAggregateDispatcher.FrageAsync`, ein Versuch, eine Frage mit Frist). Ohne angegebene Version läuft der
+  Command im Modus `Emittiert`. Die Antwort nennt Ausgang, Versionen (`version`, `ersteVersion`) und Ablehnung; die geschriebenen Events liest
+  der Eingang nur auf Wunsch (`"zeigeEvents": true`) aus dem Log — die Werkbank wünscht sie, ein Treiber unter Last nicht.
 - **Emittiert** (Reaktion, Prozess, Fluss — der Dirigent ist der Prozess-Manager): ausschließlich über `CommandEmitter.EmitAsync`
-  (`Infrastructure/PubSub/CommandEmitter.cs`) — deterministische CommandId, `CommandModus.Emittiert`, bounded Token, at-least-once auf dem
-  Draht; Akteur der Kette und Spur (`Ursache`, `Wirker`) reisen im Envelope. Andere Wege sind per Analyzer verboten (CQRS020/021).
+  (`Infrastructure/PubSub/CommandEmitter.cs`) — deterministische CommandId, `CommandModus.Emittiert`, eine Frage des Boten mit Pflicht-Frist
+  (§3.7), at-least-once auf dem Draht; Akteur der Kette und Spur (`Ursache`, `Wirker`) reisen im Envelope. Andere Wege sind per Analyzer
+  verboten (CQRS020/021; CQRS020 erkennt auch `FrageAsync<CommandResult>`).
 
 Quell-Nachrichten gehen nicht durch einen Decider: der Treiber hängt sie als erstes Event eines Vorgangs-Streams mit deterministischer Id
 an (`StartStream`, genau einmal je Kennung, `Infrastructure/Quellen/Quellen.cs`).
@@ -35,8 +37,8 @@ an (`StartStream`, genau einmal je Kennung, `Infrastructure/Quellen/Quellen.cs`)
 Das Ziel eines Commands steht in seinem Typ: `record … : ICommand<TAggregat>` mit `Id<TAggregat> AggregateId` (Plan Pub/Sub-Neustrukturierung
 §2.5). Die Framework-Sicht ist `ICommand.Ziel` (die Stream-Id), der `CommandEnvelope` leitet seine `AggregateId` daraus ab — keine zweite Angabe.
 `ProtoActorAggregateDispatcher.Dispatch` (`Infrastructure/Aggregate/ActorSystem/AggregateDispatcher.cs`) baut die Ziel-Identität
-typbasiert: `ClusterIdentity.Create(guid, envelope.AggregateType)`. Der Send ist `cluster.RequestAsync<CommandResult>(identity, envelope, ct)`
-mit bounded Token (10 s je Versuch, 3 Versuche). Sind die Versuche erschöpft: LogError, durabler Dead-Letter und ein targeted
+typbasiert: `ClusterIdentity.Create(guid, envelope.AggregateType)`. Der Send ist eine Frage des Boten (`FrageAsync<CommandResult>`, Frist
+10 s je Versuch, 3 Versuche). Sind die Versuche erschöpft: LogError, durabler Dead-Letter und ein gemeldetes (verlierbares) targeted
 `CommandFailed` an die `OriginSessionId`, damit der Client nicht still hängt. Der Dispatcher selbst wiederholt nicht über die Versuche
 hinaus; die Wiederholung bei Stille liegt im Client (gleichbleibende CommandId, die Aggregat-Inbox dedupliziert; Ausgang
 `CommandUnbestaetigt` bei totaler Stille — Details in [08](08-frontend-blazor-client.md)). `AggregateDispatcherExtensions.ResolveAggregateType`
@@ -46,7 +48,7 @@ löst den Aggregat-Typ aus der generierten Map (`GeneratedPipelines.CommandAggre
 **(c) Aggregat-Actor — der Kern.**
 `AggregateActorBase.ReceiveAsync`: die Id des Actors ist seine **Cluster-Identität** (beim `Started` gelesen), nicht die des ersten Envelopes.
 Ein Command, dessen Ziel nicht diese Identität ist (falsch geroutet), wird abgelehnt, **bevor etwas geladen ist** (technischer Fehler an den
-Absender und gezielt an die Sitzung) — sonst lüde die Aktivierung den fremden Stream unter ihrer Identität. Das erste passende `CommandEnvelope`
+Absender und gezielt an die Sitzung gemeldet) — sonst lüde die Aktivierung den fremden Stream unter ihrer Identität. Das erste passende `CommandEnvelope`
 löst `InitializeAsync` aus (Rehydration aus dem Log, ggf. ab Snapshot); dann reiht der Actor den Command ein. Jeder Command bekommt **immer**
 eine Antwort an seinen Absender — sonst wiederholt der Aufrufer.
 
@@ -57,7 +59,8 @@ decide:<Aggregat>/<Command>, Wirker des Absenders)`): dieselbe Vorprüfung und d
 schreibenden Commands wendet er sofort an — der nächste entscheidet auf diesem Stand. Alle schreibenden Commands gehen als Teile
 (`AppendTeil`: Events, Korrelation, Kausalität = CommandId, Akteur, Spur, Quittung) in **einen** Append (`AppendTeileAsync`, eine Transaktion,
 im Group-Commit ein Auftrag). Geantwortet wird jedem erst nach diesem Commit (`AbschliessenAsync`: Cache, Signale, Ablehnung an die Sitzung,
-Antwort in Mailbox-Reihenfolge); eine CommandId, die zweimal im Bündel steht, bekommt die Antwort ihres ersten Auftretens. Scheitert der Append
+Antwort in Mailbox-Reihenfolge — das `CommandResult` trägt nur Ausgang, Versionen und Ablehnung, die Events stehen im Log); eine CommandId,
+die zweimal im Bündel steht, bekommt die Antwort ihres ersten Auftretens. Scheitert der Append
 (Versionskonflikt durch einen zweiten Schreiber, eine Wiederholung, die der Cache nicht kannte, ein mehrdeutiger Commit, ein DB-Fehler), sind
 alle Entscheidungen des Bündels hinfällig: der Actor lädt frisch und behandelt jeden Command einzeln über `HandleCommandAsync` (`EinzelnAsync`)
 — ein Command, den das Bündel doch geschrieben hatte, scheitert dort an seiner Quittung und bekommt den Ausgang des ersten Mals. Solange ein
@@ -78,8 +81,8 @@ Der gemeinsame Kern `HandleCommandCoreAsync` (das Ziel ist schon beim Empfang ge
 3. **Noop** (keine Events) → trotzdem eine `KommandoVerarbeitet`-Marke co-committen (sonst bliebe ein Prozess-Schritt ewig offen: der
    Prozess-Fold erkennt den Ausgang an der Kausalität im Ziel-Stream).
 4. Trennung persistenter Events von Ablehnungen (`ITransientEvent`); ein *gemischtes* Ergebnis oder mehrere Ablehnungen werfen laut.
-5. **Reine Ablehnung** → kein Append der Ablehnung, kein Apply; eine `KommandoAbgelehnt`-Marke wird co-committet, die Ablehnung geht
-   targeted an den Aufrufer und als verlierbarer Hinweis an die Spur.
+5. **Reine Ablehnung** → kein Append der Ablehnung, kein Apply; eine `KommandoAbgelehnt`-Marke wird co-committet, die Ablehnung wird
+   targeted an den Aufrufer gemeldet (verlierbar, der Turn wartet nicht auf die Shards) und als verlierbarer Hinweis an die Spur.
 6. **Erfolg**: `AppendeAsync` schreibt die Events — ohne Marke; die Quittung des Commands (`Quittung`, Ausgang gewirkt) reist in derselben
    Transaktion in die Inbox-Tabelle (§3.3). Jeder der drei Appends (Effekt, Noop-Marke, Ablehnungs-Marke) trägt so eine Quittung.
    **Kennt die Inbox die `CommandId` schon** (eine Wiederholung, die der Cache nicht kannte — nach Passivierung, Neustart oder jenseits des
@@ -98,8 +101,8 @@ Snapshots (best-effort, ab `Schreibpfad.SnapshotSchwelle` und bei Deaktivierung,
 sind in [04 §4.7](04-konsum-und-prozess-maschine.md) beschrieben.
 
 **Passivierung** (PF-5): hört ein Aggregat-Actor `Lebenszyklus.AggregatLeerlaufSekunden` lang nichts (Standard 600), stoppt er sich
-(`Infrastructure/Lebenszyklus/Passivierung.cs`, Proto-`ReceiveTimeout`); beim Stoppen schreibt er seinen Snapshot, die nächste Nachricht
-aktiviert ihn frisch (Snapshot + Tail; der Inbox-Cache ist dann leer, die Inbox-Tabelle bleibt). Emittenten-Adapter und Prozess-Manager passivieren genauso; die Batch-Leser der
+(Rahmen, §3.7; Proto-`ReceiveTimeout`) — nie, solange ein Commit läuft oder Commands warten; beim Stoppen schreibt er seinen Snapshot, die
+nächste Nachricht aktiviert ihn frisch (Snapshot + Tail; der Inbox-Cache ist dann leer, die Inbox-Tabelle bleibt). Emittenten-Adapter und Prozess-Manager passivieren genauso; die Batch-Leser der
 Projektionen (je Projektion und Partition) nicht ([04](04-konsum-und-prozess-maschine.md) §4.1).
 
 ## 3.2 Das Aggregat-Modell (reiner Fachcode)
@@ -249,8 +252,8 @@ Degradation: `RedisConnectionException`/`TimeoutException` → nur Warning, der 
   Variante `IStateChangeSignal<TEvent>` trägt die Event→Signal-Kante am Typ.
 - **Erzeugung**: pro persistiertem Event ein `StateChangeVia{Event}` (`Domain.SourceGeneration/SignalTypeGenerator.cs`); die Instanz baut
   `GeneratedSignalFactory.Create(payload, aggregateId, version)` (`SignalFactoryGenerator`, liest das Typ-Argument, keinen Namens-Präfix).
-- **Verteilung**: im Erfolgspfad **fire-and-forget** über den `BrokerPublisher` (`PublishFireAndForget` in `AggregateActorBase`). Kein
-  Warten auf Shard-Acks — der Command ist bereits committet, Zustellung ist best-effort, durable Konsumenten heilen über Log-Read + Poll.
+- **Verteilung**: im Erfolgspfad **gemeldet** über den `BrokerPublisher` (`Melde`, `AggregateActorBase`). Kein Warten auf Shard-Acks —
+  der Command ist bereits committet, Zustellung ist best-effort, durable Konsumenten heilen über Log-Read + Poll.
   Jedes Event trägt seine eigene Position, nicht den Batch-Endwert.
 - **Routing**: der `BrokerPublisher` shardet über `Payload.GetType()` — die konkrete Signal-Klasse —, sodass nur Empfänger dieses
   Event-Typs geweckt werden.
@@ -267,6 +270,13 @@ Wiring in `Infrastructure/Extensions/CqrsServiceExtension.cs`:
   Single-Activation → Single-Writer pro Stream (tragend für Batching und OCC).
 - **Multi-Node**: generierter Wire-Serializer `CqrsWireSerializer` an `WithRemote`; `WireSerializerBootCheck` bricht bei einer Lücke ab.
   Siehe [06](06-transport-multinode-betrieb.md).
+- **Lebenszyklus** (Plan Pub/Sub-Neustrukturierung Phase 2): jeder Framework-Actor erbt `RahmenActor`
+  (`Infrastructure/Lebenszyklus/RahmenActor.cs`). Er öffnet den Fähigkeits-Bereich der Aktivierung, bricht beim Stopp die Arbeit neben der
+  Mailbox ab und wartet begrenzt (10 s) auf sie, gibt den Bereich erst frei, wenn nichts ihn mehr nutzt, passiviert nur, wenn der Actor nicht
+  beschäftigt ist, beantwortet einen Fehler ehrlich (danach startet Proto den Actor neu) und fasst Weckungen zusammen („läuft → noch einmal“).
+- **Zwei Verben** (`Infrastructure/Lebenszyklus/Bote.cs`): Framework-Code spricht einen virtuellen Actor nur über den `Bote` an —
+  `Melde` (verlierbar, ohne Antwort, intern gebunden) oder `FrageAsync<T>` (Antwort mit Pflicht-Frist; ohne Antwort `null`, wirft nie).
+  Ohne Frist wiederholt Proto.Cluster eine Anfrage unbegrenzt (Platzierung, tote PID); keine Stelle ruft `Cluster.RequestAsync` mehr selbst.
 
 `Infrastructure/Aggregate/ActorSystem/ClusterKindFactory.cs` (Klasse `ClusterKindsFactory`) ist vollständig auskommentiert — toter Code
 aus der Zeit vor dem Generator (docs/13 P3-2).

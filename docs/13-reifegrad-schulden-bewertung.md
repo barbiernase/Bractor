@@ -452,8 +452,8 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 - **P1-3 · Neustart mit Consul nach hartem Abbruch (2026-10-17, Messserver; docs/12 §12.5):** nach einem harten Abbruch führte Consul den toten
   Knoten noch einige Sekunden als Mitglied (`ConsulProviderConfig`: TTL 3 s, Abmeldung nach 10 s), der Cluster legte Broker-Aktivierungen auf ihn,
   und der Start versuchte jede genau einmal — `TimeoutException` aus `PubSubStartupService`, Abbruch (Störungsläufe „Prod-Konfig“ ungültig). Jetzt
-  wiederholen Aktivieren und Abonnieren der Broker Timeouts mit Backoff bis 60 s (`ClusterExtensions.MitWiederholungAsync`); andere Fehler gehen
-  sofort durch. Gemessen: zwei Störungsläufe mit Consul grün (53 019 und 52 756 Vorgänge), in beiden gelang beim Host der Prüfdomäne eine Aktivierung
+  wiederholen Aktivieren und Abonnieren der Broker Timeouts mit Backoff bis 60 s (heute `ClusterExtensions.FrageMitWiederholungAsync`: je Versuch
+  eine Frage des Boten mit Frist; seit Phase 2 des Plans Pub/Sub-Neustrukturierung zählt jeder Versuch ohne Antwort gleich, gleich aus welchem Grund). Gemessen: zwei Störungsläufe mit Consul grün (53 019 und 52 756 Vorgänge), in beiden gelang beim Host der Prüfdomäne eine Aktivierung
   im zweiten Versuch. Nachweis: P `BrokerWiederholungTests`.
 
 - **PF-18 · Schema lazy im Betrieb (2026-10-17; docs/03 §3.3):** ein Standalone-Host legte Tabellen und Funktionen eines Dokumenttyps erst beim

@@ -92,6 +92,8 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
   Vertrag = was er draußen tut (`Auf` mit Ausgabe = **Zusage**, `void Auf` = **Kenntnis**; „Reaktion“ heißt nur der Backend-Baustein `ISubscriber`);
   Client = Software an einer Leitung, wirksam = Vertrag ∩ Token, C#-Client per `[assembly: IstClient<IX>]`.
 - **Kein `InMemoryEventStore`:** Store-Semantik nur gegen echtes Marten (Integration); der Prüfstand testet nur store-freie Logik.
+- **Actors:** jeder Framework-Actor erbt `RahmenActor` (Bereich, Stopp, Passivierung, Fehlerantwort, Zusammenfassen); Cluster-Nachrichten nur
+  über den `Bote` — `Melde` (verlierbar) oder `FrageAsync` (Pflicht-Frist), nie `Cluster.RequestAsync` direkt (`Infrastructure/Lebenszyklus/`).
 - **Proto und STJ-Kontexte entstehen automatisch** beim Build (Target `CqrsCodegenPrepass` in `Domain.Leitung/Domain.Leitung.csproj`, auch bei ⟳);
   `./codegen.sh --check` prüft Drift (alle Anwendungen). Kein manueller Schritt. Der Prepass (`Cqrs.Codegen/CqrsCodegen.targets`) hängt an der
   Leitung bzw. ohne Leitung an der Komposition; die Wurzel folgt aus dem Projektnamen.
