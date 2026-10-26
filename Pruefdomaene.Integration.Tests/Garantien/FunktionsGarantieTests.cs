@@ -167,7 +167,8 @@ public class FunktionsGarantieTests
             await Task.Delay(TimeSpan.FromSeconds(3));
 
             var fest = await Festgehalten(a, rechnung);
-            fest.Select(e => e.Payload.GetType().Name).Should().Equal(nameof(BefehlFestgehalten), nameof(AusgabeFestgehalten), "genau ein Lauf ist festgehalten");
+            fest.Select(e => e.Payload.GetType().Name).Should().Equal(new[] { nameof(BefehlFestgehalten), nameof(AusgabeFestgehalten) }.AsEnumerable(),
+                "genau ein Lauf ist festgehalten");
             var vermerkt = (await Log(a, konto.Wert)).Where(e => e.Payload is MahnungVermerkt).ToList();
             vermerkt.Should().ContainSingle("zwei Rechnungen, eine Wirkung");
             ((BefehlFestgehalten)fest[0].Payload).Daten.Should().Contain(((MahnungVermerkt)vermerkt[0].Payload).Versand);

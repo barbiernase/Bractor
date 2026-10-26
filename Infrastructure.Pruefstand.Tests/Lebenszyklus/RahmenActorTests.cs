@@ -31,6 +31,7 @@ public class RahmenActorTests
         public TaskCompletionSource ZweiterFertig { get; } = Neu();
         public TaskCompletionSource Tor { get; } = Neu();
         public TaskCompletionSource Abgebrochen { get; } = Neu();
+        public TaskCompletionSource<string> NebenGescheitert { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         /// <summary>Hält sich der Durchlauf an das Stopp-Token (bricht er ab, bevor er auf das Tor wartet)?</summary>
         public bool HoertAufStopp { get; init; }
         /// <summary>Konnte der Durchlauf nach dem Tor seinen Bereich noch benutzen?</summary>
@@ -79,6 +80,14 @@ public class RahmenActorTests
                     throw new InvalidOperationException("kaputt");
                 case "ping":
                     context.Respond("pong");
+                    break;
+                case "neben-wirft":
+                    // Eine Arbeit ohne async, die schon beim Aufruf wirft (etwa ein Seam, der „=> throw …“ schreibt).
+                    Neben(context, _ => throw new InvalidOperationException("sofort"), t =>
+                    {
+                        w.NebenGescheitert.TrySetResult(t.Exception?.GetBaseException().Message ?? "");
+                        return Task.CompletedTask;
+                    });
                     break;
             }
             return Task.CompletedTask;
@@ -175,6 +184,19 @@ public class RahmenActorTests
         await Warte(() => w.Starts == 2 && w.Fabrik.Freigegeben == 1);
         w.Fabrik.Geoeffnet.Should().Be(2, "die neue Instanz hat einen eigenen Bereich, der alte ist frei");
         (await system.Root.RequestAsync<string>(pid, "ping", Geduld)).Should().Be("pong");
+        await system.ShutdownAsync();
+    }
+
+    [Fact]
+    public async Task Eine_Arbeit_die_schon_beim_Aufruf_wirft_ist_ein_gescheiterter_Lauf_der_Actor_laeuft_weiter()
+    {
+        var w = new Werkzeug();
+        var (system, pid) = Starte(w);
+        system.Root.Send(pid, "neben-wirft");
+
+        (await w.NebenGescheitert.Task.WaitAsync(Geduld)).Should().Be("sofort", "danach sieht den Wurf als gescheiterten Task");
+        (await system.Root.RequestAsync<string>(pid, "ping", Geduld)).Should().Be("pong");
+        w.Starts.Should().Be(1, "kein Neustart — der Wurf gehört der Arbeit, nicht der Mailbox");
         await system.ShutdownAsync();
     }
 

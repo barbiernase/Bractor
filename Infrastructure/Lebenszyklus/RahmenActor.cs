@@ -117,11 +117,14 @@ public abstract class RahmenActor : IActor, IAsyncDisposable
 
     /// <summary>
     /// Arbeit neben der Mailbox (<c>ReenterAfter</c>): sie bekommt <see cref="Stopp"/>, hält Passivierung und Freigabe auf, und
-    /// <paramref name="danach"/> läuft wieder im Actor (mit dem erledigten Task).
+    /// <paramref name="danach"/> läuft wieder im Actor (mit dem erledigten Task). Wirft <paramref name="arbeit"/> schon beim Aufruf (eine
+    /// Methode ohne <c>async</c>), ist das ein gescheiterter Lauf wie jeder andere — nie ein Fehler der Mailbox, der den Actor neu startete.
     /// </summary>
     protected void Neben(IContext context, Func<CancellationToken, Task> arbeit, Func<Task, Task>? danach = null)
     {
-        var lauf = arbeit(Stopp);
+        Task lauf;
+        try { lauf = arbeit(Stopp); }
+        catch (Exception ex) { lauf = Task.FromException(ex); }
         _laeufe.Add(lauf);
         context.ReenterAfter(lauf, async t =>
         {
