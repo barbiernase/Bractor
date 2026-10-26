@@ -8,9 +8,8 @@ namespace Domain.SourceGeneration;
 /// <summary>
 /// <b>CQRS057 — Handler-Form.</b> Extractor/Editor erkennen einen Handler an seinen TYPEN (Eingang + Kontext), die
 /// Dispatch-Generatoren rufen nur Methoden namens <c>Handle</c> in genau dieser Form auf:
-///  • Projektion/Reaktion (<c>ISubscriber</c>): <c>Handle(TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…)</c>
-///  • Reader (<c>IReader&lt;T&gt;</c>):          <c>Handle(TQuery, IMessageEnvelope, ReadContext, Fähigkeit…)</c>
-///  • Pipeline (<c>IPipelineHandler</c>):       <c>Handle(TEingang, PipelineContext, Fähigkeit…)</c>
+///  • Projektion (<c>ISubscriber</c>): <c>Handle(TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…)</c>
+///  • Reader (<c>IReader&lt;T&gt;</c>): <c>Handle(TQuery, IMessageEnvelope, ReadContext, Fähigkeit…)</c>
 /// Weicht ein erkannter Handler davon ab (anderer Name, Kontext an falscher Stelle, Extra-Parameter ohne
 /// Fähigkeits-Marker), würde der Editor ihn zeigen, die Laufzeit ihn aber still übergehen. Das ist hier ein Build-Fehler.
 /// </summary>
@@ -39,20 +38,20 @@ public sealed class HandlerFormAnalyzer : DiagnosticAnalyzer
             INamedTypeSymbol? T(string n) => c.GetTypeByMetadataName(n);
             var m = new M
             {
-                ISubscriber = T("Abstractions.ISubscriber"), IReader = T("Abstractions.IReader`1"), IPipeline = T("Abstractions.IPipelineHandler"),
+                ISubscriber = T("Abstractions.ISubscriber"), IReader = T("Abstractions.IReader`1"),
                 IEvent = T("Abstractions.IEvent"), IQuery = T("Abstractions.IQuery"),
                 IAggEnv = T("Abstractions.IAggregateEnvelope"), IMsgEnv = T("Abstractions.IMessageEnvelope"),
-                Writer = T("Core.ProjectionWriter"), ReadCtx = T("Abstractions.ReadContext"), PipeCtx = T("Abstractions.PipelineContext"),
-                IWrite = T("Abstractions.IWriteStore"), IRead = T("Abstractions.IReadStore"), IAkteur = T("Abstractions.IAkteurDienst`1"),
+                Writer = T("Core.ProjectionWriter"), ReadCtx = T("Abstractions.ReadContext"),
+                IWrite = T("Abstractions.IWriteStore"), IRead = T("Abstractions.IReadStore"),
             };
-            if (m.ISubscriber == null && m.IReader == null && m.IPipeline == null) return;
+            if (m.ISubscriber == null && m.IReader == null) return;
             start.RegisterSymbolAction(ctx => Pruefe(ctx, m), SymbolKind.Method);
         });
     }
 
     private sealed class M
     {
-        public INamedTypeSymbol? ISubscriber, IReader, IPipeline, IEvent, IQuery, IAggEnv, IMsgEnv, Writer, ReadCtx, PipeCtx, IWrite, IRead, IAkteur;
+        public INamedTypeSymbol? ISubscriber, IReader, IEvent, IQuery, IAggEnv, IMsgEnv, Writer, ReadCtx, IWrite, IRead;
     }
 
     private static bool Gleich(ITypeSymbol a, INamedTypeSymbol? b) => b != null && SymbolEqualityComparer.Default.Equals(a, b);
@@ -73,19 +72,16 @@ public sealed class HandlerFormAnalyzer : DiagnosticAnalyzer
         { k1 = m.IAggEnv; k2 = m.Writer; fähigAb = 3; erwartet = "Handle(TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…)"; }
         else if (Hat(typ, m.IReader) && Hat(p0, m.IQuery))
         { k1 = m.IMsgEnv; k2 = m.ReadCtx; fähigAb = 3; erwartet = "Handle(TQuery, IMessageEnvelope, ReadContext, Fähigkeit…)"; }
-        else if (Hat(typ, m.IPipeline) && ps.Skip(1).Any(p => Gleich(p.Type, m.PipeCtx)))
-        { k1 = m.PipeCtx; k2 = null; fähigAb = 2; erwartet = "Handle(TEingang, PipelineContext, Fähigkeit…)"; }
         else return;
 
         string? grund = null;
         if (mm.Name != Handle) grund = $"der Methodenname ist '{mm.Name}', der Dispatch ruft nur '{Handle}'";
-        else if (ps.Length < fähigAb || !Gleich(ps[1].Type, k1) || (k2 != null && !Gleich(ps[2].Type, k2)))
+        else if (k2 == m.Writer && mm.ReturnType is not INamedTypeSymbol { Name: "Task", IsGenericType: false })
+            grund = "eine Projektion gibt nichts aus (Rückgabe Task) — was auf ein Event hin etwas sendet, ist eine Funktion (IFunktion)";
+        else if (ps.Length < fähigAb || !Gleich(ps[1].Type, k1) || !Gleich(ps[2].Type, k2))
             grund = "der Framework-Kontext steht nicht an der erwarteten Stelle";
-        else if (ps.Skip(fähigAb).FirstOrDefault(p => !(p.Type.TypeKind == TypeKind.Interface && (Hat(p.Type, m.IWrite) || Hat(p.Type, m.IRead)
-                     // Akteur-Dienst (IAkteurDienst<A>): nur am Pipeline-Handle — dort entscheidet der Handle in seinem Auftrag.
-                     || k1 == m.PipeCtx && Hat(p.Type, m.IAkteur)))) is { } fremd)
-            grund = $"der Parameter '{fremd.Name}' ({fremd.Type.Name}) ist keine Fähigkeit (IWriteStore/IReadStore)"
-                + (Hat(fremd.Type, m.IAkteur) ? " — ein Akteur-Dienst ist nur am Pipeline-Handle erlaubt" : " — Dienste gehören in den Konstruktor");
+        else if (ps.Skip(fähigAb).FirstOrDefault(p => !(p.Type.TypeKind == TypeKind.Interface && (Hat(p.Type, m.IWrite) || Hat(p.Type, m.IRead)))) is { } fremd)
+            grund = $"der Parameter '{fremd.Name}' ({fremd.Type.Name}) ist keine Fähigkeit (IWriteStore/IReadStore) — Dienste gehören in den Konstruktor einer Funktion";
         if (grund == null) return;
 
         ctx.ReportDiagnostic(Diagnostic.Create(Form, mm.Locations.FirstOrDefault(), typ.Name, mm.Name, p0.Name, grund, erwartet));

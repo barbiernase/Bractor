@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 namespace Infrastructure.Persistence;
 
 /// <summary>
-/// Räumt Quittungen der Inbox ab, die älter als der Horizont sind (E2, Umgebung <c>Schreibpfad.InboxHorizontTage</c>, docs/04 §4.4). Innerhalb
+/// Räumt Quittungen der Inbox ab, die älter als der Horizont sind (E2, Umgebung <c>Schreibpfad.InboxHorizontTage</c>, docs/04 §4.6). Innerhalb
 /// des Horizonts wirkt eine wiederholte CommandId garantiert nicht erneut; danach vergisst die Inbox sie.
 ///
 /// Läuft auf jedem Knoten im Takt von 10 min, seitenweise (je Seite eine Transaktion). Die Lease ist ein Transaktions-Advisory-Lock: je Seite

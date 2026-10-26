@@ -12,9 +12,8 @@ namespace Domain.SourceGeneration;
 /// generierte Dispatch löst sie auf. Damit diese Obergrenze dicht ist, darf ein Konsument keinen anderen Weg zum Store haben:
 ///  • <b>CQRS051</b> — eine Fähigkeit deklariert genau eine Funktion und erbt keine andere Fähigkeit (Bündeln ist Sache
 ///    des Stores: <c>IStore</c>).
-///  • <b>CQRS054</b> — Projektion/Reader/Reaktion/Pipeline halten keinen Store (Fähigkeit, Bündel, Store-Klasse) und keinen
-///    <c>IFristplan</c> im Konstruktor, in einem Feld oder einer Eigenschaft (auch nicht statisch). Andere Dienste (Logger,
-///    Konfig) bleiben erlaubt.
+///  • <b>CQRS054</b> — Projektion, Reader und Funktion halten keinen Store (Fähigkeit, Bündel, Store-Klasse) im Konstruktor, in einem
+///    Feld oder einer Eigenschaft (auch nicht statisch). Andere Dienste (Domänen-Dienste einer Funktion, Logger, Konfig) bleiben erlaubt.
 ///  • <b>CQRS055</b> — niemand baut eine Store-Klasse selbst (<c>new …</c>); Stores kommen nur aus der DI.
 /// Rollen über Marker, nie über Namen.
 /// </summary>
@@ -30,7 +29,7 @@ public sealed class FaehigkeitAnalyzer : DiagnosticAnalyzer
 
     private static readonly DiagnosticDescriptor Zustand = new(
         ZustandId, "Store im Konsumenten",
-        "'{0}' hält '{1}' ({2}) — ein Konsument bekommt Store-Funktionen nur als Fähigkeits-Parameter eines Handles, " +
+        "'{0}' hält '{1}' ({2}) — ein Konsument bekommt Store-Funktionen nur als Fähigkeits-Parameter (Handle bzw. Auf), " +
         "sonst steht die Obergrenze nicht in der Signatur",
         "CQRS.Faehigkeiten", DiagnosticSeverity.Error, isEnabledByDefault: true);
 
@@ -52,10 +51,9 @@ public sealed class FaehigkeitAnalyzer : DiagnosticAnalyzer
                 c.GetTypeByMetadataName("Abstractions.IWriteStore"),
                 c.GetTypeByMetadataName("Abstractions.IReadStore"),
                 c.GetTypeByMetadataName("Abstractions.IStore"),
-                c.GetTypeByMetadataName("Abstractions.IFristplan"),
                 c.GetTypeByMetadataName("Abstractions.ISubscriber"),
                 c.GetTypeByMetadataName("Abstractions.IReader`1"),
-                c.GetTypeByMetadataName("Abstractions.IPipelineHandler"));
+                c.GetTypeByMetadataName("Abstractions.IFunktion"));
             if (m.IWrite == null || m.IRead == null) return;   // kein Fähigkeits-Vertrag in dieser Compilation
             start.RegisterSymbolAction(ctx => PruefeTyp(ctx, m), SymbolKind.NamedType);
             start.RegisterOperationAction(ctx => PruefeNeu(ctx, m), OperationKind.ObjectCreation);
@@ -64,10 +62,9 @@ public sealed class FaehigkeitAnalyzer : DiagnosticAnalyzer
 
     private sealed class Marker
     {
-        public readonly INamedTypeSymbol? IWrite, IRead, IStore, IFristplan, ISubscriber, IReader, IPipeline;
-        public Marker(INamedTypeSymbol? w, INamedTypeSymbol? r, INamedTypeSymbol? s, INamedTypeSymbol? f,
-                      INamedTypeSymbol? sub, INamedTypeSymbol? rd, INamedTypeSymbol? p)
-        { IWrite = w; IRead = r; IStore = s; IFristplan = f; ISubscriber = sub; IReader = rd; IPipeline = p; }
+        public readonly INamedTypeSymbol? IWrite, IRead, IStore, ISubscriber, IReader, IFunktion;
+        public Marker(INamedTypeSymbol? w, INamedTypeSymbol? r, INamedTypeSymbol? s, INamedTypeSymbol? sub, INamedTypeSymbol? rd, INamedTypeSymbol? f)
+        { IWrite = w; IRead = r; IStore = s; ISubscriber = sub; IReader = rd; IFunktion = f; }
 
         private static bool Hat(ITypeSymbol t, INamedTypeSymbol? i) => i != null &&
             (SymbolEqualityComparer.Default.Equals(t.OriginalDefinition, i)
@@ -78,12 +75,12 @@ public sealed class FaehigkeitAnalyzer : DiagnosticAnalyzer
             && !SymbolEqualityComparer.Default.Equals(t, IWrite) && !SymbolEqualityComparer.Default.Equals(t, IRead)
             && (Hat(t, IWrite) || Hat(t, IRead)) && !Hat(t, IStore);
 
-        /// <summary>Alles, was Store-Zugang gibt: Fähigkeit, Bündel, Marker selbst, Store-Klasse — oder der Fristplan.</summary>
+        /// <summary>Alles, was Store-Zugang gibt: Fähigkeit, Bündel, Marker selbst, Store-Klasse.</summary>
         public bool GibtStoreZugang(ITypeSymbol t) =>
-            Hat(t, IWrite) || Hat(t, IRead) || Hat(t, IStore) || Hat(t, IFristplan);
+            Hat(t, IWrite) || Hat(t, IRead) || Hat(t, IStore);
 
         public bool IstKonsument(INamedTypeSymbol t) =>
-            t.TypeKind == TypeKind.Class && (Hat(t, ISubscriber) || Hat(t, IReader) || Hat(t, IPipeline));
+            t.TypeKind == TypeKind.Class && (Hat(t, ISubscriber) || Hat(t, IReader) || Hat(t, IFunktion));
 
         public bool IstStoreKlasse(ITypeSymbol t) =>
             t.TypeKind == TypeKind.Class && (Hat(t, IWrite) || Hat(t, IRead) || Hat(t, IStore));

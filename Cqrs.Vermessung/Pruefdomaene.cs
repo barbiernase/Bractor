@@ -5,29 +5,35 @@ using Abstractions;
 namespace Cqrs.Vermessung;
 
 /// <summary>
-/// S5 Prüfdomäne: Vorgänge über den JSON-Eingang, im festen Muster je zehn — acht Aufträge, die gelingen (Diamant: Posten reservieren und
-/// Kontingent belegen, Bestätigung am Join), ein Auftrag gegen ein volles Kontingent (Ablehnung → Kompensation der Reservierung) und eine
-/// Verteilung (Fan-out auf vier Ziele, Count-Join). Jede Reservierung unter dem Mindestbestand löst die Reaktion
-/// <c>NachschubBeiMindestbestand</c> aus (Emittent auf den langlebigen Posten-Streams). Sichtbar ist ein Vorgang mit seinem
-/// <c>ProzessBeendet</c> im Log (Log-Zeit, Uhr-Versatz umgerechnet). Die Prüfdomäne hat keine Akteure — das Tor ist offen.
+/// S5 Prüfdomäne: Vorgänge über den JSON-Eingang, im festen Muster je zehn — acht Aufträge, die gelingen (Diamant: die Auftragsabwicklung
+/// reserviert den Posten und belegt das Kontingent, das Auftrags-Aggregat bestätigt am Join), ein Auftrag gegen ein volles Kontingent (Absage →
+/// das Aggregat ordnet die Freigabe der Reservierung an, die Funktion sendet sie) und eine Verteilung (Fan-out auf vier Ziele, Zählung im
+/// Verteilungs-Aggregat). Jede Reservierung unter dem Mindestbestand löst die Funktion <c>Nachschub</c> aus (auf den langlebigen Posten-Streams).
+/// Sichtbar ist ein Vorgang mit seinem letzten Event im Log (Log-Zeit, Uhr-Versatz umgerechnet): <c>AuftragBestaetigt</c>, beim abgelehnten
+/// Auftrag das <c>PostenFreigegeben</c> der Kompensation (seine Ursache liegt im Auftrags-Stream), bei der Verteilung <c>VerteilungAbgeschlossen</c>.
+/// Die Prüfdomäne hat keine Akteure — das Tor ist offen.
 /// </summary>
 internal sealed class Pruefdomaene : ILast
 {
     private const int Posten = 50, Ziele = 20;
+
+    /// <summary>Der Wirker der Funktion Nachschub (Spur-Header <c>ueber</c> ihrer Zubuchungen).</summary>
+    private const string NachschubWirker = "funktion:Nachschub";
+
     private readonly Eingang _eingang;
     private readonly TimeSpan _uhrversatz;
     private readonly Guid[] _posten = Enumerable.Range(0, Posten).Select(_ => Guid.NewGuid()).ToArray();
     private readonly Guid[] _kontingente = Enumerable.Range(0, Posten).Select(_ => Guid.NewGuid()).ToArray();
     private readonly Guid[] _ziele = Enumerable.Range(0, Ziele).Select(_ => Guid.NewGuid()).ToArray();
     private readonly Guid _voll = Guid.NewGuid();
-    private readonly ConcurrentDictionary<Guid, Vorgang> _offen = new();   // Korrelation des Vorgangs → Vorgang
-    private readonly ConcurrentQueue<(Guid Korrelation, DateTimeOffset Zeit)> _frueh = new();
+    private readonly ConcurrentDictionary<Guid, Vorgang> _offen = new();   // Id des Vorgangs-Aggregats → Vorgang
+    private readonly ConcurrentQueue<(Guid Id, DateTimeOffset Zeit)> _frueh = new();
     private readonly ConcurrentDictionary<string, DateTimeOffset> _nachschubAusloeser = new();   // "<Posten>:<Version>" → Log-Zeit der Reservierung
-    private readonly ConcurrentBag<double> _reaktionMs = new();
+    private readonly ConcurrentBag<double> _nachschubMs = new();
     private long _n;
 
     public enum Art { AuftragOk, AuftragAbgelehnt, Verteilung }
-    public ConcurrentBag<(Guid Korrelation, Guid Id, Art Art, Guid[] Ziele)> Vorgaenge { get; } = new();
+    public ConcurrentBag<(Guid Id, Art Art, Guid[] Ziele)> Vorgaenge { get; } = new();
 
     public Pruefdomaene(Eingang eingang, LogStrom log, TimeSpan uhrversatz)
     {
@@ -36,7 +42,8 @@ internal sealed class Pruefdomaene : ILast
         log.Beobachte(Sieh);
     }
 
-    public IReadOnlyCollection<double> ReaktionMs => _reaktionMs;
+    /// <summary>Von der auslösenden Reservierung bis zur Zubuchung der Funktion Nachschub (Log-Zeiten).</summary>
+    public IReadOnlyCollection<double> NachschubMs => _nachschubMs;
 
     /// <summary>Störungslauf: gescheiterte Sendungen mit derselben CommandId wiederholen.</summary>
     public bool Wiederholen { get; init; }
@@ -45,18 +52,25 @@ internal sealed class Pruefdomaene : ILast
     {
         switch (z.Typ)
         {
-            case "prozess_beendet":
-                var zeit = z.Zeit + _uhrversatz;
-                if (_offen.TryRemove(z.Stream, out var v)) v.Sichtbar = zeit;
-                else _frueh.Enqueue((z.Stream, zeit));
+            case "auftrag_bestaetigt" or "verteilung_abgeschlossen":
+                Sichtbar(z.Stream, z.Zeit + _uhrversatz);
+                break;
+            case "posten_freigegeben" when Abstractions.Spur.ZerlegeUrsache(z.Ursache, out var auftrag, out _):
+                Sichtbar(auftrag, z.Zeit + _uhrversatz);
                 break;
             case "posten_reserviert" when z.Daten != null && ((int?)JsonNode.Parse(z.Daten)!["Fehlmenge"] ?? 0) > 0:
                 _nachschubAusloeser[$"{z.Stream}:{z.Version}"] = z.Zeit;
                 break;
-            case "posten_zugebucht" when z.Ueber == "reaktion:NachschubBeiMindestbestand" && z.Ursache != null:
-                if (_nachschubAusloeser.TryRemove(z.Ursache, out var ausgeloest)) _reaktionMs.Add((z.Zeit - ausgeloest).TotalMilliseconds);
+            case "posten_zugebucht" when z.Ueber == NachschubWirker && z.Ursache != null:
+                if (_nachschubAusloeser.TryRemove(z.Ursache, out var ausgeloest)) _nachschubMs.Add((z.Zeit - ausgeloest).TotalMilliseconds);
                 break;
         }
+    }
+
+    private void Sichtbar(Guid id, DateTimeOffset zeit)
+    {
+        if (_offen.TryRemove(id, out var v)) v.Sichtbar = zeit;
+        else _frueh.Enqueue((id, zeit));
     }
 
     /// <summary>Posten (großer Bestand, Mindestbestand knapp darunter: fast jede Reservierung bestellt nach), Kontingente, Ziele.</summary>
@@ -83,7 +97,6 @@ internal sealed class Pruefdomaene : ILast
         string typ;
         JsonObject daten;
         Guid[] ziele = [];
-        Guid korrelation;
         if (art == Art.Verteilung)
         {
             ziele = Enumerable.Range(0, 4).Select(j => _ziele[(int)((i / 10 * 4 + j) % Ziele)]).ToArray();
@@ -93,7 +106,6 @@ internal sealed class Pruefdomaene : ILast
                 ["AggregateId"] = id.ToString(), ["QuelleId"] = posten.ToString(),
                 ["Ziele"] = new JsonArray(ziele.Select(z => (JsonNode)z.ToString()).ToArray()), ["MengeJeZiel"] = 1,
             };
-            korrelation = ProzessId.Für("VerteilProzess", id, 1);
         }
         else
         {
@@ -103,14 +115,13 @@ internal sealed class Pruefdomaene : ILast
                 ["AggregateId"] = id.ToString(), ["PostenId"] = posten.ToString(),
                 ["KontingentId"] = (art == Art.AuftragAbgelehnt ? _voll : _kontingente[i % Posten]).ToString(), ["Menge"] = 1 + (int)(i % 3),
             };
-            korrelation = ProzessId.Für("AuftragsProzess", id, 1);
         }
-        Vorgaenge.Add((korrelation, id, art, ziele));
+        Vorgaenge.Add((id, art, ziele));
         v.Start = DateTimeOffset.UtcNow;
-        _offen[korrelation] = v;
-        // Ein ProzessBeendet, das schneller im Log war als die Anmeldung hier: nachtragen.
+        _offen[id] = v;
+        // Ein Ende, das schneller im Log war als die Anmeldung hier: nachtragen.
         for (var n = _frueh.Count; n > 0 && _frueh.TryDequeue(out var f); n--)
-            if (_offen.TryRemove(f.Korrelation, out var w)) w.Sichtbar = f.Zeit; else _frueh.Enqueue(f);
+            if (_offen.TryRemove(f.Id, out var w)) w.Sichtbar = f.Zeit; else _frueh.Enqueue(f);
         // Im Störungslauf ist der Host zeitweise weg: dann mit DERSELBEN CommandId wiederholen (Client-Garantie, docs/11 §11.3).
         var r = Wiederholen
             ? await _eingang.CommandMitWiederholungAsync(typ, daten, null, TimeSpan.FromMinutes(3), ct)
@@ -119,51 +130,75 @@ internal sealed class Pruefdomaene : ILast
     }
 
     /// <summary>
-    /// Exactly-once (§0.2): je Vorgang genau ein ProzessBeendet mit dem erwarteten Ausgang, jede Kompensation genau einmal, je Verteilung jedes
-    /// Ziel genau einmal, je Reaktions-Command genau eine Wirkung (Ziel-Events je Ursache = 1) und keine Reservierung unter dem Mindestbestand
-    /// ohne Nachschub.
+    /// Exactly-once (§0.2), gezählt im Log, nicht am Mechanismus: je Auftrag genau ein Ausgang (bestätigt oder gescheitert, wie erwartet), jede
+    /// Kompensation genau einmal (über den Beleg des Auftrags), je Verteilung jedes Ziel genau einmal und genau ein Abschluss, je Reservierung unter
+    /// dem Mindestbestand genau ein Nachschub. Soll und Ist, die beide aus dem Log kommen, stehen in EINER Abfrage (ein Schnappschuss, VM-1).
     /// </summary>
     public async Task<List<Pruefung>> PruefeAsync(Datenbank db, bool vollstaendig = true)
     {
         var s = db.Schema;
         Pruefung P(string name, long soll, long ist) => Pruefung.Erwartet(name, soll, ist, vollstaendig);
-        var alle = Vorgaenge.ToArray();
-        var korr = alle.Select(v => v.Korrelation).ToArray();
+        Guid[] Ids(Func<Art, bool> f) => Vorgaenge.Where(v => f(v.Art)).Select(v => v.Id).ToArray();
+        var ok = Ids(a => a == Art.AuftragOk);
+        var abgelehnt = Ids(a => a == Art.AuftragAbgelehnt);
+        var auftraege = Ids(a => a != Art.Verteilung);
+        var verteilungen = Vorgaenge.Where(v => v.Art == Art.Verteilung).ToArray();
+        var vIds = verteilungen.Select(v => v.Id).ToArray();
+        var beleg = "(data->'Beleg'->>'Nummer')::uuid";
+
         var p = new List<Pruefung>
         {
-            P("je Vorgang genau ein ProzessBeendet", alle.Length,
-                await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'prozess_beendet' and stream_id = any(@k)", ("k", korr))),
-            Pruefung.Gleich("kein Vorgang mit mehr als einem ProzessBeendet", 0, await db.ZahlAsync(
-                $"select count(*) from (select stream_id from {s}.mt_events where type = 'prozess_beendet' and stream_id = any(@k) group by 1 having count(*) > 1) x",
-                ("k", korr))),
+            P("je gelingendem Auftrag genau ein AuftragBestaetigt", ok.Length,
+                await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'auftrag_bestaetigt' and stream_id = any(@a)", ("a", ok))),
+            P("je abgelehntem Auftrag genau ein AuftragGescheitert", abgelehnt.Length,
+                await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'auftrag_gescheitert' and stream_id = any(@a)", ("a", abgelehnt))),
+            Pruefung.Gleich("kein Auftrag mit zwei Ausgängen", 0, await db.ZahlAsync($"""
+                select count(*) from (select stream_id from {s}.mt_events where type in ('auftrag_bestaetigt', 'auftrag_gescheitert')
+                  and stream_id = any(@a) group by 1 having count(*) > 1) x
+                """, ("a", auftraege))),
+            Pruefung.Gleich("kein gelingender Auftrag gescheitert", 0,
+                await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'auftrag_gescheitert' and stream_id = any(@a)", ("a", ok))),
+            P("jede Kompensation genau einmal (PostenFreigegeben je abgelehntem Auftrag)", abgelehnt.Length,
+                await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'posten_freigegeben' and {beleg} = any(@a)", ("a", abgelehnt))),
+            Pruefung.Gleich("keine Freigabe zweimal (je Auftrag höchstens ein PostenFreigegeben)", 0, await db.ZahlAsync($"""
+                select count(*) from (select {beleg} from {s}.mt_events where type = 'posten_freigegeben' and {beleg} = any(@a)
+                  group by 1 having count(*) > 1) x
+                """, ("a", auftraege))),
+            P("je Verteilung jedes Ziel genau einmal zugebucht", verteilungen.Sum(v => v.Ziele.Length),
+                await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'posten_zugebucht' and {beleg} = any(@v)", ("v", vIds))),
+            Pruefung.Gleich("kein Ziel einer Verteilung zweimal zugebucht", 0, await db.ZahlAsync($"""
+                select count(*) from (select stream_id, {beleg} from {s}.mt_events where type = 'posten_zugebucht' and {beleg} = any(@v)
+                  group by 1, 2 having count(*) > 1) x
+                """, ("v", vIds))),
+            P("je Verteilung genau ein VerteilungAbgeschlossen", verteilungen.Length,
+                await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'verteilung_abgeschlossen' and stream_id = any(@v)", ("v", vIds))),
         };
-        var ok = alle.Where(v => v.Art != Art.AuftragAbgelehnt).Select(v => v.Korrelation).ToArray();
-        var abgelehnt = alle.Where(v => v.Art == Art.AuftragAbgelehnt).Select(v => v.Korrelation).ToArray();
-        p.Add(P("gelingende Vorgänge enden mit Erfolg", ok.Length, await db.ZahlAsync(
-            $"select count(*) from {s}.mt_events where type = 'prozess_beendet' and stream_id = any(@k) and (data->>'Erfolg')::boolean", ("k", ok))));
-        p.Add(P("abgelehnte Aufträge enden ohne Erfolg", abgelehnt.Length, await db.ZahlAsync(
-            $"select count(*) from {s}.mt_events where type = 'prozess_beendet' and stream_id = any(@k) and not (data->>'Erfolg')::boolean", ("k", abgelehnt))));
-        p.Add(P("jede Kompensation genau einmal (PostenFreigegeben je abgelehntem Auftrag)", abgelehnt.Length, await db.ZahlAsync(
-            $"select count(*) from {s}.mt_events where type = 'posten_freigegeben' and correlation_id = any(@k)", ("k", abgelehnt.Select(k => k.ToString()).ToArray()))));
-        var auftraegeOk = alle.Where(v => v.Art == Art.AuftragOk).Select(v => v.Id).ToArray();
-        p.Add(P("je gelingendem Auftrag genau ein AuftragBestaetigt", auftraegeOk.Length, await db.ZahlAsync(
-            $"select count(*) from {s}.mt_events where type = 'auftrag_bestaetigt' and stream_id = any(@a)", ("a", auftraegeOk))));
-        var verteilungen = alle.Where(v => v.Art == Art.Verteilung).ToArray();
-        p.Add(P("je Verteilung jedes Ziel genau einmal zugebucht", verteilungen.Sum(v => v.Ziele.Length), await db.ZahlAsync(
-            $"select count(*) from {s}.mt_events where type = 'posten_zugebucht' and correlation_id = any(@k) and headers->>'ueber' like 'prozess:VerteilProzess%'",
-            ("k", verteilungen.Select(v => v.Korrelation.ToString()).ToArray()))));
-        p.Add(P("je Verteilung genau ein VerteilungAbgeschlossen", verteilungen.Length, await db.ZahlAsync(
-            $"select count(*) from {s}.mt_events where type = 'verteilung_abgeschlossen' and stream_id = any(@v)", ("v", verteilungen.Select(v => v.Id).ToArray()))));
-        var ausloeser = await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'posten_reserviert' and (data->>'Fehlmenge')::int > 0");
-        p.Add(P("Reaktion: je Reservierung unter dem Mindestbestand genau ein Nachschub", ausloeser, await db.ZahlAsync($"""
-            select count(distinct headers->>'ursache') from {s}.mt_events
-            where type = 'posten_zugebucht' and headers->>'ueber' = 'reaktion:NachschubBeiMindestbestand'
-            """)));
-        p.Add(Pruefung.Gleich("Reaktion: je Reaktions-Command genau eine Wirkung (Ziel-Events je Ursache = 1)", 0, await db.ZahlAsync($"""
+        // Soll (Reservierungen unter dem Mindestbestand) und Ist (Nachschübe) aus demselben Schnappschuss (VM-1).
+        var (ausloeser, nachschub) = (await db.LiesAsync($"""
+            select (select count(*) from {s}.mt_events where type = 'posten_reserviert' and (data->>'Fehlmenge')::int > 0),
+                   (select count(distinct headers->>'ursache') from {s}.mt_events where type = 'posten_zugebucht' and headers->>'ueber' = @w)
+            """, r => (r.GetInt64(0), r.GetInt64(1)), ("w", NachschubWirker))).Single();
+        p.Add(P("Funktion: je Reservierung unter dem Mindestbestand genau ein Nachschub", ausloeser, nachschub));
+        p.Add(Pruefung.Gleich("Funktion: je Eingang genau eine Wirkung (Zubuchungen je Ursache = 1)", 0, await db.ZahlAsync($"""
             select count(*) from (select headers->>'ursache' from {s}.mt_events
-              where type = 'posten_zugebucht' and headers->>'ueber' = 'reaktion:NachschubBeiMindestbestand' group by 1 having count(*) > 1) x
-            """)));
+              where type = 'posten_zugebucht' and headers->>'ueber' = @w group by 1 having count(*) > 1) x
+            """, ("w", NachschubWirker))));
         return p;
+    }
+
+    /// <summary>Die Funktion läuft den Vorgängen nach (eigener Konsument): warten, bis jede auslösende Reservierung ihren Nachschub hat.</summary>
+    public static async Task WarteAufNachschubAsync(Anwendungslauf lauf)
+    {
+        var s = lauf.Db.Schema;
+        for (var i = 0; i < 120; i++)
+        {
+            var offen = await lauf.Db.ZahlAsync($"""
+                select (select count(*) from {s}.mt_events where type = 'posten_reserviert' and (data->>'Fehlmenge')::int > 0)
+                     - (select count(distinct headers->>'ursache') from {s}.mt_events where type = 'posten_zugebucht' and headers->>'ueber' = @w)
+                """, ("w", NachschubWirker));
+            if (offen <= 0) return;
+            await Task.Delay(1000);
+        }
     }
 }
 

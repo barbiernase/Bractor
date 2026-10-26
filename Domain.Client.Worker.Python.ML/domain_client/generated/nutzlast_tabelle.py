@@ -1,4 +1,4 @@
-# GENERIERT von Cqrs.Codegen aus den Nachrichten der Domäne (Command, Event, Query, Antwort, Trigger, Auftrag). Nicht von Hand ändern.
+# GENERIERT von Cqrs.Codegen aus den Nachrichten der Domäne (Command, Event, Query, Antwort). Nicht von Hand ändern.
 #
 # Die Nutzlast-Tabelle der Leitung (Cqrs.Leitung/cqrs.proto, Nutzlast.typ): typ → DTO-Klasse des Domänen-Moduls. Gegenstück zu
 # GeneratedNutzlast (C#) mit derselben Namensregel; cqrs_client.NutzlastTabelle packt und entpackt nur über diese Tabelle.

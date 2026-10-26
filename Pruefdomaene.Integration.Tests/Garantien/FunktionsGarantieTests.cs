@@ -60,7 +60,7 @@ public class FunktionsGarantieTests
     {
         public int Abstuerze;
         public Task<Festgehalten> LiesAsync(FunktionsEingabe e, CancellationToken ct) => innen.LiesAsync(e, ct);
-        public async Task<bool> HalteFestAsync(FunktionsEingabe e, int ab, IReadOnlyList<IPipelineOutput> a, bool abgeschlossen, CancellationToken ct)
+        public async Task<bool> HalteFestAsync(FunktionsEingabe e, int ab, IReadOnlyList<IAusgabe> a, bool abgeschlossen, CancellationToken ct)
         {
             var ok = await innen.HalteFestAsync(e, ab, a, abgeschlossen, ct);
             if (ok && abgeschlossen && e.Funktion == nameof(Mahnwesen) && Interlocked.Increment(ref Abstuerze) == 1)
@@ -215,9 +215,9 @@ public class FunktionsGarantieTests
             zweiter.Biete(new[] { (baustein.Name, 1) });
             await Warte(() => Task.FromResult(zweiter.Laufende.Count == 1), Frist, "der zweite Worker bekommt den Eingang nicht");
 
-            (await zweiter.AntwortAsync(offen!.Eingang.Vorgang, new IPipelineOutput[] { new GibRechnungFrei(rechnung) }, null, default))
+            (await zweiter.AntwortAsync(offen!.Eingang.Vorgang, new IAusgabe[] { new GibRechnungFrei(rechnung) }, null, default))
                 .Should().Be(ErgebnisAusgang.Geschrieben);
-            (await hand.AntworteAsync(offen.Eingang.Vorgang, new IPipelineOutput[] { new SperreRechnung(rechnung, "zu spät") }, null, default))
+            (await hand.AntworteAsync(offen.Eingang.Vorgang, new IAusgabe[] { new SperreRechnung(rechnung, "zu spät") }, null, default))
                 .Should().Be(ErgebnisAusgang.Ueberholt, "die erste Antwort ist festgehalten — die zweite verfällt");
 
             await Warte(async () => (await Zustand<Rechnung>(host.Services, rechnung.Wert)).Freigegeben, Frist, "die erste Antwort wirkt nicht");

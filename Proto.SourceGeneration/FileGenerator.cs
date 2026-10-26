@@ -34,8 +34,6 @@ public class FileGenerator
     List<(string TypeName, int Depth, TypeNode Node)> eventTypes,
     List<(string TypeName, int Depth, TypeNode Node)> queryTypes,
     List<(string TypeName, int Depth, TypeNode Node)> queryResponseTypes,
-    List<(string TypeName, int Depth, TypeNode Node)> triggerTypes,
-    List<(string TypeName, int Depth, TypeNode Node)> auftragTypes,
     string csharpNamespace)
 {
 
@@ -50,12 +48,10 @@ public class FileGenerator
         ("EVENT PAYLOADS",    eventTypes),
         ("QUERY PAYLOADS",    queryTypes),
         ("QUERY RESPONSE PAYLOADS", queryResponseTypes),
-        ("TRIGGER PAYLOADS",  triggerTypes),
-        ("AUFTRAG PAYLOADS",  auftragTypes),
     };
 
     // Enum-Typen aus ALLEN Listen sammeln (vor dem Filtern!)
-    _enumTypeNames = CollectEnumTypeNames(objectTypes, commandTypes, eventTypes, queryTypes, queryResponseTypes, triggerTypes, auftragTypes);
+    _enumTypeNames = CollectEnumTypeNames(objectTypes, commandTypes, eventTypes, queryTypes, queryResponseTypes);
 
     // Messages + OneOfs generieren — in einem Loop
     var allMessages = new StringBuilder();
@@ -83,7 +79,7 @@ public class FileGenerator
              // ============================================================================
              // DIE DOMÄNEN-NACHRICHTEN DER ANWENDUNG (generiert von Cqrs.Codegen — nicht editieren)
              //
-             // Je Command, Event, Query, Antwort, Trigger, Auftrag und Wertobjekt eine {Typ}Dto-Message. Auf der Leitung
+             // Je Command, Event, Query, Antwort und Wertobjekt eine {Typ}Dto-Message. Auf der Leitung
              // (Cqrs.Leitung/cqrs.proto) reisen sie als Nutzlast { typ = "{Typ}", daten = {Typ}Dto als Bytes }.
              // ============================================================================
 

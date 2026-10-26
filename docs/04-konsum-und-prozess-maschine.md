@@ -1,29 +1,24 @@
-# 04 — Konsum- & Prozess-Maschine (vier Konsumenten, eine Maschine)
+# 04 — Konsum, Funktionen und Uhr
 
-Stand 2026-10-26 (Batch-Konsum, Horizont der Vollständigkeit; Plan Phase 3: Funktion als Baustein, Uhr), gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
+Stand 2026-10-26 (Plan Pub/Sub-Neustrukturierung Phase 4: Dirigent, Reaktion, Fluss-DSL und Katalog-Form zurückgebaut), gegen den Code geprüft.
+Ziel für den weiteren Umbau: docs/plan-pubsub-neustrukturierung.md.
 
-Projektion, Reaktion, Prozess und Fluss sind **vier durable Konsumenten des Logs**. Sie folgen demselben Muster: ein Signal weckt
-schnell, ein Poll heilt verlorene Signale, gelesen wird geordnet aus dem Event-Store (Invariante 1), der Fortschritt liegt durabel im
-Store bzw. im Log. Es gibt keinen zweiten Marker und keine Taxonomie: was ein Konsument ist, folgt aus seiner Code-Form (Marker-Interface,
-Fähigkeits-Parameter, Rückgabetyp). Konkret laufen drei Schleifen:
+Was auf ein Event hin geschieht, ist eines von zwei Dingen: eine **Projektion** schreibt ein Read-Model (replaybar), eine **Funktion** sendet
+Commands oder schreibt Ergebnis-Events (wirkt in die Welt, nie blind neu abgespielt). Beide sind durable Konsumenten des Logs und folgen
+demselben Muster: ein Signal weckt schnell, ein Poll heilt verlorene Signale, gelesen wird geordnet aus dem Event-Store (Invariante 1), der
+Fortschritt liegt durabel im Store. Was ein Konsument ist, folgt aus seiner Code-Form (Marker-Interface, Fähigkeits-Parameter, Rückgabetyp);
+einen zweiten Marker gibt es nicht. Zeit kommt über die **Uhr**: ein Decide setzt eine Frist, die Uhr sendet sie fällig.
 
-| Konsument | Code-Form | Schleife | Fortschritt | Achse B |
+| Konsument | Code-Form | Schleife | Fortschritt | Neu abspielbar |
 |---|---|---|---|---|
-| Projektion | `ISubscriber, IPullSubscriber`; `Handle` mit Schreib-Fähigkeit | `BatchLeser` je (Projektion, Partition) | Partitions-Checkpoint (Position, Version) und Guard je Stream, co-committet | replaybar |
-| Reaktion | `ISubscriber, IPullSubscriber`; `Handle` ohne Schreib-Fähigkeit, gibt Commands aus | `EmittentenAdapter` je (Konsument, Stream) | `IEmittentenCursor`, vorgerückt nach bestätigtem Emit | emittierend |
-| Prozess | `IProzessDefinition`, `Prozess<T>.Definiere(…)` | Dirigent (`ProzessManager`) je Vorgang | Fold aus dem Log (+ Marking-Cursor) | emittierend |
-| Fluss | `IPipeline`, `PipelineFluss.Definiere(…)` | derselbe Dirigent | wie Prozess | emittierend |
-| Funktion (Baustein, neben dem Alten) | `IFunktion` mit `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])` | `FunktionsActor` je (Funktion, Partition) | Funktions-Stand (Position, Revision) und festgehaltene Ausgabe je Eingang | emittierend (§4.6a) |
+| Projektion | `ISubscriber, IPullSubscriber`; `Task Handle` mit Schreib-Fähigkeiten eines Stores | `BatchLeser` je (Projektion, Partition) | Partitions-Checkpoint (Position, Version) und Guard je Stream, co-committet | ja (Neuaufbau) |
+| Funktion | `IFunktion` mit `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])` | `FunktionsActor` je (Funktion, Partition) | Funktions-Stand (Position, Revision) und festgehaltene Ausgabe je Eingang | nein |
 
-Ein Fluss wird in Prozess-Regeln übersetzt; Prozess und Fluss sind damit zwei Schreibweisen auf einem Dirigenten (§4.6). Wie man die
-Bausteine schreibt: [10](10-entwickler-api.md).
+**Abläufe sind kein eigener Baustein mehr.** Was früher ein Prozess, eine Saga oder ein Fluss war, ist heute ein **Aggregat**, das den Ablauf
+entscheidet (Zustand, Join, Kompensation, Frist), plus **Funktionen**, die die Kanten zwischen Aggregaten ziehen (Event → Command). §4.5 zeigt
+das am Auftrag der Prüfdomäne.
 
-## 4.1 Die Pull-/Signal-Schleifen
-
-Projektionen lesen **im Batch** (eine Transaktion für die Effekte vieler Streams), Emittenten **je Stream** (ihr Cursor rückt erst nach
-bestätigtem Emit vor). Beide sind store-agnostisch: die Schleife trägt die *Policy*, die Transaktion trägt der Store (§4.3).
-
-### 4.1.1 Batch-Konsum der Projektionen
+## 4.1 Batch-Konsum der Projektionen
 
 **Partition.** Jede replaybare Projektion hat `P` Partitionen (Umgebung `Konsum.Partitionen`, Standard 8). Ein Stream gehört genau einer:
 letztes Byte der UUID in RFC-Reihenfolge modulo P — in .NET `id.ToByteArray(bigEndian: true)[15] % P` (`Abstractions/PartitionsCheckpoint.cs`,
@@ -53,15 +48,14 @@ die Versionsprüfung des Partitions-Checkpoints (G-4, unten). Der Fähigkeits-Be
 
 **Position und Nachzügler.** Vor jeder Seite bestimmt `ReadPartitionAsync` die *gesetzte* Sequenz: bis dorthin ist jede Sequenz endgültig — der
 Horizont der Vollständigkeit aus den Transaktionsnummern von Postgres, ohne Uhr ([03](03-schreibseite.md) §3.3, G-9; dieselbe Regel wie beim
-Poll der Emittenten). Die Position rückt nie darüber hinaus, bei voller Seite nie über deren Ende und
+Funktions-Actor, §4.4). Die Position rückt nie darüber hinaus, bei voller Seite nie über deren Ende und
 nie über das erste Event eines hängenden Streams (unten). Jüngere Events werden trotzdem angewandt (Latenz); welche schon erledigt sind, merkt
 sich die Aktivierung und schließt sie beim nächsten Lesen aus, nach einer Neuaktivierung fängt der Guard sie ab. So überholt die Position keine
 noch unsichtbare kleinere Sequenz. Die Liste der Erledigten ist gedeckelt (`BatchLeser.ErledigtHoechstens`, 5 000, PF-28): steht der Horizont
 (eine lange offene Transaktion irgendwo im selben Postgres) oder hängt ein Stream, wüchse sie sonst mit jedem Event und ginge mit jeder Seite
 an die Datenbank. Ist sie voll, wendet der Leser nur noch an, was bis zur gesetzten Sequenz reicht, und wartet sonst; ein hängender Stream wird
 dann geparkt statt hinter ihm weiter zu sammeln. Gesetzte Sequenz und „steht dahinter überhaupt ein Event?“ kommen aus **einer** Abfrage; steht hinter der
-Position nichts, entfällt die Seite — eine Weckung ohne Neues kostet eine Abfrage statt zwei (PF-14; ebenso der Prozess-Poll und der Poll der
-Emittenten). Gelesen wird ab einer Lese-Position im Speicher: durabel wird sie mit jedem Commit eines Batches; über fremde
+Position nichts, entfällt die Seite — eine Weckung ohne Neues kostet eine Abfrage statt zwei (PF-14; ebenso der Funktions-Actor). Gelesen wird ab einer Lese-Position im Speicher: durabel wird sie mit jedem Commit eines Batches; über fremde
 Events hinweg (leere Seite) höchstens einmal je Poll-Intervall — sonst committete unter Last jede Weckung nur eine Zahl. Eine Transaktion, die
 lange offen ist, hält die Position an (nicht die Zustellung: jüngere Events werden weiter angewandt), sie wird nie überholt. Bis 2026-10-16 galt
 hier eine Karenz von 3 s gegen den Event-Zeitstempel; eine länger offene Transaktion wurde überholt und ihr Event nie gelesen (G-9).
@@ -81,92 +75,44 @@ hier eine Karenz von 3 s gegen den Event-Zeitstempel; eine länger offene Transa
 `StateChangeVia…`-Signale ihrer Event-Typen und weckt die Partition des Streams (`Wake` an `batch-<Projektion>/<p>`). Je Partition ist höchstens
 eine Weckung unterwegs, was währenddessen kommt, wird zu genau einer weiteren; der Actor quittiert sofort und merkt sich während eines
 Durchlaufs „noch einmal“ (der Durchlauf läuft neben der Mailbox; das Zusammenfassen ist die Regel des Rahmens, `RahmenActor.Wecke`). Der **Poll** weckt alle 30 s jede Partition — das Netz für
-verlorene Signale; einen Heil-Poll je Stream gibt es für Projektionen nicht mehr. Die Batch-Leser passivieren nicht (es gibt nur Projektionen ×
+verlorene Signale. Die Batch-Leser passivieren nicht (es gibt nur Projektionen ×
 Partitionen davon, der Poll weckt sie ohnehin).
 
 **Rückstand.** `/health` und `/monitoring/metrics` melden über alle Projektionen die relevanten Events jenseits der Positionen
 (`KonsumRueckstand`, eine Abfrage je Projektion, gezählt über höchstens die ersten 1 000 Events hinter der kleinsten Position — darüber
 „mehr“, PF-29; ein volles `count(*)` las bei einer Partition ohne Checkpoint je Abruf das ganze Log) und die geparkten Streams.
 
-### 4.1.2 Emittenten je Stream
-
-Reaktionen (und der Fluss-Event-Pfad der Handle-Welt) laufen je (Konsument, Stream) im `EmittentenAdapter`
-(`Infrastructure/Projections/EmittentenAdapter.cs`): ihr Effekt ist ein Command, ihr Cursor rückt erst nach bestätigtem Emit vor — ein Cursor
-je Partition ließe einen unbekannten Emit die ganze Partition halten (E8). `WakeAsync(streamId, ct)` → `bool` (bestätigt aufgeholt), für Signal
-und Poll gleich:
-1. **Startposition:** `IEmittentenCursor.LadeAsync − 1`; ohne Cursor bewusst `−1` (ab 0, at-least-once, nur für idempotente Effekte gültig).
-2. **Geordnet lesen** ab `applied+1` über `IEventStoreRepository.ReadStreamAsync`.
-3. **Pre-Dispatch-Guard:** `if (e.AggregateVersion <= applied) continue;`.
-4. **Dispatch** je Event mit einem frischen `ProjectionWriter` und den `EmitAusgaenge` der Weckung (`Infrastructure/PubSub/EmitAusgaenge.cs`,
-   trägt das Token): ein ausgegebener Command wird sofort gesendet, sein Ausgang erfasst — die Commands eines Tails laufen parallel.
-5. **Ausgänge abwarten:** bleibt ein Command „unbekannt“, endet die Weckung mit `false` — der Cursor bleibt stehen, die nächste Weckung sendet den
-   Tail mit denselben CommandIds erneut (die Inbox des Ziels verwirft, was schon gewirkt hat).
-6. **Cursor vorrücken:** `SchreibeAsync` erst nach bestätigtem Emit; scheitert das Schreiben, sendet die nächste Weckung erneut.
-
-**Transport** (`Infrastructure/Projections/PullPath.cs`): ein `SignalReceiverActor` weckt die Cluster-Identität `(pull-<Typ>, StreamId)`; der
-**Poll** (`Poller`, 30 s) liest über `ReadChangedStreamsAsync` seitenweise (1 000 Events) die Streams, die jenseits der Hochwassermarke ein
-Event der **abonnierten Typen** bekommen haben (Diskriminatoren samt Upcasting-Herkunft, `BatchLeser.TypenAus`; nur Sequenz und Stream, keine
-Daten), und rückt sie je Seite **nur** vor, wenn jede Weckung als `WakeAck(Aufgeholt: true)` zurückkommt (eine Frage mit 10 s Frist; eine
-Weckung, die im Adapter scheitert, beantwortet er ehrlich mit `Aufgeholt: false`) — kein terminaler, unverarbeiteter Stream wird still
-übersprungen. Ein Stream ohne abonniertes Event weckt keinen Adapter (PF-12: früher bekam jeder geänderte
-Stream des Logs einen Cursor). Der
-Signal-Weckungen sind je Stream zusammengefasst (`Weckungen<TKey>`: höchstens eine unterwegs, eine hinterher; dieselbe Klasse weckt die
-Partitionen des Batch-Konsums) — ohne das wurde unter Last jedes Signal ein eigener Read des Adapters (PF-12). Der
-`SignalAdapterActor` je Stream serialisiert beide Quellen über seine Mailbox (Single-Writer je Stream) und passiviert nach
-`Lebenszyklus.AdapterLeerlaufSekunden` (Standard 120; PF-5) — der Cursor liegt durabel im Store, der Fähigkeits-Bereich wird mit der
-Aktivierung frei.
-
-**Tombstones:** scheitert ein Append, füllt Marten die reservierten Sequenzen mit `Tombstone`-Events in einem eigenen Stream.
-`MartenEventStore` meldet diesen Stream nicht als geändert und liest keine Tombstones (G-7, erledigt); Poll und Partitions-Leser laufen über sie
-hinweg.
-
-### 4.1.3 Last ohne Eingang
+### 4.1.1 Last ohne Eingang
 
 Kommt nichts hinein, arbeiten nur die Takte (gemessen auf dem Messserver, Diagnose `--art leerlauf`, docs/12 §12.5, PF-14):
 - **Batch-Poll** alle 30 s je Projektion und Partition eine Weckung, ohne Neues eine Abfrage (Beispieldomäne: 5 Projektionen × 8 Partitionen =
-  40 Abfragen je 30 s — der größte Posten, er wächst mit Projektionen × Partitionen);
-- **Prozess-Poll** und **Poll der Emittenten** alle 30 s je eine Abfrage;
-- **Backstop** jede Sekunde die DB-Uhr und die fälligen Fristen, alle 15 s die Offen-Liste; der `FristScheduler` alle 5 s DB-Uhr und Plan.
+  40 Abfragen je 30 s — er wächst mit Projektionen × Partitionen, PF-15);
+- **Funktions-Poll** ebenso alle 30 s je Funktion und Partition;
+- **Uhr** jede Sekunde die DB-Uhr und die fälligen Fristen (eine Abfrage über den Index von `cqrs_fristen`).
 
-Zusammen gemessen L1 3,8 und L5 2,6 Abfragen/s bei 1,5–2,6 % CPU eines Kerns, unabhängig vom Bestand (mit dem Batch-Poll wächst es je
-Projektion, PF-15). **Nachlauf:** unter Höchstlast rücken Prozess-Poll und Poll der
-Emittenten ihre Marke oft nicht vor (eine Weckung an einen ausgelasteten Manager bzw. Adapter bleibt in 10 s unbestätigt, G-8, §4.1.2); der erste
-Poll-Takt nach der Last liest dann einmal nach, was dazwischen kam (je Event einmal, Beispieldomäne ≈ 31 000 Events in ≈ 5 s), und die Batch-Leser
-schreiben ihre Position über fremde Events einmal fest. Danach ist der Host still; die Messung wartet diesen Nachlauf ab und weist ihn eigens aus.
+**Nachlauf.** Nach einer Last schreiben Batch-Leser und Funktions-Actors ihre Position über fremde Events einmal fest; danach ist der Host still.
+Die Messung wartet diesen Nachlauf ab (alle Partitions-Stände am Kopf des Logs) und weist ihn eigens aus.
 
-## 4.2 Die zwei Achsen
+## 4.2 Woraus folgt, was ein Konsument ist
 
-**Achse „Transport“:** `IPullSubscriber : ISubscriber` wählt den Pull-Pfad. Der `PullPathGenerator`
-(`Infrastructure.SourceGeneration/PullPathGenerator.cs`) findet jede Klasse mit `ISubscriber` **und** `IPullSubscriber` und erzeugt je
-Konsument die Verdrahtung (`GeneratedPullPaths`): für eine replaybare Projektion ein Batch-Kind `batch-<Typ>` samt `BatchRegistrierung` und
-`ProjektionsStand`, für einen Emittenten ein Adapter-Kind `pull-<Typ>` samt `PullPathRegistration`. Die Handle-Signaturen im Fachcode sind
-dieselben.
+Der `PullPathGenerator` (`Infrastructure.SourceGeneration/PullPathGenerator.cs`) findet jede Klasse mit `ISubscriber` **und** `IPullSubscriber`
+und erzeugt je Projektion ein Batch-Kind `batch-<Typ>` samt `BatchRegistrierung` und `ProjektionsStand` (`GeneratedPullPaths`). Eine Projektion
+bekommt die Store-Funktionen, die sie benutzen darf, als Parameter (`Handle(evt, env, writer, INotiereAusleihe f)`; Fähigkeit = Interface
+`: IWriteStore` mit genau einer Funktion, CQRS051). Die generierte Fabrik öffnet je Partitions-Leser einen **Fähigkeits-Bereich**
+(`IFaehigkeitsFabrik.Oeffne()`, `Infrastructure/Projections/DiFaehigkeitsFabrik.cs`): Stores sind Scoped, jede Fähigkeit eines Stores liefert in
+diesem Bereich **dieselbe Instanz**, und diese Instanz muss ein `IProjectionTracker` sein (sonst bricht der Start laut). Die Schreib-Fähigkeiten
+einer Projektion gehören zu genau einem Store (**CQRS052**). Ein Store in Konstruktor, Feld oder Eigenschaft eines Konsumenten ist verboten
+(**CQRS054**), `new …Store()` ebenso (**CQRS055**).
 
-**Achse B — replaybar vs. emittierend** — zwei getrennte Pfade mit getrennten Typen, kein gemeinsamer Konstruktor:
-- `IProjectionTracker` (Batch-Naht, nur Projektionen): `LadePartitionAsync`, `LadeGuardsAsync`, `BeginneBatch`, `Stream(id)`, `CommitAsync(stand,
-  guards)` **+ `ResetAllAsync`** (Neuaufbau).
-- `IEmittentenCursor` (`MartenEmittentenCursor`, nur Emittenten): nur `LadeAsync`/`SchreibeAsync`, **bewusst ohne Reset** — ein Emittent wird nie
-  blind neu abgespielt; der Emittenten-Pfad nimmt keinen Tracker.
-
-**Woraus die Achse folgt: aus den Schreib-Fähigkeiten der Handles.** Ein Handle bekommt die Store-Funktionen, die er benutzen darf, als
-Parameter (`Handle(evt, env, writer, INotiereAusleihe f)`; Fähigkeit = Interface `: IWriteStore` mit genau einer Funktion, CQRS051). Der
-Generator sammelt die Schreib-Fähigkeiten aller Handles einer Klasse: hat sie welche, ist sie replaybar und bekommt das Batch-Kind; die
-generierte Fabrik öffnet je Partitions-Leser einen **Fähigkeits-Bereich** (`IFaehigkeitsFabrik.Oeffne()`,
-`Infrastructure/Projections/DiFaehigkeitsFabrik.cs`): Stores sind Scoped, jede Fähigkeit eines Stores liefert in diesem Bereich **dieselbe
-Instanz**, und diese Instanz muss ein `IProjectionTracker` sein (sonst bricht der Start laut). Ohne Schreib-Fähigkeit ist der Konsument
-emittierend und bekommt den `IEmittentenCursor`. Gehören die Schreib-Fähigkeiten zu mehreren Stores, bricht der Build (**CQRS052**). Ein Store
-in Konstruktor, Feld oder Eigenschaft eines Konsumenten ist verboten (**CQRS054**), `new …Store()` ebenso (**CQRS055**).
-
-| Konsument | Schreib-Fähigkeiten der Handles | Rückgabe `Handle` | Achse B |
-|---|---|---|---|
-| Projektion | aus genau einem Store, der `ICoCommitTracker` trägt | `Task` (Effekt über `writer.Execute`) | replaybar |
-| Reaktion | keine | `IAsyncEnumerable<Cmd>` bzw. `…<OneOf<…>>` | emittierend |
-| Prozess / Fluss | — (kein `Handle`) | — | emittierend (Fold + Marking-Cursor, §4.5) |
+Eine Funktion erkennt der `FunktionsBausteinGenerator` an `IFunktion` und den `Auf`-Methoden (§4.4). Sie darf Lese-Fähigkeiten nehmen, nie
+Schreib-Fähigkeiten: was sie bewirkt, geht als Command an ein Aggregat oder als Ergebnis-Event ins Log.
 
 ## 4.3 Projektionen und der Co-Commit
 
 Form (neutral aus der Agnostik-Sonde, `GraphExtractor.Kern/Sonde/Lesen.cs.txt`): `partial class Leihliste : ISubscriber, IPullSubscriber`
-mit `Handle(Ausgeliehen evt, IAggregateEnvelope envelope, ProjectionWriter writer, INotiereAusleihe notiere)`. Je Event
+mit `Task Handle(Ausgeliehen evt, IAggregateEnvelope envelope, ProjectionWriter writer, INotiereAusleihe notiere)`. Eine Projektion gibt
+nichts aus — ihr `Handle` liefert `Task` (CQRS057) und schreibt in genau einen Store (CQRS052); was auf ein Event hin etwas sendet, ist eine
+Funktion (§4.4). Je Event
 `writer.Execute(readModelId, ctx => …)`: der Effekt über die Fähigkeit plus `ctx.Track<T>(id)` für den Versions-Index. Was entsteht, liest
 der Generator nur aus der Signatur (CQRS050), nie aus dem Rumpf.
 
@@ -204,268 +150,36 @@ prüft der `StoreZugriffAnalyzer` (CQRS066/067).
 **Neuaufbau:** `ProjectionRebuilder` leert das Ziel, setzt Partitionen und Guards zurück (`ResetAllAsync`, `Core/KonsumZuruecksetzen.cs`) und
 lässt je Partition einen Batch-Leser ab 0 laufen — seitenweise, als Strom, nie der ganze Log als Liste. Zurückgesetzt wird nicht durch Löschen,
 sondern mit neuer Revision (Position 0, nichts geparkt): ein noch laufender Leser verliert seinen nächsten Commit, statt seinen alten Stand wieder
-anzulegen. Emittenten haben kein Reset und liegen nie auf diesem Pfad. In Sim vergleicht `ProjektionsStandDienst` beim Start den Stand jeder
+anzulegen. Funktionen haben kein Reset und liegen nie auf diesem Pfad. In Sim vergleicht `ProjektionsStandDienst` beim Start den Stand jeder
 Projektion (Code-Hash der Klasse + Stores + die Form des Konsums mit der Partitionszahl) mit `<schema>.stand` und baut bei Abweichung die ganze
 Leseseite neu auf (leeren, Partitionen und Guards zurücksetzen; der erste Poll weckt jede Partition); in Prod meldet er nur
 (`docs/konzept-werkbank.md` §4.6).
 
-## 4.4 Reaktionen & das Emit-Primitiv
-
-Eine Reaktion ist ein Pull-Konsument ohne Schreib-Fähigkeit, dessen `Handle` Commands ausgibt. Keine Domäne der Beispiel-Solution hat
-derzeit eine; die Form zeigt die Sonde (`GraphExtractor.Kern/Sonde/Lesen.cs.txt`):
-```csharp
-public partial class MahnungBeiSchaden : ISubscriber, IPullSubscriber
-{
-    public string SubscriberId => "mahnung-bei-schaden";
-    public async IAsyncEnumerable<EroeffneMahnung> Handle(SchadenGemeldet evt, IAggregateEnvelope envelope, ProjectionWriter writer)
-    { … yield return new EroeffneMahnung(…); }
-}
-```
-Der **Rückgabetyp** (konkret oder `OneOf<…>`, CQRS050) sagt, was entstehen kann. Die Ausgabe routet der `HandlerOutputRouter`
-(`Infrastructure/PubSub/HandlerOutputRouter.cs`): `ICommand` → an das Ziel-Aggregat, `IEvent` → reaktiv über den Broker re-publiziert
-(verlierbar, in Sim als Spur-Hinweis sichtbar).
-
-Jeder Command geht durch das **eine** Emit-Primitiv `CommandEmitter.EmitAsync` (`Infrastructure/PubSub/CommandEmitter.cs`):
-- deterministische `CommandId` aus `EmitKausalität` (Korrelation + auslösender Stream + Position/Command-Typ) → stabil über Re-Wakes,
-- `CommandModus.Emittiert()` = **keine erwartete Version**,
-- eine **Frage** des Boten mit Pflicht-Frist (`_sendeFrist`, Standard 5 s; [03](03-schreibseite.md) §3.7), at-least-once, ohne eigenen Retry;
-- liefert den **Ausgang** (`EmitAusgang`): `Zugestellt` (Erfolg, auch als erkannte Wiederholung), `Abgelehnt` (fachlich, durabel als Marke —
-  `CommandResult.Abgelehnt`), `Unbekannt` (Frist abgelaufen, technischer Fehler, Transportfehler). Keine Ausnahme verlässt den Emitter. Wer
-  „unbekannt“ bekommt, wiederholt an seinem durablen Punkt mit derselben CommandId: der Emittenten-Cursor bleibt stehen (§4.1), die Frist liegt
-  weiter (§4.6), der Dirigent wiederholt nach Backoff (§4.5);
-- **Drossel je Ziel** (`EmitDrossel`): höchstens 8 Sends je Ziel-Aggregat gleichzeitig unterwegs (je Knoten); der Rückstau eines heißen
-  Aggregats liegt vor dem Send statt in seiner Mailbox, sodass die Sends in ihrer Frist bleiben (PF-9).
-
-**Dedup macht die Framework-Inbox, nicht der Fachcode.** Die Inbox ist eine Tabelle des Event-Stores (`cqrs_inbox`, `InboxTabelle`,
-[03 §3.3](03-schreibseite.md)): jeder Append des Aggregat-Actors trägt die Quittung seines Commands (gewirkt oder abgelehnt), geschrieben in
-derselben Transaktion wie die Events und eindeutig je CommandId. Eine Wiederholung scheitert am Schlüssel, nichts wird geschrieben, der Actor
-quittiert den Ausgang des ersten Mals. Vor dem Append erkennt ein kleiner Cache im Actor (`BoundedInbox`, je Ausgang 1 000 CommandIds) die
-häufige Wiederholung kurz nach dem ersten Mal schon **vor** der OCC-Prüfung. Exactly-once gilt innerhalb des Horizonts
-(`Schreibpfad.InboxHorizontTage`, Standard 30 Tage), nicht mehr innerhalb eines Fensters von CommandIds (G-2 geschlossen).
-
-**Marken im Ziel-Stream nur noch für den Prozess-Fold** (E1, Variante A): eine Wirkung hinterlässt nur ihre Events — das erste trägt
-`causation_id = CommandId`, daran erkennt der Prozess-Manager sie. Ein Noop hinterlässt die Marke `KommandoVerarbeitet(CommandId)`, eine
-fachliche Ablehnung die Marke `KommandoAbgelehnt(CommandId, Grund)` (`Infrastructure/Aggregate/KommandoVerarbeitet.cs`, `IProzessIntern`:
-der Applier sieht sie nie, die Version zählt sie). Was daraus garantiert ist: [11](11-garantien.md).
-
-**Analyzer-Zwang** (`CommandEmitAnalyzer`): **CQRS020** (`RequestAsync<CommandResult>` oder `FrageAsync<CommandResult>` außerhalb von
-Emitter/Dispatcher), **CQRS021** (roher Command-Send mit `CancellationToken.None`/`default`; eine Frage hat ihre Frist ohnehin). Der generierte Pull-Emit-Pfad reicht das Token der Weckung durch
-(`EmitAusgaenge.Token`).
-
-## 4.5 Prozess-Maschine (der Dirigent)
-
-**Definition (DSL).** Ein Prozess ist eine `IProzessDefinition` mit typisierten Event→Aufruf-Regeln über
-`Prozess<TAuslöser>.Definiere(p => …)` (`Abstractions/Prozess/ProzessBuilder.cs`):
-- `p.Auf<E>().Sende<Cmd>(e => …)` — Command an ein Aggregat; `.SendeJe<Cmd>(…)` — Fan-out dynamischer Breite;
-- `.Rufe<F>(e => auftrag)` — Katalog-Funktion statt Aggregat (§4.6); `.Zeitlimit(t)` je Aufruf;
-- `.RückgängigDurch<Cmd>(…)` / `.RückgängigDurchJe<Cmd>(…)` — Gegenzug für die Kompensation;
-- `.Und<E2>()` (bis drei Events) — Join; `.UndAlle<ESammel>(e => n)` — Count-Join, die Breite steht im Auslöser.
-
-Beispiel (Sonde, `GraphExtractor.Kern/Sonde/Gebuehren.cs.txt`):
-```csharp
-public sealed class SchadenBeiRueckgabe : IProzessDefinition
-{
-    ProzessRegeln IProzessDefinition.Regeln => Prozess<Zurueckgegeben>.Definiere(p =>
-    {
-        p.Auf<Zurueckgegeben>().Sende<MeldeSchaden>(e => new MeldeSchaden(Guid.NewGuid(), e.LeserId));
-        p.Auf<SchadenGemeldet>().Rufe<ISchadensSchaetzung>(s => new SchaetzeSchaden(s.LeserId, 25m)).Zeitlimit(TimeSpan.FromMinutes(5));
-        p.Auf<SchadenGeschaetzt>().Sende<EroeffneMahnung>(g => new EroeffneMahnung(Guid.NewGuid(), g.Betrag));
-    });
-}
-```
-In der Beispieldomäne ist `Domain/Sammelvorgang/TeilFertigProzess.cs` der kleinste Fall (ein `Auf → Sende`).
-
-Der `ProzessRegelnGenerator` (Domain.SourceGeneration) legt jede Definition als Daten in `GeneratedProzessRegeln.Alle` (Name = Klassenname,
-CQRS012; Regel-Namen `<Auslöser>[+<Und>]→<Ziel>`, CQRS072). Der `ProzessRegelDiagnosticGenerator` prüft CQRS001–003 (doppelter Auslöser,
-Command ohne Decider, Command-Typ explizit). Jede Assembly mit Prozessen oder Flüssen hat ihre eigene Registry
-`{Assembly}.Prozess.GeneratedProzessRegeln`; in der Komposition vereinigt der `ProzessVerbundGenerator` die Registries aller referenzierten
-Rollen-Projekte zu `GeneratedProzessVerbund.Alle` (CQRS012: derselbe Name in zwei Assemblies; CQRS099: Prozesse ohne Registry), ohne eine getippte
-Liste von Projekten. Das Framework liest den Verbund über `Anwendung.Prozesse` (`GeneratedProzesse.AlleRegeln`).
-
-**Kern-Invariante: Struktur aus Code, Marking aus dem Log.** Der generische `ProzessManager` (`Infrastructure/Prozess/ProzessManager.cs`)
-ist ein einmal geschriebener Petri-Netz-Interpreter; je Vorgang (Korrelation) ein virtueller `ProzessManagerActor`. Sein eigenes Log ist der
-Stream der Korrelation (`ProzessGestartet`, `SchrittGescheitert`, `SchrittUmgeleitet`, `ProzessBeendet`).
-
-**Start und Zustellung** (`KorrelationsRouter`, `ProzessManagerWiring.cs`): der Router abonniert die Signale aller beteiligten Events und
-routet sie parallel (bis 32, `KorrelationsRouterActor`; zustandslos, Weckungen idempotent — PF-12). Ein Auslöser-Signal startet einen Vorgang mit
-deterministischer Korrelation `ProzessId.Für(Name, Stream, Version)`, ohne Read (der Signal-Typ nennt das Event, generierte Tabelle
-`Signale.EventToSignal`); ein Ziel-Event trägt die Korrelation in seinen Metadaten (vom Manager beim Feuern gesetzt) — der Router liest genau dieses
-Event (`ReadEventAsync`) und weckt daraus — mit Stream und Version des Events als Quelle. Den **Offen-Index** schreibt der Manager als
-Beilage im Append des `ProzessGestartet` (`VorgangOffen`) und räumt ihn als Beilage im Append des `ProzessBeendet` ab (`VorgangBeendet`), je in
-einer Transaktion ([03 §3.3](03-schreibseite.md)): es gibt keinen gestarteten Vorgang ohne Eintrag (ein Abbruch zwischen Start und Eintrag ließ
-früher Vorgänge liegen, die niemand weckte). Der `ProzessManagerStartupService` betreibt dazu:
-- den **Prozess-Poll** (`ProzessPoll`, 30 s, PF-4): er liest das Log seitenweise ab seiner Hochwassermarke (`ReadPartitionAsync`, eine
-  Partition, 500 Events) und routet die geladenen Events direkt (`ProzessPollFilter`) — ein Auslöser startet seinen Vorgang nur, wenn es ihn
-  noch nicht gibt oder er offen ist (`StreamsVorhandenAsync`, eine Abfrage je Seite), jedes andere Event weckt nur über die Korrelation eines
-  offenen Vorgangs — ob offen, fragt er je Seite nur für deren Korrelationen ab (`OffeneAusAsync`, über den Schlüssel; früher las jede Seite die
-  ganze Liste der offenen Vorgänge, PF-25). Die Weckungen sind bestätigt (WakeAck, 10 s, parallel bis 32); die Marke rückt nur bis vor die erste unbestätigte (G-8) und
-  wird je Seite gespeichert;
-- den **§3-Backstop** über den durablen `IProzessOffenIndex`: jede Sekunde weckt er die Vorgänge mit fälliger **Frist** (Zeitlimit,
-  Warte-Knoten, s. u.), alle 15 s gleicht er den **Heil-Plan** (`Heilplan`, im Speicher des Knotens) mit den offenen Vorgängen ab: eine
-  Heil-Weckung nach 15 s Stille, danach mit verdoppeltem Abstand bis 1 h; jede Weckung durch Signal oder Poll setzt zurück. Das ist das Netz für
-  verlorene Weckungen ohne Ziel-Event (unbekannter Emit-Ausgang, Absturz). Je Vorgang läuft höchstens eine Backstop-Weckung zugleich (bounded
-  10 s). Im Cluster betreibt jeder Knoten seinen Backstop (eine Lease fehlt noch, docs/13 PF-4).
-
-**Fold.** Je Ziel-Stream ab `StreamCursor[s]+1` nur die Events der eigenen Korrelation lesen (`ReadKorreliertAsync`: jede Wirkung, Noop- und
-Ablehnungs-Marke eines Befehls und jedes Funktionsergebnis trägt sie; in viel beschriebenen Streams waren sonst fast alle gelesenen Events fremd), in `MarkingKompakt` einarbeiten, ein Fixpunkt zieht die Kandidaten.
-Der Cursor rückt bis zum **Kopf** des Streams, den der Read mitliefert — fremde Events dahinter liest die nächste Weckung nicht noch einmal;
-ohne Cursor (kalt ohne gespeicherten Stand, oder ein nie gelesener Stream) liest der Store erst ab dem Beginn des Vorgangs (PF-24): was ein
-Vorgang liest, hängt nie an der Geschichte seiner Ziel-Streams, nur an dem, was seit seinem Start bzw. seit der letzten Weckung dazukam. Drei getrennte
-Ergebnis-Achsen je Vorgang:
-- **ErgebnisDa** = aufgelöst (irgendein Ziel-Event, auch Noop-Marke) → nicht mehr feuern;
-- **WirkungDa** = ein Domänen-Event (kein `IProzessIntern`) → kompensierbar, aktiviert Joins;
-- **AbgelehntDa** = durable `KommandoAbgelehnt`-Marke → wird `SchrittGescheitert`.
-
-Ohne die dritte Achse läse der Vorwärtszweig eine Ablehnung als „aufgelöst“ und schriebe fälschlich `ProzessBeendet(true)`.
-
-**Ein Schritt je Weckung** (`WakeAsync`): Marking falten → neue Ablehnungen und abgelaufene Zeitlimits durabel als `SchrittGescheitert`
-(im Fluss bei verdrahtetem Fehler-Port als `SchrittUmgeleitet`, §4.6) → ohne Fehlschlag: alle offenen Funktions-Aufträge anbieten
-(parallel, ohne Selbst-Weckung — der Ausführer weckt mit dem Ergebnis), den ersten offenen Command feuern (sequenziell), sind keine Aufrufe
-offen: `ProzessBeendet(true)` → mit Fehlschlag: **Kompensation** rückwärts über die erfolgreichen Regeln mit Gegenzug (ob ein Gegenzug schon
-erledigt ist, steht im Marking: sein Ergebnis trägt die Korrelation wie jedes andere; früher las die Prüfung den ganzen Ziel-Stream ab 0, PF-23); ist ein Gegenzug selbst
-abgelehnt, endet der Vorgang als `ProzessBeendet(false, KlärungNötig: true)` mit einem best-effort Dead-Letter-Eintrag (kein endloses
-Neufeuern) — sonst `ProzessBeendet(false)`.
-
-**Feuern** geht über `ProzessManagerActor` → `DetachedProzessSend` (eine Instanz je Manager) → `CommandEmitter.EmitAsync` mit vorgegebener
-CommandId: der deterministische **Vorgang ist die CommandId**. Der Fold matcht den durablen Ausgang über `CausationId == vorgang`; der
-Emit-Ausgang entscheidet nur über das Wecken (PF-9): nach „zugestellt“ oder „abgelehnt“ weckt sich der Manager sofort selbst, damit der Fold den
-Ausgang sieht (das Ergebnis der letzten Regel ist Auslöser keiner Regel); nach „unbekannt“ erst nach einem Backoff je Vorgang (1 s, 2 s, 4 s …
-höchstens 30 s, gestreut). Solange der Send eines Vorgangs läuft oder sein Backoff wartet, sendet keine andere Weckung (Signal, Poll, Backstop)
-ihn erneut. Mit der Drossel je Ziel (§4.4) baut ein überlastetes Aggregat seinen Rückstau ab, statt dass Wiederholungen ihn vervielfachen.
-
-**Passivierung** (PF-5): ein Manager ohne Nachricht stoppt nach `Lebenszyklus.ProzessManagerLeerlaufSekunden` (Standard 600). Ein still
-wartender Vorgang passiviert; ihn wecken seine Frist, ein Event oder die nächste Heil-Weckung. Beim Stoppen und bei jeder Weckung durch den
-Backstop (der Vorgang ist still geworden) legt der Manager sein Marking durabel ab — samt der Zeiten von Auslöser und Tokens, an denen die
-Zeitlimits hängen; der Kaltstart liest dort weiter, ohne gespeicherten Stand ab dem Beginn des Vorgangs.
-
-**Marking-Cursor (P5b).** `MarkingKompakt` (`Abstractions/Prozess/ProzessMarking.cs`) hält je Ziel-Stream einen `StreamCursor` und verdichtete
-Vorgangs-Marken statt roher Tokens:
-- ein HOT-Cache je Manager-Instanz trägt das Marking über die Weckungen einer Aktivierung; ein Vorgang, der in ihr startet, beginnt sein Marking
-  im Start (Auslöser schon gelesen, kein Laden aus dem Store) und gilt als **frisch**: jeder Ziel-Stream, in den diese Aktivierung nie gefeuert
-  hat, ist sicher leer;
-- **gezielte Reads** (warm): weckt der Router wegen eines Events, liest der Manager nur dessen Stream — und gar nichts, wenn sein Cursor schon so
-  weit ist; nach einem Send bzw. einem Funktions-Ergebnis (`ProzessWake.Vorgang`) nur den Ziel-Stream — und gar nichts, wenn der Ausgang des
-  Vorgangs schon gefaltet ist; ohne Quelle die Streams, in die er gefeuert hat und deren Ergebnis noch aussteht (`dirty`).
-- **Lesen ab dem Ausgang** (Hinweis): hat der Send den Ausgang selbst geschrieben, nennt die Antwort des Aggregats dessen erste Version
-  (`CommandResult.ErsteVersion`, über `EmitErgebnis` und die Selbst-Weckung als `ProzessWake.QuellVersion`); der Fold liest den Ziel-Stream dann
-  erst ab dort statt ab seinem Cursor — in einem viel beschriebenen Stream (ein heißer Sammelvorgang, ein Posten) stand der Cursor eines frischen
-  Vorgangs bei 0, und die Datenbank las jede fremde Zeile, um sie am Korrelationsfilter zu verwerfen. Die Events eines Befehls stehen
-  zusammenhängend, das erste gelesene eigene ist also seine erste Wirkung. Über die übersprungene Lücke rückt der Cursor nur, wenn dort nichts
-  Eigenes mehr aussteht: in einem frischen Vorgang, wenn alle Vorgänge, die diese Aktivierung in den Stream gefeuert hat, aufgelöst sind (der
-  Manager feuert ohnehin nur den ersten offenen Command); sonst bleibt er stehen, und ein späterer Read liest die Lücke. Ohne Hinweis (eine als
-  Wiederholung erkannte CommandId, ein unbekannter Ausgang, ein Funktions-Ergebnis) liest der Fold wie bisher. Ein gelesener
-  Ziel-Stream ohne eigenes Event gilt als gesehen (Cursor bis zur gelesenen Version) und wird nicht „auf Verdacht“ erneut gelesen. Dass dabei
-  nichts verloren geht, trägt das erneute Feuern: jede Weckung feuert den ersten offenen Command wieder (der Send-Takt verwirft das Duplikat) und
-  markiert damit seinen Ziel-Stream;
-- der Kopf-Zustand des eigenen Logs bleibt im Speicher und wird mit jedem eigenen Append fortgeschrieben (der Manager ist sein einziger Schreiber,
-  jeder Append trägt die erwartete Version); ein gescheiterter Append, ein `SchrittUmgeleitet` (seine Log-Zeit zählt) und jede Backstop-Weckung
-  lesen frisch;
-- durabel (`IProzessMarkingStore`, Marten-Dokument `ProzessMarkingDoc`) nur gedrosselt, Standard alle 32 Weckungen; gelöscht wird es mit dem Ende
-  nur, wenn es geschrieben oder geladen wurde;
-- **Kaltstart, Backstop oder geänderter `RegelHash` (`ProzessRegelHash`) → Voll-Fold ab 0** (Invariante 1). Der Cache ist nicht-autoritativ;
-  ein veralteter Stand kann höchstens erneut feuern, was an der Empfänger-Inbox verpufft. Den Beweis „gleiche Feuer-Entscheidung wie der
-  Voll-Fold“ führt `MarkingCursorAequivalenzTests` gegen echtes Marten, auch kalt, mit Router-Weckungen, mit verzögerter Ausführung und mit
-  Hinweis (Lesen ab dem Ausgang; ein langer Ziel-Stream wird dann nicht ab 0 gelesen — gegen den Stand davor rot gesehen).
-
-**Zeitlimit und Frist.** Ein offener Aufruf, dessen Limit seit seiner Aktivierung (jüngstes gematchtes Event, DB-Zeit aus dem Log) gegen
-`IDbClock` abgelaufen ist, scheitert wie eine Ablehnung. Damit der Ablauf auch im Ruhezustand entdeckt wird, schreibt der Manager die **Frist**
-in den Offen-Index (`ProzessOffen.Frist`, PF-4): das früheste offene Zeitlimit, für einen offenen Warte-Knoten spätestens in 15 s (er liest
-seinen Strom nur bei einer Weckung). Geschrieben wird nur, wenn sie früher liegt als die zuletzt geschriebene — eine spätere bleibt liegen, die
-frühere weckt einmal umsonst und schreibt dann die richtige; weckt der Backstop wegen der Frist (`ProzessWake.FristFaellig`), schreibt der Manager
-immer neu (auch `null`), und ein beendeter Vorgang räumt dabei seinen liegengebliebenen Eintrag ab. Genauigkeit: eine Sekunde (Takt des
-Backstops), durabel über Neustarts.
-
-**Boot-Guards** (`ProzessManagerStartupService`): Azyklizität (`ProzessAzyklizität.PrüfeAlle`, gespeist aus `GeneratedCommandRouting.Produziert`
-und den Ergebnissen der Funktionen), Auslöser-Kollision zwischen Prozessen (fail-fast), jede gerufene Funktion ist gebunden
-(`FunktionsExtensions.PrüfeBindungen`).
-
-Offen: Feinschliff an `MarkingKompakt` und an der Kompensation, `KlärungNötig` ohne Test (docs/13 P2-5); Saga-E2E- und
-Marking-Äquivalenz-Tests fehlen seit dem Löschen der alten Beispiel-Domänen (docs/13 T-1).
-
-## 4.6 Fluss auf dem Dirigenten und Katalog-Funktionen
-
-**Fluss.** Eine Pipeline ist eine Klasse `: IPipeline` mit `PipelineFluss Fluss => PipelineFluss.Definiere(p => …)`
-(`Abstractions/Fluss/Pipeline.cs`). Geschrieben wird vom Draht aus, so wie der Editor zeichnet:
-- Quelle: `p.Quelle<T>()` (eine `IQuellNachricht`) oder `p.Auf<E>()` (ein Event aus dem Log) — genau eine je Pipeline;
-- `draht.Rufe<F>(λ)` (Katalog-Funktion), `knoten.Bei<E>()` (ein Ausgang), `draht.Sende<Cmd>(λ)` (Command), `draht.Je(…)` / `Sammle(…)`;
-- `p.Alle(a, b, …)` (∧), `.Oder(…)` (∨), `.Zeitlimit(t)`;
-- Fehler-Ports `knoten.BeiZeitlimit()` (⏳) und `knoten.BeiAbgelehnt()` (✕);
-- `quelle.Strom()` (Aggregat-Id und Version der Quelle als Draht) und `strom.Warte<A>().Zeitlimit(t)` (Frist als Rennen).
-
-Beispiel (Sonde, `GraphExtractor.Kern/Sonde/Fluss.cs.txt`):
-```csharp
-public sealed class Ausleihfrist : IPipeline
-{
-    public PipelineFluss Fluss => PipelineFluss.Definiere(p =>
-    {
-        var ausgeliehen = p.Auf<Ausgeliehen>();
-        var rueckgabe = ausgeliehen.Strom().Warte<Zurueckgegeben>().Zeitlimit(TimeSpan.FromDays(28));
-        var offen = ausgeliehen.Rufe<IOffenZaehlung>(ausgeliehen => new ZaehleOffene(ausgeliehen.LeserId));
-        var mahnung = p.Alle(rueckgabe.BeiZeitlimit(), offen.Bei<OffeneGezaehlt>(), ausgeliehen.Strom())
-            .Sende<EroeffneMahnung>((rueckgabeZeit, offen, ausgeliehenStrom) => new EroeffneMahnung(ausgeliehenStrom.Id, offen.Anzahl));
-    });
-}
-```
-Der Variablenname ist die Knoten-Identität (Wirker `fluss:<Pipeline>#<Knoten>`); weil nur deklarierte Knoten verdrahtet werden können, ist ein
-Fluss per Konstruktion azyklisch. Die Form prüft der `FlussAnalyzer` (CQRS073–078).
-
-**Ausführung.** `PipelineFluss.Definiere` übersetzt den Fluss in `ProzessRegeln` mit Knoten-Herkunft (`IstFluss`); der
-`ProzessRegelnGenerator` registriert `IPipeline` neben `IProzessDefinition`, und **derselbe** `ProzessManager` führt sie aus — Fold,
-Marking-Cursor, Backstop und Zeitlimit wie in §4.5. Welche Tokens eine Regel belegen (Herkunft, Je-Teile, Sammeln), entscheidet der reine
-Kern `FlussBelegung` (`Abstractions/Prozess/FlussBelegung.cs`), den auch das `FlussLaufwerk` in `Cqrs.Testing` für Prüfstand-Tests nutzt.
-- **Fehler-Ports als Tokens:** ist der ⏳- bzw. ✕-Port eines Knotens verdrahtet, wird ein Zeitlimit bzw. eine Ablehnung nicht zum
-  Fehlschlag, sondern im Log als `SchrittUmgeleitet` vermerkt und im Dirigenten zum Token `ZeitlimitAbgelaufen` bzw. `SchrittAbgelehnt`
-  (beide `IProzessIntern`, nie im Log) — der Fluss läuft auf dem verdrahteten Zweig weiter.
-- **Warte:** ein Warte-Knoten liest den Strom der Quelle nach ihrer Version; das erste erwartete Event vor Ablauf (DB-Zeit) gewinnt, sonst
-  entsteht `ZeitlimitAbgelaufen`. Er merkt sich im Marking, bis wohin er den Strom geprüft hat (`VorgangMarke.Gelesen`), und liest bei der nächsten
-  Weckung nur dahinter (PF-26) — sonst wüchse jede Weckung mit der Wartezeit.
-- **Quell-Einstieg:** `QuellEingang.NimmAufAsync` (`Infrastructure/Quellen/Quellen.cs`) hängt eine Quell-Nachricht als erstes Event eines
-  Vorgangs-Streams an, dessen Id deterministisch aus Typ und `Kennung` folgt (Version 0 → **genau einmal** im Log, auch bei Neustart oder
-  zweitem Knoten), und weckt dann jede Pipeline, die mit `p.Quelle<T>()` beginnt; eine verlorene Weckung heilt der Poll des
-  Korrelations-Routers. Gespeist wird er vom fest codierten Treiber (Datei) bzw. vom Webhook aus der Konfig (`docs/konzept-werkbank.md` §3).
-
-**Katalog-Funktionen.** Eine Funktion ist ein Interface `: IFunktion` mit genau einer Methode
-`Task<OneOf<E1, …>> RufeAsync(TAuftrag, IAusfuehrung[, Lese-Fähigkeiten])`, `TAuftrag : IAuftrag<F>`, Ergebnisse persistente Events. Der
-`FunktionsGenerator` erzeugt den reflexionsfreien Dispatch `GeneratedFunktionen` (CQRS068/069). Prozess (`Rufe<F>`) und Fluss rufen sie gleich:
-1. Der Dirigent **bietet** den Auftrag an (`FunktionsAnbieter.BieteAnAsync`) — an den **Vermittler** seiner Funktion, einen virtuellen
-   Cluster-Actor je Funktion (`FunktionsVermittlerActor`, Identität = voller Funktionsname). Der Vermittler ist nicht maßgeblich: geht er
-   verloren, bietet der Dirigent jeden offenen Auftrag bei der nächsten Weckung neu an.
-2. **Abholer** holen per Pull, so viele wie Slots frei sind, mit Lease und Long-Poll: im Host der `FunktionsAbholer` (C#-Implementierung),
-   extern eine `FunktionsAnbieterSitzung` über gRPC (generischer Python-Worker), von Hand der `HandAusfuehrer` (Werkbank, JSON-Eingang).
-3. Abgeschlossen wird immer über `FunktionsAusfuehrer.SchreibeErgebnisAsync`: **genau ein** Ergebnis im Ausführungs-Stream (Stream-Id =
-   Vorgang, Anhängen ab Version 0; rechnen zwei, gewinnt eines). Wirft die Funktion auch nach den Wiederholungen, meldet ein externer
-   Ausführer einen Fehler oder ein Ergebnis außerhalb des Vertrags, liegt dort stattdessen eine `KommandoAbgelehnt`-Marke. Danach weckt der Ausführer den Vorgang; der Fold liest das Ergebnis wie
-   das Event eines Aggregats.
-
-**Laufort ist Konfig, nicht Code.** Die Umgebungs-Datei sagt je Funktion `Funktionen:<F>:Laufort` (`Host` · `Extern` · `Hand`), dazu
-`Implementierung`, `Slots`, `Wiederholungen` (`Abstractions/Umgebung/UmgebungKonfig.cs`). `AddCqrs` bindet daraus beim Start
-(`BindeFunktionen`, Fabriken aus `GeneratedFunktionen`), danach die Domänen-Dienste der Implementierungen (`BindeDienste`, `GeneratedDienste`).
-Eine Funktion mit Lese-Fähigkeit läuft nur im Host. Details: `docs/konzept-editor-pipelines.md` §14, [10 §10.5a/§10.6](10-entwickler-api.md).
-
-**Altlast: die Handle-Pipeline.** Daneben ist noch die frühere Pipeline-Maschinerie verdrahtet, ohne Domänen-Nutzer: `IPipelineHandler` mit
-`PipelineActorBase`, `PipelineEventPullBridge` (persistierte Events über den Pull-Pfad, emittierend), `PipelineStartupService`, die
-Trigger-Welt (`IPipelineTrigger`, `ITriggerRegistration`, `TimerTrigger`, `WebhookTrigger`) und `Selbst<T>`/`Frist<TCmd>`/`FristStorno<TCmd>` als
-Handle-Ausgang (dort heißt die Frist seit Phase 3 `FristPlanung<TCmd>`, damit `Frist<TCmd>` der Ausgabe eines Decide gehört, §4.6a; durabler Fristplaner `FristScheduler`/`MartenFristplan`; er entfernt eine Frist erst bei entschiedenem Emit-Ausgang, ein
-unbekannter lässt sie für den nächsten Tick liegen). Sie ist kein Weg für neuen Code; Rückbau offen (docs/13 W11-1).
-
-## 4.6a Funktion als Baustein und Uhr (Plan Phase 3, neben dem Alten)
-
-Der Plan löst Reaktion, Prozess und Fluss durch **Funktion** und **Uhr** ab. Bis zum Umbau der Beispieldomäne (Phase 4) laufen beide Welten
-nebeneinander; die neue ist an der Prüfdomäne (`Pruefdomaene.Pipeline`) und der Sonde belegt.
+## 4.4 Funktionen
 
 **Form.** Eine Funktion ist eine Klasse (läuft im Host) oder eine Schnittstelle (läuft draußen, ihre Umsetzungen sind Klassen) `: IFunktion`
 mit Methoden `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])` — je Eingangstyp genau eine (R2, CQRS101). Was herauskommen kann, steht in der
 Rückgabe: ein konkreter Typ, `OneOf<…>`, `T?`, `IEnumerable<…>` oder `IAsyncEnumerable<…>` (auch in `Task<…>`); erlaubt sind Commands und
-Events. `Herkunft` nennt Stream, Version, Zeit und Akteur des Eingangs und leitet neue Ids ab (`h.NeueId<T>(…)`, R13). Dieselbe Marke
-`IFunktion` trägt bis Phase 4 auch die Katalog-Form (`RufeAsync`, §4.6); welche gemeint ist, sagt der Methodenname (`Funktionsform`).
-Der `FunktionsBausteinGenerator` erzeugt Dispatch, Seiten-Form und den **Weckplan** (welche Log-Typen welche Funktion wecken) als Tabelle
-`GeneratedFunktionsBausteine` (CQRS100). Lage: Klasse in der Rolle Abläufe (`HostFunktion`), Schnittstelle wie bisher (`Funktion`).
+Events. `Herkunft` nennt Stream, Version, Zeit und Akteur des Eingangs und leitet neue Ids ab (`h.NeueId<T>(…)`, R13). Eingänge sind Events
+aus dem Log (auch Quell-Nachrichten und Ergebnisse anderer Funktionen); ein Hinweis (`ITransientEvent`) als Eingang steht im Hinweisplan, wird
+aber erst mit Phase 6 zugestellt (FB-1). Der `FunktionsBausteinGenerator` erzeugt Dispatch, Seiten-Form und den **Weckplan** (welche Log-Typen
+welche Funktion wecken) als Tabelle `GeneratedFunktionsBausteine` (CQRS100). Lage: Klasse und Schnittstelle in der Rolle Abläufe
+(`HostFunktion` bzw. `Funktion`, docs/07).
+
+Beispiel (Beispieldomäne, `Domain.Pipeline/Sammelvorgang/TeilFertigMeldung.cs`) — die kleinste Funktion, eine Kante Event → Command:
+```csharp
+public sealed class TeilFertigMeldung : IFunktion
+{
+    public MeldeTeilFertig Auf(TeilauftragAbgeschlossen e) => new(e.SammelvorgangId);
+}
+```
 
 **Funktions-Actor** (`Infrastructure/Funktionen/FunktionsActor.cs`, ein `RahmenActor` je Funktion und Partition): liest seine Seite ab der
 Position aus dem Log, startet so viele Eingänge, wie Slots frei sind (Standard 1), je Stream höchstens einen (`FunktionsLauf`), und rückt die
-Position nur bis vor den ersten laufenden Eingang und nie über die gesetzte Sequenz (Horizont wie §4.1.1). Der Stand liegt im Dokument
-`FunktionsStand` mit Revision (zwei Aktivierungen: die zweite bekommt einen Konflikt und lädt neu). Ein Eingang, der wirft, wartet im Backoff
-1 … 30 s; nach den eingestellten Wiederholungen wird sein Stream geparkt (Dead-Letter) und je Poll-Intervall einzeln versucht.
+Position nur bis vor den ersten laufenden Eingang und nie über die gesetzte Sequenz (Horizont wie §4.1). Der Stand liegt im Partitions-Checkpoint
+mit der Id `funktion:<F>:<Partition>` und Revision (zwei Aktivierungen: die zweite bekommt einen Konflikt und lädt neu); so zählt `/health` den
+Rückstand der Funktionen mit. Ein Eingang, der wirft, wartet im Backoff 1 … 30 s; nach den eingestellten Wiederholungen wird sein Stream geparkt
+(Dead-Letter) und je Poll-Intervall einzeln versucht.
 
 **Festhalten** (`FunktionsArbeit`, `Festhalten.cs`). Eine **gleichbleibende** Funktion — Klasse ohne Konstruktor-Parameter und ohne
 Fähigkeiten, die nur Commands ausgibt — rechnet beim Wiederholen dasselbe (R12, CQRS103 verbietet Uhr, Zufall, Datei, Netz); sie sendet
@@ -473,59 +187,129 @@ direkt, mit abgeleiteten Command-Ids (Funktion, Eingang, Stelle, Typ, Ziel). Jed
 Stream je (Funktion, Eingang) nimmt die Events der Ausgabe, je Command ein `BefehlFestgehalten` und als Ende `AusgabeFestgehalten`. Wer
 zuerst festhält, gewinnt (Anhängen ab der erwarteten Version); ein zweiter Lauf verwirft seine Rechnung und sendet das Festgehaltene. Ein
 Strom wird in Stücken zu 100 festgehalten, ein Abbruch setzt bei der nächsten Ausgabe fort. Hinweise (`ITransientEvent`) schickt nur der
-Lauf, der festhielt. Commands gehen immer über den `CommandEmitter`; ein unbekannter Ausgang heißt „später“, die Position bleibt.
+Lauf, der festhielt. Commands gehen immer über den `CommandEmitter` (§4.6); ein unbekannter Ausgang heißt „später“, die Position bleibt.
 
-**Laufort.** Wie bei der Katalog-Form aus der Umgebung (`Funktionen:<F>:Laufort`). Ohne Bindung läuft eine Klasse im Host, eine
-Schnittstelle mit genau einer Umsetzung ebenso. `Hand`: der Actor bietet den Eingang über den Vermittler an (`EingangAnbieten`, Lease),
-eine `BausteinSitzung` nimmt die Antwort an, prüft sie gegen die Signatur und hält sie fest; die Garantie bleibt beim Actor (wartet er
-vergeblich, heißt der Eingang „später“). `Extern` (gRPC-Worker) für diese Form kommt mit Phase 7 und ist bis dahin ein Boot-Fehler.
+**Laufort ist Konfig, nicht Code.** Die Umgebungs-Datei sagt je Funktion `Funktionen:<F>:Laufort` (`Host` · `Extern` · `Hand`), dazu
+`Implementierung`, `Slots`, `Wiederholungen` (`Abstractions/Umgebung/UmgebungKonfig.cs`); `AddCqrs` bindet daraus beim Start
+(`BindeFunktionen`), danach die Domänen-Dienste der Umsetzungen (`BindeDienste`, `GeneratedDienste`). Ohne Eintrag läuft eine Klasse im Host,
+eine Schnittstelle mit genau einer Umsetzung ebenso, eine Schnittstelle ohne Umsetzung, die ein Client trägt (`ITraegt<F>`), draußen; sonst ist
+es ein Boot-Fehler, der den Eintrag nennt. Eine Funktion mit Lese-Fähigkeit läuft nur im Host.
+- **Host:** die Umsetzung einmal je Knoten (darf warme Ressourcen halten; bei Slots > 1 thread-sicher), gerufen vom Funktions-Actor.
+- **Extern und Hand:** der Actor bietet den Eingang über den **Vermittler** seiner Funktion an (`FunktionsVermittlerActor`, ein virtueller
+  Cluster-Actor je Funktion; `EingangAnbieten`, nicht maßgeblich — geht er verloren, bietet der Actor neu an). Ausführer draußen holen per Pull,
+  so viele wie Slots frei sind, mit **Lease** und Lebenszeichen, über eine `BausteinSitzung`: extern die Sitzung eines Clients über die Leitung
+  (gRPC, z. B. der generische Python-Worker, der die Funktion trägt), von Hand der `HandAusfuehrer` (Werkbank, JSON-Eingang
+  `/eingang/auftraege` und `/eingang/ergebnis`). Die Sitzung prüft die Antwort gegen die Signatur und hält sie fest — die erste gewinnt; ein
+  Strom kommt in Stücken, jedes an seiner Stelle festgehalten. Die Garantie bleibt beim Actor: läuft die Lease ab, geht der Eingang an den
+  nächsten Ausführer, der beim nächsten nicht festgehaltenen Stück weitermacht; wartet der Actor vergeblich, heißt der Eingang „später“.
 
-**Wecken.** Bis Phase 6 über die vorhandene Maschine: jede Funktion meldet sich wie eine Projektion beim `BatchKonsumStartupService` an
-(Signal der Aggregate schnell, Poll alle 30 s). Events aus Funktionen, Quellen und der Uhr senden selbst kein Signal und erreichen die
-Funktion über den Poll — ein halber eigener Wecker vor Phase 6 wäre ein zweiter Weg, der wieder verschwände.
+**Wecken.** Jede Funktion meldet sich wie eine Projektion beim `BatchKonsumStartupService` an: das Signal eines Commits weckt ihre Partition,
+der Poll alle 30 s heilt. Jeder Schreiber meldet nach seinem Commit dasselbe — Aggregat, Quelle und festgehaltene Ausgabe einer Funktion
+(`Infrastructure/PubSub/Commitmeldung.cs`): je Event den Envelope (für Sitzungen, die ihn hören) und sein typisiertes Signal. Bis Phase 4 sahen
+Events aus Quellen und Funktionen ihre Hörer erst mit dem Poll (FB-3). Den eigenen Wecker am Flush bringt Phase 6.
 
-**Uhr** (`Abstractions/Uhr.cs`, `Infrastructure/Uhr/`). Ein Decide gibt `Frist<TCmd>(Befehl, Nach)` aus; der generierte Handler macht
-daraus das Event `FristGesetzt` (des Frameworks, `IProzessIntern`: zählt in der Version, der Applier überspringt es), und der Actor legt in
-derselben Transaktion eine Beilage ins Fälligkeits-Verzeichnis `cqrs_fristen` (fällig = Zeitstempel des Events + Dauer, Datenbank-Uhr).
-Die Uhr ist ein Actor einmal im Cluster (`uhr/0`), jeder Knoten tickt sie jede Sekunde an (`UhrTakt`, verlierbar). Sie sendet Fälliges mit
-der Command-Id aus Stream und Version des Frist-Events und trägt es erst nach entschiedenem Ausgang aus — doppelt gefeuert wirkt es über
-die Inbox des Ziels einmal.
+## 4.5 Abläufe: Aggregat, Funktion und Frist
 
-**Quellen.** Neben dem Datei-Treiber gibt es den **Takt-Treiber** (`TaktGemeldet`, Konfig `Intervall` ≥ 1 s; Kennung = Beginn des
-Intervalls, gleich auf jedem Knoten) und die **Quell-Nachricht vom Client** (`ClientGemeldet`, JSON-Eingang `/eingang/quelle`, Kennung =
-Command-Id des Clients). Je Quelle wählt die Konfig `Strom`: `JeNachricht` (ein Stream je Kennung, wie bisher) oder `JeSchluessel` (ein
-Stream je Schlüssel; die Kennung steht in derselben Transaktion im Kennungs-Verzeichnis `cqrs_quell_kennungen`, angehängt wird am Kopf mit
-Versionsprüfung).
+Ein Ablauf mit Zustand — warten, zusammenführen, zählen, zurücknehmen, eine Frist überwachen — ist ein Aggregat: sein Decide entscheidet jeden
+Schritt aus seinem Zustand, sein Log ist der Ablauf. Die Kanten zu anderen Aggregaten zieht eine Funktion, die selbst nichts festhält. Die
+Zugehörigkeit eines fremden Events zu einem Ablauf ist ein **fachliches Feld** (A2), kein Korrelations-Header.
 
-## 4.7 Dead-Letter & Snapshots
+**Beispiel: der Auftrag der Prüfdomäne** (`Pruefdomaene/Auftrag/`, `Pruefdomaene.Pipeline/Auftrag/Auftragsabwicklung.cs`). Ein Auftrag
+reserviert einen Posten und belegt ein Kontingent (zwei unabhängige Zweige); erst wenn beide gelungen sind, ist er bestätigt; scheitert einer,
+wird zurückgenommen, was gelang.
+- `StarteAuftrag` → `AuftragGestartet`. Die Funktion `Auftragsabwicklung` macht daraus `ReservierePosten` und `BelegeKontingent`, beide mit dem
+  **Beleg** `(Belegart.Auftrag, AuftragId)` als fachlichem Feld.
+- Posten und Kontingent entscheiden für sich (`PostenReserviert`, `ReservierungAbgelehnt` …) und tragen den Beleg im Event. Die Funktion bildet
+  sie auf `VermerkeReservierung`, `VermerkeBelegung` bzw. `VermerkeAbsage` am Auftrag ab — nur, wenn der Beleg ein Auftrag ist.
+- Das Decide des Auftrags entscheidet **Join** und **Kompensation**: sind Reservierung und Belegung vermerkt, folgt `AuftragBestaetigt`; kommt
+  eine Absage, folgt `AuftragGescheitert` und für jeden gelungenen Zweig ein Gegenzug-Event (`PostenFreigabeAngeordnet`) — genau einmal, weil
+  der Zustand es sich merkt; eine verspätete Rückmeldung eines Zweigs nimmt sich selbst zurück. Die Funktion sendet den Gegenzug (`GibPostenFrei`).
+
+**Fan-out und Zählung** (`Verteilung`): `ZubuchungenAngeordnet` trägt die Ziele, die Funktion sendet je Ziel `BuchePostenZu` (ein Strom von
+Commands), und jede Zubuchung mit dem Beleg der Verteilung wird dort gezählt (`ZaehleZubuchung`); beim N-ten schließt das Decide ab. Es gibt
+keine Collections im Aggregat, nur einen Zähler (Haltung B); die Breite steht im Start.
+
+**Frist statt Zeitlimit.** Ein Decide gibt `Frist<TCmd>(Befehl, Nach)` aus; die Uhr (§4.7) sendet den Befehl fällig an dasselbe Aggregat, und
+dessen Decide entscheidet, ob er noch etwas bedeutet. Beispiel: der Trainings-Wächter der Beispieldomäne setzt beim Start eines Trainingslaufs
+eine Frist und erklärt den Lauf bei Ablauf ohne Lebenszeichen für gescheitert.
+
+**Ohne Dirigent.** Es gibt keinen Fold über fremde Streams, keinen Marking-Cursor, keinen Backstop und keine Prozess-Korrelation mehr. Was
+garantiert ist, folgt aus den Bausteinen: das Aggregat entscheidet unter Single-Writer und Inbox, die Funktion liefert jeden Eingang
+mindestens einmal und ihre Commands über die Inbox genau einmal wirksam, die Uhr sendet jede Frist mindestens einmal. Garantien und Nachweise:
+[11](11-garantien.md). Ein Kreis Funktion ↔ Aggregat ist der Normalfall eines Ablaufs; der Build warnt davor nicht (R6, docs/13).
+
+## 4.6 Das Emit-Primitiv und die Inbox
+
+Jeder Command, den das Framework sendet (Funktion, Uhr), geht durch das **eine** Emit-Primitiv `CommandEmitter.EmitAsync`
+(`Infrastructure/PubSub/CommandEmitter.cs`):
+- die `CommandId` gibt der Aufrufer deterministisch vor (Funktion: aus Funktion, Eingang, Stelle, Typ und Ziel; Uhr: aus Stream und Version
+  des Frist-Events) → stabil über jede Wiederholung;
+- `CommandModus.Emittiert()` = **keine erwartete Version**;
+- eine **Frage** des Boten mit Pflicht-Frist (Standard 5 s; [03](03-schreibseite.md) §3.7), at-least-once, ohne eigenen Retry;
+- liefert den **Ausgang** (`EmitAusgang`): `Zugestellt` (Erfolg, auch als erkannte Wiederholung), `Abgelehnt` (fachlich, durabel als Marke),
+  `Unbekannt` (Frist abgelaufen, technischer Fehler, Transportfehler). Keine Ausnahme verlässt den Emitter. Wer „unbekannt“ bekommt, wiederholt
+  an seinem durablen Punkt mit derselben CommandId: die Funktion lässt den Eingang offen (die Position bleibt), die Uhr lässt die Frist liegen;
+- **Drossel je Ziel** (`EmitDrossel`): höchstens 8 Sends je Ziel-Aggregat gleichzeitig unterwegs (je Knoten); der Rückstau eines heißen
+  Aggregats liegt vor dem Send statt in seiner Mailbox (PF-9).
+
+**Dedup macht die Framework-Inbox, nicht der Fachcode.** Die Inbox ist eine Tabelle des Event-Stores (`cqrs_inbox`, `InboxTabelle`,
+[03 §3.3](03-schreibseite.md)): jeder Append des Aggregat-Actors trägt die Quittung seines Commands (gewirkt oder abgelehnt), geschrieben in
+derselben Transaktion wie die Events und eindeutig je CommandId. Eine Wiederholung scheitert am Schlüssel, nichts wird geschrieben, der Actor
+quittiert den Ausgang des ersten Mals. Vor dem Append erkennt ein kleiner Cache im Actor (`BoundedInbox`, je Ausgang 1 000 CommandIds) die
+häufige Wiederholung kurz nach dem ersten Mal schon **vor** der OCC-Prüfung. Exactly-once gilt innerhalb des Horizonts
+(`Schreibpfad.InboxHorizontTage`, Standard 30 Tage).
+
+**Marken.** Ein Noop eines emittierten Commands hinterlässt die Marke `KommandoVerarbeitet(CommandId)`, eine fachliche Ablehnung die Marke
+`KommandoAbgelehnt(CommandId, Grund)` (`Infrastructure/Aggregate/KommandoVerarbeitet.cs`). Beide sind `IRahmenEvent`: Events des Rahmens im
+Aggregat-Stream, die in der Version zählen, die der generierte Applier überspringt und die nicht über die Leitung gehen. Ob die Marken bleiben,
+entscheidet Phase 5.
+
+**Analyzer-Zwang** (`CommandEmitAnalyzer`): **CQRS020** (`RequestAsync<CommandResult>` oder `FrageAsync<CommandResult>` außerhalb von
+Emitter/Dispatcher), **CQRS021** (roher Command-Send mit `CancellationToken.None`/`default`).
+
+## 4.7 Uhr und Quellen
+
+**Uhr** (`Abstractions/Uhr.cs`, `Infrastructure/Uhr/`). Ein Decide gibt `Frist<TCmd>(Befehl, Nach)` aus; der generierte Handler macht daraus
+das Event `FristGesetzt` (ein `IRahmenEvent`), und der Actor legt in derselben Transaktion eine Beilage ins Fälligkeits-Verzeichnis
+`cqrs_fristen` (fällig = Zeitstempel des Events + Dauer, Datenbank-Uhr). Die Uhr ist ein Actor einmal im Cluster (`uhr/0`), jeder Knoten tickt
+sie jede Sekunde an (`UhrTakt`, verlierbar). Sie liest die fälligen Fristen über den Index (`FristVerzeichnis.FaelligeAbfrage`), sendet sie mit
+der Command-Id aus Stream und Version des Frist-Events und trägt sie erst nach entschiedenem Ausgang aus — doppelt gefeuert wirkt es über die
+Inbox des Ziels einmal. In Sim verschiebt ein Uhr-Versatz die Datenbank-Uhr (Durchspielen).
+
+**Quellen** (`Infrastructure/Quellen/`). Was von draußen hereinkommt, ohne ein Command zu sein, ist eine **Quell-Nachricht**
+(`IQuellNachricht` mit `Kennung`): der Datei-Treiber (`DateiGemeldet`), der Takt-Treiber (`TaktGemeldet`, Konfig `Intervall` ≥ 1 s; Kennung =
+Beginn des Intervalls, gleich auf jedem Knoten) und die Quell-Nachricht vom Client (`ClientGemeldet`, JSON-Eingang `/eingang/quelle`, Kennung =
+Command-Id des Clients; über gRPC erst mit Phase 7). `QuellEingang.NimmAufAsync` hängt sie **genau einmal je Kennung** an: je Quelle wählt die
+Konfig `Strom` — `JeNachricht` (ein Stream je Kennung, Id deterministisch aus Typ und Kennung, Anhängen ab Version 0) oder `JeSchluessel` (ein
+Stream je Schlüssel; die Kennung steht in derselben Transaktion im Kennungs-Verzeichnis `cqrs_quell_kennungen`, angehängt am Kopf mit
+Versionsprüfung). Danach meldet der Eingang den Commit (§4.4); Funktionen nehmen Quell-Nachrichten wie jedes andere Event aus dem Log.
+
+## 4.8 Dead-Letter & Snapshots
 
 - **Dead-Letter:** `MartenDeadLetterSink` schreibt ein durables `DeadLetter`-Dokument je toter Zustellung (Schema `dlq`), best-effort —
-  Beobachtung, kein kritischer Pfad (z. B. ein Vorgang in `KlärungNötig`, ein vergifteter Aggregat-Actor). Lesen: `MartenDeadLetterReadStore`.
+  Beobachtung, kein kritischer Pfad (z. B. ein geparkter Stream einer Projektion oder Funktion, ein vergifteter Aggregat-Actor). Lesen: `MartenDeadLetterReadStore`.
 - **Snapshots:** `MartenSnapshotStore` — `Snapshot<TState>` als jsonb je Aggregat, Registrierung generiert (`SnapshotRegistrationGenerator`).
   **Nicht-autoritativ:** kein Treffer oder eine andere `SchemaVersion` → Voll-Replay (`AggregateRehydrator`). Die Schema-Version ist der
   Struktur-Hash des States plus der Code-Hash von State und Applier (`{State}AggregateHandler.CodeHash`) — eine geänderte Apply-Logik
   invalidiert alte Snapshots. Geschrieben wird nach einer Schwelle von Events und bei Deaktivierung: der State wird im Actor-Turn
   kopiert (die Inbox reist nicht mit — sie ist eine Tabelle), der DB-Write läuft danach fire-and-forget. Die Kopie ist ein JSON-Round-Trip (docs/13 W10-2).
 
-## 4.8 Spur der Konsumenten
+## 4.9 Spur der Konsumenten
 
 Jeder Log-Eintrag trägt die Header `ursache`, `wirker`, `ueber`, `stand` (`Abstractions/Spur/Spur.cs`, geschrieben in
 `Infrastructure/Persistence/SpurHeader.cs`). Die Konsumenten setzen sie per `Spur.Von(…)` um ihren Ausgang; der `CommandEmitter` legt Ursache
 und Wirker in den Command-Envelope, das Ziel-Aggregat schreibt mit `wirker = decide:<Aggregat>/<Command>` und dem Absender als `ueber`:
-- **Reaktion:** `HandlerOutputRouter` — Ursache = auslösendes Event (`Stream:Version`), Wirker `reaktion:<Typ>`.
-- **Prozess / Fluss:** `ProzessManager.FeuereAsync`/`BeauftrageAsync` — Ursache = jüngster echter Match-Token, Wirker `prozess:<P>#<Regel>`
-  bzw. `fluss:<P>#<Knoten>` (`ProzessRegeln.Wirker`).
-- **Funktion:** die Spur reist im `AuftragAnbieten`; `FunktionsAusfuehrer` schreibt das Ergebnis mit `funktion:<F>`, der Absender steht als
-  `ueber`.
-- **Funktion als Baustein:** Ursache = der Eingang, Wirker `funktion:<F>`; der Akteur der Kette reist mit.
+- **Funktion:** Ursache = der Eingang (`Stream:Version`), Wirker `funktion:<F>`; der Akteur der Kette reist mit. Festgehaltene Ergebnis-Events
+  stehen mit derselben Spur im Ausgabe-Stream.
 - **Uhr:** Ursache = das Frist-Event, Wirker `uhr` (ohne Karte).
 - **Quelle:** `QuellEingang` schreibt mit `quelle:<Typ>` und ohne Ursache (Wurzel).
+- **Akteur:** ein Command von draußen trägt `ueber = akteur:<Akteur>`.
 - **Projektion** schreibt nie ins Log; `projektion:<Typ>` ist nur Karten-Id.
 
-Format, Lesen und Ansichten: `docs/konzept-werkbank.md` §7.
+Das Format steht an einer Stelle (`Abstractions/Spur/WirkerId.cs`), den Weg eines Eintrags über die Karten rechnet `SpurWeg`.
 
-## 4.9 Offen
+## 4.10 Offen
 
-Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): Testlücke T-1,
-Handle-Pipeline/Trigger-Welt und doppelte DSL W11-1, Zeitlimits über den Backstop W11-2, Marking/Kompensation/
-`KlärungNötig` P2-5, hartkodierte Intervalle P2-8, reflektive Serialisierung (Marking-Store, Snapshot-Kopie) W10-2, Projektlage W2-1.
+Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): Hinweise als Eingang einer Funktion (FB-1, Phase 6), eigener Wecker am
+Flush (Phase 6), Quell-Nachricht vom Client über gRPC (Phase 7), Kreise Funktion ↔ Aggregat (R6), hartkodierte Intervalle P2-8, reflektive
+Snapshot-Kopie W10-2, Projektlage W2-1.

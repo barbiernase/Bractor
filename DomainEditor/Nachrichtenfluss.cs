@@ -1,5 +1,3 @@
-using Abstractions;
-
 namespace DomainEditor;
 
 /// <summary>Ein Knoten des Nachrichtenflusses: ein Baustein (Art aus <see cref="Grammatik"/>) oder eine Nachricht (Art „nachricht").</summary>
@@ -13,18 +11,19 @@ public sealed record FlussKnoten(string Id, string Art, string Name, string? Nam
 public sealed record FlussKante(string Von, string Nach, string Nachricht, string Sorte, string? Handle = null);
 
 /// <summary>
-/// Der NACHRICHTENFLUSS des Modells — die Grundlage, auf der die Grammatik geprüft und die Modul-Schnittstellen abgeleitet werden.
-/// Nur Signatur-Fakten: Decide-OneOf, Apply-Eingang, Prozess-Regeln, Handle-Eingang/-Ausgänge/-Fähigkeiten, Ingress-Bindungen.
-/// Bausteine: <c>agg:</c> Aggregat, <c>saga:</c> Prozess, <c>kon:</c> Projektion/Reaktion, <c>rdr:</c> Reader, <c>pl:</c> Pipeline,
-/// <c>sto:</c> Store, <c>akt:</c> Akteur, <c>aussen</c> Außenwelt (unbekannter Client/Ingress). Nachrichten: <c>msg:</c> Record-Name, <c>faeh:</c> Fähigkeit.
+/// Der NACHRICHTENFLUSS des Modells — die Grundlage, auf der die Modul-Schnittstellen und die Akteur-Anteile abgeleitet werden.
+/// Nur Signatur-Fakten: Decide-OneOf (mit Fristen), Apply-Eingang, je <c>Auf</c> einer Funktion Eingang/Ausgaben/Fähigkeiten,
+/// Handle-Eingang/-Ausgänge/-Fähigkeiten der Leseseite, Befugnisse der Akteure.
+/// Bausteine: <c>agg:</c> Aggregat, <c>fn:</c> Funktion, <c>kon:</c> Projektion, <c>rdr:</c> Reader, <c>sto:</c> Store, <c>akt:</c> Akteur,
+/// <c>aussen</c> Außenwelt (unbekannter Client oder Treiber). Nachrichten: <c>msg:</c> Record-Name, <c>faeh:</c> Fähigkeit.
 /// </summary>
-public sealed class Fluss
+public sealed class Nachrichtenfluss
 {
     public IReadOnlyList<FlussKnoten> Knoten { get; }
     public IReadOnlyList<FlussKante> Kanten { get; }
     private readonly Dictionary<string, FlussKnoten> _knoten;
 
-    private Fluss(Dictionary<string, FlussKnoten> knoten, List<FlussKante> kanten)
+    private Nachrichtenfluss(Dictionary<string, FlussKnoten> knoten, List<FlussKante> kanten)
     {
         _knoten = knoten;
         Knoten = knoten.Values.ToList();
@@ -36,12 +35,10 @@ public sealed class Fluss
     public IEnumerable<FlussKante> Ein(string id) => Kanten.Where(k => k.Nach == id);
 
     public const string AussenId = "aussen";
-    private static readonly string SelbstName = typeof(Selbst<>).Name.Split('`')[0];
-    private static readonly string FristName = typeof(FristPlanung<>).Name.Split('`')[0];
-    private static readonly string StartName = nameof(PipelineGestartet);
+    private static readonly string FristName = typeof(Abstractions.Frist<>).Name.Split('`')[0];
 
     /// <summary>Den Nachrichtenfluss aus dem Modell ableiten.</summary>
-    public static Fluss Aus(EditorModell m)
+    public static Nachrichtenfluss Aus(EditorModell m)
     {
         var knoten = new Dictionary<string, FlussKnoten>(StringComparer.Ordinal);
         var kanten = new List<FlussKante>();
@@ -76,66 +73,34 @@ public sealed class Fluss
         // Jede Nachricht ist ein Knoten — auch unverdrahtet (eine skizzierte Schnittstelle: offener Port).
         foreach (var r in m.Records) N(r.Name, null, null);
 
-        // Aggregat: Command → Decide → Events; Event → Apply.
+        // Aggregat: Command → Decide → Events (eine Frist fließt als Sorte Frist zum Command an dasselbe Aggregat); Event → Apply.
         foreach (var a in m.Aggregate) B("agg", Grammatik.Aggregat, a.Name, a.Namespace);
         foreach (var d in m.Decider.Where(d => d.Aggregat.Length > 0))
         {
             var agg = B("agg", Grammatik.Aggregat, d.Aggregat, aggNs.GetValueOrDefault(d.Aggregat));
             K(N(d.Command, null, null), agg, d.Command);
-            foreach (var e in d.Ergibt) K(agg, N(e.Event, null, null), d.Command);
+            foreach (var e in d.Ergibt)
+                if (Generisch(e.Event) is ({ } huelle, { } cmd) && huelle == FristName) K(agg, N(cmd, null, null), d.Command, Grammatik.Frist);
+                else K(agg, N(e.Event, null, null), d.Command);
         }
         foreach (var ap in m.Applier.Where(a => a.Aggregat.Length > 0))
             K(N(ap.Event, null, null), B("agg", Grammatik.Aggregat, ap.Aggregat, aggNs.GetValueOrDefault(ap.Aggregat)), ap.Event);
 
-        // Katalog-Funktion: Auftrag → Funktion → Ergebnis-Events (nur die Signatur).
-        var auftragVon = new Dictionary<string, string>(StringComparer.Ordinal);
-        foreach (var f in m.Funktionen)
+        // Funktion: je Auf Eingang → Funktion → Ausgaben (nur die Signatur); der Handle ist der Eingang.
+        foreach (var f in m.BausteinFunktionen)
         {
             var fid = B("fn", Grammatik.Funktion, f.Name, f.Namespace);
-            auftragVon.TryAdd(f.Name, f.Auftrag);
-            K(N(f.Auftrag, Grammatik.Auftrag, f.Namespace), fid, f.Auftrag);
-            foreach (var e in f.Ergebnisse) K(fid, N(e, Grammatik.Event, f.Namespace), f.Auftrag);
-        }
-
-        // Prozess: Auslöser + Wenn-Join → Sende/Rufe/Kompensation.
-        foreach (var s in m.Sagas)
-        {
-            var sg = B("saga", Grammatik.Prozess, s.Name, s.Namespace);
-            K(N(s.TriggerEvent, null, null), sg);
-            foreach (var st in s.Schritte)
+            foreach (var e in f.Eingaenge)
             {
-                foreach (var w in st.Wenn) K(N(w, null, null), sg);
-                if (st.SammelEvent is { } se) K(N(se, null, null), sg);
-                if (!string.IsNullOrWhiteSpace(st.Rufe))
-                    K(sg, N(auftragVon.GetValueOrDefault(st.Rufe!) ?? st.Rufe!, Grammatik.Auftrag, s.Namespace));
-                else K(sg, N(st.Sende, null, null));
-                if (st.Kompensation is { } ko) K(sg, N(ko, null, null));
-            }
-        }
-
-        // Pipeline als Fluss (§14): Quell-Nachricht und verdrahtete Fälle (Ergebnisse, Decide-Events) hinein; Aufträge und
-        //   Commands hinaus. Die Drähte zwischen den Knoten bleiben im Baustein (sein Inneres), die Nachrichten sind die Kanten.
-        foreach (var f in m.Fluesse)
-        {
-            var fl = B("fl", Grammatik.Fluss, f.Name, f.Namespace);
-            foreach (var k in f.Knoten)
-            {
-                if (k.Art is FlussArt.Quelle or FlussArt.Auf) K(N(k.Typ, null, null), fl);
-                // Warten: die erwarteten Events kommen (aus dem Strom eines Aggregats) in den Fluss hinein.
-                else if (k.Art == FlussArt.Warte) foreach (var w in k.WarteAuf) K(N(w, Grammatik.Event, null), fl);
-                else if (k.Art == FlussArt.Funktion)
-                    K(fl, N(auftragVon.GetValueOrDefault(k.Typ) ?? k.Typ, Grammatik.Auftrag, f.Namespace));
-                else if (k.Art == FlussArt.Command) K(fl, N(k.Typ, null, null));
-                foreach (var e in k.Eingaenge)
-                    foreach (var d in e.Draehte.Where(d => d.Fall != null && d.Port == FlussPort.Fall))
-                        K(N(d.Fall!, null, null), fl);
+                K(N(e.Eingang, e.Hinweis ? Grammatik.Transient : Grammatik.Event, f.Namespace), fid, e.Eingang);
+                foreach (var a in e.Ausgaben) K(fid, N(a, null, null), e.Eingang);
             }
         }
 
         var lesen = m.Lesen;
         if (lesen != null)
         {
-            // Store → Fähigkeit (der Store stellt sie bereit); Fähigkeit → Handle (der Handle darf sie).
+            // Store → Fähigkeit (der Store stellt sie bereit); Fähigkeit → Handle bzw. Funktion (sie darf sie).
             var faehVon = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (var st in lesen.Stores)
             {
@@ -152,8 +117,7 @@ public sealed class Fluss
 
             foreach (var k in lesen.Konsumenten)
             {
-                var istReaktion = k.Handles.Any(h => h.Ausgaenge.Any(a => recs.TryGetValue(a, out var r) && r.Kind == RecordArt.Command));
-                var kid = B("kon", istReaktion ? Grammatik.Reaktion : Grammatik.Projektion, k.Name, k.Namespace);
+                var kid = B("kon", Grammatik.Projektion, k.Name, k.Namespace);
                 foreach (var h in k.Handles)
                 {
                     K(N(h.Eingang, Grammatik.Event, k.Namespace), kid, h.Eingang);
@@ -171,51 +135,32 @@ public sealed class Fluss
                     foreach (var p in h.Faehigkeiten) K(F(p), rid, h.Eingang);
                 }
             }
-            // Katalog-Funktion mit Lese-Fähigkeit: Fähigkeit → Funktion (sie liest je Aufruf).
-            foreach (var f in m.Funktionen)
-                foreach (var p in f.Faehigkeiten) K(F(p), "fn:" + f.Name, f.Auftrag);
-            foreach (var p in lesen.Pipelines)
-            {
-                var pid = B("pl", Grammatik.Pipeline, p.Name, p.Namespace);
-                foreach (var h in p.Handles)
-                {
-                    // Eingang: Record-Sorte; ohne Record ist es eine Selbst-Nachricht (Code: nested/privat), der Start ist Framework.
-                    if (h.Eingang != StartName) K(N(h.Eingang, Grammatik.Selbst, p.Namespace), pid, h.Eingang);
-                    foreach (var a in h.Ausgaenge)
-                    {
-                        var (huelle, arg) = Generisch(a);
-                        if (huelle == SelbstName) K(pid, N(arg!, Grammatik.Selbst, p.Namespace), h.Eingang);
-                        else if (huelle == FristName) K(pid, N(arg!, null, null), h.Eingang, Grammatik.Frist);
-                        else if (huelle == null) K(pid, N(a, null, null), h.Eingang);
-                        // FristStorno<T>: löscht eine Frist — kein Nachrichtenfluss.
-                    }
-                    foreach (var fp in h.Faehigkeiten) K(F(fp), pid, h.Eingang);
-                }
-            }
+            // Funktion mit Lese-Fähigkeit: Fähigkeit → Funktion (sie liest je Eingang).
+            foreach (var f in m.BausteinFunktionen)
+                foreach (var e in f.Eingaenge)
+                    foreach (var p in e.Faehigkeiten) K(F(p), "fn:" + f.Name, e.Eingang);
         }
 
-        // Akteure: Akteur → was er darf (IDarf<T>). Sie ersetzen für diese Nachrichten die anonyme Außenwelt.
-        //   Vertrag (docs/konzept-akteure.md §3): Event → Akteur → Commands, Handle = das Event (eine Zusage draußen, wie ein Handle drinnen).
+        // Akteure: Akteur → was er darf (IDarf<T>). Sie ersetzen für diese Nachrichten die anonyme Außenwelt. Darf er eine Funktion rechnen
+        //   (IDarf<F>, F eine Schnittstelle), gibt er ihre Ausgaben hinein — im Namen der Funktion, deren Eingang der Handle ist.
+        var funktionen = m.BausteinFunktionen.GroupBy(f => f.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         foreach (var a in m.Akteure)
         {
             var aid = B("akt", Grammatik.Akteur, a.Name, a.Namespace);
-            foreach (var d in a.Darf) K(aid, N(d, null, null));
-            foreach (var r in a.Vertrag)
-            {
-                K(N(r.Eingang, Grammatik.Event, a.Namespace), aid, r.Eingang);
-                foreach (var aus in r.Ausgaenge) K(aid, N(aus, null, null), r.Eingang);
-            }
+            foreach (var d in a.Darf)
+                if (funktionen.TryGetValue(d, out var f))
+                    foreach (var e in f.Eingaenge)
+                        foreach (var aus in e.Ausgaben) K(aid, N(aus, null, null), e.Eingang);
+                else K(aid, N(d, null, null));
         }
 
-        // Außenwelt: Commands/Queries ohne internen Erzeuger (Client), Trigger mit Ingress-Bindung oder ohne Erzeuger.
-        var ingress = new HashSet<string>((m.Ingress ?? []).Select(i => i.Trigger), StringComparer.Ordinal);
+        // Außenwelt: Commands/Queries ohne internen Erzeuger (Client), Quell-Nachrichten (Treiber oder Client).
         foreach (var n in knoten.Values.Where(n => n.Art == "nachricht").ToList())
         {
             var erzeugt = kanten.Any(k => k.Nach == n.Id);
             var aussen = n.Sorte switch
             {
                 Grammatik.Command or Grammatik.Query => !erzeugt,
-                Grammatik.Trigger => !erzeugt || ingress.Contains(n.Name),
                 // Eine Quell-Nachricht kommt immer von außen: vom Treiber oder vom Webhook der Umgebung (Quellen:<Typ>, konzept-werkbank §12.3 E12).
                 Grammatik.Quelle => true,
                 _ => false,
@@ -224,7 +169,7 @@ public sealed class Fluss
             knoten.TryAdd(AussenId, new FlussKnoten(AussenId, Grammatik.Aussenwelt, "Außenwelt", null));
             K(AussenId, n.Id);
         }
-        return new Fluss(knoten, kanten);
+        return new Nachrichtenfluss(knoten, kanten);
     }
 
     /// <summary><c>Hülle&lt;Arg&gt;</c> → (Hülle, Arg); kein generischer Typ → (null, null).</summary>

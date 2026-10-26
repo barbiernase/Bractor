@@ -2,15 +2,12 @@ using Infrastructure.Einblick;
 using Infrastructure.Eingang;
 using Abstractions;
 using Infrastructure.Akteure;
-using Infrastructure.Deadlines;
 using Infrastructure.Dienste;
 using Infrastructure.Extensions;
 using Infrastructure.Funktionen;
 using Infrastructure.GrpcClient;
 using Infrastructure.Monitoring;
 using Infrastructure.Persistence;
-using Infrastructure.Pipeline;
-using Infrastructure.Prozess;
 using Infrastructure.Quellen;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -21,8 +18,8 @@ using Infrastructure.Komposition;
 namespace Infrastructure.Umgebung;
 
 /// <summary>
-/// Der Host in einer Zeile (docs/konzept-werkbank.md §4.2): WAS existiert, liefern die generierten Tabellen (Aggregate, Pull-Pfade,
-/// Prozesse/Flüsse, Funktionen, Quellen, Fristen, Akteur-Rechte); WAS aktiv ist und mit welchen Werten, sagt die Umgebung. Alle
+/// Der Host in einer Zeile (docs/konzept-werkbank.md §4.2): WAS existiert, liefern die generierten Tabellen (Aggregate, Projektionen,
+/// Funktionen, Quellen, Uhr, Akteur-Rechte); WAS aktiv ist und mit welchen Werten, sagt die Umgebung. Alle
 /// Implementierungen sind einkompiliert — ein Umgebungswechsel ist nie ein Code-Wechsel.
 /// </summary>
 public static class CqrsUmgebungExtensions
@@ -102,11 +99,7 @@ public static class CqrsUmgebungExtensions
         // Passt die Leseseite zum Code (konzept-werkbank §12.3 E9)? Vor dem Pull-Pfad (Hosted Services starten in Registrierungs-Reihenfolge).
         if (u.Cluster.Rolle != KnotenRolle.Mitglied) s.AddHostedService<Infrastructure.Projections.ProjektionsStandDienst>();
         Anwendung.Aktuell.RegistrierePullPfade(s);
-        s.AddGeneratedProzesse();
-        Anwendung.Pipelines.RegisterAllPipelines(s);
-        Anwendung.Pipelines.AddGeneratedPipelineEventPulls(s);
         s.AddBackendMonitoring();
-        s.AddDeadlines(Anwendung.Pipelines.BaueFrist);
         s.AddAkteure(builder.Configuration.GetSection(UmgebungsAbschnitte.Identitaeten));
         s.AddQuellen(builder.Configuration);
         s.BindeFunktionen(u.Funktionen);

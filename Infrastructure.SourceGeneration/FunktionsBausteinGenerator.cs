@@ -149,7 +149,7 @@ namespace Infrastructure.SourceGeneration
             {
                 var f = fs[i];
                 sb.AppendLine();
-                sb.AppendLine($"        private static IAsyncEnumerable<IPipelineOutput> Rufe{i}(object o, IEvent eingang, Herkunft h, IFaehigkeiten? b, CancellationToken ct)");
+                sb.AppendLine($"        private static IAsyncEnumerable<IAusgabe> Rufe{i}(object o, IEvent eingang, Herkunft h, IFaehigkeiten? b, CancellationToken ct)");
                 sb.AppendLine("        {");
                 sb.AppendLine($"            var f = ({T(f.Typ)})o;");
                 sb.AppendLine("            switch (eingang)");
@@ -176,7 +176,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine("        }");
                 sb.AppendLine();
                 sb.AppendLine("        /// <summary>Seiten-Form (aus der Einzel-Form gebaut): die Eingänge einer Seite nacheinander, die Ausgaben mit dem Index ihres Eingangs.</summary>");
-                sb.AppendLine($"        private static async IAsyncEnumerable<(int Index, IPipelineOutput Ausgabe)> Seite{i}(object o, IReadOnlyList<(IEvent Eingang, Herkunft Herkunft)> seite,");
+                sb.AppendLine($"        private static async IAsyncEnumerable<(int Index, IAusgabe Ausgabe)> Seite{i}(object o, IReadOnlyList<(IEvent Eingang, Herkunft Herkunft)> seite,");
                 sb.AppendLine("            IFaehigkeiten? b, [EnumeratorCancellation] CancellationToken ct)");
                 sb.AppendLine("        {");
                 sb.AppendLine("            for (var i = 0; i < seite.Count; i++)");

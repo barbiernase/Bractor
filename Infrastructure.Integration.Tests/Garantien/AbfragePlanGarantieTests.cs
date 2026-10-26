@@ -12,12 +12,12 @@ using Xunit;
 namespace Infrastructure.Integration.Tests.Garantien;
 
 /// <summary>
-/// Die häufigen Abfragen bleiben billig, egal wie groß das Log ist (PF-17, PF-20; docs/12 §12.5): gegen echtes Postgres mit 500 000 Events,
-/// 200 000 offenen Vorgängen und 200 000 Fristen liest jede über einen Index nur eine Handvoll Blöcke — mit dem auf die Werte zugeschnittenen Plan
+/// Die häufigen Abfragen bleiben billig, egal wie groß das Log ist (PF-17, PF-20; docs/12 §12.5): gegen echtes Postgres mit 500 000 Events
+/// und 200 000 Fristen liest jede über einen Index nur eine Handvoll Blöcke — mit dem auf die Werte zugeschnittenen Plan
 /// UND mit dem allgemeinen, den Postgres einer vorbereiteten Anweisung nach einigen Aufrufen gibt (Npgsql bereitet sie seit PF-20 vor), mit
 /// veralteter Statistik (die Tabelle wuchs nach dem letzten ANALYZE, wie unter Last) UND mit frischer. Gemessen werden gelesene Blöcke aus
 /// <c>EXPLAIN (ANALYZE, BUFFERS)</c>, nicht Zeit. Die SQL-Texte kommen aus derselben Quelle wie im Store (<see cref="EventStoreAbfragen"/>,
-/// <see cref="MartenProzessOffenIndex.FaelligeAbfrage"/>, <see cref="MartenFristplan.FaelligeAbfrage"/>).
+/// <see cref="Infrastructure.Uhr.FristVerzeichnis.FaelligeAbfrage"/>).
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.Fixture>
@@ -40,8 +40,6 @@ public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.F
         var faelle = new (string Name, string Sql, object[] Werte)[]
         {
             ("Horizont: steht dahinter etwas", $"select {EventStoreAbfragen.Dahinter(S)}", [nah]),
-            ("Poll: geänderte Streams", EventStoreAbfragen.GeaenderteStreams(S, false), [nah, 500]),
-            ("Poll: geänderte Streams, Typen", EventStoreAbfragen.GeaenderteStreams(S, true), [nah, 500, new[] { "posten_reserviert" }]),
             ("Seite einer Partition", EventStoreAbfragen.Events(S, MartenEventStore.MetadatenSpalten(_fx.Store),
                 EventStoreAbfragen.PartitionsBedingung(false), EventStoreAbfragen.PartitionsOrdnung), [nah, 8, 3, Array.Empty<long>(), 500]),
             ("Seite einer Partition, Typen", EventStoreAbfragen.Events(S, MartenEventStore.MetadatenSpalten(_fx.Store),
@@ -49,11 +47,6 @@ public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.F
                 [nah, 8, 3, Array.Empty<long>(), 500, new[] { "posten_reserviert" }]),
             ("Stream ab Version", EventStoreAbfragen.Events(S, MartenEventStore.MetadatenSpalten(_fx.Store), "stream_id = $1 and version >= $2",
                 "order by version"), [stream, 5L]),
-            // Der Prozess-Manager in einem Ziel-Stream mit 100 000 Events Geschichte: ohne Cursor ab dem Beginn des Vorgangs, mit Cursor ab dort.
-            ("Prozess: eigene Events ohne Cursor", EventStoreAbfragen.Korreliert(S, MartenEventStore.MetadatenSpalten(_fx.Store)),
-                [Fixture.Lang, 0L, Fixture.Korrelation, Fixture.Vorgang]),
-            ("Prozess: eigene Events ab Cursor", EventStoreAbfragen.Korreliert(S, MartenEventStore.MetadatenSpalten(_fx.Store)),
-                [Fixture.Lang, (long)(Fixture.LangVorher + Fixture.LangNachher - 10), Fixture.Korrelation, Fixture.Vorgang]),
             // Rückstand in /health, eine Partition noch ohne Checkpoint (Position 0): gezählt wird nur über die ersten Events dahinter.
             ("Rückstand ab Position 0", Infrastructure.Projections.KonsumRueckstand.Abfrage(S, true),
                 [0L, new long[8], 8, Infrastructure.Projections.KonsumRueckstand.ZaehlGrenze, new[] { "posten_reserviert" }]),
@@ -65,41 +58,18 @@ public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.F
     }
 
     [Theory, InlineData(false), InlineData(true)]
-    public async Task Die_Abfragen_des_Offen_Index_lesen_ueber_den_Index(bool frischeStatistik)
+    public async Task Die_Faelligkeits_Abfrage_der_Uhr_liest_ueber_den_Index(bool frischeStatistik)
     {
         await _fx.StatistikAsync(frischeStatistik);
-        await using var s = _fx.Store.QuerySession();
-        var jetzt = Fixture.Jetzt;
-        foreach (var (name, cmd) in new[]
-                 {
-                     ("Backstop: fällige Vorgänge", MartenProzessOffenIndex.FaelligeAbfrage(s, jetzt).ToCommand(FetchType.FetchMany)),
-                     ("Fristplan: fällige Fristen", MartenFristplan.FaelligeAbfrage(s, jetzt).ToCommand(FetchType.FetchMany)),
-                     ("Prozess-Poll: offene einer Seite", MartenProzessOffenIndex.OffeneAusAbfrage(s,
-                         Enumerable.Range(0, 20).Select(_ => Guid.NewGuid()).Append(_fx.EinOffener).ToArray()).ToCommand(FetchType.FetchMany)),
-                 })
-            foreach (var allgemein in new[] { false, true })
-                (await _fx.BloeckeAsync(Positional(cmd), cmd.Parameters.Select(p => p.Value!).ToArray(), allgemein)).Should().BeLessThan(HoechstBloecke,
-                    $"„{name}“ mit {(allgemein ? "allgemeinem" : "zugeschnittenem")} Plan, {(frischeStatistik ? "frischer" : "veralteter")} Statistik");
-    }
-
-    /// <summary>Marten benennt Parameter (<c>:p0</c>); PREPARE braucht die Position (<c>$1</c>).</summary>
-    private static string Positional(NpgsqlCommand cmd)
-    {
-        var namen = cmd.Parameters.Select((p, i) => (p.ParameterName.TrimStart(':', '@'), i + 1)).ToDictionary(x => x.Item1, x => x.Item2);
-        return System.Text.RegularExpressions.Regex.Replace(cmd.CommandText, @"(?<!:)[:@](\w+)\b",
-            m => namen.TryGetValue(m.Groups[1].Value, out var i) ? "$" + i : m.Value);
+        foreach (var allgemein in new[] { false, true })
+            (await _fx.BloeckeAsync(Infrastructure.Uhr.FristVerzeichnis.FaelligeAbfrage(_fx.Store), [100], allgemein)).Should().BeLessThan(HoechstBloecke,
+                $"„Uhr: fällige Fristen“ mit {(allgemein ? "allgemeinem" : "zugeschnittenem")} Plan, {(frischeStatistik ? "frischer" : "veralteter")} Statistik");
     }
 
     public sealed class Fixture : IAsyncLifetime
     {
         public const string Schema = "plan_it";
-        public const int Events = 500_000, Streams = 50_000, Dokumente = 200_000, Faellige = 20;
-        /// <summary>Ein Ziel-Stream mit langer Geschichte: so viele Events vor dem Beginn des Vorgangs, so viele eigene danach.</summary>
-        public const int LangVorher = 100_000, LangNachher = 100;
-        public static readonly Guid Lang = StreamIdAus("lang"), Vorgang = StreamIdAus("vorgang");
-        public const string Korrelation = "K-plan";
-        public Guid EinOffener { get; private set; }
-        public static readonly DateTimeOffset Jetzt = new(2026, 10, 18, 12, 0, 0, TimeSpan.Zero);
+        public const int Events = 500_000, Streams = 50_000, Fristen = 200_000, Faellige = 20;
 
         public IDocumentStore Store { get; } = DocumentStore.For(opts =>
         {
@@ -113,7 +83,7 @@ public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.F
             opts.Events.MetadataConfig.HeadersEnabled = true;
             KonsumSchema.Registriere(opts);
             InboxTabelle.Registriere(opts);
-            FrameworkDokumente.Registriere(opts);
+            Infrastructure.Uhr.FristVerzeichnis.Registriere(opts);
         });
 
         /// <summary>Dieselbe Id wie <c>md5('s' || n)::uuid</c> in Postgres (die Hex-Zeichen in Textreihenfolge).</summary>
@@ -127,51 +97,28 @@ public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.F
         {
             await Store.Advanced.Clean.CompletelyRemoveAllAsync();
             await Store.Storage.ApplyAllConfiguredChangesToDatabaseAsync();
-            foreach (var typ in new[] { typeof(JasperFx.Events.IEvent), typeof(ProzessOffen), typeof(Frist) })
-                await Store.Storage.Database.EnsureStorageExistsAsync(typ);
+            await Store.Storage.Database.EnsureStorageExistsAsync(typeof(JasperFx.Events.IEvent));
+            var fristen = $"{Schema}.{Infrastructure.Uhr.FristVerzeichnis.Tabelle}";
             // Veraltete Statistik wie unter Last: ANALYZE, solange die Tabellen fast leer sind, danach füllen; kein Autovacuum dazwischen.
             await SqlAsync($"""
                 alter table {Schema}.mt_events set (autovacuum_enabled = false);
-                alter table {Schema}.mt_doc_prozessoffen set (autovacuum_enabled = false);
-                alter table {Schema}.mt_doc_frist set (autovacuum_enabled = false);
+                alter table {fristen} set (autovacuum_enabled = false);
                 insert into {Schema}.mt_streams (id, type, version)
                   select md5('s' || g)::uuid, 'posten', {Events / Streams} from generate_series(0, {Streams - 1}) g;
                 insert into {Schema}.mt_events (seq_id, id, stream_id, version, data, type, timestamp, is_archived)
                   select nextval('{Schema}.mt_events_sequence'), md5('e' || g)::uuid, md5('s' || (g % {Streams}))::uuid, g / {Streams} + 1, jsonb_build_object(),
                          case when g % 3 = 0 then 'posten_reserviert' else 'posten_eroeffnet' end, now(), false
                   from generate_series(0, 999) g;
-                analyze {Schema}.mt_events; analyze {Schema}.mt_doc_prozessoffen; analyze {Schema}.mt_doc_frist;
+                analyze {Schema}.mt_events; analyze {fristen};
                 insert into {Schema}.mt_events (seq_id, id, stream_id, version, data, type, timestamp, is_archived)
                   select nextval('{Schema}.mt_events_sequence'), md5('e' || g)::uuid, md5('s' || (g % {Streams}))::uuid, g / {Streams} + 1, jsonb_build_object(),
                          case when g % 3 = 0 then 'posten_reserviert' else 'posten_eroeffnet' end, now(), false
                   from generate_series(1000, {Events - 1}) g;
-                insert into {Schema}.mt_streams (id, type, version) values (md5('lang')::uuid, 'posten', {LangVorher + LangNachher}),
-                  (md5('vorgang')::uuid, 'prozess', 1);
-                insert into {Schema}.mt_events (seq_id, id, stream_id, version, data, type, timestamp, is_archived, correlation_id)
-                  select nextval('{Schema}.mt_events_sequence'), md5('l' || g)::uuid, md5('lang')::uuid, g, jsonb_build_object(), 'posten_reserviert',
-                         now(), false, 'fremd-' || g
-                  from generate_series(1, {LangVorher}) g;
-                insert into {Schema}.mt_events (seq_id, id, stream_id, version, data, type, timestamp, is_archived, correlation_id)
-                  values (nextval('{Schema}.mt_events_sequence'), md5('v1')::uuid, md5('vorgang')::uuid, 1, jsonb_build_object(), 'prozess_gestartet',
-                          now(), false, '{Korrelation}');
-                insert into {Schema}.mt_events (seq_id, id, stream_id, version, data, type, timestamp, is_archived, correlation_id)
-                  select nextval('{Schema}.mt_events_sequence'), md5('l' || g)::uuid, md5('lang')::uuid, g, jsonb_build_object(), 'posten_reserviert',
-                         now(), false, case when g % 10 = 0 then '{Korrelation}' else 'fremd-' || g end
-                  from generate_series({LangVorher + 1}, {LangVorher + LangNachher}) g;
+                insert into {fristen} (stream_id, version, faellig, befehl, daten)
+                  select md5('f' || g)::uuid, 1,
+                         case when g < {Faellige} then now() - g * interval '1 second' else now() + (1 + g % 100) * interval '1 hour' end, 'X', '-'
+                  from generate_series(0, {Fristen - 1}) g;
                 """);
-            // Die Dokumente schreibt Marten selbst (COPY), damit ihr JSON genau so aussieht wie im Betrieb: wenige fällig, die meisten später
-            //   bzw. (Offen-Index) ohne Frist.
-            var offen = Enumerable.Range(0, Dokumente).Select(i => new ProzessOffen
-            {
-                Id = Guid.NewGuid(), ProzessName = "Plan", SeitUtc = Jetzt.AddHours(-1),
-                Frist = i < Faellige ? Jetzt.AddSeconds(-i) : i % 2 == 0 ? Jetzt.AddHours(1) : null,
-            });
-            var offenListe = offen.ToList();
-            EinOffener = offenListe[Dokumente / 2].Id;
-            await Store.BulkInsertDocumentsAsync(offenListe);
-            var fristen = Enumerable.Range(0, Dokumente)
-                .Select(i => new Frist(Guid.NewGuid(), i < Faellige ? Jetzt.AddSeconds(-i) : Jetzt.AddHours(1 + i % 100), Guid.NewGuid(), "plan"));
-            await Store.BulkInsertDocumentsAsync(fristen);
         }
 
         public Task DisposeAsync() { Store.Dispose(); return Task.CompletedTask; }
@@ -183,7 +130,7 @@ public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.F
         {
             if (frisch && !_analysiert)
             {
-                await SqlAsync($"analyze {Schema}.mt_events; analyze {Schema}.mt_doc_prozessoffen; analyze {Schema}.mt_doc_frist;");
+                await SqlAsync($"analyze {Schema}.mt_events; analyze {Schema}.{Infrastructure.Uhr.FristVerzeichnis.Tabelle};");
                 _analysiert = true;
             }
         }

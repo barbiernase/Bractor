@@ -10,16 +10,13 @@ namespace Infrastructure.SourceGeneration;
 /// Regeln, die das GESAMTBILD aller Domänen-Projekte brauchen — Erzeuger und Konsumenten liegen in verschiedenen Projekten (ein Event in
 /// <c>Domain</c>, die Funktion, die es erzeugt, in <c>Domain.Pipeline</c>; eine Query in <c>Domain</c>, ihr Reader in <c>Domain.Projections</c>).
 /// Darum laufen sie in der Laufzeit-Compilation, die alle Domänen-Projekte referenziert, und lesen nur Signaturen aus den Metadaten
-/// (Decide, Handles, Funktionen, Akteure, Verträge, Clients) — Prozess- und Fluss-Rümpfe sind dort nicht sichtbar und werden nicht gebraucht:
-/// beide falten ihren Vorgang im Log (Zustandsschritt), und was sie erzeugen, sind Commands/Aufträge, keine Events (Werkbank P7.4).
+/// (Decide, Handles, Funktionen, Akteure, Clients) — Rümpfe werden nicht gebraucht (R1: der Ausgang steht in der Signatur).
 /// <list type="bullet">
 /// <item>CQRS084 (GR-QUERY) — eine Query beantwortet genau ein Reader.</item>
 /// <item>CQRS085 (GR-MODUL-AUSGANG-OFFEN, UNUSED-EVENT; Warnung) — ein Event, eine Ablehnung oder eine Response, die niemand erzeugt.</item>
 /// <item>CQRS086 (GR-MODUL-EINGANG-OFFEN; Warnung) — ein Command ohne Decider, eine Query ohne Reader.</item>
 /// <item>CQRS087 (GR-GETRAGEN; Warnung) — eine Funktion als Schnittstelle ohne Umsetzung im Host, die kein Client trägt (<c>ITraegt</c>): sie läuft
 ///   nur mit einer Bindung von Hand (R17), sonst ist sie ein Boot-Fehler.</item>
-/// <item>CQRS088 (GR-ZYKLUS; Warnung) — ein Kreis ohne Zustandsschritt: Projektionen/Reaktionen, die sich über transiente Events gegenseitig
-///   wecken (alle übrigen Wege laufen durch ein Aggregat, einen Prozess oder einen Fluss).</item>
 /// </list>
 /// Die Befunde haben keinen Quell-Ort in dieser Compilation (die Typen liegen in den Domänen-Projekten); jede Meldung beginnt deshalb mit dem
 /// einfachen Namen des Typs in Anführungszeichen — daran hängt die Werkbank sie an die Karte.
@@ -27,7 +24,7 @@ namespace Infrastructure.SourceGeneration;
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
 {
-    public const string QueryId = "CQRS084", AusgangOffenId = "CQRS085", EingangOffenId = "CQRS086", GetragenId = "CQRS087", ZyklusId = "CQRS088";
+    public const string QueryId = "CQRS084", AusgangOffenId = "CQRS085", EingangOffenId = "CQRS086", GetragenId = "CQRS087";
 
     private static DiagnosticDescriptor D(string id, string titel, string text, DiagnosticSeverity s) =>
         new(id, titel, text, "CQRS.Gesamtbild", s, isEnabledByDefault: true);
@@ -41,16 +38,14 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor Getragen = D(GetragenId, "Funktion ohne Träger",
         "'{0}': die Funktion hat keine Umsetzung im Host und kein Client trägt sie (ITraegt<{0}>) — sie läuft nur mit einer Bindung von Hand (GR-GETRAGEN)",
         DiagnosticSeverity.Warning);
-    private static readonly DiagnosticDescriptor Zyklus = D(ZyklusId, "Kreis ohne Zustandsschritt",
-        "'{0}': Kreis ohne Aggregat, Prozess oder Fluss über transiente Events: {1} (GR-ZYKLUS)", DiagnosticSeverity.Warning);
 
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Query, AusgangOffen, EingangOffen, Getragen, Zyklus);
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Query, AusgangOffen, EingangOffen, Getragen);
 
     /// <summary>Die Rollen-Marker, deren Implementierung eine Assembly zur Domäne macht (wie die Projektlage des Extractors).</summary>
     private static readonly string[] DomaenenRollen =
     {
         "IState", "IDecider`1", "IApplier`1", "ICommand", "IEvent", "IQuery", "IQueryResponse", "IReadModel", "IWriteStore", "IReadStore",
-        "ISubscriber", "IReader`1", "IPipelineHandler", "IPipelineTrigger", "IProzessDefinition", "IWertobjekt",
+        "ISubscriber", "IReader`1", "IFunktion", "IQuellNachricht", "IWertobjekt",
     };
 
     public override void Initialize(AnalysisContext context)
@@ -66,7 +61,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         if (!Laufzeitprojekt.Ist(c)) return;   // das Gesamtbild sieht nur die Komposition (alle Rollen-Projekte, docs/07)
         INamedTypeSymbol? G(string n) => c.GetTypeByMetadataName("Abstractions." + n);
         var (iEvent, iTransient, iCommand, iQuery, iResponse) = (G("IEvent"), G("ITransientEvent"), G("ICommand"), G("IQuery"), G("IQueryResponse"));
-        var (iDecider, iReader, iSubscriber, iFunktion, iAkteur, iDarf) = (G("IDecider`1"), G("IReader`1"), G("ISubscriber"), G("IFunktion"), G("IAkteur"), G("IDarf`1"));
+        var (iDecider, iReader, iFunktion, iAkteur, iDarf) = (G("IDecider`1"), G("IReader`1"), G("IFunktion"), G("IAkteur"), G("IDarf`1"));
         var (iClient, iSendet, iTraegt, iQuelle) = (G("IClientVertrag"), G("ISendet`1"), G("ITraegt`1"), G("IQuellNachricht"));
         if (iEvent == null || iCommand == null || iDecider == null) return;
         var rollen = DomaenenRollen.Select(G).Where(x => x != null).Select(x => x!).ToList();
@@ -87,7 +82,6 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         var erzeugt = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
         var entschieden = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
         var readerJeQuery = new Dictionary<ITypeSymbol, List<string>>(SymbolEqualityComparer.Default);
-        var konsumenten = new List<(INamedTypeSymbol T, List<ITypeSymbol> Ein, List<ITypeSymbol> Aus)>();
 
         foreach (var t in typen.Where(t => !t.IsAbstract || t.TypeKind == TypeKind.Interface))
         {
@@ -104,13 +98,6 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                     l.Add(t.Name);
                     erzeugt.UnionWith(Faelle(m.ReturnType));
                 }
-            if (t.TypeKind == TypeKind.Class && IstT(t, iSubscriber))
-            {
-                var hs = Methoden(t).Where(m => IstT(m.Parameters[0].Type, iEvent)).ToList();
-                var aus = hs.SelectMany(m => Faelle(m.ReturnType)).ToList();
-                erzeugt.UnionWith(aus);
-                konsumenten.Add((t, hs.Select(m => m.Parameters[0].Type).ToList(), aus));
-            }
             if (t.TypeKind == TypeKind.Interface && iFunktion != null && IstT(t, iFunktion) && !SymbolEqualityComparer.Default.Equals(t, iFunktion))
                 foreach (var m in t.GetMembers().OfType<IMethodSymbol>().Where(m => m.IsAbstract))
                     erzeugt.UnionWith(Faelle(m.ReturnType));
@@ -158,41 +145,6 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
             SymbolEqualityComparer.Default);
         foreach (var f in typen.Where(t => t.TypeKind == TypeKind.Interface && Funktionsform.IstBaustein(t) && !getragen.Contains(t) && !umgesetzt.Contains(t)))
             ctx.ReportDiagnostic(Diagnostic.Create(Getragen, Location.None, f.Name));
-
-        // GR-ZYKLUS: Projektionen/Reaktionen, die sich über transiente Events wecken (starke Zusammenhangskomponenten).
-        var kanten = new Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>>(SymbolEqualityComparer.Default);
-        foreach (var k in konsumenten)
-            kanten[k.T] = konsumenten.Where(z => k.Aus.Any(a => IstT(a, iTransient) && z.Ein.Contains(a, SymbolEqualityComparer.Default))).Select(z => z.T).ToList();
-        foreach (var komp in Komponenten(kanten))
-            ctx.ReportDiagnostic(Diagnostic.Create(Zyklus, Location.None, komp[0].Name, string.Join(" → ", komp.Select(k => k.Name))));
-    }
-
-    /// <summary>Tarjan: Komponenten mit Kreis (mehr als ein Knoten oder Selbst-Schleife), Namen sortiert.</summary>
-    private static List<List<INamedTypeSymbol>> Komponenten(Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>> kanten)
-    {
-        var index = new Dictionary<INamedTypeSymbol, int>(SymbolEqualityComparer.Default);
-        var low = new Dictionary<INamedTypeSymbol, int>(SymbolEqualityComparer.Default);
-        var stapel = new Stack<INamedTypeSymbol>();
-        var auf = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
-        var aus = new List<List<INamedTypeSymbol>>();
-        var i = 0;
-        void Besuche(INamedTypeSymbol v)
-        {
-            index[v] = low[v] = i++;
-            stapel.Push(v); auf.Add(v);
-            foreach (var w in kanten[v])
-                if (!index.ContainsKey(w)) { Besuche(w); low[v] = System.Math.Min(low[v], low[w]); }
-                else if (auf.Contains(w)) low[v] = System.Math.Min(low[v], index[w]);
-            if (low[v] != index[v]) return;
-            var komp = new List<INamedTypeSymbol>();
-            INamedTypeSymbol x;
-            do { x = stapel.Pop(); auf.Remove(x); komp.Add(x); } while (!SymbolEqualityComparer.Default.Equals(x, v));
-            if (komp.Count > 1 || kanten[v].Contains(v, SymbolEqualityComparer.Default))
-                aus.Add(komp.OrderBy(k => k.Name, System.StringComparer.Ordinal).ToList());
-        }
-        foreach (var v in kanten.Keys.OrderBy(k => k.ToDisplayString(), System.StringComparer.Ordinal))
-            if (!index.ContainsKey(v)) Besuche(v);
-        return aus;
     }
 
     private static bool Ist(ITypeSymbol t, INamedTypeSymbol i) =>

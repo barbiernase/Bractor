@@ -11,12 +11,12 @@ namespace Infrastructure.Pruefstand.Phase5;
 /// der Integration bewiesen — Entscheidung „Integration + store-freie Unit-Tests"). Der Marker trägt genau
 /// die Typ-Eigenschaften, an denen die Korrektheit hängt:
 ///
-/// - <see cref="IEvent"/> + <see cref="IProzessIntern"/>: der Prozess-Manager-Fold (<c>FalteAsync</c>)
-///   unterscheidet „Wirkung" (ein Domänen-Event, kein <see cref="IProzessIntern"/> → kompensierbar) von der
-///   ABLEHNUNG (ist <see cref="IProzessIntern"/> → NICHT WirkungDa, aber eigene Achse AbgelehntDa). Genau
-///   dieser Diskriminator (<c>Payload is KommandoAbgelehnt</c> vs. <c>Payload is not IProzessIntern</c>)
+/// - <see cref="IEvent"/> + <see cref="IRahmenEvent"/>: der Prozess-Manager-Fold (<c>FalteAsync</c>)
+///   unterscheidet „Wirkung" (ein Domänen-Event, kein <see cref="IRahmenEvent"/> → kompensierbar) von der
+///   ABLEHNUNG (ist <see cref="IRahmenEvent"/> → NICHT WirkungDa, aber eigene Achse AbgelehntDa). Genau
+///   dieser Diskriminator (<c>Payload is KommandoAbgelehnt</c> vs. <c>Payload is not IRahmenEvent</c>)
 ///   entscheidet, ob der Fold den Marker fälschlich als kompensierbare Wirkung oder korrekt als Fehlschlag
-///   liest. Fiele <see cref="IProzessIntern"/> weg, würde der Applier ihn beim Domänen-Falten anwenden
+///   liest. Fiele <see cref="IRahmenEvent"/> weg, würde der Applier ihn beim Domänen-Falten anwenden
 ///   (Aggregat kaputt) UND der DtoMapper verlangte einen Proto-DTO.
 /// - trägt <c>CommandId</c> (== Vorgang, Fold-Match über CausationId) + <c>Grund</c> (fließt in SchrittGescheitert).
 /// </summary>
@@ -24,12 +24,12 @@ namespace Infrastructure.Pruefstand.Phase5;
 public class AblehnungsMarkeTests
 {
     [Fact]
-    public void KommandoAbgelehnt_ist_IEvent_und_IProzessIntern()
+    public void KommandoAbgelehnt_ist_IEvent_und_IRahmenEvent()
     {
         var marke = new KommandoAbgelehnt(Guid.NewGuid(), "DeckungReichtNicht");
 
         marke.Should().BeAssignableTo<IEvent>("der Marker wird ins Log co-committet");
-        marke.Should().BeAssignableTo<IProzessIntern>(
+        marke.Should().BeAssignableTo<IRahmenEvent>(
             "der Domänen-Fold überspringt ihn (nur Version zählen), der DtoMapper schließt ihn aus, " +
             "und der Prozess-Fold liest ihn als Fehlschlag (NICHT als kompensierbare Wirkung)");
     }

@@ -5,7 +5,7 @@ using DomainEditor;
 
 namespace Werkbank;
 
-/// <summary>Anker eines Python-Rumpfs (Zusage/Kenntnis einer Client-Implementierung): Datei relativ zur Solution, Klasse, Methode.</summary>
+/// <summary>Anker eines Python-Rumpfs (getragene Funktion bzw. Kenntnis einer Client-Implementierung): Datei relativ zur Solution, Klasse, Methode.</summary>
 public sealed record PythonAnker(string Datei, string Klasse, string Methode, string? Signatur);
 
 /// <summary>
@@ -110,37 +110,6 @@ public static class PythonSync
                 if (!trocken) { Directory.CreateDirectory(paketVerz); File.WriteAllText(voll, PythonQuelle.NeueImplementierung(Path.GetFileName(paketVerz), basis, im.Klasse)); }
                 geschrieben.Add($"{im.Datei} (python {im.Klasse} : {basis.Basis}, {basis.Auf.Count} Methode(n))");
             }
-        return (geschrieben, uebersprungen);
-    }
-
-    /// <summary>
-    /// Neue Python-Implementierungen der Katalog-Funktionen anlegen (konzept-werkbank §12.3 E13), wenn die Umgebung eine Funktion EXTERN rechnen lässt
-    /// (<c>Funktionen:&lt;F&gt;:Laufort = Extern</c>) und es noch keine gibt: <c>funktionen/&lt;modul&gt;.py</c> im Worker-Projekt mit einer Klasse, die die
-    /// GENERIERTE Basis erbt (<c>generated/funktionen.py</c>), und <c>rufe</c> als Platzhalter (✎/🤖 füllt ihn). Datei und Klasse nach derselben Regel
-    /// wie die generierte Tabelle des Workers (<see cref="Abstractions.Funktionsvertrag"/>). Fehlt die Basis (noch nicht gebaut): melden statt raten.
-    /// </summary>
-    public static (List<string> Geschrieben, List<string> Uebersprungen) FunktionenAnlegen(EditorModell modell, Abstractions.UmgebungKonfig u, string sln)
-    {
-        var geschrieben = new List<string>(); var uebersprungen = new List<string>();
-        if (modell.Rahmen.PythonPaket is not { Length: > 0 } paketRel) return (geschrieben, uebersprungen);
-        var paketVerz = Voll(paketRel, sln);
-        var generat = Path.Combine(paketVerz, "generated", "funktionen.py");
-        var basen = File.Exists(generat) ? PythonQuelle.FunktionsBasen(File.ReadAllText(generat)) : [];
-        foreach (var f in modell.Funktionen.Where(f => f.Python == null && u.Funktionen.GetValueOrDefault(f.Name)?.Laufort == Abstractions.FunktionsLaufort.Extern))
-        {
-            if (basen.FirstOrDefault(b => b.Funktion == f.Name) is not { } basis)
-            {
-                uebersprungen.Add($"python {f.Name}: keine Basis in {Path.GetRelativePath(sln, generat)} (eine Funktion mit Lese-Fähigkeit läuft nur im Host)");
-                continue;
-            }
-            var datei = Path.Combine(Path.GetDirectoryName(paketVerz)!, Abstractions.Funktionsvertrag.PythonOrdner, Abstractions.Funktionsvertrag.PythonModul(f.Name) + ".py");
-            if (File.Exists(datei)) continue;
-            Directory.CreateDirectory(Path.GetDirectoryName(datei)!);
-            var init = Path.Combine(Path.GetDirectoryName(datei)!, "__init__.py");
-            if (!File.Exists(init)) File.WriteAllText(init, "\"\"\"Die Python-Implementierungen der Katalog-Funktionen (Laufort Extern).\"\"\"\n");
-            File.WriteAllText(datei, PythonQuelle.NeueFunktionsImplementierung(Path.GetFileName(paketVerz), basis, Abstractions.Funktionsvertrag.OhneI(f.Name)));
-            geschrieben.Add($"{Path.GetRelativePath(sln, datei)} (python {Abstractions.Funktionsvertrag.OhneI(f.Name)} : {basis.Basis})");
-        }
         return (geschrieben, uebersprungen);
     }
 

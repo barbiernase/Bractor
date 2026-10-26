@@ -19,15 +19,6 @@ namespace Infrastructure.Integration.Tests;
 /// </summary>
 public class MonitoringHttpTests
 {
-    private sealed class FakeOffenIndex(int anzahl) : IProzessOffenIndex
-    {
-        private readonly List<Guid> _offen = Enumerable.Range(0, anzahl).Select(_ => Guid.NewGuid()).ToList();
-        public Task MarkiereOffenAsync(Guid k, string p, CancellationToken ct) => Task.CompletedTask;
-        public Task MarkiereBeendetAsync(Guid k, CancellationToken ct) => Task.CompletedTask;
-        public Task<IReadOnlyList<Guid>> ListeOffeneAsync(CancellationToken ct)
-            => Task.FromResult<IReadOnlyList<Guid>>(_offen);
-    }
-
     private sealed class FakeDlq(long count) : IDeadLetterReadStore
     {
         public Task<long> CountAsync(CancellationToken ct = default) => Task.FromResult(count);
@@ -39,12 +30,11 @@ public class MonitoringHttpTests
         public Task<bool> ResolveAsync(Guid id, CancellationToken ct = default) => Task.FromResult(false);
     }
 
-    private static async Task<WebApplication> BooteAsync(int offeneProzesse, long dlq)
+    private static async Task<WebApplication> BooteAsync(long dlq)
     {
         var builder = WebApplication.CreateBuilder();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Logging.ClearProviders();
-        builder.Services.AddSingleton<IProzessOffenIndex>(new FakeOffenIndex(offeneProzesse));
         builder.Services.AddSingleton<IDeadLetterReadStore>(new FakeDlq(dlq));
         builder.Services.AddBackendMonitoring();
         var app = builder.Build();
@@ -56,7 +46,7 @@ public class MonitoringHttpTests
     [Fact]
     public async Task Health_ist_Healthy_und_metrics_liefert_die_Zaehler()
     {
-        var app = await BooteAsync(offeneProzesse: 2, dlq: 0);
+        var app = await BooteAsync(dlq: 0);
         try
         {
             using var client = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
@@ -67,8 +57,7 @@ public class MonitoringHttpTests
             doc.RootElement.GetProperty("status").GetString().Should().Be("Healthy");
 
             var metrik = await client.GetFromJsonAsync<BackendMetrik>("/monitoring/metrics");
-            metrik!.OffeneProzesse.Should().Be(2);
-            metrik.DlqEinträge.Should().Be(0);
+            metrik!.DlqEinträge.Should().Be(0);
         }
         finally { await app.StopAsync(); }
     }
@@ -76,7 +65,7 @@ public class MonitoringHttpTests
     [Fact]
     public async Task Nicht_leere_DLQ_meldet_Degraded_und_metrics_zeigt_die_Zahl()
     {
-        var app = await BooteAsync(offeneProzesse: 0, dlq: 3);
+        var app = await BooteAsync(dlq: 3);
         try
         {
             using var client = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };

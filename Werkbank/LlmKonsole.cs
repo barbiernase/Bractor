@@ -17,8 +17,8 @@ namespace Werkbank;
 //  • Jede Runde ist ein NEUER, zustandsloser Aufruf. Reihenfolge stabil → veränderlich:
 //      Anweisung · Graph-Skelett · Slot-Teil · Auftrag · [aktueller Rumpf · Befund/Anpassung]
 //    Nie ein Gesprächsverlauf — nur der letzte Rumpf reist mit.
-//  • Prüfen = Bauen (Werkbank P7.4, konzept-werkbank A.5): Syntax, dann der Kandidat probeweise im warmen Workspace — die Datei mit dem neuen Rumpf bzw.
-//    Lambda, ihr Projekt mit seinen echten Generatoren und Analyzern (CQRS050, CQRS066/067, CQRS073 ff. …); Python über den Parser.
+//  • Prüfen = Bauen (Werkbank P7.4, konzept-werkbank A.5): Syntax, dann der Kandidat probeweise im warmen Workspace — die Datei mit dem neuen Rumpf,
+//    ihr Projekt mit seinen echten Generatoren und Analyzern (CQRS050, CQRS066/067 …); Python über den Parser.
 //    Nur NEUE Fehler gegenüber dem Unveränderten zählen. Nichts wird geschrieben, der Fork wird verworfen.
 //  • Ausführen (Editor, ▶ am 🤖-Knoten): ein GEPRÜFTER Rumpf geht sofort in die echte Datei, danach laufen die Generatoren
 //    (Build des Laufzeit-Projekts). Übernehmen (Konsole bzw. ungeprüfter Vorschlag) schreibt auf Klick. Beides ist eine Rumpf-Geste
@@ -115,55 +115,18 @@ public sealed class LlmKonsole
         Benutze nur Typen und Member, die im Kontext stehen.
         """;
 
-    /// <summary>Die feste Anweisung für einen Fluss-Lambda (docs/konzept-editor-pipelines.md §14.4).</summary>
-    public const string AnweisungFluss = """
-        Du schreibst GENAU EINEN C#-Lambda-Ausdruck eines Pipeline-Flusses: er baut aus den Nachrichten am Draht (seinen Parametern)
-        den Aufruf des Knotens (einen Auftrag bzw. ein Command). Der Kontext besteht aus dem Graph-Skelett und dem Slot-Teil; am Ende
-        stehen Auftrag und ggf. der aktuelle Lambda mit Befund oder Anpassung.
-        Antworte in GENAU einer von zwei Formen, ohne weiteren Text:
-        1) Ein einziger ```csharp-Block mit NUR dem Lambda-Ausdruck — die Parameterliste genau wie in der SIGNATUR, kein Semikolon.
-        2) Eine Zeile: AUSSERHALB: braucht <Art> <Name> — <Grund>
-           wenn der Auftrag mit den Parametern nicht lösbar ist (z. B. ein weiterer Draht, ein neues Feld).
-        Der Lambda ist rein und deterministisch: kein Guid.NewGuid(), keine Uhr, kein I/O. Bevorzuge die Zuordnungsform
-        (param.Feld, Konstanten, new Wertobjekt(…)). Benutze nur Typen und Member, die im Kontext stehen.
-        """;
-
-    /// <summary>Die feste Anweisung für einen Lambda einer Prozess-Regel (Sende/Rufe, Kompensation, Zählung).</summary>
-    public const string AnweisungRegel = """
-        Du schreibst GENAU EINEN C#-Lambda-Ausdruck einer Prozess-Regel: er baut aus dem Event der Regel (seinem Parameter) den Aufruf
-        (einen Command bzw. den Auftrag einer Funktion), die Kompensation oder die erwartete Anzahl. Der Kontext besteht aus dem
-        Graph-Skelett und dem Slot-Teil; am Ende stehen Auftrag und ggf. der aktuelle Lambda mit Befund oder Anpassung.
-        Antworte in GENAU einer von zwei Formen, ohne weiteren Text:
-        1) Ein einziger ```csharp-Block mit NUR dem Lambda-Ausdruck — die Parameterliste genau wie in der SIGNATUR, kein Semikolon.
-        2) Eine Zeile: AUSSERHALB: braucht <Art> <Name> — <Grund>
-           wenn der Auftrag mit dem Event nicht lösbar ist (z. B. ein weiteres Event, ein neues Feld).
-        Der Lambda ist rein und deterministisch: kein Guid.NewGuid(), keine Uhr, kein I/O. Bevorzuge die Zuordnungsform
-        (e.Feld, Konstanten, new Wertobjekt(…)). Benutze nur Typen und Member, die im Kontext stehen.
-        """;
-
-    /// <summary>Die feste Anweisung für eine Zusage/Kenntnis eines Akteurs DRAUSSEN — der Python-Rumpf in der Client-Implementierung.</summary>
+    /// <summary>Die feste Anweisung für eine getragene Funktion bzw. eine Kenntnis eines Clients DRAUSSEN — der Python-Rumpf in der Client-Implementierung.</summary>
     public const string AnweisungPython = """
-        Du schreibst den Rumpf genau EINER Python-Methode `auf_…` einer Client-Implementierung: so antwortet ein Akteur draußen auf ein
-        Event (Zusage) bzw. nimmt es zur Kenntnis. Der Kontext besteht aus dem Graph-Skelett und dem Slot-Teil (Signatur aus der
-        generierten Basis, Ausgabe-Vertrag, Typen, die übrigen Methoden der Klasse); am Ende stehen Auftrag und ggf. der aktuelle Rumpf.
+        Du schreibst den Rumpf genau EINER Python-Methode einer Client-Implementierung: so führt ein Client draußen den Eingang einer
+        getragenen Funktion aus bzw. nimmt ein Event zur Kenntnis. Der Kontext besteht aus dem Graph-Skelett und dem Slot-Teil (Signatur
+        aus der generierten Basis, Ausgabe-Vertrag, Typen, die übrigen Methoden der Klasse); am Ende stehen Auftrag und ggf. der aktuelle Rumpf.
         Antworte in GENAU einer von zwei Formen, ohne weiteren Text:
         1) Ein einziger ```python-Block mit den Anweisungen des Methodenrumpfs — ohne def-Zeile, ohne Einzug der Klasse.
         2) Eine Zeile: AUSSERHALB: braucht <Art> <Name> — <Grund>
            wenn der Auftrag mit dem, was im Rumpf erreichbar ist, nicht lösbar ist (z. B. ein neuer Ausgang im Vertrag).
-        Eine Zusage liefert ihre Commands mit `yield <Command>Dto(...)` — NUR die im Ausgabe-Vertrag genannten. Eine Kenntnis liefert
-        nichts. Benutze nur Namen, die im Kontext stehen (Event-Felder in snake_case wie im DTO, `ctx`, `state`, `self`).
-        """;
-
-    public const string AnweisungPythonFunktion = """
-        Du schreibst den Rumpf genau EINER Python-Methode `rufe` einer Katalog-Funktion (Laufort Extern): ein Auftrag hinein, genau ein
-        Ergebnis heraus. Der Kontext besteht aus dem Graph-Skelett und dem Slot-Teil (Signatur aus der generierten Basis, Ergebnis-Vertrag,
-        Typen, die übrigen Zeilen der Datei); am Ende stehen Auftrag und ggf. der aktuelle Rumpf.
-        Antworte in GENAU einer von zwei Formen, ohne weiteren Text:
-        1) Ein einziger ```python-Block mit den Anweisungen des Methodenrumpfs — ohne def-Zeile, ohne Einzug der Klasse.
-        2) Eine Zeile: AUSSERHALB: braucht <Art> <Name> — <Grund>
-           wenn der Auftrag mit dem, was im Rumpf erreichbar ist, nicht lösbar ist (z. B. ein neues Ergebnis im OneOf).
-        Liefere mit `return <Ergebnis>Dto(...)` genau eines der im Vertrag genannten Ergebnisse. Benutze nur Namen, die im Kontext stehen
-        (Auftrags-Felder in snake_case wie im DTO, `x`, `self.konfig`); fehlende Importe dürfen als `import` im Rumpf stehen.
+        Eine getragene Funktion liefert ihre Ausgaben mit `return <Ausgabe>Dto(...)` bzw. als Strom mit `yield <Ausgabe>Dto(...)` — NUR die
+        im Ausgabe-Vertrag genannten. Eine Kenntnis liefert nichts. Benutze nur Namen, die im Kontext stehen (Felder in snake_case wie
+        im DTO, die Parameter der Signatur, `self`).
         """;
 
     private readonly string _sln, _verz;
@@ -193,20 +156,12 @@ public sealed class LlmKonsole
             ?? slots?.FirstOrDefault(s => s["id"]?.GetValue<string>().StartsWith(id + "@", StringComparison.Ordinal) == true);
     }
 
-    // ── Fluss-Lambda: eigener Anker (Klasse + Anweisung + Lambda), der „Rumpf“ ist der ganze Lambda-Ausdruck ──
-    // Lambda-Slots (Fluss-Knoten und Prozess-Regeln) teilen den Anker: Klasse + Anweisung des Definiere-Lambdas + Lambda-Index.
-    private static bool IstFluss(JsonObject slot) => S(slot, "art") is "fluss" or "saga";
-    private static LambdaAnker LAnker(JsonObject slot) =>
-        new(S(slot, "datei"), S(slot, "klasse"), slot["anweisung"]?.GetValue<int>() ?? -1, slot["lambda"]?.GetValue<int>() ?? -1);
-    // Zusage/Kenntnis eines Akteurs draußen: der Python-Rumpf in der Client-Implementierung (eigener Anker: Datei + Klasse + Methode).
-    private static bool IstPython(JsonObject slot) => S(slot, "art") is "zusage" or "funktionpy";
-    // Der Python-Rumpf einer Katalog-Funktion (Laufort Extern, konzept-werkbank §12.3 E13): `rufe` liefert genau ein Ergebnis per return.
-    private static bool IstPythonFunktion(JsonObject slot) => S(slot, "art") == "funktionpy";
+    // Getragene Funktion bzw. Kenntnis eines Clients draußen: der Python-Rumpf in der Client-Implementierung (eigener Anker: Datei + Klasse + Methode).
+    //   Die Slot-Art heißt im Protokoll mit dem Editor „zusage“.
+    private static bool IstPython(JsonObject slot) => S(slot, "art") == "zusage";
     private static PythonAnker PAnker(JsonObject slot) => new(S(slot, "datei"), S(slot, "klasse"), S(slot, "methode"), SN(slot, "signatur"));
-    private object Lese(JsonObject slot) => IstPython(slot) ? PythonSync.Lese(PAnker(slot), _sln)
-        : IstFluss(slot) ? CodeSync.LeseLambda(LAnker(slot), _sln) : CodeSync.LeseRumpf(Anker(slot), _sln);
-    private string? BasisHash(JsonObject slot) => IstPython(slot) ? PythonSync.RumpfHash(PAnker(slot), _sln)
-        : IstFluss(slot) ? CodeSync.LambdaHash(LAnker(slot), _sln) : CodeSync.RumpfHash(Anker(slot), _sln);
+    private object Lese(JsonObject slot) => IstPython(slot) ? PythonSync.Lese(PAnker(slot), _sln) : CodeSync.LeseRumpf(Anker(slot), _sln);
+    private string? BasisHash(JsonObject slot) => IstPython(slot) ? PythonSync.RumpfHash(PAnker(slot), _sln) : CodeSync.RumpfHash(Anker(slot), _sln);
 
     private static string S(JsonNode? n, string p) => n?[p]?.GetValue<string>() ?? "";
     private static string? SN(JsonNode? n, string p) => n?[p] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
@@ -282,10 +237,10 @@ public sealed class LlmKonsole
             var art = anpassung != null ? "anpassung" : befund != null ? "reparatur" : "erzeugen";
             var uhr = Stopwatch.StartNew();
             LlmAntwort antwort;
-            try { antwort = await anbieter.FrageAsync(IstPythonFunktion(slot) ? AnweisungPythonFunktion : IstPython(slot) ? AnweisungPython : S(slot, "art") == "saga" ? AnweisungRegel : IstFluss(slot) ? AnweisungFluss : Anweisung, prompt, ct); }
+            try { antwort = await anbieter.FrageAsync(IstPython(slot) ? AnweisungPython : Anweisung, prompt, ct); }
             catch (Exception ex) { runden.Add(new { nr, art, fehler = ex.Message + (ex.InnerException != null ? " — " + ex.InnerException.Message : "") }); break; }
             uhr.Stop();
-            var (ergebnis, kandidat, ausserhalb) = IstPython(slot) ? ZerlegePython(antwort.Text) : IstFluss(slot) ? ZerlegeLambda(antwort.Text) : Zerlege(antwort.Text);
+            var (ergebnis, kandidat, ausserhalb) = IstPython(slot) ? ZerlegePython(antwort.Text) : Zerlege(antwort.Text);
             var befunde = kandidat != null ? await PruefeAsync(slot, kandidat, ct) : new List<string>();
             var runde = new
             {
@@ -318,7 +273,7 @@ public sealed class LlmKonsole
         return ("rumpf", Dedent(code), null);
     }
 
-    /// <summary>Antwort → Lambda | AUSSERHALB | unlesbar (ein Codeblock mit genau einem Lambda-Ausdruck).</summary>
+    /// <summary>Antwort → Python-Rumpf | AUSSERHALB | unlesbar (ein Codeblock, dedentet).</summary>
     private static (string Ergebnis, string? Rumpf, string? Ausserhalb) ZerlegePython(string text)
     {
         var t = text.Trim();
@@ -329,49 +284,18 @@ public sealed class LlmKonsole
         return code.Trim().Length == 0 ? ("unlesbar", null, null) : ("rumpf", code, null);
     }
 
-    /// <summary>Python-Rumpf prüfen: der ganze Dateitext MIT dem Kandidaten durch Pythons Parser; eine Zusage ohne Ausgabe darf nichts liefern.</summary>
+    /// <summary>Python-Rumpf prüfen: der ganze Dateitext MIT dem Kandidaten durch Pythons Parser; eine Kenntnis (ohne Ausgabe) darf nichts liefern,
+    /// eine getragene Funktion nur die Ausgaben ihrer Signatur.</summary>
     private List<string> PruefePython(JsonObject slot, string rumpf)
     {
         var (ok, grund, text) = PythonSync.MitRumpf(PAnker(slot), rumpf, null, _sln);
         if (!ok) return [grund];
         var befunde = PythonSync.Pruefe(text!);
         var ausg = slot["ausgaenge"]?.AsArray().Select(x => x!.GetValue<string>()).ToList() ?? [];
-        if (IstPythonFunktion(slot))
-        {
-            if (Regex.IsMatch(rumpf, @"^\s*yield\b", RegexOptions.Multiline)) befunde.Add("Eine Funktion liefert genau EIN Ergebnis per return — kein yield.");
-            foreach (Match r in Regex.Matches(rumpf, @"return\s+(\w+?)Dto\s*\("))
-                if (!ausg.Contains(r.Groups[1].Value)) befunde.Add($"return {r.Groups[1].Value} — kein Ergebnis der Funktion ({string.Join(", ", ausg)}).");
-            return befunde;
-        }
         if (ausg.Count == 0 && Regex.IsMatch(rumpf, @"^\s*yield\b", RegexOptions.Multiline)) befunde.Add("Kenntnis (ohne Ausgabe-Vertrag) darf nichts liefern — kein yield.");
-        foreach (Match y in Regex.Matches(rumpf, @"yield\s+(\w+?)Dto\s*\("))
-            if (!ausg.Contains(y.Groups[1].Value)) befunde.Add($"yield {y.Groups[1].Value} — nicht im Ausgabe-Vertrag ({(ausg.Count == 0 ? "leer" : string.Join(", ", ausg))}).");
+        foreach (Match y in Regex.Matches(rumpf, @"(yield|return)\s+(\w+?)Dto\s*\("))
+            if (!ausg.Contains(y.Groups[2].Value)) befunde.Add($"{y.Groups[1].Value} {y.Groups[2].Value} — nicht im Ausgabe-Vertrag ({(ausg.Count == 0 ? "leer" : string.Join(", ", ausg))}).");
         return befunde;
-    }
-
-    private static (string Ergebnis, string? Rumpf, string? Ausserhalb) ZerlegeLambda(string text)
-    {
-        var t = text.Trim();
-        var aus = Regex.Match(t, @"^AUSSERHALB:.*$", RegexOptions.Multiline);
-        var block = Regex.Match(t, @"```(?:csharp|cs|c#)?\s*\n(.*?)```", RegexOptions.Singleline);
-        if (!block.Success && aus.Success) return ("ausserhalb", null, aus.Value.Trim());
-        var code = (block.Success ? block.Groups[1].Value : t).Replace("\r\n", "\n").Trim().TrimEnd(';').Trim();
-        return code.Length == 0 ? ("unlesbar", null, null) : ("rumpf", code, null);
-    }
-
-    /// <summary>
-    /// Fluss-Lambda bzw. Regel-Lambda prüfen: ein Lambda-Ausdruck mit derselben Stelligkeit; dann die Datei mit dem Kandidaten an seinem Ort
-    /// (dieselbe Einsetzung wie beim Übernehmen) probeweise im warmen Workspace bauen.
-    /// </summary>
-    private async Task<List<string>> PruefeLambdaAsync(JsonObject slot, string ausdruck, CancellationToken ct)
-    {
-        if (SyntaxFactory.ParseExpression(ausdruck) is not LambdaExpressionSyntax neu || neu.GetDiagnostics().Any(d => d.Severity == DiagnosticSeverity.Error))
-            return new List<string> { "Kein einzelner Lambda-Ausdruck (Syntax)." };
-        var aktuell = JsonSerializer.SerializeToNode(CodeSync.LeseLambda(LAnker(slot), _sln))?["body"]?.GetValue<string>();
-        if (aktuell != null && SyntaxFactory.ParseExpression(aktuell) is LambdaExpressionSyntax alt && Stelligkeit(alt) != Stelligkeit(neu))
-            return new List<string> { $"Der Lambda hat {Stelligkeit(neu)} Parameter, der Knoten liefert {Stelligkeit(alt)} (Drähte)." };
-        var (ok, grund, pfad, text) = MitKandidat(slot, ausdruck);
-        return ok ? (await _arbeit.PruefeProbeweiseAsync(pfad!, text!, ct)).ToList() : new List<string> { grund };
     }
 
     /// <summary>
@@ -380,26 +304,18 @@ public sealed class LlmKonsole
     /// </summary>
     private (bool Ok, string Grund, string? Pfad, string? Text) MitKandidat(JsonObject slot, string rumpf)
     {
-        var (ort, grund, _) = IstFluss(slot) ? CodeSync.Ort(LAnker(slot), _sln) : CodeSync.Ort(Anker(slot), _sln);
+        var (ort, grund, _) = CodeSync.Ort(Anker(slot), _sln);
         if (ort is null) return (false, grund, null, null);
         var pfad = Path.GetFullPath(Path.Combine(_sln, ort.Datei));
         try { return (true, "", pfad, GraphExtractor.Rumpf.MitRumpf(File.ReadAllText(pfad), ort, rumpf, null)); }
         catch (InvalidOperationException e) { return (false, e.Message, null, null); }
     }
 
-    private static int Stelligkeit(LambdaExpressionSyntax l) => l switch
-    {
-        SimpleLambdaExpressionSyntax => 1,
-        ParenthesizedLambdaExpressionSyntax p => p.ParameterList.Parameters.Count,
-        _ => -1,
-    };
-
     // ── Prüfen: Syntax, dann probeweise bauen (warmer Workspace) — für jede C#-Methode am Slot; Python über den Parser ──
 
     public async Task<List<string>> PruefeAsync(JsonObject slot, string rumpf, CancellationToken ct = default)
     {
         if (IstPython(slot)) return PruefePython(slot, rumpf);
-        if (IstFluss(slot)) return await PruefeLambdaAsync(slot, rumpf, ct);
         var befunde = SyntaxFactory.ParseStatement("{\n" + rumpf + "\n}").GetDiagnostics()
             .Where(d => d.Severity == DiagnosticSeverity.Error)
             .Select(d => $"Syntax {d.Id} Zeile {d.Location.GetLineSpan().StartLinePosition.Line}: {d.GetMessage()}").ToList();
@@ -472,10 +388,10 @@ public sealed class LlmKonsole
         }
         else
         {
-            var (ort, grund, z) = IstFluss(slot) ? CodeSync.Ort(LAnker(slot), _sln) : CodeSync.Ort(Anker(slot), _sln);
+            var (ort, grund, z) = CodeSync.Ort(Anker(slot), _sln);
             if (ort is null) return new { ok = false, grund };
-            // Die Prompt-Zeile reist im Text; die Einsetzung setzt genau eine (ein Lambda trägt keine).
-            var text = !IstFluss(slot) && !string.IsNullOrWhiteSpace(auftrag)
+            // Die Prompt-Zeile reist im Text; die Einsetzung setzt genau eine.
+            var text = !string.IsNullOrWhiteSpace(auftrag)
                 ? $"{GraphExtractor.Rumpf.PromptMarke} {auftrag.Replace("\r", " ").Replace("\n", " ").Trim()}\n{rumpf}" : rumpf;
             antwort = await _gesten.RumpfAsync(titel, ort, text, null, ct);
             (datei, zeile) = (ort.Datei, z);

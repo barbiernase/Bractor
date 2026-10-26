@@ -26,9 +26,9 @@ public sealed record SchreibBericht(bool Ok, List<string> Geschrieben, List<stri
 ///   • <b>Decider/Applier</b>: fehlt die Datei → voll schreiben (throw-Platzhalter); existiert sie → nur fehlende
 ///     Methoden (Match über den ersten Parametertyp) in die Klasse mit derselben Rolle für dasselbe Aggregat
 ///     (gleicher Basistyp, z. B. <c>IDecider&lt;Konto&gt;</c>) einfügen.
-///   • <b>State/Saga</b>: fehlt → voll schreiben; existiert → unangetastet (dort lebt Handcode).
+///   • <b>State</b>: fehlt → voll schreiben; existiert → unangetastet (dort lebt Handcode).
 ///   • <b>Leseseite</b>: Fähigkeiten/Bündel → fehlende Interfaces + fehlende Fähigkeiten in der Basisliste des Bündels;
-///     Store-Impl → fehlende Methoden (throw-Platzhalter); Projektion/Reaktion/Reader → fehlende Handles. Danach der
+///     Store-Impl → fehlende Methoden (throw-Platzhalter); Projektion/Reader → fehlende Handles. Danach der
 ///     <b>Parameter-Abgleich</b>: je bestehendem Handle werden die Fähigkeits-Parameter (alles hinter dem Kontext, CQRS057)
 ///     auf das Modell gebracht — hinzu/weg, NUR die Parameterliste; der Rumpf bleibt Wort für Wort.
 ///
@@ -41,7 +41,7 @@ public static partial class DateiSchreiber
     /// Schreibt das Modell in die Dateien. <paramref name="trocken"/>: nichts auf Platte — der Bericht sagt, was geschähe.
     /// Reihenfolge: (1) Scaffolder-Dateien anlegen bzw. fehlende Teile additiv einmischen, (2) ABGLEICH der im Editor
     /// geänderten Elemente (Herkunfts-Stempel weicht ab) — nur deren Signatur/Deklaration, Vorhandenes bleibt wörtlich —,
-    /// (3) Fähigkeits-Parameter der Handles, (4) neue Ingress-Bindungen. Was geändert, aber nicht schreibbar ist, meldet der Bericht.
+    /// (3) Fähigkeits-Parameter der Handles. Was geändert, aber nicht schreibbar ist, meldet der Bericht.
     /// </summary>
     public static SchreibBericht Schreibe(EditorModell modell, string slnRoot, bool trocken = false)
     {
@@ -62,7 +62,6 @@ public static partial class DateiSchreiber
         // Neue Handles je Klasse (im Modell ohne Datei) — nur die werden in eine bestehende Klasse eingefügt.
         var lesen = modell.Lesen ?? new Leseseite();
         var neueHandles = lesen.Konsumenten.Select(k => (k.Name, k.Handles)).Concat(lesen.Reader.Select(r => (r.Name, r.Handles)))
-            .Concat(lesen.Pipelines.Select(p => (p.Name, p.Handles)))
             .GroupBy(x => x.Name).ToDictionary(g => g.Key, g => g.SelectMany(x => x.Handles).Where(h => h.Datei == null).Select(h => h.Eingang).ToHashSet(StringComparer.Ordinal));
 
         // Das Modell enthält nur Domänen-Typen (der Extractor filtert Framework-Typen über die Projektlage). Wohin ein Typ
@@ -99,18 +98,17 @@ public static partial class DateiSchreiber
                 DateiArt.Decider or DateiArt.Applier => MethodenMergen(alt, d.Inhalt),
                 DateiArt.Schnittstellen => SchnittstellenMergen(alt, d.Inhalt),
                 DateiArt.StoreImpl => KlassenMethodenMergen(alt, d.Inhalt, _ => true, ImplSchluessel),
-                DateiArt.Konsument or DateiArt.Leser or DateiArt.Pipeline => KlassenMethodenMergen(alt, d.Inhalt,
+                DateiArt.Konsument or DateiArt.Leser => KlassenMethodenMergen(alt, d.Inhalt,
                     m => ErsterTyp(m) is { } e && neueHandles.GetValueOrDefault(KlasseVon(d.Inhalt) ?? "")?.Contains(e) == true, ErsterTyp),
                 _ => null,
             };
-            if (gemischt is null) { if (d.Art != DateiArt.Saga && d.Art != DateiArt.State && d.Art != DateiArt.Fluss) uebersprungen.Add($"{rel} (unangetastet)"); }
+            if (gemischt is null) { if (d.Art != DateiArt.State) uebersprungen.Add($"{rel} (unangetastet)"); }
             else if (gemischt.Value.N > 0) { ws.Setze(rel, gemischt.Value.Neu); ergaenzt.Add($"{rel} (+{gemischt.Value.N})"); }
         }
 
-        var abgleich = new Abgleich(modell, ws, generiert, ergaenzt, uebersprungen);
+        var abgleich = new Abgleich(modell, ws, ergaenzt, uebersprungen);
         abgleich.Alles();
         ParameterAbgleich(modell, ws, ergaenzt, uebersprungen);
-        abgleich.Ingress();
         abgleich.MeldeUnbehandelte();
 
         return new SchreibBericht(true, geschrieben, ergaenzt, uebersprungen) { Dateien = ws.Geaendert.ToList() };
@@ -195,7 +193,7 @@ public static partial class DateiSchreiber
 
     /// <summary>
     /// Verbinden/Lösen im Editor = Fähigkeits-Parameter hinzu/weg. Je bestehendem Handle (Datei aus dem Code) werden die
-    /// Parameter HINTER dem Kontext (CQRS057: 2 bei Projektion/Reader, 1 bei Pipeline) auf das Modell gebracht; ein
+    /// Parameter HINTER dem Kontext (CQRS057: 2 bei Projektion/Reader) auf das Modell gebracht; ein
     /// vorhandener Parameter bleibt wörtlich (Name/Format), ein neuer heißt wie im Modell. Nur die Parameterliste ändert
     /// sich; benutzt der Rumpf einen gelösten Parameter noch, meldet das der anschließende Build.
     /// </summary>
@@ -207,7 +205,6 @@ public static partial class DateiSchreiber
             .GroupBy(x => x.Name).ToDictionary(g => g.Key, g => g.First().Ns, StringComparer.Ordinal);
         var orte = lesen.Konsumenten.SelectMany(k => k.Handles.Select(h => new HandleOrt(k.Name, h, 2)))
             .Concat(lesen.Reader.SelectMany(r => r.Handles.Select(h => new HandleOrt(r.Name, h, 2))))
-            .Concat(lesen.Pipelines.SelectMany(p => p.Handles.Select(h => new HandleOrt(p.Name, h, 1))))
             .Where(o => o.Handle.Datei != null);
 
         foreach (var gruppe in orte.GroupBy(o => o.Handle.Datei!))

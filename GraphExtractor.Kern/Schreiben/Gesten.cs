@@ -37,8 +37,8 @@ public static class KartenSchluessel
     /// <summary>Die Sammlungen, die aus dem Code kommen und von Gesten geändert werden.</summary>
     public static readonly string[] Sammlungen =
     [
-        "records", "enums", "aggregate", "decider", "applier", "sagas", "fluesse", "funktionen", "dienste", "akteure", "clients",
-        "readModels", "stores", "projektionen", "reaktionen", "reader",
+        "records", "enums", "aggregate", "decider", "applier", "dienste", "akteure", "clients",
+        "readModels", "stores", "projektionen", "reader",
     ];
 
     public static string Von(string sammlung, JsonObject k)
@@ -48,7 +48,7 @@ public static class KartenSchluessel
         {
             "decider" => S(k, "aggregat") + "|" + S(k, "command"),
             "applier" => S(k, "aggregat") + "|" + S(k, "event"),
-            "readModels" or "stores" or "projektionen" or "reaktionen" or "reader" => S(k, "name"),
+            "readModels" or "stores" or "projektionen" or "reader" => S(k, "name"),
             _ => S(k, "namespace") + "|" + S(k, "name"),
         };
     }
@@ -97,7 +97,6 @@ public static class Gesten
         var soll = Anwenden(board, delta);
         var vorher = BoardLeseseite.AusBoard(board.ToJsonString());
         var modell = Stempeln(BoardLeseseite.AusBoard(soll.ToJsonString()), vorher);
-        modell = modell with { Fluesse = modell.Fluesse.Select(f => f.Geordnet()).ToList() };
 
         var (geloescht, nicht) = Loeschen(board, soll, delta, ws);
         var bericht = DateiSchreiber.Schreibe(modell, ws);
@@ -118,9 +117,6 @@ public static class Gesten
         var en = Nach(code.Enums, e => e.Namespace + "|" + e.Name);
         var agg = Nach(code.Aggregate, a => a.Namespace + "|" + a.Name);
         var dec = Nach(code.Decider, d => d.Aggregat + "|" + d.Command);
-        var sag = Nach(code.Sagas, s => s.Namespace + "|" + s.Name);
-        var flu = Nach(code.Fluesse, f => f.Namespace + "|" + f.Name);
-        var fkt = Nach(code.Funktionen, f => f.Namespace + "|" + f.Name);
         var dst = Nach(code.Dienste, d => d.Namespace + "|" + d.Name);
         var akt = Nach(code.Akteure, a => a.Namespace + "|" + a.Name);
         var cli = Nach(code.Clients, c => c.Namespace + "|" + c.Name);
@@ -128,7 +124,6 @@ public static class Gesten
         var sto = Nach(lesen.Stores, s => s.Name);
         var kon = Nach(lesen.Konsumenten, k => k.Name);
         var les = Nach(lesen.Reader, r => r.Name);
-        var pip = Nach(lesen.Pipelines, p => p.Name);
         IReadOnlyList<Handle> Handles(IReadOnlyList<Handle> neu, IReadOnlyList<Handle>? alt)
         {
             var a = Nach(alt ?? [], h => h.Eingang);
@@ -142,9 +137,6 @@ public static class Gesten
             Enums = soll.Enums.Select(e => e with { Herkunft = en.GetValueOrDefault(e.Namespace + "|" + e.Name)?.Herkunft }).ToList(),
             Aggregate = soll.Aggregate.Select(a => a with { Herkunft = agg.GetValueOrDefault(a.Namespace + "|" + a.Name)?.Herkunft }).ToList(),
             Decider = soll.Decider.Select(d => d with { Herkunft = dec.GetValueOrDefault(d.Aggregat + "|" + d.Command)?.Herkunft }).ToList(),
-            Sagas = soll.Sagas.Select(s => s with { Herkunft = sag.GetValueOrDefault(s.Namespace + "|" + s.Name)?.Herkunft }).ToList(),
-            Fluesse = soll.Fluesse.Select(f => f with { Herkunft = flu.GetValueOrDefault(f.Namespace + "|" + f.Name)?.Herkunft }).ToList(),
-            Funktionen = soll.Funktionen.Select(f => f with { Herkunft = fkt.GetValueOrDefault(f.Namespace + "|" + f.Name)?.Herkunft }).ToList(),
             Dienste = soll.Dienste.Select(d => d with { Herkunft = dst.GetValueOrDefault(d.Namespace + "|" + d.Name)?.Herkunft }).ToList(),
             Akteure = soll.Akteure.Select(a => a with { Herkunft = akt.GetValueOrDefault(a.Namespace + "|" + a.Name)?.Herkunft }).ToList(),
             Clients = soll.Clients.Select(c => c with { Herkunft = cli.GetValueOrDefault(c.Namespace + "|" + c.Name)?.Herkunft }).ToList(),
@@ -163,10 +155,6 @@ public static class Gesten
                 {
                     Herkunft = les.GetValueOrDefault(r.Name)?.Herkunft, Handles = Handles(r.Handles, les.GetValueOrDefault(r.Name)?.Handles),
                 }).ToList(),
-                Pipelines = l.Pipelines.Select(p => p with
-                {
-                    Herkunft = pip.GetValueOrDefault(p.Name)?.Herkunft, Handles = Handles(p.Handles, pip.GetValueOrDefault(p.Name)?.Handles),
-                }).ToList(),
             },
         };
     }
@@ -176,7 +164,7 @@ public static class Gesten
     private sealed record Stelle(string Datei, int Start, int Ende, string Was);
 
     /// <summary>
-    /// Entfernte Karten und entfernte Handles (Projektion/Reaktion/Reader) an ihrem Ort löschen — samt Doku-Kommentar. Bleibt in einer Datei
+    /// Entfernte Karten und entfernte Handles (Projektion/Reader) an ihrem Ort löschen — samt Doku-Kommentar. Bleibt in einer Datei
     /// kein Typ übrig, entfällt die Datei. Verweise anderswo bleiben stehen: sie sind Compiler-Befunde an ihrer Karte.
     /// </summary>
     private static (List<string> Geloescht, List<string> Nicht) Loeschen(JsonObject board, JsonObject soll, KartenDelta delta, Dateipuffer ws)
@@ -197,7 +185,7 @@ public static class Gesten
             }
 
         // Handles, die an einer weiter bestehenden Klasse wegfallen: ihre Methode.
-        foreach (var (sammlung, feld) in new[] { ("projektionen", "event"), ("reaktionen", "event"), ("reader", "query") })
+        foreach (var (sammlung, feld) in new[] { ("projektionen", "event"), ("reader", "query") })
             foreach (var neu in Alle(soll[sammlung]))
             {
                 var alt = Alle(board[sammlung]).FirstOrDefault(k => KartenSchluessel.Von(sammlung, k) == KartenSchluessel.Von(sammlung, neu));

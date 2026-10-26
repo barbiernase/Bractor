@@ -21,7 +21,7 @@ public class LebenszyklusGarantieTests
     [Fact]
     public async Task Passivierung_und_Reaktivierung_ergeben_denselben_Stand()
     {
-        var kurz = new Passivierung(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+        var kurz = new Passivierung(TimeSpan.FromSeconds(1));
         using var host = Cluster("lebenszyklus", snapshotSchwelle: 10_000,
             dienste: s => s.AddSingleton(kurz));   // die letzte Registrierung gewinnt
         await host.StartAsync();

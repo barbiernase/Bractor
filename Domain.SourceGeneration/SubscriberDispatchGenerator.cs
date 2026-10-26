@@ -9,15 +9,15 @@ namespace Domain.SourceGeneration;
 /// <summary>
 /// Generiert für jede Projektion (ISubscriber):
 /// - SubscribedTypes (statische Liste der Input-Event-Typen)
-/// - ProducedTypes (statische Liste der Output-Event-Typen)
-/// - DispatchAsync (Event-Routing via switch, mit emit-Callback)
+/// - DispatchAsync (Event-Routing via switch)
 /// 
 /// ★ Phase 3: Handle-Signatur erkennt IAggregateEnvelope statt IMessageEnvelope.
 ///   Events haben immer Aggregate-Kontext → Writer-Handler nutzen IAggregateEnvelope.
 ///   Reader-Handler (IMessageEnvelope) werden vom ProjectionReaderDispatchGenerator behandelt.
 ///
 /// Erkennung: Handle-Methoden mit Signatur:
-///   (TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…) → Task | IAsyncEnumerable&lt;T&gt; | IAsyncEnumerable&lt;OneOf&lt;...&gt;&gt;
+///   (TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…) → Task. Eine Projektion gibt nichts aus — ihre Wirkung ist ihr Store
+///   (eine andere Rückgabe meldet CQRS057).
 /// </summary>
 [Generator]
 public class SubscriberDispatchGenerator : IIncrementalGenerator
@@ -66,7 +66,7 @@ public class SubscriberDispatchGenerator : IIncrementalGenerator
             return null;
 
         // Handle-Methoden finden:
-        //   (TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…) → Task | IAsyncEnumerable<T> | IAsyncEnumerable<OneOf<...>>
+        //   (TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…) → Task
         //   Fähigkeit = Interface mit Marker IWriteStore/IReadStore (0…n) — der Dispatch löst sie auf.
         var handleMethods = classSymbol.GetMembers("Handle")
             .OfType<IMethodSymbol>()
@@ -75,7 +75,8 @@ public class SubscriberDispatchGenerator : IIncrementalGenerator
                             m.Parameters[1].Type, aggregateEnvelopeType) &&
                         SymbolEqualityComparer.Default.Equals(
                             m.Parameters[2].Type, projectionWriterType) &&
-                        m.Parameters.Skip(3).All(p => FaehigkeitsTypen.IstFaehigkeit(p.Type, context.SemanticModel.Compilation)))
+                        m.Parameters.Skip(3).All(p => FaehigkeitsTypen.IstFaehigkeit(p.Type, context.SemanticModel.Compilation)) &&
+                        m.ReturnType is INamedTypeSymbol { Name: "Task", IsGenericType: false })
             .ToList();
 
         if (handleMethods.Count == 0)
@@ -88,14 +89,13 @@ public class SubscriberDispatchGenerator : IIncrementalGenerator
         foreach (var method in handleMethods)
         {
             var inputType = method.Parameters[0].Type;
-            var returnType = method.ReturnType;
 
             var inputTypeName = inputType.ToDisplayString();
             var inputNamespace = inputType.ContainingNamespace?.ToDisplayString();
             if (!string.IsNullOrEmpty(inputNamespace))
                 allEventNamespaces.Add(inputNamespace);
 
-            var handlerInfo = AnalyzeReturnType(returnType, inputTypeName, allEventNamespaces);
+            var handlerInfo = new HandlerInfo(inputTypeName);
             handlerInfo.Faehigkeiten.AddRange(FaehigkeitsTypen.Argumente(method, 3));
             handlers.Add(handlerInfo);
         }
@@ -110,53 +110,6 @@ public class SubscriberDispatchGenerator : IIncrementalGenerator
             eventNamespaces: allEventNamespaces.ToList(),
             codeHash: Kodeform.Hash(classSymbol)
         );
-    }
-
-    /// <summary>
-    /// Analysiert den Rückgabetyp einer Handle-Methode und extrahiert die Handler-Kategorie.
-    /// </summary>
-    private static HandlerInfo AnalyzeReturnType(
-        ITypeSymbol returnType, string inputTypeName, HashSet<string> namespaces)
-    {
-        // Task → async, nicht-reaktiv
-        if (returnType.Name == "Task" && returnType is INamedTypeSymbol { IsGenericType: false })
-        {
-            return new HandlerInfo(inputTypeName, HandlerKind.Task, new List<string>());
-        }
-
-        // IAsyncEnumerable<T> oder IAsyncEnumerable<OneOf<T1,T2,...>>
-        if (returnType is INamedTypeSymbol { IsGenericType: true } asyncEnum
-            && asyncEnum.OriginalDefinition.ToDisplayString()
-                .StartsWith("System.Collections.Generic.IAsyncEnumerable"))
-        {
-            var elementType = asyncEnum.TypeArguments[0];
-
-            // IAsyncEnumerable<OneOf<T1, T2, ...>>
-            if (elementType is INamedTypeSymbol { Name: "OneOf", IsGenericType: true } oneOf)
-            {
-                var producedTypes = new List<string>();
-                foreach (var typeArg in oneOf.TypeArguments)
-                {
-                    producedTypes.Add(typeArg.ToDisplayString());
-                    var ns = typeArg.ContainingNamespace?.ToDisplayString();
-                    if (!string.IsNullOrEmpty(ns))
-                        namespaces.Add(ns);
-                }
-                return new HandlerInfo(inputTypeName, HandlerKind.AsyncEnumerableOneOf, producedTypes);
-            }
-
-            // IAsyncEnumerable<T> (einzelner Typ)
-            {
-                var producedTypes = new List<string> { elementType.ToDisplayString() };
-                var ns = elementType.ContainingNamespace?.ToDisplayString();
-                if (!string.IsNullOrEmpty(ns))
-                    namespaces.Add(ns);
-                return new HandlerInfo(inputTypeName, HandlerKind.AsyncEnumerable, producedTypes);
-            }
-        }
-
-        // Fallback: unbekannter Rückgabetyp → behandle wie Task (nicht-reaktiv)
-        return new HandlerInfo(inputTypeName, HandlerKind.Task, new List<string>());
     }
 
     private static void Execute(SourceProductionContext context, SubscriberGeneratorModel model)
@@ -213,42 +166,15 @@ public class SubscriberDispatchGenerator : IIncrementalGenerator
         sb.AppendLine("    };");
         sb.AppendLine();
 
-        // ── ProducedTypes ──
-        var allProducedTypes = model.Handlers
-            .SelectMany(h => h.ProducedTypes)
-            .Distinct()
-            .ToList();
-
-        sb.AppendLine("    /// <summary>");
-        sb.AppendLine("    /// Event-Typen die dieser Subscriber produzieren kann (aus Rückgabetypen extrahiert).");
-        sb.AppendLine("    /// </summary>");
-        if (allProducedTypes.Count == 0)
-        {
-            sb.AppendLine("    public static IReadOnlyList<Type> ProducedTypes { get; } = Array.Empty<Type>();");
-        }
-        else
-        {
-            sb.AppendLine("    public static IReadOnlyList<Type> ProducedTypes { get; } = new[]");
-            sb.AppendLine("    {");
-            foreach (var producedType in allProducedTypes)
-            {
-                var simpleName = GetSimpleTypeName(producedType);
-                sb.AppendLine($"        typeof({simpleName}),");
-            }
-            sb.AppendLine("    };");
-        }
-        sb.AppendLine();
-
         // ── DispatchAsync ──
         // ★ Phase 3: IAggregateEnvelope statt IMessageEnvelope
         sb.AppendLine("    /// <summary>");
         sb.AppendLine("    /// Dispatch an den richtigen Handler basierend auf Payload-Typ.");
-        sb.AppendLine("    /// Task-Handler: await. IAsyncEnumerable-Handler: iterate + emit. OneOf: unwrap + emit.");
+        sb.AppendLine("    /// Jeder Handler schreibt nur in seinen Store (über die Fähigkeiten) — eine Projektion gibt nichts aus.");
         sb.AppendLine("    /// </summary>");
         sb.AppendLine("    public async Task DispatchAsync(");
         sb.AppendLine("        IAggregateEnvelope envelope,");
         sb.AppendLine("        ProjectionWriter writer,");
-        sb.AppendLine("        Func<IPipelineOutput, Task> emit,");
         sb.AppendLine("        IFaehigkeiten faehigkeiten)");
         sb.AppendLine("    {");
         sb.AppendLine("        switch (envelope.Payload)");
@@ -258,33 +184,10 @@ public class SubscriberDispatchGenerator : IIncrementalGenerator
         {
             var simpleName = GetSimpleTypeName(handler.InputTypeName);
 
-            switch (handler.Kind)
-            {
-                case HandlerKind.Task:
-                    sb.AppendLine($"            case {simpleName} e:");
-                    sb.AppendLine($"                await Handle(e, envelope, writer{handler.FaehigkeitsArgumente});");
-                    sb.AppendLine($"                break;");
-                    sb.AppendLine();
-                    break;
-
-                case HandlerKind.AsyncEnumerable:
-                    sb.AppendLine($"            case {simpleName} e:");
-                    sb.AppendLine($"                await foreach (var result in Handle(e, envelope, writer{handler.FaehigkeitsArgumente}))");
-                    sb.AppendLine($"                    await emit(result);");
-                    sb.AppendLine($"                break;");
-                    sb.AppendLine();
-                    break;
-
-                case HandlerKind.AsyncEnumerableOneOf:
-                    // ★ Phase 3: Output-Routing nach Typ — der Adapter/Actor entscheidet
-                    //   anhand des konkreten IMessagePayload (IEvent → publish, ICommand → Reaktion).
-                    sb.AppendLine($"            case {simpleName} e:");
-                    sb.AppendLine($"                await foreach (var oneOf in Handle(e, envelope, writer{handler.FaehigkeitsArgumente}))");
-                    sb.AppendLine($"                    await emit((IPipelineOutput)oneOf.Value);");
-                    sb.AppendLine($"                break;");
-                    sb.AppendLine();
-                    break;
-            }
+            sb.AppendLine($"            case {simpleName} e:");
+            sb.AppendLine($"                await Handle(e, envelope, writer{handler.FaehigkeitsArgumente});");
+            sb.AppendLine($"                break;");
+            sb.AppendLine();
         }
 
         sb.AppendLine("        }");
@@ -306,32 +209,16 @@ public class SubscriberDispatchGenerator : IIncrementalGenerator
 // Modelle
 // ═══════════════════════════════════════════════════════════
 
-internal enum HandlerKind
-{
-    /// <summary>async Task — nicht-reaktiv, produziert keine Events</summary>
-    Task,
-
-    /// <summary>async IAsyncEnumerable&lt;T&gt; — reaktiv, produziert Events vom Typ T</summary>
-    AsyncEnumerable,
-
-    /// <summary>async IAsyncEnumerable&lt;OneOf&lt;T1,T2,...&gt;&gt; — reaktiv, produziert Union-Events</summary>
-    AsyncEnumerableOneOf,
-}
-
 internal class HandlerInfo
 {
     public string InputTypeName { get; }
-    public HandlerKind Kind { get; }
-    public List<string> ProducedTypes { get; }
     /// <summary>Fähigkeits-Parameter (voll qualifiziert) in Signatur-Reihenfolge.</summary>
     public List<string> Faehigkeiten { get; } = new();
     public string FaehigkeitsArgumente => FaehigkeitsTypen.ArgumentListe(Faehigkeiten);
 
-    public HandlerInfo(string inputTypeName, HandlerKind kind, List<string> producedTypes)
+    public HandlerInfo(string inputTypeName)
     {
         InputTypeName = inputTypeName;
-        Kind = kind;
-        ProducedTypes = producedTypes;
     }
 }
 

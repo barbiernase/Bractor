@@ -29,10 +29,9 @@ public static class WireSerializerBootCheck
                 throw new InvalidOperationException(
                     $"[Wire] Top-Level-Nachricht {t.FullName} ist nicht serialisierbar — Wire-Serializer unvollständig.");
 
-        // (b) STJ-Payloads (Commands/Events/Triggers) haben eine JsonTypeInfo im Context.
+        // (b) STJ-Payloads (Commands/Events) haben eine JsonTypeInfo im Context.
         var stjPayloads = Anwendung.Typen.Commands.Values
-            .Concat(Anwendung.Typen.Events.Values)
-            .Concat(Anwendung.Typen.Triggers.Values);
+            .Concat(Anwendung.Typen.Events.Values);
         foreach (var t in stjPayloads)
             if (Anwendung.WireJson.GetTypeInfo(t) is null)
                 throw new InvalidOperationException(

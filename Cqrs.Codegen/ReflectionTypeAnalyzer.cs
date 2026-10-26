@@ -56,8 +56,8 @@ public sealed class ReflectionTypeAnalyzer
         foreach (var type in _allTypes.Values)
         {
             var ifaces = type.GetInterfaces();
-            // IProzessIntern = Maschinerie des Dirigenten (Manager-Log, Fehler-Tokens des Pipeline-Flusses) — proto-frei.
-            if (ifaces.Any(i => i.FullName == "Abstractions.IProzessIntern"))
+            // IRahmenEvent = Event des Rahmens im Aggregat-Stream (Frist gesetzt, Inbox-Marken) — proto-frei.
+            if (ifaces.Any(i => i.FullName == "Abstractions.IRahmenEvent"))
                 continue;
             if (ifaces.Any(i => i.FullName == interfaceFullName))
                 results.Add(BuildTypeNode(type));
@@ -301,14 +301,10 @@ public sealed class ReflectionTypeAnalyzer
         if (interfaces.Contains("Abstractions.ICommand") ||
             interfaces.Contains("Abstractions.ICreationCommand"))
             return DomainType.Command;
-        if (interfaces.Contains("Abstractions.IPipelineTrigger"))
-            return DomainType.Trigger;
         if (interfaces.Contains("Abstractions.IQuery"))
             return DomainType.Query;
         if (interfaces.Contains("Abstractions.IQueryResponse"))
             return DomainType.QueryResponse;
-        if (interfaces.Contains("Abstractions.IAuftrag"))
-            return DomainType.Auftrag;
 
         return DomainType.Object;
     }

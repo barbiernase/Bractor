@@ -27,9 +27,6 @@ public static class GrpcSetupExtensions
         Console.WriteLine("  ✓ ProtoMessageMapper");
 
         // First-Citizen Registries
-        services.AddSingleton<TriggerHandlerRegistry>();
-        Console.WriteLine("  ✓ TriggerHandlerRegistry");
-        
         services.AddSingleton<QueryHandlerRegistry>();
         Console.WriteLine("  ✓ QueryHandlerRegistry");
 
@@ -38,7 +35,6 @@ public static class GrpcSetupExtensions
         // - ProtoMessageMapper
         // - IAggregateDispatcher
         // - ProjectionQueryService
-        // - TriggerHandlerRegistry    (NEU)
         // - QueryHandlerRegistry      (NEU)
         // - BrokerPublisher           (NEU)
         services.AddSingleton<CqrsClientServiceImpl>();

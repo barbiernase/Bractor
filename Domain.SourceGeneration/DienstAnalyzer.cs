@@ -11,7 +11,7 @@ namespace Domain.SourceGeneration;
 /// Die Dienst-Bindung (konzept-werkbank §12.3 E11) im Build — was die generierte Bindung (<c>DienstGenerator</c>, <c>BindeDienste</c>) voraussetzt:
 /// <list type="bullet">
 /// <item>CQRS089 (GR-DIENST) — ein Dienst (<c>IDienst</c>) steht nur im Konstruktor einer Funktions- oder Dienst-Implementierung; als Parameter
-///   eines Handles/Decide, als Feld oder Eigenschaft im Fachcode (Aggregat, Projektion, Reaktion, Reader …) wäre er eine unsichtbare
+///   eines Handles/Decide, als Feld oder Eigenschaft im Fachcode (Aggregat, Projektion, Reader …) wäre er eine unsichtbare
 ///   Abhängigkeit — dort sind es Fähigkeiten als Parameter.</item>
 /// <item>CQRS090 (GR-DIENST-BINDBAR) — der Konstruktor einer Funktions-/Dienst-Implementierung nimmt nur, was die Umgebung binden kann:
 ///   Dienste, Konfig-Records, <c>ILogger&lt;T&gt;</c>.</item>

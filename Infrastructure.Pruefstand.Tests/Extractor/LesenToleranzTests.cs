@@ -13,8 +13,7 @@ namespace Infrastructure.Pruefstand.Extractor;
 
 /// <summary>
 /// Werkbank P7.1 (konzept-werkbank §8.2): der Extractor liest Code MIT Fehlern — nichts verschwindet still, nichts wirft. Ein unaufgelöster Basistyp wird eine
-/// Code-Karte (bzw. ein Befund an der Karte), eine Fluss-Anweisung ohne Knoten ein Befund am Fluss, ein doppelter Name ein Befund statt einer
-/// Ausnahme. Dazu: jede Karte trägt Datei + Spanne. In-Memory-Workspace (kein MSBuild), Vertrag als Metadaten.
+/// Code-Karte (bzw. ein Befund an der Karte), ein doppelter Name ein Befund statt einer Ausnahme. Dazu: jede Karte trägt Datei + Spanne. In-Memory-Workspace (kein MSBuild), Vertrag als Metadaten.
 /// </summary>
 public class LesenToleranzTests
 {
@@ -27,14 +26,9 @@ namespace Probe
     public sealed record DateiDa(string Pfad) : IQuellNachricht { public string Kennung => Pfad; }
     public sealed record Melde(Id<ProbeZiel> AggregateId, string Pfad) : ICommand<ProbeZiel>;
     public partial class ProbeZiel : IState { public int Version { get; set; } public Guid Id { get; set; } }
-    public sealed class ProbeFluss : IPipeline
+    public sealed class ProbeStart : IFunktion
     {
-        public PipelineFluss Fluss => PipelineFluss.Definiere(p =>
-        {
-            var eingang = p.Quelle<DateiDa>();
-            var zahl = 1;
-            eingang.Sende<Melde>(e => new Melde(new(Guid.Empty), e.Pfad));
-        });
+        public Melde Auf(DateiDa e, Herkunft h) => new(h.NeueId<ProbeZiel>(), e.Pfad);
     }
 }
 namespace Probe.A { public interface ILiesZahl : IReadStore { Task<int> LiesAsync(string id); } }
@@ -91,17 +85,6 @@ namespace Probe.B { public interface ILiesZahl : IReadStore { Task<int> LiesAsyn
     }
 
     [Fact]
-    public async Task Fluss_Anweisung_ohne_Knoten_wird_Befund_am_Fluss_und_die_Knoten_bleiben()
-    {
-        var board = await LiesAsync(Probe);
-
-        var fluss = Alle(board, "fluesse").Should().ContainSingle(f => (string?)f["name"] == "ProbeFluss").Subject;
-        Alle(fluss, "knoten").Select(k => (string?)k["art"]).Should().Equal("quelle", "command");
-        Alle(board, "lesebefunde").Should().Contain(b => (string?)b["code"] == "LESEN-FLUSS" && (string?)b["karte"] == "pipeline:ProbeFluss"
-                                                        && ((string?)b["text"])!.Contains("var zahl = 1;") && (int?)b["zeile"] == 15);
-    }
-
-    [Fact]
     public async Task Doppelter_Name_wirft_nicht_sondern_wird_Befund()
     {
         var board = await LiesAsync(Probe);
@@ -118,10 +101,9 @@ namespace Probe.B { public interface ILiesZahl : IReadStore { Task<int> LiesAsyn
         var ort = rec["_ort"]!.AsObject();
         Probe[(int)ort["start"]!..(int)ort["ende"]!].Should().StartWith("public sealed record DateiDa(string Pfad)").And.EndWith("}");
         ((int?)ort["zeile"]).Should().Be(7);
-        // Fluss-Knoten: die Anweisung im Definiere-Lambda.
-        var knoten = Alle(Alle(board, "fluesse").Single(), "knoten");
-        var o = knoten[1]["_ort"]!.AsObject();
-        Probe[(int)o["start"]!..(int)o["ende"]!].Should().Be("eingang.Sende<Melde>(e => new Melde(new(Guid.Empty), e.Pfad));");
+        // Funktion: die Klasse mit ihrem Auf.
+        var o = Alle(board, "bausteinFunktionen").Single()["_ort"]!.AsObject();
+        Probe[(int)o["start"]!..(int)o["ende"]!].Should().StartWith("public sealed class ProbeStart : IFunktion").And.EndWith("}");
     }
 
     private const string MitHilfscode = @"

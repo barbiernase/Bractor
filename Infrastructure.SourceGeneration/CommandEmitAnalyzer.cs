@@ -11,7 +11,7 @@ namespace Infrastructure.SourceGeneration
     /// Auflage A6 (EM-1 <b>erzwungen</b>): der Analyzer macht „genau EIN Emit-Weg" zu einer Build-Regel.
     /// Nach dem Treiber-Fold (P5) gibt es nur noch zwei legitime Stellen, die ein Command senden — als <c>Frage</c> des Boten
     /// (<c>bote.FrageAsync&lt;CommandResult&gt;</c>, Pflicht-Frist) oder roh per <c>cluster.RequestAsync&lt;CommandResult&gt;</c>:
-    ///  • <c>Infrastructure.PubSub.CommandEmitter</c> — das EINE Emit-Primitiv (Reaktion/Prozess/Pipeline).
+    ///  • <c>Infrastructure.PubSub.CommandEmitter</c> — das EINE Emit-Primitiv (Funktionen, Uhr, gRPC-Eingang emittierter Commands).
     ///  • <c>Infrastructure.Aggregate.ActorSystem.ProtoActorAggregateDispatcher</c> — der Client-/OCC-Pfad.
     /// Jeder ANDERE rohe Command-Send umgeht die deterministische CommandId (W1) + den bounded Token (W2)
     /// und bringt einen zweiten Emit-Weg zurück → <b>CQRS020</b> (Build-Fehler).

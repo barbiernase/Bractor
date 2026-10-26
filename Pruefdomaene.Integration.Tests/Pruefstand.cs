@@ -2,9 +2,7 @@ using Abstractions;
 using Infrastructure.Aggregate;
 using Infrastructure.Extensions;
 using Infrastructure.Persistence;
-using Infrastructure.Pipeline;
 using Infrastructure.Projections.Generated;
-using Infrastructure.Prozess;
 using Marten;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -37,14 +35,10 @@ internal static class Pruefstand
             opts.SnapshotThreshold = snapshotSchwelle;
             opts.InboxCache = inboxCache;
         });
-        GeneratedPipelines.RegisterAllPipelines(builder.Services);
         builder.Services.AddGeneratedPullPaths();
-        builder.Services.AddGeneratedProzesse();
         // Die Dienste der Funktionen wie im Host ohne Wahl in der Umgebung: je Dienst die eine Implementierung (Tests ersetzen sie über dienste).
         Infrastructure.Dienste.DienstExtensions.BindeDienste(builder.Services, new Dictionary<string, DienstKonfig>(),
-            new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build().GetSection(Dienstvertrag.KonfigAbschnitt),
-            Infrastructure.Komposition.Anwendung.Dienste.Namen, Infrastructure.Komposition.Anwendung.Dienste.Implementierungen,
-            Infrastructure.Komposition.Anwendung.Dienste.Braucht, Infrastructure.Komposition.Anwendung.Dienste.Konfigs);
+            new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build().GetSection(Dienstvertrag.KonfigAbschnitt));
         dienste?.Invoke(builder.Services);
         return builder.Build();
     }

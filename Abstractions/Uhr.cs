@@ -9,7 +9,7 @@ namespace Abstractions;
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 /// <summary>Nicht-generische Sicht auf eine Frist (<see cref="Frist{TCmd}"/>).</summary>
-public interface IFrist : IPipelineOutput
+public interface IFrist : IAusgabe
 {
     ICommand Befehl { get; }
     TimeSpan Nach { get; }
@@ -26,12 +26,12 @@ public sealed record Frist<TCmd>(TCmd Befehl, TimeSpan Nach) : IFrist where TCmd
 
 /// <summary>
 /// Die Frist im Log (Framework-Event im Stream des Aggregats): der Command (über den generierten, reflexionsfreien Command-Konverter) und die
-/// Dauer ab der Log-Zeit. <see cref="IProzessIntern"/>: der Applier sieht sie nie, die Version zählt sie.
+/// Dauer ab der Log-Zeit. <see cref="IRahmenEvent"/>: der Applier sieht sie nie, die Version zählt sie.
 /// </summary>
-public sealed record FristGesetzt(ICommand Befehl, TimeSpan Nach) : IEvent, IProzessIntern;
+public sealed record FristGesetzt(ICommand Befehl, TimeSpan Nach) : IEvent, IRahmenEvent;
 
 /// <summary>Wie die Ausgabe eines <c>Decide</c> ins Log geht: ein Event bleibt es selbst, eine Frist wird <see cref="FristGesetzt"/>.</summary>
 public static class Entscheidungsausgabe
 {
-    public static IEvent Als(IPipelineOutput ausgabe) => ausgabe is IFrist f ? new FristGesetzt(f.Befehl, f.Nach) : (IEvent)ausgabe;
+    public static IEvent Als(IAusgabe ausgabe) => ausgabe is IFrist f ? new FristGesetzt(f.Befehl, f.Nach) : (IEvent)ausgabe;
 }

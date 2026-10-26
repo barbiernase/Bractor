@@ -33,25 +33,6 @@ public sealed partial class Sicht
     }
 
     // ── Anschluss-Regel (früher compatible() im Editor) ──
-    private JsonObject? FlKnotenById(string id)
-    {
-        foreach (var f in _fluesse) foreach (var k in Alle(f["knoten"])) if (S(k, "_id") == id) return k;
-        return null;
-    }
-    private JsonObject? FlFluss(JsonObject k) => _fluesse.FirstOrDefault(f => Alle(f["knoten"]).Any(x => ReferenceEquals(x, k)));
-    private static bool FlErreicht(JsonObject f, string ziel, string von)
-    {
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        var q = new Stack<string>([von]);
-        while (q.Count > 0)
-        {
-            var x = q.Pop();
-            if (x == ziel) return true;
-            if (!seen.Add(x)) continue;
-            if (FlKnoten(f, x) is { } k) foreach (var v in FlVor(k)) q.Push(v);
-        }
-        return false;
-    }
     private bool IstColl(string ty) => ElementVonTyp(ty).Length > 0;
     private static bool IstGanzzahl(string ty) => Regex.IsMatch(ty.Trim(), @"^(int|long)\??$");
     private static bool Da(JsonObject o, string k) => o[k] is { } n && !(n is JsonValue v && v.TryGetValue<string>(out var s) && s.Length == 0);
@@ -61,27 +42,7 @@ public sealed partial class Sicht
         if (B(a, "anker") || B(b, "anker")) return false;
         if (S(a, "dir") == S(b, "dir")) return false;
         string T(JsonObject x) => S(x, "type");
-        if (T(a) == "kette" || T(b) == "kette")
-        {
-            var o = T(a) == "kette" ? a : b;
-            var i = ReferenceEquals(o, a) ? b : a;
-            return S(o, "dir") == "out" && S(i, "dir") == "in" && (T(i) == "rufe" || (T(i) == "sagaCmd" && Wahr(i["rec"])));
-        }
         if (T(a) != T(b)) return false;
-        if (T(a) is "draht" or "jeEl" or "jeSa")
-        {
-            var o = S(a, "dir") == "out" ? a : b;
-            var i = ReferenceEquals(o, a) ? b : a;
-            var v = FlKnotenById(S(o, "flk"));
-            var z = FlKnotenById(S(i, "flk"));
-            var f = v == null ? null : FlFluss(v);
-            if (v == null || z == null || f == null || !ReferenceEquals(FlFluss(z), f) || ReferenceEquals(v, z) || FlQuelleArt(z)
-                || FlErreicht(f, S(z, "name"), S(v, "name"))) return false;
-            if (T(a) == "draht")
-                return S(z, "art") != "je" || !Alle(z["eingaenge"]).Any()
-                       || Alle(z["eingaenge"]).Any(e => Alle(e["draehte"]).Any(d => S(d, "von") == S(v, "name")));
-            return S(v, "art") == "je" && S(z, "art") != "je";
-        }
         if (T(a) == "darf")
         {
             var o = S(a, "dir") == "out" ? a : b;
@@ -167,8 +128,6 @@ public sealed partial class Sicht
             var b = GrBaustein(o);
             var s = GrNachrichtSorte(irec);
             if (b == null || s == null) return null;
-            foreach (var (k, v) in Eintraege(g["ausgangSorte"] as JsonObject))
-                if (Da(o, k) && o[k] is not null && (string?)v is { } vs) s = vs;
             if (GrErzeugung(b, s) == null)
                 return Verstoss(GrRegelBaustein(b), GrName("bausteine", b) + " erzeugt kein " + GrName("sorten", s) + " ('" + irec + "')");
             return null;

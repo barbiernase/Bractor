@@ -98,7 +98,7 @@ Der gemeinsame Kern `HandleCommandCoreAsync` (das Ziel ist schon beim Empfang ge
    trotzdem **Erfolg** (kein falsches Negativ).
 
 Snapshots (best-effort, ab `Schreibpfad.SnapshotSchwelle` und bei Deaktivierung, Version = Struktur-Hash + Code-Hash von State + Applier)
-sind in [04 §4.7](04-konsum-und-prozess-maschine.md) beschrieben.
+sind in [04 §4.8](04-konsum-und-prozess-maschine.md) beschrieben.
 
 **Passivierung** (PF-5): hört ein Aggregat-Actor `Lebenszyklus.AggregatLeerlaufSekunden` lang nichts (Standard 600), stoppt er sich
 (Rahmen, §3.7; Proto-`ReceiveTimeout`) — nie, solange ein Commit läuft oder Commands warten; beim Stoppen schreibt er seinen Snapshot, die
@@ -161,8 +161,8 @@ Die Marken für Noop und Ablehnung (`KommandoVerarbeitet`/`KommandoAbgelehnt`, `
   mit `nextval` im Insert. Der Standard (`Rich`) las vorher außerhalb der Transaktion je Stream die Version, holte die Sequenzen ab und
   hinterließ bei einem gescheiterten Commit Tombstones (G-7).
 - **Beilagen** (`Abstractions/Beilage.cs`, `BeilagenSchreiber`): Framework-Buchhaltung, die ein Append in derselben Transaktion mitschreibt —
-  `Quittung` (Inbox, unten), `VorgangOffen`/`VorgangBeendet` (Eintrag des Prozess-Manager-Offen-Index, mit `ProzessGestartet` bzw.
-  `ProzessBeendet`, [04 §4.5](04-konsum-und-prozess-maschine.md)). Ein Weg für Einzel-Append und Group-Commit; die Quittungen eines Batches
+  `Quittung` (Inbox, unten), `FristFaellig` (Eintrag im Fälligkeits-Verzeichnis der Uhr, mit `FristGesetzt`,
+  [04 §4.7](04-konsum-und-prozess-maschine.md)), die Kennung einer Quell-Nachricht. Ein Weg für Einzel-Append und Group-Commit; die Quittungen eines Batches
   gehen in eine Anweisung, die Dokumente als Operationen derselben Session.
 - **Inbox** (`InboxTabelle`): Tabelle `cqrs_inbox` im Event-Schema (`command_id` Primärschlüssel, `stream_id`, `abgelehnt`, `zeit` =
   `now()` der schreibenden Transaktion, B-Baum auf `zeit`), ein von Marten verwaltetes Schema-Objekt (`Storage.ExtendedSchemaObjects`).

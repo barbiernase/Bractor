@@ -26,7 +26,7 @@ public class TypisierteIdTests
     public void Das_Ziel_steht_im_Typ_und_die_Huelle_leitet_es_ab()
     {
         var cmd = Command();
-        Anwendung.Pipelines.CommandAggregateTypes[typeof(NimmRangeAuf)].Should().Be("Datensatz", "das Routing liest ICommand<Datensatz>");
+        Anwendung.Routing.CommandToAggregate[typeof(NimmRangeAuf)].Should().Be("Datensatz", "das Routing liest ICommand<Datensatz>");
         ((ICommand)cmd).Ziel.Should().Be(cmd.AggregateId.Wert);
         Huelle(cmd).AggregateId.Should().Be(cmd.AggregateId.Wert, "der Envelope trägt keine zweite Angabe des Ziels");
     }

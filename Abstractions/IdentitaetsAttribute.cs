@@ -16,17 +16,3 @@ public sealed class AggregatNameAttribute : Attribute
     public string Name { get; }
     public AggregatNameAttribute(string name) => Name = name;
 }
-
-/// <summary>
-/// ★ P1c (TG-3): optionaler, EXPLIZITER Name eines Prozesses (<c>IProzessDefinition</c>). Ohne Attribut ist
-/// der Name der Definitions-Klassenname (Default → KEINE Migration). Aus dem Namen leitet der Korrelations-
-/// Router die Korrelation ab (<c>ProzessId.Für</c>), ein Rename ist also migrationswirksam — das Attribut hält
-/// ihn stabil bzw. entkoppelt ihn vom Klassennamen. Zwei Prozesse mit gleichem aufgelöstem Namen meldet der
-/// <c>ProzessRegelnGenerator</c> als Build-Fehler (CQRS012).
-/// </summary>
-[AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-public sealed class ProzessNameAttribute : Attribute
-{
-    public string Name { get; }
-    public ProzessNameAttribute(string name) => Name = name;
-}

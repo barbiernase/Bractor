@@ -22,7 +22,7 @@ namespace Infrastructure.SourceGeneration
     /// Beide Nodes laufen identischen Generat-Code → Diskriminator- und SerializerId-Konsistenz ist garantiert.
     ///
     /// Discovery deckungsgleich mit <c>TypeRegistryGenerator</c>: konkrete Klassen (nicht abstract/static),
-    /// <c>IPipelineSelfMessage</c> ausgeschlossen, Kategorie per <c>AllInterfaces</c>-Enthaltung.
+    /// Kategorie per <c>AllInterfaces</c>-Enthaltung.
     /// </summary>
     [Generator]
     public class WireSerializerGenerator : ISourceGenerator
@@ -39,27 +39,20 @@ namespace Infrastructure.SourceGeneration
             var iEvent = compilation.GetTypeByMetadataName("Abstractions.IEvent");
             if (iWire == null || iCommand == null || iEvent == null)
                 return;
-            var iSelf = compilation.GetTypeByMetadataName("Abstractions.IPipelineSelfMessage");
             var iSignal = compilation.GetTypeByMetadataName("Abstractions.IStateChangeSignal");
-            // Aufträge an Katalog-Funktionen reisen polymorph in AuftragAnbieten/ArbeitZugeteilt (Vermittler, §14.5).
-            var iAuftrag = compilation.GetTypeByMetadataName("Abstractions.IAuftrag");
 
             var all = new List<INamedTypeSymbol>();
             Collect(compilation.GlobalNamespace, all);
 
-            // Top-Level (wire): alle IWireMessage. Konkrete IPipelineTrigger sind über
-            // IPipelineTrigger : IWireMessage automatisch dabei (werden direkt als Cluster-Nachricht gesendet).
+            // Top-Level (wire): alle IWireMessage.
             var wire = new List<INamedTypeSymbol>();
             var commands = new List<INamedTypeSymbol>();
             var events = new List<INamedTypeSymbol>();
             var signals = new List<INamedTypeSymbol>();
-            var auftraege = new List<INamedTypeSymbol>();
 
             foreach (var t in all)
             {
                 var ifaces = t.AllInterfaces;
-                if (iSelf != null && ifaces.Contains(iSelf, SymbolEqualityComparer.Default))
-                    continue;
                 if (ifaces.Contains(iWire, SymbolEqualityComparer.Default))
                     wire.Add(t);
                 if (ifaces.Contains(iCommand, SymbolEqualityComparer.Default))
@@ -68,15 +61,12 @@ namespace Infrastructure.SourceGeneration
                     events.Add(t);
                 if (iSignal != null && ifaces.Contains(iSignal, SymbolEqualityComparer.Default))
                     signals.Add(t);
-                if (iAuftrag != null && ifaces.Contains(iAuftrag, SymbolEqualityComparer.Default))
-                    auftraege.Add(t);
             }
 
             wire.Sort(ByName);
             commands.Sort(ByName);
             events.Sort(ByName);
             signals.Sort(ByName);
-            auftraege.Sort(ByName);
 
             var full = SymbolDisplayFormat.FullyQualifiedFormat;
 
@@ -151,8 +141,6 @@ namespace Infrastructure.SourceGeneration
             EmitPoly(sb, "Event", "IEvent", events, full);
             sb.AppendLine();
             EmitPoly(sb, "Command", "ICommand", commands, full);
-            sb.AppendLine();
-            EmitPoly(sb, "Auftrag", "IAuftrag", auftraege, full);
             sb.AppendLine();
             EmitSignalPoly(sb, signals, full);
             sb.AppendLine("}");

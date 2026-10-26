@@ -101,6 +101,8 @@ namespace Domain.SourceGeneration
                                  switch (@event)
                                  {
                      {{eventCases}}
+                                     // Ein Event des Rahmens (Frist gesetzt, Inbox-Marke) zählt in der Version, der Applier sieht es nie (IRahmenEvent).
+                                     case IRahmenEvent: break;
                                      default: throw new NotSupportedException($"Event type {@event.GetType().Name} is not supported for {{model.StateTypeName}}.");
                                  }
                              }

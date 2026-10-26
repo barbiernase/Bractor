@@ -70,17 +70,14 @@ public sealed class Dateipuffer(string root, Func<string, string?>? quelle = nul
 
 /// <summary>
 /// Der ABGLEICH bestehender Deklarationen mit dem Modell — nur für Elemente, die im Editor geändert wurden (Herkunfts-Stempel
-/// weicht ab). Das Modell besitzt die Signatur/Deklaration (Felder, Enum-Werte, OneOf-Rückgaben, Prozess-Regeln, Parameter
-/// einer Fähigkeit, Basisliste/Attribut-Argumente); der Code besitzt Rümpfe und Handcode. Vorhandenes, das sich nicht
+/// weicht ab). Das Modell besitzt die Signatur/Deklaration (Felder, Enum-Werte, OneOf-Rückgaben, Parameter einer Fähigkeit,
+/// Basisliste/Attribut-Argumente); der Code besitzt Rümpfe und Handcode. Vorhandenes, das sich nicht
 /// geändert hat, bleibt Wort für Wort; ersetzt wird nur das Geänderte. Bricht dadurch ein Rumpf, meldet es der Bau.
 /// </summary>
-internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyList<GenerierteDatei> generiert,
-    List<string> ergaenzt, List<string> uebersprungen)
+internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string> ergaenzt, List<string> uebersprungen)
 {
     private static readonly string OneOf = typeof(Abstractions.OneOf<>).Name.Split('`')[0];
-    private static readonly string Regeln = nameof(Abstractions.IProzessDefinition.Regeln);
     private static readonly string SubscriberId = nameof(Abstractions.ISubscriber.SubscriberId);
-    private static readonly string PipelineId = nameof(Abstractions.IPipelineHandler.PipelineId);
     private static readonly string ProjectionReader = nameof(Abstractions.ProjectionReaderAttribute)[..^"Attribute".Length];
     private static readonly string TrackDeps = nameof(Abstractions.ProjectionReaderAttribute.TrackDeps);
     private static readonly HashSet<string> StateVertrag = [nameof(Abstractions.IState.Id), nameof(Abstractions.IState.Version)];
@@ -99,23 +96,6 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
             Datei(a.Datei!, $"state {a.Namespace}.{a.Name}", t => StateFelder(t, a));
         foreach (var d in modell.Decider.Where(d => d.Datei != null && Herkunft.Geaendert(d.Herkunft, Herkunft.Von(d))))
             Datei(d.Datei!, $"decide {d.Aggregat}.{d.Command}", t => DecideRueckgabe(t, d));
-        foreach (var s in modell.Sagas.Where(s => s.Datei != null && Herkunft.Geaendert(s.Herkunft, Herkunft.Von(s))))
-            Datei(s.Datei!, $"prozess {s.Namespace}.{s.Name}", t => ProzessRegeln(t, s));
-        foreach (var f in modell.Fluesse.Where(f => f.Datei != null && Herkunft.Geaendert(f.Herkunft, Herkunft.Von(f))))
-            Datei(f.Datei!, $"pipeline {f.Namespace}.{f.Name}", t => FlussKnoten(t, f));
-        // Katalog-Funktion: die Signatur (Auftrag → OneOf-Ergebnisse, Lese-Fähigkeiten) am Interface UND an der Implementierung.
-        //   Der Rumpf gehört dem Code (✓ Übernehmen am 🤖 bzw. die IDE); der Name ist die Identität — Umbenennen ist ein Refactoring.
-        foreach (var f in modell.Funktionen.Where(f => f.Datei != null && Herkunft.Geaendert(f.Herkunft, Herkunft.Von(f))))
-        {
-            var was = $"funktion {f.Namespace}.{f.Name}";
-            Datei(f.Datei!, was, t => FunktionsSignatur(t, f.Name, f, schnittstelle: true));
-            if (f.ImplDatei != null && f.Implementierung != null)
-            {
-                Datei(f.ImplDatei, was, t => FunktionsSignatur(t, f.Implementierung, f, schnittstelle: false));
-                // Der Konstruktor der Implementierung (Dienste per ⊕, Konfig-Records) — nur die Parameterliste, der Rest bleibt.
-                Datei(f.ImplDatei, was, t => Konstruktor(t, f.Implementierung, f.Konstruktor));
-            }
-        }
         // Domänen-Dienst (konzept-werkbank §12.3 E11): die Methoden am Interface und an jeder Implementierung (fehlende als throw-Stub); je Implementierung ihr
         //   Konstruktor. Rümpfe gehören dem Code (✎ am Rumpf); der Name ist die Identität (Umbenennen ist ein Refactoring).
         foreach (var d in modell.Dienste.Where(d => d.Datei != null && Herkunft.Geaendert(d.Herkunft, Herkunft.Von(d))))
@@ -148,11 +128,8 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
             Datei(k.Datei!, $"konsument {k.Name}", t => Klasse(t, k.Name, k.Basen, (SubscriberId, k.SubscriberId), null));
         foreach (var r in l.Reader.Where(r => r.Datei != null && Herkunft.Geaendert(r.Herkunft, Herkunft.Von(r))))
             Datei(r.Datei!, $"reader {r.Name}", t => Klasse(t, r.Name, r.Basen, null, r.TrackDeps));
-        foreach (var p in l.Pipelines.Where(p => p.Datei != null && Herkunft.Geaendert(p.Herkunft, Herkunft.Von(p))))
-            Datei(p.Datei!, $"pipeline {p.Name}", t => PipelineKlasse(t, p));
         foreach (var (besitzer, h) in l.Konsumenten.SelectMany(k => k.Handles.Select(h => (k.Name, h)))
                      .Concat(l.Reader.SelectMany(r => r.Handles.Select(h => (r.Name, h))))
-                     .Concat(l.Pipelines.SelectMany(p => p.Handles.Select(h => (p.Name, h))))
                      .Where(x => x.h.Datei != null && Herkunft.Geaendert(x.h.Herkunft, Herkunft.Von(x.h))))
             Datei(h.Datei!, $"handle {besitzer}.Handle({h.Eingang})", t => HandleRueckgabe(t, besitzer, h));
     }
@@ -201,8 +178,7 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
         if (Eigenschaften(decl, soll, p => Feldregeln.Eigenschaft(p) is { } e ? (e.Name, $"{N(e.Typ)}|{e.Standard}|{e.Zugriff}|{e.Pflicht}") : null, new HashSet<string>(), edits))
             notiz.Add("Property-Felder");
         if (r.Kind == RecordArt.ReadModel && GeteiltMarker(decl, r.Geteilt, edits)) notiz.Add(r.Geteilt ? "geteilt" : "nicht mehr geteilt");
-        if (r.Kind == RecordArt.Auftrag && !string.IsNullOrWhiteSpace(r.Funktion) && AuftragMarker(decl, r.Funktion!, edits)) notiz.Add($"Auftrag von {r.Funktion}");
-        return (MitNamespaces(Anwenden(text, edits), r.Felder.Select(f => f.Typ).Append(r.Funktion ?? "")), string.Join(", ", notiz));
+        return (MitNamespaces(Anwenden(text, edits), r.Felder.Select(f => f.Typ)), string.Join(", ", notiz));
     }
 
     /// <summary>
@@ -300,32 +276,6 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
     }
 
     // ── Decide: OneOf der Rückgabe (Wrapper bleibt) ──
-    /// <summary>
-    /// Der Marker eines Auftrags (<c>IAuftrag&lt;F&gt;</c>) zeigt auf SEINE Funktion: fehlt er, wird er angehängt; zeigt er auf eine andere,
-    /// wird nur das Typ-Argument ersetzt. Alle übrigen Basen bleiben Wort für Wort.
-    /// </summary>
-    private static bool AuftragMarker(TypeDeclarationSyntax decl, string funktion, List<(int, int, string)> edits)
-    {
-        var marker = typeof(Abstractions.IAuftrag<>).Name.Split('`')[0];
-        var basis = decl.BaseList?.Types.Select(t => t.Type).OfType<GenericNameSyntax>()
-            .FirstOrDefault(g => g.Identifier.Text == marker && g.TypeArgumentList.Arguments.Count == 1);
-        if (basis != null)
-        {
-            var arg = basis.TypeArgumentList.Arguments[0];
-            if (N(arg.ToString()).Split('.').Last() == funktion) return false;
-            edits.Add((arg.SpanStart, arg.Span.End, funktion));
-            return true;
-        }
-        var soll = $"{marker}<{funktion}>";
-        if (decl.BaseList is { } bl) edits.Add((bl.Span.End, bl.Span.End, ", " + soll));
-        else
-        {
-            var at = (decl as RecordDeclarationSyntax)?.ParameterList?.Span.End ?? decl.TypeParameterList?.Span.End ?? decl.Identifier.Span.End;
-            edits.Add((at, at, " : " + soll));
-        }
-        return true;
-    }
-
     private (string, string)? DecideRueckgabe(string text, DecideRegel d)
     {
         var root = Parse(text);
@@ -338,100 +288,12 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
         return (MitNamespaces(neu, d.Ergibt.Select(a => a.Event)), "OneOf-Ausgänge");
     }
 
-    // ── Prozess: nur der Ausdruck der Regeln-Property (Kopf, auch explizite Implementierung, bleibt) ──
-    private (string, string)? ProzessRegeln(string text, Saga s)
-    {
-        var gen = generiert.Where(g => g.Art == DateiArt.Saga).Select(g => Parse(g.Inhalt))
-            .Select(r => r.DescendantNodes().OfType<ClassDeclarationSyntax>().FirstOrDefault(c => c.Identifier.Text == s.Name)).FirstOrDefault(c => c != null);
-        var genProp = gen?.Members.OfType<PropertyDeclarationSyntax>().FirstOrDefault(p => p.Identifier.Text == Regeln);
-        var root = Parse(text);
-        var alt = root.DescendantNodes().OfType<ClassDeclarationSyntax>().FirstOrDefault(c => c.Identifier.Text == s.Name)?
-            .Members.OfType<PropertyDeclarationSyntax>().FirstOrDefault(p => p.Identifier.Text == Regeln);
-        if (genProp?.ExpressionBody == null || alt?.ExpressionBody == null) return (text, "Regeln-Property nicht gefunden (nur => …-Form wird geschrieben)");
-        if (Ohne(alt.ExpressionBody.ToString()) == Ohne(genProp.ExpressionBody.ToString())) return null;
-        // Je Regel eine Anweisung im Definiere-Lambda: eine unveränderte Regel (gleich bis auf Leerraum) bleibt wörtlich samt
-        //   ihrer Kommentare; nur neue/geänderte kommen in der Form des Scaffolders. Andere Form ⇒ der Ausdruck als Ganzes.
-        static BlockSyntax? Block(ArrowExpressionClauseSyntax a) =>
-            a.DescendantNodes().OfType<LambdaExpressionSyntax>().Select(l => l.Body).OfType<BlockSyntax>().FirstOrDefault();
-        var (altBlock, genBlock) = (Block(alt.ExpressionBody), Block(genProp.ExpressionBody));
-        string neu;
-        if (altBlock is { Statements.Count: > 0 } ab && genBlock is { Statements.Count: > 0 } gb)
-        {
-            var einzug = new string(' ', ab.Statements[0].GetLocation().GetLineSpan().StartLinePosition.Character);
-            var teile = gb.Statements.Select(g => ab.Statements.FirstOrDefault(a => Ohne(a.ToString()) == Ohne(g.ToString())) is { } a
-                ? a.ToFullString().TrimEnd().TrimStart('\n', '\r') : Umgerueckt(g.ToString(), g.GetLocation().GetLineSpan().StartLinePosition.Character, einzug)).ToList();
-            var erster = ab.Statements[0];
-            neu = text[..erster.FullSpan.Start] + string.Join("\n\n", teile.Select((t, i) => i == 0 && t.StartsWith(einzug) ? t : (t.StartsWith(' ') ? t : einzug + t)))
-                  + text[ab.Statements[^1].Span.End..];
-        }
-        else if (alt.ExpressionBody.DescendantNodes().OfType<LambdaExpressionSyntax>().FirstOrDefault() is { Body: ExpressionSyntax regel } lambda
-                 && genBlock is { Statements.Count: > 0 } gb2)
-        {
-            // Bisher EINE Regel als Ausdrucks-Lambda: wird ein Block; die alte Regel bleibt wörtlich, wenn sie unverändert ist.
-            var ind = new string(' ', alt.GetLocation().GetLineSpan().StartLinePosition.Character);
-            var einzug = ind + "    ";
-            var teile = gb2.Statements.Select(g => Ohne(regel + ";") == Ohne(g.ToString()) ? einzug + regel + ";"
-                : Umgerueckt(g.ToString(), g.GetLocation().GetLineSpan().StartLinePosition.Character, einzug)).ToList();
-            neu = text[..lambda.ArrowToken.Span.End] + "\n" + ind + "{\n" + string.Join("\n\n", teile) + "\n" + ind + "}" + text[regel.Span.End..];
-        }
-        else neu = text[..alt.ExpressionBody.SpanStart] + genProp.ExpressionBody.ToString() + text[alt.ExpressionBody.Span.End..];
-        return (MitUsingsAus(neu, gen!.SyntaxTree.GetRoot()), "Regeln");
-    }
-
-    // ── Pipeline als Fluss: nur die Anweisungen des Definiere-Lambdas (je Knoten eine). Unveränderte Knoten bleiben wörtlich
-    //    samt Kommentaren; neue/geänderte kommen in der Form des Scaffolders. Kopf, Doku und alles um die Property bleiben. ──
-    private static readonly string FlussProp = nameof(Abstractions.IPipeline.Fluss);
-
-    private (string, string)? FlussKnoten(string text, FlussPipeline f)
-    {
-        var gen = generiert.Where(g => g.Art == DateiArt.Fluss).Select(g => Parse(g.Inhalt))
-            .Select(r => r.DescendantNodes().OfType<ClassDeclarationSyntax>().FirstOrDefault(c => c.Identifier.Text == f.Name)).FirstOrDefault(c => c != null);
-        var genProp = gen?.Members.OfType<PropertyDeclarationSyntax>().FirstOrDefault(p => p.Identifier.Text == FlussProp);
-        var alt = Parse(text).DescendantNodes().OfType<ClassDeclarationSyntax>().FirstOrDefault(c => c.Identifier.Text == f.Name)?
-            .Members.OfType<PropertyDeclarationSyntax>().FirstOrDefault(p => p.Identifier.Text == FlussProp);
-        if (genProp?.ExpressionBody == null || alt?.ExpressionBody == null) return (text, "Fluss-Property nicht gefunden (nur => …-Form wird geschrieben)");
-        if (Ohne(alt.ExpressionBody.ToString()) == Ohne(genProp.ExpressionBody.ToString())) return null;
-        static BlockSyntax? Block(ArrowExpressionClauseSyntax a) =>
-            a.DescendantNodes().OfType<LambdaExpressionSyntax>().Select(l => l.Body).OfType<BlockSyntax>().FirstOrDefault();
-        var (altBlock, genBlock) = (Block(alt.ExpressionBody), Block(genProp.ExpressionBody));
-        string neu;
-        if (altBlock is { Statements.Count: > 0 } ab && genBlock is { Statements.Count: > 0 } gb)
-        {
-            var einzug = new string(' ', ab.Statements[0].GetLocation().GetLineSpan().StartLinePosition.Character);
-            var teile = gb.Statements.Select(g => ab.Statements.FirstOrDefault(a => Ohne(a.ToString()) == Ohne(g.ToString())) is { } a
-                ? a.ToFullString().TrimEnd().TrimStart('\n', '\r') : Umgerueckt(g.ToString(), g.GetLocation().GetLineSpan().StartLinePosition.Character, einzug)).ToList();
-            neu = text[..ab.Statements[0].FullSpan.Start] + string.Join("\n", teile.Select((t, i) => i == 0 && t.StartsWith(einzug) ? t : (t.StartsWith(' ') ? t : einzug + t)))
-                  + text[ab.Statements[^1].Span.End..];
-        }
-        else neu = text[..alt.ExpressionBody.SpanStart] + genProp.ExpressionBody.ToString() + text[alt.ExpressionBody.Span.End..];
-        return (MitUsingsAus(neu, gen!.SyntaxTree.GetRoot()), "Fluss");
-    }
-
     // ── Fähigkeit: Rückgabe + Parameter am Interface bzw. an der Impl-Methode ──
     private (string, string)? MethodenSignatur(string text, string klasse, string? methode, Faehigkeit f, bool schnittstelle)
     {
         var m = Methode(Parse(text), klasse, methode);
         if (m == null) return schnittstelle ? (text, $"{klasse} nicht gefunden") : null;   // Impl: die Methode liegt in einer anderen Teil-Datei
         return Signatur(text, m, f.Rueckgabe, f.Parameter);
-    }
-
-    // ── Katalog-Funktion: RufeAsync(Auftrag auftrag, IAusfuehrung x, Fähigkeiten…) → Task<OneOf<Ergebnisse…>>. Die Namen der beiden
-    //    festen Parameter bleiben, wie sie im Code stehen (der Rumpf benutzt sie); die Fähigkeiten gleichen wie bei Handles ab. ──
-    private (string, string)? FunktionsSignatur(string text, string klasse, Funktion f, bool schnittstelle)
-    {
-        var m = Methode(Parse(text), klasse, Abstractions.Funktionsvertrag.Methode);
-        if (m == null) return (text, $"{klasse}.{Abstractions.Funktionsvertrag.Methode} nicht gefunden");
-        var ist = m.ParameterList.Parameters;
-        var ausfuehrung = nameof(Abstractions.IAusfuehrung);
-        var soll = new List<Parameter>
-        {
-            new() { Typ = f.Auftrag, Name = ist.Count > 0 ? ist[0].Identifier.Text : "auftrag" },
-            new() { Typ = ausfuehrung, Name = ist.Count > 1 && N(ist[1].Type?.ToString()).Split('.').Last() == ausfuehrung ? ist[1].Identifier.Text : "x" },
-        };
-        soll.AddRange(f.Faehigkeiten);
-        var alt = m.ReturnType.ToString();
-        var huelle = Wrapper(alt) is "Task" or "ValueTask" ? Wrapper(alt) : "Task";
-        return Signatur(text, m, $"{huelle}<{OneOf}<{string.Join(", ", f.Ergebnisse)}>>", soll);
     }
 
     // ── Dienst: Methoden-Signaturen (Abgleich je Name), fehlende Methoden anhängen; am Interface fallen entfernte weg ──
@@ -474,7 +336,7 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
         return notiz.Count == 0 ? null : (text, "Methoden " + string.Join(", ", notiz));
     }
 
-    // ── Konstruktor einer Implementierung (Funktion/Dienst): nur die Parameterliste — Primär-Konstruktor bzw. der öffentliche Konstruktor ──
+    // ── Konstruktor einer Dienst-Implementierung: nur die Parameterliste — Primär-Konstruktor bzw. der öffentliche Konstruktor ──
     private (string, string)? Konstruktor(string text, string klasse, IReadOnlyList<Parameter> soll)
     {
         var root = Parse(text);
@@ -543,7 +405,7 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
         return (MitNamespaces(Anwenden(text, edits), h.Ausgaenge.Append(h.Eingang)), string.Join(", ", notiz));
     }
 
-    // ── Klasse: Basisliste (Pull/Append-Marker, IReader<P>), SubscriberId/PipelineId-Literal, TrackDeps ──
+    // ── Klasse: Basisliste (Pull/Append-Marker, IReader<P>), SubscriberId-Literal, TrackDeps ──
     private (string, string)? Klasse(string text, string name, IReadOnlyList<string>? basen, (string Name, string? Wert)? id, bool? trackDeps)
     {
         var root = Parse(text);
@@ -598,120 +460,6 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
         return (neu, string.Join(", ", notiz));
     }
 
-    // ── Pipeline: Basisliste + PipelineId (wie jede Klasse), dazu neue Konfigs im Konstruktor ──
-    // Umbenennen/Verschieben und das Entfernen einer Konfig schreibt der Abgleich NICHT (der Rumpf kann sie nutzen) —
-    // er sagt es ausdrücklich, statt die Änderung still fallen zu lassen.
-    private (string, string)? PipelineKlasse(string text, PipelineKarte p)
-    {
-        var klasse = Parse(text).DescendantNodes().OfType<ClassDeclarationSyntax>().FirstOrDefault(c => c.Identifier.Text == p.Name);
-        if (klasse == null)
-            return (text, $"Klasse {p.Name} nicht in {p.Datei} — das Umbenennen einer bestehenden Pipeline wird nicht geschrieben (von Hand umbenennen)");
-        var notiz = new List<string>();
-        var ns = klasse.Ancestors().OfType<BaseNamespaceDeclarationSyntax>().FirstOrDefault()?.Name.ToString();
-        if (ns != null && ns != p.Namespace)
-            notiz.Add($"Namespace {ns} → {p.Namespace} wird nicht geschrieben (von Hand verschieben)");
-        var neu = text;
-        if (Klasse(neu, p.Name, p.Basen, (PipelineId, p.PipelineId), null) is { } k)
-        {
-            neu = k.Item1;
-            if (k.Item2.Length > 0) notiz.Add(k.Item2);
-        }
-        var (mitKonfigs, konfigNotiz) = KonfigsImCtor(neu, p);
-        neu = mitKonfigs;
-        notiz.AddRange(konfigNotiz);
-        return (neu, string.Join(", ", notiz));
-    }
-
-    /// <summary>
-    /// Fehlende Konfigs (Records im öffentlichen Konstruktor, so liest sie der Extractor) ergänzen — in der Form des
-    /// Scaffolders: Parameter <c>K k</c>, Feld <c>private readonly K _k;</c>, Zuweisung im Ctor-Rumpf. Ohne öffentlichen
-    /// Ctor entsteht einer. Eine im Editor entfernte Konfig wird nur gemeldet.
-    /// </summary>
-    private (string Text, List<string> Notiz) KonfigsImCtor(string text, PipelineKarte p)
-    {
-        var notiz = new List<string>();
-        var klasse = Parse(text).DescendantNodes().OfType<ClassDeclarationSyntax>().FirstOrDefault(c => c.Identifier.Text == p.Name);
-        if (klasse == null) return (text, notiz);
-        var ctor = klasse.Members.OfType<ConstructorDeclarationSyntax>()
-            .Where(c => c.Modifiers.Any(m => m.Text == "public") && !c.Modifiers.Any(m => m.Text == "static"))
-            .OrderByDescending(c => c.ParameterList.Parameters.Count).FirstOrDefault();
-        var vorhanden = ctor?.ParameterList.Parameters.Select(x => BoardLeseseite.Basisname(x.Type?.ToString() ?? "")).ToHashSet() ?? [];
-        var konfigTypen = modell.Records.Where(r => r.Kind == "konfig").Select(r => r.Name).ToHashSet();
-        foreach (var weg in vorhanden.Where(t => konfigTypen.Contains(t) && !p.Konfigs.Select(BoardLeseseite.Basisname).Contains(t)))
-            notiz.Add($"Konfig {weg} im Editor entfernt — der Ctor-Parameter bleibt (von Hand entfernen)");
-        var fehlend = p.Konfigs.Where(k => !vorhanden.Contains(BoardLeseseite.Basisname(k))).ToList();
-        if (fehlend.Count == 0) return (text, notiz);
-
-        var edits = new List<(int, int, string)>();
-        var spalte = (ctor ?? (SyntaxNode)klasse.Members.FirstOrDefault() ?? klasse).GetLocation().GetLineSpan().StartLinePosition.Character;
-        if (klasse.Members.Count == 0) spalte = klasse.GetLocation().GetLineSpan().StartLinePosition.Character + 4;
-        var e = new string(' ', spalte);
-        string Feld(string k) => $"{e}private readonly {k} _{BoardLeseseite.ParameterName(k)};\n";
-        if (ctor == null)
-        {
-            var zeilen = string.Concat(fehlend.Select(Feld)) + "\n"
-                + $"{e}public {p.Name}({string.Join(", ", fehlend.Select(k => $"{k} {BoardLeseseite.ParameterName(k)}"))})\n{e}{{\n"
-                + string.Concat(fehlend.Select(k => $"{e}    _{BoardLeseseite.ParameterName(k)} = {BoardLeseseite.ParameterName(k)};\n")) + $"{e}}}\n";
-            var nachKlammer = text.IndexOf('\n', klasse.OpenBraceToken.Span.End) + 1;
-            edits.Add((nachKlammer, nachKlammer, zeilen + (klasse.Members.Count > 0 ? "\n" : "")));
-            notiz.Add("Konfig-Konstruktor " + string.Join(", ", fehlend));
-        }
-        else if (ctor.Body == null)
-            notiz.Add($"Konstruktor ist ein Ausdruck — Konfig {string.Join(", ", fehlend)} von Hand ergänzen");
-        else
-        {
-            var namen = ctor.ParameterList.Parameters.Select(x => x.Identifier.Text).ToHashSet();
-            var kollision = fehlend.Where(k => namen.Contains(BoardLeseseite.ParameterName(k))).ToList();
-            if (kollision.Count > 0) return (text, [.. notiz, $"Parametername für {string.Join(", ", kollision)} schon vergeben — von Hand ergänzen"]);
-            var zeilenAnfang = text.LastIndexOf('\n', Math.Max(0, (ctor.AttributeLists.Count > 0 ? ctor.AttributeLists[0] : (SyntaxNode)ctor).SpanStart - 1)) + 1;
-            edits.Add((zeilenAnfang, zeilenAnfang, string.Concat(fehlend.Select(Feld)) + "\n"));
-            var liste = ctor.ParameterList;
-            var parameter = string.Join(", ", fehlend.Select(k => $"{k} {BoardLeseseite.ParameterName(k)}"));
-            edits.Add((liste.CloseParenToken.SpanStart, liste.CloseParenToken.SpanStart, (liste.Parameters.Count > 0 ? ", " : "") + parameter));
-            var zuweisungen = fehlend.Select(k => $"_{BoardLeseseite.ParameterName(k)} = {BoardLeseseite.ParameterName(k)};").ToList();
-            var zeilenEnde = text.IndexOf('\n', ctor.Body.OpenBraceToken.Span.End);
-            if (zeilenEnde >= 0 && zeilenEnde < ctor.Body.CloseBraceToken.SpanStart)   // mehrzeiliger Rumpf
-                edits.Add((zeilenEnde + 1, zeilenEnde + 1, string.Concat(zuweisungen.Select(z => $"{e}    {z}\n"))));
-            else                                                                         // „{ … }" auf einer Zeile
-                edits.Add((ctor.Body.OpenBraceToken.Span.End, ctor.Body.OpenBraceToken.Span.End, " " + string.Join(" ", zuweisungen)));
-            notiz.Add("Konfig " + string.Join(", ", fehlend));
-        }
-        return (MitNamespaces(Anwenden(text, edits), fehlend), notiz);
-    }
-
-    // ── Ingress: neue Bindung nach dem Vorbild einer bestehenden desselben Modus ──
-    public void Ingress()
-    {
-        foreach (var b in modell.Ingress?.Where(x => x.Datei == null) ?? [])
-        {
-            var was = $"ingress {b.Trigger} ({b.Modus})";
-            var vorlage = modell.Ingress!.FirstOrDefault(x => x.Datei != null && x.Modus == b.Modus && x.Anweisung != null && x.TypArgument != null);
-            var ns = modell.Records.FirstOrDefault(r => r.Kind == RecordArt.Trigger && r.Name == b.Trigger)?.Namespace;
-            if (vorlage == null) { uebersprungen.Add($"{was}: keine {b.Modus}-Bindung im Code als Vorbild — Bindung im Host von Hand anlegen"); continue; }
-            if (ns == null) { uebersprungen.Add($"{was}: Trigger-Record unbekannt"); continue; }
-            var fq = $"{ns}.{b.Trigger}";
-            var anw = vorlage.Anweisung!.Replace($"<{vorlage.TypArgument}>", $"<{fq}>");
-            if (vorlage.OrtArgument != null && b.Ort != null)
-            {
-                var ort = vorlage.OrtArgument.StartsWith('"') ? SymbolDisplay.FormatLiteral(b.Ort, true) : b.Ort;
-                var i = anw.IndexOf(vorlage.OrtArgument, StringComparison.Ordinal);
-                if (i >= 0) anw = anw[..i] + ort + anw[(i + vorlage.OrtArgument.Length)..];
-            }
-            Datei(vorlage.Datei!, was, text =>
-            {
-                if (text.Contains($"<{fq}>", StringComparison.Ordinal)) return null;   // schon gebunden
-                var i = text.IndexOf(vorlage.Anweisung!, StringComparison.Ordinal);
-                if (i < 0) return (text, "Vorbild-Anweisung nicht gefunden");
-                var zeile = text.LastIndexOf('\n', i) + 1;
-                var einzug = text[zeile..i];
-                var ende = i + vorlage.Anweisung!.Length;
-                var zeilenEnde = text.IndexOf('\n', ende);
-                if (zeilenEnde < 0) zeilenEnde = text.Length;
-                return (text[..zeilenEnde] + "\n" + einzug + anw + text[zeilenEnde..], $"Bindung {b.Modus} {b.Ort}");
-            });
-        }
-    }
-
     // ── Akteur: die Basisliste IST der Akteur — IAkteur + IDarf<…> nach dem Modell (auch Entziehen), Fremdes bleibt ──
     private (string, string)? AkteurBefugnisse(string text, Akteur a)
     {
@@ -756,7 +504,6 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
         m.ParameterList.Parameters.Count > 0 ? BoardLeseseite.Basisname(m.ParameterList.Parameters[0].Type?.ToString() ?? "") : null;
 
     private static string N(string? typ) => BoardLeseseite.Norm(typ ?? "");
-    private static string Ohne(string s) => Regex.Replace(s, @"\s+", "");
 
     /// <summary>Eine Parameterliste in der FORM der alten schreiben: einzeilig bleibt einzeilig, mehrzeilig bleibt je Parameter eine Zeile.</summary>
     private static string Liste(ParameterListSyntax? alt, IReadOnlyList<string> teile)
@@ -769,10 +516,6 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
         return vorErstem + string.Join(zeilenweise ? ",\n" + einzug : ", ", teile) + nachLetztem;
     }
 
-    /// <summary>Mehrzeiligen Text von seiner Spalte auf einen neuen Einzug bringen (erste Zeile ohne Einzug).</summary>
-    private static string Umgerueckt(string text, int spalte, string einzug) =>
-        string.Join("\n", text.Replace("\r\n", "\n").Split('\n').Select((z, i) =>
-            i == 0 ? einzug + z : z.Length >= spalte && z[..spalte].Trim().Length == 0 ? einzug + z[spalte..] : einzug + z.TrimStart()));
     private static string Wrapper(string typ) => typ.Contains('<') ? typ[..typ.IndexOf('<')].Trim() : typ;
 
     /// <summary>Text-Änderungen (Start, Ende, Neu) von hinten nach vorn anwenden.</summary>
@@ -788,10 +531,8 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
     {
         _nsVon ??= modell.Records.Select(r => (r.Name, r.Namespace)).Concat(modell.Enums.Select(e => (e.Name, e.Namespace)))
             .Concat((modell.Lesen?.Stores ?? []).SelectMany(s => s.Fns.Select(f => (f.Name, f.Namespace ?? s.Namespace)).Append((s.Name, s.Namespace))))
-            // Akteur-Vertrags-Teile liegen beim Akteur — ein Client, der einen neuen Teil trägt, braucht dessen Namespace.
-            .Concat(modell.Akteure.SelectMany(a => a.Vertrag.Select(r => (Name: r.Teil ?? a.VertragTyp, a.Namespace))))
-            // Katalog-Funktionen: ein Akteur, der eine anbietet (IDarf<IFunktion>), braucht ihren Namespace.
-            .Concat(modell.Funktionen.Select(f => (f.Name, f.Namespace)))
+            // Funktionen: ein Akteur, der eine rechnen darf (IDarf<IFunktion>), bzw. ein Client, der sie trägt, braucht ihren Namespace.
+            .Concat(modell.BausteinFunktionen.Select(f => (f.Name, f.Namespace)))
             // Domänen-Dienste: eine Implementierung, die einen nimmt, braucht seinen Namespace.
             .Concat(modell.Dienste.Select(d => (d.Name, d.Namespace)))
             .GroupBy(x => x.Name).ToDictionary(g => g.Key, g => g.First().Item2, StringComparer.Ordinal);
@@ -804,6 +545,4 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
             .Distinct().ToList();
         return Usings.Ergaenze(text, fehlend.OfType<string>());
     }
-
-    private static string MitUsingsAus(string text, SyntaxNode genRoot) => Usings.ErgaenzeAus(text, genRoot);
 }

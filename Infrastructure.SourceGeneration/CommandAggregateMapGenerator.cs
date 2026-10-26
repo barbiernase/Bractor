@@ -14,7 +14,7 @@ namespace Infrastructure.SourceGeneration
     /// (<c>CommandToEvents</c>) und müssen im Ziel-Aggregat stehen: ein <c>Decide(TCommand)</c> in einem anderen Aggregat bricht den Build
     /// (CQRS010). Ein Command ohne typisiertes Ziel meldet CQRS013 (<c>ModellAnalyzer</c>), einer ohne Decide CQRS086.
     ///
-    /// <c>GeneratedPipelines.CommandAggregateTypes</c> ist ein Passthrough hierauf; darüber routen Dispatcher, Leitung, Emitter und Dirigent.
+    /// Darüber routen Dispatcher, Leitung und Emitter (<c>Anwendung.Routing.CommandToAggregate</c>).
     /// </summary>
     [Generator]
     public class CommandAggregateMapGenerator : ISourceGenerator

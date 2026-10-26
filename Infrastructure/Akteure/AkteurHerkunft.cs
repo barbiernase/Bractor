@@ -7,9 +7,9 @@ namespace Infrastructure.Akteure;
 /// Von welchem Akteur kommt, was das Framework gerade erzeugt? (<c>docs/konzept-akteure.md</c> §2.3/§8.4) — zur Laufzeit:
 /// <list type="number">
 /// <item><b>Kette:</b> der Akteur des auslösenden Events (Header <c>akteur</c> im Log → <see cref="EventEnvelope.UserId"/>) —
-///   der Konsument setzt ihn als <see cref="ImAuftrag"/> um den Handle (<see cref="Aus"/>), der Emit stempelt ihn.</item>
-/// <item><b>Akteur-Wechsel:</b> ein Handle mit dem Dienst eines Akteurs (<c>IAkteurDienst&lt;A&gt;</c>) — generiert gesetzt.</item>
-/// <item><b>Ingress ohne Kette</b> (Datei-/Timer-Trigger, Selbst-Tick ohne Herkunft): der EINE Akteur, der den Typ per
+///   der Konsument setzt ihn als <see cref="ImAuftrag"/> um seine Arbeit (<see cref="Aus"/>), der Emit stempelt ihn.</item>
+/// <item><b>Akteur-Wechsel:</b> eine Funktion draußen — ihre Ausgaben gibt der Akteur hinein, der sie rechnen darf (<c>IDarf&lt;F&gt;</c>).</item>
+/// <item><b>Eingang ohne Kette</b> (Quell-Nachricht eines Treibers: Datei, Takt): der EINE Akteur, der den Typ per
 ///   <c>IDarf</c> hineingeben darf (<see cref="EindeutigerHalter"/>); mehrere/keiner → keiner (<c>system</c>).</item>
 /// </list>
 /// Der Fachcode sieht davon nichts (Invariante 5).
@@ -20,7 +20,7 @@ public static class AkteurHerkunft
     {
         var d = new Dictionary<Type, string?>();
         foreach (var a in Anwendung.Akteure.Rechte.Values)
-            foreach (var t in a.Commands.Concat(a.Queries).Concat(a.Trigger).Concat(a.TransientEvents))
+            foreach (var t in a.Commands.Concat(a.Queries).Concat(a.Quellen).Concat(a.TransientEvents))
                 d[t] = d.ContainsKey(t) ? null : a.Name;   // zweiter Halter → mehrdeutig
         return d;
     });

@@ -12,14 +12,14 @@ namespace Infrastructure.Funktionen;
 /// <summary>Ein Aufruf der Einzel-Form: Eingang → Strom der Ausgaben (Commands, Events, Hinweise), wie die Signatur sie zulässt.</summary>
 /// <param name="funktion">Die gebaute Funktion (Klasse bzw. Implementierung der Schnittstelle).</param>
 /// <param name="faehigkeiten">Der Bereich für die Lese-Fähigkeiten dieses Aufrufs; null, wenn das <c>Auf</c> keine nimmt.</param>
-public delegate IAsyncEnumerable<IPipelineOutput> FunktionsAufruf(object funktion, IEvent eingang, Herkunft herkunft, IFaehigkeiten? faehigkeiten,
+public delegate IAsyncEnumerable<IAusgabe> FunktionsAufruf(object funktion, IEvent eingang, Herkunft herkunft, IFaehigkeiten? faehigkeiten,
     CancellationToken ct);
 
 /// <summary>
 /// Die Seiten-Form (Batch, vom Generator aus der Einzel-Form gebaut): eine Seite von Eingängen in einem Aufruf, die Ausgaben mit dem Index ihres
 /// Eingangs — der Actor nimmt sie für kurze, gleichbleibende Funktionen (ein Bereich, eine Aufzählung je Seite).
 /// </summary>
-public delegate IAsyncEnumerable<(int Index, IPipelineOutput Ausgabe)> FunktionsSeite(object funktion, IReadOnlyList<(IEvent Eingang, Herkunft Herkunft)> seite,
+public delegate IAsyncEnumerable<(int Index, IAusgabe Ausgabe)> FunktionsSeite(object funktion, IReadOnlyList<(IEvent Eingang, Herkunft Herkunft)> seite,
     IFaehigkeiten? faehigkeiten, CancellationToken ct);
 
 /// <summary>Ein Eingang einer Funktion (ein <c>Auf</c>): sein Typ, ob er ein Hinweis ist, ob die Ausgabe ein Strom ist, was herauskommen kann.</summary>
@@ -76,23 +76,23 @@ public sealed record FunktionsBaustein(
 /// </summary>
 public static class Ausgaben
 {
-    public static async IAsyncEnumerable<IPipelineOutput> Einzeln<T>(T wert, Func<T, IPipelineOutput?> abbildung)
+    public static async IAsyncEnumerable<IAusgabe> Einzeln<T>(T wert, Func<T, IAusgabe?> abbildung)
     {
         await Task.CompletedTask;
         if (abbildung(wert) is { } a) yield return a;
     }
 
-    public static async IAsyncEnumerable<IPipelineOutput> EinzelnAsync<T>(Task<T> wert, Func<T, IPipelineOutput?> abbildung)
+    public static async IAsyncEnumerable<IAusgabe> EinzelnAsync<T>(Task<T> wert, Func<T, IAusgabe?> abbildung)
     {
         if (abbildung(await wert.ConfigureAwait(false)) is { } a) yield return a;
     }
 
-    public static async IAsyncEnumerable<IPipelineOutput> EinzelnAsync<T>(ValueTask<T> wert, Func<T, IPipelineOutput?> abbildung)
+    public static async IAsyncEnumerable<IAusgabe> EinzelnAsync<T>(ValueTask<T> wert, Func<T, IAusgabe?> abbildung)
     {
         if (abbildung(await wert.ConfigureAwait(false)) is { } a) yield return a;
     }
 
-    public static async IAsyncEnumerable<IPipelineOutput> Strom<T>(IEnumerable<T>? strom, Func<T, IPipelineOutput?> abbildung,
+    public static async IAsyncEnumerable<IAusgabe> Strom<T>(IEnumerable<T>? strom, Func<T, IAusgabe?> abbildung,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         await Task.CompletedTask;
@@ -104,13 +104,13 @@ public static class Ausgaben
         }
     }
 
-    public static async IAsyncEnumerable<IPipelineOutput> StromAsync<T>(Task<IEnumerable<T>> strom, Func<T, IPipelineOutput?> abbildung,
+    public static async IAsyncEnumerable<IAusgabe> StromAsync<T>(Task<IEnumerable<T>> strom, Func<T, IAusgabe?> abbildung,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         await foreach (var a in Strom(await strom.ConfigureAwait(false), abbildung, ct).WithCancellation(ct)) yield return a;
     }
 
-    public static async IAsyncEnumerable<IPipelineOutput> StromAsync<T>(IAsyncEnumerable<T>? strom, Func<T, IPipelineOutput?> abbildung,
+    public static async IAsyncEnumerable<IAusgabe> StromAsync<T>(IAsyncEnumerable<T>? strom, Func<T, IAusgabe?> abbildung,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         if (strom is null) yield break;

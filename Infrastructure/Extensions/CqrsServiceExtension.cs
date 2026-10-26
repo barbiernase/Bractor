@@ -2,7 +2,6 @@ using Abstractions;
 using Infrastructure.Aggregate.ActorSystem;
 using Infrastructure.GrpcClient;
 using Infrastructure.Persistence;
-using Infrastructure.Pipeline;
 using Infrastructure.Projections;
 using Infrastructure.PubSub;
 using Infrastructure.Serialization;
@@ -208,7 +207,7 @@ public static class CqrsServiceExtensions
             // numerischer Revision — jeder Commit erwartet die geladene Version (G-4: zwei Aktivierungen, Neuaufbau).
             Core.KonsumSchema.Registriere(options);
 
-            // Die Inbox der Schreibseite (docs/04 §4.4): je Command eine Quittung, eindeutig je CommandId, in derselben Transaktion wie
+            // Die Inbox der Schreibseite (docs/04 §4.6): je Command eine Quittung, eindeutig je CommandId, in derselben Transaktion wie
             // seine Events — Exactly-once innerhalb des Horizonts (InboxAufraeumer).
             InboxTabelle.Registriere(options);
             // Das Fälligkeits-Verzeichnis der Uhr (Plan Pub/Sub-Neustrukturierung Phase 3): je Frist eine Zeile, geschrieben mit ihrem Event.
@@ -217,7 +216,7 @@ public static class CqrsServiceExtensions
             Infrastructure.Quellen.QuellKennungen.Registriere(options);
             EventZeit.Registriere(options, builder.DbUhr);
 
-            // Die Dokumente des Frameworks (Cursor, Offen-Index, Dead-Letter, Fristplan, Marking) — eine Quelle, auch für die Plan-Tests.
+            // Die Dokumente des Frameworks (Dead-Letter u. a.) — eine Quelle, auch für die Plan-Tests.
             FrameworkDokumente.Registriere(options);
 
             // ★ Snapshots (docs/03-schreibseite.md): ein jsonb-Dokument je Aggregat-Typ
@@ -265,28 +264,7 @@ public static class CqrsServiceExtensions
         services.AddHostedService(provider => new InboxAufraeumer(
             provider.GetRequiredService<IDocumentStore>(), builder.InboxHorizont, provider.GetService<ILogger<InboxAufraeumer>>()));
 
-        // Durabler Poll-Cursor (Backstop): setzt nach Neustart bei der letzten HWM auf.
-        services.AddSingleton<IPollCursorStore>(provider =>
-            new MartenPollCursorStore(provider.GetRequiredService<IDocumentStore>()));
-
-        // Emittenten-Cursor (P4, Achse B = emittierend): best-effort Fortschritt für Reaktion/Pipeline-Event,
-        // damit ein emittierender Konsument nicht bei jeder Weckung ab 0 re-faltet (O(N²)→O(Tail)); die
-        // Korrektheit trägt weiter die Empfänger-Inbox, nicht dieser Cursor (kein Reset → kein blind-Replay).
-        services.AddSingleton<IEmittentenCursor>(provider =>
-            new MartenEmittentenCursor(provider.GetRequiredService<IDocumentStore>()));
-
-        // Durabler Offen-Index der Prozesse (§3-Backstop): Grundlage des Scans, der hängende Prozesse heilt.
-        services.AddSingleton<IProzessOffenIndex>(provider =>
-            new MartenProzessOffenIndex(provider.GetRequiredService<IDocumentStore>()));
-
-        // ★ P5b: der Prozess-Marking-Cursor (best-effort): der ProzessManager faltet damit nur den Tail der
-        //   Ziel-Streams statt alles ab 0 (O(N²)→O(N)). Verlust/Stale heilt der Voll-Fold — nie Korrektheit.
-        services.AddSingleton<IProzessMarkingStore>(provider =>
-            new MartenProzessMarkingStore(
-                provider.GetRequiredService<IDocumentStore>(),
-                provider.GetService<ILogger<MartenProzessMarkingStore>>()));
-
-        // Dead-Letter-Senke (§5): nicht zustellbare Pipeline-Commands beobachtbar machen statt still droppen.
+        // Dead-Letter-Senke (§5): nicht zustellbare Commands beobachtbar machen statt still droppen.
         services.AddSingleton<IDeadLetterSink>(provider =>
             new MartenDeadLetterSink(
                 provider.GetRequiredService<IDocumentStore>(),
@@ -296,15 +274,9 @@ public static class CqrsServiceExtensions
         services.AddSingleton<IDeadLetterReadStore>(provider =>
             new MartenDeadLetterReadStore(provider.GetRequiredService<IDocumentStore>()));
 
-        // DB-Uhr + durabler Fristplan (Feature-Strom, Deadlines): der Unterbau des Deadline-Schedulers.
-        // Harmlos ohne Scheduler (kein aktiver Effekt) → immer registriert; der Scheduler ist opt-in (AddDeadlines).
+        // Die DB-Uhr (die Uhr und die Log-Zeit vergleichen gegen sie, nie gegen die Host-Uhr).
         services.AddSingleton<IDbClock>(provider =>
             new MartenDbClock(provider.GetRequiredService<IDocumentStore>()));
-        services.AddSingleton<IFristplan>(provider =>
-            new MartenFristplan(provider.GetRequiredService<IDocumentStore>()));
-        // Senke der typisierten Frist-Ausgänge (Frist<TCmd>/FristStorno<TCmd>) aus Pipelines.
-        services.AddSingleton(provider => new Infrastructure.Deadlines.FristPlaner(
-            provider.GetRequiredService<IFristplan>(), provider.GetRequiredService<IDbClock>()));
 
         // ★ Snapshot-Store (abgeleiteter jsonb-Cache): der Aggregat-Actor seedet daraus seine Rehydration.
         services.AddSingleton<ISnapshotStore>(provider =>
@@ -314,7 +286,7 @@ public static class CqrsServiceExtensions
 
         // ★ Snapshot-Schwellwert in DI → der generierte Actor injiziert ihn (Default 200, Tests klein).
         services.AddSingleton(new SnapshotOptions(builder.SnapshotThreshold, builder.InboxCache, builder.BuendelGroesse));
-        // Passivierung der virtuellen Actors (PF-5) — Aggregat, Adapter und Prozess-Manager lesen sie beim Erzeugen.
+        // Passivierung der virtuellen Actors (PF-5) — Aggregat, Leser und Funktions-Actors lesen sie beim Erzeugen.
         services.AddSingleton(builder.Passivierung);
         // Batch-Konsum der Projektionen (docs/04 §4.1): Partitionen und Seitengröße — die Batch-Leser lesen sie beim Erzeugen.
         services.AddSingleton(builder.Konsum);
@@ -471,14 +443,7 @@ public static class CqrsServiceExtensions
         
             Console.WriteLine($"  + {aggregateKinds.Length} Aggregate-Kinds registriert");
         
-            var pipelineKinds = Anwendung.Pipelines.GetPipelineKinds(provider, system);
-            foreach (var kind in pipelineKinds)
-            {
-                clusterConfig = clusterConfig.WithClusterKind(kind);
-            }
-            Console.WriteLine($"  + {pipelineKinds.Length} Pipeline-Kinds registriert");
-
-            // ★ Phase 4a: per-Stream-Adapter-Kinds der auf Pull migrierten Projektionen
+            // Die übrigen Kinds (Batch-Leser, Funktions-Actors, Vermittler, Uhr, Quellen) bringen ihre Beiträger mit
             //   (VOR StartMemberAsync, sonst nicht registrierbar).
             var kindContributors = provider
                 .GetServices<Infrastructure.Projections.IClusterKindContributor>().ToList();
@@ -540,17 +505,7 @@ public static class CqrsServiceExtensions
         services.AddHostedService<PubSubStartupService>();
         Console.WriteLine("  + PubSubStartupService");
 
-        // (B1) SubscriberStartupService entfernt — keine Push-Subscriber mehr; alle Handler laufen
-        //   über den Pull-Pfad (GenericPullStartupService via AddGeneratedPullPaths).
-
-        services.AddHostedService<Infrastructure.Pipeline.PipelineStartupService>();
-        Console.WriteLine("  + PipelineStartupService");
-
-        // Trigger-Ingress (Push): spawnt alle im DI registrierten ITriggerRegistration-Instanzen
-        //   (FileWatcher, Timer, …). Nach den Pipelines, weil Trigger sofort Messages senden.
-        //   Ohne Registrierungen ein No-op — daher unbedenklich immer registriert.
-        services.AddHostedService<Infrastructure.Pipeline.TriggerStartupService>();
-        Console.WriteLine("  + TriggerStartupService");
+        // Keine Push-Subscriber: die Projektionen laufen über den Batch-Konsum (AddGeneratedPullPaths), Funktionen über ihre Actors.
 
         Console.WriteLine();
         return services;
@@ -613,7 +568,7 @@ public class CqrsFrameworkBuilder
 
     /// <summary>
     /// Cache der Inbox im Aggregat-Actor (CommandIds je Ausgang, die eine Aktivierung kennt) — nie Semantik, die Wahrheit ist die
-    /// Inbox-Tabelle (docs/04 §4.4). Tests setzen ihn klein, damit der Weg über den Schlüssel der Tabelle läuft.
+    /// Inbox-Tabelle (docs/04 §4.6). Tests setzen ihn klein, damit der Weg über den Schlüssel der Tabelle läuft.
     /// </summary>
     public int InboxCache { get; set; } = SnapshotOptions.StandardInboxCache;
 

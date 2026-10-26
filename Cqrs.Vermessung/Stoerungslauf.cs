@@ -16,7 +16,7 @@ internal static class Stoerungslauf
         var dauer = k.Optionen.Probe ? TimeSpan.FromSeconds(40) : TimeSpan.FromSeconds(90);
         Console.WriteLine($"Störungslauf {dauer.TotalSeconds:0} s: S1 2 Paare/s, S5 8 Sender");
         k.Ressourcen.Abschnitt("stoerung");
-        var beispiel = await Anwendungslauf.StarteAsync(k, k.Beispiel, "Host.Grpc", "host", "stoerung-beispiel", true, null, "prozess_gestartet");
+        var beispiel = await Anwendungslauf.StarteAsync(k, k.Beispiel, "Host.Grpc", "host", "stoerung-beispiel", true);
         var pruef = await Anwendungslauf.StarteAsync(k, k.Pruef, "Host.Pruefdomaene", "host-pruef", "stoerung-pruefdomaene", true, null, "posten_reserviert");
         await using var bild = new Bildeingang(beispiel.Eingang, k.Beispiel.Quellpfad!, 2030, 1);
         var pd = new Pruefdomaene(pruef.Eingang, pruef.Log, pruef.Uhrversatz) { Wiederholen = true };
@@ -65,7 +65,7 @@ internal static class Stoerungslauf
         await kamera;
         var (b5, v5) = await last5;
         var ok1 = await Volllast.LeerlaufenAsync(s1, TimeSpan.FromMinutes(5));
-        await Messung.WarteAufReaktionAsync(pruef);
+        await Pruefdomaene.WarteAufNachschubAsync(pruef);
         foreach (var v in s1) k.Ablage.Latenz("S1-stoerung", 1, v);
         foreach (var v in v5) k.Ablage.Latenz("S5-stoerung", 1, v);
 

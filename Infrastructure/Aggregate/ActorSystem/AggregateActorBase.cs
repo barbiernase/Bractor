@@ -36,7 +36,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     private readonly BrokerPublisher? _publisher;
     private readonly ILogger? _logger;
 
-    // ★ Snapshot-Naht (docs/04-konsum-und-prozess-maschine.md §4.7): abgeleiteter, nicht-autoritativer Cache. Null → aus,
+    // ★ Snapshot-Naht (docs/04-konsum-und-prozess-maschine.md §4.8): abgeleiteter, nicht-autoritativer Cache. Null → aus,
     //   Voll-Replay wie bisher. Der Schema-String invalidiert stale Snapshots; der Schwellwert steuert das
     //   best-effort-Schreiben. Alle drei kommen optional aus DI (unregistriert → Snapshots schlicht inaktiv).
     private readonly ISnapshotStore? _snapshots;
@@ -57,7 +57,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     private bool _identitaetGueltig;
     private bool _initialized = false;
 
-    // Framework-Inbox (Exactly-once, docs/04 §4.4): die Wahrheit ist die Inbox-Tabelle des Stores — je Command eine Quittung in derselben
+    // Framework-Inbox (Exactly-once, docs/04 §4.6): die Wahrheit ist die Inbox-Tabelle des Stores — je Command eine Quittung in derselben
     //   Transaktion wie seine Events, eindeutig je CommandId. Hier nur ihr Cache: die CommandIds, die diese Aktivierung schon entschieden oder
     //   nachgeschlagen hat (gedeckelt, BoundedInbox), getrennt nach gewirkt und abgelehnt. Er erspart der häufigen Wiederholung kurz nach dem
     //   ersten Mal den Weg in die Datenbank; was er nicht kennt, fängt der eindeutige Schlüssel. Durable Fakten — er überlebt eine
@@ -557,7 +557,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             schreibe = persistent;
             foreach (var evt in persistent)
             {
-                if (evt is not IProzessIntern) _handler.ApplyEvent(evt);
+                if (evt is not IRahmenEvent) _handler.ApplyEvent(evt);
                 _state.Version++;
             }
         }
@@ -730,11 +730,9 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             // 2. Noop — keine Events = idempotent (z.B. DeaktiviereLagerartikel bei bereits inaktivem Artikel)
             if (!allEvents.Any())
             {
-                // ★ Audit-Fix K2 (Prozess-Livelock): Auf dem idempotenten Pfad (Reaktion/Prozess) hinterlässt
-                //   AUCH ein Noop eine durable KommandoVerarbeitet-Marke. Der Prozess-Manager erkennt „Transition
-                //   erledigt" NUR über ein Ziel-Event mit CausationId == vorgang; ohne Marke bliebe ein Noop-Ziel
-                //   ewig „pending" → der Manager (und der §3-Backstop) feuerten endlos re-firing → Livelock, nie
-                //   ProzessBeendet. Die Marke macht „getan" beobachtbar. Der OCC-Client-Pfad bleibt unberührt.
+                // Auf dem idempotenten Pfad (Funktion, Uhr) hinterlässt AUCH ein Noop eine durable KommandoVerarbeitet-Marke: die
+                //   Inbox kennt die CommandId, eine Wiederholung bleibt ein Noop, und „getan“ ist im Log beobachtbar (Plan Phase 5
+                //   entscheidet über die Marken). Der OCC-Client-Pfad bleibt unberührt.
                 if (istIdempotent && await CoCommitInboxMarkeAsync(cmdEnvelope, expectedVersion) is var noop and not AppendErgebnis.Geschrieben)
                 {
                     QuittiereEntschieden(context, noop);
@@ -841,11 +839,11 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             try
             {
                 // 6. Events applyen (Applier) — mutiert _state.
-                // ★ Audit-Fix #5 (Symmetrie Live == Rehydration): ein IProzessIntern-Persistent-Event wird
+                // ★ Audit-Fix #5 (Symmetrie Live == Rehydration): ein IRahmenEvent-Persistent-Event wird
                 //   NICHT angewandt (nur die Version mitgezählt) — exakt wie die Rehydration (AggregateRehydrator).
                 foreach (var evt in persistentEvents)
                 {
-                    if (evt is not IProzessIntern) _handler.ApplyEvent(evt);
+                    if (evt is not IRahmenEvent) _handler.ApplyEvent(evt);
                     _state.Version++;
                 }
                 _verarbeiteteCommandIds.Add(cmdEnvelope.CommandId);
@@ -916,7 +914,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     /// Co-committet AUSSCHLIESSLICH die Noop-Marke mit der Quittung (idempotenter Pfad) — ein durabler Beleg „dieser Vorgang wurde
     /// verarbeitet", ohne Domänen-Effekt. Die Quittung allein dedupliziert; die Marke im Stream braucht der Prozess-Fold, der den Ausgang
     /// über die Kausalität im Ziel-Stream erkennt (eine Wirkung hat dort ihr Event, ein Noop nur diese Marke). Die Marke ist
-    /// <see cref="IProzessIntern"/> → beim Domänen-Falten übersprungen, in der Version aber mitgezählt (Stream-Position bündig). Basis ist die
+    /// <see cref="IRahmenEvent"/> → beim Domänen-Falten übersprungen, in der Version aber mitgezählt (Stream-Position bündig). Basis ist die
     /// aufgelöste aktuelle Version (Single-Writer), sodass die Marten-OCC eine echte Doppelaktivierung weiterhin abweist.
     /// </summary>
     private async Task<AppendErgebnis> CoCommitInboxMarkeAsync(CommandEnvelope cmdEnvelope, int expectedVersion)
@@ -933,7 +931,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     /// <summary>
     /// Co-committet AUSSCHLIESSLICH die Framework-ABLEHNUNGS-Marke (idempotenter Pfad, fachliche Ablehnung) —
     /// ein durabler Beleg „dieser Vorgang wurde abgelehnt" MIT dem Grund, ohne Domänen-Effekt. Gleiche native
-    /// Transaktion wie ein normaler Append; die Marke ist <see cref="IProzessIntern"/> → beim Domänen-Falten
+    /// Transaktion wie ein normaler Append; die Marke ist <see cref="IRahmenEvent"/> → beim Domänen-Falten
     /// übersprungen, in der Version aber mitgezählt (Stream-Position bündig). Der Prozess-Manager faltet sie zu
     /// <c>SchrittGescheitert</c> (Treiber-Fold/EM-1). Basis ist die aufgelöste aktuelle Version (Single-Writer).
     /// </summary>
@@ -977,7 +975,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         }
     }
 
-    // ─── Snapshot (docs/04-konsum-und-prozess-maschine.md §4.7): capture-in-turn + fire-and-forget ───
+    // ─── Snapshot (docs/04-konsum-und-prozess-maschine.md §4.8): capture-in-turn + fire-and-forget ───
 
     /// <summary>
     /// Schreibt einen Snapshot, wenn seit dem letzten mindestens <c>_snapshotThreshold</c> Events kamen.

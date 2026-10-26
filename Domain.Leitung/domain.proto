@@ -7,7 +7,7 @@ package domain.leitung;
 // ============================================================================
 // DIE DOMÄNEN-NACHRICHTEN DER ANWENDUNG (generiert von Cqrs.Codegen — nicht editieren)
 //
-// Je Command, Event, Query, Antwort, Trigger, Auftrag und Wertobjekt eine {Typ}Dto-Message. Auf der Leitung
+// Je Command, Event, Query, Antwort und Wertobjekt eine {Typ}Dto-Message. Auf der Leitung
 // (Cqrs.Leitung/cqrs.proto) reisen sie als Nutzlast { typ = "{Typ}", daten = {Typ}Dto als Bytes }.
 // ============================================================================
 

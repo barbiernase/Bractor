@@ -49,8 +49,7 @@ namespace Infrastructure.SourceGeneration
                 return;
             var iCommand = c.GetTypeByMetadataName("Abstractions.ICommand");
             var iQuery = c.GetTypeByMetadataName("Abstractions.IQuery");
-            var iTrigger = c.GetTypeByMetadataName("Abstractions.IPipelineTrigger");
-            // Eine Quell-Nachricht (Pipeline als Fluss, §14) ist der Anstoß von außen wie ein Trigger — gleiche Befugnis-Art.
+            // Eine Quell-Nachricht (von einem Treiber oder vom Client) ist eine eigene Befugnis-Art.
             var iQuelle = c.GetTypeByMetadataName("Abstractions.IQuellNachricht");
             var iEvent = c.GetTypeByMetadataName("Abstractions.IEvent");
             var iTransient = c.GetTypeByMetadataName("Abstractions.ITransientEvent");
@@ -138,7 +137,7 @@ namespace Infrastructure.SourceGeneration
                     .Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default).ToList();
                 var cmds = darf.Where(t => Implementiert(t, iCommand)).ToList();
                 var queries = darf.Where(t => Implementiert(t, iQuery)).ToList();
-                var trigger = darf.Where(t => Implementiert(t, iTrigger) || Implementiert(t, iQuelle)).ToList();
+                var quellen = darf.Where(t => Implementiert(t, iQuelle)).ToList();
                 var transient = darf.Where(t => Implementiert(t, iTransient)).ToList();
                 // Funktionen draußen, die er rechnen (= deren Ausgaben er hineingeben) darf.
                 var funktionen = darf.Where(t => t.TypeKind == TypeKind.Interface && Implementiert(t, iFunktion)).ToList();
@@ -152,7 +151,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"        [\"{a.Name}\"] = new AkteurRechte(\"{a.Name}\", typeof({a.ToDisplayString(fq)}),");
                 sb.AppendLine($"            Commands: {Menge(cmds.Select(t => t.ToDisplayString(fq)))},");
                 sb.AppendLine($"            Queries: {Menge(queries.Select(t => t.ToDisplayString(fq)))},");
-                sb.AppendLine($"            Trigger: {Menge(trigger.Select(t => t.ToDisplayString(fq)))},");
+                sb.AppendLine($"            Quellen: {Menge(quellen.Select(t => t.ToDisplayString(fq)))},");
                 sb.AppendLine($"            TransientEvents: {Menge(transient.Select(t => t.ToDisplayString(fq)))},");
                 sb.AppendLine($"            Hoert: {Menge(hoert)},");
                 sb.AppendLine($"            Art: \"{ArtVon(a)}\") {{ Funktionen = {Menge(funktionen.Select(t => t.ToDisplayString(fq)))} }},");

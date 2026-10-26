@@ -99,8 +99,7 @@ public sealed class GleichbleibendAnalyzer : DiagnosticAnalyzer
         if (baustein == null) return;
         if (v.Art == Art.NeueId)
         {
-            if (baustein.Value.Art != BausteinArt.Andere)
-                ctx.ReportDiagnostic(Diagnostic.Create(NeueId, ort, oben.Name, baustein.Value.Text, v.Was));
+            ctx.ReportDiagnostic(Diagnostic.Create(NeueId, ort, oben.Name, baustein.Value.Text, v.Was));
             return;
         }
         if (baustein.Value.Art is BausteinArt.Aggregat or BausteinArt.Projektion)
@@ -109,17 +108,13 @@ public sealed class GleichbleibendAnalyzer : DiagnosticAnalyzer
             ctx.ReportDiagnostic(Diagnostic.Create(Gleichbleibend, ort, oben.Name, Text(v.Art), v.Was));
     }
 
-    private enum BausteinArt { Aggregat, Projektion, Reader, Funktion, GleichbleibendeFunktion, Andere }
+    private enum BausteinArt { Aggregat, Projektion, Reader, Funktion, GleichbleibendeFunktion }
 
     /// <summary>Welcher Baustein der Server-Seite <paramref name="t"/> ist — nur aus Markern und Signaturen; null = keiner (Client, Hilfscode …).</summary>
     private static (BausteinArt Art, string Text)? Baustein(INamedTypeSymbol t)
     {
         if (Funktionsform.Hat(t, "Abstractions.IState")) return (BausteinArt.Aggregat, "ein Aggregat");
-        if (Funktionsform.Hat(t, "Abstractions.ISubscriber"))
-        {
-            var schreibt = t.GetMembers().OfType<IMethodSymbol>().Any(m => m.Parameters.Any(p => Funktionsform.Hat(p.Type, "Abstractions.IWriteStore")));
-            return schreibt ? (BausteinArt.Projektion, "eine Projektion") : (BausteinArt.Andere, "eine Reaktion");
-        }
+        if (Funktionsform.Hat(t, "Abstractions.ISubscriber")) return (BausteinArt.Projektion, "eine Projektion");
         if (t.AllInterfaces.Any(i => Funktionsform.Name(i) == "Abstractions.IReader`1")) return (BausteinArt.Reader, "ein Reader");
         if (t.TypeKind == TypeKind.Class && Funktionsform.IstBaustein(t))
             return Funktionsform.Gleichbleibend(Funktionsform.Lies(t)) ? (BausteinArt.GleichbleibendeFunktion, "eine Funktion") : (BausteinArt.Funktion, "eine Funktion");

@@ -3,7 +3,6 @@
 #nullable enable
 using System.Text.Json.Serialization;
 using Infrastructure.Aggregate;
-using Infrastructure.Prozess;
 
 namespace Infrastructure.Serialization;
 
@@ -25,14 +24,7 @@ namespace Infrastructure.Serialization;
         typeof(global::Abstractions.IdJsonKonverter<global::Domain.Teilauftrag.Teilauftrag>),
         typeof(global::Abstractions.IdJsonKonverter<global::Domain.Trainingslauf.Trainingslauf>),
     })]
-// ── Framework: Prozess-intern + Aggregat-Inbox (IEvent → persistiert) ──
-[JsonSerializable(typeof(ProzessGestartet))]
-[JsonSerializable(typeof(ProzessBeendet))]
-[JsonSerializable(typeof(SchrittGescheitert))]
-[JsonSerializable(typeof(SchrittUmgeleitet))]
-[JsonSerializable(typeof(Abstractions.ZeitlimitAbgelaufen))]
-[JsonSerializable(typeof(Abstractions.SchrittAbgelehnt))]
-[JsonSerializable(typeof(Abstractions.QuellStrom))]
+// ── Framework: Aggregat-Inbox (IEvent → persistiert) ──
 [JsonSerializable(typeof(KommandoVerarbeitet))]
 [JsonSerializable(typeof(KommandoAbgelehnt))]
 // ── Framework: festgehaltene Ausgabe der Funktionen (Plan Pub/Sub-Neustrukturierung Phase 3) ──

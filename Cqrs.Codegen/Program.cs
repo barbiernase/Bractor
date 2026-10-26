@@ -17,8 +17,8 @@ using Struktur = Abstractions.Projektstruktur;
 //   1. <Wurzel>.Leitung/domain.proto               (Domänen-DTOs der Leitung, für protoc — nur mit Leitungs-Projekt)
 //   2. EventJsonSerializerContext.g.cs             (für den STJ-Source-Generator, Marten-Storage — in die Komposition)
 //   3. CqrsWireJsonContext.g.cs                    (für den STJ-Source-Generator, Cross-Node-Wire — in die Komposition)
-//   4. domain_client/generated/vertraege.py        (Akteur-Verträge → Python-Basisklassen, docs/konzept-akteure.md §3)
-//   5. domain_client/generated/funktionen.py       (Katalog-Funktionen → Python-Basisklassen, konzept-editor-pipelines §14.5)
+//   4. domain_client/generated/vertraege.py        (Client-Verträge → Python-Basisklassen, docs/konzept-akteure.md §3)
+//   5. domain_client/generated/funktionen.py       (Funktions-Schnittstellen → Python-Basisklassen, Laufort Extern)
 //      + funktions_tabelle.py                   (Funktion → Basis, Modul, Klasse der Implementierung — der generische Worker, konzept-werkbank §12.3 E13)
 //   6. domain_client/generated/nutzlast_tabelle.py (Nutzlast.typ → DTO-Klasse, Gegenstück zu GeneratedNutzlast, dieselbe Namensregel)
 //   (4–6 nur mit Python-Worker-Projekt der Anwendung.)
@@ -190,8 +190,6 @@ int Erzeuge(string wurzel)
     var allGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IMessagePayload")
         .Concat(analyzer.AnalyzeTypesImplementing("Abstractions.IQuery"))
         .Concat(analyzer.AnalyzeTypesImplementing("Abstractions.IQueryResponse"))
-        .Concat(analyzer.AnalyzeTypesImplementing("Abstractions.IPipelineTrigger"))
-        .Concat(analyzer.AnalyzeTypesImplementing("Abstractions.IAuftrag"))   // Aufträge der Katalog-Funktionen (externe Ausführer)
         .ToList();
 
     var aggregator = new TypeAggregator();
@@ -202,8 +200,6 @@ int Erzeuge(string wurzel)
     var eventTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Event");
     var queryTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Query");
     var queryResponseTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "QueryResponse");
-    var triggerTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Trigger");
-    var auftragTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Auftrag");
 
     if (Hat(Art.Proto))
     {
@@ -211,7 +207,7 @@ int Erzeuge(string wurzel)
         var leitung = Struktur.Projekt(wurzel, Struktur.Rolle.Leitung);
         var protoContent = new FileGenerator().GenerateProtoFile(
             leitung.ToLowerInvariant(), objectTypes, commandTypes, eventTypes,
-            queryTypes, queryResponseTypes, triggerTypes, auftragTypes, csharpNamespace: leitung);
+            queryTypes, queryResponseTypes, csharpNamespace: leitung);
         WriteIfChanged(Pfad(Art.Proto), protoContent);
         Console.WriteLine($"✅ {Pfad(Art.Proto)}");
     }
@@ -238,14 +234,14 @@ int Erzeuge(string wurzel)
     if (Hat(Art.Vertraege))
     {
         // ────────────────────────────────────────────────────────────────────
-        // 4. Akteur-Verträge → Python (die Worker programmieren gegen die generierte Basis)
+        // 4. Client-Verträge → Python (die Worker programmieren gegen die generierte Basis)
         // ────────────────────────────────────────────────────────────────────
         var (vertraegePy, vertragAnzahl) = PythonVertragsEmitter.Emit(assemblies);
         WriteIfChanged(Pfad(Art.Vertraege), vertraegePy);
         Console.WriteLine($"✅ {Pfad(Art.Vertraege)} ({vertragAnzahl} Verträge)");
 
         // ────────────────────────────────────────────────────────────────────
-        // 5. Katalog-Funktionen → Python (ein Worker bietet sie an: <Funktion>Basis mit rufe(auftrag, x)) + die Tabelle des
+        // 5. Funktions-Schnittstellen → Python (ein Worker trägt sie: <Funktion>Basis mit der Eingangs-Methode) + die Tabelle des
         //    generischen Workers (Funktion → Basis, Modul, Klasse der Implementierung, konzept-werkbank §12.3 E13)
         // ────────────────────────────────────────────────────────────────────
         var (funktionenPy, funktionAnzahl) = PythonFunktionsEmitter.Emit(assemblies);
@@ -257,7 +253,7 @@ int Erzeuge(string wurzel)
         // ────────────────────────────────────────────────────────────────────
         // 6. Nutzlast-Tabelle → Python (typ → DTO-Klasse; dieselben Kategorien und dieselbe Namensregel wie GeneratedNutzlast in C#)
         // ────────────────────────────────────────────────────────────────────
-        var (nutzlastPy, nutzlastAnzahl) = PythonNutzlastEmitter.Emit(commandTypes, eventTypes, queryTypes, queryResponseTypes, triggerTypes, auftragTypes);
+        var (nutzlastPy, nutzlastAnzahl) = PythonNutzlastEmitter.Emit(commandTypes, eventTypes, queryTypes, queryResponseTypes);
         WriteIfChanged(Pfad(Art.NutzlastTabelle), nutzlastPy);
         Console.WriteLine($"✅ {Pfad(Art.NutzlastTabelle)} ({nutzlastAnzahl} Nutzlast-Typen)");
     }

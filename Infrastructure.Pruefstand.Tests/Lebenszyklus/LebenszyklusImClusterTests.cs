@@ -22,8 +22,6 @@ namespace Infrastructure.Pruefstand.Lebenszyklus;
 /// in-memory, ohne Store — Log und Tracker sind die Seams des Batch-Konsums):
 /// <list type="bullet">
 /// <item>der Batch-Leser gibt seinen Bereich beim Stopp nicht frei, solange der Durchlauf ihn nutzt (vorher: freigegeben im <c>Stopped</c>);</item>
-/// <item>der Stream-Adapter gibt seinen Bereich nach der Passivierung frei (vorher: nie) und beantwortet eine gescheiterte Weckung ehrlich mit
-///   „nicht aufgeholt“ (vorher: keine Antwort, der Poll lief in seine Frist);</item>
 /// <item>eine Frage an einen Actor, der nie antwortet, läuft in ihre Frist — Proto.Cluster wiederholt sie sonst ohne Ende.</item>
 /// </list>
 /// Zeitkritisch (echte Uhr).
@@ -82,49 +80,6 @@ public class LebenszyklusImClusterTests
             await stopp.WaitAsync(Geduld);
             await fabrik.Frei.Task.WaitAsync(Geduld);
             benutzbar.Should().BeTrue("freigegeben wird nach dem Durchlauf, nicht während er den Bereich nutzt");
-        }
-        finally { await system.Cluster().ShutdownAsync(); }
-    }
-
-    [Fact]
-    public async Task Der_Stream_Adapter_gibt_seinen_Bereich_nach_der_Passivierung_frei()
-    {
-        var fabrik = new ZaehlFabrik();
-        var passivierung = new Passivierung(TimeSpan.Zero, TimeSpan.FromMilliseconds(300), TimeSpan.Zero);
-        var kind = new ClusterKind("pull-probe", Props.FromProducer(() => new SignalAdapterActor(new PartitionsLog(),
-            _ => ("probe", null, (_, _, _) => Task.CompletedTask), fabrik, passivierung: passivierung)));
-        var system = await ClusterAsync(kind);
-        try
-        {
-            var ack = await new Bote(system.Cluster()).FrageAsync<WakeAck>(ClusterIdentity.Create(Guid.NewGuid().ToString(), "pull-probe"),
-                new Wake(), Geduld, default);
-            ack.Should().Be(new WakeAck(Aufgeholt: true));
-
-            await fabrik.Frei.Task.WaitAsync(Geduld);
-            (fabrik.Geoeffnet, fabrik.Freigegeben).Should().Be((1, 1));
-        }
-        finally { await system.Cluster().ShutdownAsync(); }
-    }
-
-    [Fact]
-    public async Task Eine_gescheiterte_Weckung_des_Stream_Adapters_wird_ehrlich_als_nicht_aufgeholt_beantwortet()
-    {
-        var stream = Guid.NewGuid();
-        var log = new PartitionsLog();
-        log.Haenge(stream, 1);
-        var fabrik = new ZaehlFabrik();
-        var kind = new ClusterKind("pull-probe", Props.FromProducer(() => new SignalAdapterActor(log,
-            _ => ("probe", null, (_, _, _) => throw new InvalidOperationException("Dispatch kaputt")), fabrik)));
-        var system = await ClusterAsync(kind);
-        try
-        {
-            var uhr = Stopwatch.StartNew();
-            var ack = await new Bote(system.Cluster()).FrageAsync<WakeAck>(ClusterIdentity.Create(stream.ToString(), "pull-probe"),
-                new Wake(), Geduld, default);
-
-            ack.Should().Be(new WakeAck(Aufgeholt: false), "der Poll hält seine Marke, statt in die Frist zu laufen");
-            uhr.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(5));
-            await fabrik.Frei.Task.WaitAsync(Geduld);              // der Neustart nach dem Fehler gibt den Bereich der alten Instanz frei
         }
         finally { await system.Cluster().ShutdownAsync(); }
     }

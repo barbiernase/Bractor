@@ -4,8 +4,8 @@ using System.Text.Json.Nodes;
 namespace Cqrs.Vermessung;
 
 /// <summary>
-/// S4 Datensatz (Beispieldomäne): als KI-Operator einen Datensatz anlegen, die Range über alle Bildpaare aufnehmen (Fluss mit
-/// <c>IRangeSuche</c>, Lese-Fähigkeit) und einfrieren (Fluss mit <c>IMitgliederEinfrieren</c>, großes Event). Sichtbar über
+/// S4 Datensatz (Beispieldomäne): als KI-Operator einen Datensatz anlegen, die Range über alle Bildpaare aufnehmen (Funktion mit
+/// Lese-Fähigkeit) und einfrieren (Funktion, großes Event). Sichtbar über
 /// <c>HoleDatensatz</c>: erst alle Paare als Mitglieder, dann Status <c>Eingefroren</c>. Kennzahl ist die Dauer bzw. Paare je Sekunde.
 /// </summary>
 internal sealed class Datensatz

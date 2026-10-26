@@ -18,7 +18,7 @@ namespace Infrastructure.Pruefstand.Funktionen;
 /// </summary>
 public sealed class SpeicherAblage : IAusgabeAblage
 {
-    private readonly Dictionary<Guid, (List<IPipelineOutput> Ausgaben, bool Fertig)> _f = new();
+    private readonly Dictionary<Guid, (List<IAusgabe> Ausgaben, bool Fertig)> _f = new();
     public int Festhalten { get; private set; }
     public Func<FunktionsEingabe, int, Task>? VorDemFesthalten { get; set; }
 
@@ -27,12 +27,12 @@ public sealed class SpeicherAblage : IAusgabeAblage
         lock (_f) return Task.FromResult(_f.TryGetValue(eingabe.Schluessel, out var x) ? new Festgehalten(x.Ausgaben.ToList(), x.Fertig) : Festgehalten.Nichts);
     }
 
-    public async Task<bool> HalteFestAsync(FunktionsEingabe eingabe, int ab, IReadOnlyList<IPipelineOutput> ausgaben, bool abgeschlossen, CancellationToken ct)
+    public async Task<bool> HalteFestAsync(FunktionsEingabe eingabe, int ab, IReadOnlyList<IAusgabe> ausgaben, bool abgeschlossen, CancellationToken ct)
     {
         if (VorDemFesthalten is { } v) await v(eingabe, ab);
         lock (_f)
         {
-            var (liste, fertig) = _f.TryGetValue(eingabe.Schluessel, out var x) ? x : (new List<IPipelineOutput>(), false);
+            var (liste, fertig) = _f.TryGetValue(eingabe.Schluessel, out var x) ? x : (new List<IAusgabe>(), false);
             if (fertig || liste.Count != ab) return false;
             liste.AddRange(ausgaben);
             _f[eingabe.Schluessel] = (liste, abgeschlossen);
@@ -70,7 +70,7 @@ public class FunktionsArbeitTests
     private static readonly Guid Stream = Guid.NewGuid();
     private static EventEnvelope Ein(int version = 1) => new() { AggregateId = Stream, AggregateVersion = version, Payload = new Eingang(version), CorrelationId = Guid.NewGuid().ToString() };
 
-    private static FunktionsBaustein Baustein(Func<Eingang, Herkunft, CancellationToken, IAsyncEnumerable<IPipelineOutput>> auf, bool gleichbleibend,
+    private static FunktionsBaustein Baustein(Func<Eingang, Herkunft, CancellationToken, IAsyncEnumerable<IAusgabe>> auf, bool gleichbleibend,
         bool strom = false, bool mitEvents = false, bool draussen = false) =>
         new(typeof(FunktionsArbeitTests), "Probe", draussen, gleichbleibend,
             new[] { new FunktionsEingang(typeof(Eingang), false, strom, mitEvents, new[] { typeof(Tu), typeof(Getan), typeof(Wink) }, Type.EmptyTypes) },
@@ -78,7 +78,7 @@ public class FunktionsArbeitTests
             (f, e, h, b, ct) => auf((Eingang)e, h, ct),
             (f, s, b, ct) => throw new NotSupportedException());
 
-    private static async IAsyncEnumerable<IPipelineOutput> Aus(params IPipelineOutput[] a)
+    private static async IAsyncEnumerable<IAusgabe> Aus(params IAusgabe[] a)
     {
         await Task.Yield();
         foreach (var x in a) yield return x;
@@ -170,7 +170,7 @@ public class FunktionsArbeitTests
         var ziel = Id<Ziel>.Neu();
         var gerechnet = new List<int>();
         var brichAb = true;
-        async IAsyncEnumerable<IPipelineOutput> Strom(Eingang e, Herkunft h, [EnumeratorCancellation] CancellationToken ct)
+        async IAsyncEnumerable<IAusgabe> Strom(Eingang e, Herkunft h, [EnumeratorCancellation] CancellationToken ct)
         {
             for (var i = 0; i < 7; i++)
             {
@@ -240,7 +240,7 @@ public class FunktionsArbeitTests
             angeboten.Add(angebot);
             // Der Worker antwortet: hält fest und meldet es dem Actor.
             var eingabe = new FunktionsEingabe("Probe", angebot.Stream, angebot.Version, angebot.KorrelationsText, angebot.Akteur);
-            await ablage.HalteFestAsync(eingabe, 0, new IPipelineOutput[] { new Tu(ziel, "von draußen") }, true, ct);
+            await ablage.HalteFestAsync(eingabe, 0, new IAusgabe[] { new Tu(ziel, "von draußen") }, true, ct);
             arbeit!.Beantwortet(angebot.Vorgang, null);
         }, antwortGeduld: TimeSpan.FromSeconds(5));
 
@@ -280,8 +280,8 @@ public class FunktionsArbeitTests
         w2.Biete(new[] { ("Probe", 1) });
         await Warte(() => w1.Laufende.Count == 1 && w2.Laufende.Count == 1);
 
-        (await w1.AntwortAsync(angebot.Vorgang, new IPipelineOutput[] { new Tu(ziel, "erste") }, null, default)).Should().Be(ErgebnisAusgang.Geschrieben);
-        (await w2.AntwortAsync(angebot.Vorgang, new IPipelineOutput[] { new Tu(ziel, "zweite") }, null, default)).Should().Be(ErgebnisAusgang.Ueberholt);
+        (await w1.AntwortAsync(angebot.Vorgang, new IAusgabe[] { new Tu(ziel, "erste") }, null, default)).Should().Be(ErgebnisAusgang.Geschrieben);
+        (await w2.AntwortAsync(angebot.Vorgang, new IAusgabe[] { new Tu(ziel, "zweite") }, null, default)).Should().Be(ErgebnisAusgang.Ueberholt);
 
         var fest = await ablage.LiesAsync(new FunktionsEingabe("Probe", Stream, 1, null, null), default);
         fest.Ausgaben.Cast<Tu>().Single().Was.Should().Be("erste");
@@ -297,7 +297,7 @@ public class FunktionsArbeitTests
             (f, m) => Task.CompletedTask, (e, f, _) => Task.CompletedTask, new SpeicherAblage(), (f, e, fehler, _) => { gemeldet = fehler; return Task.CompletedTask; });
         w.Biete(new[] { ("Probe", 1) });
         await Warte(() => w.Laufende.Count == 1);
-        (await w.AntwortAsync(angebot.Vorgang, new IPipelineOutput[] { new Eingang(9) }, null, default)).Should().Be(ErgebnisAusgang.Abgelehnt);
+        (await w.AntwortAsync(angebot.Vorgang, new IAusgabe[] { new Eingang(9) }, null, default)).Should().Be(ErgebnisAusgang.Abgelehnt);
         gemeldet.Should().Contain("außerhalb der Signatur");
     }
 

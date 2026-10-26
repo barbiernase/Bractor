@@ -42,16 +42,15 @@ public sealed class KontextBauer
         miscellaneousOptions: SymbolDisplayMiscellaneousOptions.UseSpecialTypes
                               | SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
-    private static readonly string[] Arten = { "decide", "apply", "projektion", "reaktion", "reader", "pipeline", "store", "funktion", "fluss", "saga" };
+    private static readonly string[] Arten = { "decide", "apply", "projektion", "reader", "store" };
 
     private readonly SlotInventar _inv;
     private readonly DomainModel _dom;
     private readonly KnowledgeGraph _graph;
-    private readonly CompositionRoot _cr;
     private readonly JsonElement _board;        // Editor-Modell (ModellMapper.ZuBoardJson) — Quelle des Skeletts
     private readonly List<Compilation> _comps;
     private readonly HashSet<string> _domänen, _framework;
-    private readonly INamedTypeSymbol? _iTransient, _iWriteStore, _iReadStore, _iCoCommit, _iPull, _iAppend, _iTrigger, _iSelf, _iEvent, _iCommand, _iQuery, _iReadModel, _iResponse;
+    private readonly INamedTypeSymbol? _iTransient, _iWriteStore, _iReadStore, _iCoCommit, _iPull, _iAppend, _iEvent, _iCommand, _iQuery, _iReadModel, _iResponse;
     private readonly Dictionary<string, (string Intent, string Quelle)> _llmKnoten;
 
     /// <summary>Welche Syntaxbäume handgeschrieben sind (je Solution-Stand).</summary>
@@ -61,7 +60,7 @@ public sealed class KontextBauer
     {
         _quelltexte = lage.Quelltexte;
         _inv = new SlotInventar(lage, dom);
-        _dom = dom; _graph = graph; _cr = cr;
+        _dom = dom; _graph = graph;
         _board = JsonDocument.Parse(ModellMapper.ZuBoardJson(graph, dom, cr)).RootElement;
         _comps = lage.Compilations;
         _domänen = new HashSet<string>(lage.DomänenAssemblies, StringComparer.Ordinal);
@@ -69,8 +68,8 @@ public sealed class KontextBauer
         INamedTypeSymbol? Get(string n) => _comps.Select(c => c.GetTypeByMetadataName(n)).FirstOrDefault(x => x != null);
         _iTransient = Get(Vertrag.ITransientEvent); _iWriteStore = Get(Vertrag.IWriteStore); _iReadStore = Get(Vertrag.IReadStore);
         _iCoCommit = Get(Vertrag.ICoCommitTracker);
-        _iPull = Get(Vertrag.IPullSubscriber); _iAppend = Get(Vertrag.IAppendProjektion); _iTrigger = Get(Vertrag.IPipelineTrigger);
-        _iSelf = Get(Vertrag.IPipelineSelfMessage); _iEvent = Get(Vertrag.IEvent); _iCommand = Get(Vertrag.ICommand);
+        _iPull = Get(Vertrag.IPullSubscriber); _iAppend = Get(Vertrag.IAppendProjektion);
+        _iEvent = Get(Vertrag.IEvent); _iCommand = Get(Vertrag.ICommand);
         _iQuery = Get(Vertrag.IQuery); _iReadModel = Get(Vertrag.IReadModel); _iResponse = Get(Vertrag.IQueryResponse);
         _llmKnoten = LiesLlmKnoten(boardDatei);
     }
@@ -89,14 +88,8 @@ public sealed class KontextBauer
     {
         "decide" or "apply" => s.State?.Name ?? s.Klasse.Name,
         "store" => StoreVon(s)?.Name ?? s.Klasse.Name,
-        "funktion" => FunktionVon(s)?.Name ?? s.Klasse.Name,   // der Editor adressiert die Funktion über ihre Schnittstelle
         _ => s.Klasse.Name,
     };
-
-    /// <summary>Die Katalog-Funktion (Schnittstelle), deren RufeAsync der Slot implementiert.</summary>
-    private INamedTypeSymbol? FunktionVon(SlotInventar.SlotRef s) => s.Methode == null ? null
-        : s.Klasse.AllInterfaces.FirstOrDefault(i => i.GetMembers(Vertrag.FunktionsMethode).OfType<IMethodSymbol>()
-            .Any(m => SymbolEqualityComparer.Default.Equals(s.Klasse.FindImplementationForInterfaceMember(m), s.Methode)));
 
     private string Schlüssel(SlotInventar.SlotRef s) => $"{s.Art}|{Besitzer(s)}|{s.Disc}";
 
@@ -117,12 +110,9 @@ public sealed class KontextBauer
         foreach (var d in A(b, "decider")) Merke(d, $"decide|{S(d, "aggregat")}|{S(d, "command")}");
         foreach (var d in A(b, "applier")) Merke(d, $"apply|{S(d, "aggregat")}|{S(d, "event")}");
         foreach (var p in A(b, "projektionen")) foreach (var h in A(p, "handles")) Merke(h, $"projektion|{S(p, "name")}|{S(h, "event")}");
-        foreach (var p in A(b, "reaktionen")) foreach (var h in A(p, "handles")) Merke(h, $"reaktion|{S(p, "name")}|{S(h, "event")}");
         foreach (var r in A(b, "reader")) foreach (var h in A(r, "handles")) Merke(h, $"reader|{S(r, "name")}|{S(h, "query")}");
-        foreach (var p in A(b, "pipelines")) foreach (var h in A(p, "handles")) Merke(h, $"pipeline|{S(p, "name")}|{S(h, "input") ?? S(h, "event")}");
         foreach (var st in A(b, "stores"))
             foreach (var f in A(st, "writeFns").Concat(A(st, "readFns"))) Merke(f, $"store|{S(st, "name")}|{S(f, "name")}");
-        foreach (var f in A(b, "funktionen")) Merke(f, $"funktion|{S(f, "name")}|{S(f, "auftrag")}");
         foreach (var c in A(b, "clients"))
         {
             var n = S(c, "name") ?? ""; var client = n.Length > 1 && n[0] == 'I' && char.IsUpper(n[1]) ? n[1..] : n;
@@ -170,9 +160,9 @@ public sealed class KontextBauer
             }
         }
         foreach (var r in A(_board, "records").Where(r => S(r, "kind") == "rejection")) b.AppendLine($"ablehnung {S(r, "name")}({F(r)})");
-        foreach (var s in A(_board, "sagas"))
-            foreach (var st in A(s, "schritte"))
-                b.AppendLine($"PROZESS {S(s, "name")}: wenn {string.Join(" + ", Str(st, "wenn"))} -> sende {S(st, "sende")}{(Bo(st, "sendeJe") ? " (je Element)" : "")}");
+        foreach (var f in A(_board, "bausteinFunktionen"))
+            b.AppendLine($"FUNKTION {S(f, "name")} ({(Bo(f, "klasse") ? "im Host" : "draußen")}): " + string.Join("; ", A(f, "eingaenge").Select(e =>
+                $"{S(e, "eingang")} -> {(Bo(e, "strom") ? "Strom " : "")}{string.Join(" | ", Str(e, "ausgaben"))}")));
         var fnName = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var st in A(_board, "stores"))
         {
@@ -182,21 +172,12 @@ public sealed class KontextBauer
                 $"{S(f, "name")}({string.Join(", ", A(f, "params").Select(p => $"{S(p, "name")}:{S(p, "typ")}"))}){(S(f, "rueckgabe") is { } r ? " -> " + r : "")}")));
         }
         foreach (var rm in A(_board, "readModels")) b.AppendLine($"readmodel {S(rm, "name")}({F(rm)}) @ {S(rm, "store")}");
-        foreach (var p in A(_board, "projektionen").Concat(A(_board, "reaktionen")))
+        foreach (var p in A(_board, "projektionen"))
             b.AppendLine($"PROJEKTION {S(p, "name")} pull={Bo(p, "pull")} append={Bo(p, "append")}: " + string.Join("; ", A(p, "handles").Select(h =>
-                $"{S(h, "event")} -> {string.Join(", ", Str(h, "fns").Select(x => fnName.GetValueOrDefault(x, x)))}{(Str(h, "publishes").Any() ? " / veröffentlicht " + string.Join(", ", Str(h, "publishes")) : "")}{(Str(h, "sends").Any() ? " / sendet " + string.Join(", ", Str(h, "sends")) : "")}")));
+                $"{S(h, "event")} -> {string.Join(", ", Str(h, "fns").Select(x => fnName.GetValueOrDefault(x, x)))}{(Str(h, "publishes").Any() ? " / veröffentlicht " + string.Join(", ", Str(h, "publishes")) : "")}")));
         foreach (var r in A(_board, "reader"))
             b.AppendLine($"READER {S(r, "name")} liest {S(r, "projektion")}: " + string.Join("; ", A(r, "handles").Select(h =>
                 $"{S(h, "query")} -> {string.Join(", ", Str(h, "fns").Select(x => fnName.GetValueOrDefault(x, x)))} => {string.Join(" | ", Str(h, "responses"))}")));
-        foreach (var p in A(_board, "pipelines"))
-            b.AppendLine($"PIPELINE {S(p, "name")} dienste=[{string.Join(", ", Str(p, "dienste"))}] konfigs=[{string.Join(", ", Str(p, "konfigs"))}]: " + string.Join("; ", A(p, "handles").Select(h =>
-                $"{S(h, "input")} ({S(h, "inputKind")}) -> {string.Join(", ", Str(h, "sends").Concat(Str(h, "emits")).Concat(Str(h, "publishes")))}")));
-        foreach (var t in A(_board, "triggers")) b.AppendLine($"trigger {S(t, "name")}({F(t)})");
-        // Fristen = Ausgänge der Pipeline-Handles (Frist<TCmd> plant, FristStorno<TCmd> storniert).
-        foreach (var p in A(_board, "pipelines"))
-            foreach (var h in A(p, "handles"))
-                foreach (var f in A(h, "fristen"))
-                    b.AppendLine($"FRIST {S(f, "command")}: {(S(f, "art") == "storno" ? "storniert" : "plant")} bei {S(h, "input")} ({S(p, "name")}); fällig -> {S(f, "command")}");
         foreach (var d in A(_board, "dienste")) b.AppendLine($"dienst {S(d, "vertrag")} -> {S(d, "name")}");
         return b.ToString();
     }
@@ -207,7 +188,6 @@ public sealed class KontextBauer
 
     private SlotKontext Baue(SlotInventar.SlotRef s, string? cliAuftrag)
     {
-        if (s.Art is "fluss" or "saga") return BaueFluss(s, cliAuftrag);
         var m = s.Methode!;
         var model = Model(s.Rumpf.SyntaxTree);
         var k = new SlotKontext { Slot = s, Schlüssel = Schlüssel(s), Titel = $"{s.Art} {Besitzer(s)}.{s.Disc}{(s.Art == "store" ? " @ " + s.Klasse.Name : "")}", RumpfStatus = RumpfStatus(s, model) };
@@ -262,14 +242,15 @@ public sealed class KontextBauer
         return k;
     }
 
-    // ── Zusage/Kenntnis eines Akteurs DRAUSSEN (docs/konzept-akteure.md §3/§4): der Python-Rumpf einer Client-Implementierung ──
+    // ── Getragene Funktion bzw. Kenntnis eines Clients DRAUSSEN (docs/konzept-akteure.md §4): der Python-Rumpf einer Client-Implementierung ──
 
     public sealed record PythonSlot(string Id, string Titel, string Text, string Client, string Event, string Klasse, string Methode,
         string? Signatur, IReadOnlyList<string> Ausgaenge, string Datei, int Zeile, bool Fehlt, string? Auftrag, string SlotDatei);
 
     /// <summary>
-    /// Je Client-Implementierung (Klasse, die die generierte Basis erbt) und Zusage/Kenntnis ein Slot: Signatur aus der Basis, Ausgabe-
-    /// Vertrag, erreichbar (Event-DTO, ctx, state, self), Typen der Domäne, als Nachbarn die übrigen Methoden der Klasse (wörtlich).
+    /// Je Client-Implementierung (Klasse, die die generierte Basis erbt) und getragenem Funktions-Eingang bzw. Kenntnis ein Slot: Signatur aus
+    /// der Basis, Ausgabe-Vertrag, erreichbar (Eingangs-DTO, Herkunft bzw. ctx, state, self), Typen der Domäne, als Nachbarn die übrigen
+    /// Methoden der Klasse (wörtlich). Die Slot-Art heißt im Protokoll mit dem Editor weiter <c>zusage</c>.
     /// </summary>
     public IEnumerable<PythonSlot> PythonSlots(string solutionDir)
     {
@@ -314,22 +295,25 @@ public sealed class KontextBauer
                     Kopf("AUFTRAG [L]");
                     b.AppendLine(auftrag ?? "— kein LLM-Knoten an diesem Code-Block (ohne Auftrag wird kein Aufruf ausgelöst)");
                     Kopf("ANKER [S]");
-                    b.AppendLine($"{klasse}.{methode}   {datei}:{(m == null ? "— (Methode fehlt, wird mit der Signatur der Basis angelegt)" : (m.DefZeile + 1).ToString())}   Implementierung des Clients {client}{(S(r, "akteur") is { } ak ? $", antwortet im Namen von {ak}" : "")}");
+                    var funktion = S(r, "funktion");
+                    b.AppendLine($"{klasse}.{methode}   {datei}:{(m == null ? "— (Methode fehlt, wird mit der Signatur der Basis angelegt)" : (m.DefZeile + 1).ToString())}   Implementierung des Clients {client}{(funktion is { } fn ? $", trägt die Funktion {fn}" : "")}");
                     Kopf("SIGNATUR [S]");
                     b.AppendLine(defImpl ?? $"async def {methode}(self, e, ctx, state):");
                     if (m != null && sig != null && defImpl != sig) b.AppendLine($"(Basis: {sig})");
                     Kopf("VERTRAG (nur Erzwungenes) [S]");
-                    b.AppendLine(ausg.Count == 0
-                        ? "Kenntnis: keine Ausgabe (kein yield) — Framework (die generierte Basis prüft jedes Yield gegen den Vertrag)"
-                        : $"Zusage: liefert nur {string.Join(" | ", ausg.Select(x => x + "Dto"))} per yield — Framework (Basis prüft jedes Yield gegen den Ausgabe-Vertrag)");
-                    b.AppendLine("Ausgaben gehen im Namen des Akteurs durch das Tor; mehrere yields = mehrere Commands");
+                    b.AppendLine(funktion == null
+                        ? "Kenntnis: keine Ausgabe — Framework (die generierte Basis prüft jede Rückgabe gegen den Vertrag)"
+                        : $"Funktion {funktion}: liefert nur {string.Join(" | ", ausg.Select(x => x + "Dto"))} — Framework (Basis prüft jede Ausgabe gegen die Signatur der Funktion)");
+                    if (funktion != null) b.AppendLine("Festgehalten und gesendet wird beim Funktions-Actor des Servers; die erste Antwort gewinnt");
                     Kopf("ERREICHBAR IM RUMPF [S]");
-                    b.AppendLine($"Parameter  {P(0, "e")} : {ev}Dto   (das Event — Felder in snake_case, siehe TYPEN)");
-                    b.AppendLine($"Parameter  {P(1, "ctx")} : MessageContext   ({(ctxFelder.Count == 0 ? "Metadaten des Envelopes" : string.Join(", ", ctxFelder))})");
+                    b.AppendLine($"Parameter  {P(0, "e")} : {ev}Dto   (der Eingang — Felder in snake_case, siehe TYPEN)");
+                    b.AppendLine(funktion == null
+                        ? $"Parameter  {P(1, "ctx")} : MessageContext   ({(ctxFelder.Count == 0 ? "Metadaten des Envelopes" : string.Join(", ", ctxFelder))})"
+                        : $"Parameter  {P(1, "h")} : Herkunft   (Stream, Version, Zeit, Akteur des Eingangs)");
                     b.AppendLine($"Parameter  {P(2, "state")} : der Zustand der Implementierung (siehe NACHBAR-CODE)");
                     b.AppendLine("self       : die Implementierung (Felder und Hilfsmethoden siehe NACHBAR-CODE)");
                     Kopf("TYPEN (Domänen-Records als DTO; /// = Doku-Kommentar) [S]");
-                    b.AppendLine(Typzeile(ev, "Event"));
+                    b.AppendLine(Typzeile(ev, "Eingang"));
                     foreach (var a in ausg) b.AppendLine(Typzeile(a, "Ausgabe"));
                     Kopf($"NACHBAR-CODE: {Path.GetFileName(datei)} ohne diesen Rumpf [N]");
                     var z = text.Replace("\r\n", "\n").Split('\n').ToList();
@@ -339,64 +323,6 @@ public sealed class KontextBauer
                         m == null ? 0 : m.DefZeile + 1, m == null, auftrag, Regex.Replace($"zusage-{client}.{ev}@{klasse}", @"[^\w.@-]", "_") + ".txt");
                 }
             }
-        }
-    }
-
-    /// <summary>
-    /// Katalog-Funktionen mit Python-Implementierung (Laufort Extern, konzept-werkbank §12.3 E13): je Funktion ein Slot für den <c>rufe</c>-Rumpf — Signatur aus der
-    /// generierten Basis, Vertrag (genau ein Ergebnis aus dem OneOf), erreichbar (Auftrag-DTO, Ausfuehrung, self.konfig), Typen, Nachbar-Code.
-    /// Id <c>funktionpy|&lt;F&gt;@&lt;Klasse&gt;</c>.
-    /// </summary>
-    public IEnumerable<PythonSlot> PythonFunktionsSlots(string solutionDir)
-    {
-        string? S(JsonElement e, string p) => e.TryGetProperty(p, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-        IEnumerable<JsonElement> A(JsonElement e, string p) => e.TryGetProperty(p, out var v) && v.ValueKind == JsonValueKind.Array ? v.EnumerateArray() : Enumerable.Empty<JsonElement>();
-        var rec = A(_board, "records").Where(r => S(r, "name") != null).GroupBy(r => S(r, "name")!).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-        string Snake(string n) => Regex.Replace(n, "(?<=[a-z0-9])([A-Z])|(?<=[A-Z])([A-Z][a-z])", "_$1$2").ToLowerInvariant();
-        string Typzeile(string name, string rolle)
-        {
-            if (!rec.TryGetValue(name, out var r)) return $"{name}   [{rolle}]   (unbekannt)";
-            var felder = A(r, "felder").Select(f => $"{S(f, "name")}: {S(f, "typ")}  → .{Snake(S(f, "name") ?? "")}").ToList();
-            return $"{S(r, "kind")} {name}Dto   [{rolle}]   Felder: {(felder.Count == 0 ? "—" : string.Join(" · ", felder))}";
-        }
-        foreach (var f in A(_board, "funktionen"))
-        {
-            if (!f.TryGetProperty("python", out var py) || py.ValueKind != JsonValueKind.Object) continue;
-            var name = S(f, "name") ?? ""; var auftrag = S(f, "auftrag") ?? "";
-            var ergebnisse = A(f, "ergebnisse").Select(x => x.GetString() ?? "").ToList();
-            var datei = S(py, "datei") ?? ""; var klasse = S(py, "klasse") ?? ""; var methode = S(py, "methode") ?? Abstractions.Funktionsvertrag.PythonMethode;
-            var sig = S(py, "signatur");
-            var voll = Path.Combine(solutionDir, datei);
-            var text = File.Exists(voll) ? File.ReadAllText(voll) : "";
-            var m = PythonQuelle.FindeMethode(text, klasse, methode);
-            var id = $"funktionpy|{name}@{klasse}";
-            var titel = $"funktion {name} (Python) @ {klasse}";
-            var llmAuftrag = _llmKnoten.TryGetValue(id, out var llm) ? llm.Intent : null;
-            var b = new StringBuilder();
-            void Kopf(string t) { b.AppendLine(); b.AppendLine("## " + t); }
-            b.AppendLine($"# SLOT-TEIL {titel}");
-            Kopf("AUFTRAG [L]");
-            b.AppendLine(llmAuftrag ?? "— kein LLM-Knoten an diesem Code-Block (ohne Auftrag wird kein Aufruf ausgelöst)");
-            Kopf("ANKER [S]");
-            b.AppendLine($"{klasse}.{methode}   {datei}:{(m == null ? "— (Methode fehlt, wird mit der Signatur der Basis angelegt)" : (m.DefZeile + 1).ToString())}   Python-Implementierung der Katalog-Funktion {name} (Laufort Extern)");
-            Kopf("SIGNATUR [S]");
-            b.AppendLine(sig ?? "async def rufe(self, auftrag, x):");
-            Kopf("VERTRAG (nur Erzwungenes) [S]");
-            b.AppendLine($"Genau EIN Ergebnis per return: {string.Join(" | ", ergebnisse.Select(x => x + "Dto"))} — Framework (die Basis prüft das Ergebnis gegen den OneOf; eine Ausnahme ist ein gescheiterter Schritt)");
-            b.AppendLine("Eine Wiederholung nach Absturz trägt dieselbe x.ausfuehrungs_id — Außenwirkung darüber deduplizieren (z. B. Zieldatei aus der Quelle ableiten)");
-            Kopf("ERREICHBAR IM RUMPF [S]");
-            b.AppendLine($"Parameter  auftrag : {auftrag}Dto   (der Auftrag — Felder in snake_case, siehe TYPEN)");
-            b.AppendLine("Parameter  x : Ausfuehrung   (ausfuehrungs_id, korrelation, akteur)");
-            b.AppendLine("self.konfig : dict[str, str]   (Werte der Implementierung aus den Worker-Argumenten der Umgebung: --konfig NAME=WERT)");
-            Kopf("TYPEN (Domänen-Records als DTO) [S]");
-            b.AppendLine(Typzeile(auftrag, "Auftrag"));
-            foreach (var e in ergebnisse) b.AppendLine(Typzeile(e, "Ergebnis"));
-            Kopf($"NACHBAR-CODE: {Path.GetFileName(datei)} ohne diesen Rumpf [N]");
-            var z = text.Replace("\r\n", "\n").Split('\n').ToList();
-            if (m != null) { z.RemoveRange(m.RumpfStart, m.RumpfEnde - m.RumpfStart); z.Insert(m.RumpfStart, "        ...  # ◄ dieser Rumpf"); }
-            b.AppendLine(string.Join("\n", z.Take(400)));
-            yield return new PythonSlot(id, titel, b.ToString().TrimStart('\n'), name, auftrag, klasse, methode, sig, ergebnisse, datei,
-                m == null ? 0 : m.DefZeile + 1, m == null, llmAuftrag, Regex.Replace($"funktionpy-{name}@{klasse}", @"[^\w.@-]", "_") + ".txt");
         }
     }
 
@@ -411,75 +337,6 @@ public sealed class KontextBauer
             return t.Skip(i + 1).TakeWhile(z => z.Length == 0 || z.StartsWith(' ')).Select(z => Regex.Match(z, @"^    ([a-z]\w*)\s*:")).Where(m => m.Success).Select(m => m.Groups[1].Value).ToList();
         }
         return [];
-    }
-
-    // ── Fluss-Lambda (docs/konzept-editor-pipelines.md §14.4): ein Bau-Lambda eines Pipeline-Flusses ──
-
-    /// <summary>
-    /// Der Slot-Teil eines Fluss-Lambdas: Anker (Anweisung + Lambda-Index), Signatur aus dem Delegat-Typ, Vertrag (rein, deterministisch,
-    /// Zuordnungsform), erreichbar = die Lambda-Parameter (die Drähte), Typen, und als Umfeld der ganze Fluss (alle Anweisungen).
-    /// </summary>
-    private SlotKontext BaueFluss(SlotInventar.SlotRef s, string? cliAuftrag)
-    {
-        var lam = s.Lambda!;
-        var model = Model(lam.SyntaxTree);
-        var regel = s.Art == "saga";
-        var k = new SlotKontext { Slot = s, Schlüssel = Schlüssel(s), Titel = $"{s.Art} {s.Klasse.Name}.{s.Disc}", RumpfStatus = "geschrieben" };
-        if (_llmKnoten.TryGetValue(k.Schlüssel, out var llm)) { k.Auftrag = llm.Intent; k.AuftragQuelle = llm.Quelle; }
-        else if (PromptAus(s) is { } p) { k.Auftrag = p; k.AuftragQuelle = "„// 🤖 Prompt:“ im Lambda"; }
-        else if (cliAuftrag != null) { k.Auftrag = cliAuftrag; k.AuftragQuelle = "Kommandozeile (--auftrag, steht für den LLM-Knoten)"; }
-
-        var verb = (lam.Parent?.Parent?.Parent as InvocationExpressionSyntax) is { } inv ? model.GetSymbolInfo(inv).Symbol as IMethodSymbol : null;
-        var delegat = model.GetTypeInfo(lam).ConvertedType as INamedTypeSymbol;
-        var ziel = delegat?.DelegateInvokeMethod?.ReturnType;
-        var konkret = verb?.TypeArguments.FirstOrDefault() is INamedTypeSymbol ta
-            ? (Sym.Implements(ta, _iCommand) ? ta : _dom.Funktionen.FirstOrDefault(f => f.Full == ta.Fq()) is { } fn ? Typ(fn.AuftragFull) : null)
-            : null;
-        var statement = SlotInventar.Anweisung(lam);
-        var pos = lam.GetLocation().GetLineSpan();
-
-        var b = new StringBuilder();
-        void Kopf(string t) { b.AppendLine(); b.AppendLine("## " + t); }
-        b.AppendLine($"# SLOT-TEIL {k.Titel}");
-        Kopf("AUFTRAG [L]");
-        b.AppendLine(k.Auftrag == null ? "— kein LLM-Knoten an diesem Code-Block (ohne Auftrag wird kein Aufruf ausgelöst)" : $"{k.Auftrag}   (Quelle: {k.AuftragQuelle})");
-        Kopf("ANKER [S]");
-        b.AppendLine(regel
-            ? $"{s.Klasse.Name}.Regeln   {Rel(pos.Path)}:{pos.StartLinePosition.Line + 1}   Regel {s.Anweisung}, Lambda {s.LambdaIndex} (Verb {verb?.Name ?? "?"})"
-            : $"{s.Klasse.Name}.Fluss   {Rel(pos.Path)}:{pos.StartLinePosition.Line + 1}   Anweisung {s.Anweisung}, Lambda {s.LambdaIndex} (Knoten {s.Knoten}, Verb {verb?.Name ?? "?"})");
-        Kopf("SIGNATUR [S]");
-        b.AppendLine($"({string.Join(", ", s.Parameter.Select(x => $"{x.Type.ToDisplayString(Kurz)} {x.Name}"))}) => {ziel?.ToDisplayString(Kurz) ?? "?"}"
-                     + (konkret != null ? $"   — konkret: new {konkret.Name}(…)" : ""));
-        Kopf("VERTRAG (nur Erzwungenes) [S]");
-        b.AppendLine($"Rückgabe {ziel?.ToDisplayString(Kurz) ?? "?"} — Compiler (Delegat-Typ des Verbs {verb?.Name})");
-        b.AppendLine(regel
-            ? "Rein und deterministisch: der Prozess-Manager faltet die Regeln bei jeder Weckung neu aus dem Log — kein Guid.NewGuid(), keine Uhr, kein I/O, kein Zustand"
-            : "Rein und deterministisch: der Dirigent baut den Aufruf bei jeder Weckung neu und leitet daraus die Vorgang-Id ab — kein Guid.NewGuid(), keine Uhr, kein I/O, kein Zustand");
-        b.AppendLine("Zuordnungsform (param.Feld, Konstante, new Wertobjekt(…)) bleibt im Editor als Tabelle bearbeitbar; alles andere steht dort als Lambda aus dem Code");
-        Kopf("ERREICHBAR IM RUMPF [S]");
-        foreach (var x in s.Parameter)
-        {
-            // Framework-Nachrichten am Draht (QuellStrom, ZeitlimitAbgelaufen, SchrittAbgelehnt) stehen nicht in der Domänen-Hülle — ihre Felder hier.
-            var felder = x.Type is INamedTypeSymbol nt && !IstDomäne(nt) && PrimärKonstruktor(nt) is { } c
-                ? $"   = {nt.Name}({string.Join(", ", c.Parameters.Select(q => $"{q.Type.ToDisplayString(Kurz)} {q.Name}"))})" : "";
-            b.AppendLine($"Parameter  {x.Name} : {x.Type.ToDisplayString(Kurz)}   ({(regel ? "Event der Regel" : "Nachricht am Draht")}){felder}");
-        }
-        Kopf("KOMMENTARE (wörtlich) [S]");
-        var kom = Zeilenkommentare(statement).ToList();
-        if (DokuVon(s.Klasse) is { } kd) kom.Add($"[/// an {s.Klasse.Name}] {kd}");
-        b.AppendLine(kom.Count == 0 ? "keine" : string.Join("\n", kom));
-        Kopf("TYPEN (transitive Hülle der Domänen-Typen; /// = Doku-Kommentar) [S]");
-        var saat = s.Parameter.Select(x => x.Type).ToList();
-        if (konkret != null) saat.Add(konkret);
-        foreach (var t in Transitiv(saat))
-            foreach (var z in Eintrag(t, konkret != null && t.Fq() == konkret.Fq() ? "Ziel" : "Typ")) b.AppendLine(z);
-        Kopf(regel ? "GRAPH-UMFELD: alle Regeln des Prozesses (wörtlich) [K]" : "GRAPH-UMFELD: der ganze Fluss (Anweisungen wörtlich) [K]");
-        if (statement.Parent is BlockSyntax alle)
-            foreach (var st in alle.Statements) b.AppendLine((st == statement ? "► " : "  ") + Regex.Replace(st.ToString(), @"\s+", " "));
-        else b.AppendLine("► " + Regex.Replace(statement.ToString(), @"\s+", " "));
-        k.NachbarBlöcke = 0; k.KopplungBlöcke = 0;
-        k.Text = b.ToString().TrimStart('\n');
-        return k;
     }
 
     // ── Vertrag: nur, was Compiler/Marker/Framework erzwingen ──
@@ -498,34 +355,17 @@ public sealed class KontextBauer
                 yield return "Rückgabe void — Compiler";
                 break;
             case "projektion":
-            case "reaktion":
                 yield return Sym.Implements(s.Klasse, _iPull)
                     ? "Transport: geordneter Pull (IPullSubscriber) — jedes Event genau einmal, in Reihenfolge"
                     : "Transport: Signal — best-effort, darf verloren/doppelt/ungeordnet ankommen";
-                if (s.Art == "projektion")
-                    yield return Sym.Implements(s.Klasse, _iAppend)
-                        ? "Garantie: append-artig (IAppendProjektion) — Co-Commit-Store, exactly-once (Boot-Check GA-1)"
-                        : "Garantie: Upsert — at-least-once, Schreiben muss idempotent sein";
-                else
-                    yield return "Senden nur per yield — Analyzer CQRS020/021";
+                yield return Sym.Implements(s.Klasse, _iAppend)
+                    ? "Garantie: append-artig (IAppendProjektion) — Co-Commit-Store, exactly-once (Boot-Check GA-1)"
+                    : "Garantie: Upsert — at-least-once, Schreiben muss idempotent sein";
                 break;
             case "reader":
                 var rd = _dom.Readers.FirstOrDefault(r => r.Full == s.Klasse.Fq());
                 yield return $"Antworten ⊆ {{{string.Join(", ", aus.Select(a => a.Name))}}} — Compiler (Signatur)";
                 if (rd != null) yield return $"TrackDeps = {rd.TrackDeps.ToString().ToLowerInvariant()} (Attribut [ProjectionReader], Default true)";
-                break;
-            case "pipeline":
-                var input = s.Parameter[0].Type;
-                yield return "Eingangskanal: " + (Sym.Implements(input, _iTrigger) ? "Trigger (IPipelineTrigger)"
-                    : Sym.Implements(input, _iSelf) ? "Self-Nachricht (IPipelineSelfMessage)"
-                    : Sym.Implements(input, _iTransient) ? "Ablehnung (ITransientEvent)" : "Event (IEvent)") + " — Marker";
-                break;
-            case "funktion":
-                yield return $"Genau EIN Ergebnis ⊆ {{{string.Join(", ", aus.Select(a => a.Name))}}} — Compiler (OneOf-Signatur, CQRS068); es landet als Event im Ausführungs-Stream";
-                yield return "Eine Ausnahme ist ein Fehlschlag (✕-Port des Knotens bzw. Wiederholung laut Bindung AddFunktion<…>(wiederholungen)) — Framework";
-                yield return "x.AusfuehrungsId ist deterministisch (Wiederholung = dieselbe Id) — Außenwirkung darüber deduplizieren; x.Abbruch beachten (Zeitlimit/Lease)";
-                if (s.Parameter.Count > 2)
-                    yield return $"Fähigkeiten {string.Join(", ", s.Parameter.Skip(2).Select(p => p.Type.Name))}: nur LESEN, je Aufruf ein Bereich — CQRS068; läuft nur im Host (nicht extern)";
                 break;
             case "store":
                 yield return "Signatur vom Store-Interface vorgegeben — Compiler";
@@ -632,10 +472,6 @@ public sealed class KontextBauer
     private IEnumerable<INamedTypeSymbol> Ausgänge(SlotInventar.SlotRef s)
     {
         var aus = Entfalte(s.Methode!.ReturnType).Where(IstDomäne).ToList();
-        if (s.Art == "pipeline")
-            foreach (var p in _dom.Pipelines.Where(p => p.Full == s.Klasse.Fq()))
-                foreach (var h in p.Handles.Where(h => h.InputFull == s.Parameter[0].Type.Fq()))
-                    foreach (var e in h.EmitsFull) if (Typ(e) is { } t) aus.Add(t);
         return aus.GroupBy(t => t.Fq()).Select(g => g.First());
     }
 
@@ -768,19 +604,17 @@ public sealed class KontextBauer
                 var quellen = new List<string>();
                 if (cmd != null)
                 {
-                    if (cmd.Command!.Origin.Contains("client")) quellen.Add("Client");
-                    foreach (var v in _graph.Edges.Where(e => e.To == cmd.Id && e.Kind == EdgeKind.zusageGibt))
-                        quellen.Add($"Akteur-Vertrag {v.From["vertrag:".Length..]} (Zusage auf {v.Via})");
-                    foreach (var e in _graph.Edges.Where(e => e.To == cmd.Id))
-                    {
-                        var von = _graph.Nodes.FirstOrDefault(n => n.Id == e.From);
-                        if (e.Kind is EdgeKind.sends or EdgeKind.compensates && von?.Process is { } pi && int.TryParse(e.Via, out var ri) && ri < pi.Rules.Count)
-                            quellen.Add($"Prozess {von.Name} Regel {ri} ({(e.Kind == EdgeKind.compensates ? "Kompensation" : "wenn " + string.Join(" + ", pi.Rules[ri].When))})");
-                        else if (e.Kind == EdgeKind.pipelineEmits && von != null) quellen.Add($"Pipeline {von.Name}");
-                    }
+                    foreach (var e in _graph.Edges.Where(e => e.To == cmd.Id && e.Kind is EdgeKind.darf or EdgeKind.sendet))
+                        quellen.Add(e.Kind == EdgeKind.darf ? $"Akteur {e.From["akteur:".Length..]}" : $"Client {e.From["client:".Length..]}");
                 }
-                foreach (var f in _cr.Frists.Where(f => f.Sendet == disc.Name))
-                    quellen.Add($"Frist {f.Name} (fällig; geplant bei {string.Join(", ", f.Plant)}, storniert bei {string.Join(", ", f.Storniert)})");
+                // Funktionen, deren Signatur den Command ausgibt (je Auf ein Eingang).
+                foreach (var f in _dom.BausteinFunktionen)
+                    foreach (var ein in f.Eingaenge.Where(x => x.AusgabenFull.Contains(disc.Fq())))
+                        quellen.Add($"Funktion {f.Name} (auf {ein.EingangFull.Split('.').Last()})");
+                // Fristen: ein Decide, dessen Signatur Frist<Command> ausgibt.
+                foreach (var a in _dom.Aggregates)
+                    foreach (var (cmdFull, _) in a.DecideOutcomes.Where(kv => kv.Value.Contains($"Frist<{disc.Fq()}>")))
+                        quellen.Add($"Frist aus Decide({cmdFull.Split('.').Last()}) von {a.Name}");
                 yield return $"{disc.Name} kommt von: {(quellen.Count == 0 ? "—" : string.Join(" · ", quellen.Distinct()))}";
                 if (cmd?.Command?.IsCreation == true) yield return $"{disc.Name} ist Erzeugungs-Command (ICreationCommand)";
                 foreach (var o in Ausgänge(s)) yield return $"{o.Name} geht an: {Abnehmer(o, s.State)}";
@@ -796,17 +630,15 @@ public sealed class KontextBauer
                 break;
             }
             case "projektion":
-            case "reaktion":
             {
                 var pr = _dom.Projections.FirstOrDefault(p => p.Full == s.Klasse.Fq());
                 var calls = pr?.HandleFaehigkeiten.GetValueOrDefault(disc.Name) ?? new();
-                yield return $"Trigger-Event: {disc.Name} (erzeugt von Aggregat {string.Join(", ", ErzeugerAggregate(disc))})";
+                yield return $"Eingang: {disc.Name} (erzeugt von Aggregat {string.Join(", ", ErzeugerAggregate(disc))})";
                 yield return $"Fähigkeiten (Signatur): {(calls.Count == 0 ? "—" : string.Join(", ", calls.Select(c => $"{c.Store}.{c.Method}")))}";
                 foreach (var c in calls) if (FnSig(c.Store, c.Method) is { } sig) yield return $"    {sig}";
                 foreach (var st in calls.Select(c => c.Store).Distinct())
                     yield return $"ReadModels von {st}: {string.Join(", ", ReadModelsVon(st))}";
-                if (pr?.HandleSends.GetValueOrDefault(disc.Name) is { Count: > 0 } sends) yield return $"sendet: {string.Join(", ", sends)}";
-                if (pr?.HandlePublishes.GetValueOrDefault(disc.Name) is { Count: > 0 } pubs) yield return $"veröffentlicht (reaktiv, verlierbar): {string.Join(", ", pubs)}";
+                if (pr?.HandlePublishes.GetValueOrDefault(disc.Name) is { Count: > 0 } pubs) yield return $"veröffentlicht (verlierbar): {string.Join(", ", pubs)}";
                 break;
             }
             case "reader":
@@ -818,40 +650,6 @@ public sealed class KontextBauer
                 foreach (var c in calls) if (FnSig(c.Store, c.Method) is { } sig) yield return $"    {sig}";
                 foreach (var st in calls.Select(c => c.Store).Distinct())
                     yield return $"ReadModels von {st}: {string.Join(", ", ReadModelsVon(st))}";
-                break;
-            }
-            case "pipeline":
-            {
-                var pl = _dom.Pipelines.FirstOrDefault(p => p.Full == s.Klasse.Fq());
-                var h = pl?.Handles.FirstOrDefault(x => x.InputFull == disc.Fq());
-                var quelle = _dom.Aggregates.Where(a => a.DecideOutcomes.Values.Any(o => o.Contains(disc.Fq()))).Select(a => "Aggregat " + a.Name).ToList();
-                yield return $"Eingang {disc.Name} kommt von: {(quelle.Count == 0 ? "Trigger/Self (siehe Skelett)" : string.Join(", ", quelle))}";
-                yield return $"sendet: {(h?.EmitsFull.Count > 0 ? string.Join(", ", h.Value.EmitsFull.Select(e => e.Split('.').Last())) : "—")}";
-                if (pl?.HandleEmitsTriggers.GetValueOrDefault(disc.Fq()) is { Count: > 0 } tr) yield return $"erzeugt Trigger: {string.Join(", ", tr)}";
-                var vt = pl?.HandleVertraege.GetValueOrDefault(disc.Fq());
-                if (vt?.Ausgaenge.Where(a => a.Art == "self").Select(a => a.Typ).ToList() is { Count: > 0 } sc) yield return $"plant Selbst-Nachricht: {string.Join(", ", sc)}";
-                if (vt?.Ausgaenge.Where(a => a.Art == "frist").Select(a => a.Typ).ToList() is { Count: > 0 } fr) yield return $"plant Frist: {string.Join(", ", fr)}";
-                var pfs = pl?.HandleFaehigkeiten.GetValueOrDefault(disc.Fq()) ?? new();
-                if (pfs.Count > 0) yield return $"Fähigkeiten (Signatur): {string.Join(", ", pfs.Select(c => $"{c.Store}.{c.Method}"))}";
-                foreach (var ziel in h?.EmitsFull ?? new())
-                    if (_dom.Aggregates.FirstOrDefault(a => a.HandlesCommandsFull.Contains(ziel)) is { } agg)
-                        yield return $"{ziel.Split('.').Last()} geht an: Aggregat {agg.Name}";
-                break;
-            }
-            case "funktion":
-            {
-                var f = FunktionVon(s);
-                if (f == null) break;
-                yield return $"Katalog-Funktion {f.Name} (implementiert in {s.Klasse.Name}; Laufort = Bindung im Host)";
-                foreach (var fl in _dom.Fluesse)
-                    foreach (var k in fl.Knoten.Where(k => k.TypFull == f.Fq()))
-                    {
-                        var weiter = fl.Knoten.Where(z => z.Eingaenge.Any(e => e.Draehte.Any(d => d.Von == k.Name)))
-                            .Select(z => $"{z.Name} ({string.Join("/", z.Eingaenge.SelectMany(e => e.Draehte).Where(d => d.Von == k.Name).Select(d => d.FallFull?.Split('.').Last() ?? d.Port).Distinct())})");
-                        yield return $"gerufen im Fluss {fl.Name}, Knoten {k.Name}{(k.Zeitlimit != null ? $" (⏳ {k.Zeitlimit})" : "")} → weiter: {string.Join(", ", weiter.DefaultIfEmpty("—"))}";
-                    }
-                foreach (var p in _graph.Nodes.Where(n => n.Process != null && n.Process.Rules.Any(r => r.Ruft == f.Fq() || r.Ruft == f.Name)))
-                    yield return $"gerufen im Prozess {p.Name}";
                 break;
             }
             case "store":
@@ -899,9 +697,7 @@ public sealed class KontextBauer
         if (_graph.Views.EventFanout.FirstOrDefault(f => f.Event == evt.Name) is { } fo)
         {
             ziele.AddRange(fo.Projections.Select(p => $"Projektion {p}"));
-            ziele.AddRange(fo.TriggersProcesses.Select(p => $"Prozess {p} (Auslöser)"));
-            ziele.AddRange(fo.AdvancesProcesses.Select(p => $"Prozess {p} (Bedingung)"));
-            ziele.AddRange(fo.Pipelines.Select(p => $"Pipeline {p}"));
+            ziele.AddRange(fo.Funktionen.Select(f => $"Funktion {f}"));
         }
         return ziele.Count == 0 ? "—" : string.Join(" · ", ziele);
     }
@@ -944,7 +740,6 @@ public sealed class KontextBauer
                     yield return ($"Decide({d.Disc}) — erzeugt {disc.Name}", RumpfText(d.Rumpf));
                 break;
             case "projektion":
-            case "reaktion":
             case "reader":
             {
                 var calls = s.Art == "reader"
@@ -1085,18 +880,6 @@ public static class KontextCli
         // und den Auftrag, falls einer im Code/Board steht.
         var index = alle.Select(k =>
         {
-            if (k.Slot.Art is "fluss" or "saga")
-            {
-                // Fluss-Lambda: Anker = Klasse + Anweisung + Lambda-Index im Definiere-Lambda (CodeSync.LambdaAnker).
-                var lp = k.Slot.Lambda!.GetLocation().GetLineSpan();
-                return (object)new
-                {
-                    id = k.Schlüssel, schluessel = k.Schlüssel, titel = k.Titel, art = k.Slot.Art, besitzer = k.Schlüssel.Split('|')[1], disc = k.Slot.Disc,
-                    klasse = k.Slot.Klasse.Name, knoten = k.Slot.Knoten, anweisung = k.Slot.Anweisung, lambda = k.Slot.LambdaIndex,
-                    datei = Path.GetRelativePath(solutionDir, lp.Path).Replace('\\', '/'), zeile = lp.StartLinePosition.Line + 1,
-                    rumpf = k.RumpfStatus, auftrag = k.Auftrag, slotDatei = DateiName(k), tokenSlot = Token(k.Text),
-                };
-            }
             var m = k.Slot.Methode!;
             var decl = m.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).First(n => !lage.Quelltexte.IstGeneriert(n.SyntaxTree));
             var pos = decl.GetLocation().GetLineSpan();
@@ -1114,7 +897,7 @@ public static class KontextCli
                 slotDatei = DateiName(k), tokenSlot = Token(k.Text),
             };
         }).ToList();
-        // Zusagen/Kenntnisse der Akteure DRAUSSEN: je Client-Implementierung (Python) und Auf ein Slot — eigener Anker (Datei + Klasse + Methode).
+        // Rümpfe der Clients DRAUSSEN: je Client-Implementierung (Python) und Methode der Basis ein Slot — eigener Anker (Datei + Klasse + Methode).
         foreach (var py in bauer.PythonSlots(solutionDir))
         {
             File.WriteAllText(Path.Combine(verz, py.SlotDatei), py.Text);
@@ -1122,18 +905,6 @@ public static class KontextCli
             index.Add(new
             {
                 id = py.Id, schluessel = py.Id, titel = py.Titel, art = "zusage", besitzer = py.Client, disc = py.Event,
-                klasse = py.Klasse, methode = py.Methode, signatur = py.Signatur, ausgaenge = py.Ausgaenge, datei = py.Datei, zeile = py.Zeile,
-                rumpf = py.Fehlt ? "fehlt" : "geschrieben", auftrag = py.Auftrag, slotDatei = py.SlotDatei, tokenSlot = Token(py.Text),
-            });
-        }
-        // Python-Rümpfe der Katalog-Funktionen (Laufort Extern, konzept-werkbank §12.3 E13): derselbe Anker (Datei + Klasse + Methode), Art „funktionpy“.
-        foreach (var py in bauer.PythonFunktionsSlots(solutionDir))
-        {
-            File.WriteAllText(Path.Combine(verz, py.SlotDatei), py.Text);
-            md.AppendLine($"| {py.Titel} | {(py.Fehlt ? "fehlt" : "geschrieben")} | {(py.Auftrag == null ? "—" : "✓")} | {Token(py.Text)} | 0 | 0 | {skelTok + Token(py.Text)} |");
-            index.Add(new
-            {
-                id = py.Id, schluessel = py.Id, titel = py.Titel, art = "funktionpy", besitzer = py.Client, disc = py.Event,
                 klasse = py.Klasse, methode = py.Methode, signatur = py.Signatur, ausgaenge = py.Ausgaenge, datei = py.Datei, zeile = py.Zeile,
                 rumpf = py.Fehlt ? "fehlt" : "geschrieben", auftrag = py.Auftrag, slotDatei = py.SlotDatei, tokenSlot = Token(py.Text),
             });

@@ -46,8 +46,7 @@ internal static class Messung
             Console.WriteLine($"── Wiederholung {w}/{o.Wiederholungen} ──");
             if (o.Szenarien.Overlaps(["S1", "S2", "S3", "S4"]))
             {
-                await using (var lauf = await Anwendungslauf.StarteAsync(k, k.Beispiel, "Host.Grpc", "host", $"beispiel-w{w}", zuruecksetzen: true,
-                                 mitDaten: ["prozess_gestartet"]))
+                await using (var lauf = await Anwendungslauf.StarteAsync(k, k.Beispiel, "Host.Grpc", "host", $"beispiel-w{w}", zuruecksetzen: true))
                 {
                     if (o.Diagnose) await Zeitreihe.LaufeAsync(k, lauf, "L1-leer", o.ZeitreiheLeer, o.ZeitreiheTakt);
                     if (o.Szenarien.Contains("S1") || o.Szenarien.Contains("S4")) Merke("S1", await StossAsync(k, lauf, "S1", 2030, w, o.StossS1));
@@ -60,7 +59,6 @@ internal static class Messung
                             sv.NeueGroesse(1_000_000);
                             var vorher = sv.Laeufe.Count;
                             var wert = await BlockAsync(k, lauf, $"S3-{sender}", sv, sender, o.MaxS3, w);
-                            wert.Kennzahlen["prozessende_nachlauf_s"] = await WarteAufProzessendeAsync(lauf, TimeSpan.FromSeconds(60));
                             wert.Pruefungen.AddRange(await sv.PruefeAsync(lauf.Db, sv.Laeufe.Skip(vorher).ToList(), $"S3 ×{sender}", wert.Kennzahlen["abgebaut"] > 0));
                             Merke($"S3-{sender}", wert);
                         }
@@ -71,14 +69,10 @@ internal static class Messung
                 if (o.Diagnose) await NeustartZeitreiheAsync(k, k.Beispiel, "Host.Grpc", $"beispiel-neustart-w{w}", "L1-neustart");
                 if (o.Szenarien.Contains("S2"))
                 {
-                    var extern_ = new Dictionary<string, string>
-                    {
-                        ["Funktionen__IBildVerkleinerung__Laufort"] = "Extern", ["Funktionen__IHistogrammAusgleich__Laufort"] = "Extern",
-                    };
+                    var extern_ = new Dictionary<string, string> { ["Funktionen__IBildaufbereitung__Laufort"] = "Extern" };
                     await using var lauf = await Anwendungslauf.StarteAsync(k, k.Beispiel, "Host.Grpc", "host", $"beispiel-s2-w{w}", zuruecksetzen: false,
-                        extern_, "prozess_gestartet");
-                    await lauf.StarteWorkerAsync(k.Beispiel, "IBildVerkleinerung", $"worker-verkleinerung-w{w}");
-                    await lauf.StarteWorkerAsync(k.Beispiel, "IHistogrammAusgleich", $"worker-ausgleich-w{w}");
+                        extern_);
+                    await lauf.StarteWorkerAsync(k.Beispiel, "IBildaufbereitung", $"worker-bildaufbereitung-w{w}");
                     Merke("S2", await StossAsync(k, lauf, "S2", 2031, w, o.StossS2));
                 }
                 Global("Beispieldomäne", w, await GlobalePruefung.PruefeAsync(new Datenbank(k.Beispiel.Verbindung, k.Beispiel.Datenbank, k.Beispiel.Schema), "Beispieldomäne"));
@@ -99,11 +93,10 @@ internal static class Messung
                     alleAbgebaut &= letzter.Kennzahlen["abgebaut"] > 0;
                     Merke($"S5-{sender}", letzter);
                 }
-                letzter!.Kennzahlen["prozessende_nachlauf_s"] = await WarteAufProzessendeAsync(lauf, TimeSpan.FromSeconds(60));
-                await WarteAufReaktionAsync(lauf);
-                var reaktion = pd.ReaktionMs.ToList();
-                letzter!.Kennzahlen["reaktion_p50_ms"] = Statistik.Perzentil(reaktion, 50);
-                letzter.Kennzahlen["reaktion_p99_ms"] = Statistik.Perzentil(reaktion, 99);
+                await Pruefdomaene.WarteAufNachschubAsync(lauf);
+                var nachschub = pd.NachschubMs.ToList();
+                letzter!.Kennzahlen["nachschub_p50_ms"] = Statistik.Perzentil(nachschub, 50);
+                letzter.Kennzahlen["nachschub_p99_ms"] = Statistik.Perzentil(nachschub, 99);
                 var pruef = await pd.PruefeAsync(lauf.Db, alleAbgebaut);   // über alle S5-Blöcke
                 letzter.Pruefungen.AddRange(pruef);
                 alleOk &= pruef.All(p => p.Ok);
@@ -239,7 +232,7 @@ internal static class Messung
     // ── Leerlauf ───────────────────────────────────────────────────────────────────────────────────────────────────────────
     /// <summary>
     /// Grundlast ohne Eingang, mit allem, was die Blöcke davor angelegt haben (PF-2, PF-4, PF-14). Zuerst der <b>Nachlauf</b>: ab dem Ende
-    /// des letzten Blocks, bis alle durablen Konsumenten am Kopf des Logs stehen (<see cref="Konsumentenstand.Eingeholt"/>) — die Polls
+    /// des letzten Blocks, bis alle durablen Konsumenten am Kopf des Logs stehen (<see cref="Konsumentenstand.Eingeholt"/>) — die Partitionen
     /// lesen dann einmal nach, was sie unter Last nicht bestätigt vorrücken konnten; seine Dauer und seine Queries sind eigene Kennzahlen.
     /// Danach das Leerlauf-Fenster über ganze Poll-Perioden (<see cref="Optionen.Leerlauf"/>), damit jeder periodische Takt gleich oft
     /// hineinfällt. Früher maß ein 15-s-Fenster 5 s nach dem letzten Block — je nach Lage traf es den Nachlauf oder nicht.
@@ -261,8 +254,8 @@ internal static class Messung
         var nachlaufS = stand.Eingeholt ? sw.Elapsed.TotalSeconds : double.NaN;
         var (nkz, _) = await nachlauf.EndeAsync(0, k.Ablage, $"{name}-nachlauf", w);
         Console.WriteLine(stand.Eingeholt
-            ? $"    Nachlauf {nachlaufS:F0} s · {nkz["queries"]:F0} Queries · CPU {nkz["cpu_prozent"]:F1} % (Kopf {stand.Kopf}, {stand.Poll}, Projektionen ab {stand.Projektion})"
-            : $"    Nachlauf nicht vorbei nach {k.Optionen.NachlaufFrist.TotalSeconds:F0} s (Kopf {stand.Kopf}, {stand.Poll}, Projektionen ab {stand.Projektion}) — der Leerlauf misst ihn mit");
+            ? $"    Nachlauf {nachlaufS:F0} s · {nkz["queries"]:F0} Queries · CPU {nkz["cpu_prozent"]:F1} % (Kopf {stand.Kopf}, Projektionen ab {stand.Projektion}, Funktionen ab {stand.Funktion})"
+            : $"    Nachlauf nicht vorbei nach {k.Optionen.NachlaufFrist.TotalSeconds:F0} s (Kopf {stand.Kopf}, Projektionen ab {stand.Projektion}, Funktionen ab {stand.Funktion}) — der Leerlauf misst ihn mit");
 
         k.Ressourcen.Abschnitt($"{name}-w{w}");
         var fenster = new Messfenster(lauf.Db, k.Ressourcen, lauf.Rolle, lauf);
@@ -288,38 +281,5 @@ internal static class Messung
     {
         await using var lauf = await Anwendungslauf.StarteAsync(k, u, hostProjekt, "host", logName, zuruecksetzen: false, warmlauf: false);
         await Zeitreihe.LaufeAsync(k, lauf, reihe, k.Optionen.ZeitreiheNeustart, k.Optionen.ZeitreiheTakt);
-    }
-
-    /// <summary>
-    /// Das Prozess-Ende kommt dem sichtbaren Ergebnis nach (der Vorgang schreibt <c>ProzessBeendet</c> erst bei der nächsten Weckung, unter Last
-    /// über den Backstop, PF-9): warten, bis kein Vorgang mehr offen ist, und die Zeit dafür liefern (NaN = nicht in der Frist).
-    /// </summary>
-    private static async Task<double> WarteAufProzessendeAsync(Anwendungslauf lauf, TimeSpan frist)
-    {
-        var s = lauf.Db.Schema;
-        var sw = System.Diagnostics.Stopwatch.StartNew();
-        while (sw.Elapsed < frist)
-        {
-            var offen = await lauf.Db.ZahlAsync($"select count(*) from {s}.mt_events g where g.type = 'prozess_gestartet' " +
-                $"and not exists (select 1 from {s}.mt_events b where b.stream_id = g.stream_id and b.type = 'prozess_beendet')");
-            if (offen == 0) return sw.Elapsed.TotalSeconds;
-            await Task.Delay(500);
-        }
-        return double.NaN;
-    }
-
-    /// <summary>Die Reaktion läuft dem Prozess nach (eigener Konsument): warten, bis jede auslösende Reservierung ihren Nachschub hat.</summary>
-    public static async Task WarteAufReaktionAsync(Anwendungslauf lauf)
-    {
-        var s = lauf.Db.Schema;
-        for (var i = 0; i < 120; i++)
-        {
-            var offen = await lauf.Db.ZahlAsync($"""
-                select (select count(*) from {s}.mt_events where type = 'posten_reserviert' and (data->>'Fehlmenge')::int > 0)
-                     - (select count(distinct headers->>'ursache') from {s}.mt_events where type = 'posten_zugebucht' and headers->>'ueber' = 'reaktion:NachschubBeiMindestbestand')
-                """);
-            if (offen <= 0) return;
-            await Task.Delay(1000);
-        }
     }
 }

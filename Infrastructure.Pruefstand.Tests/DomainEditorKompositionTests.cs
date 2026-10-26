@@ -16,7 +16,7 @@ public sealed class DomainEditorKompositionTests
         new() { Name = name, Kind = RecordArt.Command, Namespace = ns, Felder = [new() { Name = "AggregateId", Typ = "Guid" }, .. mehr] };
     private static Record Evt(string name, string ns) => new() { Name = name, Kind = RecordArt.Event, Namespace = ns };
 
-    /// <summary>Zwei Geschwister-Module unter „Shop": Bestellung (Aggregat) → Bestellt → Versand (Reaktion → Command → Aggregat).</summary>
+    /// <summary>Zwei Geschwister-Module unter „Shop": Bestellung (Aggregat) → Bestellt → Versand (Funktion → Command → Aggregat).</summary>
     private static EditorModell Shop() => new()
     {
         Records =
@@ -32,10 +32,8 @@ public sealed class DomainEditorKompositionTests
             new() { Aggregat = "Versand", Command = "Versende", Ergibt = [new() { Event = "Versendet" }] },
         ],
         Applier = [new() { Aggregat = "Bestellung", Event = "Bestellt" }, new() { Aggregat = "Versand", Event = "Versendet" }],
-        Lesen = new Leseseite
-        {
-            Konsumenten = [new() { Name = "VersandStarter", Namespace = "Shop.Versand", Handles = [new() { Eingang = "Bestellt", Ausgaenge = ["Versende"] }] }],
-        },
+        BausteinFunktionen = [new() { Name = "VersandStarter", Namespace = "Shop.Versand", Klasse = true, Eingaenge = [new() { Eingang = "Bestellt", Ausgaben = ["Versende"] }] }],
+        Lesen = new Leseseite(),
     };
 
     [Fact]
@@ -49,13 +47,13 @@ public sealed class DomainEditorKompositionTests
         var bausteine = Grammatik.Bausteine.Select(b => b.Id).ToHashSet();
         Grammatik.Konsume.Should().OnlyContain(k => sorten.Contains(k.Sorte) && bausteine.Contains(k.Baustein));
         Grammatik.Erzeugungen.Should().OnlyContain(e => sorten.Contains(e.Sorte) && bausteine.Contains(e.Baustein));
-        // Die Tabelle aus §3: Command genau ein Aggregat, Trigger genau eine Pipeline, Query genau ein Reader, Event beliebig viele.
+        // Die Tabelle aus §3: Command genau ein Aggregat, Query genau ein Reader, Event beliebig viele Projektionen und Funktionen.
         Grammatik.KonsumVon(Grammatik.Command, Grammatik.Aggregat)!.Kardinalitaet.Should().Be(Grammatik.GenauEins);
-        Grammatik.KonsumVon(Grammatik.Trigger, Grammatik.Pipeline)!.Kardinalitaet.Should().Be(Grammatik.GenauEins);
         Grammatik.KonsumVon(Grammatik.Query, Grammatik.Reader)!.Kardinalitaet.Should().Be(Grammatik.GenauEins);
         Grammatik.KonsumVon(Grammatik.Event, Grammatik.Projektion)!.Kardinalitaet.Should().Be(Grammatik.Beliebig);
-        Grammatik.KonsumVon(Grammatik.Command, Grammatik.Pipeline).Should().BeNull();
-        Grammatik.ErzeugungVon(Grammatik.Pipeline, Grammatik.Event).Should().BeNull("Fakten entstehen nur im Aggregat");
+        Grammatik.KonsumVon(Grammatik.Event, Grammatik.Funktion)!.Kardinalitaet.Should().Be(Grammatik.Beliebig);
+        Grammatik.KonsumVon(Grammatik.Command, Grammatik.Funktion).Should().BeNull("ein Command geht nur an sein Aggregat");
+        Grammatik.ErzeugungVon(Grammatik.Projektion, Grammatik.Event).Should().BeNull("eine Projektion schreibt keine Fakten");
         // Fürs Board: die Editor-Port-Abbildung reist mit (das JS kodiert nichts hart).
         var json = System.Text.Json.JsonSerializer.Serialize(Grammatik.AlsJson(), EditorModell.JsonOptionen);
         json.Should().Contain("\"portBaustein\"").And.Contain("\"recordSorte\"").And.Contain("CQRS010");
@@ -74,7 +72,7 @@ public sealed class DomainEditorKompositionTests
         var b = module["Shop.Bestellung"];
         b.Eingaenge.Should().ContainSingle(p => p.Sorte == Grammatik.Command && p.Nachricht == "Bestelle" && p.Partner.Contains(Module.Aussenwelt) && !p.Offen);
         b.Ausgaenge.Should().ContainSingle(p => p.Sorte == Grammatik.Event && p.Nachricht == "Bestellt" && p.Partner.Contains("Shop.Versand"));
-        // Versand: das Event hinein; sein eigener Command läuft intern (Reaktion → Aggregat im selben Modul) → kein Port.
+        // Versand: das Event hinein; sein eigener Command läuft intern (Funktion → Aggregat im selben Modul) → kein Port.
         var v = module["Shop.Versand"];
         v.Eingaenge.Select(p => p.Nachricht).Should().BeEquivalentTo(["Bestellt"]);
         v.Ausgaenge.Should().BeEmpty();
@@ -110,11 +108,14 @@ public sealed class DomainEditorKompositionTests
         var m = Shop();
         m = m with
         {
-            Records = [.. m.Records, Evt("Ueberfaellig", "Shop.Mahnung")],
+            Records = [.. m.Records, Cmd("Mahne", "Shop.Mahnung")],
+            Aggregate = [.. m.Aggregate, new() { Name = "Mahnvorgang", Namespace = "Shop.Mahnung" }],
+            Decider = [.. m.Decider, new() { Aggregat = "Mahnvorgang", Command = "Mahne", Ergibt = [new() { Event = "Frist<Versende>" }] }],
+            BausteinFunktionen = [.. m.BausteinFunktionen, new() { Name = "Mahner", Namespace = "Shop.Mahnung", Klasse = true,
+                Eingaenge = [new() { Eingang = "Bestellt", Ausgaben = ["Mahne"], Faehigkeiten = [new() { Typ = "IFinde", Name = "finde" }] }] }],
             Lesen = m.Lesen! with
             {
                 Stores = [new() { Name = "IBuch", Namespace = "Shop.Lesen", Fns = [new() { Name = "IFinde", Methode = "FindeAsync", Lesen = true }] }],
-                Pipelines = [new() { Name = "Mahner", Namespace = "Shop.Mahnung", Handles = [new() { Eingang = "Bestellt", Ausgaenge = ["FristPlanung<Versende>"], Faehigkeiten = [new() { Typ = "IFinde", Name = "finde" }] }] }],
             },
         };
         var mo = Module.Ableiten(m).ToDictionary(x => x.Namespace);

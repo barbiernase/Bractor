@@ -1,7 +1,6 @@
 using Abstractions;
 using Infrastructure.Aggregate;
 using Infrastructure.Lebenszyklus;
-using Infrastructure.Pipeline;   // Anwendung.Pipelines.CommandAggregateTypes
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Proto.Cluster;
@@ -11,25 +10,25 @@ namespace Infrastructure.PubSub;
 
 /// <summary>
 /// Das EINE Emit-Primitiv (EM-1). Genau hier — und nur hier — wird ein Command an ein Fremd-Aggregat
-/// geschickt: deterministische CommandId (<see cref="EmitId"/> → W1: der Empfänger dedupliziert eine
-/// wiederholte Zustellung), <see cref="CommandModus.Emittiert"/> (KEINE Version, §4.2) und eine
+/// geschickt: mit der CommandId, die der Aufrufer deterministisch ableitet (Funktion: aus Eingang und Ausgabe-Index, Uhr: aus der Frist → W1:
+/// der Empfänger dedupliziert eine wiederholte Zustellung), <see cref="CommandModus.Emittiert"/> (KEINE Version, §4.2) und eine
 /// <c>Frage</c> des <see cref="Bote"/> mit Pflicht-Frist (W2: kein Infinit-Hang). At-least-once auf
 /// dem Draht, exactly-once-wirksam über die Empfänger-Inbox.
 ///
 /// Der Aufrufer bekommt den <see cref="EmitAusgang"/> (docs/11 §11.3): „zugestellt“ und „abgelehnt“ sind entschieden,
 /// „unbekannt“ (Frist abgelaufen, technischer Fehler, kein Ziel) verlangt eine Wiederholung mit derselben CommandId. Der Emitter
-/// selbst wiederholt nie — das tut der Aufrufer an seinem durablen Punkt: die Frist bleibt liegen (G-1), der Emittenten-Cursor
-/// rückt nicht vor (G-2), der Dirigent wiederholt mit Backoff (PF-9). Eine Ausnahme verlässt den Emitter nicht.
+/// selbst wiederholt nie — das tut der Aufrufer an seinem durablen Punkt: die Frist bleibt liegen (G-1), die Funktion lässt ihren
+/// Eingang offen und rückt die Position nicht darüber (G-2). Eine Ausnahme verlässt den Emitter nicht.
 ///
 /// <b>Drossel je Ziel</b> (PF-9): höchstens <see cref="EmitDrossel.StandardJeZiel"/> Sends je Ziel-Aggregat gleichzeitig unterwegs (je
 /// Knoten). Ein heißes Ziel arbeitet seine Mailbox in der Frist ab, statt dass sich Timeouts und Wiederholungen aufschaukeln; der
 /// Rückstau liegt vor dem Send, nicht in der Mailbox des Ziels.
 ///
 /// Context-frei: der <see cref="Bote"/> hängt am Cluster des ActorSystems, nicht an einem per-Message-Context
-/// → aus dem Pull-Adapter (Reaktion), dem Prozess-Manager und dem Fristplaner nutzbar. Im Prüfstand ist der Ziel-Send ein
+/// → aus den Funktionen und der Uhr nutzbar. Im Prüfstand ist der Ziel-Send ein
 /// <see cref="SendeSeam"/> (ein Fake ohne echten Cluster), eingesetzt als Anfrage des Boten.
 /// </summary>
-public sealed class CommandEmitter : ICommandEmitter
+public sealed class CommandEmitter
 {
     /// <summary>Naht/Test: der Ziel-Send ohne Cluster.</summary>
     public delegate Task<CommandResult?> SendeSeam(ClusterIdentity ziel, CommandEnvelope envelope, CancellationToken ct);
@@ -64,26 +63,17 @@ public sealed class CommandEmitter : ICommandEmitter
         _drossel = drossel ?? new EmitDrossel();
     }
 
-    public async Task<EmitAusgang> EmitAsync(ICommand cmd, EmitKausalität k, CancellationToken ct)
-        => (await SendeAsync(cmd, EmitId.Ableiten(k, cmd.Ziel), k.Korrelation, ct)).Ausgang;
-
     /// <summary>
-    /// EM-1-Überladung für den Prozess-Manager (Treiber-Fold) und den Fristplaner: eine VORGEGEBENE CommandId — beim Prozess der
-    /// deterministische <c>vorgang</c> (aus <c>ProzessId.FürTransition</c>/<c>FürKompensation</c>), sodass der Fold-Match (Ziel-Event/-Marke
-    /// mit <c>CausationId == vorgang</c>) unverändert bleibt. Die Korrelation reist explizit (→ Ziel-Event-Metadatum, Poll-Routing). Sonst
-    /// identisch: bounded (W2), <see cref="CommandModus.Emittiert"/> (KEINE Version, §4.2), Ausgang an den Aufrufer — dazu, wo der Ausgang im
-    /// Ziel-Stream steht, wenn dieser Send ihn geschrieben hat (<see cref="EmitErgebnis.ErsteVersion"/>).
+    /// Sendet den Command mit der VORGEGEBENEN CommandId (Funktion: aus Eingang und Ausgabe-Index; Uhr: aus der Frist). Die Korrelation reist
+    /// explizit (→ Ziel-Event-Metadatum). Bounded (W2), <see cref="CommandModus.Emittiert"/> (KEINE Version, §4.2), Ausgang an den Aufrufer.
     /// </summary>
-    public Task<EmitErgebnis> EmitAsync(ICommand cmd, Guid commandId, Guid korrelation, CancellationToken ct)
-        => SendeAsync(cmd, commandId, korrelation, ct);
-
-    private async Task<EmitErgebnis> SendeAsync(ICommand cmd, Guid commandId, Guid korrelation, CancellationToken ct)
+    public async Task<EmitAusgang> EmitAsync(ICommand cmd, Guid commandId, Guid korrelation, CancellationToken ct)
     {
-        if (!Anwendung.Pipelines.CommandAggregateTypes.TryGetValue(cmd.GetType(), out var aggregateType))
+        if (!Anwendung.Routing.CommandToAggregate.TryGetValue(cmd.GetType(), out var aggregateType))
         {
             // Ein Command ohne Aggregat verhindert der Build (CQRS010); kommt es trotzdem vor, ist nichts gewirkt.
             _logger.LogError("[Emit] keine AggregateType-Zuordnung für {Command} — nicht routbar", cmd.GetType().Name);
-            return EmitErgebnis.Unbekannt;
+            return EmitAusgang.Unbekannt;
         }
 
         // Der Envelope entsteht SYNCHRON vor dem ersten await: Spur und Akteur sind AsyncLocal-Bereiche des Aufrufers.
@@ -92,10 +82,9 @@ public sealed class CommandEmitter : ICommandEmitter
             CommandId = commandId,                              // deterministisch → Empfänger-Inbox dedupliziert (W1)
             AggregateType = aggregateType,
             Modus = new CommandModus.Emittiert(),               // KEINE Version (§4.2)
-            CorrelationId = korrelation.ToString(),             // → Ziel-Event-Metadatum (P5-Poll-Routing)
+            CorrelationId = korrelation.ToString(),             // → Ziel-Event-Metadatum
             Payload = cmd,
-            // Akteur (docs/konzept-akteure.md §5.1): der der Kette bzw. des Akteur-Dienstes (ImAuftrag, vom Konsumenten/Dispatch
-            //   gesetzt); ohne Kette der eine Akteur, der den Command per IDarf darf; sonst keiner („system").
+            // Akteur (docs/konzept-akteure.md §5.1): der der Kette (ImAuftrag, vom Konsumenten gesetzt); ohne Kette der eine Akteur, der den Command per IDarf darf; sonst keiner („system").
             UserId = ImAuftrag.Akteur ?? Infrastructure.Akteure.AkteurHerkunft.EindeutigerHalter(cmd.GetType()) ?? ImAuftrag.Ohne,
             // Spur: der auslösende Log-Eintrag und der absendende Baustein — das Aggregat stempelt die Ursache an seine Events.
             Ursache = Spur.Aktuell?.Ursache,
@@ -108,7 +97,7 @@ public sealed class CommandEmitter : ICommandEmitter
         if (platz is null)
         {
             _logger.LogDebug("[Emit] Drossel an {AggregateType}/{AggregateId} voll — nicht gesendet", aggregateType, cmd.Ziel);
-            return EmitErgebnis.Unbekannt;
+            return EmitAusgang.Unbekannt;
         }
 
         // Frage mit Pflicht-Frist (W2): keine Antwort in der Frist (abgelaufen, Identität nicht auflösbar, Knoten weg, Abbruch) heißt: ob
@@ -116,30 +105,20 @@ public sealed class CommandEmitter : ICommandEmitter
         var ergebnis = await _bote.FrageAsync<CommandResult>(identity, envelope, _sendeFrist, ct);
         return ergebnis switch
         {
-            null => EmitErgebnis.Unbekannt,
-            { Success: true } => new EmitErgebnis(EmitAusgang.Zugestellt, ergebnis.ErsteVersion),
-            { Abgelehnt: true } => new EmitErgebnis(EmitAusgang.Abgelehnt, ergebnis.ErsteVersion),
+            null => EmitAusgang.Unbekannt,
+            { Success: true } => EmitAusgang.Zugestellt,
+            { Abgelehnt: true } => EmitAusgang.Abgelehnt,
             _ => Technisch(ergebnis, aggregateType, cmd),
         };
     }
 
-    private EmitErgebnis Technisch(CommandResult ergebnis, string aggregateType, ICommand cmd)
+    private EmitAusgang Technisch(CommandResult ergebnis, string aggregateType, ICommand cmd)
     {
         // Ein technischer Fehler im Ziel (DB weg, Append gescheitert): die Wirkung ist offen — wiederholen, die Inbox klärt es.
         _logger.LogWarning("[Emit] {Command} an {AggregateType}/{AggregateId} technisch gescheitert ({Fehler}) — Ausgang unbekannt",
             cmd.GetType().Name, aggregateType, cmd.Ziel, ergebnis.ErrorMessage);
-        return EmitErgebnis.Unbekannt;
+        return EmitAusgang.Unbekannt;
     }
-}
-
-/// <summary>
-/// Der Ausgang eines Sends (<see cref="EmitAusgang"/>) und, wenn DIESER Send den Ausgang geschrieben hat, die Version seines ersten Events im
-/// Ziel-Stream (<see cref="CommandResult.ErsteVersion"/>; 0 = unbekannt, etwa bei einer als Wiederholung erkannten CommandId). Ein Hinweis für
-/// den Prozess-Fold, wo er lesen muss — nie eine Aussage über die Wirkung.
-/// </summary>
-public readonly record struct EmitErgebnis(EmitAusgang Ausgang, int ErsteVersion)
-{
-    public static readonly EmitErgebnis Unbekannt = new(EmitAusgang.Unbekannt, 0);
 }
 
 /// <summary>

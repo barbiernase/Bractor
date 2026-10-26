@@ -1,6 +1,6 @@
 namespace Abstractions;
 
-/// <summary>Wie ein Command ausging, wie die Inbox ihn festhält (docs/04 §4.4): gewirkt (Effekt oder Noop) oder fachlich abgelehnt.</summary>
+/// <summary>Wie ein Command ausging, wie die Inbox ihn festhält (docs/04 §4.6): gewirkt (Effekt oder Noop) oder fachlich abgelehnt.</summary>
 public enum KommandoAusgang
 {
     Gewirkt = 0,
@@ -22,12 +22,6 @@ public abstract record Beilage
 /// innerhalb des Aufbewahrungs-Horizonts.
 /// </summary>
 public sealed record Quittung(Guid CommandId, KommandoAusgang Ausgang) : Beilage;
-
-/// <summary>Der Vorgang <paramref name="Korrelation"/> ist offen — sein Eintrag im Offen-Index (<see cref="IProzessOffenIndex"/>), mit dem Start geschrieben.</summary>
-public sealed record VorgangOffen(Guid Korrelation, string ProzessName) : Beilage;
-
-/// <summary>Der Vorgang <paramref name="Korrelation"/> ist beendet — sein Eintrag im Offen-Index verschwindet mit dem <c>ProzessBeendet</c>.</summary>
-public sealed record VorgangBeendet(Guid Korrelation) : Beilage;
 
 /// <summary>
 /// Eine Frist für das Fälligkeits-Verzeichnis der Uhr (Plan Pub/Sub-Neustrukturierung Phase 3): das <see cref="FristGesetzt"/> an

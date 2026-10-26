@@ -150,7 +150,7 @@ public sealed class BausteinSitzung : IAsyncDisposable
     /// (<paramref name="ab"/> = Stelle seiner ersten Ausgabe, <paramref name="fertig"/> = der Lauf ist vollständig). Festgehalten wird unter „F, X“
     /// an dieser Stelle — wer zuerst festhält, gewinnt (<see cref="ErgebnisAusgang.Ueberholt"/>: eine andere Antwort war schneller, sie gilt).
     /// </summary>
-    public async Task<ErgebnisAusgang> AntwortAsync(Guid vorgang, IReadOnlyList<IPipelineOutput>? ausgaben, string? fehler, CancellationToken ct,
+    public async Task<ErgebnisAusgang> AntwortAsync(Guid vorgang, IReadOnlyList<IAusgabe>? ausgaben, string? fehler, CancellationToken ct,
         int ab = 0, bool fertig = true)
     {
         if (!_laufend.TryGetValue(vorgang, out var l)) return ErgebnisAusgang.Unbekannt;

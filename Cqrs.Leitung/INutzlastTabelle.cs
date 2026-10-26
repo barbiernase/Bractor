@@ -13,13 +13,9 @@ public interface INutzlastTabelle
     IEvent Event(Nutzlast n);
     IQuery Query(Nutzlast n);
     IQueryResponse Antwort(Nutzlast n);
-    IPipelineTrigger Trigger(Nutzlast n);
-    IAuftrag Auftrag(Nutzlast n);
 
     Nutzlast PackeCommand(ICommand command);
     Nutzlast PackeEvent(IEvent evt);
     Nutzlast PackeQuery(IQuery query);
     Nutzlast PackeAntwort(IQueryResponse antwort);
-    Nutzlast PackeTrigger(IPipelineTrigger trigger);
-    Nutzlast PackeAuftrag(IAuftrag auftrag);
 }

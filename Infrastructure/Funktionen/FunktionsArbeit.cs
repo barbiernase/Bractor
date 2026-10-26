@@ -131,7 +131,7 @@ public sealed class FunktionsArbeit
 
         if (OhneFesthalten(eingang))
         {
-            var ausgaben = new List<IPipelineOutput>();
+            var ausgaben = new List<IAusgabe>();
             await foreach (var a in Rechne(e, ct)) ausgaben.Add(a);
             foreach (var h in ausgaben.OfType<ITransientEvent>()) _hinweis?.Invoke(h, e);
             return await SendeAsync(eingabe, ausgaben.Where(a => a is not ITransientEvent).ToList(), 0, ct);
@@ -149,7 +149,7 @@ public sealed class FunktionsArbeit
     }
 
     /// <summary>Die Funktion rechnen (im Host; Lese-Fähigkeiten je Aufruf aus einem eigenen Bereich).</summary>
-    private async IAsyncEnumerable<IPipelineOutput> Rechne(EventEnvelope e, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+    private async IAsyncEnumerable<IAusgabe> Rechne(EventEnvelope e, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
         var eingang = _b.Eingang(e.Payload.GetType())!;
         using var bereich = eingang.Faehigkeiten.Count > 0
@@ -170,7 +170,7 @@ public sealed class FunktionsArbeit
         var entschieden = true;
         // Was ein abgebrochener Lauf schon festgehalten hatte, ist vielleicht nie gesendet worden — einmal senden (dieselben Ids, die Inbox verwirft).
         if (schon > 0) entschieden &= await SendeAsync(eingabe, fest.Ausgaben, 0, ct) == EingangsAusgang.Fertig;
-        var stueck = new List<IPipelineOutput>();
+        var stueck = new List<IAusgabe>();
         var hinweise = new List<IEvent>();
         var gezaehlt = 0;
         await foreach (var a in Rechne(e, ct))
@@ -187,7 +187,7 @@ public sealed class FunktionsArbeit
             // Das Festgehaltene senden, bevor der Strom weiterrechnet — der Rückstau eines großen Imports liegt im Log, nicht im Speicher.
             entschieden &= await SendeAsync(eingabe, stueck, schon, ct) == EingangsAusgang.Fertig;
             schon += stueck.Count;
-            stueck = new List<IPipelineOutput>();
+            stueck = new List<IAusgabe>();
             foreach (var hw in hinweise) _hinweis?.Invoke(hw, e);
             hinweise.Clear();
         }
@@ -251,7 +251,7 @@ public sealed class FunktionsArbeit
     /// Sendet die Commands unter <paramref name="ausgaben"/> (ab der Stelle <paramref name="ab"/>) gemeinsam hinaus — je mit der abgeleiteten Id
     /// ihrer Stelle; Fertig, wenn jeder entschieden ist (zugestellt oder abgelehnt).
     /// </summary>
-    private async Task<EingangsAusgang> SendeAsync(FunktionsEingabe eingabe, IReadOnlyList<IPipelineOutput> ausgaben, int ab, CancellationToken ct)
+    private async Task<EingangsAusgang> SendeAsync(FunktionsEingabe eingabe, IReadOnlyList<IAusgabe> ausgaben, int ab, CancellationToken ct)
     {
         var korrelation = Guid.TryParse(eingabe.Korrelation, out var k) ? k : eingabe.Stream;
         var sends = new List<Task<EmitAusgang>>();

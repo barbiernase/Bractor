@@ -21,7 +21,7 @@ public enum ClusterArt { Einzelknoten, Consul }
 /// <summary>Rolle eines Knotens beim Schema (Multi-Node-Kaltstart): allein, der eine Migrator, oder Mitglied.</summary>
 public enum KnotenRolle { Allein, Migrator, Mitglied }
 
-/// <summary>Wo eine Katalog-Funktion rechnet: im Host (C#-Implementierung), extern (z. B. Python-Worker) oder per Hand (Werkbank).</summary>
+/// <summary>Wo eine Funktion rechnet: im Host (C#-Implementierung), extern (z. B. Python-Worker) oder per Hand (Werkbank).</summary>
 public enum FunktionsLaufort { Host, Extern, Hand }
 
 /// <summary>Kopf der Umgebung.</summary>
@@ -87,14 +87,13 @@ public sealed class SchreibpfadKonfig
 }
 
 /// <summary>
-/// Lebenszyklus der virtuellen Actors (Tuning, nie Semantik): nach so vielen Sekunden ohne Nachricht passiviert ein Actor — er stoppt, der
-/// Cluster vergisst ihn, die nächste Nachricht aktiviert ihn frisch aus dem Log (bzw. Snapshot, Marke, Marking-Cursor). 0 = nie.
+/// Lebenszyklus der virtuellen Actors (Tuning, nie Semantik): nach so vielen Sekunden ohne Nachricht passiviert ein Aggregat-Actor — er stoppt,
+/// der Cluster vergisst ihn, die nächste Nachricht aktiviert ihn frisch aus dem Log (bzw. Snapshot). 0 = nie. Batch-Leser und Funktions-Actors
+/// passivieren nicht (es gibt nur Konsumenten × Partitionen davon, der Poll weckt sie ohnehin).
 /// </summary>
 public sealed class LebenszyklusKonfig
 {
     public int AggregatLeerlaufSekunden { get; set; } = 600;
-    public int AdapterLeerlaufSekunden { get; set; } = 120;
-    public int ProzessManagerLeerlaufSekunden { get; set; } = 600;
 }
 
 /// <summary>
@@ -118,7 +117,7 @@ public sealed class TransportKonfig
     public bool JsonEingang { get; set; }
 }
 
-/// <summary>Laufort einer Katalog-Funktion (Abschnitt <c>Funktionen:&lt;IFunktion&gt;</c>).</summary>
+/// <summary>Laufort einer Funktion (Abschnitt <c>Funktionen:&lt;IFunktion&gt;</c>).</summary>
 public sealed class FunktionsKonfig
 {
     public FunktionsLaufort Laufort { get; set; } = FunktionsLaufort.Host;

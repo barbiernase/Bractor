@@ -128,9 +128,12 @@ public sealed class RoheLeitung : IAsyncDisposable
     }
 
     /// <summary>Beantwortet einen Eingang mit Commands (ganz, <c>fertig</c>).</summary>
-    public Task AntworteAsync(ArbeitsAuftrag eingang, params ICommand[] ausgaben)
+    public Task AntworteAsync(ArbeitsAuftrag eingang, params ICommand[] ausgaben) => StueckAsync(eingang, 0, true, ausgaben);
+
+    /// <summary>Ein Stück eines Stroms: die Ausgaben ab Stelle <paramref name="ab"/>; <paramref name="fertig"/> beendet den Strom.</summary>
+    public Task StueckAsync(ArbeitsAuftrag eingang, int ab, bool fertig, params ICommand[] ausgaben)
     {
-        var e = new ArbeitsErgebnis { Vorgang = eingang.Vorgang, Fertig = true };
+        var e = new ArbeitsErgebnis { Vorgang = eingang.Vorgang, Ab = ab, Fertig = fertig };
         foreach (var c in ausgaben) e.Ausgaben.Add(new FunktionsAusgabe { Command = Tabelle.PackeCommand(c) });
         return SchreibeAsync(new ClientMessage { ArbeitsErgebnis = e });
     }

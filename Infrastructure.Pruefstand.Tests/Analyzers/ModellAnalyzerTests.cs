@@ -99,18 +99,6 @@ public partial class Konto : IState
         (await Ids("public enum Stufe { Neu = 1, Alt = 2 }")).Should().BeEmpty();
     }
 
-    private const string Projektion = @"
-public sealed class Mahner : ISubscriber
-{
-    public string SubscriberId => ""m"";
-    public OneOf<Mahne> Handle(SchonOffen e, IAggregateEnvelope env) => default!;
-    public Task Handle(Eroeffnet e, IAggregateEnvelope env) => Task.CompletedTask;
-}";
-
-    [Fact]
-    public async Task Ein_Command_ab_einem_transienten_Eingang_ist_eine_Warnung()
-        => (await Ids(Projektion)).Should().Equal(ModellAnalyzer.GarantieId);
-
     [Fact]
     public async Task Ein_Konsument_mit_Zustand_ist_eine_Warnung_injizierte_Felder_nicht()
     {

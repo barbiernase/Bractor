@@ -21,7 +21,7 @@ public class KreislaufAbnahmeTests
 {
     private static readonly string[] Schritte = ["Bauen", "Python-Basen", "Neu lesen", "Daten prüfen", "Infrastruktur", "Starten"];
 
-    [Fact]
+    [Fact(Skip = "Editor zurückgestellt (plan-pubsub-neustrukturierung E4)")]
     public async Task Kreislauf_Durchspielen_Worker_Geste_und_Daten_Pruefung()
     {
         await using var w = await Werkbanklauf.StarteAsync();

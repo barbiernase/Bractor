@@ -16,61 +16,18 @@ public static class Herkunft
     public static string Von(Enumeration e) => Hash(e with { Datei = null, Herkunft = null, Doku = null });
     public static string Von(Aggregat a) => Hash(a.State.Select(f => f with { ElementTyp = null }).ToList());
     public static string Von(DecideRegel d) => Hash(new { d.Aggregat, d.Command, d.Ergibt });
-    public static string Von(Akteur a) => Hash(new { a.Name, a.Darf, a.Art, Vertrag = a.Vertrag.Count == 0 ? null : a.Vertrag, VertragName = a.Vertrag.Count == 0 ? null : a.VertragTyp });
+    public static string Von(Akteur a) => Hash(new { a.Name, a.Darf, a.Art });
     public static string Von(Client c) => Hash(new { c.Name, c.Traegt, c.Sendet, c.Fragt, c.Kenntnis });
-    // Die Lese-Fähigkeiten gehören zur Signatur (Parameter nach IAusfuehrung) — sonst ging eine Änderung daran still verloren.
-    // Der Konstruktor der Implementierung gehört dazu (⊕ Dienst = ein Parameter mehr).
-    public static string Von(Funktion f) => Hash(new { f.Name, f.Auftrag, f.Ergebnisse, f.Faehigkeiten, f.Konstruktor });
     // Ein Dienst: seine Methoden-Signaturen und je Implementierung ihr Konstruktor (Rümpfe gehören dem Code).
     public static string Von(Dienst d) => Hash(new
     {
         d.Name, Methoden = d.Methoden.Select(m => new { m.Name, m.Rueckgabe, m.Parameter }).ToList(),
         Impls = d.Implementierungen.Select(i => new { i.Name, i.Konstruktor }).ToList(),
     });
-    public static string Von(Saga s) => Hash(new { s.TriggerEvent, Schritte = s.Schritte.Select(Wirksam).ToList() });
-
-    /// <summary>
-    /// Eine Regel so, wie der Scaffolder sie WIRKLICH schreibt: ein verbatim gelesener Ausdruck hat Vorrang vor Stub-Argumenten
-    /// (die der Browser beim Aufbereiten ergänzt) — die zählen dann nicht; leere Texte/Listen = nicht gesetzt.
-    /// </summary>
-    private static SagaSchritt Wirksam(SagaSchritt t)
-    {
-        static string? L(string? x) => string.IsNullOrWhiteSpace(x) ? null : x;
-        static IReadOnlyList<string>? LL(IReadOnlyList<string>? x) => x is { Count: > 0 } ? x : null;
-        var sende = L(t.SendeAusdruck);
-        var komp = L(t.KompensationAusdruck);
-        var sammel = L(t.SammelAusdruck);
-        return t with
-        {
-            SendeAusdruck = sende, KompensationAusdruck = komp, SammelAusdruck = sammel,
-            SendeArgumente = sende != null ? null : LL(t.SendeArgumente),
-            SendeJeCollection = sende != null ? null : L(t.SendeJeCollection),
-            SendeJeElement = sende != null ? null : L(t.SendeJeElement),
-            KompensationArgumente = komp != null ? null : LL(t.KompensationArgumente),
-            SammelAnzahl = sammel != null ? null : L(t.SammelAnzahl),
-            SammelEvent = L(t.SammelEvent), Kompensation = L(t.Kompensation),
-            Rufe = L(t.Rufe), Zeitlimit = L(t.Zeitlimit), Sende = t.Sende ?? "",
-        };
-    }
-    /// <summary>Ein Fluss so, wie der Scaffolder ihn schreibt: ein gelesener Ausdruck hat Vorrang vor Zuordnungs-Argumenten.</summary>
-    public static string Von(FlussPipeline f) => Hash(new
-    {
-        Knoten = f.Knoten.Select(s => s with
-        {
-            Doku = null,
-            Zeitlimit = string.IsNullOrWhiteSpace(s.Zeitlimit) ? null : s.Zeitlimit,
-            Liste = string.IsNullOrWhiteSpace(s.Liste) ? null : s.Liste,
-            Eingaenge = s.Eingaenge.Select(e => string.IsNullOrWhiteSpace(e.Ausdruck)
-                ? e with { Ausdruck = null, Argumente = e.Argumente is { Count: > 0 } ? e.Argumente : null }
-                : e with { Argumente = null }).ToList(),
-        }).ToList(),
-    });
     public static string Von(Faehigkeit f) => Hash(new { f.Name, f.Methode, f.Lesen, f.Rueckgabe, f.Parameter });
     public static string Von(Handle h) => Hash(new { h.Eingang, h.Faehigkeiten, h.Ausgaenge, h.Rueckgabe });
     public static string Von(Konsument k) => Hash(new { k.SubscriberId, k.Pull, k.Append, k.Basen });
     public static string Von(Leser r) => Hash(new { r.Projektion, r.TrackDeps, r.Basen });
-    // Name/Namespace/Konfigs gehören dazu: sonst ging eine Änderung daran im Editor still verloren (weder geschrieben noch gemeldet).
-    public static string Von(PipelineKarte p) => Hash(new { p.Name, p.Namespace, p.PipelineId, p.Basen, p.Konfigs });
 
     /// <summary>Alle änderbaren Elemente des (aus dem Code gelesenen) Modells stempeln.</summary>
     public static EditorModell Stempeln(EditorModell m)
@@ -83,10 +40,7 @@ public static class Herkunft
             Enums = m.Enums.Select(e => e with { Herkunft = Von(e) }).ToList(),
             Aggregate = m.Aggregate.Select(a => a with { Herkunft = Von(a) }).ToList(),
             Decider = m.Decider.Select(d => d with { Herkunft = Von(d) }).ToList(),
-            Sagas = m.Sagas.Select(s => s with { Herkunft = Von(s) }).ToList(),
-            Funktionen = m.Funktionen.Select(f => f with { Herkunft = Von(f) }).ToList(),
             Dienste = m.Dienste.Select(d => d with { Herkunft = Von(d) }).ToList(),
-            Fluesse = m.Fluesse.Select(f => f with { Herkunft = Von(f) }).ToList(),
             Akteure = m.Akteure.Select(a => a with { Herkunft = Von(a) }).ToList(),
             Clients = m.Clients.Select(c => c with { Herkunft = Von(c) }).ToList(),
             Lesen = l == null ? null : l with
@@ -94,7 +48,6 @@ public static class Herkunft
                 Stores = l.Stores.Select(s => s with { Fns = s.Fns.Select(f => f with { Herkunft = Von(f) }).ToList() }).ToList(),
                 Konsumenten = l.Konsumenten.Select(k => k with { Herkunft = Von(k), Handles = k.Handles.Select(H).ToList() }).ToList(),
                 Reader = l.Reader.Select(r => r with { Herkunft = Von(r), Handles = r.Handles.Select(H).ToList() }).ToList(),
-                Pipelines = l.Pipelines.Select(p => p with { Herkunft = Von(p), Handles = p.Handles.Select(H).ToList() }).ToList(),
             },
         };
     }
@@ -108,9 +61,6 @@ public static class Herkunft
         foreach (var e in m.Enums) Pruefe(e.Herkunft, Von(e), $"enum {e.Namespace}.{e.Name}");
         foreach (var a in m.Aggregate) Pruefe(a.Herkunft, Von(a), $"state {a.Namespace}.{a.Name}");
         foreach (var d in m.Decider) Pruefe(d.Herkunft, Von(d), $"decide {d.Aggregat}.{d.Command}");
-        foreach (var s in m.Sagas) Pruefe(s.Herkunft, Von(s), $"prozess {s.Namespace}.{s.Name}");
-        foreach (var f in m.Funktionen) Pruefe(f.Herkunft, Von(f), $"funktion {f.Namespace}.{f.Name}");
-        foreach (var f in m.Fluesse) Pruefe(f.Herkunft, Von(f), $"pipeline {f.Namespace}.{f.Name}");
         foreach (var d in m.Dienste) Pruefe(d.Herkunft, Von(d), $"dienst {d.Namespace}.{d.Name}");
         foreach (var a in m.Akteure) Pruefe(a.Herkunft, Von(a), $"akteur {a.Namespace}.{a.Name}");
         foreach (var c in m.Clients) Pruefe(c.Herkunft, Von(c), $"client {c.Namespace}.{c.Name}");
@@ -126,11 +76,6 @@ public static class Herkunft
         {
             Pruefe(r.Herkunft, Von(r), $"reader {r.Name}");
             foreach (var h in r.Handles) Pruefe(h.Herkunft, Von(h), $"handle {r.Name}.Handle({h.Eingang})");
-        }
-        foreach (var p in l.Pipelines)
-        {
-            Pruefe(p.Herkunft, Von(p), $"pipeline {p.Name}");
-            foreach (var h in p.Handles) Pruefe(h.Herkunft, Von(h), $"handle {p.Name}.Handle({h.Eingang})");
         }
         return aus;
     }

@@ -52,7 +52,7 @@ public sealed class AkteurAnalyzer : DiagnosticAnalyzer
             var iDarf = T("Abstractions.IDarf`1");
             var iAkteur = T("Abstractions.IAkteur");
             if (iDarf == null || iAkteur == null) return;
-            var hinein = new[] { T("Abstractions.ICommand"), T("Abstractions.IQuery"), T("Abstractions.IPipelineTrigger"), T("Abstractions.ITransientEvent"), T("Abstractions.IQuellNachricht") }
+            var hinein = new[] { T("Abstractions.ICommand"), T("Abstractions.IQuery"), T("Abstractions.ITransientEvent"), T("Abstractions.IQuellNachricht") }
                 .Where(x => x != null).Cast<INamedTypeSymbol>().ToArray();
             var iFunktion = T("Abstractions.IFunktion");
             start.RegisterSymbolAction(ctx => Pruefe(ctx, iDarf, iAkteur, hinein, iFunktion), SymbolKind.NamedType);

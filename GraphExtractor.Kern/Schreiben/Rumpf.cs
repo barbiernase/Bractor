@@ -7,17 +7,14 @@ using Microsoft.CodeAnalysis.Text;
 namespace GraphExtractor;
 
 /// <summary>
-/// Wo ein Rumpf im Code steht (Board-Feld <c>_rumpf</c>): die Methode, deren Rumpf er ist (Datei relativ zur Solution + Spanne der Deklaration),
-/// bzw. die Fluss-/Regel-Anweisung samt Index ihres Lambdas (<paramref name="Lambda"/>: der i-te Lambda, der direkt als Argument der Anweisung
-/// steht — dieselbe Zählung wie die LLM-Slots).
+/// Wo ein Rumpf im Code steht (Board-Feld <c>_rumpf</c>): die Methode, deren Rumpf er ist (Datei relativ zur Solution + Spanne der Deklaration).
 /// </summary>
-public sealed record RumpfOrt(string Datei, int Start, int Ende, int? Lambda = null);
+public sealed record RumpfOrt(string Datei, int Start, int Ende);
 
 /// <summary>
 /// Rumpf-Edit (Werkbank P7.4, Zielbild §8.4): der Rumpf-Port zeigt den Code direkt aus der Datei, ✎ ersetzt GENAU diesen Bereich — den Rumpf einer
-/// Methode (zwischen den Klammern; ein Ausdrucks-Rumpf wird ein Block) bzw. einen Lambda einer Fluss-/Regel-Anweisung. Alles andere bleibt Wort für
-/// Wort (Anhang A.2). Sperre: der Bereich muss noch so aussehen wie das, was der Editor zeigte (sonst „neu laden“). Dieselbe Einsetzung nutzt die
-/// LLM-Übernahme (Prompt-Zeile <see cref="PromptMarke"/>), damit geprüft wird, was später in der Datei steht.
+/// Methode (zwischen den Klammern; ein Ausdrucks-Rumpf wird ein Block). Alles andere bleibt Wort für Wort (Anhang A.2). Sperre: der Bereich muss
+/// noch so aussehen wie das, was der Editor zeigte (sonst „neu laden“). Dieselbe Einsetzung nutzt die LLM-Übernahme (Prompt-Zeile <see cref="PromptMarke"/>), damit geprüft wird, was später in der Datei steht.
 /// </summary>
 public static class Rumpf
 {
@@ -38,7 +35,6 @@ public static class Rumpf
     public static string? Lies(string text, RumpfOrt ort)
     {
         var root = CSharpSyntaxTree.ParseText(text).GetRoot();
-        if (ort.Lambda is { } i) return LambdaAm(root, ort, i)?.ToString().Replace("\r\n", "\n");
         if (MethodeAm(root, ort) is not { } m) return null;
         var inner = m.Body is { } b ? text[b.OpenBraceToken.Span.End..b.CloseBraceToken.Span.Start] : AlsAnweisung(m) ?? "";
         return Dedent(string.Join("\n", inner.Replace("\r\n", "\n").Split('\n').Where(z => !z.TrimStart().StartsWith(PromptMarke, StringComparison.Ordinal)))).Trim();
@@ -61,11 +57,6 @@ public static class Rumpf
     public static string MitRumpf(string text, RumpfOrt ort, string neu, string? prompt)
     {
         var root = CSharpSyntaxTree.ParseText(text).GetRoot();
-        if (ort.Lambda is { } i)
-        {
-            var l = LambdaAm(root, ort, i) ?? throw new InvalidOperationException($"{ort.Datei}: an dieser Stelle steht kein Lambda {i} (mehr) — neu laden.");
-            return text[..l.Span.Start] + neu.Trim() + text[l.Span.End..];
-        }
         var m = MethodeAm(root, ort) ?? throw new InvalidOperationException($"{ort.Datei}: an dieser Stelle steht keine Methode (mehr) — neu laden.");
         return MitMethodenRumpf(text, m, neu, prompt);
     }
@@ -90,16 +81,6 @@ public static class Rumpf
     private static MethodDeclarationSyntax? MethodeAm(SyntaxNode root, RumpfOrt ort) =>
         Am(root, ort) is { } n ? n.AncestorsAndSelf().OfType<MethodDeclarationSyntax>().FirstOrDefault(m => m.Span.Start == ort.Start && m.Span.End == ort.Ende)
             : null;
-
-    /// <summary>Der i-te Lambda, der direkt als Argument der Anweisung steht (nicht in einem anderen Lambda).</summary>
-    private static LambdaExpressionSyntax? LambdaAm(SyntaxNode root, RumpfOrt ort, int i)
-    {
-        var st = Am(root, ort)?.AncestorsAndSelf().FirstOrDefault(n => n.Span.Start == ort.Start && n.Span.End == ort.Ende);
-        if (st == null) return null;
-        var lambdas = st.DescendantNodesAndSelf().OfType<LambdaExpressionSyntax>()
-            .Where(l => l.Parent is ArgumentSyntax && !l.Ancestors().TakeWhile(x => x != st).OfType<LambdaExpressionSyntax>().Any()).ToList();
-        return i >= 0 && i < lambdas.Count ? lambdas[i] : null;
-    }
 
     private static SyntaxNode? Am(SyntaxNode root, RumpfOrt ort) =>
         ort.Start >= 0 && ort.Ende <= root.FullSpan.End && ort.Ende > ort.Start ? root.FindNode(TextSpan.FromBounds(ort.Start, ort.Ende)) : null;

@@ -3,7 +3,7 @@ namespace GraphExtractor;
 /// <summary>
 /// Setzt aus der autoritativen <see cref="RoutingTruth"/> und dem <see cref="DomainModel"/> den
 /// Property-Graph zusammen: Knoten + typisierte, gerichtete Kanten mit Provenienz, plus die abgeleiteten
-/// Sichten (Event-Fanout, Kausalketten, Diagnosen).
+/// Sichten (Event-Fanout, Diagnosen).
 /// </summary>
 public sealed class GraphBuilder
 {
@@ -31,24 +31,18 @@ public sealed class GraphBuilder
         BuildAggregateNodes();
         BuildCommandNodes();
         BuildEventNodes();
-        BuildProcessNodes();
         BuildProjectionNodes();
         BuildQueryNodes();
-        BuildPipelineNodes();
-        BuildAkteurNodes();      // Akteur + sein Vertrag, Clients (IClientVertrag) samt Kanten
+        BuildAkteurNodes();      // Akteure, Clients (IClientVertrag) samt Kanten
 
         BuildRoutingEdges();     // command → aggregat, aggregat → event  (autoritativ)
         BuildRejectEdges();      // aggregat → ablehnung  (decider)
-        BuildProcessEdges();     // event → process, process → command
         BuildConsumerEdges();    // event → projection, query → projection
 
-        ComputeCommandOrigins();
         ComputeEmittedBy();
-        ComputeProcessPatterns();
         ComputeContexts();
 
         BuildFanout();
-        BuildCausalChains();
         BuildDiagnostics();
 
         _g.Meta.Counts = new()
@@ -56,12 +50,10 @@ public sealed class GraphBuilder
             ["aggregate"] = _g.Nodes.Count(n => n.Kind == NodeKind.aggregate),
             ["command"] = _g.Nodes.Count(n => n.Kind == NodeKind.command),
             ["event"] = _g.Nodes.Count(n => n.Kind == NodeKind.@event),
-            ["process"] = _g.Nodes.Count(n => n.Kind == NodeKind.process),
             ["projection"] = _g.Nodes.Count(n => n.Kind == NodeKind.projection),
             ["query"] = _g.Nodes.Count(n => n.Kind == NodeKind.query),
-            ["pipeline"] = _g.Nodes.Count(n => n.Kind == NodeKind.pipeline),
             ["akteur"] = _g.Nodes.Count(n => n.Kind == NodeKind.akteur),
-            ["vertrag"] = _g.Nodes.Count(n => n.Kind == NodeKind.vertrag),
+            ["client"] = _g.Nodes.Count(n => n.Kind == NodeKind.client),
             ["edges"] = _g.Edges.Count,
         };
         return _g;
@@ -141,40 +133,6 @@ public sealed class GraphBuilder
         }
     }
 
-    private void BuildProcessNodes()
-    {
-        foreach (var p in _dom.Processes)
-        {
-            var rules = new List<SagaRule>();
-            for (var i = 0; i < p.Rules.Count; i++)
-            {
-                var r = p.Rules[i];
-                rules.Add(new SagaRule
-                {
-                    Index = i,
-                    When = r.WhenFull.Select(SimpleEvt).ToList(),
-                    Join = r.Join,
-                    Sammel = r.SammelFull is null ? null : SimpleEvt(r.SammelFull),
-                    FanOut = r.FanOut,
-                    Sends = r.RuftFull is null ? SimpleCmd(r.SendsFull) : "",
-                    Ruft = r.RuftFull is null ? null : r.RuftFull[(r.RuftFull.LastIndexOf('.') + 1)..],
-                    Zeitlimit = r.Zeitlimit,
-                    Compensates = r.CompensatesFull is null ? null : SimpleCmd(r.CompensatesFull),
-                });
-            }
-            Add(new Node
-            {
-                Id = $"proc:{p.Name}", Kind = NodeKind.process, Name = p.Name, Namespace = p.Namespace,
-                Process = new ProcessInfo
-                {
-                    Trigger = SimpleEvt(p.TriggerFull),
-                    Registered = _dom.RegisteredProcesses.Contains(p.Name),
-                    Rules = rules,
-                }
-            });
-        }
-    }
-
     private void BuildProjectionNodes()
     {
         foreach (var pr in _dom.Projections)
@@ -203,27 +161,9 @@ public sealed class GraphBuilder
         }
     }
 
-    private void BuildPipelineNodes()
-    {
-        foreach (var p in _dom.Pipelines)
-        {
-            var handles = p.Handles.Select(h => new PipelineHandle
-            {
-                Input = _dom.Events.TryGetValue(h.InputFull, out var et) ? et.Simple : Short(h.InputFull),
-                InputKind = h.InputKind,
-                Emits = h.EmitsFull.Select(SimpleCmd).ToList()
-            }).ToList();
-            Add(new Node
-            {
-                Id = $"pipe:{p.Name}", Kind = NodeKind.pipeline, Name = p.Name, FullName = p.Full, Namespace = p.Namespace,
-                Pipeline = new PipelineInfo { PipelineId = p.PipelineId, Handles = handles }
-            });
-        }
-    }
-
     /// <summary>
-    /// Akteure und ihre Verträge als Knoten (docs/konzept-akteure.md §3): <c>akteur:X</c> —darf→ Command/Query, —hatVertrag→ <c>vertrag:IX</c>;
-    /// Event —zusageAuf→ Vertrag —zusageGibt→ Command. So ist die Kette auch durch den Client hindurch ein Graph.
+    /// Akteure und Clients als Knoten (docs/konzept-akteure.md): <c>akteur:X</c> —darf→ Command/Query; <c>client:X</c> —traegt/sendet/fragt→,
+    /// Event —hoert→ Client, Client —verkoerpert→ Akteur.
     /// </summary>
     private void BuildAkteurNodes()
     {
@@ -233,11 +173,10 @@ public sealed class GraphBuilder
         foreach (var a in _dom.Akteure)
         {
             var aid = $"akteur:{a.Name}";
-            var vid = a.VertragName == null ? null : $"vertrag:{a.VertragName}";
             Add(new Node
             {
                 Id = aid, Kind = NodeKind.akteur, Name = a.Name, FullName = a.Full, Namespace = a.Namespace,
-                Akteur = new AkteurInfo { Art = a.Art, Darf = a.Darf.ToList(), Vertrag = vid },
+                Akteur = new AkteurInfo { Art = a.Art, Darf = a.Darf.ToList() },
             });
             foreach (var d in a.Darf)
                 if (NachrichtId(d) is { } ziel) kanten.Add((aid, ziel, EdgeKind.darf, null));
@@ -310,34 +249,6 @@ public sealed class GraphBuilder
                 }
     }
 
-    private void BuildProcessEdges()
-    {
-        foreach (var p in _dom.Processes)
-        {
-            var procNode = $"proc:{p.Name}";
-            if (_evtId.TryGetValue(p.TriggerFull, out var trigNode))
-                Edge(trigNode, procNode, EdgeKind.triggers, "process-dsl");
-
-            var conditions = new HashSet<string>(StringComparer.Ordinal);
-            for (var i = 0; i < p.Rules.Count; i++)
-            {
-                var r = p.Rules[i];
-                foreach (var w in r.WhenFull) conditions.Add(w);
-                if (r.SammelFull != null) conditions.Add(r.SammelFull);
-
-                if (_cmdId.TryGetValue(r.SendsFull, out var sendNode))
-                    Edge(procNode, sendNode, EdgeKind.sends, "process-dsl", via: i.ToString());
-                if (r.CompensatesFull != null && _cmdId.TryGetValue(r.CompensatesFull, out var compNode))
-                    Edge(procNode, compNode, EdgeKind.compensates, "process-dsl", via: i.ToString());
-            }
-
-            // Bedingungs-Events (außer dem Auslöser) treiben den Prozess voran.
-            foreach (var c in conditions)
-                if (c != p.TriggerFull && _evtId.TryGetValue(c, out var cNode))
-                    Edge(cNode, procNode, EdgeKind.advances, "process-dsl");
-        }
-    }
-
     private void BuildConsumerEdges()
     {
         foreach (var pr in _dom.Projections)
@@ -356,38 +267,9 @@ public sealed class GraphBuilder
             if (node.Query?.ReadsProjection is { } projName && projByName.TryGetValue(projName, out var projNode))
                 Edge(node.Id, projNode, EdgeKind.readsFrom, "reader");
         }
-
-        foreach (var p in _dom.Pipelines)
-        {
-            var pipeNode = $"pipe:{p.Name}";
-            foreach (var h in p.Handles)
-                foreach (var cmdFull in h.EmitsFull)
-                    if (_cmdId.TryGetValue(cmdFull, out var cmdNode))
-                        Edge(pipeNode, cmdNode, EdgeKind.pipelineEmits, "pipeline");
-        }
     }
 
     // ── Ableitungen auf den Knoten ──────────────────────────────────────────────
-
-    private void ComputeCommandOrigins()
-    {
-        foreach (var n in _g.Nodes.Where(n => n.Kind == NodeKind.command))
-        {
-            var origins = new SortedSet<string>(StringComparer.Ordinal);
-            foreach (var e in _g.Edges.Where(e => e.To == n.Id))
-            {
-                if (e.Kind == EdgeKind.sends) origins.Add("process");
-                else if (e.Kind == EdgeKind.compensates) origins.Add("process-compensation");
-                else if (e.Kind == EdgeKind.pipelineEmits) origins.Add("pipeline");
-                else if (e.Kind == EdgeKind.zusageGibt) origins.Add("akteur-vertrag");   // Zusage eines Clients auf ein Event
-                else if (e.Kind == EdgeKind.darf) origins.Add("client");   // IDarf = übers Tor, also vom Client
-            }
-            // Kein interner Erzeuger und geroutet ⇒ Einstieg von außen (Client) — inkl. Creation-Commands.
-            if (n.Command!.IsCreation || origins.Count == 0)
-                origins.Add("client");
-            n.Command!.Origin = origins.ToList();
-        }
-    }
 
     private void ComputeEmittedBy()
     {
@@ -404,44 +286,10 @@ public sealed class GraphBuilder
         }
     }
 
-    private void ComputeProcessPatterns()
-    {
-        // Verkettung: der Auslöser eines Prozesses wird von einem Command erzeugt, den ein ANDERER Prozess sendet.
-        var sentCommands = _g.Edges.Where(e => e.Kind == EdgeKind.sends).Select(e => e.To).ToHashSet();
-        foreach (var procNode in _g.Nodes.Where(n => n.Kind == NodeKind.process))
-        {
-            var pi = procNode.Process!;
-            var fanOut = pi.Rules.Any(r => r.FanOut || r.Join == "count");
-            var branches = pi.Rules.Count(r => r.Join == "single");
-            var joins = pi.Rules.Count(r => r.Join is "and" or "count");
-
-            // Verkettung erkennen: Auslöser-Event wird über einen von einem Prozess gesendeten Command erzeugt.
-            var triggerNodeId = _g.Nodes.FirstOrDefault(n => n.Kind == NodeKind.@event && n.Name == pi.Trigger)?.Id;
-            var chained = triggerNodeId != null && IsProducedByProcessCommand(triggerNodeId, sentCommands);
-
-            pi.Pattern = fanOut ? "Fan-out"
-                : chained ? "Verkettung"
-                : (branches >= 2 && joins >= 1) ? "Diamant"
-                : "Linear";
-        }
-    }
-
-    private bool IsProducedByProcessCommand(string eventNodeId, HashSet<string> sentCommandNodeIds)
-    {
-        // Welche Commands erzeugen dieses Event? produces-Kante ist command→event.
-        var producingCmdIds = _g.Edges
-            .Where(e => e.Kind == EdgeKind.produces && e.To == eventNodeId)
-            .Select(e => e.From)
-            .ToHashSet(StringComparer.Ordinal);
-
-        return sentCommandNodeIds.Any(producingCmdIds.Contains);
-    }
-
     /// <summary>
     /// Ordnet jeden Knoten einem Bounded Context (Domäne) zu. Commands/Events erben den Context ihres
-    /// behandelnden/emittierenden Aggregats (fachlich richtiger als ihr Deklarations-Namespace); Prozesse
-    /// bekommen ihren eigenen; Projektion/Query/Pipeline den Context ihres ersten konsumierten Events/Commands.
-    /// So fallen die cross-context-Kanten (Aggregat→Aggregat über eine Saga) sichtbar aus.
+    /// behandelnden/emittierenden Aggregats (fachlich richtiger als ihr Deklarations-Namespace);
+    /// Projektion/Query den Context ihres ersten konsumierten Events bzw. ihrer Projektion.
     /// </summary>
     private void ComputeContexts()
     {
@@ -458,10 +306,7 @@ public sealed class GraphBuilder
         foreach (var e in _g.Nodes.Where(n => n.Kind == NodeKind.@event))
             e.Context = e.Event?.EmittedBy is { } agg && aggCtxByName.TryGetValue(agg, out var ctx) ? ctx : Ctx(e.Namespace);
 
-        foreach (var p in _g.Nodes.Where(n => n.Kind == NodeKind.process))
-            p.Context = Ctx(p.Namespace);
-
-        // Projektion/Query/Pipeline: Context des ersten konsumierten Events bzw. emittierten Commands.
+        // Projektion/Query: Context des ersten konsumierten Events bzw. der gelesenen Projektion.
         string CtxOfNeighbour(string nodeId, EdgeKind kind, bool outgoing)
         {
             var e = _g.Edges.FirstOrDefault(x => x.Kind == kind && (outgoing ? x.From == nodeId : x.To == nodeId));
@@ -474,8 +319,6 @@ public sealed class GraphBuilder
                 .Select(x => _byId[x.From].Context).FirstOrDefault(c => c != null) ?? "(quer)";
         foreach (var q in _g.Nodes.Where(n => n.Kind == NodeKind.query))
             q.Context = CtxOfNeighbour(q.Id, EdgeKind.readsFrom, outgoing: true);
-        foreach (var pi in _g.Nodes.Where(n => n.Kind == NodeKind.pipeline))
-            pi.Context = CtxOfNeighbour(pi.Id, EdgeKind.pipelineEmits, outgoing: true);
 
         _g.Meta.Contexts = _g.Nodes.Select(n => n.Context).Where(c => c != null)!
             .Distinct().OrderBy(c => c, StringComparer.Ordinal).Cast<string>().ToList();
@@ -502,35 +345,16 @@ public sealed class GraphBuilder
             var fo = new EventFanout { Event = evt.Name, Persisted = evt.Event!.Persisted };
             fo.Projections = _g.Edges.Where(e => e.From == evt.Id && e.Kind == EdgeKind.consumedBy)
                 .Select(e => _byId[e.To].Name).Distinct().ToList();
-            fo.TriggersProcesses = _g.Edges.Where(e => e.From == evt.Id && e.Kind == EdgeKind.triggers)
-                .Select(e => _byId[e.To].Name).Distinct().ToList();
-            fo.AdvancesProcesses = _g.Edges.Where(e => e.From == evt.Id && e.Kind == EdgeKind.advances)
-                .Select(e => _byId[e.To].Name).Distinct().ToList();
-            fo.Pipelines = _dom.Pipelines
-                .Where(p => p.Handles.Any(h => _dom.Events.TryGetValue(h.InputFull, out var et) && et.Simple == evt.Name))
-                .Select(p => p.Name).Distinct().ToList();
+            fo.Funktionen = FunktionenAuf(evt.FullName).ToList();
 
-            if (fo.Projections.Count + fo.TriggersProcesses.Count + fo.AdvancesProcesses.Count + fo.Pipelines.Count > 0)
+            if (fo.Projections.Count + fo.Funktionen.Count > 0)
                 _g.Views.EventFanout.Add(fo);
         }
     }
 
-    private void BuildCausalChains()
-    {
-        foreach (var proc in _g.Nodes.Where(n => n.Kind == NodeKind.process))
-        {
-            var pi = proc.Process!;
-            var steps = new List<string>();
-            foreach (var r in pi.Rules)
-            {
-                var cond = string.Join(" ∧ ", r.When);
-                var arrow = r.FanOut ? "⇉" : (r.Join == "count" ? $"⨝(alle {r.Sammel})" : "→");
-                var comp = r.Compensates != null ? $"   ⟲ {r.Compensates}" : "";
-                steps.Add($"[{cond}] {arrow} {r.Sends}{comp}");
-            }
-            _g.Views.CausalChains.Add(new CausalChain { Start = pi.Trigger, Process = proc.Name, Steps = steps });
-        }
-    }
+    /// <summary>Die Funktionen, die das Event (voller Name) als Eingang eines <c>Auf</c> nehmen.</summary>
+    private IEnumerable<string> FunktionenAuf(string? evtFull) =>
+        _dom.BausteinFunktionen.Where(f => f.Eingaenge.Any(e => e.EingangFull == evtFull)).Select(f => f.Name).Distinct();
 
     private void BuildDiagnostics()
     {
@@ -549,20 +373,17 @@ public sealed class GraphBuilder
             })
         });
 
-        // Die Regeln, die hier früher standen, prüft der Build (Werkbank P7.4, „Prüfen = Bauen“): UNROUTED-SAGA-CMD = CQRS002/CQRS078,
-        //   MISSING-APPLY = CQRS079, ENUM-ZERO = CQRS081, UNUSED-EVENT/RESPONSE-OHNE-QUERY = CQRS085, STORE-AMBIGUOUS = CQRS053,
-        //   HANDLE-OFFEN = CQRS050; PROCESS-NOT-REGISTERED entfällt (der ProzessRegelnGenerator registriert jede Definition).
-        //   Hier bleibt nur, was der Build nicht sehen kann: wer ein Event hört, steht auch in Prozess- und Fluss-Rümpfen.
+        // Die Regeln, die hier früher standen, prüft der Build (Werkbank P7.4, „Prüfen = Bauen“): MISSING-APPLY = CQRS079,
+        //   ENUM-ZERO = CQRS081, UNUSED-EVENT/RESPONSE-OHNE-QUERY = CQRS085, STORE-AMBIGUOUS = CQRS053, HANDLE-OFFEN = CQRS050.
 
-        // Persistiertes Event ohne jeden Konsumenten (kein Konsument, kein Prozess, keine Pipeline).
+        // Persistiertes Event ohne jeden Konsumenten (keine Projektion, keine Funktion).
         foreach (var evt in _g.Nodes.Where(n => n.Kind == NodeKind.@event && n.Event!.Persisted))
         {
-            var hasConsumer = _g.Edges.Any(e => e.From == evt.Id && e.Kind is EdgeKind.consumedBy or EdgeKind.triggers or EdgeKind.advances)
-                || _dom.Pipelines.Any(p => p.Handles.Any(h => _dom.Events.TryGetValue(h.InputFull, out var et) && et.Simple == evt.Name));
+            var hasConsumer = _g.Edges.Any(e => e.From == evt.Id && e.Kind == EdgeKind.consumedBy) || FunktionenAuf(evt.FullName).Any();
             var hasProducer = _g.Edges.Any(e => e.To == evt.Id && e.Kind == EdgeKind.produces);
             if (hasProducer && !hasConsumer)
                 d.Add(new Finding { Severity = "info", Code = "DANGLING-EVENT",
-                    Message = $"Event '{evt.Name}' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)." });
+                    Message = $"Event '{evt.Name}' wird produziert, aber von niemandem konsumiert (keine Projektion, keine Funktion)." });
         }
     }
 

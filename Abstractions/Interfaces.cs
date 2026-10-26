@@ -12,16 +12,13 @@ public interface IState
 }
 
 /// <summary>
-/// Super-Marker für alle Typen die als Pipeline-Output yieldbar sind.
-/// Lockert das OneOf-Constraint: OneOf&lt;T1, T2&gt; where Ti : IPipelineOutput
-/// erlaubt sowohl IMessagePayload-Subtypen (Commands, Events) als auch IPipelineTrigger.
-///
-/// Konsumenten die nur Transport-Typen erwarten (Envelopes, BrokerSubscription,
-/// BrokerIdentity) constrainen weiterhin auf IMessagePayload — nicht betroffen.
+/// Was ein Decide oder eine Funktion ausgeben kann — das Constraint von <see cref="OneOf{T1}"/>: Commands und Events (<see cref="IMessagePayload"/>)
+/// sowie eine Frist (<see cref="IFrist"/>, nur aus einem Decide). Konsumenten, die nur Transport-Typen erwarten (Envelopes), constrainen weiter
+/// auf <see cref="IMessagePayload"/>.
 /// </summary>
-public interface IPipelineOutput { }
+public interface IAusgabe { }
 
-public interface IMessagePayload : IPipelineOutput { }
+public interface IMessagePayload : IAusgabe { }
 public interface IEvent : IMessagePayload { }
 
 /// <summary>
@@ -177,16 +174,6 @@ public interface IAggregateRepository
             => Task.FromResult<KommandoAusgang?>(null);
 
         /// <summary>
-        /// Globales Leseprimitiv für den Poll der Emittenten (docs/04 §4.1): eine Seite der Streams, die jenseits von
-        /// <paramref name="afterGlobalSequence"/> ein Event eines der <paramref name="typen"/> bekommen haben (Speicher-Diskriminatoren samt
-        /// Upcasting-Vorgängern wie bei <see cref="ReadPartitionAsync"/>; null = jeder Typ), höchstens <paramref name="limit"/> solche Events
-        /// weit, und die Marke, bis zu der die Seite reicht — nie über die gesetzte Sequenz (siehe <see cref="ReadPartitionAsync"/>). Liest nur Sequenz und Stream, keine
-        /// Daten; Tombstones zählen nicht. Der Poller weckt die Adapter der Streams — so heilt er das letzte verlorene Signal vor Stille.
-        /// </summary>
-        Task<StreamChanges> ReadChangedStreamsAsync(
-            long afterGlobalSequence, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct);
-
-        /// <summary>
         /// Rekonstruiert den aktuellen Zustand eines Aggregats, indem alle zugehörigen
         /// Events aus dem Store geladen und auf ein neues State-Objekt angewendet werden.
         /// </summary>
@@ -218,25 +205,6 @@ public interface IAggregateRepository
             => (await ReadStreamAsync(streamId, version, ct)).FirstOrDefault(e => e.AggregateVersion == version);
 
         /// <summary>
-        /// Die Events eines Streams ab <paramref name="fromVersion"/>, aber nur die mit der Korrelation <paramref name="korrelation"/> — für den
-        /// Prozess-Manager, der in einem viel beschriebenen Ziel-Stream nur die Wirkungen seiner eigenen Befehle braucht. Die Datenbank liest den
-        /// Rest weiter über den Stream-Index, liefert aber nur die eigenen Zeilen (keine fremden Daten über die Leitung, nichts auszupacken).
-        ///
-        /// Dazu der Kopf des Streams (seine höchste Version, gelesen vor den Events): bis dorthin hat der Leser alles Eigene gesehen — jedes
-        /// Anhängen an einen Stream wartet auf das vorige (Versionsprüfung an seinem Kopf), ein sichtbares Event hat also keine unsichtbaren davor.
-        /// Ohne Cursor (<paramref name="fromVersion"/> = 0) liest der Store erst ab dem ersten Event, das nach dem ersten Event von
-        /// <paramref name="beginn"/> geschrieben wurde (dem Start des Vorgangs in seinem eigenen Log): davor kann es nichts Eigenes geben, und die
-        /// Geschichte des Streams von vor dem Vorgang kostet nichts. <see cref="KorrelierteEvents.Ab"/> nennt die Version, ab der er las.
-        /// Ohne eigene Ablage (Prüfstand) über <see cref="ReadStreamAsync"/>, ab <paramref name="fromVersion"/>.
-        /// </summary>
-        async Task<KorrelierteEvents> ReadKorreliertAsync(Guid streamId, int fromVersion, string korrelation, Guid beginn, CancellationToken ct)
-        {
-            var alle = await ReadStreamAsync(streamId, fromVersion, ct);
-            var kopf = alle.Count == 0 ? Math.Max(fromVersion - 1, 0) : alle.Max(e => e.AggregateVersion);
-            return new KorrelierteEvents(alle.Where(e => e.CorrelationId == korrelation).ToList(), kopf, fromVersion);
-        }
-
-        /// <summary>
         /// Leseprimitiv des Batch-Konsums (docs/04 §4.1): eine Seite der Partition <paramref name="partition"/> von
         /// <paramref name="partitionen"/> jenseits der globalen Sequenz <paramref name="nach"/>, geordnet nach Sequenz, höchstens
         /// <paramref name="limit"/> Events. <paramref name="typen"/> = die Speicher-Diskriminatoren der abonnierten Typen samt ihrer
@@ -265,12 +233,6 @@ public interface IAggregateRepository
             => (await ReadStreamAsync(streamId, 0, ct)).Select(e => e.AggregateVersion).DefaultIfEmpty(0).Max();
     }
 
-    /// <summary>
-    /// Ergebnis von <see cref="IEventStoreRepository.ReadKorreliertAsync"/>: die eigenen Events, der Kopf des Streams beim Lesen (bis dorthin ist
-    /// alles Eigene dabei) und die Version, ab der der Store tatsächlich las (≥ der verlangten).
-    /// </summary>
-    public sealed record KorrelierteEvents(IReadOnlyList<EventEnvelope> Events, int Kopf, int Ab);
-
     /// <summary>Ein Event einer Partitions-Seite mit seiner globalen Sequenz.</summary>
     public sealed record PartitionsEvent(long Sequenz, EventEnvelope Event);
 
@@ -280,12 +242,6 @@ public interface IAggregateRepository
     /// </summary>
     public sealed record PartitionsSeite(IReadOnlyList<PartitionsEvent> Events, long Gesetzt, bool Voll);
 
-
-    /// <summary>
-    /// Eine Seite eines Poll-Scans: die seit der letzten High-Water-Mark geänderten Streams und die neue High-Water-Mark (globale
-    /// Event-Sequenz). <paramref name="Voll"/>: das Limit war erreicht, jenseits der Marke kann es mehr geben.
-    /// </summary>
-    public record StreamChanges(IReadOnlyList<Guid> StreamIds, long HighWaterMark, bool Voll = false);
 
     public interface IAggregateDispatcher
     {
@@ -531,72 +487,3 @@ public interface IAggregateRepository
             string subscriberId,
             IReadOnlyList<string> readModelIds);
     }
-    
-    /// <summary>
-    /// Marker-Interface für Pipeline-Logik-Klassen.
-    /// Analog zu ISubscriber (Projektionen) und IState (Aggregate).
-    ///
-    /// Pipeline-Handler empfangen Trigger (extern) oder Events (PubSub)
-    /// und erzeugen Commands an Aggregate. Sie sind das serverseitige
-    /// Gegenstück zum gRPC-Client.
-    ///
-    /// Der Entwickler schreibt partial classes mit Handle()-Methoden.
-    /// Der PipelineDispatchGenerator erzeugt DispatchTriggerAsync/DispatchEventAsync.
-    /// Der PipelineActorGenerator erzeugt den Actor + DI-Wiring.
-    /// </summary>
-    public interface IPipelineHandler
-    {
-        /// <summary>
-        /// Eindeutige ID für diese Pipeline.
-        /// Bestimmt ClusterIdentity UND PubSub-SubscriberId.
-        /// </summary>
-        string PipelineId { get; }
- 
-        /// <summary>
-        /// Wird beim Start aufgerufen (nach Subscriptions). Planen geht hier NICHT — die erste Selbst-Nachricht
-        /// plant ein <c>Handle(PipelineGestartet, ctx)</c> mit <c>Selbst&lt;T&gt;</c> im OneOf.
-        /// </summary>
-        Task OnInitializeAsync(PipelineContext ctx) => Task.CompletedTask;
- 
-        /// <summary>
-        /// Wird beim Stoppen aufgerufen (vor Unsubscribe).
-        /// </summary>
-        Task OnShutdownAsync() => Task.CompletedTask;
-    }
-    
-    
-    
-    /// <summary>
-    /// Marker-Interface für externe Trigger-Nachrichten.
-    ///
-    /// Trigger sind KEINE Events (nicht persistiert, kein EventStore).
-    /// Trigger sind KEINE Commands (nicht an Aggregate gerichtet).
-    /// Trigger werden zwischen Pipelines gesendet oder von nativen Actors
-    /// (FileWatcher, Timer, Webhook) direkt an Pipeline-Actors geschickt.
-    ///
-    /// Erbt von IPipelineOutput, damit Pipelines Trigger als Output yielden können
-    /// (OneOf&lt;SomeCommand, SomeTrigger&gt;). Der Generator routet Trigger-Outputs
-    /// über TriggerToPipelineId an die Ziel-Pipeline.
-    ///
-    /// Der PipelineDispatchGenerator unterscheidet Handle-Methoden nach
-    /// Parameter[0]-Typ: IPipelineTrigger → Trigger-Kanal, IEvent → PubSub-Kanal.
-    /// </summary>
-    // : IWireMessage — ein konkreter Trigger wird direkt als Top-Level-Cluster-Nachricht gesendet
-    //   (PipelineTriggerSender: RequestAsync&lt;PipelineAck&gt;(identity, trigger)), reist also cross-node
-    //   und muss vom Wire-Serializer abgedeckt sein (Multi-Node Iter.2).
-    public interface IPipelineTrigger : IPipelineOutput, IWireMessage { }
-
-    /// <summary>
-    /// Marker-Interface für Pipeline-interne Self-Messages.
-    ///
-    /// Self-Messages sind Implementierungsdetails einzelner Pipelines (z.B. PollTick,
-    /// TimeoutCheck). Sie werden NUR über einen <c>Selbst&lt;T&gt;</c>-Ausgang geplant und
-    /// durchlaufen NICHT das Framework:
-    ///   - Kein Proto-Mapping (DtoMapperGenerator ignoriert sie)
-    ///   - Keine TypeRegistry-Einträge (TypeRegistryGenerator ignoriert sie)
-    ///   - Kein TriggerToPipelineId-Lookup (PipelineActorGenerator ignoriert sie)
-    ///   - Nicht direkt im OneOf, sondern verpackt: <c>OneOf&lt;…, Selbst&lt;T&gt;&gt;</c>
-    ///
-    /// Parallel zur bestehenden Hierarchie — NICHT unter IPipelineOutput.
-    /// </summary>
-    public interface IPipelineSelfMessage { }

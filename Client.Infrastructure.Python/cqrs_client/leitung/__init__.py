@@ -32,14 +32,12 @@ class ClientMessage(betterproto.Message):
     unsubscribe: "UnsubscribeRequest" = betterproto.message_field(3, group="message")
     capabilities: "CapabilitiesRequest" = betterproto.message_field(4, group="message")
     query: "QueryRequest" = betterproto.message_field(5, group="message")
-    trigger: "TriggerRequest" = betterproto.message_field(6, group="message")
     transient_event: "TransientEventRequest" = betterproto.message_field(
         7, group="message"
     )
     query_answer: "QueryResponseFromClient" = betterproto.message_field(
         8, group="message"
     )
-    trigger_result: "TriggerResult" = betterproto.message_field(9, group="message")
     funktionen_anbieten: "FunktionenAnbieten" = betterproto.message_field(
         10, group="message"
     )
@@ -68,7 +66,6 @@ class UnsubscribeRequest(betterproto.Message):
 class CapabilitiesRequest(betterproto.Message):
     event_types: List[str] = betterproto.string_field(1)
     message_types: List[str] = betterproto.string_field(2)
-    handle_triggers: List[str] = betterproto.string_field(3)
     handle_queries: List[str] = betterproto.string_field(4)
     vertrag: str = betterproto.string_field(5)
     """
@@ -93,12 +90,6 @@ class QueryRequest(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class TriggerRequest(betterproto.Message):
-    payload: "Nutzlast" = betterproto.message_field(1)
-    correlation_id: str = betterproto.string_field(2)
-
-
-@dataclass(eq=False, repr=False)
 class ServerMessage(betterproto.Message):
     event: "EventNotification" = betterproto.message_field(1, group="message")
     subscription_confirmed: "SubscriptionConfirmed" = betterproto.message_field(
@@ -113,8 +104,6 @@ class ServerMessage(betterproto.Message):
         6, group="message"
     )
     query_response: "QueryResponse" = betterproto.message_field(7, group="message")
-    trigger_ack: "TriggerAck" = betterproto.message_field(8, group="message")
-    trigger_forward: "TriggerForward" = betterproto.message_field(9, group="message")
     query_forward: "QueryForward" = betterproto.message_field(10, group="message")
     arbeits_auftrag: "ArbeitsAuftrag" = betterproto.message_field(11, group="message")
 
@@ -148,9 +137,7 @@ class CapabilitiesResponse(betterproto.Message):
     allowed_commands: List[str] = betterproto.string_field(2)
     subscribed_events: List[str] = betterproto.string_field(3)
     supported_queries: List[str] = betterproto.string_field(4)
-    allowed_triggers: List[str] = betterproto.string_field(5)
     unknown_types: List[str] = betterproto.string_field(6)
-    handling_triggers: List[str] = betterproto.string_field(7)
     handling_queries: List[str] = betterproto.string_field(8)
     vertrag: str = betterproto.string_field(9)
     """
@@ -175,19 +162,6 @@ class AggregateMetaDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class TriggerAck(betterproto.Message):
-    accepted: bool = betterproto.bool_field(1)
-    correlation_id: str = betterproto.string_field(2)
-    error_message: str = betterproto.string_field(3)
-
-
-@dataclass(eq=False, repr=False)
-class TriggerForward(betterproto.Message):
-    payload: "Nutzlast" = betterproto.message_field(1)
-    correlation_id: str = betterproto.string_field(2)
-
-
-@dataclass(eq=False, repr=False)
 class QueryForward(betterproto.Message):
     correlation_id: str = betterproto.string_field(1)
     payload: "Nutzlast" = betterproto.message_field(2)
@@ -204,13 +178,6 @@ class QueryResponseFromClient(betterproto.Message):
     payload: "Nutzlast" = betterproto.message_field(2)
     error_code: str = betterproto.string_field(3)
     error_message: str = betterproto.string_field(4)
-
-
-@dataclass(eq=False, repr=False)
-class TriggerResult(betterproto.Message):
-    correlation_id: str = betterproto.string_field(1)
-    accepted: bool = betterproto.bool_field(2)
-    error_message: str = betterproto.string_field(3)
 
 
 @dataclass(eq=False, repr=False)

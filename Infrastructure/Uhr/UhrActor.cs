@@ -120,7 +120,7 @@ internal sealed class UhrKind : IClusterKindContributor
         {
             var emitter = new CommandEmitter(new Bote(system.Cluster(), logger), logger);
             var werk = new Uhrwerk(provider.GetRequiredService<IFaelligkeiten>(),
-                async (cmd, id, korrelation, ct) => (await emitter.EmitAsync(cmd, id, korrelation, ct)).Ausgang, logger);
+                async (cmd, id, korrelation, ct) => await emitter.EmitAsync(cmd, id, korrelation, ct), logger);
             return new UhrActor(werk, logger);
         }));
     }

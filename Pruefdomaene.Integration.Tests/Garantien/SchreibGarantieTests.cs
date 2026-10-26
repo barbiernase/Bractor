@@ -74,9 +74,8 @@ public class SchreibGarantieTests
     public async Task Eine_Wiederholung_nach_dem_Neustart_wirkt_nicht_erneut_weder_Absage_noch_Ablehnung()
     {
         // Nach dem Neustart kennt kein Actor-Cache etwas, und der Stand ist weitergegangen: eine Wiederholung der ersten Reservierung würde jetzt
-        //   abgesagt (Bestand erschöpft), eine Wiederholung der Absage (ein Fakt, Plan §3.1) würde jetzt wirken (Bestand zugebucht), eine Wiederholung
-        //   der Ablehnung (ein Hinweis: Posten unbekannt) würde jetzt wirken (Posten eröffnet). Alle bekommen den Ausgang des ersten Mals, keine
-        //   schreibt etwas.
+        //   abgesagt (Bestand erschöpft), eine Wiederholung der Absage (ein Fakt, Plan §3.1) würde jetzt wirken (Bestand zugebucht). Dazu eine
+        //   Ablehnung (ein Hinweis: Posten unbekannt). Alle bekommen den Ausgang des ersten Mals, keine schreibt etwas.
         var schema = "pruef_inbox_neustart";
         Guid p, q = Guid.NewGuid(), gewirkt = Guid.NewGuid(), abgesagt = Guid.NewGuid(), abgelehnt = Guid.NewGuid();
         using (var host = Cluster("garantie-neustart-1", schema: schema))
@@ -102,7 +101,6 @@ public class SchreibGarantieTests
             try
             {
                 (await FrageAsync(host, new BuchePostenZu(new(p), 10, Beleg.Ohne), Guid.NewGuid()))!.Success.Should().BeTrue();   // jetzt reichte der Bestand
-                (await FrageAsync(host, new EroeffnePosten(new(q), 10), Guid.NewGuid()))!.Success.Should().BeTrue();                // jetzt gibt es den Posten
                 var store = host.Services.GetRequiredService<IEventStoreRepository>();
                 var vorherP = (await store.ReadStreamAsync(p, 0, default)).Count;
                 var vorherQ = (await store.ReadStreamAsync(q, 0, default)).Count;
@@ -113,12 +111,11 @@ public class SchreibGarantieTests
 
                 w1!.Success.Should().BeTrue("die erste Reservierung hat gewirkt");
                 w2!.Success.Should().BeTrue("die zweite wurde abgesagt — als Fakt, und der wird nicht noch einmal entschieden");
-                w3!.Success.Should().BeFalse("die dritte war abgelehnt — auch wenn sie jetzt wirken könnte");
+                w3!.Success.Should().BeFalse("die dritte war abgelehnt");
                 w3.Abgelehnt.Should().BeTrue();
                 (await store.ReadStreamAsync(p, 0, default)).Count.Should().Be(vorherP, "eine Wiederholung schreibt nichts");
                 (await store.ReadStreamAsync(q, 0, default)).Count.Should().Be(vorherQ, "auch eine wiederholte Ablehnung schreibt nichts");
                 (await Zustand<PostenState>(host.Services, p)).Reserviert.Should().Be(5);
-                (await Zustand<PostenState>(host.Services, q)).Reserviert.Should().Be(0);
             }
             finally { await host.StopAsync(); }
         }
@@ -363,12 +360,6 @@ public class SchreibGarantieTests
                 Merke(streamId);
                 return innen.ReadEventAsync(streamId, version, ct);
             }
-            public Task<KorrelierteEvents> ReadKorreliertAsync(Guid streamId, int fromVersion, string korrelation, Guid beginn, CancellationToken ct)
-            {
-                Merke(streamId);
-                return innen.ReadKorreliertAsync(streamId, fromVersion, korrelation, beginn, ct);
-            }
-            public Task<StreamChanges> ReadChangedStreamsAsync(long after, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct) => innen.ReadChangedStreamsAsync(after, typen, limit, ct);
             public Task<PartitionsSeite> ReadPartitionAsync(long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit, CancellationToken ct)
                 => innen.ReadPartitionAsync(nach, partition, partitionen, typen, ausser, limit, ct);
             public Task<TState?> LoadStateAsync<TState>(Guid id) where TState : class, IState, new()
@@ -414,7 +405,6 @@ public class SchreibGarantieTests
             }
 
             public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(Guid streamId, int fromVersion, CancellationToken ct) => innen.ReadStreamAsync(streamId, fromVersion, ct);
-            public Task<StreamChanges> ReadChangedStreamsAsync(long after, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct) => innen.ReadChangedStreamsAsync(after, typen, limit, ct);
             public Task<PartitionsSeite> ReadPartitionAsync(long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit, CancellationToken ct)
                 => innen.ReadPartitionAsync(nach, partition, partitionen, typen, ausser, limit, ct);
             public Task<TState?> LoadStateAsync<TState>(Guid id) where TState : class, IState, new() => innen.LoadStateAsync<TState>(id);

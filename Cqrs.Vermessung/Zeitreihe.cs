@@ -5,8 +5,8 @@ namespace Cqrs.Vermessung;
 
 /// <summary>
 /// Diagnose des Leerlaufs (PF-14, <c>--art leerlauf</c>): statt eines Fensters eine Zeitreihe in Scheiben — je Scheibe Transaktionen und
-/// Queries je Sekunde, CPU des Hosts, die häufigsten Statements und wo die Konsumenten stehen (Kopf des Logs, Poll-Cursor, kleinste Position
-/// je Projektion, zuletzt bewegte Emittenten-Cursor; gelesen über die Lese-Rolle, also nicht mitgezählt). Zeigt, ob Last ohne Eingang
+/// Queries je Sekunde, CPU des Hosts, die häufigsten Statements und wo die Konsumenten stehen (Kopf des Logs, kleinste Position
+/// der Projektionen und der Funktionen, zuletzt bewegte Partitions-Stände; gelesen über die Lese-Rolle, also nicht mitgezählt). Zeigt, ob Last ohne Eingang
 /// abklingt (Nachlauf) oder bleibt (Grundlast).
 /// </summary>
 internal static class Zeitreihe
@@ -22,7 +22,7 @@ internal static class Zeitreihe
         lock (Sperre)
         {
             if (!File.Exists(reihe))
-                File.WriteAllText(reihe, "reihe,t_s,tx_je_s,queries_je_s,cpu_prozent,rss_mb,kopf_seq,poll_cursor,projektion_min_position,emittenten_bewegt\n", Encoding.UTF8);
+                File.WriteAllText(reihe, "reihe,t_s,tx_je_s,queries_je_s,cpu_prozent,rss_mb,kopf_seq,projektion_min_position,funktion_min_position,staende_bewegt\n", Encoding.UTF8);
             if (!File.Exists(statements)) File.WriteAllText(statements, "reihe,t_s,aufrufe,zeit_ms,zeilen,query\n", Encoding.UTF8);
         }
         var start = DateTimeOffset.UtcNow;
@@ -38,15 +38,15 @@ internal static class Zeitreihe
             var stand = await Konsumentenstand.LiesAsync(lauf.Db);
             var t = (b.Zeit - start).TotalSeconds;
             var top = st.Where(s => !IstSteuerung(s.Text)).Take(12).ToList();
-            var zeile = string.Join(',', name, F(t), F(txs), F(qs), F(cpu), F(rss), stand.Kopf, stand.Poll, stand.Projektion, stand.Emittenten);
+            var zeile = string.Join(',', name, F(t), F(txs), F(qs), F(cpu), F(rss), stand.Kopf, stand.Projektion, stand.Funktion, stand.Bewegt);
             lock (Sperre)
             {
                 File.AppendAllText(reihe, zeile + "\n");
                 File.AppendAllLines(statements, top.Select(s => string.Join(',', name, F(t), s.Aufrufe, F(s.ZeitMs), s.Zeilen,
                     "\"" + s.Text.Replace('\n', ' ').Replace("\"", "\"\"") + "\"")));
             }
-            Console.WriteLine($"    t={t,5:F0} s · {txs,6:F1} Tx/s · {qs,7:F1} Q/s · CPU {cpu,5:F1} % · Kopf {stand.Kopf} Poll {stand.Poll} " +
-                $"Proj.min {stand.Projektion} Emit.bewegt {stand.Emittenten} · " +
+            Console.WriteLine($"    t={t,5:F0} s · {txs,6:F1} Tx/s · {qs,7:F1} Q/s · CPU {cpu,5:F1} % · Kopf {stand.Kopf} " +
+                $"Proj.min {stand.Projektion} Funk.min {stand.Funktion} bewegt {stand.Bewegt} · " +
                 string.Join(" | ", top.Take(4).Select(s => $"{s.Aufrufe}× {Kurz(s.Text)}")));
             a = b;
         }

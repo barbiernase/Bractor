@@ -42,7 +42,6 @@ COMMAND_TYPES: frozenset[type] = frozenset({
     MeldeTrainingGescheitertDto,
 })
 
-TRIGGER_TYPES: frozenset[type] = frozenset()
 QUERY_TYPES: frozenset[type] = frozenset()
 QUERY_RESPONSE_TYPES: frozenset[type] = frozenset()
 
@@ -51,7 +50,6 @@ def create_registry() -> CategoryRegistry:
     return CategoryRegistry(
         events=EVENT_TYPES,
         commands=COMMAND_TYPES,
-        triggers=TRIGGER_TYPES,
         queries=QUERY_TYPES,
         query_responses=QUERY_RESPONSE_TYPES,
     )

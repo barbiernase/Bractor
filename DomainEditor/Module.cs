@@ -2,7 +2,7 @@ namespace DomainEditor;
 
 /// <summary>
 /// Ein Port eines Moduls: <see cref="Richtung"/> <c>ein</c>/<c>aus</c>, die Sorte, die über ihn fließt, die Nachricht (Typname) und
-/// die Partner auf der anderen Seite (Namespaces; <c>Außenwelt</c> = Client/Ingress). <see cref="Offen"/> = noch nicht geschlossen:
+/// die Partner auf der anderen Seite (Namespaces; <c>Außenwelt</c> = Client/Treiber). <see cref="Offen"/> = noch nicht geschlossen:
 /// ein Eingang ohne Konsument bzw. ein Ausgang ohne Erzeuger (Entwurf von oben nach unten).
 /// </summary>
 public sealed record ModulPort(string Richtung, string Sorte, string Nachricht, bool Offen, IReadOnlyList<string> Partner);
@@ -26,10 +26,10 @@ public sealed record Modul
 
 /// <summary>
 /// KAPSELUNG (<c>docs/konzept-editor-komposition.md</c> §5): jeder Namespace ist ein Modul, eingeklappt ein Baustein mit abgeleiteten
-/// Ports. Regel (auf dem <see cref="Fluss"/>): eine Kante Erzeuger → Nachricht bzw. Nachricht → Konsument, deren Enden auf verschiedenen
+/// Ports. Regel (auf dem <see cref="Nachrichtenfluss"/>): eine Kante Erzeuger → Nachricht bzw. Nachricht → Konsument, deren Enden auf verschiedenen
 /// Seiten der Modulgrenze liegen, ist ein Port — Eingang, wenn ihr Ziel drinnen liegt, Ausgang, wenn ihre Quelle drinnen liegt. Die
-/// Außenwelt (Client, Ingress) liegt außerhalb jedes Moduls. Dazu kommen die OFFENEN Ports: eine Nachricht im Modul, die einen
-/// Konsumenten braucht und keinen hat (Command, Query, Trigger, Selbst), bzw. einen Erzeuger braucht und keinen hat (Event,
+/// Außenwelt (Client, Treiber) liegt außerhalb jedes Moduls. Dazu kommen die OFFENEN Ports: eine Nachricht im Modul, die einen
+/// Konsumenten braucht und keinen hat (Command, Query), bzw. einen Erzeuger braucht und keinen hat (Event,
 /// Ablehnung, Response). Dieselbe Ableitung rechnet der Editor live auf dem Board (Parität: <c>/api/editor/module</c>).
 /// </summary>
 public static class Module
@@ -38,13 +38,13 @@ public static class Module
     /// <summary>Partner-Präfix eines Akteurs (ein benannter Teil der Außenwelt): „Akteur Inspektor".</summary>
     public const string AkteurPraefix = "Akteur ";
     /// <summary>Sorten, deren Nachricht einen Konsumenten braucht (sonst offener Eingang).</summary>
-    public static readonly IReadOnlySet<string> BrauchtKonsument = new HashSet<string> { Grammatik.Command, Grammatik.Query, Grammatik.Trigger, Grammatik.Selbst, Grammatik.Auftrag };
+    public static readonly IReadOnlySet<string> BrauchtKonsument = new HashSet<string> { Grammatik.Command, Grammatik.Query };
     /// <summary>Sorten, deren Nachricht einen Erzeuger braucht (sonst offener Ausgang).</summary>
     public static readonly IReadOnlySet<string> BrauchtErzeuger = new HashSet<string> { Grammatik.Event, Grammatik.Transient, Grammatik.Response };
 
-    public static IReadOnlyList<Modul> Ableiten(EditorModell m) => Ableiten(m, Fluss.Aus(m));
+    public static IReadOnlyList<Modul> Ableiten(EditorModell m) => Ableiten(m, Nachrichtenfluss.Aus(m));
 
-    public static IReadOnlyList<Modul> Ableiten(EditorModell m, Fluss fluss)
+    public static IReadOnlyList<Modul> Ableiten(EditorModell m, Nachrichtenfluss fluss)
     {
         // (1) Alle Namespaces, in denen etwas liegt (auch Value Objects/Konfigs/Enums/ReadModels), plus ihre Präfixe.
         var direkt = new Dictionary<string, Dictionary<string, int>>(StringComparer.Ordinal);
@@ -55,7 +55,7 @@ public static class Module
             d[art] = d.GetValueOrDefault(art) + 1;
         }
         // Akteure liegen wie die Außenwelt AUSSERHALB jedes Moduls (sie sind die Außenwelt — mit Namen).
-        foreach (var k in fluss.Knoten.Where(k => k.Id != Fluss.AussenId && k.Art != Grammatik.Akteur)) Zaehle(k.Namespace, k.Sorte ?? k.Art);
+        foreach (var k in fluss.Knoten.Where(k => k.Id != Nachrichtenfluss.AussenId && k.Art != Grammatik.Akteur)) Zaehle(k.Namespace, k.Sorte ?? k.Art);
         foreach (var r in m.Records.Where(r => Grammatik.SorteVonRecordArt(r.Kind) == null)) Zaehle(r.Namespace, r.Kind);
         foreach (var e in m.Enums) Zaehle(e.Namespace, "enum");
         var alle = new SortedSet<string>(StringComparer.Ordinal);
@@ -72,7 +72,7 @@ public static class Module
             else if (offen && !p.Offen) d[key] = p = (true, p.Partner);
             if (partner != null) p.Partner.Add(partner);
         }
-        string? NsVon(string id) => id == Fluss.AussenId || IstAkteur(id) ? null : fluss.KnotenVon(id)?.Namespace;
+        string? NsVon(string id) => id == Nachrichtenfluss.AussenId || IstAkteur(id) ? null : fluss.KnotenVon(id)?.Namespace;
         bool IstAkteur(string id) => fluss.KnotenVon(id)?.Art == Grammatik.Akteur;
         string Aussen(string id) => IstAkteur(id) ? $"{AkteurPraefix}{fluss.KnotenVon(id)!.Name}" : Aussenwelt;
         foreach (var k in fluss.Kanten)

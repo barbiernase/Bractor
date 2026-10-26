@@ -33,12 +33,6 @@ internal sealed class BeilagenSchreiber
                     (_streams ??= new()).Add(streamId);
                     (_abgelehnt ??= new()).Add(q.Ausgang == KommandoAusgang.Abgelehnt);
                     break;
-                case VorgangOffen o:
-                    session.Store(new ProzessOffen { Id = o.Korrelation, ProzessName = o.ProzessName, SeitUtc = DateTimeOffset.UtcNow });
-                    break;
-                case VorgangBeendet e:
-                    session.Delete<ProzessOffen>(e.Korrelation);
-                    break;
                 case QuellKennung k:
                     (_kennungen ??= new()).Add(k.Vorgang);
                     (_kennungStreams ??= new()).Add(streamId);

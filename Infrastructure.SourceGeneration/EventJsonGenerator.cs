@@ -36,7 +36,6 @@ namespace Infrastructure.SourceGeneration
             if (iEvent == null)
                 return;
             var iTransient = compilation.GetTypeByMetadataName("Abstractions.ITransientEvent");
-            var iSelf = compilation.GetTypeByMetadataName("Abstractions.IPipelineSelfMessage");
 
             var all = new List<INamedTypeSymbol>();
             Collect(compilation.GlobalNamespace, all);
@@ -50,8 +49,6 @@ namespace Infrastructure.SourceGeneration
                 if (!ifaces.Contains(iEvent, SymbolEqualityComparer.Default))
                     continue;
                 if (iTransient != null && ifaces.Contains(iTransient, SymbolEqualityComparer.Default))
-                    continue;
-                if (iSelf != null && ifaces.Contains(iSelf, SymbolEqualityComparer.Default))
                     continue;
                 events.Add(t);
             }

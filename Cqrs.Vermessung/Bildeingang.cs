@@ -9,7 +9,8 @@ namespace Cqrs.Vermessung;
 /// <summary>
 /// S1/S2 Bildeingang (Beispieldomäne): je Vorgang ein TIFF-Paar (<c>_DC0</c>, <c>_DC2</c>) ins Quell-Verzeichnis — erst in einen
 /// Zwischenordner geschrieben, dann hineinverschoben, dann die Fertig-Marke (Quelle <c>Fertig:Marker</c>). Sichtbar ist der Vorgang, wenn die
-/// Query <c>GetImagePair</c> das Paar als komplett liefert — Fluss (Deutung, Paar, Verkleinerung, Ausgleich) und Projektion durchlaufen. S2 ist derselbe Eingang mit den Bild-Funktionen im Python-Worker (Laufort Extern).
+/// Query <c>GetImagePair</c> das Paar als komplett liefert — Funktionen (Bildaufbereitung, Bildeingang), Aggregat und Projektion durchlaufen. S2 ist derselbe
+/// Eingang mit der Bildaufbereitung im Python-Worker (Laufort Extern).
 /// </summary>
 internal sealed class Bildeingang : ILast, IAsyncDisposable
 {

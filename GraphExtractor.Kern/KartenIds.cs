@@ -29,18 +29,15 @@ public static class KartenIds
                 && Id("applier", a => S(a, "aggregat") == typ && S(a, "event") == arg) is { } app) return app;
             return "agg:" + typ;
         }
-        return Id("funktionen", f => S(f, "name") == typ || S(f, "implementierung") == typ)
+        return Id("bausteinFunktionen", f => S(f, "name") == typ || (f["umsetzungen"] as JsonArray ?? []).OfType<JsonObject>().Any(u => S(u, "name") == typ))
             ?? Id("dienste", d => S(d, "name") == typ || (d["implementierungen"] as JsonArray ?? []).OfType<JsonObject>().Any(i => S(i, "name") == typ))
             ?? Id("projektionen", p => S(p, "name") == typ)
-            ?? Id("reaktionen", p => S(p, "name") == typ)
             ?? Id("reader", p => S(p, "name") == typ)
             ?? Id("stores", s => S(s, "name") == typ || (s["impl"] is JsonObject impl && S(impl, "name") == typ))
             ?? Id("readModels", r => S(r, "name") == typ)
-            ?? Id("fluesse", f => S(f, "name") == typ)
             ?? Id("akteure", a => S(a, "name") == typ)
             ?? Id("clients", c => S(c, "name") == typ)
             ?? Id("codeKarten", c => S(c, "name") == typ)
-            ?? (Alle("sagas").Any(s => S(s, "name") == typ) ? "saga:" + typ : null)
             ?? (Alle("records").Any(r => S(r, "name") == typ) ? "rec:" + typ : null)
             ?? (Alle("enums").Any(e => S(e, "name") == typ) ? "enum:" + typ : null);
     }

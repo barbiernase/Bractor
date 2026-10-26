@@ -54,13 +54,13 @@ public class DienstBindungTests
 
     private const string Bild = @"namespace Probe {
         public sealed record Gemacht(string X) : IEvent;
-        public sealed record MachAuftrag(string X) : IAuftrag<IMach>;
-        public interface IMach : IFunktion { Task<OneOf<Gemacht>> RufeAsync(MachAuftrag a, IAusfuehrung x); }
+        public sealed record Angefordert(string X) : IEvent;
+        public interface IMach : IFunktion { Gemacht Auf(Angefordert e); }
         public interface ISkalierer : IDienst { int Skaliere(int x); }
         public sealed class Skalierer(ILogger<Skalierer> log) : ISkalierer { public int Skaliere(int x) => x; }
         public enum Modus { Schnell = 1, Gruendlich = 2 }
         public record BildKonfig(string Ausgabe, int Hoehe, Modus Modus, TimeSpan Frist, bool Laut = false, string[]? Endungen = null);
-        public sealed class Mach(ISkalierer s, BildKonfig k) : IMach { public Task<OneOf<Gemacht>> RufeAsync(MachAuftrag a, IAusfuehrung x) => default!; }
+        public sealed class Mach(ISkalierer s, BildKonfig k) : IMach { public Gemacht Auf(Angefordert e) => default!; }
     }";
 
     [Fact]
@@ -101,7 +101,6 @@ public class DienstBindungTests
     {
         var gebunden = new List<string>();
         var s = new ServiceCollection();
-        s.AddSingleton(new FunktionsBindung(typeof(object), Impl: typeof(FImpl)));
         var namen = new Dictionary<string, Type> { ["ID1"] = typeof(ID1), ["ID2"] = typeof(ID2) };
         var impls = new List<DienstImplementierung>
         {
@@ -111,7 +110,7 @@ public class DienstBindungTests
         if (zweiImpls) impls.Add(new(typeof(ID1), "D1b", typeof(D1b), _ => gebunden.Add("ID1 → D1b")));
         var konfigs = new[] { new KonfigRecord(typeof(K), "K", sec => { KonfigLeser.NurBekannte(sec, "Wert"); return new K(KonfigLeser.Text(sec, "Wert")); }) };
         var cfg = new ConfigurationBuilder().AddInMemoryCollection(konfig).Build();
-        s.BindeDienste(wahl, cfg.GetSection("Konfig"), namen, impls, braucht, konfigs);
+        s.BindeDienste(wahl, cfg.GetSection("Konfig"), [typeof(FImpl)], namen, impls, braucht, konfigs);
         return new Lauf(s, gebunden);
     }
 
@@ -185,7 +184,6 @@ public class DienstBindungTests
         GeneratedDienste.Namen.Keys.Should().BeEquivalentTo("IImageResizer", "IHistogramEqualizer");
         GeneratedDienste.Implementierungen.Select(i => i.Name).Should().BeEquivalentTo("ImageResizer", "HistogramEqualizer");
         GeneratedDienste.Konfigs.Select(k => k.Name).Should().Equal("BildaufbereitungKonfig");
-        GeneratedFunktionen.Implementierungen.Should().OnlyContain(i => i.Impl.Name == i.Name);
     }
 
     // ── Analyzer CQRS089–CQRS092 ──────────────────────────────────────────────────────────────────────────────────────

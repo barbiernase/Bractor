@@ -78,8 +78,8 @@ class MessageRouter:
 
         Verarbeitet drei Arten von Messages aus der event_queue:
         - "event": EventNotification → Payload extrahieren → Handler → yield Outputs
-        - "trigger_forward": TriggerForward → Payload extrahieren → Handler → TriggerResult
         - "query_forward": QueryForward → Payload extrahieren → Handler → QueryResponse
+        - "arbeits_auftrag": Eingang einer getragenen Funktion → on_arbeit
         """
         while proxy.is_connected:
             try:
@@ -96,11 +96,6 @@ class MessageRouter:
                     await self._handle_event(
                         msg, proxy, handle, instance, state,
                         mapper, registry, version_tracker
-                    )
-                elif msg_type == "trigger_forward":
-                    await self._handle_trigger_forward(
-                        msg, proxy, handle, instance, state,
-                        mapper, registry
                     )
                 elif msg_type == "query_forward":
                     await self._handle_query_forward(
@@ -158,42 +153,6 @@ class MessageRouter:
         # Dispatch + Output-Routing (ein Handler ohne Vertrag darf von sich aus Commands senden; Kenntnis eines Vertrags gibt nichts aus).
         async for output in handle.receive(instance, payload, ctx, state):
             await self._route_output(output, ctx, proxy, mapper, registry)
-
-    # ═══════════════════════════════════════════════════
-    # TRIGGER FORWARD HANDLING
-    # ═══════════════════════════════════════════════════
-
-    async def _handle_trigger_forward(
-        self, trigger_fwd, proxy, handle, instance, state,
-        mapper, registry
-    ):
-        """Verarbeitet einen TriggerForward vom Server."""
-        correlation_id = trigger_fwd.correlation_id
-
-        try:
-            payload = mapper.extract_trigger_payload(trigger_fwd.payload)
-
-            ctx = MessageContext(
-                correlation_id=correlation_id,
-                session_id=proxy.session_id,
-                _proxy=proxy,
-                _mapper=mapper,
-            )
-
-            log.info("TriggerForward: %s", type(payload).__name__)
-
-            # Dispatch — Outputs werden geroutet
-            async for output in handle.receive(instance, payload, ctx, state):
-                await self._route_output(output, ctx, proxy, mapper, registry)
-
-            # Trigger accepted
-            await proxy.send_trigger_result(correlation_id, accepted=True)
-
-        except Exception as e:
-            log.error("Trigger handler failed: %s", e, exc_info=True)
-            await proxy.send_trigger_result(
-                correlation_id, accepted=False, error_message=str(e)
-            )
 
     # ═══════════════════════════════════════════════════
     # QUERY FORWARD HANDLING
@@ -262,7 +221,6 @@ class MessageRouter:
         Routet einen yielded Output basierend auf CategoryRegistry.
 
         Command   → CommandEnvelopeDto (Nutzlast) → GrpcProxy.send_command
-        Trigger   → Nutzlast → GrpcProxy.send_trigger
         Event     → EventEnvelopeDto (Nutzlast) → GrpcProxy.publish_transient (TransientEvent)
         """
         category = registry.classify(type(output))
@@ -300,12 +258,6 @@ class MessageRouter:
             )
             await proxy.publish_transient(envelope)
             log.info("→ TransientEvent: %s", type(output).__name__)
-
-        elif category == MessageCategory.TRIGGER:
-            # Client→Client-Trigger: der Server forwarded ihn an den registrierten Client-Handler
-            # (TriggerHandlerRegistry) und quittiert per TriggerAck. Fire-and-forget aus Router-Sicht.
-            await proxy.send_trigger(mapper.wrap_trigger(output), correlation_id=ctx.correlation_id)
-            log.info("→ Trigger: %s", type(output).__name__)
 
         elif category == MessageCategory.QUERY_RESPONSE:
             # Query-Responses werden in _handle_query_forward direkt gesendet

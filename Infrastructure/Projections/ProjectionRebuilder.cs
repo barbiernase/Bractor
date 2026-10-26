@@ -10,8 +10,8 @@ namespace Infrastructure.Projections;
 ///      noch laufender Leser verliert seinen nächsten Commit),
 ///   3. je Partition einen <see cref="BatchLeser"/> ab 0 laufen lassen — seitenweise, als Strom (nie der ganze Log als Liste).
 ///
-/// Replay-Grenze: nur REPLAYBARE Konsumenten (Projektionen) haben einen <see cref="IProjectionTracker"/> und damit Reset. Emittenten
-/// (<see cref="IEmittentenCursor"/> ohne Reset) liegen nie auf diesem Pfad — geld-bewegende Ausgänge werden nie blind replayt.
+/// Replay-Grenze: nur REPLAYBARE Konsumenten (Projektionen) haben einen <see cref="IProjectionTracker"/> und damit Reset. Funktionen (ihr
+/// Stand ohne Reset) liegen nie auf diesem Pfad — Ausgänge in die Welt werden nie blind replayt.
 /// </summary>
 public sealed class ProjectionRebuilder
 {

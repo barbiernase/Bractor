@@ -19,7 +19,6 @@ namespace Infrastructure.SourceGeneration
     /// - ICommand (alle Commands, inkl. ICreationCommand)
     /// - IQuery (alle Queries)
     /// - IQueryResponse (alle Responses)
-    /// - IPipelineTrigger (alle Trigger)
     /// - ITransientEvent (Subset von IEvent, für Marten-Ausschluss)
     ///
     /// Speist:
@@ -67,7 +66,6 @@ namespace Infrastructure.SourceGeneration
                 new CategoryDef("Abstractions.ICommand",           "Commands",        "COMMANDS (alle, inkl. ICreationCommand)"),
                 new CategoryDef("Abstractions.IQuery",             "Queries",         "QUERIES"),
                 new CategoryDef("Abstractions.IQueryResponse",     "QueryResponses",  "QUERY RESPONSES"),
-                new CategoryDef("Abstractions.IPipelineTrigger",   "Triggers",        "TRIGGERS (Pipeline-Eingänge)"),
                 new CategoryDef("Abstractions.IStateChangeSignal", "Signals",         "SIGNALS (StateChangeVia{Event}, nur Weckrufe)"),
             };
 
@@ -92,17 +90,8 @@ namespace Infrastructure.SourceGeneration
             var allTypes = new List<INamedTypeSymbol>();
             CollectTypes(compilation.GlobalNamespace, allTypes);
 
-            // Self-Messages komplett ignorieren — sind Pipeline-intern,
-            // kein Proto-Mapping, kein TypeRegistry, kein Marten
-            var iPipelineSelf = compilation.GetTypeByMetadataName("Abstractions.IPipelineSelfMessage");
-
             foreach (var type in allTypes)
             {
-                // Self-Messages explizit ausschließen
-                if (iPipelineSelf != null &&
-                    type.AllInterfaces.Contains(iPipelineSelf, SymbolEqualityComparer.Default))
-                    continue;
-
                 var interfaces = type.AllInterfaces;
 
                 foreach (var cat in categories)

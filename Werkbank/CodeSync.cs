@@ -16,13 +16,7 @@ namespace Werkbank;
 public sealed record MethodenAnker(string Datei, string Klasse, string Methode, string? ParameterTyp);
 
 /// <summary>
-/// Anker eines Fluss-Lambdas (docs/konzept-editor-pipelines.md §14.4): Datei, Pipeline-Klasse, die wievielte Anweisung des
-/// Definiere-Lambdas und der wievielte Lambda darin (Code-Reihenfolge; verschachtelte zählen nicht) — wie der Extractor sie zählt.
-/// </summary>
-public sealed record LambdaAnker(string Datei, string Klasse, int Anweisung, int Lambda);
-
-/// <summary>
-/// Die LLM-Slots (<c>GraphExtractor --kontexte</c>) im Code finden: Anker (Datei + Klasse + Methode bzw. Anweisung + Lambda) → aktueller Rumpf,
+/// Die LLM-Slots (<c>GraphExtractor --kontexte</c>) im Code finden: Anker (Datei + Klasse + Methode) → aktueller Rumpf,
 /// Hash (Sperre gegen Zwischenänderungen) und <see cref="GraphExtractor.RumpfOrt"/>. Geschrieben wird hier NICHTS — eine 🤖-Übernahme ist eine
 /// Rumpf-Geste (<see cref="GraphExtractor.Rumpf"/>, Verlauf und ↶ der Werkbank), derselbe Weg wie ✎ (docs/13 W11-1). Dazu der Build des
 /// Laufzeit-Projekts nach einer Übernahme.
@@ -116,60 +110,6 @@ public static class CodeSync
     }
 
     // ── Bauen: die Generatoren + Proto-Prepass laufen bei dotnet build automatisch mit (siehe Domain.Leitung.csproj). ──
-
-    // ════════════════════════════════════════════════════════════════════════════════════════
-    //  FLUSS-LAMBDAS: Anker = Klasse + Anweisung + Lambda-Index. Der „Rumpf“ ist der ganze Lambda-Ausdruck.
-    // ════════════════════════════════════════════════════════════════════════════════════════
-
-    private sealed record LambdaTreffer(bool Ok, string Pfad, string Text, LambdaExpressionSyntax? L, string Grund, Microsoft.CodeAnalysis.SyntaxNode? Anweisung = null);
-
-    private static LambdaTreffer FindeLambda(LambdaAnker a, string slnRoot)
-    {
-        var pfad = Path.GetFullPath(Path.Combine(slnRoot, a.Datei));
-        if (!pfad.StartsWith(Path.GetFullPath(slnRoot), StringComparison.Ordinal)) return new(false, pfad, "", null, "Pfad liegt außerhalb der Solution.");
-        if (!File.Exists(pfad)) return new(false, pfad, "", null, $"Datei fehlt: {a.Datei}");
-        var text = File.ReadAllText(pfad);
-        var klasse = CSharpSyntaxTree.ParseText(text).GetRoot().DescendantNodes().OfType<ClassDeclarationSyntax>()
-            .FirstOrDefault(c => c.Identifier.Text == a.Klasse);
-        var definiere = klasse?.Members.OfType<PropertyDeclarationSyntax>()
-            .SelectMany(p => p.DescendantNodes().OfType<InvocationExpressionSyntax>())
-            .Select(i => i.ArgumentList.Arguments.FirstOrDefault()?.Expression as LambdaExpressionSyntax)
-            .FirstOrDefault(l => l != null);
-        if (definiere == null) return new(false, pfad, text, null, $"{a.Klasse}: kein Definiere-Lambda gefunden.");
-        // Block = je Anweisung eine Regel/ein Knoten; Ausdrucks-Lambda (eine einzige Regel) = Anweisung 0.
-        var anweisungen = definiere.Body is BlockSyntax block ? block.Statements.Cast<Microsoft.CodeAnalysis.SyntaxNode>().ToList() : [definiere.Body];
-        if (a.Anweisung < 0 || a.Anweisung >= anweisungen.Count) return new(false, pfad, text, null, $"{a.Klasse}: Anweisung {a.Anweisung} fehlt.");
-        var st = anweisungen[a.Anweisung];
-        var lambdas = st.DescendantNodesAndSelf().OfType<LambdaExpressionSyntax>()
-            .Where(l => l.Parent is ArgumentSyntax && !l.Ancestors().TakeWhile(x => x != st).OfType<LambdaExpressionSyntax>().Any()).ToList();
-        return a.Lambda >= 0 && a.Lambda < lambdas.Count
-            ? new(true, pfad, text, lambdas[a.Lambda], "", st)
-            : new(false, pfad, text, null, $"{a.Klasse}: Anweisung {a.Anweisung} hat keinen Lambda {a.Lambda}.");
-    }
-
-    public static object LeseLambda(LambdaAnker a, string slnRoot)
-    {
-        var t = FindeLambda(a, slnRoot);
-        if (!t.Ok) return new { ok = false, grund = t.Grund };
-        var inhalt = t.L!.ToString().Replace("\r\n", "\n");
-        return new { ok = true, pfad = Rel(t.Pfad, slnRoot), zeile = t.L.GetLocation().GetLineSpan().StartLinePosition.Line + 1,
-            body = Dedent(inhalt), prompt = (string?)null, hash = Hash(inhalt) };
-    }
-
-    public static string? LambdaHash(LambdaAnker a, string slnRoot)
-    {
-        var t = FindeLambda(a, slnRoot);
-        return t.Ok ? Hash(t.L!.ToString().Replace("\r\n", "\n")) : null;
-    }
-
-    /// <summary>Der Ort des Lambdas in der Board-Form (Spanne der Anweisung + Lambda-Index, wie <c>_ort</c> eines Fluss-Knotens).</summary>
-    public static (GraphExtractor.RumpfOrt? Ort, string Grund, int Zeile) Ort(LambdaAnker a, string slnRoot)
-    {
-        var t = FindeLambda(a, slnRoot);
-        return t.Ok ? (new GraphExtractor.RumpfOrt(Rel(t.Pfad, slnRoot), t.Anweisung!.Span.Start, t.Anweisung.Span.End, a.Lambda), "",
-                t.L!.GetLocation().GetLineSpan().StartLinePosition.Line + 1)
-            : (null, t.Grund, 0);
-    }
 
 
     private static string? LiesPrompt(string inner)

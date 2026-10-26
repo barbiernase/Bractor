@@ -194,27 +194,43 @@ public class UmgebungE2ETests
         {
             var sim = Umgebung("sim-uhr", UmgebungsArt.Sim, db);
             await new UmgebungsSiegel(sim).StartAsync(default);   // legt DB, Siegel und Uhr-Tabelle an
-            using var store = DocumentStore.For(o =>
+            DocumentStore Store(UmgebungKonfig u) => DocumentStore.For(o =>
             {
-                o.Connection(UmgebungLader.Verbindung(sim.EventStore));
+                o.Connection(UmgebungLader.Verbindung(u.EventStore));
                 o.DatabaseSchemaName = "es";
-                o.Schema.For<Frist>().Identity(x => x.Id);
+                o.Events.DatabaseSchemaName = "es";
+                Infrastructure.Uhr.FristVerzeichnis.Registriere(o);
+                EventZeit.Registriere(o, UmgebungsDbClock.Ausdruck(u));   // dieselbe Uhr wie der Host (G-10)
             });
-            var plan = new MartenFristplan(store);
+            using var store = Store(sim);
+            await store.Storage.ApplyAllConfiguredChangesToDatabaseAsync();
             var uhr = new UmgebungsDbClock(sim);
             var vorher = await uhr.JetztAsync();
-            var frist = new Frist(Guid.NewGuid(), vorher.AddHours(1), Guid.NewGuid(), "in-einer-stunde");
-            await plan.PlaneAsync(frist);
-            (await plan.FälligeAsync(await uhr.JetztAsync())).Select(f => f.Id).Should().NotContain(frist.Id);
+
+            // Eine Frist, fällig in einer Stunde — die Zeile, die die Uhr sonst mit dem FristGesetzt schreibt.
+            var stream = Guid.NewGuid();
+            await using (var conn = new NpgsqlConnection(UmgebungLader.Verbindung(sim.EventStore)))
+            {
+                await conn.OpenAsync();
+                await using var cmd = new NpgsqlCommand(
+                    $"insert into es.{Infrastructure.Uhr.FristVerzeichnis.Tabelle} (stream_id, version, faellig, befehl, daten) values ($1, 1, $2, 'X', '{{}}')", conn);
+                cmd.Parameters.Add(new NpgsqlParameter { Value = stream });
+                cmd.Parameters.Add(new NpgsqlParameter { Value = vorher.AddHours(1) });
+                await cmd.ExecuteNonQueryAsync();
+            }
+            async Task<bool> Faellig(DocumentStore s) =>
+                (await new Infrastructure.Uhr.FristVerzeichnis(s).FaelligeAsync(100, default)).Any(f => f.Stream == stream);
+            (await Faellig(store)).Should().BeFalse();
 
             await SetzeVersatzAsync(sim, "2 hours");
-            var nachher = await uhr.JetztAsync();
-            nachher.Should().BeCloseTo(vorher.AddHours(2), TimeSpan.FromMinutes(1));
-            (await plan.FälligeAsync(nachher)).Select(f => f.Id).Should().Contain(frist.Id, "der Versatz verschiebt die DB-Uhr");
+            (await uhr.JetztAsync()).Should().BeCloseTo(vorher.AddHours(2), TimeSpan.FromMinutes(1));
+            (await Faellig(store)).Should().BeTrue("der Versatz verschiebt die Uhr, gegen die die Fälligkeit verglichen wird");
 
-            // Dieselbe Uhr in einer Prod-Umgebung ignoriert den Versatz.
+            // Dieselbe Datenbank als Prod: die Uhr ignoriert den Versatz, die Frist ist nicht fällig.
             var alsProd = Umgebung("sim-uhr", UmgebungsArt.Prod, db);
             (await new UmgebungsDbClock(alsProd).JetztAsync()).Should().BeCloseTo(vorher, TimeSpan.FromMinutes(1));
+            using var prod = Store(alsProd);
+            (await Faellig(prod)).Should().BeFalse("in Prod gilt die Datenbankzeit");
         }
         finally { await LoescheDatenbankAsync(db); }
     }

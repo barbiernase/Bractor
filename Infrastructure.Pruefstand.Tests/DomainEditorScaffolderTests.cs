@@ -288,22 +288,4 @@ public sealed class DomainEditorScaffolderTests
         };
         Inhalt(Scaffolder.Generiere(m), "Domain/Konto/Commands.cs").Should().StartWith("using Abstractions;\nusing Domain.Geld;\n");
     }
-
-    [Fact]
-    public void Saga_schreibt_gelesene_Lambdas_verbatim_und_leitet_Ausloeser_using_ab()
-    {
-        var m = KontoModell() with
-        {
-            Records = [ .. KontoModell().Records,
-                new() { Name = "TeilFertig", Kind = RecordArt.Event, Namespace = "Domain.Teil", Felder = [ new() { Name = "KontoId", Typ = "Guid" } ] } ],
-            Sagas = [ new()
-            {
-                Name = "TeilProzess", Namespace = "Domain.Konto", TriggerEvent = "TeilFertig",
-                Schritte = [ new() { Wenn = [ "TeilFertig" ], Sende = "ReserviereBetrag", SendeAusdruck = "e => new ReserviereBetrag(e.KontoId, 1m)" } ],
-            } ],
-        };
-        var saga = Inhalt(Scaffolder.Generiere(m), "Domain/Konto/TeilProzess.cs");
-        saga.Should().Contain("using Domain.Teil;", "der Auslöser-Namespace wird abgeleitet (früher CS0246)");
-        saga.Should().Contain(".Sende<ReserviereBetrag>(e => new ReserviereBetrag(e.KontoId, 1m));");
-    }
 }

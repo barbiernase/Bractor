@@ -32,13 +32,10 @@ public interface IAnwendung
     IAkteurTabelle Akteure { get; }
     IFunktionsTabelle Funktionen { get; }
     IDienstTabelle Dienste { get; }
-    IPipelineTabelle Pipelines { get; }
     IAggregatTabelle Aggregate { get; }
 
     /// <summary>Die Quellen-Typen und ihre Treiber (GeneratedQuellen).</summary>
     IReadOnlyList<QuellTyp> Quellen { get; }
-    /// <summary>Alle Prozesse und Flüsse (GeneratedProzessVerbund).</summary>
-    IReadOnlyDictionary<string, ProzessRegeln> Prozesse { get; }
     /// <summary>Die Query-Typen, die die Leseseite bedient (leer ohne Leseseite).</summary>
     IReadOnlyList<Type> QueryTypen { get; }
     /// <summary>Domänen-Nachricht ↔ Nutzlast der Leitung (aus dem Leitungs-Projekt der Anwendung); <c>null</c> = die Anwendung hat keine
@@ -50,7 +47,7 @@ public interface IAnwendung
 
     /// <summary>Stores, Reader und Query-Dienst der Leseseite (generiert im Speicher-Projekt).</summary>
     void RegistriereLeseseite(IServiceCollection services);
-    /// <summary>Die Pull-Pfade der Projektionen und Reaktionen.</summary>
+    /// <summary>Der Konsum der Projektionen (Batch-Leser je Partition).</summary>
     void RegistrierePullPfade(IServiceCollection services);
     /// <summary>Die Snapshot-Dokumente der Aggregate im Marten-Schema.</summary>
     void RegistriereSnapshots(StoreOptions options);
@@ -62,7 +59,6 @@ public interface ITypTabelle
     IReadOnlyDictionary<string, Type> Commands { get; }
     IReadOnlyDictionary<string, Type> Queries { get; }
     IReadOnlyDictionary<string, Type> QueryResponses { get; }
-    IReadOnlyDictionary<string, Type> Triggers { get; }
     IReadOnlyDictionary<string, Type> Signals { get; }
     IReadOnlyList<(Type Type, string SnakeCaseName)> PersistableEvents { get; }
     IReadOnlyList<Type> PersistableEventTypes { get; }
@@ -92,9 +88,6 @@ public interface IWirePolyTabelle
     string CommandDiskriminator(ICommand value);
     void WriteCommand(Utf8JsonWriter writer, ICommand value);
     ICommand ReadCommand(string diskriminator, ref Utf8JsonReader reader);
-    string AuftragDiskriminator(IAuftrag value);
-    void WriteAuftrag(Utf8JsonWriter writer, IAuftrag value);
-    IAuftrag ReadAuftrag(string diskriminator, ref Utf8JsonReader reader);
     string SignalDiskriminator(IStateChangeSignal value);
     void WriteSignal(Utf8JsonWriter writer, IStateChangeSignal value);
     IStateChangeSignal ReadSignal(string diskriminator, ref Utf8JsonReader reader);
@@ -125,15 +118,7 @@ public interface IAkteurTabelle
 
 public interface IFunktionsTabelle
 {
-    IReadOnlyDictionary<Type, Type> AuftragZuFunktion { get; }
-    IReadOnlyDictionary<Type, Type[]> Ergebnisse { get; }
-    IReadOnlyDictionary<Type, Type[]> Faehigkeiten { get; }
-    IReadOnlyDictionary<string, Type> Namen { get; }
-    IReadOnlyList<FunktionsImplementierung> Implementierungen { get; }
-    IReadOnlyDictionary<Type, Action<IServiceCollection>> Extern { get; }
-    Task<IEvent> RufeAsync(IServiceProvider sp, IAuftrag auftrag, IAusfuehrung x);
-
-    /// <summary>Die Funktionen in Baustein-Form (<c>Auf</c>, Plan Pub/Sub-Neustrukturierung Phase 3, GeneratedFunktionsBausteine).</summary>
+    /// <summary>Die Funktionen (<c>Auf</c>, Plan Pub/Sub-Neustrukturierung §3.3, GeneratedFunktionsBausteine).</summary>
     IReadOnlyList<FunktionsBaustein> Bausteine { get; }
     /// <summary>Weckplan-Einträge der Funktionen: Event-Typ → Cluster-Kinds der Funktions-Actors, die ihn hören.</summary>
     IReadOnlyDictionary<Type, string[]> Weckplan { get; }
@@ -147,18 +132,6 @@ public interface IDienstTabelle
     IReadOnlyList<DienstImplementierung> Implementierungen { get; }
     IReadOnlyDictionary<Type, Type[]> Braucht { get; }
     IReadOnlyList<KonfigRecord> Konfigs { get; }
-}
-
-public interface IPipelineTabelle
-{
-    IReadOnlyDictionary<Type, string> CommandAggregateTypes { get; }
-    IReadOnlyDictionary<Type, string> TriggerToPipelineId { get; }
-    IEnumerable<(string Name, string PipelineId)> GetPipelineIds(IServiceProvider provider);
-    ClusterKind[] GetPipelineKinds(IServiceProvider provider, ActorSystem system);
-    IServiceCollection RegisterAllPipelines(IServiceCollection services);
-    IServiceCollection AddGeneratedPipelineEventPulls(IServiceCollection services);
-    /// <summary>Der Command einer fälligen Frist (GeneratedFristen).</summary>
-    ICommand BaueFrist(Frist frist);
 }
 
 public interface IAggregatTabelle
@@ -198,10 +171,8 @@ public static class Anwendung
     public static IAkteurTabelle Akteure => Aktuell.Akteure;
     public static IFunktionsTabelle Funktionen => Aktuell.Funktionen;
     public static IDienstTabelle Dienste => Aktuell.Dienste;
-    public static IPipelineTabelle Pipelines => Aktuell.Pipelines;
     public static IAggregatTabelle Aggregate => Aktuell.Aggregate;
     public static IReadOnlyList<QuellTyp> Quellen => Aktuell.Quellen;
-    public static IReadOnlyDictionary<string, ProzessRegeln> Prozesse => Aktuell.Prozesse;
     public static IReadOnlyList<Type> QueryTypen => Aktuell.QueryTypen;
     public static JsonSerializerContext WireJson => Aktuell.WireJson;
     public static JsonSerializerContext EventJson => Aktuell.EventJson;

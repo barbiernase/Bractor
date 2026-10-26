@@ -14,12 +14,6 @@ namespace Infrastructure.GrpcClient;
 // ═══════════════════════════════════════════════════
 
 /// <summary>
-/// Server → ClientProxy: Trigger an den Client weiterleiten.
-/// CqrsClientServiceImpl sendet diesen Typ an den Actor.
-/// </summary>
-internal record TriggerForwardMsg(IPipelineTrigger Trigger, string CorrelationId);
-
-/// <summary>
 /// Server → ClientProxy: Query an den Client weiterleiten.
 /// CqrsClientServiceImpl sendet diesen Typ und wartet auf QueryAnswerMsg.
 /// </summary>
@@ -42,7 +36,6 @@ internal record ServerNachrichtMsg(Cqrs.Leitung.ServerMessage Nachricht);
 /// 
 /// Verantwortlichkeiten:
 /// - EventEnvelope vom PubSub empfangen → ServerMessage.Event
-/// - TriggerForwardMsg empfangen       → ServerMessage.TriggerForward  (NEU)
 /// - QueryForwardMsg empfangen          → ServerMessage.QueryForward   (NEU)
 /// - In gRPC Stream schreiben
 /// 
@@ -92,10 +85,6 @@ public class EventProxyActor : RahmenActor
                 await HandleEventEnvelopeAsync(envelope);
                 break;
 
-            case TriggerForwardMsg triggerFwd:
-                await HandleTriggerForwardAsync(triggerFwd);
-                break;
-
             case QueryForwardMsg queryFwd:
                 await HandleQueryForwardAsync(queryFwd);
                 break;
@@ -134,40 +123,6 @@ public class EventProxyActor : RahmenActor
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "[EventProxy-{Session}] Error writing to stream", _sessionId);
-        }
-    }
-
-    // ═══════════════════════════════════════════════════
-    // TRIGGER FORWARD → STREAM (NEU)
-    // ═══════════════════════════════════════════════════
-
-    private async Task HandleTriggerForwardAsync(TriggerForwardMsg msg)
-    {
-        try
-        {
-            var triggerDto = _mapper.MapToDto(msg.Trigger);
-
-            var serverMessage = new Cqrs.Leitung.ServerMessage
-            {
-                TriggerForward = new Cqrs.Leitung.TriggerForward
-                {
-                    Payload = triggerDto,
-                    CorrelationId = msg.CorrelationId
-                }
-            };
-
-            await _responseStream.WriteAsync(serverMessage);
-
-            _logger.LogDebug("[EventProxy-{Session}] Forwarded trigger {Trigger}, CorrelationId {CorrelationId}",
-                _sessionId, msg.Trigger.GetType().Name, msg.CorrelationId);
-        }
-        catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
-        {
-            _logger.LogDebug("[EventProxy-{Session}] Stream cancelled during trigger forward", _sessionId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "[EventProxy-{Session}] Error forwarding trigger", _sessionId);
         }
     }
 

@@ -7,7 +7,7 @@ namespace Cqrs.Codegen;
 /// <summary>
 /// Die Nutzlast-Tabelle für Python (<c>domain_client/generated/nutzlast_tabelle.py</c>): <c>Nutzlast.typ</c> → DTO-Klasse des generierten
 /// Domänen-Moduls, mit festen Importen. Gegenstück zu <c>GeneratedNutzlast</c> auf der C#-Seite (<c>DtoMapperGenerator</c>): dieselben
-/// Kategorien (Command, Event, Query, Antwort, Trigger, Auftrag) und dieselbe Namensregel (<see cref="NameSanitizer.NutzlastTyp"/>) — der
+/// Kategorien (Command, Event, Query, Antwort) und dieselbe Namensregel (<see cref="NameSanitizer.NutzlastTyp"/>) — der
 /// Python-Client baut die Tabelle nicht mehr zur Laufzeit aus dem Modul.
 /// </summary>
 public static class PythonNutzlastEmitter
@@ -25,7 +25,7 @@ public static class PythonNutzlastEmitter
         }
 
         var b = new StringBuilder();
-        b.AppendLine("# GENERIERT von Cqrs.Codegen aus den Nachrichten der Domäne (Command, Event, Query, Antwort, Trigger, Auftrag). Nicht von Hand ändern.");
+        b.AppendLine("# GENERIERT von Cqrs.Codegen aus den Nachrichten der Domäne (Command, Event, Query, Antwort). Nicht von Hand ändern.");
         b.AppendLine("#");
         b.AppendLine("# Die Nutzlast-Tabelle der Leitung (Cqrs.Leitung/cqrs.proto, Nutzlast.typ): typ → DTO-Klasse des Domänen-Moduls. Gegenstück zu");
         b.AppendLine("# GeneratedNutzlast (C#) mit derselben Namensregel; cqrs_client.NutzlastTabelle packt und entpackt nur über diese Tabelle.");

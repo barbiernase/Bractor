@@ -16,17 +16,15 @@ namespace DomainEditor;
 public static class Grammatik
 {
     // ── Alphabet: Nachrichtensorten (die Kanten) ──────────────────────────────────────────────────────────────────────
-    public const string Command = "command", Event = "event", Transient = "transient", Trigger = "trigger", Selbst = "selbst",
-        Frist = "frist", Query = "query", Response = "response", Faehigkeit = "faehigkeit", Auftrag = "auftrag", Quelle = "quelle",
-        Dienst = "dienst";
+    public const string Command = "command", Event = "event", Transient = "transient", Frist = "frist", Query = "query", Response = "response",
+        Faehigkeit = "faehigkeit", Quelle = "quelle", Dienst = "dienst";
 
     // ── Alphabet: Bausteine (die Knoten) ─────────────────────────────────────────────────────────────────────────────
-    public const string Aggregat = "aggregat", Prozess = "prozess", Projektion = "projektion", Reaktion = "reaktion", Reader = "reader",
-        Pipeline = "pipeline", Ingress = "ingress", Store = "store", Aussenwelt = "aussenwelt", Akteur = "akteur", Client = "client",
-        Funktion = "funktion", Fluss = "fluss", DienstImpl = "dienstimpl";
+    public const string Aggregat = "aggregat", Projektion = "projektion", Reader = "reader", Store = "store", Aussenwelt = "aussenwelt",
+        Akteur = "akteur", Client = "client", Funktion = "funktion", DienstImpl = "dienstimpl";
 
     /// <summary>Kardinalität eines Konsum-Eingangs.</summary>
-    public const string GenauEins = "eins", Beliebig = "beliebig", Dieselbe = "dieselbe";
+    public const string GenauEins = "eins", Beliebig = "beliebig";
 
     public sealed record SorteInfo(string Id, string Name, string Symbol, string Garantie, string Bedeutung);
     public sealed record BausteinInfo(string Id, string Name, bool Zustand);
@@ -43,25 +41,19 @@ public static class Grammatik
         new(Command, "Command", "▶", "wie der Absender (ab Event idempotent)", "Absicht an genau ein Aggregat"),
         new(Event, "Event", "◆", "durabel", "Fakt im Log"),
         new(Transient, "Transientes Event", "◇", "verlierbar", "Hinweis, Ablehnung"),
-        new(Trigger, "Trigger", "⚡", "verlierbar", "Anstoß von außen oder aus einer Pipeline"),
-        new(Selbst, "Selbst", "↺", "verlierbar", "Zeit, lokal (Tick)"),
-        new(Frist, "Frist", "⏳", "durabel", "Zeit, dauerhaft (Deadline) → Command"),
+        new(Frist, "Frist", "⏳", "durabel", "Zeit, dauerhaft (aus dem Decide eines Aggregats) → Command an dasselbe Aggregat"),
         new(Query, "Query", "?", "synchron", "Lesen"),
         new(Response, "Response", "↩", "synchron", "Antwort eines Readers"),
         new(Faehigkeit, "Fähigkeit", "⚙", "im Handle-Aufruf", "Store-Funktion (Lesen/Schreiben)"),
-        new(Auftrag, "Auftrag", "ƒ", "durabel (Ergebnis im Log, Ausführungs-Id)", "Aufruf einer Katalog-Funktion (Rufe<F>)"),
-        new(Quelle, "Quell-Nachricht", "⛲", "durabel (genau einmal je Kennung)", "Anstoß von außen (Datei, Webhook …) — startet einen Vorgang einer Pipeline"),
+        new(Quelle, "Quell-Nachricht", "⛲", "durabel (genau einmal je Kennung)", "Anstoß von außen (Datei, Webhook …) — ein Event, das Funktionen und Projektionen hören"),
         new(Dienst, "Dienst", "🧩", "im Konstruktor (gebunden nach der Umgebung)", "Technik hinter einer Funktion (IDienst) — keine Nachricht, eine Abhängigkeit"),
     ];
 
     public static readonly IReadOnlyList<BausteinInfo> Bausteine =
     [
-        new(Aggregat, "Aggregat", true), new(Prozess, "Prozess", true), new(Projektion, "Projektion", false),
-        new(Reaktion, "Reaktion", false), new(Reader, "Reader", false), new(Pipeline, "Pipeline", false),
-        new(Ingress, "Ingress", false), new(Store, "Store", true), new(Aussenwelt, "Außenwelt", false),
+        new(Aggregat, "Aggregat", true), new(Projektion, "Projektion", false), new(Reader, "Reader", false),
+        new(Store, "Store", true), new(Aussenwelt, "Außenwelt", false),
         new(Akteur, "Akteur", false), new(Client, "Client", false), new(Funktion, "Funktion", false),
-        // Pipeline als Fluss (§14): der Dirigent faltet seinen Vorgang im Log — ein Zustandsschritt wie der Prozess.
-        new(Fluss, "Pipeline (Fluss)", true),
         // Domänen-Dienst (konzept-werkbank §12.3 E11): seine Implementierung nimmt selbst Dienste im Konstruktor.
         new(DienstImpl, "Dienst-Implementierung", false),
     ];
@@ -77,52 +69,30 @@ public static class Grammatik
         // Konsum: Sorte → Eingang
         new("GR-COMMAND", "Command → genau ein Aggregat", "Ein Command nennt sein Ziel-Aggregat im Typ (ICommand<TAggregat> mit Id<TAggregat>) und wird genau dort entschieden.", "error",
             [Comp("ICommand verlangt Ziel; ICommand<TAggregat> liefert es aus Id<TAggregat> AggregateId"), An("CQRS013", "Domain.SourceGeneration/ModellAnalyzer.cs (Command ohne typisiertes Ziel)"),
-             Gen("CQRS010", "Infrastructure.SourceGeneration/CommandAggregateMapGenerator.cs (Decide außerhalb des Ziel-Aggregats)"), Gen("CQRS002", "Domain.SourceGeneration/ProzessRegelDiagnosticGenerator.cs (Prozess sendet Command ohne Decider)"),
-             An("CQRS078", "Domain.SourceGeneration/FlussAnalyzer.cs (Fluss sendet Command ohne Decider)"),
+             Gen("CQRS010", "Infrastructure.SourceGeneration/CommandAggregateMapGenerator.cs (Decide außerhalb des Ziel-Aggregats)"),
              An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Command ohne Decider)")]),
-        new("GR-EVENT", "Event → beliebig viele Konsumenten", "Ein persistentes Event hören Prozess, Projektion, Reaktion und Pipeline (beliebig viele); gefaltet wird es im eigenen Aggregat.", "error",
-            [Comp("Handle-Parameter : IEvent, Prozess-DSL Auf<T> where T : IEvent"), An("CQRS057", "Domain.SourceGeneration (HandlerFormAnalyzer)")]),
+        new("GR-EVENT", "Event → beliebig viele Konsumenten", "Ein persistentes Event hören Projektionen und Funktionen (beliebig viele); gefaltet wird es im eigenen Aggregat.", "error",
+            [Comp("Handle-/Auf-Parameter : IEvent"), An("CQRS057", "Domain.SourceGeneration (HandlerFormAnalyzer)")]),
         new("GR-FALTUNG", "Event → genau ein Aggregat faltet", "Ein Event faltet genau ein Aggregat (Applier) — das, das es entscheidet.", "warning",
             [An("CQRS080", "Domain.SourceGeneration/ModellAnalyzer.cs (Apply ohne Decide)"), An("CQRS079", "Domain.SourceGeneration/ModellAnalyzer.cs (Decide ohne Apply)")]),
-        new("GR-TRANSIENT", "Transientes Event → Projektion/Reaktion/Pipeline", "Ein transientes Event (Hinweis, Ablehnung) hören Projektion, Reaktion und Pipeline — kein Prozess, kein Aggregat.", "error",
-            [Comp("Handle-Parameter : ITransientEvent"), An("CQRS057", "Domain.SourceGeneration (HandlerFormAnalyzer)")]),
-        new("GR-TRIGGER", "Trigger → genau eine Pipeline", "Einen Trigger behandelt genau eine Pipeline.", "error",
-            [Offen("PipelineActorGenerator: bei zwei Pipelines gewinnt heute die letzte still")]),
-        new("GR-SELBST", "Selbst → dieselbe Pipeline", "Eine Selbst-Nachricht kommt nur in der Pipeline an, die sie plant.", "error",
-            [Offen("PipelineActorBase.PlaneAsync schickt an sich selbst; keine Diagnose für fremde Selbst-Handles")]),
+        new("GR-TRANSIENT", "Transientes Event → Projektion/Funktion", "Ein transientes Event (Hinweis, Ablehnung) hören Projektionen und Funktionen — kein Aggregat.", "error",
+            [Comp("Handle-/Auf-Parameter : ITransientEvent"), An("CQRS057", "Domain.SourceGeneration (HandlerFormAnalyzer)")]),
         new("GR-FRIST", "Frist → Command an genau ein Aggregat", "Eine Frist wird fällig als Command an genau ein Aggregat — die Frist eines Aggregats "
             + "(Frist<TCmd> aus seinem Decide) an sich selbst (R5).", "error",
-            [An("CQRS056", "Domain.SourceGeneration (Fristen-Router)"), Gen("CQRS010", "Infrastructure.SourceGeneration/CommandAggregateMapGenerator.cs"),
+            [Gen("CQRS010", "Infrastructure.SourceGeneration/CommandAggregateMapGenerator.cs"),
              new("laufzeit", null, "Infrastructure/Aggregate/ActorSystem/AggregateActorBase.cs (Fristen: eine fremde Frist schreibt nichts)")]),
         new("GR-QUERY", "Query → genau ein Reader", "Eine Query beantwortet genau ein Reader.", "error",
             [An("CQRS084", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (mehrere Reader)"), An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (kein Reader)")]),
         new("GR-FAEHIGKEIT", "Fähigkeit → genau ein Store", "Eine Fähigkeit (Interface mit genau einer Funktion) implementiert genau eine Store-Klasse.", "error",
             [Gen("CQRS053", "Projections.SourceGeneration/ProjectionServicesGenerator.cs"), An("CQRS051", "Domain.SourceGeneration (FaehigkeitAnalyzer)")]),
         // Erzeugung: Baustein-Ausgang → Sorte
-        new("GR-AUS-AGGREGAT", "Aggregat erzeugt Events", "Ein Aggregat (Decide) erzeugt persistente Events und Ablehnungen (transient) — sonst nichts.", "error",
+        new("GR-AUS-AGGREGAT", "Aggregat erzeugt Events", "Ein Aggregat (Decide) erzeugt persistente Events, Ablehnungen (transient) und Fristen — sonst nichts.", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)")]),
-        new("GR-AUS-PROZESS", "Prozess erzeugt Commands und Aufträge", "Ein Prozess erzeugt Commands (und Kompensations-Commands) und ruft Katalog-Funktionen (Rufe<F> → Auftrag).", "error",
-            [Gen("CQRS003", "Domain.SourceGeneration/ProzessRegelDiagnosticGenerator.cs"), Comp("Sende<TCmd> where TCmd : ICommand")]),
-        new("GR-AUS-PROJEKTION", "Projektion erzeugt nur Transientes", "Eine Projektion schreibt über Fähigkeiten und veröffentlicht höchstens transiente Events — kein Command (dann ist sie eine Reaktion), kein Fakt.", "error",
+        new("GR-AUS-PROJEKTION", "Projektion erzeugt nur Transientes", "Eine Projektion schreibt über Fähigkeiten und veröffentlicht höchstens transiente Events — kein Command, kein Fakt.", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)"), Gen("CQRS052", "Infrastructure.SourceGeneration/PullPathGenerator.cs (ein Store je Konsument)")]),
-        new("GR-AUS-REAKTION", "Reaktion erzeugt Commands", "Eine Reaktion erzeugt Commands und transiente Events — keine Fakten.", "error",
-            [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)"), An("CQRS020", "Emit nur über CommandEmitter")]),
         new("GR-AUS-READER", "Reader erzeugt Responses", "Ein Reader antwortet mit Responses (OneOf) und liest über Lese-Fähigkeiten.", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)")]),
-        new("GR-AUS-PIPELINE", "Pipeline erzeugt Commands/Trigger/Zeit", "Eine Pipeline erzeugt Command, Trigger, transientes Event, Selbst und Frist (und liest über Lese-Fähigkeiten).", "error",
-            [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)"), An("CQRS057", "Domain.SourceGeneration (HandlerFormAnalyzer)")]),
-        new("GR-FUNKTION-AUFTRAG", "Auftrag → genau eine Funktion", "Ein Auftrag (IAuftrag<F>) ist der eine Eingang genau einer Katalog-Funktion; ein Prozess ruft sie mit Rufe<F>.", "error",
-            [Comp("IAuftrag<F> + Rufe<F>(Func<…, IAuftrag<F>>)"), Gen("CQRS069", "Infrastructure.SourceGeneration/FunktionsGenerator.cs (Auftrag für mehrere Funktionen)")]),
-        new("GR-AUS-FUNKTION", "Funktion erzeugt persistente Ergebnis-Events", "Eine Katalog-Funktion antwortet mit genau einem ihrer OneOf-Ergebnisse — ein persistentes Event im Log, das weitere Regeln mit Auf<…> hören.", "error",
-            [Gen("CQRS068", "Infrastructure.SourceGeneration/FunktionsGenerator.cs (feste Form der Funktion)")]),
-        new("GR-FUNKTION-FAEHIGKEIT", "Funktion liest höchstens", "Eine Katalog-Funktion darf nach IAusfuehrung Lese-Fähigkeiten nehmen "
-            + "(ISucheX suche, je Aufruf aus einem Bereich) — schreiben bleibt dem Aggregat. Eine solche Funktion läuft nur im Host (C#), nie extern.", "error",
-            [Gen("CQRS068", "Infrastructure.SourceGeneration/FunktionsGenerator.cs (Parameter nach IAusfuehrung nur IReadStore)"),
-             new("boot", null, "Infrastructure/Funktionen/FunktionsExtensions.cs (PrüfeBindungen: nicht AddExterneFunktion)")]),
-        new("GR-FUNKTION-GEBUNDEN", "Gerufene Funktion ist gebunden", "Jede Funktion, die ein Prozess ruft, braucht im Host eine Bindung (AddFunktion<F, Impl>) — sonst bricht der Start.", "error",
-            [new("boot", null, "Infrastructure/Funktionen/FunktionsExtensions.cs (PrüfeBindungen)")]),
-        // Funktion als Baustein und die Regeln der Wiederholbarkeit (Plan Pub/Sub-Neustrukturierung §3.6, Phase 3) — die Grammatik selbst
-        //   wird in Phase 4 auf den Plan umgestellt; bis dahin stehen die neuen Regeln neben den alten.
+        // Funktion als Baustein und die Regeln der Wiederholbarkeit (Plan Pub/Sub-Neustrukturierung §3.6, Phase 3).
         new("GR-FUNKTION-FORM", "Funktion: je Eingang ein Auf, freie Ausgabe", "Eine Funktion hat je Eingang (Event, Quell-Nachricht oder Hinweis) ein Auf "
             + "mit optional Herkunft, Lese-Fähigkeiten und Abbruch; ausgegeben werden Commands, Events und Hinweise (konkret, OneOf, T?, Strom, je auch als "
             + "Task) — vollständig in der Signatur. Als Klasse läuft sie im Host, als Schnittstelle draußen (Laufort aus der Umgebung); eine Schnittstelle "
@@ -130,7 +100,7 @@ public static class Grammatik
             [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Form der Funktion)"),
              new("boot", null, "Infrastructure/Funktionen/FunktionsBausteinWiring.cs (BindungVon: Laufort, Umsetzung, Lese-Fähigkeit nur im Host)")]),
         new("GR-EIN-EINGANG", "Je Baustein und Eingangstyp eine Methode", "Ein Baustein nimmt jeden Eingangstyp mit höchstens einer Methode — ein Auf "
-            + "einer Funktion, ein Handle einer Projektion, Reaktion oder eines Readers (R2).", "error",
+            + "einer Funktion, ein Handle einer Projektion oder eines Readers (R2).", "error",
             [An("CQRS101", "Domain.SourceGeneration/EinEingangAnalyzer.cs"), Gen("CQRS101", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs")]),
         new("GR-GLEICH-RECHNEN", "Aggregat und Projektion rechnen gleich", "Aggregate und Projektionen rechnen bei gleicher Eingabe gleich: keine Uhr, "
             + "kein Zufall, kein Lesen fremder Daten — Zeit kommt aus dem Event bzw. der Herkunft (R11).", "error",
@@ -146,119 +116,61 @@ public static class Grammatik
             [An("CQRS104", "Domain.SourceGeneration/GleichbleibendAnalyzer.cs")]),
         // Domänen-Dienste (konzept-werkbank §12.3 E11): Abhängigkeiten der Implementierungen, gebunden nach der Umgebung.
         new("GR-DIENST", "Dienst nur im Konstruktor einer Implementierung", "Ein Dienst (interface IX : IDienst) steht nur im Konstruktor einer "
-            + "Funktions- oder Dienst-Implementierung — nie als Parameter, Feld oder Eigenschaft im Fachcode (Aggregat, Projektion, Reaktion, Reader): "
-            + "dort sind es Fähigkeiten als Parameter. Ein IAkteurDienst<A> ist etwas anderes (GR-AUFTRAG).", "error",
+            + "Funktion im Host oder einer Dienst-Implementierung — nie als Parameter, Feld oder Eigenschaft im Fachcode (Aggregat, Projektion, Reader): "
+            + "dort sind es Fähigkeiten als Parameter.", "error",
             [An("CQRS089", "Domain.SourceGeneration/DienstAnalyzer.cs")]),
-        new("GR-DIENST-BINDBAR", "Implementierung baubar, Konstruktor bindbar", "Eine Funktions- oder Dienst-Implementierung ist öffentlich und "
-            + "nicht generisch; ihr Konstruktor nimmt nur Dienste, Konfig-Records (Felder: Text, Zahl, Wahrheitswert, Dauer, Guid, Enum, Text-Liste) "
+        new("GR-DIENST-BINDBAR", "Implementierung baubar, Konstruktor bindbar", "Eine Funktion im Host oder eine Dienst-Implementierung ist öffentlich "
+            + "und nicht generisch; ihr Konstruktor nimmt nur Dienste, Konfig-Records (Felder: Text, Zahl, Wahrheitswert, Dauer, Guid, Enum, Text-Liste) "
             + "und ILogger<T> — gebaut wird sie per generierter Fabrik, ohne Reflection.", "error",
             [An("CQRS090", "Domain.SourceGeneration/DienstAnalyzer.cs (Konstruktor-Parameter)"), An("CQRS091", "Domain.SourceGeneration/DienstAnalyzer.cs (Konfig-Feld)"),
              An("CQRS092", "Domain.SourceGeneration/DienstAnalyzer.cs (öffentlich, nicht generisch)"),
              new("generator", null, "Infrastructure.SourceGeneration/DienstGenerator.cs (GeneratedDienste: Implementierungen, Bedarf, Konfig-Bindung)")]),
-        new("GR-DIENST-GEBUNDEN", "Gebrauchter Dienst ist gebunden", "Was eine gebundene Funktions-Implementierung (transitiv) braucht, ist in der "
-            + "Umgebung eindeutig: je Dienst genau eine Implementierung (sonst Dienste:<IX>:Implementierung), je Konfig-Record ein Abschnitt Konfig:<Record>, "
-            + "kein Kreis über Dienste — sonst bricht der Start.", "error",
+        new("GR-DIENST-GEBUNDEN", "Gebrauchter Dienst ist gebunden", "Was eine gebundene Funktion (transitiv) braucht, ist in der Umgebung eindeutig: "
+            + "je Dienst genau eine Implementierung (sonst Dienste:<IX>:Implementierung), je Konfig-Record ein Abschnitt Konfig:<Record>, kein Kreis über "
+            + "Dienste — sonst bricht der Start.", "error",
             [new("boot", null, "Infrastructure/Dienste/Dienste.cs (BindeDienste: fehlend, mehrdeutig, Kreis, Konfig)")]),
-        new("GR-AUS-FLUSS", "Pipeline (Fluss) erzeugt Commands und Aufträge", "Ein Fluss ruft Katalog-Funktionen (Auftrag) und sendet "
-            + "Commands an Aggregate — sonst nichts; Ergebnisse und Antworten der Aggregate laufen als Drähte weiter.", "error",
-            [Comp("Draht<T>.Rufe<F>(…) : IAuftrag<F>, Draht<T>.Sende<C>(…) where C : ICommand")]),
-        // Pipeline als Fluss (docs/konzept-editor-pipelines.md §14): Form und Drähte.
-        new("GR-QUELLE", "Quell-Nachricht → Pipelines", "Eine Quell-Nachricht (record … : IQuellNachricht) wird genau einmal je Kennung ins Log "
-            + "geschrieben und startet je Pipeline, die mit p.Quelle<…>() beginnt, einen Vorgang. Sie kommt von außen (die Maschine/der "
-            + "Akteur hinter der Quelle, IDarf) — eine Pipeline erzeugt sie nicht.", "error",
-            [Comp("PipelineBauer.Quelle<T>() where T : IQuellNachricht"), new("laufzeit", null, "Infrastructure/Quellen/Quellen.cs (QuellEingang: StartStream je Kennung)")]),
-        new("GR-FLUSS-QUELLE", "Eine Quelle je Pipeline", "Ein Fluss beginnt an genau einer Quelle (p.Quelle<Nachricht>() oder "
-            + "p.Auf<Event>()); jede Quell-Nachricht startet einen Vorgang.", "error",
-            [An("CQRS073", "Domain.SourceGeneration/FlussAnalyzer.cs"), new("laufzeit", null, "Abstractions/Fluss/Pipeline.cs (PipelineBauer: zweite/fehlende Quelle wirft beim Definieren)")]),
-        new("GR-FLUSS-NAME", "Knoten-Namen eindeutig", "Jeder Knoten ist eine Variable im Definiere-Lambda — ihr Name ist seine Identität.", "error",
-            [Comp("CS0128 (lokale Variable doppelt)")]),
-        new("GR-FLUSS-DRAHT", "Draht nur aus einem früheren Knoten, an einem seiner Ausgänge", "Ein Draht kommt von einem früher "
-            + "deklarierten Knoten und trägt einen seiner Fälle: ein Ergebnis der Funktion bzw. ein Event aus dem Decide des Commands "
-            + "(oder die Quelle selbst). So ist ein Fluss per Konstruktion azyklisch.", "error",
-            [Comp("CS0841 (Variable vor der Deklaration)"), An("CQRS076", "Domain.SourceGeneration/FlussAnalyzer.cs (Fall außerhalb der Ausgänge, ✕-Port am Warten)")]),
-        new("GR-FLUSS-WARTE", "Warten am Strom der Quelle, mit Zeitlimit", "Ein Warte-Knoten (quelle.Strom().Warte<A, B>()) hängt am Strom der "
-            + "Quelle und wartet auf das erste dieser Events danach; jedes ist ein Ausgang, dazu ⏳ — er braucht ein Zeitlimit (sonst bliebe der "
-            + "Vorgang offen). Ein Ende nach dem Zeitlimit zählt nicht (Frist und Storno als ein Rennen).", "error",
-            [An("CQRS074", "Domain.SourceGeneration/FlussAnalyzer.cs"), Comp("StromDraht.Warte<…>() — nur der Strom einer Quelle hat ein Warten"),
-             new("laufzeit", null, "Abstractions/Fluss/Pipeline.cs (Baue: Warten ohne Zeitlimit wirft)")]),
-        new("GR-FLUSS-ZEITLIMIT", "⏳-Port braucht ein Zeitlimit", "Aus dem ⏳-Port eines Knotens führt nur ein Draht, wenn der Knoten ein Zeitlimit hat.", "error",
-            [An("CQRS075", "Domain.SourceGeneration/FlussAnalyzer.cs"), new("laufzeit", null, "Abstractions/Fluss/Pipeline.cs (Baue: verdrahteter ⏳-Port ohne Zeitlimit wirft)")]),
-        new("GR-FLUSS-JE", "Je-Element und Sammeln nur im Rahmen", "Ein Je-Element bzw. Sammeln bezieht sich auf einen Je-Knoten; ein Je-Knoten "
-            + "hat genau einen Eingang (der Draht mit der Liste) und einen Listen-Ausdruck. ∨ (Oder) geht nur mit Drähten.", "error",
-            [Comp("JeKnoten<TQ,E>.Rufe/Sende/Sammle, RufKnoten.Oder(Draht|Verbund, …)")]),
-        new("GR-FLUSS-WARTET", "∧ wartet auf einen Weg, der nicht immer liefert", "Ein ∧ verbindet einen Ausgang, neben dem der Vorgänger "
-            + "weitere Fälle hat, die nirgends hinführen — kommt einer davon, wartet der Knoten für immer (bis zum Zeitlimit).", "warning",
-            [An("CQRS077", "Domain.SourceGeneration/FlussAnalyzer.cs (Warnung)")]),
-        new("GR-AUS-INGRESS", "Ingress erzeugt Trigger", "Ein Ingress (Webhook, Timer, Datei) erzeugt genau Trigger-Nachrichten.", "error",
-            [Comp("[Ingress]-Methoden: Trigger-Typ : IPipelineTrigger")]),
+        new("GR-QUELLE", "Quell-Nachricht von außen", "Eine Quell-Nachricht (record … : IQuellNachricht) wird genau einmal je Kennung ins Log "
+            + "geschrieben; Funktionen und Projektionen hören sie wie jedes Event. Sie kommt von außen (die Maschine/der Akteur hinter der Quelle, IDarf).", "error",
+            [new("laufzeit", null, "Infrastructure/Quellen/Quellen.cs (QuellEingang: StartStream je Kennung)")]),
         // Zusatzregeln
         new("GR-AUSGANG-GESCHLOSSEN", "Geschlossener Ausgang", "Ausgänge sind konkrete Typen im OneOf — zeichnen heißt Typ wählen.", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)")]),
         new("GR-HANDLE-FORM", "Handle-Form folgt dem Inhalt", "Keine Ausgabe ⇒ Task, sonst Strom mit OneOf.", "error",
             [An("CQRS057", "Domain.SourceGeneration (HandlerFormAnalyzer)")]),
-        new("GR-SELBST-OHNE-EVENT", "Selbst nur ohne Event-Eingang", "Ein Handle mit Event-Eingang hat keine Mailbox — er darf kein Selbst<T> planen.", "error",
-            [Offen("Laufzeit: NotSupportedException in PipelineEventPullBridge; Analyzer offen")]),
-        new("GR-KEIN-EVENT-AUS-PIPELINE", "Kein persistentes Event aus Pipelines", "Fakten entstehen nur im Aggregat — eine Pipeline erzeugt kein persistentes Event.", "error",
-            [Offen("PipelineDispatchGenerator verwirft es heute still; Analyzer offen")]),
-        new("GR-FRIST-CTOR", "Frist-Command braucht (Guid)-Konstruktor", "Der Command einer Frist wird mit der Aggregat-Id gebaut — er braucht einen Konstruktor (Guid).", "warning",
-            [An("CQRS056", "Domain.SourceGeneration (Fristen-Router)")]),
-        new("GR-START-EINMAL", "Start höchstens einmal", "Eine Pipeline hat höchstens einen Start-Handle (PipelineGestartet).", "error",
-            [Comp("CS0111 (zwei Handle-Methoden gleicher Signatur)")]),
-        new("GR-GARANTIE", "Garantie-Regel", "Führt ein verlierbarer Pfad (Trigger, Selbst, transientes Event) in einen Schritt, der Durabilität braucht (Command), ist die Kante verlierbar/nicht idempotent.", "warning",
-            [An("CQRS082", "Domain.SourceGeneration/ModellAnalyzer.cs (Handle mit transientem Eingang sendet Command)"),
-             Offen("Trigger/Selbst-Eingänge der Pipeline-Handles: Kausalität = neue Guid (PipelineActorBase); der Editor zeigt es gestrichelt")]),
-        new("GR-ZYKLUS", "Zyklus nur durch einen Zustandsschritt", "Ein Kreis ist erlaubt, wenn er durch ein Aggregat oder einen Prozess läuft (beide falten Zustand im Log; Selbst-Schleifen sind der Schleifen-Operator); sonst nicht.", "warning",
-            [new("boot", null, "Azyklizitäts-Guard (ProzessManagerWiring) — Prozesse"), An("CQRS088", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Projektionen/Reaktionen über transiente Events)")]),
-        new("GR-ZUSTAND", "Regel Z: Zustand nur in Aggregaten und Lesemodellen", "Pipelines, Reaktionen und Projektionen sind zustandslose Übersetzer; Gedächtnis gehört in ein Aggregat.", "warning",
+        new("GR-ZUSTAND", "Regel Z: Zustand nur in Aggregaten und Lesemodellen", "Projektionen sind zustandslose Übersetzer; Gedächtnis gehört in ein Aggregat.", "warning",
             [An("CQRS083", "Domain.SourceGeneration/ModellAnalyzer.cs (Instanzfelder, die Zustand halten)")]),
-        new("GR-AKTEUR", "Akteur → nur, was er darf", "Ein Akteur gibt nur hinein, was er per IDarf<T> darf: Command, Query, Trigger, Quell-Nachricht oder "
-            + "Transient-Event. Was er hören darf, wird abgeleitet (Aggregate seiner Commands, Projektionen hinter seinen Queries).", "error",
+        new("GR-AKTEUR", "Akteur → nur, was er darf", "Ein Akteur gibt nur hinein, was er per IDarf<T> darf: Command, Query, Quell-Nachricht, "
+            + "Transient-Event oder die Ausgaben einer Funktion, die er draußen rechnet. Was er hören darf, wird abgeleitet (Aggregate seiner Commands, "
+            + "Projektionen hinter seinen Queries).", "error",
             [An("CQRS058", "Domain.SourceGeneration/AkteurAnalyzer.cs"), Gen("CQRS059", "Infrastructure.SourceGeneration/AkteurRechteGenerator.cs (Name eindeutig)"),
              new("laufzeit", null, "Infrastructure/Akteure/AkteurTor.cs (Handshake + jede hineingehende Nachricht)")]),
-        new("GR-AUFTRAG", "Im Auftrag eines Akteurs über seinen Dienst", "Ein Dienst ist kein Akteur, er gehört einem (IAkteurDienst<A>). Ein "
-            + "Pipeline-Handle, der ihn als Parameter nimmt, entscheidet im Auftrag von A: höchstens einer je Handle, und er sendet nur "
-            + "Commands, die A darf; als Konstruktor-Abhängigkeit ist der Dienst in keiner Klasse erlaubt.", "error",
-            [An("CQRS060", "Domain.SourceGeneration/AkteurAnalyzer.cs"), new("laufzeit", null, "Abstractions.ImAuftrag → CommandEmitter stempelt UserId")]),
-        new("GR-VERTRAG", "Zusage im Akteur-Vertrag", "Reagiert ein Akteur draußen auf ein Event, steht es in seinem Vertrag "
-            + "(interface IX : IAkteurVertrag<X>): je Event höchstens ein Auf(E), der Rückgabetyp nennt nur konkrete Commands (void = zur "
-            + "Kenntnis). Was er so hineingibt, darf er (kein IDarf), und er hört genau diese Events; höchstens ein Vertrag je Akteur.", "error",
-            [An("CQRS061", "Domain.SourceGeneration/AkteurAnalyzer.cs (Form)"), An("CQRS062", "Domain.SourceGeneration/AkteurAnalyzer.cs (Ausgabe-Vertrag)"),
-             new("generator", null, "Infrastructure.SourceGeneration/AkteurRechteGenerator.cs (Befugt/Hört/Vertrags-Hash)"),
-             new("laufzeit", null, "Infrastructure/GrpcClient/CqrsClientService.cs (Handshake vertrag/vertrag_hash, Antwort auf Event)")]),
-        new("GR-VERKOERPERUNG", "Eine Verkörperung je Entscheidung", "Reagiert ein Akteur im Vertrag auf ein Event, trifft nicht zusätzlich ein "
-            + "Pipeline-Handle im Auftrag desselben Akteurs (Dienst) auf dasselbe Event dieselbe Entscheidung.", "error",
-            [An("CQRS060", "Domain.SourceGeneration/AkteurAnalyzer.cs (Dienst und Vertrag)")]),
-        new("GR-HERKUNFT", "Alles kommt von einem Akteur", "Sobald es Akteure gibt: jeder Command, jede Query und jeder Trigger kommt von "
-            + "einem Akteur — direkt (IDarf<T>) oder über die Kette (eine Pipeline, ein Prozess oder eine Frist erzeugt ihn aus einem "
-            + "Event, das von einem Akteur stammt). Sonst steht er im Rahmen „ohne Akteur“.", "warning",
+        new("GR-HERKUNFT", "Alles kommt von einem Akteur", "Sobald es Akteure gibt: jeder Command und jede Query kommt von einem Akteur — direkt "
+            + "(IDarf<T>) oder über die Kette (eine Funktion oder eine Frist erzeugt ihn aus einem Event, das von einem Akteur stammt). Sonst steht er im "
+            + "Rahmen „ohne Akteur“.", "warning",
             [new("laufzeit", null, "Infrastructure/Akteure/AkteurTor.cs (ohne IDarf abgewiesen)"),
              Offen("Editor-Sicht: Rahmen „ohne Akteur“ (board.sicht); Fixpunkt im Generator (docs/konzept-akteure.md §2.3)")]),
-        new("GR-INGRESS-EINDEUTIG", "Ingress-Trigger: genau ein Akteur", "Entsteht ein Trigger ohne Kette (Datei, Timer, Selbst-Tick), ist sein "
-            + "Akteur der eine, der ihn per IDarf darf — mehrere machen offen, wer ihn liefert.", "warning",
-            [Offen("Generator-Diagnose (docs/konzept-akteure.md §7, GR-INGRESS-EINDEUTIG)")]),
-        new("GR-CLIENT", "Client-Vertrag: nur der Rand", "Ein Client (interface IX : IClientVertrag) stellt zusammen, was über SEINE "
-            + "Leitung geht: getragene Akteur-Vertrags-Teile (Zusagen im Namen des jeweiligen Akteurs), ISendet<T>/IFragt<T> und eigene "
-            + "Kenntnis (void Auf(E)) — keine eigene Ausgabe, keine client-internen Typen, je Event höchstens eine Methode.", "error",
-            [An("CQRS063", "Domain.SourceGeneration/AkteurAnalyzer.cs (Form)"), An("CQRS065", "Domain.SourceGeneration/AkteurAnalyzer.cs (je Event einmal)"),
+        new("GR-CLIENT", "Client-Vertrag: nur der Rand", "Ein Client (interface IX : IClientVertrag) stellt in seiner Basisliste zusammen, was über SEINE "
+            + "Leitung geht: getragene Funktionen (ITraegt<F>), ISendet<T>/IFragt<T> und Kenntnis (IHoert<E>) — keine eigenen Member, keine "
+            + "client-internen Typen.", "error",
+            [An("CQRS063", "Domain.SourceGeneration/AkteurAnalyzer.cs (Form)"),
              new("generator", null, "Infrastructure.SourceGeneration/AkteurRechteGenerator.cs (GeneratedClientVertraege, Client-Hash)"),
              new("laufzeit", null, "Infrastructure/GrpcClient/CqrsClientService.cs (Handshake je Client, Vertrag ∩ Token)")]),
-        new("GR-CLIENT-BEFUGT", "Client sendet nur, was ein Akteur darf", "Was ein Client sendet (ISendet) oder fragt (IFragt), muss ein "
+        new("GR-CLIENT-BEFUGT", "Client sendet nur, was ein Akteur darf", "Was ein Client trägt (ITraegt), sendet (ISendet) oder fragt (IFragt), muss ein "
             + "Akteur per IDarf<T> dürfen — der Client-Vertrag schneidet aus der Befugnis, er erweitert sie nie.", "error",
             [An("CQRS064", "Domain.SourceGeneration/AkteurAnalyzer.cs"), new("laufzeit", null, "Infrastructure/Akteure/ClientVertrag.cs (Rechte = Vertrag ∩ IDarf ∩ Token)")]),
         new("GR-CLIENT-CODE", "Client-Code = Vertrag", "Eine Client-Assembly nennt ihren Vertrag ([assembly: IstClient<IX>]); was ihr Code an "
             + "Commands erzeugt, sendet der Vertrag (ISendet), was er an Queries stellt, fragt er (IFragt), worauf ein Handler hört, kennt er "
-            + "(void Auf) — abonniert, gesendet und gefragt wird nur, was im Vertrag steht. Zusagen über eine C#-Leitung gibt es nicht (Python).", "error",
-            [Gen("CQRS093", "Client.SourceGeneration/WiringGenerator.cs (Client ohne Vertrag)"),
-             Gen("CQRS094", "Client.SourceGeneration/WiringGenerator.cs (Vertrags-Teile im C#-Client)"),
+            + "(IHoert) — abonniert, gesendet und gefragt wird nur, was im Vertrag steht. Funktionen trägt draußen nur das Python-SDK.", "error",
+            [Gen("CQRS093", "Client.SourceGeneration/ClientVertrag.cs (Client ohne Vertrag)"),
+             Gen("CQRS094", "Client.SourceGeneration/ClientVertrag.cs (C#-Client trägt Funktionen)"),
              An("CQRS095", "Client.SourceGeneration/ClientVertrag.cs (Command nicht gesendet)"),
              An("CQRS096", "Client.SourceGeneration/ClientVertrag.cs (Query nicht gefragt)"),
              An("CQRS097", "Client.SourceGeneration/ClientVertrag.cs (Server-Event nicht Kenntnis)")]),
-        new("GR-GETRAGEN", "Jede Zusage hat einen Client", "Eine Zusage mit Ausgabe (Auf(E) → Command) im Vertrag eines Akteurs wird von "
-            + "mindestens einem Client getragen — sonst bricht die Kette an dieser Stelle (das Event erreicht niemanden, der antwortet).", "warning",
-            [An("CQRS087", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Warnung — ein Akteur-Vertrag ohne Client ist ein Entwurf)")]),
-        new("GR-MODUL-EINGANG-OFFEN", "Eingang ohne Konsument", "Ein Command, eine Query, ein Trigger oder eine Selbst-Nachricht, die niemand konsumiert — offener Eingang des Moduls.", "warning",
-            [An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Command ohne Decider, Query ohne Reader)"),
-             Gen("CQRS002", "Prozess sendet Command ohne Decider"), An("CQRS078", "Fluss sendet Command ohne Decider")]),
+        new("GR-GETRAGEN", "Jede Funktion draußen hat einen Träger", "Eine Funktion, die als Schnittstelle deklariert ist und keine Umsetzung im Host "
+            + "hat, wird von mindestens einem Client getragen (ITraegt<F>) — sonst läuft sie nur mit einer Bindung von Hand.", "warning",
+            [An("CQRS087", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Warnung — Funktion ohne Träger)")]),
+        new("GR-MODUL-EINGANG-OFFEN", "Eingang ohne Konsument", "Ein Command oder eine Query, die niemand konsumiert — offener Eingang des Moduls.", "warning",
+            [An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Command ohne Decider, Query ohne Reader)")]),
         new("GR-MODUL-AUSGANG-OFFEN", "Ausgang ohne Erzeuger", "Ein Event, eine Ablehnung oder eine Response, die niemand erzeugt — offener Ausgang des Moduls.", "warning",
             [An("CQRS085", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Event/Ablehnung/Response ohne Erzeuger)")]),
     ];
@@ -267,49 +179,35 @@ public static class Grammatik
     public static readonly IReadOnlyList<Konsum> Konsume =
     [
         new(Command, Aggregat, GenauEins, "GR-COMMAND"),
-        new(Event, Prozess, Beliebig, "GR-EVENT"), new(Event, Projektion, Beliebig, "GR-EVENT"),
-        new(Event, Reaktion, Beliebig, "GR-EVENT"), new(Event, Pipeline, Beliebig, "GR-EVENT"), new(Event, Fluss, Beliebig, "GR-EVENT"),
+        new(Event, Projektion, Beliebig, "GR-EVENT"), new(Event, Funktion, Beliebig, "GR-EVENT"),
         new(Event, Aggregat, GenauEins, "GR-FALTUNG"),
-        new(Transient, Projektion, Beliebig, "GR-TRANSIENT"), new(Transient, Reaktion, Beliebig, "GR-TRANSIENT"), new(Transient, Pipeline, Beliebig, "GR-TRANSIENT"),
-        new(Trigger, Pipeline, GenauEins, "GR-TRIGGER"),
-        new(Selbst, Pipeline, Dieselbe, "GR-SELBST"),
+        new(Transient, Projektion, Beliebig, "GR-TRANSIENT"), new(Transient, Funktion, Beliebig, "GR-TRANSIENT"),
         new(Frist, Aggregat, GenauEins, "GR-FRIST"),
         new(Query, Reader, GenauEins, "GR-QUERY"),
-        new(Faehigkeit, Projektion, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Reader, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Pipeline, Beliebig, "GR-FAEHIGKEIT"),
-        new(Faehigkeit, Funktion, Beliebig, "GR-FUNKTION-FAEHIGKEIT"),
-        new(Auftrag, Funktion, GenauEins, "GR-FUNKTION-AUFTRAG"),
+        new(Faehigkeit, Projektion, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Reader, Beliebig, "GR-FAEHIGKEIT"),
+        new(Faehigkeit, Funktion, Beliebig, "GR-FUNKTION-FORM"),
         new(Dienst, Funktion, Beliebig, "GR-DIENST"), new(Dienst, DienstImpl, Beliebig, "GR-DIENST"),
-        new(Quelle, Fluss, Beliebig, "GR-QUELLE"),
-        new(Event, Akteur, Beliebig, "GR-VERTRAG"), new(Transient, Akteur, Beliebig, "GR-VERTRAG"),
         new(Event, Client, Beliebig, "GR-CLIENT"), new(Transient, Client, Beliebig, "GR-CLIENT"),
     ];
 
     /// <summary>Wer welche Sorten erzeugen darf (§2.2 Spalte „Ausgänge").</summary>
     public static readonly IReadOnlyList<Erzeugung> Erzeugungen =
     [
-        new(Aggregat, Event, "GR-AUS-AGGREGAT"), new(Aggregat, Transient, "GR-AUS-AGGREGAT"),
-        new(Prozess, Command, "GR-AUS-PROZESS"), new(Prozess, Auftrag, "GR-AUS-PROZESS"),
-        new(Funktion, Event, "GR-AUS-FUNKTION"),
-        new(Fluss, Command, "GR-AUS-FLUSS"), new(Fluss, Auftrag, "GR-AUS-FLUSS"),
+        new(Aggregat, Event, "GR-AUS-AGGREGAT"), new(Aggregat, Transient, "GR-AUS-AGGREGAT"), new(Aggregat, Frist, "GR-AUS-AGGREGAT"),
+        new(Funktion, Command, "GR-FUNKTION-FORM"), new(Funktion, Event, "GR-FUNKTION-FORM"), new(Funktion, Transient, "GR-FUNKTION-FORM"),
         new(Projektion, Transient, "GR-AUS-PROJEKTION"),
-        new(Reaktion, Command, "GR-AUS-REAKTION"), new(Reaktion, Transient, "GR-AUS-REAKTION"),
         new(Reader, Response, "GR-AUS-READER"),
-        new(Pipeline, Command, "GR-AUS-PIPELINE"), new(Pipeline, Trigger, "GR-AUS-PIPELINE"), new(Pipeline, Transient, "GR-AUS-PIPELINE"),
-        new(Pipeline, Selbst, "GR-AUS-PIPELINE"), new(Pipeline, Frist, "GR-AUS-PIPELINE"),
-        new(Ingress, Trigger, "GR-AUS-INGRESS"),
         new(Store, Faehigkeit, "GR-FAEHIGKEIT"),
         new(DienstImpl, Dienst, "GR-DIENST"),
-        new(Aussenwelt, Command, "GR-COMMAND"), new(Aussenwelt, Query, "GR-QUERY"), new(Aussenwelt, Trigger, "GR-AUS-INGRESS"),
-        new(Akteur, Command, "GR-AKTEUR"), new(Akteur, Query, "GR-AKTEUR"), new(Akteur, Trigger, "GR-AKTEUR"), new(Akteur, Transient, "GR-AKTEUR"),
+        new(Aussenwelt, Command, "GR-COMMAND"), new(Aussenwelt, Query, "GR-QUERY"),
+        new(Akteur, Command, "GR-AKTEUR"), new(Akteur, Query, "GR-AKTEUR"), new(Akteur, Transient, "GR-AKTEUR"),
         new(Akteur, Quelle, "GR-AKTEUR"), new(Aussenwelt, Quelle, "GR-QUELLE"),
-        new(Client, Command, "GR-CLIENT-BEFUGT"), new(Client, Query, "GR-CLIENT-BEFUGT"), new(Client, Trigger, "GR-CLIENT-BEFUGT"),
-        new(Client, Transient, "GR-CLIENT-BEFUGT"),
+        new(Client, Command, "GR-CLIENT-BEFUGT"), new(Client, Query, "GR-CLIENT-BEFUGT"), new(Client, Transient, "GR-CLIENT-BEFUGT"),
     ];
 
-    /// <summary>Record-Art → Nachrichtensorte (null = keine Nachricht: Value Object, Konfig, ReadModel).</summary>
     /// <summary>
-    /// Nachrichtensorte eines Records: aus seiner Art — ein Event mit der Basis <c>IQuellNachricht</c> (Code-Fakt der Basisliste) ist eine
-    /// Quell-Nachricht (§14).
+    /// Nachrichtensorte eines Records: aus seiner Art — ein Event mit der Basis <c>IQuellNachricht</c> (Code-Fakt der Basisliste) oder einem
+    /// Treiber ist eine Quell-Nachricht.
     /// </summary>
     public static string? SorteVon(Record r) =>
         r.Kind == RecordArt.Event && (r.Treiber != null || (r.Basen?.Contains(QuellBasis) ?? false)) ? Quelle : SorteVonRecordArt(r.Kind);
@@ -317,10 +215,11 @@ public static class Grammatik
     /// <summary>Die Vertrags-Basis einer Quell-Nachricht (aus dem Vertrag, kein Text-Raten).</summary>
     public static readonly string QuellBasis = nameof(Abstractions.IQuellNachricht);
 
+    /// <summary>Record-Art → Nachrichtensorte (null = keine Nachricht: Value Object, Konfig, ReadModel).</summary>
     public static string? SorteVonRecordArt(string kind) => kind switch
     {
         RecordArt.Command => Command, RecordArt.Event => Event, RecordArt.Rejection => Transient, RecordArt.Query => Query,
-        RecordArt.Antwort => Response, RecordArt.Trigger => Trigger, RecordArt.Selbst => Selbst, RecordArt.Auftrag => Auftrag, _ => null,
+        RecordArt.Antwort => Response, _ => null,
     };
 
     public static Regel RegelVon(string id) => Regeln.First(r => r.Id == id);
@@ -334,25 +233,21 @@ public static class Grammatik
     /// <summary>
     /// Die Abbildung der EDITOR-Ports auf die Sprache — damit das Editor-JS nichts hart kodiert: Port-Typ → Sorte (für Ports,
     /// die nicht an einer Nachrichten-Karte hängen), Port-Schlüssel → Baustein (die Info-Felder der Ports: <c>dec</c>, <c>proj</c> …).
-    /// Der alte Frist-Knoten (Composition-Root-Sicht) ist der Frist-Ausgang einer Pipeline.
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string> EditorPortSorte = new Dictionary<string, string>
     {
-        ["trigmsg"] = Trigger, ["self"] = Selbst, ["wcall"] = Faehigkeit, ["rcall"] = Faehigkeit, ["dienst"] = Dienst,
+        ["wcall"] = Faehigkeit, ["rcall"] = Faehigkeit, ["dienst"] = Dienst,
     };
     public static readonly IReadOnlyList<(string Schluessel, string Baustein)> EditorPortBaustein =
     [
-        ("dec", Aggregat), ("app", Aggregat), ("trans", Prozess), ("saga", Prozess), ("proj", Projektion), ("reaktion", Reaktion),
-        ("pipeline", Pipeline), ("reader", Reader), ("trigId", Ingress), ("frist", Pipeline), ("akt", Akteur), ("client", Client),
-        ("fk", Funktion), ("flk", Fluss), ("dn", DienstImpl),
+        ("dec", Aggregat), ("app", Aggregat), ("proj", Projektion), ("reader", Reader), ("akt", Akteur), ("client", Client),
+        ("fk", Funktion), ("dn", DienstImpl),
     ];
     /// <summary>
     /// Editor-Ports, an denen der Baustein des AUSGANGS die Sorte GEBRAUCHT statt sie zu erzeugen: Handle → Store-Fähigkeit (der Port
     /// sitzt am Handle, die Fähigkeit selbst erzeugt der Store). Geprüft wird dort der Konsum (Sorte × Baustein des Ausgangs).
     /// </summary>
     public static readonly IReadOnlyList<string> EditorPortGebrauch = ["wcall", "rcall", "dienst"];
-    /// <summary>Editor-Port-Schlüssel, deren Ausgang eine andere Sorte trägt als die Ziel-Karte (Frist-Knoten → Command = Sorte Frist).</summary>
-    public static readonly IReadOnlyDictionary<string, string> EditorAusgangSorte = new Dictionary<string, string> { ["frist"] = Frist };
 
     /// <summary>
     /// Der Katalog im Verbinden-Modus: welche Record-Arten an einen Editor-Port passen KÖNNEN (Port-Typ + Richtung der Gegenseite), auch wenn
@@ -360,8 +255,8 @@ public static class Grammatik
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string[]> EditorKatalogSorte = new Dictionary<string, string[]>
     {
-        ["evtOut|in"] = ["event", "rejection"], ["evtUse|out"] = ["event", "rejection"], ["sagaCmd|in"] = ["command"], ["cmd|out"] = ["command"],
-        ["query|out"] = ["query"], ["qrsp|in"] = ["queryresponse"], ["auftragFn|out"] = ["auftrag"], ["ftype|out"] = ["valueobject"],
+        ["evtOut|in"] = ["event", "rejection"], ["evtUse|out"] = ["event", "rejection"], ["cmd|out"] = ["command"],
+        ["query|out"] = ["query"], ["qrsp|in"] = ["queryresponse"], ["ftype|out"] = ["valueobject"],
     };
 
     /// <summary>Die Grammatik als JSON-Objekt für das Board (<c>rahmen.grammatik</c>).</summary>
@@ -379,13 +274,11 @@ public static class Grammatik
         recordSorte = RecordArt.Alle.Where(k => SorteVonRecordArt(k) != null).ToDictionary(k => k, k => SorteVonRecordArt(k)!),
         quellBasis = QuellBasis,
         portSorte = EditorPortSorte,
-        ausgangSorte = EditorAusgangSorte,
         portBaustein = EditorPortBaustein.Select(x => new[] { x.Schluessel, x.Baustein }),
         portGebrauch = EditorPortGebrauch,
         katalogSorte = EditorKatalogSorte,
-        // Für die Modul-Ableitung im Editor (dieselbe wie DomainEditor.Module): Sorten mit Konsumenten-/Erzeuger-Pflicht, Start-Nachricht.
+        // Für die Modul-Ableitung im Editor (dieselbe wie DomainEditor.Module): Sorten mit Konsumenten-/Erzeuger-Pflicht.
         offenEin = Module.BrauchtKonsument.Order(StringComparer.Ordinal),
         offenAus = Module.BrauchtErzeuger.Order(StringComparer.Ordinal),
-        start = nameof(Abstractions.PipelineGestartet),
     };
 }

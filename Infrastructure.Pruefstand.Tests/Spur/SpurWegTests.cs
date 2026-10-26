@@ -15,7 +15,7 @@ public class SpurWegTests
     private static readonly Dictionary<string, SpurWeg.Eintrag> Log = new()
     {
         ["q:1"] = new("DateiErkannt", "quelle:DateiErkannt", null),
-        ["d:1"] = new("ImagePairDateiGedeutet", "funktion:IDateinameDeutung", "fluss:Bildeingang#deuten"),
+        ["a:1"] = new("BildAufbereitet", "funktion:IBildaufbereitung", null),
     };
 
     private static SpurWeg.Eintrag? Nachschlagen(string u) => Log.GetValueOrDefault(u);
@@ -25,25 +25,22 @@ public class SpurWegTests
     [Fact]
     public void Aggregat_Event_laeuft_ueber_Absender_Command_und_Decider()
     {
-        var w = SpurWeg.Aus("ImagePairErstellt", "decide:ImagePair/ErstelleImagePair", "fluss:Bildeingang#paar", "d:1", false, Nachschlagen);
+        var w = SpurWeg.Aus("ImagePairErstellt", "decide:ImagePair/NimmBildAuf", "funktion:Bildeingang", "a:1", false, Nachschlagen);
 
-        w.Karten.Should().Equal("fluss:Bildeingang#paar", "rec:ErstelleImagePair", "decide:ImagePair/ErstelleImagePair", "rec:ImagePairErstellt");
+        w.Karten.Should().Equal("funktion:Bildeingang", "rec:NimmBildAuf", "decide:ImagePair/NimmBildAuf", "rec:ImagePairErstellt");
         Paare(w).Should().Equal(
-            "rec:ImagePairDateiGedeutet → fluss:Bildeingang#paar",
-            "fluss:Bildeingang#deuten → fluss:Bildeingang#paar",          // der Draht im Fluss: die Ursache kam vom Knoten „deuten“
-            "fluss:Bildeingang#paar → rec:ErstelleImagePair",
-            "rec:ErstelleImagePair → decide:ImagePair/ErstelleImagePair",
-            "decide:ImagePair/ErstelleImagePair → rec:ImagePairErstellt");
+            "rec:BildAufbereitet → funktion:Bildeingang",
+            "funktion:Bildeingang → rec:NimmBildAuf",
+            "rec:NimmBildAuf → decide:ImagePair/NimmBildAuf",
+            "decide:ImagePair/NimmBildAuf → rec:ImagePairErstellt");
     }
 
     [Fact]
-    public void Erster_Knoten_eines_Flusses_haengt_am_Quell_Knoten_aus_dem_Code()
+    public void Ausgabe_einer_Funktion_haengt_an_ihrem_Eingang()
     {
-        var w = SpurWeg.Aus("ImagePairDateiGedeutet", "funktion:IDateinameDeutung", "fluss:Bildeingang#deuten", "q:1", false, Nachschlagen,
-            (pipeline, typ) => pipeline == "Bildeingang" && typ == "DateiErkannt" ? "fluss:Bildeingang#datei" : null);
+        var w = SpurWeg.Aus("BildAufbereitet", "funktion:IBildaufbereitung", null, "q:1", false, Nachschlagen);
 
-        Paare(w).Should().Contain("fluss:Bildeingang#datei → fluss:Bildeingang#deuten")
-            .And.Contain("funktion:IDateinameDeutung → rec:ImagePairDateiGedeutet");
+        Paare(w).Should().Equal("rec:DateiErkannt → funktion:IBildaufbereitung", "funktion:IBildaufbereitung → rec:BildAufbereitet");
     }
 
     [Fact]
@@ -56,13 +53,7 @@ public class SpurWegTests
     }
 
     [Fact]
-    public void Quelle_ist_Wurzel_und_Drahte_fremder_Ablaeufe_zaehlen_nicht()
-    {
-        SpurWeg.Aus("DateiErkannt", "quelle:DateiErkannt", null, null, false, Nachschlagen).Karten
+    public void Quelle_ist_Wurzel()
+        => SpurWeg.Aus("DateiErkannt", "quelle:DateiErkannt", null, null, false, Nachschlagen).Karten
             .Should().Equal("quelle:DateiErkannt", "rec:DateiErkannt");
-
-        // Eine Regel eines anderen Ablaufs, ausgelöst vom Ergebnis eines Fluss-Knotens: kein Draht zwischen beiden.
-        var w = SpurWeg.Aus("Fertig", "decide:Bildakte/MeldeFertig", "prozess:Andere#X→MeldeFertig", "d:1", false, Nachschlagen);
-        Paare(w).Should().NotContain(p => p.StartsWith("fluss:"));
-    }
 }

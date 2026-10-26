@@ -9,7 +9,6 @@ public class CapabilitiesHandler
     /// Universell: Akzeptiert alle Typ-Namen und kategorisiert automatisch.
     /// - Events → Teilnehmer will empfangen (PubSub-Subscription)
     /// - Commands → Teilnehmer will senden (Routing an Aggregate)
-    /// - Triggers → Teilnehmer will senden (Routing an Pipeline)
     /// - Queries → Teilnehmer will senden (Routing an QueryService)
     /// 
     /// Abwärtskompatibel: Wenn message_types leer, fällt auf event_types zurück
@@ -34,9 +33,6 @@ public class CapabilitiesHandler
                     case MessageCategory.Command:
                         result.AllowedCommands.Add(typeName);
                         break;
-                    case MessageCategory.Trigger:
-                        result.AllowedTriggers.Add(typeName);
-                        break;
                     case MessageCategory.Query:
                         result.AllowedQueries.Add(typeName);
                         break;
@@ -60,16 +56,6 @@ public class CapabilitiesHandler
             var allowedCommands = MessageTypeMapping.GetAllowedCommandNames(result.SubscribedEvents);
             result.AllowedCommands.AddRange(allowedCommands);
             result.AllowedQueries.AddRange(MessageTypeMapping.GetAllQueryTypeNames());
-        }
-
-        // NEU: handle_triggers — Client deklariert dass er diese Trigger-Typen VERARBEITET
-        foreach (var triggerName in request.HandleTriggers)
-        {
-            var (type, category) = MessageTypeMapping.Resolve(triggerName);
-            if (category == MessageCategory.Trigger)
-                result.HandlingTriggers.Add(triggerName);
-            else
-                result.UnknownTypes.Add(triggerName);
         }
 
         // NEU: handle_queries — Client deklariert dass er diese Query-Typen BEANTWORTET
@@ -98,9 +84,7 @@ public class CapabilitiesHandler
         response.AllowedCommands.AddRange(result.AllowedCommands);
         response.SubscribedEvents.AddRange(result.SubscribedEvents);
         response.SupportedQueries.AddRange(result.AllowedQueries);
-        response.AllowedTriggers.AddRange(result.AllowedTriggers);
         response.UnknownTypes.AddRange(result.UnknownTypes);
-        response.HandlingTriggers.AddRange(result.HandlingTriggers);
         response.HandlingQueries.AddRange(result.HandlingQueries);
         
         return response;
@@ -115,15 +99,8 @@ public class CapabilitiesResult
 {
     public List<string> AllowedCommands { get; init; } = new();
     public List<string> SubscribedEvents { get; init; } = new();
-    public List<string> AllowedTriggers { get; init; } = new();
     public List<string> AllowedQueries { get; init; } = new();
     public List<string> UnknownTypes { get; init; } = new();
-
-    /// <summary>
-    /// Trigger-Typen die dieser Client VERARBEITET (gegenläufig zu AllowedTriggers).
-    /// Client empfängt TriggerForward, Server routet an diesen Client.
-    /// </summary>
-    public List<string> HandlingTriggers { get; init; } = new();
 
     /// <summary>
     /// Query-Typen die dieser Client BEANTWORTET (gegenläufig zu AllowedQueries).

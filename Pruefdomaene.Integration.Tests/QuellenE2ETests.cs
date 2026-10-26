@@ -34,11 +34,20 @@ public class QuellenE2ETests
             var log = host.Services.GetRequiredService<IEventStoreRepository>();
             (await log.ReadStreamAsync(vorgang, 0, default)).Should().ContainSingle(e => e.Payload is ImportAngefordert);
 
-            // Die Funktion Importannahme (gleichbleibend) startet den Import; die Strom-Funktion legt die Posten an. Ein Event aus einer Quelle weckt
-            //   heute niemanden — der Takt holt es (bis zum Wecker am Flush, Phase 6).
+            // Die Funktion Importannahme (gleichbleibend) startet den Import; die Strom-Funktion legt die Posten an.
             var import = new Herkunft(vorgang, 1, default, null, WirkerId.FuerFunktion("Importannahme")).NeueId<Importauftrag>();
             await Warte(async () => (await Zustand<Importauftrag>(host.Services, import.Wert)).Stand == 12, TimeSpan.FromSeconds(90),
                 "die Anforderung startet den Import nicht");
+
+            // FB-3: der Commit einer Quelle meldet sein Signal wie ein Aggregat (Commitmeldung) — die Funktion wacht sofort auf, nicht erst mit dem
+            //   Takt (30 s). Dreimal hintereinander je unter 5 s: dass der Takt dreimal zufällig passt, ist ausgeschlossen.
+            for (var i = 0; i < 3; i++)
+            {
+                var neu = await eingang.NimmAufAsync(new ImportAngefordert(3) { Kennung = Guid.NewGuid().ToString() }, default);
+                var weiterer = new Herkunft(neu, 1, default, null, WirkerId.FuerFunktion("Importannahme")).NeueId<Importauftrag>();
+                await Warte(async () => (await Zustand<Importauftrag>(host.Services, weiterer.Wert)).Existiert, TimeSpan.FromSeconds(5),
+                    $"Durchlauf {i + 1}: die Quell-Nachricht weckt ihre Funktion nicht über das Signal (nur der Takt holte sie)");
+            }
         }
         finally { await host.StopAsync(); }
     }

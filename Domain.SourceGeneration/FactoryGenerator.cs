@@ -71,8 +71,6 @@ namespace Domain.SourceGeneration
                                    {
                        {{caseBlocks}}
                                        default:
-                                           // Prozesse sind kein Fabrik-Aggregat mehr (generischer ProzessManager,
-                                           // engine-getrieben statt Command-dispatched) — kein Prozess-Hook nötig.
                                            throw new NotSupportedException($"No handler configured for aggregate type {state.GetType().Name}.");
                                    }
                                }

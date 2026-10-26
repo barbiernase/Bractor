@@ -3,7 +3,7 @@ syntax = "proto3";
 // ============================================================================
 // DIE LEITUNG DES FRAMEWORKS (handgeschrieben, für jede Anwendung gleich)
 //
-// Hülle, Dienst und Protokoll-Nachrichten. Die Domänen-Nachricht (Command, Event, Query, Antwort, Trigger, Auftrag)
+// Hülle, Dienst und Protokoll-Nachrichten. Die Domänen-Nachricht (Command, Event, Query, Antwort, Hinweis)
 // reist als Nutzlast: ihr Typname + ihre Bytes, kodiert mit dem Proto DER ANWENDUNG (vom Codegen erzeugt, z. B.
 // Domain.Leitung/domain.proto: nur die Domänen-DTOs). So kennt das Framework keinen Domänen-Typ, und jede Anwendung
 // bringt ihre eigenen Nachrichten mit (docs/06, docs/07).
@@ -33,10 +33,8 @@ message ClientMessage {
         UnsubscribeRequest unsubscribe = 3;
         CapabilitiesRequest capabilities = 4;
         QueryRequest query = 5;
-        TriggerRequest trigger = 6;
         TransientEventRequest transient_event = 7;
         QueryResponseFromClient query_answer = 8;
-        TriggerResult trigger_result = 9;
         FunktionenAnbieten funktionen_anbieten = 10;
         ArbeitsErgebnis arbeits_ergebnis = 11;
         ArbeitLebtMeldung arbeit_lebt = 12;
@@ -60,7 +58,6 @@ message UnsubscribeRequest {
 message CapabilitiesRequest {
     repeated string event_types = 1;
     repeated string message_types = 2;
-    repeated string handle_triggers = 3;
     repeated string handle_queries = 4;
     // Akteur-Vertrag (docs/konzept-akteure.md §3): "ich bin Vertrag X" — der Server nimmt die Fähigkeiten aus der
     // generierten Tabelle statt aus der Selbstauskunft; der Hash erkennt einen Client, der gegen einen anderen Stand gebaut ist.
@@ -78,11 +75,6 @@ message QueryRequest {
     repeated string expected_fresh_ids = 3;
 }
 
-message TriggerRequest {
-    Nutzlast payload = 1;
-    string correlation_id = 2;
-}
-
 // ============================================================================
 // SERVER → CLIENT (Downstream)
 // ============================================================================
@@ -96,8 +88,6 @@ message ServerMessage {
         ErrorResponse error = 5;
         CapabilitiesResponse capabilities_response = 6;
         QueryResponse query_response = 7;
-        TriggerAck trigger_ack = 8;
-        TriggerForward trigger_forward = 9;
         QueryForward query_forward = 10;
         ArbeitsAuftrag arbeits_auftrag = 11;
     }
@@ -127,9 +117,7 @@ message CapabilitiesResponse {
     repeated string allowed_commands = 2;
     repeated string subscribed_events = 3;
     repeated string supported_queries = 4;
-    repeated string allowed_triggers = 5;
     repeated string unknown_types = 6;
-    repeated string handling_triggers = 7;
     repeated string handling_queries = 8;
     // Der angenommene Akteur-Vertrag (leer = keiner bzw. abgelehnt) und — bei abweichendem Hash — der Server-Hash.
     string vertrag = 9;
@@ -148,17 +136,6 @@ message AggregateMetaDto {
     int32 version = 3;
 }
 
-message TriggerAck {
-    bool accepted = 1;
-    string correlation_id = 2;
-    string error_message = 3;
-}
-
-message TriggerForward {
-    Nutzlast payload = 1;
-    string correlation_id = 2;
-}
-
 message QueryForward {
     string correlation_id = 1;
     Nutzlast payload = 2;
@@ -173,12 +150,6 @@ message QueryResponseFromClient {
     Nutzlast payload = 2;
     string error_code = 3;
     string error_message = 4;
-}
-
-message TriggerResult {
-    string correlation_id = 1;
-    bool accepted = 2;
-    string error_message = 3;
 }
 
 // Funktionen draußen ausführen (Plan Pub/Sub-Neustrukturierung §2.2, §2.7: ITraegt): ein Client bietet Funktionen an, die er trägt; der Server

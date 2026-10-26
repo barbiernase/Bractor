@@ -4,7 +4,7 @@ Projektgedächtnis für Claude Code — bewusst schlank, nur Wissen, kein Change
 **Maßstab im Zweig `pubsub_neustrukturierung` ist `docs/plan-pubsub-neustrukturierung.md`** (Zielbild, Grammatik, Garantien, Phasen des
 Umbaus; noch nicht umgesetzt). Wo etwas widerspricht, gilt der Plan als Ziel und der Code als Ist. Wegweiser: `docs/README.md`.
 Offenes und Schulden: `docs/13-reifegrad-schulden-bewertung.md` §13.0. Zahlen und Messwerte: `docs/12-tests-und-vermessung.md`.
-Das Bild unten („Das tragende Bild“) beschreibt den **Ist-Zustand**, den der Umbau ablöst.
+Das Bild unten („Das tragende Bild“) beschreibt den **Ist-Zustand** nach Phase 4 des Umbaus.
 
 ## Was das Projekt ist
 
@@ -42,25 +42,29 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
 - **W11** Allgemeines Framework: eine Primitive bleibt, wenn sie allgemein gebraucht wird — nicht, weil die Beispieldomäne sie nutzt. Je Absicht ein Weg.
 - **W12** Keine GUIs im Editor (Clients nur als Vertrag), keine Schema-Evolution im Editor (`IUpcast` bleibt als Backend-Primitive), kein Deploy.
 
-## Das tragende Bild (Ist-Zustand vor dem Umbau)
+## Das tragende Bild (Ist-Zustand nach Plan-Phase 4)
 
-- **Schreibseite:** Command → Aggregat-Actor (Single-Writer, Inbox-Dedup) → `Decide` → Events → Group-Commit → Signal.
-- **Vier durable Konsumenten, eine Maschine:** Projektion, Reaktion, Prozess, Fluss. Projektionen laufen im **Batch-Konsum** (`BatchLeser` je
-  Projektion und Partition: Seite lesen, je Stream anwenden, Effekte + Guards + Partitions-Checkpoint in einer Transaktion), Reaktionen je Stream
-  (`EmittentenAdapter`); beide Signal schnell + Poll 30 s. Ob replaybar (`IProjectionTracker`, Batch-Naht, Co-Commit) oder emittierend
-  (`IEmittentenCursor`, kein Reset), folgt aus den **Schreib-Fähigkeiten der Handles** und dem Rückgabetyp — kein zweiter Marker.
-- **Dirigent:** Prozesse (`IProzessDefinition`) und Flüsse (`IPipeline`, `PipelineFluss.Definiere`) laufen auf demselben `ProzessManager`
-  (Event-Regeln, Marking-Cursor, Backstop). Verarbeitung ist immer eine **Katalog-Funktion** (`IFunktion`, `Rufe<F>`); Laufort Host/Extern/Hand
-  steht in der Umgebung. Technik hinter einer Funktion ist ein **Domänen-Dienst** (`IDienst`), gebunden nach der Umgebung.
-- **Emit:** genau ein Weg (`CommandEmitter`), erzwungen durch CQRS020/021.
-- **Akteure:** alles, was hineinkommt, kommt von einem Akteur (`IDarf<T>`); Token → Akteur-Menge aus `Identitaeten`.
+- **Schreibseite:** Command → Aggregat-Actor (Single-Writer, Inbox-Tabelle) → `Decide` (`OneOf<Event, Hinweis, Frist<TCmd>>`) → Events →
+  Group-Commit → Commitmeldung (Envelope + Signal, für jeden Schreiber gleich: Aggregat, Quelle, Funktions-Ausgabe).
+- **Zwei durable Konsumenten:** **Projektion** (`ISubscriber`, `Task Handle` mit Schreib-Fähigkeiten genau eines Stores; `BatchLeser` je
+  Projektion und Partition, Co-Commit, replaybar) und **Funktion** (`IFunktion` mit `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])`;
+  `FunktionsActor` je Funktion und Partition, Ausgabe festgehalten oder gleichbleibend, nie replayt). Beide: Signal schnell + Poll 30 s.
+- **Abläufe** sind ein Vorgangs-Aggregat (Join, Zählung, Kompensation, Frist im Decide) plus Funktionen als Kanten; die Zugehörigkeit ist ein
+  fachliches Feld (A2). Kein Dirigent, keine Saga, keine Fluss-DSL, keine Reaktion als eigene Art.
+- **Uhr:** `Frist<TCmd>` aus dem Decide → `FristGesetzt` (`IRahmenEvent`) + Beilage `cqrs_fristen` → die Uhr sendet fällig mit Id aus dem Frist-Event.
+- **Laufort** einer Funktion (Host/Extern/Hand) steht in der Umgebung; draußen über Vermittler + `BausteinSitzung` mit Lease. Technik hinter
+  einer Funktion ist ein Domänen-Dienst (`IDienst`).
+- **Emit:** genau ein Weg (`CommandEmitter`, Id vom Aufrufer abgeleitet), erzwungen durch CQRS020/021.
+- **Akteure und Clients:** alles, was hineinkommt, kommt von einem Akteur (`IDarf<T>`); ein Client-Vertrag trägt Funktionen (`ITraegt<F>`),
+  sendet (`ISendet<T>`), fragt (`IFragt<T>`) und hört (`IHoert<T>`); wirksam = Vertrag ∩ Token.
+- Noch alt (spätere Phasen): Broker und Signale (6), Marken `KommandoVerarbeitet`/`KommandoAbgelehnt` (5), Redis-Index, Projektionsform (7/8).
 
 ## Wo was liegt
 
 | Bereich | Ort |
 |---|---|
 | Verträge, Marker, geteilte Regeln (eine Quelle) | `Abstractions/` (z. B. `Akteurvertrag.cs`, `Funktionsvertrag.cs`, `Dienstvertrag.cs`, `Projektstruktur.cs`, `Spur/WirkerId.cs`, `Spur/SpurWeg.cs`, `StoreZugriff.cs`, `Umgebung/UmgebungKonfig.cs`) |
-| Laufzeit (Framework) | `Infrastructure/` (Prozess, Projections, Quellen/Treiber, Funktionen, Dienste, Umgebung, Einblick, Eingang, Akteure); referenziert keine Domäne, liest sie über `Komposition/Anwendung.cs` (`IAnwendung`) |
+| Laufzeit (Framework) | `Infrastructure/` (Projections, Funktionen, Uhr, Quellen/Treiber, Dienste, Umgebung, Einblick, Eingang, Akteure); referenziert keine Domäne, liest sie über `Komposition/Anwendung.cs` (`IAnwendung`) |
 | Leitung | `Cqrs.Leitung/cqrs.proto` (Framework: Dienst, Hüllen, `Nutzlast`); je Anwendung `<Wurzel>.Leitung` (Domänen-DTOs + `GeneratedNutzlast`) |
 | Komposition | `<Wurzel>.Laufzeit` (hier `Domain.Laufzeit`): Laufzeit-Generate, `GeneratedAnwendung`, `AddCqrs(args)` der Hosts |
 | Generatoren und Analyzer | `*.SourceGeneration/`; Codegen vor dem Build (Proto, STJ-Kontexte, Python-Basen): `Cqrs.Codegen` über das Target in `Domain.Leitung` |
@@ -88,9 +92,9 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
 - **Fähigkeiten statt Rumpf-Analyse:** ein Handle bekommt die Store-Funktionen als Parameter (`: IWriteStore`/`: IReadStore`, genau eine Funktion,
   CQRS051; Bündel `: IStore`). Nie Store/`IFristplan` in Ctor/Feld (CQRS054), nie `new …Store()` (CQRS055).
 - **Grammatik = eine Quelle** (`DomainEditor/Grammatik.cs`): neue Regel ⇒ Analyzer + Test + Gegenstück in der Grammatik.
-- **Akteur, Akteur-Vertrag, Client** nicht vermischen (`docs/konzept-akteure.md`): Akteur = `IDarf` für das, was er selbst hineingibt;
-  Vertrag = was er draußen tut (`Auf` mit Ausgabe = **Zusage**, `void Auf` = **Kenntnis**; „Reaktion“ heißt nur der Backend-Baustein `ISubscriber`);
-  Client = Software an einer Leitung, wirksam = Vertrag ∩ Token, C#-Client per `[assembly: IstClient<IX>]`.
+- **Akteur und Client-Vertrag** nicht vermischen (`docs/konzept-akteure.md`): Akteur = `IDarf` für das, was er selbst hineingibt (auch auf
+  Funktions-Schnittstellen); Client-Vertrag = was eine Software an einer Leitung tut: trägt Funktionen (`ITraegt<F>`, früher „Zusage“), sendet,
+  fragt, hört (`IHoert<T>`, früher „Kenntnis“); wirksam = Vertrag ∩ Token, C#-Client per `[assembly: IstClient<IX>]`.
 - **Kein `InMemoryEventStore`:** Store-Semantik nur gegen echtes Marten (Integration); der Prüfstand testet nur store-freie Logik.
 - **Actors:** jeder Framework-Actor erbt `RahmenActor` (Bereich, Stopp, Passivierung, Fehlerantwort, Zusammenfassen); Cluster-Nachrichten nur
   über den `Bote` — `Melde` (verlierbar) oder `FrageAsync` (Pflicht-Frist), nie `Cluster.RequestAsync` direkt (`Infrastructure/Lebenszyklus/`).
@@ -136,7 +140,7 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
 |---|---|
 | Ziel des Umbaus, neue Grammatik, Garantien, Schritte | `docs/plan-pubsub-neustrukturierung.md` |
 | Was ist heute garantiert (Wirkung, Ordnung, Zustellung)? | `docs/11-garantien.md` |
-| Wie funktioniert es heute? | `docs/03` (Schreibseite), `docs/04` (Konsum, Prozess, Fluss), `docs/05` (Generatoren), `docs/06` (Transport) |
+| Wie funktioniert es heute? | `docs/03` (Schreibseite), `docs/04` (Konsum, Funktionen, Uhr), `docs/05` (Generatoren), `docs/06` (Transport) |
 | Akteure, Verträge, Clients | `docs/konzept-akteure.md`, `docs/08` (Blazor), `docs/09` (Python) |
 | Offen, Schulden | `docs/13-reifegrad-schulden-bewertung.md` §13.0 |
 | Tests, Zahlen, Messwerte | `docs/12-tests-und-vermessung.md` |

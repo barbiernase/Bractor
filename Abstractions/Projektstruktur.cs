@@ -25,13 +25,13 @@ static class Projektstruktur
     /// <summary>Die Rolle eines Projekts der Anwendung (docs/07 §7.2).</summary>
     public enum Rolle
     {
-        /// <summary><c>&lt;Wurzel&gt;</c>: Aggregate, Commands, Events, Ablehnungen, Wertobjekte, Enums, Quellen-Typen, Prozesse.</summary>
+        /// <summary><c>&lt;Wurzel&gt;</c>: Aggregate, Commands, Events, Hinweise, Wertobjekte, Enums, Quellen-Typen.</summary>
         Schreibseite,
-        /// <summary><c>&lt;Wurzel&gt;.Projections</c>: ReadModels, Queries, Antworten, Store-Fähigkeiten, Projektionen, Reaktionen, Reader.</summary>
+        /// <summary><c>&lt;Wurzel&gt;.Projections</c>: ReadModels, Queries, Antworten, Store-Fähigkeiten, Projektionen, Reader.</summary>
         Leseseite,
-        /// <summary><c>&lt;Wurzel&gt;.Pipeline</c>: Flüsse, Funktionen (Klasse im Host, Schnittstelle draußen), Domänen-Dienste, Konfig-Records.</summary>
+        /// <summary><c>&lt;Wurzel&gt;.Pipeline</c>: Funktionen (Klasse im Host, Schnittstelle draußen), ihre Events, Domänen-Dienste, Konfig-Records.</summary>
         Ablaeufe,
-        /// <summary><c>&lt;Wurzel&gt;.Akteure</c>: Akteure, Akteur-Verträge, Client-Verträge — der äußerste Ring.</summary>
+        /// <summary><c>&lt;Wurzel&gt;.Akteure</c>: Akteure und Client-Verträge — der äußerste Ring.</summary>
         Akteure,
         /// <summary><c>&lt;Wurzel&gt;.Infrastructure</c>: Store-Implementierungen.</summary>
         Speicher,
@@ -44,12 +44,12 @@ static class Projektstruktur
     /// <summary>Was ein Typ ist — bestimmt aus Code-Fakten (Lageart), nie aus Name oder Ordner.</summary>
     public enum Primitive
     {
-        Aggregat, Decider, Applier, Command, Event, Quelle, Prozess, Wertobjekt, Enum,
+        Aggregat, Decider, Applier, Command, Event, Quelle, Wertobjekt, Enum,
         ReadModel, Query, Antwort, StoreBuendel, StoreFaehigkeit, Projektion, Reader,
-        Fluss, Funktion, Auftrag, FunktionsErgebnis, FunktionsImplementierung, Dienst, DienstImplementierung, Konfig,
+        Funktion, FunktionsErgebnis, FunktionsImplementierung, Dienst, DienstImplementierung, Konfig,
         /// <summary>Eine Funktion als Klasse (Baustein-Form, <c>Auf</c>): sie läuft im Host; als Schnittstelle ist sie <see cref="Funktion"/> (draußen).</summary>
         HostFunktion,
-        Akteur, AkteurVertrag, ClientVertrag,
+        Akteur, ClientVertrag,
         StoreImplementierung,
         /// <summary>Kein Rollen-Marker: liegt im Bereichs-Ordner seines Projekts, in eigener Datei oder einer Sammeldatei des Projekts.</summary>
         Hilfscode,
@@ -73,13 +73,9 @@ static class Projektstruktur
     /// <summary>Die Datei der Domänen-DTOs im Leitungs-Projekt der Anwendung (<see cref="Rolle.Leitung"/>), vom Codegen geschrieben.</summary>
     public const string ProtoDatei = "domain.proto";
 
-    /// <summary>Das Python-Worker-Projekt der Anwendung (Zusagen, externe Funktionen) und darin der Ordner der generierten Basen.</summary>
+    /// <summary>Das Python-Worker-Projekt der Anwendung (getragene Funktionen) und darin der Ordner der generierten Basen.</summary>
     public static string PythonWorker(string wurzel) => wurzel + ".Client.Worker.Python.ML";
     public const string PythonGeneriert = "domain_client/generated";
-
-    /// <summary>Der Namespace der generierten Prozess-Registry einer Assembly (<c>GeneratedProzessRegeln</c>).</summary>
-    public static string ProzessNamespace(string assembly) => assembly + ".Prozess";
-    public const string ProzessRegistry = "GeneratedProzessRegeln";
 
     // ── Rollen-Projekte ──────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -107,7 +103,7 @@ static class Projektstruktur
         new Eintrag(Rolle.Leseseite, ".Projections", true, new[] { Rolle.Schreibseite },
             new[] { "ReadModels.cs", "Queries.cs", "Responses.cs", "Enums.cs" }),
         new Eintrag(Rolle.Ablaeufe, ".Pipeline", true, new[] { Rolle.Schreibseite, Rolle.Leseseite },
-            new[] { "Funktionen.cs", "Auftraege.cs", "Events.cs", "Konfigs.cs", "Enums.cs" }),
+            new[] { "Funktionen.cs", "Events.cs", "Konfigs.cs", "Enums.cs" }),
         new Eintrag(Rolle.Akteure, ".Akteure", false, new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Ablaeufe },
             new[] { "Akteure.cs", "Clients.cs" }),
         new Eintrag(Rolle.Speicher, ".Infrastructure", true, new[] { Rolle.Schreibseite, Rolle.Leseseite },
@@ -161,16 +157,16 @@ static class Projektstruktur
         switch (p)
         {
             case Primitive.Aggregat: case Primitive.Decider: case Primitive.Applier: case Primitive.Command: case Primitive.Event:
-            case Primitive.Quelle: case Primitive.Prozess: case Primitive.Wertobjekt:
+            case Primitive.Quelle: case Primitive.Wertobjekt:
                 return new[] { Rolle.Schreibseite };
             case Primitive.ReadModel: case Primitive.Query: case Primitive.Antwort: case Primitive.StoreBuendel: case Primitive.StoreFaehigkeit:
             case Primitive.Projektion: case Primitive.Reader:
                 return new[] { Rolle.Leseseite };
-            case Primitive.Fluss: case Primitive.Funktion: case Primitive.Auftrag: case Primitive.FunktionsErgebnis:
+            case Primitive.Funktion: case Primitive.FunktionsErgebnis:
             case Primitive.FunktionsImplementierung: case Primitive.Dienst: case Primitive.DienstImplementierung: case Primitive.Konfig:
             case Primitive.HostFunktion:
                 return new[] { Rolle.Ablaeufe };
-            case Primitive.Akteur: case Primitive.AkteurVertrag: case Primitive.ClientVertrag:
+            case Primitive.Akteur: case Primitive.ClientVertrag:
                 return new[] { Rolle.Akteure };
             case Primitive.StoreImplementierung:
                 return new[] { Rolle.Speicher };
@@ -195,9 +191,8 @@ static class Projektstruktur
             case Primitive.Query: return "Queries.cs";
             case Primitive.Antwort: return "Responses.cs";
             case Primitive.Funktion: return "Funktionen.cs";
-            case Primitive.Auftrag: return "Auftraege.cs";
             case Primitive.Konfig: return "Konfigs.cs";
-            case Primitive.Akteur: case Primitive.AkteurVertrag: return "Akteure.cs";
+            case Primitive.Akteur: return "Akteure.cs";
             case Primitive.ClientVertrag: return "Clients.cs";
             default: return null;
         }
@@ -272,7 +267,6 @@ static class Projektstruktur
             case Primitive.Command: return "ein Command";
             case Primitive.Event: return "ein Event";
             case Primitive.Quelle: return "ein Quellen-Typ";
-            case Primitive.Prozess: return "ein Prozess";
             case Primitive.Wertobjekt: return "ein Wertobjekt";
             case Primitive.Enum: return "ein Enum";
             case Primitive.ReadModel: return "ein ReadModel";
@@ -280,19 +274,16 @@ static class Projektstruktur
             case Primitive.Antwort: return "eine Antwort";
             case Primitive.StoreBuendel: return "ein Store-Bündel";
             case Primitive.StoreFaehigkeit: return "eine Store-Fähigkeit";
-            case Primitive.Projektion: return "eine Projektion/Reaktion";
+            case Primitive.Projektion: return "eine Projektion";
             case Primitive.Reader: return "ein Reader";
-            case Primitive.Fluss: return "ein Fluss";
             case Primitive.Funktion: return "eine Funktion (Schnittstelle)";
             case Primitive.HostFunktion: return "eine Funktion im Host";
-            case Primitive.Auftrag: return "ein Auftrag";
-            case Primitive.FunktionsErgebnis: return "ein Ergebnis-Event einer Funktion";
+            case Primitive.FunktionsErgebnis: return "ein Event einer Funktion";
             case Primitive.FunktionsImplementierung: return "eine Funktions-Implementierung";
             case Primitive.Dienst: return "ein Domänen-Dienst";
             case Primitive.DienstImplementierung: return "eine Dienst-Implementierung";
             case Primitive.Konfig: return "ein Konfig-Record";
             case Primitive.Akteur: return "ein Akteur";
-            case Primitive.AkteurVertrag: return "ein Akteur-Vertrag";
             case Primitive.ClientVertrag: return "ein Client-Vertrag";
             case Primitive.StoreImplementierung: return "eine Store-Implementierung";
             default: return "Hilfscode";

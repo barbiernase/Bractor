@@ -29,9 +29,9 @@ public sealed record AusgabeFestgehalten(int Anzahl) : IEvent;
 public sealed record StateChangeViaAusgabeFestgehalten(Guid StreamId, int Version) : IStateChangeSignal;
 
 /// <summary>Was unter „Funktion F, Eingang X“ festgehalten ist: die Ausgaben in Reihenfolge (Commands und Events) und ob der Lauf vollständig ist.</summary>
-public sealed record Festgehalten(IReadOnlyList<IPipelineOutput> Ausgaben, bool Abgeschlossen)
+public sealed record Festgehalten(IReadOnlyList<IAusgabe> Ausgaben, bool Abgeschlossen)
 {
-    public static readonly Festgehalten Nichts = new(Array.Empty<IPipelineOutput>(), false);
+    public static readonly Festgehalten Nichts = new(Array.Empty<IAusgabe>(), false);
 }
 
 /// <summary>Der Eingang einer Funktion: Funktion, Stream und Version des Eingangs (der Schlüssel des Festhaltens), dazu Korrelation und Akteur.</summary>
@@ -68,7 +68,7 @@ public interface IAusgabeAblage
     /// <paramref name="abgeschlossen"/> ist der Lauf danach vollständig. Liefert false, wenn an dieser Stelle schon etwas steht (ein anderer Lauf
     /// hat dort festgehalten) — dann gilt dessen Eintrag.
     /// </summary>
-    Task<bool> HalteFestAsync(FunktionsEingabe eingabe, int ab, IReadOnlyList<IPipelineOutput> ausgaben, bool abgeschlossen, CancellationToken ct);
+    Task<bool> HalteFestAsync(FunktionsEingabe eingabe, int ab, IReadOnlyList<IAusgabe> ausgaben, bool abgeschlossen, CancellationToken ct);
 }
 
 /// <summary>
@@ -82,7 +82,7 @@ public sealed class LogAusgabeAblage(IEventStoreRepository store, PubSub.BrokerP
     {
         var events = await store.ReadStreamAsync(eingabe.Schluessel, 0, ct);
         if (events.Count == 0) return Festgehalten.Nichts;
-        var ausgaben = new List<IPipelineOutput>(events.Count);
+        var ausgaben = new List<IAusgabe>(events.Count);
         var fertig = false;
         foreach (var e in events.OrderBy(e => e.AggregateVersion).ThenBy(e => e.SubIndex))
         {
@@ -96,7 +96,7 @@ public sealed class LogAusgabeAblage(IEventStoreRepository store, PubSub.BrokerP
         return new Festgehalten(ausgaben, fertig);
     }
 
-    public async Task<bool> HalteFestAsync(FunktionsEingabe eingabe, int ab, IReadOnlyList<IPipelineOutput> ausgaben, bool abgeschlossen,
+    public async Task<bool> HalteFestAsync(FunktionsEingabe eingabe, int ab, IReadOnlyList<IAusgabe> ausgaben, bool abgeschlossen,
         CancellationToken ct)
     {
         var events = new List<IEvent>(ausgaben.Count + 1);

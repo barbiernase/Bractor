@@ -5,13 +5,13 @@ using System.Text.RegularExpressions;
 namespace GraphExtractor;
 
 /// <summary>Eine Karte des Editors: Id (= Knoten-Id im Editor, z. B. <c>rec:X</c>, <c>dec:decide:A/C</c>), Art, Name, die Board-Daten und
-/// ggf. ihr Besitzer (Handle → Projektion/Reader/Reaktion, Fn → Store, Fluss-Knoten → Fluss, Zusage → Akteur).</summary>
+/// ggf. ihr Besitzer (Handle → Projektion/Reader, Fn → Store).</summary>
 public sealed record SichtKarte(string Id, string Art, string Name, JsonObject Ref, SichtKarte? Besitzer = null);
 
 /// <summary>
 /// Die ABLEITUNGEN des Boards (Werkbank P7.3, <c>docs/konzept-werkbank.md</c> §8.3): alles, was der Editor früher aus dem Board nachrechnete —
-/// Karten und Kanten, Domäne, Block (Aggregat), Akteur-Mengen und Akteur-Rahmen, Store-Scope, Inseln, eingeklappte Details, die Kette eines
-/// Prozesses, die statische Kette einer Karte, die Anschlussleiste der Clients und „was passt an diesen Port“ (⊕). Gerechnet wird NUR hier;
+/// Karten und Kanten, Domäne, Block (Aggregat), Akteur-Mengen und Akteur-Rahmen, Store-Scope, Inseln, eingeklappte Details, die statische
+/// Kette einer Karte, die Anschlussleiste der Clients und „was passt an diesen Port“ (⊕). Gerechnet wird NUR hier;
 /// der Editor zeichnet, was ankommt (<c>board.sicht</c>, <c>/api/werkbank/kette</c>, <c>/api/werkbank/passt</c>).
 /// <para>Eingabe ist das Board selbst (Code-Stand). Die Regeln sind die des früheren Editor-JS (dieselben Karten-Ids, dieselbe Reihenfolge der
 /// Kanten — die Zuordnung von Datentypen folgt ihren Nachbarn in Kanten-Reihenfolge). Ansichts-Wünsche (Heimat neuer Karten, gewünschte
@@ -23,11 +23,10 @@ public sealed partial class Sicht
     public const string AkteurBlock = "§akteure";
     public const string OhneAkteur = "§ohneAkteur";
     public const string ClientPraefix = "§client:";
-    public const string FlussPraefix = "§fluss:";
 
     private readonly JsonObject _board;
-    private readonly List<JsonObject> _records, _enums, _aggregate, _decider, _applier, _sagas, _states, _transitions, _funktionen, _dienste, _fluesse,
-        _akteure, _clients, _readModels, _stores, _projektionen, _reader, _reaktionen, _codeKarten, _bausteinFunktionen;
+    private readonly List<JsonObject> _records, _enums, _aggregate, _decider, _applier, _states, _dienste,
+        _akteure, _clients, _readModels, _stores, _projektionen, _reader, _codeKarten, _bausteinFunktionen;
     private readonly Dictionary<string, (HashSet<string> Direkt, HashSet<string> Kette)> _mengen = new(StringComparer.Ordinal);
 
     public IReadOnlyList<SichtKarte> Karten { get; }
@@ -40,12 +39,11 @@ public sealed partial class Sicht
         _board = board;
         List<JsonObject> Liste(string k) => Alle(board[k]).ToList();
         _records = Liste("records"); _enums = Liste("enums"); _aggregate = Liste("aggregate"); _decider = Liste("decider");
-        _applier = Liste("applier"); _sagas = Liste("sagas"); _funktionen = Liste("funktionen"); _dienste = Liste("dienste"); _fluesse = Liste("fluesse");
+        _applier = Liste("applier"); _dienste = Liste("dienste");
         _akteure = Liste("akteure"); _clients = Liste("clients"); _readModels = Liste("readModels"); _stores = Liste("stores");
-        _projektionen = Liste("projektionen"); _reader = Liste("reader"); _reaktionen = Liste("reaktionen"); _codeKarten = Liste("codeKarten");
+        _projektionen = Liste("projektionen"); _reader = Liste("reader"); _codeKarten = Liste("codeKarten");
         _bausteinFunktionen = Liste("bausteinFunktionen");
-        // Wie der Editor das Board liest: je Prozess-Regel eine Transition (Prozess, Wenn, ein Dann), je Aggregat mit State eine State-Karte.
-        _transitions = _sagas.SelectMany(s => Alle(s["schritte"]).Select(st => Transition(s, st))).ToList();
+        // Wie der Editor das Board liest: je Aggregat mit State eine State-Karte.
         _states = _aggregate.Where(a => Alle(a["state"]).Any()).Select(a => new JsonObject { ["_id"] = "state:" + S(a, "name"), ["aggregat"] = S(a, "name") }).ToList();
         foreach (var (n, m) in Eintraege(board["rahmen"]?["akteurMengen"] as JsonObject))
             _mengen[n] = (Strings(m?["direkt"]).ToHashSet(StringComparer.Ordinal), Strings(m?["kette"]).ToHashSet(StringComparer.Ordinal));
@@ -69,24 +67,6 @@ public sealed partial class Sicht
     }
 
     public static Sicht Aus(JsonObject board) => new(board);
-
-    private static JsonObject Transition(JsonObject saga, JsonObject st)
-    {
-        var dann = new JsonObject
-        {
-            ["sende"] = S(st, "sende"), ["sendeJe"] = B(st, "sendeJe"), ["kompensation"] = S(st, "kompensation"),
-        };
-        if (S(st, "rufe").Length > 0) dann["rufe"] = S(st, "rufe");
-        if (st["zeitlimit"] is { } z) dann["zeitlimit"] = z.DeepClone();
-        var t = new JsonObject
-        {
-            ["_id"] = S(st, "_id"), ["prozess"] = S(saga, "name"),
-            ["wenn"] = new JsonArray(Strings(st["wenn"]).Select(x => (JsonNode?)x).ToArray()),
-            ["dann"] = new JsonArray(dann),
-        };
-        if (S(st, "sammelEvent").Length > 0) t["sammelEvent"] = S(st, "sammelEvent");
-        return t;
-    }
 
     // ── JSON-Zugriff (JS-Wahrheitswerte: "" und fehlend sind falsch) ──
     internal static IEnumerable<JsonObject> Alle(JsonNode? n) => (n as JsonArray)?.OfType<JsonObject>() ?? [];
@@ -120,22 +100,15 @@ public sealed partial class Sicht
     private bool IstRec(string? n) => RecByName(n) != null;
 
     // ── Karten (in der Reihenfolge des Editors) ──
-    private static readonly Dictionary<string, string> FlSym = new()
-    {
-        ["quelle"] = "⛲", ["auf"] = "◆", ["funktion"] = "ƒ", ["command"] = "▶", ["je"] = "⧉", ["warte"] = "⧗",
-    };
     internal static string ClientAnzeige(JsonObject c)
     {
         var n = S(c, "name");
         return n.Length > 1 && n[0] == 'I' && n[1].ToString() != n[1].ToString().ToLowerInvariant() ? n[1..] : n;
     }
-    internal static string AufId(JsonObject a, int i) => "auf:" + S(a, "_id") + ":" + i;
-    private IEnumerable<(JsonObject A, JsonObject R, int I, string Id)> VertragsZusagen() =>
-        _akteure.SelectMany(a => Alle(a["vertrag"]).Select((r, i) => (a, r, i, AufId(a, i))));
     internal static string HandleDisc(JsonObject hd) =>
-        new[] { S(hd, "query"), S(hd, "event"), S(hd, "selfName"), S(hd, "input") }.FirstOrDefault(x => x.Length > 0) ?? "";
+        new[] { S(hd, "query"), S(hd, "event") }.FirstOrDefault(x => x.Length > 0) ?? "";
     private static readonly (string Art, string Sammlung, string Praefix)[] HandleArten =
-        [("projektion", "projektionen", "prj"), ("reader", "reader", "rdr"), ("reaktion", "reaktionen", "rk")];
+        [("projektion", "projektionen", "prj"), ("reader", "reader", "rdr")];
     internal static List<string> HandleIds(JsonObject o, string oid)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -150,7 +123,7 @@ public sealed partial class Sicht
     }
     private List<JsonObject> SammlungVon(string sammlung) => sammlung switch
     {
-        "projektionen" => _projektionen, "reader" => _reader, "reaktionen" => _reaktionen, _ => [],
+        "projektionen" => _projektionen, "reader" => _reader, _ => [],
     };
 
     private List<SichtKarte> BaueKarten()
@@ -158,34 +131,20 @@ public sealed partial class Sicht
         var k = new List<SichtKarte>();
         foreach (var a in _akteure) k.Add(new("akt:" + S(a, "_id"), "akteur", S(a, "name"), a));
         foreach (var c in _clients) k.Add(new("cl:" + S(c, "_id"), "client", ClientAnzeige(c), c));
-        foreach (var (a, r, _, id) in VertragsZusagen())
-            k.Add(new(id, "auf", S(r, "eingang") is { Length: > 0 } e ? e : "?", r, new SichtKarte("akt:" + S(a, "_id"), "akteur", S(a, "name"), a)));
         foreach (var r in _records) k.Add(new("rec:" + S(r, "name"), S(r, "kind"), S(r, "name"), r));
         foreach (var a in _aggregate) k.Add(new("agg:" + S(a, "name"), "aggregate", S(a, "name"), a));
         foreach (var s in _states) k.Add(new("st:" + S(s, "_id"), "state", S(s, "aggregat") is { Length: > 0 } x ? x : "frei", s));
         foreach (var d in _decider) k.Add(new("dec:" + S(d, "_id"), "decider", S(d, "command"), d));
         foreach (var a in _applier) k.Add(new("app:" + S(a, "_id"), "applier", S(a, "event"), a));
         foreach (var e in _enums) k.Add(new("enum:" + S(e, "name"), "enum", S(e, "name"), e));
-        foreach (var s in _sagas) k.Add(new("saga:" + S(s, "name"), "saga", S(s, "name"), s));
-        foreach (var t in _transitions)
-            k.Add(new("tr:" + S(t, "_id"), "transition",
-                string.Join(", ", Alle(t["dann"]).Select(d => S(d, "rufe") is { Length: > 0 } r ? r : S(d, "sende")).Where(x => x.Length > 0)), t));
-        foreach (var f in _funktionen) k.Add(new("fk:" + S(f, "_id"), "funktion", S(f, "name"), f));
-        // Funktionen in Baustein-Form: eine Karte je Funktion (Darstellung und Kanten kommen mit der Editor-Arbeit, Plan E4).
+        // Funktionen: eine Karte je Funktion (die Darstellung im Editor kommt mit der Editor-Arbeit, Plan E4).
         foreach (var f in _bausteinFunktionen) k.Add(new("fb:" + S(f, "_id"), "bausteinfunktion", S(f, "name"), f));
         foreach (var d in _dienste) k.Add(new("dn:" + S(d, "_id"), "dienst", S(d, "name"), d));
         foreach (var rm in _readModels) k.Add(new("rm:" + S(rm, "_id"), "readmodel", S(rm, "name"), rm));
         foreach (var s in _stores) k.Add(new("sto:" + S(s, "_id"), "store", S(s, "name"), s));
         foreach (var p in _projektionen) k.Add(new("prj:" + S(p, "_id"), "projektion", S(p, "name"), p));
         foreach (var r in _reader) k.Add(new("rdr:" + S(r, "_id"), "reader", S(r, "name"), r));
-        foreach (var r in _reaktionen) k.Add(new("rk:" + S(r, "_id"), "reaktion", S(r, "name"), r));
         foreach (var c in _codeKarten) k.Add(new(S(c, "_id"), "code", S(c, "name"), c));
-        foreach (var f in _fluesse)
-        {
-            var fl = new SichtKarte("fl:" + S(f, "_id"), "fluss", S(f, "name"), f);
-            foreach (var kn in Alle(f["knoten"]))
-                k.Add(new("fs:" + S(kn, "_id"), "flussknoten", (FlSym.GetValueOrDefault(S(kn, "art")) ?? "") + " " + S(kn, "name"), kn, fl));
-        }
         foreach (var (art, sammlung, pre) in HandleArten)
             foreach (var o in SammlungVon(sammlung))
             {
@@ -238,17 +197,14 @@ public sealed partial class Sicht
         var t = typ.Trim().TrimEnd('?');
         return _dienste.FirstOrDefault(d => S(d, "name") == t);
     }
-    /// <summary>Die Funktion in Baustein-Form dieses Namens — oder null.</summary>
+    /// <summary>Die Funktion dieses Namens — oder null.</summary>
     internal JsonObject? BausteinFunktion(string name) => _bausteinFunktionen.FirstOrDefault(x => S(x, "name") == name);
-    /// <summary>Die Konstruktor-Parameter einer Funktion in Baustein-Form: der Klasse, bzw. aller Umsetzungen einer Schnittstelle.</summary>
+    /// <summary>Die Konstruktor-Parameter einer Funktion: der Klasse, bzw. aller Umsetzungen einer Schnittstelle.</summary>
     internal static IEnumerable<JsonObject> BausteinKonstruktor(JsonObject f) =>
         Alle(f["konstruktor"]).Concat(Alle(f["umsetzungen"]).SelectMany(u => Alle(u["konstruktor"])));
-    /// <summary>Die Funktionen in Baustein-Form, deren Klasse oder Umsetzung den Dienst im Konstruktor nimmt.</summary>
+    /// <summary>Die Funktionen, deren Klasse oder Umsetzung den Dienst im Konstruktor nimmt.</summary>
     internal IEnumerable<JsonObject> BausteinDienstNutzer(JsonObject d) =>
         _bausteinFunktionen.Where(f => BausteinKonstruktor(f).Any(p => ReferenceEquals(DienstZu(S(p, "typ")), d)));
-    /// <summary>Die Funktionen, deren Implementierung den Dienst im Konstruktor nimmt.</summary>
-    internal IEnumerable<JsonObject> DienstNutzer(JsonObject d) =>
-        _funktionen.Where(f => Alle(f["konstruktor"]).Any(p => ReferenceEquals(DienstZu(S(p, "typ")), d)));
     private (JsonObject Store, JsonObject Fn)? LeseFnZu(string typ)
     {
         foreach (var st in _stores)
@@ -291,37 +247,6 @@ public sealed partial class Sicht
         if (t.EndsWith('?')) t = t[..^1];
         return t.Trim();
     }
-    private static List<string> FlWarteAuf(JsonObject k)
-    {
-        var w = L(k, "warteAuf").ToList();
-        return (w.Count > 0 ? w : [S(k, "typ")]).Where(x => x.Length > 0).ToList();
-    }
-    private static List<string> FlHoert(JsonObject k) => S(k, "art") switch
-    {
-        "auf" => S(k, "typ").Length > 0 ? [S(k, "typ")] : [],
-        "warte" => FlWarteAuf(k),
-        _ => [],
-    };
-    internal static bool FlQuelleArt(JsonObject? k) => k != null && S(k, "art") is "quelle" or "auf";
-    internal static List<string> FlVor(JsonObject k)
-    {
-        var l = new List<string>();
-        foreach (var e in Alle(k["eingaenge"]))
-        {
-            foreach (var d in Alle(e["draehte"])) l.Add(S(d, "von"));
-            if (S(e, "je").Length > 0) l.Add(S(e, "je"));
-        }
-        return l.Distinct(StringComparer.Ordinal).ToList();
-    }
-    internal static JsonObject? FlKnoten(JsonObject f, string name) => Alle(f["knoten"]).FirstOrDefault(k => S(k, "name") == name);
-    private string? FlZuweisung(JsonObject k)
-    {
-        var art = S(k, "art");
-        if (art is "quelle" or "command" && S(k, "typ").Length > 0) return "rec:" + S(k, "typ");
-        if (art == "funktion") return _funktionen.FirstOrDefault(x => S(x, "name") == S(k, "typ")) is { } fk ? "fk:" + S(fk, "_id") : null;
-        return null;
-    }
-
     // ── Kanten (Knoten-Id → Knoten-Id), in der Reihenfolge des Editors; Code-Blöcke (📝/🤖) gibt es hier nicht ──
     private List<(string, string)> BaueKanten()
     {
@@ -332,15 +257,8 @@ public sealed partial class Sicht
             foreach (var nm in L(a, "darf"))
             {
                 if (IstRec(nm)) P("akt:" + S(a, "_id"), Rec(nm));
-                else if (_funktionen.FirstOrDefault(x => S(x, "name") == nm) is { } fk) P("akt:" + S(a, "_id"), "fk:" + S(fk, "_id"));
                 else if (BausteinFunktion(nm) is { } fb) P("akt:" + S(a, "_id"), "fb:" + S(fb, "_id"));
             }
-        foreach (var (a, r, _, id) in VertragsZusagen())
-        {
-            P(id, "akt:" + S(a, "_id"));
-            if (IstRec(S(r, "eingang"))) P(Rec(S(r, "eingang")), id);
-            foreach (var c in L(r, "ausgaenge")) if (IstRec(c)) P(id, Rec(c));
-        }
         foreach (var d in _decider)
         {
             var did = "dec:" + S(d, "_id");
@@ -348,17 +266,6 @@ public sealed partial class Sicht
             if (S(d, "aggregat").Length > 0) P(did, "agg:" + S(d, "aggregat"));
             foreach (var o in Alle(d["ergibt"])) if (IstRec(S(o, "event"))) P(did, Rec(S(o, "event")));
         }
-        foreach (var f in _fluesse)
-            foreach (var z in Alle(f["knoten"]))
-            {
-                var zid = "fs:" + S(z, "_id");
-                foreach (var v in FlVor(z)) if (FlKnoten(f, v) is { } q) P("fs:" + S(q, "_id"), zid);
-                if (FlZuweisung(z) is { } zw) { if (FlQuelleArt(z)) P(zw, zid); else P(zid, zw); }
-                foreach (var ein in Alle(z["eingaenge"]))
-                    foreach (var d in Alle(ein["draehte"]))
-                        if ((S(d, "port") is { Length: > 0 } p ? p : "fall") == "fall" && S(d, "fall").Length > 0 && IstRec(S(d, "fall"))) P(Rec(S(d, "fall")), zid);
-                foreach (var nm in FlHoert(z)) if (IstRec(nm)) P(Rec(nm), zid);
-            }
         foreach (var a in _applier)
         {
             var aid = "app:" + S(a, "_id");
@@ -366,29 +273,7 @@ public sealed partial class Sicht
             if (S(a, "aggregat").Length > 0) P(aid, "agg:" + S(a, "aggregat"));
         }
         foreach (var s in _states) if (S(s, "aggregat").Length > 0) P("st:" + S(s, "_id"), "agg:" + S(s, "aggregat"));
-        foreach (var s in _sagas) if (IstRec(S(s, "triggerEvent"))) P(Rec(S(s, "triggerEvent")), "saga:" + S(s, "name"));
-        foreach (var t in _transitions)
-        {
-            var tid = "tr:" + S(t, "_id");
-            if (S(t, "prozess").Length > 0) P(tid, "saga:" + S(t, "prozess"));
-            foreach (var w in L(t, "wenn")) if (IstRec(w)) P(Rec(w), tid);
-            foreach (var d in Alle(t["dann"]))
-            {
-                if (IstRec(S(d, "sende"))) P(tid, Rec(S(d, "sende")));
-                if (IstRec(S(d, "kompensation"))) P(tid, Rec(S(d, "kompensation")));
-                if (S(d, "rufe").Length > 0 && _funktionen.FirstOrDefault(f => S(f, "name") == S(d, "rufe")) is { } fk) P(tid, "fk:" + S(fk, "_id"));
-            }
-        }
-        foreach (var f in _funktionen)
-        {
-            var fid = "fk:" + S(f, "_id");
-            if (IstRec(S(f, "auftrag"))) P(Rec(S(f, "auftrag")), fid);
-            foreach (var r in L(f, "ergebnisse")) if (IstRec(r)) P(fid, Rec(r));
-            foreach (var p in Alle(f["faehigkeiten"])) if (LeseFnZu(S(p, "typ")) is { } z) P(fid, "fn:" + S(z.Fn, "_id"));
-            // konzept-werkbank §12.3 E11: ein Dienst im Konstruktor der Implementierung (Kante Funktion → Dienst).
-            foreach (var p in Alle(f["konstruktor"])) if (DienstZu(S(p, "typ")) is { } dz) P(fid, "dn:" + S(dz, "_id"));
-        }
-        // Funktionen in Baustein-Form (Plan §3.3): Eingang → Funktion → Ausgaben, Lese-Fähigkeit, Dienst im Konstruktor (der Klasse bzw. einer Umsetzung).
+        // Funktionen (Plan §3.3): Eingang → Funktion → Ausgaben, Lese-Fähigkeit, Dienst im Konstruktor (der Klasse bzw. einer Umsetzung).
         foreach (var f in _bausteinFunktionen)
         {
             var fid = "fb:" + S(f, "_id");
@@ -438,15 +323,6 @@ public sealed partial class Sicht
                 foreach (var resp in L(hd, "responses")) if (IstRec(resp)) P(h, Rec(resp));
             }
         }
-        foreach (var r in _reaktionen)
-            foreach (var hd in Alle(r["handles"]))
-            {
-                var h = hid[hd];
-                P(h, "rk:" + S(r, "_id"));
-                if (IstRec(S(hd, "event"))) P(Rec(S(hd, "event")), h);
-                foreach (var c in L(hd, "sends")) if (IstRec(c)) P(h, Rec(c));
-                foreach (var ev in L(hd, "publishes")) if (IstRec(ev)) P(h, Rec(ev));
-            }
         // Store-API: Records in Fn-Parametern/-Rückgaben gehören an ihre Fn.
         foreach (var st in _stores)
             foreach (var fn in Alle(st["writeFns"]).Concat(Alle(st["readFns"])))

@@ -6,19 +6,15 @@ namespace GraphExtractor;
 
 // Zwischen-Repräsentation (raw), die der GraphBuilder zum Property-Graph und der ModellMapper zum
 // Editor-Modell zusammensetzt. Grundsatz: ALLES, was der Scaffolder zurückschreiben kann, wird hier
-// verlustfrei gelesen (Felder inkl. Defaults, Handcode-Rümpfe, Parameternamen, Saga-Lambdas) — sonst
+// verlustfrei gelesen (Felder inkl. Defaults, Handcode-Rümpfe, Parameternamen) — sonst
 // laufen Code und Editor auseinander. Die ParitaetsPruefung (--check) beweist das als Fixpunkt.
 
 public sealed class DomainModel
 {
     public List<AggregateRaw> Aggregates { get; } = new();
-    public List<ProcessRaw> Processes { get; } = new();
-    /// <summary>Pipelines als Fluss (<c>IPipeline</c>, §14) — die Knoten-Anweisungen 1:1.</summary>
-    public List<FlussRaw> Fluesse { get; } = new();
     public List<ProjectionRaw> Projections { get; } = new();
     public List<QueryRaw> Queries { get; } = new();
     public List<ReaderRaw> Readers { get; } = new();
-    public List<PipelineRaw> Pipelines { get; } = new();
     public List<StoreRaw> Stores { get; } = new();
     /// <summary><c>IAkteur</c>-Typen: wer von außen hineingibt, mit seinen <c>IDarf&lt;T&gt;</c>.</summary>
     public List<AkteurRaw> Akteure { get; } = new();
@@ -31,29 +27,19 @@ public sealed class DomainModel
     public List<RecordRaw> Responses { get; } = new();
     /// <summary><c>IReadModel</c>-Typen (Dokumente der Leseseite).</summary>
     public List<RecordRaw> ReadModels { get; } = new();
-    /// <summary><c>IPipelineTrigger</c>-Records (Ingress-Nachrichten).</summary>
-    public List<RecordRaw> Triggers { get; } = new();
-    /// <summary>Selbst-Nachrichten der Pipelines (<c>IPipelineSelfMessage</c>, Domäne).</summary>
-    public List<RecordRaw> SelbstNachrichten { get; } = new();
     /// <summary>Enums in Domain-Assemblies.</summary>
     public List<EnumRaw> Enums { get; } = new();
-    /// <summary>Katalog-Funktionen (<c>interface IX : IFunktion</c>): Auftrag und Ergebnisse aus der Signatur.</summary>
-    public List<FunktionRaw> Funktionen { get; } = new();
-    /// <summary>Aufträge (<c>IAuftrag&lt;F&gt;</c>): der eine Eingang je Katalog-Funktion.</summary>
-    public List<RecordRaw> Auftraege { get; } = new();
-    /// <summary>Funktionen in Baustein-Form (<c>Auf</c>, Plan Pub/Sub-Neustrukturierung §3.3): je Eingang die Ausgaben aus der Signatur.</summary>
+    /// <summary>Funktionen (<c>Auf</c>, Plan Pub/Sub-Neustrukturierung §3.3): je Eingang die Ausgaben aus der Signatur.</summary>
     public List<BausteinFunktionRaw> BausteinFunktionen { get; } = new();
     /// <summary>Domänen-Dienste (<c>interface IX : IDienst</c>, konzept-werkbank §12.3 E11): Signatur + Implementierungen.</summary>
     public List<DienstRaw> Dienste { get; } = new();
     /// <summary>
-    /// Konfigurations-Records: Records ohne Nachrichten-Rolle, die per DI in den KONSTRUKTOR eines Konsumenten
-    /// (Pipeline, Projektion/Reaktion, Reader, Store-Impl) injiziert werden — keine Value Objects der Domäne.
+    /// Konfigurations-Records: Records ohne Nachrichten-Rolle, die per DI in den KONSTRUKTOR einer Funktion, Dienst-Implementierung,
+    /// Projektion, eines Readers oder einer Store-Impl injiziert werden — keine Value Objects der Domäne.
     /// </summary>
     public List<RecordRaw> Konfigs { get; } = new();
-    /// <summary>Konfig-Record-Name → Namen der Konsumenten, die ihn injizieren.</summary>
+    /// <summary>Konfig-Record-Name → Namen der Klassen, die ihn injizieren.</summary>
     public Dictionary<string, List<string>> KonfigNutzer { get; } = new(StringComparer.Ordinal);
-
-    public HashSet<string> RegisteredProcesses { get; } = new(StringComparer.Ordinal);
 
     // ── Der Rahmen, wie der Code ihn vorgibt (für den Scaffolder: wohin, wie heißt es) ──
     /// <summary>Namen der inneren Decider-/Applier-Klassen und ihrer Methoden, wie der Code sie benennt (häufigste).</summary>
@@ -62,8 +48,8 @@ public sealed class DomainModel
     public Dictionary<string, string> NamespaceVerzeichnisse { get; } = new(StringComparer.Ordinal);
     /// <summary>global usings der Domänen-Compilations.</summary>
     public List<string> GlobaleUsings { get; } = new();
-    /// <summary>Größte Stelligkeit von OneOf bzw. RegelBauer im Vertrag — aus der Compilation gezählt.</summary>
-    public int OneOfMax, UndMax;
+    /// <summary>Größte Stelligkeit von OneOf im Vertrag — aus der Compilation gezählt.</summary>
+    public int OneOfMax;
     /// <summary>Wurzel-Namespace je Domänen-Projekt → Projektverzeichnis (absolut) — aus der Projektlage.</summary>
     public Dictionary<string, string> ProjektWurzeln { get; } = new(StringComparer.Ordinal);
     /// <summary>Solution-Verzeichnis (absolut) — Bezug für relative Pfade im Editor-Modell.</summary>
@@ -83,8 +69,6 @@ public sealed class DomainModel
     public Dictionary<string, CommandType> Commands { get; } = new(StringComparer.Ordinal);
 
     // ── Code mit Fehlern (Werkbank P7.1): nichts verschwindet still ──
-    /// <summary>Was der Extractor nicht lesen konnte — als Befund an der Karte (Fluss-Anweisung, Prozess-Regel, doppelter Name …).</summary>
-    public List<Lesebefund> Befunde { get; } = new();
     /// <summary>Typ-FullName → seine handgeschriebenen Deklarationen (partial: mehrere), nach Datei geordnet.</summary>
     public Dictionary<string, List<Ort>> TypOrte { get; } = new(StringComparer.Ordinal);
     /// <summary>Handgeschriebene Domänen-Typen mit unaufgelöstem Basistyp — sie werden Code-Karten mit ⚠ (bzw. ein Befund an ihrer Karte).</summary>
@@ -100,8 +84,8 @@ public sealed class DomainModel
 public sealed record TypDeklaration(string Name, string Namespace, string Art, Ort Ort, string Code);
 
 /// <summary>
-/// Ein Befund des Lesens (kein Compiler-Befund): <paramref name="Karte"/> ist die stabile Karten-Id (<c>pipeline:P</c>, <c>saga:P</c>,
-/// <c>code:T</c> …), <paramref name="Datei"/> absolut, <paramref name="Zeile"/> 1-basiert.
+/// Ein Befund des Lesens (kein Compiler-Befund): <paramref name="Karte"/> ist die stabile Karten-Id (<c>agg:A</c>, <c>code:T</c> …),
+/// <paramref name="Datei"/> absolut, <paramref name="Zeile"/> 1-basiert.
 /// </summary>
 public sealed record Lesebefund(string Code, string Text, string? Karte, string? Datei, int Zeile);
 
@@ -154,35 +138,10 @@ public sealed class RecordRaw
     public List<string>? StoreKandidaten;
     /// <summary>Nur ReadModel: geteiltes Dokument (Marker <c>IGeteiltesReadModel</c>) — aus mehreren Streams beschrieben.</summary>
     public bool Geteilt;
-    /// <summary>Nur Auftrag: die Funktion, deren Eingang er ist (<c>IAuftrag&lt;F&gt;</c>, einfacher Name).</summary>
-    public string? Funktion;
 }
 
 /// <summary>
-/// Eine Katalog-Funktion (<c>interface IX : IFunktion { Task&lt;OneOf&lt;E…&gt;&gt; RufeAsync(XAuftrag a, IAusfuehrung x); }</c>) — nur
-/// die Signatur: welcher Auftrag hinein, welche Ergebnis-Events heraus. Dazu, falls im Code vorhanden, die C#-Implementierung (die
-/// Klasse, die die Schnittstelle implementiert): ihr <c>RufeAsync</c>-Rumpf ist der Code-Block der Funktion im Editor.
-/// </summary>
-public sealed class FunktionRaw
-{
-    public string Name = "", Full = "", Namespace = "";
-    /// <summary>Die C#-Implementierung (Klasse, einfacher Name) und ihr RufeAsync-Rumpf — null, wenn es (noch) keine gibt.</summary>
-    public string? ImplKlasse, ImplRumpf, ImplFull;
-    /// <summary>Die Methode der Implementierung, deren Rumpf <see cref="ImplRumpf"/> ist (Rumpf-Edit, Werkbank P7.4).</summary>
-    public Ort? ImplOrt;
-    /// <summary>Die Datei, in der <c>RufeAsync</c> der Implementierung steht (bei partial: die Teil-Datei der Methode).</summary>
-    public string? ImplDatei;
-    /// <summary>Der Konstruktor der Implementierung (Typ wie geschrieben, Name) — Dienste, Konfig-Records, Logger.</summary>
-    public List<(string Typ, string Name)> ImplKonstruktor = new();
-    public string AuftragFull = "";
-    public List<string> ErgebnisseFull = new();
-    /// <summary>Lese-Fähigkeiten nach IAusfuehrung (Typ wie geschrieben, Name).</summary>
-    public List<(string Typ, string Name)> Faehigkeiten = new();
-    public string? Doku, Datei;
-}
-
-/// <summary>
-/// Eine Funktion in Baustein-Form (Plan Pub/Sub-Neustrukturierung §3.3): als Klasse im Host, als Schnittstelle draußen. Gelesen wird nur die
+/// Eine Funktion (Plan Pub/Sub-Neustrukturierung §3.3): als Klasse im Host, als Schnittstelle draußen. Gelesen wird nur die
 /// Signatur (<see cref="Infrastructure.SourceGeneration.Funktionsform"/>, dieselbe Lesart wie der Generator): je <c>Auf</c> Eingang, Herkunft,
 /// Lese-Fähigkeiten, Ausgaben, Strom. Nur gelesen — die Editor-Oberfläche dafür ist zurückgestellt (Plan E4).
 /// </summary>
@@ -201,7 +160,7 @@ public sealed class BausteinFunktionRaw
     public string? Doku, Datei;
 }
 
-/// <summary>Ein Eingang (ein <c>Auf</c>) einer Funktion in Baustein-Form.</summary>
+/// <summary>Ein Eingang (ein <c>Auf</c>) einer Funktion.</summary>
 public sealed class BausteinEingangRaw
 {
     public string EingangFull = "";
@@ -287,37 +246,6 @@ public sealed class AggregateRaw
     public Dictionary<string, string> ApplyParams = new();
 }
 
-public sealed class ProcessRaw
-{
-    public string Name = "", Namespace = "";
-    public string TriggerFull = "";
-    public string? Doku, Datei;
-    public List<string> Usings = new();
-    public List<RuleRaw> Rules = new();
-}
-
-public sealed class RuleRaw
-{
-    public List<string> WhenFull = new();   // Bedingungs-Events (FullNames)
-    public string Join = "single";          // single | and | count
-    public string? SammelFull;
-    /// <summary>Der Count-Join-Lambda verbatim (<c>t => n</c>).</summary>
-    public string? SammelLambda;
-    public bool FanOut;
-    public string SendsFull = "";
-    /// <summary>Statt Sende: die gerufene Katalog-Funktion (<c>Rufe&lt;F&gt;</c>, FullName); der Lambda steht in <see cref="SendLambda"/>.</summary>
-    public string? RuftFull;
-    /// <summary>Der Zeitlimit-Ausdruck verbatim (<c>.Zeitlimit(TimeSpan.FromSeconds(30))</c> → <c>TimeSpan.FromSeconds(30)</c>).</summary>
-    public string? Zeitlimit;
-    /// <summary>Der Sende-/SendeJe-Lambda verbatim.</summary>
-    public string? SendLambda;
-    public string? CompensatesFull;
-    public bool CompFanOut;
-    public string? CompLambda;
-    /// <summary>Die Anweisung der Regel im <c>Definiere</c>-Lambda.</summary>
-    public Ort? Ort;
-}
-
 /// <summary>
 /// Quelltext einer Konsumenten-/Reader-Klasse verbatim (für den verlustfreien Round-trip): Datei, Doku, Form, Basisliste,
 /// Attribute, die übrigen Member (Zusatz) und die using-Direktiven der Datei (auch Aliase).
@@ -326,7 +254,7 @@ public sealed class KlassenQuelle
 {
     public string? Datei, Doku, Typart, Attribute, Zusatz;
     public List<string> Basen = new(), Usings = new();
-    /// <summary>Regel Z: Instanzfelder, die Zustand halten (Symbol-Fakt, siehe <c>PipelineKarte.Zustand</c>); leer = zustandslos.</summary>
+    /// <summary>Regel Z: Instanzfelder, die Zustand halten (Symbol-Fakt, siehe <c>Konsument.Zustand</c>); leer = zustandslos.</summary>
     public List<string> Zustand = new();
 }
 
@@ -353,16 +281,12 @@ public sealed class ProjectionRaw
     public bool Pull;
     /// <summary>Append-artig (<c>IAppendProjektion</c> ⇒ Co-Commit-Pflicht, GA-1)?</summary>
     public bool Append;
-    /// <summary>Emittierender Konsument (Reaktion): mindestens ein Handle yieldet Commands.</summary>
-    public bool IstReaktion;
     public List<string> ConsumesFull = new();
     /// <summary>Handle-Rumpf je konsumiertem Event (Simple-Name → Body-Text).</summary>
     public Dictionary<string, string> HandleBodies = new();
     /// <summary>Fähigkeits-Parameter je Event (Simple-Name → [(Store, Funktion, Lesen?)]) — aus der SIGNATUR des Handles.</summary>
     public Dictionary<string, List<(string Store, string Method, bool IsRead)>> HandleFaehigkeiten = new();
-    /// <summary>Ge-yieldete Commands je Event (Simple-Name → Command-Simple-Namen) — Reaktion.</summary>
-    public Dictionary<string, List<string>> HandleSends = new();
-    /// <summary>Ge-yieldete (reaktiv veröffentlichte) Events je Event (Simple-Name → Event-Simple-Namen).</summary>
+    /// <summary>Ge-yieldete (veröffentlichte) Events je Event (Simple-Name → Event-Simple-Namen).</summary>
     public Dictionary<string, List<string>> HandlePublishes = new();
     /// <summary>Rückgabe-Vertrag + Ausgänge (mit Guard) je Event (Simple-Name).</summary>
     public Dictionary<string, HandleVertragRaw> HandleVertraege = new();
@@ -394,8 +318,8 @@ public sealed class ReaderRaw
 }
 
 /// <summary>
-/// Ein möglicher AUSGANG eines Handlers (Projektion/Reader/Reaktion/Pipeline) — das Gegenstück zum OneOf-Ausgang eines
-/// Deciders. <see cref="Art"/> aus dem Marker des Typs (response | command | trigger | event | typ) — immer aus der
+/// Ein möglicher AUSGANG eines Handlers (Projektion/Reader) — das Gegenstück zum OneOf-Ausgang eines
+/// Deciders. <see cref="Art"/> aus dem Marker des Typs (response | command | transient | event | typ) — immer aus der
 /// SIGNATUR —, bzw. <c>storefn</c> je Fähigkeits-Parameter (ebenfalls Signatur). Der Rumpf liefert nichts.
 /// </summary>
 public sealed class AusgangRaw
@@ -420,31 +344,6 @@ public sealed class HandleVertragRaw
     public List<AusgangRaw> Ausgaenge = new();
 }
 
-public sealed class PipelineRaw
-{
-    public string? Datei;
-    public KlassenQuelle Quelle = new();
-    /// <summary>Signatur verbatim je Eingang (FullName).</summary>
-    /// <summary>Eingang → Akteur-Dienst, in dessen Auftrag der Handle entscheidet (Parameter-Typ, CQRS060).</summary>
-    public Dictionary<string, string> HandleAkteur = new(StringComparer.Ordinal);
-    public Dictionary<string, HandleSigRaw> HandleSigs = new();
-    public string Name = "", Full = "", Namespace = "";
-    /// <summary>Der Wert der PipelineId, wenn er zur Compile-Zeit konstant ist; sonst null (nicht geraten).</summary>
-    public string? PipelineId;
-    /// <summary>Per Konstruktor injizierte Konfigurations-Records (Simple-Namen).</summary>
-    public List<string> Konfigs = new();
-    /// <summary>Je Handle: Eingang, Kanal (trigger | event | self) und ge-yieldete Commands.</summary>
-    public List<(string InputFull, string InputKind, List<string> EmitsFull)> Handles = new();
-    /// <summary>Handle-Rumpf je Eingang (Input-FullName → Body-Text).</summary>
-    public Dictionary<string, string> HandleBodies = new();
-    /// <summary>Ge-yieldete Trigger-Nachrichten je Handle (Input-FullName → [Trigger-Simple-Name]) — für die Pipeline→Pipeline-Kette.</summary>
-    public Dictionary<string, List<string>> HandleEmitsTriggers = new();
-    /// <summary>Fähigkeits-Parameter je Eingang (Input-FullName → [(Store, Funktion, Lesen?)]) — aus der SIGNATUR.</summary>
-    public Dictionary<string, List<(string Store, string Method, bool IsRead)>> HandleFaehigkeiten = new();
-    /// <summary>Rückgabe-Vertrag + Ausgänge (mit Guard) je Eingang (Input-FullName).</summary>
-    public Dictionary<string, HandleVertragRaw> HandleVertraege = new();
-}
-
 /// <summary>Ein Akteur (<c>IAkteur</c>) und was er darf (<c>IDarf&lt;T&gt;</c>, Deklarations-Reihenfolge, einfache Namen).</summary>
 public sealed class AkteurRaw
 {
@@ -452,28 +351,10 @@ public sealed class AkteurRaw
     public List<string> Darf = new();
     /// <summary>„Mensch" / „Maschine" / „Ki" aus der Basisliste, sonst null.</summary>
     public string? Art;
-    /// <summary>Dienst-Verträge dieses Akteurs (<c>IAkteurDienst&lt;Akteur&gt;</c>), einfache Namen.</summary>
-    public List<string> Dienste = new();
-    /// <summary>Sein Vertrag (<c>IAkteurVertrag&lt;Akteur&gt;</c>): Interface-Name, Datei und je <c>Auf(E)</c> die Zusage.</summary>
-    public string? VertragName, VertragDatei;
-    /// <summary>Alle Vertrags-Teile (FullName) — beim Löschen des Akteurs gehen sie mit.</summary>
-    public List<string> VertragTypen = new();
-    public List<AkteurZusageRaw> Vertrag = new();
     public string? Datei, Doku;
 }
 
-/// <summary>Eine Zusage im Akteur-Vertrag: <c>Auf(Eingang)</c> → Ausgänge (einfache Namen), Strom = (Async)Enumerable.</summary>
-public sealed class AkteurZusageRaw
-{
-    public string Eingang = "";
-    public List<string> Ausgaenge = new();
-    public bool Strom;
-    public string? Doku;
-    /// <summary>Vertrags-Teil, wenn nicht der Haupt-Vertrag (null).</summary>
-    public string? Teil;
-}
-
-/// <summary>Ein Client (<c>IClientVertrag</c>): getragene Teile, Sendet/Fragt (aus der Basisliste), eigene Kenntnis (<c>void Auf</c>).</summary>
+/// <summary>Ein Client (<c>IClientVertrag</c>): getragene Funktionen, Sendet/Fragt, Kenntnis — alles aus der Basisliste.</summary>
 public sealed class ClientRaw
 {
     public string Name = "", Namespace = "", Full = "";
@@ -525,7 +406,7 @@ public sealed class StoreRaw
 
 /// <summary>
 /// Extrahiert das gesamte Domänen-Modell semantisch (über Marker-Interfaces, nicht textuell) — inklusive der
-/// Sagas aus dem Prozess-DSL und der Handcode-Anteile, die der Scaffolder für den Round-trip braucht.
+/// Handcode-Anteile, die der Scaffolder für den Round-trip braucht.
 /// </summary>
 public sealed partial class DomainExtractor
 {
@@ -533,17 +414,16 @@ public sealed partial class DomainExtractor
     private readonly List<INamedTypeSymbol> _types;
 
     private readonly INamedTypeSymbol? _iState, _iCommand, _iCreation, _iCommandZiel, _iEvent, _iTransient, _frist,
-        _iSubscriber, _iPull, _iAppend, _iReader, _iQuery, _iQueryResponse, _iReadModel, _iGeteilt,
-        _iPipelineHandler, _iPipelineTrigger, _iSelfMessage, _iProzessDef, _iPayload, _iPipelineOutput;
+        _iSubscriber, _iPull, _iAppend, _iReader, _iQuery, _iQueryResponse, _iReadModel, _iGeteilt, _iPayload, _iPipelineOutput;
 
 
     /// <summary>Die Domänen-Assemblies (abgeleitet aus der <see cref="Projektlage"/>).</summary>
     private readonly HashSet<string> _domänen;
     /// <summary>Die globalen usings der Domänen-Compilations (ImplicitUsings + global using) + der Vertrags-Namespace — nie „explizit".</summary>
     private readonly HashSet<string> _impliziteUsings;
-    private readonly INamedTypeSymbol? _iDecider, _iApplier, _iAggEnvelope, _pipelineContext,
-        _iWriteStore, _iReadStore, _iStore, _iWertobjekt, _prozessTyp, _iAkteur, _iDarf, _iHoert, _iTraegt,
-        _iClient, _iSendet, _iFragt, _iFunktion, _iAuftrag, _iDienst;
+    private readonly INamedTypeSymbol? _iDecider, _iApplier, _iAggEnvelope,
+        _iWriteStore, _iReadStore, _iStore, _iWertobjekt, _iAkteur, _iDarf, _iHoert, _iTraegt,
+        _iClient, _iSendet, _iFragt, _iDienst;
     /// <summary>State-FullName → die Typen, die <c>IDecider&lt;State&gt;</c> bzw. <c>IApplier&lt;State&gt;</c> implementieren (egal wo deklariert).</summary>
     private readonly Dictionary<string, List<INamedTypeSymbol>> _deciderJeState = new(StringComparer.Ordinal), _applierJeState = new(StringComparer.Ordinal);
 
@@ -564,7 +444,7 @@ public sealed partial class DomainExtractor
         _iCommandZiel = Get(Vertrag.ICommandZiel);
         _iEvent = Get(Vertrag.IEvent);
         _iTransient = Get(Vertrag.ITransientEvent);
-        _frist = Get("Abstractions.Frist`1");
+        _frist = Get(Vertrag.Frist);
         _iSubscriber = Get(Vertrag.ISubscriber);
         _iPull = Get(Vertrag.IPullSubscriber);
         _iAppend = Get(Vertrag.IAppendProjektion);
@@ -573,16 +453,11 @@ public sealed partial class DomainExtractor
         _iQueryResponse = Get(Vertrag.IQueryResponse);
         _iReadModel = Get(Vertrag.IReadModel);
         _iGeteilt = Get(Vertrag.IGeteiltesReadModel);
-        _iPipelineHandler = Get(Vertrag.IPipelineHandler);
-        _iPipelineTrigger = Get(Vertrag.IPipelineTrigger);
-        _iSelfMessage = Get(Vertrag.IPipelineSelfMessage);
-        _iProzessDef = Get(Vertrag.IProzessDefinition);
         _iPayload = Get(Vertrag.IMessagePayload);
-        _iPipelineOutput = Get(Vertrag.IPipelineOutput);
+        _iPipelineOutput = Get(Vertrag.IAusgabe);
         _iDecider = Get(Vertrag.IDecider);
         _iApplier = Get(Vertrag.IApplier);
         _iAggEnvelope = Get(Vertrag.IAggregateEnvelope);
-        _pipelineContext = Get(Vertrag.PipelineContext);
         _iWriteStore = Get(Vertrag.IWriteStore);
         _iReadStore = Get(Vertrag.IReadStore);
         _iStore = Get(Vertrag.IStore);
@@ -594,11 +469,7 @@ public sealed partial class DomainExtractor
         _iFragt = Get(Vertrag.IFragt);
         _iDarf = Get(Vertrag.IDarf);
         _iWertobjekt = Get(Vertrag.IWertobjekt);
-        _iFunktion = Get(Vertrag.IFunktion);
-        _iAuftrag = Get(Vertrag.IAuftrag);
         _iDienst = Get(Abstractions.Dienstvertrag.Marker);
-        _prozessTyp = Get(Vertrag.ProzessMetadatenName);
-        _iPipeline = Get(Vertrag.IPipeline);
 
         // Aggregat-Komposition über den TYP: wer IDecider<T>/IApplier<T> implementiert, gehört zum State T.
         foreach (var t in _types)
@@ -627,35 +498,20 @@ public sealed partial class DomainExtractor
     private SemanticModel Model(SyntaxTree tree) =>
         _comps.First(c => c.ContainsSyntaxTree(tree)).GetSemanticModel(tree);
 
-    /// <summary>Befunde des laufenden Lesens (landen in <see cref="DomainModel.Befunde"/>).</summary>
-    private List<Lesebefund> _befunde = new();
-
-    /// <summary>Mehrzeiliges als eine Zeile (gekürzt) — für Befund-Texte.</summary>
-    private static string Einzeilig(string s)
-    {
-        var z = string.Join(" ", s.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
-        return z.Length > 140 ? z[..140] + " …" : z;
-    }
-
     public DomainModel Extract()
     {
         var m = new DomainModel();
-        _befunde = m.Befunde;
         if (_comps.Select(c => c.GetTypeByMetadataName(Abstractions.Treibervertrag.DateiBasis)).FirstOrDefault(x => x != null) is { } dateiBasis)
             m.Treiber[Abstractions.Treibervertrag.Datei] = (dateiBasis.Name, GeerbteFelder(dateiBasis, mitSelbst: true));
 
         CatalogEventsAndCommands(m);
-        ExtractRegisteredProcesses(m);
         // Stores ZUERST: die Konsumenten-Handler lösen ihre Fähigkeits-Parameter gegen die erkannten Fähigkeiten auf.
         ExtractStores(m);
         foreach (var t in _types)
         {
             if (Sym.Implements(t, _iState) && _deciderJeState.ContainsKey(t.Fq())) m.Aggregates.Add(ReadAggregate(t));
-            if (Sym.Implements(t, _iProzessDef)) m.Processes.Add(ReadProcess(t));
-            if (_iPipeline != null && Sym.Implements(t, _iPipeline)) m.Fluesse.Add(ReadFluss(t));
             if (Sym.Implements(t, _iSubscriber)) { var p = TryReadProjection(t); if (p != null) m.Projections.Add(p); }
             if (Sym.Implements(t, _iQuery)) m.Queries.Add(ReadQuery(t));
-            if (Sym.Implements(t, _iPipelineHandler)) m.Pipelines.Add(ReadPipeline(t));
             var reader = TryReadReader(t);
             if (reader != null) m.Readers.Add(reader);
         }
@@ -667,7 +523,6 @@ public sealed partial class DomainExtractor
         if (schreiber.Count == 1) { m.ProjektionsSchreiber = schreiber[0].Name; m.ProjektionsSchreiberNamespace = schreiber[0].ContainingNamespace.Fq(); }
 
         CatalogDomainTypes(m);
-        LinkFunktionsImpls(m);
         LinkDienstImpls(m);
         SeparateKonfigs(m);
         LinkReadModelStores(m);
@@ -684,8 +539,6 @@ public sealed partial class DomainExtractor
 
         // Deterministische Reihenfolge (die Symbol-Enumeration ist es nicht garantiert).
         m.Aggregates.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
-        m.Processes.Sort((a, b) => string.CompareOrdinal(a.Namespace + "." + a.Name, b.Namespace + "." + b.Name));
-        m.Fluesse.Sort((a, b) => string.CompareOrdinal(a.Namespace + "." + a.Name, b.Namespace + "." + b.Name));
         return m;
     }
 
@@ -720,10 +573,9 @@ public sealed partial class DomainExtractor
             return n;
         }
         m.OneOfMax = Max(typeof(Abstractions.OneOf<>).Namespace!, Vertrag.OneOf);
-        m.UndMax = Max(Vertrag.DslNamespace, typeof(Abstractions.RegelBauer).Name);
     }
 
-    // ── Domänen-Typen ohne Nachrichten-Rolle: Value Objects, Responses, ReadModels, Trigger, Enums ──
+    // ── Domänen-Typen ohne Nachrichten-Rolle: Value Objects, Responses, ReadModels, Enums ──
 
     /// <summary>
     /// Code mit Fehlern (Werkbank P7.1): ein handgeschriebener Domänen-Typ, dessen Basisliste nicht aufgelöst ist, darf nicht still
@@ -796,10 +648,8 @@ public sealed partial class DomainExtractor
                 m.Enums.Add(ReadEnum(t));
                 continue;
             }
-            // Funktion in Baustein-Form (Auf): Klasse im Host oder Schnittstelle draußen — nur ihre Signatur zählt.
+            // Funktion (Auf): Klasse im Host oder Schnittstelle draußen — nur ihre Signatur zählt.
             if (Infrastructure.SourceGeneration.Funktionsform.IstBaustein(t)) { m.BausteinFunktionen.Add(ReadBausteinFunktion(t)); continue; }
-            // Katalog-Funktion: ein Interface mit IFunktion — nur seine Signatur (Auftrag → Ergebnisse) zählt.
-            if (t.TypeKind == TypeKind.Interface && _iFunktion != null && Sym.Implements(t, _iFunktion)) { if (ReadFunktion(t) is { } f) m.Funktionen.Add(f); continue; }
             // Domänen-Dienst (konzept-werkbank §12.3 E11): ein Interface mit IDienst — Signatur; die Implementierungen hängt LinkDienstImpls an.
             if (t.TypeKind == TypeKind.Interface && _iDienst != null && Sym.Implements(t, _iDienst)) { m.Dienste.Add(ReadDienst(t)); continue; }
             // Client-Vertrag (IClientVertrag): die Software an der Leitung.
@@ -811,15 +661,12 @@ public sealed partial class DomainExtractor
             if (_iAkteur != null && Sym.Implements(t, _iAkteur)) m.Akteure.Add(ReadAkteur(t));
             else if (Sym.Implements(t, _iQueryResponse)) m.Responses.Add(raw);
             else if (Sym.Implements(t, _iReadModel)) { raw.Geteilt = _iGeteilt != null && Sym.Implements(t, _iGeteilt); m.ReadModels.Add(raw); }
-            else if (Sym.Implements(t, _iPipelineTrigger)) m.Triggers.Add(raw);
-            else if (_iSelfMessage != null && Sym.Implements(t, _iSelfMessage)) m.SelbstNachrichten.Add(raw);
-            else if (FunktionVonAuftrag(t) is { } fürFunktion) { raw.Funktion = fürFunktion.Name; m.Auftraege.Add(raw); }
             // Value Object = als Wertobjekt markiert ODER ein Record (Datenträger per Sprachkonstrukt) ohne jede Rolle.
             // Klassen ohne Marker sind Dienste/Helfer (z. B. Store-Implementierungen), keine Werte. Ein Record mit UNAUFGELÖSTER Basis
             //   ist kein Wert, sondern unbekannt (die fehlende Basis kann seine Rolle sein) — er wird eine Code-Karte (LeseUnaufgeloeste).
             else if (!HatUnaufgeloesteBasis(t) && (Sym.Implements(t, _iWertobjekt) || t.IsRecord)
                      && !Sym.Implements(t, _iPayload) && !Sym.Implements(t, _iPipelineOutput) && !Sym.Implements(t, _iQuery)
-                     && !Sym.Implements(t, _iSelfMessage) && !Sym.Implements(t, _iState)
+                     && !Sym.Implements(t, _iState)
                      && !Sym.Implements(t, _iWriteStore) && !Sym.Implements(t, _iReadStore))
                 m.ValueObjects.Add(raw);
         }
@@ -829,38 +676,8 @@ public sealed partial class DomainExtractor
         m.ValueObjects.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Responses.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.ReadModels.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
-        m.Triggers.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
-        m.SelbstNachrichten.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
-        m.Triggers.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
-        m.Funktionen.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.BausteinFunktionen.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
-        m.Auftraege.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Dienste.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
-    }
-
-    /// <summary>
-    /// Je Katalog-Funktion ihre C#-Implementierung: eine Klasse der Domänen-Quellen, die die Schnittstelle implementiert (Code-Fakt
-    /// über das Interface, nie über Namen). Mehrere → die registrierte (AddFunktion), sonst die erste nach Name.
-    /// </summary>
-    private void LinkFunktionsImpls(DomainModel m)
-    {
-        if (m.Funktionen.Count == 0) return;
-        var klassen = DomainQuellTypen().Where(t => t.TypeKind == TypeKind.Class && !t.IsAbstract).OrderBy(t => t.Fq(), StringComparer.Ordinal).ToList();
-        foreach (var f in m.Funktionen)
-        {
-            var impls = klassen.Where(k => k.AllInterfaces.Any(i => i.Fq() == f.Full)).ToList();
-            var impl = impls.FirstOrDefault(IstRegistriert) ?? impls.FirstOrDefault();
-            var iface = impl?.AllInterfaces.First(i => i.Fq() == f.Full);
-            var methode = iface?.GetMembers(Vertrag.FunktionsMethode).OfType<IMethodSymbol>().FirstOrDefault();
-            if (impl == null || methode == null) continue;
-            f.ImplKlasse = impl.Name;
-            f.ImplFull = impl.Fq();
-            var im = Sym.Implementierung(impl, methode) as IMethodSymbol;
-            f.ImplRumpf = im is null ? null : MethodBody(im);
-            f.ImplOrt = im?.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is MethodDeclarationSyntax imd ? Ort.Von(imd) : null;
-            f.ImplDatei = (im?.DeclaringSyntaxReferences ?? impl.DeclaringSyntaxReferences).FirstOrDefault()?.SyntaxTree.FilePath;
-            f.ImplKonstruktor = Konstruktor(impl);
-        }
     }
 
     /// <summary>
@@ -926,33 +743,7 @@ public sealed partial class DomainExtractor
         return d;
     }
 
-    /// <summary>Ein Auftrag (<c>record X : IAuftrag&lt;F&gt;</c>) → F; sonst null.</summary>
-    private INamedTypeSymbol? FunktionVonAuftrag(INamedTypeSymbol t) =>
-        _iAuftrag == null ? null
-            : t.AllInterfaces.FirstOrDefault(i => i.OriginalDefinition.Fq() == _iAuftrag.Fq())?.TypeArguments.FirstOrDefault() as INamedTypeSymbol;
-
-    /// <summary>
-    /// Die Signatur einer Katalog-Funktion: die eine Methode (<see cref="Vertrag.FunktionsMethode"/>), ihr Auftrag (1. Parameter)
-    /// und ihre Ergebnisse (OneOf der Rückgabe). Weicht die Form ab, gibt es keine Funktion im Modell — CQRS068 meldet es im Build.
-    /// </summary>
-    private FunktionRaw? ReadFunktion(INamedTypeSymbol t)
-    {
-        var methode = t.GetMembers(Vertrag.FunktionsMethode).OfType<IMethodSymbol>().FirstOrDefault();
-        if (methode is not { Parameters.Length: >= 2 } || methode.Parameters[0].Type is not INamedTypeSymbol auftrag) return null;
-        var decl = QuellDeklarationen(t).FirstOrDefault();
-        // Lese-Fähigkeiten: die Parameter nach IAusfuehrung — Typ so, wie er in der Signatur steht (wie bei Handles).
-        var syntax = methode.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).OfType<MethodDeclarationSyntax>().FirstOrDefault();
-        var faehigkeiten = methode.Parameters.Skip(2).Select((p, i) =>
-            (syntax?.ParameterList.Parameters.ElementAtOrDefault(i + 2)?.Type?.ToString() ?? p.Type.Name, p.Name)).ToList();
-        return new FunktionRaw
-        {
-            Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq(), AuftragFull = auftrag.Fq(),
-            ErgebnisseFull = UniverseEvents(methode.ReturnType).Select(e => e.Fq()).ToList(), Faehigkeiten = faehigkeiten,
-            Doku = decl == null ? null : Summary(decl), Datei = decl?.SyntaxTree.FilePath,
-        };
-    }
-
-    /// <summary>Die Signatur einer Funktion in Baustein-Form (Funktionsform: dieselbe Lesart wie der FunktionsBausteinGenerator).</summary>
+    /// <summary>Die Signatur einer Funktion (Funktionsform: dieselbe Lesart wie der FunktionsBausteinGenerator).</summary>
     private BausteinFunktionRaw ReadBausteinFunktion(INamedTypeSymbol t)
     {
         var form = Infrastructure.SourceGeneration.Funktionsform.Lies(t);
@@ -1024,23 +815,22 @@ public sealed partial class DomainExtractor
     }
 
     /// <summary>
-    /// Konfigurations-Records von Value Objects trennen: ein Record, der im Konstruktor eines Konsumenten
-    /// (Pipeline, Subscriber, Reader, Store-Impl) steht, ist per DI injizierte Konfiguration — kein Fachwert.
+    /// Konfigurations-Records von Value Objects trennen: ein Record, der im Konstruktor einer Funktion, Dienst-Implementierung,
+    /// Projektion, eines Readers oder einer Store-Impl steht, ist per DI injizierte Konfiguration — kein Fachwert.
     /// </summary>
     private void SeparateKonfigs(DomainModel m)
     {
         var voByFull = m.ValueObjects.GroupBy(v => v.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var storeImpls = m.Stores.SelectMany(s => s.ImplsFull).ToHashSet(StringComparer.Ordinal);
-        // Funktions- und Dienst-Implementierungen (konzept-werkbank §12.3 E11): ihre Konstruktor-Records sind Konfig aus Konfig:<Record>.
-        storeImpls.UnionWith(m.Funktionen.Where(f => f.ImplFull != null).Select(f => f.ImplFull!));
-        // Funktionen in Baustein-Form: die Klasse selbst bzw. die Umsetzungen der Schnittstelle.
+        // Funktionen und Dienst-Implementierungen (konzept-werkbank §12.3 E11): ihre Konstruktor-Records sind Konfig aus Konfig:<Record> —
+        //   bei einer Funktion die Klasse selbst bzw. die Umsetzungen der Schnittstelle.
         storeImpls.UnionWith(m.BausteinFunktionen.Where(f => f.Klasse).Select(f => f.Full));
         storeImpls.UnionWith(m.BausteinFunktionen.SelectMany(f => f.UmsetzungenFull));
         storeImpls.UnionWith(m.Dienste.SelectMany(d => d.Impls).Select(i => i.Full));
         var injiziert = new HashSet<string>(StringComparer.Ordinal);
         foreach (var t in _types)
         {
-            var istKonsument = Sym.Implements(t, _iPipelineHandler) || Sym.Implements(t, _iSubscriber)
+            var istKonsument = Sym.Implements(t, _iSubscriber)
                 || t.AllInterfaces.Any(i => _iReader != null && i.OriginalDefinition.Fq() == _iReader.Fq())
                 || storeImpls.Contains(t.Fq());
             if (!istKonsument) continue;
@@ -1051,8 +841,6 @@ public sealed partial class DomainExtractor
                     injiziert.Add(pt.Fq());
                     if (!m.KonfigNutzer.TryGetValue(pt.Name, out var nutzer)) m.KonfigNutzer[pt.Name] = nutzer = new();
                     if (!nutzer.Contains(t.Name)) nutzer.Add(t.Name);
-                    var pipe = m.Pipelines.FirstOrDefault(x => x.Full == t.Fq());
-                    if (pipe != null && !pipe.Konfigs.Contains(pt.Name)) pipe.Konfigs.Add(pt.Name);
                 }
         }
         // Genau die injizierten Typen (per FullName) — nicht alles, was zufällig gleich heißt.
@@ -1468,11 +1256,10 @@ public sealed partial class DomainExtractor
         {
             var model = Model(decl.SyntaxTree);
             // Die Rollen-Marker (sie bestimmen die Art und werden aus ihr geschrieben) — alle übrigen Basen sind Code-Fakt.
-            var rollen = new[] { _iCommand, _iCreation, _iEvent, _iTransient, _iQuery, _iQueryResponse, _iReadModel, _iGeteilt, _iPipelineTrigger, _iSelfMessage }
+            var rollen = new[] { _iCommand, _iCreation, _iEvent, _iTransient, _iQuery, _iQueryResponse, _iReadModel, _iGeteilt }
                 .Where(x => x != null).Select(x => x!.Fq()).ToHashSet(StringComparer.Ordinal);
             basen = bl.Types.Where(b => model.GetTypeInfo(b.Type).Type is not INamedTypeSymbol bt
-                                        || !(rollen.Contains(bt.Fq()) || (_iAuftrag != null && bt.OriginalDefinition.Fq() == _iAuftrag.Fq())
-                                             || (_iCommandZiel != null && bt.OriginalDefinition.Fq() == _iCommandZiel.Fq())))
+                                        || !(rollen.Contains(bt.Fq()) || (_iCommandZiel != null && bt.OriginalDefinition.Fq() == _iCommandZiel.Fq())))
                 .Select(b => b.ToString()).ToList();
             if (basen.Count == 0) basen = null;
         }
@@ -1573,133 +1360,7 @@ public sealed partial class DomainExtractor
         return string.Join("\n", lines.Select(l => (l.Length >= min ? l[min..] : l.TrimStart()).TrimEnd()));
     }
 
-    // ── Prozesse / Sagas: der DSL-Walk ───────────────────────────────────────
-
-    private ProcessRaw ReadProcess(INamedTypeSymbol t)
-    {
-        var proc = new ProcessRaw { Name = t.Name, Namespace = t.ContainingNamespace.Fq() };
-        var classDecl = QuellDeklarationen(t).FirstOrDefault();
-        if (classDecl != null)
-        {
-            proc.Datei = classDecl.SyntaxTree.FilePath;
-            proc.Doku = Summary(classDecl);
-            proc.Usings = DateiUsings(classDecl).ToList();
-        }
-
-        // Die Regeln-Property über die Interface-IMPLEMENTIERUNG (auch explizit implementiert) — nicht über ihren Namen am Typ.
-        var regelnIface = _iProzessDef?.GetMembers(Vertrag.Regeln).OfType<IPropertySymbol>().FirstOrDefault();
-        var regelnImpl = regelnIface == null ? null : Sym.Implementierung(t, regelnIface) as IPropertySymbol;
-        var propSyntax = regelnImpl?.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).OfType<PropertyDeclarationSyntax>().FirstOrDefault();
-        if (propSyntax == null) return proc;
-        var model = Model(propSyntax.SyntaxTree);
-
-        // Der Aufruf Prozess<TAuslöser>.Definiere(…) — per Methoden-Symbol erkannt; der Auslöser ist sein Typ-Argument.
-        foreach (var inv in propSyntax.DescendantNodes().OfType<InvocationExpressionSyntax>())
-        {
-            if (model.GetSymbolInfo(inv).Symbol is not IMethodSymbol ms || ms.Name != Vertrag.Definiere
-                || ms.ContainingType?.OriginalDefinition.Fq() != _prozessTyp?.Fq()) continue;
-            proc.TriggerFull = ms.ContainingType.TypeArguments[0].Fq();
-            if (inv.ArgumentList.Arguments.FirstOrDefault()?.Expression is not LambdaExpressionSyntax lambda) break;
-
-            // Jede Regel = eine Verb-Kette, deren letztes Glied von keinem weiteren Verb fortgesetzt wird.
-            var verbAufrufe = lambda.Body.DescendantNodesAndSelf(n => n is not LambdaExpressionSyntax || n == lambda.Body)
-                .OfType<InvocationExpressionSyntax>()
-                .Where(x => Vertrag.IstRegelVerb(model.GetSymbolInfo(x).Symbol as IMethodSymbol))
-                .ToList();
-            var fortgesetzt = verbAufrufe.Select(x => Empfänger(x, model)).OfType<InvocationExpressionSyntax>().ToHashSet();
-            foreach (var ende in verbAufrufe.Where(x => !fortgesetzt.Contains(x)).OrderBy(x => x.SpanStart))
-            {
-                var rule = ReadRule(ende, model);
-                if (rule != null)
-                {
-                    var anweisung = ende.FirstAncestorOrSelf<StatementSyntax>();
-                    rule.Ort = Ort.Von(anweisung != null && lambda.Span.Contains(anweisung.Span) ? anweisung : ende);
-                    proc.Rules.Add(rule);
-                }
-                else _befunde.Add(new Lesebefund("LESEN-REGEL", $"Regel wird nicht gelesen (kein Auslöser/Ziel erkannt): {Einzeilig(ende.ToString())}",
-                    "saga:" + proc.Name, ende.SyntaxTree.FilePath, ende.GetLocation().GetLineSpan().StartLinePosition.Line + 1));
-            }
-            break;
-        }
-        return proc;
-    }
-
-    /// <summary>
-    /// Das Glied VOR einem Verb-Aufruf: der Empfänger <c>x.Verb&lt;T&gt;()</c>; ist der Empfänger eine lokale Variable,
-    /// deren Initialisierer (so bleibt eine über Anweisungen verteilte Kette eine Kette).
-    /// </summary>
-    private static ExpressionSyntax? Empfänger(InvocationExpressionSyntax inv, SemanticModel model)
-    {
-        if (inv.Expression is not MemberAccessExpressionSyntax ma) return null;
-        var e = ma.Expression;
-        if (model.GetSymbolInfo(e).Symbol is ILocalSymbol lokal
-            && lokal.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is VariableDeclaratorSyntax { Initializer.Value: { } init })
-            return init;
-        return e;
-    }
-
-    private RuleRaw? ReadRule(InvocationExpressionSyntax ende, SemanticModel model)
-    {
-        // Die Kette vom Ende rückwärts einsammeln, dann in Aufruf-Reihenfolge lesen.
-        var kette = new List<(IMethodSymbol M, InvocationExpressionSyntax Inv)>();
-        for (ExpressionSyntax? x = ende; x is InvocationExpressionSyntax inv; x = Empfänger(inv, model))
-            if (model.GetSymbolInfo(inv).Symbol is IMethodSymbol ms && Vertrag.IstRegelVerb(ms)) kette.Add((ms, inv));
-            else break;
-        kette.Reverse();
-
-        var rule = new RuleRaw();
-        foreach (var (ms, inv) in kette)
-        {
-            // Zeitlimit trägt kein Typ-Argument: der Ausdruck (z. B. TimeSpan.FromSeconds(30)) verbatim.
-            if (ms.Name == Vertrag.Zeitlimit) { rule.Zeitlimit = inv.ArgumentList.Arguments.FirstOrDefault()?.Expression.ToString(); continue; }
-            if (ms.TypeArguments.FirstOrDefault() is not INamedTypeSymbol argTyp) continue;
-            var arg = argTyp.Fq();
-            var lambdaArg = inv.ArgumentList.Arguments.FirstOrDefault()?.Expression;
-            var lambdaText = lambdaArg == null ? null : Dedent(lambdaArg.ToString().Replace("\r\n", "\n"));
-            var verb = ms.Name;
-            if (verb == Vertrag.Auf || verb == Vertrag.Und) rule.WhenFull.Add(arg);
-            else if (verb == Vertrag.UndAlle) { rule.Join = "count"; rule.SammelFull = arg; rule.SammelLambda = lambdaText; }
-            else if (verb == Vertrag.Sende) { rule.SendsFull = arg; rule.SendLambda = lambdaText; }
-            else if (verb == Vertrag.SendeJe) { rule.SendsFull = arg; rule.FanOut = true; rule.SendLambda = lambdaText; }
-            else if (verb == Vertrag.Rufe) { rule.RuftFull = arg; rule.SendLambda = lambdaText; }
-            else if (verb == Vertrag.RückgängigDurch || verb == Vertrag.RückgängigDurchJe)
-            {
-                rule.CompensatesFull = arg;
-                rule.CompFanOut = verb == Vertrag.RückgängigDurchJe;
-                rule.CompLambda = lambdaText;
-            }
-        }
-        if (rule.Join != "count")
-            rule.Join = rule.WhenFull.Count > 1 ? "and" : "single";
-        return string.IsNullOrEmpty(rule.SendsFull) && rule.RuftFull == null ? null : rule;
-    }
-
-    /// <summary>
-    /// Registrierte Prozesse STRUKTURELL aus dem Generat: Einträge <c>["Name"] = new P().Regeln</c> mit P als
-    /// <c>IProzessDefinition</c> — ohne den Namen der generierten Registry-Klasse zu kennen.
-    /// </summary>
-    private void ExtractRegisteredProcesses(DomainModel m)
-    {
-        if (_iProzessDef == null) return;
-        foreach (var c in _comps)
-            foreach (var tree in c.SyntaxTrees.Where(IstGeneriert))
-            {
-                SemanticModel? model = null;
-                foreach (var asg in tree.GetRoot().DescendantNodes().OfType<AssignmentExpressionSyntax>())
-                {
-                    if (asg.Left is not ImplicitElementAccessSyntax access ||
-                        access.ArgumentList.Arguments.FirstOrDefault()?.Expression is not LiteralExpressionSyntax { Token.Value: string name }) continue;
-                    var oc = asg.Right.DescendantNodesAndSelf().OfType<ObjectCreationExpressionSyntax>().FirstOrDefault();
-                    if (oc == null) continue;
-                    model ??= c.GetSemanticModel(tree);
-                    if (model.GetTypeInfo(oc).Type is INamedTypeSymbol pt &&
-                        (Sym.Implements(pt, _iProzessDef) || (_iPipeline != null && Sym.Implements(pt, _iPipeline))))
-                        m.RegisteredProcesses.Add(name);
-                }
-            }
-    }
-
-    // ── Projektionen / Reaktionen / Queries / Reader / Pipelines ─────────────
+    // ── Projektionen / Queries / Reader ─────────────
 
     /// <summary>
     /// Die Klasse verbatim: Datei/Form/Basisliste aus der Deklaration mit Basisliste, Attribute (ohne die ausgenommenen),
@@ -1786,11 +1447,8 @@ public sealed partial class DomainExtractor
             var fs = FaehigkeitenVon(mm);
             if (fs.Count > 0) raw.HandleFaehigkeiten[evt] = fs;
 
-            // Rückgabe IAsyncEnumerable<T | OneOf<…>>: ge-yieldete Commands (→ Reaktion) bzw. Events (reaktiv).
-            var ausgaben = YieldTypen(mm.ReturnType).ToList();
-            var sends = ausgaben.Where(x => Sym.Implements(x, _iCommand)).Select(x => x.Name).ToList();
-            var pubs = ausgaben.Where(x => Sym.Implements(x, _iEvent)).Select(x => x.Name).ToList();
-            if (sends.Count > 0) { raw.HandleSends[evt] = sends; raw.IstReaktion = true; }
+            // Rückgabe IAsyncEnumerable<T | OneOf<…>>: veröffentlichte (transiente) Events.
+            var pubs = YieldTypen(mm.ReturnType).Where(x => Sym.Implements(x, _iEvent)).Select(x => x.Name).ToList();
             if (pubs.Count > 0) raw.HandlePublishes[evt] = pubs;
             raw.HandleVertraege[evt] = LiesHandleVertrag(mm);
             raw.HandleSigs[evt] = LiesHandleSig(mm, 2);
@@ -1851,42 +1509,12 @@ public sealed partial class DomainExtractor
         return raw;
     }
 
-    private PipelineRaw ReadPipeline(INamedTypeSymbol t)
-    {
-        var pipe = new PipelineRaw { Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq() };
-        pipe.PipelineId = KonstanterWert(t, _iPipelineHandler, Vertrag.PipelineId);
-
-        // Handler = öffentliche Methode mit PipelineContext-Parameter (Eingang = erster Parameter).
-        var handles = OeffentlicheMethoden(t).Where(mm => mm.Parameters.Skip(1).Any(p => p.Type.ToDisplayString() == _pipelineContext?.ToDisplayString())).ToList();
-        foreach (var method in handles)
-        {
-            if (method.Parameters.Length < 1 || method.Parameters[0].Type is not INamedTypeSymbol input) continue;
-            var kind = Sym.Implements(input, _iPipelineTrigger) ? "trigger"
-                : _iSelfMessage != null && Sym.Implements(input, _iSelfMessage) ? "self"
-                : "event";
-            // Was die Pipeline ausgibt, steht in der Signatur (CQRS050) — nicht aus den yields geraten.
-            var vertrag = LiesHandleVertrag(method);
-            pipe.HandleVertraege[input.Fq()] = vertrag;
-            pipe.Handles.Add((input.Fq(), kind, vertrag.Ausgaenge.Where(a => a.Art == "command").Select(a => a.Full).ToList()));
-            var body = MethodBody(method);
-            if (body != null) pipe.HandleBodies[input.Fq()] = body;
-            var trigs = vertrag.Ausgaenge.Where(a => a.Art == "trigger").Select(a => a.Typ).ToList();
-            if (trigs.Count > 0) pipe.HandleEmitsTriggers[input.Fq()] = trigs;
-            var fs = FaehigkeitenVon(method);
-            if (fs.Count > 0) pipe.HandleFaehigkeiten[input.Fq()] = fs;
-            pipe.HandleSigs[input.Fq()] = LiesHandleSig(method, 1);
-        }
-        pipe.Quelle = LiesKlasse(t, handles.Where(h => h.Parameters.Length >= 1 && h.Parameters[0].Type is INamedTypeSymbol));
-        pipe.Datei = pipe.Quelle.Datei;
-        return pipe;
-    }
-
     // ── Handle-Vertrag: WAS ein Handler erzeugen kann und WELCHE Store-Funktionen er benutzen darf, steht in der SIGNATUR
     //    (Typ-Fakten, vom Compiler erzwungen: CQRS050 für die Rückgabe, Fähigkeits-Parameter für die Store-Funktionen).
     //    Der RUMPF liefert nichts — er übersteht Hilfsmethoden, Delegates und fremde Objekte nicht verlässlich. ──
 
     /// <summary>
-    /// Der Vertrag eines Handlers — das Gegenstück zum OneOf eines Deciders, für Projektion/Reader/Reaktion/Pipeline.
+    /// Der Vertrag eines Handlers — das Gegenstück zum OneOf eines Deciders, für Projektion/Reader.
     /// Ausgänge: Form (nichts/einzeln/strom) + Typargumente (OneOf aufgefächert); eine offene Signatur (Interface,
     /// Typ-Parameter, object, abstrakte Klasse) liefert KEINE Ausgänge (nicht geraten; CQRS050). Dazu je
     /// Fähigkeits-Parameter ein <c>storefn</c>-Ausgang: die Obergrenze dessen, was der Handle am Store rufen darf.
@@ -1903,32 +1531,17 @@ public sealed partial class DomainExtractor
                                             || t.SpecialType == SpecialType.System_Object || (t.TypeKind == TypeKind.Class && t.IsAbstract);
         v.SignaturOffen = sigTypen.Any(Offen);
         var sig = v.SignaturOffen ? new List<INamedTypeSymbol>() : sigTypen.OfType<INamedTypeSymbol>().ToList();
-        v.Ausgaenge = sig.Select(t => Planung(t) is { } pl
-            ? new AusgangRaw { Typ = pl.Ziel.Name, Full = pl.Ziel.Fq(), Art = pl.Art }
-            : new AusgangRaw { Typ = t.Name, Full = t.Fq(), Art = ArtVon(t) }).ToList();
+        v.Ausgaenge = sig.Select(t => new AusgangRaw { Typ = t.Name, Full = t.Fq(), Art = ArtVon(t) }).ToList();
         foreach (var p in mm.Parameters)
             if (_faehigkeiten.TryGetValue(p.Type.OriginalDefinition.Fq(), out var f))
                 v.Ausgaenge.Add(new AusgangRaw { Typ = f.Method, Full = p.Type.Fq(), Art = "storefn", Store = f.Store, IstLesen = f.IsRead });
         return v;
     }
 
-    /// <summary>
-    /// Planungs-Ausgänge des Vertrags (Abstractions): <c>Selbst&lt;T&gt;</c> → self (T = Selbst-Nachricht),
-    /// <c>Frist&lt;TCmd&gt;</c> → frist, <c>FristStorno&lt;TCmd&gt;</c> → fristStorno (TCmd = der fällige Command). Über das Symbol.
-    /// </summary>
-    private static (string Art, INamedTypeSymbol Ziel)? Planung(INamedTypeSymbol t)
-    {
-        if (!t.IsGenericType || t.TypeArguments.Length != 1 || t.TypeArguments[0] is not INamedTypeSymbol ziel
-            || t.ContainingAssembly?.Name != Vertrag.VertragsAssembly) return null;
-        var def = t.OriginalDefinition.MetadataName;
-        return def == Vertrag.SelbstTyp ? ("self", ziel) : def == Vertrag.FristTyp ? ("frist", ziel) : def == Vertrag.FristStornoTyp ? ("fristStorno", ziel) : null;
-    }
-
     /// <summary>Die Art eines Ausgabe-Typs aus seinem Marker (nie aus dem Namen).</summary>
     private string ArtVon(INamedTypeSymbol t) =>
         Sym.Implements(t, _iQueryResponse) ? "response"
         : Sym.Implements(t, _iCommand) ? "command"
-        : Sym.Implements(t, _iPipelineTrigger) ? "trigger"
         : Sym.Implements(t, _iTransient) ? "transient"   // vor IEvent: ITransientEvent : IEvent (Broker statt Log)
         : Sym.Implements(t, _iEvent) ? "event"
         : "typ";

@@ -2,7 +2,7 @@ using System.Text.Json.Nodes;
 
 namespace GraphExtractor;
 
-// Die Ableitungen je Karte: Block (Aggregat), Store-Scope, Inseln, Akteure, Domäne, Einklappen und die Kette eines Prozesses.
+// Die Ableitungen je Karte: Block (Aggregat), Store-Scope, Inseln, Akteure, Domäne und Einklappen.
 public sealed partial class Sicht
 {
     private static string Eindeutig(IEnumerable<string?> xs)
@@ -34,39 +34,6 @@ public sealed partial class Sicht
         foreach (var g in _aggregate) if (Alle(g["state"]).Any(f => InnerTyp(S(f, "typ")) == t)) a.Add(S(g, "name"));
         return a.Count > 0 ? Eindeutig(a) : "";
     }
-    private Dictionary<string, JsonObject>? _ergebnisVon;
-    private JsonObject? ErgebnisVon(string nm)
-    {
-        if (_ergebnisVon == null)
-        {
-            _ergebnisVon = new(StringComparer.Ordinal);
-            foreach (var f in _funktionen) foreach (var e in L(f, "ergebnisse")) _ergebnisVon.TryAdd(e, f);
-        }
-        return _ergebnisVon.GetValueOrDefault(nm);
-    }
-    private IEnumerable<JsonObject> TransOf(JsonObject s) => _transitions.Where(t => S(t, "prozess") == S(s, "name"));
-    private List<string> SagaAggs(JsonObject s)
-    {
-        var ns = new List<string>();
-        void Add(string x) { if (!ns.Contains(x)) ns.Add(x); }
-        foreach (var t in TransOf(s))
-        {
-            foreach (var e in L(t, "wenn").Append(S(t, "sammelEvent"))) Add(RecordAgg(e));
-            foreach (var d in Alle(t["dann"])) foreach (var c in new[] { S(d, "sende"), S(d, "kompensation") }) Add(RecordAgg(c));
-        }
-        return ns.Where(x => x.Length > 0).Distinct().ToList();
-    }
-    private string SagaAgg(JsonObject sg) { var a = SagaAggs(sg); return a.Count == 1 ? a[0] : ""; }
-    private string FunktionAgg(JsonObject f)
-    {
-        var a = Eindeutig(_transitions.Where(t => Alle(t["dann"]).Any(d => S(d, "rufe") == S(f, "name")))
-            .Select(t => _sagas.FirstOrDefault(x => S(x, "name") == S(t, "prozess"))).Where(x => x != null).Select(x => SagaAgg(x!)).Where(x => x.Length > 0));
-        return a.Length > 0 ? a : Eindeutig(L(f, "ergebnisse").Select(RecordAgg).Where(x => x.Length > 0));
-    }
-    private string ErgebnisAgg(string nm) => ErgebnisVon(nm) is { } f ? FunktionAgg(f) : "";
-    private HashSet<string>? _erzeugt;
-    private bool DeciderErzeugt(string ev) =>
-        (_erzeugt ??= _decider.SelectMany(d => Alle(d["ergibt"]).Select(o => S(o, "event"))).ToHashSet(StringComparer.Ordinal)).Contains(ev);
 
     /// <summary>Der abgeleitete Store-Scope eines Konsumenten: die Stores, deren Funktionen seine Handles aufrufen.</summary>
     internal List<string> StoreScope(JsonObject node)
@@ -88,16 +55,14 @@ public sealed partial class Sicht
         string Oder(string x) => x.Length > 0 ? x : Geteilt;
         switch (k)
         {
-            case "akteur": case "auf": return AkteurBlock;
+            case "akteur": return AkteurBlock;
             case "aggregate": return name;
             case "handle": case "fn": return own == null ? Geteilt : Block(own);
             case "state": case "decider": case "applier": return Oder(S(r, "aggregat"));
         }
-        if (k == "event" && ErgebnisVon(name) != null && !DeciderErzeugt(name))
-            return Oder(ErgebnisAgg(name) is { Length: > 0 } x ? x : RecordAgg(name));
         switch (k)
         {
-            case "command": case "event": case "rejection": return Oder(RecordAgg(name) is { Length: > 0 } x ? x : ErgebnisAgg(name));
+            case "command": case "event": case "rejection": return Oder(RecordAgg(name));
             case "valueobject": case "enum": return Oder(TypAgg(name));
             case "projektion":
             {
@@ -118,14 +83,6 @@ public sealed partial class Sicht
             }
             case "readmodel":
                 return _stores.FirstOrDefault(s => S(s, "name") == S(r, "store")) is { } st ? BlockVon("store", st) : Geteilt;
-            case "saga": return Oder(SagaAgg(r));
-            case "transition":
-                return _sagas.FirstOrDefault(x => S(x, "name") == S(r, "prozess")) is { } sg ? Oder(SagaAgg(sg)) : Geteilt;
-            case "funktion": return Oder(FunktionAgg(r));
-            // Ein Dienst steht im Block der Funktionen, die ihn nehmen (eindeutig), sonst geteilt.
-            case "dienst": return Oder(Eindeutig(DienstNutzer(r).Select(FunktionAgg).Where(x => x.Length > 0)));
-            case "auftrag":
-                return _funktionen.FirstOrDefault(x => S(x, "auftrag") == name) is { } f ? Oder(FunktionAgg(f)) : Geteilt;
         }
         return Geteilt;
     }
@@ -185,11 +142,8 @@ public sealed partial class Sicht
         switch (n.Art)
         {
             case "akteur": Add([name]); break;
-            case "auf": Add([n.Besitzer!.Name]); break;
             case "command": case "query": case "event": case "rejection": case "queryresponse":
             {
-                var f = n.Art == "event" ? ErgebnisVon(name) : null;
-                if (f != null && !DeciderErzeugt(name)) { Add(AkteureId("fk:" + S(f, "_id"))); if (s.Count > 0) break; }
                 Add(MengeListe(name));
                 if (n.Art == "query" && s.Count == 0)
                     foreach (var rd in _reader.Where(rd => Alle(rd["handles"]).Any(h => S(h, "query") == name))) Add(AkteureId("rdr:" + S(rd, "_id")));
@@ -200,40 +154,19 @@ public sealed partial class Sicht
             case "aggregate": foreach (var d in _decider.Where(d => S(d, "aggregat") == name)) Add(MengeListe(S(d, "command"))); break;
             case "state": foreach (var d in _decider.Where(d => S(d, "aggregat") == S(r, "aggregat"))) Add(MengeListe(S(d, "command"))); break;
             case "reader": foreach (var hd in Alle(r["handles"])) Add(MengeListe(S(hd, "query"))); break;
-            case "reaktion": foreach (var hd in Alle(r["handles"])) Add(HandleAkteure("reaktion", hd)); break;
             case "handle":
             {
                 var o = n.Besitzer!;
                 if (o.Art == "projektion") Add(ProjektionAkteure(o.Ref));
-                else if (o.Art == "reader") Add(MengeListe(S(r, "query")));
-                else { Add(HandleAkteure(o.Art, r)); if (s.Count == 0) Add(Akteure(o)); }
+                else Add(MengeListe(S(r, "query")));
                 break;
             }
-            case "saga":
-                foreach (var t in _transitions.Where(t => S(t, "prozess") == name)) foreach (var d in Alle(t["dann"])) Add(MengeListe(S(d, "sende")));
-                Add(MengeListe(S(r, "triggerEvent")));
-                break;
-            case "transition":
-                foreach (var d in Alle(r["dann"])) Add(MengeListe(S(d, "sende")));
-                foreach (var e in L(r, "wenn")) Add(MengeListe(e));
-                if (s.Count == 0 && _sagas.FirstOrDefault(x => S(x, "name") == S(r, "prozess")) is { } sg) Add(AkteureId("saga:" + S(sg, "name")));
-                break;
-            case "funktion":
-                Add(MengeListe(S(r, "auftrag")));
-                if (s.Count == 0)
-                    foreach (var t in _transitions.Where(t => Alle(t["dann"]).Any(d => S(d, "rufe") == name))) Add(AkteureId("tr:" + S(t, "_id")));
-                break;
             case "dienst":
-                foreach (var f in DienstNutzer(r)) Add(AkteureId("fk:" + S(f, "_id")));
                 foreach (var f in BausteinDienstNutzer(r)) Add(AkteureId("fb:" + S(f, "_id")));
                 break;
             case "bausteinfunktion":
                 foreach (var a in _akteure.Where(a => L(a, "darf").Contains(name))) Add([S(a, "name")]);
                 foreach (var e in Alle(r["eingaenge"])) Add(MengeListe(S(e, "eingang")));
-                break;
-            case "auftrag":
-                if (_funktionen.FirstOrDefault(x => S(x, "auftrag") == name) is { } fa) Add(AkteureId("fk:" + S(fa, "_id")));
-                else Add(MengeListe(name));
                 break;
             case "projektion": Add(ProjektionAkteure(r)); break;
             case "store": Add(StoreAkteure(r)); break;
@@ -257,14 +190,6 @@ public sealed partial class Sicht
         return s;
     }
     private IReadOnlyList<string> AkteureId(string id) => KarteVon.TryGetValue(id, out var k) ? Akteure(k) : [];
-    private List<string>? HandleAkteure(string art, JsonObject hd)
-    {
-        if (art is "projektion" or "reader") return null;
-        var s = MengeListe(S(hd, "event"));
-        if (s.Count == 0)
-            foreach (var o in L(hd, "sends").Concat(L(hd, "publishes"))) foreach (var x in MengeListe(o)) if (!s.Contains(x)) s.Add(x);
-        return s;
-    }
     private List<string> FnLeser(string fid)
     {
         var s = new List<string>();
@@ -289,7 +214,7 @@ public sealed partial class Sicht
 
     private readonly Dictionary<string, List<string>> _akteurOrdnung = new(StringComparer.Ordinal);
     /// <summary>
-    /// Die Akteur-Rahmen einer Domäne in ihrer Reihenfolge (docs/konzept-akteure.md §8, konzept-werkbank §8.1): wer das Ding erschafft, dann wer worauf antwortet (Zusage), dann Art
+    /// Die Akteur-Rahmen einer Domäne in ihrer Reihenfolge (docs/konzept-akteure.md §8, konzept-werkbank §8.1): wer das Ding erschafft, dann Art
     /// (Maschine → KI → Mensch), dann Name. Gezählt werden die sichtbaren fachlichen Karten der Domäne (keine Inseln, keine eingeklappten Details).
     /// Eine gewünschte Reihenfolge (Ansicht) legt der Editor darüber.
     /// </summary>
@@ -308,22 +233,8 @@ public sealed partial class Sicht
             var ag = d == null ? null : _aggregate.FirstOrDefault(a => S(a, "name") == S(d, "aggregat"));
             if (ag != null && S(ag, "namespace") == dom) schoepfer.UnionWith(MengeVon(S(r, "name")));
         }
-        var basis = da.OrderBy(a => schoepfer.Contains(a) ? 0 : 1).ThenBy(a => Art(a) is { } x && ArtRang.TryGetValue(x, out var g) ? g : 3)
+        return _akteurOrdnung[dom] = da.OrderBy(a => schoepfer.Contains(a) ? 0 : 1).ThenBy(a => Art(a) is { } x && ArtRang.TryGetValue(x, out var g) ? g : 3)
             .ThenBy(a => a, Comparer<string>.Create(Locale)).ToList();
-        var vor = new Dictionary<string, HashSet<string>>(StringComparer.Ordinal);
-        foreach (var (a, r, _, _) in VertragsZusagen())
-            foreach (var x in MengeListe(S(r, "eingang")))
-                if (x != S(a, "name")) { if (!vor.TryGetValue(S(a, "name"), out var v)) vor[S(a, "name")] = v = []; v.Add(x); }
-        var aus = new List<string>();
-        var rest = basis.ToList();
-        while (rest.Count > 0)
-        {
-            var i = rest.FindIndex(b => (vor.GetValueOrDefault(b) ?? []).All(a => !rest.Contains(a) || a == b));
-            var k = i < 0 ? 0 : i;
-            aus.Add(rest[k]);
-            rest.RemoveAt(k);
-        }
-        return _akteurOrdnung[dom] = aus;
     }
 
     /// <summary>Der Akteur-Rahmen einer Karte: der erste Akteur der Domäne, zu dem sie gehört; ohne Akteur bzw. in einer Domäne ohne Akteure <see cref="OhneAkteur"/>.</summary>
@@ -358,7 +269,7 @@ public sealed partial class Sicht
     }
 
     // ══ DOMÄNE: aus dem Graphen (das Aggregat, zu dem eine Karte gehört), sonst der Namespace ══
-    private static bool IstAussenDom(string d) => d.StartsWith(ClientPraefix, StringComparison.Ordinal) || d.StartsWith(FlussPraefix, StringComparison.Ordinal) || d == "§host";
+    private static bool IstAussenDom(string d) => d.StartsWith(ClientPraefix, StringComparison.Ordinal) || d == "§host";
     /// <summary>Ohne Domäne (die Ansicht setzt ggf. eine Heimat) — im Board <c>null</c>.</summary>
     public const string OhneDomaene = "§ohne";
     internal static int DomOrd(string a, string b) =>
@@ -369,7 +280,7 @@ public sealed partial class Sicht
         var g = Block(n);
         return g != Geteilt && _aggregate.FirstOrDefault(x => S(x, "name") == g) is { } a && S(a, "namespace").Length > 0 ? S(a, "namespace") : null;
     }
-    private static readonly HashSet<string> EinheitArten = ["saga", "transition", "reaktion", "handle"];
+    private static readonly HashSet<string> EinheitArten = ["handle"];
     private readonly Dictionary<string, string?> _einheit = new(StringComparer.Ordinal);
     private string? EinheitDom(SichtKarte n)
     {
@@ -379,14 +290,7 @@ public sealed partial class Sicht
         var q = new List<string> { n.Id };
         var ds = new HashSet<string>(StringComparer.Ordinal);
         var dc = new HashSet<string>(StringComparer.Ordinal);
-        List<string> Nachbarn(string id)
-        {
-            var r = Ein(id).Concat(Aus(id)).ToList();
-            var m = KarteVon.GetValueOrDefault(id);
-            if (m?.Art == "saga") foreach (var t in _transitions) if (S(t, "prozess") == m.Name) r.Add("tr:" + S(t, "_id"));
-            if (m?.Art == "transition" && S(m.Ref, "prozess").Length > 0) r.Add("saga:" + S(m.Ref, "prozess"));
-            return r;
-        }
+        List<string> Nachbarn(string id) => Ein(id).Concat(Aus(id)).ToList();
         while (q.Count > 0)
         {
             var id = q[^1];
@@ -418,10 +322,8 @@ public sealed partial class Sicht
         switch (n.Art)
         {
             case "handle": case "fn": return n.Besitzer == null ? null : NsVon(n.Besitzer, s);
-            case "auf": return s.RecByName(S(r, "eingang")) is { } e ? Leer(S(e, "namespace")) : n.Besitzer == null ? null : NsVon(n.Besitzer, s);
             case "decider": case "applier": case "state":
                 return s._aggregate.FirstOrDefault(x => S(x, "name") == S(r, "aggregat")) is { } a ? Leer(S(a, "namespace")) : null;
-            case "transition": return s._sagas.FirstOrDefault(x => S(x, "name") == S(r, "prozess")) is { } sg ? Leer(S(sg, "namespace")) : null;
         }
         return Leer(S(r, "namespace"));
     }
@@ -429,23 +331,20 @@ public sealed partial class Sicht
 
     private readonly Dictionary<string, string> _domaene = new(StringComparer.Ordinal);
     /// <summary>
-    /// Die Domäne einer Karte (Rahmen): gehört sie laut Graph zu einem Aggregat, dessen Namespace; Ablauf-Einheiten (Prozess, Reaktion, Handles)
-    /// dort, wo sie wirken; Datentypen folgen ihren Nachbarn; sonst der eigene Namespace; ohne alles <see cref="OhneDomaene"/>. Clients und
-    /// Pipelines haben eigene Rahmen außerhalb der Domänen, Zusagen stehen beim Akteur, ein Akteur in der ersten Domäne, in der er wirkt.
+    /// Die Domäne einer Karte (Rahmen): gehört sie laut Graph zu einem Aggregat, dessen Namespace; Handles dort, wo sie wirken; Datentypen
+    /// folgen ihren Nachbarn; sonst der eigene Namespace; ohne alles <see cref="OhneDomaene"/>. Clients haben eigene Rahmen außerhalb der
+    /// Domänen, ein Akteur steht in der ersten Domäne, in der er wirkt.
     /// </summary>
     public string Domaene(SichtKarte n)
     {
         if (_domaene.TryGetValue(n.Id, out var d)) return d;
         switch (n.Art)
         {
-            case "auf": return _domaene[n.Id] = Domaene(KarteVon.GetValueOrDefault(n.Besitzer!.Id) ?? n.Besitzer!);
             case "client": return _domaene[n.Id] = ClientPraefix + S(n.Ref, "name");
-            case "flussknoten": return _domaene[n.Id] = FlussPraefix + S(n.Besitzer!.Ref, "_id");
             case "akteur":
             {
                 // Was er hineingibt: seine Befugnisse; bei einer Funktion, die er rechnen darf, deren Ausgaben.
                 var eig = L(n.Ref, "darf").SelectMany(nm => BausteinFunktion(nm) is { } fb ? Alle(fb["eingaenge"]).SelectMany(e => L(e, "ausgaben")) : [nm])
-                    .Concat(Alle(n.Ref["vertrag"]).Select(r => S(r, "eingang")))
                     .Select(nm => KarteVon.GetValueOrDefault("rec:" + nm)).Where(x => x != null).Select(x => Domaene(x!)).Distinct().ToList();
                 eig.Sort(DomOrd);
                 var ds = eig.Count > 0 ? eig : AkteurDomaenen(n.Name);
@@ -456,18 +355,8 @@ public sealed partial class Sicht
         return _domaene[n.Id] = GraphDom(n) ?? NsVon(n, this) ?? OhneDomaene;
     }
 
-    /// <summary>Die Domäne, in der ein Fluss steht: die Aggregate seiner Commands (eindeutig), sonst sein Namespace.</summary>
-    public string? FlussHeim(JsonObject f)
-    {
-        var ds = Alle(f["knoten"]).Where(k => S(k, "art") == "command" && S(k, "typ").Length > 0)
-            .Select(k => KarteVon.GetValueOrDefault("rec:" + S(k, "typ")) is { } n ? AggDom(n) : null).Where(x => x != null).Distinct().ToList();
-        return ds.Count == 1 ? ds[0] : Leer(S(f, "namespace"));
-    }
-
-    /// <summary>Die Rolle (Spalte im Block): Handles je Besitzer-Art, Ergebnis-Events einer Funktion hinter ihr, sonst die Art.</summary>
-    public string Rolle(SichtKarte n) =>
-        n.Art == "handle" ? "handle:" + n.Besitzer!.Art
-        : n.Art == "event" && ErgebnisVon(n.Name) != null && Block(n) != AkteurBlock ? "ergebnis" : n.Art;
+    /// <summary>Die Rolle (Spalte im Block): Handles je Besitzer-Art, sonst die Art.</summary>
+    public string Rolle(SichtKarte n) => n.Art == "handle" ? "handle:" + n.Besitzer!.Art : n.Art;
 
     // ══ EINKLAPPEN: Details (Decider, Applier, State, Ablehnung, VO, Enum, Response) stehen in ihrem Besitzer ══
     private static readonly HashSet<string> DetailArten = ["decider", "applier", "state", "rejection", "valueobject", "enum", "queryresponse"];
@@ -505,13 +394,9 @@ public sealed partial class Sicht
         pfad.Remove(id);
         return _vertreter[id] = res.Count > 0 ? res : [id];
     }
-    private HashSet<string>? _wegKette;
-    /// <summary>Prozess-Regeln, die als Kette (Kanten) gezeichnet werden — keine eigene Karte.</summary>
-    public IReadOnlySet<string> AlsKette => _wegKette ??= Kette.Select(k => "tr:" + S(k.T, "_id")).ToHashSet(StringComparer.Ordinal);
-    /// <summary>Kompakt sichtbar (vor Ansichts-Filtern): nicht eingeklappt und keine Regel, die als Kette gezeichnet wird.</summary>
-    internal bool Sichtbar(string id) => Vertreter(id) is [var v] && v == id && !AlsKette.Contains(id);
-    internal bool Eingeklappt(string id, bool details) =>
-        details ? AlsKette.Contains(id) : !(Vertreter(id) is [var v] && v == id) || AlsKette.Contains(id);
+    /// <summary>Kompakt sichtbar (vor Ansichts-Filtern): nicht eingeklappt.</summary>
+    internal bool Sichtbar(string id) => Vertreter(id) is [var v] && v == id;
+    internal bool Eingeklappt(string id, bool details) => !details && !Sichtbar(id);
 
     /// <summary>Zusammengezogene Kanten der kompakten Ansicht: sichtbar →(eingeklappt)*→ sichtbar (nicht ins Aggregat, nicht doppelt zu einer direkten Kante).</summary>
     public List<(string, string)> Kontrakt()
@@ -541,107 +426,26 @@ public sealed partial class Sicht
         return aus;
     }
 
-    // ══ ABLAUF ALS KETTE: jede Prozess-Regel wird Kanten Quelle → Ziel (statt einer Karte) ══
-    public sealed record KettenKante(JsonObject T, JsonObject Sg, string Von, string Nach, string Bei, int DannIdx, string Label, string Art);
-    private List<KettenKante>? _kette;
-    public IReadOnlyList<KettenKante> Kette => _kette ??= _transitions.SelectMany(KettenKanten).ToList();
-    private string QuelleVon(JsonObject sg, string e) =>
-        ErgebnisVon(e) is { } f ? "fk:" + S(f, "_id") : e == S(sg, "triggerEvent") ? "saga:" + S(sg, "name") : "rec:" + e;
-    private string? ZielVon(JsonObject d)
-    {
-        if (S(d, "rufe").Length > 0 && _funktionen.FirstOrDefault(x => S(x, "name") == S(d, "rufe")) is { } zf) return "fk:" + S(zf, "_id");
-        return S(d, "sende").Length > 0 && IstRec(S(d, "sende")) ? "rec:" + S(d, "sende") : null;
-    }
-    private IEnumerable<KettenKante> KettenKanten(JsonObject t)
-    {
-        var sg = _sagas.FirstOrDefault(x => S(x, "name") == S(t, "prozess"));
-        if (sg == null) return [];
-        var w = L(t, "wenn").Where(x => x.Length > 0).ToList();
-        var dn = Alle(t["dann"]).ToList();
-        if (w.Count == 0 || dn.Count == 0) return [];
-        var ziele = dn.Select((d, i) => (d, i, nach: ZielVon(d))).ToList();
-        if (ziele.Any(z => z.nach == null)) return [];
-        var ohne = w.Where(e => e != S(sg, "triggerEvent")).ToList();
-        var quellen = (ohne.Count > 0 ? ohne : [S(sg, "triggerEvent")]).Select(e => (e, von: QuelleVon(sg, e), alle: false)).ToList();
-        if (S(t, "sammelEvent").Length > 0) quellen.Add((S(t, "sammelEvent"), QuelleVon(sg, S(t, "sammelEvent")), true));
-        var join = quellen.Count > 1;
-        var aus = new List<KettenKante>();
-        foreach (var (d, i, nach) in ziele)
-        {
-            foreach (var q in quellen)
-            {
-                var f = ErgebnisVon(q.e);
-                var erg = f == null ? [] : L(f, "ergebnisse").ToList();
-                var zweig = f != null && erg.Count > 1 && erg[0] != q.e;
-                var teile = new List<string> { q.von.StartsWith("saga:", StringComparison.Ordinal) ? "erst" : "dann" };
-                if (zweig) teile.Add("bei " + q.e);
-                if (join) teile.Add(q.alle ? "alle" : "und");
-                if (B(d, "sendeJe")) teile.Add("×N");
-                if (Wahr(d["zeitlimit"])) teile.Add("⏳");
-                aus.Add(new(t, sg, q.von, nach!, q.e, i, string.Join(" · ", teile), "dann"));
-            }
-            if (S(d, "kompensation").Length > 0 && IstRec(S(d, "kompensation")))
-                aus.Add(new(t, sg, nach!, "rec:" + S(d, "kompensation"), "", i, "↩ rückgängig", "komp"));
-        }
-        return aus;
-    }
-    private Dictionary<string, int>? _tiefe;
-    /// <summary>Tiefe einer Funktion in der Kette (Start = 0): erst … dann … von links nach rechts.</summary>
-    public int Tiefe(string id)
-    {
-        _tiefe ??= new(StringComparer.Ordinal);
-        return TiefeVon(id, new HashSet<string>(StringComparer.Ordinal));
-    }
-    private int TiefeVon(string id, HashSet<string> pfad)
-    {
-        if (_tiefe!.TryGetValue(id, out var t)) return t;
-        if (!pfad.Add(id)) return 0;
-        var vor = Kette.Where(k => k.Art == "dann" && k.Nach == id)
-            .Select(k => k.Von.StartsWith("fk:", StringComparison.Ordinal) ? TiefeVon(k.Von, pfad) + 1 : 1).ToList();
-        var r = vor.Count > 0 ? vor.Max() : 0;
-        _tiefe[id] = r;
-        return r;
-    }
 }
 
 // Wer über die Kette: der Pfad, auf dem eine Nachricht im Namen eines Akteurs entsteht (für „👤 über die Kette“ im Panel).
 public sealed partial class Sicht
 {
-    /// <summary>Die Regeln des Nachrichtenflusses: (Eingänge, Ausgänge, Akteur-Wechsel) — dieselben Kanten wie <c>DomainEditor.Fluss</c>.</summary>
+    /// <summary>
+    /// Die Regeln des Nachrichtenflusses: (Eingänge, Ausgänge, Akteur-Wechsel) — dieselben Kanten wie <c>DomainEditor.Nachrichtenfluss</c>. Darf ein
+    /// Akteur eine Funktion draußen rechnen, ist er der Wechsel für ihre Ausgaben.
+    /// </summary>
     private List<(List<string> Ein, List<string> Aus, string? Wechsel)> FlussRegeln()
     {
         var r = new List<(List<string>, List<string>, string?)>();
         static List<string> N(IEnumerable<string> xs) => xs.Where(x => x.Length > 0).ToList();
         foreach (var d in _decider) if (S(d, "command").Length > 0) r.Add(([S(d, "command")], N(Alle(d["ergibt"]).Select(o => S(o, "event"))), null));
-        foreach (var k in _reaktionen) foreach (var hd in Alle(k["handles"])) r.Add((N([S(hd, "event")]), L(hd, "sends").Concat(L(hd, "publishes")).ToList(), null));
         foreach (var p in _projektionen) foreach (var hd in Alle(p["handles"])) r.Add((N([S(hd, "event")]), L(hd, "publishes").ToList(), null));
         foreach (var rd in _reader) foreach (var hd in Alle(rd["handles"])) r.Add((N([S(hd, "query")]), L(hd, "responses").ToList(), null));
-        foreach (var (a, z, _, _) in VertragsZusagen()) r.Add((N([S(z, "eingang")]), L(z, "ausgaenge").ToList(), S(a, "name")));
-        string AuftragVon(string nm) => _funktionen.FirstOrDefault(f => S(f, "name") == nm) is { } f && S(f, "auftrag").Length > 0 ? S(f, "auftrag") : nm;
-        foreach (var f in _funktionen) if (S(f, "auftrag").Length > 0) r.Add(([S(f, "auftrag")], L(f, "ergebnisse").ToList(), null));
-        foreach (var sg in _sagas)
-        {
-            var ts = _transitions.Where(t => S(t, "prozess") == S(sg, "name")).ToList();
-            r.Add((N(ts.SelectMany(t => L(t, "wenn")).Prepend(S(sg, "triggerEvent"))),
-                N(ts.SelectMany(t => Alle(t["dann"]).SelectMany(d => new[] { S(d, "rufe").Length > 0 ? AuftragVon(S(d, "rufe")) : S(d, "sende"), S(d, "kompensation") }))), null));
-        }
-        foreach (var f in _fluesse)
-        {
-            var ein = new List<string>();
-            var aus = new List<string>();
-            foreach (var k in Alle(f["knoten"]))
-            {
-                var art = S(k, "art");
-                if (art is "quelle" or "auf") ein.Add(S(k, "typ"));
-                else if (art == "warte") ein.AddRange(L(k, "warteAuf"));
-                else if (art == "funktion") aus.Add(AuftragVon(S(k, "typ")));
-                else if (art == "command") aus.Add(S(k, "typ"));
-                foreach (var e in Alle(k["eingaenge"]))
-                    foreach (var d in Alle(e["draehte"]))
-                        if (S(d, "fall").Length > 0 && (S(d, "port") is { Length: > 0 } p ? p : "fall") == "fall") ein.Add(S(d, "fall"));
-            }
-            r.Add((N(ein), N(aus), null));
-        }
+        foreach (var f in _bausteinFunktionen) foreach (var e in Alle(f["eingaenge"])) r.Add((N([S(e, "eingang")]), L(e, "ausgaben").ToList(), null));
+        foreach (var a in _akteure)
+            foreach (var f in L(a, "darf").Select(BausteinFunktion).OfType<JsonObject>())
+                foreach (var e in Alle(f["eingaenge"])) r.Add((N([S(e, "eingang")]), L(e, "ausgaben").ToList(), S(a, "name")));
         return r;
     }
 

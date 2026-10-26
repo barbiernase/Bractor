@@ -62,7 +62,7 @@ app.MapGet("/api/editor/model", async (CancellationToken ct) =>
     string? grund = null;
     try { await werkbank.Arbeitsbereich.LiesAsync(ct); if (werkbank.Arbeitsbereich.BoardJson is { } board) return Results.Content(board, "application/json"); }
     catch (InvalidOperationException e) { grund = e.Message; }
-    return Results.Json(new { schemaVersion = "1", aggregate = Array.Empty<object>(), sagas = Array.Empty<object>(), fehler = grund ?? "Der Code ist noch nicht gelesen." });
+    return Results.Json(new { schemaVersion = "1", aggregate = Array.Empty<object>(), fehler = grund ?? "Der Code ist noch nicht gelesen." });
 });
 
 // ── GESTEN (Werkbank P7.2): jede Bearbeitung im Editor ist ein Patch am Code — Karten ändern/anlegen/löschen, Umbenennen (Renamer), ↶.
@@ -79,7 +79,7 @@ app.MapPost("/api/werkbank/geste", async (System.Text.Json.Nodes.JsonObject b, C
 app.MapPost("/api/werkbank/umbenennen", async (System.Text.Json.Nodes.JsonObject b, CancellationToken ct) =>
     GestenErgebnis(await werkbank.Gesten.UmbenennenAsync((string?)b["titel"] ?? "Umbenennen", (string?)b["datei"] ?? "", (int?)b["start"] ?? -1,
         (string?)b["neu"] ?? "", ct)));
-// Rumpf-Edit (✎ am Rumpf-Port, P7.4): C# = Ort aus dem Board (_rumpf bzw. _ort + Lambda-Index), Python = Anker der Client-Implementierung.
+// Rumpf-Edit (✎ am Rumpf-Port, P7.4): C# = Ort aus dem Board (_rumpf), Python = Anker der Client-Implementierung.
 app.MapPost("/api/werkbank/rumpf", async (System.Text.Json.Nodes.JsonObject b, CancellationToken ct) =>
 {
     var titel = (string?)b["titel"] ?? "✎ Rumpf";
@@ -90,7 +90,7 @@ app.MapPost("/api/werkbank/rumpf", async (System.Text.Json.Nodes.JsonObject b, C
             (string?)py["methode"] ?? "", (string?)py["signatur"]), text, alt, ct));
     var o = b["ort"] as System.Text.Json.Nodes.JsonObject;
     return GestenErgebnis(await werkbank.Gesten.RumpfAsync(titel, new GraphExtractor.RumpfOrt((string?)o?["datei"] ?? "", (int?)o?["start"] ?? -1,
-        (int?)o?["ende"] ?? -1, (int?)o?["lambda"]), text, alt, ct));
+        (int?)o?["ende"] ?? -1), text, alt, ct));
 });
 app.MapPost("/api/werkbank/rueckgaengig", async (CancellationToken ct) => GestenErgebnis(await werkbank.Gesten.RueckgaengigAsync(ct)));
 // ── ABLEITUNGEN (Werkbank P7.3): was das Board nicht schon trägt (board.sicht), fragt der Editor hier — gerechnet nur auf dem Server.

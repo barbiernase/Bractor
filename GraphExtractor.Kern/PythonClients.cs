@@ -2,8 +2,8 @@ using DomainEditor;
 
 /// <summary>
 /// Die PYTHON-Implementierungen der Clients (docs/konzept-akteure.md §4) — Code-Fakt statt Konvention: die generierte
-/// <c>…/generated/vertraege.py</c> (Cqrs.Codegen) nennt je Client seine Basis und je Zusage/Kenntnis die Methode; jede Klasse im selben
-/// Python-Projekt, die diese Basis erbt, ist eine Implementierung, ihre <c>auf_…</c>-Rümpfe sind die Logik des Akteurs draußen.
+/// <c>…/generated/vertraege.py</c> (Cqrs.Codegen) nennt je Client seine Basis und je getragenem Funktions-Eingang bzw. je Kenntnis die Methode;
+/// jede Klasse im selben Python-Projekt, die diese Basis erbt, ist eine Implementierung, ihre Rümpfe sind die Logik draußen.
 /// </summary>
 public static class PythonClients
 {
@@ -40,43 +40,13 @@ public static class PythonClients
                             Rumpfe = b.Auf.Select(a => new ClientRumpf
                             {
                                 Event = a.Event, Methode = a.Methode, Rumpf = PythonQuelle.Rumpf(text, k.Name, a.Methode), Signatur = a.Def,
-                                Ausgaenge = a.Ausgaenge, Akteur = a.Akteur,
+                                Ausgaenge = a.Ausgaenge, Funktion = a.Funktion,
                             }).ToList(),
                         });
                     }
             }
         }
         foreach (var l in erg.Values) l.Sort((a, b) => string.CompareOrdinal(a.Datei + a.Klasse, b.Datei + b.Klasse));
-        return erg;
-    }
-
-    /// <summary>
-    /// Die PYTHON-Implementierungen der Funktionen draußen (Laufort Extern) — Code-Fakt wie bei den Clients: die generierte
-    /// <c>…/generated/funktionen.py</c> nennt je Funktion ihre Basis; jede Klasse im Python-Projekt, die sie erbt, ist eine Implementierung
-    /// (die erste nach Datei), der Rumpf ihrer ersten Eingangs-Methode ist der Python-Rumpf der Funktion. Funktion (Interface-Name) → Implementierung.
-    /// </summary>
-    public static Dictionary<string, FunktionPython> Funktionen(string wurzel)
-    {
-        var erg = new Dictionary<string, FunktionPython>(StringComparer.Ordinal);
-        if (string.IsNullOrEmpty(wurzel) || !Directory.Exists(wurzel)) return erg;
-        foreach (var generat in Dateien(wurzel, "funktionen.py", mitGeneriert: true).Where(p => Path.GetFileName(Path.GetDirectoryName(p)) == "generated"))
-        {
-            var basen = PythonQuelle.FunktionsBasen(File.ReadAllText(generat));
-            if (basen.Count == 0) continue;
-            var projekt = Directory.GetParent(Path.GetDirectoryName(Path.GetDirectoryName(generat)!)!)!.FullName;
-            foreach (var py in Dateien(projekt, "*.py", mitGeneriert: false).Where(p => !Path.GetFileName(p).StartsWith("test_", StringComparison.Ordinal))
-                         .OrderBy(p => p, StringComparer.Ordinal))
-            {
-                var text = File.ReadAllText(py);
-                foreach (var k in PythonQuelle.Klassen(text))
-                    foreach (var b in basen.Where(b => k.Basen.Contains(b.Basis) && !erg.ContainsKey(b.Funktion)))
-                        erg[b.Funktion] = new FunktionPython
-                        {
-                            Datei = Path.GetRelativePath(wurzel, py).Replace('\\', '/'), Klasse = k.Name, Basis = b.Basis,
-                            Methode = b.Methode, Signatur = b.Def, Rumpf = PythonQuelle.Rumpf(text, k.Name, b.Methode),
-                        };
-            }
-        }
         return erg;
     }
 

@@ -12,8 +12,8 @@ namespace GraphExtractor;
 ///
 /// Quelle der Schreibseite ist das Roh-Modell (<see cref="DomainModel"/>): echte OneOf-Reihenfolge, echte
 /// Apply-Methoden (nicht aus den Commands abgeleitet), Parameternamen, Defaults, Handcode-Anteile (Zusatz),
-/// Doku, Saga-Lambdas verbatim, Value Objects und Enums. Nur Domänen-Typen (Domain*-Assemblies) — Framework-
-/// Records (KommandoAbgelehnt, ProzessGestartet …) gehören nicht ins editierbare Modell.
+/// Doku, Value Objects und Enums. Nur Domänen-Typen (Domain*-Assemblies) — Framework-Records (FristGesetzt …)
+/// gehören nicht ins editierbare Modell.
 /// </summary>
 public static class ModellMapper
 {
@@ -46,16 +46,9 @@ public static class ModellMapper
             records.Add(AlsRecord(r.Name, RecordArt.Antwort, r.Fields, r.Meta, dom.Wurzel));
         foreach (var r in dom.ReadModels.OrderBy(r => r.Full, StringComparer.Ordinal))
             records.Add(AlsRecord(r.Name, RecordArt.ReadModel, r.Fields, r.Meta, dom.Wurzel) with { Geteilt = r.Geteilt });
-        // Betrieb: Konfigurations-Records (Ctor-Injektion), Trigger-Nachrichten, Selbst-Nachrichten der Pipelines.
+        // Konfigurations-Records (Ctor-Injektion).
         foreach (var r in dom.Konfigs)
             records.Add(AlsRecord(r.Name, RecordArt.Konfig, r.Fields, r.Meta, dom.Wurzel));
-        foreach (var r in dom.Triggers)
-            records.Add(AlsRecord(r.Name, RecordArt.Trigger, r.Fields, r.Meta, dom.Wurzel));
-        foreach (var r in dom.SelbstNachrichten)
-            records.Add(AlsRecord(r.Name, RecordArt.Selbst, r.Fields, r.Meta, dom.Wurzel));
-        // Katalog-Funktionen: der Auftrag (IAuftrag<F>) als eigene Record-Art — der eine Eingang je Funktion.
-        foreach (var r in dom.Auftraege)
-            records.Add(AlsRecord(r.Name, RecordArt.Auftrag, r.Fields, r.Meta, dom.Wurzel) with { Funktion = r.Funktion });
 
         var enums = dom.Enums.Select(e => new Enumeration
         {
@@ -100,26 +93,6 @@ public static class ModellMapper
             }
         }
 
-        var sagas = dom.Processes.Select(p => new Saga
-        {
-            Name = p.Name, Namespace = p.Namespace, TriggerEvent = Evt(p.TriggerFull), Doku = p.Doku,
-            ExtraUsings = p.Usings, Datei = Rel(p.Datei),
-            Schritte = p.Rules.Select(r => new SagaSchritt
-            {
-                Wenn = r.WhenFull.Select(Evt).ToList(),
-                SammelEvent = r.SammelFull is null ? null : Evt(r.SammelFull),
-                SammelAusdruck = r.SammelLambda,
-                Sende = r.RuftFull is null ? Cmd(r.SendsFull) : "",
-                Rufe = r.RuftFull is null ? null : Kurz(r.RuftFull),
-                Zeitlimit = r.Zeitlimit,
-                SendeJe = r.FanOut,
-                SendeAusdruck = r.SendLambda,
-                Kompensation = r.CompensatesFull is null ? null : Cmd(r.CompensatesFull),
-                KompensationJe = r.CompFanOut,
-                KompensationAusdruck = r.CompLambda,
-            }).ToList(),
-        }).ToList();
-
         // Der Rahmen AUS DEM CODE: Namenskonvention, globale usings, Verzeichnisse (Namespaces + Projekt-Wurzeln).
         var standard = new Rahmen();
         var verzeichnisse = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -137,7 +110,7 @@ public static class ModellMapper
             PythonPaket = PythonClients.Paket(dom.Wurzel),
             Kennung = Kennung(dom.Wurzel),
             Skalare = WireSkalare(),
-            OneOfMax = dom.OneOfMax, UndMax = dom.UndMax,
+            OneOfMax = dom.OneOfMax,
             ProjektionsSchreiber = dom.ProjektionsSchreiber, ProjektionsSchreiberNamespace = dom.ProjektionsSchreiberNamespace,
             StoreBasis = dom.StoreBasis is { } sb ? new StoreBasis
             {
@@ -148,18 +121,9 @@ public static class ModellMapper
         };
 
         var pyImpls = PythonClients.Lies(dom.Wurzel);
-        var pyFunktionen = PythonClients.Funktionen(dom.Wurzel);
         return Herkunft.Stempeln(new EditorModell
         {
-            Records = records, Enums = enums, Aggregate = aggregate, Decider = decider, Applier = applier, Sagas = sagas, Rahmen = rahmen,
-            Funktionen = dom.Funktionen.Select(f => new Funktion
-            {
-                Name = f.Name, Namespace = f.Namespace, Auftrag = Kurz(f.AuftragFull), Ergebnisse = f.ErgebnisseFull.Select(Evt).ToList(),
-                Faehigkeiten = f.Faehigkeiten.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
-                Doku = f.Doku, Datei = Rel(f.Datei), Implementierung = f.ImplKlasse, ImplDatei = Rel(f.ImplDatei), Rumpf = f.ImplRumpf,
-                Konstruktor = f.ImplKonstruktor.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
-                Python = pyFunktionen.GetValueOrDefault(f.Name),
-            }).ToList(),
+            Records = records, Enums = enums, Aggregate = aggregate, Decider = decider, Applier = applier, Rahmen = rahmen,
             BausteinFunktionen = dom.BausteinFunktionen.Select(f => new BausteinFunktion
             {
                 Name = f.Name, Namespace = f.Namespace, Klasse = f.Klasse, Doku = f.Doku, Datei = Rel(f.Datei),
@@ -191,26 +155,9 @@ public static class ModellMapper
                     Rumpfe = i.Rumpfe.Select(r => new DienstRumpf { Methode = r.Methode, Rumpf = r.Rumpf }).ToList(),
                 }).ToList(),
             }).ToList(),
-            Fluesse = dom.Fluesse.Select(f => new FlussPipeline
-            {
-                Name = f.Name, Namespace = f.Namespace, Doku = f.Doku, ExtraUsings = f.Usings, Datei = Rel(f.Datei), Bauer = f.Bauer,
-                Knoten = f.Knoten.Select(k => new FlussSchritt
-                {
-                    Name = k.Name, Art = k.Art, Typ = Kurz(k.TypFull), Zeitlimit = k.Zeitlimit, Liste = k.Liste, OhneVariable = k.OhneVariable,
-                    WarteAuf = k.WarteAufFull.Select(Kurz).ToList(),
-                    Eingaenge = k.Eingaenge.Select(e => new FlussEingang
-                    {
-                        Je = e.Je, Sammle = e.Sammle, Ausdruck = e.Ausdruck,
-                        Draehte = e.Draehte.Select(d => new FlussDraht { Von = d.Von, Fall = d.FallFull is null ? null : Kurz(d.FallFull), Port = d.Port }).ToList(),
-                    }).ToList(),
-                }).ToList(),
-            }).ToList(),
             Akteure = dom.Akteure.Select(x => new Akteur
             {
-                Name = x.Name, Namespace = x.Namespace, Darf = x.Darf, Art = x.Art, Dienste = x.Dienste, Doku = x.Doku, Datei = Rel(x.Datei),
-                VertragName = x.VertragName,
-                VertragDatei = x.VertragDatei == null || x.VertragDatei == x.Datei ? null : Rel(x.VertragDatei),
-                Vertrag = x.Vertrag.Select(r => new AkteurZusage { Eingang = r.Eingang, Ausgaenge = r.Ausgaenge, Strom = r.Strom, Doku = r.Doku, Teil = r.Teil }).ToList(),
+                Name = x.Name, Namespace = x.Namespace, Darf = x.Darf, Art = x.Art, Doku = x.Doku, Datei = Rel(x.Datei),
             }).ToList(),
             Clients = dom.Clients.Select(x => new Client
             {
@@ -223,7 +170,7 @@ public static class ModellMapper
         });
     }
 
-    // ── Leseseite: Stores (Fähigkeit + Bündel + Impl), Projektionen/Reaktionen, Reader, Pipeline-Fähigkeiten ──────────
+    // ── Leseseite: Stores (Fähigkeit + Bündel + Impl), Projektionen, Reader ──────────
     private static Leseseite Leseseite(DomainModel dom)
     {
         string? Rel(string? abs) => Relativ(dom.Wurzel, abs);
@@ -273,33 +220,11 @@ public static class ModellMapper
             Zusatz = r.Quelle.Zusatz, Usings = r.Quelle.Usings, Datei = Rel(r.Quelle.Datei),
         }).ToList();
 
-        var pipelines = dom.Pipelines.OrderBy(p => p.Name, StringComparer.Ordinal).Select(p => new PipelineKarte
-        {
-            Name = p.Name, Namespace = p.Namespace, Datei = Rel(p.Datei), PipelineId = p.PipelineId, Konfigs = p.Konfigs,
-            Handles = p.Handles.Select(h => AlsHandle(Kurz(h.InputFull), p.HandleSigs.GetValueOrDefault(h.InputFull),
-                p.HandleVertraege.GetValueOrDefault(h.InputFull))).ToList(),
-            Doku = p.Quelle.Doku, Typart = p.Quelle.Typart, Basen = p.Quelle.Basen, Attribute = p.Quelle.Attribute,
-            Zusatz = p.Quelle.Zusatz, Usings = p.Quelle.Usings,
-            Zustand = p.Quelle.Zustand.Count > 0 ? p.Quelle.Zustand : null,
-        }).ToList();
-
-        return new Leseseite { Stores = stores, Konsumenten = konsumenten, Reader = reader, Pipelines = pipelines };
+        return new Leseseite { Stores = stores, Konsumenten = konsumenten, Reader = reader };
     }
 
-    /// <summary>
-    /// Die Ausgänge eines Handles als Typ-Texte, wie sie in der OneOf-Signatur stehen — Planung als <c>Selbst&lt;T&gt;</c>/
-    /// <c>Frist&lt;T&gt;</c>/<c>FristStorno&lt;T&gt;</c> (die Planungs-Typnamen aus dem Vertrag); Fähigkeiten sind Parameter, keine Ausgänge.
-    /// </summary>
-    internal static List<string> AusgangsTypen(HandleVertragRaw? v) => v == null ? [] : v.Ausgaenge.Where(a => a.Art != "storefn")
-        .Select(a => a.Art switch
-        {
-            "self" => $"{Generisch(Vertrag.SelbstTyp)}<{a.Typ}>",
-            "frist" => $"{Generisch(Vertrag.FristTyp)}<{a.Typ}>",
-            "fristStorno" => $"{Generisch(Vertrag.FristStornoTyp)}<{a.Typ}>",
-            _ => a.Typ,
-        }).ToList();
-
-    private static string Generisch(string metadatenName) => metadatenName.Split('`')[0];
+    /// <summary>Die Ausgänge eines Handles als Typ-Texte, wie sie in der OneOf-Signatur stehen; Fähigkeiten sind Parameter, keine Ausgänge.</summary>
+    internal static List<string> AusgangsTypen(HandleVertragRaw? v) => v == null ? [] : v.Ausgaenge.Where(a => a.Art != "storefn").Select(a => a.Typ).ToList();
 
     /// <summary>Stabile Kennung der Solution (FNV-1a über den Wurzelpfad) — kein Inhalt, nur Unterscheidung.</summary>
     private static string Kennung(string wurzel)
@@ -336,7 +261,7 @@ public static class ModellMapper
         return rel.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(rel) ? null : rel.Replace('\\', '/');
     }
 
-    // ── Reimport als VOLLES Board-Modell (Schreibseite + Leseseite + Betrieb) ──────────────────
+    // ── Reimport als VOLLES Board-Modell (Schreibseite + Leseseite) ──────────────────
     // camelCase + Nulls weglassen — deckungsgleich mit dem Board-MODEL und EditorModell.JsonOptionen.
     private static readonly JsonSerializerOptions BoardOpts = new()
     {
@@ -346,14 +271,8 @@ public static class ModellMapper
 
     /// <summary>
     /// Reimport als VOLLES Board-Modell: die Schreibseite (<see cref="ZuEditorModell"/>) PLUS die Leseseite
-    /// (Query-/Response-Records, ReadModels, Stores, Projektionen, Reaktionen, Reader) und der Betrieb
-    /// (Pipelines mit Trigger/Event/Self-Kanal, Trigger-Nachrichten mit Feldern, Fristen, Dienste,
-    /// HostSettings). Die Positionen liefert das Board (autoLayout), nicht dieser Seed.
+    /// (Query-/Response-Records, ReadModels, Stores, Projektionen, Reader). Die Positionen liefert das Board (autoLayout), nicht dieser Seed.
     /// </summary>
-    /// <summary>Die Ingress-Bindungen der Composition Root als Modell-Bindungen (Trigger, Modus, Ort).</summary>
-    public static List<IngressBindung> Ingress(CompositionRoot cr) =>
-        cr.Triggers.Select(tb => new IngressBindung { Trigger = tb.MsgName, Modus = tb.Modus, Ort = tb.Route ?? tb.Interval ?? tb.Path }).ToList();
-
     public static string ZuBoardJson(KnowledgeGraph graph, DomainModel dom, CompositionRoot cr, JsonObject? umgebungen = null) =>
         Serialisiere(ZuBoard(graph, dom, cr, umgebungen));
 
@@ -368,7 +287,7 @@ public static class ModellMapper
     public static JsonObject ZuBoard(KnowledgeGraph graph, DomainModel dom, CompositionRoot cr, JsonObject? umgebungen = null, bool mitSicht = true)
     {
         // Code mit Fehlern (Werkbank P7.1): was das Lesen nicht fassen konnte, wird ein Befund an der Karte — nie still verworfen.
-        var befunde = new List<Lesebefund>(dom.Befunde);
+        var befunde = new List<Lesebefund>();
         var modell = ZuEditorModell(graph, dom);
         var root = JsonNode.Parse(modell.AlsJson())!.AsObject();
         // Die Leseseite zeigt das Board in seinen eigenen Sammlungen (stores/projektionen/reader/…) — mit den Code-Fakten
@@ -418,8 +337,7 @@ public static class ModellMapper
 
         // Query- und Response-Records stehen schon als Records im Modell (Reader docken daran an). ReadModels zeigt das Board
         //   als eigene Sammlung (readModels) — die Record-Form reist dort mit (Zusatz/Basen/…), Board → Modell baut sie zurück.
-        // Trigger- und Selbst-Nachrichten gehören zur Trigger-Welt — der Editor zeigt sie nicht (docs/konzept-werkbank.md §10, P0).
-        foreach (var rm in records.Where(r => (string?)r?["kind"] is RecordArt.ReadModel or RecordArt.Trigger or RecordArt.Selbst).ToList()) records.Remove(rm);
+        foreach (var rm in records.Where(r => (string?)r?["kind"] == RecordArt.ReadModel).ToList()) records.Remove(rm);
         var lesen = modell.Lesen ?? new Leseseite();
         var storeVon = Eindeutig(lesen.Stores, s => s.Name, s => s.Namespace, "store:", befunde);
         var konsumentVon = Eindeutig(lesen.Konsumenten, k => k.Name, k => k.Namespace, "projektion:", befunde);
@@ -445,8 +363,8 @@ public static class ModellMapper
             herkunft = modell.Records.FirstOrDefault(r => r.Kind == RecordArt.ReadModel && r.Name == rm.Name && r.Namespace == rm.Meta.Namespace)?.Herkunft,
         }).ToList();
 
-        // Projektionen (replaybar/idempotent) und Reaktionen (emittierend: yield Command) getrennt.
-        var projektionen = dom.Projections.Where(p => !p.IstReaktion).OrderBy(p => p.Name, StringComparer.Ordinal)
+        // Projektionen.
+        var projektionen = dom.Projections.OrderBy(p => p.Name, StringComparer.Ordinal)
             .Select((p, i) => new
             {
                 _id = Abstractions.WirkerId.FuerProjektion(p.Name), name = p.Name, @namespace = p.Namespace, subscriberId = p.SubscriberId, pull = p.Pull, append = p.Append ? true : (bool?)null,
@@ -457,26 +375,6 @@ public static class ModellMapper
                     sig = Sig(konsumentVon.GetValueOrDefault(p.Name)?.Handles.FirstOrDefault(h => h.Eingang == Kurz(ev))),
                     _ort = OrtJson(dom, p.HandleSigs.GetValueOrDefault(ev)?.Ort),
                     fns = StoreFns(p.HandleFaehigkeiten, ev),
-                    publishes = Liste(p.HandlePublishes, ev),
-                    rumpf = Rumpf(p.HandleBodies, ev),
-                    form = Vertrag(p.HandleVertraege, ev)?.Form, signatur = Vertrag(p.HandleVertraege, ev)?.Signatur,
-                    signaturOffen = Vertrag(p.HandleVertraege, ev)?.SignaturOffen == true ? true : (bool?)null,
-                    ausgaenge = Ausgaenge(Vertrag(p.HandleVertraege, ev)),
-                }).ToArray(),
-            }).ToList();
-
-        var reaktionen = dom.Projections.Where(p => p.IstReaktion).OrderBy(p => p.Name, StringComparer.Ordinal)
-            .Select((p, i) => new
-            {
-                _id = Abstractions.WirkerId.FuerReaktion(p.Name), name = p.Name, @namespace = p.Namespace, subscriberId = p.SubscriberId, pull = p.Pull,
-                append = p.Append ? true : (bool?)null,
-                code = KlassenCode(konsumentVon.GetValueOrDefault(p.Name)),
-                handles = p.ConsumesFull.Select(full => KurzEvt(dom, full)).Select(ev => new
-                {
-                    @event = ev,
-                    sig = Sig(konsumentVon.GetValueOrDefault(p.Name)?.Handles.FirstOrDefault(h => h.Eingang == Kurz(ev))),
-                    _ort = OrtJson(dom, p.HandleSigs.GetValueOrDefault(ev)?.Ort),
-                    sends = Liste(p.HandleSends, ev),
                     publishes = Liste(p.HandlePublishes, ev),
                     rumpf = Rumpf(p.HandleBodies, ev),
                     form = Vertrag(p.HandleVertraege, ev)?.Form, signatur = Vertrag(p.HandleVertraege, ev)?.Signatur,
@@ -537,24 +435,8 @@ public static class ModellMapper
             }).ToArray(),
         }).ToList();
 
-        // Pipeline als Fluss (§14): der Webhook einer Quelle (konzept-werkbank §12.3 E12) ist Konfig — Quellen:<Typ>:Webhook je Umgebung. Er gehört an die
-        //   Quelle des Flusses (keine eigene Karte); bearbeitet wird er im Host-Rahmen. Reine Board-Sicht: das Modell kennt das Feld nicht.
-        foreach (var (umgebung, u) in (umgebungen ?? new JsonObject()).Where(x => x.Value is JsonObject).Select(x => (x.Key, (JsonObject)x.Value!)))
-            foreach (var (typ, q) in (u["Quellen"] as JsonObject ?? new JsonObject()).Where(x => x.Value is JsonObject).Select(x => (x.Key, (JsonObject)x.Value!)))
-            {
-                if ((string?)q["Webhook"] is not { Length: > 0 } route) continue;
-                foreach (var k in (root["fluesse"] as JsonArray ?? new()).OfType<JsonObject>()
-                             .SelectMany(f => (f["knoten"] as JsonArray ?? new()).OfType<JsonObject>())
-                             .Where(k => (string?)k["art"] == FlussArt.Quelle && (string?)k["typ"] == typ))
-                {
-                    var liste = k["bindungen"] as JsonArray ?? new JsonArray();
-                    liste.Add(Knoten(new { modus = "webhook", ort = route, umgebung, datei = $"umgebungen/umgebung.{umgebung}.json" }));
-                    k["bindungen"] = liste;
-                }
-            }
         root["readModels"] = Knoten(readModels);
         root["projektionen"] = Knoten(projektionen);
-        root["reaktionen"] = Knoten(reaktionen);
         root["reader"] = Knoten(reader);
         root["stores"] = Knoten(stores);
         Orte(root, dom);
@@ -611,7 +493,7 @@ public static class ModellMapper
         }
     }
 
-    /// <summary>Alle Spannen, die Karten belegen (<c>_ort</c> und <c>_teile</c>, auch an verschachtelten Karten wie Fluss-Knoten), je Datei.</summary>
+    /// <summary>Alle Spannen, die Karten belegen (<c>_ort</c> und <c>_teile</c>, auch an verschachtelten Karten wie Dienst-Methoden), je Datei.</summary>
     public static Dictionary<string, List<(int Start, int Ende)>> Abdeckung(params JsonNode?[] knoten)
     {
         var aus = new Dictionary<string, List<(int, int)>>(StringComparer.Ordinal);
@@ -659,7 +541,7 @@ public static class ModellMapper
 
     /// <summary>
     /// Karten tragen Datei + Spanne (<c>_ort</c>): Typ-Karten über ihre Deklaration (bei partial die in ihrer Datei), Decide/Apply über ihre
-    /// Methode, Fluss-Knoten und Prozess-Regeln über ihre Anweisung, Handles über ihre Methode (beim Erzeugen gesetzt).
+    /// Methode, Handles über ihre Methode (beim Erzeugen gesetzt).
     /// </summary>
     private static void Orte(JsonObject root, DomainModel dom)
     {
@@ -670,8 +552,9 @@ public static class ModellMapper
             if (!dom.TypOrte.TryGetValue(full, out var l) || l.Count == 0) return null;
             return l.FirstOrDefault(o => datei != null && Relativ(dom.Wurzel, o.Datei) == datei) ?? l[0];
         }
-        // Die übrigen Deklarationen, die zur Karte gehören (weitere partial-Teile; Decider/Applier außerhalb des State; die Implementierung
-        //   einer Funktion; die Vertrags-Teile eines Akteurs) — „_teile": beim Löschen der Karte gehen sie mit. Verschachteltes zählt nicht extra.
+        // Die übrigen Deklarationen, die zur Karte gehören (weitere partial-Teile; Decider/Applier außerhalb des State; die Umsetzungen
+        //   einer Funktion; die Implementierungen eines Dienstes oder Stores) — „_teile": beim Löschen der Karte gehen sie mit. Verschachteltes
+        //   zählt nicht extra.
         void Teile(JsonObject k, Ort? haupt, IEnumerable<string> weitereTypen)
         {
             var orte = new List<Ort>();
@@ -681,24 +564,15 @@ public static class ModellMapper
             if (orte.Count > 0) k["_teile"] = new JsonArray(orte.Select(o => (JsonNode?)OrtJson(dom, o)).Where(x => x != null).ToArray());
         }
         var storeVon = dom.Stores.GroupBy(x => x.Namespace + "." + x.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-        var funktionVon = dom.Funktionen.GroupBy(f => f.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-        var akteurVon = dom.Akteure.GroupBy(a => a.Namespace + "." + a.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var dienstVon = dom.Dienste.GroupBy(d => d.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var bausteinVon = dom.BausteinFunktionen.GroupBy(f => f.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-        foreach (var sammlung in new[] { "records", "enums", "sagas", "fluesse", "funktionen", "bausteinFunktionen", "dienste", "akteure", "clients", "readModels", "projektionen", "reaktionen", "reader", "stores" })
+        foreach (var sammlung in new[] { "records", "enums", "bausteinFunktionen", "dienste", "akteure", "clients", "readModels", "projektionen", "reader", "stores" })
             foreach (var k in Alle(root[sammlung]))
             {
                 var full = S(k, "namespace") + "." + S(k, "name");
                 var haupt = TypOrt(full, (string?)k["datei"]);
                 k["_ort"] = OrtJson(dom, haupt);
                 var weitere = new List<string> { full };
-                if (sammlung == "funktionen" && funktionVon.GetValueOrDefault(full) is { ImplFull: { } impl } fraw)
-                {
-                    weitere.Add(impl);
-                    // Rumpf-Edit (Werkbank P7.4): der Rumpf der Funktion steht in der RufeAsync-Methode ihrer Implementierung.
-                    if (OrtJson(dom, fraw.ImplOrt) is { } ro) k["_rumpf"] = ro;
-                }
-                if (sammlung == "akteure" && akteurVon.TryGetValue(full, out var ak)) weitere.AddRange(ak.VertragTypen);
                 // Eine Funktion draußen: ihre Umsetzungen im Host gehören zur Karte.
                 if (sammlung == "bausteinFunktionen" && bausteinVon.TryGetValue(full, out var bf)) weitere.AddRange(bf.UmsetzungenFull);
                 // Ein Dienst: seine Implementierungen gehören zur Karte; je Methode steht der Rumpf in der Implementierung.
@@ -713,7 +587,7 @@ public static class ModellMapper
                             if (OrtJson(dom, rraw.Ort) is { } ro) r["_rumpf"] = ro;
                     }
                 }
-                // Die Implementierung eines Stores gehört zu seiner Karte (wie bei Funktionen).
+                // Die Implementierung eines Stores gehört zu seiner Karte (wie bei Diensten).
                 if (sammlung == "stores" && storeVon.GetValueOrDefault(full) is { } st)
                 {
                     if (st.Impl is { } si) weitere.Add(si.Ns + "." + si.Name);
@@ -739,10 +613,6 @@ public static class ModellMapper
             if (aggVon.TryGetValue(S(d, "aggregat"), out var raw)) d["_ort"] = OrtJson(dom, raw.DecideOrte.GetValueOrDefault(S(d, "command")));
         foreach (var ap in Alle(root["applier"]))
             if (aggVon.TryGetValue(S(ap, "aggregat"), out var raw)) ap["_ort"] = OrtJson(dom, raw.ApplyOrte.GetValueOrDefault(S(ap, "event")));
-        foreach (var (f, raw) in Alle(root["fluesse"]).Zip(dom.Fluesse))
-            foreach (var (k, kr) in Alle(f["knoten"]).Zip(raw.Knoten)) k["_ort"] = OrtJson(dom, kr.Ort);
-        foreach (var (sg, raw) in Alle(root["sagas"]).Zip(dom.Processes))
-            foreach (var (st, r) in Alle(sg["schritte"]).Zip(raw.Rules)) st["_ort"] = OrtJson(dom, r.Ort);
     }
 
     /// <summary>Die Klasse eines Konsumenten/Readers verbatim (Datei, Form, Basen, Attribute, Zusatz, usings, Doku) — Board-Feld „code".</summary>
@@ -750,7 +620,6 @@ public static class ModellMapper
     {
         Konsument x => new { datei = x.Datei, doku = x.Doku, typart = x.Typart, basen = x.Basen, attribute = x.Attribute, zusatz = x.Zusatz, usings = x.Usings, herkunft = x.Herkunft, zustand = x.Zustand },
         Leser x => new { datei = x.Datei, doku = x.Doku, typart = x.Typart, basen = x.Basen, attribute = x.Attribute, zusatz = x.Zusatz, usings = x.Usings, herkunft = x.Herkunft },
-        PipelineKarte x => new { datei = x.Datei, doku = x.Doku, typart = x.Typart, basen = x.Basen, attribute = x.Attribute, zusatz = x.Zusatz, usings = x.Usings, herkunft = x.Herkunft, zustand = x.Zustand },
         _ => null,
     };
 
@@ -778,24 +647,10 @@ public static class ModellMapper
         string S(JsonObject o, string k) => (string?)o[k] ?? "";
         foreach (var d in Alle(root["decider"])) d["_id"] = Abstractions.WirkerId.FuerDecide(S(d, "aggregat"), S(d, "command"));
         foreach (var a in Alle(root["applier"])) a["_id"] = "apply:" + S(a, "aggregat") + "/" + S(a, "event");
-        foreach (var f in Alle(root["funktionen"])) f["_id"] = Abstractions.WirkerId.FuerFunktion(S(f, "name"));
         foreach (var f in Alle(root["bausteinFunktionen"])) f["_id"] = Abstractions.WirkerId.FuerFunktion(S(f, "name"));
         foreach (var d in Alle(root["dienste"])) d["_id"] = KartenIds.Dienst + S(d, "name");
         foreach (var a in Alle(root["akteure"])) a["_id"] = Abstractions.WirkerId.FuerAkteur(S(a, "name"));
         foreach (var c in Alle(root["clients"])) c["_id"] = "client:" + S(c, "name");
-        foreach (var f in Alle(root["fluesse"]))
-        {
-            f["_id"] = "pipeline:" + S(f, "name");
-            foreach (var k in Alle(f["knoten"])) k["_id"] = Abstractions.WirkerId.FuerFluss(S(f, "name"), S(k, "name"));
-        }
-        // Prozess-Regeln: Name nach E4 aus Auslöser, Und-Events, Sammel-Event und Ziel — dieselbe Regel wie der ProzessRegelnGenerator.
-        foreach (var sg in Alle(root["sagas"]))
-            foreach (var st in Alle(sg["schritte"]))
-            {
-                var wenn = (st["wenn"] as JsonArray ?? new JsonArray()).Select(x => (string?)x ?? "").ToList();
-                var ziel = (string?)st["rufe"] is { Length: > 0 } rufe ? rufe : S(st, "sende");
-                st["_id"] = Abstractions.WirkerId.FuerProzess(S(sg, "name"), Abstractions.WirkerId.Regel(wenn, (string?)st["sammelEvent"], ziel));
-            }
     }
 
     /// <summary>Stabile Id einer Store-Funktion (natürlicher Schlüssel statt Position): <c>wf:IStore.Methode</c> bzw. <c>rf:…</c>.</summary>

@@ -29,35 +29,13 @@ public sealed class SpurSpiegel
     private long _gemeldet = -1;
     private DateTimeOffset _gemeldetUm;
 
-    /// <summary>Die Manager-Einträge, die an einer Karte einen Fehlschlag zeigen (⏳ / ✕) — alle übrigen internen Einträge sind kein Schritt.</summary>
+    /// <summary>Die internen Einträge, die an einer Karte einen Fehlschlag zeigen (✕) — alle übrigen internen Einträge sind kein Schritt.</summary>
     private static readonly Dictionary<string, string> Markiert = new()
     {
-        ["KommandoAbgelehnt"] = "abgelehnt", ["SchrittGescheitert"] = "gescheitert", ["SchrittUmgeleitet"] = "umgeleitet",
+        ["KommandoAbgelehnt"] = "abgelehnt",
     };
 
-    private (JsonObject Board, Dictionary<(string Pipeline, string Typ), string> Quellknoten)? _modell;
-
     public SpurSpiegel(WerkbankServer werkbank) => _werkbank = werkbank;
-
-    /// <summary>
-    /// Der Quell-Knoten eines Flusses (<c>fluss:P#datei</c>) für eine Quell-Nachricht — er steht nicht im Log (die Quelle schreibt als
-    /// <c>quelle:T</c>), wohl aber im gelesenen Code — im warmen Board (W1), gemerkt je gelesenem Board. So ist auch der erste Draht des Flusses
-    /// ein gegangener Weg.
-    /// </summary>
-    private string? QuellKnoten(string pipeline, string typ)
-    {
-        if (_werkbank.Arbeitsbereich.Board is not { } board) return null;
-        if (!ReferenceEquals(_modell?.Board, board))
-        {
-            var tabelle = new Dictionary<(string, string), string>();
-            foreach (var f in (board["fluesse"] as JsonArray ?? []).OfType<JsonObject>())
-                foreach (var k in (f["knoten"] as JsonArray ?? []).OfType<JsonObject>())
-                    if ((string?)k["art"] == "quelle" && (string?)k["typ"] is { } t && (string?)k["_id"] is { } id)
-                        tabelle.TryAdd(((string?)f["name"] ?? "", t), id);
-            _modell = (board, tabelle);
-        }
-        return _modell.Value.Quellknoten.GetValueOrDefault((pipeline, typ));
-    }
 
     /// <summary>Der Einblick-Port des laufenden Hosts der Werkbank und ein Schlüssel für diesen Lauf — null, wenn kein Host läuft.</summary>
     private (int Port, string Lauf)? Ziel()
@@ -169,7 +147,7 @@ public sealed class SpurSpiegel
         var intern = (bool?)e["intern"] ?? false;
         if (intern && !Markiert.ContainsKey(name)) return;
         _erste ??= zeit;
-        var weg = SpurWeg.Aus(name, (string?)e["wirker"], ueber, (string?)e["ursache"], intern, u => _eintrag.GetValueOrDefault(u), QuellKnoten);
+        var weg = SpurWeg.Aus(name, (string?)e["wirker"], ueber, (string?)e["ursache"], intern, u => _eintrag.GetValueOrDefault(u));
         foreach (var karte in weg.Karten)
             _karten[karte] = (_karten.TryGetValue(karte, out var z) ? z.N + 1 : 1, zeit);
         foreach (var p in weg.Paare)
@@ -292,11 +270,9 @@ public sealed class SpurSpiegel
             SpurWeg weg;
             lock (_sperre)
                 weg = SpurWeg.Aus(name, (string?)e["wirker"], (string?)e["ueber"], ursache, intern,
-                    u => lokal.GetValueOrDefault(u) ?? _eintrag.GetValueOrDefault(u), QuellKnoten);
+                    u => lokal.GetValueOrDefault(u) ?? _eintrag.GetValueOrDefault(u));
             var eStand = (string?)e["stand"];
             var art = intern ? Markiert[name] : "event";
-            if (art == "umgeleitet" && e["daten"]?["Art"]?.GetValue<string>() == "zeitlimit") art = "zeitlimit";
-            if (art == "gescheitert" && (e["daten"]?["Grund"]?.GetValue<string>() ?? "").StartsWith("Zeitlimit", StringComparison.Ordinal)) art = "zeitlimit";
             schritte.Add(new JsonObject
             {
                 ["nr"] = n, ["seq"] = (long?)e["seq"], ["zeit"] = e["zeit"]?.DeepClone(), ["name"] = name, ["art"] = art,

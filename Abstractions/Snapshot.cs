@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 namespace Abstractions;
 
 /// <summary>
-/// Abgeleiteter, NICHT-autoritativer Zustands-Cache eines Aggregats (docs/04-konsum-und-prozess-maschine.md §4.7).
+/// Abgeleiteter, NICHT-autoritativer Zustands-Cache eines Aggregats (docs/04-konsum-und-prozess-maschine.md §4.8).
 /// Verkürzt die Rehydration von O(n) auf O(Tail): statt den Stream bei jeder Actor-Aktivierung von 0 zu falten,
 /// seedet der Actor aus dem Snapshot und liest nur den Rest ab <see cref="Version"/>+1.
 ///
@@ -13,8 +13,8 @@ namespace Abstractions;
 /// Voll-Replay, nie ein Fehler. Ein Dokument pro Aggregat (Id = AggregateId), abgelegt als jsonb pro
 /// State-Typ (<c>Snapshot&lt;Konto&gt;</c> → <c>mt_doc_snapshot_konto</c>).
 ///
-/// WICHTIG: <see cref="Version"/> zählt ALLE Events inkl. der internen Marken (<see cref="IProzessIntern"/>), damit der Tail-Read bündig
-/// aufsetzt und die OCC-Assertion beim nächsten Append passt. Die Inbox reist nicht mit — sie ist eine eigene Tabelle des Stores (docs/04 §4.4).
+/// WICHTIG: <see cref="Version"/> zählt ALLE Events inkl. der internen Marken (<see cref="IRahmenEvent"/>), damit der Tail-Read bündig
+/// aufsetzt und die OCC-Assertion beim nächsten Append passt. Die Inbox reist nicht mit — sie ist eine eigene Tabelle des Stores (docs/04 §4.6).
 /// </summary>
 public sealed class Snapshot<TState> where TState : class, IState
 {

@@ -49,7 +49,7 @@ public sealed class GestenDienst(string slnRoot, Arbeitsbereich arbeitsbereich, 
         return (bericht.Patch, meldungen);
     }, ct);
 
-    /// <summary>Das Symbol am Ort der Karte umbenennen — samt aller Verweise (auch in Lambdas).</summary>
+    /// <summary>Das Symbol am Ort der Karte umbenennen — samt aller Verweise.</summary>
     public Task<GestenAntwort> UmbenennenAsync(string titel, string datei, int start, string neu, CancellationToken ct) => AusfuehrenAsync("umbenennen", titel, async () =>
     {
         var stand = await arbeitsbereich.StandAsync(ct);
@@ -64,7 +64,7 @@ public sealed class GestenDienst(string slnRoot, Arbeitsbereich arbeitsbereich, 
     }, ct);
 
     /// <summary>
-    /// Rumpf-Edit (✎ am Rumpf-Port, Werkbank P7.4): genau den Rumpf einer Methode bzw. einen Lambda an seinem Ort ersetzen — der Rest der Datei
+    /// Rumpf-Edit (✎ am Rumpf-Port, Werkbank P7.4): genau den Rumpf einer Methode an seinem Ort ersetzen — der Rest der Datei
     /// bleibt Wort für Wort. <paramref name="alt"/> = der Rumpf, wie ihn der Editor zeigte (Sperre gegen eine inzwischen geänderte Datei).
     /// </summary>
     public Task<GestenAntwort> RumpfAsync(string titel, RumpfOrt ort, string text, string? alt, CancellationToken ct) => AusfuehrenAsync("rumpf", titel, () =>
@@ -77,7 +77,7 @@ public sealed class GestenDienst(string slnRoot, Arbeitsbereich arbeitsbereich, 
     }, ct);
 
     /// <summary>
-    /// Rumpf-Edit eines Python-Rumpfs (Zusage/Kenntnis einer Client-Implementierung, <c>rufe</c> einer Funktion) — über <see cref="PythonSync"/>.
+    /// Rumpf-Edit eines Python-Rumpfs (getragene Funktion bzw. Kenntnis einer Client-Implementierung) — über <see cref="PythonSync"/>.
     /// <paramref name="prompt"/>: die Prompt-Zeile einer 🤖-Übernahme (derselbe Weg wie ✎).
     /// </summary>
     public Task<GestenAntwort> PythonRumpfAsync(string titel, PythonAnker anker, string text, string? alt, CancellationToken ct, string? prompt = null) => AusfuehrenAsync("rumpf", titel, () =>

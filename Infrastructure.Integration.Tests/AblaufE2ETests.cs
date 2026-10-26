@@ -44,9 +44,7 @@ public class AblaufE2ETests
         {
             [$"{Dienstvertrag.KonfigAbschnitt}:{nameof(BildaufbereitungKonfig)}:{nameof(BildaufbereitungKonfig.AusgabePfad)}"] = ausgabe,
         }).Build();
-        Infrastructure.Dienste.DienstExtensions.BindeDienste(s, new Dictionary<string, DienstKonfig>(), konfig.GetSection(Dienstvertrag.KonfigAbschnitt),
-            Infrastructure.Komposition.Anwendung.Dienste.Namen, Infrastructure.Komposition.Anwendung.Dienste.Implementierungen,
-            Infrastructure.Komposition.Anwendung.Dienste.Braucht, Infrastructure.Komposition.Anwendung.Dienste.Konfigs);
+        Infrastructure.Dienste.DienstExtensions.BindeDienste(s, new Dictionary<string, DienstKonfig>(), konfig.GetSection(Dienstvertrag.KonfigAbschnitt));
     }
 
     /// <summary>Ein echtes, kleines TIFF (OpenCV liest es) im Eingangs-Verzeichnis.</summary>

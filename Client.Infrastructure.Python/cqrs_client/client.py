@@ -239,11 +239,9 @@ class CqrsClient(HandlerBase, Generic[S]):
 
         Baut den CapabilitiesRequest mit:
         - message_types: Events (empfangen) + Commands (senden)
-        - handle_triggers: Trigger-Typen die dieser Client verarbeitet
         - handle_queries: Query-Typen die dieser Client beantwortet
         """
         subscribe_events: list[str] = []
-        handle_triggers: list[str] = []
         handle_queries: list[str] = []
 
         for registered_type in self.handle.registered_types:
@@ -256,8 +254,6 @@ class CqrsClient(HandlerBase, Generic[S]):
 
             if category == MessageCategory.EVENT:
                 subscribe_events.append(name)
-            elif category == MessageCategory.TRIGGER:
-                handle_triggers.append(name)
             elif category == MessageCategory.QUERY:
                 handle_queries.append(name)
 
@@ -269,13 +265,12 @@ class CqrsClient(HandlerBase, Generic[S]):
         # CapabilitiesRequest bauen
         request = leitung.CapabilitiesRequest(
             message_types=subscribe_events + send_commands,
-            handle_triggers=handle_triggers,
             handle_queries=handle_queries,
         )
 
         log.info(
-            "Capabilities: events=%s, commands=%s, triggers=%s, queries=%s",
-            subscribe_events, send_commands, handle_triggers, handle_queries
+            "Capabilities: events=%s, commands=%s, queries=%s",
+            subscribe_events, send_commands, handle_queries
         )
 
         return request

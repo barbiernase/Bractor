@@ -5,19 +5,17 @@ namespace Cqrs.Vermessung;
 
 /// <summary>
 /// S3 Sammelvorgang (Beispieldomäne). Ein Vorgang ist ein Teil: als Disponent <c>StarteTeilauftrag</c> und <c>SchließeTeilauftragAb</c>;
-/// der <c>TeilFertigProzess</c> meldet das Teil am Sammelvorgang (ein langlebiger, heißer Stream), nach N Teilen ist die Barriere erreicht.
-/// Es gibt keine Query auf den Sammelvorgang — sichtbar ist ein Teil, wenn sein <c>TeilVerbucht</c> im Log steht (Log-Zeit, mit dem
-/// Uhr-Versatz auf die Treiber-Uhr umgerechnet). Den Sammelvorgang legt die Last selbst an (<c>StarteSammelvorgang(N)</c>, bevor sein erstes
-/// Teil startet); in der Messung bekommt jeder Block einen eigenen, so groß, dass die Barriere nicht erreicht wird.
+/// die Funktion <c>TeilFertigMeldung</c> meldet das Teil am Sammelvorgang (ein langlebiger, heißer Stream), nach N Teilen ist die Barriere
+/// erreicht. Es gibt keine Query auf den Sammelvorgang — sichtbar ist ein Teil, wenn sein <c>TeilVerbucht</c> im Log steht (Log-Zeit, mit dem
+/// Uhr-Versatz auf die Treiber-Uhr umgerechnet); welches Teil es verbucht, sagt die Ursache (das <c>TeilauftragAbgeschlossen</c> im Teil-Stream).
+/// Den Sammelvorgang legt die Last selbst an (<c>StarteSammelvorgang(N)</c>, bevor sein erstes Teil startet); in der Messung bekommt jeder Block einen eigenen, so groß, dass die Barriere nicht erreicht wird.
 /// </summary>
 internal sealed class Sammelvorgang : ILast
 {
     public const string TokenDisponent = "vermessung-disponent";
     private readonly Eingang _eingang;
     private readonly TimeSpan _uhrversatz;
-    private readonly ConcurrentDictionary<Guid, Guid> _korrelationZuTeil = new();   // Vorgang des TeilFertigProzess → Teilauftrag
     private readonly ConcurrentDictionary<Guid, Vorgang> _offen = new();             // Teilauftrag → Vorgang
-    private readonly ConcurrentQueue<(string Korrelation, DateTimeOffset Zeit)> _verbuchtOhneTeil = new();
     private readonly object _sperre = new();
     private Lauf? _aktuell;
     private int _groesse = 200;
@@ -74,32 +72,8 @@ internal sealed class Sammelvorgang : ILast
 
     private void Sieh(LogZeile z)
     {
-        if (z.Typ == "prozess_gestartet" && z.Daten != null)
-        {
-            var d = JsonNode.Parse(z.Daten)!;
-            if ((string?)d["ProzessName"] == "TeilFertigProzess" && Guid.TryParse((string?)d["AuslöserStream"], out var teil))
-                _korrelationZuTeil[z.Stream] = teil;
-            Zuordnen();
-        }
-        else if (z.Typ == "teil_verbucht" && z.Korrelation != null)
-        {
-            _verbuchtOhneTeil.Enqueue((z.Korrelation, z.Zeit + _uhrversatz));
-            Zuordnen();
-        }
-    }
-
-    /// <summary>Ordnet TeilVerbucht über die Korrelation (= Vorgang des TeilFertigProzess) seinem Teilauftrag zu.</summary>
-    private void Zuordnen()
-    {
-        var n = _verbuchtOhneTeil.Count;
-        for (var i = 0; i < n && _verbuchtOhneTeil.TryDequeue(out var e); i++)
-        {
-            if (Guid.TryParse(e.Korrelation, out var k) && _korrelationZuTeil.TryGetValue(k, out var teil))
-            {
-                if (_offen.TryRemove(teil, out var v)) v.Sichtbar = e.Zeit;
-            }
-            else _verbuchtOhneTeil.Enqueue(e);   // prozess_gestartet noch nicht gesehen
-        }
+        if (z.Typ != "teil_verbucht" || !Abstractions.Spur.ZerlegeUrsache(z.Ursache, out var teil, out _)) return;
+        if (_offen.TryRemove(teil, out var v)) v.Sichtbar = z.Zeit + _uhrversatz;   // angemeldet ist das Teil, bevor sein erster Command geht
     }
 
     private static void Pruefe(Eingang.Antwort a)
@@ -117,6 +91,7 @@ internal sealed class Sammelvorgang : ILast
         var liste = laeufe.ToList();
         var ids = liste.Select(l => l.Id).ToArray();
         var teile = liste.SelectMany(l => l.Teile).ToArray();
+        var ursachen = teile.Select(t => t.ToString("D")).ToArray();   // Stream-Teil der Ursache (Spur.Ursache) als Text — ohne Cast im Filter
         var verbucht = await db.LiesAsync($"""
             select stream_id, count(*), coalesce(max((data->>'Fertig')::int), 0) from {s}.mt_events
             where stream_id = any(@s) and type = 'teil_verbucht' group by 1
@@ -137,12 +112,13 @@ internal sealed class Sammelvorgang : ILast
             Pruefung.Gleich($"{titel}: kein Teil zweimal abgeschlossen", 0, await db.ZahlAsync(
                 $"select count(*) from (select stream_id from {s}.mt_events where stream_id = any(@t) and type = 'teilauftrag_abgeschlossen' group by 1 having count(*) > 1) x",
                 ("t", teile))),
-            Pruefung.Erwartet($"{titel}: je Teil ein erfolgreich beendeter Vorgang", teile.Length, await db.ZahlAsync($"""
-                select count(*) from {s}.mt_events b join {s}.mt_events g on g.stream_id = b.stream_id and g.type = 'prozess_gestartet'
-                where b.type = 'prozess_beendet' and (b.data->>'Erfolg')::boolean and (g.data->>'AuslöserStream')::uuid = any(@t)
-                """, ("t", teile)), vollstaendig),
-            Pruefung.Gleich($"{titel}: kein Vorgang zweimal beendet", 0, await db.ZahlAsync(
-                $"select count(*) from (select stream_id from {s}.mt_events where type = 'prozess_beendet' group by 1 having count(*) > 1) x")),
+            Pruefung.Erwartet($"{titel}: je Teil genau ein TeilVerbucht (Ursache im Teil-Stream)", teile.Length, await db.ZahlAsync(
+                $"select count(*) from {s}.mt_events where type = 'teil_verbucht' and split_part(headers->>'ursache', ':', 1) = any(@u)",
+                ("u", ursachen)), vollstaendig),
+            Pruefung.Gleich($"{titel}: kein Teil zweimal verbucht", 0, await db.ZahlAsync($"""
+                select count(*) from (select split_part(headers->>'ursache', ':', 1) from {s}.mt_events
+                  where type = 'teil_verbucht' and split_part(headers->>'ursache', ':', 1) = any(@u) group by 1 having count(*) > 1) x
+                """, ("u", ursachen))),
         };
     }
 }

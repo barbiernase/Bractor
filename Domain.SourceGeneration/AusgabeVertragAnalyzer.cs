@@ -15,9 +15,9 @@ namespace Domain.SourceGeneration;
 ///
 /// Geprüft (Rolle über Marker/Parameter-Typen, nie über Namen):
 ///  • Decide — Klasse implementiert <c>IDecider&lt;T&gt;</c>, 1. Parameter <c>ICommand</c>: <c>IEnumerable&lt;X&gt;</c>.
-///  • Projektion/Reaktion — <c>ISubscriber</c>, Parameter <c>IEvent</c> + <c>IAggregateEnvelope</c>.
+///  • Projektion — <c>ISubscriber</c>, Parameter <c>IEvent</c> + <c>IAggregateEnvelope</c>.
 ///  • Reader — <c>IReader&lt;T&gt;</c>, 1. Parameter <c>IQuery</c>: <c>Task&lt;X&gt;</c>/<c>ValueTask&lt;X&gt;</c>/<c>X</c>.
-///  • Pipeline — <c>IPipelineHandler</c>, Parameter <c>PipelineContext</c>.
+/// Die Ausgabe einer Funktion (<c>Auf</c>) prüft die Funktionsform (CQRS100).
 /// Offen ist X (bzw. ein OneOf-Typargument), wenn es ein Interface, ein Typ-Parameter, <c>object</c> oder eine abstrakte
 /// Klasse ist. <c>Task</c>/<c>ValueTask</c>/<c>void</c> ohne Ergebnis sind erlaubt (reine Effekte, z. B. Projektionen).
 /// </summary>
@@ -54,9 +54,7 @@ public sealed class AusgabeVertragAnalyzer : DiagnosticAnalyzer
                 c.GetTypeByMetadataName("Abstractions.IQuery"),
                 c.GetTypeByMetadataName("Abstractions.ISubscriber"),
                 c.GetTypeByMetadataName("Abstractions.IAggregateEnvelope"),
-                c.GetTypeByMetadataName("Abstractions.IReader`1"),
-                c.GetTypeByMetadataName("Abstractions.IPipelineHandler"),
-                c.GetTypeByMetadataName("Abstractions.PipelineContext"));
+                c.GetTypeByMetadataName("Abstractions.IReader`1"));
             if (m.ICommand == null) return;   // kein CQRS-Vertrag in dieser Compilation
             start.RegisterSymbolAction(ctx => Pruefe(ctx, m), SymbolKind.Method);
         });
@@ -64,10 +62,10 @@ public sealed class AusgabeVertragAnalyzer : DiagnosticAnalyzer
 
     private sealed class Marker
     {
-        public readonly INamedTypeSymbol? IDecider, ICommand, IEvent, IQuery, ISubscriber, IAggEnvelope, IReader, IPipelineHandler, PipelineContext;
+        public readonly INamedTypeSymbol? IDecider, ICommand, IEvent, IQuery, ISubscriber, IAggEnvelope, IReader;
         public Marker(INamedTypeSymbol? d, INamedTypeSymbol? c, INamedTypeSymbol? e, INamedTypeSymbol? q, INamedTypeSymbol? s,
-                      INamedTypeSymbol? env, INamedTypeSymbol? r, INamedTypeSymbol? p, INamedTypeSymbol? ctx)
-        { IDecider = d; ICommand = c; IEvent = e; IQuery = q; ISubscriber = s; IAggEnvelope = env; IReader = r; IPipelineHandler = p; PipelineContext = ctx; }
+                      INamedTypeSymbol? env, INamedTypeSymbol? r)
+        { IDecider = d; ICommand = c; IEvent = e; IQuery = q; ISubscriber = s; IAggEnvelope = env; IReader = r; }
     }
 
     private static void Pruefe(SymbolAnalysisContext ctx, Marker m)
@@ -91,8 +89,6 @@ public sealed class AusgabeVertragAnalyzer : DiagnosticAnalyzer
             element = Element(rt, enumerable: true, task: false);
         else if (Hat(m.IReader) && Ist(p0, m.IQuery))
             element = Element(rt, enumerable: false, task: true) ?? (IstOhneErgebnis(rt) ? null : rt);
-        else if (Hat(m.IPipelineHandler) && HatParam(m.PipelineContext))
-            element = Element(rt, enumerable: true, task: true);
         else return;
         if (element == null) return;   // Task/void: reine Effekte
 

@@ -13,12 +13,12 @@ namespace GraphExtractor;
 ///
 /// Die Sonden-Domäne „Leihwesen" (eingebettete Ressourcen <c>Sonde/*.cs.txt</c>) nutzt absichtlich jede gültige
 /// Schreibweise, die eine Konvention brechen würde: fremder Wurzel-Namespace, Commands in eigenem Sub-Namespace,
-/// Property-Records, zwei Aggregate in einem Namespace, Decider in eigener Datei, Saga mit expliziter
-/// Interface-Implementierung, frei benannte Stores, class-ReadModel, OneOf-Antwort, Konstanten-Ids, Reaktion, Pipeline
-/// mit Konfig und einem nie ausgegebenen Objekt.
+/// Property-Records, zwei Aggregate in einem Namespace, Decider in eigener Datei, Fristen in der Entscheidung, Funktionen als
+/// Klasse und als Schnittstelle (mit Dienst, Lese-Fähigkeit, Strom), frei benannte Stores, class-ReadModel, OneOf-Antwort,
+/// Konstanten-Ids.
 ///
 /// Dazu Bausteine, die im Editor GEZEICHNET werden (<c>Sonde/Gezeichnet.gesten.json</c>: neuer Store mit einer im Panel benannten
-/// und einer abgeleiteten Fähigkeit, Projektion, Reaktion, Reader, Query/Response/ReadModel, Akteur mit Vertrag, Client, zwei Flüsse): ein
+/// und einer abgeleiteten Fähigkeit, Projektion, Reader, Query/Response/ReadModel, Akteur, Client, Dienst): ein
 /// Gesten-Skript — je Geste ein Karten-Delta wie aus dem Browser, geschrieben vom Gesten-Motor (<see cref="Gesten"/>) in den Fork, danach neu
 /// gelesen (Werkbank P7.3). Das Soll beschreibt, was der Extractor daraus wieder lesen MUSS.
 ///
@@ -116,7 +116,7 @@ public static class Sonde
             Console.WriteLine($"   [Graph-Diagnose {d.Severity}] {d.Code}: {d.Message}");
 
         // ── Volle Parität auf dem Fork (Inventar + Fixpunkt: zurückschreiben, neu kompilieren, neu extrahieren) ──
-        var befunde = await ParitaetsPruefung.PruefeAsync(fork, lage2, analyse, board, ModellMapper.Ingress(cr));
+        var befunde = await ParitaetsPruefung.PruefeAsync(fork, lage2, analyse, board);
         foreach (var b in befunde.Where(b => b.Schweregrad == "error" && b.Bereich != "Lage"))
         {
             Console.WriteLine($"   ✗ [{b.Bereich}] {b.Meldung}");
@@ -164,7 +164,6 @@ public static class Sonde
                   + (r["istErzeugung"]?.GetValue<bool>() == true ? " erzeugung" : "")
                   + (b["sicht"]?["karten"]?["rec:" + S(r, "name")]?["aggregat"] is { } ag ? $" aggregat={ag}" : "")
                   + (r["typart"] is { } ta ? $" typart={ta}" : "")
-                  + (r["funktion"] is { } fn ? $" funktion={fn}" : "")
                   + (r["treiber"] is { } tr ? $" treiber={tr}" : "")
                   + $" | {Felder(r)}");
         foreach (var e in A(b, "enums").Where(Sonde))
@@ -176,34 +175,8 @@ public static class Sonde
                 S(o, "event"))));
         foreach (var a in A(b, "applier").Where(a => sondenAggregate.Contains(S(a, "aggregat"))))
             z.Add($"apply {S(a, "aggregat")}.{S(a, "event")}");
-        foreach (var s in A(b, "sagas").Where(Sonde))
-            z.Add($"saga {S(s, "namespace")}.{S(s, "name")} auslöser={S(s, "triggerEvent")} | " + string.Join("; ", A(s, "schritte").Select(t =>
-                $"wenn {string.Join("+", A(t, "wenn").Select(x => (string?)x))} -> "
-                + (t["rufe"] is { } rf ? $"rufe {rf}" : $"{(t["sendeJe"]?.GetValue<bool>() == true ? "sendeJe" : "sende")} {S(t, "sende")}")
-                + (t["zeitlimit"] is { } zl ? $" zeitlimit={zl}" : "")
-                + (t["kompensation"] is { } k ? $" kompensiert {k}" : ""))));
-        // Pipelines als Fluss (§14): je Knoten Name=Art:Typ, Eingänge (∨ getrennt) mit Drähten und Lambda verbatim, Zeitlimit, Liste.
-        string Draht(JsonNode d) => S(d, "von") + (S(d, "port") switch
-        {
-            "zeitlimit" => ".⏳", "abgelehnt" => ".✕", "strom" => ".strom", _ => d["fall"] is { } f ? $".{f}" : "",
-        });
-        string Eingang(JsonNode e) => (e["je"] is { } je
-                ? (e["sammle"]?.GetValue<bool>() == true ? $"{je}.sammle({string.Join("+", A(e, "draehte").Select(Draht))})" : $"{je}[]")
-                : string.Join("+", A(e, "draehte").Select(Draht)))
-            + (e["ausdruck"] is { } la ? $" λ{{{la}}}" : "") + (e["argumente"] is JsonArray ar ? $" args({string.Join(", ", ar.Select(x => (string?)x))})" : "");
-        foreach (var f in A(b, "fluesse").Where(Sonde))
-            z.Add($"fluss {S(f, "namespace")}.{S(f, "name")} bauer={S(f, "bauer")} | " + string.Join("; ", A(f, "knoten").Select(k =>
-                $"{S(k, "name")}{(k["ohneVariable"]?.GetValue<bool>() == true ? "°" : "")}={S(k, "art")}:"
-                + (A(k, "warteAuf").Any() ? string.Join("|", A(k, "warteAuf").Select(x => (string?)x)) : S(k, "typ"))
-                + (A(k, "eingaenge").Any() ? " <- " + string.Join(" ∨ ", A(k, "eingaenge").Select(Eingang)) : "")
-                + (k["zeitlimit"] is { } zl ? $" ⏳{zl}" : "") + (k["liste"] is { } li ? $" je{{{li}}}" : ""))));
-        // Katalog-Funktionen: Auftrag → Ergebnisse (nur die Signatur).
         string Konstruktor(JsonNode? n) => "(" + string.Join(", ", A(n, "konstruktor").Select(p => $"{S(p, "name")}:{S(p, "typ")}")) + ")";
-        foreach (var f in A(b, "funktionen").Where(Sonde))
-            z.Add($"funktion {S(f, "namespace")}.{S(f, "name")} | {S(f, "auftrag")} -> {string.Join("; ", A(f, "ergebnisse").Select(x => (string?)x))}"
-                + (A(f, "faehigkeiten").Any() ? " liest " + string.Join(", ", A(f, "faehigkeiten").Select(p => $"{S(p, "typ")} {S(p, "name")}")) : "")
-                + (f["implementierung"] is { } im ? $" impl {im}{Konstruktor(f)}" : ""));
-        // Funktionen in Baustein-Form: Klasse oder Schnittstelle, je Eingang Herkunft/Hinweis, Ausgaben (Strom), Lese-Fähigkeiten; Konstruktor, Umsetzungen.
+        // Funktionen: Klasse oder Schnittstelle, je Eingang Herkunft/Hinweis, Ausgaben (Strom), Lese-Fähigkeiten; Konstruktor, Umsetzungen.
         foreach (var f in A(b, "bausteinFunktionen").Where(Sonde))
             z.Add($"funktion-auf {S(f, "namespace")}.{S(f, "name")} {(f["klasse"]?.GetValue<bool>() == true ? "klasse" + Konstruktor(f) : "schnittstelle")} | "
                 + string.Join(" || ", A(f, "eingaenge").Select(e => S(e, "eingang")
@@ -235,52 +208,31 @@ public static class Sonde
         foreach (var p in A(b, "projektionen").Where(Sonde))
             z.Add($"projektion {S(p, "namespace")}.{S(p, "name")} id={S(p, "subscriberId")}{(p["pull"]?.GetValue<bool>() == true ? " pull" : "")} | "
                   + string.Join("; ", A(p, "handles").Select(h => $"{S(h, "event")} -> {Fns(h)}")));
-        foreach (var p in A(b, "reaktionen").Where(Sonde))
-            z.Add($"reaktion {S(p, "namespace")}.{S(p, "name")} id={S(p, "subscriberId")} | "
-                  + string.Join("; ", A(p, "handles").Select(h => $"{S(h, "event")} -> sendet {string.Join(", ", A(h, "sends").Select(x => (string?)x))}")));
         foreach (var r in A(b, "reader").Where(Sonde))
             z.Add($"reader {S(r, "namespace")}.{S(r, "name")} projektion={S(r, "projektion")} trackDeps={r["trackDeps"]} | "
                   + string.Join("; ", A(r, "handles").Select(h => $"{S(h, "query")} -> {Fns(h)} => {string.Join("|", A(h, "responses").Select(x => (string?)x))}")));
         foreach (var ak in A(b, "akteure").Where(Sonde))
-        {
-            z.Add($"akteur {S(ak, "namespace")}.{S(ak, "name")}{(ak["art"]?.GetValue<string>() is { Length: > 0 } art ? " " + art : "")}{(A(ak, "dienste").Any() ? " dienste " + string.Join(", ", A(ak, "dienste").Select(x => (string?)x)) : "")} | darf {string.Join(", ", A(ak, "darf").Select(x => (string?)x))}");
-            if (A(ak, "vertrag").Any())
-                z.Add($"vertrag {S(ak, "namespace")}.{(ak["vertragName"]?.GetValue<string>() is { Length: > 0 } vn ? vn : "I" + S(ak, "name"))} akteur={S(ak, "name")} | "
-                      + string.Join("; ", A(ak, "vertrag").Select(r => $"{S(r, "eingang")} -> {(r["strom"]?.GetValue<bool>() == true ? "strom " : "")}"
-                                                                       + string.Join(", ", A(r, "ausgaenge").Select(x => (string?)x)))));
-        }
-        // Clients (docs/konzept-akteure.md §4): je Client sein Rand — trägt (Teile), sendet, fragt, hört.
+            z.Add($"akteur {S(ak, "namespace")}.{S(ak, "name")}{(ak["art"]?.GetValue<string>() is { Length: > 0 } art ? " " + art : "")} | darf {string.Join(", ", A(ak, "darf").Select(x => (string?)x))}");
+        // Clients (docs/konzept-akteure.md §4): je Client sein Rand — trägt (Funktionen), sendet, fragt, hört.
         foreach (var c in A(b, "clients").Where(Sonde))
             z.Add($"client {S(c, "namespace")}.{S(c, "name")} | traegt {string.Join(", ", A(c, "traegt").Select(x => (string?)x))}; "
                   + $"sendet {string.Join(", ", A(c, "sendet").Select(x => (string?)x))}; fragt {string.Join(", ", A(c, "fragt").Select(x => (string?)x))}; "
                   + $"hoert {string.Join(", ", A(c, "kenntnis").Select(x => (string?)x))}");
-        var sondenTrigger = new HashSet<string>();
-        foreach (var p in A(b, "pipelines").Where(Sonde))
-        {
-            z.Add($"pipeline {S(p, "namespace")}.{S(p, "name")} id={S(p, "pipelineId")} konfigs={string.Join(",", A(p, "konfigs").Select(x => (string?)x))} | "
-                  + string.Join("; ", A(p, "handles").Select(h => $"{S(h, "input")}({S(h, "inputKind")}) -> sendet {string.Join(", ", A(h, "sends").Select(x => (string?)x))}"
-                                                                 + (A(h, "fns").Any() ? $" -> {Fns(h)}" : "")
-                                                                 + (h["akteur"] is { } ak ? $" im Auftrag {ak}" : ""))));
-            foreach (var h in A(p, "handles").Where(h => S(h, "inputKind") == "trigger")) sondenTrigger.Add(S(h, "input"));
-        }
         // Regel Z: Zustandsfelder der zustandslosen Übersetzer (Symbol-Fakt, im Build CQRS083 GR-ZUSTAND).
-        foreach (var (liste, art) in new[] { ("pipelines", "pipeline"), ("projektionen", "projektion"), ("reaktionen", "reaktion") })
-            foreach (var o in A(b, liste).Where(Sonde).Where(o => A(o["code"], "zustand").Any()))
-                z.Add($"zustand {art} {S(o, "namespace")}.{S(o, "name")} | {string.Join(", ", A(o["code"], "zustand").Select(x => (string?)x))}");
+        foreach (var o in A(b, "projektionen").Where(Sonde).Where(o => A(o["code"], "zustand").Any()))
+            z.Add($"zustand projektion {S(o, "namespace")}.{S(o, "name")} | {string.Join(", ", A(o["code"], "zustand").Select(x => (string?)x))}");
         // Handle-Verträge: was jeder Handler erzeugen KANN und welche Store-Fns er rufen DARF — nur aus der Signatur.
         string Ausgaenge(JsonNode h) => string.Join("; ", A(h, "ausgaenge").Select(a =>
             $"{S(a, "art")}:{(S(a, "art") == "storefn" ? S(a, "store") + "." : "")}{S(a, "typ")}"));
-        foreach (var (liste, disc) in new[] { ("projektionen", "event"), ("reaktionen", "event"), ("reader", "query"), ("pipelines", "input") })
+        foreach (var (liste, disc) in new[] { ("projektionen", "event"), ("reader", "query") })
             foreach (var o in A(b, liste).Where(Sonde))
                 foreach (var h in A(o, "handles"))
                     z.Add($"ausgang {S(o, "name")}.{S(h, disc)} {S(h, "form")}{(h["signaturOffen"]?.GetValue<bool>() == true ? " offen" : "")} | {Ausgaenge(h)}");
-        foreach (var t in A(b, "triggers").Where(t => sondenTrigger.Contains(S(t, "msgName"))))
-            z.Add($"trigger {S(t, "msgName")} | {Felder(t)}");
 
         // Die Sicht (Werkbank P7.3): Domäne und Block je Karte, wie sie der Editor vom Server bekommt — aus dem Graphen, nie aus dem Namespace.
         var sicht = Sicht.Aus(b);
         foreach (var k in sicht.Karten.Where(k => k.Art is "valueobject" or "enum" or "query" or "queryresponse" or "readmodel" or "store" or "projektion"
-                                                       or "reader" or "reaktion" or "saga" or "akteur" or "dienst" && Sonde(k.Ref)))
+                                                       or "reader" or "akteur" or "dienst" && Sonde(k.Ref)))
             z.Add($"sicht {S(k.Ref, "namespace")}.{k.Name} {k.Art} domaene={sicht.Domaene(k)} block={sicht.Block(k)}"
                   + (sicht.Inseln.Contains(k.Id) ? " insel" : ""));
 

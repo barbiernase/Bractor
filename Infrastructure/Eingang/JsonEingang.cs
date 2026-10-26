@@ -22,7 +22,7 @@ namespace Infrastructure.Eingang;
 ///   Aggregat bzw. Reader. Derselbe Weg wie gRPC (Befugnis, Akteur im Envelope, Wirker <c>akteur:A</c>), nur ohne Proto: der Typ kommt über
 ///   die generierte Registry, die Felder über den generierten Wire-Kontext (keine Reflection). Die Antwort auf einen Command nennt Ausgang und
 ///   Versionen; mit <c>"zeigeEvents": true</c> dazu die geschriebenen Events, gelesen aus dem Log.</item>
-/// <item><c>GET /eingang/auftraege</c>, <c>POST /eingang/ergebnis</c> — Laufort <c>Hand</c>: die Werkbank beantwortet Aufträge
+/// <item><c>GET /eingang/auftraege</c>, <c>POST /eingang/ergebnis</c> — Laufort <c>Hand</c>: die Werkbank beantwortet die Eingänge einer Funktion
 ///   (<see cref="HandAusfuehrer"/>).</item>
 /// </list>
 /// </summary>
@@ -132,25 +132,13 @@ public static class JsonEingang
             catch (Exception e) { return Results.Json(new { ok = false, fehler = e.Message }, Json, statusCode: 500); }
         });
 
-        // Laufort Hand: die wartenden Aufträge samt Inhalt und den möglichen Ergebnis-Fällen (ihre Signatur).
+        // Laufort Hand: die wartenden Eingänge samt Inhalt, Herkunft und den möglichen Ausgaben (ihre Signatur).
         g.MapGet("/auftraege", (IServiceProvider sp) =>
         {
             var hand = sp.GetService<HandAusfuehrer>();
             return Results.Json(new
             {
-                funktionen = hand?.Funktionen.Select(f => f.Name) ?? [],
-                auftraege = (hand?.Offen ?? []).Select(a => new
-                {
-                    vorgang = a.Auftrag.Vorgang,
-                    korrelation = a.Auftrag.Korrelation,
-                    funktion = a.Funktion.Name,
-                    auftrag = Darstellung(a.Auftrag.Auftrag),
-                    akteur = a.Auftrag.Akteur,
-                    ursache = a.Auftrag.Ursache,
-                    seit = a.Seit,
-                    ergebnisse = Ergebnisse(a.Funktion).Select(t => t.Name),
-                }),
-                // Funktionen in Baustein-Form (Plan Pub/Sub-Neustrukturierung Phase 3): der Eingang und die möglichen Ausgaben (seine Signatur).
+                funktionen = hand?.Bausteine.Select(b => b.Name) ?? [],
                 eingaenge = (hand?.OffeneEingaenge ?? []).Select(e => new
                 {
                     vorgang = e.Eingang.Vorgang,
@@ -165,50 +153,31 @@ public static class JsonEingang
             }, Json);
         });
 
+        // Die Antwort ist eine Liste von Ausgaben [{typ, daten}] (oder ein Fehler) — die erste Antwort gewinnt am Schlüssel „F, X“.
         g.MapPost("/ergebnis", async (JsonElement body, IServiceProvider sp, CancellationToken ct) =>
         {
             var hand = sp.GetService<HandAusfuehrer>();
             if (hand is null) return Results.Json(new { ok = false, fehler = "keine Funktion mit Laufort Hand in dieser Umgebung" }, Json, statusCode: 404);
             if (!body.TryGetProperty("vorgang", out var vg) || !Guid.TryParse(vg.GetString(), out var vorgang))
                 return Results.Json(new { ok = false, fehler = "vorgang fehlt" }, Json, statusCode: 400);
-            // Baustein-Form: die Antwort ist eine Liste von Ausgaben [{typ, daten}] (oder ein Fehler) — die erste Antwort gewinnt am Schlüssel „F, X“.
-            if (hand.OffeneEingaenge.FirstOrDefault(e => e.Eingang.Vorgang == vorgang) is { } offen)
-            {
-                var fehlerB = body.TryGetProperty("fehler", out var fb) && fb.GetString() is { Length: > 0 } feb ? feb : null;
-                var moeglich = offen.Funktion.Eingang(offen.Eingang.Eingang.GetType())?.Ausgaben ?? [];
-                var ausgaben = new List<IPipelineOutput>();
-                if (fehlerB is null && body.TryGetProperty("ausgaben", out var liste) && liste.ValueKind == JsonValueKind.Array)
-                    foreach (var a in liste.EnumerateArray())
-                    {
-                        var name = a.TryGetProperty("typ", out var tn) ? tn.GetString() : null;
-                        var typ = moeglich.FirstOrDefault(x => x.Name == name);
-                        if (typ is null)
-                            return Results.Json(new { ok = false, fehler = $"{name} ist keine Ausgabe von {offen.Funktion.Name} ({string.Join(", ", moeglich.Select(x => x.Name))})" }, Json, statusCode: 400);
-                        try { ausgaben.Add((IPipelineOutput)EingangJson.Lies(a.TryGetProperty("daten", out var dd) ? dd : default, typ)); }
-                        catch (Exception e) when (e is JsonException or InvalidOperationException or NotSupportedException)
-                        { return Results.Json(new { ok = false, fehler = $"{typ.Name} nicht lesbar: {e.Message}" }, Json, statusCode: 400); }
-                    }
-                var ausgangB = await hand.AntworteAsync(vorgang, fehlerB is null ? ausgaben : null, fehlerB, ct);
-                return Results.Json(new { ok = ausgangB is ErgebnisAusgang.Geschrieben or ErgebnisAusgang.Ueberholt or ErgebnisAusgang.Abgelehnt, ausgang = ausgangB.ToString() }, Json,
-                    statusCode: ausgangB is ErgebnisAusgang.Unbekannt ? 404 : ausgangB is ErgebnisAusgang.NichtGeschrieben ? 503 : 200);
-            }
-            var auftrag = hand.Offen.FirstOrDefault(a => a.Auftrag.Vorgang == vorgang);
-            if (auftrag is null) return Results.Json(new { ok = false, fehler = $"Auftrag {vorgang} wartet hier nicht (mehr)" }, Json, statusCode: 404);
-
-            var fehler = body.TryGetProperty("fehler", out var f) && f.GetString() is { Length: > 0 } fe ? fe : null;
-            IEvent? ergebnis = null;
-            if (fehler is null)
-            {
-                var name = body.TryGetProperty("typ", out var t) ? t.GetString() : null;
-                var typ = Ergebnisse(auftrag.Funktion).FirstOrDefault(x => x.Name == name);
-                if (typ is null)
-                    return Results.Json(new { ok = false, fehler = $"{name} ist kein Ergebnis von {auftrag.Funktion.Name} ({string.Join(", ", Ergebnisse(auftrag.Funktion).Select(x => x.Name))})" }, Json, statusCode: 400);
-                try { ergebnis = (IEvent)EingangJson.Lies(body.TryGetProperty("daten", out var d) ? d : default, typ); }
-                catch (Exception e) when (e is JsonException or InvalidOperationException or NotSupportedException)
-                { return Results.Json(new { ok = false, fehler = $"{typ.Name} nicht lesbar: {e.Message}" }, Json, statusCode: 400); }
-            }
-            var ausgang = await hand.AntworteAsync(vorgang, ergebnis, fehler, ct);
-            return Results.Json(new { ok = ausgang is ErgebnisAusgang.Geschrieben or ErgebnisAusgang.Abgelehnt, ausgang = ausgang.ToString() }, Json,
+            if (hand.OffeneEingaenge.FirstOrDefault(e => e.Eingang.Vorgang == vorgang) is not { } offen)
+                return Results.Json(new { ok = false, fehler = $"Eingang {vorgang} wartet hier nicht (mehr)" }, Json, statusCode: 404);
+            var fehler = body.TryGetProperty("fehler", out var fb) && fb.GetString() is { Length: > 0 } feb ? feb : null;
+            var moeglich = offen.Funktion.Eingang(offen.Eingang.Eingang.GetType())?.Ausgaben ?? [];
+            var ausgaben = new List<IAusgabe>();
+            if (fehler is null && body.TryGetProperty("ausgaben", out var liste) && liste.ValueKind == JsonValueKind.Array)
+                foreach (var a in liste.EnumerateArray())
+                {
+                    var name = a.TryGetProperty("typ", out var tn) ? tn.GetString() : null;
+                    var typ = moeglich.FirstOrDefault(x => x.Name == name);
+                    if (typ is null)
+                        return Results.Json(new { ok = false, fehler = $"{name} ist keine Ausgabe von {offen.Funktion.Name} ({string.Join(", ", moeglich.Select(x => x.Name))})" }, Json, statusCode: 400);
+                    try { ausgaben.Add((IAusgabe)EingangJson.Lies(a.TryGetProperty("daten", out var dd) ? dd : default, typ)); }
+                    catch (Exception e) when (e is JsonException or InvalidOperationException or NotSupportedException)
+                    { return Results.Json(new { ok = false, fehler = $"{typ.Name} nicht lesbar: {e.Message}" }, Json, statusCode: 400); }
+                }
+            var ausgang = await hand.AntworteAsync(vorgang, fehler is null ? ausgaben : null, fehler, ct);
+            return Results.Json(new { ok = ausgang is ErgebnisAusgang.Geschrieben or ErgebnisAusgang.Ueberholt or ErgebnisAusgang.Abgelehnt, ausgang = ausgang.ToString() }, Json,
                 statusCode: ausgang is ErgebnisAusgang.Unbekannt ? 404 : ausgang is ErgebnisAusgang.NichtGeschrieben ? 503 : 200);
         });
     }
@@ -227,8 +196,6 @@ public static class JsonEingang
             .ToList();
     }
 
-    private static IReadOnlyCollection<Type> Ergebnisse(Type funktion)
-        => Anwendung.Funktionen.Ergebnisse.TryGetValue(funktion, out var e) ? e : Array.Empty<Type>();
 
     /// <summary>Das Token → Akteur (Tor). Ohne konfigurierte Identitäten ist das Tor offen (<paramref name="akteur"/> = null).</summary>
     private static bool Erkenne(HttpContext http, IServiceProvider sp, out AkteurRechte? akteur, out IResult? abgewiesen)

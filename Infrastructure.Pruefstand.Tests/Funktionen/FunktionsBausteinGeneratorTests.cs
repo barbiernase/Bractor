@@ -166,14 +166,14 @@ public interface IPost : IDienst { Task SendeAsync(string an); }
     }
 
     [Fact]
-    public void Beide_Formen_oder_fremde_Methoden_an_einer_Schnittstelle_sind_CQRS100()
+    public void Fremde_Methoden_oder_kein_Auf_an_einer_Schnittstelle_sind_CQRS100()
     {
-        Bausteine(@"namespace Probe {
-            public sealed record Rechne(int X) : IAuftrag<IBeides>;
-            public interface IBeides : IFunktion { Mahne? Auf(Ueberfaellig e); Task<OneOf<Gemahnt>> RufeAsync(Rechne a, IAusfuehrung x); } }")
-            .Ids.Should().Contain("CQRS100");
         Bausteine(@"namespace Probe { public interface IFremd : IFunktion { Mahne? Auf(Ueberfaellig e); int Zaehle(); } }")
             .Ids.Should().Contain("CQRS100");
+        Bausteine(@"namespace Probe { public interface ILeer : IFunktion { } }")
+            .Ids.Should().Contain("CQRS100", "eine Funktion hört mindestens einen Eingang");
+        Bausteine(@"namespace Probe { public sealed class Leer : IFunktion { } }")
+            .Ids.Should().Contain("CQRS100", "auch als Klasse");
     }
 
     [Fact]
@@ -188,15 +188,6 @@ public interface IPost : IDienst { Task SendeAsync(string an); }
         ids.Should().Contain("CQRS101");
         fehler.Should().BeEmpty("das Generat bleibt baubar — die Funktion fehlt");
         quelle.Should().NotContain("\"Doppelt\", Draussen");
-    }
-
-    [Fact]
-    public void Der_Katalog_Generator_laesst_die_Baustein_Form_in_Ruhe()
-    {
-        var (_, ids, fehler) = Lauf(new Infrastructure.SourceGeneration.FunktionsGenerator(), @"namespace Probe {
-            public interface IPruefung : IFunktion { OneOf<Gemahnt, Unnoetig> Auf(Ueberfaellig e); } }");
-        ids.Should().NotContain("CQRS068", "die Form mit Auf ist keine Katalog-Funktion");
-        fehler.Should().BeEmpty();
     }
 
     // ── Herkunft und Ausgaben (Laufzeit, store-frei) ─────────────────────────────────────────────────────────────────
@@ -225,9 +216,9 @@ public interface IPost : IDienst { Task SendeAsync(string an); }
     [Fact]
     public async Task Die_Adapter_bringen_jede_Rueckgabe_auf_einen_Strom_und_null_heisst_nichts()
     {
-        static async Task<List<IPipelineOutput>> Alle(IAsyncEnumerable<IPipelineOutput> s)
+        static async Task<List<IAusgabe>> Alle(IAsyncEnumerable<IAusgabe> s)
         {
-            var l = new List<IPipelineOutput>();
+            var l = new List<IAusgabe>();
             await foreach (var a in s) l.Add(a);
             return l;
         }

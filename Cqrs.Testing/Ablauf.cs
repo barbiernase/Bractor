@@ -38,7 +38,7 @@ public sealed class AblaufBauer
     public const int HoechstensSchritte = 10_000;
 
     private sealed record AggregatArt(string Typ, Func<ICommand, bool> Nimmt, Func<Guid, IState> Neu);
-    private sealed record Kante(string Funktion, Type Eingang, Func<IEvent, Herkunft, IEnumerable<IPipelineOutput>> Auf);
+    private sealed record Kante(string Funktion, Type Eingang, Func<IEvent, Herkunft, IEnumerable<IAusgabe>> Auf);
     private sealed class Instanz(IState state, IAggregateHandler handler, string typ)
     {
         public IState State { get; } = state;
@@ -67,14 +67,14 @@ public sealed class AblaufBauer
     }
 
     /// <summary>Eine Kante einer Funktion: ihr <c>Auf</c> für <typeparamref name="TEingang"/>, das nichts oder eine Ausgabe liefert.</summary>
-    public AblaufBauer Funktion<TEingang>(string funktion, Func<TEingang, Herkunft, IPipelineOutput?> auf) where TEingang : IEvent
+    public AblaufBauer Funktion<TEingang>(string funktion, Func<TEingang, Herkunft, IAusgabe?> auf) where TEingang : IEvent
     {
-        _kanten.Add(new Kante(funktion, typeof(TEingang), (e, h) => auf((TEingang)e, h) is { } a ? new[] { a } : Array.Empty<IPipelineOutput>()));
+        _kanten.Add(new Kante(funktion, typeof(TEingang), (e, h) => auf((TEingang)e, h) is { } a ? new[] { a } : Array.Empty<IAusgabe>()));
         return this;
     }
 
     /// <summary>Eine Kante einer Funktion, die einen Strom ausgibt (Fan-out).</summary>
-    public AblaufBauer Funktion<TEingang>(string funktion, Func<TEingang, Herkunft, IEnumerable<IPipelineOutput>> auf) where TEingang : IEvent
+    public AblaufBauer Funktion<TEingang>(string funktion, Func<TEingang, Herkunft, IEnumerable<IAusgabe>> auf) where TEingang : IEvent
     {
         _kanten.Add(new Kante(funktion, typeof(TEingang), (e, h) => auf((TEingang)e, h)));
         return this;

@@ -8,7 +8,7 @@ namespace Domain.SourceGeneration;
 
 /// <summary>
 /// CQRS101 (R2, Plan Pub/Sub-Neustrukturierung §3.6) — je Baustein und Eingangstyp höchstens EINE Methode, die ihn nimmt: ein <c>Auf</c> einer Funktion,
-/// ein <c>Handle</c> einer Projektion, Reaktion oder eines Readers. Zwei Überladungen für denselben Eingang (etwa mit und ohne <c>Herkunft</c>)
+/// ein <c>Handle</c> einer Projektion oder eines Readers. Zwei Überladungen für denselben Eingang (etwa mit und ohne <c>Herkunft</c>)
 /// machten unklar, was der Eingang auslöst — der Dispatch fände zwei Fälle. Schon im Domänen-Projekt, nicht erst beim Generieren in der Komposition.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]

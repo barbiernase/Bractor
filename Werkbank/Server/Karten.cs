@@ -10,8 +10,8 @@ namespace Werkbank.Server;
 public static class Karten
 {
     /// <summary>
-    /// Zuerst die INNERSTE Karte, deren Ort (<c>_ort</c>: Datei, Zeile bis <c>bis</c>) die Zeile enthält — so landet ein Befund im Fluss am
-    /// Knoten, in einer Prozess-Regel an der Regel, in einem Decide am Decider; sonst Typ + Member (<see cref="GraphExtractor.KartenIds"/>).
+    /// Zuerst die INNERSTE Karte, deren Ort (<c>_ort</c>: Datei, Zeile bis <c>bis</c>) die Zeile enthält — so landet ein Befund
+    /// in einem Decide am Decider; sonst Typ + Member (<see cref="GraphExtractor.KartenIds"/>).
     /// </summary>
     public static IReadOnlyList<Diagnose> Zuordnen(IReadOnlyList<Diagnose> diagnosen, JsonObject? board)
     {

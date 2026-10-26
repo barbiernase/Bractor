@@ -30,48 +30,35 @@ public sealed record EditorModell
     public IReadOnlyList<DecideRegel> Decider { get; init; } = [];
     /// <summary>Applier (Event → State-Faltung) — je Regel EIGENSTÄNDIG, referenziert sein Aggregat.</summary>
     public IReadOnlyList<ApplyRegel> Applier { get; init; } = [];
-    public IReadOnlyList<Saga> Sagas { get; init; } = [];
-    /// <summary>
-    /// Katalog-Funktionen (<c>interface IX : IFunktion</c>): ein Auftrag hinein, OneOf-Ergebnis-Events heraus. Ein Prozess ruft sie mit
-    /// <c>Rufe&lt;IX&gt;</c> wie ein Aggregat mit <c>Sende&lt;Cmd&gt;</c>; die Implementierung (C#, Python, extern) ist Bindung, kein Modell.
-    /// </summary>
-    public IReadOnlyList<Funktion> Funktionen { get; init; } = [];
     /// <summary>
     /// Domänen-Dienste (<c>interface IX : IDienst</c>, konzept-werkbank §12.3 E11): die Technik hinter einer Funktion — Signatur (Methoden) und Implementierungen
-    /// (Klassen, die das Interface implementieren). Eine Funktions-Implementierung nimmt sie im Konstruktor (<see cref="Funktion.Konstruktor"/>);
+    /// (Klassen, die das Interface implementieren). Eine Funktion im Host nimmt sie im Konstruktor (<see cref="BausteinFunktion.Konstruktor"/>);
     /// welche Implementierung läuft, wählt die Umgebung (<c>Dienste:&lt;IX&gt;</c>).
     /// </summary>
     public IReadOnlyList<Dienst> Dienste { get; init; } = [];
     /// <summary>
-    /// Funktionen in Baustein-Form (Plan Pub/Sub-Neustrukturierung §3.3): je Eingang ein <c>Auf</c> mit freier Ausgabe; als Klasse im Host, als
+    /// Funktionen (Plan Pub/Sub-Neustrukturierung §3.3): je Eingang ein <c>Auf</c> mit freier Ausgabe; als Klasse im Host, als
     /// Schnittstelle draußen. Nur gelesen — Gesten und Darstellung dafür kommen mit der Editor-Arbeit (Plan E4); der Scaffolder schreibt sie nicht.
     /// </summary>
     public IReadOnlyList<BausteinFunktion> BausteinFunktionen { get; init; } = [];
     /// <summary>
-    /// Pipelines als FLUSS (docs/konzept-editor-pipelines.md §14): eine Quelle, Katalog-Funktionen und Commands, frei verdrahtet
-    /// (<c>class X : IPipeline { PipelineFluss Fluss =&gt; PipelineFluss.Definiere(p =&gt; { var a = …; }) }</c>). Jede Geste im
-    /// Editor ist genau ein Code-Fakt dieser Form — entwerfbar auf leerem Board, 1:1 zurückgelesen.
-    /// </summary>
-    public IReadOnlyList<FlussPipeline> Fluesse { get; init; } = [];
-    /// <summary>
     /// Akteure (<c>docs/konzept-akteure.md</c>): wer von außen hineingibt — je Akteur die Typen, die er darf
-    /// (<c>IDarf&lt;T&gt;</c>: Commands, Queries, Trigger, Transient-Events). Was er hören darf, ist abgeleitet, nicht Modell.
+    /// (<c>IDarf&lt;T&gt;</c>: Commands, Queries, Quell-Nachrichten, Hinweise, Funktionen, die er draußen rechnet). Was er hören darf, ist
+    /// abgeleitet, nicht Modell.
     /// </summary>
     public IReadOnlyList<Akteur> Akteure { get; init; } = [];
     /// <summary>
     /// Clients (<c>docs/konzept-akteure.md</c> §4): die Software an der Leitung — je Client EIN Vertrag
-    /// (<c>interface IX : IClientVertrag, …</c>): getragene Akteur-Vertrags-Teile, Sendet/Fragt, eigene Kenntnis. Welche Akteure er
+    /// (<c>interface IX : IClientVertrag, …</c>): getragene Funktionen, Sendet/Fragt, Kenntnis (Hört). Welche Akteure er
     /// verkörpert, ist abgeleitet, nicht Modell.
     /// </summary>
     public IReadOnlyList<Client> Clients { get; init; } = [];
     /// <summary>
-    /// Die LESESEITE als Signatur-Fakten: Stores (Fähigkeiten + Bündel + Impl-Klasse), Projektionen/Reaktionen, Reader und
-    /// die Fähigkeits-Parameter der Pipeline-Handles. ReadModels/Queries/Responses sind <see cref="Record"/>s (eigene Arten).
+    /// Die LESESEITE als Signatur-Fakten: Stores (Fähigkeiten + Bündel + Impl-Klasse), Projektionen und Reader.
+    /// ReadModels/Queries/Responses sind <see cref="Record"/>s (eigene Arten).
     /// Null = das Modell trägt keine Leseseite (z. B. Simulation) — der Scaffolder erzeugt dann keine Leseseiten-Dateien.
     /// </summary>
     public Leseseite? Lesen { get; init; }
-    /// <summary>Ingress-Bindungen der Composition Root (Trigger → Webhook/Timer/Datei). Null = nicht Teil des Modells.</summary>
-    public IReadOnlyList<IngressBindung>? Ingress { get; init; }
     /// <summary>Der aus dem Code abgeleitete Rahmen (Vertrags-Namespace, globale usings, Namenskonvention, Verzeichnisse).</summary>
     public Rahmen Rahmen { get; init; } = new();
 
@@ -86,10 +73,6 @@ public sealed record EditorModell
     };
 
     public string AlsJson() => JsonSerializer.Serialize(this, JsonOptionen);
-
-    /// <summary>Ein einzelner Record aus JSON (Board-Sammlungen, die Records tragen: triggers[].code, selbstNachrichten).</summary>
-    public static Record AusJsonRecord(string json) =>
-        JsonSerializer.Deserialize<Record>(json, JsonOptionen) ?? throw new FormatException("Konnte Record nicht aus JSON lesen (null).");
 
     public static EditorModell AusJson(string json) =>
         JsonSerializer.Deserialize<EditorModell>(json, JsonOptionen)
@@ -106,12 +89,9 @@ public static class RecordArt
     public const string Query = "query";            // : IQuery → Queries.cs
     public const string Antwort = "queryresponse";  // : IQueryResponse → Responses.cs
     public const string ReadModel = "readmodel";    // : IReadModel → ReadModels.cs
-    public const string Konfig = "konfig";          // reiner Record, per Ctor in einen Konsumenten injiziert → Konfigs.cs
-    public const string Trigger = "trigger";        // : IPipelineTrigger → Triggers.cs
-    public const string Selbst = "selbst";          // : IPipelineSelfMessage (Selbst<T>-Nachricht einer Pipeline) → SelbstNachrichten.cs
-    public const string Auftrag = "auftrag";        // : IAuftrag<F> (der eine Eingang einer Katalog-Funktion) → Auftraege.cs
+    public const string Konfig = "konfig";          // reiner Record, per Ctor in eine Funktion/Dienst-Implementierung injiziert → Konfigs.cs
 
-    public static readonly IReadOnlyList<string> Alle = [Command, Event, Rejection, ValueObject, Query, Antwort, ReadModel, Konfig, Trigger, Selbst, Auftrag];
+    public static readonly IReadOnlyList<string> Alle = [Command, Event, Rejection, ValueObject, Query, Antwort, ReadModel, Konfig];
 }
 
 /// <summary>
@@ -135,8 +115,6 @@ public sealed record Record
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool Geteilt { get; init; }
-    /// <summary>Nur auftrag: die Katalog-Funktion, deren Eingang er ist (Marker <c>IAuftrag&lt;Funktion&gt;</c>).</summary>
-    public string? Funktion { get; init; }
     /// <summary>
     /// Zusätzliche Member im Record-Rumpf als roher C#-Text (z. B. <c>static Default</c>, abgeleitete
     /// Props) — Handcode, den der Scaffolder verbatim in <c>{ … }</c> einhängt. Null ⇒ <c>record X(…);</c>.
@@ -281,103 +259,7 @@ public sealed record ApplyRegel
     public string? Datei { get; init; }
 }
 
-/// <summary>
-/// Eine Saga/ein Prozess: mehrere Aggregate / asynchron / mit Kompensation. Der
-/// <see cref="TriggerEvent"/> ist das <c>Prozess&lt;T&gt;</c>-Argument.
-/// </summary>
-public sealed record Saga
-{
-    public required string Name { get; init; }
-    public required string Namespace { get; init; }
-    public required string TriggerEvent { get; init; }
-    public IReadOnlyList<SagaSchritt> Schritte { get; init; } = [];
-    public string? Doku { get; init; }
-    public IReadOnlyList<string> ExtraUsings { get; init; } = [];
-    public string? Datei { get; init; }
-    /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
-    public string? Herkunft { get; init; }
-}
-
-/// <summary>Eine Saga-Transition: <c>Auf/Und (→ UndAlle) → Sende/SendeJe → RückgängigDurch</c>.</summary>
-public sealed record SagaSchritt
-{
-    /// <summary>Der Join (Konjunktion): <c>Auf&lt;Wenn[0]&gt;().Und&lt;Wenn[1]&gt;()…</c>.</summary>
-    public IReadOnlyList<string> Wenn { get; init; } = [];
-    /// <summary>Optional Count-Join: <c>.UndAlle&lt;SammelEvent&gt;(t => SammelAnzahl)</c> — feuert erst nach ALLEN N.</summary>
-    public string? SammelEvent { get; init; }
-    /// <summary>Der Anzahl-Ausdruck des Count-Joins, z. B. <c>t.Ziele.Count</c>.</summary>
-    public string? SammelAnzahl { get; init; }
-    /// <summary>Der echte Count-Join-Lambda-Ausdruck verbatim (z. B. <c>t => t.Anzahl</c>); Vorrang vor <see cref="SammelAnzahl"/>.</summary>
-    public string? SammelAusdruck { get; init; }
-    /// <summary>Der gesendete Command (<c>Sende&lt;Cmd&gt;</c>). Leer, wenn der Schritt eine Funktion ruft (<see cref="Rufe"/>).</summary>
-    public string Sende { get; init; } = "";
-    /// <summary>
-    /// Statt eines Commands: die gerufene Katalog-Funktion (<c>Rufe&lt;F&gt;</c>) — der Aufruf-Knoten im Graph. Der Lambda (Auftrag aus dem
-    /// Match) steht in <see cref="SendeAusdruck"/>; ohne ihn schreibt der Scaffolder einen Stub mit dem Auftrag der Funktion.
-    /// </summary>
-    public string? Rufe { get; init; }
-    /// <summary>Zeitlimit des Aufrufs als C#-Ausdruck verbatim (z. B. <c>TimeSpan.FromSeconds(30)</c>); null = keins.</summary>
-    public string? Zeitlimit { get; init; }
-    /// <summary>Fan-out: <c>SendeJe</c> statt <c>Sende</c> — iteriert <see cref="SendeJeCollection"/> mit <see cref="SendeJeElement"/>.</summary>
-    public bool SendeJe { get; init; }
-    public string? SendeJeCollection { get; init; }
-    public string? SendeJeElement { get; init; }
-    public IReadOnlyList<string>? SendeArgumente { get; init; }
-    /// <summary>
-    /// Der ECHTE Sende-Lambda-Ausdruck verbatim (z. B. <c>e => new X(e.Id)</c>) — aus dem Code gelesen.
-    /// Gesetzt ⇒ hat Vorrang vor <see cref="SendeArgumente"/>/<see cref="SendeJeCollection"/> (verlustfreier Round-trip).
-    /// </summary>
-    public string? SendeAusdruck { get; init; }
-    public string? Kompensation { get; init; }
-    public IReadOnlyList<string>? KompensationArgumente { get; init; }
-    /// <summary>Der echte Kompensations-Lambda-Ausdruck verbatim; Vorrang vor <see cref="KompensationArgumente"/>.</summary>
-    public string? KompensationAusdruck { get; init; }
-    /// <summary>Kompensation als Fan-out (<c>RückgängigDurchJe</c>).</summary>
-    public bool KompensationJe { get; init; }
-}
-
-/// <summary>
-/// Eine Katalog-Funktion — nur ihre Signatur: <c>public interface {Name} : IFunktion { Task&lt;OneOf&lt;Ergebnisse…&gt;&gt; RufeAsync({Auftrag} a,
-/// IAusfuehrung x); }</c>. Der Auftrag ist ein <see cref="Record"/> der Art <see cref="RecordArt.Auftrag"/>, die Ergebnisse sind Event-Records.
-/// </summary>
-public sealed record Funktion
-{
-    public required string Name { get; init; }
-    public required string Namespace { get; init; }
-    /// <summary>Der Auftrag (Record-Name, Art <c>auftrag</c>) — der eine Eingang.</summary>
-    public required string Auftrag { get; init; }
-    /// <summary>Die Ergebnis-Events (OneOf-Fälle, Record-Namen) — die Ausgänge der Funktion im Graph.</summary>
-    public IReadOnlyList<string> Ergebnisse { get; init; } = [];
-    /// <summary>Lese-Fähigkeiten nach <c>IAusfuehrung</c> (<c>ISucheX suche</c>) — je Aufruf aus einem Bereich; eine solche Funktion läuft nur im Host.</summary>
-    public IReadOnlyList<Parameter> Faehigkeiten { get; init; } = [];
-    public string? Doku { get; init; }
-    public string? Datei { get; init; }
-    /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
-    public string? Herkunft { get; init; }
-    /// <summary>Die C#-Implementierung aus dem Code (Klassenname) — null = es gibt (noch) keine.</summary>
-    public string? Implementierung { get; init; }
-    /// <summary>Datei der Implementierung (relativ zur Solution) — dort gleicht „C# schreiben" die RufeAsync-Signatur mit ab.</summary>
-    public string? ImplDatei { get; init; }
-    /// <summary>Ihr <c>RufeAsync</c>-Rumpf (Spiegel der Datei, im Editor ein 📝/🤖-Code-Block; geändert wird er über ✓ Übernehmen).</summary>
-    public string? Rumpf { get; init; }
-    /// <summary>
-    /// Nur ohne <see cref="Implementierung"/>: der Code-Block der Funktion (📝/🤖) — „C# schreiben" legt damit die Implementierungs-Klasse
-    /// an (<c>""</c> = Block noch leer → throw-Platzhalter). null = kein Code-Block (Implementierung extern, z. B. Python).
-    /// </summary>
-    public string? Entwurf { get; init; }
-    /// <summary>
-    /// Der Konstruktor der Implementierung (Typ wie geschrieben + Name): Dienste (<c>IDienst</c>), Konfig-Records, <c>ILogger&lt;T&gt;</c>. Ein Dienst
-    /// hier ist die Kante Funktion → Dienst; ⊕ fügt einen Parameter an bzw. entfernt ihn (Geste am Konstruktor).
-    /// </summary>
-    public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
-    /// <summary>
-    /// Die Python-Implementierung (Laufort Extern, konzept-werkbank §12.3 E13) — eine Klasse im Worker-Projekt, die die generierte Basis erbt; null = keine.
-    /// Nur Spiegel der Datei (✎/🤖 am Rumpf über PythonSync), nie Teil der Signatur.
-    /// </summary>
-    public FunktionPython? Python { get; init; }
-}
-
-/// <summary>Eine Funktion in Baustein-Form (nur gelesen, Plan E4): Klasse (im Host) oder Schnittstelle (draußen), je Eingang die Signatur.</summary>
+/// <summary>Eine Funktion (nur gelesen, Plan E4): Klasse (im Host) oder Schnittstelle (draußen), je Eingang die Signatur.</summary>
 public sealed record BausteinFunktion
 {
     public required string Name { get; init; }
@@ -409,18 +291,6 @@ public sealed record BausteinEingang
     public bool Strom { get; init; }
     public IReadOnlyList<Parameter> Faehigkeiten { get; init; } = [];
     public IReadOnlyList<string> Ausgaben { get; init; } = [];
-}
-
-/// <summary>Die Python-Implementierung einer Funktion: Datei (relativ zur Solution), Klasse, die Methode <c>rufe</c> mit der Signatur der Basis.</summary>
-public sealed record FunktionPython
-{
-    public string Datei { get; init; } = "";
-    public string Klasse { get; init; } = "";
-    public string Basis { get; init; } = "";
-    public string Methode { get; init; } = "rufe";
-    /// <summary>Die <c>def</c>-Zeile aus der generierten Basis — gilt auch für einen fehlenden Rumpf.</summary>
-    public string? Signatur { get; init; }
-    public string? Rumpf { get; init; }
 }
 
 /// <summary>
@@ -468,121 +338,6 @@ public sealed record DienstRumpf
 }
 
 /// <summary>
-/// Eine Pipeline als Fluss (§14): Knoten in Deklarations-Reihenfolge — die Reihenfolge IST die Code-Reihenfolge (ein Draht
-/// kommt nur von einem früheren Knoten, also ist der Fluss per Konstruktion azyklisch).
-/// </summary>
-public sealed record FlussPipeline
-{
-    public required string Name { get; init; }
-    public required string Namespace { get; init; }
-    public IReadOnlyList<FlussSchritt> Knoten { get; init; } = [];
-    public string? Doku { get; init; }
-    public IReadOnlyList<string> ExtraUsings { get; init; } = [];
-    public string? Datei { get; init; }
-    /// <summary>Der Name des Bauer-Parameters im Lambda (<c>p</c>) — aus dem Code, sonst <c>p</c>.</summary>
-    public string Bauer { get; init; } = "p";
-    /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
-    public string? Herkunft { get; init; }
-
-    /// <summary>
-    /// Deklarations-Reihenfolge = Code-Reihenfolge: stabil topologisch (ein Draht kommt immer von einem früheren Knoten). Eine Geste darf
-    /// Knoten in beliebiger Reihenfolge schicken (ein neuer Draht nach vorn); ein Kreis bleibt am Ende stehen (der Analyzer meldet ihn).
-    /// </summary>
-    public FlussPipeline Geordnet()
-    {
-        static IEnumerable<string> Vor(FlussSchritt k) =>
-            k.Eingaenge.SelectMany(e => e.Draehte.Select(d => d.Von).Concat(e.Je is { } j ? [j] : []));
-        var namen = Knoten.Select(k => k.Name).ToHashSet(StringComparer.Ordinal);
-        var fertig = new HashSet<string>(StringComparer.Ordinal);
-        var rest = Knoten.ToList();
-        var aus = new List<FlussSchritt>();
-        while (rest.Count > 0)
-        {
-            var i = rest.FindIndex(k => Vor(k).All(v => fertig.Contains(v) || !namen.Contains(v)));
-            if (i < 0) { aus.AddRange(rest); break; }
-            aus.Add(rest[i]);
-            fertig.Add(rest[i].Name);
-            rest.RemoveAt(i);
-        }
-        return aus.SequenceEqual(Knoten) ? this : this with { Knoten = aus };
-    }
-}
-
-/// <summary>Die Art eines Fluss-Knotens.</summary>
-public static class FlussArt
-{
-    /// <summary>Katalog-Quelle: <c>p.Quelle&lt;Nachricht&gt;()</c>.</summary>
-    public const string Quelle = "quelle";
-    /// <summary>Event aus dem Log als Quelle: <c>p.Auf&lt;Event&gt;()</c>.</summary>
-    public const string Auf = "auf";
-    /// <summary>Katalog-Funktion: <c>….Rufe&lt;IF&gt;(λ)</c>.</summary>
-    public const string Funktion = "funktion";
-    /// <summary>Command an ein Aggregat: <c>….Sende&lt;Cmd&gt;(λ)</c>.</summary>
-    public const string Command = "command";
-    /// <summary>Je-Rahmen: <c>draht.Je(x =&gt; x.Liste)</c>.</summary>
-    public const string Je = "je";
-    /// <summary>Warten auf ein Event im Strom der Quelle: <c>quelle.Strom().Warte&lt;A, B&gt;().Zeitlimit(…)</c>.</summary>
-    public const string Warte = "warte";
-}
-
-/// <summary>
-/// Ein Knoten des Flusses: <c>var {Name} = …;</c>. <see cref="Typ"/> = Nachricht (Quelle/Auf), Funktions-Interface, Command bzw.
-/// Element-Typ (Je; nur Anzeige). Ein Aufruf-Knoten hat ≥ 1 Eingang — der erste ist der Hauptaufruf, jeder weitere ein ∨
-/// (<c>.Oder(…)</c>). Ein Je-Knoten hat genau einen Eingang (der Draht mit der Liste) und den Listen-Ausdruck.
-/// </summary>
-public sealed record FlussSchritt
-{
-    public required string Name { get; init; }
-    public required string Art { get; init; }
-    public required string Typ { get; init; }
-    public IReadOnlyList<FlussEingang> Eingaenge { get; init; } = [];
-    /// <summary>Zeitlimit als C#-Ausdruck verbatim (z. B. <c>TimeSpan.FromMinutes(5)</c>); null = keins.</summary>
-    public string? Zeitlimit { get; init; }
-    /// <summary>Nur Je: der Listen-Lambda verbatim (<c>z =&gt; z.Bilder</c>).</summary>
-    public string? Liste { get; init; }
-    /// <summary>Nur Warte: die Events, auf die gewartet wird (Code-Reihenfolge; <see cref="Typ"/> = das erste) — je eines ein Ausgang.</summary>
-    public IReadOnlyList<string> WarteAuf { get; init; } = [];
-    /// <summary>Im Code ohne Variable (<c>p.Alle(…).Sende&lt;X&gt;(…);</c>) — der Name ist dann nur die Editor-Identität.</summary>
-    public bool OhneVariable { get; init; }
-    public string? Doku { get; init; }
-}
-
-/// <summary>
-/// Ein Eingang eines Aufruf-Knotens: die Drähte (1 = einfach, mehr = ∧ <c>p.Alle(…)</c>), oder ein Je-Element (<see cref="Je"/>
-/// ohne Drähte), oder das Sammeln eines Je-Rahmens (<see cref="Je"/> + <see cref="Sammle"/>: die Drähte sind die gesammelten).
-/// <see cref="Ausdruck"/> ist der Bau-Lambda verbatim; fehlt er, schreibt der Scaffolder ihn aus <see cref="Argumente"/>
-/// (je Konstruktor-Parameter des Ziels ein Ausdruck in den Lambda-Parametern).
-/// </summary>
-public sealed record FlussEingang
-{
-    public IReadOnlyList<FlussDraht> Draehte { get; init; } = [];
-    /// <summary>Gesetzt: der Eingang gehört zum Je-Rahmen dieses Namens — Element (ohne <see cref="Sammle"/>) bzw. gesammelte Liste.</summary>
-    public string? Je { get; init; }
-    public bool Sammle { get; init; }
-    public string? Ausdruck { get; init; }
-    public IReadOnlyList<string>? Argumente { get; init; }
-}
-
-/// <summary>Ein Draht: Ausgang <see cref="Fall"/> (bzw. Port) des Knotens <see cref="Von"/>.</summary>
-public sealed record FlussDraht
-{
-    public required string Von { get; init; }
-    /// <summary>Der Fall (Typ-Name: Ergebnis der Funktion, Event des Aggregats). Null = der Ausgang einer Quelle selbst.</summary>
-    public string? Fall { get; init; }
-    /// <summary><c>fall</c> (Standard), <c>zeitlimit</c> (⏳), <c>abgelehnt</c> (✕) oder <c>strom</c> (der Strom einer Quelle).</summary>
-    public string Port { get; init; } = FlussPort.Fall;
-}
-
-public static class FlussPort
-{
-    public const string Fall = "fall";
-    public const string Zeitlimit = "zeitlimit";
-    public const string Abgelehnt = "abgelehnt";
-    /// <summary>Der zweite Ausgang einer Quelle: ihr Strom (<c>quelle.Strom()</c>, <c>QuellStrom(Id, Version)</c>).</summary>
-    public const string Strom = "strom";
-}
-
-/// <summary>
 /// Der Rahmen, in den geschrieben wird — vom Extractor AUS DEM CODE abgeleitet, nicht im Scaffolder festgelegt:
 /// Vertrags-Namespace, globale usings der Domänen-Projekte, die Namen der inneren Decider/Applier-Klassen und ihrer
 /// Methoden (wie der Code sie benennt) und die Verzeichnisse je Namespace (wo die Typen tatsächlich liegen).
@@ -615,8 +370,6 @@ public sealed record Rahmen
     public string AggregatIdFeld { get; init; } = Abstractions.Idvertrag.CommandZiel;
     /// <summary>Größte Stelligkeit von <c>OneOf&lt;…&gt;</c> im Vertrag (aus der Compilation gezählt; 0 = unbekannt).</summary>
     public int OneOfMax { get; init; }
-    /// <summary>Größte Join-Stelligkeit der Prozess-DSL (<c>RegelBauer&lt;…&gt;</c>, aus der Compilation gezählt; 0 = unbekannt).</summary>
-    public int UndMax { get; init; }
 
     // ── Leseseite (CQRS057: Handle(TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…) / Handle(TQuery, IMessageEnvelope, ReadContext, Fähigkeit…)) ──
     /// <summary>
@@ -650,11 +403,9 @@ public sealed record StoreBasis
 public sealed record Leseseite
 {
     public IReadOnlyList<Store> Stores { get; init; } = [];
-    /// <summary>Projektionen UND Reaktionen (dieselbe Form; Reaktion = ein Handle gibt Commands aus).</summary>
+    /// <summary>Die Projektionen.</summary>
     public IReadOnlyList<Konsument> Konsumenten { get; init; } = [];
     public IReadOnlyList<Leser> Reader { get; init; } = [];
-    /// <summary>Pipelines — hier NUR ihre Handles mit Fähigkeits-Parametern (verbinden/lösen); keine Pipeline-Scaffoldung.</summary>
-    public IReadOnlyList<PipelineKarte> Pipelines { get; init; } = [];
 }
 
 /// <summary>Ein Methoden-/Konstruktor-Parameter verbatim: Typ, Name, optionaler Default.</summary>
@@ -715,10 +466,10 @@ public sealed record StoreImpl
     public string? LeseDatei { get; init; }
 }
 
-/// <summary>Ein Handle einer Projektion/Reaktion, eines Readers oder einer Pipeline: Eingang, Kontext, Fähigkeiten, Rückgabe.</summary>
+/// <summary>Ein Handle einer Projektion oder eines Readers: Eingang, Kontext, Fähigkeiten, Rückgabe.</summary>
 public sealed record Handle
 {
-    /// <summary>Einfacher Typname des Eingangs (Event / Query / Trigger / Selbst-Nachricht) — identifiziert den Handle.</summary>
+    /// <summary>Einfacher Typname des Eingangs (Event / Query) — identifiziert den Handle.</summary>
     public required string Eingang { get; init; }
     /// <summary>
     /// Der Eingang, wie er im Code steht, wenn er im Editor umverdrahtet/umbenannt wurde (sonst null) — damit „C# schreiben"
@@ -731,7 +482,7 @@ public sealed record Handle
     public IReadOnlyList<string>? Kontext { get; init; }
     /// <summary>Die Fähigkeits-Parameter (Typ = Fähigkeits-Interface): die Obergrenze dessen, was der Rumpf am Store darf.</summary>
     public IReadOnlyList<Parameter> Faehigkeiten { get; init; } = [];
-    /// <summary>Was der Handle erzeugen KANN (OneOf-Varianten): Commands/Events (Konsument), Responses (Reader).</summary>
+    /// <summary>Was der Handle erzeugen KANN (OneOf-Varianten): Hinweise (Projektion), Responses (Reader).</summary>
     public IReadOnlyList<string> Ausgaenge { get; init; } = [];
     /// <summary>Rückgabetyp verbatim; null = aus <see cref="Ausgaenge"/> abgeleitet.</summary>
     public string? Rueckgabe { get; init; }
@@ -746,7 +497,7 @@ public sealed record Handle
     public string? Herkunft { get; init; }
 }
 
-/// <summary>Eine Projektion oder Reaktion (<c>ISubscriber</c>), Handles <c>Handle(TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…)</c>.</summary>
+/// <summary>Eine Projektion (<c>ISubscriber</c>), Handles <c>Handle(TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…)</c>.</summary>
 public sealed record Konsument
 {
     public required string Name { get; init; }
@@ -768,7 +519,11 @@ public sealed record Konsument
     public string? Datei { get; init; }
     /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
     public string? Herkunft { get; init; }
-    /// <summary>Regel Z (Code-Fakt, nur gelesen): Instanzfelder, die Zustand halten (siehe <see cref="PipelineKarte.Zustand"/>).</summary>
+    /// <summary>
+    /// Regel Z (Code-Fakt, nur gelesen, nie geschrieben — die Felder stehen verbatim im <see cref="Zusatz"/>): die Instanzfelder, die
+    /// ZUSTAND halten — nicht <c>readonly</c>, oder <c>readonly</c> mit einem Referenztyp, der weder Konstruktor-Parameter-Typ
+    /// (injiziert: Konfig, Dienst, Logger) noch <c>string</c> ist (z. B. <c>HashSet&lt;string&gt; _seen = new()</c>). Null/leer = zustandslos.
+    /// </summary>
     public IReadOnlyList<string>? Zustand { get; init; }
 }
 
@@ -794,54 +549,6 @@ public sealed record Leser
 }
 
 /// <summary>
-/// Eine Pipeline (<c>IPipelineHandler</c>), Handles <c>Handle(TEingang, PipelineContext, Fähigkeit…)</c> → <c>IAsyncEnumerable&lt;OneOf&lt;…&gt;&gt;</c>
-/// (Commands, Trigger, <c>Selbst&lt;T&gt;</c>, <c>Frist&lt;TCmd&gt;</c>). Konfigs = per Konstruktor injizierte Konfigurations-Records.
-/// </summary>
-public sealed record PipelineKarte
-{
-    public required string Name { get; init; }
-    public required string Namespace { get; init; }
-    public string? PipelineId { get; init; }
-    public IReadOnlyList<string> Konfigs { get; init; } = [];
-    public IReadOnlyList<Handle> Handles { get; init; } = [];
-    public string? Doku { get; init; }
-    public string? Typart { get; init; }
-    public IReadOnlyList<string>? Basen { get; init; }
-    public string? Attribute { get; init; }
-    /// <summary>Übrige Member verbatim (PipelineId, Ctor, Felder, Helfer). Null ⇒ PipelineId + Konfig-Ctor werden erzeugt.</summary>
-    public string? Zusatz { get; init; }
-    public IReadOnlyList<string> Usings { get; init; } = [];
-    public string? Datei { get; init; }
-    /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
-    public string? Herkunft { get; init; }
-    /// <summary>
-    /// Regel Z (Code-Fakt, nur gelesen, nie geschrieben — die Felder stehen verbatim im <see cref="Zusatz"/>): die Instanzfelder, die
-    /// ZUSTAND halten — nicht <c>readonly</c>, oder <c>readonly</c> mit einem Referenztyp, der weder Konstruktor-Parameter-Typ
-    /// (injiziert: Konfig, Dienst, Logger) noch <c>string</c> ist (z. B. <c>HashSet&lt;string&gt; _seen = new()</c>). Null/leer = zustandslos.
-    /// </summary>
-    public IReadOnlyList<string>? Zustand { get; init; }
-}
-
-/// <summary>
-/// Eine Ingress-Bindung der Composition Root: welcher Trigger über welchen Ingress (Webhook/Timer/Datei) an welchem Ort
-/// ankommt. Aus dem Code: der Aufruf einer <c>[Ingress]</c>-Methode (Datei + Anweisung verbatim). Eine NEUE Bindung wird nach
-/// dem Vorbild einer bestehenden Bindung desselben Modus geschrieben (Anweisung kopiert, Trigger-Typ und Ort ersetzt).
-/// </summary>
-public sealed record IngressBindung
-{
-    public required string Trigger { get; init; }
-    /// <summary>webhook | timer | filewatch.</summary>
-    public required string Modus { get; init; }
-    /// <summary>Der Ort (Route/Intervall/Pfad) als Wert.</summary>
-    public string? Ort { get; init; }
-    /// <summary>Nur aus dem Code: Datei, die Anweisung verbatim, der Typ-Argument-Text und der Ort-Argument-Text darin.</summary>
-    public string? Datei { get; init; }
-    public string? Anweisung { get; init; }
-    public string? TypArgument { get; init; }
-    public string? OrtArgument { get; init; }
-}
-
-/// <summary>
 /// Ein Akteur — ein Domänen-Experte: <c>public sealed record {Name} : IMensch, IDarf&lt;A&gt;, IDarf&lt;B&gt;;</c>
 /// (<c>docs/konzept-akteure.md</c> §2). <see cref="Darf"/> = einfache Typnamen in Deklarations-Reihenfolge — nur, was er SELBST
 /// hineingibt; was eine Kette in seinem Namen erzeugt, wird abgeleitet (<see cref="AkteurAnteile"/>).
@@ -853,49 +560,15 @@ public sealed record Akteur
     public IReadOnlyList<string> Darf { get; init; } = [];
     /// <summary>Art aus der Basisliste: „Mensch" (<c>IMensch</c>), „Maschine" (<c>IMaschine</c>), „Ki" (<c>IKi</c>); null = nur <c>IAkteur</c>.</summary>
     public string? Art { get; init; }
-    /// <summary>
-    /// Die Dienste dieses Akteurs (<c>interface X : IAkteurDienst&lt;Akteur&gt;</c>, einfache Namen). Ein Dienst ist kein Akteur;
-    /// ein Pipeline-Handle, der ihn als Parameter nimmt, entscheidet im Auftrag dieses Akteurs (CQRS060). Nur Code-Fakt (gelesen).
-    /// </summary>
-    public IReadOnlyList<string> Dienste { get; init; } = [];
-    /// <summary>
-    /// Der VERTRAG des Akteurs (<c>interface IX : IAkteurVertrag&lt;X&gt;</c>, <c>docs/konzept-akteure.md</c> §3): je <c>Auf(Event)</c> eine
-    /// Zusage mit ihren Ausgängen. Was er so hineingibt, darf er (kein IDarf), und er hört genau diese Eingänge. Leer = rein spontan.
-    /// </summary>
-    public IReadOnlyList<AkteurZusage> Vertrag { get; init; } = [];
-    /// <summary>Name des Vertrags-Interfaces (null = <c>I{Name}</c>, sobald es Zusagen gibt).</summary>
-    public string? VertragName { get; init; }
-    /// <summary>Datei des Vertrags, wenn sie nicht die des Akteurs ist (relativ zur Solution).</summary>
-    public string? VertragDatei { get; init; }
     public string? Doku { get; init; }
     /// <summary>Datei der Deklaration (relativ zur Solution); null = neu im Editor.</summary>
     public string? Datei { get; init; }
     public string? Herkunft { get; init; }
-
-    /// <summary>Der Name des Vertrags-Interfaces, wie er im Code steht bzw. geschrieben wird.</summary>
-    public string VertragTyp => VertragName ?? "I" + Name;
-}
-
-/// <summary>
-/// Eine Zusage im Akteur-Vertrag: <c>Auf(Eingang e)</c> mit dem Ausgabe-Vertrag als Rückgabetyp — keine Ausgänge = <c>void</c> (nur zur
-/// Kenntnis), sonst <c>OneOf&lt;…&gt;</c>, bei <see cref="Strom"/> <c>IAsyncEnumerable&lt;OneOf&lt;…&gt;&gt;</c> (mehrere Commands je Zusage).
-/// </summary>
-public sealed record AkteurZusage
-{
-    public string Eingang { get; init; } = "";
-    public IReadOnlyList<string> Ausgaenge { get; init; } = [];
-    public bool Strom { get; init; }
-    public string? Doku { get; init; }
-    /// <summary>
-    /// Der Vertrags-TEIL, in dem die Zusage steht, wenn es nicht der Haupt-Vertrag (<see cref="Akteur.VertragTyp"/>) ist — ein Akteur darf
-    /// seinen Vertrag in Teile schneiden, die Clients einzeln tragen (CQRS061). Null = Haupt-Vertrag. Teile liest der Editor nur.
-    /// </summary>
-    public string? Teil { get; init; }
 }
 
 /// <summary>
 /// Ein CLIENT — die Software an der Leitung (Python-Worker, Blazor-Arbeitsplatz …), <c>docs/konzept-akteure.md</c> §4:
-/// <c>public interface {Name} : IClientVertrag, ITeil…, ISendet&lt;C&gt;, IFragt&lt;Q&gt; { void Auf(E e); }</c>. Ein Client kann mehrere
+/// <c>public interface {Name} : IClientVertrag, ITraegt&lt;F&gt;…, ISendet&lt;C&gt;…, IFragt&lt;Q&gt;…, IHoert&lt;E&gt;…;</c>. Ein Client kann mehrere
 /// Akteure verkörpern, ein Akteur über mehrere Clients laufen; je Client genau dieser eine Vertrag. Nur der RAND steht hier — die
 /// client-internen Commands/Events (Intents, ClientEvents, Python-State) nie.
 /// </summary>
@@ -904,13 +577,13 @@ public sealed record Client
     /// <summary>Der Interface-Name wie im Code (<c>IArbeitsplatz</c>); der Handshake-Name ist er ohne führendes I.</summary>
     public string Name { get; init; } = "";
     public string Namespace { get; init; } = "";
-    /// <summary>Getragene Akteur-Vertrags-Teile (Interface-Namen, z. B. <c>IKlassifizierer</c>) — ihre Zusagen im Namen des Akteurs.</summary>
+    /// <summary><c>ITraegt&lt;F&gt;</c>: getragene Funktionen (Schnittstellen-Namen) — der Client führt ihren Code aus.</summary>
     public IReadOnlyList<string> Traegt { get; init; } = [];
-    /// <summary><c>ISendet&lt;T&gt;</c>: Command/Trigger/Transient, von sich aus (muss ein Akteur dürfen).</summary>
+    /// <summary><c>ISendet&lt;T&gt;</c>: Command, Quell-Nachricht oder Hinweis, von sich aus (muss ein Akteur dürfen).</summary>
     public IReadOnlyList<string> Sendet { get; init; } = [];
     /// <summary><c>IFragt&lt;T&gt;</c>: die Queries des Clients (muss ein Akteur dürfen).</summary>
     public IReadOnlyList<string> Fragt { get; init; } = [];
-    /// <summary>Eigene <c>void Auf(E e)</c>: nur zur Kenntnis (UI-Aktualisierung), keine Ausgabe.</summary>
+    /// <summary><c>IHoert&lt;E&gt;</c>: nur zur Kenntnis (UI-Aktualisierung), keine Ausgabe.</summary>
     public IReadOnlyList<string> Kenntnis { get; init; } = [];
     public string? Doku { get; init; }
     /// <summary>Datei der Deklaration (relativ zur Solution); null = neu im Editor.</summary>
@@ -918,13 +591,13 @@ public sealed record Client
     public string? Herkunft { get; init; }
     /// <summary>
     /// Die Software, die den Vertrag umsetzt (Code-Fakt: eine Klasse, die die generierte Basis <c>&lt;Client&gt;Basis</c> erbt) — je
-    /// Zusage/Kenntnis ihr Rumpf. Das ist die LOGIK des Akteurs draußen: im Editor ein 📝-Block (+ 🤖) je <c>Auf</c>. Nicht Teil der
+    /// getragenem Eingang und je Kenntnis ihr Rumpf. Das ist die Logik draußen: im Editor ein 📝-Block (+ 🤖) je Methode. Nicht Teil der
     /// Signatur (Herkunft), geändert wird sie über ✓ Übernehmen am 🤖 bzw. die IDE.
     /// </summary>
     public IReadOnlyList<ClientImpl> Implementierungen { get; init; } = [];
 }
 
-/// <summary>Eine Implementierung eines Clients: Sprache (heute <c>python</c>), Klasse, Datei und je <c>Auf(Event)</c> der Rumpf.</summary>
+/// <summary>Eine Implementierung eines Clients: Sprache (heute <c>python</c>), Klasse, Datei und je Methode der Basis der Rumpf.</summary>
 public sealed record ClientImpl
 {
     public string Sprache { get; init; } = "python";
@@ -933,15 +606,18 @@ public sealed record ClientImpl
     public IReadOnlyList<ClientRumpf> Rumpfe { get; init; } = [];
 }
 
-/// <summary>Der Rumpf einer Zusage/Kenntnis in der Implementierung (<see cref="Methode"/> wie die generierte Basis sie nennt; null Rumpf = fehlt).</summary>
+/// <summary>
+/// Der Rumpf eines getragenen Funktions-Eingangs bzw. einer Kenntnis in der Implementierung (<see cref="Methode"/> wie die generierte Basis sie
+/// nennt; null Rumpf = fehlt).
+/// </summary>
 public sealed record ClientRumpf
 {
     public string Event { get; init; } = "";
     public string Methode { get; init; } = "";
     public string? Rumpf { get; init; }
-    /// <summary>Die Signatur aus der generierten Basis (<c>async def auf_…(self, e: …Dto, ctx, state) -&gt; …:</c>) — gilt auch für einen fehlenden Rumpf.</summary>
+    /// <summary>Die Signatur aus der generierten Basis (<c>async def …(self, e: …Dto, …, state) -&gt; …:</c>) — gilt auch für einen fehlenden Rumpf.</summary>
     public string? Signatur { get; init; }
-    /// <summary>Der Ausgabe-Vertrag der Zusage (Commands, die sie liefern darf; leer = Kenntnis) und der Akteur, in dessen Namen sie antwortet.</summary>
+    /// <summary>Die Ausgaben des getragenen Eingangs (aus der Signatur der Funktion; leer = Kenntnis) und die getragene Funktion (null = Kenntnis).</summary>
     public IReadOnlyList<string> Ausgaenge { get; init; } = [];
-    public string? Akteur { get; init; }
+    public string? Funktion { get; init; }
 }

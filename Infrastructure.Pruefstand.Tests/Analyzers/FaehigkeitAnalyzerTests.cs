@@ -73,12 +73,11 @@ public record Konfig(int Wert);
     }
 
     [Fact]
-    public async Task Statischer_Store_und_Fristplan_in_einer_Pipeline_sind_CQRS054()
+    public async Task Statischer_Store_und_Store_als_Eigenschaft_in_einer_Funktion_sind_CQRS054()
     {
-        (await Ids(@"namespace Probe { public class L : IPipelineHandler {
+        (await Ids(@"namespace Probe { public class L : IFunktion {
             public static IFinde? Finde;
-            public IFristplan? Plan { get; set; }
-            public string PipelineId => ""l""; } }"))
+            public IFinde? Auch { get; set; } } }"))
             .Should().Equal(FaehigkeitAnalyzer.ZustandId, FaehigkeitAnalyzer.ZustandId);
     }
 
@@ -120,7 +119,6 @@ namespace Probe {
 public record Gemacht() : IEvent;
 public record Frage() : IQuery;
 public record Antwort() : IQueryResponse;
-public record Los() : IPipelineTrigger;
 public interface IFinde : IReadStore { Task<int> FindeAsync(Guid id); }
 public record Konfig(int Wert);
 " + code + " }") }, refs, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
@@ -137,9 +135,7 @@ public partial class P : ISubscriber { public string SubscriberId => ""p"";
     public Task Handle(Gemacht e, IAggregateEnvelope env, ProjectionWriter w) => Task.CompletedTask; }
 public partial class R : IReader<P> {
     public Task<Antwort> Handle(Frage q, IMessageEnvelope env, ReadContext ctx, IFinde f) => Task.FromResult(new Antwort()); }
-public partial class L : IPipelineHandler { public string PipelineId => ""l"";
-    public Task OnInitializeAsync(PipelineContext ctx) => Task.CompletedTask;
-    public Task Handle(Los t, PipelineContext ctx, IFinde f) => Task.CompletedTask; }")).Should().BeEmpty();
+")).Should().BeEmpty();
     }
 
     [Fact]
@@ -148,9 +144,15 @@ public partial class L : IPipelineHandler { public string PipelineId => ""l"";
         (await Ids(@"
 public partial class P : ISubscriber { public string SubscriberId => ""p"";
     public Task Verarbeite(Gemacht e, IAggregateEnvelope env, ProjectionWriter w) => Task.CompletedTask;
-    public Task Handle(Gemacht e, ProjectionWriter w, IAggregateEnvelope env) => Task.CompletedTask; }
-public partial class L : IPipelineHandler { public string PipelineId => ""l"";
-    public Task Handle(Los t, PipelineContext ctx, Konfig k) => Task.CompletedTask; }"))
+    public Task Handle(Gemacht e, ProjectionWriter w, IAggregateEnvelope env) => Task.CompletedTask;
+    public Task Handle(Gemacht e, IAggregateEnvelope env, ProjectionWriter w, Konfig k) => Task.CompletedTask; }"))
             .Should().Equal(HandlerFormAnalyzer.FormId, HandlerFormAnalyzer.FormId, HandlerFormAnalyzer.FormId);
     }
+
+    [Fact]
+    public async Task Eine_Projektion_die_etwas_ausgibt_ist_CQRS057()
+        => (await Ids(@"
+public partial class P : ISubscriber { public string SubscriberId => ""p"";
+    public Task<Gemacht> Handle(Gemacht e, IAggregateEnvelope env, ProjectionWriter w) => Task.FromResult(e); }"))
+            .Should().Equal(HandlerFormAnalyzer.FormId);
 }

@@ -1,15 +1,15 @@
 # 13 — Reifegrad, Schulden & Bewertung
 
 **Die eine Quelle für „offen“.** Andere Dokumente (`CLAUDE.md`, Kapitel 01–12, Konzepte) nennen Schulden höchstens kurz und verweisen
-hierher. Stand: 2026-10-18, nach Phase 4 des Plans Garantien und Durchsatz, PF-14 und der Analyse wachsender Bestände (PF-23 bis PF-32). Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
+hierher. Stand: 2026-10-26, nach Phase 4 des Plans Pub/Sub-Neustrukturierung (Dirigent, Reaktion, Fluss-DSL, Katalog-Form und Handle-/Trigger-Welt
+zurückgebaut). Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
 (`docs/konzept-werkbank.md` §2). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
 
 ## 13.0 Offen auf einen Blick
 
 **Umbau (2026-10-26):** [plan-pubsub-neustrukturierung.md](plan-pubsub-neustrukturierung.md) löst Broker, Signale, Prozess-Manager, Fluss- und
-Prozess-Sprache, Handle-/Trigger-Welt und den Redis-Versionsindex ab. Viele Punkte unten (u. a. PF-4b, PF-6, PF-7, PF-10, PF-13, PF-25, PF-26,
-W11-1, W11-2, AK-1, P2-5, P3-3) erledigen sich damit oder bekommen eine neue Form; sie werden mit der jeweiligen Phase des Plans abgeschlossen
-oder umgeschrieben. Die Befunde der Actor-Praxis vom 2026-10-18 stehen im Plan §1.7.
+Prozess-Sprache, Handle-/Trigger-Welt und den Redis-Versionsindex ab. Mit Phase 4 sind W11-1, W11-2, PF-4b, PF-25, PF-26, P2-5, P3-3, FB-2, FB-3
+und VM-1 erledigt (§13.6); PF-6, PF-7, PF-10, PF-13 und AK-1 werden mit den späteren Phasen abgeschlossen oder umgeschrieben. Die Befunde der Actor-Praxis vom 2026-10-18 stehen im Plan §1.7.
 
 | ID | Kurz | Prio |
 |---|---|:--:|
@@ -19,37 +19,33 @@ oder umgeschrieben. Die Befunde der Actor-Praxis vom 2026-10-18 stehen im Plan �
 | G-13 | Zwei Knoten vergeben dieselben Sitzungs-Kennungen (Zähler je Prozess), der Broker überschreibt: eine gezielte Antwort kann bei der Sitzung des anderen Knotens landen | P1 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
-| PF-13 | Unter S5-64: Reaktion p99 2–3,5 s (p50 5 ms) — ihr Nachschub wartet am heißen Posten hinter den Reservierungen (der S3-64-Rückgang ist mit „korreliert lesen“ erledigt: 1,85 × Baseline) | P3 |
-| PF-4b | Rest von PF-4: keine Lease für den Prozess-Backstop im Cluster (jeder Knoten heilt alle offenen Vorgänge); Abnahme „S3 Zeit je Teil konstant über N“ und „10 000 offene Vorgänge im Leerlauf“ ohne Szenario im Treiber | P3 |
+| PF-13 | Unter S5-64: der Nachschub (früher Reaktion, seit Phase 4 die Funktion `Nachschub`) wartet am heißen Posten hinter den Reservierungen — p99 im Sekundenbereich (Zahlen docs/12) | P3 |
 | PF-10 | Datei-Treiber meldet eine Datei nach der anderen ins Log (Rückstau): das Melde-Tempo ist die Decke von S1 — Entscheidung offen | P2 |
-| VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16; seit Phase 3 dazu die Uhr (eine Abfrage je Sekunde) und je Funktion und Partition ein Poll | P3 |
 | FB-1 | Ein Hinweis (`ITransientEvent`) als Eingang einer Funktion steht im generierten Hinweisplan, wird zur Laufzeit aber noch nicht zugestellt (schneller Kanal kommt mit Plan Phase 6) | P2 |
-| FB-2 | Funktion als Baustein: Laufort Extern (gRPC, Python-Worker) fehlt — Boot-Fehler bis Plan Phase 7; die Quell-Nachricht vom Client gibt es nur über den JSON-Eingang, nicht über gRPC und die SDKs | P2 |
-| FB-3 | Events aus Funktionen, Quellen und der Uhr senden kein Signal: eine Funktion, die auf sie hört, sieht sie erst mit dem Poll (bis 30 s) — eigener Wecker mit Plan Phase 6 | P3 |
+| FB-5 | Kreise Funktion ↔ Aggregat: keine Build-Prüfung (R6 des Plans). Ein Kreis ist der Normalfall eines Ablaufs (Vorgang → Funktion → Vorgang); ob und wie ein Kreis ohne fortschreitenden Zustand erkannt werden soll, ist offen | P3 |
+| FB-6 | Quell-Nachricht vom Client nur über den JSON-Eingang: das Trigger-Protokoll der Leitung ist entfernt, der gRPC-Weg (und die SDKs) kommt mit Plan Phase 7 | P2 |
+| FB-7 | Eine Funktion draußen ohne verbundenen Träger staut ihre Eingänge still im Log (Rückstand in `/health`, aber keine eigene Meldung „kein Träger“) | P3 |
 | FB-4 | Werkzeuge: Extractor und Karten zeigen `Frist<TCmd>` als Ausgang eines Decide nicht als Kante zur Uhr; das Werkbank-Schema kennt nur die Datei-Konfig (Takt fehlt); Editor-Oberfläche zurückgestellt (Plan E4) | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar (Schlüssel laufen seit PF-30 ab) | P2 |
-| PF-25 | Rest: der Backstop gleicht alle 15 s den Heil-Plan im Speicher mit der ganzen Liste der offenen Vorgänge ab; nach einem Neustart weckt er alle auf einmal | P2 |
-| PF-31 | Entscheidung offen: ein Wechsel der Snapshot-Schema-Version faltet heiße Aggregate einmal voll; ein neuer Emittent liest die Geschichte ab 0 | P3 |
-| PF-26 | Rest: offene Warte-Knoten weckt der Takt alle 15 s; der Backstop deckelt bei 1 000 Weckungen pro Sekunde (≈ 15 000 Wartende) | P3 |
-| PF-32 | Wachstum ohne Laufzeit-Risiko: Guards und Emittenten-Cursor je Stream nie gelöscht, DLQ ohne Aufräumen und Index, Einblick-Scans, Kopfzeilen 140 Byte je Event | P3 |
+| PF-31 | Entscheidung offen: ein Wechsel der Snapshot-Schema-Version faltet heiße Aggregate einmal voll; eine neue Funktion liest die Geschichte ab 0 | P3 |
+| PF-32 | Wachstum ohne Laufzeit-Risiko: Guards je Stream und Festhalte-Streams je (Funktion, Eingang) nie gelöscht, DLQ ohne Aufräumen und Index, Einblick-Scans, Kopfzeilen 140 Byte je Event | P3 |
 | PF-17 | Rest: die Zeitstempel-Regel kostet in Sim ≈ 20–35 µs je eingefügtem Event (Versatz je Zeile aus `uhr`); in Prod nur die Datenbankzeit | P3 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
-| W10-2 | Reflektive Serialisierung zur Laufzeit (Marten-Default, Marking-Store, Snapshot-`Clone`, HTTP-Antworten); kein Reflection-Verbot im Build | P1 |
+| W10-2 | Reflektive Serialisierung zur Laufzeit (Marten-Default, Snapshot-`Clone`, HTTP-Antworten); kein Reflection-Verbot im Build | P1 |
+| W10-3 | Reflection im Test-Werkzeug: `Cqrs.Testing` spiegelt den Zustand eines Aggregats per Reflection (Vergleich in `Dann`) | P3 |
 | LLM-1 | 🤖-Rümpfe sind nur „baut und regelkonform“ geprüft, nicht fachlich: keine Beispiele je Slot, `Cqrs.Testing` nicht an Editor/🤖 angebunden | P1 |
 | P1-1 | Multi-Node nur container-erprobt, Consul im `-dev`-Modus | P1 |
 | P1-2 | Transport-Sicherheit: kein TLS; Identitäten für Prod fehlen | P1 |
 | P1-7 | Deploy-Skripte veraltet (starten die Hosts ohne Umgebung, alte Konfig-Schlüssel) | P1 |
 | W2-1 | Rest der Projektstruktur: Client-Framework hängt am Server-Framework, Generat-Namespaces, Identitäten aus einfachen Namen | P2 |
-| W11-1 | Doppelte Wege: Handle-Pipeline/Trigger/`[Ingress]` ohne Nutzer, Prozess- vs. Fluss-DSL | P2 |
-| W11-2 | Fristplaner hängt an der Handle-Welt (die Zeitlimits des Dirigenten laufen seit PF-4 über die Frist im Offen-Index); seit Phase 3 steht die Uhr (`Frist<TCmd>` aus dem Decide) daneben, die Handle-Frist heißt `FristPlanung<TCmd>` — Rückbau mit dem Alten | P2 |
 | W3-1 | Ableitungen im Editor-JS (Karten-Ids, Hör-Menge, Lambda-Parameter, Auto-Zuordnung, Kardinalität) | P2 |
 | WB-1 | Werkbank: Geste p50 unter Fremdlast 346–470 ms (Ziel 300 ms), LLM-Kontexte kalt, CLI `--schreiben`, Renamer ohne String-Literale | P2 |
 | WB-4 | Die Werkbank kennt genau eine Anwendung (`StandardWurzel`, `ServerHost`); eine Anwendung anlegen ist nicht beschrieben — Entscheidung offen | P2 |
+| WB-5 | Der Einblick der Werkbank kennt keinen fachlichen Zustand „fertig“ mehr (früher `ProzessBeendet`): ein Vorgang ist gescheitert (Ablehnung), läuft oder ruht | P3 |
 | WZ-1 | Prüf-Lücken der Werkzeuge: Grammatik-Gate bestätigt sich selbst, Fixpunkt ohne Akteure/Verträge/Clients/Funktionen/Dienste, Sonde ohne `SendeJe`/Count-Join/Kompensation/`IMensch`/`IstClient` | P2 |
-| AK-1 | Akteure/Clients: durable Zustellung an Clients, `als` im Envelope, Zusagen über C#, Anmeldung je Person | P2 |
-| P2-5 | Marking-/Kompensations-Feinschliff, `KlärungNötig` ohne Test | P2 |
+| AK-1 | Akteure/Clients: `als` im Envelope, Funktionen über C# tragen, Anmeldung je Person | P2 |
 | P2-6 | Schreibpfad: paralleler Drain skaliert sublinear | P2 |
 | P2-8 | Hartkodierte Poll-Intervalle und Test-Verbindungsdaten | P2 |
 | P2-9 | Toter Lesepfad `LoadStateAsync`, Identitäts-Vertrag nur per Kommentar | P2 |
@@ -57,7 +53,6 @@ oder umgeschrieben. Die Befunde der Actor-Praxis vom 2026-10-18 stehen im Plan �
 | P2-11 | Python: Registry von Hand gepflegt, Kleinkram im SDK | P2 |
 | P3-1 | Mojibake in drei Dateien | P3 |
 | P3-2 | Toter Code und Kleinkram | P3 |
-| P3-3 | Saga-DSL in `Cqrs.Testing` kennt `Rufe` nicht | P3 |
 
 ## 13.1 Gesamteinschätzung
 
@@ -69,12 +64,12 @@ heben es über typische Eigenbau-Frameworks.
 
 **Der Kern ist solide und gemessen grün.** Die offenen Punkte liegen fast durchweg an zwei Stellen: an den **Rändern** (Transport-Sicherheit,
 Multi-Node-Betrieb) und an der **Allgemeingültigkeit** (W2/W10/W11): Komposition und Werkzeuge kennen die Projekte der Beispieldomäne beim Namen,
-Werkzeuge lesen teils per Reflection, und neben den neuen Wegen (Fluss, Quelle, Umgebung) liegt noch die alte Handle-/Trigger-Welt.
+Werkzeuge lesen teils per Reflection. Die alte Handle-/Trigger-Welt und der Dirigent sind mit Phase 4 des Umbaus zurückgebaut.
 
 | Subsystem | Reife |
 |---|:--:|
 | Schreibseite | 🟢 / 🟡 (G-5) |
-| Konsum-/Prozess-Maschine | 🟢 / 🟡 (PF-13, PF-4b) |
+| Konsum, Funktionen, Uhr | 🟢 / 🟡 (PF-13, FB-1) |
 | Generatoren & Analyzer | 🟢 / 🟡 (W10-1, W2-1) |
 | Multi-Node / Transport | 🟢 / 🟡 (P1-1, P1-2) |
 | Werkbank (Extractor, Editor, Server) | 🟢 / 🟡 (LLM-1, W3-1, WB-1, WB-4, WZ-1) |
@@ -85,10 +80,10 @@ Werkzeuge lesen teils per Reflection, und neben den neuen Wegen (Fluss, Quelle, 
 
 1. **Invarianten-Disziplin über Sprachgrenzen.** Dieselben Invarianten tragen Backend, Blazor und Python.
 2. **Compile-Zeit statt Laufzeit.** Analyzer, Generator-Diagnosen und Boot-Guards verwandeln ganze Fehlerklassen (Fehlrouting,
-   Dangling-Command, unbounded Token, Wire-Drift, zyklische Regeln, falsche Fluss-Verdrahtung, offene Ausgänge) in Build-Fehler.
-3. **Abläufe als typisierte DSL** (Prozess, Fluss) — der Fachcode ist nur die Regel; Dirigent, Korrelation, Marking und Kompensation sind einmal
-   geschrieben.
-4. **Ehrliche Nicht-Autoritativität.** Jeder Beschleuniger (Redis, Snapshot, Marking-Cursor) hat einen Voll-Read-Fallback.
+   Dangling-Command, unbounded Token, Wire-Drift, offene Ausgänge, Funktionen ohne Laufort) in Build-Fehler.
+3. **Wenige Bausteine.** Ein Ablauf ist ein Aggregat plus Funktionen plus Frist — kein eigener Ablauf-Interpreter; Exactly-once kommt aus der
+   Inbox des Aggregats und dem Festhalten der Funktion, beides einmal geschrieben.
+4. **Ehrliche Nicht-Autoritativität.** Jeder Beschleuniger (Redis, Snapshot) hat einen Voll-Read-Fallback.
 5. **Selbstbeobachtung.** Die Werkbank zeigt das System als Karten aus dem Code; durchgespielt wird das echte System, sichtbar über die Spur.
 6. **Test-Kultur.** Store-Semantik nur gegen echtes Marten; generative Vollständigkeits-Guards; Fremd-Domäne als Agnostik-Beweis (`--sonde`).
 
@@ -151,10 +146,6 @@ nennt read-your-writes ohnehin nur best-effort; Nachweis `Verhalten.Tests/Client
 In S1 ist genau das die Decke: je Sekunde werden halb so viele Paare komplett, wie Dateien gemeldet werden (Phase-2- und Phase-3-Code gleich);
 die Leseseite hält in Echtzeit mit. Das Ziel „S1 ≥ 3 × Baseline“ (Plan E5) ist deshalb mit dem Konsum nicht zu erreichen. *Optionen (Tobi):* in
 Bündeln melden (mehrere `StartStream` in einer Transaktion, Rückstau je Bündel; „genau einmal je Kennung“ bleibt) oder das S1-Ziel neu fassen.
-
-**VM-1 · Zählung im Treiber.** `Cqrs.Vermessung/Pruefdomaene.cs` zählt etwa „je Reservierung unter dem Mindestbestand genau ein Nachschub“ als
-zwei Abfragen; baut der Host noch ab (Rückstand bei Fristende), kann Ist Soll überholen (Phase 3: 21 648 gegen 21 646, im Ruhezustand 21 927 =
-21 927). *Empfehlung:* die Prüfungen erst nach dem Anhalten der Hosts zählen oder Soll und Ist in einer Abfrage.
 
 
 **W10-1 · Reflection in Werkzeugen.** `Cqrs.Codegen` liest die gebauten Domänen-DLLs per `MetadataLoadContext` und erzeugt daraus `domain.proto`,
@@ -229,25 +220,15 @@ eine Umgebung als Heredoc neben `umgebungen/*.json`. *Empfehlung:* Deploy auf `u
 
 ### P2
 
-**W11-1 · Doppelte Wege.** Ohne Domänen-Nutzer, aber verdrahtet: die `IPipelineHandler`-Maschinerie (`PipelineActorBase`, `PipelineEventPullBridge`,
-`PipelineDispatchGenerator`, `GeneratedPipelines`), die Trigger-Welt (`IPipelineTrigger`, `ITriggerRegistration`, `TimerTrigger`, `WebhookTrigger`,
-gRPC-Trigger-Pfad, Proto `Trigger*`), `[Ingress]` mit `GraphExtractor.Kern/CompositionRoot.cs`, `Selbst<T>`/`Frist<TCmd>`/`FristStorno<TCmd>` als
-Handle-Ausgang, `IAkteurDienst<A>` (nur dort verdrahtet). Prozess-DSL und Fluss-DSL sind zwei Schreibweisen auf demselben Dirigenten
-(Kompensation, Count-Join und `SendeJe` nur im Prozess; Quelle, Strom, Warte, `Je`/`Sammle` nur im Fluss). *Empfehlung:* Rückbau der
-Handle-/Trigger-Welt, sobald Takt-Treiber und flüchtige Quellen da sind (`konzept-werkbank.md` §12.2); die DSL-Frage entscheiden. (Der zweite
-Rumpf-Schreibweg ist seit 2026-10-15 weg, §13.6.)
-
-**W11-2 · Zeitlimits.** Ein Zeitlimit im Dirigenten wird nur entdeckt, wenn der Backstop alle offenen Vorgänge weckt (alle 15 s) — Genauigkeit
-15 s, Aufwand O(offene Vorgänge). Der durable Fristplaner mit Fälligkeits-Index (`FristScheduler`, `MartenFristplan`) existiert, hängt aber an der
-Handle-Welt. *Empfehlung:* Fristplaner als Weck-Quelle der Zeitlimits in den Dirigenten.
-
-**FB-1 … FB-4 · Funktion als Baustein und Uhr, bewusst offen nach Plan Phase 3** (2026-10-26). Phase 3 baut Funktion, Uhr und die neuen
-Quellen neben das Alte; was erst spätere Phasen tragen, ist mit Absicht nicht vorgezogen, weil jede Vorab-Lösung ein zweiter Weg wäre, der
-wieder verschwände. **FB-1:** der Generator kennt Hinweise als Eingang (`GeneratedFunktionsBausteine.Hinweisplan`), es fehlt der Zusteller —
-das ist der schnelle Kanal aus Phase 6. **FB-2:** die Baustein-Form braucht für einen externen Worker einen Vertrag über Eingang und
-Ausgaben auf der Leitung (`ITraegt`, Phase 7); bis dahin weist der Start `Laufort = Extern` für sie ab. Hand läuft schon über denselben
-Vermittler (`BausteinSitzung`). **FB-3:** wer auf ein Event einer Funktion, Quelle oder der Uhr hört, wartet bis zum Poll; die Prüfdomäne
-misst das nicht als Fehler, die Latenz ist aber spürbar. **FB-4:** reine Darstellungs-Lücken der Werkzeuge; die Garantien hängen nicht daran.
+**FB-1, FB-4 … FB-7 · Funktionen und Uhr, bewusst offen nach Plan Phase 4** (2026-10-26). Was erst spätere Phasen tragen, ist mit Absicht nicht
+vorgezogen, weil jede Vorab-Lösung ein zweiter Weg wäre, der wieder verschwände. **FB-1:** der Generator kennt Hinweise als Eingang
+(`GeneratedFunktionsBausteine.Hinweisplan`), es fehlt der Zusteller — das ist der schnelle Kanal aus Phase 6. **FB-4:** reine Darstellungs-Lücken
+der Werkzeuge; die Garantien hängen nicht daran. **FB-5:** R6 des Plans wollte Kreise im Signatur-Graph als Warnung; aber jeder Ablauf mit
+Vorgangs-Aggregat ist ein Kreis (Auftrag → `Auftragsabwicklung` → Posten → `Auftragsabwicklung` → Auftrag), und der Build soll nicht vor
+Design-Entscheidungen warnen. Mit dem Dirigenten sind GR-ZYKLUS (CQRS088) und GR-GARANTIE (CQRS082) entfallen; eine Erkennung „Kreis ohne
+fortschreitenden Zustand“ bräuchte mehr als Signaturen. **FB-6:** die Quell-Nachricht vom Client hatte über gRPC das Trigger-Protokoll; es ist mit
+der Handle-Welt entfernt, der neue Weg kommt mit der Leitung aus Phase 7. **FB-7:** eine getragene Funktion ohne verbundenen Client arbeitet nichts
+ab; der Rückstand steht in `/health`, eine eigene Meldung fehlt.
 
 **W3-1 · Ableitungen im Editor-JS.** `graphNodes` baut Karten-Ids parallel zu `Sicht.BaueKarten` (Transition-Id weicht bei fehlender `_id` ab);
 `akteurHoert`, `flParameter`, `faehigkeitVorschlag` (weicht bei Namenskollision von `BoardLeseseite` ab), Auto-Zuordnung (`autoArgs`,
@@ -269,21 +250,14 @@ selbst; die Ortsangaben prüft es nicht (CQRS056 steht dort falsch als Analyzer 
 Grammatik-Regel. Der Fixpunkt prüft Akteure, Verträge, Clients, Funktionen und Dienste nicht; Funktion und Dienst werden im Inventar nur nach
 Namen verglichen. Die Sonde deckt `SendeJe`, Count-Join, Kompensation, `IMensch`, `IstClient`, Laufort und Webhook nicht ab.
 
-**AK-1 · Akteure und Clients** (`konzept-akteure.md` §9): durable Zustellung an Clients (Zusagen mit Ausgabe sind durable Abhängigkeiten, werden
-aber verlierbar zugestellt), `als` im Envelope bei mehreren verkörperten Akteuren, Zusagen über C#-Clients (CQRS094), Anmeldung je Person; kein
-Boot-Check, ob `Clients:<Name>:Token` die Akteure des Vertrags verkörpert.
+**AK-1 · Akteure und Clients** (`konzept-akteure.md` §9): `als` im Envelope bei mehreren verkörperten Akteuren, Funktionen über C#-Clients tragen
+(CQRS094), Anmeldung je Person; kein Boot-Check, ob `Clients:<Name>:Token` die Akteure des Vertrags verkörpert. (Die durable Zustellung an Clients
+ist mit Phase 4 erledigt: was ein Client rechnet, ist eine getragene Funktion mit Lease und festgehaltener Antwort.)
 
-**PF-25 · Rest: Heil-Plan über die ganze Liste.** Seit PF-25 fragt der Prozess-Poll je Seite nur die eigenen Korrelationen ab, `/health` zählt
-nur. Der Backstop liest aber alle 15 s die ganze Liste der offenen Vorgänge (`ListeOffeneAsync`) und hält je Knoten den Heil-Plan im Speicher;
-nach einem Neustart ist er leer, und jeder offene Vorgang bekommt nach 15 s eine Heil-Weckung (bei 32 gleichzeitig). *Gerechnet:* bei 200 000
-offenen Vorgängen ≈ 6 000 Blöcke und 3 MB je Abgleich. *Empfehlung:* die Heilung als zweite Frist im Offen-Index (Feld „nächste Heilung“ mit
-Index, gesetzt beim Start in derselben Transaktion, verdoppelt nach jeder Heil-Weckung; Abfrage „die frühesten 1 000“ wie die Frist) — dann
-entfallen Abgleich, Plan und Sturm. Offen: ob ein Send den Abstand zurücksetzt (ein Patch je Send).
-
-**PF-31 · Volles Falten nach Schema-Wechsel, Emittent ab 0.** Passt die Schema-Version eines Snapshots nicht, faltet die erste Aktivierung den
-ganzen Stream (bei einem heißen Aggregat Millionen Events, Minuten); ein neu hinzugefügter Emittent liest jeden abonnierten Stream ab 0.
-*Entscheidung offen:* hinnehmen und beim Start warnen (Stream ohne gültigen Snapshot länger als N Events), bzw. fachlich festlegen, ob eine neue
-Reaktion die Geschichte nachholt.
+**PF-31 · Volles Falten nach Schema-Wechsel, neue Funktion ab 0.** Passt die Schema-Version eines Snapshots nicht, faltet die erste Aktivierung den
+ganzen Stream (bei einem heißen Aggregat Millionen Events, Minuten); eine neu hinzugefügte Funktion liest das Log ab 0 und wirkt auf jedes alte
+Event (die Inbox verwirft nur, was innerhalb ihres Horizonts schon wirkte). *Entscheidung offen:* hinnehmen und beim Start warnen, bzw. fachlich
+festlegen, ob eine neue Funktion die Geschichte nachholt oder am Kopf beginnt.
 
 **PF-6 · Read-your-writes-Index.** `ReadModelDepsWriter` schreibt je Event und Projektion nach Redis, für eine Garantie, die nur best-effort ist.
 *Empfehlung:* je Projektion abschaltbar, an nur für Projektionen, auf die Clients warten.
@@ -307,9 +281,6 @@ Transaktion einmal lesen (`set_config(…, true)`).
 einer gespeicherten Position mehrere Events (`MartenEventStore`, `SubIndex`), die Version läuft dem Log davon, und jeder Append scheitert.
 Latent: heute gibt es keinen Split-Upcast. *Empfehlung:* je gespeicherter Position zählen (`AggregateVersion`), Prüfstand-Test mit Split.
 
-**P2-5 · Marking-/Kompensations-Feinschliff.** `MarkingKompakt` ist bei extremem Fan-out O(N) (Payloads je Vorgang); `NächsteKompensationAsync`
-liest ab 0; der `KlärungNötig`-Pfad ist korrekt per Konstruktion, aber ohne Test.
-
 **P2-6 · Schreibpfad.** Der parallele Drain skaliert sublinear (`wait_event`).
 
 **P2-8 · Hartkodierte Intervalle und Verbindungsdaten** (Poll 30 s, Backstop 15 s; Connection-Strings je Integrationstest-Klasse).
@@ -327,11 +298,8 @@ Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 
 ### P3
 
-- **PF-26 · Rest: Warte-Knoten im Takt.** Ein offener Warte-Knoten liest seit PF-26 nur noch das Neue, wird aber weiter alle 15 s über seine Frist
-  geweckt; ab ≈ 15 000 Wartenden reicht die Grenze des Backstops (1 000 je Sekunde) nicht, dann kämen auch fremde Zeitlimits zu spät. *Option:*
-  über das Signal des Quell-Streams wecken (ein Verzeichnis „wer wartet auf Stream X“), der Takt nur als Netz mit wachsendem Abstand.
 - **PF-32 · Wachstum ohne Laufzeit-Risiko** (Analyse 2026-10-18, docs/12 §12.5): Guards `ProjectionCheckpoint` je (Projektion, Stream) und
-  Emittenten-Cursor je (Konsument, Stream) werden nie gelöscht (Zugriff über den Schlüssel; das Zurücksetzen löscht ohne Index auf
+  Festhalte-Streams je (Funktion, Eingang) werden nie gelöscht (Zugriff über den Schlüssel; das Zurücksetzen löscht ohne Index auf
   `ProjectionId`); die Dead-Letter-Tabelle wird nie geleert und je `/health` gezählt, ohne Index sortiert; der Einblick (Sim) durchsucht je
   Vorgangsliste das ganze Log; die Beispieldomäne blättert mit `OFFSET` und lädt für Statistiken ganze Tabellen; Kopfzeilen kosten ≈ 140 Byte
   je Event, die Daten ≈ 70; Postgres auf dem Messserver läuft mit `shared_buffers = 160 MB`.
@@ -341,12 +309,10 @@ Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 - **P3-2 · Toter Code und Kleinkram:** `CqrsFrameworkOptions`, `IViewModel` + `ViewModelGenerator`,
   auskommentierte Reflection-Scans (`EventTypeResolver`, `MartenEventTypeRegistration`), nicht gemappte
   Proto-Endpunkte in Host.Blazor (das Python-SDK ruft sie trotzdem), `BenchPing` ohne Treiber-Basis; Dateiname ≠ Klassenname bei einigen
-  Generatoren; veraltete Kommentare und Meldungen (z. B. „drei Header“ in `Spur.cs`, „geteilt mit der Simulation“ in `ProzessManager.cs`, die Fehlermeldung in
+  Generatoren; veraltete Kommentare und Meldungen (z. B. „drei Header“ in `Spur.cs`, die Fehlermeldung in
   `AggregateDispatcherExtensions.ResolveAggregateType` spricht noch von der Namespace-Zuordnung; `ConnectionModule.cs` nennt die CommandId „deterministisch“, sie ist aber `Guid.NewGuid()` und nur über
-  Wiederholungen gleich; `CqrsServiceExtension.cs` nennt noch `Cluster__Role`/`migrator|member` statt `Cluster__Rolle`/Allein|Migrator|Mitglied;
-  `ProzessManager.cs` sagt „nie in einem Feld gehalten“ trotz HOT-Cache; `Cqrs.Codegen/Program.cs` nennt sich „reflexionsfrei“, liest aber per
+  Wiederholungen gleich; `CqrsServiceExtension.cs` nennt noch `Cluster__Role`/`migrator|member` statt `Cluster__Rolle`/Allein|Migrator|Mitglied; `Cqrs.Codegen/Program.cs` nennt sich „reflexionsfrei“, liest aber per
   `MetadataLoadContext`; `deploy-multinode/Dockerfile` und `docker-compose.yml` erwähnen noch den entfernten LoadHarness).
-- **P3-3 · Saga-DSL** in `Cqrs.Testing` kennt `Rufe` nicht (Voraussetzung für LLM-1).
 
 ## 13.4 Korrektheit vs. Reifegrad
 
@@ -390,6 +356,23 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **Phase 4 Pub/Sub-Neustrukturierung (2026-10-26, Messserver; docs/04, docs/11 §11.6/§11.7):** die Domänen sind auf Aggregat + Funktion + Frist
+  umgeschrieben, das Alte ist zurückgebaut — Dirigent (`ProzessManager`, Prozess- und Fluss-DSL, Offen-Index, Marking, Backstop, Heil-Plan),
+  Reaktion als eigene Art (Emittenten-Adapter, Poll der Emittenten), Handle-/Trigger-Welt (`IPipelineHandler`, `IPipelineTrigger`, Timer, Webhook,
+  `[Ingress]`, `FristPlanung<TCmd>`, Fristplaner), Katalog-Form der Funktion (`RufeAsync`, `IAuftrag`), Akteur-Vertrag mit `Auf` und
+  `IAkteurDienst`. Damit erledigt:
+  - **W11-1 Doppelte Wege** und **W11-2 Zeitlimits:** es gibt je Absicht einen Weg; Zeit ist die Frist aus dem Decide (Uhr, `cqrs_fristen`).
+  - **PF-4b, PF-25, PF-26, P2-5:** Backstop, Heil-Plan, Warte-Knoten, Marking und `KlärungNötig` gibt es nicht mehr; ein Ablauf ist ein Aggregat,
+    das seinen Zustand selbst trägt.
+  - **P3-3 Saga-DSL ohne `Rufe`:** `Cqrs.Testing` prüft Aggregat und Funktion (Ablauf-Szenarien), die Saga-DSL ist entfernt.
+  - **FB-2 Laufort Extern für die Baustein-Form:** über die bestehende Sitzung und den Vermittler mit Lease (`BausteinSitzung`, Strom in Stücken,
+    Fortsetzung ab der festgehaltenen Stelle); ein Client trägt die Funktion (`ITraegt<F>`). Nachweis I `AblaufE2ETests.Bildeingang_mit_Python_Worker…`,
+    VT `ClientVerhaltenTests.Die_Antwort_eines_Traegers_wirkt_genau_einmal…`, E2E S2. Die Quell-Nachricht vom Client über gRPC ist als FB-6 offen.
+  - **FB-3 Signal aus Quellen und Funktionen:** jeder Schreiber meldet nach dem Commit dasselbe (`Commitmeldung`: Envelope und Signal je Event).
+    Nachweis PD `QuellenE2ETests.Eine_Quell_Nachricht_vom_Client…` (dreimal je unter 5 s bei 30 s Takt; ohne die Meldung rot).
+  - **VM-1 Zählung im Treiber:** Soll und Ist, die beide aus dem Log kommen, stehen in einer Abfrage (ein Schnappschuss); der Treiber prüft S5 am
+    Log (Auftrag, Kompensation über den Beleg, Verteilung, Nachschub) statt an `ProzessBeendet`.
 
 - **PF-23, PF-24, PF-25 (Teil), PF-26 (Teil), PF-27 bis PF-30 · Kosten, die mit der Datenmenge wuchsen (2026-10-18, Messserver; docs/12 §12.5,
   docs/03 §3.3, docs/04 §4.1/§4.5):** die Analyse wachsender Bestände fand Laufzeitpfade, deren Kosten mit der Geschichte statt mit der Last wuchsen.

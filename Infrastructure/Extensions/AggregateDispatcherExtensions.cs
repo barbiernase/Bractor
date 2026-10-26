@@ -1,7 +1,6 @@
 using System;
 using Abstractions;
 using Infrastructure.Komposition;
-using Infrastructure.Pipeline;   // Anwendung.Pipelines.CommandAggregateTypes
 
 namespace Infrastructure.Extensions;
 
@@ -32,7 +31,7 @@ public static class AggregateDispatcherExtensions
     /// </summary>
     public static string ResolveAggregateType(ICommand command)
     {
-        if (Anwendung.Pipelines.CommandAggregateTypes.TryGetValue(command.GetType(), out var aggregateType))
+        if (Anwendung.Routing.CommandToAggregate.TryGetValue(command.GetType(), out var aggregateType))
             return aggregateType;
 
         throw new InvalidOperationException(

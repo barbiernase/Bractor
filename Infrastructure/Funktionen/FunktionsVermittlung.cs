@@ -3,13 +3,13 @@ using Abstractions;
 namespace Infrastructure.Funktionen;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// VERMITTLUNG (docs/konzept-editor-pipelines.md §14.5): je Katalog-Funktion EIN Vermittler, der die offenen Aufträge hält. Die
-// Ausführer HOLEN sich Arbeit, sobald sie einen Slot frei haben (Pull) — C# im Host, Python-Worker über gRPC, ein GPU-Rechner.
-// So verteilt sich die Last von selbst, auch über Rechner und Sprachen. Jeder geholte Auftrag hat eine Lease; läuft sie ab (der
-// Ausführer ist weg), wird er neu ausgegeben. Das Ergebnis wird trotzdem genau einmal wirksam (StartStream im Ausführungs-Stream).
+// VERMITTLUNG (Plan Pub/Sub-Neustrukturierung §2.2): je Funktion, die draußen rechnet (Laufort Extern oder Hand), EIN Vermittler, der die
+// offenen Eingänge hält. Die Träger HOLEN sich Arbeit, sobald sie einen Slot frei haben (Pull) — ein Python-Worker über gRPC, ein Mensch an der
+// Werkbank. So verteilt sich die Last von selbst, auch über Rechner und Sprachen. Jeder geholte Eingang hat eine Lease; läuft sie ab (der Träger
+// ist weg), wird er neu ausgegeben. Die Antwort wirkt trotzdem genau einmal (festgehalten unter „Funktion F, Eingang X“, die erste gewinnt).
 //
-// Der Vermittler ist NICHT maßgeblich (Invariante 1): verliert man ihn, verliert man nichts — der Dirigent bietet jeden offenen
-// Auftrag bei jeder Weckung erneut an (§3-Backstop alle 15 s), und der Vermittler baut sich daraus wieder auf.
+// Der Vermittler ist NICHT maßgeblich (Invariante 1): verliert man ihn, verliert man nichts — der Funktions-Actor bietet jeden offenen Eingang
+// erneut an, und der Vermittler baut sich daraus wieder auf.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 /// <summary>Was ein Vermittler verteilt: eine Arbeit mit Schlüssel (<see cref="Vorgang"/>), ihr Inhalt (Typname) und ihre Ursache — für den Einblick.</summary>
@@ -19,13 +19,6 @@ public interface IArbeit
     Guid Korrelation { get; }
     string Inhalt { get; }
     string? Ursache { get; }
-}
-
-/// <summary>Ein angebotener Auftrag: wer ihn will (Korrelation des Vorgangs), seine Ausführungs-Id (Vorgang) und der Inhalt.</summary>
-public sealed record AuftragAnbieten(Guid Vorgang, Guid Korrelation, string? Akteur, IAuftrag Auftrag, string? Ursache = null, string? Wirker = null)
-    : IWireMessage, IArbeit
-{
-    string IArbeit.Inhalt => Auftrag.GetType().Name;
 }
 
 /// <summary>
@@ -54,34 +47,24 @@ public sealed record EingaengeZugeteilt(IReadOnlyList<EingangAnbieten> Eingaenge
 /// </summary>
 public sealed record EingangBeantwortet(Guid Schluessel, string? Fehler = null, bool Teil = false) : IWireMessage;
 
-/// <summary>Ein Ausführer holt bis zu <paramref name="Max"/> Aufträge; ist keiner da, wartet die Anfrage bis zu <paramref name="WarteMs"/>.</summary>
-public sealed record HoleArbeit(string Arbeiter, int Max, int WarteMs) : IWireMessage;
-
-/// <summary>Die zugeteilten Aufträge (leer, wenn die Wartezeit ohne Arbeit verstrich).</summary>
-public sealed record ArbeitZugeteilt(IReadOnlyList<AuftragAnbieten> Auftraege) : IWireMessage;
-
-/// <summary>Lebenszeichen eines laufenden Auftrags — verlängert seine Lease (lange Läufe, z. B. Training).</summary>
+/// <summary>Lebenszeichen eines laufenden Eingangs — verlängert seine Lease (lange Läufe, z. B. Training).</summary>
 public sealed record ArbeitLebt(Guid Vorgang, string Arbeiter) : IWireMessage;
 
-/// <summary>Der Auftrag ist erledigt (sein Ergebnis liegt im Log) — der Vermittler vergisst ihn.</summary>
+/// <summary>Der Eingang ist erledigt (seine Antwort liegt im Log) — der Vermittler vergisst ihn.</summary>
 public sealed record ArbeitErledigt(Guid Vorgang) : IWireMessage;
 
-/// <summary>Einblick (Werkbank P4.7): welche Aufträge hält der Vermittler gerade — wartend oder an einen Ausführer vergeben?</summary>
+/// <summary>Einblick (Werkbank P4.7): welche Eingänge hält der Vermittler gerade — wartend oder an einen Träger vergeben?</summary>
 public sealed record ListeOffene : IWireMessage;
 
-/// <summary>Ein offener Auftrag: wartend (<paramref name="Arbeiter"/> null) oder vergeben bis <paramref name="LeaseBis"/>.</summary>
+/// <summary>Ein offener Eingang: wartend (<paramref name="Arbeiter"/> null) oder vergeben bis <paramref name="LeaseBis"/>.</summary>
 public sealed record OffenerAuftrag(Guid Vorgang, Guid Korrelation, string Auftrag, string? Ursache, string? Arbeiter, DateTimeOffset? LeaseBis);
 
 /// <summary>Die Antwort auf <see cref="ListeOffene"/>.</summary>
 public sealed record OffeneAuftraege(IReadOnlyList<OffenerAuftrag> Auftraege) : IWireMessage;
 
-/// <summary>Der Kern eines Vermittlers für Katalog-Aufträge (<see cref="AuftragAnbieten"/>).</summary>
-public sealed class FunktionsVermittlung(TimeSpan lease, int erinnerung = 10_000) : Vermittlung<AuftragAnbieten>(lease, erinnerung);
-
 /// <summary>
 /// Der reine Kern eines Vermittlers (je Funktion): Warteschlange, Leases, Lebenszeichen, kürzlich Erledigtes. Ohne Uhr und
-/// ohne Transport — die Zeit kommt als Argument; im Prüfstand vollständig beweisbar. Dieselbe Mechanik für Katalog-Aufträge und für
-/// Eingänge der Baustein-Form (<see cref="EingangAnbieten"/>).
+/// ohne Transport — die Zeit kommt als Argument; im Prüfstand vollständig beweisbar (<see cref="EingangAnbieten"/>).
 /// </summary>
 public class Vermittlung<TArbeit> where TArbeit : class, IArbeit
 {

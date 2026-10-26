@@ -57,7 +57,6 @@ class GrpcProxy:
 
         # Response-Korrelation
         self._pending_queries: dict[str, asyncio.Future] = {}
-        self._pending_triggers: dict[str, asyncio.Future] = {}
 
         # Concurrency: nur ein send_message() gleichzeitig
         self._send_lock = asyncio.Lock()
@@ -153,11 +152,6 @@ class GrpcProxy:
                 f.cancel()
         self._pending_queries.clear()
 
-        for f in self._pending_triggers.values():
-            if not f.done():
-                f.cancel()
-        self._pending_triggers.clear()
-
         # Stream schließen
         if self._stream:
             try:
@@ -193,28 +187,6 @@ class GrpcProxy:
         await self._send(msg)
         log.debug("Command sent")
 
-    async def send_trigger(
-        self, nutzlast: L.Nutzlast, correlation_id: str | None = None
-    ):
-        """Trigger (als Nutzlast) senden, auf TriggerAck warten."""
-        cid = correlation_id or str(uuid4())
-
-        loop = asyncio.get_event_loop()
-        future: asyncio.Future = loop.create_future()
-        self._pending_triggers[cid] = future
-
-        try:
-            msg = L.ClientMessage(
-                trigger=L.TriggerRequest(
-                    payload=nutzlast,
-                    correlation_id=cid,
-                )
-            )
-            await self._send(msg)
-            return await asyncio.wait_for(future, timeout=30.0)
-        finally:
-            self._pending_triggers.pop(cid, None)
-
     async def send_query(
         self, nutzlast: L.Nutzlast, correlation_id: str | None = None
     ):
@@ -241,19 +213,6 @@ class GrpcProxy:
         """TransientEvent publishen."""
         msg = L.ClientMessage(
             transient_event=L.TransientEventRequest(envelope=envelope_dto)
-        )
-        await self._send(msg)
-
-    async def send_trigger_result(
-        self, correlation_id: str, accepted: bool, error_message: str = ""
-    ) -> None:
-        """Antwort auf empfangenen TriggerForward."""
-        msg = L.ClientMessage(
-            trigger_result=L.TriggerResult(
-                correlation_id=correlation_id,
-                accepted=accepted,
-                error_message=error_message,
-            )
         )
         await self._send(msg)
 
@@ -306,8 +265,8 @@ class GrpcProxy:
         """
         Empfängt ServerMessages, dispatcht nach oneof-Feld.
 
-        Events/TriggerForwards/QueryForwards → event_queue.
-        QueryResponse/TriggerAck → pending Future completieren.
+        Events/QueryForwards/ArbeitsAufträge → event_queue.
+        QueryResponse → pending Future completieren.
         """
         try:
             while self._connected:
@@ -323,9 +282,6 @@ class GrpcProxy:
                 if field_name == "event":
                     await self._event_queue.put(("event", payload))
 
-                elif field_name == "trigger_forward":
-                    await self._event_queue.put(("trigger_forward", payload))
-
                 elif field_name == "query_forward":
                     await self._event_queue.put(("query_forward", payload))
 
@@ -338,14 +294,6 @@ class GrpcProxy:
                         payload.correlation_id,
                         payload,
                         "QueryResponse",
-                    )
-
-                elif field_name == "trigger_ack":
-                    self._complete_future(
-                        self._pending_triggers,
-                        payload.correlation_id,
-                        payload,
-                        "TriggerAck",
                     )
 
                 elif field_name == "error":

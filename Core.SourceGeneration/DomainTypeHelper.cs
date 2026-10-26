@@ -33,17 +33,6 @@ namespace Core.SourceGeneration
             "IQueryResponse"
         };
 
-        private static readonly HashSet<string> TriggerInterfaces = new()
-        {
-            "Abstractions.IPipelineTrigger",
-            "IPipelineTrigger"
-        };
-        
-        private static readonly HashSet<string> AuftragInterfaces = new()
-        {
-            "Abstractions.IAuftrag",
-            "IAuftrag"
-        };
 
         public static Abstractions.SourceGeneration.DomainType ClassifyByInterfaces(IEnumerable<string> interfaces)
         {
@@ -55,17 +44,11 @@ namespace Core.SourceGeneration
             if (interfaceList.Any(i => CommandInterfaces.Contains(i) || CommandInterfaces.Any(ci => i.EndsWith(ci))))
                 return Abstractions.SourceGeneration.DomainType.Command;
                 
-            if (interfaceList.Any(i => TriggerInterfaces.Contains(i) || TriggerInterfaces.Any(ti => i.EndsWith(ti))))
-                return DomainType.Trigger;
-
             if (interfaceList.Any(i => QueryInterfaces.Contains(i) || QueryInterfaces.Any(qi => i.EndsWith(qi))))
                 return DomainType.Query;
 
             if (interfaceList.Any(i => QueryResponseInterfaces.Contains(i) || QueryResponseInterfaces.Any(qri => i.EndsWith(qri))))
                 return DomainType.QueryResponse;
-
-            if (interfaceList.Any(i => AuftragInterfaces.Contains(i)))
-                return DomainType.Auftrag;
             
             return Abstractions.SourceGeneration.DomainType.Object;
         }

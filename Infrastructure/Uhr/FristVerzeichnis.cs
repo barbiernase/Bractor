@@ -60,14 +60,16 @@ public sealed class FristVerzeichnis(IDocumentStore store) : IFaelligkeiten
             streams.ToArray(), versionen.ToArray(), nach.ToArray(), befehle.ToArray(), daten.ToArray(), akteure.ToArray());
     }
 
+    /// <summary>Die fälligen Fristen gegen die Uhr des Stores, die frühesten zuerst, höchstens <c>$1</c> — liest über den Index auf <c>faellig</c>.</summary>
+    public static string FaelligeAbfrage(IDocumentStore store) =>
+        $"select stream_id, version, befehl, daten, akteur from {Name(store)} where faellig <= {Persistence.EventZeit.Uhr(store)} order by faellig limit $1";
+
     public async Task<IReadOnlyList<FaelligeFrist>> FaelligeAsync(int hoechstens, CancellationToken ct)
     {
         await Persistence.InboxTabelle.SicherAsync(store, ct);   // rohes SQL löst Martens AutoCreate nicht aus (dieselbe Ablage wie die Inbox)
         await using var conn = store.Storage.Database.CreateConnection();
         await conn.OpenAsync(ct);
-        await using var cmd = new NpgsqlCommand(
-            $"select stream_id, version, befehl, daten, akteur from {Name(store)} where faellig <= {Persistence.EventZeit.Uhr(store)} "
-            + "order by faellig limit $1", conn);
+        await using var cmd = new NpgsqlCommand(FaelligeAbfrage(store), conn);
         cmd.Parameters.Add(new NpgsqlParameter { Value = hoechstens });
         var aus = new List<FaelligeFrist>();
         await using var r = await cmd.ExecuteReaderAsync(ct);

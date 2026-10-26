@@ -14,8 +14,8 @@ public sealed record RehydrationResult<TState>(TState State, int SnapshotVersion
     where TState : class, IState, new();
 
 /// <summary>
-/// Rehydriert ein Aggregat in EINEM Tail-Fold aus einem einzigen Stream-Read (docs/04-konsum-und-prozess-maschine.md §4.7); mit Snapshot
-/// seedet der Fold und liest nur den Rest. Die Inbox gehört nicht dazu — sie ist eine eigene Tabelle des Stores (docs/04 §4.4).
+/// Rehydriert ein Aggregat in EINEM Tail-Fold aus einem einzigen Stream-Read (docs/04-konsum-und-prozess-maschine.md §4.8); mit Snapshot
+/// seedet der Fold und liest nur den Rest. Die Inbox gehört nicht dazu — sie ist eine eigene Tabelle des Stores (docs/04 §4.6).
 ///
 /// In einen puren Helfer extrahiert, damit die Falt-Logik in-memory OHNE Proto-Actor beweisbar ist
 /// (Prüfstand). Reflection-frei — der Applier kommt aus der generierten <see cref="IAggregateHandlerFactory"/>.
@@ -48,7 +48,7 @@ public static class AggregateRehydrator
         var tail = await store.ReadStreamAsync(id, baseVersion + 1, ct);
         foreach (var env in tail)
         {
-            if (env.Payload is not IProzessIntern)
+            if (env.Payload is not IRahmenEvent)
                 handler.ApplyEvent(env.Payload);
             state.Version++;
         }

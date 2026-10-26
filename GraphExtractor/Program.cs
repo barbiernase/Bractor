@@ -11,8 +11,8 @@ using Microsoft.CodeAnalysis.MSBuild;
 //  Baut aus der aktuellen Solution einen typisierten, kausalen Property-Graph:
 //    • Kern-Kausalität (command→aggregat→event) aus dem AUTORITATIVEN
 //      GeneratedCommandRouting (aus der gebauten Infrastructure-Compilation).
-//    • Sagas/Prozesse aus dem Prozess-DSL (Bedingung/Sende/RückgängigDurch/Fan-out).
-//    • Projektionen, Queries, Pipelines.
+//    • Funktionen (je Auf Eingang → Ausgaben), Akteure und Clients.
+//    • Projektionen, Queries, Reader, Stores.
 //  Emittiert: knowledge-graph.json, domain-model.json (Editor-Modell). Die Oberfläche liegt statisch in Werkbank/wwwroot/editor.
 // ════════════════════════════════════════════════════════════════════════════
 
@@ -81,8 +81,7 @@ var (routing, dom, graph, compositionRoot) = (lesung.Routing, lesung.Dom, lesung
 Console.WriteLine("\n── Routing-Wahrheit ──");
 Console.WriteLine($"   Quelle: {routing.Source}  ({routing.CommandToAggregate.Count} Command→Aggregat, {routing.CommandToEvents.Count} Command→Events)");
 Console.WriteLine("\n── Domänen-Extraktion ──");
-Console.WriteLine($"   {dom.Aggregates.Count} Aggregate, {dom.Processes.Count} Sagas, {dom.Projections.Count} Projektionen, {dom.Queries.Count} Queries, {dom.Pipelines.Count} Pipelines");
-Console.WriteLine($"   Prozesse registriert: {string.Join(", ", dom.RegisteredProcesses)}");
+Console.WriteLine($"   {dom.Aggregates.Count} Aggregate, {dom.BausteinFunktionen.Count} Funktionen, {dom.Projections.Count} Projektionen, {dom.Queries.Count} Queries, {dom.Readers.Count} Reader");
 Console.WriteLine("\n── Graph ──");
 foreach (var (k, v) in graph.Meta.Counts) Console.WriteLine($"   {k,-12}: {v}");
 Console.WriteLine($"\n   Laden {ladeZeit.TotalSeconds:0.0} s · Übersetzen {lesung.Uebersetzen.TotalSeconds:0.0} s · Lesen {lesung.Extrahieren.TotalSeconds:0.0} s");
@@ -115,7 +114,7 @@ if (check)
     Console.WriteLine("\n── Paritäts-Prüfung (Code ⇄ Extraktion ⇄ Editor-Modell) ──");
     var boardJson = lesung.BoardJson;
     var befunde = await ParitaetsPruefung.PruefeAsync(solution, lage,
-        new ParitaetsPruefung.Analyse(routing, dom, graph, compilations), boardJson, ModellMapper.Ingress(compositionRoot));
+        new ParitaetsPruefung.Analyse(routing, dom, graph, compilations), boardJson);
     foreach (var g in befunde.GroupBy(b => b.Bereich))
     {
         Console.WriteLine($"\n   [{g.Key}] {g.Count(b => b.Schweregrad != "info")} Befund(e)");
@@ -138,11 +137,11 @@ Console.WriteLine($"\n✅ {jsonPath}");
 // C# → Board). Der Editor lädt dieses Modell und baut Vorhandenes weiter.
 var modell = ModellMapper.ZuEditorModell(graph, dom);
 // Volles Board-Modell: Schreibseite + rekonstruierte Leseseiten-Topologie (Projektion/Reader/
-// Query/Pipeline/Trigger). Das Board lädt dies als Seed und baut es weiter (autoLayout platziert).
+// Query/Store). Das Board lädt dies als Seed und baut es weiter (autoLayout platziert).
 var modellJson = lesung.BoardJson;
 var modellPath = Path.Combine(solutionDir, "domain-model.json");
 await File.WriteAllTextAsync(modellPath, modellJson);
-Console.WriteLine($"✅ {modellPath}  ({modell.Aggregate.Count} Aggregate, {modell.Sagas.Count} Sagas)");
+Console.WriteLine($"✅ {modellPath}  ({modell.Aggregate.Count} Aggregate, {modell.BausteinFunktionen.Count} Funktionen)");
 
 // --kontexte <verz>: zusätzlich zu den Modell-Dateien alle LLM-Kontexte + index.json (Quelle der LLM-Konsole der Werkbank).
 if (args.Contains("--kontexte"))

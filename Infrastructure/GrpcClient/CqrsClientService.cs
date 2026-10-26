@@ -8,7 +8,6 @@ using Infrastructure.Extensions;
 using Infrastructure.Funktionen;
 using Infrastructure.Mapping;
 using Infrastructure.Projections;   // WakeAck
-using Infrastructure.Pipeline;
 using Infrastructure.PubSub;
 using Infrastructure.Serialization;
 using Microsoft.Extensions.Logging;
@@ -32,21 +31,17 @@ namespace Infrastructure.GrpcClient;
 /// 1. Client ruft Connect() auf
 /// 2. Service spawnt EventProxyActor (für PID)
 /// 3. Service erstellt SubscriptionTracker
-/// 4. Service registriert in TriggerHandlerRegistry / QueryHandlerRegistry  (NEU)
+/// 4. Service registriert in QueryHandlerRegistry
 /// 5. Read-Loop verarbeitet ClientMessages
 /// 6. finally-Block: Subscriptions beenden, Registrierungen entfernen, Actor stoppen
 /// </summary>
 public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientServiceBase
 {
-    /// <summary>Wie lange ein Client-Trigger höchstens auf das Ack seiner Pipeline wartet (sie sendet dabei womöglich Commands).</summary>
-    private static readonly TimeSpan TriggerFrist = TimeSpan.FromSeconds(30);
-
     private readonly ActorSystem _actorSystem;
     private readonly ProtoMessageMapper _mapper;
     private readonly IAggregateDispatcher _dispatcher;
     private readonly CapabilitiesHandler _capabilitiesHandler;
     private readonly IQueryDienst _queryService;
-    private readonly TriggerHandlerRegistry _triggerHandlerRegistry;
     private readonly QueryHandlerRegistry _queryHandlerRegistry;
     private readonly BrokerPublisher _publisher;
     private readonly AkteurTor? _akteurTor;
@@ -59,7 +54,6 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
     /// Konfigurierbar, aber mit sensiblem Default für ML-Inference.
     /// </summary>
     private static readonly TimeSpan QueryForwardTimeout = TimeSpan.FromSeconds(60);
-    private static readonly TimeSpan TriggerForwardTimeout = TimeSpan.FromSeconds(30);
 
     /// <summary>
     /// Pending Query-Forwards über alle Verbindungen hinweg.
@@ -71,12 +65,6 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
     private readonly ConcurrentDictionary<string, TaskCompletionSource<Cqrs.Leitung.QueryResponseFromClient>>
         _pendingQueryForwards = new();
 
-    /// <summary>
-    /// Pending Trigger-Forwards über alle Verbindungen hinweg.
-    /// Selbes Pattern wie Query-Forwards.
-    /// </summary>
-    private readonly ConcurrentDictionary<string, TaskCompletionSource<Cqrs.Leitung.TriggerResult>>
-        _pendingTriggerForwards = new();
     
     private static int _sessionCounter = 0;
 
@@ -92,7 +80,6 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         ProtoMessageMapper mapper,
         IAggregateDispatcher dispatcher,
         IQueryDienst queryService,
-        TriggerHandlerRegistry triggerHandlerRegistry,
         QueryHandlerRegistry queryHandlerRegistry,
         BrokerPublisher publisher,
         AkteurTor? akteurTor = null,
@@ -104,7 +91,6 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _queryService = queryService ?? throw new ArgumentNullException(nameof(queryService));
-        _triggerHandlerRegistry = triggerHandlerRegistry ?? throw new ArgumentNullException(nameof(triggerHandlerRegistry));
         _queryHandlerRegistry = queryHandlerRegistry ?? throw new ArgumentNullException(nameof(queryHandlerRegistry));
         _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
         _akteurTor = akteurTor; // null = Akteure nicht konfiguriert → Pfad offen wie bisher (opt-in)
@@ -225,7 +211,6 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
             if (proxyPid != null)
             {
                 // NEU: Registrierungen entfernen
-                _triggerHandlerRegistry.UnregisterAll(proxyPid);
                 _queryHandlerRegistry.UnregisterAll(proxyPid);
 
                 try
@@ -308,8 +293,6 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
                     await HandleQueryAsync(message.Query, responseStream, proxyPid, akteur, sessionId, ct);
                     break;
 
-                case Cqrs.Leitung.ClientMessage.MessageOneofCase.Trigger:
-                    await HandleTriggerAsync(message.Trigger, responseStream, proxyPid, akteur, sessionId, ct);
                     break;
 
                 // ═════════════════════════════════════════
@@ -324,8 +307,6 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
                     HandleQueryAnswer(message.QueryAnswer, sessionId);
                     break;
 
-                case Cqrs.Leitung.ClientMessage.MessageOneofCase.TriggerResult:
-                    HandleTriggerResult(message.TriggerResult, sessionId);
                     break;
 
                 // ═════════════════════════════════════════
@@ -401,8 +382,6 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
             : $"event_types: [{string.Join(", ", request.EventTypes)}]";
         _logger.LogDebug("{Session} ← Capabilities: {Source}", sessionId, messageSource);
 
-        if (request.HandleTriggers.Any())
-            _logger.LogDebug("{Session}   handle_triggers: [{Triggers}]", sessionId, string.Join(", ", request.HandleTriggers));
         if (request.HandleQueries.Any())
             _logger.LogDebug("{Session}   handle_queries: [{Queries}]", sessionId, string.Join(", ", request.HandleQueries));
 
@@ -415,10 +394,8 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
             //     Zuständigkeit nur für Lücken (das System bedient den Typ nicht selbst) und nur einmal. Mit Vertrag: abonniert wird
             //     genau, worauf er reagiert.
             Func<string, Type?> loese = n => MessageTypeMapping.Resolve(n).Type;
-            Func<Type, bool> internBedient = t => Anwendung.QueryTypen.Contains(t)
-                                                  || Anwendung.Pipelines.TriggerToPipelineId.ContainsKey(t);
-            Func<string, bool> schonVergeben = n => _queryHandlerRegistry.GetHandler(n) is { } q && !q.Equals(proxyPid)
-                                                    || _triggerHandlerRegistry.GetHandler(n) is { } t && !t.Equals(proxyPid);
+            Func<Type, bool> internBedient = t => Anwendung.QueryTypen.Contains(t);
+            Func<string, bool> schonVergeben = n => _queryHandlerRegistry.GetHandler(n) is { } q && !q.Equals(proxyPid);
             if (sitzung.Vertrag is { } v)
             {
                 var abweichung = ClientVertragsPruefung.Wende(result, v, loese, internBedient, schonVergeben);
@@ -451,13 +428,7 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
                 _logger.LogDebug("{Session} auto-subscribed to CommandFailed", sessionId);
             }
 
-            // 4. NEU: Trigger-Handler registrieren
-            foreach (var triggerName in result.HandlingTriggers)
-            {
-                _triggerHandlerRegistry.Register(triggerName, proxyPid);
-            }
-
-            // 5. NEU: Query-Handler registrieren
+            // 4. Query-Handler registrieren
             foreach (var queryName in result.HandlingQueries)
             {
                 _queryHandlerRegistry.Register(queryName, proxyPid);
@@ -484,10 +455,8 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
             await responseStream.WriteAsync(serverMessage, ct);
 
             _logger.LogInformation(
-                "{Session} → CapabilitiesResponse: {Commands} commands, {Events} events, {Triggers} triggers, {Queries} queries, handling {HandlingTriggers} triggers / {HandlingQueries} queries",
-                sessionId, result.AllowedCommands.Count, result.SubscribedEvents.Count,
-                result.AllowedTriggers.Count, result.AllowedQueries.Count,
-                result.HandlingTriggers.Count, result.HandlingQueries.Count);
+                "{Session} → CapabilitiesResponse: {Commands} commands, {Events} events, {Queries} queries, handling {HandlingQueries} queries",
+                sessionId, result.AllowedCommands.Count, result.SubscribedEvents.Count, result.AllowedQueries.Count, result.HandlingQueries.Count);
         }
         catch (Exception ex)
         {
@@ -570,112 +539,6 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
                 ex.Message,
                 request.Envelope?.CorrelationId ?? "",
                 ct);
-        }
-    }
-
-    // =========================================================================
-    // TRIGGER HANDLING — mit Client-Handler-Registry (NEU)
-    // =========================================================================
-
-    private async Task HandleTriggerAsync(
-        Cqrs.Leitung.TriggerRequest request,
-        IServerStreamWriter<Cqrs.Leitung.ServerMessage> responseStream,
-        PID proxyPid,
-        AkteurRechte? akteur,
-        string sessionId,
-        CancellationToken ct)
-    {
-        _logger.LogDebug("{Session} ← Trigger", sessionId);
-
-        try
-        {
-            var trigger = _mapper.TriggerAus(request.Payload);
-            var triggerTypeName = trigger.GetType().Name;
-
-            _logger.LogDebug("{Session} Trigger type: {Trigger}", sessionId, triggerTypeName);
-
-            if (!AkteurTor.Darf(akteur, trigger.GetType()))
-            {
-                await SendTriggerAckAsync(responseStream, false, request.CorrelationId,
-                    $"Akteur '{akteur!.Name}' darf {triggerTypeName} nicht", ct);
-                return;
-            }
-
-            // NEU: Erst TriggerHandlerRegistry prüfen (Client-Handler)
-            var handlerPid = _triggerHandlerRegistry.GetHandler(triggerTypeName);
-            if (handlerPid != null)
-            {
-                _logger.LogDebug("{Session} forwarding trigger to client handler {Pid}", sessionId, handlerPid);
-                
-                var correlationId = request.CorrelationId ?? Guid.NewGuid().ToString();
-                var tcs = new TaskCompletionSource<Cqrs.Leitung.TriggerResult>(
-                    TaskCreationOptions.RunContinuationsAsynchronously);
-
-                if (!_pendingTriggerForwards.TryAdd(correlationId, tcs))
-                {
-                    await SendTriggerAckAsync(responseStream, false, request.CorrelationId,
-                        "Duplicate correlation ID for trigger forward", ct);
-                    return;
-                }
-
-                try
-                {
-                    // An Client-Proxy-Actor senden
-                    _actorSystem.Root.Send(handlerPid, new TriggerForwardMsg(trigger, correlationId));
-
-                    // Auf Antwort warten (mit Timeout)
-                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-                    timeoutCts.CancelAfter(TriggerForwardTimeout);
-                    using var registration = timeoutCts.Token.Register(
-                        () => tcs.TrySetCanceled(timeoutCts.Token));
-
-                    var result = await tcs.Task;
-
-                    await SendTriggerAckAsync(responseStream,
-                        result.Accepted, request.CorrelationId,
-                        result.Accepted ? null : result.ErrorMessage, ct);
-                }
-                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
-                {
-                    _logger.LogWarning("{Session} trigger forward timed out", sessionId);
-                    await SendTriggerAckAsync(responseStream, false, request.CorrelationId,
-                        "Client handler timeout", ct);
-                }
-                finally
-                {
-                    _pendingTriggerForwards.TryRemove(correlationId, out _);
-                }
-                return;
-            }
-
-            // Fallback: Pipeline-Routing (bestehend)
-            var triggerType = trigger.GetType();
-            if (!Anwendung.Pipelines.TriggerToPipelineId.TryGetValue(triggerType, out var pipelineId))
-            {
-                _logger.LogWarning("{Session} no handler for trigger {Trigger}", sessionId, triggerType.Name);
-                
-                await SendTriggerAckAsync(responseStream, false,
-                    request.CorrelationId,
-                    $"No handler for {triggerType.Name}", ct);
-                return;
-            }
-
-            var ack = await new Bote(_actorSystem.Cluster(), _logger).FrageAsync<PipelineAck>(
-                PipelineTriggerSender.Identitaet(pipelineId), trigger, TriggerFrist, ct);
-
-            await SendTriggerAckAsync(responseStream,
-                ack?.Accepted ?? false,
-                request.CorrelationId,
-                ack?.Accepted == false ? "Pipeline rejected" : null, ct);
-            
-            _logger.LogDebug("{Session} → TriggerAck: {Result}", sessionId, (ack?.Accepted ?? false) ? "accepted" : "rejected");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "{Session} trigger failed", sessionId);
-            
-            await SendTriggerAckAsync(responseStream, false,
-                request.CorrelationId, ex.Message, ct);
         }
     }
 
@@ -864,26 +727,6 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
     }
 
     // =========================================================================
-    // TRIGGER RESULT FROM CLIENT (NEU)
-    // =========================================================================
-
-    private void HandleTriggerResult(
-        Cqrs.Leitung.TriggerResult result,
-        string sessionId)
-    {
-        _logger.LogDebug("{Session} ← TriggerResult, CorrelationId {CorrelationId}", sessionId, result.CorrelationId);
-
-        if (_pendingTriggerForwards.TryGetValue(result.CorrelationId, out var tcs))
-        {
-            tcs.TrySetResult(result);
-        }
-        else
-        {
-            _logger.LogWarning("{Session} TriggerResult for unknown CorrelationId {CorrelationId}", sessionId, result.CorrelationId);
-        }
-    }
-
-    // =========================================================================
     // SUBSCRIBE HANDLING (unverändert)
     // =========================================================================
 
@@ -992,33 +835,6 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
     // HELPERS (unverändert)
     // =========================================================================
 
-    private static async Task SendTriggerAckAsync(
-        IServerStreamWriter<Cqrs.Leitung.ServerMessage> responseStream,
-        bool accepted,
-        string correlationId,
-        string? errorMessage,
-        CancellationToken ct)
-    {
-        try
-        {
-            var ack = new Cqrs.Leitung.ServerMessage
-            {
-                TriggerAck = new Cqrs.Leitung.TriggerAck
-                {
-                    Accepted = accepted,
-                    CorrelationId = correlationId ?? "",
-                    ErrorMessage = errorMessage ?? ""
-                }
-            };
-            
-            await responseStream.WriteAsync(ack, ct);
-        }
-        catch
-        {
-            // Stream möglicherweise bereits geschlossen
-        }
-    }
-
     // =========================================================================
     // FUNKTIONEN DRAUSSEN (Plan Pub/Sub-Neustrukturierung §2.2, §2.7: ITraegt, Laufort Extern)
     // =========================================================================
@@ -1109,7 +925,7 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         }
 
         var fehler = string.IsNullOrEmpty(request.Fehler) ? null : request.Fehler;
-        List<IPipelineOutput>? ausgaben = null;
+        List<IAusgabe>? ausgaben = null;
         if (fehler == null)
         {
             try { ausgaben = request.Ausgaben.Select(_mapper.Ausgabe).ToList(); }

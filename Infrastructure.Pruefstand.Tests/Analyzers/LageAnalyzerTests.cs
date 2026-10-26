@@ -35,33 +35,6 @@ public class LageAnalyzerTests
         namespace Probe {
         """;
 
-    private const string Fluss = """
-        public record Gebucht(Guid Id) : IEvent;
-        public sealed class Buchungslauf : IPipeline { public PipelineFluss Fluss => PipelineFluss.Definiere(p => { var g = p.Auf<Gebucht>(); }); }
-        """;
-
-    private const string Funktion = """
-        public sealed record Rechne(int Wert) : IAuftrag<IRechnen>;
-        public record Gerechnet(int Wert) : IEvent;
-        public interface IRechnen : IFunktion { Task<OneOf<Gerechnet>> RufeAsync(Rechne auftrag, IAusfuehrung x); }
-        """;
-
-    [Fact]
-    public async Task Ein_Fluss_gehoert_in_die_Ablaeufe()
-    {
-        (await Befunde("Leihwesen.Pipeline", Fluss)).Should().ContainSingle()
-            .Which.Should().Contain("'Gebucht' ist ein Event").And.Contain("Leihwesen, nicht nach Leihwesen.Pipeline");
-        (await Befunde("Leihwesen", Fluss)).Should().ContainSingle()
-            .Which.Should().Contain("'Buchungslauf' ist ein Fluss").And.Contain("gehört nach Leihwesen.Pipeline");
-    }
-
-    [Fact]
-    public async Task Ergebnis_Events_einer_Funktion_gehoeren_zur_Funktion()
-    {
-        (await Befunde("Leihwesen.Pipeline", Funktion)).Should().BeEmpty();
-        (await Befunde("Leihwesen", Funktion)).Should().HaveCount(3, "Auftrag, Ergebnis-Event und Schnittstelle gehören nach Leihwesen.Pipeline");
-    }
-
     private const string Bausteine = """
         public record Ueberfaellig(int Tage) : IEvent;
         public record Gemahnt(int Stufe) : IEvent;
@@ -105,7 +78,7 @@ public class LageAnalyzerTests
         Projektstruktur.HandgeschriebeneProjekte("Domain").Should().Equal("Domain", "Domain.Projections", "Domain.Pipeline", "Domain.Akteure",
             "Domain.Infrastructure");   // der Werkbank-Stand: ohne Leitung und Komposition (nur Generate)
         Projektstruktur.Datei(Projektstruktur.Primitive.Decider, "Konto").Should().Be("Konto.Decider.cs");
-        Projektstruktur.Datei(Projektstruktur.Primitive.Auftrag, "Rechne").Should().Be("Auftraege.cs");
+        Projektstruktur.Datei(Projektstruktur.Primitive.Funktion, "IRechnen").Should().Be("Funktionen.cs");
         Projektstruktur.BereichAus("Domain.Pipeline", "Domain.Pipeline.ImagePair").Should().Be("ImagePair");
         Projektstruktur.BereichAus("Domain.Pipeline", "Domain.ImagePair").Should().BeNull();
     }

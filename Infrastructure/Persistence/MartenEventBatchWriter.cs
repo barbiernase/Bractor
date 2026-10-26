@@ -73,7 +73,7 @@ public sealed class MartenEventBatchWriter : IEventBatchWriter
             eventCount += item.EventAnzahl;
             foreach (var teil in item.Teile) beilagen.Lege(session, item.StreamId, teil.Beilagen);
         }
-        // Die Beilagen aller Appends in derselben Transaktion, die Quittungen in EINER Anweisung (Inbox, docs/04 §4.4). Kennt die Inbox eine
+        // Die Beilagen aller Appends in derselben Transaktion, die Quittungen in EINER Anweisung (Inbox, docs/04 §4.6). Kennt die Inbox eine
         //   schon, scheitert der ganze Batch am Schlüssel; der Appender isoliert dann einzeln, und nur der Wiederholte fällt.
         beilagen.Abschliessen(session, _store);
 

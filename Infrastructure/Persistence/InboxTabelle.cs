@@ -10,7 +10,7 @@ using Weasel.Postgresql.Tables;
 namespace Infrastructure.Persistence;
 
 /// <summary>
-/// Die Inbox der Schreibseite (docs/04 §4.4, Plan Phase 4): eine Tabelle <c>cqrs_inbox</c> im Event-Schema, je Command eine Quittung
+/// Die Inbox der Schreibseite (docs/04 §4.6, Plan Phase 4): eine Tabelle <c>cqrs_inbox</c> im Event-Schema, je Command eine Quittung
 /// (<c>command_id</c> eindeutig, <c>stream_id</c>, <c>abgelehnt</c>, <c>zeit</c> = <c>now()</c> der schreibenden Transaktion). Geschrieben
 /// in derselben Transaktion wie die Events des Commands; ein zweites Mal scheitert am Primärschlüssel und rollt die Events mit zurück.
 ///

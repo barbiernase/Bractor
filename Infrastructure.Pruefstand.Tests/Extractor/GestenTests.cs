@@ -86,7 +86,6 @@ public sealed class GestenTests : IDisposable
             Karten = new()
             {
                 ["records"] = [Karte(board, "records", r => (string?)r["name"] == "Ausgeliehen")],
-                ["sagas"] = [Karte(board, "sagas", s => true)],
                 ["projektionen"] = [Karte(board, "projektionen", p => (string?)p["name"] == "Leihliste")],
             },
         };
@@ -158,7 +157,7 @@ public sealed class GestenTests : IDisposable
         bericht.Geloescht.Should().ContainSingle();
         Text("Fluss.cs").Should().NotContain("AusweisAbgelegt").And.NotContain("Eine Quelle mit fest codiertem Treiber",
             "der Kommentar über der Deklaration geht mit");
-        Text("Fluss.cs").Should().Contain("public sealed record PruefeSeite(string Seite) : IAuftrag<ISeitenPruefung>;");
+        Text("Fluss.cs").Should().Contain("public sealed record RueckgabeGescannt(Guid LeserId, string Code, IReadOnlyList<string> Seiten) : IQuellNachricht");
     }
 
     [Fact]
@@ -225,34 +224,6 @@ public sealed class GestenTests : IDisposable
     }
 
     [Fact]
-    public async Task Funktion_bekommt_ein_weiteres_Ergebnis()
-    {
-        var karte = Karte(await BoardAsync(), "funktionen", f => (string?)f["name"] == "ISchadensSchaetzung");
-        karte["ergebnisse"]!.AsArray().Add("SchadenGemeldet");
-
-        await GesteAsync(Geaendert("funktionen", karte));
-
-        Text("Gebuehren.cs").Should().Contain("Task<OneOf<SchadenGeschaetzt, NichtSchaetzbar, SchadenGemeldet>> RufeAsync(SchaetzeSchaden auftrag, IAusfuehrung x);");
-    }
-
-    [Fact]
-    public async Task Prozess_Regel_entfernen_laesst_die_anderen_Wort_fuer_Wort()
-    {
-        var karte = Karte(await BoardAsync(), "sagas", s => true);
-        var schritte = karte["schritte"]!.AsArray();
-        schritte.Count.Should().BeGreaterThan(1);
-        var weg = (JsonObject)schritte[^1]!;
-        schritte.Remove(weg);
-
-        var bericht = await GesteAsync(Geaendert("sagas", karte));
-
-        bericht.Patch.Should().ContainSingle();
-        var ziel = (string?)weg["sende"] is { Length: > 0 } s ? s : (string?)weg["rufe"];
-        Text(Path.GetFileName(bericht.Patch[0].Datei)).Split('\n').Count(z => z.Contains($"<{ziel}>"))
-            .Should().BeLessThan(bericht.Patch[0].Vorher!.Split('\n').Count(z => z.Contains($"<{ziel}>")));
-    }
-
-    [Fact]
     public async Task Client_sendet_einen_weiteren_Command()
     {
         var karte = Karte(await BoardAsync(), "clients", c => (string?)c["name"] == "ILesesaal");
@@ -260,40 +231,11 @@ public sealed class GestenTests : IDisposable
 
         await GesteAsync(Geaendert("clients", karte));
 
-        Text("Lesen.cs").Should().Contain("ISendet<LeiheAus>, ISendet<GibZurueck>").And.Contain("void Auf(MahnungEroeffnet e);");
+        Text("Lesen.cs").Should().Contain("ISendet<LeiheAus>, ISendet<GibZurueck>").And.Contain("IHoert<MahnungEroeffnet>");
     }
 
     [Fact]
-    public async Task Zusage_im_Akteur_Vertrag_bekommt_einen_Ausgang()
-    {
-        var karte = Karte(await BoardAsync(), "akteure", a => (string?)a["name"] == "Archiv");
-        var zusage = karte["vertrag"]!.AsArray().OfType<JsonObject>().First(z => (string?)z["eingang"] == "Ausgeliehen");
-        zusage["ausgaenge"]!.AsArray().Add("MeldeSchaden");
-
-        await GesteAsync(Geaendert("akteure", karte));
-
-        Text("Lesen.cs").Should().Contain("OneOf<MeldeSchaden> Auf(Ausgeliehen e);", "eine Zusage mit Ausgabe ist OneOf (A.2)")
-            .And.Contain("    MeldeSchaden Auf(Zurueckgegeben e);", "eine unberührte Zusage bleibt wörtlich");
-    }
-
-    [Fact]
-    public async Task Fluss_Knoten_entfernen_laesst_die_anderen_Anweisungen_wortgetreu()
-    {
-        var karte = Karte(await BoardAsync(), "fluesse", f => (string?)f["name"] == "RueckgabePruefung");
-        var knoten = karte["knoten"]!.AsArray();
-        var letzter = (JsonObject)knoten[^1]!;
-        knoten.Remove(letzter);
-
-        var bericht = await GesteAsync(Geaendert("fluesse", karte));
-
-        bericht.Patch.Select(p => p.Datei).Should().Equal("Leihwesen/Fluss.cs");
-        Text("Fluss.cs").Should().NotContain("mahnung.BeiAbgelehnt()")
-            .And.Contain("var seiten = eingang.Je(e => e.Seiten);")
-            .And.Contain(".Oder(schnell.BeiZeitlimit(), z => new EroeffneMahnung(default, 0m));", "unveränderte Lambdas bleiben wortgetreu");
-    }
-
-    [Fact]
-    public async Task Umbenennen_zieht_alle_Verweise_mit_auch_in_Lambdas()
+    public async Task Umbenennen_zieht_alle_Verweise_mit()
     {
         var board = await BoardAsync();
         var ort = Karte(board, "records", r => (string?)r["name"] == "EroeffneMahnung")["_ort"]!;
@@ -303,25 +245,12 @@ public sealed class GestenTests : IDisposable
         alt.Should().Be("EroeffneMahnung");
         patch.Select(p => p.Datei).Should().Contain(["Leihwesen/Gebuehren.cs", "Leihwesen/Fluss.cs", "Leihwesen/Lesen.cs"]);
         patch.Should().OnlyContain(p => !p.Nachher!.Contains("EroeffneMahnung"));
-        patch.Single(p => p.Datei == "Leihwesen/Fluss.cs").Nachher.Should().Contain(".Sende<OeffneMahnung>((g, e) => new OeffneMahnung(new(e.LeserId), g.Betrag))");
-    }
-
-    [Fact]
-    public async Task Fluss_Knoten_umbenennen_benennt_die_Variable_und_ihre_Verwendungen()
-    {
-        var board = await BoardAsync();
-        var fluss = Karte(board, "fluesse", f => (string?)f["name"] == "RueckgabePruefung");
-        var ort = fluss["knoten"]!.AsArray().OfType<JsonObject>().First(k => (string?)k["name"] == "seiten")["_ort"]!;
-
-        var (patch, _) = await Umbenennen.Async(Loesung(), Path.Combine(_wurzel, (string)ort["datei"]!), (int)ort["start"]!, "blaetter", _wurzel);
-
-        var neu = patch.Single().Nachher!;
-        neu.Should().Contain("var blaetter = eingang.Je(e => e.Seiten);").And.Contain("blaetter.Rufe<ISeitenPruefung>").And.Contain("blaetter.Sammle(");
+        patch.Single(p => p.Datei == "Leihwesen/Fluss.cs").Nachher.Should().Contain("new OeffneMahnung(h.NeueId<Mahnvorgang>(), anzahl * 2m)");
     }
 
     // ── Rumpf-Edit (Werkbank P7.4): ✎ am Rumpf-Port ersetzt genau den Bereich, den die Karte aus dem Code kennt ──
 
-    private static RumpfOrt OrtVon(JsonNode o, int? lambda = null) => new((string)o["datei"]!, (int)o["start"]!, (int)o["ende"]!, lambda);
+    private static RumpfOrt OrtVon(JsonNode o) => new((string)o["datei"]!, (int)o["start"]!, (int)o["ende"]!);
 
     private void RumpfGeste(RumpfOrt ort, string neu, string? alt)
     {
@@ -359,19 +288,6 @@ public sealed class GestenTests : IDisposable
     }
 
     [Fact]
-    public async Task Rumpf_Edit_eines_Fluss_Lambdas_ersetzt_nur_diesen_Lambda()
-    {
-        var fluss = Karte(await BoardAsync(), "fluesse", f => (string?)f["name"] == "RueckgabePruefung");
-        var mahnung = fluss["knoten"]!.AsArray().OfType<JsonObject>().First(k => (string?)k["name"] == "mahnung");
-
-        // Eingang 1 = das ∨ (Oder) — der zweite Lambda der Anweisung.
-        RumpfGeste(OrtVon(mahnung["_ort"]!, 1), "z => new EroeffneMahnung(default, 1m)", "z => new EroeffneMahnung(default, 0m)");
-
-        Text("Fluss.cs").Should().Contain(".Oder(schnell.BeiZeitlimit(), z => new EroeffneMahnung(default, 1m));")
-            .And.Contain(".Sende<EroeffneMahnung>((g, e) => new EroeffneMahnung(new(e.LeserId), g.Betrag))", "der Haupt-Lambda bleibt wortgetreu");
-    }
-
-    [Fact]
     public async Task Rumpf_Edit_verweigert_wenn_der_Rumpf_inzwischen_anders_ist()
     {
         var dec = Karte(await BoardAsync(), "decider", d => (string?)d["command"] == "LeiheAus");
@@ -381,7 +297,7 @@ public sealed class GestenTests : IDisposable
     }
 
     [Fact]
-    public async Task Store_Funktion_und_Funktion_kennen_den_Ort_ihres_Rumpfs_in_der_Implementierung()
+    public async Task Store_Funktion_kennt_den_Ort_ihres_Rumpfs_in_der_Implementierung()
     {
         var board = await BoardAsync();
         var fn = (board["stores"] as JsonArray)!.OfType<JsonObject>().SelectMany(st => st["writeFns"]!.AsArray().OfType<JsonObject>())
@@ -391,16 +307,13 @@ public sealed class GestenTests : IDisposable
         Rumpf.Lies(Text("Lesen.cs"), ort).Should().Be((string?)fn["rumpf"]);
     }
 
-    // ══ Dienste (konzept-werkbank §12.3 E11): ⊕ am Konstruktor der Implementierung, Methoden und Implementierungen als Geste ══
+    // ══ Dienste (konzept-werkbank §12.3 E11): Interface, Methoden und Implementierungen als Geste ══
 
     private static JsonObject Param(string typ, string name) => new() { ["typ"] = typ, ["name"] = name };
 
     [Fact]
-    public async Task Neuer_Dienst_per_Plus_an_die_Funktion_legt_Interface_und_Implementierung_an_und_erweitert_den_Konstruktor()
+    public async Task Neuer_Dienst_per_Plus_legt_Interface_und_Implementierung_an()
     {
-        var board = await BoardAsync();
-        var funktion = Karte(board, "funktionen", f => (string?)f["name"] == "ISchadensSchaetzung");
-        funktion["konstruktor"]!.AsArray().Add(Param("ILeuchte", "licht"));
         var dienst = new JsonObject
         {
             ["name"] = "ILeuchte", ["namespace"] = "Leihwesen.Gebuehren",
@@ -408,29 +321,12 @@ public sealed class GestenTests : IDisposable
             ["implementierungen"] = new JsonArray(new JsonObject { ["name"] = "Leuchte" }),
         };
 
-        var bericht = await GesteAsync(new KartenDelta { Karten = new() { ["funktionen"] = [funktion], ["dienste"] = [dienst] } });
+        var bericht = await GesteAsync(new KartenDelta { Karten = new() { ["dienste"] = [dienst] } });
 
-        bericht.Patch.Select(p => p.Datei).Should().BeEquivalentTo("Leihwesen/Gebuehren.cs", "Leihwesen/ILeuchte.cs", "Leihwesen/Leuchte.cs");
-        Text("Gebuehren.cs").Should().Contain("public sealed class Schadensschaetzer(IWertTabelle tabelle, ILeuchte licht) : ISchadensSchaetzung");
+        bericht.Patch.Select(p => p.Datei).Should().BeEquivalentTo("Leihwesen/ILeuchte.cs", "Leihwesen/Leuchte.cs");
         Text("ILeuchte.cs").Should().Contain("public interface ILeuchte : IDienst").And.Contain("    bool Hell(int stufe);");
         Text("Leuchte.cs").Should().Contain("public sealed class Leuchte : ILeuchte").And.Contain("public bool Hell(int stufe)")
             .And.Contain("throw new NotImplementedException(\"TODO: Leuchte.Hell\");");
-        var neu = await BoardAsync();
-        Karte(neu, "funktionen", f => (string?)f["name"] == "ISchadensSchaetzung")["konstruktor"]!.AsArray().Select(p => (string?)p!["typ"])
-            .Should().Equal("IWertTabelle", "ILeuchte");
-        neu["sicht"]!["kanten"]!.AsArray().Select(k => k!.ToJsonString()).Should().Contain("[\"fk:funktion:ISchadensSchaetzung\",\"dn:dienst:ILeuchte\"]");
-    }
-
-    [Fact]
-    public async Task Dienst_loesen_entfernt_nur_den_Konstruktor_Parameter()
-    {
-        var funktion = Karte(await BoardAsync(), "funktionen", f => (string?)f["name"] == "ISchadensSchaetzung");
-        funktion["konstruktor"] = new JsonArray();
-
-        await GesteAsync(Geaendert("funktionen", funktion));
-
-        Text("Gebuehren.cs").Should().Contain("public sealed class Schadensschaetzer : ISchadensSchaetzung")
-            .And.Contain("if (!await tabelle.IstSchaetzbarAsync(auftrag.LeserId))", "der Rumpf bleibt — der Compiler meldet ihn an der Karte");
     }
 
     [Fact]
@@ -456,23 +352,6 @@ public sealed class GestenTests : IDisposable
         bericht.Patch.Select(p => p.Datei).Should().Equal("Leihwesen/FesteWertTabelle.cs");
         Text("FesteWertTabelle.cs").Should().Contain("public sealed class FesteWertTabelle : IWertTabelle")
             .And.Contain("public decimal Restwert(decimal neuwert, int alterJahre)").And.Contain("public Task<bool> IstSchaetzbarAsync(Guid leserId)");
-    }
-
-    [Fact]
-    public async Task C_Sharp_Implementierung_einer_Funktion_anlegen_mit_Dienst_im_Konstruktor()
-    {
-        var funktion = Karte(await BoardAsync(), "funktionen", f => (string?)f["name"] == "ISeitenPruefung");
-        funktion["entwurf"] = "";
-        funktion["konstruktor"] = new JsonArray(Param("IWertTabelle", "tabelle"));
-
-        var bericht = await GesteAsync(Geaendert("funktionen", funktion));
-
-        bericht.Patch.Select(p => p.Datei).Should().Equal("Leihwesen/SeitenPruefung.cs");
-        Text("SeitenPruefung.cs").Should().Contain("using Leihwesen.Gebuehren;")
-            .And.Contain("public sealed class SeitenPruefung(IWertTabelle tabelle) : ISeitenPruefung")
-            .And.Contain("public async Task<OneOf<SeiteGeprueft>> RufeAsync(PruefeSeite auftrag, IAusfuehrung x)");
-        var neu = Karte(await BoardAsync(), "funktionen", f => (string?)f["name"] == "ISeitenPruefung");
-        ((string?)neu["implementierung"]).Should().Be("SeitenPruefung");
     }
 
     [Fact]
@@ -509,7 +388,7 @@ public sealed class GestenTests : IDisposable
         Rumpf.AlsAnweisung(m[0]).Should().Be("throw new NotImplementedException(\"TODO\");");
         Rumpf.AlsAnweisung(m[1]).Should().Be("return 42;");
         Rumpf.AlsAnweisung(m[2]).Should().Be("Console.WriteLine();");
-        var ort = new RumpfOrt("S.cs", m[0].Span.Start, m[0].Span.End, null);
+        var ort = new RumpfOrt("S.cs", m[0].Span.Start, m[0].Span.End);
         Rumpf.Lies(text, ort).Should().Be("throw new NotImplementedException(\"TODO\");", "dieselbe Form wie das Board-Feld rumpf — sonst greift die Sperre des ✎");
         Rumpf.MitRumpf(text, ort, "return Task.CompletedTask;", null)
             .Should().Contain("    public Task Speichere(int x)\n    {\n        return Task.CompletedTask;\n    }\n\n    public int Zahl()");

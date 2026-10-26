@@ -13,7 +13,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Analyzers;
 
 /// <summary>
-/// CQRS084–088 — Regeln über das Gesamtbild der Domänen-Projekte, geprüft in der Laufzeit-Compilation (Werkbank P7.4): die Domäne liegt
+/// CQRS084–087 — Regeln über das Gesamtbild der Domänen-Projekte, geprüft in der Laufzeit-Compilation (Werkbank P7.4): die Domäne liegt
 /// dort nur als Metadaten-Referenz vor — genau wie hier (die Probe wird übersetzt und als Referenz einer leeren „Laufzeit“ gelesen).
 /// </summary>
 public class GesamtbildAnalyzerTests
@@ -88,23 +88,14 @@ public sealed record Kunde : IMensch, IDarf<Eroeffne>, IDarf<Frage>;
     }
 
     [Fact]
-    public async Task Eine_Zusage_ohne_Client_ist_eine_Warnung_sobald_es_Clients_gibt()
+    public async Task Eine_Funktion_ohne_Umsetzung_und_ohne_Traeger_ist_eine_Warnung()
     {
-        const string vertrag = "public sealed record Kasse : IMaschine; public interface IKasse : IAkteurVertrag<Kasse> { OneOf<Eroeffne> Auf(Eroeffnet e); }";
-        (await Ids(vertrag)).Should().BeEmpty("ohne Clients ist es ein Entwurf ohne Software-Sicht");
-        var befunde = await Befunde(vertrag + "public interface IAnzeige : IClientVertrag { void Auf(Eroeffnet e); }");
-        befunde.Should().ContainSingle().Which.GetMessage().Should().StartWith("'IKasse': die Zusage Auf(Eroeffnet) → Eroeffne");
-        (await Ids(vertrag + "public interface ILaden : IClientVertrag, IKasse { }")).Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task Projektionen_die_sich_ueber_transiente_Events_wecken_sind_ein_Kreis()
-    {
-        var befunde = await Befunde(@"
-public record Ping() : ITransientEvent; public record Pong() : ITransientEvent;
-public sealed class A : ISubscriber { public string SubscriberId => ""a""; public OneOf<Pong> Handle(Ping e, IAggregateEnvelope env) => default!; }
-public sealed class B : ISubscriber { public string SubscriberId => ""b""; public OneOf<Ping> Handle(Pong e, IAggregateEnvelope env) => default!; }");
-        befunde.Should().ContainSingle().Which.Id.Should().Be(GesamtbildAnalyzer.ZyklusId);
-        befunde[0].GetMessage().Should().Contain("A → B");
+        const string funktion = "public interface IRechnen : IFunktion { OneOf<Eroeffne> Auf(Eroeffnet e); }";
+        var befunde = await Befunde(funktion);
+        befunde.Should().ContainSingle().Which.Id.Should().Be(GesamtbildAnalyzer.GetragenId);
+        befunde[0].GetMessage().Should().StartWith("'IRechnen'");
+        (await Ids(funktion + "public interface IKasse : IClientVertrag, ITraegt<IRechnen> { }")).Should().BeEmpty("ein Client trägt sie");
+        (await Ids(funktion + "public sealed class Rechnen : IRechnen { public OneOf<Eroeffne> Auf(Eroeffnet e) => default!; }"))
+            .Should().BeEmpty("sie hat eine Umsetzung im Host");
     }
 }

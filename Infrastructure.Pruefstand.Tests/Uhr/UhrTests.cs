@@ -44,7 +44,7 @@ public class UhrTests
         var befehl = new Pruefe(Id<Ziel>.Neu());
         var als = Entscheidungsausgabe.Als(new Frist<Pruefe>(befehl, TimeSpan.FromDays(14)));
         als.Should().BeOfType<FristGesetzt>().Which.Should().Be(new FristGesetzt(befehl, TimeSpan.FromDays(14)));
-        als.Should().BeAssignableTo<IProzessIntern>("der Applier sieht sie nie, die Version zählt sie");
+        als.Should().BeAssignableTo<IRahmenEvent>("der Applier sieht sie nie, die Version zählt sie");
         var e = new FristGesetzt(befehl, TimeSpan.Zero);
         Entscheidungsausgabe.Als(e).Should().BeSameAs(e);
     }

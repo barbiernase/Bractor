@@ -118,13 +118,6 @@ public sealed class BatchLeser
         return typen;
     }
 
-    /// <summary>
-    /// Die Ausgabe-Naht des generierten Dispatch für Projektionen: eine Projektion gibt nichts aus (ihr Handle liefert <c>Task</c>, CQRS050) —
-    /// ruft ein Handle sie doch, ist das ein Fehler im Generat.
-    /// </summary>
-    public static Task KeineAusgabe(IPipelineOutput ausgabe)
-        => throw new InvalidOperationException($"Eine Projektion gibt nichts aus — {ausgabe.GetType().Name} aus einem Projektions-Handle.");
-
     /// <inheritdoc cref="TypenAus(IEnumerable{Type}, IReadOnlyDictionary{Type, string[]})"/>
     public static IReadOnlyCollection<string>? TypenAus(IEnumerable<Type> abonniert) => TypenAus(abonniert, Anwendung.Upcasting.Herkunft);
 

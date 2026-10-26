@@ -3,7 +3,6 @@ using Domain.ImagePair;
 using Domain.Projections;
 using FluentAssertions;
 using Infrastructure.Extensions;
-using Infrastructure.Pipeline;
 using Infrastructure.Projections;
 using Infrastructure.Projections.Generated;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,7 +43,6 @@ public class LiveCommandE2ETests
             // Connection-Defaults zeigen bereits auf localhost (Postgres/Redis/Consul laufen).
         });
 
-        GeneratedPipelines.RegisterAllPipelines(builder.Services);
 
         // Der zu prüfende Pull-Pfad (koppelt zugleich den Push-Subscriber ab).
         builder.Services.AddGeneratedPullPaths();

@@ -57,10 +57,8 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine($"        public {K}IAkteurTabelle Akteure {{ get; }} = new AkteurTabelle();");
             sb.AppendLine($"        public {K}IFunktionsTabelle Funktionen {{ get; }} = new FunktionsTabelle();");
             sb.AppendLine($"        public {K}IDienstTabelle Dienste {{ get; }} = new DienstTabelle();");
-            sb.AppendLine($"        public {K}IPipelineTabelle Pipelines {{ get; }} = new PipelineTabelle();");
             sb.AppendLine($"        public {K}IAggregatTabelle Aggregate {{ get; }} = new AggregatTabelle();");
             sb.AppendLine("        public IReadOnlyList<global::Infrastructure.Quellen.QuellTyp> Quellen => global::Infrastructure.Quellen.GeneratedQuellen.Alle;");
-            sb.AppendLine("        public IReadOnlyDictionary<string, ProzessRegeln> Prozesse => global::Infrastructure.Prozess.GeneratedProzessVerbund.Alle;");
             sb.AppendLine("        public IReadOnlyList<Type> QueryTypen => " + (queryDienst != null
                 ? $"global::{queryDienst.ToDisplayString()}.SupportedQueryTypes;" : "Array.Empty<Type>();"));
             sb.AppendLine("        public global::Cqrs.Leitung.INutzlastTabelle? Nutzlast => " + (nutzlast != null
@@ -77,7 +75,7 @@ namespace Infrastructure.SourceGeneration
             Tabelle(sb, "TypTabelle", "ITypTabelle", "global::Infrastructure.Mapping.GeneratedTypeRegistry", new[]
             {
                 "IReadOnlyDictionary<string, Type> Events", "IReadOnlyDictionary<string, Type> Commands", "IReadOnlyDictionary<string, Type> Queries",
-                "IReadOnlyDictionary<string, Type> QueryResponses", "IReadOnlyDictionary<string, Type> Triggers", "IReadOnlyDictionary<string, Type> Signals",
+                "IReadOnlyDictionary<string, Type> QueryResponses", "IReadOnlyDictionary<string, Type> Signals",
                 "IReadOnlyList<(Type Type, string SnakeCaseName)> PersistableEvents", "IReadOnlyList<Type> PersistableEventTypes",
             }, new string[0]);
             Tabelle(sb, "RoutingTabelle", "IRoutingTabelle", "global::Infrastructure.Mapping.GeneratedCommandRouting", new[]
@@ -97,9 +95,6 @@ namespace Infrastructure.SourceGeneration
                 "string CommandDiskriminator(ICommand value) => {0}.CommandDiskriminator(value)",
                 "void WriteCommand(Utf8JsonWriter writer, ICommand value) => {0}.WriteCommand(writer, value)",
                 "ICommand ReadCommand(string diskriminator, ref Utf8JsonReader reader) => {0}.ReadCommand(diskriminator, ref reader)",
-                "string AuftragDiskriminator(IAuftrag value) => {0}.AuftragDiskriminator(value)",
-                "void WriteAuftrag(Utf8JsonWriter writer, IAuftrag value) => {0}.WriteAuftrag(writer, value)",
-                "IAuftrag ReadAuftrag(string diskriminator, ref Utf8JsonReader reader) => {0}.ReadAuftrag(diskriminator, ref reader)",
                 "string SignalDiskriminator(IStateChangeSignal value) => {0}.SignalDiskriminator(value)",
                 "void WriteSignal(Utf8JsonWriter writer, IStateChangeSignal value) => {0}.WriteSignal(writer, value)",
                 "IStateChangeSignal ReadSignal(string diskriminator, ref Utf8JsonReader reader) => {0}.ReadSignal(diskriminator, ref reader)",
@@ -123,34 +118,17 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("            public IReadOnlyDictionary<string, global::Infrastructure.Akteure.ClientVertrag> ClientVertraege => global::Infrastructure.Akteure.GeneratedClientVertraege.Alle;");
             sb.AppendLine("        }");
             sb.AppendLine();
-            Tabelle(sb, "FunktionsTabelle", "IFunktionsTabelle", "global::Infrastructure.Funktionen.GeneratedFunktionen", new[]
+            Tabelle(sb, "FunktionsTabelle", "IFunktionsTabelle", "global::Infrastructure.Funktionen.GeneratedFunktionsBausteine", new string[0], new[]
             {
-                "IReadOnlyDictionary<Type, Type> AuftragZuFunktion", "IReadOnlyDictionary<Type, Type[]> Ergebnisse", "IReadOnlyDictionary<Type, Type[]> Faehigkeiten",
-                "IReadOnlyDictionary<string, Type> Namen", "IReadOnlyList<global::Infrastructure.Funktionen.FunktionsImplementierung> Implementierungen",
-                "IReadOnlyDictionary<Type, Action<IServiceCollection>> Extern",
-            }, new[]
-            {
-                "Task<IEvent> RufeAsync(IServiceProvider sp, IAuftrag auftrag, IAusfuehrung x) => {0}.RufeAsync(sp, auftrag, x)",
-                "IReadOnlyList<global::Infrastructure.Funktionen.FunktionsBaustein> Bausteine => global::Infrastructure.Funktionen.GeneratedFunktionsBausteine.Alle",
-                "IReadOnlyDictionary<Type, string[]> Weckplan => global::Infrastructure.Funktionen.GeneratedFunktionsBausteine.Weckplan",
-                "IReadOnlyDictionary<Type, string[]> Hinweisplan => global::Infrastructure.Funktionen.GeneratedFunktionsBausteine.Hinweisplan",
+                "IReadOnlyList<global::Infrastructure.Funktionen.FunktionsBaustein> Bausteine => {0}.Alle",
+                "IReadOnlyDictionary<Type, string[]> Weckplan => {0}.Weckplan",
+                "IReadOnlyDictionary<Type, string[]> Hinweisplan => {0}.Hinweisplan",
             });
             Tabelle(sb, "DienstTabelle", "IDienstTabelle", "global::Infrastructure.Dienste.GeneratedDienste", new[]
             {
                 "IReadOnlyDictionary<string, Type> Namen", "IReadOnlyList<global::Infrastructure.Dienste.DienstImplementierung> Implementierungen",
                 "IReadOnlyDictionary<Type, Type[]> Braucht", "IReadOnlyList<global::Infrastructure.Dienste.KonfigRecord> Konfigs",
             }, new string[0]);
-            Tabelle(sb, "PipelineTabelle", "IPipelineTabelle", "global::Infrastructure.Pipeline.GeneratedPipelines", new[]
-            {
-                "IReadOnlyDictionary<Type, string> CommandAggregateTypes", "IReadOnlyDictionary<Type, string> TriggerToPipelineId",
-            }, new[]
-            {
-                "IEnumerable<(string Name, string PipelineId)> GetPipelineIds(IServiceProvider provider) => {0}.GetPipelineIds(provider)",
-                "global::Proto.Cluster.ClusterKind[] GetPipelineKinds(IServiceProvider provider, global::Proto.ActorSystem system) => {0}.GetPipelineKinds(provider, system)",
-                "IServiceCollection RegisterAllPipelines(IServiceCollection services) => {0}.RegisterAllPipelines(services)",
-                "IServiceCollection AddGeneratedPipelineEventPulls(IServiceCollection services) => {0}.AddGeneratedPipelineEventPulls(services)",
-                "ICommand BaueFrist(Frist frist) => global::Infrastructure.Pipeline.Generated.GeneratedFristen.Baue(frist)",
-            });
             Tabelle(sb, "AggregatTabelle", "IAggregatTabelle", "global::Infrastructure.Aggregate.ActorSystem.GeneratedAggregates", new string[0], new[]
             {
                 "IServiceCollection RegisterAllAggregateComponents(IServiceCollection services) => {0}.RegisterAllAggregateComponents(services)",

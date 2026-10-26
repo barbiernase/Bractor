@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Infrastructure.Pruefstand.Tests;
 
 /// <summary>
-/// Die LESESEITE des Domänen-Editors: Modell (Stores/Fähigkeiten, Projektion, Reaktion, Reader, Query/Response/ReadModel)
+/// Die LESESEITE des Domänen-Editors: Modell (Stores/Fähigkeiten, Projektion, Reader, Query/Response/ReadModel)
 /// → C#. Beweist die Form UND dass die Ausgabe die Analyzer besteht, die ihr Sicherheitsnetz sind (CQRS050 Ausgabe-Vertrag,
 /// CQRS051 eine Fn je Fähigkeit, CQRS054/055 kein Store im Konsumenten-Zustand / kein new Store, CQRS057 Handle-Form).
 /// Dazu Board → Modell: die Editor-Defaults für NEUES (Fähigkeits-Name, Parameter, Impl-Klasse).
@@ -33,8 +33,6 @@ public sealed class DomainEditorLeseseiteTests
             new() { Name = "KeineZeile", Kind = RecordArt.Antwort, Namespace = "Probe" },
             new() { Name = "Zeile", Kind = RecordArt.ReadModel, Namespace = "Probe", Felder = [new() { Name = "Id", Typ = "Guid" }, new() { Name = "Wert", Typ = "int" }] },
             new() { Name = "PruefKonfig", Kind = RecordArt.Konfig, Namespace = "Probe", Felder = [new() { Name = "Tage", Typ = "int" }] },
-            new() { Name = "Pruefe", Kind = RecordArt.Trigger, Namespace = "Probe", Felder = [new() { Name = "Id", Typ = "Guid" }] },
-            new() { Name = "Tick", Kind = RecordArt.Selbst, Namespace = "Probe", OhneParameterliste = true },
         ],
         Lesen = new Leseseite
         {
@@ -58,11 +56,6 @@ public sealed class DomainEditorLeseseiteTests
                     Name = "Zeilenliste", Namespace = "Probe", SubscriberId = "zeilenliste",
                     Handles = [new() { Eingang = "Gemacht", Faehigkeiten = [new() { Typ = "ISchreibeZeile", Name = "schreibe" }] }],
                 },
-                new()
-                {
-                    Name = "Weitermacher", Namespace = "Probe", SubscriberId = "weitermacher",
-                    Handles = [new() { Eingang = "Gemacht", Ausgaenge = ["MachWeiter"] }],
-                },
             ],
             Reader =
             [
@@ -70,19 +63,6 @@ public sealed class DomainEditorLeseseiteTests
                 {
                     Name = "ZeilenLeser", Namespace = "Probe", Projektion = "Zeilenliste", TrackDeps = false,
                     Handles = [new() { Eingang = "HoleZeile", Parameter = "query", Ausgaenge = ["ZeileAntwort", "KeineZeile"], Faehigkeiten = [new() { Typ = "IFindeZeile", Name = "finde" }] }],
-                },
-            ],
-            Pipelines =
-            [
-                new()
-                {
-                    Name = "PruefPipeline", Namespace = "Probe", PipelineId = "pruef", Konfigs = ["PruefKonfig"],
-                    Handles =
-                    [
-                        new() { Eingang = "Pruefe", Parameter = "pruefe", Ausgaenge = ["MachWeiter", "Selbst<Tick>"], Faehigkeiten = [new() { Typ = "IFindeZeile", Name = "finde" }],
-                            Rumpf = "if (await finde.FindeAsync(pruefe.Id) is null) yield break;\nyield return new MachWeiter(new(pruefe.Id));" },
-                        new() { Eingang = "Tick", Parameter = "tick", Ausgaenge = ["MachWeiter"] },
-                    ],
                 },
             ],
         },
@@ -100,9 +80,7 @@ public sealed class DomainEditorLeseseiteTests
             ("Probe/Commands.cs", DateiArt.Typen), ("Probe/Events.cs", DateiArt.Typen), ("Probe/Queries.cs", DateiArt.Typen),
             ("Probe/Responses.cs", DateiArt.Typen), ("Probe/ReadModels.cs", DateiArt.Typen),
             ("Probe/IBuch.cs", DateiArt.Schnittstellen), ("Probe/Buch.cs", DateiArt.StoreImpl),
-            ("Probe/Zeilenliste.cs", DateiArt.Konsument), ("Probe/Weitermacher.cs", DateiArt.Konsument), ("Probe/ZeilenLeser.cs", DateiArt.Leser),
-            ("Probe/Konfigs.cs", DateiArt.Typen), ("Probe/Triggers.cs", DateiArt.Typen), ("Probe/SelbstNachrichten.cs", DateiArt.Typen),
-            ("Probe/PruefPipeline.cs", DateiArt.Pipeline),
+            ("Probe/Zeilenliste.cs", DateiArt.Konsument), ("Probe/ZeilenLeser.cs", DateiArt.Leser), ("Probe/Konfigs.cs", DateiArt.Typen),
         });
     }
 
@@ -149,14 +127,12 @@ public sealed class DomainEditorLeseseiteTests
     }
 
     [Fact]
-    public void Reader_und_Reaktion_tragen_den_Ausgabe_Vertrag_in_der_Signatur()
+    public void Reader_traegt_den_Ausgabe_Vertrag_in_der_Signatur()
     {
         var d = Scaffolder.Generiere(Modell());
         Inhalt(d, "Probe/ZeilenLeser.cs").Should().Contain("[ProjectionReader(TrackDeps = false)]")
             .And.Contain("public partial class ZeilenLeser : IReader<Zeilenliste>")
             .And.Contain("public Task<OneOf<ZeileAntwort, KeineZeile>> Handle(HoleZeile query, IMessageEnvelope envelope, ReadContext ctx, IFindeZeile finde)");
-        Inhalt(d, "Probe/Weitermacher.cs").Should()
-            .Contain("public IAsyncEnumerable<MachWeiter> Handle(Gemacht evt, IAggregateEnvelope envelope, ProjectionWriter writer)");
         Inhalt(d, "Probe/ReadModels.cs").Should().Contain("public record Zeile(Guid Id, int Wert) : IReadModel;");
     }
 
@@ -303,98 +279,6 @@ public sealed class DomainEditorLeseseiteTests
     }
 
     [Fact]
-    public void Pipeline_OneOf_auch_bei_einem_Ausgang_Konfig_Konstruktor_und_Entwurf_als_Rumpf()
-    {
-        var d = Scaffolder.Generiere(Modell());
-        Inhalt(d, "Probe/PruefPipeline.cs").Should().Be(
-            """
-            using Abstractions;
-
-            namespace Probe;
-
-            public partial class PruefPipeline : IPipelineHandler
-            {
-                public string PipelineId => "pruef";
-
-                private readonly PruefKonfig _pruefKonfig;
-
-                public PruefPipeline(PruefKonfig pruefKonfig)
-                {
-                    _pruefKonfig = pruefKonfig;
-                }
-
-                public async IAsyncEnumerable<OneOf<MachWeiter, Selbst<Tick>>> Handle(Pruefe pruefe, PipelineContext ctx, IFindeZeile finde)
-                {
-                    if (await finde.FindeAsync(pruefe.Id) is null) yield break;
-                    yield return new MachWeiter(new(pruefe.Id));
-                }
-
-                public IAsyncEnumerable<OneOf<MachWeiter>> Handle(Tick tick, PipelineContext ctx)
-                {
-                    throw new NotImplementedException("TODO: Handle(Tick)");
-                }
-            }
-            """);
-        Inhalt(d, "Probe/Triggers.cs").Should().Contain("public record Pruefe(Guid Id) : IPipelineTrigger;");
-        Inhalt(d, "Probe/SelbstNachrichten.cs").Should().Contain("public record Tick : IPipelineSelfMessage { }");
-        Inhalt(d, "Probe/Konfigs.cs").Should().Contain("public record PruefKonfig(int Tage);");
-    }
-
-    [Fact]
-    public void Pipeline_Handle_ohne_Ausgang_ist_Task_und_bekommt_er_einen_wird_er_Strom()
-    {
-        var m = Modell();
-        var p = m.Lesen!.Pipelines[0];
-        m = m with { Lesen = m.Lesen with { Pipelines = [p with { Handles = [.. p.Handles, new() { Eingang = "Gemacht", Parameter = "e" }] }] } };
-        Inhalt(Scaffolder.Generiere(m), "Probe/PruefPipeline.cs").Should().Contain("public Task Handle(Gemacht e, PipelineContext ctx)");
-
-        var board = """
-            { "pipelines": [ { "_id": "pl1", "name": "P", "namespace": "Probe", "handles": [
-                { "inputKind": "event", "event": "Gemacht", "sends": [ "MachWeiter" ], "emits": [], "schedules": [], "fns": [],
-                  "sig": { "parameter": "e", "rueckgabe": "Task", "ausgangsTypen": [], "datei": "Probe/P.cs", "herkunft": "x" } },
-                { "inputKind": "event", "event": "Anders", "sends": [], "emits": [], "schedules": [], "fns": [],
-                  "sig": { "parameter": "e", "rueckgabe": "IAsyncEnumerable<OneOf<MachWeiter>>", "ausgangsTypen": [ "MachWeiter" ], "datei": "Probe/P.cs", "herkunft": "x" } } ],
-              "code": { "datei": "Probe/P.cs", "basen": [ "IPipelineHandler" ] } } ] }
-            """;
-        var hs = BoardLeseseite.AusBoard(board).Lesen!.Pipelines.Single().Handles;
-        hs[0].Rueckgabe.Should().Be("IAsyncEnumerable<OneOf<MachWeiter>>");   // Task + Ausgang ⇒ Strom, nicht Task<…>
-        hs[1].Rueckgabe.Should().Be("Task");                                   // alle Ausgänge gelöst ⇒ Task
-    }
-
-    [Fact]
-    public void Pipeline_Eingang_folgt_dem_bearbeiteten_Feld_nicht_dem_alten_input()
-    {
-        // Der Mapper setzt „input" an jedem Handle; der Editor pflegt beim Umverdrahten/Umbenennen aber event/selfName bzw.
-        // die Trigger-Karte. Früher gewann input → der neue Eingang ging still verloren.
-        var board = """
-            { "triggers": [ { "_id": "tg1", "name": "Neu", "msgName": "DateiNeu" } ],
-              "pipelines": [ { "_id": "pl1", "name": "P", "namespace": "Probe", "handles": [
-                { "inputKind": "event", "event": "Umverdrahtet", "input": "Alt", "sends": [], "emits": [], "schedules": [], "fns": [],
-                  "sig": { "parameter": "e", "rueckgabe": "Task", "ausgangsTypen": [], "datei": "Probe/P.cs", "herkunft": "x" } },
-                { "inputKind": "self", "selfName": "TickNeu", "input": "TickAlt", "sends": [], "emits": [], "schedules": [], "fns": [] },
-                { "inputKind": "trigger", "trigId": "tg1", "input": "DateiAlt", "sends": [], "emits": [], "schedules": [], "fns": [] },
-                { "inputKind": "trigger", "prod": { "k": "tg", "id": "tg1" }, "input": "DateiAlt2", "sends": [], "emits": [], "schedules": [], "fns": [] },
-                { "inputKind": "trigger", "trigId": "fehlt", "input": "NurInput", "sends": [], "emits": [], "schedules": [], "fns": [] } ] } ] }
-            """;
-        var hs = BoardLeseseite.AusBoard(board).Lesen!.Pipelines.Single().Handles;
-        hs.Select(h => h.Eingang).Should().Equal("Umverdrahtet", "TickNeu", "DateiNeu", "DateiNeu", "NurInput");
-        // Aus dem Code gelesen und umverdrahtet: der alte Eingang reist mit, damit „C# schreiben" die Methode findet.
-        hs[0].EingangImCode.Should().Be("Alt");
-        hs.Skip(1).Should().OnlyContain(h => h.EingangImCode == null, "ohne Code-Herkunft gibt es nichts umzuschreiben");
-    }
-
-    [Fact]
-    public void Pipeline_Stempel_erkennt_Konfig_Name_und_Namespace()
-    {
-        var p = new PipelineKarte { Name = "P", Namespace = "Probe", PipelineId = "p", Konfigs = ["AKonfig"], Basen = ["IPipelineHandler"] };
-        var stempel = Herkunft.Von(p);
-        Herkunft.Geaendert(stempel, Herkunft.Von(p)).Should().BeFalse("unverändert schreibt nichts");
-        Herkunft.Geaendert(stempel, Herkunft.Von(p with { Konfigs = ["AKonfig", "BKonfig"] })).Should().BeTrue();
-        Herkunft.Geaendert(stempel, Herkunft.Von(p with { Name = "Q" })).Should().BeTrue();
-        Herkunft.Geaendert(stempel, Herkunft.Von(p with { Namespace = "Anders" })).Should().BeTrue();
-    }
-
-    [Fact]
     public void Neue_Store_Fn_mit_Entwurf_bekommt_ihn_als_Rumpf()
     {
         var m = Modell();
@@ -405,23 +289,16 @@ public sealed class DomainEditorLeseseiteTests
     }
 
     [Fact]
-    public void Stempel_unveraendert_leer_geaendert_benannt_Stub_Argumente_zaehlen_nicht()
+    public void Stempel_unveraendert_leer_geaendert_benannt()
     {
-        var m = Herkunft.Stempeln(Modell() with
-        {
-            Sagas = [new() { Name = "P", Namespace = "Probe", TriggerEvent = "Gemacht", Schritte = [new() { Wenn = ["Gemacht"], Sende = "MachWeiter", SendeAusdruck = "e => new MachWeiter(e.Id)" }] }],
-        });
+        var m = Herkunft.Stempeln(Modell());
         Herkunft.Geaenderte(m).Should().BeEmpty();
-        // Der Browser ergänzt Stub-Argumente — gegenüber dem verbatim gelesenen Ausdruck wirkungslos ⇒ keine Änderung.
-        var mitStub = m with { Sagas = [m.Sagas[0] with { Schritte = [m.Sagas[0].Schritte[0] with { SendeArgumente = ["default"], SendeJeCollection = "" }] }] };
-        Herkunft.Geaenderte(mitStub).Should().BeEmpty();
         var geaendert = m with { Records = m.Records.Select(r => r.Name == "Gemacht" ? r with { Felder = [.. r.Felder, new() { Name = "Neu", Typ = "int" }] } : r).ToList() };
         Herkunft.Geaenderte(geaendert).Should().Equal("event Probe.Gemacht");
     }
 
     private const string BoardBestehend = """
         {
-          "records": [ { "name": "Pruefe", "kind": "trigger", "namespace": "Probe", "felder": [] } ],
           "stores": [ { "_id": "st1", "name": "IBuch", "namespace": "Probe", "datei": "Probe/IBuch.cs",
             "readFns": [ { "_id": "rf1", "name": "FindeAsync", "faehigkeit": "IFindeZeile", "rueckgabe": "Zeile?",
                            "params": [ { "name": "id", "typ": "Guid" }, { "name": "mitArchiv", "typ": "bool" } ],
@@ -431,11 +308,7 @@ public sealed class DomainEditorLeseseiteTests
           "reader": [ { "_id": "rd1", "name": "ZeilenLeser", "namespace": "Probe", "projektion": "Andere", "trackDeps": false,
               "code": { "datei": "Probe/ZeilenLeser.cs", "basen": [ "IReader<Zeilenliste>" ], "herkunft": "x" },
               "handles": [ { "query": "HoleZeile", "fns": [], "responses": [ "ZeileAntwort", "KeineZeile" ],
-                "sig": { "parameter": "q", "rueckgabe": "Task<ZeileAntwort>", "ausgangsTypen": [ "ZeileAntwort" ], "datei": "Probe/ZeilenLeser.cs", "herkunft": "x" } } ] } ],
-          "pipelines": [ { "_id": "pl1", "name": "P", "namespace": "Probe", "pipelineId": "p", "handles": [
-              { "inputKind": "trigger", "trigId": "tg1", "sends": [ "MachWeiter" ], "emits": [], "schedules": [ { "name": "NeuTick" } ], "fns": [] } ] } ],
-          "triggers": [ { "_id": "tg1", "name": "Pruefe", "msgName": "Pruefe", "namespace": "Probe", "felder": [ { "name": "Id", "typ": "Guid" } ],
-                          "modus": "webhook", "route": "/webhook/pruefe" } ]
+                "sig": { "parameter": "q", "rueckgabe": "Task<ZeileAntwort>", "ausgangsTypen": [ "ZeileAntwort" ], "datei": "Probe/ZeilenLeser.cs", "herkunft": "x" } } ] } ]
         }
         """;
 
@@ -453,11 +326,6 @@ public sealed class DomainEditorLeseseiteTests
         l.Konsumenten.Single().Basen.Should().Equal("ISubscriber", "IPullSubscriber", "IAppendProjektion");
         // Store-Fn: Parameter geändert ⇒ Board; unveränderter Parameter bleibt wörtlich (auch qualifiziert).
         l.Stores.Single().Fns.Single().Parameter.Select(p => (p.Typ, p.Name)).Should().Equal(("System.Guid", "id"), ("bool", "mitArchiv"));
-        // Neue Pipeline: Trigger-Eingang über trigId, Self-Tick ⇒ Selbst<T> + neuer Selbst-Record; Webhook ⇒ neue Ingress-Bindung.
-        l.Pipelines.Single().Handles.Single().Should().Match<Handle>(h => h.Eingang == "Pruefe" && h.Ausgaenge.SequenceEqual(new[] { "MachWeiter", "Selbst<NeuTick>" }));
-        m.Records.Should().Contain(r => r.Kind == RecordArt.Selbst && r.Name == "NeuTick" && r.Namespace == "Probe");
-        m.Records.Single(r => r.Kind == RecordArt.Trigger).Felder.Single().Name.Should().Be("Id");
-        m.Ingress.Should().ContainSingle(b => b.Trigger == "Pruefe" && b.Modus == "webhook" && b.Ort == "/webhook/pruefe" && b.Datei == null);
     }
 
     [Fact]

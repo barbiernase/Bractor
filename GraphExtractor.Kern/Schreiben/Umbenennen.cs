@@ -6,8 +6,8 @@ using Microsoft.CodeAnalysis.Rename;
 namespace GraphExtractor;
 
 /// <summary>
-/// Umbenennen als Geste (Werkbank P7.2): das Symbol am Ort der Karte (Typ, Fluss-Knoten-Variable …) wird mit dem Roslyn-<see cref="Renamer"/>
-/// über die ganze Solution umbenannt — alle Verweise, auch in Prozess- und Fluss-Lambdas. Ergebnis ist der Patch (geänderte Dokumente).
+/// Umbenennen als Geste (Werkbank P7.2): das Symbol am Ort der Karte (Typ, Methode …) wird mit dem Roslyn-<see cref="Renamer"/>
+/// über die ganze Solution umbenannt — alle Verweise. Ergebnis ist der Patch (geänderte Dokumente).
 /// </summary>
 public static class Umbenennen
 {

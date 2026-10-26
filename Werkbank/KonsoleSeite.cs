@@ -220,7 +220,7 @@ function zeichneErgebnis(){
   });
   html += '</div>';
   if (KANDIDAT) {
-    const python = s.art === 'zusage' || s.art === 'funktionpy';
+    const python = s.art === 'zusage';
     html += `<div class="kasten"><h2>Kandidat</h2>
       <p class="hinweis">${python ? 'Geprüft: Syntax (Python-Parser).' : 'Geprüft: Syntax + probeweise gebaut im warmen Workspace (Compiler und Analyzer des Projekts).'}</p>
       <div class="zeile"><button class="b pr" id="uebernehmen" type="button">Übernehmen (in die Datei schreiben)</button>

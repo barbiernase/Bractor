@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using Abstractions;
 using Domain.Sammelvorgang;
 using FluentAssertions;
-using Infrastructure.Prozess;
 using Infrastructure.PubSub;
 using Xunit;
 
@@ -14,8 +13,7 @@ namespace Infrastructure.Pruefstand.Garantien;
 
 /// <summary>
 /// Das eine Emit-Primitiv unter Störung (docs/11 §11.3, §11.7): der <see cref="EmitAusgang"/> trennt Entschiedenes (zugestellt, abgelehnt) von
-/// Unbekanntem, keine Ausnahme verlässt den Emitter, die Drossel begrenzt die Sends je Ziel, und der Dirigent wiederholt einen unbekannten Send
-/// erst nach einem Backoff und nie doppelt gleichzeitig (PF-9). Store-frei über die Sende-Naht des echten <see cref="CommandEmitter"/>.
+/// Unbekanntem, keine Ausnahme verlässt den Emitter, und die Drossel begrenzt die Sends je Ziel (PF-9). Store-frei über die Sende-Naht des echten <see cref="CommandEmitter"/>.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class EmitGarantieTests
@@ -23,7 +21,7 @@ public class EmitGarantieTests
     private static readonly CancellationToken Ct = CancellationToken.None;
 
     private static async Task<EmitAusgang> Sende(CommandEmitter emitter, Guid ziel)
-        => (await emitter.EmitAsync(new MeldeTeilFertig(new(ziel)), Guid.NewGuid(), Guid.NewGuid(), Ct)).Ausgang;
+        => await emitter.EmitAsync(new MeldeTeilFertig(new(ziel)), Guid.NewGuid(), Guid.NewGuid(), Ct);
 
     [Theory]
     [InlineData("erfolg", EmitAusgang.Zugestellt)]
@@ -88,72 +86,5 @@ public class EmitGarantieTests
         var ausgaenge = await Task.WhenAll(Sende(emitter, ziel), Sende(emitter, ziel));
 
         ausgaenge.Should().OnlyContain(a => a == EmitAusgang.Unbekannt);
-    }
-
-    // ── Dirigent: Sende-Takt je Vorgang (PF-9) ──
-
-    private sealed class Takt
-    {
-        public readonly List<Guid> Gesendet = new();
-        public readonly List<Guid> Geweckt = new();
-        public readonly List<TimeSpan> Gewartet = new();
-        public EmitAusgang Antwort = EmitAusgang.Unbekannt;
-        public TaskCompletionSource Warten = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public readonly DetachedProzessSend Sender;
-
-        public Takt()
-        {
-            Sender = new DetachedProzessSend(
-                (_, _, vorgang, _) => { lock (Gesendet) Gesendet.Add(vorgang); return Task.FromResult(new EmitErgebnis(Antwort, 0)); },
-                (korrelation, _, _, _, _) => { lock (Geweckt) Geweckt.Add(korrelation); return Task.CompletedTask; },
-                backoff: n => TimeSpan.FromSeconds(n),
-                warte: (t, _) => { lock (Gewartet) Gewartet.Add(t); return Warten.Task; });
-        }
-    }
-
-    [Fact]
-    public async Task Nach_unbekanntem_Ausgang_weckt_der_Dirigent_erst_nach_dem_Backoff_und_sendet_nicht_doppelt()
-    {
-        var t = new Takt();
-        var korrelation = Guid.NewGuid();
-        var vorgang = Guid.NewGuid();
-        var cmd = new MeldeTeilFertig(new(Guid.NewGuid()));
-
-        await t.Sender.SendeAsync(korrelation, cmd, vorgang, Ct);
-        await Task.Delay(50);
-        t.Geweckt.Should().BeEmpty("nach einem unbekannten Ausgang keine sofortige Selbst-Weckung — sie trieb den Retry-Sturm");
-        t.Gewartet.Should().Equal(TimeSpan.FromSeconds(1));
-
-        // Während des Backoffs wecken Signal, Poll oder Backstop den Manager; der Fold sieht den Schritt offen — gesendet wird trotzdem nicht.
-        await t.Sender.SendeAsync(korrelation, cmd, vorgang, Ct);
-        await t.Sender.SendeAsync(korrelation, cmd, vorgang, Ct);
-        t.Gesendet.Should().HaveCount(1);
-        t.Sender.IstGesperrt(vorgang).Should().BeTrue();
-
-        // Backoff vorbei: jetzt weckt er sich, der Fold sendet erneut — der zweite Versuch wartet länger.
-        var erstesWarten = t.Warten;
-        t.Warten = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        erstesWarten.SetResult();
-        await Task.Delay(50);
-        t.Geweckt.Should().Equal(korrelation);
-        await t.Sender.SendeAsync(korrelation, cmd, vorgang, Ct);
-        await Task.Delay(50);
-        t.Gesendet.Should().HaveCount(2);
-        t.Gewartet.Should().Equal(TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2));
-    }
-
-    [Fact]
-    public async Task Nach_entschiedenem_Ausgang_weckt_der_Dirigent_sofort()
-    {
-        var t = new Takt { Antwort = EmitAusgang.Abgelehnt };
-        var korrelation = Guid.NewGuid();
-        var vorgang = Guid.NewGuid();
-
-        await t.Sender.SendeAsync(korrelation, new MeldeTeilFertig(new(Guid.NewGuid())), vorgang, Ct);
-        await Task.Delay(50);
-
-        t.Geweckt.Should().Equal(korrelation);
-        t.Gewartet.Should().BeEmpty();
-        t.Sender.IstGesperrt(vorgang).Should().BeFalse();
     }
 }

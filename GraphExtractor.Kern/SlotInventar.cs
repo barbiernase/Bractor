@@ -8,8 +8,7 @@ namespace GraphExtractor;
 //  Slot-Inventar (docs/konzept-llm-minimalkontext.md §7)
 //
 //  Alle Stellen, an denen ein Code-Block hängt (H-Slots), über ihre Marker gefunden — Decide, Apply, Projektion,
-//  Reaktion, Reader, Pipeline, Store-Implementierung, Saga-Lambda, Katalog-Funktion (Implementierung von RufeAsync) und
-//  Fluss-Lambda (jeder Bau-Lambda eines Pipeline-Flusses) — und je Rumpf jedes gebundene Symbol klassifiziert:
+//  Reader und Store-Implementierung — und je Rumpf jedes gebundene Symbol klassifiziert:
 //
 //    P  Parameter des Slots            S  State-Member (Decide/Apply)       F  Feld/Property der Klasse (injiziert)
 //    H  Helfer-Methode der Klasse      X  Aufruf eines anderen Slots        K  statisch/const der Klasse
@@ -26,13 +25,6 @@ public sealed class SlotInventar
         INamedTypeSymbol? State, List<IParameterSymbol> Parameter, List<ITypeSymbol> SignaturTypen)
     {
         public string Id => $"{Art} {Klasse.Name}.{Disc}";
-
-        /// <summary>Nur Fluss-Lambda: der ganze Lambda-Ausdruck, die Anweisung im Definiere-Lambda (0-basiert), der wievielte Lambda
-        /// der Anweisung (Code-Reihenfolge: Haupt-Aufruf bzw. Liste, dann je <c>.Oder</c> einer) und der Knoten-Name.</summary>
-        public LambdaExpressionSyntax? Lambda { get; init; }
-        public int Anweisung { get; init; }
-        public int LambdaIndex { get; init; }
-        public string? Knoten { get; init; }
     }
 
     public sealed record Nutzung(char Kat, string Id, string Anzeige);
@@ -40,11 +32,11 @@ public sealed class SlotInventar
     private readonly List<Compilation> _comps;
     private readonly HashSet<string> _domänen, _framework;
     private readonly INamedTypeSymbol? _iCommand, _iEvent, _iQuery, _iDecider, _iApplier, _iSubscriber, _iReader,
-        _iPipeline, _pipelineContext, _iAggEnvelope, _iWriteStore, _iReadStore, _iProzessDef, _iFunktion, _iFluss;
+        _iAggEnvelope, _iWriteStore, _iReadStore;
     public List<SlotRef> Slots { get; } = new();
     public Dictionary<SlotRef, List<Nutzung>> Nutzungen { get; } = new();
     public Dictionary<SlotRef, HashSet<string>> Spielraum { get; } = new();
-    /// <summary>Zusätzlich über Graph-Relationen erreichbar (Editor-Verdrahtung): Pipeline → gesendete Commands, Store → ReadModels.</summary>
+    /// <summary>Zusätzlich über Graph-Relationen erreichbar (Editor-Verdrahtung): Projektion → erzeugendes Aggregat, Store → ReadModels.</summary>
     public Dictionary<SlotRef, HashSet<string>> GraphRaum { get; } = new();
     private readonly DomainModel _dom;
 
@@ -62,10 +54,8 @@ public sealed class SlotInventar
         INamedTypeSymbol? Get(string n) => _comps.Select(c => c.GetTypeByMetadataName(n)).FirstOrDefault(x => x != null);
         _iCommand = Get(Vertrag.ICommand); _iEvent = Get(Vertrag.IEvent); _iQuery = Get(Vertrag.IQuery);
         _iDecider = Get(Vertrag.IDecider); _iApplier = Get(Vertrag.IApplier); _iSubscriber = Get(Vertrag.ISubscriber);
-        _iReader = Get(Vertrag.IReader); _iPipeline = Get(Vertrag.IPipelineHandler); _pipelineContext = Get(Vertrag.PipelineContext);
+        _iReader = Get(Vertrag.IReader);
         _iAggEnvelope = Get(Vertrag.IAggregateEnvelope); _iWriteStore = Get(Vertrag.IWriteStore); _iReadStore = Get(Vertrag.IReadStore);
-        _iProzessDef = Get(Vertrag.IProzessDefinition);
-        _iFunktion = Get(Vertrag.IFunktion); _iFluss = Get(Vertrag.IPipeline);
         Sammle();
         foreach (var s in Slots)
         {
@@ -99,11 +89,9 @@ public sealed class SlotInventar
                     Add("apply", t, m, applier.TypeArguments[0] as INamedTypeSymbol);
                 else if (Sym.Implements(t, _iSubscriber) && Sym.Implements(p0, _iEvent)
                          && m.Parameters.Skip(1).Any(p => p.Type.Fq() == _iAggEnvelope?.Fq()))
-                    Add(Vertrag.Ist(m.ReturnType, typeof(IAsyncEnumerable<>)) ? "reaktion" : "projektion", t, m, null);
+                    Add("projektion", t, m, null);
                 else if (t.AllInterfaces.Any(i => i.OriginalDefinition.Fq() == _iReader?.Fq()) && Sym.Implements(p0, _iQuery))
                     Add("reader", t, m, null);
-                else if (Sym.Implements(t, _iPipeline) && m.Parameters.Skip(1).Any(p => p.Type.Fq() == _pipelineContext?.Fq()))
-                    Add("pipeline", t, m, null);
             }
 
             // Store-Implementierung: Methoden, die ein Member eines Domänen-Store-Interfaces implementieren.
@@ -115,89 +103,7 @@ public sealed class SlotInventar
                             && !Slots.Any(s => SymbolEqualityComparer.Default.Equals(s.Methode, impl)))
                             Add("store", t, impl, null, impl.Name);
 
-            // Katalog-Funktion: die Implementierung von RufeAsync (der Rumpf, den ein Entwurf als Stub, 🤖 oder Python bekommt).
-            if (t.TypeKind == TypeKind.Class && !t.IsAbstract)
-                foreach (var f in t.AllInterfaces.Where(i => _domänen.Contains(i.ContainingAssembly?.Name ?? "") && Sym.Implements(i, _iFunktion)))
-                    foreach (var im in f.GetMembers(Vertrag.FunktionsMethode).OfType<IMethodSymbol>())
-                        if (t.FindImplementationForInterfaceMember(im) is IMethodSymbol impl && Rumpf(impl) != null
-                            && !Slots.Any(s => SymbolEqualityComparer.Default.Equals(s.Methode, impl)))
-                            Add("funktion", t, impl, null);
-
-            // Fluss-Lambdas: je Anweisung des Definiere-Lambdas die Lambda-Argumente der Fluss-Verben (Code-Reihenfolge).
-            if (Sym.Implements(t, _iFluss))
-                foreach (var (anweisung, i, knoten, lam) in FlussLambdas(t))
-                {
-                    var model = Model(lam.SyntaxTree);
-                    var ps = (model.GetSymbolInfo(lam).Symbol as IMethodSymbol)?.Parameters.ToList() ?? new();
-                    var sig = ps.Select(p => p.Type).ToList();
-                    if (model.GetTypeInfo(lam).ConvertedType is INamedTypeSymbol dt) sig.Add(dt);
-                    Slots.Add(new SlotRef("fluss", t, null, lam.Body, $"{knoten}#{i}", null, ps, sig)
-                    { Lambda = lam, Anweisung = anweisung, LambdaIndex = i, Knoten = knoten });
-                }
-
-            // Prozess-Regel-Lambdas: je Regel (Anweisung des Definiere-Lambdas) die Lambda-Argumente der Regel-Verben — derselbe Anker
-            //   wie beim Fluss (Anweisung + Lambda-Index); Disc = „Anweisung#Verb" (Sende/Rufe/SendeJe, RückgängigDurch…, UndAlle).
-            if (Sym.Implements(t, _iProzessDef))
-                foreach (var (anweisung, i, lam) in DefiniereLambdas(t, _iProzessDef, Vertrag.Regeln))
-                {
-                    var model = Model(lam.SyntaxTree);
-                    if ((lam.Parent?.Parent?.Parent as InvocationExpressionSyntax) is not { } inv
-                        || model.GetSymbolInfo(inv).Symbol is not IMethodSymbol verb || !Vertrag.IstRegelVerb(verb)) continue;
-                    var ps = (model.GetSymbolInfo(lam).Symbol as IMethodSymbol)?.Parameters.ToList() ?? new();
-                    var sig = ps.Select(p => p.Type).ToList();
-                    if (model.GetTypeInfo(lam).ConvertedType is INamedTypeSymbol dt) sig.Add(dt);
-                    Slots.Add(new SlotRef("saga", t, null, lam.Body, $"{anweisung}#{verb.Name}", null, ps, sig)
-                    { Lambda = lam, Anweisung = anweisung, LambdaIndex = i, Knoten = verb.Name });
-                }
         }
-    }
-
-    /// <summary>
-    /// Die Lambdas eines Pipeline-Flusses: je Anweisung des <c>Definiere</c>-Lambdas die Lambda-ARGUMENTE (nicht verschachtelte) in
-    /// Code-Reihenfolge — der Haupt-Aufruf (bzw. die Liste eines Je) zuerst, dann je <c>.Oder(…)</c> einer. Knoten = Variablenname
-    /// (ohne Variable: „#Anweisung“). Ankert über die Implementierung der Fluss-Property, nie über ihren Namen.
-    /// </summary>
-    public IEnumerable<(int Anweisung, int Index, string Knoten, LambdaExpressionSyntax Lambda)> FlussLambdas(INamedTypeSymbol t)
-    {
-        foreach (var (a, i, lam) in DefiniereLambdas(t, _iFluss, Vertrag.FlussProperty))
-        {
-            var st = Anweisung(lam);
-            var knoten = st is LocalDeclarationStatementSyntax ld && ld.Declaration.Variables.Count == 1
-                ? ld.Declaration.Variables[0].Identifier.Text : $"#{a}";
-            yield return (a, i, knoten, lam);
-        }
-    }
-
-    /// <summary>
-    /// Die Lambdas eines <c>…Definiere(p =&gt; …)</c> in der Property <paramref name="property"/> des Vertrags (Fluss bzw. Prozess-Regeln):
-    /// je Anweisung (Block) bzw. der eine Ausdruck (Ausdrucks-Lambda = Anweisung 0) die Lambda-ARGUMENTE in Code-Reihenfolge, nicht
-    /// verschachtelte. Ankert über die Implementierung der Property, nie über ihren Namen in der Klasse.
-    /// </summary>
-    public IEnumerable<(int Anweisung, int Index, LambdaExpressionSyntax Lambda)> DefiniereLambdas(INamedTypeSymbol t, INamedTypeSymbol? vertrag, string property)
-    {
-        var iface = vertrag?.GetMembers(property).OfType<IPropertySymbol>().FirstOrDefault();
-        var impl = iface == null ? null : Sym.Implementierung(t, iface) as IPropertySymbol;
-        var prop = impl?.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).OfType<PropertyDeclarationSyntax>()
-            .FirstOrDefault(p => !_quelltexte.IstGeneriert(p.SyntaxTree));
-        var definiere = prop?.DescendantNodes().OfType<InvocationExpressionSyntax>()
-            .Select(inv => inv.ArgumentList.Arguments.FirstOrDefault()?.Expression as LambdaExpressionSyntax).FirstOrDefault(l => l != null);
-        if (definiere == null) yield break;
-        var anweisungen = definiere.Body is BlockSyntax block ? block.Statements.Cast<SyntaxNode>().ToList() : [definiere.Body];
-        for (var a = 0; a < anweisungen.Count; a++)
-        {
-            var st = anweisungen[a];
-            var lambdas = st.DescendantNodesAndSelf().OfType<LambdaExpressionSyntax>()
-                .Where(l => l.Parent is ArgumentSyntax && !l.Ancestors().TakeWhile(x => x != st).OfType<LambdaExpressionSyntax>().Any())
-                .ToList();
-            for (var i = 0; i < lambdas.Count; i++) yield return (a, i, lambdas[i]);
-        }
-    }
-
-    /// <summary>Die Anweisung des Definiere-Lambdas, in der ein Lambda steht (bei einem Ausdrucks-Lambda: dessen Ausdruck).</summary>
-    public static SyntaxNode Anweisung(LambdaExpressionSyntax lam)
-    {
-        var definiere = lam.Ancestors().OfType<LambdaExpressionSyntax>().Last();
-        return definiere.Body is BlockSyntax b ? lam.Ancestors().First(x => x.Parent == b) : definiere.Body;
     }
 
     private void Add(string art, INamedTypeSymbol t, IMethodSymbol m, INamedTypeSymbol? state, string? disc = null)
@@ -209,18 +115,13 @@ public sealed class SlotInventar
 
     /// <summary>
     /// Typen, die der GRAPH dem Slot zuordnet, obwohl die Signatur sie nicht nennt — im Editor als Kante verdrahtet:
-    /// Pipeline-Handle → gesendete Commands/Trigger; Store-Implementierung → die ReadModels ihres Stores.
+    /// Projektion → das Aggregat ihres Events; Store-Implementierung → die ReadModels ihres Stores.
     /// </summary>
     private IEnumerable<ITypeSymbol> GraphWurzeln(SlotRef s)
     {
         INamedTypeSymbol? Typ(string full) => _comps.Select(c => c.GetTypeByMetadataName(full)).FirstOrDefault(x => x != null);
-        if (s.Art == "pipeline" && s.Parameter.FirstOrDefault()?.Type is { } input)
-            foreach (var p in _dom.Pipelines.Where(p => p.Full == s.Klasse.Fq()))
-                foreach (var h in p.Handles.Where(h => h.InputFull == input.Fq()))
-                    foreach (var e in h.EmitsFull.Concat(p.HandleEmitsTriggers.GetValueOrDefault(h.InputFull) ?? new()))
-                        if (Typ(e) is { } t) yield return t;
-        // Projektion/Reaktion: das Aggregat, das das behandelte Event erzeugt (Graph: Decide-Ausgang) — für Track<Agg>.
-        if (s.Art is "projektion" or "reaktion" && s.Parameter.FirstOrDefault()?.Type is { } evt)
+        // Projektion: das Aggregat, das das behandelte Event erzeugt (Graph: Decide-Ausgang) — für Track<Agg>.
+        if (s.Art == "projektion" && s.Parameter.FirstOrDefault()?.Type is { } evt)
             foreach (var a in _dom.Aggregates.Where(a => a.DecideOutcomes.Values.Any(o => o.Contains(evt.Fq()))))
                 if (Typ(a.Full) is { } t) yield return t;
         if (s.Art == "store")
@@ -350,7 +251,7 @@ public sealed class SlotInventar
     public string Bericht()
     {
         var b = new StringBuilder();
-        var arten = new[] { "decide", "apply", "projektion", "reaktion", "reader", "pipeline", "store", "funktion", "saga", "fluss" };
+        var arten = new[] { "decide", "apply", "projektion", "reader", "store" };
         b.AppendLine("── Slot-Inventar: Isolation der Code-Block-Stellen ──\n");
         b.AppendLine($"   {"Art",-11}{"Slots",6}{"Symb/Slot",10}{"Spielraum",11}{"+Graph",8}{"+Nachbar",10}{"+Artgen.",10}{"Rest",7}   {"nutzt F",8}{"nutzt H",8}{"nutzt X",8}");
         foreach (var art in arten)
@@ -368,7 +269,7 @@ public sealed class SlotInventar
             b.AppendLine($"   {art,-11}{ss.Count,6}{(double)gesamt / ss.Count,10:0.0}{P(imRaum),11}{P(graph),8}{P(nachbar),10}{P(artgen),10}{P(rest),7}   {Q('F'),8}{Q('H'),8}{Q('X'),8}");
         }
         b.AppendLine("\n   Symb/Slot = verschiedene Domänen-/Framework-Symbole je Rumpf. Spielraum = aus Signatur/State/Feldern/Helfern erreichbar.");
-        b.AppendLine("   +Graph = zusätzlich über eine Graph-Kante erreichbar (Pipeline → gesendete Commands, Store → seine ReadModels).");
+        b.AppendLine("   +Graph = zusätzlich über eine Graph-Kante erreichbar (Projektion → Aggregat ihres Events, Store → seine ReadModels).");
         b.AppendLine("   +Nachbar = sonst von einem anderen Slot derselben Klasse benutzt; +Artgen. = von einem Slot derselben Art.");
         b.AppendLine("   Rest = weder noch (Wissen von außen). F/H/X = Rümpfe, die injizierte Felder / Helfer / andere Slots benutzen.\n");
 

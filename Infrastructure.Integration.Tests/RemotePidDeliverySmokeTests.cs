@@ -1,7 +1,6 @@
 using Abstractions;
 using FluentAssertions;
 using Infrastructure.Extensions;
-using Infrastructure.Pipeline;
 using Infrastructure.Projections;
 using Infrastructure.Projections.Generated;
 using Microsoft.Extensions.DependencyInjection;
@@ -96,7 +95,6 @@ public class RemotePidDeliverySmokeTests
             opts.EnableGrpc = false;
             opts.ClusterName = clusterName;
         });
-        GeneratedPipelines.RegisterAllPipelines(builder.Services);
         builder.Services.AddGeneratedPullPaths();
 
         return builder.Build();

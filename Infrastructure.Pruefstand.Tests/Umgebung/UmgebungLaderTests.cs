@@ -99,53 +99,47 @@ public class UmgebungLaderTests
     }
 
     // ── Funktions-Laufort als Konfig ─────────────────────────────────────────────────────────────────────────────────
+    // Die Bausteine der Beispieldomäne: IBildaufbereitung (Schnittstelle, eine Umsetzung im Host), RangeAufloesung (Klasse mit Lese-Fähigkeit).
 
-    private interface IA;   // bewusst KEIN IFunktion: sonst sähen die Generator-Tests (alle geladenen Assemblies) eine Funktion ohne Form
-    private interface IB;
-    private sealed class A1 : IA;
-    private sealed class A2 : IA;
+    private static FunktionsBaustein Baustein(string name) => Infrastructure.Komposition.Anwendung.Funktionen.Bausteine.Single(b => b.Name == name);
 
-    private static List<string> Gebunden(Dictionary<string, FunktionsKonfig> k)
+    private static BausteinBindung Bindung(string name, FunktionsKonfig k)
+        => FunktionsBausteinWiring.BindungVon(Baustein(name), [new BausteinBindung(name, k.Laufort, k.Implementierung, Math.Max(1, k.Slots), k.Wiederholungen)]);
+
+    [Fact]
+    public void Laufort_Host_bindet_die_genannte_Umsetzung()
+        => Bindung("IBildaufbereitung", new() { Implementierung = "OpenCvBildaufbereitung", Slots = 3, Wiederholungen = 1 })
+            .Should().Be(new BausteinBindung("IBildaufbereitung", FunktionsLaufort.Host, "OpenCvBildaufbereitung", 3, 1));
+
+    [Fact]
+    public void Laufort_Host_mit_unbekannter_Umsetzung_ist_ein_Boot_Fehler()
+        => FluentActions.Invoking(() => Bindung("IBildaufbereitung", new() { Implementierung = "Gibtsnicht" }))
+            .Should().Throw<BootFehler>().WithMessage("*genau eine Umsetzung*Gibtsnicht*OpenCvBildaufbereitung*");
+
+    [Fact]
+    public void Laufort_Extern_braucht_eine_Schnittstelle_und_keine_Lese_Faehigkeit()
     {
-        var protokoll = new List<string>();
-        var namen = new Dictionary<string, Type> { ["IA"] = typeof(IA), ["IB"] = typeof(IB) };
-        var impls = new[]
+        Bindung("IBildaufbereitung", new() { Laufort = FunktionsLaufort.Extern }).Laufort.Should().Be(FunktionsLaufort.Extern);
+        FluentActions.Invoking(() => Bindung("RangeAufloesung", new() { Laufort = FunktionsLaufort.Extern }))
+            .Should().Throw<BootFehler>().WithMessage("*Lese-Fähigkeit*");
+    }
+
+    [Fact]
+    public void Ohne_Eintrag_laeuft_eine_Schnittstelle_mit_einer_Umsetzung_im_Host()
+        => FunktionsBausteinWiring.BindungVon(Baustein("IBildaufbereitung"), []).Laufort.Should().Be(FunktionsLaufort.Host);
+
+    [Fact]
+    public void Ein_unbekannter_Funktionsname_ist_ein_Boot_Fehler_Hand_bindet_den_Hand_Ausfuehrer_einmal()
+    {
+        FluentActions.Invoking(() => new ServiceCollection().BindeFunktionen(new Dictionary<string, FunktionsKonfig> { ["IGibtsNicht"] = new() }))
+            .Should().Throw<BootFehler>().WithMessage("*IGibtsNicht*keine Funktion dieses Namens*");
+        var s = new ServiceCollection().BindeFunktionen(new Dictionary<string, FunktionsKonfig>
         {
-            new FunktionsImplementierung(typeof(IA), "A1", typeof(object), (_, s, w) => protokoll.Add($"A1 {s}/{w}")),
-            new FunktionsImplementierung(typeof(IA), "A2", typeof(object), (_, s, w) => protokoll.Add($"A2 {s}/{w}")),
-        };
-        var ext = new Dictionary<Type, Action<IServiceCollection>> { [typeof(IA)] = _ => protokoll.Add("IA extern"), [typeof(IB)] = _ => protokoll.Add("IB extern") };
-        var faeh = new Dictionary<Type, Type[]> { [typeof(IB)] = [typeof(object)] };
-        new ServiceCollection().BindeFunktionen(k, namen, impls, ext, faeh);
-        return protokoll;
-    }
-
-    [Fact]
-    public void Laufort_Host_bindet_die_genannte_Implementierung()
-        => Gebunden(new() { ["IA"] = new() { Implementierung = "A2", Slots = 3, Wiederholungen = 1 } }).Should().Equal("A2 3/1");
-
-    [Fact]
-    public void Laufort_Host_mit_mehreren_Implementierungen_braucht_einen_Namen()
-        => FluentActions.Invoking(() => Gebunden(new() { ["IA"] = new() })).Should().Throw<InvalidOperationException>().WithMessage("*A1, A2*");
-
-    [Fact]
-    public void Laufort_Extern_bindet_extern_ausser_mit_Lese_Faehigkeit()
-    {
-        Gebunden(new() { ["IA"] = new() { Laufort = FunktionsLaufort.Extern } }).Should().Equal("IA extern");
-        FluentActions.Invoking(() => Gebunden(new() { ["IB"] = new() { Laufort = FunktionsLaufort.Extern } }))
-            .Should().Throw<InvalidOperationException>().WithMessage("*Lese-Fähigkeit*");
-    }
-
-    [Fact]
-    public void Laufort_Hand_bindet_den_Hand_Ausfuehrer_einmal_auch_mit_Lese_Faehigkeit()
-    {
-        // Ein Mensch antwortet — er braucht keine Stores des Hosts; der Hand-Ausführer holt die Aufträge (einer für alle Funktionen).
-        var s = new ServiceCollection();
-        var namen = new Dictionary<string, Type> { ["IA"] = typeof(IA), ["IB"] = typeof(IB) };
-        s.BindeFunktionen(new Dictionary<string, FunktionsKonfig> { ["IA"] = new() { Laufort = FunktionsLaufort.Hand }, ["IB"] = new() { Laufort = FunktionsLaufort.Hand } },
-            namen, [], new Dictionary<Type, Action<IServiceCollection>>(), new Dictionary<Type, Type[]> { [typeof(IB)] = [typeof(object)] });
-        var bindungen = s.Where(d => d.ServiceType == typeof(FunktionsBindung)).Select(d => (FunktionsBindung)d.ImplementationInstance!).ToList();
-        bindungen.Should().BeEquivalentTo([new FunktionsBindung(typeof(IA), 0, 0, Extern: true, Hand: true), new FunktionsBindung(typeof(IB), 0, 0, Extern: true, Hand: true)]);
+            ["IBildaufbereitung"] = new() { Laufort = FunktionsLaufort.Hand },
+            ["TeilFertigMeldung"] = new() { Laufort = FunktionsLaufort.Hand },
+        });
+        s.Where(d => d.ServiceType == typeof(BausteinBindung)).Select(d => ((BausteinBindung)d.ImplementationInstance!).Funktion)
+            .Should().BeEquivalentTo("IBildaufbereitung", "TeilFertigMeldung");
         s.Count(d => d.ServiceType == typeof(HandAusfuehrer)).Should().Be(1);
     }
 
@@ -169,10 +163,6 @@ public class UmgebungLaderTests
         }
         else u.Transport.JsonEingang.Should().BeFalse("Prod: kein JSON-Eingang");
     }
-
-    [Fact]
-    public void Unbekannte_Funktion_ist_ein_Fehler()
-        => FluentActions.Invoking(() => Gebunden(new() { ["IC"] = new() })).Should().Throw<InvalidOperationException>().WithMessage("*IC*");
 
     [Fact]
     public void Die_generierte_Tabelle_kennt_die_Funktionen_des_Bestands_mit_ihrem_Laufort_aus_der_Form()

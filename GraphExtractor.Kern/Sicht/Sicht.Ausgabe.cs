@@ -6,16 +6,13 @@ namespace GraphExtractor;
 public sealed partial class Sicht
 {
     /// <summary>
-    /// <c>board.sicht</c>: je Karte <c>{art, domaene?, block, rolle, akteure, akteurRahmen, insel?, vertreter?, besitzer?, storeScope?, aggregat?, tiefe?,
-    /// alsKette?, beruehrt?}</c>,
-    /// dazu Kanten, zusammengezogene Kanten der kompakten Ansicht, die Prozess-Kette, die Akteur-Reihenfolge je Domäne, die Heimat der
-    /// Flüsse (mit Ports, Vorgängern, Tiefe, Zuweisung je Knoten und dem Slice), die Anschlussleisten der Clients und je Nachricht ihre zwei
-    /// Seiten (<c>partner</c>: ◀ kommt aus · geht an ▶). <c>domaene</c> fehlt, wenn die Karte keine hat (die Ansicht setzt dann ggf. ihre Heimat).
+    /// <c>board.sicht</c>: je Karte <c>{art, domaene?, block, rolle, akteure, akteurRahmen, insel?, vertreter?, besitzer?, storeScope?, aggregat?}</c>,
+    /// dazu Kanten, zusammengezogene Kanten der kompakten Ansicht, die Akteur-Reihenfolge je Domäne, die Anschlussleisten der Clients und je
+    /// Nachricht ihre zwei Seiten (<c>partner</c>: ◀ kommt aus · geht an ▶). <c>domaene</c> fehlt, wenn die Karte keine hat (die Ansicht setzt
+    /// dann ggf. ihre Heimat).
     /// </summary>
     public JsonObject AlsJson()
     {
-        // Reihenfolge wie im Editor: erst die Tiefen der Funktionen (Memo), dann die Karten.
-        foreach (var f in _funktionen) Tiefe("fk:" + S(f, "_id"));
         var karten = new JsonObject();
         foreach (var n in Karten)
         {
@@ -32,17 +29,12 @@ public sealed partial class Sicht
             if (DetailArten.Contains(n.Art) && DirekteBesitzer(n) is { Count: > 0 } bs) k["besitzer"] = Arr(bs);
             if (n.Art is "projektion" or "reader") k["storeScope"] = Arr(StoreScope(n.Ref));
             if (n.Art is "command" or "event" or "rejection" && RecordAgg(n.Name) is { Length: > 0 } agg) k["aggregat"] = agg;
-            if (n.Art == "funktion") k["tiefe"] = Tiefe(n.Id);
-            if (AlsKette.Contains(n.Id)) k["alsKette"] = true;
-            if (n.Art == "saga") k["beruehrt"] = Arr(SagaAggs(n.Ref));
             karten[n.Id] = k;
         }
         var domaenen = Karten.Select(Domaene).Distinct().ToList();
         var ordnung = new JsonObject();
         foreach (var dom in domaenen.OrderBy(x => x, StringComparer.Ordinal))
             if (AkteurOrdnung(dom) is { Count: > 0 } o) ordnung[dom] = Arr(o);
-        var fluesse = new JsonObject();
-        foreach (var f in _fluesse) fluesse["fl:" + S(f, "_id")] = FlussJson(f);
         var clients = new JsonObject();
         foreach (var c in _clients) clients["cl:" + S(c, "_id")] = Client(c);
         // Je Akteur: die Domänen, in denen er wirkt; je Nachricht und Ketten-Akteur der Pfad, auf dem sie in seinem Namen entsteht.
@@ -62,13 +54,7 @@ public sealed partial class Sicht
             ["karten"] = karten,
             ["kanten"] = Paare(Kanten),
             ["kontrakt"] = Paare(Kontrakt()),
-            ["kette"] = new JsonArray(Kette.Select(k => (JsonNode?)new JsonObject
-            {
-                ["tr"] = "tr:" + S(k.T, "_id"), ["von"] = k.Von, ["nach"] = k.Nach, ["bei"] = k.Bei, ["dannIdx"] = k.DannIdx,
-                ["label"] = k.Label, ["art"] = k.Art,
-            }).ToArray()),
             ["akteurOrdnung"] = ordnung,
-            ["fluesse"] = fluesse,
             ["clients"] = clients,
             ["akteurDomaenen"] = wirkt,
             ["pfade"] = pfade,
@@ -79,14 +65,11 @@ public sealed partial class Sicht
     private static JsonArray Paare(IEnumerable<(string, string)> ps) => new(ps.Select(p => (JsonNode?)Arr([p.Item1, p.Item2])).ToArray());
 
     // ══ CLIENTS: die Anschlussleiste (= ihr Vertrag) ══
-    private static string VertragsTyp(JsonObject a) => S(a, "vertragName") is { Length: > 0 } v ? v : "I" + S(a, "name");
-    private JsonObject? TeilAkteur(string teil) =>
-        _akteure.FirstOrDefault(a => Alle(a["vertrag"]).Any() && (VertragsTyp(a) == teil || Alle(a["vertrag"]).Any(r => S(r, "teil") == teil)));
     private List<string> DarfHalter(string nm) => _akteure.Where(a => L(a, "darf").Contains(nm)).Select(a => S(a, "name")).ToList();
     /// <summary>Verkörpert — dieselbe Regel wie der AkteurRechteGenerator (<c>Abstractions.Clientvertragsregeln.Verkoerpert</c>).</summary>
     public List<string> ClientAkteure(JsonObject c) =>
         Abstractions.Clientvertragsregeln.Verkoerpert(L(c, "traegt").Concat(L(c, "sendet")).Concat(L(c, "fragt")).Select(DarfHalter));
-    /// <summary>Die Ports der Anschlussleiste: Richtung, Nachricht, in wessen Namen (Akteur), Ziel-Karte.</summary>
+    /// <summary>Die Ports der Anschlussleiste: Richtung, Nachricht bzw. getragene Funktion, in wessen Namen (Akteur), Ziel-Karte.</summary>
     public JsonArray ClientPorts(JsonObject c)
     {
         var p = new JsonArray();
@@ -94,43 +77,30 @@ public sealed partial class Sicht
         string? Node(string nm) => IstRec(nm) ? "rec:" + nm : null;
         List<string> Als(string nm) { var hs = DarfHalter(nm); var drin = hs.Where(ver.Contains).ToList(); return drin.Count > 0 ? drin : hs; }
         foreach (var t in L(c, "traegt"))
-        {
-            var a = TeilAkteur(t);
-            var rs = a == null ? [] : Alle(a["vertrag"]).Select((r, i) => (r, i)).Where(x => (S(x.r, "teil") is { Length: > 0 } tt ? tt : VertragsTyp(a)) == t).ToList();
-            if (rs.Count == 0)
-                p.Add(new JsonObject { ["ri"] = "zusage", ["msg"] = "?", ["teil"] = t, ["akteure"] = new JsonArray(), ["aus"] = new JsonArray(), ["node"] = null, ["fehlt"] = true });
-            foreach (var (r, i) in rs)
-                p.Add(new JsonObject
-                {
-                    ["ri"] = "zusage", ["msg"] = S(r, "eingang") is { Length: > 0 } e ? e : "?", ["aus"] = Arr(L(r, "ausgaenge")), ["strom"] = B(r, "strom"),
-                    ["akteure"] = Arr([S(a!, "name")]), ["teil"] = t, ["node"] = AufId(a!, i),
-                });
-        }
+            p.Add(new JsonObject
+            {
+                ["ri"] = "traegt", ["msg"] = t, ["akteure"] = Arr(Als(t)),
+                ["node"] = BausteinFunktion(t) is { } f ? "fb:" + S(f, "_id") : null,
+            });
         foreach (var nm in L(c, "sendet")) p.Add(new JsonObject { ["ri"] = "sendet", ["msg"] = nm, ["akteure"] = Arr(Als(nm)), ["node"] = Node(nm) });
         foreach (var nm in L(c, "fragt")) p.Add(new JsonObject { ["ri"] = "fragt", ["msg"] = nm, ["akteure"] = Arr(Als(nm)), ["node"] = Node(nm) });
         foreach (var nm in L(c, "kenntnis")) p.Add(new JsonObject { ["ri"] = "kenntnis", ["msg"] = nm, ["akteure"] = new JsonArray(), ["node"] = Node(nm) });
         return p;
     }
-    private JsonObject Client(JsonObject c)
-    {
-        // Je getragenem Vertrags-Teil sein Akteur (fehlt er: kein Akteur-Vertrag mit diesem Teil).
-        var teile = new JsonArray(L(c, "traegt").Select(t => (JsonNode?)new JsonObject { ["teil"] = t, ["akteur"] = TeilAkteur(t) is { } a ? S(a, "name") : null }).ToArray());
-        return new() { ["akteure"] = Arr(ClientAkteure(c)), ["ports"] = ClientPorts(c), ["teile"] = teile };
-    }
+    private JsonObject Client(JsonObject c) => new() { ["akteure"] = Arr(ClientAkteure(c)), ["ports"] = ClientPorts(c) };
 
     // ══ DIE STATISCHE KETTE einer Karte (der eine Fokus, P6.4) ══
-    private static readonly HashSet<string> Stop = ["akteur", "aggregate", "command", "saga", "transition", "reaktion", "valueobject", "enum", "konfig"];
+    private static readonly HashSet<string> Stop = ["akteur", "aggregate", "command", "valueobject", "enum", "konfig"];
     private static readonly HashSet<string> LeseStart = ["projektion", "reader", "query", "store", "readmodel", "queryresponse"];
-    private static readonly HashSet<string> KetteHub = ["aggregate", "projektion", "reaktion", "reader", "saga", "store"];
+    private static readonly HashSet<string> KetteHub = ["aggregate", "projektion", "reader", "store"];
     private static readonly HashSet<string> KetteFluss =
-        ["command", "event", "rejection", "query", "queryresponse", "handle", "decider", "applier", "transition", "fn", "funktion", "auftrag", "flussknoten", .. KetteHub];
-    private static readonly HashSet<string> KetteStart =
-        ["command", "event", "rejection", "handle", "decider", "applier", "transition", "reaktion", "saga", "funktion", "auftrag", "flussknoten"];
+        ["command", "event", "rejection", "query", "queryresponse", "handle", "decider", "applier", "bausteinfunktion", "fn", .. KetteHub];
+    private static readonly HashSet<string> KetteStart = ["command", "event", "rejection", "handle", "decider", "applier", "bausteinfunktion"];
     private string ArtVon(string id) => KarteVon.TryGetValue(id, out var k) ? k.Art : "";
 
     /// <summary>
-    /// Die statische Kette einer Karte: von einer Nachricht/einem Handle/Decider/Applier/einer Regel aus dem Nachrichtenfluss transitiv folgen
-    /// (Besitzer werden gezeigt, nicht durchlaufen); ein Akteur zeigt, was er darf, und was daraus folgt; Aggregat/Prozess/Leseseite den
+    /// Die statische Kette einer Karte: von einer Nachricht/einem Handle/Decider/Applier aus dem Nachrichtenfluss transitiv folgen
+    /// (Besitzer werden gezeigt, nicht durchlaufen); ein Akteur zeigt, was er darf, und was daraus folgt; Aggregat/Leseseite den
     /// gerichteten Schnitt; ein Client seine Anschlussleiste. <paramref name="details"/>: eingeklappte Details sind eigene Karten.
     /// </summary>
     public List<string> KetteFuer(string id, bool details)
@@ -143,7 +113,7 @@ public sealed partial class Sicht
             foreach (var p in ClientPorts(n.Ref).OfType<JsonObject>())
             {
                 if (S(p, "node") is { Length: > 0 } node) Add(details ? node : Vertreter(node).FirstOrDefault() ?? node);
-                if (S(p, "ri") == "zusage" && L(p, "akteure").FirstOrDefault() is { } an && _akteure.FirstOrDefault(x => S(x, "name") == an) is { } a)
+                if (S(p, "ri") == "traegt" && L(p, "akteure").FirstOrDefault() is { } an && _akteure.FirstOrDefault(x => S(x, "name") == an) is { } a)
                     Add("akt:" + S(a, "_id"));
             }
             return ids;
@@ -161,7 +131,7 @@ public sealed partial class Sicht
         }
         if (KetteStart.Contains(k0) && !(k0 == "handle" && KarteVon[start].Besitzer?.Art == "reader")) return KetteVon(start, false);
         var seeds = new List<string> { start };
-        if (k0 is "aggregate" or "saga") foreach (var x in Ein(start)) { res.Add(x); seeds.Add(x); }
+        if (k0 == "aggregate") foreach (var x in Ein(start)) { res.Add(x); seeds.Add(x); }
         void Zurueck(string id, HashSet<string> seen)
         {
             foreach (var x in Ein(id))
@@ -195,10 +165,7 @@ public sealed partial class Sicht
     }
     private LinkedHashSet KetteVon(string start, bool nurVorwaerts)
     {
-        var k0 = ArtVon(start);
         var starts = new List<string> { start };
-        if (k0 == "reaktion") starts.AddRange(Ein(start).Where(y => ArtVon(y) == "handle"));
-        else if (k0 == "saga") starts.AddRange(Ein(start).Where(y => ArtVon(y) == "transition"));
         var res = new LinkedHashSet();
         foreach (var s in starts) res.Add(s);
         void Lauf(Func<string, IReadOnlyList<string>> nach)

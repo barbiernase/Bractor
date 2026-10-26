@@ -17,7 +17,6 @@ public enum MessageCategory
     Command,
     Query,
     QueryResponse,
-    Trigger,
     Unknown
 }
 
@@ -36,7 +35,6 @@ public static class MessageTypeMapping
     private static readonly Dictionary<string, Type> _commandTypes = new();
     private static readonly Dictionary<string, Type> _queryTypes = new();
     private static readonly Dictionary<string, Type> _queryResponseTypes = new();
-    private static readonly Dictionary<string, Type> _triggerTypes = new();
     
     private static readonly Dictionary<string, HashSet<string>> _eventToCommands = new();
     
@@ -64,9 +62,6 @@ public static class MessageTypeMapping
 
             foreach (var (name, type) in Anwendung.Typen.QueryResponses)
                 _queryResponseTypes[name] = type;
-
-            foreach (var (name, type) in Anwendung.Typen.Triggers)
-                _triggerTypes[name] = type;
 
             // ★ P1a (TG-1): event → Commands DESSELBEN Aggregats — präzise aus den Decider-Signaturen
             //   (GeneratedCommandRouting: CommandToAggregate + CommandToEvents), NICHT mehr aus Namespace-
@@ -99,7 +94,6 @@ public static class MessageTypeMapping
             Console.WriteLine($"  Commands: {_commandTypes.Count}");
             Console.WriteLine($"  Queries: {_queryTypes.Count}");
             Console.WriteLine($"  QueryResponses: {_queryResponseTypes.Count}");
-            Console.WriteLine($"  Triggers: {_triggerTypes.Count}");
         }
     }
 
@@ -125,7 +119,6 @@ public static class MessageTypeMapping
 
         if (_eventTypes.TryGetValue(typeName, out var e))         return (e, MessageCategory.Event);
         if (_commandTypes.TryGetValue(typeName, out var c))       return (c, MessageCategory.Command);
-        if (_triggerTypes.TryGetValue(typeName, out var t))        return (t, MessageCategory.Trigger);
         if (_queryTypes.TryGetValue(typeName, out var q))         return (q, MessageCategory.Query);
         if (_queryResponseTypes.TryGetValue(typeName, out var r)) return (r, MessageCategory.QueryResponse);
         return (null, MessageCategory.Unknown);
@@ -241,27 +234,5 @@ public static class MessageTypeMapping
     {
         EnsureInitialized();
         return _queryResponseTypes.TryGetValue(responseTypeName, out var type) ? type : null;
-    }
-
-    // =========================================================================
-    // TRIGGER METHODS
-    // =========================================================================
-
-    public static bool IsKnownTriggerType(string triggerTypeName)
-    {
-        EnsureInitialized();
-        return _triggerTypes.ContainsKey(triggerTypeName);
-    }
-
-    public static Type? GetTriggerType(string triggerTypeName)
-    {
-        EnsureInitialized();
-        return _triggerTypes.TryGetValue(triggerTypeName, out var type) ? type : null;
-    }
-
-    public static IEnumerable<string> GetAllTriggerTypeNames()
-    {
-        EnsureInitialized();
-        return _triggerTypes.Keys;
     }
 }

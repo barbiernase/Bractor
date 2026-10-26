@@ -27,12 +27,12 @@ public class DomainEditorStrukturortTests
         },
         Records =
         [
-            Rec("Pruefe", RecordArt.Auftrag, ns) with { Funktion = "IPruefung" },
+            Rec("PruefKonfig", RecordArt.Konfig, ns),
             Rec("Geprueft", RecordArt.Event, ns),
             Rec("Gebucht", RecordArt.Event, ns),
             Rec("Zeige", RecordArt.Query, ns),
         ],
-        Funktionen = [new() { Name = "IPruefung", Namespace = ns, Auftrag = "Pruefe", Ergebnisse = ["Geprueft"] }],
+        BausteinFunktionen = [new() { Name = "IPruefung", Namespace = ns, Eingaenge = [new() { Eingang = "Gebucht", Ausgaben = ["Geprueft"] }] }],
         Akteure = [new() { Name = "Pruefer", Namespace = ns, Art = "Mensch", Darf = ["Zeige"] }],
     };
 
@@ -40,15 +40,14 @@ public class DomainEditorStrukturortTests
     public void Neue_Karten_landen_im_Projekt_ihrer_Rolle_im_selben_Bereich()
     {
         var pfade = Scaffolder.Generiere(Modell("Domain.Ausleihe")).Select(d => d.Pfad).ToList();
-        pfade.Should().Contain("Domain.Pipeline/Ausleihe/Funktionen.cs", "die Funktion gehört in die Abläufe, Sammeldatei Funktionen.cs");
-        pfade.Should().Contain("Domain.Pipeline/Ausleihe/Auftraege.cs");
+        pfade.Should().Contain("Domain.Pipeline/Ausleihe/Konfigs.cs", "ein Konfig-Record gehört in die Abläufe, Sammeldatei Konfigs.cs");
         pfade.Should().Contain("Domain.Pipeline/Ausleihe/Events.cs", "ein Ergebnis-Event gehört zur Funktion");
         pfade.Should().Contain("Domain/Ausleihe/Events.cs", "ein gewöhnliches Event bleibt auf der Schreibseite");
         pfade.Should().Contain("Domain.Projections/Ausleihe/Queries.cs");
         pfade.Should().Contain("Domain.Akteure/Akteure.cs", "Akteure haben keinen Bereichs-Ordner");
 
-        var funktion = Scaffolder.Generiere(Modell("Domain.Ausleihe")).Single(d => d.Pfad == "Domain.Pipeline/Ausleihe/Funktionen.cs");
-        funktion.Inhalt.Should().Contain("namespace Domain.Pipeline.Ausleihe");
+        var konfigs = Scaffolder.Generiere(Modell("Domain.Ausleihe")).Single(d => d.Pfad == "Domain.Pipeline/Ausleihe/Konfigs.cs");
+        konfigs.Inhalt.Should().Contain("namespace Domain.Pipeline.Ausleihe");
     }
 
     [Fact]
@@ -66,8 +65,8 @@ public class DomainEditorStrukturortTests
         Strukturort.Normalisiere(m).Should().BeEquivalentTo(m);
         var bestehend = Modell("Domain.Ausleihe") with
         {
-            Funktionen = [Modell("Domain.Ausleihe").Funktionen[0] with { Datei = "Domain/Ausleihe/Alt.cs" }],
+            Records = [Modell("Domain.Ausleihe").Records[0] with { Datei = "Domain/Ausleihe/Alt.cs" }],
         };
-        Strukturort.Normalisiere(bestehend).Funktionen[0].Namespace.Should().Be("Domain.Ausleihe", "eine Karte mit Datei zieht nicht um");
+        Strukturort.Normalisiere(bestehend).Records[0].Namespace.Should().Be("Domain.Ausleihe", "eine Karte mit Datei zieht nicht um");
     }
 }

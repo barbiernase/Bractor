@@ -16,9 +16,9 @@ namespace Infrastructure.Integration.Tests;
 ///
 /// Marten zieht die globale <c>seq_id</c> beim INSERT INNERHALB der Transaktion. Zwei nebenläufige
 /// Commits können in umgekehrter Seq-Reihenfolge SICHTBAR werden: T1 zieht die niedrigere Seq, T2 die
-/// höhere — committet aber ZUERST. Ein Poll-Scan im Fenster dazwischen sieht die höhere Seq, nicht die
-/// niedrigere (noch uncommitted), und würde die HWM naiv auf die höhere setzen → die niedrigere Seq
-/// wird nie wieder gescannt. Der Poller IST der lücken-heilende Backstop → genau hier fatal.
+/// höhere — committet aber ZUERST. Ein Partitions-Read im Fenster dazwischen sieht die höhere Seq, nicht die
+/// niedrigere (noch uncommitted), und würde die Position naiv auf die höhere setzen → die niedrigere Seq
+/// wird nie wieder gelesen. Der Poll IST der lücken-heilende Backstop → genau hier fatal.
 ///
 /// Braucht laufendes Postgres auf localhost:5432 (docker-compose.infrastructure.yml).
 /// </summary>
@@ -49,8 +49,8 @@ public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.F
 
     /// <summary>
     /// G-9: eine Transaktion, die lange offen ist — länger als jede zeitliche Karenz (früher 3 s) —, wird nie überholt. Solange sie läuft,
-    /// bleiben die Marke des Polls und die gesetzte Sequenz des Partitions-Reads vor ihrer Sequenz; die jüngere, schon sichtbare wird trotzdem
-    /// geliefert (Latenz). Danach liest der nächste Durchlauf sie, und die Marke rückt über beide.
+    /// bleibt die gesetzte Sequenz des Partitions-Reads vor ihrer Sequenz; die jüngere, schon sichtbare wird trotzdem geliefert (Latenz).
+    /// Danach liest der nächste Durchlauf sie, und die gesetzte Sequenz rückt über beide.
     /// </summary>
     [Fact]
     public async Task Eine_lange_offene_Transaktion_wird_nicht_ueberholt()
@@ -61,24 +61,20 @@ public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.F
         await Task.Delay(TimeSpan.FromSeconds(4));                   // länger als die frühere Karenz: eine Uhr hielte jetzt nicht mehr
         var seqB = await SeqOf(streamB);
 
-        var poll = await es.ReadChangedStreamsAsync(basis, null, int.MaxValue, default);
-        poll.StreamIds.Should().Contain(streamB, "die sichtbare, jüngere Sequenz wird geweckt (Latenz)");
-        poll.HighWaterMark.Should().BeLessThan(seqB, "die Marke überholt die noch laufende Transaktion mit der kleineren Sequenz nicht");
         var seite = await es.ReadPartitionAsync(basis, 0, 1, null, Array.Empty<long>(), 100, default);
-        seite.Events.Select(e => e.Event.AggregateId).Should().Contain(streamB);
-        seite.Gesetzt.Should().BeLessThan(seqB, "dieselbe Regel im Batch-Konsum");
+        seite.Events.Select(e => e.Event.AggregateId).Should().Contain(streamB, "die sichtbare, jüngere Sequenz wird geliefert (Latenz)");
+        seite.Gesetzt.Should().BeLessThan(seqB, "die gesetzte Sequenz überholt die noch laufende Transaktion mit der kleineren Sequenz nicht");
 
         await txA.CommitAsync();
         var seqA = await SeqOf(streamA);
-        var nachher = await es.ReadChangedStreamsAsync(poll.HighWaterMark, null, int.MaxValue, default);
-        nachher.StreamIds.Should().Contain(streamA, "ab der Marke ist der Nachzügler jetzt zu lesen — nichts ging verloren");
-        seqA.Should().BeGreaterThan(poll.HighWaterMark);
-        (await es.ReadChangedStreamsAsync(nachher.HighWaterMark, null, int.MaxValue, default)).HighWaterMark
-            .Should().BeGreaterThanOrEqualTo(seqB, "ist die Transaktion beendet, rückt die Marke über beide");
+        var nachher = await es.ReadPartitionAsync(seite.Gesetzt, 0, 1, null, Array.Empty<long>(), 100, default);
+        nachher.Events.Select(e => e.Event.AggregateId).Should().Contain(streamA, "ab der gesetzten Sequenz ist der Nachzügler jetzt zu lesen — nichts ging verloren");
+        seqA.Should().BeGreaterThan(seite.Gesetzt);
+        nachher.Gesetzt.Should().BeGreaterThanOrEqualTo(seqB, "ist die Transaktion beendet, rückt die gesetzte Sequenz über beide");
     }
 
     /// <summary>
-    /// PF-14: steht hinter der Marke nichts, liefern Partitions-Read und Emittenten-Poll eine leere Seite und halten die Marke (gesetzte
+    /// PF-14: steht hinter der Marke nichts, liefert der Partitions-Read eine leere Seite und hält die Marke (gesetzte
     /// Sequenz und „dahinter?“ in einer Runde, die Seite entfällt); ein neues Event ohne ältere laufende Transaktion kommt und ist gesetzt.
     /// </summary>
     [Fact]
@@ -92,18 +88,12 @@ public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.F
         leer.Events.Should().BeEmpty();
         leer.Gesetzt.Should().Be(kopf);
         leer.Voll.Should().BeFalse();
-        var leerPoll = await es.ReadChangedStreamsAsync(kopf, null, 100, default);
-        leerPoll.StreamIds.Should().BeEmpty();
-        leerPoll.HighWaterMark.Should().Be(kopf);
 
         var stream = Guid.NewGuid();
         await es.AppendEventsAsync(stream, 0, new Abstractions.IEvent[] { new ImagePairInspiziert() });
         var neu = await es.ReadPartitionAsync(kopf, 0, 1, null, Array.Empty<long>(), 100, default);
         neu.Events.Select(e => e.Event.AggregateId).Should().Contain(stream);
-        neu.Gesetzt.Should().BeGreaterThanOrEqualTo(kopf);
-        var neuPoll = await es.ReadChangedStreamsAsync(kopf, null, 100, default);
-        neuPoll.StreamIds.Should().Contain(stream);
-        neuPoll.HighWaterMark.Should().BeGreaterThan(kopf, "ohne ältere laufende Transaktion ist das neue Event sofort endgültig");
+        neu.Gesetzt.Should().BeGreaterThan(kopf, "ohne ältere laufende Transaktion ist das neue Event sofort endgültig");
     }
 
     /// <summary>
@@ -190,7 +180,7 @@ public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.F
     private sealed class NoopFactory : IAggregateHandlerFactory
     {
         public IAggregateHandler CreateHandler(IState state)
-            => throw new NotSupportedException("Test nutzt nur Append/ReadChangedStreams.");
+            => throw new NotSupportedException("Test nutzt nur Append und Lesen.");
     }
 
     public sealed class Fixture : IDisposable

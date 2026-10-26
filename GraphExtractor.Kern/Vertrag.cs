@@ -45,30 +45,15 @@ public static class Vertrag
     public static readonly string IKi = typeof(IKi).FullName!;
     public static readonly string IWertobjekt = typeof(IWertobjekt).FullName!;
     public static readonly string IFunktion = typeof(IFunktion).FullName!;
-    public static readonly string IAuftrag = typeof(IAuftrag<>).FullName!;
-    /// <summary>Die eine Methode einer Katalog-Funktion (EINE Quelle: Abstractions.Funktionsvertrag).</summary>
-    public const string FunktionsMethode = Funktionsvertrag.Methode;
-    public static readonly string IPipelineHandler = typeof(IPipelineHandler).FullName!;
-    public static readonly string IPipelineTrigger = typeof(IPipelineTrigger).FullName!;
     public static readonly string IQuellNachricht = typeof(IQuellNachricht).FullName!;
-    public static readonly string IPipelineSelfMessage = typeof(IPipelineSelfMessage).FullName!;
-    public static readonly string IProzessDefinition = typeof(IProzessDefinition).FullName!;
     public static readonly string IMessagePayload = typeof(IMessagePayload).FullName!;
-    public static readonly string IPipelineOutput = typeof(IPipelineOutput).FullName!;
+    public static readonly string IAusgabe = typeof(IAusgabe).FullName!;
     public static readonly string IDecider = typeof(IDecider<>).FullName!;
     public static readonly string IApplier = typeof(IApplier<>).FullName!;
     public static readonly string IAggregateEnvelope = typeof(IAggregateEnvelope).FullName!;
-    public static readonly string PipelineContext = typeof(PipelineContext).FullName!;
     public static readonly string ProjectionReaderAttribute = typeof(ProjectionReaderAttribute).FullName!;
     public static readonly string AggregatNameAttribute = typeof(AggregatNameAttribute).FullName!;
-    public static readonly string IngressAttribute = typeof(IngressAttribute).FullName!;
     public static readonly string RoutingTabelleAttribute = typeof(RoutingTabelleAttribute).FullName!;
-    public static readonly string IngressOrt = nameof(Abstractions.IngressAttribute.Ort);
-    /// <summary>Ingress-Art (Enum-Wert) → Modus-Kennung des Editors.</summary>
-    public static readonly Dictionary<int, string> IngressModus = new()
-    {
-        [(int)IngressArt.Webhook] = "webhook", [(int)IngressArt.Timer] = "timer", [(int)IngressArt.Datei] = "filewatch",
-    };
 
     /// <summary>Die Vertrags-Assembly (Abstractions) und ihr Namespace — für die Projekt-Erkennung und usings.</summary>
     public static readonly string VertragsAssembly = typeof(IState).Assembly.GetName().Name!;
@@ -78,74 +63,15 @@ public static class Vertrag
     public static readonly string StateId = nameof(Abstractions.IState.Id);
     public static readonly string StateVersion = nameof(Abstractions.IState.Version);
     public static readonly string SubscriberId = nameof(Abstractions.ISubscriber.SubscriberId);
-    public static readonly string PipelineId = nameof(Abstractions.IPipelineHandler.PipelineId);
-    public static readonly string Regeln = nameof(Abstractions.IProzessDefinition.Regeln);
     public static readonly string TrackDeps = nameof(Abstractions.ProjectionReaderAttribute.TrackDeps);
-    // ── Planungs-Ausgänge (generische Vertrags-Typen, Metadatenname mit Stelligkeit) ──
-    public static readonly string SelbstTyp = typeof(Selbst<>).Name;
-    public static readonly string FristTyp = typeof(FristPlanung<>).Name;
-    public static readonly string FristStornoTyp = typeof(FristStorno<>).Name;
+    /// <summary>Die Frist als Ausgang einer Entscheidung (generischer Vertrags-Typ, Metadatenname mit Stelligkeit).</summary>
+    public static readonly string Frist = typeof(Frist<>).FullName!;
 
     // ── Aggregat-Namensregel des Framework-Generators (EINE Quelle: Abstractions.Aggregatvertrag) ──
     public const string DeciderKlasse = Aggregatvertrag.Decider;
     public const string ApplierKlasse = Aggregatvertrag.Applier;
     public const string DecideMethode = Aggregatvertrag.Decide;
     public const string ApplyMethode = Aggregatvertrag.Apply;
-
-    // ── Prozess-DSL (Fluent-Verben) ──
-    public static readonly string ProzessTyp = typeof(Prozess<>).Name.Split('`')[0];
-    public static readonly string ProzessMetadatenName = typeof(Prozess<>).FullName!;
-    /// <summary>Namespace der DSL-Typen (Prozess, RegelBauer…, RegelAbschluss…) — Verben werden über ihr Symbol erkannt.</summary>
-    public static readonly string DslNamespace = typeof(Prozess<>).Namespace!;
-    public static readonly string Definiere = nameof(Prozess<IEvent>.Definiere);
-    public static readonly string Auf = nameof(RegelBauer.Auf);
-    public static readonly string Und = nameof(RegelBauer<IEvent>.Und);
-    public static readonly string UndAlle = nameof(RegelBauer<IEvent>.UndAlle);
-    public static readonly string Sende = nameof(RegelBauer<IEvent>.Sende);
-    public static readonly string SendeJe = nameof(RegelBauer<IEvent>.SendeJe);
-    public static readonly string Rufe = nameof(RegelBauer<IEvent>.Rufe);
-    public static readonly string Zeitlimit = nameof(RegelAbschluss<IEvent>.Zeitlimit);
-    public static readonly string RückgängigDurch = nameof(RegelAbschluss<IEvent>.RückgängigDurch);
-    public static readonly string RückgängigDurchJe = nameof(RegelAbschluss<IEvent>.RückgängigDurchJe);
-    public static readonly HashSet<string> RegelVerben = new(StringComparer.Ordinal)
-        { Auf, Und, UndAlle, Sende, SendeJe, Rufe, Zeitlimit, RückgängigDurch, RückgängigDurchJe };
-
-    // ── Pipeline als Fluss (docs/konzept-editor-pipelines.md §14) — Verben über ihr SYMBOL (Typ + Name), nie über Text ──
-    public static readonly string IPipeline = typeof(IPipeline).FullName!;
-    public static readonly string FlussProperty = nameof(Abstractions.IPipeline.Fluss);
-    public static readonly string FlussDefiniere = nameof(PipelineFluss.Definiere);
-    public static readonly string PipelineFlussTyp = typeof(PipelineFluss).FullName!;
-    public static readonly string FlussQuelle = nameof(PipelineBauer.Quelle);
-    public static readonly string FlussAuf = nameof(PipelineBauer.Auf);
-    public static readonly string FlussAlle = nameof(PipelineBauer.Alle);
-    public static readonly string FlussRufe = nameof(Draht<IEvent>.Rufe);
-    public static readonly string FlussSende = nameof(Draht<IEvent>.Sende);
-    public static readonly string FlussJe = nameof(Draht<IEvent>.Je);
-    public static readonly string FlussBei = nameof(AufrufKnoten.Bei);
-    public static readonly string FlussBeiZeitlimit = nameof(AufrufKnoten.BeiZeitlimit);
-    public static readonly string FlussBeiAbgelehnt = nameof(AufrufKnoten.BeiAbgelehnt);
-    public static readonly string FlussZeitlimit = nameof(RufKnoten<IFunktion>.Zeitlimit);
-    public static readonly string FlussOder = nameof(RufKnoten<IFunktion>.Oder);
-    public static readonly string FlussSammle = nameof(JeKnoten<IEvent, object>.Sammle);
-    public static readonly string FlussStrom = nameof(QuellKnoten<IEvent>.Strom);
-    public static readonly string FlussWarte = nameof(StromDraht.Warte);
-    /// <summary>Metadatennamen der DSL-Typen (mit Stelligkeit) — ein Verb gehört zum Fluss, wenn sein Typ einer davon ist.</summary>
-    public static readonly HashSet<string> FlussTypen = new(StringComparer.Ordinal)
-    {
-        typeof(PipelineBauer).Name, typeof(Draht<>).Name, typeof(QuellKnoten<>).Name, typeof(AufrufKnoten).Name,
-        typeof(RufKnoten<>).Name, typeof(SendeKnoten<>).Name, typeof(JeKnoten<,>).Name, typeof(SammelDraht<,>).Name,
-        typeof(Verbund<,>).Name, typeof(Verbund<,,>).Name, typeof(Verbund<,,,>).Name,
-        typeof(StromDraht).Name, typeof(WarteKnoten).Name,
-    };
-    public static readonly string QuellKnotenTyp = typeof(QuellKnoten<>).Name;
-    public static readonly string JeKnotenTyp = typeof(JeKnoten<,>).Name;
-    public static readonly string PipelineKnotenTyp = typeof(PipelineKnoten).Name;
-
-    /// <summary>Ist <paramref name="m"/> ein Verb der Fluss-DSL (Vertrags-Assembly + DSL-Typ + Name)?</summary>
-    public static bool IstFlussVerb(IMethodSymbol? m, string name) =>
-        m?.ContainingType is { } ct && ct.ContainingAssembly?.Name == VertragsAssembly
-        && ct.ContainingNamespace?.ToDisplayString() == VertragsNamespace
-        && FlussTypen.Contains(ct.OriginalDefinition.MetadataName) && m.Name == name;
 
     // ── OneOf (Decide-/Handler-Rückgaben) ──
     public static readonly string OneOf = typeof(OneOf<>).Name.Split('`')[0];
@@ -164,11 +90,6 @@ public static class Vertrag
     public static bool Ist(ITypeSymbol? s, Type t) =>
         s is INamedTypeSymbol n && n.OriginalDefinition.MetadataName == t.Name
         && n.OriginalDefinition.ContainingNamespace?.ToDisplayString() == t.Namespace;
-
-    /// <summary>Ist <paramref name="m"/> ein Verb der Prozess-DSL (per Symbol: Vertrags-Assembly + DSL-Namespace + Verb-Name)?</summary>
-    public static bool IstRegelVerb(IMethodSymbol? m) =>
-        m?.ContainingType is { } ct && ct.ContainingAssembly?.Name == VertragsAssembly
-        && ct.ContainingNamespace?.ToDisplayString() == DslNamespace && RegelVerben.Contains(m.Name);
 
     /// <summary>Ist <paramref name="s"/> ein <c>OneOf&lt;…&gt;</c> des Vertrags (beliebige Stelligkeit)?</summary>
     public static bool IstOneOf(ITypeSymbol? s) =>

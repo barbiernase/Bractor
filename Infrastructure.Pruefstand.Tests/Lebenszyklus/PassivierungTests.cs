@@ -58,18 +58,6 @@ public class PassivierungTests
         await system.ShutdownAsync();
     }
 
-    [Theory]
-    [InlineData(10, true)]
-    [InlineData(59, true)]
-    [InlineData(60, false)]
-    [InlineData(0, false)]
-    public void Ein_zu_kurzer_Leerlauf_des_Prozess_Managers_ist_ein_Start_Fehler(int sekunden, bool fehler)
-    {
-        var akt = () => Passivierung.Aus(new Abstractions.LebenszyklusKonfig { ProzessManagerLeerlaufSekunden = sekunden });
-        if (fehler) akt.Should().Throw<InvalidOperationException>().WithMessage("*Backstop*");
-        else akt.Should().NotThrow();
-    }
-
     [Fact]
     public async Task Null_heisst_nie_passivieren()
     {

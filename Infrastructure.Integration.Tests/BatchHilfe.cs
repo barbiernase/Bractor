@@ -70,7 +70,7 @@ public static class BatchHilfe
         return async (e, writer) =>
         {
             if (vorher is not null) await vorher(e);
-            await projektion.DispatchAsync(e, writer, BatchLeser.KeineAusgabe, faehigkeiten);
+            await projektion.DispatchAsync(e, writer, faehigkeiten);
         };
     }
 

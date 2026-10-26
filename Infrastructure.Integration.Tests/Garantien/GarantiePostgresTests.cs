@@ -13,8 +13,7 @@ namespace Infrastructure.Integration.Tests.Garantien;
 
 /// <summary>
 /// Garantien der Store-Semantik unter Störung, gegen ECHTES Postgres (docs/11 §11.2, §11.5, §11.6): ein Append ist atomar, ein zweiter
-/// Schreiber mit veralteter Version verliert kein Update, ein Poison-Stream hält die Hochwassermarke des Emittenten-Polls fest, ohne andere
-/// Streams zu blockieren, ein gescheiterter Append (Tombstones) legt den Poll nicht still (G-7); im Batch-Konsum wenden zwei Aktivierungen
+/// Schreiber mit veralteter Version verliert kein Update; im Batch-Konsum wenden zwei Aktivierungen
 /// derselben Partition einen Effekt nicht doppelt an (G-4), ein Poison-Stream wird geparkt und holt nach der Heilung nach, und ein Neuaufbau
 /// nimmt einem noch laufenden Leser den Commit.
 /// </summary>
@@ -46,7 +45,7 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
     [Theory, InlineData(false), InlineData(true)]   // Martens Anhänge-Modus: Standard (Rich) und schnell (Quick, so läuft der Host)
     public async Task Effekt_und_Quittung_werden_gemeinsam_gueltig_oder_gar_nicht(bool schnell)
     {
-        // Die Inbox (docs/04 §4.4): die Quittung reist in der Transaktion der Events. Scheitert der Append an der Version, steht auch keine
+        // Die Inbox (docs/04 §4.6): die Quittung reist in der Transaktion der Events. Scheitert der Append an der Version, steht auch keine
         //   Quittung; kennt die Inbox die CommandId schon, steht auch kein Event — und der Aufrufer erfährt es an der Ausnahme.
         var es = EventStore(schnell: schnell);
         var id = Guid.NewGuid();
@@ -66,29 +65,30 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
     }
 
     [Theory, InlineData(false), InlineData(true)]
-    public async Task Vorgangs_Beilagen_werden_mit_den_Events_gueltig_oder_gar_nicht(bool schnell)
+    public async Task Die_Frist_eines_Appends_wird_mit_den_Events_gueltig_oder_gar_nicht(bool schnell)
     {
-        // Der Offen-Index-Eintrag reist im Append des ProzessGestartet, sein Ende im Append des ProzessBeendet (docs/03 §3.3): scheitert der
-        //   Append an der Version, gibt es auch keinen Eintrag bzw. kein Ende.
+        // Die Zeile im Fälligkeits-Verzeichnis der Uhr reist im Append ihres FristGesetzt (docs/03 §3.3): scheitert der Append an der Version,
+        //   gibt es auch keine Frist — es gibt keine Frist im Verzeichnis ohne ihr Event im Log und umgekehrt.
         var es = EventStore(schnell: schnell);
         var store = schnell ? _fx.Store : _fx.Rich;
         var k = Guid.NewGuid();
-        async Task<bool> Offen() { await using var q = store.QuerySession(); return await q.LoadAsync<ProzessOffen>(k) is not null; }
+        async Task<int> Fristen()
+        {
+            await using var conn = store.Storage.Database.CreateConnection();
+            await conn.OpenAsync();
+            await using var cmd = new Npgsql.NpgsqlCommand($"select count(*) from {Infrastructure.Uhr.FristVerzeichnis.Name(store)} where stream_id = $1", conn);
+            cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = k });
+            return Convert.ToInt32(await cmd.ExecuteScalarAsync());
+        }
+        FristFaellig Frist(int version) => new(version, "X", "{}", TimeSpan.FromHours(1), null);
 
         await es.AppendEventsAsync(k, 0, new IEvent[] { new ImagePairInspiziert() });
-        var konflikt = () => es.AppendEventsAsync(k, 0, new IEvent[] { new ImagePairInspiziert() }, beilagen: [new VorgangOffen(k, "P")]);
+        var konflikt = () => es.AppendEventsAsync(k, 0, new IEvent[] { new ImagePairInspiziert() }, beilagen: [Frist(1)]);
         await konflikt.Should().ThrowAsync<ConcurrencyException>();
-        (await Offen()).Should().BeFalse("ohne Events kein Eintrag");
+        (await Fristen()).Should().Be(0, "ohne Events keine Frist");
 
-        await es.AppendEventsAsync(k, 1, new IEvent[] { new ImagePairInspiziert() }, beilagen: [new VorgangOffen(k, "P")]);
-        (await Offen()).Should().BeTrue();
-
-        var endeKonflikt = () => es.AppendEventsAsync(k, 1, new IEvent[] { new ImagePairInspiziert() }, beilagen: [new VorgangBeendet(k)]);
-        await endeKonflikt.Should().ThrowAsync<ConcurrencyException>();
-        (await Offen()).Should().BeTrue("ohne Events kein Ende");
-
-        await es.AppendEventsAsync(k, 2, new IEvent[] { new ImagePairInspiziert() }, beilagen: [new VorgangBeendet(k)]);
-        (await Offen()).Should().BeFalse();
+        await es.AppendEventsAsync(k, 1, new IEvent[] { new ImagePairInspiziert() }, beilagen: [Frist(2)]);
+        (await Fristen()).Should().Be(1);
     }
 
     [Theory, InlineData(false), InlineData(true)]   // Martens Anhänge-Modus: Standard (Rich) und schnell (Quick, so läuft der Host)
@@ -106,55 +106,6 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
 
         versuche.Count(x => x).Should().Be(1, "der zweite Schreiber scheitert laut an der Versionsprüfung");
         (await es.ReadStreamAsync(id, 0, default)).Should().HaveCount(2);
-    }
-
-    [Fact]
-    public async Task Ein_Poison_Stream_haelt_die_Hochwassermarke_und_blockiert_keine_anderen_Streams()
-    {
-        var es = EventStore();
-        var basis = (await es.ReadChangedStreamsAsync(0, null, int.MaxValue, default)).HighWaterMark;
-        Guid gift = Guid.NewGuid(), gesund = Guid.NewGuid();
-        await es.AppendEventsAsync(gift, 0, new IEvent[] { new ImagePairInspiziert() });
-        await es.AppendEventsAsync(gesund, 0, new IEvent[] { new ImagePairInspiziert() });
-
-        var giftHeilt = false;
-        var verarbeitet = new List<Guid>();
-        var poller = new Poller(es, (s, _) =>
-        {
-            if (s == gift && !giftHeilt) throw new InvalidOperationException("Dispatch wirft dauerhaft");
-            verarbeitet.Add(s);
-            return Task.FromResult(true);
-        }, startHighWater: basis);
-
-        await poller.PollOnceAsync();
-        await poller.PollOnceAsync();
-        verarbeitet.Should().Contain(gesund, "ein vergifteter Stream hält die anderen nicht auf");
-        poller.HighWater.Should().Be(basis, "nichts geht verloren: die Marke bleibt vor dem unverarbeiteten Stream");
-
-        giftHeilt = true;                     // der Fehler ist behoben (neuer Code, Daten korrigiert)
-        await poller.PollOnceAsync();
-        verarbeitet.Should().Contain(gift);
-        poller.HighWater.Should().BeGreaterThan(basis);
-    }
-
-    [Fact]
-    public async Task Ein_gescheiterter_Append_blockiert_den_Poll_nicht()
-    {
-        // Ein Versionskonflikt beim Append lässt Marten die reservierten Sequenzen mit Tombstones füllen (eigener Stream). Der Poll weckt jeden
-        // geänderten Stream — auch diesen —, und der Adapter liest ihn wie jeden anderen: das darf die Hochwassermarke nicht festhalten.
-        var es = EventStore();
-        var basis = (await es.ReadChangedStreamsAsync(0, null, int.MaxValue, default)).HighWaterMark;
-        var konflikt = Guid.NewGuid();
-        await es.AppendEventsAsync(konflikt, 0, new IEvent[] { new ImagePairInspiziert() });
-        try { await es.AppendEventsAsync(konflikt, 0, new IEvent[] { new ImagePairInspiziert(), new ImagePairInspiziert() }); } catch (ConcurrencyException) { }
-        var danach = Guid.NewGuid();
-        await es.AppendEventsAsync(danach, 0, new IEvent[] { new ImagePairInspiziert() });
-
-        var poller = new Poller(es, async (s, ct) => { await es.ReadStreamAsync(s, 0, ct); return true; }, startHighWater: basis);
-        await poller.PollOnceAsync();
-
-        var kopf = (await es.ReadChangedStreamsAsync(basis, null, int.MaxValue, default)).HighWaterMark;
-        poller.HighWater.Should().Be(kopf, "ein gescheiterter Append hinterlässt keinen Stream, an dem jeder Poll für immer hängen bleibt");
     }
 
     private static readonly Konsum EinePartition = new(1, 500);
@@ -279,6 +230,7 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
             opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;
             KonsumSchema.Registriere(opts);
             InboxTabelle.Registriere(opts);
+            Infrastructure.Uhr.FristVerzeichnis.Registriere(opts);
         });
 
         public void Dispose() { Store.Dispose(); Rich.Dispose(); }

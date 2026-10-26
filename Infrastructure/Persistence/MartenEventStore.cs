@@ -158,7 +158,7 @@ public class MartenEventStore : IEventStoreRepository
             {
                 // Interne Inbox-/Prozess-Marken: in der Version mitzählen, aber nicht auf den State anwenden
                 // (der Applier kennt sie nicht) — Framework-Naht (Exactly-once-Inbox).
-                if (domainEvent is not IProzessIntern)
+                if (domainEvent is not IRahmenEvent)
                     handler.ApplyEvent(domainEvent);
             }
             state.Version++;
@@ -181,28 +181,6 @@ public class MartenEventStore : IEventStoreRepository
     /// </summary>
     public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(Guid streamId, int fromVersion, CancellationToken ct)
         => LeseStreamAsync("stream_id = $1 and version >= $2", ct, streamId, (long)fromVersion);
-
-    public async Task<KorrelierteEvents> ReadKorreliertAsync(Guid streamId, int fromVersion, string korrelation, Guid beginn, CancellationToken ct)
-    {
-        await EventTabellenAsync(_store, ct);
-        var schema = _store.Options.Events.DatabaseSchemaName;
-        await using var conn = _store.Storage.Database.CreateConnection();
-        await conn.OpenAsync(ct);
-        await using var cmd = new Npgsql.NpgsqlCommand(EventStoreAbfragen.Korreliert(schema, MetadatenSpalten(_store)), conn);
-        foreach (var w in new object[] { streamId, (long)fromVersion, korrelation, beginn })
-            cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = w });
-
-        var serializer = _store.Options.Serializer();
-        var events = new List<PartitionsEvent>();
-        long kopf = 0, ab = fromVersion;
-        await using var r = await cmd.ExecuteReaderAsync(ct);
-        while (await r.ReadAsync(ct))
-        {
-            if (!r.IsDBNull(0)) { kopf = r.GetInt64(0); ab = r.GetInt64(1); }   // die Kopfzeile (zuerst)
-            else LeseZeile(r, 2, serializer, events);
-        }
-        return new KorrelierteEvents(events.Select(e => e.Event).ToList(), (int)kopf, (int)ab);
-    }
 
     public async Task<EventEnvelope?> ReadEventAsync(Guid streamId, int version, CancellationToken ct)
         => (await LeseStreamAsync("stream_id = $1 and version = $2", ct, streamId, (long)version)).FirstOrDefault();
@@ -485,49 +463,4 @@ public class MartenEventStore : IEventStoreRepository
             $"select id from {_store.Options.Events.DatabaseSchemaName}.mt_streams where id = any(?)", ct, streams.ToArray());
     }
 
-    /// <summary>
-    /// Globales Leseprimitiv für den Poll der Emittenten (docs/04 §4.1, PF-11/PF-12): eine Seite der Streams mit einem Event der abonnierten
-    /// Typen jenseits der Marke — reines SQL über Sequenz, Stream und Typ, ohne Daten. Früher lud es jedes Event jenseits der Marke samt
-    /// Daten in einer Abfrage, und der Poller weckte jeden geänderten Stream, auch ohne abonniertes Event (der Adapter las ihn ab 0 und legte
-    /// einen Cursor an — je Stream des Logs einer).
-    ///
-    /// ★ Befund 3: die Marke rückt nur bis zur gesetzten Sequenz (<see cref="GesetztAsync"/>). Jüngere Events werden geweckt (Latenz),
-    /// schieben die Marke aber nicht vor: ein Nachzügler mit kleinerer Sequenz, dessen Transaktion noch läuft, wird nicht überholt.
-    /// Tombstones (G-7) belegen nur Sequenzen eines gescheiterten Appends und wecken niemanden.
-    /// </summary>
-    public async Task<StreamChanges> ReadChangedStreamsAsync(
-        long afterGlobalSequence, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct)
-    {
-        await EventTabellenAsync(_store, ct);
-        await using var session = _store.QuerySession();
-        var schema = _store.Options.Events.DatabaseSchemaName;
-
-        var (gesetzt, dahinter) = await GesetztAsync(afterGlobalSequence, ct);
-        if (!dahinter) return new StreamChanges(Array.Empty<Guid>(), gesetzt, false);
-
-        var conn = (Npgsql.NpgsqlConnection)session.Connection!;
-        if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync(ct);
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = EventStoreAbfragen.GeaenderteStreams(schema, typen is not null);
-        cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = afterGlobalSequence });
-        cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = limit });
-        if (typen is not null) cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = typen.ToArray() });
-
-        var streams = new List<Guid>();
-        var gesehen = new HashSet<Guid>();
-        long letzte = afterGlobalSequence;
-        var zeilen = 0;
-        await using (var r = await cmd.ExecuteReaderAsync(ct))
-            while (await r.ReadAsync(ct))
-            {
-                zeilen++;
-                letzte = r.GetInt64(0);
-                var s = r.GetGuid(1);
-                if (gesehen.Add(s)) streams.Add(s);
-            }
-
-        var voll = zeilen >= limit;
-        var hochwasser = voll ? Math.Min(gesetzt, letzte) : gesetzt;
-        return new StreamChanges(streams, Math.Max(afterGlobalSequence, hochwasser), voll);
-    }
 }

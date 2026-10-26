@@ -3,7 +3,7 @@
 Nutzlast und Hüllen: packt Domänen-DTOs in die Leitung des Frameworks und wieder aus.
 
 Die Leitung (Cqrs.Leitung/cqrs.proto → cqrs_client.leitung) kennt keinen Domänen-Typ. Jede Domänen-Nachricht
-(Command, Event, Query, Antwort, Trigger, Eingang und Ausgaben einer Funktion) reist als `Nutzlast`:
+(Command, Event, Query, Antwort, Eingang und Ausgaben einer Funktion) reist als `Nutzlast`:
 
     typ   = Proto-Name des DTO ohne „Dto“ (z. B. "ErstelleDatensatz")
     daten = die {typ}Dto-Message des Anwendungs-Protos, protobuf-kodiert (betterproto: bytes(dto))
@@ -80,8 +80,8 @@ class PayloadMapper:
     """
     Zwischen Domänen-DTOs und der Leitung.
 
-    Auspacken (Server → Client): Event-Hülle, TriggerForward, QueryForward, ArbeitsAuftrag (Eingang), QueryResponse → DTO.
-    Verpacken (Client → Server): Command → CommandEnvelopeDto, Hinweis → EventEnvelopeDto, Query, Query-Antwort, Trigger, Ausgaben einer
+    Auspacken (Server → Client): Event-Hülle, QueryForward, ArbeitsAuftrag (Eingang), QueryResponse → DTO.
+    Verpacken (Client → Server): Command → CommandEnvelopeDto, Hinweis → EventEnvelopeDto, Query, Query-Antwort, Ausgaben einer
     Funktion → Nutzlast.
     """
 
@@ -105,10 +105,6 @@ class PayloadMapper:
     def extract_event_payload(self, envelope: EventEnvelopeDto) -> betterproto.Message:
         """Das Event aus der Hülle (EventEnvelopeDto.payload)."""
         return self.entpacke(envelope.payload)
-
-    def extract_trigger_payload(self, nutzlast: Nutzlast) -> betterproto.Message:
-        """Der Trigger aus TriggerForward.payload."""
-        return self.entpacke(nutzlast)
 
     def extract_query_payload(self, nutzlast: Nutzlast) -> betterproto.Message:
         """Die Query aus QueryForward.payload."""
@@ -166,10 +162,6 @@ class PayloadMapper:
     def wrap_query_response(self, response: betterproto.Message) -> Nutzlast:
         """Eine Query-Antwort als Nutzlast für QueryResponseFromClient.payload."""
         return self.packe(response)
-
-    def wrap_trigger(self, trigger: betterproto.Message) -> Nutzlast:
-        """Ein Trigger als Nutzlast für TriggerRequest.payload (Client→Client, der Server forwarded ihn)."""
-        return self.packe(trigger)
 
 
 __all__ = ["NutzlastTabelle", "PayloadMapper", "UnbekannteNutzlast"]

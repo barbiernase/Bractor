@@ -33,9 +33,9 @@ public sealed class AkteurTor
     /// <summary>
     /// Wendet die Befugnisse auf ein Handshake-Ergebnis an. Statt Selbstauskunft gilt:
     /// <list type="bullet">
-    /// <item>erlaubte Commands/Queries/Trigger = genau die <c>IDarf</c>-Mengen des Akteurs;</item>
+    /// <item>erlaubte Commands/Queries = genau die <c>IDarf</c>-Mengen des Akteurs;</item>
     /// <item>abonnierte Events = Wunsch ∩ abgeleitete Hör-Menge;</item>
-    /// <item>Zuständigkeit (beantworten/verarbeiten) nur, wenn der Akteur den Typ darf, das System ihn NICHT selbst
+    /// <item>Zuständigkeit (beantworten) nur, wenn der Akteur den Typ darf, das System ihn NICHT selbst
     ///   bedient (Lücke im Graphen) und noch kein anderer zuständig ist (Kardinalität eins).</item>
     /// </list>
     /// Rückgabe: das Verweigerte (fürs Log; der Client sieht es an den fehlenden Einträgen der Antwort).
@@ -53,11 +53,9 @@ public sealed class AkteurTor
 
         Ersetze(ergebnis.AllowedCommands, Namen(akteur.Commands));
         Ersetze(ergebnis.AllowedQueries, Namen(akteur.Queries));
-        Ersetze(ergebnis.AllowedTriggers, Namen(akteur.Trigger));
 
         Behalte(ergebnis.SubscribedEvents, n => loese(n) is { } t && akteur.DarfHoeren(t), "hören", verweigert);
         Behalte(ergebnis.HandlingQueries, n => DarfUebernehmen(n), "beantworten", verweigert);
-        Behalte(ergebnis.HandlingTriggers, n => DarfUebernehmen(n), "verarbeiten", verweigert);
         return verweigert;
 
         bool DarfUebernehmen(string name) =>

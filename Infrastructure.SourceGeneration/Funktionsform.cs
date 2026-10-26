@@ -57,28 +57,18 @@ namespace Infrastructure.SourceGeneration
         public static bool Hat(ITypeSymbol t, string vollerName) =>
             Name(t) == vollerName || t.AllInterfaces.Any(i => Name(i) == vollerName);
 
-        private static bool HatAuf(INamedTypeSymbol t) =>
-            t.GetMembers(Abstractions.Funktionsvertrag.Auf).OfType<IMethodSymbol>().Any(m => m.MethodKind == MethodKind.Ordinary);
-
-        private static bool HatRufe(INamedTypeSymbol t) =>
-            t.GetMembers(Abstractions.Funktionsvertrag.Methode).OfType<IMethodSymbol>().Any(m => m.MethodKind == MethodKind.Ordinary);
-
-        /// <summary>Eine Schnittstelle der Katalog-Form (<c>RufeAsync</c>, bis Phase 4)?</summary>
-        public static bool IstKatalog(INamedTypeSymbol t) =>
-            t.TypeKind == TypeKind.Interface && Name(t) != IFunktion && Hat(t, IFunktion) && !HatAuf(t);
-
         /// <summary>
-        /// Ist <paramref name="t"/> eine Funktion in Baustein-Form? Eine Schnittstelle <c>: IFunktion</c> mit <c>Auf</c>, oder eine konkrete Klasse,
-        /// die <c>IFunktion</c> direkt trägt (keine abgeleitete Funktions-Schnittstelle — dann wäre sie deren Implementierung).
+        /// Ist <paramref name="t"/> eine Funktion? Eine Schnittstelle <c>: IFunktion</c> (draußen oder mit Umsetzung im Host), oder eine konkrete Klasse,
+        /// die <c>IFunktion</c> direkt trägt (keine abgeleitete Funktions-Schnittstelle — dann wäre sie deren Umsetzung).
         /// </summary>
         public static bool IstBaustein(INamedTypeSymbol t)
         {
             if (Name(t) == IFunktion || !Hat(t, IFunktion)) return false;
-            if (t.TypeKind == TypeKind.Interface) return HatAuf(t);
+            if (t.TypeKind == TypeKind.Interface) return true;
             return t.TypeKind == TypeKind.Class && !t.IsAbstract && !Umsetzt(t).Any();
         }
 
-        /// <summary>Die Funktions-Schnittstellen (beider Formen), die eine Klasse implementiert.</summary>
+        /// <summary>Die Funktions-Schnittstellen, die eine Klasse implementiert (sie ist deren Umsetzung im Host).</summary>
         public static IEnumerable<INamedTypeSymbol> Umsetzt(INamedTypeSymbol t) =>
             t.AllInterfaces.Where(i => Name(i) != IFunktion && Hat(i, IFunktion));
 
@@ -87,8 +77,6 @@ namespace Infrastructure.SourceGeneration
         {
             var f = new Form { Typ = t, Draussen = t.TypeKind == TypeKind.Interface };
             var ort = t.Locations.FirstOrDefault() ?? Location.None;
-            if (f.Draussen && HatRufe(t))
-                f.Fehler.Add(($"'{t.Name}' hat {Abstractions.Funktionsvertrag.Auf} und {Abstractions.Funktionsvertrag.Methode} — eine Funktion hat genau eine Form", ort));
             if (f.Draussen)
                 foreach (var m in t.GetMembers().OfType<IMethodSymbol>().Where(m => m.MethodKind == MethodKind.Ordinary && m.Name != Abstractions.Funktionsvertrag.Auf))
                     f.Fehler.Add(($"die Schnittstelle hat die Methode '{m.Name}' — eine Funktion draußen hat nur {Abstractions.Funktionsvertrag.Auf}", m.Locations.FirstOrDefault() ?? ort));
@@ -112,6 +100,8 @@ namespace Infrastructure.SourceGeneration
                 gesehen[schluessel] = auf;
                 f.Aufs.Add(auf);
             }
+            if (gesehen.Count == 0 && f.Doppelt.Count == 0 && f.Fehler.Count == 0)
+                f.Fehler.Add(($"'{t.Name}' hat kein {Abstractions.Funktionsvertrag.Auf} — eine Funktion hört mindestens einen Eingang", ort));
             return f;
         }
 

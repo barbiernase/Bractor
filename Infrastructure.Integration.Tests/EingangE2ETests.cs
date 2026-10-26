@@ -186,11 +186,11 @@ public class EingangE2ETests
             var wurzel = await es.ReadStreamAsync(v1, 0, default);
             wurzel.Should().ContainSingle().Which.Payload.Should().BeOfType<DateiErkannt>().Which.Name.Should().Be(datei2);
             wurzel.Single().Wirker.Should().Be("quelle:DateiErkannt");
-            await Warte(async () => (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("auftraege").GetArrayLength() > 0,
-                TimeSpan.FromSeconds(30), "Der Webhook hat den Bildeingang nicht gestartet (kein Auftrag an die Deutung).");
+            await Warte(async () => (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").GetArrayLength() > 0,
+                TimeSpan.FromSeconds(30), "Der Webhook hat keinen Eingang an die Bildaufbereitung gegeben.");
             await Task.Delay(1500);
-            (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("auftraege").EnumerateArray()
-                .Should().ContainSingle("genau ein Vorgang, also genau ein Auftrag").Which.GetProperty("auftrag").GetProperty("daten").GetProperty("Dateiname").GetString()
+            (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").EnumerateArray()
+                .Should().ContainSingle("genau eine Nachricht im Log, also genau ein Eingang").Which.GetProperty("eingang").GetProperty("daten").GetProperty("Name").GetString()
                 .Should().Be(datei2);
             (await http.PostAsJsonAsync("/webhook/datei", new { Unsinn = 1 })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
         }

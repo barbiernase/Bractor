@@ -9,7 +9,7 @@ namespace Domain.SourceGeneration;
 
 /// <summary>
 /// CQRS098 — jede Primitive liegt im Projekt ihrer Rolle (<c>docs/07-projektstruktur.md</c> §7.2, Tabelle <see cref="Projektstruktur"/>):
-/// ein Fluss in der Schreibseite, eine Projektion in den Abläufen, ein Akteur in der Leseseite … ist ein Build-Fehler, nicht still.
+/// eine Funktion in der Schreibseite, eine Projektion in den Abläufen, ein Akteur in der Leseseite … ist ein Build-Fehler, nicht still.
 /// WAS ein Typ ist, sagt <see cref="Lageart"/> (Marker, Signaturen); WO er hingehört, die Tabelle. Die Rolle des Projekts folgt aus seinem
 /// Namen (Wurzel + Suffix). Aktiv in jedem Projekt, das die Domänen-Generatoren einbindet (die Rollen-Projekte einer Anwendung).
 /// Ordner, Namespace und Dateiname prüft <c>--check</c> (dort ist das Projektverzeichnis bekannt).

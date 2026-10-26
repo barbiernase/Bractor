@@ -109,7 +109,7 @@ internal sealed class FunktionsKind(FunktionsBaustein baustein) : IClusterKindCo
         var konsum = provider.GetService<Konsum>() ?? Konsum.Standard;
         var logger = provider.GetService<ILoggerFactory>()?.CreateLogger("Funktion." + baustein.Name);
         var typen = FunktionsActor.TypenVon(baustein);
-        // Die Umsetzung einmal je Knoten (wie die Katalog-Funktionen: darf warme Ressourcen halten, muss bei Slots > 1 thread-sicher sein).
+        // Die Umsetzung einmal je Knoten (darf warme Ressourcen halten, muss bei Slots > 1 thread-sicher sein).
         var instanz = bindung.Laufort == FunktionsLaufort.Host
             ? new Lazy<object>(() => FunktionsBausteinWiring.Umsetzung(baustein, bindung).Baue(provider))
             : null;
@@ -122,7 +122,7 @@ internal sealed class FunktionsKind(FunktionsBaustein baustein) : IClusterKindCo
             var arbeit = new FunktionsArbeit(baustein,
                 instanz is null ? null : () => instanz.Value,
                 provider.GetRequiredService<IAusgabeAblage>(),
-                async (cmd, id, korrelation, ct) => (await emitter.EmitAsync(cmd, id, korrelation, ct)).Ausgang,
+                async (cmd, id, korrelation, ct) => await emitter.EmitAsync(cmd, id, korrelation, ct),
                 publisher is null ? null : (hinweis, ursache) => publisher.Melde(new EventEnvelope
                 {
                     AggregateId = ursache.AggregateId, AggregateVersion = ursache.AggregateVersion, CorrelationId = ursache.CorrelationId,

@@ -4,7 +4,7 @@ namespace DomainEditor;
 
 /// <summary>
 /// Python-Quelltext eines CLIENTS lesen und chirurgisch ändern (docs/konzept-akteure.md §4): die Implementierung eines Client-Vertrags
-/// ist eine Klasse, die die generierte Basis <c>&lt;Client&gt;Basis</c> erbt; je Zusage/Kenntnis eine Methode <c>auf_…</c>. Nur Code-Fakten:
+/// ist eine Klasse, die die generierte Basis <c>&lt;Client&gt;Basis</c> erbt; je getragenem Funktions-Eingang und je Kenntnis eine Methode. Nur Code-Fakten:
 /// Klassen und ihre Basisliste, Methoden über ihren Namen aus der generierten Basis — kein Raten über Dateinamen. Reiner Text (kein I/O),
 /// eingerückt wie Python es verlangt: der Rumpf einer Methode sind die Zeilen unter dem <c>def</c>, die tiefer eingerückt sind.
 /// </summary>
@@ -12,8 +12,11 @@ public static class PythonQuelle
 {
     public sealed record Klasse(string Name, IReadOnlyList<string> Basen, int Zeile);
     public sealed record Methode(string Name, int DefZeile, int RumpfStart, int RumpfEnde, string Einzug);
-    /// <summary>Eine Zusage/Kenntnis der generierten Client-Basis: Event, Methodenname, die <c>def</c>-Zeile (Signatur) und der Akteur.</summary>
-    public sealed record BasisAuf(string Event, string Methode, string Def, string? Akteur, bool Strom, IReadOnlyList<string> Ausgaenge);
+    /// <summary>
+    /// Eine Methode der generierten Client-Basis: Eingang (Event), Methodenname, die <c>def</c>-Zeile (Signatur), die getragene Funktion
+    /// (null = Kenntnis), Strom und die Ausgaben der Funktion für diesen Eingang.
+    /// </summary>
+    public sealed record BasisAuf(string Event, string Methode, string Def, string? Funktion, bool Strom, IReadOnlyList<string> Ausgaenge);
     public sealed record ClientBasis(string Client, string Basis, IReadOnlyList<BasisAuf> Auf);
 
     private static readonly Regex KlassenKopf = new(@"^class\s+(\w+)\s*(?:\((.*)\))?\s*:", RegexOptions.Compiled);
@@ -133,13 +136,17 @@ public static class PythonQuelle
         return string.Join("\n", zeilen.Select(z => z.Length >= min ? z[min..] : z.TrimStart())).Trim('\n');
     }
 
-    // ── Die GENERIERTE Basis (vertraege.py, Cqrs.Codegen): je Client-Basis CLIENT, ZUSAGEN und die auf_-Signaturen ──
+    // ── Die GENERIERTE Basis (vertraege.py, Cqrs.Codegen): je Client-Basis CLIENT, TRAEGT (getragene Funktionen) und HOERT (Kenntnis) ──
     private static readonly Regex ClientWert = new(@"^\s+CLIENT\s*:\s*ClassVar\[str\]\s*=\s*""(\w+)""", RegexOptions.Compiled);
-    private static readonly Regex ZusageEintrag = new(@"^\s+(\w+)\s*:\s*Zusage\(\s*""(\w+)""\s*,\s*\(([^)]*)\)(.*)\)\s*,?\s*$", RegexOptions.Compiled);
+    private static readonly Regex BlockKopf = new(@"^\s+(TRAEGT|HOERT)\s*:\s*ClassVar\[dict\]\s*=\s*\{(.*)$", RegexOptions.Compiled);
+    private static readonly Regex FunktionKopf = new(@"^\s+""(\w+)""\s*:\s*\{", RegexOptions.Compiled);
+    private static readonly Regex TraegtEintrag = new(@"^\s+(\w+)\s*:\s*Eingang\(\s*""(\w+)""\s*,\s*\{([^}]*)\}(.*)\)\s*,?\s*$", RegexOptions.Compiled);
+    private static readonly Regex HoertEintrag = new(@"^\s+(\w+)\s*:\s*""(\w+)""\s*,?\s*$", RegexOptions.Compiled);
 
     /// <summary>
-    /// Die Client-Basen der generierten <c>vertraege.py</c>. <paramref name="dtoEndung"/> ist die Endung, mit der der Generator die
-    /// Nachrichten-Typen benennt (Proto-DTO) — der Event-Name ist der Typ ohne sie.
+    /// Die Client-Basen der generierten <c>vertraege.py</c>: je getragenem Funktions-Eingang (<c>TRAEGT</c>) und je Kenntnis (<c>HOERT</c>) die
+    /// Methode der Basis. <paramref name="dtoEndung"/> ist die Endung, mit der der Generator die Nachrichten-Typen benennt (Proto-DTO) — der
+    /// Event-Name ist der Typ ohne sie.
     /// </summary>
     public static IReadOnlyList<ClientBasis> ClientBasen(string vertraege, string dtoEndung = "Dto")
     {
@@ -148,21 +155,39 @@ public static class PythonQuelle
         string Ohne(string t) => t.EndsWith(dtoEndung, StringComparison.Ordinal) ? t[..^dtoEndung.Length] : t;
         foreach (var k in Klassen(vertraege))
         {
-            string? client = null;
+            string? client = null, block = null, funktion = null;
             var auf = new List<BasisAuf>();
+            void Nimm(string eingang, string methode, string? fn, bool strom, IReadOnlyList<string> ausgaenge)
+            {
+                var def = FindeMethode(vertraege, k.Name, methode) is { } m ? DefText(z, m) : $"async def {methode}(self, e, ctx, state):";
+                auf.Add(new(Ohne(eingang), methode, def, fn, strom, ausgaenge));
+            }
             for (var i = k.Zeile + 1; i < z.Length; i++)
             {
                 if (z[i].Trim().Length > 0 && Einzug(z[i]) == 0) break;
-                if (ClientWert.Match(z[i]) is { Success: true } c) client = c.Groups[1].Value;
-                else if (ZusageEintrag.Match(z[i]) is { Success: true } e)
+                if (ClientWert.Match(z[i]) is { Success: true } c) { client = c.Groups[1].Value; continue; }
+                if (BlockKopf.Match(z[i]) is { Success: true } b)
                 {
-                    var methode = e.Groups[2].Value;
-                    var rest = e.Groups[4].Value;
-                    var akteur = Regex.Match(rest, @"akteur\s*=\s*""(\w+)""") is { Success: true } a ? a.Groups[1].Value : null;
-                    var ausg = e.Groups[3].Value.Split(',').Select(x => x.Trim()).Where(x => x.Length > 0).Select(Ohne).ToList();
-                    var def = FindeMethode(vertraege, k.Name, methode) is { } m ? DefText(z, m) : $"async def {methode}(self, e, ctx, state):";
-                    auf.Add(new(Ohne(e.Groups[1].Value), methode, def, akteur, rest.Contains("strom=True"), ausg));
+                    // Ein leerer Block steht in einer Zeile ({}), sonst bis zur schließenden Klammer auf der Einrückung des Kopfs.
+                    block = b.Groups[2].Value.TrimStart().StartsWith('}') ? null : b.Groups[1].Value;
+                    funktion = null;
+                    continue;
                 }
+                if (block == null) continue;
+                if (z[i].Trim().StartsWith('}'))
+                {
+                    if (block == "TRAEGT" && funktion != null) funktion = null;
+                    else block = null;
+                    continue;
+                }
+                if (block == "TRAEGT" && FunktionKopf.Match(z[i]) is { Success: true } f) funktion = f.Groups[1].Value;
+                else if (block == "TRAEGT" && funktion != null && TraegtEintrag.Match(z[i]) is { Success: true } t)
+                {
+                    var ausg = Regex.Matches(t.Groups[3].Value, @"(\w+)\s*:").Select(x => Ohne(x.Groups[1].Value)).ToList();
+                    Nimm(t.Groups[1].Value, t.Groups[2].Value, funktion, t.Groups[4].Value.Contains("strom=True"), ausg);
+                }
+                else if (block == "HOERT" && HoertEintrag.Match(z[i]) is { Success: true } h)
+                    Nimm(h.Groups[1].Value, h.Groups[2].Value, null, false, []);
             }
             if (client != null) erg.Add(new(client, k.Name, auf));
         }
@@ -170,7 +195,7 @@ public static class PythonQuelle
     }
 
     /// <summary>
-    /// Eine NEUE Client-Implementierung: Klasse, die die generierte Basis erbt, je Zusage/Kenntnis die Methode mit der Signatur der Basis
+    /// Eine NEUE Client-Implementierung: Klasse, die die generierte Basis erbt, je Methode der Basis ihre Signatur
     /// und einem Platzhalter-Rumpf (<c>raise NotImplementedError</c> — 📝/🤖 füllt ihn), dazu ein leerer Zustand. <paramref name="paket"/> =
     /// Python-Paketname (Verzeichnisname, z. B. <c>domain_client</c>).
     /// </summary>
@@ -185,6 +210,7 @@ public static class PythonQuelle
         b.AppendLine("from dataclasses import dataclass");
         b.AppendLine("from typing import AsyncIterator  # noqa: F401");
         b.AppendLine();
+        b.AppendLine("from cqrs_client.funktion import Herkunft  # noqa: F401");
         b.AppendLine("from cqrs_client.router import MessageContext  # noqa: F401");
         if (dtos.Count > 0) b.AppendLine($"from {paket}.generated import {string.Join(", ", dtos)}  # noqa: F401");
         b.AppendLine($"from {paket}.generated.vertraege import {basis.Basis}");
@@ -204,63 +230,6 @@ public static class PythonQuelle
             b.AppendLine();
         }
         return b.ToString().TrimEnd() + "\n";
-    }
-
-    // ── Die GENERIERTE Basis der Funktionen draußen (funktionen.py, Cqrs.Codegen): je Basis FUNKTION und die Signatur ihres ersten Eingangs (auf_<eingang>) ──
-    private static readonly Regex FunktionWert = new(@"^\s+FUNKTION\s*:\s*ClassVar\[str\]\s*=\s*""(\w+)""", RegexOptions.Compiled);
-
-    /// <summary>
-    /// Eine Funktions-Basis der generierten <c>funktionen.py</c>: Funktion (Interface-Name), Basis-Klasse, die erste abstrakte Methode (je Eingang eine,
-    /// <c>auf_&lt;eingang&gt;</c>) und ihre <c>def</c>-Zeile.
-    /// </summary>
-    public sealed record FunktionsBasis(string Funktion, string Basis, string Methode, string Def, IReadOnlyList<string> Dtos);
-
-    public static IReadOnlyList<FunktionsBasis> FunktionsBasen(string funktionenPy)
-    {
-        var erg = new List<FunktionsBasis>();
-        var z = Zeilen(funktionenPy);
-        foreach (var k in Klassen(funktionenPy))
-        {
-            string? funktion = null;
-            for (var i = k.Zeile + 1; i < z.Length; i++)
-            {
-                if (z[i].Trim().Length > 0 && Einzug(z[i]) == 0) break;
-                if (FunktionWert.Match(z[i]) is { Success: true } f) funktion = f.Groups[1].Value;
-            }
-            if (funktion == null) continue;
-            string? methode = null;
-            for (var i = k.Zeile + 1; i < z.Length && methode == null; i++)
-            {
-                if (z[i].Trim().Length > 0 && Einzug(z[i]) == 0) break;
-                if (DefKopf.Match(z[i]) is { Success: true } d && !d.Groups[2].Value.StartsWith("__", StringComparison.Ordinal)) methode = d.Groups[2].Value;
-            }
-            if (methode == null) continue;
-            var def = DefText(z, FindeMethode(funktionenPy, k.Name, methode)!);
-            var dtos = Regex.Matches(def, @"\b(\w+Dto)\b").Select(x => x.Groups[1].Value).Distinct().ToList();
-            erg.Add(new(funktion, k.Name, methode, def, dtos));
-        }
-        return erg;
-    }
-
-    /// <summary>
-    /// Eine NEUE Python-Implementierung einer Funktion: Klasse, die die generierte Basis erbt, ihre Methode mit der Signatur der Basis und dem
-    /// Platzhalter <c>raise NotImplementedError</c> (✎/🤖 füllt ihn). <paramref name="paket"/> = das Python-Paket der Generate (<c>domain_client</c>).
-    /// </summary>
-    public static string NeueFunktionsImplementierung(string paket, FunktionsBasis basis, string klasse)
-    {
-        var b = new System.Text.StringBuilder();
-        b.AppendLine($"\"\"\"{basis.Funktion} — Python-Implementierung der Funktion (Laufort Extern; Basis {basis.Basis}, generiert aus der Signatur).\"\"\"");
-        b.AppendLine("from __future__ import annotations");
-        b.AppendLine();
-        b.AppendLine("from cqrs_client.funktion import Herkunft  # noqa: F401");
-        if (basis.Dtos.Count > 0) b.AppendLine($"from {paket}.generated import {string.Join(", ", basis.Dtos.OrderBy(x => x, StringComparer.Ordinal))}  # noqa: F401");
-        b.AppendLine($"from {paket}.generated.funktionen import {basis.Basis}");
-        b.AppendLine();
-        b.AppendLine();
-        b.AppendLine($"class {klasse}({basis.Basis}):");
-        b.AppendLine($"    {basis.Def.Trim()}");
-        b.AppendLine("        raise NotImplementedError");
-        return b.ToString();
     }
 
     private static string DefText(string[] z, Methode m) =>

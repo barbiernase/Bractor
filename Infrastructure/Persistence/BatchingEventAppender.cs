@@ -108,18 +108,11 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         return p.Tcs.Task;
     }
 
-    // ── Lesezugriffe unverändert an den inneren Store durchreichen ──
-    public Task<StreamChanges> ReadChangedStreamsAsync(long afterGlobalSequence, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct)
-        => _inner.ReadChangedStreamsAsync(afterGlobalSequence, typen, limit, ct);
-
     public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(Guid streamId, int fromVersion, CancellationToken ct)
         => _inner.ReadStreamAsync(streamId, fromVersion, ct);
 
     public Task<EventEnvelope?> ReadEventAsync(Guid streamId, int version, CancellationToken ct)
         => _inner.ReadEventAsync(streamId, version, ct);
-
-    public Task<KorrelierteEvents> ReadKorreliertAsync(Guid streamId, int fromVersion, string korrelation, Guid beginn, CancellationToken ct)
-        => _inner.ReadKorreliertAsync(streamId, fromVersion, korrelation, beginn, ct);
 
     public Task<PartitionsSeite> ReadPartitionAsync(
         long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit, CancellationToken ct)

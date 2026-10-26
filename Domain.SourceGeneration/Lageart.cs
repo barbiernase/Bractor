@@ -27,11 +27,8 @@ internal sealed class Lageart
         if (!Bereit) return;
         foreach (var t in typen)
         {
-            // Ergebnis-Events: die Ausgaben jeder Funktion — der Katalog-Form (OneOf in RufeAsync, CQRS068) und der Baustein-Form (die Fälle
-            //   jedes Auf, Funktionsform). Commands unter ihnen bleiben Commands (Command wird vor Event erkannt).
-            if (IstFunktion(t))
-                foreach (var m in t.GetMembers(Funktionsvertrag.Methode).OfType<IMethodSymbol>())
-                    foreach (var e in Blaetter(m.ReturnType)) _ergebnisse.Add(Name(e));
+            // Ergebnis-Events: die Ausgaben jeder Funktion (die Fälle jedes Auf, Funktionsform). Commands unter ihnen bleiben Commands
+            //   (Command wird vor Event erkannt).
             if (Infrastructure.SourceGeneration.Funktionsform.IstBaustein(t))
                 foreach (var a in Infrastructure.SourceGeneration.Funktionsform.Lies(t).Aufs)
                     foreach (var e in a.Ausgaben) _ergebnisse.Add(Name(e));
@@ -62,24 +59,19 @@ internal sealed class Lageart
             if (Name(t) != Dienstvertrag.Marker && Hat(t, Dienst)) return Projektstruktur.Primitive.Dienst;
             if (Hat(t, "IStore")) return Projektstruktur.Primitive.StoreBuendel;
             if (Hat(t, "IReadStore") || Hat(t, "IWriteStore")) return Projektstruktur.Primitive.StoreFaehigkeit;
-            // Ein Client-Vertrag trägt Akteur-Vertrags-Teile — erst der Client, dann der Akteur-Vertrag.
             if (Hat(t, "IClientVertrag")) return Projektstruktur.Primitive.ClientVertrag;
-            if (Hat(t, "IAkteurVertrag`1")) return Projektstruktur.Primitive.AkteurVertrag;
             return Projektstruktur.Primitive.Hilfscode;
         }
         if (Hat(t, "IState")) return Projektstruktur.Primitive.Aggregat;
         if (Hat(t, "ICommand")) return Projektstruktur.Primitive.Command;
         if (Hat(t, "IQuellNachricht")) return Projektstruktur.Primitive.Quelle;
         if (Hat(t, "IEvent")) return _ergebnisse.Contains(Name(t)) ? Projektstruktur.Primitive.FunktionsErgebnis : Projektstruktur.Primitive.Event;
-        if (Hat(t, "IProzessDefinition")) return Projektstruktur.Primitive.Prozess;
-        if (Hat(t, "IPipeline")) return Projektstruktur.Primitive.Fluss;
         if (Hat(t, "IWertobjekt")) return Projektstruktur.Primitive.Wertobjekt;
         if (Hat(t, "IReadModel")) return Projektstruktur.Primitive.ReadModel;
         if (Hat(t, "IQuery")) return Projektstruktur.Primitive.Query;
         if (Hat(t, "IQueryResponse")) return Projektstruktur.Primitive.Antwort;
         if (Hat(t, "ISubscriber")) return Projektstruktur.Primitive.Projektion;
         if (Hat(t, "IReader`1")) return Projektstruktur.Primitive.Reader;
-        if (Hat(t, "IAuftrag`1")) return Projektstruktur.Primitive.Auftrag;
         if (Hat(t, "IFunktion"))
             return Infrastructure.SourceGeneration.Funktionsform.IstBaustein(t) ? Projektstruktur.Primitive.HostFunktion : Projektstruktur.Primitive.FunktionsImplementierung;
         if (Hat(t, Dienst)) return Projektstruktur.Primitive.DienstImplementierung;
@@ -103,17 +95,4 @@ internal sealed class Lageart
 
     /// <summary>Implementiert <paramref name="t"/> den Vertrags-Marker (Metadaten-Name ohne „Abstractions.“, generisch mit `n)?</summary>
     private static bool Hat(INamedTypeSymbol t, string marker) => t.AllInterfaces.Any(i => Name(i) == A + marker);
-
-    /// <summary>Die konkreten Typen in <c>Task&lt;OneOf&lt;A, B&gt;&gt;</c> bzw. <c>Task&lt;A&gt;</c>.</summary>
-    private static IEnumerable<INamedTypeSymbol> Blaetter(ITypeSymbol t)
-    {
-        if (t is not INamedTypeSymbol n) yield break;
-        if (n.IsGenericType && (n.Name == "Task" || n.Name == "ValueTask" || n.Name == "OneOf"))
-        {
-            foreach (var a in n.TypeArguments)
-                foreach (var b in Blaetter(a)) yield return b;
-            yield break;
-        }
-        yield return n.OriginalDefinition;
-    }
 }

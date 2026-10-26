@@ -10,7 +10,7 @@ namespace Infrastructure.Akteure;
 /// <param name="Name">Einfacher Typname des Akteurs (Schlüssel der Composition-Root-Abbildung).</param>
 /// <param name="Typ">Der Akteur-Typ selbst.</param>
 /// <param name="Queries">darf fragen — bzw. als Zuständiger beantworten, wenn das System sie nicht selbst bedient</param>
-/// <param name="Trigger">darf starten — bzw. als Zuständiger verarbeiten, wenn keine Pipeline ihn bedient</param>
+/// <param name="Quellen">darf als Quell-Nachricht hineingeben (<c>IQuellNachricht</c>: von einem Treiber oder vom Client)</param>
 /// <param name="TransientEvents">darf veröffentlichen (verlierbare Hinweise vom Client)</param>
 /// <param name="Commands">darf auslösen (<c>IDarf</c>)</param>
 /// <param name="Hoert">abgeleitet: die Events der Aggregate seiner Commands und der Projektionen hinter seinen Queries; bei einem Client
@@ -21,7 +21,7 @@ public sealed record AkteurRechte(
     Type Typ,
     IReadOnlySet<Type> Commands,
     IReadOnlySet<Type> Queries,
-    IReadOnlySet<Type> Trigger,
+    IReadOnlySet<Type> Quellen,
     IReadOnlySet<Type> TransientEvents,
     IReadOnlySet<Type> Hoert,
     string Art = "")
@@ -57,7 +57,7 @@ public sealed record AkteurRechte(
         if (akteure.Count == 1) return akteure[0];
         static HashSet<Type> U(IEnumerable<IReadOnlySet<Type>> s) => s.SelectMany(x => x).ToHashSet();
         return new AkteurRechte(string.Join("+", akteure.Select(a => a.Name)), typeof(IAkteur),
-            U(akteure.Select(a => a.Commands)), U(akteure.Select(a => a.Queries)), U(akteure.Select(a => a.Trigger)),
+            U(akteure.Select(a => a.Commands)), U(akteure.Select(a => a.Queries)), U(akteure.Select(a => a.Quellen)),
             U(akteure.Select(a => a.TransientEvents)), U(akteure.Select(a => a.Hoert)),
             string.Join("+", akteure.Select(a => a.Art).Distinct()))
         { Teile = akteure, Funktionen = U(akteure.Select(a => a.Funktionen)) };
@@ -65,7 +65,7 @@ public sealed record AkteurRechte(
 
     /// <summary>Darf der Akteur <paramref name="typ"/> hineingeben?</summary>
     public bool DarfHinein(Type typ) =>
-        Commands.Contains(typ) || Queries.Contains(typ) || Trigger.Contains(typ) || TransientEvents.Contains(typ);
+        Commands.Contains(typ) || Queries.Contains(typ) || Quellen.Contains(typ) || TransientEvents.Contains(typ);
 
     /// <summary>Darf der Akteur das Event <paramref name="typ"/> abonnieren? <see cref="CommandFailed"/> immer —
     /// es ist die gezielte Rückmeldung auf seine eigenen Commands.</summary>

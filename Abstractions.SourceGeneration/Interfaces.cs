@@ -36,10 +36,7 @@ namespace Abstractions.SourceGeneration
         Command,
         Event,
         Query,
-        QueryResponse,
-        Trigger,
-        // Auftrag einer Katalog-Funktion (IAuftrag<F>): reist über gRPC zu externen Ausführern (Python-Worker).
-        Auftrag
+        QueryResponse
     }
 
     public interface IDomainAnalyzer

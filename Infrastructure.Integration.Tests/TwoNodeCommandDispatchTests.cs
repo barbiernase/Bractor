@@ -1,7 +1,6 @@
 using Abstractions;
 using Domain.ImagePair;
 using Infrastructure.Extensions;
-using Infrastructure.Pipeline;
 using Infrastructure.Projections;
 using Infrastructure.Projections.Generated;
 using FluentAssertions;
@@ -59,7 +58,7 @@ public class TwoNodeCommandDispatchTests
                 result.Should().NotBeNull($"Command für {pairId} muss (ggf. cross-node) zugestellt werden.");
                 result!.Success.Should().BeTrue($"Aggregat muss {pairId} erfolgreich anlegen.");
                 // Version 1: nur das Fakt (DatensatzErstellt) — die Quittung des Commands steht in der Inbox-Tabelle, nicht im Stream
-                //   (docs/04 §4.4); seit T2b (docs/08 §8.4) ist auch der Client-Pfad idempotent (AggregateActorBase.HandleClientCommand).
+                //   (docs/04 §4.6); seit T2b (docs/08 §8.4) ist auch der Client-Pfad idempotent (AggregateActorBase.HandleClientCommand).
                 result.NewVersion.Should().Be(1);
                 result.ErsteVersion.Should().Be(1, "der Command schrieb genau Version 1");
                 (await hostA.Services.GetRequiredService<IEventStoreRepository>().ReadStreamAsync(pairId, 1, default))
@@ -112,7 +111,6 @@ public class TwoNodeCommandDispatchTests
             opts.EnableGrpc = false;
             opts.ClusterName = clusterName;   // GLEICHER Name → ein Cluster, zwei Member
         });
-        GeneratedPipelines.RegisterAllPipelines(builder.Services);
         builder.Services.AddGeneratedPullPaths();
 
         return builder.Build();

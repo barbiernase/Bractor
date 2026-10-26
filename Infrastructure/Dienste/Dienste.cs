@@ -77,12 +77,28 @@ public static class DienstExtensions
     /// nach den Abschnitten <c>Dienste</c> und <c>Konfig</c> der Umgebung. Muss NACH <c>BindeFunktionen</c> stehen.
     /// </summary>
     public static IServiceCollection BindeDienste(this IServiceCollection services, UmgebungKonfig u, IConfiguration konfig)
-        => services.BindeDienste(u.Dienste, konfig.GetSection(Dienstvertrag.KonfigAbschnitt),
-            Anwendung.Dienste.Namen, Anwendung.Dienste.Implementierungen, Anwendung.Dienste.Braucht, Anwendung.Dienste.Konfigs);
+        => services.BindeDienste(u.Dienste, konfig.GetSection(Dienstvertrag.KonfigAbschnitt));
 
+    /// <summary>Wie oben, mit der Wahl und dem Konfig-Abschnitt direkt — gebunden wird für die Funktionen, die nach den schon registrierten
+    /// Bindungen (<c>BindeFunktionen</c>) im Host rechnen, aus den generierten Tabellen der angemeldeten Anwendung.</summary>
     public static IServiceCollection BindeDienste(this IServiceCollection services, IReadOnlyDictionary<string, DienstKonfig> wahl,
-        IConfigurationSection konfigAbschnitt, IReadOnlyDictionary<string, Type> namen, IReadOnlyList<DienstImplementierung> implementierungen,
-        IReadOnlyDictionary<Type, Type[]> braucht, IReadOnlyList<KonfigRecord> konfigs)
+        IConfigurationSection konfigAbschnitt)
+    {
+        // Die Funktionen, die im Host laufen: ihre Umsetzung (die Klasse selbst bzw. die gewählte Implementierung der Schnittstelle).
+        var bindungen = services.Select(d => d.ImplementationInstance).OfType<BausteinBindung>().ToList();
+        var umsetzungen = new List<Type>();
+        foreach (var b in Anwendung.Funktionen.Bausteine)
+            if (FunktionsBausteinWiring.Gebunden(b, bindungen) is { Laufort: FunktionsLaufort.Host } bindung
+                && b.Umsetzungen.Where(x => bindung.Umsetzung is null || x.Name == bindung.Umsetzung).ToList() is [var umsetzung])
+                umsetzungen.Add(umsetzung.Typ);
+        return services.BindeDienste(wahl, konfigAbschnitt, umsetzungen,
+            Anwendung.Dienste.Namen, Anwendung.Dienste.Implementierungen, Anwendung.Dienste.Braucht, Anwendung.Dienste.Konfigs);
+    }
+
+    /// <param name="umsetzungen">Die Klassen der Funktionen, die auf diesem Knoten im Host rechnen — von ihrem Bedarf aus wird gebunden.</param>
+    public static IServiceCollection BindeDienste(this IServiceCollection services, IReadOnlyDictionary<string, DienstKonfig> wahl,
+        IConfigurationSection konfigAbschnitt, IReadOnlyCollection<Type> umsetzungen, IReadOnlyDictionary<string, Type> namen,
+        IReadOnlyList<DienstImplementierung> implementierungen, IReadOnlyDictionary<Type, Type[]> braucht, IReadOnlyList<KonfigRecord> konfigs)
     {
         // 1. Die Umgebung nennt nur bekannte Dienste und Konfig-Records.
         foreach (var name in wahl.Keys.Where(n => !namen.ContainsKey(n)))
@@ -109,15 +125,8 @@ public static class DienstExtensions
                 Karte(dienst));
         }
 
-        // 3. Vom Bedarf der gebundenen Funktions-Implementierungen aus, transitiv; ein Kreis über Dienste ist ein Fehler.
-        var start = services.Select(d => d.ImplementationInstance).OfType<FunktionsBindung>().Where(b => b.Impl != null).Select(b => b.Impl!).Distinct().ToList();
-        // Funktionen in Baustein-Form, die im Host laufen: ihre Umsetzung (die Klasse selbst bzw. die gewählte Implementierung der Schnittstelle).
-        var bausteinBindungen = services.Select(d => d.ImplementationInstance).OfType<BausteinBindung>().ToList();
-        foreach (var b in Anwendung.Funktionen.Bausteine)
-            if (FunktionsBausteinWiring.Gebunden(b, bausteinBindungen) is { Laufort: FunktionsLaufort.Host } bindung
-                && b.Umsetzungen.Where(u => bindung.Umsetzung is null || u.Name == bindung.Umsetzung).ToList() is [var umsetzung])
-                start.Add(umsetzung.Typ);
-        start = start.Distinct().ToList();
+        // 3. Vom Bedarf der Funktionen im Host aus, transitiv; ein Kreis über Dienste ist ein Fehler.
+        var start = umsetzungen.Distinct().ToList();
         var gebunden = new Dictionary<Type, DienstImplementierung>();
         var konfigGebunden = new HashSet<Type>();
         var stapel = new List<Type>();

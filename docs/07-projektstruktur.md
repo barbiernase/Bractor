@@ -20,14 +20,14 @@
 
 | Projekt (Rolle) | gehört hinein | referenziert |
 |---|---|---|
-| `Domain` | Aggregate (State, Decider, Applier), Commands, Events, Ablehnungen, Wertobjekte, Enums, Quellen-Typen, Prozesse | Abstractions, Core |
-| `Domain.Projections` | ReadModels, Queries, Antworten, Store-Fähigkeiten und -Bündel, Projektionen, Reaktionen, Reader | Domain |
-| `Domain.Pipeline` | Flüsse, Funktionen — als Klasse (im Host) oder Schnittstelle (draußen) mit `Auf`, samt ihren Ausgabe-Events —, Katalog-Funktionen bis Phase 4 des Plans (Schnittstelle, Auftrag, Ergebnis-Events, Implementierung), Domänen-Dienste (Schnittstelle, Implementierung), Konfig-Records | Domain, Domain.Projections |
-| `Domain.Akteure` | Akteure, Akteur-Verträge, Client-Verträge | Domain, Domain.Projections, Domain.Pipeline |
+| `Domain` | Aggregate (State, Decider, Applier), Commands, Events, Ablehnungen, Wertobjekte, Enums, Quellen-Typen | Abstractions, Core |
+| `Domain.Projections` | ReadModels, Queries, Antworten, Store-Fähigkeiten und -Bündel, Projektionen, Reader | Domain |
+| `Domain.Pipeline` | Funktionen — als Klasse (im Host) oder Schnittstelle (draußen) mit `Auf`, samt ihren Ausgabe-Events und den Umsetzungen einer Schnittstelle —, Domänen-Dienste (Schnittstelle, Implementierung), Konfig-Records | Domain, Domain.Projections |
+| `Domain.Akteure` | Akteure, Client-Verträge | Domain, Domain.Projections, Domain.Pipeline |
 | `Domain.Infrastructure` | Store-Implementierungen | Domain, Domain.Projections |
 | `Domain.Leitung` | die Domänen-DTOs der Leitung (`domain.proto`, vom Codegen) und ihr Nutzlast-Mapper (`GeneratedNutzlast`) — nichts Handgeschriebenes | Domain, Domain.Projections, Domain.Pipeline |
 | `Domain.Laufzeit` | die Komposition: alle Laufzeit-Generate, `GeneratedAnwendung`, `AddCqrs` der Hosts, die STJ-Kontexte — nichts Handgeschriebenes | alle Rollen-Projekte + Infrastructure |
-| `Domain.Client.Worker.Python.*` | Python-Implementierungen von Zusagen und externen Funktionen (`funktionen/<modul>.py`), generierte Basen unter `domain_client/generated/` | — |
+| `Domain.Client.Worker.Python.*` | Python-Implementierungen getragener Funktionen (`funktionen/<modul>.py`), generierte Basen unter `domain_client/generated/` | — |
 | `Domain.Client.Modules.*` | GUI-Clients (außerhalb des Editors, W12) | Client.Infrastructure |
 | `umgebungen/` | `umgebung.<name>.json` je Umgebung (Ordnername: `Projektstruktur.UmgebungsOrdner`) | — |
 
@@ -58,13 +58,11 @@ Vertrag hört auf beliebige Events, auch auf Ergebnis-Events von Funktionen.
 | | `Commands.cs`, `Events.cs` | Commands; Events und Ablehnungen |
 | | `ValueObjects.cs`, `Enums.cs` | Wertobjekte, Enums |
 | | `Quellen.cs` | Quellen-Typen (`sealed record X : DateiGemeldet;`) |
-| | `<Prozess>.cs` | ein Prozess je Datei |
 | `Domain.Projections/<Bereich>/` | `ReadModels.cs`, `Queries.cs`, `Responses.cs` | Read-Models, Queries, Antworten |
 | | `I<Store>.cs` | Store-Bündel mit seinen Fähigkeiten |
-| | `<Projektion>.cs`, `<Reaktion>.cs`, `<Reader>.cs` | je Klasse eine Datei |
-| `Domain.Akteure/` | `Akteure.cs`, `Clients.cs` | Akteure mit ihren Verträgen; Client-Verträge |
-| `Domain.Pipeline/<Bereich>/` | `<Fluss>.cs` | ein Fluss je Datei |
-| | `Funktionen.cs`, `Auftraege.cs`, `Events.cs` | Funktions-Schnittstellen (draußen); Aufträge; Ausgabe- bzw. Ergebnis-Events der Funktionen |
+| | `<Projektion>.cs`, `<Reader>.cs` | je Klasse eine Datei |
+| `Domain.Akteure/` | `Akteure.cs`, `Clients.cs` | Akteure; Client-Verträge |
+| `Domain.Pipeline/<Bereich>/` | `Funktionen.cs`, `Events.cs` | Funktions-Schnittstellen (draußen); Ausgabe-Events der Funktionen |
 | | `<Funktion>.cs` | je Funktion als Klasse (im Host, Primitive `HostFunktion`) eine Datei |
 | | `<Implementierung>.cs` | je Funktions- bzw. Dienst-Implementierung eine Datei |
 | | `I<Dienst>.cs`, `Konfigs.cs` | Dienst-Schnittstelle; Konfig-Records |
@@ -77,7 +75,6 @@ Primitive ist, liegt im Bereichs-Ordner seines Projekts und erscheint im Editor 
 
 | Werkzeug | nutzt die Struktur für | Ort |
 |---|---|---|
-| Prozess-Registry | je Assembly `{Assembly}.Prozess.GeneratedProzessRegeln`, in der Laufzeit vereinigt; Prozesse ohne Registry = CQRS099 | `ProzessRegelnGenerator`, `ProzessVerbundGenerator` |
 | Leseseiten-Generate | Namespace = Projekt (`ProjectionQueryService`, `{Projekt}.Generated`), Leseseite der Wurzel | `ProjectionQueryServiceGenerator`, `ProjectionServicesGenerator` |
 | Codegen-Schritt (Proto, STJ, Python-Generate) | je Anwendung (`--wurzel`, `--projekt`, `--alle` = je Komposition eine) Eingaben (`CodegenProjekte`, nur vorhandene) und Ausgabeorte (Proto nur mit Leitung, Python nur mit Worker); erzeugt nur bei geänderten DLLs (Hash je Wurzel) | `Cqrs.Codegen`, `Cqrs.Codegen/CqrsCodegen.targets` (importiert von der Leitung bzw. ohne Leitung von der Komposition), `codegen.sh` |
 | Projektlage (`--check`, Werkbank) | die Komposition der `StandardWurzel` ist die Laufzeit der Werkzeuge; eine zweite Anwendung derselben Solution bleibt außen vor | `GraphExtractor.Kern/Projektlage.cs` |
@@ -95,7 +92,7 @@ wie Generator und Extractor —, eine Klasse mit `IFunktion` und `Auf` ist eine 
 
 - Die Wurzel der Werkzeuge (Werkbank, Scaffolder, `--check`) ist `Projektstruktur.StandardWurzel`; Generatoren leiten sie aus dem Projektnamen
   ab, der Codegen aus dem Projekt, das ihn auslöst (`--projekt`). Die zweite Anwendung der Solution ist die Prüfdomäne (`Pruefdomaene`,
-  `Pruefdomaene.Projections` mit der Reaktion `NachschubBeiMindestbestand`, Komposition `Pruefdomaene.Laufzeit`, Host `Host.Pruefdomaene` für die
+  `Pruefdomaene.Pipeline` mit den Funktionen `Auftragsabwicklung`, `Verteilabwicklung` und `Nachschub`, Komposition `Pruefdomaene.Laufzeit`, Host `Host.Pruefdomaene` für die
   E2E-Messung, Tests in `Pruefdomaene.Integration.Tests`); damit das Werkzeug ihre DLLs hat, referenziert `Cqrs.Codegen` auch sie. Sie hat keine
   Leitung — eine Anwendung ohne Leitung startet keinen gRPC-Dienst (`IAnwendung.Nutzlast` ist dann `null`); hinein geht es über den JSON-Eingang
   und die Quellen.

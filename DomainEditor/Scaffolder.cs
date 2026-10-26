@@ -6,17 +6,13 @@ namespace DomainEditor;
 /// <summary>Welche Rolle eine generierte Datei hat — bestimmt, wie sie in eine bestehende Datei gemischt wird.</summary>
 public enum DateiArt
 {
-    Typen, State, Decider, Applier, Saga,
+    Typen, State, Decider, Applier,
     /// <summary>Fähigkeits- und Bündel-Interfaces eines Stores (Mischen: fehlende Interfaces + fehlende Basen im Bündel).</summary>
     Schnittstellen,
     /// <summary>Methoden einer Store-Implementierung (Mischen: fehlende Methoden nach Name + Parametertypen).</summary>
     StoreImpl,
-    /// <summary>Projektion/Reaktion bzw. Reader (Mischen: fehlende Handles nach Eingangstyp; Parameter-Abgleich gesondert).</summary>
+    /// <summary>Projektion bzw. Reader (Mischen: fehlende Handles nach Eingangstyp; Parameter-Abgleich gesondert).</summary>
     Konsument, Leser,
-    /// <summary>Pipeline (Mischen: fehlende Handles nach Eingangstyp; Parameter/Rückgabe-Abgleich gesondert).</summary>
-    Pipeline,
-    /// <summary>Pipeline als Fluss (§14): neu → voll; bestehend → nur der Ausdruck der Fluss-Property (Abgleich).</summary>
-    Fluss,
 }
 
 /// <summary>
@@ -29,7 +25,7 @@ public sealed record GenerierteDatei(string Pfad, string Inhalt, DateiArt Art = 
 /// Der DETERMINISTISCHE Scaffold-Generator (record-zentrisch). Aus den getaggten Records + Enums + der Aggregat-
 /// Komposition erzeugt er C#. WO etwas hinkommt, entscheidet der Code, nicht der Scaffolder: jeder Typ geht in seine
 /// echte Datei (<c>Datei</c>); ein neuer Typ in die Datei gleichartiger Typen seines Namespace; ein neuer Namespace in
-/// das Verzeichnis/Dateimuster, das der übrige Code benutzt (<see cref="Rahmen"/>). Marker- und DSL-Namen kommen über
+/// das Verzeichnis/Dateimuster, das der übrige Code benutzt (<see cref="Rahmen"/>). Marker-Namen kommen über
 /// <c>nameof</c>/<c>typeof</c> aus dem Vertrag.
 ///
 /// Erzeugt bewusst NUR die handgeschriebenen Dateien — Id/Version, State-Property, Handler und Factory liefern die
@@ -46,43 +42,6 @@ public static class Scaffolder
     private static readonly string IState = nameof(Abstractions.IState);
     private static readonly string IDecider = typeof(IDecider<>).Name.Split('`')[0];
     private static readonly string IApplier = typeof(IApplier<>).Name.Split('`')[0];
-    private static readonly string IProzessDefinition = nameof(Abstractions.IProzessDefinition);
-    private static readonly string ProzessRegeln = nameof(Abstractions.ProzessRegeln);
-    private static readonly string Regeln = nameof(Abstractions.IProzessDefinition.Regeln);
-    private static readonly string Prozess = typeof(Prozess<>).Name.Split('`')[0];
-    private static readonly string Definiere = nameof(Prozess<IEvent>.Definiere);
-    private static readonly string Auf = nameof(RegelBauer.Auf);
-    private static readonly string Und = nameof(RegelBauer<IEvent>.Und);
-    private static readonly string UndAlle = nameof(RegelBauer<IEvent>.UndAlle);
-    private static readonly string Sende = nameof(RegelBauer<IEvent>.Sende);
-    private static readonly string SendeJe = nameof(RegelBauer<IEvent>.SendeJe);
-    private static readonly string Rufe = nameof(RegelBauer<IEvent>.Rufe);
-    private static readonly string Zeitlimit = nameof(RegelAbschluss<IEvent>.Zeitlimit);
-    // ── Pipeline als Fluss (§14) ──
-    private static readonly string IPipeline = nameof(Abstractions.IPipeline);
-    private static readonly string PipelineFluss = nameof(Abstractions.PipelineFluss);
-    private static readonly string FlussProperty = nameof(Abstractions.IPipeline.Fluss);
-    private static readonly string FlussDefiniere = nameof(Abstractions.PipelineFluss.Definiere);
-    private static readonly string FlussQuelle = nameof(PipelineBauer.Quelle);
-    private static readonly string FlussAuf = nameof(PipelineBauer.Auf);
-    private static readonly string FlussAlle = nameof(PipelineBauer.Alle);
-    private static readonly string FlussRufe = nameof(Draht<IEvent>.Rufe);
-    private static readonly string FlussSende = nameof(Draht<IEvent>.Sende);
-    private static readonly string FlussJe = nameof(Draht<IEvent>.Je);
-    private static readonly string FlussBei = nameof(AufrufKnoten.Bei);
-    private static readonly string FlussBeiZeitlimit = nameof(AufrufKnoten.BeiZeitlimit);
-    private static readonly string FlussBeiAbgelehnt = nameof(AufrufKnoten.BeiAbgelehnt);
-    private static readonly string FlussZeitlimit = nameof(RufKnoten<IFunktion>.Zeitlimit);
-    private static readonly string FlussOder = nameof(RufKnoten<IFunktion>.Oder);
-    private static readonly string FlussSammle = nameof(JeKnoten<IEvent, object>.Sammle);
-    private static readonly string FlussStrom = nameof(QuellKnoten<IEvent>.Strom);
-    private static readonly string FlussWarte = nameof(StromDraht.Warte);
-    // ── Katalog-Funktionen ──
-    private static readonly string IFunktion = nameof(Abstractions.IFunktion);
-    private static readonly string IAuftrag = typeof(IAuftrag<>).Name.Split('`')[0];
-    private static readonly string IAusfuehrung = nameof(Abstractions.IAusfuehrung);
-    private static readonly string RückgängigDurch = nameof(RegelAbschluss<IEvent>.RückgängigDurch);
-    private static readonly string RückgängigDurchJe = nameof(RegelAbschluss<IEvent>.RückgängigDurchJe);
     private static readonly string OneOf = typeof(OneOf<>).Name.Split('`')[0];
     // ── Leseseite ──
     private static readonly string IQuery = nameof(Abstractions.IQuery);
@@ -102,11 +61,6 @@ public static class Scaffolder
     private static readonly string ReadContext = nameof(Abstractions.ReadContext);
     private static readonly string ProjectionReader = nameof(ProjectionReaderAttribute)[..^"Attribute".Length];
     private static readonly string TrackDeps = nameof(ProjectionReaderAttribute.TrackDeps);
-    private static readonly string IPipelineHandler = nameof(Abstractions.IPipelineHandler);
-    private static readonly string IPipelineTrigger = nameof(Abstractions.IPipelineTrigger);
-    private static readonly string IPipelineSelfMessage = nameof(Abstractions.IPipelineSelfMessage);
-    private static readonly string PipelineContext = nameof(Abstractions.PipelineContext);
-    private static readonly string PipelineId = nameof(Abstractions.IPipelineHandler.PipelineId);
     // ── Akteure ──
     private static readonly string IAkteur = nameof(Abstractions.IAkteur);
     private static readonly string IDarf = typeof(IDarf<>).Name.Split('`')[0];
@@ -120,7 +74,7 @@ public static class Scaffolder
     {
         // Neue Karten in das Projekt ihrer Rolle (docs/07): Namespace = Projekt + Bereich, Datei nach der Tabelle.
         modell = Strukturort.Normalisiere(modell);
-        var ergebnisse = modell.Funktionen.SelectMany(f => f.Ergebnisse).ToHashSet(StringComparer.Ordinal);
+        var ergebnisse = Strukturort.Funktionsergebnisse(modell);
         var dateien = new List<GenerierteDatei>();
         var rahmen = modell.Rahmen;
 
@@ -162,25 +116,6 @@ public static class Scaffolder
             dateien.Add(Platziert(agg.Datei, v, $"{agg.Name}.cs", StateDatei(agg, modell), DateiArt.State));
             dateien.Add(Platziert(agg.DeciderDatei, v, $"{agg.Name}.{rahmen.DeciderKlasse}.cs", DeciderDatei(agg, decider, modell), DateiArt.Decider));
             dateien.Add(Platziert(agg.ApplierDatei, v, $"{agg.Name}.{rahmen.ApplierKlasse}.cs", ApplierDatei(agg, applier, modell), DateiArt.Applier));
-        }
-
-        foreach (var saga in modell.Sagas)
-            dateien.Add(Platziert(saga.Datei, Verzeichnis(modell, saga.Namespace), $"{saga.Name}.cs", SagaDatei(saga, modell), DateiArt.Saga));
-
-        // ── Pipelines als Fluss → je Pipeline ihre Datei (neu voll; bestehend gleicht DateiAbgleich nur die Fluss-Property ab) ──
-        foreach (var f in modell.Fluesse)
-            dateien.Add(Platziert(f.Datei, Verzeichnis(modell, f.Namespace), $"{f.Name}.cs", FlussDatei(f, modell), DateiArt.Fluss));
-
-        // ── Katalog-Funktionen → je Funktion ihre Schnittstelle (nur die Signatur; die Implementierung ist Bindung) ──
-        foreach (var f in modell.Funktionen)
-            dateien.Add(Platziert(f.Datei, Verzeichnis(modell, f.Namespace),
-                Strukturort.InStruktur(f.Namespace) ? Abstractions.Projektstruktur.Datei(Abstractions.Projektstruktur.Primitive.Funktion, f.Name) : $"{f.Name}.cs",
-                FunktionsDatei(f, modell), DateiArt.Typen));
-        // … und ihre C#-Implementierung, wenn der Editor einen Code-Block trägt und der Code noch keine hat (neu: Rumpf aus 📝/🤖).
-        foreach (var f in modell.Funktionen.Where(f => f.Implementierung == null && f.Entwurf != null))
-        {
-            var k = ImplKlasse(f, modell);
-            dateien.Add(Platziert(null, Verzeichnis(modell, f.Namespace), $"{k}.cs", FunktionsImplDatei(f, k, modell), DateiArt.Typen));
         }
 
         // ── Domänen-Dienste (konzept-werkbank §12.3 E11) → je Dienst seine Schnittstelle; je NEUE Implementierung (ohne Datei) ihre Klasse mit throw-Stubs ──
@@ -237,9 +172,6 @@ public static class Scaffolder
             RecordArt.Antwort => "Responses.cs",
             RecordArt.ReadModel => "ReadModels.cs",
             RecordArt.Konfig => "Konfigs.cs",
-            RecordArt.Trigger => "Triggers.cs",
-            RecordArt.Selbst => "SelbstNachrichten.cs",
-            RecordArt.Auftrag => "Auftraege.cs",
             _ => "Enums.cs",
         };
         var v = Verzeichnis(m, ns);
@@ -286,7 +218,7 @@ public static class Scaffolder
         _ => IAkteur,
     };
 
-    /// <summary>Gehört dieser Basistyp zum Akteur-Vertrag (<c>IAkteur</c> bzw. <c>IDarf&lt;…&gt;</c>)? Alles andere bleibt beim Abgleich stehen.</summary>
+    /// <summary>Gehört dieser Basistyp zum Akteur (<c>IAkteur</c>, seine Art bzw. <c>IDarf&lt;…&gt;</c>)? Alles andere bleibt beim Abgleich stehen.</summary>
     public static bool IstAkteurBasis(string basis)
     {
         var name = basis.Split('<')[0].Split('.').Last().Trim();
@@ -407,7 +339,7 @@ public static class Scaffolder
         });
         // Leseseite: Queries, Responses, ReadModels — je Art ein Abschnitt mit ihrem Marker.
         foreach (var (art, marker) in new (string, string?)[] { (RecordArt.Query, IQuery), (RecordArt.Antwort, IQueryResponse), (RecordArt.ReadModel, IReadModel),
-                     (RecordArt.Konfig, null), (RecordArt.Trigger, IPipelineTrigger), (RecordArt.Selbst, IPipelineSelfMessage) })
+                     (RecordArt.Konfig, null) })
         {
             var liste = records.Where(r => r.Kind == art).ToList();
             if (liste.Count > 0) abschnitte.Add(() =>
@@ -418,67 +350,11 @@ public static class Scaffolder
             });
         }
 
-        // Aufträge: je Record der Marker seiner Funktion (IAuftrag<F>) — der eine Eingang einer Katalog-Funktion.
-        var auftraege = records.Where(r => r.Kind == RecordArt.Auftrag).ToList();
-        if (auftraege.Count > 0) abschnitte.Add(() =>
-        {
-            for (var i = 0; i < auftraege.Count; i++)
-                RecordZeilen(b, auftraege[i], string.IsNullOrWhiteSpace(auftraege[i].Funktion) ? null : $"{IAuftrag}<{auftraege[i].Funktion}>",
-                    i < auftraege.Count - 1);
-        });
-
         for (var i = 0; i < abschnitte.Count; i++)
         {
             if (i > 0) b.AppendLine();
             abschnitte[i]();
         }
-        return b.ToString();
-    }
-
-    // ── Katalog-Funktion: nur die Signatur (CQRS068) ─────────────────────────────────────────
-    private static string FunktionsDatei(Funktion f, EditorModell modell)
-    {
-        var b = Kopf(f.Namespace, Usings(f.Namespace, modell, [modell.Rahmen.VertragsNamespace],
-            [f.Auftrag, .. f.Ergebnisse, .. f.Faehigkeiten.Select(p => p.Typ)], []));
-        Doku(b, f.Doku, "");
-        b.Append(FunktionsInterface(f));
-        return b.ToString();
-    }
-
-    /// <summary>Name der neuen Implementierung: die Schnittstelle ohne führendes I (IBildVerkleinerung → BildVerkleinerung), bei Kollision + „Impl".</summary>
-    public static string ImplKlasse(Funktion f, EditorModell modell)
-    {
-        var n = f.Name.Length > 1 && f.Name[0] == 'I' && char.IsUpper(f.Name[1]) ? f.Name[1..] : f.Name + "Impl";
-        return modell.Records.Any(r => r.Name == n) || modell.Funktionen.Any(x => x.Name == n) ? n + "Impl" : n;
-    }
-
-    /// <summary>
-    /// Die C#-Implementierung einer neuen Funktion: <c>public sealed class X : IX { public async Task&lt;OneOf&lt;…&gt;&gt; RufeAsync(…) { Rumpf } }</c>.
-    /// Immer <c>async</c> mit Block-Rumpf — so passt jeder Rumpf aus 📝/🤖 (die Konsole ersetzt nur den Block). Leer: throw-Platzhalter.
-    /// Laufort ist danach eine Bindung im Host (<c>AddFunktion&lt;IX, X&gt;</c>).
-    /// </summary>
-    private static string FunktionsImplDatei(Funktion f, string klasse, EditorModell modell)
-    {
-        var b = Kopf(f.Namespace, Usings(f.Namespace, modell, [modell.Rahmen.VertragsNamespace],
-            [f.Auftrag, .. f.Ergebnisse, .. f.Faehigkeiten.Select(p => p.Typ), .. f.Konstruktor.Select(p => p.Typ)], []));
-        b.AppendLine($"public sealed class {klasse}{(f.Konstruktor.Count == 0 ? "" : $"({ParameterListe(f.Konstruktor)})")} : {f.Name}");
-        b.AppendLine("{");
-        var faehigkeiten = string.Concat(f.Faehigkeiten.Select(p => $", {p.Typ} {p.Name}"));
-        b.AppendLine($"    public async Task<{OneOf}<{string.Join(", ", f.Ergebnisse)}>> {Funktionsvertrag.Methode}({f.Auftrag} auftrag, {IAusfuehrung} x{faehigkeiten})");
-        b.AppendLine("    {");
-        if (string.IsNullOrWhiteSpace(f.Entwurf))
-        {
-            b.AppendLine("        await Task.CompletedTask;");
-            b.AppendLine($"        throw new NotImplementedException(\"TODO: {f.Name}\");");
-        }
-        else
-        {
-            var rb = new StringBuilder();
-            Eingerückt(rb, f.Entwurf, "        ");
-            b.Append(rb.ToString().TrimEnd('\n')).AppendLine();
-        }
-        b.AppendLine("    }");
-        b.AppendLine("}");
         return b.ToString();
     }
 
@@ -540,18 +416,6 @@ public static class Scaffolder
         return b.ToString();
     }
 
-    /// <summary><c>public interface IX : IFunktion { Task&lt;OneOf&lt;E…&gt;&gt; RufeAsync(XAuftrag auftrag, IAusfuehrung x); }</c></summary>
-    public static string FunktionsInterface(Funktion f)
-    {
-        var b = new StringBuilder();
-        b.AppendLine($"public interface {f.Name} : {IFunktion}");
-        b.AppendLine("{");
-        var faehigkeiten = string.Concat(f.Faehigkeiten.Select(p => $", {p.Typ} {p.Name}"));
-        b.AppendLine($"    Task<{OneOf}<{string.Join(", ", f.Ergebnisse)}>> {Funktionsvertrag.Methode}({f.Auftrag} auftrag, {IAusfuehrung} x{faehigkeiten});");
-        b.AppendLine("}");
-        return b.ToString();
-    }
-
     /// <summary>
     /// Ein Record in SEINER deklarierten Form: Doku, Attribute, <c>{Typart} X(Positions-Felder) : Marker, Basen</c>, im Rumpf
     /// die Property-Felder (mit ihrem Accessor-Satz) und der Handcode (Zusatz). Ohne Rumpf-Inhalt: <c>…;</c>.
@@ -597,8 +461,7 @@ public static class Scaffolder
         };
     }
 
-    private static IEnumerable<string> RecordTypen(Record r) =>
-        string.IsNullOrWhiteSpace(r.Funktion) ? r.Felder.Select(f => f.Typ) : r.Felder.Select(f => f.Typ).Append(r.Funktion);
+    private static IEnumerable<string> RecordTypen(Record r) => r.Felder.Select(f => f.Typ);
 
     // ── Aggregat-Komposition ──────────────────────────────────────────────────────────────────
     private static IEnumerable<string> AggregatTypen(Aggregat agg, IReadOnlyList<DecideRegel> decider, IReadOnlyList<ApplyRegel> applier) =>
@@ -685,230 +548,7 @@ public static class Scaffolder
         return b.ToString();
     }
 
-    // ── Saga / Prozess ────────────────────────────────────────────────────────────────────────
-    private static string SagaDatei(Saga saga, EditorModell modell)
-    {
-        var referenzen = new List<string> { saga.TriggerEvent };
-        foreach (var st in saga.Schritte)
-        {
-            referenzen.AddRange(st.Wenn);
-            if (!string.IsNullOrWhiteSpace(st.Rufe)) { referenzen.Add(st.Rufe); referenzen.Add(AuftragVon(st.Rufe, modell) ?? st.Rufe); }
-            else referenzen.Add(st.Sende);
-            if (st.SammelEvent is not null) referenzen.Add(st.SammelEvent);
-            if (st.Kompensation is not null) referenzen.Add(st.Kompensation);
-        }
-        var b = Kopf(saga.Namespace, Usings(saga.Namespace, modell, [modell.Rahmen.VertragsNamespace], referenzen, saga.ExtraUsings));
-        Doku(b, saga.Doku, "");
-        b.AppendLine($"public sealed class {saga.Name} : {IProzessDefinition}");
-        b.AppendLine("{");
-        b.AppendLine($"    public {ProzessRegeln} {Regeln} => {Prozess}<{saga.TriggerEvent}>.{Definiere}(p =>");
-        b.AppendLine("    {");
-
-        for (var i = 0; i < saga.Schritte.Count; i++)
-        {
-            SchrittZeilen(b, saga.Schritte[i], modell);
-            if (i < saga.Schritte.Count - 1) b.AppendLine();
-        }
-
-        b.AppendLine("    });");
-        b.AppendLine("}");
-        return b.ToString();
-    }
-
-    // ── Pipeline als Fluss (docs/konzept-editor-pipelines.md §14) ─────────────────────────────────────────
-    //    Je Knoten eine Anweisung in Deklarations-Reihenfolge: var name = <Draht>.Rufe<F>(λ).Zeitlimit(…).Oder(…, λ);
-    //    Lambda-Parameter heißen wie die Knoten, von denen der Draht kommt — so liest sich die Zuordnung wie die Tabelle im
-    //    Editor („Pfad ← vorschau.Pfad“).
-
-    private static string FlussDatei(FlussPipeline f, EditorModell modell)
-    {
-        var referenzen = new List<string>();
-        var extraNs = new List<string>(f.ExtraUsings);
-        foreach (var s in f.Knoten)
-        {
-            referenzen.Add(s.Typ);
-            if (s.Art == FlussArt.Funktion && modell.Funktionen.FirstOrDefault(x => x.Name == s.Typ) is { } fk)
-            {
-                extraNs.Add(fk.Namespace);
-                referenzen.Add(fk.Auftrag);
-            }
-            referenzen.AddRange(s.WarteAuf);
-            foreach (var e in s.Eingaenge)
-                foreach (var d in e.Draehte)
-                    if (d.Fall != null) referenzen.Add(d.Fall);
-        }
-        var b = Kopf(f.Namespace, Usings(f.Namespace, modell, [modell.Rahmen.VertragsNamespace], referenzen,
-            extraNs.Where(n => n != f.Namespace).Distinct()));
-        Doku(b, f.Doku, "");
-        b.AppendLine($"public sealed class {f.Name} : {IPipeline}");
-        b.AppendLine("{");
-        b.AppendLine($"    public {PipelineFluss} {FlussProperty} => {PipelineFluss}.{FlussDefiniere}({f.Bauer} =>");
-        b.AppendLine("    {");
-        foreach (var zeile in FlussAnweisungen(f, modell)) b.AppendLine("        " + zeile);
-        b.AppendLine("    });");
-        b.AppendLine("}");
-        return b.ToString();
-    }
-
-    /// <summary>Die Anweisungen des Definiere-Lambdas — je Knoten eine (mehrzeilig bei Zeitlimit/Oder).</summary>
-    public static IReadOnlyList<string> FlussAnweisungen(FlussPipeline f, EditorModell modell)
-    {
-        var schritte = f.Knoten.ToDictionary(s => s.Name, StringComparer.Ordinal);
-        var zeilen = new List<string>();
-        foreach (var s in f.Knoten)
-        {
-            var kopf = s.OhneVariable ? "" : $"var {s.Name} = ";
-            string kern;
-            var anhang = new List<string>();
-            switch (s.Art)
-            {
-                case FlussArt.Quelle: kern = $"{f.Bauer}.{FlussQuelle}<{s.Typ}>()"; break;
-                case FlussArt.Auf: kern = $"{f.Bauer}.{FlussAuf}<{s.Typ}>()"; break;
-                case FlussArt.Warte:
-                    // quelle.Strom().Warte<A, B>().Zeitlimit(t) — der Eingang ist der Strom-Draht der Quelle.
-                    var strom = s.Eingaenge.FirstOrDefault();
-                    var typen = s.WarteAuf.Count > 0 ? s.WarteAuf : [s.Typ];
-                    kern = $"{(strom is null ? "/* Strom */" : Empfänger(strom, f))}.{FlussWarte}<{string.Join(", ", typen)}>()";
-                    if (!string.IsNullOrWhiteSpace(s.Zeitlimit)) anhang.Add($".{FlussZeitlimit}({s.Zeitlimit})");
-                    break;
-                case FlussArt.Je:
-                    var quelle = s.Eingaenge.FirstOrDefault();
-                    var liste = string.IsNullOrWhiteSpace(s.Liste) ? "_ => System.Array.Empty<object>()" : s.Liste;
-                    kern = $"{(quelle is null ? "/* Draht */" : Empfänger(quelle, f))}.{FlussJe}({liste})";
-                    break;
-                default:
-                    var verb = s.Art == FlussArt.Funktion ? FlussRufe : FlussSende;
-                    var erster = s.Eingaenge.FirstOrDefault();
-                    kern = erster is null
-                        ? $"/* Eingang */.{verb}<{s.Typ}>(x => default!)"
-                        : $"{Empfänger(erster, f)}.{verb}<{s.Typ}>({FlussLambda(s, erster, f, schritte, modell)})";
-                    if (!string.IsNullOrWhiteSpace(s.Zeitlimit)) anhang.Add($".{FlussZeitlimit}({s.Zeitlimit})");
-                    foreach (var e in s.Eingaenge.Skip(1))
-                        anhang.Add($".{FlussOder}({Empfänger(e, f)}, {FlussLambda(s, e, f, schritte, modell)})");
-                    break;
-            }
-            if (anhang.Count == 0) { zeilen.Add($"{kopf}{kern};"); continue; }
-            zeilen.Add(kopf + kern);
-            for (var i = 0; i < anhang.Count; i++)
-                zeilen.Add("    " + anhang[i] + (i == anhang.Count - 1 ? ";" : ""));
-        }
-        return zeilen;
-    }
-
-    /// <summary>Wovon ein Eingang ausgeht: Draht, ∧-Verbund, Je-Element oder Je-Sammeln.</summary>
-    private static string Empfänger(FlussEingang e, FlussPipeline f)
-    {
-        if (e.Je != null && !e.Sammle) return e.Je;
-        var drähte = e.Draehte.Select(FlussDrahtAusdruck).ToList();
-        if (e.Je != null) return $"{e.Je}.{FlussSammle}({string.Join(", ", drähte)})";
-        return drähte.Count == 1 ? drähte[0] : $"{f.Bauer}.{FlussAlle}({string.Join(", ", drähte)})";
-    }
-
-    private static string FlussDrahtAusdruck(FlussDraht d) => d.Port switch
-    {
-        FlussPort.Zeitlimit => $"{d.Von}.{FlussBeiZeitlimit}()",
-        FlussPort.Abgelehnt => $"{d.Von}.{FlussBeiAbgelehnt}()",
-        FlussPort.Strom => $"{d.Von}.{FlussStrom}()",
-        _ => d.Fall is null ? d.Von : $"{d.Von}.{FlussBei}<{d.Fall}>()",
-    };
-
-    /// <summary>Der Bau-Lambda eines Eingangs: verbatim aus dem Code, sonst aus der Zuordnung (je Feld des Ziels ein Ausdruck).</summary>
-    private static string FlussLambda(FlussSchritt s, FlussEingang e, FlussPipeline f, IReadOnlyDictionary<string, FlussSchritt> schritte,
-        EditorModell modell)
-    {
-        if (!string.IsNullOrWhiteSpace(e.Ausdruck)) return e.Ausdruck;
-        var namen = FlussParameter(e, schritte);
-        var kopf = namen.Count == 1 ? namen[0] : "(" + string.Join(", ", namen) + ")";
-        var ziel = s.Art == FlussArt.Funktion ? AuftragVon(s.Typ, modell) : s.Typ;
-        return ziel is null ? $"{kopf} => default!" : $"{kopf} => new {ziel}({ArgListe(e.Argumente, ziel, modell)})";
-    }
-
-    /// <summary>
-    /// Die Lambda-Parameter eines Eingangs — benannt nach den Knoten, von denen die Drähte kommen (gleicher Knoten zweimal →
-    /// durchnummeriert). Je-Element: der Name des Rahmens; Sammeln: (Quelle des Rahmens, gesammelter Knoten).
-    /// </summary>
-    public static IReadOnlyList<string> FlussParameter(FlussEingang e, IReadOnlyDictionary<string, FlussSchritt> schritte)
-    {
-        if (e.Je != null && !e.Sammle) return [e.Je];
-        var roh = new List<string>();
-        if (e.Je != null)
-        {
-            var quelle = schritte.TryGetValue(e.Je, out var je) ? je.Eingaenge.FirstOrDefault()?.Draehte.FirstOrDefault()?.Von : null;
-            roh.Add(quelle ?? "quelle");
-            roh.Add(e.Draehte.FirstOrDefault()?.Von ?? "liste");
-        }
-        else roh.AddRange(e.Draehte.Select(d => d.Port switch
-        {
-            FlussPort.Fall => d.Von,
-            FlussPort.Zeitlimit => d.Von + "Zeit",
-            FlussPort.Strom => d.Von + "Strom",
-            _ => d.Von + "Abgelehnt",
-        }));
-        var namen = new List<string>();
-        foreach (var n in roh)
-        {
-            var name = n;
-            for (var i = 2; namen.Contains(name); i++) name = n + i;
-            namen.Add(name);
-        }
-        return namen;
-    }
-
-    /// <summary>Der Auftrag der Funktion (ihr einer Eingang) — aus dem Modell; null, wenn die Funktion (noch) unbekannt ist.</summary>
-    private static string? AuftragVon(string funktion, EditorModell modell) =>
-        modell.Funktionen.FirstOrDefault(f => f.Name == funktion)?.Auftrag;
-
-    private static void SchrittZeilen(StringBuilder b, SagaSchritt s, EditorModell modell)
-    {
-        var auf = new StringBuilder($"        p.{Auf}<{s.Wenn[0]}>()");
-        for (var i = 1; i < s.Wenn.Count; i++) auf.Append($".{Und}<{s.Wenn[i]}>()");
-        var hatSammel = !string.IsNullOrWhiteSpace(s.SammelEvent);
-        if (hatSammel)
-        {
-            var anzahl = !string.IsNullOrWhiteSpace(s.SammelAusdruck) ? s.SammelAusdruck
-                : $"t => {(string.IsNullOrWhiteSpace(s.SammelAnzahl) ? "0" : s.SammelAnzahl)}";
-            auf.Append($".{UndAlle}<{s.SammelEvent}>({anzahl})");
-        }
-        b.AppendLine(auf.ToString());
-
-        var lambda = LambdaKopf(s.Wenn.Count + (hatSammel ? 1 : 0));
-        var hatKomp = s.Kompensation is not null;
-        var hatLimit = !string.IsNullOrWhiteSpace(s.Zeitlimit);
-        var verb = s.SendeJe ? SendeJe : Sende;
-        string sende;
-        if (!string.IsNullOrWhiteSpace(s.Rufe))
-        {
-            // Aufruf-Knoten: die Funktion steht im Typ-Argument (CQRS003), der Lambda baut ihren Auftrag (verbatim oder Stub).
-            var auftrag = AuftragVon(s.Rufe, modell);
-            var ausdruck = !string.IsNullOrWhiteSpace(s.SendeAusdruck) ? s.SendeAusdruck
-                : auftrag is null ? $"{lambda} => default!" : $"{lambda} => new {auftrag}({ArgListe(s.SendeArgumente, auftrag, modell)})";
-            sende = $"            .{Rufe}<{s.Rufe}>({ausdruck})";
-        }
-        else if (!string.IsNullOrWhiteSpace(s.SendeAusdruck))
-            sende = $"            .{verb}<{s.Sende}>({s.SendeAusdruck})";
-        else if (s.SendeJe)
-        {
-            var sendeArgs = ArgListe(s.SendeArgumente, s.Sende, modell);
-            var el = string.IsNullOrWhiteSpace(s.SendeJeElement) ? "z" : s.SendeJeElement;
-            var coll = string.IsNullOrWhiteSpace(s.SendeJeCollection) ? "/* Collection */" : s.SendeJeCollection;
-            sende = $"            .{SendeJe}<{s.Sende}>({lambda} => {coll}.Select({el} => new {s.Sende}({sendeArgs})))";
-        }
-        else
-            sende = $"            .{Sende}<{s.Sende}>({lambda} => new {s.Sende}({ArgListe(s.SendeArgumente, s.Sende, modell)}))";
-        b.AppendLine(hatKomp || hatLimit ? sende : sende + ";");
-        if (hatLimit) b.AppendLine($"            .{Zeitlimit}({s.Zeitlimit})" + (hatKomp ? "" : ";"));
-
-        if (hatKomp)
-        {
-            var kompVerb = s.KompensationJe ? RückgängigDurchJe : RückgängigDurch;
-            var komp = !string.IsNullOrWhiteSpace(s.KompensationAusdruck)
-                ? s.KompensationAusdruck
-                : $"{lambda} => new {s.Kompensation}({ArgListe(s.KompensationArgumente, s.Kompensation!, modell)})";
-            b.AppendLine($"            .{kompVerb}<{s.Kompensation}>({komp});");
-        }
-    }
-
-    // ── Leseseite: Fähigkeiten + Bündel, Store-Impl, Projektion/Reaktion, Reader ──────────────────────
+    // ── Leseseite: Fähigkeiten + Bündel, Store-Impl, Projektion, Reader ──────────────────────
     //    Nur SIGNATUREN aus dem Modell; Rümpfe/Handcode verbatim, neue Rümpfe = throw-Platzhalter. Kein Store im Ctor
     //    (CQRS054), kein new Store (CQRS055), eine Fn je Fähigkeit (CQRS051), OneOf/konkret (CQRS050), Handle-Form (CQRS057).
 
@@ -972,45 +612,6 @@ public static class Scaffolder
         }
         foreach (var r in lesen.Reader)
             yield return Datei(r.Datei ?? Ziel(m, r.Namespace, $"{r.Name}.cs"), LeserDatei(m, r), DateiArt.Leser);
-        foreach (var p in lesen.Pipelines)
-            yield return Datei(p.Datei ?? Ziel(m, p.Namespace, $"{p.Name}.cs"), PipelineDatei(m, p), DateiArt.Pipeline);
-    }
-
-    /// <summary>
-    /// Pipeline: <c>partial class P : IPipelineHandler</c>, <c>PipelineId</c>, Konfig-Records per Konstruktor, je Handle
-    /// <c>Handle(TEingang, PipelineContext, Fähigkeit…)</c> → <c>IAsyncEnumerable&lt;OneOf&lt;…&gt;&gt;</c> (Commands, Trigger, Selbst, Frist);
-    /// ohne Ausgang <c>Task</c> (die geschlossene leere Menge — nur Effekte, wie bei Projektionen).
-    /// </summary>
-    private static string PipelineDatei(EditorModell m, PipelineKarte p)
-    {
-        var b = Kopf(p.Namespace, Usings(p.Namespace, m, [m.Rahmen.VertragsNamespace],
-            KlassenTypen(p.Datei, p.Handles).Concat(p.Datei == null ? p.Konfigs : []), p.Usings));
-        Doku(b, p.Doku, "");
-        Attribute(b, p.Attribute);
-        b.AppendLine($"{MitPartial(p.Typart)} {p.Name} : {string.Join(", ", p.Basen ?? [IPipelineHandler])}");
-        b.AppendLine("{");
-        var teile = new List<Action>();
-        teile.Add(() =>
-        {
-            if (p.Zusatz is not null) { Eingerückt(b, p.Zusatz, "    "); return; }
-            b.AppendLine($"    public string {PipelineId} => \"{p.PipelineId ?? p.Name}\";");
-            if (p.Konfigs.Count == 0) return;
-            b.AppendLine();
-            foreach (var k in p.Konfigs) b.AppendLine($"    private readonly {k} _{BoardLeseseite.ParameterName(k)};");
-            b.AppendLine();
-            b.AppendLine($"    public {p.Name}({string.Join(", ", p.Konfigs.Select(k => $"{k} {BoardLeseseite.ParameterName(k)}"))})");
-            b.AppendLine("    {");
-            foreach (var k in p.Konfigs) b.AppendLine($"        _{BoardLeseseite.ParameterName(k)} = {BoardLeseseite.ParameterName(k)};");
-            b.AppendLine("    }");
-        });
-        // Zwei Formen, nach der Ausgabemenge: keine ⇒ Task (geschlossen leer, nur Effekte); sonst IAsyncEnumerable<OneOf<…>> —
-        //   der Pipeline-Dispatch erkennt nur OneOf, auch ein einzelner Ausgang steht darin.
-        foreach (var h in p.Handles)
-            teile.Add(() => HandleZeilen(b, h, [PipelineContext], ["ctx"],
-                h.Rueckgabe ?? (h.Ausgaenge.Count == 0 ? "Task" : $"IAsyncEnumerable<{OneOf}<{string.Join(", ", h.Ausgaenge)}>>")));
-        Teile(b, teile);
-        b.AppendLine("}");
-        return b.ToString();
     }
 
     private static string Ziel(EditorModell m, string ns, string name) =>
@@ -1052,7 +653,7 @@ public static class Scaffolder
     }
 
     /// <summary>
-    /// Projektion/Reaktion. Null = der Schreiber-Typ der Handles ist aus dem Code nicht bekannt (keine Projektion im Code) —
+    /// Projektion. Null = der Schreiber-Typ der Handles ist aus dem Code nicht bekannt (keine Projektion im Code) —
     /// dann wird nicht geraten, sondern nicht geschrieben.
     /// </summary>
     private static string? KonsumentDatei(EditorModell m, Konsument k)
@@ -1220,7 +821,7 @@ public static class Scaffolder
             foreach (var f in st.Fns) nsVon.TryAdd(f.Name, f.Namespace ?? st.Namespace);
         }
         foreach (var k in modell.Lesen?.Konsumenten ?? []) nsVon.TryAdd(k.Name, k.Namespace);
-        foreach (var f in modell.Funktionen) nsVon.TryAdd(f.Name, f.Namespace);   // z. B. IDarf<IFunktion> am Akteur
+        foreach (var f in modell.BausteinFunktionen) nsVon.TryAdd(f.Name, f.Namespace);   // z. B. IDarf<IFunktion> am Akteur, ITraegt<IFunktion> am Client
         foreach (var d in modell.Dienste) nsVon.TryAdd(d.Name, d.Namespace);      // ein Dienst im Konstruktor einer Implementierung
 
         var menge = new SortedSet<string>(basis.Concat(explizit), StringComparer.Ordinal);
@@ -1242,22 +843,4 @@ public static class Scaffolder
     private static string Parameter(IReadOnlyList<Feld> felder) =>
         string.Join(", ", felder.Select(f =>
             $"{f.Typ} {f.Name}" + (f.Standard is null ? "" : $" = {f.Standard}")));
-
-    private static string LambdaKopf(int anzahl)
-    {
-        string[] namen = ["t", "r", "g"];
-        var teile = Enumerable.Range(0, Math.Max(1, anzahl))
-            .Select(i => i < namen.Length ? namen[i] : $"e{i + 1}")
-            .ToArray();
-        return anzahl <= 1 ? teile[0] : "(" + string.Join(", ", teile) + ")";
-    }
-
-    private static string ArgListe(IReadOnlyList<string>? ausdruecke, string command, EditorModell modell)
-    {
-        if (ausdruecke is { Count: > 0 }) return string.Join(", ", ausdruecke);
-        // Command oder Auftrag einer Funktion — beide werden positionsweise gebaut.
-        var record = modell.Records.FirstOrDefault(r => r.Name == command && (r.Kind == RecordArt.Command || r.Kind == RecordArt.Auftrag));
-        if (record is null) return "/* TODO: Argumente */";
-        return string.Join(", ", record.Felder.Select(_ => "default"));
-    }
 }

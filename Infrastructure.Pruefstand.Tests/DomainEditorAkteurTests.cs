@@ -37,12 +37,12 @@ public sealed class DomainEditorAkteurTests
     [Fact]
     public void Akteur_ist_Baustein_und_ersetzt_die_Aussenwelt_fuer_das_was_er_darf()
     {
-        var fluss = Fluss.Aus(Shop(Kunde));
+        var fluss = Nachrichtenfluss.Aus(Shop(Kunde));
 
         fluss.KnotenVon("akt:Kunde")!.Art.Should().Be(Grammatik.Akteur);
         fluss.Aus("akt:Kunde").Select(k => k.Nachricht).Should().BeEquivalentTo(["Bestelle", "Bestellungen"]);
         // Was niemand darf, bleibt bei der anonymen Außenwelt (unbekannter Akteur).
-        fluss.Aus(Fluss.AussenId).Select(k => k.Nachricht).Should().BeEquivalentTo(["Storniere"]);
+        fluss.Aus(Nachrichtenfluss.AussenId).Select(k => k.Nachricht).Should().BeEquivalentTo(["Storniere"]);
     }
 
     [Fact]
@@ -50,7 +50,6 @@ public sealed class DomainEditorAkteurTests
     {
         Grammatik.ErzeugungVon(Grammatik.Akteur, Grammatik.Command).Should().NotBeNull();
         Grammatik.ErzeugungVon(Grammatik.Akteur, Grammatik.Query).Should().NotBeNull();
-        Grammatik.ErzeugungVon(Grammatik.Akteur, Grammatik.Trigger).Should().NotBeNull();
         Grammatik.ErzeugungVon(Grammatik.Akteur, Grammatik.Event).Should().BeNull("Fakten entstehen nur im Aggregat (Build: CQRS058)");
     }
 
@@ -111,50 +110,41 @@ public sealed class DomainEditorAkteurTests
         EditorModell.AusJson(m.AlsJson()).Akteure.Should().BeEquivalentTo(m.Akteure);
     }
 
-    // ── Der Dienst eines Akteurs (IAkteurDienst<A>): kein Akteur; ein Handle mit ihm als Parameter entscheidet im Auftrag von A ──
+    // ── Anteile: direkt (IDarf) und über die Kette; eine Funktion, die ein Akteur draußen rechnen darf ──
 
-    private static EditorModell MitKi(IReadOnlyList<string> sendet, IReadOnlyList<string> kiDarf) => Shop(Kunde, new Akteur
+    private static BausteinFunktion Folge(bool klasse) => new()
     {
-        Name = "Gutachter", Namespace = "Shop.Akteure", Art = "Ki", Darf = kiDarf, Dienste = ["IGutachten"],
-    }) with
-    {
-        Lesen = new Leseseite
-        {
-            Pipelines = [new() { Name = "Bewerter", Namespace = "Shop.Ki", Handles =
-                [new() { Eingang = "Bestellt", Ausgaenge = sendet, Faehigkeiten = [new() { Typ = "IGutachten", Name = "ki" }] }] }],
-        },
+        Name = klasse ? "Folge" : "IFolge", Namespace = "Shop.Bestellung", Klasse = klasse,
+        Eingaenge = [new() { Eingang = "Bestellt", Ausgaben = ["Storniere"] }],
     };
 
-    [Fact]
-    public void Ein_Dienst_wird_nie_als_Akteur_geschrieben()
-        => Scaffolder.Generiere(MitKi(["Storniere"], ["Storniere"])).Should()
-            .NotContain(d => d.Inhalt.Contains("interface IGutachten"), "der Dienst gehört dem Code; geschrieben wird nur der Akteur-Record");
+    private static EditorModell Kette(params Akteur[] weitere) => Shop([Kunde, .. weitere]) with { BausteinFunktionen = [Folge(klasse: weitere.Length == 0)] };
 
-    // ── Anteile: direkt (IDarf) und über die Kette; Akteur-Wechsel über den Dienst ──
-
-    private static EditorModell Kette(bool mitDienst) => Shop(Kunde, new Akteur { Name = "Gutachter", Namespace = "Shop.Akteure", Art = "Ki", Dienste = ["IGutachten"] }) with
-    {
-        Lesen = new Leseseite
-        {
-            Pipelines = [new() { Name = "Folge", Namespace = "Shop.Bestellung", Handles =
-                [new() { Eingang = "Bestellt", Ausgaenge = ["Storniere"], Faehigkeiten = mitDienst ? [new() { Typ = "IGutachten", Name = "g" }] : [] }] }],
-        },
-    };
+    private static Akteur Gutachter => new() { Name = "Gutachter", Namespace = "Shop.Akteure", Art = "Ki", Darf = ["IFolge"] };
 
     [Fact]
     public void Ketten_Command_traegt_den_Akteur_des_ausloesenden_Events()
     {
-        var a = AkteurAnteile.Aus(Kette(mitDienst: false));
+        var a = AkteurAnteile.Aus(Kette());
         a.Direkt["Bestelle"].Should().Equal("Kunde");
         a.Kette["Bestellt"].Should().Equal("Kunde");
-        a.Kette["Storniere"].Should().Equal(new[] { "Kunde" }, "die Pipeline erzeugt ihn aus Bestellt → Kunde");
+        a.Kette["Storniere"].Should().Equal(new[] { "Kunde" }, "die Funktion erzeugt ihn aus Bestellt → Kunde");
         a.Direkt.Should().NotContainKey("Storniere", "Ketten-Commands darf niemand direkt");
         a.Eingaenge.Should().OnlyContain(e => a.AkteureVon(e.Nachricht).Count > 0, "jeder Eingang kommt von einem Akteur (GR-HERKUNFT)");
     }
 
     [Fact]
-    public void Der_Dienst_wechselt_den_Akteur_mitten_in_der_Kette()
-        => AkteurAnteile.Aus(Kette(mitDienst: true)).Kette["Storniere"].Should().Equal("Gutachter");
+    public void Ein_Akteur_der_eine_Funktion_draussen_rechnen_darf_gibt_ihre_Ausgaben_hinein()
+    {
+        var m = Kette(Gutachter);
+        var fluss = Nachrichtenfluss.Aus(m);
+        fluss.Aus("akt:Gutachter").Should().ContainSingle(k => k.Nachricht == "Storniere" && k.Handle == "Bestellt");
+        fluss.Aus(Nachrichtenfluss.AussenId).Should().BeEmpty("Storniere hat einen Erzeuger");
+
+        var anteile = AkteurAnteile.Aus(m);
+        anteile.Kette["Storniere"].Should().Contain("Gutachter");
+        anteile.Direkt.ContainsKey("Storniere").Should().BeFalse("die Ausgabe einer Funktion ist kein IDarf auf den Command");
+    }
 
     [Fact]
     public void Ein_Command_kann_von_zwei_Akteuren_kommen()
@@ -163,50 +153,34 @@ public sealed class DomainEditorAkteurTests
         AkteurAnteile.Aus(m).AkteureVon("Bestellt").Should().Equal("Haendler", "Kunde");
     }
 
-    // ── Vertrag (docs/konzept-akteure.md §3): Event → Akteur → Command, die Ausgänge gehören dem Akteur ──
-
-    private static Akteur Kasse => new()
-    {
-        Name = "Kasse", Namespace = "Shop.Akteure",
-        Vertrag = [new() { Eingang = "Bestellt", Ausgaenge = ["Storniere"] }, new() { Eingang = "Bestellt2" }],
-    };
-
     [Fact]
-    public void Vertrag_ist_Zusage_Kante_mit_Akteur_Wechsel()
+    public void Ein_Akteur_der_eine_Funktion_darf_bekommt_IDarf_und_den_Namespace_der_Funktion()
     {
-        var m = Shop(Kunde, Kasse with { Vertrag = [Kasse.Vertrag[0]] });
-        var fluss = Fluss.Aus(m);
-        fluss.Ein("akt:Kasse").Should().ContainSingle(k => k.Nachricht == "Bestellt" && k.Handle == "Bestellt");
-        fluss.Aus("akt:Kasse").Should().ContainSingle(k => k.Nachricht == "Storniere" && k.Handle == "Bestellt");
-        fluss.Aus(Fluss.AussenId).Should().BeEmpty("Storniere hat jetzt einen Erzeuger");
-
-        var anteile = AkteurAnteile.Aus(m);
-        anteile.Kette["Storniere"].Should().Equal("Kasse");   // Wechsel: nicht der Kunde, dessen Bestelle das Event auslöste
-        anteile.Direkt.ContainsKey("Storniere").Should().BeFalse("eine Zusage ist kein IDarf");
-        anteile.Eingaenge.Should().OnlyContain(e => anteile.AkteureVon(e.Nachricht).Count > 0, "jeder Eingang kommt von einem Akteur (GR-HERKUNFT)");
+        var akteure = Scaffolder.Generiere(Kette(Gutachter)).Single(d => d.Pfad.EndsWith("Akteure.cs")).Inhalt;
+        akteure.Should().Contain("IDarf<IFolge>").And.Contain("using Shop.Bestellung;");
     }
 
     // ── Clients (docs/konzept-akteure.md §4): ein Vertrag je Client, n:m zu Akteuren ──
 
     private static DomainEditor.Client Laden => new()
     {
-        Name = "ILaden", Namespace = "Shop.Clients", Traegt = ["IKasse"], Sendet = ["Bestelle"], Fragt = ["Bestellungen"], Kenntnis = ["Bestellt2"],
+        Name = "ILaden", Namespace = "Shop.Clients", Traegt = ["IFolge"], Sendet = ["Bestelle"], Fragt = ["Bestellungen"], Kenntnis = ["Bestellt"],
     };
 
     private static EditorModell MitClients(params DomainEditor.Client[] clients) =>
-        Shop(Kunde, Kasse with { Vertrag = [Kasse.Vertrag[0]] }) with { Clients = clients };
+        Kette(Gutachter) with { Clients = clients };
 
     [Fact]
     public void Scaffolder_schreibt_den_Client_als_Interface_mit_seinem_Rand()
     {
         var text = Scaffolder.ClientInterface(Laden);
         text.Should().Contain("public interface ILaden : IClientVertrag,")
-            .And.Contain("ITraegt<IKasse>").And.Contain("ISendet<Bestelle>").And.Contain("IFragt<Bestellungen>")
-            .And.Contain("IHoert<Bestellt2>").And.NotContain("void Auf");
+            .And.Contain("ITraegt<IFolge>").And.Contain("ISendet<Bestelle>").And.Contain("IFragt<Bestellungen>")
+            .And.Contain("IHoert<Bestellt>").And.NotContain("void Auf");
         Scaffolder.IstClientBasis("ISendet<Bestelle>", new HashSet<string>()).Should().BeTrue();
-        Scaffolder.IstClientBasis("ITraegt<IKasse>", new HashSet<string>()).Should().BeTrue();
-        Scaffolder.IstClientBasis("IHoert<Bestellt2>", new HashSet<string>()).Should().BeTrue();
-        Scaffolder.IstClientBasis("IDisposable", new HashSet<string> { "IKasse" }).Should().BeFalse("fremde Basistypen gehören dem Code");
+        Scaffolder.IstClientBasis("ITraegt<IFolge>", new HashSet<string>()).Should().BeTrue();
+        Scaffolder.IstClientBasis("IHoert<Bestellt>", new HashSet<string>()).Should().BeTrue();
+        Scaffolder.IstClientBasis("IDisposable", new HashSet<string> { "IFolge" }).Should().BeFalse("fremde Basistypen gehören dem Code");
         var dateien = Scaffolder.Generiere(MitClients(Laden));
         dateien.Should().Contain(d => d.Inhalt.Contains("public interface ILaden : IClientVertrag"));
     }

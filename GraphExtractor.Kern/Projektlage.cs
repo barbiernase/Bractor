@@ -13,7 +13,7 @@ namespace GraphExtractor;
 /// <item><b>Analyse</b>: die Laufzeit + ihre transitive Referenz-Hülle (alles, was das Produkt fährt).</item>
 /// <item><b>Domäne</b>: Analyse-Projekte (außer Vertrag und Laufzeit), die zur Wurzel gehören (Rollen-Projekt oder darauf aufbauend) und im
 ///   HANDGESCHRIEBENEN Quelltext mindestens einen Typ mit einer Domänen-Rolle des Vertrags deklarieren (Command, Event, State, Decider, Query,
-///   ReadModel, Store, Konsument, Pipeline, Prozess, Wertobjekt …). Das Framework baut auf kein Rollen-Projekt auf.</item>
+///   ReadModel, Store, Projektion, Funktion, Wertobjekt …). Das Framework baut auf kein Rollen-Projekt auf.</item>
 /// <item><b>Hosts</b>: Programme mit HANDGESCHRIEBENEM Einstiegspunkt, die die Laufzeit einbinden — dort lebt die
 ///   Composition Root. Testprojekte haben einen generierten Einstiegspunkt und fallen so heraus.</item>
 /// </list>
@@ -155,8 +155,8 @@ public sealed class Projektlage
     private static readonly string[] DomänenRollen =
     {
         Vertrag.IState, Vertrag.IDecider, Vertrag.IApplier, Vertrag.ICommand, Vertrag.IEvent, Vertrag.IQuery, Vertrag.IQueryResponse,
-        Vertrag.IReadModel, Vertrag.IWriteStore, Vertrag.IReadStore, Vertrag.ISubscriber, Vertrag.IReader, Vertrag.IPipelineHandler,
-        Vertrag.IPipelineTrigger, Vertrag.IProzessDefinition, Vertrag.IWertobjekt, Vertrag.IAkteur, Vertrag.IClientVertrag,
+        Vertrag.IReadModel, Vertrag.IWriteStore, Vertrag.IReadStore, Vertrag.ISubscriber, Vertrag.IReader, Vertrag.IFunktion,
+        Vertrag.IWertobjekt, Vertrag.IAkteur, Vertrag.IClientVertrag,
     };
 
     /// <summary>Deklariert die Compilation im handgeschriebenen Quelltext einen Typ, der einen der Marker implementiert (per Symbol)?</summary>

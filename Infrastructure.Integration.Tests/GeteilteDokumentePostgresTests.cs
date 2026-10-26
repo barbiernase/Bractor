@@ -126,7 +126,7 @@ public class GeteilteDokumentePostgresTests
         var projektion = new DatensatzProjektion();
         var faehigkeiten = new FaehigkeitenAus(store);
         return new BatchLeser(es, store, proj, partition, VierPartitionen, BatchLeser.TypenAus(DatensatzProjektion.SubscribedTypes),
-            (e, w) => projektion.DispatchAsync(e, w, BatchLeser.KeineAusgabe, faehigkeiten));
+            (e, w) => projektion.DispatchAsync(e, w, faehigkeiten));
     }
 
     private BatchLeser ModellLeser(MartenEventStore es, string proj, int partition)
@@ -135,7 +135,7 @@ public class GeteilteDokumentePostgresTests
         var projektion = new ModellProjektion();
         var faehigkeiten = new FaehigkeitenAus(store);
         return new BatchLeser(es, store, proj, partition, VierPartitionen, BatchLeser.TypenAus(ModellProjektion.SubscribedTypes),
-            (e, w) => projektion.DispatchAsync(e, w, BatchLeser.KeineAusgabe, faehigkeiten));
+            (e, w) => projektion.DispatchAsync(e, w, faehigkeiten));
     }
 
     private static async Task<Guid> ModellMitAktivierung(MartenEventStore es, Guid id)

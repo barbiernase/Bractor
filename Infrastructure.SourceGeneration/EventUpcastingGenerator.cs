@@ -72,7 +72,6 @@ namespace Infrastructure.SourceGeneration
             var iEvent = compilation.GetTypeByMetadataName("Abstractions.IEvent");
             if (iEvent == null) return;
             var iTransient = compilation.GetTypeByMetadataName("Abstractions.ITransientEvent");
-            var iSelf = compilation.GetTypeByMetadataName("Abstractions.IPipelineSelfMessage");
             var iUpcast2 = compilation.GetTypeByMetadataName("Abstractions.IUpcast`2");
             var iUpcast3 = compilation.GetTypeByMetadataName("Abstractions.IUpcast`3");
             var iUpcast4 = compilation.GetTypeByMetadataName("Abstractions.IUpcast`4");
@@ -88,7 +87,6 @@ namespace Infrastructure.SourceGeneration
                 var ifaces = t.AllInterfaces;
                 if (!ifaces.Contains(iEvent, cmp)) continue;
                 if (iTransient != null && ifaces.Contains(iTransient, cmp)) continue;
-                if (iSelf != null && ifaces.Contains(iSelf, cmp)) continue;
                 persistable.Add(t);
             }
 

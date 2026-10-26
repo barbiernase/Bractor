@@ -4,8 +4,8 @@ namespace DomainEditor;
 
 /// <summary>
 /// Wohin eine NEUE Karte gehört (<c>docs/07-projektstruktur.md</c>, Tabelle <see cref="P"/>): das Projekt folgt aus der Rolle ihrer Primitive,
-/// der Bereich aus dem Namespace, den die Karte mitbringt, der Dateiname aus der Tabelle. Eine neue Funktion in <c>Domain.ImagePair</c> landet
-/// so in <c>Domain.Pipeline/ImagePair/Funktionen.cs</c> mit dem Namespace <c>Domain.Pipeline.ImagePair</c> — der Server entscheidet (W3), nicht
+/// der Bereich aus dem Namespace, den die Karte mitbringt, der Dateiname aus der Tabelle. Ein neuer Konfig-Record in <c>Domain.ImagePair</c> landet
+/// so in <c>Domain.Pipeline/ImagePair/Konfigs.cs</c> mit dem Namespace <c>Domain.Pipeline.ImagePair</c> — der Server entscheidet (W3), nicht
 /// der Editor. Bestehendes (mit Datei) bleibt, wo es ist; Namespaces außerhalb der Rollen-Projekte der Wurzel bleiben unverändert (die
 /// Lage-Prüfung meldet sie).
 /// </summary>
@@ -14,17 +14,14 @@ public static class Strukturort
     /// <summary>Setzt den Namespace jeder neuen Karte auf das Projekt ihrer Rolle (gleicher Bereich). Idempotent.</summary>
     public static EditorModell Normalisiere(EditorModell m, string wurzel = P.StandardWurzel)
     {
-        var ergebnisse = m.Funktionen.SelectMany(f => f.Ergebnisse).ToHashSet(StringComparer.Ordinal);
+        var ergebnisse = Funktionsergebnisse(m);
         string Ns(string ns, P.Rolle? rolle) => rolle is { } r ? Ziel(ns, r, wurzel) ?? ns : ns;
         var lesen = m.Lesen;
         return m with
         {
             Records = m.Records.Select(r => r.Datei != null ? r : r with { Namespace = Ns(r.Namespace, Rolle(Primitive(r, ergebnisse))) }).ToList(),
             Aggregate = m.Aggregate.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Schreibseite) }).ToList(),
-            Sagas = m.Sagas.Select(s => s.Datei != null ? s : s with { Namespace = Ns(s.Namespace, P.Rolle.Schreibseite) }).ToList(),
-            Funktionen = m.Funktionen.Select(f => f.Datei != null ? f : f with { Namespace = Ns(f.Namespace, P.Rolle.Ablaeufe) }).ToList(),
             Dienste = m.Dienste.Select(d => d.Datei != null ? d : d with { Namespace = Ns(d.Namespace, P.Rolle.Ablaeufe) }).ToList(),
-            Fluesse = m.Fluesse.Select(f => f.Datei != null ? f : f with { Namespace = Ns(f.Namespace, P.Rolle.Ablaeufe) }).ToList(),
             Akteure = m.Akteure.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Akteure) }).ToList(),
             Clients = m.Clients.Select(c => c.Datei != null ? c : c with { Namespace = Ns(c.Namespace, P.Rolle.Akteure) }).ToList(),
             Lesen = lesen == null ? null : lesen with
@@ -61,6 +58,13 @@ public static class Strukturort
     public static bool InStruktur(string ns, string wurzel = P.StandardWurzel) =>
         P.Projekte(wurzel).Any(p => ns == p || ns.StartsWith(p + ".", StringComparison.Ordinal));
 
+    /// <summary>
+    /// Die Ausgaben aller Funktionen (Signatur-Fakt je <c>Auf</c>) — ein Event darunter ist ein Ergebnis einer Funktion und liegt bei den Abläufen
+    /// (dieselbe Regel wie die Lage-Prüfung, <c>Domain.SourceGeneration/Lageart.cs</c>).
+    /// </summary>
+    public static ISet<string> Funktionsergebnisse(EditorModell m) =>
+        m.BausteinFunktionen.SelectMany(f => f.Eingaenge).SelectMany(e => e.Ausgaben).ToHashSet(StringComparer.Ordinal);
+
     /// <summary>Die Primitive eines Records im Editor-Modell (Art + Code-Fakt Ergebnis einer Funktion bzw. Treiber); <c>null</c> = nicht in der Tabelle.</summary>
     public static P.Primitive? Primitive(Record r, ISet<string> funktionsErgebnisse) => r.Kind switch
     {
@@ -73,7 +77,6 @@ public static class Strukturort
         RecordArt.Antwort => P.Primitive.Antwort,
         RecordArt.ReadModel => P.Primitive.ReadModel,
         RecordArt.Konfig => P.Primitive.Konfig,
-        RecordArt.Auftrag => P.Primitive.Auftrag,
         _ => null,
     };
 
