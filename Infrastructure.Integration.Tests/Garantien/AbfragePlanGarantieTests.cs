@@ -96,6 +96,8 @@ public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.F
         public async Task InitializeAsync()
         {
             await Store.Advanced.Clean.CompletelyRemoveAllAsync();
+            // Das Fälligkeits-Verzeichnis ist ein zusätzliches Schema-Objekt — das räumt Marten nicht mit ab (sonst stünden die Zeilen des letzten Laufs noch da).
+            await SqlAsync($"drop table if exists {Schema}.{Infrastructure.Uhr.FristVerzeichnis.Tabelle}");
             await Store.Storage.ApplyAllConfiguredChangesToDatabaseAsync();
             await Store.Storage.Database.EnsureStorageExistsAsync(typeof(JasperFx.Events.IEvent));
             var fristen = $"{Schema}.{Infrastructure.Uhr.FristVerzeichnis.Tabelle}";
