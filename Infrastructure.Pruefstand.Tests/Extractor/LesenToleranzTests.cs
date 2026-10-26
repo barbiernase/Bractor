@@ -25,14 +25,14 @@ namespace Probe
     public sealed record Kaputt(string Name) : IEvnt;
     public record Teilweise(int Wert) : IEvent, IFehlt;
     public sealed record DateiDa(string Pfad) : IQuellNachricht { public string Kennung => Pfad; }
-    public sealed record Melde(Guid AggregateId, string Pfad) : ICommand;
+    public sealed record Melde(Id<ProbeZiel> AggregateId, string Pfad) : ICommand<ProbeZiel>;\n    public partial class ProbeZiel : IState { public int Version { get; set; } public Guid Id { get; set; } }
     public sealed class ProbeFluss : IPipeline
     {
         public PipelineFluss Fluss => PipelineFluss.Definiere(p =>
         {
             var eingang = p.Quelle<DateiDa>();
             var zahl = 1;
-            eingang.Sende<Melde>(e => new Melde(Guid.Empty, e.Pfad));
+            eingang.Sende<Melde>(e => new Melde(new(Guid.Empty), e.Pfad));
         });
     }
 }
@@ -120,7 +120,7 @@ namespace Probe.B { public interface ILiesZahl : IReadStore { Task<int> LiesAsyn
         // Fluss-Knoten: die Anweisung im Definiere-Lambda.
         var knoten = Alle(Alle(board, "fluesse").Single(), "knoten");
         var o = knoten[1]["_ort"]!.AsObject();
-        Probe[(int)o["start"]!..(int)o["ende"]!].Should().Be("eingang.Sende<Melde>(e => new Melde(Guid.Empty, e.Pfad));");
+        Probe[(int)o["start"]!..(int)o["ende"]!].Should().Be("eingang.Sende<Melde>(e => new Melde(new(Guid.Empty), e.Pfad));");
     }
 
     private const string MitHilfscode = @"

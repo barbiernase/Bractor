@@ -52,7 +52,10 @@ public abstract class AggregateActorBase<TState> : IActor
 
     private IAggregateHandler? _handler;  // Wird nach State-Load erstellt!
     private TState? _state;
+    // Die Id kommt aus der Cluster-Identität (Plan §1.7, Phase 1), nicht aus dem ersten Envelope: ein Command an eine andere Id wird abgelehnt,
+    //   bevor etwas geladen ist — sonst lüde der Actor dieser Identität den fremden Stream.
     private Guid _id;
+    private bool _identitaetGueltig;
     private bool _initialized = false;
 
     // Framework-Inbox (Exactly-once, docs/04 §4.4): die Wahrheit ist die Inbox-Tabelle des Stores — je Command eine Quittung in derselben
@@ -111,13 +114,19 @@ public abstract class AggregateActorBase<TState> : IActor
             switch (context.Message)
             {
                 case Started:
-                    _logger?.LogDebug("[Actor] Started");
+                    _identitaetGueltig = Guid.TryParse(context.ClusterIdentity()?.Identity, out _id);
+                    _logger?.LogDebug("[Actor] Started {Type}/{Id}", typeof(TState).Name, _id);
                     break;
 
                 case CommandEnvelope envelope:
+                    if (!_identitaetGueltig || envelope.AggregateId != _id)
+                    {
+                        await LehneFremdeIdAbAsync(context, envelope);
+                        break;
+                    }
                     if (!_initialized)
                     {
-                        await InitializeAsync(envelope.AggregateId);
+                        await InitializeAsync();
                     }
                     _wartend.Enqueue((envelope, context.Sender));
                     if (!_imCommit) await StarteBuendelAsync(context);
@@ -152,10 +161,20 @@ public abstract class AggregateActorBase<TState> : IActor
         }
     }
 
-    private async Task InitializeAsync(Guid aggregateId)
+    /// <summary>
+    /// Ein Command, dessen Ziel nicht die Identität dieses Actors ist (falsch geroutet oder eine fremde Id): abgelehnt, bevor geladen wird —
+    /// technischer Fehler an den Absender und gezielt an die Sitzung, nichts gelesen, nichts geschrieben.
+    /// </summary>
+    private async Task LehneFremdeIdAbAsync(IContext context, CommandEnvelope envelope)
     {
-        _id = aggregateId;
+        var grund = $"Command an {typeof(TState).Name}/{envelope.AggregateId} erreichte die Identität '{context.ClusterIdentity()?.Identity}' — abgelehnt";
+        _logger?.LogWarning("[Actor] {Grund}", grund);
+        await TryPublishCommandFailedAsync(envelope, grund);
+        context.Respond(new CommandResult { Success = false, ErrorMessage = grund, AggregateId = envelope.AggregateId });
+    }
 
+    private async Task InitializeAsync()
+    {
         // ★ EIN Tail-Fold (docs/04 §4.7): mit Snapshot seedet der Fold und liest nur den Rest ab snapshot.Version+1.
         RehydrationResult<TState> rehydrated;
         try
@@ -270,7 +289,7 @@ public abstract class AggregateActorBase<TState> : IActor
             _logger?.LogWarning(ex, "[Actor] Append für {Command} an {Type}/{Id} gescheitert — rehydriere frisch und sehe in der Inbox nach",
                 cmdEnvelope.Payload.GetType().Name, typeof(TState).Name, _id);
             _initialized = false;
-            await InitializeAsync(_id);   // wirft sie, bleibt _initialized false: die nächste Nachricht initialisiert neu
+            await InitializeAsync();   // wirft sie, bleibt _initialized false: die nächste Nachricht initialisiert neu
             return await NachgeschlagenAsync(cmdEnvelope.CommandId, wiederholung: false) ?? throw new AppendGescheitertException(ex);
         }
     }
@@ -348,7 +367,7 @@ public abstract class AggregateActorBase<TState> : IActor
             while (buendel.Count < _buendelGroesse && _wartend.TryDequeue(out var w)) buendel.Add(w);
             try
             {
-                if (!_initialized) await InitializeAsync(_id);
+                if (!_initialized) await InitializeAsync();
             }
             catch (Exception ex)
             {
@@ -449,13 +468,6 @@ public abstract class AggregateActorBase<TState> : IActor
     private async Task EntscheideAsync(Entscheidung e)
     {
         var env = e.Env;
-        if (env.AggregateId != _id)
-        {
-            e.Fehler = "Command sent to wrong aggregate";
-            e.Sofort = new CommandResult { Success = false, ErrorMessage = e.Fehler, AggregateId = _id };
-            return;
-        }
-
         var expectedVersion = env.Modus is CommandModus.Client c ? c.ExpectedVersion : _state!.Version;
         switch (CommandVorpruefung.Prüfe(true, _verarbeiteteCommandIds.Contains(env.CommandId), _abgelehnteCommandIds.Contains(env.CommandId),
                     _state!.Version, expectedVersion))
@@ -608,7 +620,7 @@ public abstract class AggregateActorBase<TState> : IActor
             _antwortAn = an;
             try
             {
-                if (!_initialized) await InitializeAsync(_id);
+                if (!_initialized) await InitializeAsync();
                 using (SpurVon(env))
                     await HandleCommandAsync(context, env);
             }
@@ -645,20 +657,6 @@ public abstract class AggregateActorBase<TState> : IActor
         try
         {
             _logger?.LogDebug("[Actor] Processing {Command}", cmdEnvelope.Payload.GetType().Name);
-
-            // Validierung: Falsche AggregateId
-            if (cmdEnvelope.AggregateId != _id)
-            {
-                _logger?.LogWarning("[Actor] Command for wrong aggregate (id {Id})", _id);
-                await TryPublishCommandFailedAsync(cmdEnvelope, "Command sent to wrong aggregate");
-                Antworte(context, new CommandResult 
-                { 
-                    Success = false, 
-                    ErrorMessage = "Command sent to wrong aggregate",
-                    AggregateId = _id
-                });
-                return;
-            }
 
             // ★ Vorab-Entscheidung (docs/08 §8.4) — Inbox-Dedup VOR der OCC-Prüfung (Reihenfolge in der reinen,
             //   Ebene-1-getesteten CommandVorpruefung.Prüfe gekapselt). Ein wiederholt zugestellter Command
@@ -871,7 +869,7 @@ public abstract class AggregateActorBase<TState> : IActor
                     cmdEnvelope.Payload.GetType().Name);
 
                 _initialized = false;
-                try { await InitializeAsync(_id); }
+                try { await InitializeAsync(); }
                 catch (Exception rehydrateEx)
                 {
                     // Rehydration schlug fehl → _initialized bleibt false → die nächste Nachricht initialisiert sauber neu.

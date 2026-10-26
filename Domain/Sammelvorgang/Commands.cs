@@ -8,9 +8,9 @@ namespace Domain.Sammelvorgang;
 /// nur das skalare „erwarte N" als Faktum festgehalten.
 /// </summary>
 public record StarteSammelvorgang(
-    Guid AggregateId,
+    Id<Sammelvorgang> AggregateId,
     int Anzahl
-) : ICreationCommand;
+) : ICommand<Sammelvorgang>, ICreationCommand;
 
 /// <summary>
 /// Ein Teil meldet sich fertig. Wird typischerweise von einer Reaktion gefeuert, die das
@@ -18,5 +18,5 @@ public record StarteSammelvorgang(
 /// Doppelte Zustellung desselben Teils wird von der Framework-Inbox dedupliziert (nicht hier).
 /// </summary>
 public record MeldeTeilFertig(
-    Guid AggregateId
-) : ICommand;
+    Id<Sammelvorgang> AggregateId
+) : ICommand<Sammelvorgang>;

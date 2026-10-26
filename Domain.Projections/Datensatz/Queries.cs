@@ -9,14 +9,14 @@ namespace Domain.Projections.Datensatz;
 /// Liest den <em>immutablen</em> Snapshot → reproduzierbar.
 /// </summary>
 public record HoleDatensatzSamples(
-    Guid DatensatzId,
+    Id<Domain.Datensatz.Datensatz> DatensatzId,
     int Version,
     int Seite = 1,
     int SeitenGroesse = 500
 ) : IQuery;
 
 /// <summary>Ein einzelner Datensatz (Kopf-Daten) — für GUI-Detail und Integrations-Prüfung.</summary>
-public record HoleDatensatz(Guid DatensatzId) : IQuery;
+public record HoleDatensatz(Id<Domain.Datensatz.Datensatz> DatensatzId) : IQuery;
 
 /// <summary>Alle Datensätze (Sidebar-Liste mit Entwurf/Eingefroren-Badge, Größe, Version).</summary>
 public record HoleDatensaetze() : IQuery;
@@ -25,7 +25,7 @@ public record HoleDatensaetze() : IQuery;
 /// Rückwärts-Frage: in welchen Datensätzen liegt dieses
 /// Bildpaar? Speist die „in Datensätzen: …"-Chips im Einbild. Liest den Rückwärts-Index.
 /// </summary>
-public record HoleDatensaetzeFuerPaar(Guid ImagePairId) : IQuery;
+public record HoleDatensaetzeFuerPaar(Id<Domain.ImagePair.ImagePair> ImagePairId) : IQuery;
 
 /// <summary>
 /// Die Bildpaare eines Datensatzes (Mitglieder ODER Ausgeschlossene), paginiert — speist die
@@ -34,7 +34,7 @@ public record HoleDatensaetzeFuerPaar(Guid ImagePairId) : IQuery;
 /// virtuelle Fenster wie die normale Suche absorbiert — kein neuer Lade-/Merge-Pfad.
 /// </summary>
 public record HoleDatensatzPaare(
-    Guid DatensatzId,
+    Id<Domain.Datensatz.Datensatz> DatensatzId,
     DatensatzPaarModus Modus,
     int Seite = 1,
     int SeitenGroesse = 50

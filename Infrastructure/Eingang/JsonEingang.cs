@@ -67,7 +67,6 @@ public static class JsonEingang
             {
                 // Wer wiederholt, schickt dieselbe CommandId — die Inbox des Aggregats macht daraus genau eine Wirkung (docs/11 §11.3).
                 CommandId = body.TryGetProperty("commandId", out var id) && Guid.TryParse(id.GetString(), out var cid) ? cid : Guid.NewGuid(),
-                AggregateId = cmd.AggregateId,
                 AggregateType = aggregat,
                 Payload = cmd,
                 // Eine Konsole kennt keine Version: ohne Angabe wie ein Emitter (keine behauptete Version, die Inbox dedupliziert).
@@ -80,13 +79,13 @@ public static class JsonEingang
 
             var ergebnis = await ProtoActorAggregateDispatcher.FrageAsync(system, envelope, CommandZeitlimit, ct);
             if (ergebnis is null)
-                return Results.Json(new { ok = false, fehler = $"keine Antwort von {aggregat}/{cmd.AggregateId} nach {CommandZeitlimit.TotalSeconds:0} s" }, Json, statusCode: 504);
+                return Results.Json(new { ok = false, fehler = $"keine Antwort von {aggregat}/{cmd.Ziel} nach {CommandZeitlimit.TotalSeconds:0} s" }, Json, statusCode: 504);
             return Results.Json(new
             {
                 ok = ergebnis.Success,
                 akteur = wer,
                 aggregat,
-                aggregatId = cmd.AggregateId,
+                aggregatId = cmd.Ziel,
                 korrelation = envelope.CorrelationId,
                 version = ergebnis.NewVersion,
                 events = ergebnis.Events.Select(Darstellung),

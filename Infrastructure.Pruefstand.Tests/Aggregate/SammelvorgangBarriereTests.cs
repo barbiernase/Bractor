@@ -24,7 +24,7 @@ public class SammelvorgangBarriereTests
         // Gestartet mit N=3 (Laufzeitwert) + 2 Teile bereits verbucht → der 3. löst die Barriere aus.
         Szenario.Für<Sammelvorgang>(Fabrik, id)
             .Gegeben(new SammelvorgangGestartet(3), new TeilVerbucht(1, 3), new TeilVerbucht(2, 3))
-            .Wenn(new MeldeTeilFertig(id))
+            .Wenn(new MeldeTeilFertig(new(id)))
             .Dann<TeilVerbucht>()
             .Dann<SammelvorgangAbgeschlossen>()
             .UndZustand(s => s.Abgeschlossen && s.Fertig == 3, "beim N-ten Teil ist die Barriere erreicht");
@@ -36,7 +36,7 @@ public class SammelvorgangBarriereTests
         var id = Guid.NewGuid();
         Szenario.Für<Sammelvorgang>(Fabrik, id)
             .Gegeben(new SammelvorgangGestartet(3), new TeilVerbucht(1, 3))
-            .Wenn(new MeldeTeilFertig(id))
+            .Wenn(new MeldeTeilFertig(new(id)))
             .Dann<TeilVerbucht>()
             .DannKeineAblehnung()
             .UndZustand(s => !s.Abgeschlossen && s.Fertig == 2, "erst 2 von 3 — noch nicht fertig");
@@ -49,7 +49,7 @@ public class SammelvorgangBarriereTests
         // Dieselbe Logik, aber N=1 → schon der erste Teil schließt ab. N steckt allein in den Daten.
         Szenario.Für<Sammelvorgang>(Fabrik, id)
             .Gegeben(new SammelvorgangGestartet(1))
-            .Wenn(new MeldeTeilFertig(id))
+            .Wenn(new MeldeTeilFertig(new(id)))
             .Dann<SammelvorgangAbgeschlossen>()
             .UndZustand(s => s.Abgeschlossen && s.Fertig == 1);
     }
@@ -63,7 +63,7 @@ public class SammelvorgangBarriereTests
                 new SammelvorgangGestartet(2),
                 new TeilVerbucht(1, 2), new TeilVerbucht(2, 2),
                 new SammelvorgangAbgeschlossen())
-            .Wenn(new MeldeTeilFertig(id))
+            .Wenn(new MeldeTeilFertig(new(id)))
             .DannAbgelehnt<SammelvorgangBereitsAbgeschlossen>();
     }
 
@@ -72,7 +72,7 @@ public class SammelvorgangBarriereTests
     {
         var id = Guid.NewGuid();
         Szenario.Für<Sammelvorgang>(Fabrik, id)
-            .Wenn(new StarteSammelvorgang(id, 0))
+            .Wenn(new StarteSammelvorgang(new(id), 0))
             .Dann<SammelvorgangGestartet>()
             .Dann<SammelvorgangAbgeschlossen>()
             .UndZustand(s => s.Abgeschlossen);

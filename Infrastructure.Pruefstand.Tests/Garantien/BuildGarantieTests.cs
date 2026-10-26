@@ -32,6 +32,18 @@ public class BuildGarantieTests
         return diags.Select(d => d.Id).ToArray();
     }
 
+    /// <summary>Der erzeugte Quelltext (ohne die Probe selbst).</summary>
+    private static string Generat(ISourceGenerator generator, string code)
+    {
+        var refs = AppDomain.CurrentDomain.GetAssemblies().Concat(new[] { typeof(Abstractions.IState).Assembly, typeof(Core.ProjectionWriter).Assembly }).Distinct()
+            .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
+            .Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location)).ToImmutableArray();
+        var comp = CSharpCompilation.Create("Probe.Laufzeit", new[] { CSharpSyntaxTree.ParseText(Kopf + code) }, refs,
+            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+        var lauf = CSharpGeneratorDriver.Create(generator).RunGenerators(comp).GetRunResult();
+        return string.Concat(lauf.GeneratedTrees.Select(t => t.ToString()));
+    }
+
     private const string Aggregat = @"
 public partial class {0} : IState
 {{
@@ -40,21 +52,36 @@ public partial class {0} : IState
     public class Applier : IApplier<{0}> {{ public void Apply(ProbeGemacht e) {{ }} }}
 }}";
 
-    private const string Typen = @"namespace ProbeTypen {
-public record ProbeMach(Guid AggregateId) : ICommand;
-public record ProbeSchliess(Guid AggregateId) : ICommand;
-public record ProbeGemacht() : IEvent; }
+    // Das Ziel jedes Commands steht in seinem Typ (ICommand<TAggregat>, Plan §2.5).
+    private static string Typen(string zielMach, string zielSchliess) => $@"namespace ProbeTypen {{
+public record ProbeMach(Id<{zielMach}> AggregateId) : ICommand<{zielMach}>;
+public record ProbeSchliess(Id<{zielSchliess}> AggregateId) : ICommand<{zielSchliess}>;
+public record ProbeGemacht() : IEvent; }}
 ";
 
     [Fact]
     public void Ein_Command_mit_zwei_Aggregaten_bricht_den_Build_CQRS010()
-        => Ids(new Infrastructure.SourceGeneration.CommandAggregateMapGenerator(), Typen + "namespace Probe { using ProbeTypen;"
+        => Ids(new Infrastructure.SourceGeneration.CommandAggregateMapGenerator(), Typen("Probe.ProbeA", "Probe.ProbeA") + "namespace Probe { using ProbeTypen;"
                + string.Format(Aggregat, "ProbeA", "ProbeMach") + string.Format(Aggregat, "ProbeB", "ProbeMach") + "}")
             .Should().Contain("CQRS010");
 
     [Fact]
+    public void Ein_Decide_ausserhalb_des_Ziel_Aggregats_bricht_den_Build_CQRS010()
+        => Ids(new Infrastructure.SourceGeneration.CommandAggregateMapGenerator(), Typen("Probe.ProbeA", "Probe.ProbeA") + "namespace Probe { using ProbeTypen;"
+               + string.Format(Aggregat, "ProbeA", "ProbeSchliess") + string.Format(Aggregat, "ProbeB", "ProbeMach") + "}")
+            .Should().Equal("CQRS010");
+
+    [Fact]
+    public void Das_Routing_folgt_dem_Ziel_im_Typ()
+    {
+        var quelle = Generat(new Infrastructure.SourceGeneration.CommandAggregateMapGenerator(), Typen("Probe.ProbeA", "Probe.ProbeB") + "namespace Probe { using ProbeTypen;"
+            + string.Format(Aggregat, "ProbeA", "ProbeMach") + string.Format(Aggregat, "ProbeB", "ProbeSchliess") + "}");
+        quelle.Should().Contain("[typeof(global::ProbeTypen.ProbeMach)] = \"ProbeA\"").And.Contain("[typeof(global::ProbeTypen.ProbeSchliess)] = \"ProbeB\"");
+    }
+
+    [Fact]
     public void Zwei_Aggregate_mit_derselben_Identitaet_brechen_den_Build_CQRS011()
-        => Ids(new Infrastructure.SourceGeneration.CommandAggregateMapGenerator(), Typen
+        => Ids(new Infrastructure.SourceGeneration.CommandAggregateMapGenerator(), Typen("Probe.Eins.ProbeKonto", "Probe.Zwei.ProbeKonto")
                + "namespace Probe.Eins { using ProbeTypen;" + string.Format(Aggregat, "ProbeKonto", "ProbeMach") + "}"
                + "namespace Probe.Zwei { using ProbeTypen;" + string.Format(Aggregat, "ProbeKonto", "ProbeSchliess") + "}")
             .Should().Contain("CQRS011");

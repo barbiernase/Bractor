@@ -28,15 +28,17 @@ public partial class DatensatzKompositionRefreshHandler
 
     IEnumerable<object> Handle(DatensatzEingefroren evt, MessageContext ctx)
     {
-        if (_store.AktuelleDatensatzId != ctx.AggregateId) yield break;
-        yield return new HoleDatensatz(ctx.AggregateId);
+        var id = new DatensatzId(ctx.AggregateId);
+        if (_store.AktuelleDatensatzId != id) yield break;
+        yield return new HoleDatensatz(id);
         // Balance/Split live aus dem eingefrorenen Snapshot rechnen.
-        yield return new HoleDatensatzSamples(ctx.AggregateId, evt.Version, 1, 500);
+        yield return new HoleDatensatzSamples(id, evt.Version, 1, 500);
     }
 
     private IEnumerable<object> RefreshWennAktiv(MessageContext ctx)
     {
-        if (_store.AktuelleDatensatzId == ctx.AggregateId)
-            yield return new HoleDatensatz(ctx.AggregateId);
+        var id = new DatensatzId(ctx.AggregateId);
+        if (_store.AktuelleDatensatzId == id)
+            yield return new HoleDatensatz(id);
     }
 }

@@ -9,19 +9,19 @@ using Abstractions;
 
 namespace Kundenportal.Konten;
 
-public record RegistriereBenutzer(Guid AggregateId, string Email, string Name) : ICreationCommand;
-public record RegistrierungBeantragt(Guid BenutzerId, string Email, string Name) : IEvent;
-public record BenutzerExistiert(Guid Id) : ITransientEvent;
+public record RegistriereBenutzer(Id<Benutzer> AggregateId, string Email, string Name) : ICommand<Benutzer>, ICreationCommand;
+public record RegistrierungBeantragt(Id<Benutzer> BenutzerId, string Email, string Name) : IEvent;
+public record BenutzerExistiert(Id<Benutzer> Id) : ITransientEvent;
 
-public record BestaetigeBenutzer(Guid AggregateId) : ICommand;
+public record BestaetigeBenutzer(Id<Benutzer> AggregateId) : ICommand<Benutzer>;
 public record BenutzerBestaetigt(string Email) : IEvent;
 
-public record LehneRegistrierungAb(Guid AggregateId, string Grund) : ICommand;
+public record LehneRegistrierungAb(Id<Benutzer> AggregateId, string Grund) : ICommand<Benutzer>;
 public record RegistrierungAbgelehnt(string Grund) : IEvent;
 
-public record ReserviereAdresse(Guid AggregateId, string Email, Guid BenutzerId) : ICommand;
-public record AdresseReserviert(string Email, Guid BenutzerId) : IEvent;
-public record AdresseVergeben(Guid BenutzerId, Guid Inhaber) : IEvent;
+public record ReserviereAdresse(Id<Adresse> AggregateId, string Email, Id<Benutzer> BenutzerId) : ICommand<Adresse>;
+public record AdresseReserviert(string Email, Id<Benutzer> BenutzerId) : IEvent;
+public record AdresseVergeben(Id<Benutzer> BenutzerId, Id<Benutzer> Inhaber) : IEvent;
 
 public enum Kontostatus { Beantragt = 1, Aktiv = 2, Abgelehnt = 3 }
 
@@ -62,14 +62,14 @@ public partial class Benutzer : IState
 // Das Eindeutigkeits-Aggregat: je Adresse ein Stream, der erste Benutzer gewinnt; derselbe Benutzer noch einmal ist ein Noop.
 public partial class Adresse : IState
 {
-    public Guid Inhaber { get; set; }
+    public Id<Benutzer> Inhaber { get; set; }
 
     public partial class Decider : IDecider<Adresse>
     {
         public IEnumerable<OneOf<AdresseReserviert, AdresseVergeben>> Decide(ReserviereAdresse c)
         {
             if (this.State.Inhaber == c.BenutzerId) yield break;
-            if (this.State.Inhaber != Guid.Empty) { yield return new AdresseVergeben(c.BenutzerId, this.State.Inhaber); yield break; }
+            if (this.State.Inhaber != default) { yield return new AdresseVergeben(c.BenutzerId, this.State.Inhaber); yield break; }
             yield return new AdresseReserviert(c.Email, c.BenutzerId);
         }
     }
@@ -86,7 +86,7 @@ public static class Adressschluessel
 {
     public static string Normalisiere(string email) => email.Trim().ToLowerInvariant();
 
-    public static Guid Id(string email)
+    public static Id<Adresse> Id(string email)
     {
         // Zwei FNV-1a-Läufe mit verschiedenem Start ergeben 128 Bit — stabil über Prozesse und Plattformen (string.GetHashCode wäre es nicht).
         ulong a = 14695981039346656037, b = 0x9E3779B97F4A7C15;
@@ -94,7 +94,7 @@ public static class Adressschluessel
         var bytes = new byte[16];
         BitConverter.TryWriteBytes(bytes.AsSpan(0, 8), a);
         BitConverter.TryWriteBytes(bytes.AsSpan(8, 8), b);
-        return new Guid(bytes);
+        return new Id<Adresse>(new Guid(bytes));
     }
 }
 

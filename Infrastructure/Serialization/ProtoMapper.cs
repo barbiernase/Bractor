@@ -246,18 +246,32 @@ public partial class ProtoMessageMapper
     // HÜLLEN (Framework): Metadaten-Felder kopieren, die Nutzlast packt/entpackt die Tabelle
     // =========================================================================
 
-    private CommandEnvelope CommandAusHuelle(CommandEnvelopeDto dto) => new()
+    private CommandEnvelope CommandAusHuelle(CommandEnvelopeDto dto)
+    {
+        var payload = _tabelle.Command(dto.Payload);
+        // Das Ziel steht im Command (ICommand<TAggregat>, Plan §2.5): Id und Aggregat-Typ der Hülle wiederholen es nur. Weichen sie ab, ist der
+        //   Command an eine fremde Id bzw. ein fremdes Aggregat gerichtet — abgelehnt, bevor er irgendwohin geht (der Aufrufer meldet den Fehler).
+        var aggregat = Infrastructure.Extensions.AggregateDispatcherExtensions.ResolveAggregateType(payload);
+        if (!string.IsNullOrEmpty(dto.AggregateId) && (!Guid.TryParse(dto.AggregateId, out var id) || id != payload.Ziel))
+            throw new InvalidOperationException(
+                $"{payload.GetType().Name}: die Hülle nennt das Ziel {dto.AggregateId}, der Command {payload.Ziel} — abgelehnt");
+        if (!string.IsNullOrEmpty(dto.AggregateType) && dto.AggregateType != aggregat)
+            throw new InvalidOperationException(
+                $"{payload.GetType().Name}: die Hülle nennt das Aggregat {dto.AggregateType}, der Command gehört zu {aggregat} — abgelehnt");
+        return CommandAusHuelle(dto, payload, aggregat);
+    }
+
+    private static CommandEnvelope CommandAusHuelle(CommandEnvelopeDto dto, ICommand payload, string aggregat) => new()
     {
         CommandId = Guid.Parse(dto.CommandId),
-        AggregateId = Guid.Parse(dto.AggregateId),
-        AggregateType = dto.AggregateType,
+        AggregateType = aggregat,
         // Über gRPC reisen NUR Client-Commands (OCC) — der interne Emittiert-Pfad kreuzt nie den Draht.
         Modus = new CommandModus.Client(dto.ExpectedVersion),
         CreatedAtUtc = DateTimeOffset.FromUnixTimeMilliseconds(dto.CreatedAtUtc),
         CorrelationId = dto.CorrelationId,
         UserId = dto.UserId,
         OriginSessionId = string.IsNullOrEmpty(dto.OriginSessionId) ? null : dto.OriginSessionId,
-        Payload = _tabelle.Command(dto.Payload),
+        Payload = payload,
     };
 
     private CommandEnvelopeDto CommandHuelle(CommandEnvelope envelope) => new()

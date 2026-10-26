@@ -182,6 +182,7 @@ public static class CqrsServiceExtensions
                         new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver()));
                 Console.WriteLine("  + STJ Source-Gen Serializer für Events aktiv (UseGeneratedJsonSerializer)");
             }
+            Infrastructure.Persistence.IdSerialisierung.Registriere(options);
 
             // ★ Phase 1: Event-Metadaten aktivieren, damit CorrelationId/CausationId/
             //   Header (aggregate_type) beim Append persistiert und nach dem Log-Read

@@ -12,7 +12,15 @@ namespace Infrastructure.Serialization;
 /// Martens JsonSerializerOptions + Resolver-Chain. Der EventJsonGenerator koppelt die Menge zur
 /// Compile-Zeit (Default.{Event}).
 /// </summary>
-[JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
+[JsonSourceGenerationOptions(
+    GenerationMode = JsonSourceGenerationMode.Metadata,
+    Converters = new System.Type[]
+    {
+        typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Auftrag.Auftrag>),
+        typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Kontingent.Kontingent>),
+        typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Posten.Posten>),
+        typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Verteilung.Verteilung>),
+    })]
 // ── Framework: Prozess-intern + Aggregat-Inbox (IEvent → persistiert) ──
 [JsonSerializable(typeof(ProzessGestartet))]
 [JsonSerializable(typeof(ProzessBeendet))]

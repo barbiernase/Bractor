@@ -9,37 +9,28 @@ using System.Text;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Wurzel-2-Fix, Schritt 1: PRÄZISES Command→Aggregat-Routing aus den DECIDER-SIGNATUREN
-    /// statt aus der Namespace-Konvention (die <see cref="PipelineActorGenerator"/> heute nutzt).
+    /// Das Command→Aggregat-Routing aus dem TYP des Commands (Plan §2.5, R3): ein Command ist <c>ICommand&lt;TAggregat&gt;</c>, sein Ziel steht
+    /// im Typ-Argument — Routing über Typen (Inv. 3), ohne Konvention. Die Decide-Signaturen liefern die Kanten Command → Events
+    /// (<c>CommandToEvents</c>) und müssen im Ziel-Aggregat stehen: ein <c>Decide(TCommand)</c> in einem anderen Aggregat bricht den Build
+    /// (CQRS010). Ein Command ohne typisiertes Ziel meldet CQRS013 (<c>ModellAnalyzer</c>), einer ohne Decide CQRS086.
     ///
-    /// Für jede <c>IDecider&lt;TState&gt;</c>-Implementierung wird jede <c>Decide(TCommand)</c>-Methode
-    /// gelesen: <c>TCommand</c> gehört zu <c>TState</c> (dem Aggregat, das den Command WIRKLICH behandelt).
-    /// Strukturell garantiert statt konventions-abhängig — der stille Falsch-Route und das
-    /// „kein Mapping → stiller Drop" (F7) fallen weg, weil das Ziel aus der tatsächlichen Behandlung folgt.
-    ///
-    /// STAND: VERDRAHTET — dies ist die Routing-Quelle. <c>GeneratedPipelines.CommandAggregateTypes</c> ist ein
-    /// Passthrough hierauf; damit routen <c>HandlerOutputRouter</c>, <c>ProzessManagerActor</c>,
-    /// <c>AggregateDispatcherExtensions</c> und die generierte <c>PipelineActorBase</c>-Override präzise (aus den
-    /// Decidern), nicht mehr namespace-basiert. Der alte Namespace-Algorithmus im PipelineActorGenerator ist entfernt.
-    /// Verifiziert byte-genau identisch zur Namespace-Map (34/34) — reine Substrat-Umschaltung, Verhalten unverändert.
+    /// <c>GeneratedPipelines.CommandAggregateTypes</c> ist ein Passthrough hierauf; darüber routen Dispatcher, Leitung, Emitter und Dirigent.
     /// </summary>
     [Generator]
     public class CommandAggregateMapGenerator : ISourceGenerator
     {
         private const string IDeciderMetadataName = "Abstractions.IDecider`1";
         private const string ICommandFullName = "Abstractions.ICommand";
+        private const string ICommandZielName = Abstractions.Idvertrag.CommandMetadatenName;
         private const string IEventFullName = "Abstractions.IEvent";
         private const string ITransientEventFullName = "Abstractions.ITransientEvent";
 
-        // ★ Audit-Fix H4 (fail-fast): ein Command, den mehr als ein Aggregat behandelt, fällt aus dem
-        //   eindeutigen Routing (CommandToAggregate) → als Reaktion verpufft er still, als Prozess-Send hängt
-        //   der Prozess. Das war bisher nur ein Kommentar im Generat; jetzt bricht es den Build.
+        // R3: ein Command gehört genau dem Aggregat in seinem Typ — ein Decide anderswo bräche das Routing still (der Command käme nie dort an).
         private static readonly DiagnosticDescriptor CommandKollision = new DiagnosticDescriptor(
             id: "CQRS010",
-            title: "Command von mehreren Aggregaten behandelt",
-            messageFormat: "Command '{0}' wird von mehreren Aggregaten behandelt ({1}) — er fällt aus dem eindeutigen "
-                + "Routing (CommandToAggregate) und würde als Reaktion still verpuffen bzw. einen Prozess hängen lassen. "
-                + "Jeder Command darf von genau EINEM Aggregat (Decider) behandelt werden.",
+            title: "Command außerhalb seines Ziel-Aggregats entschieden",
+            messageFormat: "Command '{0}' gehört laut ICommand<{1}> zu {1}, wird aber in {2} entschieden — ein Command gehört genau EINEM "
+                + "Aggregat, dem in seinem Typ; das Decide gehört dorthin.",
             category: "Cqrs",
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -65,12 +56,13 @@ namespace Infrastructure.SourceGeneration
             var compilation = context.Compilation;
             var iDecider = compilation.GetTypeByMetadataName(IDeciderMetadataName);
             var iCommand = compilation.GetTypeByMetadataName(ICommandFullName);
-            if (iDecider == null || iCommand == null)
+            var iCommandZiel = compilation.GetTypeByMetadataName(ICommandZielName);
+            if (iDecider == null || iCommand == null || iCommandZiel == null)
                 return;
             var iEvent = compilation.GetTypeByMetadataName(IEventFullName);
             var iTransient = compilation.GetTypeByMetadataName(ITransientEventFullName);
 
-            // Command-Symbol → Menge der behandelnden Aggregat-Namen (Menge, um Kollisionen zu erkennen).
+            // Command-Symbol → sein Ziel-Aggregat (Identität), aus ICommand<TAggregat>.
             var map = new Dictionary<INamedTypeSymbol, SortedSet<string>>(SymbolEqualityComparer.Default);
             // Command-Symbol → produzierte PERSISTIERTE Event-Typen (FQN), aus den Decide-OneOf-Rückgabetypen.
             // Grundlage des Azyklizitäts-Boot-Guards (präzise Command→Event-Kanten statt aggregat-grob).
@@ -81,6 +73,11 @@ namespace Infrastructure.SourceGeneration
 
             var allTypes = new List<INamedTypeSymbol>();
             CollectTypes(compilation.GlobalNamespace, allTypes);
+
+            // Das Ziel jedes Commands aus seinem Typ: ICommand<TAggregat> → TAggregat.
+            foreach (var type in allTypes)
+                if (Ziel(type, iCommandZiel) is { } ziel)
+                    map[type] = new SortedSet<string>(System.StringComparer.Ordinal) { AggregatIdentität(ziel) };
 
             foreach (var type in allTypes)
             {
@@ -110,9 +107,16 @@ namespace Infrastructure.SourceGeneration
                     if (!cmd.AllInterfaces.Contains(iCommand, SymbolEqualityComparer.Default))
                         continue;
 
-                    if (!map.TryGetValue(cmd, out var set))
-                        map[cmd] = set = new SortedSet<string>(System.StringComparer.Ordinal);
-                    set.Add(stateName);
+                    // Das Decide muss im Ziel-Aggregat stehen (CQRS010); ohne typisiertes Ziel meldet CQRS013 im Domänen-Projekt.
+                    var ziel = Ziel(cmd, iCommandZiel);
+                    if (ziel is null)
+                        continue;
+                    if (!SymbolEqualityComparer.Default.Equals(ziel, stateSymbol))
+                    {
+                        context.ReportDiagnostic(Diagnostic.Create(CommandKollision,
+                            method.Locations.FirstOrDefault() ?? Location.None, cmd.Name, ziel.Name, stateSymbol.Name));
+                        continue;
+                    }
 
                     if (!events.TryGetValue(cmd, out var evSet))
                         events[cmd] = evSet = new SortedSet<string>(System.StringComparer.Ordinal);
@@ -120,13 +124,6 @@ namespace Infrastructure.SourceGeneration
                         evSet.Add(ev);
                 }
             }
-
-            // ★ H4: Kollisionen als Build-Fehler melden (fail-fast statt stillem Drop).
-            foreach (var kv in map.Where(k => k.Value.Count > 1))
-                context.ReportDiagnostic(Diagnostic.Create(
-                    CommandKollision,
-                    kv.Key.Locations.FirstOrDefault() ?? Location.None,
-                    kv.Key.Name, string.Join(", ", kv.Value)));
 
             // ★ P1c (TG-3): zwei verschiedene State-Typen mit derselben aufgelösten Identität → Build-Fehler.
             foreach (var kv in identitätZuStates.Where(k => k.Value.Count > 1))
@@ -136,6 +133,13 @@ namespace Infrastructure.SourceGeneration
                     kv.Key, string.Join(", ", kv.Value.Select(s => s.ToDisplayString(fq)))));
 
             context.AddSource("GeneratedCommandRouting.g.cs", Emit(map, events, fq));
+        }
+
+        /// <summary>Das Ziel-Aggregat eines Commands aus <c>ICommand&lt;TAggregat&gt;</c>, oder null (kein Command mit typisiertem Ziel).</summary>
+        private static INamedTypeSymbol? Ziel(INamedTypeSymbol cmd, INamedTypeSymbol iCommandZiel)
+        {
+            var ziele = cmd.AllInterfaces.Where(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iCommandZiel)).ToList();
+            return ziele.Count == 1 ? ziele[0].TypeArguments[0] as INamedTypeSymbol : null;
         }
 
         /// <summary>
@@ -193,7 +197,7 @@ namespace Infrastructure.SourceGeneration
 
         private static void CollectNested(INamedTypeSymbol type, List<INamedTypeSymbol> results)
         {
-            if (type.TypeKind == TypeKind.Class && !type.IsAbstract)
+            if ((type.TypeKind == TypeKind.Class || type.TypeKind == TypeKind.Struct) && !type.IsAbstract)
                 results.Add(type);
             foreach (var nested in type.GetTypeMembers())
                 CollectNested(nested, results);
@@ -204,14 +208,12 @@ namespace Infrastructure.SourceGeneration
             Dictionary<INamedTypeSymbol, SortedSet<string>> events,
             SymbolDisplayFormat fq)
         {
-            var eindeutig = map.Where(k => k.Value.Count == 1).ToList();
-            var kollisionen = map.Where(k => k.Value.Count > 1).ToList();
+            var eindeutig = map.ToList();
 
             var sb = new StringBuilder();
             sb.AppendLine("// <auto-generated/>");
-            sb.AppendLine("// Wurzel-2: präzises Command→Aggregat-Routing UND Command→Event-Abbildung aus den Decider-Signaturen.");
-            sb.AppendLine("// Quelle: jede IDecider<TState>.Decide(TCommand) → TCommand gehört zu TState; der OneOf-Rückgabetyp nennt die Events.");
-            sb.AppendLine($"// {eindeutig.Count} eindeutige Zuordnungen, {kollisionen.Count} Kollisionen.");
+            sb.AppendLine("// Command→Aggregat-Routing aus dem Typ (ICommand<TAggregat>) und Command→Event-Abbildung aus den Decide-Signaturen.");
+            sb.AppendLine($"// {eindeutig.Count} Commands.");
             sb.AppendLine();
             sb.AppendLine("using System;");
             sb.AppendLine("using System.Collections.Generic;");
@@ -220,7 +222,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine();
             sb.AppendLine("public static class GeneratedCommandRouting");
             sb.AppendLine("{");
-            sb.AppendLine("    /// <summary>Command-Typ → Aggregat-Name, strukturell aus den Decidern abgeleitet.</summary>");
+            sb.AppendLine("    /// <summary>Command-Typ → Aggregat-Name (Cluster-Kind), aus ICommand<TAggregat>.</summary>");
             sb.AppendLine("    [global::Abstractions.RoutingTabelle(global::Abstractions.RoutingArt.CommandZuAggregat)]");
             sb.AppendLine("    public static IReadOnlyDictionary<Type, string> CommandToAggregate { get; } =");
             sb.AppendLine("        new Dictionary<Type, string>");
@@ -250,14 +252,6 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("    /// <summary>Die produzierten Events eines Commands (leer, wenn unbekannt) — für den Azyklizitäts-Guard.</summary>");
             sb.AppendLine("    public static IEnumerable<Type> Produziert(Type command)");
             sb.AppendLine("        => CommandToEvents.TryGetValue(command, out var evts) ? evts : Array.Empty<Type>();");
-
-            if (kollisionen.Count > 0)
-            {
-                sb.AppendLine();
-                sb.AppendLine("    // ⚠ MEHRDEUTIGE COMMANDS (von mehr als einem Decider behandelt — als Build-Fehler CQRS010 gemeldet):");
-                foreach (var kv in kollisionen.OrderBy(k => k.Key.Name, System.StringComparer.Ordinal))
-                    sb.AppendLine($"    //   {kv.Key.Name} → {string.Join(", ", kv.Value)}");
-            }
 
             sb.AppendLine("}");
             return sb.ToString();

@@ -98,9 +98,9 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         Guid posten = G("a1a1a1a1", 1), kontingent = G("a1a1a1a1", 2), auftrag = G("a1a1a1a1", 3);
         var (aus, _) = await BeideAsync(nameof(AuftragsProzess), auftrag, async w =>
         {
-            await w.AnlegenAsync(new EroeffnePosten(posten, 10));
-            await w.AnlegenAsync(new RichteKontingentEin(kontingent, 5));
-            await w.AnlegenAsync(new StarteAuftrag(auftrag, posten, kontingent, 3));
+            await w.AnlegenAsync(new EroeffnePosten(new(posten), 10));
+            await w.AnlegenAsync(new RichteKontingentEin(new(kontingent), 5));
+            await w.AnlegenAsync(new StarteAuftrag(new(auftrag), new(posten), new(kontingent), 3));
         });
         aus.Erfolg.Should().BeTrue();
         aus.Feuerungen.Select(f => f.Cmd).Should().BeEquivalentTo(nameof(ReservierePosten), nameof(BelegeKontingent), nameof(BestaetigeAuftrag));
@@ -113,9 +113,9 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         Guid posten = G("e5e5e5e5", 10 * n + 1), kontingent = G("e5e5e5e5", 10 * n + 2), auftrag = G("e5e5e5e5", 10 * n + 3);
         var (aus, an) = await BeideAsync(nameof(AuftragsProzess), auftrag, async w =>
         {
-            await w.AnlegenAsync(new EroeffnePosten(posten, 10));
-            await w.AnlegenAsync(new RichteKontingentEin(kontingent, 5));
-            await w.AnlegenAsync(new StarteAuftrag(auftrag, posten, kontingent, 3));
+            await w.AnlegenAsync(new EroeffnePosten(new(posten), 10));
+            await w.AnlegenAsync(new RichteKontingentEin(new(kontingent), 5));
+            await w.AnlegenAsync(new StarteAuftrag(new(auftrag), new(posten), new(kontingent), 3));
         }, kalt: kalt, mitRouter: mitRouter);
         aus.Erfolg.Should().BeTrue();
         an.Abfragen.Should().BeLessThan(aus.Abfragen);
@@ -128,9 +128,9 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         Guid posten = G("f6f6f6f6", 10 * n + 1), kontingent = G("f6f6f6f6", 10 * n + 2), auftrag = G("f6f6f6f6", 10 * n + 3);
         var (aus, _) = await BeideAsync(nameof(AuftragsProzess), auftrag, async w =>
         {
-            await w.AnlegenAsync(new EroeffnePosten(posten, 10));
-            await w.AnlegenAsync(new RichteKontingentEin(kontingent, 1));
-            await w.AnlegenAsync(new StarteAuftrag(auftrag, posten, kontingent, 3));
+            await w.AnlegenAsync(new EroeffnePosten(new(posten), 10));
+            await w.AnlegenAsync(new RichteKontingentEin(new(kontingent), 1));
+            await w.AnlegenAsync(new StarteAuftrag(new(auftrag), new(posten), new(kontingent), 3));
         }, kalt: kalt, mitRouter: mitRouter, verzögert: verzögert);
         aus.Erfolg.Should().BeFalse();
     }
@@ -143,9 +143,9 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         var ziele = Enumerable.Range(10, 6).Select(n => G("a7a7a7a7", (mitRouter ? 100 : 0) + n)).ToList();
         var (aus, _) = await BeideAsync(nameof(VerteilProzess), verteilung, async w =>
         {
-            await w.AnlegenAsync(new EroeffnePosten(quelle, 1000));
-            foreach (var z in ziele) await w.AnlegenAsync(new EroeffnePosten(z, 0));
-            await w.AnlegenAsync(new StarteVerteilung(verteilung, quelle, ziele, 5));
+            await w.AnlegenAsync(new EroeffnePosten(new(quelle), 1000));
+            foreach (var z in ziele) await w.AnlegenAsync(new EroeffnePosten(new(z), 0));
+            await w.AnlegenAsync(new StarteVerteilung(new(verteilung), new(quelle), ziele.Select(z => new Id<Posten.Posten>(z)).ToList(), 5));
         }, mitRouter: mitRouter, verzögert: true);
         aus.Erfolg.Should().BeTrue();
     }
@@ -156,9 +156,9 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         Guid posten = G("b2b2b2b2", 1), kontingent = G("b2b2b2b2", 2), auftrag = G("b2b2b2b2", 3);
         var (aus, _) = await BeideAsync(nameof(AuftragsProzess), auftrag, async w =>
         {
-            await w.AnlegenAsync(new EroeffnePosten(posten, 10));
-            await w.AnlegenAsync(new RichteKontingentEin(kontingent, 1));   // reicht nicht → Ablehnung → Kompensation
-            await w.AnlegenAsync(new StarteAuftrag(auftrag, posten, kontingent, 3));
+            await w.AnlegenAsync(new EroeffnePosten(new(posten), 10));
+            await w.AnlegenAsync(new RichteKontingentEin(new(kontingent), 1));   // reicht nicht → Ablehnung → Kompensation
+            await w.AnlegenAsync(new StarteAuftrag(new(auftrag), new(posten), new(kontingent), 3));
         });
         aus.Erfolg.Should().BeFalse();
         aus.Feuerungen.Select(f => f.Cmd).Should().Contain(nameof(GibPostenFrei)).And.NotContain(nameof(BestaetigeAuftrag));
@@ -172,9 +172,9 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         var ziele = Enumerable.Range(10, 12).Select(n => G("c3c3c3c3", n)).ToList();
         var (aus, an) = await BeideAsync(nameof(VerteilProzess), verteilung, async w =>
         {
-            await w.AnlegenAsync(new EroeffnePosten(quelle, 1000));
-            foreach (var z in ziele) await w.AnlegenAsync(new EroeffnePosten(z, 0));
-            await w.AnlegenAsync(new StarteVerteilung(verteilung, quelle, ziele, 5));
+            await w.AnlegenAsync(new EroeffnePosten(new(quelle), 1000));
+            foreach (var z in ziele) await w.AnlegenAsync(new EroeffnePosten(new(z), 0));
+            await w.AnlegenAsync(new StarteVerteilung(new(verteilung), new(quelle), ziele.Select(z => new Id<Posten.Posten>(z)).ToList(), 5));
         });
         aus.Erfolg.Should().BeTrue();
         aus.Feuerungen.Count(f => f.Cmd == nameof(BuchePostenZu)).Should().Be(ziele.Count, "je Ziel genau ein Vorgang");
@@ -193,9 +193,9 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         Guid posten = G("a8a8a8a8", 10 * n + 1), kontingent = G("a8a8a8a8", 10 * n + 2), auftrag = G("a8a8a8a8", 10 * n + 3);
         var (aus, _) = await BeideAsync(nameof(AuftragsProzess), auftrag, async w =>
         {
-            await w.AnlegenAsync(new EroeffnePosten(posten, 10));
-            await w.AnlegenAsync(new RichteKontingentEin(kontingent, 1));   // reicht nicht → Ablehnung → Kompensation in denselben Posten
-            await w.AnlegenAsync(new StarteAuftrag(auftrag, posten, kontingent, 3));
+            await w.AnlegenAsync(new EroeffnePosten(new(posten), 10));
+            await w.AnlegenAsync(new RichteKontingentEin(new(kontingent), 1));   // reicht nicht → Ablehnung → Kompensation in denselben Posten
+            await w.AnlegenAsync(new StarteAuftrag(new(auftrag), new(posten), new(kontingent), 3));
         }, kalt: kalt, mitRouter: mitRouter, verzögert: verzögert, mitHinweis: true);
         aus.Erfolg.Should().BeFalse();
 
@@ -204,9 +204,9 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         var ziele = Enumerable.Range(10, 6).Select(i => G("a9a9a9a9", 100 * n + i)).ToList();
         var (ausV, _) = await BeideAsync(nameof(VerteilProzess), verteilung, async w =>
         {
-            await w.AnlegenAsync(new EroeffnePosten(quelle, 1000));
-            foreach (var z in ziele) await w.AnlegenAsync(new EroeffnePosten(z, 0));
-            await w.AnlegenAsync(new StarteVerteilung(verteilung, quelle, ziele, 5));
+            await w.AnlegenAsync(new EroeffnePosten(new(quelle), 1000));
+            foreach (var z in ziele) await w.AnlegenAsync(new EroeffnePosten(new(z), 0));
+            await w.AnlegenAsync(new StarteVerteilung(new(verteilung), new(quelle), ziele.Select(z => new Id<Posten.Posten>(z)).ToList(), 5));
         }, kalt: kalt, mitRouter: mitRouter, verzögert: verzögert, mitHinweis: true);
         ausV.Erfolg.Should().BeTrue();
     }
@@ -222,10 +222,10 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
             Guid posten = G(präfix, 1), kontingent = G(präfix, 2), auftrag = G(präfix, 3);
             var (_, an) = await BeideAsync(nameof(AuftragsProzess), auftrag, async w =>
             {
-                await w.AnlegenAsync(new EroeffnePosten(posten, 10_000));
-                for (var i = 0; i < fremde; i++) await w.FremdAsync(new ReservierePosten(posten, 1));
-                await w.AnlegenAsync(new RichteKontingentEin(kontingent, 5));
-                await w.AnlegenAsync(new StarteAuftrag(auftrag, posten, kontingent, 3));
+                await w.AnlegenAsync(new EroeffnePosten(new(posten), 10_000));
+                for (var i = 0; i < fremde; i++) await w.FremdAsync(new ReservierePosten(new(posten), 1));
+                await w.AnlegenAsync(new RichteKontingentEin(new(kontingent), 5));
+                await w.AnlegenAsync(new StarteAuftrag(new(auftrag), new(posten), new(kontingent), 3));
             }, mitHinweis: mitHinweis);
             an.Erfolg.Should().BeTrue();
             return an;
@@ -252,10 +252,10 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         Guid posten = G(präfix, 1), kontingent = G(präfix, 2), auftrag = G(präfix, 3);
         var an = await TreibeAsync(_fx.An, nameof(AuftragsProzess), auftrag, async w =>
         {
-            await w.AnlegenAsync(new EroeffnePosten(posten, 1_000_000));
-            await w.FremdVieleAsync(new ReservierePosten(posten, 1), fremde);
-            await w.AnlegenAsync(new RichteKontingentEin(kontingent, 1));   // reicht nicht → Ablehnung → Kompensation in den Posten
-            await w.AnlegenAsync(new StarteAuftrag(auftrag, posten, kontingent, 3));
+            await w.AnlegenAsync(new EroeffnePosten(new(posten), 1_000_000));
+            await w.FremdVieleAsync(new ReservierePosten(new(posten), 1), fremde);
+            await w.AnlegenAsync(new RichteKontingentEin(new(kontingent), 1));   // reicht nicht → Ablehnung → Kompensation in den Posten
+            await w.AnlegenAsync(new StarteAuftrag(new(auftrag), new(posten), new(kontingent), 3));
         }, marking, kalt: kalt, mitHinweis: true);
         an.Erfolg.Should().BeFalse();
         an.Feuerungen.Select(f => f.Cmd).Should().Contain(nameof(GibPostenFrei));
@@ -291,9 +291,9 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         var store = new ZählenderStore(new MartenEventStore(_fx.An, new Pruefdomaene.AggregateHandlerFactory(), NullLogger<MartenEventStore>.Instance));
         var korrelation = ProzessId.Für(nameof(AuftragsProzess), auftrag, 1);
         var welt = new Welt(store) { Verzögert = true, Korrelation = korrelation };
-        await welt.AnlegenAsync(new EroeffnePosten(posten, 1_000_000));
-        await welt.AnlegenAsync(new RichteKontingentEin(kontingent, 5));
-        await welt.AnlegenAsync(new StarteAuftrag(auftrag, posten, kontingent, 3));
+        await welt.AnlegenAsync(new EroeffnePosten(new(posten), 1_000_000));
+        await welt.AnlegenAsync(new RichteKontingentEin(new(kontingent), 5));
+        await welt.AnlegenAsync(new StarteAuftrag(new(auftrag), new(posten), new(kontingent), 3));
         var registry = new Dictionary<string, ProzessRegeln> { [nameof(AuftragsProzess)] = Anwendung.Prozesse[nameof(AuftragsProzess)] };
         var marking = new MartenProzessMarkingStore(_fx.An);
         ProzessManager Neu() => new(store, registry, welt.DispatchAsync, markingStore: marking, markingSchreibIntervall: markingSchreibIntervall);
@@ -310,7 +310,7 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         //   eigenen Event — sonst läse jede Weckung alles Fremde dahinter erneut.
         var (mgr, store, welt, korrelation, posten, _) = await WartenderAuftragAsync("ab05ab05", markingSchreibIntervall: 1);
         await mgr.WakeAsync(korrelation, default);   // die Reservierung ist gefaltet, die Belegung steht aus
-        await welt.FremdVieleAsync(new ReservierePosten(posten, 1), 1_000);
+        await welt.FremdVieleAsync(new ReservierePosten(new(posten), 1), 1_000);
         store.Gelesen = 0;
         for (var i = 0; i < 5; i++) await mgr.WakeAsync(korrelation, default, vomBackstop: true);
         store.Gelesen.Should().BeLessThan(1_100, $"die 1 000 fremden Events einmal, nicht je Weckung ({store.Gelesen} gelesen)");
@@ -323,7 +323,7 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         // Selten durabel geschrieben (alle 32 Weckungen): ohne Sichern begänne die nächste Aktivierung beim Beginn des Vorgangs und läse alles,
         //   was seither in den Posten kam.
         var (mgr, store, welt, korrelation, posten, neu) = await WartenderAuftragAsync("ab06ab06", markingSchreibIntervall: 32);
-        await welt.FremdVieleAsync(new ReservierePosten(posten, 1), 1_000);
+        await welt.FremdVieleAsync(new ReservierePosten(new(posten), 1), 1_000);
         await mgr.WakeAsync(korrelation, default);   // liest den Posten einmal bis zum Kopf
         await mgr.SichereMarkingAsync(korrelation, default);
         var kalt = neu();
@@ -356,9 +356,9 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         Guid posten = G("d4d4d4d4", 1), kontingent = G("d4d4d4d4", 2), auftrag = G("d4d4d4d4", 3);
         var (_, an) = await BeideAsync(nameof(AuftragsProzess), auftrag, async w =>
         {
-            await w.AnlegenAsync(new EroeffnePosten(posten, 10));
-            await w.AnlegenAsync(new RichteKontingentEin(kontingent, 5));
-            await w.AnlegenAsync(new StarteAuftrag(auftrag, posten, kontingent, 3));
+            await w.AnlegenAsync(new EroeffnePosten(new(posten), 10));
+            await w.AnlegenAsync(new RichteKontingentEin(new(kontingent), 5));
+            await w.AnlegenAsync(new StarteAuftrag(new(auftrag), new(posten), new(kontingent), 3));
         }, an: new FalscherHashStore(), kalt: true);   // kalt: nur eine neue Aktivierung lädt das Marking aus dem Store
         an.Erfolg.Should().BeTrue("trotz korruptem Fremd-Marking läuft der Vorgang korrekt (Hash-Mismatch → Voll-Fold)");
     }
@@ -399,7 +399,7 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         public async Task AnlegenAsync(ICommand anlegen)
         {
             var s = Neu(anlegen);
-            s.Id = anlegen.AggregateId;
+            s.Id = anlegen.Ziel;
             var h = _fabrik.CreateHandler(s);
             _aggregate[s.Id] = (s, h, new HashSet<Guid>());
             var evs = h.HandleCommand(anlegen).ToList();
@@ -420,29 +420,29 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         /// <summary>Ein Befehl eines FREMDEN Vorgangs (eigene Korrelation): füllt den Ziel-Stream, zählt nicht als Feuerung.</summary>
         public async Task FremdAsync(ICommand cmd)
         {
-            var (s, h, _) = _aggregate[cmd.AggregateId];
+            var (s, h, _) = _aggregate[cmd.Ziel];
             var evs = h.HandleCommand(cmd).Where(e => e is not ITransientEvent).ToList();
-            await _store.AppendEventsAsync(cmd.AggregateId, s.Version, evs, Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), Typ(cmd));
+            await _store.AppendEventsAsync(cmd.Ziel, s.Version, evs, Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), Typ(cmd));
             foreach (var e in evs) { h.ApplyEvent(e); s.Version++; }
         }
 
         /// <summary>Viele Befehle fremder Vorgänge in einem Append (die Geschichte eines heißen Streams, schnell angelegt).</summary>
         public async Task FremdVieleAsync(ICommand cmd, int anzahl)
         {
-            var (s, h, _) = _aggregate[cmd.AggregateId];
+            var (s, h, _) = _aggregate[cmd.Ziel];
             var evs = new List<IEvent>();
             for (var i = 0; i < anzahl; i++)
                 foreach (var e in h.HandleCommand(cmd).Where(e => e is not ITransientEvent)) { h.ApplyEvent(e); evs.Add(e); }
-            await _store.AppendEventsAsync(cmd.AggregateId, s.Version, evs, Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), Typ(cmd));
+            await _store.AppendEventsAsync(cmd.Ziel, s.Version, evs, Guid.NewGuid().ToString(), Guid.NewGuid().ToString(), Typ(cmd));
             s.Version += evs.Count;
         }
 
         /// <summary>Führt den Befehl aus wie der Actor; liefert die Version des ersten geschriebenen Events (0 = als Wiederholung verworfen).</summary>
         public async Task<(Guid Ziel, Guid Vorgang, int ErsteVersion)> FuehreAusAsync(Guid korr, ICommand cmd, Guid vorgang)
         {
-            var (s, h, erledigt) = _aggregate[cmd.AggregateId];
-            if (!erledigt.Add(vorgang)) return (cmd.AggregateId, vorgang, 0);   // Inbox-Dedup des Actors
-            Feuerungen.Add((cmd.GetType().Name, cmd.AggregateId, vorgang));
+            var (s, h, erledigt) = _aggregate[cmd.Ziel];
+            if (!erledigt.Add(vorgang)) return (cmd.Ziel, vorgang, 0);   // Inbox-Dedup des Actors
+            Feuerungen.Add((cmd.GetType().Name, cmd.Ziel, vorgang));
             var erste = s.Version + 1;
 
             var alle = h.HandleCommand(cmd).ToList();
@@ -451,14 +451,14 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
             IReadOnlyList<IEvent> schreibe = ablehnungen.Count > 0 && persistent.Count == 0
                 ? new IEvent[] { new KommandoAbgelehnt(vorgang, ablehnungen[0].GetType().Name) }
                 : persistent.Count > 0 ? persistent : new IEvent[] { new KommandoVerarbeitet(vorgang) };   // Noop: nur die Marke
-            await _store.AppendEventsAsync(cmd.AggregateId, s.Version, schreibe, korr.ToString(), vorgang.ToString(), Typ(cmd));
+            await _store.AppendEventsAsync(cmd.Ziel, s.Version, schreibe, korr.ToString(), vorgang.ToString(), Typ(cmd));
             foreach (var e in schreibe)
             {
                 if (e is not IProzessIntern) h.ApplyEvent(e);
                 s.Version++;
-                if (e is not IProzessIntern) Routen.Enqueue((cmd.AggregateId, s.Version));
+                if (e is not IProzessIntern) Routen.Enqueue((cmd.Ziel, s.Version));
             }
-            return (cmd.AggregateId, vorgang, erste);
+            return (cmd.Ziel, vorgang, erste);
         }
     }
 

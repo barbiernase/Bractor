@@ -49,7 +49,6 @@ public class VertragsZusageE2ETests
             void Sende(ICommand cmd, CommandModus modus, Guid? id = null) => dispatcher.Dispatch(new CommandEnvelope
             {
                 CommandId = id ?? Guid.NewGuid(),
-                AggregateId = pair,
                 AggregateType = "ImagePair",
                 Modus = modus,
                 CorrelationId = korrelation,
@@ -60,17 +59,17 @@ public class VertragsZusageE2ETests
 
             // Paar komplett machen (wie KameraSystem → BildEingangPipeline).
             var meta = new BildMeta("a.png", 1, 1, 1, DateTimeOffset.UtcNow);
-            Sende(new ErstelleImagePair(pair, "PAIR-VERTRAG", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "/vertrag"), new CommandModus.Client(0));
+            Sende(new ErstelleImagePair(new(pair), "PAIR-VERTRAG", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "/vertrag"), new CommandModus.Client(0));
             await Warte(async () => (await Stream()).Count >= 1, "ImagePairErstellt fehlt");
-            Sende(new MeldeBildVerfuegbar(pair, BildVersion.Dc0, meta, "dc0.png"), new CommandModus.Emittiert());
-            Sende(new MeldeBildVerfuegbar(pair, BildVersion.Dc2, meta, "dc2.png"), new CommandModus.Emittiert());
+            Sende(new MeldeBildVerfuegbar(new(pair), BildVersion.Dc0, meta, "dc0.png"), new CommandModus.Emittiert());
+            Sende(new MeldeBildVerfuegbar(new(pair), BildVersion.Dc2, meta, "dc2.png"), new CommandModus.Emittiert());
             await Warte(async () => (await Stream()).Any(e => e.Payload is ImagePairKomplett), "ImagePairKomplett fehlt");
             var komplett = (await Stream()).First(e => e.Payload is ImagePairKomplett);
 
             // Die Antwort des Klassifizierers — so, wie der gRPC-Service sie aus der Kausalität ableitet.
             Guid Id(int index) => AkteurVertragsPruefung.CommandId(korrelation, pair, komplett.AggregateVersion,
                 nameof(ImagePairKomplett), index, typeof(KlassifiziereBildPaarDurchKi), pair);
-            var antwort = new KlassifiziereBildPaarDurchKi(pair, Klassifikation.Anomalie);
+            var antwort = new KlassifiziereBildPaarDurchKi(new(pair), Klassifikation.Anomalie);
 
             Sende(antwort, new CommandModus.Emittiert(), Id(0));
             Sende(antwort, new CommandModus.Emittiert(), Id(0));   // dasselbe Event noch einmal zugestellt → dieselbe Antwort

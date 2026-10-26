@@ -7,7 +7,7 @@ namespace Domain.ImagePair;
 // ═══════════════════════════════════════════════════
 
 public record ImagePairErstellt(
-    Guid AggregateId,
+    Id<ImagePair> AggregateId,
     string PairKey,
     DateTimeOffset ProduziertAm,
     DateTimeOffset AufgenommenAm,
@@ -66,8 +66,8 @@ public record ImagePairInspiziert() : IEvent;
 // ABLEHNUNGS-EVENTS (ITransientEvent)
 // ═══════════════════════════════════════════════════
 
-public record ImagePairExistiertBereits(Guid PairId) : ITransientEvent;
-public record ImagePairNichtGefunden(Guid PairId) : ITransientEvent;
+public record ImagePairExistiertBereits(Id<ImagePair> PairId) : ITransientEvent;
+public record ImagePairNichtGefunden(Id<ImagePair> PairId) : ITransientEvent;
 public record BildVersionBereitsVerfuegbar(BildVersion Version) : ITransientEvent;
 public record BildNichtVerfuegbar(BildVersion Version) : ITransientEvent;
 public record RegionIndexUngueltig(int RegionIndex) : ITransientEvent;

@@ -3,8 +3,8 @@ using Abstractions;
 namespace Pruefdomaene.Verteilung;
 
 /// <summary>Der Auslöser des <see cref="VerteilProzess"/>: die Breite N steht im Auslöser (Ziele) — kein Zähler im Aggregat.</summary>
-public record VerteilungGestartet(Guid VerteilungId, Guid QuelleId, IReadOnlyList<Guid> Ziele, int MengeJeZiel) : IEvent;
+public record VerteilungGestartet(Id<Verteilung> VerteilungId, Id<Posten.Posten> QuelleId, IReadOnlyList<Id<Posten.Posten>> Ziele, int MengeJeZiel) : IEvent;
 public record VerteilungAbgeschlossen(int Zugebucht) : IEvent;
 
-public record VerteilungExistiertBereits(Guid VerteilungId) : ITransientEvent;
-public record VerteilungNichtGefunden(Guid VerteilungId) : ITransientEvent;
+public record VerteilungExistiertBereits(Id<Verteilung> VerteilungId) : ITransientEvent;
+public record VerteilungNichtGefunden(Id<Verteilung> VerteilungId) : ITransientEvent;

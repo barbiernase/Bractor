@@ -26,7 +26,7 @@ public class FlussLaufwerkTests
 
     private static FlussAntwort Gedeutet(FlussAufruf a) => a.Auftrag switch
     {
-        DeuteDateiname d => new FlussAntwort.Ergebnis(new ImagePairDateiGedeutet(Paar, "P1",
+        DeuteDateiname d => new FlussAntwort.Ergebnis(new ImagePairDateiGedeutet(new(Paar), "P1",
             d.Dateiname.Contains("_2") ? BildVersion.Dc2 : BildVersion.Dc0, DateTimeOffset.UnixEpoch, d.Pfad)),
         VerkleinereBild v => new FlussAntwort.Ergebnis(new BildVerkleinert(v.QuellPfad + "_klein.png", 683, v.Hoehe)),
         GleicheHistogrammAus h => new FlussAntwort.Ergebnis(new HistogrammAusgeglichen(h.QuellPfad + "_aus.png", 683, 512, DateTimeOffset.UnixEpoch)),

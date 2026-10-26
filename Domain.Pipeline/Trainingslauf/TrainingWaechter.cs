@@ -16,6 +16,6 @@ public sealed class TrainingWaechter : IPipeline
         var begonnen = p.Auf<TrainingBegonnen>();
         var ende = begonnen.Strom().Warte<TrainingAbgeschlossen, TrainingGescheitert, TrainingAbgebrochen>()
             .Zeitlimit(TimeSpan.FromHours(6));
-        var haengt = p.Alle(ende.BeiZeitlimit(), begonnen.Strom()).Sende<MarkiereAlsHaengengeblieben>((endeZeit, begonnenStrom) => new MarkiereAlsHaengengeblieben(begonnenStrom.Id));
+        var haengt = p.Alle(ende.BeiZeitlimit(), begonnen.Strom()).Sende<MarkiereAlsHaengengeblieben>((endeZeit, begonnenStrom) => new MarkiereAlsHaengengeblieben(new Id<Domain.Trainingslauf.Trainingslauf>(begonnenStrom.Id)));
     });
 }

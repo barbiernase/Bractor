@@ -14,7 +14,7 @@ public partial class TrainingslaufReader : IReader<TrainingslaufProjektion>
     public async Task<OneOf<TrainingslaufAntwort, TrainingslaufNichtGefundenAntwort>> Handle(
         HoleTrainingslauf query, IMessageEnvelope envelope, ReadContext ctx, IFindTrainingslauf findTrainingslauf)
     {
-        var model = await findTrainingslauf.FindByIdAsync(query.TrainingslaufId);
+        var model = await findTrainingslauf.FindByIdAsync(query.TrainingslaufId.Wert);
 
         if (model is null)
             return new TrainingslaufNichtGefundenAntwort(query.TrainingslaufId);
@@ -43,8 +43,8 @@ public partial class TrainingslaufReader : IReader<TrainingslaufProjektion>
     private static readonly Endmetriken LeerEnd = new(0, 0);
 
     private static TrainingslaufAntwort ToAntwort(TrainingslaufReadModel m) => new(
-        Id: m.Id,
-        DatensatzId: m.DatensatzId,
+        Id: new Id<Domain.Trainingslauf.Trainingslauf>(m.Id),
+        DatensatzId: new Id<Domain.Datensatz.Datensatz>(m.DatensatzId),
         DatensatzVersion: m.DatensatzVersion,
         Status: m.Status,
         AktuelleEpoche: m.AktuelleEpoche,

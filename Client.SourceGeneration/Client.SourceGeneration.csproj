@@ -2,6 +2,7 @@
 
     <PropertyGroup>
         <TargetFramework>netstandard2.0</TargetFramework>
+        <DefineConstants>$(DefineConstants);VERTRAG_INTERN</DefineConstants>
         <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
@@ -13,6 +14,7 @@
     <ItemGroup>
         <!-- EINE Lesart des Client-Vertrags mit dem Server-Generator (Name, Hash, Sendet/Fragt/Kenntnis) — per Link, in beiden internal. -->
         <Compile Include="..\Abstractions\Akteurvertrag.cs" Link="Vertrag\Akteurvertrag.cs" />
+        <Compile Include="..\Abstractions\Idvertrag.cs" Link="Vertrag\Idvertrag.cs" />
         <Compile Include="..\Infrastructure.SourceGeneration\Clientvertragslesart.cs" Link="Vertrag\Clientvertragslesart.cs" />
         <Compile Include="..\Infrastructure.SourceGeneration\Vertragsassemblies.cs" Link="Vertrag\Vertragsassemblies.cs" />
     </ItemGroup>

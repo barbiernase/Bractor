@@ -93,7 +93,7 @@ public class PipelineFlussE2ETests
             var eingang = QuellEingang.Live(host.Services);
             var t = new DateTimeOffset(2026, 10, 8, 12, 0, 0, Random.Shared.Next(0, 999), TimeSpan.Zero).AddMinutes(Random.Shared.Next(0, 100000));
             var datei = Datei(watchDir, t, BildVersion.Dc0);
-            var paar = ImagePairFileName.Resolve(datei.Name)!.AggregateId;
+            var paar = ImagePairFileName.Resolve(datei.Name)!.AggregateId.Wert;
 
             var vorgang = await eingang.NimmAufAsync(datei, default);
             (await eingang.NimmAufAsync(datei with { }, default)).Should().Be(vorgang, "dieselbe Datei startet genau einen Vorgang");
@@ -149,7 +149,7 @@ public class PipelineFlussE2ETests
             await using var session = marten.QuerySession();
             var typen = (await session.Events.QueryAllRawEvents().Where(e => e.Timestamp > DateTimeOffset.UtcNow.AddMinutes(-5)).ToListAsync())
                 .Select(e => e.Data).ToList();
-            typen.OfType<ImagePairDateiGedeutet>().Should().Contain(g => g.PaarId == paar, "das Ergebnis der Deutung liegt im Ausführungs-Stream");
+            typen.OfType<ImagePairDateiGedeutet>().Should().Contain(g => g.PaarId.Wert == paar, "das Ergebnis der Deutung liegt im Ausführungs-Stream");
             typen.OfType<BildVerkleinert>().Should().Contain(v => v.Pfad == datei.Pfad + "_cs.png");
             typen.OfType<HistogrammAusgeglichen>().Should().Contain(h => h.Pfad == datei.Pfad + "_cs.png_aus.png");
         }
@@ -206,7 +206,7 @@ public class PipelineFlussE2ETests
             var es = app.Services.GetRequiredService<IEventStoreRepository>();
             var t = new DateTimeOffset(2026, 10, 9, 8, 0, 0, Random.Shared.Next(0, 999), TimeSpan.Zero).AddMinutes(Random.Shared.Next(0, 100000));
             var datei = Datei(watchDir, t, BildVersion.Dc2);
-            var paar = ImagePairFileName.Resolve(datei.Name)!.AggregateId;
+            var paar = ImagePairFileName.Resolve(datei.Name)!.AggregateId.Wert;
             await QuellEingang.Live(app.Services).NimmAufAsync(datei, default);
 
             await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is BildVerfuegbar), TimeSpan.FromSeconds(90),
@@ -243,11 +243,11 @@ public class PipelineFlussE2ETests
             var dispatcher = host.Services.GetRequiredService<IAggregateDispatcher>();
             var lauf = Guid.NewGuid();
             void Sende(ICommand c) => dispatcher.Dispatch(new CommandEnvelope
-            { AggregateId = lauf, AggregateType = "Trainingslauf", Modus = new CommandModus.Emittiert(), Payload = c });
+            { AggregateType = "Trainingslauf", Modus = new CommandModus.Emittiert(), Payload = c });
 
-            Sende(new Domain.Trainingslauf.StarteTraining(lauf, Guid.NewGuid(), 1, new Domain.Trainingslauf.Hyperparameter(1, 0.1, 8, "r", 1)));
+            Sende(new Domain.Trainingslauf.StarteTraining(new(lauf), new(Guid.NewGuid()), 1, new Domain.Trainingslauf.Hyperparameter(1, 0.1, 8, "r", 1)));
             await Warte(async () => (await es.ReadStreamAsync(lauf, 0, default)).Count >= 1, TimeSpan.FromSeconds(30), "Training nicht angelegt");
-            Sende(new Domain.Trainingslauf.MeldeTrainingBegonnen(lauf));
+            Sende(new Domain.Trainingslauf.MeldeTrainingBegonnen(new(lauf)));
             await Warte(async () => (await es.ReadStreamAsync(lauf, 0, default)).Any(e => e.Payload is Domain.Trainingslauf.TrainingBegonnen),
                 TimeSpan.FromSeconds(30), "TrainingBegonnen fehlt");
             var begonnen = (await es.ReadStreamAsync(lauf, 0, default)).First(e => e.Payload is Domain.Trainingslauf.TrainingBegonnen);
@@ -255,7 +255,7 @@ public class PipelineFlussE2ETests
             await Warte(async () => (await es.ReadStreamAsync(korrelation, 0, default)).Any(e => e.Payload is ProzessGestartet),
                 TimeSpan.FromSeconds(60), "Der Wächter-Fluss ist nicht gestartet (Auf<TrainingBegonnen>).");
 
-            Sende(new Domain.Trainingslauf.MeldeTrainingAbgeschlossen(lauf, "/modelle/m.pt", new Domain.Trainingslauf.Endmetriken(0.1, 0.9)));
+            Sende(new Domain.Trainingslauf.MeldeTrainingAbgeschlossen(new(lauf), "/modelle/m.pt", new Domain.Trainingslauf.Endmetriken(0.1, 0.9)));
             await Warte(async () => (await es.ReadStreamAsync(korrelation, 0, default)).Any(e => e.Payload is ProzessBeendet),
                 TimeSpan.FromSeconds(60), "Der Wächter hat das Ende im Strom nicht gesehen (Warten + Backstop).");
 
@@ -288,11 +288,11 @@ public class PipelineFlussE2ETests
         {
             var es = host.Services.GetRequiredService<IEventStoreRepository>();
             var dispatcher = host.Services.GetRequiredService<IAggregateDispatcher>();
-            void Sende(Guid id, string typ, ICommand c) => dispatcher.Dispatch(new CommandEnvelope
-            { AggregateId = id, AggregateType = typ, Modus = new CommandModus.Emittiert(), Payload = c });
+            void Sende(string typ, ICommand c) => dispatcher.Dispatch(new CommandEnvelope
+            { AggregateType = typ, Modus = new CommandModus.Emittiert(), Payload = c });
 
             var paar = Guid.NewGuid();
-            Sende(paar, "ImagePair", new ErstelleImagePair(paar, "PAIR-RANGE-" + paar.ToString("N")[..6], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "/range"));
+            Sende("ImagePair", new ErstelleImagePair(new(paar), "PAIR-RANGE-" + paar.ToString("N")[..6], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "/range"));
             using (var bereich = host.Services.CreateScope())
             {
                 var finde = bereich.ServiceProvider.GetRequiredService<Domain.Projections.ImagePair.IFindImagePair>();
@@ -300,14 +300,14 @@ public class PipelineFlussE2ETests
             }
 
             var ds = Guid.NewGuid();
-            Sende(ds, "Datensatz", new Domain.Datensatz.ErstelleDatensatz(ds, "Range-E2E"));
+            Sende("Datensatz", new Domain.Datensatz.ErstelleDatensatz(new(ds), "Range-E2E"));
             await Warte(async () => (await es.ReadStreamAsync(ds, 0, default)).Count >= 1, TimeSpan.FromSeconds(30), "Datensatz nicht angelegt");
-            Sende(ds, "Datensatz", new Domain.Datensatz.FuegeRangeHinzu(ds, new Domain.Datensatz.RangeKriterien()));
+            Sende("Datensatz", new Domain.Datensatz.FuegeRangeHinzu(new(ds), new Domain.Datensatz.RangeKriterien()));
 
             await Warte(async () => (await es.ReadStreamAsync(ds, 0, default)).Any(e => e.Payload is Domain.Datensatz.PaareAufgenommen),
                 TimeSpan.FromSeconds(60), "Die Range wurde nicht aufgelöst (Fluss DatensatzRangeAufloesung).");
             var aufgenommen = (await es.ReadStreamAsync(ds, 0, default)).Select(e => e.Payload).OfType<Domain.Datensatz.PaareAufgenommen>().Single();
-            aufgenommen.ImagePairIds.Should().Contain(paar, "die Suche lief gegen das echte Read-Model");
+            aufgenommen.ImagePairIds.Should().Contain(new Id<Domain.ImagePair.ImagePair>(paar), "die Suche lief gegen das echte Read-Model");
         }
         finally
         {
@@ -344,7 +344,7 @@ public class PipelineFlussE2ETests
 
         var t = new DateTimeOffset(2026, 10, 12, 9, 0, 0, Random.Shared.Next(0, 999), TimeSpan.Zero).AddMinutes(Random.Shared.Next(0, 100000));
         var name = $"{t:yyyy_MM_dd_HH_mm_ss_fff}_DC0.tiff";
-        var paar = ImagePairFileName.Resolve(name)!.AggregateId;
+        var paar = ImagePairFileName.Resolve(name)!.AggregateId.Wert;
         try
         {
             using (var host = Baue())

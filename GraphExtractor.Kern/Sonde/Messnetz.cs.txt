@@ -9,11 +9,11 @@ using Core;
 
 namespace Anlagen.Messung;
 
-public record RichteSensorEin(Guid AggregateId, string Ort, double Grenzwert, int AlarmNach) : ICreationCommand;
+public record RichteSensorEin(Id<Sensor> AggregateId, string Ort, double Grenzwert, int AlarmNach) : ICommand<Sensor>, ICreationCommand;
 public record SensorEingerichtet(string Ort, double Grenzwert, int AlarmNach) : IEvent;
-public record SensorUnbekannt(Guid SensorId) : ITransientEvent;
+public record SensorUnbekannt(Id<Sensor> SensorId) : ITransientEvent;
 
-public record MeldeMesswert(Guid AggregateId, double Wert, DateTimeOffset GemessenAm) : ICommand;
+public record MeldeMesswert(Id<Sensor> AggregateId, double Wert, DateTimeOffset GemessenAm) : ICommand<Sensor>;
 public record GrenzwertUeberschritten(double Wert, DateTimeOffset GemessenAm, int Hintereinander) : IEvent;
 public record AlarmAusgeloest(double Wert, DateTimeOffset GemessenAm) : IEvent;
 public record WertWiederImRahmen(double Wert, DateTimeOffset GemessenAm) : IEvent;
@@ -55,13 +55,13 @@ public partial class Sensor : IState
     }
 }
 
-public record OeffneStoerung(Guid AggregateId, double Wert) : ICommand;
+public record OeffneStoerung(Id<Stoerungsfall> AggregateId, double Wert) : ICommand<Stoerungsfall>;
 public record StoerungGeoeffnet(double Wert) : IEvent;
-public record StoerungLaeuftSchon(Guid SensorId) : ITransientEvent;
+public record StoerungLaeuftSchon(Id<Stoerungsfall> SensorId) : ITransientEvent;
 
-public record QuittiereStoerung(Guid AggregateId, string Von) : ICommand;
+public record QuittiereStoerung(Id<Stoerungsfall> AggregateId, string Von) : ICommand<Stoerungsfall>;
 public record StoerungQuittiert(string Von) : IEvent;
-public record KeineStoerung(Guid SensorId) : ITransientEvent;
+public record KeineStoerung(Id<Stoerungsfall> SensorId) : ITransientEvent;
 
 // Je Sensor ein Störungsfall (dieselbe Id wie der Sensor): offen oder nicht — eine Störung läuft höchstens einmal zugleich.
 public partial class Stoerungsfall : IState
@@ -98,7 +98,7 @@ public partial class StoerungBeiAlarm : ISubscriber, IPullSubscriber
     public async IAsyncEnumerable<OeffneStoerung> Handle(AlarmAusgeloest evt, IAggregateEnvelope envelope, ProjectionWriter writer)
     {
         await Task.CompletedTask;
-        yield return new OeffneStoerung(envelope.AggregateId, evt.Wert);
+        yield return new OeffneStoerung(new(envelope.AggregateId), evt.Wert);
     }
 }
 

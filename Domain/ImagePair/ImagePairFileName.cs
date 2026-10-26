@@ -1,3 +1,4 @@
+using Abstractions;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
@@ -104,7 +105,7 @@ public static class ImagePairFileName
         var parsed = Parse(fileName);
         if (parsed == null) return null;
 
-        var aggregateId = ToDeterministicGuid(parsed.PairKey);
+        var aggregateId = new Id<ImagePair>(ToDeterministicGuid(parsed.PairKey));
         return new ResolvedPair(
             parsed.PairKey, parsed.Version, aggregateId, parsed.ProduziertAm);
     }
@@ -114,5 +115,5 @@ public static class ImagePairFileName
     public record ParseResult(string PairKey, BildVersion Version, DateTimeOffset ProduziertAm);
 
     public record ResolvedPair(
-        string PairKey, BildVersion Version, Guid AggregateId, DateTimeOffset ProduziertAm);
+        string PairKey, BildVersion Version, Id<ImagePair> AggregateId, DateTimeOffset ProduziertAm);
 }

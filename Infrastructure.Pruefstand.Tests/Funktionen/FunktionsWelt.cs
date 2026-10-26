@@ -30,11 +30,11 @@ public interface IMetadaten : IFunktion
     Task<OneOf<MetaGelesen>> RufeAsync(MetaAuftrag a, IAusfuehrung x);
 }
 
-public sealed record MeldeFertig(Guid AggregateId, string Vorschau, string Kamera) : ICommand;
+public sealed record MeldeFertig(Id<Infrastructure.Pruefstand.Tests.TestZiel> AggregateId, string Vorschau, string Kamera) : ICommand<Infrastructure.Pruefstand.Tests.TestZiel>;
 public sealed record Fertig(string Vorschau, string Kamera) : IEvent;
-public sealed record MeldeUnbrauchbar(Guid AggregateId, string Grund) : ICommand;
+public sealed record MeldeUnbrauchbar(Id<Infrastructure.Pruefstand.Tests.TestZiel> AggregateId, string Grund) : ICommand<Infrastructure.Pruefstand.Tests.TestZiel>;
 public sealed record Unbrauchbar(string Grund) : IEvent;
-public sealed record RaeumeVorschauAuf(Guid AggregateId, string Vorschau) : ICommand;
+public sealed record RaeumeVorschauAuf(Id<Infrastructure.Pruefstand.Tests.TestZiel> AggregateId, string Vorschau) : ICommand<Infrastructure.Pruefstand.Tests.TestZiel>;
 public sealed record VorschauAufgeraeumt(string Vorschau) : IEvent;
 
 /// <summary>Das Ziel-Aggregat der Meldungen (ein fester Stream).</summary>
@@ -50,13 +50,13 @@ public sealed class BildAufbereitung(TimeSpan? limit = null, bool mitKompensatio
     {
         var vor = p.Auf<BildEingegangen>().Rufe<IVorverarbeitung>(b => new VorAuftrag(b.Pfad));
         if (limit is { } l) vor = vor.Zeitlimit(l);
-        if (mitKompensation) vor.RückgängigDurch<RaeumeVorschauAuf>(b => new RaeumeVorschauAuf(Bildakte.Id, b.Pfad));
+        if (mitKompensation) vor.RückgängigDurch<RaeumeVorschauAuf>(b => new RaeumeVorschauAuf(new(Bildakte.Id), b.Pfad));
 
         p.Auf<BildEingegangen>().Rufe<IMetadaten>(b => new MetaAuftrag(b.Pfad));
 
         p.Auf<Vorverarbeitet>().Und<MetaGelesen>()
-         .Sende<MeldeFertig>((v, m) => new MeldeFertig(Bildakte.Id, v.Vorschau, m.Kamera));
-        p.Auf<Unlesbar>().Sende<MeldeUnbrauchbar>(u => new MeldeUnbrauchbar(Bildakte.Id, u.Grund));
+         .Sende<MeldeFertig>((v, m) => new MeldeFertig(new(Bildakte.Id), v.Vorschau, m.Kamera));
+        p.Auf<Unlesbar>().Sende<MeldeUnbrauchbar>(u => new MeldeUnbrauchbar(new(Bildakte.Id), u.Grund));
     });
 }
 
@@ -220,7 +220,7 @@ internal sealed class FunktionsWelt
     private async Task DispatchAsync(Guid korrelation, ICommand cmd, Guid vorgang, CancellationToken ct)
     {
         Gesendet.Add(cmd);
-        var stream = Log.Stream(cmd.AggregateId);
+        var stream = Log.Stream(cmd.Ziel);
         if (stream.Any(e => e.CausationId == vorgang.ToString())) return;   // Framework-Inbox
         IEvent[] evs = LehneAb.Contains(cmd.GetType())
             ? new IEvent[] { new KommandoAbgelehnt(vorgang, cmd.GetType().Name + " abgelehnt") }
@@ -234,7 +234,7 @@ internal sealed class FunktionsWelt
         // Wie AggregateActorBase: die Events schreibt decide:<Aggregat>/<Command>, Ursache und Absender (ueber) kommen vom Absender
         //   (hier der Fluss-Kontext; im Host über den Envelope).
         using (Spur.Von(null, WirkerId.FuerDecide("Bildakte", cmd.GetType().Name), Spur.Aktuell?.Wirker))
-            await Log.AppendEventsAsync(cmd.AggregateId, stream.Count, evs, korrelation.ToString(), vorgang.ToString(), "Bildakte");
+            await Log.AppendEventsAsync(cmd.Ziel, stream.Count, evs, korrelation.ToString(), vorgang.ToString(), "Bildakte");
     }
 
     public Guid AuslöserStream => _auslöserStream;

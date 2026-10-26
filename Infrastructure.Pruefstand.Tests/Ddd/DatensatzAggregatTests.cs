@@ -29,7 +29,7 @@ public class DatensatzAggregatTests
             Handler = new AggregateHandlerFactory().CreateHandler(Datensatz);
             Id = Guid.NewGuid();
             if (erstellen)
-                Wende(new ErstelleDatensatz(Id, "Charge-Juni"));
+                Wende(new ErstelleDatensatz(new(Id), "Charge-Juni"));
         }
 
         public IReadOnlyList<IEvent> Wende(ICommand cmd)
@@ -49,7 +49,7 @@ public class DatensatzAggregatTests
             new(new RangeKriterien(KiKlassifikation: Klassifikation.Anomalie), anzahl);
 
         public void NimmRange(params Guid[] ids) =>
-            Wende(new NimmRangeAuf(Id, ids, Herkunft(ids.Length)));
+            Wende(new NimmRangeAuf(new(Id), ids.Select(i => new Id<Domain.ImagePair.ImagePair>(i)).ToList(), Herkunft(ids.Length)));
     }
 
     // ═══════════════════════════════════════════════════
@@ -69,7 +69,7 @@ public class DatensatzAggregatTests
     public void Zweimal_Erstellen_wird_abgelehnt()
     {
         var f = new Fixture();
-        f.Wende(new ErstelleDatensatz(f.Id, "nochmal"));
+        f.Wende(new ErstelleDatensatz(new(f.Id), "nochmal"));
         f.LetzteAblehnungen.Should().ContainSingle()
             .Which.Should().BeOfType<DatensatzExistiertBereits>();
     }
@@ -99,7 +99,7 @@ public class DatensatzAggregatTests
     public void Leere_Range_wird_abgelehnt()
     {
         var f = new Fixture();
-        f.Wende(new NimmRangeAuf(f.Id, Array.Empty<Guid>(), new RangeHerkunft(new RangeKriterien(), 0)));
+        f.Wende(new NimmRangeAuf(new(f.Id), Array.Empty<Id<Domain.ImagePair.ImagePair>>(), new RangeHerkunft(new RangeKriterien(), 0)));
         f.LetzteAblehnungen.Should().ContainSingle().Which.Should().BeOfType<RangeLeer>();
     }
 
@@ -108,8 +108,8 @@ public class DatensatzAggregatTests
     {
         var p = Guid.NewGuid();
         var f = new Fixture();
-        f.Wende(new NimmPaarAuf(f.Id, p));
-        var wieder = f.Wende(new NimmPaarAuf(f.Id, p));
+        f.Wende(new NimmPaarAuf(new(f.Id), new(p)));
+        var wieder = f.Wende(new NimmPaarAuf(new(f.Id), new(p)));
 
         wieder.Should().BeEmpty("ein bereits enthaltenes Paar erzeugt kein zweites Event");
         f.Datensatz.AnzahlDraftMitglieder.Should().Be(1);
@@ -119,7 +119,7 @@ public class DatensatzAggregatTests
     public void Entfernen_eines_nicht_enthaltenen_Paares_ist_Noop()
     {
         var f = new Fixture();
-        var events = f.Wende(new EntfernePaar(f.Id, Guid.NewGuid()));
+        var events = f.Wende(new EntfernePaar(new(f.Id), new(Guid.NewGuid())));
         events.Should().BeEmpty();
     }
 
@@ -131,7 +131,7 @@ public class DatensatzAggregatTests
     public void Split_Override_wird_uebernommen()
     {
         var f = new Fixture();
-        f.Wende(new SetzeSplit(f.Id, 80, 10, 10, 7));
+        f.Wende(new SetzeSplit(new(f.Id), 80, 10, 10, 7));
         f.Datensatz.Split.Should().Be(new SplitKonfig(80, 10, 10, 7));
     }
 
@@ -139,7 +139,7 @@ public class DatensatzAggregatTests
     public void Ungueltiger_Split_wird_abgelehnt()
     {
         var f = new Fixture();
-        f.Wende(new SetzeSplit(f.Id, 80, 10, 5, 7));   // Summe 95 ≠ 100
+        f.Wende(new SetzeSplit(new(f.Id), 80, 10, 5, 7));   // Summe 95 ≠ 100
         f.LetzteAblehnungen.Should().ContainSingle().Which.Should().BeOfType<SplitUngueltig>();
         f.Datensatz.Split.Should().Be(SplitKonfig.Default, "der ungültige Split wirkt nicht");
     }
@@ -152,7 +152,7 @@ public class DatensatzAggregatTests
     public void Einfrieren_ohne_Mitglieder_wird_abgelehnt()
     {
         var f = new Fixture();
-        f.Wende(new FriereEin(f.Id));
+        f.Wende(new FriereEin(new(f.Id)));
         f.LetzteAblehnungen.Should().ContainSingle().Which.Should().BeOfType<DatensatzLeer>();
     }
 
@@ -163,8 +163,8 @@ public class DatensatzAggregatTests
         var p2 = Guid.NewGuid();
         var f = new Fixture();
         f.NimmRange(p1, p2);
-        f.Wende(new SetzeSplit(f.Id, 80, 10, 10, 7));
-        var events = f.Wende(new FriereEin(f.Id));
+        f.Wende(new SetzeSplit(new(f.Id), 80, 10, 10, 7));
+        var events = f.Wende(new FriereEin(new(f.Id)));
 
         var angefordert = events.Should().ContainSingle()
             .Which.Should().BeOfType<EinfrierenAngefordert>().Subject;
@@ -182,14 +182,14 @@ public class DatensatzAggregatTests
         var p1 = Guid.NewGuid();
         var p2 = Guid.NewGuid();
         f.NimmRange(p1, p2);
-        f.Wende(new FriereEin(f.Id));
+        f.Wende(new FriereEin(new(f.Id)));
 
         var mitglieder = new[]
         {
-            new DatensatzMitglied(p1, Klassifikation.Anomalie, Split.Train, "dc0/1.png", "dc2/1.png"),
-            new DatensatzMitglied(p2, Klassifikation.KeineAnomalie, Split.Test, "dc0/2.png", "dc2/2.png"),
+            new DatensatzMitglied(new(p1), Klassifikation.Anomalie, Split.Train, "dc0/1.png", "dc2/1.png"),
+            new DatensatzMitglied(new(p2), Klassifikation.KeineAnomalie, Split.Test, "dc0/2.png", "dc2/2.png"),
         };
-        var events = f.Wende(new SchliesseEinfrierenAb(f.Id, mitglieder));
+        var events = f.Wende(new SchliesseEinfrierenAb(new(f.Id), mitglieder));
 
         events.Should().ContainSingle().Which.Should().BeOfType<DatensatzEingefroren>();
         f.Datensatz.Status.Should().Be(DatensatzStatus.Eingefroren);
@@ -207,9 +207,9 @@ public class DatensatzAggregatTests
         var f = new Fixture();
         var p = Guid.NewGuid();
         f.NimmRange(p);
-        f.Wende(new FriereEin(f.Id));
-        f.Wende(new SchliesseEinfrierenAb(f.Id,
-            new[] { new DatensatzMitglied(p, Klassifikation.Anomalie, Split.Train, "a", "b") }));
+        f.Wende(new FriereEin(new(f.Id)));
+        f.Wende(new SchliesseEinfrierenAb(new(f.Id),
+            new[] { new DatensatzMitglied(new(p), Klassifikation.Anomalie, Split.Train, "a", "b") }));
         return f;
     }
 
@@ -226,20 +226,20 @@ public class DatensatzAggregatTests
     public static IEnumerable<object[]> AenderungsCommands()
     {
         var id = Guid.Empty; // wird im Test nicht gegen die reale Id geprüft — der Guard greift vor der Id
-        yield return new object[] { new FuegeRangeHinzu(id, new RangeKriterien()) };
-        yield return new object[] { new NimmRangeAuf(id, new[] { Guid.NewGuid() }, new RangeHerkunft(new RangeKriterien(), 1)) };
-        yield return new object[] { new NimmPaarAuf(id, Guid.NewGuid()) };
-        yield return new object[] { new EntfernePaar(id, Guid.NewGuid()) };
-        yield return new object[] { new SetzeSplit(id, 70, 15, 15, 1) };
-        yield return new object[] { new FriereEin(id) };
+        yield return new object[] { new FuegeRangeHinzu(new(id), new RangeKriterien()) };
+        yield return new object[] { new NimmRangeAuf(new(id), new[] { Id<Domain.ImagePair.ImagePair>.Neu() }, new RangeHerkunft(new RangeKriterien(), 1)) };
+        yield return new object[] { new NimmPaarAuf(new(id), new(Guid.NewGuid())) };
+        yield return new object[] { new EntfernePaar(new(id), new(Guid.NewGuid())) };
+        yield return new object[] { new SetzeSplit(new(id), 70, 15, 15, 1) };
+        yield return new object[] { new FriereEin(new(id)) };
     }
 
     [Fact]
     public void Zweites_Abschliessen_nach_dem_Einfrieren_wird_abgelehnt()
     {
         var f = Eingefroren();
-        f.Wende(new SchliesseEinfrierenAb(f.Id,
-            new[] { new DatensatzMitglied(Guid.NewGuid(), Klassifikation.Anomalie, Split.Val, "a", "b") }));
+        f.Wende(new SchliesseEinfrierenAb(new(f.Id),
+            new[] { new DatensatzMitglied(new(Guid.NewGuid()), Klassifikation.Anomalie, Split.Val, "a", "b") }));
         f.LetzteAblehnungen.Should().ContainSingle()
             .Which.Should().BeOfType<DatensatzBereitsEingefroren>();
     }

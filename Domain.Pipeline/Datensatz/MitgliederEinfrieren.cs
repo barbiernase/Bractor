@@ -19,7 +19,7 @@ public sealed class MitgliederEinfrieren(ILogger<MitgliederEinfrieren> logger) :
         foreach (var pid in auftrag.Mitglieder)
         {
             x.Abbruch.ThrowIfCancellationRequested();
-            if (await finde.FindByIdAsync(pid) is { } ip) modelle[pid] = ip;
+            if (await finde.FindByIdAsync(pid.Wert) is { } ip) modelle[pid.Wert] = ip;
             else logger.LogWarning("Einfrieren {Id}: ImagePair {Pid} fehlt im Read-Model — übersprungen", x.AusfuehrungsId, pid);
         }
         if (modelle.Count == 0) return new KeinMitgliedAuffindbar(auftrag.Mitglieder.Count);
@@ -28,7 +28,7 @@ public sealed class MitgliederEinfrieren(ILogger<MitgliederEinfrieren> logger) :
         var mitglieder = modelle
             .OrderBy(kv => kv.Key)
             .Select(kv => new DatensatzMitglied(
-                ImagePairId: kv.Key,
+                ImagePairId: new Id<Domain.ImagePair.ImagePair>(kv.Key),
                 Label: BestimmeLabel(kv.Value),
                 Split: splits[kv.Key],
                 Dc0Pfad: kv.Value.Dc0Pfad ?? "",

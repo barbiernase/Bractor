@@ -17,12 +17,12 @@ public sealed class RangeSuche(ILogger<RangeSuche> logger) : IRangeSuche
 
     public async Task<OneOf<RangeGefunden, RangeOhneTreffer>> RufeAsync(SucheRange auftrag, IAusfuehrung x, ISearchImagePairs suche)
     {
-        var ids = new List<Guid>();
+        var ids = new List<Id<Domain.ImagePair.ImagePair>>();
         for (var seite = 1; ; seite++)
         {
             x.Abbruch.ThrowIfCancellationRequested();
             var (items, gesamt) = await suche.SearchAsync(ZuFilter(auftrag.Kriterien, seite, SeitenGroesse));
-            ids.AddRange(items.Select(m => m.Id));
+            ids.AddRange(items.Select(m => new Id<Domain.ImagePair.ImagePair>(m.Id)));
             if (items.Count == 0 || ids.Count >= gesamt) break;
         }
 

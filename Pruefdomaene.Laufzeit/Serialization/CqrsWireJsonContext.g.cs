@@ -30,6 +30,10 @@ namespace Infrastructure.Serialization;
         typeof(IStateChangeSignalJsonConverter),
         typeof(IMessageEnvelopeJsonConverter),
         typeof(PidJsonConverter),
+        typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Auftrag.Auftrag>),
+        typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Kontingent.Kontingent>),
+        typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Posten.Posten>),
+        typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Verteilung.Verteilung>),
     })]
 // ── Framework: Wire-Hüllen (IWireMessage) ──
 [JsonSerializable(typeof(CommandEnvelope))]

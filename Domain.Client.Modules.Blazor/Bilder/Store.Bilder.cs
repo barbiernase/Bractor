@@ -25,7 +25,7 @@ public partial class Store
 
     void Handle(BildVerfuegbar evt, MessageContext ctx)
     {
-        VirtualImagePairs.Patch(ctx.AggregateId, e => evt.Version switch
+        VirtualImagePairs.Patch(new ImagePairId(ctx.AggregateId), e => evt.Version switch
         {
             BildVersion.Dc0 => e with { Dc0Pfad = evt.Pfad },
             BildVersion.Dc2 => e with { Dc2Pfad = evt.Pfad },

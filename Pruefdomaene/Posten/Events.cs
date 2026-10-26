@@ -23,6 +23,6 @@ public record PostenFreigegeben(int Menge) : IEvent;
 public record PostenZugebucht(int Menge) : IEvent;
 
 // ── Ablehnungen (transient — lösen im Prozess die Kompensation aus) ──
-public record PostenExistiertBereits(Guid PostenId) : ITransientEvent;
-public record PostenNichtGefunden(Guid PostenId) : ITransientEvent;
-public record PostenReichtNicht(Guid PostenId, int Verfuegbar, int Angefordert) : ITransientEvent;
+public record PostenExistiertBereits(Id<Posten> PostenId) : ITransientEvent;
+public record PostenNichtGefunden(Id<Posten> PostenId) : ITransientEvent;
+public record PostenReichtNicht(Id<Posten> PostenId, int Verfuegbar, int Angefordert) : ITransientEvent;

@@ -63,7 +63,7 @@ internal static class Pruefstand
         => Infrastructure.Aggregate.ActorSystem.ProtoActorAggregateDispatcher.FrageAsync(host.Services.GetRequiredService<Proto.ActorSystem>(),
             new CommandEnvelope
             {
-                CommandId = commandId, AggregateId = cmd.AggregateId, AggregateType = AggregateDispatcherExtensions.ResolveAggregateType(cmd),
+                CommandId = commandId, AggregateType = AggregateDispatcherExtensions.ResolveAggregateType(cmd),
                 Payload = cmd, Modus = new CommandModus.Emittiert(), CorrelationId = Guid.NewGuid().ToString(),
             }, TimeSpan.FromSeconds(30), default);
 
@@ -80,6 +80,7 @@ internal static class Pruefstand
         opts.Events.MetadataConfig.HeadersEnabled = true;
         MartenEventTypeRegistration.RegisterEventTypes(opts);
         RegisteredSnapshotTypes.Register(opts);   // die GENERIERTE Registrierung der Komposition
+        IdSerialisierung.Registriere(opts);       // typisierte Ids als UUID-String, wie der Host schreibt
     });
 
     /// <summary>Der Zustand eines Aggregats aus dem Log (Voll-Fold, ohne Snapshot) — die Wahrheit.</summary>

@@ -93,21 +93,21 @@
     private void Registriere()
     {
         // Manueller Weg (Platzhalter-Provenienz/-Metriken) — die Saga liefert später echte Werte.
-        Fx.Dispatch(new ModellRegistrierenIntent(_name, Guid.Empty, Guid.Empty, 0, "", 0, 0));
+        Fx.Dispatch(new ModellRegistrierenIntent(_name, default, default, 0, "", 0, 0));
         _name = "";
     }
 
     private void RegKey(KeyboardEventArgs e) { if (e.Key is "Enter" or "NumpadEnter") Registriere(); }
 
-    private void AktivSetzen(Guid id) => Fx.Dispatch(new ModellAktivSetzenIntent(id));
-    private void Archivieren(Guid id)  => Fx.Dispatch(new ModellArchivierenIntent(id));
+    private void AktivSetzen(ModellId id) => Fx.Dispatch(new ModellAktivSetzenIntent(id));
+    private void Archivieren(ModellId id)  => Fx.Dispatch(new ModellArchivierenIntent(id));
 
     private static string RowStyle(ModellAntwort m)
         => "border-radius:8px;padding:10px 12px;border:1px solid " +
            (m.IstAktiv ? "#2e7d32;background:#132218" : "#333;background:#1a1a1a");
 
     private static string Prozent(double anteil) => (anteil * 100).ToString("0.0", Ic) + " %";
-    private static string Kurz(Guid id) => id == Guid.Empty ? "—" : id.ToString("N")[..8];
+    private static string Kurz<T>(Abstractions.Id<T> id) where T : Abstractions.IState => id == default ? "—" : id.Wert.ToString("N")[..8];
 
     public void Dispose() => Fx.Dispose();
 }

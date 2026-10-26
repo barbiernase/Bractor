@@ -15,7 +15,7 @@ public enum DatensatzGalerieModus { Aus, Mitglieder, Ausgeschlossen }
 public record DatensatzGalerieModusGesetzt(DatensatzGalerieModus Modus) : IClientEvent;
 
 // Navigation
-public record ImagePairAusgewaehlt(Guid PairId) : IClientEvent;
+public record ImagePairAusgewaehlt(ImagePairId PairId) : IClientEvent;
 public record NavigationZielGesetzt(int Index) : IClientEvent;
 public record SeiteAngefordert(int Seite) : IClientEvent;
 

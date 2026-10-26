@@ -39,9 +39,9 @@ public sealed record Ausgeglichen(string Pfad) : IEvent;
 public interface IAusgleich : IFunktion { Task<OneOf<Ausgeglichen>> RufeAsync(GleicheAus a, IAusfuehrung x); }
 
 // ── Aggregat-Welt ──
-public sealed record LegePaarAn(Guid AggregateId, string Pfad) : ICommand;
+public sealed record LegePaarAn(Id<Infrastructure.Pruefstand.Tests.TestZiel> AggregateId, string Pfad) : ICommand<Infrastructure.Pruefstand.Tests.TestZiel>;
 public sealed record PaarAngelegt(string Pfad) : IEvent;
-public sealed record MeldeBild(Guid AggregateId, string Vorschau, string Daumen) : ICommand;
+public sealed record MeldeBild(Id<Infrastructure.Pruefstand.Tests.TestZiel> AggregateId, string Vorschau, string Daumen) : ICommand<Infrastructure.Pruefstand.Tests.TestZiel>;
 public sealed record BildGemeldet(string Vorschau, string Daumen) : IEvent;
 
 /// <summary>Beispiel 1: Datei → Name deuten → (Paar anlegen ∥ Vorschau → Kontrast ∥ Daumen) → ∧ melden.</summary>
@@ -51,12 +51,12 @@ public sealed class Bildeingang : IPipeline
     {
         var datei    = p.Quelle<DateiDa>();
         var deuten   = datei.Rufe<INameDeuten>(d => new DeuteName(d.Name));
-        var paar     = deuten.Bei<Bilddatei>().Sende<LegePaarAn>(b => new LegePaarAn(b.PaarId, b.Pfad));
+        var paar     = deuten.Bei<Bilddatei>().Sende<LegePaarAn>(b => new LegePaarAn(new(b.PaarId), b.Pfad));
         var vorschau = deuten.Bei<Bilddatei>().Rufe<IVerkleinern>(b => new Verkleinere(b.Pfad, 512));
         var kontrast = vorschau.Bei<Verkleinert>().Rufe<IAusgleich>(v => new GleicheAus(v.Pfad));
         var daumen   = deuten.Bei<Bilddatei>().Rufe<IVerkleinern>(b => new Verkleinere(b.Pfad, 128));
         p.Alle(kontrast.Bei<Ausgeglichen>(), daumen.Bei<Verkleinert>(), deuten.Bei<Bilddatei>())
-         .Sende<MeldeBild>((k, t, b) => new MeldeBild(b.PaarId, k.Pfad, t.Pfad));
+         .Sende<MeldeBild>((k, t, b) => new MeldeBild(new(b.PaarId), k.Pfad, t.Pfad));
     });
 }
 
@@ -78,11 +78,11 @@ public sealed record PruefeBonitaet(decimal Betrag) : IAuftrag<IBonitaet>;
 public sealed record BonitaetOk : IEvent;
 public interface IBonitaet : IFunktion { Task<OneOf<BonitaetOk>> RufeAsync(PruefeBonitaet a, IAusfuehrung x); }
 
-public sealed record LegeBestellungAn(Guid AggregateId, string Weg) : ICommand;
+public sealed record LegeBestellungAn(Id<Infrastructure.Pruefstand.Tests.TestZiel> AggregateId, string Weg) : ICommand<Infrastructure.Pruefstand.Tests.TestZiel>;
 public sealed record BestellungAngelegt(string Weg) : IEvent;
-public sealed record LehneBestellungAb(Guid AggregateId, string Grund) : ICommand;
+public sealed record LehneBestellungAb(Id<Infrastructure.Pruefstand.Tests.TestZiel> AggregateId, string Grund) : ICommand<Infrastructure.Pruefstand.Tests.TestZiel>;
 public sealed record BestellungAbgelehnt(string Grund) : IEvent;
-public sealed record Benachrichtige(Guid AggregateId, string Text) : ICommand;
+public sealed record Benachrichtige(Id<Infrastructure.Pruefstand.Tests.TestZiel> AggregateId, string Text) : ICommand<Infrastructure.Pruefstand.Tests.TestZiel>;
 public sealed record Benachrichtigt(string Text) : IEvent;
 
 public sealed class Bestellung : IPipeline
@@ -94,12 +94,12 @@ public sealed class Bestellung : IPipeline
         var karte   = p.Alle(zahlart.Bei<PerKarte>(), eingang).Rufe<IKarte>((_, e) => new Belaste(e.Betrag))
                        .Zeitlimit(TimeSpan.FromSeconds(30));
         var boni    = p.Alle(zahlart.Bei<PerRechnung>(), eingang).Rufe<IBonitaet>((_, e) => new PruefeBonitaet(e.Betrag));
-        var anlegen = p.Alle(karte.Bei<Belastet>(), eingang).Sende<LegeBestellungAn>((b, e) => new LegeBestellungAn(e.BestellId, "karte:" + b.Transaktion))
-                       .Oder(p.Alle(boni.Bei<BonitaetOk>(), eingang), (_, e) => new LegeBestellungAn(e.BestellId, "rechnung"));
-        var ablehnen = p.Alle(karte.Bei<KarteAbgelehnt>(), eingang).Sende<LehneBestellungAb>((k, e) => new LehneBestellungAb(e.BestellId, k.Grund))
-                       .Oder(p.Alle(karte.BeiZeitlimit(), eingang), (z, e) => new LehneBestellungAb(e.BestellId, "zeit"));
+        var anlegen = p.Alle(karte.Bei<Belastet>(), eingang).Sende<LegeBestellungAn>((b, e) => new LegeBestellungAn(new(e.BestellId), "karte:" + b.Transaktion))
+                       .Oder(p.Alle(boni.Bei<BonitaetOk>(), eingang), (_, e) => new LegeBestellungAn(new(e.BestellId), "rechnung"));
+        var ablehnen = p.Alle(karte.Bei<KarteAbgelehnt>(), eingang).Sende<LehneBestellungAb>((k, e) => new LehneBestellungAb(new(e.BestellId), k.Grund))
+                       .Oder(p.Alle(karte.BeiZeitlimit(), eingang), (z, e) => new LehneBestellungAb(new(e.BestellId), "zeit"));
         // ✕-Port: lehnt das Aggregat das Anlegen ab, geht eine Benachrichtigung raus, statt den Vorgang scheitern zu lassen.
-        p.Alle(anlegen.BeiAbgelehnt(), eingang).Sende<Benachrichtige>((a, e) => new Benachrichtige(e.BestellId, "nicht angelegt: " + a.Grund));
+        p.Alle(anlegen.BeiAbgelehnt(), eingang).Sende<Benachrichtige>((a, e) => new Benachrichtige(new(e.BestellId), "nicht angelegt: " + a.Grund));
     });
 }
 
@@ -122,7 +122,7 @@ public sealed record Bewerte(string Objekt, int Hell) : IAuftrag<IBewerten>;
 public sealed record Bewertet(string Note) : IEvent;
 public interface IBewerten : IFunktion { Task<OneOf<Bewertet>> RufeAsync(Bewerte a, IAusfuehrung x); }
 
-public sealed record SpeichereBericht(Guid AggregateId, string Bericht) : ICommand;
+public sealed record SpeichereBericht(Id<Infrastructure.Pruefstand.Tests.TestZiel> AggregateId, string Bericht) : ICommand<Infrastructure.Pruefstand.Tests.TestZiel>;
 public sealed record BerichtGespeichert(string Bericht) : IEvent;
 
 public sealed class Video : IPipeline
@@ -138,7 +138,7 @@ public sealed class Video : IPipeline
         var messen   = je.Rufe<IMessen>(b => new Miss(b));
         var bewerten = p.Alle(erkennen.Bei<Erkannt>(), messen.Bei<Gemessen>()).Rufe<IBewerten>((e, m) => new Bewerte(e.Objekt, m.Hell));
         je.Sammle(bewerten.Bei<Bewertet>())
-          .Sende<SpeichereBericht>((z, noten) => new SpeichereBericht(Akte, string.Join(",", noten.Select(n => n.Note))));
+          .Sende<SpeichereBericht>((z, noten) => new SpeichereBericht(new(Akte), string.Join(",", noten.Select(n => n.Note))));
     });
 }
 
@@ -146,7 +146,7 @@ public sealed class Video : IPipeline
 public sealed record LaufBegonnen : IEvent;
 public sealed record LaufFertig(string Modell) : IEvent;
 public sealed record LaufAbgebrochen : IEvent;
-public sealed record MarkiereHaengend(Guid AggregateId) : ICommand;
+public sealed record MarkiereHaengend(Id<Infrastructure.Pruefstand.Tests.TestZiel> AggregateId) : ICommand<Infrastructure.Pruefstand.Tests.TestZiel>;
 public sealed record HaengendMarkiert : IEvent;
 public sealed record LaufFortschritt(int Schritt) : IEvent;
 
@@ -157,7 +157,7 @@ public sealed class LaufWaechter : IPipeline
     {
         var begonnen = p.Auf<LaufBegonnen>();
         var ende = begonnen.Strom().Warte<LaufFertig, LaufAbgebrochen>().Zeitlimit(TimeSpan.FromHours(6));
-        p.Alle(ende.BeiZeitlimit(), begonnen.Strom()).Sende<MarkiereHaengend>((endeZeit, begonnenStrom) => new MarkiereHaengend(begonnenStrom.Id));
+        p.Alle(ende.BeiZeitlimit(), begonnen.Strom()).Sende<MarkiereHaengend>((endeZeit, begonnenStrom) => new MarkiereHaengend(new(begonnenStrom.Id)));
     });
 }
 
@@ -199,12 +199,12 @@ internal sealed class FlussWelt
     private async Task DispatchAsync(Guid korrelation, ICommand cmd, Guid vorgang, CancellationToken ct)
     {
         lock (Gesendet) Gesendet.Add(cmd);
-        var stream = Log.Stream(cmd.AggregateId);
+        var stream = Log.Stream(cmd.Ziel);
         if (stream.Any(e => e.CausationId == vorgang.ToString())) return;
         IEvent[] evs = LehneAb.Contains(cmd.GetType())
             ? new IEvent[] { new KommandoAbgelehnt(vorgang, cmd.GetType().Name + " abgelehnt") }
             : new[] { Antwort(cmd) };
-        await Log.AppendEventsAsync(cmd.AggregateId, stream.Count, evs, korrelation.ToString(), vorgang.ToString(), "Akte");
+        await Log.AppendEventsAsync(cmd.Ziel, stream.Count, evs, korrelation.ToString(), vorgang.ToString(), "Akte");
     }
 
     private static IEvent Antwort(ICommand cmd) => cmd switch
@@ -311,7 +311,7 @@ public class PipelineFlussTests
         var st = await w.TreibeAsync();
 
         st.Erfolg.Should().BeTrue();
-        w.Gesendete<LegeBestellungAn>().Should().ContainSingle().Which.Should().Be(new LegeBestellungAn(id, weg));
+        w.Gesendete<LegeBestellungAn>().Should().ContainSingle().Which.Should().Be(new LegeBestellungAn(new(id), weg));
         w.Gesendete<LehneBestellungAb>().Should().BeEmpty();
     }
 
@@ -538,7 +538,7 @@ public class PipelineFlussTests
         var zeitPortOhneLimit = () => PipelineFluss.Definiere(p =>
         {
             var k = p.Quelle<DateiDa>().Rufe<IVerkleinern>(x => new Verkleinere(x.Pfad, 1));
-            k.BeiZeitlimit().Sende<LegePaarAn>(z => new LegePaarAn(Guid.Empty, z.Grund));
+            k.BeiZeitlimit().Sende<LegePaarAn>(z => new LegePaarAn(new(Guid.Empty), z.Grund));
         });
         zeitPortOhneLimit.Should().Throw<InvalidOperationException>().WithMessage("*kein Zeitlimit*");
 
@@ -547,7 +547,7 @@ public class PipelineFlussTests
         var fremderDraht = () => PipelineFluss.Definiere(p =>
         {
             var eigen = p.Quelle<VideoDa>();
-            p.Alle(eigen, fremd!).Sende<LegePaarAn>((v, d) => new LegePaarAn(Guid.Empty, d.Pfad));
+            p.Alle(eigen, fremd!).Sende<LegePaarAn>((v, d) => new LegePaarAn(new(Guid.Empty), d.Pfad));
         });
         fremderDraht.Should().Throw<InvalidOperationException>().WithMessage("*anderen Pipeline*");
     }

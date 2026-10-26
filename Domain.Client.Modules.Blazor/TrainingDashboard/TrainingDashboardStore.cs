@@ -20,13 +20,13 @@ namespace Domain.Client.Modules.TrainingDashboard;
 public partial class TrainingDashboardStore : StoreBase
 {
     // Interner Index; die öffentliche Liste ist die (neu zugewiesene) Sicht darauf.
-    private readonly Dictionary<Guid, TrainingslaufAntwort> _index = new();
+    private readonly Dictionary<TrainingslaufId, TrainingslaufAntwort> _index = new();
 
     [ObservableProperty] private IReadOnlyList<TrainingslaufAntwort> _laeufe = [];
     [ObservableProperty] private IReadOnlyList<DatensatzAntwort> _eingefroreneDatensaetze = [];
 
     /// <summary>Der in der Master-Liste gewählte Lauf; null = kein expliziter Fokus.</summary>
-    [ObservableProperty] private Guid? _aktiveId;
+    [ObservableProperty] private TrainingslaufId? _aktiveId;
 
     /// <summary>
     /// Der im Detail gezeigte Lauf: der explizit gewählte, sonst der neueste. So zeigt das

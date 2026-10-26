@@ -6,11 +6,11 @@ using Leihwesen.Ausleihe.Befehle;
 namespace Leihwesen.Ausleihe.Befehle
 {
     /// <summary>Leiht ein Medium aus.</summary>
-    public record LeiheAus(Guid AggregateId, Signatur Medium, Guid LeserId, int Tage = 14) : ICreationCommand;
+    public record LeiheAus(Id<Leihvorgang> AggregateId, Signatur Medium, Guid LeserId, int Tage = 14) : ICommand<Leihvorgang>, ICreationCommand;
 
-    public record GibZurueck : ICommand
+    public record GibZurueck : ICommand<Leihvorgang>
     {
-        public Guid AggregateId { get; init; }
+        public Id<Leihvorgang> AggregateId { get; init; }
         public Zustand Zustand { get; init; }
     }
 }
@@ -29,8 +29,8 @@ namespace Leihwesen.Ausleihe
         public Zustand Zustand { get; init; }
     }
 
-    public record BereitsAusgeliehen(Guid AusleiheId) : ITransientEvent;
-    public record NichtAusgeliehen(Guid AusleiheId) : ITransientEvent;
+    public record BereitsAusgeliehen(Id<Leihvorgang> AusleiheId) : ITransientEvent;
+    public record NichtAusgeliehen(Id<Leihvorgang> AusleiheId) : ITransientEvent;
 
     public partial class Leihvorgang : IState
     {

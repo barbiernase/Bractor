@@ -5,11 +5,11 @@ namespace Domain.Projections.Modell;
 
 /// <summary>Kopf-Daten eines registrierten Modells (+ ob es das aktive ist).</summary>
 public record ModellAntwort(
-    Guid Id,
+    Id<Domain.Modell.Modell> Id,
     string? Name,
     string? Pfad,
-    Guid TrainingslaufId,
-    Guid DatensatzId,
+    Id<Domain.Trainingslauf.Trainingslauf> TrainingslaufId,
+    Id<Domain.Datensatz.Datensatz> DatensatzId,
     int DatensatzVersion,
     double Loss,
     double Genauigkeit,
@@ -25,10 +25,10 @@ public record ModellListe(
 
 /// <summary>
 /// Antwort auf <see cref="HoleAktivesModell"/> — der Singleton-Zeiger. <see cref="ModellId"/>
-/// ist leer (Guid.Empty), wenn (noch) kein Modell aktiv ist.
+/// ist leer (default), wenn (noch) kein Modell aktiv ist.
 /// </summary>
 public record AktivesModellAntwort(
-    Guid ModellId,
+    Id<Domain.Modell.Modell> ModellId,
     string? Name,
     string? Pfad
 ) : IQueryResponse;

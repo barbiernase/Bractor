@@ -62,14 +62,14 @@ public class WirkerIdTests
         var (quelle, diag) = Generiere(@"
 public sealed record Los(Guid Id) : IEvent;
 public sealed record Weiter(Guid Id) : IEvent;
-public sealed record Mach(Guid AggregateId) : ICommand;
-public sealed record Melde(Guid AggregateId) : ICommand;
+public sealed record Mach(Id<ProbeZiel> AggregateId) : ICommand<ProbeZiel>;
+public sealed record Melde(Id<ProbeZiel> AggregateId) : ICommand<ProbeZiel>;
 public sealed class P : IProzessDefinition
 {
     public ProzessRegeln Regeln => Prozess<Los>.Definiere(p =>
     {
-        p.Auf<Los>().Sende<Mach>(e => new Mach(e.Id));
-        p.Auf<Los>().Und<Weiter>().Sende<Melde>((a, b) => new Melde(a.Id));
+        p.Auf<Los>().Sende<Mach>(e => new Mach(new(e.Id)));
+        p.Auf<Los>().Und<Weiter>().Sende<Melde>((a, b) => new Melde(new(a.Id)));
     });
 }
 public sealed class F : IPipeline
@@ -77,9 +77,9 @@ public sealed class F : IPipeline
     public PipelineFluss Fluss => PipelineFluss.Definiere(p =>
     {
         var los = p.Auf<Los>();
-        los.Sende<Mach>(e => new Mach(e.Id));
-        var weiter = los.Sende<Melde>(e => new Melde(e.Id)).Zeitlimit(TimeSpan.FromSeconds(5));
-        los.Sende<Mach>(e => new Mach(e.Id));
+        los.Sende<Mach>(e => new Mach(new(e.Id)));
+        var weiter = los.Sende<Melde>(e => new Melde(new(e.Id))).Zeitlimit(TimeSpan.FromSeconds(5));
+        los.Sende<Mach>(e => new Mach(new(e.Id)));
     });
 }");
         diag.Should().BeEmpty();
@@ -92,13 +92,13 @@ public sealed class F : IPipeline
     {
         var (_, diag) = Generiere(@"
 public sealed record Los(Guid Id) : IEvent;
-public sealed record Mach(Guid AggregateId) : ICommand;
+public sealed record Mach(Id<ProbeZiel> AggregateId) : ICommand<ProbeZiel>;
 public sealed class P : IProzessDefinition
 {
     public ProzessRegeln Regeln => Prozess<Los>.Definiere(p =>
     {
-        p.Auf<Los>().Sende<Mach>(e => new Mach(e.Id));
-        p.Auf<Los>().Sende<Mach>(e => new Mach(e.Id));
+        p.Auf<Los>().Sende<Mach>(e => new Mach(new(e.Id)));
+        p.Auf<Los>().Sende<Mach>(e => new Mach(new(e.Id)));
     });
 }");
         diag.Should().Contain("CQRS072");

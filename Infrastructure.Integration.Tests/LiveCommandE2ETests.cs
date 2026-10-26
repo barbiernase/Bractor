@@ -66,11 +66,10 @@ public class LiveCommandE2ETests
             var pairId = Guid.NewGuid();
             dispatcher.Dispatch(new CommandEnvelope
             {
-                AggregateId = pairId,
                 AggregateType = "ImagePair",   // MUSS mit dem ClusterKind übereinstimmen
                 Modus = new CommandModus.Client(0),
                 Payload = new ErstelleImagePair(
-                    pairId,
+                    new(pairId),
                     PairKey: "PAIR-LIVE",
                     ProduziertAm: DateTimeOffset.UtcNow,
                     AufgenommenAm: DateTimeOffset.UtcNow,

@@ -12,7 +12,7 @@ namespace Domain.Client.Modules.Trainingslaeufe;
 public partial class TrainingslaufListeStore : StoreBase
 {
     [ObservableProperty] private IReadOnlyList<TrainingslaufAntwort> _laeufe = [];
-    [ObservableProperty] private Guid? _aktiveId;
+    [ObservableProperty] private TrainingslaufId? _aktiveId;
 
     void Handle(TrainingslaufListe antwort, MessageContext ctx)
     {

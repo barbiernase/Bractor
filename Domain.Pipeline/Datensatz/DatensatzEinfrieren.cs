@@ -12,6 +12,6 @@ public sealed class DatensatzEinfrieren : IPipeline
     {
         var angefordert = p.Auf<EinfrierenAngefordert>();
         var einfrieren = angefordert.Rufe<IMitgliederEinfrieren>(angefordert => new FriereMitgliederEin(angefordert.Mitglieder, angefordert.Split));
-        var abschliessen = p.Alle(einfrieren.Bei<MitgliederEingefroren>(), angefordert.Strom()).Sende<SchliesseEinfrierenAb>((einfrieren, angefordertStrom) => new SchliesseEinfrierenAb(angefordertStrom.Id, einfrieren.Mitglieder));
+        var abschliessen = p.Alle(einfrieren.Bei<MitgliederEingefroren>(), angefordert.Strom()).Sende<SchliesseEinfrierenAb>((einfrieren, angefordertStrom) => new SchliesseEinfrierenAb(new Id<Domain.Datensatz.Datensatz>(angefordertStrom.Id), einfrieren.Mitglieder));
     });
 }

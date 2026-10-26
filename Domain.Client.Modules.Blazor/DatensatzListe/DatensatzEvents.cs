@@ -7,4 +7,4 @@ namespace Domain.Client.Modules.Datensaetze;
 /// gewählt. Der Komposition-Store übernimmt ihn als aktiven Datensatz und
 /// lädt seinen Kopf nach. Geht nie an den Server.
 /// </summary>
-public record DatensatzAusgewaehlt(Guid DatensatzId) : IClientEvent;
+public record DatensatzAusgewaehlt(DatensatzId DatensatzId) : IClientEvent;

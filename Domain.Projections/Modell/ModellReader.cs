@@ -20,7 +20,8 @@ public partial class ModellReader : IReader<ModellProjektion>
         {
             ctx.Track(m.Id.ToString());
             return new ModellAntwort(
-                m.Id, m.Name, m.Pfad, m.TrainingslaufId, m.DatensatzId, m.DatensatzVersion,
+                new Id<Domain.Modell.Modell>(m.Id), m.Name, m.Pfad, new Id<Domain.Trainingslauf.Trainingslauf>(m.TrainingslaufId),
+                new Id<Domain.Datensatz.Datensatz>(m.DatensatzId), m.DatensatzVersion,
                 m.Loss, m.Genauigkeit, m.Status, m.Id == aktivId, m.RegistriertAm);
         }).ToList();
 
@@ -32,9 +33,9 @@ public partial class ModellReader : IReader<ModellProjektion>
     {
         var aktiv = await getAktivesModell.GetAktivesAsync();
         if (aktiv is null)
-            return new AktivesModellAntwort(Guid.Empty, null, null);
+            return new AktivesModellAntwort(default, null, null);
 
         ctx.Track(aktiv.ModellId.ToString());
-        return new AktivesModellAntwort(aktiv.ModellId, aktiv.Name, aktiv.Pfad);
+        return new AktivesModellAntwort(new Id<Domain.Modell.Modell>(aktiv.ModellId), aktiv.Name, aktiv.Pfad);
     }
 }

@@ -6,7 +6,7 @@ using Domain.Projections.ImagePair;
 namespace Domain.Client.Modules;
 
 public record ImagePairRecord(
-    Guid Id, string? PairKey,
+    ImagePairId Id, string? PairKey,
     DateTimeOffset ProduziertAm, DateTimeOffset AufgenommenAm,
     bool IstKomplett, string? UrsprungsPfad,
     string? Dc0Pfad, Klassifikation? Dc0KiBildKlassifikation,
@@ -42,7 +42,7 @@ public record ImagePairRecord(
     /// Bilder/KI/Labels tröpfeln danach als Patch nach.
     /// </summary>
     public static ImagePairRecord Neu(
-        Guid id, string? pairKey,
+        ImagePairId id, string? pairKey,
         DateTimeOffset produziertAm, DateTimeOffset aufgenommenAm, string? ursprungsPfad) => new(
         id, pairKey, produziertAm, aufgenommenAm, IstKomplett: false, ursprungsPfad,
         Dc0Pfad: null, Dc0KiBildKlassifikation: null, Dc0MenschBildLabel: null, Dc0BildSrc: null,

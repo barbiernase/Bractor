@@ -35,7 +35,7 @@ public class AkteurDienstTests
     public async Task Der_Emit_stempelt_den_Akteur_im_Auftrag()
     {
         var (emitter, umschlaege) = Emitter();
-        var cmd = new NimmRangeAuf(Guid.NewGuid(), new List<Guid>(), default!);
+        var cmd = new NimmRangeAuf(new(Guid.NewGuid()), new List<Id<Domain.ImagePair.ImagePair>>(), default!);
         var k = new EmitKausalität(Guid.NewGuid(), Guid.NewGuid(), "x");
 
         using (ImAuftrag.Von("KIOperator"))
@@ -44,7 +44,7 @@ public class AkteurDienstTests
 
         umschlaege[0].UserId.Should().Be("KIOperator");
         umschlaege[1].UserId.Should().Be(ImAuftrag.Ohne, "ein Ketten-Command ohne Kette hat keinen Akteur — niemand darf ihn direkt");
-        umschlaege[0].CommandId.Should().Be(Infrastructure.Aggregate.EmitId.Ableiten(k, cmd.AggregateId), "der Akteur ändert die Idempotenz nicht");
+        umschlaege[0].CommandId.Should().Be(Infrastructure.Aggregate.EmitId.Ableiten(k, cmd.AggregateId.Wert), "der Akteur ändert die Idempotenz nicht");
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public class AkteurDienstTests
         AkteurHerkunft.EindeutigerHalter(typeof(NimmRangeAuf)).Should().BeNull("Ketten-Commands darf niemand direkt");
 
         var (emitter, umschlaege) = Emitter();
-        await emitter.EmitAsync(new LabelPhysischesProdukt(Guid.NewGuid(), default), new EmitKausalität(Guid.NewGuid(), Guid.NewGuid(), "x"), CancellationToken.None);
+        await emitter.EmitAsync(new LabelPhysischesProdukt(new(Guid.NewGuid()), default), new EmitKausalität(Guid.NewGuid(), Guid.NewGuid(), "x"), CancellationToken.None);
         umschlaege.Single().UserId.Should().Be("Produktpruefer");
     }
 
@@ -67,7 +67,7 @@ public class AkteurDienstTests
         {
             await Task.Yield();                       // über ein await hinweg — der Auftrag reist im Fluss
             gesehen = ImAuftrag.Akteur;
-            await sendCommand(new SchliesseEinfrierenAb(env.AggregateId, new List<DatensatzMitglied>()));
+            await sendCommand(new SchliesseEinfrierenAb(new(env.AggregateId), new List<DatensatzMitglied>()));
         };
         var pull = PipelineEventPullBridge.Wrap(dispatch, (_, _) => _ => Task.CompletedTask, (_, _) => Task.CompletedTask);
         var stream = Guid.NewGuid();

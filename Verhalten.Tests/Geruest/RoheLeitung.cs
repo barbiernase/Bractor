@@ -91,7 +91,7 @@ public sealed class RoheLeitung : IAsyncDisposable
         var dto = new CommandEnvelopeDto
         {
             CommandId = Guid.NewGuid().ToString(),
-            AggregateId = command.AggregateId.ToString(),
+            AggregateId = command.Ziel.ToString(),
             AggregateType = aggregatTyp,
             ExpectedVersion = erwarteteVersion,
             CreatedAtUtc = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),

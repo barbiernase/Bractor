@@ -37,8 +37,8 @@ public class AusgabeVertragAnalyzerTests
     private const string Vorspann = @"
 using System; using System.Collections.Generic; using System.Threading.Tasks; using Abstractions; using Core;
 namespace Probe {
-public record Mach(Guid AggregateId) : ICommand;
-public record Anderes(Guid AggregateId) : ICommand;
+public record Mach(Id<Ding> AggregateId) : ICommand<Ding>;
+public record Anderes(Id<Ding> AggregateId) : ICommand<Ding>;
 public record Gemacht() : IEvent;
 public record Abgelehnt() : ITransientEvent;
 public record Frage() : IQuery;
@@ -71,10 +71,10 @@ public partial class Ding : IState { public int Version { get; set; } public Gui
     public async Task Pipeline_mit_ICommand_ist_offen_mit_OneOf_geschlossen_und_Task_erlaubt()
     {
         (await Ids(@"namespace Probe { public class P : IPipelineHandler { public string PipelineId => ""p"";
-            public async IAsyncEnumerable<ICommand> Handle(Los t, PipelineContext ctx) { await Task.CompletedTask; yield return new Mach(Guid.Empty); } } }"))
+            public async IAsyncEnumerable<ICommand> Handle(Los t, PipelineContext ctx) { await Task.CompletedTask; yield return new Mach(new(Guid.Empty)); } } }"))
             .Should().Equal(AusgabeVertragAnalyzer.OffenId);
         (await Ids(@"namespace Probe { public class P : IPipelineHandler { public string PipelineId => ""p"";
-            public async IAsyncEnumerable<OneOf<Mach, Los>> Handle(Los t, PipelineContext ctx) { await Task.CompletedTask; yield return new Mach(Guid.Empty); }
+            public async IAsyncEnumerable<OneOf<Mach, Los>> Handle(Los t, PipelineContext ctx) { await Task.CompletedTask; yield return new Mach(new(Guid.Empty)); }
             public Task Handle(Gemacht e, PipelineContext ctx) => Task.CompletedTask; } }")).Should().BeEmpty();
     }
 
@@ -82,7 +82,7 @@ public partial class Ding : IState { public int Version { get; set; } public Gui
     public async Task OneOf_mit_Interface_Argument_ist_offen()
     {
         (await Ids(@"namespace Probe { public class R : ISubscriber { public string SubscriberId => ""r"";
-            public async IAsyncEnumerable<OneOf<Mach, ICommand>> Handle(Gemacht e, IAggregateEnvelope env) { await Task.CompletedTask; yield return new Mach(Guid.Empty); } } }"))
+            public async IAsyncEnumerable<OneOf<Mach, ICommand>> Handle(Gemacht e, IAggregateEnvelope env) { await Task.CompletedTask; yield return new Mach(new(Guid.Empty)); } } }"))
             .Should().Equal(AusgabeVertragAnalyzer.OffenId);
     }
 

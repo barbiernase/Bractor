@@ -14,7 +14,7 @@ namespace Domain.Trainingslauf;
 /// </summary>
 public partial class Trainingslauf : IState
 {
-    public Guid DatensatzId { get; set; }
+    public Id<Datensatz.Datensatz> DatensatzId { get; set; }
     public int DatensatzVersion { get; set; }
     public Hyperparameter? Hyperparameter { get; set; }
 

@@ -44,7 +44,7 @@
     protected override void OnInitialized()
         => Fx.OnChanged(Store, () => InvokeAsync(StateHasChanged));
 
-    void Waehle(Guid id) => Fx.Dispatch(new DatensatzAusgewaehlt(id));
+    void Waehle(DatensatzId id) => Fx.Dispatch(new DatensatzAusgewaehlt(id));
 
     public void Dispose() => Fx.Dispose();
 

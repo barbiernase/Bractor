@@ -80,8 +80,8 @@ public sealed class DomainEditorScaffolderTests
 
             namespace Domain.Konto;
 
-            public record EroeffneKonto(Guid AggregateId, decimal StartSaldo, bool Gesperrt = false) : ICommand;
-            public record ReserviereBetrag(Guid AggregateId, decimal Betrag) : ICommand;
+            public record EroeffneKonto(Id<Konto> AggregateId, decimal StartSaldo, bool Gesperrt = false) : ICommand<Konto>;
+            public record ReserviereBetrag(Id<Konto> AggregateId, decimal Betrag) : ICommand<Konto>;
             """);
     }
 
@@ -168,7 +168,7 @@ public sealed class DomainEditorScaffolderTests
             [
                 new() { Name = "BildMeta", Kind = RecordArt.ValueObject, Namespace = "Domain.ImagePair",
                     Felder = [ new() { Name = "OriginalDateiname", Typ = "string" }, new() { Name = "ErstelltAm", Typ = "DateTimeOffset" } ] },
-                new() { Name = "MeldeBildVerfuegbar", Kind = RecordArt.Command, Namespace = "Domain.ImagePair",
+                new() { Name = "MeldeBildVerfuegbar", Kind = RecordArt.Command, Namespace = "Domain.ImagePair", Aggregat = "ImagePair",
                     Felder = [ new() { Name = "AggregateId", Typ = "Guid" }, new() { Name = "Version", Typ = "BildVersion" }, new() { Name = "Meta", Typ = "BildMeta" } ] },
                 new() { Name = "BildVerfuegbar", Kind = RecordArt.Event, Namespace = "Domain.ImagePair",
                     Felder = [ new() { Name = "Version", Typ = "BildVersion" }, new() { Name = "Regionen", Typ = "IReadOnlyList<BildMeta>" } ] },
@@ -189,7 +189,7 @@ public sealed class DomainEditorScaffolderTests
             public record BildMeta(string OriginalDateiname, DateTimeOffset ErstelltAm);
             """);
         // Composition: das Command-Feld hat den Typ eines anderen Records/Enums.
-        Inhalt(dateien, "Domain/ImagePair/Commands.cs").Should().Contain("public record MeldeBildVerfuegbar(Guid AggregateId, BildVersion Version, BildMeta Meta) : ICommand;");
+        Inhalt(dateien, "Domain/ImagePair/Commands.cs").Should().Contain("public record MeldeBildVerfuegbar(Id<ImagePair> AggregateId, BildVersion Version, BildMeta Meta) : ICommand<ImagePair>;");
         Inhalt(dateien, "Domain/ImagePair/Events.cs").Should().Contain("public record BildVerfuegbar(BildVersion Version, IReadOnlyList<BildMeta> Regionen) : IEvent;");
     }
 
@@ -199,9 +199,21 @@ public sealed class DomainEditorScaffolderTests
         var m = new EditorModell
         {
             Rahmen = TestRahmen,
-            Records = [ new() { Name = "ErstelleX", Kind = RecordArt.Command, Namespace = "Domain.X", IstErzeugung = true, Felder = [ new() { Name = "AggregateId", Typ = "Guid" } ] } ],
+            Records = [ new() { Name = "ErstelleX", Kind = RecordArt.Command, Namespace = "Domain.X", IstErzeugung = true, Aggregat = "X", Felder = [ new() { Name = "AggregateId", Typ = "Guid" } ] } ],
         };
-        Inhalt(Scaffolder.Generiere(m), "Domain/X/Commands.cs").Should().Contain("public record ErstelleX(Guid AggregateId) : ICommand, ICreationCommand;");
+        Inhalt(Scaffolder.Generiere(m), "Domain/X/Commands.cs").Should().Contain("public record ErstelleX(Id<X> AggregateId) : ICommand<X>, ICreationCommand;");
+    }
+
+    [Fact]
+    public void Ein_Command_ohne_Aggregat_bleibt_unfertig()
+    {
+        // Ohne Ziel-Aggregat (weder im Code noch über ein Decide) baut der Command nicht: ICommand allein verlangt ein Ziel (W1, R7).
+        var m = new EditorModell
+        {
+            Rahmen = TestRahmen,
+            Records = [ new() { Name = "MacheX", Kind = RecordArt.Command, Namespace = "Domain.X", Felder = [ new() { Name = "AggregateId", Typ = "Guid" } ] } ],
+        };
+        Inhalt(Scaffolder.Generiere(m), "Domain/X/Commands.cs").Should().Contain("public record MacheX(Guid AggregateId) : ICommand;");
     }
 
     [Fact]

@@ -36,10 +36,10 @@ public sealed class RueckgabePruefung : IPipeline
         var schnell = eingang.Rufe<ISchadensSchaetzung>(e => new SchaetzeSchaden(e.LeserId, 10m))
             .Zeitlimit(TimeSpan.FromSeconds(30));
         var gruendlich = eingang.Rufe<ISchadensSchaetzung>(e => new SchaetzeSchaden(e.LeserId, 100m));
-        var mahnung = scan.Alle(gruendlich.Bei<SchadenGeschaetzt>(), eingang).Sende<EroeffneMahnung>((g, e) => new EroeffneMahnung(e.LeserId, g.Betrag))
-            .Oder(schnell.BeiZeitlimit(), z => new EroeffneMahnung(Guid.Empty, 0m));
-        seiten.Sammle(seite.Bei<SeiteGeprueft>()).Sende<MeldeSchaden>((e, geprueft) => new MeldeSchaden(e.LeserId, e.LeserId));
-        mahnung.BeiAbgelehnt().Sende<MeldeSchaden>(a => new MeldeSchaden(Guid.Empty, Guid.Empty));
+        var mahnung = scan.Alle(gruendlich.Bei<SchadenGeschaetzt>(), eingang).Sende<EroeffneMahnung>((g, e) => new EroeffneMahnung(new(e.LeserId), g.Betrag))
+            .Oder(schnell.BeiZeitlimit(), z => new EroeffneMahnung(default, 0m));
+        seiten.Sammle(seite.Bei<SeiteGeprueft>()).Sende<MeldeSchaden>((e, geprueft) => new MeldeSchaden(new(e.LeserId), e.LeserId));
+        mahnung.BeiAbgelehnt().Sende<MeldeSchaden>(a => new MeldeSchaden(default, Guid.Empty));
     });
 }
 

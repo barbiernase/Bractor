@@ -114,7 +114,7 @@ public sealed class DetachedProzessSend
             if (ct.IsCancellationRequested) return;
         }
 
-        try { await _danach(korrelation, cmd.AggregateId, vorgang, abVersion, ct); }
+        try { await _danach(korrelation, cmd.Ziel, vorgang, abVersion, ct); }
         catch (Exception ex)
         {
             Console.WriteLine($"[DetachedProzessSend] Selbst-Weckung fehlgeschlagen ({korrelation}): {ex.Message}");

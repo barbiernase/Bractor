@@ -40,11 +40,11 @@
     protected override void OnInitialized()
         => Fx.OnChanged(Store, () => InvokeAsync(StateHasChanged));
 
-    void Waehle(Guid id) => Fx.Dispatch(new TrainingslaufAusgewaehlt(id));
+    void Waehle(TrainingslaufId id) => Fx.Dispatch(new TrainingslaufAusgewaehlt(id));
 
     public void Dispose() => Fx.Dispose();
 
-    private static string Kurz(Guid id) => id.ToString("N")[..8];
+    private static string Kurz<T>(Abstractions.Id<T> id) where T : Abstractions.IState => id.Wert.ToString("N")[..8];
 
     private static string ZeilenStil(bool aktiv) =>
         $"padding:6px 8px;cursor:pointer;border-left:3px solid {(aktiv ? "#1976d2" : "transparent")};" +

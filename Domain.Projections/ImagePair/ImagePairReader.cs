@@ -9,7 +9,7 @@ public partial class ImagePairReader : IReader<ImagePairProjektion>
     public async Task<OneOf<ImagePairAntwort, ImagePairNichtGefundenAntwort>>
         Handle(GetImagePair query, IMessageEnvelope envelope, ReadContext ctx, IFindImagePair findImagePair)
     {
-        var model = await findImagePair.FindByIdAsync(query.PairId);
+        var model = await findImagePair.FindByIdAsync(query.PairId.Wert);
 
         if (model != null)
         {
@@ -83,7 +83,7 @@ public partial class ImagePairReader : IReader<ImagePairProjektion>
 
     /// <summary>Read-Model → DTO. Internal, damit der DatensatzReader (Galerie-Join) es wiederverwendet.</summary>
     internal static ImagePairAntwort ToAntwort(ImagePairReadModel m) => new(
-        Id: m.Id,
+        Id: new Id<Domain.ImagePair.ImagePair>(m.Id),
         PairKey: m.PairKey,
         ProduziertAm: m.ProduziertAm,
         AufgenommenAm: m.AufgenommenAm,

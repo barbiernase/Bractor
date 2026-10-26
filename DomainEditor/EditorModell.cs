@@ -142,8 +142,8 @@ public sealed record Record
     /// <summary>Die Quelldatei (relativ zur Solution), in der der Record steht — null = noch nicht geschrieben.</summary>
     public string? Datei { get; init; }
     /// <summary>
-    /// Das Aggregat, zu dem der Record GEHÖRT — aus dem Code: der Command, den genau ein Decider entscheidet; das Event,
-    /// das genau ein Aggregat erzeugt/faltet. Null = keinem (Value Object, geteilt, oder im Editor noch nicht verdrahtet).
+    /// Das Aggregat, zu dem der Record GEHÖRT — aus dem Code: beim Command das Ziel in seinem Typ (<c>ICommand&lt;TAggregat&gt;</c>); beim Event
+    /// das Aggregat, das es als einziges erzeugt/faltet. Null = keinem (Value Object, geteilt, oder im Editor noch nicht verdrahtet).
     /// </summary>
     public string? Aggregat { get; init; }
     /// <summary>Die Deklarationsform verbatim ohne Namen, z. B. <c>public sealed record</c>, <c>public record struct</c>. Null = <c>public record</c>.</summary>
@@ -572,8 +572,8 @@ public sealed record Rahmen
     public string? Kennung { get; init; }
     /// <summary>Die Skalar-Typen, die der Wire (Proto-Codegen, <c>ProtoScalarSpecs</c>) trägt — Vorschläge + Validierung.</summary>
     public IReadOnlyList<string> Skalare { get; init; } = [];
-    /// <summary>Das Identitäts-Feld, das <c>ICommand</c> verlangt (<c>nameof(ICommand.AggregateId)</c>).</summary>
-    public string AggregatIdFeld { get; init; } = nameof(Abstractions.ICommand.AggregateId);
+    /// <summary>Das Ziel-Feld, das <c>ICommand&lt;TAggregat&gt;</c> verlangt (<c>Id&lt;TAggregat&gt; AggregateId</c>, <see cref="Abstractions.Idvertrag.CommandZiel"/>).</summary>
+    public string AggregatIdFeld { get; init; } = Abstractions.Idvertrag.CommandZiel;
     /// <summary>Größte Stelligkeit von <c>OneOf&lt;…&gt;</c> im Vertrag (aus der Compilation gezählt; 0 = unbekannt).</summary>
     public int OneOfMax { get; init; }
     /// <summary>Größte Join-Stelligkeit der Prozess-DSL (<c>RegelBauer&lt;…&gt;</c>, aus der Compilation gezählt; 0 = unbekannt).</summary>

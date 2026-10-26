@@ -7,9 +7,9 @@ namespace Domain.Datensatz;
 // ═══════════════════════════════════════════════════
 
 public record ErstelleDatensatz(
-    Guid AggregateId,
+    Id<Datensatz> AggregateId,
     string Name
-) : ICreationCommand;
+) : ICommand<Datensatz>, ICreationCommand;
 
 // ═══════════════════════════════════════════════════
 // RANGE — Variante A (zweiphasig)
@@ -20,45 +20,45 @@ public record ErstelleDatensatz(
 
 /// <summary>GUI-Command: eine ganze Such-Range in den Datensatz aufnehmen.</summary>
 public record FuegeRangeHinzu(
-    Guid AggregateId,
+    Id<Datensatz> AggregateId,
     RangeKriterien Kriterien
-) : ICommand;
+) : ICommand<Datensatz>;
 
 /// <summary>
 /// Resolver-Command: die aufgelöste Range (konkrete IDs) aufnehmen (Union, dedupliziert).
 /// Wird vom server-seitigen Resolver nach SearchAsync ausgelöst, nie von der GUI.
 /// </summary>
 public record NimmRangeAuf(
-    Guid AggregateId,
-    IReadOnlyList<Guid> ImagePairIds,
+    Id<Datensatz> AggregateId,
+    IReadOnlyList<Id<ImagePair.ImagePair>> ImagePairIds,
     RangeHerkunft Herkunft
-) : ICommand;
+) : ICommand<Datensatz>;
 
 // ═══════════════════════════════════════════════════
 // MANUELLES DELTA
 // ═══════════════════════════════════════════════════
 
 public record NimmPaarAuf(
-    Guid AggregateId,
-    Guid ImagePairId
-) : ICommand;
+    Id<Datensatz> AggregateId,
+    Id<ImagePair.ImagePair> ImagePairId
+) : ICommand<Datensatz>;
 
 public record EntfernePaar(
-    Guid AggregateId,
-    Guid ImagePairId
-) : ICommand;
+    Id<Datensatz> AggregateId,
+    Id<ImagePair.ImagePair> ImagePairId
+) : ICommand<Datensatz>;
 
 // ═══════════════════════════════════════════════════
 // SPLIT — optionaler Override (Default 70/15/15)
 // ═══════════════════════════════════════════════════
 
 public record SetzeSplit(
-    Guid AggregateId,
+    Id<Datensatz> AggregateId,
     int TrainProzent,
     int ValProzent,
     int TestProzent,
     int Seed
-) : ICommand;
+) : ICommand<Datensatz>;
 
 // ═══════════════════════════════════════════════════
 // EINFRIEREN — zweiphasig
@@ -68,14 +68,14 @@ public record SetzeSplit(
 
 /// <summary>GUI-Command: das Einfrieren anstoßen.</summary>
 public record FriereEin(
-    Guid AggregateId
-) : ICommand;
+    Id<Datensatz> AggregateId
+) : ICommand<Datensatz>;
 
 /// <summary>
 /// Resolver-Command: das Einfrieren abschließen mit dem aufgelösten Mitglieder-Snapshot
 /// (Label-Stand + Split je Mitglied). Wird vom Resolver ausgelöst, nie von der GUI.
 /// </summary>
 public record SchliesseEinfrierenAb(
-    Guid AggregateId,
+    Id<Datensatz> AggregateId,
     IReadOnlyList<DatensatzMitglied> Mitglieder
-) : ICommand;
+) : ICommand<Datensatz>;

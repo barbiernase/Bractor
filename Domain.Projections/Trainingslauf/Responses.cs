@@ -11,8 +11,8 @@ namespace Domain.Projections.Trainingslauf;
 /// der Client wertet sie über den Status.
 /// </remarks>
 public record TrainingslaufAntwort(
-    Guid Id,
-    Guid DatensatzId,
+    Id<Domain.Trainingslauf.Trainingslauf> Id,
+    Id<Domain.Datensatz.Datensatz> DatensatzId,
     int DatensatzVersion,
     TrainingsStatus Status,
     int AktuelleEpoche,
@@ -25,7 +25,7 @@ public record TrainingslaufAntwort(
     DateTimeOffset Startzeit
 ) : IQueryResponse;
 
-public record TrainingslaufNichtGefundenAntwort(Guid TrainingslaufId) : IQueryResponse;
+public record TrainingslaufNichtGefundenAntwort(Id<Domain.Trainingslauf.Trainingslauf> TrainingslaufId) : IQueryResponse;
 
 public record TrainingslaufListe(
     IReadOnlyList<TrainingslaufAntwort> Items

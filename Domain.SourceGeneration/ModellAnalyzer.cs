@@ -17,12 +17,15 @@ namespace Domain.SourceGeneration;
 /// <item>CQRS082 (GR-GARANTIE, Warnung) — ein Konsument sendet ab einem transienten (verlierbaren) Eingang einen Command.</item>
 /// <item>CQRS083 (GR-ZUSTAND, Regel Z, Warnung) — ein Konsument (Projektion/Reaktion/Pipeline-Handler) hält Zustand in Instanzfeldern;
 ///   Gedächtnis gehört in ein Aggregat bzw. Lesemodell.</item>
+/// <item>CQRS013 (R7) — ein Command ohne typisiertes Ziel: er implementiert <c>ICommand</c>, aber nicht genau ein <c>ICommand&lt;TAggregat&gt;</c>
+///   (etwa mit einer handgeschriebenen <c>Ziel</c>-Guid). Das Ziel eines Commands steht im Typ (Plan §2.5).</item>
 /// </list>
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class ModellAnalyzer : DiagnosticAnalyzer
 {
-    public const string ApplyFehltId = "CQRS079", FaltungId = "CQRS080", EnumNullId = "CQRS081", GarantieId = "CQRS082", ZustandId = "CQRS083";
+    public const string ApplyFehltId = "CQRS079", FaltungId = "CQRS080", EnumNullId = "CQRS081", GarantieId = "CQRS082", ZustandId = "CQRS083",
+        ZielId = "CQRS013";
 
     private static DiagnosticDescriptor D(string id, string titel, string text, DiagnosticSeverity s) =>
         new(id, titel, text, "CQRS.Modell", s, isEnabledByDefault: true);
@@ -43,7 +46,11 @@ public sealed class ModellAnalyzer : DiagnosticAnalyzer
         "'{0}' hält Zustand in {1} — Projektionen, Reaktionen und Pipelines sind zustandslose Übersetzer; Gedächtnis gehört in ein Aggregat (GR-ZUSTAND, Regel Z)",
         DiagnosticSeverity.Warning);
 
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(ApplyFehlt, Faltung, EnumNull, Garantie, Zustand);
+    private static readonly DiagnosticDescriptor Ziel = D(ZielId, "Command ohne typisiertes Ziel",
+        "Command '{0}' nennt sein Ziel nicht im Typ — ein Command implementiert genau ein ICommand<TAggregat> mit Id<TAggregat> AggregateId (R7)",
+        DiagnosticSeverity.Error);
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(ApplyFehlt, Faltung, EnumNull, Garantie, Zustand, Ziel);
 
     public override void Initialize(AnalysisContext context)
     {
@@ -60,12 +67,13 @@ public sealed class ModellAnalyzer : DiagnosticAnalyzer
 
     private sealed class Vertrag
     {
-        public readonly INamedTypeSymbol? IEvent, ITransient, ICommand, IState, IDecider, IApplier, ISubscriber, IPipelineHandler;
+        public readonly INamedTypeSymbol? IEvent, ITransient, ICommand, ICommandZiel, IState, IDecider, IApplier, ISubscriber, IPipelineHandler;
         public Vertrag(Compilation c)
         {
             INamedTypeSymbol? G(string n) => c.GetTypeByMetadataName("Abstractions." + n);
             IEvent = G("IEvent"); ITransient = G("ITransientEvent"); ICommand = G("ICommand"); IState = G("IState");
             IDecider = G("IDecider`1"); IApplier = G("IApplier`1"); ISubscriber = G("ISubscriber"); IPipelineHandler = G("IPipelineHandler");
+            ICommandZiel = c.GetTypeByMetadataName(Abstractions.Idvertrag.CommandMetadatenName);
         }
         public bool Ist(ITypeSymbol t, INamedTypeSymbol? i) => i != null && (SymbolEqualityComparer.Default.Equals(t, i) || t.AllInterfaces.Contains(i, SymbolEqualityComparer.Default));
     }
@@ -75,6 +83,9 @@ public sealed class ModellAnalyzer : DiagnosticAnalyzer
         var t = (INamedTypeSymbol)ctx.Symbol;
         if (t.TypeKind == TypeKind.Enum) { PruefeEnum(ctx, t); return; }
         if (v.Ist(t, v.IState) && !t.IsAbstract) PruefeAggregat(ctx, t, v);
+        if (t.TypeKind is TypeKind.Class or TypeKind.Struct && !t.IsAbstract && v.Ist(t, v.ICommand) && v.ICommandZiel != null
+            && t.AllInterfaces.Count(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, v.ICommandZiel)) != 1)
+            ctx.ReportDiagnostic(Diagnostic.Create(Ziel, t.Locations.FirstOrDefault(), t.Name));
         if (t.TypeKind == TypeKind.Class && !t.IsAbstract && (v.Ist(t, v.ISubscriber) || v.Ist(t, v.IPipelineHandler))) PruefeKonsument(ctx, t, v);
     }
 

@@ -3,6 +3,7 @@ using FluentAssertions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Pruefdomaene.Posten;
+using Proto.Cluster;
 using static Pruefdomaene.Integration.Tests.Pruefstand;
 using PostenState = Pruefdomaene.Posten.Posten;
 
@@ -20,7 +21,7 @@ public class SchreibGarantieTests
     private static async Task<Guid> PostenAsync(IHost host, int bestand = 100)
     {
         var p = Guid.NewGuid();
-        (await FrageAsync(host, new EroeffnePosten(p, bestand), Guid.NewGuid()))!.Success.Should().BeTrue();
+        (await FrageAsync(host, new EroeffnePosten(new(p), bestand), Guid.NewGuid()))!.Success.Should().BeTrue();
         return p;
     }
 
@@ -36,8 +37,8 @@ public class SchreibGarantieTests
         {
             var p = await PostenAsync(host);
             var id = Guid.NewGuid();
-            var erste = await FrageAsync(host, new ReservierePosten(p, 5), id);
-            var wiederholt = await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => FrageAsync(host, new ReservierePosten(p, 5), id)));
+            var erste = await FrageAsync(host, new ReservierePosten(new(p), 5), id);
+            var wiederholt = await Task.WhenAll(Enumerable.Range(0, 5).Select(_ => FrageAsync(host, new ReservierePosten(new(p), 5), id)));
 
             erste!.Success.Should().BeTrue();
             wiederholt.Should().OnlyContain(r => r != null && r.Success, "eine Wiederholung bekommt idempotent dasselbe Ergebnis");
@@ -58,10 +59,10 @@ public class SchreibGarantieTests
         {
             var p = await PostenAsync(host);
             var alt = Guid.NewGuid();
-            (await FrageAsync(host, new ReservierePosten(p, 1), alt))!.Success.Should().BeTrue();
-            for (var i = 0; i < 3; i++) (await FrageAsync(host, new ReservierePosten(p, 1), Guid.NewGuid()))!.Success.Should().BeTrue();
+            (await FrageAsync(host, new ReservierePosten(new(p), 1), alt))!.Success.Should().BeTrue();
+            for (var i = 0; i < 3; i++) (await FrageAsync(host, new ReservierePosten(new(p), 1), Guid.NewGuid()))!.Success.Should().BeTrue();
 
-            await FrageAsync(host, new ReservierePosten(p, 1), alt);   // ein Emittent gibt die alte CommandId erneut aus
+            await FrageAsync(host, new ReservierePosten(new(p), 1), alt);   // ein Emittent gibt die alte CommandId erneut aus
 
             (await Zustand<PostenState>(host.Services, p)).Reserviert.Should().Be(4, "die alte CommandId hat schon gewirkt");
             (await ReserviertImLog(host, p)).Should().Be(4);
@@ -83,8 +84,8 @@ public class SchreibGarantieTests
             try
             {
                 p = await PostenAsync(host, bestand: 5);
-                (await FrageAsync(host, new ReservierePosten(p, 5), gewirkt))!.Success.Should().BeTrue();
-                var erst = await FrageAsync(host, new ReservierePosten(p, 3), abgelehnt);
+                (await FrageAsync(host, new ReservierePosten(new(p), 5), gewirkt))!.Success.Should().BeTrue();
+                var erst = await FrageAsync(host, new ReservierePosten(new(p), 3), abgelehnt);
                 erst!.Success.Should().BeFalse();
                 erst.Abgelehnt.Should().BeTrue();
             }
@@ -96,12 +97,12 @@ public class SchreibGarantieTests
             await host.StartAsync();
             try
             {
-                (await FrageAsync(host, new BuchePostenZu(p, 10), Guid.NewGuid()))!.Success.Should().BeTrue();   // jetzt reichte der Bestand
+                (await FrageAsync(host, new BuchePostenZu(new(p), 10), Guid.NewGuid()))!.Success.Should().BeTrue();   // jetzt reichte der Bestand
                 var store = host.Services.GetRequiredService<IEventStoreRepository>();
                 var vorher = (await store.ReadStreamAsync(p, 0, default)).Count;
 
-                var w1 = await FrageAsync(host, new ReservierePosten(p, 5), gewirkt);
-                var w2 = await FrageAsync(host, new ReservierePosten(p, 3), abgelehnt);
+                var w1 = await FrageAsync(host, new ReservierePosten(new(p), 5), gewirkt);
+                var w2 = await FrageAsync(host, new ReservierePosten(new(p), 3), abgelehnt);
 
                 w1!.Success.Should().BeTrue("die erste Reservierung hat gewirkt");
                 w2!.Success.Should().BeFalse("die zweite war abgelehnt — auch wenn sie jetzt wirken könnte");
@@ -124,13 +125,13 @@ public class SchreibGarantieTests
         {
             var p = await PostenAsync(host);
             var alt = Guid.NewGuid();
-            (await FrageAsync(host, new ReservierePosten(p, 1), alt))!.Success.Should().BeTrue();
-            (await FrageAsync(host, new ReservierePosten(p, 1), Guid.NewGuid()))!.Success.Should().BeTrue();   // verdrängt alt aus dem Cache
+            (await FrageAsync(host, new ReservierePosten(new(p), 1), alt))!.Success.Should().BeTrue();
+            (await FrageAsync(host, new ReservierePosten(new(p), 1), Guid.NewGuid()))!.Success.Should().BeTrue();   // verdrängt alt aus dem Cache
             var andere = new List<Guid>();
             for (var i = 0; i < 20; i++) andere.Add(await PostenAsync(host));
 
-            var frisch = andere.Select(a => FrageAsync(host, new ReservierePosten(a, 2), Guid.NewGuid()));
-            var ergebnisse = await Task.WhenAll(frisch.Append(FrageAsync(host, new ReservierePosten(p, 1), alt)));
+            var frisch = andere.Select(a => FrageAsync(host, new ReservierePosten(new(a), 2), Guid.NewGuid()));
+            var ergebnisse = await Task.WhenAll(frisch.Append(FrageAsync(host, new ReservierePosten(new(p), 1), alt)));
 
             ergebnisse.Should().OnlyContain(r => r != null && r.Success);
             (await ReserviertImLog(host, p)).Should().Be(2, "die Wiederholung hat nicht gewirkt");
@@ -148,7 +149,7 @@ public class SchreibGarantieTests
         {
             var p = await PostenAsync(host);
             var id = Guid.NewGuid();
-            (await FrageAsync(host, new ReservierePosten(p, 1), id))!.Success.Should().BeTrue();
+            (await FrageAsync(host, new ReservierePosten(new(p), 1), id))!.Success.Should().BeTrue();
             var store = host.Services.GetRequiredService<IEventStoreRepository>();
             var marten = host.Services.GetRequiredService<Marten.IDocumentStore>();
 
@@ -183,8 +184,8 @@ public class SchreibGarantieTests
         {
             var p = await PostenAsync(host, bestand: 10_000);
             var ids = Enumerable.Range(0, 200).Select(_ => Guid.NewGuid()).ToList();
-            var sends = ids.Select(id => FrageAsync(host, new ReservierePosten(p, 1), id))
-                .Concat(ids.Where((_, i) => i % 4 == 0).Select(id => FrageAsync(host, new ReservierePosten(p, 1), id)));
+            var sends = ids.Select(id => FrageAsync(host, new ReservierePosten(new(p), 1), id))
+                .Concat(ids.Where((_, i) => i % 4 == 0).Select(id => FrageAsync(host, new ReservierePosten(new(p), 1), id)));
             var ergebnisse = await Task.WhenAll(sends);
 
             ergebnisse.Should().OnlyContain(r => r != null && r.Success);
@@ -204,7 +205,7 @@ public class SchreibGarantieTests
         try
         {
             var p = await PostenAsync(host, bestand: 40);
-            var ergebnisse = await Task.WhenAll(Enumerable.Range(0, 80).Select(_ => FrageAsync(host, new ReservierePosten(p, 1), Guid.NewGuid())));
+            var ergebnisse = await Task.WhenAll(Enumerable.Range(0, 80).Select(_ => FrageAsync(host, new ReservierePosten(new(p), 1), Guid.NewGuid())));
 
             ergebnisse.Count(r => r!.Success).Should().Be(40);
             ergebnisse.Count(r => !r!.Success && r.Abgelehnt).Should().Be(40);
@@ -226,7 +227,7 @@ public class SchreibGarantieTests
         {
             var p = await PostenAsync(host, bestand: 1_000);
             var store = host.Services.GetRequiredService<IEventStoreRepository>();
-            var ansturm = Enumerable.Range(0, 100).Select(_ => FrageAsync(host, new ReservierePosten(p, 1), Guid.NewGuid())).ToList();
+            var ansturm = Enumerable.Range(0, 100).Select(_ => FrageAsync(host, new ReservierePosten(new(p), 1), Guid.NewGuid())).ToList();
             var version = (await store.ReadStreamAsync(p, 0, default)).Max(e => e.AggregateVersion);
             try { await store.AppendEventsAsync(p, version, new IEvent[] { new PostenZugebucht(10) }); }
             catch (ConcurrencyException) { /* das Bündel war schneller — dann schreibt der zweite Schreiber eben nicht */ }
@@ -250,15 +251,15 @@ public class SchreibGarantieTests
         try
         {
             var p = await PostenAsync(host);
-            (await FrageAsync(host, new ReservierePosten(p, 1), Guid.NewGuid()))!.Success.Should().BeTrue();   // der Actor ist aktiv, Stand v4
+            (await FrageAsync(host, new ReservierePosten(new(p), 1), Guid.NewGuid()))!.Success.Should().BeTrue();   // der Actor ist aktiv, Stand v4
 
             // Ein zweiter Schreiber (zweite Aktivierung, anderer Knoten) hängt an denselben Stream an.
             var store = host.Services.GetRequiredService<IEventStoreRepository>();
             var version = (await store.ReadStreamAsync(p, 0, default)).Max(e => e.AggregateVersion);
             await store.AppendEventsAsync(p, version, new IEvent[] { new PostenZugebucht(10) });
 
-            await FrageAsync(host, new ReservierePosten(p, 1), Guid.NewGuid());          // trifft den veralteten Stand — darf scheitern
-            var danach = await FrageAsync(host, new ReservierePosten(p, 1), Guid.NewGuid());
+            await FrageAsync(host, new ReservierePosten(new(p), 1), Guid.NewGuid());          // trifft den veralteten Stand — darf scheitern
+            var danach = await FrageAsync(host, new ReservierePosten(new(p), 1), Guid.NewGuid());
 
             danach!.Success.Should().BeTrue("der Actor rehydriert nach dem Konflikt frisch und entscheidet auf dem aktuellen Stand");
             (await Zustand<PostenState>(host.Services, p)).Bestand.Should().Be(110);
@@ -278,14 +279,95 @@ public class SchreibGarantieTests
             störung.Scharf = p;
             var id = Guid.NewGuid();
 
-            var ergebnis = await FrageAsync(host, new ReservierePosten(p, 5), id);
+            var ergebnis = await FrageAsync(host, new ReservierePosten(new(p), 5), id);
 
             störung.Ausgeloest.Should().BeTrue("der Commit ist durch, nur die Quittung ging verloren");
             ergebnis!.Success.Should().BeTrue("was im Log steht, hat gewirkt (P10) — kein falsches Negativ");
-            (await FrageAsync(host, new ReservierePosten(p, 5), id))!.Success.Should().BeTrue();
+            (await FrageAsync(host, new ReservierePosten(new(p), 5), id))!.Success.Should().BeTrue();
             (await ReserviertImLog(host, p)).Should().Be(1);
         }
         finally { await host.StopAsync(); }
+    }
+
+    [Fact]
+    public async Task Ein_Command_an_eine_fremde_Identitaet_wird_abgelehnt_bevor_etwas_geladen_ist()
+    {
+        // Die Id des Aggregat-Actors ist seine Cluster-Identität (Plan §1.7, Phase 1). Erreicht ihn ein Command mit einem anderen Ziel (falsch
+        // geroutet), lehnt er ab, ohne einen Stream zu lesen — früher hätte der erste Envelope die Aktivierung initialisiert und den fremden
+        // Stream unter dieser Identität geladen (zwei Schreiber für einen Stream).
+        var lesen = new StreamLeser();
+        using var host = Cluster("garantie-fremde-id", dienste: s => Dekoriere<IEventStoreRepository>(s, (_, innen) => lesen.Um(innen)));
+        await host.StartAsync();
+        try
+        {
+            var p = await PostenAsync(host);                    // das Ziel des Commands, mit Geschichte
+            var fremd = Guid.NewGuid();                          // die Identität, die ihn bekommt
+            lesen.Beobachte(p, fremd);
+
+            var cluster = host.Services.GetRequiredService<Proto.ActorSystem>().Cluster();
+            var huelle = new CommandEnvelope
+            {
+                CommandId = Guid.NewGuid(), AggregateType = "Posten", Modus = new CommandModus.Emittiert(), Payload = new ReservierePosten(new(p), 5),
+            };
+            using var frist = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            var ergebnis = await cluster.RequestAsync<CommandResult>(ClusterIdentity.Create(fremd.ToString(), "Posten"), huelle, frist.Token);
+
+            ergebnis.Success.Should().BeFalse("die Identität des Actors ist nicht das Ziel des Commands");
+            ergebnis.ErrorMessage.Should().Contain(fremd.ToString());
+            lesen.Gelesen.Should().BeEmpty("abgelehnt, bevor die Aktivierung etwas lädt");
+            (await ReserviertImLog(host, p)).Should().Be(0, "nichts gewirkt");
+            (await host.Services.GetRequiredService<IEventStoreRepository>().ReadStreamAsync(fremd, 0, default)).Should().BeEmpty("nichts geschrieben");
+
+            (await FrageAsync(host, new ReservierePosten(new(p), 5), Guid.NewGuid()))!.Success.Should().BeTrue("an die richtige Identität wirkt er");
+        }
+        finally { await host.StopAsync(); }
+    }
+
+    /// <summary>Störungs-Seam: merkt sich jedes Lesen eines beobachteten Streams (ab dem Scharfschalten).</summary>
+    private sealed class StreamLeser
+    {
+        private HashSet<Guid> _beobachtet = new();
+        public System.Collections.Concurrent.ConcurrentQueue<Guid> Gelesen { get; } = new();
+
+        public void Beobachte(params Guid[] streams) => _beobachtet = streams.ToHashSet();
+
+        public IEventStoreRepository Um(IEventStoreRepository innen) => new Laeufer(this, innen);
+
+        private sealed class Laeufer(StreamLeser s, IEventStoreRepository innen) : IEventStoreRepository
+        {
+            private void Merke(Guid stream) { if (s._beobachtet.Contains(stream)) s.Gelesen.Enqueue(stream); }
+
+            public Task AppendEventsAsync(Guid aggregateId, int expectedVersion, IReadOnlyList<IEvent> events, string? correlationId = null,
+                string? causationId = null, string? aggregateType = null, string? akteur = null, IReadOnlyList<Beilage>? beilagen = null)
+                => innen.AppendEventsAsync(aggregateId, expectedVersion, events, correlationId, causationId, aggregateType, akteur, beilagen);
+            public Task AppendTeileAsync(Guid aggregateId, int expectedVersion, IReadOnlyList<AppendTeil> teile, string? aggregateType)
+                => innen.AppendTeileAsync(aggregateId, expectedVersion, teile, aggregateType);
+            public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(Guid streamId, int fromVersion, CancellationToken ct)
+            {
+                Merke(streamId);
+                return innen.ReadStreamAsync(streamId, fromVersion, ct);
+            }
+            public Task<EventEnvelope?> ReadEventAsync(Guid streamId, int version, CancellationToken ct)
+            {
+                Merke(streamId);
+                return innen.ReadEventAsync(streamId, version, ct);
+            }
+            public Task<KorrelierteEvents> ReadKorreliertAsync(Guid streamId, int fromVersion, string korrelation, Guid beginn, CancellationToken ct)
+            {
+                Merke(streamId);
+                return innen.ReadKorreliertAsync(streamId, fromVersion, korrelation, beginn, ct);
+            }
+            public Task<StreamChanges> ReadChangedStreamsAsync(long after, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct) => innen.ReadChangedStreamsAsync(after, typen, limit, ct);
+            public Task<PartitionsSeite> ReadPartitionAsync(long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit, CancellationToken ct)
+                => innen.ReadPartitionAsync(nach, partition, partitionen, typen, ausser, limit, ct);
+            public Task<TState?> LoadStateAsync<TState>(Guid id) where TState : class, IState, new()
+            {
+                Merke(id);
+                return innen.LoadStateAsync<TState>(id);
+            }
+            public Task<KommandoAusgang?> AusgangAsync(Guid commandId, CancellationToken ct) => innen.AusgangAsync(commandId, ct);
+            public Task<IReadOnlyCollection<Guid>> StreamsVorhandenAsync(IReadOnlyCollection<Guid> streams, CancellationToken ct) => innen.StreamsVorhandenAsync(streams, ct);
+        }
     }
 
     /// <summary>Störungs-Seam: der nächste Append auf den scharfen Stream committet — dann geht die Quittung verloren (Ausnahme).</summary>

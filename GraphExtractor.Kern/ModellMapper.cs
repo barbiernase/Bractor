@@ -28,13 +28,12 @@ public static class ModellMapper
         // Zugehörigkeit aus dem Code: Command → das Aggregat, dessen Decider ihn entscheidet; Event → das Aggregat, das ihn
         // erzeugt (Decide-Ausgang) oder faltet (Apply). Nur wenn EINDEUTIG — sonst gehört er keinem (nicht geraten).
         string? Eindeutig(IEnumerable<string> xs) { var l = xs.Distinct(StringComparer.Ordinal).ToList(); return l.Count == 1 ? l[0] : null; }
-        string? AggVonCmd(string full) => Eindeutig(dom.Aggregates.Where(a => a.HandlesCommandsFull.Contains(full)).Select(a => a.Name));
         string? AggVonEvt(string full) => Eindeutig(dom.Aggregates
             .Where(a => a.ApplyEventsFull.Contains(full) || a.DecideOutcomes.Values.Any(o => o.Contains(full))).Select(a => a.Name));
 
         var records = new List<Record>();
         foreach (var (full, c) in dom.Commands.Where(kv => kv.Value.Meta.IstDomäne).OrderBy(kv => kv.Key, StringComparer.Ordinal))
-            records.Add(AlsRecord(c.Simple, RecordArt.Command, c.Fields, c.Meta, dom.Wurzel) with { IstErzeugung = c.IsCreation, Aggregat = AggVonCmd(full) });
+            records.Add(AlsRecord(c.Simple, RecordArt.Command, c.Fields, c.Meta, dom.Wurzel) with { IstErzeugung = c.IsCreation, Aggregat = c.Ziel });
         foreach (var (full, e) in dom.Events.Where(kv => kv.Value.Meta.IstDomäne).OrderBy(kv => kv.Key, StringComparer.Ordinal))
             records.Add(AlsRecord(e.Simple, e.Persisted ? RecordArt.Event : RecordArt.Rejection, e.Fields, e.Meta, dom.Wurzel) with { Aggregat = AggVonEvt(full) });
         foreach (var vo in dom.ValueObjects)

@@ -75,8 +75,9 @@ public static class Grammatik
     public static readonly IReadOnlyList<Regel> Regeln =
     [
         // Konsum: Sorte → Eingang
-        new("GR-COMMAND", "Command → genau ein Aggregat", "Ein Command wird von genau einem Aggregat entschieden.", "error",
-            [Gen("CQRS010", "Infrastructure.SourceGeneration/CommandAggregateMapGenerator.cs"), Gen("CQRS002", "Domain.SourceGeneration/ProzessRegelDiagnosticGenerator.cs (Prozess sendet Command ohne Decider)"),
+        new("GR-COMMAND", "Command → genau ein Aggregat", "Ein Command nennt sein Ziel-Aggregat im Typ (ICommand<TAggregat> mit Id<TAggregat>) und wird genau dort entschieden.", "error",
+            [Comp("ICommand verlangt Ziel; ICommand<TAggregat> liefert es aus Id<TAggregat> AggregateId"), An("CQRS013", "Domain.SourceGeneration/ModellAnalyzer.cs (Command ohne typisiertes Ziel)"),
+             Gen("CQRS010", "Infrastructure.SourceGeneration/CommandAggregateMapGenerator.cs (Decide außerhalb des Ziel-Aggregats)"), Gen("CQRS002", "Domain.SourceGeneration/ProzessRegelDiagnosticGenerator.cs (Prozess sendet Command ohne Decider)"),
              An("CQRS078", "Domain.SourceGeneration/FlussAnalyzer.cs (Fluss sendet Command ohne Decider)"),
              An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Command ohne Decider)")]),
         new("GR-EVENT", "Event → beliebig viele Konsumenten", "Ein persistentes Event hören Prozess, Projektion, Reaktion und Pipeline (beliebig viele); gefaltet wird es im eigenen Aggregat.", "error",

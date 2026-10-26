@@ -83,11 +83,10 @@ public class TwoNodeCommandDispatchTests
     {
         var envelope = new CommandEnvelope
         {
-            AggregateId = pairId,
             AggregateType = "ImagePair",   // MUSS mit dem ClusterKind übereinstimmen
             Modus = new CommandModus.Client(expectedVersion),
             Payload = new ErstelleImagePair(
-                pairId,
+                new(pairId),
                 PairKey: "PAIR-P8-" + pairId.ToString("N")[..6],
                 ProduziertAm: DateTimeOffset.UtcNow,
                 AufgenommenAm: DateTimeOffset.UtcNow,

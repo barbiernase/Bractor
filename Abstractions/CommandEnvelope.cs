@@ -7,7 +7,11 @@ namespace Abstractions;
 public record CommandEnvelope : IAggregateEnvelope, IWireMessage
 {
     public Guid CommandId { get; init; } = Guid.NewGuid();
-    public Guid AggregateId { get; init; }
+
+    /// <summary>Das Ziel — aus dem Command abgeleitet (<see cref="ICommand.Ziel"/>), keine zweite Angabe: Routing und Aggregat-Actor sehen
+    /// dieselbe Id, die der Command typisiert trägt (Plan §2.5).</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public Guid AggregateId => Payload.Ziel;
 
     /// <summary>
     /// Die explizite Auslieferungs-Art (EM-2): <see cref="CommandModus.Client"/> (OCC gegen eine

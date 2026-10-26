@@ -11,40 +11,40 @@ namespace Domain.Trainingslauf;
 /// Input). Der Python-TrainingWorker abonniert das resultierende Event.
 /// </summary>
 public record StarteTraining(
-    Guid AggregateId,
-    Guid DatensatzId,
+    Id<Trainingslauf> AggregateId,
+    Id<Datensatz.Datensatz> DatensatzId,
     int DatensatzVersion,
     Hyperparameter Hyperparameter
-) : ICreationCommand;
+) : ICommand<Trainingslauf>, ICreationCommand;
 
 /// <summary>GUI: laufendes Training kooperativ abbrechen.</summary>
 public record BricheTrainingAb(
-    Guid AggregateId
-) : ICommand;
+    Id<Trainingslauf> AggregateId
+) : ICommand<Trainingslauf>;
 
 // ═══════════════════════════════════════════════════
 // PYTHON — Fortschritt zurückmelden (Event→Command-Reaktor)
 // ═══════════════════════════════════════════════════
 
 public record MeldeTrainingBegonnen(
-    Guid AggregateId
-) : ICommand;
+    Id<Trainingslauf> AggregateId
+) : ICommand<Trainingslauf>;
 
 public record MeldeFortschritt(
-    Guid AggregateId,
+    Id<Trainingslauf> AggregateId,
     EpochenMetrik Metrik
-) : ICommand;
+) : ICommand<Trainingslauf>;
 
 public record MeldeTrainingAbgeschlossen(
-    Guid AggregateId,
+    Id<Trainingslauf> AggregateId,
     string ModellPfad,
     Endmetriken Endmetriken
-) : ICommand;
+) : ICommand<Trainingslauf>;
 
 public record MeldeTrainingGescheitert(
-    Guid AggregateId,
+    Id<Trainingslauf> AggregateId,
     string Grund
-) : ICommand;
+) : ICommand<Trainingslauf>;
 
 // ═══════════════════════════════════════════════════
 // FRIST — Timeout
@@ -55,5 +55,5 @@ public record MeldeTrainingGescheitert(
 /// abschließt. Auf ein bereits beendetes Training wirkungslos (idempotent).
 /// </summary>
 public record MarkiereAlsHaengengeblieben(
-    Guid AggregateId
-) : ICommand;
+    Id<Trainingslauf> AggregateId
+) : ICommand<Trainingslauf>;

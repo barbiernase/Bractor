@@ -7,7 +7,7 @@ namespace Domain.Client.Modules.TrainingDashboard;
 
 /// <summary>Ein neues Training gegen eine eingefrorene Datensatz-Version starten.</summary>
 public record StarteTrainingIntent(
-    Guid DatensatzId,
+    DatensatzId DatensatzId,
     int DatensatzVersion,
     int Epochen,
     double LernRate,
@@ -16,4 +16,4 @@ public record StarteTrainingIntent(
     int Seed) : IClientEvent;
 
 /// <summary>Einen laufenden Trainingslauf abbrechen.</summary>
-public record BrichTrainingAbIntent(Guid TrainingslaufId) : IClientEvent;
+public record BrichTrainingAbIntent(TrainingslaufId TrainingslaufId) : IClientEvent;

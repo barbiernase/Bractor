@@ -27,9 +27,9 @@ public class ClientCodeVertragTests
             .Concat(dazu).Distinct().Select(l => (MetadataReference)MetadataReference.CreateFromFile(l)).ToImmutableArray();
     }
 
-    private const string Vertrag = @"namespace Probe {
-    public sealed record Mach(Guid AggregateId) : ICommand;
-    public sealed record Verboten(Guid AggregateId) : ICommand;
+    private const string Vertrag = @"namespace Probe {\npublic partial class ProbeZiel : IState { public int Version { get; set; } public Guid Id { get; set; } }
+    public sealed record Mach(Id<ProbeZiel> AggregateId) : ICommand<ProbeZiel>;
+    public sealed record Verboten(Id<ProbeZiel> AggregateId) : ICommand<ProbeZiel>;
     public sealed record Frag : IQuery;
     public sealed record FragNicht : IQuery;
     public sealed record Passiert(Guid Id) : IEvent;

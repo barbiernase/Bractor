@@ -22,16 +22,16 @@ public record RangeAngefordert(
 /// Die aufgelöste Range wurde in den Entwurf aufgenommen (Union, dedupliziert).
 /// </summary>
 public record PaareAufgenommen(
-    IReadOnlyList<Guid> ImagePairIds,
+    IReadOnlyList<Id<ImagePair.ImagePair>> ImagePairIds,
     RangeHerkunft Herkunft
 ) : IEvent;
 
 public record PaarAufgenommen(
-    Guid ImagePairId
+    Id<ImagePair.ImagePair> ImagePairId
 ) : IEvent;
 
 public record PaarEntfernt(
-    Guid ImagePairId
+    Id<ImagePair.ImagePair> ImagePairId
 ) : IEvent;
 
 public record SplitGesetzt(
@@ -48,7 +48,7 @@ public record SplitGesetzt(
 /// dem ImagePair-Read-Store, teilt den Split zu und schließt mit SchliesseEinfrierenAb ab.
 /// </summary>
 public record EinfrierenAngefordert(
-    IReadOnlyList<Guid> Mitglieder,
+    IReadOnlyList<Id<ImagePair.ImagePair>> Mitglieder,
     SplitKonfig Split
 ) : IEvent;
 
@@ -66,8 +66,8 @@ public record DatensatzEingefroren(
 // ABLEHNUNGS-EVENTS (ITransientEvent) — nicht persistiert
 // ═══════════════════════════════════════════════════
 
-public record DatensatzExistiertBereits(Guid DatensatzId) : ITransientEvent;
-public record DatensatzBereitsEingefroren(Guid DatensatzId) : ITransientEvent;
-public record DatensatzLeer(Guid DatensatzId) : ITransientEvent;
-public record RangeLeer(Guid DatensatzId) : ITransientEvent;
+public record DatensatzExistiertBereits(Id<Datensatz> DatensatzId) : ITransientEvent;
+public record DatensatzBereitsEingefroren(Id<Datensatz> DatensatzId) : ITransientEvent;
+public record DatensatzLeer(Id<Datensatz> DatensatzId) : ITransientEvent;
+public record RangeLeer(Id<Datensatz> DatensatzId) : ITransientEvent;
 public record SplitUngueltig(int TrainProzent, int ValProzent, int TestProzent) : ITransientEvent;

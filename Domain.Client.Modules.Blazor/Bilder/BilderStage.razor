@@ -89,7 +89,7 @@
             Fx.Dispatch(new HoleDatensaetzeFuerPaar(id));
     }
 
-    private void Wechsle(Guid id) => Fx.Dispatch(new DatensatzAusgewaehlt(id));
+    private void Wechsle(DatensatzId id) => Fx.Dispatch(new DatensatzAusgewaehlt(id));
 
     private static string Suffix(DatensatzTag t)
         => t.Status == DatensatzStatus.Eingefroren ? $" · v{t.EingefroreneVersion}" : " · Entwurf";

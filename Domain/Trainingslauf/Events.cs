@@ -11,7 +11,7 @@ namespace Domain.Trainingslauf;
 /// Der Python-TrainingWorker abonniert dieses Event und startet den Lauf.
 /// </summary>
 public record TrainingAngefordert(
-    Guid DatensatzId,
+    Id<Datensatz.Datensatz> DatensatzId,
     int DatensatzVersion,
     Hyperparameter Hyperparameter
 ) : IEvent;
@@ -40,7 +40,7 @@ public record TrainingHaengengeblieben() : IEvent;
 // ABLEHNUNGS-EVENTS (ITransientEvent) — nicht persistiert
 // ═══════════════════════════════════════════════════
 
-public record TrainingslaufExistiertBereits(Guid TrainingslaufId) : ITransientEvent;
-public record TrainingslaufNichtGefunden(Guid TrainingslaufId) : ITransientEvent;
-public record TrainingNichtAktiv(Guid TrainingslaufId) : ITransientEvent;
-public record TrainingBereitsBeendet(Guid TrainingslaufId) : ITransientEvent;
+public record TrainingslaufExistiertBereits(Id<Trainingslauf> TrainingslaufId) : ITransientEvent;
+public record TrainingslaufNichtGefunden(Id<Trainingslauf> TrainingslaufId) : ITransientEvent;
+public record TrainingNichtAktiv(Id<Trainingslauf> TrainingslaufId) : ITransientEvent;
+public record TrainingBereitsBeendet(Id<Trainingslauf> TrainingslaufId) : ITransientEvent;

@@ -52,7 +52,7 @@ public partial class DatensatzProjektion : ISubscriber, IPullSubscriber, IAppend
         {
             ctx.Track<DatensatzAgg>(envelope.AggregateId);
             await nimmRangeAuf.NimmRangeAufAsync(
-                envelope.AggregateId, evt.ImagePairIds, evt.Herkunft, envelope.CreatedAtUtc);
+                envelope.AggregateId, evt.ImagePairIds.Select(i => i.Wert).ToList(), evt.Herkunft, envelope.CreatedAtUtc);
         });
     }
 
@@ -62,7 +62,7 @@ public partial class DatensatzProjektion : ISubscriber, IPullSubscriber, IAppend
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<DatensatzAgg>(envelope.AggregateId);
-            await nimmPaarAuf.NimmPaarAufAsync(envelope.AggregateId, evt.ImagePairId, envelope.CreatedAtUtc);
+            await nimmPaarAuf.NimmPaarAufAsync(envelope.AggregateId, evt.ImagePairId.Wert, envelope.CreatedAtUtc);
         });
     }
 
@@ -72,7 +72,7 @@ public partial class DatensatzProjektion : ISubscriber, IPullSubscriber, IAppend
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<DatensatzAgg>(envelope.AggregateId);
-            await entfernePaar.EntfernePaarAsync(envelope.AggregateId, evt.ImagePairId, envelope.CreatedAtUtc);
+            await entfernePaar.EntfernePaarAsync(envelope.AggregateId, evt.ImagePairId.Wert, envelope.CreatedAtUtc);
         });
     }
 

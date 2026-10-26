@@ -309,7 +309,7 @@ public sealed class ProzessManager
                 Id = Guid.NewGuid(),
                 Quelle = $"prozess-manager/{prozessName}",
                 CommandType = unvollziehbar.Cmd.GetType().Name,
-                AggregateId = unvollziehbar.Cmd.AggregateId,
+                AggregateId = unvollziehbar.Cmd.Ziel,
                 CorrelationId = korrelation.ToString(),
                 Grund = $"Kompensation abgelehnt — Prozess in KlärungNötig ({grund})",
                 Versuche = 1,
@@ -336,9 +336,9 @@ public sealed class ProzessManager
         if (CursorAktiv)
         {
             if (!_dirty.TryGetValue(korrelation, out var set)) { set = new HashSet<Guid>(); _dirty[korrelation] = set; }
-            set.Add(cmd.AggregateId);
+            set.Add(cmd.Ziel);
             if (!_gefeuert.TryGetValue(korrelation, out var jeStream)) _gefeuert[korrelation] = jeStream = new Dictionary<Guid, HashSet<Guid>>();
-            if (!jeStream.TryGetValue(cmd.AggregateId, out var vorgaenge)) jeStream[cmd.AggregateId] = vorgaenge = new HashSet<Guid>();
+            if (!jeStream.TryGetValue(cmd.Ziel, out var vorgaenge)) jeStream[cmd.Ziel] = vorgaenge = new HashSet<Guid>();
             vorgaenge.Add(vorgang);
         }
         return _dispatch(korrelation, cmd, vorgang, ct);
@@ -527,9 +527,9 @@ public sealed class ProzessManager
                         //   Ein Funktions-Auftrag hat kein Ziel-Aggregat: sein Diskriminator ist der Regel-/Instanz-Index.
                         var vorgang = ProzessId.FürTransition(
                             korrelation, primär.Stream, primär.Version, typName,
-                            cmd is not null ? $"{ri}:{ci}:{cmd.AggregateId:N}" : $"{ri}:{ci}:auftrag");
+                            cmd is not null ? $"{ri}:{ci}:{cmd.Ziel:N}" : $"{ri}:{ci}:auftrag");
                         // Ziel-Stream: das Aggregat des Commands bzw. der Ausführungs-Stream (= Vorgang) der Funktion.
-                        var zielStream = cmd?.AggregateId ?? vorgang;
+                        var zielStream = cmd?.Ziel ?? vorgang;
 
                         // Den Ziel-Stream bis Head einarbeiten (Tail-Read bei aktivem Cursor, ab 0 beim Voll-Fold),
                         // DANN die Achsen aus dem Marking lesen — statt den Stream bei jeder Weckung neu zu scannen.
@@ -821,13 +821,13 @@ public sealed class ProzessManager
                 // ★ Befund 7/8: RegelIndex (k.RegelIndex) + Instanz-Index (ci) — analog zur Vorwärts-Transition.
                 var vorgang = ProzessId.FürKompensation(
                     korrelation, primär.Stream, primär.Version, cmd.GetType().Name,
-                    $"{k.RegelIndex}:{ci}:{cmd.AggregateId:N}");
+                    $"{k.RegelIndex}:{ci}:{cmd.Ziel:N}");
                 // Schon ausgeglichen? Der Gegenzug ist erledigt, wenn sein Ergebnis auf dem Ziel-Stream liegt —
                 // ABER nur ein Ergebnis, das KEINE Ablehnung ist (eine Wirkung ODER die KommandoVerarbeitet-Noop-
                 // Marke). Eine KommandoAbgelehnt-Marke zählt NICHT als erledigt (der Gegenzug wurde abgelehnt).
                 // Das Ergebnis trägt die Korrelation des Vorgangs wie jedes andere: es steht im Marking, sobald der Ziel-Stream eingearbeitet
                 //   ist — nach denselben Regeln wie im Fold (Cursor, Hinweis, dirty), nie mehr der ganze Ziel-Stream ab 0.
-                if (ein.MussLesen(cmd.AggregateId)) await ein.IntegriereAsync(cmd.AggregateId, ct);
+                if (ein.MussLesen(cmd.Ziel)) await ein.IntegriereAsync(cmd.Ziel, ct);
                 var marke = ein.Marking.Vorgänge.GetValueOrDefault(vorgang.ToString());
                 var erledigt = marke is not null && (marke.Wirkung || !marke.Abgelehnt);
                 if (erledigt) continue;

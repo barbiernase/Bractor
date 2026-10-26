@@ -37,6 +37,6 @@ public partial class TrainingDashboardRefreshHandler
 
     private static IEnumerable<object> Einzel(MessageContext ctx)
     {
-        yield return new HoleTrainingslauf(ctx.AggregateId);
+        yield return new HoleTrainingslauf(new TrainingslaufId(ctx.AggregateId));
     }
 }

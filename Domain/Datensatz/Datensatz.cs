@@ -19,7 +19,7 @@ public partial class Datensatz : IState
     public DatensatzStatus Status { get; set; } = DatensatzStatus.Entwurf;
 
     /// <summary>Der Entwurfs-Korb: konkrete Bildpaar-Referenzen, dedupliziert.</summary>
-    public HashSet<Guid> DraftMitglieder { get; } = new();
+    public HashSet<Id<ImagePair.ImagePair>> DraftMitglieder { get; } = new();
 
     /// <summary>Herkunft der aufgenommenen Ranges (Provenienz).</summary>
     public List<RangeHerkunft> Ranges { get; } = new();
@@ -43,7 +43,7 @@ public partial class Datensatz : IState
 
     public bool IstEingefroren => Status == DatensatzStatus.Eingefroren;
 
-    public bool IstDraftMitglied(Guid imagePairId) => DraftMitglieder.Contains(imagePairId);
+    public bool IstDraftMitglied(Id<ImagePair.ImagePair> imagePairId) => DraftMitglieder.Contains(imagePairId);
 
     public int AnzahlDraftMitglieder => DraftMitglieder.Count;
 }

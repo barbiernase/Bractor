@@ -15,7 +15,7 @@ public partial class DatensatzListeStore : StoreBase
     [ObservableProperty] private IReadOnlyList<DatensatzAntwort> _datensaetze = [];
 
     /// <summary>Die aktuell gewählte Datensatz-Id (Klick-Markierung in der Liste).</summary>
-    [ObservableProperty] private Guid? _aktiveId;
+    [ObservableProperty] private DatensatzId? _aktiveId;
 
     void Handle(DatensatzListe antwort, MessageContext ctx)
     {

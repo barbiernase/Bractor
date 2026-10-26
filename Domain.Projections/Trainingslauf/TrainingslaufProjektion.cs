@@ -25,7 +25,7 @@ public partial class TrainingslaufProjektion : ISubscriber, IPullSubscriber, IAp
             await upsertTrainingslauf.UpsertAsync(new TrainingslaufReadModel
             {
                 Id = envelope.AggregateId,
-                DatensatzId = evt.DatensatzId,
+                DatensatzId = evt.DatensatzId.Wert,
                 DatensatzVersion = evt.DatensatzVersion,
                 Status = TrainingsStatus.Angefordert,
                 Hyperparameter = evt.Hyperparameter,

@@ -103,10 +103,10 @@ public sealed partial class DatensatzStore : MartenCoCommitStoreBase, IDatensatz
         foreach (var m in mitglieder)
             EnqueueZeile(id, new DatensatzSampleReadModel
             {
-                Id = DatensatzSampleReadModel.MakeId(id, version, m.ImagePairId),
+                Id = DatensatzSampleReadModel.MakeId(id, version, m.ImagePairId.Wert),
                 DatensatzId = id,
                 Version = version,
-                ImagePairId = m.ImagePairId,
+                ImagePairId = m.ImagePairId.Wert,
                 Dc0Pfad = m.Dc0Pfad,
                 Dc2Pfad = m.Dc2Pfad,
                 Label = m.Label,

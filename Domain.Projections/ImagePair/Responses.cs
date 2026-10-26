@@ -4,7 +4,7 @@ using Domain.ImagePair;
 namespace Domain.Projections.ImagePair;
 
 public record ImagePairAntwort(
-    Guid Id,
+    Id<Domain.ImagePair.ImagePair> Id,
     string? PairKey,
     DateTimeOffset ProduziertAm,
     DateTimeOffset AufgenommenAm,
@@ -34,7 +34,7 @@ public record ImagePairAntwort(
     bool IstInspiziert
 ) : IQueryResponse;
 
-public record ImagePairNichtGefundenAntwort(Guid PairId) : IQueryResponse;
+public record ImagePairNichtGefundenAntwort(Id<Domain.ImagePair.ImagePair> PairId) : IQueryResponse;
 
 public record ImagePairSuchergebnis(
     IReadOnlyList<ImagePairAntwort> Items,
@@ -119,7 +119,7 @@ public record ProduktionsStripAntwort(
 /// Antwort auf GetImagePairHistorie — enthält die komplette Timeline.
 /// </summary>
 public record ImagePairHistorieAntwort(
-    Guid PairId,
+    Id<Domain.ImagePair.ImagePair> PairId,
     IReadOnlyList<HistorieEintrag> Eintraege
 ) : IQueryResponse;
 
@@ -128,5 +128,5 @@ public record ImagePairHistorieAntwort(
 /// Kann vorkommen wenn die Projektion noch nicht aufgeholt hat.
 /// </summary>
 public record ImagePairHistorieNichtGefunden(
-    Guid PairId
+    Id<Domain.ImagePair.ImagePair> PairId
 ) : IQueryResponse;

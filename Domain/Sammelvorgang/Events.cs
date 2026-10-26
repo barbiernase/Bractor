@@ -27,6 +27,6 @@ public record SammelvorgangAbgeschlossen() : IEvent;
 // ABLEHNUNGS-EVENTS (ITransientEvent) — nicht persistiert
 // ═══════════════════════════════════════════════════
 
-public record SammelvorgangExistiertBereits(Guid SammelvorgangId) : ITransientEvent;
-public record SammelvorgangNichtGefunden(Guid SammelvorgangId) : ITransientEvent;
-public record SammelvorgangBereitsAbgeschlossen(Guid SammelvorgangId) : ITransientEvent;
+public record SammelvorgangExistiertBereits(Id<Sammelvorgang> SammelvorgangId) : ITransientEvent;
+public record SammelvorgangNichtGefunden(Id<Sammelvorgang> SammelvorgangId) : ITransientEvent;
+public record SammelvorgangBereitsAbgeschlossen(Id<Sammelvorgang> SammelvorgangId) : ITransientEvent;

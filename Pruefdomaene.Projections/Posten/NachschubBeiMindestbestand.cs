@@ -16,6 +16,6 @@ public partial class NachschubBeiMindestbestand : ISubscriber, IPullSubscriber
     public async IAsyncEnumerable<BuchePostenZu> Handle(PostenReserviert evt, IAggregateEnvelope envelope, ProjectionWriter writer)
     {
         await Task.CompletedTask;
-        if (evt.Fehlmenge > 0) yield return new BuchePostenZu(envelope.AggregateId, evt.Fehlmenge);
+        if (evt.Fehlmenge > 0) yield return new BuchePostenZu(new Id<Pruefdomaene.Posten.Posten>(envelope.AggregateId), evt.Fehlmenge);
     }
 }

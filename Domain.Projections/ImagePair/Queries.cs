@@ -4,7 +4,7 @@ using Domain.ImagePair;
 namespace Domain.Projections.ImagePair;
 
 /// <summary>Einzelnes ImagePair abfragen.</summary>
-public record GetImagePair(Guid PairId) : IQuery;
+public record GetImagePair(Id<Domain.ImagePair.ImagePair> PairId) : IQuery;
 
 /// <summary>Filterbare Suche über alle ImagePairs.</summary>
 public record SucheImagePairs(ImagePairFilter Filter) : IQuery;
@@ -65,4 +65,4 @@ public record ImagePairFilter(
 /// Wird vom Client beim Paar-Wechsel publiziert.
 /// QueryBridge → gRPC → ImagePairHistorieReader → Store.
 /// </summary>
-public record GetImagePairHistorie(Guid PairId) : IQuery;
+public record GetImagePairHistorie(Id<Domain.ImagePair.ImagePair> PairId) : IQuery;

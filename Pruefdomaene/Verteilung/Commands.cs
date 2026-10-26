@@ -2,6 +2,6 @@ using Abstractions;
 
 namespace Pruefdomaene.Verteilung;
 
-public record StarteVerteilung(Guid AggregateId, Guid QuelleId, IReadOnlyList<Guid> Ziele, int MengeJeZiel) : ICreationCommand;
+public record StarteVerteilung(Id<Verteilung> AggregateId, Id<Posten.Posten> QuelleId, IReadOnlyList<Id<Posten.Posten>> Ziele, int MengeJeZiel) : ICommand<Verteilung>, ICreationCommand;
 
-public record SchliesseVerteilungAb(Guid AggregateId, int Zugebucht) : ICommand;
+public record SchliesseVerteilungAb(Id<Verteilung> AggregateId, int Zugebucht) : ICommand<Verteilung>;

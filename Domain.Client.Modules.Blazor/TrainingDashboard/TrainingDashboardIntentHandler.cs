@@ -12,7 +12,7 @@ public partial class TrainingDashboardIntentHandler
 {
     IEnumerable<object> Handle(StarteTrainingIntent evt, MessageContext ctx)
     {
-        var id = Guid.NewGuid();
+        var id = TrainingslaufId.Neu();
         var hp = new Hyperparameter(
             Epochen: evt.Epochen,
             LernRate: evt.LernRate,

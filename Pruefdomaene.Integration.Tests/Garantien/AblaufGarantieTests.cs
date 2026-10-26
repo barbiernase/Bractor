@@ -27,8 +27,8 @@ public class AblaufGarantieTests
         {
             var store = host.Services.GetRequiredService<IEventStoreRepository>();
             var p = Guid.NewGuid();
-            (await FrageAsync(host, new EroeffnePosten(p, 100, Mindestbestand: 98), Guid.NewGuid()))!.Success.Should().BeTrue();
-            (await FrageAsync(host, new ReservierePosten(p, 5), Guid.NewGuid()))!.Success.Should().BeTrue();   // Fehlmenge 3
+            (await FrageAsync(host, new EroeffnePosten(new(p), 100, Mindestbestand: 98), Guid.NewGuid()))!.Success.Should().BeTrue();
+            (await FrageAsync(host, new ReservierePosten(new(p), 5), Guid.NewGuid()))!.Success.Should().BeTrue();   // Fehlmenge 3
 
             async Task<int> Nachschuebe() => (await store.ReadStreamAsync(p, 0, default)).Count(e => e.Payload is PostenZugebucht);
             await Warte(async () => await Nachschuebe() > 0, Frist, "Die Reaktion hat nicht nachgebucht.");
@@ -56,8 +56,8 @@ public class AblaufGarantieTests
         {
             var store = host.Services.GetRequiredService<IEventStoreRepository>();
             var cursor = host.Services.GetRequiredService<IEmittentenCursor>();
-            (await FrageAsync(host, new EroeffnePosten(p, 100, Mindestbestand: 98), Guid.NewGuid()))!.Success.Should().BeTrue();
-            (await FrageAsync(host, new ReservierePosten(p, 5), Guid.NewGuid()))!.Success.Should().BeTrue();   // Fehlmenge 3
+            (await FrageAsync(host, new EroeffnePosten(new(p), 100, Mindestbestand: 98), Guid.NewGuid()))!.Success.Should().BeTrue();
+            (await FrageAsync(host, new ReservierePosten(new(p), 5), Guid.NewGuid()))!.Success.Should().BeTrue();   // Fehlmenge 3
 
             async Task<int> Nachschuebe() => (await store.ReadStreamAsync(p, 0, default)).Count(e => e.Payload is PostenZugebucht);
             await Warte(async () => await Nachschuebe() > 0, Frist, "Die Reaktion hat nicht nachgebucht.");
@@ -89,9 +89,9 @@ public class AblaufGarantieTests
         using (var erster = Cluster("garantie-neustart-1", schema: schema))
         {
             await erster.StartAsync();
-            (await FrageAsync(erster, new EroeffnePosten(posten, 10), Guid.NewGuid()))!.Success.Should().BeTrue();
-            (await FrageAsync(erster, new RichteKontingentEin(kontingent, 10), Guid.NewGuid()))!.Success.Should().BeTrue();
-            (await FrageAsync(erster, new StarteAuftrag(auftrag, posten, kontingent, 3), Guid.NewGuid()))!.Success.Should().BeTrue();
+            (await FrageAsync(erster, new EroeffnePosten(new(posten), 10), Guid.NewGuid()))!.Success.Should().BeTrue();
+            (await FrageAsync(erster, new RichteKontingentEin(new(kontingent), 10), Guid.NewGuid()))!.Success.Should().BeTrue();
+            (await FrageAsync(erster, new StarteAuftrag(new(auftrag), new(posten), new(kontingent), 3), Guid.NewGuid()))!.Success.Should().BeTrue();
             await erster.StopAsync();   // sofort danach: Signale, Weckungen und abgesetzte Sends im Flug gehen mit dem Host unter
         }
 

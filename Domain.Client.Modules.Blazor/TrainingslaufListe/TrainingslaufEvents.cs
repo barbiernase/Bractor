@@ -7,4 +7,4 @@ namespace Domain.Client.Modules.Trainingslaeufe;
 /// gewählt. Das Training-Dashboard scrollt/fokussiert daraufhin diesen Lauf. Geht nie
 /// an den Server.
 /// </summary>
-public record TrainingslaufAusgewaehlt(Guid TrainingslaufId) : IClientEvent;
+public record TrainingslaufAusgewaehlt(TrainingslaufId TrainingslaufId) : IClientEvent;

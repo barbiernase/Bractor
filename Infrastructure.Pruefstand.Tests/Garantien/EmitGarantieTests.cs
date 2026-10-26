@@ -23,7 +23,7 @@ public class EmitGarantieTests
     private static readonly CancellationToken Ct = CancellationToken.None;
 
     private static async Task<EmitAusgang> Sende(CommandEmitter emitter, Guid ziel)
-        => (await emitter.EmitAsync(new MeldeTeilFertig(ziel), Guid.NewGuid(), Guid.NewGuid(), Ct)).Ausgang;
+        => (await emitter.EmitAsync(new MeldeTeilFertig(new(ziel)), Guid.NewGuid(), Guid.NewGuid(), Ct)).Ausgang;
 
     [Theory]
     [InlineData("erfolg", EmitAusgang.Zugestellt)]
@@ -117,7 +117,7 @@ public class EmitGarantieTests
         var t = new Takt();
         var korrelation = Guid.NewGuid();
         var vorgang = Guid.NewGuid();
-        var cmd = new MeldeTeilFertig(Guid.NewGuid());
+        var cmd = new MeldeTeilFertig(new(Guid.NewGuid()));
 
         await t.Sender.SendeAsync(korrelation, cmd, vorgang, Ct);
         await Task.Delay(50);
@@ -149,7 +149,7 @@ public class EmitGarantieTests
         var korrelation = Guid.NewGuid();
         var vorgang = Guid.NewGuid();
 
-        await t.Sender.SendeAsync(korrelation, new MeldeTeilFertig(Guid.NewGuid()), vorgang, Ct);
+        await t.Sender.SendeAsync(korrelation, new MeldeTeilFertig(new(Guid.NewGuid())), vorgang, Ct);
         await Task.Delay(50);
 
         t.Geweckt.Should().Equal(korrelation);

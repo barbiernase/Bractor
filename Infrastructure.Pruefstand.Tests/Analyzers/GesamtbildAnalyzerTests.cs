@@ -39,7 +39,7 @@ public class GesamtbildAnalyzerTests
     private const string Vorspann = @"
 using System; using System.Collections.Generic; using System.Threading.Tasks; using Abstractions;
 namespace Probe {
-public record Eroeffne(Guid AggregateId) : ICommand;
+public record Eroeffne(Id<Konto> AggregateId) : ICommand<Konto>;
 public record Eroeffnet() : IEvent;
 public record SchonOffen() : ITransientEvent;
 public partial class Konto : IState
@@ -75,7 +75,7 @@ public sealed record Kunde : IMensch, IDarf<Eroeffne>, IDarf<Frage>;
 
     [Fact]
     public async Task Ein_Command_ohne_Decider_ist_ein_offener_Eingang()
-        => (await Befunde("public record Schliesse(Guid AggregateId) : ICommand;")).Should().ContainSingle()
+        => (await Befunde("public record Schliesse(Id<Konto> AggregateId) : ICommand<Konto>;")).Should().ContainSingle()
             .Which.GetMessage().Should().StartWith("'Schliesse' (Command) nimmt niemand an");
 
     [Fact]

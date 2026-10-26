@@ -15,12 +15,12 @@ namespace Domain.Client.Modules;
 /// Mitglieder-Menge speist O(1)-Mitgliedschaft für Galerie-Badges und Einbild-Toggle.
 /// </summary>
 public sealed record SammelZielKontext(
-    Guid Id,
+    DatensatzId Id,
     string? Name,
     DatensatzStatus Status,
     int EingefroreneVersion,
-    IReadOnlySet<Guid> MitgliederIds,
-    IReadOnlySet<Guid> AusgeschlossenIds)
+    IReadOnlySet<ImagePairId> MitgliederIds,
+    IReadOnlySet<ImagePairId> AusgeschlossenIds)
 {
     public int AnzahlMitglieder => MitgliederIds.Count;
     public int AnzahlAusgeschlossen => AusgeschlossenIds.Count;
@@ -42,7 +42,7 @@ public partial class Store
     [ObservableProperty] private SammelZielKontext? _sammelZiel;
 
     /// <summary>Dedizierte Mehrfach-Auswahl in der Galerie (Kachel-Häkchen).</summary>
-    [ObservableProperty] private IReadOnlySet<Guid> _markierung = new HashSet<Guid>();
+    [ObservableProperty] private IReadOnlySet<ImagePairId> _markierung = new HashSet<ImagePairId>();
 
     /// <summary>Rückwärts-Tags des betrachteten Paars: „in Datensätzen: …".</summary>
     [ObservableProperty] private IReadOnlyList<DatensatzTag> _paarTags = System.Array.Empty<DatensatzTag>();
@@ -64,15 +64,15 @@ public partial class Store
     }
 
     /// <summary>O(1): liegt dieses Bildpaar im aktiven Sammel-Ziel?</summary>
-    public bool IstMitglied(Guid pairId) => SammelZiel?.MitgliederIds.Contains(pairId) ?? false;
+    public bool IstMitglied(ImagePairId pairId) => SammelZiel?.MitgliederIds.Contains(pairId) ?? false;
 
     /// <summary>O(1): ist dieses Bildpaar dediziert markiert?</summary>
-    public bool IstMarkiert(Guid pairId) => Markierung.Contains(pairId);
+    public bool IstMarkiert(ImagePairId pairId) => Markierung.Contains(pairId);
 
     // ── Markierungs-Reducer (reine Client-Sicht) ──
     void Handle(MarkierungGetoggelt evt, MessageContext ctx)
     {
-        var set = new HashSet<Guid>(Markierung);
+        var set = new HashSet<ImagePairId>(Markierung);
         if (!set.Add(evt.PairId)) set.Remove(evt.PairId);
         Markierung = set;
     }
@@ -80,7 +80,7 @@ public partial class Store
     void Handle(MarkierungBereichHinzugefuegt evt, MessageContext ctx)
     {
         if (evt.PairIds.Count == 0) return;
-        var set = new HashSet<Guid>(Markierung);
+        var set = new HashSet<ImagePairId>(Markierung);
         foreach (var id in evt.PairIds) set.Add(id);
         Markierung = set;
     }
@@ -88,7 +88,7 @@ public partial class Store
     void Handle(MarkierungGeleert evt, MessageContext ctx)
     {
         if (Markierung.Count == 0) return;
-        Markierung = new HashSet<Guid>();
+        Markierung = new HashSet<ImagePairId>();
     }
 
     // ── Rückwärts-Tags des Cursor-Paars ──
@@ -105,7 +105,7 @@ public partial class Store
         if (SammelZiel?.Id == evt.DatensatzId) return;
         // Leeren Kontext scharf stellen; Kopf/Mitglieder kommen per HoleDatensatz nach.
         SammelZiel = new SammelZielKontext(
-            evt.DatensatzId, null, DatensatzStatus.Entwurf, 0, new HashSet<Guid>(), new HashSet<Guid>());
+            evt.DatensatzId, null, DatensatzStatus.Entwurf, 0, new HashSet<ImagePairId>(), new HashSet<ImagePairId>());
     }
 
     // ── Kopf-Antwort des aktiven Ziels: Mitglieder + Status übernehmen ──
@@ -117,29 +117,29 @@ public partial class Store
             Name = a.Name,
             Status = a.Status,
             EingefroreneVersion = a.EingefroreneVersion,
-            MitgliederIds = new HashSet<Guid>(a.Mitglieder),
-            AusgeschlossenIds = new HashSet<Guid>(a.Ausgeschlossen),
+            MitgliederIds = new HashSet<ImagePairId>(a.Mitglieder),
+            AusgeschlossenIds = new HashSet<ImagePairId>(a.Ausgeschlossen),
         };
     }
 
     // ── Optimistische Tag-Reaktion (sofortiges Badge-Feedback, bevor der Refresh nachzieht) ──
-    void Handle(PaarAufgenommen evt, MessageContext ctx) => PatchMitglied(ctx.AggregateId, evt.ImagePairId, drin: true);
-    void Handle(PaarEntfernt evt, MessageContext ctx)    => PatchMitglied(ctx.AggregateId, evt.ImagePairId, drin: false);
+    void Handle(PaarAufgenommen evt, MessageContext ctx) => PatchMitglied(new DatensatzId(ctx.AggregateId), evt.ImagePairId, drin: true);
+    void Handle(PaarEntfernt evt, MessageContext ctx)    => PatchMitglied(new DatensatzId(ctx.AggregateId), evt.ImagePairId, drin: false);
 
     void Handle(PaareAufgenommen evt, MessageContext ctx)
     {
-        if (SammelZiel is not { } ziel || ctx.AggregateId != ziel.Id) return;
-        var mit = new HashSet<Guid>(ziel.MitgliederIds);
-        var aus = new HashSet<Guid>(ziel.AusgeschlossenIds);
+        if (SammelZiel is not { } ziel || new DatensatzId(ctx.AggregateId) != ziel.Id) return;
+        var mit = new HashSet<ImagePairId>(ziel.MitgliederIds);
+        var aus = new HashSet<ImagePairId>(ziel.AusgeschlossenIds);
         foreach (var id in evt.ImagePairIds) { mit.Add(id); aus.Remove(id); }
         SammelZiel = ziel with { MitgliederIds = mit, AusgeschlossenIds = aus };
     }
 
-    private void PatchMitglied(Guid datensatzId, Guid pairId, bool drin)
+    private void PatchMitglied(DatensatzId datensatzId, ImagePairId pairId, bool drin)
     {
         if (SammelZiel is not { } ziel || datensatzId != ziel.Id) return;
-        var mit = new HashSet<Guid>(ziel.MitgliederIds);
-        var aus = new HashSet<Guid>(ziel.AusgeschlossenIds);
+        var mit = new HashSet<ImagePairId>(ziel.MitgliederIds);
+        var aus = new HashSet<ImagePairId>(ziel.AusgeschlossenIds);
         if (drin) { mit.Add(pairId); aus.Remove(pairId); }
         else      { mit.Remove(pairId); aus.Add(pairId); }
         SammelZiel = ziel with { MitgliederIds = mit, AusgeschlossenIds = aus };

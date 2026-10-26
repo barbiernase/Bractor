@@ -69,7 +69,7 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
 
         // Der Client kennt den Kopf des Streams — und der Server nimmt einen Command mit dieser Version an.
         ap.Versionen.GetVersion(paar.Id).Should().Be(stream.Max(e => e.Version), "die Version aus den Pushes ist der Kopf des Streams");
-        var quittung = await ap.QuittungAsync(ap.Sende(new LabelBildPaar(paar.Id, Klassifikation.Anomalie)), Kurz);
+        var quittung = await ap.QuittungAsync(ap.Sende(new LabelBildPaar(new(paar.Id), Klassifikation.Anomalie)), Kurz);
         quittung.Nachricht.Should().BeOfType<BildPaarGelabelt>("mit der Version aus den Pushes entscheidet das Aggregat, statt einen Konflikt zu melden");
         (await b.Log.ZahlAsync<BildPaarGelabelt>(paar.Id)).Should().Be(1);
     }
@@ -80,7 +80,7 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
         await using var ap = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenArbeitsplatz);
         var datensatz = Guid.NewGuid();
         var gesendet = DateTimeOffset.UtcNow;
-        var quittung = await ap.QuittungAsync(ap.Sende(new ErstelleDatensatz(datensatz, "Quittung")), Kurz);
+        var quittung = await ap.QuittungAsync(ap.Sende(new ErstelleDatensatz(new(datensatz), "Quittung")), Kurz);
 
         quittung.Nachricht.Should().BeOfType<DatensatzErstellt>();
         (quittung.Zeit - gesendet).Should().BeLessThan(TimeSpan.FromSeconds(4), "binnen der Frist des Clients (5 s), sonst schickt er noch einmal");
@@ -99,9 +99,9 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
     {
         await using var ap = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenArbeitsplatz);
         var datensatz = Guid.NewGuid();
-        await ap.QuittungAsync(ap.Sende(new ErstelleDatensatz(datensatz, "leer")), Kurz);
+        await ap.QuittungAsync(ap.Sende(new ErstelleDatensatz(new(datensatz), "leer")), Kurz);
 
-        var quittung = await ap.QuittungAsync(ap.Sende(new FriereEin(datensatz)), TimeSpan.FromSeconds(4));   // leer → abgelehnt
+        var quittung = await ap.QuittungAsync(ap.Sende(new FriereEin(new(datensatz))), TimeSpan.FromSeconds(4));   // leer → abgelehnt
 
         quittung.Nachricht.Should().BeOfType<DatensatzLeer>();
         await Task.Delay(TimeSpan.FromSeconds(12));
@@ -116,11 +116,11 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
         await using var ap = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenInspekteur);
         await using var roh = await RoheLeitung.VerbindeAsync(b.Host, "Arbeitsplatz", Testumgebung.TokenInspekteur);
 
-        (await ap.QuittungAsync(ap.Sende(new LabelBildPaar(paar.Id, Klassifikation.KeineAnomalie)), Kurz))
+        (await ap.QuittungAsync(ap.Sende(new LabelBildPaar(new(paar.Id), Klassifikation.KeineAnomalie)), Kurz))
             .Nachricht.Should().BeOfType<BildPaarGelabelt>("Labeln darf der Inspekteur");
 
         var datensatz = Guid.NewGuid();
-        (await ap.QuittungAsync(ap.Sende(new ErstelleDatensatz(datensatz, "verboten")), Kurz))
+        (await ap.QuittungAsync(ap.Sende(new ErstelleDatensatz(new(datensatz), "verboten")), Kurz))
             .Nachricht.Should().BeOfType<CommandFailed>("Datensätze legt der KI-Operator an — der steckt im Vertrag, aber nicht im Token");
         (await ap.FrageAsync(new HoleDatensaetze(), Kurz, typeof(DatensatzListe)))
             .Should().BeOfType<QueryFailed>("auch fragen darf er nur, was der Inspekteur darf");
@@ -150,7 +150,7 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
         var e1 = await eins.WarteAufEventAsync(Komplett, Kurz, "Träger 1 hört ImagePairKomplett nicht");
         var e2 = await zwei.WarteAufEventAsync(Komplett, Kurz, "Träger 2 hört ImagePairKomplett nicht");
 
-        var antwort = new KlassifiziereBildPaarDurchKi(paar.Id, Klassifikation.Anomalie);
+        var antwort = new KlassifiziereBildPaarDurchKi(new(paar.Id), Klassifikation.Anomalie);
         await eins.SendeAsync(antwort, "ImagePair", -1, e1.CorrelationId, (e1, 0));
         await eins.SendeAsync(antwort, "ImagePair", -1, e1.CorrelationId, (e1, 0));   // dasselbe Event noch einmal beantwortet
         await zwei.SendeAsync(antwort, "ImagePair", -1, e2.CorrelationId, (e2, 0));   // der zweite Träger antwortet auch
@@ -172,9 +172,9 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
     {
         await using var ap = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenArbeitsplatz);
         var datensatz = Guid.NewGuid();
-        await ap.QuittungAsync(ap.Sende(new ErstelleDatensatz(datensatz, "Lesen nach Schreiben")), Kurz);
+        await ap.QuittungAsync(ap.Sende(new ErstelleDatensatz(new(datensatz), "Lesen nach Schreiben")), Kurz);
         // Das Anlegen prüft der nächste Test (G-14); hier erst warten, bis die Leseseite den Datensatz kennt.
-        await Warte.BisAsync(async () => await ap.FrageAsync(new HoleDatensatz(datensatz), Kurz, typeof(DatensatzAntwort), typeof(DatensatzNichtGefunden))
+        await Warte.BisAsync(async () => await ap.FrageAsync(new HoleDatensatz(new(datensatz)), Kurz, typeof(DatensatzAntwort), typeof(DatensatzNichtGefunden))
             is DatensatzAntwort, Kurz, "die Leseseite kennt den Datensatz nicht", b.Host);
 
         var paare = new List<Guid>();
@@ -182,13 +182,13 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
         {
             var paar = Guid.NewGuid();
             paare.Add(paar);
-            (await ap.QuittungAsync(ap.Sende(new NimmPaarAuf(datensatz, paar)), Kurz)).Nachricht.Should().BeOfType<PaarAufgenommen>();
-            var antwort = (DatensatzAntwort)await ap.FrageAsync(new HoleDatensatz(datensatz), Kurz, typeof(DatensatzAntwort), typeof(DatensatzNichtGefunden));
-            antwort.Mitglieder.Should().BeEquivalentTo(paare, $"Query {i + 1} direkt nach der Quittung zeigt den eigenen Stand");
+            (await ap.QuittungAsync(ap.Sende(new NimmPaarAuf(new(datensatz), new(paar))), Kurz)).Nachricht.Should().BeOfType<PaarAufgenommen>();
+            var antwort = (DatensatzAntwort)await ap.FrageAsync(new HoleDatensatz(new(datensatz)), Kurz, typeof(DatensatzAntwort), typeof(DatensatzNichtGefunden));
+            antwort.Mitglieder.Select(m => m.Wert).Should().BeEquivalentTo(paare, $"Query {i + 1} direkt nach der Quittung zeigt den eigenen Stand");
         }
 
-        await ap.QuittungAsync(ap.Sende(new SetzeSplit(datensatz, 80, 10, 10, 7)), Kurz);
-        var nachSplit = (DatensatzAntwort)await ap.FrageAsync(new HoleDatensatz(datensatz), Kurz, typeof(DatensatzAntwort), typeof(DatensatzNichtGefunden));
+        await ap.QuittungAsync(ap.Sende(new SetzeSplit(new(datensatz), 80, 10, 10, 7)), Kurz);
+        var nachSplit = (DatensatzAntwort)await ap.FrageAsync(new HoleDatensatz(new(datensatz)), Kurz, typeof(DatensatzAntwort), typeof(DatensatzNichtGefunden));
         (nachSplit.Split.TrainProzent, nachSplit.Split.Seed).Should().Be((80, 7));
     }
 
@@ -204,8 +204,8 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
         for (var i = 0; i < 5; i++)
         {
             var datensatz = Guid.NewGuid();
-            await ap.QuittungAsync(ap.Sende(new ErstelleDatensatz(datensatz, $"neu {i}")), Kurz);
-            (await ap.FrageAsync(new HoleDatensatz(datensatz), Kurz, typeof(DatensatzAntwort), typeof(DatensatzNichtGefunden)))
+            await ap.QuittungAsync(ap.Sende(new ErstelleDatensatz(new(datensatz), $"neu {i}")), Kurz);
+            (await ap.FrageAsync(new HoleDatensatz(new(datensatz)), Kurz, typeof(DatensatzAntwort), typeof(DatensatzNichtGefunden)))
                 .Should().BeOfType<DatensatzAntwort>($"Query {i + 1} gleich nach der Quittung kennt den neuen Datensatz");
         }
     }

@@ -15,24 +15,24 @@ namespace Domain.Modell;
 /// es stammt, plus Pfad zum Artefakt und Endmetriken.
 /// </summary>
 public record RegistriereModell(
-    Guid AggregateId,
-    Guid TrainingslaufId,
-    Guid DatensatzId,
+    Id<Modell> AggregateId,
+    Id<Trainingslauf.Trainingslauf> TrainingslaufId,
+    Id<Datensatz.Datensatz> DatensatzId,
     int DatensatzVersion,
     string Name,
     string Pfad,
     ModellMetriken Metriken
-) : ICreationCommand;
+) : ICommand<Modell>, ICreationCommand;
 
 /// <summary>
 /// Setzt dieses Modell aktiv („genau ein aktives Modell je Zweck"). Der Inferenz-
 /// Worker abonniert das resultierende <see cref="ModellAktiviert"/> und lädt das neue Modell.
 /// </summary>
 public record SetzeModellAktiv(
-    Guid AggregateId
-) : ICommand;
+    Id<Modell> AggregateId
+) : ICommand<Modell>;
 
 /// <summary>Archiviert das Modell (nicht mehr aktivierbar).</summary>
 public record ArchiviereModell(
-    Guid AggregateId
-) : ICommand;
+    Id<Modell> AggregateId
+) : ICommand<Modell>;

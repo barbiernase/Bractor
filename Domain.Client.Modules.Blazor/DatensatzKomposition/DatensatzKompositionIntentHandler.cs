@@ -26,7 +26,7 @@ public partial class DatensatzKompositionIntentHandler
 
     IEnumerable<object> Handle(ErstelleDatensatzIntent evt, MessageContext ctx)
     {
-        var id = Guid.NewGuid();
+        var id = DatensatzId.Neu();
         var name = string.IsNullOrWhiteSpace(evt.Name) ? "Neuer Datensatz" : evt.Name.Trim();
         yield return new ErstelleDatensatz(id, name);
         // Sofort aktiv wählen — der RefreshHandler lädt dann seinen (leeren) Kopf.

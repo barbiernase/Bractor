@@ -6,13 +6,13 @@ namespace Domain.Client.Modules.Historie;
 
 public partial class HistorieStore : StoreBase
 {
-    private readonly Dictionary<Guid, List<HistorieEintrag>> _data = new();
+    private readonly Dictionary<ImagePairId, List<HistorieEintrag>> _data = new();
 
     [ObservableProperty] private int _version;
 
-    public IReadOnlyList<HistorieEintrag> Get(Guid pairId)
+    public IReadOnlyList<HistorieEintrag> Get(ImagePairId pairId)
         => _data.TryGetValue(pairId, out var list) ? list : [];
-    public bool IstGeladen(Guid pairId) => _data.ContainsKey(pairId);
+    public bool IstGeladen(ImagePairId pairId) => _data.ContainsKey(pairId);
 
     // Reine Backend-Historie: der Server ist die Quelle der Wahrheit. Kein lokaler
     // Aufbau, keine Texte, kein Versioning — die View lädt und reagiert nur.

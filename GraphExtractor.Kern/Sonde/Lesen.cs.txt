@@ -105,7 +105,7 @@ public partial class MahnungBeiSchaden : ISubscriber, IPullSubscriber
     public async IAsyncEnumerable<EroeffneMahnung> Handle(SchadenGemeldet evt, IAggregateEnvelope envelope, ProjectionWriter writer)
     {
         await Task.CompletedTask;
-        yield return new EroeffneMahnung(Guid.NewGuid(), 5m);
+        yield return new EroeffneMahnung(new(Guid.NewGuid()), 5m);
     }
 }
 

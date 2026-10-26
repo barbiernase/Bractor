@@ -7,4 +7,4 @@ namespace Domain.Pipeline.Datensatz;
 public sealed record SucheRange(RangeKriterien Kriterien) : IAuftrag<IRangeSuche>;
 
 /// <summary>Je Mitglied den Label-Stand und die Bildpfade lesen und den Split deterministisch zuteilen.</summary>
-public sealed record FriereMitgliederEin(IReadOnlyList<Guid> Mitglieder, SplitKonfig Split) : IAuftrag<IMitgliederEinfrieren>;
+public sealed record FriereMitgliederEin(IReadOnlyList<Id<Domain.ImagePair.ImagePair>> Mitglieder, SplitKonfig Split) : IAuftrag<IMitgliederEinfrieren>;

@@ -34,11 +34,11 @@ public class UmgezogeneFluesseTests
     {
         var w = Laufwerk();
         var ds = Guid.NewGuid();
-        w.Fahre(new ErstelleDatensatz(ds, "Probe"), _ => throw new InvalidOperationException("kein Fluss erwartet"));
+        w.Fahre(new ErstelleDatensatz(new(ds), "Probe"), _ => throw new InvalidOperationException("kein Fluss erwartet"));
 
-        var lauf = w.Fahre(new FuegeRangeHinzu(ds, new RangeKriterien(NurKomplette: true)), a => a.Auftrag switch
+        var lauf = w.Fahre(new FuegeRangeHinzu(new(ds), new RangeKriterien(NurKomplette: true)), a => a.Auftrag switch
         {
-            SucheRange s => new FlussAntwort.Ergebnis(new RangeGefunden(new[] { PaarA }, new RangeHerkunft(s.Kriterien, 1))),
+            SucheRange s => new FlussAntwort.Ergebnis(new RangeGefunden(new[] { new Id<Domain.ImagePair.ImagePair>(PaarA) }, new RangeHerkunft(s.Kriterien, 1))),
             _ => throw new NotSupportedException(),
         });
 
@@ -53,8 +53,8 @@ public class UmgezogeneFluesseTests
     {
         var w = Laufwerk();
         var ds = Guid.NewGuid();
-        w.Fahre(new ErstelleDatensatz(ds, "Probe"), _ => throw new InvalidOperationException());
-        var lauf = w.Fahre(new FuegeRangeHinzu(ds, new RangeKriterien()),
+        w.Fahre(new ErstelleDatensatz(new(ds), "Probe"), _ => throw new InvalidOperationException());
+        var lauf = w.Fahre(new FuegeRangeHinzu(new(ds), new RangeKriterien()),
             a => new FlussAntwort.Ergebnis(new RangeOhneTreffer(((SucheRange)a.Auftrag!).Kriterien)));
 
         lauf.Vorgänge.Should().ContainSingle().Which.Erfolg.Should().BeTrue();
@@ -65,7 +65,7 @@ public class UmgezogeneFluesseTests
     {
         var w = Laufwerk();
         var lauf = Guid.NewGuid();
-        w.Fahre(new StarteTraining(lauf, Guid.NewGuid(), 1, new Hyperparameter(1, 0.1, 8, "resnet", 1)), _ => throw new InvalidOperationException());
+        w.Fahre(new StarteTraining(new(lauf), new(Guid.NewGuid()), 1, new Hyperparameter(1, 0.1, 8, "resnet", 1)), _ => throw new InvalidOperationException());
         return (w, lauf);
     }
 
@@ -73,7 +73,7 @@ public class UmgezogeneFluesseTests
     public void Trainings_Waechter_Ende_vor_der_Frist_markiert_nichts()
     {
         var (w, lauf) = GestartetesTraining();
-        var ergebnis = w.Fahre(new MeldeTrainingBegonnen(lauf),
+        var ergebnis = w.Fahre(new MeldeTrainingBegonnen(new(lauf)),
             a => new FlussAntwort.Ergebnis(new TrainingAbgebrochen()));
 
         var schritt = ergebnis.Schritte.Single(s => s.Art == PipelineKnotenArt.Warte);
@@ -86,7 +86,7 @@ public class UmgezogeneFluesseTests
     public void Trainings_Waechter_nach_der_Frist_markiert_den_Lauf_als_haengengeblieben()
     {
         var (w, lauf) = GestartetesTraining();
-        var ergebnis = w.Fahre(new MeldeTrainingBegonnen(lauf), a => new FlussAntwort.Zeitlimit());
+        var ergebnis = w.Fahre(new MeldeTrainingBegonnen(new(lauf)), a => new FlussAntwort.Zeitlimit());
 
         var markieren = ergebnis.Schritte.Single(s => s.Nachricht is MarkiereAlsHaengengeblieben);
         ((MarkiereAlsHaengengeblieben)markieren.Nachricht).AggregateId.Should().Be(lauf);

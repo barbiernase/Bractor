@@ -14,12 +14,11 @@ namespace Infrastructure.Pruefstand.Dispatcher;
 /// </summary>
 public class DispatcherCommandFailedTests
 {
-    private record TestCommand(Guid AggregateId) : ICommand;
+    private record TestCommand(Id<Infrastructure.Pruefstand.Tests.TestZiel> AggregateId) : ICommand<Infrastructure.Pruefstand.Tests.TestZiel>;
 
     private static CommandEnvelope Envelope(string? originSessionId) => new()
     {
-        AggregateId = Guid.NewGuid(),
-        Payload = new TestCommand(Guid.NewGuid()),
+        Payload = new TestCommand(new(Guid.NewGuid())),
         Modus = new CommandModus.Client(0),
         AggregateType = "Konto",
         OriginSessionId = originSessionId,

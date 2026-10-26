@@ -34,7 +34,7 @@ public class FunktionsAufrufTests
 
         st.Beendet.Should().BeTrue();
         st.Erfolg.Should().BeTrue();
-        w.Gesendet.Should().ContainSingle().Which.Should().Be(new MeldeFertig(Bildakte.Id, "bild.tiff.png", "K7"));
+        w.Gesendet.Should().ContainSingle().Which.Should().Be(new MeldeFertig(new(Bildakte.Id), "bild.tiff.png", "K7"));
         w.Log.Stream(Bildakte.Id).Select(e => e.Payload).OfType<Fertig>().Should().ContainSingle();
     }
 
@@ -70,7 +70,7 @@ public class FunktionsAufrufTests
 
         st.Beendet.Should().BeTrue();
         st.Erfolg.Should().BeTrue("ein fachlicher Fall (Unlesbar) ist ein Ergebnis, kein Fehler");
-        w.Gesendet.Should().ContainSingle().Which.Should().Be(new MeldeUnbrauchbar(Bildakte.Id, "leer"));
+        w.Gesendet.Should().ContainSingle().Which.Should().Be(new MeldeUnbrauchbar(new(Bildakte.Id), "leer"));
     }
 
     [Fact]
@@ -140,7 +140,7 @@ public class FunktionsAufrufTests
 
         st.Beendet.Should().BeTrue();
         st.Erfolg.Should().BeFalse();
-        w.Gesendet.Should().Contain(new RaeumeVorschauAuf(Bildakte.Id, "x.tiff"));
+        w.Gesendet.Should().Contain(new RaeumeVorschauAuf(new(Bildakte.Id), "x.tiff"));
         w.Log.Stream(Bildakte.Id).Select(e => e.Payload).OfType<VorschauAufgeraeumt>().Should().ContainSingle();
     }
 
@@ -254,7 +254,7 @@ public class FunktionsAufrufTests
 
         // Eine reine Command-Regel: kein „ruft=" und kein „zeitlimit=" im Hash-Text → bestehende Caches bleiben gültig.
         var nurSende = Prozess<BildEingegangen>.Definiere(p =>
-            p.Auf<BildEingegangen>().Sende<MeldeUnbrauchbar>(b => new MeldeUnbrauchbar(Bildakte.Id, b.Pfad)));
+            p.Auf<BildEingegangen>().Sende<MeldeUnbrauchbar>(b => new MeldeUnbrauchbar(new(Bildakte.Id), b.Pfad)));
         var alt = new ProzessRegeln(nurSende.AuslöserTyp, nurSende.Regeln.Select(x =>
             new Regel(x.Bedingung, x.Sende, x.RückgängigDurch, x.Sammel, x.ProduziertCommands)).ToList());
         ProzessRegelHash.Berechne(nurSende).Should().Be(ProzessRegelHash.Berechne(alt));

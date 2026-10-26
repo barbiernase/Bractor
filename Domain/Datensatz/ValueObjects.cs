@@ -1,3 +1,4 @@
+using Abstractions;
 using Domain.ImagePair;
 
 namespace Domain.Datensatz;
@@ -64,7 +65,7 @@ public record SplitKonfig(
 /// über den bestehenden Datei-Endpunkt holen kann (Events tragen Pfade, keine Blobs).
 /// </summary>
 public record DatensatzMitglied(
-    Guid ImagePairId,
+    Id<ImagePair.ImagePair> ImagePairId,
     Klassifikation Label,
     Split Split,
     string Dc0Pfad,

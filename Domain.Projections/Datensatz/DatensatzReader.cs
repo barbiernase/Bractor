@@ -1,5 +1,7 @@
 using Abstractions;
 using Domain.Projections.ImagePair;
+using DatensatzId = Abstractions.Id<Domain.Datensatz.Datensatz>;
+using ImagePairId = Abstractions.Id<Domain.ImagePair.ImagePair>;
 
 namespace Domain.Projections.Datensatz;
 
@@ -18,10 +20,10 @@ public partial class DatensatzReader : IReader<DatensatzProjektion>
         HoleDatensatzSamples query, IMessageEnvelope envelope, ReadContext ctx, IHoleSamples holeSamples)
     {
         var (items, gesamtAnzahl) = await holeSamples.HoleSamplesAsync(
-            query.DatensatzId, query.Version, query.Seite, query.SeitenGroesse);
+            query.DatensatzId.Wert, query.Version, query.Seite, query.SeitenGroesse);
 
         var samples = items
-            .Select(s => new DatensatzSample(s.ImagePairId, s.Dc0Pfad, s.Dc2Pfad, s.Label, s.Split))
+            .Select(s => new DatensatzSample(new ImagePairId(s.ImagePairId), s.Dc0Pfad, s.Dc2Pfad, s.Label, s.Split))
             .ToList();
 
         // Das Datensatz-Aggregat als Dep tracken: die Samples sind zwar ein immutabler Snapshot, aber
@@ -36,7 +38,7 @@ public partial class DatensatzReader : IReader<DatensatzProjektion>
     public async Task<OneOf<DatensatzAntwort, DatensatzNichtGefunden>> Handle(
         HoleDatensatz query, IMessageEnvelope envelope, ReadContext ctx, IFindDatensatz findDatensatz)
     {
-        var model = await findDatensatz.FindByIdAsync(query.DatensatzId);
+        var model = await findDatensatz.FindByIdAsync(query.DatensatzId.Wert);
 
         if (model is null)
             return new DatensatzNichtGefunden(query.DatensatzId);
@@ -48,7 +50,7 @@ public partial class DatensatzReader : IReader<DatensatzProjektion>
     public async Task<ImagePairSuchergebnis> Handle(
         HoleDatensatzPaare query, IMessageEnvelope envelope, ReadContext ctx, IFindDatensatz findDatensatz, ILadeVieleImagePairs ladeVieleImagePairs)
     {
-        var model = await findDatensatz.FindByIdAsync(query.DatensatzId);
+        var model = await findDatensatz.FindByIdAsync(query.DatensatzId.Wert);
         var alle = model is null
             ? new List<Guid>()
             : (query.Modus == DatensatzPaarModus.Ausgeschlossen ? model.Ausgeschlossen : model.Mitglieder);
@@ -77,10 +79,10 @@ public partial class DatensatzReader : IReader<DatensatzProjektion>
     public async Task<DatensaetzeFuerPaar> Handle(
         HoleDatensaetzeFuerPaar query, IMessageEnvelope envelope, ReadContext ctx, IHoleDatensaetzeFuerPaar holeDatensaetzeFuerPaar)
     {
-        var modelle = await holeDatensaetzeFuerPaar.HoleDatensaetzeFuerPaarAsync(query.ImagePairId);
+        var modelle = await holeDatensaetzeFuerPaar.HoleDatensaetzeFuerPaarAsync(query.ImagePairId.Wert);
 
         var tags = modelle
-            .Select(m => new DatensatzTag(m.Id, m.Name, m.Status, m.EingefroreneVersion))
+            .Select(m => new DatensatzTag(new DatensatzId(m.Id), m.Name, m.Status, m.EingefroreneVersion))
             .ToList();
 
         // Rückwärts-Index gegen die betroffenen Aggregate tracken (Read-Your-Writes nach dem Taggen).
@@ -105,13 +107,13 @@ public partial class DatensatzReader : IReader<DatensatzProjektion>
     }
 
     private static DatensatzAntwort ToAntwort(DatensatzReadModel model) => new(
-        Id: model.Id,
+        Id: new DatensatzId(model.Id),
         Name: model.Name,
         Status: model.Status,
         AnzahlMitglieder: model.AnzahlMitglieder,
         EingefroreneVersion: model.EingefroreneVersion,
         Split: model.Split,
         Ranges: model.Ranges,
-        Mitglieder: model.Mitglieder,
-        Ausgeschlossen: model.Ausgeschlossen);
+        Mitglieder: model.Mitglieder.Select(i => new ImagePairId(i)).ToList(),
+        Ausgeschlossen: model.Ausgeschlossen.Select(i => new ImagePairId(i)).ToList());
 }

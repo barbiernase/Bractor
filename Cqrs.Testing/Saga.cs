@@ -229,7 +229,7 @@ public sealed class SagaLaufwerk
     {
         var schritte = new List<SagaSchritt>();
         var queue = new Queue<(ICommand Cmd, Guid Corr, string? Saga, int? Regel)>();
-        queue.Enqueue((wurzel, wurzel.AggregateId, null, null));
+        queue.Enqueue((wurzel, wurzel.Ziel, null, null));
         Kaskade(queue, schritte);
         return Bau(wurzel, schritte);
     }
@@ -267,12 +267,12 @@ public sealed class SagaLaufwerk
             return new SagaSchritt
             {
                 Command = c, Ursprung = ursprung, SagaName = saga, Unrouted = true,
-                AggregatId = c.AggregateId, AggregatTyp = "?",
+                AggregatId = c.Ziel, AggregatTyp = "?",
                 Ausgang = Array.Empty<Ereignis>(),
                 ZustandVorher = new Dictionary<string, object?>(), ZustandNachher = new Dictionary<string, object?>(),
             };
 
-        var state = Hole(stateType, c.AggregateId);
+        var state = Hole(stateType, c.Ziel);
         var vorher = Zustandsspiegel.Von(state); // Zustand VOR dem Command → für die Guard-Bindung
         var handler = _fabrik.CreateHandler(state);
         var ausgang = new List<Ereignis>();
@@ -289,7 +289,7 @@ public sealed class SagaLaufwerk
         return new SagaSchritt
         {
             Command = c, Ursprung = ursprung, SagaName = saga, Unrouted = false,
-            AggregatId = c.AggregateId, AggregatTyp = stateType.Name,
+            AggregatId = c.Ziel, AggregatTyp = stateType.Name,
             Ausgang = ausgang, ZustandVorher = vorher, ZustandNachher = Zustandsspiegel.Von(state),
         };
     }
@@ -420,6 +420,6 @@ public sealed class SagaLaufwerk
 /// <summary>Synthetischer Wurzel-„Command" für <see cref="SagaBauer.WennAusgelöst"/> — trägt nur den Auslöser für den Bericht.</summary>
 internal sealed record AuslöserWurzel(IEvent Auslöser) : ICommand
 {
-    public Guid AggregateId => Guid.Empty;
+    public Guid Ziel => Guid.Empty;
     public override string ToString() => $"(ausgelöst durch {Auslöser})";
 }

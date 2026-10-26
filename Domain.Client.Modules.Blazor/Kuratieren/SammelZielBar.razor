@@ -87,7 +87,7 @@
 
     private void Wechsle(ChangeEventArgs e)
     {
-        if (Guid.TryParse(e.Value?.ToString(), out var id))
+        if (DatensatzId.TryParse(e.Value?.ToString(), out var id))
         {
             Fx.Dispatch(new DatensatzAusgewaehlt(id));
             Fx.Dispatch(new DatensatzGalerieModusGesetzt(DatensatzGalerieModus.Aus)); // Fokus verlassen

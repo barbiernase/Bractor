@@ -276,8 +276,8 @@ public class FileGenerator
         if (string.IsNullOrEmpty(typeName))
             return false;
         
-        // Direkt in der EINEN Quelle?
-        if (ProtoScalarSpecs.ByCSharpType.ContainsKey(typeName))
+        // Direkt in der EINEN Quelle (auch eine typisierte Id, Id<TAggregat>)?
+        if (ProtoScalarSpecs.TryGet(typeName, out _))
             return true;
         
         // Nullable<T> Pattern

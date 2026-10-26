@@ -39,6 +39,7 @@ public static class Scaffolder
 {
     // ── Der Vertrag, über nameof/typeof (nie als String) ──
     private static readonly string ICommand = nameof(Abstractions.ICommand);
+    private static readonly string Id = typeof(Abstractions.Id<>).Name.Split('`')[0];
     private static readonly string ICreationCommand = nameof(Abstractions.ICreationCommand);
     private static readonly string IEvent = nameof(Abstractions.IEvent);
     private static readonly string ITransientEvent = nameof(Abstractions.ITransientEvent);
@@ -418,11 +419,16 @@ public static class Scaffolder
                 if (i < enums.Count - 1) b.AppendLine();
             }
         });
-        var commands = records.Where(r => r.Kind == RecordArt.Command).ToList();
+        // Commands: das Ziel steht im Typ (ICommand<TAggregat>, Plan §2.5) — das Aggregat aus dem Code bzw. dem Decide, das ihn entscheidet. Ohne
+        //   Aggregat bleibt er unfertig (ICommand ohne Ziel baut nicht, W1); das Ziel-Feld des Editors (Guid) wird die Id des Aggregats.
+        var commands = records.Where(r => r.Kind == RecordArt.Command).Select(r => MitZiel(r, modell)).ToList();
         if (commands.Count > 0) abschnitte.Add(() =>
         {
             for (var i = 0; i < commands.Count; i++)
-                RecordZeilen(b, commands[i], commands[i].IstErzeugung ? $"{ICommand}, {ICreationCommand}" : ICommand, i < commands.Count - 1);
+            {
+                var ziel = commands[i].Aggregat is { Length: > 0 } a ? $"{ICommand}<{a}>" : ICommand;
+                RecordZeilen(b, commands[i], commands[i].IstErzeugung ? $"{ziel}, {ICreationCommand}" : ziel, i < commands.Count - 1);
+            }
         });
         var persistent = records.Where(r => r.Kind == RecordArt.Event).ToList();
         var ablehnungen = records.Where(r => r.Kind == RecordArt.Rejection).ToList();
@@ -621,6 +627,18 @@ public static class Scaffolder
             b.AppendLine("}");
         }
         if (leerzeileDanach && (r.Zusatz is not null || r.Doku is not null || eigenschaften.Count > 0)) b.AppendLine();
+    }
+
+    /// <summary>Ein Command mit seinem Ziel-Aggregat (aus dem Code oder dem Decide, das ihn entscheidet); das Ziel-Feld als <c>Id&lt;Aggregat&gt;</c>.</summary>
+    private static Record MitZiel(Record r, EditorModell modell)
+    {
+        var aggregat = r.Aggregat ?? modell.Decider.FirstOrDefault(d => d.Command == r.Name && d.Aggregat.Length > 0)?.Aggregat;
+        if (aggregat is null) return r;
+        return r with
+        {
+            Aggregat = aggregat,
+            Felder = r.Felder.Select(f => f.Name == modell.Rahmen.AggregatIdFeld && f.Typ == nameof(Guid) ? f with { Typ = $"{Id}<{aggregat}>" } : f).ToList(),
+        };
     }
 
     private static IEnumerable<string> RecordTypen(Record r) =>

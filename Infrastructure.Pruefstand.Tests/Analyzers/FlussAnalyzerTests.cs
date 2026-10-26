@@ -49,10 +49,10 @@ public sealed record Deute(string Pfad) : IAuftrag<IDeuten>;
 public record Gedeutet(Guid Id) : IEvent;
 public record Unbekannt(string Pfad) : IEvent;
 public interface IDeuten : IFunktion { Task<OneOf<Gedeutet, Unbekannt>> RufeAsync(Deute a, IAusfuehrung x); }
-public record Melde(Guid AggregateId) : ICommand;
+public record Melde(Id<Akte> AggregateId) : ICommand<Akte>;
 public record Gemeldet() : IEvent;
 public record SchonGemeldet() : ITransientEvent;
-public record NieGesendet(Guid AggregateId) : ICommand;
+public record NieGesendet(Id<Akte> AggregateId) : ICommand<Akte>;
 public record Begonnen(Guid Id) : IEvent;
 public record Fertig() : IEvent;
 public partial class Akte : IState
@@ -70,10 +70,10 @@ public partial class Akte : IState
         => (await Ids(Fluss(@"
             var datei = p.Quelle<DateiDa>();
             var deuten = datei.Rufe<IDeuten>(d => new Deute(d.Pfad)).Zeitlimit(TimeSpan.FromMinutes(1));
-            var melden = deuten.Bei<Gedeutet>().Sende<Melde>(g => new Melde(g.Id));
-            var nein = deuten.Bei<Unbekannt>().Sende<Melde>(u => new Melde(Guid.Empty));
-            var zeit = deuten.BeiZeitlimit().Sende<Melde>(z => new Melde(Guid.Empty));
-            var doppelt = melden.BeiAbgelehnt().Sende<Melde>(a => new Melde(Guid.Empty));"))).Should().BeEmpty();
+            var melden = deuten.Bei<Gedeutet>().Sende<Melde>(g => new Melde(new(g.Id)));
+            var nein = deuten.Bei<Unbekannt>().Sende<Melde>(u => new Melde(new(Guid.Empty)));
+            var zeit = deuten.BeiZeitlimit().Sende<Melde>(z => new Melde(new(Guid.Empty)));
+            var doppelt = melden.BeiAbgelehnt().Sende<Melde>(a => new Melde(new(Guid.Empty)));"))).Should().BeEmpty();
 
     [Fact]
     public async Task Keine_oder_zwei_Quellen_sind_ein_Fehler()
@@ -94,7 +94,7 @@ public partial class Akte : IState
         => (await Ids(Fluss(@"
             var datei = p.Quelle<DateiDa>();
             var deuten = datei.Rufe<IDeuten>(d => new Deute(d.Pfad));
-            var zeit = deuten.BeiZeitlimit().Sende<Melde>(z => new Melde(Guid.Empty));"))).Should().Equal(FlussAnalyzer.ZeitlimitId);
+            var zeit = deuten.BeiZeitlimit().Sende<Melde>(z => new Melde(new(Guid.Empty)));"))).Should().Equal(FlussAnalyzer.ZeitlimitId);
 
     [Fact]
     public async Task Ein_Fall_ausserhalb_der_Ausgaenge_ist_ein_Fehler()
@@ -102,9 +102,9 @@ public partial class Akte : IState
         var befunde = await Befunde(Vorspann + Fluss(@"
             var datei = p.Quelle<DateiDa>();
             var deuten = datei.Rufe<IDeuten>(d => new Deute(d.Pfad));
-            var melden = deuten.Bei<Gedeutet>().Sende<Melde>(g => new Melde(g.Id));
-            var falsch = deuten.Bei<Fertig>().Sende<Melde>(f => new Melde(Guid.Empty));
-            var ablehnung = melden.Bei<SchonGemeldet>().Sende<Melde>(a => new Melde(Guid.Empty));") + "\n}");
+            var melden = deuten.Bei<Gedeutet>().Sende<Melde>(g => new Melde(new(g.Id)));
+            var falsch = deuten.Bei<Fertig>().Sende<Melde>(f => new Melde(new(Guid.Empty)));
+            var ablehnung = melden.Bei<SchonGemeldet>().Sende<Melde>(a => new Melde(new(Guid.Empty)));") + "\n}");
         befunde.Select(d => d.Id).Should().Equal(FlussAnalyzer.DrahtId, FlussAnalyzer.DrahtId);
         befunde[0].GetMessage().Should().Contain("Fertig ist kein Ausgang von 'deuten' (Ausgänge: Gedeutet, Unbekannt)");
         befunde[1].GetMessage().Should().Contain("eine Ablehnung kommt am ✕-Port: melden.BeiAbgelehnt()");
@@ -115,11 +115,11 @@ public partial class Akte : IState
         => (await Ids(Fluss(@"
             var b = p.Auf<Begonnen>();
             var ende = b.Strom().Warte<Fertig>().Zeitlimit(TimeSpan.FromHours(1));
-            var x = ende.BeiAbgelehnt().Sende<Melde>(a => new Melde(Guid.Empty));"))).Should().Equal(FlussAnalyzer.DrahtId);
+            var x = ende.BeiAbgelehnt().Sende<Melde>(a => new Melde(new(Guid.Empty)));"))).Should().Equal(FlussAnalyzer.DrahtId);
 
     [Fact]
     public async Task Ein_Command_ohne_Decider_ist_ein_Fehler()
-        => (await Ids(Fluss("var b = p.Auf<Begonnen>(); var x = b.Sende<NieGesendet>(e => new NieGesendet(e.Id));"))).Should().Equal(FlussAnalyzer.OhneDeciderId);
+        => (await Ids(Fluss("var b = p.Auf<Begonnen>(); var x = b.Sende<NieGesendet>(e => new NieGesendet(new(e.Id)));"))).Should().Equal(FlussAnalyzer.OhneDeciderId);
 
     [Fact]
     public async Task Und_auf_einen_Weg_der_nicht_immer_liefert_ist_eine_Warnung_je_Fall_einmal()
@@ -127,8 +127,8 @@ public partial class Akte : IState
         var befunde = await Befunde(Vorspann + Fluss(@"
             var datei = p.Quelle<DateiDa>();
             var deuten = datei.Rufe<IDeuten>(d => new Deute(d.Pfad));
-            var a = p.Alle(deuten.Bei<Gedeutet>(), datei).Sende<Melde>((g, d) => new Melde(g.Id));
-            var b = p.Alle(deuten.Bei<Gedeutet>(), datei).Sende<Melde>((g, d) => new Melde(g.Id));") + "\n}");
+            var a = p.Alle(deuten.Bei<Gedeutet>(), datei).Sende<Melde>((g, d) => new Melde(new(g.Id)));
+            var b = p.Alle(deuten.Bei<Gedeutet>(), datei).Sende<Melde>((g, d) => new Melde(new(g.Id)));") + "\n}");
         befunde.Should().ContainSingle().Which.Id.Should().Be(FlussAnalyzer.WartetId);
         befunde[0].Severity.Should().Be(DiagnosticSeverity.Warning);
         befunde[0].GetMessage().Should().Contain("'deuten.Gedeutet'").And.Contain("Unbekannt").And.Contain("für immer");

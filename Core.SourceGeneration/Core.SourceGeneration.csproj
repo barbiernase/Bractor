@@ -4,6 +4,8 @@
         <TargetFramework>net9.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <!-- Verträge als Link: intern, sonst kollidieren sie mit Abstractions (siehe Idvertrag.cs). -->
+        <DefineConstants>$(DefineConstants);VERTRAG_INTERN</DefineConstants>
     </PropertyGroup>
 
     <ItemGroup>
@@ -17,4 +19,7 @@
       <ProjectReference Include="..\Abstractions.SourceGeneration\Abstractions.SourceGeneration.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <Compile Include="..\Abstractions\Idvertrag.cs" Link="Vertrag\Idvertrag.cs" />
+    </ItemGroup>
 </Project>

@@ -19,7 +19,7 @@ namespace Domain.Client.Modules.DatensatzKomposition;
 /// </summary>
 public partial class DatensatzKompositionStore : StoreBase
 {
-    [ObservableProperty] private Guid? _aktuelleDatensatzId;
+    [ObservableProperty] private DatensatzId? _aktuelleDatensatzId;
     [ObservableProperty] private string? _name;
     [ObservableProperty] private DatensatzStatus _status;
     [ObservableProperty] private int _anzahlMitglieder;

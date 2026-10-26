@@ -69,7 +69,7 @@ public class BildeingangTests
         private async Task DispatchAsync(Guid korrelation, ICommand cmd, Guid vorgang, CancellationToken ct)
         {
             lock (Gesendet) Gesendet.Add(cmd);
-            var stream = Log.Stream(cmd.AggregateId);
+            var stream = Log.Stream(cmd.Ziel);
             if (stream.Any(e => e.CausationId == vorgang.ToString())) return;   // Framework-Inbox
             IEvent[] evs = cmd switch
             {
@@ -79,7 +79,7 @@ public class BildeingangTests
                 MeldeBildVerfuegbar m => [new BildVerfuegbar(m.Version, m.Meta, m.Pfad, [])],
                 _ => throw new NotSupportedException(cmd.GetType().Name),
             };
-            await Log.AppendEventsAsync(cmd.AggregateId, stream.Count, evs, korrelation.ToString(), vorgang.ToString(), "ImagePair");
+            await Log.AppendEventsAsync(cmd.Ziel, stream.Count, evs, korrelation.ToString(), vorgang.ToString(), "ImagePair");
         }
 
         public async Task<ProzessManager.ManagerStatus> DateiAsync(string name, long groesse = 4711)
@@ -117,7 +117,7 @@ public class BildeingangTests
         w.Gerufen.Should().Equal(nameof(DeuteDateiname), nameof(VerkleinereBild), nameof(GleicheHistogrammAus));
         w.Gesendet.OfType<ErstelleImagePair>().Should().ContainSingle().Which.UrsprungsPfad.Should().Be("/in/" + Dc0);
         w.Meldungen.Should().ContainSingle().Which.Should().BeEquivalentTo(new MeldeBildVerfuegbar(
-            Paar, BildVersion.Dc0, new BildMeta(Dc0, 4711, 683, 512, w.Log.Jetzt), "/in/" + Dc0 + "_klein.png_ausgeglichen.png"));
+            new(Paar), BildVersion.Dc0, new BildMeta(Dc0, 4711, 683, 512, w.Log.Jetzt), "/in/" + Dc0 + "_klein.png_ausgeglichen.png"));
     }
 
     [Fact]
@@ -129,7 +129,7 @@ public class BildeingangTests
 
         st.Erfolg.Should().BeTrue("ErstelleImagePair ist abgelehnt (Paar existiert), der ✕-Port ist verdrahtet — kein Scheitern");
         w.Meldungen.Select(m => m.Version).Should().BeEquivalentTo(new[] { BildVersion.Dc0, BildVersion.Dc2 });
-        w.Meldungen.Should().OnlyContain(m => m.AggregateId == Paar);
+        w.Meldungen.Should().OnlyContain(m => m.AggregateId.Wert == Paar);
         st.Umgeleitet.Values.Should().ContainSingle(u => u.Art == "abgelehnt" && u.Grund == nameof(ImagePairExistiertBereits));
     }
 

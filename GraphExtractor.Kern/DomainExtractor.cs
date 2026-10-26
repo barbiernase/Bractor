@@ -139,7 +139,7 @@ public sealed record TypMeta(string Namespace, string Assembly, string? Doku, st
     string Typart = "public record", List<string>? Basen = null, string? Attribute = null, bool OhneParameterliste = false, string? Treiber = null);
 
 public sealed record EventType(string Simple, bool Persisted, List<FieldInfo> Fields, TypMeta Meta);
-public sealed record CommandType(string Simple, bool IsCreation, List<FieldInfo> Fields, TypMeta Meta);
+public sealed record CommandType(string Simple, bool IsCreation, List<FieldInfo> Fields, TypMeta Meta, string? Ziel = null);
 
 public sealed class RecordRaw
 {
@@ -501,7 +501,7 @@ public sealed partial class DomainExtractor
     private readonly List<Compilation> _comps;
     private readonly List<INamedTypeSymbol> _types;
 
-    private readonly INamedTypeSymbol? _iState, _iCommand, _iCreation, _iEvent, _iTransient,
+    private readonly INamedTypeSymbol? _iState, _iCommand, _iCreation, _iCommandZiel, _iEvent, _iTransient,
         _iSubscriber, _iPull, _iAppend, _iReader, _iQuery, _iQueryResponse, _iReadModel, _iGeteilt,
         _iPipelineHandler, _iPipelineTrigger, _iSelfMessage, _iProzessDef, _iPayload, _iPipelineOutput;
 
@@ -530,6 +530,7 @@ public sealed partial class DomainExtractor
         _iState = Get(Vertrag.IState);
         _iCommand = Get(Vertrag.ICommand);
         _iCreation = Get(Vertrag.ICreationCommand);
+        _iCommandZiel = Get(Vertrag.ICommandZiel);
         _iEvent = Get(Vertrag.IEvent);
         _iTransient = Get(Vertrag.ITransientEvent);
         _iSubscriber = Get(Vertrag.ISubscriber);
@@ -1306,7 +1307,10 @@ public sealed partial class DomainExtractor
             if (Sym.Implements(t, _iCommand))
             {
                 var isCreation = Sym.Implements(t, _iCreation);
-                m.Commands[t.Fq()] = new CommandType(t.Name, isCreation, Felder(t), Meta(t));
+                // Das Ziel-Aggregat steht im Typ (ICommand<TAggregat>) — ein Code-Fakt, nicht aus dem Decider geraten.
+                var ziel = _iCommandZiel == null ? null
+                    : t.AllInterfaces.FirstOrDefault(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, _iCommandZiel))?.TypeArguments[0].Name;
+                m.Commands[t.Fq()] = new CommandType(t.Name, isCreation, Felder(t), Meta(t), ziel);
             }
         }
     }
@@ -1452,7 +1456,8 @@ public sealed partial class DomainExtractor
             var rollen = new[] { _iCommand, _iCreation, _iEvent, _iTransient, _iQuery, _iQueryResponse, _iReadModel, _iGeteilt, _iPipelineTrigger, _iSelfMessage }
                 .Where(x => x != null).Select(x => x!.Fq()).ToHashSet(StringComparer.Ordinal);
             basen = bl.Types.Where(b => model.GetTypeInfo(b.Type).Type is not INamedTypeSymbol bt
-                                        || !(rollen.Contains(bt.Fq()) || (_iAuftrag != null && bt.OriginalDefinition.Fq() == _iAuftrag.Fq())))
+                                        || !(rollen.Contains(bt.Fq()) || (_iAuftrag != null && bt.OriginalDefinition.Fq() == _iAuftrag.Fq())
+                                             || (_iCommandZiel != null && bt.OriginalDefinition.Fq() == _iCommandZiel.Fq())))
                 .Select(b => b.ToString()).ToList();
             if (basen.Count == 0) basen = null;
         }

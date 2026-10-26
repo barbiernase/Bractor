@@ -4,7 +4,7 @@ using Domain.Datensatz;
 namespace Domain.Pipeline.Datensatz;
 
 /// <summary>Die Range traf Paare: ihre Ids und die Herkunft (Kriterien + Anzahl) für die Nachvollziehbarkeit.</summary>
-public record RangeGefunden(IReadOnlyList<Guid> ImagePairIds, RangeHerkunft Herkunft) : IEvent;
+public record RangeGefunden(IReadOnlyList<Id<Domain.ImagePair.ImagePair>> ImagePairIds, RangeHerkunft Herkunft) : IEvent;
 
 /// <summary>Die Range traf kein Paar — nichts aufzunehmen.</summary>
 public record RangeOhneTreffer(RangeKriterien Kriterien) : IEvent;

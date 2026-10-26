@@ -13,7 +13,7 @@ namespace Infrastructure.Pruefstand.Analyzers;
 
 /// <summary>
 /// CQRS079–083 — Grammatik-Regeln und Graph-Diagnosen im Build (Werkbank P7.4): MISSING-APPLY, GR-FALTUNG, ENUM-ZERO, GR-GARANTIE und
-/// Regel Z (GR-ZUSTAND). Alles aus Signaturen und Symbolen, nie aus Rümpfen.
+/// Regel Z (GR-ZUSTAND); CQRS013 — ein Command nennt sein Ziel im Typ (R7). Alles aus Signaturen und Symbolen, nie aus Rümpfen.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class ModellAnalyzerTests
@@ -35,13 +35,13 @@ public class ModellAnalyzerTests
     private const string Vorspann = @"
 using System; using System.Collections.Generic; using System.Threading.Tasks; using Abstractions;
 namespace Probe {
-public record Eroeffne(Guid AggregateId) : ICommand;
-public record Schliesse(Guid AggregateId) : ICommand;
+public record Eroeffne(Id<ProbeZiel> AggregateId) : ICommand<ProbeZiel>;
+public record Schliesse(Id<ProbeZiel> AggregateId) : ICommand<ProbeZiel>;
 public record Eroeffnet() : IEvent;
 public record Geschlossen() : IEvent;
 public record Fremd() : IEvent;
 public record SchonOffen() : ITransientEvent;
-public record Mahne(Guid AggregateId) : ICommand;
+public record Mahne(Id<ProbeZiel> AggregateId) : ICommand<ProbeZiel>;\npublic partial class ProbeZiel : IState { public int Version { get; set; } public Guid Id { get; set; } }
 ";
 
     private const string Konto = @"
@@ -60,6 +60,19 @@ public partial class Konto : IState
     public async Task Ein_vollstaendiges_Aggregat_ist_still()
         => (await Ids(Konto + "public partial class Konto { public class Applier : IApplier<Konto> { public void Apply(Eroeffnet e) { } public void Apply(Geschlossen e) { } } }"))
             .Should().BeEmpty();
+
+    [Fact]
+    public async Task Ein_Command_ohne_typisiertes_Ziel_ist_ein_Fehler_CQRS013()
+    {
+        // Der Umweg an ICommand<TAggregat> vorbei: die Framework-Sicht (Ziel als Guid) von Hand implementiert.
+        var befunde = await Befunde("public record Umweg(Guid Ziel) : ICommand;");
+        befunde.Should().ContainSingle().Which.Id.Should().Be(ModellAnalyzer.ZielId);
+        befunde[0].GetMessage().Should().Contain("'Umweg'");
+    }
+
+    [Fact]
+    public async Task Ein_Command_mit_typisiertem_Ziel_ist_still()
+        => (await Ids("public record Direkt(Id<ProbeZiel> AggregateId) : ICommand<ProbeZiel>, ICreationCommand;")).Should().BeEmpty();
 
     [Fact]
     public async Task Ein_entschiedenes_Event_ohne_Apply_ist_ein_Fehler_die_Ablehnung_nicht()

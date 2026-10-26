@@ -41,8 +41,8 @@ public sealed class ZweiKnotenTests
             var kb = Guid.NewGuid().ToString();
             vonA.Add(ka);
             vonB.Add(kb);
-            await sitzungA.SendeAsync(new LabelBildPaar(p, Klassifikation.Anomalie), "ImagePair", 1, ka);
-            await sitzungB.SendeAsync(new LabelBildPaar(p, Klassifikation.Anomalie), "ImagePair", 1, kb);
+            await sitzungA.SendeAsync(new LabelBildPaar(new(p), Klassifikation.Anomalie), "ImagePair", 1, ka);
+            await sitzungB.SendeAsync(new LabelBildPaar(new(p), Klassifikation.Anomalie), "ImagePair", 1, kb);
         }
 
         foreach (var k in vonA)

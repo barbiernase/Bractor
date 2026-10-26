@@ -224,19 +224,20 @@ public class WiringGenerator : IIncrementalGenerator
         var iClientEvent = compilation.GetTypeByMetadataName("Client.Infrastructure.Abstractions.IClientEvent");
         var iQuery = compilation.GetTypeByMetadataName("Abstractions.IQuery");
         var iState = compilation.GetTypeByMetadataName("Abstractions.IState");
+        var iCommandZiel = compilation.GetTypeByMetadataName(Abstractions.Idvertrag.CommandMetadatenName);
 
         var results = ImmutableArray.CreateBuilder<WiringDomainTypeInfo>();
 
         // Nur der Vertrag und seine Nutzer (Code-Fakt, Vertragsassemblies) — keine Liste fremder Namespaces.
         foreach (var assembly in Infrastructure.SourceGeneration.Vertragsassemblies.MitVertrag(compilation))
-            WalkNamespace(assembly.GlobalNamespace, iCommand, iEvent, iClientEvent, iQuery, iState, results);
+            WalkNamespace(assembly.GlobalNamespace, iCommand, iCommandZiel, iEvent, iClientEvent, iQuery, iState, results);
 
         return results.ToImmutable();
     }
 
     private static void WalkNamespace(
         INamespaceSymbol ns,
-        INamedTypeSymbol? iCommand, INamedTypeSymbol? iEvent,
+        INamedTypeSymbol? iCommand, INamedTypeSymbol? iCommandZiel, INamedTypeSymbol? iEvent,
         INamedTypeSymbol? iClientEvent, INamedTypeSymbol? iQuery, INamedTypeSymbol? iState,
         ImmutableArray<WiringDomainTypeInfo>.Builder results)
     {
@@ -244,14 +245,14 @@ public class WiringGenerator : IIncrementalGenerator
         {
             if (member is INamespaceSymbol childNs)
             {
-                WalkNamespace(childNs, iCommand, iEvent, iClientEvent, iQuery, iState, results);
+                WalkNamespace(childNs, iCommand, iCommandZiel, iEvent, iClientEvent, iQuery, iState, results);
             }
             else if (member is INamedTypeSymbol type &&
                      !type.IsAbstract &&
                      type.DeclaredAccessibility == Accessibility.Public &&
                      type.TypeKind is TypeKind.Class or TypeKind.Struct)
             {
-                var info = ClassifyDomainType(type, iCommand, iEvent, iClientEvent, iQuery, iState);
+                var info = ClassifyDomainType(type, iCommand, iCommandZiel, iEvent, iClientEvent, iQuery, iState);
                 if (info != null)
                     results.Add(info);
             }
@@ -260,14 +261,15 @@ public class WiringGenerator : IIncrementalGenerator
 
     private static WiringDomainTypeInfo? ClassifyDomainType(
         INamedTypeSymbol symbol,
-        INamedTypeSymbol? iCommand, INamedTypeSymbol? iEvent,
+        INamedTypeSymbol? iCommand, INamedTypeSymbol? iCommandZiel, INamedTypeSymbol? iEvent,
         INamedTypeSymbol? iClientEvent, INamedTypeSymbol? iQuery, INamedTypeSymbol? iState)
     {
         var fqn = symbol.ToDisplayString();
 
+        // Ein Command nennt sein Ziel-Aggregat im Typ (ICommand<TAggregat>, Plan §2.5) — dieselbe Identität wie am Server ([AggregatName] oder Name).
         if (iCommand != null && symbol.AllInterfaces.Any(i =>
             SymbolEqualityComparer.Default.Equals(i, iCommand)))
-            return new WiringDomainTypeInfo(fqn, DomainTypeKind.Command);
+            return new WiringDomainTypeInfo(fqn, DomainTypeKind.Command, Ziel(symbol, iCommandZiel));
 
         if (iQuery != null && symbol.AllInterfaces.Any(i =>
             SymbolEqualityComparer.Default.Equals(i, iQuery)))
@@ -332,7 +334,7 @@ public class WiringGenerator : IIncrementalGenerator
         var queries = vertrag.Fragt.Select(f => new WiringDomainTypeInfo(f, DomainTypeKind.Query)).ToList();
         var states = domainTypes.Where(d => d.Kind == DomainTypeKind.State).ToList();
 
-        var commandAggregateMap = BuildCommandAggregateTypeMap(commands, states);
+        var commandAggregateMap = BuildCommandAggregateTypeMap(commands, domainTypes);
 
         // ── Store-Baum aufbauen ──
         var storeFqns = new HashSet<string>(stores.Select(s => s.Fqn));
@@ -415,30 +417,28 @@ public class WiringGenerator : IIncrementalGenerator
     // CommandAggregateType Mapping
     // ═══════════════════════════════════════════════════
 
+    /// <summary>Command → Ziel-Aggregat (Cluster-Kind), aus <c>ICommand&lt;TAggregat&gt;</c> der gesendeten Commands.</summary>
     private static Dictionary<string, string> BuildCommandAggregateTypeMap(
         List<WiringDomainTypeInfo> commands,
-        List<WiringDomainTypeInfo> states)
+        List<WiringDomainTypeInfo> domainTypes)
     {
-        var stateByNamespace = new Dictionary<string, string>();
-        foreach (var state in states)
-        {
-            var lastDot = state.Fqn.LastIndexOf('.');
-            if (lastDot < 0) continue;
-            var ns = state.Fqn.Substring(0, lastDot);
-            var name = state.Fqn.Substring(lastDot + 1);
-            stateByNamespace[ns] = name;
-        }
-
+        var ziele = domainTypes.Where(d => d.Kind == DomainTypeKind.Command && d.Ziel != null)
+            .GroupBy(d => d.Fqn).ToDictionary(g => g.Key, g => g.First().Ziel!);
         var map = new Dictionary<string, string>();
         foreach (var cmd in commands)
-        {
-            var lastDot = cmd.Fqn.LastIndexOf('.');
-            if (lastDot < 0) continue;
-            var ns = cmd.Fqn.Substring(0, lastDot);
-            if (stateByNamespace.TryGetValue(ns, out var aggregateType))
-                map[cmd.Fqn] = aggregateType;
-        }
+            if (ziele.TryGetValue(cmd.Fqn, out var aggregat))
+                map[cmd.Fqn] = aggregat;
         return map;
+    }
+
+    /// <summary>Die Aggregat-Identität des Ziels: <c>[AggregatName("…")]</c> falls gesetzt, sonst der Typname (wie <c>CommandAggregateMapGenerator</c>).</summary>
+    private static string? Ziel(INamedTypeSymbol cmd, INamedTypeSymbol? iCommandZiel)
+    {
+        if (iCommandZiel == null) return null;
+        var ziele = cmd.AllInterfaces.Where(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iCommandZiel)).ToList();
+        if (ziele.Count != 1 || ziele[0].TypeArguments[0] is not INamedTypeSymbol ziel) return null;
+        var attr = ziel.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == "Abstractions.AggregatNameAttribute");
+        return attr is { ConstructorArguments.Length: > 0 } && attr.ConstructorArguments[0].Value is string s && !string.IsNullOrWhiteSpace(s) ? s : ziel.Name;
     }
 
     // ═══════════════════════════════════════════════════
@@ -743,7 +743,9 @@ internal class WiringDomainTypeInfo
 {
     public string Fqn { get; }
     public DomainTypeKind Kind { get; }
-    public WiringDomainTypeInfo(string fqn, DomainTypeKind kind) { Fqn = fqn; Kind = kind; }
+    /// <summary>Beim Command: die Identität des Ziel-Aggregats (aus <c>ICommand&lt;TAggregat&gt;</c>).</summary>
+    public string? Ziel { get; }
+    public WiringDomainTypeInfo(string fqn, DomainTypeKind kind, string? ziel = null) { Fqn = fqn; Kind = kind; Ziel = ziel; }
 }
 
 internal class WiringHandleClassInfo

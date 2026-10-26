@@ -11,8 +11,8 @@ namespace Domain.Client.Modules.Modelle;
 /// </summary>
 public record ModellRegistrierenIntent(
     string Name,
-    Guid TrainingslaufId,
-    Guid DatensatzId,
+    TrainingslaufId TrainingslaufId,
+    DatensatzId DatensatzId,
     int DatensatzVersion,
     string Pfad,
     double Loss,
@@ -20,7 +20,7 @@ public record ModellRegistrierenIntent(
 ) : IClientEvent;
 
 /// <summary>Dieses Modell aktiv setzen (Inferenz nutzt es).</summary>
-public record ModellAktivSetzenIntent(Guid ModellId) : IClientEvent;
+public record ModellAktivSetzenIntent(ModellId ModellId) : IClientEvent;
 
 /// <summary>Dieses Modell archivieren.</summary>
-public record ModellArchivierenIntent(Guid ModellId) : IClientEvent;
+public record ModellArchivierenIntent(ModellId ModellId) : IClientEvent;

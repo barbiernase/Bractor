@@ -13,7 +13,7 @@
 
 <div style="display:flex;flex-direction:column;height:100%;font-size:12px">
     <div style="flex:1;min-height:0">
-        <VirtualList TItem="ImagePairRecord" TKey="Guid"
+        <VirtualList TItem="ImagePairRecord" TKey="ImagePairId"
                      Store="Store" Window="Store.VirtualImagePairs" Cursor="Store.Cursor"
                      RowHeight="22" BufferPages="2"
                      OnActivate="rec => Fx.Dispatch(new ImagePairAusgewaehlt(rec.Id))">

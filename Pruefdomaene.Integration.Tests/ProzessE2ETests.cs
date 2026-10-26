@@ -24,8 +24,8 @@ public class ProzessE2ETests
     private static async Task Eroeffne(IHost host, Guid posten, int bestand, Guid? kontingent = null, int plaetze = 0)
     {
         var d = host.Services.GetRequiredService<IAggregateDispatcher>();
-        d.Dispatch(new EroeffnePosten(posten, bestand));
-        if (kontingent is { } k) d.Dispatch(new RichteKontingentEin(k, plaetze));
+        d.Dispatch(new EroeffnePosten(new(posten), bestand));
+        if (kontingent is { } k) d.Dispatch(new RichteKontingentEin(new(k), plaetze));
         await Warte(async () => (await Zustand<Posten.Posten>(host.Services, posten)).Existiert
                                 && (kontingent == null || (await Zustand<Kontingent.Kontingent>(host.Services, kontingent.Value)).Existiert),
             Frist, "Posten/Kontingent wurden nicht angelegt (Cluster-Boot?).");
@@ -42,7 +42,7 @@ public class ProzessE2ETests
             Guid posten = Guid.NewGuid(), kontingent = Guid.NewGuid(), auftrag = Guid.NewGuid();
             await Eroeffne(host, posten, 10, kontingent, 5);
 
-            host.Services.GetRequiredService<IAggregateDispatcher>().Dispatch(new StarteAuftrag(auftrag, posten, kontingent, 3));
+            host.Services.GetRequiredService<IAggregateDispatcher>().Dispatch(new StarteAuftrag(new(auftrag), new(posten), new(kontingent), 3));
 
             var korr = ProzessId.Für(nameof(AuftragsProzess), auftrag, 1);
             await Warte(() => Beendet(store, korr, erfolg: true), Frist, "Der Diamant ist nicht bis zur Bestätigung gelaufen.");
@@ -64,7 +64,7 @@ public class ProzessE2ETests
             Guid posten = Guid.NewGuid(), kontingent = Guid.NewGuid(), auftrag = Guid.NewGuid();
             await Eroeffne(host, posten, 10, kontingent, plaetze: 1);   // das Kontingent reicht nicht für 3
 
-            host.Services.GetRequiredService<IAggregateDispatcher>().Dispatch(new StarteAuftrag(auftrag, posten, kontingent, 3));
+            host.Services.GetRequiredService<IAggregateDispatcher>().Dispatch(new StarteAuftrag(new(auftrag), new(posten), new(kontingent), 3));
 
             var korr = ProzessId.Für(nameof(AuftragsProzess), auftrag, 1);
             await Warte(() => Beendet(store, korr, erfolg: false), Frist, "Der gescheiterte Vorgang wurde nicht als fehlgeschlagen beendet.");
@@ -93,7 +93,7 @@ public class ProzessE2ETests
 
             var auftraege = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).ToList();
             var d = host.Services.GetRequiredService<IAggregateDispatcher>();
-            foreach (var a in auftraege) d.Dispatch(new StarteAuftrag(a, posten, kontingent, 2));
+            foreach (var a in auftraege) d.Dispatch(new StarteAuftrag(new(a), new(posten), new(kontingent), 2));
 
             foreach (var a in auftraege)
                 await Warte(() => Beendet(store, ProzessId.Für(nameof(AuftragsProzess), a, 1), erfolg: true), Frist,
@@ -119,7 +119,7 @@ public class ProzessE2ETests
             foreach (var z in ziele) await Eroeffne(host, z, 0);
 
             var verteilung = Guid.NewGuid();
-            host.Services.GetRequiredService<IAggregateDispatcher>().Dispatch(new StarteVerteilung(verteilung, quelle, ziele, 5));
+            host.Services.GetRequiredService<IAggregateDispatcher>().Dispatch(new StarteVerteilung(new(verteilung), new(quelle), ziele.Select(z => new Id<Posten.Posten>(z)).ToList(), 5));
 
             await Warte(async () => (await Zustand<Verteilung.Verteilung>(host.Services, verteilung)).Abgeschlossen, Frist,
                 "Die Verteilung wurde nicht abgeschlossen — Fan-out oder Count-Join lief nicht durch.");

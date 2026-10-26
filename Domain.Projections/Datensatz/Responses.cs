@@ -13,7 +13,7 @@ namespace Domain.Projections.Datensatz;
 /// Label + Split zum Einfrier-Zeitpunkt. DatensatzId/Version stecken in der Query.
 /// </summary>
 public record DatensatzSample(
-    Guid ImagePairId,
+    Id<Domain.ImagePair.ImagePair> ImagePairId,
     string Dc0Pfad,
     string Dc2Pfad,
     Klassifikation Label,
@@ -33,7 +33,7 @@ public record DatensatzSamples(
 // ═══════════════════════════════════════════════════════
 
 public record DatensatzAntwort(
-    Guid Id,
+    Id<Domain.Datensatz.Datensatz> Id,
     string? Name,
     DatensatzStatus Status,
     int AnzahlMitglieder,
@@ -43,12 +43,12 @@ public record DatensatzAntwort(
     // Die konkreten Entwurfs-Mitglieder (Bildpaar-Ids). Grundlage für die
     // „Datensatz-als-Tag"-Sicht: der Client
     // baut daraus O(1)-Mitgliedschaft (Badges in Galerie/Einbild) für das Sammel-Ziel.
-    IReadOnlyList<Guid> Mitglieder,
+    IReadOnlyList<Id<Domain.ImagePair.ImagePair>> Mitglieder,
     // Beim Kuratieren aussortierte Paare — für die „Ausgeschlossen"-Galerie + Zähler.
-    IReadOnlyList<Guid> Ausgeschlossen
+    IReadOnlyList<Id<Domain.ImagePair.ImagePair>> Ausgeschlossen
 ) : IQueryResponse;
 
-public record DatensatzNichtGefunden(Guid DatensatzId) : IQueryResponse;
+public record DatensatzNichtGefunden(Id<Domain.Datensatz.Datensatz> DatensatzId) : IQueryResponse;
 
 /// <summary>Antwort auf <see cref="HoleDatensaetze"/> — alle Datensätze (Sidebar-Liste).</summary>
 public record DatensatzListe(
@@ -61,7 +61,7 @@ public record DatensatzListe(
 
 /// <summary>Ein Datensatz-Tag eines Bildes: Kopf-Daten für den Chip im Einbild.</summary>
 public record DatensatzTag(
-    Guid Id,
+    Id<Domain.Datensatz.Datensatz> Id,
     string? Name,
     DatensatzStatus Status,
     int EingefroreneVersion
@@ -73,6 +73,6 @@ public record DatensatzTag(
 /// gegen den aktuellen Cursor prüfen und verwerfen kann.
 /// </summary>
 public record DatensaetzeFuerPaar(
-    Guid ImagePairId,
+    Id<Domain.ImagePair.ImagePair> ImagePairId,
     IReadOnlyList<DatensatzTag> Tags
 ) : IQueryResponse;

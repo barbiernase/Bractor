@@ -24,7 +24,7 @@ public partial class Store
             || Cursor.Index + VirtualImagePairs.InsertOffset == 0;
 
         var rec = ImagePairRecord.Neu(
-            ctx.AggregateId, evt.PairKey, evt.ProduziertAm, evt.AufgenommenAm, evt.UrsprungsPfad);
+            new ImagePairId(ctx.AggregateId), evt.PairKey, evt.ProduziertAm, evt.AufgenommenAm, evt.UrsprungsPfad);
         VirtualImagePairs.FuegeVorneEin(rec);
 
         if (folgtNeuesten)
@@ -32,10 +32,10 @@ public partial class Store
     }
 
     void Handle(ImagePairKomplett evt, MessageContext ctx)
-        => VirtualImagePairs.Patch(ctx.AggregateId, e => e with { IstKomplett = true });
+        => VirtualImagePairs.Patch(new ImagePairId(ctx.AggregateId), e => e with { IstKomplett = true });
 
     void Handle(EinzelBildDurchKiKlassifiziert evt, MessageContext ctx)
-        => VirtualImagePairs.Patch(ctx.AggregateId, e => evt.Version switch
+        => VirtualImagePairs.Patch(new ImagePairId(ctx.AggregateId), e => evt.Version switch
         {
             BildVersion.Dc0 => e with { Dc0KiBildKlassifikation = evt.BildLabel, Dc0KiRegionen = MapRegionen(evt.RegionLabels) },
             BildVersion.Dc2 => e with { Dc2KiBildKlassifikation = evt.BildLabel, Dc2KiRegionen = MapRegionen(evt.RegionLabels) },
@@ -43,7 +43,7 @@ public partial class Store
         });
 
     void Handle(BildPaarDurchKiKlassifiziert evt, MessageContext ctx)
-        => VirtualImagePairs.Patch(ctx.AggregateId, e => e with { KiBildpaarKlassifikation = evt.Label });
+        => VirtualImagePairs.Patch(new ImagePairId(ctx.AggregateId), e => e with { KiBildpaarKlassifikation = evt.Label });
 
     // ─── Suchergebnis: Sammel-Merge (N Bereiche) oder Normalpfad (unbegrenzt/lazy) ───
 

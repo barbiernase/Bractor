@@ -14,8 +14,8 @@ namespace Domain.Modell;
 /// </summary>
 public partial class Modell : IState
 {
-    public Guid TrainingslaufId { get; set; }
-    public Guid DatensatzId { get; set; }
+    public Id<Trainingslauf.Trainingslauf> TrainingslaufId { get; set; }
+    public Id<Datensatz.Datensatz> DatensatzId { get; set; }
     public int DatensatzVersion { get; set; }
     public string? Name { get; set; }
     public string? Pfad { get; set; }

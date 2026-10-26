@@ -60,7 +60,7 @@ public sealed class CommandEmitter : ICommandEmitter
     }
 
     public async Task<EmitAusgang> EmitAsync(ICommand cmd, EmitKausalität k, CancellationToken ct)
-        => (await SendeAsync(cmd, EmitId.Ableiten(k, cmd.AggregateId), k.Korrelation, ct)).Ausgang;
+        => (await SendeAsync(cmd, EmitId.Ableiten(k, cmd.Ziel), k.Korrelation, ct)).Ausgang;
 
     /// <summary>
     /// EM-1-Überladung für den Prozess-Manager (Treiber-Fold) und den Fristplaner: eine VORGEGEBENE CommandId — beim Prozess der
@@ -85,7 +85,6 @@ public sealed class CommandEmitter : ICommandEmitter
         var envelope = new CommandEnvelope
         {
             CommandId = commandId,                              // deterministisch → Empfänger-Inbox dedupliziert (W1)
-            AggregateId = cmd.AggregateId,
             AggregateType = aggregateType,
             Modus = new CommandModus.Emittiert(),               // KEINE Version (§4.2)
             CorrelationId = korrelation.ToString(),             // → Ziel-Event-Metadatum (P5-Poll-Routing)
@@ -97,13 +96,13 @@ public sealed class CommandEmitter : ICommandEmitter
             Ursache = Spur.Aktuell?.Ursache,
             Wirker = Spur.Aktuell?.Wirker,
         };
-        var identity = ClusterIdentity.Create(cmd.AggregateId.ToString(), aggregateType);
+        var identity = ClusterIdentity.Create(cmd.Ziel.ToString(), aggregateType);
 
         // Drossel je Ziel (PF-9): das Warten auf einen Platz ist ebenso gebunden wie der Send.
         using var platz = await _drossel.BelegeAsync(identity.ToString(), _sendeFrist, ct);
         if (platz is null)
         {
-            _logger.LogDebug("[Emit] Drossel an {AggregateType}/{AggregateId} voll — nicht gesendet", aggregateType, cmd.AggregateId);
+            _logger.LogDebug("[Emit] Drossel an {AggregateType}/{AggregateId} voll — nicht gesendet", aggregateType, cmd.Ziel);
             return EmitErgebnis.Unbekannt;
         }
 
@@ -116,13 +115,13 @@ public sealed class CommandEmitter : ICommandEmitter
         }
         catch (OperationCanceledException)
         {
-            _logger.LogDebug("[Emit] Frist an {AggregateType}/{AggregateId} abgelaufen — Ausgang unbekannt", aggregateType, cmd.AggregateId);
+            _logger.LogDebug("[Emit] Frist an {AggregateType}/{AggregateId} abgelaufen — Ausgang unbekannt", aggregateType, cmd.Ziel);
             return EmitErgebnis.Unbekannt;
         }
         catch (Exception ex)
         {
             // Transportfehler (Identität nicht auflösbar, Dead-Letter, Knoten weg): ob das Ziel gewirkt hat, ist offen.
-            _logger.LogDebug(ex, "[Emit] Send an {AggregateType}/{AggregateId} gescheitert — Ausgang unbekannt", aggregateType, cmd.AggregateId);
+            _logger.LogDebug(ex, "[Emit] Send an {AggregateType}/{AggregateId} gescheitert — Ausgang unbekannt", aggregateType, cmd.Ziel);
             return EmitErgebnis.Unbekannt;
         }
 
@@ -139,7 +138,7 @@ public sealed class CommandEmitter : ICommandEmitter
     {
         // Ein technischer Fehler im Ziel (DB weg, Append gescheitert): die Wirkung ist offen — wiederholen, die Inbox klärt es.
         _logger.LogWarning("[Emit] {Command} an {AggregateType}/{AggregateId} technisch gescheitert ({Fehler}) — Ausgang unbekannt",
-            cmd.GetType().Name, aggregateType, cmd.AggregateId, ergebnis.ErrorMessage);
+            cmd.GetType().Name, aggregateType, cmd.Ziel, ergebnis.ErrorMessage);
         return EmitErgebnis.Unbekannt;
     }
 }

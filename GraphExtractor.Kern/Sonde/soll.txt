@@ -2,13 +2,13 @@
 # Ein Fakt je Zeile. Was der Editor über die unbekannte Domäne wissen MUSS (Reihenfolge egal).
 
 # ── Ausleihe: Commands im Sub-Namespace, Property-Records, if/else ──
-record Leihwesen.Ausleihe.Befehle.LeiheAus command erzeugung aggregat=Leihvorgang | AggregateId:Guid, Medium:Signatur, LeserId:Guid, Tage:int=14
-record Leihwesen.Ausleihe.Befehle.GibZurueck command aggregat=Leihvorgang | AggregateId:Guid { get; init; }, Zustand:Zustand { get; init; }
+record Leihwesen.Ausleihe.Befehle.LeiheAus command erzeugung aggregat=Leihvorgang | AggregateId:Id<Leihvorgang>, Medium:Signatur, LeserId:Guid, Tage:int=14
+record Leihwesen.Ausleihe.Befehle.GibZurueck command aggregat=Leihvorgang | AggregateId:Id<Leihvorgang> { get; init; }, Zustand:Zustand { get; init; }
 record Leihwesen.Ausleihe.Signatur valueobject | Regal:string, Nummer:int
 record Leihwesen.Ausleihe.Ausgeliehen event aggregat=Leihvorgang | Medium:Signatur, LeserId:Guid, Tage:int
 record Leihwesen.Ausleihe.Zurueckgegeben event aggregat=Leihvorgang | LeserId:Guid { get; init; }, Zustand:Zustand { get; init; }
-record Leihwesen.Ausleihe.BereitsAusgeliehen rejection aggregat=Leihvorgang | AusleiheId:Guid
-record Leihwesen.Ausleihe.NichtAusgeliehen rejection aggregat=Leihvorgang | AusleiheId:Guid
+record Leihwesen.Ausleihe.BereitsAusgeliehen rejection aggregat=Leihvorgang | AusleiheId:Id<Leihvorgang>
+record Leihwesen.Ausleihe.NichtAusgeliehen rejection aggregat=Leihvorgang | AusleiheId:Id<Leihvorgang>
 enum Leihwesen.Ausleihe.Zustand | Neu = 1, Gebraucht = 2, Beschaedigt = 3
 aggregat Leihwesen.Ausleihe.Leihvorgang | LeserId:Guid, Offen:bool
 decide Leihvorgang.LeiheAus -> Ausgeliehen; BereitsAusgeliehen
@@ -17,12 +17,12 @@ apply Leihvorgang.Ausgeliehen
 apply Leihvorgang.Zurueckgegeben
 
 # ── Gebuehren: ZWEI Aggregate in einem Namespace, Decider in eigener Datei, Saga explizit implementiert ──
-record Leihwesen.Gebuehren.MeldeSchaden command erzeugung aggregat=Schadensfall | AggregateId:Guid, LeserId:Guid
+record Leihwesen.Gebuehren.MeldeSchaden command erzeugung aggregat=Schadensfall | AggregateId:Id<Schadensfall>, LeserId:Guid
 record Leihwesen.Gebuehren.SchadenGemeldet event aggregat=Schadensfall | LeserId:Guid
-record Leihwesen.Gebuehren.SchadenExistiert rejection aggregat=Schadensfall | Id:Guid
-record Leihwesen.Gebuehren.EroeffneMahnung command erzeugung aggregat=Mahnvorgang | AggregateId:Guid, Betrag:decimal
+record Leihwesen.Gebuehren.SchadenExistiert rejection aggregat=Schadensfall | Id:Id<Schadensfall>
+record Leihwesen.Gebuehren.EroeffneMahnung command erzeugung aggregat=Mahnvorgang | AggregateId:Id<Mahnvorgang>, Betrag:decimal
 record Leihwesen.Gebuehren.MahnungEroeffnet event aggregat=Mahnvorgang | Betrag:decimal
-record Leihwesen.Gebuehren.MahnungExistiert rejection aggregat=Mahnvorgang | Id:Guid
+record Leihwesen.Gebuehren.MahnungExistiert rejection aggregat=Mahnvorgang | Id:Id<Mahnvorgang>
 aggregat Leihwesen.Gebuehren.Schadensfall | Gemeldet:bool
 aggregat Leihwesen.Gebuehren.Mahnvorgang | Betrag:decimal
 decide Schadensfall.MeldeSchaden -> SchadenGemeldet; SchadenExistiert
@@ -54,10 +54,10 @@ record Leihwesen.Pruefung.AusweisAbgelegt event typart=public sealed record trei
 record Leihwesen.Pruefung.PruefeSeite auftrag typart=public sealed record funktion=ISeitenPruefung | Seite:string
 record Leihwesen.Pruefung.SeiteGeprueft event | Seite:string, Beschaedigt:bool
 funktion Leihwesen.Pruefung.ISeitenPruefung | PruefeSeite -> SeiteGeprueft
-fluss Leihwesen.Pruefung.RueckgabePruefung bauer=scan | eingang=quelle:RueckgabeGescannt; seiten=je:string <- eingang je{e => e.Seiten}; seite=funktion:ISeitenPruefung <- seiten[] λ{s => new PruefeSeite(s)}; schnell=funktion:ISchadensSchaetzung <- eingang λ{e => new SchaetzeSchaden(e.LeserId, 10m)} ⏳TimeSpan.FromSeconds(30); gruendlich=funktion:ISchadensSchaetzung <- eingang λ{e => new SchaetzeSchaden(e.LeserId, 100m)}; mahnung=command:EroeffneMahnung <- gruendlich.SchadenGeschaetzt+eingang λ{(g, e) => new EroeffneMahnung(e.LeserId, g.Betrag)} ∨ schnell.⏳ λ{z => new EroeffneMahnung(Guid.Empty, 0m)}; meldeSchaden°=command:MeldeSchaden <- seiten.sammle(seite.SeiteGeprueft) λ{(e, geprueft) => new MeldeSchaden(e.LeserId, e.LeserId)}; meldeSchaden2°=command:MeldeSchaden <- mahnung.✕ λ{a => new MeldeSchaden(Guid.Empty, Guid.Empty)}
+fluss Leihwesen.Pruefung.RueckgabePruefung bauer=scan | eingang=quelle:RueckgabeGescannt; seiten=je:string <- eingang je{e => e.Seiten}; seite=funktion:ISeitenPruefung <- seiten[] λ{s => new PruefeSeite(s)}; schnell=funktion:ISchadensSchaetzung <- eingang λ{e => new SchaetzeSchaden(e.LeserId, 10m)} ⏳TimeSpan.FromSeconds(30); gruendlich=funktion:ISchadensSchaetzung <- eingang λ{e => new SchaetzeSchaden(e.LeserId, 100m)}; mahnung=command:EroeffneMahnung <- gruendlich.SchadenGeschaetzt+eingang λ{(g, e) => new EroeffneMahnung(new(e.LeserId), g.Betrag)} ∨ schnell.⏳ λ{z => new EroeffneMahnung(default, 0m)}; meldeSchaden°=command:MeldeSchaden <- seiten.sammle(seite.SeiteGeprueft) λ{(e, geprueft) => new MeldeSchaden(new(e.LeserId), e.LeserId)}; meldeSchaden2°=command:MeldeSchaden <- mahnung.✕ λ{a => new MeldeSchaden(default, Guid.Empty)}
 # GEZEICHNET (Gezeichnet.gesten.json, ohne Lambda — nur die Zuordnung): Event-Quelle → ƒ mit Zeitlimit → Command am Ergebnis-Port.
 #    Der Scaffolder benennt die Lambda-Parameter nach den Knoten, von denen der Draht kommt.
-fluss Leihwesen.Gebuehren.MahnungBeiRueckgabe bauer=p | rueckgabe=auf:Zurueckgegeben; schaetzung=funktion:ISchadensSchaetzung <- rueckgabe λ{rueckgabe => new SchaetzeSchaden(rueckgabe.LeserId, 50m)} ⏳TimeSpan.FromMinutes(1); mahnung=command:EroeffneMahnung <- schaetzung.SchadenGeschaetzt λ{schaetzung => new EroeffneMahnung(Guid.NewGuid(), schaetzung.Betrag)}
+fluss Leihwesen.Gebuehren.MahnungBeiRueckgabe bauer=p | rueckgabe=auf:Zurueckgegeben; schaetzung=funktion:ISchadensSchaetzung <- rueckgabe λ{rueckgabe => new SchaetzeSchaden(rueckgabe.LeserId, 50m)} ⏳TimeSpan.FromMinutes(1); mahnung=command:EroeffneMahnung <- schaetzung.SchadenGeschaetzt λ{schaetzung => new EroeffneMahnung(new(Guid.NewGuid()), schaetzung.Betrag)}
 # STROM + WARTEN + LESE-FÄHIGKEIT (Sonde/Fluss.cs.txt, Ausleihfrist): der Strom der Quelle als zweiter Ausgang (ausgeliehen.strom),
 #    ein Warte-Knoten (warte:Typen) mit ⏳, eine Funktion mit Fähigkeit nach IAusfuehrung („liest Typ name").
 record Leihwesen.Pruefung.ZaehleOffene auftrag typart=public sealed record funktion=IOffenZaehlung | LeserId:Guid
@@ -66,7 +66,7 @@ funktion Leihwesen.Pruefung.IOffenZaehlung | ZaehleOffene -> OffeneGezaehlt lies
 fluss Leihwesen.Pruefung.Ausleihfrist bauer=p | ausgeliehen=auf:Ausgeliehen; rueckgabe=warte:Zurueckgegeben <- ausgeliehen.strom ⏳TimeSpan.FromDays(28); offen=funktion:IOffenZaehlung <- ausgeliehen λ{ausgeliehen => new ZaehleOffene(ausgeliehen.LeserId)}; mahnung=command:EroeffneMahnung <- rueckgabe.⏳+offen.OffeneGezaehlt+ausgeliehen.strom λ{(rueckgabeZeit, offen, ausgeliehenStrom) => new EroeffneMahnung(ausgeliehenStrom.Id, offen.Anzahl)}
 # GEZEICHNET (Gezeichnet.gesten.json): dieselbe Frist auf leerem Board — Strom-Draht und ⏳ als Drähte, Zuordnung; der Scaffolder benennt
 #    die Lambda-Parameter nach Knoten + Port (rueckgabeZeit, ausgeliehenStrom).
-fluss Leihwesen.Gebuehren.Rueckgabefrist bauer=p | ausgeliehen=auf:Ausgeliehen; rueckgabe=warte:Zurueckgegeben <- ausgeliehen.strom ⏳TimeSpan.FromDays(28); mahnung=command:EroeffneMahnung <- rueckgabe.⏳+ausgeliehen.strom λ{(rueckgabeZeit, ausgeliehenStrom) => new EroeffneMahnung(ausgeliehenStrom.Id, 0m)}
+fluss Leihwesen.Gebuehren.Rueckgabefrist bauer=p | ausgeliehen=auf:Ausgeliehen; rueckgabe=warte:Zurueckgegeben <- ausgeliehen.strom ⏳TimeSpan.FromDays(28); mahnung=command:EroeffneMahnung <- rueckgabe.⏳+ausgeliehen.strom λ{(rueckgabeZeit, ausgeliehenStrom) => new EroeffneMahnung(new(ausgeliehenStrom.Id), 0m)}
 
 # ── Lesen: frei benannte Fähigkeiten + Bündel (Marker statt Namensregel), class-ReadModel, OneOf, Konstanten-Ids ──
 record Leihwesen.Lesen.OffeneAusleihen query | LeserId:Guid { get; init; }
@@ -157,19 +157,19 @@ sicht Leihwesen.Lesen.Archiv akteur domaene=Leihwesen.Ausleihe block=§akteure
 
 # ── Kundenportal (Konten.cs.txt): Benutzer mit EINDEUTIGER E-Mail — die Adresse ist das Eindeutigkeits-Aggregat, die Absage ein Fakt,
 #    der Benutzer steht als fachliches Feld im Event (A2); ein Prozess verbindet die beiden Aggregate; Hilfscode leitet die Id ab. ──
-record Kundenportal.Konten.RegistriereBenutzer command erzeugung aggregat=Benutzer | AggregateId:Guid, Email:string, Name:string
-record Kundenportal.Konten.RegistrierungBeantragt event aggregat=Benutzer | BenutzerId:Guid, Email:string, Name:string
-record Kundenportal.Konten.BenutzerExistiert rejection aggregat=Benutzer | Id:Guid
-record Kundenportal.Konten.BestaetigeBenutzer command aggregat=Benutzer | AggregateId:Guid
+record Kundenportal.Konten.RegistriereBenutzer command erzeugung aggregat=Benutzer | AggregateId:Id<Benutzer>, Email:string, Name:string
+record Kundenportal.Konten.RegistrierungBeantragt event aggregat=Benutzer | BenutzerId:Id<Benutzer>, Email:string, Name:string
+record Kundenportal.Konten.BenutzerExistiert rejection aggregat=Benutzer | Id:Id<Benutzer>
+record Kundenportal.Konten.BestaetigeBenutzer command aggregat=Benutzer | AggregateId:Id<Benutzer>
 record Kundenportal.Konten.BenutzerBestaetigt event aggregat=Benutzer | Email:string
-record Kundenportal.Konten.LehneRegistrierungAb command aggregat=Benutzer | AggregateId:Guid, Grund:string
+record Kundenportal.Konten.LehneRegistrierungAb command aggregat=Benutzer | AggregateId:Id<Benutzer>, Grund:string
 record Kundenportal.Konten.RegistrierungAbgelehnt event aggregat=Benutzer | Grund:string
-record Kundenportal.Konten.ReserviereAdresse command aggregat=Adresse | AggregateId:Guid, Email:string, BenutzerId:Guid
-record Kundenportal.Konten.AdresseReserviert event aggregat=Adresse | Email:string, BenutzerId:Guid
-record Kundenportal.Konten.AdresseVergeben event aggregat=Adresse | BenutzerId:Guid, Inhaber:Guid
+record Kundenportal.Konten.ReserviereAdresse command aggregat=Adresse | AggregateId:Id<Adresse>, Email:string, BenutzerId:Id<Benutzer>
+record Kundenportal.Konten.AdresseReserviert event aggregat=Adresse | Email:string, BenutzerId:Id<Benutzer>
+record Kundenportal.Konten.AdresseVergeben event aggregat=Adresse | BenutzerId:Id<Benutzer>, Inhaber:Id<Benutzer>
 enum Kundenportal.Konten.Kontostatus | Beantragt = 1, Aktiv = 2, Abgelehnt = 3
 aggregat Kundenportal.Konten.Benutzer | Email:string="", Status:Kontostatus
-aggregat Kundenportal.Konten.Adresse | Inhaber:Guid
+aggregat Kundenportal.Konten.Adresse | Inhaber:Id<Benutzer>
 decide Benutzer.RegistriereBenutzer -> RegistrierungBeantragt; BenutzerExistiert
 decide Benutzer.BestaetigeBenutzer -> BenutzerBestaetigt
 decide Benutzer.LehneRegistrierungAb -> RegistrierungAbgelehnt
@@ -189,19 +189,19 @@ sicht Kundenportal.Konten.Besucher akteur domaene=Kundenportal.Konten block=§ak
 
 # ── Anlagen (Messnetz.cs.txt): SENSOR-STROM MIT ALARM — der Sensor zählt Überschreitungen hintereinander (Zähl-Aggregat, zwei Fakten aus
 #    einem Messwert), ein Messwert im Rahmen ist ein Noop; eine Reaktion öffnet die Störung desselben Sensors (gleiche Id). ──
-record Anlagen.Messung.RichteSensorEin command erzeugung aggregat=Sensor | AggregateId:Guid, Ort:string, Grenzwert:double, AlarmNach:int
+record Anlagen.Messung.RichteSensorEin command erzeugung aggregat=Sensor | AggregateId:Id<Sensor>, Ort:string, Grenzwert:double, AlarmNach:int
 record Anlagen.Messung.SensorEingerichtet event aggregat=Sensor | Ort:string, Grenzwert:double, AlarmNach:int
-record Anlagen.Messung.SensorUnbekannt rejection aggregat=Sensor | SensorId:Guid
-record Anlagen.Messung.MeldeMesswert command aggregat=Sensor | AggregateId:Guid, Wert:double, GemessenAm:DateTimeOffset
+record Anlagen.Messung.SensorUnbekannt rejection aggregat=Sensor | SensorId:Id<Sensor>
+record Anlagen.Messung.MeldeMesswert command aggregat=Sensor | AggregateId:Id<Sensor>, Wert:double, GemessenAm:DateTimeOffset
 record Anlagen.Messung.GrenzwertUeberschritten event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset, Hintereinander:int
 record Anlagen.Messung.AlarmAusgeloest event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset
 record Anlagen.Messung.WertWiederImRahmen event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset
-record Anlagen.Messung.OeffneStoerung command aggregat=Stoerungsfall | AggregateId:Guid, Wert:double
+record Anlagen.Messung.OeffneStoerung command aggregat=Stoerungsfall | AggregateId:Id<Stoerungsfall>, Wert:double
 record Anlagen.Messung.StoerungGeoeffnet event aggregat=Stoerungsfall | Wert:double
-record Anlagen.Messung.StoerungLaeuftSchon rejection aggregat=Stoerungsfall | SensorId:Guid
-record Anlagen.Messung.QuittiereStoerung command aggregat=Stoerungsfall | AggregateId:Guid, Von:string
+record Anlagen.Messung.StoerungLaeuftSchon rejection aggregat=Stoerungsfall | SensorId:Id<Stoerungsfall>
+record Anlagen.Messung.QuittiereStoerung command aggregat=Stoerungsfall | AggregateId:Id<Stoerungsfall>, Von:string
 record Anlagen.Messung.StoerungQuittiert event aggregat=Stoerungsfall | Von:string
-record Anlagen.Messung.KeineStoerung rejection aggregat=Stoerungsfall | SensorId:Guid
+record Anlagen.Messung.KeineStoerung rejection aggregat=Stoerungsfall | SensorId:Id<Stoerungsfall>
 aggregat Anlagen.Messung.Sensor | Grenzwert:double, AlarmNach:int, Hintereinander:int, Alarm:bool
 aggregat Anlagen.Messung.Stoerungsfall | Offen:bool
 decide Sensor.RichteSensorEin -> SensorEingerichtet
@@ -228,17 +228,17 @@ sicht Anlagen.Messung.Schichtleitung akteur domaene=Anlagen.Messung block=§akte
 #    Import-Vorgang (Id = Strom der Quelle), ein Import-Dienst draußen antwortet als STROM (Artikel je Zeile, Fortschritt, Abschluss),
 #    die Leseseite zeigt den Stand. ──
 record Warenkatalog.Import.KatalogDateiAbgelegt event typart=public sealed record treiber=Datei | Name:string { get; init; } required, Pfad:string { get; init; } required, RelativerPfad:string { get; init; } required, Groesse:long { get; init; } required, GeaendertAm:DateTimeOffset { get; init; } required, ErkanntAm:DateTimeOffset { get; init; } required, Kennung:string { get; init; } required
-record Warenkatalog.Import.StarteImport command erzeugung aggregat=Importlauf | AggregateId:Guid, Pfad:string
-record Warenkatalog.Import.ImportGestartet event aggregat=Importlauf | ImportId:Guid, Pfad:string
-record Warenkatalog.Import.ImportLaeuftSchon rejection aggregat=Importlauf | ImportId:Guid
-record Warenkatalog.Import.MeldeImportFortschritt command aggregat=Importlauf | AggregateId:Guid, Zeilen:int
+record Warenkatalog.Import.StarteImport command erzeugung aggregat=Importlauf | AggregateId:Id<Importlauf>, Pfad:string
+record Warenkatalog.Import.ImportGestartet event aggregat=Importlauf | ImportId:Id<Importlauf>, Pfad:string
+record Warenkatalog.Import.ImportLaeuftSchon rejection aggregat=Importlauf | ImportId:Id<Importlauf>
+record Warenkatalog.Import.MeldeImportFortschritt command aggregat=Importlauf | AggregateId:Id<Importlauf>, Zeilen:int
 record Warenkatalog.Import.ImportFortgeschritten event aggregat=Importlauf | Zeilen:int
-record Warenkatalog.Import.SchliesseImportAb command aggregat=Importlauf | AggregateId:Guid, Zeilen:int, Fehler:int
+record Warenkatalog.Import.SchliesseImportAb command aggregat=Importlauf | AggregateId:Id<Importlauf>, Zeilen:int, Fehler:int
 record Warenkatalog.Import.ImportAbgeschlossen event aggregat=Importlauf | Zeilen:int, Fehler:int
-record Warenkatalog.Import.LegeArtikelAn command erzeugung aggregat=Artikel | AggregateId:Guid, Nummer:string, Bezeichnung:string, Preis:decimal
+record Warenkatalog.Import.LegeArtikelAn command erzeugung aggregat=Artikel | AggregateId:Id<Artikel>, Nummer:string, Bezeichnung:string, Preis:decimal
 record Warenkatalog.Import.ArtikelAngelegt event aggregat=Artikel | Nummer:string, Bezeichnung:string, Preis:decimal
-record Warenkatalog.Import.ArtikelExistiert rejection aggregat=Artikel | ArtikelId:Guid
-record Warenkatalog.Import.HoleImportstand query | ImportId:Guid
+record Warenkatalog.Import.ArtikelExistiert rejection aggregat=Artikel | ArtikelId:Id<Artikel>
+record Warenkatalog.Import.HoleImportstand query | ImportId:Id<Importlauf>
 record Warenkatalog.Import.ImportstandAntwort queryresponse | Zeilen:int, Fertig:bool
 record Warenkatalog.Import.ImportUnbekannt queryresponse |
 aggregat Warenkatalog.Import.Importlauf | Zeilen:int, Fertig:bool
@@ -251,7 +251,7 @@ apply Importlauf.ImportGestartet
 apply Importlauf.ImportFortgeschritten
 apply Importlauf.ImportAbgeschlossen
 apply Artikel.ArtikelAngelegt
-fluss Warenkatalog.Import.Katalogeingang bauer=p | datei=quelle:KatalogDateiAbgelegt; start=command:StarteImport <- datei+datei.strom λ{(d, strom) => new StarteImport(strom.Id, d.Pfad)}
+fluss Warenkatalog.Import.Katalogeingang bauer=p | datei=quelle:KatalogDateiAbgelegt; start=command:StarteImport <- datei+datei.strom λ{(d, strom) => new StarteImport(new(strom.Id), d.Pfad)}
 akteur Warenkatalog.Import.Importdienst Maschine | darf
 vertrag Warenkatalog.Import.IImportLauf akteur=Importdienst | ImportGestartet -> strom LegeArtikelAn, MeldeImportFortschritt, SchliesseImportAb
 akteur Warenkatalog.Import.Ablage Maschine | darf KatalogDateiAbgelegt

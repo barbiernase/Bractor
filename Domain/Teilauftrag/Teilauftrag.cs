@@ -11,7 +11,7 @@ namespace Domain.Teilauftrag;
 /// </summary>
 public partial class Teilauftrag : IState
 {
-    public Guid SammelvorgangId { get; set; }
+    public Id<Sammelvorgang.Sammelvorgang> SammelvorgangId { get; set; }
     public bool Fertig { get; set; }
 
     public bool Existiert => Version > 0;

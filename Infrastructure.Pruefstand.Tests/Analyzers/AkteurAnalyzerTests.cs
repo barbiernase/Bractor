@@ -31,21 +31,21 @@ public class AkteurAnalyzerTests
 
     private const string Vorspann = @"
 using System; using System.Collections.Generic; using Abstractions;
-namespace Probe {
-public record Buche(Guid AggregateId) : ICommand;
+namespace Probe {\npublic partial class ProbeZiel : IState { public int Version { get; set; } public Guid Id { get; set; } }
+public record Buche(Id<ProbeZiel> AggregateId) : ICommand<ProbeZiel>;
 public record Gebucht() : IEvent;
 public record Hinweis() : ITransientEvent;
 public record Zeige() : IQuery;
 public record Antwort() : IQueryResponse;
 public record Starte() : IPipelineTrigger;
-public record Storniere(Guid AggregateId) : ICommand;
+public record Storniere(Id<ProbeZiel> AggregateId) : ICommand<ProbeZiel>;
 public record Gebucht2() : IEvent;
 public record Ki(int Wert);
 public sealed record Kassierer : IMensch, IDarf<Buche>;
 public sealed record Revisor : IMensch, IDarf<Storniere>;
 public interface IKasse : IAkteurDienst<Kassierer> { Ki Frage(); }
 public interface IPruefer : IAkteurDienst<Revisor> { }
-public record Sperre(Guid AggregateId) : ICommand;
+public record Sperre(Id<ProbeZiel> AggregateId) : ICommand<ProbeZiel>;
 public sealed record Leser : IMensch, IDarf<Zeige>;
 ";
 

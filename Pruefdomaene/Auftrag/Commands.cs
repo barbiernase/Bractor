@@ -2,6 +2,6 @@ using Abstractions;
 
 namespace Pruefdomaene.Auftrag;
 
-public record StarteAuftrag(Guid AggregateId, Guid PostenId, Guid KontingentId, int Menge) : ICreationCommand;
+public record StarteAuftrag(Id<Auftrag> AggregateId, Id<Posten.Posten> PostenId, Id<Kontingent.Kontingent> KontingentId, int Menge) : ICommand<Auftrag>, ICreationCommand;
 
-public record BestaetigeAuftrag(Guid AggregateId) : ICommand;
+public record BestaetigeAuftrag(Id<Auftrag> AggregateId) : ICommand<Auftrag>;

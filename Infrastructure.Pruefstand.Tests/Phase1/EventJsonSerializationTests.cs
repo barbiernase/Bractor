@@ -41,7 +41,7 @@ public class EventJsonSerializationTests
             .First(e => e.Type == typeof(ImagePairErstellt));
 
         GeneratedEventJson.Diskriminator(new ImagePairErstellt(
-            Guid.NewGuid(), "k", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, "p"))
+            new(Guid.NewGuid()), "k", DateTimeOffset.UnixEpoch, DateTimeOffset.UnixEpoch, "p"))
             .Should().Be(snake).And.Be("image_pair_erstellt");
     }
 
@@ -49,7 +49,7 @@ public class EventJsonSerializationTests
     public void RoundTrip_einfaches_Event()
     {
         var e = new ImagePairErstellt(
-            Guid.NewGuid(), "pair-42",
+            new(Guid.NewGuid()), "pair-42",
             new DateTimeOffset(2026, 8, 10, 12, 0, 0, TimeSpan.Zero),
             new DateTimeOffset(2026, 8, 9, 8, 30, 0, TimeSpan.Zero),
             "/ursprung/pfad.png");

@@ -113,6 +113,10 @@ namespace Abstractions.SourceGeneration
         {
             if (string.IsNullOrEmpty(typeName))
                 return true;
+
+            // Eine typisierte Id (Id<TAggregat>) ist ein Skalar: auf der Leitung eine UUID, kein Wertobjekt mit eigener Message.
+            if (Abstractions.Idvertrag.IstId(typeName))
+                return true;
             
             var cleanName = typeName.Split('<')[0].Split('.').Last();
             

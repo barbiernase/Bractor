@@ -30,21 +30,21 @@ public class SammelvorgangKaskadeTests
         var bauer = SagaSzenario.Mit(Fabrik, new TeilFertigProzess());
 
         // 1) Fan-out — N=3 (Laufzeitwert) + drei Teilaufträge, alle an dieselbe Barriere gebunden.
-        bauer.Wenn(new StarteSammelvorgang(batch, 3));
-        bauer.Wenn(new StarteTeilauftrag(w1, batch));
-        bauer.Wenn(new StarteTeilauftrag(w2, batch));
-        bauer.Wenn(new StarteTeilauftrag(w3, batch));
+        bauer.Wenn(new StarteSammelvorgang(new(batch), 3));
+        bauer.Wenn(new StarteTeilauftrag(new(w1), new(batch)));
+        bauer.Wenn(new StarteTeilauftrag(new(w2), new(batch)));
+        bauer.Wenn(new StarteTeilauftrag(new(w3), new(batch)));
 
         // 2) Zwei Teile fertig → Prozess feuert je MeldeTeilFertig; Barriere noch NICHT erreicht.
-        bauer.Wenn(new SchließeTeilauftragAb(w1))
+        bauer.Wenn(new SchließeTeilauftragAb(new(w1)))
              .Feuert<MeldeTeilFertig>()
              .EndzustandVon<Sammelvorgang>(batch, s => !s.Abgeschlossen && s.Fertig == 1, "1 von 3");
 
-        bauer.Wenn(new SchließeTeilauftragAb(w2))
+        bauer.Wenn(new SchließeTeilauftragAb(new(w2)))
              .EndzustandVon<Sammelvorgang>(batch, s => !s.Abgeschlossen && s.Fertig == 2, "2 von 3");
 
         // 3) Der dritte Teil schließt die Barriere — hier feuert SammelvorgangAbgeschlossen.
-        bauer.Wenn(new SchließeTeilauftragAb(w3))
+        bauer.Wenn(new SchließeTeilauftragAb(new(w3)))
              .Feuert<MeldeTeilFertig>()
              .EndzustandVon<Sammelvorgang>(batch, s => s.Abgeschlossen && s.Fertig == 3,
                  "erst beim 3. (letzten) Teil ist die Barriere erreicht");

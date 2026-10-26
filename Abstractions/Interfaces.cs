@@ -24,15 +24,28 @@ public interface IPipelineOutput { }
 public interface IMessagePayload : IPipelineOutput { }
 public interface IEvent : IMessagePayload { }
 
+/// <summary>
+/// Die Framework-Sicht auf einen Command: sein Ziel als Stream-Id. Der Fachcode implementiert nie dieses Interface allein, sondern
+/// <see cref="ICommand{TAggregat}"/> — dort steht das Ziel typisiert (R7, Plan §3.6), und <see cref="Ziel"/> folgt daraus. Ein Command ohne
+/// typisiertes Ziel baut nicht (der Compiler verlangt <see cref="Ziel"/>, CQRS013 verbietet den Umweg).
+/// </summary>
 public interface ICommand : IMessagePayload
 {
-    Guid AggregateId { get; }
+    /// <summary>Das Ziel-Aggregat als Stream-Id (= Cluster-Identität des Aggregat-Actors).</summary>
+    Guid Ziel { get; }
 }
 
+/// <summary>
+/// Ein Command an genau ein Aggregat <typeparamref name="TAggregat"/> (Plan §3.1, R3): das Ziel steht im Typ. Routing, Aggregat-Actor, Leitung,
+/// Python und Client lesen es von hier — die Decide-Signatur muss im selben Aggregat stehen (CQRS014).
+/// </summary>
+public interface ICommand<TAggregat> : ICommand where TAggregat : IState
+{
+    /// <summary>Die Id des Ziel-Aggregats.</summary>
+    Id<TAggregat> AggregateId { get; }
 
-// Nach den bestehenden Interfaces:
-// public interface ICommand : IMessagePayload { }
-// public interface ICreationCommand : ICommand { }
+    Guid ICommand.Ziel => AggregateId.Wert;
+}
 
 /// <summary>
 /// Marker-Interface für Queries an Projektionen.
@@ -55,6 +68,7 @@ public interface IQueryResponse : IMessagePayload { }
 /// </summary>
 public interface IReader<TProjection> where TProjection : ISubscriber { }
     
+/// <summary>Marker: ein erzeugender Command (der C#-Client sendet ihn mit erwarteter Version 0). Neben <see cref="ICommand{TAggregat}"/>.</summary>
 public interface ICreationCommand : ICommand{ }
     
 public interface IDecider<TState> where TState : IState { }

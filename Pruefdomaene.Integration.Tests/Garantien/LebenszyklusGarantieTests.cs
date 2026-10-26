@@ -31,8 +31,8 @@ public class LebenszyklusGarantieTests
             var snapshots = host.Services.GetRequiredService<ISnapshotStore>();
             var p = Guid.NewGuid();
             var erste = Guid.NewGuid();
-            (await FrageAsync(host, new EroeffnePosten(p, 100, Mindestbestand: 98), Guid.NewGuid()))!.Success.Should().BeTrue();
-            (await FrageAsync(host, new ReservierePosten(p, 5), erste))!.Success.Should().BeTrue();   // Fehlmenge 3 → Nachschub
+            (await FrageAsync(host, new EroeffnePosten(new(p), 100, Mindestbestand: 98), Guid.NewGuid()))!.Success.Should().BeTrue();
+            (await FrageAsync(host, new ReservierePosten(new(p), 5), erste))!.Success.Should().BeTrue();   // Fehlmenge 3 → Nachschub
 
             async Task<int> Nachschuebe() => (await store.ReadStreamAsync(p, 0, default)).Count(e => e.Payload is PostenZugebucht);
             await Warte(async () => await Nachschuebe() == 1, Frist, "Die Reaktion hat nicht nachgebucht.");
@@ -42,8 +42,8 @@ public class LebenszyklusGarantieTests
             await Task.Delay(TimeSpan.FromSeconds(2));   // auch der Adapter der Reaktion ist jetzt passiviert
 
             // Frisch aktiviert: die alte CommandId erkennt die Inbox (aus dem Snapshot), eine neue Reservierung wirkt auf dem fortgeschriebenen Stand.
-            (await FrageAsync(host, new ReservierePosten(p, 5), erste))!.Success.Should().BeTrue();
-            (await FrageAsync(host, new ReservierePosten(p, 5), Guid.NewGuid()))!.Success.Should().BeTrue();
+            (await FrageAsync(host, new ReservierePosten(new(p), 5), erste))!.Success.Should().BeTrue();
+            (await FrageAsync(host, new ReservierePosten(new(p), 5), Guid.NewGuid()))!.Success.Should().BeTrue();
             await Warte(async () => await Nachschuebe() == 2, Frist, "Die reaktivierte Reaktion hat nicht nachgebucht.");
             await Task.Delay(TimeSpan.FromSeconds(3));
 

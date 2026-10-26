@@ -223,8 +223,7 @@ public class AkteurRechteTests
     {
         var env = new CommandEnvelope
         {
-            AggregateId = Guid.NewGuid(),
-            Payload = new SetzeModellAktiv(Guid.NewGuid()),
+            Payload = new SetzeModellAktiv(new(Guid.NewGuid())),
             Modus = new CommandModus.Client(1),
             AggregateType = "Modell",
             OriginSessionId = "session-0007",

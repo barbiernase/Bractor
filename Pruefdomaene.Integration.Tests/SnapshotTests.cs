@@ -72,13 +72,13 @@ public class SnapshotTests : IClassFixture<SnapshotTests.Fixture>
             var id = Guid.NewGuid();
 
             // Vier Commands nacheinander, je mit der OCC-Erwartung der vorigen Version (Client-Modus) — Bestand 10 → 11 → 13 → 16.
-            d.Dispatch(new EroeffnePosten(id, 10));
+            d.Dispatch(new EroeffnePosten(new(id), 10));
             var soll = 10;
             foreach (var (menge, i) in new[] { 1, 2, 3 }.Select((m, i) => (m, i)))
             {
                 await Warte(async () => (await Zustand<PostenState>(host.Services, id)).Bestand == soll, TimeSpan.FromSeconds(60),
                     $"Schritt {i}: Bestand {soll} nicht erreicht (Cluster-Boot?).");
-                d.Dispatch(new BuchePostenZu(id, menge), expectedVersion: (await Zustand<PostenState>(host.Services, id)).Version);
+                d.Dispatch(new BuchePostenZu(new(id), menge), expectedVersion: (await Zustand<PostenState>(host.Services, id)).Version);
                 soll += menge;
             }
             await Warte(async () => (await Zustand<PostenState>(host.Services, id)).Bestand == 16, TimeSpan.FromSeconds(30), "Bestand 16 nicht erreicht.");

@@ -6,13 +6,13 @@ namespace Domain.Client.Modules;
 public partial class Store
 {
     void Handle(PhysischesProduktGelabelt evt, MessageContext ctx)
-        => VirtualImagePairs.Patch(ctx.AggregateId, e => e with { PhysischesProduktLabel = evt.Label });
+        => VirtualImagePairs.Patch(new ImagePairId(ctx.AggregateId), e => e with { PhysischesProduktLabel = evt.Label });
 
     void Handle(BildPaarGelabelt evt, MessageContext ctx)
-        => VirtualImagePairs.Patch(ctx.AggregateId, e => e with { MenschBildpaarLabel = evt.Label });
+        => VirtualImagePairs.Patch(new ImagePairId(ctx.AggregateId), e => e with { MenschBildpaarLabel = evt.Label });
 
     void Handle(EinzelBildGelabelt evt, MessageContext ctx)
-        => VirtualImagePairs.Patch(ctx.AggregateId, e => evt.Version switch
+        => VirtualImagePairs.Patch(new ImagePairId(ctx.AggregateId), e => evt.Version switch
         {
             BildVersion.Dc0 => e with { Dc0MenschBildLabel = evt.Label },
             BildVersion.Dc2 => e with { Dc2MenschBildLabel = evt.Label },
@@ -20,5 +20,5 @@ public partial class Store
         });
 
     void Handle(ImagePairInspiziert evt, MessageContext ctx)
-        => VirtualImagePairs.Patch(ctx.AggregateId, e => e with { IstInspiziert = true });
+        => VirtualImagePairs.Patch(new ImagePairId(ctx.AggregateId), e => e with { IstInspiziert = true });
 }

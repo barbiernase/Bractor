@@ -22,7 +22,7 @@ public class PipelineEventPullBridgeTests
 {
     private static readonly Infrastructure.PubSub.EmitAusgaenge Ausgaenge = new(CancellationToken.None);
     private sealed record FakeEvent(Guid AggregateId) : IEvent;
-    private sealed record FakeCommand(Guid AggregateId) : ICommand;
+    private sealed record FakeCommand(Id<Infrastructure.Pruefstand.Tests.TestZiel> AggregateId) : ICommand<Infrastructure.Pruefstand.Tests.TestZiel>;
     private sealed record FakeTrigger : IPipelineTrigger;
     private sealed record FakeTransient(Guid AggregateId) : ITransientEvent;
 
@@ -48,7 +48,7 @@ public class PipelineEventPullBridgeTests
         PipelineEventPullBridge.EventDispatch dispatch = async (env, ctx, sendCommand, _, _, _) =>
         {
             gesehenerCtx = ctx;
-            await sendCommand(new FakeCommand(env.AggregateId));
+            await sendCommand(new FakeCommand(new(env.AggregateId)));
         };
 
         Func<EventEnvelope, Infrastructure.PubSub.EmitAusgaenge, Func<IPipelineOutput, Task>> emitFactory =

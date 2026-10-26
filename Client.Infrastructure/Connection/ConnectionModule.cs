@@ -151,14 +151,14 @@ public class ConnectionModule : IAsyncDisposable
             _bus?.PostToSyncContext(() =>
                 _bus.Publish(new CommandSendFailed(
                     command.GetType().Name,
-                    command.AggregateId,
+                    command.Ziel,
                     "Not connected")));
             return;
         }
 
         // Read-Your-Writes: dieses Aggregat als "gerade geschrieben" merken → geht als
         // expected_fresh_ids mit künftigen Queries mit, bis die Projektion es eingeholt hat.
-        _versioning.MarkWritten(command.AggregateId);
+        _versioning.MarkWritten(command.Ziel);
 
         try
         {
@@ -173,14 +173,13 @@ public class ConnectionModule : IAsyncDisposable
             //     Ablehnungs-Marken im Stream wäre — also zu niedrig für die OCC gegen den Head.
             var expectedVersion = command is ICreationCommand
                 ? 0
-                : _versioning.GetVersion(command.AggregateId) ?? -1;
+                : _versioning.GetVersion(command.Ziel) ?? -1;
 
             var envelope = new CommandEnvelope
             {
                 // ★ deterministische CommandId — EINMAL erzeugt, über Retries wiederverwendet →
                 //   der Server dedupliziert einen Doppel-Send idempotent (Inbox vor OCC).
                 CommandId = Guid.NewGuid(),
-                AggregateId = command.AggregateId,
                 Payload = command,
                 Modus = new CommandModus.Client(expectedVersion),
                 CorrelationId = !string.IsNullOrEmpty(ctx.CorrelationId)
@@ -197,7 +196,7 @@ public class ConnectionModule : IAsyncDisposable
             _bus?.PostToSyncContext(() =>
                 _bus.Publish(new CommandSendFailed(
                     command.GetType().Name,
-                    command.AggregateId,
+                    command.Ziel,
                     ex.Message)));
         }
     }
@@ -225,7 +224,7 @@ public class ConnectionModule : IAsyncDisposable
             _bus?.PostToSyncContext(() =>
                 _bus.Publish(new CommandUnbestaetigt(
                     command.GetType().Name,
-                    command.AggregateId,
+                    command.Ziel,
                     MaxSendAttempts)));
         }
         catch (OperationCanceledException) { /* shutdown */ }

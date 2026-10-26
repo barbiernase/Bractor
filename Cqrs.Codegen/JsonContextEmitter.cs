@@ -46,7 +46,12 @@ public static class JsonContextEmitter
         /// Martens JsonSerializerOptions + Resolver-Chain. Der EventJsonGenerator koppelt die Menge zur
         /// Compile-Zeit (Default.{Event}).
         /// </summary>
-        [JsonSourceGenerationOptions(GenerationMode = JsonSourceGenerationMode.Metadata)]
+        [JsonSourceGenerationOptions(
+            GenerationMode = JsonSourceGenerationMode.Metadata,
+            Converters = new System.Type[]
+            {
+        /*ID-KONVERTER*/
+            })]
         // ── Framework: Prozess-intern + Aggregat-Inbox (IEvent → persistiert) ──
         [JsonSerializable(typeof(ProzessGestartet))]
         [JsonSerializable(typeof(ProzessBeendet))]
@@ -93,6 +98,7 @@ public static class JsonContextEmitter
                 typeof(IStateChangeSignalJsonConverter),
                 typeof(IMessageEnvelopeJsonConverter),
                 typeof(PidJsonConverter),
+        /*ID-KONVERTER*/
             })]
         // ── Framework: Wire-Hüllen (IWireMessage) ──
         [JsonSerializable(typeof(CommandEnvelope))]
@@ -138,12 +144,20 @@ public static class JsonContextEmitter
     {
         var persistableEvents = new SortedSet<string>(StringComparer.Ordinal);
         var wire = new SortedSet<string>(StringComparer.Ordinal);
+        // Jede typisierte Id (Id<X>), die irgendein Typ der Anwendung trägt — Nachrichten, Zustände (Snapshots), Wertobjekte: je Ziel ein
+        //   geschlossener IdJsonKonverter<X> in beiden Kontexten (der STJ-Quellgenerator kennt keine offenen generischen Konverter).
+        var ids = new SortedSet<string>(StringComparer.Ordinal);
 
         // Es werden AUSSCHLIESSLICH die drei geladenen Domain-Assemblies durchsucht
         // (assembly.GetTypes() liefert nur die dort DEFINIERTEN Typen) — deckungsgleich zum
         // domainAssemblies-Filter der Roslyn-Variante. Interface-Zugehörigkeit per FullName
         // (MetadataLoadContext-Typen sind inspection-only). Nur die konkreten Klassen zählen,
         // IPipelineSelfMessage bleibt aus, Signale werden bewusst nicht registriert.
+        foreach (var asm in domainAssemblies)
+            foreach (var t in AlleTypen(asm))
+                foreach (var p in t.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+                    SammleIds(p.PropertyType, ids);
+
         foreach (var asm in domainAssemblies)
         {
             foreach (var t in ConcreteClasses(asm))
@@ -174,12 +188,13 @@ public static class JsonContextEmitter
             }
         }
 
-        var eventCtx = Build(EventContextHeader, "EventJsonSerializerContext", persistableEvents,
+        var konverter = string.Concat(ids.Select(z => $"        typeof({Abstractions.Idvertrag.Konverter(z)}),\n"));
+        var eventCtx = Build(EventContextHeader.Replace("/*ID-KONVERTER*/\n", konverter), "EventJsonSerializerContext", persistableEvents,
             "Domänen-Events (Domain.*, persistierbar)");
-        var wireCtx = Build(WireContextHeader, "CqrsWireJsonContext", wire,
+        var wireCtx = Build(WireContextHeader.Replace("/*ID-KONVERTER*/\n", konverter), "CqrsWireJsonContext", wire,
             "Domänen-Commands/Events/Trigger/Aufträge/Queries (Domain.*)");
 
-        var stats = $"Storage-Events: {persistableEvents.Count + 8} (8 Framework), Wire-Typen: {wire.Count + 28} (28 Framework)";
+        var stats = $"Storage-Events: {persistableEvents.Count + 8} (8 Framework), Wire-Typen: {wire.Count + 28} (28 Framework), Id-Konverter: {ids.Count}";
         return (eventCtx, wireCtx, stats);
     }
 
@@ -195,6 +210,28 @@ public static class JsonContextEmitter
         sb.AppendLine("{");
         sb.AppendLine("}");
         return sb.ToString();
+    }
+
+    /// <summary>Sammelt die Ziel-Typen jeder <c>Id&lt;X&gt;</c> in <paramref name="t"/> — auch in Listen, Arrays, Wörterbüchern und Nullable.</summary>
+    private static void SammleIds(Type t, ISet<string> ids)
+    {
+        if (t.IsArray) { SammleIds(t.GetElementType()!, ids); return; }
+        if (!t.IsGenericType || t.IsGenericTypeDefinition) return;
+        var args = t.GetGenericArguments();
+        if (t.GetGenericTypeDefinition().FullName == Abstractions.Idvertrag.IdMetadatenName)
+        {
+            ids.Add(FullyQualified(args[0]));
+            return;
+        }
+        foreach (var a in args) SammleIds(a, ids);
+    }
+
+    private static IEnumerable<Type> AlleTypen(Assembly assembly)
+    {
+        Type?[] types;
+        try { types = assembly.GetTypes(); }
+        catch (ReflectionTypeLoadException ex) { types = ex.Types; }
+        return types.Where(t => t is not null)!;
     }
 
     // Konkrete Klassen (keine Structs/Enums/Interfaces, nicht abstrakt, nicht statisch).

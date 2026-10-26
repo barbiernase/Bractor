@@ -29,7 +29,7 @@ public class TrainingslaufAggregatTests
             Handler = new AggregateHandlerFactory().CreateHandler(Lauf);
             Id = Guid.NewGuid();
             if (starten)
-                Wende(new StarteTraining(Id, Guid.NewGuid(), 1, StdHp));
+                Wende(new StarteTraining(new(Id), new(Guid.NewGuid()), 1, StdHp));
         }
 
         public IReadOnlyList<IEvent> Wende(ICommand cmd)
@@ -45,7 +45,7 @@ public class TrainingslaufAggregatTests
             return events;
         }
 
-        public void Begonnen() => Wende(new MeldeTrainingBegonnen(Id));
+        public void Begonnen() => Wende(new MeldeTrainingBegonnen(new(Id)));
     }
 
     // ═══════════════════════════════════════════════════
@@ -57,7 +57,7 @@ public class TrainingslaufAggregatTests
     {
         var datensatzId = Guid.NewGuid();
         var f = new Fixture(starten: false);
-        f.Wende(new StarteTraining(f.Id, datensatzId, 3, StdHp));
+        f.Wende(new StarteTraining(new(f.Id), new(datensatzId), 3, StdHp));
 
         f.Lauf.Status.Should().Be(TrainingsStatus.Angefordert);
         f.Lauf.DatensatzId.Should().Be(datensatzId);
@@ -69,7 +69,7 @@ public class TrainingslaufAggregatTests
     public void Zweimal_Starten_wird_abgelehnt()
     {
         var f = new Fixture();
-        f.Wende(new StarteTraining(f.Id, Guid.NewGuid(), 1, StdHp));
+        f.Wende(new StarteTraining(new(f.Id), new(Guid.NewGuid()), 1, StdHp));
         f.LetzteAblehnungen.Should().ContainSingle()
             .Which.Should().BeOfType<TrainingslaufExistiertBereits>();
     }
@@ -85,7 +85,7 @@ public class TrainingslaufAggregatTests
         f.Begonnen();
         f.Lauf.Status.Should().Be(TrainingsStatus.Laeuft);
 
-        var wieder = f.Wende(new MeldeTrainingBegonnen(f.Id));
+        var wieder = f.Wende(new MeldeTrainingBegonnen(new(f.Id)));
         wieder.Should().BeEmpty("doppelt zugestelltes Begonnen erzeugt kein zweites Event");
     }
 
@@ -100,7 +100,7 @@ public class TrainingslaufAggregatTests
         f.Begonnen();
 
         for (var epoche = 1; epoche <= 5; epoche++)
-            f.Wende(new MeldeFortschritt(f.Id, new EpochenMetrik(epoche, Loss: 1.0 / epoche, Genauigkeit: 0.1 * epoche)));
+            f.Wende(new MeldeFortschritt(new(f.Id), new EpochenMetrik(epoche, Loss: 1.0 / epoche, Genauigkeit: 0.1 * epoche)));
 
         f.Lauf.MetrikHistorie.Should().HaveCount(5);
         f.Lauf.MetrikHistorie.Select(m => m.Epoche).Should().Equal(1, 2, 3, 4, 5);
@@ -112,7 +112,7 @@ public class TrainingslaufAggregatTests
     public void Fortschritt_vor_Beginn_wird_abgelehnt()
     {
         var f = new Fixture();   // Angefordert, noch nicht begonnen
-        f.Wende(new MeldeFortschritt(f.Id, new EpochenMetrik(1, 1.0, 0.1)));
+        f.Wende(new MeldeFortschritt(new(f.Id), new EpochenMetrik(1, 1.0, 0.1)));
         f.LetzteAblehnungen.Should().ContainSingle().Which.Should().BeOfType<TrainingNichtAktiv>();
         f.Lauf.MetrikHistorie.Should().BeEmpty();
     }
@@ -126,7 +126,7 @@ public class TrainingslaufAggregatTests
     {
         var f = new Fixture();
         f.Begonnen();
-        f.Wende(new MeldeTrainingAbgeschlossen(f.Id, "modelle/m1.pt", new Endmetriken(Loss: 0.05, Genauigkeit: 0.97)));
+        f.Wende(new MeldeTrainingAbgeschlossen(new(f.Id), "modelle/m1.pt", new Endmetriken(Loss: 0.05, Genauigkeit: 0.97)));
 
         f.Lauf.Status.Should().Be(TrainingsStatus.Abgeschlossen);
         f.Lauf.ModellPfad.Should().Be("modelle/m1.pt");
@@ -138,9 +138,9 @@ public class TrainingslaufAggregatTests
     {
         var f = new Fixture();
         f.Begonnen();
-        f.Wende(new MeldeTrainingAbgeschlossen(f.Id, "m.pt", new Endmetriken(0.05, 0.97)));
+        f.Wende(new MeldeTrainingAbgeschlossen(new(f.Id), "m.pt", new Endmetriken(0.05, 0.97)));
 
-        f.Wende(new MeldeFortschritt(f.Id, new EpochenMetrik(6, 0.9, 0.2)));
+        f.Wende(new MeldeFortschritt(new(f.Id), new EpochenMetrik(6, 0.9, 0.2)));
         f.LetzteAblehnungen.Should().ContainSingle().Which.Should().BeOfType<TrainingBereitsBeendet>();
     }
 
@@ -149,7 +149,7 @@ public class TrainingslaufAggregatTests
     {
         var f = new Fixture();
         f.Begonnen();
-        f.Wende(new MeldeTrainingGescheitert(f.Id, "CUDA out of memory"));
+        f.Wende(new MeldeTrainingGescheitert(new(f.Id), "CUDA out of memory"));
 
         f.Lauf.Status.Should().Be(TrainingsStatus.Gescheitert);
         f.Lauf.Fehlergrund.Should().Be("CUDA out of memory");
@@ -160,10 +160,10 @@ public class TrainingslaufAggregatTests
     {
         var f = new Fixture();
         f.Begonnen();
-        f.Wende(new BricheTrainingAb(f.Id));
+        f.Wende(new BricheTrainingAb(new(f.Id)));
         f.Lauf.Status.Should().Be(TrainingsStatus.Abgebrochen);
 
-        var wieder = f.Wende(new BricheTrainingAb(f.Id));
+        var wieder = f.Wende(new BricheTrainingAb(new(f.Id)));
         wieder.Should().BeEmpty("zweiter Abbruch ist ein Noop");
     }
 
@@ -176,7 +176,7 @@ public class TrainingslaufAggregatTests
     {
         var f = new Fixture();
         f.Begonnen();
-        f.Wende(new MarkiereAlsHaengengeblieben(f.Id));
+        f.Wende(new MarkiereAlsHaengengeblieben(new(f.Id)));
         f.Lauf.Status.Should().Be(TrainingsStatus.Haengengeblieben);
     }
 
@@ -185,9 +185,9 @@ public class TrainingslaufAggregatTests
     {
         var f = new Fixture();
         f.Begonnen();
-        f.Wende(new MeldeTrainingAbgeschlossen(f.Id, "m.pt", new Endmetriken(0.05, 0.97)));
+        f.Wende(new MeldeTrainingAbgeschlossen(new(f.Id), "m.pt", new Endmetriken(0.05, 0.97)));
 
-        var events = f.Wende(new MarkiereAlsHaengengeblieben(f.Id));
+        var events = f.Wende(new MarkiereAlsHaengengeblieben(new(f.Id)));
         events.Should().BeEmpty("eine späte Frist ist auf ein beendetes Training wirkungslos");
         f.Lauf.Status.Should().Be(TrainingsStatus.Abgeschlossen);
     }
@@ -200,7 +200,7 @@ public class TrainingslaufAggregatTests
     public void Meldung_auf_unbekannten_Lauf_wird_abgelehnt()
     {
         var f = new Fixture(starten: false);
-        f.Wende(new MeldeTrainingBegonnen(f.Id));
+        f.Wende(new MeldeTrainingBegonnen(new(f.Id)));
         f.LetzteAblehnungen.Should().ContainSingle().Which.Should().BeOfType<TrainingslaufNichtGefunden>();
     }
 
@@ -210,8 +210,8 @@ public class TrainingslaufAggregatTests
         var f = new Fixture();
         f.Begonnen();
         for (var e = 1; e <= 10; e++)
-            f.Wende(new MeldeFortschritt(f.Id, new EpochenMetrik(e, 1.0 / e, 0.09 * e)));
-        f.Wende(new MeldeTrainingAbgeschlossen(f.Id, "modelle/final.pt", new Endmetriken(0.03, 0.98)));
+            f.Wende(new MeldeFortschritt(new(f.Id), new EpochenMetrik(e, 1.0 / e, 0.09 * e)));
+        f.Wende(new MeldeTrainingAbgeschlossen(new(f.Id), "modelle/final.pt", new Endmetriken(0.03, 0.98)));
 
         f.Lauf.Status.Should().Be(TrainingsStatus.Abgeschlossen);
         f.Lauf.MetrikHistorie.Should().HaveCount(10);

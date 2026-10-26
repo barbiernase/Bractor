@@ -22,6 +22,6 @@ public sealed class DatensatzRangeAufloesung : IPipeline
     {
         var angefordert = p.Auf<RangeAngefordert>();
         var suche = angefordert.Rufe<IRangeSuche>(angefordert => new SucheRange(angefordert.Kriterien));
-        var aufnehmen = p.Alle(suche.Bei<RangeGefunden>(), angefordert.Strom()).Sende<NimmRangeAuf>((suche, angefordertStrom) => new NimmRangeAuf(angefordertStrom.Id, suche.ImagePairIds, suche.Herkunft));
+        var aufnehmen = p.Alle(suche.Bei<RangeGefunden>(), angefordert.Strom()).Sende<NimmRangeAuf>((suche, angefordertStrom) => new NimmRangeAuf(new Id<Domain.Datensatz.Datensatz>(angefordertStrom.Id), suche.ImagePairIds, suche.Herkunft));
     });
 }

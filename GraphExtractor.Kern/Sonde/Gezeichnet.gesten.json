@@ -79,7 +79,7 @@
               { "name": "schaetzung", "art": "funktion", "typ": "ISchadensSchaetzung", "zeitlimit": "TimeSpan.FromMinutes(1)",
                 "eingaenge": [ { "draehte": [ { "von": "rueckgabe" } ], "argumente": [ "rueckgabe.LeserId", "50m" ] } ] },
               { "name": "mahnung", "art": "command", "typ": "EroeffneMahnung",
-                "eingaenge": [ { "draehte": [ { "von": "schaetzung", "fall": "SchadenGeschaetzt" } ], "argumente": [ "Guid.NewGuid()", "schaetzung.Betrag" ] } ] }
+                "eingaenge": [ { "draehte": [ { "von": "schaetzung", "fall": "SchadenGeschaetzt" } ], "argumente": [ "new(Guid.NewGuid())", "schaetzung.Betrag" ] } ] }
             ]
           },
           {
@@ -89,7 +89,7 @@
               { "name": "rueckgabe", "art": "warte", "typ": "Zurueckgegeben", "warteAuf": [ "Zurueckgegeben" ], "zeitlimit": "TimeSpan.FromDays(28)",
                 "eingaenge": [ { "draehte": [ { "von": "ausgeliehen", "port": "strom" } ] } ] },
               { "name": "mahnung", "art": "command", "typ": "EroeffneMahnung",
-                "eingaenge": [ { "draehte": [ { "von": "rueckgabe", "port": "zeitlimit" }, { "von": "ausgeliehen", "port": "strom" } ], "argumente": [ "ausgeliehenStrom.Id", "0m" ] } ] }
+                "eingaenge": [ { "draehte": [ { "von": "rueckgabe", "port": "zeitlimit" }, { "von": "ausgeliehen", "port": "strom" } ], "argumente": [ "new(ausgeliehenStrom.Id)", "0m" ] } ] }
             ]
           }
         ]

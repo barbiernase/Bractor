@@ -12,7 +12,7 @@ public record ErstelleDatensatzIntent(string Name) : IClientEvent;
 public record RangeHinzufuegenIntent() : IClientEvent;
 
 /// <summary>Ein einzelnes Paar aus dem aktiven Datensatz entfernen.</summary>
-public record PaarEntfernenIntent(Guid ImagePairId) : IClientEvent;
+public record PaarEntfernenIntent(ImagePairId ImagePairId) : IClientEvent;
 
 /// <summary>Split-Override auf dem aktiven Datensatz setzen.</summary>
 public record SplitSetzenIntent(int Train, int Val, int Test, int Seed) : IClientEvent;

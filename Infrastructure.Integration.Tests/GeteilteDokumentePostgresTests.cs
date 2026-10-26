@@ -47,7 +47,7 @@ public class GeteilteDokumentePostgresTests
         foreach (var ds in new[] { a, b })
             await es.AppendEventsAsync(ds, 0,
                 new IEvent[] { new DatensatzErstellt("ds-" + ds.ToString("N")[..6]) }
-                    .Concat(paare.Select(p => (IEvent)new PaarAufgenommen(p))).ToList());
+                    .Concat(paare.Select(p => (IEvent)new PaarAufgenommen(new(p)))).ToList());
 
         // Zwei Partitionen, zwei Batch-Leser, zwei Store-Instanzen (je ein Fähigkeits-Bereich) — gleichzeitig.
         await Task.WhenAll(
@@ -67,8 +67,8 @@ public class GeteilteDokumentePostgresTests
         var (a, b) = (BatchHilfe.StreamIn(0, 4), BatchHilfe.StreamIn(1, 4));
         var proj = await Frisch("datensatz");
         var es = _fx.EventStore();
-        await es.AppendEventsAsync(a, 0, new IEvent[] { new DatensatzErstellt("a"), new PaarAufgenommen(p), new PaarEntfernt(p) });
-        await es.AppendEventsAsync(b, 0, new IEvent[] { new DatensatzErstellt("b"), new PaarAufgenommen(p) });
+        await es.AppendEventsAsync(a, 0, new IEvent[] { new DatensatzErstellt("a"), new PaarAufgenommen(new(p)), new PaarEntfernt(new(p)) });
+        await es.AppendEventsAsync(b, 0, new IEvent[] { new DatensatzErstellt("b"), new PaarAufgenommen(new(p)) });
 
         await DatensatzLeser(es, proj, 0).LaufAsync();
         await DatensatzLeser(es, proj, 1).LaufAsync();
@@ -142,7 +142,7 @@ public class GeteilteDokumentePostgresTests
     {
         await es.AppendEventsAsync(id, 0, new IEvent[]
         {
-            new ModellRegistriert(Guid.NewGuid(), Guid.NewGuid(), 1, "m", "/m.pt", new ModellMetriken(0.1, 0.9)),
+            new ModellRegistriert(new(Guid.NewGuid()), new(Guid.NewGuid()), 1, "m", "/m.pt", new ModellMetriken(0.1, 0.9)),
             new ModellAktiviert("/m.pt", "m")
         });
         return id;

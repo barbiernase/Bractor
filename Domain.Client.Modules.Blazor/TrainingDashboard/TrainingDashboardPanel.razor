@@ -142,11 +142,11 @@
         => Fx.OnChanged(Store, () => InvokeAsync(StateHasChanged));
 
     private bool KannStarten =>
-        Guid.TryParse(_selDsId, out _) && _epochen > 0 && _batch > 0;
+        DatensatzId.TryParse(_selDsId, out _) && _epochen > 0 && _batch > 0;
 
     void Starte()
     {
-        if (!Guid.TryParse(_selDsId, out var dsId)) return;
+        if (!DatensatzId.TryParse(_selDsId, out var dsId)) return;
         var ds = Store.EingefroreneDatensaetze.FirstOrDefault(d => d.Id == dsId);
         if (ds is null) return;
         Fx.Dispatch(new StarteTrainingIntent(
@@ -159,11 +159,11 @@
             Seed: _seed));
     }
 
-    void BrichAb(Guid id) => Fx.Dispatch(new BrichTrainingAbIntent(id));
+    void BrichAb(TrainingslaufId id) => Fx.Dispatch(new BrichTrainingAbIntent(id));
 
     public void Dispose() => Fx.Dispose();
 
-    private static string Kurz(Guid id) => id.ToString("N")[..8];
+    private static string Kurz<T>(Abstractions.Id<T> id) where T : Abstractions.IState => id.Wert.ToString("N")[..8];
     private static string Kurvenschluessel(TrainingslaufAntwort l) => $"{l.Id:N}:{l.MetrikHistorie.Count}:{(int)l.Status}";
 
     private static string StatusText(TrainingsStatus s) => s switch

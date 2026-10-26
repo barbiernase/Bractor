@@ -12,14 +12,14 @@ namespace Warenkatalog.Import;
 // Die Quelle: der Datei-Treiber befüllt die geerbten Felder, die Kennung sagt die Konfig.
 public sealed record KatalogDateiAbgelegt : DateiGemeldet;
 
-public record StarteImport(Guid AggregateId, string Pfad) : ICreationCommand;
-public record ImportGestartet(Guid ImportId, string Pfad) : IEvent;
-public record ImportLaeuftSchon(Guid ImportId) : ITransientEvent;
+public record StarteImport(Id<Importlauf> AggregateId, string Pfad) : ICommand<Importlauf>, ICreationCommand;
+public record ImportGestartet(Id<Importlauf> ImportId, string Pfad) : IEvent;
+public record ImportLaeuftSchon(Id<Importlauf> ImportId) : ITransientEvent;
 
-public record MeldeImportFortschritt(Guid AggregateId, int Zeilen) : ICommand;
+public record MeldeImportFortschritt(Id<Importlauf> AggregateId, int Zeilen) : ICommand<Importlauf>;
 public record ImportFortgeschritten(int Zeilen) : IEvent;
 
-public record SchliesseImportAb(Guid AggregateId, int Zeilen, int Fehler) : ICommand;
+public record SchliesseImportAb(Id<Importlauf> AggregateId, int Zeilen, int Fehler) : ICommand<Importlauf>;
 public record ImportAbgeschlossen(int Zeilen, int Fehler) : IEvent;
 
 public partial class Importlauf : IState
@@ -57,9 +57,9 @@ public partial class Importlauf : IState
     }
 }
 
-public record LegeArtikelAn(Guid AggregateId, string Nummer, string Bezeichnung, decimal Preis) : ICreationCommand;
+public record LegeArtikelAn(Id<Artikel> AggregateId, string Nummer, string Bezeichnung, decimal Preis) : ICommand<Artikel>, ICreationCommand;
 public record ArtikelAngelegt(string Nummer, string Bezeichnung, decimal Preis) : IEvent;
-public record ArtikelExistiert(Guid ArtikelId) : ITransientEvent;
+public record ArtikelExistiert(Id<Artikel> ArtikelId) : ITransientEvent;
 
 public partial class Artikel : IState
 {
@@ -87,7 +87,7 @@ public sealed class Katalogeingang : IPipeline
     public PipelineFluss Fluss => PipelineFluss.Definiere(p =>
     {
         var datei = p.Quelle<KatalogDateiAbgelegt>();
-        var start = p.Alle(datei, datei.Strom()).Sende<StarteImport>((d, strom) => new StarteImport(strom.Id, d.Pfad));
+        var start = p.Alle(datei, datei.Strom()).Sende<StarteImport>((d, strom) => new StarteImport(new(strom.Id), d.Pfad));
     });
 }
 
@@ -132,7 +132,7 @@ public partial class Importfortschritt : ISubscriber, IPullSubscriber
     }
 }
 
-public record HoleImportstand(Guid ImportId) : IQuery;
+public record HoleImportstand(Id<Importlauf> ImportId) : IQuery;
 public record ImportstandAntwort(int Zeilen, bool Fertig) : IQueryResponse;
 public record ImportUnbekannt() : IQueryResponse;
 
@@ -141,7 +141,7 @@ public partial class Importauskunft : IReader<Importfortschritt>
 {
     public async Task<OneOf<ImportstandAntwort, ImportUnbekannt>> Handle(HoleImportstand query, IMessageEnvelope envelope, ReadContext ctx, IFindeImportstand finde)
     {
-        var stand = await finde.FindeAsync(query.ImportId);
+        var stand = await finde.FindeAsync(query.ImportId.Wert);
         if (stand is null) return new ImportUnbekannt();
         return new ImportstandAntwort(stand.Zeilen, stand.Fertig);
     }

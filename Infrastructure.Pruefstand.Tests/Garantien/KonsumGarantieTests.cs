@@ -85,7 +85,7 @@ public class KonsumGarantieTests
         var router = new HandlerOutputRouter(emitter, null, "reaktion");
         var cursor = new AbsturzCursor();
         var adapter = new EmittentenAdapter(new LeseSeam(log), cursor, "reaktion",
-            (e, _, a) => router.EmitFor(e, a)(new MeldeTeilFertig(Guid.Parse("00000000-0000-0000-0000-0000000000aa"))));
+            (e, _, a) => router.EmitFor(e, a)(new MeldeTeilFertig(new(Guid.Parse("00000000-0000-0000-0000-0000000000aa")))));
 
         var erster = () => adapter.WakeAsync(stream, Ct);
         await erster.Should().ThrowAsync<InvalidOperationException>();
@@ -118,7 +118,7 @@ public class KonsumGarantieTests
         var router = new HandlerOutputRouter(emitter, null, "reaktion");
         var cursor = new InMemoryEmittentenCursor();
         var adapter = new EmittentenAdapter(new LeseSeam(log), cursor, "reaktion",
-            (e, _, a) => router.EmitFor(e, a)(new MeldeTeilFertig(Guid.Parse("00000000-0000-0000-0000-0000000000bb"))));
+            (e, _, a) => router.EmitFor(e, a)(new MeldeTeilFertig(new(Guid.Parse("00000000-0000-0000-0000-0000000000bb")))));
 
         (await adapter.WakeAsync(stream, Ct)).Should().BeFalse("ein unbekannter Ausgang ist kein Aufholen");
         (await cursor.LadeAsync($"reaktion:{stream}", Ct)).Should().Be(0, "der Command des Events 1 ist nicht zugestellt");
@@ -139,7 +139,7 @@ public class KonsumGarantieTests
         var router = new HandlerOutputRouter(emitter, null, "reaktion");
         var cursor = new InMemoryEmittentenCursor();
         var adapter = new EmittentenAdapter(new LeseSeam(log), cursor, "reaktion",
-            (e, _, a) => router.EmitFor(e, a)(new MeldeTeilFertig(Guid.Parse("00000000-0000-0000-0000-0000000000cc"))));
+            (e, _, a) => router.EmitFor(e, a)(new MeldeTeilFertig(new(Guid.Parse("00000000-0000-0000-0000-0000000000cc")))));
 
         (await adapter.WakeAsync(stream, Ct)).Should().BeTrue();
         (await cursor.LadeAsync($"reaktion:{stream}", Ct)).Should().Be(2);
@@ -163,7 +163,7 @@ public class KonsumGarantieTests
         var router = new HandlerOutputRouter(emitter, null, "reaktion");
         var cursor = new InMemoryEmittentenCursor();
         var adapter = new EmittentenAdapter(new LeseSeam(log), cursor, "reaktion",
-            (e, _, a) => router.EmitFor(e, a)(new MeldeTeilFertig(Guid.NewGuid())));
+            (e, _, a) => router.EmitFor(e, a)(new MeldeTeilFertig(new(Guid.NewGuid()))));
 
         (await adapter.WakeAsync(stream, Ct)).Should().BeTrue();
         (await cursor.LadeAsync($"reaktion:{stream}", Ct)).Should().Be(4);

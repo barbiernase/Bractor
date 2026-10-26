@@ -475,10 +475,10 @@ namespace Infrastructure.SourceGeneration
                 return $"if ({sourceVar}.{propName} != null) dto.{propName}.AddRange({sourceVar}.{propName}.Select(x => (int)x));";
             }
             
-            // Collection von Guids (z.B. IReadOnlyList<Guid>) → in Proto als repeated string.
-            if (elementType == "System.Guid")
+            // Collection von Guids oder typisierten Ids (IReadOnlyList<Guid>, IReadOnlyList<Id<T>>) → in Proto als repeated string.
+            if ((elementType == "System.Guid" || Abstractions.Idvertrag.IstId(elementType)) && ProtoScalarSpecs.TryGet(elementType, out var idSpec))
             {
-                return $"if ({sourceVar}.{propName} != null) dto.{propName}.AddRange({sourceVar}.{propName}.Select(x => x.ToString()));";
+                return $"if ({sourceVar}.{propName} != null) dto.{propName}.AddRange({sourceVar}.{propName}.Select(x => {idSpec.Encode("x")}));";
             }
 
             if (TypeMappingHelper.IsProtoScalarType(elementType))
@@ -616,10 +616,10 @@ namespace Infrastructure.SourceGeneration
                     return $"{sourceVar}.{fieldName}?.Select(x => ({sanitizedEnumType})x).ToList()";
                 }
                 
-                // Collection von Guids (repeated string in Proto) → Guid.Parse je Element.
-                if (elementType == "System.Guid")
+                // Collection von Guids oder typisierten Ids (repeated string in Proto) → je Element zurück.
+                if ((elementType == "System.Guid" || Abstractions.Idvertrag.IstId(elementType)) && ProtoScalarSpecs.TryGet(elementType, out var idSpec))
                 {
-                    return $"{sourceVar}.{fieldName}?.Select(x => Guid.Parse(x)).ToList()";
+                    return $"{sourceVar}.{fieldName}?.Select(x => {idSpec.Decode("x")}).ToList()";
                 }
 
                 if (TypeMappingHelper.IsProtoScalarType(elementType) || IsPrimitiveOrNullableType(elementType))
@@ -908,8 +908,8 @@ namespace Infrastructure.SourceGeneration
                 "System.TimeSpan",
             };
             
-            // Direkter Match (non-nullable)
-            if (primitiveTypes.Contains(typeName))
+            // Direkter Match (non-nullable); eine typisierte Id ist ein Skalar wie Guid.
+            if (primitiveTypes.Contains(typeName) || Abstractions.Idvertrag.IstId(typeName))
                 return true;
             
             // Endet mit ? (nullable) - prüfe ob der Base-Typ primitiv ist

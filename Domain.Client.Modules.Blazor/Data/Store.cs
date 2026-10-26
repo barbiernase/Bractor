@@ -9,8 +9,8 @@ namespace Domain.Client.Modules;
 public partial class Store : StoreBase, IHydrationStore
 {
     /// <summary>Virtualisiertes Fenster über die gesamte (virtuelle) Paarliste.</summary>
-    public VirtualCollection<ImagePairRecord, Guid> VirtualImagePairs { get; }
-    public Cursor<Guid> Cursor { get; }
+    public VirtualCollection<ImagePairRecord, ImagePairId> VirtualImagePairs { get; }
+    public Cursor<ImagePairId> Cursor { get; }
 
     public ArbeitsModus Modus { get; set; } = ArbeitsModus.Live;
 
@@ -34,10 +34,10 @@ public partial class Store : StoreBase, IHydrationStore
 
     public Store()
     {
-        VirtualImagePairs = Track(new VirtualCollection<ImagePairRecord, Guid>(
+        VirtualImagePairs = Track(new VirtualCollection<ImagePairRecord, ImagePairId>(
             keyOf:     r => r.Id,
             baueQuery: BaueFensterQuery));
-        Cursor = Track(new Cursor<Guid>());
+        Cursor = Track(new Cursor<ImagePairId>());
     }
 
     /// <summary>

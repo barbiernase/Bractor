@@ -8,8 +8,8 @@ namespace Domain.Modell;
 
 /// <summary>Modell registriert — Provenienz + Pfad + Metriken festgeschrieben.</summary>
 public record ModellRegistriert(
-    Guid TrainingslaufId,
-    Guid DatensatzId,
+    Id<Trainingslauf.Trainingslauf> TrainingslaufId,
+    Id<Datensatz.Datensatz> DatensatzId,
     int DatensatzVersion,
     string Name,
     string Pfad,
@@ -33,6 +33,6 @@ public record ModellArchiviert() : IEvent;
 // ABLEHNUNGS-EVENTS (ITransientEvent) — nicht persistiert
 // ═══════════════════════════════════════════════════
 
-public record ModellExistiertBereits(Guid ModellId) : ITransientEvent;
-public record ModellNichtGefunden(Guid ModellId) : ITransientEvent;
-public record ModellBereitsArchiviert(Guid ModellId) : ITransientEvent;
+public record ModellExistiertBereits(Id<Modell> ModellId) : ITransientEvent;
+public record ModellNichtGefunden(Id<Modell> ModellId) : ITransientEvent;
+public record ModellBereitsArchiviert(Id<Modell> ModellId) : ITransientEvent;
