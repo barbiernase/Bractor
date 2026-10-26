@@ -256,6 +256,13 @@ public interface IAggregateRepository
         /// </summary>
         Task<IReadOnlyCollection<Guid>> StreamsVorhandenAsync(IReadOnlyCollection<Guid> streams, CancellationToken ct)
             => Task.FromResult<IReadOnlyCollection<Guid>>(Array.Empty<Guid>());
+
+        /// <summary>
+        /// Die höchste Version eines Streams (0 = es gibt ihn nicht) — für Schreiber, die an einen fremden Stream anhängen, ohne seinen Inhalt zu
+        /// brauchen (eine Quelle mit einem Stream je Schlüssel). Ohne eigene Ablage (Prüfstand) über <see cref="ReadStreamAsync"/>.
+        /// </summary>
+        async Task<int> KopfAsync(Guid streamId, CancellationToken ct)
+            => (await ReadStreamAsync(streamId, 0, ct)).Select(e => e.AggregateVersion).DefaultIfEmpty(0).Max();
     }
 
     /// <summary>

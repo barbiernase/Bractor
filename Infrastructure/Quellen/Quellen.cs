@@ -48,6 +48,20 @@ public static class QuellVorgang
         MD5.HashData(Encoding.UTF8.GetBytes($"quelle:{nachricht.FullName}:{kennung}"), hash);
         return new Guid(hash);
     }
+
+    /// <summary>Der Stream eines Schlüssels (Option „ein Stream je Schlüssel“): alle Nachrichten dieses Typs mit diesem Schlüssel.</summary>
+    public static Guid StreamFürSchluessel(Type nachricht, string schluessel) => StreamFür(nachricht, "schluessel:" + schluessel);
+
+    /// <summary>
+    /// Der Schlüssel einer Nachricht nach dem Treiber, wenn die Quelle einen Stream je Schlüssel hat: eine Datei — ihr Ordner (relativ), ein Takt — die
+    /// Quelle selbst; sonst (Client, Stream je Nachricht) keiner.
+    /// </summary>
+    public static string? Schluessel(IQuellNachricht nachricht, QuellKonfig? konfig) => konfig?.Strom != QuellStromArt.JeSchluessel ? null : nachricht switch
+    {
+        DateiGemeldet d => System.IO.Path.GetDirectoryName(d.RelativerPfad)?.Replace('\\', '/') ?? "",
+        TaktGemeldet => "",
+        _ => null,
+    };
 }
 
 /// <summary>
@@ -60,16 +74,18 @@ public sealed class QuellEingang
     private readonly IReadOnlyDictionary<Type, IReadOnlyList<string>> _pipelinesJeTyp;
     private readonly Func<Guid, Guid, int, string, CancellationToken, Task> _wecke;
     private readonly Func<Type, string?> _akteur;
+    private readonly IStreamBestand? _bestand;
 
     /// <param name="registry">Die Regel-Registry (Prozesse und Pipeline-Flüsse) — daraus: welche beginnen mit welchem Typ.</param>
     /// <param name="wecke">(Korrelation, Stream, Version, Pipeline-Name) → Start-Weckung des Dirigenten.</param>
     /// <param name="akteur">Der Akteur, der diesen Nachrichtentyp liefert (IDarf), oder null.</param>
     public QuellEingang(IEventStoreRepository store, IReadOnlyDictionary<string, ProzessRegeln> registry,
-        Func<Guid, Guid, int, string, CancellationToken, Task> wecke, Func<Type, string?>? akteur = null)
+        Func<Guid, Guid, int, string, CancellationToken, Task> wecke, Func<Type, string?>? akteur = null, IStreamBestand? bestand = null)
     {
         _store = store;
         _wecke = wecke;
         _akteur = akteur ?? (_ => null);
+        _bestand = bestand;
         _pipelinesJeTyp = registry
             .GroupBy(kv => kv.Value.AuslöserTyp)
             .ToDictionary(g => g.Key, g => (IReadOnlyList<string>)g.Select(kv => kv.Key).OrderBy(n => n).ToList());
@@ -81,35 +97,61 @@ public sealed class QuellEingang
         var system = sp.GetRequiredService<ActorSystem>();
         return new QuellEingang(sp.GetRequiredService<IEventStoreRepository>(), sp.GetRequiredService<IReadOnlyDictionary<string, ProzessRegeln>>(),
             (korr, stream, version, name, ct) => WeckeAsync(system, korr, stream, version, name, ct),
-            AkteurHerkunft.EindeutigerHalter);
+            AkteurHerkunft.EindeutigerHalter, sp.GetService<IStreamBestand>() ?? new Infrastructure.Persistence.MartenStreamBestand(sp.GetRequiredService<Marten.IDocumentStore>()));
     }
 
     /// <summary>Welche Pipelines eine Nachricht dieses Typs startet (leer = niemand hört zu, die Nachricht wird trotzdem protokolliert).</summary>
     public IReadOnlyList<string> PipelinesFür(Type nachricht)
         => _pipelinesJeTyp.TryGetValue(nachricht, out var p) ? p : Array.Empty<string>();
 
-    /// <summary>Nimmt eine Quell-Nachricht auf: genau einmal ins Log, dann jede startende Pipeline wecken. Liefert den Vorgangs-Stream.</summary>
-    public async Task<Guid> NimmAufAsync(IQuellNachricht nachricht, CancellationToken ct)
+    /// <summary>
+    /// Nimmt eine Quell-Nachricht auf: genau einmal ins Log, dann jede startende Pipeline wecken. Liefert den Vorgang (die Id aus Typ und Kennung).
+    /// Ohne <paramref name="schluessel"/> wird sie das erste Event ihres eigenen Streams (Version 0 — der Stream ist der Vorgang); mit Schlüssel geht
+    /// sie in den Stream des Schlüssels, und die Kennung steht in derselben Transaktion im Kennungs-Verzeichnis (<see cref="QuellKennung"/>).
+    /// <paramref name="akteur"/>: wer sie hineingab (das Tor des Eingangs); sonst der eine Akteur mit <c>IDarf</c>.
+    /// </summary>
+    public async Task<Guid> NimmAufAsync(IQuellNachricht nachricht, CancellationToken ct, string? schluessel = null, string? akteur = null)
     {
         var typ = nachricht.GetType();
-        var stream = QuellVorgang.StreamFür(typ, nachricht.Kennung);
-        try
+        var vorgang = QuellVorgang.StreamFür(typ, nachricht.Kennung);
+        // Spur: eine Quell-Nachricht ist eine Wurzel (keine Ursache im Log), geschrieben von der Quelle.
+        using var spur = Spur.Von(null, WirkerId.FuerQuelle(typ.Name));
+        var wer = akteur ?? _akteur(typ);
+        if (schluessel is null)
         {
-            // Spur: eine Quell-Nachricht ist eine Wurzel (keine Ursache im Log), geschrieben von der Quelle.
-            using var spur = Spur.Von(null, WirkerId.FuerQuelle(typ.Name));
-            await _store.AppendEventsAsync(stream, 0, new IEvent[] { nachricht },
-                correlationId: stream.ToString(), causationId: stream.ToString(),
-                aggregateType: $"Quelle:{typ.Name}", akteur: _akteur(typ));
-        }
-        catch (Exception)
-        {
-            // Schon aufgenommen (Neustart, anderer Knoten)? Dann läuft der Vorgang bereits — die Weckung unten ist idempotent.
-            if ((await _store.ReadStreamAsync(stream, 0, ct)).Count == 0) throw;
+            try
+            {
+                await _store.AppendEventsAsync(vorgang, 0, new IEvent[] { nachricht },
+                    correlationId: vorgang.ToString(), causationId: vorgang.ToString(), aggregateType: $"Quelle:{typ.Name}", akteur: wer);
+            }
+            catch (Exception)
+            {
+                // Schon aufgenommen (Neustart, anderer Knoten)? Dann läuft der Vorgang bereits — die Weckung unten ist idempotent.
+                if ((await _store.ReadStreamAsync(vorgang, 0, ct)).Count == 0) throw;
+            }
+            foreach (var name in PipelinesFür(typ))
+                await _wecke(ProzessId.Für(name, vorgang, 1), vorgang, 1, name, ct);
+            return vorgang;
         }
 
-        foreach (var name in PipelinesFür(typ))
-            await _wecke(ProzessId.Für(name, stream, 1), stream, 1, name, ct);
-        return stream;
+        // Ein Stream je Schlüssel: anhängen mit Versionsprüfung am Kopf; die Kennung macht es genau einmal (Kennungs-Verzeichnis, eine Transaktion).
+        var stream = QuellVorgang.StreamFürSchluessel(typ, schluessel);
+        for (var versuch = 1; ; versuch++)
+        {
+            var kopf = await _store.KopfAsync(stream, ct);
+            try
+            {
+                await _store.AppendEventsAsync(stream, kopf, new IEvent[] { nachricht }, correlationId: vorgang.ToString(),
+                    causationId: vorgang.ToString(), aggregateType: $"Quelle:{typ.Name}", akteur: wer, beilagen: [new QuellKennung(vorgang)]);
+                return vorgang;
+            }
+            catch (Exception) when (!ct.IsCancellationRequested)
+            {
+                if (_bestand is not null && (await _bestand.BekannteAsync(new[] { vorgang }, ct)).Contains(vorgang)) return vorgang;   // schon im Log
+                if (versuch >= 5) throw;
+                await Task.Delay(Random.Shared.Next(5, 25 * versuch), ct);   // ein anderer Schreiber war am Kopf — neu lesen
+            }
+        }
     }
 
     private static async Task WeckeAsync(ActorSystem system, Guid korrelation, Guid stream, int version, string name, CancellationToken ct)
@@ -147,7 +189,8 @@ public static partial class QuellenExtensions
                 try { nachricht = (IQuellNachricht)Infrastructure.Eingang.EingangJson.Lies(body, typ); }
                 catch (Exception e) when (e is System.Text.Json.JsonException or InvalidOperationException or NotSupportedException or InvalidCastException)
                 { return Results.BadRequest(new { fehler = $"{typ.Name} nicht lesbar: {e.Message}" }); }
-                var vorgang = await QuellEingang.Live(http.RequestServices).NimmAufAsync(nachricht, http.RequestAborted);
+                var vorgang = await QuellEingang.Live(http.RequestServices).NimmAufAsync(nachricht, http.RequestAborted,
+                    QuellVorgang.Schluessel(nachricht, q.Konfig));
                 return Results.Accepted(value: new { vorgang });
             }).RequireHost($"*:{u.Transport.EinblickPort}");
             Console.WriteLine($"  ⛲ Quelle {q.Typ.Abschnitt}: Webhook POST :{u.Transport.EinblickPort}{q.Konfig.Webhook!.Trim()}");

@@ -467,6 +467,15 @@ public class MartenEventStore : IEventStoreRepository
             alter.TotalSeconds, wer);
     }
 
+    public async Task<int> KopfAsync(Guid streamId, CancellationToken ct)
+    {
+        await EventTabellenAsync(_store, ct);
+        await using var session = _store.QuerySession();
+        var kopf = await session.QueryAsync<long>(
+            $"select version from {_store.Options.Events.DatabaseSchemaName}.mt_streams where id = ?", ct, streamId);
+        return kopf.Count == 0 ? 0 : (int)kopf[0];
+    }
+
     public async Task<IReadOnlyCollection<Guid>> StreamsVorhandenAsync(IReadOnlyCollection<Guid> streams, CancellationToken ct)
     {
         if (streams.Count == 0) return Array.Empty<Guid>();

@@ -100,6 +100,22 @@ public static class JsonEingang
             }, Json);
         });
 
+        // Eine Quell-Nachricht vom Client (Plan Pub/Sub-Neustrukturierung Phase 3): ein Fakt von draußen (: ClientGemeldet), Kennung = die Command-Id,
+        //   die der Client vergibt und beim Wiederholen wieder schickt — genau einmal im Log je Kennung, derselbe Vorgang.
+        g.MapPost("/quelle", async (HttpContext http, JsonElement body, IServiceProvider sp, CancellationToken ct) =>
+        {
+            if (!Erkenne(http, sp, out var akteur, out var abgewiesen)) return abgewiesen!;
+            if (!Lies(body, MessageCategory.Event, out var typ, out var nachricht, out var fehler)) return fehler!;
+            if (nachricht is not ClientGemeldet gemeldet)
+                return Results.Json(new { ok = false, fehler = $"{typ!.Name} ist keine Quell-Nachricht vom Client (: ClientGemeldet)" }, Json, statusCode: 400);
+            if (akteur != null && !akteur.DarfHinein(typ!))
+                return Results.Json(new { ok = false, abgelehnt = $"Akteur '{akteur.Name}' darf {typ!.Name} nicht (kein IDarf<{typ.Name}>)" }, Json, statusCode: 403);
+            var kennung = body.TryGetProperty("kennung", out var kn) && Guid.TryParse(kn.GetString(), out var k) ? k : Guid.NewGuid();
+            var wer = akteur?.AkteurFuer(typ!) ?? AkteurHerkunft.EindeutigerHalter(typ!);
+            var vorgang = await Infrastructure.Quellen.QuellEingang.Live(sp).NimmAufAsync(gemeldet with { Kennung = kennung.ToString() }, ct, akteur: wer);
+            return Results.Json(new { ok = true, vorgang, kennung, akteur = wer }, Json, statusCode: StatusCodes.Status202Accepted);
+        });
+
         g.MapPost("/query", async (HttpContext http, JsonElement body, IServiceProvider sp) =>
         {
             if (!Erkenne(http, sp, out var akteur, out var abgewiesen)) return abgewiesen!;

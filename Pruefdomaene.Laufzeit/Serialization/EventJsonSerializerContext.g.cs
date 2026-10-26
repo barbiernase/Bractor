@@ -51,6 +51,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.ZahlungUeberfaellig))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.AuftragBestaetigt))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.AuftragGestartet))]
+[JsonSerializable(typeof(global::Pruefdomaene.Import.ImportAngefordert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Import.ImportGestartet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Import.ImportStandGemeldet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentBelegt))]

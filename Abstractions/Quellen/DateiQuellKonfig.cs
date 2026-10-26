@@ -15,6 +15,13 @@ public enum DateiKennungArt { NameGroesse, PfadGroesseZeit }
 /// <summary>Wo die Schleife läuft: genau einmal im Cluster (Lease, wandert bei Ausfall) oder auf jedem Knoten (lokale Verzeichnisse).</summary>
 public enum QuellLaufmodus { EinmalImCluster, JederKnoten }
 
+/// <summary>
+/// In welchen Stream eine Quell-Nachricht geht (Plan Pub/Sub-Neustrukturierung §4.2): <c>JeNachricht</c> — ein Stream je Kennung, genau einmal über
+/// Version 0; <c>JeSchluessel</c> — ein Stream je Schlüssel des Treibers (Datei: ihr Ordner; Takt: die Quelle), genau einmal über das
+/// Kennungs-Verzeichnis. Weniger Streams für hochfrequente Quellen; ein Vorgang je Nachricht gibt es dann nicht mehr.
+/// </summary>
+public enum QuellStromArt { JeNachricht, JeSchluessel }
+
 /// <summary>Fertig-Erkennung: <c>Stabil</c> = Größe und Änderungszeit über das Fenster unverändert; <c>Marker</c> = <c>&lt;datei&gt;&lt;Endung&gt;</c> existiert.</summary>
 public sealed class DateiFertig
 {
@@ -30,6 +37,8 @@ public sealed class DateiFertig
 public abstract class QuellKonfig
 {
     public QuellLaufmodus Laufmodus { get; set; } = QuellLaufmodus.EinmalImCluster;
+    /// <summary>Ein Stream je Nachricht (Standard) oder je Schlüssel des Treibers (<see cref="QuellStromArt"/>).</summary>
+    public QuellStromArt Strom { get; set; } = QuellStromArt.JeNachricht;
     /// <summary>
     /// Ein zweiter Weg in dieselbe Quelle (konzept-werkbank §12.3 E12): <c>POST {Webhook}</c> auf dem Einblick-Port mit der Nachricht als JSON — genau einmal ins
     /// Log, Vorgang gestartet (dieselbe Nachricht zweimal → derselbe Vorgang). Leer = kein Webhook. Die Route ist Betrieb, nicht Domäne.

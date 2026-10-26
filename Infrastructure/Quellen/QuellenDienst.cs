@@ -89,12 +89,12 @@ public sealed class QuellenDienst(IServiceProvider sp, IEnumerable<Konfigurierte
                 switch (q.Konfig)
                 {
                     case DateiQuellKonfig datei:
-                        await new DateiTreiber(q.Typ, datei, (n, c) => eingang.NimmAufAsync(n, c), bestand.BekannteAsync, zustand, logger: logger)
+                        await new DateiTreiber(q.Typ, datei, (n, c) => eingang.NimmAufAsync(n, c, QuellVorgang.Schluessel(n, datei)), bestand.BekannteAsync, zustand, logger: logger)
                             .LaufeAsync(ct);
                         return;
                     case TaktQuellKonfig takt:
                         var uhr = sp.GetRequiredService<IDbClock>();
-                        await new TaktTreiber(q.Typ, takt, (n, c) => eingang.NimmAufAsync(n, c), c => uhr.JetztAsync(c), zustand, logger)
+                        await new TaktTreiber(q.Typ, takt, (n, c) => eingang.NimmAufAsync(n, c, QuellVorgang.Schluessel(n, takt)), c => uhr.JetztAsync(c), zustand, logger)
                             .LaufeAsync(ct);
                         return;
                     default:

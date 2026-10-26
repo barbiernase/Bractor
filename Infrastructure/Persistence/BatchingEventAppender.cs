@@ -128,6 +128,8 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
     public Task<IReadOnlyCollection<Guid>> StreamsVorhandenAsync(IReadOnlyCollection<Guid> streams, CancellationToken ct)
         => _inner.StreamsVorhandenAsync(streams, ct);
 
+    public Task<int> KopfAsync(Guid streamId, CancellationToken ct) => _inner.KopfAsync(streamId, ct);
+
     public Task<TState?> LoadStateAsync<TState>(Guid aggregateId) where TState : class, IState, new()
         => _inner.LoadStateAsync<TState>(aggregateId);
 

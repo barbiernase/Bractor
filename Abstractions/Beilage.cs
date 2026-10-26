@@ -36,6 +36,12 @@ public sealed record VorgangBeendet(Guid Korrelation) : Beilage;
 public sealed record FristFaellig(int Version, string Befehl, string Daten, TimeSpan Nach, string? Akteur) : Beilage;
 
 /// <summary>
+/// Die Kennung einer Quell-Nachricht in einem Stream je Schlüssel (Plan Pub/Sub-Neustrukturierung §4.2): ihr Vorgang (abgeleitet aus Typ und Kennung)
+/// steht eindeutig im Kennungs-Verzeichnis — ein zweites Melden derselben Kennung scheitert am Schlüssel, nichts wird geschrieben.
+/// </summary>
+public sealed record QuellKennung(Guid Vorgang) : Beilage;
+
+/// <summary>
 /// Der Append trug eine Quittung, deren CommandId die Inbox schon kennt: nichts ist geschrieben. Den Ausgang des ersten Mals liefert
 /// <see cref="IEventStoreRepository.AusgangAsync"/>.
 /// </summary>

@@ -18,6 +18,8 @@ internal sealed class BeilagenSchreiber
     private List<TimeSpan>? _fristNach;
     private List<string>? _fristBefehle, _fristDaten;
     private List<string?>? _fristAkteure;
+    // Kennungen der Quell-Nachrichten in einem Stream je Schlüssel (Plan Pub/Sub-Neustrukturierung Phase 3).
+    private List<Guid>? _kennungen, _kennungStreams;
 
     public void Lege(IDocumentSession session, Guid streamId, IReadOnlyList<Beilage>? beilagen)
     {
@@ -37,6 +39,10 @@ internal sealed class BeilagenSchreiber
                 case VorgangBeendet e:
                     session.Delete<ProzessOffen>(e.Korrelation);
                     break;
+                case QuellKennung k:
+                    (_kennungen ??= new()).Add(k.Vorgang);
+                    (_kennungStreams ??= new()).Add(streamId);
+                    break;
                 case FristFaellig f:
                     (_fristStreams ??= new()).Add(streamId);
                     (_fristVersionen ??= new()).Add(f.Version);
@@ -53,6 +59,9 @@ internal sealed class BeilagenSchreiber
     public void Abschliessen(IDocumentSession session, IDocumentStore store)
     {
         if (_commands is not null) InboxTabelle.Quittiere(session, InboxTabelle.Name(store), _commands, _streams!, _abgelehnt!);
+        if (_kennungen is not null)
+            session.QueueSqlCommand($"insert into {Infrastructure.Quellen.QuellKennungen.Name(store)} (vorgang, stream_id) select * from unnest(?::uuid[], ?::uuid[])",
+                _kennungen.ToArray(), _kennungStreams!.ToArray());
         if (_fristStreams is not null)
             Infrastructure.Uhr.FristVerzeichnis.Lege(session, store, _fristStreams, _fristVersionen!, _fristNach!, _fristBefehle!, _fristDaten!, _fristAkteure!);
     }

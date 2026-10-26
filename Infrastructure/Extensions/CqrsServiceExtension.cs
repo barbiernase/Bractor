@@ -213,6 +213,8 @@ public static class CqrsServiceExtensions
             InboxTabelle.Registriere(options);
             // Das Fälligkeits-Verzeichnis der Uhr (Plan Pub/Sub-Neustrukturierung Phase 3): je Frist eine Zeile, geschrieben mit ihrem Event.
             Infrastructure.Uhr.FristVerzeichnis.Registriere(options);
+            // Das Kennungs-Verzeichnis der Quellen mit einem Stream je Schlüssel (genau einmal je Kennung, ohne Horizont).
+            Infrastructure.Quellen.QuellKennungen.Registriere(options);
             EventZeit.Registriere(options, builder.DbUhr);
 
             // Die Dokumente des Frameworks (Cursor, Offen-Index, Dead-Letter, Fristplan, Marking) — eine Quelle, auch für die Plan-Tests.

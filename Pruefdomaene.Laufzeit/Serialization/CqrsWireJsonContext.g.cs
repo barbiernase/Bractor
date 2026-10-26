@@ -106,6 +106,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.AuftragNichtGefunden))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.BestaetigeAuftrag))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.StarteAuftrag))]
+[JsonSerializable(typeof(global::Pruefdomaene.Import.ImportAngefordert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Import.ImportExistiert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Import.ImportGestartet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Import.ImportStandGemeldet))]
