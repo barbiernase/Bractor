@@ -28,14 +28,14 @@ public sealed class FunktionsAktivierung : IAsyncDisposable
         _baue = baue;
     }
 
-    /// <summary>Die Umsetzung dieser Aktivierung (nach <see cref="Beginne"/>).</summary>
+    /// <summary>Die Umsetzung dieser Aktivierung (nach <see cref="BeginneAsync"/>).</summary>
     public object Umsetzung => _umsetzung ?? throw new InvalidOperationException("Die Aktivierung ist nicht begonnen oder schon freigegeben.");
 
     /// <summary>Ist die Umsetzung gebaut und noch nicht freigegeben?</summary>
     public bool Aktiv => _umsetzung is not null;
 
-    /// <summary>Öffnet den Bereich und baut die Umsetzung (beim Aktivieren des Actors).</summary>
-    public void Beginne()
+    /// <summary>Öffnet den Bereich und baut die Umsetzung (beim Aktivieren des Actors); scheitert der Bau, ist der Bereich wieder zu.</summary>
+    public async ValueTask BeginneAsync()
     {
         if (_umsetzung is not null) return;
         var bereich = _wurzel.CreateAsyncScope();
@@ -46,7 +46,7 @@ public sealed class FunktionsAktivierung : IAsyncDisposable
         }
         catch
         {
-            bereich.Dispose();
+            await bereich.DisposeAsync();
             throw;
         }
     }

@@ -45,7 +45,7 @@ public class FunktionsAktivierungTests
     {
         var (wurzel, p) = Container();
         var a = new FunktionsAktivierung(wurzel, Baue);
-        a.Beginne();
+        await a.BeginneAsync();
         a.Aktiv.Should().BeTrue();
         p.Should().BeEmpty();
 
@@ -60,12 +60,12 @@ public class FunktionsAktivierungTests
     {
         var (wurzel, p) = Container();
         var erste = new FunktionsAktivierung(wurzel, Baue);
-        erste.Beginne();
+        await erste.BeginneAsync();
         var v1 = ((Umsetzung)erste.Umsetzung).Verbindung;
         await erste.DisposeAsync();
 
         var zweite = new FunktionsAktivierung(wurzel, Baue);
-        zweite.Beginne();
+        await zweite.BeginneAsync();
         ((Umsetzung)zweite.Umsetzung).Verbindung.Nr.Should().NotBe(v1.Nr, "die Ressource gehört der Aktivierung, nicht dem Knoten");
         await zweite.DisposeAsync();
         p.Should().Equal("umsetzung zu", "verbindung zu", "umsetzung zu", "verbindung zu");
@@ -76,7 +76,7 @@ public class FunktionsAktivierungTests
     {
         var (wurzel, p) = Container();
         var a = new FunktionsAktivierung(wurzel, sp => { sp.GetRequiredService<Verbindung>(); throw new InvalidOperationException("Modell fehlt"); });
-        a.Invoking(x => x.Beginne()).Should().Throw<InvalidOperationException>();
+        await a.Invoking(x => x.BeginneAsync().AsTask()).Should().ThrowAsync<InvalidOperationException>();
         p.Should().Equal("verbindung zu");
         await a.DisposeAsync();   // nichts mehr offen
         p.Should().HaveCount(1);

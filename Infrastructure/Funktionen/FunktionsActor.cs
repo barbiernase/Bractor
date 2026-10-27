@@ -72,12 +72,12 @@ public sealed class FunktionsActor : RahmenActor
     /// <summary>Die Speicher-Diskriminatoren der Eingänge aus dem Log (samt Upcasting-Vorgängern) — der Typfilter beim Lesen.</summary>
     public static IReadOnlyCollection<string>? TypenVon(FunktionsBaustein b) => BatchLeser.TypenAus(b.LogEingaenge.Select(e => e.Typ));
 
-    protected override Task BeginneAsync(IContext context)
+    protected override async Task BeginneAsync(IContext context)
     {
         _partition = int.TryParse(context.ClusterIdentity()?.Identity, out var p) ? p : 0;
         _lauf = new FunktionsLauf(_slots);
-        _aktivierung?.Beginne();   // wirft der Bau, startet die Supervision neu (die nächste Weckung versucht es wieder)
-        return Task.CompletedTask;
+        // Wirft der Bau, startet die Supervision neu (die nächste Weckung versucht es wieder).
+        if (_aktivierung is not null) await _aktivierung.BeginneAsync();
     }
 
     /// <summary>Umsetzung und Dienste dieser Aktivierung schließen (Stopp, Passivierung, Neustart) — die nächste baut sie neu.</summary>
