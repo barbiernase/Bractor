@@ -1,0 +1,90 @@
+using Abstractions;
+
+// SONDE — fremdes Szenario (Plan Pub/Sub-Neustrukturierung §2.9, Phase 4b): FUNKTIONEN ALS ACTORS MIT ZUSTAND UND HINWEIS-NETZ.
+//
+// Wetterstationen melden Temperaturen (Fakten im Log). Eine gleichbleibende Funktion bildet daraus eine Tendenz — einen HINWEIS, der nicht zur
+// Fachdomäne gehört und nie im Log steht. Ein Prognosemodell mit gekapseltem Zustand (IZustand, EINE Adresse für alle Stationen) lernt aus jeder
+// Meldung im Log, vergisst eine Station, die das Aggregat ablehnt (Hinweis aus einem Decide), und gibt auf jede Tendenz eine Prognose ab — als
+// Command an die Station. Eine Unwetter-Warnung hört die Tendenz draußen (eine Schnittstelle, getragen von einer App) und gibt selbst einen
+// Hinweis aus.
+
+namespace Wetterdienst.Vorhersage;
+
+public record MeldeTemperatur(Id<Station> AggregateId, double Grad) : ICommand<Station>;
+public record TemperaturGemeldet(double Grad) : IEvent;
+public record StationStillgelegt(Id<Station> StationId) : ITransientEvent;
+
+public record VermerkePrognose(Id<Station> AggregateId, double Grad, int Gelernt) : ICommand<Station>;
+public record PrognoseVermerkt(double Grad, int Gelernt) : IEvent;
+
+public partial class Station : IState
+{
+    public bool Stillgelegt { get; set; }
+    public double Letzte { get; set; }
+
+    public partial class Decider : IDecider<Station>
+    {
+        public IEnumerable<OneOf<TemperaturGemeldet, StationStillgelegt>> Decide(MeldeTemperatur c)
+        {
+            if (this.State.Stillgelegt) { yield return new StationStillgelegt(c.AggregateId); yield break; }
+            yield return new TemperaturGemeldet(c.Grad);
+        }
+
+        public IEnumerable<OneOf<PrognoseVermerkt>> Decide(VermerkePrognose c)
+        {
+            yield return new PrognoseVermerkt(c.Grad, c.Gelernt);
+        }
+    }
+
+    public partial class Applier : IApplier<Station>
+    {
+        public void Apply(TemperaturGemeldet e) { this.State.Letzte = e.Grad; }
+        public void Apply(PrognoseVermerkt e) { }
+    }
+}
+
+// Die Tendenz einer Meldung: ein Hinweis, von Funktion zu Funktion im Speicher (höchstens einmal).
+public record Tendenz(Id<Station> Station, double Grad) : ITransientEvent;
+
+public sealed class Tendenzbildung : IFunktion
+{
+    public Tendenz Auf(TemperaturGemeldet e, Herkunft h) => new(new Id<Station>(h.Stream), e.Grad);
+}
+
+// Der Zustand des Modells: je Station, was es gelernt hat (kein Domänen-Zustand; gesichert mit der Position).
+public sealed class Gewichte
+{
+    public Dictionary<Guid, double> Mittel { get; set; } = new();
+    public Dictionary<Guid, int> Anzahl { get; set; } = new();
+}
+
+[EineAdresse]
+public sealed class Prognosemodell(IZustand<Gewichte> gewichte) : IFunktion
+{
+    public void Auf(TemperaturGemeldet e, Herkunft h)
+    {
+        var n = gewichte.Wert.Anzahl.GetValueOrDefault(h.Stream) + 1;
+        gewichte.Wert.Anzahl[h.Stream] = n;
+        gewichte.Wert.Mittel[h.Stream] = gewichte.Wert.Mittel.GetValueOrDefault(h.Stream) + (e.Grad - gewichte.Wert.Mittel.GetValueOrDefault(h.Stream)) / n;
+    }
+
+    public Task Auf(StationStillgelegt h)
+    {
+        gewichte.Wert.Mittel.Remove(h.StationId.Wert);
+        gewichte.Wert.Anzahl.Remove(h.StationId.Wert);
+        return Task.CompletedTask;
+    }
+
+    public VermerkePrognose? Auf(Tendenz t) =>
+        gewichte.Wert.Anzahl.TryGetValue(t.Station.Wert, out var n) ? new VermerkePrognose(t.Station, gewichte.Wert.Mittel[t.Station.Wert], n) : null;
+}
+
+// Draußen: eine Warnung hört die Tendenz und gibt selbst einen Hinweis aus — getragen von der Wetter-App.
+public record Unwetter(Id<Station> Station, string Stufe) : ITransientEvent;
+
+public interface IUnwetterwarnung : IFunktion
+{
+    Unwetter? Auf(Tendenz t);
+}
+
+public interface IWetterApp : IClientVertrag, ITraegt<IUnwetterwarnung>, IHoert<Unwetter> { }

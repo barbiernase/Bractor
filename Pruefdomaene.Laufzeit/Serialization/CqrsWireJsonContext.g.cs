@@ -33,6 +33,7 @@ namespace Infrastructure.Serialization;
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Auftrag.Auftrag>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Import.Importauftrag>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Kontingent.Kontingent>),
+        typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Messung.Messstelle>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Posten.Posten>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Verteilung.Verteilung>),
     })]
@@ -114,7 +115,14 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentExistiertBereits))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentNichtGefunden))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.RichteKontingentEin))]
+[JsonSerializable(typeof(global::Pruefdomaene.Messung.AusreisserGemeldet))]
+[JsonSerializable(typeof(global::Pruefdomaene.Messung.ErfasseMesswert))]
+[JsonSerializable(typeof(global::Pruefdomaene.Messung.MeldeAusreisser))]
+[JsonSerializable(typeof(global::Pruefdomaene.Messung.MesswertErfasst))]
+[JsonSerializable(typeof(global::Pruefdomaene.Messung.SchaetzungVermerkt))]
+[JsonSerializable(typeof(global::Pruefdomaene.Messung.VermerkeSchaetzung))]
 [JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Abrechnung.MahnungUnnoetig))]
+[JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Messung.Merkmal))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.BuchePostenZu))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.EroeffnePosten))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.GibPostenFrei))]

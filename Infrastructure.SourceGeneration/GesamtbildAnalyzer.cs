@@ -15,7 +15,7 @@ namespace Infrastructure.SourceGeneration;
 /// <item>CQRS084 (GR-QUERY) — eine Query beantwortet genau ein Reader.</item>
 /// <item>CQRS085 (GR-MODUL-AUSGANG-OFFEN, UNUSED-EVENT; Warnung) — ein Event, eine Ablehnung oder eine Response, die niemand erzeugt.</item>
 /// <item>CQRS106 (R20, GR-HINWEIS-NETZ; Fehler) — eine Funktion hört einen Hinweis, den im Hinweis-Netz niemand erzeugt (kein Decide, keine Funktion
-///   nennt ihn in der Signatur): ihre Adresse bekäme ihn nie (Plan Pub/Sub-Neustrukturierung §2.9).</item>
+///   nennt ihn in der Signatur, kein Client sendet ihn): ihre Adresse bekäme ihn nie (Plan Pub/Sub-Neustrukturierung §2.9).</item>
 /// <item>CQRS086 (GR-MODUL-EINGANG-OFFEN; Warnung) — ein Command ohne Decider, eine Query ohne Reader.</item>
 /// <item>CQRS087 (GR-GETRAGEN; Warnung) — eine Funktion als Schnittstelle ohne Umsetzung im Host, die kein Client trägt (<c>ITraegt</c>): sie läuft
 ///   nur mit einer Bindung von Hand (R17), sonst ist sie ein Boot-Fehler.</item>
@@ -42,7 +42,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         DiagnosticSeverity.Warning);
 
     private static readonly DiagnosticDescriptor HinweisOhneErzeuger = D(HinweisOhneErzeugerId, "Gehörter Hinweis ohne Erzeuger",
-        "Die Funktion '{0}' hört den Hinweis '{1}', aber im Hinweis-Netz erzeugt ihn niemand — kein Decide und keine Funktion nennt ihn in der Signatur "
+        "Die Funktion '{0}' hört den Hinweis '{1}', aber im Hinweis-Netz erzeugt ihn niemand — kein Decide und keine Funktion nennt ihn in der Signatur, kein Client sendet ihn "
         + "(R20, GR-HINWEIS-NETZ)", DiagnosticSeverity.Error);
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Query, AusgangOffen, EingangOffen, Getragen, HinweisOhneErzeuger);
@@ -122,7 +122,12 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
             if (IstT(t, iAkteur))
                 erzeugt.UnionWith(t.AllInterfaces.Where(i => iDarf != null && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iDarf)).Select(i => i.TypeArguments[0]));
             if (t.TypeKind == TypeKind.Interface && IstT(t, iClient))
-                erzeugt.UnionWith(t.AllInterfaces.Where(i => iSendet != null && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iSendet)).Select(i => i.TypeArguments[0]));
+            {
+                var gesendet = t.AllInterfaces.Where(i => iSendet != null && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iSendet))
+                    .Select(i => i.TypeArguments[0]).ToList();
+                erzeugt.UnionWith(gesendet);
+                imNetz.UnionWith(gesendet);   // ein Hinweis, den ein Client sendet, geht ins Hinweis-Netz
+            }
         }
 
         // GR-QUERY und offene Eingänge.

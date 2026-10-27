@@ -358,3 +358,29 @@ lage Registrierung -> Domain.Pipeline
 lage SchadenAusPruefung -> Domain.Pipeline
 lage SchadenBeiRueckgabe -> Domain.Pipeline
 lage StoerungBeiAlarm -> Domain.Pipeline
+
+# ── Wetterdienst (Vorhersage.cs.txt): FUNKTIONEN ALS ACTORS (Plan §2.9) — ein Prognosemodell mit gekapseltem ZUSTAND (IZustand, EINE Adresse) lernt
+#    aus dem Log (Auf ohne Ausgabe) und aus einem Hinweis des Aggregats; eine gleichbleibende Funktion bildet einen HINWEIS (Tendenz), den eine
+#    Funktion im Host und eine draußen (Schnittstelle, getragen von einer App) hören — die eine gibt einen Command aus, die andere einen Hinweis. ──
+record Wetterdienst.Vorhersage.MeldeTemperatur command aggregat=Station | AggregateId:Id<Station>, Grad:double
+record Wetterdienst.Vorhersage.TemperaturGemeldet event aggregat=Station | Grad:double
+record Wetterdienst.Vorhersage.StationStillgelegt rejection aggregat=Station | StationId:Id<Station>
+record Wetterdienst.Vorhersage.VermerkePrognose command aggregat=Station | AggregateId:Id<Station>, Grad:double, Gelernt:int
+record Wetterdienst.Vorhersage.PrognoseVermerkt event aggregat=Station | Grad:double, Gelernt:int
+record Wetterdienst.Vorhersage.Tendenz rejection | Station:Id<Station>, Grad:double
+record Wetterdienst.Vorhersage.Unwetter rejection | Station:Id<Station>, Stufe:string
+aggregat Wetterdienst.Vorhersage.Station | Stillgelegt:bool, Letzte:double
+decide Station.MeldeTemperatur -> TemperaturGemeldet; StationStillgelegt
+decide Station.VermerkePrognose -> PrognoseVermerkt
+apply Station.TemperaturGemeldet
+apply Station.PrognoseVermerkt
+funktion-auf Wetterdienst.Vorhersage.Tendenzbildung klasse() | TemperaturGemeldet herkunft -> Tendenz
+funktion-auf Wetterdienst.Vorhersage.Prognosemodell klasse(gewichte:IZustand<Gewichte>) zustand=Gewichte eineadresse | TemperaturGemeldet herkunft -> lernt || StationStillgelegt hinweis -> lernt || Tendenz hinweis -> VermerkePrognose
+funktion-auf Wetterdienst.Vorhersage.IUnwetterwarnung schnittstelle | Tendenz hinweis -> Unwetter
+client Wetterdienst.Vorhersage.IWetterApp | traegt IUnwetterwarnung; sendet ; fragt ; hoert Unwetter
+lage Tendenzbildung -> Domain.Pipeline
+lage Prognosemodell -> Domain.Pipeline
+lage IUnwetterwarnung -> Domain.Pipeline
+lage Tendenz -> Domain.Pipeline
+lage Unwetter -> Domain.Pipeline
+lage IWetterApp -> Domain.Akteure

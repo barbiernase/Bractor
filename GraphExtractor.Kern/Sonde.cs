@@ -176,12 +176,15 @@ public static class Sonde
         foreach (var a in A(b, "applier").Where(a => sondenAggregate.Contains(S(a, "aggregat"))))
             z.Add($"apply {S(a, "aggregat")}.{S(a, "event")}");
         string Konstruktor(JsonNode? n) => "(" + string.Join(", ", A(n, "konstruktor").Select(p => $"{S(p, "name")}:{S(p, "typ")}")) + ")";
-        // Funktionen: Klasse oder Schnittstelle, je Eingang Herkunft/Hinweis, Ausgaben (Strom), Lese-Fähigkeiten; Konstruktor, Umsetzungen.
+        // Funktionen: Klasse oder Schnittstelle (mit Zustand und einer Adresse, Plan §2.9), je Eingang Herkunft/Hinweis, Ausgaben (Strom; keine =
+        //   „lernt“), Lese-Fähigkeiten; Konstruktor, Umsetzungen.
         foreach (var f in A(b, "bausteinFunktionen").Where(Sonde))
-            z.Add($"funktion-auf {S(f, "namespace")}.{S(f, "name")} {(f["klasse"]?.GetValue<bool>() == true ? "klasse" + Konstruktor(f) : "schnittstelle")} | "
+            z.Add($"funktion-auf {S(f, "namespace")}.{S(f, "name")} {(f["klasse"]?.GetValue<bool>() == true ? "klasse" + Konstruktor(f) : "schnittstelle")}"
+                + (f["zustand"] is { } zu ? $" zustand={zu}" : "") + (f["eineAdresse"]?.GetValue<bool>() == true ? " eineadresse" : "") + " | "
                 + string.Join(" || ", A(f, "eingaenge").Select(e => S(e, "eingang")
                     + (e["hinweis"]?.GetValue<bool>() == true ? " hinweis" : "") + (e["herkunft"]?.GetValue<bool>() == true ? " herkunft" : "")
-                    + " -> " + (e["strom"]?.GetValue<bool>() == true ? "strom " : "") + string.Join("; ", A(e, "ausgaben").Select(x => (string?)x))
+                    + " -> " + (e["strom"]?.GetValue<bool>() == true ? "strom " : "")
+                    + (A(e, "ausgaben").Any() ? string.Join("; ", A(e, "ausgaben").Select(x => (string?)x)) : "lernt")
                     + (A(e, "faehigkeiten").Any() ? " liest " + string.Join(", ", A(e, "faehigkeiten").Select(p => $"{S(p, "typ")} {S(p, "name")}")) : "")))
                 + (A(f, "umsetzungen").Any() ? " umsetzung " + string.Join(", ", A(f, "umsetzungen").Select(u => S(u, "name") + Konstruktor(u))) : ""));
         // Domänen-Dienste (konzept-werkbank §12.3 E11): Signatur (Methoden) und Implementierungen mit Konstruktor.

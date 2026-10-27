@@ -22,6 +22,7 @@ namespace Infrastructure.Serialization;
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Auftrag.Auftrag>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Import.Importauftrag>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Kontingent.Kontingent>),
+        typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Messung.Messstelle>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Posten.Posten>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Verteilung.Verteilung>),
     })]
@@ -55,6 +56,9 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentBelegt))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentEingerichtet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentEntlastet))]
+[JsonSerializable(typeof(global::Pruefdomaene.Messung.AusreisserGemeldet))]
+[JsonSerializable(typeof(global::Pruefdomaene.Messung.MesswertErfasst))]
+[JsonSerializable(typeof(global::Pruefdomaene.Messung.SchaetzungVermerkt))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.PostenEroeffnet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.PostenEroeffnet_V1))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.PostenFreigegeben))]
@@ -66,6 +70,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.VerteilungGestartet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.ZubuchungGezaehlt))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.ZubuchungenAngeordnet))]
+[JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Messung.Schaetzmodell))]
 public partial class EventJsonSerializerContext : JsonSerializerContext
 {
 }

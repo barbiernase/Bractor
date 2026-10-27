@@ -68,6 +68,9 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
     
     private static int _sessionCounter = 0;
 
+    /// <summary>Das Hinweis-Netz (Plan §2.9): ein Hinweis, den ein Client sendet (ISendet), geht auch an die Funktionen, die ihn hören.</summary>
+    private readonly HinweisNetz? _hinweisNetz;
+
     /// <summary>
     /// Intervall, in dem eine offene Session ihre PubSub-Subscriptions ERNEUT an die Shards sendet
     /// (Selbst-Heilung gegen Shard-Rebalance — das Poll-Äquivalent für den Client-Targeted-Pfad).
@@ -85,8 +88,10 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         AkteurTor? akteurTor = null,
         ILogger<CqrsClientServiceImpl>? logger = null,
         IAusgabeAblage? ausgaben = null,
-        Konsum? konsum = null)
+        Konsum? konsum = null,
+        HinweisNetz? hinweisNetz = null)
     {
+        _hinweisNetz = hinweisNetz;   // null = keine Funktion hört Hinweise
         _actorSystem = actorSystem ?? throw new ArgumentNullException(nameof(actorSystem));
         _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
@@ -696,6 +701,11 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
                 envelope = envelope with { UserId = halter };   // Tor aus: Herkunft laut Modell (der eine Akteur mit IDarf)
 
             _publisher.Melde(envelope);
+            // An die Funktionen, die den Hinweis hören (Hinweis-Netz): die Kennung vergibt der Client (CausationId, sonst gewürfelt — Clients
+            //   würfeln, R13), die Adresse folgt aus dem Stream, den er nennt (A6).
+            _hinweisNetz?.Verteile(new HinweisZustellen(Guid.TryParse(envelope.CausationId, out var kennung) ? kennung : Guid.NewGuid(), envelope.Payload,
+                envelope.AggregateId, envelope.AggregateVersion, DateTimeOffset.UtcNow, envelope.CorrelationId,
+                ImAuftrag.IstAkteur(envelope.UserId) ? envelope.UserId : null));
 
             _logger.LogDebug("{Session} TransientEvent published: {Payload}", sessionId, envelope.Payload.GetType().Name);
         }

@@ -271,6 +271,10 @@ public sealed record BausteinFunktion
     public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
     /// <summary>Bei einer Schnittstelle: ihre Umsetzungen im Host (Klasse und Konstruktor).</summary>
     public IReadOnlyList<FunktionsUmsetzung> Umsetzungen { get; init; } = [];
+    /// <summary>Der gekapselte Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, Plan §2.9): der einfache Name von T, sonst null.</summary>
+    public string? Zustand { get; init; }
+    /// <summary><c>[EineAdresse]</c>: ein Funktions-Actor für alles statt einer je Partition (A6).</summary>
+    public bool EineAdresse { get; init; }
     public string? Doku { get; init; }
     public string? Datei { get; init; }
 }

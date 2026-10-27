@@ -157,6 +157,9 @@ public sealed class BausteinFunktionRaw
     public List<string> UmsetzungenFull = new();
     /// <summary>Je Umsetzung ihr Konstruktor (Typ wie geschrieben, Name) — ein Dienst darin ist die Kante Funktion → Dienst.</summary>
     public Dictionary<string, List<(string Typ, string Name)>> UmsetzungsKonstruktoren = new(StringComparer.Ordinal);
+    /// <summary>Der Zustand (<c>IZustand&lt;T&gt;</c>, voller Name von T) — null ohne; <c>[EineAdresse]</c> als Code-Fakt (Plan §2.9).</summary>
+    public string? ZustandFull;
+    public bool EineAdresse;
     public string? Doku, Datei;
 }
 
@@ -755,6 +758,7 @@ public sealed partial class DomainExtractor
         {
             Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq(), Klasse = !form.Draussen,
             Doku = decl == null ? null : Summary(decl), Datei = decl?.SyntaxTree.FilePath,
+            ZustandFull = form.Zustand?.Fq(), EineAdresse = form.EineAdresse,
         };
         foreach (var a in form.Aufs)
         {
