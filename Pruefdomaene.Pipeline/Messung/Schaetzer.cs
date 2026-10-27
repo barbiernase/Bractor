@@ -34,6 +34,8 @@ public sealed class Schaetzer(IZustand<Schaetzmodell> modell) : IFunktion
 {
     public void Auf(MesswertErfasst e, Herkunft h) => modell.Wert.Lerne(h.Stream, e.Wert);
 
-    public VermerkeSchaetzung? Auf(Merkmal m) =>
-        modell.Wert.Stand(m.Stelle.Wert) is { Anzahl: > 0 } s ? new VermerkeSchaetzung(m.Stelle, s.Summe / s.Anzahl, s.Anzahl) : null;
+    /// <summary>Auf jedes Merkmal eine Schätzung — hat das Modell die Messstelle noch nicht gelernt (der Hinweis war schneller als das Log), schätzt
+    /// es den Wert selbst, mit Anzahl 0.</summary>
+    public VermerkeSchaetzung Auf(Merkmal m) =>
+        modell.Wert.Stand(m.Stelle.Wert) is { Anzahl: > 0 } s ? new VermerkeSchaetzung(m.Stelle, s.Summe / s.Anzahl, s.Anzahl) : new VermerkeSchaetzung(m.Stelle, m.Wert, 0);
 }
