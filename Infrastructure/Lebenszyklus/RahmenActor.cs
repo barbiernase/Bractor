@@ -12,7 +12,8 @@ namespace Infrastructure.Lebenszyklus;
 ///   gestoppt oder neu gestartet ist <b>und</b> keine Arbeit ihn mehr nutzt.</item>
 /// <item><b>Stopp:</b> beim <see cref="Stopping"/> (und vor einem Neustart) bricht er <see cref="Stopp"/> ab und wartet begrenzt
 ///   (<see cref="StandardAbwarten"/>) auf die Arbeit neben der Mailbox (<see cref="Neben"/>); was länger läuft, behält den Bereich bis zu
-///   seinem Ende. Erst dann läuft <see cref="BeimStoppenAsync"/> (nur beim Stopp, nicht vor einem Neustart).</item>
+///   seinem Ende. Erst dann läuft <see cref="BeimStoppenAsync"/> (nur beim Stopp, nicht vor einem Neustart), danach in beiden Fällen
+///   <see cref="FreigebenAsync"/> — die Ressourcen der Aktivierung (etwa die Umsetzung einer Funktion samt ihren Diensten).</item>
 /// <item><b>Passivierung:</b> mit einem Leerlauf &gt; 0 stoppt sich der Actor, wenn er so lange keine Nachricht bekam — nie, solange er
 ///   <see cref="Beschaeftigt"/> ist (PF-5; der durable Zustand liegt nie im Actor).</item>
 /// <item><b>Fehler:</b> wirft die Behandlung einer Nachricht, bekommt ein wartender Absender die ehrliche Antwort aus
@@ -78,11 +79,13 @@ public abstract class RahmenActor : IActor, IAsyncDisposable
                 await BeendeLaeufeAsync();
                 try { await BeimStoppenAsync(context); }
                 catch (Exception ex) { _rahmenLogger?.LogWarning(ex, "[{Actor}] Fehler beim Stoppen", GetType().Name); }
+                await FreigebenSicherAsync();
                 return;
 
             case Restarting:
                 // Nach einem Fehler: kein BeimStoppen (der Zustand ist nicht mehr verlässlich), nur abbrechen, abwarten, freigeben.
                 await BeendeLaeufeAsync();
+                await FreigebenSicherAsync();
                 return;
 
             case Stopped:
@@ -111,6 +114,18 @@ public abstract class RahmenActor : IActor, IAsyncDisposable
 
     /// <summary>Beim Stopp, nachdem die laufende Arbeit beendet ist (oder die Wartezeit um ist), bevor der Bereich frei wird.</summary>
     protected virtual Task BeimStoppenAsync(IContext context) => Task.CompletedTask;
+
+    /// <summary>
+    /// Gibt die Ressourcen der Aktivierung frei — nach dem Stopp (nach <see cref="BeimStoppenAsync"/>) und vor einem Neustart, jeweils nachdem
+    /// die laufende Arbeit beendet ist (oder die Wartezeit um ist). Die nächste Aktivierung baut sie neu.
+    /// </summary>
+    protected virtual ValueTask FreigebenAsync() => ValueTask.CompletedTask;
+
+    private async Task FreigebenSicherAsync()
+    {
+        try { await FreigebenAsync(); }
+        catch (Exception ex) { _rahmenLogger?.LogWarning(ex, "[{Actor}] Fehler beim Freigeben der Ressourcen", GetType().Name); }
+    }
 
     /// <summary>Die ehrliche Antwort an einen wartenden Absender, wenn die Behandlung von <paramref name="nachricht"/> warf; null = keine.</summary>
     protected virtual object? Fehlerantwort(object nachricht, Exception fehler) => null;

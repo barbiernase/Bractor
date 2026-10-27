@@ -81,7 +81,7 @@ namespace Infrastructure.SourceGeneration
             foreach (var (d, impls) in dienste)
                 foreach (var k in impls)
                     sb.AppendLine($"            new DienstImplementierung(typeof({d.ToDisplayString(fq)}), \"{k.Name}\", typeof({k.ToDisplayString(fq)}), "
-                        + $"s => s.AddSingleton<{d.ToDisplayString(fq)}>(sp => new {k.ToDisplayString(fq)}({Ctorbindung.Argumente(Ctorbindung.Konstruktor(k), fq)}))),");
+                        + $"s => s.AddScoped<{d.ToDisplayString(fq)}>(sp => new {k.ToDisplayString(fq)}({Ctorbindung.Argumente(Ctorbindung.Konstruktor(k), fq)}))),");
             sb.AppendLine("        };");
             sb.AppendLine();
             sb.AppendLine("        /// <summary>Implementierung (Funktion oder Dienst) → was ihr Konstruktor braucht: Dienste und Konfig-Records.</summary>");

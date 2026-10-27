@@ -16,8 +16,9 @@ namespace Infrastructure.Funktionen;
 /// <para><b>Wecken</b> (bis zum Wecker am Flush, Plan Phase 6): wie ein Partitions-Leser einer Projektion — das Signal eines Aggregat-Commits weckt die
 /// Partition schnell, der Takt (alle 30 s je Partition) holt alles andere nach (Events aus Funktionen, Quellen und Uhr wecken heute niemanden). Jede
 /// Weckung führt zu höchstens einer Lese-Runde mehr („läuft → noch einmal“).</para>
-/// <para><b>Lebenszyklus</b> (Rahmen): Lesen und Arbeiten laufen neben der Mailbox (<see cref="RahmenActor.Neben"/>); der Zustand
-/// (<see cref="FunktionsLauf"/>) wird nur in der Mailbox geändert. Beim Stopp bricht die Arbeit ab — was nicht fertig wurde, rechnet die nächste
+/// <para><b>Lebenszyklus</b> (Rahmen): beim Aktivieren baut der Actor die Umsetzung im Host samt ihren Diensten in einem eigenen Bereich
+/// (<see cref="FunktionsAktivierung"/>), beim Stoppen, Passivieren und vor einem Neustart gibt er sie frei. Lesen und Arbeiten laufen neben der
+/// Mailbox (<see cref="RahmenActor.Neben"/>); der Lauf (<see cref="FunktionsLauf"/>) wird nur in der Mailbox geändert. Beim Stopp bricht die Arbeit ab — was nicht fertig wurde, rechnet die nächste
 /// Aktivierung erneut (wiederholungsfest über das Festgehaltene bzw. abgeleitete Command-Ids); der Stand wird zuletzt noch geschrieben. Kein
 /// Leerlauf-Stopp: es gibt nur Funktionen × Partitionen dieser Actors, der Takt weckt sie ohnehin.</para>
 /// </summary>
@@ -31,6 +32,7 @@ public sealed class FunktionsActor : RahmenActor
 
     private readonly FunktionsBaustein _b;
     private readonly FunktionsArbeit _arbeit;
+    private readonly FunktionsAktivierung? _aktivierung;
     private readonly IEventStoreRepository _log;
     private readonly IFunktionsStand _staende;
     private readonly IDeadLetterSink? _deadLetter;
@@ -47,13 +49,15 @@ public sealed class FunktionsActor : RahmenActor
     private DateTimeOffset _letzterStand = DateTimeOffset.MinValue, _naechsterParkVersuch = DateTimeOffset.MinValue;
 
     /// <param name="wiederholungen">Wie oft ein werfender Eingang nach Backoff erneut versucht wird, bevor sein Stream geparkt wird.</param>
+    /// <param name="aktivierung">Die Umsetzung im Host und ihre Dienste je Aktivierung; null = die Funktion rechnet draußen.</param>
     public FunktionsActor(FunktionsBaustein baustein, FunktionsArbeit arbeit, IEventStoreRepository log, IFunktionsStand staende, Konsum konsum,
         int slots, int wiederholungen, IDeadLetterSink? deadLetter = null, ILogger? logger = null, Func<DateTimeOffset>? jetzt = null,
-        IReadOnlyCollection<string>? typen = null)
+        IReadOnlyCollection<string>? typen = null, FunktionsAktivierung? aktivierung = null)
         : base(logger)
     {
         _b = baustein;
         _arbeit = arbeit;
+        _aktivierung = aktivierung;
         _log = log;
         _staende = staende;
         _konsum = konsum;
@@ -72,8 +76,12 @@ public sealed class FunktionsActor : RahmenActor
     {
         _partition = int.TryParse(context.ClusterIdentity()?.Identity, out var p) ? p : 0;
         _lauf = new FunktionsLauf(_slots);
+        _aktivierung?.Beginne();   // wirft der Bau, startet die Supervision neu (die nächste Weckung versucht es wieder)
         return Task.CompletedTask;
     }
+
+    /// <summary>Umsetzung und Dienste dieser Aktivierung schließen (Stopp, Passivierung, Neustart) — die nächste baut sie neu.</summary>
+    protected override ValueTask FreigebenAsync() => _aktivierung?.DisposeAsync() ?? ValueTask.CompletedTask;
 
     protected override Task BehandleAsync(IContext context)
     {

@@ -95,7 +95,7 @@ public static class FunktionsBausteinWiring
         return bindung;
     }
 
-    /// <summary>Die Umsetzung im Host nach der Bindung (gebaut einmal je Knoten über die generierte Fabrik).</summary>
+    /// <summary>Die Umsetzung im Host nach der Bindung (gebaut je Aktivierung über die generierte Fabrik, <see cref="FunktionsAktivierung"/>).</summary>
     public static FunktionsUmsetzung Umsetzung(FunktionsBaustein b, BausteinBindung bindung) =>
         b.Umsetzungen.Single(u => bindung.Umsetzung is null || u.Name == bindung.Umsetzung);
 }
@@ -109,18 +109,18 @@ internal sealed class FunktionsKind(FunktionsBaustein baustein) : IClusterKindCo
         var konsum = provider.GetService<Konsum>() ?? Konsum.Standard;
         var logger = provider.GetService<ILoggerFactory>()?.CreateLogger("Funktion." + baustein.Name);
         var typen = FunktionsActor.TypenVon(baustein);
-        // Die Umsetzung einmal je Knoten (darf warme Ressourcen halten, muss bei Slots > 1 thread-sicher sein).
-        var instanz = bindung.Laufort == FunktionsLaufort.Host
-            ? new Lazy<object>(() => FunktionsBausteinWiring.Umsetzung(baustein, bindung).Baue(provider))
-            : null;
+        var umsetzung = bindung.Laufort == FunktionsLaufort.Host ? FunktionsBausteinWiring.Umsetzung(baustein, bindung) : null;
         return new ClusterKind(baustein.KindName, Props.FromProducer(() =>
         {
             // Der Cluster ist hier fertig (Spawn-Zeit): Emitter und Bote erst jetzt bauen.
             var bote = new Bote(system.Cluster(), logger);
             var emitter = new CommandEmitter(bote, logger);
             var publisher = provider.GetService<BrokerPublisher>();
+            // Die Umsetzung je Aktivierung, samt ihren Diensten in einem eigenen Bereich (Plan §2.9); bei Slots > 1 teilen sich die Eingänge
+            //   dieser Aktivierung die Instanz — sie muss dann thread-sicher sein.
+            var aktivierung = umsetzung is null ? null : new FunktionsAktivierung(provider, umsetzung.Baue);
             var arbeit = new FunktionsArbeit(baustein,
-                instanz is null ? null : () => instanz.Value,
+                aktivierung is null ? null : () => aktivierung.Umsetzung,
                 provider.GetRequiredService<IAusgabeAblage>(),
                 async (cmd, id, korrelation, ct) => await emitter.EmitAsync(cmd, id, korrelation, ct),
                 publisher is null ? null : (hinweis, ursache) => publisher.Melde(new EventEnvelope
@@ -132,7 +132,7 @@ internal sealed class FunktionsKind(FunktionsBaustein baustein) : IClusterKindCo
                 (angebot, ct) => bote.FrageAsync<WakeAck>(FunktionsVermittlerActor.Identitaet(baustein.Typ), angebot, TimeSpan.FromSeconds(5), ct),
                 logger);
             return new FunktionsActor(baustein, arbeit, provider.GetRequiredService<IEventStoreRepository>(), provider.GetRequiredService<IFunktionsStand>(),
-                konsum, bindung.Slots, bindung.Wiederholungen, provider.GetService<IDeadLetterSink>(), logger, typen: typen);
+                konsum, bindung.Slots, bindung.Wiederholungen, provider.GetService<IDeadLetterSink>(), logger, typen: typen, aktivierung: aktivierung);
         }));
     }
 }

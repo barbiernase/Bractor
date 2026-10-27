@@ -69,7 +69,7 @@ public class DienstBindungTests
         var q = Generiert(Bild);
         q.Should().Contain("[\"ISkalierer\"] = typeof(global::Probe.ISkalierer)");
         q.Should().Contain("new DienstImplementierung(typeof(global::Probe.ISkalierer), \"Skalierer\", typeof(global::Probe.Skalierer), "
-                           + "s => s.AddSingleton<global::Probe.ISkalierer>(sp => new global::Probe.Skalierer(");
+                           + "s => s.AddScoped<global::Probe.ISkalierer>(sp => new global::Probe.Skalierer(");
         q.Should().Contain("GetRequiredService<global::Microsoft.Extensions.Logging.ILogger<global::Probe.Skalierer>>(sp)", "die Fabrik ruft den Konstruktor direkt");
         q.Should().Contain("[typeof(global::Probe.Mach)] = new Type[] { typeof(global::Probe.ISkalierer), typeof(global::Probe.BildKonfig) }");
         q.Should().MatchRegex(@"new KonfigRecord\(typeof\(global::Probe\.BildKonfig\), ""BildKonfig"", Konfig\d+\)");
