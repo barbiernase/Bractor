@@ -98,4 +98,18 @@ public sealed record Kunde : IMensch, IDarf<Eroeffne>, IDarf<Frage>;
         (await Ids(funktion + "public sealed class Rechnen : IRechnen { public OneOf<Eroeffne> Auf(Eroeffnet e) => default!; }"))
             .Should().BeEmpty("sie hat eine Umsetzung im Host");
     }
+
+    [Fact]
+    public async Task R20_ein_gehoerter_Hinweis_ohne_Erzeuger_im_Netz_ist_CQRS106()
+    {
+        // Ein Hinweis, den ein Decide (SchonOffen) oder eine Funktion ausgibt, hat einen Erzeuger — einer, den nur ein Client sendet, nicht.
+        (await Ids("public sealed class Mahner : IFunktion { public Eroeffne? Auf(SchonOffen h) => null; }")).Should().BeEmpty();
+        var befunde = await Befunde("public record Merkmal(double Wert) : ITransientEvent; "
+                                    + "public sealed class Schaetzer : IFunktion { public Eroeffne? Auf(Merkmal m) => null; }");
+        befunde.Select(d => d.Id).Should().Contain(GesamtbildAnalyzer.HinweisOhneErzeugerId);
+        befunde.Single(d => d.Id == GesamtbildAnalyzer.HinweisOhneErzeugerId).GetMessage().Should().Contain("'Schaetzer'").And.Contain("'Merkmal'");
+        (await Ids("public record Merkmal(double Wert) : ITransientEvent; "
+                   + "public sealed class Merkmalsbildung : IFunktion { public Merkmal Auf(Eroeffnet e) => new(1); } "
+                   + "public sealed class Schaetzer : IFunktion { public Eroeffne? Auf(Merkmal m) => null; }")).Should().BeEmpty("eine Funktion erzeugt ihn");
+    }
 }

@@ -81,8 +81,14 @@ public static class Grammatik
             [An("CQRS080", "Domain.SourceGeneration/ModellAnalyzer.cs (Apply ohne Decide)"), An("CQRS079", "Domain.SourceGeneration/ModellAnalyzer.cs (Decide ohne Apply)")]),
         new("GR-TRANSIENT", "Hinweis → Funktion/Client", "Einen Hinweis (ITransientEvent: Ablehnung, Fortschritt) hören Funktionen (höchstens einmal) "
             + "und Clients (IHoert) — nie eine Projektion, nie ein Aggregat. Ist eine Ablehnung für einen Ablauf wichtig, ist sie ein Event.", "error",
-            [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Hinweisplan)"),
-             Offen("Zustellung an Funktionen (schneller Kanal) mit Plan Phase 6, docs/13 FB-1")]),
+            [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Hinweisplan; aus einem Hinweis nur Commands und Hinweise)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/HinweisNetz.cs (direkt an die Adresse, ohne Log und Broker)")]),
+        new("GR-HINWEIS-NETZ", "Hinweis-Netz: hart verdrahtet, höchstens einmal", "Ein Hinweis aus einem Aggregat oder einer Funktion geht direkt an "
+            + "die Adresse jeder Funktion, die ihn hört (Partition seines Herkunfts-Streams bzw. die eine Adresse) — im Speicher, ohne Log, ohne Broker, "
+            + "höchstens einmal. Jeder Hinweis, den eine Funktion hört, hat einen Erzeuger im Netz; jede Adresse der Routing-Tabelle existiert; "
+            + "Commands aus einem Hinweis tragen eine Id aus Funktion, Hinweis-Kennung, Stelle, Typ und Ziel (R20, Plan §2.9).", "error",
+            [An("CQRS106", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (gehörter Hinweis ohne Erzeuger)"),
+             new("boot", null, "Infrastructure/Funktionen/HinweisNetz.cs (jede Adresse der Routing-Tabelle gehört zu einer Funktion)")]),
         new("GR-FRIST", "Frist → Uhr → Command an dasselbe Aggregat", "Eine Frist (Frist<TCmd> aus dem Decide eines Aggregats) nimmt die Uhr; fällig "
             + "sendet sie den Command an das Aggregat, das sie setzte (R5) — mindestens einmal, mit der Id aus dem Frist-Event.", "error",
             [Gen("CQRS010", "Infrastructure.SourceGeneration/CommandAggregateMapGenerator.cs"),

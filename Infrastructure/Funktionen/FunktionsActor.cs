@@ -20,6 +20,10 @@ namespace Infrastructure.Funktionen;
 /// Mailbox (<see cref="RahmenActor.Neben"/>); der Lauf (<see cref="FunktionsLauf"/>) wird nur in der Mailbox geändert. Beim Stopp bricht die Arbeit
 /// ab — was nicht fertig wurde, rechnet die nächste Aktivierung erneut (wiederholungsfest über das Festgehaltene bzw. abgeleitete Command-Ids); der
 /// Stand wird zuletzt noch geschrieben.</para>
+/// <para><b>Hinweise</b> (Plan §2.9, E7, A7): ein Hinweis kommt direkt aus dem Hinweis-Netz (<see cref="HinweisZustellen"/>, verlierbar) — ohne
+/// Position, ohne Festhalten, höchstens einmal. Bis zur Slot-Grenze laufen Hinweise neben den Log-Eingängen; was nicht gleich starten kann, wartet in
+/// einer gedeckelten Schlange (läuft sie über, fallen die ältesten weg). Bleibt ein Command „unbekannt“, sendet der Actor nach Backoff dieselben
+/// Commands mit denselben Ids erneut. Eine Funktion, die nur Hinweise hört, hat keinen Log-Leser, keine Position und keinen Takt.</para>
 /// <para><b>Zustand</b> (<c>IZustand&lt;T&gt;</c>, Plan §2.9, A5) — nach dem Vorbild des Aggregat-Actors: geladen beim Aktivieren (zusammen mit dem
 /// Stand, bevor das erste <c>Auf</c> läuft); immer nur EIN Eingang zugleich (ein Schreiber je Adresse); gesichert nur in einem RUHEPUNKT — kein
 /// Eingang in Arbeit, also enthält der Zustand genau die Log-Eingänge bis zur Position — in EINER Transaktion mit dem Stand, höchstens so oft wie
@@ -37,6 +41,10 @@ public sealed class FunktionsActor : RahmenActor
     private sealed record Gelesen(PartitionsCheckpoint? Stand, PartitionsSeite Seite);
     private sealed record Geladen(PartitionsCheckpoint? Stand, GeladenerZustand Zustand);
     private sealed record Erneut(PartitionsEvent Eingang);
+    private sealed record HinweisErneut(HinweisZustellen Hinweis, int Versuch);
+
+    /// <summary>So viele Hinweise warten höchstens auf einen freien Slot; darüber fallen die ältesten weg (höchstens einmal, Inv. 6).</summary>
+    public const int HinweiseHoechstens = 10_000;
 
     private readonly FunktionsBaustein _b;
     private readonly FunktionsArbeit _arbeit;
@@ -55,6 +63,10 @@ public sealed class FunktionsActor : RahmenActor
     private readonly Dictionary<long, int> _versuche = new();
     /// <summary>Nur mit Zustand: die Rechnungen der Eingänge in Arbeit (Schlüssel „F, X“) — <c>Auf</c> läuft je Eingang und Aktivierung einmal.</summary>
     private readonly Dictionary<Guid, EingangsRechnung> _rechnungen = new();
+    /// <summary>Hinweise, die auf einen Slot warten, und die Rechnungen der Hinweise in Arbeit oder im Backoff (Schlüssel = Kennung).</summary>
+    private readonly Queue<HinweisZustellen> _hinweise = new();
+    private readonly Dictionary<Guid, EingangsRechnung> _hinweisRechnungen = new();
+    private int _hinweiseInArbeit;
     private FunktionsLauf? _lauf;
     private int _partition;
     private string _adresse = "0";
@@ -100,10 +112,16 @@ public sealed class FunktionsActor : RahmenActor
     private bool MitZustand => _sicherung is not null;
 
     /// <summary>Kein Eingang in Arbeit, keine Sicherung, kein Laden — nur hier enthält der Zustand genau die Log-Eingänge bis zur Position.</summary>
-    private bool Ruhig => _lauf is { InArbeit: 0 } && _parkInArbeit == 0 && !_schreibt && !_laedt;
+    private bool Ruhig => _lauf is { InArbeit: 0 } && _parkInArbeit == 0 && _hinweiseInArbeit == 0 && !_schreibt && !_laedt;
 
-    /// <summary>Darf jetzt ein Eingang starten? Ohne Zustand immer (bis zur Slot-Grenze); mit Zustand nur geladen und ohne laufende Sicherung.</summary>
-    private bool DarfStarten => !MitZustand || (_zustandBereit && !_schreibt && !_laedt && _parkInArbeit == 0);
+    /// <summary>
+    /// Darf jetzt ein Log-Eingang starten? Ohne Zustand immer (bis zur Slot-Grenze); mit Zustand nur geladen, ohne laufende Sicherung und ohne einen
+    /// Hinweis in Arbeit (ein Schreiber).
+    /// </summary>
+    private bool DarfStarten => !MitZustand || (_zustandBereit && !_schreibt && !_laedt && _parkInArbeit == 0 && _hinweiseInArbeit == 0);
+
+    /// <summary>Darf jetzt ein Hinweis starten? Ohne Zustand bis zur Slot-Grenze, mit Zustand nur im Ruhepunkt.</summary>
+    private bool HinweisDarfStarten => !Stopp.IsCancellationRequested && (MitZustand ? _zustandBereit && Ruhig : _hinweiseInArbeit < _slots);
 
     protected override async Task BeginneAsync(IContext context)
     {
@@ -133,7 +151,79 @@ public sealed class FunktionsActor : RahmenActor
             case Erneut e:
                 Starte(context, e.Eingang);
                 break;
+            case HinweisZustellen h:
+                if (context.Sender is not null) context.Respond(new WakeAck());   // der Bote wartet nicht länger als nötig
+                NimmHinweis(context, h);
+                break;
+            case HinweisErneut e:
+                StarteHinweis(context, e.Hinweis, e.Versuch);
+                break;
         }
+        return Task.CompletedTask;
+    }
+
+    // ── Hinweise: ohne Position, höchstens einmal ─────────────────────────────────────────────────────────────────────────
+
+    private void NimmHinweis(IContext context, HinweisZustellen h)
+    {
+        if (_b.Eingang(h.Hinweis.GetType()) is not { Hinweis: true })
+        {
+            _logger?.LogWarning("[Funktion] {Funktion}: Hinweis {Typ} gehört nicht zu ihren Eingängen — verworfen", _b.Name, h.Hinweis.GetType().Name);
+            return;
+        }
+        _hinweise.Enqueue(h);
+        while (_hinweise.Count > HinweiseHoechstens)
+        {
+            var weg = _hinweise.Dequeue();
+            _logger?.LogWarning("[Funktion] {Funktion}/{Adresse}: Hinweis {Kennung} verworfen — die Schlange ist voll (höchstens einmal)", _b.Name, _adresse, weg.Kennung);
+        }
+        StarteHinweise(context);
+    }
+
+    private void StarteHinweise(IContext context)
+    {
+        while (_hinweise.Count > 0 && HinweisDarfStarten) StarteHinweis(context, _hinweise.Dequeue(), 0);
+    }
+
+    private void StarteHinweis(IContext context, HinweisZustellen h, int versuch)
+    {
+        if (Stopp.IsCancellationRequested) return;
+        if (versuch > 0 && !HinweisDarfStarten) { _hinweise.Enqueue(h); return; }   // nach dem Backoff wieder hinten anstellen
+        if (!_hinweisRechnungen.TryGetValue(h.Kennung, out var rechnung)) _hinweisRechnungen[h.Kennung] = rechnung = new EingangsRechnung();
+        _hinweiseInArbeit++;
+        Neben(context, ct => _arbeit.HinweisAsync(h, rechnung, ct), t => NachHinweis(context, h, versuch, t));
+    }
+
+    private Task NachHinweis(IContext context, HinweisZustellen h, int versuch, Task arbeit)
+    {
+        _hinweiseInArbeit--;
+        if (Stopp.IsCancellationRequested) return Task.CompletedTask;
+        if (MitZustand) _zustandGeaendert = true;   // Auf lief (oder lief teilweise) auf dem Zustand
+        var ausgang = arbeit is Task<EingangsAusgang> { IsCompletedSuccessfully: true } a ? a.Result : EingangsAusgang.Fehler;
+        switch (ausgang)
+        {
+            case EingangsAusgang.Fertig:
+                _hinweisRechnungen.Remove(h.Kennung);
+                break;
+            case EingangsAusgang.Fehler:
+                // Höchstens einmal: ein Hinweis, an dem die Funktion scheitert, verfällt (kein Parken — er steht in keinem Log).
+                _hinweisRechnungen.Remove(h.Kennung);
+                _logger?.LogWarning(arbeit.Exception?.GetBaseException(), "[Funktion] {Funktion}: Hinweis {Typ} {Kennung} gescheitert — verworfen (höchstens einmal)",
+                    _b.Name, h.Hinweis.GetType().Name, h.Kennung);
+                break;
+            default:
+                // Ein Command blieb „unbekannt“ (oder draußen kam keine Antwort): nach Backoff dieselben Commands mit denselben Ids, nicht neu rechnen.
+                var warte = TimeSpan.FromMilliseconds(Math.Min(30_000, 1_000 * Math.Pow(2, Math.Min(versuch, 5))) * (0.8 + Random.Shared.NextDouble() * 0.4));
+                Neben(context, ct => Task.Delay(warte, ct), _ =>
+                {
+                    if (!Stopp.IsCancellationRequested) context.Send(context.Self, new HinweisErneut(h, versuch + 1));
+                    return Task.CompletedTask;
+                });
+                break;
+        }
+        if (MitZustand) Sichere(context, sofort: false);
+        StarteHinweise(context);
+        Lies(context);
         return Task.CompletedTask;
     }
 
@@ -185,6 +275,7 @@ public sealed class FunktionsActor : RahmenActor
             if (t is Task<Geladen> { IsCompletedSuccessfully: true } g) Uebernimm(g.Result);
             else _logger?.LogWarning(t.Exception?.GetBaseException(), "[Funktion] {Funktion}/{Adresse}: Zustand nicht geladen — die nächste Weckung versucht es wieder",
                 _b.Name, _adresse);
+            StarteHinweise(context);
             Lies(context);
             return Task.CompletedTask;
         });
@@ -194,12 +285,13 @@ public sealed class FunktionsActor : RahmenActor
 
     private void Lies(IContext context)
     {
-        if (Stopp.IsCancellationRequested || _lauf is null || !_b.HoertLog) return;
+        if (Stopp.IsCancellationRequested || _lauf is null) return;
         if (MitZustand && !_zustandBereit)
         {
             if (!_laedt) LadeNeu(context);
             return;
         }
+        if (!_b.HoertLog) return;   // nur Hinweise: kein Log-Leser, keine Position
         if (_liest) { _nochmal = true; return; }
         if (_lauf.Stand is not null && (_lauf.FreieSlots <= 0 || !DarfStarten)) return;   // Rückstau im Log: erst lesen, wenn ein Slot frei ist
         _liest = true;
@@ -275,6 +367,7 @@ public sealed class FunktionsActor : RahmenActor
             Vergiss(e.Event);
             lauf.Fertig(e.Sequenz);
             SchreibeStand(context, sofort: false);
+            StarteHinweise(context);   // mit Zustand warten Hinweise auf den Ruhepunkt
             Lies(context);   // ein Slot ist frei, dahinter kann ein Eingang desselben Streams warten
             return Task.CompletedTask;
         }
@@ -456,6 +549,7 @@ public sealed class FunktionsActor : RahmenActor
                 _logger?.LogWarning(t.Exception?.GetBaseException(), "[Funktion] {Funktion}/{Adresse}: Zustand nicht gesichert — beim nächsten Ruhepunkt wieder",
                     _b.Name, _adresse);
             }
+            StarteHinweise(context);
             Lies(context);
             return Task.CompletedTask;
         });

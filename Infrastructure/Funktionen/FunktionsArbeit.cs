@@ -24,6 +24,9 @@ public sealed class EingangsRechnung
 {
     /// <summary>Die Ausgaben des einen Laufs von <c>Auf</c> auf dem Zustand; null = noch nicht gerechnet.</summary>
     public IReadOnlyList<IAusgabe>? Ausgaben { get; internal set; }
+
+    /// <summary>Nur ein Hinweis-Eingang: seine Hinweise sind schon weiter (ein Wiederholen schickt sie nicht noch einmal).</summary>
+    internal bool HinweiseGesendet { get; set; }
 }
 
 /// <summary>Ein Eingang wird draußen gerechnet (Laufort Hand, Worker, Client): anbieten und auf die Antwort warten.</summary>
@@ -55,7 +58,7 @@ public sealed class FunktionsArbeit
     private readonly Func<object>? _funktion;
     private readonly IAusgabeAblage _ablage;
     private readonly Func<ICommand, Guid, Guid, CancellationToken, Task<EmitAusgang>> _sende;
-    private readonly Action<IEvent, EventEnvelope>? _hinweis;
+    private readonly Action<HinweisZustellen>? _hinweis;
     private readonly IFaehigkeitsFabrik? _faehigkeiten;
     private readonly BieteAn? _bieteAn;
     private readonly ILogger? _logger;
@@ -93,9 +96,9 @@ public sealed class FunktionsArbeit
 
     /// <param name="funktion">Baut bzw. liefert die Umsetzung im Host; null = die Funktion rechnet draußen (dann <paramref name="bieteAn"/>).</param>
     /// <param name="sende">Command, Command-Id, Korrelation → Ausgang (live der <c>CommandEmitter</c>, eine Frage mit Pflicht-Frist).</param>
-    /// <param name="hinweis">Einen Hinweis melden (verlierbar); null = Hinweise verfallen.</param>
+    /// <param name="hinweis">Einen Hinweis weitergeben (verlierbar: das Hinweis-Netz und die Clients); null = Hinweise verfallen.</param>
     public FunktionsArbeit(FunktionsBaustein baustein, Func<object>? funktion, IAusgabeAblage ablage,
-        Func<ICommand, Guid, Guid, CancellationToken, Task<EmitAusgang>> sende, Action<IEvent, EventEnvelope>? hinweis = null,
+        Func<ICommand, Guid, Guid, CancellationToken, Task<EmitAusgang>> sende, Action<HinweisZustellen>? hinweis = null,
         IFaehigkeitsFabrik? faehigkeiten = null, BieteAn? bieteAn = null, ILogger? logger = null, int stueck = StromStueck, TimeSpan? antwortGeduld = null)
     {
         if (funktion is null && bieteAn is null)
@@ -147,7 +150,7 @@ public sealed class FunktionsArbeit
         {
             var ausgaben = new List<IAusgabe>();
             await foreach (var a in Rechne(e, ct)) ausgaben.Add(a);
-            foreach (var h in ausgaben.OfType<ITransientEvent>()) _hinweis?.Invoke(h, e);
+            MeldeHinweise(ausgaben, e);
             return await SendeAsync(eingabe, ausgaben.Where(a => a is not ITransientEvent).ToList(), 0, ct);
         }
 
@@ -182,22 +185,87 @@ public sealed class FunktionsArbeit
         var schon = fest.Ausgaben.Count;
         if (!await _ablage.HalteFestAsync(eingabe, schon, ohneHinweise.Skip(schon).ToList(), abgeschlossen: true, ct))
             return await NachKonfliktAsync(eingabe, ct) ?? EingangsAusgang.Spaeter;
-        foreach (var h in rechnung.Ausgaben.OfType<ITransientEvent>()) _hinweis?.Invoke(h, e);
+        MeldeHinweise(rechnung.Ausgaben, e);
         var gesendet = await SendeAsync(eingabe, fest.Ausgaben, 0, ct);   // was ein abgebrochener Lauf festhielt, ist vielleicht nie gesendet worden
         var rest = await SendeAsync(eingabe, ohneHinweise.Skip(schon).ToList(), schon, ct);
         return gesendet == EingangsAusgang.Fertig && rest == EingangsAusgang.Fertig ? EingangsAusgang.Fertig : EingangsAusgang.Spaeter;
     }
 
+    /// <summary>Die Funktion zu einem Log-Eingang rechnen.</summary>
+    private IAsyncEnumerable<IAusgabe> Rechne(EventEnvelope e, CancellationToken ct) =>
+        Rechne(e.Payload, new Herkunft(e.AggregateId, e.AggregateVersion, e.CreatedAtUtc, ImAuftrag.IstAkteur(e.UserId) ? e.UserId : null, _b.Wirker), ct);
+
     /// <summary>Die Funktion rechnen (im Host; Lese-Fähigkeiten je Aufruf aus einem eigenen Bereich).</summary>
-    private async IAsyncEnumerable<IAusgabe> Rechne(EventEnvelope e, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+    private async IAsyncEnumerable<IAusgabe> Rechne(IEvent eingabe, Herkunft herkunft, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
     {
-        var eingang = _b.Eingang(e.Payload.GetType())!;
+        var eingang = _b.Eingang(eingabe.GetType())!;
         using var bereich = eingang.Faehigkeiten.Count > 0
             ? (_faehigkeiten ?? throw new InvalidOperationException($"{_b.Name} liest Fähigkeiten, aber es gibt keine Fähigkeits-Fabrik.")).Oeffne()
             : null;
-        var herkunft = new Herkunft(e.AggregateId, e.AggregateVersion, e.CreatedAtUtc, ImAuftrag.IstAkteur(e.UserId) ? e.UserId : null, _b.Wirker);
-        await foreach (var a in _b.Rufe(_funktion!(), e.Payload, herkunft, bereich, ct).WithCancellation(ct)) yield return a;
+        await foreach (var a in _b.Rufe(_funktion!(), eingabe, herkunft, bereich, ct).WithCancellation(ct)) yield return a;
     }
+
+    /// <summary>
+    /// Die Hinweise einer Ausgabe zum Log-Eingang <paramref name="e"/> weitergeben — je mit der Kennung aus Funktion, Eingang und ihrer Stelle unter
+    /// den Hinweisen (A7; dasselbe Nachrechnen ergibt dieselbe Kennung). Der Herkunfts-Stream ist der des Eingangs (er bestimmt die Adresse, A6).
+    /// </summary>
+    private void MeldeHinweise(IEnumerable<IAusgabe> ausgaben, EventEnvelope e, int ab = 0)
+    {
+        if (_hinweis is null) return;
+        var nr = ab;
+        foreach (var h in ausgaben.OfType<ITransientEvent>())
+            _hinweis(new HinweisZustellen(FunktionsIds.Hinweis(_b.Name, e.AggregateId, e.AggregateVersion, nr++), h, e.AggregateId, e.AggregateVersion,
+                e.CreatedAtUtc, e.CorrelationId, ImAuftrag.IstAkteur(e.UserId) ? e.UserId : null, Spur.Ursache(e.AggregateId, e.AggregateVersion)));
+    }
+
+    /// <summary>
+    /// Ein HINWEIS-Eingang (Plan §2.9, E7, A7): höchstens einmal — keine Position, nichts festgehalten. Die Rechnung hält die Ausgabe des einen Laufs
+    /// (ein Wiederholen nach „unbekannt“ rechnet nicht noch einmal und schickt die Hinweise nicht noch einmal); Commands gehen mit der Id aus Funktion,
+    /// Hinweis-Kennung, Stelle, Typ und Ziel in den Aggregat-Mechanismus, Hinweise mit einer abgeleiteten Kennung weiter ins Netz.
+    /// </summary>
+    public async Task<EingangsAusgang> HinweisAsync(HinweisZustellen h, EingangsRechnung rechnung, CancellationToken ct)
+    {
+        if (_b.Eingang(h.Hinweis.GetType()) is not { Hinweis: true })
+            throw new InvalidOperationException($"{_b.Name} hört den Hinweis {h.Hinweis.GetType().Name} nicht.");
+        using var spur = Spur.Von(h.Ursache ?? Spur.Ursache(h.Stream, h.Version), _b.Wirker);
+        using var akteur = Infrastructure.Akteure.AkteurHerkunft.Aus(h.Akteur);
+        if (rechnung.Ausgaben is null)
+        {
+            if (Draussen)
+            {
+                if (await HinweisDraussenAsync(h, ct) is not { } antwort) return EingangsAusgang.Spaeter;
+                rechnung.Ausgaben = antwort;
+            }
+            else
+            {
+                // Je Hinweis eine eigene Ableitung neuer Ids (zwei Hinweise aus demselben Eingang bekommen verschiedene).
+                var herkunft = new Herkunft(h.Stream, h.Version, h.Zeit, ImAuftrag.IstAkteur(h.Akteur) ? h.Akteur : null, $"{_b.Wirker}/hinweis:{h.Kennung:N}");
+                var liste = new List<IAusgabe>();
+                await foreach (var a in Rechne(h.Hinweis, herkunft, ct)) liste.Add(a);
+                rechnung.Ausgaben = liste;
+            }
+        }
+        if (!rechnung.HinweiseGesendet)
+        {
+            rechnung.HinweiseGesendet = true;
+            var nr = 0;
+            foreach (var w in rechnung.Ausgaben.OfType<ITransientEvent>())
+                _hinweis?.Invoke(new HinweisZustellen(FunktionsIds.Hinweis(_b.Name, h.Kennung, nr++), w, h.Stream, h.Version, h.Zeit, h.Korrelation,
+                    h.Akteur, h.Ursache));
+        }
+        var korrelation = Guid.TryParse(h.Korrelation, out var k) ? k : h.Stream;
+        var sends = new List<Task<EmitAusgang>>();
+        var stelle = 0;
+        foreach (var c in rechnung.Ausgaben.OfType<ICommand>())
+            sends.Add(_sende(c, FunktionsIds.BefehlAusHinweis(_b.Name, h.Kennung, stelle++, c), korrelation, ct));
+        if (sends.Count == 0) return EingangsAusgang.Fertig;
+        var ausgaenge = await Task.WhenAll(sends);
+        return ausgaenge.All(a => a.IstEntschieden()) ? EingangsAusgang.Fertig : EingangsAusgang.Spaeter;
+    }
+
+    /// <summary>Ein Hinweis-Eingang draußen (Plan §2.9, E9): anbieten, auf die Antwort mit ihren Ausgaben warten; null = (noch) keine Antwort.</summary>
+    private Task<IReadOnlyList<IAusgabe>?> HinweisDraussenAsync(HinweisZustellen h, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<IAusgabe>?>(null);
 
     /// <summary>
     /// Rechnen und festhalten. Ein Strom überspringt, was schon festgehalten ist (Fortschritt), hält stückweise fest und sendet jedes Stück, bevor
@@ -211,13 +279,16 @@ public sealed class FunktionsArbeit
         // Was ein abgebrochener Lauf schon festgehalten hatte, ist vielleicht nie gesendet worden — einmal senden (dieselben Ids, die Inbox verwirft).
         if (schon > 0) entschieden &= await SendeAsync(eingabe, fest.Ausgaben, 0, ct) == EingangsAusgang.Fertig;
         var stueck = new List<IAusgabe>();
-        var hinweise = new List<IEvent>();
+        var hinweise = new List<IAusgabe>();
         var gezaehlt = 0;
+        var hinweisNr = 0;     // die Stelle der Hinweise unter den Hinweisen (ihre Kennung, A7)
+        var ersterHinweis = 0;
         await foreach (var a in Rechne(e, ct))
         {
             if (a is ITransientEvent h)
             {
-                if (gezaehlt >= schon) hinweise.Add(h);   // Hinweise aus dem schon festgehaltenen Teil gingen schon (oder verfielen)
+                if (gezaehlt < schon) ersterHinweis = ++hinweisNr;   // Hinweise aus dem schon festgehaltenen Teil gingen schon (oder verfielen)
+                else { hinweise.Add(h); hinweisNr++; }
                 continue;
             }
             if (gezaehlt++ < schon) continue;
@@ -228,11 +299,12 @@ public sealed class FunktionsArbeit
             entschieden &= await SendeAsync(eingabe, stueck, schon, ct) == EingangsAusgang.Fertig;
             schon += stueck.Count;
             stueck = new List<IAusgabe>();
-            foreach (var hw in hinweise) _hinweis?.Invoke(hw, e);
+            MeldeHinweise(hinweise, e, ersterHinweis);
+            ersterHinweis = hinweisNr;
             hinweise.Clear();
         }
         if (!await _ablage.HalteFestAsync(eingabe, schon, stueck, abgeschlossen: true, ct)) return await NachKonfliktAsync(eingabe, ct);
-        foreach (var hw in hinweise) _hinweis?.Invoke(hw, e);
+        MeldeHinweise(hinweise, e, ersterHinweis);
         entschieden &= await SendeAsync(eingabe, stueck, schon, ct) == EingangsAusgang.Fertig;
         return entschieden ? EingangsAusgang.Fertig : EingangsAusgang.Spaeter;
     }

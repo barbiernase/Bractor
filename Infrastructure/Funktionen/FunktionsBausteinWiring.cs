@@ -28,6 +28,8 @@ public sealed record BausteinBindung(string Funktion, FunktionsLaufort Laufort =
 ///   der Takt (30 s) jede Partition — bis der Wecker am Flush kommt (Phase 6). Ihr Stand liegt im selben Dokument wie der einer Projektion, so zählt
 ///   <c>/health</c> ihren Rückstand mit;</item>
 /// <item>das Festhalten im Log (<see cref="LogAusgabeAblage"/>) und der Stand im Dokument-Store (<see cref="MartenFunktionsStand"/>);</item>
+/// <item>das Hinweis-Netz (<see cref="HinweisNetz"/>), wenn irgendeine Funktion einen Hinweis hört: Hinweise aus Funktionen und Aggregaten gehen
+///   direkt an die hörenden Funktions-Actors, ohne Log und Broker;</item>
 /// <item>für Funktionen draußen der Vermittler (Lease) — die Hand-Seite über den <see cref="HandAusfuehrer"/>, die Leitung (Laufort Extern) über die
 ///   Sitzung des Clients, der sie trägt (<c>CqrsClientService</c>).</item>
 /// </list>
@@ -51,6 +53,11 @@ public static class FunktionsBausteinWiring
             services.AddHostedService<BatchKonsumStartupService>();   // idempotent (TryAddEnumerable), auch wenn die Projektionen ihn schon anmeldeten
             services.TryAddSingleton<IKonsumRueckstand, KonsumRueckstand>();
         }
+        // Das Hinweis-Netz (Plan §2.9): die generierte Routing-Tabelle Hinweis-Typ → Funktions-Adressen, Versand direkt über den Bote.
+        if (Anwendung.Funktionen.Hinweisplan.Count > 0)
+            services.TryAddSingleton(sp => new HinweisNetz(bausteine, Anwendung.Funktionen.Hinweisplan, sp.GetService<Konsum>() ?? Konsum.Standard,
+                () => new Bote(sp.GetRequiredService<ActorSystem>().Cluster(), sp.GetService<ILoggerFactory>()?.CreateLogger("Hinweisnetz")),
+                sp.GetService<ILoggerFactory>()?.CreateLogger("Hinweisnetz")));
         if (bausteine.Any(b => b.Draussen) && !services.Any(d => d.ImplementationType == typeof(FunktionsVermittlerKind)))
             services.AddSingleton<IClusterKindContributor, FunktionsVermittlerKind>();
         Console.WriteLine($"[CQRS] {bausteine.Count} Funktion(en) als Baustein: " + string.Join(", ", bausteine.Select(b => b.Name)));
@@ -117,6 +124,7 @@ internal sealed class FunktionsKind(FunktionsBaustein baustein) : IClusterKindCo
             ? new ZustandsSicherung(provider.GetRequiredService<IFunktionsStand>(), zustand,
                 zustand.Verzeichnis is { } verz ? new VerzeichnisZustandsDateien(verz) : null)
             : null;
+        var netz = provider.GetService<HinweisNetz>();   // Start-Prüfung der Routing-Tabelle (R20: jede Adresse existiert)
         return new ClusterKind(baustein.KindName, Props.FromProducer(() =>
         {
             // Der Cluster ist hier fertig (Spawn-Zeit): Emitter und Bote erst jetzt bauen.
@@ -130,11 +138,16 @@ internal sealed class FunktionsKind(FunktionsBaustein baustein) : IClusterKindCo
                 aktivierung is null ? null : () => aktivierung.Umsetzung,
                 provider.GetRequiredService<IAusgabeAblage>(),
                 async (cmd, id, korrelation, ct) => await emitter.EmitAsync(cmd, id, korrelation, ct),
-                publisher is null ? null : (hinweis, ursache) => publisher.Melde(new EventEnvelope
+                publisher is null && netz is null ? null : h =>
                 {
-                    AggregateId = ursache.AggregateId, AggregateVersion = ursache.AggregateVersion, CorrelationId = ursache.CorrelationId,
-                    UserId = ursache.UserId, Payload = hinweis, AggregateType = "Funktion:" + baustein.Name,
-                }),
+                    // An die hörenden Funktionen direkt (Hinweis-Netz); an Clients bis Plan Phase 7 auf dem heutigen Weg.
+                    netz?.Verteile(h);
+                    publisher?.Melde(new EventEnvelope
+                    {
+                        AggregateId = h.Stream, AggregateVersion = h.Version, CorrelationId = h.Korrelation, UserId = h.Akteur, Payload = h.Hinweis,
+                        AggregateType = "Funktion:" + baustein.Name,
+                    });
+                },
                 provider.GetService<IFaehigkeitsFabrik>(),
                 (angebot, ct) => bote.FrageAsync<WakeAck>(FunktionsVermittlerActor.Identitaet(baustein.Typ), angebot, TimeSpan.FromSeconds(5), ct),
                 logger);

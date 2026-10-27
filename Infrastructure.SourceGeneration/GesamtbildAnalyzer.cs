@@ -14,6 +14,8 @@ namespace Infrastructure.SourceGeneration;
 /// <list type="bullet">
 /// <item>CQRS084 (GR-QUERY) — eine Query beantwortet genau ein Reader.</item>
 /// <item>CQRS085 (GR-MODUL-AUSGANG-OFFEN, UNUSED-EVENT; Warnung) — ein Event, eine Ablehnung oder eine Response, die niemand erzeugt.</item>
+/// <item>CQRS106 (R20, GR-HINWEIS-NETZ; Fehler) — eine Funktion hört einen Hinweis, den im Hinweis-Netz niemand erzeugt (kein Decide, keine Funktion
+///   nennt ihn in der Signatur): ihre Adresse bekäme ihn nie (Plan Pub/Sub-Neustrukturierung §2.9).</item>
 /// <item>CQRS086 (GR-MODUL-EINGANG-OFFEN; Warnung) — ein Command ohne Decider, eine Query ohne Reader.</item>
 /// <item>CQRS087 (GR-GETRAGEN; Warnung) — eine Funktion als Schnittstelle ohne Umsetzung im Host, die kein Client trägt (<c>ITraegt</c>): sie läuft
 ///   nur mit einer Bindung von Hand (R17), sonst ist sie ein Boot-Fehler.</item>
@@ -24,7 +26,7 @@ namespace Infrastructure.SourceGeneration;
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
 {
-    public const string QueryId = "CQRS084", AusgangOffenId = "CQRS085", EingangOffenId = "CQRS086", GetragenId = "CQRS087";
+    public const string QueryId = "CQRS084", AusgangOffenId = "CQRS085", EingangOffenId = "CQRS086", GetragenId = "CQRS087", HinweisOhneErzeugerId = "CQRS106";
 
     private static DiagnosticDescriptor D(string id, string titel, string text, DiagnosticSeverity s) =>
         new(id, titel, text, "CQRS.Gesamtbild", s, isEnabledByDefault: true);
@@ -39,7 +41,11 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         "'{0}': die Funktion hat keine Umsetzung im Host und kein Client trägt sie (ITraegt<{0}>) — sie läuft nur mit einer Bindung von Hand (GR-GETRAGEN)",
         DiagnosticSeverity.Warning);
 
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Query, AusgangOffen, EingangOffen, Getragen);
+    private static readonly DiagnosticDescriptor HinweisOhneErzeuger = D(HinweisOhneErzeugerId, "Gehörter Hinweis ohne Erzeuger",
+        "Die Funktion '{0}' hört den Hinweis '{1}', aber im Hinweis-Netz erzeugt ihn niemand — kein Decide und keine Funktion nennt ihn in der Signatur "
+        + "(R20, GR-HINWEIS-NETZ)", DiagnosticSeverity.Error);
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Query, AusgangOffen, EingangOffen, Getragen, HinweisOhneErzeuger);
 
     /// <summary>Die Rollen-Marker, deren Implementierung eine Assembly zur Domäne macht (wie die Projektlage des Extractors).</summary>
     private static readonly string[] DomaenenRollen =
@@ -80,6 +86,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         IEnumerable<IMethodSymbol> Methoden(INamedTypeSymbol t, string? name = null) => t.GetMembers().OfType<IMethodSymbol>()
             .Where(m => m.MethodKind == MethodKind.Ordinary && m.DeclaredAccessibility == Accessibility.Public && m.Parameters.Length > 0 && (name == null || m.Name == name));
         var erzeugt = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+        var imNetz = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);   // was ins Hinweis-Netz gelangt: Ausgaben von Decide und Funktionen
         var entschieden = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
         var readerJeQuery = new Dictionary<ITypeSymbol, List<string>>(SymbolEqualityComparer.Default);
 
@@ -90,6 +97,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                 {
                     entschieden.Add(m.Parameters[0].Type);
                     erzeugt.UnionWith(Faelle(m.ReturnType));
+                    imNetz.UnionWith(Faelle(m.ReturnType));
                 }
             if (t.TypeKind == TypeKind.Class && Generisch(t, iReader))
                 foreach (var m in Methoden(t).Where(m => IstT(m.Parameters[0].Type, iQuery)))
@@ -100,10 +108,17 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                 }
             if (t.TypeKind == TypeKind.Interface && iFunktion != null && IstT(t, iFunktion) && !SymbolEqualityComparer.Default.Equals(t, iFunktion))
                 foreach (var m in t.GetMembers().OfType<IMethodSymbol>().Where(m => m.IsAbstract))
+                {
                     erzeugt.UnionWith(Faelle(m.ReturnType));
+                    imNetz.UnionWith(Faelle(m.ReturnType));
+                }
             // Eine Funktion als Klasse (Baustein-Form): die Fälle jedes Auf.
             if (t.TypeKind == TypeKind.Class && Funktionsform.IstBaustein(t))
-                foreach (var a in Funktionsform.Lies(t).Aufs) erzeugt.UnionWith(a.Ausgaben);
+                foreach (var a in Funktionsform.Lies(t).Aufs)
+                {
+                    erzeugt.UnionWith(a.Ausgaben);
+                    imNetz.UnionWith(a.Ausgaben);
+                }
             if (IstT(t, iAkteur))
                 erzeugt.UnionWith(t.AllInterfaces.Where(i => iDarf != null && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iDarf)).Select(i => i.TypeArguments[0]));
             if (t.TypeKind == TypeKind.Interface && IstT(t, iClient))
@@ -136,6 +151,11 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
             else if (IstT(t, iResponse) && !erzeugt.Contains(t) && !alsFeld.Contains(t))
                 ctx.ReportDiagnostic(Diagnostic.Create(AusgangOffen, Location.None, t.Name, "Response", "kein Reader-Handle nennt sie in seiner Signatur"));
         }
+
+        // R20: jeder Hinweis, den eine Funktion hört, hat einen Erzeuger im Hinweis-Netz (sonst bekäme ihre Adresse ihn nie).
+        foreach (var f in typen.Where(t => (t.TypeKind == TypeKind.Interface || (t.TypeKind == TypeKind.Class && !t.IsAbstract)) && Funktionsform.IstBaustein(t)))
+            foreach (var a in Funktionsform.Lies(f).Aufs.Where(a => a.Hinweis && !imNetz.Contains(a.Eingang)))
+                ctx.ReportDiagnostic(Diagnostic.Create(HinweisOhneErzeuger, a.Methode.Locations.FirstOrDefault() ?? Location.None, f.Name, a.Eingang.Name));
 
         // GR-GETRAGEN: eine Funktion als Schnittstelle braucht eine Umsetzung im Host oder einen Träger (sonst nur eine Bindung von Hand).
         var getragen = new HashSet<ITypeSymbol>(typen.Where(t => t.TypeKind == TypeKind.Interface && IstT(t, iClient))

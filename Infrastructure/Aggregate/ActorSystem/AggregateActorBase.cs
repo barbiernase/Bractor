@@ -34,6 +34,9 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     private readonly IEventStoreRepository _eventStore;
     private readonly IVersionTracker? _versionTracker;
     private readonly BrokerPublisher? _publisher;
+    // Das Hinweis-Netz (Plan Pub/Sub-Neustrukturierung §2.9): ein Hinweis aus dem Decide (eine Ablehnung), den eine Funktion hört, geht direkt an
+    //   ihre Adresse — ohne Log, ohne Broker, höchstens einmal. Null = keine Funktion hört Hinweise.
+    private readonly Infrastructure.Funktionen.HinweisNetz? _hinweisNetz;
     private readonly ILogger? _logger;
 
     // ★ Snapshot-Naht (docs/04-konsum-und-prozess-maschine.md §4.8): abgeleiteter, nicht-autoritativer Cache. Null → aus,
@@ -85,10 +88,12 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         string? snapshotSchemaVersion = null,
         SnapshotOptions? snapshotOptions = null,
         IDeadLetterSink? deadLetters = null,
-        Passivierung? passivierung = null)
+        Passivierung? passivierung = null,
+        Infrastructure.Funktionen.HinweisNetz? hinweisNetz = null)
         // PF-5: Leerlauf bis zur Passivierung (Snapshot beim Stoppen, die nächste Nachricht rehydriert).
         : base(logger, (passivierung ?? Passivierung.Standard).Aggregat)
     {
+        _hinweisNetz = hinweisNetz;
         _handlerFactory = handlerFactory;
         _eventStore = eventStore;
         _versionTracker = versionTracker;
@@ -1094,6 +1099,15 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     /// </summary>
     private void MeldeAblehnung(CommandEnvelope cmdEnvelope, IEvent rejection)
     {
+        // An die Funktionen, die den Hinweis hören (Hinweis-Netz, Plan §2.9): Kennung aus der Command-Id (A7), Herkunft der eigene Stream.
+        if (_hinweisNetz is { } netz && netz.Hoert(rejection.GetType()))
+        {
+            var version = _state?.Version ?? 0;
+            netz.Verteile(new Infrastructure.Funktionen.HinweisZustellen(Infrastructure.Funktionen.FunktionsIds.HinweisAusCommand(cmdEnvelope.CommandId),
+                rejection, _id, version, DateTimeOffset.UtcNow, cmdEnvelope.CorrelationId, ImAuftrag.IstAkteur(cmdEnvelope.UserId) ? cmdEnvelope.UserId : null,
+                Spur.Ursache(_id, version)));
+        }
+
         if (_publisher == null || string.IsNullOrEmpty(cmdEnvelope.OriginSessionId))
         {
             _logger?.LogDebug("[Actor] Cannot publish rejection: no publisher or no OriginSessionId");

@@ -92,7 +92,7 @@ public class FunktionsArbeitTests
         var ziel = Id<Ziel>.Neu();
         var b = Baustein((e, h, ct) => Aus(new Tu(ziel, "a"), new Wink("w"), new Tu(ziel, "b")), gleichbleibend: true);
         var hinweise = new List<IEvent>();
-        var arbeit = new FunktionsArbeit(b, () => new object(), ablage, sende.SendeAsync, (h, _) => hinweise.Add(h));
+        var arbeit = new FunktionsArbeit(b, () => new object(), ablage, sende.SendeAsync, h => hinweise.Add(h.Hinweis));
 
         (await arbeit.VerarbeiteAsync(Ein(), default)).Should().Be(EingangsAusgang.Fertig);
         (await arbeit.VerarbeiteAsync(Ein(), default)).Should().Be(EingangsAusgang.Fertig);
@@ -114,7 +114,7 @@ public class FunktionsArbeitTests
         var b = Baustein((e, h, ct) => Aus(new Tu(ziel, $"stand-{Interlocked.Increment(ref zaehler)}"), new Wink("w")), gleichbleibend: false);
         var hinweise = new List<IEvent>();
         var unbekannt = new Gesendet { Ausgang = _ => EmitAusgang.Unbekannt };
-        var arbeit = new FunktionsArbeit(b, () => new object(), ablage, unbekannt.SendeAsync, (h, _) => hinweise.Add(h));
+        var arbeit = new FunktionsArbeit(b, () => new object(), ablage, unbekannt.SendeAsync, h => hinweise.Add(h.Hinweis));
         var rechnung = new EingangsRechnung();
 
         (await arbeit.VerarbeiteAsync(Ein(), default, rechnung)).Should().Be(EingangsAusgang.Spaeter);
@@ -135,10 +135,10 @@ public class FunktionsArbeitTests
         var b = Baustein((e, h, ct) => Aus(new Tu(ziel, $"stand-{Interlocked.Increment(ref zaehler)}"), new Wink("w")), gleichbleibend: false);
         var hinweise = new List<IEvent>();
         var sende = new Gesendet();
-        (await new FunktionsArbeit(b, () => new object(), ablage, sende.SendeAsync, (h, _) => hinweise.Add(h))
+        (await new FunktionsArbeit(b, () => new object(), ablage, sende.SendeAsync, h => hinweise.Add(h.Hinweis))
             .VerarbeiteAsync(Ein(), default, new EingangsRechnung())).Should().Be(EingangsAusgang.Fertig);
 
-        (await new FunktionsArbeit(b, () => new object(), ablage, sende.SendeAsync, (h, _) => hinweise.Add(h))
+        (await new FunktionsArbeit(b, () => new object(), ablage, sende.SendeAsync, h => hinweise.Add(h.Hinweis))
             .VerarbeiteAsync(Ein(), default, new EingangsRechnung())).Should().Be(EingangsAusgang.Fertig);
         zaehler.Should().Be(2, "die neue Aktivierung rechnet auf ihrem (geladenen) Zustand nach");
         sende.Alle.Select(x => x.Befehl.Was).Should().AllBe("stand-1", "es gilt das Festgehaltene");
@@ -264,7 +264,7 @@ public class FunktionsArbeitTests
         var ziel = Id<Ziel>.Neu();
         var b = Baustein((e, h, ct) => Aus(new Wink("w"), new Tu(ziel, "x")), gleichbleibend: false);
         var hinweise = 0;
-        var arbeit = new FunktionsArbeit(b, () => new object(), ablage, new Gesendet().SendeAsync, (_, _) => Interlocked.Increment(ref hinweise));
+        var arbeit = new FunktionsArbeit(b, () => new object(), ablage, new Gesendet().SendeAsync, _ => Interlocked.Increment(ref hinweise));
         await arbeit.VerarbeiteAsync(Ein(), default);
         await arbeit.VerarbeiteAsync(Ein(), default);
         hinweise.Should().Be(1, "ein Hinweis ist höchstens einmal — der zweite Lauf sendet nur aus dem Festgehaltenen");

@@ -53,6 +53,28 @@ public static class FunktionsIds
     /// </summary>
     public static Guid Befehl(string funktion, Guid stream, int version, int stelle, ICommand befehl) =>
         Herkunft.Ableite($"funktionsbefehl:{funktion}:{stream:N}:{version}:{stelle}:{befehl.GetType().FullName}:{befehl.Ziel:N}");
+
+    // ── Hinweis-Netz (Plan §2.9, A7): die Kennung eines Hinweises vergibt der Absender, abgeleitet — dasselbe Nachrechnen ergibt dieselbe Kennung ──
+
+    /// <summary>Die Kennung des Hinweises an <paramref name="stelle"/> der Ausgabe einer Funktion zum Log-Eingang (Stream, Version).</summary>
+    public static Guid Hinweis(string funktion, Guid stream, int version, int stelle) =>
+        Herkunft.Ableite($"hinweis:{funktion}:{stream:N}:{version}:{stelle}");
+
+    /// <summary>Die Kennung des Hinweises an <paramref name="stelle"/> der Ausgabe einer Funktion zum Hinweis-Eingang mit der Kennung <paramref name="eingang"/>.</summary>
+    public static Guid Hinweis(string funktion, Guid eingang, int stelle) => Herkunft.Ableite($"hinweis:{funktion}:hinweis:{eingang:N}:{stelle}");
+
+    /// <summary>Die Kennung des Hinweises, den ein Aggregat auf den Command <paramref name="commandId"/> hin ausgab (eine Ablehnung).</summary>
+    public static Guid HinweisAusCommand(Guid commandId) => Herkunft.Ableite($"hinweis:command:{commandId:N}");
+
+    /// <summary>
+    /// Die Command-Id der Ausgabe an <paramref name="stelle"/> zum Hinweis-Eingang mit der Kennung <paramref name="hinweis"/> (Plan §4.2: Funktion,
+    /// Hinweis-Kennung, Stelle, Typ, Ziel) — ein Wiederholen des Emitters trägt dieselbe Id, die Inbox des Ziels verwirft es.
+    /// </summary>
+    public static Guid BefehlAusHinweis(string funktion, Guid hinweis, int stelle, ICommand befehl) =>
+        Herkunft.Ableite($"funktionsbefehl:{funktion}:hinweis:{hinweis:N}:{stelle}:{befehl.GetType().FullName}:{befehl.Ziel:N}");
+
+    /// <summary>Der Schlüssel eines Hinweis-Eingangs draußen (Vermittler, Sitzung): je Funktion und Kennung.</summary>
+    public static Guid HinweisEingang(string funktion, Guid hinweis) => Herkunft.Ableite($"hinweiseingang:{funktion}:{hinweis:N}");
 }
 
 /// <summary>
