@@ -118,7 +118,7 @@ public static class Grammatik
             + "nutzt (R12).", "error",
             [An("CQRS103", "Domain.SourceGeneration/GleichbleibendAnalyzer.cs (gleichbleibend heißt ohne Uhr und Zufall)"),
              new("generator", null, "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Gleichbleibend aus der Signatur)")]),
-        new("GR-ZUSTAND", "Zustand einer Funktion nur über IZustand<T>", "Eine Funktion hält Zustand (ein Modell, das weiterlernt, ein Zähler) "
+        new("GR-FUNKTION-ZUSTAND", "Zustand einer Funktion nur über IZustand<T>", "Eine Funktion hält Zustand (ein Modell, das weiterlernt, ein Zähler) "
             + "nur über IZustand<T> im Konstruktor einer Funktions-Klasse: er wird mit der Position gesichert, kommt beim Umzug mit, und Auf läuft immer "
             + "nur einmal zugleich. Felder mit Setter, veränderliche Felder und Sammlungen hinter readonly sind verboten (sie gingen beim Umzug still "
             + "verloren); eine Funktion mit Zustand ist nie gleichbleibend und darf aus einem Eingang allein lernen (Auf ohne Ausgabe); ein Zustand für "
