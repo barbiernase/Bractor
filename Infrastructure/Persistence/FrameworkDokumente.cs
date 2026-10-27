@@ -10,5 +10,7 @@ public static class FrameworkDokumente
     {
         // Dead-Letter-Queue (§5): nicht zustellbare Commands, beobachtbar + replay-bar.
         options.Schema.For<DeadLetter>().Identity(x => x.Id).DatabaseSchemaName("dlq");
+        // Der gesicherte Zustand der Funktionen (Plan Pub/Sub-Neustrukturierung §2.9): je Adresse ein Dokument mit numerischer Revision.
+        Infrastructure.Funktionen.FunktionsZustandsDokument.Registriere(options);
     }
 }

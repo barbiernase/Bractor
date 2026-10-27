@@ -15,6 +15,17 @@ public enum EingangsAusgang
     Fehler,
 }
 
+/// <summary>
+/// Die Rechnung einer Funktion mit Zustand an EINEM Eingang in dieser Aktivierung (Plan §2.9, A5): sobald <c>Auf</c> auf dem Zustand gelaufen ist,
+/// stehen hier seine Ausgaben — ein Wiederholen (Command „unbekannt“, Festhalten gescheitert) rechnet nicht noch einmal, sonst wirkte der Eingang
+/// zweimal auf den Zustand. Der Funktions-Actor hält sie, bis der Eingang fertig ist.
+/// </summary>
+public sealed class EingangsRechnung
+{
+    /// <summary>Die Ausgaben des einen Laufs von <c>Auf</c> auf dem Zustand; null = noch nicht gerechnet.</summary>
+    public IReadOnlyList<IAusgabe>? Ausgaben { get; internal set; }
+}
+
 /// <summary>Ein Eingang wird draußen gerechnet (Laufort Hand, Worker, Client): anbieten und auf die Antwort warten.</summary>
 public delegate Task BieteAn(EingangAnbieten angebot, CancellationToken ct);
 
@@ -120,7 +131,8 @@ public sealed class FunktionsArbeit
     public static FunktionsEingabe EingabeVon(FunktionsBaustein b, EventEnvelope e) =>
         new(b.Name, e.AggregateId, e.AggregateVersion, e.CorrelationId, e.UserId);
 
-    public async Task<EingangsAusgang> VerarbeiteAsync(EventEnvelope e, CancellationToken ct)
+    /// <param name="rechnung">Nur eine Funktion mit Zustand: die Rechnung dieses Eingangs in dieser Aktivierung (<see cref="EingangsRechnung"/>).</param>
+    public async Task<EingangsAusgang> VerarbeiteAsync(EventEnvelope e, CancellationToken ct, EingangsRechnung? rechnung = null)
     {
         var eingang = _b.Eingang(e.Payload.GetType())
             ?? throw new InvalidOperationException($"{_b.Name} hört {e.Payload.GetType().Name} nicht.");
@@ -128,6 +140,8 @@ public sealed class FunktionsArbeit
         // Spur: Ursache ist der Eingang, Wirker die Funktion; der Akteur der Kette reist mit (docs/konzept-akteure.md §5.1).
         using var spur = Spur.Von(Spur.Ursache(e.AggregateId, e.AggregateVersion), _b.Wirker);
         using var akteur = Infrastructure.Akteure.AkteurHerkunft.Aus(e.UserId);
+
+        if (rechnung is not null) return await MitZustandAsync(e, eingabe, rechnung, ct);
 
         if (OhneFesthalten(eingang))
         {
@@ -146,6 +160,32 @@ public sealed class FunktionsArbeit
             return lauf.Value;
         }
         return await SendeAsync(eingabe, fest.Ausgaben, 0, ct);
+    }
+
+    /// <summary>
+    /// Eine Funktion mit Zustand (Plan §2.9, A5): <c>Auf</c> läuft je Eingang und Aktivierung GENAU EINMAL auf dem Zustand — auch wenn die Ausgabe
+    /// schon festgehalten ist (dann rechnet die Aktivierung nach einem Absturz den Eingang auf dem gesicherten Zustand nach, gesendet wird das
+    /// Festgehaltene, Hinweise nicht noch einmal). Sonst wird der Rest der Ausgabe festgehalten (was ein abgebrochener Lauf schon festhielt, gilt)
+    /// und gesendet; die Hinweise schickt nur, wer den Lauf abschließt.
+    /// </summary>
+    private async Task<EingangsAusgang> MitZustandAsync(EventEnvelope e, FunktionsEingabe eingabe, EingangsRechnung rechnung, CancellationToken ct)
+    {
+        var fest = await _ablage.LiesAsync(eingabe, ct);
+        if (rechnung.Ausgaben is null)
+        {
+            var liste = new List<IAusgabe>();
+            await foreach (var a in Rechne(e, ct)) liste.Add(a);
+            rechnung.Ausgaben = liste;   // ab hier wirkt der Eingang auf den Zustand — ein Wiederholen rechnet nicht noch einmal
+        }
+        if (fest.Abgeschlossen) return await SendeAsync(eingabe, fest.Ausgaben, 0, ct);
+        var ohneHinweise = rechnung.Ausgaben.Where(a => a is not ITransientEvent).ToList();
+        var schon = fest.Ausgaben.Count;
+        if (!await _ablage.HalteFestAsync(eingabe, schon, ohneHinweise.Skip(schon).ToList(), abgeschlossen: true, ct))
+            return await NachKonfliktAsync(eingabe, ct) ?? EingangsAusgang.Spaeter;
+        foreach (var h in rechnung.Ausgaben.OfType<ITransientEvent>()) _hinweis?.Invoke(h, e);
+        var gesendet = await SendeAsync(eingabe, fest.Ausgaben, 0, ct);   // was ein abgebrochener Lauf festhielt, ist vielleicht nie gesendet worden
+        var rest = await SendeAsync(eingabe, ohneHinweise.Skip(schon).ToList(), schon, ct);
+        return gesendet == EingangsAusgang.Fertig && rest == EingangsAusgang.Fertig ? EingangsAusgang.Fertig : EingangsAusgang.Spaeter;
     }
 
     /// <summary>Die Funktion rechnen (im Host; Lese-Fähigkeiten je Aufruf aus einem eigenen Bereich).</summary>

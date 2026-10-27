@@ -30,8 +30,11 @@ public delegate IAsyncEnumerable<(int Index, IAusgabe Ausgabe)> FunktionsSeite(o
 /// <param name="Faehigkeiten">Die Lese-Fähigkeiten des <c>Auf</c> (eine solche Funktion läuft nur im Host).</param>
 public sealed record FunktionsEingang(Type Typ, bool Hinweis, bool Strom, bool MitEvents, IReadOnlyList<Type> Ausgaben, IReadOnlyList<Type> Faehigkeiten);
 
-/// <summary>Eine Umsetzung, die im Host rechnen kann: die Klasse selbst bzw. eine Implementierung der Schnittstelle, gebaut per generierter Fabrik.</summary>
-public sealed record FunktionsUmsetzung(string Name, Type Typ, Func<IServiceProvider, object> Baue);
+/// <summary>
+/// Eine Umsetzung, die im Host rechnen kann: die Klasse selbst bzw. eine Implementierung der Schnittstelle, gebaut per generierter Fabrik — im
+/// Bereich der Aktivierung, mit ihrem Zustand (<see cref="Zustand{T}"/>, null ohne <c>IZustand&lt;T&gt;</c>).
+/// </summary>
+public sealed record FunktionsUmsetzung(string Name, Type Typ, Func<IServiceProvider, object?, object> Baue);
 
 /// <summary>
 /// Eine Funktion in Baustein-Form (generiert, <c>GeneratedFunktionsBausteine</c>).
@@ -40,6 +43,8 @@ public sealed record FunktionsUmsetzung(string Name, Type Typ, Func<IServiceProv
 /// <param name="Gleichbleibend">Nachweislich gleichbleibend (R12): eine Klasse ohne Konstruktor-Parameter und ohne Lese-Fähigkeit — derselbe
 /// Eingang ergibt dieselbe Ausgabe (Uhr und Zufall verbietet CQRS103). Nur sie darf ihre Ausgabe ohne Festhalten senden.</param>
 /// <param name="Dienste">Was der Konstruktor der Klasse braucht (Dienste, Konfig-Records) — für die Boot-Prüfung der Bindung.</param>
+/// <param name="Zustand">Der gekapselte Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, Plan §2.9) — null = ohne Zustand.</param>
+/// <param name="EineAdresse">Eine Adresse statt einer je Partition (<c>[EineAdresse]</c>, A6): ein Actor liest alle Partitionen.</param>
 public sealed record FunktionsBaustein(
     Type Typ,
     string Name,
@@ -49,10 +54,22 @@ public sealed record FunktionsBaustein(
     IReadOnlyList<FunktionsUmsetzung> Umsetzungen,
     IReadOnlyList<Type> Dienste,
     FunktionsAufruf Rufe,
-    FunktionsSeite RufeSeite)
+    FunktionsSeite RufeSeite,
+    FunktionsZustandsform? Zustand = null,
+    bool EineAdresse = false)
 {
-    /// <summary>Das Cluster-Kind des Funktions-Actors (Identität = Partition).</summary>
+    /// <summary>Das Cluster-Kind des Funktions-Actors (Identität = Partition bzw. die eine Adresse).</summary>
     public string KindName => Funktionsvertrag.Kind(Name);
+
+    /// <summary>In wie viele Partitionen die Funktion das Log liest: eine bei <see cref="EineAdresse"/>, sonst die des Konsums.</summary>
+    public int Partitionen(int konsum) => EineAdresse ? 1 : konsum;
+
+    /// <summary>Die Adresse (Identität des Funktions-Actors), die einen Eingang des Streams <paramref name="stream"/> rechnet (A6).</summary>
+    public string Adresse(Guid stream, int konsumPartitionen) =>
+        EineAdresse ? Funktionsvertrag.EinzigeIdentitaet : Partitionierung.Von(stream, konsumPartitionen).ToString();
+
+    /// <summary>Hört die Funktion etwas aus dem Log? Sonst hat sie keinen Leser, keine Position, keinen Takt (nur Hinweise).</summary>
+    public bool HoertLog => Eingaenge.Any(e => !e.Hinweis);
 
     /// <summary>Die Id des Stands (Position je Partition).</summary>
     public string StandId => Funktionsvertrag.StandId(Name);
@@ -76,6 +93,21 @@ public sealed record FunktionsBaustein(
 /// </summary>
 public static class Ausgaben
 {
+    /// <summary>Ein <c>Auf</c> ohne Ausgabe (nur mit Zustand: der Eingang wirkt allein auf ihn).</summary>
+    public static IAsyncEnumerable<IAusgabe> Leer => KeineAsync(Task.CompletedTask);
+
+    public static async IAsyncEnumerable<IAusgabe> KeineAsync(Task lauf)
+    {
+        await lauf.ConfigureAwait(false);
+        yield break;
+    }
+
+    public static async IAsyncEnumerable<IAusgabe> KeineAsync(ValueTask lauf)
+    {
+        await lauf.ConfigureAwait(false);
+        yield break;
+    }
+
     public static async IAsyncEnumerable<IAusgabe> Einzeln<T>(T wert, Func<T, IAusgabe?> abbildung)
     {
         await Task.CompletedTask;

@@ -139,6 +139,7 @@ public static class JsonContextEmitter
         // Jede typisierte Id (Id<X>), die irgendein Typ der Anwendung trägt — Nachrichten, Zustände (Snapshots), Wertobjekte: je Ziel ein
         //   geschlossener IdJsonKonverter<X> in beiden Kontexten (der STJ-Quellgenerator kennt keine offenen generischen Konverter).
         var ids = new SortedSet<string>(StringComparer.Ordinal);
+        var zustaende = new SortedSet<string>(StringComparer.Ordinal);
 
         // Es werden AUSSCHLIESSLICH die drei geladenen Domain-Assemblies durchsucht
         // (assembly.GetTypes() liefert nur die dort DEFINIERTEN Typen) — deckungsgleich zum
@@ -166,6 +167,14 @@ public static class JsonContextEmitter
                 if (isEvent && !isTransient) persistableEvents.Add(name);
                 if (isEvent || isCommand || isWire || isQuery) wire.Add(name);
 
+                // Der Zustand einer Funktion (IZustand<T> im Konstruktor, Plan Pub/Sub-Neustrukturierung §2.9): gesichert über denselben Speicher-
+                //   Kontext (GeneratedFunktionsBausteine koppelt Default.{T} zur Compile-Zeit).
+                if (ifaces.Contains("Abstractions.IFunktion"))
+                    foreach (var c in t.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
+                        foreach (var p in c.GetParameters())
+                            if (p.ParameterType.IsGenericType && p.ParameterType.GetGenericTypeDefinition().FullName == Abstractions.Funktionsvertrag.Zustand)
+                                zustaende.Add("global::" + FullyQualified(p.ParameterType.GetGenericArguments()[0]));
+
                 // Schema-Evolution (IUpcast<TAlt, …>): die früheren Gestalten liegen als alte Bytes im Store — Marten liest sie über
                 // denselben Kontext (GeneratedEventUpcasting koppelt Default.{TAlt} zur Compile-Zeit). Alle Typ-Argumente der Kante.
                 foreach (var kante in t.GetInterfaces().Where(i => i.IsGenericType
@@ -176,13 +185,13 @@ public static class JsonContextEmitter
         }
 
         var konverter = string.Concat(ids.Select(z => $"        typeof({Abstractions.Idvertrag.Konverter(z)}),\n"));
-        var eventCtx = Build(EventContextHeader.Replace("/*ID-KONVERTER*/\n", konverter), "EventJsonSerializerContext", persistableEvents,
-            "Domänen-Events (Domain.*, persistierbar)");
+        var eventCtx = Build(EventContextHeader.Replace("/*ID-KONVERTER*/\n", konverter), "EventJsonSerializerContext",
+            persistableEvents.Concat(zustaende).Distinct(StringComparer.Ordinal), "Domänen-Events (Domain.*, persistierbar) und Zustände der Funktionen (IZustand<T>)");
         var wireCtx = Build(WireContextHeader.Replace("/*ID-KONVERTER*/\n", konverter), "CqrsWireJsonContext", wire,
             "Domänen-Commands/Events/Queries (Domain.*)");
 
         static int Framework(string kopf) => kopf.Split("[JsonSerializable(").Length - 1;
-        var stats = $"Storage-Events: {persistableEvents.Count + Framework(EventContextHeader)} ({Framework(EventContextHeader)} Framework), "
+        var stats = $"Storage-Events: {persistableEvents.Count + Framework(EventContextHeader)} ({Framework(EventContextHeader)} Framework), Zustände: {zustaende.Count}, "
                     + $"Wire-Typen: {wire.Count + Framework(WireContextHeader)} ({Framework(WireContextHeader)} Framework), Id-Konverter: {ids.Count}";
         return (eventCtx, wireCtx, stats);
     }

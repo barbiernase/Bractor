@@ -38,7 +38,7 @@ public class FunktionsAktivierungTests
         return (s.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true }), p);
     }
 
-    private static object Baue(IServiceProvider sp) => new Umsetzung(sp.GetRequiredService<Verbindung>(), sp.GetRequiredService<Protokoll>());
+    private static object Baue(IServiceProvider sp, object? _) => new Umsetzung(sp.GetRequiredService<Verbindung>(), sp.GetRequiredService<Protokoll>());
 
     [Fact]
     public async Task Beim_Stoppen_werden_erst_die_Umsetzung_dann_ihre_Dienste_geschlossen()
@@ -75,7 +75,7 @@ public class FunktionsAktivierungTests
     public async Task Scheitert_der_Bau_wird_der_Bereich_trotzdem_geschlossen()
     {
         var (wurzel, p) = Container();
-        var a = new FunktionsAktivierung(wurzel, sp => { sp.GetRequiredService<Verbindung>(); throw new InvalidOperationException("Modell fehlt"); });
+        var a = new FunktionsAktivierung(wurzel, (sp, _) => { sp.GetRequiredService<Verbindung>(); throw new InvalidOperationException("Modell fehlt"); });
         await a.Invoking(x => x.BeginneAsync().AsTask()).Should().ThrowAsync<InvalidOperationException>();
         p.Should().Equal("verbindung zu");
         await a.DisposeAsync();   // nichts mehr offen

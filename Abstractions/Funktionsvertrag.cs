@@ -17,8 +17,20 @@ public static class Funktionsvertrag
     /// <summary>Der volle Name der <c>Herkunft</c> (optionaler Parameter eines <see cref="Auf"/>).</summary>
     public const string Herkunft = "Abstractions.Herkunft";
 
-    /// <summary>Das Cluster-Kind des Funktions-Actors einer Funktion (Identität = Partition).</summary>
+    /// <summary>Der volle Metadaten-Name des Zustands einer Funktion (<c>IZustand&lt;T&gt;</c> im Konstruktor, Plan §2.9).</summary>
+    public const string Zustand = "Abstractions.IZustand`1";
+
+    /// <summary>Der volle Name des Attributs „eine Adresse statt einer je Partition“ (Plan §2.9, A6).</summary>
+    public const string EineAdresse = "Abstractions.EineAdresseAttribute";
+
+    /// <summary>Die Identität des einen Funktions-Actors einer Funktion mit <see cref="EineAdresse"/> (er liest alle Partitionen).</summary>
+    public const string EinzigeIdentitaet = "0";
+
+    /// <summary>Das Cluster-Kind des Funktions-Actors einer Funktion (Identität = Partition bzw. <see cref="EinzigeIdentitaet"/>).</summary>
     public static string Kind(string funktion) => "funktion-" + funktion;
+
+    /// <summary>Die Id des gesicherten Zustands einer Funktion an einer Adresse (Identität des Funktions-Actors).</summary>
+    public static string ZustandId(string funktion, string identitaet) => "zustand:" + funktion + ":" + identitaet;
 
     /// <summary>Die Id des Stands einer Funktion (Position je Partition, wie bei Projektionen <c>&lt;Id&gt;:&lt;Partition&gt;</c>).</summary>
     public static string StandId(string funktion) => "funktion:" + funktion;

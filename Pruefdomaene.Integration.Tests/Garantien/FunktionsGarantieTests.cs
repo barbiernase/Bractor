@@ -99,6 +99,9 @@ public class FunktionsGarantieTests
         public Task<Abstractions.PartitionsCheckpoint> LadeAsync(string id, int partition, CancellationToken ct) => innen.LadeAsync(id, partition, ct);
         public Task<int> SchreibeAsync(Abstractions.PartitionsCheckpoint stand, CancellationToken ct) =>
             throw new InvalidOperationException("Absturz nach den Commands, vor der Position");
+        public Task<FunktionsZustandsDokument?> LadeZustandAsync(string id, CancellationToken ct) => innen.LadeZustandAsync(id, ct);
+        public Task<(int? Stand, int Zustand)> SichereAsync(Abstractions.PartitionsCheckpoint? stand, FunktionsZustandsDokument zustand, CancellationToken ct) =>
+            throw new InvalidOperationException("Absturz nach den Commands, vor der Position");
     }
 
     [Fact]
@@ -208,7 +211,7 @@ public class FunktionsGarantieTests
                 (_, _, _) => Task.CompletedTask, host.Services.GetRequiredService<IAusgabeAblage>(),
                 (b, e, fehler, teil) =>
                 {
-                    bote.Melde(FunktionsActor.Identitaet(b, Partitionierung.Von(e.Stream, Infrastructure.Projections.Konsum.Standard.Partitionen)),
+                    bote.Melde(FunktionsActor.IdentitaetFuer(b, e.Stream, Infrastructure.Projections.Konsum.Standard),
                         new EingangBeantwortet(e.Vorgang, fehler, teil));
                     return Task.CompletedTask;
                 });

@@ -37,6 +37,9 @@ namespace Infrastructure.SourceGeneration
             /// <summary>Wie ein Element zur Ausgabe wird: <c>""</c> (es selbst), <c>".Value"</c> (OneOf), <c>"?.Value"</c> (OneOf?).</summary>
             public string Abbildung = "";
             public List<INamedTypeSymbol> Ausgaben = new List<INamedTypeSymbol>();
+            /// <summary>Ein <c>Auf</c> ohne Ausgabe (<c>void</c>, <c>Task</c>, <c>ValueTask</c>): nur mit Zustand — der Eingang wirkt allein auf ihn (die
+            /// Funktion lernt, Plan §2.9).</summary>
+            public bool Keine;
         }
 
         /// <summary>Eine gelesene Funktion: die Methoden <c>Auf</c> und die Formfehler (Text, Ort).</summary>
@@ -49,6 +52,10 @@ namespace Infrastructure.SourceGeneration
             public List<(string Text, Location Ort)> Fehler = new List<(string, Location)>();
             /// <summary>Eingangstypen mit mehr als einem <c>Auf</c> (R2).</summary>
             public List<(INamedTypeSymbol Eingang, Location Ort)> Doppelt = new List<(INamedTypeSymbol, Location)>();
+            /// <summary>Der Typ des Zustands (<c>IZustand&lt;T&gt;</c> im Konstruktor einer Klasse, Plan §2.9) — null = ohne Zustand.</summary>
+            public INamedTypeSymbol? Zustand;
+            /// <summary><c>[EineAdresse]</c>: ein Funktions-Actor statt einer je Partition (A6).</summary>
+            public bool EineAdresse;
         }
 
         public static string Name(ITypeSymbol t) =>
@@ -72,11 +79,37 @@ namespace Infrastructure.SourceGeneration
         public static IEnumerable<INamedTypeSymbol> Umsetzt(INamedTypeSymbol t) =>
             t.AllInterfaces.Where(i => Name(i) != IFunktion && Hat(i, IFunktion));
 
+        /// <summary>Ist <paramref name="t"/> der Zustand einer Funktion, <c>IZustand&lt;T&gt;</c>?</summary>
+        public static bool IstZustand(ITypeSymbol t) => t is INamedTypeSymbol { IsGenericType: true } n && Name(n) == Abstractions.Funktionsvertrag.Zustand;
+
+        /// <summary>Die Parameter des Konstruktors, die einen Zustand nehmen (<c>IZustand&lt;T&gt;</c>).</summary>
+        public static IEnumerable<IParameterSymbol> ZustandsParameter(INamedTypeSymbol t) =>
+            Ctorbindung.Konstruktor(t)?.Parameters.Where(p => IstZustand(p.Type)) ?? Enumerable.Empty<IParameterSymbol>();
+
+        /// <summary>Trägt <paramref name="t"/> das Attribut <c>[EineAdresse]</c>?</summary>
+        public static bool HatEineAdresse(INamedTypeSymbol t) =>
+            t.GetAttributes().Any(a => a.AttributeClass != null && Name(a.AttributeClass) == Abstractions.Funktionsvertrag.EineAdresse);
+
         /// <summary>Liest die Form einer Funktion (<see cref="IstBaustein"/> vorausgesetzt).</summary>
         public static Form Lies(INamedTypeSymbol t)
         {
-            var f = new Form { Typ = t, Draussen = t.TypeKind == TypeKind.Interface };
+            var f = new Form { Typ = t, Draussen = t.TypeKind == TypeKind.Interface, EineAdresse = HatEineAdresse(t) };
             var ort = t.Locations.FirstOrDefault() ?? Location.None;
+            if (!f.Draussen)
+            {
+                var zustaende = ZustandsParameter(t).ToList();
+                if (zustaende.Count > 1)
+                    f.Fehler.Add(("der Konstruktor nimmt mehr als einen IZustand<T> — eine Funktion hat höchstens einen Zustand (fasse ihn in einer Klasse zusammen)",
+                        zustaende[1].Locations.FirstOrDefault() ?? ort));
+                else if (zustaende.Count == 1)
+                {
+                    var z = ((INamedTypeSymbol)zustaende[0].Type).TypeArguments[0] as INamedTypeSymbol;
+                    if (z == null || z.TypeKind != TypeKind.Class || z.IsGenericType || z.IsAbstract || z.ContainingType != null)
+                        f.Fehler.Add(($"der Zustand '{zustaende[0].Type.ToDisplayString()}' ist keine eigene, nicht generische, nicht geschachtelte Klasse — "
+                            + "nur so entsteht sein Serializer ohne Reflection", zustaende[0].Locations.FirstOrDefault() ?? ort));
+                    else f.Zustand = z;
+                }
+            }
             if (f.Draussen)
                 foreach (var m in t.GetMembers().OfType<IMethodSymbol>().Where(m => m.MethodKind == MethodKind.Ordinary && m.Name != Abstractions.Funktionsvertrag.Auf))
                     f.Fehler.Add(($"die Schnittstelle hat die Methode '{m.Name}' — eine Funktion draußen hat nur {Abstractions.Funktionsvertrag.Auf}", m.Locations.FirstOrDefault() ?? ort));
@@ -93,7 +126,7 @@ namespace Infrastructure.SourceGeneration
                     continue;
                 }
                 if (m.IsGenericMethod) { f.Fehler.Add(("ein Auf ist nicht generisch", mOrt)); continue; }
-                var auf = LiesAuf(m, mOrt, f.Fehler);
+                var auf = LiesAuf(m, mOrt, f.Fehler, f.Zustand != null);
                 if (auf == null) continue;
                 var schluessel = Name(auf.Eingang);
                 if (gesehen.ContainsKey(schluessel)) { f.Doppelt.Add((auf.Eingang, mOrt)); continue; }
@@ -105,7 +138,7 @@ namespace Infrastructure.SourceGeneration
             return f;
         }
 
-        private static Auf? LiesAuf(IMethodSymbol m, Location ort, List<(string, Location)> fehler)
+        private static Auf? LiesAuf(IMethodSymbol m, Location ort, List<(string, Location)> fehler, bool mitZustand)
         {
             if (m.Parameters.Length == 0 || m.Parameters[0].Type is not INamedTypeSymbol eingang)
             {
@@ -144,6 +177,22 @@ namespace Infrastructure.SourceGeneration
                         + "eine Funktion liest höchstens, sie schreibt nie selbst", p.Locations.FirstOrDefault() ?? ort));
                     return null;
                 }
+            }
+
+            // Ohne Ausgabe (void, Task, ValueTask): nur mit Zustand — der Eingang wirkt allein auf ihn (die Funktion lernt).
+            if (m.ReturnsVoid || m.ReturnType is INamedTypeSymbol { IsGenericType: false } k
+                && (Name(k) == "System.Threading.Tasks.Task" || Name(k) == "System.Threading.Tasks.ValueTask"))
+            {
+                if (!mitZustand)
+                {
+                    fehler.Add(("ein Auf gibt etwas aus (void und Task ohne Ergebnis sind keine Funktion — nur eine Funktion mit Zustand darf aus einem Eingang "
+                        + "allein lernen)", ort));
+                    return null;
+                }
+                auf.Keine = true;
+                auf.Huelle = m.ReturnsVoid ? "" : ((INamedTypeSymbol)m.ReturnType).Name;
+                auf.Element = m.ReturnType;
+                return auf;
             }
 
             // Rückgabe: [Task<|ValueTask<] ( IEnumerable<X> | IAsyncEnumerable<X> | X ) mit X = konkreter Typ | OneOf<…> | OneOf<…>?
@@ -193,6 +242,12 @@ namespace Infrastructure.SourceGeneration
                     fehler.Add(($"die Ausgabe '{a.Name}' ist eine Quell-Nachricht — Quell-Nachrichten bringen Quellen und Clients ins Log, nicht Funktionen", ort));
                     return null;
                 }
+                if (auf.Hinweis && Hat(a, A + "IEvent") && !Hat(a, A + "ITransientEvent"))
+                {
+                    fehler.Add(($"die Ausgabe '{a.Name}' ist ein Event, der Eingang '{eingang.Name}' ein Hinweis — aus einem Hinweis (höchstens einmal, nicht im "
+                        + "Log) gehen nur Commands und Hinweise hervor; was fachlich zählt, verlässt das Hinweis-Netz als Command an ein Aggregat (Plan §2.9)", ort));
+                    return null;
+                }
                 auf.Ausgaben.Add(a);
             }
             if (auf.Ausgaben.Count == 0) { fehler.Add(("ein Auf gibt etwas aus (void und Task ohne Ergebnis sind keine Funktion)", ort)); return null; }
@@ -203,7 +258,8 @@ namespace Infrastructure.SourceGeneration
 
         /// <summary>
         /// Nachweislich gleichbleibend (R12, aus der Signatur): eine Klasse ohne Konstruktor-Parameter, deren <c>Auf</c> keine Lese-Fähigkeit nimmt.
-        /// Dass ihr Rumpf weder Uhr noch Zufall nutzt, prüft CQRS103.
+        /// Dass ihr Rumpf weder Uhr noch Zufall nutzt, prüft CQRS103, dass sie keinen Zustand in Feldern hält, CQRS105 (R19) — eine Funktion mit
+        /// <c>IZustand&lt;T&gt;</c> hat einen Konstruktor-Parameter und ist damit nie gleichbleibend.
         /// </summary>
         public static bool Gleichbleibend(Form f) =>
             !f.Draussen && f.Aufs.All(a => a.Faehigkeiten.Count == 0)

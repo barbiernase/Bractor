@@ -104,6 +104,50 @@ public class FunktionsArbeitTests
     }
 
     [Fact]
+    public async Task Mit_Zustand_laeuft_Auf_je_Eingang_und_Aktivierung_genau_einmal_auch_beim_Wiederholen()
+    {
+        // Plan §2.9, A5: ein Wiederholen in derselben Aktivierung (Command „unbekannt“) rechnet nicht noch einmal — sonst wirkte der Eingang
+        //   zweimal auf den Zustand; gesendet wird dasselbe mit denselben Ids.
+        var ablage = new SpeicherAblage();
+        var zaehler = 0;
+        var ziel = Id<Ziel>.Neu();
+        var b = Baustein((e, h, ct) => Aus(new Tu(ziel, $"stand-{Interlocked.Increment(ref zaehler)}"), new Wink("w")), gleichbleibend: false);
+        var hinweise = new List<IEvent>();
+        var unbekannt = new Gesendet { Ausgang = _ => EmitAusgang.Unbekannt };
+        var arbeit = new FunktionsArbeit(b, () => new object(), ablage, unbekannt.SendeAsync, (h, _) => hinweise.Add(h));
+        var rechnung = new EingangsRechnung();
+
+        (await arbeit.VerarbeiteAsync(Ein(), default, rechnung)).Should().Be(EingangsAusgang.Spaeter);
+        (await arbeit.VerarbeiteAsync(Ein(), default, rechnung)).Should().Be(EingangsAusgang.Spaeter);
+        zaehler.Should().Be(1, "Auf wirkt einmal auf den Zustand, das Wiederholen sendet nur");
+        unbekannt.Ids.Distinct().Should().ContainSingle("dieselbe Stelle, dieselbe Command-Id");
+        hinweise.Should().ContainSingle("der Hinweis geht nur mit dem Lauf, der festhält");
+    }
+
+    [Fact]
+    public async Task Mit_Zustand_rechnet_eine_neue_Aktivierung_einen_festgehaltenen_Eingang_nach_und_sendet_das_Festgehaltene()
+    {
+        // Nach einem Absturz lädt die Aktivierung den gesicherten Zustand und liest die Log-Eingänge ab der gesicherten Position erneut: Auf läuft auf
+        //   dem Zustand (damit jeder Eingang genau einmal auf den gesicherten wirkt), gesendet wird das Festgehaltene, Hinweise nicht noch einmal.
+        var ablage = new SpeicherAblage();
+        var zaehler = 0;
+        var ziel = Id<Ziel>.Neu();
+        var b = Baustein((e, h, ct) => Aus(new Tu(ziel, $"stand-{Interlocked.Increment(ref zaehler)}"), new Wink("w")), gleichbleibend: false);
+        var hinweise = new List<IEvent>();
+        var sende = new Gesendet();
+        (await new FunktionsArbeit(b, () => new object(), ablage, sende.SendeAsync, (h, _) => hinweise.Add(h))
+            .VerarbeiteAsync(Ein(), default, new EingangsRechnung())).Should().Be(EingangsAusgang.Fertig);
+
+        (await new FunktionsArbeit(b, () => new object(), ablage, sende.SendeAsync, (h, _) => hinweise.Add(h))
+            .VerarbeiteAsync(Ein(), default, new EingangsRechnung())).Should().Be(EingangsAusgang.Fertig);
+        zaehler.Should().Be(2, "die neue Aktivierung rechnet auf ihrem (geladenen) Zustand nach");
+        sende.Alle.Select(x => x.Befehl.Was).Should().AllBe("stand-1", "es gilt das Festgehaltene");
+        sende.Ids.Distinct().Should().ContainSingle();
+        hinweise.Should().ContainSingle();
+        ablage.Festhalten.Should().Be(1);
+    }
+
+    [Fact]
     public async Task Festhaltend_rechnet_einmal_und_ein_zweiter_Lauf_sendet_aus_dem_Festgehaltenen()
     {
         var ablage = new SpeicherAblage();

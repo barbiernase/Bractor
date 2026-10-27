@@ -75,7 +75,7 @@ public interface IPost : IDienst { Task SendeAsync(string an); }
             + "new Type[] { typeof(global::Probe.Mahne), typeof(global::Probe.Unnoetig) }, new Type[] {  })");
         quelle.Should().Contain("case global::Probe.Ueberfaellig e: return Ausgaben.Einzeln(f.Auf(e, h), y => y.Value);");
         quelle.Should().Contain("[typeof(global::Probe.Ueberfaellig)] = new[] { \"funktion-Mahnwesen\" }", "der Weckplan nennt den Funktions-Actor");
-        quelle.Should().Contain("new FunktionsUmsetzung(\"Mahnwesen\", typeof(global::Probe.Mahnwesen), sp => new global::Probe.Mahnwesen())");
+        quelle.Should().Contain("new FunktionsUmsetzung(\"Mahnwesen\", typeof(global::Probe.Mahnwesen), (sp, z) => new global::Probe.Mahnwesen())");
         quelle.Should().Contain("Seite0(object o, IReadOnlyList<(IEvent Eingang, Herkunft Herkunft)> seite", "die Seiten-Form kommt aus der Einzel-Form");
     }
 
@@ -118,7 +118,7 @@ public interface IPost : IDienst { Task SendeAsync(string an); }
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty();
         quelle.Should().Contain("typeof(global::Probe.IPruefung), \"IPruefung\", Draussen: true, Gleichbleibend: false,");
-        quelle.Should().Contain("new FunktionsUmsetzung(\"Pruefung\", typeof(global::Probe.Pruefung), sp => new global::Probe.Pruefung(");
+        quelle.Should().Contain("new FunktionsUmsetzung(\"Pruefung\", typeof(global::Probe.Pruefung), (sp, z) => new global::Probe.Pruefung(");
         quelle.Should().NotContain("\"Pruefung\", Draussen", "die Implementierung ist keine eigene Funktion");
     }
 
@@ -151,12 +151,58 @@ public interface IPost : IDienst { Task SendeAsync(string an); }
         quelle.Should().Contain("[typeof(global::Probe.Messwert)] = new[] { \"funktion-Sensorik\" }");
     }
 
+    /// <summary>Der Serializer-Kontext der Komposition, wie ihn der Codegen-Prepass um die Zustände ergänzt (hier von Hand, für die Probe).</summary>
+    private const string Kontext = @"
+        namespace Infrastructure.Serialization {
+            public sealed class EventJsonSerializerContext
+            {
+                public static EventJsonSerializerContext Default { get; } = new();
+                public System.Text.Json.Serialization.Metadata.JsonTypeInfo<Probe.Mittelwerte> Mittelwerte => null!;
+            } }";
+
+    [Fact]
+    public void Ein_Zustand_im_Konstruktor_wird_erkannt_verdrahtet_und_ueber_den_Kontext_gesichert()
+    {
+        var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
+            public sealed class Mittelwerte { public Dictionary<Guid, double> Je { get; set; } = new(); public int Anzahl { get; set; } }
+            [EineAdresse]
+            public sealed class Schaetzer(IZustand<Mittelwerte> modell, IPost post) : IFunktion
+            {
+                public void Auf(Bezahlt e, Herkunft h) { modell.Wert.Anzahl++; }                    // lernt aus dem Log, ohne Ausgabe
+                public Task Auf(Ueberfaellig e) => Task.CompletedTask;                                 // ebenso, asynchron
+                public Mahne? Auf(Messwert m) => modell.Wert.Anzahl > 0 ? null : null;                 // Hinweis rein, Command raus
+            } }" + Kontext);
+
+        ids.Should().BeEmpty();
+        fehler.Should().BeEmpty("das Generat kompiliert gegen den Kontext");
+        quelle.Should().Contain("\"Schaetzer\", Draussen: false, Gleichbleibend: false,", "eine Funktion mit Zustand ist nie gleichbleibend (R12, R19)");
+        quelle.Should().Contain("(sp, z) => new global::Probe.Schaetzer((global::Abstractions.IZustand<global::Probe.Mittelwerte>)z!, ",
+            "der Zustand kommt aus der Aktivierung, nie aus dem Container");
+        quelle.Should().Contain("Zustand: new FunktionsZustandsform(typeof(global::Probe.Mittelwerte), () => new global::Infrastructure.Funktionen.Zustand<global::Probe.Mittelwerte>()");
+        quelle.Should().Contain("global::Infrastructure.Serialization.EventJsonSerializerContext.Default.Mittelwerte", "ohne Reflection: der generierte Kontext");
+        quelle.Should().Contain("EineAdresse: true");
+        quelle.Should().Contain("case global::Probe.Bezahlt e: f.Auf(e, h); return Ausgaben.Leer;");
+        quelle.Should().Contain("case global::Probe.Ueberfaellig e: return Ausgaben.KeineAsync(f.Auf(e));");
+        quelle.Should().Contain("new Type[] { typeof(global::Probe.IPost) }", "der Zustand ist kein Dienst im Bedarf");
+    }
+
+    [Theory]
+    [InlineData("public sealed class Z(IZustand<Zahl> a, IZustand<Zahl> b) : IFunktion { public Mahne? Auf(Ueberfaellig e) => null; }", "zwei Zustände")]
+    [InlineData("public sealed class Z(IZustand<List<int>> a) : IFunktion { public Mahne? Auf(Ueberfaellig e) => null; }", "generischer Zustand")]
+    [InlineData("public sealed class Z(IZustand<Zahl> a) : IFunktion { public Gemahnt? Auf(Messwert m) => null; }", "Event aus einem Hinweis")]
+    public void Zustand_und_Hinweis_ausser_Form_sind_CQRS100(string klasse, string worum)
+    {
+        var (quelle, ids, _) = Bausteine("namespace Probe { public sealed class Zahl { public int N { get; set; } } " + klasse + " }");
+        ids.Should().Contain("CQRS100", worum);
+        quelle.Should().NotContain("\"Z\", Draussen", "eine fehlerhafte Funktion fehlt im Dispatch");
+    }
+
     [Theory]
     [InlineData("public Mahne? Auf(Mahne c) => null;", "Eingang")]                                          // Command als Eingang
     [InlineData("public IEvent? Auf(Ueberfaellig e) => null;", "Ausgabe")]                                   // Schnittstelle als Ausgabe
     [InlineData("public Mahne? Auf(Ueberfaellig e, ISchreibeKonto s) => null;", "Parameter")]                // Schreib-Fähigkeit
     [InlineData("public Datei? Auf(Ueberfaellig e) => null;", "Quell-Nachricht")]                            // Quell-Nachricht als Ausgabe
-    [InlineData("public void Auf(Ueberfaellig e) { }", "Ausgabe")]                                          // nichts
+    [InlineData("public void Auf(Ueberfaellig e) { }", "Ausgabe")]                                          // nichts (ohne Zustand)
     [InlineData("public static Mahne? Auf(Ueberfaellig e) => null;", "statisch")]                            // statisch
     public void Eine_Funktion_ausser_Form_ist_CQRS100(string methode, string worum)
     {

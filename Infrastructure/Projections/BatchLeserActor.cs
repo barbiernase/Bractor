@@ -67,6 +67,11 @@ public sealed class BatchLeserActor : RahmenActor
 
 /// <summary>
 /// Ein Batch-Konsument (vom <c>PullPathGenerator</c> je replaybarer Projektion registriert): Cluster-Kind, Projektions-Id und die
-/// abonnierten Event-Typen (für die Signale und den Typfilter).
+/// abonnierten Event-Typen (für die Signale und den Typfilter). Mit <paramref name="EineAdresse"/> (eine Funktion mit <c>[EineAdresse]</c>, Plan §2.9)
+/// liest EIN Actor (Identität 0) alle Partitionen — geweckt, gepollt und gezählt wird dann nur er.
 /// </summary>
-public sealed record BatchRegistrierung(string KindName, string ProjektionsId, IReadOnlyList<Type> EventTypes);
+public sealed record BatchRegistrierung(string KindName, string ProjektionsId, IReadOnlyList<Type> EventTypes, bool EineAdresse = false)
+{
+    /// <summary>In wie viele Partitionen dieser Konsument liest.</summary>
+    public int Partitionen(Konsum konsum) => EineAdresse ? 1 : konsum.Partitionen;
+}

@@ -33,7 +33,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(Infrastructure.Funktionen.AusgabeFestgehalten))]
 // ── Framework: die Frist eines Aggregats (Uhr) ──
 [JsonSerializable(typeof(Abstractions.FristGesetzt))]
-// ── Domänen-Events (Domain.*, persistierbar) (gescannt) ──
+// ── Domänen-Events (Domain.*, persistierbar) und Zustände der Funktionen (IZustand<T>) (gescannt) ──
 [JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.GutschriftGebucht))]
 [JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.MahnungVermerkt))]
 [JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.RechnungBezahlt))]

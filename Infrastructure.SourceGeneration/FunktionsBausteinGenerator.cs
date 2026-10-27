@@ -78,6 +78,21 @@ namespace Infrastructure.SourceGeneration
             context.AddSource("GeneratedFunktionsBausteine.g.cs", Emit(gut, umsetzungen, iDienst, fq));
         }
 
+        /// <summary>
+        /// Die Form des Zustands: frisch, sichern, laden, zurücksetzen — über den Serializer-Kontext der Komposition
+        /// (<c>EventJsonSerializerContext</c>, vom Codegen-Prepass um die Zustände ergänzt; fehlt der Typ dort, bricht der Build).
+        /// </summary>
+        private static string Zustandsform(INamedTypeSymbol z, System.Func<ITypeSymbol, string> T)
+        {
+            var typ = T(z);
+            var huelle = $"global::Infrastructure.Funktionen.Zustand<{typ}>";
+            var info = $"global::Infrastructure.Serialization.EventJsonSerializerContext.Default.{z.Name}";
+            return $"new FunktionsZustandsform(typeof({typ}), () => new {huelle}(), "
+                + $"z => global::System.Text.Json.JsonSerializer.SerializeToUtf8Bytes((({huelle})z).Wert, {info}), "
+                + $"(z, d) => (({huelle})z).Wert = global::System.Text.Json.JsonSerializer.Deserialize(d, {info}) ?? new {typ}(), "
+                + $"z => (({huelle})z).Wert = new {typ}())";
+        }
+
         private static string Emit(List<Funktionsform.Form> fs, Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>> umsetzungen, INamedTypeSymbol? iDienst,
             SymbolDisplayFormat fq)
         {
@@ -118,10 +133,10 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine("                new FunktionsUmsetzung[]");
                 sb.AppendLine("                {");
                 foreach (var k in umsetzungen[f.Typ])
-                    sb.AppendLine($"                    new FunktionsUmsetzung(\"{k.Name}\", typeof({T(k)}), sp => new {T(k)}({Ctorbindung.Argumente(Ctorbindung.Konstruktor(k), fq)})),");
+                    sb.AppendLine($"                    new FunktionsUmsetzung(\"{k.Name}\", typeof({T(k)}), (sp, z) => new {T(k)}({Ctorbindung.Argumente(Ctorbindung.Konstruktor(k), fq, "z")})),");
                 sb.AppendLine("                },");
                 sb.AppendLine($"                new Type[] {{ {string.Join(", ", dienste)} }},");
-                sb.AppendLine($"                Rufe{i}, Seite{i}),");
+                sb.AppendLine($"                Rufe{i}, Seite{i}{(f.Zustand != null ? ", Zustand: " + Zustandsform(f.Zustand, T) : "")}{(f.EineAdresse ? ", EineAdresse: true" : "")}),");
             }
             sb.AppendLine("        };");
             sb.AppendLine();
@@ -156,6 +171,21 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine("            {");
                 foreach (var a in f.Aufs)
                 {
+                    var argsKeine = string.Join(", ", a.Parameter.Select(p => p.Art switch
+                    {
+                        "e" => "e",
+                        "h" => "h",
+                        "ct" => "ct",
+                        _ => $"b!.Hole<{T(p.Typ!)}>()",
+                    }));
+                    if (a.Keine)
+                    {
+                        // Ohne Ausgabe (nur mit Zustand): der Eingang wirkt allein auf den Zustand.
+                        sb.AppendLine(a.Huelle.Length == 0
+                            ? $"                case {T(a.Eingang)} e: f.{Abstractions.Funktionsvertrag.Auf}({argsKeine}); return Ausgaben.Leer;"
+                            : $"                case {T(a.Eingang)} e: return Ausgaben.KeineAsync(f.{Abstractions.Funktionsvertrag.Auf}({argsKeine}));");
+                        continue;
+                    }
                     var args = string.Join(", ", a.Parameter.Select(p => p.Art switch
                     {
                         "e" => "e",

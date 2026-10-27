@@ -83,7 +83,7 @@ public sealed class HandAusfuehrer : BackgroundService
             _ausgaben,
             (b, e, fehler, teil) =>
             {
-                bote.Melde(FunktionsActor.Identitaet(b, Partitionierung.Von(e.Stream, _konsum.Partitionen)), new EingangBeantwortet(e.Vorgang, fehler, teil));
+                bote.Melde(FunktionsActor.IdentitaetFuer(b, e.Stream, _konsum), new EingangBeantwortet(e.Vorgang, fehler, teil));
                 return Task.CompletedTask;
             },
             _logger);

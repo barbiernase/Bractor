@@ -56,20 +56,21 @@ public sealed class BatchKonsumStartupService : IHostedService
         {
             var weckung = new Weckung(_system, reg.KindName, _logger);
             var signalTypen = SignalReceiver.SignalTypesFor(reg.EventTypes);
+            var partitionen = reg.Partitionen(_konsum);
             var receiver = new SignalReceiver((streamId, _) =>
             {
-                weckung.Wecke(Partitionierung.Von(streamId, _konsum.Partitionen));
+                weckung.Wecke(Partitionierung.Von(streamId, partitionen));
                 return Task.CompletedTask;
             });
             _pids.Add(_system.Root.Spawn(Props.FromProducer(() => new SignalReceiverActor(reg.KindName, signalTypen, receiver))));
-            _pollSchleifen.Add(PollSchleifeAsync(weckung, _stopp.Token));
+            _pollSchleifen.Add(PollSchleifeAsync(weckung, partitionen, _stopp.Token));
             Console.WriteLine($"  ✓ {reg.ProjektionsId}: Kind '{reg.KindName}', {signalTypen.Count} Signal-Typen → Partition (+ Poll {_pollIntervall.TotalSeconds:0}s je Partition)");
         }
         Console.WriteLine();
         await Task.CompletedTask;
     }
 
-    private async Task PollSchleifeAsync(Weckung weckung, CancellationToken ct)
+    private async Task PollSchleifeAsync(Weckung weckung, int partitionen, CancellationToken ct)
     {
         // Der erste Poll kurz nach dem Start (Cluster steht): holt nach, was während „unten“ geschah, und startet einen Neuaufbau.
         var erster = true;
@@ -78,7 +79,7 @@ public sealed class BatchKonsumStartupService : IHostedService
             try { await Task.Delay(erster ? TimeSpan.FromSeconds(2) : _pollIntervall, ct); }
             catch (OperationCanceledException) { break; }
             erster = false;
-            for (var p = 0; p < _konsum.Partitionen; p++) weckung.Wecke(p);
+            for (var p = 0; p < partitionen; p++) weckung.Wecke(p);
         }
     }
 
@@ -155,15 +156,16 @@ public sealed class KonsumRueckstand(IDocumentStore marten, IEnumerable<BatchReg
         foreach (var reg in registrierungen)
         {
             var partitionen = await s.Query<PartitionsCheckpoint>().Where(p => p.ProjektionsId == reg.ProjektionsId).ToListAsync(ct);
-            var positionen = new long[konsum.Partitionen];
-            foreach (var p in partitionen.Where(p => p.Partition < konsum.Partitionen)) positionen[p.Partition] = p.Position;
+            var anzahl = reg.Partitionen(konsum);
+            var positionen = new long[anzahl];
+            foreach (var p in partitionen.Where(p => p.Partition < anzahl)) positionen[p.Partition] = p.Position;
             var typen = BatchLeser.TypenAus(reg.EventTypes)?.ToArray();
             await using var conn = marten.Storage.Database.CreateConnection();
             await conn.OpenAsync(ct);
             await using var cmd = new Npgsql.NpgsqlCommand(Abfrage(schema, typen is not null), conn);
             foreach (var w in typen is null
-                         ? new object[] { positionen.Min(), positionen, konsum.Partitionen, ZaehlGrenze }
-                         : new object[] { positionen.Min(), positionen, konsum.Partitionen, ZaehlGrenze, typen })
+                         ? new object[] { positionen.Min(), positionen, anzahl, ZaehlGrenze }
+                         : new object[] { positionen.Min(), positionen, anzahl, ZaehlGrenze, typen })
                 cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = w });
             long zahl, angesehen;
             await using (var r = await cmd.ExecuteReaderAsync(ct))

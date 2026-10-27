@@ -13,10 +13,11 @@ namespace Infrastructure.Funktionen;
 
 /// <summary>
 /// Wo und wie eine Funktion in Baustein-Form läuft (Umgebung <c>Funktionen:&lt;Name&gt;</c>, sonst der Standard): Laufort, die Umsetzung im Host
-/// (bei mehreren nach Name), Slots je Partition und Wiederholungen, bevor ein werfender Eingang seinen Stream parkt.
+/// (bei mehreren nach Name), Slots je Partition und Wiederholungen, bevor ein werfender Eingang seinen Stream parkt; für eine Funktion mit Zustand
+/// dazu, wo und wie oft er gesichert wird (ohne Angabe <see cref="ZustandsBindung.Standard"/>).
 /// </summary>
 public sealed record BausteinBindung(string Funktion, FunktionsLaufort Laufort = FunktionsLaufort.Host, string? Umsetzung = null, int Slots = 1,
-    int Wiederholungen = 0);
+    int Wiederholungen = 0, ZustandsBindung? Zustand = null);
 
 /// <summary>
 /// Die Verdrahtung der Funktionen in Baustein-Form (Plan Pub/Sub-Neustrukturierung Phase 3), für jede Anwendung gleich — aus der generierten Tabelle
@@ -42,10 +43,10 @@ public static class FunktionsBausteinWiring
         foreach (var b in bausteine)
         {
             services.AddSingleton<IClusterKindContributor>(new FunktionsKind(b));
-            if (b.LogEingaenge.Any())
-                services.AddSingleton(new BatchRegistrierung(b.KindName, b.StandId, b.LogEingaenge.Select(e => e.Typ).ToList()));
+            if (b.HoertLog)
+                services.AddSingleton(new BatchRegistrierung(b.KindName, b.StandId, b.LogEingaenge.Select(e => e.Typ).ToList(), EineAdresse: b.EineAdresse));
         }
-        if (bausteine.Any(b => b.LogEingaenge.Any()))
+        if (bausteine.Any(b => b.HoertLog))
         {
             services.AddHostedService<BatchKonsumStartupService>();   // idempotent (TryAddEnumerable), auch wenn die Projektionen ihn schon anmeldeten
             services.TryAddSingleton<IKonsumRueckstand, KonsumRueckstand>();
@@ -110,6 +111,12 @@ internal sealed class FunktionsKind(FunktionsBaustein baustein) : IClusterKindCo
         var logger = provider.GetService<ILoggerFactory>()?.CreateLogger("Funktion." + baustein.Name);
         var typen = FunktionsActor.TypenVon(baustein);
         var umsetzung = bindung.Laufort == FunktionsLaufort.Host ? FunktionsBausteinWiring.Umsetzung(baustein, bindung) : null;
+        // Mit Zustand (Plan §2.9): Laden und Sichern über den Stand-Store, große Zustände als Datei in der Ablage der Umgebung.
+        var zustand = bindung.Zustand ?? ZustandsBindung.Standard;
+        var sicherung = umsetzung is not null && baustein.Zustand is not null
+            ? new ZustandsSicherung(provider.GetRequiredService<IFunktionsStand>(), zustand,
+                zustand.Verzeichnis is { } verz ? new VerzeichnisZustandsDateien(verz) : null)
+            : null;
         return new ClusterKind(baustein.KindName, Props.FromProducer(() =>
         {
             // Der Cluster ist hier fertig (Spawn-Zeit): Emitter und Bote erst jetzt bauen.
@@ -118,7 +125,7 @@ internal sealed class FunktionsKind(FunktionsBaustein baustein) : IClusterKindCo
             var publisher = provider.GetService<BrokerPublisher>();
             // Die Umsetzung je Aktivierung, samt ihren Diensten in einem eigenen Bereich (Plan §2.9); bei Slots > 1 teilen sich die Eingänge
             //   dieser Aktivierung die Instanz — sie muss dann thread-sicher sein.
-            var aktivierung = umsetzung is null ? null : new FunktionsAktivierung(provider, umsetzung.Baue);
+            var aktivierung = umsetzung is null ? null : new FunktionsAktivierung(provider, umsetzung.Baue, baustein.Zustand);
             var arbeit = new FunktionsArbeit(baustein,
                 aktivierung is null ? null : () => aktivierung.Umsetzung,
                 provider.GetRequiredService<IAusgabeAblage>(),
@@ -132,7 +139,8 @@ internal sealed class FunktionsKind(FunktionsBaustein baustein) : IClusterKindCo
                 (angebot, ct) => bote.FrageAsync<WakeAck>(FunktionsVermittlerActor.Identitaet(baustein.Typ), angebot, TimeSpan.FromSeconds(5), ct),
                 logger);
             return new FunktionsActor(baustein, arbeit, provider.GetRequiredService<IEventStoreRepository>(), provider.GetRequiredService<IFunktionsStand>(),
-                konsum, bindung.Slots, bindung.Wiederholungen, provider.GetService<IDeadLetterSink>(), logger, typen: typen, aktivierung: aktivierung);
+                konsum, bindung.Slots, bindung.Wiederholungen, provider.GetService<IDeadLetterSink>(), logger, typen: typen, aktivierung: aktivierung,
+                sicherung: sicherung);
         }));
     }
 }

@@ -20,7 +20,8 @@ public static class FunktionsLaufortExtensions
             if (!bausteine.Contains(name))
                 throw new Infrastructure.Umgebung.BootFehler($"Funktionen:{name} — keine Funktion dieses Namens (bekannt: "
                     + string.Join(", ", bausteine.OrderBy(n => n, StringComparer.Ordinal)) + ").", "host:Funktionen");
-            services.AddSingleton(new BausteinBindung(name, k.Laufort, k.Implementierung, Math.Max(1, k.Slots), Math.Max(0, k.Wiederholungen)));
+            services.AddSingleton(new BausteinBindung(name, k.Laufort, k.Implementierung, Math.Max(1, k.Slots), Math.Max(0, k.Wiederholungen),
+                k.Zustand is null ? null : ZustandsBindung.Aus(k.Zustand)));
             if (k.Laufort == FunktionsLaufort.Hand) services.AddHandAusfuehrer();
         }
         return services;

@@ -15,7 +15,8 @@ namespace Infrastructure.SourceGeneration
     /// </summary>
     internal static class Ctorbindung
     {
-        public enum Art { Dienst, Konfig, Logger, Fremd }
+        /// <summary>Was ein Konstruktor-Parameter ist; <see cref="Zustand"/> nur in einer Funktions-Klasse (<c>IZustand&lt;T&gt;</c>, Plan §2.9).</summary>
+        public enum Art { Dienst, Konfig, Logger, Zustand, Fremd }
 
         /// <summary>Der Konstruktor, den die Fabrik benutzt: der öffentliche mit den meisten Parametern (wie der DI-Aktivator).</summary>
         public static IMethodSymbol? Konstruktor(INamedTypeSymbol t) => t.InstanceConstructors
@@ -28,6 +29,9 @@ namespace Infrastructure.SourceGeneration
                 && i.AllInterfaces.Contains(iDienst, SymbolEqualityComparer.Default)) return Art.Dienst;
             if (p is INamedTypeSymbol { IsGenericType: true } g && g.OriginalDefinition.ToDisplayString() == "Microsoft.Extensions.Logging.ILogger<TCategoryName>")
                 return Art.Logger;
+            if (p is INamedTypeSymbol { IsGenericType: true } z && (z.OriginalDefinition.ContainingNamespace?.ToDisplayString() + "." + z.OriginalDefinition.MetadataName)
+                == Abstractions.Funktionsvertrag.Zustand)
+                return Art.Zustand;
             if (p is INamedTypeSymbol { TypeKind: TypeKind.Class, IsRecord: true, IsAbstract: false } r && Vertragsassemblies.NutztVertrag(r.ContainingAssembly)) return Art.Konfig;
             return Art.Fremd;
         }
@@ -38,9 +42,14 @@ namespace Infrastructure.SourceGeneration
             || t is IArrayTypeSymbol { ElementType.SpecialType: SpecialType.System_String }
             || Abstractions.Dienstvertrag.IstFeldtyp((t.ContainingNamespace?.ToDisplayString() ?? "") + "." + t.MetadataName);
 
-        /// <summary>Die Argumente der Fabrik: je Parameter <c>sp.GetRequiredService&lt;T&gt;()</c>.</summary>
-        public static string Argumente(IMethodSymbol? ctor, SymbolDisplayFormat fq) => ctor == null ? ""
-            : string.Join(", ", ctor.Parameters.Select(p => $"global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{p.Type.ToDisplayString(fq)}>(sp)"));
+        /// <summary>
+        /// Die Argumente der Fabrik: je Parameter <c>sp.GetRequiredService&lt;T&gt;()</c> — ein Zustand (<c>IZustand&lt;T&gt;</c>) kommt aus der
+        /// Aktivierung (<paramref name="zustand"/>, der Name der Variablen in der Fabrik), nie aus dem Container.
+        /// </summary>
+        public static string Argumente(IMethodSymbol? ctor, SymbolDisplayFormat fq, string? zustand = null) => ctor == null ? ""
+            : string.Join(", ", ctor.Parameters.Select(p => zustand != null && ArtVon(p.Type, null) == Art.Zustand
+                ? $"({p.Type.ToDisplayString(fq)}){zustand}!"
+                : $"global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{p.Type.ToDisplayString(fq)}>(sp)"));
 
         /// <summary>Was die Bindung prüfen muss (Dienste und Konfig-Records des Konstruktors).</summary>
         public static IEnumerable<INamedTypeSymbol> Braucht(IMethodSymbol? ctor, INamedTypeSymbol? iDienst) => ctor == null

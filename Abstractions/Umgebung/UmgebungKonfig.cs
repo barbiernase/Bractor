@@ -127,6 +127,24 @@ public sealed class FunktionsKonfig
     public int Wiederholungen { get; set; }
     /// <summary>Nur Extern: wie die Werkbank den Worker startet (▶ Worker starten). Der Host liest es nie.</summary>
     public WorkerKonfig? Worker { get; set; }
+    /// <summary>Nur eine Funktion mit Zustand (<c>IZustand&lt;T&gt;</c>, Plan §2.9): wo und wie oft er gesichert wird. Ohne Eintrag: im Dokument,
+    /// höchstens einmal je Sekunde.</summary>
+    public ZustandKonfig? Zustand { get; set; }
+}
+
+/// <summary>Wo der Zustand einer Funktion liegt: im Dokument neben der Position (klein) oder als Datei in einem Verzeichnis (groß, Netzgewichte).</summary>
+public enum ZustandsAblage { Dokument, Datei }
+
+/// <summary>
+/// Die Sicherung des Zustands einer Funktion (Abschnitt <c>Funktionen:&lt;F&gt;:Zustand</c>, Plan §2.9, A5): Ablage, Verzeichnis der Dateien, und wie oft
+/// höchstens gesichert wird (Sekunden; beim Stoppen, Passivieren und Umziehen immer). Großer Zustand bremst bei kurzem Intervall den Durchsatz, ein
+/// langes kostet nach einem Absturz Nachrechnen.
+/// </summary>
+public sealed class ZustandKonfig
+{
+    public ZustandsAblage Ablage { get; set; } = ZustandsAblage.Dokument;
+    public string? Verzeichnis { get; set; }
+    public double SichernAlleSekunden { get; set; } = 1;
 }
 
 /// <summary>

@@ -146,12 +146,18 @@ public sealed class FunktionsLauf
         return true;
     }
 
-    /// <summary>Der Einzelversuch ist zu Ende; lief er durch, ist der Stream nicht mehr geparkt (seine weiteren Eingänge laufen wieder normal).</summary>
-    public void EndeParkVersuch(Guid stream, bool durch)
+    /// <summary>
+    /// Der Einzelversuch ist zu Ende; lief er durch, ist der Stream nicht mehr geparkt (seine weiteren Eingänge laufen wieder normal). Sonst rückt
+    /// sein Stand bis <paramref name="bis"/> (die Version des letzten fertigen Eingangs) — der nächste Versuch beginnt dahinter.
+    /// </summary>
+    public void EndeParkVersuch(Guid stream, bool durch, int? bis = null)
     {
         _parkVersuch.Remove(stream);
         if (_belegt.TryGetValue(stream, out var s) && s == long.MaxValue) _belegt.Remove(stream);
-        if (durch && Stand is not null) Stand.Geparkt = Stand.Geparkt.Where(g => g.StreamId != stream).ToList();
+        if (Stand is null) return;
+        if (durch) Stand.Geparkt = Stand.Geparkt.Where(g => g.StreamId != stream).ToList();
+        else if (bis is { } v)
+            foreach (var g in Stand.Geparkt.Where(g => g.StreamId == stream && g.Version < v)) g.Version = v;
     }
 
     /// <summary>Hat sich der Stand seit dem letzten Schreiben geändert (Position oder Geparkt)? Dann der nächste Stand zum Schreiben.</summary>

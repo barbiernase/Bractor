@@ -16,6 +16,15 @@ public interface IFunktionsStand
 
     /// <summary>Schreibt den Stand mit erwarteter Version (<see cref="PartitionsCheckpoint.Version"/>); liefert die neue Version.</summary>
     Task<int> SchreibeAsync(PartitionsCheckpoint stand, CancellationToken ct);
+
+    /// <summary>Der gesicherte Zustand einer Funktion an einer Adresse (Plan §2.9), oder null.</summary>
+    Task<FunktionsZustandsDokument?> LadeZustandAsync(string id, CancellationToken ct);
+
+    /// <summary>
+    /// Sichert Zustand und (bei Log-Eingängen) Stand in EINER Transaktion, beide mit erwarteter Version (A5); liefert die neuen Versionen. Eine zweite
+    /// Aktivierung derselben Adresse verliert den ganzen Versuch (<see cref="PartitionsKonfliktException"/>).
+    /// </summary>
+    Task<(int? Stand, int Zustand)> SichereAsync(PartitionsCheckpoint? stand, FunktionsZustandsDokument zustand, CancellationToken ct);
 }
 
 /// <summary>Der Stand im Dokument-Store (Marten, numerische Revision wie beim Partitions-Checkpoint der Projektionen).</summary>
@@ -50,4 +59,9 @@ public sealed class MartenFunktionsStand(IDocumentStore store) : IFunktionsStand
             throw new PartitionsKonfliktException($"Funktions-Stand {stand.Id} zwischenzeitlich geschrieben (erwartet v{stand.Version}).", ex);
         }
     }
+
+    public Task<FunktionsZustandsDokument?> LadeZustandAsync(string id, CancellationToken ct) => MartenZustand.LadeAsync(store, id, ct);
+
+    public Task<(int? Stand, int Zustand)> SichereAsync(PartitionsCheckpoint? stand, FunktionsZustandsDokument zustand, CancellationToken ct) =>
+        MartenZustand.SichereAsync(store, stand, zustand, ct);
 }
