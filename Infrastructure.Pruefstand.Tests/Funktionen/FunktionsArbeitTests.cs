@@ -148,6 +148,18 @@ public class FunktionsArbeitTests
     }
 
     [Fact]
+    public async Task Mit_Zustand_haelt_ein_Lauf_ohne_Ausgabe_nichts_fest()
+    {
+        var ablage = new SpeicherAblage();
+        var gelernt = 0;
+        var b = Baustein((e, h, ct) => { Interlocked.Increment(ref gelernt); return Aus(); }, gleichbleibend: false);
+        var arbeit = new FunktionsArbeit(b, () => new object(), ablage, new Gesendet().SendeAsync);
+        (await arbeit.VerarbeiteAsync(Ein(), default, new EingangsRechnung())).Should().Be(EingangsAusgang.Fertig);
+        gelernt.Should().Be(1);
+        ablage.Festhalten.Should().Be(0, "eine Funktion, die nur lernt, schreibt je Eingang nichts ins Log");
+    }
+
+    [Fact]
     public async Task Festhaltend_rechnet_einmal_und_ein_zweiter_Lauf_sendet_aus_dem_Festgehaltenen()
     {
         var ablage = new SpeicherAblage();

@@ -190,6 +190,9 @@ public sealed class FunktionsArbeit
             rechnung.Ausgaben = liste;   // ab hier wirkt der Eingang auf den Zustand — ein Wiederholen rechnet nicht noch einmal
         }
         if (fest.Abgeschlossen) return await SendeAsync(eingabe, fest.Ausgaben, 0, ct);
+        // Nichts ausgegeben (die Funktion hat nur gelernt): nichts festzuhalten, nichts zu senden — nach einem Absturz rechnet die Aktivierung den
+        //   Eingang ohnehin auf dem gesicherten Zustand nach. (Mit einem Hinweis hielte sie fest: sonst ginge er beim Nachrechnen ein zweites Mal hinaus.)
+        if (rechnung.Ausgaben.Count == 0 && fest.Ausgaben.Count == 0) return EingangsAusgang.Fertig;
         var ohneHinweise = rechnung.Ausgaben.Where(a => a is not ITransientEvent).ToList();
         var schon = fest.Ausgaben.Count;
         if (!await _ablage.HalteFestAsync(eingabe, schon, ohneHinweise.Skip(schon).ToList(), abgeschlossen: true, ct))

@@ -116,6 +116,21 @@ public class FunktionsLaufTests
     }
 
     [Fact]
+    public void Ein_Einzelversuch_der_nur_teilweise_durchlaeuft_rueckt_den_Stand_des_geparkten_Streams_vor()
+    {
+        // Was der Einzelversuch schon geschafft hat, rechnet der nächste nicht noch einmal (mit Zustand wirkte es sonst zweimal auf ihn, Plan §2.9).
+        var l = Lauf(slots: 2);
+        l.Nimm(new PartitionsSeite(new[] { E(1, A, 1) }, 1, false));
+        l.Parke(1, "wirft", DateTimeOffset.UnixEpoch);
+        l.BeginneParkVersuch(A).Should().BeTrue();
+        l.EndeParkVersuch(A, durch: false, bis: 3);
+        l.Geparkt.Should().ContainSingle().Which.Version.Should().Be(3, "v1 bis v3 liefen durch, v4 scheiterte");
+        l.BeginneParkVersuch(A).Should().BeTrue();
+        l.EndeParkVersuch(A, durch: false, bis: 2);
+        l.Geparkt.Single().Version.Should().Be(3, "der Stand geht nie zurück");
+    }
+
+    [Fact]
     public void Der_Stand_wird_nur_geschrieben_wenn_er_sich_aenderte()
     {
         var l = Lauf(slots: 2);
