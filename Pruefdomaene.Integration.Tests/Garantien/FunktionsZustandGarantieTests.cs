@@ -136,7 +136,9 @@ public class FunktionsZustandGarantieTests
         var bindung = new BausteinBindung(nameof(Schaetzer), Zustand: new ZustandsBindung(ZustandsAblage.Datei, verzeichnis, TimeSpan.FromMilliseconds(200)));
         var stelle = Id<Messstelle>.Neu();
         AbsturzNachDerDatei? stoerung = null;
-        using (var a = Cluster("garantie-zustand-absturz-a", dienste: s =>
+        // Ein eigenes Schema: der gesicherte Zustand verweist auf die Datei-Ablage dieses Tests (die anderen Tests sichern im Dokument).
+        const string schema = "pruef_zustand_absturz";
+        using (var a = Cluster("garantie-zustand-absturz-a", schema: schema, dienste: s =>
                {
                    s.AddSingleton(bindung);
                    Dekoriere<IFunktionsStand>(s, (_, innen) => stoerung = new AbsturzNachDerDatei(innen));
@@ -156,7 +158,7 @@ public class FunktionsZustandGarantieTests
             finally { await a.StopAsync(); }   // auch die Sicherung beim Stopp „stürzt ab“ — gesichert bleibt der Stand der ersten Sicherung
         }
 
-        using var b = Cluster("garantie-zustand-absturz-b", dienste: s => s.AddSingleton(bindung));
+        using var b = Cluster("garantie-zustand-absturz-b", schema: schema, dienste: s => s.AddSingleton(bindung));
         Verzeichnisse[b] = verzeichnis;
         await b.StartAsync();
         try
