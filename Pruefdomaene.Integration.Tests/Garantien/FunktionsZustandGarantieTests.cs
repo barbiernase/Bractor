@@ -96,6 +96,7 @@ public class FunktionsZustandGarantieTests
             {
                 await MissAsync(a, stelle, 1, 2, 3, 4);
                 await Gelernt(a, stelle, 4, "der Schätzer lernt nicht");
+                await Warte(async () => (await Log(a, stelle.Wert)).Count(e => e.Payload is SchaetzungVermerkt) == 4, Frist, "die Schätzungen fehlen");
             }
             finally { await a.StopAsync(); }
         }
@@ -105,8 +106,11 @@ public class FunktionsZustandGarantieTests
         {
             await MissAsync(b, stelle, 5, 6);
             await Gelernt(b, stelle, 6, "die neue Aktivierung kennt den Zustand der alten nicht (oder lernt doppelt)");
-            await Warte(async () => (await Log(b, stelle.Wert)).Select(e => e.Payload).OfType<SchaetzungVermerkt>().Any(s => s.Anzahl == 6), Frist,
-                "die Schätzung nach dem Umzug beruht nicht auf allem Gelernten");
+            // Die Schätzungen nach dem Umzug beruhen auf dem mitgekommenen Zustand (≥ 4 gelernt) — nie auf einem neuen ab 0. (Wie viel genau, hängt
+            //   davon ab, ob der Hinweis vor oder nach dem Log-Eingang ankam: zwei getrennte Wege.)
+            await Warte(async () => (await Log(b, stelle.Wert)).Count(e => e.Payload is SchaetzungVermerkt) == 6, Frist, "die Schätzungen nach dem Umzug fehlen");
+            (await Log(b, stelle.Wert)).Select(e => e.Payload).OfType<SchaetzungVermerkt>().Skip(4).Should().OnlyContain(s => s.Anzahl >= 4,
+                "die neue Aktivierung schätzt mit dem Zustand der alten");
         }
         finally { await b.StopAsync(); }
     }
@@ -136,8 +140,19 @@ public class FunktionsZustandGarantieTests
         var bindung = new BausteinBindung(nameof(Schaetzer), Zustand: new ZustandsBindung(ZustandsAblage.Datei, verzeichnis, TimeSpan.FromMilliseconds(200)));
         var stelle = Id<Messstelle>.Neu();
         AbsturzNachDerDatei? stoerung = null;
-        // Ein eigenes Schema: der gesicherte Zustand verweist auf die Datei-Ablage dieses Tests (die anderen Tests sichern im Dokument).
+        // Ein eigenes Schema: der gesicherte Zustand verweist auf die Datei-Ablage dieses Tests (die anderen Tests sichern im Dokument). Ein früherer
+        //   Lauf hat seine Ablage gelöscht — sein Zustand und Stand gehen mit (frischer Anfang, die Messstellen sind ohnehin neu).
         const string schema = "pruef_zustand_absturz";
+        await using (var conn = new Npgsql.NpgsqlConnection(Verbindung))
+        {
+            await conn.OpenAsync();
+            foreach (var sql in new[] { $"delete from {schema}.mt_doc_funktionszustandsdokument",
+                         $"delete from {schema}.mt_doc_partitionscheckpoint where id like 'funktion:{nameof(Schaetzer)}:%'" })
+            {
+                try { await using var cmd = new Npgsql.NpgsqlCommand(sql, conn); await cmd.ExecuteNonQueryAsync(); }
+                catch (Npgsql.PostgresException) { /* erster Lauf: die Tabelle gibt es noch nicht */ }
+            }
+        }
         using (var a = Cluster("garantie-zustand-absturz-a", schema: schema, dienste: s =>
                {
                    s.AddSingleton(bindung);
