@@ -39,7 +39,7 @@ public sealed class BausteinSitzung : IAsyncDisposable
     private readonly Func<FunktionsBaustein, object, Task> _melde;
     private readonly Func<EingangAnbieten, FunktionsBaustein, int, Task> _sende;
     private readonly IAusgabeAblage _ablage;
-    private readonly Func<FunktionsBaustein, EingangAnbieten, string?, bool, Task> _beantwortet;
+    private readonly Func<FunktionsBaustein, EingangAnbieten, string?, bool, IReadOnlyList<IAusgabe>?, Task> _beantwortet;
     private readonly ILogger? _logger;
     private readonly int _warteMs;
     private readonly CancellationTokenSource _ende = new();
@@ -52,10 +52,11 @@ public sealed class BausteinSitzung : IAsyncDisposable
     /// <param name="sende">Einen zugeteilten Eingang weiterreichen (an den Menschen, den Worker) — mit der Zahl der schon festgehaltenen Ausgaben
     /// (Strom: ein neuer Träger macht beim nächsten nicht festgehaltenen Stück weiter, Fortschritt wie im Host).</param>
     /// <param name="beantwortet">An den Funktions-Actor der Partition: die Antwort liegt fest (bzw. Fehler; mit <c>teil</c> nur ein Stück eines
-    /// Stroms) — verlierbar.</param>
+    /// Stroms) — verlierbar. Für einen Hinweis als Eingang trägt sie die Ausgaben selbst (nichts wird festgehalten, Plan §2.9).</param>
     public BausteinSitzung(string sitzung, Func<string, FunktionsBaustein?> loese,
         Func<FunktionsBaustein, HoleEingaenge, CancellationToken, Task<EingaengeZugeteilt?>> hole, Func<FunktionsBaustein, object, Task> melde,
-        Func<EingangAnbieten, FunktionsBaustein, int, Task> sende, IAusgabeAblage ablage, Func<FunktionsBaustein, EingangAnbieten, string?, bool, Task> beantwortet,
+        Func<EingangAnbieten, FunktionsBaustein, int, Task> sende, IAusgabeAblage ablage,
+        Func<FunktionsBaustein, EingangAnbieten, string?, bool, IReadOnlyList<IAusgabe>?, Task> beantwortet,
         ILogger? logger = null, int warteMs = 4_000)
     {
         _sitzung = sitzung;
@@ -120,7 +121,7 @@ public sealed class BausteinSitzung : IAsyncDisposable
                     try
                     {
                         // Ein Strom, den ein früherer Träger begonnen hat: weiter ab dem, was schon festgehalten ist.
-                        var schon = f.Eingang(e.Eingang.GetType()) is { Strom: true }
+                        var schon = f.Eingang(e.Eingang.GetType()) is { Strom: true, Hinweis: false }
                             ? (await _ablage.LiesAsync(new FunktionsEingabe(f.Name, e.Stream, e.Version, e.KorrelationsText, e.Akteur), ct)).Ausgaben.Count
                             : 0;
                         await _sende(e, f, schon);
@@ -160,13 +161,27 @@ public sealed class BausteinSitzung : IAsyncDisposable
             var eingang = l.Funktion.Eingang(l.Eingang.Eingang.GetType());
             if (fehler is null && (ausgaben is null || eingang is null || ausgaben.Any(a => !eingang.Ausgaben.Contains(a.GetType()))))
                 fehler = $"Antwort außerhalb der Signatur von {l.Funktion.Name} ({string.Join(", ", eingang?.Ausgaben.Select(t => t.Name) ?? [])})";
-            if (fehler is null && !fertig && eingang is { Strom: false })
+            if (fehler is null && !fertig && eingang is { Strom: false, Hinweis: false })
                 fehler = $"{l.Funktion.Name} antwortet auf {eingang.Typ.Name} mit genau einer Ausgabe, nicht mit einem Strom";
             if (fehler is not null)
             {
-                await _beantwortet(l.Funktion, l.Eingang, fehler, false);
+                await _beantwortet(l.Funktion, l.Eingang, fehler, false, null);
                 await _melde(l.Funktion, new ArbeitErledigt(vorgang));
                 return ErgebnisAusgang.Abgelehnt;
+            }
+            if (eingang!.Hinweis)
+            {
+                // Ein Hinweis als Eingang (Plan §2.9): höchstens einmal, nichts festgehalten — die Ausgaben gehen mit der Meldung an den Funktions-Actor,
+                //   der sie sendet (die Garantie bleibt dort). Ein Strom kommt hier nur als Ganzes an (der Träger sammelt ihn).
+                if (!fertig)
+                {
+                    await _beantwortet(l.Funktion, l.Eingang, $"{l.Funktion.Name} antwortet auf den Hinweis {eingang.Typ.Name} in Stücken — nur als Ganzes", false, null);
+                    await _melde(l.Funktion, new ArbeitErledigt(vorgang));
+                    return ErgebnisAusgang.Abgelehnt;
+                }
+                await _melde(l.Funktion, new ArbeitErledigt(vorgang));
+                await _beantwortet(l.Funktion, l.Eingang, null, false, ausgaben);
+                return ErgebnisAusgang.Geschrieben;
             }
             var eingabe = new FunktionsEingabe(l.Funktion.Name, l.Eingang.Stream, l.Eingang.Version, l.Eingang.KorrelationsText, l.Eingang.Akteur);
             bool gewonnen;
@@ -182,7 +197,7 @@ public sealed class BausteinSitzung : IAsyncDisposable
             vorbei = fertig || !gewonnen;
             if (vorbei) await _melde(l.Funktion, new ArbeitErledigt(vorgang));
             else await _melde(l.Funktion, new ArbeitLebt(vorgang, Arbeiter(l.Funktion)));
-            await _beantwortet(l.Funktion, l.Eingang, null, !vorbei);
+            await _beantwortet(l.Funktion, l.Eingang, null, !vorbei, null);
             return gewonnen ? ErgebnisAusgang.Geschrieben : ErgebnisAusgang.Ueberholt;
         }
         finally

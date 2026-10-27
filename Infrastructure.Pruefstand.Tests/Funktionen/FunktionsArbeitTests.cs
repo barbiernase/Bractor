@@ -317,7 +317,7 @@ public class FunktionsArbeitTests
             null, null);
         BausteinSitzung Worker(string name) => new(name, n => n == "Probe" ? b : null,
             (f, h, ct) => Task.FromResult<EingaengeZugeteilt?>(new EingaengeZugeteilt(new[] { angebot })),
-            (f, m) => Task.CompletedTask, (e, f, _) => Task.CompletedTask, ablage, (f, e, fehler, _) => Task.CompletedTask);
+            (f, m) => Task.CompletedTask, (e, f, _) => Task.CompletedTask, ablage, (f, e, fehler, _, _) => Task.CompletedTask);
         await using var w1 = Worker("w1");
         await using var w2 = Worker("w2");
         w1.Biete(new[] { ("Probe", 1) });
@@ -338,7 +338,7 @@ public class FunktionsArbeitTests
         var angebot = new EingangAnbieten(Guid.NewGuid(), "Probe", new Eingang(1), Stream, 1, DateTimeOffset.UnixEpoch, null, null);
         string? gemeldet = "—";
         await using var w = new BausteinSitzung("w", n => b, (f, h, ct) => Task.FromResult<EingaengeZugeteilt?>(new EingaengeZugeteilt(new[] { angebot })),
-            (f, m) => Task.CompletedTask, (e, f, _) => Task.CompletedTask, new SpeicherAblage(), (f, e, fehler, _) => { gemeldet = fehler; return Task.CompletedTask; });
+            (f, m) => Task.CompletedTask, (e, f, _) => Task.CompletedTask, new SpeicherAblage(), (f, e, fehler, _, _) => { gemeldet = fehler; return Task.CompletedTask; });
         w.Biete(new[] { ("Probe", 1) });
         await Warte(() => w.Laufende.Count == 1);
         (await w.AntwortAsync(angebot.Vorgang, new IAusgabe[] { new Eingang(9) }, null, default)).Should().Be(ErgebnisAusgang.Abgelehnt);

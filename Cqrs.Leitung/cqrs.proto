@@ -166,7 +166,9 @@ message FunktionsAngebot {
 }
 
 // Ein Eingang einer Funktion: der Schlüssel „Funktion, Eingang“ (vorgang), die Funktion, das Event und seine Herkunft; ab = so viele Ausgaben
-// (Strom) sind schon festgehalten — ein neuer Träger lässt sie aus und macht beim nächsten Stück weiter.
+// (Strom) sind schon festgehalten — ein neuer Träger lässt sie aus und macht beim nächsten Stück weiter. hinweis = der Eingang ist ein Hinweis aus
+// dem Hinweis-Netz (Plan Pub/Sub-Neustrukturierung §2.9): höchstens einmal, nichts wird festgehalten — die Antwort kommt als Ganzes (auch ein Strom),
+// ihre Commands und Hinweise sendet der Funktions-Actor; stream/version nennen den Eingang, aus dem der Hinweis hervorging.
 message ArbeitsAuftrag {
     string vorgang = 1;
     string korrelation = 2;
@@ -177,6 +179,7 @@ message ArbeitsAuftrag {
     int32 version = 7;
     int64 zeit_utc = 8;
     int32 ab = 9;
+    bool hinweis = 10;
 }
 
 // Eine Ausgabe in der Reihenfolge der Funktion: ein Command, ein Event oder ein Hinweis.

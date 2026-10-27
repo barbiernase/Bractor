@@ -191,6 +191,52 @@ async def test_ein_strom_setzt_bei_der_schon_festgehaltenen_stelle_fort():
     assert MeldeDto().parse(proxy.ergebnisse[0][1][0][1].daten).n == 2
 
 
+class MerkmalBasis(FunktionsBasis):
+    """Eine Funktion, die einen Hinweis hört (Plan §2.9) — die generierte Basis trägt hinweis=True."""
+    FUNKTION = "ISchaetzung"
+    EINGAENGE = {DateiDto: Eingang("auf_datei", {MeldeDto: Ausgabe.COMMAND, SkalierteDto: Ausgabe.HINWEIS}, strom=True, hinweis=True)}
+
+
+class Schaetzer(MerkmalBasis):
+    """Ein Zustand im Worker (A8): er sieht jeden Hinweis seiner Adresse — hier nur gezählt."""
+    def __init__(self):
+        super().__init__()
+        self.gesehen = 0
+
+    async def auf_datei(self, e, h):
+        self.gesehen += 1
+        yield MeldeDto(n=self.gesehen)
+        yield SkalierteDto(pfad=e.pfad)
+        yield MeldeDto(n=99)
+
+
+@sync
+async def test_ein_hinweis_als_eingang_antwortet_einmal_als_ganzes_auch_als_strom():
+    f = Schaetzer()
+    laeufer, proxy = _laeufer(f)
+    auftrag = _eingang(funktion="ISchaetzung")
+    auftrag.hinweis = True
+    await laeufer.nimm(auftrag)
+
+    assert f.gesehen == 1
+    [(vorgang, ausgaben, ab, fertig, fehler)] = proxy.ergebnisse
+    assert (vorgang, ab, fertig, fehler) == ("v1", 0, True, ""), "nichts ist festgehalten — keine Stücke, keine Stelle"
+    assert [art for art, _ in ausgaben] == [Ausgabe.COMMAND, Ausgabe.HINWEIS, Ausgabe.COMMAND], "Commands und Hinweise in ihrer Reihenfolge"
+
+
+@sync
+async def test_die_angabe_hinweis_der_leitung_genuegt_auch_ohne_generierte_angabe():
+    class OhneAngabe(StromBasis):
+        async def auf_datei(self, e, h):
+            yield MeldeDto(n=1)
+            yield MeldeDto(n=2)
+    laeufer, proxy = _laeufer(OhneAngabe())
+    auftrag = _eingang(funktion="IZaehlung")
+    auftrag.hinweis = True
+    await laeufer.nimm(auftrag)
+    assert [(ab, fertig, len(aus)) for _, aus, ab, fertig, _ in proxy.ergebnisse] == [(0, True, 2)]
+
+
 @sync
 async def test_hoechstens_slots_gleichzeitig_und_derselbe_eingang_laeuft_nur_einmal():
     f = Skalierer(slots=2, dauer=0.03)

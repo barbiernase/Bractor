@@ -81,9 +81,9 @@ public sealed class HandAusfuehrer : BackgroundService
                 return Task.CompletedTask;
             },
             _ausgaben,
-            (b, e, fehler, teil) =>
+            (b, e, fehler, teil, ausgaben) =>
             {
-                bote.Melde(FunktionsActor.IdentitaetFuer(b, e.Stream, _konsum), new EingangBeantwortet(e.Vorgang, fehler, teil));
+                bote.Melde(FunktionsActor.IdentitaetFuer(b, e.Stream, _konsum), EingangBeantwortet.Aus(e.Vorgang, fehler, teil, ausgaben));
                 return Task.CompletedTask;
             },
             _logger);

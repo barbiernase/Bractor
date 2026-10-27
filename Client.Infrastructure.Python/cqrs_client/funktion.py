@@ -30,6 +30,10 @@ Was das SDK übernimmt — der Worker schreibt nichts davon von Hand:
     kommt; nach einem Abbruch übernimmt ein anderer Träger beim nächsten nicht festgehaltenen Stück;
   - Genau einmal: festgehalten wird beim Server unter „Funktion, Eingang“ — die erste Antwort gewinnt. Wirkungen nach außen (Dateien, Mails)
     sollten über `h.schluessel` (gleich bei jeder Wiederholung) deduplizieren.
+  - Hinweise (Plan §2.9): ein `auf_…`, dessen Eingang ein Hinweis aus dem Hinweis-Netz ist (`Eingang(..., hinweis=True)`, auf der Leitung
+    `ArbeitsAuftrag.hinweis`), läuft höchstens einmal — nichts wird festgehalten; die Antwort geht als Ganzes zurück (auch ein Strom), ihre Commands
+    und Hinweise sendet der Funktions-Actor. Dieselbe Adresse wie in C#: alle Eingänge eines Funktions-Actors rechnet derselbe Träger, solange er
+    lebt — ein Zustand im Worker (ein Modell) sieht so alles, was zu ihm gehört; ihn zu sichern, ist Sache des Workers.
 """
 
 from __future__ import annotations
@@ -56,10 +60,12 @@ class Ausgabe:
 
 @dataclass(frozen=True)
 class Eingang:
-    """Ein `Auf` einer Funktion: die Methode, die erlaubten Ausgaben (DTO-Typ → Art) und ob die Ausgabe ein Strom ist."""
+    """Ein `Auf` einer Funktion: die Methode, die erlaubten Ausgaben (DTO-Typ → Art), ob die Ausgabe ein Strom ist und ob der Eingang ein Hinweis
+    ist (höchstens einmal, die Antwort als Ganzes)."""
     methode: str
     ausgaben: dict = field(default_factory=dict)
     strom: bool = False
+    hinweis: bool = False
 
 
 @dataclass(frozen=True)
@@ -223,19 +229,22 @@ class FunktionsLaeufer:
                 try:
                     e = self._mapper.entpacke(msg.eingang)
                     eingang = f.eingang(type(e))
+                    # Ein Hinweis als Eingang: nichts ist festgehalten — die Antwort geht als Ganzes zurück (auch ein Strom).
+                    hinweis = bool(getattr(msg, "hinweis", False)) or eingang.hinweis
+                    stueckweise = eingang.strom and not hinweis
                     puffer = []
                     async for aus in _ausgaben(f.rufe(e, h)):
                         art = f.pruefe(eingang, aus)
-                        if eingang.strom and gesendet < schon:
+                        if stueckweise and gesendet < schon:
                             gesendet += 1
                             continue
-                        if eingang.strom:
+                        if stueckweise:
                             # Ein Strom: jedes Stück sofort — der Server hält es fest und sendet es, bevor das nächste kommt.
                             await self._proxy.send_arbeits_ergebnis(msg.vorgang, [(art, self._mapper.packe(aus))], ab=gesendet, fertig=False)
                             gesendet += 1
                         else:
                             puffer.append((art, self._mapper.packe(aus)))
-                            if len(puffer) > 1:
+                            if len(puffer) > 1 and not eingang.strom:
                                 raise FunktionsVerletzung(f"{type(f).__name__}.{eingang.methode}: mehr als eine Ausgabe — die Signatur ist kein Strom")
                     await self._proxy.send_arbeits_ergebnis(msg.vorgang, puffer, ab=gesendet, fertig=True)
                     log.info("→ Antwort %s (%s): %d Ausgabe(n)", msg.vorgang[:8], f.FUNKTION, gesendet + len(puffer))

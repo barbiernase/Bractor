@@ -22,6 +22,42 @@ public class FunktionsVermittlungTests
     private static EingangAnbieten Angebot(string _) =>
         new(Guid.NewGuid(), "ITraining", new TrainingAbgebrochen(), Guid.NewGuid(), 3, T0, null, "KIOperator");
 
+    private static EingangAnbieten An(string adresse) =>
+        new(Guid.NewGuid(), "ITraining", new TrainingAbgebrochen(), Guid.NewGuid(), 3, T0, null, "KIOperator", Adresse: adresse);
+
+    [Trait("Kategorie", "Garantie")]
+    [Fact]
+    public void A8_alle_Eingaenge_einer_Adresse_rechnet_derselbe_Traeger_solange_er_lebt()
+    {
+        var v = new Vermittlung<EingangAnbieten>(TimeSpan.FromSeconds(30));
+        v.Hole("w2", 4, T0).Should().BeEmpty("w2 lebt (er fragt), hat aber noch nichts");
+        var a1 = An("1"); var b1 = An("2");
+        v.Biete(a1); v.Biete(b1);
+        v.Hole("w1", 4, T0).Should().Equal(new[] { a1 }, "w1 bindet Adresse 1 — Adresse 2 bleibt für w2 (gerecht verteilt)");
+        v.Hole("w2", 4, T0).Should().Equal(b1);
+
+        var a2 = An("1");
+        v.Biete(a2);
+        v.Hole("w2", 4, T0.AddSeconds(5)).Should().BeEmpty("Adresse 1 gehört w1, solange er lebt — dort lebt der Zustand des Workers");
+        v.Hole("w1", 4, T0.AddSeconds(6)).Should().Equal(a2);
+        v.GebundenAn("1", T0.AddSeconds(6)).Should().Be("w1");
+
+        // w1 fragt nicht mehr und sendet kein Lebenszeichen: nach der Lease geht die Adresse an den nächsten Träger.
+        var a3 = An("1");
+        v.Biete(a3);
+        v.Hole("w2", 4, T0.AddSeconds(40)).Should().Contain(a3);
+        v.GebundenAn("1", T0.AddSeconds(40)).Should().Be("w2");
+    }
+
+    [Fact]
+    public void Ein_einzelner_Traeger_nimmt_alle_Adressen()
+    {
+        var v = new Vermittlung<EingangAnbieten>(TimeSpan.FromSeconds(30));
+        var x = Enumerable.Range(0, 5).Select(i => An(i.ToString())).ToList();
+        foreach (var a in x) v.Biete(a);
+        v.Hole("allein", 10, T0).Should().Equal(x);
+    }
+
     [Fact]
     public void Doppelte_Angebote_werden_ignoriert_und_Hole_teilt_hoechstens_Max_zu()
     {

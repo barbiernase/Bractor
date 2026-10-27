@@ -205,7 +205,9 @@ class FunktionsAngebot(betterproto.Message):
 class ArbeitsAuftrag(betterproto.Message):
     """
     Ein Eingang einer Funktion: der Schlüssel „Funktion, Eingang“ (vorgang), die Funktion, das Event und seine Herkunft; ab = so viele Ausgaben
-     (Strom) sind schon festgehalten — ein neuer Träger lässt sie aus und macht beim nächsten Stück weiter.
+     (Strom) sind schon festgehalten — ein neuer Träger lässt sie aus und macht beim nächsten Stück weiter. hinweis = der Eingang ist ein Hinweis aus
+     dem Hinweis-Netz (Plan Pub/Sub-Neustrukturierung §2.9): höchstens einmal, nichts wird festgehalten — die Antwort kommt als Ganzes (auch ein Strom),
+     ihre Commands und Hinweise sendet der Funktions-Actor; stream/version nennen den Eingang, aus dem der Hinweis hervorging.
     """
 
     vorgang: str = betterproto.string_field(1)
@@ -217,6 +219,7 @@ class ArbeitsAuftrag(betterproto.Message):
     version: int = betterproto.int32_field(7)
     zeit_utc: int = betterproto.int64_field(8)
     ab: int = betterproto.int32_field(9)
+    hinweis: bool = betterproto.bool_field(10)
 
 
 @dataclass(eq=False, repr=False)

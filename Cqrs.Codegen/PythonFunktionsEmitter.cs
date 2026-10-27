@@ -13,7 +13,8 @@ public static class PythonFunktionsform
     private const string FunktionName = "Abstractions.IFunktion";
 
     public sealed record Ausgabe(string Typ, string Art);
-    public sealed record Auf(string Eingang, List<Ausgabe> Ausgaben, bool Strom);
+    /// <param name="Hinweis">Der Eingang ist ein Hinweis aus dem Hinweis-Netz (Plan §2.9): höchstens einmal, die Antwort kommt als Ganzes.</param>
+    public sealed record Auf(string Eingang, List<Ausgabe> Ausgaben, bool Strom, bool Hinweis = false);
     public sealed record Funktion(Type Typ, List<Auf> Aufs);
 
     /// <summary>
@@ -36,7 +37,8 @@ public static class PythonFunktionsform
             if (r.IsGenericType && r.Name is "IEnumerable`1" or "IAsyncEnumerable`1") { strom = true; r = r.GetGenericArguments()[0]; }
             if (r.IsGenericType && r.Name == "Nullable`1") r = r.GetGenericArguments()[0];
             var faelle = r.IsGenericType && r.Name.StartsWith("OneOf`", StringComparison.Ordinal) ? r.GetGenericArguments().ToList() : new List<Type> { r };
-            aufs.Add(new Auf(p[0].ParameterType.Name, faelle.Select(f => new Ausgabe(f.Name, Art(f))).ToList(), strom));
+            aufs.Add(new Auf(p[0].ParameterType.Name, faelle.Select(f => new Ausgabe(f.Name, Art(f))).ToList(), strom,
+                p[0].ParameterType.GetInterfaces().Any(i => i.FullName == "Abstractions.ITransientEvent")));
         }
         return aufs.Count == 0 ? null : new Funktion(t, aufs);
     }
@@ -152,7 +154,7 @@ public static class PythonFunktionsEmitter
             b.AppendLine($"    FUNKTION: ClassVar[str] = \"{f.Typ.Name}\"");
             b.AppendLine("    EINGAENGE: ClassVar[dict] = {");
             foreach (var a in f.Aufs)
-                b.AppendLine($"        {a.Eingang}{Dto}: Eingang(\"auf_{PythonVertragsEmitter.Snake(a.Eingang)}\", {PythonFunktionsform.Ausgaben(a, Dto)}{(a.Strom ? ", strom=True" : "")}),");
+                b.AppendLine($"        {a.Eingang}{Dto}: Eingang(\"auf_{PythonVertragsEmitter.Snake(a.Eingang)}\", {PythonFunktionsform.Ausgaben(a, Dto)}{(a.Strom ? ", strom=True" : "")}{(a.Hinweis ? ", hinweis=True" : "")}),");
             b.AppendLine("    }");
             foreach (var a in f.Aufs)
             {

@@ -209,10 +209,10 @@ public class FunktionsGarantieTests
                 (_, _, _) => Task.FromResult<EingaengeZugeteilt?>(new EingaengeZugeteilt(new[] { offen!.Eingang })),
                 (b, nachricht) => { bote.Melde(FunktionsVermittlerActor.Identitaet(b.Typ), nachricht); return Task.CompletedTask; },
                 (_, _, _) => Task.CompletedTask, host.Services.GetRequiredService<IAusgabeAblage>(),
-                (b, e, fehler, teil) =>
+                (b, e, fehler, teil, ausgaben) =>
                 {
                     bote.Melde(FunktionsActor.IdentitaetFuer(b, e.Stream, Infrastructure.Projections.Konsum.Standard),
-                        new EingangBeantwortet(e.Vorgang, fehler, teil));
+                        EingangBeantwortet.Aus(e.Vorgang, fehler, teil, ausgaben));
                     return Task.CompletedTask;
                 });
             zweiter.Biete(new[] { (baustein.Name, 1) });

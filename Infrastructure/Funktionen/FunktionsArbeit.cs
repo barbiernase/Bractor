@@ -62,6 +62,7 @@ public sealed class FunktionsArbeit
     private readonly IFaehigkeitsFabrik? _faehigkeiten;
     private readonly BieteAn? _bieteAn;
     private readonly ILogger? _logger;
+    private readonly int _partitionen;
     private readonly int _stueck;
     private readonly TimeSpan _geduld;
     private readonly ConcurrentDictionary<Guid, Antworten> _antworten = new();
@@ -69,18 +70,24 @@ public sealed class FunktionsArbeit
     /// Neustart sendet der Actor alles noch einmal — dieselben Ids, die Inbox verwirft es).</summary>
     private readonly ConcurrentDictionary<Guid, int> _gesendet = new();
 
-    /// <summary>Die Meldungen der Sitzung zu einem Eingang draußen: ein Stück (Strom), das Ende oder ein Fehler — ein Kanal, ein Leser.</summary>
+    /// <summary>
+    /// Die Meldungen der Sitzung zu einem Eingang draußen: ein Stück (Strom), das Ende oder ein Fehler — ein Kanal, ein Leser. Für einen Hinweis als
+    /// Eingang trägt die Meldung die Ausgaben selbst (nichts ist festgehalten).
+    /// </summary>
     private sealed class Antworten
     {
         private readonly System.Threading.Channels.Channel<string?> _kanal =
             System.Threading.Channels.Channel.CreateUnbounded<string?>(new() { SingleReader = true });
         private string? _fehler;
+        private IReadOnlyList<IAusgabe>? _ausgaben;
 
         public string? Fehler => Volatile.Read(ref _fehler);
+        public IReadOnlyList<IAusgabe>? Ausgaben => Volatile.Read(ref _ausgaben);
 
-        public void Melde(string? fehler)
+        public void Melde(string? fehler, IReadOnlyList<IAusgabe>? ausgaben = null)
         {
             if (fehler is not null) Interlocked.CompareExchange(ref _fehler, fehler, null);
+            if (ausgaben is not null) Interlocked.CompareExchange(ref _ausgaben, ausgaben, null);
             _kanal.Writer.TryWrite(fehler);
         }
 
@@ -99,7 +106,8 @@ public sealed class FunktionsArbeit
     /// <param name="hinweis">Einen Hinweis weitergeben (verlierbar: das Hinweis-Netz und die Clients); null = Hinweise verfallen.</param>
     public FunktionsArbeit(FunktionsBaustein baustein, Func<object>? funktion, IAusgabeAblage ablage,
         Func<ICommand, Guid, Guid, CancellationToken, Task<EmitAusgang>> sende, Action<HinweisZustellen>? hinweis = null,
-        IFaehigkeitsFabrik? faehigkeiten = null, BieteAn? bieteAn = null, ILogger? logger = null, int stueck = StromStueck, TimeSpan? antwortGeduld = null)
+        IFaehigkeitsFabrik? faehigkeiten = null, BieteAn? bieteAn = null, ILogger? logger = null, int stueck = StromStueck, TimeSpan? antwortGeduld = null,
+        int partitionen = 0)
     {
         if (funktion is null && bieteAn is null)
             throw new ArgumentException($"{baustein.Name}: weder eine Umsetzung im Host noch ein Weg nach draußen.");
@@ -112,6 +120,7 @@ public sealed class FunktionsArbeit
         _bieteAn = funktion is null ? bieteAn : null;
         _logger = logger;
         _stueck = Math.Max(1, stueck);
+        _partitionen = partitionen > 0 ? partitionen : Infrastructure.Projections.Konsum.Standard.Partitionen;
         _geduld = antwortGeduld ?? AntwortGeduld;
     }
 
@@ -126,9 +135,9 @@ public sealed class FunktionsArbeit
     /// Die Antwort für den Eingang mit diesem Schlüssel liegt vor (Meldung der Sitzung; <paramref name="fehler"/> = draußen gescheitert,
     /// <paramref name="teil"/> = ein Stück eines Stroms, es kommt noch mehr).
     /// </summary>
-    public void Beantwortet(Guid schluessel, string? fehler, bool teil = false)
+    public void Beantwortet(Guid schluessel, string? fehler, bool teil = false, IReadOnlyList<IAusgabe>? ausgaben = null)
     {
-        if (_antworten.TryGetValue(schluessel, out var a)) a.Melde(fehler);
+        if (_antworten.TryGetValue(schluessel, out var a)) a.Melde(fehler, ausgaben);
     }
 
     public static FunktionsEingabe EingabeVon(FunktionsBaustein b, EventEnvelope e) =>
@@ -263,9 +272,31 @@ public sealed class FunktionsArbeit
         return ausgaenge.All(a => a.IstEntschieden()) ? EingangsAusgang.Fertig : EingangsAusgang.Spaeter;
     }
 
-    /// <summary>Ein Hinweis-Eingang draußen (Plan §2.9, E9): anbieten, auf die Antwort mit ihren Ausgaben warten; null = (noch) keine Antwort.</summary>
-    private Task<IReadOnlyList<IAusgabe>?> HinweisDraussenAsync(HinweisZustellen h, CancellationToken ct) =>
-        Task.FromResult<IReadOnlyList<IAusgabe>?>(null);
+    /// <summary>
+    /// Ein Hinweis-Eingang draußen (Plan §2.9, E9): derselbe Weg wie ein Log-Eingang — anbieten beim Vermittler (die Adresse bindet ihn an den Träger
+    /// dieses Actors, A8), die Sitzung reicht ihn als <c>ArbeitsAuftrag</c> weiter —, nur dass die Antwort nicht festgehalten wird: sie kommt mit ihren
+    /// Ausgaben zurück. Kommt in der Geduld keine, verfällt der Hinweis (höchstens einmal; ein zweites Anbieten nähme der Vermittler nach „erledigt“
+    /// ohnehin nicht mehr an).
+    /// </summary>
+    private async Task<IReadOnlyList<IAusgabe>?> HinweisDraussenAsync(HinweisZustellen h, CancellationToken ct)
+    {
+        var schluessel = FunktionsIds.HinweisEingang(_b.Name, h.Kennung);
+        var antworten = _antworten.GetOrAdd(schluessel, _ => new Antworten());
+        try
+        {
+            await _bieteAn!(new EingangAnbieten(schluessel, _b.Name, h.Hinweis, h.Stream, h.Version, h.Zeit, h.Korrelation,
+                ImAuftrag.IstAkteur(h.Akteur) ? h.Akteur : null, h.Ursache, _b.Wirker, _b.Adresse(h.Stream, _partitionen)), ct);
+            while (antworten.Ausgaben is null && antworten.Fehler is null)
+                if (!await antworten.WarteAsync(_geduld, ct))
+                    throw new TimeoutException($"{_b.Name}: auf den Hinweis {h.Hinweis.GetType().Name} {h.Kennung} kam draußen in {_geduld.TotalSeconds:0} s keine Antwort");
+            if (antworten.Fehler is { } fehler) throw new InvalidOperationException($"{_b.Name}: draußen gescheitert am Hinweis {h.Kennung}: {fehler}");
+            return antworten.Ausgaben;
+        }
+        finally
+        {
+            _antworten.TryRemove(schluessel, out _);
+        }
+    }
 
     /// <summary>
     /// Rechnen und festhalten. Ein Strom überspringt, was schon festgehalten ist (Fortschritt), hält stückweise fest und sendet jedes Stück, bevor
@@ -329,7 +360,8 @@ public sealed class FunktionsArbeit
         try
         {
             await _bieteAn!(new EingangAnbieten(eingabe.Schluessel, _b.Name, e.Payload, e.AggregateId, e.AggregateVersion, e.CreatedAtUtc,
-                e.CorrelationId, ImAuftrag.IstAkteur(e.UserId) ? e.UserId : null, Spur.Aktuell?.Ursache, Spur.Aktuell?.Wirker), ct);
+                e.CorrelationId, ImAuftrag.IstAkteur(e.UserId) ? e.UserId : null, Spur.Aktuell?.Ursache, Spur.Aktuell?.Wirker,
+                _b.Adresse(e.AggregateId, _partitionen)), ct);
             while (true)
             {
                 var gemeldet = await antworten.WarteAsync(_geduld, ct);   // die Meldung der Sitzung ist verlierbar: ohne sie nachsehen

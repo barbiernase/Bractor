@@ -150,7 +150,7 @@ internal sealed class FunktionsKind(FunktionsBaustein baustein) : IClusterKindCo
                 },
                 provider.GetService<IFaehigkeitsFabrik>(),
                 (angebot, ct) => bote.FrageAsync<WakeAck>(FunktionsVermittlerActor.Identitaet(baustein.Typ), angebot, TimeSpan.FromSeconds(5), ct),
-                logger);
+                logger, partitionen: konsum.Partitionen);
             return new FunktionsActor(baustein, arbeit, provider.GetRequiredService<IEventStoreRepository>(), provider.GetRequiredService<IFunktionsStand>(),
                 konsum, bindung.Slots, bindung.Wiederholungen, provider.GetService<IDeadLetterSink>(), logger, typen: typen, aktivierung: aktivierung,
                 sicherung: sicherung);

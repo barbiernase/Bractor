@@ -119,7 +119,7 @@ public static class PythonVertragsEmitter
                 {
                     b.AppendLine($"        \"{g.Funktion.Typ.Name}\": {{");
                     foreach (var (a, m) in g.Aufs)
-                        b.AppendLine($"            {a.Eingang}{Dto}: Eingang(\"{m}\", {PythonFunktionsform.Ausgaben(a, Dto)}{(a.Strom ? ", strom=True" : "")}),");
+                        b.AppendLine($"            {a.Eingang}{Dto}: Eingang(\"{m}\", {PythonFunktionsform.Ausgaben(a, Dto)}{(a.Strom ? ", strom=True" : "")}{(a.Hinweis ? ", hinweis=True" : "")}),");
                     b.AppendLine("        },");
                 }
                 b.AppendLine("    }");

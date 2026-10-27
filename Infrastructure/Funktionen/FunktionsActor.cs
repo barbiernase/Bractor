@@ -145,7 +145,8 @@ public sealed class FunktionsActor : RahmenActor
                 Lies(context);
                 break;
             case EingangBeantwortet b:
-                _arbeit.Beantwortet(b.Schluessel, b.Fehler, b.Teil);
+                _arbeit.Beantwortet(b.Schluessel, b.Fehler, b.Teil, b.Befehle is null && b.Hinweise is null ? null
+                    : (b.Befehle ?? Array.Empty<ICommand>()).Cast<IAusgabe>().Concat(b.Hinweise ?? Array.Empty<IEvent>()).ToList());
                 if (context.Sender is not null) context.Respond(new WakeAck());
                 break;
             case Erneut e:
