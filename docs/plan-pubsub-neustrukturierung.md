@@ -1,6 +1,7 @@
 # Plan: Neustrukturierung von Pub/Sub, Bausteinen und Grammatik
 
-> **Plan**, Stand 2026-10-26, Zweig `pubsub_neustrukturierung`. Noch nichts umgesetzt. Dieses Dokument ist für die Dauer des Umbaus der
+> **Plan**, Stand 2026-10-27, Zweig `pubsub_neustrukturierung`. Phasen 0–4 sind umgesetzt (Stand und Messwerte in docs/12, offene Punkte in
+> docs/13); am 2026-10-27 ergänzt um Funktionen als Actors mit Zustand und das Hinweis-Netz (E6–E9, §2.9, Phase 4b). Dieses Dokument ist für die Dauer des Umbaus der
 > **Maßstab**; wo ein anderes Dokument oder der Code widerspricht, gilt der Plan als Ziel und der Code als Ist. Nach dem Umbau wird er in die
 > Kapitel eingearbeitet (§9) und gelöscht.
 >
@@ -23,7 +24,16 @@ Genehmigungen, Integrationen …), und jeder Store-Typ muss hinter derselben Nah
 | E2 | Direkte Abfrage eines Aggregats (exakter Stand) | **ja**, als eigener Lesepfad neben dem Reader (§2.6). |
 | E3 | Typisierte Ids (`Id<TAggregat>` statt `Guid`) | **ja**, Pflicht für Command-Ziele; in Antworten die Grundlage für feine Updates an Clients (§2.5). |
 | E4 | Editor-Oberfläche (Fluss-Karten, Darstellung) | **zurückgestellt.** Werkbank und GraphExtractor werden nur so weit mitgezogen, dass alles baut und `--check`/`--sonde` für die neuen Bausteine grün sind (§6, Phase 4). `Werkbank/wwwroot/editor/` wird nicht angefasst. |
-| E5 | Implementieren | **nicht in diesem Schritt.** Dieser Commit enthält nur den Plan und das Aufräumen der Doku. |
+| E5 | Implementieren | **phasenweise**, je Phase auf Tobis Wort (Phasen 0–4 umgesetzt). |
+
+**Entscheidungen (Tobi, 2026-10-27) — Funktionen als Actors (§2.9):**
+
+| # | Frage | Entscheidung |
+|---|---|---|
+| E6 | Darf eine Funktion Zustand haben? | **ja, gekapselt und durabel**, kein Domänen-Zustand: ein neuronales Netz, das weiterlernt, ein Cache, eine Datenbank-Verbindung. Die Funktion ist ein Actor; Architektur nach dem Vorbild des Aggregat-Actors (ein Schreiber, Aktivierung, Passivierung, Snapshot, Rehydration) — **ohne neue Event-Typen** und ohne Faltung aus dem Log. Zustand ist ein Interface im Konstruktor (`IZustand<T>`), das der Generator erkennt und injiziert; Ressourcen (Dienste) leben in der Aktivierung. |
+| E7 | Nachrichten zwischen Funktionen ohne Log | **ja**: Nachrichten, die nicht zur Fachdomäne gehören, gehen von Funktions-Actor zu Funktions-Actor **im Speicher**, nie in den Log (Inv. 6). Typ ist der vorhandene **Hinweis** (`ITransientEvent`) — **kein neues Interface**. Eine Funktion muss kein Konsument des Logs sein. |
+| E8 | Wie kommen die Nachrichten an? | **hart verdrahtet mit den Mitteln des Actor-Frameworks**: eine zur Build-Zeit generierte Tabelle Hinweis-Typ → Actor-Adressen, gesendet direkt über den `Bote`. Kein Broker, keine Abos, kein Topic-Actor, kein Pub/Sub von Proto.Cluster. |
+| E9 | C# und Python | **eine Adresse je Funktion**, gleich für beide; hinter der Adresse rechnet die Umsetzung im Host (C#) oder die gRPC-Sitzung eines Clients, der die Funktion trägt (Python) — dieselbe Initialisierung wie heute (Handshake, `FunktionenAnbieten`, `ArbeitsAuftrag`/`ArbeitsErgebnis`). Funktionen geben **Commands und Hinweise** aus; Commands gehen immer in den Aggregat-Mechanismus (`CommandEmitter`, Inbox, Log). |
 
 **Annahmen (sicherer Default, gelten, solange Tobi nicht widerspricht):**
 
@@ -32,6 +42,18 @@ Genehmigungen, Integrationen …), und jeder Store-Typ muss hinter derselben Nah
   versteckte Korrelation in den Metadaten. Alternative wäre `Herkunft.Korrelation`; siehe §8.
 - **A3** Wiederholungsfeste Stores (Klasse 2, §2.4) schreiben **mit der Event-Identität im Schlüssel oder bedingt nach Position** — reines Überschreiben reicht nicht.
 - **A4** Der Neuaufbau einer Projektion geht über **Generationen** (neues Ziel aufbauen, dann umschalten); „Leeren“ ist der Sonderfall.
+- **A5** Der Zustand einer Funktion wird **zusammen mit ihrer Position** gesichert (dieselbe Transaktion; bei großem Zustand erst die Ablage, dann
+  Position und Verweis), höchstens so oft wie der Stand heute (einmal je Sekunde) und immer beim Stoppen, Passivieren und Umziehen. Nach einem
+  Absturz lädt die Aktivierung Zustand und Position und liest die Log-Eingänge ab dort erneut — jeder Log-Eingang wirkt so genau einmal auf den
+  gesicherten Zustand; Hinweise im Flug gehen verloren (höchstens einmal).
+- **A6** Die **Adresse** einer Funktion ist die heutige Identität `funktion-<F>/<Partition>`; ein Hinweis geht an die Partition seines
+  Herkunfts-Streams (dieselbe Aktivierung wie die Log-Eingänge dieses Streams). Eine Funktion mit **einem** Zustand für alles (ein Netz) erklärt
+  das als Code-Fakt und hat eine einzige Adresse.
+- **A7** Ein Hinweis trägt eine **Kennung**, die der Absender vergibt (bei Ausgaben einer Funktion abgeleitet aus Eingang und Stelle); Command-Ids
+  aus einem Hinweis-Eingang werden daraus abgeleitet wie heute aus Stream+Version.
+- **A8** Rechnet eine Funktion mit Zustand **draußen** (Python), lebt der Zustand im Worker; der Funktions-Actor bindet seine Eingänge an **eine**
+  tragende Sitzung, solange sie lebt (Lease je Funktions-Actor statt je Eingang). Das Sichern dieses Zustands ist Sache des Workers; das Framework
+  liefert dazu in diesem Schritt nichts.
 
 **Arbeitsweise:** wie in `CLAUDE.md` und im Gedächtnis: lokal nur bauen, alle Tests über `scripts/server.sh lauf …` auf dem Messserver, Messen kurz
 (Minuten, eine Wiederholung), Bestand direkt umbauen ohne Übergangs- oder Kompatibilitätsschichten, Ursachen statt Flickwerk, Commits ohne
@@ -120,7 +142,9 @@ muss vor Phase 8 geklärt oder mit einem roten Test eingegrenzt sein. Die Unters
 
 Das **Log in Postgres ist die einzige Wahrheit.** Geschrieben wird von **Aggregaten** (was sie entschieden haben), **Quellen** (was von draußen
 kam) und **Funktionen** (ihre festgehaltene Ausgabe, §4.2) — jedes Mal genau einmal. Alles andere **liest das Log ab seiner eigenen Position**:
-**Projektionen** falten Events in ihren Store und geben nichts aus; **Funktionen** nehmen einen Eingang und geben aus, was sie wollen. **Clients**
+**Projektionen** falten Events in ihren Store und geben nichts aus; **Funktionen** nehmen einen Eingang und geben aus, was sie wollen — sie sind
+Actors mit gekapseltem Zustand und können untereinander auch **ohne Log** Hinweise austauschen (§2.9); was fachlich zählt, verlässt dieses Netz als
+Command an ein Aggregat. **Clients**
 hängen am Rand: sie schicken Commands, Quell-Nachrichten und Queries hinein und bekommen über einen **Verteiler je Knoten** mit, was sie
 abonniert haben. Die **Signaturen sind der Graph**: `Auf(BildErfasst e)` in einer Funktion heißt „diese Funktion hört dieses Event“, der
 Rückgabetyp sagt, was herauskommt. Daraus entstehen Generate, Editor-Graph und Laufzeit.
@@ -132,7 +156,7 @@ Rückgabetyp sagt, was herauskommt. Daraus entstehen Generate, Editor-Graph und 
 | **Aggregat** | entscheidet: Command rein, Events/Hinweise/Fristen raus; einziger Schreiber; darf direkt gefragt werden (§2.6) | virtueller Actor je typisierter Id (wie heute), Bündel, Passivierung |
 | **Projektion** | hört Events, schreibt ihren Store über Fähigkeiten, gibt nichts aus | Leser je (Projektion, Partition) — der heutige Batch-Leser |
 | **Reader** | beantwortet Queries über Lese-Fähigkeiten | Aufruf im Host oder draußen (Laufort) |
-| **Funktion** | frei programmierbar: ein Eingang (Event oder Hinweis), beliebige Ausgaben | **ein Actor je (Funktion, Partition)**: Position, Fortschritt, Gleichzeitigkeit (Slots), Wiederholung mit Backoff, Festhalten der Ausgabe; Laufort Host / Worker / Client / Hand aus der Umgebung |
+| **Funktion** | frei programmierbar: ein Eingang (Event aus dem Log oder Hinweis im Speicher), beliebige Ausgaben (Commands, Events, Hinweise); optional gekapselter, durabler Zustand und Ressourcen (§2.9) | **ein Actor je (Funktion, Partition)** bzw. einer je Funktion: Position, Fortschritt, Gleichzeitigkeit (Slots), Wiederholung mit Backoff, Festhalten der Ausgabe, Zustand und Ressourcen in der Aktivierung; Laufort Host / Worker / Client / Hand aus der Umgebung |
 | **Quelle** | fester Treiber + Konfig bringt Nachrichten genau einmal ins Log | ein Treiber je Quelle im Cluster (Lease, wie heute) |
 | Store, Dienst | Technik hinter Projektion/Reader bzw. Funktion | – |
 | Akteur, Client | wer welche Typen darf; welche Software für welche Akteure spricht | Sitzung als Actor je Verbindung, Verteiler je Knoten |
@@ -255,6 +279,52 @@ Kein Geltungsbereich und keine Daten-Rechte je Objekt (E1); der Platz bleibt fre
 Bereich wäre später eine weitere Kopfzeile plus Filter in Verteiler, Reader und Lesen ab Position. Kein Löschen/Aufbewahren-Konzept in diesem Umbau
 (verschlüsselbare Felder bleiben als Option offen, §8). Keine Editor-Arbeit (E4). Keine Schema-Evolution im Editor; `IUpcast` bleibt Backend-Primitive.
 
+### 2.9 Funktionen als Actors: Zustand, Ressourcen, Hinweis-Netz (E6–E9)
+
+**Zustand und Ressourcen.** Steht `IZustand<T>` im Konstruktor einer Funktions-Klasse, hat sie gekapselten Zustand (Code-Fakt, der Generator sieht
+es über Roslyn und erzeugt die Verdrahtung ohne Reflection). Der Funktions-Actor baut die Umsetzung **je Aktivierung** (heute: einmal je Knoten
+neben den Actors), lädt beim Aktivieren den gesicherten Zustand, ruft `Auf` in seiner Mailbox (immer nur einer zugleich), sichert den Zustand nach
+A5 und gibt beim Stoppen Zustand und Ressourcen frei (`IAsyncDisposable` der Umsetzung und ihrer Dienste). Vorbild ist der Aggregat-Actor:
+
+| Aggregat-Actor | Funktions-Actor mit Zustand |
+|---|---|
+| ein Schreiber je Identität | ein Schreiber je Adresse (A6) |
+| Zustand aus dem Log gefaltet, Snapshot als Abkürzung | Zustand **ist** der Snapshot (keine Zustands-Events), gesichert mit der Position (A5) |
+| Inbox je Command-Id | Position je Partition für Log-Eingänge (wie heute); Hinweise höchstens einmal |
+| Passivierung mit Snapshot beim Stoppen | Passivierung mit Sicherung beim Stoppen; Ressourcen werden geschlossen |
+| Bereich (Fähigkeiten) je Aktivierung | Umsetzung, Dienste und Zustand je Aktivierung |
+
+Gesichert wird über einen generierten Serializer (STJ-Kontext, ohne Reflection) in eine Ablage der Umgebung; großer Zustand (Netzgewichte) liegt
+als Blob in einer Ablage (Datei, Objektspeicher), die Position verweist darauf. Eine Funktion mit Zustand ist nie gleichbleibend (R12) — sie hält
+ihre Ausgabe fest. Zustand in Feldern ohne `IZustand<T>` ist verboten (Analyzer): er ginge beim Umzug still verloren.
+
+**Hinweis-Netz.** Eine Funktion darf Hinweise ausgeben und hören (`Auf(SomeHinweis h)`). Der Generator kennt aus den Signaturen Erzeuger und Hörer
+jedes Hinweis-Typs und erzeugt eine **feste Routing-Tabelle** Hinweis-Typ → Funktions-Adressen (heute schon als `Hinweisplan` vorhanden, ohne
+Zusteller). Gibt ein Baustein einen Hinweis aus, schaut der Rahmen in der Tabelle nach und schickt ihn per `Bote.Melde` **direkt** an jede Adresse
+— im Speicher, ohne Log, ohne Broker. Zwischen zwei Actors bleibt die Reihenfolge. Clients, die einen Hinweis hören (`IHoert`), bekommen ihn über den
+Verteiler je Knoten (§2.7, Phase 7). Eine Funktion, die **nur** Hinweise hört, hat keinen Log-Leser, keine Position und keinen Takt.
+
+**C# und Python unter einer Adresse.** Laufort Host: der Funktions-Actor ruft die Umsetzung. Laufort Extern: derselbe Actor reicht Log-Eingänge
+und Hinweise an die gRPC-Sitzung weiter, die die Funktion trägt (`ITraegt<F>`, Handshake `FunktionenAnbieten`, `ArbeitsAuftrag` mit dem Eingang als
+Nutzlast, Antwort `ArbeitsErgebnis` mit Ausgaben inklusive Hinweisen). Der Absender sieht nie, was hinter der Adresse rechnet.
+
+**Ausgaben.** Commands gehen über den `CommandEmitter` in den Aggregat-Mechanismus (Inbox, Log) — auch aus einem Hinweis-Eingang, mit Command-Ids
+aus der Hinweis-Kennung (A7). Events aus einer Funktion werden wie heute festgehalten; Hinweise gehen ins Hinweis-Netz.
+
+```csharp
+public sealed class Vorverarbeitung(IGpu gpu) : IFunktion
+{
+    public Merkmale Auf(ImagePairKomplett e) => new(e.PaarId, gpu.Extrahiere(…));      // Event aus dem Log rein, Hinweis raus
+}
+public sealed record Merkmale(Guid Paar, float[] Vektor) : ITransientEvent;
+
+public sealed class Klassifikator(IZustand<Netz> netz) : IFunktion
+{
+    public KlassifiziereBildPaarDurchKi Auf(Merkmale m) => new(new(m.Paar), netz.Wert.Beurteile(m.Vektor));   // Hinweis rein, Command raus
+    public void Auf(BildPaarGelabelt e) => netz.Wert.Trainiere(…);                                            // lernt mit
+}
+```
+
 ## 3 · Die Grammatik
 
 Ersetzt den Inhalt von `DomainEditor/Grammatik.cs` (Phase 4). Was neu ist, ist markiert.
@@ -338,7 +408,7 @@ Rückgaben: konkreter Typ, `OneOf<…>`, `T?` („nichts“), `IEnumerable<…>`
 | Command | Aggregat | genau eins |
 | Event (auch Quell-Nachricht) | Projektion, Funktion | beliebig viele |
 | Event, vom Aggregat entschieden | sein `Apply` | genau das entscheidende Aggregat |
-| Hinweis | Funktion (höchstens einmal), Client (`IHoert`) | beliebig viele; nie Projektion, nie Aggregat |
+| Hinweis | Funktion (höchstens einmal, direkt an ihre Adresse, §2.9), Client (`IHoert`) | beliebig viele; nie Projektion, nie Aggregat |
 | Query | Reader **oder** Aggregat | genau eins |
 | Frist | Uhr → Command an **dasselbe** Aggregat | genau eins |
 | Antwort | der fragende Client | – |
@@ -377,6 +447,8 @@ Rückgaben: konkreter Typ, `OneOf<…>`, `T?` („nichts“), `IEnumerable<…>`
 | R16 | Alles von draußen kommt von einem Akteur, der es darf; für einen Client gilt Vertrag ∩ Token | Generator + Start-Prüfung (heute) |
 | R17 | Ein Client sendet/fragt/hört/trägt nur, was seine Akteure dürfen; eine als Schnittstelle deklarierte Funktion braucht einen Träger (`ITraegt`) oder eine Bindung | Analyzer + Start-Prüfung (heute CQRS095–097, erweitert) |
 | R18 | Die Hausregel für Actors (§1.7) | Analyzer, **neu** (Phase 10) |
+| R19 | Zustand einer Funktion nur über `IZustand<T>` im Konstruktor einer Klasse; sonst keine veränderlichen Felder; eine Funktion mit Zustand ist nie gleichbleibend | Analyzer + Generator, **neu** (Phase 4b) |
+| R20 | Jeder Hinweis-Typ, den eine Funktion hört, hat mindestens einen Erzeuger; jede Adresse der Routing-Tabelle existiert | Generator, **neu** (Phase 4b) |
 
 Projektstruktur (docs/07, `Abstractions/Projektstruktur.cs`, `Domain.SourceGeneration/Lageart.cs`): Primitive Prozess, Fluss, Reaktion und
 Auftrag entfallen; Funktion (Klasse = im Host, Schnittstelle = draußen) bleibt; neu sind Store-Klasse (Fakt am Store) und typisierte Ids (kein
@@ -404,6 +476,9 @@ Postgres, heute schon); verlorene Weckrufe holt der Takt; ein Poison-Event wird 
 | Frist → Aggregat | Command-Id aus dem Frist-Event; die Uhr ist gleichbleibend und hält nichts fest | Auflösung ≈ 1 s |
 | Client → Aggregat | dieselbe Command-Id beim Wiederholen | der Client speichert die Id **vor** dem Senden (Ausgangskorb im Client-SDK, §4.7) |
 | Funktion beim Client | die erste Antwort gewinnt am Schlüssel „F, X“; Lease-Ablauf → nächster Worker | – |
+| Hinweis → Funktion | **höchstens einmal**, direkt an die Adresse (§2.9) | verloren bei Absturz oder Umzug im Flug (Inv. 6) |
+| Commands aus einem Hinweis-Eingang | Command-Id aus Funktion, Hinweis-Kennung, Stelle, Typ, Ziel (A7), Inbox des Ziels | eine Wiederholung des Emitters wirkt nicht doppelt |
+| Zustand einer Funktion | gesichert mit der Position (A5); nach Absturz Log-Eingänge ab der gesicherten Position erneut | Log-Eingänge genau einmal auf den Zustand; Hinweise höchstens einmal; draußen Sache des Workers (A8) |
 | nach außen (Mail, API) | **nur mindestens einmal**; der Dienst bekommt eine stabile Id | genau einmal nur, wenn das fremde System die Id nutzt |
 | Push an Clients, „P hat S weiterverarbeitet“ | **keine Garantie, gewollt** | verlässlich nur über Lesen ab Position (§2.7) |
 
@@ -461,7 +536,8 @@ Pflicht-Frist, Drossel je Ziel bleibt); Akteur-Rechte, Handshake-Ermittlung; Spu
 - Im Werkzeug: Prozess-/Fluss-Lesen in `GraphExtractor.Kern` (`FlussLeser.cs`, Teile von `DomainExtractor`, `Sicht/*`), `DomainEditor/Fluss.cs`,
   Fluss-/Saga-DSL in `Cqrs.Testing` (`Fluss.cs`, `Saga.cs`), Sonde-Texte `Fluss.cs.txt`, `Gebuehren.cs.txt` (umschreiben statt löschen).
 
-**Neu:** `Id<T>`; `IFunktion` mit `Auf`; Funktions-Actor (Position, Fortschritt, Slots, Festhalten, Laufort); Uhr mit `Frist<TCmd>`;
+**Neu:** `Id<T>`; `IFunktion` mit `Auf`; `IZustand<T>` und Funktions-Actor mit Zustand und Ressourcen je Aktivierung; Hinweis-Netz
+(generierte Routing-Tabelle, direkter Versand); Funktions-Actor (Position, Fortschritt, Slots, Festhalten, Laufort); Uhr mit `Frist<TCmd>`;
 Quell-Nachricht vom Client; Weckplan-Generator + Wecker am Flush; `Melde`/`Frage`; Actor-Lebenszyklus im Framework; Sitzung als Actor; Verteiler;
 `IHoert`/`ITraegt`; Lesen ab Position über die Leitung; Store-Klassen-Schnittstellen + allgemeiner Store-Test + Fortschritt beim Framework;
 Neuaufbau über Generationen; direkte Aggregat-Abfrage; Analyzer R2, R5–R7, R11–R14, R18.
@@ -517,6 +593,25 @@ Noch neben dem Alten; nichts wird hier gelöscht.
    Werkbank-Abnahmetests, die Fluss/Prozess voraussetzen, bekommen `Skip = "Editor zurückgestellt (plan-pubsub-neustrukturierung E4)"`.
 3. Messung A-B gegen Phase 0 (S1, S3-64, S5-64): erwartet deutlich weniger Events und Transaktionen je Vorgang.
 
+### Phase 4b · Funktionen als Actors: Zustand, Ressourcen, Hinweis-Netz (5–8 PT)
+
+1. **Umsetzung je Aktivierung:** der Funktions-Actor baut die Host-Umsetzung beim Aktivieren (nicht mehr einmal je Knoten in `FunktionsKind`) und
+   gibt sie samt Diensten beim Stoppen frei (`IAsyncDisposable`).
+2. **`IZustand<T>`:** Code-Fakt im Konstruktor; Generator (Erkennung, Serializer-Kontext, Verdrahtung), Laden beim Aktivieren, Sichern mit der
+   Position (A5), Ablage aus der Umgebung (Dokument im Store für kleinen, Datei/Objektspeicher für großen Zustand); Adresse je Funktion statt je
+   Partition als Code-Fakt (A6). Analyzer R19.
+3. **Hinweis-Netz:** Hinweis-Kennung (A7); Routing-Tabelle Hinweis-Typ → Adressen aus dem vorhandenen Hinweisplan; Versand direkt per
+   `Bote.Melde` für Hinweise aus Funktionen (und aus Aggregaten, soweit eine Funktion sie hört); Eingang „Hinweis“ im Funktions-Actor ohne
+   Position; Funktionen nur mit Hinweis-Eingängen ohne Log-Leser; Command-Ids aus Hinweisen; Generator-Prüfung R20. Hinweise an Clients bleiben bis
+   Phase 7 auf dem heutigen Weg.
+4. **Python:** `ArbeitsAuftrag` mit Hinweis als Eingang, `ArbeitsErgebnis` mit Hinweisen als Ausgabe; Python-Basen für Hinweis-Eingänge;
+   Bindung der Eingänge eines Funktions-Actors an eine tragende Sitzung (A8).
+5. **Prüflinge und Werkzeuge:** Prüfdomäne bekommt einen allgemeinen Fall (Funktion mit Zustand + Hinweis-Kette bis zum Command); Sonde und
+   `soll.txt` decken `IZustand<T>` und Hinweis-Eingänge ab; Lage, Grammatik (§3), Extractor.
+6. **Nachweis:** Absturz zwischen Sicherung und Position, Umzug einer Aktivierung (Zustand kommt mit), zwei Aktivierungen derselben Adresse (eine
+   gewinnt), Ressource wird beim Stoppen geschlossen, Hinweis-Kette ohne Log-Eintrag bis auf den Command, Commands aus Hinweisen wirken einmal,
+   Python-Funktion hört einen Hinweis; Gegenprobe je Mechanismus. Messung nur, wenn der heiße Pfad bestehender Funktionen sich ändert (S5).
+
 ### Phase 5 · Marken aus dem Log (2–3 PT)
 
 `KommandoVerarbeitet`/`KommandoAbgelehnt` entfallen (nur noch Inbox-Tabelle); eine Version je Aggregat; `VersioningModule` mit einer Version;
@@ -525,7 +620,7 @@ Ablehnungen als Hinweis an die Sitzung oder fachliches Event. Abnahme: Ablehnung
 ### Phase 6 · Wecker statt Broker (4–6 PT)
 
 Weckplan-Generator (Event-Typ → Partitionen der Projektionen und Funktionen, Uhr, Verteiler; Prüfung: jeder Hörer steht mit jedem gehörten Typ im
-Plan); Wecker am Flush inkl. `IsolateAsync`; Broker, Signale, Receiver, Push-Pfad, Signal-Generatoren, Redis-Versionsindex zurückbauen;
+Plan); Wecker am Flush inkl. `IsolateAsync`, mit denselben Mitteln wie das Hinweis-Netz aus Phase 4b (feste Tabelle, direkt per `Bote`); Broker, Signale, Receiver, Push-Pfad, Signal-Generatoren, Redis-Versionsindex zurückbauen;
 Prozess-/Emittenten-Polls entfallen (Takt je Partition bleibt). Tests: verlorene und doppelte Meldung, zwei Knoten mit hartem Ende eines Knotens
 (Weckungen kommen an, ohne auf den Takt zu warten), Störungslauf. Messung A-B-B-A.
 
@@ -558,7 +653,7 @@ Analyzer R18 über alle `Proto.IActor`-Typen und die Typen, die ein Actor als Fe
 Neues `docs/10-entwickler-api.md` („Wie schreibe ich X?“ nach §3); docs/03, 04, 05, 06, 08, 09, 11, 12, 13 und `konzept-akteure.md` auf den neuen
 Stand; Invariante 2 neu (§2.3) in `CLAUDE.md`; Verweise im Code auf gelöschte Dokumente nachziehen; dieser Plan wird gelöscht.
 
-Summe grob 40–65 PT.
+Summe grob 45–73 PT.
 
 ## 7 · Risiken
 
@@ -571,12 +666,19 @@ Summe grob 40–65 PT.
 6. **Große Abhängigkeitsmengen** in Antworten (ein Datensatz mit 10 000 Paaren) → ab einer Grenze nur die Position statt aller Versionen.
 7. **Typisierte Ids** berühren jede Domäne, alle Generatoren und beide Client-SDKs; ein Fehler dort bricht viel — Phase 1 allein und vollständig grün.
 8. **Werkbank** verliert vorübergehend Fluss-/Prozess-Karten (E4); das Abnahme-Netz der Werkbank ist bis zur Editor-Arbeit dünner.
+9. **Großer Zustand** (Netzgewichte) macht das Sichern teuer; das Intervall (A5) muss je Funktion einstellbar sein, sonst bremst die Sicherung den
+   Durchsatz oder ein Absturz kostet viel Nachrechnen.
+10. **Hinweise an umgezogene Aktivierungen** gehen verloren (Melde an eine alte PID); wer sich auf eine Hinweis-Kette verlässt, muss das wissen —
+    fachlich Wichtiges gehört als Command ins Aggregat.
 
 ## 8 · Offen
 
 - **A2** Zugehörigkeit zum Vorgang: fachliches Feld (Vorschlag) oder `Herkunft.Korrelation`.
 - **Löschen und Aufbewahren** (Recht auf Löschung, Archiv): eigenes Konzept nach dem Umbau; Option „verschlüsselbare Felder als Typ-Fakt“.
-- **Funktionen auf Hinweisen** (R15) sind im Zielbild; ob es dafür schon in Phase 3 einen Nutzer gibt (Sensor-Sonde), entscheidet sich dort.
+- **Slots der Funktionen** (docs/13 PF-33): ein Slot je Partition als Standard lässt S5-8/S5-64 auf ≈ 300 Vorgänge/s fallen; höherer Standard für
+  gleichbleibende Funktionen oder je Umgebung — Tobi.
+- **Zustand draußen** (A8): ob das Framework später auch den Zustand eines Python-Workers sichert (Ablage über die Leitung).
+- **Hinweise an Clients** gehen bis Phase 7 den heutigen Weg; danach über den Verteiler.
 - **Grenze für Abhängigkeitsmengen** (Risiko 6) und **Zusammenfassungs-Takt** des Verteilers: in Phase 7 messen.
 
 ## 9 · Nach dem Umbau
