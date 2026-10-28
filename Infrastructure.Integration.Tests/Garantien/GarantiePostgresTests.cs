@@ -15,7 +15,7 @@ namespace Infrastructure.Integration.Tests.Garantien;
 /// Garantien der Store-Semantik unter Störung, gegen ECHTES Postgres (docs/11 §11.2, §11.5, §11.6): ein Append ist atomar, ein zweiter
 /// Schreiber mit veralteter Version verliert kein Update; im Batch-Konsum wenden zwei Aktivierungen
 /// derselben Partition einen Effekt nicht doppelt an (G-4), ein Poison-Stream wird geparkt und holt nach der Heilung nach, und ein Neuaufbau
-/// nimmt einem noch laufenden Leser den Commit.
+/// nimmt einem noch laufenden Leser den Commit. Eine Quittung ohne Events (Noop, Ablehnung) gilt nur auf dem Kopf ihrer Entscheidung.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture>
@@ -62,6 +62,48 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         (await wiederholung.Should().ThrowAsync<KommandoSchonEntschiedenException>()).Which.CommandId.Should().Be(erster);
         (await es.ReadStreamAsync(id, 0, default)).Should().HaveCount(1, "ohne neue Quittung keine Events");
         (await es.AusgangAsync(erster, default)).Should().Be(KommandoAusgang.Gewirkt, "der erste Ausgang bleibt");
+    }
+
+    [Theory, InlineData(false), InlineData(true)]   // Martens Anhänge-Modus: Standard (Rich) und schnell (Quick, so läuft der Host)
+    public async Task Eine_Quittung_ohne_Events_gilt_nur_auf_dem_Kopf_ihrer_Entscheidung(bool schnell)
+    {
+        // Ein Noop oder eine Ablehnung schreibt nur die Quittung (Plan Phase 5: keine Marken im Log). Sie gilt nur, wenn der Stream noch auf dem
+        //   Stand der Entscheidung steht — sonst hätte ein zweiter Schreiber auf einem veralteten Stand dauerhaft abgelehnt. Auch ohne Stream
+        //   (Kopf 0): eine Ablehnung legt keinen an. Derselbe Weg im Group-Commit.
+        var es = EventStore(schnell: schnell);
+        var store = schnell ? _fx.Store : _fx.Rich;
+        var neu = Guid.NewGuid();
+        var ablehnung = Guid.NewGuid();
+        await es.AppendEventsAsync(neu, 0, Array.Empty<IEvent>(), beilagen: [new Quittung(ablehnung, KommandoAusgang.Abgelehnt)]);
+        (await es.AusgangAsync(ablehnung, default)).Should().Be(KommandoAusgang.Abgelehnt);
+        (await es.KopfAsync(neu, default)).Should().Be(0, "eine Ablehnung legt keinen Stream an");
+
+        var id = Guid.NewGuid();
+        await es.AppendEventsAsync(id, 0, new IEvent[] { new ImagePairInspiziert() });
+        var veraltet = Guid.NewGuid();
+        var konflikt = () => es.AppendEventsAsync(id, 0, Array.Empty<IEvent>(), beilagen: [new Quittung(veraltet, KommandoAusgang.Abgelehnt)]);
+        await konflikt.Should().ThrowAsync<ConcurrencyException>();
+        (await es.AusgangAsync(veraltet, default)).Should().BeNull("die Entscheidung fiel auf Version 0, der Stream steht auf 1");
+
+        var noop = Guid.NewGuid();
+        await es.AppendEventsAsync(id, 1, Array.Empty<IEvent>(), beilagen: [new Quittung(noop, KommandoAusgang.Gewirkt)]);
+        (await es.AusgangAsync(noop, default)).Should().Be(KommandoAusgang.Gewirkt);
+        (await es.ReadStreamAsync(id, 0, default)).Should().HaveCount(1, "ein Noop schreibt kein Event");
+
+        // Im Group-Commit: eine veraltete Quittung ohne Events reißt den ganzen Batch mit; die übrigen Teile sind nicht geschrieben.
+        var writer = new MartenEventBatchWriter(store, NullLogger<MartenEventBatchWriter>.Instance);
+        var anderer = Guid.NewGuid();
+        var mit = Guid.NewGuid();
+        var batch = () => writer.WriteBatchAsync(
+        [
+            new BatchAppend(anderer, 0, [new AppendTeil(new IEvent[] { new ImagePairInspiziert() }, null, mit.ToString(), null, null, [new Quittung(mit, KommandoAusgang.Gewirkt)])], null),
+            new BatchAppend(id, 0, [new AppendTeil(Array.Empty<IEvent>(), null, null, null, null, [new Quittung(veraltet, KommandoAusgang.Abgelehnt)])], null),
+        ], default);
+        await batch.Should().ThrowAsync<Exception>();
+        (await es.AusgangAsync(mit, default)).Should().BeNull("der Group-Commit ist ganz oder gar nicht gültig");
+        (await es.KopfAsync(anderer, default)).Should().Be(0);
+        await writer.WriteBatchAsync([new BatchAppend(id, 1, [new AppendTeil(Array.Empty<IEvent>(), null, null, null, null, [new Quittung(veraltet, KommandoAusgang.Abgelehnt)])], null)], default);
+        (await es.AusgangAsync(veraltet, default)).Should().Be(KommandoAusgang.Abgelehnt, "auf dem aktuellen Kopf gilt sie");
     }
 
     [Theory, InlineData(false), InlineData(true)]

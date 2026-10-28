@@ -63,13 +63,14 @@ public sealed class MartenEventBatchWriter : IEventBatchWriter
     public async Task WriteBatchAsync(IReadOnlyList<BatchAppend> batch, CancellationToken ct)
     {
         await EventZeit.SicherAsync(_store, ct);   // den Zeitstempel setzt die Datenbank-Uhr (G-10)
+        await InboxTabelle.SicherAsync(_store, ct);
         await using var session = _store.LightweightSession();
 
         var eventCount = 0;
         var beilagen = new BeilagenSchreiber();
         foreach (var item in batch)
         {
-            Stage(session, item);
+            Stage(session, item, beilagen);
             eventCount += item.EventAnzahl;
             foreach (var teil in item.Teile) beilagen.Lege(session, item.StreamId, teil.Beilagen);
         }
@@ -89,10 +90,16 @@ public sealed class MartenEventBatchWriter : IEventBatchWriter
 
     /// <summary>
     /// Legt EINEN Append (alle Teile, ein Stream) in die Session (noch kein Commit) und stempelt die Metadaten PRO EVENT aus seinem Teil.
-    /// Gleiche Versions-Arithmetik wie <see cref="MartenEventStore.AppendTeileAsync"/>: Version 0 → StartStream, sonst Ziel-Version.
+    /// Gleiche Versions-Arithmetik wie <see cref="MartenEventStore.AppendTeileAsync"/>: Version 0 → StartStream, sonst Ziel-Version. Ohne Events
+    /// (nur Quittungen) legt er statt des Appends die Kopf-Prüfung bei den Beilagen ab.
     /// </summary>
-    internal static void Stage(IDocumentSession session, in BatchAppend item)
+    internal static void Stage(IDocumentSession session, in BatchAppend item, BeilagenSchreiber beilagen)
     {
+        if (item.EventAnzahl == 0)
+        {
+            beilagen.PruefeKopf(item.StreamId, item.ExpectedVersion);
+            return;
+        }
         var events = new object[item.EventAnzahl];
         var n = 0;
         foreach (var teil in item.Teile)

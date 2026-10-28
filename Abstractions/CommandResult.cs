@@ -20,9 +20,9 @@ public class CommandResult : IWireMessage
     public int NewVersion { get; set; }
 
     /// <summary>
-    /// Version des ersten Events, das DIESER Aufruf geschrieben hat (Wirkung, Noop- oder Ablehnungs-Marke) — sein Ausgang steht im Stream genau
-    /// in <c>ErsteVersion … NewVersion</c>. 0, wenn der Aufruf nichts geschrieben hat (als Wiederholung erkannt, Fehler): dann ist unbekannt, wo
-    /// der Ausgang steht. Ein Hinweis für Leser, die den Ausgang im Log suchen (Prozess-Fold, JSON-Eingang); die Wahrheit bleibt der Log.
+    /// Version des ersten Events, das DIESER Aufruf geschrieben hat — seine Events stehen im Stream genau in <c>ErsteVersion … NewVersion</c>.
+    /// 0, wenn der Aufruf kein Event geschrieben hat (Noop, Ablehnung, als Wiederholung erkannt, Fehler). Ein Hinweis für Leser, die die Events
+    /// im Log suchen (JSON-Eingang); die Wahrheit bleibt der Log, „gewirkt/abgelehnt“ hält die Inbox-Tabelle.
     /// </summary>
     public int ErsteVersion { get; set; }
 

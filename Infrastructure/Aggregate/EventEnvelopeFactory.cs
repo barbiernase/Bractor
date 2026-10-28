@@ -34,7 +34,7 @@ public static class EventEnvelopeFactory
             {
                 AggregateId      = aggregateId,
                 AggregateVersion = baseVersion + i + 1,   // Version PRO Event
-                // Stream-Head nach dem ganzen Batch (inkl. Marke) — für die Client-OCC. Jedes Event
+                // Kopf des Streams nach dem ganzen Commit — für die Client-OCC. Jedes Event
                 // des Batches trägt denselben Head; 0 (ungesetzt) → Client nutzt AggregateVersion.
                 StreamHeadVersion = streamHeadVersion,
                 AggregateType    = aggregateType,

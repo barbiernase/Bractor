@@ -57,11 +57,11 @@ public class EventReadGarantieTests : IClassFixture<EventReadGarantieTests.Fixtu
             s.Events.StartStream(a, new PostenEroeffnet_V1(Bestand: 50));
             await s.SaveChangesAsync();
         }
-        // Version 2–3: Korrelation K1, mit Akteur und Spur in den Kopfzeilen; Version 4: K2, ohne Spur; Version 5: eine Noop-Marke.
+        // Version 2–3: Korrelation K1, mit Akteur und Spur in den Kopfzeilen; Version 4: K2, ohne Spur; Version 5: ein Eintrag des Rahmens (Frist).
         using (Spur.Von("u-stream:1", "decide:Posten/ReservierePosten", "funktion:Auftragsabwicklung"))
             await es.AppendEventsAsync(a, 1, new IEvent[] { new PostenReserviert(3, 0, Beleg.Ohne), new PostenReserviert(4, 0, Beleg.Ohne) }, "K1", "C1", "Posten", "Disponent");
         await es.AppendEventsAsync(a, 3, new IEvent[] { new PostenFreigegeben(2, Beleg.Ohne) }, "K2", "C2", "Posten");
-        await es.AppendEventsAsync(a, 4, new IEvent[] { new KommandoVerarbeitet(Guid.NewGuid()) }, "K2", "C3", "Posten");
+        await es.AppendEventsAsync(a, 4, new IEvent[] { new FristGesetzt(new BuchePostenZu(new(a), 1, Beleg.Ohne), TimeSpan.FromMinutes(1)) }, "K2", "C3", "Posten");
 
         Gleich(await es.ReadStreamAsync(a, 0, default), await SollAsync(a, _ => true), "ganzer Stream ab 0");
         Gleich(await es.ReadStreamAsync(a, 3, default), await SollAsync(a, e => e.Version >= 3), "ab Version 3");

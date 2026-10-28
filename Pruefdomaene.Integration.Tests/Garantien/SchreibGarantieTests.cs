@@ -89,8 +89,11 @@ public class SchreibGarantieTests
                 var erst = await FrageAsync(host, new ReservierePosten(new(q), 1, Beleg.Ohne), abgelehnt);
                 erst!.Success.Should().BeFalse();
                 erst.Abgelehnt.Should().BeTrue();
-                (await host.Services.GetRequiredService<IEventStoreRepository>().ReadStreamAsync(p, 0, default))
-                    .Count(e => e.Payload is ReservierungAbgelehnt).Should().Be(1);
+                var es = host.Services.GetRequiredService<IEventStoreRepository>();
+                (await es.ReadStreamAsync(p, 0, default)).Count(e => e.Payload is ReservierungAbgelehnt).Should().Be(1);
+                // Eine Ablehnung (ein Hinweis) steht nur in der Inbox, nie im Log — sie legt auch keinen Stream an (Plan Phase 5: keine Marken).
+                (await es.KopfAsync(q, default)).Should().Be(0, "eine Ablehnung schreibt kein Event, auch keinen Stream");
+                (await es.AusgangAsync(abgelehnt, default)).Should().Be(KommandoAusgang.Abgelehnt);
             }
             finally { await host.StopAsync(); }
         }
@@ -271,6 +274,34 @@ public class SchreibGarantieTests
 
             danach!.Success.Should().BeTrue("der Actor rehydriert nach dem Konflikt frisch und entscheidet auf dem aktuellen Stand");
             (await Zustand<PostenState>(host.Services, p)).Bestand.Should().Be(110);
+        }
+        finally { await host.StopAsync(); }
+    }
+
+    [Fact]
+    public async Task Eine_Ablehnung_auf_einem_veralteten_Stand_wird_nicht_gueltig()
+    {
+        // Eine Ablehnung schreibt kein Event, nur ihre Quittung (Plan Phase 5). Die Quittung gilt nur, wenn der Stream noch auf dem Stand der
+        //   Entscheidung steht: hier hat ein zweiter Schreiber (zweite Aktivierung, anderer Knoten) den Posten eröffnet, während der Actor noch
+        //   „gibt es nicht“ weiß. Seine Ablehnung darf nicht dauerhaft werden — er lädt frisch und entscheidet auf dem aktuellen Stand.
+        using var host = Cluster("garantie-veraltet");
+        await host.StartAsync();
+        try
+        {
+            var p = Guid.NewGuid();
+            var vorher = await FrageAsync(host, new ReservierePosten(new(p), 1, Beleg.Ohne), Guid.NewGuid());
+            vorher!.Abgelehnt.Should().BeTrue("den Posten gibt es noch nicht — der Actor ist aktiv und kennt den Stand 0");
+
+            var store = host.Services.GetRequiredService<IEventStoreRepository>();
+            await store.AppendEventsAsync(p, 0, new IEvent[] { new PostenEroeffnet(10) });
+
+            var id = Guid.NewGuid();
+            var danach = await FrageAsync(host, new ReservierePosten(new(p), 1, Beleg.Ohne), id);
+
+            danach!.Success.Should().BeTrue("die Ablehnung auf dem veralteten Stand scheitert an der Kopf-Prüfung; auf dem aktuellen wirkt der Command");
+            (await store.AusgangAsync(id, default)).Should().Be(KommandoAusgang.Gewirkt);
+            (await ReserviertImLog(host, p)).Should().Be(1);
+            (await Zustand<PostenState>(host.Services, p)).Reserviert.Should().Be(1);
         }
         finally { await host.StopAsync(); }
     }

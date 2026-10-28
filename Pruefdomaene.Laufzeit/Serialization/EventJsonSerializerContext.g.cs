@@ -26,9 +26,6 @@ namespace Infrastructure.Serialization;
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Posten.Posten>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Verteilung.Verteilung>),
     })]
-// ── Framework: Aggregat-Inbox (IEvent → persistiert) ──
-[JsonSerializable(typeof(KommandoVerarbeitet))]
-[JsonSerializable(typeof(KommandoAbgelehnt))]
 // ── Framework: festgehaltene Ausgabe der Funktionen (Plan Pub/Sub-Neustrukturierung Phase 3) ──
 [JsonSerializable(typeof(Infrastructure.Funktionen.BefehlFestgehalten))]
 [JsonSerializable(typeof(Infrastructure.Funktionen.AusgabeFestgehalten))]

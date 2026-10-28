@@ -29,12 +29,6 @@ public sealed class SpurSpiegel
     private long _gemeldet = -1;
     private DateTimeOffset _gemeldetUm;
 
-    /// <summary>Die internen Einträge, die an einer Karte einen Fehlschlag zeigen (✕) — alle übrigen internen Einträge sind kein Schritt.</summary>
-    private static readonly Dictionary<string, string> Markiert = new()
-    {
-        ["KommandoAbgelehnt"] = "abgelehnt",
-    };
-
     public SpurSpiegel(WerkbankServer werkbank) => _werkbank = werkbank;
 
     /// <summary>Der Einblick-Port des laufenden Hosts der Werkbank und ein Schlüssel für diesen Lauf — null, wenn kein Host läuft.</summary>
@@ -145,9 +139,9 @@ public sealed class SpurSpiegel
             menge.Add(stream);
         }
         var intern = (bool?)e["intern"] ?? false;
-        if (intern && !Markiert.ContainsKey(name)) return;
+        if (intern) return;   // Einträge des Rahmens (Frist gesetzt) sind kein Schritt
         _erste ??= zeit;
-        var weg = SpurWeg.Aus(name, (string?)e["wirker"], ueber, (string?)e["ursache"], intern, u => _eintrag.GetValueOrDefault(u));
+        var weg = SpurWeg.Aus(name, (string?)e["wirker"], ueber, (string?)e["ursache"], u => _eintrag.GetValueOrDefault(u));
         foreach (var karte in weg.Karten)
             _karten[karte] = (_karten.TryGetValue(karte, out var z) ? z.N + 1 : 1, zeit);
         foreach (var p in weg.Paare)
@@ -262,17 +256,17 @@ public sealed class SpurSpiegel
         {
             var name = (string?)e["name"] ?? (string?)e["typ"] ?? "?";
             var intern = (bool?)e["intern"] ?? false;
-            if (intern && !Markiert.ContainsKey(name)) continue;
+            if (intern) continue;
             var schluessel = $"{(string?)e["stream"]}:{(long?)e["version"]}";
             var n = schritte.Count + 1;
             nr[schluessel] = n;
             var ursache = (string?)e["ursache"];
             SpurWeg weg;
             lock (_sperre)
-                weg = SpurWeg.Aus(name, (string?)e["wirker"], (string?)e["ueber"], ursache, intern,
+                weg = SpurWeg.Aus(name, (string?)e["wirker"], (string?)e["ueber"], ursache,
                     u => lokal.GetValueOrDefault(u) ?? _eintrag.GetValueOrDefault(u));
             var eStand = (string?)e["stand"];
-            var art = intern ? Markiert[name] : "event";
+            const string art = "event";
             schritte.Add(new JsonObject
             {
                 ["nr"] = n, ["seq"] = (long?)e["seq"], ["zeit"] = e["zeit"]?.DeepClone(), ["name"] = name, ["art"] = art,

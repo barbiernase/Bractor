@@ -36,23 +36,24 @@ public class RehydrationGarantieTests
         => new() { AggregateId = id, AggregateVersion = version, SubIndex = subIndex, Payload = payload };
 
     [Fact]
-    public async Task Neustart_zaehlt_die_Marken_in_der_Version_und_wendet_sie_nicht_an()
+    public async Task Neustart_zaehlt_Eintraege_des_Rahmens_in_der_Version_und_wendet_sie_nicht_an()
     {
-        // Ein Command, der als Noop gewirkt hat (nur die Marke), und einer, der abgelehnt wurde (nur die Marke): beide Hüllen zählen die
-        // Version hoch (die nächste OCC passt), der Zustand sieht sie nie. Dass eine Wiederholung nach dem Neustart nicht erneut wirkt,
-        // trägt die Inbox-Tabelle (Prüfdomäne, SchreibGarantieTests).
+        // Eine Frist (FristGesetzt, ein Eintrag des Rahmens) zählt die Version hoch (die nächste OCC passt), der Zustand sieht sie nie. Ein Noop
+        // und eine Ablehnung stehen nicht im Log (Plan Pub/Sub-Neustrukturierung Phase 5); dass ihre Wiederholung nach dem Neustart nicht erneut
+        // wirkt, trägt die Inbox-Tabelle (Prüfdomäne, SchreibGarantieTests).
         var id = Guid.NewGuid();
         var log = new[]
         {
             Env(id, 1, new SammelvorgangGestartet(2)),
-            Env(id, 2, new KommandoVerarbeitet(Guid.NewGuid())),
-            Env(id, 3, new KommandoAbgelehnt(Guid.NewGuid(), "SammelvorgangExistiertBereits")),
+            Env(id, 2, new FristGesetzt(new MeldeTeilFertig(new(id)), TimeSpan.FromMinutes(1))),
+            Env(id, 3, new TeilVerbucht(1, 2)),
         };
 
         var r = await AggregateRehydrator.LoadAsync<Sammelvorgang>(id, null, new LeseSeam(log), Fabrik, null, default);
 
-        r.State.Version.Should().Be(3, "jede Hülle zählt, auch die Marken");
+        r.State.Version.Should().Be(3, "jede Hülle zählt, auch die des Rahmens");
         r.State.Erwartet.Should().Be(2);
+        r.State.Fertig.Should().Be(1);
     }
 
     [Fact(Skip = "G-5 offen (docs/13)")]

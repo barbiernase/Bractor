@@ -51,6 +51,7 @@ CREATE TABLE streams (id int PRIMARY KEY, version int NOT NULL);
 INSERT INTO streams SELECT g, 0 FROM generate_series(1,200000) g;
 CREATE TABLE events (seq bigserial PRIMARY KEY, stream_id int NOT NULL, version int NOT NULL, type text NOT NULL,
   data jsonb NOT NULL, ts timestamptz NOT NULL DEFAULT now(), causation text, UNIQUE (stream_id, version));
+CREATE TABLE inbox (command_id uuid PRIMARY KEY, stream_id int NOT NULL, abgelehnt boolean NOT NULL, zeit timestamptz NOT NULL DEFAULT now());
 ANALYZE;
 SQL
 
@@ -81,8 +82,8 @@ UPDATE readmodel SET data = jsonb_set(data,'{status}', to_jsonb(:i)) WHERE id IN
 INSERT INTO checkpoint SELECT 'p:'||g, '{"v":2}', 2 FROM generate_series(:i, :i+499) g ON CONFLICT (id) DO UPDATE SET data = excluded.data, version = checkpoint.version + 1;
 COMMIT;
 SQL
-# Group-Commit: 256 Appends je Transaktion, je Append ein Event — ohne Inbox-Marke.
-schreibe append_ohne_marke <<'SQL'
+# Group-Commit: 256 Appends je Transaktion, je Append ein Event — ohne Quittung.
+schreibe append <<'SQL'
 \set i random(1, 199700)
 BEGIN;
 WITH u AS (UPDATE streams SET version = version + 1 WHERE id BETWEEN :i AND :i+255 RETURNING id, version)
@@ -90,15 +91,15 @@ INSERT INTO events (stream_id, version, type, data, causation)
 SELECT id, version, 'TeilGefertigt', '{"teil":"A-4711","linie":3,"station":12,"dauerMs":5321,"ergebnis":"iO","werker":"w-17"}'::jsonb, gen_random_uuid()::text FROM u;
 COMMIT;
 SQL
-# Dasselbe mit Inbox-Marke je Command (KommandoVerarbeitet).
-schreibe append_mit_marke <<'SQL'
+# Dasselbe mit der Quittung je Command in der Inbox-Tabelle (der Weg des Frameworks, docs/04 §4.6).
+schreibe append_mit_quittung <<'SQL'
 \set i random(1, 199700)
 BEGIN;
-WITH u AS (UPDATE streams SET version = version + 2 WHERE id BETWEEN :i AND :i+255 RETURNING id, version)
-INSERT INTO events (stream_id, version, type, data, causation)
-SELECT id, version - 1, 'TeilGefertigt', '{"teil":"A-4711","linie":3,"station":12,"dauerMs":5321,"ergebnis":"iO","werker":"w-17"}'::jsonb, gen_random_uuid()::text FROM u
-UNION ALL
-SELECT id, version, 'KommandoVerarbeitet', '{"commandId":"0b6f0a8e-3c1d-4c55-9a8e-1f2d3c4b5a69"}'::jsonb, gen_random_uuid()::text FROM u;
+WITH u AS (UPDATE streams SET version = version + 1 WHERE id BETWEEN :i AND :i+255 RETURNING id, version),
+     e AS (INSERT INTO events (stream_id, version, type, data, causation)
+           SELECT id, version, 'TeilGefertigt', '{"teil":"A-4711","linie":3,"station":12,"dauerMs":5321,"ergebnis":"iO","werker":"w-17"}'::jsonb,
+                  gen_random_uuid()::text FROM u RETURNING stream_id, causation)
+INSERT INTO inbox (command_id, stream_id, abgelehnt) SELECT causation::uuid, stream_id, false FROM e;
 COMMIT;
 SQL
 
@@ -113,8 +114,8 @@ echo "== pgbench, $DAUER s je Lauf, Container $CONTAINER"
 lauf weckung 4;  lauf weckung 16
 lauf leer 4;     lauf leer 16
 lauf batch 4
-lauf append_ohne_marke 4
-lauf append_mit_marke 4
+lauf append 4
+lauf append_mit_quittung 4
 
 echo "== Lesepfade (Ausführungszeit in der Datenbank)"
 "${PSQL[@]}" -d "$DB" <<'SQL' | grep -E "Execution Time|^ *-- "

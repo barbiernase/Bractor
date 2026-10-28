@@ -250,8 +250,9 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     private sealed class AppendGescheitertException(Exception innen) : Exception("Append gescheitert", innen);
 
     /// <summary>
-    /// Der eine Append-Weg des Actors (Effekt, Noop-Marke, Ablehnungs-Marke — jeweils mit der Quittung des Commands in derselben
-    /// Transaktion). Kennt die Inbox die CommandId schon (eine Wiederholung, die der Cache nicht kannte), ist nichts geschrieben und der Stand
+    /// Der eine Append-Weg des Actors: die Events eines Commands mit seiner Quittung in derselben Transaktion — bei einem Noop oder einer
+    /// Ablehnung nur die Quittung, gültig, wenn der Stream noch auf dem Stand der Entscheidung steht (Plan Pub/Sub-Neustrukturierung Phase 5:
+    /// keine Marken im Log, die Inbox-Tabelle hält „gewirkt/abgelehnt“). Kennt die Inbox die CommandId schon (eine Wiederholung, die der Cache nicht kannte), ist nichts geschrieben und der Stand
     /// bleibt gültig: der Ausgang des ersten Mals wird quittiert. Scheitert der Append sonst — Versionskonflikt durch einen zweiten Schreiber,
     /// ein Commit, dessen Quittung verloren ging, ein DB-Fehler —, ist der In-Memory-Stand nicht mehr verlässlich: der Actor rehydriert frisch
     /// aus dem Log (G-3) und schlägt in der Inbox nach. Steht die CommandId dort, hat der Command gewirkt bzw. ist abgelehnt — der mehrdeutige
@@ -531,22 +532,19 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             return;
         }
 
-        IReadOnlyList<IEvent> schreibe;
+        IReadOnlyList<IEvent> schreibe = Array.Empty<IEvent>();
         IReadOnlyList<Beilage> fristen = Array.Empty<Beilage>();
         e.VersionVorher = _state.Version;
         if (alle.Count == 0)
         {
-            // Noop: die Marke macht „getan" für den Prozess-Fold beobachtbar (Audit-Fix K2).
+            // Noop: nur die Quittung (gewirkt), die Version bleibt.
             e.Ausgang = KommandoAusgang.Gewirkt;
-            schreibe = new IEvent[] { new KommandoVerarbeitet(env.CommandId) };
-            _state.Version++;
         }
         else if (ablehnungen.Count == 1)
         {
+            // Ablehnung: nur die Quittung (abgelehnt), die Version bleibt; der Hinweis geht nach dem Commit an Sitzung und Hörer.
             e.Ausgang = KommandoAusgang.Abgelehnt;
             e.Ablehnung = ablehnungen[0];
-            schreibe = new IEvent[] { new KommandoAbgelehnt(env.CommandId, e.Ablehnung.GetType().Name) };
-            _state.Version++;
         }
         else
         {
@@ -602,7 +600,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                     e.Ergebnis = new CommandResult
                     {
                         Success = false, Abgelehnt = true, RejectionEvent = e.Ablehnung, ErrorMessage = e.Ablehnung.ToString(),
-                        NewVersion = e.VersionNachher, ErsteVersion = e.VersionVorher + 1,
+                        NewVersion = e.VersionNachher,
                     };
                 }
                 else
@@ -616,7 +614,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                     }
                     e.Ergebnis = new CommandResult
                     {
-                        Success = true, NewVersion = e.VersionNachher, ErsteVersion = e.VersionVorher + 1,
+                        Success = true, NewVersion = e.VersionNachher, ErsteVersion = e.Persistent.Count > 0 ? e.VersionVorher + 1 : 0,
                     };
                 }
             }
@@ -668,14 +666,13 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     /// (neue CommandId) fällt weiterhin durch zur OCC-Assertion.
     /// </summary>
     private Task HandleClientCommand(IContext context, CommandEnvelope cmdEnvelope, int expectedVersion)
-        => HandleCommandCoreAsync(context, cmdEnvelope, istIdempotent: true, expectedVersion);
+        => HandleCommandCoreAsync(context, cmdEnvelope, expectedVersion);
 
-    /// <summary>Interner Emitter (Reaktion/Prozess/Pipeline): KEINE Version — Idempotenz via det. CommandId + Inbox.</summary>
+    /// <summary>Interner Emitter (Funktion, Uhr): KEINE Version — Idempotenz via det. CommandId + Inbox.</summary>
     private Task HandleEmittedCommand(IContext context, CommandEnvelope cmdEnvelope)
-        => HandleCommandCoreAsync(context, cmdEnvelope, istIdempotent: true, expectedVersion: _state!.Version);
+        => HandleCommandCoreAsync(context, cmdEnvelope, expectedVersion: _state!.Version);
 
-    private async Task HandleCommandCoreAsync(
-        IContext context, CommandEnvelope cmdEnvelope, bool istIdempotent, int expectedVersion)
+    private async Task HandleCommandCoreAsync(IContext context, CommandEnvelope cmdEnvelope, int expectedVersion)
     {
         try
         {
@@ -686,7 +683,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             //   (at-least-once — Emittiert IMMER, Client bei Retry nach verlorenem Ack) liefert
             //   idempotent DASSELBE Ergebnis; ein frischer Command fällt durch zur OCC-Assertion.
             switch (CommandVorpruefung.Prüfe(
-                        istIdempotent,
+                        true,
                         _verarbeiteteCommandIds.Contains(cmdEnvelope.CommandId),
                         _abgelehnteCommandIds.Contains(cmdEnvelope.CommandId),
                         _state!.Version,
@@ -732,13 +729,11 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             // 1. Events erzeugen (Decider) — wirft keine Exceptions mehr für Domänen-Ablehnungen
             var allEvents = _handler!.HandleCommand(cmdEnvelope.Payload).ToList();
 
-            // 2. Noop — keine Events = idempotent (z.B. DeaktiviereLagerartikel bei bereits inaktivem Artikel)
+            // 2. Noop — keine Events (z.B. DeaktiviereLagerartikel bei bereits inaktivem Artikel): nur die Quittung, die Version bleibt. Die Inbox
+            //    kennt die CommandId, eine Wiederholung bleibt ein Noop.
             if (!allEvents.Any())
             {
-                // Auf dem idempotenten Pfad (Funktion, Uhr) hinterlässt AUCH ein Noop eine durable KommandoVerarbeitet-Marke: die
-                //   Inbox kennt die CommandId, eine Wiederholung bleibt ein Noop, und „getan“ ist im Log beobachtbar (Plan Phase 5
-                //   entscheidet über die Marken). Der OCC-Client-Pfad bleibt unberührt.
-                if (istIdempotent && await CoCommitInboxMarkeAsync(cmdEnvelope, expectedVersion) is var noop and not AppendErgebnis.Geschrieben)
+                if (await QuittiereOhneEventsAsync(cmdEnvelope, expectedVersion, KommandoAusgang.Gewirkt) is var noop and not AppendErgebnis.Geschrieben)
                 {
                     QuittiereEntschieden(context, noop);
                     return;
@@ -774,34 +769,25 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             }
 
             // 4. ★ Reine Ablehnung — genau EIN transientes Event, keine persistenten (der Guard oben
-            //    garantiert: hier steht exakt eine Ablehnung).
-            //    Kein Append, kein Apply, keine Version-Änderung.
-            //    Targeted Delivery an den aufrufenden Client.
+            //    garantiert: hier steht exakt eine Ablehnung). Kein Event, kein Apply, keine Version-Änderung — nur die Quittung (abgelehnt):
+            //    eine Wiederholung derselben CommandId bekommt dieselbe Ablehnung (Zwei-Mengen-Inbox), der Sender sieht „abgelehnt“ als
+            //    entschieden. Ist die Ablehnung für einen Ablauf wichtig, ist sie ein Fakt (Event) — das entscheidet der Modellierer über den Typ.
             if (rejections.Any() && !persistentEvents.Any())
             {
                 var rejection = rejections.First();
                 _logger?.LogDebug("[Actor] Rejected: {Rejection}", rejection.GetType().Name);
-                // Spur: eine Ablehnung steht (auf dem Client-Pfad) nicht im Log — als verlierbarer Hinweis an die Werkbank.
-                Infrastructure.Einblick.SpurHinweise.Melde(Infrastructure.Einblick.SpurHinweise.Ablehnung, Spur.Aktuell?.Wirker, cmdEnvelope.Ursache,
-                    cmdEnvelope.CorrelationId, $"{cmdEnvelope.Payload.GetType().Name} abgelehnt: {rejection.GetType().Name}");
 
-                // ★ Treiber-Fold (EM-1) — Wende der früheren K2-Entscheidung: auf dem EMITTIERTEN Pfad
-                //   (Reaktion/Prozess) wird die Ablehnung jetzt DURABEL als KommandoAbgelehnt co-committet. Der
-                //   Prozess-Manager faltet sie als eigene Achse (AbgelehntDa) zu SchrittGescheitert — er braucht
-                //   die Ziel-Quittung nicht mehr (der EINE Emit-Weg). Der frühere Falsch-Erfolg-Fallstrick (eine
-                //   RE-Zustellung liefert per Inbox-Dedup Success:true → Manager verzweigt auf Erfolg) ist durch
-                //   die ZWEITE Inbox-Menge geschlossen: ein abgelehnter Vorgang bleibt bei Re-Delivery auf
-                //   Success:false (siehe Dedup-Zweig oben). Marke + Zwei-Mengen-Inbox + Fold-Achse zusammen (§4).
-                //   Auch der Client-Pfad schreibt die Marke (er ist idempotent, docs/08 §8.4); die Ablehnung geht dort zusätzlich
-                //   targeted an den Aufrufer.
-                if (istIdempotent && await CoCommitAblehnungsMarkeAsync(cmdEnvelope, expectedVersion, rejection.GetType().Name) is var marke
+                if (await QuittiereOhneEventsAsync(cmdEnvelope, expectedVersion, KommandoAusgang.Abgelehnt) is var schon
                     and not AppendErgebnis.Geschrieben)
                 {
-                    QuittiereEntschieden(context, marke);
+                    QuittiereEntschieden(context, schon);
                     return;
                 }
 
-                // Targeted Delivery — nur an den Aufrufer
+                // Spur: eine Ablehnung steht nicht im Log — als verlierbarer Hinweis an die Werkbank.
+                Infrastructure.Einblick.SpurHinweise.Melde(Infrastructure.Einblick.SpurHinweise.Ablehnung, Spur.Aktuell?.Wirker, cmdEnvelope.Ursache,
+                    cmdEnvelope.CorrelationId, $"{cmdEnvelope.Payload.GetType().Name} abgelehnt: {rejection.GetType().Name}");
+                // Der Hinweis an die Sitzung des Aufrufers und an die Funktionen, die ihn hören (verlierbar).
                 MeldeAblehnung(cmdEnvelope, rejection);
 
                 Antworte(context, new CommandResult
@@ -809,7 +795,8 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                     Success = false,
                     Abgelehnt = true,
                     RejectionEvent = rejection,
-                    ErrorMessage = rejection.ToString()
+                    ErrorMessage = rejection.ToString(),
+                    NewVersion = _state.Version,
                 });
                 return;
             }
@@ -817,7 +804,6 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             // 5. Erfolg — persistente Events verarbeiten.
             //    ★ Phase 1: Metadaten mit ins Log stempeln (nach Log-Read verfügbar).
             //    ★ Inbox: die Quittung reist in DERSELBEN Transaktion wie der Effekt (Inbox-Tabelle) → exactly-once-wirksam, crash-fest.
-            //      Eine Marke im Stream braucht die Wirkung nicht: ihr erstes Event trägt causation_id = CommandId, das liest der Prozess-Fold.
             var append = await AppendeAsync(cmdEnvelope, expectedVersion, persistentEvents, KommandoAusgang.Gewirkt,
                 Fristen(persistentEvents, expectedVersion, cmdEnvelope.UserId));
             if (append != AppendErgebnis.Geschrieben)
@@ -916,38 +902,16 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     }
 
     /// <summary>
-    /// Co-committet AUSSCHLIESSLICH die Noop-Marke mit der Quittung (idempotenter Pfad) — ein durabler Beleg „dieser Vorgang wurde
-    /// verarbeitet", ohne Domänen-Effekt. Die Quittung allein dedupliziert; die Marke im Stream braucht der Prozess-Fold, der den Ausgang
-    /// über die Kausalität im Ziel-Stream erkennt (eine Wirkung hat dort ihr Event, ein Noop nur diese Marke). Die Marke ist
-    /// <see cref="IRahmenEvent"/> → beim Domänen-Falten übersprungen, in der Version aber mitgezählt (Stream-Position bündig). Basis ist die
-    /// aufgelöste aktuelle Version (Single-Writer), sodass die Marten-OCC eine echte Doppelaktivierung weiterhin abweist.
+    /// Ein Noop oder eine Ablehnung: nur die Quittung des Commands (Inbox-Tabelle), ohne Event — die Version des Streams bleibt. Gültig nur, wenn
+    /// der Stream noch auf <paramref name="expectedVersion"/> steht (Kopf-Prüfung in derselben Transaktion): eine zweite Aktivierung auf einem
+    /// veralteten Stand hätte sonst dauerhaft abgelehnt oder nichts getan. Basis ist die aufgelöste aktuelle Version (Single-Writer).
     /// </summary>
-    private async Task<AppendErgebnis> CoCommitInboxMarkeAsync(CommandEnvelope cmdEnvelope, int expectedVersion)
+    private async Task<AppendErgebnis> QuittiereOhneEventsAsync(CommandEnvelope cmdEnvelope, int expectedVersion, KommandoAusgang ausgang)
     {
-        var ergebnis = await AppendeAsync(cmdEnvelope, expectedVersion,
-            new IEvent[] { new Infrastructure.Aggregate.KommandoVerarbeitet(cmdEnvelope.CommandId) }, KommandoAusgang.Gewirkt);
+        var ergebnis = await AppendeAsync(cmdEnvelope, expectedVersion, Array.Empty<IEvent>(), ausgang);
         if (ergebnis != AppendErgebnis.Geschrieben) return ergebnis;   // schon im frisch rehydrierten Stand
 
-        _state!.Version++;
-        _verarbeiteteCommandIds.Add(cmdEnvelope.CommandId);
-        return ergebnis;
-    }
-
-    /// <summary>
-    /// Co-committet AUSSCHLIESSLICH die Framework-ABLEHNUNGS-Marke (idempotenter Pfad, fachliche Ablehnung) —
-    /// ein durabler Beleg „dieser Vorgang wurde abgelehnt" MIT dem Grund, ohne Domänen-Effekt. Gleiche native
-    /// Transaktion wie ein normaler Append; die Marke ist <see cref="IRahmenEvent"/> → beim Domänen-Falten
-    /// übersprungen, in der Version aber mitgezählt (Stream-Position bündig). Der Prozess-Manager faltet sie zu
-    /// <c>SchrittGescheitert</c> (Treiber-Fold/EM-1). Basis ist die aufgelöste aktuelle Version (Single-Writer).
-    /// </summary>
-    private async Task<AppendErgebnis> CoCommitAblehnungsMarkeAsync(CommandEnvelope cmdEnvelope, int expectedVersion, string grund)
-    {
-        var ergebnis = await AppendeAsync(cmdEnvelope, expectedVersion,
-            new IEvent[] { new Infrastructure.Aggregate.KommandoAbgelehnt(cmdEnvelope.CommandId, grund) }, KommandoAusgang.Abgelehnt);
-        if (ergebnis != AppendErgebnis.Geschrieben) return ergebnis;   // schon im frisch rehydrierten Stand
-
-        _state!.Version++;
-        _abgelehnteCommandIds.Add(cmdEnvelope.CommandId);
+        (ausgang == KommandoAusgang.Abgelehnt ? _abgelehnteCommandIds : _verarbeiteteCommandIds).Add(cmdEnvelope.CommandId);
         return ergebnis;
     }
 
@@ -1080,8 +1044,8 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             correlationId: cmdEnvelope.CorrelationId,
             causationId: cmdEnvelope.CommandId.ToString(),
             userId: cmdEnvelope.UserId,
-            // Der Actor-State steht hier bereits auf dem Head NACH Domain-Events + co-committer
-            // Marke — genau die ExpectedVersion, die der nächste Client-Command tragen muss.
+            // Der Actor-State steht hier bereits auf dem Kopf NACH dem Commit — genau die ExpectedVersion, die der nächste
+            // Client-Command tragen muss (auch wenn der Client das letzte Event des Commits nicht hört).
             streamHeadVersion: _state.Version,
             spur: Spur.Aktuell);
 

@@ -11,10 +11,10 @@ public sealed record SpurWeg(IReadOnlyList<string> Karten, IReadOnlyList<string[
     public sealed record Eintrag(string Name, string? Wirker, string? Ueber);
 
     /// <summary>
-    /// Der Weg: Absender (<c>ueber</c>: Funktion, Uhr, Akteur) → beim Aggregat die Command-Karte → Wirker → die eigene Event-Karte (nicht bei
-    /// internen Marken wie <c>KommandoAbgelehnt</c>). Gegangen ist dazu: Ursache (deren Event-Karte) → erste Karte.
+    /// Der Weg: Absender (<c>ueber</c>: Funktion, Uhr, Akteur) → beim Aggregat die Command-Karte → Wirker → die eigene Event-Karte. Gegangen ist
+    /// dazu: Ursache (deren Event-Karte) → erste Karte. Einträge des Rahmens (<see cref="IRahmenEvent"/>) sind kein Schritt; der Aufrufer lässt sie aus.
     /// </summary>
-    public static SpurWeg Aus(string name, string? wirker, string? ueber, string? ursache, bool intern, Func<string, Eintrag?> eintrag)
+    public static SpurWeg Aus(string name, string? wirker, string? ueber, string? ursache, Func<string, Eintrag?> eintrag)
     {
         var karten = new List<string>();
         void Karte(string? id)
@@ -24,7 +24,7 @@ public sealed record SpurWeg(IReadOnlyList<string> Karten, IReadOnlyList<string[
         Karte(ueber);
         if (wirker?.StartsWith("decide:", StringComparison.Ordinal) == true && wirker.IndexOf('/') is var i and > 0) Karte("rec:" + wirker[(i + 1)..]);
         Karte(wirker);
-        if (!intern) Karte("rec:" + name);
+        Karte("rec:" + name);
 
         var paare = new List<string[]>();
         if ((ursache != null ? eintrag(ursache) : null) is { } u && karten.Count > 0)

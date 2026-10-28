@@ -205,7 +205,7 @@ internal sealed class Pruefdomaene : ILast
 /// <summary>
 /// Prüfungen, die für jede Anwendung gelten: keine CommandId hat zweimal gewirkt. Unabhängig vom Mechanismus (Inbox-Schlüssel) gemessen: die
 /// Events eines Commands (causation_id = CommandId, jede CommandId der Inbox) stehen alle in EINER Transaktion (xmin) — ein zweites Wirken
-/// stünde in einer zweiten. Dazu Noop- und Ablehnungs-Marken je CommandId höchstens einmal.
+/// stünde in einer zweiten. Dazu: ein abgelehnter Command hat nichts geschrieben (eine Ablehnung steht nur in der Inbox, nie im Log).
 /// </summary>
 internal static class GlobalePruefung
 {
@@ -218,10 +218,8 @@ internal static class GlobalePruefung
                 select count(*) from (select e.causation_id from {s}.mt_events e join {s}.cqrs_inbox i on i.command_id::text = e.causation_id
                   group by 1 having count(distinct e.xmin::text) > 1) x
                 """)),
-            Pruefung.Gleich($"{titel}: keine CommandId zweimal noop-markiert", 0, await db.ZahlAsync(
-                $"select count(*) from (select data->>'CommandId' from {s}.mt_events where type = 'kommando_verarbeitet' group by 1 having count(*) > 1) x")),
-            Pruefung.Gleich($"{titel}: keine CommandId zweimal abgelehnt-markiert", 0, await db.ZahlAsync(
-                $"select count(*) from (select data->>'CommandId' from {s}.mt_events where type = 'kommando_abgelehnt' group by 1 having count(*) > 1) x")),
+            Pruefung.Gleich($"{titel}: kein abgelehnter Command hat geschrieben", 0, await db.ZahlAsync(
+                $"select count(*) from {s}.cqrs_inbox i join {s}.mt_events e on e.causation_id = i.command_id::text where i.abgelehnt")),
             Pruefung.Gleich($"{titel}: kein Stream mit doppelter Version", 0, await db.ZahlAsync(
                 $"select count(*) from (select stream_id, version from {s}.mt_events group by 1, 2 having count(*) > 1) x")),
         };

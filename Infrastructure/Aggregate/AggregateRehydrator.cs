@@ -43,7 +43,7 @@ public static class AggregateRehydrator
         // 3. Handler JETZT erstellen — mit dem geseedeten State, damit Applier auf dasselbe Objekt zeigt.
         var handler = factory.CreateHandler(state);
 
-        // 4. Tail ab baseVersion+1 falten. Jede Hülle — auch die internen Marken (Noop, Ablehnung) — zählt die Version hoch
+        // 4. Tail ab baseVersion+1 falten. Jede Hülle — auch die des Rahmens (Frist gesetzt) — zählt die Version hoch
         //    (Stream-Position bündig), angewandt werden nur Domänen-Events.
         var tail = await store.ReadStreamAsync(id, baseVersion + 1, ct);
         foreach (var env in tail)

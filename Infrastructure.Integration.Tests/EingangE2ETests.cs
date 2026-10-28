@@ -100,11 +100,12 @@ public class EingangE2ETests
             var nochmal = await Lies(await Sende("/eingang/command", new { typ = "ErstelleDatensatz", daten = new { AggregateId = ds, Name = "Werkbank" } }, "t-ki"));
             nochmal.GetProperty("ablehnung").GetProperty("typ").GetString().Should().Be("DatensatzExistiertBereits");
             nochmal.GetProperty("events").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null, "ohne Wunsch liest der Eingang das Log nicht");
-            // Einblick (Werkbank P6): der abgelehnte Command von außen ist ein gescheiterter Vorgang; seine Marke trägt den Akteur als Absender.
+            // Eine Ablehnung steht nicht im Log (Plan Pub/Sub-Neustrukturierung Phase 5): der Stream bleibt, wie er war, der Einblick kennt keinen
+            //   Vorgang dazu — „abgelehnt“ hält nur die Inbox-Tabelle.
+            (await es.ReadStreamAsync(ds, 0, default)).Should().HaveCount(log.Count, "eine Ablehnung schreibt kein Event");
             var leser = new SpurLeser(u);
-            var gescheitert = (await leser.VorgaengeAsync(50, default)).Single(v => v.Korrelation == nochmal.GetProperty("korrelation").GetString());
-            (gescheitert.Zustand, gescheitert.Grund).Should().Be(("gescheitert", "DatensatzExistiertBereits"));
-            (await leser.VorgangAsync(gescheitert.Korrelation, default)).Single().Ueber.Should().Be("akteur:KIOperator");
+            (await leser.VorgaengeAsync(50, default)).Should().NotContain(v => v.Korrelation == nochmal.GetProperty("korrelation").GetString());
+            (await leser.VorgangAsync(nochmal.GetProperty("korrelation").GetString()!, default)).Should().BeEmpty();
 
             (await Sende("/eingang/command", new { typ = "ErstelleDatensatz", daten = new { AggregateId = Guid.NewGuid(), Name = "x" } }, "t-inspekteur"))
                 .StatusCode.Should().Be(HttpStatusCode.Forbidden, "der Inspekteur hat kein IDarf<ErstelleDatensatz>");

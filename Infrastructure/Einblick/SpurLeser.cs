@@ -13,16 +13,18 @@ public sealed record SpurEintrag(
     long Seq, Guid Stream, long Version, string Typ, string Name, DateTimeOffset Zeit, string? Korrelation, string? Kausal,
     string? Akteur, string? Ursache, string? Wirker, string? Ueber, string? Stand, string? Aggregat, bool Intern, JsonElement Daten);
 
-/// <summary>Ein Vorgang (alle Einträge einer <c>CorrelationId</c>) mit Zustand: <c>laeuft</c> · <c>ruht</c> · <c>gescheitert</c>.</summary>
+/// <summary>
+/// Ein Vorgang (alle Einträge einer <c>CorrelationId</c>) mit Zustand: <c>laeuft</c> · <c>ruht</c>. Eine Ablehnung steht nicht im Log (Plan
+/// Pub/Sub-Neustrukturierung Phase 5): sie kommt als verlierbarer Spur-Hinweis; ist sie für den Ablauf wichtig, ist sie ein Fakt im Log.
+/// </summary>
 public sealed record Vorgang(
     string Korrelation, long ErsteSeq, long LetzteSeq, int Eintraege, DateTimeOffset Beginn, DateTimeOffset Zuletzt,
-    string Zustand, string? WurzelTyp, string? WurzelWirker, string? Akteur, string? Grund);
+    string Zustand, string? WurzelTyp, string? WurzelWirker, string? Akteur);
 
 /// <summary>
 /// Liest die Spur aus dem Log (<c>docs/konzept-werkbank.md</c> §7, Werkbank P4.4/P4.6) — nur lesend, direkt über die globale Sequenz
 /// (<c>mt_events.seq_id</c>) samt Headern. Die „Spur-Projektion“ ist bewusst keine zweite gespeicherte Wahrheit: Knoten sind die Log-Einträge,
-/// Kanten ihre <c>ursache</c>; ein Vorgang ist die Menge einer <c>CorrelationId</c>, sein Zustand folgt aus der letzten Aktivität und einer
-/// Ablehnung darin. Ob ein Vorgang FACHLICH fertig ist, sagt sein Aggregat (ein Fakt), nicht der Einblick. So gilt dasselbe in Sim und Prod; die
+/// Kanten ihre <c>ursache</c>; ein Vorgang ist die Menge einer <c>CorrelationId</c>, sein Zustand folgt aus der letzten Aktivität. Ob ein Vorgang FACHLICH fertig ist, sagt sein Aggregat (ein Fakt), nicht der Einblick. So gilt dasselbe in Sim und Prod; die
 /// Werkbank holt ab ihrem Cursor nach (§7.2).
 /// </summary>
 public sealed class SpurLeser(string verbindung, string schema)
@@ -32,11 +34,8 @@ public sealed class SpurLeser(string verbindung, string schema)
     /// <summary>Wie lange ein Vorgang ohne neuen Eintrag als „läuft“ gilt — danach ruht er (fertig, oder er wartet auf eine Funktion, Hand, Frist).</summary>
     public static readonly TimeSpan Ruhe = TimeSpan.FromSeconds(5);
 
-    // Einträge des Rahmens, die kein Baustein der Domäne geschrieben hat (Inbox-Marken, Frist gesetzt) — die Werkbank blendet sie ein/aus.
-    private static readonly string[] InternTypen =
-    [
-        typeof(Aggregate.KommandoVerarbeitet).FullName!, typeof(Aggregate.KommandoAbgelehnt).FullName!, typeof(FristGesetzt).FullName!,
-    ];
+    // Einträge des Rahmens, die kein Baustein der Domäne geschrieben hat (Frist gesetzt) — die Werkbank blendet sie ein/aus.
+    private static readonly string[] InternTypen = [typeof(FristGesetzt).FullName!];
 
     private string Schema => schema;
 
@@ -111,8 +110,7 @@ public sealed class SpurLeser(string verbindung, string schema)
 
     /// <summary>
     /// Die jüngsten <paramref name="n"/> Vorgänge. Ein Vorgang ist die Menge einer <c>CorrelationId</c>; seine Wurzel (Typ, Wirker, Akteur) ist sein
-    /// erster Eintrag. Zustand: gescheitert, wenn ein Aggregat darin einen Command ablehnte (Grund = die Ablehnung); sonst läuft er, solange in den
-    /// letzten <see cref="Ruhe"/> etwas geschah, und ruht danach.
+    /// erster Eintrag. Zustand: er läuft, solange in den letzten <see cref="Ruhe"/> etwas geschah, und ruht danach.
     /// </summary>
     public async Task<IReadOnlyList<Vorgang>> VorgaengeAsync(int n, CancellationToken ct)
     {
@@ -121,18 +119,16 @@ public sealed class SpurLeser(string verbindung, string schema)
         cmd.CommandText = $"""
             with g as (
               select {Korrelation} as k, min(seq_id) as erste, max(seq_id) as letzte, count(*)::int as n,
-                     min(timestamp) as beginn, max(timestamp) as zuletzt,
-                     max(case when starts_with(mt_dotnet_type, @a) then data->>'Grund' end) as abgelehnt
+                     min(timestamp) as beginn, max(timestamp) as zuletzt
               from "{Schema}".mt_events
               where {Korrelation} is not null
               group by 1)
-            select g.k, g.erste, g.letzte, g.n, g.beginn, g.zuletzt, g.abgelehnt,
+            select g.k, g.erste, g.letzte, g.n, g.beginn, g.zuletzt,
                    r.type, r.headers->>'{Abstractions.Spur.WirkerHeader}', r.headers->>'akteur', now(), r.mt_dotnet_type
             from g join "{Schema}".mt_events r on r.seq_id = g.erste
             order by g.letzte desc
             limit @n
             """;
-        cmd.Parameters.AddWithValue("a", typeof(Aggregate.KommandoAbgelehnt).FullName + ",");
         cmd.Parameters.AddWithValue("n", Math.Clamp(n, 1, 2000));
         var aus = new List<Vorgang>();
         try
@@ -142,10 +138,9 @@ public sealed class SpurLeser(string verbindung, string schema)
             {
                 string? S(int i) => r.IsDBNull(i) ? null : r.GetString(i);
                 var zuletzt = r.GetFieldValue<DateTimeOffset>(5);
-                var abgelehnt = S(6);
-                var zustand = abgelehnt != null ? "gescheitert" : r.GetFieldValue<DateTimeOffset>(10) - zuletzt < Ruhe ? "laeuft" : "ruht";
+                var zustand = r.GetFieldValue<DateTimeOffset>(9) - zuletzt < Ruhe ? "laeuft" : "ruht";
                 aus.Add(new Vorgang(r.GetString(0), r.GetInt64(1), r.GetInt64(2), r.GetInt32(3), r.GetFieldValue<DateTimeOffset>(4), zuletzt,
-                    zustand, S(7) is { } typ ? KurzName(S(11) ?? "", typ) : null, S(8), S(9), abgelehnt));
+                    zustand, S(6) is { } typ ? KurzName(S(10) ?? "", typ) : null, S(7), S(8)));
             }
         }
         catch (PostgresException e) when (e.SqlState == "42P01") { }

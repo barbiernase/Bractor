@@ -29,18 +29,18 @@ diagnose() { # $1 Ergebnis-Ordner
     $PSQL -d cqrs_vermessung -c "
       with g as (select c.id, c.data->>'ProjectionId' p, (c.data->>'StreamId')::uuid s, (c.data->>'Version')::int v, c.mt_last_modified from es.mt_doc_projectioncheckpoint c)
       select g.id, g.v guard, max(e.version) kopf, g.mt_last_modified from g join es.mt_events e on e.stream_id = g.s
-       and e.type not in ('kommando_abgelehnt','kommando_verarbeitet') group by g.id, g.v, g.mt_last_modified having max(e.version) > g.v order by 1"
+       group by g.id, g.v, g.mt_last_modified having max(e.version) > g.v order by 1"
     echo "### Events dieser Streams: Sequenz, Transaktion, Commit-Zeit"
     $PSQL -d cqrs_vermessung -c "
       with g as (select (c.data->>'StreamId')::uuid s, (c.data->>'Version')::int v from es.mt_doc_projectioncheckpoint c),
-      kaputt as (select distinct g.s from g join es.mt_events e on e.stream_id = g.s and e.type not in ('kommando_abgelehnt','kommando_verarbeitet')
+      kaputt as (select distinct g.s from g join es.mt_events e on e.stream_id = g.s
                  group by g.s, g.v having max(e.version) > g.v)
       select e.stream_id, e.version, e.seq_id, e.type, e.xmin::text xid, pg_xact_commit_timestamp(e.xmin) commit, e.timestamp, e.correlation_id
         from es.mt_events e join kaputt k on k.s = e.stream_id order by e.stream_id, e.version"
     echo "### Nachbarschaft: Events ±40 Sequenzen um die betroffenen, mit Transaktion und Commit-Zeit"
     $PSQL -d cqrs_vermessung -c "
       with g as (select (c.data->>'StreamId')::uuid s, (c.data->>'Version')::int v from es.mt_doc_projectioncheckpoint c),
-      kaputt as (select distinct g.s from g join es.mt_events e on e.stream_id = g.s and e.type not in ('kommando_abgelehnt','kommando_verarbeitet')
+      kaputt as (select distinct g.s from g join es.mt_events e on e.stream_id = g.s
                  group by g.s, g.v having max(e.version) > g.v),
       seqs as (select e.seq_id from es.mt_events e join kaputt k on k.s = e.stream_id)
       select e.seq_id, e.stream_id, e.version, e.type, e.xmin::text xid, pg_xact_commit_timestamp(e.xmin) commit, e.timestamp

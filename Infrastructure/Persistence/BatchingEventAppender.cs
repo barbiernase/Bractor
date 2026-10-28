@@ -87,8 +87,6 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         string? akteur = null,
         IReadOnlyList<Beilage>? beilagen = null)
     {
-        if (events.Count == 0)
-            return Task.CompletedTask;
         // Die Spur des Aufrufers jetzt festhalten — geschrieben wird in der Drain-Schleife (anderer Fluss).
         return AppendTeileAsync(aggregateId, expectedVersion,
             [new AppendTeil(events, correlationId, causationId, akteur, Spur.Aktuell, beilagen)], aggregateType);
@@ -98,7 +96,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
     {
         if (expectedVersion < 0)
             throw new ArgumentException($"ExpectedVersion must be >= 0, was {expectedVersion}.", nameof(expectedVersion));
-        if (teile.All(t => t.Events.Count == 0))
+        if (teile.All(t => t.Events.Count == 0 && (t.Beilagen?.Count ?? 0) == 0))
             return Task.CompletedTask;
 
         var p = new Pending { StreamId = aggregateId, ExpectedVersion = expectedVersion, Teile = teile, AggType = aggregateType };

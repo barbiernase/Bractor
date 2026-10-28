@@ -62,32 +62,33 @@ public class MartenEventStore : IEventStoreRepository
         string? aggregateType = null,
         string? akteur = null,
         IReadOnlyList<Beilage>? beilagen = null)
-        => events.Count == 0 && expectedVersion >= 0
-            ? Task.CompletedTask
-            : AppendTeileAsync(aggregateId, expectedVersion,
-                [new AppendTeil(events, correlationId, causationId, akteur, Spur.Aktuell, beilagen)], aggregateType);
+        => AppendTeileAsync(aggregateId, expectedVersion,
+            [new AppendTeil(events, correlationId, causationId, akteur, Spur.Aktuell, beilagen)], aggregateType);
 
     /// <summary>
     /// Ein Append an einen Stream mit einem oder mehreren Teilen (dem Bündel eines Aggregat-Actors) — eine Transaktion, Metadaten je Event aus
     /// seinem Teil (<see cref="MartenEventBatchWriter.Stage"/>, derselbe Weg wie der Group-Commit), Beilagen aller Teile in derselben Transaktion.
-    /// Version 0 → <c>StartStream</c> (wirft, wenn es den Stream gibt), sonst Append mit Ziel-Version (erwartet + Anzahl Events).
+    /// Version 0 → <c>StartStream</c> (wirft, wenn es den Stream gibt), sonst Append mit Ziel-Version (erwartet + Anzahl Events). Ohne Events, aber
+    /// mit Beilagen (die Quittung eines Noops oder einer Ablehnung) schreibt er nur die Beilagen — gültig, wenn der Stream noch auf
+    /// <paramref name="expectedVersion"/> steht (Kopf-Prüfung der Inbox), sonst <see cref="ConcurrencyException"/>.
     /// </summary>
     public async Task AppendTeileAsync(Guid aggregateId, int expectedVersion, IReadOnlyList<AppendTeil> teile, string? aggregateType)
     {
         // Guard: der Actor prüft bereits gegen seinen State; ohne Actor-Kontext (CommandEnvelope-Default −1) defensiv abfangen.
         if (expectedVersion < 0)
             throw new ArgumentException($"ExpectedVersion must be >= 0, was {expectedVersion}.", nameof(expectedVersion));
-        if (teile.All(t => t.Events.Count == 0))
+        if (teile.All(t => t.Events.Count == 0 && (t.Beilagen?.Count ?? 0) == 0))
             return;
 
         await EventZeit.SicherAsync(_store, default);   // den Zeitstempel setzt die Datenbank-Uhr (G-10)
+        await InboxTabelle.SicherAsync(_store, default);
         await using var session = _store.LightweightSession();
         var item = new BatchAppend(aggregateId, expectedVersion, teile, aggregateType);
-        MartenEventBatchWriter.Stage(session, item);
 
         // Die Beilagen in DERSELBEN Transaktion (docs/03 §3.3): kennt die Inbox eine Quittung schon, scheitert der Commit am Schlüssel und
         //   nichts ist geschrieben.
         var schreiber = new BeilagenSchreiber();
+        MartenEventBatchWriter.Stage(session, item, schreiber);
         foreach (var teil in teile) schreiber.Lege(session, aggregateId, teil.Beilagen);
         schreiber.Abschliessen(session, _store);
 
@@ -102,6 +103,13 @@ public class MartenEventStore : IEventStoreRepository
         catch (EventStreamUnexpectedMaxEventIdException ex)
         {
             _logger.LogWarning("Concurrency conflict for aggregate {AggregateId}. Expected version {ExpectedVersion}, but stream has diverged.",
+                aggregateId, expectedVersion);
+            throw new ConcurrencyException(
+                $"Concurrency conflict for aggregate {aggregateId}. Expected version {expectedVersion}, but stream has diverged.", ex);
+        }
+        catch (Exception ex) when (InboxTabelle.IstKopfKonflikt(ex))
+        {
+            _logger.LogWarning("Concurrency conflict for aggregate {AggregateId}: a receipt without events expected version {ExpectedVersion}.",
                 aggregateId, expectedVersion);
             throw new ConcurrencyException(
                 $"Concurrency conflict for aggregate {aggregateId}. Expected version {expectedVersion}, but stream has diverged.", ex);
@@ -156,8 +164,8 @@ public class MartenEventStore : IEventStoreRepository
             //   auch wenn ein Stored-Event später zu mehreren wird, rückt die Stream-Position um 1.
             foreach (var domainEvent in Anwendung.Upcasting.Aufwerten(@event.Data))
             {
-                // Interne Inbox-/Prozess-Marken: in der Version mitzählen, aber nicht auf den State anwenden
-                // (der Applier kennt sie nicht) — Framework-Naht (Exactly-once-Inbox).
+                // Einträge des Rahmens (Frist gesetzt): in der Version mitzählen, aber nicht auf den State anwenden
+                // (der Applier kennt sie nicht).
                 if (domainEvent is not IRahmenEvent)
                     handler.ApplyEvent(domainEvent);
             }

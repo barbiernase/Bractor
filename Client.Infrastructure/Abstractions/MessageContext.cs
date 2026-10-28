@@ -25,9 +25,9 @@ public record MessageContext
     public int AggregateVersion { get; init; }
 
     /// <summary>
-    /// Der Stream-Head nach dem Commit dieses Events — inklusive der Noop- und Ablehnungs-Marken
-    /// im Stream. Das VersioningModule zieht diese (wenn gesetzt) der <see cref="AggregateVersion"/>
-    /// vor, damit die nächste <c>ExpectedVersion</c> die Marken mitzählt und nicht am OCC scheitert. 0 = ungesetzt → Fallback auf AggregateVersion.
+    /// Der Kopf des Streams nach dem Commit dieses Events (dieselbe Version wie <see cref="AggregateVersion"/>, am Ende des Commits). Das
+    /// VersioningModule zieht ihn (wenn gesetzt) vor: schrieb der Commit nach diesem Event weitere, die der Client nicht hört, scheitert die
+    /// nächste <c>ExpectedVersion</c> sonst an der OCC. 0 = ungesetzt → Fallback auf AggregateVersion.
     /// </summary>
     public int StreamHeadVersion { get; init; }
 

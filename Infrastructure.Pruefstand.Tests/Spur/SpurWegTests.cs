@@ -25,7 +25,7 @@ public class SpurWegTests
     [Fact]
     public void Aggregat_Event_laeuft_ueber_Absender_Command_und_Decider()
     {
-        var w = SpurWeg.Aus("ImagePairErstellt", "decide:ImagePair/NimmBildAuf", "funktion:Bildeingang", "a:1", false, Nachschlagen);
+        var w = SpurWeg.Aus("ImagePairErstellt", "decide:ImagePair/NimmBildAuf", "funktion:Bildeingang", "a:1", Nachschlagen);
 
         w.Karten.Should().Equal("funktion:Bildeingang", "rec:NimmBildAuf", "decide:ImagePair/NimmBildAuf", "rec:ImagePairErstellt");
         Paare(w).Should().Equal(
@@ -38,22 +38,13 @@ public class SpurWegTests
     [Fact]
     public void Ausgabe_einer_Funktion_haengt_an_ihrem_Eingang()
     {
-        var w = SpurWeg.Aus("BildAufbereitet", "funktion:IBildaufbereitung", null, "q:1", false, Nachschlagen);
+        var w = SpurWeg.Aus("BildAufbereitet", "funktion:IBildaufbereitung", null, "q:1", Nachschlagen);
 
         Paare(w).Should().Equal("rec:DateiErkannt → funktion:IBildaufbereitung", "funktion:IBildaufbereitung → rec:BildAufbereitet");
     }
 
     [Fact]
-    public void Abgelehnter_Command_von_aussen_endet_am_Decider_ohne_Event_Karte()
-    {
-        var w = SpurWeg.Aus("KommandoAbgelehnt", "decide:Datensatz/ErstelleDatensatz", "akteur:KIOperator", null, true, Nachschlagen);
-
-        w.Karten.Should().Equal("akteur:KIOperator", "rec:ErstelleDatensatz", "decide:Datensatz/ErstelleDatensatz");
-        Paare(w).Should().HaveCount(2, "ohne Ursache gibt es keine Kante davor");
-    }
-
-    [Fact]
     public void Quelle_ist_Wurzel()
-        => SpurWeg.Aus("DateiErkannt", "quelle:DateiErkannt", null, null, false, Nachschlagen).Karten
+        => SpurWeg.Aus("DateiErkannt", "quelle:DateiErkannt", null, null, Nachschlagen).Karten
             .Should().Equal("quelle:DateiErkannt", "rec:DateiErkannt");
 }

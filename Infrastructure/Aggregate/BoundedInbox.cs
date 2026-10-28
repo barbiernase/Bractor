@@ -4,18 +4,9 @@ using System.Collections.Generic;
 namespace Infrastructure.Aggregate;
 
 /// <summary>
-/// Die Framework-Inbox (verarbeitete CommandIds des idempotenten Reaktions-/Prozess-Pfads) mit HARTER
-/// Obergrenze (Audit-Fix #4/H3). Bisher wuchs die Dedup-Menge — und ihre Kopie in JEDEM Snapshot
-/// (<see cref="Abstractions.Snapshot{T}.ProcessedCommandIds"/>) — MONOTON: heiße, langlebige Reaktions-/
-/// Prozess-Ziele (z.B. Konto) sammelten O(n) CommandIds für immer → Speicher + Snapshot-Größe +
-/// Serialisierungskosten stiegen linear ohne Grenze.
-///
-/// Diese Struktur behält nur die letzten <c>cap</c> Ids (FIFO-Verdrängung in Einfüge-/Stream-Reihenfolge).
-/// Das ist praktisch sicher, weil das Re-Delivery-Fenster KURZ ist: ein Prozess/eine Reaktion re-sendet
-/// einen Vorgang nur, BIS er die Marke sieht — danach faltet er die Transition als „aufgelöst" und feuert
-/// sie nie wieder; der Poll-Backstop re-liefert innerhalb ~30s. Eine Id, die älter als <c>cap</c> distinkte
-/// Commands zurückliegt, wird also nicht mehr zugestellt. Der Tradeoff ist bewusst: airtight-Dedup bräuchte
-/// unbegrenzten Speicher (siehe Audit-Diskussion — Weg A statt eines separaten Inbox-Stores/Weg C).
+/// Der Cache der Inbox im Aggregat-Actor (docs/04 §4.6): die zuletzt entschiedenen CommandIds mit HARTER Obergrenze (FIFO-Verdrängung in
+/// Einfüge-Reihenfolge). Er erspart der häufigen Wiederholung kurz nach dem ersten Mal den Weg in die Datenbank; die Wahrheit ist die
+/// Inbox-Tabelle — was der Cache vergessen hat, fängt ihr eindeutiger Schlüssel.
 ///
 /// Reine store-freie Logik → in-memory (Prüfstand) beweisbar.
 /// </summary>
@@ -33,7 +24,7 @@ public sealed class BoundedInbox
     }
 
     /// <summary>
-    /// Baut die Inbox aus einer GEORDNETEN Marken-Folge (ältestes zuerst — Snapshot-Seed dann Tail) und
+    /// Baut die Inbox aus einer GEORDNETEN Folge von CommandIds (ältestes zuerst) und
     /// behält nur die letzten <paramref name="cap"/>. Reihenfolge-erhaltend, damit der Snapshot-Roundtrip
     /// (<see cref="ToArray"/> → Guid[] → hier zurück) dieselbe Verdrängungs-Ordnung liefert.
     /// </summary>

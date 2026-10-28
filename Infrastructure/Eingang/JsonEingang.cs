@@ -183,15 +183,15 @@ public static class JsonEingang
     }
 
     /// <summary>
-    /// Die fachlichen Events, die ein gewirkter Command geschrieben hat: der Bereich <c>ErsteVersion … NewVersion</c> seines Streams aus dem Log,
-    /// ohne die Marken des Frameworks (Noop, Ablehnung). Leer, wenn er nichts geschrieben hat (Wiederholung, Ablehnung, Fehler).
+    /// Die Events, die ein gewirkter Command geschrieben hat: der Bereich <c>ErsteVersion … NewVersion</c> seines Streams aus dem Log. Leer, wenn er
+    /// nichts geschrieben hat (Noop, Wiederholung, Ablehnung, Fehler).
     /// </summary>
     private static async Task<IEnumerable<object>> GeschriebenAsync(IServiceProvider sp, Guid stream, CommandResult ergebnis, CancellationToken ct)
     {
         if (!ergebnis.Success || ergebnis.ErsteVersion <= 0) return [];
         var gelesen = await sp.GetRequiredService<IEventStoreRepository>().ReadStreamAsync(stream, ergebnis.ErsteVersion, ct);
         return gelesen
-            .Where(e => e.AggregateVersion <= ergebnis.NewVersion && e.Payload is not (Infrastructure.Aggregate.KommandoVerarbeitet or Infrastructure.Aggregate.KommandoAbgelehnt))
+            .Where(e => e.AggregateVersion <= ergebnis.NewVersion)
             .Select(e => Darstellung(e.Payload))
             .ToList();
     }

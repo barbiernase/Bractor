@@ -33,7 +33,7 @@ public static class EinblickEndpunkte
             return Results.Json(new { bis = eintraege.Count > 0 ? eintraege[^1].Seq : ab ?? 0, eintraege }, Json);
         });
 
-        // Die jüngsten Vorgänge mit Zustand (läuft · wartet · fertig · gescheitert) und Wurzel (Quelle/Akteur).
+        // Die jüngsten Vorgänge mit Zustand (läuft · ruht) und Wurzel (Quelle/Akteur).
         g.MapGet("/vorgaenge", async (SpurLeser leser, int? n, CancellationToken ct)
             => Results.Json(new { vorgaenge = await leser.VorgaengeAsync(n ?? 200, ct) }, Json));
 

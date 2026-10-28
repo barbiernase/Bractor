@@ -20,9 +20,8 @@ public abstract record CommandModus
     public sealed record Client(int ExpectedVersion) : CommandModus;
 
     /// <summary>
-    /// Interner Emitter (Reaktion / Prozess / Pipeline): behauptet KEINE Empfänger-Version. Idempotenz
-    /// sichert die deterministische <see cref="CommandEnvelope.CommandId"/> + die Framework-Inbox
-    /// (<c>KommandoVerarbeitet</c>) am Empfänger — nicht OCC.
+    /// Interner Emitter (Funktion, Uhr) oder ein Client ohne Versionsprüfung: behauptet KEINE Empfänger-Version. Idempotenz
+    /// sichert die deterministische <see cref="CommandEnvelope.CommandId"/> + die Inbox-Tabelle am Empfänger — nicht OCC.
     /// </summary>
     public sealed record Emittiert : CommandModus;
 }

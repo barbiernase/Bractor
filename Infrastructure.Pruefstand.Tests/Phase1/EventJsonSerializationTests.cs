@@ -78,13 +78,6 @@ public class EventJsonSerializationTests
         back.Should().BeEquivalentTo(e);                       // Meta + Liste + verschachtelte Records tief
     }
 
-    [Fact]
-    public void RoundTrip_prozessinterne_Marke()
-    {
-        var e = new KommandoVerarbeitet(Guid.NewGuid());
-        RoundTrip(e).Should().Be(e);
-    }
-
     /// <summary>Serialisiert über den Dispatch, liest über den Diskriminator zurück — der Weg,
     /// den der künftige COPY-Writer/-Reader nimmt.</summary>
     private static IEvent RoundTrip(IEvent e)

@@ -53,9 +53,6 @@ public static class JsonContextEmitter
                 typeof(ICommandJsonConverter),
         /*ID-KONVERTER*/
             })]
-        // ── Framework: Aggregat-Inbox (IEvent → persistiert) ──
-        [JsonSerializable(typeof(KommandoVerarbeitet))]
-        [JsonSerializable(typeof(KommandoAbgelehnt))]
         // ── Framework: festgehaltene Ausgabe der Funktionen (Plan Pub/Sub-Neustrukturierung Phase 3) ──
         [JsonSerializable(typeof(Infrastructure.Funktionen.BefehlFestgehalten))]
         [JsonSerializable(typeof(Infrastructure.Funktionen.AusgabeFestgehalten))]
@@ -123,10 +120,8 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(TraegerAbgemeldet))]
         [JsonSerializable(typeof(HalteQuelle))]
         [JsonSerializable(typeof(QuelleGehalten))]
-        // ── Framework: Ergebnis-/Inbox-Events, Festhalten, Frist (reisen im Wire) ──
+        // ── Framework: Ergebnis-Events, Festhalten, Frist (reisen im Wire) ──
         [JsonSerializable(typeof(CommandFailed))]
-        [JsonSerializable(typeof(KommandoVerarbeitet))]
-        [JsonSerializable(typeof(KommandoAbgelehnt))]
         [JsonSerializable(typeof(BefehlFestgehalten))]
         [JsonSerializable(typeof(AusgabeFestgehalten))]
         [JsonSerializable(typeof(FristGesetzt))]
