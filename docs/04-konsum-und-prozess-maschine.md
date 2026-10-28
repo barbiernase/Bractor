@@ -232,9 +232,18 @@ ein Absturz dazwischen lässt nur eine verwaiste Datei, die gleich wieder entfer
 Aktivierung ab der gesicherten Position erneut: `Auf` läuft auf dem gesicherten Zustand auch für Eingänge, deren Ausgabe schon festgehalten ist
 (gesendet wird das Festgehaltene, Hinweise nicht noch einmal) — jeder Log-Eingang wirkt so **genau einmal** auf den gesicherten Zustand; in
 derselben Aktivierung läuft `Auf` je Eingang genau einmal, auch beim Wiederholen (`EingangsRechnung`). Verliert eine Sicherung gegen eine zweite
-Aktivierung derselben Adresse, verwirft der Actor Zustand und Lauf und lädt die des Gewinners. Eine Funktion mit Zustand ist nie gleichbleibend (sie
+Aktivierung derselben Adresse, beginnt die Aktivierung über die Supervision neu (Freigabe, Bau, Laden des Gewinner-Stands, Lebenszyklus). Eine Funktion mit Zustand ist nie gleichbleibend (sie
 hält fest, R12); Zustand in Feldern oder Eigenschaften verbietet CQRS105 (R19) — er ginge beim Umzug still verloren. Rechnet eine Funktion draußen,
 lebt ein Zustand im Worker (A8, gebunden an die Adresse); ihn zu sichern, ist Sache des Workers.
+
+**Lebenszyklus** (`ILebenszyklus`, optional, E10). Muss eine Funktion beim Aktivieren etwas laden — ein Netz auf die GPU, eine Verbindung —,
+implementiert sie `ILebenszyklus` und überschreibt, was sie braucht: `BeimAktivierenAsync` läuft je Aktivierung nach dem Bau und dem Laden des Zustands,
+vor dem ersten `Auf` (bis dahin warten Eingänge und Hinweise in der Mailbox); `VorDemSichernAsync` läuft vor jeder Sicherung im Ruhepunkt und beim
+Stoppen (Gewichte von der GPU nach `Zustand.Wert`); das Ende ist `IAsyncDisposable` der Funktion, danach werden ihre Dienste frei. Wirft
+`BeimAktivierenAsync`, ist die Aktivierung gescheitert, nicht ein Eingang: sie beginnt neu, kein Stream wird geparkt. Die geladene Ressource steht in
+einem `readonly`-Feld; was gesichert werden muss, gehört in `IZustand<T>`. Beispiel ist der Schätzer der Prüfdomäne, der auf einem Arbeitsmodell der
+Aktivierung rechnet. Eine Funktion mit Lebenszyklus ist nie gleichbleibend; CQRS107 erlaubt ihn nur an Funktions-Klassen und `VorDemSichernAsync` nur
+mit Zustand. Draußen hat die Python-Basis die Gegenstücke `beim_start` (einmal je Worker, vor dem Anbieten) und `beim_ende`.
 
 **Hinweis-Netz** (`HinweisNetz.cs`, Plan §2.9, E7, E8). Hinweise, die nicht zur Fachdomäne gehören (Merkmale, Messwerte, Ablehnungen), gehen im
 Speicher von Baustein zu Funktions-Actor — nie in den Log, kein Broker, keine Abos. Die Routing-Tabelle ist der generierte Hinweisplan (Hinweis-Typ →

@@ -228,7 +228,9 @@ Neuverbinden, wirkt einmal (VT `ClientVerhaltenTests.Die_Antwort_eines_Traegers_
 Ist der Eingang ein **Hinweis** aus dem Hinweis-Netz (`ArbeitsAuftrag.hinweis = true`, Plan §2.9), wird nichts festgehalten: die Antwort kommt als
 Ganzes (auch ein Strom — das SDK sammelt ihn), ihre Commands und Hinweise gehen mit der Meldung an den Funktions-Actor, der sie sendet; die
 CommandIds leitet er aus der Kennung des Hinweises ab. Höchstens einmal: antwortet niemand in 30 s, verfällt der Hinweis. Die generierte
-Python-Basis kennt den Eingang als Hinweis (`Eingang(…, hinweis=True)`); den Zustand eines Workers sichert das Framework nicht (A8).
+Python-Basis kennt den Eingang als Hinweis (`Eingang(…, hinweis=True)`); den Zustand eines Workers sichert das Framework nicht (A8). Was ein Worker
+laden oder schließen muss, steht in den optionalen Haken der Basis: `beim_start` (einmal, bevor er die Funktion anbietet) und `beim_ende` (beim
+Herunterfahren) — das Gegenstück zu `ILebenszyklus` im Host.
 
 ### 5.4 Zustellung an Clients
 

@@ -51,7 +51,8 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
   `FunktionsActor` je Funktion und Adresse — Partition, oder eine mit `[EineAdresse]` —, Ausgabe festgehalten oder gleichbleibend, nie replayt).
   Beide: Signal schnell + Poll 30 s.
 - **Funktion als Actor** (Plan §2.9, Phase 4b): Umsetzung und Dienste je Aktivierung (DI-Bereich, geschlossen beim Stoppen); gekapselter Zustand
-  über `IZustand<T>` im Konstruktor (gesichert mit der Position in einer Transaktion, ein `Auf` zugleich, CQRS105); **Hinweis-Netz**: Hinweise
+  über `IZustand<T>` im Konstruktor (gesichert mit der Position in einer Transaktion, ein `Auf` zugleich, CQRS105); optionaler Lebenszyklus
+  `ILebenszyklus` (`BeimAktivierenAsync` nach dem Laden, `VorDemSichernAsync` vor jeder Sicherung, CQRS107); **Hinweis-Netz**: Hinweise
   (`ITransientEvent`) aus Funktionen, Aggregaten und Clients gehen über die generierte Tabelle direkt per `Bote.Melde` an die hörenden Funktionen,
   ohne Log und Broker, höchstens einmal; Commands daraus mit Ids aus der Hinweis-Kennung (CQRS106: gehörter Hinweis braucht einen Erzeuger).
 - **Abläufe** sind ein Vorgangs-Aggregat (Join, Zählung, Kompensation, Frist im Decide) plus Funktionen als Kanten; die Zugehörigkeit ist ein

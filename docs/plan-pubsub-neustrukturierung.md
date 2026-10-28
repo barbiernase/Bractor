@@ -34,6 +34,7 @@ Genehmigungen, Integrationen …), und jeder Store-Typ muss hinter derselben Nah
 | E6 | Darf eine Funktion Zustand haben? | **ja, gekapselt und durabel**, kein Domänen-Zustand: ein neuronales Netz, das weiterlernt, ein Cache, eine Datenbank-Verbindung. Die Funktion ist ein Actor; Architektur nach dem Vorbild des Aggregat-Actors (ein Schreiber, Aktivierung, Passivierung, Snapshot, Rehydration) — **ohne neue Event-Typen** und ohne Faltung aus dem Log. Zustand ist ein Interface im Konstruktor (`IZustand<T>`), das der Generator erkennt und injiziert; Ressourcen (Dienste) leben in der Aktivierung. |
 | E7 | Nachrichten zwischen Funktionen ohne Log | **ja**: Nachrichten, die nicht zur Fachdomäne gehören, gehen von Funktions-Actor zu Funktions-Actor **im Speicher**, nie in den Log (Inv. 6). Typ ist der vorhandene **Hinweis** (`ITransientEvent`) — **kein neues Interface**. Eine Funktion muss kein Konsument des Logs sein. |
 | E8 | Wie kommen die Nachrichten an? | **hart verdrahtet mit den Mitteln des Actor-Frameworks**: eine zur Build-Zeit generierte Tabelle Hinweis-Typ → Actor-Adressen, gesendet direkt über den `Bote`. Kein Broker, keine Abos, kein Topic-Actor, kein Pub/Sub von Proto.Cluster. |
+| E10 | Lebenszyklus einer Funktion (Tobi, 2026-10-28) | **optional, als Teil des Interfaces**: `ILebenszyklus` mit vorbelegten `BeimAktivierenAsync` (nach Bau und Laden des Zustands, vor dem ersten `Auf` — ein Netz laden) und `VorDemSichernAsync` (vor jeder Sicherung — Gewichte zurückholen); das Ende bleibt `IAsyncDisposable`. Nur an Funktions-Klassen im Host; draußen `beim_start`/`beim_ende` im Python-SDK. |
 | E9 | C# und Python | **eine Adresse je Funktion**, gleich für beide; hinter der Adresse rechnet die Umsetzung im Host (C#) oder die gRPC-Sitzung eines Clients, der die Funktion trägt (Python) — dieselbe Initialisierung wie heute (Handshake, `FunktionenAnbieten`, `ArbeitsAuftrag`/`ArbeitsErgebnis`). Funktionen geben **Commands und Hinweise** aus; Commands gehen immer in den Aggregat-Mechanismus (`CommandEmitter`, Inbox, Log). |
 
 **Annahmen (sicherer Default, gelten, solange Tobi nicht widerspricht):**
@@ -298,6 +299,11 @@ A5 und gibt beim Stoppen Zustand und Ressourcen frei (`IAsyncDisposable` der Ums
 Gesichert wird über einen generierten Serializer (STJ-Kontext, ohne Reflection) in eine Ablage der Umgebung; großer Zustand (Netzgewichte) liegt
 als Blob in einer Ablage (Datei, Objektspeicher), die Position verweist darauf. Eine Funktion mit Zustand ist nie gleichbleibend (R12) — sie hält
 ihre Ausgabe fest. Zustand in Feldern ohne `IZustand<T>` ist verboten (Analyzer): er ginge beim Umzug still verloren.
+
+**Lebenszyklus (E10).** Optional implementiert eine Funktions-Klasse `ILebenszyklus`: `BeimAktivierenAsync` läuft je Aktivierung nach dem Bau und dem
+Laden des Zustands, vor dem ersten `Auf`; `VorDemSichernAsync` vor jeder Sicherung im Ruhepunkt; das Ende ist `IAsyncDisposable` der Funktion und ihrer
+Dienste. Scheitert das Aktivieren, beginnt die Aktivierung neu (kein Stream wird geparkt); verliert eine Sicherung gegen eine zweite Aktivierung,
+beginnt sie ebenfalls neu. Eine geladene Ressource steht in einem `readonly`-Feld, Zustand nur in `IZustand<T>` (CQRS107, R19).
 
 **Hinweis-Netz.** Eine Funktion darf Hinweise ausgeben und hören (`Auf(SomeHinweis h)`). Der Generator kennt aus den Signaturen Erzeuger und Hörer
 jedes Hinweis-Typs und erzeugt eine **feste Routing-Tabelle** Hinweis-Typ → Funktions-Adressen (heute schon als `Hinweisplan` vorhanden, ohne

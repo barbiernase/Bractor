@@ -89,6 +89,15 @@ Prüfdomäne), Ausgaben der Antwort draußen auf einen Hinweis, Bindung an einen
 heiße Pfad bestehender Funktionen ist unverändert (die Umsetzung entsteht je Aktivierung statt je Knoten, die Dienste je Aktivierung; je Eingang
 kommt nichts hinzu), die Bindung je Adresse wirkt bei einem Slot je Partition nicht (docs/13 PF-35).
 
+**Stand 2026-10-28 (Phase 4b Nachtrag E10 — Lebenszyklus einer Funktion, `3080b2c`):** Prüfstand **507 grün + 1 übersprungen** (G-5; neu
+`LebenszyklusAnalyzerTests` 4, Lebenszyklus in `FunktionsAktivierungTests` 2, nie gleichbleibend in `FunktionsBausteinGeneratorTests` 1), Prüfdomäne
+**54/54** (neu `Verliert_eine_Sicherung_beginnt_die_Aktivierung_neu…`; der Test „zwei Aktivierungen“ läuft danach mit einem Knoten weiter), Integration
+Abläufe mit Python-Worker 5/5, Verhaltens-Netz **13 grün + 3 übersprungen**, Python SDK 36/36 (neu: `beim_start`/`beim_ende`), Worker 21/21;
+`codegen --check`, `--check`, `--sonde` (247 Soll-Fakten), `--grammatik` (mit GR-FUNKTION-LEBENSZYKLUS), `./pruefe-checkout.sh` grün. Gegenproben rot
+gesehen: Lebenszyklus nicht nach dem Laden gerufen (Umzug), `VorDemSichernAsync` nicht vor der Sicherung (Absturz, Umzug, Prüfstand), kein Neubeginn
+nach verlorenem Konflikt (der neue Test; der Test mit zwei Knoten erzwingt den Konflikt nicht und blieb unter dieser Sabotage grün). Ein Lauf war rot an
+einem Fehler im Actor — die Sicherung lief als `async`-Lambda an `Func<…, Task>` und verlor ihre neue Version; behoben.
+
 Statisch gezählt:
 
 | Projekt | `[Fact]` | `[Theory]` | Dateien |
@@ -152,7 +161,7 @@ den Läufen kommt von den expandierten `[Theory]`-Fällen.
 | `UhrE2ETests` | 3 | fällige Frist mit der Id aus ihrem Event, vor der Fälligkeit erledigt, doppelt gefeuert wirkt einmal |
 | `QuellenE2ETests` | 2 | Quell-Nachricht vom Client genau einmal und über eine Funktion weiter — dreimal je unter 5 s bei 30 s Takt (FB-3: Commitmeldung der Quelle); ein Stream je Schlüssel |
 | `Garantien/FunktionsGarantieTests` | 4 | Abbruch nach dem Festhalten vor den Commands, Abbruch nach den Commands vor der Position, zwei Aktivierungen, zwei Worker |
-| `Garantien/FunktionsZustandGarantieTests` | 8 | am allgemeinen Fall Messung (Plan Phase 4b): Hinweis-Kette bis zum Command ohne Log-Eintrag des Hinweises; Umzug einer Aktivierung (der Zustand kommt mit); Absturz zwischen Sicherung (Datei) und Position — jeder Log-Eingang wirkt genau einmal auf den gesicherten Zustand; zwei Aktivierungen derselben Adresse; zwei Sicherungen mit derselben Version (eine gewinnt ganz); Ressource beim Stoppen geschlossen; Commands aus einem doppelten Hinweis wirken einmal; eine Funktion draußen hört einen Hinweis über die Sitzung der Leitung |
+| `Garantien/FunktionsZustandGarantieTests` | 9 | am allgemeinen Fall Messung (Plan Phase 4b; der Schätzer rechnet mit Lebenszyklus auf einem Arbeitsmodell): verliert eine Sicherung, beginnt die Aktivierung neu mit dem Stand des Gewinners; Hinweis-Kette bis zum Command ohne Log-Eintrag des Hinweises; Umzug einer Aktivierung (der Zustand kommt mit); Absturz zwischen Sicherung (Datei) und Position — jeder Log-Eingang wirkt genau einmal auf den gesicherten Zustand; zwei Aktivierungen derselben Adresse; zwei Sicherungen mit derselben Version (eine gewinnt ganz); Ressource beim Stoppen geschlossen; Commands aus einem doppelten Hinweis wirken einmal; eine Funktion draußen hört einen Hinweis über die Sitzung der Leitung |
 | `Garantien/AblaufGarantieTests` | 2 | die Funktion `Nachschub` wirkt genau einmal über Signal und Takt; Neustart des Hosts mitten im Auftrag führt ihn zu Ende |
 
 **Verhaltens-Netz (`Verhalten.Tests`):** `BeispielAblaufTests` (3), `PruefdomaeneAblaufTests` (4), `TrainingsWaechterTests` (1),
