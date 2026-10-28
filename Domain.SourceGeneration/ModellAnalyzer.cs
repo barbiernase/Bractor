@@ -68,7 +68,7 @@ public sealed class ModellAnalyzer : DiagnosticAnalyzer
         {
             INamedTypeSymbol? G(string n) => c.GetTypeByMetadataName("Abstractions." + n);
             IEvent = G("IEvent"); ITransient = G("ITransientEvent"); ICommand = G("ICommand"); IState = G("IState");
-            IDecider = G("IDecider`1"); IApplier = G("IApplier`1"); ISubscriber = G("ISubscriber");
+            IDecider = G("IDecider`1"); IApplier = G("IApplier`1"); ISubscriber = G("IProjektion");
             ICommandZiel = c.GetTypeByMetadataName(Abstractions.Idvertrag.CommandMetadatenName);
         }
         public bool Ist(ITypeSymbol t, INamedTypeSymbol? i) => i != null && (SymbolEqualityComparer.Default.Equals(t, i) || t.AllInterfaces.Contains(i, SymbolEqualityComparer.Default));

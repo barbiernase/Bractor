@@ -10,8 +10,8 @@ using Microsoft.CodeAnalysis.Operations;
 namespace Projections.SourceGeneration;
 
 /// <summary>
-/// <b>Ein Store schreibt nur über seinen Puffer.</b> Ein Co-Commit-Store (Klasse mit Store-Fähigkeiten, deren Basis die
-/// Marke trägt — <c>ICoCommitTracker</c>) puffert Effekte; die Basis committet sie mit der Marke in EINER Transaktion
+/// <b>Ein Store schreibt nur über seinen Puffer.</b> Ein Store der Klasse 1 (Klasse mit Store-Fähigkeiten, deren Basis den
+/// Fortschritt trägt — <c>IAtomaresZiel</c>, Klasse 1) puffert Wirkungen; die Basis schreibt sie mit dem Fortschritt in EINER Transaktion
 /// und prüft je Dokument, wem es gehört. Der übliche Marten-Weg <c>LightweightSession() … SaveChangesAsync()</c> ginge
 /// still daran vorbei: kein gemeinsames Commit (Absturz ⇒ doppelter Effekt beim Replay), keine Schreib-Regel (Lost
 /// Update). Deshalb:
@@ -58,7 +58,7 @@ public sealed class StoreZugriffAnalyzer : DiagnosticAnalyzer
         context.RegisterCompilationStartAction(start =>
         {
             var c = start.Compilation;
-            var iCoCommit = c.GetTypeByMetadataName("Abstractions.ICoCommitTracker");
+            var iCoCommit = c.GetTypeByMetadataName("Abstractions.IAtomaresZiel");
             var iWrite = c.GetTypeByMetadataName("Abstractions.IWriteStore");
             var iRead = c.GetTypeByMetadataName("Abstractions.IReadStore");
             var iStore = c.GetTypeByMetadataName("Abstractions.IStore");
@@ -169,7 +169,7 @@ public sealed class StoreZugriffAnalyzer : DiagnosticAnalyzer
             (SymbolEqualityComparer.Default.Equals(t.OriginalDefinition, i)
              || t.AllInterfaces.Any(x => SymbolEqualityComparer.Default.Equals(x.OriginalDefinition, i)));
 
-        /// <summary>Co-Commit-Store: eine BASIS trägt die Marke (ICoCommitTracker), der Typ selbst implementiert Fähigkeiten.
+        /// <summary>Store der Klasse 1: eine BASIS trägt den Fortschritt (IAtomaresZiel), der Typ selbst implementiert Fähigkeiten.
         /// Die Basis selbst hat keine Fähigkeiten und fällt heraus — sie ist der eine Ort, der schreiben muss.</summary>
         public StoreInfo? Info(INamedTypeSymbol t)
         {

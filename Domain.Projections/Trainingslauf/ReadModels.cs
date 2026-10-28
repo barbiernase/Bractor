@@ -1,17 +1,18 @@
 using Abstractions;
 using Domain.Trainingslauf;
+using TrainingslaufAgg = Domain.Trainingslauf.Trainingslauf;
 
 namespace Domain.Projections.Trainingslauf;
 
 /// <summary>
 /// Materialisierter Zustand eines Trainingslaufs. Ein Doc pro Lauf; die
 /// <see cref="MetrikHistorie"/> wächst je Epoche (Live-Kurve) — append-artig, deshalb
-/// braucht die Projektion einen Co-Commit-Store (exactly-once).
+/// braucht die Projektion einen Store der Klasse 1 oder 2 (genau einmal).
 /// </summary>
-public record TrainingslaufReadModel : IReadModel
+public partial record TrainingslaufReadModel : IReadModel
 {
-    public Guid Id { get; init; }
-    public Guid DatensatzId { get; init; }
+    public Id<TrainingslaufAgg> Id { get; init; }
+    public Id<Domain.Datensatz.Datensatz> DatensatzId { get; init; }
     public int DatensatzVersion { get; init; }
 
     public TrainingsStatus Status { get; init; }

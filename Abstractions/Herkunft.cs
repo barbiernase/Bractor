@@ -31,6 +31,10 @@ public sealed class Herkunft
     public DateTimeOffset Zeit { get; }
     public string? Akteur { get; }
 
+    /// <summary>Der Stream des Eingangs als Id des Aggregats <typeparamref name="T"/> — für ein Event, das <typeparamref name="T"/> entschieden hat
+    /// (in einer Projektion: das Read-Model dieses Aggregats).</summary>
+    public Id<T> Id<T>() where T : IState => new(Stream);
+
     /// <summary>
     /// Eine neue Id, abgeleitet aus Baustein, Eingang, Ziel-Typ und <paramref name="zweck"/> — derselbe Eingang ergibt beim Wiederholen dieselbe Id
     /// (statt <c>Guid.NewGuid()</c>, R13). Mehrere neue Ids desselben Typs aus einem Eingang unterscheidet der Zweck (etwa die Zeilennummer).

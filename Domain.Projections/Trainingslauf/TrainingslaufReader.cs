@@ -8,29 +8,26 @@ namespace Domain.Projections.Trainingslauf;
 /// Trainings-Queries über Lese-Fähigkeiten des <see cref="ITrainingslaufStore"/> — derselbe Kanal für Blazor
 /// (Live-Dashboard) und Python.
 /// </summary>
-[ProjectionReader(TrackDeps = true)]
-public partial class TrainingslaufReader : IReader<TrainingslaufProjektion>
+public sealed class TrainingslaufReader : IReader
 {
-    public async Task<OneOf<TrainingslaufAntwort, TrainingslaufNichtGefundenAntwort>> Handle(
-        HoleTrainingslauf query, IMessageEnvelope envelope, ReadContext ctx, IFindTrainingslauf findTrainingslauf)
+    public async Task<OneOf<TrainingslaufAntwort, TrainingslaufNichtGefundenAntwort>> Frage(
+        HoleTrainingslauf query, IFindTrainingslauf findTrainingslauf)
     {
-        var model = await findTrainingslauf.FindByIdAsync(query.TrainingslaufId.Wert);
+        var model = await findTrainingslauf.FindByIdAsync(query.TrainingslaufId);
 
         if (model is null)
             return new TrainingslaufNichtGefundenAntwort(query.TrainingslaufId);
 
-        ctx.Track(query.TrainingslaufId.ToString());
         return ToAntwort(model);
     }
 
-    public async Task<TrainingslaufListe> Handle(
-        HoleTrainingslaeufe query, IMessageEnvelope envelope, ReadContext ctx, IGetAlleTrainingslaeufe getAlleTrainingslaeufe)
+    public async Task<TrainingslaufListe> Frage(
+        HoleTrainingslaeufe query, IGetAlleTrainingslaeufe getAlleTrainingslaeufe)
     {
         var modelle = await getAlleTrainingslaeufe.GetAlleAsync();
 
         var items = modelle.Select(m =>
         {
-            ctx.Track(m.Id.ToString());
             return ToAntwort(m);
         }).ToList();
 
@@ -43,8 +40,8 @@ public partial class TrainingslaufReader : IReader<TrainingslaufProjektion>
     private static readonly Endmetriken LeerEnd = new(0, 0);
 
     private static TrainingslaufAntwort ToAntwort(TrainingslaufReadModel m) => new(
-        Id: new Id<Domain.Trainingslauf.Trainingslauf>(m.Id),
-        DatensatzId: new Id<Domain.Datensatz.Datensatz>(m.DatensatzId),
+        Id: m.Id,
+        DatensatzId: m.DatensatzId,
         DatensatzVersion: m.DatensatzVersion,
         Status: m.Status,
         AktuelleEpoche: m.AktuelleEpoche,

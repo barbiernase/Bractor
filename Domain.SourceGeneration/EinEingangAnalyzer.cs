@@ -38,13 +38,11 @@ public sealed class EinEingangAnalyzer : DiagnosticAnalyzer
                 ctx.ReportDiagnostic(Diagnostic.Create(Doppelt, ort, t.Name, eingang.Name, Abstractions.Funktionsvertrag.Auf));
             return;
         }
-        if (t.TypeKind != TypeKind.Class || !(Funktionsform.Hat(t, "Abstractions.ISubscriber") || t.AllInterfaces.Any(i => Funktionsform.Name(i) == "Abstractions.IReader`1")))
-            return;
-        foreach (var g in t.GetMembers("Handle").OfType<IMethodSymbol>()
-                     .Where(m => m.MethodKind == MethodKind.Ordinary && m.Parameters.Length > 0)
-                     .GroupBy(m => Funktionsform.Name(m.Parameters[0].Type))
-                     .Where(g => g.Count() > 1))
-            foreach (var m in g.Skip(1))
-                ctx.ReportDiagnostic(Diagnostic.Create(Doppelt, m.Locations.FirstOrDefault() ?? Location.None, t.Name, m.Parameters[0].Type.Name, "Handle"));
+        if (Projektionsform.IstProjektion(t))
+            foreach (var (eingang, ort) in Projektionsform.LiesProjektion(t).Doppelt)
+                ctx.ReportDiagnostic(Diagnostic.Create(Doppelt, ort, t.Name, eingang.Name, Abstractions.Projektionsvertrag.Auf));
+        else if (Projektionsform.IstReader(t))
+            foreach (var (query, ort) in Projektionsform.LiesReader(t).Doppelt)
+                ctx.ReportDiagnostic(Diagnostic.Create(Doppelt, ort, t.Name, query.Name, Abstractions.Projektionsvertrag.Frage));
     }
 }

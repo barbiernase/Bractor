@@ -1,19 +1,18 @@
 using Abstractions;
 using Marten;
-using Marten.Exceptions;
 
 namespace Core;
 
 /// <summary>
-/// Marten-Implementierung der Co-Commit-Naht (<see cref="ICoCommitTracker"/>) — die technik­spezifische, in ALLEN Projektions-Stores
-/// identische Exactly-once-Maschinerie an EINER auditierten Stelle. Write-Effekte werden nur GEPUFFERT; <see cref="CommitAsync"/> spielt die
-/// Effekte eines Batches (viele Streams einer Partition), die Guards seiner Streams und den <see cref="PartitionsCheckpoint"/> mit erwarteter
-/// Version in EINER Marten-<c>IdentitySession</c> ab und committet mit EINEM <c>SaveChangesAsync</c> → Effekte und Fortschritt werden gemeinsam
-/// durabel (exactly-once, auch für nicht-idempotente Append-Effekte), und eine zweite Aktivierung derselben Partition verliert (G-4).
+/// Der Marten-Store der <b>Klasse 1</b> (<see cref="IAtomaresZiel"/>, Plan Pub/Sub-Neustrukturierung §2.4) — die technikspezifische, in ALLEN
+/// Marten-Stores identische Exactly-once-Maschinerie an EINER Stelle. Wirkungen werden nur GEPUFFERT; <see cref="SchreibeMitFortschrittAsync"/>
+/// spielt die Wirkungen eines Batches (viele Streams einer Partition), die Guards seiner Streams und den Fortschritt der Partition mit erwarteter
+/// Revision in EINER Marten-<c>IdentitySession</c> ab und committet mit EINEM <c>SaveChangesAsync</c> → Wirkungen und Fortschritt werden gemeinsam
+/// durabel (genau einmal, auch für nicht-idempotente Wirkungen), und eine zweite Aktivierung derselben Partition verliert (G-4).
 ///
 /// <b>Schreib-Regel (Single-Writer je Dokument).</b> Die Konsum-Maschine garantiert genau EINEN Schreiber je (Projektion, Partition) und damit je
-/// (Projektion, Stream). Das Co-Commit macht einen Batch atomar, isoliert aber nicht die Batches zweier Partitionen gegeneinander. Darum gibt es
-/// drei Arten von Effekten, und jede wird beim Puffern gegen den Stream des laufenden Events (<see cref="Stream"/>) geprüft:
+/// (Projektion, Stream). Die Transaktion macht einen Batch atomar, isoliert aber nicht die Batches zweier Partitionen gegeneinander. Darum gibt es
+/// drei Arten von Wirkungen, und jede wird beim Puffern gegen den Stream des laufenden Events (<see cref="Stream"/>) geprüft:
 /// <list type="bullet">
 ///   <item><b>Eigenes Dokument</b> (Schlüssel = Stream des Events): <see cref="EnqueueStore{T}"/>,
 ///     <see cref="EnqueueTransform{T}"/>, <see cref="EnqueueAnlegenOderAendern{T}"/> — sicher per Konstruktion.</item>
@@ -27,23 +26,30 @@ namespace Core;
 /// Ein Schreibzugriff auf das Dokument eines FREMDEN Streams über die ersten beiden Wege wirft sofort — statt still
 /// ein Update eines parallel laufenden Batches zu überschreiben.
 ///
-/// Jeder Effekt schreibt ein <see cref="IReadModel"/> — die Leseseite ist damit genau die Menge der Read-Model-Typen, die ein
-/// Neuaufbau leert (<c>GeneratedProjectionServices.ReadModelTypen</c>, Werkbank §4.6).
+/// <b>Neuaufbau:</b> für Klasse 1 ist eine neue Generation das Leeren der eigenen Dokument-Typen (der Sonderfall aus A4) — Wirkungen einer alten
+/// Aktivierung werden ohnehin nur mit ihrem Fortschritt gültig, und der verliert gegen den zurückgesetzten. Welche Typen dem Store gehören, nennt
+/// er im Konstruktor (Code-Fakt).
 ///
-/// Konkrete Stores erben und schreiben nur noch ihre FACHLICHEN Write-Methoden. Kein Domänenwissen hier, kein
-/// Generat — reiner Marten-Adapter. SCOPED registriert: eine Instanz je Fähigkeits-Bereich (je Partitions-Leser → isolierter Puffer).
+/// Konkrete Stores erben und schreiben nur noch ihre FACHLICHEN Methoden. Kein Domänenwissen hier, kein Generat — reiner Marten-Adapter. SCOPED
+/// registriert: eine Instanz je Fähigkeits-Bereich (je Partitions-Leser → isolierter Puffer).
 /// </summary>
-public abstract class MartenCoCommitStoreBase : ICoCommitTracker
+public abstract class MartenStore : IAtomaresZiel
 {
     /// <summary>Der geteilte Document-Store — für die Lese-Methoden (eigene Query-Sessions, committete Daten).</summary>
     protected IDocumentStore Store { get; }
 
     private readonly List<Func<IDocumentSession, Task>> _pending = new();
+    private readonly Type[] _dokumente;
 
     /// <summary>Der Stream des laufenden Events (gesetzt in <see cref="Stream"/>); null = kein Batch offen.</summary>
     private Guid? _stapelStream;
 
-    protected MartenCoCommitStoreBase(IDocumentStore store) => Store = store;
+    /// <param name="dokumente">Die Read-Model-Typen, die dieser Store schreibt — eine neue Generation leert sie.</param>
+    protected MartenStore(IDocumentStore store, params Type[] dokumente)
+    {
+        Store = store;
+        _dokumente = dokumente;
+    }
 
     // ─────────────────────────────────────────────────────────────
     // Eigenes Dokument: Schlüssel = Stream des Stapels
@@ -156,27 +162,19 @@ public abstract class MartenCoCommitStoreBase : ICoCommitTracker
     }
 
     // ─────────────────────────────────────────────────────────────
-    // Batch-Naht (IProjectionTracker)
+    // Klasse 1: Fortschritt im Store, Wirkungen und Fortschritt in einer Transaktion
     // ─────────────────────────────────────────────────────────────
 
-    public async Task<PartitionsCheckpoint> LadePartitionAsync(string projektionsId, int partition, CancellationToken ct)
-    {
-        await using var s = Store.QuerySession();
-        return await s.LoadAsync<PartitionsCheckpoint>(PartitionsCheckpoint.MakeId(projektionsId, partition), ct)
-               ?? PartitionsCheckpoint.Neu(projektionsId, partition);
-    }
+    public Task<PartitionsCheckpoint> LadeFortschrittAsync(string projektion, int partition, CancellationToken ct)
+        => MartenFortschritt.LadeAsync(Store, projektion, partition, ct);
 
-    public async Task<IReadOnlyDictionary<Guid, int>> LadeGuardsAsync(string projektionsId, IReadOnlyCollection<Guid> streams, CancellationToken ct)
-    {
-        var guards = streams.ToDictionary(s => s, _ => -1);
-        if (guards.Count == 0) return guards;
-        await using var s = Store.QuerySession();
-        foreach (var cp in await s.LoadManyAsync<ProjectionCheckpoint>(ct, streams.Select(id => ProjectionCheckpoint.MakeId(projektionsId, id))))
-            guards[cp.StreamId] = cp.Version;
-        return guards;
-    }
+    public Task<IReadOnlyDictionary<Guid, int>> LadeGuardsAsync(string projektion, IReadOnlyCollection<Guid> streams, CancellationToken ct)
+        => MartenFortschritt.LadeGuardsAsync(Store, projektion, streams, ct);
 
-    public void BeginneBatch()
+    public Task FortschrittZuruecksetzenAsync(string projektion, int partitionen, string generation, CancellationToken ct)
+        => MartenFortschritt.ZuruecksetzenAsync(Store, projektion, partitionen, generation, ct);
+
+    public void Beginne(string generation)
     {
         _pending.Clear();   // neuer Batch → Vorlauf eines verworfenen Batches weg
         _stapelStream = null;
@@ -184,46 +182,21 @@ public abstract class MartenCoCommitStoreBase : ICoCommitTracker
 
     public void Stream(Guid streamId) => _stapelStream = streamId;
 
-    // ── Commit-Punkt: Effekte + Guards + Partitions-Checkpoint in EINER Session, ein SaveChanges ──
-    public async Task<int> CommitAsync(PartitionsCheckpoint stand, IReadOnlyDictionary<Guid, int> guards, CancellationToken ct)
+    // ── Commit-Punkt: Wirkungen + Guards + Fortschritt in EINER Session, ein SaveChanges ──
+    public async Task<int> SchreibeMitFortschrittAsync(PartitionsCheckpoint fortschritt, IReadOnlyDictionary<Guid, int> guards, CancellationToken ct)
     {
         try
         {
             await using var s = Store.IdentitySession();   // read-your-writes über alle Streams des Batches; Versionen der Loads für die OCC-Prüfung
             foreach (var op in _pending)
                 await op(s);
-
-            var jetzt = DateTimeOffset.UtcNow;
-            foreach (var (stream, version) in guards)
-                s.Store(new ProjectionCheckpoint
-                {
-                    Id = ProjectionCheckpoint.MakeId(stand.ProjektionsId, stream),
-                    ProjectionId = stand.ProjektionsId,
-                    StreamId = stream,
-                    Version = version,
-                    UpdatedAt = jetzt
-                });
-
-            // Der Partitions-Checkpoint mit erwarteter Version (G-4): noch nie geschrieben → Insert (ein zweiter Erster scheitert am Schlüssel),
-            //   sonst UpdateRevision auf Version + 1 (eine zweite Aktivierung oder ein Neuaufbau dazwischen → Versionskonflikt).
-            var neu = new PartitionsCheckpoint
-            {
-                Id = stand.Id, ProjektionsId = stand.ProjektionsId, Partition = stand.Partition,
-                Position = stand.Position, Geparkt = stand.Geparkt, UpdatedAt = jetzt, Version = stand.Version + 1
-            };
-            if (stand.Version == 0) s.Insert(neu);
-            else s.UpdateRevision(neu, stand.Version + 1);
-
-            await s.SaveChangesAsync(ct);   // EIN Commit → Effekte, Guards und Partition gemeinsam gültig
-            return neu.Version;
+            var neu = MartenFortschritt.Lege(s, fortschritt, guards);
+            await s.SaveChangesAsync(ct);   // EIN Commit → Wirkungen, Guards und Partition gemeinsam gültig
+            return neu;
         }
-        catch (Exception ex) when (Konflikt(ex) is { } doku)
+        catch (Exception ex) when (MartenFortschritt.Konflikt(ex, fortschritt, GetType().Name) is { } konflikt)
         {
-            if (IstPartition(doku))
-                throw new PartitionsKonfliktException(
-                    $"{GetType().Name}: Partition {stand.Id} zwischenzeitlich geschrieben (erwartet v{stand.Version}) — Batch verworfen.", ex);
-            throw new SchreibKonfliktException(
-                $"{GetType().Name}: geteiltes Dokument {doku} zwischenzeitlich geändert (Partition {stand.Id}) — Batch verworfen.", ex);
+            throw konflikt;
         }
         finally
         {
@@ -232,26 +205,29 @@ public abstract class MartenCoCommitStoreBase : ICoCommitTracker
         }
     }
 
-    // Marten 8 meldet die Versionsprüfung als JasperFx.ConcurrencyException (nicht Marten.Exceptions.ConcurrencyException),
-    // ein gleichzeitiges Insert als DocumentAlreadyExistsException — beide gegen echtes Postgres gemessen (SchreibRegelPostgresTests), beide mit
-    // dem Dokumenttyp (einmal als Name, einmal als Typ). Liefert den Namen des Dokuments im Konflikt (der Partitions-Checkpoint geht vor), sonst null.
-    private static string? Konflikt(Exception ex) => ex switch
+    /// <summary>Die Wirkungen ohne Fortschritt — der Batch-Leser ruft für Klasse 1 nur <see cref="SchreibeMitFortschrittAsync"/>.</summary>
+    public async Task SchreibeAsync(CancellationToken ct)
     {
-        JasperFx.ConcurrencyException c => c.DocType ?? "?",
-        DocumentAlreadyExistsException d => d.DocType?.FullName ?? "?",
-        AggregateException agg when agg.InnerExceptions.Count > 0 && agg.InnerExceptions.All(i => Konflikt(i) != null)
-            => agg.InnerExceptions.Select(Konflikt).FirstOrDefault(n => IstPartition(n!)) ?? Konflikt(agg.InnerExceptions[0]),
-        _ => null
-    };
-
-    private static bool IstPartition(string dokument)
-        => dokument == typeof(PartitionsCheckpoint).FullName || dokument == nameof(PartitionsCheckpoint);
-
-    // ── Neuaufbau ──
-    public async Task ResetAllAsync(string projektionsId, CancellationToken ct)
-    {
-        await using var s = Store.LightweightSession();
-        await KonsumZuruecksetzen.PartitionenUndGuardsAsync(s, projektionsId, ct);
-        await s.SaveChangesAsync(ct);
+        try
+        {
+            await using var s = Store.IdentitySession();
+            foreach (var op in _pending)
+                await op(s);
+            await s.SaveChangesAsync(ct);
+        }
+        finally
+        {
+            _pending.Clear();
+            _stapelStream = null;
+        }
     }
+
+    // ── Neuaufbau: die eigenen Dokument-Typen leeren (Klasse 1, A4) ──
+    public async Task NeueGenerationAsync(string generation, CancellationToken ct)
+    {
+        foreach (var t in _dokumente)
+            await Store.Advanced.Clean.DeleteDocumentsByTypeAsync(t, ct);
+    }
+
+    public Task UmschaltenAsync(string generation, CancellationToken ct) => Task.CompletedTask;
 }

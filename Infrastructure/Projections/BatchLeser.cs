@@ -7,16 +7,16 @@ namespace Infrastructure.Projections;
 
 /// <summary>
 /// Der Batch-Konsum einer replaybaren Projektion für EINE Partition (docs/04 §4.1) — die store-agnostische Schleife ohne Proto-Mantel
-/// (<see cref="BatchLeserActor"/>). Sie besitzt die <b>Policy</b>, die Transaktion besitzt der Store (<see cref="IProjectionTracker"/>):
+/// (<see cref="BatchLeserActor"/>). Sie besitzt die <b>Policy</b>; wie ein Batch gültig wird, sagt die Store-Klasse (<see cref="Projektionsnaht"/>):
 /// <list type="number">
-///   <item><b>Stand laden</b>: Position, Version, geparkte Streams der Partition.</item>
+///   <item><b>Stand laden</b>: Position, Revision, geparkte Streams und Generation der Partition (beim Store der Klasse 1, sonst beim Framework).</item>
 ///   <item><b>Seite lesen</b> (<see cref="IEventStoreRepository.ReadPartitionAsync"/>): Events jenseits der Position, nur die Partition, nur die
 ///     abonnierten Typen samt Upcasting-Vorgängern, ohne schon Erledigtes, höchstens <see cref="Konsum.BatchGroesse"/>.</item>
 ///   <item><b>Guard je Stream</b> in einer Abfrage; Events mit Version ≤ Guard überspringen (Nachzügler-Wiederholung).</item>
-///   <item><b>Anwenden</b> je Stream in Versionsreihenfolge über den generierten Dispatch; vor jedem Event setzt der Leser den Stream
-///     (<see cref="IProjectionTracker.Stream"/>) für die Schreib-Regel je Dokument.</item>
-///   <item><b>Commit</b>: Effekte, Guards und Partitions-Checkpoint mit erwarteter Version in einer Transaktion (G-4).</item>
-///   <item><b>Danach</b> der Versions-Index best-effort — nie über Uncommittetes.</item>
+///   <item><b>Anwenden</b> je Stream in Versionsreihenfolge über den generierten Dispatch (das <c>Auf</c> der Projektion); vor jedem Event setzt
+///     der Leser den Stream (<see cref="IProjektionsZiel.Stream"/>) für eine Schreib-Regel je Dokument.</item>
+///   <item><b>Commit</b>: Klasse 1 Wirkungen, Guards und Fortschritt mit erwarteter Revision in einer Transaktion (G-4); Klasse 2/3 erst die
+///     Wirkungen, dann Guards und Fortschritt beim Framework.</item>
 ///   <item><b>Weiter</b>, solange die Seite voll war.</item>
 /// </list>
 /// <b>Position und Nachzügler:</b> die Position rückt nur bis zur gesetzten Sequenz vor (bis dorthin ist laut Store jede endgültig) und nie über ein Event, das
@@ -44,12 +44,12 @@ public sealed class BatchLeser
     public const int ErledigtHoechstens = 5_000;
 
     private readonly IEventStoreRepository _eventStore;
-    private readonly IProjectionTracker _tracker;
+    private readonly Projektionsnaht _naht;
     private readonly string _projektionsId;
     private readonly int _partition;
     private readonly Konsum _konsum;
     private readonly IReadOnlyCollection<string>? _typen;
-    private readonly Func<EventEnvelope, ProjectionWriter, Task> _dispatch;
+    private readonly Func<EventEnvelope, CancellationToken, Task> _dispatch;
     private readonly IDeadLetterSink? _deadLetter;
     private readonly ILogger? _logger;
     private readonly Func<Task>? _absturzVorCommit;
@@ -71,12 +71,12 @@ public sealed class BatchLeser
     /// Plan Pub/Sub-Neustrukturierung §2.7) — Mechanik nach dem Commit, die Projektion gibt dabei nichts aus.</param>
     public BatchLeser(
         IEventStoreRepository eventStore,
-        IProjectionTracker tracker,
+        Projektionsnaht naht,
         string projektionsId,
         int partition,
         Konsum konsum,
         IReadOnlyCollection<string>? typen,
-        Func<EventEnvelope, ProjectionWriter, Task> dispatch,
+        Func<EventEnvelope, CancellationToken, Task> dispatch,
         IDeadLetterSink? deadLetter = null,
         ILogger? logger = null,
         Func<Task>? absturzVorCommit = null,
@@ -86,7 +86,7 @@ public sealed class BatchLeser
         if (partition < 0 || partition >= konsum.Partitionen)
             throw new ArgumentOutOfRangeException(nameof(partition), $"{projektionsId}: Partition {partition} außerhalb 0..{konsum.Partitionen - 1}.");
         _eventStore = eventStore;
-        _tracker = tracker;
+        _naht = naht;
         _projektionsId = projektionsId;
         _partition = partition;
         _konsum = konsum;
@@ -157,7 +157,7 @@ public sealed class BatchLeser
     {
         if (_stand is null)
         {
-            _stand = await _tracker.LadePartitionAsync(_projektionsId, _partition, ct);
+            _stand = await _naht.Ablage.LadeFortschrittAsync(_projektionsId, _partition, ct);
             _lese = _stand.Position;
             _erledigt.Clear();
         }
@@ -186,7 +186,7 @@ public sealed class BatchLeser
                 Rueckevor(seite.Gesetzt);
                 if (_lese > _stand.Position && _jetzt() - _letzterCommit >= _konsum.Takt)
                 {
-                    _tracker.BeginneBatch();
+                    _naht.Beginne(_stand!.Generation);
                     await CommitAsync(Neu(_lese), new Dictionary<Guid, int>(), ct);
                 }
                 return angewandt;
@@ -234,7 +234,7 @@ public sealed class BatchLeser
     private async Task<int> VerarbeiteSeiteAsync(List<PartitionsEvent> events, long grenze, CancellationToken ct)
     {
         var streams = events.Select(e => e.Event.AggregateId).Distinct().ToList();
-        var guards = new Dictionary<Guid, int>(await _tracker.LadeGuardsAsync(_projektionsId, streams, ct));
+        var guards = new Dictionary<Guid, int>(await _naht.Ablage.LadeGuardsAsync(_projektionsId, streams, ct));
         var geparkt = _stand!.Geparkt.Select(g => g.StreamId).ToHashSet();
 
         // Schneller Weg: die ganze Seite in EINEM Commit samt neuer Position.
@@ -288,7 +288,7 @@ public sealed class BatchLeser
         var neuePosition = grenze;
         var ersteHaengende = events.FirstOrDefault(e => haengend.Contains(e.Event.AggregateId));
         if (ersteHaengende is not null) neuePosition = Math.Min(neuePosition, ersteHaengende.Sequenz - 1);
-        _tracker.BeginneBatch();
+        _naht.Beginne(_stand!.Generation);
         await CommitAsync(Neu(Math.Max(_lese, neuePosition)), new Dictionary<Guid, int>(), ct);
         // Erledigt sind auch die übersprungenen Events geparkter Streams; hängende nicht — die liest der nächste Durchlauf erneut.
         foreach (var e in events)
@@ -328,7 +328,7 @@ public sealed class BatchLeser
         long position, CancellationToken ct)
     {
         var imTeil = teil.ToHashSet();
-        _tracker.BeginneBatch();
+        _naht.Beginne(_stand!.Generation);
         var neueGuards = new Dictionary<Guid, int>();
         var erledigt = new List<long>();
         var angewandt = 0;
@@ -343,9 +343,8 @@ public sealed class BatchLeser
                 if (geparkt.Contains(e.AggregateId)) continue;                                      // geparkt: übersprungen
                 if (e.AggregateVersion <= guards.GetValueOrDefault(e.AggregateId, -1)) continue;    // Guard: schon angewandt
                 aktuell = e.AggregateId;
-                _tracker.Stream(e.AggregateId);
-                var writer = new ProjectionWriter(e.AggregateId, e.AggregateVersion);
-                await _dispatch(e, writer);
+                _naht.Stream(e.AggregateId);
+                await _dispatch(e, ct);
                 neueGuards[e.AggregateId] = e.AggregateVersion;
                 angewandt++;
             }
@@ -399,9 +398,9 @@ public sealed class BatchLeser
         var angewandt = 0;
         foreach (var g in _stand!.Geparkt.ToList())
         {
-            var guard = (await _tracker.LadeGuardsAsync(_projektionsId, new[] { g.StreamId }, ct))[g.StreamId];
+            var guard = (await _naht.Ablage.LadeGuardsAsync(_projektionsId, new[] { g.StreamId }, ct))[g.StreamId];
             var events = await _eventStore.ReadStreamAsync(g.StreamId, guard + 1, ct);
-            _tracker.BeginneBatch();
+            _naht.Beginne(_stand!.Generation);
             var letzte = guard;
             var n = 0;
             try
@@ -409,9 +408,8 @@ public sealed class BatchLeser
                 foreach (var e in events)
                 {
                     if (e.AggregateVersion <= guard) continue;
-                    _tracker.Stream(e.AggregateId);
-                    var writer = new ProjectionWriter(e.AggregateId, e.AggregateVersion);
-                    await _dispatch(e, writer);
+                    _naht.Stream(e.AggregateId);
+                    await _dispatch(e, ct);
                     letzte = e.AggregateVersion;
                     n++;
                 }
@@ -426,7 +424,7 @@ public sealed class BatchLeser
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
-                _tracker.BeginneBatch();
+                _naht.Beginne(_stand!.Generation);
                 _logger?.LogDebug(ex, "[Konsum] {Projektion}/{Partition}: geparkter Stream {Stream} wirft weiter", _projektionsId, _partition, g.StreamId);
             }
         }
@@ -449,13 +447,13 @@ public sealed class BatchLeser
     private PartitionsCheckpoint Neu(long position) => new()
     {
         Id = _stand!.Id, ProjektionsId = _stand.ProjektionsId, Partition = _stand.Partition,
-        Position = position, Version = _stand.Version, Geparkt = _stand.Geparkt.ToList()
+        Position = position, Version = _stand.Version, Geparkt = _stand.Geparkt.ToList(), Generation = _stand.Generation
     };
 
     private async Task CommitAsync(
         PartitionsCheckpoint neu, IReadOnlyDictionary<Guid, int> guards, CancellationToken ct)
     {
-        neu.Version = await _tracker.CommitAsync(neu, guards, ct);
+        neu.Version = await _naht.CommitAsync(neu, guards, ct);
         _stand = neu;
         _letzterCommit = _jetzt();
         Rueckevor(neu.Position);

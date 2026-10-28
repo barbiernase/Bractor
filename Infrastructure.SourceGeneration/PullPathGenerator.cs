@@ -6,29 +6,36 @@ using System.Text;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Verdrahtungs-Generator für den Konsum der PROJEKTIONEN. Findet jede <c>ISubscriber</c>, die zusätzlich
-    /// <c>Abstractions.IPullSubscriber</c> implementiert, und emittiert die komplette, sonst handgeschriebene Verdrahtung:
-    ///   - ein Batch-Kind <c>batch-&lt;Typ&gt;</c> je Projektion — ein Leser je Partition, der Store aus einem Fähigkeits-Bereich ist die
-    ///     Batch-Naht (Store-Impl-Typ wird NIE genannt), dazu eine <c>BatchRegistrierung</c> (Takt je Partition, Prüfung gegen den Weckplan) und
-    ///     der <c>ProjektionsStand</c>;
-    ///   - <c>AddGeneratedPullPaths()</c>, das der Host als EINZIGEN Aufruf nutzt.
-    /// Eine Projektion schreibt in genau EINEN Store (R9, CQRS052): ihre Schreib-Fähigkeiten gehören zu einem Store. Ohne Schreib-Fähigkeit wäre
-    /// sie früher eine Reaktion gewesen — die gibt es nicht mehr (Plan Phase 4): was auf ein Event hin etwas sendet, ist eine Funktion.
+    /// Verdrahtungs-Generator für den Konsum der PROJEKTIONEN (Plan Pub/Sub-Neustrukturierung §3.3, Phase 8). Findet jede Projektion (<c>IProjektion</c>,
+    /// gelesen über <see cref="Projektionsform"/> — dieselbe Lesart wie der Weckplan) und emittiert die komplette Verdrahtung:
+    ///   - je Projektion den Dispatch (<c>switch</c> über den Event-Typ → ihr <c>Auf</c> mit Herkunft und Fähigkeiten aus dem Bereich), die gehörten
+    ///     Typen und den Store aus einem Fähigkeits-Bereich (<c>GeneratedProjektionen</c>);
+    ///   - ein Batch-Kind <c>batch-&lt;Projektion&gt;</c> — ein Leser je Partition, die Naht nach der Store-Klasse (Store-Impl-Typ wird NIE genannt);
+    ///   - <c>AddGeneratedPullPaths()</c>: Batch-Kinds, Takt-Registrierung, <c>Projektionseintrag</c> (Neuaufbau, Stand je Id) und der Query-Dienst.
+    /// Die Kennung einer Projektion ist ihr Typname (Code-Fakt), nicht mehr ein handgeschriebener String.
     ///
-    /// KEIN handgeschriebener Domänen-Glue im Framework mehr — die Domäne steckt nur noch in
-    /// der Projektion (Domain.Projections) und ihrem Store (Domain.Infrastructure).
+    /// CQRS052 — eine Projektion schreibt in genau EINEN Store (R9): ihre Schreib-Fähigkeiten gehören zu einer Store-Klasse.
+    /// CQRS110 — eine Projektion schreibt in einen Store der Klasse 3 ohne die ausdrückliche Erlaubnis <c>[MindestensEinmal]</c> (R14).
     /// </summary>
     [Generator]
     public class PullPathGenerator : ISourceGenerator
     {
-        private const string ISubscriberFullName = "Abstractions.ISubscriber";
-        private const string IExactlyOnceFullName = "Abstractions.IPullSubscriber";
+        public const string MindestensEinmalId = "CQRS110";
 
         /// <summary>CQRS052: eine Projektion schreibt in genau einen Store (R9) — nicht in mehrere, nicht in keinen.</summary>
-        private static readonly DiagnosticDescriptor MehrereStores = new(
+        private static readonly DiagnosticDescriptor MehrereStores = new DiagnosticDescriptor(
             "CQRS052",
             "Eine Projektion schreibt in genau einen Store",
-            "{0}: {1} — eine Projektion schreibt in genau EINEN Store (eine Transaktionsgrenze, eine Marke); was auf ein Event hin etwas sendet, ist eine Funktion (IFunktion)",
+            "{0}: {1} — eine Projektion schreibt in genau EINEN Store (eine Transaktionsgrenze, ein Fortschritt); was auf ein Event hin etwas sendet, ist eine Funktion (IFunktion)",
+            "Cqrs.Faehigkeiten",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        private static readonly DiagnosticDescriptor OhneErlaubnis = new DiagnosticDescriptor(
+            MindestensEinmalId,
+            "Store der Klasse 3 ohne Erlaubnis",
+            "{0} schreibt in {1}, einen Store der Klasse 3 (INurMindestensEinmal) — seine Wirkungen gelten nur mindestens einmal; das braucht die ausdrückliche "
+                + "Erlaubnis [MindestensEinmal] an der Projektion (R14)",
             "Cqrs.Faehigkeiten",
             DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -38,204 +45,167 @@ namespace Infrastructure.SourceGeneration
         public void Execute(GeneratorExecutionContext context)
         {
             if (!Laufzeitprojekt.Ist(context.Compilation)) return;   // nur in der Komposition (docs/07)
-            var iSubscriber = context.Compilation.GetTypeByMetadataName(ISubscriberFullName);
-            var iExactlyOnce = context.Compilation.GetTypeByMetadataName(IExactlyOnceFullName);
-            if (iSubscriber == null || iExactlyOnce == null)
-                return;
+            var bild = Leseseitenbild.Lies(context.Compilation);
 
-            var projections = new List<INamedTypeSymbol>();
-            void Walk(INamespaceSymbol ns)
+            var gueltig = new List<(Projektionsform.Projektion P, List<INamedTypeSymbol> Stores)>();
+            foreach (var p in bild.Projektionen)
             {
-                foreach (var t in ns.GetTypeMembers())
+                if (p.Fehler.Count > 0 || p.Doppelt.Count > 0) continue;   // meldet der HandlerFormAnalyzer in der Compilation der Projektion
+                var ort = p.Typ.Locations.FirstOrDefault();
+                var stores = bild.Stores(p);
+                if (stores.Count != 1)
                 {
-                    if (t.TypeKind == TypeKind.Class && !t.IsAbstract &&
-                        t.AllInterfaces.Contains(iExactlyOnce, SymbolEqualityComparer.Default))
-                        projections.Add(t);
+                    context.ReportDiagnostic(Diagnostic.Create(MehrereStores, ort, p.Typ.Name, stores.Count == 0
+                        ? "keine Schreib-Fähigkeit eines Stores in den Auf"
+                        : "die Schreib-Fähigkeiten gehören zu mehreren Stores (" + string.Join(", ", stores.Select(k => k.Name)) + ")"));
+                    continue;
                 }
-                foreach (var child in ns.GetNamespaceMembers())
-                    Walk(child);
-            }
-            Walk(context.Compilation.GlobalNamespace);
-
-            var iWrite = context.Compilation.GetTypeByMetadataName("Abstractions.IWriteStore");
-            var klassen = new List<INamedTypeSymbol>();
-            void Klassen(INamespaceSymbol ns)
-            {
-                foreach (var t in ns.GetTypeMembers())
-                    if (t.TypeKind == TypeKind.Class && !t.IsAbstract && iWrite != null
-                        && t.AllInterfaces.Contains(iWrite, SymbolEqualityComparer.Default)) klassen.Add(t);
-                foreach (var child in ns.GetNamespaceMembers()) Klassen(child);
-            }
-            Klassen(context.Compilation.GlobalNamespace);
-
-            var faehigkeiten = new Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>>(SymbolEqualityComparer.Default);
-            foreach (var p in projections)
-            {
-                var fs = iWrite == null ? new List<INamedTypeSymbol>() : SchreibFaehigkeiten(p, iWrite);
-                faehigkeiten[p] = fs;
-                // Achse B zur Compile-Zeit: alle Schreib-Fähigkeiten einer Klasse gehören zu EINEM Store
-                //   (einer Transaktionsgrenze). Sonst gäbe es zwei Marken für einen Konsumenten.
-                var stores = fs
-                    .Select(f => klassen.Where(k => k.AllInterfaces.Contains(f, SymbolEqualityComparer.Default)).ToList())
-                    .SelectMany(x => x).Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default).ToList();
-                if (stores.Count > 1)
-                    context.ReportDiagnostic(Diagnostic.Create(MehrereStores, p.Locations.FirstOrDefault(), p.Name,
-                        "die Schreib-Fähigkeiten der Handles gehören zu mehreren Stores (" + string.Join(", ", stores.Select(k => k.Name)) + ")"));
-                else if (stores.Count == 0)
-                    context.ReportDiagnostic(Diagnostic.Create(MehrereStores, p.Locations.FirstOrDefault(), p.Name,
-                        "keine Schreib-Fähigkeit eines Stores in den Handles"));
+                if (Projektionsform.StoreKlassen(stores[0]).Contains(3) && !p.MindestensEinmal)
+                    context.ReportDiagnostic(Diagnostic.Create(OhneErlaubnis, ort, p.Typ.Name, stores[0].Name));
+                gueltig.Add((p, stores));
             }
 
-            // Die Store-Klasse(n) hinter den Schreib-Fähigkeiten — Teil des Projektions-Stands (konzept-werkbank §12.3 E9).
-            var storesJe = projections.ToDictionary(p => p, p => faehigkeiten[p]
-                .SelectMany(f => klassen.Where(k => k.AllInterfaces.Contains(f, SymbolEqualityComparer.Default)))
-                .Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default).ToList(), (IEqualityComparer<INamedTypeSymbol>)SymbolEqualityComparer.Default);
-
-            context.AddSource("GeneratedPullPaths.g.cs",
-                GenerateFile(projections.OrderBy(p => p.Name).ToList(), faehigkeiten, storesJe));
+            context.AddSource("GeneratedPullPaths.g.cs", GenerateFile(gueltig.OrderBy(g => g.P.Typ.Name, System.StringComparer.Ordinal).ToList()));
         }
 
-        private static string GenerateFile(List<INamedTypeSymbol> projections, Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>> faehigkeiten,
-            Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>> storesJe)
+        private static string Fq(ITypeSymbol t) => t.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+        /// <summary>Der Code-Stand der Projektion aus ihrer Compilation (<c>[assembly: Projektionsstand(typeof(P), "…")]</c>, Domain.SourceGeneration).</summary>
+        private static string Hash(INamedTypeSymbol p)
+        {
+            foreach (var a in p.ContainingAssembly.GetAttributes())
+                if (a.AttributeClass != null && Projektionsform.Name(a.AttributeClass) == Abstractions.Projektionsvertrag.Projektionsstand
+                    && a.ConstructorArguments.Length == 2 && a.ConstructorArguments[0].Value is INamedTypeSymbol t
+                    && SymbolEqualityComparer.Default.Equals(t, p) && a.ConstructorArguments[1].Value is string h)
+                    return h;
+            return "";
+        }
+
+        private static string GenerateFile(List<(Projektionsform.Projektion P, List<INamedTypeSymbol> Stores)> projektionen)
         {
             var sb = new StringBuilder();
             sb.AppendLine("// <auto-generated/>");
-            sb.AppendLine("// Verdrahtung des Pull-Pfads pro IPullSubscriber (PullPathGenerator).");
+            sb.AppendLine("// Verdrahtung der Projektionen (PullPathGenerator).");
+            sb.AppendLine("#nullable enable");
             sb.AppendLine("using Abstractions;");
-            sb.AppendLine("using Core;");
             sb.AppendLine("using Infrastructure.Projections;");
-            sb.AppendLine("using Infrastructure.Emit;");
             sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
             sb.AppendLine("using Microsoft.Extensions.DependencyInjection.Extensions;");
             sb.AppendLine("using Microsoft.Extensions.Logging;");
             sb.AppendLine("using Proto;");
             sb.AppendLine("using Proto.Cluster;");
             sb.AppendLine("using System;");
-            sb.AppendLine("using System.Collections.Generic;");
-            sb.AppendLine("using System.Linq;");
+            sb.AppendLine("using System.Threading;");
             sb.AppendLine("using System.Threading.Tasks;");
             sb.AppendLine();
             sb.AppendLine("namespace Infrastructure.Projections.Generated;");
             sb.AppendLine();
 
-            foreach (var p in projections.Where(p => storesJe[p].Count > 0))
-                EmitBatchKind(sb, p, faehigkeiten[p]);
+            // ── Dispatch, Typen, Store je Projektion ──
+            sb.AppendLine("/// <summary>Je Projektion: die gehörten Typen, der Dispatch auf ihr Auf und ihr Store aus einem Fähigkeits-Bereich.</summary>");
+            sb.AppendLine("public static class GeneratedProjektionen");
+            sb.AppendLine("{");
+            foreach (var (p, _) in projektionen)
+            {
+                var n = p.Typ.Name;
+                var wirker = Abstractions.Projektionsvertrag.Wirker(n);
+                sb.AppendLine($"    // ── {n} ──");
+                sb.AppendLine($"    public const string {n}_Kennung = \"{Abstractions.Projektionsvertrag.Kennung(n)}\";");
+                sb.AppendLine($"    public static readonly Type[] {n}_Typen = {{ {string.Join(", ", p.Aufs.Select(a => $"typeof({Fq(a.Eingang)})"))} }};");
+                sb.AppendLine($"    public static IProjektionsZiel {n}_Ziel(IFaehigkeiten f) => Projektionslauf.Ziel({n}_Kennung, {(p.MindestensEinmal ? "true" : "false")}, "
+                    + string.Join(", ", p.SchreibFaehigkeiten().Select(c => $"f.Hole<{Fq(c)}>()")) + ");");
+                sb.AppendLine($"    public static Task {n}_Dispatch({Fq(p.Typ)} projektion, EventEnvelope e, IFaehigkeiten f, CancellationToken ct)");
+                sb.AppendLine("    {");
+                sb.AppendLine("        switch (e.Payload)");
+                sb.AppendLine("        {");
+                foreach (var a in p.Aufs)
+                {
+                    var args = a.Parameter.Select(x => x.Art switch
+                    {
+                        "e" => "p",
+                        "h" => $"Projektionslauf.Herkunft(e, \"{wirker}\")",
+                        "ct" => "ct",
+                        _ => $"f.Hole<{Fq(x.Typ!)}>()",
+                    });
+                    sb.AppendLine($"            case {Fq(a.Eingang)} p: return projektion.{Abstractions.Projektionsvertrag.Auf}({string.Join(", ", args)});");
+                }
+                sb.AppendLine("            default: return Task.CompletedTask;");
+                sb.AppendLine("        }");
+                sb.AppendLine("    }");
+                sb.AppendLine();
+            }
+            sb.AppendLine("}");
+            sb.AppendLine();
+
+            foreach (var (p, _) in projektionen)
+                EmitBatchKind(sb, p.Typ);
 
             sb.AppendLine("public static class GeneratedPullPaths");
             sb.AppendLine("{");
             sb.AppendLine("    public static IServiceCollection AddGeneratedPullPaths(this IServiceCollection services)");
             sb.AppendLine("    {");
-            if (projections.Count == 0)
+            foreach (var (p, stores) in projektionen)
             {
-                sb.AppendLine("        // Keine IPullSubscriber gefunden.");
+                var n = p.Typ.Name;
+                var typen = string.Join(", ", stores.Select(k => $"typeof({Fq(k)})"));
+                sb.AppendLine($"        services.AddSingleton<IClusterKindContributor, {n}BatchKind>();");
+                sb.AppendLine($"        services.AddSingleton(new BatchRegistrierung({n}BatchKind.KindName, GeneratedProjektionen.{n}_Kennung, GeneratedProjektionen.{n}_Typen));");
+                sb.AppendLine($"        services.AddSingleton(new Projektionseintrag(GeneratedProjektionen.{n}_Kennung, {n}BatchKind.KindName, GeneratedProjektionen.{n}_Typen,");
+                sb.AppendLine($"            \"{Hash(p.Typ)}\", new Type[] {{ {typen} }}, GeneratedProjektionen.{n}_Ziel));");
             }
-            else
+            if (projektionen.Count > 0)
             {
-                var batch = false;
-                foreach (var p in projections)
-                {
-                    var stores = storesJe[p];
-                    if (stores.Count > 0)
-                    {
-                        batch = true;
-                        var hash = p.GetMembers("CodeHash").OfType<IFieldSymbol>().Any(f => f.IsConst) ? $"{p.ToDisplayString()}.CodeHash" : "\"\"";
-                        var typen = string.Join(", ", stores.Select(k => $"typeof({k.ToDisplayString()})"));
-                        sb.AppendLine($"        services.AddSingleton<IClusterKindContributor, {p.Name}BatchKind>();");
-                        sb.AppendLine($"        services.AddSingleton(sp => new BatchRegistrierung({p.Name}BatchKind.KindName,");
-                        sb.AppendLine($"            sp.GetRequiredService<{p.ToDisplayString()}>().SubscriberId, {p.ToDisplayString()}.SubscribedTypes));");
-                        sb.AppendLine($"        services.AddSingleton(sp => new ProjektionsStand({p.Name}BatchKind.KindName,");
-                        sb.AppendLine($"            sp.GetRequiredService<{p.ToDisplayString()}>().SubscriberId, {hash}, new Type[] {{ {typen} }}));");
-                    }
-                }
-                sb.AppendLine();
-                if (batch)
-                {
-                    sb.AppendLine("        services.AddHostedService<BatchKonsumStartupService>();");
-                    sb.AppendLine("        services.TryAddSingleton<IKonsumRueckstand, KonsumRueckstand>();");
-                }
+                sb.AppendLine("        services.AddHostedService<BatchKonsumStartupService>();");
+                sb.AppendLine("        services.TryAddSingleton<IKonsumRueckstand, KonsumRueckstand>();");
             }
+            sb.AppendLine("        // Der Query-Dienst der Leseseite (QueryDienstGenerator).");
+            sb.AppendLine("        services.AddSingleton<GeneratedQueryDienst>();");
+            sb.AppendLine("        services.AddSingleton<IQueryDienst>(sp => sp.GetRequiredService<GeneratedQueryDienst>());");
             sb.AppendLine("        return services;");
             sb.AppendLine("    }");
             sb.AppendLine("}");
-
             return sb.ToString();
         }
 
-        /// <summary>
-        /// Die SCHREIB-Fähigkeiten (Marker <c>IWriteStore</c>) aller Handles einer Projektion — Achse B liest sich
-        /// daraus (nicht mehr aus dem Konstruktor): hat der Konsument Schreib-Fähigkeiten, löst der Bereich den Store
-        /// auf, der zugleich <c>IProjectionTracker</c> ist (Co-Commit, replaybar).
-        /// </summary>
-        private static List<INamedTypeSymbol> SchreibFaehigkeiten(INamedTypeSymbol p, INamedTypeSymbol iWrite)
+        /// <summary>Die Konstruktion aus dem Container (Konstruktor-Parameter als Dienste).</summary>
+        internal static string Konstruktion(INamedTypeSymbol t, string provider)
         {
-            var result = new List<INamedTypeSymbol>();
-            foreach (var m in p.GetMembers("Handle").OfType<IMethodSymbol>())
-                foreach (var par in m.Parameters.Skip(3))
-                    if (par.Type is INamedTypeSymbol t && t.TypeKind == TypeKind.Interface
-                        && t.AllInterfaces.Contains(iWrite, SymbolEqualityComparer.Default)
-                        && !result.Contains(t, SymbolEqualityComparer.Default))
-                        result.Add(t);
-            return result;
-        }
-
-        /// <summary>Die Konstruktion der Projektion aus dem Container (Konstruktor-Parameter als Dienste).</summary>
-        private static void EmitKonstruktion(StringBuilder sb, INamedTypeSymbol p, string einzug)
-        {
-            var ctor = p.InstanceConstructors
+            var ctor = t.InstanceConstructors
                 .Where(c => c.DeclaredAccessibility == Accessibility.Public && !c.IsStatic)
                 .OrderByDescending(c => c.Parameters.Length)
                 .FirstOrDefault();
-            var ctorParams = ctor?.Parameters ?? default;
-            var argNames = new List<string>();
-            if (!ctorParams.IsDefault)
-            {
-                for (int i = 0; i < ctorParams.Length; i++)
-                {
-                    sb.AppendLine($"{einzug}var d{i} = provider.GetRequiredService<{ctorParams[i].Type.ToDisplayString()}>();");
-                    argNames.Add("d" + i);
-                }
-            }
-            sb.AppendLine($"{einzug}var projection = new {p.ToDisplayString()}({string.Join(", ", argNames)});");
+            var args = ctor == null ? "" : string.Join(", ", ctor.Parameters.Select(par => $"{provider}.GetRequiredService<{Fq(par.Type)}>()"));
+            return $"new {Fq(t)}({args})";
         }
 
-        /// <summary>Replaybar: ein Batch-Leser je Partition (docs/04 §4.1); der Store der Schreib-Fähigkeiten ist die Batch-Naht.</summary>
-        private static void EmitBatchKind(StringBuilder sb, INamedTypeSymbol p, List<INamedTypeSymbol> schreibFaehigkeiten)
+        /// <summary>Ein Batch-Leser je Partition (docs/04 §4.1); die Naht folgt der Store-Klasse.</summary>
+        private static void EmitBatchKind(StringBuilder sb, INamedTypeSymbol p)
         {
-            sb.AppendLine($"internal sealed class {p.Name}BatchKind : IClusterKindContributor");
+            var n = p.Name;
+            sb.AppendLine($"internal sealed class {n}BatchKind : IClusterKindContributor");
             sb.AppendLine("{");
-            sb.AppendLine($"    public const string KindName = \"batch-{p.Name}\";");
+            sb.AppendLine($"    public const string KindName = \"{Abstractions.Projektionsvertrag.Kind(n)}\";");
             sb.AppendLine();
             sb.AppendLine("    public ClusterKind CreateKind(ActorSystem system, IServiceProvider provider)");
             sb.AppendLine("    {");
             sb.AppendLine("        var eventStore = provider.GetRequiredService<IEventStoreRepository>();");
             sb.AppendLine("        var deadLetter = provider.GetService<IDeadLetterSink>();");
             sb.AppendLine("        var konsum = provider.GetService<Konsum>() ?? Konsum.Standard;");
-            sb.AppendLine($"        var logger = provider.GetService<ILoggerFactory>()?.CreateLogger(\"Konsum.{p.Name}\");");
-            sb.AppendLine("        // Typfilter der Seiten: die Speicher-Diskriminatoren der abonnierten Typen samt Upcasting-Vorgängern.");
-            sb.AppendLine($"        var typen = BatchLeser.TypenAus({p.ToDisplayString()}.SubscribedTypes);");
+            sb.AppendLine($"        var logger = provider.GetService<ILoggerFactory>()?.CreateLogger(\"Konsum.{n}\");");
+            sb.AppendLine("        // Typfilter der Seiten: die Speicher-Diskriminatoren der gehörten Typen samt Upcasting-Vorgängern.");
+            sb.AppendLine($"        var typen = BatchLeser.TypenAus(GeneratedProjektionen.{n}_Typen);");
             sb.AppendLine("        return new ClusterKind(KindName, Props.FromProducer(() =>");
             sb.AppendLine("            new BatchLeserActor((partition, faehigkeiten) =>");
             sb.AppendLine("            {");
-            sb.AppendLine("                // Der Fähigkeits-Bereich der Aktivierung (Rahmen): jede Fähigkeit eines Stores liefert DIESELBE Instanz");
-            sb.AppendLine("                //   (Co-Commit: Effekte, Guards und Partition in einer Transaktion); frei, wenn die Aktivierung endet.");
-            EmitKonstruktion(sb, p, "                ");
-            var holen = schreibFaehigkeiten.Select(f => $"faehigkeiten.Hole<{f.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}>()");
-            sb.AppendLine($"                var trackers = new object[] {{ {string.Join(", ", holen)} }}.OfType<IProjectionTracker>().Distinct().ToList();");
-            sb.AppendLine("                if (trackers.Count != 1)");
-            sb.AppendLine($"                    throw new InvalidOperationException(\"{p.Name}: die Schreib-Fähigkeiten müssen genau einen IProjectionTracker-Store auflösen (gefunden: \" + trackers.Count + \") — docs/04 §4.2, CQRS052.\");");
-            sb.AppendLine();
-            sb.AppendLine("                // GA-1-Check (P4): eine append-artige Projektion OHNE Co-Commit-Tracker bricht hier");
-            sb.AppendLine("                //   (statt still at-least-once doppelte Appends zu schreiben).");
-            sb.AppendLine("                GaEinsPruefung.PrüfeCoCommit(projection, trackers[0], projection.SubscriberId);");
-            sb.AppendLine();
-            sb.AppendLine("                Func<EventEnvelope, ProjectionWriter, Task> dispatch =");
-            sb.AppendLine("                    (e, writer) => projection.DispatchAsync(e, writer, faehigkeiten);");
+            sb.AppendLine("                // Der Fähigkeits-Bereich der Aktivierung (Rahmen): jede Fähigkeit eines Stores liefert DIESELBE Instanz; frei, wenn die Aktivierung endet.");
+            sb.AppendLine($"                var projektion = {Konstruktion(p, "provider")};");
+            sb.AppendLine($"                var naht = new Projektionsnaht(GeneratedProjektionen.{n}_Ziel(faehigkeiten), provider.GetService<IFortschrittBeimFramework>());");
             sb.AppendLine("                // „P hat S weiterverarbeitet“ an die Clients — erst beim Spawnen aufgelöst (die Verteilung braucht das fertige Actor-System).");
             sb.AppendLine("                var verteilung = provider.GetService<global::Infrastructure.Verteilen.Verteilung>();");
-            sb.AppendLine("                var leser = new BatchLeser(eventStore, trackers[0], projection.SubscriberId, partition, konsum, typen, dispatch,");
+            sb.AppendLine($"                return new BatchLeser(eventStore, naht, GeneratedProjektionen.{n}_Kennung, partition, konsum, typen,");
+            sb.AppendLine($"                    (e, ct) => GeneratedProjektionen.{n}_Dispatch(projektion, e, faehigkeiten, ct),");
             sb.AppendLine("                    deadLetter: deadLetter, logger: logger,");
-            sb.AppendLine("                    verarbeitet: verteilung is null ? null : streams => verteilung.MeldeVerarbeitet(projection.SubscriberId, streams));");
-            sb.AppendLine("                return leser;");
+            sb.AppendLine($"                    verarbeitet: verteilung is null ? null : streams => verteilung.MeldeVerarbeitet(GeneratedProjektionen.{n}_Kennung, streams));");
             sb.AppendLine("            }, provider.GetRequiredService<IFaehigkeitsFabrik>(), logger)));");
             sb.AppendLine("    }");
             sb.AppendLine("}");

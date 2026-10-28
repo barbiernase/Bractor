@@ -114,8 +114,8 @@ public sealed class GleichbleibendAnalyzer : DiagnosticAnalyzer
     private static (BausteinArt Art, string Text)? Baustein(INamedTypeSymbol t)
     {
         if (Funktionsform.Hat(t, "Abstractions.IState")) return (BausteinArt.Aggregat, "ein Aggregat");
-        if (Funktionsform.Hat(t, "Abstractions.ISubscriber")) return (BausteinArt.Projektion, "eine Projektion");
-        if (t.AllInterfaces.Any(i => Funktionsform.Name(i) == "Abstractions.IReader`1")) return (BausteinArt.Reader, "ein Reader");
+        if (Funktionsform.Hat(t, "Abstractions.IProjektion")) return (BausteinArt.Projektion, "eine Projektion");
+        if (Funktionsform.Hat(t, "Abstractions.IReader")) return (BausteinArt.Reader, "ein Reader");
         if (t.TypeKind == TypeKind.Class && Funktionsform.IstBaustein(t))
             return Funktionsform.Gleichbleibend(Funktionsform.Lies(t)) ? (BausteinArt.GleichbleibendeFunktion, "eine Funktion") : (BausteinArt.Funktion, "eine Funktion");
         // Die Umsetzung einer Funktion draußen (Schnittstelle mit Auf), wenn sie im Host rechnet.

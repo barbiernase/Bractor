@@ -70,8 +70,8 @@ internal sealed class Lageart
         if (Hat(t, "IReadModel")) return Projektstruktur.Primitive.ReadModel;
         if (Hat(t, "IQuery")) return Projektstruktur.Primitive.Query;
         if (Hat(t, "IQueryResponse")) return Projektstruktur.Primitive.Antwort;
-        if (Hat(t, "ISubscriber")) return Projektstruktur.Primitive.Projektion;
-        if (Hat(t, "IReader`1")) return Projektstruktur.Primitive.Reader;
+        if (Hat(t, "IProjektion")) return Projektstruktur.Primitive.Projektion;
+        if (Hat(t, "IReader")) return Projektstruktur.Primitive.Reader;
         if (Hat(t, "IFunktion"))
             return Infrastructure.SourceGeneration.Funktionsform.IstBaustein(t) ? Projektstruktur.Primitive.HostFunktion : Projektstruktur.Primitive.FunktionsImplementierung;
         if (Hat(t, Dienst)) return Projektstruktur.Primitive.DienstImplementierung;

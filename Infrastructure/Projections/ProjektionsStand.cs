@@ -1,35 +1,45 @@
 using Abstractions;
-using Marten;
 using Microsoft.Extensions.Hosting;
 using Npgsql;
 
 namespace Infrastructure.Projections;
 
 /// <summary>
-/// Der Code-Stand einer replaybaren Projektion (vom PullPathGenerator registriert): Batch-Kind (<paramref name="KindName"/>),
-/// Schlüssel der Partitionen und Guards (<paramref name="ProjektionsId"/> = <c>SubscriberId</c>), Hash der Klasse und die Store-Klassen hinter
-/// ihren Schreib-Fähigkeiten. Emittierende Konsumenten haben keinen Stand — sie werden nie neu aufgebaut.
+/// Eine Projektion, wie der Generator sie registriert (PullPathGenerator): ihre Kennung (Typname), das Batch-Kind, die gehörten Event-Typen,
+/// der Code-Stand ihrer Klasse, die Store-Klassen hinter ihren Schreib-Fähigkeiten und wie man ihren Store aus einem Fähigkeits-Bereich holt
+/// (dieselbe Instanz unter jeder Fähigkeit). Daraus lesen Neuaufbau (<see cref="ProjektionsStandDienst"/>) und Stand je Id (<see cref="ProjektionsStaende"/>).
 /// </summary>
-public sealed record ProjektionsStand(string KindName, string ProjektionsId, string KlassenHash, IReadOnlyList<Type> Stores);
+public sealed record Projektionseintrag(
+    string Kennung,
+    string KindName,
+    IReadOnlyList<Type> Typen,
+    string KlassenHash,
+    IReadOnlyList<Type> Stores,
+    Func<IFaehigkeiten, IProjektionsZiel> Ziel)
+{
+    /// <summary>Die Naht zum Store dieser Projektion in einem Fähigkeits-Bereich.</summary>
+    public Projektionsnaht Naht(IFaehigkeiten faehigkeiten, IFortschrittBeimFramework? framework) => new(Ziel(faehigkeiten), framework);
+}
 
 /// <summary>
 /// „Passt die Leseseite noch zum Code?" (docs/konzept-werkbank.md §4.6, §12.3 E9). Läuft beim Start nach dem Siegel und VOR dem
 /// Pull-Pfad: der Code-Hash jeder Projektion (Klasse + Store) wird mit dem in <c>&lt;schema&gt;.stand</c> gespeicherten verglichen.
 /// Zum Stand gehört auch die Form des Konsums (<see cref="KonsumForm"/>, Partitionen): ein Wechsel der Partitionszahl ist ein Neuaufbau.
 /// <list type="bullet">
-///   <item><b>Sim</b>, mindestens eine Projektion geändert (oder ohne gespeicherten Stand): die ganze Leseseite wird geleert (alle
-///     Read-Model-Typen), die Partitionen und Guards aller Projektionen auf Anfang gesetzt. Der erste Poll weckt danach jede Partition, die
-///     Leser lesen ab 0 seitenweise — Neuaufbau IST der normale Batch-Konsum (wie <see cref="ProjectionRebuilder"/>). Geleert wird alles, weil
-///     Read-Models nicht einer Projektion gehören müssen; in Sim ist das billig und immer richtig.</item>
+///   <item><b>Sim</b>, mindestens eine Projektion geändert (oder ohne gespeicherten Stand): jede Projektion bekommt eine neue Generation (ihr Store
+///     ein leeres Ziel — bei Klasse 1 geleert —, der Fortschritt aller Partitionen auf Anfang) und wird sofort umgeschaltet. Der erste Takt weckt
+///     danach jede Partition, die Leser lesen ab 0 seitenweise — Neuaufbau IST der normale Batch-Konsum (wie <see cref="ProjectionRebuilder"/>, nur
+///     ohne auf das Ende zu warten: in Sim ist eine leere Sicht während des Aufbaus billig und richtig). Neu aufgebaut wird die ganze Leseseite,
+///     weil ein Store mehreren Projektionen dienen kann.</item>
 ///   <item><b>Prod</b>: nur eine Meldung (ein Neuaufbau ist eine bewusste Betriebsentscheidung), der gespeicherte Stand bleibt.</item>
 /// </list>
 /// </summary>
 public sealed class ProjektionsStandDienst(
     UmgebungKonfig umgebung,
-    IEnumerable<ProjektionsStand> projektionen,
+    IEnumerable<Projektionseintrag> projektionen,
     IEnumerable<StoreStand> stores,
-    IEnumerable<ReadModelTyp> readModels,
-    IDocumentStore marten,
+    IFaehigkeitsFabrik faehigkeiten,
+    IFortschrittBeimFramework framework,
     Konsum konsum) : IHostedService
 {
     public const string Praefix = "projektion:";
@@ -37,11 +47,11 @@ public sealed class ProjektionsStandDienst(
     /// <summary>Die Form des Konsums, die der gespeicherte Stand voraussetzt: Batch-Konsum mit P Partitionen.</summary>
     public static string KonsumForm(Konsum konsum) => $"batch/{konsum.Partitionen}";
 
-    /// <summary>Der Hash je Projektions-Id: Klasse + Stores (Reihenfolge der Store-Typen wie generiert) + Form des Konsums.</summary>
-    public static IReadOnlyDictionary<string, string> Hashes(IEnumerable<ProjektionsStand> projektionen, IEnumerable<StoreStand> stores, Konsum konsum)
+    /// <summary>Der Hash je Projektion: Klasse + Stores (Reihenfolge der Store-Typen wie generiert) + Form des Konsums.</summary>
+    public static IReadOnlyDictionary<string, string> Hashes(IEnumerable<Projektionseintrag> projektionen, IEnumerable<StoreStand> stores, Konsum konsum)
     {
         var je = stores.ToDictionary(s => s.Store, s => s.CodeHash);
-        return projektionen.ToDictionary(p => p.ProjektionsId,
+        return projektionen.ToDictionary(p => p.Kennung,
             p => Kodehash.Kombiniere([p.KlassenHash, .. p.Stores.Select(t => je.TryGetValue(t, out var h) ? h : t.FullName ?? t.Name), KonsumForm(konsum)]),
             StringComparer.Ordinal);
     }
@@ -78,14 +88,15 @@ public sealed class ProjektionsStandDienst(
             return;
         }
 
-        // Leseseite leeren, Partitionen und Guards aller Projektionen auf Anfang.
-        foreach (var t in readModels.Select(r => r.Typ).Distinct())
-            await marten.Advanced.Clean.DeleteDocumentsByTypeAsync(t, ct);
-        await using (var s = marten.LightweightSession())
+        // Jede Projektion in eine neue Generation, Fortschritt auf Anfang, sofort umschalten.
+        var generation = Generationen.Neu(DateTimeOffset.UtcNow);
+        foreach (var p in liste)
         {
-            foreach (var p in liste)
-                await Core.KonsumZuruecksetzen.PartitionenUndGuardsAsync(s, p.ProjektionsId, ct);
-            await s.SaveChangesAsync(ct);
+            using var bereich = faehigkeiten.Oeffne();
+            var naht = p.Naht(bereich, framework);
+            await naht.Ziel.NeueGenerationAsync(generation, ct);
+            await naht.Ablage.FortschrittZuruecksetzenAsync(p.Kennung, konsum.Partitionen, generation, ct);
+            await naht.Ziel.UmschaltenAsync(generation, ct);
         }
 
         await using (var cmd = conn.CreateCommand())
@@ -98,7 +109,7 @@ public sealed class ProjektionsStandDienst(
             cmd.Parameters.AddWithValue("w", aktuell.Values.ToArray());
             await cmd.ExecuteNonQueryAsync(ct);
         }
-        Console.WriteLine($"[CQRS] Leseseite neu: Code von {string.Join(", ", geaendert)} geändert — {liste.Count} Projektion(en) bauen aus dem Log neu auf.");
+        Console.WriteLine($"[CQRS] Leseseite neu: Code von {string.Join(", ", geaendert)} geändert — {liste.Count} Projektion(en) bauen aus dem Log neu auf (Generation {generation}).");
     }
 
     public Task StopAsync(CancellationToken ct) => Task.CompletedTask;

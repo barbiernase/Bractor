@@ -1,5 +1,4 @@
 using Abstractions;
-using Core;
 using Domain.Trainingslauf;
 using TrainingslaufAgg = Domain.Trainingslauf.Trainingslauf;
 
@@ -9,84 +8,39 @@ namespace Domain.Projections.Trainingslauf;
 /// Materialisiert den Trainingslauf-Zustand: ein <see cref="TrainingslaufReadModel"/>
 /// pro Lauf, die MetrikHistorie wächst je Epoche → Live-Kurve fürs Dashboard.
 ///
-/// APPEND-ARTIG (<see cref="IAppendProjektion"/>): TrainingFortschritt hängt einen Metrik-Punkt an —
-/// Doppelverarbeitung wäre sichtbar/korrumpierend, daher erzwingt der GA-1-Check den Co-Commit-Store
-/// (<c>TrainingslaufStore</c> ist zugleich <see cref="ICoCommitTracker"/>).
+/// Append-artig: TrainingFortschritt hängt einen Metrik-Punkt an — eine doppelte Wirkung wäre sichtbar; genau einmal, weil der
+/// <c>TrainingslaufStore</c> ein Store der Klasse 1 ist.
 /// </summary>
-public partial class TrainingslaufProjektion : ISubscriber, IPullSubscriber, IAppendProjektion
+public sealed class TrainingslaufProjektion : IProjektion
 {
-    public string SubscriberId => "trainingslauf-projektion";
-
-    public async Task Handle(TrainingAngefordert evt, IAggregateEnvelope envelope, ProjectionWriter writer, IUpsertTrainingslauf upsertTrainingslauf)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
+    public Task Auf(TrainingAngefordert e, Herkunft h, IUpsertTrainingslauf upsertTrainingslauf)
+        => upsertTrainingslauf.UpsertAsync(new TrainingslaufReadModel
         {
-            ctx.Track<TrainingslaufAgg>(envelope.AggregateId);
-            await upsertTrainingslauf.UpsertAsync(new TrainingslaufReadModel
-            {
-                Id = envelope.AggregateId,
-                DatensatzId = evt.DatensatzId.Wert,
-                DatensatzVersion = evt.DatensatzVersion,
-                Status = TrainingsStatus.Angefordert,
-                Hyperparameter = evt.Hyperparameter,
-                GesamtEpochen = evt.Hyperparameter.Epochen,
-                LetzteAktualisierung = envelope.CreatedAtUtc
-            });
+            Id = h.Id<TrainingslaufAgg>(),
+            DatensatzId = e.DatensatzId,
+            DatensatzVersion = e.DatensatzVersion,
+            Status = TrainingsStatus.Angefordert,
+            Hyperparameter = e.Hyperparameter,
+            GesamtEpochen = e.Hyperparameter.Epochen,
+            LetzteAktualisierung = h.Zeit
         });
-    }
 
-    public async Task Handle(TrainingBegonnen evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetTrainingslaufBegonnen setTrainingslaufBegonnen)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<TrainingslaufAgg>(envelope.AggregateId);
-            await setTrainingslaufBegonnen.SetBegonnenAsync(envelope.AggregateId, envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(TrainingBegonnen e, Herkunft h, ISetTrainingslaufBegonnen setTrainingslaufBegonnen)
+        => setTrainingslaufBegonnen.SetBegonnenAsync(h.Id<TrainingslaufAgg>(), h.Zeit);
 
-    public async Task Handle(TrainingFortschritt evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendMetrik appendMetrik)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<TrainingslaufAgg>(envelope.AggregateId);
-            await appendMetrik.AppendMetrikAsync(envelope.AggregateId, evt.Metrik, envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(TrainingFortschritt e, Herkunft h, IAppendMetrik appendMetrik)
+        => appendMetrik.AppendMetrikAsync(h.Id<TrainingslaufAgg>(), e.Metrik, h.Zeit);
 
-    public async Task Handle(TrainingAbgeschlossen evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetTrainingslaufAbgeschlossen setTrainingslaufAbgeschlossen)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<TrainingslaufAgg>(envelope.AggregateId);
-            await setTrainingslaufAbgeschlossen.SetAbgeschlossenAsync(
-                envelope.AggregateId, evt.ModellPfad, evt.Endmetriken, envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(TrainingAbgeschlossen e, Herkunft h, ISetTrainingslaufAbgeschlossen setTrainingslaufAbgeschlossen)
+        => setTrainingslaufAbgeschlossen.SetAbgeschlossenAsync(
+            h.Id<TrainingslaufAgg>(), e.ModellPfad, e.Endmetriken, h.Zeit);
 
-    public async Task Handle(TrainingGescheitert evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetTrainingslaufGescheitert setTrainingslaufGescheitert)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<TrainingslaufAgg>(envelope.AggregateId);
-            await setTrainingslaufGescheitert.SetGescheitertAsync(envelope.AggregateId, evt.Grund, envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(TrainingGescheitert e, Herkunft h, ISetTrainingslaufGescheitert setTrainingslaufGescheitert)
+        => setTrainingslaufGescheitert.SetGescheitertAsync(h.Id<TrainingslaufAgg>(), e.Grund, h.Zeit);
 
-    public async Task Handle(TrainingAbgebrochen evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetTrainingslaufStatus setTrainingslaufStatus)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<TrainingslaufAgg>(envelope.AggregateId);
-            await setTrainingslaufStatus.SetStatusAsync(envelope.AggregateId, TrainingsStatus.Abgebrochen, envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(TrainingAbgebrochen e, Herkunft h, ISetTrainingslaufStatus setTrainingslaufStatus)
+        => setTrainingslaufStatus.SetStatusAsync(h.Id<TrainingslaufAgg>(), TrainingsStatus.Abgebrochen, h.Zeit);
 
-    public async Task Handle(TrainingHaengengeblieben evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetTrainingslaufStatus setTrainingslaufStatus)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<TrainingslaufAgg>(envelope.AggregateId);
-            await setTrainingslaufStatus.SetStatusAsync(envelope.AggregateId, TrainingsStatus.Haengengeblieben, envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(TrainingHaengengeblieben e, Herkunft h, ISetTrainingslaufStatus setTrainingslaufStatus)
+        => setTrainingslaufStatus.SetStatusAsync(h.Id<TrainingslaufAgg>(), TrainingsStatus.Haengengeblieben, h.Zeit);
 }

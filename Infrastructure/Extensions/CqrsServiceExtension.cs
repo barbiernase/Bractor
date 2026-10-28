@@ -307,16 +307,17 @@ public static class CqrsServiceExtensions
     }
     
     /// <summary>
-    /// Query Infrastructure: der Stand der Projektion je gezeigter Id (<see cref="ProjektionsStaende"/>, aus dem Guard je Stream).
-    ///
-    /// Reader + ProjectionQueryService sind bereits ueber AddGeneratedProjectionServices() registriert (Domain.Infrastructure).
+    /// Query Infrastructure: der Stand der Projektionen je gezeigter Id (<see cref="ProjektionsStaende"/>, aus dem Guard je Stream) und der Fortschritt,
+    /// den das Framework für die Store-Klassen 2 und 3 hält. Der Query-Dienst selbst ist generiert (Komposition, <c>AddGeneratedPullPaths</c>).
     /// </summary>
     public static IServiceCollection AddCqrsQueryService(this IServiceCollection services)
     {
         Console.WriteLine("[CQRS] Registriere Query Infrastructure...");
         
-        services.AddSingleton<IReadModelDepsReader, ProjektionsStaende>();
-        Console.WriteLine("  + ProjektionsStaende (Stand je Id aus dem Fortschritt der Projektion)");
+        services.AddSingleton<ProjektionsStaende>();
+        services.AddSingleton<IFortschrittBeimFramework, FortschrittBeimFramework>();
+        services.AddSingleton<Core.StoreOrte>();
+        Console.WriteLine("  + ProjektionsStaende (Stand je Id aus dem Fortschritt der Projektion), Fortschritt beim Framework (Store-Klassen 2, 3)");
         
         Console.WriteLine();
         return services;

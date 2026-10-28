@@ -51,8 +51,8 @@ public sealed class FaehigkeitAnalyzer : DiagnosticAnalyzer
                 c.GetTypeByMetadataName("Abstractions.IWriteStore"),
                 c.GetTypeByMetadataName("Abstractions.IReadStore"),
                 c.GetTypeByMetadataName("Abstractions.IStore"),
-                c.GetTypeByMetadataName("Abstractions.ISubscriber"),
-                c.GetTypeByMetadataName("Abstractions.IReader`1"),
+                c.GetTypeByMetadataName("Abstractions.IProjektion"),
+                c.GetTypeByMetadataName("Abstractions.IReader"),
                 c.GetTypeByMetadataName("Abstractions.IFunktion"));
             if (m.IWrite == null || m.IRead == null) return;   // kein Fähigkeits-Vertrag in dieser Compilation
             start.RegisterSymbolAction(ctx => PruefeTyp(ctx, m), SymbolKind.NamedType);

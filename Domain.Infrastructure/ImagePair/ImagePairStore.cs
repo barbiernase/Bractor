@@ -1,25 +1,28 @@
+using Abstractions;
 using Core;
 using Domain.ImagePair;
 using Domain.Projections;
 using Marten;
 using Domain.Projections.ImagePair;
 
+using ImagePairAgg = Domain.ImagePair.ImagePair;
+
 namespace Domain.Infrastructure.ImagePair;
 
 /// <summary>
 /// Co-Commit-Store der ImagePair-Projektion — implementiert das Bündel <see cref="IImagePairStore"/> (Schreiben hier,
-/// Lesen im Teil <c>ImagePairStore.Lesen.cs</c>). Exactly-once-Naht in <see cref="MartenCoCommitStoreBase"/>; hier nur
+/// Lesen im Teil <c>ImagePairStore.Lesen.cs</c>). Exactly-once-Naht in <see cref="MartenStore"/>; hier nur
 /// die fachlichen Write-Effekte. SCOPED registriert (eine Instanz je Fähigkeits-Bereich, unter jeder Fähigkeit).
 /// </summary>
-public sealed partial class ImagePairStore : MartenCoCommitStoreBase, IImagePairStore
+public sealed partial class ImagePairStore : MartenStore, IImagePairStore
 {
-    public ImagePairStore(IDocumentStore store) : base(store) { }
+    public ImagePairStore(IDocumentStore store) : base(store, typeof(ImagePairReadModel)) { }
 
-    public Task UpsertAsync(ImagePairReadModel model) => EnqueueStore(model.Id, model);
+    public Task UpsertAsync(ImagePairReadModel model) => EnqueueStore(model.Id.Wert, model);
 
     public Task SetBildVerfuegbarAsync(
-        Guid id, BildVersion version, BildMeta meta, string pfad, DateTimeOffset aktualisierung)
-        => EnqueueTransform<ImagePairReadModel>(id, existing => version switch
+        Id<ImagePairAgg> id, BildVersion version, BildMeta meta, string pfad, DateTimeOffset aktualisierung)
+        => EnqueueTransform<ImagePairReadModel>(id.Wert, existing => version switch
         {
             BildVersion.Dc0 => existing with
             {
@@ -36,13 +39,13 @@ public sealed partial class ImagePairStore : MartenCoCommitStoreBase, IImagePair
             _ => existing
         });
 
-    public Task SetKomplettAsync(Guid id, DateTimeOffset aktualisierung)
-        => EnqueueTransform<ImagePairReadModel>(id, existing => existing with { IstKomplett = true, LetzteAktualisierung = aktualisierung });
+    public Task SetKomplettAsync(Id<ImagePairAgg> id, DateTimeOffset aktualisierung)
+        => EnqueueTransform<ImagePairReadModel>(id.Wert, existing => existing with { IstKomplett = true, LetzteAktualisierung = aktualisierung });
 
     public Task SetKiEinzelbildKlassifikationAsync(
-        Guid id, BildVersion version, Klassifikation bildLabel,
+        Id<ImagePairAgg> id, BildVersion version, Klassifikation bildLabel,
         IReadOnlyList<Klassifikation> regionLabels, DateTimeOffset aktualisierung)
-        => EnqueueTransform<ImagePairReadModel>(id, existing =>
+        => EnqueueTransform<ImagePairReadModel>(id.Wert, existing =>
         {
             var kiRegionen = regionLabels.Select(r => (Klassifikation?)r).ToArray();
             return version switch
@@ -61,12 +64,12 @@ public sealed partial class ImagePairStore : MartenCoCommitStoreBase, IImagePair
             };
         });
 
-    public Task SetKiBildpaarKlassifikationAsync(Guid id, Klassifikation label, DateTimeOffset aktualisierung)
-        => EnqueueTransform<ImagePairReadModel>(id, existing => existing with { KiBildpaarKlassifikation = label, LetzteAktualisierung = aktualisierung });
+    public Task SetKiBildpaarKlassifikationAsync(Id<ImagePairAgg> id, Klassifikation label, DateTimeOffset aktualisierung)
+        => EnqueueTransform<ImagePairReadModel>(id.Wert, existing => existing with { KiBildpaarKlassifikation = label, LetzteAktualisierung = aktualisierung });
 
     public Task SetMenschRegionLabelAsync(
-        Guid id, BildVersion version, int regionIndex, Klassifikation label, DateTimeOffset aktualisierung)
-        => EnqueueTransform<ImagePairReadModel>(id, existing => version switch
+        Id<ImagePairAgg> id, BildVersion version, int regionIndex, Klassifikation label, DateTimeOffset aktualisierung)
+        => EnqueueTransform<ImagePairReadModel>(id.Wert, existing => version switch
         {
             BildVersion.Dc0 => existing with
             {
@@ -82,22 +85,22 @@ public sealed partial class ImagePairStore : MartenCoCommitStoreBase, IImagePair
         });
 
     public Task SetMenschEinzelbildLabelAsync(
-        Guid id, BildVersion version, Klassifikation label, DateTimeOffset aktualisierung)
-        => EnqueueTransform<ImagePairReadModel>(id, existing => version switch
+        Id<ImagePairAgg> id, BildVersion version, Klassifikation label, DateTimeOffset aktualisierung)
+        => EnqueueTransform<ImagePairReadModel>(id.Wert, existing => version switch
         {
             BildVersion.Dc0 => existing with { Dc0MenschBildLabel = label, HatMenschLabel = true, LetzteAktualisierung = aktualisierung },
             BildVersion.Dc2 => existing with { Dc2MenschBildLabel = label, HatMenschLabel = true, LetzteAktualisierung = aktualisierung },
             _ => existing
         });
 
-    public Task SetMenschBildpaarLabelAsync(Guid id, Klassifikation label, DateTimeOffset aktualisierung)
-        => EnqueueTransform<ImagePairReadModel>(id, existing => existing with { MenschBildpaarLabel = label, HatMenschLabel = true, LetzteAktualisierung = aktualisierung });
+    public Task SetMenschBildpaarLabelAsync(Id<ImagePairAgg> id, Klassifikation label, DateTimeOffset aktualisierung)
+        => EnqueueTransform<ImagePairReadModel>(id.Wert, existing => existing with { MenschBildpaarLabel = label, HatMenschLabel = true, LetzteAktualisierung = aktualisierung });
 
-    public Task SetPhysischesProduktLabelAsync(Guid id, Klassifikation label, DateTimeOffset aktualisierung)
-        => EnqueueTransform<ImagePairReadModel>(id, existing => existing with { PhysischesProduktLabel = label, HatProduktLabel = true, LetzteAktualisierung = aktualisierung });
+    public Task SetPhysischesProduktLabelAsync(Id<ImagePairAgg> id, Klassifikation label, DateTimeOffset aktualisierung)
+        => EnqueueTransform<ImagePairReadModel>(id.Wert, existing => existing with { PhysischesProduktLabel = label, HatProduktLabel = true, LetzteAktualisierung = aktualisierung });
 
-    public Task SetInspiziertAsync(Guid id, DateTimeOffset aktualisierung)
-        => EnqueueTransform<ImagePairReadModel>(id, existing => existing with { IstInspiziert = true, LetzteAktualisierung = aktualisierung });
+    public Task SetInspiziertAsync(Id<ImagePairAgg> id, DateTimeOffset aktualisierung)
+        => EnqueueTransform<ImagePairReadModel>(id.Wert, existing => existing with { IstInspiziert = true, LetzteAktualisierung = aktualisierung });
 
     private static IReadOnlyList<Klassifikation?> UpdateRegionArray(
         IReadOnlyList<Klassifikation?> regionen, int index, Klassifikation label)

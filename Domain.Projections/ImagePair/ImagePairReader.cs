@@ -3,17 +3,15 @@ using Domain.ImagePair;
 
 namespace Domain.Projections.ImagePair;
 
-[ProjectionReader(TrackDeps = true)]
-public partial class ImagePairReader : IReader<ImagePairProjektion>
+public sealed class ImagePairReader : IReader
 {
     public async Task<OneOf<ImagePairAntwort, ImagePairNichtGefundenAntwort>>
-        Handle(GetImagePair query, IMessageEnvelope envelope, ReadContext ctx, IFindImagePair findImagePair)
+        Frage(GetImagePair query, IFindImagePair findImagePair)
     {
-        var model = await findImagePair.FindByIdAsync(query.PairId.Wert);
+        var model = await findImagePair.FindByIdAsync(query.PairId);
 
         if (model != null)
         {
-            ctx.Track(query.PairId.ToString());
             return ToAntwort(model);
         }
 
@@ -21,13 +19,12 @@ public partial class ImagePairReader : IReader<ImagePairProjektion>
     }
 
     public async Task<ImagePairSuchergebnis>
-        Handle(SucheImagePairs query, IMessageEnvelope envelope, ReadContext ctx, ISearchImagePairs searchImagePairs)
+        Frage(SucheImagePairs query, ISearchImagePairs searchImagePairs)
     {
         var (items, gesamtAnzahl) = await searchImagePairs.SearchAsync(query.Filter);
 
         var antworten = items.Select(m =>
         {
-            ctx.Track(m.Id.ToString());
             return ToAntwort(m);
         }).ToList();
 
@@ -37,7 +34,7 @@ public partial class ImagePairReader : IReader<ImagePairProjektion>
     }
 
     public async Task<ImagePairStatistikAntwort>
-        Handle(GetImagePairStatistik query, IMessageEnvelope envelope, ReadContext ctx, IGetImagePairStatistik getImagePairStatistik)
+        Frage(GetImagePairStatistik query, IGetImagePairStatistik getImagePairStatistik)
     {
         var s = await getImagePairStatistik.GetStatistikAsync();
 
@@ -49,13 +46,12 @@ public partial class ImagePairReader : IReader<ImagePairProjektion>
     }
 
     public async Task<ImagePairArbeitsliste>
-        Handle(GetUnklassifizierteImagePairs query, IMessageEnvelope envelope, ReadContext ctx, IGetUnklassifizierte getUnklassifizierte)
+        Frage(GetUnklassifizierteImagePairs query, IGetUnklassifizierte getUnklassifizierte)
     {
         var models = await getUnklassifizierte.GetUnklassifizierteAsync(query.MaxAnzahl);
 
         var antworten = models.Select(m =>
         {
-            ctx.Track(m.Id.ToString());
             return ToAntwort(m);
         }).ToList();
 
@@ -63,27 +59,27 @@ public partial class ImagePairReader : IReader<ImagePairProjektion>
     }
 
     public async Task<ProduktionsVerlaufAntwort>
-        Handle(GetProduktionsVerlauf query, IMessageEnvelope envelope, ReadContext ctx, IGetVerlauf getVerlauf)
+        Frage(GetProduktionsVerlauf query, IGetVerlauf getVerlauf)
     {
         return await getVerlauf.GetVerlaufAsync(
             query.Von, query.Bis, query.BucketMinuten);
     }
 
     public async Task<ProduktionsTageAntwort>
-        Handle(GetProduktionsTage query, IMessageEnvelope envelope, ReadContext ctx, IGetProduktionsTage getProduktionsTage)
+        Frage(GetProduktionsTage query, IGetProduktionsTage getProduktionsTage)
     {
         return await getProduktionsTage.GetProduktionsTageAsync();
     }
 
     public async Task<ProduktionsStripAntwort>
-        Handle(GetProduktionsStrip query, IMessageEnvelope envelope, ReadContext ctx, IGetProduktionsStrip getProduktionsStrip)
+        Frage(GetProduktionsStrip query, IGetProduktionsStrip getProduktionsStrip)
     {
         return await getProduktionsStrip.GetProduktionsStripAsync(query.Von, query.Bis);
     }
 
     /// <summary>Read-Model → DTO. Internal, damit der DatensatzReader (Galerie-Join) es wiederverwendet.</summary>
     internal static ImagePairAntwort ToAntwort(ImagePairReadModel m) => new(
-        Id: new Id<Domain.ImagePair.ImagePair>(m.Id),
+        Id: m.Id,
         PairKey: m.PairKey,
         ProduziertAm: m.ProduziertAm,
         AufgenommenAm: m.AufgenommenAm,

@@ -1,30 +1,33 @@
+using Abstractions;
 using Core;
 using Domain.Projections;
 using Marten;
 using Domain.Projections.ImagePair;
 
+using ImagePairAgg = Domain.ImagePair.ImagePair;
+
 namespace Domain.Infrastructure.ImagePair;
 
 /// <summary>
 /// Co-Commit-Store der ImagePairHistorie (Append-Projektion, Muster B: Read + Write auf derselben
-/// Klasse). Exactly-once-Naht in <see cref="MartenCoCommitStoreBase"/>; <see cref="AppendEintragAsync"/>
+/// Klasse). Exactly-once-Naht in <see cref="MartenStore"/>; <see cref="AppendEintragAsync"/>
 /// puffert einen load-or-create-append als Effekt. SCOPED registriert (eine Instanz je Fähigkeits-Bereich, unter jeder Fähigkeit).
 /// </summary>
 public sealed class ImagePairHistorieStore
-    : MartenCoCommitStoreBase, IImagePairHistorieStore
+    : MartenStore, IImagePairHistorieStore
 {
-    public ImagePairHistorieStore(IDocumentStore store) : base(store) { }
+    public ImagePairHistorieStore(IDocumentStore store) : base(store, typeof(ImagePairHistorieReadModel)) { }
 
     // ─── Write: nur puffern (load-or-create-append im Commit-Batch) ───
-    public Task AppendEintragAsync(Guid pairId, HistorieEintrag eintrag)
-        => EnqueueAnlegenOderAendern<ImagePairHistorieReadModel>(pairId, existing => existing is null
+    public Task AppendEintragAsync(Id<ImagePairAgg> pairId, HistorieEintrag eintrag)
+        => EnqueueAnlegenOderAendern<ImagePairHistorieReadModel>(pairId.Wert, existing => existing is null
             ? new ImagePairHistorieReadModel { Id = pairId, Eintraege = new List<HistorieEintrag> { eintrag } }
             : existing with { Eintraege = new List<HistorieEintrag>(existing.Eintraege) { eintrag } });
 
     // ─── Read ───
-    public async Task<ImagePairHistorieReadModel?> GetByPairIdAsync(Guid pairId)
+    public async Task<ImagePairHistorieReadModel?> GetByPairIdAsync(Id<ImagePairAgg> pairId)
     {
         await using var s = Store.QuerySession();
-        return await s.LoadAsync<ImagePairHistorieReadModel>(pairId);
+        return await s.LoadAsync<ImagePairHistorieReadModel>(pairId.Wert);
     }
 }

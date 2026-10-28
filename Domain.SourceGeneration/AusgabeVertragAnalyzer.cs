@@ -15,8 +15,8 @@ namespace Domain.SourceGeneration;
 ///
 /// Geprüft (Rolle über Marker/Parameter-Typen, nie über Namen):
 ///  • Decide — Klasse implementiert <c>IDecider&lt;T&gt;</c>, 1. Parameter <c>ICommand</c>: <c>IEnumerable&lt;X&gt;</c>.
-///  • Projektion — <c>ISubscriber</c>, Parameter <c>IEvent</c> + <c>IAggregateEnvelope</c>.
-///  • Reader — <c>IReader&lt;T&gt;</c>, 1. Parameter <c>IQuery</c>: <c>Task&lt;X&gt;</c>/<c>ValueTask&lt;X&gt;</c>/<c>X</c>.
+///  • Reader — <c>IReader</c>, <c>Frage</c> mit 1. Parameter <c>IQuery</c>: <c>Task&lt;X&gt;</c>/<c>ValueTask&lt;X&gt;</c>/<c>X</c>.
+/// Eine Projektion gibt nichts aus (ihr <c>Auf</c> liefert <c>Task</c>, CQRS057).
 /// Die Ausgabe einer Funktion (<c>Auf</c>) prüft die Funktionsform (CQRS100).
 /// Offen ist X (bzw. ein OneOf-Typargument), wenn es ein Interface, ein Typ-Parameter, <c>object</c> oder eine abstrakte
 /// Klasse ist. <c>Task</c>/<c>ValueTask</c>/<c>void</c> ohne Ergebnis sind erlaubt (reine Effekte, z. B. Projektionen).
@@ -52,9 +52,7 @@ public sealed class AusgabeVertragAnalyzer : DiagnosticAnalyzer
                 c.GetTypeByMetadataName("Abstractions.ICommand"),
                 c.GetTypeByMetadataName("Abstractions.IEvent"),
                 c.GetTypeByMetadataName("Abstractions.IQuery"),
-                c.GetTypeByMetadataName("Abstractions.ISubscriber"),
-                c.GetTypeByMetadataName("Abstractions.IAggregateEnvelope"),
-                c.GetTypeByMetadataName("Abstractions.IReader`1"));
+                c.GetTypeByMetadataName("Abstractions.IReader"));
             if (m.ICommand == null) return;   // kein CQRS-Vertrag in dieser Compilation
             start.RegisterSymbolAction(ctx => Pruefe(ctx, m), SymbolKind.Method);
         });
@@ -62,10 +60,9 @@ public sealed class AusgabeVertragAnalyzer : DiagnosticAnalyzer
 
     private sealed class Marker
     {
-        public readonly INamedTypeSymbol? IDecider, ICommand, IEvent, IQuery, ISubscriber, IAggEnvelope, IReader;
-        public Marker(INamedTypeSymbol? d, INamedTypeSymbol? c, INamedTypeSymbol? e, INamedTypeSymbol? q, INamedTypeSymbol? s,
-                      INamedTypeSymbol? env, INamedTypeSymbol? r)
-        { IDecider = d; ICommand = c; IEvent = e; IQuery = q; ISubscriber = s; IAggEnvelope = env; IReader = r; }
+        public readonly INamedTypeSymbol? IDecider, ICommand, IEvent, IQuery, IReader;
+        public Marker(INamedTypeSymbol? d, INamedTypeSymbol? c, INamedTypeSymbol? e, INamedTypeSymbol? q, INamedTypeSymbol? r)
+        { IDecider = d; ICommand = c; IEvent = e; IQuery = q; IReader = r; }
     }
 
     private static void Pruefe(SymbolAnalysisContext ctx, Marker m)
@@ -79,15 +76,12 @@ public sealed class AusgabeVertragAnalyzer : DiagnosticAnalyzer
             SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, generischOderMarker));
         bool Ist(ITypeSymbol t, INamedTypeSymbol? marker) => marker != null &&
             (SymbolEqualityComparer.Default.Equals(t, marker) || t.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i, marker)));
-        bool HatParam(INamedTypeSymbol? pt) => pt != null && mm.Parameters.Any(p => SymbolEqualityComparer.Default.Equals(p.Type, pt));
 
         ITypeSymbol? element = null;
         var rt = mm.ReturnType;
         if (Hat(m.IDecider) && Ist(p0, m.ICommand))
             element = Element(rt, enumerable: true, task: false);
-        else if (Hat(m.ISubscriber) && Ist(p0, m.IEvent) && HatParam(m.IAggEnvelope))
-            element = Element(rt, enumerable: true, task: false);
-        else if (Hat(m.IReader) && Ist(p0, m.IQuery))
+        else if (Ist(typ, m.IReader) && mm.Name == Abstractions.Projektionsvertrag.Frage && Ist(p0, m.IQuery))
             element = Element(rt, enumerable: false, task: true) ?? (IstOhneErgebnis(rt) ? null : rt);
         else return;
         if (element == null) return;   // Task/void: reine Effekte

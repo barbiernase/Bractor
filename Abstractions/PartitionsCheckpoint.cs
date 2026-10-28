@@ -1,7 +1,7 @@
 namespace Abstractions;
 
 /// <summary>
-/// Durabler Stand einer Partition einer replaybaren Projektion im Batch-Konsum (docs/04 §4.1). Id-Form
+/// Durabler Stand (Fortschritt) einer Partition einer Projektion bzw. Funktion (docs/04 §4.1). Id-Form
 /// <c>"{projektionsId}:{partition}"</c>. Reines POCO ohne Persistenz-Abhängigkeit (analog <see cref="ProjectionCheckpoint"/>); die
 /// Marten-Registrierung (numerische Revision auf <see cref="Version"/>) erfolgt in der Host-/Store-Konfiguration.
 /// <list type="bullet">
@@ -11,6 +11,8 @@ namespace Abstractions;
 ///     Aktivierung oder ein Neuaufbau dazwischen geschrieben, fällt der ganze Batch zurück. 0 = noch nie geschrieben.</item>
 ///   <item><see cref="Geparkt"/>: Streams, deren Dispatch dauerhaft wirft; ihre Events überspringt der Leser, bis ein Einzelversuch
 ///     durchläuft.</item>
+///   <item><see cref="Generation"/>: in welche Generation des Ziels die Projektion schreibt (A4, <see cref="IProjektionsZiel.Beginne"/>); ein
+///     Neuaufbau setzt eine neue.</item>
 /// </list>
 /// </summary>
 public class PartitionsCheckpoint
@@ -21,6 +23,7 @@ public class PartitionsCheckpoint
     public long Position { get; set; }
     public int Version { get; set; }
     public List<GeparkterStream> Geparkt { get; set; } = new();
+    public string Generation { get; set; } = Generationen.Erste;
     public DateTimeOffset UpdatedAt { get; set; }
 
     public static string MakeId(string projektionsId, int partition) => $"{projektionsId}:{partition}";

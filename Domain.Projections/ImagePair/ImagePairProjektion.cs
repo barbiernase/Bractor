@@ -1,149 +1,77 @@
 using Abstractions;
-using Core;
 using Domain.ImagePair;
+using ImagePairAgg = Domain.ImagePair.ImagePair;
 
 namespace Domain.Projections.ImagePair;
 
-public partial class ImagePairProjektion : ISubscriber, IPullSubscriber
+public sealed class ImagePairProjektion : IProjektion
 {
-    public string SubscriberId => "imagepair-projektion";
-
     // =========================================================================
     // LIFECYCLE
     // =========================================================================
 
-    public async Task Handle(
-        ImagePairErstellt evt, IAggregateEnvelope envelope, ProjectionWriter writer, IUpsertImagePair upsertImagePair)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
+    public Task Auf(ImagePairErstellt e, Herkunft h, IUpsertImagePair upsertImagePair)
+        => upsertImagePair.UpsertAsync(new ImagePairReadModel
         {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await upsertImagePair.UpsertAsync(new ImagePairReadModel
-            {
-                Id = envelope.AggregateId,
-                PairKey = evt.PairKey,
-                ProduziertAm = evt.ProduziertAm,
-                AufgenommenAm = evt.AufgenommenAm,
-                UrsprungsPfad = evt.UrsprungsPfad,
-                LetzteAktualisierung = envelope.CreatedAtUtc
-            });
+            Id = h.Id<ImagePairAgg>(),
+            PairKey = e.PairKey,
+            ProduziertAm = e.ProduziertAm,
+            AufgenommenAm = e.AufgenommenAm,
+            UrsprungsPfad = e.UrsprungsPfad,
+            LetzteAktualisierung = h.Zeit
         });
-    }
 
-    public async Task Handle(
-        BildVerfuegbar evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetBildVerfuegbar setBildVerfuegbar)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await setBildVerfuegbar.SetBildVerfuegbarAsync(
-                envelope.AggregateId, evt.Version, evt.Meta, evt.Pfad,
-                envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(BildVerfuegbar e, Herkunft h, ISetBildVerfuegbar setBildVerfuegbar)
+        => setBildVerfuegbar.SetBildVerfuegbarAsync(
+            h.Id<ImagePairAgg>(), e.Version, e.Meta, e.Pfad,
+            h.Zeit);
 
-    public async Task Handle(
-        ImagePairKomplett evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetKomplett setKomplett)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await setKomplett.SetKomplettAsync(envelope.AggregateId, envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(ImagePairKomplett e, Herkunft h, ISetKomplett setKomplett)
+        => setKomplett.SetKomplettAsync(h.Id<ImagePairAgg>(), h.Zeit);
 
     // =========================================================================
     // STRANG 1 — KI-Klassifikation
     // =========================================================================
 
-    public async Task Handle(
-        EinzelBildDurchKiKlassifiziert evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetKiEinzelbildKlassifikation setKiEinzelbildKlassifikation)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await setKiEinzelbildKlassifikation.SetKiEinzelbildKlassifikationAsync(
-                envelope.AggregateId, evt.Version, evt.BildLabel, evt.RegionLabels,
-                envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(EinzelBildDurchKiKlassifiziert e, Herkunft h, ISetKiEinzelbildKlassifikation setKiEinzelbildKlassifikation)
+        => setKiEinzelbildKlassifikation.SetKiEinzelbildKlassifikationAsync(
+            h.Id<ImagePairAgg>(), e.Version, e.BildLabel, e.RegionLabels,
+            h.Zeit);
 
-    public async Task Handle(
-        BildPaarDurchKiKlassifiziert evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetKiBildpaarKlassifikation setKiBildpaarKlassifikation)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await setKiBildpaarKlassifikation.SetKiBildpaarKlassifikationAsync(
-                envelope.AggregateId, evt.Label, envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(BildPaarDurchKiKlassifiziert e, Herkunft h, ISetKiBildpaarKlassifikation setKiBildpaarKlassifikation)
+        => setKiBildpaarKlassifikation.SetKiBildpaarKlassifikationAsync(
+            h.Id<ImagePairAgg>(), e.Label, h.Zeit);
 
     // =========================================================================
     // STRANG 2 — Mensch labelt Kamerabilder
     // =========================================================================
 
-    public async Task Handle(
-        BildRegionGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetMenschRegionLabel setMenschRegionLabel)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await setMenschRegionLabel.SetMenschRegionLabelAsync(
-                envelope.AggregateId, evt.Version, evt.RegionIndex, evt.Label,
-                envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(BildRegionGelabelt e, Herkunft h, ISetMenschRegionLabel setMenschRegionLabel)
+        => setMenschRegionLabel.SetMenschRegionLabelAsync(
+            h.Id<ImagePairAgg>(), e.Version, e.RegionIndex, e.Label,
+            h.Zeit);
 
-    public async Task Handle(
-        EinzelBildGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetMenschEinzelbildLabel setMenschEinzelbildLabel)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await setMenschEinzelbildLabel.SetMenschEinzelbildLabelAsync(
-                envelope.AggregateId, evt.Version, evt.Label, envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(EinzelBildGelabelt e, Herkunft h, ISetMenschEinzelbildLabel setMenschEinzelbildLabel)
+        => setMenschEinzelbildLabel.SetMenschEinzelbildLabelAsync(
+            h.Id<ImagePairAgg>(), e.Version, e.Label, h.Zeit);
 
-    public async Task Handle(
-        BildPaarGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetMenschBildpaarLabel setMenschBildpaarLabel)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await setMenschBildpaarLabel.SetMenschBildpaarLabelAsync(
-                envelope.AggregateId, evt.Label, envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(BildPaarGelabelt e, Herkunft h, ISetMenschBildpaarLabel setMenschBildpaarLabel)
+        => setMenschBildpaarLabel.SetMenschBildpaarLabelAsync(
+            h.Id<ImagePairAgg>(), e.Label, h.Zeit);
 
     // =========================================================================
     // STRANG 3 — Mensch labelt physisches Produkt
     // =========================================================================
 
-    public async Task Handle(
-        PhysischesProduktGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetPhysischesProduktLabel setPhysischesProduktLabel)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await setPhysischesProduktLabel.SetPhysischesProduktLabelAsync(
-                envelope.AggregateId, evt.Label, envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(PhysischesProduktGelabelt e, Herkunft h, ISetPhysischesProduktLabel setPhysischesProduktLabel)
+        => setPhysischesProduktLabel.SetPhysischesProduktLabelAsync(
+            h.Id<ImagePairAgg>(), e.Label, h.Zeit);
 
     // =========================================================================
     // INSPEKTION
     // =========================================================================
 
-    public async Task Handle(
-        ImagePairInspiziert evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetInspiziert setInspiziert)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await setInspiziert.SetInspiziertAsync(
-                envelope.AggregateId, envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(ImagePairInspiziert e, Herkunft h, ISetInspiziert setInspiziert)
+        => setInspiziert.SetInspiziertAsync(
+            h.Id<ImagePairAgg>(), h.Zeit);
 }

@@ -1,5 +1,4 @@
 using Abstractions;
-using Core;
 using Domain.Datensatz;
 using DatensatzAgg = Domain.Datensatz.Datensatz;
 
@@ -10,97 +9,50 @@ namespace Domain.Projections.Datensatz;
 /// pro Datensatz (Upsert) und beim Einfrieren je Mitglied eine <see cref="DatensatzSampleReadModel"/>
 /// (die queryierbare Trainings-Wahrheit).
 ///
-/// APPEND-ARTIG (<see cref="IAppendProjektion"/>): das Einfrieren schreibt neue Sample-Zeilen —
-/// der GA-1-Check erzwingt daher den Co-Commit-Store (der <c>DatensatzStore</c> ist zugleich
-/// <see cref="ICoCommitTracker"/> → Effekt + Marke in EINER Transaktion, exactly-once).
-///
-/// Kein EventStore-Zugriff — die Wahrheit kommt ausschließlich aus PubSub-Events.
+/// Das Einfrieren schreibt neue Sample-Zeilen (append-artig, eine doppelte Wirkung wäre sichtbar) — genau einmal, weil der
+/// <c>DatensatzStore</c> ein Store der Klasse 1 ist (Wirkung und Fortschritt in einer Transaktion).
 /// </summary>
-public partial class DatensatzProjektion : ISubscriber, IPullSubscriber, IAppendProjektion
+public sealed class DatensatzProjektion : IProjektion
 {
-    public string SubscriberId => "datensatz-projektion";
-
     // ═══════════════════════════════════════════════════════════
     // LIFECYCLE
     // ═══════════════════════════════════════════════════════════
 
-    public async Task Handle(
-        DatensatzErstellt evt, IAggregateEnvelope envelope, ProjectionWriter writer, IUpsertDatensatz upsertDatensatz)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
+    public Task Auf(DatensatzErstellt e, Herkunft h, IUpsertDatensatz upsertDatensatz)
+        => upsertDatensatz.UpsertAsync(new DatensatzReadModel
         {
-            ctx.Track<DatensatzAgg>(envelope.AggregateId);
-            await upsertDatensatz.UpsertAsync(new DatensatzReadModel
-            {
-                Id = envelope.AggregateId,
-                Name = evt.Name,
-                Status = DatensatzStatus.Entwurf,
-                AnzahlMitglieder = 0,
-                LetzteAktualisierung = envelope.CreatedAtUtc
-            });
+            Id = h.Id<DatensatzAgg>(),
+            Name = e.Name,
+            Status = DatensatzStatus.Entwurf,
+            AnzahlMitglieder = 0,
+            LetzteAktualisierung = h.Zeit
         });
-    }
 
     // ═══════════════════════════════════════════════════════════
     // KOMPOSITION — Ranges & manuelles Delta
     // ═══════════════════════════════════════════════════════════
 
-    public async Task Handle(
-        PaareAufgenommen evt, IAggregateEnvelope envelope, ProjectionWriter writer, INimmRangeAuf nimmRangeAuf)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<DatensatzAgg>(envelope.AggregateId);
-            await nimmRangeAuf.NimmRangeAufAsync(
-                envelope.AggregateId, evt.ImagePairIds.Select(i => i.Wert).ToList(), evt.Herkunft, envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(PaareAufgenommen e, Herkunft h, INimmRangeAuf nimmRangeAuf)
+        => nimmRangeAuf.NimmRangeAufAsync(
+            h.Id<DatensatzAgg>(), e.ImagePairIds, e.Herkunft, h.Zeit);
 
-    public async Task Handle(
-        PaarAufgenommen evt, IAggregateEnvelope envelope, ProjectionWriter writer, INimmPaarAuf nimmPaarAuf)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<DatensatzAgg>(envelope.AggregateId);
-            await nimmPaarAuf.NimmPaarAufAsync(envelope.AggregateId, evt.ImagePairId.Wert, envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(PaarAufgenommen e, Herkunft h, INimmPaarAuf nimmPaarAuf)
+        => nimmPaarAuf.NimmPaarAufAsync(h.Id<DatensatzAgg>(), e.ImagePairId, h.Zeit);
 
-    public async Task Handle(
-        PaarEntfernt evt, IAggregateEnvelope envelope, ProjectionWriter writer, IEntfernePaar entfernePaar)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<DatensatzAgg>(envelope.AggregateId);
-            await entfernePaar.EntfernePaarAsync(envelope.AggregateId, evt.ImagePairId.Wert, envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(PaarEntfernt e, Herkunft h, IEntfernePaar entfernePaar)
+        => entfernePaar.EntfernePaarAsync(h.Id<DatensatzAgg>(), e.ImagePairId, h.Zeit);
 
-    public async Task Handle(
-        SplitGesetzt evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetzeSplit setzeSplit)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<DatensatzAgg>(envelope.AggregateId);
-            await setzeSplit.SetzeSplitAsync(
-                envelope.AggregateId,
-                new SplitKonfig(evt.TrainProzent, evt.ValProzent, evt.TestProzent, evt.Seed),
-                envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(SplitGesetzt e, Herkunft h, ISetzeSplit setzeSplit)
+        => setzeSplit.SetzeSplitAsync(
+            h.Id<DatensatzAgg>(),
+            new SplitKonfig(e.TrainProzent, e.ValProzent, e.TestProzent, e.Seed),
+            h.Zeit);
 
     // ═══════════════════════════════════════════════════════════
     // EINFRIEREN — Snapshot festschreiben (append-artig)
     // ═══════════════════════════════════════════════════════════
 
-    public async Task Handle(
-        DatensatzEingefroren evt, IAggregateEnvelope envelope, ProjectionWriter writer, IFriereEin friereEin)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<DatensatzAgg>(envelope.AggregateId);
-            await friereEin.FriereEinAsync(
-                envelope.AggregateId, evt.Version, evt.Mitglieder, envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(DatensatzEingefroren e, Herkunft h, IFriereEin friereEin)
+        => friereEin.FriereEinAsync(
+            h.Id<DatensatzAgg>(), e.Version, e.Mitglieder, h.Zeit);
 }

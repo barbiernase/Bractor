@@ -16,7 +16,7 @@ public sealed class MitgliederEinfrieren : IFunktion
     {
         var modelle = new Dictionary<Guid, ImagePairReadModel>();
         foreach (var pid in e.Mitglieder)
-            if (await finde.FindByIdAsync(pid.Wert) is { } ip) modelle[pid.Wert] = ip;
+            if (await finde.FindByIdAsync(pid) is { } ip) modelle[pid.Wert] = ip;
         if (modelle.Count == 0) return new KeinMitgliedAuffindbar(e.Mitglieder.Count);
 
         var splits = SplitZuteiler.Zuteilen(modelle.Select(kv => (kv.Key, BestimmeLabel(kv.Value))).ToList(), e.Split);

@@ -12,7 +12,7 @@ namespace Infrastructure.SourceGeneration
     /// Der WECKPLAN (Plan Pub/Sub-Neustrukturierung §2.3, Phase 6): je Event-Typ, wen ein Commit weckt — die Batch-Leser der Projektionen, die ihn
     /// hören (<c>batch-&lt;Projektion&gt;</c>, je Partition), die Funktions-Actors, die ihn aus dem Log hören (<c>funktion-&lt;F&gt;</c>, je Partition
     /// bzw. die eine Adresse), und die Uhr (<c>FristGesetzt</c>). Alles NUR aus den Signaturen:
-    /// <code>public Task Handle(BildErfasst e, IAggregateEnvelope env, ProjectionWriter w, ISchreibeBild s)   → batch-BildProjektion</code>
+    /// <code>public Task Auf(BildErfasst e, Herkunft h, ISchreibeBild s)                                      → batch-BildProjektion</code>
     /// <code>public OneOf&lt;Mahne&gt; Auf(Ueberfaellig e, Herkunft h)                                         → funktion-Mahnwesen</code>
     /// Der Wecker am Flush (<c>Infrastructure.Wecken.Wecker</c>) schlägt hier nach und weckt gezielt; der Takt je Partition bleibt das Netz.
     ///
@@ -47,15 +47,13 @@ namespace Infrastructure.SourceGeneration
 
             foreach (var t in Vertragsassemblies.Typen(context.Compilation).OrderBy(t => t.ToDisplayString(), System.StringComparer.Ordinal))
             {
-                // Projektionen: Handle(TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeiten…) — der Batch-Leser je Partition.
-                if (t.TypeKind == TypeKind.Class && !t.IsAbstract && Funktionsform.Hat(t, "Abstractions.IPullSubscriber"))
+                // Projektionen: Auf(TEvent[, Herkunft], Fähigkeiten…) — der Batch-Leser je Partition (dieselbe Lesart wie der PullPathGenerator, FB-12).
+                if (Projektionsform.IstProjektion(t))
                 {
-                    foreach (var m in t.GetMembers("Handle").OfType<IMethodSymbol>())
-                    {
-                        if (m.Parameters.Length < 3 || Funktionsform.Name(m.Parameters[1].Type) != "Abstractions.IAggregateEnvelope"
-                            || Funktionsform.Name(m.Parameters[2].Type) != "Core.ProjectionWriter") continue;
-                        if (Pruefe(context, t, m.Parameters[0].Type, m.Locations.FirstOrDefault()) is { } e) eintraege.Add((e, "batch-" + t.Name, false));
-                    }
+                    var p = Projektionsform.LiesProjektion(t);
+                    foreach (var a in p.Aufs)
+                        if (Pruefe(context, t, a.Eingang, a.Methode.Locations.FirstOrDefault()) is { } e)
+                            eintraege.Add((e, Abstractions.Projektionsvertrag.Kind(t.Name), false));
                 }
 
                 // Funktionen: Auf mit einem Event aus dem Log (Hinweise gehen übers Hinweis-Netz, nicht über den Weckplan).

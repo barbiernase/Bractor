@@ -17,9 +17,8 @@ namespace Infrastructure.SourceGeneration
     /// <para><b>Abgeleitet</b> (aus dem Graphen, kein zweites Wort): die Hör-Menge =
     /// (1) alle Events, die das Aggregat eines erlaubten Commands erzeugt (Decide-OneOf aller Decide dieses Aggregats,
     ///     inkl. Ablehnungen) — „du hörst das Ding, auf das du einwirkst";
-    /// (2) alle Events, die die Projektion hinter einer erlaubten Query behandelt (Query → Reader-Handle →
-    ///     <c>IReader&lt;TProjektion&gt;</c> → Projektions-Handle mit <c>IAggregateEnvelope</c>) — „du hörst, was du
-    ///     sowieso lesen darfst".</para>
+    /// (2) alle Events, die die Projektionen hinter einer erlaubten Query hören (Query → Frage eines Readers → ihre Lese-Fähigkeiten → die
+    ///     Projektionen, die in denselben Store schreiben → ihre Auf, <see cref="Leseseitenbild"/>) — „du hörst, was du sowieso lesen darfst".</para>
     /// <para><b>Funktionen</b>: die Funktionen draußen, die er rechnen darf (<c>IDarf&lt;IFunktion-Typ&gt;</c>) — ein Client, der ihn verkörpert,
     /// darf sie tragen.</para>
     /// <para><b>Clients</b> (<c>GeneratedClientVertraege</c>, docs/konzept-akteure.md §4): je <c>IClientVertrag</c> was er trägt, sendet, fragt
@@ -55,8 +54,6 @@ namespace Infrastructure.SourceGeneration
             var iTransient = c.GetTypeByMetadataName("Abstractions.ITransientEvent");
             var iFunktion = c.GetTypeByMetadataName("Abstractions.IFunktion");
             var iDecider = c.GetTypeByMetadataName("Abstractions.IDecider`1");
-            var iReader = c.GetTypeByMetadataName("Abstractions.IReader`1");
-            var iAggEnvelope = c.GetTypeByMetadataName("Abstractions.IAggregateEnvelope");
             var fq = SymbolDisplayFormat.FullyQualifiedFormat;
 
             var alle = new List<INamedTypeSymbol>();
@@ -71,8 +68,12 @@ namespace Infrastructure.SourceGeneration
             var cmdZuAgg = new Dictionary<INamedTypeSymbol, INamedTypeSymbol>(SymbolEqualityComparer.Default);
             var aggEvents = new Dictionary<INamedTypeSymbol, SortedSet<string>>(SymbolEqualityComparer.Default);
             // ── Graph: Query → Projektion, Projektion → behandelte Events ──
-            var queryZuProj = new Dictionary<INamedTypeSymbol, INamedTypeSymbol>(SymbolEqualityComparer.Default);
-            var projEvents = new Dictionary<INamedTypeSymbol, SortedSet<string>>(SymbolEqualityComparer.Default);
+            var queryEvents = new Dictionary<INamedTypeSymbol, SortedSet<string>>(SymbolEqualityComparer.Default);
+            var leseseite = Leseseitenbild.Lies(c);
+            foreach (var r in leseseite.Reader)
+                foreach (var f in r.Fragen)
+                    queryEvents[f.Query] = new SortedSet<string>(leseseite.Hinter(f).SelectMany(p => p.Aufs).Select(a => a.Eingang.ToDisplayString(fq)),
+                        System.StringComparer.Ordinal);
 
             foreach (var t in alle)
             {
@@ -90,17 +91,6 @@ namespace Infrastructure.SourceGeneration
                         foreach (var e in EventsAus(m.ReturnType, iEvent, iTransient))
                             evs.Add(e.ToDisplayString(fq));
                     }
-                }
-
-                var rdr = iReader == null ? null : t.AllInterfaces.FirstOrDefault(i =>
-                    SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iReader));
-                if (rdr?.TypeArguments.FirstOrDefault() is INamedTypeSymbol proj)
-                {
-                    foreach (var m in t.GetMembers("Handle").OfType<IMethodSymbol>())
-                        if (m.Parameters.Length >= 1 && m.Parameters[0].Type is INamedTypeSymbol q && Implementiert(q, iQuery))
-                            queryZuProj[q] = proj;
-                    if (!projEvents.ContainsKey(proj))
-                        projEvents[proj] = ProjektionsEvents(proj, iAggEnvelope, iEvent, iTransient, fq);
                 }
             }
 
@@ -146,7 +136,7 @@ namespace Infrastructure.SourceGeneration
                 foreach (var cmd in cmds)
                     if (cmdZuAgg.TryGetValue(cmd, out var agg) && aggEvents.TryGetValue(agg, out var evs)) hoert.UnionWith(evs);
                 foreach (var q in queries)
-                    if (queryZuProj.TryGetValue(q, out var p) && projEvents.TryGetValue(p, out var evs)) hoert.UnionWith(evs);
+                    if (queryEvents.TryGetValue(q, out var evs)) hoert.UnionWith(evs);
 
                 sb.AppendLine($"        [\"{a.Name}\"] = new AkteurRechte(\"{a.Name}\", typeof({a.ToDisplayString(fq)}),");
                 sb.AppendLine($"            Commands: {Menge(cmds.Select(t => t.ToDisplayString(fq)))},");
@@ -217,20 +207,6 @@ namespace Infrastructure.SourceGeneration
             return liste.Count == 0
                 ? "new HashSet<Type>()"
                 : "new HashSet<Type> { " + string.Join(", ", liste.Select(t => $"typeof({t})")) + " }";
-        }
-
-        /// <summary>Events, die eine Projektion behandelt: erster Parameter jedes <c>Handle(evt, IAggregateEnvelope, …)</c>.</summary>
-        private static SortedSet<string> ProjektionsEvents(INamedTypeSymbol proj, INamedTypeSymbol? iAggEnvelope,
-            INamedTypeSymbol? iEvent, INamedTypeSymbol? iTransient, SymbolDisplayFormat fq)
-        {
-            var evs = new SortedSet<string>(System.StringComparer.Ordinal);
-            foreach (var m in proj.GetMembers("Handle").OfType<IMethodSymbol>())
-            {
-                if (m.Parameters.Length < 2 || m.Parameters[0].Type is not INamedTypeSymbol e) continue;
-                if (iAggEnvelope != null && !SymbolEqualityComparer.Default.Equals(m.Parameters[1].Type, iAggEnvelope)) continue;
-                if (Implementiert(e, iEvent) || Implementiert(e, iTransient)) evs.Add(e.ToDisplayString(fq));
-            }
-            return evs;
         }
 
         /// <summary>Alle Event-Typen (persistiert + Ablehnung) aus <c>IEnumerable&lt;OneOf&lt;…&gt;&gt;</c> bzw. <c>IEnumerable&lt;E&gt;</c>.</summary>

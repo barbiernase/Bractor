@@ -175,6 +175,15 @@ public sealed class ClientKonfig
     public string[] Dateien { get; set; } = [];
 }
 
+/// <summary>
+/// Wo ein Store im Dateisystem liegt (Abschnitt <c>Stores:&lt;Store&gt;</c>, Klassenname des Stores; Plan Pub/Sub-Neustrukturierung §2.4). Ohne Eintrag
+/// unter dem Temp-Verzeichnis je Datenbank und Schema des Logs.
+/// </summary>
+public sealed class StoreKonfig
+{
+    public string? Verzeichnis { get; set; }
+}
+
 /// <summary>Die gebundene Umgebung (ohne Quellen, Identitäten, Konfig-Records — die binden ihre eigenen Abschnitte).</summary>
 public sealed class UmgebungKonfig
 {
@@ -188,6 +197,7 @@ public sealed class UmgebungKonfig
     public Dictionary<string, FunktionsKonfig> Funktionen { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, DienstKonfig> Dienste { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, ClientKonfig> Clients { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, StoreKonfig> Stores { get; set; } = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Der Python-Interpreter — eine Regel für alle Aufrufer: der des Workers, sonst der der Umgebung (<c>Umgebung:Python</c>), sonst
@@ -208,10 +218,10 @@ public static class UmgebungsAbschnitte
 {
     public const string Umgebung = "Umgebung", EventStore = "EventStore", Cluster = "Cluster",
         Schreibpfad = "Schreibpfad", Lebenszyklus = "Lebenszyklus", Konsum = "Konsum", Transport = "Transport", Identitaeten = "Identitaeten", Quellen = "Quellen",
-        Funktionen = "Funktionen", Dienste = "Dienste", Clients = "Clients", Konfig = "Konfig", Logging = "Logging";
+        Funktionen = "Funktionen", Dienste = "Dienste", Clients = "Clients", Stores = "Stores", Konfig = "Konfig", Logging = "Logging";
 
     public static readonly IReadOnlyList<string> Alle =
-        [Umgebung, EventStore, Cluster, Schreibpfad, Lebenszyklus, Konsum, Transport, Identitaeten, Quellen, Funktionen, Dienste, Clients, Konfig, Logging];
+        [Umgebung, EventStore, Cluster, Schreibpfad, Lebenszyklus, Konsum, Transport, Identitaeten, Quellen, Funktionen, Dienste, Clients, Stores, Konfig, Logging];
 }
 
 /// <summary>

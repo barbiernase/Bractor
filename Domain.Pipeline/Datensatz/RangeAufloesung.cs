@@ -31,11 +31,11 @@ public sealed class RangeAufloesung : IFunktion
         for (var seite = 1; ; seite++)
         {
             var (items, gesamt) = await suche.SearchAsync(ZuFilter(e.Kriterien, seite, SeitenGroesse));
-            ids.AddRange(items.Select(m => new Id<Domain.ImagePair.ImagePair>(m.Id)));
+            ids.AddRange(items.Select(m => m.Id));
             if (items.Count == 0 || ids.Count >= gesamt) break;
         }
         if (ids.Count == 0) return new RangeOhneTreffer(e.Kriterien);
-        return new NimmRangeAuf(new Id<Domain.Datensatz.Datensatz>(h.Stream), ids, new RangeHerkunft(e.Kriterien, ids.Count));
+        return new NimmRangeAuf(h.Id<Domain.Datensatz.Datensatz>(), ids, new RangeHerkunft(e.Kriterien, ids.Count));
     }
 
     private static ImagePairFilter ZuFilter(RangeKriterien k, int seite, int seitenGroesse) => new(

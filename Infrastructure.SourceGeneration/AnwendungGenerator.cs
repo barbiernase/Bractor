@@ -25,7 +25,6 @@ namespace Infrastructure.SourceGeneration
             var wurzel = Projektstruktur.Zerlege(asm).Wurzel;
             string Projekt(Projektstruktur.Rolle r) => Projektstruktur.Projekt(wurzel, r);
 
-            var queryDienst = c.GetTypeByMetadataName(Projekt(Projektstruktur.Rolle.Leseseite) + ".ProjectionQueryService");
             var leseseite = c.GetTypeByMetadataName(Projekt(Projektstruktur.Rolle.Speicher) + ".Generated.GeneratedProjectionServices");
             var nutzlast = c.GetTypeByMetadataName(Projekt(Projektstruktur.Rolle.Leitung) + ".GeneratedNutzlast");
 
@@ -59,8 +58,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine($"        public {K}IAggregatTabelle Aggregate {{ get; }} = new AggregatTabelle();");
             sb.AppendLine("        public IReadOnlyDictionary<Type, global::Infrastructure.Wecken.Weckziel[]> Weckplan => global::Infrastructure.Wecken.GeneratedWeckplan.Plan;");
             sb.AppendLine("        public IReadOnlyList<global::Infrastructure.Quellen.QuellTyp> Quellen => global::Infrastructure.Quellen.GeneratedQuellen.Alle;");
-            sb.AppendLine("        public IReadOnlyList<Type> QueryTypen => " + (queryDienst != null
-                ? $"global::{queryDienst.ToDisplayString()}.SupportedQueryTypes;" : "Array.Empty<Type>();"));
+            sb.AppendLine("        public IReadOnlyList<Type> QueryTypen => global::Infrastructure.Projections.Generated.GeneratedQueryDienst.SupportedQueryTypes;");
             sb.AppendLine("        public global::Cqrs.Leitung.INutzlastTabelle? Nutzlast => " + (nutzlast != null
                 ? $"global::{nutzlast.ToDisplayString()}.Instanz;"
                 : "null;   // ohne Leitungs-Projekt kein gRPC-Dienst (docs/07, Rolle Leitung)"));

@@ -1,5 +1,6 @@
 using Abstractions;
 using Domain.Modell;
+using ModellAgg = Domain.Modell.Modell;
 
 namespace Domain.Projections.Modell;
 
@@ -12,14 +13,14 @@ namespace Domain.Projections.Modell;
 /// Provenienz (aus welchem Lauf / welcher eingefrorenen Datensatz-Version), Pfad, Metriken, Status.
 /// „Welches Modell aktiv ist" hält der Singleton <see cref="AktivesModellReadModel"/>.
 /// </summary>
-public record ModellReadModel : IReadModel
+public partial record ModellReadModel : IReadModel
 {
-    public Guid Id { get; init; }
+    public Id<ModellAgg> Id { get; init; }
     public string? Name { get; init; }
     public string? Pfad { get; init; }
 
-    public Guid TrainingslaufId { get; init; }
-    public Guid DatensatzId { get; init; }
+    public Id<Domain.Trainingslauf.Trainingslauf> TrainingslaufId { get; init; }
+    public Id<Domain.Datensatz.Datensatz> DatensatzId { get; init; }
     public int DatensatzVersion { get; init; }
 
     public double Loss { get; init; }
@@ -48,7 +49,7 @@ public record AktivesModellReadModel : IReadModel, IGeteiltesReadModel
     public const string Singleton = "aktiv";
 
     public string Id { get; init; } = Singleton;
-    public Guid ModellId { get; init; }
+    public Id<ModellAgg> ModellId { get; init; }
     public string? Name { get; init; }
     public string? Pfad { get; init; }
     public DateTimeOffset AktiviertAm { get; init; }

@@ -1,4 +1,5 @@
 using Abstractions;
+using ModellAgg = Domain.Modell.Modell;
 
 namespace Domain.Projections.Modell;
 
@@ -9,13 +10,13 @@ namespace Domain.Projections.Modell;
 public interface IUpsertModell : IWriteStore { Task UpsertAsync(ModellReadModel model); }
 
 /// <summary>Setzt den Singleton-Zeiger auf das aktive Modell (last-writer-wins).</summary>
-public interface ISetzeModellAktiv : IWriteStore { Task SetzeAktivAsync(Guid modellId, string? name, string? pfad, DateTimeOffset aktiviertAm); }
+public interface ISetzeModellAktiv : IWriteStore { Task SetzeAktivAsync(Id<ModellAgg> modellId, string? name, string? pfad, DateTimeOffset aktiviertAm); }
 
 /// <summary>Markiert ein Modell als archiviert.</summary>
-public interface IArchiviereModell : IWriteStore { Task ArchiviereAsync(Guid modellId, DateTimeOffset aktualisierung); }
+public interface IArchiviereModell : IWriteStore { Task ArchiviereAsync(Id<ModellAgg> modellId, DateTimeOffset aktualisierung); }
 
 // ── Lesen (ModellReader) ──
-public interface IFindModell : IReadStore { Task<ModellReadModel?> FindByIdAsync(Guid id); }
+public interface IFindModell : IReadStore { Task<ModellReadModel?> FindByIdAsync(Id<ModellAgg> id); }
 
 /// <summary>Alle Modelle, neueste zuerst.</summary>
 public interface IGetAlleModelle : IReadStore { Task<IReadOnlyList<ModellReadModel>> GetAlleAsync(); }

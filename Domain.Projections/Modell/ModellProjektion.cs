@@ -1,5 +1,4 @@
 using Abstractions;
-using Core;
 using Domain.Modell;
 using ModellAgg = Domain.Modell.Modell;
 
@@ -10,53 +9,28 @@ namespace Domain.Projections.Modell;
 /// <see cref="ModellReadModel"/> pro Modell (Upsert) + den Singleton-Zeiger
 /// <see cref="AktivesModellReadModel"/> auf das aktive Modell.
 ///
-/// Upsert-artig (kein Append) → <see cref="ISubscriber"/>, <see cref="IPullSubscriber"/>; der
-/// <c>ModellStore</c> ist zugleich Co-Commit-Tracker (Effekt + Marke in EINER Transaktion).
-/// Kein EventStore-Zugriff — die Wahrheit kommt aus den Events, die der Batch-Leser zustellt.
+/// Upsert-artig; der <c>ModellStore</c> ist ein Store der Klasse 1 (Wirkung und Fortschritt in einer Transaktion).
 /// </summary>
-public partial class ModellProjektion : ISubscriber, IPullSubscriber
+public sealed class ModellProjektion : IProjektion
 {
-    public string SubscriberId => "modell-projektion";
-
-    public async Task Handle(
-        ModellRegistriert evt, IAggregateEnvelope envelope, ProjectionWriter writer, IUpsertModell upsertModell)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
+    public Task Auf(ModellRegistriert e, Herkunft h, IUpsertModell upsertModell)
+        => upsertModell.UpsertAsync(new ModellReadModel
         {
-            ctx.Track<ModellAgg>(envelope.AggregateId);
-            await upsertModell.UpsertAsync(new ModellReadModel
-            {
-                Id = envelope.AggregateId,
-                Name = evt.Name,
-                Pfad = evt.Pfad,
-                TrainingslaufId = evt.TrainingslaufId.Wert,
-                DatensatzId = evt.DatensatzId.Wert,
-                DatensatzVersion = evt.DatensatzVersion,
-                Loss = evt.Metriken.Loss,
-                Genauigkeit = evt.Metriken.Genauigkeit,
-                Status = ModellStatus.Registriert,
-                RegistriertAm = envelope.CreatedAtUtc
-            });
+            Id = h.Id<ModellAgg>(),
+            Name = e.Name,
+            Pfad = e.Pfad,
+            TrainingslaufId = e.TrainingslaufId,
+            DatensatzId = e.DatensatzId,
+            DatensatzVersion = e.DatensatzVersion,
+            Loss = e.Metriken.Loss,
+            Genauigkeit = e.Metriken.Genauigkeit,
+            Status = ModellStatus.Registriert,
+            RegistriertAm = h.Zeit
         });
-    }
 
-    public async Task Handle(
-        ModellAktiviert evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetzeModellAktiv setzeModellAktiv)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<ModellAgg>(envelope.AggregateId);
-            await setzeModellAktiv.SetzeAktivAsync(envelope.AggregateId, evt.Name, evt.Pfad, envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(ModellAktiviert e, Herkunft h, ISetzeModellAktiv setzeModellAktiv)
+        => setzeModellAktiv.SetzeAktivAsync(h.Id<ModellAgg>(), e.Name, e.Pfad, h.Zeit);
 
-    public async Task Handle(
-        ModellArchiviert evt, IAggregateEnvelope envelope, ProjectionWriter writer, IArchiviereModell archiviereModell)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<ModellAgg>(envelope.AggregateId);
-            await archiviereModell.ArchiviereAsync(envelope.AggregateId, envelope.CreatedAtUtc);
-        });
-    }
+    public Task Auf(ModellArchiviert e, Herkunft h, IArchiviereModell archiviereModell)
+        => archiviereModell.ArchiviereAsync(h.Id<ModellAgg>(), h.Zeit);
 }

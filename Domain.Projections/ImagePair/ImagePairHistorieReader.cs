@@ -3,23 +3,17 @@ using Abstractions;
 namespace Domain.Projections.ImagePair;
 
 /// <summary>
-/// Query-Handler für die Historie-Projektion.
-///
-/// Beantwortet GetImagePairHistorie-Queries gegen den ReadStore.
-/// TrackDeps=true damit der Client Aggregate-Versionen für
-/// Stale Detection bekommt.
+/// Reader der Historie-Projektion: beantwortet GetImagePairHistorie über den Historien-Store.
 /// </summary>
-[ProjectionReader(TrackDeps = true)]
-public partial class ImagePairHistorieReader : IReader<ImagePairHistorieProjektion>
+public sealed class ImagePairHistorieReader : IReader
 {
     public async Task<OneOf<ImagePairHistorieAntwort, ImagePairHistorieNichtGefunden>>
-        Handle(GetImagePairHistorie query, IMessageEnvelope envelope, ReadContext ctx, IGetHistorie getHistorie)
+        Frage(GetImagePairHistorie query, IGetHistorie getHistorie)
     {
-        var model = await getHistorie.GetByPairIdAsync(query.PairId.Wert);
+        var model = await getHistorie.GetByPairIdAsync(query.PairId);
 
         if (model != null)
         {
-            ctx.Track(query.PairId.ToString());
             return new ImagePairHistorieAntwort(
                 query.PairId,
                 model.Eintraege);

@@ -58,12 +58,6 @@ public interface IQuery { }
 /// </summary>
 public interface IQueryResponse : IMessagePayload { }
 
-/// <summary>
-/// Marker-Interface für Reader-Klassen innerhalb von Projektionen.
-/// Analog zu IDecider/IApplier bei Aggregaten.
-/// Der Generic-Parameter verknüpft den Reader mit seiner Projektion.
-/// </summary>
-public interface IReader<TProjection> where TProjection : ISubscriber { }
     
 /// <summary>Marker: ein erzeugender Command (der C#-Client sendet ihn mit erwarteter Version 0). Neben <see cref="ICommand{TAggregat}"/>.</summary>
 public interface ICreationCommand : ICommand{ }
@@ -248,28 +242,6 @@ public interface IAggregateRepository
         void Dispatch(CommandEnvelope envelope);
     }
     
-    /// <summary>
-    /// Marker-Interface für Subscriber-Logik-Klassen.
-    /// Analog zu IState für Aggregates.
-    /// </summary>
-    public interface ISubscriber
-    {
-        /// <summary>
-        /// Eindeutige ID für diesen Subscriber.
-        /// Bestimmt das Shard-Routing.
-        /// </summary>
-        string SubscriberId { get; }
-    
-        /// <summary>
-        /// Wird beim Start aufgerufen (nach Subscriptions).
-        /// </summary>
-        Task OnInitializeAsync() => Task.CompletedTask;
-    
-        /// <summary>
-        /// Wird beim Stoppen aufgerufen (vor Unsubscribe).
-        /// </summary>
-        Task OnShutdownAsync() => Task.CompletedTask;
-    }
     
 
     /// <summary>
@@ -364,91 +336,7 @@ public interface IAggregateRepository
         /// der Stand davor.</summary>
         public bool NochNicht { get; init; }
 
-        /// <summary>Die Projektion, die geantwortet hat (ihre SubscriberId) — die Sitzung beobachtet sie, um den Client neu fragen zu lassen
-        /// (Plan Pub/Sub-Neustrukturierung §2.7). Nicht auf der Leitung.</summary>
-        public string? Projektion { get; init; }
-    }
-
-
-
-    /// <summary>
-    /// Steuert ob für diesen Reader die Stände je Id gelesen werden.
-    /// 
-    /// Wird auf die Reader-Klasse innerhalb einer Projektion gesetzt.
-    /// Der ProjectionQueryService evaluiert dieses Attribut nach dem Handler-Aufruf.
-    /// 
-    /// Entscheidungsmatrix:
-    ///   TrackDeps=true  + ctx.Track() aufgerufen  → Stände je Id lesen
-    ///   TrackDeps=true  + kein ctx.Track()         → kein Lesen, Deps=null
-    ///   TrackDeps=false + ctx.Track() aufgerufen   → kein Lesen, Deps=null (Attribut überschreibt)
-    ///   TrackDeps=false + kein ctx.Track()         → kein Lesen, Deps=null
-    /// 
-    /// Default: TrackDeps = true (opt-out statt opt-in).
-    /// Projektionen die keine Deps brauchen (z.B. AuditLog) setzen TrackDeps = false.
-    /// </summary>
-    [AttributeUsage(AttributeTargets.Class, AllowMultiple = false, Inherited = false)]
-    public class ProjectionReaderAttribute : Attribute
-    {
-        /// <summary>
-        /// Wenn true: die Stände je Id werden gelesen (sofern ctx.Track() aufgerufen wurde).
-        /// Wenn false: Deps werden nie geladen, unabhängig von ctx.Track().
-        /// Default: true.
-        /// </summary>
-        public bool TrackDeps { get; set; } = true;
-    }
-
-    /// <summary>
-    /// Kontext für einen Query-Aufruf.
-    /// 
-    /// Wird vom ProjectionQueryService erstellt und an den Reader-Handler übergeben.
-    /// Der Entwickler registriert ReadModel-IDs via Track() — 
-    /// das Framework liest die gesammelten IDs nach dem Handler und holt Deps.
-    /// 
-    /// Gegenstück zu WriteContext (Write-Seite).
-    /// </summary>
-    public class ReadContext
-    {
-        private readonly List<string> _trackedIds = new();
-
-        /// <summary>
-        /// Markiert eine ReadModel-ID.
-        /// "Für dieses ReadModel sollen Deps geladen werden."
-        /// 
-        /// Typisch: ctx.Track(query.ArtikelId.ToString())
-        /// </summary>
-        public void Track(string readModelId)
-        {
-            ArgumentNullException.ThrowIfNull(readModelId);
-            _trackedIds.Add(readModelId);
-        }
-
-        /// <summary>
-        /// Wurden Track-Aufrufe gemacht?
-        /// Wenn false: kein Lesen, Deps bleiben null.
-        /// </summary>
-        public bool HasTrackedIds => _trackedIds.Count > 0;
-
-        /// <summary>
-        /// Gesammelte ReadModel-IDs (Framework-intern).
-        /// </summary>
-        public IReadOnlyList<string> TrackedIds => _trackedIds;
-    }
-
-    /// <summary>
-    /// Der Stand einer Projektion je Stream (Infrastructure: <c>ProjektionsStaende</c>, aus dem Guard je (Projektion, Stream) und dem Log): wie
-    /// weit sie ihn verarbeitet hat — gehörte Events bis zum Guard, danach so weit, wie nur Events folgen, die sie nicht hört. Der
-    /// ProjectionQueryService wartet vor dem Reader darauf (Read-your-writes) und liest danach den Stand je gezeigter Id.
-    /// </summary>
-    public interface IReadModelDepsReader
-    {
-        /// <summary>Der Stand je Id (Deps der Antwort); null bei Fehler oder ohne gültige Id.</summary>
-        /// <param name="subscriberId">Die Projektion (ihre SubscriberId)</param>
-        /// <param name="readModelIds">Die getrackten Ids aus dem ReadContext</param>
-        Task<IReadOnlyList<AggregateMeta>?> ReadAsync(
-            string subscriberId,
-            IReadOnlyList<string> readModelIds);
-
-        /// <summary>Wartet höchstens <paramref name="frist"/>, bis die Projektion jeden Stream mindestens bis zu seiner Version verarbeitet hat.
-        /// false = noch nicht so weit.</summary>
-        Task<bool> WarteAsync(string subscriberId, IReadOnlyList<StreamStand> mindestens, TimeSpan frist, CancellationToken ct = default);
+        /// <summary>Die Projektionen hinter der Frage (ihre Kennungen, aus den Lese-Fähigkeiten) — die Sitzung beobachtet sie grob, wenn die Antwort
+        /// keine Id zeigt, um den Client neu fragen zu lassen (Plan Pub/Sub-Neustrukturierung §2.7). Nicht auf der Leitung.</summary>
+        public IReadOnlyList<string> Projektionen { get; init; } = Array.Empty<string>();
     }

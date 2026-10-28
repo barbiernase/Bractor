@@ -20,6 +20,8 @@
     <Compile Include="..\Domain.SourceGeneration\Kodeform.cs" Link="Vertrag\Kodeform.cs" />
     <Compile Include="..\Abstractions\Projektstruktur.cs" Link="Vertrag\Projektstruktur.cs" />
     <Compile Include="..\Abstractions\Aggregatvertrag.cs" Link="Vertrag\Aggregatvertrag.cs" />
+    <Compile Include="..\Abstractions\Projektionsvertrag.cs" Link="Vertrag\Projektionsvertrag.cs" />
+    <Compile Include="..\Infrastructure.SourceGeneration\Projektionsform.cs" Link="Vertrag\Projektionsform.cs" />
   </ItemGroup>
 
 </Project>

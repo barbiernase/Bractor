@@ -1,7 +1,10 @@
+using Abstractions;
 using Domain.ImagePair;
 using Domain.Projections;
 using Marten;
 using Domain.Projections.ImagePair;
+
+using ImagePairAgg = Domain.ImagePair.ImagePair;
 
 namespace Domain.Infrastructure.ImagePair;
 
@@ -15,17 +18,17 @@ public sealed partial class ImagePairStore
     // Read-Seite
     // ═══════════════════════════════════════════════════════════
 
-    public async Task<ImagePairReadModel?> FindByIdAsync(Guid id)
+    public async Task<ImagePairReadModel?> FindByIdAsync(Id<ImagePairAgg> id)
     {
         await using var session = Store.QuerySession();
-        return await session.LoadAsync<ImagePairReadModel>(id);
+        return await session.LoadAsync<ImagePairReadModel>(id.Wert);
     }
 
-    public async Task<IReadOnlyList<ImagePairReadModel>> LadeVieleAsync(IReadOnlyList<Guid> ids)
+    public async Task<IReadOnlyList<ImagePairReadModel>> LadeVieleAsync(IReadOnlyList<Id<ImagePairAgg>> ids)
     {
         if (ids.Count == 0) return System.Array.Empty<ImagePairReadModel>();
         await using var session = Store.QuerySession();
-        var geladen = await session.LoadManyAsync<ImagePairReadModel>(ids.ToArray());
+        var geladen = await session.LoadManyAsync<ImagePairReadModel>(ids.Select(i => i.Wert).ToArray());
         return geladen.ToList();
     }
 

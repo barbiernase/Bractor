@@ -68,7 +68,7 @@ public sealed class SitzungsActor : RahmenActor
     public const int HoechstensIds = 1_000;
 
     /// <summary>Was eine gehaltene Antwort zeigt: die Projektion, die antwortete, und die Streams ihrer Ids (leer = grob, die ganze Projektion).</summary>
-    private sealed record Beobachtung(string Projektion, IReadOnlySet<Guid> Streams);
+    private sealed record Beobachtung(IReadOnlyList<string> Projektionen, IReadOnlySet<Guid> Streams);
 
     private readonly IServerStreamWriter<Leitung.ServerMessage> _stream;
     private readonly string _id;
@@ -169,7 +169,7 @@ public sealed class SitzungsActor : RahmenActor
     /// <summary>Merkt sich, was eine Antwort zeigt, und meldet dem Verteiler die neue Menge der beobachteten Streams und Projektionen.</summary>
     private void Beobachte(IContext context, IQuery query, QueryResponse<IQueryResponse> antwort)
     {
-        if (antwort.Projektion is not { } projektion) return;
+        if (antwort.Projektionen.Count == 0) return;
         var ids = antwort.Deps?.Select(d => d.Id).Where(g => g != Guid.Empty).ToHashSet() ?? new HashSet<Guid>();
         if (ids.Count > HoechstensIds) ids.Clear();
         if (!_beobachtungen.ContainsKey(query))
@@ -177,17 +177,17 @@ public sealed class SitzungsActor : RahmenActor
             _beobachtungsReihe.Enqueue(query);
             while (_beobachtungsReihe.Count > HoechstensAntworten) _beobachtungen.Remove(_beobachtungsReihe.Dequeue());
         }
-        _beobachtungen[query] = new Beobachtung(projektion, ids);
+        _beobachtungen[query] = new Beobachtung(antwort.Projektionen, ids);
         context.Send(_verteiler!, new SitzungBeobachtet(_id,
             _beobachtungen.Values.SelectMany(b => b.Streams).ToHashSet(),
-            _beobachtungen.Values.Where(b => b.Streams.Count == 0).Select(b => b.Projektion).ToHashSet(StringComparer.Ordinal)));
+            _beobachtungen.Values.Where(b => b.Streams.Count == 0).SelectMany(b => b.Projektionen).ToHashSet(StringComparer.Ordinal)));
     }
 
     /// <summary>Sammelt die betroffenen Queries und nennt sie dem Client nach <see cref="Zusammenfassen"/> in einer Nachricht.</summary>
     private void Weiterverarbeitet(IContext context, Verarbeitet v)
     {
         foreach (var (query, b) in _beobachtungen)
-            if (b.Streams.Count == 0 ? b.Projektion == v.Projektion : v.Streams.Any(b.Streams.Contains))
+            if (b.Streams.Count == 0 ? b.Projektionen.Contains(v.Projektion) : v.Streams.Any(b.Streams.Contains))
                 _veraendert.Add(query);
         if (_veraendert.Count == 0 || _aktualisierungGeplant) return;
         _aktualisierungGeplant = true;

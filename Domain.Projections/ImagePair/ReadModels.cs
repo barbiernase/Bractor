@@ -1,11 +1,12 @@
 using Abstractions;
 using Domain.ImagePair;
+using ImagePairAgg = Domain.ImagePair.ImagePair;
 
 namespace Domain.Projections.ImagePair;
 
-public record ImagePairReadModel : IReadModel
+public partial record ImagePairReadModel : IReadModel
 {
-    public Guid Id { get; init; }
+    public Id<ImagePairAgg> Id { get; init; }
     public DateTimeOffset ProduziertAm { get; init; }
     public DateTimeOffset AufgenommenAm { get; init; }
     public DateTimeOffset LetzteAktualisierung { get; init; }
@@ -85,13 +86,10 @@ public record HistorieEintrag(
 ///
 /// Wird als JSONB-Dokument in Marten gespeichert.
 /// Die Einträge-Liste wächst nur — kein Update, kein Delete.
-///
-/// Eigenständige Projektion, KEIN Zugriff auf den EventStore.
-/// Die Wahrheit kommt ausschließlich aus PubSub-Events.
 /// </summary>
-public record ImagePairHistorieReadModel : IReadModel
+public partial record ImagePairHistorieReadModel : IReadModel
 {
-    public Guid Id { get; init; }
+    public Id<ImagePairAgg> Id { get; init; }
     public List<HistorieEintrag> Eintraege { get; init; } = new();
 }
 

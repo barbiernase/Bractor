@@ -1,196 +1,114 @@
 using Abstractions;
-using Core;
 using Domain.ImagePair;
+using ImagePairAgg = Domain.ImagePair.ImagePair;
 
 namespace Domain.Projections.ImagePair;
 
 /// <summary>
 /// Materialisiert die Historie eines ImagePairs als eigenständige Projektion.
 ///
-/// Empfängt alle Events via PubSub (KEIN EventStore-Zugriff!)
-/// und appendet pro Event einen HistorieEintrag an das ReadModel.
-///
-/// Jeder Handle-Aufruf erzeugt genau einen Eintrag mit:
-///   - Zeitpunkt aus dem Envelope
-///   - Menschenlesbare Beschreibung
-///   - Kategorie für UI-Farbkodierung
-///   - Optionale Details (Klassifikation, Version, etc.)
-///
-/// APPEND-ARTIG (<see cref="IAppendProjektion"/>): jedes Event → ein NEUER Eintrag, Doppelverarbeitung
-/// ist sichtbar/korrumpierend. Der GA-1-Check erzwingt daher den Co-Commit-Store (unten: der
-/// ImagePairHistorieStore ist zugleich IProjectionTracker → Effekt + Marke in EINER Transaktion).
+/// Jedes Auf hängt genau einen Eintrag an (Zeitpunkt aus der Herkunft, menschenlesbare Beschreibung, Kategorie für die Farbe, optionale
+/// Details). Append-artig — eine doppelte Wirkung wäre sichtbar; genau einmal, weil der Historien-Store ein Store der Klasse 1 ist.
 /// </summary>
-public partial class ImagePairHistorieProjektion : ISubscriber, IPullSubscriber, IAppendProjektion
+public sealed class ImagePairHistorieProjektion : IProjektion
 {
-    public string SubscriberId => "imagepair-historie";
-
     // ═══════════════════════════════════════════════════════════
     // LIFECYCLE
     // ═══════════════════════════════════════════════════════════
 
-    public async Task Handle(
-        ImagePairErstellt evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
-                Zeitpunkt: envelope.CreatedAtUtc,
-                EreignisTyp: nameof(ImagePairErstellt),
-                Beschreibung: "ImagePair erstellt",
-                Kategorie: HistorieKategorie.Lifecycle,
-                Details: $"PairKey: {evt.PairKey}"));
-        });
-    }
+    public Task Auf(ImagePairErstellt e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+            Zeitpunkt: h.Zeit,
+            EreignisTyp: nameof(ImagePairErstellt),
+            Beschreibung: "ImagePair erstellt",
+            Kategorie: HistorieKategorie.Lifecycle,
+            Details: $"PairKey: {e.PairKey}"));
 
-    public async Task Handle(
-        BildVerfuegbar evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
-                Zeitpunkt: envelope.CreatedAtUtc,
-                EreignisTyp: nameof(BildVerfuegbar),
-                Beschreibung: $"{evt.Version} verfügbar",
-                Kategorie: HistorieKategorie.Lifecycle,
-                Details: $"{evt.Meta.BreitePixel}×{evt.Meta.HoehePixel}, {evt.Meta.DateigroesseBytes / 1024} KB"));
-        });
-    }
+    public Task Auf(BildVerfuegbar e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+            Zeitpunkt: h.Zeit,
+            EreignisTyp: nameof(BildVerfuegbar),
+            Beschreibung: $"{e.Version} verfügbar",
+            Kategorie: HistorieKategorie.Lifecycle,
+            Details: $"{e.Meta.BreitePixel}×{e.Meta.HoehePixel}, {e.Meta.DateigroesseBytes / 1024} KB"));
 
-    public async Task Handle(
-        ImagePairKomplett evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
-                Zeitpunkt: envelope.CreatedAtUtc,
-                EreignisTyp: nameof(ImagePairKomplett),
-                Beschreibung: "Beide Bilder verfügbar",
-                Kategorie: HistorieKategorie.Lifecycle));
-        });
-    }
+    public Task Auf(ImagePairKomplett e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+            Zeitpunkt: h.Zeit,
+            EreignisTyp: nameof(ImagePairKomplett),
+            Beschreibung: "Beide Bilder verfügbar",
+            Kategorie: HistorieKategorie.Lifecycle));
 
     // ═══════════════════════════════════════════════════════════
     // STRANG 1 — KI-Klassifikation
     // ═══════════════════════════════════════════════════════════
 
-    public async Task Handle(
-        EinzelBildDurchKiKlassifiziert evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
-                Zeitpunkt: envelope.CreatedAtUtc,
-                EreignisTyp: nameof(EinzelBildDurchKiKlassifiziert),
-                Beschreibung: $"KI: {evt.Version} klassifiziert",
-                Kategorie: HistorieKategorie.Ki,
-                Details: $"Bild: {FormatKlassifikation(evt.BildLabel)}"));
-        });
-    }
+    public Task Auf(EinzelBildDurchKiKlassifiziert e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+            Zeitpunkt: h.Zeit,
+            EreignisTyp: nameof(EinzelBildDurchKiKlassifiziert),
+            Beschreibung: $"KI: {e.Version} klassifiziert",
+            Kategorie: HistorieKategorie.Ki,
+            Details: $"Bild: {FormatKlassifikation(e.BildLabel)}"));
 
-    public async Task Handle(
-        BildPaarDurchKiKlassifiziert evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
-                Zeitpunkt: envelope.CreatedAtUtc,
-                EreignisTyp: nameof(BildPaarDurchKiKlassifiziert),
-                Beschreibung: "KI: Bildpaar klassifiziert",
-                Kategorie: HistorieKategorie.Ki,
-                Details: FormatKlassifikation(evt.Label)));
-        });
-    }
+    public Task Auf(BildPaarDurchKiKlassifiziert e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+            Zeitpunkt: h.Zeit,
+            EreignisTyp: nameof(BildPaarDurchKiKlassifiziert),
+            Beschreibung: "KI: Bildpaar klassifiziert",
+            Kategorie: HistorieKategorie.Ki,
+            Details: FormatKlassifikation(e.Label)));
 
     // ═══════════════════════════════════════════════════════════
     // STRANG 2 — Mensch labelt Kamerabilder
     // ═══════════════════════════════════════════════════════════
 
-    public async Task Handle(
-        BildRegionGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
-                Zeitpunkt: envelope.CreatedAtUtc,
-                EreignisTyp: nameof(BildRegionGelabelt),
-                Beschreibung: $"Region {evt.RegionIndex} gelabelt ({evt.Version})",
-                Kategorie: HistorieKategorie.Mensch,
-                Details: FormatKlassifikation(evt.Label)));
-        });
-    }
+    public Task Auf(BildRegionGelabelt e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+            Zeitpunkt: h.Zeit,
+            EreignisTyp: nameof(BildRegionGelabelt),
+            Beschreibung: $"Region {e.RegionIndex} gelabelt ({e.Version})",
+            Kategorie: HistorieKategorie.Mensch,
+            Details: FormatKlassifikation(e.Label)));
 
-    public async Task Handle(
-        EinzelBildGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
-                Zeitpunkt: envelope.CreatedAtUtc,
-                EreignisTyp: nameof(EinzelBildGelabelt),
-                Beschreibung: $"Einzelbild {evt.Version} gelabelt",
-                Kategorie: HistorieKategorie.Mensch,
-                Details: FormatKlassifikation(evt.Label)));
-        });
-    }
+    public Task Auf(EinzelBildGelabelt e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+            Zeitpunkt: h.Zeit,
+            EreignisTyp: nameof(EinzelBildGelabelt),
+            Beschreibung: $"Einzelbild {e.Version} gelabelt",
+            Kategorie: HistorieKategorie.Mensch,
+            Details: FormatKlassifikation(e.Label)));
 
-    public async Task Handle(
-        BildPaarGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
-                Zeitpunkt: envelope.CreatedAtUtc,
-                EreignisTyp: nameof(BildPaarGelabelt),
-                Beschreibung: "Bildpaar gelabelt",
-                Kategorie: HistorieKategorie.Mensch,
-                Details: FormatKlassifikation(evt.Label)));
-        });
-    }
+    public Task Auf(BildPaarGelabelt e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+            Zeitpunkt: h.Zeit,
+            EreignisTyp: nameof(BildPaarGelabelt),
+            Beschreibung: "Bildpaar gelabelt",
+            Kategorie: HistorieKategorie.Mensch,
+            Details: FormatKlassifikation(e.Label)));
 
     // ═══════════════════════════════════════════════════════════
     // STRANG 3 — Mensch labelt physisches Produkt
     // ═══════════════════════════════════════════════════════════
 
-    public async Task Handle(
-        PhysischesProduktGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
-                Zeitpunkt: envelope.CreatedAtUtc,
-                EreignisTyp: nameof(PhysischesProduktGelabelt),
-                Beschreibung: "Produkt gelabelt",
-                Kategorie: HistorieKategorie.Mensch,
-                Details: FormatKlassifikation(evt.Label)));
-        });
-    }
+    public Task Auf(PhysischesProduktGelabelt e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+            Zeitpunkt: h.Zeit,
+            EreignisTyp: nameof(PhysischesProduktGelabelt),
+            Beschreibung: "Produkt gelabelt",
+            Kategorie: HistorieKategorie.Mensch,
+            Details: FormatKlassifikation(e.Label)));
 
     // ═══════════════════════════════════════════════════════════
     // INSPEKTION
     // ═══════════════════════════════════════════════════════════
 
-    public async Task Handle(
-        ImagePairInspiziert evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Domain.ImagePair.ImagePair>(envelope.AggregateId);
-            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
-                Zeitpunkt: envelope.CreatedAtUtc,
-                EreignisTyp: nameof(ImagePairInspiziert),
-                Beschreibung: "Inspiziert",
-                Kategorie: HistorieKategorie.Inspektion));
-        });
-    }
+    public Task Auf(ImagePairInspiziert e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+            Zeitpunkt: h.Zeit,
+            EreignisTyp: nameof(ImagePairInspiziert),
+            Beschreibung: "Inspiziert",
+            Kategorie: HistorieKategorie.Inspektion));
 
     // ─── Hilfsmethode ───
 

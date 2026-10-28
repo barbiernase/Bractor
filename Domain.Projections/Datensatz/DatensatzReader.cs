@@ -10,49 +10,46 @@ namespace Domain.Projections.Datensatz;
 /// Datensatz-Queries über Lese-Fähigkeiten des <see cref="IDatensatzStore"/> — derselbe Kanal für Blazor
 /// und Python.
 ///
-/// Die Samples sind ein <em>immutabler</em> Snapshot → kein Deps-Tracking nötig
-/// (read-only). Beim Kopf-Read wird die Datensatz-Id getrackt (Stale-Detection wie ImagePair).
+/// Was eine Antwort zeigt, steht in ihren <c>Id&lt;T&gt;</c>-Feldern und in der Query (etwa die Datensatz-Id der Samples: direkt nach dem Einfrieren
+/// sind die Sample-Zeilen vielleicht noch nicht geschrieben — der Stand des Datensatzes lässt den Client nachfassen).
 /// </summary>
-[ProjectionReader(TrackDeps = true)]
-public partial class DatensatzReader : IReader<DatensatzProjektion>
+public sealed class DatensatzReader : IReader
 {
-    public async Task<DatensatzSamples> Handle(
-        HoleDatensatzSamples query, IMessageEnvelope envelope, ReadContext ctx, IHoleSamples holeSamples)
+    public async Task<DatensatzSamples> Frage(
+        HoleDatensatzSamples query, IHoleSamples holeSamples)
     {
         var (items, gesamtAnzahl) = await holeSamples.HoleSamplesAsync(
-            query.DatensatzId.Wert, query.Version, query.Seite, query.SeitenGroesse);
+            query.DatensatzId, query.Version, query.Seite, query.SeitenGroesse);
 
         var samples = items
-            .Select(s => new DatensatzSample(new ImagePairId(s.ImagePairId), s.Dc0Pfad, s.Dc2Pfad, s.Label, s.Split))
+            .Select(s => new DatensatzSample(s.ImagePairId, s.Dc0Pfad, s.Dc2Pfad, s.Label, s.Split))
             .ToList();
 
         // Das Datensatz-Aggregat als Dep tracken: die Samples sind zwar ein immutabler Snapshot, aber
         // DIREKT nach dem Einfrieren kann die (asynchrone) Projektion die Sample-Zeilen noch nicht
         // geschrieben haben. Der Dep (auf die DatensatzEingefroren-Version) lässt den Client per
         // Read-Your-Writes nachfassen, bis die Balance-Grundlage wirklich da ist.
-        ctx.Track(query.DatensatzId.ToString());
 
         return new DatensatzSamples(samples, gesamtAnzahl, query.Seite, query.SeitenGroesse);
     }
 
-    public async Task<OneOf<DatensatzAntwort, DatensatzNichtGefunden>> Handle(
-        HoleDatensatz query, IMessageEnvelope envelope, ReadContext ctx, IFindDatensatz findDatensatz)
+    public async Task<OneOf<DatensatzAntwort, DatensatzNichtGefunden>> Frage(
+        HoleDatensatz query, IFindDatensatz findDatensatz)
     {
-        var model = await findDatensatz.FindByIdAsync(query.DatensatzId.Wert);
+        var model = await findDatensatz.FindByIdAsync(query.DatensatzId);
 
         if (model is null)
             return new DatensatzNichtGefunden(query.DatensatzId);
 
-        ctx.Track(query.DatensatzId.ToString());
         return ToAntwort(model);
     }
 
-    public async Task<ImagePairSuchergebnis> Handle(
-        HoleDatensatzPaare query, IMessageEnvelope envelope, ReadContext ctx, IFindDatensatz findDatensatz, ILadeVieleImagePairs ladeVieleImagePairs)
+    public async Task<ImagePairSuchergebnis> Frage(
+        HoleDatensatzPaare query, IFindDatensatz findDatensatz, ILadeVieleImagePairs ladeVieleImagePairs)
     {
-        var model = await findDatensatz.FindByIdAsync(query.DatensatzId.Wert);
+        var model = await findDatensatz.FindByIdAsync(query.DatensatzId);
         var alle = model is null
-            ? new List<Guid>()
+            ? new List<ImagePairId>()
             : (query.Modus == DatensatzPaarModus.Ausgeschlossen ? model.Ausgeschlossen : model.Mitglieder);
 
         var gesamt = alle.Count;
@@ -68,38 +65,31 @@ public partial class DatensatzReader : IReader<DatensatzProjektion>
         foreach (var id in seitenIds)                         // Reihenfolge der Id-Liste bewahren
             if (nachId.TryGetValue(id, out var m))
             {
-                ctx.Track(id.ToString());
                 items.Add(ImagePairReader.ToAntwort(m));
             }
 
-        ctx.Track(query.DatensatzId.ToString());              // RYW: Sicht folgt dem Delta
         return new ImagePairSuchergebnis(items, gesamt, query.Seite, query.SeitenGroesse);
     }
 
-    public async Task<DatensaetzeFuerPaar> Handle(
-        HoleDatensaetzeFuerPaar query, IMessageEnvelope envelope, ReadContext ctx, IHoleDatensaetzeFuerPaar holeDatensaetzeFuerPaar)
+    public async Task<DatensaetzeFuerPaar> Frage(
+        HoleDatensaetzeFuerPaar query, IHoleDatensaetzeFuerPaar holeDatensaetzeFuerPaar)
     {
-        var modelle = await holeDatensaetzeFuerPaar.HoleDatensaetzeFuerPaarAsync(query.ImagePairId.Wert);
+        var modelle = await holeDatensaetzeFuerPaar.HoleDatensaetzeFuerPaarAsync(query.ImagePairId);
 
         var tags = modelle
-            .Select(m => new DatensatzTag(new DatensatzId(m.Id), m.Name, m.Status, m.EingefroreneVersion))
+            .Select(m => new DatensatzTag(m.Id, m.Name, m.Status, m.EingefroreneVersion))
             .ToList();
-
-        // Rückwärts-Index gegen die betroffenen Aggregate tracken (Read-Your-Writes nach dem Taggen).
-        ctx.Track(query.ImagePairId.ToString());
-        foreach (var m in modelle) ctx.Track(m.Id.ToString());
 
         return new DatensaetzeFuerPaar(query.ImagePairId, tags);
     }
 
-    public async Task<DatensatzListe> Handle(
-        HoleDatensaetze query, IMessageEnvelope envelope, ReadContext ctx, IGetAlleDatensaetze getAlleDatensaetze)
+    public async Task<DatensatzListe> Frage(
+        HoleDatensaetze query, IGetAlleDatensaetze getAlleDatensaetze)
     {
         var modelle = await getAlleDatensaetze.GetAlleAsync();
 
         var items = modelle.Select(m =>
         {
-            ctx.Track(m.Id.ToString());
             return ToAntwort(m);
         }).ToList();
 
@@ -107,13 +97,13 @@ public partial class DatensatzReader : IReader<DatensatzProjektion>
     }
 
     private static DatensatzAntwort ToAntwort(DatensatzReadModel model) => new(
-        Id: new DatensatzId(model.Id),
+        Id: model.Id,
         Name: model.Name,
         Status: model.Status,
         AnzahlMitglieder: model.AnzahlMitglieder,
         EingefroreneVersion: model.EingefroreneVersion,
         Split: model.Split,
         Ranges: model.Ranges,
-        Mitglieder: model.Mitglieder.Select(i => new ImagePairId(i)).ToList(),
-        Ausgeschlossen: model.Ausgeschlossen.Select(i => new ImagePairId(i)).ToList());
+        Mitglieder: model.Mitglieder,
+        Ausgeschlossen: model.Ausgeschlossen);
 }

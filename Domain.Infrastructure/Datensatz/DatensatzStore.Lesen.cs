@@ -1,6 +1,11 @@
+using Abstractions;
 using Domain.Projections;
 using Marten;
 using Domain.Projections.Datensatz;
+
+using DatensatzAgg = Domain.Datensatz.Datensatz;
+
+using ImagePairAgg = Domain.ImagePair.ImagePair;
 
 namespace Domain.Infrastructure.Datensatz;
 
@@ -10,10 +15,10 @@ namespace Domain.Infrastructure.Datensatz;
 /// </summary>
 public sealed partial class DatensatzStore
 {
-    public async Task<DatensatzReadModel?> FindByIdAsync(Guid id)
+    public async Task<DatensatzReadModel?> FindByIdAsync(Id<DatensatzAgg> id)
     {
         await using var session = Store.QuerySession();
-        return await session.LoadAsync<DatensatzReadModel>(id);
+        return await session.LoadAsync<DatensatzReadModel>(id.Wert);
     }
 
     public async Task<IReadOnlyList<DatensatzReadModel>> GetAlleAsync()
@@ -25,7 +30,7 @@ public sealed partial class DatensatzStore
     }
 
     public async Task<(IReadOnlyList<DatensatzSampleReadModel> Items, int GesamtAnzahl)> HoleSamplesAsync(
-        Guid datensatzId, int version, int seite, int seitenGroesse)
+        Id<DatensatzAgg> datensatzId, int version, int seite, int seitenGroesse)
     {
         await using var session = Store.QuerySession();
 
@@ -43,7 +48,7 @@ public sealed partial class DatensatzStore
         return (page, gesamtAnzahl);
     }
 
-    public async Task<IReadOnlyList<DatensatzReadModel>> HoleDatensaetzeFuerPaarAsync(Guid imagePairId)
+    public async Task<IReadOnlyList<DatensatzReadModel>> HoleDatensaetzeFuerPaarAsync(Id<ImagePairAgg> imagePairId)
     {
         await using var session = Store.QuerySession();
 
@@ -55,7 +60,7 @@ public sealed partial class DatensatzStore
             return Array.Empty<DatensatzReadModel>();
 
         // Join: Kopf-Daten (Name/Status/Version) frisch aus den Datensatz-Read-Models.
-        var modelle = await session.LoadManyAsync<DatensatzReadModel>(datensatzIds.Distinct().ToArray());
+        var modelle = await session.LoadManyAsync<DatensatzReadModel>(datensatzIds.Select(d => d.Wert).Distinct().ToArray());
         return modelle.ToList();
     }
 }
