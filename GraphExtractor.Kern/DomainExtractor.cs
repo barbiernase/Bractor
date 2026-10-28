@@ -1116,7 +1116,7 @@ public sealed partial class DomainExtractor
                 var isCreation = Sym.Implements(t, _iCreation);
                 // Das Ziel-Aggregat steht im Typ (ICommand<TAggregat>) — ein Code-Fakt, nicht aus dem Decider geraten.
                 var ziel = _iCommandZiel == null ? null
-                    : t.AllInterfaces.FirstOrDefault(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, _iCommandZiel))?.TypeArguments[0].Name;
+                    : t.AllInterfaces.FirstOrDefault(i => _iCommandZiel != null && i.OriginalDefinition.Fq() == _iCommandZiel.Fq())?.TypeArguments[0].Name;
                 m.Commands[t.Fq()] = new CommandType(t.Name, isCreation, Felder(t), Meta(t), ziel);
             }
         }
@@ -1656,7 +1656,9 @@ public sealed partial class DomainExtractor
         if (returnType is not INamedTypeSymbol enumerable || enumerable.TypeArguments.Length != 1) return l;
         if (enumerable.TypeArguments[0] is not INamedTypeSymbol element) return l;
         foreach (var ta in Vertrag.IstOneOf(element) ? element.TypeArguments.ToList() : new List<ITypeSymbol> { element })
-            if (ta is INamedTypeSymbol f && _frist != null && SymbolEqualityComparer.Default.Equals(f.OriginalDefinition, _frist))
+            // Über den Namen wie Sym.Implements, nicht über die Symbol-Identität: sieht ein Projekt den Vertrag als Metadaten statt als Projekt
+            //   (MSBuild lud es mit Fehlern), sind die Symbole verschiedene Instanzen — die Frist fiele still aus dem Ausgang.
+            if (ta is INamedTypeSymbol f && _frist != null && f.OriginalDefinition.Fq() == _frist.Fq())
                 l.Add($"Frist<{f.TypeArguments[0].Fq()}>");
             else if (ta is INamedTypeSymbol et && Sym.Implements(et, _iEvent))
                 l.Add(et.Fq());
