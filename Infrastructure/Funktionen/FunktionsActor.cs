@@ -520,7 +520,8 @@ public sealed class FunktionsActor : RahmenActor
         _zustandGeaendert = _geparktGeaendert = false;
         var lauf = _lauf!;
         var (version, verweis) = (_zustandVersion, _zustandVerweis);
-        Neben(context, async ct => await _sicherung.SichereAsync(_b.Name, _adresse, s.Stand, s.Position, await _aktivierung!.SichereAsync(ct), version, verweis, ct), t =>
+        // Ein typisierter Task (kein async-Lambda an Func<…, Task>: dort ginge das Ergebnis — die neue Version — verloren).
+        Neben(context, ct => SichereAsync(s.Stand, s.Position, version, verweis, ct), t =>
         {
             _schreibt = false;
             if (t is Task<(int? Stand, int Zustand, string? Verweis)> { IsCompletedSuccessfully: true } v)
@@ -550,6 +551,11 @@ public sealed class FunktionsActor : RahmenActor
             return Task.CompletedTask;
         });
     }
+
+    /// <summary>Vor dem Sichern der Lebenszyklus (<c>VorDemSichernAsync</c>), dann die Daten, dann Zustand und Stand in einer Transaktion.</summary>
+    private async Task<(int? Stand, int Zustand, string? Verweis)> SichereAsync(PartitionsCheckpoint? stand, long position, int version, string? verweis,
+        CancellationToken ct) =>
+        await _sicherung!.SichereAsync(_b.Name, _adresse, stand, position, await _aktivierung!.SichereAsync(ct), version, verweis, ct);
 
     protected override async Task BeimStoppenAsync(IContext context)
     {
