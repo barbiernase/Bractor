@@ -50,6 +50,20 @@ public class FunktionsVermittlungTests
     }
 
     [Fact]
+    public void A8_ein_Traeger_der_sich_abmeldet_gibt_seine_Adressen_sofort_frei()
+    {
+        var v = new Vermittlung<EingangAnbieten>(TimeSpan.FromSeconds(30));
+        var a1 = An("1");
+        v.Biete(a1);
+        v.Hole("weg", 4, T0).Should().Equal(a1);
+        var a2 = An("1");
+        v.Biete(a2);
+        v.Hole("neu", 4, T0.AddSeconds(1)).Should().BeEmpty("die Adresse gehört noch dem anderen");
+        v.Abmelden("weg");
+        v.Hole("neu", 4, T0.AddSeconds(2)).Should().Equal(new[] { a2 }, "abgemeldet — nicht erst nach Ablauf der Lease");
+    }
+
+    [Fact]
     public void Ein_einzelner_Traeger_nimmt_alle_Adressen()
     {
         var v = new Vermittlung<EingangAnbieten>(TimeSpan.FromSeconds(30));

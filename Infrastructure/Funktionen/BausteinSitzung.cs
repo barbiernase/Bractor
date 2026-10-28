@@ -210,6 +210,12 @@ public sealed class BausteinSitzung : IAsyncDisposable
     {
         _ende.Cancel();
         try { await Task.WhenAll(_schleifen.Values); } catch { /* gemeldet */ }
+        // Abmelden: die Adressen dieser Sitzung sind sofort frei (A8); was sie hält, geht nach Ablauf der Lease an den nächsten Träger (wie bisher).
+        foreach (var name in _schleifen.Keys)
+            if (_loese(name) is { } f)
+            {
+                try { await _melde(f, new TraegerAbgemeldet(Arbeiter(f))); } catch { /* verlierbar: die Lease heilt */ }
+            }
         _laufend.Clear();
     }
 }

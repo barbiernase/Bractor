@@ -70,6 +70,9 @@ public sealed record ArbeitLebt(Guid Vorgang, string Arbeiter) : IWireMessage;
 /// <summary>Der Eingang ist erledigt (seine Antwort liegt im Log) — der Vermittler vergisst ihn.</summary>
 public sealed record ArbeitErledigt(Guid Vorgang) : IWireMessage;
 
+/// <summary>Ein Träger meldet sich ab (seine Sitzung endet): seine Adressen sind sofort frei (A8), nicht erst nach Ablauf der Lease.</summary>
+public sealed record TraegerAbgemeldet(string Arbeiter) : IWireMessage;
+
 /// <summary>Einblick (Werkbank P4.7): welche Eingänge hält der Vermittler gerade — wartend oder an einen Träger vergeben?</summary>
 public sealed record ListeOffene : IWireMessage;
 
@@ -152,6 +155,16 @@ public class Vermittlung<TArbeit> where TArbeit : class, IArbeit
         int Traegt(string a) => _bindung.Count(x => x.Value.Arbeiter == a && x.Value.Bis > jetzt);
         var eigene = Traegt(arbeiter);
         return _lebend.Where(l => l.Key != arbeiter && l.Value > jetzt).All(l => eigene <= Traegt(l.Key));
+    }
+
+    /// <summary>
+    /// Der Träger ist weg (seine Sitzung endete): seine Adressen sind sofort frei. Was er gerade hält, behält seine Lease (läuft sie ab, geht es an
+    /// den nächsten — wie bisher).
+    /// </summary>
+    public void Abmelden(string arbeiter)
+    {
+        _lebend.Remove(arbeiter);
+        foreach (var adresse in _bindung.Where(b => b.Value.Arbeiter == arbeiter).Select(b => b.Key).ToList()) _bindung.Remove(adresse);
     }
 
     /// <summary>An wen ist die Adresse gerade gebunden (Einblick, Tests)?</summary>

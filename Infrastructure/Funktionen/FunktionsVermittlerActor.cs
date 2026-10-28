@@ -74,6 +74,19 @@ public sealed class FunktionsVermittlerActor : RahmenActor
                 context.Respond(new WakeAck());
                 break;
 
+            case TraegerAbgemeldet t:
+                // Seine Adressen sind frei (A8) — wer jetzt wartet, darf sie nehmen.
+                _eingaenge.Abmelden(t.Arbeiter);
+                for (var n = _geparktEingang.First; n is not null;)
+                {
+                    var weiter = n.Next;
+                    if (n.Value.Anfrage.Arbeiter == t.Arbeiter) _geparktEingang.Remove(n);
+                    n = weiter;
+                }
+                BedieneEingaenge(context);
+                if (context.Sender is not null) context.Respond(new WakeAck());
+                break;
+
             case ListeOffene:
                 context.Respond(new OffeneAuftraege(_eingaenge.Offen().ToList()));
                 break;
@@ -99,15 +112,22 @@ public sealed class FunktionsVermittlerActor : RahmenActor
         return Task.CompletedTask;
     }
 
-    /// <summary>Geparkte Hol-Anfragen nach Eingängen der Reihe nach bedienen, solange Arbeit da ist.</summary>
+    /// <summary>
+    /// Geparkte Hol-Anfragen nach Eingängen der Reihe nach bedienen, solange Arbeit da ist — jede wird versucht: was eine nicht nehmen darf (die Adresse
+    /// gehört einem anderen Träger, A8), nimmt vielleicht die nächste.
+    /// </summary>
     private void BedieneEingaenge(IContext context)
     {
-        while (_geparktEingang.First is { } n && _eingaenge.Wartend > 0)
+        for (var n = _geparktEingang.First; n is not null && _eingaenge.Wartend > 0;)
         {
+            var weiter = n.Next;
             var los = _eingaenge.Hole(n.Value.Anfrage.Arbeiter, n.Value.Anfrage.Max, _jetzt());
-            if (los.Count == 0) break;
-            _geparktEingang.RemoveFirst();
-            context.Send(n.Value.Antwort, new EingaengeZugeteilt(los));
+            if (los.Count > 0)
+            {
+                _geparktEingang.Remove(n);
+                context.Send(n.Value.Antwort, new EingaengeZugeteilt(los));
+            }
+            n = weiter;
         }
     }
 

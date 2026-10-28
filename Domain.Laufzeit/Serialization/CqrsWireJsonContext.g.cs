@@ -58,6 +58,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(EingaengeZugeteilt))]
 [JsonSerializable(typeof(EingangBeantwortet))]
 [JsonSerializable(typeof(HinweisZustellen))]
+[JsonSerializable(typeof(TraegerAbgemeldet))]
 [JsonSerializable(typeof(HalteQuelle))]
 [JsonSerializable(typeof(QuelleGehalten))]
 // ── Framework: Ergebnis-/Inbox-Events, Festhalten, Frist (reisen im Wire) ──
