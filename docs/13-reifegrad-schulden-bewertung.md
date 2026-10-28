@@ -16,8 +16,6 @@ abgeschlossen oder umgeschrieben. Der Broker trägt bis Phase 7 nur noch, was an
 
 | ID | Kurz | Prio |
 |---|---|:--:|
-| G-17 | Im Störungslauf gehen nach dem harten Neustart des Hosts der Prüfdomäne Wirkungen von Funktionen verloren: Nachschub (50–56 von ≈ 100 000) und Zubuchungen der Verteilung (8–40, dazu 4–12 Vorgänge offen). Die Eingänge gelten als erledigt (alle Funktions-Positionen am Kopf, nichts geparkt, nichts endgültig gescheitert), die fehlenden Commands haben keine Quittung in der Inbox; die Lücke wächst nach dem Neustart über gut zwei Minuten stetig, nicht im Moment des Abbruchs. Gleich mit dem Code von Phase 5 (`…_server-pubsub-phase6-ab-a-stoerung`) und Phase 6 (`…_server-pubsub-phase6-stoerung`), also nicht vom Wecker; seit Phase 0 lief kein Störungslauf mehr. Verdacht: der Weg Funktion → `CommandEmitter` → Aggregat liefert ein „zugestellt“ ohne Commit, solange der tote Knoten noch in Consul steht — Ursache und Test offen | P1 |
-| G-11 | Im Störungslauf übersprang eine Projektion einmal zwei Events eines Streams (Partition am Kopf, Guard dahinter) — Ursache und Test offen | P1 |
 | G-12 | Eine fachliche Ablehnung erreicht den Client nie, wenn sein Vertrag ihren Typ nicht hört (der Arbeitsplatz hört keine): er wiederholt dreimal und meldet „unbestätigt“ | P1 |
 | G-14 | Read-your-writes greift nicht für ein eben angelegtes Objekt: hat die Projektion es noch nicht verarbeitet, gibt es keinen Stand (Guard) für seine Id, und die Antwort gilt als frisch („nicht gefunden“ gleich nach der Quittung) | P2 |
 | G-13 | Zwei Knoten vergeben dieselben Sitzungs-Kennungen (Zähler je Prozess), der Broker überschreibt: eine gezielte Antwort kann bei der Sitzung des anderen Knotens landen | P1 |
@@ -113,24 +111,6 @@ Keine offenen P0-Befunde (G-1 und G-7 erledigt in Phase 1 des Plans Garantien un
 ### P1
 
 Die Reihe **PF** sind Kosten der Garantien ([11](11-garantien.md) §11.12): die Garantie bleibt, der Mechanismus ist teurer als nötig.
-
-**G-11 · Projektion übersprang Events im Störungslauf** (gemessen einmal, `vermessung/ergebnisse/2026-10-18_0405_5e2d293_server-wachstum-stoerung-1`).
-In S1 fehlte im Read-Model ein komplettes Paar: für seinen Stream standen die Guards beider Bildpaar-Projektionen auf Version 3, die Versionen 4
-(`BildVerfuegbar`) und 5 (`ImagePairKomplett`) waren nie angewandt, alle Partitionen standen am Kopf des Logs, nichts geparkt. Die drei Events
-entstanden um 02:08:07 — laut `host.csv` drei Sekunden nachdem der Treiber den Prüfdomänen-Host hart beendet und neu gestartet hatte, fast
-20 s nach dem Redis-Neustart (eine erste Lesart der Zeitachse, „während Redis stand“, war falsch). Beide Projektionen übersprangen dieselben
-Events; gemeinsam ist ihnen der Horizont (einer je Host-Prozess) und die Seite derselben Partition. Den Batch-Leser hat der Umbau zu PF-28 nur
-an einer Obergrenze geändert, die bei 3 258 Events nicht greift.
-- *Geprüft, ohne Befund:* die Sequenz hat Cache 1; die Freigabe-Regel des Horizonts und die Reihenfolge Stream-Zeile vor `nextval` (auch für
-  gemischte Group-Commits, `AnhaengeReihenfolgePostgresTests`); der Host öffnet je Partitions-Leser einen eigenen Store. Neu: I
-  `HorizontStressGarantieTests` (16 Schreiber über Group-Commit und Bündel, ≈ 250 000 Events in 40 s, langsame Batch-Leser mit Neustarts —
-  jedes Event genau einmal; zweimal grün). Eine erste Fassung teilte einen Store unter allen Lesern und verlor dadurch Effekte — ein Fehler
-  des Tests, nicht des Hosts.
-- *Gemessen:* nach dem Löschen allen Rest-Zustands (Mess- und Test-Datenbanken, Redis, Host-Logs) fünf Störungsläufe grün
-  (`…_05*_server-g11-stoerung-1` bis `-5`); insgesamt 1 rot zu 27 grün.
-- *Vermutet:* Rest-Zustand auf dem Server (Tobi), eine Lücke im Horizont beim harten Ende eines anderen Hosts am selben Postgres, oder ein
-  Weg, auf dem Sequenzen als erledigt gelten, ohne angewandt zu sein. *Nächster Schritt:* `scripts/stoerungsserie.sh <N>` sichert beim
-  nächsten roten Lauf Transaktionen und Commit-Zeiten der betroffenen Events (Commit-Zeitstempel sind auf dem Server eingeschaltet).
 
 **G-12 · Fachliche Ablehnungen erreichen den Client nicht** (gefunden beim Verhaltens-Netz, Plan Pub/Sub-Neustrukturierung Phase 0). Das Aggregat
 schickt eine Ablehnung gezielt an die Sitzung des Absenders (`AggregateActorBase.TryPublishRejectionAsync`, `TargetSubscriberId`), der Broker
@@ -386,13 +366,30 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 
 ## 13.6 Erledigt (früher hier offen)
 
+- **G-17 und G-11 · Leser rückten über Events, die noch niemand gezogen hatte (2026-10-28, Messserver; docs/03 §3.3, docs/11 §11.4):** die Probe
+  des Horizonts der Vollständigkeit las den Sequenzzähler mit `select last_value from mt_events_sequence` — ohne Sperre der Sequenz-Seite. Jeder
+  32. `nextval` schreibt einen WAL-Eintrag und setzt dafür in der Seite kurz den vorausgeloggten Wert (bis zu 32 über dem zuletzt vergebenen);
+  eine Probe, die ihn sah, gab Sequenzen frei, die noch niemand gezogen hatte. Die Transaktionen, die sie danach zogen, bekamen höhere Nummern,
+  als die Probe abwartete, ihre Events wurden erst nach der Freigabe sichtbar, und die Leser (Funktionen wie Projektionen) rückten über sie.
+  Bei Funktionen fehlten so Wirkungen (im Störungslauf 50–56 Nachschübe, 8–40 Zubuchungen der Verteilung, Vorgänge offen; „Eingang erledigt,
+  Command ohne Quittung“), bei Projektionen fehlten Events im Read-Model (G-11: Guard dahinter, Partition am Kopf). Der harte Neustart war nur
+  ein Lastfall: im Test fehlten Wirkungen auch vor dem Abbruch. Jetzt liest die Probe `pg_sequence_last_value` unter der Sperre
+  (`EventStoreAbfragen.Zaehlerstand`). *Belege:* im protokollierten Lauf lasen genau zwei Proben einen Stand 31 über der höchsten vergebenen
+  Sequenz, je 31 Zeilen darunter trugen spätere Transaktionsnummern — genau die zwei Verlust-Schübe des Laufs; die Funktions-Actors hatten die
+  fehlenden Eingänge nie begonnen (Debug-Spur), ihre Seite meldete den Horizont über den damals unsichtbaren Events. *Nachweise:* I
+  `ZaehlerstandPostgresTests` (acht ziehende Verbindungen, ein Leser vergleicht Stand und nächste Sequenz; ≈ 60 000 Proben), VT `NeustartTests`
+  (Prüfdomäne im Consul-Cluster, acht Sender über den JSON-Eingang, SIGKILL und Neustart unter Last; je Reservierung unter dem Mindestbestand
+  genau ein Nachschub, je Verteilung jedes Ziel genau einmal und ein Abschluss; Kategorie Last). Mit der Behebung dreimal grün, zwei
+  Störungsläufe gültig (`…_server-pubsub-g17-stoerung-1/2`); Gegenprobe (Zähler wieder ohne Sperre) beide Tests rot. Ein erster Umbau, der die
+  Sequenz im Trigger der Event-Zeilen nach der Transaktionsnummer neu zog, ließ `NeustartTests` dreimal rot und ist zurückgenommen — Martens
+  Reihenfolge (Stream-Zeile vor den Events, `AnhaengeReihenfolgePostgresTests`) war nie das Problem.
 - **Phase 6 Pub/Sub-Neustrukturierung (2026-10-28, Messserver; docs/03 §3.5, docs/04 §4.1/§4.4, docs/06, docs/11 §11.5/§11.10):** Wecker statt
   Broker-Signalen — der `WeckplanGenerator` erzeugt aus den Signaturen je Event-Typ die Ziele (Batch-Leser der Projektionen, Funktions-Actors je
   Partition bzw. die eine Adresse, die Uhr bei einer Frist; CQRS108), der Wecker weckt nach dem Commit des Group-Commits und des Einzel-Appends je
   Commit und Ziel einmal, der Takt je Partition prüft beim Start den Plan (GR-WECKPLAN). Signale samt Typen, Generatoren, Wire, Proto und Empfang
   sind entfernt, ebenso der Redis-Versionsindex: der Stand je gezeigter Id kommt aus dem Guard der Projektion (`ProjektionsStaende`), **PF-6** ist
   damit erledigt (kein Redis-Write je Event, kein Redis-Aufruf im Command-Turn, Redis entfällt im Betrieb). Der Broker trägt bis Phase 7 nur noch
-  die Nachrichten an Clients. Grenzen: FB-10, FB-11, FB-12, PF-36; G-17 kam im Störungslauf ans Licht (schon mit dem Code von Phase 5).
+  die Nachrichten an Clients. Grenzen: FB-10, FB-11, FB-12, PF-36; G-17 kam im Störungslauf ans Licht (schon mit dem Code von Phase 5; erledigt, oben).
 - **Phase 5 Pub/Sub-Neustrukturierung (2026-10-28, Messserver; docs/03 §3.2/§3.3, docs/04 §4.6, docs/11 §11.2/§11.3):** keine Marken im Log —
   `KommandoVerarbeitet`/`KommandoAbgelehnt` entfallen. Ein Noop und eine Ablehnung schreiben nur ihre Quittung in die Inbox-Tabelle; die Version
   bleibt, ein Aggregat hat eine Version (die Zahl seiner Events), eine Ablehnung legt keinen Stream mehr an. Weil kein Append mehr die Version

@@ -210,7 +210,10 @@ Noop und Ablehnung stehen nicht im Log; „gewirkt/abgelehnt“ je CommandId hä
 - **Horizont der Vollständigkeit** (`Horizont`, G-9): bis zu welcher globalen Sequenz `seq_id` jedes Event endgültig ist — committet und
   sichtbar oder nie (zurückgerollt). Postgres zieht die Sequenz im Insert innerhalb der Transaktion; nebenläufige Commits werden in umgekehrter
   Reihenfolge sichtbar. Ohne Uhr: eine **Probe** (eine kurze eigene Transaktion ohne Warten auf die Platte, eine Runde) liest erst den Stand des
-  Sequenzzählers, dann ihre eigene Transaktionsnummer und die älteste noch laufende. Im Anhänge-Modus `Quick` schreibt Marten in jeder
+  Sequenzzählers, dann ihre eigene Transaktionsnummer und die älteste noch laufende. Den Stand liest sie mit `pg_sequence_last_value`, unter der
+  Sperre der Sequenz-Seite (`EventStoreAbfragen.Zaehlerstand`): ein gewöhnliches `select last_value` liest ohne Sperre und sah mitunter den Wert,
+  den ein `nextval` gerade vorausloggt (jeder 32. schreibt einen WAL-Eintrag und steht dafür kurz bis zu 32 darüber) — die Probe gab so Sequenzen
+  frei, die noch niemand gezogen hatte, und Leser rückten über deren Events (G-17, Nachweis I `ZaehlerstandPostgresTests`). Im Anhänge-Modus `Quick` schreibt Marten in jeder
   Transaktion zuerst die Stream-Zeile, dann die Events mit `nextval` — jede Transaktion hat ihre Nummer, bevor sie eine Sequenz zieht
   (Wächter: I `AnhaengeReihenfolgePostgresTests`); Nummern steigen. Läuft keine kleinere Nummer als die der Probe mehr, ist alles bis zu ihrem
   Stand endgültig. Eine lange offene Transaktion hält den Horizont an, statt überholt zu werden; nach 30 s warnt der Store einmal je Minute mit

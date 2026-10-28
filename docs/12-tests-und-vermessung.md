@@ -130,6 +130,14 @@ Vorgang sind gleich. Der **Störungslauf ist ungültig** (`…_server-pubsub-pha
 offen) — und ebenso mit dem Code von Phase 5 (`…_server-pubsub-phase6-ab-a-stoerung`: 50 und 40, 12 offen): Wirkungen von Funktionen gehen nach dem
 harten Neustart verloren, nicht durch den Wecker (G-17, docs/13). Ein Lastlauf dauert auf dem Messserver ≈ 12 min statt der früher genannten 5.
 
+**Stand 2026-10-28 (G-17 und G-11 behoben, `acb3620`):** die Probe des Horizonts liest den Sequenzzähler mit `pg_sequence_last_value` (docs/03
+§3.3). Neu Integration `Garantien/ZaehlerstandPostgresTests` (Garantie) und Verhaltens-Netz `NeustartTests` (Garantie und Last: Prüfdomäne im
+Consul-Cluster, acht Sender über den JSON-Eingang, 40 s Last, SIGKILL nach 12 s, Neustart nach 3 s, dann das fachliche Soll im Log; ≈ 2–4 min;
+in `tests.sh schnell` wie die Last-Tests der Integration ausgenommen). Ohne die Behebung war `NeustartTests` in 13 von 15 Läufen rot (2–14
+Nachschübe, bis 180 Zubuchungen fehlten, auch schon vor dem Abbruch), danach dreimal grün; Gegenprobe (Zähler wieder ohne Sperre): beide Tests rot,
+`ZaehlerstandPostgresTests` mit ≈ 60 000 Proben in 8 s. Zwei Störungsläufe gültig, Exactly-once grün (`…_server-pubsub-g17-stoerung-1/2`: S5 113 194
+und 108 342 Vorgänge, je 182 bzw. 181 Paare in S1).
+
 Statisch gezählt:
 
 | Projekt | `[Fact]` | `[Theory]` | Dateien |
@@ -171,7 +179,7 @@ den Läufen kommt von den expandierten `[Theory]`-Fällen.
 | `GeteilteDokumentePostgresTests`, `SchreibRegelPostgresTests` | 4 + 5 | Single-Writer je Dokument, OCC bei geteilten Dokumenten zwischen Partitions-Lesern |
 | `SequenceGapPostgresTests` | 4 | `seq_id`-Lücke; eine lange offene Transaktion wird nicht überholt (G-9, über die gesetzte Sequenz des Partitions-Reads); der Batch-Leser überholt einen Nachzügler nicht |
 | `BatchNachholPostgresTests` | 1 | der Batch-Leser holt ein Event mit verlorenem Weckruf beim nächsten Takt nach (auch eines, das während des Durchlaufs kam) |
-| `Garantien/AnhaengeReihenfolgePostgresTests`, `Garantien/EventZeitPostgresTests`, `DbUhrPostgresTests` | 1 + 3 + 1 | Wächter des Horizonts; eine Uhr (G-10); DB-Uhr mit Versatz |
+| `Garantien/AnhaengeReihenfolgePostgresTests`, `Garantien/ZaehlerstandPostgresTests`, `Garantien/EventZeitPostgresTests`, `DbUhrPostgresTests` | 1 + 1 + 3 + 1 | Wächter des Horizonts: Martens Reihenfolge, der Zählerstand der Probe eilt nie voraus (G-17, acht ziehende Verbindungen, ≈ 8 s); eine Uhr (G-10); DB-Uhr mit Versatz |
 | `MetadataPostgresTests` | 3 | Header-Readback |
 | `LiveCommandE2ETests`, `TwoNodeCommandDispatchTests`, `RemotePidDeliverySmokeTests` | 4 | Command → Event → Projektion im Cluster, Stand je Id aus dem Fortschritt der Projektion; Latenz: der Commit weckt die Projektion (dreimal unter 5 s); Cross-Node |
 | `AblaufE2ETests` | 5 | Beispieldomäne im echten Cluster: Bildeingang Quelle → Bildaufbereitung → Bildeingang → Fakt, auch mit Python-Worker, der die Bildaufbereitung über gRPC trägt (Laufort Extern, FB-2); Wächterfrist im Stream des Laufs; Lese-Fähigkeit; Datei-Treiber genau einmal auch nach Neustart |

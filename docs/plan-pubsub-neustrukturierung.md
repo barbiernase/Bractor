@@ -135,8 +135,9 @@ Aus der Analyse vom 2026-10-18 (nicht im Repo; die Teile, die nicht ohnehin mit 
 
 ### 1.8 Offene Garantie-Lücke, die der Umbau erbt
 
-**G-11** (docs/13): im Störungslauf übersprang eine Projektion einmal zwei Events eines Streams. Der Batch-Leser bleibt im Zielbild — die Lücke
-muss vor Phase 8 geklärt oder mit einem roten Test eingegrenzt sein. Die Untersuchung läuft in einem anderen Worktree (`CqrsSolution-g11`).
+**G-11** (docs/13): im Störungslauf übersprang eine Projektion einmal zwei Events eines Streams. Geklärt mit G-17 (2026-10-28): die Probe des
+Horizonts las den Sequenzzähler ohne Sperre und sah mitunter den vorausgeloggten Wert eines `nextval`; jetzt `pg_sequence_last_value`
+(`ZaehlerstandPostgresTests`).
 
 ## 2 · Zielbild
 
@@ -652,7 +653,8 @@ bis Phase 7/8. (3) Der Wecker fasst **beim Absender** zusammen (je Ziel höchste
 (4) Ein Commit mit mehrdeutigem Ausgang (G-3) weckt nicht; ihn holt der Takt. (5) Prozess- und Emittenten-Polls gab es seit Phase 4 nicht mehr.
 (6) Der Störungslauf stoppt kein Redis mehr; die Messung ist auf Tobis Wort A-B statt A-B-B-A.
 Ergebnis (docs/12): S1 gleich, S3-64 1,15 ×, S5-1 1,09 ×, aber S5-8 0,71 × und S5-64 0,81 × im A-B-B-A nur für S5 (PF-36, Ursache offen); der
-Störungslauf ist ungültig — nach dem harten Neustart gehen Wirkungen von Funktionen verloren, gleich mit dem Code von Phase 5 (G-17).
+Störungslauf war ungültig — Wirkungen von Funktionen gingen verloren, gleich mit dem Code von Phase 5 (G-17: die Probe des Horizonts las den
+Sequenzzähler ohne Sperre; behoben, zwei Störungsläufe gültig, `…_server-pubsub-g17-stoerung-1/2`).
 
 ### Phase 7 · Clients (5–8 PT)
 
@@ -667,7 +669,7 @@ unverändert grün, dazu transitive Aktualisierung (Datensatz-Ansicht nach fremd
 Projektions-Signatur `Auf(Event[, Herkunft], Fähigkeiten)` ohne Writer/Track/Envelope/SubscriberId; Store-Klassen-Schnittstellen (§2.4) statt
 `IProjectionTracker`/`ICoCommitTracker`/`IAppendProjektion`; Fortschritt beim Framework für Klasse 2; Neuaufbau über Generationen; allgemeiner
 Store-Test; Marten-Store als Klasse 1; ein Klasse-2-Treiber (Dateisystem/Objektspeicher) und ein Klasse-3-Sink als Nachweis; Analyzer R14.
-Vorbedingung: G-11 geklärt oder eingegrenzt (§1.8). Messung A-B (S1, S3).
+Vorbedingung (G-11 geklärt, §1.8) erfüllt. Messung A-B (S1, S3).
 
 ### Phase 9 · Direkte Aggregat-Abfrage (1–2 PT)
 
