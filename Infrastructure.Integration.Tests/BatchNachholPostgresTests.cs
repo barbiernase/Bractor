@@ -78,6 +78,7 @@ public class BatchNachholPostgresTests : IClassFixture<BatchNachholPostgresTests
                 opts.Events.DatabaseSchemaName = "audit_befund1_it";
                 opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;
                 Core.KonsumSchema.Registriere(opts);
+                Domain.Infrastructure.Generated.GeneratedProjectionServices.RegistriereSchema(opts);
             });
         }
 

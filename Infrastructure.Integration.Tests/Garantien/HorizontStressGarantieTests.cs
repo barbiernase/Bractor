@@ -137,6 +137,7 @@ public class HorizontStressGarantieTests : IClassFixture<HorizontStressGarantieT
             opts.Events.DatabaseSchemaName = Schema;
             opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;
             Core.KonsumSchema.Registriere(opts);
+            Domain.Infrastructure.Generated.GeneratedProjectionServices.RegistriereSchema(opts);
         });
 
         public async Task InitializeAsync()

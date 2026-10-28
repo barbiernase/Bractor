@@ -271,6 +271,7 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
             opts.Events.DatabaseSchemaName = schema;
             opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;
             KonsumSchema.Registriere(opts);
+            Domain.Infrastructure.Generated.GeneratedProjectionServices.RegistriereSchema(opts);
             InboxTabelle.Registriere(opts);
             Infrastructure.Uhr.FristVerzeichnis.Registriere(opts);
         });

@@ -136,6 +136,7 @@ public sealed class PostgresFixture : IDisposable
             opts.DatabaseSchemaName = "phase2_cocommit_it";
             opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;
             KonsumSchema.Registriere(opts);
+            Domain.Infrastructure.Generated.GeneratedProjectionServices.RegistriereSchema(opts);
         });
     }
 

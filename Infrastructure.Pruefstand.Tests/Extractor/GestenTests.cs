@@ -210,7 +210,7 @@ public sealed class GestenTests : IDisposable
         var bericht = await GesteAsync(Geaendert("projektionen", karte));
 
         bericht.Geloescht.Should().ContainSingle(x => x.Contains("Auf(Zurueckgegeben)"));
-        Text("Lesen.cs").Should().NotContain("Auf(Zurueckgegeben e").And.Contain("Auf(Ausgeliehen e");
+        Text("Lesen.cs").Should().NotContain("Task Auf(Zurueckgegeben e").And.Contain("Task Auf(Ausgeliehen e");
     }
 
     [Fact]

@@ -102,27 +102,30 @@ namespace Projections.SourceGeneration
             sb.AppendLine("    public static IServiceCollection AddGeneratedProjectionServices(this IServiceCollection services)");
             sb.AppendLine("    {");
 
-            // Marten-Schema
-            sb.AppendLine("        services.ConfigureMarten(options =>");
-            sb.AppendLine("        {");
+            // Marten-Schema (eine Methode, die auch Test-Stores ohne DI aufrufen)
+            sb.AppendLine("        services.ConfigureMarten(RegistriereSchema);");
+            sb.AppendLine();
+            var schema = new StringBuilder();
+            schema.AppendLine("    /// <summary>Das Marten-Schema der Read-Models — für den Host über <c>ConfigureMarten</c>, für Stores ohne DI (Tests) direkt.</summary>");
+            schema.AppendLine("    public static void RegistriereSchema(StoreOptions options)");
+            schema.AppendLine("    {");
             // Optimistic Concurrency nur für GETEILTE Dokumente (aus mehreren Streams beschrieben): alle übrigen haben
             // per Schreib-Regel der Store-Basis genau einen Schreiber (ihren Stream) — dort wäre die Prüfung reine Last.
             var idTypen = new SortedSet<string>(System.StringComparer.Ordinal);
             foreach (var rm in readModels)
             {
                 var typisiert = rm.GetMembers("Id").OfType<IPropertySymbol>().Any(p => IstId(p.Type));
-                sb.AppendLine($"            options.Schema.For<{rm.ToDisplayString(full)}>()");
-                sb.AppendLine("                .DatabaseSchemaName(\"rm\")");
-                sb.AppendLine($"                .Identity(x => x.{(typisiert ? Abstractions.Projektionsvertrag.Schluessel : "Id")})");
-                sb.AppendLine($"                .UseOptimisticConcurrency({(Impl(rm, iGeteilt) ? "true" : "false")});");
+                schema.AppendLine($"        options.Schema.For<{rm.ToDisplayString(full)}>()");
+                schema.AppendLine("            .DatabaseSchemaName(\"rm\")");
+                schema.AppendLine($"            .Identity(x => x.{(typisiert ? Abstractions.Projektionsvertrag.Schluessel : "Id")})");
+                schema.AppendLine($"            .UseOptimisticConcurrency({(Impl(rm, iGeteilt) ? "true" : "false")});");
                 foreach (var m in rm.GetMembers().OfType<IPropertySymbol>())
                     foreach (var id in IdsIn(m.Type)) idTypen.Add(id.ToDisplayString(full));
             }
             // Ids in Read-Models als Werttyp (eine UUID) — so übersetzt LINQ einen Vergleich auf ein Id-Feld.
             foreach (var id in idTypen)
-                sb.AppendLine($"            options.RegisterValueType(typeof({id}));");
-            sb.AppendLine("        });");
-            sb.AppendLine();
+                schema.AppendLine($"        options.RegisterValueType(typeof({id}));");
+            schema.AppendLine("    }");
 
             // Stores: eine Instanz je Bereich, unter jeder Fähigkeit + dem Bündel
             foreach (var store in stores)
@@ -150,6 +153,7 @@ namespace Projections.SourceGeneration
             sb.AppendLine("        return services;");
             sb.AppendLine("    }");
             sb.AppendLine();
+            sb.Append(schema.ToString());
 
             sb.AppendLine("}");
 
