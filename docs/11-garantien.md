@@ -210,7 +210,8 @@ read-your-writes griff nicht für ein eben angelegtes Objekt (alle drei Phase 7:
   `SchreibGarantieTests`), verlorener Weckruf (`BatchNachholPostgresTests`, `AblaufGarantieTests`, `WeckerGarantieTests`), Absturz mitten im Batch
   (`CoCommitPostgresTests`, `BatchKonsumGarantieTests`), Abbruch einer Funktion zwischen Commands und Position (`FunktionsGarantieTests`),
   Timeout und Fehlschlag beim Emit (`EmitGarantieTests`, `FunktionsArbeitTests`, `UhrTests`), Überlast eines Ziels (`EmitGarantieTests`: Drossel), Versionskonflikt, mehrdeutiger Commit, Wiederholung nach Neustart und mitten im Group-Commit (`SchreibGarantieTests`), Konflikt an geteilten
-  Dokumenten zwischen Partitionen (`SchreibRegelPostgresTests`, `GeteilteDokumentePostgresTests`), Passivierung und Reaktivierung
+  Dokumenten zwischen Partitionen (`SchreibRegelPostgresTests`, `GeteilteDokumentePostgresTests`), jede Store-Klasse unter Batch-Abbruch,
+  Wiederholung, zweiter Aktivierung und Neuaufbau (allgemeiner Store-Test, `StoretestPostgresTests`), Passivierung und Reaktivierung
   (`LebenszyklusGarantieTests`), alte CommandId jenseits des Inbox-Caches und der Horizont der Inbox (`SchreibGarantieTests`), zwei Aktivierungen und Neuaufbau gegen einen laufenden
   Leser (`GarantiePostgresTests`, `BatchKonsumGarantieTests`), Poison-Stream (`GarantiePostgresTests`, `BatchKonsumGarantieTests`), gescheiterter Append (`EventReadGarantieTests`), Neustart des Hosts (`AblaufGarantieTests`, `RehydrationGarantieTests`), Abbruch einer Funktion nach dem Festhalten, nach den Commands, zwei
   Aktivierungen und zwei Worker mit verschiedenen Antworten (`FunktionsGarantieTests`, `FunktionsArbeitTests`), eine doppelt gefeuerte Frist

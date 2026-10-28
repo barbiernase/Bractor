@@ -43,8 +43,10 @@ public class StoreKlassenE2ETests
 
             await Warte(async () => ((Messzaehler)(await queries.ExecuteAsync(new HoleMesszaehler(stelle))).Data).Anzahl >= werte.Count,
                 Frist, "die Senke zählt nicht nach");
-            ((Messzaehler)(await queries.ExecuteAsync(new HoleMesszaehler(stelle))).Data).Anzahl.Should().Be(werte.Count,
-                "ohne Störung genau einmal — zugesichert ist nur mindestens einmal");
+            var zaehler = await queries.ExecuteAsync(new HoleMesszaehler(stelle));
+            ((Messzaehler)zaehler.Data).Anzahl.Should().Be(werte.Count, "ohne Störung genau einmal — zugesichert ist nur mindestens einmal");
+            zaehler.Deps.Should().ContainSingle(d => d.Id == stelle.Wert && d.Version == werte.Count,
+                "die Antwort zeigt die Id ihrer Query (ohne „mindestens“): der Generator findet sie im Id<T>-Feld");
         }
         finally { await host.StopAsync(); }
     }
