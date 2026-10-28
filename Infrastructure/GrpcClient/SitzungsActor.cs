@@ -541,7 +541,7 @@ public sealed class SitzungsActor : RahmenActor
         }
         catch (Exception ex) when (ex is RpcException or InvalidOperationException or OperationCanceledException)
         {
-            _logger.LogDebug("{Session} Stream zu — {Case} nicht geschrieben", _id, nachricht.MessageCase);
+            _logger.LogWarning(ex, "DIAG {Session} Stream zu — {Case} nicht geschrieben", _id, nachricht.MessageCase);
         }
         catch (Exception ex)
         {
