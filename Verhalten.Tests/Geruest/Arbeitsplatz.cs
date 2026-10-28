@@ -60,6 +60,12 @@ public sealed class Arbeitsplatz : IAsyncDisposable
         return a;
     }
 
+    /// <summary>
+    /// Hört zusätzlich einen Typ mit, den der Vertrag nicht hört — etwa eine Ablehnung: sie kommt gezielt an die Sitzung, die den Command schickte,
+    /// und der Client-Stack legt sie auf den Bus; ein Modul, das sie zeigen will, hört sie dort.
+    /// </summary>
+    public void Hoere(Type typ) => Bus.Subscribe(typ, (m, ctx) => _empfangen.Enqueue(new Empfangen(m, ctx, DateTimeOffset.UtcNow)));
+
     /// <summary>Ein Command, wie ihn ein IntentHandler auf den Bus legt — mit der Korrelation, über die die Antwort quittiert.</summary>
     public string Sende(ICommand command)
     {

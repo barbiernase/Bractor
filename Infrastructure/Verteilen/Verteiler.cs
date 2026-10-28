@@ -119,7 +119,6 @@ public sealed class VerteilerActor : RahmenActor
         {
             if (e.ZielSitzung is { } ziel)
             {
-                _logger?.LogWarning("DIAG {Zeit:HH:mm:ss.fff} Verteiler gezielt {T} an {Z}: {Da} (bekannt: {B})", DateTime.UtcNow, e.Payload.GetType().Name, ziel, _sitzungen.ContainsKey(ziel), string.Join(",", _sitzungen.Keys));
                 if (_sitzungen.ContainsKey(ziel)) Fuer(ziel, e);
             }
             else if (_hoerer.TryGetValue(e.Payload.GetType(), out var hoerer))

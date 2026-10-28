@@ -116,7 +116,6 @@ public sealed class SitzungsActor : RahmenActor
                 break;
 
             case Zustellung z:
-                foreach (var e in z.Envelopes.Where(e => e.ZielSitzung is not null)) _logger.LogWarning("DIAG {Zeit:HH:mm:ss.fff} {Session} schreibt gezielt {T}", DateTime.UtcNow, _id, e.Payload.GetType().Name);
                 foreach (var e in z.Envelopes)
                     await SchreibeAsync(new Leitung.ServerMessage { Event = new Leitung.EventNotification { Envelope = _d.Mapper.MapToDto(e) } });
                 _rueckstau.Erledigt();
@@ -289,8 +288,6 @@ public sealed class SitzungsActor : RahmenActor
         if (ImAuftrag.IstAkteur(envelope.UserId))
             envelope = envelope with { Wirker = WirkerId.FuerAkteur(envelope.UserId) };
 
-        _logger.LogWarning("DIAG {Zeit:HH:mm:ss.fff} {Session} Command {Command} v{V} {Id}", DateTime.UtcNow, _id, envelope.Payload.GetType().Name,
-            request.Envelope.ExpectedVersion, envelope.CommandId);
         _logger.LogDebug("{Session} Command {Command} → {AggregateType} ({Modus}), CorrelationId {CorrelationId}",
             _id, envelope.Payload.GetType().Name, envelope.AggregateType, envelope.Modus.GetType().Name, envelope.CorrelationId);
         _d.Dispatcher.Dispatch(envelope);
@@ -541,7 +538,7 @@ public sealed class SitzungsActor : RahmenActor
         }
         catch (Exception ex) when (ex is RpcException or InvalidOperationException or OperationCanceledException)
         {
-            _logger.LogWarning(ex, "DIAG {Session} Stream zu — {Case} nicht geschrieben", _id, nachricht.MessageCase);
+            _logger.LogDebug("{Session} Stream zu — {Case} nicht geschrieben", _id, nachricht.MessageCase);
         }
         catch (Exception ex)
         {

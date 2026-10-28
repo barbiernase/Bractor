@@ -98,6 +98,7 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
     public async Task Eine_fachliche_Ablehnung_quittiert_den_Command_beim_Client()
     {
         await using var ap = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenArbeitsplatz);
+        ap.Hoere(typeof(DatensatzLeer));
         var datensatz = Guid.NewGuid();
         await ap.QuittungAsync(ap.Sende(new ErstelleDatensatz(new(datensatz), "leer")), Kurz);
 
