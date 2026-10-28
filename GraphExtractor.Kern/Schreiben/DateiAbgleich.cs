@@ -77,9 +77,7 @@ public sealed class Dateipuffer(string root, Func<string, string?>? quelle = nul
 internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string> ergaenzt, List<string> uebersprungen)
 {
     private static readonly string OneOf = typeof(Abstractions.OneOf<>).Name.Split('`')[0];
-    private static readonly string SubscriberId = nameof(Abstractions.ISubscriber.SubscriberId);
-    private static readonly string ProjectionReader = nameof(Abstractions.ProjectionReaderAttribute)[..^"Attribute".Length];
-    private static readonly string TrackDeps = nameof(Abstractions.ProjectionReaderAttribute.TrackDeps);
+    private static readonly string MindestensEinmal = nameof(Abstractions.MindestensEinmalAttribute)[..^"Attribute".Length];
     private static readonly HashSet<string> StateVertrag = [nameof(Abstractions.IState.Id), nameof(Abstractions.IState.Version)];
 
     /// <summary>Was abgeglichen wurde (auch ohne Textänderung) — der Rest der geänderten Elemente wird als „nicht schreibbar" gemeldet.</summary>
@@ -125,13 +123,13 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
                     Datei(datei!, was, t => MethodenSignatur(t, st.Impl.Name, f.Methode, f, schnittstelle: false));
             }
         foreach (var k in l.Konsumenten.Where(k => k.Datei != null && Herkunft.Geaendert(k.Herkunft, Herkunft.Von(k))))
-            Datei(k.Datei!, $"konsument {k.Name}", t => Klasse(t, k.Name, k.Basen, (SubscriberId, k.SubscriberId), null));
+            Datei(k.Datei!, $"konsument {k.Name}", t => Klasse(t, k.Name, k.Basen, k.MindestensEinmal));
         foreach (var r in l.Reader.Where(r => r.Datei != null && Herkunft.Geaendert(r.Herkunft, Herkunft.Von(r))))
-            Datei(r.Datei!, $"reader {r.Name}", t => Klasse(t, r.Name, r.Basen, null, r.TrackDeps));
-        foreach (var (besitzer, h) in l.Konsumenten.SelectMany(k => k.Handles.Select(h => (k.Name, h)))
-                     .Concat(l.Reader.SelectMany(r => r.Handles.Select(h => (r.Name, h))))
+            Datei(r.Datei!, $"reader {r.Name}", t => Klasse(t, r.Name, r.Basen, null));
+        foreach (var (besitzer, methode, h) in l.Konsumenten.SelectMany(k => k.Handles.Select(h => (k.Name, Abstractions.Projektionsvertrag.Auf, h)))
+                     .Concat(l.Reader.SelectMany(r => r.Handles.Select(h => (r.Name, Abstractions.Projektionsvertrag.Frage, h))))
                      .Where(x => x.h.Datei != null && Herkunft.Geaendert(x.h.Herkunft, Herkunft.Von(x.h))))
-            Datei(h.Datei!, $"handle {besitzer}.Handle({h.Eingang})", t => HandleRueckgabe(t, besitzer, h));
+            Datei(h.Datei!, $"handle {besitzer}.{methode}({h.Eingang})", t => HandleRueckgabe(t, besitzer, h));
     }
 
     /// <summary>Eine Änderung auf eine Datei anwenden; <paramref name="aendern"/> liefert (neuer Text, Beschreibung) oder null = nichts zu tun.</summary>
@@ -381,14 +379,14 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         return (MitNamespaces(Anwenden(text, edits), parameter.Select(p => p.Typ).Append(rueckgabe)), "Signatur");
     }
 
-    // ── Handle: Eingang (umverdrahtet) + Rückgabe (Ausgänge); die Fähigkeits-Parameter gleicht ParameterAbgleich ab ──
+    // ── Auf/Frage: Eingang (umverdrahtet) + Rückgabe (Antworten); die Fähigkeits-Parameter gleicht ParameterAbgleich ab ──
     private (string, string)? HandleRueckgabe(string text, string klasse, Handle h)
     {
         var imCode = h.EingangImCode ?? h.Eingang;
         var root = Parse(text);
         var m = root.DescendantNodes().OfType<ClassDeclarationSyntax>().Where(c => c.Identifier.Text == klasse)
             .SelectMany(c => c.Members.OfType<MethodDeclarationSyntax>()).FirstOrDefault(x => ErsterTyp(x) == imCode);
-        if (m == null) return (text, "Handle nicht gefunden");
+        if (m == null) return (text, "Eingang nicht gefunden");
         var edits = new List<(int, int, string)>();
         var notiz = new List<string>();
         if (imCode != h.Eingang && m.ParameterList.Parameters[0].Type is { } eingangsTyp)
@@ -405,8 +403,8 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         return (MitNamespaces(Anwenden(text, edits), h.Ausgaenge.Append(h.Eingang)), string.Join(", ", notiz));
     }
 
-    // ── Klasse: Basisliste (Pull/Append-Marker, IReader<P>), SubscriberId-Literal, TrackDeps ──
-    private (string, string)? Klasse(string text, string name, IReadOnlyList<string>? basen, (string Name, string? Wert)? id, bool? trackDeps)
+    // ── Klasse: Basisliste verbatim; bei einer Projektion das Attribut [MindestensEinmal] (R14) ──
+    private (string, string)? Klasse(string text, string name, IReadOnlyList<string>? basen, bool? mindestensEinmal)
     {
         var root = Parse(text);
         var decls = root.DescendantNodes().OfType<ClassDeclarationSyntax>().Where(c => c.Identifier.Text == name).ToList();
@@ -419,41 +417,39 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
             edits.Add((bl.Types[0].SpanStart, bl.Types[^1].Span.End, string.Join(", ", basen)));
             notiz.Add("Basisliste");
         }
-        if (id is { Wert: { } wert } kennung)
+        if (mindestensEinmal is { } soll)
         {
-            var prop = decls.SelectMany(d => d.Members.OfType<PropertyDeclarationSyntax>()).FirstOrDefault(p => p.Identifier.Text == kennung.Name);
-            var ausdruck = prop?.ExpressionBody?.Expression;
-            // Literal direkt oder über eine Konstante derselben Klasse.
-            if (ausdruck is IdentifierNameSyntax idn)
-                ausdruck = decls.SelectMany(d => d.Members.OfType<FieldDeclarationSyntax>()).SelectMany(f => f.Declaration.Variables)
-                    .FirstOrDefault(v => v.Identifier.Text == idn.Identifier.Text)?.Initializer?.Value;
-            if (ausdruck is LiteralExpressionSyntax { Token.Value: string alt } lit)
-            {
-                if (alt != wert) { edits.Add((lit.SpanStart, lit.Span.End, SymbolDisplay.FormatLiteral(wert, true))); notiz.Add(kennung.Name); }
-            }
-            else notiz.Add($"{kennung.Name} ist kein Literal im Code — nicht geändert");
-        }
-        if (trackDeps is { } td)
-        {
-            var attr = decls.SelectMany(d => d.AttributeLists).SelectMany(a => a.Attributes)
-                .FirstOrDefault(a => BoardLeseseite.Basisname(a.Name.ToString()) is var n && (n == ProjectionReader || n == ProjectionReader + "Attribute"));
-            var soll = td ? "true" : "false";
-            var arg = attr?.ArgumentList?.Arguments.FirstOrDefault(a => a.NameEquals?.Name.Identifier.Text == TrackDeps);
-            if (attr == null)
+            var liste = decls.SelectMany(d => d.AttributeLists)
+                .FirstOrDefault(al => al.Attributes.Any(a => BoardLeseseite.Basisname(a.Name.ToString()) is var n && (n == MindestensEinmal || n == MindestensEinmal + "Attribute")));
+            if (soll && liste == null)
             {
                 var spalte = haupt.GetLocation().GetLineSpan().StartLinePosition.Character;
                 var at = haupt.AttributeLists.Count > 0 ? haupt.AttributeLists[0].SpanStart : haupt.Modifiers.Count > 0 ? haupt.Modifiers[0].SpanStart : haupt.Keyword.SpanStart;
-                edits.Add((at, at, $"[{ProjectionReader}({TrackDeps} = {soll})]\n" + new string(' ', spalte)));
-                notiz.Add(TrackDeps);
+                edits.Add((at, at, $"[{MindestensEinmal}]\n" + new string(' ', spalte)));
+                notiz.Add(MindestensEinmal);
             }
-            else if (arg == null)
+            else if (!soll && liste != null)
             {
-                if (attr.ArgumentList == null) edits.Add((attr.Span.End, attr.Span.End, $"({TrackDeps} = {soll})"));
-                else edits.Add((attr.ArgumentList.CloseParenToken.SpanStart, attr.ArgumentList.CloseParenToken.SpanStart,
-                    (attr.ArgumentList.Arguments.Count > 0 ? ", " : "") + $"{TrackDeps} = {soll}"));
-                notiz.Add(TrackDeps);
+                // Steht es allein in seiner Liste, fällt die Liste samt Zeilenende; sonst nur das Attribut.
+                var attr = liste.Attributes.First(a => BoardLeseseite.Basisname(a.Name.ToString()) is var n && (n == MindestensEinmal || n == MindestensEinmal + "Attribute"));
+                if (liste.Attributes.Count == 1)
+                {
+                    var ende = liste.Span.End;
+                    while (ende < text.Length && text[ende] is ' ' or '\t') ende++;
+                    if (ende < text.Length && text[ende] == '\r') ende++;
+                    if (ende < text.Length && text[ende] == '\n') ende++;
+                    var start = liste.SpanStart;
+                    while (start > 0 && text[start - 1] is ' ' or '\t') start--;
+                    edits.Add((start, ende, ""));
+                }
+                else
+                {
+                    var i = liste.Attributes.IndexOf(attr);
+                    var (von, bis) = i == 0 ? (attr.SpanStart, liste.Attributes[1].SpanStart) : (liste.Attributes[i - 1].Span.End, attr.Span.End);
+                    edits.Add((von, bis, ""));
+                }
+                notiz.Add(MindestensEinmal);
             }
-            else if (arg.Expression.ToString() != soll) { edits.Add((arg.Expression.SpanStart, arg.Expression.Span.End, soll)); notiz.Add(TrackDeps); }
         }
         var neu = Anwenden(text, edits);
         if (basen != null && neu != text) neu = MitNamespaces(neu, basen);

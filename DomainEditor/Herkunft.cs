@@ -26,8 +26,8 @@ public static class Herkunft
     });
     public static string Von(Faehigkeit f) => Hash(new { f.Name, f.Methode, f.Lesen, f.Rueckgabe, f.Parameter });
     public static string Von(Handle h) => Hash(new { h.Eingang, h.Faehigkeiten, h.Ausgaenge, h.Rueckgabe });
-    public static string Von(Konsument k) => Hash(new { k.SubscriberId, k.Pull, k.Append, k.Basen });
-    public static string Von(Leser r) => Hash(new { r.Projektion, r.TrackDeps, r.Basen });
+    public static string Von(Konsument k) => Hash(new { k.MindestensEinmal, k.Basen });
+    public static string Von(Leser r) => Hash(new { r.Basen });
 
     /// <summary>Alle änderbaren Elemente des (aus dem Code gelesenen) Modells stempeln.</summary>
     public static EditorModell Stempeln(EditorModell m)
@@ -70,12 +70,12 @@ public static class Herkunft
         foreach (var k in l.Konsumenten)
         {
             Pruefe(k.Herkunft, Von(k), $"konsument {k.Name}");
-            foreach (var h in k.Handles) Pruefe(h.Herkunft, Von(h), $"handle {k.Name}.Handle({h.Eingang})");
+            foreach (var h in k.Handles) Pruefe(h.Herkunft, Von(h), $"handle {k.Name}.{Abstractions.Projektionsvertrag.Auf}({h.Eingang})");
         }
         foreach (var r in l.Reader)
         {
             Pruefe(r.Herkunft, Von(r), $"reader {r.Name}");
-            foreach (var h in r.Handles) Pruefe(h.Herkunft, Von(h), $"handle {r.Name}.Handle({h.Eingang})");
+            foreach (var h in r.Handles) Pruefe(h.Herkunft, Von(h), $"handle {r.Name}.{Abstractions.Projektionsvertrag.Frage}({h.Eingang})");
         }
         return aus;
     }

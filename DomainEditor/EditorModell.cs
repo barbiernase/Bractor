@@ -377,13 +377,7 @@ public sealed record Rahmen
     /// <summary>Größte Stelligkeit von <c>OneOf&lt;…&gt;</c> im Vertrag (aus der Compilation gezählt; 0 = unbekannt).</summary>
     public int OneOfMax { get; init; }
 
-    // ── Leseseite (CQRS057: Handle(TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…) / Handle(TQuery, IMessageEnvelope, ReadContext, Fähigkeit…)) ──
-    /// <summary>
-    /// Der Schreiber-Typ der Projektions-Handles (3. Parameter) + sein Namespace — aus den Handles im Code gelesen (er liegt
-    /// außerhalb des Vertrags). Null = kein Handle im Code: dann kann der Scaffolder keine NEUE Projektion schreiben.
-    /// </summary>
-    public string? ProjektionsSchreiber { get; init; }
-    public string? ProjektionsSchreiberNamespace { get; init; }
+    // ── Leseseite (CQRS057: Task Auf(TEvent e[, Herkunft h], Schreib-Fähigkeit…[, CancellationToken ct]) / Frage(TQuery q, Lese-Fähigkeit…[, CancellationToken ct])) ──
     /// <summary>Gemeinsame Basisklasse ALLER Store-Implementierungen im Code (nur wenn eindeutig) — Basis einer NEUEN Impl-Klasse.</summary>
     public StoreBasis? StoreBasis { get; init; }
     /// <summary>Namespace, in dem ALLE Store-Implementierungen liegen (nur wenn eindeutig) — Ort einer NEUEN Impl-Klasse.</summary>
@@ -438,6 +432,12 @@ public sealed record Store
     public StoreImpl? Impl { get; init; }
     /// <summary>Datei des Bündel-Interfaces (relativ zur Solution) — null = noch nicht geschrieben.</summary>
     public string? Datei { get; init; }
+    /// <summary>
+    /// Die Store-Klassen (1 atomar, 2 wiederholungsfest, 3 mindestens einmal; Plan §2.4, R14), die seine Implementierungen tragen — Code-Fakt der
+    /// Basisliste (<c>IAtomaresZiel</c>, <c>IWiederholungsfestesZiel</c>, <c>INurMindestensEinmal</c>, auch über die Basisklasse), nur gelesen, nie
+    /// geschrieben. Richtig ist genau eine (CQRS109); leer = keine Implementierung bzw. keine Klasse.
+    /// </summary>
+    public IReadOnlyList<int> Klassen { get; init; } = [];
 }
 
 /// <summary>Eine Fähigkeit = Interface mit GENAU EINER Funktion (CQRS051), <c>: IWriteStore</c> bzw. <c>: IReadStore</c>.</summary>
@@ -472,7 +472,10 @@ public sealed record StoreImpl
     public string? LeseDatei { get; init; }
 }
 
-/// <summary>Ein Handle einer Projektion oder eines Readers: Eingang, Kontext, Fähigkeiten, Rückgabe.</summary>
+/// <summary>
+/// Ein Eingang einer Projektion (<c>Auf</c>) oder eines Readers (<c>Frage</c>): Eingang, optional Herkunft und Abbruch, Fähigkeiten, Rückgabe.
+/// Der Methodenname ist Vertrag (<see cref="Abstractions.Projektionsvertrag.Auf"/>, <see cref="Abstractions.Projektionsvertrag.Frage"/>).
+/// </summary>
 public sealed record Handle
 {
     /// <summary>Einfacher Typname des Eingangs (Event / Query) — identifiziert den Handle.</summary>
@@ -483,12 +486,14 @@ public sealed record Handle
     /// </summary>
     public string? EingangImCode { get; init; }
     /// <summary>Parametername des Eingangs.</summary>
-    public string Parameter { get; init; } = "evt";
-    /// <summary>Namen der Kontext-Parameter (Umschlag, Schreiber/Lese-Kontext) verbatim; null = Standardnamen.</summary>
-    public IReadOnlyList<string>? Kontext { get; init; }
+    public string Parameter { get; init; } = "e";
+    /// <summary>Name des <c>Herkunft</c>-Parameters (nur Projektion, direkt nach dem Eingang); null = keiner.</summary>
+    public string? HerkunftParameter { get; init; }
+    /// <summary>Name des <c>CancellationToken</c>-Parameters (am Ende); null = keiner.</summary>
+    public string? AbbruchParameter { get; init; }
     /// <summary>Die Fähigkeits-Parameter (Typ = Fähigkeits-Interface): die Obergrenze dessen, was der Rumpf am Store darf.</summary>
     public IReadOnlyList<Parameter> Faehigkeiten { get; init; } = [];
-    /// <summary>Was der Handle erzeugen KANN (OneOf-Varianten): Hinweise (Projektion), Responses (Reader).</summary>
+    /// <summary>Was der Eingang erzeugen KANN (OneOf-Varianten): die Antworten eines Readers; eine Projektion gibt nichts aus (leer).</summary>
     public IReadOnlyList<string> Ausgaenge { get; init; } = [];
     /// <summary>Rückgabetyp verbatim; null = aus <see cref="Ausgaenge"/> abgeleitet.</summary>
     public string? Rueckgabe { get; init; }
@@ -503,22 +508,22 @@ public sealed record Handle
     public string? Herkunft { get; init; }
 }
 
-/// <summary>Eine Projektion (<c>ISubscriber</c>), Handles <c>Handle(TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…)</c>.</summary>
+/// <summary>Eine Projektion (<c>IProjektion</c>), je gehörtem Event ein <c>Task Auf(TEvent e[, Herkunft h], Schreib-Fähigkeit…[, CancellationToken ct])</c>.</summary>
 public sealed record Konsument
 {
     public required string Name { get; init; }
     public required string Namespace { get; init; }
-    public string? SubscriberId { get; init; }
-    public bool Pull { get; init; } = true;
-    public bool Append { get; init; }
+    /// <summary><c>[MindestensEinmal]</c>: ausdrücklich erlaubt, in einen Store der Klasse 3 zu schreiben (R14).</summary>
+    public bool MindestensEinmal { get; init; }
     public IReadOnlyList<Handle> Handles { get; init; } = [];
     public string? Doku { get; init; }
-    /// <summary>Deklarationsform verbatim ohne <c>partial</c> (z. B. <c>public</c>); null = <c>public</c>.</summary>
+    /// <summary>Deklarationsform verbatim (z. B. <c>public sealed class</c>); null = <c>public sealed class</c>.</summary>
     public string? Typart { get; init; }
-    /// <summary>Basisliste verbatim; null = aus den Markern (<c>ISubscriber, IPullSubscriber[, IAppendProjektion]</c>).</summary>
+    /// <summary>Basisliste verbatim; null = der Marker <c>IProjektion</c>.</summary>
     public IReadOnlyList<string>? Basen { get; init; }
+    /// <summary>Weitere Attribute AUSSER <c>[MindestensEinmal]</c> (das kommt aus <see cref="MindestensEinmal"/>).</summary>
     public string? Attribute { get; init; }
-    /// <summary>Alle übrigen Member (SubscriberId, Konstanten, Ctor, Helfer) verbatim. Null ⇒ nur <c>SubscriberId</c> wird erzeugt.</summary>
+    /// <summary>Alle übrigen Member (Konstanten, Ctor, Helfer) verbatim. Null ⇒ keine.</summary>
     public string? Zusatz { get; init; }
     /// <summary>using-Direktiven der Datei verbatim (ohne <c>using</c>/<c>;</c>, auch Aliase).</summary>
     public IReadOnlyList<string> Usings { get; init; } = [];
@@ -533,19 +538,19 @@ public sealed record Konsument
     public IReadOnlyList<string>? Zustand { get; init; }
 }
 
-/// <summary>Ein Reader (<c>IReader&lt;TProjektion&gt;</c>), Handles <c>Handle(TQuery, IMessageEnvelope, ReadContext, Fähigkeit…)</c>.</summary>
+/// <summary>
+/// Ein Reader (<c>IReader</c>), je Query eine <c>Frage(TQuery q, Lese-Fähigkeit…[, CancellationToken ct])</c> → Antwort bzw. <c>OneOf&lt;…&gt;</c>. Welche
+/// Projektionen hinter ihm stehen, folgt aus seinen Lese-Fähigkeiten (die Projektionen, die in denselben Store schreiben) — kein eigenes Feld.
+/// </summary>
 public sealed record Leser
 {
     public required string Name { get; init; }
     public required string Namespace { get; init; }
-    /// <summary>Name der Projektion (<c>IReader&lt;T&gt;</c>).</summary>
-    public required string Projektion { get; init; }
-    public bool TrackDeps { get; init; } = true;
     public IReadOnlyList<Handle> Handles { get; init; } = [];
     public string? Doku { get; init; }
     public string? Typart { get; init; }
+    /// <summary>Basisliste verbatim; null = der Marker <c>IReader</c>.</summary>
     public IReadOnlyList<string>? Basen { get; init; }
-    /// <summary>Weitere Attribute AUSSER <c>[ProjectionReader]</c> (das kommt aus <see cref="TrackDeps"/>).</summary>
     public string? Attribute { get; init; }
     public string? Zusatz { get; init; }
     public IReadOnlyList<string> Usings { get; init; } = [];

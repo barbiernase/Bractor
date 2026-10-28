@@ -78,17 +78,18 @@ funktion-auf Leihwesen.Pruefung.ISeitenPruefung schnittstelle | PruefungGestarte
 funktion-auf Leihwesen.Pruefung.SchadenAusPruefung klasse() | PruefungAbgeschlossen herkunft -> MeldeSchaden
 funktion-auf Leihwesen.Pruefung.Offenzaehlung klasse() | RueckgabeAngemahnt herkunft -> EroeffneMahnung liest IZaehleOffene offene
 
-# ── Lesen: frei benannte Fähigkeiten + Bündel (Marker statt Namensregel), class-ReadModel, OneOf, Konstanten-Ids ──
+# ── Lesen: frei benannte Fähigkeiten + Bündel (Marker statt Namensregel), class-ReadModel, OneOf; Kennung = Typname; der Store hat Klasse 1
+#    (Basis MartenStore); jedes Auf nimmt die Herkunft; hinter dem Reader steht, wer in denselben Store schreibt (aus den Fähigkeiten) ──
 record Leihwesen.Lesen.OffeneAusleihen query | LeserId:Guid { get; init; }
 record Leihwesen.Lesen.OffeneAusleihenAntwort queryresponse | Anzahl:int
 record Leihwesen.Lesen.KeineAusleihen queryresponse |
 readmodel Leihwesen.Lesen.LeihEintrag store=ILeihBuch | Id:Guid { get; set; }, LeserId:Guid { get; set; }, Offen:bool { get; set; }
 readmodel Leihwesen.Lesen.Ausleihzaehler store= geteilt | Id:string="gesamt" { get; init; }, Offen:int { get; init; }
-store Leihwesen.Lesen.ILeihBuch | schreibt SchreibeAsync(eintrag:LeihEintrag), SchliesseAsync(id:Guid) | liest OffeneAsync(leserId:Guid):IReadOnlyList<LeihEintrag>
-projektion Leihwesen.Lesen.Leihliste id=leihliste pull | Ausgeliehen -> ILeihBuch.SchreibeAsync; Zurueckgegeben -> ILeihBuch.SchliesseAsync
-reader Leihwesen.Lesen.LeihAuskunftLeser projektion=Leihliste trackDeps=false | OffeneAusleihen -> ILeihBuch.OffeneAsync => OffeneAusleihenAntwort|KeineAusleihen
+store Leihwesen.Lesen.ILeihBuch klasse=1 | schreibt SchreibeAsync(eintrag:LeihEintrag), SchliesseAsync(id:Guid) | liest OffeneAsync(leserId:Guid):IReadOnlyList<LeihEintrag>
+projektion Leihwesen.Lesen.Leihliste | Ausgeliehen herkunft -> ILeihBuch.SchreibeAsync; Zurueckgegeben herkunft -> ILeihBuch.SchliesseAsync
+reader Leihwesen.Lesen.LeihAuskunftLeser hinter=Leihliste | OffeneAusleihen -> ILeihBuch.OffeneAsync => OffeneAusleihenAntwort|KeineAusleihen
 
-# ── Handle-Verträge: WAS aus der Signatur (Form · Art:Typ), WELCHE Store-Fns aus den Fähigkeits-Parametern — kein Rumpf-Fakt ──
+# ── Verträge von Auf und Frage: WAS aus der Signatur (Form · Art:Typ), WELCHE Store-Fns aus den Fähigkeits-Parametern — kein Rumpf-Fakt ──
 ausgang Leihliste.Ausgeliehen nichts | storefn:ILeihBuch.SchreibeAsync
 ausgang Leihliste.Zurueckgegeben nichts | storefn:ILeihBuch.SchliesseAsync
 ausgang LeihAuskunftLeser.OffeneAusleihen einzeln | response:OffeneAusleihenAntwort; response:KeineAusleihen; storefn:ILeihBuch.OffeneAsync
@@ -99,17 +100,18 @@ faehigkeit Leihwesen.Lesen.ISchliesseAusleihe schreibt ILeihBuch.SchliesseAsync
 faehigkeit Leihwesen.Lesen.IZaehleOffene liest ILeihBuch.OffeneAsync
 
 # ── Im Editor GEZEICHNET (Sonde/Gezeichnet.gesten.json → Gesten-Motor → Fork → neu eingelesen) ──
-#    Store neu (Impl-Klasse ohne Basis, weil die Impls im Code keine gemeinsame haben), Fähigkeit von MerkeVorAsync im Panel
-#    benannt, die von ZaehleAsync abgeleitet (I + Methode ohne Async). Kanten = Fähigkeits-Parameter, Ausgänge = Signatur.
+#    Store neu (Impl-Klasse ohne Basis, weil die Impls im Code keine gemeinsame haben — darum noch ohne Store-Klasse, „klasse=-“), Fähigkeit von
+#    MerkeVorAsync im Panel benannt, die von ZaehleAsync abgeleitet (I + Methode ohne Async). Kanten = Fähigkeits-Parameter, Ausgänge = Signatur;
+#    ein neues Auf nimmt die Herkunft.
 #    (Reaktionen gibt es nicht mehr — was eine Reaktion tat, ist eine Funktion.)
 record Leihwesen.Lesen.Vormerkungen query | LeserId:Guid
 record Leihwesen.Lesen.VormerkungenAntwort queryresponse | Anzahl:int
 readmodel Leihwesen.Lesen.Vormerkung store=IVormerkbuch | Id:Guid, LeserId:Guid
-store Leihwesen.Lesen.IVormerkbuch | schreibt MerkeVorAsync(v:Vormerkung) | liest ZaehleAsync(leserId:Guid):int
+store Leihwesen.Lesen.IVormerkbuch klasse=- | schreibt MerkeVorAsync(v:Vormerkung) | liest ZaehleAsync(leserId:Guid):int
 faehigkeit Leihwesen.Lesen.INotiereVormerkung schreibt IVormerkbuch.MerkeVorAsync
 faehigkeit Leihwesen.Lesen.IZaehle liest IVormerkbuch.ZaehleAsync
-projektion Leihwesen.Lesen.Vormerkliste id=vormerkliste pull | Ausgeliehen -> IVormerkbuch.MerkeVorAsync
-reader Leihwesen.Lesen.VormerkAuskunft projektion=Vormerkliste trackDeps=true | Vormerkungen -> IVormerkbuch.ZaehleAsync => VormerkungenAntwort
+projektion Leihwesen.Lesen.Vormerkliste | Ausgeliehen herkunft -> IVormerkbuch.MerkeVorAsync
+reader Leihwesen.Lesen.VormerkAuskunft hinter=Vormerkliste | Vormerkungen -> IVormerkbuch.ZaehleAsync => VormerkungenAntwort
 ausgang Vormerkliste.Ausgeliehen nichts | storefn:IVormerkbuch.MerkeVorAsync
 ausgang VormerkAuskunft.Vormerkungen einzeln | response:VormerkungenAntwort; storefn:IVormerkbuch.ZaehleAsync
 
@@ -232,7 +234,8 @@ sicht Anlagen.Messung.Schichtleitung akteur domaene=Anlagen.Messung block=§akte
 
 # ── Warenkatalog (Katalogimport.cs.txt): MASSEN-IMPORT MIT FORTSCHRITT — EINE Quell-Nachricht (Datei-Treiber) startet über eine gleichbleibende
 #    Funktion den Import-Vorgang (Id = Stream der Quelle), ein Import-Dienst draußen antwortet als STROM (Artikel je Zeile, Fortschritt, Abschluss),
-#    getragen von seinem Client (ITraegt); die Leseseite zeigt den Stand. ──
+#    getragen von seinem Client (ITraegt); die Leseseite zeigt den Stand in einem Store der Klasse 2 (Dateien, jede Schreib-Fähigkeit nimmt die
+#    Herkunft) und zählt angelegte Artikel in einem Store der Klasse 3 (nur mit [MindestensEinmal] an der Projektion; ohne Herkunft, mit Abbruch). ──
 record Warenkatalog.Import.KatalogDateiAbgelegt event typart=public sealed record treiber=Datei | Name:string { get; init; } required, Pfad:string { get; init; } required, RelativerPfad:string { get; init; } required, Groesse:long { get; init; } required, GeaendertAm:DateTimeOffset { get; init; } required, ErkanntAm:DateTimeOffset { get; init; } required, Kennung:string { get; init; } required
 record Warenkatalog.Import.StarteImport command erzeugung aggregat=Importlauf | AggregateId:Id<Importlauf>, Pfad:string
 record Warenkatalog.Import.ImportGestartet event aggregat=Importlauf | ImportId:Id<Importlauf>, Pfad:string
@@ -265,16 +268,20 @@ client Warenkatalog.Import.IKatalogpflegeOberflaeche | traegt ; sendet ; fragt H
 akteur Warenkatalog.Import.Importdienst Maschine | darf IImportLauf
 client Warenkatalog.Import.IImportWerk | traegt IImportLauf; sendet ; fragt ; hoert
 readmodel Warenkatalog.Import.Importstand store=IImportUebersicht | Id:Guid { get; set; }, Pfad:string="" { get; set; }, Zeilen:int { get; set; }, Fertig:bool { get; set; }
-store Warenkatalog.Import.IImportUebersicht | schreibt BeginneAsync(importId:Guid, pfad:string), SetzeAsync(importId:Guid, zeilen:int, fertig:bool) | liest FindeAsync(importId:Guid):Importstand?
+store Warenkatalog.Import.IImportUebersicht klasse=2 | schreibt BeginneAsync(importId:Guid, pfad:string, h:Herkunft), SetzeAsync(importId:Guid, zeilen:int, fertig:bool, h:Herkunft) | liest FindeAsync(importId:Guid):Importstand?
 faehigkeit Warenkatalog.Import.IBeginneImportstand schreibt IImportUebersicht.BeginneAsync
 faehigkeit Warenkatalog.Import.ISetzeImportstand schreibt IImportUebersicht.SetzeAsync
 faehigkeit Warenkatalog.Import.IFindeImportstand liest IImportUebersicht.FindeAsync
-projektion Warenkatalog.Import.Importfortschritt id=importfortschritt pull | ImportGestartet -> IImportUebersicht.BeginneAsync; ImportFortgeschritten -> IImportUebersicht.SetzeAsync; ImportAbgeschlossen -> IImportUebersicht.SetzeAsync
-reader Warenkatalog.Import.Importauskunft projektion=Importfortschritt trackDeps=false | HoleImportstand -> IImportUebersicht.FindeAsync => ImportstandAntwort|ImportUnbekannt
+projektion Warenkatalog.Import.Importfortschritt | ImportGestartet herkunft -> IImportUebersicht.BeginneAsync; ImportFortgeschritten herkunft -> IImportUebersicht.SetzeAsync; ImportAbgeschlossen herkunft -> IImportUebersicht.SetzeAsync
+reader Warenkatalog.Import.Importauskunft hinter=Importfortschritt | HoleImportstand -> IImportUebersicht.FindeAsync => ImportstandAntwort|ImportUnbekannt
 ausgang Importfortschritt.ImportGestartet nichts | storefn:IImportUebersicht.BeginneAsync
 ausgang Importfortschritt.ImportFortgeschritten nichts | storefn:IImportUebersicht.SetzeAsync
 ausgang Importfortschritt.ImportAbgeschlossen nichts | storefn:IImportUebersicht.SetzeAsync
 ausgang Importauskunft.HoleImportstand einzeln | response:ImportstandAntwort; response:ImportUnbekannt; storefn:IImportUebersicht.FindeAsync
+store Warenkatalog.Import.IArtikelprotokoll klasse=3 | schreibt ProtokolliereAsync(nummer:string, preis:decimal) | liest
+faehigkeit Warenkatalog.Import.IProtokolliereArtikel schreibt IArtikelprotokoll.ProtokolliereAsync
+projektion Warenkatalog.Import.Artikelzaehlung mindestenseinmal | ArtikelAngelegt -> IArtikelprotokoll.ProtokolliereAsync
+ausgang Artikelzaehlung.ArtikelAngelegt nichts | storefn:IArtikelprotokoll.ProtokolliereAsync
 sicht Warenkatalog.Import.HoleImportstand query domaene=Warenkatalog.Import block=Importlauf
 sicht Warenkatalog.Import.ImportstandAntwort queryresponse domaene=Warenkatalog.Import block=Importlauf
 sicht Warenkatalog.Import.ImportUnbekannt queryresponse domaene=Warenkatalog.Import block=Importlauf
@@ -282,6 +289,8 @@ sicht Warenkatalog.Import.Importstand readmodel domaene=Warenkatalog.Import bloc
 sicht Warenkatalog.Import.IImportUebersicht store domaene=Warenkatalog.Import block=Importlauf
 sicht Warenkatalog.Import.Importfortschritt projektion domaene=Warenkatalog.Import block=Importlauf
 sicht Warenkatalog.Import.Importauskunft reader domaene=Warenkatalog.Import block=Importlauf
+sicht Warenkatalog.Import.IArtikelprotokoll store domaene=Warenkatalog.Import block=Artikel
+sicht Warenkatalog.Import.Artikelzaehlung projektion domaene=Warenkatalog.Import block=Artikel
 sicht Warenkatalog.Import.Ablage akteur domaene=Warenkatalog.Import block=§akteure
 sicht Warenkatalog.Import.Katalogpflege akteur domaene=Warenkatalog.Import block=§akteure
 sicht Warenkatalog.Import.Importdienst akteur domaene=Warenkatalog.Import block=§akteure
@@ -341,6 +350,11 @@ lage ISetzeImportstand -> Domain.Projections
 lage ImportUnbekannt -> Domain.Projections
 lage Importauskunft -> Domain.Projections
 lage Importfortschritt -> Domain.Projections
+lage Importablage -> Domain.Infrastructure
+lage Artikelzaehlung -> Domain.Projections
+lage IArtikelprotokoll -> Domain.Projections
+lage IProtokolliereArtikel -> Domain.Projections
+lage Artikelprotokoll -> Domain.Infrastructure
 lage Importstand -> Domain.Projections
 lage ImportstandAntwort -> Domain.Projections
 lage Katalogeingang -> Domain.Pipeline

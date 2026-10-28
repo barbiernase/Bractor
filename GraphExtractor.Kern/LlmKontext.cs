@@ -50,7 +50,7 @@ public sealed class KontextBauer
     private readonly JsonElement _board;        // Editor-Modell (ModellMapper.ZuBoardJson) — Quelle des Skeletts
     private readonly List<Compilation> _comps;
     private readonly HashSet<string> _domänen, _framework;
-    private readonly INamedTypeSymbol? _iTransient, _iWriteStore, _iReadStore, _iCoCommit, _iPull, _iAppend, _iEvent, _iCommand, _iQuery, _iReadModel, _iResponse;
+    private readonly INamedTypeSymbol? _iTransient, _iWriteStore, _iReadStore, _iEvent, _iCommand, _iQuery, _iReadModel, _iResponse;
     private readonly Dictionary<string, (string Intent, string Quelle)> _llmKnoten;
 
     /// <summary>Welche Syntaxbäume handgeschrieben sind (je Solution-Stand).</summary>
@@ -67,8 +67,6 @@ public sealed class KontextBauer
         _framework = lage.Analyse.Select(a => a.Compilation.AssemblyName ?? "").Where(n => !_domänen.Contains(n)).ToHashSet(StringComparer.Ordinal);
         INamedTypeSymbol? Get(string n) => _comps.Select(c => c.GetTypeByMetadataName(n)).FirstOrDefault(x => x != null);
         _iTransient = Get(Vertrag.ITransientEvent); _iWriteStore = Get(Vertrag.IWriteStore); _iReadStore = Get(Vertrag.IReadStore);
-        _iCoCommit = Get(Vertrag.ICoCommitTracker);
-        _iPull = Get(Vertrag.IPullSubscriber); _iAppend = Get(Vertrag.IAppendProjektion);
         _iEvent = Get(Vertrag.IEvent); _iCommand = Get(Vertrag.ICommand);
         _iQuery = Get(Vertrag.IQuery); _iReadModel = Get(Vertrag.IReadModel); _iResponse = Get(Vertrag.IQueryResponse);
         _llmKnoten = LiesLlmKnoten(boardDatei);
@@ -173,10 +171,10 @@ public sealed class KontextBauer
         }
         foreach (var rm in A(_board, "readModels")) b.AppendLine($"readmodel {S(rm, "name")}({F(rm)}) @ {S(rm, "store")}");
         foreach (var p in A(_board, "projektionen"))
-            b.AppendLine($"PROJEKTION {S(p, "name")} pull={Bo(p, "pull")} append={Bo(p, "append")}: " + string.Join("; ", A(p, "handles").Select(h =>
-                $"{S(h, "event")} -> {string.Join(", ", Str(h, "fns").Select(x => fnName.GetValueOrDefault(x, x)))}{(Str(h, "publishes").Any() ? " / veröffentlicht " + string.Join(", ", Str(h, "publishes")) : "")}")));
+            b.AppendLine($"PROJEKTION {S(p, "name")}{(Bo(p, "mindestensEinmal") ? " [MindestensEinmal]" : "")}: " + string.Join("; ", A(p, "handles").Select(h =>
+                $"{S(h, "event")} -> {string.Join(", ", Str(h, "fns").Select(x => fnName.GetValueOrDefault(x, x)))}")));
         foreach (var r in A(_board, "reader"))
-            b.AppendLine($"READER {S(r, "name")} liest {S(r, "projektion")}: " + string.Join("; ", A(r, "handles").Select(h =>
+            b.AppendLine($"READER {S(r, "name")} liest {string.Join(", ", Str(r, "projektionen"))}: " + string.Join("; ", A(r, "handles").Select(h =>
                 $"{S(h, "query")} -> {string.Join(", ", Str(h, "fns").Select(x => fnName.GetValueOrDefault(x, x)))} => {string.Join(" | ", Str(h, "responses"))}")));
         foreach (var d in A(_board, "dienste")) b.AppendLine($"dienst {S(d, "vertrag")} -> {S(d, "name")}");
         return b.ToString();
@@ -355,21 +353,24 @@ public sealed class KontextBauer
                 yield return "Rückgabe void — Compiler";
                 break;
             case "projektion":
-                yield return Sym.Implements(s.Klasse, _iPull)
-                    ? "Transport: geordneter Pull (IPullSubscriber) — jedes Event genau einmal, in Reihenfolge"
-                    : "Transport: keiner — ohne IPullSubscriber liest und weckt nichts die Projektion";
-                yield return Sym.Implements(s.Klasse, _iAppend)
-                    ? "Garantie: append-artig (IAppendProjektion) — Co-Commit-Store, exactly-once (Boot-Check GA-1)"
-                    : "Garantie: Upsert — at-least-once, Schreiben muss idempotent sein";
+                yield return "Rückgabe Task, keine Nachricht; schreibt nur über die Schreib-Fähigkeiten genau eines Stores — Analyzer CQRS057, Generator CQRS052";
+                yield return "rechnet bei gleicher Eingabe gleich: keine Uhr, kein Zufall, kein Lesen fremder Daten; Zeit aus der Herkunft — Analyzer CQRS102";
+                var pr = _dom.Projections.FirstOrDefault(p => p.Full == s.Klasse.Fq());
+                foreach (var k in (pr?.HandleFaehigkeiten.Values.SelectMany(cs => cs.Select(c => c.Store)) ?? []).Distinct()
+                             .Select(st => _dom.Stores.FirstOrDefault(x => x.Name == st)).OfType<StoreRaw>().SelectMany(st => st.Klassen).Distinct())
+                    yield return k switch
+                    {
+                        1 => "Store der Klasse 1 (atomar): Wirkungen und Fortschritt in einer Transaktion — jedes Event wirkt genau einmal, in Reihenfolge je Stream",
+                        2 => "Store der Klasse 2 (wiederholungsfest): eine Wiederholung muss dasselbe ergeben — Event-Identität aus der Herkunft im Schlüssel oder als Bedingung",
+                        _ => "Store der Klasse 3 (mindestens einmal): Wirkungen können doppelt stehen — nur mit [MindestensEinmal] (Generator CQRS110)",
+                    };
                 break;
             case "reader":
-                var rd = _dom.Readers.FirstOrDefault(r => r.Full == s.Klasse.Fq());
                 yield return $"Antworten ⊆ {{{string.Join(", ", aus.Select(a => a.Name))}}} — Compiler (Signatur)";
-                if (rd != null) yield return $"TrackDeps = {rd.TrackDeps.ToString().ToLowerInvariant()} (Attribut [ProjectionReader], Default true)";
                 break;
             case "store":
                 yield return "Signatur vom Store-Interface vorgegeben — Compiler";
-                if (IstCoCommitStore(s.Klasse) && StoreRolle(s) is { } schreibt)
+                if (IstAtomarerStore(s.Klasse) && StoreRolle(s) is { } schreibt)
                     yield return schreibt
                         ? "Schreib-Fähigkeit: nur puffern über die Puffer-Methoden der Basis, keine committeten Daten lesen (Lesen-Ändern-Schreiben = Puffer-Methode mit Transformation) — Analyzer CQRS066/067"
                         : "Lese-Fähigkeit: " + Abstractions.StoreZugriff.Hinweis + "; nichts puffern — Analyzer CQRS067";
@@ -394,7 +395,7 @@ public sealed class KontextBauer
             foreach (var mm in bt.GetMembers().Where(x => x.DeclaredAccessibility is Accessibility.Protected or Accessibility.Public
                                                           && !x.IsImplicitlyDeclared && x is IMethodSymbol { MethodKind: MethodKind.Ordinary } or IPropertySymbol))
                 yield return $"Geerbt     {Sig(mm)}   (aus {bt.Name})"
-                             + (IstCoCommitStore(s.Klasse) && IstDatenzugriff(TypVon(mm)) ? "   — " + Abstractions.StoreZugriff.Hinweis : "");
+                             + (IstAtomarerStore(s.Klasse) && IstDatenzugriff(TypVon(mm)) ? "   — " + Abstractions.StoreZugriff.Hinweis : "");
         }
         foreach (var h in Helfer(s)) yield return $"Helfer     {Sig(h)}";
         foreach (var c in s.Klasse.GetMembers().OfType<IFieldSymbol>().Where(f => f.IsConst || f.IsStatic && f.IsReadOnly).Where(IstHand))
@@ -403,11 +404,11 @@ public sealed class KontextBauer
 
     // ── Store-Zugriff (CQRS066/067): dieselbe Positivliste wie der Analyzer (Abstractions.StoreZugriff) ──
 
-    /// <summary>Co-Commit-Store: eine Basis trägt die Marke (ICoCommitTracker) — wie im Analyzer, über Symbole.</summary>
-    private bool IstCoCommitStore(INamedTypeSymbol t)
+    /// <summary>Store der Klasse 1: eine Basis trägt den Fortschritt (<c>IAtomaresZiel</c>) — wie im Analyzer CQRS066/067, über Symbole.</summary>
+    private static bool IstAtomarerStore(INamedTypeSymbol t)
     {
         for (var b = t.BaseType; b != null; b = b.BaseType)
-            if (Sym.Implements(b, _iCoCommit)) return true;
+            if (Infrastructure.SourceGeneration.Projektionsform.StoreKlassen(b).Contains(1)) return true;
         return false;
     }
 
@@ -638,14 +639,13 @@ public sealed class KontextBauer
                 foreach (var c in calls) if (FnSig(c.Store, c.Method) is { } sig) yield return $"    {sig}";
                 foreach (var st in calls.Select(c => c.Store).Distinct())
                     yield return $"ReadModels von {st}: {string.Join(", ", ReadModelsVon(st))}";
-                if (pr?.HandlePublishes.GetValueOrDefault(disc.Name) is { Count: > 0 } pubs) yield return $"veröffentlicht (verlierbar): {string.Join(", ", pubs)}";
                 break;
             }
             case "reader":
             {
                 var rd = _dom.Readers.FirstOrDefault(r => r.Full == s.Klasse.Fq());
                 var calls = rd?.HandleFaehigkeiten.GetValueOrDefault(disc.Name) ?? new();
-                yield return $"liest Projektion: {rd?.ProjectionName ?? "—"}";
+                yield return $"hinter der Frage (wer in denselben Store schreibt): {(rd is { Projektionen.Count: > 0 } ? string.Join(", ", rd.Projektionen) : "—")}";
                 yield return $"Fähigkeiten (Signatur): {(calls.Count == 0 ? "—" : string.Join(", ", calls.Select(c => $"{c.Store}.{c.Method}")))}";
                 foreach (var c in calls) if (FnSig(c.Store, c.Method) is { } sig) yield return $"    {sig}";
                 foreach (var st in calls.Select(c => c.Store).Distinct())
@@ -657,12 +657,12 @@ public sealed class KontextBauer
                 var st = StoreVon(s);
                 if (st == null) break;
                 var fn = st.Fns.First(f => f.Name == s.Disc);
-                yield return $"Store {st.Name}: {(fn.IsRead ? "Lese" : "Schreib")}-Funktion {s.Disc}";
+                yield return $"Store {st.Name}: {(fn.IsRead ? "Lese" : "Schreib")}-Funktion {s.Disc}; Store-Klasse {(st.Klassen.Count == 0 ? "—" : string.Join(", ", st.Klassen))}";
                 yield return $"ReadModels: {string.Join(", ", ReadModelsVon(st.Name))}";
                 var aufrufer = Aufrufer(st.Name, s.Disc).Select(x => x.Titel).ToList();
                 yield return $"aufgerufen von: {(aufrufer.Count == 0 ? "—" : string.Join(", ", aufrufer))}";
                 foreach (var p in _dom.Projections.Where(p => p.HandleFaehigkeiten.Values.Any(cs => cs.Any(c => c.Store == st.Name && c.Method == s.Disc))))
-                    yield return $"    {p.Name}: {(p.Append ? "append-artig (exactly-once)" : "Upsert (at-least-once)")}";
+                    yield return $"    {p.Name}{(p.MindestensEinmal ? " [MindestensEinmal]" : "")}";
                 if (st.MehrdeutigeImpls.Count > 0) yield return $"mehrere Implementierungen: {string.Join(", ", st.MehrdeutigeImpls.Select(x => x.Split('.').Last()))}";
                 break;
             }
@@ -764,12 +764,12 @@ public sealed class KontextBauer
             foreach (var (evt, calls) in p.HandleFaehigkeiten)
                 if (calls.Any(c => c.Store == store && c.Method == method)
                     && _inv.Slots.FirstOrDefault(x => x.Klasse.Fq() == p.Full && x.Disc == evt) is { } sl)
-                    yield return ($"{p.Name}.Handle({evt})", sl.Rumpf);
+                    yield return ($"{p.Name}.{Abstractions.Projektionsvertrag.Auf}({evt})", sl.Rumpf);
         foreach (var r in _dom.Readers)
             foreach (var (q, calls) in r.HandleFaehigkeiten)
                 if (calls.Any(c => c.Store == store && c.Method == method)
                     && _inv.Slots.FirstOrDefault(x => x.Klasse.Fq() == r.Full && x.Disc == q) is { } sl)
-                    yield return ($"{r.Name}.Handle({q})", sl.Rumpf);
+                    yield return ($"{r.Name}.{Abstractions.Projektionsvertrag.Frage}({q})", sl.Rumpf);
     }
 
     // ── Hilfen ──

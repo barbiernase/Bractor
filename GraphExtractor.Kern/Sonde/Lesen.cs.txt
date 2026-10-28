@@ -1,14 +1,15 @@
 using Abstractions;
 using Core;
+using Marten;
 using Leihwesen.Ausleihe;
 using Leihwesen.Ausleihe.Befehle;
 using Leihwesen.Gebuehren;
 
-// SONDE — Leseseite mit FREIEN Namen (keine Namenskonvention), class-ReadModel, OneOf-Antwort,
-// Konstanten-Id. Handle-Verträge: WAS aus der Signatur (auch eine deklarierte,
-// nie ausgegebene Variante), WELCHE Store-Fns aus den Fähigkeits-Parametern. Verschleierung: Fähigkeit über eine
-// Hilfsmethode, über einen Delegate, über ein fremdes Objekt, in einem nie ausgeführten Lambda — die Kanten bleiben exakt,
-// weil sie nur aus der Signatur kommen. Kein Rumpf-Fakt (kein Guard).
+// SONDE — Leseseite mit FREIEN Namen (keine Namenskonvention), class-ReadModel, OneOf-Antwort, ein Store der Klasse 1 (atomar, Marten).
+// Verträge von Auf und Frage: WAS aus der Signatur (auch eine deklarierte, nie ausgegebene Variante), WELCHE Store-Fns aus den
+// Fähigkeits-Parametern, WELCHE Projektion hinter einem Reader aus seinen Lese-Fähigkeiten (derselbe Store). Verschleierung: Fähigkeit über
+// eine Hilfsmethode, über einen Delegate, über ein fremdes Objekt, in einem nie ausgeführten Lambda — die Kanten bleiben exakt, weil sie nur
+// aus der Signatur kommen. Kein Rumpf-Fakt (kein Guard).
 
 namespace Leihwesen.Lesen;
 
@@ -33,16 +34,20 @@ public interface IZaehleOffene : IReadStore { Task<IReadOnlyList<LeihEintrag>> O
 
 public interface ILeihBuch : IStore, INotiereAusleihe, ISchliesseAusleihe, IZaehleOffene { }
 
-public sealed class LeihBuchSpeicher : ILeihBuch
+// Klasse 1 über die Basis (MartenStore : IAtomaresZiel): Wirkungen und Fortschritt in einer Transaktion.
+public sealed class LeihBuchSpeicher : MartenStore, ILeihBuch
 {
-    private readonly Dictionary<Guid, LeihEintrag> _daten = new();
+    public LeihBuchSpeicher(IDocumentStore store) : base(store, typeof(LeihEintrag)) { }
 
-    public Task SchreibeAsync(LeihEintrag eintrag) { _daten[eintrag.Id] = eintrag; return Task.CompletedTask; }
+    public Task SchreibeAsync(LeihEintrag eintrag) => EnqueueStore(eintrag.Id, eintrag);
 
-    public Task SchliesseAsync(Guid id) { if (_daten.TryGetValue(id, out var e)) e.Offen = false; return Task.CompletedTask; }
+    public Task SchliesseAsync(Guid id) => EnqueueTransform<LeihEintrag>(id, e => { e.Offen = false; return e; });
 
-    public Task<IReadOnlyList<LeihEintrag>> OffeneAsync(Guid leserId) =>
-        Task.FromResult<IReadOnlyList<LeihEintrag>>(_daten.Values.Where(e => e.Offen && e.LeserId == leserId).ToList());
+    public async Task<IReadOnlyList<LeihEintrag>> OffeneAsync(Guid leserId)
+    {
+        await using var session = Store.QuerySession();
+        return await session.Query<LeihEintrag>().Where(e => e.Offen && e.LeserId == leserId).ToListAsync();
+    }
 }
 
 public record OffeneAusleihen : IQuery
@@ -53,46 +58,32 @@ public record OffeneAusleihen : IQuery
 public record OffeneAusleihenAntwort(int Anzahl) : IQueryResponse;
 public record KeineAusleihen() : IQueryResponse;
 
-public partial class Leihliste : ISubscriber, IPullSubscriber
+// Die Kennung ist der Typname — kein Feld, keine Konstante.
+public sealed class Leihliste : IProjektion
 {
-    private const string Kennung = "leihliste";
-
-    public string SubscriberId => Kennung;
-
     // Verschleierung 1: die Fähigkeit geht durch eine Hilfsmethode.
-    public async Task Handle(Ausgeliehen evt, IAggregateEnvelope envelope, ProjectionWriter writer, INotiereAusleihe notiere)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Leihvorgang>(envelope.AggregateId);
-            await Notiere(notiere, envelope.AggregateId, evt.LeserId);
-        });
-    }
+    public Task Auf(Ausgeliehen e, Herkunft h, INotiereAusleihe notiere) => Notiere(notiere, h.Stream, e.LeserId);
 
     private static Task Notiere(INotiereAusleihe f, Guid id, Guid leser) =>
         f.SchreibeAsync(new LeihEintrag { Id = id, LeserId = leser, Offen = true });
 
     // Verschleierung 2+3: über einen Delegate und über ein fremdes Objekt; dazu ein nie ausgeführtes Lambda.
-    public async Task Handle(Zurueckgegeben evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISchliesseAusleihe schliesse)
+    public async Task Auf(Zurueckgegeben e, Herkunft h, ISchliesseAusleihe schliesse)
     {
         Func<Guid, Task> tu = schliesse.SchliesseAsync;
         Func<Task> nie = () => new Schliesser(schliesse).Los(Guid.Empty);
-        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
-        {
-            ctx.Track<Leihvorgang>(envelope.AggregateId);
-            await tu(envelope.AggregateId);
-        });
+        await tu(h.Stream);
     }
 
     private sealed class Schliesser(ISchliesseAusleihe f) { public Task Los(Guid id) => f.SchliesseAsync(id); }
 }
 
-[ProjectionReader(TrackDeps = false)]
-public partial class LeihAuskunftLeser : IReader<Leihliste>
+// Der Reader nennt keine Projektion: dahinter steht, wer in denselben Store schreibt (Leihliste über ILeihBuch). Mit Abbruch-Parameter.
+public sealed class LeihAuskunftLeser : IReader
 {
-    public async Task<OneOf<OffeneAusleihenAntwort, KeineAusleihen>> Handle(OffeneAusleihen query, IMessageEnvelope envelope, ReadContext ctx, IZaehleOffene zaehle)
+    public async Task<OneOf<OffeneAusleihenAntwort, KeineAusleihen>> Frage(OffeneAusleihen q, IZaehleOffene zaehle, CancellationToken ct)
     {
-        var offen = await zaehle.OffeneAsync(query.LeserId);
+        var offen = await zaehle.OffeneAsync(q.LeserId);
         if (offen.Count == 0) return new KeineAusleihen();
         return new OffeneAusleihenAntwort(offen.Count);
     }

@@ -6,14 +6,14 @@ namespace DomainEditor;
 
 /// <summary>
 /// Board ⇄ Modell für die LESESEITE. Das Board zeigt sie in eigenen Sammlungen (<c>stores</c> mit Fn-Karten,
-/// <c>projektionen</c>/<c>reader</c> mit Handles und „darf Store.Fn ▶"-Kanten als Fn-Ids, <c>readModels</c>). Was davon Code-Fakt
-/// ist, reist in den Board-Objekten mit (<c>sig</c> je Fn/Handle, <c>code</c> je Klasse, <c>impl</c>/<c>datei</c> je Store, jeweils
-/// mit Herkunfts-Stempel). Hier wird daraus wieder das typisierte Modell:
+/// <c>projektionen</c>/<c>reader</c> mit ihren Eingängen (<c>Auf</c>/<c>Frage</c>) und „darf Store.Fn ▶"-Kanten als Fn-Ids, <c>readModels</c>).
+/// Was davon Code-Fakt ist, reist in den Board-Objekten mit (<c>sig</c> je Fn/Eingang, <c>code</c> je Klasse, <c>impl</c>/<c>datei</c> je Store,
+/// jeweils mit Herkunfts-Stempel). Hier wird daraus wieder das typisierte Modell:
 ///
-///   • Kante Handle → Fn  ⇒ Fähigkeits-Parameter des Handles (Typ = Fähigkeit der Fn; Name aus dem Code, sonst abgeleitet).
-///   • Ausgänge eines Handles (Responses / veröffentlicht) ⇒ OneOf der Rückgabe;
-///     bei einem bestehenden Handle wird nur das Typ-Argument der Rückgabe getauscht (Form und Wrapper bleiben).
-///   • Parameter/Rückgabe einer bestehenden Fn, Pull/Append/TrackDeps/SubscriberId/Projektion ⇒ die jeweilige Deklaration.
+///   • Kante Eingang → Fn  ⇒ Fähigkeits-Parameter des Eingangs (Typ = Fähigkeit der Fn; Name aus dem Code, sonst abgeleitet).
+///   • Antworten einer Frage ⇒ OneOf der Rückgabe; bei einer bestehenden Frage wird nur das Typ-Argument getauscht (Hülle bleibt).
+///     Ein Auf einer Projektion gibt nichts aus (Rückgabe <c>Task</c>).
+///   • Parameter/Rückgabe einer bestehenden Fn, <c>[MindestensEinmal]</c> einer Projektion ⇒ die jeweilige Deklaration.
 ///   • Fn ohne Fähigkeit (neu) ⇒ Fähigkeit <c>I</c>+Methode ohne <c>Async</c> (+ Store bei Kollision) — danach Code-Fakt.
 ///   • Neuer Store ohne Impl ⇒ Impl-Klasse (Name ohne <c>I</c>-Präfix, Namespace = der aller Impls, sonst der des Stores).
 ///
@@ -72,6 +72,7 @@ public static class BoardLeseseite
             {
                 Name = name, Namespace = ns, Doku = N(st, "doku"), Datei = datei, IstBuendel = B(st, "istBuendel") ?? true,
                 Fns = fns, Impl = impl,
+                Klassen = A(st, "klassen").Select(x => x is JsonValue v && v.TryGetValue<int>(out var k) ? k : 0).Where(k => k > 0).ToList(),
             });
         }
 
@@ -86,14 +87,14 @@ public static class BoardLeseseite
             }
             return aus.OrderBy(p => alt.FindIndex(x => Basisname(x.Typ) == Basisname(p.Typ)) is var i && i < 0 ? int.MaxValue : i).ToList();
         }
-        // Ein Handle: aus dem Code (sig) unverändert, außer Fähigkeiten und Ausgänge, die das Board trägt.
-        Handle AlsHandle(JsonNode? hd, string eingang, string standardParameter, IReadOnlyList<string> boardAusgaenge, Wrapper art)
+        // Ein Eingang (Auf/Frage): aus dem Code (sig) unverändert, außer Fähigkeiten und Antworten, die das Board trägt. Neu: Auf mit Herkunft.
+        Handle AlsHandle(JsonNode? hd, string eingang, string standardParameter, IReadOnlyList<string> boardAusgaenge, bool projektion)
         {
             var sig = hd?["sig"];
             var sigAus = sig?["ausgangsTypen"] is JsonArray ? Strings(sig, "ausgangsTypen") : null;
-            var aus = AusgaengeAbgleich(sigAus, boardAusgaenge);
+            var aus = projektion ? [] : AusgaengeAbgleich(sigAus, boardAusgaenge);
             var rueck = N(sig, "rueckgabe");
-            if (rueck != null && sigAus != null && !aus.SequenceEqual(sigAus)) rueck = Umhuellen(rueck, aus, art);
+            if (rueck != null && sigAus != null && !projektion && !aus.SequenceEqual(sigAus)) rueck = Umhuellen(rueck, aus);
             // input = der Eingang beim Einlesen aus dem Code; weicht er vom bearbeiteten ab, steht im Code noch der alte.
             var imCode = sig != null && N(hd, "input") is { Length: > 0 } ein && ein != eingang ? ein : null;
             return new Handle
@@ -101,7 +102,8 @@ public static class BoardLeseseite
                 Eingang = eingang,
                 EingangImCode = imCode,
                 Parameter = N(sig, "parameter") ?? standardParameter,
-                Kontext = sig?["kontext"] is JsonArray ? Strings(sig, "kontext") : null,
+                HerkunftParameter = sig != null ? N(sig, "herkunftParameter") : projektion ? "h" : null,
+                AbbruchParameter = N(sig, "abbruchParameter"),
                 Faehigkeiten = Faehigkeiten(hd),
                 Ausgaenge = aus,
                 Rueckgabe = rueck, Modifikatoren = N(sig, "modifikatoren"),
@@ -115,37 +117,29 @@ public static class BoardLeseseite
         var konsumenten = A(b, "projektionen").Select(p =>
         {
             var code = p?["code"];
-            var pull = B(p, "pull") ?? true;
-            var append = B(p, "append") ?? false;
             return new Konsument
             {
-                Name = S(p, "name"), Namespace = S(p, "namespace"),
-                SubscriberId = N(p, "subscriberId") ?? (code == null ? S(p, "name") : null),
-                Pull = pull, Append = append,
+                Name = S(p, "name"), Namespace = S(p, "namespace"), MindestensEinmal = B(p, "mindestensEinmal") ?? false,
                 Handles = A(p, "handles").Where(hd => S(hd, "event").Length > 0)
-                    .Select(hd => AlsHandle(hd, S(hd, "event"), "evt", Strings(hd, "publishes").Distinct().ToList(), Wrapper.Konsument)).ToList(),
+                    .Select(hd => AlsHandle(hd, S(hd, "event"), "e", [], projektion: true)).ToList(),
                 Doku = N(code, "doku"), Typart = N(code, "typart"),
-                // Basisliste aus dem Code, die Marker nach den Flags (Pull/Append) nachgezogen.
-                Basen = code?["basen"] is JsonArray ? Marker(Marker(Strings(code, "basen"), nameof(IPullSubscriber), pull), nameof(IAppendProjektion), append) : null,
+                Basen = code?["basen"] is JsonArray ? Strings(code, "basen") : null,
                 Attribute = N(code, "attribute"), Zusatz = N(code, "zusatz"), Usings = Strings(code, "usings"), Datei = N(code, "datei"),
                 Herkunft = N(code, "herkunft"), Zustand = code?["zustand"] is JsonArray ? Strings(code, "zustand") : null,
             };
         }).Where(k => k.Name.Length > 0 && k.Namespace.Length > 0).OrderBy(k => k.Name, StringComparer.Ordinal).ToList();
 
-        // ── Reader (ohne angedockte Projektion kein IReader<T> — nicht platzierbar, übergangen) ──
-        var reader = A(b, "reader").Where(r => S(r, "projektion").Length > 0).Select(r =>
+        // ── Reader (welche Projektionen dahinter stehen, folgt aus den Lese-Fähigkeiten — kein Board-Feld wird zurückgeschrieben) ──
+        var reader = A(b, "reader").Select(r =>
         {
             var code = r?["code"];
-            var projektion = S(r, "projektion");
-            var ireader = typeof(IReader<>).Name.Split('`')[0];
             return new Leser
             {
-                Name = S(r, "name"), Namespace = S(r, "namespace"), Projektion = projektion, TrackDeps = B(r, "trackDeps") ?? true,
+                Name = S(r, "name"), Namespace = S(r, "namespace"),
                 Handles = A(r, "handles").Where(hd => S(hd, "query").Length > 0)
-                    .Select(hd => AlsHandle(hd, S(hd, "query"), "query", Strings(hd, "responses"), Wrapper.Reader)).ToList(),
+                    .Select(hd => AlsHandle(hd, S(hd, "query"), "q", Strings(hd, "responses"), projektion: false)).ToList(),
                 Doku = N(code, "doku"), Typart = N(code, "typart"),
-                // IReader<P>: das Typ-Argument folgt der Projektion im Board.
-                Basen = code?["basen"] is JsonArray ? Strings(code, "basen").Select(x => Basisname(x) == ireader ? $"{ireader}<{projektion}>" : x).ToList() : null,
+                Basen = code?["basen"] is JsonArray ? Strings(code, "basen") : null,
                 Attribute = N(code, "attribute"), Zusatz = N(code, "zusatz"), Usings = Strings(code, "usings"), Datei = N(code, "datei"),
                 Herkunft = N(code, "herkunft"),
             };
@@ -189,37 +183,24 @@ public static class BoardLeseseite
         };
     }
 
-    /// <summary>Welche Form ein Handle hat — bestimmt den Wrapper der Rückgabe.</summary>
-    private enum Wrapper { Konsument, Reader }
-
-    /// <summary>Die Ausgänge nach dem Board: aus dem Code die Reihenfolge der Signatur (was bleibt), neue hinten dran.</summary>
+    /// <summary>Die Antworten nach dem Board: aus dem Code die Reihenfolge der Signatur (was bleibt), neue hinten dran.</summary>
     private static List<string> AusgaengeAbgleich(IReadOnlyList<string>? sig, IReadOnlyList<string> board) =>
         sig == null ? board.ToList() : sig.Where(board.Contains).Concat(board.Where(t => !sig.Contains(t))).ToList();
 
-    /// <summary>Neue Ausgänge in die bestehende Rückgabe setzen: der Wrapper bleibt (Task/IAsyncEnumerable/IEnumerable/ValueTask), nur das Typ-Argument wechselt.</summary>
-    private static string Umhuellen(string alt, IReadOnlyList<string> aus, Wrapper art)
+    /// <summary>Neue Antworten in die bestehende Rückgabe einer Frage setzen: die Hülle bleibt (Task/ValueTask oder keine), nur der Antwort-Typ wechselt.</summary>
+    private static string Umhuellen(string alt, IReadOnlyList<string> aus)
     {
+        // Keine Antwort: eine Frage braucht immer eine — bleibt.
+        if (aus.Count == 0) return alt;
         var inner = aus.Count == 1 ? aus[0] : $"{OneOf}<{string.Join(", ", aus)}>";
-        // Keine Ausgabe ⇒ Task (Projektion: nur Effekte); ein Reader braucht immer eine Antwort ⇒ bleibt.
-        if (aus.Count == 0) return art == Wrapper.Reader ? alt : "Task";
         var w = Wrapper0(alt);
-        if (art != Wrapper.Reader && Innen(alt) == null) w = "IAsyncEnumerable";   // bisher Task (nichts) → Strom
-        return $"{w}<{inner}>";
+        return w is "Task" or "ValueTask" && Innen(alt) != null ? $"{w}<{inner}>" : inner;
     }
 
     private static string Wrapper0(string typ) => typ.Contains('<') ? typ[..typ.IndexOf('<')].Trim() : "Task";
     private static string? Innen(string typ) => typ.Contains('<') && typ.EndsWith('>') ? typ[(typ.IndexOf('<') + 1)..^1] : null;
     /// <summary>Typ-Text ohne Leerzeichen und ohne Namespace-Qualifizierer — Vergleich „derselbe Typ?".</summary>
     public static string Norm(string typ) => Regex.Replace(Regex.Replace(typ ?? "", @"\s+", ""), @"\b(?:[A-Za-z_]\w*\.)+(?=[A-Za-z_])", "");
-
-    /// <summary>Marker in der Basisliste setzen/entfernen (die übrigen Basen bleiben wörtlich).</summary>
-    private static List<string> Marker(List<string> basen, string marker, bool an)
-    {
-        var hat = basen.Any(x => Basisname(x) == marker);
-        if (an && !hat) return basen.Append(marker).ToList();
-        if (!an && hat) return basen.Where(x => Basisname(x) != marker).ToList();
-        return basen;
-    }
 
     /// <summary>Leere Strings aus dem Browser (Eingabefelder) sind „nicht gesetzt".</summary>
     private static Record Bereinigt(Record r) => r with

@@ -22,7 +22,7 @@ public class SichtTests
 {
     private static async Task<JsonObject> BoardAsync()
     {
-        _ = typeof(Abstractions.IEvent); _ = typeof(Core.ProjectionWriter);
+        _ = typeof(Abstractions.IEvent); _ = typeof(Core.MartenStore); _ = typeof(Marten.IDocumentStore);
         var refs = AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
             .Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location)).ToImmutableArray();
         using var ws = new AdhocWorkspace();
@@ -30,7 +30,7 @@ public class SichtTests
             filePath: "/sonde/Leihwesen.csproj", metadataReferences: refs,
             compilationOptions: new Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary)));
         foreach (var (name, text) in Sonde.Quelltexte().Append(("GlobalUsings.cs",
-                     "global using System;\nglobal using System.Collections.Generic;\nglobal using System.Linq;\nglobal using System.Threading.Tasks;\n")))
+                     "global using System;\nglobal using System.Collections.Generic;\nglobal using System.Linq;\nglobal using System.Threading;\nglobal using System.Threading.Tasks;\n")))
             ws.AddDocument(DocumentInfo.Create(DocumentId.CreateNewId(projekt.Id), name,
                 loader: TextLoader.From(TextAndVersion.Create(SourceText.From(text), VersionStamp.Create())), filePath: "/sonde/" + name));
         var loesung = ws.CurrentSolution;
@@ -74,6 +74,22 @@ public class SichtTests
         Karte(board, "sto:" + Id(board, "stores", "name", "ILeihBuch"))["domaene"]!.GetValue<string>().Should().Be("Leihwesen.Ausleihe");
         // Wert-Typ: die Signatur steckt nur in Records des Leihvorgangs → dort.
         Karte(board, "rec:Signatur")["domaene"]!.GetValue<string>().Should().Be("Leihwesen.Ausleihe");
+    }
+
+    [Fact]
+    public async Task Projektion_hinter_dem_Reader_und_Store_Klasse_sind_Code_Fakten()
+    {
+        var board = await BoardAsync();
+        JsonObject Objekt(string sammlung, string name) => (board[sammlung] as JsonArray)!.OfType<JsonObject>().First(x => (string?)x["name"] == name);
+        // Hinter dem Reader steht, wer in denselben Store schreibt — aus den Fähigkeiten, nicht aus einem Typ-Argument.
+        Objekt("reader", "LeihAuskunftLeser")["projektionen"]!.AsArray().Select(x => (string)x!).Should().Equal("Leihliste");
+        Objekt("reader", "Importauskunft")["projektionen"]!.AsArray().Select(x => (string)x!).Should().Equal("Importfortschritt");
+        // Die Store-Klasse aus der Basisliste der Implementierung (über die Basisklasse): 1 Marten, 2 Dateien, 3 Senke.
+        int[] Klassen(string store) => Objekt("stores", store)["klassen"]!.AsArray().Select(x => (int)x!).ToArray();
+        Klassen("ILeihBuch").Should().Equal(1);
+        Klassen("IImportUebersicht").Should().Equal(2);
+        Klassen("IArtikelprotokoll").Should().Equal(3);
+        Objekt("projektionen", "Artikelzaehlung")["mindestensEinmal"]!.GetValue<bool>().Should().BeTrue();
     }
 
     [Fact]

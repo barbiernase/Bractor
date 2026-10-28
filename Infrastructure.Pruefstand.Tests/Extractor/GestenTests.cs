@@ -28,7 +28,7 @@ public sealed class GestenTests : IDisposable
         Directory.CreateDirectory(Projekt);
         foreach (var (name, text) in Sonde.Quelltexte()) File.WriteAllText(Path.Combine(Projekt, name), text);
         File.WriteAllText(Path.Combine(Projekt, "GlobalUsings.cs"),
-            "global using System;\nglobal using System.Collections.Generic;\nglobal using System.Linq;\nglobal using System.Threading.Tasks;\n");
+            "global using System;\nglobal using System.Collections.Generic;\nglobal using System.Linq;\nglobal using System.Threading;\nglobal using System.Threading.Tasks;\n");
     }
 
     public void Dispose() { try { Directory.Delete(_wurzel, true); } catch (IOException) { } }
@@ -37,7 +37,7 @@ public sealed class GestenTests : IDisposable
 
     private Solution Loesung()
     {
-        _ = typeof(Abstractions.IEvent); _ = typeof(Core.ProjectionWriter);
+        _ = typeof(Abstractions.IEvent); _ = typeof(Core.MartenStore); _ = typeof(Marten.IDocumentStore);
         var refs = AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
             .Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location)).ToImmutableArray();
         var ws = new AdhocWorkspace();
@@ -186,21 +186,22 @@ public sealed class GestenTests : IDisposable
     }
 
     [Fact]
-    public async Task Projektions_Handle_bekommt_eine_Faehigkeit_als_Parameter()
+    public async Task Projektions_Auf_bekommt_eine_Faehigkeit_als_Parameter()
     {
         var board = await BoardAsync();
         var karte = Karte(board, "projektionen", p => (string?)p["name"] == "Leihliste");
         var handle = karte["handles"]!.AsArray().OfType<JsonObject>().First(h => (string?)h["event"] == "Zurueckgegeben");
-        handle["fns"]!.AsArray().Add("rf:ILeihBuch.OffeneAsync");
+        handle["fns"]!.AsArray().Add("wf:ILeihBuch.SchreibeAsync");
 
         await GesteAsync(Geaendert("projektionen", karte));
 
-        Text("Lesen.cs").Should().Contain("public async Task Handle(Zurueckgegeben evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISchliesseAusleihe schliesse, IZaehleOffene zaehleOffene)")
+        // Eingang und Herkunft bleiben vorn, die neue Fähigkeit kommt hinter die bestehende.
+        Text("Lesen.cs").Should().Contain("public async Task Auf(Zurueckgegeben e, Herkunft h, ISchliesseAusleihe schliesse, INotiereAusleihe notiereAusleihe)")
             .And.Contain("Func<Guid, Task> tu = schliesse.SchliesseAsync;", "der Rumpf bleibt");
     }
 
     [Fact]
-    public async Task Handle_loeschen_entfernt_seine_Methode()
+    public async Task Auf_loeschen_entfernt_seine_Methode()
     {
         var karte = Karte(await BoardAsync(), "projektionen", p => (string?)p["name"] == "Leihliste");
         var handles = karte["handles"]!.AsArray();
@@ -208,8 +209,8 @@ public sealed class GestenTests : IDisposable
 
         var bericht = await GesteAsync(Geaendert("projektionen", karte));
 
-        bericht.Geloescht.Should().ContainSingle(x => x.Contains("Handle(Zurueckgegeben)"));
-        Text("Lesen.cs").Should().NotContain("Handle(Zurueckgegeben evt").And.Contain("Handle(Ausgeliehen evt");
+        bericht.Geloescht.Should().ContainSingle(x => x.Contains("Auf(Zurueckgegeben)"));
+        Text("Lesen.cs").Should().NotContain("Auf(Zurueckgegeben e").And.Contain("Auf(Ausgeliehen e");
     }
 
     [Fact]

@@ -111,7 +111,6 @@ public static class ModellMapper
             Kennung = Kennung(dom.Wurzel),
             Skalare = WireSkalare(),
             OneOfMax = dom.OneOfMax,
-            ProjektionsSchreiber = dom.ProjektionsSchreiber, ProjektionsSchreiberNamespace = dom.ProjektionsSchreiberNamespace,
             StoreBasis = dom.StoreBasis is { } sb ? new StoreBasis
             {
                 Name = sb.Name, Namespace = sb.Ns, Usings = sb.Usings,
@@ -189,13 +188,14 @@ public static class ModellMapper
             {
                 Name = i.Name, Namespace = i.Ns, Datei = Rel(i.Datei), SchreibDatei = Rel(i.SchreibDatei), LeseDatei = Rel(i.LeseDatei),
             } : null,
+            Klassen = s.Klassen.ToList(),
         }).ToList();
 
         Handle AlsHandle(string eingang, HandleSigRaw? sig, HandleVertragRaw? v, bool mitRumpf = true) => new()
         {
             Eingang = eingang,
-            Parameter = sig?.Parameter ?? "evt",
-            Kontext = sig?.Kontext,
+            Parameter = sig?.Parameter ?? "e",
+            HerkunftParameter = sig?.HerkunftParameter, AbbruchParameter = sig?.AbbruchParameter,
             Faehigkeiten = sig?.Faehigkeiten.Select(f => new Parameter { Typ = f.Typ, Name = f.Name }).ToList() ?? [],
             Ausgaenge = AusgangsTypen(v),
             Rueckgabe = sig?.Rueckgabe, Modifikatoren = sig?.Modifikatoren,
@@ -205,7 +205,7 @@ public static class ModellMapper
 
         var konsumenten = dom.Projections.OrderBy(p => p.Name, StringComparer.Ordinal).Select(p => new Konsument
         {
-            Name = p.Name, Namespace = p.Namespace, SubscriberId = p.SubscriberId, Pull = p.Pull, Append = p.Append,
+            Name = p.Name, Namespace = p.Namespace, MindestensEinmal = p.MindestensEinmal,
             Handles = p.ConsumesFull.Select(full => Kurz(full))
                 .Select(ev => AlsHandle(ev, p.HandleSigs.GetValueOrDefault(ev), p.HandleVertraege.GetValueOrDefault(ev))).ToList(),
             Doku = p.Quelle.Doku, Typart = p.Quelle.Typart, Basen = p.Quelle.Basen, Attribute = p.Quelle.Attribute,
@@ -215,7 +215,7 @@ public static class ModellMapper
 
         var reader = dom.Readers.OrderBy(r => r.Name, StringComparer.Ordinal).Select(r => new Leser
         {
-            Name = r.Name, Namespace = r.Namespace, Projektion = r.ProjectionName, TrackDeps = r.TrackDeps,
+            Name = r.Name, Namespace = r.Namespace,
             Handles = r.QueryNames.Select(q => AlsHandle(q, r.HandleSigs.GetValueOrDefault(q), r.HandleVertraege.GetValueOrDefault(q))).ToList(),
             Doku = r.Quelle.Doku, Typart = r.Quelle.Typart, Basen = r.Quelle.Basen, Attribute = r.Quelle.Attribute,
             Zusatz = r.Quelle.Zusatz, Usings = r.Quelle.Usings, Datei = Rel(r.Quelle.Datei),
@@ -346,7 +346,7 @@ public static class ModellMapper
         // Die Signatur verbatim eines Handles (für Board → Modell: verbinden/lösen ändert nur die Fähigkeits-Parameter).
         static object? Sig(Handle? h) => h == null ? null : new
         {
-            parameter = h.Parameter, kontext = h.Kontext, rueckgabe = h.Rueckgabe, modifikatoren = h.Modifikatoren,
+            parameter = h.Parameter, herkunftParameter = h.HerkunftParameter, abbruchParameter = h.AbbruchParameter, rueckgabe = h.Rueckgabe, modifikatoren = h.Modifikatoren,
             faehigkeitParameter = h.Faehigkeiten.Select(f => new { typ = f.Typ, name = f.Name }).ToArray(),
             ausgangsTypen = h.Ausgaenge, ausdruck = h.Ausdruck, rumpfCode = h.Rumpf, datei = h.Datei, herkunft = h.Herkunft,
         };
@@ -368,7 +368,8 @@ public static class ModellMapper
         var projektionen = dom.Projections.OrderBy(p => p.Name, StringComparer.Ordinal)
             .Select((p, i) => new
             {
-                _id = Abstractions.WirkerId.FuerProjektion(p.Name), name = p.Name, @namespace = p.Namespace, subscriberId = p.SubscriberId, pull = p.Pull, append = p.Append ? true : (bool?)null,
+                _id = Abstractions.WirkerId.FuerProjektion(p.Name), name = p.Name, @namespace = p.Namespace,
+                mindestensEinmal = p.MindestensEinmal ? true : (bool?)null,
                 code = KlassenCode(konsumentVon.GetValueOrDefault(p.Name)),
                 handles = p.ConsumesFull.Select(full => KurzEvt(dom, full)).Select(ev => new
                 {
@@ -376,7 +377,6 @@ public static class ModellMapper
                     sig = Sig(konsumentVon.GetValueOrDefault(p.Name)?.Handles.FirstOrDefault(h => h.Eingang == Kurz(ev))),
                     _ort = OrtJson(dom, p.HandleSigs.GetValueOrDefault(ev)?.Ort),
                     fns = StoreFns(p.HandleFaehigkeiten, ev),
-                    publishes = Liste(p.HandlePublishes, ev),
                     rumpf = Rumpf(p.HandleBodies, ev),
                     form = Vertrag(p.HandleVertraege, ev)?.Form, signatur = Vertrag(p.HandleVertraege, ev)?.Signatur,
                     signaturOffen = Vertrag(p.HandleVertraege, ev)?.SignaturOffen == true ? true : (bool?)null,
@@ -384,12 +384,12 @@ public static class ModellMapper
                 }).ToArray(),
             }).ToList();
 
-        // Reader — direkt aus dem Roh-Modell (IReader<TProjektion>, Queries, OneOf-Responses).
+        // Reader — direkt aus dem Roh-Modell (IReader, Queries, OneOf-Antworten; die Projektionen dahinter aus den Lese-Fähigkeiten).
         var reader = dom.Readers.OrderBy(r => r.Name, StringComparer.Ordinal)
             .Select((r, i) => new
             {
-                _id = "reader:" + r.Name, name = r.Name, @namespace = r.Namespace, trackDeps = r.TrackDeps,
-                projektion = r.ProjectionName,
+                _id = "reader:" + r.Name, name = r.Name, @namespace = r.Namespace,
+                projektionen = r.Projektionen,
                 code = KlassenCode(leserVon.GetValueOrDefault(r.Name)),
                 handles = r.QueryNames.Select(q => new
                 {
@@ -421,6 +421,7 @@ public static class ModellMapper
             _id = "store:" + s.Name, name = s.Name, @namespace = s.Namespace,
             datei = storeVon.GetValueOrDefault(s.Name)?.Datei, doku = s.Doku, istBuendel = s.IstBuendel ? (bool?)null : false,
             impl = storeVon.GetValueOrDefault(s.Name)?.Impl,
+            klassen = s.Klassen,
             writeFns = s.Fns.Where(f => !f.IsRead).Select((f, fi) => new
             {
                 _id = FnId(s.Name, f.Name, false), name = f.Name, faehigkeit = f.Faehigkeit,
@@ -616,7 +617,7 @@ public static class ModellMapper
             if (aggVon.TryGetValue(S(ap, "aggregat"), out var raw)) ap["_ort"] = OrtJson(dom, raw.ApplyOrte.GetValueOrDefault(S(ap, "event")));
     }
 
-    /// <summary>Die Klasse eines Konsumenten/Readers verbatim (Datei, Form, Basen, Attribute, Zusatz, usings, Doku) — Board-Feld „code".</summary>
+    /// <summary>Die Klasse einer Projektion/eines Readers verbatim (Datei, Form, Basen, Attribute, Zusatz, usings, Doku) — Board-Feld „code".</summary>
     private static object? KlassenCode(object? k) => k switch
     {
         Konsument x => new { datei = x.Datei, doku = x.Doku, typart = x.Typart, basen = x.Basen, attribute = x.Attribute, zusatz = x.Zusatz, usings = x.Usings, herkunft = x.Herkunft, zustand = x.Zustand },

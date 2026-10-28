@@ -33,6 +33,9 @@
       <Compile Include="../Infrastructure.SourceGeneration/Ctorbindung.cs" Link="Vertrag/Ctorbindung.cs" />
       <Compile Include="../Infrastructure.SourceGeneration/Vertragsassemblies.cs" Link="Vertrag/Vertragsassemblies.cs" />
       <Compile Include="../Infrastructure.SourceGeneration/Funktionsform.cs" Link="Vertrag/Funktionsform.cs" />
+      <!-- Die EINE Lesart von Projektion und Reader (Plan §3.3) — dieselbe wie Generatoren und Analyzer. Ihre Namen (Projektionsvertrag) kommen aus
+           der referenzierten Abstractions-Assembly; ein Link wäre derselbe Typ ein zweites Mal. -->
+      <Compile Include="../Infrastructure.SourceGeneration/Projektionsform.cs" Link="Vertrag/Projektionsform.cs" />
     </ItemGroup>
 
     <ItemGroup>

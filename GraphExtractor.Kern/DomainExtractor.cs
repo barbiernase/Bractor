@@ -1,6 +1,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Infrastructure.SourceGeneration;
 
 namespace GraphExtractor;
 
@@ -59,8 +60,6 @@ public sealed class DomainModel
 
     /// <summary>Event-FullName → (Simple, Persisted, Felder, Meta).</summary>
     public Dictionary<string, EventType> Events { get; } = new(StringComparer.Ordinal);
-    /// <summary>Der Schreiber-Typ (3. Parameter) der Projektions-Handles im Code — nur wenn eindeutig.</summary>
-    public string? ProjektionsSchreiber, ProjektionsSchreiberNamespace;
     /// <summary>Gemeinsame Basisklasse aller Store-Impls (nur eindeutig): Name, Namespace, Ctor-Parameter, usings.</summary>
     public (string Name, string Ns, List<(string Typ, string Name)> Ktor, List<string> Usings)? StoreBasis;
     /// <summary>Namespace aller Store-Impls (nur eindeutig).</summary>
@@ -250,7 +249,7 @@ public sealed class AggregateRaw
 }
 
 /// <summary>
-/// Quelltext einer Konsumenten-/Reader-Klasse verbatim (für den verlustfreien Round-trip): Datei, Doku, Form, Basisliste,
+/// Quelltext einer Projektions-/Reader-Klasse verbatim (für den verlustfreien Round-trip): Datei, Doku, Form, Basisliste,
 /// Attribute, die übrigen Member (Zusatz) und die using-Direktiven der Datei (auch Aliase).
 /// </summary>
 public sealed class KlassenQuelle
@@ -261,11 +260,15 @@ public sealed class KlassenQuelle
     public List<string> Zustand = new();
 }
 
-/// <summary>Die Signatur eines Handles verbatim: Parameternamen, Fähigkeits-Parameter, Rückgabe, Modifizierer, Rumpf.</summary>
+/// <summary>
+/// Die Signatur eines Eingangs (<c>Auf</c> einer Projektion, <c>Frage</c> eines Readers) verbatim: Parameternamen (Eingang, Herkunft, Abbruch),
+/// Fähigkeits-Parameter, Rückgabe, Modifizierer, Rumpf.
+/// </summary>
 public sealed class HandleSigRaw
 {
     public string Parameter = "";
-    public List<string> Kontext = new();
+    /// <summary>Name des <c>Herkunft</c>- bzw. <c>CancellationToken</c>-Parameters; null = keiner.</summary>
+    public string? HerkunftParameter, AbbruchParameter;
     public List<(string Typ, string Name)> Faehigkeiten = new();
     public string Rueckgabe = "", Modifikatoren = "";
     public string? Rumpf, Ausdruck, Datei;
@@ -277,22 +280,19 @@ public sealed class ProjectionRaw
     /// <summary>Die Klasse verbatim (Round-trip) und je Handle (Event-Simple-Name) die Signatur verbatim.</summary>
     public KlassenQuelle Quelle = new();
     public Dictionary<string, HandleSigRaw> HandleSigs = new();
+    /// <summary>Kennung = Typname (<see cref="Abstractions.Projektionsvertrag.Kennung"/>): kein eigenes Feld.</summary>
     public string Name = "", Full = "", Namespace = "";
-    /// <summary>Der Wert der SubscriberId, wenn er zur Compile-Zeit konstant ist; sonst null (nicht geraten).</summary>
-    public string? SubscriberId;
-    /// <summary>Geordneter Pull (<c>IPullSubscriber</c>)?</summary>
-    public bool Pull;
-    /// <summary>Append-artig (<c>IAppendProjektion</c> ⇒ Co-Commit-Pflicht, GA-1)?</summary>
-    public bool Append;
+    /// <summary><c>[MindestensEinmal]</c>: ausdrücklich erlaubt, in einen Store der Klasse 3 zu schreiben (R14).</summary>
+    public bool MindestensEinmal;
     public List<string> ConsumesFull = new();
-    /// <summary>Handle-Rumpf je konsumiertem Event (Simple-Name → Body-Text).</summary>
+    /// <summary>Rumpf je gehörtem Event (Simple-Name → Body-Text).</summary>
     public Dictionary<string, string> HandleBodies = new();
-    /// <summary>Fähigkeits-Parameter je Event (Simple-Name → [(Store, Funktion, Lesen?)]) — aus der SIGNATUR des Handles.</summary>
+    /// <summary>Fähigkeits-Parameter je Event (Simple-Name → [(Store, Funktion, Lesen?)]) — aus der SIGNATUR des Auf.</summary>
     public Dictionary<string, List<(string Store, string Method, bool IsRead)>> HandleFaehigkeiten = new();
-    /// <summary>Ge-yieldete (veröffentlichte) Events je Event (Simple-Name → Event-Simple-Namen).</summary>
-    public Dictionary<string, List<string>> HandlePublishes = new();
-    /// <summary>Rückgabe-Vertrag + Ausgänge (mit Guard) je Event (Simple-Name).</summary>
+    /// <summary>Rückgabe-Vertrag + Fähigkeiten je Event (Simple-Name).</summary>
     public Dictionary<string, HandleVertragRaw> HandleVertraege = new();
+    /// <summary>Wohin die Schreib-Fähigkeiten führen (Store-Implementierungen, sonst das Bündel) — für die Reader dahinter.</summary>
+    internal HashSet<string> Ziele = new(StringComparer.Ordinal);
 }
 
 public sealed class QueryRaw
@@ -307,8 +307,12 @@ public sealed class ReaderRaw
     public KlassenQuelle Quelle = new();
     /// <summary>Signatur verbatim je Query (Simple-Name).</summary>
     public Dictionary<string, HandleSigRaw> HandleSigs = new();
-    public string Name = "", Full = "", Namespace = "", ProjectionName = "";
-    public bool TrackDeps = true;
+    public string Name = "", Full = "", Namespace = "";
+    /// <summary>
+    /// Die Projektionen hinter dem Reader (nach Namen): die, die in einen Store schreiben, dessen Lese-Fähigkeiten er nimmt — dieselbe
+    /// Store-Implementierung, ohne Implementierung dasselbe Bündel (Plan §3.3). Aus den Signaturen, nie aus Rümpfen.
+    /// </summary>
+    public List<string> Projektionen = new();
     public List<string> QueryNames = new();
     /// <summary>Handle-Rumpf je Query (Query-Simple-Name → Body-Text).</summary>
     public Dictionary<string, string> HandleBodies = new();
@@ -316,12 +320,14 @@ public sealed class ReaderRaw
     public Dictionary<string, List<(string Store, string Method, bool IsRead)>> HandleFaehigkeiten = new();
     /// <summary>Die (OneOf-)Responses je Query (Query-Simple-Name → Response-Simple-Namen) aus der Rückgabe-Signatur.</summary>
     public Dictionary<string, List<string>> HandleResponses = new();
-    /// <summary>Rückgabe-Vertrag + Ausgänge (mit Guard) je Query (Simple-Name).</summary>
+    /// <summary>Rückgabe-Vertrag + Ausgänge je Query (Simple-Name).</summary>
     public Dictionary<string, HandleVertragRaw> HandleVertraege = new();
+    /// <summary>Woher die Lese-Fähigkeiten lesen (Store-Implementierungen, sonst das Bündel).</summary>
+    internal HashSet<string> Quellen = new(StringComparer.Ordinal);
 }
 
 /// <summary>
-/// Ein möglicher AUSGANG eines Handlers (Projektion/Reader) — das Gegenstück zum OneOf-Ausgang eines
+/// Ein möglicher AUSGANG eines Eingangs (Projektion/Reader) — das Gegenstück zum OneOf-Ausgang eines
 /// Deciders. <see cref="Art"/> aus dem Marker des Typs (response | command | transient | event | typ) — immer aus der
 /// SIGNATUR —, bzw. <c>storefn</c> je Fähigkeits-Parameter (ebenfalls Signatur). Der Rumpf liefert nichts.
 /// </summary>
@@ -335,10 +341,10 @@ public sealed class AusgangRaw
     public bool IstLesen;
 }
 
-/// <summary>Der Rückgabe-Vertrag eines Handlers: Form, ob die Signatur offen ist (Marker statt konkreter Typen), die Ausgänge.</summary>
+/// <summary>Der Rückgabe-Vertrag eines Eingangs: Form, ob die Signatur offen ist (Marker statt konkreter Typen), die Ausgänge.</summary>
 public sealed class HandleVertragRaw
 {
-    /// <summary>nichts (<c>Task</c>/<c>void</c>) · einzeln (<c>Task&lt;T&gt;</c>) · strom (<c>IAsyncEnumerable&lt;T&gt;</c>/<c>IEnumerable&lt;T&gt;</c>).</summary>
+    /// <summary>nichts (<c>Task</c>/<c>void</c>) · einzeln (<c>T</c>, <c>Task&lt;T&gt;</c>) · strom (<c>IAsyncEnumerable&lt;T&gt;</c>/<c>IEnumerable&lt;T&gt;</c>).</summary>
     public string Form = "nichts";
     /// <summary>Das Element-Typargument ist ein Interface (z. B. <c>ICommand</c>) — der Vertrag steht nur im Rumpf.</summary>
     public bool SignaturOffen;
@@ -405,6 +411,11 @@ public sealed class StoreRaw
     public bool IstBuendel = true;
     /// <summary>Die EINZIGE Impl-Klasse (sonst null): Name, Namespace, Datei der Deklaration, Datei der Schreib-/Lese-Methoden.</summary>
     public (string Name, string Ns, string? Datei, string? SchreibDatei, string? LeseDatei)? Impl;
+    /// <summary>
+    /// Die Store-Klassen (1, 2, 3; Plan §2.4, R14), die seine Implementierungen tragen (<c>IAtomaresZiel</c>, <c>IWiederholungsfestesZiel</c>,
+    /// <c>INurMindestensEinmal</c> — auch über die Basisklasse), aufsteigend. Richtig ist genau eine (CQRS109).
+    /// </summary>
+    public List<int> Klassen = new();
 }
 
 /// <summary>
@@ -417,14 +428,14 @@ public sealed partial class DomainExtractor
     private readonly List<INamedTypeSymbol> _types;
 
     private readonly INamedTypeSymbol? _iState, _iCommand, _iCreation, _iCommandZiel, _iEvent, _iTransient, _frist,
-        _iSubscriber, _iPull, _iAppend, _iReader, _iQuery, _iQueryResponse, _iReadModel, _iGeteilt, _iPayload, _iPipelineOutput;
+        _iQuery, _iQueryResponse, _iReadModel, _iGeteilt, _iPayload, _iPipelineOutput;
 
 
     /// <summary>Die Domänen-Assemblies (abgeleitet aus der <see cref="Projektlage"/>).</summary>
     private readonly HashSet<string> _domänen;
     /// <summary>Die globalen usings der Domänen-Compilations (ImplicitUsings + global using) + der Vertrags-Namespace — nie „explizit".</summary>
     private readonly HashSet<string> _impliziteUsings;
-    private readonly INamedTypeSymbol? _iDecider, _iApplier, _iAggEnvelope,
+    private readonly INamedTypeSymbol? _iDecider, _iApplier,
         _iWriteStore, _iReadStore, _iStore, _iWertobjekt, _iAkteur, _iDarf, _iHoert, _iTraegt,
         _iClient, _iSendet, _iFragt, _iDienst;
     /// <summary>State-FullName → die Typen, die <c>IDecider&lt;State&gt;</c> bzw. <c>IApplier&lt;State&gt;</c> implementieren (egal wo deklariert).</summary>
@@ -448,10 +459,6 @@ public sealed partial class DomainExtractor
         _iEvent = Get(Vertrag.IEvent);
         _iTransient = Get(Vertrag.ITransientEvent);
         _frist = Get(Vertrag.Frist);
-        _iSubscriber = Get(Vertrag.ISubscriber);
-        _iPull = Get(Vertrag.IPullSubscriber);
-        _iAppend = Get(Vertrag.IAppendProjektion);
-        _iReader = Get(Vertrag.IReader);
         _iQuery = Get(Vertrag.IQuery);
         _iQueryResponse = Get(Vertrag.IQueryResponse);
         _iReadModel = Get(Vertrag.IReadModel);
@@ -460,7 +467,6 @@ public sealed partial class DomainExtractor
         _iPipelineOutput = Get(Vertrag.IAusgabe);
         _iDecider = Get(Vertrag.IDecider);
         _iApplier = Get(Vertrag.IApplier);
-        _iAggEnvelope = Get(Vertrag.IAggregateEnvelope);
         _iWriteStore = Get(Vertrag.IWriteStore);
         _iReadStore = Get(Vertrag.IReadStore);
         _iStore = Get(Vertrag.IStore);
@@ -508,22 +514,19 @@ public sealed partial class DomainExtractor
             m.Treiber[Abstractions.Treibervertrag.Datei] = (dateiBasis.Name, GeerbteFelder(dateiBasis, mitSelbst: true));
 
         CatalogEventsAndCommands(m);
-        // Stores ZUERST: die Konsumenten-Handler lösen ihre Fähigkeits-Parameter gegen die erkannten Fähigkeiten auf.
+        // Stores ZUERST: Projektionen und Reader lösen ihre Fähigkeits-Parameter gegen die erkannten Fähigkeiten auf.
         ExtractStores(m);
         foreach (var t in _types)
         {
             if (Sym.Implements(t, _iState) && _deciderJeState.ContainsKey(t.Fq())) m.Aggregates.Add(ReadAggregate(t));
-            if (Sym.Implements(t, _iSubscriber)) { var p = TryReadProjection(t); if (p != null) m.Projections.Add(p); }
+            if (TryReadProjection(t) is { } p) m.Projections.Add(p);
             if (Sym.Implements(t, _iQuery)) m.Queries.Add(ReadQuery(t));
-            var reader = TryReadReader(t);
-            if (reader != null) m.Readers.Add(reader);
+            if (TryReadReader(t) is { } reader) m.Readers.Add(reader);
         }
-        // Der Schreiber-Typ der Projektions-Handles (CQRS057: 3. Parameter) — aus dem Code, nur wenn eindeutig.
-        var schreiber = _types.Where(t => Sym.Implements(t, _iSubscriber)).SelectMany(OeffentlicheMethoden)
-            .Where(mm => mm.Parameters.Length >= 3 && Sym.Implements(mm.Parameters[0].Type, _iEvent)
-                         && mm.Parameters[1].Type.ToDisplayString() == _iAggEnvelope?.ToDisplayString())
-            .Select(mm => mm.Parameters[2].Type).GroupBy(x => x.Fq()).Select(g => g.First()).ToList();
-        if (schreiber.Count == 1) { m.ProjektionsSchreiber = schreiber[0].Name; m.ProjektionsSchreiberNamespace = schreiber[0].ContainingNamespace.Fq(); }
+        // Hinter einem Reader: die Projektionen, die dorthin schreiben, woher er liest (Plan §3.3) — nur aus den Fähigkeiten.
+        foreach (var r in m.Readers)
+            r.Projektionen = m.Projections.Where(p => p.Ziele.Overlaps(r.Quellen)).Select(p => p.Name)
+                .Distinct(StringComparer.Ordinal).OrderBy(n => n, StringComparer.Ordinal).ToList();
 
         CatalogDomainTypes(m);
         LinkDienstImpls(m);
@@ -834,9 +837,7 @@ public sealed partial class DomainExtractor
         var injiziert = new HashSet<string>(StringComparer.Ordinal);
         foreach (var t in _types)
         {
-            var istKonsument = Sym.Implements(t, _iSubscriber)
-                || t.AllInterfaces.Any(i => _iReader != null && i.OriginalDefinition.Fq() == _iReader.Fq())
-                || storeImpls.Contains(t.Fq());
+            var istKonsument = Projektionsform.IstProjektion(t) || Projektionsform.IstReader(t) || storeImpls.Contains(t.Fq());
             if (!istKonsument) continue;
             foreach (var ctor in t.InstanceConstructors.Where(c => c.DeclaredAccessibility == Accessibility.Public))
                 foreach (var p in ctor.Parameters)
@@ -935,6 +936,8 @@ public sealed partial class DomainExtractor
             var impls = ImplsVon(f);
             implsJeFaehigkeit[f.Fq()] = impls.Select(x => x.Name).Distinct().OrderBy(x => x, StringComparer.Ordinal).ToList();
             foreach (var impl in impls) if (!store.ImplsFull.Contains(impl.Fq())) store.ImplsFull.Add(impl.Fq());
+            // Die Store-Klasse ist ein Fakt der Implementierung (Basisliste, auch über die Basisklasse) — dieselbe Lesart wie CQRS109.
+            store.Klassen = store.Klassen.Union(impls.SelectMany(Projektionsform.StoreKlassen)).Order().ToList();
             // Genau EINE Funktion je Fähigkeit (CQRS051); mehrere wären ein Analyzer-Fehler — hier: jede wird eine Fn.
             foreach (var im in f.GetMembers().OfType<IMethodSymbol>().Where(x => x.MethodKind == MethodKind.Ordinary))
             {
@@ -1032,7 +1035,7 @@ public sealed partial class DomainExtractor
         }
     }
 
-    /// <summary>Die Fähigkeits-Parameter einer Handle-Methode → (Store, Funktion, Lesen?) — reine Signatur.</summary>
+    /// <summary>Die Fähigkeits-Parameter eines Eingangs (Auf/Frage) → (Store, Funktion, Lesen?) — reine Signatur.</summary>
     private List<(string Store, string Method, bool IsRead)> FaehigkeitenVon(IMethodSymbol mm) =>
         mm.Parameters.Select(p => _faehigkeiten.TryGetValue(p.Type.OriginalDefinition.Fq(), out var f) ? f : default)
             .Where(f => f.Store != null).Distinct().ToList();
@@ -1368,7 +1371,7 @@ public sealed partial class DomainExtractor
 
     /// <summary>
     /// Die Klasse verbatim: Datei/Form/Basisliste aus der Deklaration mit Basisliste, Attribute (ohne die ausgenommenen),
-    /// Doku, die übrigen Member aller handgeschriebenen Teile (ohne die Handles) und die using-Direktiven (auch Aliase).
+    /// Doku, die übrigen Member aller handgeschriebenen Teile (ohne die Eingänge) und die using-Direktiven (auch Aliase).
     /// </summary>
     private KlassenQuelle LiesKlasse(INamedTypeSymbol t, IEnumerable<IMethodSymbol> handles, string? ohneAttribut = null)
     {
@@ -1378,7 +1381,7 @@ public sealed partial class DomainExtractor
         if (haupt == null) return q;
         q.Datei = haupt.SyntaxTree.FilePath;
         q.Doku = decls.Select(Summary).FirstOrDefault(d => d != null);
-        q.Typart = string.Join(" ", haupt.Modifiers.Where(x => !x.IsKind(SyntaxKind.PartialKeyword)).Select(x => x.Text).Append(haupt.Keyword.Text));
+        q.Typart = string.Join(" ", haupt.Modifiers.Select(x => x.Text).Append(haupt.Keyword.Text));
         q.Basen = decls.Where(d => d.BaseList != null).SelectMany(d => d.BaseList!.Types.Select(b => b.ToString())).Distinct(StringComparer.Ordinal).ToList();
         var attrs = decls.SelectMany(d => d.AttributeLists)
             .Where(al => ohneAttribut == null || !al.Attributes.Any(a => Model(a.SyntaxTree).GetTypeInfo(a).Type?.ToDisplayString() == ohneAttribut))
@@ -1410,14 +1413,22 @@ public sealed partial class DomainExtractor
             .Select(f => f.Name).ToList();
     }
 
-    /// <summary>Die Signatur eines Handles verbatim; <paramref name="kontext"/> = Anzahl Kontext-Parameter nach dem Eingang (CQRS057).</summary>
-    private static HandleSigRaw LiesHandleSig(IMethodSymbol mm, int kontext)
+    /// <summary>
+    /// Die Signatur eines Eingangs verbatim: der Eingang, Herkunft und Abbruch (nach ihrem Typ, nicht nach der Stelle), alle übrigen Parameter
+    /// sind Fähigkeiten (Projektionsform, CQRS057).
+    /// </summary>
+    private static HandleSigRaw LiesHandleSig(IMethodSymbol mm)
     {
         var sig = new HandleSigRaw { Parameter = mm.Parameters[0].Name };
         if (mm.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is not MethodDeclarationSyntax s) return sig;
         var ps = s.ParameterList.Parameters;
-        sig.Kontext = ps.Skip(1).Take(kontext).Select(p => p.Identifier.Text).ToList();
-        sig.Faehigkeiten = ps.Skip(1 + kontext).Select(p => (p.Type?.ToString() ?? "", p.Identifier.Text)).ToList();
+        for (var i = 1; i < ps.Count && i < mm.Parameters.Length; i++)
+        {
+            var typ = Projektionsform.Name(mm.Parameters[i].Type);
+            if (typ == Abstractions.Projektionsvertrag.Herkunft && sig.HerkunftParameter == null) sig.HerkunftParameter = ps[i].Identifier.Text;
+            else if (Vertrag.Ist(mm.Parameters[i].Type, typeof(CancellationToken)) && sig.AbbruchParameter == null) sig.AbbruchParameter = ps[i].Identifier.Text;
+            else sig.Faehigkeiten.Add((ps[i].Type?.ToString() ?? "", ps[i].Identifier.Text));
+        }
         sig.Rueckgabe = s.ReturnType.ToString();
         sig.Modifikatoren = string.Join(" ", s.Modifiers.Select(x => x.Text));
         sig.Datei = s.SyntaxTree.FilePath;
@@ -1427,89 +1438,68 @@ public sealed partial class DomainExtractor
         return sig;
     }
 
-    private ProjectionRaw? TryReadProjection(INamedTypeSymbol t)
+    /// <summary>
+    /// Wohin bzw. woher eine Fähigkeit führt: die Store-Implementierungen, die sie tragen; ohne Implementierung (gezeichnet, noch leer) das
+    /// Bündel, zu dem sie gehört. Zwei Fähigkeiten mit gemeinsamem Schlüssel gehören zu demselben Store (wie <c>Leseseitenbild</c> der Komposition).
+    /// </summary>
+    private IEnumerable<string> StoreSchluessel(INamedTypeSymbol faehigkeit)
     {
-        // Handler = öffentliche Methode: Event als erster Parameter + Aggregat-Umschlag (Name egal, die Typen tragen die Rolle).
-        var methods = OeffentlicheMethoden(t)
-            .Where(mm => mm.Parameters.Length >= 1 && Sym.Implements(mm.Parameters[0].Type, _iEvent)
-                         && mm.Parameters.Skip(1).Any(p => p.Type.ToDisplayString() == _iAggEnvelope?.ToDisplayString())).ToList();
-        if (methods.Count == 0) return null;
-        var handles = methods.Select(mm => mm.Parameters[0].Type.Fq()).Distinct().ToList();
-
-        var subId = KonstanterWert(t, _iSubscriber, Vertrag.SubscriberId);
-
-        var raw = new ProjectionRaw
-        {
-            Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq(), SubscriberId = subId, ConsumesFull = handles,
-            Pull = Sym.Implements(t, _iPull), Append = _iAppend != null && Sym.Implements(t, _iAppend),
-        };
-        foreach (var mm in methods)
-        {
-            var evt = mm.Parameters[0].Type.Name;
-            var body = MethodBody(mm);
-            if (body != null) raw.HandleBodies[evt] = body;
-            var fs = FaehigkeitenVon(mm);
-            if (fs.Count > 0) raw.HandleFaehigkeiten[evt] = fs;
-
-            // Rückgabe IAsyncEnumerable<T | OneOf<…>>: veröffentlichte (transiente) Events.
-            var pubs = YieldTypen(mm.ReturnType).Where(x => Sym.Implements(x, _iEvent)).Select(x => x.Name).ToList();
-            if (pubs.Count > 0) raw.HandlePublishes[evt] = pubs;
-            raw.HandleVertraege[evt] = LiesHandleVertrag(mm);
-            raw.HandleSigs[evt] = LiesHandleSig(mm, 2);
-        }
-        raw.Quelle = LiesKlasse(t, methods);
-        return raw;
+        var impls = ImplsVon(faehigkeit);
+        if (impls.Count > 0) return impls.Select(i => "impl:" + i.Fq());
+        return _faehigkeiten.TryGetValue(faehigkeit.OriginalDefinition.Fq(), out var f) ? ["store:" + f.Store] : ["faehigkeit:" + faehigkeit.Fq()];
     }
 
-    /// <summary>Die Element-Typen einer <c>IAsyncEnumerable&lt;T&gt;</c>/<c>IEnumerable&lt;T&gt;</c>-Rückgabe (OneOf aufgefächert).</summary>
-    private static IEnumerable<INamedTypeSymbol> YieldTypen(ITypeSymbol rt)
+    /// <summary>Eine Projektion (<c>IProjektion</c>) in der EINEN Lesart (<see cref="Projektionsform"/>): je gehörtem Event ein <c>Auf</c>.</summary>
+    private ProjectionRaw? TryReadProjection(INamedTypeSymbol t)
     {
-        if (!(Vertrag.Ist(rt, typeof(IAsyncEnumerable<>)) || Vertrag.Ist(rt, typeof(IEnumerable<>)))) yield break;
-        if (((INamedTypeSymbol)rt).TypeArguments[0] is not INamedTypeSymbol el) yield break;
-        if (Vertrag.IstOneOf(el))
+        if (!Projektionsform.IstProjektion(t) || !IstDomänenAssembly(t.ContainingAssembly)) return null;
+        var form = Projektionsform.LiesProjektion(t);
+        var raw = new ProjectionRaw
         {
-            foreach (var a in el.TypeArguments.OfType<INamedTypeSymbol>()) yield return a;
+            Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq(), MindestensEinmal = form.MindestensEinmal,
+            ConsumesFull = form.Aufs.Select(a => a.Eingang.Fq()).ToList(),
+        };
+        foreach (var auf in form.Aufs)
+        {
+            var mm = auf.Methode;
+            var evt = auf.Eingang.Name;
+            if (MethodBody(mm) is { } body) raw.HandleBodies[evt] = body;
+            var fs = FaehigkeitenVon(mm);
+            if (fs.Count > 0) raw.HandleFaehigkeiten[evt] = fs;
+            raw.HandleVertraege[evt] = LiesHandleVertrag(mm);
+            raw.HandleSigs[evt] = LiesHandleSig(mm);
+            foreach (var f in auf.Faehigkeiten) raw.Ziele.UnionWith(StoreSchluessel(f));
         }
-        else yield return el;
+        raw.Quelle = LiesKlasse(t, form.Aufs.Select(a => a.Methode), Abstractions.Projektionsvertrag.MindestensEinmal);
+        return raw;
     }
 
     private QueryRaw ReadQuery(INamedTypeSymbol t) =>
         new() { Name = t.Name, Full = t.Fq(), Fields = Felder(t), Meta = Meta(t) };
 
+    /// <summary>Ein Reader (<c>IReader</c>) in der EINEN Lesart (<see cref="Projektionsform"/>): je Query eine <c>Frage</c>.</summary>
     private ReaderRaw? TryReadReader(INamedTypeSymbol t)
     {
-        var readerIface = t.AllInterfaces.FirstOrDefault(i => _iReader != null && i.OriginalDefinition.Fq() == _iReader.Fq());
-        if (readerIface == null || readerIface.TypeArguments.Length != 1) return null;
-
-        var methods = OeffentlicheMethoden(t)
-            .Where(mm => mm.Parameters.Length >= 1 && Sym.Implements(mm.Parameters[0].Type, _iQuery)).ToList();
-        var queries = methods.Select(mm => mm.Parameters[0].Type.Name).Distinct().ToList();
-
-        // [ProjectionReader(TrackDeps = false)] — Default true.
-        var attr = t.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == Vertrag.ProjectionReaderAttribute);
-        var trackDeps = attr?.NamedArguments.FirstOrDefault(a => a.Key == Vertrag.TrackDeps).Value.Value as bool? ?? true;
-
+        if (!Projektionsform.IstReader(t) || !IstDomänenAssembly(t.ContainingAssembly)) return null;
+        var form = Projektionsform.LiesReader(t);
         var raw = new ReaderRaw
         {
             Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq(),
-            ProjectionName = readerIface.TypeArguments[0].Name, QueryNames = queries, TrackDeps = trackDeps,
+            QueryNames = form.Fragen.Select(f => f.Query.Name).ToList(),
         };
-        foreach (var mm in methods)
+        foreach (var frage in form.Fragen)
         {
-            var q = mm.Parameters[0].Type.Name;
-            var body = MethodBody(mm);
-            if (body != null) raw.HandleBodies[q] = body;
+            var mm = frage.Methode;
+            var q = frage.Query.Name;
+            if (MethodBody(mm) is { } body) raw.HandleBodies[q] = body;
             var fs = FaehigkeitenVon(mm);
             if (fs.Count > 0) raw.HandleFaehigkeiten[q] = fs;
-            // Task<R> / Task<OneOf<R1,R2>> → Responses.
-            var inner = IstTask(mm.ReturnType) ? ((INamedTypeSymbol)mm.ReturnType).TypeArguments[0] as INamedTypeSymbol : null;
-            if (inner != null)
-                raw.HandleResponses[q] = (Vertrag.IstOneOf(inner) ? inner.TypeArguments.OfType<INamedTypeSymbol>() : new[] { inner })
-                    .Select(x => x.Name).ToList();
+            raw.HandleResponses[q] = frage.Antworten.Select(x => x.Name).ToList();
             raw.HandleVertraege[q] = LiesHandleVertrag(mm);
-            raw.HandleSigs[q] = LiesHandleSig(mm, 2);
+            raw.HandleSigs[q] = LiesHandleSig(mm);
+            foreach (var f in frage.Faehigkeiten) raw.Quellen.UnionWith(StoreSchluessel(f));
         }
-        raw.Quelle = LiesKlasse(t, methods, Vertrag.ProjectionReaderAttribute);
+        raw.Quelle = LiesKlasse(t, form.Fragen.Select(f => f.Methode));
         return raw;
     }
 
@@ -1518,10 +1508,10 @@ public sealed partial class DomainExtractor
     //    Der RUMPF liefert nichts — er übersteht Hilfsmethoden, Delegates und fremde Objekte nicht verlässlich. ──
 
     /// <summary>
-    /// Der Vertrag eines Handlers — das Gegenstück zum OneOf eines Deciders, für Projektion/Reader.
+    /// Der Vertrag eines Eingangs — das Gegenstück zum OneOf eines Deciders, für Projektion (<c>Auf</c>: nichts) und Reader (<c>Frage</c>).
     /// Ausgänge: Form (nichts/einzeln/strom) + Typargumente (OneOf aufgefächert); eine offene Signatur (Interface,
     /// Typ-Parameter, object, abstrakte Klasse) liefert KEINE Ausgänge (nicht geraten; CQRS050). Dazu je
-    /// Fähigkeits-Parameter ein <c>storefn</c>-Ausgang: die Obergrenze dessen, was der Handle am Store rufen darf.
+    /// Fähigkeits-Parameter ein <c>storefn</c>-Ausgang: die Obergrenze dessen, was der Eingang am Store rufen darf.
     /// </summary>
     private HandleVertragRaw LiesHandleVertrag(IMethodSymbol mm)
     {
@@ -1530,6 +1520,8 @@ public sealed partial class DomainExtractor
         ITypeSymbol? el = null;
         if (IstTask(rt)) { v.Form = "einzeln"; el = ((INamedTypeSymbol)rt).TypeArguments[0]; }
         else if (Vertrag.Ist(rt, typeof(IAsyncEnumerable<>)) || Vertrag.Ist(rt, typeof(IEnumerable<>))) { v.Form = "strom"; el = ((INamedTypeSymbol)rt).TypeArguments[0]; }
+        // Eine Frage darf auch ohne Hülle antworten (Projektionsform): die Rückgabe selbst ist die Antwort.
+        else if (!mm.ReturnsVoid && !Vertrag.Ist(rt, typeof(Task)) && !Vertrag.Ist(rt, typeof(ValueTask))) { v.Form = "einzeln"; el = rt; }
         var sigTypen = el == null ? new List<ITypeSymbol>() : Vertrag.IstOneOf(el) ? ((INamedTypeSymbol)el).TypeArguments.ToList() : new List<ITypeSymbol> { el };
         static bool Offen(ITypeSymbol t) => t.TypeKind is TypeKind.Interface or TypeKind.TypeParameter
                                             || t.SpecialType == SpecialType.System_Object || (t.TypeKind == TypeKind.Class && t.IsAbstract);
@@ -1549,28 +1541,6 @@ public sealed partial class DomainExtractor
         : Sym.Implements(t, _iTransient) ? "transient"   // vor IEvent: ITransientEvent : IEvent (Broker statt Log)
         : Sym.Implements(t, _iEvent) ? "event"
         : "typ";
-
-    /// <summary>
-    /// Der Compile-Zeit-Wert eines Vertrags-Members (z. B. <c>SubscriberId</c>) am Typ: über die Interface-Implementierung
-    /// (auch explizit), ausgewertet als Konstante (<c>"x"</c>, <c>const</c>, <c>nameof</c>, Verkettung). Nicht konstant ⇒ null.
-    /// </summary>
-    private string? KonstanterWert(INamedTypeSymbol t, INamedTypeSymbol? iface, string member)
-    {
-        var vertrag = iface?.GetMembers(member).OfType<IPropertySymbol>().FirstOrDefault();
-        if (vertrag == null || Sym.Implementierung(t, vertrag) is not IPropertySymbol impl) return null;
-        foreach (var syn in impl.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).OfType<PropertyDeclarationSyntax>())
-        {
-            var expr = syn.ExpressionBody?.Expression ?? syn.Initializer?.Value
-                ?? syn.AccessorList?.Accessors.FirstOrDefault(a => a.IsKind(SyntaxKind.GetAccessorDeclaration)) switch
-                {
-                    { ExpressionBody: { } eb } => eb.Expression,
-                    { Body.Statements: [ReturnStatementSyntax { Expression: { } re }] } => re,
-                    _ => null,
-                };
-            if (expr != null && Model(syn.SyntaxTree).GetConstantValue(expr) is { HasValue: true, Value: string wert }) return wert;
-        }
-        return null;
-    }
 
     // ── Helfer ───────────────────────────────────────────────────────────────
 

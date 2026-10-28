@@ -1,4 +1,5 @@
 using System.Text;
+using Infrastructure.SourceGeneration;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
@@ -31,8 +32,7 @@ public sealed class SlotInventar
 
     private readonly List<Compilation> _comps;
     private readonly HashSet<string> _domänen, _framework;
-    private readonly INamedTypeSymbol? _iCommand, _iEvent, _iQuery, _iDecider, _iApplier, _iSubscriber, _iReader,
-        _iAggEnvelope, _iWriteStore, _iReadStore;
+    private readonly INamedTypeSymbol? _iCommand, _iEvent, _iQuery, _iDecider, _iApplier, _iWriteStore, _iReadStore;
     public List<SlotRef> Slots { get; } = new();
     public Dictionary<SlotRef, List<Nutzung>> Nutzungen { get; } = new();
     public Dictionary<SlotRef, HashSet<string>> Spielraum { get; } = new();
@@ -53,9 +53,8 @@ public sealed class SlotInventar
         _framework = lage.Analyse.Select(a => a.Compilation.AssemblyName ?? "").Where(n => !_domänen.Contains(n)).ToHashSet(StringComparer.Ordinal);
         INamedTypeSymbol? Get(string n) => _comps.Select(c => c.GetTypeByMetadataName(n)).FirstOrDefault(x => x != null);
         _iCommand = Get(Vertrag.ICommand); _iEvent = Get(Vertrag.IEvent); _iQuery = Get(Vertrag.IQuery);
-        _iDecider = Get(Vertrag.IDecider); _iApplier = Get(Vertrag.IApplier); _iSubscriber = Get(Vertrag.ISubscriber);
-        _iReader = Get(Vertrag.IReader);
-        _iAggEnvelope = Get(Vertrag.IAggregateEnvelope); _iWriteStore = Get(Vertrag.IWriteStore); _iReadStore = Get(Vertrag.IReadStore);
+        _iDecider = Get(Vertrag.IDecider); _iApplier = Get(Vertrag.IApplier);
+        _iWriteStore = Get(Vertrag.IWriteStore); _iReadStore = Get(Vertrag.IReadStore);
         Sammle();
         foreach (var s in Slots)
         {
@@ -79,6 +78,11 @@ public sealed class SlotInventar
         {
             var decider = t.AllInterfaces.FirstOrDefault(i => i.OriginalDefinition.Fq() == _iDecider?.Fq());
             var applier = t.AllInterfaces.FirstOrDefault(i => i.OriginalDefinition.Fq() == _iApplier?.Fq());
+            // Projektion und Reader in der EINEN Lesart (Projektionsform): ihre Auf bzw. Frage sind die Slots.
+            if (Projektionsform.IstProjektion(t))
+                foreach (var auf in Projektionsform.LiesProjektion(t).Aufs) Add("projektion", t, auf.Methode, null);
+            if (Projektionsform.IstReader(t))
+                foreach (var frage in Projektionsform.LiesReader(t).Fragen) Add("reader", t, frage.Methode, null);
             foreach (var m in Methoden(t))
             {
                 var p0 = m.Parameters.FirstOrDefault()?.Type;
@@ -87,11 +91,6 @@ public sealed class SlotInventar
                     Add("decide", t, m, decider.TypeArguments[0] as INamedTypeSymbol);
                 else if (applier != null && Sym.Implements(p0, _iEvent))
                     Add("apply", t, m, applier.TypeArguments[0] as INamedTypeSymbol);
-                else if (Sym.Implements(t, _iSubscriber) && Sym.Implements(p0, _iEvent)
-                         && m.Parameters.Skip(1).Any(p => p.Type.Fq() == _iAggEnvelope?.Fq()))
-                    Add("projektion", t, m, null);
-                else if (t.AllInterfaces.Any(i => i.OriginalDefinition.Fq() == _iReader?.Fq()) && Sym.Implements(p0, _iQuery))
-                    Add("reader", t, m, null);
             }
 
             // Store-Implementierung: Methoden, die ein Member eines Domänen-Store-Interfaces implementieren.
@@ -120,7 +119,7 @@ public sealed class SlotInventar
     private IEnumerable<ITypeSymbol> GraphWurzeln(SlotRef s)
     {
         INamedTypeSymbol? Typ(string full) => _comps.Select(c => c.GetTypeByMetadataName(full)).FirstOrDefault(x => x != null);
-        // Projektion: das Aggregat, das das behandelte Event erzeugt (Graph: Decide-Ausgang) — für Track<Agg>.
+        // Projektion: das Aggregat, das das gehörte Event erzeugt (Graph: Decide-Ausgang) — für die Id aus der Herkunft (h.Id<Agg>()).
         if (s.Art == "projektion" && s.Parameter.FirstOrDefault()?.Type is { } evt)
             foreach (var a in _dom.Aggregates.Where(a => a.DecideOutcomes.Values.Any(o => o.Contains(evt.Fq()))))
                 if (Typ(a.Full) is { } t) yield return t;

@@ -10,7 +10,7 @@ namespace Infrastructure.Pruefstand.Tests;
 /// <summary>
 /// Die LESESEITE des Domänen-Editors: Modell (Stores/Fähigkeiten, Projektion, Reader, Query/Response/ReadModel)
 /// → C#. Beweist die Form UND dass die Ausgabe die Analyzer besteht, die ihr Sicherheitsnetz sind (CQRS050 Ausgabe-Vertrag,
-/// CQRS051 eine Fn je Fähigkeit, CQRS054/055 kein Store im Konsumenten-Zustand / kein new Store, CQRS057 Handle-Form).
+/// CQRS051 eine Fn je Fähigkeit, CQRS054/055 kein Store im Konsumenten-Zustand / kein new Store, CQRS057 Form von Auf/Frage).
 /// Dazu Board → Modell: die Editor-Defaults für NEUES (Fähigkeits-Name, Parameter, Impl-Klasse).
 /// </summary>
 public sealed class DomainEditorLeseseiteTests
@@ -18,7 +18,6 @@ public sealed class DomainEditorLeseseiteTests
     private static readonly Rahmen TestRahmen = new()
     {
         Verzeichnisse = new Dictionary<string, string> { ["Probe"] = "Probe" },
-        ProjektionsSchreiber = nameof(Core.ProjectionWriter), ProjektionsSchreiberNamespace = typeof(Core.ProjectionWriter).Namespace,
     };
 
     private static EditorModell Modell() => new()
@@ -53,16 +52,16 @@ public sealed class DomainEditorLeseseiteTests
             [
                 new()
                 {
-                    Name = "Zeilenliste", Namespace = "Probe", SubscriberId = "zeilenliste",
-                    Handles = [new() { Eingang = "Gemacht", Faehigkeiten = [new() { Typ = "ISchreibeZeile", Name = "schreibe" }] }],
+                    Name = "Zeilenliste", Namespace = "Probe",
+                    Handles = [new() { Eingang = "Gemacht", HerkunftParameter = "h", Faehigkeiten = [new() { Typ = "ISchreibeZeile", Name = "schreibe" }] }],
                 },
             ],
             Reader =
             [
                 new()
                 {
-                    Name = "ZeilenLeser", Namespace = "Probe", Projektion = "Zeilenliste", TrackDeps = false,
-                    Handles = [new() { Eingang = "HoleZeile", Parameter = "query", Ausgaenge = ["ZeileAntwort", "KeineZeile"], Faehigkeiten = [new() { Typ = "IFindeZeile", Name = "finde" }] }],
+                    Name = "ZeilenLeser", Namespace = "Probe",
+                    Handles = [new() { Eingang = "HoleZeile", Parameter = "query", AbbruchParameter = "ct", Ausgaenge = ["ZeileAntwort", "KeineZeile"], Faehigkeiten = [new() { Typ = "IFindeZeile", Name = "finde" }] }],
                 },
             ],
         },
@@ -105,22 +104,19 @@ public sealed class DomainEditorLeseseiteTests
     }
 
     [Fact]
-    public void Projektion_nimmt_die_Faehigkeit_als_Parameter_nicht_im_Konstruktor()
+    public void Projektion_nimmt_Herkunft_und_Faehigkeit_als_Parameter_nicht_im_Konstruktor()
     {
         Inhalt(Scaffolder.Generiere(Modell()), "Probe/Zeilenliste.cs").Should().Be(
             """
             using Abstractions;
-            using Core;
 
             namespace Probe;
 
-            public partial class Zeilenliste : ISubscriber, IPullSubscriber
+            public sealed class Zeilenliste : IProjektion
             {
-                public string SubscriberId => "zeilenliste";
-
-                public Task Handle(Gemacht evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISchreibeZeile schreibe)
+                public Task Auf(Gemacht e, Herkunft h, ISchreibeZeile schreibe)
                 {
-                    throw new NotImplementedException("TODO: Handle(Gemacht)");
+                    throw new NotImplementedException("TODO: Auf(Gemacht)");
                 }
             }
             """);
@@ -130,9 +126,8 @@ public sealed class DomainEditorLeseseiteTests
     public void Reader_traegt_den_Ausgabe_Vertrag_in_der_Signatur()
     {
         var d = Scaffolder.Generiere(Modell());
-        Inhalt(d, "Probe/ZeilenLeser.cs").Should().Contain("[ProjectionReader(TrackDeps = false)]")
-            .And.Contain("public partial class ZeilenLeser : IReader<Zeilenliste>")
-            .And.Contain("public Task<OneOf<ZeileAntwort, KeineZeile>> Handle(HoleZeile query, IMessageEnvelope envelope, ReadContext ctx, IFindeZeile finde)");
+        Inhalt(d, "Probe/ZeilenLeser.cs").Should().Contain("public sealed class ZeilenLeser : IReader")
+            .And.Contain("public Task<OneOf<ZeileAntwort, KeineZeile>> Frage(HoleZeile query, IFindeZeile finde, CancellationToken ct)");
         Inhalt(d, "Probe/ReadModels.cs").Should().Contain("public record Zeile(Guid Id, int Wert) : IReadModel;");
     }
 
@@ -191,7 +186,6 @@ public sealed class DomainEditorLeseseiteTests
     public async Task Scaffolder_Ausgabe_kompiliert_und_besteht_alle_Vertrags_Analyzer()
     {
         _ = typeof(Abstractions.ICommand);
-        _ = typeof(Core.ProjectionWriter);
         var refs = AppDomain.CurrentDomain.GetAssemblies()
             .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
             .Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location)).ToImmutableArray();
@@ -201,7 +195,7 @@ public sealed class DomainEditorLeseseiteTests
             Aggregate = [new() { Name = "Ding", Namespace = "Probe", StateZusatz = "public int Version { get; set; }\npublic Guid Id { get; set; }" }],
         };
         var trees = Scaffolder.Generiere(modell).Select(d => CSharpSyntaxTree.ParseText(d.Inhalt, path: d.Pfad))
-            .Append(CSharpSyntaxTree.ParseText("global using System; global using System.Collections.Generic; global using System.Threading.Tasks;"))
+            .Append(CSharpSyntaxTree.ParseText("global using System; global using System.Collections.Generic; global using System.Threading; global using System.Threading.Tasks;"))
             .ToList();
         var comp = CSharpCompilation.Create("LeseseiteProbe", trees, refs,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
@@ -235,13 +229,13 @@ public sealed class DomainEditorLeseseiteTests
               "writeFns": [ { "_id": "wf3", "name": "LoescheAsync", "params": [] } ], "readFns": [] }
           ],
           "projektionen": [
-            { "_id": "pj1", "name": "Zeilenliste", "namespace": "Probe", "subscriberId": "zeilenliste", "pull": true,
-              "code": { "datei": "Probe/Zeilenliste.cs", "zusatz": "public string SubscriberId => \"zeilenliste\";" },
+            { "_id": "pj1", "name": "Zeilenliste", "namespace": "Probe",
+              "code": { "datei": "Probe/Zeilenliste.cs", "zusatz": "private const int Rand = 2;" },
               "handles": [ { "event": "Gemacht", "fns": [ "wf1", "wf2" ],
-                "sig": { "parameter": "e", "kontext": [ "env", "w" ], "rueckgabe": "Task", "modifikatoren": "public async",
+                "sig": { "parameter": "e", "herkunftParameter": "hk", "abbruchParameter": "ct", "rueckgabe": "Task", "modifikatoren": "public async",
                          "faehigkeitParameter": [ { "typ": "ISchreibeZeile", "name": "schreib" } ], "rumpfCode": "await Task.CompletedTask;", "datei": "Probe/Zeilenliste.cs" } } ] }
           ],
-          "reader": [ { "_id": "rd1", "name": "ZeilenLeser", "namespace": "Probe", "projektion": "Zeilenliste",
+          "reader": [ { "_id": "rd1", "name": "ZeilenLeser", "namespace": "Probe", "projektionen": [ "Zeilenliste" ],
                         "handles": [ { "query": "HoleZeile", "fns": [ "rf1" ], "responses": [ "ZeileAntwort" ] } ] },
                       { "_id": "rd2", "name": "Waise", "namespace": "Probe", "handles": [] } ],
           "readModels": [ { "name": "Zeile", "namespace": "Probe", "typart": "public record", "felder": [ { "name": "Id", "typ": "Guid" } ] } ]
@@ -262,7 +256,8 @@ public sealed class DomainEditorLeseseiteTests
         h.Faehigkeiten.Select(f => (f.Typ, f.Name)).Should().Equal(("ISchreibeZeile", "schreib"), ("ILoesche", "loesche"));
         // Aus dem Code gelesen ⇒ unverändert (nur die Fähigkeits-Parameter folgen den Kanten).
         h.Parameter.Should().Be("e");
-        h.Kontext.Should().Equal("env", "w");
+        h.HerkunftParameter.Should().Be("hk");
+        h.AbbruchParameter.Should().Be("ct");
         h.Modifikatoren.Should().Be("public async");
         h.Rumpf.Should().Be("await Task.CompletedTask;");
     }
@@ -273,8 +268,14 @@ public sealed class DomainEditorLeseseiteTests
         var lesen = BoardLeseseite.AusBoard(Board).Lesen!;
         lesen.Stores.Single(s => s.Name == "IArchiv").Impl.Should().BeEquivalentTo(new StoreImpl { Name = "Archiv", Namespace = "Probe.Speicher" });
         lesen.Stores.Single(s => s.Name == "IBuch").Impl!.Datei.Should().Be("Probe/Buch.cs");
-        lesen.Reader.Select(r => r.Name).Should().Equal("ZeilenLeser");   // ohne Projektion kein IReader<T>
-        lesen.Reader[0].Handles.Single().Faehigkeiten.Single().Should().BeEquivalentTo(new Parameter { Typ = "IFinde", Name = "finde" });
+        // Ein Reader braucht keine Projektion (sie folgt aus den Fähigkeiten) — auch einer ohne Frage bleibt im Modell.
+        lesen.Reader.Select(r => r.Name).Should().Equal("Waise", "ZeilenLeser");
+        var frage = lesen.Reader.Single(r => r.Name == "ZeilenLeser").Handles.Single();
+        frage.Faehigkeiten.Single().Should().BeEquivalentTo(new Parameter { Typ = "IFinde", Name = "finde" });
+        (frage.Parameter, frage.HerkunftParameter).Should().Be(("q", (string?)null));
+        // Ein neues Auf nimmt die Herkunft.
+        BoardLeseseite.AusBoard(Board.Replace("\"sig\": { \"parameter\": \"e\"", "\"_alt\": { \"parameter\": \"e\"")).Lesen!
+            .Konsumenten.Single().Handles.Single().Should().Match<Handle>(x => x.Parameter == "e" && x.HerkunftParameter == "h");
         BoardLeseseite.AusBoard(Board).Records.Single(r => r.Kind == RecordArt.ReadModel).Typart.Should().BeNull();
     }
 
@@ -303,10 +304,10 @@ public sealed class DomainEditorLeseseiteTests
             "readFns": [ { "_id": "rf1", "name": "FindeAsync", "faehigkeit": "IFindeZeile", "rueckgabe": "Zeile?",
                            "params": [ { "name": "id", "typ": "Guid" }, { "name": "mitArchiv", "typ": "bool" } ],
                            "sig": { "rueckgabe": "Task<Zeile?>", "datei": "Probe/IBuch.cs", "herkunft": "x", "parameter": [ { "typ": "System.Guid", "name": "id" } ] } } ] } ],
-          "projektionen": [ { "_id": "pj1", "name": "Zeilenliste", "namespace": "Probe", "pull": true, "append": true,
-              "code": { "datei": "Probe/Zeilenliste.cs", "basen": [ "ISubscriber", "IPullSubscriber" ], "herkunft": "x" }, "handles": [] } ],
-          "reader": [ { "_id": "rd1", "name": "ZeilenLeser", "namespace": "Probe", "projektion": "Andere", "trackDeps": false,
-              "code": { "datei": "Probe/ZeilenLeser.cs", "basen": [ "IReader<Zeilenliste>" ], "herkunft": "x" },
+          "projektionen": [ { "_id": "pj1", "name": "Zeilenliste", "namespace": "Probe", "mindestensEinmal": true,
+              "code": { "datei": "Probe/Zeilenliste.cs", "basen": [ "IProjektion" ], "herkunft": "x" }, "handles": [] } ],
+          "reader": [ { "_id": "rd1", "name": "ZeilenLeser", "namespace": "Probe", "projektionen": [ "Andere" ],
+              "code": { "datei": "Probe/ZeilenLeser.cs", "basen": [ "IReader" ], "herkunft": "x" },
               "handles": [ { "query": "HoleZeile", "fns": [], "responses": [ "ZeileAntwort", "KeineZeile" ],
                 "sig": { "parameter": "q", "rueckgabe": "Task<ZeileAntwort>", "ausgangsTypen": [ "ZeileAntwort" ], "datei": "Probe/ZeilenLeser.cs", "herkunft": "x" } } ] } ]
         }
@@ -317,13 +318,14 @@ public sealed class DomainEditorLeseseiteTests
     {
         var m = BoardLeseseite.AusBoard(BoardBestehend);
         var l = m.Lesen!;
-        // Reader: neue Response ⇒ nur das Typ-Argument der Rückgabe wechselt; Projektion ⇒ IReader<P>.
+        // Reader: neue Antwort ⇒ nur das Typ-Argument der Rückgabe wechselt (die Hülle Task bleibt); die Basisliste bleibt wörtlich.
         var rh = l.Reader.Single().Handles.Single();
         rh.Ausgaenge.Should().Equal("ZeileAntwort", "KeineZeile");
         rh.Rueckgabe.Should().Be("Task<OneOf<ZeileAntwort, KeineZeile>>");
-        l.Reader.Single().Basen.Should().Equal("IReader<Andere>");
-        // Flags ⇒ Marker in der Basisliste.
-        l.Konsumenten.Single().Basen.Should().Equal("ISubscriber", "IPullSubscriber", "IAppendProjektion");
+        l.Reader.Single().Basen.Should().Equal("IReader");
+        // [MindestensEinmal] ist ein Flag der Projektion (kein Marker in der Basisliste).
+        l.Konsumenten.Single().MindestensEinmal.Should().BeTrue();
+        l.Konsumenten.Single().Basen.Should().Equal("IProjektion");
         // Store-Fn: Parameter geändert ⇒ Board; unveränderter Parameter bleibt wörtlich (auch qualifiziert).
         l.Stores.Single().Fns.Single().Parameter.Select(p => (p.Typ, p.Name)).Should().Equal(("System.Guid", "id"), ("bool", "mitArchiv"));
     }
@@ -335,5 +337,22 @@ public sealed class DomainEditorLeseseiteTests
         EditorModell.AusJson(m.AlsJson()).AlsJson().Should().Be(m.AlsJson());
         Scaffolder.Generiere(EditorModell.AusJson(m.AlsJson())).Select(d => d.Inhalt)
             .Should().Equal(Scaffolder.Generiere(m).Select(d => d.Inhalt));
+    }
+
+    [Fact]
+    public void MindestensEinmal_wird_Attribut_und_Frage_ohne_Huelle_bleibt_ohne()
+    {
+        var m = Modell();
+        m = m with
+        {
+            Lesen = m.Lesen! with
+            {
+                Konsumenten = [m.Lesen.Konsumenten[0] with { MindestensEinmal = true }],
+                Reader = [m.Lesen.Reader[0] with { Handles = [m.Lesen.Reader[0].Handles[0] with { Rueckgabe = "ZeileAntwort", Ausgaenge = ["ZeileAntwort"] }] }],
+            },
+        };
+        var d = Scaffolder.Generiere(m);
+        Inhalt(d, "Probe/Zeilenliste.cs").Should().Contain("[MindestensEinmal]\npublic sealed class Zeilenliste : IProjektion");
+        Inhalt(d, "Probe/ZeilenLeser.cs").Should().Contain("public ZeileAntwort Frage(HoleZeile query, IFindeZeile finde, CancellationToken ct)");
     }
 }

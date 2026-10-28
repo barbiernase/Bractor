@@ -125,7 +125,7 @@ public static class ParitaetsPruefung
             $"{soll.Aggregate.Values.Sum(a => a.Apply.Count)} Apply), {soll.Commands.Count} Commands, {soll.Events.Count} Events, " +
             $"{soll.Ablehnungen.Count} Ablehnungen, {soll.ValueObjects.Count} VOs, {soll.Konfigs.Count} Konfigs, {soll.Stores.Count} Stores, {soll.Enums.Count} Enums, " +
             $"{soll.Funktionen.Count} Funktionen, {soll.Dienste.Count} Dienste, {soll.Queries.Count} Queries, {soll.Responses.Count} Responses, " +
-            $"{soll.ReadModels.Count} ReadModels, {soll.Subscriber.Count} Projektionen, {soll.Readers.Count} Reader, " +
+            $"{soll.ReadModels.Count} ReadModels, {soll.Projektionen.Count} Projektionen, {soll.Readers.Count} Reader, " +
             $"{soll.Akteure.Count} Akteure ({soll.AkteurRechte.Values.Sum(x => x.Count)} Befugnisse), "
             + $"{soll.Clients.Count} Clients ({soll.Clients.Values.Sum(x => x.Count)} Rand-Ports)."));
 
@@ -171,7 +171,7 @@ public static class ParitaetsPruefung
                 .Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal);
             Vergleiche($"Client-Vertrag ({k.Name})", sollRand.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istRand, befunde);
         }
-        Vergleiche("Projektion", soll.Subscriber, BoardListe("projektion"), befunde);
+        Vergleiche("Projektion", soll.Projektionen, BoardListe("projektion"), befunde);
 
         // Decide-/Apply-Methoden je Aggregat: Soll = Methoden im Quelltext, Ist = Decider-/Applier-Karten.
         var decider = Arten("decider").Select(d => $"{(string?)d.Ref["aggregat"]}|{(string?)d.Ref["command"]}").ToHashSet(StringComparer.Ordinal);
@@ -222,7 +222,7 @@ public static class ParitaetsPruefung
     {
         public HashSet<string> Commands = new(), Events = new(), Ablehnungen = new(), ValueObjects = new(),
             Queries = new(), Responses = new(), Enums = new(), ReadModels = new(), Readers = new(),
-            Subscriber = new(), Konfigs = new(), Stores = new(), Akteure = new(), Funktionen = new(), Dienste = new();
+            Projektionen = new(), Konfigs = new(), Stores = new(), Akteure = new(), Funktionen = new(), Dienste = new();
         /// <summary>Akteur → seine IDarf-Ziele (einfache Namen) — aus der Basisliste, unabhängig vom DomainExtractor.</summary>
         public Dictionary<string, HashSet<string>> AkteurRechte = new(StringComparer.Ordinal);
         /// <summary>Client (IClientVertrag) → sein Rand „T:Funktion", „S:Typ", „F:Query", „K:Event" — aus der Basisliste.</summary>
@@ -238,11 +238,11 @@ public static class ParitaetsPruefung
             INamedTypeSymbol? Get(string n) => comps.Select(c => c.GetTypeByMetadataName(n)).FirstOrDefault(x => x != null);
             var iCmd = Get(Vertrag.ICommand); var iEvt = Get(Vertrag.IEvent); var iTr = Get(Vertrag.ITransientEvent);
             var iQ = Get(Vertrag.IQuery); var iQr = Get(Vertrag.IQueryResponse); var iRm = Get(Vertrag.IReadModel);
-            var iState = Get(Vertrag.IState); var iSub = Get(Vertrag.ISubscriber);
+            var iState = Get(Vertrag.IState);
             var iPayload = Get(Vertrag.IMessagePayload); var iOut = Get(Vertrag.IAusgabe);
-            var iReader = Get(Vertrag.IReader); var iDecider = Get(Vertrag.IDecider); var iApplier = Get(Vertrag.IApplier);
+            var iDecider = Get(Vertrag.IDecider); var iApplier = Get(Vertrag.IApplier);
             var iWStore = Get(Vertrag.IWriteStore); var iRStore = Get(Vertrag.IReadStore); var iStore = Get(Vertrag.IStore);
-            var iWert = Get(Vertrag.IWertobjekt); var iEnv = Get(Vertrag.IAggregateEnvelope);
+            var iWert = Get(Vertrag.IWertobjekt);
             var iAkteur = Get(Vertrag.IAkteur); var iDarf = Get(Vertrag.IDarf); var iHoert = Get(Vertrag.IHoert); var iTraegt = Get(Vertrag.ITraegt);
             var iClient = Get(Vertrag.IClientVertrag); var iSendet = Get(Vertrag.ISendet); var iFragt = Get(Vertrag.IFragt);
             var iFunktion = Get(Vertrag.IFunktion); var iDienst = Get(Abstractions.Dienstvertrag.Marker);
@@ -317,23 +317,21 @@ public static class ParitaetsPruefung
                                  && !Sym.Implements(t, iWStore) && !Sym.Implements(t, iRStore))
                             inv.ValueObjects.Add(full);
 
-                        if (t.AllInterfaces.Any(i => iReader != null && i.OriginalDefinition.Fq() == iReader.Fq())) inv.Readers.Add(full);
-                        // Subscriber/Reader/Store-Impl: Records im öffentlichen Ctor = Konfiguration.
+                        // Projektion und Reader: der Marker in der EINEN Lesart (Projektionsform) — auch ohne gültiges Auf/Frage eine Karte.
+                        var istProjektion = Infrastructure.SourceGeneration.Projektionsform.IstProjektion(t);
+                        var istReader = Infrastructure.SourceGeneration.Projektionsform.IstReader(t);
+                        if (istReader) inv.Readers.Add(full);
+                        if (istProjektion) inv.Projektionen.Add(full);
+                        // Projektion/Reader/Store-Impl: Records im öffentlichen Ctor = Konfiguration.
                         var istStoreImpl = t.TypeKind != TypeKind.Interface && (Sym.Implements(t, iWStore) || Sym.Implements(t, iRStore));
                         // … ebenso Funktionen im Host und Dienst-Implementierungen (konzept-werkbank §12.3 E11: ihre Records kommen aus Konfig:<Record>).
                         var istImpl = t.TypeKind == TypeKind.Class && ((iFunktion != null && Sym.Implements(t, iFunktion)) || (iDienst != null && Sym.Implements(t, iDienst)));
-                        if (Sym.Implements(t, iSub) || istStoreImpl || istImpl
-                            || t.AllInterfaces.Any(i => iReader != null && i.OriginalDefinition.Fq() == iReader.Fq()))
+                        if (istProjektion || istReader || istStoreImpl || istImpl)
                             foreach (var c in t.InstanceConstructors.Where(c => c.DeclaredAccessibility == Accessibility.Public))
                                 foreach (var prm in c.Parameters)
                                     if (prm.Type is INamedTypeSymbol { IsRecord: true } pr && Domäne(pr.ContainingAssembly)
                                         && !Sym.Implements(pr, iPayload) && !Sym.Implements(pr, iOut) && !Sym.Implements(pr, iRm))
                                         inv.Konfigs.Add(pr.Fq());
-                        // Konsument = Subscriber mit mindestens einem Handler (Event + Aggregat-Umschlag) — Methodenname egal.
-                        if (Sym.Implements(t, iSub) && t.GetMembers().OfType<IMethodSymbol>()
-                                .Any(m => m.Parameters.Length > 1 && Sym.Implements(m.Parameters[0].Type, iEvt)
-                                          && m.Parameters.Skip(1).Any(p => p.Type.Fq() == iEnv?.Fq())))
-                            inv.Subscriber.Add(full);
 
                         // Aggregat-Komposition über den TYP: Decider/Applier = wer IDecider<S>/IApplier<S> implementiert (wo auch immer).
                         foreach (var i in t.AllInterfaces.Where(i => i.TypeArguments.Length == 1
