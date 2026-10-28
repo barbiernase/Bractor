@@ -73,6 +73,32 @@ public sealed record Kunde : IMensch, IDarf<Eroeffne>, IDarf<Hole>;
         befunde.Should().OnlyContain(d => d.Location == Location.None, "die Typen liegen in der Domänen-Referenz — der Name führt zur Karte");
     }
 
+    // R4 (Plan Pub/Sub-Neustrukturierung §2.6, §3.6): eine Query hat genau ein Ziel — einen Reader oder ein Aggregat (Frage im Decider).
+    private const string Kasse = @"
+public record Zaehle(Id<Kasse> AggregateId) : ICommand<Kasse>;
+public record Gezaehlt() : IEvent;
+public record HoleKasse(Id<Kasse> Kasse) : IQuery;
+public record KassenStand(int Bestand) : IQueryResponse;
+public partial class Kasse : IState
+{
+    public int Version { get; set; } public Guid Id { get; set; }
+    public class Decider : IDecider<Kasse> { public IEnumerable<Gezaehlt> Decide(Zaehle c) => default!; public KassenStand Frage(HoleKasse q) => default!; }
+    public class Applier : IApplier<Kasse> { public void Apply(Gezaehlt e) { } }
+}
+";
+
+    [Fact]
+    public async Task R4_eine_Query_an_ein_Aggregat_hat_ihr_Ziel_und_ihre_Antwort_einen_Erzeuger()
+        => (await Ids(Kasse)).Should().BeEmpty("das Aggregat beantwortet HoleKasse (kein offener Eingang) und erzeugt KassenStand (kein offener Ausgang)");
+
+    [Fact]
+    public async Task R4_eine_Query_an_Reader_und_Aggregat_zugleich_ist_CQRS084()
+    {
+        var befunde = await Befunde(Kasse + "public sealed class Kassenbuch : IReader { public KassenStand Frage(HoleKasse q) => default!; }");
+        befunde.Should().ContainSingle().Which.Id.Should().Be(GesamtbildAnalyzer.QueryId);
+        befunde[0].GetMessage().Should().StartWith("'HoleKasse'").And.Contain("Aggregat Kasse").And.Contain("Reader Kassenbuch");
+    }
+
     [Fact]
     public async Task Ein_Command_ohne_Decider_ist_ein_offener_Eingang()
         => (await Befunde("public record Schliesse(Id<Konto> AggregateId) : ICommand<Konto>;")).Should().ContainSingle()

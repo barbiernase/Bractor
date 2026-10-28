@@ -210,8 +210,18 @@ public sealed record Aggregat
     public string? Datei { get; init; }
     public string? DeciderDatei { get; init; }
     public string? ApplierDatei { get; init; }
+    /// <summary>Die Fragen an das Aggregat (Plan Pub/Sub-Neustrukturierung §2.6) — Signatur-Fakt der <c>Frage</c> im Decider, nur gelesen; ihr
+    /// Quelltext steht im <see cref="DeciderZusatz"/>.</summary>
+    public IReadOnlyList<AggregatFrage> Fragen { get; init; } = [];
     /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
     public string? Herkunft { get; init; }
+}
+
+/// <summary>Eine Frage an ein Aggregat: die Query (Record-Name) und ihre möglichen Antworten (Record-Namen) aus der Signatur.</summary>
+public sealed record AggregatFrage
+{
+    public string Query { get; init; } = "";
+    public IReadOnlyList<string> Antworten { get; init; } = [];
 }
 
 /// <summary>

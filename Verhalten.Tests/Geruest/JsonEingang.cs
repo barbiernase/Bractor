@@ -17,11 +17,13 @@ public sealed class JsonEingang : IDisposable
 
     public sealed record Antwort(bool Ok, int Status, JsonNode? Inhalt, string? Fehler);
 
-    /// <summary>Schickt einen Command; ohne <paramref name="commandId"/> vergibt der Host eine neue.</summary>
-    public Task<Antwort> CommandAsync(string typ, JsonObject daten, string? token = null, Guid? commandId = null)
+    /// <summary>Schickt einen Command; ohne <paramref name="commandId"/> vergibt der Host eine neue. Mit <paramref name="erwarteteVersion"/> wie ein
+    /// Client mit Versionsprüfung (OCC), sonst wie ein Emitter.</summary>
+    public Task<Antwort> CommandAsync(string typ, JsonObject daten, string? token = null, Guid? commandId = null, int? erwarteteVersion = null)
     {
         var body = new JsonObject { ["typ"] = typ, ["daten"] = daten };
         if (commandId is { } id) body["commandId"] = id.ToString();
+        if (erwarteteVersion is { } v) body["erwarteteVersion"] = v;
         return SendeAsync("/eingang/command", body, token);
     }
 
@@ -37,6 +39,15 @@ public sealed class JsonEingang : IDisposable
     {
         var a = await SendeAsync("/eingang/query", new JsonObject { ["typ"] = typ, ["daten"] = daten }, token);
         return a.Ok && a.Inhalt?["antwort"] is { } antwort ? antwort : throw new InvalidOperationException($"Query {typ}: {a.Status} {a.Fehler}");
+    }
+
+    /// <summary>Stellt eine Query; liefert die Antwort (<c>{typ, daten}</c>) und den Stand je gezeigter Id (<c>[{id, aggregat, version}]</c>).</summary>
+    public async Task<(JsonNode Antwort, JsonArray Staende)> QueryMitStandAsync(string typ, JsonObject daten, string? token = null)
+    {
+        var a = await SendeAsync("/eingang/query", new JsonObject { ["typ"] = typ, ["daten"] = daten }, token);
+        return a.Ok && a.Inhalt?["antwort"] is { } antwort && a.Inhalt["staende"] is JsonArray staende
+            ? (antwort, staende)
+            : throw new InvalidOperationException($"Query {typ}: {a.Status} {a.Fehler}");
     }
 
     private async Task<Antwort> SendeAsync(string pfad, JsonObject body, string? token)

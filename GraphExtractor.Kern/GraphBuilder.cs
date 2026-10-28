@@ -149,6 +149,10 @@ public sealed class GraphBuilder
         var readerByQuery = _dom.Readers
             .SelectMany(r => r.QueryNames.Select(q => (q, r)))
             .GroupBy(x => x.q).ToDictionary(g => g.Key, g => g.First().r, StringComparer.Ordinal);
+        // Aggregate liefern Query→Aggregat (Frage im Decider, Plan §2.6).
+        var aggregatByQuery = _dom.Aggregates
+            .SelectMany(a => a.Fragen.Select(f => (q: f.QueryFull, a.Name)))
+            .GroupBy(x => x.q).ToDictionary(g => g.Key, g => g.First().Name, StringComparer.Ordinal);
 
         foreach (var q in _dom.Queries)
         {
@@ -156,7 +160,11 @@ public sealed class GraphBuilder
             Add(new Node
             {
                 Id = $"query:{q.Name}", Kind = NodeKind.query, Name = q.Name, FullName = q.Full, Namespace = q.Meta.Namespace,
-                Query = new QueryInfo { Fields = q.Fields, ServedByReader = reader?.Name, ReadsProjections = reader?.Projektionen.ToList() ?? new() }
+                Query = new QueryInfo
+                {
+                    Fields = q.Fields, ServedByReader = reader?.Name, ReadsProjections = reader?.Projektionen.ToList() ?? new(),
+                    AnsweredByAggregate = aggregatByQuery.GetValueOrDefault(q.Full),
+                }
             });
         }
     }
@@ -267,6 +275,8 @@ public sealed class GraphBuilder
             foreach (var projName in node.Query?.ReadsProjections ?? [])
                 if (projByName.TryGetValue(projName, out var projNode))
                     Edge(node.Id, projNode, EdgeKind.readsFrom, "reader");
+            if (node.Query?.AnsweredByAggregate is { } agg && _byId.ContainsKey($"agg:{agg}"))
+                Edge(node.Id, $"agg:{agg}", EdgeKind.answeredBy, "frage");
         }
     }
 
@@ -319,7 +329,9 @@ public sealed class GraphBuilder
             pr.Context = _g.Edges.Where(x => x.Kind == EdgeKind.consumedBy && x.To == pr.Id)
                 .Select(x => _byId[x.From].Context).FirstOrDefault(c => c != null) ?? "(quer)";
         foreach (var q in _g.Nodes.Where(n => n.Kind == NodeKind.query))
-            q.Context = CtxOfNeighbour(q.Id, EdgeKind.readsFrom, outgoing: true);
+            q.Context = q.Query?.AnsweredByAggregate != null
+                ? CtxOfNeighbour(q.Id, EdgeKind.answeredBy, outgoing: true)
+                : CtxOfNeighbour(q.Id, EdgeKind.readsFrom, outgoing: true);
 
         _g.Meta.Contexts = _g.Nodes.Select(n => n.Context).Where(c => c != null)!
             .Distinct().OrderBy(c => c, StringComparer.Ordinal).Cast<string>().ToList();

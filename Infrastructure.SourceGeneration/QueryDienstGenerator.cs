@@ -16,6 +16,8 @@ namespace Infrastructure.SourceGeneration
     /// </list>
     /// Vor dem Reader wartet der Dienst begrenzt auf „mindestens S auf v“ (Read-your-writes), danach hängt er den Stand je gezeigter Id an
     /// (<c>ProjektionsStaende</c>: Guard + Log, über mehrere Projektionen der kleinste).
+    /// Eine Query, deren Ziel ein Aggregat ist (<c>Frage</c> im Decider, §2.6), geht über <c>AggregatAbfrage</c> an den Aggregat-Actor der Id aus
+    /// ihrem Glied <c>Id&lt;TAggregat&gt;</c>; die Antwort zeigt genau dieses Aggregat mit der Version, auf der es antwortete — exakt, ohne Warten.
     /// </summary>
     [Generator]
     public class QueryDienstGenerator : ISourceGenerator
@@ -27,14 +29,15 @@ namespace Infrastructure.SourceGeneration
             if (!Laufzeitprojekt.Ist(context.Compilation)) return;
             var bild = Leseseitenbild.Lies(context.Compilation);
             var reader = bild.Reader.Where(r => r.Fehler.Count == 0 && r.Doppelt.Count == 0).ToList();
-            context.AddSource("GeneratedQueryDienst.g.cs", Emit(bild, reader));
+            var aggregate = bild.Aggregate.Where(a => a.Fehler.Count == 0 && a.Doppelt.Count == 0).ToList();
+            context.AddSource("GeneratedQueryDienst.g.cs", Emit(bild, reader, aggregate));
         }
 
         private static string Fq(ITypeSymbol t) => t.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
         private static string Feld(Projektionsform.Reader r) => "_" + char.ToLowerInvariant(r.Typ.Name[0]) + r.Typ.Name.Substring(1);
 
-        private static string Emit(Leseseitenbild bild, List<Projektionsform.Reader> reader)
+        private static string Emit(Leseseitenbild bild, List<Projektionsform.Reader> reader, List<Projektionsform.Aggregatfragen> aggregate)
         {
             var ids = new IdSammler();
             var sb = new StringBuilder();
@@ -58,7 +61,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine();
             sb.AppendLine("    public static IReadOnlyList<Type> SupportedQueryTypes { get; } = new Type[]");
             sb.AppendLine("    {");
-            foreach (var f in reader.SelectMany(r => r.Fragen)) sb.AppendLine($"        typeof({Fq(f.Query)}),");
+            foreach (var f in reader.SelectMany(r => r.Fragen).Concat(aggregate.SelectMany(a => a.Fragen))) sb.AppendLine($"        typeof({Fq(f.Query)}),");
             sb.AppendLine("    };");
             sb.AppendLine();
             sb.AppendLine("    IReadOnlyList<Type> IQueryDienst.QueryTypen => SupportedQueryTypes;");
@@ -66,12 +69,14 @@ namespace Infrastructure.SourceGeneration
             foreach (var r in reader) sb.AppendLine($"    private readonly {Fq(r.Typ)} {Feld(r)};");
             sb.AppendLine("    private readonly IFaehigkeitsFabrik _faehigkeiten;");
             sb.AppendLine("    private readonly ProjektionsStaende? _staende;");
+            if (aggregate.Count > 0) sb.AppendLine("    private readonly global::Infrastructure.Aggregate.ActorSystem.AggregatAbfrage _aggregate;");
             sb.AppendLine();
             sb.AppendLine("    public GeneratedQueryDienst(IServiceProvider provider)");
             sb.AppendLine("    {");
             foreach (var r in reader) sb.AppendLine($"        {Feld(r)} = {PullPathGenerator.Konstruktion(r.Typ, "provider")};");
             sb.AppendLine("        _faehigkeiten = provider.GetRequiredService<IFaehigkeitsFabrik>();");
             sb.AppendLine("        _staende = provider.GetService<ProjektionsStaende>();");
+            if (aggregate.Count > 0) sb.AppendLine("        _aggregate = provider.GetRequiredService<global::Infrastructure.Aggregate.ActorSystem.AggregatAbfrage>();");
             sb.AppendLine("    }");
             sb.AppendLine();
 
@@ -109,6 +114,13 @@ namespace Infrastructure.SourceGeneration
                     sb.AppendLine($"            case {Fq(f.Query)} q:");
                     sb.AppendLine($"                return FrageAsync({listen[f]}, mindestens, {lambdaAsync}b => {ergebnis},");
                     sb.AppendLine($"                    (a, ids) => {{ {ids.Aufruf(f.Query, "q")} {AntwortIds(ids, f)} }});");
+                }
+            // Eine Query an ein Aggregat (§2.6): an die Identität aus ihrem Glied Id<TAggregat> — der Stand ist exakt, „mindestens S auf v“ gilt von selbst.
+            foreach (var a in aggregate)
+                foreach (var f in a.Fragen)
+                {
+                    sb.AppendLine($"            case {Fq(f.Query)} q:   // Frage an das Aggregat {a.State.Name}");
+                    sb.AppendLine($"                return _aggregate.FrageAsync(q.{f.IdGlied}.Wert, \"{CommandAggregateMapGenerator.AggregatIdentität(a.State)}\", q);");
                 }
             sb.AppendLine("            default:");
             sb.AppendLine("                throw new NotSupportedException($\"Keine Frage für die Query {query.GetType().Name}.\");");

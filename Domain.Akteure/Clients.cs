@@ -52,7 +52,7 @@ public interface IArbeitsplatz : IClientVertrag,
     // ── Inspekteur: Bilder befunden ──
     ISendet<LabelBildPaar>, ISendet<MarkiereAlsInspiziert>,
     IFragt<SucheImagePairs>, IFragt<GetImagePairHistorie>, IFragt<GetImagePairStatistik>, IFragt<GetProduktionsTage>,
-    IFragt<GetProduktionsStrip>,
+    IFragt<GetProduktionsStrip>, IFragt<HoleBildPaarStand>,
     // ── Produktprüfer: Ground Truth am physischen Teil ──
     ISendet<LabelPhysischesProdukt>,
     // ── KIOperator: Datensätze, Training ──

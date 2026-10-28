@@ -139,6 +139,8 @@ public sealed class ProjectionInfo
 public sealed class QueryInfo
 {
     public string? ServedByReader { get; set; }
+    /// <summary>Das Aggregat, das die Query beantwortet (Frage im Decider, Plan §2.6) — eine Query hat genau ein Ziel (R4).</summary>
+    public string? AnsweredByAggregate { get; set; }
     /// <summary>Die Projektionen hinter dem Reader (aus seinen Lese-Fähigkeiten: wer in denselben Store schreibt).</summary>
     public List<string> ReadsProjections { get; set; } = new();
     public List<FieldInfo> Fields { get; set; } = new();
@@ -179,6 +181,7 @@ public enum EdgeKind
     produces,       // command  → event       (Decide-OneOf, handler-sensitiv; persistiert autoritativ aus CommandToEvents, Ablehnung aus Decider)
     consumedBy,     // event    → projection  (IProjektion.Auf)
     readsFrom,      // query    → projection  (Lese-Fähigkeiten des Readers ↔ Schreib-Fähigkeiten der Projektion, derselbe Store)
+    answeredBy,     // query    → aggregate   (Frage im Decider, Plan §2.6: exakter Stand)
     darf,           // akteur   → command/query (IDarf<T>)
     traegt,         // client   → funktion    (ITraegt<F>)
     sendet,         // client   → command     (ISendet<T>)

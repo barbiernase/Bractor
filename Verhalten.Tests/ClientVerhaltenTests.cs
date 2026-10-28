@@ -75,6 +75,38 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
     }
 
     [Fact]
+    public async Task Ein_Client_fragt_das_Aggregat_direkt_und_entscheidet_mit_dessen_Version()
+    {
+        // Plan Pub/Sub-Neustrukturierung §2.6 (Phase 9): die Antwort eines Aggregats ist sein exakter Stand und trägt die Version, auf der der nächste
+        //   Command entschieden würde — von außen über den JSON-Eingang und über die Leitung mit dem Client-Stack des Arbeitsplatzes.
+        var paar = await b.KomplettesPaarAsync();
+        var kopf = (await b.Log.StreamAsync(paar.Id)).Max(e => e.Version);
+
+        var (antwort, staende) = await b.Eingang.QueryMitStandAsync("HoleBildPaarStand", new() { ["Paar"] = paar.Id.ToString() }, Testumgebung.TokenInspekteur);
+        antwort["typ"]!.ToString().Should().Be("BildPaarStand");
+        ((bool)antwort["daten"]!["Komplett"]!).Should().BeTrue();
+        staende.Should().ContainSingle();
+        staende[0]!["id"]!.ToString().Should().Be(paar.Id.ToString());
+        ((int)staende[0]!["version"]!).Should().Be(kopf, "die Antwort trägt die Version des Aggregats — sein Kopf im Log");
+
+        // Ein Command mit einer älteren Version scheitert, einer mit der Version der Antwort wird entschieden.
+        var label = new System.Text.Json.Nodes.JsonObject { ["AggregateId"] = paar.Id.ToString(), ["Label"] = "Questionable" };
+        (await b.Eingang.CommandAsync("LabelBildPaar", label, Testumgebung.TokenInspekteur, erwarteteVersion: kopf - 1)).Ok
+            .Should().BeFalse("eine ältere Version ist ein Versionskonflikt");
+        (await b.Eingang.CommandAsync("LabelBildPaar", label, Testumgebung.TokenInspekteur, erwarteteVersion: kopf)).Ok
+            .Should().BeTrue("mit der Version der Antwort entscheidet das Aggregat");
+
+        // Über die Leitung: die Antwort setzt die Version des Clients; sein nächster Command entscheidet auf ihr, ohne Konflikt.
+        await using var ap = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenArbeitsplatz);
+        var stand = (BildPaarStand)await ap.FrageAsync(new HoleBildPaarStand(new(paar.Id)), Kurz, typeof(BildPaarStand), typeof(BildPaarUnbekannt));
+        stand.Label.Should().Be(Klassifikation.Questionable, "der exakte Stand — ohne Warten auf eine Projektion");
+        ap.Versionen.GetVersion(paar.Id).Should().Be(kopf + 1, "die Version aus der Antwort des Aggregats");
+        var quittung = await ap.QuittungAsync(ap.Sende(new LabelBildPaar(new(paar.Id), Klassifikation.Anomalie)), Kurz);
+        quittung.Nachricht.Should().BeOfType<BildPaarGelabelt>();
+        (await b.Log.ZahlAsync<BildPaarGelabelt>(paar.Id)).Should().Be(2);
+    }
+
+    [Fact]
     public async Task Die_Quittung_eines_Commands_erreicht_den_Client_ueber_die_Korrelation_bevor_er_wiederholt()
     {
         await using var ap = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenArbeitsplatz);

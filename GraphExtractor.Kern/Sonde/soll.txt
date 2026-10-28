@@ -20,6 +20,11 @@ decide Leihvorgang.MahneRueckgabe -> RueckgabeAngemahnt
 apply Leihvorgang.Ausgeliehen
 apply Leihvorgang.Zurueckgegeben
 apply Leihvorgang.RueckgabeAngemahnt
+# Direkte Abfrage (Plan §2.6): der Leihvorgang beantwortet HoleLeihstand selbst (Frage im Decider); Query und Antworten liegen bei der Schreibseite
+record Leihwesen.Ausleihe.HoleLeihstand query aggregat=Leihvorgang | Vorgang:Id<Leihvorgang>
+record Leihwesen.Ausleihe.Leihstand queryresponse aggregat=Leihvorgang | Vorgang:Id<Leihvorgang>, LeserId:Guid
+record Leihwesen.Ausleihe.NichtVerliehen queryresponse aggregat=Leihvorgang | Vorgang:Id<Leihvorgang>
+frage Leihvorgang.HoleLeihstand -> Leihstand|NichtVerliehen
 
 # ── Gebuehren: ZWEI Aggregate in einem Namespace, Decider in eigener Datei; der Ablauf zwischen ihnen aus FUNKTIONEN (früher eine Saga) ──
 record Leihwesen.Gebuehren.MeldeSchaden command erzeugung aggregat=Schadensfall | AggregateId:Id<Schadensfall>, LeserId:Guid

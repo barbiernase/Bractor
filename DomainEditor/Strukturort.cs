@@ -15,11 +15,12 @@ public static class Strukturort
     public static EditorModell Normalisiere(EditorModell m, string wurzel = P.StandardWurzel)
     {
         var ergebnisse = Funktionsergebnisse(m);
+        var anAggregat = Aggregatfragen(m);
         string Ns(string ns, P.Rolle? rolle) => rolle is { } r ? Ziel(ns, r, wurzel) ?? ns : ns;
         var lesen = m.Lesen;
         return m with
         {
-            Records = m.Records.Select(r => r.Datei != null ? r : r with { Namespace = Ns(r.Namespace, Rolle(Primitive(r, ergebnisse))) }).ToList(),
+            Records = m.Records.Select(r => r.Datei != null ? r : r with { Namespace = Ns(r.Namespace, Rolle(Primitive(r, ergebnisse, anAggregat))) }).ToList(),
             Aggregate = m.Aggregate.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Schreibseite) }).ToList(),
             Dienste = m.Dienste.Select(d => d.Datei != null ? d : d with { Namespace = Ns(d.Namespace, P.Rolle.Ablaeufe) }).ToList(),
             Akteure = m.Akteure.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Akteure) }).ToList(),
@@ -65,14 +66,24 @@ public static class Strukturort
     public static ISet<string> Funktionsergebnisse(EditorModell m) =>
         m.BausteinFunktionen.SelectMany(f => f.Eingaenge).SelectMany(e => e.Ausgaben).ToHashSet(StringComparer.Ordinal);
 
-    /// <summary>Die Primitive eines Records im Editor-Modell (Art + Code-Fakt Ergebnis einer Funktion bzw. Treiber); <c>null</c> = nicht in der Tabelle.</summary>
-    public static P.Primitive? Primitive(Record r, ISet<string> funktionsErgebnisse) => r.Kind switch
+    /// <summary>
+    /// Die Queries an Aggregate und ihre Antworten (Signatur-Fakt der <c>Frage</c> im Decider, Plan Pub/Sub-Neustrukturierung §2.6) — sie liegen bei
+    /// der Schreibseite (dieselbe Regel wie die Lage-Prüfung, <c>Domain.SourceGeneration/Lageart.cs</c>).
+    /// </summary>
+    public static ISet<string> Aggregatfragen(EditorModell m) =>
+        m.Aggregate.SelectMany(a => a.Fragen).SelectMany(f => f.Antworten.Prepend(f.Query)).ToHashSet(StringComparer.Ordinal);
+
+    /// <summary>Die Primitive eines Records im Editor-Modell (Art + Code-Fakt Ergebnis einer Funktion, Frage an ein Aggregat bzw. Treiber);
+    /// <c>null</c> = nicht in der Tabelle.</summary>
+    public static P.Primitive? Primitive(Record r, ISet<string> funktionsErgebnisse, ISet<string> aggregatfragen) => r.Kind switch
     {
         RecordArt.Command => P.Primitive.Command,
         RecordArt.Event when r.Treiber != null => P.Primitive.Quelle,
         RecordArt.Event when funktionsErgebnisse.Contains(r.Name) => P.Primitive.FunktionsErgebnis,
         RecordArt.Event or RecordArt.Rejection => P.Primitive.Event,
         RecordArt.ValueObject => P.Primitive.Wertobjekt,
+        RecordArt.Query when aggregatfragen.Contains(r.Name) => P.Primitive.AggregatQuery,
+        RecordArt.Antwort when aggregatfragen.Contains(r.Name) => P.Primitive.AggregatAntwort,
         RecordArt.Query => P.Primitive.Query,
         RecordArt.Antwort => P.Primitive.Antwort,
         RecordArt.ReadModel => P.Primitive.ReadModel,

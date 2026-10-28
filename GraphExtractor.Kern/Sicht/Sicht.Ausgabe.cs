@@ -28,7 +28,7 @@ public sealed partial class Sicht
             if (!(v.Count == 1 && v[0] == n.Id)) k["vertreter"] = Arr(v);
             if (DetailArten.Contains(n.Art) && DirekteBesitzer(n) is { Count: > 0 } bs) k["besitzer"] = Arr(bs);
             if (n.Art is "projektion" or "reader") k["storeScope"] = Arr(StoreScope(n.Ref));
-            if (n.Art is "command" or "event" or "rejection" && RecordAgg(n.Name) is { Length: > 0 } agg) k["aggregat"] = agg;
+            if (n.Art is "command" or "event" or "rejection" or "query" or "queryresponse" && RecordAgg(n.Name) is { Length: > 0 } agg) k["aggregat"] = agg;
             karten[n.Id] = k;
         }
         var domaenen = Karten.Select(Domaene).Distinct().ToList();

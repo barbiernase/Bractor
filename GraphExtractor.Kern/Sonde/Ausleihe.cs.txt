@@ -3,6 +3,7 @@ using Leihwesen.Ausleihe.Befehle;
 
 // SONDE — Aggregat mit Commands in eigenem Sub-Namespace, Property-Records, if/else-Guards, alles in EINER Datei. Die Ausleihe setzt eine
 //         FRIST (Plan §3.1): die Uhr schickt nach Ablauf der Leihdauer die Mahnung an DENSELBEN Leihvorgang; ist er schon zurück, wirkt sie nicht.
+//         Der Leihvorgang beantwortet eine Query DIREKT (Frage im Decider, Plan §2.6): Ziel ist das Glied Id<Leihvorgang>, die Antwort ein OneOf.
 
 namespace Leihwesen.Ausleihe.Befehle
 {
@@ -36,6 +37,10 @@ namespace Leihwesen.Ausleihe
 
     public record BereitsAusgeliehen(Id<Leihvorgang> AusleiheId) : ITransientEvent;
     public record NichtAusgeliehen(Id<Leihvorgang> AusleiheId) : ITransientEvent;
+
+    public record HoleLeihstand(Id<Leihvorgang> Vorgang) : IQuery;
+    public record Leihstand(Id<Leihvorgang> Vorgang, Guid LeserId) : IQueryResponse;
+    public record NichtVerliehen(Id<Leihvorgang> Vorgang) : IQueryResponse;
 
     public partial class Leihvorgang : IState
     {
@@ -72,6 +77,9 @@ namespace Leihwesen.Ausleihe
                 }
                 yield return new Zurueckgegeben { LeserId = this.State.LeserId, Zustand = befehl.Zustand };
             }
+
+            public OneOf<Leihstand, NichtVerliehen> Frage(HoleLeihstand frage) =>
+                this.State.Offen ? new Leihstand(frage.Vorgang, this.State.LeserId) : new NichtVerliehen(frage.Vorgang);
         }
 
         public partial class Applier : IApplier<Leihvorgang>

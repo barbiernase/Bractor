@@ -24,6 +24,8 @@ namespace Infrastructure.Aggregate.ActorSystem;
 ///   CommandFailed bleibt für technische Fehler (catch-Block).
 ///
 /// ★ Das <see cref="CommandResult"/> trägt nur Ausgang, Versionen und Ablehnung; die Events stehen im Log.
+/// ★ Direkte Abfrage (Plan Pub/Sub-Neustrukturierung §2.6): eine <see cref="AggregatFrage"/> beantwortet die <c>Frage</c> des Deciders im Turn, auf dem
+///   committeten Stand — exakt dem, auf dem der nächste Command entschieden würde; läuft ein Commit, wartet sie bis danach.
 /// ★ Lebenszyklus aus dem Rahmen (<see cref="RahmenActor"/>): Passivierung nur, wenn kein Commit läuft und kein Command wartet.
 /// </summary>
 public abstract class AggregateActorBase<TState> : RahmenActor
@@ -76,6 +78,10 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     // Wem der Einzel-Pfad antwortet (der Absender des Commands, den er gerade behandelt — nicht unbedingt die aktuelle Nachricht).
     private PID? _antwortAn;
 
+    // ★ Direkte Abfrage (Plan §2.6): während eines Commits trägt der State die Entscheidungen des Bündels, die noch scheitern können — eine Frage
+    //   in dieser Zeit wartet hier und wird nach dem Commit beantwortet, bevor das nächste Bündel entschieden wird.
+    private readonly Queue<(AggregatFrage Frage, PID? An)> _fragen = new();
+
     protected AggregateActorBase(
         IAggregateHandlerFactory handlerFactory,
         IEventStoreRepository eventStore,
@@ -106,7 +112,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     }
 
     /// <summary>Kein Passivieren, solange ein Commit läuft oder Commands warten — sie bekämen sonst nie eine Antwort.</summary>
-    protected override bool Beschaeftigt => base.Beschaeftigt || _imCommit || _wartend.Count > 0;
+    protected override bool Beschaeftigt => base.Beschaeftigt || _imCommit || _wartend.Count > 0 || _fragen.Count > 0;
 
     protected override Task BeginneAsync(IContext context)
     {
@@ -127,6 +133,11 @@ public abstract class AggregateActorBase<TState> : RahmenActor
 
     protected override async Task BehandleAsync(IContext context)
     {
+        if (context.Message is AggregatFrage frage)
+        {
+            await FrageAsync(context, frage);
+            return;
+        }
         if (context.Message is not CommandEnvelope envelope) return;
         try
         {
@@ -162,6 +173,56 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         _logger?.LogWarning("[Actor] {Grund}", grund);
         MeldeCommandFailed(envelope, grund);
         context.Respond(new CommandResult { Success = false, ErrorMessage = grund });
+    }
+
+    // ─── Direkte Abfrage (Plan Pub/Sub-Neustrukturierung §2.6) ───
+
+    /// <summary>
+    /// Eine Frage an dieses Aggregat: im Turn beantwortet, auf dem committeten Stand. Läuft ein Commit, wartet sie bis danach (der State trägt
+    /// dann Entscheidungen, die noch scheitern können). Eine Frage an eine fremde Identität (falsch geroutet) wird nicht beantwortet, bevor etwas
+    /// geladen ist — sonst lüde der Actor dieser Identität den fremden Stream.
+    /// </summary>
+    private async Task FrageAsync(IContext context, AggregatFrage frage)
+    {
+        if (!_identitaetGueltig || frage.Ziel != _id)
+        {
+            var grund = $"Query an {typeof(TState).Name}/{frage.Ziel} erreichte die Identität '{context.ClusterIdentity()?.Identity}' — nicht beantwortet";
+            _logger?.LogWarning("[Actor] {Grund}", grund);
+            context.Respond(new AggregatAntwort(null, 0, grund));
+            return;
+        }
+        if (_imCommit)
+        {
+            _fragen.Enqueue((frage, context.Sender));
+            return;
+        }
+        context.Respond(await BeantworteAsync(frage));
+    }
+
+    /// <summary>Die Antwort der Frage des Deciders und die Version des Stands, auf dem sie gegeben ist; ein Fehler (nicht rehydrierbar, die Frage
+    /// warf) wird die Antwort — er bricht nichts.</summary>
+    private async Task<AggregatAntwort> BeantworteAsync(AggregatFrage frage)
+    {
+        try
+        {
+            if (!_initialized) await InitializeAsync();
+            return new AggregatAntwort(_handler!.Frage(frage.Query), _state!.Version);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "[Actor] {Query} an {Type}/{Id} nicht beantwortet", frage.Query.GetType().Name, typeof(TState).Name, _id);
+            return new AggregatAntwort(null, _state?.Version ?? 0, ex.Message);
+        }
+    }
+
+    /// <summary>Die Fragen, die während des Commits kamen — nach ihm, auf dem committeten Stand, bevor das nächste Bündel entschieden wird.</summary>
+    private async Task BeantworteWartendeAsync(IContext context)
+    {
+        while (_fragen.TryDequeue(out var w))
+        {
+            var antwort = await BeantworteAsync(w.Frage);
+            if (w.An is not null) context.Send(w.An, antwort);
+        }
     }
 
     private async Task InitializeAsync()
@@ -447,6 +508,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                         buendel.Count, typeof(TState).Name, _id);
                     await EinzelnAsync(context, buendel);
                 }
+                await BeantworteWartendeAsync(context);
                 await StarteBuendelAsync(context);
             });
             return;

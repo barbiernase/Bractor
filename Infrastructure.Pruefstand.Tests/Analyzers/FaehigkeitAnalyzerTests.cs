@@ -166,4 +166,37 @@ public sealed class P : IProjektion { public Task Auf(" + name + @" e) => Task.C
 public sealed class P : IProjektion {
     public Task<Gemacht> Auf(Gemacht e) => Task.FromResult(e); }"))
             .Should().Equal(HandlerFormAnalyzer.FormId);
+
+    // Die Frage an ein Aggregat (Plan Pub/Sub-Neustrukturierung §2.6): im Decider, eine Query mit genau einem Glied Id<TAggregat>, synchron.
+    private const string Kasse = @"
+public record Zaehle(Id<Kasse> AggregateId) : ICommand<Kasse>;
+public record Gezaehlt() : IEvent;
+public record HoleKasse(Id<Kasse> Kasse) : IQuery;
+public record OhneZiel(Guid Kasse) : IQuery;
+public record ZweiZiele(Id<Kasse> Eine, Id<Kasse> Andere) : IQuery;
+public record Stand(int Bestand) : IQueryResponse;
+public record Unbekannt() : IQueryResponse;
+public partial class Kasse : IState
+{
+    public int Version { get; set; } public Guid Id { get; set; }
+    public class Applier : IApplier<Kasse> { public void Apply(Gezaehlt e) { } }
+    public class Decider : IDecider<Kasse>
+    {
+        public IEnumerable<Gezaehlt> Decide(Zaehle c) { yield break; }
+";
+
+    [Fact]
+    public async Task Eine_Frage_an_ein_Aggregat_nimmt_eine_Query_mit_ihrem_Ziel_und_antwortet_synchron()
+        => (await Ids(Kasse + @"
+        public OneOf<Stand, Unbekannt> Frage(HoleKasse q) => new Stand(1);
+    } }")).Should().BeEmpty();
+
+    [Theory]
+    [InlineData("public Task<Stand> Frage(HoleKasse q) => Task.FromResult(new Stand(1));", "asynchron: der Actor antwortet im Turn")]
+    [InlineData("public Stand Frage(OhneZiel q) => new Stand(1);", "kein Glied Id<Kasse>")]
+    [InlineData("public Stand Frage(ZweiZiele q) => new Stand(1);", "zwei Glieder Id<Kasse>")]
+    [InlineData("public Stand Frage(HoleKasse q, CancellationToken ct) => new Stand(1);", "ein zweiter Parameter (keine Fähigkeit an einem Aggregat)")]
+    [InlineData("public Stand Handle(HoleKasse q) => new Stand(1);", "anderer Name — nie aufgerufen")]
+    public async Task Eine_Frage_an_ein_Aggregat_in_anderer_Form_ist_CQRS057(string frage, string warum)
+        => (await Ids(Kasse + frage + " } }")).Should().Equal(new[] { HandlerFormAnalyzer.FormId }, warum);
 }

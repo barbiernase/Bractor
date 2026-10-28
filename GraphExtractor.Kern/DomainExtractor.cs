@@ -237,6 +237,9 @@ public sealed class AggregateRaw
     public Dictionary<string, List<string>> DecideOutcomes = new();
     /// <summary>Parametername je Command-FullName (der Rumpf referenziert ihn).</summary>
     public Dictionary<string, string> DecideParams = new();
+    /// <summary>Die Fragen an das Aggregat (Plan Pub/Sub-Neustrukturierung §2.6): Query-FullName → Antwort-FullNames, aus der Signatur der Frage im
+    /// Decider (Lesart <c>Projektionsform</c>). Der Quelltext der Frage bleibt im Decider-Zusatz.</summary>
+    public List<(string QueryFull, List<string> AntwortenFull)> Fragen = new();
 
     /// <summary>Der ECHTE Decide-Rumpf je Command (FullName → dedenteter Body-Text; "" = leer).</summary>
     public Dictionary<string, string> DecideBodies = new();
@@ -1189,6 +1192,9 @@ public sealed partial class DomainExtractor
                 deciderZusatz.Add(member);
             }
         agg.DeciderZusatz = MemberText(deciderZusatz);
+        foreach (var d in deciders)
+            foreach (var f in Projektionsform.LiesAggregatfragen(d, t).Fragen)
+                agg.Fragen.Add((f.Query.Fq(), f.Antworten.Select(x => x.Fq()).ToList()));
 
         // Apply-Methoden: die ECHTEN (nicht aus den Commands abgeleitet) — inkl. bewusst leerer No-ops.
         var appliers = ApplierVon(t);

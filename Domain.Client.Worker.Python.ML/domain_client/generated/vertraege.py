@@ -32,6 +32,7 @@ from . import (
     GetProduktionsStripDto,
     GetProduktionsTageDto,
     HoleAktivesModellDto,
+    HoleBildPaarStandDto,
     HoleDatensaetzeDto,
     HoleDatensaetzeFuerPaarDto,
     HoleDatensatzDto,
@@ -84,7 +85,7 @@ class ArbeitsplatzBasis(ClientVertragBasis[S]):
     CLIENT: ClassVar[str] = "Arbeitsplatz"
     AKTEURE: ClassVar[tuple] = ("Inspekteur", "KIOperator", "Modellfreigeber", "Produktpruefer")
     VERTRAG: ClassVar[str] = "IArbeitsplatz"
-    VERTRAG_HASH: ClassVar[str] = "9a5f70d646d1d1b6"
+    VERTRAG_HASH: ClassVar[str] = "0499158fd8dc4638"
     TRAEGT: ClassVar[dict] = {}
     HOERT: ClassVar[dict] = {   # IHoert: Kenntnis, verlierbar
         BildPaarDurchKiKlassifiziertDto: "auf_bild_paar_durch_ki_klassifiziert",
@@ -114,7 +115,7 @@ class ArbeitsplatzBasis(ClientVertragBasis[S]):
         TrainingHaengengebliebenDto: "auf_training_haengengeblieben",
     }
     SPONTAN: ClassVar[tuple] = (LabelBildPaarDto, MarkiereAlsInspiziertDto, LabelPhysischesProduktDto, ErstelleDatensatzDto, FuegeRangeHinzuDto, NimmPaarAufDto, EntfernePaarDto, SetzeSplitDto, FriereEinDto, StarteTrainingDto, BricheTrainingAbDto, RegistriereModellDto, SetzeModellAktivDto, ArchiviereModellDto,)   # ISendet: von sich aus
-    FRAGT: ClassVar[tuple] = (SucheImagePairsDto, GetImagePairHistorieDto, GetImagePairStatistikDto, GetProduktionsTageDto, GetProduktionsStripDto, HoleDatensaetzeDto, HoleDatensatzDto, HoleDatensatzPaareDto, HoleDatensaetzeFuerPaarDto, HoleTrainingslaeufeDto, HoleTrainingslaufDto, HoleModelleDto, HoleDatensatzSamplesDto,)   # IFragt: die Queries des Clients
+    FRAGT: ClassVar[tuple] = (SucheImagePairsDto, GetImagePairHistorieDto, GetImagePairStatistikDto, GetProduktionsTageDto, GetProduktionsStripDto, HoleBildPaarStandDto, HoleDatensaetzeDto, HoleDatensatzDto, HoleDatensatzPaareDto, HoleDatensaetzeFuerPaarDto, HoleTrainingslaeufeDto, HoleTrainingslaufDto, HoleModelleDto, HoleDatensatzSamplesDto,)   # IFragt: die Queries des Clients
 
     @abstractmethod
     async def auf_bild_paar_durch_ki_klassifiziert(self, e: BildPaarDurchKiKlassifiziertDto, ctx: MessageContext, state: S) -> None:

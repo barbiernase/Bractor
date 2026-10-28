@@ -8,7 +8,8 @@ namespace Infrastructure.Serialization;
 
 /// <summary>
 /// Polymorphe STJ-Converter für die Interface-Payloads, die GESCHACHTELT in einer Wire-Hülle reisen
-/// (<c>CommandEnvelope.Payload : ICommand</c>, <c>CommandResult.RejectionEvent : IEvent</c>).
+/// (<c>CommandEnvelope.Payload : ICommand</c>, <c>CommandResult.RejectionEvent : IEvent</c>, <c>AggregatFrage.Query : IQuery</c>,
+/// <c>AggregatAntwort.Antwort : IQueryResponse</c>).
 ///
 /// Reflexionsfrei (Invariante 4): der Diskriminator ist der Typ-Name (PascalCase, identisch zu den
 /// <c>GeneratedTypeRegistry</c>-Schlüsseln); der konkrete Typ wird über den source-gen
@@ -60,6 +61,52 @@ public sealed class ICommandJsonConverter : JsonConverter<ICommand>
         var cmd = Anwendung.WirePoly.ReadCommand(disc, ref reader);
         reader.Read(); // EndArray
         return cmd;
+    }
+}
+
+/// <summary>Die Query einer Frage an ein Aggregat (<c>AggregatFrage.Query</c>, Plan Pub/Sub-Neustrukturierung §2.6).</summary>
+public sealed class IQueryJsonConverter : JsonConverter<IQuery>
+{
+    public override void Write(Utf8JsonWriter writer, IQuery value, JsonSerializerOptions options)
+    {
+        writer.WriteStartArray();
+        writer.WriteStringValue(Anwendung.WirePoly.QueryDiskriminator(value));
+        Anwendung.WirePoly.WriteQuery(writer, value);
+        writer.WriteEndArray();
+    }
+
+    public override IQuery Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw new JsonException("Erwartet: StartArray für IQuery-Payload.");
+        reader.Read();
+        var disc = reader.GetString() ?? throw new JsonException("Erwartet: Query-Diskriminator (string).");
+        reader.Read();
+        var q = Anwendung.WirePoly.ReadQuery(disc, ref reader);
+        reader.Read(); // EndArray
+        return q;
+    }
+}
+
+/// <summary>Die Antwort eines Aggregats (<c>AggregatAntwort.Antwort</c>, Plan Pub/Sub-Neustrukturierung §2.6).</summary>
+public sealed class IQueryResponseJsonConverter : JsonConverter<IQueryResponse>
+{
+    public override void Write(Utf8JsonWriter writer, IQueryResponse value, JsonSerializerOptions options)
+    {
+        writer.WriteStartArray();
+        writer.WriteStringValue(Anwendung.WirePoly.AntwortDiskriminator(value));
+        Anwendung.WirePoly.WriteAntwort(writer, value);
+        writer.WriteEndArray();
+    }
+
+    public override IQueryResponse Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw new JsonException("Erwartet: StartArray für IQueryResponse-Payload.");
+        reader.Read();
+        var disc = reader.GetString() ?? throw new JsonException("Erwartet: Antwort-Diskriminator (string).");
+        reader.Read();
+        var a = Anwendung.WirePoly.ReadAntwort(disc, ref reader);
+        reader.Read(); // EndArray
+        return a;
     }
 }
 

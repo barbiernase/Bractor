@@ -24,5 +24,9 @@ public partial class Kontingent
             if (!this.State.Existiert) { yield return new KontingentNichtGefunden(cmd.AggregateId); yield break; }
             yield return new KontingentEntlastet(cmd.Plaetze, cmd.Beleg);
         }
+
+        /// <summary>Die direkte Abfrage (Plan §2.6): die freien Plätze, auf denen die nächste Belegung entschieden würde.</summary>
+        public OneOf<KontingentStand, KontingentUnbekannt> Frage(HoleKontingent q) =>
+            this.State.Existiert ? new KontingentStand(q.Kontingent, this.State.Frei) : new KontingentUnbekannt(q.Kontingent);
     }
 }

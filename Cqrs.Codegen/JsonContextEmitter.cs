@@ -86,11 +86,15 @@ public static class JsonContextEmitter
                 typeof(IEventJsonConverter),
                 typeof(ICommandJsonConverter),
                 typeof(CommandModusJsonConverter),
+                typeof(IQueryJsonConverter),
+                typeof(IQueryResponseJsonConverter),
         /*ID-KONVERTER*/
             })]
         // ── Framework: Wire-Hüllen (IWireMessage) ──
         [JsonSerializable(typeof(CommandEnvelope))]
         [JsonSerializable(typeof(CommandResult))]
+        [JsonSerializable(typeof(Infrastructure.Aggregate.ActorSystem.AggregatFrage))]
+        [JsonSerializable(typeof(Infrastructure.Aggregate.ActorSystem.AggregatAntwort))]
         [JsonSerializable(typeof(Wake))]
         [JsonSerializable(typeof(WakeAck))]
         [JsonSerializable(typeof(EventEnvelope))]

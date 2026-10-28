@@ -24,6 +24,8 @@ namespace Infrastructure.Serialization;
         typeof(IEventJsonConverter),
         typeof(ICommandJsonConverter),
         typeof(CommandModusJsonConverter),
+        typeof(IQueryJsonConverter),
+        typeof(IQueryResponseJsonConverter),
         typeof(global::Abstractions.IdJsonKonverter<global::Domain.Datensatz.Datensatz>),
         typeof(global::Abstractions.IdJsonKonverter<global::Domain.ImagePair.ImagePair>),
         typeof(global::Abstractions.IdJsonKonverter<global::Domain.Modell.Modell>),
@@ -34,6 +36,8 @@ namespace Infrastructure.Serialization;
 // ── Framework: Wire-Hüllen (IWireMessage) ──
 [JsonSerializable(typeof(CommandEnvelope))]
 [JsonSerializable(typeof(CommandResult))]
+[JsonSerializable(typeof(Infrastructure.Aggregate.ActorSystem.AggregatFrage))]
+[JsonSerializable(typeof(Infrastructure.Aggregate.ActorSystem.AggregatAntwort))]
 [JsonSerializable(typeof(Wake))]
 [JsonSerializable(typeof(WakeAck))]
 [JsonSerializable(typeof(EventEnvelope))]
@@ -81,12 +85,15 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Domain.ImagePair.BildNichtVerfuegbar))]
 [JsonSerializable(typeof(global::Domain.ImagePair.BildPaarDurchKiKlassifiziert))]
 [JsonSerializable(typeof(global::Domain.ImagePair.BildPaarGelabelt))]
+[JsonSerializable(typeof(global::Domain.ImagePair.BildPaarStand))]
+[JsonSerializable(typeof(global::Domain.ImagePair.BildPaarUnbekannt))]
 [JsonSerializable(typeof(global::Domain.ImagePair.BildRegionGelabelt))]
 [JsonSerializable(typeof(global::Domain.ImagePair.BildVerfuegbar))]
 [JsonSerializable(typeof(global::Domain.ImagePair.BildVersionBereitsVerfuegbar))]
 [JsonSerializable(typeof(global::Domain.ImagePair.DateiErkannt))]
 [JsonSerializable(typeof(global::Domain.ImagePair.EinzelBildDurchKiKlassifiziert))]
 [JsonSerializable(typeof(global::Domain.ImagePair.EinzelBildGelabelt))]
+[JsonSerializable(typeof(global::Domain.ImagePair.HoleBildPaarStand))]
 [JsonSerializable(typeof(global::Domain.ImagePair.ImagePairEingabeUngueltig))]
 [JsonSerializable(typeof(global::Domain.ImagePair.ImagePairErstellt))]
 [JsonSerializable(typeof(global::Domain.ImagePair.ImagePairInspiziert))]

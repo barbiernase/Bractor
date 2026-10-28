@@ -88,6 +88,12 @@ public interface IWirePolyTabelle
     string CommandDiskriminator(ICommand value);
     void WriteCommand(Utf8JsonWriter writer, ICommand value);
     ICommand ReadCommand(string diskriminator, ref Utf8JsonReader reader);
+    string QueryDiskriminator(IQuery value);
+    void WriteQuery(Utf8JsonWriter writer, IQuery value);
+    IQuery ReadQuery(string diskriminator, ref Utf8JsonReader reader);
+    string AntwortDiskriminator(IQueryResponse value);
+    void WriteAntwort(Utf8JsonWriter writer, IQueryResponse value);
+    IQueryResponse ReadAntwort(string diskriminator, ref Utf8JsonReader reader);
 }
 
 public interface IUpcastingTabelle

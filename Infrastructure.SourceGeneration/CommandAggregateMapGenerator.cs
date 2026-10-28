@@ -146,7 +146,7 @@ namespace Infrastructure.SourceGeneration
         /// ★ P1c (TG-3): die Aggregat-Identität — <c>[AggregatName("…")]</c> falls gesetzt, sonst der einfache
         /// Typname des State (Default, keine Migration).
         /// </summary>
-        private static string AggregatIdentität(INamedTypeSymbol state)
+        internal static string AggregatIdentität(INamedTypeSymbol state)
         {
             var attr = state.GetAttributes().FirstOrDefault(a =>
                 a.AttributeClass?.ToDisplayString() == "Abstractions.AggregatNameAttribute");

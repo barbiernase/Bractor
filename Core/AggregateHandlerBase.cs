@@ -19,5 +19,6 @@ namespace Core
 
         public abstract IEnumerable<IEvent> HandleCommand(ICommand command);
         public abstract void ApplyEvent(IEvent @event);
+        public abstract IQueryResponse Frage(IQuery query);
     }
 }

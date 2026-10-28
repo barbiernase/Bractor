@@ -16,6 +16,7 @@ namespace Domain.SourceGeneration;
 /// Geprüft (Rolle über Marker/Parameter-Typen, nie über Namen):
 ///  • Decide — Klasse implementiert <c>IDecider&lt;T&gt;</c>, 1. Parameter <c>ICommand</c>: <c>IEnumerable&lt;X&gt;</c>.
 ///  • Reader — <c>IReader</c>, <c>Frage</c> mit 1. Parameter <c>IQuery</c>: <c>Task&lt;X&gt;</c>/<c>ValueTask&lt;X&gt;</c>/<c>X</c>.
+///  • Frage an ein Aggregat — im Decider, <c>Frage</c> mit 1. Parameter <c>IQuery</c>: <c>X</c> (Plan §2.6).
 /// Eine Projektion gibt nichts aus (ihr <c>Auf</c> liefert <c>Task</c>, CQRS057).
 /// Die Ausgabe einer Funktion (<c>Auf</c>) prüft die Funktionsform (CQRS100).
 /// Offen ist X (bzw. ein OneOf-Typargument), wenn es ein Interface, ein Typ-Parameter, <c>object</c> oder eine abstrakte
@@ -81,6 +82,8 @@ public sealed class AusgabeVertragAnalyzer : DiagnosticAnalyzer
         var rt = mm.ReturnType;
         if (Hat(m.IDecider) && Ist(p0, m.ICommand))
             element = Element(rt, enumerable: true, task: false);
+        else if (Hat(m.IDecider) && mm.Name == Abstractions.Projektionsvertrag.Frage && Ist(p0, m.IQuery))
+            element = IstOhneErgebnis(rt) ? null : rt;   // die Frage an ein Aggregat (Plan §2.6): synchron, die Antwort steht in der Signatur
         else if (Ist(typ, m.IReader) && mm.Name == Abstractions.Projektionsvertrag.Frage && Ist(p0, m.IQuery))
             element = Element(rt, enumerable: false, task: true) ?? (IstOhneErgebnis(rt) ? null : rt);
         else return;

@@ -23,7 +23,9 @@ public sealed partial class Sicht
     private string RecordAggOhneCache(string n)
     {
         var a = _decider.Where(d => S(d, "command") == n || Alle(d["ergibt"]).Any(o => S(o, "event") == n)).Select(d => S(d, "aggregat"))
-            .Concat(_applier.Where(x => S(x, "event") == n).Select(x => S(x, "aggregat"))).ToList();
+            .Concat(_applier.Where(x => S(x, "event") == n).Select(x => S(x, "aggregat")))
+            // Die Query, die ein Aggregat beantwortet, und ihre Antworten (Frage im Decider, Plan Pub/Sub-Neustrukturierung §2.6).
+            .Concat(_aggregate.Where(g => Alle(g["fragen"]).Any(f => S(f, "query") == n || L(f, "antworten").Contains(n))).Select(g => S(g, "name"))).ToList();
         return a.Count > 0 ? Eindeutig(a) : "";
     }
     private string TypAgg(string t)
@@ -72,8 +74,10 @@ public sealed partial class Sicht
             case "reader":
                 return _projektionen.FirstOrDefault(x => L(r, "projektionen").FirstOrDefault() == S(x, "name")) is { } p ? BlockVon("projektion", p) : Geteilt;
             case "query":
+                if (RecordAgg(name) is { Length: > 0 } qa) return qa;   // eine Frage an ein Aggregat (§2.6)
                 return _reader.FirstOrDefault(x => Alle(x["handles"]).Any(h => S(h, "query") == name)) is { } rd ? BlockVon("reader", rd) : Geteilt;
             case "queryresponse":
+                if (RecordAgg(name) is { Length: > 0 } ra) return ra;
                 return _reader.FirstOrDefault(x => Alle(x["handles"]).Any(h => L(h, "responses").Contains(name))) is { } rq ? BlockVon("reader", rq) : Geteilt;
             case "store":
             {

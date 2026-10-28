@@ -14,13 +14,16 @@ namespace Domain.SourceGeneration
         public string ApplierName { get; }
         public List<DecideMethodInfo> DecideMethods { get; }
         public List<string> EventTypes { get; }
+        /// <summary>Die Fragen an das Aggregat (Plan §2.6): Query-Typ und ob die Antwort ein OneOf ist.</summary>
+        public List<(string Query, bool OneOf)> Fragen { get; }
         /// <summary>Code-Hash der Daten-Seite (State + Applier, ohne Decider) — Snapshot-Version (konzept-werkbank §12.3 E9).</summary>
         public string CodeHash { get; }
 
         public HandlerGeneratorModel(
             string ns, string stateTypeName, string handlerName,
-            List<DecideMethodInfo> decideMethods, List<string> eventTypes, string codeHash)
+            List<DecideMethodInfo> decideMethods, List<string> eventTypes, List<(string Query, bool OneOf)> fragen, string codeHash)
         {
+            Fragen = fragen;
             CodeHash = codeHash;
             Namespace = ns;
             StateTypeName = stateTypeName;
@@ -65,6 +68,9 @@ namespace Domain.SourceGeneration
             var eventCases = string.Join("\n", model.EventTypes.Select(evt =>
                 $"                case {evt} e: _applier.Apply(e); break;"));
 
+            var frageCases = string.Join("\n", model.Fragen.Select(f =>
+                $"                case {f.Query} q: return (IQueryResponse)_decider.Frage(q){(f.OneOf ? ".Value" : "")};"));
+
             // â˜… Braucht System.Linq fÃ¼r .Select() bei OneOf-Unwrap
             var needsLinq = model.DecideMethods.Any(m => m.ReturnsOneOf);
 
@@ -104,6 +110,16 @@ namespace Domain.SourceGeneration
                                      // Ein Event des Rahmens (Frist gesetzt, Inbox-Marke) zählt in der Version, der Applier sieht es nie (IRahmenEvent).
                                      case IRahmenEvent: break;
                                      default: throw new NotSupportedException($"Event type {@event.GetType().Name} is not supported for {{model.StateTypeName}}.");
+                                 }
+                             }
+
+                             // Die direkte Abfrage (Plan Pub/Sub-Neustrukturierung §2.6): die Frage des Deciders, nur lesend auf den Zustand.
+                             public override IQueryResponse Frage(IQuery query)
+                             {
+                                 switch (query)
+                                 {
+                     {{frageCases}}
+                                     default: throw new NotSupportedException($"Query type {query.GetType().Name} is not answered by {{model.StateTypeName}}.");
                                  }
                              }
                          }
@@ -166,6 +182,8 @@ namespace Domain.SourceGeneration
                 handlerName: $"{stateTypeName}AggregateHandler",
                 decideMethods: decideMethods,
                 eventTypes: eventTypes,
+                fragen: Infrastructure.SourceGeneration.Projektionsform.LiesAggregatfragen(deciderSymbol, classSymbol).Fragen
+                    .Select(f => (f.Query.ToDisplayString(), f.OneOf)).ToList(),
                 codeHash: Kodeform.Hash(classSymbol, n => n is TypeDeclarationSyntax td && td.Identifier.Text == Abstractions.Aggregatvertrag.Decider)
             );
             

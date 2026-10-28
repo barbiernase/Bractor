@@ -45,9 +45,9 @@ public interface ICommand<TAggregat> : ICommand where TAggregat : IState
 }
 
 /// <summary>
-/// Marker-Interface für Queries an Projektionen.
-/// Queries sind synchrone Request/Response (keine Zustellung über den Verteiler).
-/// Erbt bewusst NICHT von IMessagePayload.
+/// Marker-Interface für Queries. Eine Query hat genau ein Ziel (R4): einen Reader (<c>Frage</c> über Lese-Fähigkeiten) oder ein Aggregat
+/// (<c>Frage</c> im Decider, dann nennt sie es mit genau einem Glied <c>Id&lt;TAggregat&gt;</c>, Plan Pub/Sub-Neustrukturierung §2.6).
+/// Queries sind synchrone Request/Response (keine Zustellung über den Verteiler). Erbt bewusst NICHT von IMessagePayload.
 /// </summary>
 public interface IQuery { }
 
@@ -70,6 +70,10 @@ public interface IAggregateHandler
 {
     IEnumerable<IEvent> HandleCommand(ICommand command);
     void ApplyEvent(IEvent @event);
+
+    /// <summary>Die direkte Abfrage (Plan Pub/Sub-Neustrukturierung §2.6): die <c>Frage</c> des Deciders zur Query, nur lesend auf den Zustand —
+    /// derselbe Stand, auf dem der nächste Command entschieden würde.</summary>
+    IQueryResponse Frage(IQuery query);
 }
     
 public interface IAggregateHandlerFactory

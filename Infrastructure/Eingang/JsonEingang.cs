@@ -19,9 +19,10 @@ namespace Infrastructure.Eingang;
 /// Einblick-Port und nur mit <c>Transport:JsonEingang</c> (Sim an, Prod aus):
 /// <list type="bullet">
 /// <item><c>POST /eingang/command</c>, <c>/eingang/query</c> — als Akteur: Token im Header <c>akteur-token</c> → <see cref="AkteurTor"/> →
-///   Aggregat bzw. Reader. Derselbe Weg wie gRPC (Befugnis, Akteur im Envelope, Wirker <c>akteur:A</c>), nur ohne Proto: der Typ kommt über
+///   Aggregat bzw. Reader oder Aggregat. Derselbe Weg wie gRPC (Befugnis, Akteur im Envelope, Wirker <c>akteur:A</c>), nur ohne Proto: der Typ kommt über
 ///   die generierte Registry, die Felder über den generierten Wire-Kontext (keine Reflection). Die Antwort auf einen Command nennt Ausgang und
-///   Versionen; mit <c>"zeigeEvents": true</c> dazu die geschriebenen Events, gelesen aus dem Log.</item>
+///   Versionen; mit <c>"zeigeEvents": true</c> dazu die geschriebenen Events, gelesen aus dem Log. Die Antwort auf eine Query nennt den Stand je
+///   gezeigter Id (<c>staende</c>) — fragt sie ein Aggregat, seine Version als OCC-Stand.</item>
 /// <item><c>GET /eingang/auftraege</c>, <c>POST /eingang/ergebnis</c> — Laufort <c>Hand</c>: die Werkbank beantwortet die Eingänge einer Funktion
 ///   (<see cref="HandAusfuehrer"/>).</item>
 /// </list>
@@ -123,11 +124,13 @@ public static class JsonEingang
             if (!AkteurTor.Darf(akteur, typ!))
                 return Results.Json(new { ok = false, abgelehnt = $"Akteur '{akteur!.Name}' darf {typ!.Name} nicht (kein IDarf<{typ.Name}>)" }, Json, statusCode: 403);
             if (!Anwendung.QueryTypen.Contains(typ!))
-                return Results.Json(new { ok = false, fehler = $"{typ!.Name} beantwortet kein Reader des Systems" }, Json, statusCode: 400);
+                return Results.Json(new { ok = false, fehler = $"{typ!.Name} beantwortet kein Reader und kein Aggregat des Systems" }, Json, statusCode: 400);
             try
             {
                 var antwort = await sp.GetRequiredService<IQueryDienst>().ExecuteAsync((IQuery)nachricht!);
-                return Results.Json(new { ok = true, antwort = Darstellung(antwort.Data) }, Json);
+                // Der Stand je gezeigter Id — bei einer Frage an ein Aggregat seine Version, der OCC-Stand für den nächsten Command (Plan §2.6).
+                var staende = (antwort.Deps ?? []).Select(d => new { id = d.Id, aggregat = d.AggregateType, version = d.Version });
+                return Results.Json(new { ok = true, antwort = Darstellung(antwort.Data), staende }, Json);
             }
             catch (Exception e) { return Results.Json(new { ok = false, fehler = e.Message }, Json, statusCode: 500); }
         });

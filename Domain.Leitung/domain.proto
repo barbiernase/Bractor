@@ -631,6 +631,10 @@ message TrainingslaufNichtGefundenDto {
 // ============================================================================
 // QUERY PAYLOADS
 // ============================================================================
+message HoleBildPaarStandDto {
+    string paar = 1;
+}
+
 message HoleDatensaetzeDto {
     // Keine Parameter
 }
@@ -773,6 +777,17 @@ message TrainingslaufAntwortDto {
     EndmetrikenDto endmetriken = 10;
     string fehlergrund = 11;
     int64 startzeit = 12;
+}
+
+message BildPaarStandDto {
+    string paar = 1;
+    bool komplett = 2;
+    string label = 3;
+    bool inspiziert = 4;
+}
+
+message BildPaarUnbekanntDto {
+    string paar = 1;
 }
 
 message DatensaetzeFuerPaarDto {

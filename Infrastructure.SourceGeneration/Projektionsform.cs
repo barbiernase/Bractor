@@ -11,7 +11,8 @@ namespace Infrastructure.SourceGeneration
     /// Die EINE Lesart von Projektion und Reader (Plan Pub/Sub-Neustrukturierung §3.3) — für die Batch-Kinds und den Weckplan (eine Erkennung für
     /// beide, FB-12), den Query-Dienst, die Analyzer, die Lage-Regeln und den Extractor. Nur Code-Fakten: die Marker <c>IProjektion</c> und
     /// <c>IReader</c>, die Methoden <c>Auf</c> bzw. <c>Frage</c> und ihre Signaturen, die Store-Klasse eines Stores. Verglichen wird über volle
-    /// Namen, nie über Symbol-Identität — so liest sie auch Typen aus anderen Compilations.
+    /// Namen, nie über Symbol-Identität — so liest sie auch Typen aus anderen Compilations. Dazu die Frage an ein Aggregat (§2.6): die
+    /// <c>Frage</c> im Decider — eine Query hat genau ein Ziel, einen Reader oder ein Aggregat (R4).
     /// </summary>
     internal static class Projektionsform
     {
@@ -57,6 +58,18 @@ namespace Infrastructure.SourceGeneration
             public bool OneOf;
             /// <summary>Die möglichen Antwort-Typen (ein konkreter Typ oder die Typen des <c>OneOf</c>).</summary>
             public List<INamedTypeSymbol> Antworten = new List<INamedTypeSymbol>();
+            /// <summary>Nur an ein Aggregat: das <c>Id&lt;TAggregat&gt;</c>-Glied der Query — daran geht sie an ihr Aggregat.</summary>
+            public string? IdGlied;
+        }
+
+        /// <summary>Die Fragen eines Aggregats (§2.6): je Query eine <c>Frage(TQuery q)</c> im Decider, synchron, nur lesend auf seinen Zustand.</summary>
+        internal sealed class Aggregatfragen
+        {
+            public INamedTypeSymbol Decider = null!;
+            public INamedTypeSymbol State = null!;
+            public List<Frage> Fragen = new List<Frage>();
+            public List<(string Text, Location Ort)> Fehler = new List<(string, Location)>();
+            public List<(INamedTypeSymbol Query, Location Ort)> Doppelt = new List<(INamedTypeSymbol, Location)>();
         }
 
         internal sealed class Reader
@@ -206,6 +219,12 @@ namespace Infrastructure.SourceGeneration
                     return null;
                 }
             }
+            return LiesAntwort(m, f, ort, fehler) ? f : null;
+        }
+
+        /// <summary>Die Rückgabe einer Frage: Antwort oder <c>OneOf&lt;…&gt;</c> konkreter Typen mit <c>IQueryResponse</c>, auch als Task.</summary>
+        private static bool LiesAntwort(IMethodSymbol m, Frage f, Location ort, List<(string, Location)> fehler)
+        {
             var rueck = m.ReturnType as INamedTypeSymbol;
             if (rueck != null && rueck.IsGenericType && rueck.TypeArguments.Length == 1
                 && (Name(rueck) == "System.Threading.Tasks.Task`1" || Name(rueck) == "System.Threading.Tasks.ValueTask`1"))
@@ -216,7 +235,7 @@ namespace Infrastructure.SourceGeneration
             if (rueck == null || m.ReturnsVoid || Name(rueck) == "System.Threading.Tasks.Task" || Name(rueck) == "System.Threading.Tasks.ValueTask")
             {
                 fehler.Add(($"'{m.Name}' gibt keine Antwort zurück — eine Frage liefert eine Antwort oder OneOf<…> (auch als Task)", ort));
-                return null;
+                return false;
             }
             if (rueck.IsGenericType && Name(rueck).StartsWith(A + "OneOf`"))
             {
@@ -228,9 +247,62 @@ namespace Infrastructure.SourceGeneration
                 if (a.TypeKind == TypeKind.Interface || a.IsAbstract || !Hat(a, A + "IQueryResponse"))
                 {
                     fehler.Add(($"die Antwort '{a.ToDisplayString()}' ist kein konkreter Typ mit IQueryResponse — eine Antwort reist über die Leitung", ort));
-                    return null;
+                    return false;
                 }
-            return f;
+            return true;
+        }
+
+        /// <summary>Ein Decider: eine Klasse mit <c>IDecider&lt;TState&gt;</c> — dann ihr State, sonst <c>null</c>.</summary>
+        public static INamedTypeSymbol? StateVonDecider(INamedTypeSymbol t)
+        {
+            if (t.TypeKind != TypeKind.Class) return null;
+            var d = t.AllInterfaces.FirstOrDefault(i => i.IsGenericType && Name(i) == A + "IDecider`1");
+            return d?.TypeArguments[0] as INamedTypeSymbol;
+        }
+
+        /// <summary>
+        /// Die Fragen eines Deciders (§2.6): <c>Frage(TQuery q)</c> → Antwort oder <c>OneOf&lt;…&gt;</c>, synchron (der Aggregat-Actor antwortet im Turn
+        /// aus seinem Zustand), ohne Fähigkeiten. Die Query trägt genau ein <c>Id&lt;TAggregat&gt;</c>-Glied — daran wird sie geroutet.
+        /// </summary>
+        public static Aggregatfragen LiesAggregatfragen(INamedTypeSymbol decider, INamedTypeSymbol state)
+        {
+            var a = new Aggregatfragen { Decider = decider, State = state };
+            var ort = decider.Locations.FirstOrDefault() ?? Location.None;
+            var gesehen = new HashSet<string>();
+            foreach (var m in decider.GetMembers(Abstractions.Projektionsvertrag.Frage).OfType<IMethodSymbol>().Where(m => m.MethodKind == MethodKind.Ordinary))
+            {
+                var mOrt = m.Locations.FirstOrDefault() ?? ort;
+                if (m.DeclaredAccessibility != Accessibility.Public || m.IsStatic || m.IsGenericMethod)
+                {
+                    a.Fehler.Add(($"'{m.Name}' ist {(m.IsStatic ? "statisch" : m.IsGenericMethod ? "generisch" : "nicht öffentlich")} — eine Frage ist eine öffentliche, "
+                        + "nicht generische Instanz-Methode", mOrt));
+                    continue;
+                }
+                if (m.Parameters.Length != 1 || m.Parameters[0].Type is not INamedTypeSymbol query || query.TypeKind == TypeKind.Interface || !Hat(query, A + "IQuery"))
+                {
+                    a.Fehler.Add(("eine Frage an ein Aggregat nimmt genau einen Parameter, ihre Query (ein konkreter Typ mit IQuery) — sie liest nur seinen Zustand", mOrt));
+                    continue;
+                }
+                var f = new Frage { Methode = m, Query = query };
+                f.Parameter.Add(("q", query));
+                if (!LiesAntwort(m, f, mOrt, a.Fehler)) continue;
+                if (f.Huelle != "")
+                {
+                    a.Fehler.Add(($"'{m.Name}' gibt einen {f.Huelle} zurück — eine Frage an ein Aggregat antwortet synchron aus seinem Zustand (im Turn des Actors)", mOrt));
+                    continue;
+                }
+                var ids = Glieder(query).Where(g => IstId(g.Typ) && Name(((INamedTypeSymbol)g.Typ).TypeArguments[0]) == Name(state)).Select(g => g.Name).ToList();
+                if (ids.Count != 1)
+                {
+                    a.Fehler.Add(($"die Query '{query.Name}' trägt {(ids.Count == 0 ? "kein Glied" : ids.Count + " Glieder")} Id<{state.Name}> — eine Frage an ein Aggregat "
+                        + "geht an genau eine Instanz, die ein Glied Id<TAggregat> nennt", mOrt));
+                    continue;
+                }
+                f.IdGlied = ids[0];
+                if (!gesehen.Add(Name(query))) { a.Doppelt.Add((query, mOrt)); continue; }
+                a.Fragen.Add(f);
+            }
+            return a;
         }
 
         // ─────────────────────────────────────────────────────────────

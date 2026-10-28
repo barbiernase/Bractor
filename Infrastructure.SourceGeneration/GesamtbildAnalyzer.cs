@@ -12,11 +12,11 @@ namespace Infrastructure.SourceGeneration;
 /// Darum laufen sie in der Laufzeit-Compilation, die alle Domänen-Projekte referenziert, und lesen nur Signaturen aus den Metadaten
 /// (Decide, Handles, Funktionen, Akteure, Clients) — Rümpfe werden nicht gebraucht (R1: der Ausgang steht in der Signatur).
 /// <list type="bullet">
-/// <item>CQRS084 (GR-QUERY) — eine Query beantwortet genau ein Reader.</item>
+/// <item>CQRS084 (GR-QUERY, R4) — eine Query hat genau ein Ziel: einen Reader oder ein Aggregat (<c>Frage</c> im Decider, Plan §2.6).</item>
 /// <item>CQRS085 (GR-MODUL-AUSGANG-OFFEN, UNUSED-EVENT; Warnung) — ein Event, eine Ablehnung oder eine Response, die niemand erzeugt.</item>
 /// <item>CQRS106 (R20, GR-HINWEIS-NETZ; Fehler) — eine Funktion hört einen Hinweis, den im Hinweis-Netz niemand erzeugt (kein Decide, keine Funktion
 ///   nennt ihn in der Signatur, kein Client sendet ihn): ihre Adresse bekäme ihn nie (Plan Pub/Sub-Neustrukturierung §2.9).</item>
-/// <item>CQRS086 (GR-MODUL-EINGANG-OFFEN; Warnung) — ein Command ohne Decider, eine Query ohne Reader.</item>
+/// <item>CQRS086 (GR-MODUL-EINGANG-OFFEN; Warnung) — ein Command ohne Decider, eine Query ohne Reader und ohne Aggregat.</item>
 /// <item>CQRS087 (GR-GETRAGEN; Warnung) — eine Funktion als Schnittstelle ohne Umsetzung im Host, die kein Client trägt (<c>ITraegt</c>): sie läuft
 ///   nur mit einer Bindung von Hand (R17), sonst ist sie ein Boot-Fehler.</item>
 /// </list>
@@ -31,8 +31,8 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
     private static DiagnosticDescriptor D(string id, string titel, string text, DiagnosticSeverity s) =>
         new(id, titel, text, "CQRS.Gesamtbild", s, isEnabledByDefault: true);
 
-    private static readonly DiagnosticDescriptor Query = D(QueryId, "Query mit mehreren Readern",
-        "'{0}': die Query beantworten {1} Reader ({2}) — genau einer (GR-QUERY)", DiagnosticSeverity.Error);
+    private static readonly DiagnosticDescriptor Query = D(QueryId, "Query mit mehreren Zielen",
+        "'{0}': die Query beantworten {1} Ziele ({2}) — genau eines, ein Reader oder ein Aggregat (R4, GR-QUERY)", DiagnosticSeverity.Error);
     private static readonly DiagnosticDescriptor AusgangOffen = D(AusgangOffenId, "Ausgang ohne Erzeuger",
         "'{0}' ({1}) erzeugt niemand — {2} (GR-MODUL-AUSGANG-OFFEN)", DiagnosticSeverity.Warning);
     private static readonly DiagnosticDescriptor EingangOffen = D(EingangOffenId, "Eingang ohne Konsument",
@@ -88,23 +88,36 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         var erzeugt = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
         var imNetz = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);   // was ins Hinweis-Netz gelangt: Ausgaben von Decide und Funktionen
         var entschieden = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
-        var readerJeQuery = new Dictionary<ITypeSymbol, List<string>>(SymbolEqualityComparer.Default);
+        var zieleJeQuery = new Dictionary<ITypeSymbol, List<string>>(SymbolEqualityComparer.Default);
+        void Ziel(ITypeSymbol query, string ziel)
+        {
+            if (!zieleJeQuery.TryGetValue(query, out var l)) zieleJeQuery[query] = l = new List<string>();
+            l.Add(ziel);
+        }
 
         foreach (var t in typen.Where(t => !t.IsAbstract || t.TypeKind == TypeKind.Interface))
         {
             if (t.TypeKind == TypeKind.Class && Generisch(t, iDecider))
+            {
                 foreach (var m in Methoden(t, Abstractions.Aggregatvertrag.Decide))
                 {
                     entschieden.Add(m.Parameters[0].Type);
                     erzeugt.UnionWith(Faelle(m.ReturnType));
                     imNetz.UnionWith(Faelle(m.ReturnType));
                 }
+                // Die Fragen an das Aggregat (Plan §2.6, dieselbe Lesart wie Generator und Extractor): Ziel der Query, Erzeuger der Antworten.
+                if (Projektionsform.StateVonDecider(t) is { } state)
+                    foreach (var f in Projektionsform.LiesAggregatfragen(t, state).Fragen)
+                    {
+                        Ziel(f.Query, "Aggregat " + state.Name);
+                        erzeugt.UnionWith(f.Antworten);
+                    }
+            }
             // Ein Reader (Projektionsform, eine Lesart mit Generator und Extractor): die Antworten jeder Frage.
             if (Projektionsform.IstReader(t))
                 foreach (var f in Projektionsform.LiesReader(t).Fragen)
                 {
-                    if (!readerJeQuery.TryGetValue(f.Query, out var l)) readerJeQuery[f.Query] = l = new List<string>();
-                    l.Add(t.Name);
+                    Ziel(f.Query, "Reader " + t.Name);
                     erzeugt.UnionWith(f.Antworten);
                 }
             if (t.TypeKind == TypeKind.Interface && iFunktion != null && IstT(t, iFunktion) && !SymbolEqualityComparer.Default.Equals(t, iFunktion))
@@ -136,9 +149,9 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         {
             if (IstT(t, iQuery))
             {
-                var r = readerJeQuery.TryGetValue(t, out var l) ? l : new List<string>();
+                var r = zieleJeQuery.TryGetValue(t, out var l) ? l : new List<string>();
                 if (r.Count > 1) ctx.ReportDiagnostic(Diagnostic.Create(Query, Location.None, t.Name, r.Count, string.Join(", ", r)));
-                if (r.Count == 0) ctx.ReportDiagnostic(Diagnostic.Create(EingangOffen, Location.None, t.Name, "Query", "kein Reader beantwortet sie"));
+                if (r.Count == 0) ctx.ReportDiagnostic(Diagnostic.Create(EingangOffen, Location.None, t.Name, "Query", "kein Reader und kein Aggregat beantwortet sie"));
             }
             else if (IstT(t, iCommand) && !entschieden.Contains(t))
                 ctx.ReportDiagnostic(Diagnostic.Create(EingangOffen, Location.None, t.Name, "Command", "kein Aggregat entscheidet ihn (Decide)"));
@@ -155,7 +168,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                 ctx.ReportDiagnostic(Diagnostic.Create(AusgangOffen, Location.None, t.Name, IstT(t, iTransient) ? "Ablehnung/Hinweis" : "Event",
                     "kein Decide, keine Funktion und kein Akteur nennt es in seiner Signatur"));
             else if (IstT(t, iResponse) && !erzeugt.Contains(t) && !alsFeld.Contains(t))
-                ctx.ReportDiagnostic(Diagnostic.Create(AusgangOffen, Location.None, t.Name, "Response", "keine Frage eines Readers nennt sie in ihrer Signatur"));
+                ctx.ReportDiagnostic(Diagnostic.Create(AusgangOffen, Location.None, t.Name, "Response", "keine Frage eines Readers oder Aggregats nennt sie in ihrer Signatur"));
         }
 
         // R20: jeder Hinweis, den eine Funktion hört, hat einen Erzeuger im Hinweis-Netz (sonst bekäme ihre Adresse ihn nie).

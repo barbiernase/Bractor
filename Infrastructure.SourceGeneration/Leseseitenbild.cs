@@ -10,13 +10,15 @@ namespace Infrastructure.SourceGeneration
     /// <summary>
     /// Die Leseseite einer Anwendung, wie die Komposition sie sieht (nur dort sind Projektionen, Reader und Store-Klassen zugleich sichtbar):
     /// Projektionen und Reader in ihrer Lesart (<see cref="Projektionsform"/>), je Fähigkeit die Store-Klassen, die sie implementieren, je
-    /// Projektion ihre Stores und je Frage die Projektionen dahinter (die in dieselben Stores schreiben).
+    /// Projektion ihre Stores und je Frage die Projektionen dahinter (die in dieselben Stores schreiben). Dazu die Fragen an Aggregate (Plan §2.6):
+    /// eine Query geht an einen Reader oder an ein Aggregat (R4).
     /// </summary>
     internal sealed class Leseseitenbild
     {
         public List<Projektionsform.Projektion> Projektionen = new List<Projektionsform.Projektion>();
         public List<Projektionsform.Reader> Reader = new List<Projektionsform.Reader>();
         public List<INamedTypeSymbol> StoreKlassen = new List<INamedTypeSymbol>();
+        public List<Projektionsform.Aggregatfragen> Aggregate = new List<Projektionsform.Aggregatfragen>();
 
         public static Leseseitenbild Lies(Compilation c)
         {
@@ -28,6 +30,8 @@ namespace Infrastructure.SourceGeneration
                 else if (t.TypeKind == TypeKind.Class && !t.IsAbstract
                          && t.AllInterfaces.Any(i => Projektionsform.IstSchreibFaehigkeit(i) || Projektionsform.IstLeseFaehigkeit(i)))
                     b.StoreKlassen.Add(t);
+                else if (Projektionsform.StateVonDecider(t) is { } state && Projektionsform.LiesAggregatfragen(t, state) is { Fragen.Count: > 0 } fragen)
+                    b.Aggregate.Add(fragen);
             }
             return b;
         }

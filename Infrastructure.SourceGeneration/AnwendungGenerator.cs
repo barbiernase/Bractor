@@ -93,6 +93,12 @@ namespace Infrastructure.SourceGeneration
                 "string CommandDiskriminator(ICommand value) => {0}.CommandDiskriminator(value)",
                 "void WriteCommand(Utf8JsonWriter writer, ICommand value) => {0}.WriteCommand(writer, value)",
                 "ICommand ReadCommand(string diskriminator, ref Utf8JsonReader reader) => {0}.ReadCommand(diskriminator, ref reader)",
+                "string QueryDiskriminator(IQuery value) => {0}.QueryDiskriminator(value)",
+                "void WriteQuery(Utf8JsonWriter writer, IQuery value) => {0}.WriteQuery(writer, value)",
+                "IQuery ReadQuery(string diskriminator, ref Utf8JsonReader reader) => {0}.ReadQuery(diskriminator, ref reader)",
+                "string AntwortDiskriminator(IQueryResponse value) => {0}.AntwortDiskriminator(value)",
+                "void WriteAntwort(Utf8JsonWriter writer, IQueryResponse value) => {0}.WriteAntwort(writer, value)",
+                "IQueryResponse ReadAntwort(string diskriminator, ref Utf8JsonReader reader) => {0}.ReadAntwort(diskriminator, ref reader)",
             });
             Tabelle(sb, "UpcastingTabelle", "IUpcastingTabelle", "global::Infrastructure.Serialization.GeneratedEventUpcasting",
                 new[] { "IReadOnlyList<(Type Typ, string Diskriminator)> Registrierungen", "IReadOnlyDictionary<Type, string[]> Herkunft" }, new[]

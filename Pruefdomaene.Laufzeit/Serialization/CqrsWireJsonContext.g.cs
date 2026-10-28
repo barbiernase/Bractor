@@ -24,6 +24,8 @@ namespace Infrastructure.Serialization;
         typeof(IEventJsonConverter),
         typeof(ICommandJsonConverter),
         typeof(CommandModusJsonConverter),
+        typeof(IQueryJsonConverter),
+        typeof(IQueryResponseJsonConverter),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Abrechnung.Kundenkonto>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Abrechnung.Rechnung>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Auftrag.Auftrag>),
@@ -36,6 +38,8 @@ namespace Infrastructure.Serialization;
 // ── Framework: Wire-Hüllen (IWireMessage) ──
 [JsonSerializable(typeof(CommandEnvelope))]
 [JsonSerializable(typeof(CommandResult))]
+[JsonSerializable(typeof(Infrastructure.Aggregate.ActorSystem.AggregatFrage))]
+[JsonSerializable(typeof(Infrastructure.Aggregate.ActorSystem.AggregatAntwort))]
 [JsonSerializable(typeof(Wake))]
 [JsonSerializable(typeof(WakeAck))]
 [JsonSerializable(typeof(EventEnvelope))]
@@ -97,11 +101,14 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.BelegeKontingent))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.BelegungAbgelehnt))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.EntlasteKontingent))]
+[JsonSerializable(typeof(global::Pruefdomaene.Kontingent.HoleKontingent))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentBelegt))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentEingerichtet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentEntlastet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentExistiertBereits))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentNichtGefunden))]
+[JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentStand))]
+[JsonSerializable(typeof(global::Pruefdomaene.Kontingent.KontingentUnbekannt))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.RichteKontingentEin))]
 [JsonSerializable(typeof(global::Pruefdomaene.Messung.AusreisserGemeldet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Messung.ErfasseMesswert))]

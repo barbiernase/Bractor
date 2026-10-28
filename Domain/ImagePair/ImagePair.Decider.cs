@@ -7,6 +7,16 @@ public partial class ImagePair
     public partial class Decider : IDecider<ImagePair>
     {
         // ═══════════════════════════════════════════════════
+        // DIREKTE ABFRAGE (Plan Pub/Sub-Neustrukturierung §2.6)
+        // ═══════════════════════════════════════════════════
+
+        /// <summary>Der exakte Stand des Paars — nur lesend; die Version hängt das Framework an.</summary>
+        public OneOf<BildPaarStand, BildPaarUnbekannt> Frage(HoleBildPaarStand q) =>
+            this.State.Version == 0
+                ? new BildPaarUnbekannt(q.Paar)
+                : new BildPaarStand(q.Paar, this.State.IstKomplett, this.State.MenschBildpaarLabel, this.State.IstInspiziert);
+
+        // ═══════════════════════════════════════════════════
         // LIFECYCLE
         // ═══════════════════════════════════════════════════
 

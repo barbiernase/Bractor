@@ -175,6 +175,10 @@ public static class Sonde
                 S(o, "event"))));
         foreach (var a in A(b, "applier").Where(a => sondenAggregate.Contains(S(a, "aggregat"))))
             z.Add($"apply {S(a, "aggregat")}.{S(a, "event")}");
+        // Direkte Abfrage (Plan §2.6): die Fragen im Decider — Query und Antworten aus der Signatur.
+        foreach (var a in A(b, "aggregate").Where(Sonde))
+            foreach (var f in A(a, "fragen"))
+                z.Add($"frage {S(a, "name")}.{S(f, "query")} -> {string.Join("|", A(f, "antworten").Select(x => (string?)x))}");
         string Konstruktor(JsonNode? n) => "(" + string.Join(", ", A(n, "konstruktor").Select(p => $"{S(p, "name")}:{S(p, "typ")}")) + ")";
         // Funktionen: Klasse oder Schnittstelle (mit Zustand und einer Adresse, Plan §2.9), je Eingang Herkunft/Hinweis, Ausgaben (Strom; keine =
         //   „lernt“), Lese-Fähigkeiten; Konstruktor, Umsetzungen.

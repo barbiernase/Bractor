@@ -70,6 +70,7 @@ public static class Scaffolder
         // Neue Karten in das Projekt ihrer Rolle (docs/07): Namespace = Projekt + Bereich, Datei nach der Tabelle.
         modell = Strukturort.Normalisiere(modell);
         var ergebnisse = Strukturort.Funktionsergebnisse(modell);
+        var anAggregat = Strukturort.Aggregatfragen(modell);
         var dateien = new List<GenerierteDatei>();
         var rahmen = modell.Rahmen;
 
@@ -82,7 +83,7 @@ public static class Scaffolder
             return g;
         }
         foreach (var rec in modell.Records.Where(x => RecordArt.Alle.Contains(x.Kind)))
-            Gruppe(rec.Datei ?? StrukturZiel(modell, rec.Namespace, Strukturort.Primitive(rec, ergebnisse), rec.Name)
+            Gruppe(rec.Datei ?? StrukturZiel(modell, rec.Namespace, Strukturort.Primitive(rec, ergebnisse, anAggregat), rec.Name)
                    ?? TypZiel(modell, rec.Namespace, Sorte(rec.Kind), rec.Name), rec.Namespace).Records.Add(rec);
         foreach (var e in modell.Enums)
             Gruppe(e.Datei ?? TypZiel(modell, e.Namespace, "enum", e.Name), e.Namespace).Enums.Add(e);

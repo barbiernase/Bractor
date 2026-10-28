@@ -46,7 +46,7 @@ public static class Grammatik
         new(Transient, "Hinweis", "◇", "höchstens einmal (verlierbar)", "flüchtig: Ablehnung, Fortschritt, Live-Anzeige (ITransientEvent)"),
         new(Frist, "Frist", "⏳", "durabel; feuert mindestens einmal, wirkt genau einmal", "Zeit aus dem Decide eines Aggregats — die Uhr macht daraus den Command an dasselbe Aggregat"),
         new(Query, "Query", "?", "synchron, wirkt nicht", "Frage"),
-        new(Response, "Antwort", "↩", "synchron", "Rückgabe eines Readers"),
+        new(Response, "Antwort", "↩", "synchron; trägt den Stand der gezeigten Ids", "Rückgabe eines Readers oder eines Aggregats (dann mit seiner Version als OCC-Stand)"),
         new(Faehigkeit, "Fähigkeit", "⚙", "als Parameter von Auf bzw. Frage", "Store-Funktion (Lesen/Schreiben)"),
         new(Quelle, "Quell-Nachricht", "⛲", "durabel (genau einmal je Kennung)", "Anstoß von außen (Datei, Webhook …) — ein Event, das Funktionen und Projektionen hören"),
         new(Dienst, "Dienst", "🧩", "im Konstruktor (gebunden nach der Umgebung)", "Technik hinter einer Funktion (IDienst) — keine Nachricht, eine Abhängigkeit"),
@@ -105,13 +105,19 @@ public static class Grammatik
             [Gen("CQRS010", "Infrastructure.SourceGeneration/CommandAggregateMapGenerator.cs"),
              new("laufzeit", null, "Infrastructure/Aggregate/ActorSystem/AggregateActorBase.cs (Fristen: eine fremde Frist schreibt nichts)"),
              new("laufzeit", null, "Infrastructure/Uhr/UhrActor.cs (fällig senden, nach entschiedenem Ausgang austragen)")]),
-        new("GR-QUERY", "Query → genau ein Reader", "Eine Query beantwortet genau ein Reader.", "error",
-            [An("CQRS084", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (mehrere Reader)"), An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (kein Reader)")]),
+        new("GR-QUERY", "Query → genau ein Ziel: Reader oder Aggregat", "Eine Query hat genau ein Ziel (R4): einen Reader (Frage über Lese-Fähigkeiten, "
+            + "der Stand der Projektionen dahinter) oder ein Aggregat (Frage im Decider, nur lesend auf seinen Zustand; die Query nennt es mit genau einem "
+            + "Glied Id<TAggregat>, der Actor antwortet im Turn auf dem committeten Stand — exakt dem, auf dem der nächste Command entschieden würde; die "
+            + "Antwort trägt seine Version als OCC-Stand, Plan §2.6).", "error",
+            [An("CQRS084", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (mehrere Ziele: Reader und/oder Aggregate)"),
+             An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (kein Reader, kein Aggregat)"),
+             An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Frage an ein Aggregat: eine Query, synchron, genau ein Glied Id<TAggregat>)")]),
         new("GR-FAEHIGKEIT", "Fähigkeit → genau ein Store", "Eine Fähigkeit (Interface mit genau einer Funktion) gehört zu genau einem Store "
             + "(eine Implementierung); Auf und Frage nehmen sie als Parameter.", "error",
             [Gen("CQRS053", "Projections.SourceGeneration/ProjectionServicesGenerator.cs"), An("CQRS051", "Domain.SourceGeneration (FaehigkeitAnalyzer)")]),
         // Erzeugung: Baustein-Ausgang → Sorte
-        new("GR-AUS-AGGREGAT", "Aggregat erzeugt Events", "Ein Aggregat (Decide) erzeugt Events, Hinweise und Fristen — keine Commands.", "error",
+        new("GR-AUS-AGGREGAT", "Aggregat erzeugt Events", "Ein Aggregat (Decide) erzeugt Events, Hinweise und Fristen — keine Commands; auf eine "
+            + "direkte Query (Frage) Antworten.", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)")]),
         new("GR-AUS-PROJEKTION", "Projektion erzeugt keine Nachricht", "Eine Projektion wirkt nur in ihrem Store (Schreib-Fähigkeiten genau eines Stores, R9) "
             + "und gibt nichts aus (Auf liefert Task) — was auf ein Event hin etwas sendet, ist eine Funktion.", "error",
@@ -231,7 +237,7 @@ public static class Grammatik
             + "hat, wird von mindestens einem Client getragen (ITraegt<F>) — sonst läuft sie nur mit einer Bindung von Hand.", "warning",
             [An("CQRS087", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Warnung — Funktion ohne Träger)")]),
         new("GR-MODUL-EINGANG-OFFEN", "Eingang ohne Konsument", "Ein Command oder eine Query, die niemand konsumiert — offener Eingang des Moduls.", "warning",
-            [An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Command ohne Decider, Query ohne Reader)")]),
+            [An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Command ohne Decider, Query ohne Reader und ohne Aggregat)")]),
         new("GR-MODUL-AUSGANG-OFFEN", "Ausgang ohne Erzeuger", "Ein Event, eine Ablehnung oder eine Response, die niemand erzeugt — offener Ausgang des Moduls.", "warning",
             [An("CQRS085", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Event/Ablehnung/Response ohne Erzeuger)")]),
     ];
@@ -243,7 +249,7 @@ public static class Grammatik
         new(Event, Projektion, Beliebig, "GR-EVENT"), new(Event, Funktion, Beliebig, "GR-EVENT"),
         new(Event, Aggregat, GenauEins, "GR-FALTUNG"),
         new(Transient, Funktion, Beliebig, "GR-TRANSIENT"),
-        new(Query, Reader, GenauEins, "GR-QUERY"),
+        new(Query, Reader, GenauEins, "GR-QUERY"), new(Query, Aggregat, GenauEins, "GR-QUERY"),
         new(Faehigkeit, Projektion, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Reader, Beliebig, "GR-FAEHIGKEIT"),
         new(Faehigkeit, Funktion, Beliebig, "GR-FUNKTION-FORM"),
         new(Dienst, Funktion, Beliebig, "GR-DIENST"), new(Dienst, DienstImpl, Beliebig, "GR-DIENST"),
@@ -256,7 +262,7 @@ public static class Grammatik
     [
         new(Aggregat, Event, "GR-AUS-AGGREGAT"), new(Aggregat, Transient, "GR-AUS-AGGREGAT"), new(Aggregat, Frist, "GR-AUS-AGGREGAT"),
         new(Funktion, Command, "GR-FUNKTION-FORM"), new(Funktion, Event, "GR-FUNKTION-FORM"), new(Funktion, Transient, "GR-FUNKTION-FORM"),
-        new(Reader, Response, "GR-AUS-READER"),
+        new(Reader, Response, "GR-AUS-READER"), new(Aggregat, Response, "GR-AUS-AGGREGAT"),
         new(Store, Faehigkeit, "GR-FAEHIGKEIT"),
         new(DienstImpl, Dienst, "GR-DIENST"),
         new(Aussenwelt, Command, "GR-COMMAND"), new(Aussenwelt, Query, "GR-QUERY"),

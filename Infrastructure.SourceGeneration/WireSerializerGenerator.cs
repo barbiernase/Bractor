@@ -37,7 +37,9 @@ namespace Infrastructure.SourceGeneration
             var iWire = compilation.GetTypeByMetadataName("Abstractions.IWireMessage");
             var iCommand = compilation.GetTypeByMetadataName("Abstractions.ICommand");
             var iEvent = compilation.GetTypeByMetadataName("Abstractions.IEvent");
-            if (iWire == null || iCommand == null || iEvent == null)
+            var iQuery = compilation.GetTypeByMetadataName("Abstractions.IQuery");
+            var iAntwort = compilation.GetTypeByMetadataName("Abstractions.IQueryResponse");
+            if (iWire == null || iCommand == null || iEvent == null || iQuery == null || iAntwort == null)
                 return;
 
             var all = new List<INamedTypeSymbol>();
@@ -47,6 +49,9 @@ namespace Infrastructure.SourceGeneration
             var wire = new List<INamedTypeSymbol>();
             var commands = new List<INamedTypeSymbol>();
             var events = new List<INamedTypeSymbol>();
+            // Queries und Antworten reisen geschachtelt in der Frage an ein Aggregat (AggregatFrage/AggregatAntwort, Plan §2.6).
+            var queries = new List<INamedTypeSymbol>();
+            var antworten = new List<INamedTypeSymbol>();
 
             foreach (var t in all)
             {
@@ -57,11 +62,17 @@ namespace Infrastructure.SourceGeneration
                     commands.Add(t);
                 if (ifaces.Contains(iEvent, SymbolEqualityComparer.Default))
                     events.Add(t);
+                if (ifaces.Contains(iQuery, SymbolEqualityComparer.Default))
+                    queries.Add(t);
+                if (ifaces.Contains(iAntwort, SymbolEqualityComparer.Default))
+                    antworten.Add(t);
             }
 
             wire.Sort(ByName);
             commands.Sort(ByName);
             events.Sort(ByName);
+            queries.Sort(ByName);
+            antworten.Sort(ByName);
 
             var full = SymbolDisplayFormat.FullyQualifiedFormat;
 
@@ -136,6 +147,10 @@ namespace Infrastructure.SourceGeneration
             EmitPoly(sb, "Event", "IEvent", events, full);
             sb.AppendLine();
             EmitPoly(sb, "Command", "ICommand", commands, full);
+            sb.AppendLine();
+            EmitPoly(sb, "Query", "IQuery", queries, full);
+            sb.AppendLine();
+            EmitPoly(sb, "Antwort", "IQueryResponse", antworten, full);
             sb.AppendLine("}");
 
             context.AddSource("GeneratedWire.g.cs", sb.ToString());

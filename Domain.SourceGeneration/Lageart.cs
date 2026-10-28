@@ -15,6 +15,7 @@ internal sealed class Lageart
     private const string A = "Abstractions.";
     private readonly HashSet<string> _ergebnisse = new();
     private readonly HashSet<string> _konfigs = new();
+    private readonly HashSet<string> _aggregatQueries = new(), _aggregatAntworten = new();
 
     /// <summary>Ist der Vertrag (Abstractions) in der Compilation? Sonst gibt es nichts zu prüfen.</summary>
     public bool Bereit { get; }
@@ -32,6 +33,13 @@ internal sealed class Lageart
             if (Infrastructure.SourceGeneration.Funktionsform.IstBaustein(t))
                 foreach (var a in Infrastructure.SourceGeneration.Funktionsform.Lies(t).Aufs)
                     foreach (var e in a.Ausgaben) _ergebnisse.Add(Name(e));
+            // Fragen an ein Aggregat (Frage im Decider, Plan §2.6): ihre Query und ihre Antworten liegen bei der Schreibseite.
+            if (Infrastructure.SourceGeneration.Projektionsform.StateVonDecider(t) is { } state)
+                foreach (var f in Infrastructure.SourceGeneration.Projektionsform.LiesAggregatfragen(t, state).Fragen)
+                {
+                    _aggregatQueries.Add(Name(f.Query));
+                    foreach (var a in f.Antworten) _aggregatAntworten.Add(Name(a));
+                }
             // Konfig-Records: was der Konstruktor einer Funktions-/Dienst-Implementierung als Konfig bindet (Ctorbindung, CQRS090).
             if (t.TypeKind == TypeKind.Class && !t.IsAbstract && (Hat(t, "IFunktion") || Hat(t, Dienst)))
                 foreach (var p in Infrastructure.SourceGeneration.Ctorbindung.Konstruktor(t)?.Parameters ?? Enumerable.Empty<IParameterSymbol>())
@@ -68,8 +76,8 @@ internal sealed class Lageart
         if (Hat(t, "IEvent")) return _ergebnisse.Contains(Name(t)) ? Projektstruktur.Primitive.FunktionsErgebnis : Projektstruktur.Primitive.Event;
         if (Hat(t, "IWertobjekt")) return Projektstruktur.Primitive.Wertobjekt;
         if (Hat(t, "IReadModel")) return Projektstruktur.Primitive.ReadModel;
-        if (Hat(t, "IQuery")) return Projektstruktur.Primitive.Query;
-        if (Hat(t, "IQueryResponse")) return Projektstruktur.Primitive.Antwort;
+        if (Hat(t, "IQuery")) return _aggregatQueries.Contains(Name(t)) ? Projektstruktur.Primitive.AggregatQuery : Projektstruktur.Primitive.Query;
+        if (Hat(t, "IQueryResponse")) return _aggregatAntworten.Contains(Name(t)) ? Projektstruktur.Primitive.AggregatAntwort : Projektstruktur.Primitive.Antwort;
         if (Hat(t, "IProjektion")) return Projektstruktur.Primitive.Projektion;
         if (Hat(t, "IReader")) return Projektstruktur.Primitive.Reader;
         if (Hat(t, "IFunktion"))

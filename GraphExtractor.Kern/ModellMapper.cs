@@ -67,6 +67,7 @@ public static class ModellMapper
                 StateZusatz = a.StateZusatz, DeciderZusatz = a.DeciderZusatz, ApplierZusatz = a.ApplierZusatz,
                 Usings = a.Usings,
                 Datei = Rel(a.Datei), DeciderDatei = Rel(a.DeciderDatei), ApplierDatei = Rel(a.ApplierDatei),
+                Fragen = a.Fragen.Select(f => new AggregatFrage { Query = Kurz(f.QueryFull), Antworten = f.AntwortenFull.Select(Kurz).ToList() }).ToList(),
             });
 
             foreach (var cmdFull in a.HandlesCommandsFull)

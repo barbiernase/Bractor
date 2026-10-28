@@ -442,7 +442,9 @@ public static class CqrsServiceExtensions
             return new ProtoActorAggregateDispatcher(system, logger, deadLetters, verteilung);
         });
         Console.WriteLine("  + IAggregateDispatcher");
-    
+        // Die direkte Abfrage eines Aggregats (Plan Pub/Sub-Neustrukturierung §2.6): der Query-Dienst fragt darüber den Aggregat-Actor.
+        services.AddSingleton<AggregatAbfrage>();
+
         Console.WriteLine();
         return services;
     }
