@@ -34,6 +34,7 @@ public sealed class NeustartTests
     {
         var u = await Testumgebung.NeuAsync(Anwendung.Pruefdomaene, "verhalten-neustart", consul: true, taktSekunden: 2);
         var host = await Hostlauf.StarteAsync(u, "host-1", Diagnose);
+        await DiagTriggerAsync(u);
         var eingang = new JsonEingang(host);
         var alteEingaenge = new List<JsonEingang>();
         try
@@ -102,6 +103,7 @@ public sealed class NeustartTests
             await Task.Delay(3000);
             await host.DisposeAsync();
             host = await Hostlauf.StarteAsync(u, "host-2", Diagnose);
+            await DiagTriggerAsync(u);
             alteEingaenge.Add(eingang);
             Volatile.Write(ref eingang, new JsonEingang(host));
             await Task.WhenAll(sender);
@@ -135,6 +137,26 @@ public sealed class NeustartTests
         long ZweimalGewirkt, string Bericht)
     {
         public bool Vollstaendig => Nachschuebe == Ausloeser && Zubuchungen == ZubuchungenSoll && Abgeschlossen == Verteilungen;
+    }
+
+    // DIAG G-17: hält jede Event-Zeile fest, deren Transaktion beim Einfügen (nach nextval) noch keine Nummer hatte.
+    private static async Task DiagTriggerAsync(Testumgebung u)
+    {
+        await using var conn = new NpgsqlConnection(u.DbVerbindung);
+        await conn.OpenAsync();
+        await using var cmd = new NpgsqlCommand($$"""
+            create table if not exists es.diag_ohne_xid (seq bigint, stream uuid, version bigint, zeit timestamptz default clock_timestamp());
+            create or replace function es.cqrs_event_zeit() returns trigger language plpgsql as $f$
+            begin
+                if pg_current_xact_id_if_assigned() is null then
+                    insert into es.diag_ohne_xid (seq, stream, version) values (new.seq_id, new.stream_id, new.version);
+                end if;
+                new.timestamp := (clock_timestamp() + coalesce((select versatz from "es".uhr where id = 1), interval '0'));
+                return new;
+            end
+            $f$;
+            """, conn);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     private static async Task<DateTime> JetztAsync(Testumgebung u)
