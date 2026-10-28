@@ -225,6 +225,41 @@ public class FunktionsZustandGarantieTests
     }
 
     [Fact]
+    public async Task Verliert_eine_Sicherung_beginnt_die_Aktivierung_neu_mit_dem_Stand_des_Gewinners()
+    {
+        // Eine zweite Aktivierung (hier: der Test) sichert dazwischen einen anderen Stand derselben Adresse. Die laufende Aktivierung verliert ihre
+        //   nächste Sicherung, beginnt neu (Bau, Laden, Lebenszyklus) und lernt auf dem Stand des Gewinners weiter — nie auf ihrem eigenen.
+        using var host = Cluster("garantie-zustand-neubeginn");
+        await host.StartAsync();
+        try
+        {
+            var stelle = Id<Messstelle>.Neu();
+            await MissAsync(host, stelle, 1);
+            await Gelernt(host, stelle, 1, "der Schätzer lernt nicht");
+
+            var staende = host.Services.GetRequiredService<IFunktionsStand>();
+            for (var versuch = 0; ; versuch++)
+            {
+                var dok = (await staende.LadeZustandAsync(ZustandsId, default))!;
+                var stand = await staende.LadeAsync(Funktionsvertrag.StandId(nameof(Schaetzer)), 0, default);
+                if (dok.Position != stand.Position) continue;
+                var json = System.Text.Json.Nodes.JsonNode.Parse(dok.Daten!)!;
+                json[nameof(Schaetzmodell.Je)]![stelle.Wert.ToString()]![nameof(Lernstand.Anzahl)] = 100;
+                var fremd = new FunktionsZustandsDokument
+                {
+                    Id = dok.Id, Funktion = dok.Funktion, Adresse = dok.Adresse, Position = dok.Position, Daten = json.ToJsonString(), Version = dok.Version,
+                };
+                try { await staende.SichereAsync(stand, fremd, default); break; }
+                catch (PartitionsKonfliktException) when (versuch < 10) { /* die Aktivierung sicherte gerade selbst — noch einmal */ }
+            }
+
+            await MissAsync(host, stelle, 2, 3);
+            await Gelernt(host, stelle, 102, "nach dem verlorenen Konflikt lernt die Aktivierung nicht auf dem Stand des Gewinners weiter");
+        }
+        finally { await host.StopAsync(); }
+    }
+
+    [Fact]
     public async Task Zwei_Sicherungen_mit_derselben_erwarteten_Version_eine_gewinnt_die_andere_verliert_ganz()
     {
         using var host = Cluster("garantie-zustand-sicherung");
