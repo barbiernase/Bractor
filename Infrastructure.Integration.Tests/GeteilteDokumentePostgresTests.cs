@@ -106,7 +106,7 @@ public class GeteilteDokumentePostgresTests
             // Vier Partitions-Leser schreiben gleichzeitig in DASSELBE Dokument → Versionsprüfung, Trennen und Wiederholung im Leser.
             await Task.WhenAll(Enumerable.Range(0, 4).Select(p => Task.Run(() => ModellLeser(es, proj, p).LaufAsync())));
 
-            (await new ModellStore(_fx.Store).GetAktivesAsync())!.ModellId
+            (await new ModellStore(_fx.Store).GetAktivesAsync())!.ModellId.Wert
                 .Should().Be(modelle[^1], $"Runde {runde}: das zuletzt aktivierte Modell");
         }
     }
