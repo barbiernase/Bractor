@@ -16,6 +16,15 @@ public static class EventStoreAbfragen
     public static string Dahinter(string schema) => $"(select seq_id from {schema}.mt_events where seq_id > $1 order by seq_id limit 1) is not null";
 
 
+    /// <summary>
+    /// Der Stand des Sequenzzählers für eine Probe des Horizonts (0, solange nie gezogen) — über <c>pg_sequence_last_value</c>, das die Seite der
+    /// Sequenz unter ihrer Puffersperre liest. Ein gewöhnliches <c>select last_value from …_sequence</c> liest ohne Sperre: schreibt ein
+    /// <c>nextval</c> gerade seinen WAL-Eintrag (jeder 32.), steht in der Seite für einen Moment der vorausgeloggte Wert, bis zu 32 über dem
+    /// zuletzt vergebenen. Eine Probe mit diesem Stand gab Sequenzen frei, die noch niemand gezogen hatte — ihre Transaktionen bekamen danach
+    /// höhere Nummern, als die Probe abwartete, und Leser rückten über ihre Events (G-17).
+    /// </summary>
+    public static string Zaehlerstand(string schema) => $"select coalesce(pg_sequence_last_value('{schema}.mt_events_sequence'), 0)";
+
     /// <summary>Die Spalten eines gelesenen Events: Daten, Typ, Identität, die Metadaten nach der Konfiguration des Stores, die Sequenz.</summary>
     public static string Events(string schema, string metadatenSpalten, string bedingung, string ordnung)
         => $"select data, type, id, stream_id, version, timestamp, {metadatenSpalten}, seq_id from {schema}.mt_events "

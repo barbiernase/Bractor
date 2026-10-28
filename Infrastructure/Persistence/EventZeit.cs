@@ -4,28 +4,21 @@ using Npgsql;
 namespace Infrastructure.Persistence;
 
 /// <summary>
-/// Die Regel jeder Event-Zeile (<c>before insert</c> auf <c>mt_events</c>), zwei Dinge, die nur die Datenbank richtig setzen kann:
-/// <list type="number">
-/// <item><b>Sequenz nach der Transaktionsnummer</b> (G-17, docs/03 §3.3): der Horizont der Vollständigkeit (<see cref="Horizont"/>) setzt voraus,
-///   dass jede Transaktion ihre Nummer hat, bevor sie eine Sequenz zieht. Martens Insert zieht <c>nextval</c> selbst — gemessen unter Last
-///   mitunter Dutzende Millisekunden vor der Nummer der Transaktion; eine Probe dazwischen sah den Zählerstand schon, die Transaktion aber noch
-///   nicht als laufend, gab die Sequenzen frei, und Leser rückten über Events, die erst danach sichtbar wurden. Die Regel holt deshalb zuerst die
-///   Nummer (<c>pg_current_xact_id()</c>, vergibt sie, falls nötig) und zieht dann die Sequenz der Zeile neu; die von Marten gezogene bleibt eine
-///   Lücke. So gilt die Voraussetzung für jede Event-Zeile, gleich welcher Weg sie schreibt.</item>
-/// <item><b>Eine Uhr für alles Fachliche</b> (G-10): den Zeitstempel setzt die Datenbank mit DERSELBEN Uhr, die <see cref="Abstractions.IDbClock"/>
-///   liest (in Sim samt Versatz), statt der Uhr des Hosts aus Martens Insert. Zeitlimits, Warte-Knoten und Fristen vergleichen so Zeit aus dem
-///   Log mit Zeit aus derselben Quelle — ohne Uhrenversatz zwischen Knoten, und ein Zeitsprung der Sim verschiebt beide gleich.</item>
-/// </list>
+/// Eine Uhr für alles Fachliche (G-10, docs/03 §3.3): den Zeitstempel eines Events setzt die Datenbank beim Einfügen, mit DERSELBEN Uhr, die
+/// <see cref="Abstractions.IDbClock"/> liest (in Sim samt Versatz). Marten schickt im Insert die Uhr des Hosts mit; eine Regel
+/// <c>before insert</c> auf <c>mt_events</c> ersetzt sie. Zeitlimits, Warte-Knoten und Fristen vergleichen so Zeit aus dem Log mit Zeit aus
+/// derselben Quelle — ohne Uhrenversatz zwischen Knoten, und ein Zeitsprung der Sim verschiebt beide gleich.
+///
 /// Weasel kennt keine Trigger, die Regel ist deshalb kein Schema-Objekt: angelegt wird sie vor dem ersten Schreiben je Store
 /// (<see cref="SicherAsync"/>) bzw. vom Migrator; ein Knoten ohne Schema-Recht (<c>AutoCreate.None</c>) prüft nur, dass sie da ist. Weasels
 /// Tabellen-Abgleich lässt Trigger stehen.
 /// </summary>
-public static class EventRegel
+public static class EventZeit
 {
     /// <summary>Die Uhr ohne Umgebung (Tests, Werkzeuge): die Zeit der Datenbank.</summary>
     public const string Datenbankzeit = "clock_timestamp()";
 
-    public const string Regel = "cqrs_event_regel";
+    public const string Regel = "cqrs_event_zeit";
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, string> Uhren = new();
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IDocumentStore, object> Da = new();
@@ -67,8 +60,7 @@ public static class EventRegel
         => AnlegenAsync(store, store.Options.Events.DatabaseSchemaName, Uhr(store), ct);
 
     /// <summary>Der Rumpf der Regel — so, wie Postgres ihn speichert (<c>pg_proc.prosrc</c>), damit ein unveränderter Stand nichts anfasst.</summary>
-    private static string Rumpf(string schema, string uhr) =>
-        $"\nbegin\n    perform pg_current_xact_id();\n    new.seq_id := nextval('\"{schema}\".mt_events_sequence');\n    new.timestamp := {uhr};\n    return new;\nend\n";
+    private static string Rumpf(string uhr) => $"\nbegin\n    new.timestamp := {uhr};\n    return new;\nend\n";
 
     /// <summary>
     /// Legt Funktion und Trigger an — nur, wenn sie fehlen oder anders lauten: ein <c>create or replace trigger</c> braucht eine Sperre auf
@@ -89,7 +81,7 @@ public static class EventRegel
             CommandText = $"""
                 set local lock_timeout = '10s';
                 select pg_advisory_xact_lock(hashtext('{schema}.{Regel}'));
-                create or replace function "{schema}".{Regel}() returns trigger language plpgsql as $f${Rumpf(schema, uhr)}$f$;
+                create or replace function "{schema}".{Regel}() returns trigger language plpgsql as $f${Rumpf(uhr)}$f$;
                 create or replace trigger {Regel} before insert on "{schema}".mt_events
                     for each row execute function "{schema}".{Regel}();
                 """,
@@ -109,7 +101,7 @@ public static class EventRegel
         cmd.Parameters.Add(new NpgsqlParameter { Value = schema });
         await using var r = await cmd.ExecuteReaderAsync(ct);
         await r.ReadAsync(ct);
-        return !r.IsDBNull(0) && r.GetString(0) == Rumpf(schema, uhr) && r.GetBoolean(1);
+        return !r.IsDBNull(0) && r.GetString(0) == Rumpf(uhr) && r.GetBoolean(1);
     }
 
     private static async Task<bool> VorhandenAsync(IDocumentStore store, string schema, CancellationToken ct)

@@ -6,10 +6,12 @@ namespace Infrastructure.Persistence;
 /// Der Horizont der Vollständigkeit (docs/03 §3.3, docs/11 §11.4): bis zu welcher globalen Sequenz jedes Event endgültig ist — committet und
 /// sichtbar oder nie (zurückgerollt, eine Lücke). Ohne Uhr: er folgt aus den Transaktionsnummern von Postgres.
 ///
-/// Eine <b>Probe</b> hält zwei Zahlen fest: den Stand des Sequenzzählers und danach die Nummer einer eigenen, kurzen Transaktion. Jede
-/// Transaktion, die eine Sequenz bis zu diesem Stand gezogen hat, hatte ihre Nummer schon vorher — das sichert die Regel jeder Event-Zeile
-/// (<see cref="EventRegel"/>: erst die Nummer, dann die Sequenz; Martens eigenes <c>nextval</c> kam unter Last mitunter vor der Nummer, G-17) —
-/// und Nummern werden aufsteigend vergeben; ihre Nummer ist also kleiner als die der Probe. Laufen keine kleineren Nummern mehr (die älteste laufende ist mindestens die der Probe), ist alles bis zum Stand
+/// Eine <b>Probe</b> hält zwei Zahlen fest: den Stand des Sequenzzählers (unter der Sperre seiner Seite gelesen, <see cref="EventStoreAbfragen.Zaehlerstand"/>
+/// — ungesperrt sah eine Probe mitunter den vorausgeloggten Wert, bis zu 32 über dem zuletzt vergebenen, G-17) und danach die Nummer einer eigenen,
+/// kurzen Transaktion. Jede
+/// Transaktion, die eine Sequenz bis zu diesem Stand gezogen hat, hatte ihre Nummer schon vorher — im Anhänge-Modus <c>Quick</c> schreibt
+/// Marten zuerst die Stream-Zeile, dann die Events mit <c>nextval</c> — und Nummern werden aufsteigend vergeben; ihre Nummer ist also kleiner
+/// als die der Probe. Laufen keine kleineren Nummern mehr (die älteste laufende ist mindestens die der Probe), ist alles bis zum Stand
 /// endgültig. Eine lange offene Transaktion hält den Horizont an, statt überholt zu werden: lieber warten als verlieren.
 ///
 /// Reine Logik, ohne Datenbank (Prüfstand); die Abfragen stellt <see cref="MartenEventStore"/>. Je Event-Store ein Horizont, geteilt von allen

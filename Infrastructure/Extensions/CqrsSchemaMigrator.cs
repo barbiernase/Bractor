@@ -34,7 +34,7 @@ public static class CqrsSchemaMigrator
         foreach (var rm in services.GetServices<Abstractions.ReadModelTyp>())
             await store.Storage.Database.EnsureStorageExistsAsync(rm.Typ, ct);
         // Die Regel für den Event-Zeitstempel (G-10) ist kein Weasel-Objekt (Weasel kennt keine Trigger): eigens anlegen.
-        await Infrastructure.Persistence.EventRegel.AnlegenAsync(store, ct);
+        await Infrastructure.Persistence.EventZeit.AnlegenAsync(store, ct);
     }
 }
 
