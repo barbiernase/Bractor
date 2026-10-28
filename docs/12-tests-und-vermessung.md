@@ -168,6 +168,11 @@ Messung A-B (A = `567cfe0` im Worktree `/opt/bractor-a`, B = `b01b789`; S1, S3; 
 S3-64 1 466 → 1 513 Teile/s (p50 632 → 561 ms), S3-8 1 334 → 1 334 (p99 76 → 56 ms), Queries und Transaktionen je Vorgang gleich. Die zusätzlichen
 Queries in S1 sind der Stand je gezeigter Id: er wird jetzt bei jeder Query gelesen, weil eine Antwort auch die Id ihrer Query zeigt (vorher nur nach
 `ctx.Track` eines gefundenen Read-Models) — `mt_doc_projectioncheckpoint` 2 837 → 12 867, die Stand-Abfrage 630 → 10 651 Aufrufe (PF-38).
+**PF-38 behoben (`b16b10a`):** liegt der Fortschritt im Postgres des Logs (Marten-Store, Fortschritt beim Framework, `IFortschrittImLog`), liest
+der Stand je Id Guard und Log in einer Abfrage. Schnelle Stufe grün; Gegenprobe (Guard-Feld falsch gelesen) rot gesehen (`LiveCommandE2ETests`:
+Stand verfehlt; `StoreKlassenE2ETests`: Read-your-writes `noch_nicht`). Neues Paar nur S1 (A = `567cfe0`, B = `b16b10a`, Ordner
+`…_server-pubsub-pf38-ab-{a,b}`, gültig, grün): 155 → 152 Paare/s, p50 2,79 → 2,80 s, p99 3,81 → 3,84 s, Queries je Vorgang 91,8 → 104 (vorher 122),
+Transaktionen gleich. Was bleibt, ist die eine Stand-Abfrage je Query (627 → 10 345) — gewollt, weil eine Antwort jetzt auch „noch nicht da“ mit Stand zeigt.
 
 Statisch gezählt:
 

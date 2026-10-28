@@ -709,9 +709,9 @@ CQRS110 (Klasse 3 ohne Erlaubnis) und Start-Prüfung `Projektionslauf.Ziel`. Rea
 Dokument-Identität kann, ergänzt `ReadModelSchluesselGenerator` die Speicher-Identität `Schluessel` (CQRS111, FB-17). CQRS108 entfällt (die Form
 sichert es). Abweichungen: (1) „neues Ziel aufbauen, dann umschalten“ leistet der `ProjectionRebuilder`; der Sim-Start schaltet sofort um
 (FB-16). (2) Eine Generation trennt eine alte Aktivierung, die nach dem Zurücksetzen noch schreibt, nicht alten Code (FB-16). (3) Die gezeigten Ids
-schließen die Query ein; damit wird der Stand je Id bei jeder Query gelesen, auch bei „nicht gefunden“ — in S1 mehr Abfragen (PF-38).
-Ergebnis (docs/12): volle Stufe grün, zehn Gegenproben rot gesehen; A-B S1 158 → 147 Paare/s (Queries je Vorgang 90,5 → 122, PF-38), S3-64 1 466 →
-1 513 Teile/s, S3-8 gleich.
+schließen die Query ein; damit wird der Stand je Id bei jeder Query gelesen, auch bei „nicht gefunden“ — dafür liest er Guard und Log in einer
+Abfrage, wo der Fortschritt im Postgres des Logs liegt (PF-38, behoben). Ergebnis (docs/12): volle Stufe grün, elf Gegenproben rot gesehen; A-B S3-64
+1 466 → 1 513 Teile/s, S3-8 gleich; S1 nach PF-38 155 → 152 Paare/s (Queries je Vorgang 91,8 → 104).
 
 ### Phase 9 · Direkte Aggregat-Abfrage (1–2 PT)
 

@@ -56,7 +56,8 @@ Frist oder ein fremdes Event kam. Vor dem Reader wartet der Query-Dienst begrenz
 so weit ist (Read-your-writes, Plan Pub/Sub-Neustrukturierung §2.7); reicht die Frist nicht, trägt die Antwort `noch_nicht`. Welche Ids eine
 Antwort zeigt, findet der Generator selbst: jedes `Id<T>`-Feld der Antwort (auch geschachtelt, in Listen) und der Query, nach der gefragt wurde;
 welche Projektionen hinter einer Frage stehen, folgt aus ihren Lese-Fähigkeiten (die Projektionen, die in denselben Store schreiben) — bei mehreren
-gilt je Stream der kleinste Stand.
+gilt je Stream der kleinste Stand. Liegt der Fortschritt im Postgres des Logs (Marten-Store, Fortschritt beim Framework), liest eine Abfrage Guard und
+Log zusammen (`IFortschrittImLog`).
 
 Nach jedem Commit, der Events anwandte, meldet der Leser „P hat die Streams S weiterverarbeitet“ an die Verteiler (`Verteilung.MeldeVerarbeitet`) —
 Mechanik nach dem Commit, die Projektion gibt dabei nichts aus. Eine Sitzung, die eine Antwort hält, die einen dieser Streams zeigt (oder, ohne
