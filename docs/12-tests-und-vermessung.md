@@ -75,8 +75,11 @@ als Vergleich je Zeile (Fälligkeits-Abfrage liest das ganze Verzeichnis).
 übersprungen** (G-5), davon Garantie 209 + 1; neu u. a. `FunktionsAktivierungTests`, `HinweisNetzTests`, `ZustandAnalyzerTests`, Zustand und eine
 Adresse in `FunktionsBausteinGeneratorTests`, A8 in `FunktionsVermittlungTests`, R20 in `GesamtbildAnalyzerTests`. Integration **61/61** (44 Garantie),
 Prüfdomäne **53/53** (48 Garantie; neu `Garantien/FunktionsZustandGarantieTests` 8 am allgemeinen Fall Messung), Verhaltens-Netz **13 grün + 3
-übersprungen** (G-12, G-13, G-14; Tests unverändert — ein Lauf war rot an `ClientVerhaltenTests.Die_Antwort_eines_Traegers…`, weil die neue Bindung
-je Adresse die Adressen abgemeldeter Träger bis zum Lease-Ablauf festhielt; behoben im Vermittler, nicht im Test), Client 30/30, Python SDK 35/35
+übersprungen** (G-12, G-13, G-14) in zwei von drei Läufen; im dritten scheiterte einmal `Nach_dem_eigenen_Command_sieht_die_naechste_Query…`
+(Lesen nach Schreiben über den Versionsindex, docs/13 G-16 — nicht von Phase 4b berührt). Eine Teständerung: `Die_Antwort_eines_Traegers…` trennt den
+Träger erst, wenn der Server seine Antworten gelesen hat (die rohe Leitung schließt hart; eine noch nicht gesendete Antwort ging verloren, seit
+abgemeldete Träger ihre Adressen sofort freigeben und der erste Träger mehr alte Eingänge auf einmal bekommt — die Zusicherung ist unverändert).
+Dazu im Vermittler: ein Träger, dessen Sitzung endet, meldet sich ab, und jede geparkte Anfrage wird bedient. Client 30/30, Python SDK 35/35
 (neu: Antwort auf einen Hinweis als Ganzes), Worker 21/21; `codegen --check`, Leitung `--check`, `--check` (0 Befunde), `--sonde` (246 Soll-Fakten mit
 dem neuen Szenario Wetterdienst, 76 Lage-Typen), `--grammatik` (mit GR-FUNKTION-ZUSTAND, GR-HINWEIS-NETZ) und `./pruefe-checkout.sh` grün.
 Gegenprobe je neuem Mechanismus per `sed` im Server-Lauf rot gesehen (13): Nachrechnen auf dem gesicherten Zustand (Prüfstand und Prüfdomäne), Laden
