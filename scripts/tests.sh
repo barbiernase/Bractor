@@ -20,7 +20,7 @@ suite() {   # suite <Projekt> [Filter]
   t0=$(zeit)
   aus=$(dotnet test "$p/$p.csproj" --no-build ${filter:+--filter "$filter"} --logger "console;verbosity=normal" 2>&1)
   # Abschluss bei „normal“: „Test Run Successful./Failed.“ und je eine Zeile Total/Passed/Failed/Skipped.
-  local zahl; zahl() { grep -E "^\s+$1( tests)?: " <<<"$aus" | tail -1 | grep -oE "[0-9]+" | head -1; }
+  local zahl; zahl() { grep -E "^\s*$1( tests)?: " <<<"$aus" | tail -1 | grep -oE "[0-9]+" | head -1; }
   local gesamt bestanden rot ueber; gesamt=$(zahl Total); bestanden=$(zahl Passed); rot=$(zahl Failed); ueber=$(zahl Skipped)
   local summe="kein Ergebnis (Build? Filter?)"
   [ -n "$gesamt" ] && summe="${bestanden:-0} grün, ${rot:-0} rot, ${ueber:-0} übersprungen von $gesamt"
