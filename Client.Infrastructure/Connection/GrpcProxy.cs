@@ -35,6 +35,7 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
     // FIX: Dictionary statt Channel für Query-Responses
     // Ermöglicht parallele Queries mit korrektem Matching
     private readonly ConcurrentDictionary<string, TaskCompletionSource<QueryResponse>> _pendingQueries = new();
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<LogSeite>> _pendingLog = new();
 
     // Serialisiert Stream-Writes: gRPC erlaubt nur EINEN ausstehenden WriteAsync
     // auf dem RequestStream. Ohne das werfen parallele Queries (Multi-Select!)
@@ -215,6 +216,30 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
     }
 
     /// <summary>
+    /// Liest das Log ab <paramref name="ab"/> (Plan Pub/Sub-Neustrukturierung §2.7): die Events, die diese Sitzung hören darf, bis zum Horizont —
+    /// wer ab <see cref="LogLesung.Bis"/> weiterliest, verpasst nichts (auch nach dem Wiederverbinden).
+    /// </summary>
+    public async Task<LogLesung> LiesLogAsync(long ab, int hoechstens = 500, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        var korrelation = Guid.NewGuid().ToString();
+        var tcs = new TaskCompletionSource<LogSeite>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _pendingLog[korrelation] = tcs;
+        try
+        {
+            await SchreibeAsync(new ClientMessage { LiesLog = new LiesLog { Korrelation = korrelation, Ab = ab, Hoechstens = hoechstens } }, ct);
+            using var registration = ct.Register(() => tcs.TrySetCanceled(ct));
+            var seite = await tcs.Task;
+            return new LogLesung(seite.Eintraege.Select(e => new LogEintragLesung(e.Position, _mapper.MapToDomain(e.Envelope))).ToList(), seite.Bis,
+                seite.Voll);
+        }
+        finally
+        {
+            _pendingLog.TryRemove(korrelation, out _);
+        }
+    }
+
+    /// <summary>
     /// Trennt die Verbindung.
     /// </summary>
     public async Task DisconnectAsync()
@@ -294,6 +319,10 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
     {
         switch (message.MessageCase)
         {
+            case ServerMessage.MessageOneofCase.LogSeite:
+                if (_pendingLog.TryGetValue(message.LogSeite.Korrelation, out var seite)) seite.TrySetResult(message.LogSeite);
+                break;
+
             case ServerMessage.MessageOneofCase.Aktualisiert:
                 foreach (var q in message.Aktualisiert.Queries)
                     await _aktualisierungen.Writer.WriteAsync(_mapper.QueryAus(q));
@@ -327,6 +356,8 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
                 {
                     errorTcs.TrySetException(new QueryException(message.Error.Code, message.Error.Message));
                 }
+                else if (!string.IsNullOrEmpty(errorCorrelationId) && _pendingLog.TryGetValue(errorCorrelationId, out var logTcs))
+                    logTcs.TrySetException(new QueryException(message.Error.Code, message.Error.Message));
                 Console.WriteLine($"[GrpcProxy] Error from server: {message.Error.Code} - {message.Error.Message}");
                 break;
                 

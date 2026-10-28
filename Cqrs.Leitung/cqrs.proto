@@ -36,7 +36,17 @@ message ClientMessage {
         FunktionenAnbieten funktionen_anbieten = 10;
         ArbeitsErgebnis arbeits_ergebnis = 11;
         ArbeitLebtMeldung arbeit_lebt = 12;
+        LiesLog lies_log = 13;
     }
+}
+
+// Verlässliches Lesen (Plan Pub/Sub-Neustrukturierung §2.7): das Log ab einer Position, gefiltert auf das, was die Sitzung hören darf, nur bis
+// zum Horizont der Vollständigkeit — wer ab „bis“ weiterliest, verpasst nichts. So führt ein Client eine Projektion bei sich, und ein Client,
+// der wieder verbindet, liest nach, was er verpasst hat; der Push bleibt die Abkürzung. ab = 0: von Anfang an.
+message LiesLog {
+    string korrelation = 1;
+    int64 ab = 2;
+    int32 hoechstens = 3;
 }
 
 message CommandRequest {
@@ -82,7 +92,22 @@ message ServerMessage {
         QueryForward query_forward = 10;
         ArbeitsAuftrag arbeits_auftrag = 11;
         Aktualisiert aktualisiert = 12;
+        LogSeite log_seite = 13;
     }
+}
+
+// Eine Seite des Logs: die Einträge nach Position geordnet; bis = die Position, ab der weiterzulesen ist (alles bis dorthin ist gelesen oder
+// gehört nicht zur Sitzung); voll = es folgt sofort mehr.
+message LogSeite {
+    string korrelation = 1;
+    repeated LogEintrag eintraege = 2;
+    int64 bis = 3;
+    bool voll = 4;
+}
+
+message LogEintrag {
+    int64 position = 1;
+    EventEnvelopeDto envelope = 2;
 }
 
 // Eine Projektion hat Streams weiterverarbeitet, die Antworten dieser Sitzung zeigen (oder, bei Antworten ohne Ids, die Projektion selbst):

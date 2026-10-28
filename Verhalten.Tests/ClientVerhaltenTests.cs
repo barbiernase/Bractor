@@ -258,6 +258,39 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
     }
 
     /// <summary>
+    /// Wiederverbinden mit Nachlesen (Plan Pub/Sub-Neustrukturierung §2.7, Abnahme Phase 7): ein Client liest das Log bis zum Horizont und trennt;
+    /// was dann geschieht, verpasst er als Push. Verbindet er wieder und liest ab seiner Position, bekommt er es — genau einmal, nur, was er
+    /// hören darf, und alles hinter seiner Position.
+    /// </summary>
+    [Fact]
+    public async Task Wer_wieder_verbindet_liest_ab_seiner_Position_nach_was_er_verpasst_hat()
+    {
+        long position;
+        await using (var vorher = await RoheLeitung.VerbindeAsync(b.Host, "Arbeitsplatz", Testumgebung.TokenArbeitsplatz))
+            position = (await vorher.LiesLogBisZumEndeAsync(0)).Bis;
+
+        var datensatz = Guid.NewGuid();
+        await using (var anderer = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenArbeitsplatz))
+            await anderer.QuittungAsync(anderer.Sende(new ErstelleDatensatz(new(datensatz), "verpasst")), Kurz);
+
+        await using var wieder = await RoheLeitung.VerbindeAsync(b.Host, "Arbeitsplatz", Testumgebung.TokenArbeitsplatz);
+        List<Cqrs.Leitung.LogEintrag> nachgelesen = [];
+        await Warte.BisAsync(async () =>
+        {
+            var (eintraege, _) = await wieder.LiesLogBisZumEndeAsync(position);
+            nachgelesen = eintraege;
+            return eintraege.Any(e => e.Envelope.AggregateId == datensatz.ToString());
+        }, Kurz, "das Verpasste kam beim Nachlesen nicht", b.Host);
+
+        nachgelesen.Should().OnlyContain(e => e.Position > position, "gelesen wird hinter der Position");
+        nachgelesen.Select(e => e.Position).Should().BeInAscendingOrder();
+        nachgelesen.Where(e => e.Envelope.AggregateId == datensatz.ToString()).Select(e => RoheLeitung.Payload(e.Envelope))
+            .Should().ContainSingle().Which.Should().BeOfType<DatensatzErstellt>();
+        nachgelesen.Select(e => e.Envelope.Payload.Typ.ToLowerInvariant()).Should().OnlyContain(t => Gehoert.Contains(t),
+            "der Client liest nur, was er hören darf");
+    }
+
+    /// <summary>
     /// Kennt der Client ein Aggregat nur aus einer Antwort — er war nicht verbunden, als es entstand, und hat keinen Push dazu gesehen —, trägt
     /// sein nächster Command die Version aus der Antwort (eine Version je Aggregat, Plan Phase 5): der Server prüft gegen sie (OCC), statt den
     /// Command ungeprüft anzunehmen, und weil keine Marke die Version verschiebt, passt sie.

@@ -41,6 +41,20 @@ class ClientMessage(betterproto.Message):
     )
     arbeits_ergebnis: "ArbeitsErgebnis" = betterproto.message_field(11, group="message")
     arbeit_lebt: "ArbeitLebtMeldung" = betterproto.message_field(12, group="message")
+    lies_log: "LiesLog" = betterproto.message_field(13, group="message")
+
+
+@dataclass(eq=False, repr=False)
+class LiesLog(betterproto.Message):
+    """
+    Verlässliches Lesen (Plan Pub/Sub-Neustrukturierung §2.7): das Log ab einer Position, gefiltert auf das, was die Sitzung hören darf, nur bis
+     zum Horizont der Vollständigkeit — wer ab „bis“ weiterliest, verpasst nichts. So führt ein Client eine Projektion bei sich, und ein Client,
+     der wieder verbindet, liest nach, was er verpasst hat; der Push bleibt die Abkürzung. ab = 0: von Anfang an.
+    """
+
+    korrelation: str = betterproto.string_field(1)
+    ab: int = betterproto.int64_field(2)
+    hoechstens: int = betterproto.int32_field(3)
 
 
 @dataclass(eq=False, repr=False)
@@ -96,6 +110,26 @@ class ServerMessage(betterproto.Message):
     query_forward: "QueryForward" = betterproto.message_field(10, group="message")
     arbeits_auftrag: "ArbeitsAuftrag" = betterproto.message_field(11, group="message")
     aktualisiert: "Aktualisiert" = betterproto.message_field(12, group="message")
+    log_seite: "LogSeite" = betterproto.message_field(13, group="message")
+
+
+@dataclass(eq=False, repr=False)
+class LogSeite(betterproto.Message):
+    """
+    Eine Seite des Logs: die Einträge nach Position geordnet; bis = die Position, ab der weiterzulesen ist (alles bis dorthin ist gelesen oder
+     gehört nicht zur Sitzung); voll = es folgt sofort mehr.
+    """
+
+    korrelation: str = betterproto.string_field(1)
+    eintraege: List["LogEintrag"] = betterproto.message_field(2)
+    bis: int = betterproto.int64_field(3)
+    voll: bool = betterproto.bool_field(4)
+
+
+@dataclass(eq=False, repr=False)
+class LogEintrag(betterproto.Message):
+    position: int = betterproto.int64_field(1)
+    envelope: "EventEnvelopeDto" = betterproto.message_field(2)
 
 
 @dataclass(eq=False, repr=False)

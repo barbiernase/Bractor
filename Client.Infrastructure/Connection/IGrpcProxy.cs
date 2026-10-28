@@ -54,6 +54,15 @@ public interface IGrpcProxy
         IReadOnlyList<StreamStand>? mindestens = null,
         CancellationToken ct = default) where TResponse : IQueryResponse;
 
+    /// <summary>Liest das Log ab einer Position — gefiltert auf das, was die Sitzung hören darf, bis zum Horizont der Vollständigkeit.</summary>
+    Task<LogLesung> LiesLogAsync(long ab, int hoechstens = 500, CancellationToken ct = default);
+
     /// <summary>Trennt die Verbindung.</summary>
     Task DisconnectAsync();
 }
+
+/// <summary>Ein Eintrag des Logs: seine Position und das Event.</summary>
+public sealed record LogEintragLesung(long Position, EventEnvelope Event);
+
+/// <summary>Eine Seite des Logs: die Einträge, die Position zum Weiterlesen, und ob sofort mehr folgt.</summary>
+public sealed record LogLesung(IReadOnlyList<LogEintragLesung> Eintraege, long Bis, bool Voll);

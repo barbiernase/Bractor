@@ -37,6 +37,7 @@ public sealed record SitzungsDienste(
     IAusgabeAblage? Ausgaben,
     Konsum Konsum,
     HinweisNetz? HinweisNetz,
+    IEventStoreRepository? Log,
     ConcurrentDictionary<string, TaskCompletionSource<Leitung.QueryResponseFromClient>> OffeneWeiterleitungen,
     ILogger Logger);
 
@@ -56,6 +57,9 @@ public sealed class SitzungsActor : RahmenActor
 
     /// <summary>So lange sammelt die Sitzung „P hat S weiterverarbeitet“, bevor sie dem Client die betroffenen Queries nennt.</summary>
     public static readonly TimeSpan Zusammenfassen = TimeSpan.FromMilliseconds(200);
+
+    /// <summary>So viele Einträge liefert eine Seite des Logs höchstens.</summary>
+    public const int LogSeiteHoechstens = 1_000;
 
     /// <summary>So viele Antworten beobachtet eine Sitzung höchstens (die ältesten fallen heraus).</summary>
     public const int HoechstensAntworten = 200;
@@ -85,6 +89,7 @@ public sealed class SitzungsActor : RahmenActor
     private readonly Queue<IQuery> _beobachtungsReihe = new();
     private readonly HashSet<IQuery> _veraendert = new();
     private bool _aktualisierungGeplant;
+    private IReadOnlySet<Type> _hoert = new HashSet<Type>();
 
     public SitzungsActor(IServerStreamWriter<Leitung.ServerMessage> stream, string sitzungsId, AkteurRechte? akteur, SitzungsDienste dienste,
         TaskCompletionSource ende) : base(dienste.Logger)
@@ -216,6 +221,9 @@ public sealed class SitzungsActor : RahmenActor
                 if (_d.OffeneWeiterleitungen.TryGetValue(m.QueryAnswer.CorrelationId, out var offen)) offen.TrySetResult(m.QueryAnswer);
                 else _logger.LogWarning("{Session} QueryAnswer for unknown CorrelationId {CorrelationId}", _id, m.QueryAnswer.CorrelationId);
                 break;
+            case Leitung.ClientMessage.MessageOneofCase.LiesLog:
+                await LiesLogAsync(context, m.LiesLog);
+                break;
             case Leitung.ClientMessage.MessageOneofCase.FunktionenAnbieten:
                 await FunktionenAnbietenAsync(m.FunktionenAnbieten);
                 break;
@@ -300,8 +308,11 @@ public sealed class SitzungsActor : RahmenActor
             _id, result.AllowedCommands.Count, result.SubscribedEvents.Count, result.AllowedQueries.Count, result.HandlingQueries.Count);
     }
 
-    private void MeldeAn(IContext context, IReadOnlySet<Type> hoert) =>
+    private void MeldeAn(IContext context, IReadOnlySet<Type> hoert)
+    {
+        _hoert = hoert;
         context.Send(_verteiler!, new SitzungMeldetAn(_id, context.Self, hoert, _rueckstau));
+    }
 
     // ═════════════════════════════════════════
     // COMMAND
@@ -429,6 +440,60 @@ public sealed class SitzungsActor : RahmenActor
             await SchreibeAsync(new Leitung.ServerMessage { QueryResponse = _d.Mapper.ToQueryResponse(antwort, request.CorrelationId) });
             Beobachte(context, query, antwort);
         });
+    }
+
+    // ═════════════════════════════════════════
+    // LESEN AB POSITION
+    // ═════════════════════════════════════════
+
+    private async Task LiesLogAsync(IContext context, Leitung.LiesLog request)
+    {
+        if (_d.Log is not { } log)
+        {
+            await FehlerAsync("LOG_NICHT_VERFUEGBAR", "Dieser Host liest kein Log", request.Korrelation);
+            return;
+        }
+        // Nur, was im Log steht und die Sitzung hören darf (Hinweise stehen nie im Log); ohne solche Typen ist die Seite leer.
+        var typen = _hoert.Where(Anwendung.Typen.PersistableEventTypes.Contains).ToList();
+        var diskriminatoren = typen.Count == 0 ? null : BatchLeser.TypenAus(typen);
+        var ab = Math.Max(0, request.Ab);
+        if (diskriminatoren is null)
+        {
+            await SchreibeAsync(new Leitung.ServerMessage { LogSeite = new Leitung.LogSeite { Korrelation = request.Korrelation, Bis = ab } });
+            return;
+        }
+        var hoechstens = request.Hoechstens is > 0 and <= LogSeiteHoechstens ? request.Hoechstens : LogSeiteHoechstens;
+        Neben(context, ct => log.ReadPartitionAsync(ab, 0, 1, diskriminatoren, Array.Empty<long>(), hoechstens, ct), async t =>
+        {
+            if (!t.IsCompletedSuccessfully)
+            {
+                await FehlerAsync("LOG_NICHT_LESBAR", t.Exception?.InnerException?.Message ?? "abgebrochen", request.Korrelation);
+                return;
+            }
+            var seite = await (Task<PartitionsSeite>)t;
+            await SchreibeAsync(new Leitung.ServerMessage { LogSeite = LogSeite(request.Korrelation, ab, seite) });
+        });
+    }
+
+    /// <summary>
+    /// Die Seite für den Client: nur Einträge bis zum Horizont (dahinter könnte noch ein früheres Event sichtbar werden); ist sie voll, endet sie
+    /// vor der letzten Position (ein Split-Upcast liefert mehrere Events mit derselben), sonst reicht „bis“ bis zum Horizont.
+    /// </summary>
+    private Leitung.LogSeite LogSeite(string korrelation, long ab, PartitionsSeite seite)
+    {
+        var bisHorizont = seite.Events.Where(e => e.Sequenz <= seite.Gesetzt).ToList();
+        var voll = seite.Voll && bisHorizont.Count == seite.Events.Count;
+        long bis;
+        if (voll && bisHorizont.Select(e => e.Sequenz).Distinct().Count() > 1)
+        {
+            var letzte = bisHorizont[^1].Sequenz;
+            bisHorizont = bisHorizont.Where(e => e.Sequenz < letzte).ToList();
+            bis = bisHorizont[^1].Sequenz;
+        }
+        else bis = voll ? bisHorizont[^1].Sequenz : Math.Max(ab, seite.Gesetzt);
+        var antwort = new Leitung.LogSeite { Korrelation = korrelation, Bis = bis, Voll = voll };
+        antwort.Eintraege.AddRange(bisHorizont.Select(e => new Leitung.LogEintrag { Position = e.Sequenz, Envelope = _d.Mapper.MapToDto(e.Event) }));
+        return antwort;
     }
 
     // ═════════════════════════════════════════

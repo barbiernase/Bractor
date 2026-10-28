@@ -68,6 +68,34 @@ public sealed class RoheLeitung : IAsyncDisposable
 
     public IReadOnlyCollection<ServerMessage> Alles => _empfangen;
 
+    /// <summary>Eine Seite des Logs ab <paramref name="ab"/> (Lesen ab Position).</summary>
+    public async Task<LogSeite> LiesLogAsync(long ab, int hoechstens = 1000)
+    {
+        var korrelation = Guid.NewGuid().ToString();
+        await _ruf.RequestStream.WriteAsync(new ClientMessage { LiesLog = new LiesLog { Korrelation = korrelation, Ab = ab, Hoechstens = hoechstens } });
+        var bis = DateTime.UtcNow + TimeSpan.FromSeconds(15);
+        while (DateTime.UtcNow < bis)
+        {
+            if (_empfangen.FirstOrDefault(m => m.LogSeite?.Korrelation == korrelation) is { } m) return m.LogSeite;
+            if (_empfangen.FirstOrDefault(m => m.Error?.CorrelationId == korrelation) is { } f) throw new InvalidOperationException(f.Error.Message);
+            await Task.Delay(20);
+        }
+        throw new TimeoutException($"keine Seite des Logs ab {ab}");
+    }
+
+    /// <summary>Liest das Log ab <paramref name="ab"/> bis zum Horizont; die Einträge und die Position zum Weiterlesen.</summary>
+    public async Task<(List<LogEintrag> Eintraege, long Bis)> LiesLogBisZumEndeAsync(long ab)
+    {
+        var alle = new List<LogEintrag>();
+        while (true)
+        {
+            var seite = await LiesLogAsync(ab);
+            alle.AddRange(seite.Eintraege);
+            ab = seite.Bis;
+            if (!seite.Voll) return (alle, ab);
+        }
+    }
+
     /// <summary>Die Events (auch CommandFailed), die diese Sitzung bekommen hat.</summary>
     public IEnumerable<EventEnvelopeDto> Events => _empfangen.Where(m => m.Event != null).Select(m => m.Event.Envelope);
 

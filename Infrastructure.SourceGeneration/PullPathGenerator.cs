@@ -213,7 +213,6 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine($"        var logger = provider.GetService<ILoggerFactory>()?.CreateLogger(\"Konsum.{p.Name}\");");
             sb.AppendLine("        // Typfilter der Seiten: die Speicher-Diskriminatoren der abonnierten Typen samt Upcasting-Vorgängern.");
             sb.AppendLine($"        var typen = BatchLeser.TypenAus({p.ToDisplayString()}.SubscribedTypes);");
-            sb.AppendLine("        var verteilung = provider.GetService<global::Infrastructure.Verteilen.Verteilung>();   // „P hat S weiterverarbeitet“ an die Clients");
             sb.AppendLine("        return new ClusterKind(KindName, Props.FromProducer(() =>");
             sb.AppendLine("            new BatchLeserActor((partition, faehigkeiten) =>");
             sb.AppendLine("            {");
@@ -231,6 +230,8 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine();
             sb.AppendLine("                Func<EventEnvelope, ProjectionWriter, Task> dispatch =");
             sb.AppendLine("                    (e, writer) => projection.DispatchAsync(e, writer, faehigkeiten);");
+            sb.AppendLine("                // „P hat S weiterverarbeitet“ an die Clients — erst beim Spawnen aufgelöst (die Verteilung braucht das fertige Actor-System).");
+            sb.AppendLine("                var verteilung = provider.GetService<global::Infrastructure.Verteilen.Verteilung>();");
             sb.AppendLine("                var leser = new BatchLeser(eventStore, trackers[0], projection.SubscriberId, partition, konsum, typen, dispatch,");
             sb.AppendLine("                    deadLetter: deadLetter, logger: logger,");
             sb.AppendLine("                    verarbeitet: verteilung is null ? null : streams => verteilung.MeldeVerarbeitet(projection.SubscriberId, streams));");

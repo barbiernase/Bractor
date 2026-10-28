@@ -37,7 +37,8 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         ILogger<CqrsClientServiceImpl>? logger = null,
         IAusgabeAblage? ausgaben = null,
         Konsum? konsum = null,
-        HinweisNetz? hinweisNetz = null)
+        HinweisNetz? hinweisNetz = null,
+        IEventStoreRepository? log = null)
     {
         _actorSystem = actorSystem ?? throw new ArgumentNullException(nameof(actorSystem));
         _akteurTor = akteurTor;   // null = Akteure nicht konfiguriert → offen (opt-in)
@@ -46,6 +47,7 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
             ausgaben,   // null = keine Funktion draußen in dieser Anwendung → Anbieten wird abgewiesen
             konsum ?? Konsum.Standard,
             hinweisNetz,   // null = keine Funktion hört Hinweise
+            log,
             new ConcurrentDictionary<string, TaskCompletionSource<Cqrs.Leitung.QueryResponseFromClient>>(), _logger);
     }
 
