@@ -137,6 +137,18 @@ in `tests.sh schnell` wie die Last-Tests der Integration ausgenommen). Ohne die 
 Nachschübe, bis 180 Zubuchungen fehlten, auch schon vor dem Abbruch), danach dreimal grün; Gegenprobe (Zähler wieder ohne Sperre): beide Tests rot,
 `ZaehlerstandPostgresTests` mit ≈ 60 000 Proben in 8 s. Zwei Störungsläufe gültig, Exactly-once grün (`…_server-pubsub-g17-stoerung-1/2`: S5 113 194
 und 108 342 Vorgänge, je 182 bzw. 181 Paare in S1).
+**Stand 2026-10-28 (Plan Pub/Sub-Neustrukturierung, Phase 7 — Clients, `403f058` … `70cda54`, Start-Sperre `d9b2676`):** volle Stufe auf
+`70cda54`: Prüfstand **508 grün + 1 übersprungen** (neu `VerteilerTests` 5, `AusgangskorbTests` 2; entfallen `BrokerIdentityTests`,
+`BrokerWiederholungTests`), Integration **64/64** (mit Last), Prüfdomäne **59/59**, Verhaltens-Netz **21 grün, ohne Skip** (G-12, G-13, G-14 grün;
+neu `ClientVerhaltenTests.Eine_fachliche_Ablehnung_erreicht_die_Sitzung_an_der_rohen_Leitung`, `…Eine_Datensatz_Ansicht_zeigt_das_Label…`
+(transitive Aktualisierung), `…Wer_wieder_verbindet_liest_ab_seiner_Position…`), Client 30/30, Python SDK und Worker grün, `codegen --check`,
+`--check`, `--sonde`, `--grammatik` und Gate grün. Rot war nur `NeustartTests` (dreimal; mit dem Code von Phase 6 `09ae06d` grün in 173 s, auch
+mit abgeschalteter Verteilung rot): mit dem Broker fiel seine Aktivierung beim Start, die unausgesprochen wartete, bis der Cluster nach dem harten
+Ende eines Knotens wieder platzierte — jetzt die Start-Sperre `Bereitschaft`; danach `NeustartTests` grün in 133 s, `schnell` grün bis auf FB-13
+(einmal, danach das Verhaltens-Netz 21/21). Gegenproben rot gesehen: Verteiler ohne gezielte Zustellung (Ablehnung im Client-Stack und an der rohen
+Leitung, `CommandFailed` am Akteur-Tor, zwei Knoten), Read-your-writes ohne Warten (`Nach_dem_eigenen_Command…`), Beobachtung abgeschaltet
+(transitive Aktualisierung), Seite des Logs ohne Einträge (Wiederverbinden), Ausgangskorb ohne Ablegen (`AusgangskorbTests`). Nicht gemessen
+(Plan Phase 7 verlangt keine Messung; PF-37).
 
 Statisch gezählt:
 

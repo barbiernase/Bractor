@@ -679,7 +679,8 @@ Verteiler hält Stream → Sitzungen und Projektion → Sitzungen (grob). Beobac
 Zustellungen des Verteilers (`Rueckstau`); über der Grenze nur eine Warnung im Log, kein Spur-Hinweis, und die Nachrichten des Clients selbst
 laufen ohne Grenze (docs/13 FB-15). (4) Der Stand je Id liest nach dem Guard das Log (nächstes gehörtes Event − 1, sonst der Kopf) — FB-10 ist
 damit schon hier erledigt, nicht erst mit Phase 8. (5) Das Python-SDK kennt nur die neue Leitung (FB-14); die Quell-Nachricht vom Client über
-gRPC (FB-6) ist nicht gebaut. (6) Nicht gemessen: die Kosten von „P hat S weiterverarbeitet“ (PF-37).
+gRPC (FB-6) ist nicht gebaut. (6) Nicht gemessen: die Kosten von „P hat S weiterverarbeitet“ (PF-37). (7) Neu die Start-Sperre `Bereitschaft`:
+mit dem Broker fiel seine Aktivierung beim Start, die unausgesprochen wartete, bis der Cluster nach dem harten Ende eines Knotens wieder platzierte.
 
 ### Phase 8 · Stores und Projektionsform (5–8 PT)
 
