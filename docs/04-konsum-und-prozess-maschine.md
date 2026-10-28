@@ -139,7 +139,8 @@ Eingang), ist CQRS057; zwei `Auf` für denselben Eingang CQRS101.
 Ein **Reader** ist eine Klasse mit `IReader` und je Query einer `Frage(TQuery q, Lese-Fähigkeiten…[, CancellationToken])`, die eine Antwort oder
 `OneOf<…>` liefert (auch als `Task`). Der `QueryDienstGenerator` erzeugt den Query-Dienst der Anwendung (`GeneratedQueryDienst`): je Query die
 Frage, die Projektionen dahinter (aus den Lese-Fähigkeiten: die Projektionen, die in denselben Store schreiben) und die gezeigten Ids (die
-`Id<T>`-Felder von Antwort und Query) — ohne `ctx.Track` und ohne Reader-Attribut.
+`Id<T>`-Felder von Antwort und Query) — ohne `ctx.Track` und ohne Reader-Attribut. Eine Query hat genau ein Ziel (R4): statt eines Readers kann
+sie ein Aggregat beantworten (`Frage` im Decider, exakter Stand mit seiner Version, ohne Projektion dahinter — [03](03-schreibseite.md) §3.1 (d)).
 
 Eine Funktion erkennt der `FunktionsBausteinGenerator` an `IFunktion` und den `Auf`-Methoden (§4.4). Sie darf Lese-Fähigkeiten nehmen, nie
 Schreib-Fähigkeiten: was sie bewirkt, geht als Command an ein Aggregat oder als Ergebnis-Event ins Log.

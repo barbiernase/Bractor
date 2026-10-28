@@ -56,7 +56,7 @@ Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein Prozess fä
 |---|---|---|---|
 | `Generator` | `IDecider<T>`/`IApplier<T>` | `{State}.{Klasse}.State.g.cs` | injiziert `State`-Property + Ctor in Decider/Applier |
 | `StatePropertyGenerator` | `IState` | `{State}.State.g.cs` | `Guid Id` + `int Version` |
-| `AggregateHandlerGenerator` | `IState` + nested Decider/Applier | `{State}AggregateHandler` | `HandleCommand`/`ApplyEvent`-Switch, entpackt `OneOf`; `CodeHash` (State + Applier) für Snapshots |
+| `AggregateHandlerGenerator` | `IState` + nested Decider/Applier | `{State}AggregateHandler` | `HandleCommand`/`ApplyEvent`-Switch, entpackt `OneOf`; `Frage`-Switch für die direkten Queries des Deciders (Plan §2.6, über `Projektionsform.LiesAggregatfragen`); `CodeHash` (State + Applier) für Snapshots |
 | `HandlerFactoryGenerator` | `IState` | `AggregateHandlerFactory` (ns = Projekt der Aggregate) | State-Typ → Handler |
 | `SignalTypeGenerator` | `IEvent` & nicht transient | `StateChangeVia{Event}` | Weckruf-Signal je persistiertem Event (bewusst syntax-lokal) |
 | `ProjektionsstandGenerator` | `IProjektion` | `[assembly: Projektionsstand(typeof(P), "…")]` | Code-Stand der Projektion (nur in ihrer Compilation ist der Quelltext sichtbar); die Komposition liest ihn für den Neuaufbau in Sim |
@@ -72,11 +72,11 @@ Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein Prozess fä
 | `CommandAggregateMapGenerator` | jeder `ICommand<TAggregat>` (Ziel) + `IDecider<T>.Decide(TCommand)` mit OneOf-Rückgaben | `GeneratedCommandRouting` (ns `Infrastructure.Mapping`) | **Dispatch-Kern**: `CommandToAggregate` (aus dem Typ), `CommandToEvents`, `Produziert()` (CQRS010 Decide außerhalb des Ziels, CQRS011) |
 | `AggregateActorGenerator` | `IState` | `AggregateActors`, `GeneratedAggregates` | Proto.Actor-Actor + Cluster-Kinds |
 | `PullPathGenerator` | `IProjektion` + `Auf` (über `Projektionsform`, dieselbe Lesart wie der Weckplan) | `GeneratedProjektionen`, `GeneratedPullPaths` | je Projektion Dispatch auf ihr `Auf`, gehörte Typen, Store aus dem Bereich, Batch-Kind, `Projektionseintrag`; ein Store je Projektion (CQRS052), Klasse 3 nur mit `[MindestensEinmal]` (CQRS110) ([04 §4.2](04-konsum-und-prozess-maschine.md)) |
-| `QueryDienstGenerator` | `IReader` + `Frage` (über `Projektionsform`) | `GeneratedQueryDienst : IQueryDienst` | je Query die Frage mit Lese-Fähigkeiten; die Projektionen dahinter aus den Fähigkeiten (dieselben Stores), die gezeigten Ids aus den `Id<T>`-Feldern von Antwort und Query |
+| `QueryDienstGenerator` | `IReader` + `Frage` (über `Projektionsform`) | `GeneratedQueryDienst : IQueryDienst` | je Query die Frage mit Lese-Fähigkeiten; die Projektionen dahinter aus den Fähigkeiten (dieselben Stores), die gezeigten Ids aus den `Id<T>`-Feldern von Antwort und Query; eine Query an ein Aggregat (`Frage` im Decider) geht über `AggregatAbfrage` an die Identität aus ihrem Glied `Id<TAggregat>`, Stand = das Aggregat mit seiner Version |
 | `SignalFactoryGenerator` | `IStateChangeSignal` | `GeneratedSignalFactory`, `GeneratedSignalRoutes` | Event → Signal ohne Reflection |
 | `SnapshotRegistrationGenerator` | `IState` | `GeneratedSnapshotRegistration` | Marten-Registrierung; Schema-Version = FNV-1a-Struktur-Hash + `CodeHash` |
 | `EventJsonGenerator` | persistierte Events | `GeneratedEventJson` | Event-JSON über `EventJsonSerializerContext.Default.{Typ}` |
-| `WireSerializerGenerator` | `IWireMessage` + Payload-Wurzeln | `GeneratedWire`, `GeneratedWirePoly` | Cross-Node-Wire über `CqrsWireJsonContext.Default.{Typ}` ([06](06-transport-multinode-betrieb.md)) |
+| `WireSerializerGenerator` | `IWireMessage` + Payload-Wurzeln (Command, Event, Query, Antwort) | `GeneratedWire`, `GeneratedWirePoly` | Cross-Node-Wire über `CqrsWireJsonContext.Default.{Typ}` ([06](06-transport-multinode-betrieb.md)) |
 | `FunktionsGenerator` | `IFunktion` + `IAuftrag<F>` | `GeneratedFunktionen` | Dispatch Auftrag → Funktion → Ergebnis, Implementierungen je Funktion (CQRS068/069) |
 | `DienstGenerator` | `IDienst` + Konstruktoren der Implementierungen | `GeneratedDienste` | Fabriken ohne Reflection, Bedarf je Konstruktor, Konfig-Records Feld für Feld |
 | `QuellenGenerator` | Record, der von einer Treiber-Basis erbt (`DateiGemeldet`) | `GeneratedQuellen` | je Quelle Treiber, Konfig-Abschnitt, Wirker-Id, Fabrik |
@@ -117,7 +117,7 @@ aus den Analyzern der warmen Compilations und hängt sie an die Karte (`Werkbank
 | Leseseite & Store | CQRS051, 054, 055 · CQRS052, 110 · CQRS053 · CQRS066/067 · CQRS109 · CQRS111 | `FaehigkeitAnalyzer` · `PullPathGenerator` · `ProjectionServicesGenerator` · `StoreZugriffAnalyzer` · `StoreKlasseAnalyzer` · `ReadModelSchluesselGenerator` |
 | Funktionen, Dienste, Quellen | CQRS068/069 · CQRS089–092 · CQRS070 | `FunktionsGenerator` · `DienstAnalyzer` · `QuellenTypAnalyzer` |
 | Akteure, Verträge, Clients | CQRS058, 060–065 · CQRS059 · CQRS093/094 · CQRS095–097 | `AkteurAnalyzer` · `AkteurRechteGenerator` · `WiringGenerator` · `ClientVertragAnalyzer` |
-| Gesamtbild | CQRS084–088 | `GesamtbildAnalyzer` (Query mit mehreren Readern, Ausgang ohne Erzeuger, Eingang ohne Konsument, Zusage ohne Client, Kreis ohne Zustandsschritt) |
+| Gesamtbild | CQRS084–088 | `GesamtbildAnalyzer` (Query mit mehreren Zielen — R4: ein Reader oder ein Aggregat —, Ausgang ohne Erzeuger, Eingang ohne Konsument, Zusage ohne Client, Kreis ohne Zustandsschritt) |
 | Proto | CQRS030 | `DtoMapperSourceGenerator` (Generator-Ausnahme wird lauter Fehler) |
 | Upcasting | CQRS040–046 | `EventUpcastingGenerator` |
 | Altlast | CQRS056 | `PipelineActorGenerator` (`Frist<TCmd>`) |

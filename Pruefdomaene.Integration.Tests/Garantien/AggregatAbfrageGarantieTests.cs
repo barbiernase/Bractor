@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Pruefdomaene.Kontingent;
 using Pruefdomaene.Posten;
+using Proto.Cluster;
 using static Pruefdomaene.Integration.Tests.Pruefstand;
 
 namespace Pruefdomaene.Integration.Tests.Garantien;
@@ -145,6 +146,31 @@ public class AggregatAbfrageGarantieTests
             var (danach, vDanach) = await FrageKontingentAsync(host, k);
             danach.Should().Be(new KontingentStand(new(k), 12), "10 + 5 entlastet − 3 belegt");
             vDanach.Should().Be(3);
+        }
+        finally { await host.StopAsync(); }
+    }
+
+    [Fact]
+    public async Task Eine_Frage_an_eine_fremde_Identitaet_wird_nicht_beantwortet()
+    {
+        // Wie ein falsch gerouteter Command (SchreibGarantieTests): die Id des Actors ist seine Cluster-Identität; eine Frage, deren Ziel eine andere
+        //   ist, beantwortet er nicht — sonst nennte er den Stand eines anderen Aggregats als den des gefragten.
+        using var host = Cluster("garantie-abfrage-fremd");
+        await host.StartAsync();
+        try
+        {
+            var k = Guid.NewGuid();
+            (await FrageAsync(host, new RichteKontingentEin(new(k), 10), Guid.NewGuid()))!.Success.Should().BeTrue();
+            var fremd = Guid.NewGuid();
+            var bote = new global::Infrastructure.Lebenszyklus.Bote(host.Services.GetRequiredService<Proto.ActorSystem>().Cluster());
+            var antwort = await bote.FrageAsync<global::Infrastructure.Aggregate.ActorSystem.AggregatAntwort>(
+                Proto.Cluster.ClusterIdentity.Create(fremd.ToString(), nameof(Kontingent.Kontingent)),
+                new global::Infrastructure.Aggregate.ActorSystem.AggregatFrage(new HoleKontingent(new(k)), k), TimeSpan.FromSeconds(30), default);
+
+            antwort.Should().NotBeNull();
+            antwort!.Antwort.Should().BeNull("die Identität des Actors ist nicht das Ziel der Frage");
+            antwort.Fehler.Should().Contain(fremd.ToString());
+            (await FrageKontingentAsync(host, k)).Antwort.Should().Be(new KontingentStand(new(k), 10), "an die richtige Identität antwortet er");
         }
         finally { await host.StopAsync(); }
     }

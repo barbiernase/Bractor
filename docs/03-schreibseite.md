@@ -1,6 +1,6 @@
 # 03 — Die Schreibseite (Command → Decider → Event → Store)
 
-Stand 2026-10-28 (Plan Pub/Sub-Neustrukturierung Phase 6), gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
+Stand 2026-10-29 (Plan Pub/Sub-Neustrukturierung Phase 9), gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
 
 Der Schreibpfad ist das dichte Zentrum des Frameworks. `AggregateActorBase`
 (`Infrastructure/Aggregate/ActorSystem/AggregateActorBase.cs`) trägt fast alle Invarianten und Audit-Fixes und ist ausführlich
@@ -111,11 +111,25 @@ sind in [04 §4.8](04-konsum-und-prozess-maschine.md) beschrieben.
 nächste Nachricht aktiviert ihn frisch (Snapshot + Tail; der Inbox-Cache ist dann leer, die Inbox-Tabelle bleibt). Emittenten-Adapter und Prozess-Manager passivieren genauso; die Batch-Leser der
 Projektionen (je Projektion und Partition) nicht ([04](04-konsum-und-prozess-maschine.md) §4.1).
 
+**(d) Direkte Abfrage** (Plan Pub/Sub-Neustrukturierung §2.6). Eine Query darf statt an einen Reader an ein Aggregat gehen: die `Frage` im
+Decider (§3.2) beantwortet sie aus dem Zustand, nur lesend und synchron. Die Query nennt ihr Aggregat mit genau einem Glied `Id<TAggregat>`;
+der generierte Query-Dienst (`GeneratedQueryDienst`, derselbe Weg für gRPC und JSON-Eingang) schickt sie über `AggregatAbfrage`
+(`Infrastructure/Aggregate/ActorSystem/AggregatAbfrage.cs`) als `AggregatFrage` an die Cluster-Identität aus dieser Id — eine Frage des Boten
+mit Frist 10 s, ohne Antwort ein Fehler. Der Actor antwortet im Turn mit `AggregatAntwort` (Antwort und Version): eine Frage an eine fremde
+Identität beantwortet er nicht, bevor etwas geladen ist (wie einen falsch gerouteten Command); eine inaktive Aktivierung rehydriert zuerst.
+Läuft gerade der Commit eines Bündels, trägt der State dessen Entscheidungen, die noch scheitern können — die Frage wartet dann neben den
+Commands und wird nach dem Commit beantwortet, bevor das nächste Bündel entschieden wird. Die Antwort ist so genau der committete Stand, auf
+dem der nächste Command entschieden würde. Ihr Stand je gezeigter Id ist genau dieses Aggregat mit seiner Version (`AggregateMeta`) — der
+OCC-Stand für den Client (`VersioningModule`, über JSON `staende`): ein Command mit dieser Version wird entschieden, einer mit einer älteren
+scheitert am Versionskonflikt. „Mindestens S auf v“ gilt von selbst (kein Warten auf eine Projektion). Eine Query hat genau ein Ziel, einen
+Reader oder ein Aggregat (R4, CQRS084/086); die Form der Frage prüft CQRS057.
+
 ## 3.2 Das Aggregat-Modell (reiner Fachcode)
 
 Beispiel aus der Agnostik-Sonde (`GraphExtractor.Kern/Sonde/Ausleihe.cs.txt`, Domäne „Leihwesen“, gekürzt). Ein Aggregat ist eine
 `partial class : IState` mit zwei verschachtelten `partial`-Klassen `Decider : IDecider<T>` und `Applier : IApplier<T>`; Decider und
-Applier dürfen auch in eigenen Dateien liegen (`Mahnvorgang.Decider.cs.txt`):
+Applier dürfen auch in eigenen Dateien liegen (`Mahnvorgang.Decider.cs.txt`). Der Decider entscheidet (`Decide`) und beantwortet direkte
+Queries (`Frage`, §3.1 (d)) — beides auf demselben Stand:
 
 ```csharp
 // Commands — Record mit Id<TAggregat> AggregateId : ICommand<TAggregat> (das Ziel steht im Typ); ein erzeugender Command ist zusätzlich
@@ -125,6 +139,11 @@ public record LeiheAus(Id<Leihvorgang> AggregateId, Signatur Medium, Guid LeserI
 // Events — persistent : IEvent ; Ablehnung : ITransientEvent (nie im Log). Verweise auf Aggregate sind Id<T>.
 public record Ausgeliehen(Signatur Medium, Guid LeserId, int Tage) : IEvent;
 public record BereitsAusgeliehen(Id<Leihvorgang> AusleiheId) : ITransientEvent;
+
+// Query an das Aggregat und ihre Antworten — bei der Schreibseite (der Decider sieht die Leseseite nicht); das Glied Id<Leihvorgang> ist das Ziel.
+public record HoleLeihstand(Id<Leihvorgang> Vorgang) : IQuery;
+public record Leihstand(Id<Leihvorgang> Vorgang, Guid LeserId) : IQueryResponse;
+public record NichtVerliehen(Id<Leihvorgang> Vorgang) : IQueryResponse;
 
 // State — nur fachliche Properties. Id/Version werden generiert.
 public partial class Leihvorgang : IState
@@ -140,6 +159,10 @@ public partial class Leihvorgang : IState
             if (this.State.Offen) { yield return new BereitsAusgeliehen(befehl.AggregateId); yield break; }
             yield return new Ausgeliehen(befehl.Medium, befehl.LeserId, befehl.Tage);
         }
+
+        // Direkte Abfrage — nur lesend, synchron; die Version hängt das Framework an (§3.1 (d)).
+        public OneOf<Leihstand, NichtVerliehen> Frage(HoleLeihstand frage) =>
+            this.State.Offen ? new Leihstand(frage.Vorgang, this.State.LeserId) : new NichtVerliehen(frage.Vorgang);
     }
 
     // Applier — ein Apply je Event, mutiert State.
@@ -264,7 +287,7 @@ Was nach einem Commit geschieht, ist für jeden Schreiber gleich (Aggregat, Quel
   geht an dessen Verteiler und dort an genau diese Sitzung, gleich, was sie hört ([06](06-transport-multinode-betrieb.md) §6.2).
 
 Es gibt keine Signal-Typen, keinen Broker und keinen Versionsindex. Die Version, die eine Query-Antwort je gezeigter Id trägt, kommt aus dem
-Fortschritt der Projektion ([04](04-konsum-und-prozess-maschine.md) §4.1).
+Fortschritt der Projektion ([04](04-konsum-und-prozess-maschine.md) §4.1), bei einer Frage an ein Aggregat aus ihm selbst (§3.1 (d)).
 
 ## 3.6 Proto.Actor: virtuelle Cluster-Actors
 

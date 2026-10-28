@@ -752,13 +752,18 @@ class TrainingslaufNichtGefundenDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class HoleDatensaetzeDto(betterproto.Message):
+class HoleBildPaarStandDto(betterproto.Message):
     """
     ============================================================================
      QUERY PAYLOADS
      ============================================================================
     """
 
+    paar: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class HoleDatensaetzeDto(betterproto.Message):
     pass
 
 
@@ -923,6 +928,19 @@ class TrainingslaufAntwortDto(betterproto.Message):
     endmetriken: "EndmetrikenDto" = betterproto.message_field(10)
     fehlergrund: str = betterproto.string_field(11)
     startzeit: int = betterproto.int64_field(12)
+
+
+@dataclass(eq=False, repr=False)
+class BildPaarStandDto(betterproto.Message):
+    paar: str = betterproto.string_field(1)
+    komplett: bool = betterproto.bool_field(2)
+    label: str = betterproto.string_field(3)
+    inspiziert: bool = betterproto.bool_field(4)
+
+
+@dataclass(eq=False, repr=False)
+class BildPaarUnbekanntDto(betterproto.Message):
+    paar: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)

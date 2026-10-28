@@ -90,10 +90,10 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
         ((int)staende[0]!["version"]!).Should().Be(kopf, "die Antwort trägt die Version des Aggregats — sein Kopf im Log");
 
         // Ein Command mit einer älteren Version scheitert, einer mit der Version der Antwort wird entschieden.
-        var label = new System.Text.Json.Nodes.JsonObject { ["AggregateId"] = paar.Id.ToString(), ["Label"] = "Questionable" };
-        (await b.Eingang.CommandAsync("LabelBildPaar", label, Testumgebung.TokenInspekteur, erwarteteVersion: kopf - 1)).Ok
+        System.Text.Json.Nodes.JsonObject Label() => new() { ["AggregateId"] = paar.Id.ToString(), ["Label"] = "Questionable" };
+        (await b.Eingang.CommandAsync("LabelBildPaar", Label(), Testumgebung.TokenInspekteur, erwarteteVersion: kopf - 1)).Ok
             .Should().BeFalse("eine ältere Version ist ein Versionskonflikt");
-        (await b.Eingang.CommandAsync("LabelBildPaar", label, Testumgebung.TokenInspekteur, erwarteteVersion: kopf)).Ok
+        (await b.Eingang.CommandAsync("LabelBildPaar", Label(), Testumgebung.TokenInspekteur, erwarteteVersion: kopf)).Ok
             .Should().BeTrue("mit der Version der Antwort entscheidet das Aggregat");
 
         // Über die Leitung: die Antwort setzt die Version des Clients; sein nächster Command entscheidet auf ihr, ohne Konflikt.

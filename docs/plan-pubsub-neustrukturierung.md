@@ -25,7 +25,7 @@ Genehmigungen, Integrationen …), und jeder Store-Typ muss hinter derselben Nah
 | E2 | Direkte Abfrage eines Aggregats (exakter Stand) | **ja**, als eigener Lesepfad neben dem Reader (§2.6). |
 | E3 | Typisierte Ids (`Id<TAggregat>` statt `Guid`) | **ja**, Pflicht für Command-Ziele; in Antworten die Grundlage für feine Updates an Clients (§2.5). |
 | E4 | Editor-Oberfläche (Fluss-Karten, Darstellung) | **zurückgestellt.** Werkbank und GraphExtractor werden nur so weit mitgezogen, dass alles baut und `--check`/`--sonde` für die neuen Bausteine grün sind (§6, Phase 4). `Werkbank/wwwroot/editor/` wird nicht angefasst. |
-| E5 | Implementieren | **phasenweise**, je Phase auf Tobis Wort (Phasen 0–4, 4b, 5, 6, 7 und 8 umgesetzt). |
+| E5 | Implementieren | **phasenweise**, je Phase auf Tobis Wort (Phasen 0–4, 4b, 5, 6, 7, 8 und 9 umgesetzt). |
 
 **Entscheidungen (Tobi, 2026-10-27) — Funktionen als Actors (§2.9):**
 
@@ -440,7 +440,7 @@ Rückgaben: konkreter Typ, `OneOf<…>`, `T?` („nichts“), `IEnumerable<…>`
 | R1 | Der Ausgang steht in der Signatur (`Decide`, `Auf`, `Frage`); der ganze Graph entsteht nur daraus, nie aus Rümpfen | Analyzer (heute CQRS050), erweitert auf `Auf`/`Frage` |
 | R2 | Je Baustein und Eingangstyp höchstens ein `Auf` | Analyzer, **neu** |
 | R3 | Ein Command gehört genau einem Aggregat (über `ICommand<TAggregat>`); jedes entschiedene Event hat ein `Apply` im selben Aggregat und umgekehrt; Events aus Funktionen/Quellen haben kein `Apply` | Generator/Analyzer (heute CQRS010, CQRS079/080) |
-| R4 | Eine Query hat genau ein Ziel (Reader oder Aggregat) | Analyzer (heute CQRS084/086), erweitert |
+| R4 | Eine Query hat genau ein Ziel (Reader oder Aggregat) | Analyzer CQRS084/086 (Reader und Aggregate), CQRS057 (Form der Frage im Decider) |
 | R5 | Eine Frist zielt auf einen Command des eigenen Aggregats | Analyzer, **neu** |
 | R6 | Kreise Funktion → Command → Aggregat → Event → dieselbe Funktion werden gemeldet | Build-Warnung über den Signatur-Graphen, **neu** (ersetzt die Start-Prüfung `ProzessAzyklizität`) |
 | R7 | Ids sind typisiert; Command-Ziele sind `Id<T>` | Compiler + Analyzer, **neu** |

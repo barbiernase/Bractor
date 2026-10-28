@@ -20,8 +20,8 @@
 
 | Projekt (Rolle) | gehört hinein | referenziert |
 |---|---|---|
-| `Domain` | Aggregate (State, Decider, Applier), Commands, Events, Ablehnungen, Wertobjekte, Enums, Quellen-Typen | Abstractions, Core |
-| `Domain.Projections` | ReadModels, Queries, Antworten, Store-Fähigkeiten und -Bündel, Projektionen, Reader | Domain |
+| `Domain` | Aggregate (State, Decider, Applier), Commands, Events, Ablehnungen, Wertobjekte, Enums, Quellen-Typen; Queries an ein Aggregat und ihre Antworten (`Frage` im Decider — er sieht die Leseseite nicht) | Abstractions, Core |
+| `Domain.Projections` | ReadModels, Queries an Reader, Antworten, Store-Fähigkeiten und -Bündel, Projektionen, Reader | Domain |
 | `Domain.Pipeline` | Funktionen — als Klasse (im Host) oder Schnittstelle (draußen) mit `Auf`, samt ihren Ausgabe-Events und den Umsetzungen einer Schnittstelle —, Domänen-Dienste (Schnittstelle, Implementierung), Konfig-Records | Domain, Domain.Projections |
 | `Domain.Akteure` | Akteure, Client-Verträge | Domain, Domain.Projections, Domain.Pipeline |
 | `Domain.Infrastructure` | Store-Implementierungen | Domain, Domain.Projections |
@@ -58,6 +58,7 @@ Vertrag hört auf beliebige Events, auch auf Ergebnis-Events von Funktionen.
 | | `Commands.cs`, `Events.cs` | Commands; Events und Ablehnungen |
 | | `ValueObjects.cs`, `Enums.cs` | Wertobjekte, Enums |
 | | `Quellen.cs` | Quellen-Typen (`sealed record X : DateiGemeldet;`) |
+| | `Queries.cs`, `Responses.cs` | Queries an das Aggregat und ihre Antworten (Primitive `AggregatQuery`/`AggregatAntwort`, erkannt an der `Frage` im Decider) |
 | `Domain.Projections/<Bereich>/` | `ReadModels.cs`, `Queries.cs`, `Responses.cs` | Read-Models, Queries, Antworten |
 | | `I<Store>.cs` | Store-Bündel mit seinen Fähigkeiten |
 | | `<Projektion>.cs`, `<Reader>.cs` | je Klasse eine Datei |

@@ -4,7 +4,7 @@ Projektgedächtnis für Claude Code — bewusst schlank, nur Wissen, kein Change
 **Maßstab im Zweig `pubsub_neustrukturierung` ist `docs/plan-pubsub-neustrukturierung.md`** (Zielbild, Grammatik, Garantien, Phasen des
 Umbaus; noch nicht umgesetzt). Wo etwas widerspricht, gilt der Plan als Ziel und der Code als Ist. Wegweiser: `docs/README.md`.
 Offenes und Schulden: `docs/13-reifegrad-schulden-bewertung.md` §13.0. Zahlen und Messwerte: `docs/12-tests-und-vermessung.md`.
-Das Bild unten („Das tragende Bild“) beschreibt den **Ist-Zustand** nach Phase 8 des Umbaus.
+Das Bild unten („Das tragende Bild“) beschreibt den **Ist-Zustand** nach Phase 9 des Umbaus.
 
 ## Was das Projekt ist
 
@@ -42,7 +42,7 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
 - **W11** Allgemeines Framework: eine Primitive bleibt, wenn sie allgemein gebraucht wird — nicht, weil die Beispieldomäne sie nutzt. Je Absicht ein Weg.
 - **W12** Keine GUIs im Editor (Clients nur als Vertrag), keine Schema-Evolution im Editor (`IUpcast` bleibt als Backend-Primitive), kein Deploy.
 
-## Das tragende Bild (Ist-Zustand nach Plan-Phase 8)
+## Das tragende Bild (Ist-Zustand nach Plan-Phase 9)
 
 - **Schreibseite:** Command → Aggregat-Actor (Single-Writer, Inbox-Tabelle) → `Decide` (`OneOf<Event, Hinweis, Frist<TCmd>>`) → Events →
   Group-Commit → **Wecker** am Commit (generierter Weckplan, für jeden Schreiber gleich: Aggregat, Quelle, Funktions-Ausgabe) + Push an Clients
@@ -56,6 +56,10 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
   Partition. **Reader** (`IReader`, `Frage(Query, Lese-Fähigkeiten)`): die gezeigten Ids findet der Generator in den `Id<T>`-Feldern von Antwort
   und Query, die Projektionen dahinter aus den Lese-Fähigkeiten (`GeneratedQueryDienst`); Stand je gezeigter Id = Guard der Projektionen, dahinter
   das Log (`ProjektionsStaende`); Read-your-writes „mindestens S auf v“ wartet begrenzt darauf, sonst `noch_nicht`.
+- **Direkte Abfrage** (Plan §2.6, Phase 9): eine Query hat genau ein Ziel (R4, CQRS084/086) — einen Reader oder ein Aggregat. `Frage(Query)` im
+  Decider (nur lesend, synchron; die Query nennt ihr Aggregat mit genau einem Glied `Id<TAggregat>`, CQRS057; Query und Antwort liegen bei der
+  Schreibseite); der Query-Dienst schickt sie über `AggregatAbfrage` an den Aggregat-Actor, der im Turn auf dem committeten Stand antwortet (während
+  eines Commits wartet sie bis danach); die Antwort zeigt das Aggregat mit seiner Version als OCC-Stand.
 - **Store-Klassen** (Plan §2.4): ein Store implementiert genau eine — `IAtomaresZiel` (1: Wirkungen und Fortschritt in einer Transaktion,
   `MartenStore`), `IWiederholungsfestesZiel` (2: Fortschritt beim Framework nach den Wirkungen, Schreib-Fähigkeiten nehmen die `Herkunft`,
   `DateiZiel`), `INurMindestensEinmal` (3: nur mit `[MindestensEinmal]`, `DateiSink`); CQRS109/110; jeder Treiber besteht den allgemeinen
