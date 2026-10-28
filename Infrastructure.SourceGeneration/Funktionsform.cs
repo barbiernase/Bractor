@@ -56,6 +56,8 @@ namespace Infrastructure.SourceGeneration
             public INamedTypeSymbol? Zustand;
             /// <summary><c>[EineAdresse]</c>: ein Funktions-Actor statt einer je Partition (A6).</summary>
             public bool EineAdresse;
+            /// <summary>Die Klasse hat einen Lebenszyklus (<c>ILebenszyklus</c>, E10): sie lädt etwas beim Aktivieren.</summary>
+            public bool Lebenszyklus;
         }
 
         public static string Name(ITypeSymbol t) =>
@@ -93,7 +95,11 @@ namespace Infrastructure.SourceGeneration
         /// <summary>Liest die Form einer Funktion (<see cref="IstBaustein"/> vorausgesetzt).</summary>
         public static Form Lies(INamedTypeSymbol t)
         {
-            var f = new Form { Typ = t, Draussen = t.TypeKind == TypeKind.Interface, EineAdresse = HatEineAdresse(t) };
+            var f = new Form
+            {
+                Typ = t, Draussen = t.TypeKind == TypeKind.Interface, EineAdresse = HatEineAdresse(t),
+                Lebenszyklus = t.TypeKind == TypeKind.Class && Hat(t, Abstractions.Funktionsvertrag.Lebenszyklus),
+            };
             var ort = t.Locations.FirstOrDefault() ?? Location.None;
             if (!f.Draussen)
             {
@@ -259,10 +265,11 @@ namespace Infrastructure.SourceGeneration
         /// <summary>
         /// Nachweislich gleichbleibend (R12, aus der Signatur): eine Klasse ohne Konstruktor-Parameter, deren <c>Auf</c> keine Lese-Fähigkeit nimmt.
         /// Dass ihr Rumpf weder Uhr noch Zufall nutzt, prüft CQRS103, dass sie keinen Zustand in Feldern hält, CQRS105 (R19) — eine Funktion mit
-        /// <c>IZustand&lt;T&gt;</c> hat einen Konstruktor-Parameter und ist damit nie gleichbleibend.
+        /// <c>IZustand&lt;T&gt;</c> hat einen Konstruktor-Parameter und ist damit nie gleichbleibend; eine mit Lebenszyklus lädt etwas und ist es
+        /// ebenso nie.
         /// </summary>
         public static bool Gleichbleibend(Form f) =>
-            !f.Draussen && f.Aufs.All(a => a.Faehigkeiten.Count == 0)
+            !f.Draussen && !f.Lebenszyklus && f.Aufs.All(a => a.Faehigkeiten.Count == 0)
             && (Ctorbindung.Konstruktor(f.Typ)?.Parameters.Length ?? 0) == 0;
     }
 }

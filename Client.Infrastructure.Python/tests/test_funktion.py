@@ -237,6 +237,36 @@ async def test_die_angabe_hinweis_der_leitung_genuegt_auch_ohne_generierte_angab
     assert [(ab, fertig, len(aus)) for _, aus, ab, fertig, _ in proxy.ergebnisse] == [(0, True, 2)]
 
 
+class MitLebenszyklus(SkalierungBasis):
+    """Lädt beim Start ein Modell (hier ein Wert) und schließt es am Ende."""
+    def __init__(self):
+        super().__init__()
+        self.protokoll = []
+
+    async def beim_start(self):
+        self.protokoll.append("start")
+
+    async def beim_ende(self):
+        self.protokoll.append("ende")
+
+    async def auf_datei(self, e, h):
+        self.protokoll.append("auf")
+        return SkalierteDto(pfad=e.pfad)
+
+
+@sync
+async def test_der_lebenszyklus_laeuft_einmal_vor_dem_anbieten_und_einmal_am_ende():
+    f = MitLebenszyklus()
+    laeufer, proxy = _laeufer(f, Zaehler())     # eine Funktion ohne Haken: die vorbelegten tun nichts
+    await laeufer.starte()
+    await laeufer.starte()                      # ein zweites Mal (Reconnect) startet nicht noch einmal
+    await laeufer.biete_an()
+    await laeufer.nimm(_eingang())
+    await laeufer.beende()
+    await laeufer.beende()
+    assert f.protokoll == ["start", "auf", "ende"]
+
+
 @sync
 async def test_hoechstens_slots_gleichzeitig_und_derselbe_eingang_laeuft_nur_einmal():
     f = Skalierer(slots=2, dauer=0.03)

@@ -186,6 +186,16 @@ public interface IPost : IDienst { Task SendeAsync(string an); }
         quelle.Should().Contain("new Type[] { typeof(global::Probe.IPost) }", "der Zustand ist kein Dienst im Bedarf");
     }
 
+    [Fact]
+    public void Eine_Funktion_mit_Lebenszyklus_ist_nie_gleichbleibend()
+    {
+        var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
+            public sealed class Laedt : IFunktion, ILebenszyklus { public Mahne? Auf(Ueberfaellig e) => null; } }");
+        ids.Should().BeEmpty();
+        fehler.Should().BeEmpty();
+        quelle.Should().Contain("\"Laedt\", Draussen: false, Gleichbleibend: false,", "sie lädt etwas beim Aktivieren — ihre Ausgabe wird festgehalten");
+    }
+
     [Theory]
     [InlineData("public sealed class Z(IZustand<Zahl> a, IZustand<Zahl> b) : IFunktion { public Mahne? Auf(Ueberfaellig e) => null; }", "zwei Zustände")]
     [InlineData("public sealed class Z(IZustand<List<int>> a) : IFunktion { public Mahne? Auf(Ueberfaellig e) => null; }", "generischer Zustand")]

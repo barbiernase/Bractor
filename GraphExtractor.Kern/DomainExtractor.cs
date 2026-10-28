@@ -159,7 +159,7 @@ public sealed class BausteinFunktionRaw
     public Dictionary<string, List<(string Typ, string Name)>> UmsetzungsKonstruktoren = new(StringComparer.Ordinal);
     /// <summary>Der Zustand (<c>IZustand&lt;T&gt;</c>, voller Name von T) — null ohne; <c>[EineAdresse]</c> als Code-Fakt (Plan §2.9).</summary>
     public string? ZustandFull;
-    public bool EineAdresse;
+    public bool EineAdresse, Lebenszyklus;
     public string? Doku, Datei;
 }
 
@@ -758,7 +758,7 @@ public sealed partial class DomainExtractor
         {
             Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq(), Klasse = !form.Draussen,
             Doku = decl == null ? null : Summary(decl), Datei = decl?.SyntaxTree.FilePath,
-            ZustandFull = form.Zustand?.Fq(), EineAdresse = form.EineAdresse,
+            ZustandFull = form.Zustand?.Fq(), EineAdresse = form.EineAdresse, Lebenszyklus = form.Lebenszyklus,
         };
         foreach (var a in form.Aufs)
         {

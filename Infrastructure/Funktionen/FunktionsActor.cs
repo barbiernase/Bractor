@@ -27,8 +27,10 @@ namespace Infrastructure.Funktionen;
 /// <para><b>Zustand</b> (<c>IZustand&lt;T&gt;</c>, Plan §2.9, A5) — nach dem Vorbild des Aggregat-Actors: geladen beim Aktivieren (zusammen mit dem
 /// Stand, bevor das erste <c>Auf</c> läuft); immer nur EIN Eingang zugleich (ein Schreiber je Adresse); gesichert nur in einem RUHEPUNKT — kein
 /// Eingang in Arbeit, also enthält der Zustand genau die Log-Eingänge bis zur Position — in EINER Transaktion mit dem Stand, höchstens so oft wie
-/// die Umgebung sagt und beim Stoppen. Während einer Sicherung startet nichts. Verliert die Sicherung gegen eine zweite Aktivierung, verwirft der
-/// Actor Zustand und Lauf und lädt beides neu.</para>
+/// die Umgebung sagt und beim Stoppen. Während einer Sicherung startet nichts. Verliert die Sicherung gegen eine zweite Aktivierung, beginnt die
+/// Aktivierung neu (über die Supervision: Freigabe, Bau, Laden, Lebenszyklus).</para>
+/// <para><b>Lebenszyklus</b> (<c>ILebenszyklus</c>, optional, E10): nach dem Laden <c>BeimAktivierenAsync</c>, vor jeder Sicherung
+/// <c>VorDemSichernAsync</c>, am Ende die Freigabe.</para>
 /// </summary>
 public sealed class FunktionsActor : RahmenActor
 {
@@ -42,6 +44,10 @@ public sealed class FunktionsActor : RahmenActor
     private sealed record Geladen(PartitionsCheckpoint? Stand, GeladenerZustand Zustand);
     private sealed record Erneut(PartitionsEvent Eingang);
     private sealed record HinweisErneut(HinweisZustellen Hinweis, int Versuch);
+    private sealed record NeuBeginnen;
+
+    /// <summary>Eine zweite Aktivierung derselben Adresse hat gesichert: diese beginnt neu (Bau, Laden, Lebenszyklus) mit deren Stand.</summary>
+    public sealed class AktivierungVerdraengtException(string meldung) : Exception(meldung);
 
     /// <summary>So viele Hinweise warten höchstens auf einen freien Slot; darüber fallen die ältesten weg (höchstens einmal, Inv. 6).</summary>
     public const int HinweiseHoechstens = 10_000;
@@ -74,7 +80,7 @@ public sealed class FunktionsActor : RahmenActor
     private DateTimeOffset _letzterStand = DateTimeOffset.MinValue, _naechsterParkVersuch = DateTimeOffset.MinValue;
 
     // ── Zustand (nur mit IZustand<T>) ──
-    private bool _zustandBereit, _laedt, _zustandGeaendert;
+    private bool _zustandBereit, _zustandGeaendert;
     private int _zustandVersion, _parkInArbeit;
     private long _zustandPosition;
     private string? _zustandVerweis;
@@ -112,13 +118,13 @@ public sealed class FunktionsActor : RahmenActor
     private bool MitZustand => _sicherung is not null;
 
     /// <summary>Kein Eingang in Arbeit, keine Sicherung, kein Laden — nur hier enthält der Zustand genau die Log-Eingänge bis zur Position.</summary>
-    private bool Ruhig => _lauf is { InArbeit: 0 } && _parkInArbeit == 0 && _hinweiseInArbeit == 0 && !_schreibt && !_laedt;
+    private bool Ruhig => _lauf is { InArbeit: 0 } && _parkInArbeit == 0 && _hinweiseInArbeit == 0 && !_schreibt;
 
     /// <summary>
     /// Darf jetzt ein Log-Eingang starten? Ohne Zustand immer (bis zur Slot-Grenze); mit Zustand nur geladen, ohne laufende Sicherung und ohne einen
     /// Hinweis in Arbeit (ein Schreiber).
     /// </summary>
-    private bool DarfStarten => !MitZustand || (_zustandBereit && !_schreibt && !_laedt && _parkInArbeit == 0 && _hinweiseInArbeit == 0);
+    private bool DarfStarten => !MitZustand || (_zustandBereit && !_schreibt && _parkInArbeit == 0 && _hinweiseInArbeit == 0);
 
     /// <summary>Darf jetzt ein Hinweis starten? Ohne Zustand bis zur Slot-Grenze, mit Zustand nur im Ruhepunkt.</summary>
     private bool HinweisDarfStarten => !Stopp.IsCancellationRequested && (MitZustand ? _zustandBereit && Ruhig : _hinweiseInArbeit < _slots);
@@ -128,9 +134,12 @@ public sealed class FunktionsActor : RahmenActor
         _adresse = context.ClusterIdentity()?.Identity ?? "0";
         _partition = int.TryParse(_adresse, out var p) && p < _partitionen ? p : 0;
         _lauf = new FunktionsLauf(_slots);
-        // Wirft der Bau oder das Laden, startet die Supervision neu (die nächste Weckung versucht es wieder).
+        // Bauen, Zustand laden, dann der Lebenszyklus der Funktion (ILebenszyklus: ein Netz laden …) — erst danach laufen Eingänge und Hinweise
+        //   (bis dahin warten sie in der Mailbox). Wirft etwas davon, ist die Aktivierung gescheitert, nicht ein Eingang: die Supervision beginnt
+        //   neu, die nächste Weckung versucht es wieder, kein Stream wird geparkt.
         if (_aktivierung is not null) await _aktivierung.BeginneAsync();
         if (MitZustand) Uebernimm(await LadeAsync(Stopp));
+        if (_aktivierung is not null) await _aktivierung.AktiviereAsync(Stopp);
     }
 
     /// <summary>Umsetzung und Dienste dieser Aktivierung schließen (Stopp, Passivierung, Neustart) — die nächste baut sie neu.</summary>
@@ -159,6 +168,9 @@ public sealed class FunktionsActor : RahmenActor
             case HinweisErneut e:
                 StarteHinweis(context, e.Hinweis, e.Versuch);
                 break;
+            case NeuBeginnen:
+                // Über die Supervision: Freigabe (Umsetzung, Dienste), neue Instanz, Bau, Laden des Gewinner-Stands, Lebenszyklus.
+                throw new AktivierungVerdraengtException($"{_b.Name}/{_adresse}: eine zweite Aktivierung hat gesichert — diese beginnt neu mit deren Stand");
         }
         return Task.CompletedTask;
     }
@@ -263,35 +275,12 @@ public sealed class FunktionsActor : RahmenActor
         _zustandBereit = true;
     }
 
-    /// <summary>Nach einem verlorenen Konflikt: Zustand und Lauf der anderen Aktivierung übernehmen (was sie seit ihrer Sicherung rechnete, verfällt).</summary>
-    private void LadeNeu(IContext context)
-    {
-        if (_laedt) return;
-        _laedt = true;
-        _zustandBereit = false;
-        _lauf = new FunktionsLauf(_slots);
-        Neben(context, LadeAsync, t =>
-        {
-            _laedt = false;
-            if (t is Task<Geladen> { IsCompletedSuccessfully: true } g) Uebernimm(g.Result);
-            else _logger?.LogWarning(t.Exception?.GetBaseException(), "[Funktion] {Funktion}/{Adresse}: Zustand nicht geladen — die nächste Weckung versucht es wieder",
-                _b.Name, _adresse);
-            StarteHinweise(context);
-            Lies(context);
-            return Task.CompletedTask;
-        });
-    }
-
     // ── Lesen: eine Seite neben der Mailbox, aufnehmen in der Mailbox ─────────────────────────────────────────────────────
 
     private void Lies(IContext context)
     {
         if (Stopp.IsCancellationRequested || _lauf is null) return;
-        if (MitZustand && !_zustandBereit)
-        {
-            if (!_laedt) LadeNeu(context);
-            return;
-        }
+        if (MitZustand && !_zustandBereit) return;
         if (!_b.HoertLog) return;   // nur Hinweise: kein Log-Leser, keine Position
         if (_liest) { _nochmal = true; return; }
         if (_lauf.Stand is not null && (_lauf.FreieSlots <= 0 || !DarfStarten)) return;   // Rückstau im Log: erst lesen, wenn ein Slot frei ist
@@ -498,8 +487,11 @@ public sealed class FunktionsActor : RahmenActor
         });
     }
 
-    /// <summary>Was jetzt zu sichern wäre (nur im Ruhepunkt): Stand (mit Log-Eingängen), Position, Daten — oder null, wenn sich nichts änderte.</summary>
-    private (PartitionsCheckpoint? Stand, long Position, byte[] Daten)? ZuSichern(bool erzwingen)
+    /// <summary>
+    /// Was jetzt zu sichern wäre (nur im Ruhepunkt): Stand (mit Log-Eingängen) und Position — oder null, wenn sich nichts änderte. Die Daten holt die
+    /// Sicherung danach (<see cref="FunktionsAktivierung.SichereAsync"/>, mit <c>VorDemSichernAsync</c>); bis dahin startet nichts.
+    /// </summary>
+    private (PartitionsCheckpoint? Stand, long Position)? ZuSichern(bool erzwingen)
     {
         if (!Ruhig || !_zustandBereit || _lauf is not { } lauf) return null;
         PartitionsCheckpoint? stand = null;
@@ -510,7 +502,7 @@ public sealed class FunktionsActor : RahmenActor
         }
         var position = stand?.Position ?? 0;
         if (!erzwingen && !_zustandGeaendert && !_geparktGeaendert && position <= _zustandPosition) return null;
-        return (stand, position, _aktivierung!.Sichere());
+        return (stand, position);
     }
 
     /// <summary>
@@ -527,7 +519,8 @@ public sealed class FunktionsActor : RahmenActor
         var warGeaendert = (_zustandGeaendert, _geparktGeaendert);
         _zustandGeaendert = _geparktGeaendert = false;
         var lauf = _lauf!;
-        Neben(context, ct => _sicherung.SichereAsync(_b.Name, _adresse, s.Stand, s.Position, s.Daten, _zustandVersion, _zustandVerweis, ct), t =>
+        var (version, verweis) = (_zustandVersion, _zustandVerweis);
+        Neben(context, async ct => await _sicherung.SichereAsync(_b.Name, _adresse, s.Stand, s.Position, await _aktivierung!.SichereAsync(ct), version, verweis, ct), t =>
         {
             _schreibt = false;
             if (t is Task<(int? Stand, int Zustand, string? Verweis)> { IsCompletedSuccessfully: true } v)
@@ -539,9 +532,11 @@ public sealed class FunktionsActor : RahmenActor
             }
             else if (t.Exception?.GetBaseException() is PartitionsKonfliktException)
             {
-                // Eine zweite Aktivierung hat gesichert: ihr Stand gilt — Zustand und Lauf verwerfen und neu laden (nichts ist gerade in Arbeit).
-                _logger?.LogInformation("[Funktion] {Funktion}/{Adresse}: Zustand zwischenzeitlich gesichert — neu laden", _b.Name, _adresse);
-                LadeNeu(context);
+                // Eine zweite Aktivierung hat gesichert: ihr Stand gilt. Diese Aktivierung beginnt neu — die Umsetzung (mit dem, was sie im
+                //   Lebenszyklus geladen hat) passt nicht mehr zum Zustand. Bis dahin startet nichts mehr.
+                _logger?.LogInformation("[Funktion] {Funktion}/{Adresse}: Zustand zwischenzeitlich gesichert — beginnt neu", _b.Name, _adresse);
+                _zustandBereit = false;
+                context.Send(context.Self, new NeuBeginnen());
                 return Task.CompletedTask;
             }
             else
@@ -565,7 +560,8 @@ public sealed class FunktionsActor : RahmenActor
             if (ZuSichern(erzwingen: false) is not { } s) return;
             try
             {
-                await _sicherung.SichereAsync(_b.Name, _adresse, s.Stand, s.Position, s.Daten, _zustandVersion, _zustandVerweis, CancellationToken.None)
+                var daten = await _aktivierung!.SichereAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10));
+                await _sicherung.SichereAsync(_b.Name, _adresse, s.Stand, s.Position, daten, _zustandVersion, _zustandVerweis, CancellationToken.None)
                     .WaitAsync(TimeSpan.FromSeconds(10));
             }
             catch (Exception ex) { _logger?.LogDebug(ex, "[Funktion] {Funktion}/{Adresse}: Zustand beim Stopp nicht gesichert (die letzte Sicherung gilt)", _b.Name, _adresse); }

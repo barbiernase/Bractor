@@ -20,6 +20,9 @@ public static class Funktionsvertrag
     /// <summary>Der volle Metadaten-Name des Zustands einer Funktion (<c>IZustand&lt;T&gt;</c> im Konstruktor, Plan §2.9).</summary>
     public const string Zustand = "Abstractions.IZustand`1";
 
+    /// <summary>Der volle Name des optionalen Lebenszyklus einer Funktion im Host (Plan §2.9, E10).</summary>
+    public const string Lebenszyklus = "Abstractions.ILebenszyklus";
+
     /// <summary>Der volle Name des Attributs „eine Adresse statt einer je Partition“ (Plan §2.9, A6).</summary>
     public const string EineAdresse = "Abstractions.EineAdresseAttribute";
 

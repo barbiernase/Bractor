@@ -180,7 +180,8 @@ public static class Sonde
         //   „lernt“), Lese-Fähigkeiten; Konstruktor, Umsetzungen.
         foreach (var f in A(b, "bausteinFunktionen").Where(Sonde))
             z.Add($"funktion-auf {S(f, "namespace")}.{S(f, "name")} {(f["klasse"]?.GetValue<bool>() == true ? "klasse" + Konstruktor(f) : "schnittstelle")}"
-                + (f["zustand"] is { } zu ? $" zustand={zu}" : "") + (f["eineAdresse"]?.GetValue<bool>() == true ? " eineadresse" : "") + " | "
+                + (f["zustand"] is { } zu ? $" zustand={zu}" : "") + (f["eineAdresse"]?.GetValue<bool>() == true ? " eineadresse" : "")
+                + (f["lebenszyklus"]?.GetValue<bool>() == true ? " lebenszyklus" : "") + " | "
                 + string.Join(" || ", A(f, "eingaenge").Select(e => S(e, "eingang")
                     + (e["hinweis"]?.GetValue<bool>() == true ? " hinweis" : "") + (e["herkunft"]?.GetValue<bool>() == true ? " herkunft" : "")
                     + " -> " + (e["strom"]?.GetValue<bool>() == true ? "strom " : "")

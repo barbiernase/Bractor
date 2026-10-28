@@ -81,4 +81,47 @@ public class FunktionsAktivierungTests
         await a.DisposeAsync();   // nichts mehr offen
         p.Should().HaveCount(1);
     }
+
+    // ── Lebenszyklus (ILebenszyklus, Plan §2.9, E10) ──
+
+    private sealed class Netz { public int Gewicht { get; set; } }
+
+    private sealed class Lernend(Abstractions.IZustand<Netz> netz, Protokoll p) : Abstractions.ILebenszyklus
+    {
+        public int Gpu;   // nur im Test: die Ressource der Aktivierung
+        public Task BeimAktivierenAsync(System.Threading.CancellationToken ct) { Gpu = netz.Wert.Gewicht; p.Add($"aktiviert mit {Gpu}"); return Task.CompletedTask; }
+        public Task VorDemSichernAsync(System.Threading.CancellationToken ct) { netz.Wert.Gewicht = Gpu; p.Add("zurückgeschrieben"); return Task.CompletedTask; }
+    }
+
+    private static FunktionsZustandsform Form() => new(typeof(Netz), () => new Zustand<Netz>(),
+        z => System.Text.Encoding.UTF8.GetBytes(((Zustand<Netz>)z).Wert.Gewicht.ToString()),
+        (z, d) => ((Zustand<Netz>)z).Wert = new Netz { Gewicht = int.Parse(System.Text.Encoding.UTF8.GetString(d)) },
+        z => ((Zustand<Netz>)z).Wert = new Netz());
+
+    [Fact]
+    public async Task Der_Lebenszyklus_laeuft_nach_dem_Laden_des_Zustands_und_vor_jeder_Sicherung()
+    {
+        var (wurzel, p) = Container();
+        Lernend? f = null;
+        var a = new FunktionsAktivierung(wurzel, (sp, z) => f = new Lernend((Abstractions.IZustand<Netz>)z!, p), Form());
+        await a.BeginneAsync();
+        a.Lade(System.Text.Encoding.UTF8.GetBytes("7"));          // der Actor lädt den gesicherten Zustand …
+        await a.AktiviereAsync(default);                           // … dann der Lebenszyklus: er sieht ihn
+        f!.Gpu.Should().Be(7);
+
+        f.Gpu = 9;                                                 // gerechnet wird auf der Ressource
+        System.Text.Encoding.UTF8.GetString(await a.SichereAsync(default)).Should().Be("9", "vor dem Sichern schreibt die Funktion zurück");
+        p.Should().Equal("aktiviert mit 7", "zurückgeschrieben");
+        await a.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Ohne_Lebenszyklus_ist_Aktivieren_nichts()
+    {
+        var (wurzel, _) = Container();
+        var a = new FunktionsAktivierung(wurzel, Baue);
+        await a.BeginneAsync();
+        await a.AktiviereAsync(default);
+        await a.DisposeAsync();
+    }
 }

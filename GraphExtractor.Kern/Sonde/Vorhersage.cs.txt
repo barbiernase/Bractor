@@ -58,9 +58,25 @@ public sealed class Gewichte
     public Dictionary<Guid, int> Anzahl { get; set; } = new();
 }
 
-[EineAdresse]
-public sealed class Prognosemodell(IZustand<Gewichte> gewichte) : IFunktion
+// Mit Lebenszyklus (E10): beim Aktivieren lädt es ein Arbeitsmodell aus dem gesicherten Zustand, vor jeder Sicherung schreibt es zurück.
+public sealed class Arbeitsmodell
 {
+    public double Faktor { get; set; } = 1;
+}
+
+[EineAdresse]
+public sealed class Prognosemodell(IZustand<Gewichte> gewichte) : IFunktion, ILebenszyklus
+{
+    private readonly Arbeitsmodell _modell = new();
+
+    public Task BeimAktivierenAsync(CancellationToken ct)
+    {
+        _modell.Faktor = gewichte.Wert.Anzahl.Count > 0 ? 1.0 / gewichte.Wert.Anzahl.Count : 1;
+        return Task.CompletedTask;
+    }
+
+    public Task VorDemSichernAsync(CancellationToken ct) => Task.CompletedTask;
+
     public void Auf(TemperaturGemeldet e, Herkunft h)
     {
         var n = gewichte.Wert.Anzahl.GetValueOrDefault(h.Stream) + 1;

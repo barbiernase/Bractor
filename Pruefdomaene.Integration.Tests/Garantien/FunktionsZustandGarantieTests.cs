@@ -210,13 +210,18 @@ public class FunktionsZustandGarantieTests
             var g = await GesichertAsync(a, stelle);
             g.Anzahl.Should().Be(6);
             g.Position.Should().Be(g.Stand, "Zustand und Position aus derselben Sicherung");
+
+            // Nur noch b: hat seine Aktivierung einmal verloren, hat sie neu begonnen (Laden, Lebenszyklus) und sichert weiter.
+            await a.StopAsync();
+            await MissAsync(b, stelle, 6, 7);
+            await Gelernt(b, stelle, 8, "die verbliebene Aktivierung sichert nach einem verlorenen Konflikt nicht weiter");
         }
         finally
         {
             await b.StopAsync();
             await a.StopAsync();
         }
-        (await GesichertAsync(a, stelle)).Anzahl.Should().Be(6, "auch nach dem Stopp beider gilt eine Sicherung, kein Gemisch");
+        (await GesichertAsync(b, stelle)).Anzahl.Should().Be(8, "auch nach dem Stopp beider gilt eine Sicherung, kein Gemisch");
     }
 
     [Fact]

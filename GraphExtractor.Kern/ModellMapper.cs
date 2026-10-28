@@ -127,7 +127,7 @@ public static class ModellMapper
             BausteinFunktionen = dom.BausteinFunktionen.Select(f => new BausteinFunktion
             {
                 Name = f.Name, Namespace = f.Namespace, Klasse = f.Klasse, Doku = f.Doku, Datei = Rel(f.Datei),
-                Zustand = f.ZustandFull is { } z ? Kurz(z) : null, EineAdresse = f.EineAdresse,
+                Zustand = f.ZustandFull is { } z ? Kurz(z) : null, EineAdresse = f.EineAdresse, Lebenszyklus = f.Lebenszyklus,
                 Eingaenge = f.Eingaenge.Select(e => new BausteinEingang
                 {
                     Eingang = Kurz(e.EingangFull), Hinweis = e.Hinweis, Herkunft = e.Herkunft, Strom = e.Strom,

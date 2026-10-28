@@ -34,6 +34,8 @@ Was das SDK übernimmt — der Worker schreibt nichts davon von Hand:
     `ArbeitsAuftrag.hinweis`), läuft höchstens einmal — nichts wird festgehalten; die Antwort geht als Ganzes zurück (auch ein Strom), ihre Commands
     und Hinweise sendet der Funktions-Actor. Dieselbe Adresse wie in C#: alle Eingänge eines Funktions-Actors rechnet derselbe Träger, solange er
     lebt — ein Zustand im Worker (ein Modell) sieht so alles, was zu ihm gehört; ihn zu sichern, ist Sache des Workers.
+  - Lebenszyklus (optional, Gegenstück zu `ILebenszyklus` im Host): `async def beim_start(self)` läuft einmal, bevor der Worker die Funktion
+    anbietet (ein Netz laden), `async def beim_ende(self)` einmal beim Herunterfahren (Ressourcen schließen, Zustand selbst sichern).
 """
 
 from __future__ import annotations
@@ -100,6 +102,12 @@ class FunktionsBasis(ABC):
     def __init__(self, slots: int | None = None, konfig: dict[str, str] | None = None):
         self.slots = max(1, slots if slots is not None else self.SLOTS)
         self.konfig: dict[str, str] = dict(konfig or {})
+
+    async def beim_start(self) -> None:
+        """Optional: einmal je Worker, bevor die Funktion angeboten wird — etwa ein Netz laden. Wirft es, startet der Worker nicht."""
+
+    async def beim_ende(self) -> None:
+        """Optional: einmal beim Herunterfahren — Ressourcen schließen, den eigenen Zustand sichern (das Framework sichert ihn draußen nicht)."""
 
     def eingang(self, typ: type) -> Eingang:
         e = self.EINGAENGE.get(typ)
@@ -182,6 +190,26 @@ class FunktionsLaeufer:
     @property
     def laufend(self) -> int:
         return len(self._laufend)
+
+    async def starte(self) -> None:
+        """Einmal je Worker, vor dem ersten Anbieten: `beim_start` jeder Funktion (der Lebenszyklus, Gegenstück zu `ILebenszyklus`)."""
+        if getattr(self, "_gestartet", False):
+            return
+        for f in self._funktionen.values():
+            await f.beim_start()
+        self._gestartet = True
+
+    async def beende(self) -> None:
+        """Beim Herunterfahren: laufende Eingänge abwarten, dann `beim_ende` jeder Funktion — einmal, auch wenn eine davon wirft."""
+        if not getattr(self, "_gestartet", False):
+            return
+        self._gestartet = False
+        await self.warte_auf_alle()
+        for f in self._funktionen.values():
+            try:
+                await f.beim_ende()
+            except Exception as e:   # die übrigen trotzdem schließen
+                log.warning("beim_ende von %s gescheitert: %s", f.FUNKTION, e)
 
     async def biete_an(self, _antwort=None) -> None:
         """Nach dem Handshake (und nach jedem Reconnect): Funktionen + Slots anmelden."""

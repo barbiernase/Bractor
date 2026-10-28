@@ -375,11 +375,12 @@ decide Station.VermerkePrognose -> PrognoseVermerkt
 apply Station.TemperaturGemeldet
 apply Station.PrognoseVermerkt
 funktion-auf Wetterdienst.Vorhersage.Tendenzbildung klasse() | TemperaturGemeldet herkunft -> Tendenz
-funktion-auf Wetterdienst.Vorhersage.Prognosemodell klasse(gewichte:IZustand<Gewichte>) zustand=Gewichte eineadresse | TemperaturGemeldet herkunft -> lernt || StationStillgelegt hinweis -> lernt || Tendenz hinweis -> VermerkePrognose
+funktion-auf Wetterdienst.Vorhersage.Prognosemodell klasse(gewichte:IZustand<Gewichte>) zustand=Gewichte eineadresse lebenszyklus | TemperaturGemeldet herkunft -> lernt || StationStillgelegt hinweis -> lernt || Tendenz hinweis -> VermerkePrognose
 funktion-auf Wetterdienst.Vorhersage.IUnwetterwarnung schnittstelle | Tendenz hinweis -> Unwetter
 client Wetterdienst.Vorhersage.IWetterApp | traegt IUnwetterwarnung; sendet ; fragt ; hoert Unwetter
 # Der Zustand ist eine eigene Klasse ohne Marker — eine Code-Karte (wo der Editor sie zeigt, ist mit der Oberfläche zurückgestellt, Plan E4).
 code Wetterdienst.Vorhersage.Gewichte class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
+code Wetterdienst.Vorhersage.Arbeitsmodell class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
 lage Tendenzbildung -> Domain.Pipeline
 lage Prognosemodell -> Domain.Pipeline
 lage IUnwetterwarnung -> Domain.Pipeline

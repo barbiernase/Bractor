@@ -132,6 +132,14 @@ public static class Grammatik
             [An("CQRS105", "Domain.SourceGeneration/ZustandAnalyzer.cs"),
              Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (höchstens ein Zustand, eigene Klasse; Auf ohne Ausgabe nur mit Zustand)"),
              new("generator", null, "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (mit Zustand nie gleichbleibend; Sichern über den generierten Kontext)")]),
+        new("GR-FUNKTION-LEBENSZYKLUS", "Lebenszyklus einer Funktion optional", "Eine Funktions-Klasse im Host kann einen Lebenszyklus haben "
+            + "(ILebenszyklus): BeimAktivierenAsync nach dem Bau und dem Laden des Zustands, vor dem ersten Auf (ein Netz laden); VorDemSichernAsync vor "
+            + "jeder Sicherung des Zustands (Gewichte zurückholen); das Ende über IAsyncDisposable. Eine geladene Ressource darf in einem readonly-Feld "
+            + "stehen, Zustand nur in IZustand<T>. Nicht an Schnittstellen (draußen gehört der Lebenszyklus dem Worker), nicht an Diensten; eine Funktion "
+            + "mit Lebenszyklus ist nie gleichbleibend (Plan §2.9, E10).", "error",
+            [An("CQRS107", "Domain.SourceGeneration/LebenszyklusAnalyzer.cs"),
+             new("generator", null, "Infrastructure.SourceGeneration/Funktionsform.cs (mit Lebenszyklus nie gleichbleibend)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsActor.cs (Aktivieren nach dem Laden, vor jeder Sicherung, Freigabe am Ende)")]),
         new("GR-NEUE-ID", "Neue Ids nur abgeleitet", "Auf der Server-Seite (Aggregat, Projektion, Reader, Funktion im Host) entstehen neue Ids nur "
             + "abgeleitet (Herkunft.NeueId), nie mit Guid.NewGuid() oder Id<T>.Neu() — eine Wiederholung bekäme sonst ein anderes Ziel (R13). Clients "
             + "würfeln.", "error",

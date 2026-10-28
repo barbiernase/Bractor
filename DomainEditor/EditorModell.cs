@@ -275,6 +275,8 @@ public sealed record BausteinFunktion
     public string? Zustand { get; init; }
     /// <summary><c>[EineAdresse]</c>: ein Funktions-Actor für alles statt einer je Partition (A6).</summary>
     public bool EineAdresse { get; init; }
+    /// <summary>Die Klasse hat einen Lebenszyklus (<c>ILebenszyklus</c>, E10): sie lädt beim Aktivieren etwas.</summary>
+    public bool Lebenszyklus { get; init; }
     public string? Doku { get; init; }
     public string? Datei { get; init; }
 }

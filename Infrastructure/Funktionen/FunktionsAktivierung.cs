@@ -1,3 +1,4 @@
+using Abstractions;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Infrastructure.Funktionen;
@@ -10,7 +11,9 @@ namespace Infrastructure.Funktionen;
 ///   Datenbank-Verbindung, ein geladenes Modell, ein Cache;</item>
 /// <item>die Umsetzung im Host, über die generierte Fabrik in diesem Bereich gebaut (nie einmal je Knoten neben den Actors);</item>
 /// <item>ihr Zustand (<c>IZustand&lt;T&gt;</c>, Plan §2.9): frisch beim Aktivieren, geladen und gesichert über die generierte Form
-///   (<see cref="FunktionsZustandsform"/>) — der Actor lädt ihn, bevor das erste <c>Auf</c> läuft.</item>
+///   (<see cref="FunktionsZustandsform"/>) — der Actor lädt ihn, bevor das erste <c>Auf</c> läuft;</item>
+/// <item>ihr optionaler Lebenszyklus (<see cref="ILebenszyklus"/>, E10): <see cref="AktiviereAsync"/> nach dem Laden des Zustands,
+///   <see cref="SichereAsync"/> ruft vor dem Serialisieren <c>VorDemSichernAsync</c>.</item>
 /// </list>
 /// Freigegeben wird in umgekehrter Reihenfolge: zuerst die Umsetzung (<see cref="IAsyncDisposable"/> bzw. <see cref="IDisposable"/>), dann der
 /// Bereich mit seinen Diensten. Die nächste Aktivierung — auf diesem oder einem anderen Knoten — baut alles neu.
@@ -36,6 +39,20 @@ public sealed class FunktionsAktivierung : IAsyncDisposable
 
     /// <summary>Hat die Funktion Zustand?</summary>
     public bool MitZustand => _form is not null;
+
+    /// <summary>
+    /// Der Lebenszyklus der Funktion (<see cref="ILebenszyklus"/>, optional): nach dem Laden des Zustands, vor dem ersten <c>Auf</c>. Ohne
+    /// Lebenszyklus nichts.
+    /// </summary>
+    public Task AktiviereAsync(CancellationToken ct) =>
+        _umsetzung is ILebenszyklus l ? l.BeimAktivierenAsync(ct) : Task.CompletedTask;
+
+    /// <summary>Vor jeder Sicherung, im Ruhepunkt (<see cref="ILebenszyklus.VorDemSichernAsync"/>); danach die Daten des Zustands.</summary>
+    public async Task<byte[]> SichereAsync(CancellationToken ct)
+    {
+        if (_umsetzung is ILebenszyklus l) await l.VorDemSichernAsync(ct);
+        return Sichere();
+    }
 
     /// <summary>Lädt gesicherte Daten in den Zustand dieser Aktivierung (vor dem ersten <c>Auf</c>); null = Anfangszustand.</summary>
     public void Lade(byte[]? daten)

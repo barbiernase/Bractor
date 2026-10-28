@@ -193,6 +193,8 @@ class CqrsClient(HandlerBase, Generic[S]):
             verify_hash_at_connect(file_base_url, generated_dir)
 
         capabilities = self._build_capabilities_request()
+        # Der Lebenszyklus der getragenen Funktionen (beim_start: ein Netz laden) — einmal, bevor sie angeboten werden.
+        await self._funktionen.starte()
         # on_connected läuft nach JEDEM Handshake (auch nach Reconnect): angebotene Funktionen neu anmelden.
         await self._connection.connect_with_retry(host, port, capabilities, on_connected=self._funktionen.biete_an)
 
@@ -210,6 +212,7 @@ class CqrsClient(HandlerBase, Generic[S]):
             log.info("Client shutting down...")
         finally:
             await self._proxy.disconnect()
+            await self._funktionen.beende()
             log.info("Client stopped")
 
     async def _sitzung(self) -> None:
