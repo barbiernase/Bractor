@@ -39,7 +39,7 @@ public class DispatcherCommandFailedTests
         var failed = ProtoActorAggregateDispatcher.BaueCommandFailed(env, "Cluster nicht routbar", 3);
 
         failed.Should().NotBeNull();
-        failed!.TargetSubscriberId.Should().Be("session-abc");          // targeted an den auslösenden Client
+        failed!.ZielSitzung.Should().Be("session-abc");          // targeted an den auslösenden Client
         failed.CorrelationId.Should().Be(env.CorrelationId);            // Client matched darüber
         failed.CausationId.Should().Be(env.CommandId.ToString());       // Ursache = der Command
         failed.AggregateId.Should().Be(env.AggregateId);

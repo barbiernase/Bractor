@@ -2,7 +2,7 @@ using Abstractions;
 using Infrastructure.Komposition;
 using Infrastructure.Lebenszyklus;
 using Infrastructure.Projections;   // IClusterKindContributor, Wake
-using Infrastructure.PubSub;        // CommandEmitter
+using Infrastructure.Emit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;

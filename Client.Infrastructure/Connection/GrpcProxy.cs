@@ -60,7 +60,7 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
 
     /// <summary>
     /// Serialisierter Write auf den bidirektionalen RequestStream. Alle Sender
-    /// (Command, Query, Subscribe, Capabilities) laufen hierüber, damit nie zwei
+    /// (Command, Query, Capabilities) laufen hierüber, damit nie zwei
     /// Writes gleichzeitig ausstehen. Der Lock umschließt NUR den Write.
     /// </summary>
     private async Task SchreibeAsync(ClientMessage message, CancellationToken ct)
@@ -213,40 +213,6 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
     }
 
     /// <summary>
-    /// Subscribes für einen Event-Typ.
-    /// </summary>
-    public async Task SubscribeAsync(string eventType, CancellationToken ct = default)
-    {
-        EnsureConnected();
-        
-        var message = new ClientMessage
-        {
-            Subscribe = new SubscribeRequest { EventType = eventType }
-        };
-        
-        await SchreibeAsync(message, ct);
-        
-        Console.WriteLine($"[GrpcProxy] Subscribed to: {eventType}");
-    }
-
-    /// <summary>
-    /// Unsubscribes von einem Event-Typ.
-    /// </summary>
-    public async Task UnsubscribeAsync(string eventType, CancellationToken ct = default)
-    {
-        EnsureConnected();
-        
-        var message = new ClientMessage
-        {
-            Unsubscribe = new UnsubscribeRequest { EventType = eventType }
-        };
-        
-        await SchreibeAsync(message, ct);
-        
-        Console.WriteLine($"[GrpcProxy] Unsubscribed from: {eventType}");
-    }
-
-    /// <summary>
     /// Trennt die Verbindung.
     /// </summary>
     public async Task DisconnectAsync()
@@ -346,14 +312,6 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
                 }
                 break;
                 
-            case ServerMessage.MessageOneofCase.SubscriptionConfirmed:
-                Console.WriteLine($"[GrpcProxy] Subscription confirmed: {message.SubscriptionConfirmed.EventType}");
-                break;
-                
-            case ServerMessage.MessageOneofCase.UnsubscriptionConfirmed:
-                Console.WriteLine($"[GrpcProxy] Unsubscription confirmed: {message.UnsubscriptionConfirmed.EventType}");
-                break;
-                
             case ServerMessage.MessageOneofCase.Error:
                 // FIX: Fehler an Query weiterleiten falls CorrelationId passt
                 var errorCorrelationId = message.Error.CorrelationId;
@@ -363,11 +321,6 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
                     errorTcs.TrySetException(new QueryException(message.Error.Code, message.Error.Message));
                 }
                 Console.WriteLine($"[GrpcProxy] Error from server: {message.Error.Code} - {message.Error.Message}");
-                break;
-                
-            case ServerMessage.MessageOneofCase.CommandAccepted:
-                // Ignorieren - wir nutzen Fire-and-Forget mit Events
-                Console.WriteLine($"[GrpcProxy] Command accepted (ignored): {message.CommandAccepted.CorrelationId}");
                 break;
                 
             default:

@@ -12,7 +12,7 @@ namespace Domain.Projections.Modell;
 ///
 /// Upsert-artig (kein Append) → <see cref="ISubscriber"/>, <see cref="IPullSubscriber"/>; der
 /// <c>ModellStore</c> ist zugleich Co-Commit-Tracker (Effekt + Marke in EINER Transaktion).
-/// Kein EventStore-Zugriff — die Wahrheit kommt aus PubSub-Events.
+/// Kein EventStore-Zugriff — die Wahrheit kommt aus den Events, die der Batch-Leser zustellt.
 /// </summary>
 public partial class ModellProjektion : ISubscriber, IPullSubscriber
 {

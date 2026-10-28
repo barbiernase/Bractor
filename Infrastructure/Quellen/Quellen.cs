@@ -3,7 +3,7 @@ using System.Text;
 using Abstractions;
 using Infrastructure.Lebenszyklus;
 using Infrastructure.Akteure;       // AkteurHerkunft
-using Infrastructure.PubSub;       // BrokerPublisher, Commitmeldung
+using Infrastructure.Verteilen;   // Verteilung, Commitmeldung
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -88,12 +88,12 @@ public sealed class QuellEingang
         _bestand = bestand;
     }
 
-    /// <summary>Der Eingang live: Marten-Log, Commit-Meldung über den Broker, Akteur aus den IDarf-Befugnissen.</summary>
+    /// <summary>Der Eingang live: Marten-Log, Commit-Meldung an die Verteiler, Akteur aus den IDarf-Befugnissen.</summary>
     public static QuellEingang Live(IServiceProvider sp)
     {
-        var publisher = sp.GetService<BrokerPublisher>();
+        var verteilung = sp.GetService<Verteilung>();
         return new QuellEingang(sp.GetRequiredService<IEventStoreRepository>(),
-            (events, stream, typ, vorher, korrelation, ursache, akteur) => Commitmeldung.Melde(publisher, events, stream, typ, vorher, korrelation, ursache, akteur),
+            (events, stream, typ, vorher, korrelation, ursache, akteur) => Commitmeldung.Melde(verteilung, events, stream, typ, vorher, korrelation, ursache, akteur),
             AkteurHerkunft.EindeutigerHalter, sp.GetService<IStreamBestand>() ?? new Infrastructure.Persistence.MartenStreamBestand(sp.GetRequiredService<Marten.IDocumentStore>()));
     }
 

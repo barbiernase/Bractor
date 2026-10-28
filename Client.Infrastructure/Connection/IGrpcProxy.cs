@@ -52,12 +52,6 @@ public interface IGrpcProxy
         IReadOnlyList<string>? expectedFreshIds = null,
         CancellationToken ct = default) where TResponse : IQueryResponse;
 
-    /// <summary>Subscribes für einen Event-Typ.</summary>
-    Task SubscribeAsync(string eventType, CancellationToken ct = default);
-
-    /// <summary>Unsubscribes von einem Event-Typ.</summary>
-    Task UnsubscribeAsync(string eventType, CancellationToken ct = default);
-
     /// <summary>Trennt die Verbindung.</summary>
     Task DisconnectAsync();
 }

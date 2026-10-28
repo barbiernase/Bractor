@@ -299,12 +299,6 @@ class GrpcProxy:
                 elif field_name == "error":
                     self._handle_error(payload)
 
-                elif field_name == "subscription_confirmed":
-                    log.debug("Subscribed: %s", payload.event_type)
-
-                elif field_name == "command_accepted":
-                    log.debug("Command accepted: %s", payload.correlation_id)
-
                 else:
                     log.warning("Unknown message: %s", field_name)
 

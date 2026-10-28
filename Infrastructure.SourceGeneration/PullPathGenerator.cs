@@ -104,7 +104,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("using Abstractions;");
             sb.AppendLine("using Core;");
             sb.AppendLine("using Infrastructure.Projections;");
-            sb.AppendLine("using Infrastructure.PubSub;");
+            sb.AppendLine("using Infrastructure.Emit;");
             sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
             sb.AppendLine("using Microsoft.Extensions.DependencyInjection.Extensions;");
             sb.AppendLine("using Microsoft.Extensions.Logging;");

@@ -195,7 +195,7 @@ public class AkteurRechteTests
         };
 
         var failed = AkteurVerweigerung.Baue(env, "Inspekteur")!;
-        failed.TargetSubscriberId.Should().Be("session-0007");
+        failed.ZielSitzung.Should().Be("session-0007");
         failed.CorrelationId.Should().Be(env.CorrelationId);
         ((CommandFailed)failed.Payload).Reason.Should().Be("Akteur 'Inspekteur' darf SetzeModellAktiv nicht");
         AkteurVerweigerung.Baue(env with { OriginSessionId = null }, "Inspekteur").Should().BeNull();

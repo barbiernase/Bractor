@@ -91,7 +91,7 @@ namespace Infrastructure.SourceGeneration
         /// <summary>
         /// Generiert Actor-Klassen.
         /// 
-        /// Konstruktor: handlerFactory, eventStore, dann die optionalen Dienste aus DI (publisher?, logger?, snapshots? …).
+        /// Konstruktor: handlerFactory, eventStore, dann die optionalen Dienste aus DI (verteilung?, logger?, snapshots? …).
         /// </summary>
         private string GenerateAggregateActorsFile(List<INamedTypeSymbol> aggregateSymbols)
         {
@@ -107,7 +107,7 @@ namespace Infrastructure.SourceGeneration
             }
 
             sb.AppendLine("using Abstractions;");
-            sb.AppendLine("using Infrastructure.PubSub;");
+            sb.AppendLine("using Infrastructure.Emit;");
             sb.AppendLine("using Infrastructure.Persistence;");
             sb.AppendLine("using Microsoft.Extensions.Logging;");
             foreach (var ns in namespaces.OrderBy(n => n))
@@ -126,19 +126,19 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"public class {aggregateName}Actor : AggregateActorBase<{aggregateName}>");
                 sb.AppendLine("{");
                 
-                // ★ Konstruktor: BrokerPublisher? / ISnapshotStore? via DI (optional).
+                // ★ Konstruktor: Verteilung? / ISnapshotStore? via DI (optional).
                 //   Schema-Version (Struktur-Hash) wird als Konstante mitgegeben — invalidiert stale Snapshots.
                 sb.AppendLine($"    public {aggregateName}Actor(");
                 sb.AppendLine($"        IAggregateHandlerFactory handlerFactory,");
                 sb.AppendLine($"        IEventStoreRepository eventStore,");
-                sb.AppendLine($"        BrokerPublisher? publisher = null,");
+                sb.AppendLine($"        global::Infrastructure.Verteilen.Verteilung? verteilung = null,");
                 sb.AppendLine($"        ILogger<{aggregateName}Actor>? logger = null,");
                 sb.AppendLine($"        ISnapshotStore? snapshots = null,");
                 sb.AppendLine($"        SnapshotOptions? snapshotOptions = null,");
                 sb.AppendLine($"        IDeadLetterSink? deadLetters = null,");
                 sb.AppendLine($"        global::Infrastructure.Lebenszyklus.Passivierung? passivierung = null,");
                 sb.AppendLine($"        global::Infrastructure.Funktionen.HinweisNetz? hinweisNetz = null)");
-                sb.AppendLine($"        : base(handlerFactory, eventStore, publisher, logger,");
+                sb.AppendLine($"        : base(handlerFactory, eventStore, verteilung, logger,");
                 sb.AppendLine($"               snapshots, GeneratedSnapshotSchema.VersionOf<{aggregateName}>(), snapshotOptions, deadLetters, passivierung, hinweisNetz)");
                 sb.AppendLine("    {");
                 sb.AppendLine("    }");
@@ -172,7 +172,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"using {ns};");
             }
             sb.AppendLine("using Abstractions;");
-            sb.AppendLine("using Infrastructure.PubSub;");
+            sb.AppendLine("using Infrastructure.Emit;");
             sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
             sb.AppendLine("using Proto;");
             sb.AppendLine("using Proto.Cluster;");

@@ -1,6 +1,5 @@
 using Abstractions;
 using Infrastructure.Lebenszyklus;
-using Infrastructure.PubSub;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Proto.Cluster;
@@ -11,9 +10,9 @@ namespace Infrastructure.Aggregate.ActorSystem;
 /// Dispatcht Commands an Aggregate-Actors.
 ///
 /// FIRE-AND-FORGET aus Sicht des Aufrufers: <see cref="Dispatch"/> kehrt sofort zurück.
-/// Feedback kommt ausschließlich über Events (PubSub):
-/// - Erfolg: Domain-Events (Broadcast)
-/// - Fehler: CommandFailed Event (Targeted) — technische Actor-Fehler publiziert der Actor
+/// Feedback kommt ausschließlich über Events an die Verteiler:
+/// - Erfolg: Domain-Events (an jede Sitzung, die sie hört)
+/// - Fehler: CommandFailed Event (gezielt an die Sitzung) — technische Actor-Fehler publiziert der Actor
 ///   selbst; ERREICHT der Command nach erschöpfter Platzierung nie einen Actor, publiziert
 ///   HIER der Dispatcher das CommandFailed (docs/08 §8.4), damit der auslösende Client nicht still hängt.
 ///
@@ -28,7 +27,7 @@ public class ProtoActorAggregateDispatcher : IAggregateDispatcher
     private Bote? _bote;                              // erst beim ersten Senden: der Cluster ist bei der Registrierung noch nicht fertig
     private readonly ILogger _logger;
     private readonly IDeadLetterSink? _deadLetters;   // ★ Audit-Fix #1: nicht-zustellbaren Command durabel machen
-    private readonly BrokerPublisher? _publisher;     // ★ CommandFailed an den Client bei erschöpfter Platzierung
+    private readonly Infrastructure.Verteilen.Verteilung? _verteilung;   // ★ CommandFailed an den Client bei erschöpfter Platzierung
 
     /// <summary>Frist pro Sende-Versuch (begrenzt die interne Placement-Retry-Schleife von Proto.Cluster).</summary>
     private static readonly TimeSpan AttemptTimeout = TimeSpan.FromSeconds(10);
@@ -40,12 +39,12 @@ public class ProtoActorAggregateDispatcher : IAggregateDispatcher
         Proto.ActorSystem actorSystem,
         ILogger<ProtoActorAggregateDispatcher>? logger = null,
         IDeadLetterSink? deadLetters = null,
-        BrokerPublisher? publisher = null)
+        Infrastructure.Verteilen.Verteilung? verteilung = null)
     {
         _actorSystem = actorSystem;
         _logger = logger ?? NullLogger<ProtoActorAggregateDispatcher>.Instance;
         _deadLetters = deadLetters;
-        _publisher = publisher;
+        _verteilung = verteilung;
     }
 
     /// <summary>
@@ -108,29 +107,29 @@ public class ProtoActorAggregateDispatcher : IAggregateDispatcher
 
         // ★ Zusätzlich den auslösenden Client benachrichtigen. Der Command hat nie einen Actor
         //   erreicht → NIEMAND publiziert sonst ein CommandFailed (das tut normal der Actor). Ohne dies
-        //   hinge der Client still (kein Ack, kein Nack). Targeted über OriginSessionId, wie der Actor.
+        //   hinge der Client still (kein Ack, kein Nack). Gezielt an die OriginSessionId, wie der Actor.
         MeldeCommandFailed(envelope, grund);
     }
 
     /// <summary>
     /// Meldet ein <see cref="CommandFailed"/> targeted an die <c>OriginSessionId</c> (verlierbar) — spiegelt
     /// das Actor-Muster (<c>AggregateActorBase.MeldeCommandFailed</c>), für den Fall, dass
-    /// der Command mangels routbarem Cluster nie einen Actor erreicht hat. Ohne Publisher
+    /// der Command mangels routbarem Cluster nie einen Actor erreicht hat. Ohne Verteilung
     /// oder ohne OriginSessionId folgenlos.
     /// </summary>
     private void MeldeCommandFailed(CommandEnvelope envelope, string grund)
     {
         var failed = BaueCommandFailed(envelope, grund, MaxAttempts);
-        if (_publisher is null || failed is null)
+        if (_verteilung is null || failed is null)
             return;
-        _publisher.Melde(failed);
+        _verteilung.Melde(failed);
         _logger.LogDebug("[Dispatcher] CommandFailed an '{Session}' gemeldet (nicht zugestellt).", envelope.OriginSessionId);
     }
 
     /// <summary>
     /// Reine Konstruktion des targeted <see cref="CommandFailed"/>-EventEnvelopes für den
     /// Nicht-zugestellt-Fall (store-/cluster-frei, Ebene-1-testbar). Gibt <c>null</c> zurück, wenn keine
-    /// <c>OriginSessionId</c> vorliegt — dann gibt es kein Ziel für die Targeted Delivery. Spiegelt
+    /// <c>OriginSessionId</c> vorliegt — dann gibt es keine Sitzung, der es gälte. Spiegelt
     /// die Feldbelegung von <c>AggregateActorBase.MeldeCommandFailed</c>.
     /// </summary>
     public static EventEnvelope? BaueCommandFailed(CommandEnvelope envelope, string grund, int maxAttempts)
@@ -150,7 +149,7 @@ public class ProtoActorAggregateDispatcher : IAggregateDispatcher
                 envelope.Payload.GetType().Name,
                 $"Nicht zugestellt nach {maxAttempts} Versuchen: {grund}",
                 envelope.AggregateId.ToString()),
-            TargetSubscriberId = envelope.OriginSessionId,
+            ZielSitzung = envelope.OriginSessionId,
         };
     }
 

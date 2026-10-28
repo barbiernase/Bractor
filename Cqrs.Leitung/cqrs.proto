@@ -29,8 +29,6 @@ service CqrsClientService {
 message ClientMessage {
     oneof message {
         CommandRequest command = 1;
-        SubscribeRequest subscribe = 2;
-        UnsubscribeRequest unsubscribe = 3;
         CapabilitiesRequest capabilities = 4;
         QueryRequest query = 5;
         TransientEventRequest transient_event = 7;
@@ -45,18 +43,10 @@ message CommandRequest {
     CommandEnvelopeDto envelope = 1;
 }
 
-message SubscribeRequest {
-    string event_type = 1;
-    string aggregate_id = 2;
-}
-
-message UnsubscribeRequest {
-    string event_type = 1;
-    string aggregate_id = 2;
-}
-
+// Der Handshake: der Client nennt seinen Vertrag (der Server nimmt die Befugnisse aus SEINER Tabelle, Vertrag ∩ Token) — ein Client ohne
+// Vertrag nennt, was er hören, senden und fragen will (message_types), und was er beantwortet (handle_queries); wirksam ist auch dann nur,
+// was das Token erlaubt. Was die Sitzung hört, meldet der Server beim Verteiler seines Knotens an (Plan Pub/Sub-Neustrukturierung §2.7).
 message CapabilitiesRequest {
-    repeated string event_types = 1;
     repeated string message_types = 2;
     repeated string handle_queries = 4;
     // Akteur-Vertrag (docs/konzept-akteure.md §3): "ich bin Vertrag X" — der Server nimmt die Fähigkeiten aus der
@@ -82,9 +72,6 @@ message QueryRequest {
 message ServerMessage {
     oneof message {
         EventNotification event = 1;
-        SubscriptionConfirmed subscription_confirmed = 2;
-        UnsubscriptionConfirmed unsubscription_confirmed = 3;
-        CommandAccepted command_accepted = 4;
         ErrorResponse error = 5;
         CapabilitiesResponse capabilities_response = 6;
         QueryResponse query_response = 7;
@@ -95,21 +82,6 @@ message ServerMessage {
 
 message EventNotification {
     EventEnvelopeDto envelope = 1;
-}
-
-message SubscriptionConfirmed {
-    string event_type = 1;
-    string aggregate_id = 2;
-}
-
-message UnsubscriptionConfirmed {
-    string event_type = 1;
-    string aggregate_id = 2;
-}
-
-message CommandAccepted {
-    string command_id = 1;
-    string correlation_id = 2;
 }
 
 message CapabilitiesResponse {
@@ -249,7 +221,6 @@ message EventEnvelopeDto {
     string causation_id = 6;
     string correlation_id = 7;
     string user_id = 8;
-    string target_subscriber_id = 9;
     int32 stream_head_version = 10;
 
     // Die Domänen-Nachricht: Typname + Bytes (Proto der Anwendung, docs/06).

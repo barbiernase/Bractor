@@ -25,7 +25,7 @@ public class CommandEmitAnalyzerTests
         // Die relevanten Assemblies laden (Token-Referenz erzwingt das Laden), dann alle als MetadataReference.
         _ = typeof(Abstractions.CommandResult);
         _ = typeof(Proto.Cluster.Cluster);
-        _ = typeof(Infrastructure.PubSub.CommandEmitter);
+        _ = typeof(Infrastructure.Emit.CommandEmitter);
         _ = typeof(System.Threading.CancellationToken);
         _ = typeof(object);
 
@@ -63,7 +63,7 @@ namespace Fremd { class Sender {
     // Der ERLAUBTE Emitter-Typ (voll qualifiziert) mit bounded Token → KEIN Diagnostic.
     private const string ErlaubterEmitterBounded = @"
 using System.Threading; using System.Threading.Tasks; using Abstractions; using Proto.Cluster;
-namespace Infrastructure.PubSub { class CommandEmitter {
+namespace Infrastructure.Emit { class CommandEmitter {
     public Task<CommandResult> M(Cluster c, ClusterIdentity id, object env, CancellationToken ct)
         => c.RequestAsync<CommandResult>(id, env, ct);
 } }";

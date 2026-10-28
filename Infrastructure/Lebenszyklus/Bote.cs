@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Proto;
 using Proto.Cluster;
 
 namespace Infrastructure.Lebenszyklus;
@@ -15,6 +16,7 @@ namespace Infrastructure.Lebenszyklus;
 ///   abgelaufen, Ziel nicht platzierbar, Transportfehler, Abbruch des Aufrufers), liefert sie <c>null</c>; eine Ausnahme verlässt den Boten nie.
 ///   „Keine Antwort“ heißt „unbekannt“, nie „nicht gewirkt“ — wer wiederholt, wiederholt mit derselben Identität der Nachricht.</item>
 /// </list>
+/// Dazu für die Actors mit festem Namen je Knoten (der Verteiler, Plan §2.7) <see cref="MeldeAnKnoten"/> — ebenso verlierbar, ohne Platzierung.
 /// Proto.Cluster wiederholt eine Anfrage ohne Frist unbegrenzt (Platzierung, tote PID) — der Grund, warum keine Stelle mehr
 /// <c>Cluster.RequestAsync</c> selbst ruft. Die Anfrage selbst ist eine Naht (<see cref="Anfrage"/>): live der Cluster, im Prüfstand ein Fake.
 /// </summary>
@@ -29,20 +31,35 @@ public sealed class Bote
     private readonly Anfrage _anfrage;
     private readonly ILogger _logger;
     private readonly TimeSpan _meldeFrist;
+    private readonly Action<PID, object>? _sende;
 
     /// <summary>Live: an den Cluster gebunden.</summary>
     public Bote(Cluster cluster, ILogger? logger = null)
-        : this((ziel, nachricht, ct) => cluster.RequestAsync<object?>(ziel, nachricht, ct), logger)
+        : this((ziel, nachricht, ct) => cluster.RequestAsync<object?>(ziel, nachricht, ct), logger,
+            sende: (pid, nachricht) => cluster.System.Root.Send(pid, nachricht))
     {
         ArgumentNullException.ThrowIfNull(cluster);
     }
 
-    /// <summary>Naht/Test: eine eingesetzte Anfrage.</summary>
-    public Bote(Anfrage anfrage, ILogger? logger = null, TimeSpan? meldeFrist = null)
+    /// <summary>Naht/Test: eine eingesetzte Anfrage (und, für <see cref="MeldeAnKnoten"/>, ein eingesetztes Senden).</summary>
+    public Bote(Anfrage anfrage, ILogger? logger = null, TimeSpan? meldeFrist = null, Action<PID, object>? sende = null)
     {
         _anfrage = anfrage ?? throw new ArgumentNullException(nameof(anfrage));
         _logger = logger ?? NullLogger.Instance;
         _meldeFrist = meldeFrist ?? StandardMeldeFrist;
+        _sende = sende;
+    }
+
+    /// <summary>
+    /// Verlierbar, ohne Antwort, an den Actor mit festem Namen <paramref name="name"/> auf dem Knoten <paramref name="adresse"/> (kein virtueller
+    /// Actor: nichts wird platziert, nichts wiederholt). Lebt er nicht oder ist der Knoten fort, geht die Meldung verloren.
+    /// </summary>
+    public void MeldeAnKnoten(string adresse, string name, object nachricht)
+    {
+        ArgumentNullException.ThrowIfNull(nachricht);
+        if (_sende is null) throw new InvalidOperationException("Bote ohne Senden an Knoten (Naht ohne sende)");
+        try { _sende(PID.FromAddress(adresse, name), nachricht); }
+        catch (Exception ex) { _logger.LogWarning(ex, "[Bote] Meldung {Nachricht} an {Adresse}/{Name} gescheitert (verlierbar)", nachricht.GetType().Name, adresse, name); }
     }
 
     /// <summary>

@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 using Abstractions;
 using Domain.Sammelvorgang;
 using FluentAssertions;
-using Infrastructure.PubSub;
+using Infrastructure.Emit;
 using Xunit;
 
 namespace Infrastructure.Pruefstand.Garantien;

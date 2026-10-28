@@ -6,7 +6,7 @@ using Abstractions;
 using Infrastructure.Aggregate;
 using Infrastructure.Funktionen;
 using Infrastructure.Projections;
-using Infrastructure.PubSub.Messages;
+using Infrastructure.Verteilen;
 using Infrastructure.Quellen;
 
 namespace Infrastructure.Serialization;
@@ -24,8 +24,6 @@ namespace Infrastructure.Serialization;
         typeof(IEventJsonConverter),
         typeof(ICommandJsonConverter),
         typeof(CommandModusJsonConverter),
-        typeof(IMessageEnvelopeJsonConverter),
-        typeof(PidJsonConverter),
         typeof(global::Abstractions.IdJsonKonverter<global::Domain.Datensatz.Datensatz>),
         typeof(global::Abstractions.IdJsonKonverter<global::Domain.ImagePair.ImagePair>),
         typeof(global::Abstractions.IdJsonKonverter<global::Domain.Modell.Modell>),
@@ -39,13 +37,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(Wake))]
 [JsonSerializable(typeof(WakeAck))]
 [JsonSerializable(typeof(EventEnvelope))]
-[JsonSerializable(typeof(Publish))]
-[JsonSerializable(typeof(Subscribe))]
-[JsonSerializable(typeof(Unsubscribe))]
-[JsonSerializable(typeof(Ack))]
-[JsonSerializable(typeof(Activate))]
-[JsonSerializable(typeof(GetSubscriberCount))]
-[JsonSerializable(typeof(SubscriberCountResponse))]
+[JsonSerializable(typeof(Verteile))]
 [JsonSerializable(typeof(ArbeitLebt))]
 [JsonSerializable(typeof(ArbeitErledigt))]
 [JsonSerializable(typeof(ListeOffene))]

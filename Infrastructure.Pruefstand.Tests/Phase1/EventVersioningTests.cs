@@ -62,7 +62,7 @@ public class EventVersioningTests
             e.CorrelationId == "korr-1" &&
             e.CausationId == "cmd-1" &&
             e.UserId == "tobi" &&
-            e.TargetSubscriberId == null);
+            e.ZielSitzung == null);
 
         envelopes.Select(e => e.Payload).Should().Equal(events);
     }

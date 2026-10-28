@@ -28,8 +28,6 @@ if TYPE_CHECKING:
 @dataclass(eq=False, repr=False)
 class ClientMessage(betterproto.Message):
     command: "CommandRequest" = betterproto.message_field(1, group="message")
-    subscribe: "SubscribeRequest" = betterproto.message_field(2, group="message")
-    unsubscribe: "UnsubscribeRequest" = betterproto.message_field(3, group="message")
     capabilities: "CapabilitiesRequest" = betterproto.message_field(4, group="message")
     query: "QueryRequest" = betterproto.message_field(5, group="message")
     transient_event: "TransientEventRequest" = betterproto.message_field(
@@ -51,20 +49,13 @@ class CommandRequest(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class SubscribeRequest(betterproto.Message):
-    event_type: str = betterproto.string_field(1)
-    aggregate_id: str = betterproto.string_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class UnsubscribeRequest(betterproto.Message):
-    event_type: str = betterproto.string_field(1)
-    aggregate_id: str = betterproto.string_field(2)
-
-
-@dataclass(eq=False, repr=False)
 class CapabilitiesRequest(betterproto.Message):
-    event_types: List[str] = betterproto.string_field(1)
+    """
+    Der Handshake: der Client nennt seinen Vertrag (der Server nimmt die Befugnisse aus SEINER Tabelle, Vertrag ∩ Token) — ein Client ohne
+     Vertrag nennt, was er hören, senden und fragen will (message_types), und was er beantwortet (handle_queries); wirksam ist auch dann nur,
+     was das Token erlaubt. Was die Sitzung hört, meldet der Server beim Verteiler seines Knotens an (Plan Pub/Sub-Neustrukturierung §2.7).
+    """
+
     message_types: List[str] = betterproto.string_field(2)
     handle_queries: List[str] = betterproto.string_field(4)
     vertrag: str = betterproto.string_field(5)
@@ -92,13 +83,6 @@ class QueryRequest(betterproto.Message):
 @dataclass(eq=False, repr=False)
 class ServerMessage(betterproto.Message):
     event: "EventNotification" = betterproto.message_field(1, group="message")
-    subscription_confirmed: "SubscriptionConfirmed" = betterproto.message_field(
-        2, group="message"
-    )
-    unsubscription_confirmed: "UnsubscriptionConfirmed" = betterproto.message_field(
-        3, group="message"
-    )
-    command_accepted: "CommandAccepted" = betterproto.message_field(4, group="message")
     error: "ErrorResponse" = betterproto.message_field(5, group="message")
     capabilities_response: "CapabilitiesResponse" = betterproto.message_field(
         6, group="message"
@@ -111,24 +95,6 @@ class ServerMessage(betterproto.Message):
 @dataclass(eq=False, repr=False)
 class EventNotification(betterproto.Message):
     envelope: "EventEnvelopeDto" = betterproto.message_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class SubscriptionConfirmed(betterproto.Message):
-    event_type: str = betterproto.string_field(1)
-    aggregate_id: str = betterproto.string_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class UnsubscriptionConfirmed(betterproto.Message):
-    event_type: str = betterproto.string_field(1)
-    aggregate_id: str = betterproto.string_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class CommandAccepted(betterproto.Message):
-    command_id: str = betterproto.string_field(1)
-    correlation_id: str = betterproto.string_field(2)
 
 
 @dataclass(eq=False, repr=False)
@@ -296,7 +262,6 @@ class EventEnvelopeDto(betterproto.Message):
     causation_id: str = betterproto.string_field(6)
     correlation_id: str = betterproto.string_field(7)
     user_id: str = betterproto.string_field(8)
-    target_subscriber_id: str = betterproto.string_field(9)
     stream_head_version: int = betterproto.int32_field(10)
     payload: "Nutzlast" = betterproto.message_field(20)
     """

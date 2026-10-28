@@ -46,7 +46,7 @@ public interface ICommand<TAggregat> : ICommand where TAggregat : IState
 
 /// <summary>
 /// Marker-Interface für Queries an Projektionen.
-/// Queries gehen NICHT durch PubSub – sie sind synchrone Request/Response.
+/// Queries sind synchrone Request/Response (keine Zustellung über den Verteiler).
 /// Erbt bewusst NICHT von IMessagePayload.
 /// </summary>
 public interface IQuery { }
@@ -273,7 +273,7 @@ public interface IAggregateRepository
     
 
     /// <summary>
-    /// Marker für Events, die nur über PubSub verteilt,
+    /// Marker für Events, die nur verlierbar zugestellt (Hinweis-Netz, Verteiler an Clients),
     /// aber nicht im EventStore persistiert werden.
     /// 
     /// Beispiel: CommandFailed wird an den auslösenden Client gesendet,

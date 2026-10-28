@@ -1,5 +1,5 @@
 [Unit]
-Description=CQRS Host.Grpc (EventStore + PubSub + Pipeline)
+Description=CQRS Host.Grpc (EventStore, Funktionen, Leitung)
 After=network.target docker.service
 Wants=docker.service
 

@@ -68,7 +68,7 @@ public static class JsonContextEmitter
         using Infrastructure.Aggregate;
         using Infrastructure.Funktionen;
         using Infrastructure.Projections;
-        using Infrastructure.PubSub.Messages;
+        using Infrastructure.Verteilen;
         using Infrastructure.Quellen;
 
         namespace Infrastructure.Serialization;
@@ -86,8 +86,6 @@ public static class JsonContextEmitter
                 typeof(IEventJsonConverter),
                 typeof(ICommandJsonConverter),
                 typeof(CommandModusJsonConverter),
-                typeof(IMessageEnvelopeJsonConverter),
-                typeof(PidJsonConverter),
         /*ID-KONVERTER*/
             })]
         // ── Framework: Wire-Hüllen (IWireMessage) ──
@@ -96,13 +94,7 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(Wake))]
         [JsonSerializable(typeof(WakeAck))]
         [JsonSerializable(typeof(EventEnvelope))]
-        [JsonSerializable(typeof(Publish))]
-        [JsonSerializable(typeof(Subscribe))]
-        [JsonSerializable(typeof(Unsubscribe))]
-        [JsonSerializable(typeof(Ack))]
-        [JsonSerializable(typeof(Activate))]
-        [JsonSerializable(typeof(GetSubscriberCount))]
-        [JsonSerializable(typeof(SubscriberCountResponse))]
+        [JsonSerializable(typeof(Verteile))]
         [JsonSerializable(typeof(ArbeitLebt))]
         [JsonSerializable(typeof(ArbeitErledigt))]
         [JsonSerializable(typeof(ListeOffene))]

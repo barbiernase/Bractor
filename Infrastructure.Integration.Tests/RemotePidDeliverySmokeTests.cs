@@ -15,11 +15,8 @@ namespace Infrastructure.Integration.Tests;
 /// auf Node B, von Node A aus per <c>context.Send(pid, message)</c> angesprochen, stellt cross-node
 /// SERIALISIERT zu (Proto-PID-Location-Transparency).
 ///
-/// Das ist EXAKT der Mechanismus, auf dem der PubSub-Broker fußt: <c>BrokerShardActor.OnPublish</c>
-/// stellt via <c>context.Send(subscriberPid, envelope)</c> zu — der Subscriber ist ein node-lokal
-/// gespawnter <c>SignalReceiverActor</c>/<c>EventProxyActor</c>. Bevor Iteration 2 die PubSub-Typen
-/// serialisierbar macht, muss diese Grundannahme stehen: sonst wäre der ganze „PID beibehalten,
-/// nur serialisierbar machen"-Ansatz falsch.
+/// Das ist der Mechanismus, auf dem die Verteilung an Clients fußt (Plan Pub/Sub-Neustrukturierung §2.7): die <c>Verteilung</c> schickt
+/// je Commit <c>Verteile</c> an <c>PID(Knoten, "verteiler")</c> — einen node-lokal gespawnten Actor mit festem Namen.
 ///
 /// Trick: <c>Wake</c> ist bereits ein Wire-Typ (Iteration 1) → der Test braucht KEINEN neuen
 /// Produktionscode, er isoliert nur den Transport. Node B spawnt eine Probe lokal (Root.Spawn,

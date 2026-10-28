@@ -43,7 +43,7 @@ public sealed class BeispielHost : IAsyncLifetime
 
 /// <summary>
 /// Das Verhalten an der Leitung, wie es ein Client erlebt (Plan §6, Phase 0) — gefahren mit dem echten Client-Stack des Blazor-Arbeitsplatzes
-/// bzw. der rohen Leitung gegen einen echten Host. Muss den Umbau von Broker, Sitzung und Verteiler (Phasen 5–7) unverändert überstehen.
+/// bzw. der rohen Leitung gegen einen echten Host. Hat den Umbau von Broker, Sitzung und Verteiler (Phasen 5–7) unverändert überstanden.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<BeispielHost>
@@ -90,11 +90,11 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
     }
 
     /// <summary>
-    /// Auch eine fachliche Ablehnung ist ein bekannter Ausgang: der Client muss sie über die Korrelation bekommen (docs/08 §8.4). Heute kommt
-    /// sie nie an — der Broker stellt die gezielte Ablehnung nur zu, wenn die Sitzung ihren Typ abonniert hat, und der Vertrag des Arbeitsplatzes
-    /// nennt keine Ablehnungen; der Client wiederholt dreimal und meldet „unbestätigt“.
+    /// Auch eine fachliche Ablehnung ist ein bekannter Ausgang: der Client muss sie über die Korrelation bekommen (docs/08 §8.4) — gezielt an
+    /// seine Sitzung, gleich, was sie hört (G-12: der Broker stellte sie nur zu, wenn die Sitzung ihren Typ abonniert hatte; der Client
+    /// wiederholte dreimal und meldete „unbestätigt“).
     /// </summary>
-    [Fact(Skip = "G-12 offen (docs/13)")]
+    [Fact]
     public async Task Eine_fachliche_Ablehnung_quittiert_den_Command_beim_Client()
     {
         await using var ap = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenArbeitsplatz);

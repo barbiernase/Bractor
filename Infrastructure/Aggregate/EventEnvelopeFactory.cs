@@ -46,7 +46,7 @@ public static class EventEnvelopeFactory
                 Ueber            = spur?.Ueber,
                 Stand            = Spur.Stand,
                 Payload          = events[i]
-                // TargetSubscriberId bleibt null = Broadcast
+                // ZielSitzung bleibt null = Broadcast
             });
         }
         return result;

@@ -28,8 +28,7 @@ public record CommandEnvelope : IAggregateEnvelope, IWireMessage
     public string AggregateType { get; init; }
     
     /// <summary>
-    /// Session-ID des Clients der den Command gesendet hat.
-    /// Wird für Targeted Delivery von CommandFailed Events verwendet.
+    /// Die Sitzung, die den Command gesendet hat (Knoten und Nummer) — ihr gehen Ablehnung und <c>CommandFailed</c> gezielt zu.
     /// </summary>
     public string? OriginSessionId { get; init; }
 
@@ -74,10 +73,10 @@ public record EventEnvelope : IEventEnvelope, IWireMessage
     public string AggregateType { get; init; }
     
     /// <summary>
-    /// Wenn gesetzt: Event wird nur an diesen Subscriber gesendet (Targeted Delivery).
-    /// Wenn null: Event wird an alle Subscriber gesendet (Broadcast).
+    /// Gesetzt: geht nur an diese Sitzung (eine Antwort auf ihren Command: Ablehnung, <c>CommandFailed</c>) — über den Verteiler des Knotens,
+    /// den die Sitzungs-Id nennt, gleich, was sie hört. Null: an jede Sitzung, die den Typ hört.
     /// </summary>
-    public string? TargetSubscriberId { get; init; }
+    public string? ZielSitzung { get; init; }
 
     /// <summary>Spur (<see cref="Spur"/>): der auslösende Log-Eintrag (<c>Stream:Version</c>); null = Wurzel (von außen).</summary>
     public string? Ursache { get; init; }

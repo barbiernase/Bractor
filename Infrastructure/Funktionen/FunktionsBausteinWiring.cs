@@ -2,7 +2,7 @@ using Abstractions;
 using Infrastructure.Komposition;
 using Infrastructure.Lebenszyklus;
 using Infrastructure.Projections;   // IClusterKindContributor, BatchRegistrierung, BatchKonsumStartupService, Konsum
-using Infrastructure.PubSub;        // CommandEmitter, BrokerPublisher
+using Infrastructure.Emit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
@@ -29,7 +29,7 @@ public sealed record BausteinBindung(string Funktion, FunktionsLaufort Laufort =
 ///   <c>/health</c> ihren Rückstand mit;</item>
 /// <item>das Festhalten im Log (<see cref="LogAusgabeAblage"/>) und der Stand im Dokument-Store (<see cref="MartenFunktionsStand"/>);</item>
 /// <item>das Hinweis-Netz (<see cref="HinweisNetz"/>), wenn irgendeine Funktion einen Hinweis hört: Hinweise aus Funktionen und Aggregaten gehen
-///   direkt an die hörenden Funktions-Actors, ohne Log und Broker;</item>
+///   direkt an die hörenden Funktions-Actors, ohne Log;</item>
 /// <item>für Funktionen draußen der Vermittler (Lease) — die Hand-Seite über den <see cref="HandAusfuehrer"/>, die Leitung (Laufort Extern) über die
 ///   Sitzung des Clients, der sie trägt (<c>CqrsClientService</c>).</item>
 /// </list>
@@ -40,7 +40,7 @@ public static class FunktionsBausteinWiring
     {
         var bausteine = Anwendung.Funktionen.Bausteine;
         if (bausteine.Count == 0) return services;
-        services.TryAddSingleton<IAusgabeAblage>(sp => new LogAusgabeAblage(sp.GetRequiredService<IEventStoreRepository>(), sp.GetService<BrokerPublisher>()));
+        services.TryAddSingleton<IAusgabeAblage>(sp => new LogAusgabeAblage(sp.GetRequiredService<IEventStoreRepository>(), sp.GetService<Infrastructure.Verteilen.Verteilung>()));
         services.TryAddSingleton<IFunktionsStand>(sp => new MartenFunktionsStand(sp.GetRequiredService<Marten.IDocumentStore>()));
         foreach (var b in bausteine)
         {
@@ -130,7 +130,7 @@ internal sealed class FunktionsKind(FunktionsBaustein baustein) : IClusterKindCo
             // Der Cluster ist hier fertig (Spawn-Zeit): Emitter und Bote erst jetzt bauen.
             var bote = new Bote(system.Cluster(), logger);
             var emitter = new CommandEmitter(bote, logger);
-            var publisher = provider.GetService<BrokerPublisher>();
+            var verteilung = provider.GetService<Infrastructure.Verteilen.Verteilung>();
             // Die Umsetzung je Aktivierung, samt ihren Diensten in einem eigenen Bereich (Plan §2.9); bei Slots > 1 teilen sich die Eingänge
             //   dieser Aktivierung die Instanz — sie muss dann thread-sicher sein.
             var aktivierung = umsetzung is null ? null : new FunktionsAktivierung(provider, umsetzung.Baue, baustein.Zustand);
@@ -138,11 +138,11 @@ internal sealed class FunktionsKind(FunktionsBaustein baustein) : IClusterKindCo
                 aktivierung is null ? null : () => aktivierung.Umsetzung,
                 provider.GetRequiredService<IAusgabeAblage>(),
                 async (cmd, id, korrelation, ct) => await emitter.EmitAsync(cmd, id, korrelation, ct),
-                publisher is null && netz is null ? null : h =>
+                verteilung is null && netz is null ? null : h =>
                 {
-                    // An die hörenden Funktionen direkt (Hinweis-Netz); an Clients bis Plan Phase 7 auf dem heutigen Weg.
+                    // An die hörenden Funktionen direkt (Hinweis-Netz); an die Clients, die ihn hören, über die Verteiler.
                     netz?.Verteile(h);
-                    publisher?.Melde(new EventEnvelope
+                    verteilung?.Melde(new EventEnvelope
                     {
                         AggregateId = h.Stream, AggregateVersion = h.Version, CorrelationId = h.Korrelation, UserId = h.Akteur, Payload = h.Hinweis,
                         AggregateType = "Funktion:" + baustein.Name,

@@ -2,7 +2,7 @@ using Abstractions;
 using Infrastructure.Aggregate;
 using Infrastructure.Lebenszyklus;
 using Infrastructure.Mapping;
-using Infrastructure.PubSub;
+using Infrastructure.Emit;
 using Microsoft.Extensions.Logging;
 using Proto;
 using Proto.Cluster;
@@ -20,7 +20,7 @@ namespace Infrastructure.Aggregate.ActorSystem;
 /// 
 /// ★ OneOf-Migration: Decider wirft keine Exceptions mehr für Domänen-Ablehnungen.
 ///   Stattdessen yieldet er ITransientEvent (z.B. BestandNichtAusreichend).
-///   Der Actor trennt persistent/transient und meldet Ablehnungen per Targeted Delivery (verlierbar, ohne zu warten).
+///   Der Actor trennt persistent/transient und meldet Ablehnungen gezielt an die Sitzung (verlierbar, ohne zu warten).
 ///   CommandFailed bleibt für technische Fehler (catch-Block).
 ///
 /// ★ Das <see cref="CommandResult"/> trägt nur Ausgang, Versionen und Ablehnung; die Events stehen im Log.
@@ -31,7 +31,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
 {
     private readonly IAggregateHandlerFactory _handlerFactory;
     private readonly IEventStoreRepository _eventStore;
-    private readonly BrokerPublisher? _publisher;
+    private readonly Infrastructure.Verteilen.Verteilung? _verteilung;
     // Das Hinweis-Netz (Plan Pub/Sub-Neustrukturierung §2.9): ein Hinweis aus dem Decide (eine Ablehnung), den eine Funktion hört, geht direkt an
     //   ihre Adresse — ohne Log, ohne Broker, höchstens einmal. Null = keine Funktion hört Hinweise.
     private readonly Infrastructure.Funktionen.HinweisNetz? _hinweisNetz;
@@ -79,7 +79,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     protected AggregateActorBase(
         IAggregateHandlerFactory handlerFactory,
         IEventStoreRepository eventStore,
-        BrokerPublisher? publisher = null,
+        Infrastructure.Verteilen.Verteilung? verteilung = null,
         ILogger? logger = null,
         ISnapshotStore? snapshots = null,
         string? snapshotSchemaVersion = null,
@@ -93,7 +93,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         _hinweisNetz = hinweisNetz;
         _handlerFactory = handlerFactory;
         _eventStore = eventStore;
-        _publisher = publisher;
+        _verteilung = verteilung;
         _logger = logger;
         _snapshots = snapshots;
         _snapshotSchemaVersion = snapshotSchemaVersion;
@@ -603,7 +603,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                 {
                     geschrieben = true;
                     _verarbeiteteCommandIds.Add(e.Env.CommandId);
-                    if (e.Persistent.Count > 0 && _publisher != null)
+                    if (e.Persistent.Count > 0 && _verteilung != null)
                     {
                         try { await PublishEventsAsync(e.Persistent, e.Env, e.VersionVorher); }
                         catch (Exception ex) { _logger?.LogWarning(ex, "[Actor] Pushes nach dem Commit nicht veröffentlicht"); }
@@ -806,7 +806,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                 // Mehrdeutiger Commit (G-3): die Events stehen im Log, der Actor hat sie beim Rehydrieren schon gefaltet. Die Pushes an
                 //   Clients gehen trotzdem hinaus (verlierbar); geweckt hat der Wecker nicht (sein Commit galt als gescheitert) — die Konsumenten
                 //   holt der Takt. Quittiert wird der durable Ausgang.
-                if (append == AppendErgebnis.SchonGewirkt && _publisher != null)
+                if (append == AppendErgebnis.SchonGewirkt && _verteilung != null)
                 {
                     try { await PublishEventsAsync(persistentEvents, cmdEnvelope, expectedVersion); }
                     catch (Exception ex) { _logger?.LogWarning(ex, "[Actor] Pushes nach mehrdeutigem Commit nicht veröffentlicht"); }
@@ -839,8 +839,8 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                 // 7b. ★ Snapshot bei Schwellwert (best-effort, out-of-band): verkürzt künftige Rehydration.
                 TrySnapshotOnThreshold();
 
-                // 8. Events broadcast-publishen (wenn Publisher vorhanden)
-                if (_publisher != null)
+                // 8. Events an die Verteiler (Pushes an die Clients, die sie hören)
+                if (_verteilung != null)
                 {
                     await PublishEventsAsync(persistentEvents, cmdEnvelope, expectedVersion);
                 }
@@ -1019,16 +1019,16 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             spur: Spur.Aktuell);
 
         // ★ Perf: Publish ist reine Benachrichtigung — der Command ist bereits im Log committet (Schritt 5). Zustellung ist best-effort
-        //   (Invariante 2); die durablen Konsumenten heilen über Log-Read + Takt. Darum NICHT im Single-Writer-Turn auf die Shards warten.
+        //   (Invariante 2); die durablen Konsumenten heilen über Log-Read + Takt. Darum NICHT im Single-Writer-Turn auf die Verteiler warten.
         //   Dieselbe Meldung wie jeder andere Schreiber (Quelle, festgehaltene Ausgabe einer Funktion): der Envelope je Event an die Clients;
         //   die Konsumenten weckt der Wecker am Commit.
-        PubSub.Commitmeldung.Melde(_publisher!, envelopes);
+        Infrastructure.Verteilen.Commitmeldung.Melde(_verteilung!, envelopes);
 
         return Task.CompletedTask;
     }
 
     /// <summary>
-    /// Meldet ein Ablehnungs-Event per Targeted Delivery an den Aufrufer (verlierbar, Invariante 6; der Turn wartet nicht auf die Shards).
+    /// Meldet ein Ablehnungs-Event gezielt an die Sitzung des Aufrufers (verlierbar, Invariante 6; der Turn wartet nicht).
     /// Verwendet OriginSessionId für die direkte Zustellung. Das Ablehnungs-Event ist das typisierte Domänen-Event (z.B. BestandNichtAusreichend).
     /// </summary>
     private void MeldeAblehnung(CommandEnvelope cmdEnvelope, IEvent rejection)
@@ -1042,13 +1042,13 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                 Spur.Ursache(_id, version)));
         }
 
-        if (_publisher == null || string.IsNullOrEmpty(cmdEnvelope.OriginSessionId))
+        if (_verteilung == null || string.IsNullOrEmpty(cmdEnvelope.OriginSessionId))
         {
-            _logger?.LogDebug("[Actor] Cannot publish rejection: no publisher or no OriginSessionId");
+            _logger?.LogDebug("[Actor] Cannot publish rejection: keine Verteilung oder keine Sitzung");
             return;
         }
 
-        _publisher.Melde(new EventEnvelope
+        _verteilung.Melde(new EventEnvelope
         {
             AggregateId = _id,
             AggregateVersion = _state?.Version ?? 0,
@@ -1057,24 +1057,24 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             CausationId = cmdEnvelope.CommandId.ToString(),
             UserId = cmdEnvelope.UserId,
             Payload = rejection,
-            TargetSubscriberId = cmdEnvelope.OriginSessionId  // Targeted Delivery!
+            ZielSitzung = cmdEnvelope.OriginSessionId
         });
         _logger?.LogDebug("[Actor] Rejection {Rejection} an '{Session}' gemeldet", rejection.GetType().Name, cmdEnvelope.OriginSessionId);
     }
 
     /// <summary>
-    /// Meldet ein CommandFailed Event für technische Fehler (verlierbar, Targeted Delivery über die OriginSessionId).
+    /// Meldet ein CommandFailed Event für technische Fehler (verlierbar, gezielt an die Sitzung der OriginSessionId).
     /// Nur für technische Fehler — Domänen-Ablehnungen nutzen <see cref="MeldeAblehnung"/>.
     /// </summary>
     private void MeldeCommandFailed(CommandEnvelope cmdEnvelope, string reason)
     {
-        if (_publisher == null || string.IsNullOrEmpty(cmdEnvelope.OriginSessionId))
+        if (_verteilung == null || string.IsNullOrEmpty(cmdEnvelope.OriginSessionId))
         {
-            _logger?.LogDebug("[Actor] Cannot publish CommandFailed: no publisher or no OriginSessionId");
+            _logger?.LogDebug("[Actor] Cannot publish CommandFailed: keine Verteilung oder keine Sitzung");
             return;
         }
 
-        _publisher.Melde(new EventEnvelope
+        _verteilung.Melde(new EventEnvelope
         {
             AggregateId = _id,
             AggregateVersion = _state?.Version ?? 0,
@@ -1086,7 +1086,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                 cmdEnvelope.Payload.GetType().Name,
                 reason,
                 _id.ToString()),
-            TargetSubscriberId = cmdEnvelope.OriginSessionId
+            ZielSitzung = cmdEnvelope.OriginSessionId
         });
         _logger?.LogDebug("[Actor] CommandFailed an '{Session}' gemeldet", cmdEnvelope.OriginSessionId);
     }

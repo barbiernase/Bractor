@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Proto.Cluster;
 using Infrastructure.Komposition;
 
-namespace Infrastructure.PubSub;
+namespace Infrastructure.Emit;
 
 /// <summary>
 /// Das EINE Emit-Primitiv (EM-1). Genau hier — und nur hier — wird ein Command an ein Fremd-Aggregat

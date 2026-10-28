@@ -67,9 +67,9 @@ case "$KNOPF" in
   keiner) ;;
   sync-aus) psql_c "ALTER SYSTEM SET synchronous_commit = off" >/dev/null; psql_c "SELECT pg_reload_conf()" >/dev/null ;;
   drossel-64)
-    grep -q 'public const int StandardJeZiel = 8;' Infrastructure/PubSub/CommandEmitter.cs || { echo "Drossel-Konstante nicht gefunden" >&2; exit 1; }
-    GEAENDERT=(Infrastructure/PubSub/CommandEmitter.cs)
-    sed -i 's/public const int StandardJeZiel = 8;/public const int StandardJeZiel = 64;/' Infrastructure/PubSub/CommandEmitter.cs ;;
+    grep -q 'public const int StandardJeZiel = 8;' Infrastructure/Emit/CommandEmitter.cs || { echo "Drossel-Konstante nicht gefunden" >&2; exit 1; }
+    GEAENDERT=(Infrastructure/Emit/CommandEmitter.cs)
+    sed -i 's/public const int StandardJeZiel = 8;/public const int StandardJeZiel = 64;/' Infrastructure/Emit/CommandEmitter.cs ;;
   auto-prepare-20) GEAENDERT=(umgebungen/); umgebung_setzen 'u["EventStore"]["Verbindung"] += ";Max Auto Prepare=20"' ;;
   drain-8) GEAENDERT=(umgebungen/); umgebung_setzen 'u.setdefault("Schreibpfad", {})["Drain"] = 8' ;;
   *) echo "unbekannter Knopf $KNOPF" >&2; exit 2 ;;

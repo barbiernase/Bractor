@@ -299,7 +299,6 @@ public partial class ProtoMessageMapper
         CausationId = dto.CausationId,
         CorrelationId = dto.CorrelationId,
         UserId = dto.UserId,
-        TargetSubscriberId = string.IsNullOrEmpty(dto.TargetSubscriberId) ? null : dto.TargetSubscriberId,
         Payload = _tabelle.Event(dto.Payload),
     };
 
@@ -314,7 +313,6 @@ public partial class ProtoMessageMapper
         CausationId = envelope.CausationId,
         CorrelationId = envelope.CorrelationId,
         UserId = envelope.UserId,
-        TargetSubscriberId = envelope.TargetSubscriberId ?? string.Empty,
         Payload = _tabelle.PackeEvent(envelope.Payload),
     };
 

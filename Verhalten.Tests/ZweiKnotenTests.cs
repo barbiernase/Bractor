@@ -9,13 +9,13 @@ namespace Verhalten.Tests;
 /// Command muss bei GENAU der Sitzung ankommen, die ihn geschickt hat — gleich, auf welchem Knoten das Aggregat lebt. Zwei Prozesse, nicht
 /// zwei Knoten in einem Prozess: dort teilten sich die Knoten den Zähler der Sitzungs-Kennungen, und die Verwechslung bliebe unsichtbar.
 ///
-/// Heute rot: die Sitzungs-Kennung ist ein Zähler je Prozess (<c>session-0001</c> …), die Abonnenten-Tabelle des Brokers überschreibt bei
-/// gleicher Kennung — die ersten Sitzungen beider Knoten heißen gleich, und die Antwort für die eine landet bei der anderen.
+/// G-13: die Sitzungs-Kennung war ein Zähler je Prozess (<c>session-0001</c> …), die Abonnenten-Tabelle des Brokers überschrieb bei gleicher
+/// Kennung — die Antwort für die eine Sitzung landete bei der anderen. Jetzt nennt die Kennung ihren Knoten, und die Antwort geht an dessen Verteiler.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public sealed class ZweiKnotenTests
 {
-    [Fact(Skip = "G-13 offen (docs/13)")]
+    [Fact]
     public async Task Eine_Ablehnung_landet_bei_zwei_Knoten_an_der_richtigen_Sitzung()
     {
         var u = await Testumgebung.NeuAsync(Anwendung.Beispiel, "verhalten-zwei-knoten", consul: true);

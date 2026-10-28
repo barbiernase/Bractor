@@ -92,9 +92,9 @@ public interface IAusgabeAblage
 /// <summary>
 /// Das Festhalten im Log: je (F, X) ein Stream mit abgeleiteter Id, angehängt mit erwarteter Version = Zahl der schon festgehaltenen Einträge.
 /// Zwei Läufe an derselben Stelle: Marten lässt nur einen gelten (Versionsprüfung, bei Version 0 der Schlüssel des Streams). Danach meldet sie
-/// den Commit wie ein Aggregat (<see cref="PubSub.Commitmeldung"/>): eine Funktion, die ein ausgegebenes Event hört, sieht es sofort.
+/// den Commit wie ein Aggregat (<see cref="Verteilen.Commitmeldung"/>): eine Funktion, die ein ausgegebenes Event hört, sieht es sofort.
 /// </summary>
-public sealed class LogAusgabeAblage(IEventStoreRepository store, PubSub.BrokerPublisher? publisher = null) : IAusgabeAblage
+public sealed class LogAusgabeAblage(IEventStoreRepository store, Verteilen.Verteilung? verteilung = null) : IAusgabeAblage
 {
     public async Task<Festgehalten> LiesAsync(FunktionsEingabe eingabe, CancellationToken ct)
     {
@@ -133,8 +133,8 @@ public sealed class LogAusgabeAblage(IEventStoreRepository store, PubSub.BrokerP
             await store.AppendEventsAsync(eingabe.Schluessel, ab, events, correlationId: eingabe.Korrelation,
                 causationId: Spur.Ursache(eingabe.Stream, eingabe.Version), aggregateType: "Funktion:" + eingabe.Funktion,
                 akteur: ImAuftrag.IstAkteur(eingabe.Akteur) ? eingabe.Akteur : null);
-            if (publisher is not null && events.Any(e => e is not BefehlFestgehalten and not AusgabeFestgehalten))
-                PubSub.Commitmeldung.Melde(publisher, Aggregate.EventEnvelopeFactory.BuildPerEvent(events, eingabe.Schluessel, "Funktion:" + eingabe.Funktion,
+            if (verteilung is not null && events.Any(e => e is not BefehlFestgehalten and not AusgabeFestgehalten))
+                Verteilen.Commitmeldung.Melde(verteilung, Aggregate.EventEnvelopeFactory.BuildPerEvent(events, eingabe.Schluessel, "Funktion:" + eingabe.Funktion,
                         ab, eingabe.Korrelation ?? eingabe.Schluessel.ToString(), Spur.Ursache(eingabe.Stream, eingabe.Version),
                         ImAuftrag.IstAkteur(eingabe.Akteur) ? eingabe.Akteur! : ImAuftrag.Ohne, ab + events.Count, Spur.Aktuell)
                     .Where(e => e.Payload is not BefehlFestgehalten and not AusgabeFestgehalten).ToList());

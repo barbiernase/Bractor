@@ -104,7 +104,7 @@ public static class AkteurVerweigerung
             CausationId = envelope.CommandId.ToString(),
             UserId = envelope.UserId,
             Payload = new Abstractions.CommandFailed(command, $"Akteur '{akteur}' darf {command} nicht", envelope.AggregateId.ToString()),
-            TargetSubscriberId = envelope.OriginSessionId,
+            ZielSitzung = envelope.OriginSessionId,
         };
     }
 }

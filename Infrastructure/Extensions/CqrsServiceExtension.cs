@@ -3,10 +3,8 @@ using Infrastructure.Aggregate.ActorSystem;
 using Infrastructure.GrpcClient;
 using Infrastructure.Persistence;
 using Infrastructure.Projections;
-using Infrastructure.PubSub;
+using Infrastructure.Emit;
 using Infrastructure.Serialization;
-using Infrastructure.PubSub.Extensions;
-using Infrastructure.PubSub.Startup;
 using Infrastructure.Startup;
 using JasperFx;
 using Marten;
@@ -97,8 +95,8 @@ public static class CqrsServiceExtensions
         // 3. Aggregate-Components -- GENERIERT
         services.AddCqrsAggregates();
         
-        // 5. PubSub
-        services.AddCqrsPubSub();
+        // 5. Verteilen an Clients (Verteiler je Knoten, Plan §2.7)
+        services.AddCqrsVerteilen();
         
         // 6. Actor System mit Cluster
         services.AddCqrsActorSystem(builder);
@@ -325,19 +323,21 @@ public static class CqrsServiceExtensions
     }
 
     /// <summary>
-    /// PubSub: BrokerPublisher (lazy)
+    /// Verteilen an Clients: die Verteilung (je Commit eine Nachricht an den Verteiler jedes Knotens, nur hörbare Typen) und der Verteiler dieses
+    /// Knotens (beim Start gespawnt, <see cref="Infrastructure.Verteilen.VerteilerStart"/>).
     /// </summary>
-    public static IServiceCollection AddCqrsPubSub(this IServiceCollection services)
+    public static IServiceCollection AddCqrsVerteilen(this IServiceCollection services)
     {
-        Console.WriteLine("[CQRS] Registriere PubSub...");
+        Console.WriteLine("[CQRS] Registriere Verteilen...");
         
-        services.AddSingleton<BrokerPublisher>(provider =>
+        services.AddSingleton(provider =>
         {
             var actorSystem = provider.GetRequiredService<ActorSystem>();
-            return new BrokerPublisher(actorSystem.Cluster(),
-                provider.GetService<ILogger<BrokerPublisher>>());
+            return new Infrastructure.Verteilen.Verteilung(actorSystem.Cluster(),
+                Infrastructure.Verteilen.Verteilung.Hoerbar(Anwendung.Akteure.Rechte, Anwendung.Akteure.ClientVertraege),
+                provider.GetService<ILogger<Infrastructure.Verteilen.Verteilung>>());
         });
-        Console.WriteLine("  + BrokerPublisher (lazy)");
+        Console.WriteLine("  + Verteilung (lazy)");
         
         Console.WriteLine();
         return services;
@@ -386,8 +386,7 @@ public static class CqrsServiceExtensions
                 .Setup(
                     clusterName: builder.ClusterName,
                     clusterProvider: clusterProvider,
-                    identityLookup: new PartitionIdentityLookup())
-                .WithBrokerKinds(loggerFactory);
+                    identityLookup: new PartitionIdentityLookup());
         
             var aggregateKinds = Anwendung.Aggregate.GetAllKinds(system);
             foreach (var kind in aggregateKinds)
@@ -437,8 +436,8 @@ public static class CqrsServiceExtensions
             var system = provider.GetRequiredService<ActorSystem>();
             var logger = provider.GetService<ILogger<ProtoActorAggregateDispatcher>>();
             var deadLetters = provider.GetService<IDeadLetterSink>();   // ★ #1: nicht-zustellbare Commands durabel
-            var publisher = provider.GetService<BrokerPublisher>();     // ★ CommandFailed an den Client bei Erschöpfung
-            return new ProtoActorAggregateDispatcher(system, logger, deadLetters, publisher);
+            var verteilung = provider.GetService<Infrastructure.Verteilen.Verteilung>();   // ★ CommandFailed an den Client bei Erschöpfung
+            return new ProtoActorAggregateDispatcher(system, logger, deadLetters, verteilung);
         });
         Console.WriteLine("  + IAggregateDispatcher");
     
@@ -456,8 +455,8 @@ public static class CqrsServiceExtensions
         services.AddHostedService<ClusterStartupService>();
         Console.WriteLine("  + ClusterStartupService");
         
-        services.AddHostedService<PubSubStartupService>();
-        Console.WriteLine("  + PubSubStartupService");
+        services.AddHostedService<Infrastructure.Verteilen.VerteilerStart>();
+        Console.WriteLine("  + VerteilerStart");
 
         // Keine Push-Subscriber: die Projektionen laufen über den Batch-Konsum (AddGeneratedPullPaths), Funktionen über ihre Actors.
 
