@@ -19,14 +19,10 @@ namespace Infrastructure.Funktionen;
 /// <summary>Ein festgehaltener Command einer Funktion (Framework-Event im Stream „Funktion F, Eingang X“): Diskriminator und Wire-JSON.</summary>
 public sealed record BefehlFestgehalten(string Typ, string Daten) : IEvent;
 
-/// <summary>Inertes Signal (Registry-Invariante „ein Signal je persistierbarem Event“; wird nie emittiert).</summary>
-public sealed record StateChangeViaBefehlFestgehalten(Guid StreamId, int Version) : IStateChangeSignal;
 
 /// <summary>Das Ende eines festgehaltenen Laufs: so viele Ausgaben (ohne Hinweise) gehören zu ihm, mehr kommen nicht.</summary>
 public sealed record AusgabeFestgehalten(int Anzahl) : IEvent;
 
-/// <summary>Inertes Signal (Registry-Invariante „ein Signal je persistierbarem Event“; wird nie emittiert).</summary>
-public sealed record StateChangeViaAusgabeFestgehalten(Guid StreamId, int Version) : IStateChangeSignal;
 
 /// <summary>Was unter „Funktion F, Eingang X“ festgehalten ist: die Ausgaben in Reihenfolge (Commands und Events) und ob der Lauf vollständig ist.</summary>
 public sealed record Festgehalten(IReadOnlyList<IAusgabe> Ausgaben, bool Abgeschlossen)

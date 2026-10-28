@@ -114,7 +114,7 @@ public sealed class StoreZwei : ISchreibeA { public Task SchreibeAAsync(string x
     [Fact]
     public void Jeder_Wire_Typ_der_Anwendung_ist_serialisierbar()
     {
-        // Der Boot-Check des Hosts über die echte Komposition (Beispielanwendung): Hüllen, alle Commands/Events/Trigger, alle Signale.
+        // Der Boot-Check des Hosts über die echte Komposition (Beispielanwendung): Hüllen, alle Commands/Events/Trigger.
         var akt = () => WireSerializerBootCheck.Verify();
         akt.Should().NotThrow();
     }

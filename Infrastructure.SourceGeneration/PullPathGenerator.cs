@@ -9,9 +9,8 @@ namespace Infrastructure.SourceGeneration
     /// Verdrahtungs-Generator für den Konsum der PROJEKTIONEN. Findet jede <c>ISubscriber</c>, die zusätzlich
     /// <c>Abstractions.IPullSubscriber</c> implementiert, und emittiert die komplette, sonst handgeschriebene Verdrahtung:
     ///   - ein Batch-Kind <c>batch-&lt;Typ&gt;</c> je Projektion — ein Leser je Partition, der Store aus einem Fähigkeits-Bereich ist die
-    ///     Batch-Naht (Store-Impl-Typ wird NIE genannt), dazu eine <c>BatchRegistrierung</c> (Signal → Partition, Poll je Partition) und
+    ///     Batch-Naht (Store-Impl-Typ wird NIE genannt), dazu eine <c>BatchRegistrierung</c> (Takt je Partition, Prüfung gegen den Weckplan) und
     ///     der <c>ProjektionsStand</c>;
-    ///   - <c>PushSubscriberExclusions</c> (koppelt den Push-Subscriber ab),
     ///   - <c>AddGeneratedPullPaths()</c>, das der Host als EINZIGEN Aufruf nutzt.
     /// Eine Projektion schreibt in genau EINEN Store (R9, CQRS052): ihre Schreib-Fähigkeiten gehören zu einem Store. Ohne Schreib-Fähigkeit wäre
     /// sie früher eine Reaktion gewesen — die gibt es nicht mehr (Plan Phase 4): was auf ein Event hin etwas sendet, ist eine Funktion.
@@ -106,7 +105,6 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("using Core;");
             sb.AppendLine("using Infrastructure.Projections;");
             sb.AppendLine("using Infrastructure.PubSub;");
-            sb.AppendLine("using Infrastructure.PubSub.Startup;");
             sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
             sb.AppendLine("using Microsoft.Extensions.DependencyInjection.Extensions;");
             sb.AppendLine("using Microsoft.Extensions.Logging;");
@@ -133,9 +131,6 @@ namespace Infrastructure.SourceGeneration
             }
             else
             {
-                var names = string.Join(", ", projections.Select(p => "\"" + p.Name + "\""));
-                sb.AppendLine($"        services.AddSingleton(new PushSubscriberExclusions(new[] {{ {names} }}));");
-                sb.AppendLine();
                 var batch = false;
                 foreach (var p in projections)
                 {

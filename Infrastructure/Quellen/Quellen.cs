@@ -20,8 +20,8 @@ namespace Infrastructure.Quellen;
 // (`sealed record DateiErkannt : DateiGemeldet;`); der Treiber (hier: Datei) liest, die Konfig der Umgebung (`Quellen:<Typ>`) sagt wie.
 // Jede Nachricht wird das erste Event ihres Streams — Id deterministisch aus Typ + Kennung, geschrieben per StartStream (oder, mit „ein Stream je
 // Schlüssel“, am Kopf mit Kennungs-Verzeichnis). Dieselbe Nachricht zweimal (Neustart, zweiter Knoten, Re-Scan) steht also genau einmal im Log.
-// Danach meldet der Eingang den Commit wie ein Aggregat (Commitmeldung: Push + Signal) — die Funktionen, die den Typ hören, sehen ihn sofort;
-// geht die Meldung verloren, holt sie der Takt.
+// Die Funktionen und Projektionen, die den Typ hören, weckt der Wecker am Commit (geht der Weckruf verloren, holt sie der Takt); danach meldet
+// der Eingang den Commit wie ein Aggregat an die Clients (Commitmeldung: Push).
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 /// <summary>Was ein Datei-Treiber über eine fertige Datei weiß — die Fabrik eines Quellen-Typs baut daraus die Nachricht.</summary>
@@ -78,7 +78,7 @@ public sealed class QuellEingang
     private readonly Func<Type, string?> _akteur;
     private readonly IStreamBestand? _bestand;
 
-    /// <param name="melde">Meldet den Commit an die Hörer (Push + Signal); null = niemand wird geweckt (der Takt holt es).</param>
+    /// <param name="melde">Meldet den Commit an die Clients (Push); null = kein Push.</param>
     /// <param name="akteur">Der Akteur, der diesen Nachrichtentyp liefert (IDarf), oder null.</param>
     public QuellEingang(IEventStoreRepository store, Gemeldet? melde = null, Func<Type, string?>? akteur = null, IStreamBestand? bestand = null)
     {

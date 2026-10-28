@@ -7,9 +7,9 @@ using Microsoft.Extensions.Logging;
 using Proto.Cluster;
 
 /// <summary>
-/// Veröffentlicht IMessageEnvelope an Subscriber — immer <b>verlierbar</b> (<see cref="Bote.Melde"/>): Signale, Event-Pushes, Ablehnungen und
-/// <c>CommandFailed</c> an eine Sitzung, Hinweise. Ein Signal ist nur ein Weckruf (Invariante 2), alles andere schneller Kanal (Invariante 6);
-/// die durablen Konsumenten heilen über Log-Read und Poll. Der Absender wartet nie auf die Shards.
+/// Veröffentlicht IMessageEnvelope an Subscriber — immer <b>verlierbar</b> (<see cref="Bote.Melde"/>): Event-Pushes, Ablehnungen und
+/// <c>CommandFailed</c> an eine Sitzung, Hinweise an Clients — schneller Kanal (Invariante 6), bis Plan Phase 7 der Verteiler je Knoten ihn ersetzt;
+/// die durablen Konsumenten weckt der Wecker am Commit. Der Absender wartet nie auf die Shards.
 ///
 /// Zwei Modi:
 /// - Broadcast (default): an alle Shards des Typs

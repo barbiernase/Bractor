@@ -357,7 +357,7 @@ public sealed class KontextBauer
             case "projektion":
                 yield return Sym.Implements(s.Klasse, _iPull)
                     ? "Transport: geordneter Pull (IPullSubscriber) — jedes Event genau einmal, in Reihenfolge"
-                    : "Transport: Signal — best-effort, darf verloren/doppelt/ungeordnet ankommen";
+                    : "Transport: keiner — ohne IPullSubscriber liest und weckt nichts die Projektion";
                 yield return Sym.Implements(s.Klasse, _iAppend)
                     ? "Garantie: append-artig (IAppendProjektion) — Co-Commit-Store, exactly-once (Boot-Check GA-1)"
                     : "Garantie: Upsert — at-least-once, Schreiben muss idempotent sein";

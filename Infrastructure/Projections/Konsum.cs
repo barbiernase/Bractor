@@ -9,7 +9,7 @@ public sealed record Konsum(int Partitionen, int BatchGroesse)
     /// <summary>E4 und E11 (Plan Garantien und Durchsatz): 8 Partitionen, 500 Events je Seite.</summary>
     public static Konsum Standard { get; } = new(8, 500);
 
-    /// <summary>Der Poll weckt jede Partition in diesem Abstand — das Netz für verlorene Signale.</summary>
+    /// <summary>Der Takt weckt jede Partition in diesem Abstand — das Netz für verlorene Weckrufe.</summary>
     public static readonly TimeSpan PollIntervall = TimeSpan.FromSeconds(30);
 
     /// <summary>Aus dem Umgebungs-Abschnitt <c>Konsum</c>; Werte außerhalb der Grenzen sind ein Start-Fehler.</summary>

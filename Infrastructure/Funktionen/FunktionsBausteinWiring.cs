@@ -24,8 +24,8 @@ public sealed record BausteinBindung(string Funktion, FunktionsLaufort Laufort =
 /// <c>Anwendung.Funktionen.Bausteine</c>, ohne Domänen-Typ im Framework:
 /// <list type="bullet">
 /// <item>je Funktion ein Cluster-Kind <c>funktion-&lt;F&gt;</c> (Identität = Partition) mit dem <see cref="FunktionsActor"/>;</item>
-/// <item>je Funktion mit Eingängen aus dem Log eine Weck-Registrierung wie bei einer Projektion: das Signal eines Aggregat-Commits weckt die Partition,
-///   der Takt (30 s) jede Partition — bis der Wecker am Flush kommt (Phase 6). Ihr Stand liegt im selben Dokument wie der einer Projektion, so zählt
+/// <item>je Funktion mit Eingängen aus dem Log eine Weck-Registrierung wie bei einer Projektion: der Wecker am Commit weckt die Partition
+///   (Weckplan), der Takt (30 s) jede Partition. Ihr Stand liegt im selben Dokument wie der einer Projektion, so zählt
 ///   <c>/health</c> ihren Rückstand mit;</item>
 /// <item>das Festhalten im Log (<see cref="LogAusgabeAblage"/>) und der Stand im Dokument-Store (<see cref="MartenFunktionsStand"/>);</item>
 /// <item>das Hinweis-Netz (<see cref="HinweisNetz"/>), wenn irgendeine Funktion einen Hinweis hört: Hinweise aus Funktionen und Aggregaten gehen

@@ -64,33 +64,9 @@ public sealed class ICommandJsonConverter : JsonConverter<ICommand>
     }
 }
 
-/// <summary>Signal-Payload einer <see cref="SignalEnvelope"/> (StateChangeVia{Event}). Iteration 2.</summary>
-public sealed class IStateChangeSignalJsonConverter : JsonConverter<IStateChangeSignal>
-{
-    public override void Write(Utf8JsonWriter writer, IStateChangeSignal value, JsonSerializerOptions options)
-    {
-        writer.WriteStartArray();
-        writer.WriteStringValue(Anwendung.WirePoly.SignalDiskriminator(value));
-        Anwendung.WirePoly.WriteSignal(writer, value);
-        writer.WriteEndArray();
-    }
-
-    public override IStateChangeSignal Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-    {
-        if (reader.TokenType != JsonTokenType.StartArray) throw new JsonException("Erwartet: StartArray für IStateChangeSignal.");
-        reader.Read();
-        var disc = reader.GetString() ?? throw new JsonException("Erwartet: Signal-Diskriminator (string).");
-        reader.Read();
-        var sig = Anwendung.WirePoly.ReadSignal(disc, ref reader);
-        reader.Read(); // EndArray
-        return sig;
-    }
-}
-
 /// <summary>
-/// Envelope-Payload einer <see cref="Abstractions.SignalEnvelope"/>? Nein — die HÜLLE einer
-/// <c>Publish</c>-Nachricht (<c>Publish.Envelope : IMessageEnvelope</c>). Über den PubSub reisen nur
-/// <see cref="EventEnvelope"/> (Events) und <see cref="SignalEnvelope"/> (Signale); die anderen
+/// Die HÜLLE einer <c>Publish</c>-Nachricht (<c>Publish.Envelope : IMessageEnvelope</c>). Über den Broker reisen nur
+/// <see cref="EventEnvelope"/> (Event-Pushes, Ablehnungen, Hinweise und <c>CommandFailed</c> an Clients); die anderen
 /// <c>IMessageEnvelope</c>-Implementierer (<c>CommandEnvelope</c>/<c>QueryEnvelope</c>) gehen NICHT durch
 /// <c>Publish</c> und werfen hier bewusst. Hand-Converter (fixe, kleine Menge, kein Generat nötig).
 /// </summary>
@@ -105,13 +81,9 @@ public sealed class IMessageEnvelopeJsonConverter : JsonConverter<IMessageEnvelo
                 writer.WriteStringValue("EventEnvelope");
                 JsonSerializer.Serialize(writer, ee, ((System.Text.Json.Serialization.Metadata.JsonTypeInfo<EventEnvelope>)Anwendung.WireJson.GetTypeInfo(typeof(EventEnvelope))!));
                 break;
-            case SignalEnvelope se:
-                writer.WriteStringValue("SignalEnvelope");
-                JsonSerializer.Serialize(writer, se, ((System.Text.Json.Serialization.Metadata.JsonTypeInfo<SignalEnvelope>)Anwendung.WireJson.GetTypeInfo(typeof(SignalEnvelope))!));
-                break;
             default:
                 throw new JsonException(
-                    $"IMessageEnvelope {value.GetType().Name} reist nicht über Publish (nur EventEnvelope/SignalEnvelope).");
+                    $"IMessageEnvelope {value.GetType().Name} reist nicht über Publish (nur EventEnvelope).");
         }
         writer.WriteEndArray();
     }
@@ -125,7 +97,6 @@ public sealed class IMessageEnvelopeJsonConverter : JsonConverter<IMessageEnvelo
         IMessageEnvelope env = disc switch
         {
             "EventEnvelope"  => JsonSerializer.Deserialize(ref reader, ((System.Text.Json.Serialization.Metadata.JsonTypeInfo<EventEnvelope>)Anwendung.WireJson.GetTypeInfo(typeof(EventEnvelope))!))!,
-            "SignalEnvelope" => JsonSerializer.Deserialize(ref reader, ((System.Text.Json.Serialization.Metadata.JsonTypeInfo<SignalEnvelope>)Anwendung.WireJson.GetTypeInfo(typeof(SignalEnvelope))!))!,
             _ => throw new JsonException($"Unbekannter IMessageEnvelope-Diskriminator: {disc}"),
         };
         reader.Read(); // EndArray

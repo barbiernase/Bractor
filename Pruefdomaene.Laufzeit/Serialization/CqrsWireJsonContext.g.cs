@@ -14,7 +14,6 @@ namespace Infrastructure.Serialization;
 /// <summary>
 /// STJ-Manifest für den internen Actor-Plane (WIRE): Transport-Hüllen + ALLE Commands/Events (inkl.
 /// Transient) + Queries/Antworten. Polymorphe Interface-Payloads laufen über die eingebackenen Converter.
-/// Signale sind BEWUSST nicht registriert (uniform, vom WireSerializerGenerator selbst serialisiert).
 /// Der WireSerializerGenerator koppelt die Menge zur Compile-Zeit (Default.{Typ}).
 /// </summary>
 [JsonSourceGenerationOptions(
@@ -25,7 +24,6 @@ namespace Infrastructure.Serialization;
         typeof(IEventJsonConverter),
         typeof(ICommandJsonConverter),
         typeof(CommandModusJsonConverter),
-        typeof(IStateChangeSignalJsonConverter),
         typeof(IMessageEnvelopeJsonConverter),
         typeof(PidJsonConverter),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Abrechnung.Kundenkonto>),
@@ -43,7 +41,6 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(Wake))]
 [JsonSerializable(typeof(WakeAck))]
 [JsonSerializable(typeof(EventEnvelope))]
-[JsonSerializable(typeof(SignalEnvelope))]
 [JsonSerializable(typeof(Publish))]
 [JsonSerializable(typeof(Subscribe))]
 [JsonSerializable(typeof(Unsubscribe))]

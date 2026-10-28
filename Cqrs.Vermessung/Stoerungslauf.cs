@@ -6,7 +6,7 @@ namespace Cqrs.Vermessung;
 /// <summary>
 /// Störungslauf (§0.2), etwa drei Minuten: S1 (zwei Paare je Sekunde) und S5 (8 Sender) gleichzeitig, dabei Störungen — Host der
 /// Beispieldomäne hart beenden und neu starten, Redis (Versions-Index) 10 s stoppen, Host der Prüfdomäne hart beenden. Jeder harte Abbruch
-/// verliert alle Signale im Flug (der Broker läuft im Host). Clients wiederholen mit derselben CommandId (§11.3). Danach dieselbe
+/// verliert alle Weckrufe im Flug. Clients wiederholen mit derselben CommandId (§11.3). Danach dieselbe
 /// Exactly-once-Prüfung wie in der Messung.
 /// </summary>
 internal static class Stoerungslauf

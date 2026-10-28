@@ -93,5 +93,3 @@ public sealed class FristVerzeichnis(IDocumentStore store) : IFaelligkeiten
     }
 }
 
-/// <summary>Inertes Signal (Registry-Invariante „ein Signal je persistierbarem Event“; wird nie emittiert).</summary>
-public sealed record StateChangeViaFristGesetzt(Guid StreamId, int Version) : IStateChangeSignal;

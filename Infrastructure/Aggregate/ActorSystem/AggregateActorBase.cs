@@ -570,7 +570,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     }
 
     /// <summary>
-    /// Nach dem Commit des Bündels (oder ohne Schreiben): Cache, Signale, Ablehnungen an die Sitzung, Antworten — in der Reihenfolge der Commands.
+    /// Nach dem Commit des Bündels (oder ohne Schreiben): Cache, Pushes an Clients, Ablehnungen an die Sitzung, Antworten — in der Reihenfolge der Commands.
     /// Alles hier ist abgeleitet bzw. best-effort; der Commit ist durch.
     /// </summary>
     private async Task AbschliessenAsync(IContext context, List<Entscheidung> entscheidungen)
@@ -610,7 +610,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                     if (e.Persistent.Count > 0 && _publisher != null)
                     {
                         try { await PublishEventsAsync(e.Persistent, e.Env, e.VersionVorher); }
-                        catch (Exception ex) { _logger?.LogWarning(ex, "[Actor] Signale nach dem Commit nicht veröffentlicht"); }
+                        catch (Exception ex) { _logger?.LogWarning(ex, "[Actor] Pushes nach dem Commit nicht veröffentlicht"); }
                     }
                     e.Ergebnis = new CommandResult
                     {
@@ -808,12 +808,13 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                 Fristen(persistentEvents, expectedVersion, cmdEnvelope.UserId));
             if (append != AppendErgebnis.Geschrieben)
             {
-                // Mehrdeutiger Commit (G-3): die Events stehen im Log, der Actor hat sie beim Rehydrieren schon gefaltet. Die Signale
-                //   gehen trotzdem hinaus (verlierbar, der Poll trüge sie sonst nach); quittiert wird der durable Ausgang.
+                // Mehrdeutiger Commit (G-3): die Events stehen im Log, der Actor hat sie beim Rehydrieren schon gefaltet. Die Pushes an
+                //   Clients gehen trotzdem hinaus (verlierbar); geweckt hat der Wecker nicht (sein Commit galt als gescheitert) — die Konsumenten
+                //   holt der Takt. Quittiert wird der durable Ausgang.
                 if (append == AppendErgebnis.SchonGewirkt && _publisher != null)
                 {
                     try { await PublishEventsAsync(persistentEvents, cmdEnvelope, expectedVersion); }
-                    catch (Exception ex) { _logger?.LogWarning(ex, "[Actor] Signale nach mehrdeutigem Commit nicht veröffentlicht"); }
+                    catch (Exception ex) { _logger?.LogWarning(ex, "[Actor] Pushes nach mehrdeutigem Commit nicht veröffentlicht"); }
                 }
                 QuittiereEntschieden(context, append);
                 return;
@@ -1051,7 +1052,8 @@ public abstract class AggregateActorBase<TState> : RahmenActor
 
         // ★ Perf: Publish ist reine Benachrichtigung — der Command ist bereits im Log committet (Schritt 5). Zustellung ist best-effort
         //   (Invariante 2); die durablen Konsumenten heilen über Log-Read + Takt. Darum NICHT im Single-Writer-Turn auf die Shards warten.
-        //   Dieselbe Meldung wie jeder andere Schreiber (Quelle, festgehaltene Ausgabe einer Funktion): Envelope + Signal je Event.
+        //   Dieselbe Meldung wie jeder andere Schreiber (Quelle, festgehaltene Ausgabe einer Funktion): der Envelope je Event an die Clients;
+        //   die Konsumenten weckt der Wecker am Commit.
         PubSub.Commitmeldung.Melde(_publisher!, envelopes);
 
         return Task.CompletedTask;

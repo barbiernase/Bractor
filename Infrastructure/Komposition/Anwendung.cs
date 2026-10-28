@@ -28,7 +28,6 @@ public interface IAnwendung
     IWireTabelle Wire { get; }
     IWirePolyTabelle WirePoly { get; }
     IUpcastingTabelle Upcasting { get; }
-    ISignalTabelle Signale { get; }
     IAkteurTabelle Akteure { get; }
     IFunktionsTabelle Funktionen { get; }
     IDienstTabelle Dienste { get; }
@@ -61,7 +60,6 @@ public interface ITypTabelle
     IReadOnlyDictionary<string, Type> Commands { get; }
     IReadOnlyDictionary<string, Type> Queries { get; }
     IReadOnlyDictionary<string, Type> QueryResponses { get; }
-    IReadOnlyDictionary<string, Type> Signals { get; }
     IReadOnlyList<(Type Type, string SnakeCaseName)> PersistableEvents { get; }
     IReadOnlyList<Type> PersistableEventTypes { get; }
 }
@@ -90,10 +88,6 @@ public interface IWirePolyTabelle
     string CommandDiskriminator(ICommand value);
     void WriteCommand(Utf8JsonWriter writer, ICommand value);
     ICommand ReadCommand(string diskriminator, ref Utf8JsonReader reader);
-    string SignalDiskriminator(IStateChangeSignal value);
-    void WriteSignal(Utf8JsonWriter writer, IStateChangeSignal value);
-    IStateChangeSignal ReadSignal(string diskriminator, ref Utf8JsonReader reader);
-    IReadOnlyList<Type> SignalTypes { get; }
 }
 
 public interface IUpcastingTabelle
@@ -104,12 +98,6 @@ public interface IUpcastingTabelle
     IReadOnlyList<(Type Typ, string Diskriminator)> Registrierungen { get; }
     /// <summary>Je aktuellem Event die Speicher-Diskriminatoren, die beim Lesen zu ihm werden (es selbst und seine früheren Versionen).</summary>
     IReadOnlyDictionary<Type, string[]> Herkunft { get; }
-}
-
-public interface ISignalTabelle
-{
-    IStateChangeSignal? Create(IEvent evt, Guid streamId, int version);
-    IReadOnlyDictionary<Type, Type> EventToSignal { get; }
 }
 
 public interface IAkteurTabelle
@@ -167,7 +155,6 @@ public static class Anwendung
     public static IWireTabelle Wire => Aktuell.Wire;
     public static IWirePolyTabelle WirePoly => Aktuell.WirePoly;
     public static IUpcastingTabelle Upcasting => Aktuell.Upcasting;
-    public static ISignalTabelle Signale => Aktuell.Signale;
     public static IAkteurTabelle Akteure => Aktuell.Akteure;
     public static IFunktionsTabelle Funktionen => Aktuell.Funktionen;
     public static IDienstTabelle Dienste => Aktuell.Dienste;

@@ -66,7 +66,6 @@ namespace Infrastructure.SourceGeneration
                 new CategoryDef("Abstractions.ICommand",           "Commands",        "COMMANDS (alle, inkl. ICreationCommand)"),
                 new CategoryDef("Abstractions.IQuery",             "Queries",         "QUERIES"),
                 new CategoryDef("Abstractions.IQueryResponse",     "QueryResponses",  "QUERY RESPONSES"),
-                new CategoryDef("Abstractions.IStateChangeSignal", "Signals",         "SIGNALS (StateChangeVia{Event}, nur Weckrufe)"),
             };
 
             // TransientEvent: kein eigenes Dictionary, aber nötig für PersistableEvents

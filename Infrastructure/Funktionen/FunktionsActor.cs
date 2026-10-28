@@ -13,8 +13,8 @@ namespace Infrastructure.Funktionen;
 /// Fortschritt (der Stand beim Framework), Gleichzeitigkeit (Slots; Eingänge eines Streams nacheinander), Wiederholung mit Backoff, Parken, das
 /// Festhalten der Ausgabe und das Senden aus dem Festgehaltenen (<see cref="FunktionsArbeit"/>). Rechnet die Funktion draußen, bietet er den Eingang
 /// über den Vermittler an — die Garantie bleibt hier.
-/// <para><b>Wecken</b> (bis zum Wecker am Flush, Plan Phase 6): wie ein Partitions-Leser einer Projektion — das Signal eines Aggregat-Commits weckt die
-/// Partition schnell, der Takt (alle 30 s je Partition) holt alles andere nach. Jede Weckung führt zu höchstens einer Lese-Runde mehr.</para>
+/// <para><b>Wecken</b> (Plan §2.3): wie ein Partitions-Leser einer Projektion — der Wecker am Commit weckt die Partition schnell (Weckplan), der
+/// Takt (alle 30 s je Partition) holt nach, was ein verlorener Weckruf liegen ließ. Jede Weckung führt zu höchstens einer Lese-Runde mehr.</para>
 /// <para><b>Lebenszyklus</b> (Rahmen): beim Aktivieren baut der Actor die Umsetzung im Host samt ihren Diensten in einem eigenen Bereich
 /// (<see cref="FunktionsAktivierung"/>), beim Stoppen, Passivieren und vor einem Neustart gibt er sie frei. Lesen und Arbeiten laufen neben der
 /// Mailbox (<see cref="RahmenActor.Neben"/>); der Lauf (<see cref="FunktionsLauf"/>) wird nur in der Mailbox geändert. Beim Stopp bricht die Arbeit

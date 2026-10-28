@@ -263,8 +263,7 @@ int Erzeuge(string wurzel)
     Console.WriteLine($"📊 {stats}");
     Console.WriteLine();
     File.WriteAllText(hashDatei, standHash);
-    Console.WriteLine("Fertig. (Signale werden bewusst NICHT registriert — der WireSerializerGenerator");
-    Console.WriteLine(" serialisiert sie uniform (StreamId, Version) selbst, ohne STJ.)");
+    Console.WriteLine("Fertig.");
     Console.WriteLine();
     return 0;
 }

@@ -343,7 +343,7 @@ public static class CqrsServiceExtensions
     ///
     /// (B1) Die Push-Subscriber-Maschinerie (SubscriberActorBase-Dispatch + generierte Push-Actors +
     /// SubscriberStartupService) wurde entfernt — alle durablen Handler laufen auf dem Pull-Pfad
-    /// (AddGeneratedPullPaths). Der Broker-Kanal bleibt (Signal-Zustellung + Re-Publish reaktiver Events).
+    /// (AddGeneratedPullPaths). Der Broker-Kanal bleibt bis Plan Phase 7 nur für die Clients (Pushes, Ablehnungen, CommandFailed, Hinweise).
     /// Der Deps-Index-Writer bleibt ebenfalls: der Pull-Adapter nutzt ihn als <see cref="Core.IReadModelDepsSink"/>.
     /// </summary>
     public static IServiceCollection AddCqrsSubscribers(this IServiceCollection services)

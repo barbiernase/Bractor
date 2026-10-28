@@ -37,15 +37,5 @@ public static class WireSerializerBootCheck
                 throw new InvalidOperationException(
                     $"[Wire] Kein Wire-JsonTypeInfo für Payload-Typ {t.FullName}. " +
                     $"Fehlt eine [JsonSerializable]-Zeile in CqrsWireJsonContext?");
-
-        // (c) Signale sind BEWUSST nicht STJ-backed (uniform (StreamId,Version), self-serialized über
-        //     GeneratedWirePoly.WriteSignal/ReadSignal). Backstop hier: jeder Registry-Signaltyp ist im
-        //     generierten Signal-Dispatch enthalten (sonst Registry↔Generator-Drift).
-        var signalDispatch = Anwendung.WirePoly.SignalTypes.ToHashSet();
-        foreach (var t in Anwendung.Typen.Signals.Values)
-            if (!signalDispatch.Contains(t))
-                throw new InvalidOperationException(
-                    $"[Wire] Signal {t.FullName} fehlt im generierten Signal-Dispatch (GeneratedWirePoly). " +
-                    $"Registry↔WireSerializerGenerator-Drift?");
     }
 }

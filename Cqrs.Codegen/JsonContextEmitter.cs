@@ -24,9 +24,7 @@ namespace Cqrs.Codegen;
 ///    <c>EventJsonGenerator</c>/<c>WireSerializerGenerator</c> (konkrete Klassen).
 ///
 /// Set-Gleichheit (nicht Byte-Gleichheit) zu den bisherigen Handlisten genügt: die Attribut-Reihenfolge ist
-/// für STJ irrelevant. Signale (<c>StateChangeVia{Event}</c>) werden bewusst NICHT registriert — sie sind
-/// uniform <c>(StreamId, Version)</c> und werden vom <c>WireSerializerGenerator</c> selbst serialisiert.
-/// Drift-Schutz bleibt COMPILE-ZEIT (die Generatoren referenzieren je Typ <c>Default.{Typ}</c>).
+/// für STJ irrelevant. Drift-Schutz bleibt COMPILE-ZEIT (die Generatoren referenzieren je Typ <c>Default.{Typ}</c>).
 /// </summary>
 public static class JsonContextEmitter
 {
@@ -78,7 +76,6 @@ public static class JsonContextEmitter
         /// <summary>
         /// STJ-Manifest für den internen Actor-Plane (WIRE): Transport-Hüllen + ALLE Commands/Events (inkl.
         /// Transient) + Queries/Antworten. Polymorphe Interface-Payloads laufen über die eingebackenen Converter.
-        /// Signale sind BEWUSST nicht registriert (uniform, vom WireSerializerGenerator selbst serialisiert).
         /// Der WireSerializerGenerator koppelt die Menge zur Compile-Zeit (Default.{Typ}).
         /// </summary>
         [JsonSourceGenerationOptions(
@@ -89,7 +86,6 @@ public static class JsonContextEmitter
                 typeof(IEventJsonConverter),
                 typeof(ICommandJsonConverter),
                 typeof(CommandModusJsonConverter),
-                typeof(IStateChangeSignalJsonConverter),
                 typeof(IMessageEnvelopeJsonConverter),
                 typeof(PidJsonConverter),
         /*ID-KONVERTER*/
@@ -100,7 +96,6 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(Wake))]
         [JsonSerializable(typeof(WakeAck))]
         [JsonSerializable(typeof(EventEnvelope))]
-        [JsonSerializable(typeof(SignalEnvelope))]
         [JsonSerializable(typeof(Publish))]
         [JsonSerializable(typeof(Subscribe))]
         [JsonSerializable(typeof(Unsubscribe))]
@@ -141,7 +136,6 @@ public static class JsonContextEmitter
         // (assembly.GetTypes() liefert nur die dort DEFINIERTEN Typen) — deckungsgleich zum
         // domainAssemblies-Filter der Roslyn-Variante. Interface-Zugehörigkeit per FullName
         // (MetadataLoadContext-Typen sind inspection-only). Nur die konkreten Klassen zählen,
-        // Signale werden bewusst nicht registriert.
         foreach (var asm in domainAssemblies)
             foreach (var t in AlleTypen(asm))
                 foreach (var p in t.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))

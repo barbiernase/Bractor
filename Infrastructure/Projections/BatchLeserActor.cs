@@ -11,13 +11,13 @@ namespace Infrastructure.Projections;
 /// Partition. Der Cluster hält genau eine Aktivierung je Partition; fällt das bei einer Netzstörung kurz aus, verliert die zweite Aktivierung
 /// ihren Commit an der Version des Partitions-Checkpoints (G-4).
 ///
-/// <b>Weckung, zusammengefasst</b> (Rahmen, <see cref="RahmenActor.Wecke"/>): <see cref="Wake"/> (Signal oder Poll) wird sofort quittiert.
+/// <b>Weckung, zusammengefasst</b> (Rahmen, <see cref="RahmenActor.Wecke"/>): <see cref="Wake"/> (Wecker am Commit oder Takt) wird sofort quittiert.
 /// Läuft schon ein Durchlauf, merkt sich der Actor „noch einmal“ — beliebig viele Weckungen während eines Durchlaufs ergeben genau einen
 /// weiteren. Der Durchlauf läuft neben der Mailbox, damit Weckungen ihn nicht stauen. Scheitert er (Datenbank weg), heilt die nächste Weckung,
-/// spätestens der Poll. Der Fähigkeits-Bereich (Store-Instanz, Co-Commit-Puffer) gehört der Aktivierung: beim Stopp bricht der Durchlauf ab, der
+/// spätestens der Takt. Der Fähigkeits-Bereich (Store-Instanz, Co-Commit-Puffer) gehört der Aktivierung: beim Stopp bricht der Durchlauf ab, der
 /// Bereich wird erst frei, wenn er geendet hat.
 ///
-/// Kein Leerlauf-Stopp: es gibt nur Projektionen × Partitionen dieser Actors, und der Poll weckt jede Partition ohnehin alle 30 s.
+/// Kein Leerlauf-Stopp: es gibt nur Projektionen × Partitionen dieser Actors, und der Takt weckt jede Partition ohnehin alle 30 s.
 /// </summary>
 public sealed class BatchLeserActor : RahmenActor
 {
@@ -67,7 +67,7 @@ public sealed class BatchLeserActor : RahmenActor
 
 /// <summary>
 /// Ein Batch-Konsument (vom <c>PullPathGenerator</c> je replaybarer Projektion registriert): Cluster-Kind, Projektions-Id und die
-/// abonnierten Event-Typen (für die Signale und den Typfilter). Mit <paramref name="EineAdresse"/> (eine Funktion mit <c>[EineAdresse]</c>, Plan §2.9)
+/// gehörten Event-Typen (für den Typfilter und die Prüfung gegen den Weckplan). Mit <paramref name="EineAdresse"/> (eine Funktion mit <c>[EineAdresse]</c>, Plan §2.9)
 /// liest EIN Actor (Identität 0) alle Partitionen — geweckt, gepollt und gezählt wird dann nur er.
 /// </summary>
 public sealed record BatchRegistrierung(string KindName, string ProjektionsId, IReadOnlyList<Type> EventTypes, bool EineAdresse = false)

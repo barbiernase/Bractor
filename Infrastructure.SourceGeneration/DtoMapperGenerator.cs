@@ -49,14 +49,6 @@ namespace Infrastructure.SourceGeneration
                 var analyzer = DomainGraphAnalyzer.Create(context.Compilation, useGlobalNamespace: true);
                 var graphs = analyzer.AnalyzeMessagePayloads();
 
-                // Signale (StateChangeVia{Event}) ausschließen: sie laufen NUR auf der
-                // internen PubSub-Ebene (rohe CLR), nie über die externe gRPC/Proto-Grenze.
-                // Ohne Ausschluss würden sie als DomainType.Object Value-Object-Mapper auf
-                // nicht existierende StateChangeVia*Dto erzeugen → Compile-Fehler.
-                var signalGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IStateChangeSignal");
-                var signalNames = new HashSet<string>(signalGraphs.Select(g => g.FullName));
-                graphs = graphs.Where(g => !signalNames.Contains(g.FullName)).ToList();
-
                 // Events des Rahmens (IRahmenEvent: Frist gesetzt, Inbox-Marken) aus dem Proto-Mapping ausschließen: sie gehen nie über die
                 // Leitung. Für Marten/Replay bleiben sie in der Typ-Registry.
                 var rahmenGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IRahmenEvent");

@@ -53,7 +53,6 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine($"        public {K}IWireTabelle Wire {{ get; }} = new WireTabelle();");
             sb.AppendLine($"        public {K}IWirePolyTabelle WirePoly {{ get; }} = new WirePolyTabelle();");
             sb.AppendLine($"        public {K}IUpcastingTabelle Upcasting {{ get; }} = new UpcastingTabelle();");
-            sb.AppendLine($"        public {K}ISignalTabelle Signale {{ get; }} = new SignalTabelle();");
             sb.AppendLine($"        public {K}IAkteurTabelle Akteure {{ get; }} = new AkteurTabelle();");
             sb.AppendLine($"        public {K}IFunktionsTabelle Funktionen {{ get; }} = new FunktionsTabelle();");
             sb.AppendLine($"        public {K}IDienstTabelle Dienste {{ get; }} = new DienstTabelle();");
@@ -76,7 +75,7 @@ namespace Infrastructure.SourceGeneration
             Tabelle(sb, "TypTabelle", "ITypTabelle", "global::Infrastructure.Mapping.GeneratedTypeRegistry", new[]
             {
                 "IReadOnlyDictionary<string, Type> Events", "IReadOnlyDictionary<string, Type> Commands", "IReadOnlyDictionary<string, Type> Queries",
-                "IReadOnlyDictionary<string, Type> QueryResponses", "IReadOnlyDictionary<string, Type> Signals",
+                "IReadOnlyDictionary<string, Type> QueryResponses",
                 "IReadOnlyList<(Type Type, string SnakeCaseName)> PersistableEvents", "IReadOnlyList<Type> PersistableEventTypes",
             }, new string[0]);
             Tabelle(sb, "RoutingTabelle", "IRoutingTabelle", "global::Infrastructure.Mapping.GeneratedCommandRouting", new[]
@@ -88,7 +87,7 @@ namespace Infrastructure.SourceGeneration
                 "byte[] Serialize(object message) => {0}.Serialize(message)", "object Deserialize(byte[] bytes, string typeName) => {0}.Deserialize(bytes, typeName)",
                 "string TypeName(object message) => {0}.TypeName(message)", "bool CanSerialize(Type type) => {0}.CanSerialize(type)",
             });
-            Tabelle(sb, "WirePolyTabelle", "IWirePolyTabelle", "global::Infrastructure.Serialization.GeneratedWirePoly", new[] { "IReadOnlyList<Type> SignalTypes" }, new[]
+            Tabelle(sb, "WirePolyTabelle", "IWirePolyTabelle", "global::Infrastructure.Serialization.GeneratedWirePoly", new string[0], new[]
             {
                 "string EventDiskriminator(IEvent value) => {0}.EventDiskriminator(value)",
                 "void WriteEvent(Utf8JsonWriter writer, IEvent value) => {0}.WriteEvent(writer, value)",
@@ -96,9 +95,6 @@ namespace Infrastructure.SourceGeneration
                 "string CommandDiskriminator(ICommand value) => {0}.CommandDiskriminator(value)",
                 "void WriteCommand(Utf8JsonWriter writer, ICommand value) => {0}.WriteCommand(writer, value)",
                 "ICommand ReadCommand(string diskriminator, ref Utf8JsonReader reader) => {0}.ReadCommand(diskriminator, ref reader)",
-                "string SignalDiskriminator(IStateChangeSignal value) => {0}.SignalDiskriminator(value)",
-                "void WriteSignal(Utf8JsonWriter writer, IStateChangeSignal value) => {0}.WriteSignal(writer, value)",
-                "IStateChangeSignal ReadSignal(string diskriminator, ref Utf8JsonReader reader) => {0}.ReadSignal(diskriminator, ref reader)",
             });
             Tabelle(sb, "UpcastingTabelle", "IUpcastingTabelle", "global::Infrastructure.Serialization.GeneratedEventUpcasting",
                 new[] { "IReadOnlyList<(Type Typ, string Diskriminator)> Registrierungen", "IReadOnlyDictionary<Type, string[]> Herkunft" }, new[]
@@ -107,12 +103,6 @@ namespace Infrastructure.SourceGeneration
                     "IReadOnlyList<IEvent> Aufwerten(object data) => {0}.Aufwerten(data)",
                     "string Diskriminator(IEvent evt) => {0}.Diskriminator(evt)",
                 });
-            sb.AppendLine($"        private sealed class SignalTabelle : {K}ISignalTabelle");
-            sb.AppendLine("        {");
-            sb.AppendLine("            public IStateChangeSignal? Create(IEvent evt, Guid streamId, int version) => global::Infrastructure.Mapping.GeneratedSignalFactory.Create(evt, streamId, version);");
-            sb.AppendLine("            public IReadOnlyDictionary<Type, Type> EventToSignal => global::Infrastructure.Mapping.GeneratedSignalRoutes.EventToSignal;");
-            sb.AppendLine("        }");
-            sb.AppendLine();
             sb.AppendLine($"        private sealed class AkteurTabelle : {K}IAkteurTabelle");
             sb.AppendLine("        {");
             sb.AppendLine("            public IReadOnlyDictionary<string, global::Infrastructure.Akteure.AkteurRechte> Rechte => global::Infrastructure.Akteure.GeneratedAkteurRechte.Alle;");
