@@ -4,7 +4,6 @@ using Domain.Projections;
 using Marten;
 using Domain.Projections.ImagePair;
 
-using ImagePairAgg = Domain.ImagePair.ImagePair;
 
 namespace Domain.Infrastructure.ImagePair;
 
@@ -18,13 +17,13 @@ public sealed partial class ImagePairStore
     // Read-Seite
     // ═══════════════════════════════════════════════════════════
 
-    public async Task<ImagePairReadModel?> FindByIdAsync(Id<ImagePairAgg> id)
+    public async Task<ImagePairReadModel?> FindByIdAsync(Id<Domain.ImagePair.ImagePair> id)
     {
         await using var session = Store.QuerySession();
         return await session.LoadAsync<ImagePairReadModel>(id.Wert);
     }
 
-    public async Task<IReadOnlyList<ImagePairReadModel>> LadeVieleAsync(IReadOnlyList<Id<ImagePairAgg>> ids)
+    public async Task<IReadOnlyList<ImagePairReadModel>> LadeVieleAsync(IReadOnlyList<Id<Domain.ImagePair.ImagePair>> ids)
     {
         if (ids.Count == 0) return System.Array.Empty<ImagePairReadModel>();
         await using var session = Store.QuerySession();

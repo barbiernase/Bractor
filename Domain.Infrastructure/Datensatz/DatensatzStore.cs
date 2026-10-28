@@ -5,9 +5,7 @@ using Domain.Projections;
 using Marten;
 using Domain.Projections.Datensatz;
 
-using DatensatzAgg = Domain.Datensatz.Datensatz;
 
-using ImagePairAgg = Domain.ImagePair.ImagePair;
 
 namespace Domain.Infrastructure.Datensatz;
 
@@ -23,11 +21,11 @@ public sealed partial class DatensatzStore : MartenStore, IDatensatzStore
     public Task UpsertAsync(DatensatzReadModel model) => EnqueueStore(model.Id.Wert, model);
 
     public Task NimmRangeAufAsync(
-        Id<DatensatzAgg> id, IReadOnlyList<Id<ImagePairAgg>> imagePairIds, RangeHerkunft herkunft, DateTimeOffset aktualisierung)
+        Id<Domain.Datensatz.Datensatz> id, IReadOnlyList<Id<Domain.ImagePair.ImagePair>> imagePairIds, RangeHerkunft herkunft, DateTimeOffset aktualisierung)
     {
         EnqueueTransform<DatensatzReadModel>(id.Wert, existing =>
         {
-            var mitglieder = new List<Id<ImagePairAgg>>(existing.Mitglieder);
+            var mitglieder = new List<Id<Domain.ImagePair.ImagePair>>(existing.Mitglieder);
             foreach (var pid in imagePairIds)
                 if (!mitglieder.Contains(pid)) mitglieder.Add(pid);   // Union, dedup, Reihenfolge stabil
             var ausgeschlossen = existing.Ausgeschlossen.Where(x => !imagePairIds.Contains(x)).ToList();
@@ -45,7 +43,7 @@ public sealed partial class DatensatzStore : MartenStore, IDatensatzStore
         return Task.CompletedTask;
     }
 
-    public Task NimmPaarAufAsync(Id<DatensatzAgg> id, Id<ImagePairAgg> imagePairId, DateTimeOffset aktualisierung)
+    public Task NimmPaarAufAsync(Id<Domain.Datensatz.Datensatz> id, Id<Domain.ImagePair.ImagePair> imagePairId, DateTimeOffset aktualisierung)
     {
         EnqueueTransform<DatensatzReadModel>(id.Wert, existing =>
         {
@@ -54,7 +52,7 @@ public sealed partial class DatensatzStore : MartenStore, IDatensatzStore
                 return ausgeschlossen.Count == existing.Ausgeschlossen.Count
                     ? existing
                     : existing with { Ausgeschlossen = ausgeschlossen, LetzteAktualisierung = aktualisierung };
-            var mitglieder = new List<Id<ImagePairAgg>>(existing.Mitglieder) { imagePairId };
+            var mitglieder = new List<Id<Domain.ImagePair.ImagePair>>(existing.Mitglieder) { imagePairId };
             return existing with
             {
                 Mitglieder = mitglieder,
@@ -67,15 +65,15 @@ public sealed partial class DatensatzStore : MartenStore, IDatensatzStore
         return Task.CompletedTask;
     }
 
-    public Task EntfernePaarAsync(Id<DatensatzAgg> id, Id<ImagePairAgg> imagePairId, DateTimeOffset aktualisierung)
+    public Task EntfernePaarAsync(Id<Domain.Datensatz.Datensatz> id, Id<Domain.ImagePair.ImagePair> imagePairId, DateTimeOffset aktualisierung)
     {
         EnqueueTransform<DatensatzReadModel>(id.Wert, existing =>
         {
             if (!existing.Mitglieder.Contains(imagePairId)) return existing;
-            var mitglieder = new List<Id<ImagePairAgg>>(existing.Mitglieder);
+            var mitglieder = new List<Id<Domain.ImagePair.ImagePair>>(existing.Mitglieder);
             mitglieder.Remove(imagePairId);
             // Aussortiert → in die Ausgeschlossen-Sicht (dedup).
-            var ausgeschlossen = new List<Id<ImagePairAgg>>(existing.Ausgeschlossen);
+            var ausgeschlossen = new List<Id<Domain.ImagePair.ImagePair>>(existing.Ausgeschlossen);
             if (!ausgeschlossen.Contains(imagePairId)) ausgeschlossen.Add(imagePairId);
             return existing with
             {
@@ -89,11 +87,11 @@ public sealed partial class DatensatzStore : MartenStore, IDatensatzStore
         return Task.CompletedTask;
     }
 
-    public Task SetzeSplitAsync(Id<DatensatzAgg> id, SplitKonfig split, DateTimeOffset aktualisierung)
+    public Task SetzeSplitAsync(Id<Domain.Datensatz.Datensatz> id, SplitKonfig split, DateTimeOffset aktualisierung)
         => EnqueueTransform<DatensatzReadModel>(id.Wert, existing => existing with { Split = split, LetzteAktualisierung = aktualisierung });
 
     public Task FriereEinAsync(
-        Id<DatensatzAgg> id, int version, IReadOnlyList<DatensatzMitglied> mitglieder, DateTimeOffset aktualisierung)
+        Id<Domain.Datensatz.Datensatz> id, int version, IReadOnlyList<DatensatzMitglied> mitglieder, DateTimeOffset aktualisierung)
     {
         // 1) Datensatz-Kopf: Status + eingefrorene Version.
         EnqueueTransform<DatensatzReadModel>(id.Wert, existing => existing with
@@ -125,7 +123,7 @@ public sealed partial class DatensatzStore : MartenStore, IDatensatzStore
     /// anlegen (idempotent), raus → entfernen. Keine Liste je Bildpaar: die würden mehrere Datensatz-Streams parallel
     /// überschreiben. Co-committet im selben Batch wie das Vorwärts-Delta.
     /// </summary>
-    private void BufferRueckwaerts(Id<ImagePairAgg> imagePairId, Id<DatensatzAgg> datensatzId, bool drin)
+    private void BufferRueckwaerts(Id<Domain.ImagePair.ImagePair> imagePairId, Id<Domain.Datensatz.Datensatz> datensatzId, bool drin)
     {
         var zeilenId = DatensatzMitgliedschaftZeile.MakeId(datensatzId, imagePairId);
         if (drin)

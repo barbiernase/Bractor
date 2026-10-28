@@ -1,7 +1,5 @@
 using Abstractions;
 using Domain.Datensatz;
-using DatensatzAgg = Domain.Datensatz.Datensatz;
-using ImagePairAgg = Domain.ImagePair.ImagePair;
 
 namespace Domain.Projections.Datensatz;
 
@@ -16,17 +14,17 @@ public interface IUpsertDatensatz : IWriteStore { Task UpsertAsync(DatensatzRead
 public interface INimmRangeAuf : IWriteStore
 {
     Task NimmRangeAufAsync(
-        Id<DatensatzAgg> id, IReadOnlyList<Id<ImagePairAgg>> imagePairIds, RangeHerkunft herkunft, DateTimeOffset aktualisierung);
+        Id<Domain.Datensatz.Datensatz> id, IReadOnlyList<Id<Domain.ImagePair.ImagePair>> imagePairIds, RangeHerkunft herkunft, DateTimeOffset aktualisierung);
 }
 
 /// <summary>Manuelles Delta: ein Paar aufnehmen.</summary>
-public interface INimmPaarAuf : IWriteStore { Task NimmPaarAufAsync(Id<DatensatzAgg> id, Id<ImagePairAgg> imagePairId, DateTimeOffset aktualisierung); }
+public interface INimmPaarAuf : IWriteStore { Task NimmPaarAufAsync(Id<Domain.Datensatz.Datensatz> id, Id<Domain.ImagePair.ImagePair> imagePairId, DateTimeOffset aktualisierung); }
 
 /// <summary>Manuelles Delta: ein Paar entfernen.</summary>
-public interface IEntfernePaar : IWriteStore { Task EntfernePaarAsync(Id<DatensatzAgg> id, Id<ImagePairAgg> imagePairId, DateTimeOffset aktualisierung); }
+public interface IEntfernePaar : IWriteStore { Task EntfernePaarAsync(Id<Domain.Datensatz.Datensatz> id, Id<Domain.ImagePair.ImagePair> imagePairId, DateTimeOffset aktualisierung); }
 
 /// <summary>Split-Override setzen.</summary>
-public interface ISetzeSplit : IWriteStore { Task SetzeSplitAsync(Id<DatensatzAgg> id, SplitKonfig split, DateTimeOffset aktualisierung); }
+public interface ISetzeSplit : IWriteStore { Task SetzeSplitAsync(Id<Domain.Datensatz.Datensatz> id, SplitKonfig split, DateTimeOffset aktualisierung); }
 
 /// <summary>
 /// Einfrieren festschreiben: Status/Version am Datensatz setzen UND je Mitglied
@@ -35,12 +33,12 @@ public interface ISetzeSplit : IWriteStore { Task SetzeSplitAsync(Id<DatensatzAg
 public interface IFriereEin : IWriteStore
 {
     Task FriereEinAsync(
-        Id<DatensatzAgg> id, int version, IReadOnlyList<DatensatzMitglied> mitglieder, DateTimeOffset aktualisierung);
+        Id<Domain.Datensatz.Datensatz> id, int version, IReadOnlyList<DatensatzMitglied> mitglieder, DateTimeOffset aktualisierung);
 }
 
 // ── Lesen (DatensatzReader, GUI) — Queries mit Paginierung ──
 
-public interface IFindDatensatz : IReadStore { Task<DatensatzReadModel?> FindByIdAsync(Id<DatensatzAgg> id); }
+public interface IFindDatensatz : IReadStore { Task<DatensatzReadModel?> FindByIdAsync(Id<Domain.Datensatz.Datensatz> id); }
 
 /// <summary>Alle Datensätze (Sidebar-Liste), neueste zuerst.</summary>
 public interface IGetAlleDatensaetze : IReadStore { Task<IReadOnlyList<DatensatzReadModel>> GetAlleAsync(); }
@@ -52,14 +50,14 @@ public interface IGetAlleDatensaetze : IReadStore { Task<IReadOnlyList<Datensatz
 public interface IHoleSamples : IReadStore
 {
     Task<(IReadOnlyList<DatensatzSampleReadModel> Items, int GesamtAnzahl)> HoleSamplesAsync(
-        Id<DatensatzAgg> datensatzId, int version, int seite, int seitenGroesse);
+        Id<Domain.Datensatz.Datensatz> datensatzId, int version, int seite, int seitenGroesse);
 }
 
 /// <summary>
 /// Rückwärts-Index: alle Datensätze, in denen das Bildpaar (als Entwurfs-Mitglied) liegt.
 /// Liest die <see cref="DatensatzMitgliedschaftZeile"/>n des Paares und joint die Kopf-Daten.
 /// </summary>
-public interface IHoleDatensaetzeFuerPaar : IReadStore { Task<IReadOnlyList<DatensatzReadModel>> HoleDatensaetzeFuerPaarAsync(Id<ImagePairAgg> imagePairId); }
+public interface IHoleDatensaetzeFuerPaar : IReadStore { Task<IReadOnlyList<DatensatzReadModel>> HoleDatensaetzeFuerPaarAsync(Id<Domain.ImagePair.ImagePair> imagePairId); }
 
 /// <summary>Der Datensatz-Store — Bündel seiner Fähigkeiten, Transaktionsgrenze.</summary>
 public interface IDatensatzStore : IStore,

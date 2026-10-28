@@ -1,8 +1,6 @@
 using Abstractions;
 using Domain.Datensatz;
 using Domain.ImagePair;   // Klassifikation
-using DatensatzAgg = Domain.Datensatz.Datensatz;
-using ImagePairAgg = Domain.ImagePair.ImagePair;
 
 namespace Domain.Projections.Datensatz;
 
@@ -22,19 +20,19 @@ namespace Domain.Projections.Datensatz;
 /// </summary>
 public partial record DatensatzReadModel : IReadModel
 {
-    public Id<DatensatzAgg> Id { get; init; }
+    public Id<Domain.Datensatz.Datensatz> Id { get; init; }
     public string? Name { get; init; }
     public DatensatzStatus Status { get; init; }
 
     /// <summary>Der Entwurfs-Korb: konkrete Bildpaar-Referenzen, dedupliziert.</summary>
-    public List<Id<ImagePairAgg>> Mitglieder { get; init; } = new();
+    public List<Id<Domain.ImagePair.ImagePair>> Mitglieder { get; init; } = new();
 
     /// <summary>
     /// Beim Kuratieren aussortierte Bildpaare (aus einer Range/dem Korb entfernt) — die
     /// „Ausgeschlossen"-Sicht (eigene Galerie der rausgeworfenen
     /// Bilder, in der Galerie ansehbar/wieder-aufnehmbar). Read-Model-Sicht, kein Domänenzustand.
     /// </summary>
-    public List<Id<ImagePairAgg>> Ausgeschlossen { get; init; } = new();
+    public List<Id<Domain.ImagePair.ImagePair>> Ausgeschlossen { get; init; } = new();
 
     /// <summary>Materialisierte Größe (== <see cref="Mitglieder"/>.Count) — für die Sidebar.</summary>
     public int AnzahlMitglieder { get; init; }
@@ -69,15 +67,15 @@ public partial record DatensatzReadModel : IReadModel
 public record DatensatzSampleReadModel : IReadModel
 {
     public string Id { get; init; } = "";
-    public Id<DatensatzAgg> DatensatzId { get; init; }
+    public Id<Domain.Datensatz.Datensatz> DatensatzId { get; init; }
     public int Version { get; init; }
-    public Id<ImagePairAgg> ImagePairId { get; init; }
+    public Id<Domain.ImagePair.ImagePair> ImagePairId { get; init; }
     public string Dc0Pfad { get; init; } = "";
     public string Dc2Pfad { get; init; } = "";
     public Klassifikation Label { get; init; }
     public Split Split { get; init; }
 
-    public static string MakeId(Id<DatensatzAgg> datensatzId, int version, Id<ImagePairAgg> imagePairId) =>
+    public static string MakeId(Id<Domain.Datensatz.Datensatz> datensatzId, int version, Id<Domain.ImagePair.ImagePair> imagePairId) =>
         $"{datensatzId.Wert:N}:{version}:{imagePairId.Wert:N}";
 }
 
@@ -100,8 +98,8 @@ public record DatensatzMitgliedschaftZeile : IReadModel
 {
     /// <summary><c>{DatensatzId:N}:{ImagePairId:N}</c> (Marten-Dokument-Id).</summary>
     public string Id { get; init; } = "";
-    public Id<DatensatzAgg> DatensatzId { get; init; }
-    public Id<ImagePairAgg> ImagePairId { get; init; }
+    public Id<Domain.Datensatz.Datensatz> DatensatzId { get; init; }
+    public Id<Domain.ImagePair.ImagePair> ImagePairId { get; init; }
 
-    public static string MakeId(Id<DatensatzAgg> datensatzId, Id<ImagePairAgg> imagePairId) => $"{datensatzId.Wert:N}:{imagePairId.Wert:N}";
+    public static string MakeId(Id<Domain.Datensatz.Datensatz> datensatzId, Id<Domain.ImagePair.ImagePair> imagePairId) => $"{datensatzId.Wert:N}:{imagePairId.Wert:N}";
 }

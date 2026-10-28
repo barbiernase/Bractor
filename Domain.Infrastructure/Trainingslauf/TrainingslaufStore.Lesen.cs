@@ -3,7 +3,6 @@ using Domain.Projections;
 using Marten;
 using Domain.Projections.Trainingslauf;
 
-using TrainingslaufAgg = Domain.Trainingslauf.Trainingslauf;
 
 namespace Domain.Infrastructure.Trainingslauf;
 
@@ -13,7 +12,7 @@ namespace Domain.Infrastructure.Trainingslauf;
 /// </summary>
 public sealed partial class TrainingslaufStore
 {
-    public async Task<TrainingslaufReadModel?> FindByIdAsync(Id<TrainingslaufAgg> id)
+    public async Task<TrainingslaufReadModel?> FindByIdAsync(Id<Domain.Trainingslauf.Trainingslauf> id)
     {
         await using var session = Store.QuerySession();
         return await session.LoadAsync<TrainingslaufReadModel>(id.Wert);

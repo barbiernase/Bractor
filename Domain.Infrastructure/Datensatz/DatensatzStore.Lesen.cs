@@ -3,9 +3,7 @@ using Domain.Projections;
 using Marten;
 using Domain.Projections.Datensatz;
 
-using DatensatzAgg = Domain.Datensatz.Datensatz;
 
-using ImagePairAgg = Domain.ImagePair.ImagePair;
 
 namespace Domain.Infrastructure.Datensatz;
 
@@ -15,7 +13,7 @@ namespace Domain.Infrastructure.Datensatz;
 /// </summary>
 public sealed partial class DatensatzStore
 {
-    public async Task<DatensatzReadModel?> FindByIdAsync(Id<DatensatzAgg> id)
+    public async Task<DatensatzReadModel?> FindByIdAsync(Id<Domain.Datensatz.Datensatz> id)
     {
         await using var session = Store.QuerySession();
         return await session.LoadAsync<DatensatzReadModel>(id.Wert);
@@ -30,7 +28,7 @@ public sealed partial class DatensatzStore
     }
 
     public async Task<(IReadOnlyList<DatensatzSampleReadModel> Items, int GesamtAnzahl)> HoleSamplesAsync(
-        Id<DatensatzAgg> datensatzId, int version, int seite, int seitenGroesse)
+        Id<Domain.Datensatz.Datensatz> datensatzId, int version, int seite, int seitenGroesse)
     {
         await using var session = Store.QuerySession();
 
@@ -48,7 +46,7 @@ public sealed partial class DatensatzStore
         return (page, gesamtAnzahl);
     }
 
-    public async Task<IReadOnlyList<DatensatzReadModel>> HoleDatensaetzeFuerPaarAsync(Id<ImagePairAgg> imagePairId)
+    public async Task<IReadOnlyList<DatensatzReadModel>> HoleDatensaetzeFuerPaarAsync(Id<Domain.ImagePair.ImagePair> imagePairId)
     {
         await using var session = Store.QuerySession();
 

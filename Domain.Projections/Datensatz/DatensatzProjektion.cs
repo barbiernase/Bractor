@@ -1,6 +1,5 @@
 using Abstractions;
 using Domain.Datensatz;
-using DatensatzAgg = Domain.Datensatz.Datensatz;
 
 namespace Domain.Projections.Datensatz;
 
@@ -21,7 +20,7 @@ public sealed class DatensatzProjektion : IProjektion
     public Task Auf(DatensatzErstellt e, Herkunft h, IUpsertDatensatz upsertDatensatz)
         => upsertDatensatz.UpsertAsync(new DatensatzReadModel
         {
-            Id = h.Id<DatensatzAgg>(),
+            Id = h.Id<Domain.Datensatz.Datensatz>(),
             Name = e.Name,
             Status = DatensatzStatus.Entwurf,
             AnzahlMitglieder = 0,
@@ -34,17 +33,17 @@ public sealed class DatensatzProjektion : IProjektion
 
     public Task Auf(PaareAufgenommen e, Herkunft h, INimmRangeAuf nimmRangeAuf)
         => nimmRangeAuf.NimmRangeAufAsync(
-            h.Id<DatensatzAgg>(), e.ImagePairIds, e.Herkunft, h.Zeit);
+            h.Id<Domain.Datensatz.Datensatz>(), e.ImagePairIds, e.Herkunft, h.Zeit);
 
     public Task Auf(PaarAufgenommen e, Herkunft h, INimmPaarAuf nimmPaarAuf)
-        => nimmPaarAuf.NimmPaarAufAsync(h.Id<DatensatzAgg>(), e.ImagePairId, h.Zeit);
+        => nimmPaarAuf.NimmPaarAufAsync(h.Id<Domain.Datensatz.Datensatz>(), e.ImagePairId, h.Zeit);
 
     public Task Auf(PaarEntfernt e, Herkunft h, IEntfernePaar entfernePaar)
-        => entfernePaar.EntfernePaarAsync(h.Id<DatensatzAgg>(), e.ImagePairId, h.Zeit);
+        => entfernePaar.EntfernePaarAsync(h.Id<Domain.Datensatz.Datensatz>(), e.ImagePairId, h.Zeit);
 
     public Task Auf(SplitGesetzt e, Herkunft h, ISetzeSplit setzeSplit)
         => setzeSplit.SetzeSplitAsync(
-            h.Id<DatensatzAgg>(),
+            h.Id<Domain.Datensatz.Datensatz>(),
             new SplitKonfig(e.TrainProzent, e.ValProzent, e.TestProzent, e.Seed),
             h.Zeit);
 
@@ -54,5 +53,5 @@ public sealed class DatensatzProjektion : IProjektion
 
     public Task Auf(DatensatzEingefroren e, Herkunft h, IFriereEin friereEin)
         => friereEin.FriereEinAsync(
-            h.Id<DatensatzAgg>(), e.Version, e.Mitglieder, h.Zeit);
+            h.Id<Domain.Datensatz.Datensatz>(), e.Version, e.Mitglieder, h.Zeit);
 }

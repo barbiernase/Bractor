@@ -3,7 +3,6 @@ using Domain.Projections;
 using Marten;
 using Domain.Projections.Modell;
 
-using ModellAgg = Domain.Modell.Modell;
 
 namespace Domain.Infrastructure.Modell;
 
@@ -13,7 +12,7 @@ namespace Domain.Infrastructure.Modell;
 /// </summary>
 public sealed partial class ModellStore
 {
-    public async Task<ModellReadModel?> FindByIdAsync(Id<ModellAgg> id)
+    public async Task<ModellReadModel?> FindByIdAsync(Id<Domain.Modell.Modell> id)
     {
         await using var session = Store.QuerySession();
         return await session.LoadAsync<ModellReadModel>(id.Wert);

@@ -5,7 +5,6 @@ using Domain.Trainingslauf;
 using Marten;
 using Domain.Projections.Trainingslauf;
 
-using TrainingslaufAgg = Domain.Trainingslauf.Trainingslauf;
 
 namespace Domain.Infrastructure.Trainingslauf;
 
@@ -19,7 +18,7 @@ public sealed partial class TrainingslaufStore : MartenStore, ITrainingslaufStor
 
     public Task UpsertAsync(TrainingslaufReadModel model) => EnqueueStore(model.Id.Wert, model);
 
-    public Task SetBegonnenAsync(Id<TrainingslaufAgg> id, DateTimeOffset startzeit)
+    public Task SetBegonnenAsync(Id<Domain.Trainingslauf.Trainingslauf> id, DateTimeOffset startzeit)
         => EnqueueTransform<TrainingslaufReadModel>(id.Wert, existing => existing with
         {
             Status = TrainingsStatus.Laeuft,
@@ -27,7 +26,7 @@ public sealed partial class TrainingslaufStore : MartenStore, ITrainingslaufStor
             LetzteAktualisierung = startzeit
         });
 
-    public Task AppendMetrikAsync(Id<TrainingslaufAgg> id, EpochenMetrik metrik, DateTimeOffset aktualisierung)
+    public Task AppendMetrikAsync(Id<Domain.Trainingslauf.Trainingslauf> id, EpochenMetrik metrik, DateTimeOffset aktualisierung)
         => EnqueueTransform<TrainingslaufReadModel>(id.Wert, existing => existing with
         {
             MetrikHistorie = new List<EpochenMetrik>(existing.MetrikHistorie) { metrik },
@@ -35,7 +34,7 @@ public sealed partial class TrainingslaufStore : MartenStore, ITrainingslaufStor
             LetzteAktualisierung = aktualisierung
         });
 
-    public Task SetAbgeschlossenAsync(Id<TrainingslaufAgg> id, string modellPfad, Endmetriken endmetriken, DateTimeOffset aktualisierung)
+    public Task SetAbgeschlossenAsync(Id<Domain.Trainingslauf.Trainingslauf> id, string modellPfad, Endmetriken endmetriken, DateTimeOffset aktualisierung)
         => EnqueueTransform<TrainingslaufReadModel>(id.Wert, existing => existing with
         {
             Status = TrainingsStatus.Abgeschlossen,
@@ -44,7 +43,7 @@ public sealed partial class TrainingslaufStore : MartenStore, ITrainingslaufStor
             LetzteAktualisierung = aktualisierung
         });
 
-    public Task SetGescheitertAsync(Id<TrainingslaufAgg> id, string grund, DateTimeOffset aktualisierung)
+    public Task SetGescheitertAsync(Id<Domain.Trainingslauf.Trainingslauf> id, string grund, DateTimeOffset aktualisierung)
         => EnqueueTransform<TrainingslaufReadModel>(id.Wert, existing => existing with
         {
             Status = TrainingsStatus.Gescheitert,
@@ -52,7 +51,7 @@ public sealed partial class TrainingslaufStore : MartenStore, ITrainingslaufStor
             LetzteAktualisierung = aktualisierung
         });
 
-    public Task SetStatusAsync(Id<TrainingslaufAgg> id, TrainingsStatus status, DateTimeOffset aktualisierung)
+    public Task SetStatusAsync(Id<Domain.Trainingslauf.Trainingslauf> id, TrainingsStatus status, DateTimeOffset aktualisierung)
         => EnqueueTransform<TrainingslaufReadModel>(id.Wert, existing => existing with
         {
             Status = status,

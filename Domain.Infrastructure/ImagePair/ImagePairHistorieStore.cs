@@ -4,7 +4,6 @@ using Domain.Projections;
 using Marten;
 using Domain.Projections.ImagePair;
 
-using ImagePairAgg = Domain.ImagePair.ImagePair;
 
 namespace Domain.Infrastructure.ImagePair;
 
@@ -19,13 +18,13 @@ public sealed class ImagePairHistorieStore
     public ImagePairHistorieStore(IDocumentStore store) : base(store, typeof(ImagePairHistorieReadModel)) { }
 
     // ─── Write: nur puffern (load-or-create-append im Commit-Batch) ───
-    public Task AppendEintragAsync(Id<ImagePairAgg> pairId, HistorieEintrag eintrag)
+    public Task AppendEintragAsync(Id<Domain.ImagePair.ImagePair> pairId, HistorieEintrag eintrag)
         => EnqueueAnlegenOderAendern<ImagePairHistorieReadModel>(pairId.Wert, existing => existing is null
             ? new ImagePairHistorieReadModel { Id = pairId, Eintraege = new List<HistorieEintrag> { eintrag } }
             : existing with { Eintraege = new List<HistorieEintrag>(existing.Eintraege) { eintrag } });
 
     // ─── Read ───
-    public async Task<ImagePairHistorieReadModel?> GetByPairIdAsync(Id<ImagePairAgg> pairId)
+    public async Task<ImagePairHistorieReadModel?> GetByPairIdAsync(Id<Domain.ImagePair.ImagePair> pairId)
     {
         await using var s = Store.QuerySession();
         return await s.LoadAsync<ImagePairHistorieReadModel>(pairId.Wert);

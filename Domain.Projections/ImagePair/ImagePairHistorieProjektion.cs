@@ -1,6 +1,5 @@
 using Abstractions;
 using Domain.ImagePair;
-using ImagePairAgg = Domain.ImagePair.ImagePair;
 
 namespace Domain.Projections.ImagePair;
 
@@ -17,7 +16,7 @@ public sealed class ImagePairHistorieProjektion : IProjektion
     // ═══════════════════════════════════════════════════════════
 
     public Task Auf(ImagePairErstellt e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
-        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<Domain.ImagePair.ImagePair>(), new HistorieEintrag(
             Zeitpunkt: h.Zeit,
             EreignisTyp: nameof(ImagePairErstellt),
             Beschreibung: "ImagePair erstellt",
@@ -25,7 +24,7 @@ public sealed class ImagePairHistorieProjektion : IProjektion
             Details: $"PairKey: {e.PairKey}"));
 
     public Task Auf(BildVerfuegbar e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
-        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<Domain.ImagePair.ImagePair>(), new HistorieEintrag(
             Zeitpunkt: h.Zeit,
             EreignisTyp: nameof(BildVerfuegbar),
             Beschreibung: $"{e.Version} verfügbar",
@@ -33,7 +32,7 @@ public sealed class ImagePairHistorieProjektion : IProjektion
             Details: $"{e.Meta.BreitePixel}×{e.Meta.HoehePixel}, {e.Meta.DateigroesseBytes / 1024} KB"));
 
     public Task Auf(ImagePairKomplett e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
-        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<Domain.ImagePair.ImagePair>(), new HistorieEintrag(
             Zeitpunkt: h.Zeit,
             EreignisTyp: nameof(ImagePairKomplett),
             Beschreibung: "Beide Bilder verfügbar",
@@ -44,7 +43,7 @@ public sealed class ImagePairHistorieProjektion : IProjektion
     // ═══════════════════════════════════════════════════════════
 
     public Task Auf(EinzelBildDurchKiKlassifiziert e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
-        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<Domain.ImagePair.ImagePair>(), new HistorieEintrag(
             Zeitpunkt: h.Zeit,
             EreignisTyp: nameof(EinzelBildDurchKiKlassifiziert),
             Beschreibung: $"KI: {e.Version} klassifiziert",
@@ -52,7 +51,7 @@ public sealed class ImagePairHistorieProjektion : IProjektion
             Details: $"Bild: {FormatKlassifikation(e.BildLabel)}"));
 
     public Task Auf(BildPaarDurchKiKlassifiziert e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
-        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<Domain.ImagePair.ImagePair>(), new HistorieEintrag(
             Zeitpunkt: h.Zeit,
             EreignisTyp: nameof(BildPaarDurchKiKlassifiziert),
             Beschreibung: "KI: Bildpaar klassifiziert",
@@ -64,7 +63,7 @@ public sealed class ImagePairHistorieProjektion : IProjektion
     // ═══════════════════════════════════════════════════════════
 
     public Task Auf(BildRegionGelabelt e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
-        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<Domain.ImagePair.ImagePair>(), new HistorieEintrag(
             Zeitpunkt: h.Zeit,
             EreignisTyp: nameof(BildRegionGelabelt),
             Beschreibung: $"Region {e.RegionIndex} gelabelt ({e.Version})",
@@ -72,7 +71,7 @@ public sealed class ImagePairHistorieProjektion : IProjektion
             Details: FormatKlassifikation(e.Label)));
 
     public Task Auf(EinzelBildGelabelt e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
-        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<Domain.ImagePair.ImagePair>(), new HistorieEintrag(
             Zeitpunkt: h.Zeit,
             EreignisTyp: nameof(EinzelBildGelabelt),
             Beschreibung: $"Einzelbild {e.Version} gelabelt",
@@ -80,7 +79,7 @@ public sealed class ImagePairHistorieProjektion : IProjektion
             Details: FormatKlassifikation(e.Label)));
 
     public Task Auf(BildPaarGelabelt e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
-        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<Domain.ImagePair.ImagePair>(), new HistorieEintrag(
             Zeitpunkt: h.Zeit,
             EreignisTyp: nameof(BildPaarGelabelt),
             Beschreibung: "Bildpaar gelabelt",
@@ -92,7 +91,7 @@ public sealed class ImagePairHistorieProjektion : IProjektion
     // ═══════════════════════════════════════════════════════════
 
     public Task Auf(PhysischesProduktGelabelt e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
-        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<Domain.ImagePair.ImagePair>(), new HistorieEintrag(
             Zeitpunkt: h.Zeit,
             EreignisTyp: nameof(PhysischesProduktGelabelt),
             Beschreibung: "Produkt gelabelt",
@@ -104,7 +103,7 @@ public sealed class ImagePairHistorieProjektion : IProjektion
     // ═══════════════════════════════════════════════════════════
 
     public Task Auf(ImagePairInspiziert e, Herkunft h, IAppendHistorieEintrag appendHistorieEintrag)
-        => appendHistorieEintrag.AppendEintragAsync(h.Id<ImagePairAgg>(), new HistorieEintrag(
+        => appendHistorieEintrag.AppendEintragAsync(h.Id<Domain.ImagePair.ImagePair>(), new HistorieEintrag(
             Zeitpunkt: h.Zeit,
             EreignisTyp: nameof(ImagePairInspiziert),
             Beschreibung: "Inspiziert",

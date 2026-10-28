@@ -1,6 +1,5 @@
 using Abstractions;
 using Domain.Modell;
-using ModellAgg = Domain.Modell.Modell;
 
 namespace Domain.Projections.Modell;
 
@@ -16,7 +15,7 @@ public sealed class ModellProjektion : IProjektion
     public Task Auf(ModellRegistriert e, Herkunft h, IUpsertModell upsertModell)
         => upsertModell.UpsertAsync(new ModellReadModel
         {
-            Id = h.Id<ModellAgg>(),
+            Id = h.Id<Domain.Modell.Modell>(),
             Name = e.Name,
             Pfad = e.Pfad,
             TrainingslaufId = e.TrainingslaufId,
@@ -29,8 +28,8 @@ public sealed class ModellProjektion : IProjektion
         });
 
     public Task Auf(ModellAktiviert e, Herkunft h, ISetzeModellAktiv setzeModellAktiv)
-        => setzeModellAktiv.SetzeAktivAsync(h.Id<ModellAgg>(), e.Name, e.Pfad, h.Zeit);
+        => setzeModellAktiv.SetzeAktivAsync(h.Id<Domain.Modell.Modell>(), e.Name, e.Pfad, h.Zeit);
 
     public Task Auf(ModellArchiviert e, Herkunft h, IArchiviereModell archiviereModell)
-        => archiviereModell.ArchiviereAsync(h.Id<ModellAgg>(), h.Zeit);
+        => archiviereModell.ArchiviereAsync(h.Id<Domain.Modell.Modell>(), h.Zeit);
 }

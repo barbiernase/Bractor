@@ -1,6 +1,5 @@
 using Abstractions;
 using Domain.Modell;
-using ModellAgg = Domain.Modell.Modell;
 
 namespace Domain.Projections.Modell;
 
@@ -15,7 +14,7 @@ namespace Domain.Projections.Modell;
 /// </summary>
 public partial record ModellReadModel : IReadModel
 {
-    public Id<ModellAgg> Id { get; init; }
+    public Id<Domain.Modell.Modell> Id { get; init; }
     public string? Name { get; init; }
     public string? Pfad { get; init; }
 
@@ -49,7 +48,7 @@ public record AktivesModellReadModel : IReadModel, IGeteiltesReadModel
     public const string Singleton = "aktiv";
 
     public string Id { get; init; } = Singleton;
-    public Id<ModellAgg> ModellId { get; init; }
+    public Id<Domain.Modell.Modell> ModellId { get; init; }
     public string? Name { get; init; }
     public string? Pfad { get; init; }
     public DateTimeOffset AktiviertAm { get; init; }

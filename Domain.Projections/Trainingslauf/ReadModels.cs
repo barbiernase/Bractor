@@ -1,6 +1,5 @@
 using Abstractions;
 using Domain.Trainingslauf;
-using TrainingslaufAgg = Domain.Trainingslauf.Trainingslauf;
 
 namespace Domain.Projections.Trainingslauf;
 
@@ -11,7 +10,7 @@ namespace Domain.Projections.Trainingslauf;
 /// </summary>
 public partial record TrainingslaufReadModel : IReadModel
 {
-    public Id<TrainingslaufAgg> Id { get; init; }
+    public Id<Domain.Trainingslauf.Trainingslauf> Id { get; init; }
     public Id<Domain.Datensatz.Datensatz> DatensatzId { get; init; }
     public int DatensatzVersion { get; init; }
 
