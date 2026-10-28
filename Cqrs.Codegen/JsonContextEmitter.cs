@@ -125,7 +125,6 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(BefehlFestgehalten))]
         [JsonSerializable(typeof(AusgabeFestgehalten))]
         [JsonSerializable(typeof(FristGesetzt))]
-        [JsonSerializable(typeof(Infrastructure.Uhr.UhrTick))]
         """;
 
     public static (string EventContext, string WireContext, string Stats) Emit(

@@ -33,13 +33,17 @@ public class MartenEventStore : IEventStoreRepository
     /// Postgres über die Transaktionsnummern (<see cref="Horizont"/>); eine lange offene Transaktion hält die Marken an, statt überholt zu werden.
     /// </summary>
     private readonly Horizont _horizont;
+    /// <summary>Weckt nach dem Commit, wen der Weckplan nennt (Plan §2.3) — auch im Rückfall des Group-Commits auf Einzel-Appends.</summary>
+    private readonly Infrastructure.Wecken.Wecker? _wecker;
     private long _letzteHorizontWarnung = long.MinValue;
 
     public MartenEventStore(
         IDocumentStore store,
         IAggregateHandlerFactory handlerFactory,
-        ILogger<MartenEventStore> logger)
+        ILogger<MartenEventStore> logger,
+        Infrastructure.Wecken.Wecker? wecker = null)
     {
+        _wecker = wecker;
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _handlerFactory = handlerFactory ?? throw new ArgumentNullException(nameof(handlerFactory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -95,6 +99,7 @@ public class MartenEventStore : IEventStoreRepository
         try
         {
             await session.SaveChangesAsync();
+            _wecker?.Geschrieben(aggregateId, teile);
             Infrastructure.Einblick.SpurSignal.Melde();
 
             _logger.LogDebug("Appended {EventCount} events to stream {AggregateId}, expected version {ExpectedVersion}",

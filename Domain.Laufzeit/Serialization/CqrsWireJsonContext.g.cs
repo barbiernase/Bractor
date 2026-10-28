@@ -66,7 +66,6 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(BefehlFestgehalten))]
 [JsonSerializable(typeof(AusgabeFestgehalten))]
 [JsonSerializable(typeof(FristGesetzt))]
-[JsonSerializable(typeof(Infrastructure.Uhr.UhrTick))]
 // ── Domänen-Commands/Events/Queries (Domain.*) (gescannt) ──
 [JsonSerializable(typeof(global::Domain.Datensatz.DatensatzBereitsEingefroren))]
 [JsonSerializable(typeof(global::Domain.Datensatz.DatensatzEingefroren))]

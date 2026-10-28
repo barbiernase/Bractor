@@ -1,5 +1,5 @@
 using FluentAssertions;
-using Infrastructure.Projections;
+using Infrastructure.Wecken;
 
 namespace Infrastructure.Pruefstand.Phase5;
 

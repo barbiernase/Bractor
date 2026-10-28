@@ -33,6 +33,8 @@ public interface IAnwendung
     IFunktionsTabelle Funktionen { get; }
     IDienstTabelle Dienste { get; }
     IAggregatTabelle Aggregate { get; }
+    /// <summary>Der Weckplan (GeneratedWeckplan): Event-Typ → wen ein Commit weckt (Plan Pub/Sub-Neustrukturierung §2.3).</summary>
+    IReadOnlyDictionary<Type, Infrastructure.Wecken.Weckziel[]> Weckplan { get; }
 
     /// <summary>Die Quellen-Typen und ihre Treiber (GeneratedQuellen).</summary>
     IReadOnlyList<QuellTyp> Quellen { get; }
@@ -120,8 +122,6 @@ public interface IFunktionsTabelle
 {
     /// <summary>Die Funktionen (<c>Auf</c>, Plan Pub/Sub-Neustrukturierung §3.3, GeneratedFunktionsBausteine).</summary>
     IReadOnlyList<FunktionsBaustein> Bausteine { get; }
-    /// <summary>Weckplan-Einträge der Funktionen: Event-Typ → Cluster-Kinds der Funktions-Actors, die ihn hören.</summary>
-    IReadOnlyDictionary<Type, string[]> Weckplan { get; }
     /// <summary>Hinweis-Typ → Funktions-Actors, die ihn hören.</summary>
     IReadOnlyDictionary<Type, string[]> Hinweisplan { get; }
 }
@@ -172,6 +172,7 @@ public static class Anwendung
     public static IFunktionsTabelle Funktionen => Aktuell.Funktionen;
     public static IDienstTabelle Dienste => Aktuell.Dienste;
     public static IAggregatTabelle Aggregate => Aktuell.Aggregate;
+    public static IReadOnlyDictionary<Type, Infrastructure.Wecken.Weckziel[]> Weckplan => Aktuell.Weckplan;
     public static IReadOnlyList<QuellTyp> Quellen => Aktuell.Quellen;
     public static IReadOnlyList<Type> QueryTypen => Aktuell.QueryTypen;
     public static JsonSerializerContext WireJson => Aktuell.WireJson;

@@ -58,6 +58,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine($"        public {K}IFunktionsTabelle Funktionen {{ get; }} = new FunktionsTabelle();");
             sb.AppendLine($"        public {K}IDienstTabelle Dienste {{ get; }} = new DienstTabelle();");
             sb.AppendLine($"        public {K}IAggregatTabelle Aggregate {{ get; }} = new AggregatTabelle();");
+            sb.AppendLine("        public IReadOnlyDictionary<Type, global::Infrastructure.Wecken.Weckziel[]> Weckplan => global::Infrastructure.Wecken.GeneratedWeckplan.Plan;");
             sb.AppendLine("        public IReadOnlyList<global::Infrastructure.Quellen.QuellTyp> Quellen => global::Infrastructure.Quellen.GeneratedQuellen.Alle;");
             sb.AppendLine("        public IReadOnlyList<Type> QueryTypen => " + (queryDienst != null
                 ? $"global::{queryDienst.ToDisplayString()}.SupportedQueryTypes;" : "Array.Empty<Type>();"));
@@ -121,7 +122,6 @@ namespace Infrastructure.SourceGeneration
             Tabelle(sb, "FunktionsTabelle", "IFunktionsTabelle", "global::Infrastructure.Funktionen.GeneratedFunktionsBausteine", new string[0], new[]
             {
                 "IReadOnlyList<global::Infrastructure.Funktionen.FunktionsBaustein> Bausteine => {0}.Alle",
-                "IReadOnlyDictionary<Type, string[]> Weckplan => {0}.Weckplan",
                 "IReadOnlyDictionary<Type, string[]> Hinweisplan => {0}.Hinweisplan",
             });
             Tabelle(sb, "DienstTabelle", "IDienstTabelle", "global::Infrastructure.Dienste.GeneratedDienste", new[]

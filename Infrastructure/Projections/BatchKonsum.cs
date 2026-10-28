@@ -1,5 +1,5 @@
 using Abstractions;
-using Infrastructure.Lebenszyklus;
+using Infrastructure.Wecken;
 using Marten;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -9,77 +9,61 @@ using Proto.Cluster;
 namespace Infrastructure.Projections;
 
 /// <summary>
-/// Die Weckung des Batch-Konsums (docs/04 §4.1), ein generischer Dienst für alle replaybaren Projektionen:
+/// Der Takt des Batch-Konsums (docs/04 §4.1), ein generischer Dienst für alle Projektionen und Funktionen mit Log-Eingängen:
 /// <list type="bullet">
-///   <item><b>Signal</b> (schnell): ein <see cref="SignalReceiverActor"/> je Projektion abonniert die Signale ihrer Event-Typen und weckt die
-///     Partition des Streams. Je Partition ist höchstens eine Weckung unterwegs; was währenddessen kommt, wird zu einer weiteren.</item>
-///   <item><b>Poll</b> (Sicherheit): alle 30 s weckt er jede Partition — das Netz für verlorene Signale (der Leser liest ab seiner durablen
-///     Position). Kein Heil-Poll je Stream mehr.</item>
+///   <item><b>Beim Start</b> prüft er den Weckplan (<see cref="Wecker.Pruefe"/>): jeder registrierte Konsument steht mit jedem Typ, den er hört,
+///     im Plan — sonst weckte ihn ein Commit nie, nur der Takt.</item>
+///   <item><b>Takt</b> (Sicherheit): alle 30 s weckt er jede Partition — das Netz für verlorene Weckrufe (der Leser liest ab seiner durablen
+///     Position). Schnell weckt der <see cref="Wecker"/> am Commit.</item>
 /// </list>
 /// Kennt keinen Domänentyp; die Kinds bringt der Generator als <see cref="IClusterKindContributor"/> bei.
 /// </summary>
 public sealed class BatchKonsumStartupService : IHostedService
 {
-    private readonly ActorSystem _system;
     private readonly IEnumerable<BatchRegistrierung> _registrierungen;
     private readonly Konsum _konsum;
-    private readonly ILogger<BatchKonsumStartupService>? _logger;
+    private readonly Wecker _wecker;
     private readonly TimeSpan _pollIntervall;
 
-    private readonly List<PID> _pids = new();
     private readonly List<Task> _pollSchleifen = new();
     private CancellationTokenSource? _stopp;
 
-    public BatchKonsumStartupService(
-        ActorSystem system, IEnumerable<BatchRegistrierung> registrierungen, Konsum konsum,
-        ILogger<BatchKonsumStartupService>? logger = null)
-        : this(system, registrierungen, konsum, logger, Konsum.PollIntervall) { }
+    public BatchKonsumStartupService(IEnumerable<BatchRegistrierung> registrierungen, Konsum konsum, Wecker wecker)
+        : this(registrierungen, konsum, wecker, Konsum.PollIntervall) { }
 
-    internal BatchKonsumStartupService(
-        ActorSystem system, IEnumerable<BatchRegistrierung> registrierungen, Konsum konsum,
-        ILogger<BatchKonsumStartupService>? logger, TimeSpan pollIntervall)
+    internal BatchKonsumStartupService(IEnumerable<BatchRegistrierung> registrierungen, Konsum konsum, Wecker wecker, TimeSpan pollIntervall)
     {
-        _system = system;
         _registrierungen = registrierungen;
         _konsum = konsum;
-        _logger = logger;
+        _wecker = wecker;
         _pollIntervall = pollIntervall;
     }
 
-    public async Task StartAsync(CancellationToken ct)
+    public Task StartAsync(CancellationToken ct)
     {
+        Wecker.Pruefe(_wecker.Plan, _registrierungen);
         _stopp = new CancellationTokenSource();
         Console.WriteLine();
         Console.WriteLine($"=== Batch-Konsum (generiert, {_konsum.Partitionen} Partitionen, Seite {_konsum.BatchGroesse}) ===");
-
         foreach (var reg in _registrierungen)
         {
-            var weckung = new Weckung(_system, reg.KindName, _logger);
-            var signalTypen = SignalReceiver.SignalTypesFor(reg.EventTypes);
-            var partitionen = reg.Partitionen(_konsum);
-            var receiver = new SignalReceiver((streamId, _) =>
-            {
-                weckung.Wecke(Partitionierung.Von(streamId, partitionen));
-                return Task.CompletedTask;
-            });
-            _pids.Add(_system.Root.Spawn(Props.FromProducer(() => new SignalReceiverActor(reg.KindName, signalTypen, receiver))));
-            _pollSchleifen.Add(PollSchleifeAsync(weckung, partitionen, _stopp.Token));
-            Console.WriteLine($"  ✓ {reg.ProjektionsId}: Kind '{reg.KindName}', {signalTypen.Count} Signal-Typen → Partition (+ Poll {_pollIntervall.TotalSeconds:0}s je Partition)");
+            _pollSchleifen.Add(TaktAsync(reg.KindName, reg.Partitionen(_konsum), _stopp.Token));
+            Console.WriteLine($"  ✓ {reg.ProjektionsId}: Kind '{reg.KindName}', {reg.EventTypes.Count} Typen im Weckplan (+ Takt {_pollIntervall.TotalSeconds:0}s je Partition)");
         }
         Console.WriteLine();
-        await Task.CompletedTask;
+        return Task.CompletedTask;
     }
 
-    private async Task PollSchleifeAsync(Weckung weckung, int partitionen, CancellationToken ct)
+    private async Task TaktAsync(string kind, int partitionen, CancellationToken ct)
     {
-        // Der erste Poll kurz nach dem Start (Cluster steht): holt nach, was während „unten“ geschah, und startet einen Neuaufbau.
+        // Der erste Takt kurz nach dem Start (Cluster steht): holt nach, was während „unten“ geschah, und startet einen Neuaufbau.
         var erster = true;
         while (!ct.IsCancellationRequested)
         {
             try { await Task.Delay(erster ? TimeSpan.FromSeconds(2) : _pollIntervall, ct); }
             catch (OperationCanceledException) { break; }
             erster = false;
-            for (var p = 0; p < partitionen; p++) weckung.Wecke(p);
+            for (var p = 0; p < partitionen; p++) _wecker.Wecke(kind, p.ToString());
         }
     }
 
@@ -90,28 +74,6 @@ public sealed class BatchKonsumStartupService : IHostedService
         {
             try { await schleife; } catch { /* egal */ }
         }
-        foreach (var pid in _pids)
-            await _system.Root.StopAsync(pid);
-        _pids.Clear();
-    }
-
-    /// <summary>
-    /// Weckt die Partitionen einer Projektion, zusammengefasst (<see cref="Weckungen{TKey}"/>): je Partition höchstens eine Weckung unterwegs
-    /// und eine hinterher.
-    /// </summary>
-    private sealed class Weckung
-    {
-        private readonly Weckungen<int> _weckungen;
-
-        public Weckung(ActorSystem system, string kind, ILogger? logger)
-        {
-            var bote = new Bote(system.Cluster(), logger);
-            // Verlierbar (der Poll heilt); die Quittung abwarten, damit je Partition höchstens eine Weckung unterwegs ist.
-            _weckungen = new Weckungen<int>(p =>
-                bote.FrageAsync<WakeAck>(ClusterIdentity.Create(p.ToString(), kind), new Wake(), TimeSpan.FromSeconds(10), default));
-        }
-
-        public void Wecke(int partition) => _weckungen.Wecke(partition);
     }
 }
 

@@ -89,6 +89,13 @@ public static class Grammatik
             + "Commands aus einem Hinweis tragen eine Id aus Funktion, Hinweis-Kennung, Stelle, Typ und Ziel (R20, Plan §2.9).", "error",
             [An("CQRS106", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (gehörter Hinweis ohne Erzeuger)"),
              new("boot", null, "Infrastructure/Funktionen/HinweisNetz.cs (jede Adresse der Routing-Tabelle gehört zu einer Funktion)")]),
+        new("GR-WECKPLAN", "Weckplan: jeder Hörer mit jedem gehörten Typ", "Nach jedem Commit weckt der Wecker gezielt, wen der generierte Weckplan "
+            + "zum Typ eines geschriebenen Events nennt: die Partition jeder Projektion und jeder Funktion, die ihn aus dem Log hört (bzw. die eine "
+            + "Adresse), und die Uhr bei einer gesetzten Frist — verlierbar, der Takt je Partition holt nach. Ein Hörer aus dem Log hört nur konkrete, "
+            + "persistente Events (der Plan sucht nach dem Typ des geschriebenen Events); jeder registrierte Hörer steht mit jedem gehörten Typ im Plan "
+            + "(Plan §2.3, Phase 6).", "error",
+            [Gen("CQRS108", "Infrastructure.SourceGeneration/WeckplanGenerator.cs (gehörter Typ kann nicht im Plan stehen)"),
+             new("boot", null, "Infrastructure/Wecken/Wecker.cs (jeder registrierte Hörer steht mit jedem gehörten Typ im Plan)")]),
         new("GR-FRIST", "Frist → Uhr → Command an dasselbe Aggregat", "Eine Frist (Frist<TCmd> aus dem Decide eines Aggregats) nimmt die Uhr; fällig "
             + "sendet sie den Command an das Aggregat, das sie setzte (R5) — mindestens einmal, mit der Id aus dem Frist-Event.", "error",
             [Gen("CQRS010", "Infrastructure.SourceGeneration/CommandAggregateMapGenerator.cs"),

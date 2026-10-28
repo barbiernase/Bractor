@@ -15,7 +15,7 @@ namespace Infrastructure.Pruefstand.Funktionen;
 /// <summary>
 /// Funktion als Baustein (Plan Pub/Sub-Neustrukturierung §3.3, Phase 3): der <c>FunktionsBausteinGenerator</c> liest NUR Signaturen — je Eingang ein
 /// <c>Auf</c>, Herkunft, Lese-Fähigkeiten, freie Ausgabe (konkret, OneOf, T?, Strom, je auch als Task) — und erzeugt Dispatch (Einzel- und
-/// Seiten-Form), Weckplan-Einträge und die Bausteine-Tabelle. Jede erlaubte Form muss als Generat kompilieren; was nicht passt, ist CQRS100/101.
+/// Seiten-Form), den Hinweisplan und die Bausteine-Tabelle (den Weckplan prüft WeckplanGeneratorTests). Jede erlaubte Form muss als Generat kompilieren; was nicht passt, ist CQRS100/101.
 /// </summary>
 public class FunktionsBausteinGeneratorTests
 {
@@ -60,7 +60,7 @@ public interface IPost : IDienst { Task SendeAsync(string an); }
         Lauf(new Infrastructure.SourceGeneration.FunktionsBausteinGenerator(), code);
 
     [Fact]
-    public void Eine_Klasse_mit_Auf_ergibt_Dispatch_Tabelle_und_Weckplan()
+    public void Eine_Klasse_mit_Auf_ergibt_Dispatch_und_Tabelle()
     {
         var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
             public sealed class Mahnwesen : IFunktion
@@ -74,7 +74,6 @@ public interface IPost : IDienst { Task SendeAsync(string an); }
         quelle.Should().Contain("new FunktionsEingang(typeof(global::Probe.Ueberfaellig), Hinweis: false, Strom: false, MitEvents: false, "
             + "new Type[] { typeof(global::Probe.Mahne), typeof(global::Probe.Unnoetig) }, new Type[] {  })");
         quelle.Should().Contain("case global::Probe.Ueberfaellig e: return Ausgaben.Einzeln(f.Auf(e, h), y => y.Value);");
-        quelle.Should().Contain("[typeof(global::Probe.Ueberfaellig)] = new[] { \"funktion-Mahnwesen\" }", "der Weckplan nennt den Funktions-Actor");
         quelle.Should().Contain("new FunktionsUmsetzung(\"Mahnwesen\", typeof(global::Probe.Mahnwesen), (sp, z) => new global::Probe.Mahnwesen())");
         quelle.Should().Contain("Seite0(object o, IReadOnlyList<(IEvent Eingang, Herkunft Herkunft)> seite", "die Seiten-Form kommt aus der Einzel-Form");
     }
@@ -138,7 +137,7 @@ public interface IPost : IDienst { Task SendeAsync(string an); }
     }
 
     [Fact]
-    public void Ein_Hinweis_als_Eingang_steht_im_Hinweisplan_nicht_im_Weckplan()
+    public void Ein_Hinweis_als_Eingang_steht_im_Hinweisplan()
     {
         var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
             public sealed class Sensorik : IFunktion { public Mahne? Auf(Messwert m) => null; } }");
@@ -146,8 +145,6 @@ public interface IPost : IDienst { Task SendeAsync(string an); }
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty();
         quelle.Should().Contain("new FunktionsEingang(typeof(global::Probe.Messwert), Hinweis: true,");
-        var weckplan = quelle.Substring(quelle.IndexOf("Weckplan =", StringComparison.Ordinal));
-        weckplan.Substring(0, weckplan.IndexOf("};", StringComparison.Ordinal)).Should().NotContain("Messwert", "ein Hinweis steht nicht im Log");
         quelle.Should().Contain("[typeof(global::Probe.Messwert)] = new[] { \"funktion-Sensorik\" }");
     }
 

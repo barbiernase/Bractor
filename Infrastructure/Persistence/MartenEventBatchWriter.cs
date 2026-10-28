@@ -53,11 +53,14 @@ public sealed class MartenEventBatchWriter : IEventBatchWriter
 {
     private readonly IDocumentStore _store;
     private readonly ILogger<MartenEventBatchWriter> _logger;
+    private readonly Infrastructure.Wecken.Wecker? _wecker;
 
-    public MartenEventBatchWriter(IDocumentStore store, ILogger<MartenEventBatchWriter> logger)
+    /// <param name="wecker">weckt nach dem Commit, wen der Weckplan nennt (Plan §2.3); null = niemand (Tests ohne Cluster).</param>
+    public MartenEventBatchWriter(IDocumentStore store, ILogger<MartenEventBatchWriter> logger, Infrastructure.Wecken.Wecker? wecker = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _wecker = wecker;
     }
 
     public async Task WriteBatchAsync(IReadOnlyList<BatchAppend> batch, CancellationToken ct)
@@ -81,6 +84,7 @@ public sealed class MartenEventBatchWriter : IEventBatchWriter
         var sw = Stopwatch.StartNew();
         await session.SaveChangesAsync(ct);
         sw.Stop();
+        _wecker?.Geschrieben(batch);
         Infrastructure.Einblick.SpurSignal.Melde();
         BatchWriterStats.Record(eventCount, sw.Elapsed.TotalMilliseconds);
 

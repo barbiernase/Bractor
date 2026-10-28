@@ -236,7 +236,8 @@ public static class CqrsServiceExtensions
             var store = provider.GetRequiredService<IDocumentStore>();
             var factory = provider.GetRequiredService<IAggregateHandlerFactory>();
             var logger = provider.GetRequiredService<ILogger<MartenEventStore>>();
-            var marten = new MartenEventStore(store, factory, logger);
+            var wecker = provider.GetService<Infrastructure.Wecken.Wecker>();
+            var marten = new MartenEventStore(store, factory, logger, wecker);
 
             if (!builder.AppendBatching)
                 return marten;
@@ -245,7 +246,7 @@ public static class CqrsServiceExtensions
             // in eine Transaktion. Lesezugriffe reicht der Dekorator unverändert durch; OCC/Single-Writer/
             // exactly-once bleiben, der Isolations-Retry fällt auf den Einzel-Append (marten) zurück.
             var writer = new MartenEventBatchWriter(
-                store, provider.GetRequiredService<ILogger<MartenEventBatchWriter>>());
+                store, provider.GetRequiredService<ILogger<MartenEventBatchWriter>>(), wecker);
             return new BatchingEventAppender(
                 marten, writer, provider.GetRequiredService<ILogger<BatchingEventAppender>>(),
                 maxBatch: builder.AppendBatchMaxSize, lingerMs: builder.AppendBatchLingerMs,
@@ -290,6 +291,10 @@ public static class CqrsServiceExtensions
         services.AddSingleton(builder.Passivierung);
         // Batch-Konsum der Projektionen (docs/04 §4.1): Partitionen und Seitengröße — die Batch-Leser lesen sie beim Erzeugen.
         services.AddSingleton(builder.Konsum);
+        // Der Wecker (Plan §2.3): nach jedem Commit gezielt, wen der generierte Weckplan nennt — der Bote entsteht beim ersten Weckruf.
+        services.AddSingleton(provider => new Infrastructure.Wecken.Wecker(Anwendung.Weckplan, builder.Konsum,
+            () => new Infrastructure.Lebenszyklus.Bote(provider.GetRequiredService<ActorSystem>().Cluster(),
+                provider.GetService<ILoggerFactory>()?.CreateLogger("Wecker"))));
         
         // Redis (VersionTracker)
         services.AddSingleton<IConnectionMultiplexer>(provider =>

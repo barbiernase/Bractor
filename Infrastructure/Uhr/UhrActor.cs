@@ -1,7 +1,7 @@
 using Abstractions;
 using Infrastructure.Komposition;
 using Infrastructure.Lebenszyklus;
-using Infrastructure.Projections;   // IClusterKindContributor
+using Infrastructure.Projections;   // IClusterKindContributor, Wake
 using Infrastructure.PubSub;        // CommandEmitter
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -10,9 +10,6 @@ using Proto;
 using Proto.Cluster;
 
 namespace Infrastructure.Uhr;
-
-/// <summary>Der Takt der Uhr (je Knoten jede Sekunde gemeldet, verlierbar; der Actor fasst zusammen).</summary>
-public sealed record UhrTick : IWireMessage;
 
 /// <summary>
 /// Die Arbeit der Uhr (Plan Pub/Sub-Neustrukturierung §2.2, §4.2): die fälligen Fristen lesen, je Frist ihren Command senden — mit der Command-Id
@@ -69,7 +66,7 @@ public sealed class Uhrwerk(IFaelligkeiten verzeichnis, Func<ICommand, Guid, Gui
 
 /// <summary>
 /// Die UHR als virtueller Cluster-Actor (eine Aktivierung im Cluster, Kind <c>uhr</c>, Identität <c>0</c>): jeder Knoten meldet ihr jede Sekunde
-/// einen Takt (<see cref="UhrTakt"/>), der Rahmen fasst die Weckungen zusammen — höchstens ein Durchlauf zugleich, einer hinterher. Auflösung
+/// einen Takt (<see cref="UhrTakt"/>), der Wecker weckt sie nach einer gesetzten Frist (Weckplan); der Rahmen fasst die Weckungen zusammen — höchstens ein Durchlauf zugleich, einer hinterher. Auflösung
 /// ≈ 1 s. Fällt eine Aktivierung aus, startet der nächste Takt sie anderswo; was sie halb gefeuert hatte, feuert sie erneut (dieselbe Command-Id).
 /// </summary>
 public sealed class UhrActor(Uhrwerk werk, ILogger? logger = null) : RahmenActor(logger)
@@ -79,9 +76,10 @@ public sealed class UhrActor(Uhrwerk werk, ILogger? logger = null) : RahmenActor
 
     protected override Task BehandleAsync(IContext context)
     {
-        if (context.Message is UhrTick)
+        // Geweckt vom Takt je Knoten (jede Sekunde) und vom Wecker, wenn eine Frist gesetzt wurde (Weckplan: FristGesetzt → Uhr).
+        if (context.Message is Wake)
         {
-            if (context.Sender is not null) context.Respond(new Projections.WakeAck());
+            if (context.Sender is not null) context.Respond(new WakeAck());
             Wecke(context, async stopp =>
             {
                 try { await werk.LaufAsync(stopp); }
@@ -104,7 +102,7 @@ public sealed class UhrTakt(ActorSystem system, ILogger<UhrTakt>? logger = null)
         try { await Task.Delay(TimeSpan.FromSeconds(2), stoppingToken); } catch (OperationCanceledException) { return; }
         while (!stoppingToken.IsCancellationRequested)
         {
-            bote.Melde(UhrActor.Identitaet, new UhrTick());
+            bote.Melde(UhrActor.Identitaet, new Wake());
             try { await Task.Delay(Abstand, stoppingToken); } catch (OperationCanceledException) { return; }
         }
     }
