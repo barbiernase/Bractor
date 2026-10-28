@@ -4,7 +4,7 @@ Projektgedächtnis für Claude Code — bewusst schlank, nur Wissen, kein Change
 **Maßstab im Zweig `pubsub_neustrukturierung` ist `docs/plan-pubsub-neustrukturierung.md`** (Zielbild, Grammatik, Garantien, Phasen des
 Umbaus; noch nicht umgesetzt). Wo etwas widerspricht, gilt der Plan als Ziel und der Code als Ist. Wegweiser: `docs/README.md`.
 Offenes und Schulden: `docs/13-reifegrad-schulden-bewertung.md` §13.0. Zahlen und Messwerte: `docs/12-tests-und-vermessung.md`.
-Das Bild unten („Das tragende Bild“) beschreibt den **Ist-Zustand** nach Phase 4 des Umbaus.
+Das Bild unten („Das tragende Bild“) beschreibt den **Ist-Zustand** nach Phase 4b des Umbaus.
 
 ## Was das Projekt ist
 
@@ -42,13 +42,18 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
 - **W11** Allgemeines Framework: eine Primitive bleibt, wenn sie allgemein gebraucht wird — nicht, weil die Beispieldomäne sie nutzt. Je Absicht ein Weg.
 - **W12** Keine GUIs im Editor (Clients nur als Vertrag), keine Schema-Evolution im Editor (`IUpcast` bleibt als Backend-Primitive), kein Deploy.
 
-## Das tragende Bild (Ist-Zustand nach Plan-Phase 4)
+## Das tragende Bild (Ist-Zustand nach Plan-Phase 4b)
 
 - **Schreibseite:** Command → Aggregat-Actor (Single-Writer, Inbox-Tabelle) → `Decide` (`OneOf<Event, Hinweis, Frist<TCmd>>`) → Events →
   Group-Commit → Commitmeldung (Envelope + Signal, für jeden Schreiber gleich: Aggregat, Quelle, Funktions-Ausgabe).
 - **Zwei durable Konsumenten:** **Projektion** (`ISubscriber`, `Task Handle` mit Schreib-Fähigkeiten genau eines Stores; `BatchLeser` je
   Projektion und Partition, Co-Commit, replaybar) und **Funktion** (`IFunktion` mit `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])`;
-  `FunktionsActor` je Funktion und Partition, Ausgabe festgehalten oder gleichbleibend, nie replayt). Beide: Signal schnell + Poll 30 s.
+  `FunktionsActor` je Funktion und Adresse — Partition, oder eine mit `[EineAdresse]` —, Ausgabe festgehalten oder gleichbleibend, nie replayt).
+  Beide: Signal schnell + Poll 30 s.
+- **Funktion als Actor** (Plan §2.9, Phase 4b): Umsetzung und Dienste je Aktivierung (DI-Bereich, geschlossen beim Stoppen); gekapselter Zustand
+  über `IZustand<T>` im Konstruktor (gesichert mit der Position in einer Transaktion, ein `Auf` zugleich, CQRS105); **Hinweis-Netz**: Hinweise
+  (`ITransientEvent`) aus Funktionen, Aggregaten und Clients gehen über die generierte Tabelle direkt per `Bote.Melde` an die hörenden Funktionen,
+  ohne Log und Broker, höchstens einmal; Commands daraus mit Ids aus der Hinweis-Kennung (CQRS106: gehörter Hinweis braucht einen Erzeuger).
 - **Abläufe** sind ein Vorgangs-Aggregat (Join, Zählung, Kompensation, Frist im Decide) plus Funktionen als Kanten; die Zugehörigkeit ist ein
   fachliches Feld (A2). Kein Dirigent, keine Saga, keine Fluss-DSL, keine Reaktion als eigene Art.
 - **Uhr:** `Frist<TCmd>` aus dem Decide → `FristGesetzt` (`IRahmenEvent`) + Beilage `cqrs_fristen` → die Uhr sendet fällig mit Id aus dem Frist-Event.
@@ -57,7 +62,8 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
 - **Emit:** genau ein Weg (`CommandEmitter`, Id vom Aufrufer abgeleitet), erzwungen durch CQRS020/021.
 - **Akteure und Clients:** alles, was hineinkommt, kommt von einem Akteur (`IDarf<T>`); ein Client-Vertrag trägt Funktionen (`ITraegt<F>`),
   sendet (`ISendet<T>`), fragt (`IFragt<T>`) und hört (`IHoert<T>`); wirksam = Vertrag ∩ Token.
-- Noch alt (spätere Phasen): Broker und Signale (6), Marken `KommandoVerarbeitet`/`KommandoAbgelehnt` (5), Redis-Index, Projektionsform (7/8).
+- Noch alt (spätere Phasen): Broker und Signale (6), Marken `KommandoVerarbeitet`/`KommandoAbgelehnt` (5), Redis-Index, Projektionsform (7/8),
+  Hinweise an Clients über den Broker (7).
 
 ## Wo was liegt
 

@@ -1,15 +1,16 @@
 # 13 — Reifegrad, Schulden & Bewertung
 
 **Die eine Quelle für „offen“.** Andere Dokumente (`CLAUDE.md`, Kapitel 01–12, Konzepte) nennen Schulden höchstens kurz und verweisen
-hierher. Stand: 2026-10-26, nach Phase 4 des Plans Pub/Sub-Neustrukturierung (Dirigent, Reaktion, Fluss-DSL, Katalog-Form und Handle-/Trigger-Welt
-zurückgebaut). Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
+hierher. Stand: 2026-10-28, nach Phase 4b des Plans Pub/Sub-Neustrukturierung (Funktionen als Actors mit Zustand, Ressourcen je Aktivierung und
+Hinweis-Netz; davor Phase 4: Dirigent, Reaktion, Fluss-DSL, Katalog-Form und Handle-/Trigger-Welt zurückgebaut). Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
 (`docs/konzept-werkbank.md` §2). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
 
 ## 13.0 Offen auf einen Blick
 
 **Umbau (2026-10-26):** [plan-pubsub-neustrukturierung.md](plan-pubsub-neustrukturierung.md) löst Broker, Signale, Prozess-Manager, Fluss- und
 Prozess-Sprache, Handle-/Trigger-Welt und den Redis-Versionsindex ab. Mit Phase 4 sind W11-1, W11-2, PF-4b, PF-25, PF-26, P2-5, P3-3, FB-2, FB-3
-und VM-1 erledigt (§13.6); PF-6, PF-7, PF-10, PF-13 und AK-1 werden mit den späteren Phasen abgeschlossen oder umgeschrieben. Die Befunde der Actor-Praxis vom 2026-10-18 stehen im Plan §1.7.
+und VM-1 erledigt (§13.6), mit Phase 4b FB-1 (Hinweise erreichen Funktionen über das Hinweis-Netz); PF-6, PF-7, PF-10, PF-13 und AK-1 werden mit den
+späteren Phasen abgeschlossen oder umgeschrieben. Die Befunde der Actor-Praxis vom 2026-10-18 stehen im Plan §1.7.
 
 | ID | Kurz | Prio |
 |---|---|:--:|
@@ -19,15 +20,19 @@ und VM-1 erledigt (§13.6); PF-6, PF-7, PF-10, PF-13 und AK-1 werden mit den sp�
 | G-13 | Zwei Knoten vergeben dieselben Sitzungs-Kennungen (Zähler je Prozess), der Broker überschreibt: eine gezielte Antwort kann bei der Sitzung des anderen Knotens landen | P1 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
+| G-15 | Hinweise zwischen zwei Actors ohne zugesicherte Reihenfolge: der Plan (§2.9) sagt „zwischen zwei Actors bleibt die Reihenfolge“, der Bote meldet aber jede Nachricht für sich — zwei Hinweise desselben Absenders an dieselbe Adresse können sich überholen; ohne Nachweis-Test | P2 |
+| PF-34 | Eine Funktion mit Zustand rechnet einen Eingang zugleich (Slots gelten nicht) und startet während ihrer Sicherung nichts; die Last je Sicherung wächst mit dem Zustand (Intervall `Zustand:SichernAlleSekunden`) — ungemessen | P3 |
+| PF-35 | Bindung je Adresse (A8) für jede Funktion draußen, auch ohne Zustand: die Adressen verteilen sich gerecht über die Träger, aber eine Adresse läuft nie über zwei Träger zugleich; bei einem Slot je Partition (PF-33) ohne Wirkung, mit vielen Slots je Partition ungemessen | P3 |
 | PF-33 | Funktionen laufen ohne Eintrag in der Umgebung mit einem Slot je Partition: S5-8/S5-64 fallen auf ≈ 300 Vorgänge/s (0,22 × bzw. 0,13 × der Basis); mit 16 Slots 1,18 × bzw. 0,56 × — Standard und Rest bei 64 Sendern offen | P1 |
 | PF-13 | Unter S5-64: der Nachschub (früher Reaktion, seit Phase 4 die Funktion `Nachschub`) wartet am heißen Posten hinter den Reservierungen — p99 im Sekundenbereich (Zahlen docs/12) | P3 |
 | PF-10 | Datei-Treiber meldet eine Datei nach der anderen ins Log (Rückstau): das Melde-Tempo ist die Decke von S1 — Entscheidung offen | P2 |
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16; seit Phase 3 dazu die Uhr (eine Abfrage je Sekunde) und je Funktion und Partition ein Poll | P3 |
-| FB-1 | Ein Hinweis (`ITransientEvent`) als Eingang einer Funktion steht im generierten Hinweisplan, wird zur Laufzeit aber noch nicht zugestellt (schneller Kanal kommt mit Plan Phase 6) | P2 |
+| FB-8 | „Python-Funktion hört einen Hinweis“ ist nur geteilt nachgewiesen: das SDK (pytest, Antwort als Ganzes) und der Weg des Servers über dieselbe Sitzung (`BausteinSitzung` hinter dem Hand-Ausführer) — kein echter Python-Prozess über gRPC, weil keine Anwendung mit Leitung eine Funktion draußen hat, die einen Hinweis hört | P2 |
+| FB-9 | Wechselt die Zustands-Ablage einer Funktion (Datei ↔ Dokument) oder geht das Verzeichnis verloren, lädt die Aktivierung den gesicherten Zustand nicht mehr (lauter Fehler, kein stiller Neubeginn); eine Migration oder ein bewusster Neubeginn fehlt | P3 |
 | FB-5 | Kreise Funktion ↔ Aggregat: keine Build-Prüfung (R6 des Plans). Ein Kreis ist der Normalfall eines Ablaufs (Vorgang → Funktion → Vorgang); ob und wie ein Kreis ohne fortschreitenden Zustand erkannt werden soll, ist offen | P3 |
 | FB-6 | Quell-Nachricht vom Client nur über den JSON-Eingang: das Trigger-Protokoll der Leitung ist entfernt, der gRPC-Weg (und die SDKs) kommt mit Plan Phase 7 | P2 |
 | FB-7 | Eine Funktion draußen ohne verbundenen Träger staut ihre Eingänge still im Log (Rückstand in `/health`, aber keine eigene Meldung „kein Träger“); ein Träger, der Eingänge annimmt und nicht beantwortet, hält bei einem Slot je Partition die übrigen Streams der Partition bis zum Ablauf der Lease (30 s) auf | P3 |
-| FB-4 | Werkzeuge: Extractor und Karten zeigen `Frist<TCmd>` als Ausgang eines Decide nicht als Kante zur Uhr; das Werkbank-Schema kennt nur die Datei-Konfig (Takt fehlt); Editor-Oberfläche zurückgestellt (Plan E4) | P3 |
+| FB-4 | Werkzeuge: Extractor und Karten zeigen `Frist<TCmd>` als Ausgang eines Decide nicht als Kante zur Uhr; das Werkbank-Schema kennt nur die Datei-Konfig (Takt fehlt); der Zustandstyp einer Funktion (`IZustand<T>`) ist eine Code-Karte im geteilten Block statt an seiner Funktion, das Hinweis-Netz hat keine eigene Kante; Editor-Oberfläche zurückgestellt (Plan E4) | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar (Schlüssel laufen seit PF-30 ab) | P2 |
 | PF-31 | Entscheidung offen: ein Wechsel der Snapshot-Schema-Version faltet heiße Aggregate einmal voll; eine neue Funktion liest die Geschichte ab 0 | P3 |
 | PF-32 | Wachstum ohne Laufzeit-Risiko: Guards je Stream und Festhalte-Streams je (Funktion, Eingang) nie gelöscht, DLQ ohne Aufräumen und Index, Einblick-Scans, Kopfzeilen 140 Byte je Event | P3 |
@@ -70,7 +75,7 @@ Werkzeuge lesen teils per Reflection. Die alte Handle-/Trigger-Welt und der Diri
 | Subsystem | Reife |
 |---|:--:|
 | Schreibseite | 🟢 / 🟡 (G-5) |
-| Konsum, Funktionen, Uhr | 🟢 / 🟡 (PF-13, FB-1) |
+| Konsum, Funktionen, Uhr | 🟢 / 🟡 (PF-13, G-15, FB-8) |
 | Generatoren & Analyzer | 🟢 / 🟡 (W10-1, W2-1) |
 | Multi-Node / Transport | 🟢 / 🟡 (P1-1, P1-2) |
 | Werkbank (Extractor, Editor, Server) | 🟢 / 🟡 (LLM-1, W3-1, WB-1, WB-4, WZ-1) |
@@ -228,9 +233,8 @@ vorher bis 2 326. Mit 16 Slots S5-8 1,18 × der Basis, S5-64 0,56 ×. *Entscheid
 halten nichts fest, Slots kosten nur gleichzeitige Emits) oder Slots je Umgebung setzen; danach den Rest bei 64 Sendern untersuchen (Kandidat: je
 Stream nacheinander auf den 50 heißen Posten-Streams, auf denen `Nachschub` und `Auftragsabwicklung` hören).
 
-**FB-1, FB-4 … FB-7 · Funktionen und Uhr, bewusst offen nach Plan Phase 4** (2026-10-26). Was erst spätere Phasen tragen, ist mit Absicht nicht
-vorgezogen, weil jede Vorab-Lösung ein zweiter Weg wäre, der wieder verschwände. **FB-1:** der Generator kennt Hinweise als Eingang
-(`GeneratedFunktionsBausteine.Hinweisplan`), es fehlt der Zusteller — das ist der schnelle Kanal aus Phase 6. **FB-4:** reine Darstellungs-Lücken
+**FB-4 … FB-7 · Funktionen und Uhr, bewusst offen nach Plan Phase 4** (2026-10-26). Was erst spätere Phasen tragen, ist mit Absicht nicht
+vorgezogen, weil jede Vorab-Lösung ein zweiter Weg wäre, der wieder verschwände. (FB-1, Hinweise als Eingang, ist mit Phase 4b erledigt, §13.6.) **FB-4:** reine Darstellungs-Lücken
 der Werkzeuge; die Garantien hängen nicht daran. **FB-5:** R6 des Plans wollte Kreise im Signatur-Graph als Warnung; aber jeder Ablauf mit
 Vorgangs-Aggregat ist ein Kreis (Auftrag → `Auftragsabwicklung` → Posten → `Auftragsabwicklung` → Auftrag), und der Build soll nicht vor
 Design-Entscheidungen warnen. Mit dem Dirigenten sind GR-ZYKLUS (CQRS088) und GR-GARANTIE (CQRS082) entfallen; eine Erkennung „Kreis ohne
@@ -239,6 +243,16 @@ der Handle-Welt entfernt, der neue Weg kommt mit der Leitung aus Phase 7. **FB-7
 ab; der Rückstand steht in `/health`, eine eigene Meldung fehlt. Nimmt ein Träger Eingänge an und antwortet nicht, wartet die Partition (bei einem Slot)
 bis zum Ablauf der Lease; gesehen im Verhaltens-Netz, dort trägt die Umgebung deshalb acht Slots. In der Messung hält dieselbe Lage die
 Position der Funktion `IBildpaarBeurteilung` fest (kein Klassifizierer gestartet): L1 wird nie still.
+
+**G-15, FB-8, FB-9, PF-34, PF-35 · Funktionen als Actors** (Plan Phase 4b, 2026-10-28). **G-15:** `Bote.Melde` stellt jede Meldung als eigene
+Anfrage zu; zwei Hinweise desselben Absenders an dieselbe Adresse können sich überholen — der Plan versprach die Reihenfolge zwischen zwei Actors.
+Fachlich hängt nichts daran (Hinweise sind höchstens einmal, was zählt, geht als Command ins Aggregat), aber die Zusage stimmt nicht; ein Weg wäre
+ein Absender-Actor je Ziel oder `Send` an eine zwischengespeicherte PID. Einen Test, der die Überholung sicher herbeiführt, gibt es nicht. **FB-8:**
+die Beispieldomäne hat keinen Hinweis, den eine Funktion draußen fachlich hören müsste; die Prüfdomäne hat keine Leitung. Kandidat ist das Beispiel
+aus Plan §2.9 (Vorverarbeitung → Merkmale → Klassifikator mit Zustand) — es änderte den Bildeingang und S1, daher nicht ungefragt. **FB-9:** der
+Verweis im Zustands-Dokument zeigt in die Ablage, mit der gesichert wurde; die Prüfdomäne zeigt es (der Absturz-Test sichert deshalb in einem eigenen
+Schema und setzt dessen Zustand zu Beginn zurück). **PF-34:** Folge der Garantie „ein Schreiber, gesichert im Ruhepunkt mit der Position“ (Risiko 9
+des Plans). **PF-35:** Folge von A8 — eine Bindung nur für Funktionen mit Zustand bräuchte einen Code-Fakt „Zustand draußen“ an der Schnittstelle.
 
 **W3-1 · Ableitungen im Editor-JS.** `graphNodes` baut Karten-Ids parallel zu `Sicht.BaueKarten` (Transition-Id weicht bei fehlender `_id` ab);
 `akteurHoert`, `flParameter`, `faehigkeitVorschlag` (weicht bei Namenskollision von `BoardLeseseite` ab), Auto-Zuordnung (`autoArgs`,
@@ -366,6 +380,16 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **Phase 4b Pub/Sub-Neustrukturierung (2026-10-28, Messserver; docs/04 §4.4, docs/11 §11.6/§11.10):** Funktionen sind Actors mit gekapseltem,
+  durablem Zustand (`IZustand<T>`, gesichert mit der Position, eine Adresse als Code-Fakt), Ressourcen je Aktivierung (Umsetzung und Dienste im
+  DI-Bereich der Aktivierung, geschlossen beim Stoppen) und einem hart verdrahteten Hinweis-Netz ohne Log und Broker (Routing-Tabelle aus dem
+  Hinweisplan, `Bote.Melde` an die Adresse, Kennung vom Absender, Commands mit Ids aus der Kennung). Damit erledigt:
+  - **FB-1 Hinweis als Eingang einer Funktion:** zugestellt über das Hinweis-Netz — von Funktionen, Aggregaten (Ablehnung) und Clients
+    (`TransientEvent`), im Host und draußen (`ArbeitsAuftrag.hinweis`). Nachweis P `HinweisNetzTests`; PD `FunktionsZustandGarantieTests`
+    (Hinweis-Kette bis zum Command, Commands aus einem doppelten Hinweis wirken einmal, eine Funktion draußen hört einen Hinweis).
+  - Die Lücke „gleichbleibende Funktion mit Feldern“ (ohne Nummer, Plan R19): CQRS105 verbietet veränderliche Felder, Setter und Sammlungen hinter
+    `readonly` in Funktions-Klassen. Nachweis P `ZustandAnalyzerTests`.
 
 - **Phase 4 Pub/Sub-Neustrukturierung (2026-10-26, Messserver; docs/04, docs/11 §11.6/§11.7):** die Domänen sind auf Aggregat + Funktion + Frist
   umgeschrieben, das Alte ist zurückgebaut — Dirigent (`ProzessManager`, Prozess- und Fluss-DSL, Offen-Index, Marking, Backstop, Heil-Plan),

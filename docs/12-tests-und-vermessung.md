@@ -71,18 +71,33 @@ Server-Lauf rot gesehen: der Applier überspringt `IRahmenEvent` nicht mehr (Tra
 Quelle meldet ihren Commit nicht (FB-3: dreimal je unter 5 s), die Leitung bietet getragene Funktionen nicht an (FB-2: Python-Worker), die Uhr
 als Vergleich je Zeile (Fälligkeits-Abfrage liest das ganze Verzeichnis).
 
+**Stand 2026-10-28 (Plan Pub/Sub-Neustrukturierung, Phase 4b — Funktionen als Actors: Zustand, Ressourcen, Hinweis-Netz):** Prüfstand **500 grün + 1
+übersprungen** (G-5), davon Garantie 209 + 1; neu u. a. `FunktionsAktivierungTests`, `HinweisNetzTests`, `ZustandAnalyzerTests`, Zustand und eine
+Adresse in `FunktionsBausteinGeneratorTests`, A8 in `FunktionsVermittlungTests`, R20 in `GesamtbildAnalyzerTests`. Integration **61/61** (44 Garantie),
+Prüfdomäne **53/53** (48 Garantie; neu `Garantien/FunktionsZustandGarantieTests` 8 am allgemeinen Fall Messung), Verhaltens-Netz **13 grün + 3
+übersprungen** (G-12, G-13, G-14; Tests unverändert — ein Lauf war rot an `ClientVerhaltenTests.Die_Antwort_eines_Traegers…`, weil die neue Bindung
+je Adresse die Adressen abgemeldeter Träger bis zum Lease-Ablauf festhielt; behoben im Vermittler, nicht im Test), Client 30/30, Python SDK 35/35
+(neu: Antwort auf einen Hinweis als Ganzes), Worker 21/21; `codegen --check`, Leitung `--check`, `--check` (0 Befunde), `--sonde` (246 Soll-Fakten mit
+dem neuen Szenario Wetterdienst, 76 Lage-Typen), `--grammatik` (mit GR-FUNKTION-ZUSTAND, GR-HINWEIS-NETZ) und `./pruefe-checkout.sh` grün.
+Gegenprobe je neuem Mechanismus per `sed` im Server-Lauf rot gesehen (13): Nachrechnen auf dem gesicherten Zustand (Prüfstand und Prüfdomäne), Laden
+beim Aktivieren (Umzug), Position nur zusammen mit dem Zustand (Absturz, Umzug), Zustand und Stand mit erwarteter Version (zwei Sicherungen),
+Freigabe der Ressourcen beim Stoppen, Versand des Hinweis-Netzes (Prüfstand und Prüfdomäne), Command-Id aus der Hinweis-Kennung (Prüfstand und
+Prüfdomäne), Ausgaben der Antwort draußen auf einen Hinweis, Bindung an einen Träger (A8), eine Adresse liest alle Partitionen. Keine Messung: der
+heiße Pfad bestehender Funktionen ist unverändert (die Umsetzung entsteht je Aktivierung statt je Knoten, die Dienste je Aktivierung; je Eingang
+kommt nichts hinzu), die Bindung je Adresse wirkt bei einem Slot je Partition nicht (docs/13 PF-35).
+
 Statisch gezählt:
 
 | Projekt | `[Fact]` | `[Theory]` | Dateien |
 |---|---:|---:|---:|
-| Infrastructure.Pruefstand.Tests | 445 | 6 | 73 |
+| Infrastructure.Pruefstand.Tests | 464 | 8 | 76 |
 | Infrastructure.Integration.Tests | 49 | 6 | 23 |
-| Pruefdomaene.Integration.Tests | 45 | 0 | 11 |
+| Pruefdomaene.Integration.Tests | 53 | 0 | 12 |
 | Verhalten.Tests | 16 | 0 | 5 |
 | Client.Infrastructure.CollectionTests | 31 | 0 | 2 |
 | Werkbank.Abnahme.Tests | 1 | 0 | 1 |
 
-Gezählt (2026-10-26, nach Plan Pub/Sub-Neustrukturierung Phase 4): Zeilen `[Fact` bzw. `[Theory`, Dateien = Dateien mit Tests. Die Differenz zu
+Gezählt (2026-10-28, nach Plan Pub/Sub-Neustrukturierung Phase 4b): Zeilen `[Fact` bzw. `[Theory`, Dateien = Dateien mit Tests. Die Differenz zu
 den Läufen kommt von den expandierten `[Theory]`-Fällen.
 
 ## 12.3 Was getestet ist
@@ -91,10 +106,10 @@ den Läufen kommt von den expandierten `[Theory]`-Fällen.
 
 | Bereich | Tests | Klassen |
 |---|---:|---|
-| Analyzer | 69 | `AkteurAnalyzerTests` (17), `FaehigkeitAnalyzerTests` mit `HandlerFormAnalyzerTests` (CQRS051/054/055, CQRS057 auch für eine Projektion, die etwas ausgibt), `ModellAnalyzerTests`, `QuellenTypAnalyzerTests`, `StoreZugriffAnalyzerTests`, `AusgabeVertragAnalyzerTests`, `GesamtbildAnalyzerTests` (CQRS084–087: Funktion ohne Umsetzung und ohne Träger), `LageAnalyzerTests`, `WiederholungAnalyzerTests` (R2/R11/R12/R13), `CommandEmitAnalyzerTests` |
+| Analyzer | 74 | `ZustandAnalyzerTests` (CQRS105, R19: Felder, Setter, Sammlungen, IZustand außerhalb einer Funktions-Klasse), `AkteurAnalyzerTests` (17), `FaehigkeitAnalyzerTests` mit `HandlerFormAnalyzerTests` (CQRS051/054/055, CQRS057 auch für eine Projektion, die etwas ausgibt), `ModellAnalyzerTests`, `QuellenTypAnalyzerTests`, `StoreZugriffAnalyzerTests`, `AusgabeVertragAnalyzerTests`, `GesamtbildAnalyzerTests` (CQRS084–087: Funktion ohne Umsetzung und ohne Träger; CQRS106, R20: gehörter Hinweis ohne Erzeuger), `LageAnalyzerTests`, `WiederholungAnalyzerTests` (R2/R11/R12/R13), `CommandEmitAnalyzerTests` |
 | Editor-Modell, Scaffolder, Grammatik | 55 | `DomainEditorLeseseiteTests`, `DomainEditorAkteurTests` (Kette über eine Funktion, Akteur darf eine Funktion draußen rechnen), `DomainEditorScaffolderTests`, `DomainEditorStrukturortTests`, `DomainEditorKompositionTests` (Grammatik nach Plan §3: Hinweis nur an Funktion und Client, Projektion erzeugt nichts, Frist über die Uhr), `PythonQuelleTests` |
 | Extractor, Gesten, Sicht, Werkbank | 41 | `GestenTests` (22), `SichtTests`, `LesenToleranzTests`, `UsingsTests`, `GitKopfTests`, `ProtoVergleichTests` |
-| Funktionen und Uhr | 44 | `FunktionsBausteinGeneratorTests` (Dispatch, Weckplan, erlaubte Rückgaben, draußen und Umsetzungen, gleichbleibend, Hinweisplan, CQRS100/101), `FunktionsLaufTests` (Slots, ein Stream nacheinander, Position, gedeckelte Liste, Parken), `FunktionsArbeitTests` (Festhalten, Abbruch, zwei Läufe, Strom, unbekannter Emit-Ausgang, Hinweise vom Gewinner, draußen mit und ohne Antwort, zwei Worker, Antwort außerhalb der Signatur), `FunktionsVermittlungTests`, `BildeingangTests`, `UhrTests` |
+| Funktionen und Uhr | 60 | `FunktionsBausteinGeneratorTests` (Dispatch, Weckplan, erlaubte Rückgaben, draußen und Umsetzungen, gleichbleibend, Hinweisplan, Zustand im Konstruktor samt Kontext und eine Adresse, lernendes `Auf`, CQRS100/101), `FunktionsLaufTests` (Slots, ein Stream nacheinander, Position, gedeckelte Liste, Parken, Stand eines geparkten Streams rückt mit), `FunktionsArbeitTests` (Festhalten, Abbruch, zwei Läufe, Strom, unbekannter Emit-Ausgang, Hinweise vom Gewinner, draußen mit und ohne Antwort, zwei Worker, Antwort außerhalb der Signatur; mit Zustand: `Auf` je Eingang einmal, Nachrechnen bei festgehaltener Ausgabe, kein Festhalten ohne Ausgabe), `FunktionsAktivierungTests` (Umsetzung und Dienste je Aktivierung, Freigabe-Reihenfolge), `HinweisNetzTests` (Routing an die Adresse, Kennungen, Command-Ids aus der Kennung, Wiederholen ohne Neurechnen, Boot-Fehler), `FunktionsVermittlungTests` (dazu A8: Bindung je Adresse), `BildeingangTests`, `UhrTests` |
 | Akteure, Clients | 34 | `AkteurRechteTests`, `ClientVertragTests`, `ClientCodeVertragTests` |
 | Schreibpfad, Signale, Serialisierung, Ids | 30 | `SignalTypeGeneratorTests`, `SignalEmitTests`, `SignalWireRoundTripTests`, `EventJsonSerializationTests`, `EventVersioningTests`, `AppendBatchingTests`, `DtoMapperRoundTripTests`, `TypisierteIdTests`, `CommandVorpruefungTests`, `DispatcherCommandFailedTests` |
 | Beispiel-Aggregate | 40 | `DatensatzAggregatTests`, `TrainingslaufAggregatTests` (Frist des Wächters im Decide), `SammelvorgangBarriereTests`, `SammelvorgangKaskadeTests`, `BoundedInboxTests` |
@@ -134,6 +149,7 @@ den Läufen kommt von den expandierten `[Theory]`-Fällen.
 | `UhrE2ETests` | 3 | fällige Frist mit der Id aus ihrem Event, vor der Fälligkeit erledigt, doppelt gefeuert wirkt einmal |
 | `QuellenE2ETests` | 2 | Quell-Nachricht vom Client genau einmal und über eine Funktion weiter — dreimal je unter 5 s bei 30 s Takt (FB-3: Commitmeldung der Quelle); ein Stream je Schlüssel |
 | `Garantien/FunktionsGarantieTests` | 4 | Abbruch nach dem Festhalten vor den Commands, Abbruch nach den Commands vor der Position, zwei Aktivierungen, zwei Worker |
+| `Garantien/FunktionsZustandGarantieTests` | 8 | am allgemeinen Fall Messung (Plan Phase 4b): Hinweis-Kette bis zum Command ohne Log-Eintrag des Hinweises; Umzug einer Aktivierung (der Zustand kommt mit); Absturz zwischen Sicherung (Datei) und Position — jeder Log-Eingang wirkt genau einmal auf den gesicherten Zustand; zwei Aktivierungen derselben Adresse; zwei Sicherungen mit derselben Version (eine gewinnt ganz); Ressource beim Stoppen geschlossen; Commands aus einem doppelten Hinweis wirken einmal; eine Funktion draußen hört einen Hinweis über die Sitzung der Leitung |
 | `Garantien/AblaufGarantieTests` | 2 | die Funktion `Nachschub` wirkt genau einmal über Signal und Takt; Neustart des Hosts mitten im Auftrag führt ihn zu Ende |
 
 **Verhaltens-Netz (`Verhalten.Tests`):** `BeispielAblaufTests` (3), `PruefdomaeneAblaufTests` (4), `TrainingsWaechterTests` (1),
@@ -145,7 +161,9 @@ den Läufen kommt von den expandierten `[Theory]`-Fällen.
 ## 12.4 Was nicht getestet ist
 
 - **Kreise Funktion ↔ Aggregat ohne Fortschritt** — der Build erkennt sie nicht (docs/13 FB-5).
-- **Hinweis als Eingang einer Funktion** — steht im Hinweisplan, wird aber noch nicht zugestellt (docs/13 FB-1).
+- **Echter Python-Prozess mit Hinweis-Eingang über gRPC** — nachgewiesen sind das SDK (pytest) und der Weg des Servers über dieselbe Sitzung
+  (docs/13 FB-8).
+- **Reihenfolge der Hinweise zwischen zwei Actors** — nicht zugesichert, ohne Test (docs/13 G-15).
 - **Spur über Funktionen und Commands als lückenlose Kette** — nur indirekt (Treiber S3 ordnet über die Ursache zu); der Prüfstand-Test dazu lief
   über die entfernte Katalog-Welt.
 - **Werkbank-Abnahme** — ihr einziger Test ist zurückgestellt (Editor, Plan E4).

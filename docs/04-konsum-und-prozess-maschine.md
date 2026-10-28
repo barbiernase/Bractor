@@ -160,11 +160,12 @@ Leseseite neu auf (leeren, Partitionen und Guards zurücksetzen; der erste Poll 
 **Form.** Eine Funktion ist eine Klasse (läuft im Host) oder eine Schnittstelle (läuft draußen, ihre Umsetzungen sind Klassen) `: IFunktion`
 mit Methoden `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])` — je Eingangstyp genau eine (R2, CQRS101). Was herauskommen kann, steht in der
 Rückgabe: ein konkreter Typ, `OneOf<…>`, `T?`, `IEnumerable<…>` oder `IAsyncEnumerable<…>` (auch in `Task<…>`); erlaubt sind Commands und
-Events. `Herkunft` nennt Stream, Version, Zeit und Akteur des Eingangs und leitet neue Ids ab (`h.NeueId<T>(…)`, R13). Eingänge sind Events
-aus dem Log (auch Quell-Nachrichten und Ergebnisse anderer Funktionen); ein Hinweis (`ITransientEvent`) als Eingang steht im Hinweisplan, wird
-aber erst mit Phase 6 zugestellt (FB-1). Der `FunktionsBausteinGenerator` erzeugt Dispatch, Seiten-Form und den **Weckplan** (welche Log-Typen
-welche Funktion wecken) als Tabelle `GeneratedFunktionsBausteine` (CQRS100). Lage: Klasse und Schnittstelle in der Rolle Abläufe
-(`HostFunktion` bzw. `Funktion`, docs/07).
+Events und Hinweise. `Herkunft` nennt Stream, Version, Zeit und Akteur des Eingangs und leitet neue Ids ab (`h.NeueId<T>(…)`, R13). Eingänge sind
+Events aus dem Log (auch Quell-Nachrichten und Ergebnisse anderer Funktionen) und **Hinweise** (`ITransientEvent`) aus dem Hinweis-Netz (unten);
+aus einem Hinweis gehen nur Commands und Hinweise hervor, keine Events (CQRS100). Eine Funktion mit Zustand darf aus einem Eingang allein
+lernen (`void`/`Task` ohne Ausgabe). Der `FunktionsBausteinGenerator` erzeugt Dispatch, Seiten-Form, den **Weckplan** (welche Log-Typen welche
+Funktion wecken) und den **Hinweisplan** (welche Hinweis-Typen welche Funktion hören) als Tabelle `GeneratedFunktionsBausteine` (CQRS100).
+Lage: Klasse und Schnittstelle in der Rolle Abläufe (`HostFunktion` bzw. `Funktion`, docs/07); ein Hinweis, den eine Funktion ausgibt, ebenda.
 
 Beispiel (Beispieldomäne, `Domain.Pipeline/Sammelvorgang/TeilFertigMeldung.cs`) — die kleinste Funktion, eine Kante Event → Command:
 ```csharp
@@ -174,7 +175,8 @@ public sealed class TeilFertigMeldung : IFunktion
 }
 ```
 
-**Funktions-Actor** (`Infrastructure/Funktionen/FunktionsActor.cs`, ein `RahmenActor` je Funktion und Partition): liest seine Seite ab der
+**Funktions-Actor** (`Infrastructure/Funktionen/FunktionsActor.cs`, ein `RahmenActor` je Funktion und Adresse — die Partition, bzw. die eine
+Adresse einer Funktion mit `[EineAdresse]`, die dann alle Partitionen liest): liest seine Seite ab der
 Position aus dem Log, startet so viele Eingänge, wie Slots frei sind (Standard 1), je Stream höchstens einen (`FunktionsLauf`), und rückt die
 Position nur bis vor den ersten laufenden Eingang und nie über die gesetzte Sequenz (Horizont wie §4.1). Der Stand liegt im Partitions-Checkpoint
 mit der Id `funktion:<F>:<Partition>` und Revision (zwei Aktivierungen: die zweite bekommt einen Konflikt und lädt neu); so zählt `/health` den
@@ -194,14 +196,57 @@ Lauf, der festhielt. Commands gehen immer über den `CommandEmitter` (§4.6); ei
 (`BindeFunktionen`), danach die Domänen-Dienste der Umsetzungen (`BindeDienste`, `GeneratedDienste`). Ohne Eintrag läuft eine Klasse im Host,
 eine Schnittstelle mit genau einer Umsetzung ebenso, eine Schnittstelle ohne Umsetzung, die ein Client trägt (`ITraegt<F>`), draußen; sonst ist
 es ein Boot-Fehler, der den Eintrag nennt. Eine Funktion mit Lese-Fähigkeit läuft nur im Host.
-- **Host:** die Umsetzung einmal je Knoten (darf warme Ressourcen halten; bei Slots > 1 thread-sicher), gerufen vom Funktions-Actor.
+- **Host:** die Umsetzung **je Aktivierung** (`FunktionsAktivierung`): beim Aktivieren in einem eigenen DI-Bereich gebaut, samt ihren Diensten
+  (im Bereich gebunden — eine Datenbank-Verbindung, ein geladenes Modell), beim Stoppen, Passivieren und vor einem Neustart in umgekehrter
+  Reihenfolge freigegeben (`IAsyncDisposable`/`IDisposable`; `RahmenActor.FreigebenAsync`). Bei Slots > 1 teilen sich die Eingänge einer
+  Aktivierung die Instanz (thread-sicher).
 - **Extern und Hand:** der Actor bietet den Eingang über den **Vermittler** seiner Funktion an (`FunktionsVermittlerActor`, ein virtueller
   Cluster-Actor je Funktion; `EingangAnbieten`, nicht maßgeblich — geht er verloren, bietet der Actor neu an). Ausführer draußen holen per Pull,
   so viele wie Slots frei sind, mit **Lease** und Lebenszeichen, über eine `BausteinSitzung`: extern die Sitzung eines Clients über die Leitung
   (gRPC, z. B. der generische Python-Worker, der die Funktion trägt), von Hand der `HandAusfuehrer` (Werkbank, JSON-Eingang
   `/eingang/auftraege` und `/eingang/ergebnis`). Die Sitzung prüft die Antwort gegen die Signatur und hält sie fest — die erste gewinnt; ein
   Strom kommt in Stücken, jedes an seiner Stelle festgehalten. Die Garantie bleibt beim Actor: läuft die Lease ab, geht der Eingang an den
-  nächsten Ausführer, der beim nächsten nicht festgehaltenen Stück weitermacht; wartet der Actor vergeblich, heißt der Eingang „später“.
+  nächsten Ausführer, der beim nächsten nicht festgehaltenen Stück weitermacht; wartet der Actor vergeblich, heißt der Eingang „später“. Jedes
+  Angebot trägt die **Adresse** des Funktions-Actors: alle Eingänge einer Adresse rechnet derselbe Träger, solange er lebt (holt oder Lebenszeichen
+  gibt) — ein Zustand im Worker sieht so alles, was zu ihm gehört (A8); eine freie Adresse bindet der Holende, wenn er nicht schon mehr trägt als
+  ein anderer lebender Träger. Endet eine Sitzung, meldet sie sich ab (`TraegerAbgemeldet`) und ihre Adressen sind sofort frei.
+
+**Zustand** (`IZustand<T>`, Plan §2.9, A5, A6). Steht `IZustand<T>` im Konstruktor einer Funktions-Klasse, hat sie gekapselten, durablen Zustand —
+kein Domänen-Zustand, keine Zustands-Events, keine Faltung aus dem Log; Vorbild ist der Aggregat-Actor:
+```csharp
+[EineAdresse]                                                   // ein Zustand für alle Messstellen (sonst einer je Partition)
+public sealed class Schaetzer(IZustand<Schaetzmodell> modell) : IFunktion
+{
+    public void Auf(MesswertErfasst e, Herkunft h) => modell.Wert.Lerne(h.Stream, e.Wert);           // lernt aus dem Log
+    public VermerkeSchaetzung Auf(Merkmal m) => …;                                                 // Hinweis rein, Command raus
+}
+```
+(Prüfdomäne `Pruefdomaene.Pipeline/Messung`.) Der Generator erkennt den Konstruktor-Parameter, reicht den Zustand aus der Aktivierung hinein (nie aus
+dem Container) und sichert ihn über den Speicher-Kontext der Komposition (`EventJsonSerializerContext`, der Codegen nimmt jedes `T` auf — ohne
+Reflection). Der Actor lädt Zustand und Stand beim Aktivieren, bevor das erste `Auf` läuft; er rechnet **einen** Eingang zugleich (Log oder Hinweis);
+er sichert nur in einem **Ruhepunkt** — kein Eingang in Arbeit, der Zustand enthält genau die Log-Eingänge bis zur Position — Zustand und Stand
+in **einer Transaktion**, beide mit erwarteter Version (`FunktionsZustandsDokument` je Adresse, Id `zustand:<F>:<Adresse>`). Ein großer Zustand
+liegt als Datei in einer Ablage der Umgebung (`Funktionen:<F>:Zustand:Ablage = Datei`, `Verzeichnis`): erst die Datei, dann Position und Verweis;
+ein Absturz dazwischen lässt nur eine verwaiste Datei, die gleich wieder entfernt wird. Gesichert wird höchstens so oft wie
+`Zustand:SichernAlleSekunden` (Standard 1 s, wie der Stand) und beim Stoppen, sofern gerade Ruhe ist. Nach einem Absturz liest die nächste
+Aktivierung ab der gesicherten Position erneut: `Auf` läuft auf dem gesicherten Zustand auch für Eingänge, deren Ausgabe schon festgehalten ist
+(gesendet wird das Festgehaltene, Hinweise nicht noch einmal) — jeder Log-Eingang wirkt so **genau einmal** auf den gesicherten Zustand; in
+derselben Aktivierung läuft `Auf` je Eingang genau einmal, auch beim Wiederholen (`EingangsRechnung`). Verliert eine Sicherung gegen eine zweite
+Aktivierung derselben Adresse, verwirft der Actor Zustand und Lauf und lädt die des Gewinners. Eine Funktion mit Zustand ist nie gleichbleibend (sie
+hält fest, R12); Zustand in Feldern oder Eigenschaften verbietet CQRS105 (R19) — er ginge beim Umzug still verloren. Rechnet eine Funktion draußen,
+lebt ein Zustand im Worker (A8, gebunden an die Adresse); ihn zu sichern, ist Sache des Workers.
+
+**Hinweis-Netz** (`HinweisNetz.cs`, Plan §2.9, E7, E8). Hinweise, die nicht zur Fachdomäne gehören (Merkmale, Messwerte, Ablehnungen), gehen im
+Speicher von Baustein zu Funktions-Actor — nie in den Log, kein Broker, keine Abos. Die Routing-Tabelle ist der generierte Hinweisplan (Hinweis-Typ →
+Funktionen); gibt eine Funktion, ein Aggregat (eine Ablehnung aus dem Decide) oder ein Client (`TransientEvent` über die Leitung) einen Hinweis aus,
+schickt der Rahmen ihn per `Bote.Melde` direkt an jede Adresse: die Partition seines Herkunfts-Streams bzw. die eine Adresse (A6). Er trägt eine
+**Kennung**, die der Absender ableitet (A7: aus Funktion, Eingang und Stelle; aus der Command-Id bei einem Aggregat). Im Funktions-Actor hat ein
+Hinweis keine Position: er wartet in einer gedeckelten Schlange auf einen Slot (mit Zustand auf den Ruhepunkt) und läuft **höchstens einmal**;
+Commands daraus tragen eine Id aus Funktion, Hinweis-Kennung, Stelle, Typ und Ziel — bleibt einer „unbekannt“, sendet der Actor dieselben
+Commands erneut, ohne neu zu rechnen. Eine Funktion, die nur Hinweise hört, hat keinen Log-Leser, keine Position und keinen Takt. Draußen geht ein
+Hinweis denselben Weg wie ein Log-Eingang (Vermittler, Sitzung, `ArbeitsAuftrag` mit `hinweis = true`), nur wird die Antwort nicht festgehalten:
+sie kommt mit ihren Commands und Hinweisen zum Actor, der sendet. Hört niemand einen Hinweis, den eine Funktion hören will, bricht der Build (R20,
+CQRS106); eine Adresse der Tabelle ohne Funktion ist ein Boot-Fehler. Hinweise an Clients gehen bis Plan Phase 7 den heutigen Weg (Broker).
 
 **Wecken.** Jede Funktion meldet sich wie eine Projektion beim `BatchKonsumStartupService` an: das Signal eines Commits weckt ihre Partition,
 der Poll alle 30 s heilt. Jeder Schreiber meldet nach seinem Commit dasselbe — Aggregat, Quelle und festgehaltene Ausgabe einer Funktion
@@ -310,6 +355,7 @@ Das Format steht an einer Stelle (`Abstractions/Spur/WirkerId.cs`), den Weg eine
 
 ## 4.10 Offen
 
-Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): Hinweise als Eingang einer Funktion (FB-1, Phase 6), eigener Wecker am
+Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): Reihenfolge der Hinweise zwischen zwei Actors (G-15), echter Python-Prozess
+mit Hinweis-Eingang im Testnetz (FB-8), Wechsel der Zustands-Ablage (FB-9), Kosten des Zustands und der Bindung (PF-34, PF-35), eigener Wecker am
 Flush (Phase 6), Quell-Nachricht vom Client über gRPC (Phase 7), Kreise Funktion ↔ Aggregat (R6), hartkodierte Intervalle P2-8, reflektive
 Snapshot-Kopie W10-2, Projektlage W2-1.

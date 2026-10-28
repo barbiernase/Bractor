@@ -1,7 +1,8 @@
 # Plan: Neustrukturierung von Pub/Sub, Bausteinen und Grammatik
 
-> **Plan**, Stand 2026-10-27, Zweig `pubsub_neustrukturierung`. Phasen 0–4 sind umgesetzt (Stand und Messwerte in docs/12, offene Punkte in
-> docs/13); am 2026-10-27 ergänzt um Funktionen als Actors mit Zustand und das Hinweis-Netz (E6–E9, §2.9, Phase 4b). Dieses Dokument ist für die Dauer des Umbaus der
+> **Plan**, Stand 2026-10-28, Zweig `pubsub_neustrukturierung`. Phasen 0–4 und 4b sind umgesetzt (Stand und Messwerte in docs/12, offene Punkte in
+> docs/13); am 2026-10-27 ergänzt um Funktionen als Actors mit Zustand und das Hinweis-Netz (E6–E9, §2.9, Phase 4b, umgesetzt 2026-10-28 — Abweichung
+> von §2.9: die Reihenfolge zwischen zwei Actors ist nicht zugesichert, docs/13 G-15). Dieses Dokument ist für die Dauer des Umbaus der
 > **Maßstab**; wo ein anderes Dokument oder der Code widerspricht, gilt der Plan als Ziel und der Code als Ist. Nach dem Umbau wird er in die
 > Kapitel eingearbeitet (§9) und gelöscht.
 >
@@ -24,7 +25,7 @@ Genehmigungen, Integrationen …), und jeder Store-Typ muss hinter derselben Nah
 | E2 | Direkte Abfrage eines Aggregats (exakter Stand) | **ja**, als eigener Lesepfad neben dem Reader (§2.6). |
 | E3 | Typisierte Ids (`Id<TAggregat>` statt `Guid`) | **ja**, Pflicht für Command-Ziele; in Antworten die Grundlage für feine Updates an Clients (§2.5). |
 | E4 | Editor-Oberfläche (Fluss-Karten, Darstellung) | **zurückgestellt.** Werkbank und GraphExtractor werden nur so weit mitgezogen, dass alles baut und `--check`/`--sonde` für die neuen Bausteine grün sind (§6, Phase 4). `Werkbank/wwwroot/editor/` wird nicht angefasst. |
-| E5 | Implementieren | **phasenweise**, je Phase auf Tobis Wort (Phasen 0–4 umgesetzt). |
+| E5 | Implementieren | **phasenweise**, je Phase auf Tobis Wort (Phasen 0–4 und 4b umgesetzt). |
 
 **Entscheidungen (Tobi, 2026-10-27) — Funktionen als Actors (§2.9):**
 

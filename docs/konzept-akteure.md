@@ -213,7 +213,9 @@ Ketten-Command wie `NimmRangeAuf` (nur aus der Funktion) steht in keinem Client-
 
 - Der Client nennt im `CapabilitiesRequest` **`vertrag`** (Client-Name) und **`vertrag_hash`**. Der Server nimmt die Fähigkeiten aus **seiner**
   Tabelle, nicht aus der Selbstauskunft, abonniert genau die gehörten Events und bietet die getragenen Funktionen beim Vermittler an
-  (`BausteinSitzung`, Lease je Eingang).
+  (`BausteinSitzung`, Lease je Eingang). Jedes Angebot trägt die Adresse des Funktions-Actors; alle Eingänge einer Adresse rechnet dieselbe
+  Sitzung, solange sie lebt (Plan §2.9, A8) — ein Zustand im Worker (ein Modell) sieht so alles, was zu ihm gehört. C# und Python teilen sich die
+  Adresse: hinter ihr rechnet die Umsetzung im Host oder die Sitzung, die die Funktion trägt; der Absender sieht den Unterschied nicht.
 - Mit Tor muss das Token einen Akteur des Clients verkörpern (sonst `PermissionDenied`). Hash ≠ Server → Warnung, im strengen Modus
   (`Identitaeten:VertragStreng` = `true` in der Umgebung) Ablehnung.
 
@@ -222,6 +224,11 @@ Ketten-Command wie `NimmRangeAuf` (nur aus der Funktion) steht in keinem Client-
 Eine Antwort auf einen Eingang reist als Ausgabe-Liste zurück (gRPC bzw. JSON-Eingang `/eingang/ergebnis`), mit der Kennung des Eingangs.
 Der Server hält sie unter (Funktion, Eingang) fest und leitet die CommandIds daraus ab — doppelt geantwortet, von zwei Trägern oder nach dem
 Neuverbinden, wirkt einmal (VT `ClientVerhaltenTests.Die_Antwort_eines_Traegers_wirkt_genau_einmal…`). Die Id enthält keinen Client.
+
+Ist der Eingang ein **Hinweis** aus dem Hinweis-Netz (`ArbeitsAuftrag.hinweis = true`, Plan §2.9), wird nichts festgehalten: die Antwort kommt als
+Ganzes (auch ein Strom — das SDK sammelt ihn), ihre Commands und Hinweise gehen mit der Meldung an den Funktions-Actor, der sie sendet; die
+CommandIds leitet er aus der Kennung des Hinweises ab. Höchstens einmal: antwortet niemand in 30 s, verfällt der Hinweis. Die generierte
+Python-Basis kennt den Eingang als Hinweis (`Eingang(…, hinweis=True)`); den Zustand eines Workers sichert das Framework nicht (A8).
 
 ### 5.4 Zustellung an Clients
 
