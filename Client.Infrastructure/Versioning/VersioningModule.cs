@@ -73,12 +73,12 @@ public class VersioningModule : IVersioningModule
         }
     }
 
-    public IReadOnlyList<string> RecentWrites
+    public IReadOnlyList<global::Abstractions.StreamStand> Mindestens
     {
         get
         {
             lock (_gate)
-                return _recentWrites.Select(id => id.ToString()).ToList();
+                return _recentWrites.Where(_versionen.ContainsKey).Select(id => new global::Abstractions.StreamStand(id, _versionen[id])).ToList();
         }
     }
 

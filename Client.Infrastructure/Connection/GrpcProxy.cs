@@ -168,7 +168,7 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
     public async Task<QueryResponse<TResponse>> QueryAsync<TResponse>(
         IQuery query,
         string correlationId,
-        IReadOnlyList<string>? expectedFreshIds = null,
+        IReadOnlyList<global::Abstractions.StreamStand>? mindestens = null,
         CancellationToken ct = default) where TResponse : IQueryResponse
     {
         EnsureConnected();
@@ -190,9 +190,9 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
                 CorrelationId = correlationId,
                 Payload = queryDto
             };
-            // Read-Your-Writes: die zuletzt beschriebenen Aggregate mitschicken (Deps-Tracking).
-            if (expectedFreshIds is { Count: > 0 })
-                queryRequest.ExpectedFreshIds.AddRange(expectedFreshIds);
+            // Read-your-writes: „mindestens S auf v“ für die zuletzt beschriebenen Aggregate.
+            if (mindestens is { Count: > 0 })
+                queryRequest.Mindestens.AddRange(mindestens.Select(m => new Cqrs.Leitung.StreamStand { Stream = m.Stream.ToString(), Version = m.Version }));
             var message = new ClientMessage { Query = queryRequest };
             
             await SchreibeAsync(message, ct);

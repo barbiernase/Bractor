@@ -63,6 +63,10 @@ public sealed class SitzungsActor : RahmenActor
     private readonly ILogger _logger;
     private BausteinSitzung? _anbieter;
     private PID? _verteiler;
+    // Antworten und Lebenszeichen der Funktionen draußen in der Reihenfolge des Clients, eine nach der anderen (eine zweite Antwort auf denselben
+    //   Eingang sieht so, dass die erste ihn schon erledigt hat); gewartet wird neben der Mailbox.
+    private readonly Queue<Func<IContext, CancellationToken, Task<Func<Task>?>>> _anbieterArbeit = new();
+    private bool _anbieterLaeuft;
 
     public SitzungsActor(IServerStreamWriter<Leitung.ServerMessage> stream, string sitzungsId, AkteurRechte? akteur, SitzungsDienste dienste,
         TaskCompletionSource ende) : base(dienste.Logger)
@@ -112,6 +116,7 @@ public sealed class SitzungsActor : RahmenActor
                 break;
 
             case Zustellung z:
+                foreach (var e in z.Envelopes.Where(e => e.ZielSitzung is not null)) _logger.LogWarning("DIAG {Session} schreibt gezielt {T}", _id, e.Payload.GetType().Name);
                 foreach (var e in z.Envelopes)
                     await SchreibeAsync(new Leitung.ServerMessage { Event = new Leitung.EventNotification { Envelope = _d.Mapper.MapToDto(e) } });
                 _rueckstau.Erledigt();
@@ -158,7 +163,7 @@ public sealed class SitzungsActor : RahmenActor
                 break;
             case Leitung.ClientMessage.MessageOneofCase.ArbeitLebt:
                 if (_anbieter is { } a && Guid.TryParse(m.ArbeitLebt.Vorgang, out var lebt))
-                    Neben(context, _ => a.LebtAsync(lebt));
+                    AnbieterArbeit(context, async (_, _) => { await a.LebtAsync(lebt); return null; });
                 break;
             default:
                 _logger.LogWarning("{Session} unknown message type: {MessageCase}", _id, m.MessageCase);
@@ -341,9 +346,10 @@ public sealed class SitzungsActor : RahmenActor
             return;
         }
 
-        // Die Leseseite; die vom Client mitgeschickten „zuletzt geschrieben"-Ids werden als Stände mitgeliefert (Read-your-writes).
-        var frisch = request.ExpectedFreshIds.ToList();
-        Neben(context, _ => _d.Queries.ExecuteAsync(query, frisch), async t =>
+        // Die Leseseite, mit Read-your-writes: „mindestens S auf v“ je Stream, den der Client zuletzt beschrieben hat.
+        var mindestens = request.Mindestens.Where(m => Guid.TryParse(m.Stream, out _))
+            .Select(m => new StreamStand(Guid.Parse(m.Stream), m.Version)).ToList();
+        Neben(context, _ => _d.Queries.ExecuteAsync(query, mindestens), async t =>
         {
             if (t.IsFaulted && t.Exception!.InnerException is NotSupportedException ns)
             {
@@ -489,14 +495,32 @@ public sealed class SitzungsActor : RahmenActor
             try { ausgaben = request.Ausgaben.Select(_d.Mapper.Ausgabe).ToList(); }
             catch (Exception ex) { fehler = $"Antwort nicht lesbar: {ex.Message}"; }
         }
-        Neben(context, ct => anbieter.AntwortAsync(vorgang, ausgaben, fehler, ct, request.Ab, request.Fertig), async t =>
+        AnbieterArbeit(context, async (_, ct) =>
         {
-            if (!t.IsCompletedSuccessfully) return;
-            var ausgang = await (Task<ErgebnisAusgang>)t;
+            var ausgang = await anbieter.AntwortAsync(vorgang, ausgaben, fehler, ct, request.Ab, request.Fertig);
             _logger.LogDebug("{Session} Antwort {Vorgang} (ab {Ab}, fertig {Fertig}): {Ausgang}", _id, vorgang, request.Ab, request.Fertig, ausgang);
-            if (ausgang == ErgebnisAusgang.Unbekannt)
-                await FehlerAsync("ARBEIT_UNBEKANNT",
-                    $"Eingang {vorgang} läuft in dieser Sitzung nicht (Lease abgelaufen oder schon erledigt)", request.Vorgang);
+            return ausgang == ErgebnisAusgang.Unbekannt
+                ? () => FehlerAsync("ARBEIT_UNBEKANNT", $"Eingang {vorgang} läuft in dieser Sitzung nicht (Lease abgelaufen oder schon erledigt)", request.Vorgang)
+                : null;
+        });
+    }
+
+    /// <summary>Reiht Arbeit der Funktionen draußen ein: eine nach der anderen neben der Mailbox; was sie danach schreiben will, schreibt der Actor.</summary>
+    private void AnbieterArbeit(IContext context, Func<IContext, CancellationToken, Task<Func<Task>?>> arbeit)
+    {
+        _anbieterArbeit.Enqueue(arbeit);
+        if (!_anbieterLaeuft) NaechsteAnbieterArbeit(context);
+    }
+
+    private void NaechsteAnbieterArbeit(IContext context)
+    {
+        if (!_anbieterArbeit.TryDequeue(out var arbeit)) { _anbieterLaeuft = false; return; }
+        _anbieterLaeuft = true;
+        Neben(context, ct => arbeit(context, ct), async t =>
+        {
+            if (t.IsCompletedSuccessfully && await (Task<Func<Task>?>)t is { } danach) await danach();
+            else if (t.IsFaulted) _logger.LogWarning(t.Exception, "{Session} Funktion draußen: Antwort nicht verarbeitet", _id);
+            NaechsteAnbieterArbeit(context);
         });
     }
 

@@ -95,7 +95,7 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         {
             _logger.LogInformation("{Session} cancelled", sessionId);
         }
-        catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
+        catch (Exception ex) when (ex is RpcException { StatusCode: StatusCode.Cancelled } or IOException)
         {
             _logger.LogInformation("{Session} client disconnected", sessionId);
         }

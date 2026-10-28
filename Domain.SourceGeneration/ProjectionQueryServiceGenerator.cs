@@ -235,16 +235,23 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
         sb.AppendLine();
 
         // ── ExecuteAsync ──
+        sb.AppendLine("    /// <summary>Wie lange eine Query höchstens auf „mindestens S auf v“ wartet (Read-your-writes), bevor sie „noch nicht so weit“ antwortet.</summary>");
+        sb.AppendLine("    public static readonly TimeSpan MindestensFrist = TimeSpan.FromSeconds(3);");
+        sb.AppendLine();
         sb.AppendLine("    /// <summary>");
-        sb.AppendLine("    /// Führt eine Query aus. Erstellt QueryEnvelope für Transport-Metadaten.");
-        sb.AppendLine("    /// Deps sind null wenn TrackDeps=false oder kein ctx.Track() aufgerufen wurde.");
+        sb.AppendLine("    /// Führt eine Query aus: wartet begrenzt, bis die Projektion jeden Stream aus <paramref name=\"mindestens\"/> verarbeitet hat, liest, und");
+        sb.AppendLine("    /// nennt den Stand je gezeigter Id (Deps; null wenn TrackDeps=false oder kein ctx.Track()).");
         sb.AppendLine("    /// </summary>");
-        sb.AppendLine("    public async Task<QueryResponse<IQueryResponse>> ExecuteAsync(IQuery query, IReadOnlyList<string>? expectedFreshIds = null)");
+        sb.AppendLine("    public async Task<QueryResponse<IQueryResponse>> ExecuteAsync(IQuery query, IReadOnlyList<StreamStand>? mindestens = null)");
         sb.AppendLine("    {");
         sb.AppendLine("        ArgumentNullException.ThrowIfNull(query);");
         sb.AppendLine();
         sb.AppendLine("        if (!_handlers.TryGetValue(query.GetType(), out var entry))");
         sb.AppendLine("            throw new NotSupportedException($\"No handler registered for query type {query.GetType().Name}\");");
+        sb.AppendLine();
+        sb.AppendLine("        // Read-your-writes: erst lesen, wenn die Projektion die eigenen Writes des Clients verarbeitet hat (begrenzt).");
+        sb.AppendLine("        var nochNicht = mindestens is { Count: > 0 } && _depsReader != null");
+        sb.AppendLine("            && !await _depsReader.WarteAsync(entry.SubscriberId, mindestens, MindestensFrist);");
         sb.AppendLine();
         sb.AppendLine("        var ctx = new ReadContext();");
         sb.AppendLine("        var envelope = new QueryEnvelope();");
@@ -253,13 +260,10 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
         sb.AppendLine("        using (var bereich = _faehigkeiten.Oeffne())");
         sb.AppendLine("            data = await entry.Handler(query, envelope, ctx, bereich);");
         sb.AppendLine();
-        sb.AppendLine("        // Read-Your-Writes: die vom Client mitgeschickten \"zuletzt geschrieben\"-IDs zusätzlich als");
-        sb.AppendLine("        // Deps tracken. So liefert der Deps-Read auch deren (evtl. noch stale) Read-Model-Version →");
-        sb.AppendLine("        // der Client fasst bounded nach, bis die Projektion die eigenen Writes eingeholt hat — auch");
-        sb.AppendLine("        // wenn ein frisch geschriebenes Objekt (noch) nicht ins gefilterte Ergebnis fällt.");
-        sb.AppendLine("        if (expectedFreshIds != null)");
-        sb.AppendLine("            foreach (var __freshId in expectedFreshIds)");
-        sb.AppendLine("                ctx.Track(__freshId);");
+        sb.AppendLine("        // Die geschriebenen Streams zählen zu den gezeigten: ihr Stand geht mit zurück (auch wenn ein Objekt nicht ins Ergebnis fällt).");
+        sb.AppendLine("        if (mindestens != null)");
+        sb.AppendLine("            foreach (var __m in mindestens)");
+        sb.AppendLine("                ctx.Track(__m.Stream.ToString());");
         sb.AppendLine();
         sb.AppendLine("        IReadOnlyList<AggregateMeta>? deps = null;");
         sb.AppendLine("        if (entry.TrackDeps && ctx.HasTrackedIds && _depsReader != null)");
@@ -267,7 +271,7 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
         sb.AppendLine("            deps = await _depsReader.ReadAsync(entry.SubscriberId, ctx.TrackedIds);");
         sb.AppendLine("        }");
         sb.AppendLine();
-        sb.AppendLine("        return new QueryResponse<IQueryResponse> { Data = data, Deps = deps };");
+        sb.AppendLine("        return new QueryResponse<IQueryResponse> { Data = data, Deps = deps, NochNicht = nochNicht };");
         sb.AppendLine("    }");
         sb.AppendLine();
 

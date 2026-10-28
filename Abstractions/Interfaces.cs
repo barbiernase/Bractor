@@ -355,25 +355,29 @@ public interface IAggregateRepository
         public required T Data { get; init; }
 
         /// <summary>
-        /// Aggregate-Abhängigkeiten. Null wenn nichts getrackt.
-        /// Flache Liste aller Aggregate von denen das ReadModel abhängt.
+        /// Der Stand je gezeigter Id: bis zu welcher Version die Projektion den Stream verarbeitet hat — ihr Inhalt für den Stream gilt bis
+        /// dorthin (bis zum Kopf, wenn danach nur Events kamen, die sie nicht hört). Null, wenn nichts getrackt.
         /// </summary>
         public IReadOnlyList<AggregateMeta>? Deps { get; init; }
+
+        /// <summary>„Noch nicht so weit“: die Projektion hat in der Frist nicht jeden Stream aus <c>mindestens</c> verarbeitet — die Daten sind
+        /// der Stand davor.</summary>
+        public bool NochNicht { get; init; }
     }
 
 
 
     /// <summary>
-    /// Steuert ob für diesen Reader Deps aus Redis geladen werden.
+    /// Steuert ob für diesen Reader die Stände je Id gelesen werden.
     /// 
     /// Wird auf die Reader-Klasse innerhalb einer Projektion gesetzt.
     /// Der ProjectionQueryService evaluiert dieses Attribut nach dem Handler-Aufruf.
     /// 
     /// Entscheidungsmatrix:
-    ///   TrackDeps=true  + ctx.Track() aufgerufen  → Redis Deps laden
-    ///   TrackDeps=true  + kein ctx.Track()         → kein Redis, Deps=null
-    ///   TrackDeps=false + ctx.Track() aufgerufen   → kein Redis, Deps=null (Attribut überschreibt)
-    ///   TrackDeps=false + kein ctx.Track()         → kein Redis, Deps=null
+    ///   TrackDeps=true  + ctx.Track() aufgerufen  → Stände je Id lesen
+    ///   TrackDeps=true  + kein ctx.Track()         → kein Lesen, Deps=null
+    ///   TrackDeps=false + ctx.Track() aufgerufen   → kein Lesen, Deps=null (Attribut überschreibt)
+    ///   TrackDeps=false + kein ctx.Track()         → kein Lesen, Deps=null
     /// 
     /// Default: TrackDeps = true (opt-out statt opt-in).
     /// Projektionen die keine Deps brauchen (z.B. AuditLog) setzen TrackDeps = false.
@@ -382,7 +386,7 @@ public interface IAggregateRepository
     public class ProjectionReaderAttribute : Attribute
     {
         /// <summary>
-        /// Wenn true: Deps werden aus Redis geladen (sofern ctx.Track() aufgerufen wurde).
+        /// Wenn true: die Stände je Id werden gelesen (sofern ctx.Track() aufgerufen wurde).
         /// Wenn false: Deps werden nie geladen, unabhängig von ctx.Track().
         /// Default: true.
         /// </summary>
@@ -416,7 +420,7 @@ public interface IAggregateRepository
 
         /// <summary>
         /// Wurden Track-Aufrufe gemacht?
-        /// Wenn false: Kein Redis-Read nötig, Deps bleiben null.
+        /// Wenn false: kein Lesen, Deps bleiben null.
         /// </summary>
         public bool HasTrackedIds => _trackedIds.Count > 0;
 
@@ -427,18 +431,20 @@ public interface IAggregateRepository
     }
 
     /// <summary>
-    /// Liest ReadModel-Abhängigkeiten (Deps): den Stand der Projektion je gezeigter Id (Infrastructure: <c>ProjektionsStaende</c>, aus dem
-    /// Guard je (Projektion, Stream)). Wird vom ProjectionQueryService nach dem Reader-Handler aufgerufen.
+    /// Der Stand einer Projektion je Stream (Infrastructure: <c>ProjektionsStaende</c>, aus dem Guard je (Projektion, Stream) und dem Log): wie
+    /// weit sie ihn verarbeitet hat — gehörte Events bis zum Guard, danach so weit, wie nur Events folgen, die sie nicht hört. Der
+    /// ProjectionQueryService wartet vor dem Reader darauf (Read-your-writes) und liest danach den Stand je gezeigter Id.
     /// </summary>
     public interface IReadModelDepsReader
     {
-        /// <summary>
-        /// Liest Deps für eine oder mehrere ReadModel-IDs.
-        /// </summary>
-        /// <param name="subscriberId">Der Subscriber/Projektion-Name</param>
-        /// <param name="readModelIds">Die getrackten ReadModel-IDs aus dem ReadContext</param>
-        /// <returns>Deduplizierte Deps oder null bei Fehler/leerem Ergebnis</returns>
+        /// <summary>Der Stand je Id (Deps der Antwort); null bei Fehler oder ohne gültige Id.</summary>
+        /// <param name="subscriberId">Die Projektion (ihre SubscriberId)</param>
+        /// <param name="readModelIds">Die getrackten Ids aus dem ReadContext</param>
         Task<IReadOnlyList<AggregateMeta>?> ReadAsync(
             string subscriberId,
             IReadOnlyList<string> readModelIds);
+
+        /// <summary>Wartet höchstens <paramref name="frist"/>, bis die Projektion jeden Stream mindestens bis zu seiner Version verarbeitet hat.
+        /// false = noch nicht so weit.</summary>
+        Task<bool> WarteAsync(string subscriberId, IReadOnlyList<StreamStand> mindestens, TimeSpan frist, CancellationToken ct = default);
     }

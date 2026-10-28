@@ -204,7 +204,8 @@ public partial class ProtoMessageMapper
         var dto = new QueryResponse
         {
             CorrelationId = correlationId,
-            Payload = MapToDto(response.Data)
+            Payload = MapToDto(response.Data),
+            NochNicht = response.NochNicht,
         };
 
         if (response.Deps != null)
@@ -239,7 +240,7 @@ public partial class ProtoMessageMapper
                 .ToList();
         }
 
-        return new Abstractions.QueryResponse<TResponse> { Data = data, Deps = deps };
+        return new Abstractions.QueryResponse<TResponse> { Data = data, Deps = deps, NochNicht = proto.NochNicht };
     }
 
     // =========================================================================

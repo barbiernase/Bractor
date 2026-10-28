@@ -18,15 +18,14 @@ public interface IVersioningModule
     void TrackFromDeps(IEnumerable<AggregateDep> deps);
 
     /// <summary>
-    /// Merkt sich ein Aggregat, das der Client GERADE beschrieben hat (beim Command-Senden aufgerufen).
-    /// Read-Your-Writes: diese IDs gehen als <c>expected_fresh_ids</c> mit jeder Query mit, damit die
-    /// Leseseite sie als Deps trackt und der Client nachfasst, bis die Projektion sie eingeholt hat.
-    /// Recency-begrenzt (die ältesten fallen heraus) — hält das Set klein.
+    /// Merkt sich ein Aggregat, das der Client GERADE beschrieben hat (beim Command-Senden aufgerufen). Read-your-writes: es geht mit seiner
+    /// Version (aus der Quittung, also dem Push danach) als „mindestens S auf v“ mit jeder Query mit — die Leseseite wartet, bis ihre Projektion
+    /// so weit ist. Begrenzt auf die zuletzt beschriebenen (die ältesten fallen heraus).
     /// </summary>
     void MarkWritten(Guid aggregateId);
 
-    /// <summary>Die zuletzt beschriebenen Aggregat-IDs (readModel-ID-Format) für die RYW-Deps.</summary>
-    IReadOnlyList<string> RecentWrites { get; }
+    /// <summary>„Mindestens S auf v“ für die zuletzt beschriebenen Aggregate, deren Version der Client kennt.</summary>
+    IReadOnlyList<global::Abstractions.StreamStand> Mindestens { get; }
 }
 
 /// <summary>

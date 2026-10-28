@@ -42,14 +42,13 @@ public interface IGrpcProxy
     Task SendCommandAsync(CommandEnvelope envelope, CancellationToken ct = default);
 
     /// <summary>
-    /// Sendet eine Query und wartet auf Response. <paramref name="expectedFreshIds"/> sind
-    /// Aggregat-IDs, die der Client zuletzt beschrieben hat — die Leseseite trackt sie als Deps,
-    /// damit das bounded Read-Your-Writes nachfasst, bis die Projektion die Writes eingeholt hat.
+    /// Sendet eine Query und wartet auf die Antwort. <paramref name="mindestens"/>: „mindestens S auf v“ je Stream, den der Client zuletzt
+    /// beschrieben hat — die Leseseite wartet begrenzt, bis ihre Projektion so weit ist (sonst <c>NochNicht</c>).
     /// </summary>
     Task<QueryResponse<TResponse>> QueryAsync<TResponse>(
         IQuery query,
         string correlationId,
-        IReadOnlyList<string>? expectedFreshIds = null,
+        IReadOnlyList<StreamStand>? mindestens = null,
         CancellationToken ct = default) where TResponse : IQueryResponse;
 
     /// <summary>Trennt die Verbindung.</summary>

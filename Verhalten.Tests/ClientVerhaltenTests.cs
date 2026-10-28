@@ -240,11 +240,11 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
     }
 
     /// <summary>
-    /// Auch ein eben angelegtes Objekt muss die nächste Query des Clients kennen. Heute nicht: der Client fasst nur nach, wenn die Antwort für das
-    /// Objekt einen Stand mitbringt, der hinter seinem Schreiben liegt — für ein neues Objekt hat die Projektion noch keinen Eintrag im
-    /// Versions-Index, und „kein Eintrag“ gilt als frisch.
+    /// Auch ein eben angelegtes Objekt muss die nächste Query des Clients kennen: die Query trägt „mindestens S auf v“, und die Leseseite wartet,
+    /// bis ihre Projektion so weit ist (G-14: der Client fasste nur nach, wenn die Antwort für das Objekt einen Stand mitbrachte, der hinter
+    /// seinem Schreiben lag — für ein neues Objekt hatte die Projektion noch keinen, und „kein Stand“ galt als frisch).
     /// </summary>
-    [Fact(Skip = "G-14 offen (docs/13)")]
+    [Fact]
     public async Task Nach_dem_Anlegen_kennt_die_naechste_Query_des_Clients_das_neue_Objekt()
     {
         await using var ap = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenArbeitsplatz);

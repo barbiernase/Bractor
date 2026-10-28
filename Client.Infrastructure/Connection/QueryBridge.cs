@@ -23,11 +23,6 @@ public record QueryFailed(string QueryType, string ErrorMessage) : IClientEvent;
 /// </summary>
 public class QueryBridge : IAsyncDisposable
 {
-    // Read-Your-Writes: höchstens so oft nachfragen, dann die (evtl. noch leicht stale) Antwort
-    // nehmen — gebounded, damit ein dauerhaft zurückliegendes Read-Model nie einen Hänger erzeugt.
-    private const int MaxReadAttempts = 4;
-    private const int ReadRetryDelayMs = 120;
-
     private readonly IGrpcProxy _proxy;
     private readonly IVersioningModule _versioning;
     private readonly List<IDisposable> _subscriptions = new();
@@ -79,40 +74,20 @@ public class QueryBridge : IAsyncDisposable
         {
             var correlationId = Guid.NewGuid().ToString();
 
-            // ── Read-Your-Writes (gebounded) ──
-            // Die Datensatz-/Trainings-Projektionen sind asynchrone Pull-Consumer; ein Refresh-Query
-            // direkt nach einem Mutations-Event kann sie überholen und ein STALES Read-Model lesen.
-            // Deshalb: die Deps der Antwort gegen das Read-Ziel prüfen (die Domain-Event-Version, die
-            // der Client aus dem Event kennt). Ist das Read-Model noch dahinter, kurz warten und
-            // erneut fragen — gebounded, also nie ein Hänger. Ist es frisch (Normalfall), kein Delay.
-            List<AggregateDep>? deps = null;
-            object? data = null;
+            // Read-your-writes: die Leseseite wartet selbst (begrenzt), bis ihre Projektion die zuletzt beschriebenen Aggregate verarbeitet hat
+            //   („mindestens S auf v“). Reicht ihre Frist nicht, ist die Antwort der Stand davor (NochNicht) — der Client nimmt sie trotzdem.
+            var response = await _proxy.QueryAsync<TResponse>(query, correlationId, _versioning.Mindestens);
+            var deps = response.Deps?.Select(d => new AggregateDep(d.Id, d.AggregateType, d.Version)).ToList();
+            if (response.NochNicht)
+                Console.WriteLine($"[QueryBridge] {queryTypeName}: die Leseseite ist noch nicht bei den eigenen Writes — Antwort mit dem Stand davor");
 
-            // Read-Your-Writes: die zuletzt vom Client beschriebenen Aggregate mitschicken. Die
-            // Leseseite trackt sie als Deps → IstReadModelZurueck erkennt auch ein frisch
-            // geschriebenes Objekt, das (noch) nicht ins gefilterte Ergebnis fällt, und fasst nach.
-            var frischeIds = _versioning.RecentWrites;
-
-            for (var attempt = 1; attempt <= MaxReadAttempts; attempt++)
-            {
-                var response = await _proxy.QueryAsync<TResponse>(query, correlationId, frischeIds);
-                deps = response.Deps?.Select(d =>
-                    new AggregateDep(d.Id, d.AggregateType, d.Version)).ToList();
-                data = response.Data!;
-
-                if (attempt == MaxReadAttempts || !IstReadModelZurueck(deps))
-                    break;
-
-                await Task.Delay(ReadRetryDelayMs);   // der Projektion einen Wimpernschlag geben
-            }
-
-            // Alles auf dem UI-Thread: erst Deps, dann Response
+            // Alles auf dem UI-Thread: erst der Stand je Id, dann die Antwort
             _bus!.PostToSyncContext(() =>
             {
                 if (deps != null)
                     _versioning.TrackFromDeps(deps);
 
-                _bus.Publish(data!, MessageContext.Local());
+                _bus.Publish(response.Data!, MessageContext.Local());
             });
         }
         catch (Exception ex)
@@ -120,23 +95,6 @@ public class QueryBridge : IAsyncDisposable
             _bus?.PostToSyncContext(() =>
                 _bus.Publish(new QueryFailed(queryTypeName, ex.Message)));
         }
-    }
-
-    /// <summary>
-    /// True, wenn das Read-Model für mindestens ein in der Antwort berührtes Aggregat noch HINTER der Version liegt, die der Client schon kennt
-    /// (aus Pushes oder einer früheren Antwort) — dann lohnt ein erneuter Versuch. Ohne Deps oder ohne bekannte Version: nichts zu erwarten → frisch.
-    /// </summary>
-    private bool IstReadModelZurueck(List<AggregateDep>? deps)
-    {
-        if (deps == null) return false;
-
-        foreach (var dep in deps)
-        {
-            var ziel = _versioning.GetVersion(dep.Id);
-            if (ziel is int z && dep.Version < z)
-                return true;
-        }
-        return false;
     }
 
     public ValueTask DisposeAsync()

@@ -71,13 +71,18 @@ class CapabilitiesRequest(betterproto.Message):
 class QueryRequest(betterproto.Message):
     correlation_id: str = betterproto.string_field(1)
     payload: "Nutzlast" = betterproto.message_field(2)
-    expected_fresh_ids: List[str] = betterproto.string_field(3)
+    mindestens: List["StreamStand"] = betterproto.message_field(4)
     """
-    Read-Your-Writes: Aggregat-IDs, die der Client zuletzt beschrieben hat. Die
-     Leseseite trackt sie als Deps, damit das bounded RYW so lange nachfasst, bis die
-     (asynchrone) Projektion die eigenen Writes eingeholt hat — auch wenn ein frisch
-     geschriebenes Objekt (noch) nicht ins gefilterte Ergebnis fällt.
+    Read-your-writes (Plan Pub/Sub-Neustrukturierung §2.7): „mindestens S auf v“ je Stream, den der Client zuletzt beschrieben hat (Version aus
+     der Quittung). Der Reader wartet begrenzt, bis seine Projektion jeden so weit verarbeitet hat; reicht die Frist nicht, sagt die Antwort
+     noch_nicht. Die Streams zählen zu den gezeigten — ihr Stand kommt in deps mit, auch wenn ein Objekt nicht ins Ergebnis fällt.
     """
+
+
+@dataclass(eq=False, repr=False)
+class StreamStand(betterproto.Message):
+    stream: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
 
 
 @dataclass(eq=False, repr=False)
@@ -115,9 +120,15 @@ class CapabilitiesResponse(betterproto.Message):
 
 @dataclass(eq=False, repr=False)
 class QueryResponse(betterproto.Message):
+    """
+    deps = der Stand je gezeigter Id: bis zu welcher Version die Projektion den Stream verarbeitet hat (Version für den nächsten Command).
+     noch_nicht = die Projektion hat in der Frist nicht jeden Stream aus mindestens verarbeitet; die Daten sind der Stand davor.
+    """
+
     correlation_id: str = betterproto.string_field(1)
     payload: "Nutzlast" = betterproto.message_field(2)
     deps: List["AggregateMetaDto"] = betterproto.message_field(3)
+    noch_nicht: bool = betterproto.bool_field(4)
 
 
 @dataclass(eq=False, repr=False)
