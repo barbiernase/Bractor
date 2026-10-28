@@ -35,10 +35,9 @@ public interface ISchreibeKonto : IWriteStore { Task SetzeAsync(Guid konto); }
 
     private static (string Quelle, string[] Ids) Lauf(string code)
     {
-        _ = typeof(IFunktion);
-        _ = typeof(FunktionsBaustein);
-        _ = typeof(Core.ProjectionWriter);
-        var refs = AppDomain.CurrentDomain.GetAssemblies()
+        // Die Vertrags-Assemblies ausdrücklich (eine nur per typeof erwähnte ist zur Laufzeit womöglich noch nicht geladen).
+        var noetig = new[] { typeof(IFunktion).Assembly, typeof(FunktionsBaustein).Assembly, typeof(Core.ProjectionWriter).Assembly };
+        var refs = AppDomain.CurrentDomain.GetAssemblies().Concat(noetig).Distinct()
             .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
             .Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location))
             .ToImmutableArray();
