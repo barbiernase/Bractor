@@ -61,7 +61,7 @@ abgeschlossen oder umgeschrieben. Der Broker trägt bis Phase 7 nur noch, was an
 | WZ-1 | Prüf-Lücken der Werkzeuge: Grammatik-Gate bestätigt sich selbst, Fixpunkt ohne Akteure/Verträge/Clients/Funktionen/Dienste, Sonde ohne `SendeJe`/Count-Join/Kompensation/`IMensch`/`IstClient` | P2 |
 | AK-1 | Akteure/Clients: `als` im Envelope, Funktionen über C# tragen, Anmeldung je Person | P2 |
 | P2-6 | Schreibpfad: paralleler Drain skaliert sublinear | P2 |
-| P2-8 | Hartkodierte Poll-Intervalle und Test-Verbindungsdaten | P2 |
+| P2-8 | Hartkodierte Test-Verbindungsdaten und übrige Intervalle (der Takt je Partition ist seit 2026-10-28 einstellbar: Umgebung `Konsum.TaktSekunden`) | P2 |
 | P2-9 | Toter Lesepfad `LoadStateAsync`, Identitäts-Vertrag nur per Kommentar | P2 |
 | P2-10 | Monitoring schmal, Default-Credentials, kein OTel, Logging per `Console.WriteLine` | P2 |
 | P2-11 | Python: Registry von Hand gepflegt, Kleinkram im SDK | P2 |

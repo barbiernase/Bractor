@@ -828,6 +828,13 @@ Signal→Wake-Mapping; Kompensations-Dedup und Count-Join ohne verfrühtes Feuer
 - **Python:** nur mit dem Interpreter der Umgebung (`Umgebung:Python` in `umgebung.<name>.json`, sonst `CQRS_PYTHON`, sonst `python3`; lokal
   `gpu_env`), weil betterproto/pytest dort installiert sind. Der Fluss-E2E-Test mit Python-Worker liest ihn aus `umgebung.sim-main.json`.
 
+**Test-Stufen (seit 2026-10-28, `scripts/tests.sh`):** `schnell` je Teilschritt — Build, Prüfstand, Integration ohne die Kategorie `Last` (die
+beiden Stresstests des Horizonts, zusammen ≈ 3,8 min), Prüfdomäne, Verhaltens-Netz: ≈ 7 min statt ≈ 13,5 (Integration 301 → 74 s, Prüfdomäne
+343 → 181 s, Verhaltens-Netz 145 → 108 s). `voll` zur Abnahme mit `Last`, Codegen-Drift, Client, Python, `--check`, `--sonde`, `--grammatik` und Gate.
+Der Takt je Partition ist einstellbar (Umgebung `Konsum.TaktSekunden`); `Pruefstand.Cluster` und der Prüfdomänen-Host des Verhaltens-Netzes laufen
+mit 2 s, damit Tests, die auf den Takt warten (Nachholen, Position über fremde Events), nicht je 30 s stehen. Ein Test, der zeigt, dass ein Commit
+weckt, ohne auf den Takt zu warten, verlangt den Standard (`takt: Konsum.StandardTakt`) — sonst bestünde er auch ohne Wecker (Gegenprobe gesehen).
+
 **Garantie-Test:** in den Ordner `Garantien/` der passenden Ebene (Prüfstand über Seams, sonst gegen echtes Marten), Klasse oder Methode mit
 `[Trait("Kategorie", "Garantie")]`, und die Zeile in der Nachweis-Spalte von [11](11-garantien.md) nachtragen. Zeigt der Test eine offene Lücke:
 `[Fact(Skip = "G-n offen (docs/13)")]` — und einmal ohne Skip laufen lassen, er muss rot sein. Die Phase, die die Lücke schließt, entfernt das Skip.
