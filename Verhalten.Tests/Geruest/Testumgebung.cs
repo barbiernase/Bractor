@@ -42,11 +42,14 @@ public sealed class Testumgebung
     public string Zwischenpfad => Path.Combine(Verzeichnis, "zwischen");
     /// <summary>Consul-Cluster (mehrere Knoten) statt Einzelknoten; der Name ist je Lauf neu, damit kein Mitglied eines früheren Laufs mitspielt.</summary>
     public string? ConsulCluster { get; private init; }
+    /// <summary>Takt je Partition in Sekunden (Umgebung <c>Konsum.TaktSekunden</c>); null = Standard 30 s. Kurz für Tests, die auf den Takt warten —
+    /// nie für einen Test, der zeigt, dass ein Commit weckt, ohne auf den Takt zu warten.</summary>
+    public int? TaktSekunden { get; private init; }
 
     /// <summary>Eine frische Umgebung: die Datenbank des Namens wird gelöscht, das Verzeichnis neu angelegt.</summary>
-    public static async Task<Testumgebung> NeuAsync(Anwendung anwendung, string name, bool consul = false)
+    public static async Task<Testumgebung> NeuAsync(Anwendung anwendung, string name, bool consul = false, int? taktSekunden = null)
     {
-        var u = new Testumgebung(anwendung, name) { ConsulCluster = consul ? $"cqrs-{name}-{Guid.NewGuid():N}"[..40] : null };
+        var u = new Testumgebung(anwendung, name) { ConsulCluster = consul ? $"cqrs-{name}-{Guid.NewGuid():N}"[..40] : null, TaktSekunden = taktSekunden };
         if (Directory.Exists(u.Verzeichnis)) Directory.Delete(u.Verzeichnis, recursive: true);
         Directory.CreateDirectory(u.Quellpfad);
         Directory.CreateDirectory(u.Zwischenpfad);
@@ -73,6 +76,7 @@ public sealed class Testumgebung
             // Die Ports setzt jeder Host-Prozess selbst (Transport__GrpcPort/EinblickPort): zwei Knoten teilen eine Umgebung.
             ["Transport"] = new JsonObject { ["GrpcPort"] = 0, ["EinblickPort"] = 0, ["JsonEingang"] = true },
         };
+        if (TaktSekunden is { } takt) json["Konsum"] = new JsonObject { ["TaktSekunden"] = takt };
         if (Anwendung == Anwendung.Pruefdomaene) return json;
         json["Identitaeten"] = new JsonObject
         {

@@ -30,7 +30,7 @@ public class BatchLeserTests
         }
         db.Partitionen["p:0"].Version.Should().Be(1, "fünf Weckungen ohne eigenes Event: ein Commit (der erste), nicht fünf");
 
-        uhr += Konsum.PollIntervall;
+        uhr += Konsum.StandardTakt;
         log.Haenge(PartitionsLog.StreamIn(1, 2), 1);
         await leser.LaufAsync(Ct);
         db.Partitionen["p:0"].Version.Should().Be(2);

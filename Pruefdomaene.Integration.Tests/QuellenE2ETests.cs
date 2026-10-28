@@ -22,7 +22,7 @@ public class QuellenE2ETests
     [Fact]
     public async Task Eine_Quell_Nachricht_vom_Client_steht_genau_einmal_im_Log_und_startet_ueber_eine_Funktion_den_Import()
     {
-        using var host = Cluster("pruef-quelle-client");
+        using var host = Cluster("pruef-quelle-client", takt: Infrastructure.Projections.Konsum.StandardTakt);   // Latenz-Prüfung unten: der lange Takt
         await host.StartAsync();
         try
         {
@@ -39,14 +39,14 @@ public class QuellenE2ETests
             await Warte(async () => (await Zustand<Importauftrag>(host.Services, import.Wert)).Stand == 12, TimeSpan.FromSeconds(90),
                 "die Anforderung startet den Import nicht");
 
-            // FB-3: der Commit einer Quelle meldet sein Signal wie ein Aggregat (Commitmeldung) — die Funktion wacht sofort auf, nicht erst mit dem
+            // FB-3: der Commit einer Quelle weckt wie jeder Commit (Wecker am Commit) — die Funktion wacht sofort auf, nicht erst mit dem
             //   Takt (30 s). Dreimal hintereinander je unter 5 s: dass der Takt dreimal zufällig passt, ist ausgeschlossen.
             for (var i = 0; i < 3; i++)
             {
                 var neu = await eingang.NimmAufAsync(new ImportAngefordert(3) { Kennung = Guid.NewGuid().ToString() }, default);
                 var weiterer = new Herkunft(neu, 1, default, null, WirkerId.FuerFunktion("Importannahme")).NeueId<Importauftrag>();
                 await Warte(async () => (await Zustand<Importauftrag>(host.Services, weiterer.Wert)).Existiert, TimeSpan.FromSeconds(5),
-                    $"Durchlauf {i + 1}: die Quell-Nachricht weckt ihre Funktion nicht über das Signal (nur der Takt holte sie)");
+                    $"Durchlauf {i + 1}: die Quell-Nachricht weckt ihre Funktion nicht über den Wecker (nur der Takt holte sie)");
             }
         }
         finally { await host.StopAsync(); }

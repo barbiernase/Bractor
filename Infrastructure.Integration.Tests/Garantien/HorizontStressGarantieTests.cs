@@ -19,6 +19,7 @@ namespace Infrastructure.Integration.Tests.Garantien;
 /// sein: je Stream so viele Historien-Einträge, wie Events geschrieben wurden.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
+[Trait("Kategorie", "Last")]   // Minuten unter Last: in der Abnahme (scripts/tests.sh voll), nicht in jedem Teilschritt
 public class HorizontStressGarantieTests : IClassFixture<HorizontStressGarantieTests.Fixture>
 {
     private readonly Fixture _fx;

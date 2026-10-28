@@ -142,7 +142,7 @@ public class BatchKonsumGarantieTests
         db.VersionenVon(gift).Should().BeEmpty();
 
         heilt = true;                                                            // der Fehler ist behoben
-        uhr += Konsum.PollIntervall;                  // der nächste Poll versucht geparkte Streams einzeln
+        uhr += Konsum.StandardTakt;                  // der nächste Poll versucht geparkte Streams einzeln
         await leser.LaufAsync(Ct);
         db.VersionenVon(gift).Should().Equal(1, 2, 3);
         leser.Geparkt.Should().BeEmpty();

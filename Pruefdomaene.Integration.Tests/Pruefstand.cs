@@ -2,6 +2,7 @@ using Abstractions;
 using Infrastructure.Aggregate;
 using Infrastructure.Extensions;
 using Infrastructure.Persistence;
+using Infrastructure.Projections;
 using Infrastructure.Projections.Generated;
 using Marten;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,9 +21,12 @@ internal static class Pruefstand
     /// <summary>
     /// Ein In-Process-Host mit der Verdrahtung von Host.Grpc (ohne gRPC): Framework, Pull-Pfade, Prozesse. <paramref name="inboxCache"/> ist
     /// der Inbox-Cache des Actors (klein = der Weg über den Schlüssel der Inbox-Tabelle); <paramref name="dienste"/> greift nach der Verdrahtung ein (Störungs-Seams der Garantie-Tests).
+    /// <paramref name="takt"/>: der Takt je Partition — kurz (<see cref="KurzerTakt"/>), damit Tests, die auf ihn warten (Nachholen, Position über
+    /// fremde Events), nicht 30 s stehen; ein Latenz-Test des Weckers verlangt den Standard (<see cref="Konsum.StandardTakt"/>), sonst bestünde er
+    /// auch ohne Wecker.
     /// </summary>
     public static IHost Cluster(string name, int snapshotSchwelle = 200, int inboxCache = SnapshotOptions.StandardInboxCache, Action<IServiceCollection>? dienste = null,
-        string schema = "pruef_e2e")
+        string schema = "pruef_e2e", TimeSpan? takt = null)
     {
         var builder = Host.CreateApplicationBuilder();
         builder.Services.AddCqrsFramework(opts =>
@@ -33,6 +37,7 @@ internal static class Pruefstand
             opts.EventStoreSchema = schema;
             opts.SnapshotThreshold = snapshotSchwelle;
             opts.InboxCache = inboxCache;
+            opts.Konsum = Konsum.Standard with { Takt = takt ?? KurzerTakt };
         });
         builder.Services.AddGeneratedPullPaths();
         // Die Dienste der Funktionen wie im Host ohne Wahl in der Umgebung: je Dienst die eine Implementierung (Tests ersetzen sie über dienste).
@@ -41,6 +46,9 @@ internal static class Pruefstand
         dienste?.Invoke(builder.Services);
         return builder.Build();
     }
+
+    /// <summary>Der Takt der Prüfdomänen-Tests, wenn ein Test nichts anderes verlangt.</summary>
+    public static readonly TimeSpan KurzerTakt = TimeSpan.FromSeconds(2);
 
     /// <summary>Ersetzt die Registrierung von <typeparamref name="T"/> durch einen Dekorator um die bisherige (Seam für Störungen).</summary>
     public static void Dekoriere<T>(IServiceCollection s, Func<IServiceProvider, T, T> dekorator) where T : class

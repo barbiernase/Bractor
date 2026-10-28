@@ -93,6 +93,8 @@ public sealed class KonsumKonfig
 {
     public int Partitionen { get; set; } = 8;
     public int BatchGroesse { get; set; } = 500;
+    /// <summary>Der Takt je Partition in Sekunden — das Netz für verlorene Weckrufe (Standard 30).</summary>
+    public int TaktSekunden { get; set; } = 30;
 }
 
 /// <summary>Ports: gRPC (HTTP/2) für Clients/Worker, Einblick (HTTP/1.1 + 2) für Werkbank, Webhook und /health; 0 = aus.</summary>

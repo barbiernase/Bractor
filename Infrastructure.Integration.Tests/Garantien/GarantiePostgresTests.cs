@@ -205,7 +205,7 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
 
         await es.AppendEventsAsync(gift, 1, new IEvent[] { new ImagePairInspiziert() });
         heilt = true;                                       // der Fehler ist behoben (neuer Code, Daten korrigiert)
-        uhr += Konsum.PollIntervall;                        // der nächste Poll versucht geparkte Streams einzeln
+        uhr += Konsum.StandardTakt;                        // der nächste Poll versucht geparkte Streams einzeln
         await leser.LaufAsync();
 
         (await store.GetByPairIdAsync(gift))!.Eintraege.Should().HaveCount(2, "nichts geht verloren: beide Events, je genau einmal");

@@ -16,7 +16,7 @@ public sealed class PruefdomaeneHost : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        Umgebung = await Testumgebung.NeuAsync(Anwendung.Pruefdomaene, "verhalten-pruefdomaene");
+        Umgebung = await Testumgebung.NeuAsync(Anwendung.Pruefdomaene, "verhalten-pruefdomaene", taktSekunden: 2);
         Host = await Hostlauf.StarteAsync(Umgebung);
         Eingang = new JsonEingang(Host);
         Log = new Log(Umgebung);
@@ -136,7 +136,7 @@ public sealed class PruefdomaeneAblaufTests(PruefdomaeneHost h) : IClassFixture<
         await h.Eingang.MussAsync("StarteAuftrag", Auftrag(Guid.NewGuid(), posten, kontingent, 5));   // 95 < 98 → Fehlmenge 3
 
         await Warte.BisAsync(async () => await h.Log.ZahlAsync<PostenZugebucht>(posten) >= 1, Frist, "kein Nachschub", h.Host);
-        await Warte.NachlaufAsync(35);   // über eine ganze Takt-Periode (30 s): auch das Netz des Takts darf nicht ein zweites Mal bestellen
+        await Warte.NachlaufAsync(6);    // über drei Takt-Perioden (hier 2 s): auch das Netz des Takts darf nicht ein zweites Mal bestellen
 
         var zu = await h.Log.DatenAsync<PostenZugebucht>(posten);
         zu.Should().ContainSingle("je Reservierung unter dem Mindestbestand genau ein Nachschub");

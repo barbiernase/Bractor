@@ -32,6 +32,7 @@ namespace Infrastructure.Integration.Tests.Garantien;
 /// sichtbares Event (Batch-Leser).
 /// </summary>
 [Trait("Kategorie", "Garantie")]
+[Trait("Kategorie", "Last")]   // Minuten unter Last: in der Abnahme (scripts/tests.sh voll), nicht in jedem Teilschritt
 public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGarantieTests.Fixture>
 {
     private readonly Fixture _fx;

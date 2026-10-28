@@ -13,7 +13,7 @@ namespace Infrastructure.Projections;
 /// <list type="bullet">
 ///   <item><b>Beim Start</b> prüft er den Weckplan (<see cref="Wecker.Pruefe"/>): jeder registrierte Konsument steht mit jedem Typ, den er hört,
 ///     im Plan — sonst weckte ihn ein Commit nie, nur der Takt.</item>
-///   <item><b>Takt</b> (Sicherheit): alle 30 s weckt er jede Partition — das Netz für verlorene Weckrufe (der Leser liest ab seiner durablen
+///   <item><b>Takt</b> (Sicherheit): alle <see cref="Konsum.Takt"/> (Standard 30 s) weckt er jede Partition — das Netz für verlorene Weckrufe (der Leser liest ab seiner durablen
 ///     Position). Schnell weckt der <see cref="Wecker"/> am Commit.</item>
 /// </list>
 /// Kennt keinen Domänentyp; die Kinds bringt der Generator als <see cref="IClusterKindContributor"/> bei.
@@ -29,14 +29,11 @@ public sealed class BatchKonsumStartupService : IHostedService
     private CancellationTokenSource? _stopp;
 
     public BatchKonsumStartupService(IEnumerable<BatchRegistrierung> registrierungen, Konsum konsum, Wecker wecker)
-        : this(registrierungen, konsum, wecker, Konsum.PollIntervall) { }
-
-    internal BatchKonsumStartupService(IEnumerable<BatchRegistrierung> registrierungen, Konsum konsum, Wecker wecker, TimeSpan pollIntervall)
     {
         _registrierungen = registrierungen;
         _konsum = konsum;
         _wecker = wecker;
-        _pollIntervall = pollIntervall;
+        _pollIntervall = konsum.Takt;
     }
 
     public Task StartAsync(CancellationToken ct)

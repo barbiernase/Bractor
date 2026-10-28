@@ -160,7 +160,7 @@ public sealed class BatchLeser
 
         if (_stand.Geparkt.Count > 0 && _jetzt() >= _naechsterParkVersuch)
         {
-            _naechsterParkVersuch = _jetzt() + Konsum.PollIntervall;
+            _naechsterParkVersuch = _jetzt() + _konsum.Takt;
             angewandt += await GeparkteVersuchenAsync(ct);
         }
 
@@ -179,7 +179,7 @@ public sealed class BatchLeser
                 // Nichts Unerledigtes in der Partition: die Lese-Position läuft bis zur gesetzten Sequenz über fremde Events hinweg; durabel
                 //   höchstens einmal je Poll-Intervall (sonst committete jede Weckung unter Last nur eine Zahl).
                 Rueckevor(seite.Gesetzt);
-                if (_lese > _stand.Position && _jetzt() - _letzterCommit >= Konsum.PollIntervall)
+                if (_lese > _stand.Position && _jetzt() - _letzterCommit >= _konsum.Takt)
                 {
                     _tracker.BeginneBatch();
                     await CommitAsync(Neu(_lese), new Dictionary<Guid, int>(), ct);
@@ -196,7 +196,7 @@ public sealed class BatchLeser
                 {
                     Rueckevor(seite.Gesetzt);
                     if (_erledigt.Count < ErledigtHoechstens) continue;
-                    if (_jetzt() - _letzteVollWarnung >= Konsum.PollIntervall)
+                    if (_jetzt() - _letzteVollWarnung >= _konsum.Takt)
                     {
                         _letzteVollWarnung = _jetzt();
                         _logger?.LogWarning("[Konsum] {Projektion}/{Partition}: {N} Events jenseits der gesetzten Sequenz {Gesetzt} angewandt — die Partition "
@@ -369,7 +369,7 @@ public sealed class BatchLeser
     private void Parke(Guid stream, IReadOnlyDictionary<Guid, int> guards, Exception fehler, HashSet<Guid> geparkt)
     {
         if (!geparkt.Add(stream)) return;
-        _naechsterParkVersuch = _jetzt() + Konsum.PollIntervall;   // der Einzelversuch kommt mit dem nächsten Poll
+        _naechsterParkVersuch = _jetzt() + _konsum.Takt;   // der Einzelversuch kommt mit dem nächsten Poll
         var g = new GeparkterStream
         {
             StreamId = stream, Version = guards.GetValueOrDefault(stream, -1), Grund = $"{fehler.GetType().Name}: {fehler.Message}", Seit = _jetzt()

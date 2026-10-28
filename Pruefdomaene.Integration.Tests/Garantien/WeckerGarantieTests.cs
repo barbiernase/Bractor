@@ -50,7 +50,7 @@ public class WeckerGarantieTests
     [Fact]
     public async Task Ein_Commit_weckt_die_Funktion_die_sein_Event_hoert_ohne_auf_den_Takt_zu_warten()
     {
-        using var host = Cluster("wecker-latenz");
+        using var host = Cluster("wecker-latenz", takt: Konsum.StandardTakt);   // der lange Takt: sonst bestünde die Prüfung auch ohne Wecker
         await host.StartAsync();
         try
         {
@@ -107,7 +107,7 @@ public class WeckerGarantieTests
             (await Nachschuebe(host, p)).Should().Be(0, "ohne Weckruf weckt nur der Takt — der Eingang wartet noch");
             Volatile.Write(ref verloren, false);
 
-            // Der Takt (30 s je Partition) weckt die Partition; sie liest ab ihrer Position.
+            // Der Takt (hier der kurze der Prüfdomäne) weckt die Partition; sie liest ab ihrer Position.
             await Warte(async () => await Nachschuebe(host, p) == 1, TimeSpan.FromSeconds(45), "der Takt holt den Eingang nicht nach");
             await Task.Delay(TimeSpan.FromSeconds(3));
             (await Nachschuebe(host, p)).Should().Be(1, "der nachgeholte Eingang wirkt genau einmal");

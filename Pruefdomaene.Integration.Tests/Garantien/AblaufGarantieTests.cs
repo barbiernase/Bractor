@@ -33,8 +33,8 @@ public class AblaufGarantieTests
 
             async Task<int> Nachschuebe() => (await store.ReadStreamAsync(p, 0, default)).Count(e => e.Payload is PostenZugebucht);
             await Warte(async () => await Nachschuebe() > 0, Frist, "Die Funktion Nachschub hat nicht nachgebucht.");
-            // Mindestens ein Takt (30 s) weckt die Partition erneut; sie liest ab ihrer Position und gibt nichts erneut aus.
-            await Task.Delay(TimeSpan.FromSeconds(40));
+            // Mehrere Takte (hier der kurze der Prüfdomäne) wecken die Partition erneut; sie liest ab ihrer Position und gibt nichts erneut aus.
+            await Task.Delay(KurzerTakt * 3);
 
             (await Nachschuebe()).Should().Be(1, "dieselbe Ursache ergibt dieselbe CommandId — die Inbox des Postens verwirft die Wiederholung");
             (await Zustand<Posten.Posten>(host.Services, p)).Bestand.Should().Be(103);

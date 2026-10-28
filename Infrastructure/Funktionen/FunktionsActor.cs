@@ -411,7 +411,7 @@ public sealed class FunktionsActor : RahmenActor
     {
         if (_lauf is not { } lauf || lauf.Geparkt.Count == 0 || _jetzt() < _naechsterParkVersuch) return;
         if (MitZustand && !Ruhig) return;   // mit Zustand nur im Ruhepunkt, einer zugleich (ein Schreiber)
-        _naechsterParkVersuch = _jetzt() + Konsum.PollIntervall;
+        _naechsterParkVersuch = _jetzt() + _konsum.Takt;
         foreach (var g in lauf.Geparkt.ToList())
         {
             if (!lauf.BeginneParkVersuch(g.StreamId)) continue;
