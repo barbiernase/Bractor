@@ -4,7 +4,7 @@ Projektgedächtnis für Claude Code — bewusst schlank, nur Wissen, kein Change
 **Maßstab im Zweig `pubsub_neustrukturierung` ist `docs/plan-pubsub-neustrukturierung.md`** (Zielbild, Grammatik, Garantien, Phasen des
 Umbaus; noch nicht umgesetzt). Wo etwas widerspricht, gilt der Plan als Ziel und der Code als Ist. Wegweiser: `docs/README.md`.
 Offenes und Schulden: `docs/13-reifegrad-schulden-bewertung.md` §13.0. Zahlen und Messwerte: `docs/12-tests-und-vermessung.md`.
-Das Bild unten („Das tragende Bild“) beschreibt den **Ist-Zustand** nach Phase 6 des Umbaus.
+Das Bild unten („Das tragende Bild“) beschreibt den **Ist-Zustand** nach Phase 7 des Umbaus.
 
 ## Was das Projekt ist
 
@@ -42,23 +42,29 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
 - **W11** Allgemeines Framework: eine Primitive bleibt, wenn sie allgemein gebraucht wird — nicht, weil die Beispieldomäne sie nutzt. Je Absicht ein Weg.
 - **W12** Keine GUIs im Editor (Clients nur als Vertrag), keine Schema-Evolution im Editor (`IUpcast` bleibt als Backend-Primitive), kein Deploy.
 
-## Das tragende Bild (Ist-Zustand nach Plan-Phase 6)
+## Das tragende Bild (Ist-Zustand nach Plan-Phase 7)
 
 - **Schreibseite:** Command → Aggregat-Actor (Single-Writer, Inbox-Tabelle) → `Decide` (`OneOf<Event, Hinweis, Frist<TCmd>>`) → Events →
   Group-Commit → **Wecker** am Commit (generierter Weckplan, für jeden Schreiber gleich: Aggregat, Quelle, Funktions-Ausgabe) + Push an Clients
-  (Envelope, Broker bis Phase 7). **Keine Marken im Log**
+  (`Commitmeldung` → `Verteilung`: je Commit eine Nachricht an den Verteiler jedes Knotens). **Keine Marken im Log**
   (Phase 5): Noop und Ablehnung schreiben nur ihre Quittung in die Inbox, mit Kopf-Prüfung des Streams in derselben Transaktion
   (`cqrs_kopf`); eine Version je Aggregat (= Zahl seiner Events), beim Client aus Pushes und Antworten (`VersioningModule`).
 - **Zwei durable Konsumenten:** **Projektion** (`ISubscriber`, `Task Handle` mit Schreib-Fähigkeiten genau eines Stores; `BatchLeser` je
   Projektion und Partition, Co-Commit, replaybar) und **Funktion** (`IFunktion` mit `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])`;
   `FunktionsActor` je Funktion und Adresse — Partition, oder eine mit `[EineAdresse]` —, Ausgabe festgehalten oder gleichbleibend, nie replayt).
   Beide: Wecker am Commit schnell (je Commit und Ziel ein `Wake`, Weckplan aus den Signaturen, beim Start geprüft: GR-WECKPLAN, CQRS108) +
-  Takt 30 s je Partition. Den Stand je gezeigter Id einer Antwort liefert der Guard der Projektion (`ProjektionsStaende`), kein Redis.
+  Takt 30 s je Partition. Stand je gezeigter Id einer Antwort = Guard der Projektion, dahinter das Log (nicht gehörte Events bremsen nicht;
+  `ProjektionsStaende`); Read-your-writes „mindestens S auf v“ wartet begrenzt darauf, sonst `noch_nicht`.
+- **Clients** (Plan §2.7, Phase 7): Sitzung als Actor je Verbindung (`SitzungsActor`, einziger Schreiber am gRPC-Stream, Id `<Knoten>#<Nr>`);
+  **Verteiler** je Knoten (`VerteilerActor`, fester Name, Typ → Sitzungen, Rückstau mit Grenze) für Pushes, gezielte Antworten (Ablehnung,
+  `CommandFailed`, ohne Abo) und Hinweise an Clients; nach jedem Projektions-Commit „P hat S weiterverarbeitet“ → die Sitzung nennt dem Client die
+  betroffenen Queries (`Aktualisiert`), er fragt neu; Lesen ab Position (`LiesLog`, nur Hörbares, nur bis zum Horizont); Ausgangskorb im C#-Client.
+  Kein Broker, keine Abos.
 - **Funktion als Actor** (Plan §2.9, Phase 4b): Umsetzung und Dienste je Aktivierung (DI-Bereich, geschlossen beim Stoppen); gekapselter Zustand
   über `IZustand<T>` im Konstruktor (gesichert mit der Position in einer Transaktion, ein `Auf` zugleich, CQRS105); optionaler Lebenszyklus
   `ILebenszyklus` (`BeimAktivierenAsync` nach dem Laden, `VorDemSichernAsync` vor jeder Sicherung, CQRS107); **Hinweis-Netz**: Hinweise
   (`ITransientEvent`) aus Funktionen, Aggregaten und Clients gehen über die generierte Tabelle direkt per `Bote.Melde` an die hörenden Funktionen,
-  ohne Log und Broker, höchstens einmal; Commands daraus mit Ids aus der Hinweis-Kennung (CQRS106: gehörter Hinweis braucht einen Erzeuger).
+  ohne Log, höchstens einmal; Commands daraus mit Ids aus der Hinweis-Kennung (CQRS106: gehörter Hinweis braucht einen Erzeuger).
 - **Abläufe** sind ein Vorgangs-Aggregat (Join, Zählung, Kompensation, Frist im Decide) plus Funktionen als Kanten; die Zugehörigkeit ist ein
   fachliches Feld (A2). Kein Dirigent, keine Saga, keine Fluss-DSL, keine Reaktion als eigene Art.
 - **Uhr:** `Frist<TCmd>` aus dem Decide → `FristGesetzt` (`IRahmenEvent`) + Beilage `cqrs_fristen` → die Uhr sendet fällig mit Id aus dem Frist-Event.
@@ -67,15 +73,14 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
 - **Emit:** genau ein Weg (`CommandEmitter`, Id vom Aufrufer abgeleitet), erzwungen durch CQRS020/021.
 - **Akteure und Clients:** alles, was hineinkommt, kommt von einem Akteur (`IDarf<T>`); ein Client-Vertrag trägt Funktionen (`ITraegt<F>`),
   sendet (`ISendet<T>`), fragt (`IFragt<T>`) und hört (`IHoert<T>`); wirksam = Vertrag ∩ Token.
-- Noch alt (spätere Phasen): der Broker für alles, was an Clients geht (Pushes, Ablehnungen, `CommandFailed`, Hinweise; Verteiler je Knoten
-  in Phase 7), Projektionsform mit `ProjectionWriter`/`Track` (8).
+- Noch alt (spätere Phasen): Projektionsform mit `ProjectionWriter`/`Track` (8).
 
 ## Wo was liegt
 
 | Bereich | Ort |
 |---|---|
 | Verträge, Marker, geteilte Regeln (eine Quelle) | `Abstractions/` (z. B. `Akteurvertrag.cs`, `Funktionsvertrag.cs`, `Dienstvertrag.cs`, `Projektstruktur.cs`, `Spur/WirkerId.cs`, `Spur/SpurWeg.cs`, `StoreZugriff.cs`, `Umgebung/UmgebungKonfig.cs`) |
-| Laufzeit (Framework) | `Infrastructure/` (Projections, Wecken, Funktionen, Uhr, Quellen/Treiber, Dienste, Umgebung, Einblick, Eingang, Akteure); referenziert keine Domäne, liest sie über `Komposition/Anwendung.cs` (`IAnwendung`) |
+| Laufzeit (Framework) | `Infrastructure/` (Projections, Wecken, Verteilen, Funktionen, Uhr, Quellen/Treiber, Dienste, Umgebung, Einblick, Eingang, Akteure); referenziert keine Domäne, liest sie über `Komposition/Anwendung.cs` (`IAnwendung`) |
 | Leitung | `Cqrs.Leitung/cqrs.proto` (Framework: Dienst, Hüllen, `Nutzlast`); je Anwendung `<Wurzel>.Leitung` (Domänen-DTOs + `GeneratedNutzlast`) |
 | Komposition | `<Wurzel>.Laufzeit` (hier `Domain.Laufzeit`): Laufzeit-Generate, `GeneratedAnwendung`, `AddCqrs(args)` der Hosts |
 | Generatoren und Analyzer | `*.SourceGeneration/`; Codegen vor dem Build (Proto, STJ-Kontexte, Python-Basen): `Cqrs.Codegen` über das Target in `Domain.Leitung` |

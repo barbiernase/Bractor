@@ -258,11 +258,13 @@ Was nach einem Commit geschieht, ist für jeden Schreiber gleich (Aggregat, Quel
   geschriebenem Event den generierten Weckplan nach und weckt jedes Ziel einmal — die Partitionen der Projektionen und Funktionen, die den Typ
   hören, und die Uhr bei einer Frist. Der Weckruf trägt nur sein Ziel, darf verloren, doppelt, ungeordnet sein; das Ziel liest ab seiner Position,
   der Takt je Partition (30 s) holt Verlorenes. Einzelheiten [04](04-konsum-und-prozess-maschine.md) §4.1.
-- **Push an Clients** (`Infrastructure/PubSub/Commitmeldung.cs`): je Event der Envelope mit Version und Kopf nach dem Commit, über den Broker an
-  die Sitzungen, die ihn hören — verlierbar (Invariante 6); bis Plan Phase 7 der Verteiler je Knoten ihn ersetzt.
+- **Push an Clients** (`Infrastructure/Verteilen/Commitmeldung.cs`): je Event der Envelope mit Version und Kopf nach dem Commit, als EINE Nachricht
+  je Commit an den Verteiler jedes Knotens (`Verteilung`, nur Typen, die irgendein Client hören darf), der ihn an die Sitzungen seines Knotens
+  reicht, die ihn hören — verlierbar (Invariante 6). Ablehnung und `CommandFailed` gehen gezielt: die Sitzungs-Id nennt den Knoten, die Nachricht
+  geht an dessen Verteiler und dort an genau diese Sitzung, gleich, was sie hört ([06](06-transport-multinode-betrieb.md) §6.2).
 
-Es gibt keine Signal-Typen und keinen Versionsindex mehr (bis Phase 5: `StateChangeVia{Event}` je Event über den Broker, Redis-Hash `agg:{id}` je
-Command im Turn). Die Version, die eine Query-Antwort je gezeigter Id trägt, kommt aus dem Fortschritt der Projektion (Guard je Stream, [04](04-konsum-und-prozess-maschine.md) §4.1).
+Es gibt keine Signal-Typen, keinen Broker und keinen Versionsindex. Die Version, die eine Query-Antwort je gezeigter Id trägt, kommt aus dem
+Fortschritt der Projektion ([04](04-konsum-und-prozess-maschine.md) §4.1).
 
 ## 3.6 Proto.Actor: virtuelle Cluster-Actors
 

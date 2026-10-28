@@ -58,12 +58,17 @@ Kein `dynamic`; Routing über Typen (`Dictionary<Type, …>`, Lookup per `messag
 - **`ConnectionModule`** — Brücke Bus↔gRPC. Upstream: abonniert auf dem Bus **nur die Command-Typen des Vertrags** (`CommandTypes` =
   `ISendet`), baut den `CommandEnvelope` (§8.4) und sendet. Downstream: liest Events aus dem Channel, quittiert offene Commands über die
   CorrelationId, `PostToSyncContext` → `bus.Publish` auf dem UI-Thread.
-- **`QueryBridge`** — abonniert je Query-Typ des Vertrags, ruft `proxy.QueryAsync<TResponse>`, trackt `Deps` im `VersioningModule`,
-  publiziert die Antwort wieder auf den Bus.
+- **`QueryBridge`** — abonniert je Query-Typ des Vertrags, ruft `proxy.QueryAsync<TResponse>` mit „mindestens S auf v“ für die zuletzt beschriebenen
+  Aggregate (der Server wartet begrenzt, bis seine Projektion so weit ist; sonst `NochNicht`), trackt den Stand je Id im `VersioningModule`,
+  publiziert die Antwort wieder auf den Bus. Keine Nachfrage-Schleife im Client.
+- **Aktualisieren** — nennt der Server Queries (`Aktualisiert`: eine Projektion hat weiterverarbeitet, was ihre letzte Antwort zeigte, auch
+  transitiv), legt das `ConnectionModule` sie wieder auf den Bus; die `QueryBridge` fragt neu.
+- **Lesen ab Position** — `GrpcProxy.LiesLogAsync(ab)`: das Log ab einer Position, gefiltert auf das, was die Sitzung hören darf, nur bis zum
+  Horizont; wer ab `Bis` weiterliest, verpasst nichts — auch nach dem Wiederverbinden. Der Push bleibt die Abkürzung.
 - **`VersioningModule`** — **eine** Version je Aggregat (ohne Marken im Log ist sie die Zahl seiner Events, Plan Pub/Sub-Neustrukturierung
   Phase 5), monoton aus Event-Pushes (Kopf nach dem Commit, sonst die Version des Events) und Query-`Deps`; sie ist die `ExpectedVersion` des
-  nächsten Commands und das Ziel der Read-Your-Writes-Prüfung der `QueryBridge`; gerade beschriebene Aggregate gehen als `expected_fresh_ids`
-  mit den nächsten Queries mit (`MarkWritten`).
+  nächsten Commands; gerade beschriebene Aggregate gehen mit ihrer Version als „mindestens S auf v“ mit den nächsten Queries mit (`MarkWritten`,
+  `Mindestens`).
 
 **Bus** (`Bus/ClientBus.cs`): `IBus` mit `Dictionary<Type, List<Handler>>`. Transaktionsmodell: `IsDispatching` + `DispatchCompleted`
 (genau einmal pro Root-Publish), Tiefen-Guard (`MaxDepth` 16 → Zyklus-Erkennung).
@@ -97,8 +102,12 @@ Der Client sendet at-least-once; der Server macht daraus genau einen Effekt.
   wiederholter, längst erfolgreicher Command keinen falschen Versionskonflikt.
 - **`ExpectedVersion`:** `ICreationCommand` → 0; sonst die bekannte Version aus Pushes oder Antworten (`CommandModus.Client`) — auch ein
   Aggregat, das der Client nur aus einer Antwort kennt, wird gegen ihren Stand geprüft; ist keine bekannt, geht `-1` mit — der Server behandelt das
-  wie einen emittierten Command (keine OCC, nur Inbox-Dedup). Grenze: die Version einer Antwort stammt vom letzten Event, für das die Projektion
-  schrieb (docs/13 FB-10).
+  wie einen emittierten Command (keine OCC, nur Inbox-Dedup). Die Version einer Antwort ist der Stand der Projektion für den Stream — bis zum Kopf,
+  wenn danach nur Events kamen, die sie nicht hört.
+- **Ausgangskorb** (`IAusgangskorb`; im Speicher `Ausgangskorb`, dauerhaft `DateiAusgangskorb`): ein Command liegt darin, BEVOR er gesendet wird,
+  und bis seine korrelierte Antwort kam. Reißt die Verbindung, geht er nach dem Wiederverbinden mit derselben Command-Id und Korrelation an die neue
+  Sitzung (`SendeOffeneAsync`) — die Inbox lässt ihn genau einmal wirken; mit dem Datei-Korb auch nach einem Neustart des Clients. Bleibt er bei
+  bestehender Verbindung nach allen Versuchen still, ist er aus dem Korb (`CommandUnbestaetigt`).
 - **`CommandFailed`** (`Abstractions/CommandFailed.cs`, `ITransientEvent`, nie im Log) geht gezielt an die auslösende Sitzung: bei Versionskonflikt,
   technischem Fehler oder falschem Ziel im Aggregat (`AggregateActorBase`), bei Ablehnung am Akteur-Tor und wenn der Dispatcher nach allen
   begrenzten Platzierungs-Versuchen aufgibt (`AggregateDispatcher`, dazu Dead-Letter). Eine fachliche Ablehnung ist dagegen ein eigenes

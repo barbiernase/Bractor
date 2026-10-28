@@ -121,7 +121,7 @@ Abhängigkeits-Graphen selbst kennen.
 
 Aus der Analyse vom 2026-10-18 (nicht im Repo; die Teile, die nicht ohnehin mit dem Umbau entfallen):
 
-- Der gRPC-Antwort-Stream einer Sitzung hat zwei Schreiber → wird mit der Sitzung als Actor gelöst (Phase 7).
+- Der gRPC-Antwort-Stream einer Sitzung hatte zwei Schreiber → gelöst mit der Sitzung als Actor (Phase 7).
 - Cluster-Anfragen ohne Frist in Actors (Publish von Ablehnung/`CommandFailed`, Abmelden in `Stopping`, `BrokerManagerActor`) → zwei Verben
   `Melde` (verlierbar, ohne Antwort) und `Frage` (Antwort, Pflicht-Frist) (Phase 6).
 - Fähigkeits-Bereiche (DI-Scope) werden in Stream-Adapter und Pipeline-Actor nie freigegeben; `BatchLeserActor` gibt seinen Bereich frei, während
@@ -664,6 +664,23 @@ Antworten; Beobachtung „P hat S weiterverarbeitet“ mit Zusammenfassen; Lesen
 (Command-Id vor dem Senden speichern); Python-SDK und Blazor auf `ISendet`/`IFragt`/`IHoert`/`ITraegt`. Abnahme: die Client-Tests aus Phase 0
 unverändert grün, dazu transitive Aktualisierung (Datensatz-Ansicht nach fremdem Label) und Wiederverbinden mit Nachlesen.
 
+*Umgesetzt (2026-10-28):* `SitzungsActor` je Verbindung (einziger Schreiber, Lese-Schleife reicht nur weiter, Warten neben der Mailbox, Antworten
+eines Trägers der Reihe nach), Sitzungs-Id `<Knoten>#<Nummer>`; `VerteilerActor` je Knoten (fester Name, Typ → Sitzungen, `Watch`, Rückstau mit
+Grenze 1000); `Verteilung` schickt je Commit eine Nachricht an den Verteiler jedes Knotens, gezielte Antworten an den Knoten der Sitzungs-Id.
+Broker, Abos, `SubscriptionTracker`, `event_types`/`CapabilitiesHandler`, Subscribe/Unsubscribe der Leitung und `target_subscriber_id` sind
+entfernt. Read-your-writes „mindestens S auf v“ (Frist 3 s, sonst `noch_nicht`), die Nachfrage-Schleife des Clients entfällt. „P hat S
+weiterverarbeitet“ nach jedem Commit einer Projektion, `Aktualisiert` an den Client, der neu fragt. `LiesLog`/`LogSeite` über die Leitung.
+Ausgangskorb im C#-Client. G-12, G-13, G-14 geschlossen (ihre Tests grün), dazu die beiden Abnahmen. Abweichungen: (1) Nicht der Wecker schickt an
+die Verteiler, sondern jeder Schreiber nach seinem Commit über `Commitmeldung` → `Verteilung` (dieselben Schreiber, dieselbe Stelle wie vorher der
+Push); der Weckplan hat keinen Eintrag „Verteiler“, die hörbaren Typen kommen aus den generierten Tabellen der Akteure und Client-Verträge.
+(2) „P hat S weiterverarbeitet“ fasst die Sitzung zusammen (200 ms), nicht der Verteiler — nur sie kennt die Queries hinter den Streams; der
+Verteiler hält Stream → Sitzungen und Projektion → Sitzungen (grob). Beobachtet wird nach Streams, gleich welche Projektion sie weiterverarbeitet
+(eine Antwort kann Read-Models zweier Projektionen zeigen); über 1000 Ids einer Antwort grob nach der Projektion. (3) Begrenzt sind nur die
+Zustellungen des Verteilers (`Rueckstau`); über der Grenze nur eine Warnung im Log, kein Spur-Hinweis, und die Nachrichten des Clients selbst
+laufen ohne Grenze (docs/13 FB-15). (4) Der Stand je Id liest nach dem Guard das Log (nächstes gehörtes Event − 1, sonst der Kopf) — FB-10 ist
+damit schon hier erledigt, nicht erst mit Phase 8. (5) Das Python-SDK kennt nur die neue Leitung (FB-14); die Quell-Nachricht vom Client über
+gRPC (FB-6) ist nicht gebaut. (6) Nicht gemessen: die Kosten von „P hat S weiterverarbeitet“ (PF-37).
+
 ### Phase 8 · Stores und Projektionsform (5–8 PT)
 
 Projektions-Signatur `Auf(Event[, Herkunft], Fähigkeiten)` ohne Writer/Track/Envelope/SubscriberId; Store-Klassen-Schnittstellen (§2.4) statt
@@ -710,8 +727,8 @@ Summe grob 45–73 PT.
 - **Slots der Funktionen** (docs/13 PF-33): ein Slot je Partition als Standard lässt S5-8/S5-64 auf ≈ 300 Vorgänge/s fallen; höherer Standard für
   gleichbleibende Funktionen oder je Umgebung — Tobi.
 - **Zustand draußen** (A8): ob das Framework später auch den Zustand eines Python-Workers sichert (Ablage über die Leitung).
-- **Hinweise an Clients** gehen bis Phase 7 den heutigen Weg; danach über den Verteiler.
-- **Grenze für Abhängigkeitsmengen** (Risiko 6) und **Zusammenfassungs-Takt** des Verteilers: in Phase 7 messen.
+- **Hinweise an Clients** gehen über den Verteiler (Phase 7).
+- **Grenze für Abhängigkeitsmengen** (Risiko 6) und **Zusammenfassungs-Takt**: gesetzt auf 1000 Ids je Antwort und 200 ms je Sitzung, nicht gemessen (docs/13 PF-37).
 
 ## 9 · Nach dem Umbau
 

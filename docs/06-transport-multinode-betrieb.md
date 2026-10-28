@@ -32,8 +32,8 @@ Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses K
   Details `konzept-werkbank.md` §4.3–§4.4.
 - **Cluster:** `Cluster:Art = Einzelknoten` (Mitgliedschaft in-memory über den `TestProvider` von Proto.Cluster, kein Consul — Standard in Sim)
   oder `Consul` (`ConsulProvider` als Discovery, kein statischer Seed). In beiden Fällen `PartitionIdentityLookup`. Die Kinds werden beim
-  Start aggregiert: Aggregate, Broker (bis Plan Phase 7 nur für Clients) und alle `IClusterKindContributor` (Adapter der Pull-Pfade, Prozess-Manager,
-  Funktions-Vermittler, Quellen-Halter). Cluster-Start mit hartem 30-s-Timeout (`ClusterStartupService`).
+  Start aggregiert: Aggregate und alle `IClusterKindContributor` (Batch-Leser, Funktions-Actors, Funktions-Vermittler, Uhr, Quellen-Halter); dazu
+  spawnt jeder Knoten seinen Verteiler (lokaler Actor mit festem Namen `verteiler`, `VerteilerStart`). Cluster-Start mit hartem 30-s-Timeout (`ClusterStartupService`).
 - **Boot-Fehler** gehen als Zeile `CQRS-BOOT {text, karte, art}` auf stderr; die Werkbank hängt sie an die Karte.
 
 ## 6.2 Der Wire-Transport (Multi-Node-Herzstück)
@@ -76,8 +76,18 @@ Protobuf-`IMessage` bleiben beim Default-Serializer. Registriert an `.WithSerial
 serialisierbar; (b) jeder Command/Event/Trigger aus `GeneratedTypeRegistry` hat eine `JsonTypeInfo` im Kontext — sonst
 **Start-Abbruch**. Backstop gegen Registry↔Kontext-Drift neben dem Compile-Zeit-Guard des Generators.
 
+**Clients: Sitzung und Verteiler** (Plan Pub/Sub-Neustrukturierung §2.7). Je gRPC-Verbindung ist die Sitzung ein Actor (`SitzungsActor`), der
+einzige Schreiber auf den Antwort-Stream; die Lese-Schleife der Verbindung reicht jede Nachricht des Clients nur weiter, was wartet (Query,
+Antwort einer Funktion draußen, Weiterleitung an einen zuständigen Client) läuft neben der Mailbox. Ihre Id nennt den Knoten
+(`<Adresse>#<Nummer>`). Nach dem Handshake meldet sie ihre wirksame Liste (Vertrag ∩ Token) beim **Verteiler** ihres Knotens an — einem lokalen
+Actor mit festem Namen `verteiler`, der Typ → Sitzungen hält und jede Sitzung beobachtet (`Watch`). Ein Commit geht als EINE Nachricht
+(`Verteile`) an den Verteiler jedes Knotens (Mitgliederliste, `Bote.MeldeAnKnoten`), nur mit Typen, die irgendein Client hören darf; gezielte
+Antworten nur an den Knoten der Sitzungs-Id. Liest ein Client nicht nach, verwirft der Verteiler über 1000 offenen Zustellungen je Sitzung
+(`Rueckstau`). Proto.Clusters eigenes Pub/Sub wird bewusst nicht genutzt. Dieselben Verteiler tragen „P hat S weiterverarbeitet“
+(`Verarbeitet`) an die Sitzungen, die eine Antwort mit diesen Streams halten ([04](04-konsum-und-prozess-maschine.md) §4.1).
+
 **Nachgewiesen** durch Integrationstests (`TwoNodeCommandDispatchTests`, `RemotePidDeliverySmokeTests`), das Verhaltens-Netz
-(`ZweiKnotenTests`: Weckrufe nach dem harten Ende eines Knotens) und den
+(`ZweiKnotenTests`: gezielte Antworten an der richtigen Sitzung bei zwei Knoten, Weckrufe nach dem harten Ende eines Knotens) und den
 3-Node-Container-Betrieb (§6.3). Welche Tests es gibt und was sie messen: [12](12-tests-und-vermessung.md).
 
 ## 6.3 Multi-Node-Betrieb (`deploy-multinode/`)

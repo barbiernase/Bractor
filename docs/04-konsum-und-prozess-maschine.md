@@ -1,6 +1,6 @@
 # 04 — Konsum, Funktionen und Uhr
 
-Stand 2026-10-28 (Plan Pub/Sub-Neustrukturierung Phase 6: Wecker statt Broker und Signale, Redis-Versionsindex entfernt), gegen den Code geprüft.
+Stand 2026-10-28 (Plan Pub/Sub-Neustrukturierung Phase 7: Wecker am Commit, Verteiler je Knoten für die Clients, Stand je Id aus Guard und Log), gegen den Code geprüft.
 Ziel für den weiteren Umbau: docs/plan-pubsub-neustrukturierung.md.
 
 Was auf ein Event hin geschieht, ist eines von zwei Dingen: eine **Projektion** schreibt ein Read-Model (replaybar), eine **Funktion** sendet
@@ -45,9 +45,16 @@ die Versionsprüfung des Partitions-Checkpoints (G-4, unten). Der Fähigkeits-Be
    (`PartitionsKonfliktException`), der Leser lädt den Stand neu und liest von dort (G-4).
 6. **Weiter**, solange die Seite voll war.
 
-Der Guard je Stream ist zugleich der **Stand je Id**, den eine Antwort trägt (`ProjektionsStaende`, ein Lesezugriff über den Schlüssel
-„Projektion:Stream“): er steht mit den Wirkungen in derselben Transaktion, ist also nie vor den Daten sichtbar und sinkt nie. Er rückt nur mit den
-Events vor, die die Projektion hört (docs/13 FB-10). Einen Redis-Index gibt es nicht mehr.
+Aus dem Guard je Stream folgt der **Stand je Id**, den eine Antwort trägt (`ProjektionsStaende`): der Guard (mit den Wirkungen in derselben
+Transaktion, nie vor den Daten sichtbar, sinkt nie), und dahinter das Log — folgen nach ihm nur Events, die die Projektion nicht hört, gilt ihr
+Inhalt bis zum nächsten gehörten Event bzw. bis zum Kopf des Streams. So taugt der Stand als Version des nächsten Commands, auch wenn danach eine
+Frist oder ein fremdes Event kam. Vor dem Reader wartet der Query-Dienst begrenzt (3 s, `MindestensFrist`), bis jeder Stream aus „mindestens S auf v“
+so weit ist (Read-your-writes, Plan Pub/Sub-Neustrukturierung §2.7); reicht die Frist nicht, trägt die Antwort `noch_nicht`.
+
+Nach jedem Commit, der Events anwandte, meldet der Leser „P hat die Streams S weiterverarbeitet“ an die Verteiler (`Verteilung.MeldeVerarbeitet`) —
+Mechanik nach dem Commit, die Projektion gibt dabei nichts aus. Eine Sitzung, die eine Antwort hält, die einen dieser Streams zeigt (oder, ohne
+Ids, eine Antwort von P), nennt dem Client nach höchstens 200 ms die betroffenen Queries (`Aktualisiert`); er fragt neu. Die transitive
+Abhängigkeit (eine Datensatz-Ansicht zeigt Labels von Bildpaaren) hat die Projektion beim Falten hergestellt — der Client kennt sie nicht.
 
 **Position und Nachzügler.** Vor jeder Seite bestimmt `ReadPartitionAsync` die *gesetzte* Sequenz: bis dorthin ist jede Sequenz endgültig — der
 Horizont der Vollständigkeit aus den Transaktionsnummern von Postgres, ohne Uhr ([03](03-schreibseite.md) §3.3, G-9; dieselbe Regel wie beim
@@ -264,12 +271,11 @@ Commands daraus tragen eine Id aus Funktion, Hinweis-Kennung, Stelle, Typ und Zi
 Commands erneut, ohne neu zu rechnen. Eine Funktion, die nur Hinweise hört, hat keinen Log-Leser, keine Position und keinen Takt. Draußen geht ein
 Hinweis denselben Weg wie ein Log-Eingang (Vermittler, Sitzung, `ArbeitsAuftrag` mit `hinweis = true`), nur wird die Antwort nicht festgehalten:
 sie kommt mit ihren Commands und Hinweisen zum Actor, der sendet. Hört niemand einen Hinweis, den eine Funktion hören will, bricht der Build (R20,
-CQRS106); eine Adresse der Tabelle ohne Funktion ist ein Boot-Fehler. Hinweise an Clients gehen bis Plan Phase 7 den heutigen Weg (Broker).
+CQRS106); eine Adresse der Tabelle ohne Funktion ist ein Boot-Fehler. Hinweise an Clients gehen über die Verteiler an die Sitzungen, die sie hören.
 
 **Wecken.** Jede Funktion mit Log-Eingängen meldet sich wie eine Projektion beim `BatchKonsumStartupService` an (Takt, Prüfung gegen den
 Weckplan); der Wecker am Commit weckt ihre Partition bzw. ihre eine Adresse (§4.1). Den Clients meldet jeder Schreiber nach seinem Commit
-weiterhin den Envelope je Event über den Broker (`Infrastructure/PubSub/Commitmeldung.cs`), bis Plan Phase 7 ihn durch den Verteiler je Knoten
-ersetzt.
+den Envelope je Event an die Verteiler (`Infrastructure/Verteilen/Commitmeldung.cs`).
 
 ## 4.5 Abläufe: Aggregat, Funktion und Frist
 

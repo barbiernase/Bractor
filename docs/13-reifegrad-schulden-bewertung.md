@@ -12,16 +12,13 @@ Prozess-Sprache, Handle-/Trigger-Welt und den Redis-Versionsindex ab. Mit Phase 
 und VM-1 erledigt (§13.6), mit Phase 4b FB-1 (Hinweise erreichen Funktionen über das Hinweis-Netz), mit Phase 5 die Marken im Log (keine
 eigene ID; Noop und Ablehnung nur noch in der Inbox, eine Version je Aggregat, §13.6), mit Phase 6 die Signale und der Redis-Versionsindex
 samt PF-6 (Wecker am Commit, Stand je Id aus dem Fortschritt der Projektion, §13.6); PF-7, PF-10, PF-13 und AK-1 werden mit den späteren Phasen
-abgeschlossen oder umgeschrieben. Der Broker trägt bis Phase 7 nur noch, was an Clients geht. Die Befunde der Actor-Praxis vom 2026-10-18 stehen im Plan §1.7.
+abgeschlossen oder umgeschrieben. Mit Phase 7 sind der Broker, G-12, G-13, G-14 und FB-10 erledigt (Sitzung als Actor, Verteiler je Knoten, „mindestens S auf v“, §13.6). Die Befunde der Actor-Praxis vom 2026-10-18 stehen im Plan §1.7.
 
 | ID | Kurz | Prio |
 |---|---|:--:|
-| G-12 | Eine fachliche Ablehnung erreicht den Client nie, wenn sein Vertrag ihren Typ nicht hört (der Arbeitsplatz hört keine): er wiederholt dreimal und meldet „unbestätigt“ | P1 |
-| G-14 | Read-your-writes greift nicht für ein eben angelegtes Objekt: hat die Projektion es noch nicht verarbeitet, gibt es keinen Stand (Guard) für seine Id, und die Antwort gilt als frisch („nicht gefunden“ gleich nach der Quittung) | P2 |
-| G-13 | Zwei Knoten vergeben dieselben Sitzungs-Kennungen (Zähler je Prozess), der Broker überschreibt: eine gezielte Antwort kann bei der Sitzung des anderen Knotens landen | P1 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
-| G-16 | Lesen nach Schreiben im Verhaltens-Netz einmal verfehlt (`ClientVerhaltenTests.Nach_dem_eigenen_Command_sieht_die_naechste_Query…`, 1 von 3 Läufen am 2026-10-28): die Query direkt nach der Quittung zeigte den eigenen Stand nicht; vermutlich derselbe Mechanismus wie G-14 oder der damalige Redis-Index (nach dem Commit geschrieben, überschreibend, mit Ablauf); seit Phase 6 kommt der Stand aus dem Guard der Projektion (mit den Wirkungen in einer Transaktion) — am 2026-10-28 mit diesem Stand wieder einmal in drei vollen Läufen rot — der Redis-Index war es also nicht; Ursache und Test offen | P2 |
+| G-16 | Lesen nach Schreiben im Verhaltens-Netz einmal verfehlt (`ClientVerhaltenTests.Nach_dem_eigenen_Command_sieht_die_naechste_Query…`, 1 von 3 Läufen am 2026-10-28): die Query direkt nach der Quittung zeigte den eigenen Stand nicht; vermutlich derselbe Mechanismus wie G-14 oder der damalige Redis-Index (nach dem Commit geschrieben, überschreibend, mit Ablauf); seit Phase 6 kommt der Stand aus dem Guard der Projektion (mit den Wirkungen in einer Transaktion) — am 2026-10-28 mit diesem Stand wieder einmal in drei vollen Läufen rot — der Redis-Index war es also nicht. Seit Phase 7 wartet die Leseseite selbst auf „mindestens S auf v“ (keine Nachfrage im Client mehr); ob G-16 damit weg ist, zeigt erst eine Reihe voller Läufe | P2 |
 | G-15 | Hinweise zwischen zwei Actors ohne zugesicherte Reihenfolge: der Plan (§2.9) sagt „zwischen zwei Actors bleibt die Reihenfolge“, der Bote meldet aber jede Nachricht für sich — zwei Hinweise desselben Absenders an dieselbe Adresse können sich überholen; ohne Nachweis-Test | P2 |
 | PF-36 | Seit dem Wecker (Phase 6) liegt S5 unter Parallelität niedriger: A-B-B-A nur S5 gegen den Code von Phase 5 — S5-8 343/415 (A) gegen 243/293 (B) Vorgänge/s, Mittel 0,71 ×; S5-64 329/363 gegen 224/334, 0,81 ×; S5-1 dagegen 1,09 ×, S3-64 1,15 ×, S1 gleich. Die Läufe streuen stark (A in S5-8 343 bis 415); Transaktionen und Queries je Vorgang sind gleich, der Host ist in B weniger ausgelastet — er wartet. Ursache offen (Verdacht: Zeitpunkt des Weckrufs am Commit statt nach der Antwort des Aggregats im Zusammenspiel mit einem Slot je Partition, PF-33). Profil unter S5-8 nur für B (`…_server-pf36-sonde-b`, 255 Vorgänge/s, Host 4,5 Kerne): ≈ 66 % der arbeitenden Host-CPU liest Events (`LeseEventsAsync`) — bei einem Slot je Partition liest ein Funktions-Actor nach jedem fertigen Eingang wieder eine volle Seite (bis 500), um einen zu starten; davon 30 % in `EventEnvelope..ctor` (`Guid.NewGuid` als Vorgabe für `EventId`, `CausationId`, `CorrelationId`, vom Leser sofort überschrieben) und 24 % JSON. Dasselbe Profil für A (`…_server-pf36-sonde-a`, 220 Vorgänge/s, Host 4,3 Kerne) hat dieselbe Gestalt (`LeseEventsAsync` 64 %, `EventEnvelope..ctor` 30 %, JSON 23 %), Transaktionen und Queries je Vorgang sind gleich; unter dem Profiler liegt B sogar vorn (255 gegen 220). Der Unterschied A-B ist im Profil also nicht zu sehen — kein Umbau, solange er nicht belegt ist. B enthielt hier schon die Behebung von G-17 (`pg_sequence_last_value` in der Probe), das A-B-B-A noch nicht; ein neues A-B-B-A nur für S5-8 (≈ 20 min) klärt, ob die Senkung bleibt. Unabhängig davon ist das Neulesen der Seite der größte Hebel unter Last, in A wie in B | P2 |
 | PF-34 | Eine Funktion mit Zustand rechnet einen Eingang zugleich (Slots gelten nicht) und startet während ihrer Sicherung nichts; die Last je Sicherung wächst mit dem Zustand (Intervall `Zustand:SichernAlleSekunden`) — ungemessen | P3 |
@@ -31,13 +28,15 @@ abgeschlossen oder umgeschrieben. Der Broker trägt bis Phase 7 nur noch, was an
 | PF-10 | Datei-Treiber meldet eine Datei nach der anderen ins Log (Rückstau): das Melde-Tempo ist die Decke von S1 — Entscheidung offen | P2 |
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16; seit Phase 3 dazu die Uhr (eine Abfrage je Sekunde) und je Funktion und Partition ein Poll | P3 |
 | FB-8 | „Python-Funktion hört einen Hinweis“ ist nur geteilt nachgewiesen: das SDK (pytest, Antwort als Ganzes) und der Weg des Servers über dieselbe Sitzung (`BausteinSitzung` hinter dem Hand-Ausführer) — kein echter Python-Prozess über gRPC, weil keine Anwendung mit Leitung eine Funktion draußen hat, die einen Hinweis hört | P2 |
-| FB-10 | Die Version in einer Query-Antwort ist die des letzten Events, das die Projektion für den Stream verarbeitet hat (seit Phase 6 ihr Guard je Stream statt des Redis-Index — dieselbe Grenze): schreibt sie für das letzte Event eines Streams nicht (eine Frist nach `TrainingBegonnen`, ein Event, das sie nicht hört), kennt ein Client, der das Aggregat nur aus der Antwort kennt, eine zu kleine Version — sein Command scheitert an der OCC (die Antwort `CommandFailed` nennt die richtige), und die Lese-nach-Schreiben-Prüfung fasst bis zu dreimal nach. Löst der Stand je Id aus dem Fortschritt der Projektion (Plan Phase 7/8) | P2 |
 | FB-11 | Ein Commit, dessen Ausgang mehrdeutig blieb (G-3: die Events stehen im Log, das `SaveChanges` meldete trotzdem einen Fehler), weckt niemanden — der Wecker hängt am erfolgreichen Commit; die Konsumenten holt erst der Takt (bis 30 s). Selten, folgenlos für Exactly-once | P3 |
 | FB-12 | Welche Projektion welchen Typ hört, erkennen zwei Generatoren getrennt: `SubscriberDispatchGenerator` (Domäne, `SubscribedTypes` für Typfilter und Registrierung) und `WeckplanGenerator` (Komposition, Weckplan). Dass sie übereinstimmen, sichert nur die Start-Prüfung des Takts (Boot-Fehler, GR-WECKPLAN); mit der neuen Projektionsform (Plan Phase 8) sollte eine Erkennung für beide gelten | P3 |
 | FB-13 | `TrainingsWaechterTests.Ein_Training_ohne_Meldung_bis_zur_Frist…` (Verhaltens-Netz, Frist des Trainings-Wächters über die Uhr) war am 2026-10-28 in einem von drei vollen Läufen nach 35 s rot, einzeln und in den beiden anderen Läufen grün; die Meldung ist nicht erfasst. Seit Phase 6 weckt eine gesetzte Frist die Uhr zusätzlich zu ihrem Takt — ob das zusammenhängt, ist offen | P2 |
 | FB-9 | Wechselt die Zustands-Ablage einer Funktion (Datei ↔ Dokument) oder geht das Verzeichnis verloren, lädt die Aktivierung den gesicherten Zustand nicht mehr (lauter Fehler, kein stiller Neubeginn); eine Migration oder ein bewusster Neubeginn fehlt | P3 |
 | FB-5 | Kreise Funktion ↔ Aggregat: keine Build-Prüfung (R6 des Plans). Ein Kreis ist der Normalfall eines Ablaufs (Vorgang → Funktion → Vorgang); ob und wie ein Kreis ohne fortschreitenden Zustand erkannt werden soll, ist offen | P3 |
-| FB-6 | Quell-Nachricht vom Client nur über den JSON-Eingang: das Trigger-Protokoll der Leitung ist entfernt, der gRPC-Weg (und die SDKs) kommt mit Plan Phase 7 | P2 |
+| FB-6 | Quell-Nachricht vom Client nur über den JSON-Eingang: das Trigger-Protokoll der Leitung ist entfernt, einen gRPC-Weg (und SDK-Aufrufe) gibt es auch nach Phase 7 nicht — Phase 7 hat Sitzung, Verteiler, Lesen und Ausgangskorb gebaut, nicht `ISendet<Quell-Nachricht>` | P2 |
+| FB-14 | Das Python-SDK kennt nur die Leitung von Phase 7 (neue Nachrichten werden erkannt, `aktualisiert` nur geloggt), aber weder Lesen ab Position noch Ausgangskorb noch neu Fragen — die stehen nur im C#-Client (`GrpcProxy.LiesLogAsync`, `IAusgangskorb`) | P3 |
+| FB-15 | Überlast an einer Sitzung: über 1000 offenen Zustellungen verwirft der Verteiler (`Rueckstau`) und schreibt nur eine Warnung ins Log, keinen Spur-Hinweis; die Nachrichten des Clients selbst (Commands, Queries) laufen ohne Grenze in die Mailbox der Sitzung | P3 |
+| PF-37 | „P hat S weiterverarbeitet“ geht nach JEDEM Commit einer Projektion, der Events anwandte, als Nachricht an den Verteiler jedes Knotens — auch wenn keine Sitzung beobachtet; nicht gemessen (Plan §8: Zusammenfassungs-Takt und Grenze der Abhängigkeitsmengen „in Phase 7 messen“) | P3 |
 | FB-7 | Eine Funktion draußen ohne verbundenen Träger staut ihre Eingänge still im Log (Rückstand in `/health`, aber keine eigene Meldung „kein Träger“); ein Träger, der Eingänge annimmt und nicht beantwortet, hält bei einem Slot je Partition die übrigen Streams der Partition bis zum Ablauf der Lease (30 s) auf | P3 |
 | FB-4 | Werkzeuge: Extractor und Karten zeigen `Frist<TCmd>` als Ausgang eines Decide nicht als Kante zur Uhr; das Werkbank-Schema kennt nur die Datei-Konfig (Takt fehlt); der Zustandstyp einer Funktion (`IZustand<T>`) ist eine Code-Karte im geteilten Block statt an seiner Funktion, das Hinweis-Netz hat keine eigene Kante; Editor-Oberfläche zurückgestellt (Plan E4); die Oberfläche nennt noch den entfallenen Umgebungs-Abschnitt `VersionIndex` und einen Schalter „TrackDeps (Redis-Deps)“ | P3 |
 | PF-31 | Entscheidung offen: ein Wechsel der Snapshot-Schema-Version faltet heiße Aggregate einmal voll; eine neue Funktion liest die Geschichte ab 0 | P3 |
@@ -111,30 +110,6 @@ Keine offenen P0-Befunde (G-1 und G-7 erledigt in Phase 1 des Plans Garantien un
 ### P1
 
 Die Reihe **PF** sind Kosten der Garantien ([11](11-garantien.md) §11.12): die Garantie bleibt, der Mechanismus ist teurer als nötig.
-
-**G-12 · Fachliche Ablehnungen erreichen den Client nicht** (gefunden beim Verhaltens-Netz, Plan Pub/Sub-Neustrukturierung Phase 0). Das Aggregat
-schickt eine Ablehnung gezielt an die Sitzung des Absenders (`AggregateActorBase.TryPublishRejectionAsync`, `TargetSubscriberId`), der Broker
-stellt sie aber nur einer Sitzung zu, die den TYP abonniert hat (`BrokerShardActor`: je Typ eine Abonnenten-Tabelle). Die Sitzung abonniert
-genau die Eingänge ihres Vertrags (`AkteurVertragsPruefung.Wende`) und immer `CommandFailed` — keine Ablehnungs-Typen. Der Blazor-Arbeitsplatz
-bekommt deshalb auf einen abgelehnten Command (z. B. `FriereEin` auf einen leeren Datensatz → `DatensatzLeer`) keine Antwort, sendet dieselbe
-Hülle dreimal (je 5 s) und meldet `CommandUnbestaetigt`, obwohl der Ausgang feststeht (docs/08 §8.4 sagt anderes). Nachweis:
-`Verhalten.Tests/ClientVerhaltenTests.Eine_fachliche_Ablehnung_quittiert_den_Command_beim_Client` (Skip G-12). Behebt der Plan mit Phase 5
-(Ablehnung als Hinweis an die Sitzung) und Phase 7 (Sitzung als Actor, gezielt über den Verteiler des Knotens).
-
-**G-13 · Sitzungs-Kennungen kollidieren zwischen Knoten** (gefunden beim Verhaltens-Netz, Phase 0). `CqrsClientServiceImpl` vergibt
-`session-NNNN` aus einem statischen Zähler je Prozess; die Abonnenten-Tabelle der Broker-Shards ist clusterweit und überschreibt bei gleicher
-Kennung (`SubscriberRegistry`). Die ersten Sitzungen zweier Knoten heißen beide `session-0001`: eine gezielte Nachricht (Ablehnung,
-`CommandFailed`) für die eine geht an die zuletzt angemeldete. In einem Test mit zwei Knoten im selben Prozess bliebe das unsichtbar (der Zähler
-ist geteilt). Nachweis: `Verhalten.Tests/ZweiKnotenTests.Eine_Ablehnung_landet_bei_zwei_Knoten_an_der_richtigen_Sitzung` (zwei Host-Prozesse,
-Skip G-13). Behebt der Plan mit Phase 7 (Sitzungs-Id nennt den Knoten, Verteiler je Knoten).
-
-**G-14 · Read-your-writes nach dem Anlegen** (gefunden beim Verhaltens-Netz, Phase 0). Die Query-Brücke des Clients schickt die zuletzt
-beschriebenen Ids mit (`expected_fresh_ids`), der Query-Dienst liest für sie die Stände der Projektion aus dem Versions-Index, und der Client
-fragt nur nach, wenn ein Stand HINTER der ihm bekannten Version liegt (`QueryBridge.IstReadModelZurueck`). Für ein eben angelegtes Objekt hat
-die Projektion noch keinen Eintrag geschrieben — kein Stand gilt als frisch, die Antwort ist „nicht gefunden“ (gemessen: `ErstelleDatensatz`,
-Quittung, sofort `HoleDatensatz` → `DatensatzNichtGefunden`). Für Änderungen eines bekannten Objekts greift der Mechanismus. docs/11 §11.5
-nennt read-your-writes ohnehin nur best-effort; Nachweis `Verhalten.Tests/ClientVerhaltenTests.Nach_dem_Anlegen_kennt_die_naechste_Query…`
-(Skip G-14). Behebt der Plan mit Phase 7 („mindestens S auf v“: der Reader wartet begrenzt auf den Fortschritt seiner Projektion für S).
 
 **PF-10 · Datei-Treiber meldet seriell.** Der Datei-Treiber meldet die nächste Datei erst, wenn die vorige im Log steht (Rückstau, docs/11 §11.8).
 In S1 ist genau das die Decke: je Sekunde werden halb so viele Paare komplett, wie Dateien gemeldet werden (Phase-2- und Phase-3-Code gleich);
@@ -383,13 +358,25 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
   Störungsläufe gültig (`…_server-pubsub-g17-stoerung-1/2`); Gegenprobe (Zähler wieder ohne Sperre) beide Tests rot. Ein erster Umbau, der die
   Sequenz im Trigger der Event-Zeilen nach der Transaktionsnummer neu zog, ließ `NeustartTests` dreimal rot und ist zurückgenommen — Martens
   Reihenfolge (Stream-Zeile vor den Events, `AnhaengeReihenfolgePostgresTests`) war nie das Problem.
+- **Phase 7 Pub/Sub-Neustrukturierung (2026-10-28, Messserver; docs/03 §3.5, docs/04 §4.1/§4.4, docs/06 §6.2, docs/08 §8.3/§8.4, docs/11
+  §11.3/§11.5/§11.9):** Clients. Die Sitzung ist ein Actor (`SitzungsActor`, einziger Schreiber am gRPC-Stream; die Lese-Schleife reicht nur
+  weiter; was wartet, läuft neben der Mailbox; die Antworten eines Trägers der Reihe nach), ihre Id nennt den Knoten. Je Knoten ein Verteiler
+  (`VerteilerActor`, fester Name, Typ → Sitzungen, `Watch`, Rückstau mit Grenze); ein Commit geht als eine Nachricht an den Verteiler jedes Knotens,
+  nur mit hörbaren Typen, gezielte Antworten an den Knoten der Sitzung. Broker, Abos, `SubscriptionTracker`, der alte Handshake-Weg (`event_types`,
+  `CapabilitiesHandler`) und Subscribe/Unsubscribe der Leitung sind entfernt. **G-12** (Ablehnung erreicht den Client nicht) und **G-13**
+  (Sitzungs-Kennungen kollidieren zwischen Knoten) sind damit geschlossen. Read-your-writes „mindestens S auf v“: der Query-Dienst wartet begrenzt,
+  bis der Stand seiner Projektion reicht, sonst `noch_nicht`; keine Nachfrage-Schleife im Client (**G-14** geschlossen). Der Stand je Id liest nach
+  dem Guard das Log — nicht gehörte Events danach bremsen nicht, die Version einer Antwort taugt für den nächsten Command (**FB-10** erledigt).
+  „P hat S weiterverarbeitet“ nach jedem Commit einer Projektion; die Sitzung hält je Antwort Projektion und gezeigte Streams und nennt dem Client
+  nach höchstens 200 ms die Queries (`Aktualisiert`), der C#-Client fragt neu (transitive Aktualisierung). Lesen ab Position über die Leitung
+  (`LiesLog`, nur was die Sitzung hören darf, nur bis zum Horizont). Ausgangskorb im C#-Client (`IAusgangskorb`, `DateiAusgangskorb`). Grenzen:
+  FB-6, FB-14, FB-15, PF-37.
 - **Phase 6 Pub/Sub-Neustrukturierung (2026-10-28, Messserver; docs/03 §3.5, docs/04 §4.1/§4.4, docs/06, docs/11 §11.5/§11.10):** Wecker statt
   Broker-Signalen — der `WeckplanGenerator` erzeugt aus den Signaturen je Event-Typ die Ziele (Batch-Leser der Projektionen, Funktions-Actors je
   Partition bzw. die eine Adresse, die Uhr bei einer Frist; CQRS108), der Wecker weckt nach dem Commit des Group-Commits und des Einzel-Appends je
   Commit und Ziel einmal, der Takt je Partition prüft beim Start den Plan (GR-WECKPLAN). Signale samt Typen, Generatoren, Wire, Proto und Empfang
   sind entfernt, ebenso der Redis-Versionsindex: der Stand je gezeigter Id kommt aus dem Guard der Projektion (`ProjektionsStaende`), **PF-6** ist
-  damit erledigt (kein Redis-Write je Event, kein Redis-Aufruf im Command-Turn, Redis entfällt im Betrieb). Der Broker trägt bis Phase 7 nur noch
-  die Nachrichten an Clients. Grenzen: FB-10, FB-11, FB-12, PF-36; G-17 kam im Störungslauf ans Licht (schon mit dem Code von Phase 5; erledigt, oben).
+  damit erledigt (kein Redis-Write je Event, kein Redis-Aufruf im Command-Turn, Redis entfällt im Betrieb). Grenzen: FB-11, FB-12, PF-36; G-17 kam im Störungslauf ans Licht (schon mit dem Code von Phase 5; erledigt, oben).
 - **Phase 5 Pub/Sub-Neustrukturierung (2026-10-28, Messserver; docs/03 §3.2/§3.3, docs/04 §4.6, docs/11 §11.2/§11.3):** keine Marken im Log —
   `KommandoVerarbeitet`/`KommandoAbgelehnt` entfallen. Ein Noop und eine Ablehnung schreiben nur ihre Quittung in die Inbox-Tabelle; die Version
   bleibt, ein Aggregat hat eine Version (die Zahl seiner Events), eine Ablehnung legt keinen Stream mehr an. Weil kein Append mehr die Version

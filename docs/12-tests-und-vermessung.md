@@ -168,7 +168,8 @@ den Läufen kommt von den expandierten `[Theory]`-Fällen.
 | Quellen, Umgebung, Spur, Dienste | 59 | `DateiTreiberTests` (18), `UmgebungLaderTests` (Laufort-Bindung der Funktionen: genannte Umsetzung, unbekannte Umsetzung, Extern nur ohne Lese-Fähigkeit, Standard ohne Eintrag, unbekannter Name, Hand), `ProjektionsStandTests`, `SpurTests`, `WirkerIdTests`, `SpurWegTests`, `DienstBindungTests` (15) |
 | Konsum, Projektionen, Wecken | 28 | `BatchLeserTests`, `ProjectionRebuilderTests`, `GaEinsPruefungTests`, `WeckungenTests`, `WeckplanGeneratorTests` (Kinds aus den Signaturen, eine Adresse, Uhr, Hinweis nicht im Plan, CQRS108), `WeckerTests` (Ziele je Commit, Group-Commit, verlorener Weckruf, Start-Prüfung), `TransientPersistiertSplitTests`, `DeadLetterReadStoreTests` |
 | Lebenszyklus, zwei Verben (Sammlung „Zeitkritisch“) | 19 | `RahmenActorTests`, `BoteTests`, `PassivierungTests` (Leerlauf stoppt, Nachricht schiebt hinaus, 0 = nie), `LebenszyklusImClusterTests` (Batch-Leser gibt seinen Bereich erst nach dem Durchlauf frei; eine Frage an einen schweigenden Actor läuft in ihre Frist) |
-| Übrige | 11 | `BackendMonitoringTests`, `EingangJsonTests`, `BrokerIdentityTests`, `BrokerWiederholungTests` |
+| Übrige | 9 | `BackendMonitoringTests`, `EingangJsonTests` |
+| Clients: Verteiler, Ausgangskorb | 7 | `VerteilerTests` (je Sitzung eine Zustellung in Log-Reihenfolge, nur Gehörtes; gezielte Antwort nur an ihre Sitzung, auch ohne Abo; beendete Sitzung ausgetragen, neue Anmeldung ersetzt; über der Grenze des Rückstaus verworfen; Sitzungs-Id nennt den Knoten), `AusgangskorbTests` (nach dem Abriss dieselbe Command-Id an die neue Sitzung, mit der Antwort erledigt; der Datei-Korb übersteht einen Neustart) |
 | Garantien (Störung über Seams, `Garantien/`) | 33 + 1 übersprungen | `HorizontTests`, `BatchKonsumGarantieTests`, `EmitGarantieTests` (Emit-Ausgang je Antwort, Drossel je Ziel, volle Drossel meldet unbekannt), `RehydrationGarantieTests` (Split-Upcast Skip G-5), `BuildGarantieTests` |
 
 **Integration (Ebene 2):**
@@ -206,7 +207,10 @@ den Läufen kommt von den expandierten `[Theory]`-Fällen.
 | `Garantien/AblaufGarantieTests` | 2 | die Funktion `Nachschub` wirkt genau einmal über Wecker und Takt; Neustart des Hosts mitten im Auftrag führt ihn zu Ende |
 
 **Verhaltens-Netz (`Verhalten.Tests`):** `BeispielAblaufTests` (3), `PruefdomaeneAblaufTests` (4), `TrainingsWaechterTests` (1),
-`ClientVerhaltenTests` (7, davon G-12 und G-14 übersprungen), `ZweiKnotenTests` (2: Weckrufe nach dem harten Ende eines Knotens; Ablehnung an der richtigen Sitzung, G-13 übersprungen).
+`ClientVerhaltenTests` (11: Pushes mit Kopf-Version, Quittung über die Korrelation, Ablehnung als Quittung im Client-Stack und an der rohen Leitung,
+Vertrag ∩ Token, Träger-Antwort genau einmal, Lesen nach Schreiben, nach dem Anlegen (G-14), Version aus der Antwort, transitive Aktualisierung,
+Wiederverbinden mit Nachlesen), `ZweiKnotenTests` (2: Weckrufe nach dem harten Ende eines Knotens; Ablehnung an der richtigen Sitzung bei zwei
+Knoten, G-13), `NeustartTests` (1, Kategorie Last).
 
 **Client:** `VirtualCollectionTests` (26), `PendingCommandTrackerTests` (5). **Python:** SDK `test_vertrag`, `test_funktion`, `test_client_query`,
 `test_client_reconnect`, `test_mapper_*` (inkl. Nutzlast-Tabelle); Worker `test_vertraege`, `test_funktionen`, `test_funktions_worker`, `test_training_worker`.

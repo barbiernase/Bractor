@@ -48,6 +48,7 @@ public static class ClientInfrastructureExtensions
         services.AddSingleton<IVersioningModule>(sp =>
             sp.GetRequiredService<VersioningModule>());
 
+        services.AddSingleton<IAusgangskorb, Ausgangskorb>();   // dauerhaft: DateiAusgangskorb (übersteht einen Neustart des Clients)
         services.AddSingleton<ConnectionModule>();
         services.AddSingleton<QueryBridge>();
         services.AddSingleton<FileBridge>();

@@ -236,8 +236,9 @@ Herunterfahren) — das Gegenstück zu `ILebenszyklus` im Host.
 
 - **Funktionen:** durabel über den Funktions-Actor — der Eingang bleibt offen, bis eine Antwort festgehalten ist; ein Client, der wegbricht,
   verliert seine Lease, der Eingang geht an den nächsten Träger.
-- **Hören:** verlierbarer Push (Inv. 6) an **jede** abonnierte Sitzung (Broadcast); `SubscriptionTracker` heilt nur das Abo. Wer es durabel
-  braucht, fragt per Query.
+- **Hören:** verlierbarer Push (Inv. 6) an jede Sitzung, deren wirksame Liste (Vertrag ∩ Token) den Typ nennt — über den Verteiler ihres
+  Knotens; Antworten auf eigene Commands (Ablehnung, `CommandFailed`) gezielt, auch ohne den Typ zu hören. Wer es durabel braucht, liest ab Position
+  oder fragt per Query.
 
 ---
 

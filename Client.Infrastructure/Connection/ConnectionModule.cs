@@ -27,6 +27,8 @@ public class ConnectionModule : IAsyncDisposable
     private readonly IGrpcProxy _proxy;
     private readonly IVersioningModule _versioning;
     private readonly string _defaultAggregateType;
+    private readonly IAusgangskorb _korb;
+    private Task? _nachsendenTask;
 
     private ClientBus? _bus;
     private IReadOnlyDictionary<Type, string>? _commandAggregateTypes;
@@ -45,11 +47,13 @@ public class ConnectionModule : IAsyncDisposable
     public ConnectionModule(
         IGrpcProxy proxy,
         IVersioningModule versioning,
-        string defaultAggregateType = "")
+        string defaultAggregateType = "",
+        IAusgangskorb? korb = null)
     {
         _proxy = proxy;
         _versioning = versioning;
         _defaultAggregateType = defaultAggregateType;
+        _korb = korb ?? new Ausgangskorb();
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -115,6 +119,8 @@ public class ConnectionModule : IAsyncDisposable
             _eventReadTask = EventReadLoopAsync(_cts.Token);
             _stateReadTask = StateChangeLoopAsync(_cts.Token);
             _aktualisierungsTask = AktualisierungsLoopAsync(_cts.Token);
+            // Was beim letzten Mal offen blieb (Verbindung weg, Client neu gestartet): noch einmal, mit derselben Command-Id.
+            _nachsendenTask = SendeOffeneAsync();
 
             _bus.PostToSyncContext(() =>
                 _bus.Publish(new ConnectionEstablished(capabilities.SessionId)));
@@ -139,6 +145,8 @@ public class ConnectionModule : IAsyncDisposable
             try { await _stateReadTask; } catch { /* cancelled */ }
         if (_aktualisierungsTask != null)
             try { await _aktualisierungsTask; } catch { /* cancelled */ }
+        if (_nachsendenTask != null)
+            try { await _nachsendenTask; } catch { /* cancelled */ }
 
         _bus?.PostToSyncContext(() =>
             _bus.Publish(new ConnectionLost("Disconnected by client")));
@@ -189,6 +197,7 @@ public class ConnectionModule : IAsyncDisposable
                 OriginSessionId = _proxy.SessionId,
             };
 
+            _korb.Lege(envelope);   // VOR dem Senden: bricht die Verbindung, geht er nach dem Wiederverbinden mit derselben Id noch einmal
             await SendWithRetryAsync(command, envelope);
         }
         catch (Exception ex)
@@ -218,9 +227,14 @@ public class ConnectionModule : IAsyncDisposable
             {
                 await _proxy.SendCommandAsync(envelope);
                 if (await _pending.WaitAsync(envelope.CorrelationId, AckTimeout, ct))
-                    return;   // korrelierte Antwort (Event / CommandFailed) kam
+                {
+                    _korb.Erledigt(envelope.CommandId);
+                    return;   // korrelierte Antwort (Event / Ablehnung / CommandFailed) kam
+                }
             }
 
+            // Verbunden und trotzdem still: der Ausgang bleibt unbekannt, aber ein Nachsenden nach dem Wiederverbinden brächte nichts Neues.
+            _korb.Erledigt(envelope.CommandId);
             _bus?.PostToSyncContext(() =>
                 _bus.Publish(new CommandUnbestaetigt(
                     command.GetType().Name,
@@ -231,6 +245,20 @@ public class ConnectionModule : IAsyncDisposable
         finally
         {
             _pending.Forget(envelope.CorrelationId);
+        }
+    }
+
+    /// <summary>
+    /// Sendet die offenen Commands des Ausgangskorbs erneut — mit ihrer Command-Id und Korrelation, an die neue Sitzung (ihre Ablehnung soll sie
+    /// erreichen). Die Inbox des Ziels lässt jeden genau einmal wirken, auch wenn er beim ersten Mal schon ankam.
+    /// </summary>
+    private async Task SendeOffeneAsync()
+    {
+        foreach (var offen in _korb.Offen())
+        {
+            if (_cts?.IsCancellationRequested ?? true) return;
+            try { await SendWithRetryAsync(offen.Payload, offen with { OriginSessionId = _proxy.SessionId }); }
+            catch (Exception) { /* bleibt im Korb, bis zum nächsten Verbinden */ }
         }
     }
 
