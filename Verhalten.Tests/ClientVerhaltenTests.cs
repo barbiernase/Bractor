@@ -165,6 +165,9 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
         await traeger.AntworteAsync(eingang, antwort);
         await traeger.AntworteAsync(eingang, antwort);                                                      // noch einmal geschickt
         await anderer.AntworteAsync(eingang, new KlassifiziereBildPaarDurchKi(new(paar.Id), Klassifikation.KeineAnomalie));   // ohne Lease
+        // Erst trennen, wenn der Server die Antworten gelesen hat (die doppelte quittiert er mit ARBEIT_UNBEKANNT): die Leitung schließt hart
+        //   (Reset), ein noch nicht gesendetes Stück ginge sonst verloren — und dann hielte der getrennte Träger den Eingang bis zum Ablauf der Lease.
+        await Warte.BisAsync(() => Task.FromResult(traeger.Fehler.Contains("ARBEIT_UNBEKANNT")), Kurz, "der Server hat die Antworten des Trägers nicht gelesen", b.Host);
         if (ReferenceEquals(traeger, eins))
         {
             await eins.DisposeAsync();
