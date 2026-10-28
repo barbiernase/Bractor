@@ -5,6 +5,15 @@ using Marten.Exceptions;
 namespace Core;
 
 /// <summary>
+/// Eine Fortschritts-Ablage, die die Guards als <see cref="ProjectionCheckpoint"/>-Dokumente in <see cref="Log"/> hält (über <see cref="MartenFortschritt"/>):
+/// wer Guard und Log zusammen braucht (der Stand je Id), liest beides in einer Abfrage.
+/// </summary>
+public interface IFortschrittImLog
+{
+    IDocumentStore Log { get; }
+}
+
+/// <summary>
 /// Der Fortschritt einer Projektion in Marten (Plan Pub/Sub-Neustrukturierung §2.4) an EINER Stelle: je Partition ein
 /// <see cref="PartitionsCheckpoint"/> mit numerischer Revision (<see cref="KonsumSchema"/>), je (Projektion, Stream) ein
 /// <see cref="ProjectionCheckpoint"/> (Guard). Zwei Nutzer: der Marten-Store der Klasse 1 legt ihn in derselben Session ab wie seine Wirkungen

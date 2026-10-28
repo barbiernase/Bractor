@@ -33,8 +33,10 @@ namespace Core;
 /// Konkrete Stores erben und schreiben nur noch ihre FACHLICHEN Methoden. Kein Domänenwissen hier, kein Generat — reiner Marten-Adapter. SCOPED
 /// registriert: eine Instanz je Fähigkeits-Bereich (je Partitions-Leser → isolierter Puffer).
 /// </summary>
-public abstract class MartenStore : IAtomaresZiel
+public abstract class MartenStore : IAtomaresZiel, IFortschrittImLog
 {
+    IDocumentStore IFortschrittImLog.Log => Store;
+
     /// <summary>Der geteilte Document-Store — für die Lese-Methoden (eigene Query-Sessions, committete Daten).</summary>
     protected IDocumentStore Store { get; }
 

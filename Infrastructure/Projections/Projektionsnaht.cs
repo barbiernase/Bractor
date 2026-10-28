@@ -16,8 +16,10 @@ public interface IFortschrittBeimFramework : IFortschrittsAblage
 }
 
 /// <summary>Der Fortschritt beim Framework in Marten (im Log-Postgres).</summary>
-public sealed class FortschrittBeimFramework(IDocumentStore store) : IFortschrittBeimFramework
+public sealed class FortschrittBeimFramework(IDocumentStore store) : IFortschrittBeimFramework, IFortschrittImLog
 {
+    public IDocumentStore Log => store;
+
     public Task<PartitionsCheckpoint> LadeFortschrittAsync(string projektion, int partition, CancellationToken ct)
         => MartenFortschritt.LadeAsync(store, projektion, partition, ct);
 

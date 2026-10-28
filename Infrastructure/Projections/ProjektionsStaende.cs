@@ -1,4 +1,5 @@
 using Abstractions;
+using Core;
 using Marten;
 using Microsoft.Extensions.Logging;
 using Npgsql;
@@ -94,34 +95,51 @@ public sealed class ProjektionsStaende
         return ergebnis ?? new Dictionary<Guid, int>();
     }
 
-    /// <summary>Der Stand je Stream einer Projektion: ihr Guard, dann das nächste gehörte Event bzw. der Kopf aus dem Log.</summary>
+    /// <summary>
+    /// Der Stand je Stream einer Projektion: ihr Guard, dann das nächste gehörte Event bzw. der Kopf aus dem Log. Liegt der Fortschritt als Dokument
+    /// im Postgres des Logs (Marten-Store der Klasse 1, Fortschritt beim Framework — <see cref="IFortschrittImLog"/>), liest EINE Abfrage Guard und Log
+    /// (PF-38: der Stand je gezeigter Id wird bei jeder Query gelesen); sonst zuerst die Guards über die Ablage, dann das Log.
+    /// </summary>
     private async Task<Dictionary<Guid, int>> StaendeAsync(Projektionseintrag p, string[]? typen, Guid[] streams, CancellationToken ct)
     {
-        IReadOnlyDictionary<Guid, int> guards;
+        IReadOnlyDictionary<Guid, int>? guards = null;
         using (var bereich = _faehigkeiten.Oeffne())
-            guards = await p.Naht(bereich, _framework).Ablage.LadeGuardsAsync(p.Kennung, streams, ct);
+        {
+            var ablage = p.Naht(bereich, _framework).Ablage;
+            if (!(ablage is IFortschrittImLog imLog && ReferenceEquals(imLog.Log, _store)))
+                guards = await ablage.LadeGuardsAsync(p.Kennung, streams, ct);
+        }
 
         var schema = _store.Options.Events.DatabaseSchemaName;
-        // Je Stream ein Index-Zugriff (stream_id, version) und einer auf mt_streams — kein Aggregat, keine laterale Verknüpfung (feste Pläne).
+        // Je Stream ein Index-Zugriff (stream_id, version) und einer auf mt_streams — kein Aggregat, keine laterale Verknüpfung (feste Pläne);
+        //   der Guard im selben Zug über den Schlüssel seines Dokuments ("<projektion>:<stream>").
+        var quelle = guards is null
+            ? $"""
+              (select u.id, coalesce((select (c.data->>'Version')::bigint from "{_store.Options.DatabaseSchemaName}".mt_doc_projectioncheckpoint c
+                                      where c.id = @projektion || ':' || u.id::text), 0) as g
+               from unnest(@ids::uuid[]) as u(id)) as i
+              """
+            : "unnest(@ids::uuid[], @guards::bigint[]) as i(id, g)";
         var sql = $"""
             select i.id, i.g,
                    (select e.version from "{schema}".mt_events e
                      where e.stream_id = i.id and e.version > i.g {(typen is null ? "" : "and e.type = any(@typen)")}
                      order by e.version limit 1) as naechste,
                    (select st.version from "{schema}".mt_streams st where st.id = i.id) as kopf
-            from unnest(@ids::uuid[], @guards::bigint[]) as i(id, g)
+            from {quelle}
             """;
         var ergebnis = new Dictionary<Guid, int>();
         await using var conn = _store.Storage.Database.CreateConnection();
         await conn.OpenAsync(ct);
         await using var cmd = new NpgsqlCommand(sql, (NpgsqlConnection)conn);
         cmd.Parameters.AddWithValue("ids", streams);
-        cmd.Parameters.AddWithValue("guards", streams.Select(g => (long)Math.Max(0, guards.TryGetValue(g, out var v) ? v : 0)).ToArray());
+        if (guards is null) cmd.Parameters.AddWithValue("projektion", p.Kennung);
+        else cmd.Parameters.AddWithValue("guards", streams.Select(g => (long)Math.Max(0, guards.TryGetValue(g, out var v) ? v : 0)).ToArray());
         if (typen is not null) cmd.Parameters.AddWithValue("typen", typen);
         await using var r = await cmd.ExecuteReaderAsync(ct);
         while (await r.ReadAsync(ct))
         {
-            var guard = r.GetInt64(1);
+            var guard = Math.Max(0, r.GetInt64(1));
             long stand = !r.IsDBNull(2) ? r.GetInt64(2) - 1 : !r.IsDBNull(3) ? r.GetInt64(3) : guard;
             ergebnis[r.GetGuid(0)] = (int)Math.Max(stand, guard);
         }
