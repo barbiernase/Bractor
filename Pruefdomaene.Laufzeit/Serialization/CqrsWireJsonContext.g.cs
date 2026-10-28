@@ -40,6 +40,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(WakeAck))]
 [JsonSerializable(typeof(EventEnvelope))]
 [JsonSerializable(typeof(Verteile))]
+[JsonSerializable(typeof(Verarbeitet))]
 [JsonSerializable(typeof(ArbeitLebt))]
 [JsonSerializable(typeof(ArbeitErledigt))]
 [JsonSerializable(typeof(ListeOffene))]

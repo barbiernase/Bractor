@@ -30,6 +30,7 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
     // Channels für ausgehende Daten
     private readonly Channel<EventEnvelope> _events = Channel.CreateUnbounded<EventEnvelope>();
     private readonly Channel<ConnectionState> _stateChanges = Channel.CreateUnbounded<ConnectionState>();
+    private readonly Channel<IQuery> _aktualisierungen = Channel.CreateUnbounded<IQuery>();
     
     // FIX: Dictionary statt Channel für Query-Responses
     // Ermöglicht parallele Queries mit korrektem Matching
@@ -57,6 +58,7 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
     // Channel Readers (für Consumer)
     public ChannelReader<EventEnvelope> Events => _events.Reader;
     public ChannelReader<ConnectionState> StateChanges => _stateChanges.Reader;
+    public ChannelReader<IQuery> Aktualisierungen => _aktualisierungen.Reader;
 
     /// <summary>
     /// Serialisierter Write auf den bidirektionalen RequestStream. Alle Sender
@@ -292,6 +294,11 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
     {
         switch (message.MessageCase)
         {
+            case ServerMessage.MessageOneofCase.Aktualisiert:
+                foreach (var q in message.Aktualisiert.Queries)
+                    await _aktualisierungen.Writer.WriteAsync(_mapper.QueryAus(q));
+                break;
+
             case ServerMessage.MessageOneofCase.Event:
                 var envelope = _mapper.MapToDomain(message.Event.Envelope);
                 await _events.Writer.WriteAsync(envelope);

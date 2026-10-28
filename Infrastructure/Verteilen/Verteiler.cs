@@ -21,6 +21,15 @@ public sealed record SitzungMeldetAn(string SitzungsId, PID Sitzung, IReadOnlySe
 /// <summary>Vom Verteiler an eine Sitzung: was sie aus einem Commit hört bzw. was ihr gilt.</summary>
 public sealed record Zustellung(IReadOnlyList<EventEnvelope> Envelopes);
 
+/// <summary>„Projektion P hat die Streams S weiterverarbeitet“ — an den Verteiler jedes Knotens und weiter an die Sitzungen, die es betrifft.</summary>
+public sealed record Verarbeitet(string Projektion, Guid[] Streams) : IWireMessage;
+
+/// <summary>
+/// Was eine Sitzung beobachtet (ersetzt das vorige): die Streams der Ids, die ihre gehaltenen Antworten zeigen, und die Projektionen, deren
+/// Antworten keine Ids zeigen (grob: jedes Weiterverarbeiten betrifft sie).
+/// </summary>
+public sealed record SitzungBeobachtet(string SitzungsId, IReadOnlySet<Guid> Streams, IReadOnlySet<string> Projektionen);
+
 /// <summary>
 /// Wie viele Zustellungen einer Sitzung noch nicht geschrieben sind. Liest ein Client nicht schnell genug, verwirft der Verteiler über der
 /// <see cref="Grenze"/> — statt die Mailbox der Sitzung ohne Ende wachsen zu lassen. Der Verteiler zählt hoch, die Sitzung nach dem Schreiben herunter.
@@ -64,6 +73,9 @@ public sealed class VerteilerActor : RahmenActor
     private readonly Dictionary<string, Eintrag> _sitzungen = new(StringComparer.Ordinal);
     private readonly Dictionary<Type, HashSet<string>> _hoerer = new();
     private readonly Dictionary<PID, string> _nachPid = new();
+    private readonly Dictionary<string, SitzungBeobachtet> _beobachtet = new(StringComparer.Ordinal);
+    private readonly Dictionary<Guid, HashSet<string>> _streamBeobachter = new();
+    private readonly Dictionary<string, HashSet<string>> _projektionsBeobachter = new(StringComparer.Ordinal);
     private readonly ILogger? _logger;
 
     public VerteilerActor(ILogger? logger = null) : base(logger) => _logger = logger;
@@ -80,6 +92,12 @@ public sealed class VerteilerActor : RahmenActor
                 break;
             case Verteile v:
                 Verteile(context, v.Envelopes);
+                break;
+            case SitzungBeobachtet b when _sitzungen.ContainsKey(b.SitzungsId):
+                Beobachte(b);
+                break;
+            case Verarbeitet v:
+                Weiterverarbeitet(context, v);
                 break;
         }
         return Task.CompletedTask;
@@ -98,8 +116,44 @@ public sealed class VerteilerActor : RahmenActor
         }
     }
 
+    private void Beobachte(SitzungBeobachtet b)
+    {
+        VergissBeobachtung(b.SitzungsId);
+        _beobachtet[b.SitzungsId] = b;
+        foreach (var s in b.Streams) Menge(_streamBeobachter, s).Add(b.SitzungsId);
+        foreach (var p in b.Projektionen) Menge(_projektionsBeobachter, p).Add(b.SitzungsId);
+    }
+
+    private void VergissBeobachtung(string id)
+    {
+        if (!_beobachtet.Remove(id, out var alt)) return;
+        foreach (var s in alt.Streams)
+            if (_streamBeobachter.TryGetValue(s, out var m) && m.Remove(id) && m.Count == 0) _streamBeobachter.Remove(s);
+        foreach (var p in alt.Projektionen)
+            if (_projektionsBeobachter.TryGetValue(p, out var m) && m.Remove(id) && m.Count == 0) _projektionsBeobachter.Remove(p);
+    }
+
+    private static HashSet<string> Menge<TKey>(Dictionary<TKey, HashSet<string>> tabelle, TKey key) where TKey : notnull
+    {
+        if (!tabelle.TryGetValue(key, out var m)) tabelle[key] = m = new HashSet<string>(StringComparer.Ordinal);
+        return m;
+    }
+
+    /// <summary>An jede Sitzung, die einen der Streams (bzw. die Projektion grob) beobachtet, einmal — sie fasst selbst zusammen.</summary>
+    private void Weiterverarbeitet(IContext context, Verarbeitet v)
+    {
+        HashSet<string>? betroffen = null;
+        if (_projektionsBeobachter.TryGetValue(v.Projektion, out var grob)) (betroffen ??= new(StringComparer.Ordinal)).UnionWith(grob);
+        foreach (var s in v.Streams)
+            if (_streamBeobachter.TryGetValue(s, out var m)) (betroffen ??= new(StringComparer.Ordinal)).UnionWith(m);
+        if (betroffen is null) return;
+        foreach (var id in betroffen)
+            if (_sitzungen.TryGetValue(id, out var e) && e.Rueckstau.Nimm()) context.Send(e.Sitzung, v);
+    }
+
     private void TrageAus(string id)
     {
+        VergissBeobachtung(id);
         if (!_sitzungen.Remove(id, out var e)) return;
         foreach (var typ in e.Hoert)
             if (_hoerer.TryGetValue(typ, out var menge) && menge.Remove(id) && menge.Count == 0) _hoerer.Remove(typ);

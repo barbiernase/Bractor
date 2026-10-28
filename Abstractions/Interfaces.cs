@@ -363,6 +363,10 @@ public interface IAggregateRepository
         /// <summary>„Noch nicht so weit“: die Projektion hat in der Frist nicht jeden Stream aus <c>mindestens</c> verarbeitet — die Daten sind
         /// der Stand davor.</summary>
         public bool NochNicht { get; init; }
+
+        /// <summary>Die Projektion, die geantwortet hat (ihre SubscriberId) — die Sitzung beobachtet sie, um den Client neu fragen zu lassen
+        /// (Plan Pub/Sub-Neustrukturierung §2.7). Nicht auf der Leitung.</summary>
+        public string? Projektion { get; init; }
     }
 
 

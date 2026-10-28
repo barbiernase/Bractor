@@ -95,6 +95,17 @@ class ServerMessage(betterproto.Message):
     query_response: "QueryResponse" = betterproto.message_field(7, group="message")
     query_forward: "QueryForward" = betterproto.message_field(10, group="message")
     arbeits_auftrag: "ArbeitsAuftrag" = betterproto.message_field(11, group="message")
+    aktualisiert: "Aktualisiert" = betterproto.message_field(12, group="message")
+
+
+@dataclass(eq=False, repr=False)
+class Aktualisiert(betterproto.Message):
+    """
+    Eine Projektion hat Streams weiterverarbeitet, die Antworten dieser Sitzung zeigen (oder, bei Antworten ohne Ids, die Projektion selbst):
+     diese Queries lohnen eine neue Frage. Zusammengefasst (höchstens alle 200 ms), verlierbar — wer verlässlich lesen will, liest ab Position.
+    """
+
+    queries: List["Nutzlast"] = betterproto.message_field(1)
 
 
 @dataclass(eq=False, repr=False)

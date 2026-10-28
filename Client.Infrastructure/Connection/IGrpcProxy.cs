@@ -28,6 +28,9 @@ public interface IGrpcProxy
     /// <summary>Channel für Verbindungszustandsänderungen.</summary>
     ChannelReader<ConnectionState> StateChanges { get; }
 
+    /// <summary>Queries, die der Server zum neuen Fragen nennt: eine Projektion hat weiterverarbeitet, was ihre letzte Antwort zeigte.</summary>
+    ChannelReader<IQuery> Aktualisierungen { get; }
+
     /// <summary>
     /// Verbindet zum Server und führt den Capabilities-Handshake durch: der Client nennt seinen Vertrag (Name + Hash, docs/konzept-akteure.md
     /// §5.2) — Fähigkeiten und Abos nimmt der Server aus seiner Tabelle, nicht aus einer Selbstauskunft.

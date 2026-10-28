@@ -81,7 +81,14 @@ message ServerMessage {
         QueryResponse query_response = 7;
         QueryForward query_forward = 10;
         ArbeitsAuftrag arbeits_auftrag = 11;
+        Aktualisiert aktualisiert = 12;
     }
+}
+
+// Eine Projektion hat Streams weiterverarbeitet, die Antworten dieser Sitzung zeigen (oder, bei Antworten ohne Ids, die Projektion selbst):
+// diese Queries lohnen eine neue Frage. Zusammengefasst (höchstens alle 200 ms), verlierbar — wer verlässlich lesen will, liest ab Position.
+message Aktualisiert {
+    repeated Nutzlast queries = 1;
 }
 
 message EventNotification {

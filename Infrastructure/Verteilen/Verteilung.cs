@@ -41,6 +41,17 @@ public sealed class Verteilung
         return i > 0 ? sitzungsId[..i] : null;
     }
 
+    /// <summary>
+    /// „P hat S weiterverarbeitet“ (nach jedem Commit einer Projektion, der Events anwandte): an den Verteiler jedes Knotens, der es an die
+    /// Sitzungen weiterreicht, die eine Antwort mit einem dieser Streams (bzw. ohne Ids von P) halten — sie fragen neu. Verlierbar.
+    /// </summary>
+    public void MeldeVerarbeitet(string projektion, IReadOnlyCollection<Guid> streams)
+    {
+        var nachricht = new Verarbeitet(projektion, streams.ToArray());
+        foreach (var m in _cluster.MemberList.GetAllMembers())
+            _bote.MeldeAnKnoten(m.Address, VerteilerActor.Name, nachricht);
+    }
+
     /// <summary>Ein Envelope (gezielt oder an alle, die ihn hören).</summary>
     public void Melde(EventEnvelope envelope) => Melde([envelope]);
 

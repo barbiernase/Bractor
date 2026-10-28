@@ -54,6 +54,18 @@ public sealed class SitzungsActor : RahmenActor
     /// <summary>Wie lange eine an einen zuständigen Client weitergeleitete Query auf seine Antwort wartet.</summary>
     public static readonly TimeSpan WeiterleitungsFrist = TimeSpan.FromSeconds(60);
 
+    /// <summary>So lange sammelt die Sitzung „P hat S weiterverarbeitet“, bevor sie dem Client die betroffenen Queries nennt.</summary>
+    public static readonly TimeSpan Zusammenfassen = TimeSpan.FromMilliseconds(200);
+
+    /// <summary>So viele Antworten beobachtet eine Sitzung höchstens (die ältesten fallen heraus).</summary>
+    public const int HoechstensAntworten = 200;
+
+    /// <summary>Zeigt eine Antwort mehr Ids, beobachtet die Sitzung ihre Projektion grob statt jeder Id (Plan §7, Risiko 6).</summary>
+    public const int HoechstensIds = 1_000;
+
+    /// <summary>Was eine gehaltene Antwort zeigt: die Projektion, die antwortete, und die Streams ihrer Ids (leer = grob, die ganze Projektion).</summary>
+    private sealed record Beobachtung(string Projektion, IReadOnlySet<Guid> Streams);
+
     private readonly IServerStreamWriter<Leitung.ServerMessage> _stream;
     private readonly string _id;
     private readonly SitzungsDienste _d;
@@ -67,6 +79,12 @@ public sealed class SitzungsActor : RahmenActor
     //   Eingang sieht so, dass die erste ihn schon erledigt hat); gewartet wird neben der Mailbox.
     private readonly Queue<Func<IContext, CancellationToken, Task<Func<Task>?>>> _anbieterArbeit = new();
     private bool _anbieterLaeuft;
+    // Beobachtung (Plan §2.7, „P hat S weiterverarbeitet“): je gehaltener Antwort, was sie zeigt; die betroffenen Queries sammeln sich bis zur
+    //   nächsten Aktualisierung an den Client.
+    private readonly Dictionary<IQuery, Beobachtung> _beobachtungen = new();
+    private readonly Queue<IQuery> _beobachtungsReihe = new();
+    private readonly HashSet<IQuery> _veraendert = new();
+    private bool _aktualisierungGeplant;
 
     public SitzungsActor(IServerStreamWriter<Leitung.ServerMessage> stream, string sitzungsId, AkteurRechte? akteur, SitzungsDienste dienste,
         TaskCompletionSource ende) : base(dienste.Logger)
@@ -131,7 +149,51 @@ public sealed class SitzungsActor : RahmenActor
             case ServerNachricht n:
                 await SchreibeAsync(n.Nachricht);
                 break;
+
+            case Verarbeitet v:
+                _rueckstau.Erledigt();
+                Weiterverarbeitet(context, v);
+                break;
         }
+    }
+
+    // ═════════════════════════════════════════
+    // BEOBACHTUNG: „P hat S weiterverarbeitet“ → der Client fragt neu
+    // ═════════════════════════════════════════
+
+    /// <summary>Merkt sich, was eine Antwort zeigt, und meldet dem Verteiler die neue Menge der beobachteten Streams und Projektionen.</summary>
+    private void Beobachte(IContext context, IQuery query, QueryResponse<IQueryResponse> antwort)
+    {
+        if (antwort.Projektion is not { } projektion) return;
+        var ids = antwort.Deps?.Select(d => d.Id).Where(g => g != Guid.Empty).ToHashSet() ?? new HashSet<Guid>();
+        if (ids.Count > HoechstensIds) ids.Clear();
+        if (!_beobachtungen.ContainsKey(query))
+        {
+            _beobachtungsReihe.Enqueue(query);
+            while (_beobachtungsReihe.Count > HoechstensAntworten) _beobachtungen.Remove(_beobachtungsReihe.Dequeue());
+        }
+        _beobachtungen[query] = new Beobachtung(projektion, ids);
+        context.Send(_verteiler!, new SitzungBeobachtet(_id,
+            _beobachtungen.Values.SelectMany(b => b.Streams).ToHashSet(),
+            _beobachtungen.Values.Where(b => b.Streams.Count == 0).Select(b => b.Projektion).ToHashSet(StringComparer.Ordinal)));
+    }
+
+    /// <summary>Sammelt die betroffenen Queries und nennt sie dem Client nach <see cref="Zusammenfassen"/> in einer Nachricht.</summary>
+    private void Weiterverarbeitet(IContext context, Verarbeitet v)
+    {
+        foreach (var (query, b) in _beobachtungen)
+            if (b.Streams.Count == 0 ? b.Projektion == v.Projektion : v.Streams.Any(b.Streams.Contains))
+                _veraendert.Add(query);
+        if (_veraendert.Count == 0 || _aktualisierungGeplant) return;
+        _aktualisierungGeplant = true;
+        Neben(context, ct => Task.Delay(Zusammenfassen, ct), async _ =>
+        {
+            _aktualisierungGeplant = false;
+            var nachricht = new Leitung.Aktualisiert();
+            nachricht.Queries.AddRange(_veraendert.Select(q => _d.Mapper.MapToDto(q)));
+            _veraendert.Clear();
+            await SchreibeAsync(new Leitung.ServerMessage { Aktualisiert = nachricht });
+        });
     }
 
     private async Task AusClientAsync(IContext context, Leitung.ClientMessage m)
@@ -365,6 +427,7 @@ public sealed class SitzungsActor : RahmenActor
             }
             var antwort = await (Task<QueryResponse<IQueryResponse>>)t;
             await SchreibeAsync(new Leitung.ServerMessage { QueryResponse = _d.Mapper.ToQueryResponse(antwort, request.CorrelationId) });
+            Beobachte(context, query, antwort);
         });
     }
 

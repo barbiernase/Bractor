@@ -271,7 +271,7 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
         sb.AppendLine("            deps = await _depsReader.ReadAsync(entry.SubscriberId, ctx.TrackedIds);");
         sb.AppendLine("        }");
         sb.AppendLine();
-        sb.AppendLine("        return new QueryResponse<IQueryResponse> { Data = data, Deps = deps, NochNicht = nochNicht };");
+        sb.AppendLine("        return new QueryResponse<IQueryResponse> { Data = data, Deps = deps, NochNicht = nochNicht, Projektion = entry.SubscriberId };");
         sb.AppendLine("    }");
         sb.AppendLine();
 

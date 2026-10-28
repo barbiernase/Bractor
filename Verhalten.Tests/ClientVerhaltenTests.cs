@@ -229,6 +229,35 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
     }
 
     /// <summary>
+    /// Transitive Aktualisierung (Plan Pub/Sub-Neustrukturierung §2.7, Abnahme Phase 7): ein Client zeigt die Paare eines Datensatzes; ein ANDERER
+    /// Client labelt eines davon. Die Projektion, die das Paar führt, meldet nach ihrem Commit „Stream des Paares weiterverarbeitet“; die Sitzung
+    /// des ersten Clients hält eine Antwort, die dieses Paar zeigt, und nennt ihm die Query — er fragt von sich aus neu und sieht das Label,
+    /// ohne dass er das Label-Event hört oder die Abhängigkeit Datensatz → Paar kennt.
+    /// </summary>
+    [Fact]
+    public async Task Eine_Datensatz_Ansicht_zeigt_das_Label_das_ein_anderer_Client_setzt()
+    {
+        var paar = await b.KomplettesPaarAsync();
+        await using var ansicht = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenArbeitsplatz);
+        await using var fremd = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenArbeitsplatz);
+        var datensatz = Guid.NewGuid();
+        await ansicht.QuittungAsync(ansicht.Sende(new ErstelleDatensatz(new(datensatz), "Ansicht")), Kurz);
+        await ansicht.QuittungAsync(ansicht.Sende(new NimmPaarAuf(new(datensatz), new(paar.Id))), Kurz);
+        ansicht.Hoere(typeof(Domain.Projections.ImagePair.ImagePairSuchergebnis));
+
+        var frage = new HoleDatensatzPaare(new(datensatz), DatensatzPaarModus.Mitglieder);
+        var vorher = (Domain.Projections.ImagePair.ImagePairSuchergebnis)await ansicht.FrageAsync(frage, Kurz,
+            typeof(Domain.Projections.ImagePair.ImagePairSuchergebnis));
+        vorher.Items.Should().ContainSingle(i => i.Id.Wert == paar.Id).Which.MenschBildpaarLabel.Should().BeNull();
+
+        await fremd.QuittungAsync(fremd.Sende(new LabelBildPaar(new(paar.Id), Klassifikation.Anomalie)), Kurz);
+
+        await ansicht.WarteAufAsync(e => e.Nachricht is Domain.Projections.ImagePair.ImagePairSuchergebnis r
+                && r.Items.Any(i => i.Id.Wert == paar.Id && i.MenschBildpaarLabel == Klassifikation.Anomalie),
+            TimeSpan.FromSeconds(10), "die Ansicht fragte nach dem fremden Label nicht von sich aus neu");
+    }
+
+    /// <summary>
     /// Kennt der Client ein Aggregat nur aus einer Antwort — er war nicht verbunden, als es entstand, und hat keinen Push dazu gesehen —, trägt
     /// sein nächster Command die Version aus der Antwort (eine Version je Aggregat, Plan Phase 5): der Server prüft gegen sie (OCC), statt den
     /// Command ungeprüft anzunehmen, und weil keine Marke die Version verschiebt, passt sie.

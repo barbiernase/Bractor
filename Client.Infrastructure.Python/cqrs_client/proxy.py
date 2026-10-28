@@ -299,6 +299,9 @@ class GrpcProxy:
                 elif field_name == "error":
                     self._handle_error(payload)
 
+                elif field_name == "aktualisiert":
+                    log.debug("Aktualisiert: %d Queries (ein Worker fragt nicht neu)", len(payload.queries))
+
                 else:
                     log.warning("Unknown message: %s", field_name)
 

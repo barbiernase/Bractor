@@ -33,6 +33,7 @@ public class ConnectionModule : IAsyncDisposable
     private CancellationTokenSource? _cts;
     private Task? _eventReadTask;
     private Task? _stateReadTask;
+    private Task? _aktualisierungsTask;
     private readonly List<IDisposable> _subscriptions = new();
 
     // ★ Retry-on-Silence (docs/08 §8.4). Der Loop sendet mit DERSELBEN (deterministischen) CommandId erneut,
@@ -113,6 +114,7 @@ public class ConnectionModule : IAsyncDisposable
 
             _eventReadTask = EventReadLoopAsync(_cts.Token);
             _stateReadTask = StateChangeLoopAsync(_cts.Token);
+            _aktualisierungsTask = AktualisierungsLoopAsync(_cts.Token);
 
             _bus.PostToSyncContext(() =>
                 _bus.Publish(new ConnectionEstablished(capabilities.SessionId)));
@@ -135,6 +137,8 @@ public class ConnectionModule : IAsyncDisposable
             try { await _eventReadTask; } catch { /* cancelled */ }
         if (_stateReadTask != null)
             try { await _stateReadTask; } catch { /* cancelled */ }
+        if (_aktualisierungsTask != null)
+            try { await _aktualisierungsTask; } catch { /* cancelled */ }
 
         _bus?.PostToSyncContext(() =>
             _bus.Publish(new ConnectionLost("Disconnected by client")));
@@ -282,6 +286,21 @@ public class ConnectionModule : IAsyncDisposable
             _bus?.PostToSyncContext(() =>
                 _bus.Publish(new ConnectionLost(ex.Message)));
         }
+    }
+
+    /// <summary>
+    /// Fragt neu, was der Server nennt (eine Projektion hat weiterverarbeitet, was die letzte Antwort zeigte — auch transitiv, etwa ein fremdes
+    /// Label in einer Datensatz-Ansicht): die Query geht wieder auf den Bus, die QueryBridge stellt sie, die Antwort landet in den Stores.
+    /// </summary>
+    private async Task AktualisierungsLoopAsync(CancellationToken ct)
+    {
+        try
+        {
+            await foreach (var query in _proxy.Aktualisierungen.ReadAllAsync(ct))
+                _bus!.PostToSyncContext(() => _bus.Publish(query, MessageContext.Local()));
+        }
+        catch (OperationCanceledException) { /* shutdown */ }
+        catch (ChannelClosedException) { /* proxy disposed */ }
     }
 
     private async Task StateChangeLoopAsync(CancellationToken ct)

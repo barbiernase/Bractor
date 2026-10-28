@@ -54,6 +54,7 @@ public sealed class BatchLeser
     private readonly ILogger? _logger;
     private readonly Func<Task>? _absturzVorCommit;
     private readonly Func<DateTimeOffset> _jetzt;
+    private readonly Action<IReadOnlyCollection<Guid>>? _verarbeitet;
 
     private PartitionsCheckpoint? _stand;
     /// <summary>Die Lese-Position dieser Aktivierung (≥ der durablen): bis hierher ist jedes Event der Partition erledigt.</summary>
@@ -66,6 +67,8 @@ public sealed class BatchLeser
 
     /// <param name="typen">Speicher-Diskriminatoren der abonnierten Typen samt Upcasting-Vorgängern (<see cref="TypenAus"/>); null = ohne Typfilter.</param>
     /// <param name="absturzVorCommit">Prüf-Naht: läuft nach dem Dispatch eines Batches, vor seinem Commit (Absturz mitten im Batch, zweite Aktivierung).</param>
+    /// <param name="verarbeitet">nach jedem Commit, der Events anwandte: die Streams dieser Events („P hat S weiterverarbeitet“ an die Verteiler,
+    /// Plan Pub/Sub-Neustrukturierung §2.7) — Mechanik nach dem Commit, die Projektion gibt dabei nichts aus.</param>
     public BatchLeser(
         IEventStoreRepository eventStore,
         IProjectionTracker tracker,
@@ -77,6 +80,7 @@ public sealed class BatchLeser
         IDeadLetterSink? deadLetter = null,
         ILogger? logger = null,
         Func<Task>? absturzVorCommit = null,
+        Action<IReadOnlyCollection<Guid>>? verarbeitet = null,
         Func<DateTimeOffset>? jetzt = null)
     {
         if (partition < 0 || partition >= konsum.Partitionen)
@@ -91,6 +95,7 @@ public sealed class BatchLeser
         _deadLetter = deadLetter;
         _logger = logger;
         _absturzVorCommit = absturzVorCommit;
+        _verarbeitet = verarbeitet;
         _jetzt = jetzt ?? (() => DateTimeOffset.UtcNow);
     }
 
@@ -362,6 +367,7 @@ public sealed class BatchLeser
 
         foreach (var s in erledigt) if (s > _lese) _erledigt.Add(s);
         foreach (var (stream, version) in neueGuards) guards[stream] = version;
+        if (neueGuards.Count > 0) _verarbeitet?.Invoke(neueGuards.Keys);
         return new Versuch(true, angewandt);
     }
 
