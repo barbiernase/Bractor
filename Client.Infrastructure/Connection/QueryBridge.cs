@@ -123,9 +123,8 @@ public class QueryBridge : IAsyncDisposable
     }
 
     /// <summary>
-    /// True, wenn das Read-Model für mindestens ein in der Antwort berührtes Aggregat noch HINTER dem
-    /// Read-Ziel liegt (die Domain-Event-Version, die der Client bereits aus dem Event-Push kennt) —
-    /// dann lohnt ein erneuter Versuch. Ohne Deps oder ohne bekanntes Ziel: nichts zu erwarten → frisch.
+    /// True, wenn das Read-Model für mindestens ein in der Antwort berührtes Aggregat noch HINTER der Version liegt, die der Client schon kennt
+    /// (aus Pushes oder einer früheren Antwort) — dann lohnt ein erneuter Versuch. Ohne Deps oder ohne bekannte Version: nichts zu erwarten → frisch.
     /// </summary>
     private bool IstReadModelZurueck(List<AggregateDep>? deps)
     {
@@ -133,7 +132,7 @@ public class QueryBridge : IAsyncDisposable
 
         foreach (var dep in deps)
         {
-            var ziel = _versioning.GetReadTarget(dep.Id);
+            var ziel = _versioning.GetVersion(dep.Id);
             if (ziel is int z && dep.Version < z)
                 return true;
         }

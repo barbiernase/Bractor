@@ -126,10 +126,12 @@ class MessageRouter:
         # Payload extrahieren
         payload = mapper.extract_event_payload(envelope)
 
-        # Version tracken
+        # Version tracken — eine Version je Aggregat: der Kopf nach dem Commit, wenn gesetzt (schrieb der Commit nach diesem Event
+        # weitere, die der Client nicht hört, zählen sie mit), sonst die Version des Events.
         agg_id = _parse_uuid(envelope.aggregate_id)
-        if agg_id and envelope.aggregate_version > 0:
-            version_tracker.track(agg_id, envelope.aggregate_version)
+        version = max(envelope.aggregate_version, envelope.stream_head_version)
+        if agg_id and version > 0:
+            version_tracker.track(agg_id, version)
 
         # Context aufbauen
         ctx = MessageContext(

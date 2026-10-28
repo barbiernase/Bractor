@@ -56,14 +56,15 @@ internal static class Pruefstand
 
     /// <summary>
     /// Schickt einen Command wie ein Emittent (Modus <c>Emittiert</c>, vorgegebene CommandId) und wartet auf das Ergebnis des Aggregats —
-    /// derselbe Weg wie der JSON-Eingang (<c>ProtoActorAggregateDispatcher.FrageAsync</c>).
+    /// derselbe Weg wie der JSON-Eingang (<c>ProtoActorAggregateDispatcher.FrageAsync</c>). Mit <paramref name="version"/> wie ein Client mit
+    /// Versionsprüfung (Modus <c>Client</c>, OCC gegen diese Version).
     /// </summary>
-    public static Task<CommandResult?> FrageAsync(IHost host, ICommand cmd, Guid commandId)
+    public static Task<CommandResult?> FrageAsync(IHost host, ICommand cmd, Guid commandId, int? version = null)
         => Infrastructure.Aggregate.ActorSystem.ProtoActorAggregateDispatcher.FrageAsync(host.Services.GetRequiredService<Proto.ActorSystem>(),
             new CommandEnvelope
             {
                 CommandId = commandId, AggregateType = AggregateDispatcherExtensions.ResolveAggregateType(cmd),
-                Payload = cmd, Modus = new CommandModus.Emittiert(), CorrelationId = Guid.NewGuid().ToString(),
+                Payload = cmd, Modus = version is int v ? new CommandModus.Client(v) : new CommandModus.Emittiert(), CorrelationId = Guid.NewGuid().ToString(),
             }, TimeSpan.FromSeconds(30), default);
 
     /// <summary>Ein Marten-Store auf eigenem Schema mit der Produktions-Registrierung (Events samt Upcasting, Snapshots, Metadaten).</summary>

@@ -164,13 +164,9 @@ public class ConnectionModule : IAsyncDisposable
         {
             // ExpectedVersion-Logik:
             //   ICreationCommand → immer 0 (Aggregat darf noch nicht existieren).
-            //   Sonst, wenn der Client die (marker-inklusive) Stream-Head-Version aus einem
-            //     Event-Push kennt → diese als OCC-ExpectedVersion (CommandModus.Client).
-            //   Sonst (Aggregat nur per Query geladen, noch KEIN Event-Push in dieser Sitzung)
-            //     → Sentinel -1: der Server mappt negativ auf CommandModus.Emittiert (kein OCC,
-            //     Inbox-Dedup). Sonst schlüge der erste Command fehl, weil die einzige dem Client
-            //     bekannte Version die Domain-Version (aus Query-Deps) ohne die Noop- und
-            //     Ablehnungs-Marken im Stream wäre — also zu niedrig für die OCC gegen den Head.
+            //   Sonst die Version, die der Client kennt — aus einem Event-Push oder aus einer Antwort (eine Version je Aggregat,
+            //     Plan Pub/Sub-Neustrukturierung Phase 5) → OCC (CommandModus.Client).
+            //   Kennt er das Aggregat gar nicht → Sentinel -1: der Server mappt negativ auf CommandModus.Emittiert (kein OCC, Inbox-Dedup).
             var expectedVersion = command is ICreationCommand
                 ? 0
                 : _versioning.GetVersion(command.Ziel) ?? -1;

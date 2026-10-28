@@ -77,7 +77,8 @@ public class SchreibGarantieTests
         //   abgesagt (Bestand erschöpft), eine Wiederholung der Absage (ein Fakt, Plan §3.1) würde jetzt wirken (Bestand zugebucht). Dazu eine
         //   Ablehnung (ein Hinweis: Posten unbekannt). Alle bekommen den Ausgang des ersten Mals, keine schreibt etwas.
         var schema = "pruef_inbox_neustart";
-        Guid p, q = Guid.NewGuid(), gewirkt = Guid.NewGuid(), abgesagt = Guid.NewGuid(), abgelehnt = Guid.NewGuid();
+        Guid p, q = Guid.NewGuid(), gewirkt = Guid.NewGuid(), abgesagt = Guid.NewGuid(), abgelehnt = Guid.NewGuid(), clientAbgelehnt = Guid.NewGuid();
+        int versionDesClients;
         using (var host = Cluster("garantie-neustart-1", schema: schema))
         {
             await host.StartAsync();
@@ -94,6 +95,13 @@ public class SchreibGarantieTests
                 // Eine Ablehnung (ein Hinweis) steht nur in der Inbox, nie im Log — sie legt auch keinen Stream an (Plan Phase 5: keine Marken).
                 (await es.KopfAsync(q, default)).Should().Be(0, "eine Ablehnung schreibt kein Event, auch keinen Stream");
                 (await es.AusgangAsync(abgelehnt, default)).Should().Be(KommandoAusgang.Abgelehnt);
+
+                // Ein Client mit Versionsprüfung: „gibt es schon“ — abgelehnt auf dem Stand, den er kennt; die Version bleibt.
+                versionDesClients = await es.KopfAsync(p, default);
+                var client = await FrageAsync(host, new EroeffnePosten(new(p), 1), clientAbgelehnt, versionDesClients);
+                client!.Abgelehnt.Should().BeTrue();
+                client.NewVersion.Should().Be(versionDesClients, "eine Ablehnung verschiebt die Version nicht");
+                (await es.KopfAsync(p, default)).Should().Be(versionDesClients);
             }
             finally { await host.StopAsync(); }
         }
@@ -111,11 +119,16 @@ public class SchreibGarantieTests
                 var w1 = await FrageAsync(host, new ReservierePosten(new(p), 5, Beleg.Ohne), gewirkt);
                 var w2 = await FrageAsync(host, new ReservierePosten(new(p), 3, Beleg.Ohne), abgesagt);
                 var w3 = await FrageAsync(host, new ReservierePosten(new(q), 1, Beleg.Ohne), abgelehnt);
+                // Der Client wiederholt mit seiner alten Version — der Stand ist weiter, aber die Inbox kennt die CommandId: dieselbe Ablehnung,
+                //   kein Versionskonflikt (Inbox vor OCC).
+                var w4 = await FrageAsync(host, new EroeffnePosten(new(p), 1), clientAbgelehnt, versionDesClients);
 
                 w1!.Success.Should().BeTrue("die erste Reservierung hat gewirkt");
                 w2!.Success.Should().BeTrue("die zweite wurde abgesagt — als Fakt, und der wird nicht noch einmal entschieden");
                 w3!.Success.Should().BeFalse("die dritte war abgelehnt");
                 w3.Abgelehnt.Should().BeTrue();
+                w4!.Abgelehnt.Should().BeTrue("die Ablehnung des Clients bleibt nach dem Neustart dieselbe");
+                w4.ErrorMessage.Should().NotContain("Concurrency");
                 (await store.ReadStreamAsync(p, 0, default)).Count.Should().Be(vorherP, "eine Wiederholung schreibt nichts");
                 (await store.ReadStreamAsync(q, 0, default)).Count.Should().Be(vorherQ, "auch eine wiederholte Ablehnung schreibt nichts");
                 (await Zustand<PostenState>(host.Services, p)).Reserviert.Should().Be(5);

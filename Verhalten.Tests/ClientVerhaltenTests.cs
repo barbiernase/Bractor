@@ -212,6 +212,34 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
     }
 
     /// <summary>
+    /// Kennt der Client ein Aggregat nur aus einer Antwort — er war nicht verbunden, als es entstand, und hat keinen Push dazu gesehen —, trägt
+    /// sein nächster Command die Version aus der Antwort (eine Version je Aggregat, Plan Phase 5): der Server prüft gegen sie (OCC), statt den
+    /// Command ungeprüft anzunehmen, und weil keine Marke die Version verschiebt, passt sie.
+    /// </summary>
+    [Fact]
+    public async Task Kennt_der_Client_ein_Aggregat_nur_aus_einer_Antwort_traegt_sein_Command_die_Version_der_Antwort()
+    {
+        var datensatz = Guid.NewGuid();
+        await using (var schreiber = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenArbeitsplatz))
+        {
+            await schreiber.QuittungAsync(schreiber.Sende(new ErstelleDatensatz(new(datensatz), "nur aus der Antwort")), Kurz);
+            await schreiber.QuittungAsync(schreiber.Sende(new NimmPaarAuf(new(datensatz), new(Guid.NewGuid()))), Kurz);
+        }
+        var kopf = (await b.Log.StreamAsync(datensatz)).Max(e => e.Version);
+
+        await using var ap = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenArbeitsplatz);
+        ap.Versionen.GetVersion(datensatz).Should().BeNull("der Client hat keinen Push zu diesem Datensatz gesehen");
+        await Warte.BisAsync(async () => await ap.FrageAsync(new HoleDatensatz(new(datensatz)), Kurz, typeof(DatensatzAntwort), typeof(DatensatzNichtGefunden))
+            is DatensatzAntwort { Mitglieder.Count: 1 }, Kurz, "die Leseseite kennt den Datensatz nicht", b.Host);
+        ap.Versionen.GetVersion(datensatz).Should().Be(kopf, "die Antwort nennt den Stand des Datensatzes — den Kopf seines Streams");
+
+        var quittung = await ap.QuittungAsync(ap.Sende(new SetzeSplit(new(datensatz), 70, 20, 10, 3)), Kurz);
+        quittung.Nachricht.Should().BeOfType<SplitGesetzt>("mit der Version aus der Antwort entscheidet das Aggregat, statt einen Konflikt zu melden");
+        quittung.Kontext.AggregateVersion.Should().Be(kopf + 1);
+        ap.Alles.Where(e => e.Nachricht is CommandFailed).Should().BeEmpty();
+    }
+
+    /// <summary>
     /// Auch ein eben angelegtes Objekt muss die nächste Query des Clients kennen. Heute nicht: der Client fasst nur nach, wenn die Antwort für das
     /// Objekt einen Stand mitbringt, der hinter seinem Schreiben liegt — für ein neues Objekt hat die Projektion noch keinen Eintrag im
     /// Versions-Index, und „kein Eintrag“ gilt als frisch.
