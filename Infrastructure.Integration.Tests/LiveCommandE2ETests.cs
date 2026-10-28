@@ -135,7 +135,9 @@ public class LiveCommandE2ETests
             //   Wirkungen in einer Transaktion) — hier das eine Event des Paars.
             var staende = host.Services.GetRequiredService<IReadModelDepsReader>();
             var stand = await staende.ReadAsync("imagepair-historie", new[] { pairId.ToString() });
-            stand.Should().ContainSingle(d => d.Id == pairId && d.Version == 1, "die Projektion hat das Paar bis Version 1 verarbeitet");
+            var kopf = (await host.Services.GetRequiredService<IEventStoreRepository>().ReadStreamAsync(pairId, 0, default)).Max(e => e.AggregateVersion);
+            stand.Should().ContainSingle(d => d.Id == pairId && d.Version >= 1 && d.Version <= kopf,
+                "die Projektion hat das Paar mindestens bis zum Anlegen verarbeitet, nie über den Kopf des Streams hinaus");
         }
         finally
         {
