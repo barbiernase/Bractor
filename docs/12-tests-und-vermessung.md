@@ -150,6 +150,25 @@ Leitung, `CommandFailed` am Akteur-Tor, zwei Knoten), Read-your-writes ohne Wart
 (transitive Aktualisierung), Seite des Logs ohne Einträge (Wiederverbinden), Ausgangskorb ohne Ablegen (`AusgangskorbTests`). Nicht gemessen
 (Plan Phase 7 verlangt keine Messung; PF-37).
 
+**Stand 2026-10-28 (Plan Pub/Sub-Neustrukturierung, Phase 8 — Stores und Projektionsform, `86092d0` … `b01b789`):** volle Stufe auf `496e384`
+grün bis auf `--check` und `--sonde` (die Werkzeuge schrieben `using`-Aliase und `partial` an Read-Models nicht zurück; behoben, auf `b01b789` beide
+grün): Prüfstand **519 grün + 1 übersprungen** (neu `StoreKlassenTests` 5, `StoreKlasseAnalyzerTests` 5, Formfälle in `HandlerFormAnalyzerTests`;
+entfallen `GaEinsPruefungTests`), Integration **67/67** (mit Last; neu `StoretestPostgresTests` 3: der allgemeine Store-Test für Marten, Datei-Ziel
+und Senke), Prüfdomäne **60/60** (neu `StoreKlassenE2ETests`), Verhaltens-Netz **22/22** unverändert (mit `NeustartTests`), Client 30/30, Python SDK
+und Worker grün, `codegen --check`, `--grammatik` und Gate grün. Rot unterwegs: Test-Stores ohne Read-Model-Schema und ohne `Id<T>`-Konverter
+(Marten-Codegen bricht an `Id<T>` als Identität; jetzt `GeneratedProjectionServices.RegistriereSchema` und `IdSerialisierung` in den Fixtures),
+Altzeilen `{"Wert": …}` aus diesem Lauf in den langlebigen Test-Datenbanken (gelöscht), zwei Testannahmen (Stand = Zahl der eigenen Events —
+Funktionen der Messung hängen mehr an; ein zu grober Gesten-Text). `FB-13` trat in der ersten schnellen Stufe einmal auf, danach nicht mehr.
+Gegenproben per `sed` im Server-Lauf rot gesehen: Klasse 1 ohne Revisionsprüfung (Store-Test Marten, Fall Neuaufbau), Klasse 2 ohne Bedingung
+(Store-Test Datei, zweite Aktivierung: Stand 3 statt 5), Neuaufbau ohne neue Generation (Store-Test Datei: die alte Aktivierung sichtbar, 4 Einträge,
+Stand 1002), Fortschritt vor den Wirkungen (`StoreKlassenTests`), Start-Prüfung lässt Klasse 3 ohne Erlaubnis zu, CQRS109, CQRS110 und CQRS111
+abgeschaltet (`StoreKlasseAnalyzerTests`), Query-Dienst ohne gezeigte Ids bzw. ohne Projektionen hinter der Frage (`StoreKlassenE2ETests`).
+Messung A-B (A = `567cfe0` im Worktree `/opt/bractor-a`, B = `b01b789`; S1, S3; beide gültig, Exactly-once grün; Ordner
+`…_server-pubsub-phase8-ab-{a,b}`): S1 158 → 147 Paare/s, p50 2,6 → 2,9 s, Queries je Vorgang 90,5 → 122, Transaktionen gleich (9,7 → 9,8);
+S3-64 1 466 → 1 513 Teile/s (p50 632 → 561 ms), S3-8 1 334 → 1 334 (p99 76 → 56 ms), Queries und Transaktionen je Vorgang gleich. Die zusätzlichen
+Queries in S1 sind der Stand je gezeigter Id: er wird jetzt bei jeder Query gelesen, weil eine Antwort auch die Id ihrer Query zeigt (vorher nur nach
+`ctx.Track` eines gefundenen Read-Models) — `mt_doc_projectioncheckpoint` 2 837 → 12 867, die Stand-Abfrage 630 → 10 651 Aufrufe (PF-38).
+
 Statisch gezählt:
 
 | Projekt | `[Fact]` | `[Theory]` | Dateien |
