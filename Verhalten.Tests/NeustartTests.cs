@@ -21,19 +21,11 @@ public sealed class NeustartTests
     private static readonly TimeSpan Abbruch = TimeSpan.FromSeconds(12);
     private static readonly TimeSpan Nachlauf = TimeSpan.FromMinutes(3);
 
-    // DIAG G-17: Debug-Meldungen der Funktionen und Aggregate mit Zeitstempel, eine Zeile je Meldung.
-    private static readonly Dictionary<string, string> Diagnose = new()
-    {
-        ["Logging__LogLevel__Funktion"] = "Debug", ["Logging__LogLevel__Infrastructure.Persistence.MartenEventStore"] = "Debug",
-        ["Logging__Console__FormatterName"] = "simple", ["Logging__Console__FormatterOptions__SingleLine"] = "true",
-        ["Logging__Console__FormatterOptions__TimestampFormat"] = "HH:mm:ss.fff ",
-    };
-
     [Fact]
     public async Task Nach_dem_harten_Neustart_unter_Last_wirkt_jede_Funktion_genau_einmal()
     {
         var u = await Testumgebung.NeuAsync(Anwendung.Pruefdomaene, "verhalten-neustart", consul: true, taktSekunden: 2);
-        var host = await Hostlauf.StarteAsync(u, "host-1", Diagnose);
+        var host = await Hostlauf.StarteAsync(u, "host-1");
         var eingang = new JsonEingang(host);
         var alteEingaenge = new List<JsonEingang>();
         try
@@ -101,7 +93,7 @@ public sealed class NeustartTests
             var getoetet = await JetztAsync(u);
             await Task.Delay(3000);
             await host.DisposeAsync();
-            host = await Hostlauf.StarteAsync(u, "host-2", Diagnose);
+            host = await Hostlauf.StarteAsync(u, "host-2");
                 alteEingaenge.Add(eingang);
             Volatile.Write(ref eingang, new JsonEingang(host));
             await Task.WhenAll(sender);
@@ -135,26 +127,6 @@ public sealed class NeustartTests
         long ZweimalGewirkt, string Bericht)
     {
         public bool Vollstaendig => Nachschuebe == Ausloeser && Zubuchungen == ZubuchungenSoll && Abgeschlossen == Verteilungen;
-    }
-
-    // DIAG G-17: hält jede Event-Zeile fest, deren Transaktion beim Einfügen (nach nextval) noch keine Nummer hatte.
-    private static async Task DiagTriggerAsync(Testumgebung u)
-    {
-        await using var conn = new NpgsqlConnection(u.DbVerbindung);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand($$"""
-            create table if not exists es.diag_ohne_xid (seq bigint, stream uuid, version bigint, zeit timestamptz default clock_timestamp());
-            create or replace function es.cqrs_event_zeit() returns trigger language plpgsql as $f$
-            begin
-                if pg_current_xact_id_if_assigned() is null then
-                    insert into es.diag_ohne_xid (seq, stream, version) values (new.seq_id, new.stream_id, new.version);
-                end if;
-                new.timestamp := (clock_timestamp() + coalesce((select versatz from "es".uhr where id = 1), interval '0'));
-                return new;
-            end
-            $f$;
-            """, conn);
-        await cmd.ExecuteNonQueryAsync();
     }
 
     private static async Task<DateTime> JetztAsync(Testumgebung u)

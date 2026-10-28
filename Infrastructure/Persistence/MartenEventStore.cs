@@ -84,7 +84,7 @@ public class MartenEventStore : IEventStoreRepository
         if (teile.All(t => t.Events.Count == 0 && (t.Beilagen?.Count ?? 0) == 0))
             return;
 
-        await EventZeit.SicherAsync(_store, default);   // den Zeitstempel setzt die Datenbank-Uhr (G-10)
+        await EventRegel.SicherAsync(_store, default);   // Sequenz nach der Transaktionsnummer (G-17), Zeitstempel von der Datenbank-Uhr (G-10)
         await InboxTabelle.SicherAsync(_store, default);
         await using var session = _store.LightweightSession();
         var item = new BatchAppend(aggregateId, expectedVersion, teile, aggregateType);
@@ -352,16 +352,11 @@ public class MartenEventStore : IEventStoreRepository
     /// oder eine fällig (solange eine offen ist, höchstens eine je <see cref="Horizont.ProbenAbstand"/>), ist die Runde eine kurze eigene Transaktion: Zählerstand, dann ihre
     /// Transaktionsnummer und die älteste noch laufende — sie schreibt keine Daten, nur ihren Commit, ohne auf die Platte zu warten. Sonst prüft
     /// die Runde nur die älteste laufende. Bleibt die höchste offene Probe stehen und war die letzte Freigabe lange her (ein Leser ohne Mitleser,
-    /// etwa ein Poll alle 30 s), wartet die Abfrage kurz auf sie — sonst stünde seine Marke ein Poll-Intervall zurück. Nur im Anhänge-Modus
-    /// <c>Quick</c> gültig (dort hat jede Transaktion ihre Nummer, bevor sie eine Sequenz zieht; <c>Rich</c> zieht die Sequenzen vor der
-    /// Transaktion).
+    /// etwa ein Poll alle 30 s), wartet die Abfrage kurz auf sie — sonst stünde seine Marke ein Poll-Intervall zurück. Gültig, weil jede
+    /// Event-Zeile ihre Sequenz erst nach der Nummer ihrer Transaktion bekommt (<see cref="EventRegel"/>).
     /// </summary>
     private async Task<(long Gesetzt, bool Dahinter)> GesetztAsync(long nach, CancellationToken ct)
     {
-        if (_store.Options.Events.AppendMode != EventAppendMode.Quick)
-            throw new InvalidOperationException(
-                "Der Horizont der Vollständigkeit setzt Martens Anhänge-Modus Quick voraus (docs/03 §3.3): im Modus Rich zieht Marten die "
-                + "Sequenzen vor der Transaktion, eine Marke könnte ein noch unsichtbares Event überholen.");
         var schema = _store.Options.Events.DatabaseSchemaName;
         await using var conn = _store.Storage.Database.CreateConnection();
         await conn.OpenAsync(ct);
@@ -392,7 +387,6 @@ public class MartenEventStore : IEventStoreRepository
             var aelteste = ulong.Parse(r.GetString(1));
             dahinter = r.GetBoolean(2);
             frei = _horizont.Probe(stand, nummer, aelteste);
-            _logger.LogDebug("[DIAG] Probe nach {Nach}: Stand {Stand} Nummer {Nummer} älteste {Aelteste} → frei {Frei}", nach, stand, nummer, aelteste, frei);
         }
         else
         {
@@ -405,7 +399,6 @@ public class MartenEventStore : IEventStoreRepository
             var aelteste = ulong.Parse(r.GetString(0));
             dahinter = r.GetBoolean(1);
             frei = _horizont.Pruefe(aelteste);
-            _logger.LogDebug("[DIAG] Prüfung nach {Nach}: älteste {Aelteste} → frei {Frei}", nach, aelteste, frei);
         }
 
         if (_horizont.HoechsteOffene is { } offen && frei < offen && _horizont.SeitFreigabe > HorizontFrisch)
@@ -432,9 +425,7 @@ public class MartenEventStore : IEventStoreRepository
             await Task.Delay(pause, ct);
             if (pause < TimeSpan.FromMilliseconds(32)) pause *= 2;
             await using var cmd = new Npgsql.NpgsqlCommand("select pg_snapshot_xmin(pg_current_snapshot())::text", conn);
-            var a = ulong.Parse((string)(await cmd.ExecuteScalarAsync(ct))!);
-            frei = _horizont.Pruefe(a);
-            _logger.LogDebug("[DIAG] Warten: älteste {Aelteste} → frei {Frei}", a, frei);
+            frei = _horizont.Pruefe(ulong.Parse((string)(await cmd.ExecuteScalarAsync(ct))!));
         }
         return frei;
     }

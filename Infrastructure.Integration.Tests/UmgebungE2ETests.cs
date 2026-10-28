@@ -122,7 +122,7 @@ public class UmgebungE2ETests
                 ((bool)(await cmd.ExecuteScalarAsync())!).Should().BeTrue($"die Tabelle {tabelle} des Read-Models {rm.Typ.Name} steht nach dem Start");
             }
             await using (var cmd = new NpgsqlCommand(
-                $"select exists(select 1 from pg_trigger where tgname = '{EventZeit.Regel}' and tgrelid = 'es.mt_events'::regclass)", conn))
+                $"select exists(select 1 from pg_trigger where tgname = '{EventRegel.Regel}' and tgrelid = 'es.mt_events'::regclass)", conn))
                 ((bool)(await cmd.ExecuteScalarAsync())!).Should().BeTrue("die Regel für den Event-Zeitstempel steht nach dem Start");
         }
         finally
@@ -194,7 +194,7 @@ public class UmgebungE2ETests
                 o.DatabaseSchemaName = "es";
                 o.Events.DatabaseSchemaName = "es";
                 Infrastructure.Uhr.FristVerzeichnis.Registriere(o);
-                EventZeit.Registriere(o, UmgebungsDbClock.Ausdruck(u));   // dieselbe Uhr wie der Host (G-10)
+                EventRegel.Registriere(o, UmgebungsDbClock.Ausdruck(u));   // dieselbe Uhr wie der Host (G-10)
             });
             using var store = Store(sim);
             await store.Storage.ApplyAllConfiguredChangesToDatabaseAsync();

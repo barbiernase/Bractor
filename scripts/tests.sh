@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Die Test-Stufen (docs/12 §12.6) — gedacht für den Messserver: scripts/server.sh lauf scripts/tests.sh <stufe>
 #
-#   scripts/tests.sh schnell            je Teilschritt: Build, Prüfstand, Integration ohne Kategorie „Last“, Prüfdomäne, Verhaltens-Netz (≈ 8 min)
+#   scripts/tests.sh schnell            je Teilschritt: Build, Prüfstand, Integration und Verhaltens-Netz ohne Kategorie „Last“, Prüfdomäne (≈ 8 min)
 #   scripts/tests.sh voll               Abnahme: dazu „Last“, Codegen-Drift, Client, Python-SDK und Worker, --check, --sonde, --grammatik, Gate
 #   scripts/tests.sh suite <Projekt> [Filter]   eine Suite, optional mit dotnet-test-Filter (z. B. "FullyQualifiedName~WeckerGarantieTests")
 #
@@ -52,7 +52,7 @@ case "${1:-}" in
     suite Infrastructure.Pruefstand.Tests
     suite Infrastructure.Integration.Tests "Kategorie!=Last"
     suite Pruefdomaene.Integration.Tests
-    suite Verhalten.Tests
+    suite Verhalten.Tests "Kategorie!=Last"
     ;;
   voll)
     bauen

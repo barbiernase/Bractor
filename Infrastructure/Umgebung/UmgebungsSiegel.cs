@@ -124,7 +124,7 @@ public sealed class UmgebungsSiegel(UmgebungKonfig umgebung) : IHostedService
 
 /// <summary>
 /// Die DB-Uhr einer Umgebung (docs/konzept-werkbank.md §4.4): die Zeit der Datenbank plus <c>versatz</c> aus <c>&lt;schema&gt;.uhr</c> — nur in
-/// Sim; in Prod ohne Versatz. Derselbe Ausdruck setzt den Zeitstempel jedes Events (G-10, <c>Persistence.EventZeit</c>): Zeitlimits, Warte-Knoten
+/// Sim; in Prod ohne Versatz. Derselbe Ausdruck setzt den Zeitstempel jedes Events (G-10, <c>Persistence.EventRegel</c>): Zeitlimits, Warte-Knoten
 /// und Fristen vergleichen Zeit aus dem Log mit Zeit aus derselben Uhr, auch nach einem Zeitsprung der Sim.
 /// </summary>
 public sealed class UmgebungsDbClock(UmgebungKonfig umgebung) : IDbClock
@@ -132,7 +132,7 @@ public sealed class UmgebungsDbClock(UmgebungKonfig umgebung) : IDbClock
     /// <summary>Die Uhr der Umgebung als SQL-Ausdruck (<c>timestamptz</c>) — die eine Quelle für <see cref="IDbClock"/> und den Event-Zeitstempel.</summary>
     public static string Ausdruck(UmgebungKonfig u) => u.Umgebung.Art == UmgebungsArt.Sim
         ? $"(clock_timestamp() + coalesce((select versatz from \"{u.EventStore.Schema}\".uhr where id = 1), interval '0'))"
-        : Infrastructure.Persistence.EventZeit.Datenbankzeit;
+        : Infrastructure.Persistence.EventRegel.Datenbankzeit;
 
     public async Task<DateTimeOffset> JetztAsync(CancellationToken ct = default)
     {

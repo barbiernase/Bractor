@@ -407,11 +407,6 @@ public sealed class FunktionsArbeit
                 sends.Add(_sende(c, FunktionsIds.Befehl(eingabe.Funktion, eingabe.Stream, eingabe.Version, ab + i, c), korrelation, ct));
         if (sends.Count == 0) return EingangsAusgang.Fertig;
         var ausgaenge = await Task.WhenAll(sends);
-        if (_logger?.IsEnabled(LogLevel.Debug) == true)
-            for (int i = 0, j = 0; i < ausgaben.Count; i++)
-                if (ausgaben[i] is ICommand c)
-                    _logger.LogDebug("[DIAG] {Funktion} {Stream}:{Version} sendet {Command} {CommandId} → {Ausgang}", eingabe.Funktion, eingabe.Stream, eingabe.Version,
-                        c.GetType().Name, FunktionsIds.Befehl(eingabe.Funktion, eingabe.Stream, eingabe.Version, ab + i, c), ausgaenge[j++]);
         return ausgaenge.All(a => a.IstEntschieden()) ? EingangsAusgang.Fertig : EingangsAusgang.Spaeter;
     }
 }

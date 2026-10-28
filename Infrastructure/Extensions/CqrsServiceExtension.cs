@@ -194,9 +194,9 @@ public static class CqrsServiceExtensions
 
             // Schneller Anhänge-Modus: der Group-Commit hängt nur mit erwarteter Version an (StartStream bzw. Append(id, Ziel-Version)) —
             //   Marten vergibt die Versionen dann selbst und schreibt in EINER Runde: Stream-Kopf per „update … where version = erwartet“
-            //   (die OCC, auch gegen gleichzeitige Transaktionen), Events mit nextval im Insert. Der Standard (Rich) las vorher außerhalb der
-            //   Transaktion je Stream die Version und holte die Sequenzen ab, und hinterließ bei einem gescheiterten Commit Tombstones (G-7).
-            //   Metadaten (Kausalität, Korrelation, Header) und der Zeitstempel (Client-Uhr, wie bisher) bleiben gleich.
+            //   (die OCC, auch gegen gleichzeitige Transaktionen), dann die Events. Der Standard (Rich) las vorher außerhalb der Transaktion
+            //   je Stream die Version und holte die Sequenzen ab, und hinterließ bei einem gescheiterten Commit Tombstones (G-7). Sequenz und
+            //   Zeitstempel jeder Event-Zeile setzt die Regel der Datenbank (EventRegel).
             options.Events.AppendMode = JasperFx.Events.EventAppendMode.Quick;
 
             // Batch-Konsum der Projektionen (docs/04 §4.1): der Guard je (Projektion, Stream) und der Stand je (Projektion, Partition) mit
@@ -210,7 +210,7 @@ public static class CqrsServiceExtensions
             Infrastructure.Uhr.FristVerzeichnis.Registriere(options);
             // Das Kennungs-Verzeichnis der Quellen mit einem Stream je Schlüssel (genau einmal je Kennung, ohne Horizont).
             Infrastructure.Quellen.QuellKennungen.Registriere(options);
-            EventZeit.Registriere(options, builder.DbUhr);
+            EventRegel.Registriere(options, builder.DbUhr);
 
             // Die Dokumente des Frameworks (Dead-Letter u. a.) — eine Quelle, auch für die Plan-Tests.
             FrameworkDokumente.Registriere(options);
@@ -536,10 +536,10 @@ public class CqrsFrameworkBuilder
     public TimeSpan InboxHorizont { get; set; } = TimeSpan.FromDays(30);
 
     /// <summary>
-    /// Die Uhr der Datenbank als SQL-Ausdruck (G-10): dieselbe für <c>IDbClock</c> und den Event-Zeitstempel (<see cref="Persistence.EventZeit"/>).
+    /// Die Uhr der Datenbank als SQL-Ausdruck (G-10): dieselbe für <c>IDbClock</c> und den Event-Zeitstempel (<see cref="Persistence.EventRegel"/>).
     /// Die Umgebung setzt sie (in Sim samt Versatz, <c>UmgebungsDbClock.Ausdruck</c>); ohne Umgebung die Zeit der Datenbank.
     /// </summary>
-    public string DbUhr { get; set; } = Persistence.EventZeit.Datenbankzeit;
+    public string DbUhr { get; set; } = Persistence.EventRegel.Datenbankzeit;
 
     /// <summary>Leerlauf bis zur Passivierung je Actor-Art (PF-5, Umgebung <c>Lebenszyklus</c>); Standard 10/2/10 min.</summary>
     public Infrastructure.Lebenszyklus.Passivierung Passivierung { get; set; } = Infrastructure.Lebenszyklus.Passivierung.Standard;

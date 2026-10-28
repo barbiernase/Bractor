@@ -66,7 +66,7 @@ public sealed class FristVerzeichnis(IDocumentStore store) : IFaelligkeiten
     /// liefe den Index in Fälligkeits-Reihenfolge bis zum Ende durch, um <c>$1</c> Treffer zu finden (das ganze Verzeichnis je Takt).
     /// </summary>
     public static string FaelligeAbfrage(IDocumentStore store) =>
-        $"select stream_id, version, befehl, daten, akteur from {Name(store)} where faellig <= (select {Persistence.EventZeit.Uhr(store)}) order by faellig limit $1";
+        $"select stream_id, version, befehl, daten, akteur from {Name(store)} where faellig <= (select {Persistence.EventRegel.Uhr(store)}) order by faellig limit $1";
 
     public async Task<IReadOnlyList<FaelligeFrist>> FaelligeAsync(int hoechstens, CancellationToken ct)
     {
