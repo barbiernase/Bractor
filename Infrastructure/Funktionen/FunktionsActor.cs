@@ -310,7 +310,11 @@ public sealed class FunktionsActor : RahmenActor
             if (g.Result.Stand is { } stand && !MitZustand) lauf.Setze(stand);   // mit Zustand setzt nur das Laden den Stand (A5)
             if (lauf.Stand is not null && DarfStarten)
             {
+                var vor = lauf.Position;
                 foreach (var e in lauf.Nimm(g.Result.Seite)) Starte(context, e);
+                _logger?.LogDebug("[DIAG] {Funktion}/{Partition} Seite ab {Vor}: {Anzahl} Events {Erste}..{Letzte} gesetzt {Gesetzt} voll {Voll} → Position {Position}",
+                    _b.Name, _partition, vor, g.Result.Seite.Events.Count, g.Result.Seite.Events.FirstOrDefault()?.Sequenz,
+                    g.Result.Seite.Events.LastOrDefault()?.Sequenz, g.Result.Seite.Gesetzt, g.Result.Seite.Voll, lauf.Position);
                 VersucheGeparkte(context);
                 SchreibeStand(context, sofort: false);
                 // Die Seite war voll und es sind noch Slots frei: weiterlesen.
@@ -330,6 +334,7 @@ public sealed class FunktionsActor : RahmenActor
     {
         if (Stopp.IsCancellationRequested) return;
         var rechnung = RechnungFuer(e.Event);
+        _logger?.LogDebug("[DIAG] {Funktion}/{Partition} beginnt {Stream}:{Version} seq {Seq}", _b.Name, _partition, e.Event.AggregateId, e.Event.AggregateVersion, e.Sequenz);
         Neben(context, ct => _arbeit.VerarbeiteAsync(e.Event, ct, rechnung), t => NachArbeit(context, e, t));
     }
 
@@ -351,6 +356,8 @@ public sealed class FunktionsActor : RahmenActor
     {
         if (_lauf is not { } lauf || Stopp.IsCancellationRequested) return Task.CompletedTask;
         var ausgang = arbeit is Task<EingangsAusgang> { IsCompletedSuccessfully: true } a ? a.Result : EingangsAusgang.Fehler;
+        _logger?.LogDebug("[DIAG] {Funktion}/{Partition} fertig {Stream}:{Version} seq {Seq} → {Ausgang} Position {Position}", _b.Name, _partition,
+            e.Event.AggregateId, e.Event.AggregateVersion, e.Sequenz, ausgang, lauf.Position);
         if (ausgang == EingangsAusgang.Fertig)
         {
             _versuche.Remove(e.Sequenz);

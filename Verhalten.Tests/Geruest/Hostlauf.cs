@@ -27,7 +27,7 @@ public sealed class Hostlauf : IAsyncDisposable
     public int EinblickPort { get; }
     public string GrpcAdresse => $"http://localhost:{GrpcPort}";
 
-    public static async Task<Hostlauf> StarteAsync(Testumgebung u, string rolle = "host")
+    public static async Task<Hostlauf> StarteAsync(Testumgebung u, string rolle = "host", IReadOnlyDictionary<string, string>? variablen = null)
     {
         var dll = HostDll(u.Anwendung == Anwendung.Beispiel ? "Host.Grpc" : "Host.Pruefdomaene");
         var grpc = Testumgebung.FreierPort();
@@ -41,6 +41,7 @@ public sealed class Hostlauf : IAsyncDisposable
         psi.Environment["Transport__EinblickPort"] = einblick.ToString();
         psi.Environment["DOTNET_ENVIRONMENT"] = "Production";
         psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
+        foreach (var (k, v) in variablen ?? new Dictionary<string, string>()) psi.Environment[k] = v;
         var logDatei = Path.Combine(u.Verzeichnis, rolle + ".log");
         var log = new StreamWriter(logDatei, append: true, Encoding.UTF8) { AutoFlush = true };
         var prozess = Process.Start(psi)!;

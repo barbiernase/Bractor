@@ -75,6 +75,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     private bool _imCommit;
     // Wem der Einzel-Pfad antwortet (der Absender des Commands, den er gerade behandelt — nicht unbedingt die aktuelle Nachricht).
     private PID? _antwortAn;
+    private Guid _antwortFuer;   // DIAG G-17
 
     protected AggregateActorBase(
         IAggregateHandlerFactory handlerFactory,
@@ -128,6 +129,8 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     protected override async Task BehandleAsync(IContext context)
     {
         if (context.Message is not CommandEnvelope envelope) return;
+        _logger?.LogDebug("[DIAG] {Type}/{Id} empfängt {Command} {CommandId} von {Sender}", typeof(TState).Name, _id, envelope.Payload.GetType().Name,
+            envelope.CommandId, context.Sender);
         try
         {
             if (!_identitaetGueltig || envelope.AggregateId != _id)
@@ -334,6 +337,8 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     /// <summary>Antwortet dem Absender des Commands, den der Einzel-Pfad gerade behandelt.</summary>
     private void Antworte(IContext context, CommandResult ergebnis)
     {
+        _logger?.LogDebug("[DIAG] {Type}/{Id} einzeln {CommandId} → Success={Success} Abgelehnt={Abgelehnt} {Fehler}", typeof(TState).Name, _id, _antwortFuer,
+            ergebnis.Success, ergebnis.Abgelehnt, ergebnis.ErrorMessage);
         if (_antwortAn is { } an) context.Send(an, ergebnis);
     }
 
@@ -614,6 +619,8 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                     };
                 }
             }
+            _logger?.LogDebug("[DIAG] {Type}/{Id} Bündel {CommandId} → Success={Success} Abgelehnt={Abgelehnt} Sofort={Sofort} Wie={Wie} an={An}", typeof(TState).Name, _id,
+                e.Env.CommandId, e.Ergebnis!.Success, e.Ergebnis.Abgelehnt, e.Sofort is not null, e.WieVorgaenger, e.An is not null);
             if (e.An is { } an) context.Send(an, e.Ergebnis!);
             e.Beantwortet = true;
         }
@@ -634,6 +641,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         foreach (var (env, an) in buendel)
         {
             _antwortAn = an;
+            _antwortFuer = env.CommandId;
             try
             {
                 if (!_initialized) await InitializeAsync();

@@ -21,11 +21,19 @@ public sealed class NeustartTests
     private static readonly TimeSpan Abbruch = TimeSpan.FromSeconds(12);
     private static readonly TimeSpan Nachlauf = TimeSpan.FromMinutes(3);
 
+    // DIAG G-17: Debug-Meldungen der Funktionen und Aggregate mit Zeitstempel, eine Zeile je Meldung.
+    private static readonly Dictionary<string, string> Diagnose = new()
+    {
+        ["Logging__LogLevel__Funktion"] = "Debug", ["Logging__LogLevel__Infrastructure.Aggregate"] = "Debug",
+        ["Logging__Console__FormatterName"] = "simple", ["Logging__Console__FormatterOptions__SingleLine"] = "true",
+        ["Logging__Console__FormatterOptions__TimestampFormat"] = "HH:mm:ss.fff ",
+    };
+
     [Fact]
     public async Task Nach_dem_harten_Neustart_unter_Last_wirkt_jede_Funktion_genau_einmal()
     {
         var u = await Testumgebung.NeuAsync(Anwendung.Pruefdomaene, "verhalten-neustart", consul: true, taktSekunden: 2);
-        var host = await Hostlauf.StarteAsync(u, "host-1");
+        var host = await Hostlauf.StarteAsync(u, "host-1", Diagnose);
         var eingang = new JsonEingang(host);
         var alteEingaenge = new List<JsonEingang>();
         try
@@ -93,7 +101,7 @@ public sealed class NeustartTests
             var getoetet = await JetztAsync(u);
             await Task.Delay(3000);
             await host.DisposeAsync();
-            host = await Hostlauf.StarteAsync(u, "host-2");
+            host = await Hostlauf.StarteAsync(u, "host-2", Diagnose);
             alteEingaenge.Add(eingang);
             Volatile.Write(ref eingang, new JsonEingang(host));
             await Task.WhenAll(sender);
@@ -104,7 +112,7 @@ public sealed class NeustartTests
             Befund befund;
             while (true)
             {
-                befund = await BefundAsync(u, verteilungen.ToArray(), getoetet);
+                befund = await BefundAsync(u, verteilungen.ToArray(), getoetet, mitBericht: false);
                 if (befund.Vollstaendig || nachlauf.Elapsed > Nachlauf) break;
                 await Task.Delay(1000);
             }
@@ -138,7 +146,7 @@ public sealed class NeustartTests
     }
 
     /// <summary>Soll und Ist aus EINER Momentaufnahme; dazu die fehlenden Nachschübe (Stream, Version, Sequenz, Partition, Zeit relativ zum Abbruch).</summary>
-    private static async Task<Befund> BefundAsync(Testumgebung u, Guid[] verteilungen, DateTime getoetet)
+    private static async Task<Befund> BefundAsync(Testumgebung u, Guid[] verteilungen, DateTime getoetet, bool mitBericht = true)
     {
         var s = Testumgebung.Schema;
         const string beleg = "(data->'Beleg'->>'Nummer')::uuid";
@@ -147,7 +155,7 @@ public sealed class NeustartTests
         await using var tx = await conn.BeginTransactionAsync(System.Data.IsolationLevel.RepeatableRead);
         async Task<long> Zahl(string sql)
         {
-            await using var cmd = new NpgsqlCommand(sql, conn, tx);
+            await using var cmd = new NpgsqlCommand(sql, conn, tx) { CommandTimeout = 120 };
             cmd.Parameters.AddWithValue("v", verteilungen);
             return Convert.ToInt64(await cmd.ExecuteScalarAsync());
         }
@@ -164,15 +172,14 @@ public sealed class NeustartTests
         var bericht = new StringBuilder();
         bericht.AppendLine($"Nachschub {nachschuebe} von {ausloeser}; Zubuchungen der Verteilung {zubuchungen} von {gestartet * 4}; "
                            + $"Verteilungen abgeschlossen {abgeschlossen} von {gestartet} (gesendet {verteilungen.Length}); Abbruch {getoetet:HH:mm:ss.fff}");
+        if (!mitBericht) return new Befund(ausloeser, nachschuebe, zubuchungen, gestartet * 4, abgeschlossen, gestartet, zweimal, bericht.ToString());
         await using (var cmd = new NpgsqlCommand($"""
-            select r.stream_id, r.version, r.seq_id, get_byte(uuid_send(r.stream_id), 15) % 8,
-                   extract(epoch from r.timestamp - @t)::numeric(10, 3)
-            from {s}.mt_events r
-            where r.type = 'posten_reserviert' and (r.data->>'Fehlmenge')::int > 0
-              and not exists (select 1 from {s}.mt_events z where z.type = 'posten_zugebucht' and z.stream_id = r.stream_id
-                              and z.headers->>'ueber' = 'funktion:Nachschub' and z.headers->>'ursache' = r.stream_id::text || ':' || r.version)
+            with zu as (select headers->>'ursache' u from {s}.mt_events where type = 'posten_zugebucht' and headers->>'ueber' = 'funktion:Nachschub')
+            select r.stream_id, r.version, r.seq_id, get_byte(uuid_send(r.stream_id), 15) % 8, extract(epoch from r.timestamp - @t)::numeric(10, 3)
+            from {s}.mt_events r left join zu on zu.u = r.stream_id::text || ':' || r.version
+            where r.type = 'posten_reserviert' and (r.data->>'Fehlmenge')::int > 0 and zu.u is null
             order by r.seq_id limit 40
-            """, conn, tx))
+            """, conn, tx) { CommandTimeout = 120 })
         {
             cmd.Parameters.AddWithValue("t", getoetet);
             await using var r = await cmd.ExecuteReaderAsync();
@@ -180,13 +187,13 @@ public sealed class NeustartTests
                 bericht.AppendLine($"  ohne Nachschub: {r.GetGuid(0)} v{r.GetInt64(1)} seq {r.GetInt64(2)} Partition {r.GetInt32(3)} {r.GetDecimal(4):+0.000;-0.000} s");
         }
         await using (var cmd = new NpgsqlCommand($"""
-            select v.stream_id, v.seq_id, extract(epoch from v.timestamp - @t)::numeric(10, 3),
-                   (select count(*) from {s}.mt_events z where z.type = 'posten_zugebucht' and (z.data->'Beleg'->>'Nummer')::uuid = v.stream_id)
-            from {s}.mt_events v
-            where v.type = 'verteilung_gestartet' and v.stream_id = any(@v)
-              and not exists (select 1 from {s}.mt_events a where a.type = 'verteilung_abgeschlossen' and a.stream_id = v.stream_id)
+            with zu as (select {beleg} b, count(*) n from {s}.mt_events where type = 'posten_zugebucht' and {beleg} = any(@v) group by 1),
+                 ab as (select stream_id from {s}.mt_events where type = 'verteilung_abgeschlossen' and stream_id = any(@v))
+            select v.stream_id, v.seq_id, extract(epoch from v.timestamp - @t)::numeric(10, 3), coalesce(zu.n, 0)
+            from {s}.mt_events v left join zu on zu.b = v.stream_id left join ab on ab.stream_id = v.stream_id
+            where v.type = 'verteilung_gestartet' and v.stream_id = any(@v) and ab.stream_id is null
             order by v.seq_id limit 20
-            """, conn, tx))
+            """, conn, tx) { CommandTimeout = 120 })
         {
             cmd.Parameters.AddWithValue("t", getoetet);
             cmd.Parameters.AddWithValue("v", verteilungen);
