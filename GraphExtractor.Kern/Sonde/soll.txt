@@ -145,6 +145,9 @@ client Leihwesen.Gebuehren.IMahnportal | traegt ISchadensSchaetzung; sendet Eroe
 code Leihwesen.Ausleihe.Fristrechnung class teile=2 domaene=Leihwesen.Ausleihe block=§geteilt
 sicht Leihwesen.Ausleihe.Signatur valueobject domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Ausleihe.Zustand enum domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Ausleihe.HoleLeihstand query domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Ausleihe.Leihstand queryresponse domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Ausleihe.NichtVerliehen queryresponse domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Lesen.OffeneAusleihen query domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Lesen.OffeneAusleihenAntwort queryresponse domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Lesen.KeineAusleihen queryresponse domaene=Leihwesen.Ausleihe block=Leihvorgang

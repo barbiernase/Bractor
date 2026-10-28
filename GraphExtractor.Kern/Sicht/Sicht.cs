@@ -273,6 +273,13 @@ public sealed partial class Sicht
             if (S(a, "aggregat").Length > 0) P(aid, "agg:" + S(a, "aggregat"));
         }
         foreach (var s in _states) if (S(s, "aggregat").Length > 0) P("st:" + S(s, "_id"), "agg:" + S(s, "aggregat"));
+        // Direkte Abfrage (Plan Pub/Sub-Neustrukturierung §2.6): Query → Aggregat → Antworten (die Frage im Decider).
+        foreach (var a in _aggregate)
+            foreach (var f in Alle(a["fragen"]))
+            {
+                if (IstRec(S(f, "query"))) P(Rec(S(f, "query")), "agg:" + S(a, "name"));
+                foreach (var x in L(f, "antworten")) if (IstRec(x)) P("agg:" + S(a, "name"), Rec(x));
+            }
         // Funktionen (Plan §3.3): Eingang → Funktion → Ausgaben, Lese-Fähigkeit, Dienst im Konstruktor (der Klasse bzw. einer Umsetzung).
         foreach (var f in _bausteinFunktionen)
         {
