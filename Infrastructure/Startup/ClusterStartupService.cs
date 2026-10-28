@@ -1,19 +1,23 @@
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Proto;
 using Proto.Cluster;
 
 namespace Infrastructure.Startup;
 
 /// <summary>
-/// Startet den Cluster beim Application-Start.
+/// Startet den Cluster beim Application-Start und wartet, bis er bereit ist (<see cref="Bereitschaft"/>): erst dann starten die übrigen Dienste
+/// (Takt, Eingänge) — nach dem harten Ende eines Knotens legt der Cluster sonst Aktivierungen auf den toten.
 /// </summary>
 public class ClusterStartupService : IHostedService
 {
     private readonly ActorSystem _actorSystem;
+    private readonly ILogger<ClusterStartupService>? _logger;
 
-    public ClusterStartupService(ActorSystem actorSystem)
+    public ClusterStartupService(ActorSystem actorSystem, ILogger<ClusterStartupService>? logger = null)
     {
         _actorSystem = actorSystem;
+        _logger = logger;
     }
 
     public async Task StartAsync(CancellationToken ct)
@@ -36,6 +40,8 @@ public class ClusterStartupService : IHostedService
 
         var members = _actorSystem.Cluster().MemberList.GetAllMembers();
         Console.WriteLine($"  ✓ Cluster gestartet ({members.Length} Member)");
+        if (await Bereitschaft.WarteAsync(_actorSystem.Cluster(), _logger, ct))
+            Console.WriteLine("  ✓ Cluster bereit (jede Probe antwortet)");
         Console.WriteLine();
     }
 

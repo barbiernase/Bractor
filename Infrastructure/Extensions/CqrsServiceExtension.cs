@@ -386,7 +386,8 @@ public static class CqrsServiceExtensions
                 .Setup(
                     clusterName: builder.ClusterName,
                     clusterProvider: clusterProvider,
-                    identityLookup: new PartitionIdentityLookup());
+                    identityLookup: new PartitionIdentityLookup())
+                .WithClusterKind(Infrastructure.Startup.Bereitschaft.ClusterKind());   // Proben der Start-Sperre (ClusterStartupService)
         
             var aggregateKinds = Anwendung.Aggregate.GetAllKinds(system);
             foreach (var kind in aggregateKinds)
