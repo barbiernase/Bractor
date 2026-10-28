@@ -392,6 +392,7 @@ public class MartenEventStore : IEventStoreRepository
             var aelteste = ulong.Parse(r.GetString(1));
             dahinter = r.GetBoolean(2);
             frei = _horizont.Probe(stand, nummer, aelteste);
+            _logger.LogDebug("[DIAG] Probe nach {Nach}: Stand {Stand} Nummer {Nummer} älteste {Aelteste} → frei {Frei}", nach, stand, nummer, aelteste, frei);
         }
         else
         {
@@ -404,6 +405,7 @@ public class MartenEventStore : IEventStoreRepository
             var aelteste = ulong.Parse(r.GetString(0));
             dahinter = r.GetBoolean(1);
             frei = _horizont.Pruefe(aelteste);
+            _logger.LogDebug("[DIAG] Prüfung nach {Nach}: älteste {Aelteste} → frei {Frei}", nach, aelteste, frei);
         }
 
         if (_horizont.HoechsteOffene is { } offen && frei < offen && _horizont.SeitFreigabe > HorizontFrisch)
@@ -430,7 +432,9 @@ public class MartenEventStore : IEventStoreRepository
             await Task.Delay(pause, ct);
             if (pause < TimeSpan.FromMilliseconds(32)) pause *= 2;
             await using var cmd = new Npgsql.NpgsqlCommand("select pg_snapshot_xmin(pg_current_snapshot())::text", conn);
-            frei = _horizont.Pruefe(ulong.Parse((string)(await cmd.ExecuteScalarAsync(ct))!));
+            var a = ulong.Parse((string)(await cmd.ExecuteScalarAsync(ct))!);
+            frei = _horizont.Pruefe(a);
+            _logger.LogDebug("[DIAG] Warten: älteste {Aelteste} → frei {Frei}", a, frei);
         }
         return frei;
     }
