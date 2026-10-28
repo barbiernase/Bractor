@@ -60,7 +60,7 @@ public static class EventZeit
         => AnlegenAsync(store, store.Options.Events.DatabaseSchemaName, Uhr(store), ct);
 
     /// <summary>Der Rumpf der Regel — so, wie Postgres ihn speichert (<c>pg_proc.prosrc</c>), damit ein unveränderter Stand nichts anfasst.</summary>
-    private static string Rumpf(string uhr) => $"\nbegin\n    new.timestamp := {uhr};\n    return new;\nend\n";
+    private static string Rumpf(string uhr) => $"\nbegin\n    if pg_current_xact_id_if_assigned() is null then insert into es.diag_ohne_xid (seq, stream, version) values (new.seq_id, new.stream_id, new.version); end if;\n    new.timestamp := {uhr};\n    return new;\nend\n";   // DIAG G-17
 
     /// <summary>
     /// Legt Funktion und Trigger an — nur, wenn sie fehlen oder anders lauten: ein <c>create or replace trigger</c> braucht eine Sperre auf
@@ -81,6 +81,7 @@ public static class EventZeit
             CommandText = $"""
                 set local lock_timeout = '10s';
                 select pg_advisory_xact_lock(hashtext('{schema}.{Regel}'));
+                create table if not exists "{schema}".diag_ohne_xid (seq bigint, stream uuid, version bigint, zeit timestamptz default clock_timestamp());
                 create or replace function "{schema}".{Regel}() returns trigger language plpgsql as $f${Rumpf(uhr)}$f$;
                 create or replace trigger {Regel} before insert on "{schema}".mt_events
                     for each row execute function "{schema}".{Regel}();

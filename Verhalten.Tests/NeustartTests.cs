@@ -34,7 +34,6 @@ public sealed class NeustartTests
     {
         var u = await Testumgebung.NeuAsync(Anwendung.Pruefdomaene, "verhalten-neustart", consul: true, taktSekunden: 2);
         var host = await Hostlauf.StarteAsync(u, "host-1", Diagnose);
-        await DiagTriggerAsync(u);
         var eingang = new JsonEingang(host);
         var alteEingaenge = new List<JsonEingang>();
         try
@@ -103,8 +102,7 @@ public sealed class NeustartTests
             await Task.Delay(3000);
             await host.DisposeAsync();
             host = await Hostlauf.StarteAsync(u, "host-2", Diagnose);
-            await DiagTriggerAsync(u);
-            alteEingaenge.Add(eingang);
+                alteEingaenge.Add(eingang);
             Volatile.Write(ref eingang, new JsonEingang(host));
             await Task.WhenAll(sender);
             gescheitert.Should().BeEmpty("jeder Command kommt nach dem Neustart mit derselben CommandId durch");
