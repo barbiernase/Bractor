@@ -33,7 +33,10 @@ Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses K
 - **Cluster:** `Cluster:Art = Einzelknoten` (Mitgliedschaft in-memory über den `TestProvider` von Proto.Cluster, kein Consul — Standard in Sim)
   oder `Consul` (`ConsulProvider` als Discovery, kein statischer Seed). In beiden Fällen `PartitionIdentityLookup`. Die Kinds werden beim
   Start aggregiert: Aggregate und alle `IClusterKindContributor` (Batch-Leser, Funktions-Actors, Funktions-Vermittler, Uhr, Quellen-Halter); dazu
-  spawnt jeder Knoten seinen Verteiler (lokaler Actor mit festem Namen `verteiler`, `VerteilerStart`). Cluster-Start mit hartem 30-s-Timeout (`ClusterStartupService`).
+  spawnt jeder Knoten seinen Verteiler (lokaler Actor mit festem Namen `verteiler`, `VerteilerStart`). Cluster-Start mit hartem 30-s-Timeout (`ClusterStartupService`), danach die **Start-Sperre** (`Bereitschaft`): 32 Proben-Identitäten, die über
+  die Mitglieder streuen, werden gefragt, bis jede antwortet (höchstens 90 s, dann mit Warnung weiter) — erst dann starten Takt und Eingänge. Nach
+  dem harten Ende eines Knotens steht er noch in der Mitgliederliste, und der Cluster legt Aktivierungen auf ihn; ohne die Sperre arbeitete ein
+  neu gestarteter Host Minuten lang gegen Fristen (vorher leistete das unausgesprochen die Aktivierung der Broker beim Start).
 - **Boot-Fehler** gehen als Zeile `CQRS-BOOT {text, karte, art}` auf stderr; die Werkbank hängt sie an die Karte.
 
 ## 6.2 Der Wire-Transport (Multi-Node-Herzstück)
