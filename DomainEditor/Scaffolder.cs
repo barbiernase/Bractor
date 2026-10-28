@@ -423,7 +423,12 @@ public static class Scaffolder
         var positionell = r.Felder.Where(f => !f.Geerbt && f.Zugriff is null).ToList();
         var eigenschaften = r.Felder.Where(f => !f.Geerbt && f.Zugriff is not null).ToList();
         var basen = new[] { marker }.Concat(r.Basen ?? []).Where(x => !string.IsNullOrEmpty(x)).ToList();
-        var kopf = $"{r.Typart ?? "public record"} {r.Name}"
+        var typart = r.Typart ?? "public record";
+        // Ein Read-Model mit typisierter Id ist partial (CQRS111): der Generator ergänzt seine Speicher-Identität.
+        if (marker is not null && marker.StartsWith(IReadModel) && r.Felder.Any(f => f.Name == "Id" && f.Typ.StartsWith("Id<"))
+            && !typart.Split(' ').Contains("partial"))
+            typart = typart.Contains("record") ? typart.Replace("record", "partial record") : typart.Replace("class", "partial class");
+        var kopf = $"{typart} {r.Name}"
                    + (r.OhneParameterliste && positionell.Count == 0 ? "" : $"({Parameter(positionell)})")
                    + (basen.Count == 0 ? "" : $" : {string.Join(", ", basen)}");
         if (eigenschaften.Count == 0 && string.IsNullOrWhiteSpace(r.Zusatz))
