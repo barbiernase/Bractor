@@ -4,12 +4,12 @@ Projektgedächtnis für Claude Code — bewusst schlank, nur Wissen, kein Change
 **Maßstab im Zweig `pubsub_neustrukturierung` ist `docs/plan-pubsub-neustrukturierung.md`** (Zielbild, Grammatik, Garantien, Phasen des
 Umbaus; noch nicht umgesetzt). Wo etwas widerspricht, gilt der Plan als Ziel und der Code als Ist. Wegweiser: `docs/README.md`.
 Offenes und Schulden: `docs/13-reifegrad-schulden-bewertung.md` §13.0. Zahlen und Messwerte: `docs/12-tests-und-vermessung.md`.
-Das Bild unten („Das tragende Bild“) beschreibt den **Ist-Zustand** nach Phase 5 des Umbaus.
+Das Bild unten („Das tragende Bild“) beschreibt den **Ist-Zustand** nach Phase 6 des Umbaus.
 
 ## Was das Projekt ist
 
 Ein **allgemeines** signalbasiertes CQRS-/Event-Sourcing-Framework auf **Proto.Actor** (virtuelle Cluster-Actors), **Marten/PostgreSQL**
-(Event-Store, einzige Wahrheit) und **Redis** (nicht-autoritativer Versions-Index). Events werden geordnet und genau einmal wirksam an
+(Event-Store, einzige Wahrheit). Events werden geordnet und genau einmal wirksam an
 Projektionen, Reaktionen, Prozesse und Flüsse zugestellt; alles Dispatchende ist zur Compile-Zeit generiert. Dazu gehört die **Werkbank**:
 ein Editor, in dem eine Anwendung entworfen, als Code erzeugt, gebaut, im echten Host durchgespielt und über die Spur nachvollzogen wird.
 Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling und Beispiel**, nicht der Maßstab.
@@ -42,16 +42,18 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
 - **W11** Allgemeines Framework: eine Primitive bleibt, wenn sie allgemein gebraucht wird — nicht, weil die Beispieldomäne sie nutzt. Je Absicht ein Weg.
 - **W12** Keine GUIs im Editor (Clients nur als Vertrag), keine Schema-Evolution im Editor (`IUpcast` bleibt als Backend-Primitive), kein Deploy.
 
-## Das tragende Bild (Ist-Zustand nach Plan-Phase 5)
+## Das tragende Bild (Ist-Zustand nach Plan-Phase 6)
 
 - **Schreibseite:** Command → Aggregat-Actor (Single-Writer, Inbox-Tabelle) → `Decide` (`OneOf<Event, Hinweis, Frist<TCmd>>`) → Events →
-  Group-Commit → Commitmeldung (Envelope + Signal, für jeden Schreiber gleich: Aggregat, Quelle, Funktions-Ausgabe). **Keine Marken im Log**
+  Group-Commit → **Wecker** am Commit (generierter Weckplan, für jeden Schreiber gleich: Aggregat, Quelle, Funktions-Ausgabe) + Push an Clients
+  (Envelope, Broker bis Phase 7). **Keine Marken im Log**
   (Phase 5): Noop und Ablehnung schreiben nur ihre Quittung in die Inbox, mit Kopf-Prüfung des Streams in derselben Transaktion
   (`cqrs_kopf`); eine Version je Aggregat (= Zahl seiner Events), beim Client aus Pushes und Antworten (`VersioningModule`).
 - **Zwei durable Konsumenten:** **Projektion** (`ISubscriber`, `Task Handle` mit Schreib-Fähigkeiten genau eines Stores; `BatchLeser` je
   Projektion und Partition, Co-Commit, replaybar) und **Funktion** (`IFunktion` mit `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])`;
   `FunktionsActor` je Funktion und Adresse — Partition, oder eine mit `[EineAdresse]` —, Ausgabe festgehalten oder gleichbleibend, nie replayt).
-  Beide: Signal schnell + Poll 30 s.
+  Beide: Wecker am Commit schnell (je Commit und Ziel ein `Wake`, Weckplan aus den Signaturen, beim Start geprüft: GR-WECKPLAN, CQRS108) +
+  Takt 30 s je Partition. Den Stand je gezeigter Id einer Antwort liefert der Guard der Projektion (`ProjektionsStaende`), kein Redis.
 - **Funktion als Actor** (Plan §2.9, Phase 4b): Umsetzung und Dienste je Aktivierung (DI-Bereich, geschlossen beim Stoppen); gekapselter Zustand
   über `IZustand<T>` im Konstruktor (gesichert mit der Position in einer Transaktion, ein `Auf` zugleich, CQRS105); optionaler Lebenszyklus
   `ILebenszyklus` (`BeimAktivierenAsync` nach dem Laden, `VorDemSichernAsync` vor jeder Sicherung, CQRS107); **Hinweis-Netz**: Hinweise
@@ -65,15 +67,15 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
 - **Emit:** genau ein Weg (`CommandEmitter`, Id vom Aufrufer abgeleitet), erzwungen durch CQRS020/021.
 - **Akteure und Clients:** alles, was hineinkommt, kommt von einem Akteur (`IDarf<T>`); ein Client-Vertrag trägt Funktionen (`ITraegt<F>`),
   sendet (`ISendet<T>`), fragt (`IFragt<T>`) und hört (`IHoert<T>`); wirksam = Vertrag ∩ Token.
-- Noch alt (spätere Phasen): Broker und Signale (6), Redis-Index, Projektionsform (7/8), Hinweise und Ablehnungen an Clients über den
-  Broker (7).
+- Noch alt (spätere Phasen): der Broker für alles, was an Clients geht (Pushes, Ablehnungen, `CommandFailed`, Hinweise; Verteiler je Knoten
+  in Phase 7), Projektionsform mit `ProjectionWriter`/`Track` (8).
 
 ## Wo was liegt
 
 | Bereich | Ort |
 |---|---|
 | Verträge, Marker, geteilte Regeln (eine Quelle) | `Abstractions/` (z. B. `Akteurvertrag.cs`, `Funktionsvertrag.cs`, `Dienstvertrag.cs`, `Projektstruktur.cs`, `Spur/WirkerId.cs`, `Spur/SpurWeg.cs`, `StoreZugriff.cs`, `Umgebung/UmgebungKonfig.cs`) |
-| Laufzeit (Framework) | `Infrastructure/` (Projections, Funktionen, Uhr, Quellen/Treiber, Dienste, Umgebung, Einblick, Eingang, Akteure); referenziert keine Domäne, liest sie über `Komposition/Anwendung.cs` (`IAnwendung`) |
+| Laufzeit (Framework) | `Infrastructure/` (Projections, Wecken, Funktionen, Uhr, Quellen/Treiber, Dienste, Umgebung, Einblick, Eingang, Akteure); referenziert keine Domäne, liest sie über `Komposition/Anwendung.cs` (`IAnwendung`) |
 | Leitung | `Cqrs.Leitung/cqrs.proto` (Framework: Dienst, Hüllen, `Nutzlast`); je Anwendung `<Wurzel>.Leitung` (Domänen-DTOs + `GeneratedNutzlast`) |
 | Komposition | `<Wurzel>.Laufzeit` (hier `Domain.Laufzeit`): Laufzeit-Generate, `GeneratedAnwendung`, `AddCqrs(args)` der Hosts |
 | Generatoren und Analyzer | `*.SourceGeneration/`; Codegen vor dem Build (Proto, STJ-Kontexte, Python-Basen): `Cqrs.Codegen` über das Target in `Domain.Leitung` |
@@ -118,7 +120,7 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
 
 - Build: `dotnet build`
 - Prüfstand (store-frei, immer grün): `dotnet test Infrastructure.Pruefstand.Tests/Infrastructure.Pruefstand.Tests.csproj`
-- Integration (Postgres/Consul/Redis, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
+- Integration (Postgres/Consul, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
 - Prüfdomäne (Framework domänenneutral, echtes Marten, sequentiell, nie parallel zur anderen Integrations-Suite):
   `dotnet test Pruefdomaene.Integration.Tests/Pruefdomaene.Integration.Tests.csproj`
 - Verhaltens-Netz des Umbaus (echte Hosts als Prozesse, nur von außen angesprochen, sequentiell, nie parallel zu Integration oder Messung):

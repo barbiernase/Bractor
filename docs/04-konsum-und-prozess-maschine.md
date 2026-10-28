@@ -1,11 +1,11 @@
 # 04 — Konsum, Funktionen und Uhr
 
-Stand 2026-10-26 (Plan Pub/Sub-Neustrukturierung Phase 4: Dirigent, Reaktion, Fluss-DSL und Katalog-Form zurückgebaut), gegen den Code geprüft.
+Stand 2026-10-28 (Plan Pub/Sub-Neustrukturierung Phase 6: Wecker statt Broker und Signale, Redis-Versionsindex entfernt), gegen den Code geprüft.
 Ziel für den weiteren Umbau: docs/plan-pubsub-neustrukturierung.md.
 
 Was auf ein Event hin geschieht, ist eines von zwei Dingen: eine **Projektion** schreibt ein Read-Model (replaybar), eine **Funktion** sendet
 Commands oder schreibt Ergebnis-Events (wirkt in die Welt, nie blind neu abgespielt). Beide sind durable Konsumenten des Logs und folgen
-demselben Muster: ein Signal weckt schnell, ein Poll heilt verlorene Signale, gelesen wird geordnet aus dem Event-Store (Invariante 1), der
+demselben Muster: der Wecker am Commit weckt schnell, der Takt je Partition heilt verlorene Weckrufe, gelesen wird geordnet aus dem Event-Store (Invariante 1), der
 Fortschritt liegt durabel im Store. Was ein Konsument ist, folgt aus seiner Code-Form (Marker-Interface, Fähigkeits-Parameter, Rückgabetyp);
 einen zweiten Marker gibt es nicht. Zeit kommt über die **Uhr**: ein Decide setzt eine Frist, die Uhr sendet sie fällig.
 
@@ -29,7 +29,7 @@ Neuaufbau (er gehört zum Stand der Leseseite, §4.3).
 **Partitions-Leser** (`Infrastructure/Projections/BatchLeser.cs`, als `BatchLeserActor` ein virtueller Cluster-Actor, Kind
 `batch-<Projektion>`, Identität = Partition). Der Cluster hält eine Aktivierung je Partition; fällt das bei einer Netzstörung kurz aus, schützt
 die Versionsprüfung des Partitions-Checkpoints (G-4, unten). Der Fähigkeits-Bereich (Store-Instanz, Co-Commit-Puffer) gehört der Aktivierung
-(Rahmen, [03](03-schreibseite.md) §3.7): beim Stopp bricht der Durchlauf ab, der Bereich wird erst frei, wenn er geendet hat. Ein Durchlauf:
+(Rahmen, [03](03-schreibseite.md) §3.6): beim Stopp bricht der Durchlauf ab, der Bereich wird erst frei, wenn er geendet hat. Ein Durchlauf:
 1. **Stand laden:** `PartitionsCheckpoint { Id = "<projektion>:<p>", Position (globale Sequenz), Version, Geparkt }` über den Store
    (`IProjectionTracker.LadePartitionAsync`).
 2. **Seite lesen:** `IEventStoreRepository.ReadPartitionAsync` — Events mit `seq_id` jenseits der Position, nur Partition `p`, nur die
@@ -43,8 +43,11 @@ die Versionsprüfung des Partitions-Checkpoints (G-4, unten). Der Fähigkeits-Be
 5. **Commit (eine Transaktion):** alle Effekte, die Guards der berührten Streams und der Partitions-Checkpoint mit erwarteter Version
    (`CommitAsync`). Hat dazwischen eine zweite Aktivierung oder ein Neuaufbau geschrieben, fällt der ganze Batch zurück
    (`PartitionsKonfliktException`), der Leser lädt den Stand neu und liest von dort (G-4).
-6. **Danach** der Versions-Index (Redis) für die Events des Batches best-effort, parallel — nie über Uncommittetes.
-7. **Weiter**, solange die Seite voll war.
+6. **Weiter**, solange die Seite voll war.
+
+Der Guard je Stream ist zugleich der **Stand je Id**, den eine Antwort trägt (`ProjektionsStaende`, ein Lesezugriff über den Schlüssel
+„Projektion:Stream“): er steht mit den Wirkungen in derselben Transaktion, ist also nie vor den Daten sichtbar und sinkt nie. Er rückt nur mit den
+Events vor, die die Projektion hört (docs/13 FB-10). Einen Redis-Index gibt es nicht mehr.
 
 **Position und Nachzügler.** Vor jeder Seite bestimmt `ReadPartitionAsync` die *gesetzte* Sequenz: bis dorthin ist jede Sequenz endgültig — der
 Horizont der Vollständigkeit aus den Transaktionsnummern von Postgres, ohne Uhr ([03](03-schreibseite.md) §3.3, G-9; dieselbe Regel wie beim
@@ -71,12 +74,17 @@ hier eine Karenz von 3 s gegen den Event-Zeitstempel; eine länger offene Transa
   Innerhalb eines Batches sehen sich zwei Streams auf demselben geteilten Dokument über die Identity-Map (read-your-writes) — kein Konflikt.
 - Wirft etwas anderes (Datenbank weg), endet der Durchlauf; der nächste beginnt beim durablen Stand.
 
-**Weckung** (`Infrastructure/Projections/BatchKonsum.cs`, `BatchKonsumStartupService`). Ein `SignalReceiverActor` je Projektion abonniert die
-`StateChangeVia…`-Signale ihrer Event-Typen und weckt die Partition des Streams (`Wake` an `batch-<Projektion>/<p>`). Je Partition ist höchstens
-eine Weckung unterwegs, was währenddessen kommt, wird zu genau einer weiteren; der Actor quittiert sofort und merkt sich während eines
-Durchlaufs „noch einmal“ (der Durchlauf läuft neben der Mailbox; das Zusammenfassen ist die Regel des Rahmens, `RahmenActor.Wecke`). Der **Poll** weckt alle 30 s jede Partition — das Netz für
-verlorene Signale. Die Batch-Leser passivieren nicht (es gibt nur Projektionen ×
-Partitionen davon, der Poll weckt sie ohnehin).
+**Weckung** (Plan §2.3, `Infrastructure/Wecken/`). Es gibt **eine** Stelle, an der nach einem Commit geweckt wird: nach dem `SaveChanges` des
+Group-Commits (`MartenEventBatchWriter`) und des Einzel-Appends (`MartenEventStore`, auch der Rückfall `IsolateAsync` und der Betrieb ohne
+Bündeln). Alle Schreiber gehen durch sie — Aggregat, Quelle, festgehaltene Ausgabe einer Funktion. Der **Weckplan** (`WeckplanGenerator`, nur aus
+Signaturen) sagt je Event-Typ, wen der Commit weckt: den Batch-Leser jeder Projektion, die den Typ hört (`batch-<Projektion>`, Partition des
+Streams), jeden Funktions-Actor, der ihn aus dem Log hört (`funktion-<F>`, Partition bzw. die eine Adresse), und die Uhr bei `FristGesetzt`. Der
+**Wecker** schickt je Commit und Ziel genau einen `Wake` (ohne Inhalt, verlierbar); je Ziel ist beim Absender höchstens einer unterwegs, was
+währenddessen kommt, wird zu genau einem weiteren (`Weckungen`). Das Ziel quittiert sofort und merkt sich während eines Durchlaufs „noch
+einmal“ (`RahmenActor.Wecke`). Der **Takt** (`BatchKonsumStartupService`) weckt alle 30 s jede Partition — das Netz für verlorene Weckrufe; beim
+Start prüft er, dass jeder registrierte Hörer mit jedem gehörten Typ im Plan steht (Boot-Fehler sonst, GR-WECKPLAN; im Build CQRS108: ein Hörer
+aus dem Log hört nur konkrete, persistente Events). Ein Commit, dessen Ausgang mehrdeutig blieb (G-3), weckt nicht — ihn holt der Takt. Die
+Batch-Leser passivieren nicht (es gibt nur Projektionen × Partitionen davon, der Takt weckt sie ohnehin).
 
 **Rückstand.** `/health` und `/monitoring/metrics` melden über alle Projektionen die relevanten Events jenseits der Positionen
 (`KonsumRueckstand`, eine Abfrage je Projektion, gezählt über höchstens die ersten 1 000 Events hinter der kleinsten Position — darüber
@@ -113,7 +121,8 @@ Form (neutral aus der Agnostik-Sonde, `GraphExtractor.Kern/Sonde/Lesen.cs.txt`):
 mit `Task Handle(Ausgeliehen evt, IAggregateEnvelope envelope, ProjectionWriter writer, INotiereAusleihe notiere)`. Eine Projektion gibt
 nichts aus — ihr `Handle` liefert `Task` (CQRS057) und schreibt in genau einen Store (CQRS052); was auf ein Event hin etwas sendet, ist eine
 Funktion (§4.4). Je Event
-`writer.Execute(readModelId, ctx => …)`: der Effekt über die Fähigkeit plus `ctx.Track<T>(id)` für den Versions-Index. Was entsteht, liest
+`writer.Execute(readModelId, ctx => …)`: der Effekt über die Fähigkeit (`ctx.Track<T>(id)` ist seit Phase 6 ohne Wirkung und fällt mit der neuen
+Projektionsform, Plan Phase 8). Was entsteht, liest
 der Generator nur aus der Signatur (CQRS050), nie aus dem Rumpf.
 
 **Theorie (der gültige Kern).** Exactly-once-*Zustellung* gibt es nicht (Effekt und Quittung lassen sich über eine Grenze nie atomar
@@ -257,10 +266,10 @@ Hinweis denselben Weg wie ein Log-Eingang (Vermittler, Sitzung, `ArbeitsAuftrag`
 sie kommt mit ihren Commands und Hinweisen zum Actor, der sendet. Hört niemand einen Hinweis, den eine Funktion hören will, bricht der Build (R20,
 CQRS106); eine Adresse der Tabelle ohne Funktion ist ein Boot-Fehler. Hinweise an Clients gehen bis Plan Phase 7 den heutigen Weg (Broker).
 
-**Wecken.** Jede Funktion meldet sich wie eine Projektion beim `BatchKonsumStartupService` an: das Signal eines Commits weckt ihre Partition,
-der Poll alle 30 s heilt. Jeder Schreiber meldet nach seinem Commit dasselbe — Aggregat, Quelle und festgehaltene Ausgabe einer Funktion
-(`Infrastructure/PubSub/Commitmeldung.cs`): je Event den Envelope (für Sitzungen, die ihn hören) und sein typisiertes Signal. Bis Phase 4 sahen
-Events aus Quellen und Funktionen ihre Hörer erst mit dem Poll (FB-3). Den eigenen Wecker am Flush bringt Phase 6.
+**Wecken.** Jede Funktion mit Log-Eingängen meldet sich wie eine Projektion beim `BatchKonsumStartupService` an (Takt, Prüfung gegen den
+Weckplan); der Wecker am Commit weckt ihre Partition bzw. ihre eine Adresse (§4.1). Den Clients meldet jeder Schreiber nach seinem Commit
+weiterhin den Envelope je Event über den Broker (`Infrastructure/PubSub/Commitmeldung.cs`), bis Plan Phase 7 ihn durch den Verteiler je Knoten
+ersetzt.
 
 ## 4.5 Abläufe: Aggregat, Funktion und Frist
 
@@ -299,7 +308,7 @@ Jeder Command, den das Framework sendet (Funktion, Uhr), geht durch das **eine**
 - die `CommandId` gibt der Aufrufer deterministisch vor (Funktion: aus Funktion, Eingang, Stelle, Typ und Ziel; Uhr: aus Stream und Version
   des Frist-Events) → stabil über jede Wiederholung;
 - `CommandModus.Emittiert()` = **keine erwartete Version**;
-- eine **Frage** des Boten mit Pflicht-Frist (Standard 5 s; [03](03-schreibseite.md) §3.7), at-least-once, ohne eigenen Retry;
+- eine **Frage** des Boten mit Pflicht-Frist (Standard 5 s; [03](03-schreibseite.md) §3.6), at-least-once, ohne eigenen Retry;
 - liefert den **Ausgang** (`EmitAusgang`): `Zugestellt` (Erfolg, auch als erkannte Wiederholung), `Abgelehnt` (fachlich, durabel als Quittung in der Inbox),
   `Unbekannt` (Frist abgelaufen, technischer Fehler, Transportfehler). Keine Ausnahme verlässt den Emitter. Wer „unbekannt“ bekommt, wiederholt
   an seinem durablen Punkt mit derselben CommandId: die Funktion lässt den Eingang offen (die Position bleibt), die Uhr lässt die Frist liegen;

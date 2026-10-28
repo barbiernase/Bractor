@@ -1,6 +1,6 @@
 # 03 — Die Schreibseite (Command → Decider → Event → Store)
 
-Stand 2026-10-13, gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
+Stand 2026-10-28 (Plan Pub/Sub-Neustrukturierung Phase 6), gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
 
 Der Schreibpfad ist das dichte Zentrum des Frameworks. `AggregateActorBase`
 (`Infrastructure/Aggregate/ActorSystem/AggregateActorBase.cs`) trägt fast alle Invarianten und Audit-Fixes und ist ausführlich
@@ -27,7 +27,7 @@ kommentiert. Die Schalter des Schreibpfads stehen für Nutzer in der Umgebungs-D
   der Eingang nur auf Wunsch (`"zeigeEvents": true`) aus dem Log — die Werkbank wünscht sie, ein Treiber unter Last nicht.
 - **Emittiert** (Reaktion, Prozess, Fluss — der Dirigent ist der Prozess-Manager): ausschließlich über `CommandEmitter.EmitAsync`
   (`Infrastructure/PubSub/CommandEmitter.cs`) — deterministische CommandId, `CommandModus.Emittiert`, eine Frage des Boten mit Pflicht-Frist
-  (§3.7), at-least-once auf dem Draht; Akteur der Kette und Spur (`Ursache`, `Wirker`) reisen im Envelope. Andere Wege sind per Analyzer
+  (§3.6), at-least-once auf dem Draht; Akteur der Kette und Spur (`Ursache`, `Wirker`) reisen im Envelope. Andere Wege sind per Analyzer
   verboten (CQRS020/021; CQRS020 erkennt auch `FrageAsync<CommandResult>`).
 
 Quell-Nachrichten gehen nicht durch einen Decider: der Treiber hängt sie als erstes Event eines Vorgangs-Streams mit deterministischer Id
@@ -58,7 +58,7 @@ wartende Commands und entscheidet sie nacheinander im Speicher (`EntscheideAsync
 decide:<Aggregat>/<Command>, Wirker des Absenders)`): dieselbe Vorprüfung und dasselbe Decide wie der Einzel-Pfad unten, die Events eines
 schreibenden Commands wendet er sofort an — der nächste entscheidet auf diesem Stand. Alle schreibenden Commands gehen als Teile
 (`AppendTeil`: Events, Korrelation, Kausalität = CommandId, Akteur, Spur, Quittung) in **einen** Append (`AppendTeileAsync`, eine Transaktion,
-im Group-Commit ein Auftrag). Geantwortet wird jedem erst nach diesem Commit (`AbschliessenAsync`: Cache, Signale, Ablehnung an die Sitzung,
+im Group-Commit ein Auftrag). Geantwortet wird jedem erst nach diesem Commit (`AbschliessenAsync`: Cache, Pushes an Clients, Ablehnung an die Sitzung,
 Antwort in Mailbox-Reihenfolge — das `CommandResult` trägt nur Ausgang, Versionen und Ablehnung, die Events stehen im Log); eine CommandId,
 die zweimal im Bündel steht, bekommt die Antwort ihres ersten Auftretens. Scheitert der Append
 (Versionskonflikt durch einen zweiten Schreiber, eine Wiederholung, die der Cache nicht kannte, ein mehrdeutiger Commit, ein DB-Fehler), sind
@@ -95,18 +95,19 @@ Der gemeinsame Kern `HandleCommandCoreAsync` (das Ziel ist schon beim Empfang ge
    Ausgang des ersten Mals — auch wenn er jetzt anders entschieden hätte.
    **Scheitert ein Append sonst** (Versionskonflikt durch einen zweiten Schreiber, verlorene Quittung, DB-Fehler), rehydriert der Actor
    frisch aus dem Log (G-3) und schlägt in der Inbox nach. Steht die `CommandId` dort, hat der Command gewirkt bzw. ist abgelehnt — das wird
-   quittiert (mehrdeutiger Commit, kein falsches Negativ, P10), die Signale gehen nachträglich hinaus. Sonst ist sicher nichts geschrieben:
+   quittiert (mehrdeutiger Commit, kein falsches Negativ, P10), die Pushes an Clients gehen nachträglich hinaus; geweckt hat der
+   Wecker nicht (sein Commit galt als gescheitert), die Konsumenten holt der Takt. Sonst ist sicher nichts geschrieben:
    der Command wird **einmal** auf dem frischen Stand neu entschieden (ein Client-Command mit veralteter Version scheitert dabei regulär an der
    Vorprüfung); scheitert auch das, kommt ein technischer Fehler zurück.
 7. **Post-Append-Grenze**: ab dem Commit ist der Command durabel. Applier mutiert `_state` in-memory (Einträge des Rahmens wie
-   `FristGesetzt` werden nur in der Version mitgezählt), Redis-Track, Snapshot ab Schwelle, Publish. Wirft etwas davon, rehydriert der `catch` frisch aus dem Log und quittiert
+   `FristGesetzt` werden nur in der Version mitgezählt), Snapshot ab Schwelle, Push an Clients. Wirft etwas davon, rehydriert der `catch` frisch aus dem Log und quittiert
    trotzdem **Erfolg** (kein falsches Negativ).
 
 Snapshots (best-effort, ab `Schreibpfad.SnapshotSchwelle` und bei Deaktivierung, Version = Struktur-Hash + Code-Hash von State + Applier)
 sind in [04 §4.8](04-konsum-und-prozess-maschine.md) beschrieben.
 
 **Passivierung** (PF-5): hört ein Aggregat-Actor `Lebenszyklus.AggregatLeerlaufSekunden` lang nichts (Standard 600), stoppt er sich
-(Rahmen, §3.7; Proto-`ReceiveTimeout`) — nie, solange ein Commit läuft oder Commands warten; beim Stoppen schreibt er seinen Snapshot, die
+(Rahmen, §3.6; Proto-`ReceiveTimeout`) — nie, solange ein Commit läuft oder Commands warten; beim Stoppen schreibt er seinen Snapshot, die
 nächste Nachricht aktiviert ihn frisch (Snapshot + Tail; der Inbox-Cache ist dann leer, die Inbox-Tabelle bleibt). Emittenten-Adapter und Prozess-Manager passivieren genauso; die Batch-Leser der
 Projektionen (je Projektion und Partition) nicht ([04](04-konsum-und-prozess-maschine.md) §4.1).
 
@@ -150,7 +151,7 @@ public partial class Leihvorgang : IState
 ```
 
 **Wie der Fachcode rein bleibt:** `this.State` und der Konstruktor `Decider(Leihvorgang state)` (`Domain.SourceGeneration/Generator.cs`)
-sowie `Id`/`Version` (`StateGenerator`) sind generiert. OCC, Signal, Cursor, Idempotenz und Spur erscheinen ausschließlich im Framework.
+sowie `Id`/`Version` (`StateGenerator`) sind generiert. OCC, Weckruf, Cursor, Idempotenz und Spur erscheinen ausschließlich im Framework.
 Noop und Ablehnung stehen nicht im Log; „gewirkt/abgelehnt“ je CommandId hält die Inbox-Tabelle des Stores. Einträge des Rahmens
 (`IRahmenEvent`, heute nur `FristGesetzt`) werden beim Falten übersprungen (aber versionsgezählt) — der Decider sieht sie nie. Command → Aggregat folgt aus
 `ICommand<TAggregat>`, nicht aus Namespaces; das Decide muss im Ziel-Aggregat stehen (CQRS010), ein Command ohne typisiertes Ziel baut nicht
@@ -246,29 +247,21 @@ Reads werden durchgereicht. Schalter in der Umgebung: `Schreibpfad.GroupCommit` 
 
 Messwerte: [12](12-tests-und-vermessung.md).
 
-## 3.5 Redis Version-Index (nicht-autoritativ)
+## 3.5 Nach dem Commit: Wecker und Push
 
-`Infrastructure/Persistence/RedisVersionTracker.cs`: schneller verteilter Index für Stale-Detection auf der Leseseite (Wahrheit bleibt
-der Log). Datenmodell: Hash `agg:{id}` (Felder `v`/`t`/`ts`), mit Schlüssel-Präfix je Umgebung (`VersionIndex.Praefix`) und Ablauf
-(`VersionIndex.HaltbarkeitStunden`, Standard 24 — ohne Ablauf wuchs Redis mit jedem Aggregat, das es je gab; das Sekundär-Set `agg_idx:{type}`
-las niemand, es entfiel, PF-30). Geschrieben **nach** erfolgreichem Append, Hash und Ablauf in einer Redis-Pipeline. Ein abgelaufener Schlüssel
-gilt wie ein Ausfall: keine Information, niemand wartet. Graceful
-Degradation: `RedisConnectionException`/`TimeoutException` → nur Warning, der Command-Flow bricht nicht. Ganz abschaltbar über
-`VersionIndex.Betrieb = Aus` in der Umgebung → `NullVersionTracker`.
+Was nach einem Commit geschieht, ist für jeden Schreiber gleich (Aggregat, Quelle, festgehaltene Ausgabe einer Funktion) und nie Teil der Wahrheit:
 
-## 3.6 Signal-Mechanik `(StreamId, Version)`
+- **Wecker** (`Infrastructure/Wecken/Wecker.cs`, Plan §2.3): nach dem `SaveChanges` des Group-Commits und des Einzel-Appends schlägt er je
+  geschriebenem Event den generierten Weckplan nach und weckt jedes Ziel einmal — die Partitionen der Projektionen und Funktionen, die den Typ
+  hören, und die Uhr bei einer Frist. Der Weckruf trägt nur sein Ziel, darf verloren, doppelt, ungeordnet sein; das Ziel liest ab seiner Position,
+  der Takt je Partition (30 s) holt Verlorenes. Einzelheiten [04](04-konsum-und-prozess-maschine.md) §4.1.
+- **Push an Clients** (`Infrastructure/PubSub/Commitmeldung.cs`): je Event der Envelope mit Version und Kopf nach dem Commit, über den Broker an
+  die Sitzungen, die ihn hören — verlierbar (Invariante 6); bis Plan Phase 7 der Verteiler je Knoten ihn ersetzt.
 
-- **Vertrag**: `IStateChangeSignal` (`Abstractions/IStateChangeSignal.cs`) trägt nur `Guid StreamId` + `int Version`. Die typisierte
-  Variante `IStateChangeSignal<TEvent>` trägt die Event→Signal-Kante am Typ.
-- **Erzeugung**: pro persistiertem Event ein `StateChangeVia{Event}` (`Domain.SourceGeneration/SignalTypeGenerator.cs`); die Instanz baut
-  `GeneratedSignalFactory.Create(payload, aggregateId, version)` (`SignalFactoryGenerator`, liest das Typ-Argument, keinen Namens-Präfix).
-- **Verteilung**: im Erfolgspfad **gemeldet** über den `BrokerPublisher` (`Melde`, `AggregateActorBase`). Kein Warten auf Shard-Acks —
-  der Command ist bereits committet, Zustellung ist best-effort, durable Konsumenten heilen über Log-Read + Poll.
-  Jedes Event trägt seine eigene Position, nicht den Batch-Endwert.
-- **Routing**: der `BrokerPublisher` shardet über `Payload.GetType()` — die konkrete Signal-Klasse —, sodass nur Empfänger dieses
-  Event-Typs geweckt werden.
+Es gibt keine Signal-Typen und keinen Versionsindex mehr (bis Phase 5: `StateChangeVia{Event}` je Event über den Broker, Redis-Hash `agg:{id}` je
+Command im Turn). Die Version, die eine Query-Antwort je gezeigter Id trägt, kommt aus dem Fortschritt der Projektion (Guard je Stream, [04](04-konsum-und-prozess-maschine.md) §4.1).
 
-## 3.7 Proto.Actor: virtuelle Cluster-Actors
+## 3.6 Proto.Actor: virtuelle Cluster-Actors
 
 Wiring in `Infrastructure/Extensions/CqrsServiceExtension.cs`:
 - `ActorSystem` mit `PartitionIdentityLookup`; der Cluster-Provider folgt `Cluster.Art` der Umgebung: `Einzelknoten` (Mitgliedschaft
@@ -291,7 +284,7 @@ Wiring in `Infrastructure/Extensions/CqrsServiceExtension.cs`:
 `Infrastructure/Aggregate/ActorSystem/ClusterKindFactory.cs` (Klasse `ClusterKindsFactory`) ist vollständig auskommentiert — toter Code
 aus der Zeit vor dem Generator (docs/13 P3-2).
 
-## 3.8 Schulden im Schreibpfad
+## 3.7 Schulden im Schreibpfad
 
 Offenes steht in einer Quelle, [13 §13.0](13-reifegrad-schulden-bewertung.md): der parallele Drain skaliert sublinear (P2-6), Split-Upcasts verschieben die Version (G-5), der Snapshot-`Clone` ist ein JSON-Round-Trip (W10-2), der tote
 Lesepfad `LoadStateAsync` neben `AggregateRehydrator` (P2-9).

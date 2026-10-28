@@ -1,6 +1,6 @@
 # 06 — Transport, Multi-Node & Betrieb
 
-Stand 2026-10-13, gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
+Stand 2026-10-28 (Plan Pub/Sub-Neustrukturierung Phase 6: Wecker statt Signale, ohne Redis), gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
 
 Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses Kapitel verweisen.
 
@@ -8,7 +8,7 @@ Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses K
 
 | Prozess | Rolle |
 |---|---|
-| **Host.Grpc** | der einzige Cluster-tragende Prozess: Marten + Redis + ActorSystem (Einzelknoten oder Consul) + gRPC + Einblick-Port |
+| **Host.Grpc** | der einzige Cluster-tragende Prozess: Marten + ActorSystem (Einzelknoten oder Consul) + gRPC + Einblick-Port |
 | **Host.Blazor** | Beispiel-GUI der Beispieldomäne, ein gRPC-**Client** mit Vertrag (kein ActorSystem, kein Cluster); Verbindung aus `Clients:<Name>` der Umgebung (Kapitel [08](08-frontend-blazor-client.md)) |
 | **Werkbank** | Entwurfs-Oberfläche (`dotnet run --project Werkbank`); startet den Host als eigenen Prozess (`HostProzess`), **nur in einer Sim-Umgebung** — bei Prod endet ⟳ nach dem Lesen (`konzept-werkbank.md` §5) |
 | **Python-Worker externer Funktionen** | generischer `funktions_worker.py` für Funktionen mit Laufort `Extern`; meldet sich wie jeder Client am gRPC-Port an (Token, dessen Akteur `IDarf<F>` hat) und holt Aufträge beim Vermittler. Gestartet über „▶ Worker“ der Werkbank (`Werkbank/Server/Worker.cs`, aus `Funktionen:<F>:Worker`) oder von Hand (Kapitel [09](09-python-sdk.md)) |
@@ -23,16 +23,16 @@ Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses K
   unbekannter Abschnitt oder ein unbekanntes Feld ist ein Startfehler (Lader: `Infrastructure/Umgebung/UmgebungLader.cs`). Sim-DB je Branch:
   `cqrs_sim_${branch}`.
 - **`AddCqrs`** (`Infrastructure/Umgebung/CqrsUmgebungExtensions.cs`) bindet der Reihe nach: Kestrel (gRPC-Port HTTP/2; Einblick-Port
-  HTTP/1.1+2, 0 = aus), Umgebungs-Siegel, Redis-Präfix, `AddCqrsFramework` (Werte aus der Umgebung), `IDbClock` mit Versatz, Projektions-Stand,
+  HTTP/1.1+2, 0 = aus), Umgebungs-Siegel, `AddCqrsFramework` (Werte aus der Umgebung), `IDbClock` mit Versatz, Projektions-Stand,
   Pull-Pfade, Prozesse und Flüsse, Monitoring, Fristen, Akteure (`Identitaeten`), Quellen, Funktionen (Laufort), Dienste, Einblick.
 - **`LaufeAsync`** mappt gRPC (`CqrsClientService`, bidirektionaler Stream `Connect`), Monitoring, Einblick, JSON-Eingang und die Quell-Webhooks
   (§6.6). Mit Rolle `Migrator` legt es nur das Schema an und endet (§6.3).
 - **Umgebungs-Siegel** (`<schema>.umgebung`): ein Host startet nur gegen eine DB mit passendem Namen, passender Art und passendem Cluster-Namen;
-  eine Sim-DB legt der Host bei Bedarf an. **Uhr** (`<schema>.uhr`): Versatz nur in Sim wirksam. Redis-Schlüssel tragen das Präfix der Umgebung.
+  eine Sim-DB legt der Host bei Bedarf an. **Uhr** (`<schema>.uhr`): Versatz nur in Sim wirksam.
   Details `konzept-werkbank.md` §4.3–§4.4.
 - **Cluster:** `Cluster:Art = Einzelknoten` (Mitgliedschaft in-memory über den `TestProvider` von Proto.Cluster, kein Consul — Standard in Sim)
   oder `Consul` (`ConsulProvider` als Discovery, kein statischer Seed). In beiden Fällen `PartitionIdentityLookup`. Die Kinds werden beim
-  Start aggregiert: Aggregate, Pipeline-Kinds, Broker und alle `IClusterKindContributor` (Adapter der Pull-Pfade, Prozess-Manager,
+  Start aggregiert: Aggregate, Broker (bis Plan Phase 7 nur für Clients) und alle `IClusterKindContributor` (Adapter der Pull-Pfade, Prozess-Manager,
   Funktions-Vermittler, Quellen-Halter). Cluster-Start mit hartem 30-s-Timeout (`ClusterStartupService`).
 - **Boot-Fehler** gehen als Zeile `CQRS-BOOT {text, karte, art}` auf stderr; die Werkbank hängt sie an die Karte.
 
@@ -48,19 +48,18 @@ Ohne Serializer wären die internen Actor-Nachrichten rohe CLR-Records → de fa
 |---|---|
 | Command/Pull | `CommandEnvelope`, `CommandResult`, `EventEnvelope`, `Wake`/`WakeAck` |
 | PubSub | `Subscribe`, `Unsubscribe`, `Publish`, `Ack`, `Activate`, `GetSubscriberCount`, `SubscriberCountResponse` |
-| Pipeline | `SignalEnvelope`, `PipelineAck`, `PipelineAktivieren`; dazu `IPipelineTrigger` (Trigger-Welt ohne Domänen-Nutzer, Rückbau offen, docs/13 W11-1) |
 | Prozess | `ProzessWake` |
 | Funktionen | `AuftragAnbieten`, `HoleArbeit`, `ArbeitZugeteilt`, `ArbeitErledigt`, `ArbeitLebt`, `ListeOffene`, `OffeneAuftraege` (`Infrastructure/Funktionen/FunktionsVermittlung.cs`) |
 | Quellen | `HalteQuelle`, `QuelleGehalten` (Lease für `Laufmodus: EinmalImCluster`, `Infrastructure/Quellen/QuellenHalter.cs`) |
 
 **Generator (reflexionsfrei)** — `WireSerializerGenerator` (Infrastructure.SourceGeneration) emittiert `GeneratedWire` (Top-Level-Whitelist:
-`Serialize/Deserialize/TypeName/CanSerialize`) und `GeneratedWirePoly` (polymorpher Payload-Dispatch je Wurzel Event, Command, Signal, Auftrag).
-Diskriminator = Typname, identisch zu `GeneratedTypeRegistry`. Signale serialisiert der Generator selbst (uniform `(StreamId, Version)`).
+`Serialize/Deserialize/TypeName/CanSerialize`) und `GeneratedWirePoly` (polymorpher Payload-Dispatch je Wurzel Event, Command).
+Diskriminator = Typname, identisch zu `GeneratedTypeRegistry`.
 
 **STJ-Manifest** — `CqrsWireJsonContext` (`Domain.Laufzeit/Serialization/CqrsWireJsonContext.g.cs`, `Metadata`-Mode) ist **generiert**: der
 Codegen-Schritt im Build (Target `CqrsCodegenPrepass` in `Domain.Leitung/Domain.Leitung.csproj` → `Cqrs.Codegen`, `JsonContextEmitter`) schreibt
 Framework-Kopf (alle Wire-Hüllen) plus alle Commands/Events/Trigger der Domäne. Eingebacken sind die Converter aus `WirePolyConverters.cs`
-(`IEvent`, `ICommand`, `IAuftrag`, `IStateChangeSignal`, `IMessageEnvelope`, `PID`, `CommandModus`). `Cqrs.Codegen` liest die gebauten
+(`IEvent`, `ICommand`, `IMessageEnvelope`, `PID`, `CommandModus`). `Cqrs.Codegen` liest die gebauten
 Domänen-DLLs heute per `MetadataLoadContext` — das ist Reflection in einem Werkzeug (docs/13 W10-1).
 
 **Besonderheiten** (`WirePolyConverters.cs`):
@@ -74,10 +73,11 @@ Default-Protobuf 0 und Default-JSON -1000). `CanSerialize` = strikte Whitelist (
 Protobuf-`IMessage` bleiben beim Default-Serializer. Registriert an `.WithSerializer(...)` **vor** `WithRemote` (`CqrsServiceExtension.cs`).
 
 **Boot-Guard** — `WireSerializerBootCheck.Verify()` läuft direkt nach `WithRemote/WithCluster`: (a) jede `IWireMessage`-Hülle ist
-serialisierbar; (b) jeder Command/Event/Trigger aus `GeneratedTypeRegistry` hat eine `JsonTypeInfo` im Kontext; (c) jedes Signal steht im
-generierten Signal-Dispatch — sonst **Start-Abbruch**. Backstop gegen Registry↔Kontext-Drift neben dem Compile-Zeit-Guard des Generators.
+serialisierbar; (b) jeder Command/Event/Trigger aus `GeneratedTypeRegistry` hat eine `JsonTypeInfo` im Kontext — sonst
+**Start-Abbruch**. Backstop gegen Registry↔Kontext-Drift neben dem Compile-Zeit-Guard des Generators.
 
-**Nachgewiesen** durch Integrationstests (`TwoNodeCommandDispatchTests`, `RemotePidDeliverySmokeTests`, `SignalDeliveryClusterTests`) und den
+**Nachgewiesen** durch Integrationstests (`TwoNodeCommandDispatchTests`, `RemotePidDeliverySmokeTests`), das Verhaltens-Netz
+(`ZweiKnotenTests`: Weckrufe nach dem harten Ende eines Knotens) und den
 3-Node-Container-Betrieb (§6.3). Welche Tests es gibt und was sie messen: [12](12-tests-und-vermessung.md).
 
 ## 6.3 Multi-Node-Betrieb (`deploy-multinode/`)
@@ -85,7 +85,7 @@ generierten Signal-Dispatch — sonst **Start-Abbruch**. Backstop gegen Registry
 `docker-compose.yml` + `Dockerfile`. Alle Werte stehen in `umgebungen/umgebung.multinode.json` (`CQRS_UMGEBUNG=multinode`, `Cluster:Art =
 Consul`); je Node setzt Compose nur `Cluster__Rolle` und `Cluster__AdvertisedHost`. Topologie: ein Docker-Netz, Service-Namen als DNS.
 
-- **Infra**: `consul` (`agent -dev`), `postgres:16-alpine`, `redis:7-alpine` — mit Healthchecks.
+- **Infra**: `consul` (`agent -dev`), `postgres:16-alpine` — mit Healthchecks (kein Redis mehr, Plan Phase 6).
 - **Nodes**: `grpc1/2/3` (identisches Image) und ein `migrate`-Init-Node.
 - **Cold-Start über einen dedizierten Migrator**: `migrate` (`Cluster__Rolle=Migrator`) legt **alle** Marten-Objekte (inkl. der sonst lazy
   erzeugten Snapshot-Tabellen) eager und advisory-lock-gesichert an (`CqrsSchemaMigrator`), dann `exit 0`, `restart: no`. Die Nodes
@@ -122,7 +122,7 @@ Für Nutzer gibt es **eine** Konfiguration je Umgebung: `umgebungen/umgebung.<na
 `Abstractions/Umgebung/UmgebungKonfig.cs` — **sie sind das Schema** (eine Quelle; die Werkbank rendert daraus das Formular). Die vollständige
 Abschnitts-Tabelle steht in `konzept-werkbank.md` §4.1; hier nur der Überblick:
 
-- **Backend:** `Umgebung` (Name, Art `Sim`/`Prod`), `EventStore`, `VersionIndex` (Redis, `Aus` = Betrieb ohne Redis), `Cluster`
+- **Backend:** `Umgebung` (Name, Art `Sim`/`Prod`), `EventStore`, `Cluster`
   (Art, Name, Consul, AdvertisedHost, Rolle), `Schreibpfad` (generiertes JSON, Group-Commit, Batch, Linger, Drain, Snapshot-Schwelle,
   Inbox-Grenze), `Lebenszyklus` (Leerlauf bis zur Passivierung je Actor-Art), `Konsum` (Partitionen und Seitengröße des Batch-Konsums), `Transport` (gRPC-Port, Einblick-Port, JSON-Eingang).
 - **Was aktiv ist:** `Identitaeten` (Token → Akteure; ohne Abschnitt ist das Akteur-Tor offen), `Quellen` (Treiber-Konfig inkl. Webhook),
@@ -137,7 +137,7 @@ Intern übersetzt `AddCqrs` die Umgebung in den `CqrsFrameworkBuilder` (`AddCqrs
 `CqrsFrameworkOptions` existiert noch als toter Code (docs/13 P3-2).
 
 **Ports** (Werte der mitgelieferten Umgebungen): `prod` 5001 (gRPC/h2c) / 5002 (Einblick); `sim-main` 5101 / 5102 mit JSON-Eingang;
-Host.Blazor 5010 (`Clients:<Name>:Urls`); Postgres 5432, Redis 6379, Consul 8500. Ohne Angabe ist der Einblick-Port 0 (aus).
+Host.Blazor 5010 (`Clients:<Name>:Urls`); Postgres 5432, Consul 8500. Ohne Angabe ist der Einblick-Port 0 (aus).
 
 ### Betriebs-Kommandos
 - Infra: `docker compose -f docker-compose.infrastructure.yml up -d` (bzw. in Sim: ⟳ der Werkbank startet fehlende Container,

@@ -1,6 +1,6 @@
 # Plan: Neustrukturierung von Pub/Sub, Bausteinen und Grammatik
 
-> **Plan**, Stand 2026-10-28, Zweig `pubsub_neustrukturierung`. Phasen 0–4, 4b und 5 sind umgesetzt (Stand und Messwerte in docs/12, offene Punkte in
+> **Plan**, Stand 2026-10-28, Zweig `pubsub_neustrukturierung`. Phasen 0–4, 4b, 5 und 6 sind umgesetzt (Stand und Messwerte in docs/12, offene Punkte in
 > docs/13); am 2026-10-27 ergänzt um Funktionen als Actors mit Zustand und das Hinweis-Netz (E6–E9, §2.9, Phase 4b, umgesetzt 2026-10-28 — Abweichung
 > von §2.9: die Reihenfolge zwischen zwei Actors ist nicht zugesichert, docs/13 G-15). Dieses Dokument ist für die Dauer des Umbaus der
 > **Maßstab**; wo ein anderes Dokument oder der Code widerspricht, gilt der Plan als Ziel und der Code als Ist. Nach dem Umbau wird er in die
@@ -25,7 +25,7 @@ Genehmigungen, Integrationen …), und jeder Store-Typ muss hinter derselben Nah
 | E2 | Direkte Abfrage eines Aggregats (exakter Stand) | **ja**, als eigener Lesepfad neben dem Reader (§2.6). |
 | E3 | Typisierte Ids (`Id<TAggregat>` statt `Guid`) | **ja**, Pflicht für Command-Ziele; in Antworten die Grundlage für feine Updates an Clients (§2.5). |
 | E4 | Editor-Oberfläche (Fluss-Karten, Darstellung) | **zurückgestellt.** Werkbank und GraphExtractor werden nur so weit mitgezogen, dass alles baut und `--check`/`--sonde` für die neuen Bausteine grün sind (§6, Phase 4). `Werkbank/wwwroot/editor/` wird nicht angefasst. |
-| E5 | Implementieren | **phasenweise**, je Phase auf Tobis Wort (Phasen 0–4, 4b und 5 umgesetzt). |
+| E5 | Implementieren | **phasenweise**, je Phase auf Tobis Wort (Phasen 0–4, 4b, 5 und 6 umgesetzt). |
 
 **Entscheidungen (Tobi, 2026-10-27) — Funktionen als Actors (§2.9):**
 
@@ -637,6 +637,22 @@ Weckplan-Generator (Event-Typ → Partitionen der Projektionen und Funktionen, U
 Plan); Wecker am Flush inkl. `IsolateAsync`, mit denselben Mitteln wie das Hinweis-Netz aus Phase 4b (feste Tabelle, direkt per `Bote`); Broker, Signale, Receiver, Push-Pfad, Signal-Generatoren, Redis-Versionsindex zurückbauen;
 Prozess-/Emittenten-Polls entfallen (Takt je Partition bleibt). Tests: verlorene und doppelte Meldung, zwei Knoten mit hartem Ende eines Knotens
 (Weckungen kommen an, ohne auf den Takt zu warten), Störungslauf. Messung A-B-B-A.
+
+*Umgesetzt (2026-10-28), mit Tobis Zuschnitt:* `WeckplanGenerator` (nur aus Signaturen: Projektionen mit `Handle(TEvent, IAggregateEnvelope,
+ProjectionWriter, …)`, Funktionen mit Log-Eingang samt eigener Adresse, die Uhr bei `FristGesetzt`; CQRS108: ein Hörer aus dem Log hört nur konkrete,
+persistente Events; GR-WECKPLAN); der Wecker hängt nach dem `SaveChanges` des Group-Commits und des Einzel-Appends (damit auch an `IsolateAsync` und
+am Betrieb ohne Bündeln); der Takt je Partition läuft über ihn und prüft beim Start, dass jeder registrierte Hörer mit jedem gehörten Typ im Plan
+steht. Abweichungen: (1) **Der Broker bleibt bis Phase 7 für die Clients** (Pushes, gezielte Ablehnungen, `CommandFailed`, Hinweise an Clients,
+`SubscriptionTracker`) — ein vorgezogener Verteiler hätte den Großteil von Phase 7 ohne Sitzung als Actor gebaut; der Weckplan hat darum noch
+keinen Eintrag „Verteiler“. Entfallen sind die Signale ganz (Typen, Generatoren, Wire, Proto, Empfang) und die toten Broker-Reste.
+(2) **Der Redis-Versionsindex fällt schon hier**: der Stand je gezeigter Id kommt aus dem Guard je (Projektion, Stream), der mit den Wirkungen in
+einer Transaktion steht (`ProjektionsStaende`); Proto, Client und `VersioningModule` bleiben, FB-10 (nur gehörte Events zählen) und G-14 bleiben
+bis Phase 7/8. (3) Der Wecker fasst **beim Absender** zusammen (je Ziel höchstens ein Weckruf unterwegs, einer hinterher) und sendet darum mit
+`FrageAsync` und Frist statt `Melde` — verlierbar wie dieses, aber mit bekanntem Ende (PF-12); das Ziel fasst zusätzlich im Rahmen zusammen.
+(4) Ein Commit mit mehrdeutigem Ausgang (G-3) weckt nicht; ihn holt der Takt. (5) Prozess- und Emittenten-Polls gab es seit Phase 4 nicht mehr.
+(6) Der Störungslauf stoppt kein Redis mehr; die Messung ist auf Tobis Wort A-B statt A-B-B-A.
+Ergebnis (docs/12): S1 gleich, S3-64 1,15 ×, S5-1 1,09 ×, aber S5-8 0,71 × und S5-64 0,81 × im A-B-B-A nur für S5 (PF-36, Ursache offen); der
+Störungslauf ist ungültig — nach dem harten Neustart gehen Wirkungen von Funktionen verloren, gleich mit dem Code von Phase 5 (G-17).
 
 ### Phase 7 · Clients (5–8 PT)
 
