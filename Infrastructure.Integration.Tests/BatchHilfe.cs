@@ -3,6 +3,7 @@ using Core;
 using Domain.Projections.ImagePair;
 using Infrastructure.Persistence;
 using Infrastructure.Projections;
+using Infrastructure.Projections.Generated;
 using Marten;
 
 namespace Infrastructure.Integration.Tests;
@@ -62,21 +63,21 @@ public static class BatchHilfe
         }
     }
 
-    /// <summary>Der Dispatch der Historien-Projektion über eine Store-Instanz (wie der generierte Batch-Kind).</summary>
-    public static Func<EventEnvelope, ProjectionWriter, Task> HistorieDispatch(IAppendHistorieEintrag store, Func<EventEnvelope, Task>? vorher = null)
+    /// <summary>Der Dispatch der Historien-Projektion über eine Store-Instanz (der generierte Dispatch, wie im Batch-Kind).</summary>
+    public static Func<EventEnvelope, CancellationToken, Task> HistorieDispatch(IAppendHistorieEintrag store, Func<EventEnvelope, Task>? vorher = null)
     {
         var projektion = new ImagePairHistorieProjektion();
         var faehigkeiten = new FaehigkeitenAus(store);
-        return async (e, writer) =>
+        return async (e, ct) =>
         {
             if (vorher is not null) await vorher(e);
-            await projektion.DispatchAsync(e, writer, faehigkeiten);
+            await GeneratedProjektionen.ImagePairHistorieProjektion_Dispatch(projektion, e, faehigkeiten, ct);
         };
     }
 
-    /// <summary>Ein Batch-Leser der Historien-Projektion mit echtem Typfilter (inkl. Upcasting-Herkunft).</summary>
+    /// <summary>Ein Batch-Leser der Historien-Projektion (Store der Klasse 1) mit echtem Typfilter (inkl. Upcasting-Herkunft).</summary>
     public static BatchLeser HistorieLeser(MartenEventStore es, Domain.Infrastructure.ImagePair.ImagePairHistorieStore store, string projektionsId,
         int partition, Konsum konsum, Func<EventEnvelope, Task>? vorher = null, Func<Task>? absturz = null, Func<DateTimeOffset>? jetzt = null)
-        => new(es, store, projektionsId, partition, konsum, BatchLeser.TypenAus(ImagePairHistorieProjektion.SubscribedTypes),
+        => new(es, new Projektionsnaht(store, null), projektionsId, partition, konsum, BatchLeser.TypenAus(GeneratedProjektionen.ImagePairHistorieProjektion_Typen),
             HistorieDispatch(store, vorher), absturzVorCommit: absturz, jetzt: jetzt);
 }

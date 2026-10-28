@@ -11,7 +11,7 @@ einen zweiten Marker gibt es nicht. Zeit kommt über die **Uhr**: ein Decide set
 
 | Konsument | Code-Form | Schleife | Fortschritt | Neu abspielbar |
 |---|---|---|---|---|
-| Projektion | `ISubscriber, IPullSubscriber`; `Task Handle` mit Schreib-Fähigkeiten eines Stores | `BatchLeser` je (Projektion, Partition) | Partitions-Checkpoint (Position, Version) und Guard je Stream, co-committet | ja (Neuaufbau) |
+| Projektion | `IProjektion`; `Task Auf(Event[, Herkunft], Schreib-Fähigkeiten eines Stores)` | `BatchLeser` je (Projektion, Partition) | Fortschritt (Position, Revision, Generation) und Guard je Stream — beim Store der Klasse 1 in seiner Transaktion, sonst beim Framework (§4.3) | ja (Neuaufbau über Generationen) |
 | Funktion | `IFunktion` mit `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])` | `FunktionsActor` je (Funktion, Partition) | Funktions-Stand (Position, Revision) und festgehaltene Ausgabe je Eingang | nein |
 
 **Abläufe sind kein eigener Baustein mehr.** Was früher ein Prozess, eine Saga oder ein Fluss war, ist heute ein **Aggregat**, das den Ablauf
@@ -27,29 +27,36 @@ und ohne Hash-Abhängigkeit von Laufzeit oder PG-Version; für zufällige und ge
 Neuaufbau (er gehört zum Stand der Leseseite, §4.3).
 
 **Partitions-Leser** (`Infrastructure/Projections/BatchLeser.cs`, als `BatchLeserActor` ein virtueller Cluster-Actor, Kind
-`batch-<Projektion>`, Identität = Partition). Der Cluster hält eine Aktivierung je Partition; fällt das bei einer Netzstörung kurz aus, schützt
-die Versionsprüfung des Partitions-Checkpoints (G-4, unten). Der Fähigkeits-Bereich (Store-Instanz, Co-Commit-Puffer) gehört der Aktivierung
-(Rahmen, [03](03-schreibseite.md) §3.6): beim Stopp bricht der Durchlauf ab, der Bereich wird erst frei, wenn er geendet hat. Ein Durchlauf:
-1. **Stand laden:** `PartitionsCheckpoint { Id = "<projektion>:<p>", Position (globale Sequenz), Version, Geparkt }` über den Store
-   (`IProjectionTracker.LadePartitionAsync`).
+`batch-<Projektion>`, Identität = Partition; die Kennung der Projektion ist ihr Typname). Der Cluster hält eine Aktivierung je Partition; fällt
+das bei einer Netzstörung kurz aus, schützt die Revisionsprüfung des Fortschritts (G-4, unten). Der Fähigkeits-Bereich (Store-Instanz, Puffer)
+gehört der Aktivierung (Rahmen, [03](03-schreibseite.md) §3.6): beim Stopp bricht der Durchlauf ab, der Bereich wird erst frei, wenn er geendet
+hat. Wo der Fortschritt liegt und wie ein Batch gültig wird, sagt die Klasse des Stores (§4.3, `Projektionsnaht`). Ein Durchlauf:
+1. **Stand laden:** der Fortschritt der Partition `PartitionsCheckpoint { Id = "<projektion>:<p>", Position (globale Sequenz), Version (Revision),
+   Geparkt, Generation }` — beim Store der Klasse 1 im Store, sonst beim Framework (`IFortschrittsAblage.LadeFortschrittAsync`).
 2. **Seite lesen:** `IEventStoreRepository.ReadPartitionAsync` — Events mit `seq_id` jenseits der Position, nur Partition `p`, nur die
    **abonnierten Typen samt aller früheren Versionen, die per Upcasting in sie münden** (generierte Tabelle `GeneratedEventUpcasting.Herkunft`;
    ohne verlässliche Liste ohne Typfilter), ohne schon Erledigtes, `order by seq_id limit N` (`Konsum.BatchGroesse`, Standard 500).
    Materialisiert wird wie in `ReadStreamAsync` (Upcasting, Tombstones überspringen).
-3. **Guard je Stream:** die `ProjectionCheckpoint`s der Streams der Seite in **einer** Abfrage (`LadeGuardsAsync`); Events mit
+3. **Guard je Stream:** die Guards der Streams der Seite (`ProjectionCheckpoint`) in **einer** Abfrage (`LadeGuardsAsync`); Events mit
    `AggregateVersion <= Guard` überspringen (Wiederholung nach Neuaktivierung oder verlorenem Commit).
-4. **Anwenden:** je Stream in Versionsreihenfolge über den generierten `DispatchAsync` (unverändert). Der Store puffert die Effekte aller
-   Streams; vor jedem Event setzt der Leser den Stream des Events (`Stream(id)`), die Schreib-Regel je Dokument (§4.3) prüft gegen ihn.
-5. **Commit (eine Transaktion):** alle Effekte, die Guards der berührten Streams und der Partitions-Checkpoint mit erwarteter Version
-   (`CommitAsync`). Hat dazwischen eine zweite Aktivierung oder ein Neuaufbau geschrieben, fällt der ganze Batch zurück
-   (`PartitionsKonfliktException`), der Leser lädt den Stand neu und liest von dort (G-4).
+4. **Anwenden:** `Beginne(generation)` am Store, dann je Stream in Versionsreihenfolge über den generierten Dispatch das `Auf` der Projektion
+   (mit `Herkunft` und den Fähigkeiten aus dem Bereich). Der Store puffert die Wirkungen aller Streams; vor jedem Event setzt der Leser den Stream
+   des Events (`Stream(id)`), eine Schreib-Regel je Dokument (§4.3) prüft gegen ihn.
+5. **Commit:** Klasse 1 schreibt die Wirkungen, die Guards der berührten Streams und den Fortschritt mit erwarteter Revision in **einer**
+   Transaktion (`SchreibeMitFortschrittAsync`); Klasse 2 und 3 schreiben erst die Wirkungen (`SchreibeAsync`), dann hält das Framework Guards und
+   Fortschritt mit erwarteter Revision fest (`FortschrittBeimFramework`). Hat dazwischen eine zweite Aktivierung oder ein Neuaufbau geschrieben,
+   verliert der Fortschritt (`PartitionsKonfliktException`), der Leser lädt den Stand neu und liest von dort (G-4) — bei Klasse 1 ist dann nichts
+   aus dem Batch durabel, bei Klasse 2 stehen die Wirkungen und ergeben wiederholt dasselbe.
 6. **Weiter**, solange die Seite voll war.
 
-Aus dem Guard je Stream folgt der **Stand je Id**, den eine Antwort trägt (`ProjektionsStaende`): der Guard (mit den Wirkungen in derselben
-Transaktion, nie vor den Daten sichtbar, sinkt nie), und dahinter das Log — folgen nach ihm nur Events, die die Projektion nicht hört, gilt ihr
+Aus dem Guard je Stream folgt der **Stand je Id**, den eine Antwort trägt (`ProjektionsStaende`): der Guard (Klasse 1 mit den Wirkungen in
+derselben Transaktion, Klasse 2/3 nach ihnen — nie vor den Daten sichtbar, sinkt nie), und dahinter das Log — folgen nach ihm nur Events, die die Projektion nicht hört, gilt ihr
 Inhalt bis zum nächsten gehörten Event bzw. bis zum Kopf des Streams. So taugt der Stand als Version des nächsten Commands, auch wenn danach eine
 Frist oder ein fremdes Event kam. Vor dem Reader wartet der Query-Dienst begrenzt (3 s, `MindestensFrist`), bis jeder Stream aus „mindestens S auf v“
-so weit ist (Read-your-writes, Plan Pub/Sub-Neustrukturierung §2.7); reicht die Frist nicht, trägt die Antwort `noch_nicht`.
+so weit ist (Read-your-writes, Plan Pub/Sub-Neustrukturierung §2.7); reicht die Frist nicht, trägt die Antwort `noch_nicht`. Welche Ids eine
+Antwort zeigt, findet der Generator selbst: jedes `Id<T>`-Feld der Antwort (auch geschachtelt, in Listen) und der Query, nach der gefragt wurde;
+welche Projektionen hinter einer Frage stehen, folgt aus ihren Lese-Fähigkeiten (die Projektionen, die in denselben Store schreiben) — bei mehreren
+gilt je Stream der kleinste Stand.
 
 Nach jedem Commit, der Events anwandte, meldet der Leser „P hat die Streams S weiterverarbeitet“ an die Verteiler (`Verteilung.MeldeVerarbeitet`) —
 Mechanik nach dem Commit, die Projektion gibt dabei nichts aus. Eine Sitzung, die eine Antwort hält, die einen dieser Streams zeigt (oder, ohne
@@ -89,8 +96,9 @@ Streams), jeden Funktions-Actor, der ihn aus dem Log hört (`funktion-<F>`, Part
 **Wecker** schickt je Commit und Ziel genau einen `Wake` (ohne Inhalt, verlierbar); je Ziel ist beim Absender höchstens einer unterwegs, was
 währenddessen kommt, wird zu genau einem weiteren (`Weckungen`). Das Ziel quittiert sofort und merkt sich während eines Durchlaufs „noch
 einmal“ (`RahmenActor.Wecke`). Der **Takt** (`BatchKonsumStartupService`) weckt alle 30 s jede Partition — das Netz für verlorene Weckrufe; beim
-Start prüft er, dass jeder registrierte Hörer mit jedem gehörten Typ im Plan steht (Boot-Fehler sonst, GR-WECKPLAN; im Build CQRS108: ein Hörer
-aus dem Log hört nur konkrete, persistente Events). Ein Commit, dessen Ausgang mehrdeutig blieb (G-3), weckt nicht — ihn holt der Takt. Die
+Start prüft er, dass jeder registrierte Hörer mit jedem gehörten Typ im Plan steht (Boot-Fehler sonst, GR-WECKPLAN; dass ein Hörer aus dem Log nur
+konkrete, persistente Events hört, sichert im Build die Form: CQRS057 Projektion, CQRS100 Funktion). Weckplan und Batch-Kinds lesen eine Projektion
+über dieselbe Lesart (`Projektionsform`) — sie können nicht auseinanderlaufen. Ein Commit, dessen Ausgang mehrdeutig blieb (G-3), weckt nicht — ihn holt der Takt. Die
 Batch-Leser passivieren nicht (es gibt nur Projektionen × Partitionen davon, der Takt weckt sie ohnehin).
 
 **Rückstand.** `/health` und `/monitoring/metrics` melden über alle Projektionen die relevanten Events jenseits der Positionen
@@ -110,66 +118,78 @@ Die Messung wartet diesen Nachlauf ab (alle Partitions-Stände am Kopf des Logs)
 
 ## 4.2 Woraus folgt, was ein Konsument ist
 
-Der `PullPathGenerator` (`Infrastructure.SourceGeneration/PullPathGenerator.cs`) findet jede Klasse mit `ISubscriber` **und** `IPullSubscriber`
-und erzeugt je Projektion ein Batch-Kind `batch-<Typ>` samt `BatchRegistrierung` und `ProjektionsStand` (`GeneratedPullPaths`). Eine Projektion
-bekommt die Store-Funktionen, die sie benutzen darf, als Parameter (`Handle(evt, env, writer, INotiereAusleihe f)`; Fähigkeit = Interface
-`: IWriteStore` mit genau einer Funktion, CQRS051). Die generierte Fabrik öffnet je Partitions-Leser einen **Fähigkeits-Bereich**
-(`IFaehigkeitsFabrik.Oeffne()`, `Infrastructure/Projections/DiFaehigkeitsFabrik.cs`): Stores sind Scoped, jede Fähigkeit eines Stores liefert in
-diesem Bereich **dieselbe Instanz**, und diese Instanz muss ein `IProjectionTracker` sein (sonst bricht der Start laut). Die Schreib-Fähigkeiten
-einer Projektion gehören zu genau einem Store (**CQRS052**). Ein Store in Konstruktor, Feld oder Eigenschaft eines Konsumenten ist verboten
-(**CQRS054**), `new …Store()` ebenso (**CQRS055**).
+Eine **Projektion** ist eine Klasse mit `IProjektion` und je gehörtem Event einem `Task Auf(TEvent e[, Herkunft h], Schreib-Fähigkeiten…[,
+CancellationToken ct])` (Plan Pub/Sub-Neustrukturierung §3.3); ihre Kennung ist der Typname (`Projektionsvertrag.Kennung`). Gelesen wird sie über
+**eine** Lesart (`Infrastructure.SourceGeneration/Projektionsform.cs`) — dieselbe für Batch-Kinds, Weckplan, Akteur-Rechte, Analyzer und Extractor.
+Der `PullPathGenerator` erzeugt in der Komposition je Projektion den Dispatch (`switch` über den Event-Typ → ihr `Auf`, die `Herkunft` aus dem
+Event, die Fähigkeiten aus dem Bereich), die gehörten Typen, ein Batch-Kind `batch-<Projektion>` und einen `Projektionseintrag`
+(`GeneratedProjektionen`, `GeneratedPullPaths`). Den Code-Stand der Projektion schreibt ihre eigene Compilation als Assembly-Angabe
+(`ProjektionsstandGenerator`); die Projektion selbst bleibt unberührt (kein `partial`).
+
+Eine Projektion bekommt die Store-Funktionen, die sie benutzen darf, als Parameter (Fähigkeit = Interface `: IWriteStore` mit genau einer Funktion,
+CQRS051). Die generierte Fabrik öffnet je Partitions-Leser einen **Fähigkeits-Bereich** (`IFaehigkeitsFabrik.Oeffne()`,
+`Infrastructure/Projections/DiFaehigkeitsFabrik.cs`): Stores sind Scoped, jede Fähigkeit eines Stores liefert in diesem Bereich **dieselbe
+Instanz**. Beim ersten Spawn prüft `Projektionslauf.Ziel`, dass alle Schreib-Fähigkeiten einer Projektion denselben Store auflösen, dass er ein
+`IProjektionsZiel` mit genau einer Klasse ist und dass er Klasse 3 nur mit der Erlaubnis `[MindestensEinmal]` an der Projektion ist (R14; im Build
+CQRS052, CQRS109, CQRS110). Ein Store in Konstruktor, Feld oder Eigenschaft eines Konsumenten ist verboten (**CQRS054**), `new …Store()` ebenso
+(**CQRS055**). Eine Form, die der Dispatch nicht ruft (anderer Name, ein Parameter, der keine Fähigkeit ist, eine Rückgabe, ein Hinweis als
+Eingang), ist CQRS057; zwei `Auf` für denselben Eingang CQRS101.
+
+Ein **Reader** ist eine Klasse mit `IReader` und je Query einer `Frage(TQuery q, Lese-Fähigkeiten…[, CancellationToken])`, die eine Antwort oder
+`OneOf<…>` liefert (auch als `Task`). Der `QueryDienstGenerator` erzeugt den Query-Dienst der Anwendung (`GeneratedQueryDienst`): je Query die
+Frage, die Projektionen dahinter (aus den Lese-Fähigkeiten: die Projektionen, die in denselben Store schreiben) und die gezeigten Ids (die
+`Id<T>`-Felder von Antwort und Query) — ohne `ctx.Track` und ohne Reader-Attribut.
 
 Eine Funktion erkennt der `FunktionsBausteinGenerator` an `IFunktion` und den `Auf`-Methoden (§4.4). Sie darf Lese-Fähigkeiten nehmen, nie
 Schreib-Fähigkeiten: was sie bewirkt, geht als Command an ein Aggregat oder als Ergebnis-Event ins Log.
 
-## 4.3 Projektionen und der Co-Commit
+## 4.3 Projektionen und Store-Klassen
 
-Form (neutral aus der Agnostik-Sonde, `GraphExtractor.Kern/Sonde/Lesen.cs.txt`): `partial class Leihliste : ISubscriber, IPullSubscriber`
-mit `Task Handle(Ausgeliehen evt, IAggregateEnvelope envelope, ProjectionWriter writer, INotiereAusleihe notiere)`. Eine Projektion gibt
-nichts aus — ihr `Handle` liefert `Task` (CQRS057) und schreibt in genau einen Store (CQRS052); was auf ein Event hin etwas sendet, ist eine
-Funktion (§4.4). Je Event
-`writer.Execute(readModelId, ctx => …)`: der Effekt über die Fähigkeit (`ctx.Track<T>(id)` ist seit Phase 6 ohne Wirkung und fällt mit der neuen
-Projektionsform, Plan Phase 8). Was entsteht, liest
-der Generator nur aus der Signatur (CQRS050), nie aus dem Rumpf.
+Form (neutral aus der Agnostik-Sonde, `GraphExtractor.Kern/Sonde/Lesen.cs.txt`): `public sealed class Leihliste : IProjektion` mit
+`public Task Auf(Ausgeliehen e, Herkunft h, INotiereAusleihe notiere) => notiere.SchreibeAsync(…)`. Eine Projektion gibt nichts aus und schreibt in
+genau einen Store (CQRS052); sie rechnet bei gleicher Eingabe gleich — Zeit nur aus der `Herkunft` (R11). Was entsteht, liest der Generator nur
+aus der Signatur (CQRS050), nie aus dem Rumpf. Read-Models, die ein Aggregat abbilden, tragen seine typisierte Id (`Id<T> Id`, dann `partial`:
+der `ReadModelSchluesselGenerator` ergänzt die Speicher-Identität `Schluessel`, CQRS111 — Marten kann `Id<T>` nicht als Dokument-Identität);
+Fähigkeiten nehmen `Id<T>`.
 
-**Theorie (der gültige Kern).** Exactly-once-*Zustellung* gibt es nicht (Effekt und Quittung lassen sich über eine Grenze nie atomar
-koppeln); erreichbar ist exactly-once-*Wirksamkeit*, und dafür gibt es genau zwei Mechanismen:
+**Theorie (der gültige Kern).** Exactly-once-*Zustellung* gibt es nicht (Wirkung und Quittung lassen sich über eine Grenze nie atomar
+koppeln); erreichbar ist exactly-once-*Wirksamkeit*. Das Framework schreibt keine Datenform vor; von einem Store braucht es nur eine von drei
+Zusagen (Plan §2.4, `Abstractions/Projektionsziel.cs`), und jeder Store implementiert **genau eine**:
 
-| Mechanismus | Voraussetzung | kostet |
-|---|---|---|
-| **A — atomarer Co-Commit:** Effekt + Fortschritt in einer Transaktion | Effekt und Fortschritt in derselben transaktionalen Ressource | den Store |
-| **B — idempotenter Effekt** + at-least-once | jeder Effekt wiederholungsfest (Upsert) | den Entwickler |
+| Klasse | Schnittstelle | Zusage | genau einmal, weil | Treiber im Framework |
+|---|---|---|---|---|
+| **1 atomar** | `IAtomaresZiel` | Wirkungen und Fortschritt in **einer** Transaktion | ein Absturz lässt beides oder keins zurück; der Fortschritt wird mit erwarteter Revision geschrieben | `Core/MartenStore.cs` |
+| **2 wiederholungsfest** | `IWiederholungsfestesZiel` | jede Wirkung ergibt wiederholt dasselbe; den Fortschritt hält das Framework und rückt ihn erst nach den Wirkungen vor | die Wirkung trägt die Event-Identität im Schlüssel oder schreibt bedingt nach der Version — darum nimmt jede Schreib-Fähigkeit die `Herkunft` (CQRS109) | `Core/DateiZiel.cs` (`DateiZiel`) |
+| **3 mindestens einmal** | `INurMindestensEinmal` | keine | – (nur mit `[MindestensEinmal]` an der Projektion, CQRS110) | `Core/DateiZiel.cs` (`DateiSink`) |
 
-B entkommt der Atomarität bei Append-Effekten nicht (ein „schon gesehen?“ müsste selbst atomar mit dem Append geschrieben werden). Die Naht
-`IProjectionTracker` ist deshalb bewusst minimal und store-agnostisch: der Leser ruft Puffern und Commit als Schritte; ob sie gemeinsam
-gültig werden, entscheidet der Store. Damit ein Store aus dieser Naht A macht, muss er implizite Bedingungen erfüllen: Store und Tracker sind
-dieselbe Instanz, Effekte werden gepuffert statt durchgeschrieben, die Unit-of-Work folgt aus der Aufrufreihenfolge (`BeginneBatch` = Beginn,
-`CommitAsync` = Commit), Read-your-writes im Batch (über Streams hinweg), eine Instanz je Partitions-Leser (Scoped), und ein geworfener Dispatch
-committet nie. Statisch beweisbar ist Atomarität nicht — sie bleibt eine Laufzeiteigenschaft der Store-Transaktion und wird per Crash-Test
-gezeigt (`CoCommitPostgresTests`, docs/12).
+Ob ein Treiber seine Klasse einhält, ist eine Laufzeit-Eigenschaft: jeder Treiber besteht den **allgemeinen Store-Test**
+(`Infrastructure/Projections/Storetest.cs`, je Treiber eine Implementierung von `IStoretestTreiber`): Batch-Abbruch, Wiederholung (Wirkungen
+geschrieben, Fortschritt nicht), zweite Aktivierung mit älterem Stand und Neuaufbau mit einer alten Aktivierung, die danach noch schreibt — gegen ein
+echtes Log und den echten Batch-Leser (`StoretestPostgresTests` für alle drei Treiber). Die Prüfdomäne zeigt Klasse 2 und 3 an echten Projektionen
+(`MessreiheProjektion` in ein Datei-Ziel, `MesszaehlerProjektion` in eine Senke; `StoreKlassenE2ETests`). Wo ein Datei-Store liegt, sagt die
+Umgebung (`Stores:<Store>:Verzeichnis`), sonst das Temp-Verzeichnis je Datenbank und Schema des Logs (`StoreOrte`).
 
-**Umsetzung.** Diese Bedingungen erfüllt die eine Basisklasse `MartenCoCommitStoreBase` (`Core/MartenCoCommitStoreBase.cs`, Framework), von der
-alle Projektions-Stores erben: Effekte werden nur gepuffert, `CommitAsync` spielt sie zusammen mit den Guards (`ProjectionCheckpoint` je Stream)
-und dem `PartitionsCheckpoint` in **einer** Marten-`IdentitySession` ab, ein `SaveChangesAsync`. Der Partitions-Checkpoint trägt eine
-numerische Revision (`Core/KonsumSchema.cs`): noch nie geschrieben → `Insert` (ein zweiter Erster scheitert am Schlüssel), sonst
-`UpdateRevision` auf Version + 1 (eine zweite Aktivierung scheitert an der Version) — **G-4 geschlossen**. Die Fähigkeits-Bereiche (§4.2)
-liefern „Store == Tracker“ per Konstruktion. Dazu die Schreib-Regel je Dokument, geprüft gegen den Stream des laufenden Events: eigenes Dokument
-(Schlüssel = Stream), Zeile dieses Streams, oder geteiltes Dokument (`IGeteiltesReadModel`, Versionsprüfung; ein Konflikt verwirft den Batch →
-`SchreibKonfliktException`, §4.1.1). Dass ein Store nur über diese Puffer-Methoden schreibt und Lese- und Schreib-Fähigkeiten nicht vermischt,
-prüft der `StoreZugriffAnalyzer` (CQRS066/067).
-- **Hebel 1 (umgesetzt):** Atomarität als eigener Typ. `ICoCommitTracker : IProjectionTracker` tragen nur co-committende Stores; der
-  GA-1-Check (`Infrastructure/Projections/GaEinsPruefung.cs`, beim ersten Spawn eines Partitions-Lesers) bricht, wenn eine `IAppendProjektion`
-  keinen `ICoCommitTracker` hat.
-- **Hebel 2 (offen):** eine framework-getriebene Unit-of-Work (der Leser holt eine Einheit vom Store und routet Effekt und Fortschritt
-  hindurch), die Fehlverdrahtung strukturell unbaubar machte.
+**Klasse 1 in Marten** (`MartenStore`): Wirkungen werden nur gepuffert, `SchreibeMitFortschrittAsync` spielt sie zusammen mit den Guards
+(`ProjectionCheckpoint` je Stream) und dem Fortschritt (`PartitionsCheckpoint`) in **einer** Marten-`IdentitySession` ab, ein `SaveChangesAsync`
+(`Core/MartenFortschritt.cs`). Der Fortschritt trägt eine numerische Revision (`Core/KonsumSchema.cs`): noch nie geschrieben → `Insert` (ein zweiter
+Erster scheitert am Schlüssel), sonst `UpdateRevision` auf Revision + 1 (eine zweite Aktivierung scheitert) — **G-4 geschlossen**. Dazu die
+Schreib-Regel je Dokument, geprüft gegen den Stream des laufenden Events: eigenes Dokument (Schlüssel = Stream), Zeile dieses Streams, oder
+geteiltes Dokument (`IGeteiltesReadModel`, Versionsprüfung; ein Konflikt verwirft den Batch → `SchreibKonfliktException`, §4.1). Dass ein Store
+nur über diese Puffer-Methoden schreibt und Lese- und Schreib-Fähigkeiten nicht vermischt, prüft der `StoreZugriffAnalyzer` (CQRS066/067).
 
-**Neuaufbau:** `ProjectionRebuilder` leert das Ziel, setzt Partitionen und Guards zurück (`ResetAllAsync`, `Core/KonsumZuruecksetzen.cs`) und
-lässt je Partition einen Batch-Leser ab 0 laufen — seitenweise, als Strom, nie der ganze Log als Liste. Zurückgesetzt wird nicht durch Löschen,
-sondern mit neuer Revision (Position 0, nichts geparkt): ein noch laufender Leser verliert seinen nächsten Commit, statt seinen alten Stand wieder
-anzulegen. Funktionen haben kein Reset und liegen nie auf diesem Pfad. In Sim vergleicht `ProjektionsStandDienst` beim Start den Stand jeder
-Projektion (Code-Hash der Klasse + Stores + die Form des Konsums mit der Partitionszahl) mit `<schema>.stand` und baut bei Abweichung die ganze
-Leseseite neu auf (leeren, Partitionen und Guards zurücksetzen; der erste Poll weckt jede Partition); in Prod meldet er nur
-(`docs/konzept-werkbank.md` §4.6).
+**Klasse 2 und 3:** der Fortschritt liegt beim Framework (`FortschrittBeimFramework`, dieselben Dokumente im Log-Postgres, eigene Transaktion nach
+den Wirkungen). Das `DateiZiel` legt je Wirkung eine Datei unter einem Pfad mit der Event-Identität ab (`LegeAb`) oder ersetzt eine Datei nur, wenn
+die Version des Eingangs größer ist als die gespeicherte (`LegeAbWennNeuer`, unter einer Sperre geprüft) — immer über eine temporäre Datei und
+`File.Move`. Die `DateiSink` hängt Zeilen an, ohne Bedingung.
+
+**Neuaufbau über Generationen (A4):** `ProjectionRebuilder` gibt dem Store eine neue Generation (`NeueGenerationAsync`: ein leeres Ziel; gelesen
+wird weiter die alte), setzt den Fortschritt aller Partitionen in dieser Generation auf Anfang (neue Revision — ein laufender Leser verliert seinen
+nächsten Commit), lässt je Partition einen Batch-Leser ab 0 laufen — seitenweise, als Strom — und schaltet um (`UmschaltenAsync`). Geschrieben wird
+immer in die Generation aus dem Fortschritt (`Beginne(generation)`): eine alte Aktivierung, die nach dem Zurücksetzen noch schreibt, trifft das neue
+Ziel nicht. Für Klasse 1 ist die neue Generation das Leeren der eigenen Dokument-Typen (der Sonderfall; Wirkungen gelten dort ohnehin nur mit dem
+Fortschritt). Funktionen haben keinen Neuaufbau und liegen nie auf diesem Pfad. In Sim vergleicht `ProjektionsStandDienst` beim Start den Stand
+jeder Projektion (Code-Hash der Klasse + Stores + die Form des Konsums mit der Partitionszahl) mit `<schema>.stand` und gibt bei Abweichung jeder
+Projektion eine neue Generation (Fortschritt auf Anfang, sofort umgeschaltet; der erste Takt weckt jede Partition); in Prod meldet er nur.
 
 ## 4.4 Funktionen
 

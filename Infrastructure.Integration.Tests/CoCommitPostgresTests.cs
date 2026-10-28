@@ -39,7 +39,7 @@ public class CoCommitPostgresTests : IClassFixture<PostgresFixture>
 
         await BatchHilfe.HistorieLeser(es, store, proj, 0, EinePartition).LaufAsync();
 
-        (await store.GetByPairIdAsync(stream))!.Eintraege.Should().HaveCount(1);
+        (await store.GetByPairIdAsync(new(stream)))!.Eintraege.Should().HaveCount(1);
         (await BatchHilfe.GuardAsync(_fx.Store, proj, stream)).Should().Be(1);
         (await BatchHilfe.PartitionAsync(_fx.Store, proj, 0))!.Position.Should().Be(await BatchHilfe.KopfAsync(_fx.Store));
     }
@@ -61,7 +61,7 @@ public class CoCommitPostgresTests : IClassFixture<PostgresFixture>
 
         foreach (var s in streams)
         {
-            (await store.GetByPairIdAsync(s))!.Eintraege.Should().HaveCount(3);
+            (await store.GetByPairIdAsync(new(s)))!.Eintraege.Should().HaveCount(3);
             (await BatchHilfe.GuardAsync(_fx.Store, proj, s)).Should().Be(3);
         }
         (await BatchHilfe.PartitionAsync(_fx.Store, proj, 0))!.Version.Should().Be(vorher + 1, "Effekte, Guards und Partition: ein Commit");
@@ -84,8 +84,8 @@ public class CoCommitPostgresTests : IClassFixture<PostgresFixture>
         await Assert.ThrowsAsync<InvalidOperationException>(() => abstuerzend.LaufAsync());
 
         // Nichts wurde durabel: weder Effekte noch Guards noch die Partition (die ganze Session wurde verworfen).
-        (await store.GetByPairIdAsync(a)).Should().BeNull();
-        (await store.GetByPairIdAsync(b)).Should().BeNull();
+        (await store.GetByPairIdAsync(new(a))).Should().BeNull();
+        (await store.GetByPairIdAsync(new(b))).Should().BeNull();
         (await BatchHilfe.GuardAsync(_fx.Store, proj, a)).Should().Be(-1);
         (await BatchHilfe.PartitionAsync(_fx.Store, proj, 0))!.Version.Should().Be(vorher!.Version);
 
@@ -93,8 +93,8 @@ public class CoCommitPostgresTests : IClassFixture<PostgresFixture>
         var neu = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
         await BatchHilfe.HistorieLeser(es, neu, proj, 0, EinePartition).LaufAsync();
 
-        (await neu.GetByPairIdAsync(a))!.Eintraege.Should().HaveCount(2, "exactly-once wirksam trotz Absturz");
-        (await neu.GetByPairIdAsync(b))!.Eintraege.Should().HaveCount(1);
+        (await neu.GetByPairIdAsync(new(a)))!.Eintraege.Should().HaveCount(2, "exactly-once wirksam trotz Absturz");
+        (await neu.GetByPairIdAsync(new(b)))!.Eintraege.Should().HaveCount(1);
         (await BatchHilfe.GuardAsync(_fx.Store, proj, a)).Should().Be(2);
     }
 

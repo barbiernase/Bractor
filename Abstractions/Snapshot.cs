@@ -54,7 +54,7 @@ public sealed record SnapshotOptions(
 
 /// <summary>
 /// Ablage-Naht für Aggregat-Snapshots. Reines Vertragsinterface — die konkrete Ablage (Marten-jsonb,
-/// In-Memory) ist Store-Sache, analog <see cref="IProjectionTracker"/> / <see cref="IPollCursorStore"/>.
+/// In-Memory) ist Store-Sache, analog <see cref="IFortschrittsAblage"/> / <see cref="IPollCursorStore"/>.
 /// Generisch, damit die Registrierung reflection-frei generiert werden kann und der Store selbst winzig bleibt.
 /// </summary>
 public interface ISnapshotStore

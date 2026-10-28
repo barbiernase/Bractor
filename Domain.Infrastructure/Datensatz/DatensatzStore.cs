@@ -12,9 +12,8 @@ using ImagePairAgg = Domain.ImagePair.ImagePair;
 namespace Domain.Infrastructure.Datensatz;
 
 /// <summary>
-/// Co-Commit-Store der Datensatz-Projektion. Exactly-once-Naht in <see cref="MartenStore"/>;
-/// hier nur die fachlichen Write-Effekte (inkl. Rückwärts-Index-Pflege + Einfrieren-Snapshot). Die
-/// Projektion ist <see cref="Abstractions.IAppendProjektion"/> (Einfrieren schreibt neue Sample-Zeilen).
+/// Store der Datensatz-Projektion, Klasse 1 (<see cref="MartenStore"/>: Wirkungen und Fortschritt in einer Transaktion);
+/// hier nur die fachlichen Write-Effekte (inkl. Rückwärts-Index-Pflege + Einfrieren-Snapshot — append-artig, genau einmal).
 /// SCOPED registriert (eine Instanz je Fähigkeits-Bereich, unter jeder Fähigkeit).
 /// </summary>
 public sealed partial class DatensatzStore : MartenStore, IDatensatzStore

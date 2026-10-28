@@ -51,7 +51,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
     private static readonly string[] DomaenenRollen =
     {
         "IState", "IDecider`1", "IApplier`1", "ICommand", "IEvent", "IQuery", "IQueryResponse", "IReadModel", "IWriteStore", "IReadStore",
-        "ISubscriber", "IReader`1", "IFunktion", "IQuellNachricht", "IWertobjekt",
+        "IProjektion", "IReader", "IFunktion", "IQuellNachricht", "IWertobjekt",
     };
 
     public override void Initialize(AnalysisContext context)
@@ -67,7 +67,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         if (!Laufzeitprojekt.Ist(c)) return;   // das Gesamtbild sieht nur die Komposition (alle Rollen-Projekte, docs/07)
         INamedTypeSymbol? G(string n) => c.GetTypeByMetadataName("Abstractions." + n);
         var (iEvent, iTransient, iCommand, iQuery, iResponse) = (G("IEvent"), G("ITransientEvent"), G("ICommand"), G("IQuery"), G("IQueryResponse"));
-        var (iDecider, iReader, iFunktion, iAkteur, iDarf) = (G("IDecider`1"), G("IReader`1"), G("IFunktion"), G("IAkteur"), G("IDarf`1"));
+        var (iDecider, iFunktion, iAkteur, iDarf) = (G("IDecider`1"), G("IFunktion"), G("IAkteur"), G("IDarf`1"));
         var (iClient, iSendet, iTraegt, iQuelle) = (G("IClientVertrag"), G("ISendet`1"), G("ITraegt`1"), G("IQuellNachricht"));
         if (iEvent == null || iCommand == null || iDecider == null) return;
         var rollen = DomaenenRollen.Select(G).Where(x => x != null).Select(x => x!).ToList();
@@ -99,12 +99,13 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                     erzeugt.UnionWith(Faelle(m.ReturnType));
                     imNetz.UnionWith(Faelle(m.ReturnType));
                 }
-            if (t.TypeKind == TypeKind.Class && Generisch(t, iReader))
-                foreach (var m in Methoden(t).Where(m => IstT(m.Parameters[0].Type, iQuery)))
+            // Ein Reader (Projektionsform, eine Lesart mit Generator und Extractor): die Antworten jeder Frage.
+            if (Projektionsform.IstReader(t))
+                foreach (var f in Projektionsform.LiesReader(t).Fragen)
                 {
-                    if (!readerJeQuery.TryGetValue(m.Parameters[0].Type, out var l)) readerJeQuery[m.Parameters[0].Type] = l = new List<string>();
+                    if (!readerJeQuery.TryGetValue(f.Query, out var l)) readerJeQuery[f.Query] = l = new List<string>();
                     l.Add(t.Name);
-                    erzeugt.UnionWith(Faelle(m.ReturnType));
+                    erzeugt.UnionWith(f.Antworten);
                 }
             if (t.TypeKind == TypeKind.Interface && iFunktion != null && IstT(t, iFunktion) && !SymbolEqualityComparer.Default.Equals(t, iFunktion))
                 foreach (var m in t.GetMembers().OfType<IMethodSymbol>().Where(m => m.IsAbstract))
@@ -152,9 +153,9 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         {
             if (IstT(t, iEvent) && !IstT(t, iQuelle) && !erzeugt.Contains(t))
                 ctx.ReportDiagnostic(Diagnostic.Create(AusgangOffen, Location.None, t.Name, IstT(t, iTransient) ? "Ablehnung/Hinweis" : "Event",
-                    "kein Decide, keine Funktion, kein Handle und kein Akteur nennt es in seiner Signatur"));
+                    "kein Decide, keine Funktion und kein Akteur nennt es in seiner Signatur"));
             else if (IstT(t, iResponse) && !erzeugt.Contains(t) && !alsFeld.Contains(t))
-                ctx.ReportDiagnostic(Diagnostic.Create(AusgangOffen, Location.None, t.Name, "Response", "kein Reader-Handle nennt sie in seiner Signatur"));
+                ctx.ReportDiagnostic(Diagnostic.Create(AusgangOffen, Location.None, t.Name, "Response", "keine Frage eines Readers nennt sie in ihrer Signatur"));
         }
 
         // R20: jeder Hinweis, den eine Funktion hört, hat einen Erzeuger im Hinweis-Netz (sonst bekäme ihre Adresse ihn nie).

@@ -11,9 +11,9 @@ using Projections.SourceGeneration;
 namespace Infrastructure.Pruefstand.Analyzers;
 
 /// <summary>
-/// Ein Co-Commit-Store schreibt nur über die Puffer-Methoden seiner Basis. CQRS066 = von der Datenzugriffs-Bibliothek nur
+/// Ein Store der Klasse 1 schreibt nur über die Puffer-Methoden seiner Basis. CQRS066 = von der Datenzugriffs-Bibliothek nur
 /// der Lese-Einstieg (QuerySession → LoadAsync/LoadManyAsync/Query + LINQ), kein Zugangs-Objekt an fremden Code;
-/// CQRS067 = Schreib-Fähigkeit liest nicht, Lese-Fähigkeit puffert nicht. Gegen die echte <c>MartenCoCommitStoreBase</c>
+/// CQRS067 = Schreib-Fähigkeit liest nicht, Lese-Fähigkeit puffert nicht. Gegen den echten <c>MartenStore</c>
 /// und echte Marten-Typen.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
@@ -23,8 +23,8 @@ public class StoreZugriffAnalyzerTests
     {
         // Marten samt seinen Abhängigkeiten, die echte Basis und LINQ auf IQueryable ausdrücklich (nicht nur über die geladenen Assemblies).
         var marten = typeof(Marten.IDocumentStore).Assembly;
-        var noetig = new[] { typeof(Abstractions.ICoCommitTracker).Assembly, marten,
-                             typeof(Core.MartenCoCommitStoreBase).Assembly, typeof(System.Linq.Queryable).Assembly }
+        var noetig = new[] { typeof(Abstractions.IAtomaresZiel).Assembly, marten,
+                             typeof(Core.MartenStore).Assembly, typeof(System.Linq.Queryable).Assembly }
             .Concat(marten.GetReferencedAssemblies().Select(n => { try { return System.Reflection.Assembly.Load(n); } catch { return null; } })
                 .Where(a => a != null).Select(a => a!));
         var refs = AppDomain.CurrentDomain.GetAssemblies().Concat(noetig)
@@ -55,7 +55,7 @@ public static class Fremd { public static Task Schreibe(IDocumentStore s, Zeile 
     [Fact]
     public async Task Puffern_und_Lesen_ueber_die_Positivliste_ist_erlaubt()
     {
-        (await Ids(@"namespace Probe { public sealed class Buch : MartenCoCommitStoreBase, IBuch {
+        (await Ids(@"namespace Probe { public sealed class Buch : MartenStore, IBuch {
             public Buch(IDocumentStore s) : base(s) { }
             public Task SchreibeAsync(Zeile z) => EnqueueTransform<Zeile>(z.Id, alt => alt with { Wert = z.Wert });
             public async Task<Zeile?> FindeAsync(Guid id) { await using var s = Store.QuerySession(); return await s.LoadAsync<Zeile>(id); }
@@ -69,7 +69,7 @@ public static class Fremd { public static Task Schreibe(IDocumentStore s, Zeile 
     [Fact]
     public async Task Der_uebliche_Marten_Schreibweg_ist_CQRS066()
     {
-        (await Ids(@"namespace Probe { public sealed class Buch : MartenCoCommitStoreBase, IBuch {
+        (await Ids(@"namespace Probe { public sealed class Buch : MartenStore, IBuch {
             public Buch(IDocumentStore s) : base(s) { }
             public async Task SchreibeAsync(Zeile z) {
                 await using var s = Store.LightweightSession();
@@ -83,7 +83,7 @@ public static class Fremd { public static Task Schreibe(IDocumentStore s, Zeile 
     [Fact]
     public async Task Hintertuer_ueber_die_Lese_Session_ist_CQRS066()
     {
-        (await Ids(@"namespace Probe { public sealed class Buch : MartenCoCommitStoreBase, IBuch {
+        (await Ids(@"namespace Probe { public sealed class Buch : MartenStore, IBuch {
             public Buch(IDocumentStore s) : base(s) { }
             public Task SchreibeAsync(Zeile z) => EnqueueStore(z.Id, z);
             public async Task<Zeile?> FindeAsync(Guid id) {
@@ -98,7 +98,7 @@ public static class Fremd { public static Task Schreibe(IDocumentStore s, Zeile 
     [Fact]
     public async Task Zugang_an_fremden_Code_weiterreichen_ist_CQRS066_an_eigene_Helfer_nicht()
     {
-        (await Ids(@"namespace Probe { public sealed class Buch : MartenCoCommitStoreBase, IBuch {
+        (await Ids(@"namespace Probe { public sealed class Buch : MartenStore, IBuch {
             public Buch(IDocumentStore s) : base(s) { }
             public Task SchreibeAsync(Zeile z) => Fremd.Schreibe(Store, z);
             public async Task<Zeile?> FindeAsync(Guid id) { await using var s = Store.QuerySession(); return await Lade(s, id); }
@@ -110,7 +110,7 @@ public static class Fremd { public static Task Schreibe(IDocumentStore s, Zeile 
     [Fact]
     public async Task Schreib_Fn_liest_und_Lese_Fn_puffert_ist_CQRS067()
     {
-        (await Ids(@"namespace Probe { public sealed class Buch : MartenCoCommitStoreBase, IBuch {
+        (await Ids(@"namespace Probe { public sealed class Buch : MartenStore, IBuch {
             public Buch(IDocumentStore s) : base(s) { }
             public async Task SchreibeAsync(Zeile z) {
                 await using var s = Store.QuerySession();
@@ -128,7 +128,7 @@ public static class Fremd { public static Task Schreibe(IDocumentStore s, Zeile 
         (await Ids(@"namespace Probe {
             public sealed class Werkzeug { private readonly IDocumentStore _s; public Werkzeug(IDocumentStore s) => _s = s;
                 public async Task Schreibe(Zeile z) { await using var x = _s.LightweightSession(); x.Store(z); await x.SaveChangesAsync(); } }
-            public sealed class OhneFaehigkeit : MartenCoCommitStoreBase {
+            public sealed class OhneFaehigkeit : MartenStore {
                 public OhneFaehigkeit(IDocumentStore s) : base(s) { }
                 public async Task Schreibe(Zeile z) { await using var x = Store.LightweightSession(); x.Store(z); await x.SaveChangesAsync(); } } }"))
             .Should().BeEmpty("die Regel gilt für Co-Commit-Stores (Basis mit Marke + Fähigkeiten), nicht für beliebige Marten-Nutzer");

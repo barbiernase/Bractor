@@ -4,7 +4,7 @@ using Infrastructure.Persistence;
 using Marten;
 using Microsoft.Extensions.Logging.Abstractions;
 using Pruefdomaene.Posten;
-using Anwendung = Infrastructure.Komposition.Anwendung;
+using Anwendung = global::Infrastructure.Komposition.Anwendung;
 
 namespace Pruefdomaene.Integration.Tests;
 

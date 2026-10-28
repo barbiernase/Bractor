@@ -21,10 +21,10 @@ public class AusgabeVertragAnalyzerTests
     private static async Task<ImmutableArray<Diagnostic>> Analysiere(string code)
     {
         _ = typeof(Abstractions.ICommand);
-        _ = typeof(Core.ProjectionWriter);
+        _ = typeof(Core.MartenStore);
         _ = typeof(object);
         // Ausdrücklich angehängt: ein „_ = typeof(…)" darf der JIT verwerfen — ob Core geladen ist, hinge sonst an der Testreihenfolge.
-        var refs = AppDomain.CurrentDomain.GetAssemblies().Concat(new[] { typeof(Abstractions.ICommand).Assembly, typeof(Core.ProjectionWriter).Assembly }).Distinct()
+        var refs = AppDomain.CurrentDomain.GetAssemblies().Concat(new[] { typeof(Abstractions.ICommand).Assembly, typeof(Core.MartenStore).Assembly }).Distinct()
             .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
             .Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location))
             .ToImmutableArray();
@@ -41,7 +41,7 @@ public record Mach(Id<Ding> AggregateId) : ICommand<Ding>;
 public record Anderes(Id<Ding> AggregateId) : ICommand<Ding>;
 public record Gemacht() : IEvent;
 public record Abgelehnt() : ITransientEvent;
-public record Frage() : IQuery;
+public record Hole() : IQuery;
 public record Antwort() : IQueryResponse;
 public record Fehlt() : IQueryResponse;
 public partial class Ding : IState { public int Version { get; set; } public Guid Id { get; set; } }
@@ -69,26 +69,26 @@ public partial class Ding : IState { public int Version { get; set; } public Gui
     [Fact]
     public async Task OneOf_mit_Interface_Argument_ist_offen()
     {
-        (await Ids(@"namespace Probe { public class R : ISubscriber { public string SubscriberId => ""r"";
-            public async IAsyncEnumerable<OneOf<Mach, ICommand>> Handle(Gemacht e, IAggregateEnvelope env) { await Task.CompletedTask; yield return new Mach(new(Guid.Empty)); } } }"))
+        (await Ids(@"namespace Probe { public class D : IDecider<Ding> {
+            public IEnumerable<OneOf<Gemacht, IEvent>> Decide(Mach c) { yield return new Gemacht(); } } }"))
             .Should().Equal(AusgabeVertragAnalyzer.OffenId);
     }
 
     [Fact]
     public async Task Projektion_mit_Task_ist_erlaubt()
     {
-        (await Ids(@"namespace Probe { public class Pj : ISubscriber { public string SubscriberId => ""pj"";
-            public Task Handle(Gemacht e, IAggregateEnvelope env, ProjectionWriter w) => Task.CompletedTask; } }")).Should().BeEmpty();
+        (await Ids(@"namespace Probe { public class Pj : IProjektion {
+            public Task Auf(Gemacht e, Herkunft h) => Task.CompletedTask; } }")).Should().BeEmpty();
     }
 
     [Fact]
     public async Task Reader_mit_IQueryResponse_ist_offen_mit_OneOf_geschlossen()
     {
-        (await Ids(@"namespace Probe { public class Pj : ISubscriber { public string SubscriberId => ""pj""; }
-            public class Rd : IReader<Pj> { public Task<IQueryResponse> Handle(Frage q, IMessageEnvelope env, ReadContext ctx) => Task.FromResult<IQueryResponse>(new Antwort()); } }"))
+        (await Ids(@"namespace Probe {
+            public class Rd : IReader { public Task<IQueryResponse> Frage(Hole q) => Task.FromResult<IQueryResponse>(new Antwort()); } }"))
             .Should().Equal(AusgabeVertragAnalyzer.OffenId);
-        (await Ids(@"namespace Probe { public class Pj : ISubscriber { public string SubscriberId => ""pj""; }
-            public class Rd : IReader<Pj> { public Task<OneOf<Antwort, Fehlt>> Handle(Frage q, IMessageEnvelope env, ReadContext ctx) => Task.FromResult<OneOf<Antwort, Fehlt>>(new Antwort()); } }"))
+        (await Ids(@"namespace Probe {
+            public class Rd : IReader { public Task<OneOf<Antwort, Fehlt>> Frage(Hole q) => Task.FromResult<OneOf<Antwort, Fehlt>>(new Antwort()); } }"))
             .Should().BeEmpty();
     }
 }

@@ -103,37 +103,40 @@ public sealed class SpeicherKonsum
     public IEnumerable<int> VersionenVon(Guid stream) => Angewandt.Where(a => a.Stream == stream).Select(a => a.Version);
 }
 
-/// <summary>Eine Store-Instanz (eine Aktivierung): puffert Effekte, committet sie mit Guards und Partition über <see cref="SpeicherKonsum"/>.</summary>
-public sealed class SpeicherTracker(SpeicherKonsum db) : ICoCommitTracker, IRebuildableProjection
+/// <summary>Eine Store-Instanz der Klasse 1 (eine Aktivierung): puffert Wirkungen, schreibt sie mit Guards und Fortschritt über <see cref="SpeicherKonsum"/>.</summary>
+public sealed class SpeicherZiel(SpeicherKonsum db) : IAtomaresZiel
 {
     private readonly List<(Guid, int)> _puffer = new();
     public Guid? Aktuell { get; private set; }
 
-    /// <summary>Der Effekt eines Events (aus dem Dispatch): gepuffert bis zum Commit.</summary>
+    /// <summary>Die Naht des Batch-Lesers zu diesem Store.</summary>
+    public Infrastructure.Projections.Projektionsnaht Naht => new(this, null);
+
+    /// <summary>Die Wirkung eines Events (aus dem Dispatch): gepuffert bis zum Schreiben.</summary>
     public void Wende(Guid stream, int version)
     {
-        if (Aktuell != stream) throw new InvalidOperationException("Effekt außerhalb des Streams des Events");
+        if (Aktuell != stream) throw new InvalidOperationException("Wirkung außerhalb des Streams des Events");
         _puffer.Add((stream, version));
     }
 
-    public Task<PartitionsCheckpoint> LadePartitionAsync(string projektionsId, int partition, CancellationToken ct)
+    public Task<PartitionsCheckpoint> LadeFortschrittAsync(string projektion, int partition, CancellationToken ct)
     {
         lock (db)
-            return Task.FromResult(db.Partitionen.TryGetValue(PartitionsCheckpoint.MakeId(projektionsId, partition), out var p)
-                ? Kopie(p) : PartitionsCheckpoint.Neu(projektionsId, partition));
+            return Task.FromResult(db.Partitionen.TryGetValue(PartitionsCheckpoint.MakeId(projektion, partition), out var p)
+                ? Kopie(p) : PartitionsCheckpoint.Neu(projektion, partition));
     }
 
-    public Task<IReadOnlyDictionary<Guid, int>> LadeGuardsAsync(string projektionsId, IReadOnlyCollection<Guid> streams, CancellationToken ct)
+    public Task<IReadOnlyDictionary<Guid, int>> LadeGuardsAsync(string projektion, IReadOnlyCollection<Guid> streams, CancellationToken ct)
     {
         lock (db)
             return Task.FromResult<IReadOnlyDictionary<Guid, int>>(streams.Distinct().ToDictionary(s => s,
-                s => db.Guards.TryGetValue((projektionsId, s), out var v) ? v : -1));
+                s => db.Guards.TryGetValue((projektion, s), out var v) ? v : -1));
     }
 
-    public void BeginneBatch() { _puffer.Clear(); Aktuell = null; }
+    public void Beginne(string generation) { _puffer.Clear(); Aktuell = null; }
     public void Stream(Guid streamId) => Aktuell = streamId;
 
-    public Task<int> CommitAsync(PartitionsCheckpoint stand, IReadOnlyDictionary<Guid, int> guards, CancellationToken ct)
+    public Task<int> SchreibeMitFortschrittAsync(PartitionsCheckpoint stand, IReadOnlyDictionary<Guid, int> guards, CancellationToken ct)
     {
         try
         {
@@ -154,30 +157,36 @@ public sealed class SpeicherTracker(SpeicherKonsum db) : ICoCommitTracker, IRebu
         finally { _puffer.Clear(); Aktuell = null; }
     }
 
-    public Task ResetAllAsync(string projektionsId, CancellationToken ct)
+    public Task SchreibeAsync(CancellationToken ct) => throw new NotSupportedException("Klasse 1 schreibt nur mit dem Fortschritt");
+
+    public Task FortschrittZuruecksetzenAsync(string projektion, int partitionen, string generation, CancellationToken ct)
     {
         lock (db)
         {
-            foreach (var p in db.Partitionen.Values.Where(p => p.ProjektionsId == projektionsId))
+            for (var nr = 0; nr < partitionen; nr++)
             {
-                p.Position = 0;
-                p.Geparkt = new();
-                p.Version++;
+                var id = PartitionsCheckpoint.MakeId(projektion, nr);
+                var version = db.Partitionen.TryGetValue(id, out var alt) ? alt.Version : 0;
+                db.Partitionen[id] = new PartitionsCheckpoint
+                    { Id = id, ProjektionsId = projektion, Partition = nr, Version = version + 1, Generation = generation };
             }
-            foreach (var k in db.Guards.Keys.Where(k => k.Item1 == projektionsId).ToList()) db.Guards.Remove(k);
+            foreach (var k in db.Guards.Keys.Where(k => k.Item1 == projektion).ToList()) db.Guards.Remove(k);
         }
         return Task.CompletedTask;
     }
 
-    public Task ClearAsync(CancellationToken ct)
+    /// <summary>Eine neue Generation: das Ziel ist leer (Klasse 1 — der Sonderfall Leeren).</summary>
+    public Task NeueGenerationAsync(string generation, CancellationToken ct)
     {
         lock (db) db.Angewandt.Clear();
         return Task.CompletedTask;
     }
 
+    public Task UmschaltenAsync(string generation, CancellationToken ct) => Task.CompletedTask;
+
     private static PartitionsCheckpoint Kopie(PartitionsCheckpoint p) => new()
     {
-        Id = p.Id, ProjektionsId = p.ProjektionsId, Partition = p.Partition, Position = p.Position, Version = p.Version,
+        Id = p.Id, ProjektionsId = p.ProjektionsId, Partition = p.Partition, Position = p.Position, Version = p.Version, Generation = p.Generation,
         Geparkt = p.Geparkt.Select(g => new GeparkterStream { StreamId = g.StreamId, Version = g.Version, Grund = g.Grund, Seit = g.Seit }).ToList()
     };
 }

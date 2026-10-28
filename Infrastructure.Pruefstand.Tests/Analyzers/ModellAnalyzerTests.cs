@@ -102,12 +102,12 @@ public partial class Konto : IState
     [Fact]
     public async Task Ein_Konsument_mit_Zustand_ist_eine_Warnung_injizierte_Felder_nicht()
     {
-        var mitZustand = "public sealed class Zaehler : ISubscriber { public string SubscriberId => \"z\"; private int _n; private readonly List<Guid> _gesehen = new(); }";
+        var mitZustand = "public sealed class Zaehler : IProjektion { private int _n; private readonly List<Guid> _gesehen = new(); }";
         var befunde = await Befunde(mitZustand);
         befunde.Should().ContainSingle().Which.Id.Should().Be(ModellAnalyzer.ZustandId);
         befunde[0].GetMessage().Should().Contain("_n, _gesehen");
 
-        (await Ids("public sealed record Konfig(int Wert); public sealed class Leser : ISubscriber { public string SubscriberId => \"l\"; "
+        (await Ids("public sealed record Konfig(int Wert); public sealed class Leser : IProjektion { "
                    + "private readonly Konfig _k; private readonly string _name = \"x\"; public Leser(Konfig k) { _k = k; } }"))
             .Should().BeEmpty("injiziert (Ctor) und string halten keinen Zustand");
     }

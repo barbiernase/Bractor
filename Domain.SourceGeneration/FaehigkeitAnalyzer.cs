@@ -62,9 +62,9 @@ public sealed class FaehigkeitAnalyzer : DiagnosticAnalyzer
 
     private sealed class Marker
     {
-        public readonly INamedTypeSymbol? IWrite, IRead, IStore, ISubscriber, IReader, IFunktion;
+        public readonly INamedTypeSymbol? IWrite, IRead, IStore, IProjektion, IReader, IFunktion;
         public Marker(INamedTypeSymbol? w, INamedTypeSymbol? r, INamedTypeSymbol? s, INamedTypeSymbol? sub, INamedTypeSymbol? rd, INamedTypeSymbol? f)
-        { IWrite = w; IRead = r; IStore = s; ISubscriber = sub; IReader = rd; IFunktion = f; }
+        { IWrite = w; IRead = r; IStore = s; IProjektion = sub; IReader = rd; IFunktion = f; }
 
         private static bool Hat(ITypeSymbol t, INamedTypeSymbol? i) => i != null &&
             (SymbolEqualityComparer.Default.Equals(t.OriginalDefinition, i)
@@ -80,7 +80,7 @@ public sealed class FaehigkeitAnalyzer : DiagnosticAnalyzer
             Hat(t, IWrite) || Hat(t, IRead) || Hat(t, IStore);
 
         public bool IstKonsument(INamedTypeSymbol t) =>
-            t.TypeKind == TypeKind.Class && (Hat(t, ISubscriber) || Hat(t, IReader) || Hat(t, IFunktion));
+            t.TypeKind == TypeKind.Class && (Hat(t, IProjektion) || Hat(t, IReader) || Hat(t, IFunktion));
 
         public bool IstStoreKlasse(ITypeSymbol t) =>
             t.TypeKind == TypeKind.Class && (Hat(t, IWrite) || Hat(t, IRead) || Hat(t, IStore));

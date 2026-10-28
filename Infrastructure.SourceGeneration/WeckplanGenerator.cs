@@ -16,26 +16,14 @@ namespace Infrastructure.SourceGeneration
     /// <code>public OneOf&lt;Mahne&gt; Auf(Ueberfaellig e, Herkunft h)                                         → funktion-Mahnwesen</code>
     /// Der Wecker am Flush (<c>Infrastructure.Wecken.Wecker</c>) schlägt hier nach und weckt gezielt; der Takt je Partition bleibt das Netz.
     ///
-    /// CQRS108 — ein Hörer aus dem Log hört einen Typ, den der Plan nicht führen kann: kein konkretes, persistentes Event (eine Schnittstelle, eine
-    /// abstrakte Klasse, ein Hinweis). Der Wecker sucht nach dem Typ des geschriebenen Events — ein solcher Hörer würde nie geweckt (und der
-    /// Batch-Leser fände ihn im Log nicht). Dass jeder registrierte Hörer mit jedem gehörten Typ im Plan steht, prüft der Wecker beim Start.
+    /// Ein Hörer aus dem Log hört nur konkrete, persistente Events — das sichert schon die Form (CQRS057 Projektion, CQRS100 Funktion: dieselben
+    /// Lesarten wie hier); dass jeder registrierte Hörer mit jedem gehörten Typ im Plan steht, prüft der Wecker beim Start (GR-WECKPLAN).
     /// </summary>
     [Generator]
     public class WeckplanGenerator : ISourceGenerator
     {
-        public const string NichtImPlanId = "CQRS108";
-
         /// <summary>Das Cluster-Kind der Uhr (<c>Infrastructure.Uhr.UhrActor.KindName</c>) und das Event, das sie weckt.</summary>
         private const string UhrKind = "uhr", FristGesetzt = "Abstractions.FristGesetzt";
-
-        private static readonly DiagnosticDescriptor NichtImPlan = new DiagnosticDescriptor(
-            id: NichtImPlanId,
-            title: "Gehörter Typ kann nicht im Weckplan stehen",
-            messageFormat: "'{0}' hört '{1}' aus dem Log, aber {2} — der Weckplan führt nur konkrete, persistente Events (der Wecker sucht nach dem Typ des "
-                + "geschriebenen Events); dieser Hörer würde nie geweckt",
-            category: "CQRS.Weckplan",
-            defaultSeverity: DiagnosticSeverity.Error,
-            isEnabledByDefault: true);
 
         public void Initialize(GeneratorInitializationContext context) { }
 
@@ -52,8 +40,7 @@ namespace Infrastructure.SourceGeneration
                 {
                     var p = Projektionsform.LiesProjektion(t);
                     foreach (var a in p.Aufs)
-                        if (Pruefe(context, t, a.Eingang, a.Methode.Locations.FirstOrDefault()) is { } e)
-                            eintraege.Add((e, Abstractions.Projektionsvertrag.Kind(t.Name), false));
+                        eintraege.Add((a.Eingang, Abstractions.Projektionsvertrag.Kind(t.Name), false));
                 }
 
                 // Funktionen: Auf mit einem Event aus dem Log (Hinweise gehen übers Hinweis-Netz, nicht über den Weckplan).
@@ -62,8 +49,7 @@ namespace Infrastructure.SourceGeneration
                     var f = Funktionsform.Lies(t);
                     if (f.Fehler.Count > 0 || f.Doppelt.Count > 0) continue;   // CQRS100/101 meldet der Baustein-Generator
                     foreach (var a in f.Aufs.Where(a => !a.Hinweis))
-                        if (Pruefe(context, t, a.Eingang, a.Methode.Locations.FirstOrDefault()) is { } e)
-                            eintraege.Add((e, Abstractions.Funktionsvertrag.Kind(t.Name), f.EineAdresse));
+                        eintraege.Add((a.Eingang, Abstractions.Funktionsvertrag.Kind(t.Name), f.EineAdresse));
                 }
             }
 
@@ -71,20 +57,6 @@ namespace Infrastructure.SourceGeneration
             if (context.Compilation.GetTypeByMetadataName(FristGesetzt) is { } frist) eintraege.Add((frist, UhrKind, true));
 
             context.AddSource("GeneratedWeckplan.g.cs", Emit(eintraege, fq));
-        }
-
-        /// <summary>Der gehörte Typ, wenn er im Plan stehen kann; sonst CQRS108 und null.</summary>
-        private static INamedTypeSymbol? Pruefe(GeneratorExecutionContext context, INamedTypeSymbol hoerer, ITypeSymbol typ, Location? ort)
-        {
-            string? grund = null;
-            if (typ is not INamedTypeSymbol n || n.TypeKind == TypeKind.Interface) grund = "der Typ ist eine Schnittstelle";
-            else if (n.IsAbstract) grund = "der Typ ist abstrakt";
-            else if (Funktionsform.Hat(n, "Abstractions.ITransientEvent")) grund = "der Typ ist ein Hinweis (ITransientEvent) und steht nie im Log";
-            else if (!Funktionsform.Hat(n, "Abstractions.IEvent")) grund = "der Typ ist kein Event";
-            if (grund == null) return (INamedTypeSymbol)typ;
-            context.ReportDiagnostic(Diagnostic.Create(NichtImPlan, ort ?? hoerer.Locations.FirstOrDefault() ?? Location.None, hoerer.Name,
-                typ.ToDisplayString(), grund));
-            return null;
         }
 
         private static string Emit(List<(INamedTypeSymbol Typ, string Kind, bool EineAdresse)> eintraege, SymbolDisplayFormat fq)

@@ -9,7 +9,7 @@ using Marten;
 namespace Infrastructure.Integration.Tests;
 
 /// <summary>
-/// Die Schreib-Regel von <see cref="MartenCoCommitStoreBase"/> gegen echtes Postgres, mit einer Sonde, die den
+/// Die Schreib-Regel von <see cref="MartenStore"/> gegen echtes Postgres, mit einer Sonde, die den
 /// Konflikt ERZWINGT: zwei Batches zweier Partitionen laden dasselbe geteilte Dokument, treffen sich an einer Barriere (beide haben jetzt
 /// denselben Stand gelesen) und schreiben dann. Ohne Versionsprüfung gewönne still der letzte Commit.
 /// </summary>
@@ -43,8 +43,8 @@ public class SchreibRegelPostgresTests
         using var treffpunkt = new Barrier(2);
         var a = new SondenStore(_fx.Store, treffpunkt);
         var b = new SondenStore(_fx.Store, treffpunkt);
-        var leserA = new BatchLeser(es, a, proj, 0, konsum, null, (_, _) => a.Erhoehe(zaehler));
-        var leserB = new BatchLeser(es, b, proj, 1, konsum, null, (_, _) => b.Erhoehe(zaehler));
+        var leserA = new BatchLeser(es, new Projektionsnaht(a, null), proj, 0, konsum, null, (_, _) => a.Erhoehe(zaehler));
+        var leserB = new BatchLeser(es, new Projektionsnaht(b, null), proj, 1, konsum, null, (_, _) => b.Erhoehe(zaehler));
 
         // Der erste Versuch kollidiert (Barriere), der Verlierer wiederholt seinen Stream einzeln — keine Ausnahme nach außen.
         await Task.WhenAll(Task.Run(() => leserA.LaufAsync()), Task.Run(() => leserB.LaufAsync()));
@@ -59,7 +59,7 @@ public class SchreibRegelPostgresTests
     {
         var store = new SondenStore(_fx.Store);
         var stream = Guid.NewGuid();
-        store.BeginneBatch();
+        store.Beginne(Generationen.Erste);
         store.Stream(stream);
 
         await store.Invoking(s => s.AendereEigen(stream)).Should().NotThrowAsync();
@@ -91,8 +91,8 @@ public class SchreibRegelPostgresTests
         var (sa, sb) = (Guid.NewGuid(), Guid.NewGuid());
         var a = new SondenStore(_fx.Store, treffpunkt);
         var b = new SondenStore(_fx.Store, treffpunkt);
-        a.BeginneBatch(); a.Stream(sa); await a.Erhoehe(zaehler);
-        b.BeginneBatch(); b.Stream(sb); await b.Erhoehe(zaehler);
+        a.Beginne(Generationen.Erste); a.Stream(sa); await a.Erhoehe(zaehler);
+        b.Beginne(Generationen.Erste); b.Stream(sb); await b.Erhoehe(zaehler);
 
         // Zwei Partitionen derselben Projektion, je ein Batch — sie teilen nur das geteilte Dokument.
         var ergebnisse = await Task.WhenAll(
@@ -112,7 +112,7 @@ public class SchreibRegelPostgresTests
 
     private static async Task<Exception?> Commit(SondenStore store, PartitionsCheckpoint stand, Guid stream)
     {
-        try { await store.CommitAsync(stand, new Dictionary<Guid, int> { [stream] = 1 }, default); return null; }
+        try { await store.SchreibeMitFortschrittAsync(stand, new Dictionary<Guid, int> { [stream] = 1 }, default); return null; }
         catch (Exception ex) { return ex; }
     }
 
@@ -140,12 +140,12 @@ public record SondenEigen : IReadModel
 /// Sonde: erhöht einen geteilten Zähler. Mit Barriere wartet der ERSTE Versuch je Instanz nach dem Laden auf den
 /// anderen Stapel — so haben beide sicher denselben Stand gelesen, bevor einer schreibt.
 /// </summary>
-internal sealed class SondenStore : MartenCoCommitStoreBase
+internal sealed class SondenStore : MartenStore
 {
     private readonly Barrier? _treffpunkt;
     private bool _getroffen;
 
-    public SondenStore(IDocumentStore store, Barrier? treffpunkt = null) : base(store) => _treffpunkt = treffpunkt;
+    public SondenStore(IDocumentStore store, Barrier? treffpunkt = null) : base(store, typeof(SondenZaehler), typeof(SondenEigen)) => _treffpunkt = treffpunkt;
 
     public Task Erhoehe(string id) => EnqueueGeteilt<SondenZaehler>(id, alt =>
     {

@@ -10,8 +10,8 @@ public class ProjektionsStandTests
     private sealed class StoreA;
     private sealed class StoreB;
 
-    private static readonly ProjektionsStand P1 = new("batch-P1", "p1", "k1", [typeof(StoreA)]);
-    private static readonly ProjektionsStand P2 = new("batch-P2", "p2", "k2", [typeof(StoreB)]);
+    private static readonly Projektionseintrag P1 = new("p1", "batch-p1", [], "k1", [typeof(StoreA)], _ => throw new NotSupportedException());
+    private static readonly Projektionseintrag P2 = new("p2", "batch-p2", [], "k2", [typeof(StoreB)], _ => throw new NotSupportedException());
 
     [Fact]
     public void Store_Aenderung_aendert_den_Hash_nur_der_Projektionen_auf_diesem_Store()

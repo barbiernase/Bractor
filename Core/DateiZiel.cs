@@ -261,13 +261,15 @@ public abstract class DateiSink : INurMindestensEinmal
 }
 
 /// <summary>
-/// Wo die Stores einer Umgebung im Dateisystem liegen (Abschnitt <c>Stores:&lt;Store&gt;:Verzeichnis</c>); ohne Eintrag unter dem Temp-Verzeichnis
-/// je Datenbank und Schema des Logs — so gehören die Dateien zu genau einem Log.
+/// Wo die Stores einer Umgebung im Dateisystem liegen (Abschnitt <c>Stores:&lt;Store&gt;:Verzeichnis</c>); ohne Eintrag (oder ohne Umgebung) unter dem
+/// Temp-Verzeichnis je Datenbank und Schema des Logs — so gehören die Dateien zu genau einem Log.
 /// </summary>
-public sealed class StoreOrte(UmgebungKonfig umgebung)
+public sealed class StoreOrte(Marten.IDocumentStore log, UmgebungKonfig? umgebung = null)
 {
     public string Verzeichnis(string store)
-        => umgebung.Stores.TryGetValue(store, out var k) && k.Verzeichnis is { Length: > 0 } v
-            ? v
-            : Path.Combine(Path.GetTempPath(), "cqrs-stores", $"{umgebung.EventStore.Datenbank}_{umgebung.EventStore.Schema}", store);
+    {
+        if (umgebung is not null && umgebung.Stores.TryGetValue(store, out var k) && k.Verzeichnis is { Length: > 0 } v) return v;
+        using var verbindung = log.Storage.Database.CreateConnection();
+        return Path.Combine(Path.GetTempPath(), "cqrs-stores", $"{verbindung.Database}_{log.Options.Events.DatabaseSchemaName}", store);
+    }
 }

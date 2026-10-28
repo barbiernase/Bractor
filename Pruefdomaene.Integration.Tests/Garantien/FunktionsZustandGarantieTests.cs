@@ -330,9 +330,9 @@ public class FunktionsZustandGarantieTests
             var stelle = Id<Messstelle>.Neu();
             await MissAsync(host, stelle, 1);   // die Messstelle gibt es
             var bote = new Bote(host.Services.GetRequiredService<ActorSystem>().Cluster());
-            var pruefung = Infrastructure.Komposition.Anwendung.Funktionen.Bausteine.Single(b => b.Name == nameof(IAusreisserpruefung));
+            var pruefung = global::Infrastructure.Komposition.Anwendung.Funktionen.Bausteine.Single(b => b.Name == nameof(IAusreisserpruefung));
             var hinweis = new HinweisZustellen(Guid.NewGuid(), new Merkmal(stelle, 5_000), stelle.Wert, 1, DateTimeOffset.UtcNow, Guid.NewGuid().ToString(), null);
-            var ziel = FunktionsActor.IdentitaetFuer(pruefung, stelle.Wert, Infrastructure.Projections.Konsum.Standard);
+            var ziel = FunktionsActor.IdentitaetFuer(pruefung, stelle.Wert, global::Infrastructure.Projections.Konsum.Standard);
             bote.Melde(ziel, hinweis);
             bote.Melde(ziel, hinweis);   // derselbe Hinweis noch einmal (ein Absender, der wiederholt): dieselbe Kennung, dieselbe Command-Id
             await Warte(async () => (await Log(host, stelle.Wert)).Any(e => e.Payload is AusreisserGemeldet), Frist, "der Hinweis wirkt nicht");
@@ -376,6 +376,6 @@ public class FunktionsZustandGarantieTests
         finally { await host.StopAsync(); }
 
         static string pruefungsAdresse(Id<Messstelle> s) =>
-            Partitionierung.Von(s.Wert, Infrastructure.Projections.Konsum.Standard.Partitionen).ToString();
+            Partitionierung.Von(s.Wert, global::Infrastructure.Projections.Konsum.Standard.Partitionen).ToString();
     }
 }

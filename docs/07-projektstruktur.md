@@ -9,7 +9,7 @@
 
 - **Wo etwas liegt und wie die Datei heißt**, legt diese Struktur fest. Werkzeuge dürfen sie kennen: der Codegen weiß, welche Projekte die Domäne
   bilden; der Scaffolder weiß, wohin eine neue Projektion gehört; `--check` prüft, dass alles am richtigen Ort liegt.
-- **Was etwas ist**, erkennen Werkzeuge weiterhin nur an Markern und Signaturen (`IState`, `ICommand`, `ISubscriber`, `IFunktion` …). Ein Typ wird nie
+- **Was etwas ist**, erkennen Werkzeuge weiterhin nur an Markern und Signaturen (`IState`, `ICommand`, `IProjektion`, `IFunktion` …). Ein Typ wird nie
   über seinen Namen oder Ordner als Aggregat, Projektion usw. erkannt. Die Struktur ordnet, die Marker bestimmen.
 - **Rollen, keine Domänen.** Die Projekte sind Rollen (Schreibseite, Leseseite, Abläufe …). Jede Domäne passt in dieselben Rollen; Domänen werden
   innerhalb der Projekte durch Bereichs-Ordner getrennt.

@@ -20,7 +20,7 @@ public class GesamtbildAnalyzerTests
 {
     private static async Task<Diagnostic[]> Befunde(string domaene)
     {
-        _ = typeof(Abstractions.IReader<>);
+        _ = typeof(Abstractions.IReader);
         // Nur BCL + Vertrag: die echten Domänen-Assemblies im Test-Prozess gehören nicht ins Bild der Probe.
         var refs = AppDomain.CurrentDomain.GetAssemblies()
             .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
@@ -48,12 +48,12 @@ public partial class Konto : IState
     public class Decider : IDecider<Konto> { public OneOf<Eroeffnet, SchonOffen> Decide(Eroeffne c) => default!; }
     public class Applier : IApplier<Konto> { public void Apply(Eroeffnet e) { } }
 }
-public sealed class Uebersicht : ISubscriber { public string SubscriberId => ""u""; public Task Handle(Eroeffnet e, IAggregateEnvelope env) => Task.CompletedTask; }
-public record Frage() : IQuery;
+public sealed class Uebersicht : IProjektion { public Task Auf(Eroeffnet e, Herkunft h) => Task.CompletedTask; }
+public record Hole() : IQuery;
 public record Teil(int Wert) : IQueryResponse;
 public record Antwort(IReadOnlyList<Teil> Teile) : IQueryResponse;
-public sealed class Leser : IReader<Uebersicht> { public OneOf<Antwort> Handle(Frage q) => default!; }
-public sealed record Kunde : IMensch, IDarf<Eroeffne>, IDarf<Frage>;
+public sealed class Leser : IReader { public OneOf<Antwort> Frage(Hole q) => default!; }
+public sealed record Kunde : IMensch, IDarf<Eroeffne>, IDarf<Hole>;
 ";
 
     private static async Task<string[]> Ids(string domaene) => (await Befunde(domaene)).Select(d => d.Id).ToArray();
@@ -65,10 +65,10 @@ public sealed record Kunde : IMensch, IDarf<Eroeffne>, IDarf<Frage>;
     [Fact]
     public async Task Eine_Query_mit_zwei_Readern_ist_ein_Fehler_ohne_Reader_ein_offener_Eingang()
     {
-        var befunde = await Befunde("public sealed class Zweiter : IReader<Uebersicht> { public OneOf<Antwort> Handle(Frage q) => default!; }"
+        var befunde = await Befunde("public sealed class Zweiter : IReader { public OneOf<Antwort> Frage(Hole q) => default!; }"
                                     + "public record Vergessen() : IQuery;");
         befunde.Select(d => d.Id).Should().BeEquivalentTo([GesamtbildAnalyzer.QueryId, GesamtbildAnalyzer.EingangOffenId]);
-        befunde.Single(d => d.Id == GesamtbildAnalyzer.QueryId).GetMessage().Should().StartWith("'Frage'").And.Contain("Leser").And.Contain("Zweiter");
+        befunde.Single(d => d.Id == GesamtbildAnalyzer.QueryId).GetMessage().Should().StartWith("'Hole'").And.Contain("Leser").And.Contain("Zweiter");
         befunde.Single(d => d.Id == GesamtbildAnalyzer.EingangOffenId).GetMessage().Should().StartWith("'Vergessen'");
         befunde.Should().OnlyContain(d => d.Location == Location.None, "die Typen liegen in der Domänen-Referenz — der Name führt zur Karte");
     }

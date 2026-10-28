@@ -7,7 +7,7 @@ using Marten;
 using Marten.Linq.MatchesSql;
 using Microsoft.Extensions.Logging.Abstractions;
 using Pruefdomaene.Posten;
-using Anwendung = Infrastructure.Komposition.Anwendung;
+using Anwendung = global::Infrastructure.Komposition.Anwendung;
 using IEvent = Abstractions.IEvent;
 
 namespace Pruefdomaene.Integration.Tests.Garantien;

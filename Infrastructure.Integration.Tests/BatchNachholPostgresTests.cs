@@ -46,11 +46,11 @@ public class BatchNachholPostgresTests : IClassFixture<BatchNachholPostgresTests
             await es.AppendEventsAsync(waehrend, 0, new IEvent[] { new ImagePairInspiziert() });
         });
         await leser.LaufAsync();
-        (await store.GetByPairIdAsync(waehrend)).Should().BeNull("die Seite war schon gelesen");
+        (await store.GetByPairIdAsync(new(waehrend))).Should().BeNull("die Seite war schon gelesen");
 
         await leser.LaufAsync();                                     // der Poll weckt die Partition
-        (await store.GetByPairIdAsync(erster))!.Eintraege.Should().HaveCount(1);
-        (await store.GetByPairIdAsync(waehrend))!.Eintraege.Should().HaveCount(1, "die Position hat das Event nicht übersprungen");
+        (await store.GetByPairIdAsync(new(erster)))!.Eintraege.Should().HaveCount(1);
+        (await store.GetByPairIdAsync(new(waehrend)))!.Eintraege.Should().HaveCount(1, "die Position hat das Event nicht übersprungen");
     }
 
     /// <summary>Der Store wird im Test nur für Append und Lesen genutzt — kein Replay.</summary>

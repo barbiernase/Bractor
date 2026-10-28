@@ -248,7 +248,7 @@ public class AblaufE2ETests
             using (var bereich = host.Services.CreateScope())
             {
                 var finde = bereich.ServiceProvider.GetRequiredService<Domain.Projections.ImagePair.IFindImagePair>();
-                await Warte(async () => await finde.FindByIdAsync(paar) is not null, TimeSpan.FromSeconds(30), "Read-Model des Paars fehlt");
+                await Warte(async () => await finde.FindByIdAsync(new(paar)) is not null, TimeSpan.FromSeconds(30), "Read-Model des Paars fehlt");
             }
 
             var ds = Guid.NewGuid();

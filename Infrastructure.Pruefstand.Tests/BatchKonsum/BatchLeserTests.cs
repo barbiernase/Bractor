@@ -19,8 +19,8 @@ public class BatchLeserTests
         var log = new PartitionsLog();
         var db = new SpeicherKonsum();
         var uhr = DateTimeOffset.UnixEpoch;
-        var tracker = new SpeicherTracker(db);
-        var leser = new BatchLeser(log, tracker, "p", 0, Zwei, null,
+        var tracker = new SpeicherZiel(db);
+        var leser = new BatchLeser(log, tracker.Naht, "p", 0, Zwei, null,
             (e, _) => { tracker.Wende(e.AggregateId, e.AggregateVersion); return Task.CompletedTask; }, jetzt: () => uhr);
 
         for (var i = 0; i < 5; i++)
@@ -44,9 +44,9 @@ public class BatchLeserTests
         //   trotzdem an und merkt es sich — ohne Grenze wüchse die Liste mit jedem Event und ginge mit jeder Seite an die Datenbank.
         var log = new PartitionsLog();
         var db = new SpeicherKonsum();
-        var tracker = new SpeicherTracker(db);
+        var tracker = new SpeicherZiel(db);
         var konsum = new Konsum(Partitionen: 1, BatchGroesse: 100);
-        var leser = new BatchLeser(log, tracker, "p", 0, konsum, null,
+        var leser = new BatchLeser(log, tracker.Naht, "p", 0, konsum, null,
             (e, _) => { tracker.Wende(e.AggregateId, e.AggregateVersion); return Task.CompletedTask; });
         const int n = 3 * BatchLeser.ErledigtHoechstens;
         var eintraege = new List<PartitionsLog.Eintrag>();

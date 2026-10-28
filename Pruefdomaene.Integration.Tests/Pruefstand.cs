@@ -41,7 +41,7 @@ internal static class Pruefstand
         });
         builder.Services.AddGeneratedPullPaths();
         // Die Dienste der Funktionen wie im Host ohne Wahl in der Umgebung: je Dienst die eine Implementierung (Tests ersetzen sie über dienste).
-        Infrastructure.Dienste.DienstExtensions.BindeDienste(builder.Services, new Dictionary<string, DienstKonfig>(),
+        global::Infrastructure.Dienste.DienstExtensions.BindeDienste(builder.Services, new Dictionary<string, DienstKonfig>(),
             new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build().GetSection(Dienstvertrag.KonfigAbschnitt));
         dienste?.Invoke(builder.Services);
         return builder.Build();
@@ -67,7 +67,7 @@ internal static class Pruefstand
     /// Versionsprüfung (Modus <c>Client</c>, OCC gegen diese Version).
     /// </summary>
     public static Task<CommandResult?> FrageAsync(IHost host, ICommand cmd, Guid commandId, int? version = null)
-        => Infrastructure.Aggregate.ActorSystem.ProtoActorAggregateDispatcher.FrageAsync(host.Services.GetRequiredService<Proto.ActorSystem>(),
+        => global::Infrastructure.Aggregate.ActorSystem.ProtoActorAggregateDispatcher.FrageAsync(host.Services.GetRequiredService<Proto.ActorSystem>(),
             new CommandEnvelope
             {
                 CommandId = commandId, AggregateType = AggregateDispatcherExtensions.ResolveAggregateType(cmd),

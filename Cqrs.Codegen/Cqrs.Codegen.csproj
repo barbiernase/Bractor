@@ -33,6 +33,7 @@
          zu welcher Anwendung gehören, entscheidet das Werkzeug über die Wurzel (Projektstruktur) und die Referenz-Hülle. -->
     <ProjectReference Include="..\Pruefdomaene\Pruefdomaene.csproj" />
     <ProjectReference Include="..\Pruefdomaene.Pipeline\Pruefdomaene.Pipeline.csproj" />
+    <ProjectReference Include="..\Pruefdomaene.Projections\Pruefdomaene.Projections.csproj" />
   </ItemGroup>
 
   <ItemGroup>

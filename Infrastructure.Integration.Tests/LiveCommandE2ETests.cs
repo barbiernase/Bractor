@@ -65,12 +65,12 @@ public class LiveCommandE2ETests
 
             // Aufwärmen: Aktivierungen und der erste Takt (2 s nach dem Start).
             var warm = await NeuesPaarAsync();
-            await WaitAsync(async () => (await historieRead.GetByPairIdAsync(warm))?.Eintraege.Count >= 1, TimeSpan.FromSeconds(60), "Aufwärmen: keine Historie");
+            await WaitAsync(async () => (await historieRead.GetByPairIdAsync(new(warm)))?.Eintraege.Count >= 1, TimeSpan.FromSeconds(60), "Aufwärmen: keine Historie");
 
             for (var i = 0; i < 3; i++)
             {
                 var paar = await NeuesPaarAsync();
-                await WaitAsync(async () => (await historieRead.GetByPairIdAsync(paar))?.Eintraege.Count >= 1, TimeSpan.FromSeconds(5),
+                await WaitAsync(async () => (await historieRead.GetByPairIdAsync(new(paar)))?.Eintraege.Count >= 1, TimeSpan.FromSeconds(5),
                     $"Durchlauf {i + 1}: der Commit weckt die Projektion nicht (nur der Takt holte sie)");
             }
         }
@@ -116,25 +116,25 @@ public class LiveCommandE2ETests
 
             // Command → Event → Wecker → Batch-Leser → Co-Commit ist asynchron.
             await WaitAsync(
-                async () => (await historieRead.GetByPairIdAsync(pairId))?.Eintraege.Count >= 1,
+                async () => (await historieRead.GetByPairIdAsync(new(pairId)))?.Eintraege.Count >= 1,
                 TimeSpan.FromSeconds(30),
                 "Historie ist nach dem Command nicht über den Pull-Pfad gewachsen.");
 
-            var historie = await historieRead.GetByPairIdAsync(pairId);
+            var historie = await historieRead.GetByPairIdAsync(new(pairId));
             historie.Should().NotBeNull();
             historie!.Eintraege.Should().Contain(e => e.EreignisTyp == nameof(ImagePairErstellt));
 
-            // (B0) Auch die ImagePairProjektion läuft jetzt über den Pull-Pfad (neuer Co-Commit-Store):
+            // (B0) Auch die ImagePairProjektion läuft jetzt über den Pull-Pfad (Store der Klasse 1):
             //   dasselbe Event materialisiert ihr Read-Model in "rm" mit dem richtigen PairKey.
             await WaitAsync(
-                async () => (await imagePairRead.FindByIdAsync(pairId)) is { PairKey: "PAIR-LIVE" },
+                async () => (await imagePairRead.FindByIdAsync(new(pairId))) is { PairKey: "PAIR-LIVE" },
                 TimeSpan.FromSeconds(30),
                 "ImagePairProjektion ist nach dem Command nicht über den Pull-Co-Commit-Pfad materialisiert.");
 
             // Plan Phase 6: der Stand je Id, den eine Antwort trägt, kommt aus dem Fortschritt der Projektion (Guard je Stream, mit den
             //   Wirkungen in einer Transaktion) — hier das eine Event des Paars.
-            var staende = host.Services.GetRequiredService<IReadModelDepsReader>();
-            var stand = await staende.ReadAsync("imagepair-historie", new[] { pairId.ToString() });
+            var staende = host.Services.GetRequiredService<Infrastructure.Projections.ProjektionsStaende>();
+            var stand = await staende.LiesAsync(new[] { "ImagePairHistorieProjektion" }, new[] { pairId });
             var kopf = (await host.Services.GetRequiredService<IEventStoreRepository>().ReadStreamAsync(pairId, 0, default)).Max(e => e.AggregateVersion);
             stand.Should().ContainSingle(d => d.Id == pairId && d.Version >= 1 && d.Version <= kopf,
                 "die Projektion hat das Paar mindestens bis zum Anlegen verarbeitet, nie über den Kopf des Streams hinaus");

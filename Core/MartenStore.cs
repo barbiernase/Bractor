@@ -28,7 +28,7 @@ namespace Core;
 ///
 /// <b>Neuaufbau:</b> für Klasse 1 ist eine neue Generation das Leeren der eigenen Dokument-Typen (der Sonderfall aus A4) — Wirkungen einer alten
 /// Aktivierung werden ohnehin nur mit ihrem Fortschritt gültig, und der verliert gegen den zurückgesetzten. Welche Typen dem Store gehören, nennt
-/// er im Konstruktor (Code-Fakt).
+/// er im Konstruktor (Code-Fakt); schreibt er einen anderen, wirft er sofort.
 ///
 /// Konkrete Stores erben und schreiben nur noch ihre FACHLICHEN Methoden. Kein Domänenwissen hier, kein Generat — reiner Marten-Adapter. SCOPED
 /// registriert: eine Instanz je Fähigkeits-Bereich (je Partitions-Leser → isolierter Puffer).
@@ -130,6 +130,7 @@ public abstract class MartenStore : IAtomaresZiel
     /// </summary>
     protected Task EnqueueGeteilt<T>(string id, Func<T?, T?> aendern) where T : class, IGeteiltesReadModel
     {
+        PruefeTyp(typeof(T));
         _pending.Add(async s => Geteilt(s, await s.LoadAsync<T>(id), aendern));
         return Task.CompletedTask;
     }
@@ -137,6 +138,7 @@ public abstract class MartenStore : IAtomaresZiel
     /// <inheritdoc cref="EnqueueGeteilt{T}(string, Func{T, T})"/>
     protected Task EnqueueGeteilt<T>(Guid id, Func<T?, T?> aendern) where T : class, IGeteiltesReadModel
     {
+        PruefeTyp(typeof(T));
         _pending.Add(async s => Geteilt(s, await s.LoadAsync<T>(id), aendern));
         return Task.CompletedTask;
     }
@@ -149,8 +151,17 @@ public abstract class MartenStore : IAtomaresZiel
         else s.Store(neu);                     // gleichzeitig geändert → ConcurrencyException (Version aus dem Load)
     }
 
+    /// <summary>Der Store schreibt nur Typen, die er im Konstruktor nennt — sonst ließe eine neue Generation sie stehen.</summary>
+    private void PruefeTyp(Type dokument)
+    {
+        if (Array.IndexOf(_dokumente, dokument) < 0)
+            throw new InvalidOperationException(
+                $"{GetType().Name} schreibt {dokument.Name}, nennt es aber nicht in seinen Dokument-Typen (Konstruktor) — ein Neuaufbau würde es nicht leeren.");
+    }
+
     private void PruefeEigen(Guid id, Type dokument)
     {
+        PruefeTyp(dokument);
         if (_stapelStream is not { } stream)
             throw new InvalidOperationException(
                 $"{GetType().Name}: Schreib-Effekt auf {dokument.Name} außerhalb eines Batches — Stores schreiben nur aus einer Projektion.");

@@ -22,7 +22,7 @@ public class QuellenE2ETests
     [Fact]
     public async Task Eine_Quell_Nachricht_vom_Client_steht_genau_einmal_im_Log_und_startet_ueber_eine_Funktion_den_Import()
     {
-        using var host = Cluster("pruef-quelle-client", takt: Infrastructure.Projections.Konsum.StandardTakt);   // Latenz-Prüfung unten: der lange Takt
+        using var host = Cluster("pruef-quelle-client", takt: global::Infrastructure.Projections.Konsum.StandardTakt);   // Latenz-Prüfung unten: der lange Takt
         await host.StartAsync();
         try
         {
@@ -73,7 +73,7 @@ public class QuellenE2ETests
             var stream = QuellVorgang.StreamFürSchluessel(typeof(ImportAngefordert), schluessel);
             var events = await host.Services.GetRequiredService<IEventStoreRepository>().ReadStreamAsync(stream, 0, default);
             events.Select(e => ((ImportAngefordert)e.Payload).Kennung).Should().BeEquivalentTo(new[] { a, b, c }, "je Kennung genau ein Event im Stream des Schlüssels");
-            (await new Infrastructure.Persistence.MartenStreamBestand(host.Services.GetRequiredService<Marten.IDocumentStore>()).BekannteAsync(new[] { va, vb, Guid.NewGuid() }, default))
+            (await new global::Infrastructure.Persistence.MartenStreamBestand(host.Services.GetRequiredService<Marten.IDocumentStore>()).BekannteAsync(new[] { va, vb, Guid.NewGuid() }, default))
                 .Should().BeEquivalentTo(new[] { va, vb }, "der Bestand kennt die Vorgänge auch ohne eigenen Stream (Abgleich der Treiber beim Start)");
         }
         finally { await host.StopAsync(); }

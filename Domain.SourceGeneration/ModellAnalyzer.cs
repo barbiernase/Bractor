@@ -63,12 +63,12 @@ public sealed class ModellAnalyzer : DiagnosticAnalyzer
 
     private sealed class Vertrag
     {
-        public readonly INamedTypeSymbol? IEvent, ITransient, ICommand, ICommandZiel, IState, IDecider, IApplier, ISubscriber;
+        public readonly INamedTypeSymbol? IEvent, ITransient, ICommand, ICommandZiel, IState, IDecider, IApplier, IProjektion;
         public Vertrag(Compilation c)
         {
             INamedTypeSymbol? G(string n) => c.GetTypeByMetadataName("Abstractions." + n);
             IEvent = G("IEvent"); ITransient = G("ITransientEvent"); ICommand = G("ICommand"); IState = G("IState");
-            IDecider = G("IDecider`1"); IApplier = G("IApplier`1"); ISubscriber = G("IProjektion");
+            IDecider = G("IDecider`1"); IApplier = G("IApplier`1"); IProjektion = G("IProjektion");
             ICommandZiel = c.GetTypeByMetadataName(Abstractions.Idvertrag.CommandMetadatenName);
         }
         public bool Ist(ITypeSymbol t, INamedTypeSymbol? i) => i != null && (SymbolEqualityComparer.Default.Equals(t, i) || t.AllInterfaces.Contains(i, SymbolEqualityComparer.Default));
@@ -82,7 +82,7 @@ public sealed class ModellAnalyzer : DiagnosticAnalyzer
         if (t.TypeKind is TypeKind.Class or TypeKind.Struct && !t.IsAbstract && v.Ist(t, v.ICommand) && v.ICommandZiel != null
             && t.AllInterfaces.Count(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, v.ICommandZiel)) != 1)
             ctx.ReportDiagnostic(Diagnostic.Create(Ziel, t.Locations.FirstOrDefault(), t.Name));
-        if (t.TypeKind == TypeKind.Class && !t.IsAbstract && v.Ist(t, v.ISubscriber)) PruefeKonsument(ctx, t, v);
+        if (t.TypeKind == TypeKind.Class && !t.IsAbstract && v.Ist(t, v.IProjektion)) PruefeKonsument(ctx, t, v);
     }
 
     private static void PruefeEnum(SymbolAnalysisContext ctx, INamedTypeSymbol e)

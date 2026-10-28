@@ -54,8 +54,8 @@ public class LebenszyklusImClusterTests
 
         var kind = new ClusterKind("batch-probe", Props.FromProducer(() => new BatchLeserActor((partition, bereich) =>
         {
-            var tracker = new SpeicherTracker(new SpeicherKonsum());
-            return new BatchLeser(log, tracker, "probe", partition, new Konsum(1, 500), null, async (e, _) =>
+            var tracker = new SpeicherZiel(new SpeicherKonsum());
+            return new BatchLeser(log, tracker.Naht, "probe", partition, new Konsum(1, 500), null, async (e, _) =>
             {
                 laeuft.TrySetResult();
                 await tor.Task;                                    // ein Effekt, der nicht auf das Token hört (etwa ein laufender Befehl)

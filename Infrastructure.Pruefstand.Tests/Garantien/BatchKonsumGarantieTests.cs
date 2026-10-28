@@ -24,9 +24,9 @@ public class BatchKonsumGarantieTests
     private static readonly CancellationToken Ct = CancellationToken.None;
     private static readonly Konsum Klein = new(Partitionen: 2, BatchGroesse: 3);
 
-    private static BatchLeser Leser(PartitionsLog log, SpeicherTracker tracker, int partition = 0,
+    private static BatchLeser Leser(PartitionsLog log, SpeicherZiel tracker, int partition = 0,
         Func<EventEnvelope, Task>? vorher = null, Func<Task>? absturz = null, Func<DateTimeOffset>? jetzt = null)
-        => new(log, tracker, Projektion, partition, Klein, typen: null, async (e, _) =>
+        => new(log, tracker.Naht, Projektion, partition, Klein, typen: null, async (e, _) =>
         {
             if (vorher is not null) await vorher(e);
             tracker.Wende(e.AggregateId, e.AggregateVersion);
@@ -45,7 +45,7 @@ public class BatchKonsumGarantieTests
         log.Haenge(a, 4, gesetzt: false);
         log.Haenge(a, 5, gesetzt: false);
 
-        var leser = Leser(log, new SpeicherTracker(db));
+        var leser = Leser(log, new SpeicherZiel(db));
         await leser.LaufAsync(Ct);
         await leser.LaufAsync(Ct);                                               // doppelte Weckung
         leser.Position.Should().Be(2, "die Position überholt den unsichtbaren Nachzügler (Sequenz 3) nicht");
@@ -53,7 +53,7 @@ public class BatchKonsumGarantieTests
         nachzuegler.Sichtbar = true;                                             // der Nachzügler wird sichtbar
         await leser.LaufAsync(Ct);
         nachzuegler.Gesetzt = true;
-        await Leser(log, new SpeicherTracker(db)).LaufAsync(Ct);                 // Neuaktivierung: liest ab der Position, der Guard fängt ab
+        await Leser(log, new SpeicherZiel(db)).LaufAsync(Ct);                 // Neuaktivierung: liest ab der Position, der Guard fängt ab
 
         db.VersionenVon(a).Should().Equal(1, 2, 3, 4, 5);
         db.VersionenVon(b).Should().Equal(1);
@@ -68,7 +68,7 @@ public class BatchKonsumGarantieTests
         foreach (var s in streams) { log.Haenge(s, 1); log.Haenge(s, 2); }
         var fremd = log.Haenge(PartitionsLog.StreamIn(0, 2), 1);                // andere Partition, jüngste gesetzte Sequenz
 
-        var leser = Leser(log, new SpeicherTracker(db), partition: 1);
+        var leser = Leser(log, new SpeicherZiel(db), partition: 1);
         (await leser.LaufAsync(Ct)).Should().Be(8);
 
         db.Angewandt.Should().HaveCount(8);
@@ -84,12 +84,12 @@ public class BatchKonsumGarantieTests
         log.Haenge(s, 1);
         log.Haenge(s, 2);
 
-        var abstuerzend = Leser(log, new SpeicherTracker(db), absturz: () => throw new InvalidOperationException("Absturz vor dem Commit"));
+        var abstuerzend = Leser(log, new SpeicherZiel(db), absturz: () => throw new InvalidOperationException("Absturz vor dem Commit"));
         var lauf = () => abstuerzend.LaufAsync(Ct);
         await lauf.Should().ThrowAsync<InvalidOperationException>();             // der Prozess endet mitten im Batch
 
         db.Angewandt.Should().BeEmpty();
-        await Leser(log, new SpeicherTracker(db)).LaufAsync(Ct);
+        await Leser(log, new SpeicherZiel(db)).LaufAsync(Ct);
         db.VersionenVon(s).Should().Equal(1, 2);
     }
 
@@ -103,8 +103,8 @@ public class BatchKonsumGarantieTests
 
         var halt = new TaskCompletionSource();
         var angehalten = new TaskCompletionSource();
-        var erste = Leser(log, new SpeicherTracker(db), absturz: async () => { angehalten.TrySetResult(); await halt.Task; });
-        var zweite = Leser(log, new SpeicherTracker(db));
+        var erste = Leser(log, new SpeicherZiel(db), absturz: async () => { angehalten.TrySetResult(); await halt.Task; });
+        var zweite = Leser(log, new SpeicherZiel(db));
 
         var ersteLaeuft = erste.LaufAsync(Ct);
         await angehalten.Task;                                                   // die erste hat ihren Effekt gepuffert
@@ -128,7 +128,7 @@ public class BatchKonsumGarantieTests
 
         var heilt = false;
         var uhr = DateTimeOffset.UnixEpoch;
-        var leser = Leser(log, new SpeicherTracker(db), jetzt: () => uhr,
+        var leser = Leser(log, new SpeicherZiel(db), jetzt: () => uhr,
             vorher: e => e.AggregateId == gift && !heilt ? throw new InvalidOperationException("Dispatch wirft dauerhaft") : Task.CompletedTask);
 
         await leser.LaufAsync(Ct);
@@ -162,7 +162,7 @@ public class BatchKonsumGarantieTests
 
         // Jeder Commit, der mehr als einen Stream enthält, kollidiert (ein anderer Batch schrieb dasselbe geteilte Dokument).
         db.CommitFehler = guards => guards.Count > 1 ? new SchreibKonfliktException("geteiltes Dokument", new Exception()) : null;
-        await Leser(log, new SpeicherTracker(db)).LaufAsync(Ct);
+        await Leser(log, new SpeicherZiel(db)).LaufAsync(Ct);
 
         db.Angewandt.Select(x => x.Stream).Should().BeEquivalentTo(streams, "jeder Stream wirkt genau einmal");
     }
@@ -177,7 +177,7 @@ public class BatchKonsumGarantieTests
         log.Haenge(frei, 1);
 
         db.CommitFehler = guards => guards.ContainsKey(umkaempft) ? new SchreibKonfliktException("geteiltes Dokument", new Exception()) : null;
-        var leser = Leser(log, new SpeicherTracker(db));
+        var leser = Leser(log, new SpeicherZiel(db));
         await leser.LaufAsync(Ct);
 
         db.VersionenVon(frei).Should().Equal(1);

@@ -9,7 +9,7 @@ using ImagePairAgg = Domain.ImagePair.ImagePair;
 namespace Domain.Infrastructure.ImagePair;
 
 /// <summary>
-/// Co-Commit-Store der ImagePairHistorie (Append-Projektion, Muster B: Read + Write auf derselben
+/// Store (Klasse 1) der ImagePairHistorie (Append-Projektion, Muster B: Read + Write auf derselben
 /// Klasse). Exactly-once-Naht in <see cref="MartenStore"/>; <see cref="AppendEintragAsync"/>
 /// puffert einen load-or-create-append als Effekt. SCOPED registriert (eine Instanz je Fähigkeits-Bereich, unter jeder Fähigkeit).
 /// </summary>

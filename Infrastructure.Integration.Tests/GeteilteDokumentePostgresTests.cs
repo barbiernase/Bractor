@@ -7,6 +7,7 @@ using Domain.Projections;
 using FluentAssertions;
 using Infrastructure.Persistence;
 using Infrastructure.Projections;
+using Infrastructure.Projections.Generated;
 using Marten;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -56,7 +57,7 @@ public class GeteilteDokumentePostgresTests
 
         var leser = new DatensatzStore(_fx.Store);
         foreach (var p in paare)
-            (await leser.HoleDatensaetzeFuerPaarAsync(p)).Select(d => d.Id)
+            (await leser.HoleDatensaetzeFuerPaarAsync(new(p))).Select(d => d.Id.Wert)
                 .Should().BeEquivalentTo(new[] { a, b }, $"Paar {p} liegt in beiden Datensätzen");
     }
 
@@ -73,7 +74,7 @@ public class GeteilteDokumentePostgresTests
         await DatensatzLeser(es, proj, 0).LaufAsync();
         await DatensatzLeser(es, proj, 1).LaufAsync();
 
-        (await new DatensatzStore(_fx.Store).HoleDatensaetzeFuerPaarAsync(p)).Select(d => d.Id)
+        (await new DatensatzStore(_fx.Store).HoleDatensaetzeFuerPaarAsync(new(p))).Select(d => d.Id.Wert)
             .Should().BeEquivalentTo(new[] { b });
     }
 
@@ -89,7 +90,7 @@ public class GeteilteDokumentePostgresTests
         await ModellLeser(es, proj, 1).LaufAsync();
         await ModellLeser(es, proj, 0).LaufAsync();
 
-        (await new ModellStore(_fx.Store).GetAktivesAsync())!.ModellId.Should().Be(neu);
+        (await new ModellStore(_fx.Store).GetAktivesAsync())!.ModellId.Wert.Should().Be(neu);
     }
 
     [Fact]
@@ -125,8 +126,8 @@ public class GeteilteDokumentePostgresTests
         var store = new DatensatzStore(_fx.Store);
         var projektion = new DatensatzProjektion();
         var faehigkeiten = new FaehigkeitenAus(store);
-        return new BatchLeser(es, store, proj, partition, VierPartitionen, BatchLeser.TypenAus(DatensatzProjektion.SubscribedTypes),
-            (e, w) => projektion.DispatchAsync(e, w, faehigkeiten));
+        return new BatchLeser(es, new Projektionsnaht(store, null), proj, partition, VierPartitionen, BatchLeser.TypenAus(GeneratedProjektionen.DatensatzProjektion_Typen),
+            (e, ct) => GeneratedProjektionen.DatensatzProjektion_Dispatch(projektion, e, faehigkeiten, ct));
     }
 
     private BatchLeser ModellLeser(MartenEventStore es, string proj, int partition)
@@ -134,8 +135,8 @@ public class GeteilteDokumentePostgresTests
         var store = new ModellStore(_fx.Store);
         var projektion = new ModellProjektion();
         var faehigkeiten = new FaehigkeitenAus(store);
-        return new BatchLeser(es, store, proj, partition, VierPartitionen, BatchLeser.TypenAus(ModellProjektion.SubscribedTypes),
-            (e, w) => projektion.DispatchAsync(e, w, faehigkeiten));
+        return new BatchLeser(es, new Projektionsnaht(store, null), proj, partition, VierPartitionen, BatchLeser.TypenAus(GeneratedProjektionen.ModellProjektion_Typen),
+            (e, ct) => GeneratedProjektionen.ModellProjektion_Dispatch(projektion, e, faehigkeiten, ct));
     }
 
     private static async Task<Guid> ModellMitAktivierung(MartenEventStore es, Guid id)

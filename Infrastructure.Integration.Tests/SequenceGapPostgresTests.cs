@@ -115,15 +115,15 @@ public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.F
         var store = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
         var leser = BatchHilfe.HistorieLeser(es, store, proj, 0, konsum);
         await leser.LaufAsync();
-        (await store.GetByPairIdAsync(streamB))!.Eintraege.Should().HaveCount(1, "jung, aber angewandt (Latenz)");
+        (await store.GetByPairIdAsync(new(streamB)))!.Eintraege.Should().HaveCount(1, "jung, aber angewandt (Latenz)");
         leser.Position.Should().Be(kopf, "die Position überholt die noch unsichtbare kleinere Sequenz nicht");
 
         await txA.CommitAsync();                                     // erst jetzt wird die kleinere Sequenz sichtbar
         await leser.LaufAsync();
         await BatchHilfe.HistorieLeser(es, new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store), proj, 0, konsum).LaufAsync();
 
-        (await store.GetByPairIdAsync(streamA))!.Eintraege.Should().HaveCount(1);
-        (await store.GetByPairIdAsync(streamB))!.Eintraege.Should().HaveCount(1, "die Neuaktivierung liest es erneut, der Guard überspringt es");
+        (await store.GetByPairIdAsync(new(streamA)))!.Eintraege.Should().HaveCount(1);
+        (await store.GetByPairIdAsync(new(streamB)))!.Eintraege.Should().HaveCount(1, "die Neuaktivierung liest es erneut, der Guard überspringt es");
     }
 
     private MartenEventStore Neu() => new(_fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance);

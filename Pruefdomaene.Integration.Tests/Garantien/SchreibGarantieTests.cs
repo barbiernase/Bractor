@@ -176,11 +176,11 @@ public class SchreibGarantieTests
             var store = host.Services.GetRequiredService<IEventStoreRepository>();
             var marten = host.Services.GetRequiredService<Marten.IDocumentStore>();
 
-            await Infrastructure.Persistence.InboxAufraeumer.RaeumeAsync(marten, TimeSpan.FromHours(1), default);
+            await global::Infrastructure.Persistence.InboxAufraeumer.RaeumeAsync(marten, TimeSpan.FromHours(1), default);
             (await store.AusgangAsync(id, default)).Should().Be(KommandoAusgang.Gewirkt, "innerhalb des Horizonts bleibt die Quittung");
 
             await Task.Delay(50);
-            (await Infrastructure.Persistence.InboxAufraeumer.RaeumeAsync(marten, TimeSpan.FromMilliseconds(10), default)).Should().BeGreaterThan(0);
+            (await global::Infrastructure.Persistence.InboxAufraeumer.RaeumeAsync(marten, TimeSpan.FromMilliseconds(10), default)).Should().BeGreaterThan(0);
             (await store.AusgangAsync(id, default)).Should().BeNull("jenseits des Horizonts ist sie vergessen");
         }
         finally { await host.StopAsync(); }

@@ -6,6 +6,7 @@ using Domain.Projections.ImagePair;
 using FluentAssertions;
 using Infrastructure.Persistence;
 using Infrastructure.Projections;
+using Infrastructure.Projections.Generated;
 using Marten;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
@@ -140,8 +141,8 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
             {
                 // Je Aktivierung ein eigener Co-Commit-Store (er puffert die Effekte eines Batches) — wie im Host.
                 var store = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
-                return new BatchLeser(es, new Mitschreiber(store, p, commits), proj, p, konsum,
-                    BatchLeser.TypenAus(ImagePairHistorieProjektion.SubscribedTypes),
+                return new BatchLeser(es, new Projektionsnaht(new Mitschreiber(store, p, commits), null), proj, p, konsum,
+                    BatchLeser.TypenAus(GeneratedProjektionen.ImagePairHistorieProjektion_Typen),
                     BatchHilfe.HistorieDispatch(store, async _ => { if (zufall.Next(200) == 0) await Task.Delay(zufall.Next(50, 400)); }),
                     absturzVorCommit: async () => { if (zufall.Next(30) == 0) await Task.Delay(zufall.Next(50, 600)); });
             }
@@ -186,7 +187,7 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
         var abweichend = new List<(Guid Stream, int Ist, int Soll)>();
         foreach (var (stream, n) in soll)
         {
-            var ist = (await historie.GetByPairIdAsync(stream))?.Eintraege.Count ?? 0;
+            var ist = (await historie.GetByPairIdAsync(new(stream)))?.Eintraege.Count ?? 0;
             if (ist != n) abweichend.Add((stream, ist, n));
         }
         var stand = await Task.WhenAll(Enumerable.Range(0, Partitionen).Select(p => BatchHilfe.PartitionAsync(_fx.Store, proj, p)));
@@ -334,19 +335,23 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
     private sealed record Commit(int Partition, DateTimeOffset Beginn, DateTimeOffset Ende, long Position);
 
     /// <summary>Reicht an den Store durch und schreibt jeden gelungenen Partitions-Commit mit (Zeit vor und nach dem Commit, neue Position).</summary>
-    private sealed class Mitschreiber(IProjectionTracker innen, int partition, ConcurrentQueue<Commit> log) : IProjectionTracker
+    private sealed class Mitschreiber(IAtomaresZiel innen, int partition, ConcurrentQueue<Commit> log) : IAtomaresZiel
     {
-        public Task<PartitionsCheckpoint> LadePartitionAsync(string projektionsId, int p, CancellationToken ct) => innen.LadePartitionAsync(projektionsId, p, ct);
-        public Task<IReadOnlyDictionary<Guid, int>> LadeGuardsAsync(string projektionsId, IReadOnlyCollection<Guid> streams, CancellationToken ct)
-            => innen.LadeGuardsAsync(projektionsId, streams, ct);
-        public void BeginneBatch() => innen.BeginneBatch();
+        public Task<PartitionsCheckpoint> LadeFortschrittAsync(string projektion, int p, CancellationToken ct) => innen.LadeFortschrittAsync(projektion, p, ct);
+        public Task<IReadOnlyDictionary<Guid, int>> LadeGuardsAsync(string projektion, IReadOnlyCollection<Guid> streams, CancellationToken ct)
+            => innen.LadeGuardsAsync(projektion, streams, ct);
+        public Task FortschrittZuruecksetzenAsync(string projektion, int partitionen, string generation, CancellationToken ct)
+            => innen.FortschrittZuruecksetzenAsync(projektion, partitionen, generation, ct);
+        public void Beginne(string generation) => innen.Beginne(generation);
         public void Stream(Guid streamId) => innen.Stream(streamId);
-        public Task ResetAllAsync(string projektionsId, CancellationToken ct) => innen.ResetAllAsync(projektionsId, ct);
+        public Task SchreibeAsync(CancellationToken ct) => innen.SchreibeAsync(ct);
+        public Task NeueGenerationAsync(string generation, CancellationToken ct) => innen.NeueGenerationAsync(generation, ct);
+        public Task UmschaltenAsync(string generation, CancellationToken ct) => innen.UmschaltenAsync(generation, ct);
 
-        public async Task<int> CommitAsync(PartitionsCheckpoint stand, IReadOnlyDictionary<Guid, int> guards, CancellationToken ct)
+        public async Task<int> SchreibeMitFortschrittAsync(PartitionsCheckpoint stand, IReadOnlyDictionary<Guid, int> guards, CancellationToken ct)
         {
             var beginn = DateTimeOffset.UtcNow;
-            var v = await innen.CommitAsync(stand, guards, ct);
+            var v = await innen.SchreibeMitFortschrittAsync(stand, guards, ct);
             log.Enqueue(new Commit(partition, beginn, DateTimeOffset.UtcNow, stand.Position));
             return v;
         }

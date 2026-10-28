@@ -177,7 +177,7 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         halt.SetResult();
         await ersteLaeuft;   // ihr Commit verliert an der Version der Partition, sie lädt neu — der Guard überspringt das Event
 
-        (await store1.GetByPairIdAsync(stream))!.Eintraege.Should().HaveCount(1, "der Effekt des Events gilt genau einmal");
+        (await store1.GetByPairIdAsync(new(stream)))!.Eintraege.Should().HaveCount(1, "der Effekt des Events gilt genau einmal");
     }
 
     [Fact]
@@ -197,8 +197,8 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
             vorher: e => e.AggregateId == gift && !heilt ? throw new InvalidOperationException("Dispatch wirft dauerhaft") : Task.CompletedTask);
 
         await leser.LaufAsync();
-        (await store.GetByPairIdAsync(gesund))!.Eintraege.Should().HaveCount(2, "ein vergifteter Stream hält die anderen nicht auf");
-        (await store.GetByPairIdAsync(gift)).Should().BeNull();
+        (await store.GetByPairIdAsync(new(gesund)))!.Eintraege.Should().HaveCount(2, "ein vergifteter Stream hält die anderen nicht auf");
+        (await store.GetByPairIdAsync(new(gift))).Should().BeNull();
         var stand = (await BatchHilfe.PartitionAsync(_fx.Store, proj, 0))!;
         stand.Geparkt.Should().ContainSingle(g => g.StreamId == gift, "der Stand ist sichtbar: durabel geparkt");
         stand.Position.Should().Be(await BatchHilfe.KopfAsync(_fx.Store), "nichts hält die Partition fest");
@@ -208,7 +208,7 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         uhr += Konsum.StandardTakt;                        // der nächste Poll versucht geparkte Streams einzeln
         await leser.LaufAsync();
 
-        (await store.GetByPairIdAsync(gift))!.Eintraege.Should().HaveCount(2, "nichts geht verloren: beide Events, je genau einmal");
+        (await store.GetByPairIdAsync(new(gift)))!.Eintraege.Should().HaveCount(2, "nichts geht verloren: beide Events, je genau einmal");
         (await BatchHilfe.PartitionAsync(_fx.Store, proj, 0))!.Geparkt.Should().BeEmpty();
         (await BatchHilfe.GuardAsync(_fx.Store, proj, gift)).Should().Be(2);
     }
@@ -226,7 +226,7 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
             var proj = "it-neuaufbau";
             var stream = Guid.NewGuid();
             await es.AppendEventsAsync(stream, 0, new IEvent[] { new ImagePairInspiziert() });
-            await new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(frisch).CommitAsync(PartitionsCheckpoint.Neu(proj, 0),
+            await new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(frisch).SchreibeMitFortschrittAsync(PartitionsCheckpoint.Neu(proj, 0),
                 new Dictionary<Guid, int>(), default);   // die Partition existiert (Version 1, Position 0)
 
             var store = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(frisch);
@@ -235,14 +235,14 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
             {
                 if (!zuruecksetzen) return;
                 zuruecksetzen = false;
-                await new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(frisch).ResetAllAsync(proj, default);
+                await new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(frisch).FortschrittZuruecksetzenAsync(proj, 1, "g-neu", default);
             });
 
             await leser.LaufAsync();   // der erste Commit verliert, der Leser lädt den zurückgesetzten Stand und liest neu
 
             var stand = (await BatchHilfe.PartitionAsync(frisch, proj, 0))!;
             stand.Version.Should().Be(3, "angelegt (1), zurückgesetzt (2), der Commit nach dem Neuladen (3) — der verlorene zählt nicht");
-            (await store.GetByPairIdAsync(stream))!.Eintraege.Should().HaveCount(1, "genau einmal — der verlorene Commit hinterließ nichts");
+            (await store.GetByPairIdAsync(new(stream)))!.Eintraege.Should().HaveCount(1, "genau einmal — der verlorene Commit hinterließ nichts");
         }
         finally
         {

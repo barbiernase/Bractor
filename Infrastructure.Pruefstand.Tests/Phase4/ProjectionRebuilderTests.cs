@@ -32,10 +32,10 @@ public class ProjectionRebuilderTests
         return (log, streams);
     }
 
-    private static async Task Materialisiere(PartitionsLog log, SpeicherTracker ziel)
+    private static async Task Materialisiere(PartitionsLog log, SpeicherZiel ziel)
     {
         for (var p = 0; p < Klein.Partitionen; p++)
-            await new BatchLeser(log, ziel, ProjId, p, Klein, null, (e, _) => { ziel.Wende(e.AggregateId, e.AggregateVersion); return Task.CompletedTask; })
+            await new BatchLeser(log, ziel.Naht, ProjId, p, Klein, null, (e, _) => { ziel.Wende(e.AggregateId, e.AggregateVersion); return Task.CompletedTask; })
                 .LaufAsync(Ct);
     }
 
@@ -44,19 +44,19 @@ public class ProjectionRebuilderTests
     {
         var (log, streams) = Log();
         var db = new SpeicherKonsum();
-        var ziel = new SpeicherTracker(db);
+        var ziel = new SpeicherZiel(db);
         await Materialisiere(log, ziel);
         db.Angewandt.Should().HaveCount(12);
 
         var rebuilder = new ProjectionRebuilder(log, Klein);
         var gelesenVorher = log.Lesungen;
-        await rebuilder.RebuildAsync(ProjId, ziel, ziel, null, (e, _) => { ziel.Wende(e.AggregateId, e.AggregateVersion); return Task.CompletedTask; }, Ct);
+        await rebuilder.RebuildAsync(ProjId, ziel.Naht, null, (e, _) => { ziel.Wende(e.AggregateId, e.AggregateVersion); return Task.CompletedTask; }, Ct);
 
         db.Angewandt.Should().HaveCount(12, "geleert und genau einmal neu angewandt");
         foreach (var s in streams) db.VersionenVon(s).Should().Equal(1, 2, 3);
         (log.Lesungen - gelesenVorher).Should().BeGreaterThan(Klein.Partitionen, "als Strom: mehrere Seiten je Partition, nie der ganze Log auf einmal");
 
-        await rebuilder.RebuildAsync(ProjId, ziel, ziel, null, (e, _) => { ziel.Wende(e.AggregateId, e.AggregateVersion); return Task.CompletedTask; }, Ct);
+        await rebuilder.RebuildAsync(ProjId, ziel.Naht, null, (e, _) => { ziel.Wende(e.AggregateId, e.AggregateVersion); return Task.CompletedTask; }, Ct);
         db.Angewandt.Should().HaveCount(12, "ein zweiter Neuaufbau ist idempotent");
     }
 
@@ -65,11 +65,11 @@ public class ProjectionRebuilderTests
     {
         var (log, _) = Log();
         var db = new SpeicherKonsum();
-        var ziel = new SpeicherTracker(db);
+        var ziel = new SpeicherZiel(db);
         await Materialisiere(log, ziel);
 
-        await ziel.ResetAllAsync(ProjId, Ct);                    // Zurücksetzen OHNE Leeren
+        await ziel.FortschrittZuruecksetzenAsync(ProjId, Klein.Partitionen, "g1", Ct);   // Zurücksetzen OHNE neue Generation (ohne Leeren)
         await Materialisiere(log, ziel);
-        db.Angewandt.Should().HaveCount(24, "verdoppelt → deshalb IST das Leeren nötig");
+        db.Angewandt.Should().HaveCount(24, "verdoppelt → deshalb braucht ein Neuaufbau ein neues (leeres) Ziel");
     }
 }

@@ -22,7 +22,7 @@ public class BuildGarantieTests
     private static string[] Ids(ISourceGenerator generator, string code)
     {
         // Ausdrücklich angehängt (wie FaehigkeitAnalyzerTests): ein „_ = typeof(…)" darf der JIT verwerfen.
-        var refs = AppDomain.CurrentDomain.GetAssemblies().Concat(new[] { typeof(Abstractions.IState).Assembly, typeof(Core.ProjectionWriter).Assembly }).Distinct()
+        var refs = AppDomain.CurrentDomain.GetAssemblies().Concat(new[] { typeof(Abstractions.IState).Assembly, typeof(Core.MartenStore).Assembly }).Distinct()
             .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
             .Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location)).ToImmutableArray();
         var comp = CSharpCompilation.Create("Probe.Laufzeit", new[] { CSharpSyntaxTree.ParseText(Kopf + code) }, refs,
@@ -35,7 +35,7 @@ public class BuildGarantieTests
     /// <summary>Der erzeugte Quelltext (ohne die Probe selbst).</summary>
     private static string Generat(ISourceGenerator generator, string code)
     {
-        var refs = AppDomain.CurrentDomain.GetAssemblies().Concat(new[] { typeof(Abstractions.IState).Assembly, typeof(Core.ProjectionWriter).Assembly }).Distinct()
+        var refs = AppDomain.CurrentDomain.GetAssemblies().Concat(new[] { typeof(Abstractions.IState).Assembly, typeof(Core.MartenStore).Assembly }).Distinct()
             .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
             .Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location)).ToImmutableArray();
         var comp = CSharpCompilation.Create("Probe.Laufzeit", new[] { CSharpSyntaxTree.ParseText(Kopf + code) }, refs,
@@ -97,10 +97,9 @@ public interface ISchreibeB : IWriteStore { Task SchreibeBAsync(string x); }
         => Ids(new Infrastructure.SourceGeneration.PullPathGenerator(), Faehigkeiten + @"
 public sealed class StoreA : ISchreibeA { public Task SchreibeAAsync(string x) => Task.CompletedTask; }
 public sealed class StoreB : ISchreibeB { public Task SchreibeBAsync(string x) => Task.CompletedTask; }
-public partial class ZweiStores : ISubscriber, IPullSubscriber
+public sealed class ZweiStores : IProjektion
 {
-    public string SubscriberId => ""zwei"";
-    public Task Handle(ProbeGemacht e, IAggregateEnvelope env, ProjectionWriter w, ISchreibeA a, ISchreibeB b) => Task.CompletedTask;
+    public Task Auf(ProbeGemacht e, ISchreibeA a, ISchreibeB b) => Task.CompletedTask;
 } }")
             .Should().Contain("CQRS052");
 

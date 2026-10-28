@@ -67,10 +67,10 @@ public class LeseseitenStandE2ETests
                 await Warte(async () => { await using var s = marten.QuerySession(); return await s.LoadAsync<ImagePairReadModel>(paar) != null; },
                     TimeSpan.FromSeconds(30), "Die Projektion hat das Paar nicht geschrieben.");
                 // Ein Dokument, das kein Stream erzeugt hat — es verschwindet nur, wenn die Leseseite geleert wird.
-                await using (var s = marten.LightweightSession()) { s.Store(new ImagePairReadModel { Id = fremd, PairKey = "FREMD" }); await s.SaveChangesAsync(); }
+                await using (var s = marten.LightweightSession()) { s.Store(new ImagePairReadModel { Id = new(fremd), PairKey = "FREMD" }); await s.SaveChangesAsync(); }
                 await host.StopAsync();
             }
-            (await StandAsync(u)).Should().ContainKey("projektion:imagepair-projektion");
+            (await StandAsync(u)).Should().ContainKey("projektion:ImagePairProjektion");
 
             // 2. Neustart ohne Code-Änderung: nichts wird geleert.
             await using (var host = Baue())
@@ -82,7 +82,7 @@ public class LeseseitenStandE2ETests
             }
 
             // 3. Der gespeicherte Stand passt nicht mehr (= Projektions-Code geändert): die Leseseite wird geleert und neu aufgebaut.
-            await SetzeStandAsync(u, "projektion:imagepair-projektion", "alt");
+            await SetzeStandAsync(u, "projektion:ImagePairProjektion", "alt");
             await using (var host = Baue())
             {
                 await host.StartAsync();
@@ -93,7 +93,7 @@ public class LeseseitenStandE2ETests
                     TimeSpan.FromSeconds(30), "Die Projektion hat das Paar nach dem Leeren nicht aus dem Log neu aufgebaut.");
                 await host.StopAsync();
             }
-            (await StandAsync(u))["projektion:imagepair-projektion"].Should().NotBe("alt", "der neue Stand ist gespeichert");
+            (await StandAsync(u))["projektion:ImagePairProjektion"].Should().NotBe("alt", "der neue Stand ist gespeichert");
         }
         finally
         {

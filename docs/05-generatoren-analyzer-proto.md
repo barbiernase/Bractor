@@ -59,9 +59,8 @@ Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein Prozess fä
 | `AggregateHandlerGenerator` | `IState` + nested Decider/Applier | `{State}AggregateHandler` | `HandleCommand`/`ApplyEvent`-Switch, entpackt `OneOf`; `CodeHash` (State + Applier) für Snapshots |
 | `HandlerFactoryGenerator` | `IState` | `AggregateHandlerFactory` (ns = Projekt der Aggregate) | State-Typ → Handler |
 | `SignalTypeGenerator` | `IEvent` & nicht transient | `StateChangeVia{Event}` | Weckruf-Signal je persistiertem Event (bewusst syntax-lokal) |
-| `SubscriberDispatchGenerator` | `ISubscriber` + `Handle(…)` | `{Sub}.Dispatch.g.cs` | `SubscribedTypes` + `DispatchAsync` mit Fähigkeits-Parametern |
-| `ProjectionReaderDispatchGenerator` | `IReader<T>` + `Handle(TQuery,…)` | `{Reader}.Dispatch.g.cs` | Query-Routing |
-| `ProjectionQueryServiceGenerator` | `IReader<T>` | `ProjectionQueryService` (ns = Leseseiten-Projekt) | zentraler Query-Service |
+| `ProjektionsstandGenerator` | `IProjektion` | `[assembly: Projektionsstand(typeof(P), "…")]` | Code-Stand der Projektion (nur in ihrer Compilation ist der Quelltext sichtbar); die Komposition liest ihn für den Neuaufbau in Sim |
+| `ReadModelSchluesselGenerator` | `IReadModel` mit `Id<T> Id` (partial) | `{Typ}.Schluessel.g.cs` | Speicher-Identität `Schluessel` (UUID) für Stores mit einfachem Schlüssel (Marten kann `Id<T>` nicht als Identität) — CQRS111 |
 | `ProzessRegelnGenerator` | `IProzessDefinition`, `IPipeline` | `{Assembly}.Prozess.GeneratedProzessRegeln` | Registry Name → Regeln, Regel- und Knoten-Namen (CQRS012, CQRS072) |
 | `LageAnalyzer` | Rollen-Marker (`Lageart`) | — (nur Diagnosen) | CQRS098: Primitive im Projekt ihrer Rolle (docs/07 §7.2) |
 | `ProzessRegelDiagnosticGenerator` | `IProzessDefinition` + `IDecider` | — (nur Diagnosen) | CQRS001–003 |
@@ -72,7 +71,8 @@ Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein Prozess fä
 |---|---|---|---|
 | `CommandAggregateMapGenerator` | jeder `ICommand<TAggregat>` (Ziel) + `IDecider<T>.Decide(TCommand)` mit OneOf-Rückgaben | `GeneratedCommandRouting` (ns `Infrastructure.Mapping`) | **Dispatch-Kern**: `CommandToAggregate` (aus dem Typ), `CommandToEvents`, `Produziert()` (CQRS010 Decide außerhalb des Ziels, CQRS011) |
 | `AggregateActorGenerator` | `IState` | `AggregateActors`, `GeneratedAggregates` | Proto.Actor-Actor + Cluster-Kinds |
-| `PullPathGenerator` | `ISubscriber` & `IPullSubscriber` | `GeneratedPullPaths` | Pull-Pfad je Konsument; Achse B aus den Schreib-Fähigkeiten der Handles (CQRS052, [04 §4.2](04-konsum-und-prozess-maschine.md)) |
+| `PullPathGenerator` | `IProjektion` + `Auf` (über `Projektionsform`, dieselbe Lesart wie der Weckplan) | `GeneratedProjektionen`, `GeneratedPullPaths` | je Projektion Dispatch auf ihr `Auf`, gehörte Typen, Store aus dem Bereich, Batch-Kind, `Projektionseintrag`; ein Store je Projektion (CQRS052), Klasse 3 nur mit `[MindestensEinmal]` (CQRS110) ([04 §4.2](04-konsum-und-prozess-maschine.md)) |
+| `QueryDienstGenerator` | `IReader` + `Frage` (über `Projektionsform`) | `GeneratedQueryDienst : IQueryDienst` | je Query die Frage mit Lese-Fähigkeiten; die Projektionen dahinter aus den Fähigkeiten (dieselben Stores), die gezeigten Ids aus den `Id<T>`-Feldern von Antwort und Query |
 | `SignalFactoryGenerator` | `IStateChangeSignal` | `GeneratedSignalFactory`, `GeneratedSignalRoutes` | Event → Signal ohne Reflection |
 | `SnapshotRegistrationGenerator` | `IState` | `GeneratedSnapshotRegistration` | Marten-Registrierung; Schema-Version = FNV-1a-Struktur-Hash + `CodeHash` |
 | `EventJsonGenerator` | persistierte Events | `GeneratedEventJson` | Event-JSON über `EventJsonSerializerContext.Default.{Typ}` |
@@ -91,7 +91,8 @@ Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein Prozess fä
 ### Projections.SourceGeneration
 | Generator | Input | Output | Zweck |
 |---|---|---|---|
-| `ProjectionServicesGenerator` | `IReadModel`, Store-Klassen mit Fähigkeiten, `IReader<T>` | `GeneratedProjectionServices` (ns `{Projekt}.Generated`) + `IQueryDienst` | Marten-Schema je Read-Model, Stores Scoped unter jeder Fähigkeit + Bündel, Reader, Read-Model-Typen für den Neuaufbau (CQRS053) |
+| `ProjectionServicesGenerator` | `IReadModel`, Store-Klassen mit Fähigkeiten | `GeneratedProjectionServices` (ns `{Projekt}.Generated`) | Marten-Schema je Read-Model (Identität `Schluessel` bei typisierter Id, `Id<X>` als Werttyp für LINQ), Stores Scoped unter jeder Fähigkeit + Bündel, Read-Model-Typen für den Migrator (CQRS053) |
+| `StoreKlasseAnalyzer` | Store-Klassen mit Schreib-Fähigkeiten | — (nur Diagnosen) | CQRS109: genau eine Store-Klasse (`IAtomaresZiel`, `IWiederholungsfestesZiel`, `INurMindestensEinmal`); Klasse 2 → jede Schreib-Fähigkeit nimmt die `Herkunft` (R14) |
 
 ### Client.SourceGeneration (Syntax, außer `WiringGenerator`)
 | Generator | Input | Zweck |
@@ -113,7 +114,7 @@ aus den Analyzern der warmen Compilations und hängt sie an die Karte (`Werkbank
 | Schreibseite & Routing | CQRS010/011 · CQRS013 · CQRS020/021 · CQRS050 · CQRS057 · CQRS079–083 | `CommandAggregateMapGenerator` · `ModellAnalyzer` (Command ohne typisiertes Ziel) · `CommandEmitAnalyzer` · `AusgabeVertragAnalyzer` · `HandlerFormAnalyzer` · `ModellAnalyzer` (Apply fehlt, Faltung, Enum-Wert 0, Command ab verlierbarem Eingang, Konsument mit Zustand) |
 | Prozess & Fluss | CQRS001–003 · CQRS012, 072 · CQRS073–078 · CQRS099 | `ProzessRegelDiagnosticGenerator` · `ProzessRegelnGenerator` · `FlussAnalyzer` · `ProzessVerbundGenerator` |
 | Projektstruktur | CQRS098 | `LageAnalyzer` (Ordner, Namespace, Datei prüft `--check`, docs/07) |
-| Leseseite & Store | CQRS051, 054, 055 · CQRS052 · CQRS053 · CQRS066/067 | `FaehigkeitAnalyzer` · `PullPathGenerator` · `ProjectionServicesGenerator` · `StoreZugriffAnalyzer` |
+| Leseseite & Store | CQRS051, 054, 055 · CQRS052, 110 · CQRS053 · CQRS066/067 · CQRS109 · CQRS111 | `FaehigkeitAnalyzer` · `PullPathGenerator` · `ProjectionServicesGenerator` · `StoreZugriffAnalyzer` · `StoreKlasseAnalyzer` · `ReadModelSchluesselGenerator` |
 | Funktionen, Dienste, Quellen | CQRS068/069 · CQRS089–092 · CQRS070 | `FunktionsGenerator` · `DienstAnalyzer` · `QuellenTypAnalyzer` |
 | Akteure, Verträge, Clients | CQRS058, 060–065 · CQRS059 · CQRS093/094 · CQRS095–097 | `AkteurAnalyzer` · `AkteurRechteGenerator` · `WiringGenerator` · `ClientVertragAnalyzer` |
 | Gesamtbild | CQRS084–088 | `GesamtbildAnalyzer` (Query mit mehreren Readern, Ausgang ohne Erzeuger, Eingang ohne Konsument, Zusage ohne Client, Kreis ohne Zustandsschritt) |
@@ -127,7 +128,7 @@ Dispatch-Generatoren melden selbst nichts; ein nicht erkannter Fall wird zum gen
 erkannte Form haben, sichern die Analyzer davor.
 
 **Boot-Guards** (beim Start, als maschinenlesbare Zeile `CQRS-BOOT {json}` für die Werkbank, `Infrastructure/Umgebung/BootFehler.cs`):
-Wire-Abdeckung (`WireSerializerBootCheck`), GA-1 (`GaEinsPruefung`), Azyklizität der Regeln, Auslöser-Kollision, Bindung jeder gerufenen
+Wire-Abdeckung (`WireSerializerBootCheck`), Store einer Projektion (`Projektionslauf.Ziel`: ein Store, genau eine Klasse, Klasse 3 nur mit Erlaubnis — R14 beim ersten Spawn), Azyklizität der Regeln, Auslöser-Kollision, Bindung jeder gerufenen
 Funktion, Dienst-Bindung (fehlend, mehrdeutig, Kreis, Konfig), Umgebungs-Datei.
 
 ## 5.4 Der Dispatch-Kern

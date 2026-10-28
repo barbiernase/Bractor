@@ -1,6 +1,6 @@
 # Plan: Neustrukturierung von Pub/Sub, Bausteinen und Grammatik
 
-> **Plan**, Stand 2026-10-28, Zweig `pubsub_neustrukturierung`. Phasen 0–4, 4b, 5 und 6 sind umgesetzt (Stand und Messwerte in docs/12, offene Punkte in
+> **Plan**, Stand 2026-10-28, Zweig `pubsub_neustrukturierung`. Phasen 0–4, 4b, 5, 6, 7 und 8 sind umgesetzt (Stand und Messwerte in docs/12, offene Punkte in
 > docs/13); am 2026-10-27 ergänzt um Funktionen als Actors mit Zustand und das Hinweis-Netz (E6–E9, §2.9, Phase 4b, umgesetzt 2026-10-28 — Abweichung
 > von §2.9: die Reihenfolge zwischen zwei Actors ist nicht zugesichert, docs/13 G-15). Dieses Dokument ist für die Dauer des Umbaus der
 > **Maßstab**; wo ein anderes Dokument oder der Code widerspricht, gilt der Plan als Ziel und der Code als Ist. Nach dem Umbau wird er in die
@@ -25,7 +25,7 @@ Genehmigungen, Integrationen …), und jeder Store-Typ muss hinter derselben Nah
 | E2 | Direkte Abfrage eines Aggregats (exakter Stand) | **ja**, als eigener Lesepfad neben dem Reader (§2.6). |
 | E3 | Typisierte Ids (`Id<TAggregat>` statt `Guid`) | **ja**, Pflicht für Command-Ziele; in Antworten die Grundlage für feine Updates an Clients (§2.5). |
 | E4 | Editor-Oberfläche (Fluss-Karten, Darstellung) | **zurückgestellt.** Werkbank und GraphExtractor werden nur so weit mitgezogen, dass alles baut und `--check`/`--sonde` für die neuen Bausteine grün sind (§6, Phase 4). `Werkbank/wwwroot/editor/` wird nicht angefasst. |
-| E5 | Implementieren | **phasenweise**, je Phase auf Tobis Wort (Phasen 0–4, 4b, 5 und 6 umgesetzt). |
+| E5 | Implementieren | **phasenweise**, je Phase auf Tobis Wort (Phasen 0–4, 4b, 5, 6, 7 und 8 umgesetzt). |
 
 **Entscheidungen (Tobi, 2026-10-27) — Funktionen als Actors (§2.9):**
 
@@ -688,6 +688,27 @@ Projektions-Signatur `Auf(Event[, Herkunft], Fähigkeiten)` ohne Writer/Track/En
 `IProjectionTracker`/`ICoCommitTracker`/`IAppendProjektion`; Fortschritt beim Framework für Klasse 2; Neuaufbau über Generationen; allgemeiner
 Store-Test; Marten-Store als Klasse 1; ein Klasse-2-Treiber (Dateisystem/Objektspeicher) und ein Klasse-3-Sink als Nachweis; Analyzer R14.
 Vorbedingung (G-11 geklärt, §1.8) erfüllt. Messung A-B (S1, S3).
+
+*Umgesetzt (2026-10-28):* Projektion `IProjektion` mit `Task Auf(Event[, Herkunft], Schreib-Fähigkeiten[, CancellationToken])`, Kennung = Typname;
+Reader `IReader` (nicht generisch) mit `Frage(Query, Lese-Fähigkeiten)`; `ProjectionWriter`, `WriteContext`/`Track`, `ReadContext`,
+`IAggregateEnvelope`/`IMessageEnvelope` im Handle, `SubscriberId`, `ISubscriber`, `IPullSubscriber`, `IReader<T>`, `[ProjectionReader]`,
+`IAppendProjektion`, GA-1, `IProjectionTracker`, `ICoCommitTracker`, `IRebuildableProjection` sind entfernt. Eine Lesart für alle
+(`Projektionsform`, FB-12 erledigt): `PullPathGenerator` (Dispatch, Batch-Kind, `Projektionseintrag`), `WeckplanGenerator`, `QueryDienstGenerator`
+(ersetzt `ProjectionQueryServiceGenerator`, `ProjectionReaderDispatchGenerator`; der Dienst entsteht in der Komposition), `AkteurRechteGenerator`,
+Analyzer, Extractor; `SubscriberDispatchGenerator` entfällt, der Code-Stand kommt als Assembly-Angabe (`ProjektionsstandGenerator`). Die gezeigten
+Ids sind die `Id<T>`-Felder von Antwort **und Query** (eine Antwort hängt von der Query ab, auch wenn sie ihre Id nicht wiederholt — etwa die
+Samples eines Datensatzes); die Projektionen hinter einer Frage folgen aus ihren Lese-Fähigkeiten, bei mehreren gilt je Stream der kleinste Stand.
+Store-Klassen nach §2.4 mit `IFortschrittsAblage` (Laden, Guards, Zurücksetzen) als gemeinsamem Teil von Klasse 1 und Framework; die Naht
+(`Projektionsnaht`) schreibt Klasse 1 in einer Transaktion, Klasse 2/3 erst die Wirkungen, dann den Fortschritt beim Framework
+(`FortschrittBeimFramework`). Zusätzlich zur vorgeschlagenen Schnittstelle: `Beginne(generation)` (die Generation aus dem Fortschritt),
+`Stream(id)` (Schreib-Regel je Dokument) und `UmschaltenAsync` („dann umschalten“). Treiber: `MartenStore` (Klasse 1, nennt seine Dokument-Typen —
+die neue Generation leert sie), `DateiZiel` (Klasse 2: Event-Identität im Pfad oder bedingt nach Version unter Sperre) und `DateiSink` (Klasse 3);
+der allgemeine Store-Test `Storetest` mit vier Fällen, bestanden von allen drei; in der Prüfdomäne eine Leseseite mit `MessreiheProjektion`
+(Klasse 2) und `MesszaehlerProjektion` (`[MindestensEinmal]`, Klasse 3). R14 als CQRS109 (Store-Klasse, Herkunft in Klasse-2-Fähigkeiten),
+CQRS110 (Klasse 3 ohne Erlaubnis) und Start-Prüfung `Projektionslauf.Ziel`. Read-Models und Fähigkeiten auf `Id<T>`; weil Marten `Id<T>` nicht als
+Dokument-Identität kann, ergänzt `ReadModelSchluesselGenerator` die Speicher-Identität `Schluessel` (CQRS111, FB-17). CQRS108 entfällt (die Form
+sichert es). Abweichungen: (1) „neues Ziel aufbauen, dann umschalten“ leistet der `ProjectionRebuilder`; der Sim-Start schaltet sofort um
+(FB-16). (2) Eine Generation trennt eine alte Aktivierung, die nach dem Zurücksetzen noch schreibt, nicht alten Code (FB-16).
 
 ### Phase 9 · Direkte Aggregat-Abfrage (1–2 PT)
 

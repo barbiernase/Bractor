@@ -131,7 +131,7 @@ public class FunktionsGarantieTests
         try
         {
             var ueberfaellig = (await Log(zweiter, rechnung.Wert)).Single(e => e.Payload is ZahlungUeberfaellig);
-            var p = Partitionierung.Von(rechnung.Wert, Infrastructure.Projections.Konsum.Standard.Partitionen);
+            var p = Partitionierung.Von(rechnung.Wert, global::Infrastructure.Projections.Konsum.Standard.Partitionen);
             var staende = zweiter.Services.GetRequiredService<IFunktionsStand>();
             var seq = await Sequenz(ueberfaellig);
             await Warte(async () => (await staende.LadeAsync(Funktionsvertrag.StandId(nameof(Mahnwesen)), p, default)).Position >= seq, Frist,
@@ -204,14 +204,14 @@ public class FunktionsGarantieTests
             // Ein zweiter Worker hat denselben Eingang (etwa nach Ablauf der Lease des ersten) — er antwortet anders und schneller.
             var system = host.Services.GetRequiredService<ActorSystem>();
             var bote = new Bote(system.Cluster());
-            var baustein = Infrastructure.Komposition.Anwendung.Funktionen.Bausteine.Single(b => b.Name == nameof(IFreigabe));
+            var baustein = global::Infrastructure.Komposition.Anwendung.Funktionen.Bausteine.Single(b => b.Name == nameof(IFreigabe));
             await using var zweiter = new BausteinSitzung("zweiter-worker", n => n == baustein.Name ? baustein : null,
                 (_, _, _) => Task.FromResult<EingaengeZugeteilt?>(new EingaengeZugeteilt(new[] { offen!.Eingang })),
                 (b, nachricht) => { bote.Melde(FunktionsVermittlerActor.Identitaet(b.Typ), nachricht); return Task.CompletedTask; },
                 (_, _, _) => Task.CompletedTask, host.Services.GetRequiredService<IAusgabeAblage>(),
                 (b, e, fehler, teil, ausgaben) =>
                 {
-                    bote.Melde(FunktionsActor.IdentitaetFuer(b, e.Stream, Infrastructure.Projections.Konsum.Standard),
+                    bote.Melde(FunktionsActor.IdentitaetFuer(b, e.Stream, global::Infrastructure.Projections.Konsum.Standard),
                         EingangBeantwortet.Aus(e.Vorgang, fehler, teil, ausgaben));
                     return Task.CompletedTask;
                 });

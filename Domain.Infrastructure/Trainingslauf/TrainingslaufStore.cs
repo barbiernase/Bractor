@@ -10,9 +10,8 @@ using TrainingslaufAgg = Domain.Trainingslauf.Trainingslauf;
 namespace Domain.Infrastructure.Trainingslauf;
 
 /// <summary>
-/// Co-Commit-Store der Trainingslauf-Projektion. Exactly-once-Naht in
-/// <see cref="MartenStore"/>; hier nur die fachlichen Write-Effekte. Die Projektion ist
-/// <see cref="Abstractions.IAppendProjektion"/> (MetrikHistorie wächst je Epoche). SCOPED registriert (eine Instanz je Fähigkeits-Bereich, unter jeder Fähigkeit).
+/// Store der Trainingslauf-Projektion, Klasse 1 (<see cref="MartenStore"/>); hier nur die fachlichen Write-Effekte
+/// (die MetrikHistorie wächst je Epoche — append-artig, genau einmal). SCOPED registriert (eine Instanz je Fähigkeits-Bereich, unter jeder Fähigkeit).
 /// </summary>
 public sealed partial class TrainingslaufStore : MartenStore, ITrainingslaufStore
 {

@@ -4,7 +4,7 @@ Projektgedächtnis für Claude Code — bewusst schlank, nur Wissen, kein Change
 **Maßstab im Zweig `pubsub_neustrukturierung` ist `docs/plan-pubsub-neustrukturierung.md`** (Zielbild, Grammatik, Garantien, Phasen des
 Umbaus; noch nicht umgesetzt). Wo etwas widerspricht, gilt der Plan als Ziel und der Code als Ist. Wegweiser: `docs/README.md`.
 Offenes und Schulden: `docs/13-reifegrad-schulden-bewertung.md` §13.0. Zahlen und Messwerte: `docs/12-tests-und-vermessung.md`.
-Das Bild unten („Das tragende Bild“) beschreibt den **Ist-Zustand** nach Phase 7 des Umbaus.
+Das Bild unten („Das tragende Bild“) beschreibt den **Ist-Zustand** nach Phase 8 des Umbaus.
 
 ## Was das Projekt ist
 
@@ -42,19 +42,24 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
 - **W11** Allgemeines Framework: eine Primitive bleibt, wenn sie allgemein gebraucht wird — nicht, weil die Beispieldomäne sie nutzt. Je Absicht ein Weg.
 - **W12** Keine GUIs im Editor (Clients nur als Vertrag), keine Schema-Evolution im Editor (`IUpcast` bleibt als Backend-Primitive), kein Deploy.
 
-## Das tragende Bild (Ist-Zustand nach Plan-Phase 7)
+## Das tragende Bild (Ist-Zustand nach Plan-Phase 8)
 
 - **Schreibseite:** Command → Aggregat-Actor (Single-Writer, Inbox-Tabelle) → `Decide` (`OneOf<Event, Hinweis, Frist<TCmd>>`) → Events →
   Group-Commit → **Wecker** am Commit (generierter Weckplan, für jeden Schreiber gleich: Aggregat, Quelle, Funktions-Ausgabe) + Push an Clients
   (`Commitmeldung` → `Verteilung`: je Commit eine Nachricht an den Verteiler jedes Knotens). **Keine Marken im Log**
   (Phase 5): Noop und Ablehnung schreiben nur ihre Quittung in die Inbox, mit Kopf-Prüfung des Streams in derselben Transaktion
   (`cqrs_kopf`); eine Version je Aggregat (= Zahl seiner Events), beim Client aus Pushes und Antworten (`VersioningModule`).
-- **Zwei durable Konsumenten:** **Projektion** (`ISubscriber`, `Task Handle` mit Schreib-Fähigkeiten genau eines Stores; `BatchLeser` je
-  Projektion und Partition, Co-Commit, replaybar) und **Funktion** (`IFunktion` mit `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])`;
+- **Zwei durable Konsumenten:** **Projektion** (`IProjektion`, `Task Auf(Event[, Herkunft], Schreib-Fähigkeiten genau eines Stores)`, Kennung =
+  Typname; `BatchLeser` je Projektion und Partition, replaybar) und **Funktion** (`IFunktion` mit `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])`;
   `FunktionsActor` je Funktion und Adresse — Partition, oder eine mit `[EineAdresse]` —, Ausgabe festgehalten oder gleichbleibend, nie replayt).
-  Beide: Wecker am Commit schnell (je Commit und Ziel ein `Wake`, Weckplan aus den Signaturen, beim Start geprüft: GR-WECKPLAN, CQRS108) +
-  Takt 30 s je Partition. Stand je gezeigter Id einer Antwort = Guard der Projektion, dahinter das Log (nicht gehörte Events bremsen nicht;
-  `ProjektionsStaende`); Read-your-writes „mindestens S auf v“ wartet begrenzt darauf, sonst `noch_nicht`.
+  Beide: Wecker am Commit schnell (je Commit und Ziel ein `Wake`, Weckplan aus den Signaturen, beim Start geprüft: GR-WECKPLAN) + Takt 30 s je
+  Partition. **Reader** (`IReader`, `Frage(Query, Lese-Fähigkeiten)`): die gezeigten Ids findet der Generator in den `Id<T>`-Feldern von Antwort
+  und Query, die Projektionen dahinter aus den Lese-Fähigkeiten (`GeneratedQueryDienst`); Stand je gezeigter Id = Guard der Projektionen, dahinter
+  das Log (`ProjektionsStaende`); Read-your-writes „mindestens S auf v“ wartet begrenzt darauf, sonst `noch_nicht`.
+- **Store-Klassen** (Plan §2.4): ein Store implementiert genau eine — `IAtomaresZiel` (1: Wirkungen und Fortschritt in einer Transaktion,
+  `MartenStore`), `IWiederholungsfestesZiel` (2: Fortschritt beim Framework nach den Wirkungen, Schreib-Fähigkeiten nehmen die `Herkunft`,
+  `DateiZiel`), `INurMindestensEinmal` (3: nur mit `[MindestensEinmal]`, `DateiSink`); CQRS109/110; jeder Treiber besteht den allgemeinen
+  Store-Test (`Storetest`); Neuaufbau über Generationen (`NeueGenerationAsync`/`UmschaltenAsync`, Klasse 1 = Leeren).
 - **Clients** (Plan §2.7, Phase 7): Sitzung als Actor je Verbindung (`SitzungsActor`, einziger Schreiber am gRPC-Stream, Id `<Knoten>#<Nr>`);
   **Verteiler** je Knoten (`VerteilerActor`, fester Name, Typ → Sitzungen, Rückstau mit Grenze) für Pushes, gezielte Antworten (Ablehnung,
   `CommandFailed`, ohne Abo) und Hinweise an Clients; nach jedem Projektions-Commit „P hat S weiterverarbeitet“ → die Sitzung nennt dem Client die
@@ -73,7 +78,6 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
 - **Emit:** genau ein Weg (`CommandEmitter`, Id vom Aufrufer abgeleitet), erzwungen durch CQRS020/021.
 - **Akteure und Clients:** alles, was hineinkommt, kommt von einem Akteur (`IDarf<T>`); ein Client-Vertrag trägt Funktionen (`ITraegt<F>`),
   sendet (`ISendet<T>`), fragt (`IFragt<T>`) und hört (`IHoert<T>`); wirksam = Vertrag ∩ Token.
-- Noch alt (spätere Phasen): Projektionsform mit `ProjectionWriter`/`Track` (8).
 
 ## Wo was liegt
 
@@ -102,10 +106,11 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
 - **Neue Dispatch-Logik = Generator erweitern**, nie Handschalter, nie Reflection.
 - **Typisierte Ids:** ein Command ist `record … : ICommand<TAggregat>` mit `Id<TAggregat> AggregateId` (das Ziel steht im Typ; Framework-Sicht
   `ICommand.Ziel`, CQRS013/CQRS010); Verweise auf Aggregate in Events, Queries, Antworten sind `Id<T>` (UUID auf Leitung, Log, Wire; Namensregel
-  `Abstractions/Idvertrag.cs`). Read-Models und Store-Fähigkeiten bleiben bis zur neuen Projektionsform (Plan Phase 8) bei `Guid`.
-- **Ausgabe-Vertrag in der Signatur (CQRS050):** Decide und jedes Handle geben einen konkreten Typ oder `OneOf<…>` konkreter Typen zurück.
+  `Abstractions/Idvertrag.cs`), auch in Read-Models und Store-Fähigkeiten (ein Read-Model mit `Id<T> Id` ist `partial`, der Generator ergänzt
+  die Speicher-Identität `Schluessel`, CQRS111).
+- **Ausgabe-Vertrag in der Signatur (CQRS050):** Decide, Auf und Frage geben einen konkreten Typ oder `OneOf<…>` konkreter Typen zurück.
   WAS entstehen kann, lesen Generatoren/Extractor/Editor NUR aus der Signatur; Rümpfe liefern nichts.
-- **Fähigkeiten statt Rumpf-Analyse:** ein Handle bekommt die Store-Funktionen als Parameter (`: IWriteStore`/`: IReadStore`, genau eine Funktion,
+- **Fähigkeiten statt Rumpf-Analyse:** ein Auf bzw. eine Frage bekommt die Store-Funktionen als Parameter (`: IWriteStore`/`: IReadStore`, genau eine Funktion,
   CQRS051; Bündel `: IStore`). Nie Store/`IFristplan` in Ctor/Feld (CQRS054), nie `new …Store()` (CQRS055).
 - **Grammatik = eine Quelle** (`DomainEditor/Grammatik.cs`): neue Regel ⇒ Analyzer + Test + Gegenstück in der Grammatik.
 - **Akteur und Client-Vertrag** nicht vermischen (`docs/konzept-akteure.md`): Akteur = `IDarf` für das, was er selbst hineingibt (auch auf

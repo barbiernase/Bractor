@@ -21,9 +21,9 @@ public class FaehigkeitAnalyzerTests
     private static async Task<string[]> Ids(string code)
     {
         _ = typeof(Abstractions.ICommand);
-        _ = typeof(Core.ProjectionWriter);
+        _ = typeof(Core.MartenStore);
         // Ausdrücklich angehängt: ein „_ = typeof(…)" darf der JIT verwerfen — ob Core geladen ist, hinge sonst an der Testreihenfolge.
-        var refs = AppDomain.CurrentDomain.GetAssemblies().Concat(new[] { typeof(Abstractions.ICommand).Assembly, typeof(Core.ProjectionWriter).Assembly }).Distinct()
+        var refs = AppDomain.CurrentDomain.GetAssemblies().Concat(new[] { typeof(Abstractions.ICommand).Assembly, typeof(Core.MartenStore).Assembly }).Distinct()
             .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
             .Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location))
             .ToImmutableArray();
@@ -54,21 +54,19 @@ public record Konfig(int Wert);
     [Fact]
     public async Task Faehigkeit_als_Handle_Parameter_ist_erlaubt()
     {
-        (await Ids(@"namespace Probe { public partial class P : ISubscriber, IPullSubscriber {
+        (await Ids(@"namespace Probe { public sealed class P : IProjektion {
             public P(Konfig k) { }
-            public string SubscriberId => ""p"";
-            public Task Handle(Gemacht e, IAggregateEnvelope env, ProjectionWriter w, ISchreibe s) => s.SchreibeAsync(new Zeile()); } }"))
+            public Task Auf(Gemacht e, Herkunft h, ISchreibe s) => s.SchreibeAsync(new Zeile()); } }"))
             .Should().BeEmpty("Fähigkeit als Parameter + ein anderer Dienst (Konfig) im Konstruktor sind der vorgesehene Weg");
     }
 
     [Fact]
     public async Task Store_im_Konstruktor_oder_Feld_eines_Konsumenten_ist_CQRS054()
     {
-        (await Ids(@"namespace Probe { public partial class P : ISubscriber, IPullSubscriber {
+        (await Ids(@"namespace Probe { public sealed class P : IProjektion {
             private readonly IBuch _buch;
             public P(IBuch buch) { _buch = buch; }
-            public string SubscriberId => ""p"";
-            public Task Handle(Gemacht e, IAggregateEnvelope env, ProjectionWriter w) => _buch.SchreibeAsync(new Zeile()); } }"))
+            public Task Auf(Gemacht e, Herkunft h) => _buch.SchreibeAsync(new Zeile()); } }"))
             .Should().Equal(FaehigkeitAnalyzer.ZustandId, FaehigkeitAnalyzer.ZustandId);
     }
 
@@ -99,27 +97,29 @@ public record Konfig(int Wert);
 }
 
 /// <summary>
-/// CQRS057 — ein Handler, den der Editor an seinen Typen erkennt, muss auch der sein, den der Dispatch ruft:
-/// Name <c>Handle</c>, Kontext an fester Stelle, dahinter nur Fähigkeiten. Sonst wäre er im Editor sichtbar, zur Laufzeit tot.
+/// CQRS057 — Projektion und Reader in der Form, die Generatoren, Weckplan und Extractor über dieselbe Lesart rufen: <c>Task Auf(TEvent e[, Herkunft h],
+/// Schreib-Fähigkeiten…)</c> bzw. <c>Frage(TQuery q, Lese-Fähigkeiten…)</c>. Eine Methode, die einen Eingang nimmt und anders heißt, ein Parameter, der
+/// keine Fähigkeit ist, oder eine Projektion, die etwas zurückgibt, wäre im Editor sichtbar, zur Laufzeit tot.
 /// </summary>
 public class HandlerFormAnalyzerTests
 {
     private static async Task<string[]> Ids(string code)
     {
         _ = typeof(Abstractions.ICommand);
-        _ = typeof(Core.ProjectionWriter);
+        _ = typeof(Core.MartenStore);
         // Ausdrücklich angehängt: ein „_ = typeof(…)" darf der JIT verwerfen — ob Core geladen ist, hinge sonst an der Testreihenfolge.
-        var refs = AppDomain.CurrentDomain.GetAssemblies().Concat(new[] { typeof(Abstractions.ICommand).Assembly, typeof(Core.ProjectionWriter).Assembly }).Distinct()
+        var refs = AppDomain.CurrentDomain.GetAssemblies().Concat(new[] { typeof(Abstractions.ICommand).Assembly, typeof(Core.MartenStore).Assembly }).Distinct()
             .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
             .Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location))
             .ToImmutableArray();
         var comp = CSharpCompilation.Create("FormProbe", new[] { CSharpSyntaxTree.ParseText(@"
-using System; using System.Collections.Generic; using System.Threading.Tasks; using Abstractions; using Core;
+using System; using System.Collections.Generic; using System.Threading; using System.Threading.Tasks; using Abstractions; using Core;
 namespace Probe {
 public record Gemacht() : IEvent;
-public record Frage() : IQuery;
+public record Hole() : IQuery;
 public record Antwort() : IQueryResponse;
 public interface IFinde : IReadStore { Task<int> FindeAsync(Guid id); }
+public interface ISchreibe : IWriteStore { Task SchreibeAsync(Guid id); }
 public record Konfig(int Wert);
 " + code + " }") }, refs, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         comp.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).Should().BeEmpty("die Probe selbst muss kompilieren");
@@ -128,31 +128,42 @@ public record Konfig(int Wert);
     }
 
     [Fact]
-    public async Task Korrekte_Handler_mit_Faehigkeiten_sind_erlaubt()
+    public async Task Auf_und_Frage_mit_Faehigkeiten_Herkunft_und_Abbruch_sind_erlaubt()
     {
         (await Ids(@"
-public partial class P : ISubscriber { public string SubscriberId => ""p"";
-    public Task Handle(Gemacht e, IAggregateEnvelope env, ProjectionWriter w) => Task.CompletedTask; }
-public partial class R : IReader<P> {
-    public Task<Antwort> Handle(Frage q, IMessageEnvelope env, ReadContext ctx, IFinde f) => Task.FromResult(new Antwort()); }
+public sealed class P : IProjektion { public Task Auf(Gemacht e, ISchreibe s, Herkunft h, CancellationToken ct) => s.SchreibeAsync(h.Stream); }
+public sealed class R : IReader { public Task<Antwort> Frage(Hole q, IFinde f, CancellationToken ct) => Task.FromResult(new Antwort()); }
 ")).Should().BeEmpty();
     }
 
     [Fact]
-    public async Task Anderer_Name_falsche_Stelle_und_Nicht_Faehigkeit_sind_CQRS057()
+    public async Task Anderer_Name_und_ein_Parameter_der_keine_Faehigkeit_ist_sind_CQRS057()
     {
         (await Ids(@"
-public partial class P : ISubscriber { public string SubscriberId => ""p"";
-    public Task Verarbeite(Gemacht e, IAggregateEnvelope env, ProjectionWriter w) => Task.CompletedTask;
-    public Task Handle(Gemacht e, ProjectionWriter w, IAggregateEnvelope env) => Task.CompletedTask;
-    public Task Handle(Gemacht e, IAggregateEnvelope env, ProjectionWriter w, Konfig k) => Task.CompletedTask; }"))
-            .Should().Equal(HandlerFormAnalyzer.FormId, HandlerFormAnalyzer.FormId, HandlerFormAnalyzer.FormId);
+public sealed class P : IProjektion {
+    public Task Verarbeite(Gemacht e, Herkunft h) => Task.CompletedTask;
+    public Task Auf(Gemacht e, Konfig k) => Task.CompletedTask; }"))
+            .Should().Equal(HandlerFormAnalyzer.FormId, HandlerFormAnalyzer.FormId);
+        (await Ids(@"
+public sealed class R : IReader {
+    public Task<Antwort> Handle(Hole q, IFinde f) => Task.FromResult(new Antwort());
+    public Task<Antwort> Frage(Hole q, ISchreibe s) => Task.FromResult(new Antwort()); }"))
+            .Should().Equal(HandlerFormAnalyzer.FormId, HandlerFormAnalyzer.FormId);
     }
+
+    [Theory]
+    [InlineData("public interface IEreignis : IEvent { }", "IEreignis")]
+    [InlineData("public abstract record Basis : IEvent;", "Basis")]
+    [InlineData("public record Messwert(double Wert) : ITransientEvent;", "Messwert")]
+    public async Task Eine_Projektion_hoert_nur_konkrete_persistente_Events_sonst_CQRS057(string typ, string name)
+        => (await Ids(typ + @"
+public sealed class P : IProjektion { public Task Auf(" + name + @" e) => Task.CompletedTask; }"))
+            .Should().Equal(HandlerFormAnalyzer.FormId);
 
     [Fact]
     public async Task Eine_Projektion_die_etwas_ausgibt_ist_CQRS057()
         => (await Ids(@"
-public partial class P : ISubscriber { public string SubscriberId => ""p"";
-    public Task<Gemacht> Handle(Gemacht e, IAggregateEnvelope env, ProjectionWriter w) => Task.FromResult(e); }"))
+public sealed class P : IProjektion {
+    public Task<Gemacht> Auf(Gemacht e) => Task.FromResult(e); }"))
             .Should().Equal(HandlerFormAnalyzer.FormId);
 }

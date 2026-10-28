@@ -10,7 +10,7 @@ using ModellAgg = Domain.Modell.Modell;
 namespace Domain.Infrastructure.Modell;
 
 /// <summary>
-/// Co-Commit-Store der Modell-Projektion. Die Exactly-once-Naht (Puffern → ein SaveChanges +
+/// Store (Klasse 1) der Modell-Projektion. Die Exactly-once-Naht (Puffern → ein SaveChanges +
 /// ProjectionCheckpoint) liegt in <see cref="MartenStore"/>; hier nur die fachlichen
 /// Write-Effekte. SCOPED registriert (eine Instanz je Fähigkeits-Bereich, unter jeder Fähigkeit).
 /// </summary>

@@ -29,8 +29,8 @@ public class WeckerGarantieTests
     private static readonly TimeSpan Schnell = TimeSpan.FromSeconds(5);
 
     /// <summary>Ersetzt den Wecker durch einen mit demselben Plan, dessen Weckrufe <paramref name="anfrage"/> zustellt (über den echten Cluster).</summary>
-    private static Action<IServiceCollection> Wecker(Func<Bote.Anfrage, Bote.Anfrage> anfrage) => s => Dekoriere<Infrastructure.Wecken.Wecker>(s,
-        (sp, alt) => new Infrastructure.Wecken.Wecker(alt.Plan, sp.GetRequiredService<Konsum>(), () =>
+    private static Action<IServiceCollection> Wecker(Func<Bote.Anfrage, Bote.Anfrage> anfrage) => s => Dekoriere<global::Infrastructure.Wecken.Wecker>(s,
+        (sp, alt) => new global::Infrastructure.Wecken.Wecker(alt.Plan, sp.GetRequiredService<Konsum>(), () =>
         {
             var cluster = sp.GetRequiredService<ActorSystem>().Cluster();
             return new Bote(anfrage((ziel, nachricht, ct) => cluster.RequestAsync<object?>(ziel, nachricht, ct)));

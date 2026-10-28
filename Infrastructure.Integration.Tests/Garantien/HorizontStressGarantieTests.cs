@@ -105,7 +105,7 @@ public class HorizontStressGarantieTests : IClassFixture<HorizontStressGarantieT
         var fehlend = new List<string>();
         foreach (var (stream, n) in geschrieben)
         {
-            var eintraege = (await historie.GetByPairIdAsync(stream))?.Eintraege.Count ?? 0;
+            var eintraege = (await historie.GetByPairIdAsync(new(stream)))?.Eintraege.Count ?? 0;
             if (eintraege != n)
                 fehlend.Add($"{stream}: {eintraege} statt {n} (Guard {await BatchHilfe.GuardAsync(_fx.Store, proj, stream)})");
         }

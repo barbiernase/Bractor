@@ -27,8 +27,9 @@ public interface IStoretestTreiber
 ///     Fall 1 deckt es ab); eine neue Aktivierung wendet denselben Batch noch einmal an.</item>
 ///   <item><b>Zweite Aktivierung mit älterem Stand:</b> A hat geladen und angewandt; bevor A schreibt, kommen neue Events und B verarbeitet alles; dann
 ///     schreibt A — ihre Wirkungen dürfen nichts verdoppeln und keinen Stand zurückdrehen, ihr Fortschritt verliert.</item>
-///   <item><b>Neuaufbau:</b> neue Generation, Fortschritt auf Anfang; eine alte Aktivierung schreibt danach noch (neue Events), dann baut der
-///     Neuaufbau auf und schaltet um — gelesen wird genau das Log.</item>
+///   <item><b>Neuaufbau:</b> neue Generation, Fortschritt auf Anfang; eine alte Aktivierung (alter Fortschritt, alte Generation) schreibt danach
+///     noch eine fremde Wirkung und verliert ihren Fortschritt; dann baut der Neuaufbau auf und schaltet um — gelesen wird genau das Log, nichts
+///     von der alten Aktivierung.</item>
 /// </list>
 /// Erwartet wird je Stream: Klasse 1 und 2 genau so viele Einträge wie Events und der Stand des letzten; Klasse 3 mindestens so viele (nichts geht
 /// verloren) und der Stand des letzten.
@@ -128,17 +129,32 @@ public static class Storetest
         {
             var kennung = $"storetest-{lauf_}-neuaufbau";
             var soll = await SchreibeAsync(Enumerable.Range(0, 3).ToDictionary(_ => Guid.NewGuid(), _ => 0), 2);
+            await Leser(Naht(), kennung).LaufAsync(ct);                          // der alte Stand steht
+
+            // Eine alte Aktivierung hat ihren Fortschritt (alte Generation, alte Revision) geladen und schreibt NACH dem Zurücksetzen noch — mit
+            // erkennbar fremder Wirkung (Version + 1000, wie alter Code): sie darf im neuen Ziel nie sichtbar werden.
             var alt = Naht();
-            var alterLeser = Leser(alt, kennung);
-            await alterLeser.LaufAsync(ct);                         // der alte Stand steht
+            var alterStand = await alt.Ablage.LadeFortschrittAsync(kennung, 0, ct);
 
             var generation = Generationen.Neu(DateTimeOffset.UtcNow);
             var neu = Naht();
             await neu.Ziel.NeueGenerationAsync(generation, ct);
             await neu.Ablage.FortschrittZuruecksetzenAsync(kennung, konsum.Partitionen, generation, ct);
 
+            alt.Beginne(alterStand.Generation);
+            foreach (var (s, v) in soll)
+            {
+                alt.Stream(s);
+                await treiber.WirkeAsync(alt.Ziel, new Herkunft(s, v + 1000, DateTimeOffset.UtcNow, null, kennung));
+            }
+            try
+            {
+                await alt.CommitAsync(alterStand, soll.ToDictionary(x => x.Key, x => x.Value + 1000), ct);
+                fehler.Add("Neuaufbau: der Fortschritt einer alten Aktivierung wurde nach dem Zurücksetzen noch angenommen");
+            }
+            catch (PartitionsKonfliktException) { }
+
             await SchreibeAsync(soll, 1);
-            await alterLeser.LaufAsync(ct);                         // die alte Aktivierung schreibt noch — verliert, lädt die neue Generation
             await Leser(neu, kennung).LaufAsync(ct);
             await neu.Ziel.UmschaltenAsync(generation, ct);
             await VergleicheAsync("Neuaufbau", soll);

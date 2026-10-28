@@ -37,7 +37,7 @@ public class WiederholungAnalyzerTests
     private static async Task<(string Id, string Text)[]> Befunde(string code)
     {
         _ = typeof(IState);
-        _ = typeof(Core.ProjectionWriter);
+        _ = typeof(Core.MartenStore);
         var refs = AppDomain.CurrentDomain.GetAssemblies()
             .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
             .Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location))
@@ -62,11 +62,10 @@ public class WiederholungAnalyzerTests
             }
             """)).Should().ContainSingle(b => b.Id == EinEingangAnalyzer.Id).Which.Text.Should().Contain("Ueberfaellig");
         (await Befunde("""
-            public partial class Liste : ISubscriber, IPullSubscriber
+            public sealed class Liste : IProjektion
             {
-                public string SubscriberId => "liste";
-                public Task Handle(Ueberfaellig e, IAggregateEnvelope env, ProjectionWriter w, ISchreibe s) => Task.CompletedTask;
-                public Task Handle(Ueberfaellig e, IAggregateEnvelope env, ProjectionWriter w) => Task.CompletedTask;
+                public Task Auf(Ueberfaellig e, Herkunft h, ISchreibe s) => Task.CompletedTask;
+                public Task Auf(Ueberfaellig e, Herkunft h) => Task.CompletedTask;
             }
             """)).Select(b => b.Id).Should().Contain(EinEingangAnalyzer.Id);
     }
@@ -84,10 +83,9 @@ public class WiederholungAnalyzerTests
             }
             """)).Should().ContainSingle(b => b.Id == GleichbleibendAnalyzer.GleichId).Which.Text.Should().Contain("die Uhr");
         (await Befunde("""
-            public partial class Liste : ISubscriber, IPullSubscriber
+            public sealed class Liste : IProjektion
             {
-                public string SubscriberId => "liste";
-                public Task Handle(Ueberfaellig e, IAggregateEnvelope env, ProjectionWriter w, ISchreibe s)
+                public Task Auf(Ueberfaellig e, Herkunft h, ISchreibe s)
                     => new Random().Next() > 0 ? s.SetzeAsync(Guid.Empty) : System.IO.File.ReadAllTextAsync("x");
             }
             """)).Where(b => b.Id == GleichbleibendAnalyzer.GleichId).Select(b => b.Text).Should()

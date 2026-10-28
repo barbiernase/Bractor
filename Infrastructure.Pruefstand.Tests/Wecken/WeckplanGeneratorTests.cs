@@ -11,10 +11,10 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Wecken;
 
 /// <summary>
-/// Der Weckplan (Plan Pub/Sub-Neustrukturierung §2.3, Phase 6) entsteht NUR aus Signaturen: eine Projektion mit <c>Handle(TEvent, IAggregateEnvelope,
-/// ProjectionWriter, …)</c> steht mit ihrem Batch-Kind unter TEvent, eine Funktion mit <c>Auf(TEvent …)</c> mit ihrem Funktions-Kind (eine Adresse,
-/// wenn sie <c>[EineAdresse]</c> trägt), die Uhr unter <c>FristGesetzt</c>; ein Hinweis-Eingang steht nicht darin. Was ein Hörer aus dem Log hört und
-/// der Plan nicht führen kann (Schnittstelle, abstrakt, Hinweis), ist CQRS108.
+/// Der Weckplan (Plan Pub/Sub-Neustrukturierung §2.3, Phase 6) entsteht NUR aus Signaturen: eine Projektion mit <c>Auf(TEvent …)</c> steht mit ihrem
+/// Batch-Kind unter TEvent (gelesen wie im PullPathGenerator, eine Lesart), eine Funktion mit <c>Auf(TEvent …)</c> mit ihrem Funktions-Kind (eine
+/// Adresse, wenn sie <c>[EineAdresse]</c> trägt), die Uhr unter <c>FristGesetzt</c>; ein Hinweis-Eingang steht nicht darin. Was eine Funktion aus dem
+/// Log hören soll und der Plan nicht führen kann (Schnittstelle, abstrakt), ist schon ein Formfehler (CQRS057 bzw. CQRS100) und steht nicht im Plan.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class WeckplanGeneratorTests
@@ -36,7 +36,7 @@ public interface ISchreibeKonto : IWriteStore { Task SetzeAsync(Guid konto); }
     private static (string Quelle, string[] Ids) Lauf(string code)
     {
         // Die Vertrags-Assemblies ausdrücklich (eine nur per typeof erwähnte ist zur Laufzeit womöglich noch nicht geladen).
-        var noetig = new[] { typeof(IFunktion).Assembly, typeof(FunktionsBaustein).Assembly, typeof(Core.ProjectionWriter).Assembly };
+        var noetig = new[] { typeof(IFunktion).Assembly, typeof(FunktionsBaustein).Assembly, typeof(Core.MartenStore).Assembly };
         var refs = AppDomain.CurrentDomain.GetAssemblies().Concat(noetig).Distinct()
             .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
             .Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location))
@@ -52,11 +52,10 @@ public interface ISchreibeKonto : IWriteStore { Task SetzeAsync(Guid konto); }
     }
 
     private const string Projektion = @"namespace Probe {
-        public sealed class KontoProjektion : ISubscriber, IPullSubscriber
+        public sealed class KontoProjektion : IProjektion
         {
-            public string SubscriberId => ""konto"";
-            public Task Handle(Ueberfaellig e, IAggregateEnvelope env, ProjectionWriter w, ISchreibeKonto s) => Task.CompletedTask;
-            public Task Handle(Bezahlt e, IAggregateEnvelope env, ProjectionWriter w, ISchreibeKonto s) => Task.CompletedTask;
+            public Task Auf(Ueberfaellig e, Herkunft h, ISchreibeKonto s) => Task.CompletedTask;
+            public Task Auf(Bezahlt e, ISchreibeKonto s) => Task.CompletedTask;
         } }";
 
     [Fact]
@@ -87,16 +86,17 @@ public interface ISchreibeKonto : IWriteStore { Task SetzeAsync(Guid konto); }
     [InlineData("IKontoEreignis")]
     [InlineData("Basis")]
     [InlineData("Messwert")]
-    public void Eine_Projektion_die_keinen_konkreten_persistenten_Typ_hoert_ist_CQRS108(string typ)
+    public void Was_der_Plan_nicht_fuehren_kann_steht_nicht_darin(string typ)
     {
         var (quelle, ids) = Lauf(@"namespace Probe {
-            public sealed class Falsch : ISubscriber, IPullSubscriber
+            public sealed class Falsch : IProjektion
             {
-                public string SubscriberId => ""falsch"";
-                public Task Handle(" + typ + @" e, IAggregateEnvelope env, ProjectionWriter w, ISchreibeKonto s) => Task.CompletedTask;
-            } }");
+                public Task Auf(" + typ + @" e, ISchreibeKonto s) => Task.CompletedTask;
+            }
+            public interface IFalsch : IFunktion { Mahne? Auf(" + typ + @" e); } }");
 
-        ids.Should().Contain(Infrastructure.SourceGeneration.WeckplanGenerator.NichtImPlanId);
-        quelle.Should().NotContain("batch-Falsch", "was der Plan nicht führen kann, steht nicht darin");
+        ids.Should().BeEmpty("die Form meldet es (CQRS057 bzw. CQRS100), nicht der Weckplan");
+        quelle.Should().NotContain("batch-Falsch").And.NotContain("funktion-IFalsch",
+            "ein Hörer aus dem Log hört nur konkrete, persistente Events — alles andere ist ein Formfehler oder ein Hinweis-Eingang");
     }
 }
