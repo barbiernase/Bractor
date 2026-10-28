@@ -108,6 +108,22 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
         ap.Alles.Where(e => e.Nachricht is CommandUnbestaetigt).Should().BeEmpty();
     }
 
+    /// <summary>Dieselbe Ablehnung an der rohen Leitung: sie erreicht genau die Sitzung, die den Command schickte, über ihre Korrelation.</summary>
+    [Fact]
+    public async Task Eine_fachliche_Ablehnung_erreicht_die_Sitzung_an_der_rohen_Leitung()
+    {
+        await using var leitung = await RoheLeitung.VerbindeAsync(b.Host, "Arbeitsplatz", Testumgebung.TokenArbeitsplatz);
+        var datensatz = Guid.NewGuid();
+        var anlegen = Guid.NewGuid().ToString();
+        await leitung.SendeAsync(new ErstelleDatensatz(new(datensatz), "leer"), "Datensatz", 0, anlegen);
+        await leitung.WarteAufEventAsync(e => e.CorrelationId == anlegen, Kurz, "keine Quittung für das Anlegen");
+
+        var einfrieren = Guid.NewGuid().ToString();
+        await leitung.SendeAsync(new FriereEin(new(datensatz)), "Datensatz", 1, einfrieren);
+        var antwort = await leitung.WarteAufEventAsync(e => e.CorrelationId == einfrieren, TimeSpan.FromSeconds(4), "die Ablehnung kam nicht an");
+        RoheLeitung.Payload(antwort).Should().BeOfType<DatensatzLeer>();
+    }
+
     [Fact]
     public async Task Ein_Client_darf_und_hoert_nur_was_Vertrag_und_Token_gemeinsam_erlauben()
     {
