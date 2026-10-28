@@ -38,14 +38,15 @@ public class StoreKlassenE2ETests
             var reihe = (Messreihe)antwort.Data;
             reihe.Werte.Should().Equal(werte, "je Event genau ein Messpunkt, in Log-Reihenfolge");
             reihe.Letzter.Should().Be(werte[^1]);
-            antwort.Deps.Should().ContainSingle(d => d.Id == stelle.Wert && d.Version == werte.Count, "die Antwort trägt den Stand der gezeigten Id");
+            antwort.Deps.Should().ContainSingle(d => d.Id == stelle.Wert && d.Version >= werte.Count,
+                "die Antwort trägt den Stand der gezeigten Id (die Funktionen der Messung hängen weitere Events an die Stelle)");
             antwort.Projektionen.Should().Equal("MessreiheProjektion");
 
             await Warte(async () => ((Messzaehler)(await queries.ExecuteAsync(new HoleMesszaehler(stelle))).Data).Anzahl >= werte.Count,
                 Frist, "die Senke zählt nicht nach");
             var zaehler = await queries.ExecuteAsync(new HoleMesszaehler(stelle));
             ((Messzaehler)zaehler.Data).Anzahl.Should().Be(werte.Count, "ohne Störung genau einmal — zugesichert ist nur mindestens einmal");
-            zaehler.Deps.Should().ContainSingle(d => d.Id == stelle.Wert && d.Version == werte.Count,
+            zaehler.Deps.Should().ContainSingle(d => d.Id == stelle.Wert && d.Version >= werte.Count,
                 "die Antwort zeigt die Id ihrer Query (ohne „mindestens“): der Generator findet sie im Id<T>-Feld");
         }
         finally { await host.StopAsync(); }

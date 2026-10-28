@@ -201,6 +201,7 @@ public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.F
                 opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;
                 Core.KonsumSchema.Registriere(opts);
                 Domain.Infrastructure.Generated.GeneratedProjectionServices.RegistriereSchema(opts);
+                Infrastructure.Persistence.IdSerialisierung.Registriere(opts);
             });
         }
 

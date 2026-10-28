@@ -432,6 +432,7 @@ public class HorizontAbbruchGarantieTests : IClassFixture<HorizontAbbruchGaranti
             opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;
             Core.KonsumSchema.Registriere(opts);
             Domain.Infrastructure.Generated.GeneratedProjectionServices.RegistriereSchema(opts);
+            Infrastructure.Persistence.IdSerialisierung.Registriere(opts);
         });
 
         /// <summary>Die Leser (nie abgebrochen).</summary>

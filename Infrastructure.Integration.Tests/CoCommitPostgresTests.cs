@@ -137,6 +137,7 @@ public sealed class PostgresFixture : IDisposable
             opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;
             KonsumSchema.Registriere(opts);
             Domain.Infrastructure.Generated.GeneratedProjectionServices.RegistriereSchema(opts);
+            Infrastructure.Persistence.IdSerialisierung.Registriere(opts);
         });
     }
 

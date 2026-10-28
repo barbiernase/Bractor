@@ -83,6 +83,7 @@ public class AbfragePlanGarantieTests : IClassFixture<AbfragePlanGarantieTests.F
             opts.Events.MetadataConfig.HeadersEnabled = true;
             KonsumSchema.Registriere(opts);
             Domain.Infrastructure.Generated.GeneratedProjectionServices.RegistriereSchema(opts);
+            Infrastructure.Persistence.IdSerialisierung.Registriere(opts);
             InboxTabelle.Registriere(opts);
             Infrastructure.Uhr.FristVerzeichnis.Registriere(opts);
         });

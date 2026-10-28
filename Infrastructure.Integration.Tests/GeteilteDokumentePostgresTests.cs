@@ -190,6 +190,7 @@ public sealed class GeteiltFixture : IAsyncLifetime
             KonsumSchema.Registriere(opts);
             opts.Schema.For<SondenZaehler>().Identity(x => x.Id).UseOptimisticConcurrency(true);
             opts.Schema.For<SondenEigen>().Identity(x => x.Id);
+            Infrastructure.Persistence.IdSerialisierung.Registriere(opts);   // typisierte Ids als UUID-String, wie im Host
         });
         services.AddGeneratedProjectionServices();
         _sp = services.BuildServiceProvider();
