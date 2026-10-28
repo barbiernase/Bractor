@@ -1033,7 +1033,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     /// </summary>
     private void MeldeAblehnung(CommandEnvelope cmdEnvelope, IEvent rejection)
     {
-        _logger?.LogWarning("DIAG MeldeAblehnung {R} Sitzung '{S}' Verteilung {V}", rejection.GetType().Name, cmdEnvelope.OriginSessionId, _verteilung is not null);
+        _logger?.LogWarning("DIAG {Zeit:HH:mm:ss.fff} MeldeAblehnung {R} Sitzung '{S}' Verteilung {V}", DateTime.UtcNow, rejection.GetType().Name, cmdEnvelope.OriginSessionId, _verteilung is not null);
         // An die Funktionen, die den Hinweis hören (Hinweis-Netz, Plan §2.9): Kennung aus der Command-Id (A7), Herkunft der eigene Stream.
         if (_hinweisNetz is { } netz && netz.Hoert(rejection.GetType()))
         {
