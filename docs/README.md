@@ -19,6 +19,7 @@ unten beschreiben den **Ist-Zustand** des Codes, den der Umbau ablöst. Wo beide
 | Datei | Inhalt | Rolle im Umbau |
 |---|---|---|
 | [plan-pubsub-neustrukturierung.md](plan-pubsub-neustrukturierung.md) | Zielbild, Grammatik, Garantien, Phasen | **Maßstab**, wird nach dem Umbau eingearbeitet und gelöscht |
+| [praesentation/](praesentation/) | Präsentation des Zielbilds als Geschichte (reveal.js; Leertaste weiter, ↓ genauer hinsehen, Esc Übersicht): kurz [zielbild.html](praesentation/zielbild.html) aus `geschichte.html`, vollständig [zielbild_full.html](praesentation/zielbild_full.html) aus `geschichte_full.html` (dazu Konsistenz und Garantien, Arbeitsplatz, Werkbank, LLM). Karten, Graphen, Diagramme aus `zielbild-seite.html`; `baue_deck.py` setzt zusammen | Ziel (Darstellung des Plans); nach Änderungen `python3 docs/praesentation/baue_deck.py` bzw. mit `VORLAGE=geschichte_full.html … zielbild_full.html` |
 | [03-schreibseite.md](03-schreibseite.md) | Command → Decide → Event → Log: Aggregat-Actor, Bündel, Group-Commit, Inbox, Horizont | Ist; bleibt im Kern |
 | [04-konsum-und-prozess-maschine.md](04-konsum-und-prozess-maschine.md) | Batch-Leser, Emittenten, Prozess-Manager, Fluss, Funktionen, Spur | Ist; Batch-Leser bleibt, der Rest wird abgelöst |
 | [05-generatoren-analyzer-proto.md](05-generatoren-analyzer-proto.md) | Generatoren, Analyzer, Boot-Guards, Codegen im Build | Ist; Generatoren ändern sich |

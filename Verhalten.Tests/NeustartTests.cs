@@ -24,7 +24,7 @@ public sealed class NeustartTests
     // DIAG G-17: Debug-Meldungen der Funktionen und Aggregate mit Zeitstempel, eine Zeile je Meldung.
     private static readonly Dictionary<string, string> Diagnose = new()
     {
-        ["Logging__LogLevel__Funktion"] = "Debug", ["Logging__LogLevel__Infrastructure.Aggregate"] = "Debug", ["Logging__LogLevel__Infrastructure.Persistence.MartenEventStore"] = "Debug",
+        ["Logging__LogLevel__Funktion"] = "Debug", ["Logging__LogLevel__Infrastructure.Persistence.MartenEventStore"] = "Debug",
         ["Logging__Console__FormatterName"] = "simple", ["Logging__Console__FormatterOptions__SingleLine"] = "true",
         ["Logging__Console__FormatterOptions__TimestampFormat"] = "HH:mm:ss.fff ",
     };
