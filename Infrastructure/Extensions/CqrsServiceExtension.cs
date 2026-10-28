@@ -19,7 +19,6 @@ using Proto.Cluster.Partition;
 using Proto.DependencyInjection;
 using Proto.Remote;
 using Proto.Remote.GrpcNet;
-using StackExchange.Redis;
 using Weasel.Core;
 using Infrastructure.Komposition;
 
@@ -87,7 +86,7 @@ public static class CqrsServiceExtensions
         Console.WriteLine("==========================================================");
         Console.WriteLine();
         
-        // 1. Infrastruktur (Marten + Redis)
+        // 1. Infrastruktur (Marten)
         services.AddCqrsInfrastructure(builder);
         
         // 2. Domain-Stores + Reader (generiert vom ProjectionServicesGenerator in Domain.Infrastructure).
@@ -98,16 +97,13 @@ public static class CqrsServiceExtensions
         // 3. Aggregate-Components -- GENERIERT
         services.AddCqrsAggregates();
         
-        // 4. Subscribers (Projektionen/Writer) -- GENERIERT
-        services.AddCqrsSubscribers();
-        
         // 5. PubSub
         services.AddCqrsPubSub();
         
         // 6. Actor System mit Cluster
         services.AddCqrsActorSystem(builder);
         
-        // 7. Query Infrastructure (DepsReader)
+        // 7. Query Infrastructure (Stand je Id)
         services.AddCqrsQueryService();
         
         // 8. gRPC Client Services (optional)
@@ -129,7 +125,7 @@ public static class CqrsServiceExtensions
     }
     
     /// <summary>
-    /// Basis-Infrastruktur: EventStore (Marten/PostgreSQL), VersionTracker (Redis).
+    /// Basis-Infrastruktur: EventStore (Marten/PostgreSQL), Wecker.
     /// </summary>
     public static IServiceCollection AddCqrsInfrastructure(
         this IServiceCollection services,
@@ -295,32 +291,6 @@ public static class CqrsServiceExtensions
         services.AddSingleton(provider => new Infrastructure.Wecken.Wecker(Anwendung.Weckplan, builder.Konsum,
             () => new Infrastructure.Lebenszyklus.Bote(provider.GetRequiredService<ActorSystem>().Cluster(),
                 provider.GetService<ILoggerFactory>()?.CreateLogger("Wecker"))));
-        
-        // Redis (VersionTracker)
-        services.AddSingleton<IConnectionMultiplexer>(provider =>
-        {
-            var config = new ConfigurationOptions
-            {
-                EndPoints = { builder.RedisConnectionString },
-                DefaultDatabase = builder.RedisDatabase,
-                AbortOnConnectFail = false,
-            };
-            return ConnectionMultiplexer.Connect(config);
-        });
-
-        if (builder.EnableVersionTracking)
-        {
-            services.AddSingleton<IVersionTracker, RedisVersionTracker>();
-            Console.WriteLine($"  + IVersionTracker (Redis)");
-            Console.WriteLine($"    Endpoint: {builder.RedisConnectionString}, DB: {builder.RedisDatabase}");
-        }
-        else
-        {
-            // Messung/Redis-los: der Index ist aus (No-op). Der Actor-Track wird folgenlos, der eine
-            // Leser (ReadModelDepsWriter) bekommt leere Ergebnisse — beides tolerierbar (nicht-autoritativ).
-            services.AddSingleton<IVersionTracker, NullVersionTracker>();
-            Console.WriteLine($"  + IVersionTracker (No-op — Version-Index AUS)");
-        }
 
         Console.WriteLine();
         return services;
@@ -339,37 +309,16 @@ public static class CqrsServiceExtensions
     }
     
     /// <summary>
-    /// Deps-Index-Naht registrieren.
+    /// Query Infrastructure: der Stand der Projektion je gezeigter Id (<see cref="ProjektionsStaende"/>, aus dem Guard je Stream).
     ///
-    /// (B1) Die Push-Subscriber-Maschinerie (SubscriberActorBase-Dispatch + generierte Push-Actors +
-    /// SubscriberStartupService) wurde entfernt — alle durablen Handler laufen auf dem Pull-Pfad
-    /// (AddGeneratedPullPaths). Der Broker-Kanal bleibt bis Plan Phase 7 nur für die Clients (Pushes, Ablehnungen, CommandFailed, Hinweise).
-    /// Der Deps-Index-Writer bleibt ebenfalls: der Pull-Adapter nutzt ihn als <see cref="Core.IReadModelDepsSink"/>.
-    /// </summary>
-    public static IServiceCollection AddCqrsSubscribers(this IServiceCollection services)
-    {
-        Console.WriteLine("[CQRS] Registriere Deps-Index-Naht...");
-        services.AddSingleton<Infrastructure.Projections.ReadModelDepsWriter>();
-        services.AddSingleton<Core.IReadModelDepsSink>(
-            sp => sp.GetRequiredService<Infrastructure.Projections.ReadModelDepsWriter>());
-        Console.WriteLine();
-        return services;
-    }
-    
-    /// <summary>
-    /// Query Infrastructure: ReadModelDepsReader (Redis).
-    /// 
-    /// Reader + ProjectionQueryService sind bereits ueber
-    /// AddGeneratedProjectionServices() registriert (Domain.Infrastructure).
-    /// Hier kommt nur das Infrastructure-Zeug (Redis DepsReader).
+    /// Reader + ProjectionQueryService sind bereits ueber AddGeneratedProjectionServices() registriert (Domain.Infrastructure).
     /// </summary>
     public static IServiceCollection AddCqrsQueryService(this IServiceCollection services)
     {
         Console.WriteLine("[CQRS] Registriere Query Infrastructure...");
         
-        // ReadModelDepsReader: Redis-Abhaengigkeit → gehoert zu Infrastructure
-        services.AddSingleton<IReadModelDepsReader, ReadModelDepsReader>();
-        Console.WriteLine("  + ReadModelDepsReader");
+        services.AddSingleton<IReadModelDepsReader, ProjektionsStaende>();
+        Console.WriteLine("  + ProjektionsStaende (Stand je Id aus dem Fortschritt der Projektion)");
         
         Console.WriteLine();
         return services;
@@ -561,9 +510,6 @@ public class CqrsFrameworkBuilder
     /// </summary>
     public int CommandTimeoutSeconds { get; set; } = 30;
 
-    public string RedisConnectionString { get; set; } = "localhost:6379";
-    public int RedisDatabase { get; set; } = 1;
-
     /// <summary>
     /// Snapshot-Schwellwert (docs/03-schreibseite.md): der Aggregat-Actor schreibt best-effort nach je so
     /// vielen Events einen Snapshot. Default 200 — hoch genug, dass kurze Aggregate nie snapshotten. Tests
@@ -638,12 +584,6 @@ public class CqrsFrameworkBuilder
     /// </summary>
     public bool UseGeneratedJsonSerializer { get; set; } = false;
 
-    /// <summary>
-    /// Redis-Version-Index (nicht-autoritative Stale-Detection/Typ-Liste). Default AN. AUS = No-op-Tracker:
-    /// isoliert für die Messung den synchronen Redis-Round-Trip aus dem Command-Turn — und erlaubt den Betrieb
-    /// ganz ohne Redis (der Index ist ohnehin nicht die Wahrheit; sein einziger Leser verträgt Leere).
-    /// </summary>
-    public bool EnableVersionTracking { get; set; } = true;
 
     public CqrsFrameworkBuilder(IServiceCollection services)
     {

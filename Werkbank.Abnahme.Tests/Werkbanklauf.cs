@@ -12,13 +12,13 @@ namespace Werkbank.Abnahme.Tests;
 /// Eine echte Werkbank auf einer eigenen Kopie des Arbeitsbaums (docs/12 §12.1, docs/13 WB-2):
 /// <list type="bullet">
 /// <item>Kopie aller Quell-Dateien (<c>git ls-files -co --exclude-standard</c>: verfolgt + neu, ohne Ignoriertes) in ein Temp-Verzeichnis,
-///   dort <c>git init -b abnahme-&lt;id&gt;</c> — der Branch benennt Sim-DB, Redis-Präfix und Cluster; Gesten sind erlaubt (nicht <c>main</c>).</item>
+///   dort <c>git init -b abnahme-&lt;id&gt;</c> — der Branch benennt Sim-DB und Cluster; Gesten sind erlaubt (nicht <c>main</c>).</item>
 /// <item>Umgebung <c>abnahme</c> = Kopie von <c>sim-main</c> mit freien Ports, Pfaden im Temp-Verzeichnis und <c>IBildVerkleinerung</c> auf
 ///   Laufort <c>Extern</c> (nur in der Kopie).</item>
 /// <item>Die gebaute Werkbank als Prozess (<c>dotnet Werkbank.dll</c>, Arbeitsverzeichnis = Kopie, <c>PORT</c> frei); der Test spricht nur HTTP.</item>
 /// </list>
 /// Der Arbeitsbaum des Entwicklers, seine <c>.werkbank/</c> und seine Sim-DB bleiben unberührt. Aufräumen: SIGTERM an die Werkbank (sie hält
-/// Host und Worker an), eigene DB und Redis-Schlüssel löschen, Kopie löschen.
+/// Host und Worker an), eigene DB löschen, Kopie löschen.
 /// </summary>
 public sealed class Werkbanklauf : IAsyncDisposable
 {
@@ -39,9 +39,6 @@ public sealed class Werkbanklauf : IAsyncDisposable
     private readonly ConcurrentQueue<string> _log = new();
     private Process? _werkbank;
     private string _verbindung = "";
-    private string _redis = "";
-    private int _redisDb;
-    private string _praefix = "";
 
     private Werkbanklauf()
     {
@@ -96,7 +93,7 @@ public sealed class Werkbanklauf : IAsyncDisposable
 
     /// <summary>
     /// <c>umgebung.abnahme.json</c> aus <c>sim-main</c>: eigene Ports, Daten-Pfade im Temp-Verzeichnis, die Verkleinerung extern (Python-Worker).
-    /// DB, Redis-Präfix und Cluster folgen über <c>${branch}</c> dem Branch der Kopie.
+    /// DB und Cluster folgen über <c>${branch}</c> dem Branch der Kopie.
     /// </summary>
     private async Task SchreibeUmgebungAsync()
     {
@@ -109,11 +106,7 @@ public sealed class Werkbanklauf : IAsyncDisposable
         u["Funktionen"]!["IBildVerkleinerung"]!["Laufort"] = "Extern";
         await File.WriteAllTextAsync(Path.Combine(verz, $"umgebung.{Umgebung}.json"), u.ToJsonString(new() { WriteIndented = true }));
 
-        var schluessel = Branch.Replace('-', '_');
         _verbindung = (string)u["EventStore"]!["Verbindung"]!;
-        _redis = (string)u["VersionIndex"]!["Endpunkt"]!;
-        _redisDb = (int?)u["VersionIndex"]!["Datenbank"] ?? 0;
-        _praefix = ((string)u["VersionIndex"]!["Praefix"]!).Replace("${branch}", schluessel);
     }
 
     private async Task StarteWerkbankAsync()
@@ -202,16 +195,6 @@ public sealed class Werkbanklauf : IAsyncDisposable
                 await cmd.ExecuteNonQueryAsync();
             }
             catch (NpgsqlException) { }
-        if (_redis.Length > 0)
-            try
-            {
-                await using var r = await StackExchange.Redis.ConnectionMultiplexer.ConnectAsync(_redis + ",allowAdmin=true,connectTimeout=2000");
-                var db = r.GetDatabase(_redisDb);
-                foreach (var ep in r.GetEndPoints())
-                    foreach (var k in r.GetServer(ep).Keys(_redisDb, _praefix + "*"))
-                        await db.KeyDeleteAsync(k);
-            }
-            catch (StackExchange.Redis.RedisException) { }
         Http.Dispose();
         try { Directory.Delete(_wurzel, recursive: true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
     }

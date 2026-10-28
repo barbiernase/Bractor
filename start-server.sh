@@ -44,11 +44,6 @@ case "${1:-start}" in
     done
     echo " ✓"
 
-    echo -n "  Redis..."
-    until docker exec cqrs-redis redis-cli ping 2>/dev/null | grep -q PONG; do
-      sleep 1; echo -n "."
-    done
-    echo " ✓"
 
     echo -n "  Consul..."
     until docker exec cqrs-consul consul members 2>/dev/null | grep -q alive; do

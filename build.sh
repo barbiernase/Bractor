@@ -45,10 +45,6 @@ POSTGRES_USER="postgres"
 POSTGRES_PASSWORD="postgres"
 POSTGRES_SCHEMA="es"
 
-# ─── Redis ───
-REDIS_ENDPOINT="localhost:6379"
-REDIS_DATABASE=1
-
 # ─── Consul (Proto.Actor Cluster Discovery) ───
 CONSUL_ADDRESS="localhost:8500"
 
@@ -137,7 +133,6 @@ cat > "$OUTPUT/grpc/umgebungen/umgebung.linux.json" << EOF
     "Datenbank": "${POSTGRES_DB}",
     "Schema": "${POSTGRES_SCHEMA}"
   },
-  "VersionIndex": { "Betrieb": "Vorhanden", "Endpunkt": "${REDIS_ENDPOINT}", "Datenbank": ${REDIS_DATABASE}, "Praefix": "prod:" },
   "Cluster": { "Art": "Consul", "Name": "${CLUSTER_NAME}", "Consul": "${CONSUL_ADDRESS}", "AdvertisedHost": "${CLUSTER_ADVERTISED_HOST}" },
   "Transport": { "GrpcPort": ${GRPC_PORT}, "EinblickPort": ${GRPC_EINBLICK_PORT} },
   "Quellen": {
@@ -202,7 +197,6 @@ echo "    Blazor Port:    ${BLAZOR_PORT}"
 echo "    WatchPath:      ${GRPC_WATCH_PATH}"
 echo "    Preprocessed:   ${GRPC_PREPROCESSED_PATH}"
 echo "    PostgreSQL:     ${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
-echo "    Redis:          ${REDIS_ENDPOINT}"
 echo "    Consul:         ${CONSUL_ADDRESS}"
 echo ""
 

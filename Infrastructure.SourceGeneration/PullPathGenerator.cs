@@ -208,7 +208,6 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("    public ClusterKind CreateKind(ActorSystem system, IServiceProvider provider)");
             sb.AppendLine("    {");
             sb.AppendLine("        var eventStore = provider.GetRequiredService<IEventStoreRepository>();");
-            sb.AppendLine("        var depsSink = provider.GetService<IReadModelDepsSink>();");
             sb.AppendLine("        var deadLetter = provider.GetService<IDeadLetterSink>();");
             sb.AppendLine("        var konsum = provider.GetService<Konsum>() ?? Konsum.Standard;");
             sb.AppendLine($"        var logger = provider.GetService<ILoggerFactory>()?.CreateLogger(\"Konsum.{p.Name}\");");
@@ -232,7 +231,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("                Func<EventEnvelope, ProjectionWriter, Task> dispatch =");
             sb.AppendLine("                    (e, writer) => projection.DispatchAsync(e, writer, faehigkeiten);");
             sb.AppendLine("                var leser = new BatchLeser(eventStore, trackers[0], projection.SubscriberId, partition, konsum, typen, dispatch,");
-            sb.AppendLine("                    depsSink, deadLetter, logger);");
+            sb.AppendLine("                    deadLetter: deadLetter, logger: logger);");
             sb.AppendLine("                return leser;");
             sb.AppendLine("            }, provider.GetRequiredService<IFaehigkeitsFabrik>(), logger)));");
             sb.AppendLine("    }");

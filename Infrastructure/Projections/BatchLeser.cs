@@ -50,7 +50,6 @@ public sealed class BatchLeser
     private readonly Konsum _konsum;
     private readonly IReadOnlyCollection<string>? _typen;
     private readonly Func<EventEnvelope, ProjectionWriter, Task> _dispatch;
-    private readonly IReadModelDepsSink? _depsSink;
     private readonly IDeadLetterSink? _deadLetter;
     private readonly ILogger? _logger;
     private readonly Func<Task>? _absturzVorCommit;
@@ -75,7 +74,6 @@ public sealed class BatchLeser
         Konsum konsum,
         IReadOnlyCollection<string>? typen,
         Func<EventEnvelope, ProjectionWriter, Task> dispatch,
-        IReadModelDepsSink? depsSink = null,
         IDeadLetterSink? deadLetter = null,
         ILogger? logger = null,
         Func<Task>? absturzVorCommit = null,
@@ -90,7 +88,6 @@ public sealed class BatchLeser
         _konsum = konsum;
         _typen = typen;
         _dispatch = dispatch;
-        _depsSink = depsSink;
         _deadLetter = deadLetter;
         _logger = logger;
         _absturzVorCommit = absturzVorCommit;
@@ -185,7 +182,7 @@ public sealed class BatchLeser
                 if (_lese > _stand.Position && _jetzt() - _letzterCommit >= Konsum.PollIntervall)
                 {
                     _tracker.BeginneBatch();
-                    await CommitAsync(Neu(_lese), new Dictionary<Guid, int>(), deps: null, ct);
+                    await CommitAsync(Neu(_lese), new Dictionary<Guid, int>(), ct);
                 }
                 return angewandt;
             }
@@ -287,7 +284,7 @@ public sealed class BatchLeser
         var ersteHaengende = events.FirstOrDefault(e => haengend.Contains(e.Event.AggregateId));
         if (ersteHaengende is not null) neuePosition = Math.Min(neuePosition, ersteHaengende.Sequenz - 1);
         _tracker.BeginneBatch();
-        await CommitAsync(Neu(Math.Max(_lese, neuePosition)), new Dictionary<Guid, int>(), deps: null, ct);
+        await CommitAsync(Neu(Math.Max(_lese, neuePosition)), new Dictionary<Guid, int>(), ct);
         // Erledigt sind auch die übersprungenen Events geparkter Streams; hängende nicht — die liest der nächste Durchlauf erneut.
         foreach (var e in events)
             if (e.Sequenz > _lese && !haengend.Contains(e.Event.AggregateId)) _erledigt.Add(e.Sequenz);
@@ -328,7 +325,6 @@ public sealed class BatchLeser
         var imTeil = teil.ToHashSet();
         _tracker.BeginneBatch();
         var neueGuards = new Dictionary<Guid, int>();
-        var deps = new List<(EventEnvelope, ProjectionWriter)>();
         var erledigt = new List<long>();
         var angewandt = 0;
         Guid? aktuell = null;
@@ -345,7 +341,6 @@ public sealed class BatchLeser
                 _tracker.Stream(e.AggregateId);
                 var writer = new ProjectionWriter(e.AggregateId, e.AggregateVersion);
                 await _dispatch(e, writer);
-                if (writer.HasResults) deps.Add((e, writer));
                 neueGuards[e.AggregateId] = e.AggregateVersion;
                 angewandt++;
             }
@@ -358,7 +353,7 @@ public sealed class BatchLeser
 
         try
         {
-            await CommitAsync(Neu(position), neueGuards, deps, ct);
+            await CommitAsync(Neu(position), neueGuards, ct);
         }
         catch (PartitionsKonfliktException) { throw; }
         catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }
@@ -401,7 +396,6 @@ public sealed class BatchLeser
             var guard = (await _tracker.LadeGuardsAsync(_projektionsId, new[] { g.StreamId }, ct))[g.StreamId];
             var events = await _eventStore.ReadStreamAsync(g.StreamId, guard + 1, ct);
             _tracker.BeginneBatch();
-            var deps = new List<(EventEnvelope, ProjectionWriter)>();
             var letzte = guard;
             var n = 0;
             try
@@ -412,13 +406,12 @@ public sealed class BatchLeser
                     _tracker.Stream(e.AggregateId);
                     var writer = new ProjectionWriter(e.AggregateId, e.AggregateVersion);
                     await _dispatch(e, writer);
-                    if (writer.HasResults) deps.Add((e, writer));
                     letzte = e.AggregateVersion;
                     n++;
                 }
                 var ohne = Neu(_lese);
                 ohne.Geparkt = _stand.Geparkt.Where(x => x.StreamId != g.StreamId).ToList();
-                await CommitAsync(ohne, letzte > guard ? new Dictionary<Guid, int> { [g.StreamId] = letzte } : new Dictionary<Guid, int>(), deps, ct);
+                await CommitAsync(ohne, letzte > guard ? new Dictionary<Guid, int> { [g.StreamId] = letzte } : new Dictionary<Guid, int>(), ct);
                 angewandt += n;
                 _logger?.LogInformation("[Konsum] {Projektion}/{Partition}: geparkter Stream {Stream} läuft wieder (bis v{Version})",
                     _projektionsId, _partition, g.StreamId, letzte);
@@ -454,22 +447,11 @@ public sealed class BatchLeser
     };
 
     private async Task CommitAsync(
-        PartitionsCheckpoint neu, IReadOnlyDictionary<Guid, int> guards, List<(EventEnvelope, ProjectionWriter)>? deps, CancellationToken ct)
+        PartitionsCheckpoint neu, IReadOnlyDictionary<Guid, int> guards, CancellationToken ct)
     {
         neu.Version = await _tracker.CommitAsync(neu, guards, ct);
         _stand = neu;
         _letzterCommit = _jetzt();
         Rueckevor(neu.Position);
-
-        // Der verlierbare Versions-Index erst NACH dem durablen Commit — nie über Uncommittetes; ein Verlust ist folgenlos.
-        if (_depsSink is null || deps is null || deps.Count == 0) return;
-        try
-        {
-            await Task.WhenAll(deps.Select(d => _depsSink.PublishAsync(_projektionsId, d.Item1, d.Item2.GetResults(), ct)));
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogDebug(ex, "[Konsum] {Projektion}/{Partition}: Versions-Index nicht geschrieben (best-effort)", _projektionsId, _partition);
-        }
     }
 }

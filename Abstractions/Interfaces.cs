@@ -285,49 +285,6 @@ public interface IAggregateRepository
     public interface ITransientEvent : IEvent { }
 
     /// <summary>
-    /// Schneller, verteilter Index für Aggregate-Versionen.
-    /// Abgeleitet, nicht autoritativ – die Wahrheit liegt im EventStore.
-    ///
-    /// Wird nach jedem erfolgreichen Append aktualisiert.
-    /// Wird von Clients und Projektionen für Stale Detection gelesen.
-    /// 
-    /// Eigene Datei, nicht in Interfaces.cs – bildet mit AggregateVersionInfo
-    /// eine abgeschlossene Einheit.
-    /// </summary>
-    public interface IVersionTracker
-    {
-        /// <summary>
-        /// Aktualisiert die Version eines Aggregats.
-        /// Wird vom Actor nach erfolgreichem EventStore-Append aufgerufen.
-        /// </summary>
-        Task TrackAsync(Guid aggregateId, string aggregateType, int newVersion);
-
-        /// <summary>
-        /// Liest die aktuelle Version eines Aggregats.
-        /// Gibt null zurück, wenn das Aggregat nicht im Tracker existiert
-        /// (z.B. nach Redis-Neustart oder wenn das Aggregat noch nie getrackt wurde).
-        /// </summary>
-        Task<AggregateVersionInfo?> GetAsync(Guid aggregateId);
-
-        /// <summary>
-        /// Liest die Versionen mehrerer Aggregate in einem Roundtrip.
-        /// Für Batch-Stale-Detection in ReadModels.
-        /// Aggregate die nicht im Tracker existieren fehlen im Dictionary.
-        /// </summary>
-        Task<IReadOnlyDictionary<Guid, AggregateVersionInfo>> GetManyAsync(
-            IReadOnlyList<Guid> aggregateIds);
-    }
-
-    /// <summary>
-    /// Versionsinformation eines Aggregats im Tracker.
-    /// </summary>
-    public record AggregateVersionInfo(
-        string AggregateType,
-        int Version,
-        DateTimeOffset UpdatedAt);
-        
-
-    /// <summary>
     /// Marker-Interface für ReadModels.
     /// Gibt dem Typsystem und dem Source Generator semantische Information:
     /// "Dieser Record ist ein ReadModel einer Projektion."
@@ -470,10 +427,8 @@ public interface IAggregateRepository
     }
 
     /// <summary>
-    /// Liest ReadModel-Abhängigkeiten (Deps).
-    /// 
-    /// Implementierung typischerweise via Redis (ReadModelDepsReader).
-    /// Wird vom ProjectionQueryService nach dem Reader-Handler aufgerufen.
+    /// Liest ReadModel-Abhängigkeiten (Deps): den Stand der Projektion je gezeigter Id (Infrastructure: <c>ProjektionsStaende</c>, aus dem
+    /// Guard je (Projektion, Stream)). Wird vom ProjectionQueryService nach dem Reader-Handler aufgerufen.
     /// </summary>
     public interface IReadModelDepsReader
     {

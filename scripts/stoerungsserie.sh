@@ -1,5 +1,5 @@
 #!/bin/bash
-# Nur auf dem Messserver (scripts/server.sh lauf scripts/stoerungsserie.sh <N>): Rest-Zustand löschen (Mess- und Test-Datenbanken, beide Redis,
+# Nur auf dem Messserver (scripts/server.sh lauf scripts/stoerungsserie.sh <N>): Rest-Zustand löschen (Mess- und Test-Datenbanken,
 # Host-Logs), Commit-Zeitstempel in Postgres einschalten (einmal, mit Neustart des Containers), dann bis zu N Störungsläufe. Beim ersten roten
 # Lauf sichert es den Zustand in dessen Ergebnis-Ordner (g11-diagnose.txt: Guards hinter dem Stream, die Events samt Transaktion und
 # Commit-Zeit, Nachbarschaft, Partitions-Checkpoints, DLQ; dazu die Host-Logs) und hält an — bevor der nächste Lauf die Datenbanken neu anlegt
@@ -11,7 +11,6 @@ PSQL="docker exec -i cqrs-postgres psql -U postgres -v ON_ERROR_STOP=0 -P pager=
 echo "== Rest-Zustand löschen"
 for db in cqrs_vermessung cqrs_vermessung_pruefdomaene; do $PSQL -c "drop database if exists $db with (force)"; done
 for db in cqrs_events cqrs_it_geteilt; do $PSQL -c "drop database if exists $db with (force)"; $PSQL -c "create database $db"; done
-docker exec cqrs-vermessung-redis redis-cli -p 6390 flushall; docker exec cqrs-redis redis-cli flushall
 rm -rf /tmp/cqrs-vermessung-logs/*
 
 echo "== Commit-Zeitstempel"

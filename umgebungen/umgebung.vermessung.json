@@ -10,12 +10,6 @@
     "Datenbank": "cqrs_vermessung",
     "Schema": "es"
   },
-  "VersionIndex": {
-    "Betrieb": "Vorhanden",
-    "Endpunkt": "localhost:6390",
-    "Datenbank": 0,
-    "Praefix": "vermessung:"
-  },
   "Cluster": {
     "Art": "Consul",
     "Name": "cqrs-vermessung",

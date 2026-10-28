@@ -31,7 +31,6 @@ internal static class Pruefstand
             opts.ClusterName = name + "-" + Guid.NewGuid().ToString("N")[..8];
             opts.EventStoreConnectionString = Verbindung;
             opts.EventStoreSchema = schema;
-            opts.RedisDatabase = 2;
             opts.SnapshotThreshold = snapshotSchwelle;
             opts.InboxCache = inboxCache;
         });

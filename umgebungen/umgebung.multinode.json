@@ -6,7 +6,6 @@
     "Datenbank": "cqrs_events",
     "Schema": "es"
   },
-  "VersionIndex": { "Betrieb": "Vorhanden", "Endpunkt": "redis:6379", "Datenbank": 1, "Praefix": "multinode:" },
   "Cluster": { "Art": "Consul", "Name": "cqrs-multinode", "Consul": "consul:8500", "AdvertisedHost": "localhost" },
   "Transport": { "GrpcPort": 5001, "EinblickPort": 5002 },
   "Quellen": {

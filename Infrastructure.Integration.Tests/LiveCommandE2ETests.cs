@@ -23,7 +23,7 @@ namespace Infrastructure.Integration.Tests;
 ///   Command → ImagePair-Aggregat → Event in "es" + Signal-Emit → Broker → Receiver →
 ///   Co-Commit-Adapter → Log-Read → Projektion → Historie-Eintrag in "rm".
 ///
-/// Braucht Postgres (5432), Redis (6379) und Consul (8500) — das Dev-Setup.
+/// Braucht Postgres (5432) und Consul (8500) — das Dev-Setup.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class LiveCommandE2ETests
@@ -40,7 +40,7 @@ public class LiveCommandE2ETests
         {
             opts.EnableGrpc = false;                       // kein gRPC-Endpoint nötig
             opts.ClusterName = "phase2-live-" + Guid.NewGuid().ToString("N")[..8];
-            // Connection-Defaults zeigen bereits auf localhost (Postgres/Redis/Consul laufen).
+            // Connection-Defaults zeigen bereits auf localhost (Postgres/Consul laufen).
         });
 
 
@@ -51,10 +51,6 @@ public class LiveCommandE2ETests
         await host.StartAsync();
         try
         {
-            // Diagnose Phase 5: ist der Deps-Sink registriert?
-            host.Services.GetService<Core.IReadModelDepsSink>()
-                .Should().NotBeNull("IReadModelDepsSink muss für den Pull-Deps-Index registriert sein");
-
             var dispatcher = host.Services.GetRequiredService<IAggregateDispatcher>();
             // Stores sind SCOPED (eine Instanz je Fähigkeits-Bereich) → aus einem eigenen Bereich lesen.
             using var bereich = host.Services.CreateScope();
@@ -86,13 +82,11 @@ public class LiveCommandE2ETests
                 TimeSpan.FromSeconds(30),
                 "ImagePairProjektion ist nach dem Command nicht über den Pull-Co-Commit-Pfad materialisiert.");
 
-            // Phase 5: der Deps-Index (rm:) wird auch auf dem PULL-Pfad geführt (früher fiel er weg).
-            var redis = host.Services.GetRequiredService<StackExchange.Redis.IConnectionMultiplexer>();
-            var depsKey = $"rm:imagepair-historie:{pairId}";
-            await WaitAsync(
-                async () => (await redis.GetDatabase().HashGetAllAsync(depsKey)).Length > 0,
-                TimeSpan.FromSeconds(10),
-                "Deps-Index (rm:) wurde auf dem Pull-Pfad nicht geführt.");
+            // Plan Phase 6: der Stand je Id, den eine Antwort trägt, kommt aus dem Fortschritt der Projektion (Guard je Stream, mit den
+            //   Wirkungen in einer Transaktion) — hier das eine Event des Paars.
+            var staende = host.Services.GetRequiredService<IReadModelDepsReader>();
+            var stand = await staende.ReadAsync("imagepair-historie", new[] { pairId.ToString() });
+            stand.Should().ContainSingle(d => d.Id == pairId && d.Version == 1, "die Projektion hat das Paar bis Version 1 verarbeitet");
         }
         finally
         {

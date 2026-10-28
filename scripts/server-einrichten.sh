@@ -3,7 +3,7 @@
 #
 #   scripts/server-einrichten.sh <dotnet-sdk-version> [--netz host|proxy]
 #
-# --netz host (Standard): Postgres, Redis und der Redis der Vermessung im Host-Netzwerk (docker-compose.messserver.yml), ohne docker-proxy;
+# --netz host (Standard): Postgres im Host-Netzwerk (docker-compose.messserver.yml), ohne docker-proxy;
 # --netz proxy: wie auf dem Mac über veröffentlichte Ports — nur für Vergleichsmessungen.
 #
 # Was es tut: .NET-SDK in genau der Version des lokalen Rechners (/usr/local/share/dotnet), Python-Umgebung der Funktions-Worker
@@ -58,21 +58,13 @@ mkdir -p /opt/miniconda3/envs
 [ -L /opt/miniconda3/envs/gpu_env ] || rm -rf /opt/miniconda3/envs/gpu_env
 ln -sfn "$PY" /opt/miniconda3/envs/gpu_env
 
-# ── Infrastruktur (Postgres, Redis, Consul; der Redis der Vermessung, den vermessung-e2e.sh sonst mit -p anlegt) ──
+# ── Infrastruktur (Postgres, Consul) ──
 echo "== Infrastruktur-Container (Netz: $NETZ)"
 DATEIEN=(-f "$WURZEL/docker-compose.infrastructure.yml")
 [ "$NETZ" = host ] && DATEIEN+=(-f "$WURZEL/docker-compose.messserver.yml")
 docker compose "${DATEIEN[@]}" -p cqrs up -d --wait
-if [ "$(docker inspect -f '{{.HostConfig.NetworkMode}}' cqrs-vermessung-redis 2>/dev/null)" != "$([ "$NETZ" = host ] && echo host || echo bridge)" ]; then
-  docker rm -f cqrs-vermessung-redis >/dev/null 2>&1 || true
-  if [ "$NETZ" = host ]; then
-    docker run -d --name cqrs-vermessung-redis --network host --restart unless-stopped redis:7-alpine redis-server --bind 127.0.0.1 --port 6390 >/dev/null
-  else
-    docker run -d --name cqrs-vermessung-redis -p 127.0.0.1:6390:6379 --restart unless-stopped redis:7-alpine >/dev/null
-  fi
-fi
 # Nichts davon darf außerhalb von 127.0.0.1 lauschen.
-if ss -tlnH | awk '{print $4}' | grep -E ':(5432|6379|6390|8500)$' | grep -vE '^(127\.0\.0\.1|\[::1\]):'; then
+if ss -tlnH | awk '{print $4}' | grep -E ':(5432|8500)$' | grep -vE '^(127\.0\.0\.1|\[::1\]):'; then
   echo "FEHLER: ein Infrastruktur-Port lauscht nicht nur auf 127.0.0.1 (siehe oben)." >&2; exit 1
 fi
 

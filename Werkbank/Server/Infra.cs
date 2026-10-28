@@ -5,7 +5,7 @@ using Npgsql;
 namespace Werkbank.Server;
 
 /// <summary>
-/// Die Infrastruktur einer Umgebung (docs/konzept-werkbank.md §4.5): Postgres immer, Redis bei <c>VersionIndex = Verwaltet</c>,
+/// Die Infrastruktur einer Umgebung (docs/konzept-werkbank.md §4.5): Postgres immer,
 /// Consul bei <c>Cluster = Consul</c>. Für <c>Verwaltet</c> erzeugt die Werkbank ein Docker-Compose-Projekt <c>cqrs-&lt;umgebung&gt;</c> und
 /// startet es — nur wenn der Dienst nicht schon erreichbar ist (ein lokal laufender Postgres auf demselben Port wird mitbenutzt).
 /// <c>Vorhanden</c> verwaltet sie nie.
@@ -18,11 +18,6 @@ public sealed class Infra(string slnRoot)
     {
         var pg = new NpgsqlConnectionStringBuilder(u.EventStore.Verbindung);
         var aus = new List<Dienst> { Pruefe("Postgres", pg.Host ?? "localhost", pg.Port, u.EventStore.Betrieb) };
-        if (u.VersionIndex.Betrieb != Betrieb.Aus)
-        {
-            var (h, p) = HostPort(u.VersionIndex.Endpunkt, 6379);
-            aus.Add(Pruefe("Redis", h, p, u.VersionIndex.Betrieb));
-        }
         if (u.Cluster.Art == ClusterArt.Consul)
         {
             var (h, p) = HostPort(u.Cluster.Consul.Replace("http://", "").Replace("https://", ""), 8500);
@@ -54,8 +49,8 @@ public sealed class Infra(string slnRoot)
         var b = new System.Text.StringBuilder("# Von der Werkbank erzeugt (docs/konzept-werkbank.md §4.5) — nicht von Hand ändern.\nservices:\n");
         foreach (var d in fehlend)
         {
-            var bild = d.Name switch { "Postgres" => "postgres:16-alpine", "Redis" => "redis:7-alpine", _ => "hashicorp/consul:1.19" };
-            b.AppendLine($"  {d.Name.ToLowerInvariant()}:\n    image: {bild}\n    ports: [\"127.0.0.1:{d.Port}:{(d.Name == "Postgres" ? 5432 : d.Name == "Redis" ? 6379 : 8500)}\"]");
+            var bild = d.Name switch { "Postgres" => "postgres:16-alpine", _ => "hashicorp/consul:1.19" };
+            b.AppendLine($"  {d.Name.ToLowerInvariant()}:\n    image: {bild}\n    ports: [\"127.0.0.1:{d.Port}:{(d.Name == "Postgres" ? 5432 : 8500)}\"]");
             if (d.Name == "Postgres") b.AppendLine("    environment: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres }");
             if (d.Name == "Consul") b.AppendLine("    command: agent -dev -client 0.0.0.0");
         }

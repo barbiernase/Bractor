@@ -14,7 +14,7 @@ set -euo pipefail
 WURZEL="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 cd "$WURZEL"
 
-# ── Infrastruktur: Postgres mit pg_stat_statements, eigener Redis für die Vermessung (der Störungslauf stoppt ihn) ──
+# ── Infrastruktur: Postgres mit pg_stat_statements ──
 docker start cqrs-postgres >/dev/null
 until docker exec cqrs-postgres pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
 if ! docker exec cqrs-postgres psql -U postgres -tAc "show shared_preload_libraries" | grep -q pg_stat_statements; then
@@ -29,10 +29,6 @@ if [ "$(docker exec cqrs-postgres psql -U postgres -tAc "show max_connections")"
   docker restart cqrs-postgres >/dev/null
   until docker exec cqrs-postgres pg_isready -U postgres >/dev/null 2>&1; do sleep 1; done
 fi
-if ! docker ps -a --format '{{.Names}}' | grep -qx cqrs-vermessung-redis; then
-  docker run -d --name cqrs-vermessung-redis -p 127.0.0.1:6390:6379 --restart unless-stopped redis:7-alpine >/dev/null
-fi
-docker start cqrs-vermessung-redis >/dev/null
 
 # ── Release-Build der Hosts und des Treibers (der Debug-Build der Werkbank bleibt unberührt) ──
 for p in Host.Grpc Host.Pruefdomaene Cqrs.Vermessung; do

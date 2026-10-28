@@ -48,18 +48,6 @@ public sealed class EventStoreKonfig
     public int BefehlsTimeoutSekunden { get; set; } = 30;
 }
 
-/// <summary>Der Version-Index (Redis, nicht autoritativ).</summary>
-public sealed class VersionIndexKonfig
-{
-    public Betrieb Betrieb { get; set; } = Betrieb.Verwaltet;
-    public string Endpunkt { get; set; } = "localhost:6379";
-    public int Datenbank { get; set; } = 1;
-    /// <summary>Schlüssel-Präfix — zwei Umgebungen auf einem Redis dürfen sich nie mischen.</summary>
-    public string Praefix { get; set; } = "";
-    /// <summary>Wie lange ein Schlüssel ohne neuen Schreibvorgang lebt (Stunden). Der Index trägt nur „Read your writes“ für Sekunden.</summary>
-    public int HaltbarkeitStunden { get; set; } = 24;
-}
-
 /// <summary>Der Cluster (Proto.Actor).</summary>
 public sealed class ClusterKonfig
 {
@@ -190,7 +178,6 @@ public sealed class UmgebungKonfig
 {
     public UmgebungKopf Umgebung { get; set; } = new();
     public EventStoreKonfig EventStore { get; set; } = new();
-    public VersionIndexKonfig VersionIndex { get; set; } = new();
     public ClusterKonfig Cluster { get; set; } = new();
     public SchreibpfadKonfig Schreibpfad { get; set; } = new();
     public LebenszyklusKonfig Lebenszyklus { get; set; } = new();
@@ -217,12 +204,12 @@ public sealed class UmgebungKonfig
 /// <summary>Die Abschnitte einer Umgebungs-Datei — ein anderer Abschnitt ist ein Start-Fehler.</summary>
 public static class UmgebungsAbschnitte
 {
-    public const string Umgebung = "Umgebung", EventStore = "EventStore", VersionIndex = "VersionIndex", Cluster = "Cluster",
+    public const string Umgebung = "Umgebung", EventStore = "EventStore", Cluster = "Cluster",
         Schreibpfad = "Schreibpfad", Lebenszyklus = "Lebenszyklus", Konsum = "Konsum", Transport = "Transport", Identitaeten = "Identitaeten", Quellen = "Quellen",
         Funktionen = "Funktionen", Dienste = "Dienste", Clients = "Clients", Konfig = "Konfig", Logging = "Logging";
 
     public static readonly IReadOnlyList<string> Alle =
-        [Umgebung, EventStore, VersionIndex, Cluster, Schreibpfad, Lebenszyklus, Konsum, Transport, Identitaeten, Quellen, Funktionen, Dienste, Clients, Konfig, Logging];
+        [Umgebung, EventStore, Cluster, Schreibpfad, Lebenszyklus, Konsum, Transport, Identitaeten, Quellen, Funktionen, Dienste, Clients, Konfig, Logging];
 }
 
 /// <summary>

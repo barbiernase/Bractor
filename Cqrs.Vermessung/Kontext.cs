@@ -80,8 +80,6 @@ internal sealed class Umgebungsdatei
     public string Verbindung => (string)Json["EventStore"]!["Verbindung"]!;
     public int EinblickPort => (int)Json["Transport"]!["EinblickPort"]!;
     public int GrpcPort => (int)Json["Transport"]!["GrpcPort"]!;
-    public string RedisEndpunkt => (string)Json["VersionIndex"]!["Endpunkt"]!;
-    public int RedisDatenbank => (int)Json["VersionIndex"]!["Datenbank"]!;
     public string Python => Ersetze((string?)Json["Umgebung"]!["Python"] ?? "python3");
     public string? Quellpfad => Json["Quellen"]?["DateiErkannt"]?["Pfad"] is { } p ? Ersetze((string)p!) : null;
     public string? Ausgabepfad => Json["Konfig"]?["BildaufbereitungKonfig"]?["AusgabePfad"] is { } p ? Ersetze((string)p!) : null;

@@ -5,7 +5,7 @@ namespace Cqrs.Vermessung;
 
 /// <summary>
 /// Störungslauf (§0.2), etwa drei Minuten: S1 (zwei Paare je Sekunde) und S5 (8 Sender) gleichzeitig, dabei Störungen — Host der
-/// Beispieldomäne hart beenden und neu starten, Redis (Versions-Index) 10 s stoppen, Host der Prüfdomäne hart beenden. Jeder harte Abbruch
+/// Beispieldomäne hart beenden und neu starten, Host der Prüfdomäne hart beenden. Jeder harte Abbruch
 /// verliert alle Weckrufe im Flug. Clients wiederholen mit derselben CommandId (§11.3). Danach dieselbe
 /// Exactly-once-Prüfung wie in der Messung.
 /// </summary>
@@ -53,10 +53,6 @@ internal static class Stoerungslauf
         await Bei(0.2, "Host Beispieldomäne hart beendet (SIGKILL), Neustart nach 3 s", async () =>
         {
             beispiel.Host.Toete(); await Task.Delay(3000); await beispiel.Host.StarteAsync();
-        });
-        await Bei(0.45, "Redis (Versions-Index) 10 s gestoppt", async () =>
-        {
-            Werkzeuge.Laufe("docker", "stop cqrs-vermessung-redis"); await Task.Delay(10_000); Werkzeuge.Laufe("docker", "start cqrs-vermessung-redis");
         });
         await Bei(0.7, "Host Prüfdomäne hart beendet (SIGKILL), Neustart nach 3 s", async () =>
         {

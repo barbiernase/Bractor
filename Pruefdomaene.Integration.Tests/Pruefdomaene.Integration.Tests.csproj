@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Ebene 2 für die PRÜFDOMÄNE (docs/13 T-1, docs/12): Framework-Verhalten domänenneutral gegen ECHTES Marten/Consul/Redis —
+  <!-- Ebene 2 für die PRÜFDOMÄNE (docs/13 T-1, docs/12): Framework-Verhalten domänenneutral gegen ECHTES Marten/Consul —
        Prozess-Diamant mit Kompensation, Fan-out mit Count-Join, Snapshot, Upcasting, Marking-Cursor-Äquivalenz. Ein Prozess fährt eine
        Anwendung: dieses Testprojekt meldet nur Pruefdomaene.Laufzeit an (AnwendungAnmelden.cs). Sequentiell (xunit.runner.json). -->
   <PropertyGroup>
@@ -24,7 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Je Klasse ein echter Cluster bzw. ein eigenes Schema; parallel konkurrierten sie um Postgres/Consul/Redis. -->
+    <!-- Je Klasse ein echter Cluster bzw. ein eigenes Schema; parallel konkurrierten sie um Postgres/Consul. -->
     <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

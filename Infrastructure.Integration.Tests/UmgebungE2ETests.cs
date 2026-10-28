@@ -16,10 +16,10 @@ using Domain.Laufzeit;
 namespace Infrastructure.Integration.Tests;
 
 /// <summary>
-/// Ebene 2 — UMGEBUNGEN gegen echtes Postgres/Redis (docs/konzept-werkbank.md §4, Werkbank P2):
+/// Ebene 2 — UMGEBUNGEN gegen echtes Postgres (docs/konzept-werkbank.md §4, Werkbank P2):
 /// <list type="bullet">
 /// <item>das Siegel: ein Sim-Host startet nicht gegen eine Datenbank mit Siegel <c>Prod</c> (und umgekehrt);</item>
-/// <item>zwei Umgebungen parallel auf einer Maschine stören sich nicht — eigene DB, eigenes Redis-Präfix, eigener Cluster (Einzelknoten);</item>
+/// <item>zwei Umgebungen parallel auf einer Maschine stören sich nicht — eigene DB, eigener Cluster (Einzelknoten);</item>
 /// <item>der Uhr-Versatz einer Sim-Umgebung macht eine Frist früher fällig; in Prod wirkt er nie.</item>
 /// </list>
 /// </summary>
@@ -31,7 +31,6 @@ public class UmgebungE2ETests
     {
         Umgebung = new UmgebungKopf { Name = name, Art = art },
         EventStore = new EventStoreKonfig { Verbindung = Verbindung, Datenbank = db, Schema = "es" },
-        VersionIndex = new VersionIndexKonfig { Praefix = name + ":" },
         Cluster = new ClusterKonfig { Art = ClusterArt.Einzelknoten, Name = "cqrs-" + name },
         Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = 0 },
         Funktionen = new(StringComparer.Ordinal)
@@ -170,11 +169,6 @@ public class UmgebungE2ETests
                 "Umgebung A hat den Command nicht verarbeitet.");
             (await esB.ReadStreamAsync(paar, 0, default)).Should().BeEmpty("Umgebung B hat eine eigene Datenbank");
 
-            var redis = hostA.Services.GetRequiredService<StackExchange.Redis.IConnectionMultiplexer>().GetDatabase(1);
-            await Warte(async () => await redis.KeyExistsAsync($"{a.Umgebung.Name}:agg:{paar}"), TimeSpan.FromSeconds(10),
-                "Der Version-Index von A steht nicht unter A's Präfix.");
-            (await redis.KeyExistsAsync($"{b.Umgebung.Name}:agg:{paar}")).Should().BeFalse("B's Präfix bleibt leer");
-            (await redis.KeyExistsAsync($"agg:{paar}")).Should().BeFalse("ohne Präfix schreibt keine Umgebung");
         }
         finally
         {

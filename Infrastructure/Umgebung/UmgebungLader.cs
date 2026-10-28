@@ -81,7 +81,6 @@ public static partial class UmgebungLader
         {
             Umgebung = Abschnitt<UmgebungKopf>(konfig, UmgebungsAbschnitte.Umgebung),
             EventStore = Abschnitt<EventStoreKonfig>(konfig, UmgebungsAbschnitte.EventStore),
-            VersionIndex = Abschnitt<VersionIndexKonfig>(konfig, UmgebungsAbschnitte.VersionIndex),
             Cluster = Abschnitt<ClusterKonfig>(konfig, UmgebungsAbschnitte.Cluster),
             Schreibpfad = Abschnitt<SchreibpfadKonfig>(konfig, UmgebungsAbschnitte.Schreibpfad),
             Lebenszyklus = Abschnitt<LebenszyklusKonfig>(konfig, UmgebungsAbschnitte.Lebenszyklus),

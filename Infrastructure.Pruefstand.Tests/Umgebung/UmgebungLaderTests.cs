@@ -42,7 +42,6 @@ public class UmgebungLaderTests
         var (k, verz) = Datei("sim-t", """
             { "Umgebung": { "Name": "sim-t", "Art": "Sim" },
               "EventStore": { "Verbindung": "Host=db;Password=${env:CQRS_TEST_PW}", "Datenbank": "cqrs_sim_${branch}" },
-              "VersionIndex": { "Betrieb": "Aus", "Praefix": "sim:${branch}:" },
               "Cluster": { "Art": "Consul", "Name": "c-${branch}", "Rolle": "Mitglied" },
               "Funktionen": { "IX": { "Laufort": "Extern" } } }
             """);
@@ -52,8 +51,6 @@ public class UmgebungLaderTests
             u.Umgebung.Art.Should().Be(UmgebungsArt.Sim);
             u.EventStore.Datenbank.Should().Be("cqrs_sim_feature_werkbank_p2", "${branch} wird DB-tauglich");
             UmgebungLader.Verbindung(u.EventStore).Should().Contain("Password=geheim").And.Contain("Database=cqrs_sim_feature_werkbank_p2");
-            u.VersionIndex.Betrieb.Should().Be(Betrieb.Aus);
-            u.VersionIndex.Praefix.Should().Be("sim:feature_werkbank_p2:");
             u.Cluster.Art.Should().Be(ClusterArt.Consul);
             u.Cluster.Rolle.Should().Be(KnotenRolle.Mitglied);
             u.Funktionen["IX"].Laufort.Should().Be(FunktionsLaufort.Extern);

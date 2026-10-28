@@ -1,7 +1,7 @@
 namespace Cqrs.Vermessung;
 
 /// <summary>
-/// Eine Anwendung im echten Host: optional frische DB (E3) und frischer Redis-Index, Host-Prozess bereit, Lese-Strom des Logs, JSON-Eingang,
+/// Eine Anwendung im echten Host: optional frische DB (E3), Host-Prozess bereit, Lese-Strom des Logs, JSON-Eingang,
 /// Uhr-Versatz. CPU und RSS des Hosts (und seiner Worker) schreibt <see cref="Ressourcen"/> mit.
 /// </summary>
 internal sealed class Anwendungslauf : IAsyncDisposable
@@ -38,7 +38,6 @@ internal sealed class Anwendungslauf : IAsyncDisposable
         if (zuruecksetzen)
         {
             await db.ZuruecksetzenAsync();
-            Werkzeuge.LeereRedis(u.RedisEndpunkt, u.RedisDatenbank);
             if (u.Quellpfad is { } q)
             {
                 var basis = Path.GetDirectoryName(q)!;

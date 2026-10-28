@@ -24,7 +24,7 @@ namespace Infrastructure.Integration.Tests;
 /// Serializer für die rohen CLR-Records). Dass ALLE Ids einer Charge von N=12 lokal blieben, ist praktisch
 /// ausgeschlossen ((1/2)^12) — grün = Serialisierung funktioniert cross-node.
 ///
-/// Braucht Postgres (5432), Redis (6379), Consul (8500). Sequentiell laufen lassen.
+/// Braucht Postgres (5432), Consul (8500). Sequentiell laufen lassen.
 /// </summary>
 public class TwoNodeCommandDispatchTests
 {

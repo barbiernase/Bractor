@@ -96,7 +96,7 @@ if (-not (Test-Path $WatchPath)) {
 # ─── 1. Infrastruktur starten ───
 
 Write-Host ""
-Write-Host "[1] Starte Infrastruktur (PostgreSQL + Redis + Consul)..." -ForegroundColor Yellow
+Write-Host "[1] Starte Infrastruktur (PostgreSQL + Consul)..." -ForegroundColor Yellow
 docker compose -f docker-compose.infrastructure.yml up -d
 
 # ─── 2. Warten bis alles bereit ist ───
@@ -108,15 +108,6 @@ Write-Host -NoNewline "  PostgreSQL..."
 for ($i = 0; $i -lt 30; $i++) {
     $ready = docker exec cqrs-postgres pg_isready -U postgres 2>$null
     if ($LASTEXITCODE -eq 0) { break }
-    Write-Host -NoNewline "."
-    Start-Sleep 1
-}
-Write-Host " OK" -ForegroundColor Green
-
-Write-Host -NoNewline "  Redis..."
-for ($i = 0; $i -lt 30; $i++) {
-    $pong = docker exec cqrs-redis redis-cli ping 2>$null
-    if ($pong -match "PONG") { break }
     Write-Host -NoNewline "."
     Start-Sleep 1
 }

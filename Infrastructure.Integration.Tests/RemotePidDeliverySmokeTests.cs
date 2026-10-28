@@ -25,7 +25,7 @@ namespace Infrastructure.Integration.Tests;
 /// Produktionscode, er isoliert nur den Transport. Node B spawnt eine Probe lokal (Root.Spawn,
 /// wie die echten Receiver); Node A sendet der Probe-PID ein <c>Wake</c>; die Probe muss es empfangen.
 ///
-/// Braucht Postgres (5432), Redis (6379), Consul (8500). Sequentiell.
+/// Braucht Postgres (5432), Consul (8500). Sequentiell.
 /// </summary>
 public class RemotePidDeliverySmokeTests
 {

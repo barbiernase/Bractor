@@ -10,12 +10,6 @@
     "Datenbank": "cqrs_sim_${branch}",
     "Schema": "es"
   },
-  "VersionIndex": {
-    "Betrieb": "Verwaltet",
-    "Endpunkt": "localhost:6379",
-    "Datenbank": 1,
-    "Praefix": "sim:${branch}:"
-  },
   "Cluster": {
     "Art": "Einzelknoten",
     "Name": "cqrs-sim-${branch}"

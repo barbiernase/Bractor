@@ -19,7 +19,7 @@ using Domain.Laufzeit;
 namespace Infrastructure.Integration.Tests;
 
 /// <summary>
-/// Ebene 2 — DURCHSPIELEN gegen echtes Postgres/Redis (docs/konzept-werkbank.md §6, Werkbank P5): der JSON-Eingang des Hosts.
+/// Ebene 2 — DURCHSPIELEN gegen echtes Postgres (docs/konzept-werkbank.md §6, Werkbank P5): der JSON-Eingang des Hosts.
 /// <list type="bullet">
 /// <item>Als Akteur handeln: ein Token → Akteur-Tor → Aggregat (Event im Log, Ablehnung als Ablehnungs-Event), Verweigerung ohne Befugnis
 ///   bzw. ohne gültiges Token, Query an den Reader;</item>
@@ -40,7 +40,6 @@ public class EingangE2ETests
         {
             Umgebung = new UmgebungKopf { Name = name, Art = UmgebungsArt.Sim },
             EventStore = new EventStoreKonfig { Verbindung = Verbindung, Datenbank = "cqrs_it_eingang_" + Guid.NewGuid().ToString("N")[..8], Schema = "es" },
-            VersionIndex = new VersionIndexKonfig { Praefix = name + ":" },
             Cluster = new ClusterKonfig { Art = ClusterArt.Einzelknoten, Name = "cqrs-" + name },
             Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = FreierPort(), JsonEingang = true },
             Funktionen = new(StringComparer.Ordinal)
@@ -222,7 +221,6 @@ public class EingangE2ETests
         {
             Umgebung = new UmgebungKopf { Name = name, Art = UmgebungsArt.Sim },
             EventStore = new EventStoreKonfig { Verbindung = Verbindung, Datenbank = "cqrs_it_wiederholung_" + Guid.NewGuid().ToString("N")[..8], Schema = "es" },
-            VersionIndex = new VersionIndexKonfig { Praefix = name + ":" },
             Cluster = new ClusterKonfig { Art = ClusterArt.Einzelknoten, Name = "cqrs-" + name },
             Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = FreierPort(), JsonEingang = true },
             Funktionen = new(StringComparer.Ordinal)

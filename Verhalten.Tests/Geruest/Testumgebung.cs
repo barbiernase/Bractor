@@ -67,7 +67,6 @@ public sealed class Testumgebung
         {
             ["Umgebung"] = new JsonObject { ["Name"] = Name, ["Art"] = "Sim" },
             ["EventStore"] = new JsonObject { ["Betrieb"] = "Vorhanden", ["Verbindung"] = Verbindung, ["Datenbank"] = Datenbank, ["Schema"] = Schema },
-            ["VersionIndex"] = new JsonObject { ["Betrieb"] = "Vorhanden", ["Endpunkt"] = "localhost:6379", ["Datenbank"] = 3, ["Praefix"] = Name + ":" },
             ["Cluster"] = ConsulCluster is { } c
                 ? new JsonObject { ["Art"] = "Consul", ["Name"] = c, ["Consul"] = "localhost:8500", ["AdvertisedHost"] = "localhost" }
                 : new JsonObject { ["Art"] = "Einzelknoten", ["Name"] = "cqrs-" + Name },

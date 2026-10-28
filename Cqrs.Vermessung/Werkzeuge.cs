@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Cqrs.Vermessung;
 
-/// <summary>Kleine Helfer ohne Bezug zur Messung: Repo, Git, Prozesse, Redis, Rechner.</summary>
+/// <summary>Kleine Helfer ohne Bezug zur Messung: Repo, Git, Prozesse, Rechner.</summary>
 internal static class Werkzeuge
 {
     /// <summary>Die Wurzel des Repos (das Verzeichnis mit der .sln), gesucht vom Programm aufwärts.</summary>
@@ -29,26 +29,6 @@ internal static class Werkzeuge
     }
 
     public static string Git(string wurzel, string argumente) => Laufe("git", argumente, wurzel);
-
-    /// <summary>Leert eine Redis-Datenbank (RESP über TCP, ohne Client-Bibliothek).</summary>
-    public static void LeereRedis(string endpunkt, int datenbank)
-    {
-        var (host, port) = (endpunkt.Split(':')[0], int.Parse(endpunkt.Split(':')[1]));
-        using var c = new TcpClient(host, port);
-        var s = c.GetStream();
-        var befehl = Encoding.ASCII.GetBytes($"SELECT {datenbank}\r\nFLUSHDB\r\n");
-        s.Write(befehl);
-        s.ReadTimeout = 5000;
-        var antwort = new StringBuilder();
-        var puffer = new byte[256];
-        while (antwort.ToString().Split("+OK").Length < 3)
-        {
-            var n = s.Read(puffer, 0, puffer.Length);
-            if (n <= 0) break;
-            antwort.Append(Encoding.ASCII.GetString(puffer, 0, n));
-            if (antwort.ToString().Contains('-')) throw new InvalidOperationException($"Redis {endpunkt}: {antwort}");
-        }
-    }
 
     public static string Rechner()
     {

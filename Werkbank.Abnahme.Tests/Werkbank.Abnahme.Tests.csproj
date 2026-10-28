@@ -14,7 +14,6 @@
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
     <!-- Aufräumen der eigenen Sim-DB und der eigenen Schlüssel im Versions-Index. -->
     <PackageReference Include="Npgsql" Version="9.0.4" />
-    <PackageReference Include="StackExchange.Redis" Version="2.10.14" />
   </ItemGroup>
 
   <ItemGroup>

@@ -30,7 +30,6 @@ public class LeseseitenStandE2ETests
     {
         Umgebung = new UmgebungKopf { Name = name, Art = UmgebungsArt.Sim },
         EventStore = new EventStoreKonfig { Verbindung = Verbindung, Datenbank = db, Schema = "es" },
-        VersionIndex = new VersionIndexKonfig { Praefix = name + ":" },
         Cluster = new ClusterKonfig { Art = ClusterArt.Einzelknoten, Name = "cqrs-" + name },
         Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = 0 },
         Funktionen = new(StringComparer.Ordinal)

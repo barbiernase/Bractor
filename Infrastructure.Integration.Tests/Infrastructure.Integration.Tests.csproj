@@ -27,7 +27,7 @@
 
   <ItemGroup>
     <!-- Diese Tests fahren je Klasse einen ECHTEN Consul-Cluster hoch; parallel würden 4
-         Cluster gleichzeitig um Postgres/Consul/Redis konkurrieren (Timing-Flakiness). -->
+         Cluster gleichzeitig um Postgres/Consul konkurrieren (Timing-Flakiness). -->
     <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 

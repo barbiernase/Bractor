@@ -23,7 +23,6 @@ namespace Infrastructure.Aggregate.ActorSystem;
 ///   Der Actor trennt persistent/transient und meldet Ablehnungen per Targeted Delivery (verlierbar, ohne zu warten).
 ///   CommandFailed bleibt für technische Fehler (catch-Block).
 ///
-/// ★ Phase 4: IVersionTracker (optional) für Redis-basierte Stale Detection.
 /// ★ Das <see cref="CommandResult"/> trägt nur Ausgang, Versionen und Ablehnung; die Events stehen im Log.
 /// ★ Lebenszyklus aus dem Rahmen (<see cref="RahmenActor"/>): Passivierung nur, wenn kein Commit läuft und kein Command wartet.
 /// </summary>
@@ -32,7 +31,6 @@ public abstract class AggregateActorBase<TState> : RahmenActor
 {
     private readonly IAggregateHandlerFactory _handlerFactory;
     private readonly IEventStoreRepository _eventStore;
-    private readonly IVersionTracker? _versionTracker;
     private readonly BrokerPublisher? _publisher;
     // Das Hinweis-Netz (Plan Pub/Sub-Neustrukturierung §2.9): ein Hinweis aus dem Decide (eine Ablehnung), den eine Funktion hört, geht direkt an
     //   ihre Adresse — ohne Log, ohne Broker, höchstens einmal. Null = keine Funktion hört Hinweise.
@@ -81,7 +79,6 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     protected AggregateActorBase(
         IAggregateHandlerFactory handlerFactory,
         IEventStoreRepository eventStore,
-        IVersionTracker? versionTracker = null,
         BrokerPublisher? publisher = null,
         ILogger? logger = null,
         ISnapshotStore? snapshots = null,
@@ -96,7 +93,6 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         _hinweisNetz = hinweisNetz;
         _handlerFactory = handlerFactory;
         _eventStore = eventStore;
-        _versionTracker = versionTracker;
         _publisher = publisher;
         _logger = logger;
         _snapshots = snapshots;
@@ -623,7 +619,6 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         }
         if (geschrieben)
         {
-            await TryTrackVersionAsync();
             TrySnapshotOnThreshold();
         }
     }
@@ -840,8 +835,6 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                 }
                 _verarbeiteteCommandIds.Add(cmdEnvelope.CommandId);
 
-                // 7. ★ Version-Tracking in Redis (nicht-kritisch)
-                await TryTrackVersionAsync();
 
                 // 7b. ★ Snapshot bei Schwellwert (best-effort, out-of-band): verkürzt künftige Rehydration.
                 TrySnapshotOnThreshold();
@@ -1005,31 +998,6 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     {
         var json = System.Text.Json.JsonSerializer.Serialize(state);
         return System.Text.Json.JsonSerializer.Deserialize<TState>(json)!;
-    }
-
-    /// <summary>
-    /// ★ Phase 4: Aktualisiert die Version in Redis.
-    /// Nicht-kritisch: Redis-Fehler unterbrechen den Command-Flow NICHT.
-    /// </summary>
-    private async Task TryTrackVersionAsync()
-    {
-        if (_versionTracker == null)
-            return;
-
-        try
-        {
-            await _versionTracker.TrackAsync(
-                _id,
-                typeof(TState).Name,
-                _state!.Version);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex,
-                "Version tracking failed for {AggregateType}/{AggregateId}. " +
-                "Redis will catch up on next successful command.",
-                typeof(TState).Name, _id);
-        }
     }
 
     private Task PublishEventsAsync(List<IEvent> events, CommandEnvelope cmdEnvelope, int baseVersion)

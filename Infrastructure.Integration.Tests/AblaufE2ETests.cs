@@ -22,7 +22,7 @@ using OpenCvSharp;
 namespace Infrastructure.Integration.Tests;
 
 /// <summary>
-/// Ebene 2 — die ABLÄUFE der Beispieldomäne gegen echtes Marten/Consul/Redis (Plan Pub/Sub-Neustrukturierung Phase 4): Aggregate entscheiden,
+/// Ebene 2 — die ABLÄUFE der Beispieldomäne gegen echtes Marten/Consul (Plan Pub/Sub-Neustrukturierung Phase 4): Aggregate entscheiden,
 /// Funktionen tragen die Kanten Event → Command, Fristen tragen die Zeit — ohne Dirigent. Der Bildeingang läuft über die ganze Kette —
 ///
 ///   Quell-Nachricht ──QuellEingang (StartStream je Kennung, Commit gemeldet)──▶ ƒ IBildaufbereitung (OpenCV im Host bzw. Python-Worker über

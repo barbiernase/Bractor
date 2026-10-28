@@ -1,5 +1,5 @@
 # ═══════════════════════════════════════════════════════════════════
-# Echtes Multi-Node-Deployment: EIN Consul + Postgres + Redis + DREI
+# Echtes Multi-Node-Deployment: EIN Consul + Postgres + DREI
 # gRPC-Cluster-Nodes (grpc1/2/3). (Der frühere LoadHarness-Verifikationsnode
 # ist mit dem Projekt entfernt, Commit fb07f5e.)
 #
@@ -35,8 +35,6 @@ x-infra-deps: &infra-deps
     condition: service_healthy
   postgres:
     condition: service_healthy
-  redis:
-    condition: service_healthy
 
 services:
 
@@ -57,17 +55,6 @@ services:
       POSTGRES_PASSWORD: postgres
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
-  redis:
-    image: redis:7-alpine
-    # Der Version-Index ist verlierbar (Read your writes): Schlüssel laufen ab (VersionIndex.HaltbarkeitStunden), und wird es doch eng,
-    #   verdrängt Redis die ältesten mit Ablauf, statt den Speicher des Rechners zu füllen.
-    command: redis-server --maxmemory 512mb --maxmemory-policy volatile-lru
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
       retries: 10
