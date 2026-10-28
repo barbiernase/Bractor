@@ -19,10 +19,13 @@ suite() {   # suite <Projekt> [Filter]
   local p=$1 filter=${2:-} t0 aus
   t0=$(zeit)
   aus=$(dotnet test "$p/$p.csproj" --no-build ${filter:+--filter "$filter"} --logger "console;verbosity=normal" 2>&1)
-  local summe; summe=$(grep -E "^(Passed|Failed)!" <<<"$aus" | tail -1 | sed -E 's/ - [^ ]+\.dll.*//')
-  [ -z "$summe" ] && summe="kein Ergebnis (Build? Filter?)"
+  # Abschluss bei „normal“: „Test Run Successful./Failed.“ und je eine Zeile Total/Passed/Failed/Skipped.
+  local zahl; zahl() { grep -E "^\s+$1( tests)?: " <<<"$aus" | tail -1 | grep -oE "[0-9]+" | head -1; }
+  local gesamt bestanden rot ueber; gesamt=$(zahl Total); bestanden=$(zahl Passed); rot=$(zahl Failed); ueber=$(zahl Skipped)
+  local summe="kein Ergebnis (Build? Filter?)"
+  [ -n "$gesamt" ] && summe="${bestanden:-0} grün, ${rot:-0} rot, ${ueber:-0} übersprungen von $gesamt"
   ZEILEN+=("$(printf '%-42s %4ss  %s' "$p${filter:+ [$filter]}" "$(( $(zeit)-t0 ))" "$summe")")
-  if ! grep -q "^Passed!" <<<"$aus"; then
+  if ! grep -q "Test Run Successful" <<<"$aus"; then
     ROT=1
     echo "── rot: $p"
     grep -E "^\s+Failed [A-Za-z]|Error Message:" -A3 <<<"$aus" | grep -vE "^\s+at |^--$" | cut -c1-300 | head -40
