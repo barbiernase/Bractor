@@ -9,7 +9,8 @@ Hinweis-Netz; davor Phase 4: Dirigent, Reaktion, Fluss-DSL, Katalog-Form und Han
 
 **Umbau (2026-10-26):** [plan-pubsub-neustrukturierung.md](plan-pubsub-neustrukturierung.md) löst Broker, Signale, Prozess-Manager, Fluss- und
 Prozess-Sprache, Handle-/Trigger-Welt und den Redis-Versionsindex ab. Mit Phase 4 sind W11-1, W11-2, PF-4b, PF-25, PF-26, P2-5, P3-3, FB-2, FB-3
-und VM-1 erledigt (§13.6), mit Phase 4b FB-1 (Hinweise erreichen Funktionen über das Hinweis-Netz); PF-6, PF-7, PF-10, PF-13 und AK-1 werden mit den
+und VM-1 erledigt (§13.6), mit Phase 4b FB-1 (Hinweise erreichen Funktionen über das Hinweis-Netz), mit Phase 5 die Marken im Log (keine
+eigene ID; Noop und Ablehnung nur noch in der Inbox, eine Version je Aggregat, §13.6); PF-6, PF-7, PF-10, PF-13 und AK-1 werden mit den
 späteren Phasen abgeschlossen oder umgeschrieben. Die Befunde der Actor-Praxis vom 2026-10-18 stehen im Plan §1.7.
 
 | ID | Kurz | Prio |
@@ -29,6 +30,7 @@ späteren Phasen abgeschlossen oder umgeschrieben. Die Befunde der Actor-Praxis 
 | PF-10 | Datei-Treiber meldet eine Datei nach der anderen ins Log (Rückstau): das Melde-Tempo ist die Decke von S1 — Entscheidung offen | P2 |
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16; seit Phase 3 dazu die Uhr (eine Abfrage je Sekunde) und je Funktion und Partition ein Poll | P3 |
 | FB-8 | „Python-Funktion hört einen Hinweis“ ist nur geteilt nachgewiesen: das SDK (pytest, Antwort als Ganzes) und der Weg des Servers über dieselbe Sitzung (`BausteinSitzung` hinter dem Hand-Ausführer) — kein echter Python-Prozess über gRPC, weil keine Anwendung mit Leitung eine Funktion draußen hat, die einen Hinweis hört | P2 |
+| FB-10 | Die Version in einer Query-Antwort ist die des letzten Events, für das die Projektion schrieb (Versions-Index): schreibt sie für das letzte Event eines Streams nicht (eine Frist nach `TrainingBegonnen`, ein Event, das sie nicht hört), kennt ein Client, der das Aggregat nur aus der Antwort kennt, eine zu kleine Version — sein Command scheitert an der OCC (die Antwort `CommandFailed` nennt die richtige), und die Lese-nach-Schreiben-Prüfung fasst bis zu dreimal nach. Löst der Stand je Id aus dem Fortschritt der Projektion (Plan Phase 7/8) | P2 |
 | FB-9 | Wechselt die Zustands-Ablage einer Funktion (Datei ↔ Dokument) oder geht das Verzeichnis verloren, lädt die Aktivierung den gesicherten Zustand nicht mehr (lauter Fehler, kein stiller Neubeginn); eine Migration oder ein bewusster Neubeginn fehlt | P3 |
 | FB-5 | Kreise Funktion ↔ Aggregat: keine Build-Prüfung (R6 des Plans). Ein Kreis ist der Normalfall eines Ablaufs (Vorgang → Funktion → Vorgang); ob und wie ein Kreis ohne fortschreitenden Zustand erkannt werden soll, ist offen | P3 |
 | FB-6 | Quell-Nachricht vom Client nur über den JSON-Eingang: das Trigger-Protokoll der Leitung ist entfernt, der gRPC-Weg (und die SDKs) kommt mit Plan Phase 7 | P2 |
@@ -50,7 +52,7 @@ späteren Phasen abgeschlossen oder umgeschrieben. Die Befunde der Actor-Praxis 
 | W3-1 | Ableitungen im Editor-JS (Karten-Ids, Hör-Menge, Lambda-Parameter, Auto-Zuordnung, Kardinalität) | P2 |
 | WB-1 | Werkbank: Geste p50 unter Fremdlast 346–470 ms (Ziel 300 ms), LLM-Kontexte kalt, CLI `--schreiben`, Renamer ohne String-Literale | P2 |
 | WB-4 | Die Werkbank kennt genau eine Anwendung (`StandardWurzel`, `ServerHost`); eine Anwendung anlegen ist nicht beschrieben — Entscheidung offen | P2 |
-| WB-5 | Der Einblick der Werkbank kennt keinen fachlichen Zustand „fertig“ mehr (früher `ProzessBeendet`): ein Vorgang ist gescheitert (Ablehnung), läuft oder ruht | P3 |
+| WB-5 | Der Einblick der Werkbank kennt keinen fachlichen Zustand „fertig“ mehr (früher `ProzessBeendet`) und seit Phase 5 auch kein „gescheitert“ (eine Ablehnung steht nicht im Log, sie kommt nur als verlierbarer Spur-Hinweis): ein Vorgang läuft oder ruht | P3 |
 | WZ-1 | Prüf-Lücken der Werkzeuge: Grammatik-Gate bestätigt sich selbst, Fixpunkt ohne Akteure/Verträge/Clients/Funktionen/Dienste, Sonde ohne `SendeJe`/Count-Join/Kompensation/`IMensch`/`IstClient` | P2 |
 | AK-1 | Akteure/Clients: `als` im Envelope, Funktionen über C# tragen, Anmeldung je Person | P2 |
 | P2-6 | Schreibpfad: paralleler Drain skaliert sublinear | P2 |
@@ -382,6 +384,13 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 
 ## 13.6 Erledigt (früher hier offen)
 
+- **Phase 5 Pub/Sub-Neustrukturierung (2026-10-28, Messserver; docs/03 §3.2/§3.3, docs/04 §4.6, docs/11 §11.2/§11.3):** keine Marken im Log —
+  `KommandoVerarbeitet`/`KommandoAbgelehnt` entfallen. Ein Noop und eine Ablehnung schreiben nur ihre Quittung in die Inbox-Tabelle; die Version
+  bleibt, ein Aggregat hat eine Version (die Zahl seiner Events), eine Ablehnung legt keinen Stream mehr an. Weil kein Append mehr die Version
+  einer solchen Entscheidung prüft, prüft die Quittung ohne Events den Kopf ihres Streams in derselben Transaktion (`cqrs_kopf`, sperrt die
+  Kopfzeile): eine zweite Aktivierung auf veraltetem Stand kann nicht dauerhaft ablehnen. Beim Client eine Version je Aggregat, auch aus Antworten
+  (`VersioningModule`) — ein Aggregat, das er nur aus einer Antwort kennt, wird mit OCC geschrieben statt ungeprüft. Grenze: FB-10. Nebenbei der
+  Extractor: `Frist` im Decide-Ausgang über den Namen statt über die Symbol-Identität (flackernder `--check`, docs/12 §12.2).
 - **Phase 4b Pub/Sub-Neustrukturierung (2026-10-28, Messserver; docs/04 §4.4, docs/11 §11.6/§11.10):** Funktionen sind Actors mit gekapseltem,
   durablem Zustand (`IZustand<T>`, gesichert mit der Position, eine Adresse als Code-Fakt), Ressourcen je Aktivierung (Umsetzung und Dienste im
   DI-Bereich der Aktivierung, geschlossen beim Stoppen) und einem hart verdrahteten Hinweis-Netz ohne Log und Broker (Routing-Tabelle aus dem

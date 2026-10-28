@@ -60,8 +60,10 @@ Kein `dynamic`; Routing über Typen (`Dictionary<Type, …>`, Lookup per `messag
   CorrelationId, `PostToSyncContext` → `bus.Publish` auf dem UI-Thread.
 - **`QueryBridge`** — abonniert je Query-Typ des Vertrags, ruft `proxy.QueryAsync<TResponse>`, trackt `Deps` im `VersioningModule`,
   publiziert die Antwort wieder auf den Bus.
-- **`VersioningModule`** — trackt Aggregat-Versionen (OCC) aus Event-`AggregateVersion` und Query-`Deps`; Read-Your-Writes: gerade
-  beschriebene Aggregate gehen als `expected_fresh_ids` mit den nächsten Queries mit (`MarkWritten`).
+- **`VersioningModule`** — **eine** Version je Aggregat (ohne Marken im Log ist sie die Zahl seiner Events, Plan Pub/Sub-Neustrukturierung
+  Phase 5), monoton aus Event-Pushes (Kopf nach dem Commit, sonst die Version des Events) und Query-`Deps`; sie ist die `ExpectedVersion` des
+  nächsten Commands und das Ziel der Read-Your-Writes-Prüfung der `QueryBridge`; gerade beschriebene Aggregate gehen als `expected_fresh_ids`
+  mit den nächsten Queries mit (`MarkWritten`).
 
 **Bus** (`Bus/ClientBus.cs`): `IBus` mit `Dictionary<Type, List<Handler>>`. Transaktionsmodell: `IsDispatching` + `DispatchCompleted`
 (genau einmal pro Root-Publish), Tiefen-Guard (`MaxDepth` 16 → Zyklus-Erkennung).
@@ -93,12 +95,14 @@ Der Client sendet at-least-once; der Server macht daraus genau einen Effekt.
 - **Server: Inbox vor OCC** (`Infrastructure/Aggregate/ActorSystem/CommandVorpruefung.cs`): eine bereits verarbeitete `CommandId` ergibt
   idempotent denselben Erfolg, eine bereits abgelehnte dieselbe Ablehnung; erst ein frischer Command läuft in die OCC-Prüfung. So liest ein
   wiederholter, längst erfolgreicher Command keinen falschen Versionskonflikt.
-- **`ExpectedVersion`:** `ICreationCommand` → 0; sonst die aus Event-Pushes bekannte Stream-Head-Version (`CommandModus.Client`); ist keine
-  bekannt (Aggregat nur per Query geladen), geht `-1` mit — der Server behandelt das wie einen emittierten Command (keine OCC, nur Inbox-Dedup).
+- **`ExpectedVersion`:** `ICreationCommand` → 0; sonst die bekannte Version aus Pushes oder Antworten (`CommandModus.Client`) — auch ein
+  Aggregat, das der Client nur aus einer Antwort kennt, wird gegen ihren Stand geprüft; ist keine bekannt, geht `-1` mit — der Server behandelt das
+  wie einen emittierten Command (keine OCC, nur Inbox-Dedup). Grenze: die Version einer Antwort stammt vom letzten Event, für das die Projektion
+  schrieb (docs/13 FB-10).
 - **`CommandFailed`** (`Abstractions/CommandFailed.cs`, `ITransientEvent`, nie im Log) geht gezielt an die auslösende Sitzung: bei Versionskonflikt,
   technischem Fehler oder falschem Ziel im Aggregat (`AggregateActorBase`), bei Ablehnung am Akteur-Tor und wenn der Dispatcher nach allen
   begrenzten Platzierungs-Versuchen aufgibt (`AggregateDispatcher`, dazu Dead-Letter). Eine fachliche Ablehnung ist dagegen ein eigenes
-  transientes Event aus dem OneOf von Decide (`ITransientEvent`, im Log steht nur die Inbox-Marke) und geht ebenfalls gezielt an die
+  transientes Event aus dem OneOf von Decide (`ITransientEvent`, nicht im Log; die Inbox-Tabelle hält „abgelehnt“) und geht ebenfalls gezielt an die
   Sitzung; auch sie quittiert den Command. Jede Sitzung ist automatisch auf `CommandFailed` abonniert.
 - **Client-Events** auf dem Bus (`Connection/ConnectionEvents.cs`): `CommandSendFailed` (nicht verbunden bzw. Senden warf),
   `CommandUnbestaetigt` (nach allen Versuchen keine Antwort — Ausgang **unbekannt**, nicht „fehlgeschlagen“; erneutes Senden ist sicher),

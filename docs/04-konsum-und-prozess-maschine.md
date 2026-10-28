@@ -300,7 +300,7 @@ Jeder Command, den das Framework sendet (Funktion, Uhr), geht durch das **eine**
   des Frist-Events) → stabil über jede Wiederholung;
 - `CommandModus.Emittiert()` = **keine erwartete Version**;
 - eine **Frage** des Boten mit Pflicht-Frist (Standard 5 s; [03](03-schreibseite.md) §3.7), at-least-once, ohne eigenen Retry;
-- liefert den **Ausgang** (`EmitAusgang`): `Zugestellt` (Erfolg, auch als erkannte Wiederholung), `Abgelehnt` (fachlich, durabel als Marke),
+- liefert den **Ausgang** (`EmitAusgang`): `Zugestellt` (Erfolg, auch als erkannte Wiederholung), `Abgelehnt` (fachlich, durabel als Quittung in der Inbox),
   `Unbekannt` (Frist abgelaufen, technischer Fehler, Transportfehler). Keine Ausnahme verlässt den Emitter. Wer „unbekannt“ bekommt, wiederholt
   an seinem durablen Punkt mit derselben CommandId: die Funktion lässt den Eingang offen (die Position bleibt), die Uhr lässt die Frist liegen;
 - **Drossel je Ziel** (`EmitDrossel`): höchstens 8 Sends je Ziel-Aggregat gleichzeitig unterwegs (je Knoten); der Rückstau eines heißen
@@ -313,10 +313,11 @@ quittiert den Ausgang des ersten Mals. Vor dem Append erkennt ein kleiner Cache 
 häufige Wiederholung kurz nach dem ersten Mal schon **vor** der OCC-Prüfung. Exactly-once gilt innerhalb des Horizonts
 (`Schreibpfad.InboxHorizontTage`, Standard 30 Tage).
 
-**Marken.** Ein Noop eines emittierten Commands hinterlässt die Marke `KommandoVerarbeitet(CommandId)`, eine fachliche Ablehnung die Marke
-`KommandoAbgelehnt(CommandId, Grund)` (`Infrastructure/Aggregate/KommandoVerarbeitet.cs`). Beide sind `IRahmenEvent`: Events des Rahmens im
-Aggregat-Stream, die in der Version zählen, die der generierte Applier überspringt und die nicht über die Leitung gehen. Ob die Marken bleiben,
-entscheidet Phase 5.
+**Keine Marken im Log** (Plan Pub/Sub-Neustrukturierung Phase 5). Ein Noop und eine fachliche Ablehnung schreiben kein Event, nur ihre
+Quittung (gewirkt bzw. abgelehnt) — die Version des Ziels bleibt, ein Aggregat hat **eine** Version, die Zahl seiner Events. Eine Wiederholung
+derselben CommandId bekommt denselben Ausgang, auch nach einem Neustart (Inbox vor OCC). Die Quittung ohne Events gilt nur auf dem Stand, auf dem
+entschieden wurde (Kopf-Prüfung, [03 §3.3](03-schreibseite.md)). Die Ablehnung selbst ist ein Hinweis: gezielt an die Sitzung des Aufrufers und
+an die Funktionen, die sie hören (verlierbar). Braucht ein Ablauf sie, ist sie ein Fakt (Event, etwa `ReservierungAbgelehnt` der Prüfdomäne).
 
 **Analyzer-Zwang** (`CommandEmitAnalyzer`): **CQRS020** (`RequestAsync<CommandResult>` oder `FrageAsync<CommandResult>` außerhalb von
 Emitter/Dispatcher), **CQRS021** (roher Command-Send mit `CancellationToken.None`/`default`).

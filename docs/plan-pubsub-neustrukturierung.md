@@ -1,6 +1,6 @@
 # Plan: Neustrukturierung von Pub/Sub, Bausteinen und Grammatik
 
-> **Plan**, Stand 2026-10-28, Zweig `pubsub_neustrukturierung`. Phasen 0–4 und 4b sind umgesetzt (Stand und Messwerte in docs/12, offene Punkte in
+> **Plan**, Stand 2026-10-28, Zweig `pubsub_neustrukturierung`. Phasen 0–4, 4b und 5 sind umgesetzt (Stand und Messwerte in docs/12, offene Punkte in
 > docs/13); am 2026-10-27 ergänzt um Funktionen als Actors mit Zustand und das Hinweis-Netz (E6–E9, §2.9, Phase 4b, umgesetzt 2026-10-28 — Abweichung
 > von §2.9: die Reihenfolge zwischen zwei Actors ist nicht zugesichert, docs/13 G-15). Dieses Dokument ist für die Dauer des Umbaus der
 > **Maßstab**; wo ein anderes Dokument oder der Code widerspricht, gilt der Plan als Ziel und der Code als Ist. Nach dem Umbau wird er in die
@@ -25,7 +25,7 @@ Genehmigungen, Integrationen …), und jeder Store-Typ muss hinter derselben Nah
 | E2 | Direkte Abfrage eines Aggregats (exakter Stand) | **ja**, als eigener Lesepfad neben dem Reader (§2.6). |
 | E3 | Typisierte Ids (`Id<TAggregat>` statt `Guid`) | **ja**, Pflicht für Command-Ziele; in Antworten die Grundlage für feine Updates an Clients (§2.5). |
 | E4 | Editor-Oberfläche (Fluss-Karten, Darstellung) | **zurückgestellt.** Werkbank und GraphExtractor werden nur so weit mitgezogen, dass alles baut und `--check`/`--sonde` für die neuen Bausteine grün sind (§6, Phase 4). `Werkbank/wwwroot/editor/` wird nicht angefasst. |
-| E5 | Implementieren | **phasenweise**, je Phase auf Tobis Wort (Phasen 0–4 und 4b umgesetzt). |
+| E5 | Implementieren | **phasenweise**, je Phase auf Tobis Wort (Phasen 0–4, 4b und 5 umgesetzt). |
 
 **Entscheidungen (Tobi, 2026-10-27) — Funktionen als Actors (§2.9):**
 
@@ -623,6 +623,13 @@ Noch neben dem Alten; nichts wird hier gelöscht.
 
 `KommandoVerarbeitet`/`KommandoAbgelehnt` entfallen (nur noch Inbox-Tabelle); eine Version je Aggregat; `VersioningModule` mit einer Version;
 Ablehnungen als Hinweis an die Sitzung oder fachliches Event. Abnahme: Ablehnung idempotent nach Neustart, Client-OCC mit Version aus der Antwort.
+
+*Umgesetzt (2026-10-28):* Noop und Ablehnung schreiben nur ihre Quittung; weil damit kein Append mehr die Version prüft, prüft die Quittung ohne
+Events in derselben Transaktion den Kopf ihres Streams (`cqrs_kopf`, sperrt die Kopfzeile) — sonst würde eine Entscheidung einer zweiten
+Aktivierung auf veraltetem Stand dauerhaft (§4.1, Bedingung 3). Eine Ablehnung legt keinen Stream mehr an. Der Einblick kennt den Zustand
+„gescheitert“ nicht mehr (die Ablehnung ist ein Spur-Hinweis). Das `VersioningModule` übernimmt die Versionen aus Antworten; die Version einer
+Antwort ist bis Phase 7/8 die des letzten Events, für das die Projektion schrieb (docs/13 FB-10). Die Ablehnung an die Sitzung geht weiter über den
+Broker; dass sie eine Sitzung ohne passendes Abo nicht erreicht (G-12), löst Phase 7.
 
 ### Phase 6 · Wecker statt Broker (4–6 PT)
 

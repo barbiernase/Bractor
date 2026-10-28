@@ -78,13 +78,18 @@ Der gemeinsame Kern `HandleCommandCoreAsync` (das Ziel ist schon beim Empfang ge
    weitergerückte Version. Die Reihenfolge sorgt dafür, dass ein wiederholt zugestellter Command (Emittiert immer, Client bei Wiederholung nach
    verlorenem Ack) dasselbe Ergebnis liefert statt eines Versionskonflikts.
 2. **Decider**: `_handler.HandleCommand(payload).ToList()`.
-3. **Noop** (keine Events) → trotzdem eine `KommandoVerarbeitet`-Marke co-committen (sonst bliebe ein Prozess-Schritt ewig offen: der
-   Prozess-Fold erkennt den Ausgang an der Kausalität im Ziel-Stream).
+3. **Noop** (keine Events) → nur die Quittung (Ausgang gewirkt) in die Inbox-Tabelle, kein Event: die Version bleibt
+   (`QuittiereOhneEventsAsync`). Eine Wiederholung bleibt ein Noop.
 4. Trennung persistenter Events von Ablehnungen (`ITransientEvent`); ein *gemischtes* Ergebnis oder mehrere Ablehnungen werfen laut.
-5. **Reine Ablehnung** → kein Append der Ablehnung, kein Apply; eine `KommandoAbgelehnt`-Marke wird co-committet, die Ablehnung wird
-   targeted an den Aufrufer gemeldet (verlierbar, der Turn wartet nicht auf die Shards) und als verlierbarer Hinweis an die Spur.
-6. **Erfolg**: `AppendeAsync` schreibt die Events — ohne Marke; die Quittung des Commands (`Quittung`, Ausgang gewirkt) reist in derselben
-   Transaktion in die Inbox-Tabelle (§3.3). Jeder der drei Appends (Effekt, Noop-Marke, Ablehnungs-Marke) trägt so eine Quittung.
+5. **Reine Ablehnung** → kein Event, kein Apply, die Version bleibt; nur die Quittung (Ausgang abgelehnt). Danach geht die Ablehnung als
+   Hinweis gezielt an die Sitzung des Aufrufers und an die Funktionen, die sie hören (verlierbar, der Turn wartet nicht), und als verlierbarer
+   Hinweis an die Spur. Eine Ablehnung legt auch keinen Stream an. Ist sie für einen Ablauf wichtig, ist sie ein Fakt (Event) — das entscheidet
+   der Modellierer über den Typ (Plan Pub/Sub-Neustrukturierung §3.1).
+6. **Erfolg**: `AppendeAsync` schreibt die Events; die Quittung des Commands (`Quittung`, Ausgang gewirkt) reist in derselben Transaktion in
+   die Inbox-Tabelle (§3.3). Jeder der drei Wege (Effekt, Noop, Ablehnung) trägt so eine Quittung; im Log stehen nur Effekte — **eine
+   Version je Aggregat**, die Zahl seiner Events. Eine Quittung **ohne** Events gilt nur, wenn der Stream noch auf dem Stand der
+   Entscheidung steht (Kopf-Prüfung `cqrs_kopf` in derselben Transaktion, §3.3) — sonst hätte eine zweite Aktivierung auf einem veralteten
+   Stand dauerhaft abgelehnt oder nichts getan; sie scheitert wie ein Versionskonflikt.
    **Kennt die Inbox die `CommandId` schon** (eine Wiederholung, die der Cache nicht kannte — nach Passivierung, Neustart oder jenseits des
    Caches), scheitert der Append am Schlüssel, nichts ist geschrieben (`KommandoSchonEntschiedenException`), und der Actor quittiert den
    Ausgang des ersten Mals — auch wenn er jetzt anders entschieden hätte.
@@ -93,8 +98,8 @@ Der gemeinsame Kern `HandleCommandCoreAsync` (das Ziel ist schon beim Empfang ge
    quittiert (mehrdeutiger Commit, kein falsches Negativ, P10), die Signale gehen nachträglich hinaus. Sonst ist sicher nichts geschrieben:
    der Command wird **einmal** auf dem frischen Stand neu entschieden (ein Client-Command mit veralteter Version scheitert dabei regulär an der
    Vorprüfung); scheitert auch das, kommt ein technischer Fehler zurück.
-7. **Post-Append-Grenze**: ab dem Commit ist der Command durabel. Applier mutiert `_state` in-memory (Marken werden nur in der Version
-   mitgezählt), Redis-Track, Snapshot ab Schwelle, Publish. Wirft etwas davon, rehydriert der `catch` frisch aus dem Log und quittiert
+7. **Post-Append-Grenze**: ab dem Commit ist der Command durabel. Applier mutiert `_state` in-memory (Einträge des Rahmens wie
+   `FristGesetzt` werden nur in der Version mitgezählt), Redis-Track, Snapshot ab Schwelle, Publish. Wirft etwas davon, rehydriert der `catch` frisch aus dem Log und quittiert
    trotzdem **Erfolg** (kein falsches Negativ).
 
 Snapshots (best-effort, ab `Schreibpfad.SnapshotSchwelle` und bei Deaktivierung, Version = Struktur-Hash + Code-Hash von State + Applier)
@@ -146,8 +151,8 @@ public partial class Leihvorgang : IState
 
 **Wie der Fachcode rein bleibt:** `this.State` und der Konstruktor `Decider(Leihvorgang state)` (`Domain.SourceGeneration/Generator.cs`)
 sowie `Id`/`Version` (`StateGenerator`) sind generiert. OCC, Signal, Cursor, Idempotenz und Spur erscheinen ausschließlich im Framework.
-Die Marken für Noop und Ablehnung (`KommandoVerarbeitet`/`KommandoAbgelehnt`, `Infrastructure/Aggregate/KommandoVerarbeitet.cs`) sind
-`IProzessIntern`, werden beim Falten übersprungen (aber versionsgezählt) — der Decider sieht sie nie; die Inbox ist eine Tabelle des Stores. Command → Aggregat folgt aus
+Noop und Ablehnung stehen nicht im Log; „gewirkt/abgelehnt“ je CommandId hält die Inbox-Tabelle des Stores. Einträge des Rahmens
+(`IRahmenEvent`, heute nur `FristGesetzt`) werden beim Falten übersprungen (aber versionsgezählt) — der Decider sieht sie nie. Command → Aggregat folgt aus
 `ICommand<TAggregat>`, nicht aus Namespaces; das Decide muss im Ziel-Aggregat stehen (CQRS010), ein Command ohne typisiertes Ziel baut nicht
 (CQRS013, `CommandAggregateMapGenerator`, `ModellAnalyzer`).
 
@@ -169,6 +174,11 @@ Die Marken für Noop und Ablehnung (`KommandoVerarbeitet`/`KommandoAbgelehnt`, `
   Trägt der Append eine `Quittung`, schreibt `QueueSqlCommand` sie in derselben Transaktion (Marten führt sie nach den Events aus); eine
   Schlüsselverletzung auf `cqrs_inbox` wird zu `KommandoSchonEntschiedenException`. Martens Wiederholungs-Policy (Polly) nimmt
   Eindeutigkeitsverletzungen aus — sie sind deterministisch und liefen sonst viermal mit Rollback. `AusgangAsync` liest per Primärschlüssel.
+  **Quittung ohne Events** (Noop, Ablehnung): der Append trägt nur Beilagen; statt der Events prüft er den **Kopf** seines Streams — die
+  Funktion `cqrs_kopf(stream, erwartet)` (Schema-Objekt neben der Tabelle) sperrt die Zeile in `mt_streams` (`for update`) und scheitert mit
+  SQLSTATE `CQ409`, wenn der Stream nicht auf der erwarteten Version steht (ein fehlender Stream steht auf 0). Das wird zu
+  `ConcurrencyException`, wie der Versionskonflikt eines Appends mit Events; Polly nimmt `CQ409` ebenfalls aus. Im Group-Commit eine Anweisung
+  für alle Köpfe des Batches (`select cqrs_kopf(s, v) from unnest(…)`).
   Der `InboxAufraeumer` (je Knoten, alle 10 min, seitenweise, Lease über einen Transaktions-Advisory-Lock) löscht Quittungen älter als
   `Schreibpfad.InboxHorizontTage` (Standard 30, E2): innerhalb des Horizonts wirkt ein Command genau einmal. Er sucht über den Index, die
   ältesten zuerst, und erst ab der Grenze, bis zu der er zuletzt gelöscht hat (abzüglich 5 min) — so kostet eine Seite, was sie löscht, nicht die
@@ -227,7 +237,7 @@ Reads werden durchgereicht. Schalter in der Umgebung: `Schreibpfad.GroupCommit` 
   unter Last füllt sich die Queue, während der vorige Commit läuft), dann `FlushAsync`.
 - **Commit** (`MartenEventBatchWriter.WriteBatchAsync`): N Appends in **einer** `LightweightSession` → ein `SaveChangesAsync` = eine
   Postgres-Transaktion. Metadaten und Spur-Header **pro Event** gesetzt (Voraussetzung fürs Bündeln verschiedener Korrelationen); die
-  Quittungen aller Appends in **einer** Anweisung (`insert … select * from unnest(…)`).
+  Quittungen aller Appends in **einer** Anweisung (`insert … select * from unnest(…)`), ebenso die Kopf-Prüfungen der Appends ohne Events.
 - **Fehlermodell**: der Batch ist all-or-nothing; wirft er (z. B. OCC-Konflikt eines Streams, eine Quittung, die die Inbox schon kennt),
   wiederholt `IsolateAsync` jeden Auftrag **einzeln** über den inneren Store → nur der Schuldige fällt, der innere Store meldet Konflikt
   (`ConcurrencyException`) und Wiederholung (`KommandoSchonEntschiedenException`) getrennt. Beim Herunterfahren werden verbliebene Aufträge isoliert geschrieben.
