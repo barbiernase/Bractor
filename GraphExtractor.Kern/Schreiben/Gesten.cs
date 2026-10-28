@@ -184,15 +184,15 @@ public static class Gesten
                 stellen.AddRange(orte!);
             }
 
-        // Handles, die an einer weiter bestehenden Klasse wegfallen: ihre Methode.
-        foreach (var (sammlung, feld) in new[] { ("projektionen", "event"), ("reader", "query") })
+        // Eingänge (Auf/Frage), die an einer weiter bestehenden Klasse wegfallen: ihre Methode.
+        foreach (var (sammlung, feld, methode) in new[] { ("projektionen", "event", Abstractions.Projektionsvertrag.Auf), ("reader", "query", Abstractions.Projektionsvertrag.Frage) })
             foreach (var neu in Alle(soll[sammlung]))
             {
                 var alt = Alle(board[sammlung]).FirstOrDefault(k => KartenSchluessel.Von(sammlung, k) == KartenSchluessel.Von(sammlung, neu));
                 if (alt == null) continue;
                 var bleibt = Alle(neu["handles"]).Select(h => (string?)h[feld]).ToHashSet(StringComparer.Ordinal);
                 foreach (var h in Alle(alt["handles"]).Where(h => !bleibt.Contains((string?)h[feld])))
-                    if (Aus(h["_ort"], $"handle {(string?)alt["name"]}.Handle({(string?)h[feld]})") is { } st) stellen.Add(st);
+                    if (Aus(h["_ort"], $"handle {(string?)alt["name"]}.{methode}({(string?)h[feld]})") is { } st) stellen.Add(st);
             }
 
         var geloescht = new List<string>();

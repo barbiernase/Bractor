@@ -21,17 +21,14 @@ public static class Vertrag
     public static readonly string ICommandZiel = typeof(ICommand<>).FullName!;
     public static readonly string IEvent = typeof(IEvent).FullName!;
     public static readonly string ITransientEvent = typeof(ITransientEvent).FullName!;
-    public static readonly string ISubscriber = typeof(ISubscriber).FullName!;
-    public static readonly string IPullSubscriber = typeof(IPullSubscriber).FullName!;
-    public static readonly string IAppendProjektion = typeof(IAppendProjektion).FullName!;
-    public static readonly string IReader = typeof(IReader<>).FullName!;
+    public static readonly string IProjektion = typeof(IProjektion).FullName!;
+    public static readonly string IReader = typeof(IReader).FullName!;
     public static readonly string IQuery = typeof(IQuery).FullName!;
     public static readonly string IQueryResponse = typeof(IQueryResponse).FullName!;
     public static readonly string IReadModel = typeof(IReadModel).FullName!;
     public static readonly string IGeteiltesReadModel = typeof(IGeteiltesReadModel).FullName!;
     public static readonly string IWriteStore = typeof(IWriteStore).FullName!;
     public static readonly string IReadStore = typeof(IReadStore).FullName!;
-    public static readonly string ICoCommitTracker = typeof(ICoCommitTracker).FullName!;
     public static readonly string IStore = typeof(IStore).FullName!;
     public static readonly string IAkteur = typeof(IAkteur).FullName!;
     public static readonly string IDarf = typeof(IDarf<>).FullName!;
@@ -50,8 +47,6 @@ public static class Vertrag
     public static readonly string IAusgabe = typeof(IAusgabe).FullName!;
     public static readonly string IDecider = typeof(IDecider<>).FullName!;
     public static readonly string IApplier = typeof(IApplier<>).FullName!;
-    public static readonly string IAggregateEnvelope = typeof(IAggregateEnvelope).FullName!;
-    public static readonly string ProjectionReaderAttribute = typeof(ProjectionReaderAttribute).FullName!;
     public static readonly string AggregatNameAttribute = typeof(AggregatNameAttribute).FullName!;
     public static readonly string RoutingTabelleAttribute = typeof(RoutingTabelleAttribute).FullName!;
 
@@ -62,8 +57,6 @@ public static class Vertrag
     // ── Member-Namen des Vertrags ──
     public static readonly string StateId = nameof(Abstractions.IState.Id);
     public static readonly string StateVersion = nameof(Abstractions.IState.Version);
-    public static readonly string SubscriberId = nameof(Abstractions.ISubscriber.SubscriberId);
-    public static readonly string TrackDeps = nameof(Abstractions.ProjectionReaderAttribute.TrackDeps);
     /// <summary>Die Frist als Ausgang einer Entscheidung (generischer Vertrags-Typ, Metadatenname mit Stelligkeit).</summary>
     public static readonly string Frist = typeof(Frist<>).FullName!;
 

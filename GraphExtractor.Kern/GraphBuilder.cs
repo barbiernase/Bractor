@@ -139,13 +139,13 @@ public sealed class GraphBuilder
             Add(new Node
             {
                 Id = $"proj:{pr.Name}", Kind = NodeKind.projection, Name = pr.Name, FullName = pr.Full, Namespace = pr.Namespace,
-                Projection = new ProjectionInfo { SubscriberId = pr.SubscriberId, Consumes = pr.ConsumesFull.Select(SimpleEvt).ToList() }
+                Projection = new ProjectionInfo { MindestensEinmal = pr.MindestensEinmal, Consumes = pr.ConsumesFull.Select(SimpleEvt).ToList() }
             });
     }
 
     private void BuildQueryNodes()
     {
-        // Reader liefern Query→Projektion.
+        // Reader liefern Query→Projektion (über ihre Lese-Fähigkeiten).
         var readerByQuery = _dom.Readers
             .SelectMany(r => r.QueryNames.Select(q => (q, r)))
             .GroupBy(x => x.q).ToDictionary(g => g.Key, g => g.First().r, StringComparer.Ordinal);
@@ -156,7 +156,7 @@ public sealed class GraphBuilder
             Add(new Node
             {
                 Id = $"query:{q.Name}", Kind = NodeKind.query, Name = q.Name, FullName = q.Full, Namespace = q.Meta.Namespace,
-                Query = new QueryInfo { Fields = q.Fields, ServedByReader = reader?.Name, ReadsProjection = reader?.ProjectionName }
+                Query = new QueryInfo { Fields = q.Fields, ServedByReader = reader?.Name, ReadsProjections = reader?.Projektionen.ToList() ?? new() }
             });
         }
     }
@@ -256,7 +256,7 @@ public sealed class GraphBuilder
             var projNode = $"proj:{pr.Name}";
             foreach (var evtFull in pr.ConsumesFull)
                 if (_evtId.TryGetValue(evtFull, out var evtNode))
-                    Edge(evtNode, projNode, EdgeKind.consumedBy, "subscriber");
+                    Edge(evtNode, projNode, EdgeKind.consumedBy, "projektion");
         }
 
         // Tolerant: ein doppelter Projektions-Name (halb editiert) ist ein Lese-Befund (ModellMapper), kein Absturz.
@@ -264,8 +264,9 @@ public sealed class GraphBuilder
         foreach (var q in _dom.Queries)
         {
             var node = _byId[$"query:{q.Name}"];
-            if (node.Query?.ReadsProjection is { } projName && projByName.TryGetValue(projName, out var projNode))
-                Edge(node.Id, projNode, EdgeKind.readsFrom, "reader");
+            foreach (var projName in node.Query?.ReadsProjections ?? [])
+                if (projByName.TryGetValue(projName, out var projNode))
+                    Edge(node.Id, projNode, EdgeKind.readsFrom, "reader");
         }
     }
 

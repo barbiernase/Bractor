@@ -51,24 +51,19 @@ public static class Scaffolder
     private static readonly string IWriteStore = nameof(Abstractions.IWriteStore);
     private static readonly string IReadStore = nameof(Abstractions.IReadStore);
     private static readonly string IStore = nameof(Abstractions.IStore);
-    private static readonly string ISubscriber = nameof(Abstractions.ISubscriber);
-    private static readonly string IPullSubscriber = nameof(Abstractions.IPullSubscriber);
-    private static readonly string IAppendProjektion = nameof(Abstractions.IAppendProjektion);
-    private static readonly string SubscriberId = nameof(Abstractions.ISubscriber.SubscriberId);
-    private static readonly string IReader = typeof(IReader<>).Name.Split('`')[0];
-    private static readonly string IAggregateEnvelope = nameof(Abstractions.IAggregateEnvelope);
-    private static readonly string IMessageEnvelope = nameof(Abstractions.IMessageEnvelope);
-    private static readonly string ReadContext = nameof(Abstractions.ReadContext);
-    private static readonly string ProjectionReader = nameof(ProjectionReaderAttribute)[..^"Attribute".Length];
-    private static readonly string TrackDeps = nameof(ProjectionReaderAttribute.TrackDeps);
+    private static readonly string IProjektion = nameof(Abstractions.IProjektion);
+    private static readonly string IReader = nameof(Abstractions.IReader);
+    private static readonly string Herkunft = nameof(Abstractions.Herkunft);
+    private static readonly string MindestensEinmal = nameof(MindestensEinmalAttribute)[..^"Attribute".Length];
+    private static readonly string Abbruch = nameof(CancellationToken);
     // ── Akteure ──
     private static readonly string IAkteur = nameof(Abstractions.IAkteur);
     private static readonly string IDarf = typeof(IDarf<>).Name.Split('`')[0];
     /// <summary>
-    /// Der Methodenname, den die Dispatch-Generatoren rufen — Framework-Vertrag, erzwungen durch CQRS057
-    /// (HandlerFormAnalyzer): ein anders benannter Handler ist ein Build-Fehler, kein stilles Auseinanderlaufen.
+    /// Die Methodennamen, die die Generatoren rufen — Framework-Vertrag (<see cref="Projektionsvertrag"/>), erzwungen durch CQRS057
+    /// (HandlerFormAnalyzer): ein anders benannter Eingang ist ein Build-Fehler, kein stilles Auseinanderlaufen.
     /// </summary>
-    private const string HandleMethode = "Handle";
+    private const string AufMethode = Projektionsvertrag.Auf, FrageMethode = Projektionsvertrag.Frage;
 
     public static IReadOnlyList<GenerierteDatei> Generiere(EditorModell modell)
     {
@@ -550,7 +545,7 @@ public static class Scaffolder
 
     // ── Leseseite: Fähigkeiten + Bündel, Store-Impl, Projektion, Reader ──────────────────────
     //    Nur SIGNATUREN aus dem Modell; Rümpfe/Handcode verbatim, neue Rümpfe = throw-Platzhalter. Kein Store im Ctor
-    //    (CQRS054), kein new Store (CQRS055), eine Fn je Fähigkeit (CQRS051), OneOf/konkret (CQRS050), Handle-Form (CQRS057).
+    //    (CQRS054), kein new Store (CQRS055), eine Fn je Fähigkeit (CQRS051), OneOf/konkret (CQRS050), Form von Auf/Frage (CQRS057).
 
     private static IEnumerable<GenerierteDatei> LeseseitenDateien(EditorModell m, Leseseite lesen)
     {
@@ -604,12 +599,7 @@ public static class Scaffolder
         }
 
         foreach (var k in lesen.Konsumenten)
-        {
-            var d = KonsumentDatei(m, k);
-            yield return d == null
-                ? new GenerierteDatei($"{Unplatziert}{k.Name}.cs", "", DateiArt.Konsument, Platzierbar: false)
-                : Datei(k.Datei ?? Ziel(m, k.Namespace, $"{k.Name}.cs"), d, DateiArt.Konsument);
-        }
+            yield return Datei(k.Datei ?? Ziel(m, k.Namespace, $"{k.Name}.cs"), KonsumentDatei(m, k), DateiArt.Konsument);
         foreach (var r in lesen.Reader)
             yield return Datei(r.Datei ?? Ziel(m, r.Namespace, $"{r.Name}.cs"), LeserDatei(m, r), DateiArt.Leser);
     }
@@ -652,70 +642,61 @@ public static class Scaffolder
         return b.ToString();
     }
 
-    /// <summary>
-    /// Projektion. Null = der Schreiber-Typ der Handles ist aus dem Code nicht bekannt (keine Projektion im Code) —
-    /// dann wird nicht geraten, sondern nicht geschrieben.
-    /// </summary>
-    private static string? KonsumentDatei(EditorModell m, Konsument k)
+    /// <summary>Projektion: <c>IProjektion</c>, je Event ein <c>Task Auf(TEvent e[, Herkunft h], Schreib-Fähigkeit…[, CancellationToken ct])</c>.</summary>
+    private static string KonsumentDatei(EditorModell m, Konsument k)
     {
-        var r = m.Rahmen;
-        if (r.ProjektionsSchreiber is null) return null;
-        var basis = new List<string> { r.VertragsNamespace };
-        if (r.ProjektionsSchreiberNamespace is { } sns) basis.Add(sns);
-        var b = Kopf(k.Namespace, Usings(k.Namespace, m, basis, KlassenTypen(k.Datei, k.Handles), k.Usings));
+        var b = Kopf(k.Namespace, Usings(k.Namespace, m, [m.Rahmen.VertragsNamespace], KlassenTypen(k.Datei, k.Handles), k.Usings));
         Doku(b, k.Doku, "");
+        if (k.MindestensEinmal) b.AppendLine($"[{MindestensEinmal}]");
         Attribute(b, k.Attribute);
-        var basen = k.Basen ?? new[] { ISubscriber }.Concat(k.Pull ? [IPullSubscriber] : []).Concat(k.Append ? [IAppendProjektion] : []).ToList();
-        b.AppendLine($"{MitPartial(k.Typart)} {k.Name} : {string.Join(", ", basen)}");
+        b.AppendLine($"{k.Typart ?? "public sealed class"} {k.Name} : {string.Join(", ", k.Basen ?? [IProjektion])}");
         b.AppendLine("{");
         var teile = new List<Action>();
-        teile.Add(() => { if (k.Zusatz is null) b.AppendLine($"    public string {SubscriberId} => \"{k.SubscriberId ?? k.Name}\";"); else Eingerückt(b, k.Zusatz, "    "); });
+        if (k.Zusatz is not null) teile.Add(() => Eingerückt(b, k.Zusatz, "    "));
         foreach (var h in k.Handles)
-            teile.Add(() => HandleZeilen(b, h, [IAggregateEnvelope, r.ProjektionsSchreiber], ["envelope", "writer"],
-                h.Rueckgabe ?? (h.Ausgaenge.Count == 0 ? "Task" : $"IAsyncEnumerable<{OneOfVon(h.Ausgaenge)}>")));
+            teile.Add(() => HandleZeilen(b, h, AufMethode, h.Rueckgabe ?? "Task"));
         Teile(b, teile);
         b.AppendLine("}");
         return b.ToString();
     }
 
+    /// <summary>Reader: <c>IReader</c>, je Query eine <c>Frage(TQuery q, Lese-Fähigkeit…[, CancellationToken ct])</c> → Antwort bzw. <c>OneOf&lt;…&gt;</c>.</summary>
     private static string LeserDatei(EditorModell m, Leser r)
     {
-        var b = Kopf(r.Namespace, Usings(r.Namespace, m, [m.Rahmen.VertragsNamespace],
-            KlassenTypen(r.Datei, r.Handles).Append(r.Projektion), r.Usings));
+        var b = Kopf(r.Namespace, Usings(r.Namespace, m, [m.Rahmen.VertragsNamespace], KlassenTypen(r.Datei, r.Handles), r.Usings));
         Doku(b, r.Doku, "");
-        b.AppendLine($"[{ProjectionReader}({TrackDeps} = {(r.TrackDeps ? "true" : "false")})]");
         Attribute(b, r.Attribute);
-        b.AppendLine($"{MitPartial(r.Typart)} {r.Name} : {string.Join(", ", r.Basen ?? [$"{IReader}<{r.Projektion}>"])}");
+        b.AppendLine($"{r.Typart ?? "public sealed class"} {r.Name} : {string.Join(", ", r.Basen ?? [IReader])}");
         b.AppendLine("{");
         var teile = new List<Action>();
         if (r.Zusatz is not null) teile.Add(() => Eingerückt(b, r.Zusatz, "    "));
-        // Ein Reader-Handle ohne Response hat keinen Vertrag (CQRS050) — nicht geschrieben (CQRS050 meldet es im Build).
+        // Eine Frage ohne Antwort hat keinen Vertrag (CQRS050/CQRS057) — nicht geschrieben (der Build meldet es).
         foreach (var h in r.Handles.Where(h => h.Rueckgabe != null || h.Ausgaenge.Count > 0))
-            teile.Add(() => HandleZeilen(b, h, [IMessageEnvelope, ReadContext], ["envelope", "ctx"],
-                h.Rueckgabe ?? $"Task<{OneOfVon(h.Ausgaenge)}>"));
+            teile.Add(() => HandleZeilen(b, h, FrageMethode, h.Rueckgabe ?? $"Task<{OneOfVon(h.Ausgaenge)}>"));
         Teile(b, teile);
         b.AppendLine("}");
         return b.ToString();
     }
 
     /// <summary>
-    /// Typen, aus denen die usings einer Konsumenten-/Reader-Datei ABGELEITET werden: bei einer NEUEN Klasse alle, bei einer
-    /// bestehenden nur die der neuen Handles (die bestehenden usings stehen verbatim im Modell — keine neuen Mehrdeutigkeiten).
+    /// Typen, aus denen die usings einer Projektions-/Reader-Datei ABGELEITET werden: bei einer NEUEN Klasse alle, bei einer
+    /// bestehenden nur die der neuen Eingänge (die bestehenden usings stehen verbatim im Modell — keine neuen Mehrdeutigkeiten).
     /// </summary>
     private static IEnumerable<string> KlassenTypen(string? datei, IReadOnlyList<Handle> handles) =>
         handles.Where(h => datei == null || h.Datei == null)
             .SelectMany(h => h.Faehigkeiten.Select(f => f.Typ).Concat(h.Ausgaenge).Append(h.Eingang));
 
-    private static void HandleZeilen(StringBuilder b, Handle h, string[] kontextTypen, string[] kontextNamen, string rueckgabe)
+    /// <summary>Ein Eingang: <c>Methode(Eingang e[, Herkunft h], Fähigkeit…[, CancellationToken ct])</c> mit Rumpf (verbatim) bzw. <c>throw</c>-Platzhalter.</summary>
+    private static void HandleZeilen(StringBuilder b, Handle h, string methode, string rueckgabe)
     {
         var ps = new List<string> { $"{h.Eingang} {h.Parameter}" };
-        for (var i = 0; i < kontextTypen.Length; i++)
-            ps.Add($"{kontextTypen[i]} {(h.Kontext is { } k && i < k.Count ? k[i] : kontextNamen[i])}");
+        if (h.HerkunftParameter is { } hp) ps.Add($"{Herkunft} {hp}");
         ps.AddRange(h.Faehigkeiten.Select(f => $"{f.Typ} {f.Name}"));
-        // Neuer Handle mit Entwurf, der await benutzt ⇒ async (bestehende Modifizierer bleiben wörtlich).
-        var asy = h.Rumpf is { } r && (r.Contains("await ") || rueckgabe.StartsWith("IAsyncEnumerable<", StringComparison.Ordinal) && r.Contains("yield "));
+        if (h.AbbruchParameter is { } ap) ps.Add($"{Abbruch} {ap}");
+        // Neuer Eingang mit Entwurf, der await benutzt ⇒ async (bestehende Modifizierer bleiben wörtlich).
+        var asy = h.Rumpf is { } r && r.Contains("await ");
         var mods = h.Modifikatoren ?? (asy ? "public async" : "public");
-        var kopf = $"    {mods} {rueckgabe} {HandleMethode}({string.Join(", ", ps)})";
+        var kopf = $"    {mods} {rueckgabe} {methode}({string.Join(", ", ps)})";
         if (h.Ausdruck is not null)
         {
             b.AppendLine(kopf + " =>");
@@ -724,7 +705,7 @@ public static class Scaffolder
         }
         b.AppendLine(kopf);
         b.AppendLine("    {");
-        if (h.Rumpf is null) b.AppendLine($"        throw new NotImplementedException(\"TODO: {HandleMethode}({h.Eingang})\");");
+        if (h.Rumpf is null) b.AppendLine($"        throw new NotImplementedException(\"TODO: {methode}({h.Eingang})\");");
         else if (h.Rumpf.Trim().Length > 0) Eingerückt(b, h.Rumpf, "        ");
         b.AppendLine("    }");
     }
@@ -742,14 +723,6 @@ public static class Scaffolder
     {
         if (string.IsNullOrWhiteSpace(attribute)) return;
         foreach (var zeile in attribute.Replace("\r\n", "\n").Split('\n')) b.AppendLine(zeile);
-    }
-
-    /// <summary>Die Deklarationsform mit <c>partial</c> vor dem Schlüsselwort (die Dispatch-Generatoren ergänzen die Klasse).</summary>
-    private static string MitPartial(string? typart)
-    {
-        var teile = (typart ?? "public class").Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
-        teile.Insert(teile.Count - 1, "partial");
-        return string.Join(" ", teile);
     }
 
     private static string OneOfVon(IReadOnlyList<string> typen) =>

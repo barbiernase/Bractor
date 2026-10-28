@@ -28,8 +28,8 @@ public sealed record SchreibBericht(bool Ok, List<string> Geschrieben, List<stri
 ///     (gleicher Basistyp, z. B. <c>IDecider&lt;Konto&gt;</c>) einfügen.
 ///   • <b>State</b>: fehlt → voll schreiben; existiert → unangetastet (dort lebt Handcode).
 ///   • <b>Leseseite</b>: Fähigkeiten/Bündel → fehlende Interfaces + fehlende Fähigkeiten in der Basisliste des Bündels;
-///     Store-Impl → fehlende Methoden (throw-Platzhalter); Projektion/Reader → fehlende Handles. Danach der
-///     <b>Parameter-Abgleich</b>: je bestehendem Handle werden die Fähigkeits-Parameter (alles hinter dem Kontext, CQRS057)
+///     Store-Impl → fehlende Methoden (throw-Platzhalter); Projektion/Reader → fehlende Eingänge (Auf/Frage). Danach der
+///     <b>Parameter-Abgleich</b>: je bestehendem Eingang werden die Fähigkeits-Parameter (alles außer Eingang, Herkunft und Abbruch, CQRS057)
 ///     auf das Modell gebracht — hinzu/weg, NUR die Parameterliste; der Rumpf bleibt Wort für Wort.
 ///
 /// Welche Rolle eine Datei hat, sagt der Scaffolder (<see cref="DateiArt"/>) — nie ihr Dateiname.
@@ -41,7 +41,7 @@ public static partial class DateiSchreiber
     /// Schreibt das Modell in die Dateien. <paramref name="trocken"/>: nichts auf Platte — der Bericht sagt, was geschähe.
     /// Reihenfolge: (1) Scaffolder-Dateien anlegen bzw. fehlende Teile additiv einmischen, (2) ABGLEICH der im Editor
     /// geänderten Elemente (Herkunfts-Stempel weicht ab) — nur deren Signatur/Deklaration, Vorhandenes bleibt wörtlich —,
-    /// (3) Fähigkeits-Parameter der Handles. Was geändert, aber nicht schreibbar ist, meldet der Bericht.
+    /// (3) Fähigkeits-Parameter der Eingänge (Auf/Frage). Was geändert, aber nicht schreibbar ist, meldet der Bericht.
     /// </summary>
     public static SchreibBericht Schreibe(EditorModell modell, string slnRoot, bool trocken = false)
     {
@@ -59,7 +59,7 @@ public static partial class DateiSchreiber
         var geschrieben = new List<string>();
         var ergaenzt = new List<string>();
         var uebersprungen = new List<string>();
-        // Neue Handles je Klasse (im Modell ohne Datei) — nur die werden in eine bestehende Klasse eingefügt.
+        // Neue Eingänge (Auf/Frage) je Klasse (im Modell ohne Datei) — nur die werden in eine bestehende Klasse eingefügt.
         var lesen = modell.Lesen ?? new Leseseite();
         var neueHandles = lesen.Konsumenten.Select(k => (k.Name, k.Handles)).Concat(lesen.Reader.Select(r => (r.Name, r.Handles)))
             .GroupBy(x => x.Name).ToDictionary(g => g.Key, g => g.SelectMany(x => x.Handles).Where(h => h.Datei == null).Select(h => h.Eingang).ToHashSet(StringComparer.Ordinal));
@@ -121,7 +121,7 @@ public static partial class DateiSchreiber
 
     private static string Basis(string? typ) => BoardLeseseite.Basisname(typ ?? "");
 
-    /// <summary>Handle-Schlüssel: der Typ des ersten Parameters (Event/Query/Eingang).</summary>
+    /// <summary>Schlüssel eines Eingangs: der Typ des ersten Parameters (Event/Query/Eingang).</summary>
     private static string? ErsterTyp(MethodDeclarationSyntax m) =>
         m.ParameterList.Parameters.Count > 0 ? Basis(m.ParameterList.Parameters[0].Type?.ToString()) : null;
 
@@ -189,13 +189,13 @@ public static partial class DateiSchreiber
         return (n + m, text);
     }
 
-    private sealed record HandleOrt(string Klasse, Handle Handle, int Kontext);
+    private sealed record HandleOrt(string Klasse, string Methode, Handle Handle);
 
     /// <summary>
-    /// Verbinden/Lösen im Editor = Fähigkeits-Parameter hinzu/weg. Je bestehendem Handle (Datei aus dem Code) werden die
-    /// Parameter HINTER dem Kontext (CQRS057: 2 bei Projektion/Reader) auf das Modell gebracht; ein
-    /// vorhandener Parameter bleibt wörtlich (Name/Format), ein neuer heißt wie im Modell. Nur die Parameterliste ändert
-    /// sich; benutzt der Rumpf einen gelösten Parameter noch, meldet das der anschließende Build.
+    /// Verbinden/Lösen im Editor = Fähigkeits-Parameter hinzu/weg. Je bestehendem Eingang (Datei aus dem Code) werden die Fähigkeiten auf das
+    /// Modell gebracht: die Parameterliste wird Eingang, Herkunft, Fähigkeiten, Abbruch (CQRS057) — Eingang, Herkunft und Abbruch nach ihrem Typ
+    /// erkannt und wörtlich behalten, ein vorhandener Fähigkeits-Parameter ebenso (Name/Format), ein neuer heißt wie im Modell. Nur die
+    /// Parameterliste ändert sich; benutzt der Rumpf einen gelösten Parameter noch, meldet das der anschließende Build.
     /// </summary>
     private static void ParameterAbgleich(EditorModell modell, Dateipuffer ws, List<string> ergaenzt, List<string> uebersprungen)
     {
@@ -203,9 +203,11 @@ public static partial class DateiSchreiber
         if (lesen == null) return;
         var nsVonFaehigkeit = lesen.Stores.SelectMany(s => s.Fns.Select(f => (f.Name, Ns: f.Namespace ?? s.Namespace)))
             .GroupBy(x => x.Name).ToDictionary(g => g.Key, g => g.First().Ns, StringComparer.Ordinal);
-        var orte = lesen.Konsumenten.SelectMany(k => k.Handles.Select(h => new HandleOrt(k.Name, h, 2)))
-            .Concat(lesen.Reader.SelectMany(r => r.Handles.Select(h => new HandleOrt(r.Name, h, 2))))
+        var orte = lesen.Konsumenten.SelectMany(k => k.Handles.Select(h => new HandleOrt(k.Name, Abstractions.Projektionsvertrag.Auf, h)))
+            .Concat(lesen.Reader.SelectMany(r => r.Handles.Select(h => new HandleOrt(r.Name, Abstractions.Projektionsvertrag.Frage, h))))
             .Where(o => o.Handle.Datei != null);
+        var herkunft = nameof(Abstractions.Herkunft);
+        var abbruch = nameof(CancellationToken);
 
         foreach (var gruppe in orte.GroupBy(o => o.Handle.Datei!))
         {
@@ -217,21 +219,23 @@ public static partial class DateiSchreiber
                 var m = root.DescendantNodes().OfType<ClassDeclarationSyntax>().Where(c => c.Identifier.Text == o.Klasse)
                     .SelectMany(c => c.Members.OfType<MethodDeclarationSyntax>())
                     // Eingang: der bearbeitete — oder, falls der Abgleich ihn (noch) nicht umgeschrieben hat, der im Code.
-                    .FirstOrDefault(x => (ErsterTyp(x) == o.Handle.Eingang || ErsterTyp(x) == o.Handle.EingangImCode)
-                                         && x.ParameterList.Parameters.Count > o.Kontext);
-                if (m == null) { uebersprungen.Add($"{gruppe.Key} ({o.Klasse}.Handle({o.Handle.Eingang}) nicht gefunden)"); continue; }
+                    .FirstOrDefault(x => (ErsterTyp(x) == o.Handle.Eingang || ErsterTyp(x) == o.Handle.EingangImCode) && x.ParameterList.Parameters.Count > 0);
+                if (m == null) { uebersprungen.Add($"{gruppe.Key} ({o.Klasse}.{o.Methode}({o.Handle.Eingang}) nicht gefunden)"); continue; }
                 var ps = m.ParameterList.Parameters;
-                var ist = ps.Skip(1 + o.Kontext).ToList();
+                var h = ps.Skip(1).FirstOrDefault(p => Basis(p.Type?.ToString()) == herkunft);
+                var ct = ps.Skip(1).FirstOrDefault(p => Basis(p.Type?.ToString()) == abbruch);
+                var ist = ps.Skip(1).Where(p => p != h && p != ct).ToList();
                 var soll = o.Handle.Faehigkeiten;
                 if (ist.Select(p => Basis(p.Type?.ToString())).SequenceEqual(soll.Select(f => Basis(f.Typ)))) continue;
 
-                var teile = soll.Select(f => ist.FirstOrDefault(p => Basis(p.Type?.ToString()) == Basis(f.Typ))?.ToString() ?? $"{f.Typ} {f.Name}");
-                var fest = ps[o.Kontext];   // letzter Kontext-Parameter
-                var neu = text[m.ParameterList.SpanStart..fest.Span.End] + string.Concat(teile.Select(t => ", " + t)) + ")";
-                text = text[..m.ParameterList.SpanStart] + neu + text[m.ParameterList.Span.End..];
+                var teile = new List<string> { ps[0].ToString() };
+                if (h != null) teile.Add(h.ToString());
+                teile.AddRange(soll.Select(f => ist.FirstOrDefault(p => Basis(p.Type?.ToString()) == Basis(f.Typ))?.ToString() ?? $"{f.Typ} {f.Name}"));
+                if (ct != null) teile.Add(ct.ToString());
+                text = text[..m.ParameterList.SpanStart] + "(" + string.Join(", ", teile) + ")" + text[m.ParameterList.Span.End..];
                 var hinzu = soll.Select(f => Basis(f.Typ)).Except(ist.Select(p => Basis(p.Type?.ToString()))).ToList();
                 var weg = ist.Select(p => Basis(p.Type?.ToString())).Except(soll.Select(f => Basis(f.Typ))).ToList();
-                aenderungen.Add($"{o.Klasse}.Handle({o.Handle.Eingang}): " + string.Join(" ", hinzu.Select(x => "+" + x).Concat(weg.Select(x => "−" + x))));
+                aenderungen.Add($"{o.Klasse}.{o.Methode}({o.Handle.Eingang}): " + string.Join(" ", hinzu.Select(x => "+" + x).Concat(weg.Select(x => "−" + x))));
 
                 // Fähigkeit aus einem anderen Namespace: using ergänzen.
                 var dateiNs = root.DescendantNodes().OfType<BaseNamespaceDeclarationSyntax>().FirstOrDefault()?.Name.ToString();

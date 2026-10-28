@@ -309,11 +309,11 @@ public sealed partial class Sicht
                 P(h, "prj:" + S(p, "_id"));
                 if (IstRec(S(hd, "event"))) P(Rec(S(hd, "event")), h);
                 foreach (var fid in L(hd, "fns")) if (FnById(fid) != null) P(h, "fn:" + fid);
-                foreach (var ev in L(hd, "publishes")) if (IstRec(ev)) P(h, Rec(ev));
             }
         foreach (var r in _reader)
         {
-            if (S(r, "projektion").Length > 0 && _projektionen.FirstOrDefault(x => S(x, "name") == S(r, "projektion")) is { } p) P("rdr:" + S(r, "_id"), "prj:" + S(p, "_id"));
+            // Die Projektionen hinter dem Reader: aus seinen Lese-Fähigkeiten (wer in denselben Store schreibt) — der Server leitet ab.
+            foreach (var p in _projektionen.Where(x => L(r, "projektionen").Contains(S(x, "name")))) P("rdr:" + S(r, "_id"), "prj:" + S(p, "_id"));
             foreach (var hd in Alle(r["handles"]))
             {
                 var h = hid[hd];

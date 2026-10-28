@@ -15,7 +15,7 @@ namespace GraphExtractor;
 /// Schreibweise, die eine Konvention brechen würde: fremder Wurzel-Namespace, Commands in eigenem Sub-Namespace,
 /// Property-Records, zwei Aggregate in einem Namespace, Decider in eigener Datei, Fristen in der Entscheidung, Funktionen als
 /// Klasse und als Schnittstelle (mit Dienst, Lese-Fähigkeit, Strom), frei benannte Stores, class-ReadModel, OneOf-Antwort,
-/// Konstanten-Ids.
+/// Stores aller drei Klassen (atomar, wiederholungsfest, mindestens einmal).
 ///
 /// Dazu Bausteine, die im Editor GEZEICHNET werden (<c>Sonde/Gezeichnet.gesten.json</c>: neuer Store mit einer im Panel benannten
 /// und einer abgeleiteten Fähigkeit, Projektion, Reader, Query/Response/ReadModel, Akteur, Client, Dienst): ein
@@ -203,17 +203,21 @@ public static class Sonde
         foreach (var rm in A(b, "readModels").Where(Sonde))
             z.Add($"readmodel {S(rm, "namespace")}.{S(rm, "name")} store={S(rm, "store")}"
                   + (rm["geteilt"]?.GetValue<bool>() == true ? " geteilt" : "") + $" | {Felder(rm)}");
+        // Store: seine Klasse (1/2/3, R14) aus der Basisliste der Implementierung — „-“: keine Implementierung bzw. keine Klasse.
+        string Klassen(JsonNode st) => A(st, "klassen").Any() ? string.Join(",", A(st, "klassen").Select(k => k.ToString())) : "-";
         foreach (var st in A(b, "stores").Where(Sonde))
-            z.Add($"store {S(st, "namespace")}.{S(st, "name")} | schreibt {string.Join(", ", A(st, "writeFns").Select(f => $"{S(f, "name")}({string.Join(", ", A(f, "params").Select(p => $"{S(p, "name")}:{S(p, "typ")}"))})"))}"
+            z.Add($"store {S(st, "namespace")}.{S(st, "name")} klasse={Klassen(st)} | schreibt {string.Join(", ", A(st, "writeFns").Select(f => $"{S(f, "name")}({string.Join(", ", A(f, "params").Select(p => $"{S(p, "name")}:{S(p, "typ")}"))})"))}"
                   + $" | liest {string.Join(", ", A(st, "readFns").Select(f => $"{S(f, "name")}({string.Join(", ", A(f, "params").Select(p => $"{S(p, "name")}:{S(p, "typ")}"))}):{S(f, "rueckgabe")}"))}");
         foreach (var st in A(b, "stores").Where(Sonde))
             foreach (var (f, art) in A(st, "writeFns").Select(f => (f, "schreibt")).Concat(A(st, "readFns").Select(f => (f, "liest"))))
                 z.Add($"faehigkeit {(string?)f["sig"]?["namespace"] ?? S(st, "namespace")}.{S(f, "faehigkeit")} {art} {S(st, "name")}.{S(f, "name")}");
+        // Projektion: Kennung = Typname (kein Feld); [MindestensEinmal]; je Auf der Eingang, ob er die Herkunft nimmt, und die Fähigkeiten.
         foreach (var p in A(b, "projektionen").Where(Sonde))
-            z.Add($"projektion {S(p, "namespace")}.{S(p, "name")} id={S(p, "subscriberId")}{(p["pull"]?.GetValue<bool>() == true ? " pull" : "")} | "
-                  + string.Join("; ", A(p, "handles").Select(h => $"{S(h, "event")} -> {Fns(h)}")));
+            z.Add($"projektion {S(p, "namespace")}.{S(p, "name")}{(p["mindestensEinmal"]?.GetValue<bool>() == true ? " mindestenseinmal" : "")} | "
+                  + string.Join("; ", A(p, "handles").Select(h => $"{S(h, "event")}{(h["sig"]?["herkunftParameter"] != null ? " herkunft" : "")} -> {Fns(h)}")));
+        // Reader: die Projektionen dahinter folgen aus den Lese-Fähigkeiten (wer in denselben Store schreibt).
         foreach (var r in A(b, "reader").Where(Sonde))
-            z.Add($"reader {S(r, "namespace")}.{S(r, "name")} projektion={S(r, "projektion")} trackDeps={r["trackDeps"]} | "
+            z.Add($"reader {S(r, "namespace")}.{S(r, "name")} hinter={string.Join(",", A(r, "projektionen").Select(x => (string?)x))} | "
                   + string.Join("; ", A(r, "handles").Select(h => $"{S(h, "query")} -> {Fns(h)} => {string.Join("|", A(h, "responses").Select(x => (string?)x))}")));
         foreach (var ak in A(b, "akteure").Where(Sonde))
             z.Add($"akteur {S(ak, "namespace")}.{S(ak, "name")}{(ak["art"]?.GetValue<string>() is { Length: > 0 } art ? " " + art : "")} | darf {string.Join(", ", A(ak, "darf").Select(x => (string?)x))}");

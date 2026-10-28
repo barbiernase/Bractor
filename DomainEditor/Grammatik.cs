@@ -32,7 +32,10 @@ public static class Grammatik
     public sealed record Konsum(string Sorte, string Baustein, string Kardinalitaet, string Regel);
     /// <summary>Der Baustein darf Nachrichten dieser Sorte erzeugen (Ausgang).</summary>
     public sealed record Erzeugung(string Baustein, string Sorte, string Regel);
-    /// <summary>Das Gegenstück einer Regel im Build: Art (analyzer/generator/compiler/boot/laufzeit/offen), Kennung (z. B. CQRS010), Ort.</summary>
+    /// <summary>
+    /// Das Gegenstück einer Regel im Build: Art (analyzer/generator/compiler/boot/laufzeit/test/offen; test = ein allgemeiner Test, den jede
+    /// Implementierung besteht), Kennung (z. B. CQRS010), Ort.
+    /// </summary>
     public sealed record Gegenstueck(string Art, string? Kennung, string Ort);
     public sealed record Regel(string Id, string Name, string Text, string Schwere, IReadOnlyList<Gegenstueck> Build);
 
@@ -44,7 +47,7 @@ public static class Grammatik
         new(Frist, "Frist", "⏳", "durabel; feuert mindestens einmal, wirkt genau einmal", "Zeit aus dem Decide eines Aggregats — die Uhr macht daraus den Command an dasselbe Aggregat"),
         new(Query, "Query", "?", "synchron, wirkt nicht", "Frage"),
         new(Response, "Antwort", "↩", "synchron", "Rückgabe eines Readers"),
-        new(Faehigkeit, "Fähigkeit", "⚙", "im Handle-Aufruf", "Store-Funktion (Lesen/Schreiben)"),
+        new(Faehigkeit, "Fähigkeit", "⚙", "als Parameter von Auf bzw. Frage", "Store-Funktion (Lesen/Schreiben)"),
         new(Quelle, "Quell-Nachricht", "⛲", "durabel (genau einmal je Kennung)", "Anstoß von außen (Datei, Webhook …) — ein Event, das Funktionen und Projektionen hören"),
         new(Dienst, "Dienst", "🧩", "im Konstruktor (gebunden nach der Umgebung)", "Technik hinter einer Funktion (IDienst) — keine Nachricht, eine Abhängigkeit"),
     ];
@@ -75,7 +78,7 @@ public static class Grammatik
              An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Command ohne Decider)")]),
         new("GR-EVENT", "Event → beliebig viele Konsumenten", "Ein persistentes Event (auch eine Quell-Nachricht) hören Projektionen und Funktionen "
             + "(beliebig viele) und Clients zur Kenntnis (IHoert); gefaltet wird es im eigenen Aggregat.", "error",
-            [Comp("Handle-/Auf-Parameter : IEvent"), An("CQRS057", "Domain.SourceGeneration (HandlerFormAnalyzer)"),
+            [Comp("Auf-Parameter : IEvent"), An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Auf einer Projektion)"),
              Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Eingang einer Funktion)")]),
         new("GR-FALTUNG", "Event → genau ein Aggregat faltet", "Ein Event faltet genau ein Aggregat (Applier) — das, das es entscheidet.", "warning",
             [An("CQRS080", "Domain.SourceGeneration/ModellAnalyzer.cs (Apply ohne Decide)"), An("CQRS079", "Domain.SourceGeneration/ModellAnalyzer.cs (Decide ohne Apply)")]),
@@ -92,10 +95,11 @@ public static class Grammatik
         new("GR-WECKPLAN", "Weckplan: jeder Hörer mit jedem gehörten Typ", "Nach jedem Commit weckt der Wecker gezielt, wen der generierte Weckplan "
             + "zum Typ eines geschriebenen Events nennt: die Partition jeder Projektion und jeder Funktion, die ihn aus dem Log hört (bzw. die eine "
             + "Adresse), und die Uhr bei einer gesetzten Frist — verlierbar, der Takt je Partition holt nach. Ein Hörer aus dem Log hört nur konkrete, "
-            + "persistente Events (der Plan sucht nach dem Typ des geschriebenen Events); jeder registrierte Hörer steht mit jedem gehörten Typ im Plan "
-            + "(Plan §2.3, Phase 6).", "error",
-            [Gen("CQRS108", "Infrastructure.SourceGeneration/WeckplanGenerator.cs (gehörter Typ kann nicht im Plan stehen)"),
-             new("boot", null, "Infrastructure/Wecken/Wecker.cs (jeder registrierte Hörer steht mit jedem gehörten Typ im Plan)")]),
+            + "persistente Events (der Plan sucht nach dem Typ des geschriebenen Events) — sonst ist schon seine Form falsch, denn Weckplan und Form "
+            + "lesen dieselbe Lesart; jeder registrierte Hörer steht mit jedem gehörten Typ im Plan (Plan §2.3, Phase 6).", "error",
+            [An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Auf einer Projektion, Lesart Projektionsform)"),
+             Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Eingang einer Funktion, Lesart Funktionsform)"),
+             new("boot", null, "Infrastructure/Wecken/Wecker.cs (Pruefe: jeder registrierte Hörer steht mit jedem gehörten Typ im Plan)")]),
         new("GR-FRIST", "Frist → Uhr → Command an dasselbe Aggregat", "Eine Frist (Frist<TCmd> aus dem Decide eines Aggregats) nimmt die Uhr; fällig "
             + "sendet sie den Command an das Aggregat, das sie setzte (R5) — mindestens einmal, mit der Id aus dem Frist-Event.", "error",
             [Gen("CQRS010", "Infrastructure.SourceGeneration/CommandAggregateMapGenerator.cs"),
@@ -103,16 +107,19 @@ public static class Grammatik
              new("laufzeit", null, "Infrastructure/Uhr/UhrActor.cs (fällig senden, nach entschiedenem Ausgang austragen)")]),
         new("GR-QUERY", "Query → genau ein Reader", "Eine Query beantwortet genau ein Reader.", "error",
             [An("CQRS084", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (mehrere Reader)"), An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (kein Reader)")]),
-        new("GR-FAEHIGKEIT", "Fähigkeit → genau ein Store", "Eine Fähigkeit (Interface mit genau einer Funktion) implementiert genau eine Store-Klasse.", "error",
+        new("GR-FAEHIGKEIT", "Fähigkeit → genau ein Store", "Eine Fähigkeit (Interface mit genau einer Funktion) gehört zu genau einem Store "
+            + "(eine Implementierung); Auf und Frage nehmen sie als Parameter.", "error",
             [Gen("CQRS053", "Projections.SourceGeneration/ProjectionServicesGenerator.cs"), An("CQRS051", "Domain.SourceGeneration (FaehigkeitAnalyzer)")]),
         // Erzeugung: Baustein-Ausgang → Sorte
         new("GR-AUS-AGGREGAT", "Aggregat erzeugt Events", "Ein Aggregat (Decide) erzeugt Events, Hinweise und Fristen — keine Commands.", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)")]),
-        new("GR-AUS-PROJEKTION", "Projektion erzeugt keine Nachricht", "Eine Projektion wirkt nur in ihrem Store (Schreib-Fähigkeiten genau eines Stores) "
-            + "und gibt nichts aus (Rückgabe Task) — was auf ein Event hin etwas sendet, ist eine Funktion.", "error",
+        new("GR-AUS-PROJEKTION", "Projektion erzeugt keine Nachricht", "Eine Projektion wirkt nur in ihrem Store (Schreib-Fähigkeiten genau eines Stores, R9) "
+            + "und gibt nichts aus (Auf liefert Task) — was auf ein Event hin etwas sendet, ist eine Funktion.", "error",
             [An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Rückgabe Task)"), Gen("CQRS052", "Infrastructure.SourceGeneration/PullPathGenerator.cs (ein Store je Projektion)")]),
-        new("GR-AUS-READER", "Reader erzeugt Responses", "Ein Reader antwortet mit Responses (OneOf) und liest über Lese-Fähigkeiten.", "error",
-            [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)")]),
+        new("GR-AUS-READER", "Reader erzeugt Antworten", "Ein Reader antwortet je Frage mit einer Antwort oder OneOf<…> (auch als Task) und liest nur über "
+            + "Lese-Fähigkeiten. Welche Projektionen hinter einer Frage stehen, folgt aus ihnen: die, die in denselben Store schreiben; was eine Antwort "
+            + "zeigt, sagen ihre Id<T>-Felder (und die der Query).", "error",
+            [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)"), An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Frage eines Readers)")]),
         // Funktion als Baustein und die Regeln der Wiederholbarkeit (Plan Pub/Sub-Neustrukturierung §3.6, Phase 3).
         new("GR-FUNKTION-FORM", "Funktion: je Eingang ein Auf, freie Ausgabe", "Eine Funktion hat je Eingang (Event, Quell-Nachricht oder Hinweis) ein Auf "
             + "mit optional Herkunft, Lese-Fähigkeiten und Abbruch; ausgegeben werden Commands, Events und Hinweise (konkret, OneOf, T?, Strom, je auch als "
@@ -121,7 +128,7 @@ public static class Grammatik
             [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Form der Funktion)"),
              new("boot", null, "Infrastructure/Funktionen/FunktionsBausteinWiring.cs (BindungVon: Laufort, Umsetzung, Lese-Fähigkeit nur im Host)")]),
         new("GR-EIN-EINGANG", "Je Baustein und Eingangstyp eine Methode", "Ein Baustein nimmt jeden Eingangstyp mit höchstens einer Methode — ein Auf "
-            + "einer Funktion, ein Handle einer Projektion oder eines Readers (R2).", "error",
+            + "einer Funktion oder Projektion, eine Frage eines Readers (R2).", "error",
             [An("CQRS101", "Domain.SourceGeneration/EinEingangAnalyzer.cs"), Gen("CQRS101", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs")]),
         new("GR-GLEICH-RECHNEN", "Aggregat und Projektion rechnen gleich", "Aggregate und Projektionen rechnen bei gleicher Eingabe gleich: keine Uhr, "
             + "kein Zufall, kein Lesen fremder Daten — Zeit kommt aus dem Event bzw. der Herkunft (R11).", "error",
@@ -172,9 +179,22 @@ public static class Grammatik
         // Zusatzregeln
         new("GR-AUSGANG-GESCHLOSSEN", "Geschlossener Ausgang", "Ausgänge sind konkrete Typen im OneOf — zeichnen heißt Typ wählen.", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)")]),
-        new("GR-HANDLE-FORM", "Handle-Form ist die, die der Dispatch ruft", "Eine Projektion bzw. ein Reader hat Handle(Eingang, Kontext, …Fähigkeiten) "
-            + "an fester Stelle — sonst wäre die Methode im Editor sichtbar, zur Laufzeit tot.", "error",
-            [An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs")]),
+        new("GR-LESESEITE-FORM", "Form von Auf und Frage ist die, die die Laufzeit ruft", "Eine Projektion (IProjektion) hat je Event ein "
+            + "Task Auf(Event e[, Herkunft h], Schreib-Fähigkeiten…[, CancellationToken ct]), ein Reader (IReader) je Query eine Frage(Query q, "
+            + "Lese-Fähigkeiten…[, CancellationToken ct]) — sonst wäre die Methode im Editor sichtbar, zur Laufzeit tot. Die Kennung einer Projektion ist "
+            + "ihr Typname; Position, Ordnung, Wiederholung und Store-Transaktion trägt das Framework.", "error",
+            [An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs"), An("CQRS101", "Domain.SourceGeneration/EinEingangAnalyzer.cs (doppeltes Auf/Frage)")]),
+        new("GR-STORE-KLASSE", "Store mit genau einer Klasse", "Ein Store, in den eine Projektion schreibt, implementiert genau eine Store-Klasse: "
+            + "IAtomaresZiel (1: Wirkung und Fortschritt in einer Transaktion), IWiederholungsfestesZiel (2: jede Wirkung ergibt wiederholt dasselbe; "
+            + "darum nimmt jede Schreib-Fähigkeit die Herkunft) oder INurMindestensEinmal (3: keine Zusage; nur für eine Projektion mit "
+            + "[MindestensEinmal]). Ob ein Treiber seine Klasse einhält, zeigt der allgemeine Store-Test (R14, Plan §2.4).", "error",
+            [An("CQRS109", "Projections.SourceGeneration/StoreKlasseAnalyzer.cs (genau eine Klasse; Klasse 2: Herkunft in jeder Schreib-Fähigkeit)"),
+             Gen("CQRS110", "Infrastructure.SourceGeneration/PullPathGenerator.cs (Klasse 3 nur mit [MindestensEinmal])"),
+             new("boot", null, "Infrastructure/Projections/Projektionsnaht.cs (Projektionslauf.Ziel: genau eine Klasse, Klasse 3 nur mit Erlaubnis)"),
+             new("test", null, "Infrastructure/Projections/Storetest.cs (allgemeiner Store-Test: Abbruch, Wiederholung, zweite Aktivierung, Neuaufbau)")]),
+        new("GR-READMODEL-SCHLUESSEL", "Read-Model mit typisierter Id ist partial", "Ein Read-Model zu einem Aggregat trägt Id<T> Id und ist partial — "
+            + "der Generator ergänzt den Speicher-Schlüssel (Schluessel) für Stores, die einen einfachen Schlüssel brauchen; Fähigkeiten nehmen Id<T>.", "error",
+            [Gen("CQRS111", "Domain.SourceGeneration/ReadModelSchluesselGenerator.cs")]),
         new("GR-KREIS", "Kreise Funktion ↔ Aggregat", "Ein Ablauf ist ein Kreis (Vorgang → Funktion → anderes Aggregat → Funktion → Vorgang); er endet, "
             + "weil das Decide des Vorgangs fortschreitenden Zustand trägt. Einen Kreis ohne Fortschritt erkennt der Build nicht (R6 des Plans).", "info",
             [Offen("docs/13 FB-5: aus Signaturen allein nicht von einem Ablauf zu unterscheiden")]),
@@ -286,8 +306,8 @@ public static class Grammatik
         ("fk", Funktion), ("dn", DienstImpl),
     ];
     /// <summary>
-    /// Editor-Ports, an denen der Baustein des AUSGANGS die Sorte GEBRAUCHT statt sie zu erzeugen: Handle → Store-Fähigkeit (der Port
-    /// sitzt am Handle, die Fähigkeit selbst erzeugt der Store). Geprüft wird dort der Konsum (Sorte × Baustein des Ausgangs).
+    /// Editor-Ports, an denen der Baustein des AUSGANGS die Sorte GEBRAUCHT statt sie zu erzeugen: Auf/Frage → Store-Fähigkeit (der Port
+    /// sitzt am Eingang, die Fähigkeit selbst erzeugt der Store). Geprüft wird dort der Konsum (Sorte × Baustein des Ausgangs).
     /// </summary>
     public static readonly IReadOnlyList<string> EditorPortGebrauch = ["wcall", "rcall", "dienst"];
 

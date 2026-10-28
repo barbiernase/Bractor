@@ -1,3 +1,4 @@
+using System.Text;
 using Abstractions;
 using Core;
 
@@ -7,6 +8,10 @@ using Core;
 // liest die Datei und gibt als STROM je Zeile einen Artikel und zwischendurch den Fortschritt aus; die Leseseite zeigt den Stand. Der Strom ist
 // eine Funktion draußen (Plan §2.2, Phase 3): Position und Fortschritt hält das Framework — nach einem Absturz geht es bei der nächsten Zeile
 // weiter; die Artikel-Ids leitet sie aus der Herkunft ab (R13). Getragen wird sie vom Import-Werk (ITraegt), das der Import-Dienst verkörpert.
+//
+// Die Leseseite zeigt die beiden Store-Klassen ohne Transaktion (Plan §2.4, R14): der Stand liegt in Dateien (Klasse 2, wiederholungsfest — jede
+// Schreib-Fähigkeit nimmt die Herkunft und schreibt bedingt), und eine Metrik zählt angelegte Artikel (Klasse 3, mindestens einmal — nur mit
+// ausdrücklicher Erlaubnis an der Projektion).
 
 namespace Warenkatalog.Import;
 
@@ -103,41 +108,69 @@ public class Importstand : IReadModel
     public bool Fertig { get; set; }
 }
 
-public interface IBeginneImportstand : IWriteStore { Task BeginneAsync(Guid importId, string pfad); }
-public interface ISetzeImportstand : IWriteStore { Task SetzeAsync(Guid importId, int zeilen, bool fertig); }
+public interface IBeginneImportstand : IWriteStore { Task BeginneAsync(Guid importId, string pfad, Herkunft h); }
+public interface ISetzeImportstand : IWriteStore { Task SetzeAsync(Guid importId, int zeilen, bool fertig, Herkunft h); }
 public interface IFindeImportstand : IReadStore { Task<Importstand?> FindeAsync(Guid importId); }
 public interface IImportUebersicht : IStore, IBeginneImportstand, ISetzeImportstand, IFindeImportstand { }
 
-public partial class Importfortschritt : ISubscriber, IPullSubscriber
+// Klasse 2 über die Basis (DateiZiel : IWiederholungsfestesZiel): je Import zwei Dateien, jede nur geschrieben, wenn die Version des Events
+// größer ist als die gespeicherte — eine Wiederholung oder eine zweite Aktivierung mit älterem Stand ergibt dasselbe.
+public sealed class Importablage : DateiZiel, IImportUebersicht
 {
-    public string SubscriberId => "importfortschritt";
+    public Importablage(StoreOrte orte) : base(orte.Verzeichnis(nameof(Importablage))) { }
 
-    public async Task Handle(ImportGestartet evt, IAggregateEnvelope envelope, ProjectionWriter writer, IBeginneImportstand beginne)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), ctx => beginne.BeginneAsync(envelope.AggregateId, evt.Pfad));
-    }
+    public Task BeginneAsync(Guid importId, string pfad, Herkunft h) => LegeAbWennNeuer($"import/{importId}/pfad", Encoding.UTF8.GetBytes(pfad), h);
 
-    public async Task Handle(ImportFortgeschritten evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetzeImportstand setze)
-    {
-        await writer.Execute(envelope.AggregateId.ToString(), ctx => setze.SetzeAsync(envelope.AggregateId, evt.Zeilen, false));
-    }
+    public Task SetzeAsync(Guid importId, int zeilen, bool fertig, Herkunft h) =>
+        LegeAbWennNeuer($"import/{importId}/stand", Encoding.UTF8.GetBytes($"{zeilen};{fertig}"), h);
 
-    public async Task Handle(ImportAbgeschlossen evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetzeImportstand setze)
+    public Task<Importstand?> FindeAsync(Guid importId)
     {
-        await writer.Execute(envelope.AggregateId.ToString(), ctx => setze.SetzeAsync(envelope.AggregateId, evt.Zeilen, true));
+        if (Lies($"import/{importId}/pfad") is not { } pfad) return Task.FromResult<Importstand?>(null);
+        var stand = Lies($"import/{importId}/stand") is { } s ? Encoding.UTF8.GetString(s).Split(';') : ["0", "False"];
+        return Task.FromResult<Importstand?>(new Importstand
+        {
+            Id = importId, Pfad = Encoding.UTF8.GetString(pfad), Zeilen = int.Parse(stand[0]), Fertig = bool.Parse(stand[1]),
+        });
     }
+}
+
+public sealed class Importfortschritt : IProjektion
+{
+    public Task Auf(ImportGestartet e, Herkunft h, IBeginneImportstand beginne) => beginne.BeginneAsync(h.Stream, e.Pfad, h);
+
+    public Task Auf(ImportFortgeschritten e, Herkunft h, ISetzeImportstand setze) => setze.SetzeAsync(h.Stream, e.Zeilen, false, h);
+
+    public Task Auf(ImportAbgeschlossen e, Herkunft h, ISetzeImportstand setze) => setze.SetzeAsync(h.Stream, e.Zeilen, true, h);
+}
+
+// Klasse 3 über die Basis (DateiSink : INurMindestensEinmal): je angelegtem Artikel eine Zeile — nach einem Abbruch kann sie doppelt stehen.
+public interface IProtokolliereArtikel : IWriteStore { Task ProtokolliereAsync(string nummer, decimal preis); }
+public interface IArtikelprotokoll : IStore, IProtokolliereArtikel { }
+
+public sealed class Artikelprotokoll : DateiSink, IArtikelprotokoll
+{
+    public Artikelprotokoll(StoreOrte orte) : base(orte.Verzeichnis(nameof(Artikelprotokoll))) { }
+
+    public Task ProtokolliereAsync(string nummer, decimal preis) => HaengeAn("artikel.log", $"{nummer};{preis}");
+}
+
+// Die ausdrückliche Erlaubnis, in einen Store der Klasse 3 zu schreiben; ohne Herkunft, mit Abbruch-Parameter.
+[MindestensEinmal]
+public sealed class Artikelzaehlung : IProjektion
+{
+    public Task Auf(ArtikelAngelegt e, IProtokolliereArtikel protokoll, CancellationToken ct) => protokoll.ProtokolliereAsync(e.Nummer, e.Preis);
 }
 
 public record HoleImportstand(Id<Importlauf> ImportId) : IQuery;
 public record ImportstandAntwort(int Zeilen, bool Fertig) : IQueryResponse;
 public record ImportUnbekannt() : IQueryResponse;
 
-[ProjectionReader(TrackDeps = false)]
-public partial class Importauskunft : IReader<Importfortschritt>
+public sealed class Importauskunft : IReader
 {
-    public async Task<OneOf<ImportstandAntwort, ImportUnbekannt>> Handle(HoleImportstand query, IMessageEnvelope envelope, ReadContext ctx, IFindeImportstand finde)
+    public async Task<OneOf<ImportstandAntwort, ImportUnbekannt>> Frage(HoleImportstand q, IFindeImportstand finde)
     {
-        var stand = await finde.FindeAsync(query.ImportId.Wert);
+        var stand = await finde.FindeAsync(q.ImportId.Wert);
         if (stand is null) return new ImportUnbekannt();
         return new ImportstandAntwort(stand.Zeilen, stand.Fertig);
     }

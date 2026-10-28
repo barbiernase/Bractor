@@ -70,7 +70,7 @@ public sealed partial class Sicht
                 return a.Count > 0 ? Oder(Eindeutig(a)) : Geteilt;
             }
             case "reader":
-                return _projektionen.FirstOrDefault(x => S(r, "projektion").Length > 0 && S(x, "name") == S(r, "projektion")) is { } p ? BlockVon("projektion", p) : Geteilt;
+                return _projektionen.FirstOrDefault(x => L(r, "projektionen").FirstOrDefault() == S(x, "name")) is { } p ? BlockVon("projektion", p) : Geteilt;
             case "query":
                 return _reader.FirstOrDefault(x => Alle(x["handles"]).Any(h => S(h, "query") == name)) is { } rd ? BlockVon("reader", rd) : Geteilt;
             case "queryresponse":
@@ -207,7 +207,7 @@ public sealed partial class Sicht
     {
         var s = new List<string>();
         void Add(IEnumerable<string> xs) { foreach (var x in xs) if (!s.Contains(x)) s.Add(x); }
-        foreach (var rd in _reader.Where(rd => S(rd, "projektion") == S(p, "name"))) foreach (var hd in Alle(rd["handles"])) Add(MengeListe(S(hd, "query")));
+        foreach (var rd in _reader.Where(rd => L(rd, "projektionen").Contains(S(p, "name")))) foreach (var hd in Alle(rd["handles"])) Add(MengeListe(S(hd, "query")));
         foreach (var nm in StoreScope(p)) if (_stores.FirstOrDefault(x => S(x, "name") == nm) is { } st) Add(StoreAkteure(st));
         return s;
     }
@@ -440,7 +440,7 @@ public sealed partial class Sicht
         var r = new List<(List<string>, List<string>, string?)>();
         static List<string> N(IEnumerable<string> xs) => xs.Where(x => x.Length > 0).ToList();
         foreach (var d in _decider) if (S(d, "command").Length > 0) r.Add(([S(d, "command")], N(Alle(d["ergibt"]).Select(o => S(o, "event"))), null));
-        foreach (var p in _projektionen) foreach (var hd in Alle(p["handles"])) r.Add((N([S(hd, "event")]), L(hd, "publishes").ToList(), null));
+        foreach (var p in _projektionen) foreach (var hd in Alle(p["handles"])) r.Add((N([S(hd, "event")]), [], null));   // eine Projektion gibt nichts aus
         foreach (var rd in _reader) foreach (var hd in Alle(rd["handles"])) r.Add((N([S(hd, "query")]), L(hd, "responses").ToList(), null));
         foreach (var f in _bausteinFunktionen) foreach (var e in Alle(f["eingaenge"])) r.Add((N([S(e, "eingang")]), L(e, "ausgaben").ToList(), null));
         foreach (var a in _akteure)

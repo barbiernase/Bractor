@@ -131,14 +131,16 @@ public sealed class EventInfo
 
 public sealed class ProjectionInfo
 {
-    public string SubscriberId { get; set; } = "";
+    /// <summary><c>[MindestensEinmal]</c>: darf in einen Store der Klasse 3 schreiben (R14). Die Kennung ist der Typname.</summary>
+    public bool MindestensEinmal { get; set; }
     public List<string> Consumes { get; set; } = new(); // Event-Namen
 }
 
 public sealed class QueryInfo
 {
     public string? ServedByReader { get; set; }
-    public string? ReadsProjection { get; set; }
+    /// <summary>Die Projektionen hinter dem Reader (aus seinen Lese-Fähigkeiten: wer in denselben Store schreibt).</summary>
+    public List<string> ReadsProjections { get; set; } = new();
     public List<FieldInfo> Fields { get; set; } = new();
 }
 
@@ -175,8 +177,8 @@ public enum EdgeKind
 {
     routedTo,       // command  → aggregate   (GeneratedCommandRouting.CommandToAggregate, autoritativ)
     produces,       // command  → event       (Decide-OneOf, handler-sensitiv; persistiert autoritativ aus CommandToEvents, Ablehnung aus Decider)
-    consumedBy,     // event    → projection  (ISubscriber.Handle)
-    readsFrom,      // query    → projection  (IReader<TProjection>)
+    consumedBy,     // event    → projection  (IProjektion.Auf)
+    readsFrom,      // query    → projection  (Lese-Fähigkeiten des Readers ↔ Schreib-Fähigkeiten der Projektion, derselbe Store)
     darf,           // akteur   → command/query (IDarf<T>)
     traegt,         // client   → funktion    (ITraegt<F>)
     sendet,         // client   → command     (ISendet<T>)
