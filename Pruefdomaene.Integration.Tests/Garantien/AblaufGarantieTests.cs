@@ -9,7 +9,7 @@ using static Pruefdomaene.Integration.Tests.Pruefstand;
 namespace Pruefdomaene.Integration.Tests.Garantien;
 
 /// <summary>
-/// Garantien der Abläufe im echten Cluster (docs/11 §11.6, §11.7): die Funktion <c>Nachschub</c> wirkt genau einmal über Signal und Takt (beide
+/// Garantien der Abläufe im echten Cluster (docs/11 §11.6, §11.7): die Funktion <c>Nachschub</c> wirkt genau einmal über Wecker und Takt (beide
 /// lesen ab ihrer Position; den Absturz zwischen Commands und Position deckt <see cref="FunktionsGarantieTests"/>); ein Auftrag, dessen Host mitten
 /// im Lauf neu startet, wird zu Ende geführt und wirkt jeden Schritt genau einmal — ohne eigene Prozess-Maschine: das Vorgangs-Aggregat wartet passiv,
 /// liegen bleiben kann nur ein Funktions-Eingang, und den holen Position und Takt.
@@ -20,7 +20,7 @@ public class AblaufGarantieTests
     private static readonly TimeSpan Frist = TimeSpan.FromSeconds(90);
 
     [Fact]
-    public async Task Nachschub_wirkt_genau_einmal_ueber_Signal_und_Takt()
+    public async Task Nachschub_wirkt_genau_einmal_ueber_Wecker_und_Takt()
     {
         using var host = Cluster("garantie-nachschub");
         await host.StartAsync();

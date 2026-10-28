@@ -1,5 +1,6 @@
 using Abstractions;
 using Domain.ImagePair;
+using Pruefdomaene.Posten;
 
 namespace Verhalten.Tests;
 
@@ -54,5 +55,74 @@ public sealed class ZweiKnotenTests
         sitzungB.Events.Should().NotContain(e => vonA.Contains(e.CorrelationId), "eine Antwort an A darf nie bei B landen");
         sitzungA.Events.Where(e => vonA.Contains(e.CorrelationId)).Select(e => RoheLeitung.Payload(e)).Should().AllBeOfType<CommandFailed>();
         foreach (var p in paare) (await log.ZahlAsync<BildPaarGelabelt>(p)).Should().Be(0, "kein Command mit veralteter Version hat gewirkt");
+    }
+
+    /// <summary>
+    /// Hartes Ende eines Knotens (Plan Pub/Sub-Neustrukturierung Phase 6, §7 Risiko 3): zwei Knoten der Prüfdomäne, Knoten B wird mit SIGKILL beendet.
+    /// Danach weckt jeder Commit auf Knoten A die Funktion <c>Nachschub</c> in jeder Partition — auch in denen, die auf B aktiv waren und neu
+    /// platziert werden — ohne auf den Takt (30 s) zu warten: sobald der Cluster B ausgetragen hat, kommt eine Runde aus je einem Posten je Partition
+    /// dreimal hintereinander in unter 5 s durch. Jeder Eingang wirkt genau einmal, auch die aus der Übergangszeit.
+    /// </summary>
+    [Fact]
+    public async Task Nach_dem_harten_Ende_eines_Knotens_wecken_Commits_die_neuen_Aktivierungen_ohne_den_Takt()
+    {
+        const int partitionen = 8;   // Konsum-Standard der Umgebung
+        var u = await Testumgebung.NeuAsync(Anwendung.Pruefdomaene, "verhalten-wecker-knoten", consul: true);
+        await using var a = await Hostlauf.StarteAsync(u, "knoten-a");
+        await using var b = await Hostlauf.StarteAsync(u, "knoten-b");
+        using var eingang = new JsonEingang(a);
+        var log = new Log(u);
+        var alle = new List<Guid>();
+
+        // Je Partition ein Posten, dessen Reservierung eine Fehlmenge hinterlässt (die Funktion Nachschub bucht sie nach).
+        async Task<IReadOnlyList<Guid>> RundeAsync()
+        {
+            var runde = new List<Guid>();
+            for (var p = 0; p < partitionen; p++)
+            {
+                Guid id;
+                do id = Guid.NewGuid(); while (Partitionierung.Von(id, partitionen) != p);
+                var eroeffnet = await eingang.CommandAsync("EroeffnePosten", new() { ["AggregateId"] = id.ToString(), ["Bestand"] = 100, ["Mindestbestand"] = 98 });
+                if (!eroeffnet.Ok) continue;   // Übergangszeit: das Ziel lag auf B
+                var reserviert = await eingang.CommandAsync("ReservierePosten", new()
+                    { ["AggregateId"] = id.ToString(), ["Menge"] = 5, ["Beleg"] = new System.Text.Json.Nodes.JsonObject { ["Art"] = "Keiner", ["Nummer"] = Guid.Empty.ToString() } });
+                if (reserviert.Ok) runde.Add(id);
+            }
+            alle.AddRange(runde);
+            return runde;
+        }
+        async Task<bool> NachgebuchtAsync(IEnumerable<Guid> posten)
+        {
+            foreach (var p in posten) if (await log.ZahlAsync<PostenZugebucht>(p) < 1) return false;
+            return true;
+        }
+
+        // Aufwärmen: Aktivierungen auf beiden Knoten.
+        var warm = await RundeAsync();
+        await Warte.BisAsync(() => NachgebuchtAsync(warm), TimeSpan.FromSeconds(90), "Aufwärmen: der Nachschub kommt nicht", a);
+
+        b.Toete();
+
+        var schnell = 0;
+        var uhr = System.Diagnostics.Stopwatch.StartNew();
+        while (schnell < 3)
+        {
+            if (uhr.Elapsed > TimeSpan.FromSeconds(150))
+                throw new TimeoutException($"Nach dem harten Ende von B kam keine Folge von drei schnellen Runden zustande.\n{a.LogEnde()}");
+            var runde = await RundeAsync();
+            var start = System.Diagnostics.Stopwatch.StartNew();
+            var ok = runde.Count == partitionen;
+            while (ok && !await NachgebuchtAsync(runde))
+            {
+                if (start.Elapsed > TimeSpan.FromSeconds(5)) { ok = false; break; }
+                await Task.Delay(100);
+            }
+            schnell = ok ? schnell + 1 : 0;
+        }
+
+        // Genau einmal, auch für die Eingänge aus der Übergangszeit (die holt spätestens der Takt).
+        await Warte.BisAsync(() => NachgebuchtAsync(alle), TimeSpan.FromSeconds(90), "ein Eingang aus der Übergangszeit wirkt nie", a);
+        await Warte.NachlaufAsync();
+        foreach (var p in alle) (await log.ZahlAsync<PostenZugebucht>(p)).Should().Be(1, $"Posten {p}: der Nachschub wirkt genau einmal");
     }
 }

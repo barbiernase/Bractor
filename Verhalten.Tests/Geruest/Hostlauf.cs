@@ -82,6 +82,17 @@ public sealed class Hostlauf : IAsyncDisposable
         catch (IOException e) { return $"(Log nicht lesbar: {e.Message})"; }
     }
 
+    /// <summary>
+    /// Hartes Ende (SIGKILL): kein Herunterfahren, kein Abmelden im Cluster — Aktivierungen und Weckrufe im Flug gehen verloren, die anderen Knoten
+    /// merken es erst, wenn Consul den Knoten austrägt.
+    /// </summary>
+    public void Toete()
+    {
+        if (_prozess.HasExited) return;
+        _prozess.Kill(entireProcessTree: true);
+        _prozess.WaitForExit(10_000);
+    }
+
     public async ValueTask DisposeAsync()
     {
         if (!_prozess.HasExited)

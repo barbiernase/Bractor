@@ -20,14 +20,63 @@ namespace Infrastructure.Integration.Tests;
 /// und prüft, dass die Historie in Postgres wächst.
 ///
 /// Damit läuft die GANZE Kette produktiv:
-///   Command → ImagePair-Aggregat → Event in "es" + Signal-Emit → Broker → Receiver →
-///   Co-Commit-Adapter → Log-Read → Projektion → Historie-Eintrag in "rm".
+///   Command → ImagePair-Aggregat → Event in "es" → Wecker am Commit (Weckplan) → Batch-Leser der Partition →
+///   Log-Read → Projektion → Historie-Eintrag in "rm" (Co-Commit).
 ///
 /// Braucht Postgres (5432) und Consul (8500) — das Dev-Setup.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class LiveCommandE2ETests
 {
+    /// <summary>
+    /// Latenz der Projektion (Plan Pub/Sub-Neustrukturierung §7 Risiko 1): der Commit weckt den Batch-Leser der Partition, die das Event liest — die
+    /// Historie wächst in Sekunden, nicht erst mit dem Takt (30 s). Dreimal hintereinander je unter 5 s.
+    /// </summary>
+    [Fact]
+    public async Task Ein_Commit_weckt_die_Projektion_ohne_auf_den_Takt_zu_warten()
+    {
+        var builder = Host.CreateApplicationBuilder();
+        builder.Services.AddCqrsFramework(opts =>
+        {
+            opts.EnableGrpc = false;
+            opts.ClusterName = "wecker-projektion-" + Guid.NewGuid().ToString("N")[..8];
+        });
+        builder.Services.AddGeneratedPullPaths();
+
+        using var host = builder.Build();
+        await host.StartAsync();
+        try
+        {
+            var dispatcher = host.Services.GetRequiredService<IAggregateDispatcher>();
+            using var bereich = host.Services.CreateScope();
+            var historieRead = bereich.ServiceProvider.GetRequiredService<IGetHistorie>();
+
+            async Task<Guid> NeuesPaarAsync()
+            {
+                var paar = Guid.NewGuid();
+                dispatcher.Dispatch(new CommandEnvelope
+                {
+                    AggregateType = "ImagePair", Modus = new CommandModus.Client(0),
+                    Payload = new NimmBildAuf(new(paar), "PAIR-WECKER", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "/wecker/e2e", BildVersion.Dc0,
+                        new BildMeta("dc0.tiff", 1, 1, 1, DateTimeOffset.UtcNow), "/wecker/e2e.png"),
+                });
+                return paar;
+            }
+
+            // Aufwärmen: Aktivierungen und der erste Takt (2 s nach dem Start).
+            var warm = await NeuesPaarAsync();
+            await WaitAsync(async () => (await historieRead.GetByPairIdAsync(warm))?.Eintraege.Count >= 1, TimeSpan.FromSeconds(60), "Aufwärmen: keine Historie");
+
+            for (var i = 0; i < 3; i++)
+            {
+                var paar = await NeuesPaarAsync();
+                await WaitAsync(async () => (await historieRead.GetByPairIdAsync(paar))?.Eintraege.Count >= 1, TimeSpan.FromSeconds(5),
+                    $"Durchlauf {i + 1}: der Commit weckt die Projektion nicht (nur der Takt holte sie)");
+            }
+        }
+        finally { await host.StopAsync(); }
+    }
+
     [Fact]
     public async Task Echter_Command_laesst_die_Historie_ueber_den_Pull_Pfad_wachsen()
     {
@@ -65,7 +114,7 @@ public class LiveCommandE2ETests
                 Payload = new NimmBildAuf(new(pairId), "PAIR-LIVE", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "/live/e2e", BildVersion.Dc0, new BildMeta("dc0.tiff", 1, 1, 1, DateTimeOffset.UtcNow), "/live/e2e" + ".png")
             });
 
-            // Command → Event+Signal → Broker → Receiver → Adapter → Co-Commit ist asynchron.
+            // Command → Event → Wecker → Batch-Leser → Co-Commit ist asynchron.
             await WaitAsync(
                 async () => (await historieRead.GetByPairIdAsync(pairId))?.Eintraege.Count >= 1,
                 TimeSpan.FromSeconds(30),
