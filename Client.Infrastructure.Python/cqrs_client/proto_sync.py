@@ -5,7 +5,7 @@ Automatische Proto-Synchronisation (Laufzeit-Sicherheitsnetz).
 Framework-Modul — domain-agnostisch.
 Das Zielverzeichnis wird als Parameter übergeben.
 
-Der PRIMÄRE Pfad ist build_python.sh (Build-Zeit). Gilt nur für das Domänen-Proto (nur DTOs);
+Der PRIMÄRE Pfad ist der Codegen-Prepass im Build (Cqrs.Codegen, PythonDtoErzeuger). Gilt nur für das Domänen-Proto (nur DTOs);
 die Leitung (cqrs_client.leitung) liegt dem SDK bei (build_leitung.sh).
 """
 
@@ -101,7 +101,7 @@ def _download_proto(url: str) -> bytes | None:
 
 def _generate_types(content: bytes, generated_dir: Path, proto_file: Path) -> bool:
     generated_dir.mkdir(parents=True, exist_ok=True)
-    # Wie build_python.sh: ohne package-Zeile generieren — sonst legt betterproto ein Unterpaket an statt __init__.py.
+    # Wie der Codegen-Prepass: ohne package-Zeile generieren — sonst legt betterproto ein Unterpaket an statt __init__.py.
     zeilen = content.decode("utf-8").splitlines(keepends=True)
     proto_file.write_text("".join(z for z in zeilen if not z.lstrip().startswith("package ")), encoding="utf-8")
     try:

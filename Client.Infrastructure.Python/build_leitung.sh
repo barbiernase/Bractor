@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # REPO-PFAD: Client.Infrastructure.Python/build_leitung.sh
 # Generiert die betterproto-Typen der Framework-Leitung (Cqrs.Leitung/cqrs.proto: Dienst, Hüllen, Nutzlast)
-# nach cqrs_client/leitung/. Die Domänen-DTOs kommen aus dem Proto der Anwendung (z. B. build_python.sh im Worker).
+# nach cqrs_client/leitung/. Die Domänen-DTOs kommen aus dem Proto der Anwendung (der Codegen-Prepass im Build erzeugt sie im Worker).
 #   ./build_leitung.sh           erzeugt neu, wenn sich cqrs.proto geändert hat
 #   ./build_leitung.sh --check   prüft nur (Exit 1 = veraltet)
 set -euo pipefail

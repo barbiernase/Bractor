@@ -55,7 +55,7 @@ class NutzlastTabelle:
         if klasse is None:
             raise UnbekannteNutzlast(
                 f"Unbekannter Nutzlast-Typ '{typ}' — nicht in der Nutzlast-Tabelle ({len(self._klassen)} Typen); "
-                f"Generat veraltet? (dotnet build, dann build_python.sh)")
+                f"Generat veraltet? (dotnet build)")
         return klasse
 
     def typ(self, klasse: type) -> str:

@@ -21,7 +21,8 @@ using Struktur = Abstractions.Projektstruktur;
 //   5. domain_client/generated/funktionen.py       (Funktions-Schnittstellen → Python-Basisklassen, Laufort Extern)
 //      + funktions_tabelle.py                   (Funktion → Basis, Modul, Klasse der Implementierung — der generische Worker, konzept-werkbank §12.3 E13)
 //   6. domain_client/generated/nutzlast_tabelle.py (Nutzlast.typ → DTO-Klasse, Gegenstück zu GeneratedNutzlast, dieselbe Namensregel)
-//   (4–6 nur mit Python-Worker-Projekt der Anwendung.)
+//   7. domain_client/generated/__init__.py + .proto_hash (betterproto-DTOs aus 1. über protoc — nur, wenn sich das Proto änderte, PythonDtoErzeuger)
+//   (4–6 nur mit Python-Worker-Projekt der Anwendung, 7 mit Python-Worker UND Leitung.)
 //
 // Früher öffnete dieser Prepass die ganze Solution über MSBuildWorkspace (geschachteltes
 // MSBuild, fragil, plattformabhängig). Jetzt liest er nur die Metadaten der gebauten
@@ -100,6 +101,15 @@ int Erzeuge(string wurzel)
     var artefakte = Artefakte(solutionDir, wurzel);
     string Pfad(Art art) => Path.Combine(solutionDir, artefakte.Single(a => a.Art == art).Pfad);
     bool Hat(Art art) => artefakte.Any(a => a.Art == art);
+    // 7. Die DTOs hängen am Proto, nicht an den DLLs: auch ein übersprungener Lauf prüft sie (ein Hash, ohne Python, wenn er passt).
+    int Dtos()
+    {
+        if (!Hat(Art.PythonDtos)) return 0;
+        var fehler = PythonDtoErzeuger.Erzeuge(Pfad(Art.Proto), Path.GetDirectoryName(Pfad(Art.PythonDtos))!, Pfad(Art.PythonDtos), Pfad(Art.ProtoHash));
+        if (fehler == null) return 0;
+        Console.Error.WriteLine($"❌ Python-DTOs ({wurzel}): {fehler}");
+        return 1;
+    }
 
     if (targetProjects.Length == 0)
     {
@@ -114,7 +124,7 @@ int Erzeuge(string wurzel)
         && artefakte.All(a => File.Exists(Path.Combine(solutionDir, a.Pfad))))
     {
         Console.WriteLine($"Codegen {wurzel} aktuell ({standHash[..16]}…) — übersprungen.");
-        return 0;
+        return Dtos();
     }
 
     Console.WriteLine($"📁 Solution:  {solutionPath}");
@@ -259,6 +269,11 @@ int Erzeuge(string wurzel)
     }
     else Console.WriteLine($"·  kein Python-Worker ({Struktur.PythonWorker(wurzel)}) — keine Python-Generate");
 
+    // ────────────────────────────────────────────────────────────────────────
+    // 7. betterproto-DTOs des Workers aus domain.proto (docs/09 §9.2, docs/13 FB-20)
+    // ────────────────────────────────────────────────────────────────────────
+    if (Dtos() != 0) return 1;
+
     Console.WriteLine();
     Console.WriteLine($"📊 {stats}");
     Console.WriteLine();
@@ -283,6 +298,11 @@ static List<(Art Art, string Pfad)> Artefakte(string solutionDir, string wurzel)
         liste.Add((Art.Funktionen, Path.Combine(py, "funktionen.py")));
         liste.Add((Art.FunktionsTabelle, Path.Combine(py, "funktions_tabelle.py")));
         liste.Add((Art.NutzlastTabelle, Path.Combine(py, "nutzlast_tabelle.py")));
+        if (liste.Any(a => a.Item1 == Art.Proto))
+        {
+            liste.Add((Art.PythonDtos, Path.Combine(py, "__init__.py")));
+            liste.Add((Art.ProtoHash, Path.Combine(py, ".proto_hash")));
+        }
     }
     return liste;
 }
@@ -333,4 +353,4 @@ static string? FindSolutionFile()
 }
 
 /// <summary>Die Artefakt-Arten des Codegens.</summary>
-enum Art { Proto, EventJson, WireJson, Vertraege, Funktionen, FunktionsTabelle, NutzlastTabelle }
+enum Art { Proto, EventJson, WireJson, Vertraege, Funktionen, FunktionsTabelle, NutzlastTabelle, PythonDtos, ProtoHash }

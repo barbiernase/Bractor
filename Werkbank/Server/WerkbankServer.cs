@@ -161,31 +161,28 @@ public sealed class WerkbankServer
             // Der aktuelle Code-Stand im warmen Workspace — Befunde des Bauens finden darüber ihre Karte (auch neu angelegte Typen).
             var vorher = await Arbeitsbereich.LiesAsync(ct);
 
-            // 1 Bauen: dotnet build des Laufzeit-Hosts — der Codegen-Prepass (Proto, STJ-Kontexte, Python-Basen) läuft im Build mit.
+            // 1 Bauen: dotnet build des Laufzeit-Hosts — der Codegen-Prepass (Proto, STJ-Kontexte, Python-Basen und -DTOs) läuft im Build mit.
+            // Die DTOs erzeugt er über den Interpreter der Umgebung (Umgebung:Python, sonst CQRS_PYTHON/python3), wenn sich das Proto änderte.
             Beginne("Bauen");
             // -p:CqrsStand: der Host stempelt diesen Stand an jedes Event (Spur) — Board, Build und Lauf tragen denselben.
             var host = Abstractions.Projektstruktur.ServerHost;
-            var bau = await Prozesse.LaufeAsync("dotnet", ["build", $"{host}/{host}.csproj", "-v", "q", "-nologo", "-clp:NoSummary", $"-p:CqrsStand={stand}"], _root, ct: ct);
+            var interpreter = Umgebungen.Aufgeloest(Aktiv).Python();
+            var bau = await Prozesse.LaufeAsync("dotnet", ["build", $"{host}/{host}.csproj", "-v", "q", "-nologo", "-clp:NoSummary", $"-p:CqrsStand={stand}"], _root,
+                new Dictionary<string, string> { ["CQRS_PYTHON"] = interpreter }, ct: ct);
             var diagnosen = Karten.Zuordnen(Diagnosen.Lies(bau.Zeilen, _root), vorher.Board);
             Schritt(schritte, new Schritt("Bauen", bau.Ok, (long)bau.Dauer.TotalMilliseconds,
                 bau.Ok ? ["0 Fehler"] : diagnosen.Count > 0 ? diagnosen.Select(x => $"{x.Datei}:{x.Zeile} {x.Code} {x.Text}").Take(20).ToList() : bau.Zeilen.TakeLast(15).ToList()));
             if (!bau.Ok) return Ende(false, diagnosen);
 
-            // 2 Python-DTOs (betterproto) — sonst verstehen externe Worker die geänderten Nachrichten nicht.
-            // Der Interpreter der Umgebung (Umgebung:Python, sonst CQRS_PYTHON/python3) steht vorn im PATH des Build-Skripts.
-            var interpreter = Umgebungen.Aufgeloest(Aktiv).Python();
-            var python = Path.GetDirectoryName(interpreter) is { Length: > 0 } verz ? verz : "";
-            var skript = Path.Combine(_root, Abstractions.Projektstruktur.PythonWorker(Abstractions.Projektstruktur.StandardWurzel), "build_python.sh");
-            if (File.Exists(skript))
+            // 2 Python-Implementierungen: neue Client-Implementierungen entstehen aus der GENERIERTEN Basis — also erst nach dem Bauen.
+            if (Directory.Exists(Path.Combine(_root, Abstractions.Projektstruktur.PythonWorker(Abstractions.Projektstruktur.StandardWurzel))))
             {
                 Beginne("Python-Basen");
-                var pr = await Prozesse.LaufeAsync("bash", [skript], _root, new Dictionary<string, string> { ["PATH"] = (python.Length > 0 ? python + ":" : "") + Environment.GetEnvironmentVariable("PATH") }, TimeSpan.FromMinutes(3), ct);
-                // Neue Client-Implementierungen (Python) entstehen aus der GENERIERTEN Basis — also erst nach dem Bauen (früher „C# schreiben“).
+                var pyUhr = System.Diagnostics.Stopwatch.StartNew();
                 var modell = DomainEditor.BoardLeseseite.AusBoard(vorher.BoardJson);
                 var (angelegt, nicht) = Werkbank.PythonSync.ImplementierungenAnlegen(modell, _root, trocken: false);
-                Schritt(schritte, new Schritt("Python-Basen", pr.Ok, (long)pr.Dauer.TotalMilliseconds,
-                    [.. pr.Zeilen.TakeLast(3), .. angelegt.Select(a => "＋ " + a), .. nicht.Select(a => "⚠ " + a)]));
-                if (!pr.Ok) return Ende(false, diagnosen);
+                Schritt(schritte, new Schritt("Python-Basen", true, (long)pyUhr.Elapsed.TotalMilliseconds,
+                    [.. angelegt.Select(a => "＋ " + a), .. nicht.Select(a => "⚠ " + a)]));
             }
 
             // 3 Board neu lesen (Code = Wahrheit) — im warmen Workspace, nur was sich geändert hat (E7).

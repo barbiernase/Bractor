@@ -9,7 +9,9 @@ Zwei Teile, streng getrennt (W11):
   externer Funktionen.
 
 Python läuft nur mit dem Interpreter der Umgebung: `Umgebung:Python` (je Worker überschreibbar: `Funktionen:<F>:Worker:Python`), sonst
-`CQRS_PYTHON`, sonst `python3` (eine Regel: `UmgebungKonfig.Python`); die Werkbank nimmt ihn für Worker und `build_python.sh`.
+`CQRS_PYTHON`, sonst `python3` (eine Regel: `UmgebungKonfig.Python`); die Werkbank nimmt ihn für die Worker und gibt ihn dem Build als
+`CQRS_PYTHON` mit (der Codegen-Prepass erzeugt damit die DTOs, §9.2). Ohne Umgebung (Kommandozeile, Server, Gate) nimmt der Prepass
+`CQRS_PYTHON`, sonst `/opt/miniconda3/envs/gpu_env/bin/python` (`PythonDtoErzeuger.Interpreter`).
 
 ## 9.1 Gesamtbild
 
@@ -36,7 +38,7 @@ Methoden.
 
 | Datei | Erzeugt von | Inhalt |
 |---|---|---|
-| `domain_client/generated/__init__.py` | `build_python.sh` (`protoc --python_betterproto_out` aus `Domain.Leitung/domain.proto`) | betterproto-DTOs (`…Dto`) der Anwendung |
+| `domain_client/generated/__init__.py` + `.proto_hash` | `Cqrs.Codegen` (`PythonDtoErzeuger`: `protoc --python_betterproto_out` aus `Domain.Leitung/domain.proto`) | betterproto-DTOs (`…Dto`) der Anwendung; `.proto_hash` = sha256 des Protos, aus dem sie entstanden |
 | `cqrs_client/leitung/__init__.py` (SDK) | `Client.Infrastructure.Python/build_leitung.sh` (aus `Cqrs.Leitung/cqrs.proto`) | die Leitung des Frameworks: `ClientMessage`/`ServerMessage`, Hüllen, `Nutzlast` |
 | `domain_client/generated/vertraege.py` | `Cqrs.Codegen` | je Akteur-Vertrag (`IAkteurVertrag<A>`) bzw. Client-Vertrag (`IClientVertrag`) eine abstrakte Basis `<Name>Basis` mit `auf_<event>`, Vertrag, Hash, Zusagen, `FRAGT` |
 | `domain_client/generated/funktionen.py` | `Cqrs.Codegen` | je Katalog-Funktion ohne Lese-Fähigkeit eine Basis `<Funktion>Basis` mit `FUNKTION`, `AUFTRAG`, `ERGEBNISSE`, abstrakt `rufe(auftrag, x)` |
@@ -44,8 +46,12 @@ Methoden.
 | `domain_client/generated/nutzlast_tabelle.py` | `Cqrs.Codegen` | `TABELLE`: `Nutzlast.typ` → DTO-Klasse (Command, Event, Query, Antwort, Trigger, Auftrag) — Gegenstück zu `GeneratedNutzlast`, dieselbe Namensregel (`NameSanitizer.NutzlastTyp`); der Client bekommt sie als `nutzlast=` |
 
 `Cqrs.Codegen` läuft **automatisch** im Codegen-Schritt jedes Builds (Target `CqrsCodegenPrepass` in `Domain.Leitung/Domain.Leitung.csproj`), zusammen mit
-`domain.proto` und den STJ-Kontexten; `./codegen.sh --check` prüft auf Drift. Die betterproto-DTOs erzeugt `build_python.sh` (Schritt 2 von ⟳ in
-der Werkbank, `konzept-werkbank.md` §5); es hasht `domain.proto` (`generated/.proto_hash`) und entfernt vor `protoc` die `package`-Zeile. Die Leitung
+`domain.proto` und den STJ-Kontexten; `./codegen.sh --check` prüft auf Drift. Die betterproto-DTOs erzeugt derselbe Prepass gleich nach
+`domain.proto` (eine Quelle, kein manueller Schritt): passt der sha256 des Protos zu `generated/.proto_hash`, ruft er kein Python — ein frischer
+Checkout (Docker, Gate) baut ohne Interpreter; sonst läuft `grpc_tools.protoc` mit dem betterproto-Plugin über den Interpreter oben (sein Ordner
+vorn im PATH, die `package`-Zeile vorher entfernt), und fehlen Interpreter oder Pakete, scheitert der Build laut. Eine neue Domänen-Nachricht kommt
+so mit dem nächsten Build im Worker an; DTOs, die nicht zum committeten Proto passen, macht `./codegen.sh --check` rot (`__init__.py` und
+`.proto_hash` stehen in der Artefakt-Liste, docs/13 §13.6 FB-20). Die Leitung
 erzeugt `build_leitung.sh` ebenso (committet); `GrpcProxy` nutzt die Route `/cqrs.CqrsClientService/Connect` (Paket `cqrs`). `Cqrs.Codegen` liest die gebauten Domänen-DLLs per
 `MetadataLoadContext` und schreibt fest in das Projekt der Beispieldomäne (docs/13 W10-1, W2-1).
 

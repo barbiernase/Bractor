@@ -41,7 +41,6 @@ abgeschlossen oder umgeschrieben. Mit Phase 7 sind der Broker, G-12, G-13, G-14 
 | FB-17 | Marten kann `Id<T>` nicht als Dokument-Identität (sein Codegen bricht an generischen Ids, Probe 2026-10-28): ein Read-Model mit typisierter Id bekommt eine generierte Speicher-Identität `Schluessel` (die UUID steht damit zweimal im JSON) und muss `partial` sein (CQRS111); LINQ über `Id<T>`-Felder geht über `RegisterValueType` je verwendetem `Id<X>` | P3 |
 | FB-18 | Datei-Stores liegen ohne Eintrag `Stores:<Store>:Verzeichnis` unter dem Temp-Verzeichnis je Datenbank und Schema des Logs (`StoreOrte`); wird die Datenbank gelöscht, bleiben die Dateien — in Sim baut der Start dann neu auf (neue Generation), in Prod nicht. Der Rückstand (`KonsumRueckstand`) liest den Fortschritt aus Marten: richtig für den Marten-Store und den Fortschritt beim Framework, nicht für einen künftigen Store der Klasse 1 außerhalb von Marten | P3 |
 | FB-19 | Die Antwort eines Aggregats auf eine direkte Query (Phase 9) wird nicht beobachtet: die Sitzung beobachtet nur Antworten mit Projektionen dahinter, ein späterer Commit des Aggregats bringt dem Client kein `Aktualisiert` — wer den Stand live braucht, hört die Events des Aggregats (`IHoert`) oder fragt neu. Ein Weg über die Verteiler hinge am heißen Pfad (je Commit eine Meldung, auch für Typen, die kein Client hört) | P3 |
-| FB-20 | Python-DTOs ohne Drift-Prüfung: der Codegen-Prepass schreibt beim Build die Nutzlast-Tabelle des Python-Workers (`nutzlast_tabelle.py`, `vertraege.py`), die betterproto-DTOs (`generated/__init__.py`) aber nur `build_python.sh` (in der Werkbank Schritt 2 von ⟳). Eine neue Domänen-Nachricht lässt den Worker beim Import scheitern, bis jemand das Skript startet; weder `codegen.sh --check` noch das Gate prüfen es (Phase 9: `AblaufE2ETests.Bildeingang_mit_Python_Worker…` rot, „Worker hat sich nicht angemeldet“) | P2 |
 | PF-37 | „P hat S weiterverarbeitet“ geht nach JEDEM Commit einer Projektion, der Events anwandte, als Nachricht an den Verteiler jedes Knotens — auch wenn keine Sitzung beobachtet; nicht gemessen (Plan §8: Zusammenfassungs-Takt und Grenze der Abhängigkeitsmengen „in Phase 7 messen“) | P3 |
 | FB-7 | Eine Funktion draußen ohne verbundenen Träger staut ihre Eingänge still im Log (Rückstand in `/health`, aber keine eigene Meldung „kein Träger“); ein Träger, der Eingänge annimmt und nicht beantwortet, hält bei einem Slot je Partition die übrigen Streams der Partition bis zum Ablauf der Lease (30 s) auf | P3 |
 | FB-4 | Werkzeuge: Extractor und Karten zeigen `Frist<TCmd>` als Ausgang eines Decide nicht als Kante zur Uhr; das Werkbank-Schema kennt nur die Datei-Konfig (Takt fehlt); der Zustandstyp einer Funktion (`IZustand<T>`) ist eine Code-Karte im geteilten Block statt an seiner Funktion, das Hinweis-Netz hat keine eigene Kante; Editor-Oberfläche zurückgestellt (Plan E4); die Oberfläche nennt noch den entfallenen Umgebungs-Abschnitt `VersionIndex` und einen Schalter „TrackDeps (Redis-Deps)“ | P3 |
@@ -346,6 +345,17 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **FB-20 · Python-DTOs im Codegen-Prepass (2026-10-29; docs/09 §9.2):** die betterproto-DTOs des Workers (`generated/__init__.py`) erzeugte nur
+  `build_python.sh` (in der Werkbank Schritt 2 von ⟳); eine neue Domänen-Nachricht ließ den Worker beim Import scheitern, bis jemand das Skript
+  startete, und weder `codegen.sh --check` noch das Gate merkten es (Phase 9: `AblaufE2ETests.Bildeingang_mit_Python_Worker…` rot). Jetzt erzeugt
+  sie der Prepass gleich nach `domain.proto` (`Cqrs.Codegen/PythonDtoErzeuger`): passt der sha256 des Protos zu `generated/.proto_hash`, ruft er
+  kein Python (ein frischer Checkout baut ohne Interpreter), sonst `grpc_tools.protoc` mit betterproto über `CQRS_PYTHON`, sonst
+  `/opt/miniconda3/envs/gpu_env/bin/python` (die Werkbank gibt den Interpreter ihrer Umgebung mit); fehlt er, scheitert der Build laut. Auch ein
+  übersprungener Lauf (DLLs unverändert) prüft den Hash. `__init__.py` und `.proto_hash` stehen in der Artefakt-Liste — `codegen.sh --check` und
+  das Gate (Build verändert den Checkout) sehen veraltete DTOs. `build_python.sh` ist entfallen (kein zweiter Weg); ⟳ legt in Schritt 2 nur noch
+  die Python-Implementierungen an. *Gegenprobe:* ein Domänen-Feld ergänzt, `domain.proto` neu, DTOs alt committet → `./codegen.sh --check` auf
+  dem Server rot.
 
 - **G-17 und G-11 · Leser rückten über Events, die noch niemand gezogen hatte (2026-10-28, Messserver; docs/03 §3.3, docs/11 §11.4):** die Probe
   des Horizonts der Vollständigkeit las den Sequenzzähler mit `select last_value from mt_events_sequence` — ohne Sperre der Sequenz-Seite. Jeder

@@ -6,8 +6,9 @@
        ohne Leitung die Komposition (STJ-Kontexte). Die Anwendung (Wurzel) folgt aus dem Projektnamen (Projektstruktur, docs/07).
 
        Erzeugt VOR protoc/STJ die Artefakte aus den GEBAUTEN Domain-DLLs (Cqrs.Codegen; die Liste gibt das Werkzeug mit
-       „artefakte“ aus): <Wurzel>.Leitung/domain.proto, <Wurzel>.Laufzeit/Serialization/*.g.cs, die Python-Generate des Workers —
-       je Rolle nur, wenn ihr Projekt existiert.
+       „artefakte“ aus): <Wurzel>.Leitung/domain.proto, <Wurzel>.Laufzeit/Serialization/*.g.cs, die Python-Generate des Workers samt
+       seiner betterproto-DTOs (aus domain.proto über protoc; Python nur, wenn sich das Proto änderte — Interpreter CQRS_PYTHON, sonst
+       /opt/miniconda3/envs/gpu_env/bin/python) — je Rolle nur, wenn ihr Projekt existiert.
 
        ROBUSTHEIT: Die build-order-only ProjectReference (ReferenceOutputAssembly=false) stellt sicher, dass Cqrs.Codegen.dll SAMT der
        Domain-DLLs gebaut ist (Cqrs.Codegen referenziert die Codegen-Projekte jeder Anwendung), bevor der Prepass läuft. Das Target

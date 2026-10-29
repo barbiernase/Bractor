@@ -50,13 +50,9 @@ else
     echo "  ⚠ domain.proto nicht gefunden"
 fi
 
-# --- Python-Typen generieren (NEU) ---
+# --- Python-Typen: erzeugt der Codegen-Prepass im Build (domain_client/generated/__init__.py) ---
 WORKER_DIR="$REPO_DIR/Domain.Client.Worker.Python.ML"
 INFRA_DIR="$REPO_DIR/Client.Infrastructure.Python"
-if [ -d "$WORKER_DIR" ] && command -v python3 &>/dev/null; then
-    echo "Python-Typen generieren..."
-    "$WORKER_DIR/build_python.sh" || echo "  ⚠ Python-Generierung fehlgeschlagen (nicht kritisch)"
-fi
 
 # --- Python auf GPU-Maschine deployen (NEU, optional) ---
 GPU_HOST="${GPU_HOST:-}"

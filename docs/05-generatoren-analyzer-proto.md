@@ -180,6 +180,8 @@ Domain.Leitung: Target CqrsCodegenPrepass  (Cqrs.Codegen/CqrsCodegen.targets, Af
     Domain.Laufzeit/Serialization/EventJsonSerializerContext.g.cs
     Domain.Laufzeit/Serialization/CqrsWireJsonContext.g.cs
     Domain.Client.Worker.Python.ML/domain_client/generated/vertraege.py · funktionen.py · funktions_tabelle.py · nutzlast_tabelle.py
+    Domain.Client.Worker.Python.ML/domain_client/generated/__init__.py · .proto_hash   (betterproto-DTOs aus domain.proto über protoc —
+                Python nur, wenn sich der Hash des Protos änderte; PythonDtoErzeuger)
         ▼
 Domain.Leitung: Grpc.Tools kompiliert domain.proto → {Typ}Dto        (nur Domänen-DTOs)
         ▼
