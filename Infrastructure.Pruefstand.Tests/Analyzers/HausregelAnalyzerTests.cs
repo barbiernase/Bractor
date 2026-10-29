@@ -51,8 +51,8 @@ class A : IActor {
 
     public static TheoryData<string, string> Verbote => new()
     {
-        { "Task.Run", "Task.Run(() => { });" },
-        { "TaskFactory.StartNew", "Task.Factory.StartNew(() => { });" },
+        { "Task.Run", "await Task.Run(() => { });" },
+        { "TaskFactory.StartNew", "await Task.Factory.StartNew(() => { });" },
         { "Parallel", "Parallel.For(0, 2, _ => { });" },
         { "ThreadPool", "ThreadPool.QueueUserWorkItem(_ => { });" },
         { "new Thread", "var t = new Thread(() => { });" },
@@ -85,7 +85,7 @@ class A : IActor {
     public async Task Was_ein_Actor_besitzt_gilt_mit(string actor, string wie)
     {
         var code = Kopf + actor + @"
-class Teil { public Task Tu() { Task.Run(() => { }); return Task.CompletedTask; } } }";
+class Teil { public Task Tu() => Task.Run(() => { }); } }";
         var d = await Analysiere(code);
         d.Where(x => x.Id == HausregelAnalyzer.VerstossId).Should().ContainSingle(wie)
             .Which.GetMessage().Should().Contain("'Teil'");
