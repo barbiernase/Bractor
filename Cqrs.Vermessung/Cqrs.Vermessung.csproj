@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- Der E2E-Treiber der Vermessung (docs/12 §12.5): startet die ECHTEN Hosts in den Umgebungen
-       vermessung bzw. vermessung-pruefdomaene, gibt Last nur über die echten Eingänge (Datei-Quelle, JSON-Eingang mit Akteur-Token),
+       vermessung bzw. vermessung-pruefdomaene, gibt Last nur über die echten Eingänge (Datei-Quelle, JSON-Eingang mit Akteur-Token, gRPC-Leitung mit dem C#-Client-Stack),
        misst bis zum fachlich sichtbaren Ergebnis, prüft Exactly-once über Queries und den Log und legt alles unter vermessung/ergebnisse/ ab.
        Aufruf über scripts/vermessung-e2e.sh. Keine Reflection: JSON nur über JsonNode/JsonDocument. -->
   <PropertyGroup>
@@ -21,6 +21,10 @@
     <!-- ProzessId (Korrelation eines Vorgangs) und die Paar-Id der Beispieldomäne: dieselbe Regel wie im Host, nicht nachgebaut. -->
     <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
     <ProjectReference Include="..\Domain\Domain.csproj" />
+    <!-- S6 (Clients über gRPC): der Client-Stack und das generierte Wiring des Blazor-Arbeitsplatzes, die Nutzlast-Tabelle der Leitung. -->
+    <ProjectReference Include="..\Client.Infrastructure\Client.Infrastructure.csproj" />
+    <ProjectReference Include="..\Domain.Client.Modules.Blazor\Domain.Client.Modules.Blazor.csproj" />
+    <ProjectReference Include="..\Domain.Leitung\Domain.Leitung.csproj" />
   </ItemGroup>
 
 </Project>

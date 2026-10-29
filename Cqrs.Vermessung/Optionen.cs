@@ -14,7 +14,7 @@ internal sealed class Optionen
     public string Art { get; private set; } = "messung";
     public string Anlass { get; private set; } = "";
     public string? Spalte { get; private set; }
-    public HashSet<string> Szenarien { get; private set; } = new() { "S1", "S2", "S3", "S4", "S5" };
+    public HashSet<string> Szenarien { get; private set; } = new() { "S1", "S2", "S3", "S4", "S5", "S6" };
     public int Wiederholungen { get; private set; } = 1;
     public bool Probe { get; private set; }
     /// <summary><c>--art leerlauf</c>: die Messung mit Zeitreihen statt Leerlauf-Fenster (vor der Last, danach, nach einem Neustart) — eine
@@ -38,13 +38,16 @@ internal sealed class Optionen
     /// <summary>Gleichzeitige Sender je Block.</summary>
     public int[] SenderS3 { get; private set; } = [8, 64];
     public int[] SenderS5 { get; private set; } = [1, 8, 64];
+    /// <summary>S6: gleichzeitige Clients je Block, jeder mit eigener gRPC-Sitzung.</summary>
+    public int[] SenderS6 { get; private set; } = [8, 64];
     /// <summary>Höchstzahl Vorgänge je Block: unter Höchstlast nimmt der Eingang weit mehr an, als dahinter durchkommt — ohne Deckel wüchse
     /// der Rückstand auf zehntausende und der Abbau dauerte Stunden.</summary>
     public int MaxS3 => _maxS3 ?? (Probe ? 500 : 2000);
     public int MaxS5 => _maxS5 ?? (Probe ? 1000 : 3000);
-    private int? _maxS3, _maxS5;
+    public int MaxS6 => _maxS6 ?? (Probe ? 300 : 3000);
+    private int? _maxS3, _maxS5, _maxS6;
     /// <summary>Ein Diagnose-Lauf mit geänderten Block-Parametern (keine Messung, keine Spalte).</summary>
-    public bool Geaendert => _fenster != null || _maxS3 != null || _maxS5 != null || _senderGeaendert;
+    public bool Geaendert => _fenster != null || _maxS3 != null || _maxS5 != null || _maxS6 != null || _senderGeaendert;
     private bool _senderGeaendert;
     /// <summary>Das Leerlauf-Fenster: zwei ganze Poll-Perioden (30 s), damit jeder periodische Takt gleich oft hineinfällt (PF-14).</summary>
     public TimeSpan Leerlauf => Probe ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(60);
@@ -76,13 +79,15 @@ internal sealed class Optionen
                     foreach (var (block, werte) in JeBlock(Wert()))
                     {
                         var sender = werte.Split('+').Select(x => int.Parse(x, CultureInfo.InvariantCulture)).ToArray();
-                        if (block == "S3") o.SenderS3 = sender; else o.SenderS5 = sender;
+                        if (block == "S3") o.SenderS3 = sender; else if (block == "S6") o.SenderS6 = sender; else o.SenderS5 = sender;
                     }
                     o._senderGeaendert = true;
                     break;
                 case "--hoechstens":
                     foreach (var (block, wert) in JeBlock(Wert()))
-                        if (block == "S3") o._maxS3 = int.Parse(wert, CultureInfo.InvariantCulture); else o._maxS5 = int.Parse(wert, CultureInfo.InvariantCulture);
+                        if (block == "S3") o._maxS3 = int.Parse(wert, CultureInfo.InvariantCulture);
+                        else if (block == "S6") o._maxS6 = int.Parse(wert, CultureInfo.InvariantCulture);
+                        else o._maxS5 = int.Parse(wert, CultureInfo.InvariantCulture);
                     break;
                 default: throw new ArgumentException($"unbekannte Option {args[i]}");
             }
@@ -93,14 +98,14 @@ internal sealed class Optionen
         return o;
     }
 
-    /// <summary><c>S3=64,S5=1+64</c> → (S3, "64"), (S5, "1+64"); nur S3 und S5 haben Sender und Obergrenzen.</summary>
+    /// <summary><c>S3=64,S5=1+64</c> → (S3, "64"), (S5, "1+64"); nur S3, S5 und S6 haben Sender und Obergrenzen.</summary>
     private static IEnumerable<(string Block, string Wert)> JeBlock(string text)
     {
         foreach (var teil in text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
         {
             var kv = teil.Split('=', 2);
             var block = kv[0].ToUpperInvariant();
-            if (kv.Length != 2 || block is not ("S3" or "S5")) throw new ArgumentException($"'{teil}': erwartet S3=… oder S5=…");
+            if (kv.Length != 2 || block is not ("S3" or "S5" or "S6")) throw new ArgumentException($"'{teil}': erwartet S3=…, S5=… oder S6=…");
             yield return (block, kv[1]);
         }
     }
@@ -120,12 +125,15 @@ internal sealed class Optionen
         ["s3"] = "je Block ein Sammelvorgang (N = 1 000 000, die Barriere wird nicht erreicht); je Teil StarteTeilauftrag + SchließeTeilauftragAb",
         ["s5_sender"] = new JsonArray(SenderS5.Select(n => (JsonNode)n).ToArray()),
         ["s3_hoechstens_teile_je_block"] = MaxS3,
+        ["s6_sender"] = new JsonArray(SenderS6.Select(n => (JsonNode)n).ToArray()),
+        ["s6_hoechstens_vorgaenge_je_block"] = MaxS6,
+        ["s6"] = "je Sender ein C#-Client (Stack des Blazor-Arbeitsplatzes, eigene gRPC-Sitzung); je Vorgang NimmPaarAuf bis zur Quittung, dann HoleDatensatz mit read-your-writes, bis das Paar darin steht; höchstens 50 Paare je Datensatz",
         ["s5_hoechstens_vorgaenge_je_block"] = MaxS5,
         ["s5_muster"] = "je 10 Vorgänge: 8 Aufträge ok, 1 Auftrag gegen volles Kontingent (Kompensation), 1 Verteilung auf 4 Ziele; 50 Posten, 20 Ziele",
         ["leerlauf_s"] = Leerlauf.TotalSeconds,
         ["leerlauf"] = "erst nach dem Nachlauf (alle Poll-Cursor und Projektions-Positionen am Kopf des Logs, höchstens nachlauf_frist_s), dann das Fenster",
         ["nachlauf_frist_s"] = NachlaufFrist.TotalSeconds,
-        ["sichtbar"] = "S1/S2: Query GetImagePair je offenem Paar (komplett), alle 100 ms; S3: TeilVerbucht im Log; S4: Query HoleDatensatz; S5: AuftragBestaetigt, PostenFreigegeben der Kompensation bzw. VerteilungAbgeschlossen im Log",
+        ["sichtbar"] = "S1/S2: Query GetImagePair je offenem Paar (komplett), alle 100 ms; S3: TeilVerbucht im Log; S4: Query HoleDatensatz; S5: AuftragBestaetigt, PostenFreigegeben der Kompensation bzw. VerteilungAbgeschlossen im Log; S6: HoleDatensatz des Clients zeigt das Paar",
         ["transaktionen"] = "COMMITs aus pg_stat_statements (track = top); Queries = übrige Statements ohne BEGIN/COMMIT/ROLLBACK/DISCARD/SET/SHOW; ohne die Lese-Rolle des Treibers",
     };
 }

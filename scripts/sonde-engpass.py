@@ -12,8 +12,8 @@ Was sie mitschreibt (nur Linux, nur Standardbibliothek):
                     Anfang der Anweisung — über eine einzige psql-Sitzung im Container
   pg_wal.csv        jede Sekunde: pg_stat_wal (Records, Bytes, Writes, Syncs)
   counters-<rolle>-<pid>.csv  dotnet-counters (System.Runtime, Npgsql) je Host- und Treiber-Prozess, jede Sekunde
-  profil.nettrace / profil.speedscope.json  mit --profil <abschnitt>: dotnet-trace (Stacks aller .NET-Threads, ~100 Hz) des Hosts für
-                    --profil-dauer Sekunden ab dem Beginn des Abschnitts (der Treiber schreibt ihn in host.csv); Auswertung scripts/sonde-profil.py
+  profil-<abschnitt>.speedscope.json  mit --profil <abschnitt>[,<abschnitt> …]: je Abschnitt dotnet-trace (Stacks aller .NET-Threads, ~100 Hz)
+                    des Hosts für --profil-dauer Sekunden ab seinem Beginn (der Treiber schreibt ihn in host.csv); Auswertung scripts/sonde-profil.py
 
 Ende per SIGTERM/SIGINT oder nach --dauer Sekunden. Auswertung: scripts/sonde-auswertung.py.
 """
@@ -383,10 +383,16 @@ def trace_dauer(sekunden):
     return f"{h // 24:02d}:{h % 24:02d}:{m:02d}:{s:02d}"
 
 
-def profil_schleife(aus, ergebnisse, abschnitt, dauer):
-    """Wartet, bis der Treiber den Abschnitt beginnt (neuester Ergebnis-Ordner, host.csv), und zeichnet dann den Host auf."""
-    werkzeug = shutil.which("dotnet-trace") or os.path.expanduser("~/.dotnet/tools/dotnet-trace")
+def profil_schleife(aus, ergebnisse, abschnitte, dauer):
+    """Je Abschnitt, in der Reihenfolge des Treibers: warten, bis er beginnt (neuester Ergebnis-Ordner, host.csv), dann den Host aufzeichnen."""
     beginn = time.time()
+    for abschnitt in abschnitte:
+        if not profil_eines(aus, ergebnisse, abschnitt, dauer, beginn):
+            return
+
+
+def profil_eines(aus, ergebnisse, abschnitt, dauer, beginn):
+    werkzeug = shutil.which("dotnet-trace") or os.path.expanduser("~/.dotnet/tools/dotnet-trace")
     while not STOP.wait(0.2):
         try:
             ordner = [os.path.join(ergebnisse, d) for d in os.listdir(ergebnisse)]
@@ -403,19 +409,20 @@ def profil_schleife(aus, ergebnisse, abschnitt, dauer):
         pid = next((p for p, r in host_pids().items() if r == rolle), None)
         if pid is None:
             continue
-        with open(os.path.join(aus, "profil.txt"), "w") as f:
+        with open(os.path.join(aus, "profil.txt"), "a") as f:
             f.write(f"{abschnitt} {rolle} {pid} ab {jetzt()} für {dauer} s\n")
         subprocess.run([werkzeug, "collect", "--process-id", str(pid), "--profile", "dotnet-common,dotnet-sampled-thread-time",
-                        "--duration", trace_dauer(dauer), "--format", "Speedscope", "--output", os.path.join(aus, "profil.nettrace")],
+                        "--duration", trace_dauer(dauer), "--format", "Speedscope", "--output", os.path.join(aus, f"profil-{abschnitt}.nettrace")],
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, timeout=dauer + 120)
-        return
+        return True
+    return False
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--aus", required=True)
     ap.add_argument("--dauer", type=float, default=0, help="Sekunden; 0 = bis SIGTERM")
-    ap.add_argument("--profil", default="", help="Abschnitt des Treibers (z. B. S5-8-w1), ab dessen Beginn der Host aufgezeichnet wird")
+    ap.add_argument("--profil", default="", help="Abschnitte des Treibers, durch Komma getrennt (z. B. S1-w1,S5-64-w1), ab deren Beginn je der Host aufgezeichnet wird")
     ap.add_argument("--profil-dauer", type=int, default=int(os.environ.get("SONDE_PROFIL_DAUER", "15")))
     ap.add_argument("--ergebnisse", default="vermessung/ergebnisse")
     ap.add_argument("--horizont", default="", help="DB, in der die Teile der Horizont-Probe jede Sekunde gemessen werden (PF-17)")
@@ -431,7 +438,7 @@ def main():
     if a.horizont:
         faeden.append(threading.Thread(target=horizont_schleife, args=(a.aus, a.horizont)))
     if a.profil:
-        faeden.append(threading.Thread(target=profil_schleife, args=(a.aus, a.ergebnisse, a.profil, a.profil_dauer)))
+        faeden.append(threading.Thread(target=profil_schleife, args=(a.aus, a.ergebnisse, [x for x in a.profil.split(",") if x], a.profil_dauer)))
     for f in faeden:
         f.daemon = True
         f.start()

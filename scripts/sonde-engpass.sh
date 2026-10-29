@@ -9,8 +9,8 @@
 #   -- --sender S5=64 --fenster 120 --hoechstens S5=1000000     (S5 nur mit 64 Sendern, 120 s lang, ohne Deckel)
 #
 # --horizont <db>: zusätzlich jede Sekunde die Teile der Horizont-Probe einzeln mit EXPLAIN ANALYZE (PF-17), nach sonde/horizont.csv.
-# --profil <abschnitt>: zusätzlich ein CPU-Profil des Hosts ab dem Beginn des Abschnitts (dotnet-trace; Dauer SONDE_PROFIL_DAUER, Standard
-#   15 s), ausgewertet mit scripts/sonde-profil.py nach sonde/profil.md.
+# --profil <abschnitt>[,<abschnitt> …]: zusätzlich je Abschnitt ein CPU-Profil des Hosts ab seinem Beginn (dotnet-trace; Dauer SONDE_PROFIL_DAUER,
+#   Standard 15 s), ausgewertet mit scripts/sonde-profil.py nach sonde/profil-<abschnitt>.md.
 #
 # Knöpfe (wirken nur auf den Checkout des Messservers, der vor jedem Lauf gesäubert wird; knopf.txt hält die Änderung fest):
 #   keiner            Stand des Commits
@@ -99,11 +99,13 @@ ziel="vermessung/ergebnisse/$neu/sonde"
 mkdir -p "$ziel"
 cp "$SONDE"/* "$ziel"/
 python3 scripts/sonde-auswertung.py "vermessung/ergebnisse/$neu" || echo "Auswertung fehlgeschlagen (Rohdaten liegen in $ziel)" >&2
-if [ -f "$ziel/profil.speedscope.json" ]; then
-  python3 scripts/sonde-profil.py "$ziel/profil.speedscope.json" > "$ziel/profil.md" || echo "Profil-Auswertung fehlgeschlagen" >&2
-  cat "$ziel/profil.md"
-  rm -f "$ziel/profil.nettrace"; gzip -9 "$ziel/profil.speedscope.json"
-fi
+for profil in "$ziel"/profil-*.speedscope.json; do
+  [ -f "$profil" ] || continue
+  md="${profil%.speedscope.json}.md"
+  python3 scripts/sonde-profil.py "$profil" > "$md" || echo "Profil-Auswertung fehlgeschlagen: $profil" >&2
+  cat "$md"
+  rm -f "${profil%.speedscope.json}.nettrace"; gzip -9 "$profil"
+done
 gzip -9 "$ziel"/*.csv
 rm -rf "$SONDE"
 exit $rc

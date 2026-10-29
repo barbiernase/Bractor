@@ -47,14 +47,48 @@ internal static class Werkzeuge
             ? File.ReadLines(datei).FirstOrDefault(z => z.StartsWith(schluessel))?.Split(':', 2)[1].Trim() ?? ""
             : "";
 
-    /// <summary>Fremdlast: Lastdurchschnitt und die fünf CPU-stärksten fremden Prozesse.</summary>
+    /// <summary>
+    /// Fremdlast: Lastdurchschnitt und die fünf CPU-stärksten Prozesse <b>jetzt</b> — unter Linux über eine Sekunde aus <c>/proc/&lt;pid&gt;/stat</c>
+    /// gemessen. <c>ps -o pcpu</c> nennt den Durchschnitt über die ganze Lebenszeit eines Prozesses: ein kurz zuvor beendeter Build stand dort mit
+    /// „390 % dotnet“, obwohl nichts mehr lief. Ohne /proc (macOS) bleibt es bei <c>ps</c>.
+    /// </summary>
     public static string Fremdlast()
     {
         var last = OperatingSystem.IsMacOS() ? Laufe("sysctl", "-n vm.loadavg") : File.Exists("/proc/loadavg") ? File.ReadAllText("/proc/loadavg") : "";
-        // BSD-ps (macOS) sortiert mit -r nach CPU, procps (Linux) mit --sort.
-        var sortierung = OperatingSystem.IsMacOS() ? "-r" : "--sort=-pcpu";
-        var top = Laufe("sh", $"-c \"ps -Ao pcpu,comm {sortierung} | head -6 | tail -5\"").Replace('\n', ';');
-        return $"Last {last.Trim('{', '}', ' ')} · CPU-stärkste: {System.Text.RegularExpressions.Regex.Replace(top, @"\s+", " ")}";
+        string top;
+        if (Directory.Exists("/proc/self"))
+        {
+            var vorher = CpuTicks();
+            Thread.Sleep(1000);
+            var nachher = CpuTicks();
+            top = string.Join("; ", nachher
+                .Select(kv => (kv.Value.Name, Prozent: vorher.TryGetValue(kv.Key, out var v) ? (kv.Value.Ticks - v.Ticks) / 100.0 * 100 : 0))
+                .Where(x => x.Prozent > 0).OrderByDescending(x => x.Prozent).Take(5).Select(x => $"{x.Prozent:F0} {x.Name}"));
+        }
+        else
+            top = Laufe("sh", "-c \"ps -Ao pcpu,comm -r | head -6 | tail -5\"").Replace('\n', ';');
+        return $"Last {last.Trim('{', '}', ' ')} · CPU jetzt: {System.Text.RegularExpressions.Regex.Replace(top, @"\s+", " ")}";
+    }
+
+    /// <summary>Je Prozess Name und verbrauchte CPU-Zeit (utime + stime, in Ticks zu 1/100 s) aus <c>/proc/&lt;pid&gt;/stat</c>.</summary>
+    private static Dictionary<int, (string Name, long Ticks)> CpuTicks()
+    {
+        var aus = new Dictionary<int, (string, long)>();
+        foreach (var dir in Directory.EnumerateDirectories("/proc"))
+        {
+            if (!int.TryParse(Path.GetFileName(dir), out var pid)) continue;
+            try
+            {
+                var stat = File.ReadAllText(Path.Combine(dir, "stat"));
+                var auf = stat.IndexOf('(');
+                var zu = stat.LastIndexOf(')');
+                var felder = stat[(zu + 2)..].Split(' ');   // ab Feld 3 (state); utime = Feld 14, stime = Feld 15
+                aus[pid] = (stat[(auf + 1)..zu], long.Parse(felder[11]) + long.Parse(felder[12]));
+            }
+            catch (IOException) { }   // der Prozess endete gerade
+            catch (UnauthorizedAccessException) { }
+        }
+        return aus;
     }
 }
 

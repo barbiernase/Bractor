@@ -17,8 +17,12 @@ internal static class Zusammenfassung
         ("durchsatz_je_s", "Durchsatz bis alles sichtbar", "{V}/s"),
         ("rueckstand", "Rückstand am Fensterende", "Vorgänge"),
         ("abbau_s", "Abbauzeit", "s"),
+        ("erstes_sichtbar_ms", "Erster Vorgang sichtbar nach", "ms"),
         ("latenz_p50_ms", "Latenz p50", "ms"),
         ("latenz_p99_ms", "Latenz p99", "ms"),
+        ("quittung_p50_ms", "Quittung p50", "ms"),
+        ("quittung_p99_ms", "Quittung p99", "ms"),
+        ("wiederverbunden", "Wiederverbunden", "1"),
         ("dauer_aufnahme_s", "Dauer Range aufnehmen", "s"),
         ("dauer_einfrieren_s", "Dauer Einfrieren", "s"),
         ("nachschub_p50_ms", "Nachschub p50", "ms"),
@@ -58,7 +62,7 @@ internal static class Zusammenfassung
 
     private static string Vorgaenge(string s) => s switch
     {
-        "S1" or "S2" or "S4" => "Paare", _ when s.StartsWith("S3") => "Teile", _ when s.StartsWith("S5") => "Vorgänge", _ => "",
+        "S1" or "S2" or "S4" => "Paare", _ when s.StartsWith("S3") => "Teile", _ when s.StartsWith("S5") || s.StartsWith("S6") => "Vorgänge", _ => "",
     };
 
     public static string Markdown(JsonObject e)

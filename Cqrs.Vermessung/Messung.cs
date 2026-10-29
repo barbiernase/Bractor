@@ -13,7 +13,7 @@ internal sealed class SzenarioWert
 /// <summary>
 /// Die Messung (§0.1, Höchstlast) in wenigen Minuten. Je Durchgang frische DBs; Beispieldomäne: S1 (Stoß TIFF-Paare), S4 (Datensatz über die
 /// Paare aus S1), S3 (Teile an EINEN Sammelvorgang, 8 und 64 Sender), L1 (Leerlauf); dieselbe DB mit Bild-Funktionen im Python-Worker: S2
-/// (kleiner Stoß); Prüfdomäne: S5 (Vorgänge an viele Aggregate, 1, 8 und 64 Sender), L5. Jeder Block sendet höchstens 15 s und baut danach
+/// (kleiner Stoß); S6 (Clients über gRPC, 8 und 64 Sitzungen); Prüfdomäne: S5 (Vorgänge an viele Aggregate, 1, 8 und 64 Sender), L5. Jeder Block sendet höchstens 15 s und baut danach
 /// ab; nach jedem Szenario die Exactly-once-Prüfung, je Anwendung die globale.
 /// </summary>
 internal static class Messung
@@ -44,7 +44,7 @@ internal static class Messung
         for (var w = 1; w <= o.Wiederholungen; w++)
         {
             Console.WriteLine($"── Wiederholung {w}/{o.Wiederholungen} ──");
-            if (o.Szenarien.Overlaps(["S1", "S2", "S3", "S4"]))
+            if (o.Szenarien.Overlaps(["S1", "S2", "S3", "S4", "S6"]))
             {
                 await using (var lauf = await Anwendungslauf.StarteAsync(k, k.Beispiel, "Host.Grpc", "host", $"beispiel-w{w}", zuruecksetzen: true))
                 {
@@ -63,6 +63,19 @@ internal static class Messung
                             Merke($"S3-{sender}", wert);
                         }
                     }
+                    if (o.Szenarien.Contains("S6"))
+                        foreach (var sender in o.SenderS6)
+                        {
+                            await using var clients = await ClientSitzungen.VerbindeAsync(k.Beispiel.GrpcPort, sender);
+                            await AufwaermenAsync(clients, 20);
+                            var wert = await BlockAsync(k, lauf, $"S6-{sender}", clients, sender, o.MaxS6, w);
+                            var quittung = clients.QuittungMs.ToList();
+                            wert.Kennzahlen["quittung_p50_ms"] = Statistik.Perzentil(quittung, 50);
+                            wert.Kennzahlen["quittung_p99_ms"] = Statistik.Perzentil(quittung, 99);
+                            wert.Kennzahlen["wiederverbunden"] = clients.Wiederverbunden;
+                            wert.Pruefungen.AddRange(await clients.PruefeAsync(lauf.Db, $"S6 ×{sender}", wert.Kennzahlen["abgebaut"] > 0));
+                            Merke($"S6-{sender}", wert);
+                        }
                     if (o.Diagnose) await Zeitreihe.LaufeAsync(k, lauf, "L1-nach-last", o.ZeitreiheNachLast, o.ZeitreiheTakt);
                     else Merke("L1", await LeerlaufAsync(k, lauf, "L1", w, nichtAbgebaut.Count == 0));
                 }
@@ -150,6 +163,7 @@ internal static class Messung
         "L1" => "Leerlauf Beispieldomäne", "L5" => "Leerlauf Prüfdomäne",
         _ when s.StartsWith("S3-") => $"Sammelvorgang heiß, {s[3..]} Sender",
         _ when s.StartsWith("S5-") => $"Prüfdomäne verteilt, {s[3..]} Sender",
+        _ when s.StartsWith("S6-") => $"Clients über gRPC, {s[3..]} Sitzungen",
         _ => s,
     };
 
@@ -169,6 +183,10 @@ internal static class Messung
         wert.Kennzahlen["rueckstand"] = b.Rueckstand;
         wert.Kennzahlen["abbau_s"] = b.AbbauS;
         wert.Kennzahlen["abgebaut"] = b.Abgebaut ? 1 : 0;
+        // Ab dem ersten Start bis zum ersten sichtbaren Ergebnis — bei einem Stoß die einzige Aussage über den Anlauf (im Fenster wird dort nichts sichtbar).
+        var erstes = vorgaenge.Where(x => x.Sichtbar != null).Select(x => x.Sichtbar!.Value).DefaultIfEmpty().Min();
+        var start = vorgaenge.Where(x => x.Start != default).Select(x => x.Start).DefaultIfEmpty().Min();
+        wert.Kennzahlen["erstes_sichtbar_ms"] = erstes == default || start == default ? double.NaN : (erstes - start).TotalMilliseconds;
         wert.Kennzahlen["latenz_p50_ms"] = b.P50;
         wert.Kennzahlen["latenz_p95_ms"] = b.P95;
         wert.Kennzahlen["latenz_p99_ms"] = b.P99;
@@ -200,6 +218,10 @@ internal static class Messung
         await AufwaermenAsync(bild, 10);
         // Der Stoß: ein Sender schreibt die Paare so schnell, wie das Dateisystem sie nimmt (eine Kamera nach einem Stillstand).
         var wert = await BlockAsync(k, lauf, name, bild, 1, paare, w);
+        // Ein Stoß ist angenommen, bevor das erste Paar fertig ist: „sichtbar im Fenster“ wäre immer 0 und der Rückstand immer der ganze Stoß —
+        //   beides sagt nichts; was zählt, sind Durchsatz bis alles sichtbar, Abbau, Latenz und der erste sichtbare Vorgang.
+        wert.Kennzahlen.Remove("sichtbar_je_s");
+        wert.Kennzahlen.Remove("rueckstand");
         wert.Pruefungen.AddRange(await bild.PruefeAsync(lauf.Db, 2 * bild.Paare.Count, wert.Kennzahlen["abgebaut"] > 0));
         return wert;
     }

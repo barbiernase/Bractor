@@ -27,7 +27,8 @@
       "vermessung-bildrechner": "Bildrechner",
       "vermessung-disponent": "Disponent",
       "vermessung-kioperator": "KIOperator",
-      "vermessung-inspekteur": "Inspekteur"
+      "vermessung-inspekteur": "Inspekteur",
+      "vermessung-arbeitsplatz": "Inspekteur,KIOperator,Modellfreigeber,Produktpruefer"
     }
   },
   "Quellen": {
