@@ -12,7 +12,7 @@ Prozess-Sprache, Handle-/Trigger-Welt, Marken im Log und der Redis-Versionsindex
 Hinweis-Netz, Uhr, Sitzung und Verteiler, Store-Klassen und die direkte Aggregat-Abfrage (Grammatik [10](10-entwickler-api.md)). Was er
 erledigt hat, steht in §13.6 (u. a. W11-1, W11-2, PF-4b, PF-6, PF-25, PF-26, P2-5, P3-3, FB-1, FB-2, FB-3, FB-10, VM-1, G-12, G-13, G-14); offen
 blieben, was die Tabelle unten nennt, darunter PF-7, PF-10, PF-13 und AK-1 (Entscheidungen offen) sowie FB-19 aus der direkten Abfrage. Die Hausregel
-für Actors ist eine Build-Prüfung (CQRS112/113, docs/06 §6.7). G-18 und PF-36 sind mit dem Vorrat der Seite im Funktions-Actor erledigt (§13.6).
+für Actors ist eine Build-Prüfung (CQRS112/113, docs/06 §6.7). G-18 und PF-36 sind mit dem Vorrat der Seite im Funktions-Actor erledigt, PF-33 mit dem Standard von 4 Slots (§13.6); die Decke danach ist PF-40.
 
 | ID | Kurz | Prio |
 |---|---|:--:|
@@ -21,8 +21,8 @@ für Actors ist eine Build-Prüfung (CQRS112/113, docs/06 §6.7). G-18 und PF-36
 | G-16 | Lesen nach Schreiben im Verhaltens-Netz einmal verfehlt (`ClientVerhaltenTests.Nach_dem_eigenen_Command_sieht_die_naechste_Query…`, 1 von 3 Läufen am 2026-10-28): die Query direkt nach der Quittung zeigte den eigenen Stand nicht; vermutlich derselbe Mechanismus wie G-14 oder der damalige Redis-Index (nach dem Commit geschrieben, überschreibend, mit Ablauf); seit Phase 6 kommt der Stand aus dem Guard der Projektion (mit den Wirkungen in einer Transaktion) — am 2026-10-28 mit diesem Stand wieder einmal in drei vollen Läufen rot — der Redis-Index war es also nicht. Seit Phase 7 wartet die Leseseite selbst auf „mindestens S auf v“ (keine Nachfrage im Client mehr); ob G-16 damit weg ist, zeigt erst eine Reihe voller Läufe | P2 |
 | G-15 | Hinweise zwischen zwei Actors ohne zugesicherte Reihenfolge: der Plan (§2.9) sagt „zwischen zwei Actors bleibt die Reihenfolge“, der Bote meldet aber jede Nachricht für sich — zwei Hinweise desselben Absenders an dieselbe Adresse können sich überholen; ohne Nachweis-Test | P2 |
 | PF-34 | Eine Funktion mit Zustand rechnet einen Eingang zugleich (Slots gelten nicht) und startet während ihrer Sicherung nichts; die Last je Sicherung wächst mit dem Zustand (Intervall `Zustand:SichernAlleSekunden`) — ungemessen | P3 |
-| PF-35 | Bindung je Adresse (A8) für jede Funktion draußen, auch ohne Zustand: die Adressen verteilen sich gerecht über die Träger, aber eine Adresse läuft nie über zwei Träger zugleich; bei einem Slot je Partition (PF-33) ohne Wirkung, mit vielen Slots je Partition ungemessen | P3 |
-| PF-33 | Funktionen laufen ohne Eintrag in der Umgebung mit einem Slot je Partition. Messreihe nach dem Vorrat der Seite (2026-10-29, `ec956e5`, `…_pf33-*`, je ein Lauf, alle gültig): S5-64 mit 1 / 4 / 16 Slots bei 8 Partitionen 807 / 1 996 / 2 326 Vorgänge/s (p99 3,4 / 1,2 / 0,9 s); 1 Slot bei 32 Partitionen 1 948, 16 Slots bei 32 Partitionen nur 1 533. S5-8 ab 4 Slots ≈ 1 750 — so schnell, wie die acht Sender senden (angenommen ≈ sichtbar, p99 40 ms). Der Host bleibt bei 2,5–3,7 Kernen, Postgres meist unter 4. Mehr Slots sind semantisch folgenlos (je Stream bleibt es nacheinander, mit Zustand gilt ein Slot); offen sind der Standard (Vorschlag: 4) und die echte Decke — der Block von S5 (3 000 Vorgänge, bei 64 Sendern in 0,3–1 s angenommen) ist zu kurz für einen eingeschwungenen Zustand | P1 |
+| PF-35 | Bindung je Adresse (A8) für jede Funktion draußen, auch ohne Zustand: die Adressen verteilen sich gerecht über die Träger, aber eine Adresse läuft nie über zwei Träger zugleich; seit dem Standard von 4 Slots (PF-33) wirksam, ungemessen | P3 |
+| PF-40 | Decke von S5 bei ≈ 1 800–2 000 Vorgängen/s durchgehend (Abbau mit 16 Slots ≈ 3 000): Postgres wird dabei zur Grenze — bis 11 Kerne im Mittel, fast 20 in der Spitze, 18–23 Queries je Vorgang unter S5-64, 34–42 unter S5-8; der Host nutzt nur 3–4 Kerne (docs/12, Decke von S5). Welche Queries je Vorgang die Last tragen, ist ungemessen (nächster Schritt: Queries je Vorgang nach Herkunft aufschlüsseln) | P2 |
 | PF-13 | Unter S5-64: der Nachschub (früher Reaktion, seit Phase 4 die Funktion `Nachschub`) wartet am heißen Posten hinter den Reservierungen — p99 im Sekundenbereich (Zahlen docs/12) | P3 |
 | PF-10 | Datei-Treiber meldet eine Datei nach der anderen ins Log (Rückstau): das Melde-Tempo ist die Decke von S1 — Entscheidung offen | P2 |
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16; seit Phase 3 dazu die Uhr (eine Abfrage je Sekunde) und je Funktion und Partition ein Poll | P3 |
@@ -196,13 +196,6 @@ eine Umgebung als Heredoc neben `umgebungen/*.json`. *Empfehlung:* Deploy auf `u
 
 ### P2
 
-**PF-33 · Slots der Funktionen** (Messung Phase 4, docs/12 §12.5). Ein Funktions-Actor startet je Partition höchstens so viele Eingänge, wie die
-Umgebung Slots nennt (Standard 1), und jeder Eingang wartet auf seinen Emit (eine Frage an das Ziel-Aggregat). Ein Ablauf über mehrere Aggregate
-hat mehrere Kanten, also mehrere Eingänge je Vorgang: mit einem Slot tragen acht Partitionen in der Prüfdomäne ≈ 300 Vorgänge/s, der Dirigent
-vorher bis 2 326. Mit 16 Slots S5-8 1,18 × der Basis, S5-64 0,56 ×. *Entscheidung offen:* höherer Standard für gleichbleibende Funktionen (sie
-halten nichts fest, Slots kosten nur gleichzeitige Emits) oder Slots je Umgebung setzen; danach den Rest bei 64 Sendern untersuchen (Kandidat: je
-Stream nacheinander auf den 50 heißen Posten-Streams, auf denen `Nachschub` und `Auftragsabwicklung` hören).
-
 **FB-4 … FB-7 · Funktionen und Uhr, bewusst offen nach Umbau-Phase 4** (2026-10-26). Was erst spätere Phasen tragen, ist mit Absicht nicht
 vorgezogen, weil jede Vorab-Lösung ein zweiter Weg wäre, der wieder verschwände. (FB-1, Hinweise als Eingang, ist mit Phase 4b erledigt, §13.6.) **FB-4:** reine Darstellungs-Lücken
 der Werkzeuge; die Garantien hängen nicht daran. **FB-5:** R6 des Plans wollte Kreise im Signatur-Graph als Warnung; aber jeder Ablauf mit
@@ -355,6 +348,14 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
   (eine Query hat genau ein Ziel, Reader oder Aggregat) und hatte keine Nutzer. Wer etwas wissen will, das draußen berechnet wird, lässt eine
   Funktion draußen ihr Ergebnis ins Log schreiben und fragt einen Reader.
 
+- **PF-33 · Slots der Funktionen (2026-10-29, Messserver; docs/04 §4.4):** Funktionen liefen ohne Eintrag in der Umgebung mit einem Slot je
+  Partition; jeder Eingang wartet auf seinen Emit, ein Ablauf über mehrere Aggregate hat mehrere Kanten je Vorgang. Messreihe nach dem Vorrat
+  der Seite (`ec956e5`, `…_pf33-*`): S5-64 mit 1 / 4 / 16 Slots bei 8 Partitionen 807 / 1 996 / 2 326 Vorgänge/s, S5-8 ab 4 Slots durch die
+  Sender begrenzt. Der Standard ist jetzt **4 Slots** (`FunktionsKonfig.StandardSlots`, eine Konstante für die Umgebung und die Bindung ohne
+  Eintrag, `c6b6ec8`; schnelle Stufe grün). Semantisch folgenlos: je Stream bleibt es nacheinander, eine Funktion mit Zustand rechnet einen
+  Eingang zugleich; eine Umsetzung teilt bei mehreren Slots ihre Instanz und muss thread-sicher sein, sonst nennt die Umgebung `Slots: 1`.
+  Die Decke mit langem Block (docs/12) liegt bei ≈ 1 800–2 000 Vorgängen/s; 16 Slots bauen schneller ab (≈ 3 000 gegen 2 100), bleiben aber
+  eine Sache der Umgebung. Was danach begrenzt, ist PF-40.
 - **PF-36 · S5 unter Parallelität langsam und streuend (2026-10-29, Messserver; docs/04 §4.4):** seit Phase 6 lag S5 mit 8 und 64
   Sendern niedrig (≈ 220–360 Vorgänge/s) und streute beim selben Commit um bis zu 1,5 ×; das A-B-B-A gegen Phase 5 zeigte den Unterschied im
   Profil nicht. Beide Profile (A wie B) und das der ersten Gesamtprüfung zeigten dieselbe Ursache: ≈ 66 % der arbeitenden Host-CPU lasen Events,
@@ -362,7 +363,7 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
   Seite neu, um genau einen zu starten. Behoben mit G-18 (unten: Vorrat der Seite). S5 A-B-B-A, A = `90798a7` ohne, B = `f49bbf5` mit Vorrat:
   S5-8 300/214 gegen 833/866 Vorgänge/s (≈ 3,3 ×), S5-64 297/250 gegen 933/940 (≈ 3,4 ×), p99 von 8–12 s auf 2–3 s, Queries je Vorgang
   39 → 27 bzw. 38 → 23, S5-1 gleich; die B-Läufe streuen kaum (`…_pf36-vorrat-*`). Ob die Senkung seit Phase 6 eine zweite Ursache hatte, ist
-  damit gegenstandslos. Offen bleibt der Standard der Slots (PF-33). Die drei überflüssigen `Guid.NewGuid` je materialisiertem Event
+  damit gegenstandslos. Den Standard der Slots setzt PF-33 (oben). Die drei überflüssigen `Guid.NewGuid` je materialisiertem Event
   (`EventEnvelope`-Vorgaben) bleiben, bis ein Profil sie wieder zeigt — gelesen wird jetzt etwa einmal je Seite statt je Eingang.
 - **G-18 · Nach dem harten Neustart holte eine Partition einer Funktion ihren Rückstand nicht auf (2026-10-29, Messserver; docs/04 §4.4):** der
   Verdacht war ein Lauf, der nie endet und den einzigen Slot der Partition hält. Die Daten zeigten etwas anderes. Mit Diagnose-Logging im

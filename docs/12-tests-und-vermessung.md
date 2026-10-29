@@ -236,7 +236,7 @@ die Wartezustände der Verbindungen (`…_pf33-postgres/proben.csv`). Alle gült
 
 | Slots / Partitionen | S5-1 | S5-8 | S5-64 | p99 S5-64 |
 |---|---:|---:|---:|---:|
-| 1 / 8 (Standard) | 443 | 800 | 807 | 3,4 s |
+| 1 / 8 (Standard bis `c6b6ec8`) | 443 | 800 | 807 | 3,4 s |
 | 4 / 8 | 433 | 1 745 | 1 996 | 1,2 s |
 | 16 / 8 | 406 | 1 784 | 2 326 | 0,9 s |
 | 1 / 32 | 415 | 1 721 | 1 948 | 1,2 s |
@@ -246,6 +246,23 @@ S5-8 ist ab 4 Slots durch die Sender begrenzt (angenommen ≈ sichtbar, p99 40 m
 Postgres meist unter 4; Sperren warten nie, LWLock und IO kaum. Die Proben von Postgres sind für die kurzen Blöcke grob (2–10 je Szenario): ein
 S5-Block hat 3 000 Vorgänge, bei 64 Sendern in 0,3–1 s angenommen — die Messung zeigt den Hebel der Slots, nicht die Decke. Transaktionen je
 Vorgang fallen mit mehr Slots von 2,4 auf 0,5–1 (größere Gruppen im Group-Commit).
+
+**Decke von S5 (PF-33, 2026-10-29, `c6b6ec8`, Standard jetzt 4 Slots, Diagnose ohne Spalte):** S5 mit 8 und 64 Sendern, Fenster 20 s, höchstens
+40 000 Vorgänge je Block (`--sender S5=8+64 --fenster 20 --hoechstens S5=40000`), je ein Lauf, Proben wie oben (`…_pf33-decke-postgres`). Alle
+gültig, Exactly-once grün. „Durchgehend“ = Vorgänge / (Fenster + Abbau); „Abbau“ = was nach dem Fenster noch sichtbar wurde, je Sekunde.
+
+| Slots / Partitionen | S5-8 (20 s) | p99 S5-8 | S5-64 durchgehend | angenommen | Abbau | p99 S5-64 | Postgres-CPU Mittel / Spitze (S5-64) |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 4 / 8 (Standard) | 1 569 | 50 ms | 1 758 | 8 505 | 2 113 | 19,7 s | 4,1 / 14,8 Kerne |
+| 16 / 8 | 1 561 | 40 ms | 2 028 | 3 933 | 2 963 | 14,6 s | 8,4 / 16,2 Kerne |
+| 4 / 32 | 1 450 | 40 ms | 1 485 | 3 468 | 1 929 | 21,3 s | 10,9 / 19,3 Kerne |
+
+S5-8 hält 20 s lang ≈ 1 500–1 570 Vorgänge/s ohne Rückstau (die acht Sender warten je Vorgang auf die Quittung — das ist ihr Takt, nicht die
+Decke). Bei 64 Sendern nimmt die Schreibseite bis 8 500 Vorgänge/s an, 40 000 also in 5–12 s; die Funktionen bauen den Rückstau danach mit
+≈ 2 100 (4 Slots) bzw. ≈ 3 000 (16 Slots) Vorgängen/s ab. Die Decke durchgehend liegt damit bei ≈ 1 800–2 000 Vorgängen/s, beim Abbau allein
+bei 2 100–3 000. Der Host nutzt im Mittel 3,2–3,4 Kerne (Spitze 5,7). Postgres steigt mit Slots und Partitionen bis 11 Kerne im Mittel und
+fast 20 in der Spitze, also die ganze Maschine; LWLock wartet bei 32 Partitionen im Mittel 3,4 Verbindungen, Sperren nie. Mehr Partitionen
+bringen deshalb nichts mehr, sie verlagern Last auf Postgres. Queries je Vorgang 18–23 (S5-64) bzw. 34–42 (S5-8, kleinere Gruppen).
 
 Statisch gezählt:
 
