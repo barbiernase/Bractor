@@ -717,6 +717,22 @@ Abfrage, wo der Fortschritt im Postgres des Logs liegt (PF-38, behoben). Ergebni
 
 `Frage(Query)` im Aggregat (R4), Antwort mit Version; Wire/Leitung; Test „Antwort entspricht dem Stand, auf dem der nächste Command entscheidet“.
 
+*Umgesetzt (2026-10-29):* die `Frage` steht im **Decider** (dort ist der Stand, auf dem `Decide` entscheidet; ein eigener dritter Teil des Aggregats
+brächte nur einen weiteren Namen): `Frage(TQuery q)` → Antwort oder `OneOf<…>`, synchron, ohne Fähigkeiten; die Query nennt ihr Aggregat mit genau
+einem Glied `Id<TAggregat>` (kein neuer Marker, das Ziel folgt aus Signatur und Feld). Eine Lesart (`Projektionsform.LiesAggregatfragen`) für den
+Handler-Generator (`Frage`-Switch im `{State}AggregateHandler`, `IAggregateHandler.Frage`), den Query-Dienst (`GeneratedQueryDienst` schickt die Query
+über `AggregatAbfrage` an die Identität aus dem Glied; ein Weg für gRPC und JSON-Eingang), die Analyzer und den Extractor. Der Aggregat-Actor
+antwortet im Turn (`AggregatFrage` → `AggregatAntwort`, Wire-Typen, Query und Antwort polymorph über `GeneratedWirePoly`); während des Commits eines
+Bündels wartet die Frage und wird gleich danach beantwortet, vor dem nächsten Bündel — sie sieht nie eine Entscheidung, die noch scheitern kann; eine
+Frage an eine fremde Identität beantwortet er nicht. Die Version reist als Stand je gezeigter Id (`AggregateMeta`), also ohne neue Felder auf der
+Leitung: der C#-Client übernimmt sie wie jede Antwort (`VersioningModule`), der JSON-Eingang nennt sie neu als `staende`. R4 als CQRS084/086 über
+Reader und Aggregate, die Form der Frage als CQRS057, der Ausgabe-Vertrag als CQRS050; in der Grammatik `query → aggregat` und
+`aggregat → response`. Neu sind zwei Primitive (`AggregatQuery`, `AggregatAntwort`): Query und Antwort eines Aggregats liegen bei der Schreibseite
+(`Queries.cs`, `Responses.cs`), denn der Decider sieht die Leseseite nicht. Beispiele: `HoleBildPaarStand` am Bildpaar (Beispieldomäne),
+`HoleKontingent` am Kontingent (Prüfdomäne), `HoleLeihstand` in der Sonde. Abweichungen: (1) eine Antwort eines Aggregats wird nicht beobachtet
+(kein `Aktualisiert`, FB-19). (2) Python-SDK unverändert — Query und Antwort reisen als gewöhnliche Nutzlast; neu erzeugt sind nur die DTOs, dabei
+fiel FB-20 auf. (3) Keine Messung: der heiße Pfad ist bis auf eine leere Warteschlange je Commit unverändert.
+
 ### Phase 10 · Hausregel als Build-Prüfung (2–3 PT)
 
 Analyzer R18 über alle `Proto.IActor`-Typen und die Typen, die ein Actor als Feld besitzt (Fehler; Ausnahme nur per Attribut mit Begründung);

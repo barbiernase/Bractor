@@ -174,6 +174,21 @@ Stand verfehlt; `StoreKlassenE2ETests`: Read-your-writes `noch_nicht`). Neues Pa
 `…_server-pubsub-pf38-ab-{a,b}`, gültig, grün): 155 → 152 Paare/s, p50 2,79 → 2,80 s, p99 3,81 → 3,84 s, Queries je Vorgang 91,8 → 104 (vorher 122),
 Transaktionen gleich. Was bleibt, ist die eine Stand-Abfrage je Query (627 → 10 345) — gewollt, weil eine Antwort jetzt auch „noch nicht da“ mit Stand zeigt.
 
+**Stand 2026-10-29 (Plan Pub/Sub-Neustrukturierung, Phase 9 — direkte Aggregat-Abfrage, `562a84c` … `73ade32`):** volle Stufe auf `73ade32` grün bis
+auf einen Verhaltens-Test: Prüfstand **527 grün + 1 übersprungen** (neu: R4 in `GesamtbildAnalyzerTests` 2, Form der Frage im Decider in
+`HandlerFormAnalyzerTests` 1 + 5 Fälle), Integration **67/67** (mit Last), Prüfdomäne **64/64** (neu `AggregatAbfrageGarantieTests` 4: Antwort =
+Stand des nächsten Commands, unter 60 gleichzeitigen Commands jede Antwort = Log an ihrer Version, eine Frage während eines scheiternden Commits,
+eine Frage an eine fremde Identität), Verhaltens-Netz **22 von 23** (neu `ClientVerhaltenTests.Ein_Client_fragt_das_Aggregat_direkt…`, grün; rot
+`NeustartTests` — G-18, älter als Phase 9: derselbe Test gegen `3e16e9a` 1 von 3 rot, gegen `73ade32` 3 von 4, jedes Mal eine stehende Partition
+von `Verteilabwicklung`), Client 30/30, Python SDK und Worker grün, `codegen --check`, `--check`, `--sonde`, `--grammatik` und Gate grün. Rot unterwegs
+(schnelle Stufe auf `562a84c`): der Python-Worker meldete sich nicht an — die betterproto-DTOs waren nicht neu erzeugt (FB-20, `build_python.sh`
+nachgeholt); der neue Verhaltens-Fall nutzte einen JSON-Knoten zweimal; die Sonde zeigte Query und Antworten des Aggregats als Insel (die Sicht
+bekam die Kante Query → Aggregat → Antwort). Gegenproben per `perl` im Server-Lauf rot gesehen: die Frage wartet nicht während des Commits (die
+Antwort nennt den hinfälligen Stand), die Version der Antwort um eins verschoben, die Identität der Frage nicht geprüft, das Aggregat nicht als Ziel
+im Gesamtbild (CQRS086 statt still, CQRS084 fehlt), CQRS057 für die Frage im Decider abgeschaltet, die wartende Frage nach dem Commit nicht
+beantwortet (zuerst grün: Proto.Cluster stellt die unbeantwortete Anfrage nach ≈ 5 s erneut zu, dann antwortet der Actor — der Test verlangt jetzt
+die Antwort binnen 2 s nach dem Commit, danach rot). Keine Messung: der heiße Pfad ist bis auf eine leere Warteschlange je Commit unverändert.
+
 Statisch gezählt:
 
 | Projekt | `[Fact]` | `[Theory]` | Dateien |
