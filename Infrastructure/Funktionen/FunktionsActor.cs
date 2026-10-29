@@ -282,6 +282,9 @@ public sealed class FunktionsActor : RahmenActor
         if (Stopp.IsCancellationRequested || _lauf is null) return;
         if (MitZustand && !_zustandBereit) return;
         if (!_b.HoertLog) return;   // nur Hinweise: kein Log-Leser, keine Position
+        // Erst der Vorrat der letzten Seite: eine Seite trägt alle ihre Eingänge — neu gelesen wird nur, wenn danach noch ein Slot frei ist (G-18).
+        if (_lauf.Stand is not null && DarfStarten)
+            foreach (var e in _lauf.Naechste()) Starte(context, e);
         if (_liest) { _nochmal = true; return; }
         if (_lauf.Stand is not null && (_lauf.FreieSlots <= 0 || !DarfStarten)) return;   // Rückstau im Log: erst lesen, wenn ein Slot frei ist
         _liest = true;
