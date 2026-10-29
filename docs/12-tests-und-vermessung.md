@@ -364,11 +364,15 @@ Treiber, Host und Postgres teilen einen Rechner. Jeder Block sendet höchstens 1
 | S3-8, S3-64 Sammelvorgang heiß | 8 bzw. 64 Sender, je Teil `StarteTeilauftrag` + `SchließeTeilauftragAb` an EINEN Sammelvorgang (höchstens 2 000 Teile) | `TeilVerbucht` des Teils im Log (keine Query vorhanden) |
 | S4 Datensatz | als KI-Operator `ErstelleDatensatz`, `FuegeRangeHinzu` (alle Paare aus S1), `FriereEin` | `HoleDatensatz`: alle Paare Mitglied, dann `Eingefroren` |
 | S5-1, S5-8, S5-64 Prüfdomäne verteilt | 1, 8 bzw. 64 Sender, je zehn Vorgänge 8 Aufträge (Diamant), 1 Auftrag gegen ein volles Kontingent (Kompensation), 1 Verteilung (Fan-out 4, Count-Join), höchstens 3 000 je Block; jede Reservierung unter dem Mindestbestand weckt die Reaktion | `ProzessBeendet` im Log; die Reaktion gesondert (Reservierung → Nachschub) |
+| S6-8, S6-64 Clients über gRPC | 8 bzw. 64 C#-Clients (Stack des Blazor-Arbeitsplatzes, je eine gRPC-Sitzung): je Vorgang `NimmPaarAuf` bis zur Quittung, höchstens 50 Paare je Datensatz, höchstens 3 000 je Block | `HoleDatensatz` des Clients (read-your-writes) zeigt das Paar; dazu Quittung p50/p99, kein Command unbestätigt |
 | L1, L5 Leerlauf | ohne Eingang nach den Blöcken: erst der Nachlauf, bis alle Poll-Cursor und Projektions-Positionen am Kopf des Logs stehen (höchstens 180 s; Dauer und Queries als eigene Kennzahlen), dann 60 s (zwei Poll-Perioden) — bis 2026-10-16 15 s, 5 s nach dem letzten Block (PF-14) | Grundlast (PF-2, PF-4, PF-14) |
 
 Kennzahlen je Block: angenommen je Sekunde (Schreibseite), sichtbar je Sekunde im Fenster und Durchsatz bis „alles sichtbar“ (Ende zu Ende),
 Rückstand am Fensterende und Abbauzeit (ein nicht abgebauter Rückstand ist ein Ergebnis), Latenz p50/p95/p99, Transaktionen und Queries je
-Sekunde und je Vorgang (`pg_stat_statements`, `track = top`, Transaktionen = COMMITs, ohne die Lese-Rolle des Treibers), CPU und RSS des Hosts.
+Sekunde und je Vorgang (`pg_stat_statements`, `track = top`, Transaktionen = COMMITs, ohne die Lese-Rolle des Treibers), CPU und RSS des Hosts,
+„erster Vorgang sichtbar nach“. Bei einem Stoß (S1, S2) entfallen „sichtbar im Fenster“ und „Rückstand am Fensterende“ — der Stoß ist angenommen,
+bevor das erste Paar fertig ist, beide wären immer 0 bzw. der ganze Stoß. Die Fremdlast vor und nach dem Lauf ist die CPU je Prozess über eine
+Sekunde aus `/proc` (nicht `ps -o pcpu`, das den Durchschnitt über die Lebenszeit eines Prozesses nennt).
 Eine Aufwärmrunde vor S1 und S5 zählt nicht. Jeder Lauf auf frischen DBs; danach die Exactly-once-Prüfung ([11](11-garantien.md) §11.14) — mit
 offenem Rückstand prüft sie „höchstens einmal, nichts doppelt“. Ablage: `vermessung/ergebnisse/<datum>_<commit>_<anlass>/` (nur anhängen); die
 Tabellen erzeugt `scripts/vermessung-tabelle.sh --schreibe` aus diesen Ordnern — nie von Hand, je Rechner eine mit eigener Baseline
@@ -950,6 +954,16 @@ Pfad aus `Umgebung:Python`), die Bibliotheken der nativen OpenCvSharp-Runtime un
 Redis im Host-Netzwerk ohne docker-proxy, `docker-compose.messserver.yml`, `--netz proxy` für Vergleiche; alles nur auf 127.0.0.1, die Einrichtung prüft das). Nach außen ist nichts offen; die übrigen Dienste des Servers (Caddy, andere Apps) bleiben unberührt. Messwerte des Servers sind nicht mit
 denen des MacBooks vergleichbar — Läufe dort tragen ein eigenes Anlass-Präfix (`server-…`) und erst eine eigene Baseline-Spalte, wenn die
 Tabelle nach Rechner getrennt ist.
+
+**Gesamtprüfung (für Meilensteine, ≈ 45–50 min):** `scripts/server.sh lauf scripts/gesamtpruefung.sh [--vergleich <ergebnis-ordner>] [--spalte <name>]
+[--ohne-ab]` prüft einen Commit in einem Lauf, nacheinander: (1) die volle Test-Stufe — jeder rote Test wird bis zu zweimal einzeln wiederholt und
+heißt danach „rot“ oder „wackelt“, mit seiner Nummer in docs/13, wenn bekannt (`scripts/gesamtpruefung.py`, `BEKANNT`); (2) die Messung S1–S6 mit
+Exactly-once; (3) den Störungslauf; (4) die Engpass-Sonde über S1, S5 und S6 mit CPU-Profilen der Abschnitte S1, S5-64 und S6-64
+(`sonde-engpass.sh --profil` nimmt mehrere Abschnitte). Der Bericht `<Messung>/gesamtpruefung.md` nennt je Teil eine Ampel, jede Kennzahl gegen
+den Vergleich (ohne Angabe die letzte frühere Gesamtprüfung, sonst die Spalte „Phase 6“) mit Urteil „im Rauschen“, „besser“ oder „auffällig“ —
+auffällig erst außerhalb des Rausch-Bands der Kennzahl (aus den bisherigen Streuungen gleicher Commits, z. B. Durchsatz ±15 %, Kosten je Vorgang
+±5 %) und über einer Mindest-Abweichung in ihrer Einheit — sowie die Profile. Ist ein Szenario auffällig, misst die Gesamtprüfung es A gegen B nach
+(A = Commit des Vergleichs im Worktree `/opt/bractor-a`, nur Szenarien, die es dort gibt) und hängt das Ergebnis an den Bericht.
 
 **Gate „frischer Checkout baut“ (vor jedem Push):** `./pruefe-checkout.sh` (Optionen `--verz <dir>` für den Ort des Worktrees, `--ohne-tests`).
 Es meldet zuerst lokal vorhandene Dateien, die eine Ignore-Regel schluckt (mit der greifenden Regel aus `git check-ignore -v`; Build- und
