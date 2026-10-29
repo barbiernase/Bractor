@@ -16,8 +16,8 @@ namespace Infrastructure.Funktionen;
 /// (bei mehreren nach Name), Slots je Partition und Wiederholungen, bevor ein werfender Eingang seinen Stream parkt; für eine Funktion mit Zustand
 /// dazu, wo und wie oft er gesichert wird (ohne Angabe <see cref="ZustandsBindung.Standard"/>).
 /// </summary>
-public sealed record BausteinBindung(string Funktion, FunktionsLaufort Laufort = FunktionsLaufort.Host, string? Umsetzung = null, int Slots = 1,
-    int Wiederholungen = 0, ZustandsBindung? Zustand = null);
+public sealed record BausteinBindung(string Funktion, FunktionsLaufort Laufort = FunktionsLaufort.Host, string? Umsetzung = null,
+    int Slots = FunktionsKonfig.StandardSlots, int Wiederholungen = 0, ZustandsBindung? Zustand = null);
 
 /// <summary>
 /// Die Verdrahtung der Funktionen in Baustein-Form, für jede Anwendung gleich — aus der generierten Tabelle

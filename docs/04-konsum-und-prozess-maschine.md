@@ -214,7 +214,7 @@ public sealed class TeilFertigMeldung : IFunktion
 
 **Funktions-Actor** (`Infrastructure/Funktionen/FunktionsActor.cs`, ein `RahmenActor` je Funktion und Adresse — die Partition, bzw. die eine
 Adresse einer Funktion mit `[EineAdresse]`, die dann alle Partitionen liest): liest seine Seite ab der
-Position aus dem Log, startet so viele Eingänge, wie Slots frei sind (Standard 1), je Stream höchstens einen (`FunktionsLauf`), und rückt die
+Position aus dem Log, startet so viele Eingänge, wie Slots frei sind (Standard 4, PF-33), je Stream höchstens einen (`FunktionsLauf`), und rückt die
 Position nur bis vor den ersten laufenden Eingang und nie über die gesetzte Sequenz (Horizont wie §4.1), bei voller Seite nie über deren letztes
 Event. Was von der Seite noch nicht starten kann, bleibt als **Vorrat** (höchstens eine Seite) und startet, sobald ein Slot frei ist; neu gelesen
 wird erst, wenn der Vorrat nichts Startbares mehr hat — eine Seite trägt alle ihre Eingänge (G-18: vorher las ein Actor mit einem Slot nach jedem
@@ -238,8 +238,8 @@ eine Schnittstelle mit genau einer Umsetzung ebenso, eine Schnittstelle ohne Ums
 es ein Boot-Fehler, der den Eintrag nennt. Eine Funktion mit Lese-Fähigkeit läuft nur im Host.
 - **Host:** die Umsetzung **je Aktivierung** (`FunktionsAktivierung`): beim Aktivieren in einem eigenen DI-Bereich gebaut, samt ihren Diensten
   (im Bereich gebunden — eine Datenbank-Verbindung, ein geladenes Modell), beim Stoppen, Passivieren und vor einem Neustart in umgekehrter
-  Reihenfolge freigegeben (`IAsyncDisposable`/`IDisposable`; `RahmenActor.FreigebenAsync`). Bei Slots > 1 teilen sich die Eingänge einer
-  Aktivierung die Instanz (thread-sicher).
+  Reihenfolge freigegeben (`IAsyncDisposable`/`IDisposable`; `RahmenActor.FreigebenAsync`). Bei Slots > 1 (Standard 4) teilen sich die Eingänge
+  einer Aktivierung die Instanz: sie muss thread-sicher sein, sonst nennt die Umgebung für sie `Slots: 1`.
 - **Extern und Hand:** der Actor bietet den Eingang über den **Vermittler** seiner Funktion an (`FunktionsVermittlerActor`, ein virtueller
   Cluster-Actor je Funktion; `EingangAnbieten`, nicht maßgeblich — geht er verloren, bietet der Actor neu an). Ausführer draußen holen per Pull,
   so viele wie Slots frei sind, mit **Lease** und Lebenszeichen, über eine `BausteinSitzung`: extern die Sitzung eines Clients über die Leitung

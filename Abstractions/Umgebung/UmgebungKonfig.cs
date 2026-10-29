@@ -113,7 +113,11 @@ public sealed class FunktionsKonfig
     public FunktionsLaufort Laufort { get; set; } = FunktionsLaufort.Host;
     /// <summary>Nur Host: der Klassenname der Implementierung — nötig, wenn es mehrere gibt.</summary>
     public string? Implementierung { get; set; }
-    public int Slots { get; set; } = 1;
+    /// <summary>Eingänge zugleich je Partition (verschiedene Streams; je Stream bleibt es nacheinander, mit Zustand gilt einer). Mehr als einer ⇒
+    /// die Umsetzung teilt ihre Instanz und muss thread-sicher sein.</summary>
+    public int Slots { get; set; } = StandardSlots;
+    /// <summary>Slots ohne Eintrag in der Umgebung (PF-33: mit einem Slot staute S5-64 bei ≈ 800 Vorgängen/s, mit vier ≈ 2 000).</summary>
+    public const int StandardSlots = 4;
     public int Wiederholungen { get; set; }
     /// <summary>Nur Extern: wie die Werkbank den Worker startet (▶ Worker starten). Der Host liest es nie.</summary>
     public WorkerKonfig? Worker { get; set; }
