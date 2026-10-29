@@ -34,18 +34,14 @@ public sealed class AkteurTor
     /// Wendet die Befugnisse auf ein Handshake-Ergebnis an. Statt Selbstauskunft gilt:
     /// <list type="bullet">
     /// <item>erlaubte Commands/Queries = genau die <c>IDarf</c>-Mengen des Akteurs;</item>
-    /// <item>abonnierte Events = Wunsch ∩ abgeleitete Hör-Menge;</item>
-    /// <item>Zuständigkeit (beantworten) nur, wenn der Akteur den Typ darf, das System ihn NICHT selbst
-    ///   bedient (Lücke im Graphen) und noch kein anderer zuständig ist (Kardinalität eins).</item>
+    /// <item>abonnierte Events = Wunsch ∩ abgeleitete Hör-Menge.</item>
     /// </list>
     /// Rückgabe: das Verweigerte (fürs Log; der Client sieht es an den fehlenden Einträgen der Antwort).
     /// </summary>
     public static IReadOnlyList<string> Wende(
         CapabilitiesResult ergebnis,
         AkteurRechte akteur,
-        Func<string, Type?> loese,
-        Func<Type, bool> internBedient,
-        Func<string, bool> schonVergeben)
+        Func<string, Type?> loese)
     {
         var verweigert = new List<string>();
 
@@ -55,11 +51,7 @@ public sealed class AkteurTor
         Ersetze(ergebnis.AllowedQueries, Namen(akteur.Queries));
 
         Behalte(ergebnis.SubscribedEvents, n => loese(n) is { } t && akteur.DarfHoeren(t), "hören", verweigert);
-        Behalte(ergebnis.HandlingQueries, n => DarfUebernehmen(n), "beantworten", verweigert);
         return verweigert;
-
-        bool DarfUebernehmen(string name) =>
-            loese(name) is { } t && akteur.DarfHinein(t) && !internBedient(t) && !schonVergeben(name);
     }
 
     /// <summary>Darf diese Session <paramref name="typ"/> hineingeben? Ohne Akteur (Tor aus) immer ja.</summary>

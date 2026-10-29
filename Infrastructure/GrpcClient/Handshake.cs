@@ -1,8 +1,8 @@
 using Infrastructure.Mapping;
 
 /// <summary>
-/// Die Ermittlung am Handshake: was der Client nennt (<c>message_types</c>: Events, die er hören, Commands und Queries, die er senden will;
-/// <c>handle_queries</c>: Queries, die er beantwortet), nach Kategorie sortiert. Wirksam wird daraus erst Vertrag ∩ Token
+/// Die Ermittlung am Handshake: was der Client nennt (<c>message_types</c>: Events, die er hören, Commands und Queries, die er senden will),
+/// nach Kategorie sortiert. Wirksam wird daraus erst Vertrag ∩ Token
 /// (<see cref="Infrastructure.Akteure.ClientVertragsPruefung.Wende"/>, <see cref="Infrastructure.Akteure.AkteurTor.Wende"/>) — mit Vertrag zählt
 /// die Tabelle des Servers, nicht die Selbstauskunft.
 /// </summary>
@@ -21,11 +21,6 @@ public static class Handshake
                 default: result.UnknownTypes.Add(typeName); break;
             }
         }
-        foreach (var queryName in request.HandleQueries)
-        {
-            if (MessageTypeMapping.Resolve(queryName).Category == MessageCategory.Query) result.HandlingQueries.Add(queryName);
-            else result.UnknownTypes.Add(queryName);
-        }
         return result;
     }
 
@@ -36,21 +31,17 @@ public static class Handshake
         response.SubscribedEvents.AddRange(result.SubscribedEvents);
         response.SupportedQueries.AddRange(result.AllowedQueries);
         response.UnknownTypes.AddRange(result.UnknownTypes);
-        response.HandlingQueries.AddRange(result.HandlingQueries);
         return response;
     }
 }
 
-/// <summary>Das Ergebnis des Handshakes einer Sitzung (nach Vertrag ∩ Token: was sie senden, fragen, hören und beantworten darf).</summary>
+/// <summary>Das Ergebnis des Handshakes einer Sitzung (nach Vertrag ∩ Token: was sie senden, fragen und hören darf).</summary>
 public class CapabilitiesResult
 {
     public List<string> AllowedCommands { get; init; } = new();
     public List<string> SubscribedEvents { get; init; } = new();
     public List<string> AllowedQueries { get; init; } = new();
     public List<string> UnknownTypes { get; init; } = new();
-
-    /// <summary>Query-Typen, die dieser Client BEANTWORTET (er bekommt sie als QueryForward, seine Antwort geht an den Fragenden).</summary>
-    public List<string> HandlingQueries { get; init; } = new();
 
     public string SessionId { get; init; } = string.Empty;
 }

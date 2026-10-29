@@ -143,10 +143,9 @@ Der Entwickler schreibt nur Fachlogik: State-Dataclass, die Methoden des Vertrag
 Reconnect und Vertragsprüfung liegen im SDK (Invariante 5).
 
 **Ohne Vertrag:** ein `CqrsClient[S]` mit `@handle.register`-Methoden nennt im Handshake selbst, was er hört (`message_types`), sendet
-(`_declared_command_types`) und beantwortet (`handle_queries`); wirksam ist auch dann nur, was das Token erlaubt
-(`Infrastructure/GrpcClient/Handshake.cs`, `Infrastructure/Akteure/AkteurTor.cs`). Seine Handler dürfen Commands und Hinweise ausgeben.
-**Queries beantworten:** leitet der Server eine Query an den Client weiter (`QueryForward`), ruft der Router den Handler; die erste Ausgabe, die
-eine Query-Antwort ist, geht als `QueryResponseFromClient` zurück, sonst ein Fehlercode (`NO_RESPONSE`, `HANDLER_ERROR`).
+(`_declared_command_types`); wirksam ist auch dann nur, was das Token erlaubt (`Infrastructure/GrpcClient/Handshake.cs`,
+`Infrastructure/Akteure/AkteurTor.cs`). Seine Handler dürfen Commands und Hinweise ausgeben. Queries beantwortet ein Client nie: eine Query hat genau
+ein Ziel, einen Reader oder ein Aggregat ([10](10-entwickler-api.md) §10.5) — ein Handler auf einer Query bricht den Start ab.
 
 ## 9.5 Funktionen draußen (Laufort `Extern`)
 

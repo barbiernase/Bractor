@@ -216,17 +216,6 @@ class GrpcProxy:
         )
         await self._send(msg)
 
-    async def send_query_response(
-        self, correlation_id: str, nutzlast: L.Nutzlast | None,
-        error_code: str = "", error_message: str = ""
-    ) -> None:
-        """Antwort auf empfangene QueryForward: die Antwort als Nutzlast ODER ein Fehler (dann ohne Nutzlast)."""
-        felder = {"correlation_id": correlation_id, "error_code": error_code, "error_message": error_message}
-        if nutzlast is not None:   # bei Fehler bleibt das Feld leer (nicht None)
-            felder["payload"] = nutzlast
-        msg = L.ClientMessage(query_answer=L.QueryResponseFromClient(**felder))
-        await self._send(msg)
-
     # ═══════════════════════════════════════════════════
     # FUNKTIONEN DRAUSSEN (ITraegt, Laufort Extern)
     # ═══════════════════════════════════════════════════
@@ -265,7 +254,7 @@ class GrpcProxy:
         """
         Empfängt ServerMessages, dispatcht nach oneof-Feld.
 
-        Events/QueryForwards/ArbeitsAufträge → event_queue.
+        Events/ArbeitsAufträge → event_queue.
         QueryResponse → pending Future completieren.
         """
         try:
@@ -281,9 +270,6 @@ class GrpcProxy:
 
                 if field_name == "event":
                     await self._event_queue.put(("event", payload))
-
-                elif field_name == "query_forward":
-                    await self._event_queue.put(("query_forward", payload))
 
                 elif field_name == "arbeits_auftrag":
                     await self._event_queue.put(("arbeits_auftrag", payload))

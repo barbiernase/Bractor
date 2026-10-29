@@ -21,7 +21,6 @@ namespace Infrastructure.GrpcClient;
 public sealed record VonClient(Leitung.ClientMessage Nachricht);
 
 /// <summary>Eine andere Sitzung leitet eine Query an diese weiter — dieser Client beantwortet sie (Zuständiger).</summary>
-public sealed record QueryWeiterleitung(IQuery Query, string CorrelationId);
 
 /// <summary>Eine fertige Server-Nachricht, die ein Hintergrund-Teil der Sitzung schreiben will (Arbeitsaufträge an Funktionen draußen).</summary>
 public sealed record ServerNachricht(Leitung.ServerMessage Nachricht);
@@ -31,30 +30,25 @@ public sealed record SitzungsDienste(
     ProtoMessageMapper Mapper,
     IAggregateDispatcher Dispatcher,
     IQueryDienst Queries,
-    QueryHandlerRegistry Zustaendige,
     Verteilung? Verteilung,
     AkteurTor? Tor,
     IAusgabeAblage? Ausgaben,
     Konsum Konsum,
     HinweisNetz? HinweisNetz,
     IEventStoreRepository? Log,
-    ConcurrentDictionary<string, TaskCompletionSource<Leitung.QueryResponseFromClient>> OffeneWeiterleitungen,
     ILogger Logger);
 
 /// <summary>
 /// Die Sitzung einer gRPC-Verbindung als Actor (docs/konzept-akteure.md §5): der <b>einzige Schreiber</b> auf den
 /// Antwort-Stream. Die Lese-Schleife der Verbindung reicht jede Nachricht des Clients nur weiter (<see cref="VonClient"/>); Pushes kommen vom
 /// Verteiler des Knotens (<see cref="Zustellung"/>, begrenzt über den <see cref="Rueckstau"/>); was wartet (Query, Antwort einer Funktion
-/// draußen, Weiterleitung an einen zuständigen Client), läuft neben der Mailbox, geschrieben wird danach wieder im Actor.
+/// draußen), läuft neben der Mailbox, geschrieben wird danach wieder im Actor.
 /// Nach dem Handshake meldet sie ihre wirksame Liste (Vertrag ∩ Token) beim Verteiler an; gezielte Antworten (Ablehnung, <c>CommandFailed</c>)
 /// erreichen sie über ihre Sitzungs-Id, gleich, was sie hört. Endet die Sitzung (Stream zu, Ablehnung am Handshake), beendet sie
 /// <see cref="Ende"/>; den Status bekommt der Client vom <see cref="CqrsClientServiceImpl"/>.
 /// </summary>
 public sealed class SitzungsActor : RahmenActor
 {
-    /// <summary>Wie lange eine an einen zuständigen Client weitergeleitete Query auf seine Antwort wartet.</summary>
-    public static readonly TimeSpan WeiterleitungsFrist = TimeSpan.FromSeconds(60);
-
     /// <summary>So lange sammelt die Sitzung „P hat S weiterverarbeitet“, bevor sie dem Client die betroffenen Queries nennt.</summary>
     public static readonly TimeSpan Zusammenfassen = TimeSpan.FromMilliseconds(200);
 
@@ -115,7 +109,6 @@ public sealed class SitzungsActor : RahmenActor
 
     protected override async Task BeimStoppenAsync(IContext context)
     {
-        _d.Zustaendige.UnregisterAll(context.Self);
         // Funktionen draußen: Hol-Schleifen beenden; Laufendes nicht erledigt melden — die Leases laufen ab, der Vermittler gibt die Eingänge
         //   neu aus (anderer Träger, oder dieser nach dem Neuverbinden), und der Funktions-Actor sendet nur, was festgehalten ist.
         if (_anbieter is { } a)
@@ -142,13 +135,6 @@ public sealed class SitzungsActor : RahmenActor
                 foreach (var e in z.Envelopes)
                     await SchreibeAsync(new Leitung.ServerMessage { Event = new Leitung.EventNotification { Envelope = _d.Mapper.MapToDto(e) } });
                 _rueckstau.Erledigt();
-                break;
-
-            case QueryWeiterleitung w:
-                await SchreibeAsync(new Leitung.ServerMessage
-                {
-                    QueryForward = new Leitung.QueryForward { CorrelationId = w.CorrelationId, Payload = _d.Mapper.MapToDto(w.Query) }
-                });
                 break;
 
             case ServerNachricht n:
@@ -217,10 +203,6 @@ public sealed class SitzungsActor : RahmenActor
             case Leitung.ClientMessage.MessageOneofCase.TransientEvent:
                 await HinweisAsync(m.TransientEvent);
                 break;
-            case Leitung.ClientMessage.MessageOneofCase.QueryAnswer:
-                if (_d.OffeneWeiterleitungen.TryGetValue(m.QueryAnswer.CorrelationId, out var offen)) offen.TrySetResult(m.QueryAnswer);
-                else _logger.LogWarning("{Session} QueryAnswer for unknown CorrelationId {CorrelationId}", _id, m.QueryAnswer.CorrelationId);
-                break;
             case Leitung.ClientMessage.MessageOneofCase.LiesLog:
                 await LiesLogAsync(context, m.LiesLog);
                 break;
@@ -268,21 +250,19 @@ public sealed class SitzungsActor : RahmenActor
         }
         var akteur = _sitzung.Akteur;
 
-        // Befugnis statt Selbstauskunft: erlaubte Mengen aus IDarf (∪ Vertrags-Ausgaben), Hören abgeleitet, Zuständigkeit nur für Lücken (das
-        //   System bedient den Typ nicht selbst) und nur einmal. Mit Vertrag hört die Sitzung genau, was er hört.
+        // Befugnis statt Selbstauskunft: erlaubte Mengen aus IDarf (∪ Vertrags-Ausgaben), Hören abgeleitet. Mit Vertrag hört die
+        //   Sitzung genau, was er hört.
         var result = Handshake.Ermittle(request, _id);
         Func<string, Type?> loese = n => MessageTypeMapping.Resolve(n).Type;
-        Func<Type, bool> internBedient = t => Anwendung.QueryTypen.Contains(t);
-        Func<string, bool> schonVergeben = n => _d.Zustaendige.GetHandler(n) is { } q && !q.Equals(context.Self);
         if (_sitzung.Vertrag is { } v)
         {
-            var abweichung = ClientVertragsPruefung.Wende(result, v, loese, internBedient, schonVergeben);
+            var abweichung = ClientVertragsPruefung.Wende(result, v, loese);
             if (abweichung.Count > 0)
                 _logger.LogInformation("{Session} Vertrag {Vertrag} statt Selbstauskunft: [{Abweichung}]", _id, v.Name, string.Join(", ", abweichung));
         }
         else if (akteur != null)
         {
-            var verweigert = AkteurTor.Wende(result, akteur, loese, internBedient, schonVergeben);
+            var verweigert = AkteurTor.Wende(result, akteur, loese);
             if (verweigert.Count > 0)
                 _logger.LogWarning("{Session} Akteur {Akteur} verweigert: [{Verweigert}]", _id, akteur.Name, string.Join(", ", verweigert));
         }
@@ -290,9 +270,6 @@ public sealed class SitzungsActor : RahmenActor
         // Die wirksame Liste beim Verteiler anmelden (ersetzt die vorige).
         MeldeAn(context, result.SubscribedEvents.Select(n => MessageTypeMapping.Resolve(n))
             .Where(r => r.Type is not null && r.Category == MessageCategory.Event).Select(r => r.Type!).ToHashSet());
-
-        foreach (var queryName in result.HandlingQueries)
-            _d.Zustaendige.Register(queryName, context.Self);
 
         if (result.UnknownTypes.Count > 0)
             _logger.LogWarning("{Session} unknown types: [{Types}]", _id, string.Join(", ", result.UnknownTypes));
@@ -304,8 +281,8 @@ public sealed class SitzungsActor : RahmenActor
             antwort.VertragHash = angenommen.VertragHash;
         }
         await SchreibeAsync(new Leitung.ServerMessage { CapabilitiesResponse = antwort });
-        _logger.LogInformation("{Session} → CapabilitiesResponse: {Commands} commands, {Events} events, {Queries} queries, handling {HandlingQueries} queries",
-            _id, result.AllowedCommands.Count, result.SubscribedEvents.Count, result.AllowedQueries.Count, result.HandlingQueries.Count);
+        _logger.LogInformation("{Session} → CapabilitiesResponse: {Commands} commands, {Events} events, {Queries} queries",
+            _id, result.AllowedCommands.Count, result.SubscribedEvents.Count, result.AllowedQueries.Count);
     }
 
     private void MeldeAn(IContext context, IReadOnlySet<Type> hoert)
@@ -384,37 +361,6 @@ public sealed class SitzungsActor : RahmenActor
         if (!AkteurTor.Darf(akteur, query.GetType()))
         {
             await FehlerAsync("AKTEUR_DARF_NICHT", $"Akteur '{akteur!.Name}' darf {name} nicht", request.CorrelationId);
-            return;
-        }
-
-        // Beantwortet ein Client sie (Zuständiger): weiterleiten und neben der Mailbox auf seine Antwort warten.
-        if (_d.Zustaendige.GetHandler(name) is { } zustaendig)
-        {
-            var korrelation = string.IsNullOrEmpty(request.CorrelationId) ? Guid.NewGuid().ToString() : request.CorrelationId;
-            var offen = new TaskCompletionSource<Leitung.QueryResponseFromClient>(TaskCreationOptions.RunContinuationsAsynchronously);
-            if (!_d.OffeneWeiterleitungen.TryAdd(korrelation, offen))
-            {
-                await FehlerAsync("QUERY_DUPLICATE_CORRELATION", "Duplicate correlation ID for query forward", request.CorrelationId);
-                return;
-            }
-            context.Send(zustaendig, new QueryWeiterleitung(query, korrelation));
-            Neben(context, ct => offen.Task.WaitAsync(WeiterleitungsFrist, ct), async t =>
-            {
-                _d.OffeneWeiterleitungen.TryRemove(korrelation, out _);
-                if (!t.IsCompletedSuccessfully)
-                {
-                    await FehlerAsync("QUERY_FORWARD_TIMEOUT", "Client handler did not respond in time", request.CorrelationId);
-                    return;
-                }
-                var antwort = await (Task<Leitung.QueryResponseFromClient>)t;
-                if (!string.IsNullOrEmpty(antwort.ErrorCode))
-                    await FehlerAsync(antwort.ErrorCode, antwort.ErrorMessage, request.CorrelationId);
-                else
-                    await SchreibeAsync(new Leitung.ServerMessage
-                    {
-                        QueryResponse = new Leitung.QueryResponse { CorrelationId = request.CorrelationId, Payload = antwort.Payload }
-                    });
-            });
             return;
         }
 

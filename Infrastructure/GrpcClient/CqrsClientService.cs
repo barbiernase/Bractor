@@ -31,7 +31,6 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         ProtoMessageMapper mapper,
         IAggregateDispatcher dispatcher,
         IQueryDienst queryService,
-        QueryHandlerRegistry queryHandlerRegistry,
         Verteilung? verteilung = null,
         AkteurTor? akteurTor = null,
         ILogger<CqrsClientServiceImpl>? logger = null,
@@ -43,12 +42,12 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         _actorSystem = actorSystem ?? throw new ArgumentNullException(nameof(actorSystem));
         _akteurTor = akteurTor;   // null = Akteure nicht konfiguriert → offen (opt-in)
         _logger = logger ?? NullLogger<CqrsClientServiceImpl>.Instance;
-        _dienste = new SitzungsDienste(mapper, dispatcher, queryService, queryHandlerRegistry, verteilung, akteurTor,
+        _dienste = new SitzungsDienste(mapper, dispatcher, queryService, verteilung, akteurTor,
             ausgaben,   // null = keine Funktion draußen in dieser Anwendung → Anbieten wird abgewiesen
             konsum ?? Konsum.Standard,
             hinweisNetz,   // null = keine Funktion hört Hinweise
             log,
-            new ConcurrentDictionary<string, TaskCompletionSource<Cqrs.Leitung.QueryResponseFromClient>>(), _logger);
+            _logger);
     }
 
     public override async Task Connect(

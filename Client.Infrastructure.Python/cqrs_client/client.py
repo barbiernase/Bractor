@@ -240,12 +240,10 @@ class CqrsClient(HandlerBase, Generic[S]):
         Scannt handle.registered_types und klassifiziert
         via CategoryRegistry.
 
-        Baut den CapabilitiesRequest mit:
-        - message_types: Events (empfangen) + Commands (senden)
-        - handle_queries: Query-Typen die dieser Client beantwortet
+        Baut den CapabilitiesRequest mit message_types: Events (empfangen) + Commands (senden). Queries beantwortet ein Client
+        nie — eine Query hat genau ein Ziel, einen Reader oder ein Aggregat (docs/10 §10.5).
         """
         subscribe_events: list[str] = []
-        handle_queries: list[str] = []
 
         for registered_type in self.handle.registered_types:
             try:
@@ -258,7 +256,7 @@ class CqrsClient(HandlerBase, Generic[S]):
             if category == MessageCategory.EVENT:
                 subscribe_events.append(name)
             elif category == MessageCategory.QUERY:
-                handle_queries.append(name)
+                raise TypeError(f"{registered_type.__name__} ist eine Query — ein Client beantwortet keine Queries (docs/10 §10.5)")
 
         # Deklarierte Command-Typen
         send_commands: list[str] = []
@@ -268,13 +266,9 @@ class CqrsClient(HandlerBase, Generic[S]):
         # CapabilitiesRequest bauen
         request = leitung.CapabilitiesRequest(
             message_types=subscribe_events + send_commands,
-            handle_queries=handle_queries,
         )
 
-        log.info(
-            "Capabilities: events=%s, commands=%s, queries=%s",
-            subscribe_events, send_commands, handle_queries
-        )
+        log.info("Capabilities: events=%s, commands=%s", subscribe_events, send_commands)
 
         return request
 

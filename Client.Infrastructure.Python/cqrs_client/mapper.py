@@ -80,7 +80,7 @@ class PayloadMapper:
     """
     Zwischen Domänen-DTOs und der Leitung.
 
-    Auspacken (Server → Client): Event-Hülle, QueryForward, ArbeitsAuftrag (Eingang), QueryResponse → DTO.
+    Auspacken (Server → Client): Event-Hülle, ArbeitsAuftrag (Eingang), QueryResponse → DTO.
     Verpacken (Client → Server): Command → CommandEnvelopeDto, Hinweis → EventEnvelopeDto, Query, Query-Antwort, Ausgaben einer
     Funktion → Nutzlast.
     """
@@ -105,10 +105,6 @@ class PayloadMapper:
     def extract_event_payload(self, envelope: EventEnvelopeDto) -> betterproto.Message:
         """Das Event aus der Hülle (EventEnvelopeDto.payload)."""
         return self.entpacke(envelope.payload)
-
-    def extract_query_payload(self, nutzlast: Nutzlast) -> betterproto.Message:
-        """Die Query aus QueryForward.payload."""
-        return self.entpacke(nutzlast)
 
     def extract_query_response(self, query_response: leitung.QueryResponse) -> betterproto.Message:
         """Die TYPISIERTE Antwort aus einem QueryResponse (Server → Client) — die Ask-Seite (docs/09 §9.4)."""
@@ -158,10 +154,6 @@ class PayloadMapper:
     def wrap_query(self, query: betterproto.Message) -> Nutzlast:
         """Eine Query als Nutzlast für QueryRequest.payload — der Proxy hängt Korrelation + 30 s Timeout drum."""
         return self.packe(query)
-
-    def wrap_query_response(self, response: betterproto.Message) -> Nutzlast:
-        """Eine Query-Antwort als Nutzlast für QueryResponseFromClient.payload."""
-        return self.packe(response)
 
 
 __all__ = ["NutzlastTabelle", "PayloadMapper", "UnbekannteNutzlast"]

@@ -56,7 +56,7 @@ public static class ClientVertragsPruefung
     /// (fürs Log) und das Verweigerte.
     /// </summary>
     public static IReadOnlyList<string> Wende(CapabilitiesResult ergebnis, AkteurRechte vertrag,
-        Func<string, Type?> loese, Func<Type, bool> internBedient, Func<string, bool> schonVergeben)
+        Func<string, Type?> loese)
     {
         var soll = vertrag.Hoert.Select(t => t.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
         var abweichung = new List<string>();
@@ -66,7 +66,7 @@ public static class ClientVertragsPruefung
             abweichung.AddRange(ergebnis.SubscribedEvents.Where(n => n != nameof(CommandFailed) && !soll.Contains(n)).Select(n => $"hört laut Vertrag nicht: {n}"));
             abweichung.AddRange(soll.Where(n => !ergebnis.SubscribedEvents.Contains(n)).Select(n => $"Selbstauskunft ohne Vertrags-Eingang: {n}"));
         }
-        abweichung.AddRange(AkteurTor.Wende(ergebnis, vertrag, loese, internBedient, schonVergeben).Where(v => !v.StartsWith("hören:", StringComparison.Ordinal)));
+        abweichung.AddRange(AkteurTor.Wende(ergebnis, vertrag, loese).Where(v => !v.StartsWith("hören:", StringComparison.Ordinal)));
         ergebnis.SubscribedEvents.Clear();
         ergebnis.SubscribedEvents.AddRange(soll);
         return abweichung;

@@ -158,29 +158,11 @@ public class AkteurRechteTests
             SubscribedEvents = { "ImagePairKomplett", "TrainingAngefordert" },
         };
 
-        var verweigert = AkteurTor.Wende(wunsch, R("Klassifizierer"), Loese, _ => false, _ => false);
+        var verweigert = AkteurTor.Wende(wunsch, R("Klassifizierer"), Loese);
 
         wunsch.AllowedCommands.Should().BeEquivalentTo("KlassifiziereEinzelBildDurchKi");
         wunsch.SubscribedEvents.Should().Equal("ImagePairKomplett");
         verweigert.Should().Equal("hören: TrainingAngefordert");
-    }
-
-    [Fact]
-    public void Zustaendigkeit_nur_fuer_Luecken_und_nur_einmal()
-    {
-        var trainer = R("KIOperator");
-
-        Ergebnis(trainer, internBedient: false, vergeben: false).Should().Equal("HoleModelle");
-        Ergebnis(trainer, internBedient: true, vergeben: false).Should().BeEmpty("einen Server-Reader kann niemand kapern");
-        Ergebnis(trainer, internBedient: false, vergeben: true).Should().BeEmpty("Kardinalität eins");
-        Ergebnis(R("Inspekteur"), internBedient: false, vergeben: false).Should().BeEmpty("der Inspekteur darf HoleModelle nicht");
-
-        static List<string> Ergebnis(AkteurRechte a, bool internBedient, bool vergeben)
-        {
-            var r = new CapabilitiesResult { HandlingQueries = { "HoleModelle" } };
-            AkteurTor.Wende(r, a, Loese, _ => internBedient, _ => vergeben);
-            return r.HandlingQueries;
-        }
     }
 
     [Fact]

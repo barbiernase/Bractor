@@ -88,7 +88,7 @@ public class ClientVertragTests
         e.Client!.Name.Should().Be("KlassifikationsWorker");
 
         var wunsch = new CapabilitiesResult { SubscribedEvents = { "TrainingAngefordert" } };
-        var abweichung = ClientVertragsPruefung.Wende(wunsch, e.Vertrag!, Loese, _ => false, _ => false);
+        var abweichung = ClientVertragsPruefung.Wende(wunsch, e.Vertrag!, Loese);
         wunsch.SubscribedEvents.Should().BeEquivalentTo("BildVerfuegbar", "ModellAktiviert");
         wunsch.AllowedCommands.Should().BeEquivalentTo("KlassifiziereEinzelBildDurchKi");
         abweichung.Should().Contain("hört laut Vertrag nicht: TrainingAngefordert");

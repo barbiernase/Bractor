@@ -76,9 +76,8 @@ class MessageRouter:
         `on_arbeit` (optional): nimmt einen ArbeitsAuftrag (Eingang einer getragenen Funktion) entgegen — er läuft entkoppelt,
         die Schleife wartet nicht auf ihn (FunktionsLaeufer.nimm).
 
-        Verarbeitet drei Arten von Messages aus der event_queue:
+        Verarbeitet zwei Arten von Messages aus der event_queue:
         - "event": EventNotification → Payload extrahieren → Handler → yield Outputs
-        - "query_forward": QueryForward → Payload extrahieren → Handler → QueryResponse
         - "arbeits_auftrag": Eingang einer getragenen Funktion → on_arbeit
         """
         while proxy.is_connected:
@@ -96,11 +95,6 @@ class MessageRouter:
                     await self._handle_event(
                         msg, proxy, handle, instance, state,
                         mapper, registry, version_tracker
-                    )
-                elif msg_type == "query_forward":
-                    await self._handle_query_forward(
-                        msg, proxy, handle, instance, state,
-                        mapper, registry
                     )
                 elif msg_type == "arbeits_auftrag":
                     if on_arbeit is None:
@@ -157,57 +151,6 @@ class MessageRouter:
             await self._route_output(output, ctx, proxy, mapper, registry)
 
     # ═══════════════════════════════════════════════════
-    # QUERY FORWARD HANDLING
-    # ═══════════════════════════════════════════════════
-
-    async def _handle_query_forward(
-        self, query_fwd, proxy, handle, instance, state,
-        mapper, registry
-    ):
-        """Verarbeitet einen QueryForward vom Server."""
-        correlation_id = query_fwd.correlation_id
-
-        try:
-            payload = mapper.extract_query_payload(query_fwd.payload)
-
-            ctx = MessageContext(
-                correlation_id=correlation_id,
-                session_id=proxy.session_id,
-                _proxy=proxy,
-                _mapper=mapper,
-            )
-
-            log.info("QueryForward: %s", type(payload).__name__)
-
-            # Dispatch — der erste yield ist die Query-Response
-            response = None
-            async for output in handle.receive(instance, payload, ctx, state):
-                if registry.is_query_response(type(output)):
-                    response = output
-                    break
-                else:
-                    # Andere Outputs (Commands, Events) normal routen
-                    await self._route_output(output, ctx, proxy, mapper, registry)
-
-            if response is not None:
-                # Die Antwort reist als Nutzlast (typ + Bytes) in QueryResponseFromClient.payload.
-                await proxy.send_query_response(correlation_id, mapper.wrap_query_response(response))
-            else:
-                await proxy.send_query_response(
-                    correlation_id, None,
-                    error_code="NO_RESPONSE",
-                    error_message="Handler did not yield a query response"
-                )
-
-        except Exception as e:
-            log.error("Query handler failed: %s", e, exc_info=True)
-            await proxy.send_query_response(
-                correlation_id, None,
-                error_code="HANDLER_ERROR",
-                error_message=str(e)
-            )
-
-    # ═══════════════════════════════════════════════════
     # OUTPUT ROUTING
     # ═══════════════════════════════════════════════════
 
@@ -260,10 +203,6 @@ class MessageRouter:
             )
             await proxy.publish_transient(envelope)
             log.info("→ TransientEvent: %s", type(output).__name__)
-
-        elif category == MessageCategory.QUERY_RESPONSE:
-            # Query-Responses werden in _handle_query_forward direkt gesendet
-            pass
 
         else:
             log.warning("Unbekannter Output-Typ: %s (%s)", type(output).__name__, category)

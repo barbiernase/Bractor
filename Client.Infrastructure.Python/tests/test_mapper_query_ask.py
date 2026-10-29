@@ -91,13 +91,13 @@ def test_extract_query_response_unbekannter_typ_wirft_klar(gen):
 
 
 # ═══════════════════════════════════════════════════
-# Round-trip: wrap_query_response → extract_query_response (Symmetrie)
+# Round-trip: packe → extract_query_response (Symmetrie)
 # ═══════════════════════════════════════════════════
 
 def test_roundtrip_response_symmetrie(gen):
     mapper = PayloadMapper(gen)
 
-    nutzlast = mapper.wrap_query_response(FakeAntwortDto(text="rund"))
+    nutzlast = mapper.packe(FakeAntwortDto(text="rund"))
     qr = QueryResponse().parse(bytes(QueryResponse(correlation_id="x", payload=nutzlast)))   # über den Draht
 
     zurueck = mapper.extract_query_response(qr)

@@ -33,9 +33,6 @@ class ClientMessage(betterproto.Message):
     transient_event: "TransientEventRequest" = betterproto.message_field(
         7, group="message"
     )
-    query_answer: "QueryResponseFromClient" = betterproto.message_field(
-        8, group="message"
-    )
     funktionen_anbieten: "FunktionenAnbieten" = betterproto.message_field(
         10, group="message"
     )
@@ -66,12 +63,11 @@ class CommandRequest(betterproto.Message):
 class CapabilitiesRequest(betterproto.Message):
     """
     Der Handshake: der Client nennt seinen Vertrag (der Server nimmt die Befugnisse aus SEINER Tabelle, Vertrag ∩ Token) — ein Client ohne
-     Vertrag nennt, was er hören, senden und fragen will (message_types), und was er beantwortet (handle_queries); wirksam ist auch dann nur,
+     Vertrag nennt, was er hören, senden und fragen will (message_types); wirksam ist auch dann nur,
      was das Token erlaubt. Was die Sitzung hört, meldet der Server beim Verteiler seines Knotens an (docs/konzept-akteure.md §5).
     """
 
     message_types: List[str] = betterproto.string_field(2)
-    handle_queries: List[str] = betterproto.string_field(4)
     vertrag: str = betterproto.string_field(5)
     """
     Client-Vertrag (docs/konzept-akteure.md §5.2): "ich bin Vertrag X" — der Server nimmt die Fähigkeiten aus der
@@ -107,7 +103,6 @@ class ServerMessage(betterproto.Message):
         6, group="message"
     )
     query_response: "QueryResponse" = betterproto.message_field(7, group="message")
-    query_forward: "QueryForward" = betterproto.message_field(10, group="message")
     arbeits_auftrag: "ArbeitsAuftrag" = betterproto.message_field(11, group="message")
     aktualisiert: "Aktualisiert" = betterproto.message_field(12, group="message")
     log_seite: "LogSeite" = betterproto.message_field(13, group="message")
@@ -154,7 +149,6 @@ class CapabilitiesResponse(betterproto.Message):
     subscribed_events: List[str] = betterproto.string_field(3)
     supported_queries: List[str] = betterproto.string_field(4)
     unknown_types: List[str] = betterproto.string_field(6)
-    handling_queries: List[str] = betterproto.string_field(8)
     vertrag: str = betterproto.string_field(9)
     """
     Der angenommene Akteur-Vertrag (leer = keiner bzw. abgelehnt) und — bei abweichendem Hash — der Server-Hash.
@@ -184,22 +178,8 @@ class AggregateMetaDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class QueryForward(betterproto.Message):
-    correlation_id: str = betterproto.string_field(1)
-    payload: "Nutzlast" = betterproto.message_field(2)
-
-
-@dataclass(eq=False, repr=False)
 class TransientEventRequest(betterproto.Message):
     envelope: "EventEnvelopeDto" = betterproto.message_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class QueryResponseFromClient(betterproto.Message):
-    correlation_id: str = betterproto.string_field(1)
-    payload: "Nutzlast" = betterproto.message_field(2)
-    error_code: str = betterproto.string_field(3)
-    error_message: str = betterproto.string_field(4)
 
 
 @dataclass(eq=False, repr=False)

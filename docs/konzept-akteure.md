@@ -214,7 +214,7 @@ keinem Client-Vertrag; die Mehrfach-Auswahl beim Kuratieren schickt je Paar `Nim
 
 - **Sitzung als Actor:** je gRPC-Verbindung prüft `CqrsClientServiceImpl` das Token (`AkteurTor.Erkenne`; ungültig → `Unauthenticated`) und
   startet einen `SitzungsActor` — den **einzigen Schreiber** auf den Antwort-Stream. Die Lese-Schleife der Verbindung reicht jede
-  Client-Nachricht nur weiter (`VonClient`); was wartet (Query, Antwort einer Funktion draußen, Weiterleitung an einen zuständigen Client),
+  Client-Nachricht nur weiter (`VonClient`); was wartet (Query, Antwort einer Funktion draußen),
   läuft neben der Mailbox. Die Sitzungs-Id nennt den Knoten: `<Knoten>#<Nr>` (`Verteilung.SitzungsId`).
 - **Vertrag:** der Client nennt im `CapabilitiesRequest` `vertrag` (Client-Name) und `vertrag_hash`. `ClientVertragsPruefung.Pruefe` sucht ihn
   in der generierten Tabelle (unbekannt → Ablehnung) und rechnet Vertrag ∩ Token (§4.3; leer → Ablehnung). Hash ≠ Server → Warnung im Log, im
@@ -290,9 +290,7 @@ vergebene Id, genau einmal im Log je Kennung), nicht über gRPC (§9).
 - **Lesen ab Position** (`LiesLog` → `LogSeite`): das Log ab einer Position, nur die Typen der Hör-Liste der Sitzung, die im Log stehen (Hinweise
   nie), höchstens 1000 Einträge je Seite und nur bis zum Horizont der Vollständigkeit — wer ab `bis` weiterliest, verpasst nichts. So führt ein
   Client eine Projektion bei sich oder liest nach dem Wiederverbinden nach.
-- **Queries an einen Client:** ein Client darf beim Handshake Query-Typen nennen, die er selbst beantwortet (`handle_queries`) — nur, wenn er sie
-  darf, das System sie nicht selbst beantwortet und noch kein anderer zuständig ist. Die Sitzung leitet sie dann weiter (`QueryForward`, Antwort
-  `QueryResponseFromClient`, Frist 60 s).
+- **Keine Queries an einen Client:** ein Client fragt, er beantwortet nie — eine Query hat genau ein Ziel, einen Reader oder ein Aggregat (R4).
 
 ---
 

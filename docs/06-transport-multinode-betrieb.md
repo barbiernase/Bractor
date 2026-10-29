@@ -83,7 +83,7 @@ serialisierbar; (b) jeder Command/Event/Trigger aus `GeneratedTypeRegistry` hat 
 
 **Clients: Sitzung und Verteiler** (docs/konzept-akteure.md §5). Je gRPC-Verbindung ist die Sitzung ein Actor (`SitzungsActor`), der
 einzige Schreiber auf den Antwort-Stream; die Lese-Schleife der Verbindung reicht jede Nachricht des Clients nur weiter, was wartet (Query,
-Antwort einer Funktion draußen, Weiterleitung an einen zuständigen Client) läuft neben der Mailbox. Ihre Id nennt den Knoten
+Antwort einer Funktion draußen) läuft neben der Mailbox. Ihre Id nennt den Knoten
 (`<Adresse>#<Nummer>`). Nach dem Handshake meldet sie ihre wirksame Liste (Vertrag ∩ Token) beim **Verteiler** ihres Knotens an — einem lokalen
 Actor mit festem Namen `verteiler`, der Typ → Sitzungen hält und jede Sitzung beobachtet (`Watch`). Ein Commit geht als EINE Nachricht
 (`Verteile`) an den Verteiler jedes Knotens (Mitgliederliste, `Bote.MeldeAnKnoten`), nur mit Typen, die irgendein Client hören darf; gezielte

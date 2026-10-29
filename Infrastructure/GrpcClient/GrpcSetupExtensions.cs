@@ -26,17 +26,7 @@ public static class GrpcSetupExtensions
         services.AddSingleton<ProtoMessageMapper>();
         Console.WriteLine("  ✓ ProtoMessageMapper");
 
-        // First-Citizen Registries
-        services.AddSingleton<QueryHandlerRegistry>();
-        Console.WriteLine("  ✓ QueryHandlerRegistry");
-
-        // CqrsClientService - bekommt alle Dependencies via DI:
-        // - ActorSystem
-        // - ProtoMessageMapper
-        // - IAggregateDispatcher
-        // - ProjectionQueryService
-        // - QueryHandlerRegistry      (NEU)
-        // - BrokerPublisher           (NEU)
+        // CqrsClientService — bekommt seine Dienste über DI (ActorSystem, Mapper, Dispatcher, Query-Dienst, Verteilung, Akteur-Tor …).
         services.AddSingleton<CqrsClientServiceImpl>();
         Console.WriteLine("  ✓ CqrsClientServiceImpl");
 

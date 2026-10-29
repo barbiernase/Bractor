@@ -32,7 +32,6 @@ message ClientMessage {
         CapabilitiesRequest capabilities = 4;
         QueryRequest query = 5;
         TransientEventRequest transient_event = 7;
-        QueryResponseFromClient query_answer = 8;
         FunktionenAnbieten funktionen_anbieten = 10;
         ArbeitsErgebnis arbeits_ergebnis = 11;
         ArbeitLebtMeldung arbeit_lebt = 12;
@@ -54,11 +53,10 @@ message CommandRequest {
 }
 
 // Der Handshake: der Client nennt seinen Vertrag (der Server nimmt die Befugnisse aus SEINER Tabelle, Vertrag ∩ Token) — ein Client ohne
-// Vertrag nennt, was er hören, senden und fragen will (message_types), und was er beantwortet (handle_queries); wirksam ist auch dann nur,
+// Vertrag nennt, was er hören, senden und fragen will (message_types); wirksam ist auch dann nur,
 // was das Token erlaubt. Was die Sitzung hört, meldet der Server beim Verteiler seines Knotens an (docs/konzept-akteure.md §5).
 message CapabilitiesRequest {
     repeated string message_types = 2;
-    repeated string handle_queries = 4;
     // Client-Vertrag (docs/konzept-akteure.md §5.2): "ich bin Vertrag X" — der Server nimmt die Fähigkeiten aus der
     // generierten Tabelle statt aus der Selbstauskunft; der Hash erkennt einen Client, der gegen einen anderen Stand gebaut ist.
     string vertrag = 5;
@@ -89,7 +87,6 @@ message ServerMessage {
         ErrorResponse error = 5;
         CapabilitiesResponse capabilities_response = 6;
         QueryResponse query_response = 7;
-        QueryForward query_forward = 10;
         ArbeitsAuftrag arbeits_auftrag = 11;
         Aktualisiert aktualisiert = 12;
         LogSeite log_seite = 13;
@@ -126,7 +123,6 @@ message CapabilitiesResponse {
     repeated string subscribed_events = 3;
     repeated string supported_queries = 4;
     repeated string unknown_types = 6;
-    repeated string handling_queries = 8;
     // Der angenommene Akteur-Vertrag (leer = keiner bzw. abgelehnt) und — bei abweichendem Hash — der Server-Hash.
     string vertrag = 9;
     string vertrag_hash = 10;
@@ -147,20 +143,8 @@ message AggregateMetaDto {
     int32 version = 3;
 }
 
-message QueryForward {
-    string correlation_id = 1;
-    Nutzlast payload = 2;
-}
-
 message TransientEventRequest {
     EventEnvelopeDto envelope = 1;
-}
-
-message QueryResponseFromClient {
-    string correlation_id = 1;
-    Nutzlast payload = 2;
-    string error_code = 3;
-    string error_message = 4;
 }
 
 // Funktionen draußen ausführen (docs/10 §10.1, docs/konzept-akteure.md §5: ITraegt): ein Client bietet Funktionen an, die er trägt; der Server
