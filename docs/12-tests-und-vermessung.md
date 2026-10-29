@@ -227,7 +227,8 @@ Gesamtprüfung. S5 A-B-B-A danach (2026-10-29, `…_pf36-vorrat-a1/b1/b2/a2`, A 
 Exactly-once grün): S5-8 300/214 (A) gegen 833/866 (B) Vorgänge/s, ≈ 3,3 ×, p99 8,2/12,3 s gegen 2,1/2,2 s, Abbau 8/12 s gegen 1,8 s;
 S5-64 297/250 gegen 933/940, ≈ 3,4 ×, p99 9,8/11,6 s gegen 2,9 s; Queries je Vorgang 39 → 27 (S5-8) bzw. 38 → 23 (S5-64); S5-1 gleich
 (433/448 gegen 446/399) — mit einem Sender gibt es keinen Rückstau, also nichts neu zu lesen. Die B-Läufe liegen eng beieinander; die
-Streuung von S5 (PF-36) kam aus dem Neulesen.
+Streuung von S5 (PF-36) kam aus dem Neulesen. Nach dem Merge (`2076038`) schnelle Stufe grün: Prüfstand **561 grün + 1 übersprungen**, Integration ohne Last
+65/65, Prüfdomäne 64/64, Verhaltens-Netz ohne Last 23/23; `NeustartTests` einzeln grün in 79 s.
 
 Statisch gezählt:
 
