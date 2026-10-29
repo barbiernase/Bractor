@@ -8,9 +8,11 @@ namespace Infrastructure.Funktionen;
 /// <list type="bullet">
 /// <item><b>Slots:</b> höchstens so viele Eingänge zugleich in Arbeit; neue holt der Actor erst, wenn einer frei ist — der Rückstau liegt im
 ///   Log, nicht im Speicher.</item>
-/// <item><b>Vorrat:</b> was von der zuletzt gelesenen Seite noch nicht starten konnte, behält der Lauf (höchstens eine Seite) und startet es, sobald
+/// <item><b>Vorrat:</b> was von den gelesenen Seiten noch nicht starten konnte, behält der Lauf (höchstens eine Seite) und startet es, sobald
 ///   ein Slot frei ist (<see cref="Naechste"/>) — eine Seite trägt alle ihre Eingänge. Neu gelesen wird erst, wenn der Vorrat nichts Startbares mehr
-///   hat (G-18: mit einem Slot las der Actor sonst nach jedem Eingang eine volle Seite, um genau einen zu starten).</item>
+///   hat (G-18: mit einem Slot las der Actor sonst nach jedem Eingang eine volle Seite, um genau einen zu starten), und zwar ab der Grenze der
+///   letzten Seite (<see cref="LeseAb"/>), nicht ab der Position: bis dorthin ist jeder Eingang bekannt (PF-40: ab der Position ging Postgres
+///   je Seite alles Erledigte dahinter noch einmal durch und verglich es mit einer Liste von bis zu 5 000 Sequenzen).</item>
 /// <item><b>Je Stream nacheinander:</b> ein Eingang startet erst, wenn kein früherer desselben Streams mehr offen ist; verschiedene Streams
 ///   laufen parallel.</item>
 /// <item><b>Position beim ältesten Unfertigen:</b> sie rückt nur bis vor den ersten Eingang, der noch offen ist oder noch nicht starten konnte,
@@ -56,8 +58,26 @@ public sealed class FunktionsLauf
     public int InArbeit => _inArbeit.Count;
     public IReadOnlyCollection<long> Erledigt => _erledigt;
 
-    /// <summary>Was das Lesen ausschließt: Erledigtes und Eingänge in Arbeit.</summary>
-    public IReadOnlyCollection<long> Ausser => _erledigt.Concat(_inArbeit.Keys).ToList();
+    /// <summary>
+    /// Ab hier liest der Actor weiter: bis zur Grenze der gelesenen Seiten ist jeder Eingang bekannt — erledigt, in Arbeit oder im Vorrat.
+    /// </summary>
+    public long LeseAb => Math.Max(Position, _seitenGrenze);
+
+    /// <summary>
+    /// Was das Lesen ausschließt: was jenseits von <see cref="LeseAb"/> schon bekannt ist (erledigt, in Arbeit, im Vorrat) — nur, was eine Seite
+    /// jenseits der gesetzten Sequenz brachte, also wenige.
+    /// </summary>
+    public IReadOnlyCollection<long> Ausser
+    {
+        get
+        {
+            var ab = LeseAb;
+            return _erledigt.Where(s => s > ab).Concat(_inArbeit.Keys.Where(s => s > ab)).Concat(_vorrat.Keys.Where(s => s > ab)).ToList();
+        }
+    }
+
+    /// <summary>So viele Eingänge darf die nächste Seite höchstens bringen, damit der Vorrat bei einer Seite bleibt.</summary>
+    public int Platz(int seite) => seite - _vorrat.Count;
 
     public IReadOnlyList<GeparkterStream> Geparkt => Stand?.Geparkt ?? (IReadOnlyList<GeparkterStream>)Array.Empty<GeparkterStream>();
 
@@ -88,20 +108,21 @@ public sealed class FunktionsLauf
     }
 
     /// <summary>
-    /// Nimmt eine Seite auf (sie ersetzt den Vorrat: gelesen ab der Position, enthält sie alles, was er hielt) und liefert die Eingänge, die jetzt
-    /// starten (<see cref="Naechste"/>). Die übrigen bleiben im Vorrat und halten die Position vor sich.
+    /// Nimmt eine Seite auf (gelesen ab <see cref="LeseAb"/>: sie ergänzt den Vorrat; was er schon hält, zählt einmal) und liefert die Eingänge,
+    /// die jetzt starten (<see cref="Naechste"/>). Die übrigen bleiben im Vorrat und halten die Position vor sich.
     /// </summary>
     public IReadOnlyList<PartitionsEvent> Nimm(PartitionsSeite seite)
     {
         if (Stand is null) throw new InvalidOperationException("Erst den Stand setzen.");
-        _vorrat.Clear();
         foreach (var g in seite.Events
                      .Where(e => e.Sequenz > Position && !_erledigt.Contains(e.Sequenz) && !_inArbeit.ContainsKey(e.Sequenz))
                      .GroupBy(e => e.Sequenz))
             _vorrat[g.Key] = g.OrderBy(e => e.Event.SubIndex).First();   // ein Eingang je Sequenz
-        _gesetzt = seite.Gesetzt;
-        // Vollständig ist eine volle Seite nur bis zu ihrem letzten Event — auch wenn davon schon alles erledigt oder in Arbeit ist.
-        _seitenGrenze = seite.Voll && seite.Events.Count > 0 ? Math.Min(seite.Gesetzt, seite.Events.Max(e => e.Sequenz)) : seite.Gesetzt;
+        _gesetzt = Math.Max(_gesetzt, seite.Gesetzt);
+        // Vollständig ist eine volle Seite nur bis zu ihrem letzten Event — auch wenn davon schon alles erledigt oder in Arbeit ist. Davor war alles
+        //   schon bekannt (die Seite begann bei LeseAb): die Grenze rückt nur vor.
+        var grenze = seite.Voll && seite.Events.Count > 0 ? Math.Min(seite.Gesetzt, seite.Events.Max(e => e.Sequenz)) : seite.Gesetzt;
+        _seitenGrenze = Math.Max(_seitenGrenze, grenze);
         return Naechste();
     }
 

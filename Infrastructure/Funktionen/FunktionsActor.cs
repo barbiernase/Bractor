@@ -286,21 +286,23 @@ public sealed class FunktionsActor : RahmenActor
         if (_lauf.Stand is not null && DarfStarten)
             foreach (var e in _lauf.Naechste()) Starte(context, e);
         if (_liest) { _nochmal = true; return; }
-        if (_lauf.Stand is not null && (_lauf.FreieSlots <= 0 || !DarfStarten)) return;   // Rückstau im Log: erst lesen, wenn ein Slot frei ist
+        // Rückstau im Log: erst lesen, wenn ein Slot frei ist und der Vorrat Platz hat (er bleibt bei einer Seite).
+        if (_lauf.Stand is not null && (_lauf.FreieSlots <= 0 || !DarfStarten || _lauf.Platz(_konsum.BatchGroesse) <= 0)) return;
         _liest = true;
         _nochmal = false;
         var lauf = _lauf;
         var brauchtStand = lauf.Stand is null;
-        var lese = lauf.Position;
+        var lese = lauf.LeseAb;   // ab der Grenze der letzten Seite, nicht ab der Position (PF-40)
         var ausser = lauf.Ausser;
-        Neben(context, ct => LiesAsync(brauchtStand, lese, ausser, ct), t => NachLesen(context, lauf, t));
+        var platz = lauf.Platz(_konsum.BatchGroesse);
+        Neben(context, ct => LiesAsync(brauchtStand, lese, ausser, platz, ct), t => NachLesen(context, lauf, t));
     }
 
-    private async Task<Gelesen> LiesAsync(bool brauchtStand, long lese, IReadOnlyCollection<long> ausser, CancellationToken ct)
+    private async Task<Gelesen> LiesAsync(bool brauchtStand, long lese, IReadOnlyCollection<long> ausser, int platz, CancellationToken ct)
     {
         var stand = brauchtStand ? await _staende.LadeAsync(_b.StandId, _partition, ct) : null;
         var seite = await _log.ReadPartitionAsync(stand?.Position ?? lese, _partition, _partitionen, _typen,
-            stand is null ? ausser : Array.Empty<long>(), _konsum.BatchGroesse, ct);
+            stand is null ? ausser : Array.Empty<long>(), stand is null ? platz : _konsum.BatchGroesse, ct);
         return new Gelesen(stand, seite);
     }
 

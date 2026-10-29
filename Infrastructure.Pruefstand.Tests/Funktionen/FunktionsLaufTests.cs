@@ -83,6 +83,34 @@ public class FunktionsLaufTests
     }
 
     [Fact]
+    public void Gelesen_wird_ab_der_Grenze_der_letzten_Seite_und_ausgeschlossen_nur_Bekanntes_dahinter()
+    {
+        // PF-40: ab der Position ging Postgres je Seite alles Erledigte dahinter noch einmal durch, gegen eine Liste von bis zu 5 000 Sequenzen.
+        var l = Lauf(slots: 2);
+        l.Nimm(new PartitionsSeite(new[] { E(1, A, 1), E(2, A, 2), E(3, B, 1), E(4, A, 3), E(6, C, 1) }, Gesetzt: 5, Voll: false))
+            .Select(e => e.Sequenz).Should().Equal(1, 3);
+        l.Fertig(3);
+        l.Position.Should().Be(0, "Eingang 1 läuft noch");
+        l.LeseAb.Should().Be(5, "bis zur gesetzten Sequenz ist jeder Eingang bekannt: erledigt, in Arbeit oder im Vorrat");
+        l.Ausser.Should().BeEquivalentTo(new long[] { 6 }, "die 3 schließt schon die Grenze aus, jenseits davon ist nur die 6 bekannt");
+        l.Platz(10).Should().Be(7, "im Vorrat liegen 2, 4 und 6");
+
+        // Die nächste Seite beginnt hinter der Grenze und ergänzt den Vorrat, statt ihn zu ersetzen.
+        l.Nimm(new PartitionsSeite(new[] { E(7, B, 2) }, Gesetzt: 8, Voll: false)).Select(e => e.Sequenz).Should().Equal(6);
+        l.ImVorrat.Should().Be(3, "2 und 4 warten auf A, 7 auf einen Slot");
+        l.LeseAb.Should().Be(8);
+        l.Fertig(1);
+        l.Naechste().Select(e => e.Sequenz).Should().Equal(2);
+        l.Fertig(2);
+        l.Fertig(6);
+        l.Naechste().Select(e => e.Sequenz).Should().Equal(4, 7);
+        l.Fertig(4);
+        l.Fertig(7);
+        l.Position.Should().Be(8, "alles bis zur gesetzten Sequenz ist erledigt");
+        l.ImVorrat.Should().Be(0);
+    }
+
+    [Fact]
     public void Eine_volle_Seite_aus_lauter_Erledigtem_reicht_nur_bis_zu_ihrem_letzten_Event()
     {
         // Die Seite ab der Position enthält nur Eingänge, die laufen oder fertig sind — vollständig ist sie trotzdem nur bis zu ihrem Ende; dahinter
