@@ -153,8 +153,38 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
 
         var einfrieren = Guid.NewGuid().ToString();
         await leitung.SendeAsync(new FriereEin(new(datensatz)), "Datensatz", 1, einfrieren);
-        var antwort = await leitung.WarteAufEventAsync(e => e.CorrelationId == einfrieren, TimeSpan.FromSeconds(4), "die Ablehnung kam nicht an");
-        RoheLeitung.Payload(antwort).Should().BeOfType<DatensatzLeer>();
+        await leitung.WarteAufEventAsync(e => e.CorrelationId == einfrieren && e.Payload.Typ == nameof(DatensatzLeer), TimeSpan.FromSeconds(4),
+            "die Ablehnung kam nicht an");
+        var quittung = await leitung.WarteAufEventAsync(e => e.CorrelationId == einfrieren && e.Payload.Typ == nameof(CommandQuittung),
+            TimeSpan.FromSeconds(4), "die Quittung der Ablehnung kam nicht an");
+        RoheLeitung.Payload(quittung).Should().BeOfType<CommandQuittung>().Which.Abgelehnt.Should().BeTrue();
+    }
+
+    /// <summary>
+    /// Ein Noop hat kein Event, das der Client hören könnte — trotzdem kennt er den Ausgang (docs/08 §8.4, FB-22): die Quittung kommt über die
+    /// Korrelation, nennt die Version des Aggregats, und der Client wiederholt nicht und meldet nicht „unbestätigt“.
+    /// </summary>
+    [Fact]
+    public async Task Ein_Noop_wird_dem_Client_quittiert_mit_der_Version_des_Aggregats()
+    {
+        await using var ap = await Arbeitsplatz.VerbindeAsync(b.Host, Testumgebung.TokenArbeitsplatz);
+        ap.Hoere(typeof(CommandQuittung));
+        var datensatz = Guid.NewGuid();
+        var paar = Guid.NewGuid();
+        await ap.QuittungAsync(ap.Sende(new ErstelleDatensatz(new(datensatz), "Noop")), Kurz);
+        var aufnehmen = ap.Sende(new NimmPaarAuf(new(datensatz), new(paar)));
+        await ap.WarteAufAsync(e => e.Kontext.CorrelationId == aufnehmen && e.Nachricht is PaarAufgenommen, Kurz, "das Paar wurde nicht aufgenommen");
+
+        var gesendet = DateTimeOffset.UtcNow;
+        var korrelation = ap.Sende(new NimmPaarAuf(new(datensatz), new(paar)));   // schon im Datensatz → Noop, kein Event
+        var quittung = await ap.WarteAufAsync(e => e.Kontext.CorrelationId == korrelation, Kurz, "keine Quittung für den Noop");
+
+        var q = quittung.Nachricht.Should().BeOfType<CommandQuittung>().Subject;
+        (q.Geschrieben, q.Abgelehnt, q.Version).Should().Be((false, false, 2), "angelegt (1), aufgenommen (2) — der Noop schreibt nichts");
+        (quittung.Zeit - gesendet).Should().BeLessThan(TimeSpan.FromSeconds(4), "binnen der Frist des Clients (5 s), sonst schickt er noch einmal");
+        ap.Versionen.GetVersion(datensatz).Should().Be(2);
+        await Task.Delay(TimeSpan.FromSeconds(6));
+        ap.Alles.Where(e => e.Nachricht is CommandUnbestaetigt or CommandSendFailed).Should().BeEmpty("der Ausgang ist bekannt");
     }
 
     [Fact]

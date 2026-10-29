@@ -327,6 +327,14 @@ message CommandFailedDto {
     string aggregate_id = 3;
 }
 
+message CommandQuittungDto {
+    string command_type = 1;
+    string stream = 2;
+    int32 version = 3;
+    bool geschrieben = 4;
+    bool abgelehnt = 5;
+}
+
 message DatensatzBereitsEingefrorenDto {
     string datensatz_id = 1;
 }

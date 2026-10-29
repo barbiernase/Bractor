@@ -15,9 +15,16 @@ public record ConnectionEstablished(string SessionId) : IClientEvent;
 public record ConnectionLost(string? Reason) : IClientEvent;
 
 /// <summary>
-/// Reconnect-Versuch wird unternommen.
+/// Reconnect-Versuch wird unternommen (der <see cref="ConnectionModule"/> verbindet nach einem Abbruch selbst neu, mit wachsender Pause).
 /// </summary>
 public record ReconnectAttempt(int Attempt) : IClientEvent;
+
+/// <summary>
+/// Ein Command kam ohne Verbindung: er liegt im Ausgangskorb und geht nach dem Wiederverbinden mit derselben Command-Id hinaus.
+/// </summary>
+public record CommandWartetAufVerbindung(
+    string CommandType,
+    Guid AggregateId) : IClientEvent;
 
 /// <summary>
 /// Ein Command konnte nicht an den Server gesendet werden.
@@ -29,10 +36,10 @@ public record CommandSendFailed(
     string ErrorMessage) : IClientEvent;
 
 /// <summary>
-/// ★ Ein Command wurde gesendet, aber nach mehreren Versuchen kam KEINE korrelierte Antwort
-/// (weder Event noch CommandFailed). Der Ausgang ist UNBEKANNT — der Command könnte angewandt und nur
-/// das Event verloren sein. Bewusst KEIN „Fehlgeschlagen": ein erneutes Senden ist dank deterministischer
-/// CommandId server-seitig idempotent (kein Doppel-Effekt). Die UI kann den Nutzer um Rückversicherung
+/// ★ Ein Command wurde gesendet, aber nach mehreren Versuchen kam bei stehender Verbindung KEINE korrelierte Antwort
+/// (weder Quittung noch Event noch CommandFailed). Der Ausgang ist UNBEKANNT — der Command könnte gewirkt haben und nur
+/// die Quittung verloren sein. Bewusst KEIN „Fehlgeschlagen": ein erneutes Senden mit derselben CommandId ist
+/// server-seitig idempotent (kein Doppel-Effekt). Die UI kann den Nutzer um Rückversicherung
 /// bitten oder still den Read-Model-Stand abwarten.
 /// </summary>
 public record CommandUnbestaetigt(

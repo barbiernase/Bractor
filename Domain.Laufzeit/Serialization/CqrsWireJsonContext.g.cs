@@ -57,6 +57,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(QuelleGehalten))]
 // ── Framework: Ergebnis-Events, Festhalten, Frist (reisen im Wire) ──
 [JsonSerializable(typeof(CommandFailed))]
+[JsonSerializable(typeof(CommandQuittung))]
 [JsonSerializable(typeof(BefehlFestgehalten))]
 [JsonSerializable(typeof(AusgabeFestgehalten))]
 [JsonSerializable(typeof(FristGesetzt))]

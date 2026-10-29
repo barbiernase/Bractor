@@ -10,8 +10,9 @@ namespace Infrastructure.Aggregate.ActorSystem;
 /// Dispatcht Commands an Aggregate-Actors.
 ///
 /// FIRE-AND-FORGET aus Sicht des Aufrufers: <see cref="Dispatch"/> kehrt sofort zurück.
-/// Feedback kommt ausschließlich über Events an die Verteiler:
-/// - Erfolg: Domain-Events (an jede Sitzung, die sie hört)
+/// Feedback kommt ausschließlich über die Verteiler:
+/// - Ausgang: eine <see cref="CommandQuittung"/> (gezielt an die Sitzung) mit Ausgang und Version — auch für einen Noop und für Events,
+///   die der Client nicht hört; dazu die Domain-Events an jede Sitzung, die sie hört
 /// - Fehler: CommandFailed Event (gezielt an die Sitzung) — technische Actor-Fehler publiziert der Actor
 ///   selbst; ERREICHT der Command nach erschöpfter Platzierung nie einen Actor, publiziert
 ///   HIER der Dispatcher das CommandFailed (docs/08 §8.4), damit der auslösende Client nicht still hängt.
@@ -79,11 +80,14 @@ public class ProtoActorAggregateDispatcher : IAggregateDispatcher
 
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
-            // Eine Antwort ⇒ der Actor hat den Command verarbeitet (Erfolg ODER fachliche Ablehnung — das Feedback fließt über Events). In
-            //   beiden Fällen ist er ZUGESTELLT → fertig.
+            // Eine Antwort ⇒ der Actor hat den Command verarbeitet (Erfolg, Noop ODER fachliche Ablehnung) → ZUGESTELLT; die Sitzung bekommt
+            //   die Quittung (einen technischen Fehler meldet der Actor selbst als CommandFailed).
             _bote ??= new Bote(_actorSystem.Cluster(), _logger);
-            if (await _bote.FrageAsync<CommandResult>(identity, envelope, AttemptTimeout, CancellationToken.None) is not null)
+            if (await _bote.FrageAsync<CommandResult>(identity, envelope, AttemptTimeout, CancellationToken.None) is { } ergebnis)
+            {
+                if (_verteilung is not null && BaueQuittung(envelope, ergebnis) is { } quittung) _verteilung.Melde(quittung);
                 return;
+            }
 
             _logger.LogWarning(
                 "[Dispatcher] Keine Antwort für {Command} an {Type}/{Id} in {Frist} s (Versuch {Attempt}/{Max}) — " +
@@ -149,6 +153,29 @@ public class ProtoActorAggregateDispatcher : IAggregateDispatcher
                 envelope.Payload.GetType().Name,
                 $"Nicht zugestellt nach {maxAttempts} Versuchen: {grund}",
                 envelope.AggregateId.ToString()),
+            ZielSitzung = envelope.OriginSessionId,
+        };
+    }
+
+    /// <summary>
+    /// Die gezielte <see cref="CommandQuittung"/> für die Sitzung, die den Command gesendet hat (store-/cluster-frei, Ebene-1-testbar).
+    /// <c>null</c> ohne <c>OriginSessionId</c> und bei einem technischen Fehler (weder gewirkt noch abgelehnt — dafür kommt CommandFailed).
+    /// </summary>
+    public static EventEnvelope? BaueQuittung(CommandEnvelope envelope, CommandResult ergebnis)
+    {
+        if (string.IsNullOrEmpty(envelope.OriginSessionId) || (!ergebnis.Success && !ergebnis.Abgelehnt))
+            return null;
+
+        return new EventEnvelope
+        {
+            AggregateId = envelope.AggregateId,
+            AggregateVersion = ergebnis.NewVersion,
+            AggregateType = envelope.AggregateType,
+            CorrelationId = envelope.CorrelationId,
+            CausationId = envelope.CommandId.ToString(),
+            UserId = envelope.UserId,
+            Payload = new CommandQuittung(envelope.Payload.GetType().Name, envelope.AggregateId, ergebnis.NewVersion,
+                Geschrieben: ergebnis.ErsteVersion > 0, Abgelehnt: ergebnis.Abgelehnt),
             ZielSitzung = envelope.OriginSessionId,
         };
     }

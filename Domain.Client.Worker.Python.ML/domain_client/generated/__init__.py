@@ -387,6 +387,15 @@ class CommandFailedDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class CommandQuittungDto(betterproto.Message):
+    command_type: str = betterproto.string_field(1)
+    stream: str = betterproto.string_field(2)
+    version: int = betterproto.int32_field(3)
+    geschrieben: bool = betterproto.bool_field(4)
+    abgelehnt: bool = betterproto.bool_field(5)
+
+
+@dataclass(eq=False, repr=False)
 class DatensatzBereitsEingefrorenDto(betterproto.Message):
     datensatz_id: str = betterproto.string_field(1)
 

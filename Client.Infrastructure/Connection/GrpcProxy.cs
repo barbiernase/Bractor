@@ -287,7 +287,8 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
     }
 
     /// <summary>
-    /// Liest kontinuierlich Server-Messages.
+    /// Liest kontinuierlich Server-Messages. Endet der Stream, ohne dass der Client trennt (der Server schließt ihn, der Knoten ist fort,
+    /// das Netz reißt), ist die Verbindung <see cref="ConnectionState.Failed"/> — der <see cref="ConnectionModule"/> verbindet dann neu.
     /// </summary>
     private async Task ReadLoopAsync(CancellationToken ct)
     {
@@ -299,12 +300,13 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
                 var message = _stream.ResponseStream.Current;
                 await HandleServerMessageAsync(message);
             }
+            if (!ct.IsCancellationRequested)
+            {
+                Console.WriteLine("[GrpcProxy] Server closed the stream");
+                await SetStateAsync(ConnectionState.Failed);
+            }
         }
-        catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
-        {
-            Console.WriteLine("[GrpcProxy] Read loop cancelled");
-        }
-        catch (OperationCanceledException)
+        catch (Exception) when (ct.IsCancellationRequested)
         {
             Console.WriteLine("[GrpcProxy] Read loop cancelled");
         }

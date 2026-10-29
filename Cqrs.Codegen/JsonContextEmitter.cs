@@ -17,7 +17,7 @@ namespace Cqrs.Codegen;
 ///
 /// ── Zwei Anteile ──
 /// 1. FRAMEWORK-Kopf (Konstante hier): Optionen + Converter + die stabilen, NICHT mit der Domäne wachsenden
-///    Typen (Wire-Hüllen, Inbox-Marken, Festhalten, Frist, <c>CommandFailed</c>). Wächst ein neuer Framework-Hüllentyp
+///    Typen (Wire-Hüllen, Inbox-Marken, Festhalten, Frist, <c>CommandFailed</c>, <c>CommandQuittung</c>). Wächst ein neuer Framework-Hüllentyp
 ///    hinzu (selten), wird er HIER ergänzt.
 /// 2. DOMÄNEN-Anteil (gescannt): die Domain.*-residenten Commands/Events/Queries — der eigentliche
 ///    Boilerplate, der pro neuem Domain-Typ wächst. Discovery deckungsgleich mit
@@ -114,6 +114,7 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(QuelleGehalten))]
         // ── Framework: Ergebnis-Events, Festhalten, Frist (reisen im Wire) ──
         [JsonSerializable(typeof(CommandFailed))]
+        [JsonSerializable(typeof(CommandQuittung))]
         [JsonSerializable(typeof(BefehlFestgehalten))]
         [JsonSerializable(typeof(AusgabeFestgehalten))]
         [JsonSerializable(typeof(FristGesetzt))]
