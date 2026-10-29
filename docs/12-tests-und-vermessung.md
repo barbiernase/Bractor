@@ -230,6 +230,23 @@ S5-64 297/250 gegen 933/940, ≈ 3,4 ×, p99 9,8/11,6 s gegen 2,9 s; Queries je 
 Streuung von S5 (PF-36) kam aus dem Neulesen. Nach dem Merge (`2076038`) schnelle Stufe grün: Prüfstand **561 grün + 1 übersprungen**, Integration ohne Last
 65/65, Prüfdomäne 64/64, Verhaltens-Netz ohne Last 23/23; `NeustartTests` einzeln grün in 79 s.
 
+**Messreihe Slots und Partitionen (PF-33, 2026-10-29, `ec956e5`, Diagnose ohne Spalte):** nur S5, Slots der Funktionen `Auftragsabwicklung`,
+`Verteilabwicklung` und `Nachschub` und `Konsum.Partitionen` über Umgebungsvariablen, je ein Lauf, dazu jede Sekunde CPU von Postgres und Host und
+die Wartezustände der Verbindungen (`…_pf33-postgres/proben.csv`). Alle gültig, Exactly-once grün.
+
+| Slots / Partitionen | S5-1 | S5-8 | S5-64 | p99 S5-64 |
+|---|---:|---:|---:|---:|
+| 1 / 8 (Standard) | 443 | 800 | 807 | 3,4 s |
+| 4 / 8 | 433 | 1 745 | 1 996 | 1,2 s |
+| 16 / 8 | 406 | 1 784 | 2 326 | 0,9 s |
+| 1 / 32 | 415 | 1 721 | 1 948 | 1,2 s |
+| 16 / 32 | 396 | 1 684 | 1 533 | 1,4 s |
+
+S5-8 ist ab 4 Slots durch die Sender begrenzt (angenommen ≈ sichtbar, p99 40 ms), S5-64 läuft noch in den Rückstau. Der Host nutzt 2,5–3,7 Kerne,
+Postgres meist unter 4; Sperren warten nie, LWLock und IO kaum. Die Proben von Postgres sind für die kurzen Blöcke grob (2–10 je Szenario): ein
+S5-Block hat 3 000 Vorgänge, bei 64 Sendern in 0,3–1 s angenommen — die Messung zeigt den Hebel der Slots, nicht die Decke. Transaktionen je
+Vorgang fallen mit mehr Slots von 2,4 auf 0,5–1 (größere Gruppen im Group-Commit).
+
 Statisch gezählt:
 
 | Projekt | `[Fact]` | `[Theory]` | Dateien |
