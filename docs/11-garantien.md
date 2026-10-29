@@ -192,9 +192,9 @@ Kostenlos zur Laufzeit sind die Garantien aus §11.10 (Build und Start) sowie We
 ## 11.13 Lücken
 
 Stehen nur in [13](13-reifegrad-schulden-bewertung.md) §13.0: **G-5** Versionszählung bei Split-Upcasts, **G-6** Garantien ohne eigenen
-Nachweis-Test, **G-18** eine Partition einer Funktion bleibt nach dem harten Neustart mitunter stehen (gezeigt von VT `NeustartTests`, ohne Skip:
-der Test wackelt). Jede offene Lücke hat einen Test, der sie zeigt (Skip `G-n offen (docs/13)`); geschlossen ist sie erst, wenn ihr Test grün ist.
-Geschlossen: **G-1** Fristverlust, **G-7** Tombstones legen den Poll still (der Poll der Emittenten ist mit Phase 4 entfallen; die Reads lesen keine Tombstones, `EventReadGarantieTests`), der Emittenten-Anteil von **G-2** (Phase 1); **G-3** Actor nach
+Nachweis-Test. Jede offene Lücke hat einen Test, der sie zeigt (Skip `G-n offen (docs/13)`); geschlossen ist sie erst, wenn ihr Test grün ist.
+Geschlossen: **G-18** nach dem harten Neustart holte eine Partition einer Funktion ihren Rückstand nicht in der Frist auf — sie stand nicht, sie las
+je Eingang eine volle Seite neu (Vorrat der Seite im `FunktionsLauf`, `FunktionsActorLeseTests`, VT `NeustartTests`); **G-1** Fristverlust, **G-7** Tombstones legen den Poll still (der Poll der Emittenten ist mit Phase 4 entfallen; die Reads lesen keine Tombstones, `EventReadGarantieTests`), der Emittenten-Anteil von **G-2** (Phase 1); **G-3** Actor nach
 Append-Konflikt (Phase 2); **G-4** Projektions-Checkpoint ohne Versionsprüfung (Phase 3, Batch-Konsum); **G-8** Prozess-Poll ohne bestätigte
 Weckung (Phase 5; mit dem Dirigenten in Phase 4 entfallen); **G-2** Inbox-Fenster (Phase 4, Inbox als Tabelle: Fenster → Horizont); **G-9** eine lange
 offene Transaktion überholt die Positionen (Horizont der Vollständigkeit statt Karenz, `SequenceGapPostgresTests.Eine_lange_offene_Transaktion…`); **G-10** Zeitlimits rechneten ab dem Event-Zeitstempel (Uhr des Hosts)

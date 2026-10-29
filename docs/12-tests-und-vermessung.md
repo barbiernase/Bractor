@@ -189,6 +189,16 @@ im Gesamtbild (CQRS086 statt still, CQRS084 fehlt), CQRS057 für die Frage im De
 beantwortet (zuerst grün: Proto.Cluster stellt die unbeantwortete Anfrage nach ≈ 5 s erneut zu, dann antwortet der Actor — der Test verlangt jetzt
 die Antwort binnen 2 s nach dem Commit, danach rot). Keine Messung: der heiße Pfad ist bis auf eine leere Warteschlange je Commit unverändert.
 
+**Stand 2026-10-29 (G-18 behoben, `d0ccce2`, `71d3b75`):** kein Hänger, sondern zu wenig Durchsatz je Partition (docs/13 §13.6): der
+Funktions-Actor startet jetzt aus dem Vorrat der gelesenen Seite, statt je Eingang eine Seite neu zu lesen; `NeustartTests` wartet zusätzlich auf
+Rückstand 0 (`/monitoring/metrics`), bevor er „vollständig“ abnimmt. Schnelle Stufe auf `71d3b75` grün: Prüfstand **530 grün + 1 übersprungen**
+(neu `Funktionen/FunktionsActorLeseTests` 1 und in `FunktionsLaufTests` 2), Integration ohne Last 65/65, Prüfdomäne 64/64, Verhaltens-Netz ohne
+Last 22/22. `NeustartTests` 5 von 5 grün, je 77–85 s (vorher 184–232 s, die roten schöpften die Nachlauf-Frist von 3 min aus); auf `d0ccce2`, noch
+mit der alten Abnahme, 2 von 3 (rot: 4 von 15 055 Nachschüben, abgenommen, während `Auftragsabwicklung` noch Rückstand hatte). Gegenproben per
+`sed`: ohne Start aus dem Vorrat `FunktionsActorLeseTests` rot (201 statt höchstens 7 Lesungen), die alte Grenze einer vollen Seite rot
+(Position 100 statt 2); `NeustartTests` ohne Vorrat einmal grün in 197 s — wackelt, deshalb nicht die Gegenprobe. Keine Messung der Vermessung
+(PF-36: S5 danach ungemessen).
+
 Statisch gezählt:
 
 | Projekt | `[Fact]` | `[Theory]` | Dateien |
