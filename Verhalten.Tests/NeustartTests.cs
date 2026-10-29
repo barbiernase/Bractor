@@ -99,13 +99,17 @@ public sealed class NeustartTests
             await Task.WhenAll(sender);
             gescheitert.Should().BeEmpty("jeder Command kommt nach dem Neustart mit derselben CommandId durch");
 
-            // Die Funktionen laufen den Vorgängen nach: warten, bis jede Wirkung da ist (oder die Frist um ist), dann das Soll prüfen.
+            // Die Funktionen laufen den Vorgängen nach: warten, bis kein Konsument mehr Rückstand hat und jede Wirkung da ist (oder die Frist um
+            //   ist), dann das Soll prüfen. „Vollständig“ allein kann ein Augenblick sein, in dem eine Funktion weiter oben (Auftragsabwicklung)
+            //   gleich neue Auslöser schreibt.
             var nachlauf = Stopwatch.StartNew();
             Befund befund;
+            long rueckstand;
             while (true)
             {
+                rueckstand = await RueckstandAsync(host);
                 befund = await BefundAsync(u, verteilungen.ToArray(), getoetet, mitBericht: false);
-                if (befund.Vollstaendig || nachlauf.Elapsed > Nachlauf) break;
+                if ((befund.Vollstaendig && rueckstand == 0) || nachlauf.Elapsed > Nachlauf) break;
                 await Task.Delay(1000);
             }
             await Warte.NachlaufAsync(6);   // über drei Takt-Perioden: auch ein Nachzügler darf nicht ein zweites Mal wirken
@@ -114,6 +118,7 @@ public sealed class NeustartTests
             befund.Nachschuebe.Should().BeGreaterThan(1000, "die Last muss nennenswert sein, sonst beweist der Test nichts");
             befund.ZweimalGewirkt.Should().Be(0, "kein Eingang wirkt zweimal");
             befund.Vollstaendig.Should().BeTrue($"jede Wirkung der Funktionen steht nach dem Neustart genau einmal im Log\n{befund.Bericht}");
+            rueckstand.Should().Be(0, $"nach {nachlauf.Elapsed.TotalSeconds:0} s hat kein Konsument mehr Rückstand\n{befund.Bericht}");
         }
         finally
         {
@@ -127,6 +132,18 @@ public sealed class NeustartTests
         long ZweimalGewirkt, string Bericht)
     {
         public bool Vollstaendig => Nachschuebe == Ausloeser && Zubuchungen == ZubuchungenSoll && Abgeschlossen == Verteilungen;
+    }
+
+    /// <summary>Der Rückstand aller Konsumenten (Projektionen und Funktionen) laut <c>/monitoring/metrics</c> des Hosts; -1, wenn er nicht antwortet.</summary>
+    private static async Task<long> RueckstandAsync(Hostlauf host)
+    {
+        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(10) };
+        try
+        {
+            var metrik = JsonNode.Parse(await http.GetStringAsync($"http://localhost:{host.EinblickPort}/monitoring/metrics"));
+            return metrik?["konsumRueckstand"]?.GetValue<long>() ?? -1;
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException) { return -1; }
     }
 
     private static async Task<DateTime> JetztAsync(Testumgebung u)

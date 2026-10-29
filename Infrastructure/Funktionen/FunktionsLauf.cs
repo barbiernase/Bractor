@@ -8,6 +8,9 @@ namespace Infrastructure.Funktionen;
 /// <list type="bullet">
 /// <item><b>Slots:</b> höchstens so viele Eingänge zugleich in Arbeit; neue holt der Actor erst, wenn einer frei ist — der Rückstau liegt im
 ///   Log, nicht im Speicher.</item>
+/// <item><b>Vorrat:</b> was von der zuletzt gelesenen Seite noch nicht starten konnte, behält der Lauf (höchstens eine Seite) und startet es, sobald
+///   ein Slot frei ist (<see cref="Naechste"/>) — eine Seite trägt alle ihre Eingänge. Neu gelesen wird erst, wenn der Vorrat nichts Startbares mehr
+///   hat (G-18: mit einem Slot las der Actor sonst nach jedem Eingang eine volle Seite, um genau einen zu starten).</item>
 /// <item><b>Je Stream nacheinander:</b> ein Eingang startet erst, wenn kein früherer desselben Streams mehr offen ist; verschiedene Streams
 ///   laufen parallel.</item>
 /// <item><b>Position beim ältesten Unfertigen:</b> sie rückt nur bis vor den ersten Eingang, der noch offen ist oder noch nicht starten konnte,
@@ -28,6 +31,12 @@ public sealed class FunktionsLauf
     private readonly SortedDictionary<long, PartitionsEvent> _inArbeit = new();
     private readonly Dictionary<Guid, long> _belegt = new();
     private readonly HashSet<Guid> _parkVersuch = new();
+    /// <summary>Gelesen, noch nicht gestartet (nach Sequenz) — der Rest der letzten Seite.</summary>
+    private readonly SortedDictionary<long, PartitionsEvent> _vorrat = new();
+    /// <summary>Bis hierher war die letzte Seite vollständig (die gesetzte Sequenz bzw. das Ende einer vollen Seite).</summary>
+    private long _seitenGrenze;
+    /// <summary>Die gesetzte Sequenz der letzten Seite (der Deckel für „dahinter fertig“).</summary>
+    private long _gesetzt;
     private long _grenze;
     private long _geschrieben;
 
@@ -52,48 +61,74 @@ public sealed class FunktionsLauf
 
     public IReadOnlyList<GeparkterStream> Geparkt => Stand?.Geparkt ?? (IReadOnlyList<GeparkterStream>)Array.Empty<GeparkterStream>();
 
-    /// <summary>Setzt den geladenen Stand (erster Start oder nach einem Konflikt): Position aus dem Stand, Erledigtes vergessen, Arbeit läuft weiter.</summary>
+    /// <summary>Wartet gelesen im Vorrat (nach <see cref="Nimm"/>, bis es startet).</summary>
+    public int ImVorrat => _vorrat.Count;
+
+    /// <summary>
+    /// Setzt den geladenen Stand (erster Start oder nach einem Konflikt): Position aus dem Stand, Erledigtes und Vorrat vergessen, Arbeit läuft
+    /// weiter.
+    /// </summary>
     public void Setze(PartitionsCheckpoint stand)
     {
         Stand = stand;
         Position = stand.Position;
         _geschrieben = stand.Position;
         _grenze = stand.Position;
+        _seitenGrenze = stand.Position;
+        _gesetzt = stand.Position;
         _erledigt.Clear();
+        _vorrat.Clear();
     }
 
     /// <summary>Eine zweite Aktivierung hat den Stand geschrieben: beim nächsten Lesen neu laden (die laufende Arbeit ist wiederholungsfest).</summary>
-    public void Verloren() => Stand = null;
+    public void Verloren()
+    {
+        Stand = null;
+        _vorrat.Clear();
+    }
 
     /// <summary>
-    /// Nimmt eine Seite auf und liefert die Eingänge, die jetzt starten: je Stream der früheste offene, solange Slots frei sind; Eingänge geparkter
-    /// Streams sind erledigt (übersprungen). Die übrigen bleiben im Log und halten die Position vor sich.
+    /// Nimmt eine Seite auf (sie ersetzt den Vorrat: gelesen ab der Position, enthält sie alles, was er hielt) und liefert die Eingänge, die jetzt
+    /// starten (<see cref="Naechste"/>). Die übrigen bleiben im Vorrat und halten die Position vor sich.
     /// </summary>
     public IReadOnlyList<PartitionsEvent> Nimm(PartitionsSeite seite)
     {
         if (Stand is null) throw new InvalidOperationException("Erst den Stand setzen.");
-        var events = seite.Events
-            .Where(e => e.Sequenz > Position && !_erledigt.Contains(e.Sequenz) && !_inArbeit.ContainsKey(e.Sequenz))
-            .GroupBy(e => e.Sequenz).Select(g => g.OrderBy(e => e.Event.SubIndex).First())   // ein Eingang je Sequenz
-            .OrderBy(e => e.Sequenz).ToList();
+        _vorrat.Clear();
+        foreach (var g in seite.Events
+                     .Where(e => e.Sequenz > Position && !_erledigt.Contains(e.Sequenz) && !_inArbeit.ContainsKey(e.Sequenz))
+                     .GroupBy(e => e.Sequenz))
+            _vorrat[g.Key] = g.OrderBy(e => e.Event.SubIndex).First();   // ein Eingang je Sequenz
+        _gesetzt = seite.Gesetzt;
+        // Vollständig ist eine volle Seite nur bis zu ihrem letzten Event — auch wenn davon schon alles erledigt oder in Arbeit ist.
+        _seitenGrenze = seite.Voll && seite.Events.Count > 0 ? Math.Min(seite.Gesetzt, seite.Events.Max(e => e.Sequenz)) : seite.Gesetzt;
+        return Naechste();
+    }
+
+    /// <summary>
+    /// Die Eingänge aus dem Vorrat, die jetzt starten: je Stream der früheste offene, solange Slots frei sind; Eingänge geparkter Streams sind
+    /// erledigt (übersprungen). Die übrigen bleiben im Vorrat und halten die Position vor sich.
+    /// </summary>
+    public IReadOnlyList<PartitionsEvent> Naechste()
+    {
+        if (Stand is null) return Array.Empty<PartitionsEvent>();
         var geparkt = Stand.Geparkt.Select(g => g.StreamId).ToHashSet();
         var voll = _erledigt.Count >= _erledigtHoechstens;
 
-        var grenze = seite.Gesetzt;
-        if (seite.Voll && events.Count > 0) grenze = Math.Min(grenze, events[^1].Sequenz);
         var start = new List<PartitionsEvent>();
         long? ersteWartende = null;
         var gesehen = new HashSet<Guid>();
-        foreach (var e in events)
+        foreach (var e in _vorrat.Values.ToList())
         {
             var stream = e.Event.AggregateId;
             if (geparkt.Contains(stream) && !_parkVersuch.Contains(stream))
             {
+                _vorrat.Remove(e.Sequenz);
                 _erledigt.Add(e.Sequenz);   // geparkt: der Einzelversuch des Streams liest ab seinem Stand
                 continue;
             }
             var startbar = FreieSlots > start.Count && !_belegt.ContainsKey(stream) && gesehen.Add(stream)
-                           && !(voll && e.Sequenz > seite.Gesetzt);
+                           && !(voll && e.Sequenz > _gesetzt);
             if (startbar) start.Add(e);
             else
             {
@@ -101,10 +136,12 @@ public sealed class FunktionsLauf
                 ersteWartende ??= e.Sequenz;
             }
         }
+        var grenze = _seitenGrenze;
         if (ersteWartende is { } w) grenze = Math.Min(grenze, w - 1);
         _grenze = Math.Max(Position, grenze);
         foreach (var e in start)
         {
+            _vorrat.Remove(e.Sequenz);
             _inArbeit[e.Sequenz] = e;
             _belegt[e.Event.AggregateId] = e.Sequenz;
         }

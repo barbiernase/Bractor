@@ -215,6 +215,20 @@ kein Wiederverbinden, Command ohne Verbindung nicht im Korb, ein wartender Comma
 Messung: der Messtreiber geht über den JSON-Eingang (Frage mit Antwort), den die Quittung nicht berührt; den gRPC-Weg misst die Vermessung bisher
 nicht.
 
+**Stand 2026-10-29 (G-18 behoben, `d0ccce2`, `71d3b75`):** kein Hänger, sondern zu wenig Durchsatz je Partition (docs/13 §13.6): der
+Funktions-Actor startet jetzt aus dem Vorrat der gelesenen Seite, statt je Eingang eine Seite neu zu lesen; `NeustartTests` wartet zusätzlich auf
+Rückstand 0 (`/monitoring/metrics`), bevor er „vollständig“ abnimmt. Schnelle Stufe auf `71d3b75` grün: Prüfstand **530 grün + 1 übersprungen**
+(neu `Funktionen/FunktionsActorLeseTests` 1 und in `FunktionsLaufTests` 2), Integration ohne Last 65/65, Prüfdomäne 64/64, Verhaltens-Netz ohne
+Last 22/22. `NeustartTests` 5 von 5 grün, je 77–85 s (vorher 184–232 s, die roten schöpften die Nachlauf-Frist von 3 min aus); auf `d0ccce2`, noch
+mit der alten Abnahme, 2 von 3 (rot: 4 von 15 055 Nachschüben, abgenommen, während `Auftragsabwicklung` noch Rückstand hatte). Gegenproben per
+`sed`: ohne Start aus dem Vorrat `FunktionsActorLeseTests` rot (201 statt höchstens 7 Lesungen), die alte Grenze einer vollen Seite rot
+(Position 100 statt 2); `NeustartTests` ohne Vorrat einmal grün in 197 s — wackelt, deshalb nicht die Gegenprobe. Merge in `pubsub_neustrukturierung` nach der ersten
+Gesamtprüfung. S5 A-B-B-A danach (2026-10-29, `…_pf36-vorrat-a1/b1/b2/a2`, A = `90798a7` ohne Vorrat, B = `f49bbf5`, alle gültig,
+Exactly-once grün): S5-8 300/214 (A) gegen 833/866 (B) Vorgänge/s, ≈ 3,3 ×, p99 8,2/12,3 s gegen 2,1/2,2 s, Abbau 8/12 s gegen 1,8 s;
+S5-64 297/250 gegen 933/940, ≈ 3,4 ×, p99 9,8/11,6 s gegen 2,9 s; Queries je Vorgang 39 → 27 (S5-8) bzw. 38 → 23 (S5-64); S5-1 gleich
+(433/448 gegen 446/399) — mit einem Sender gibt es keinen Rückstau, also nichts neu zu lesen. Die B-Läufe liegen eng beieinander; die
+Streuung von S5 (PF-36) kam aus dem Neulesen.
+
 Statisch gezählt:
 
 | Projekt | `[Fact]` | `[Theory]` | Dateien |

@@ -12,16 +12,14 @@ Prozess-Sprache, Handle-/Trigger-Welt, Marken im Log und der Redis-Versionsindex
 Hinweis-Netz, Uhr, Sitzung und Verteiler, Store-Klassen und die direkte Aggregat-Abfrage (Grammatik [10](10-entwickler-api.md)). Was er
 erledigt hat, steht in §13.6 (u. a. W11-1, W11-2, PF-4b, PF-6, PF-25, PF-26, P2-5, P3-3, FB-1, FB-2, FB-3, FB-10, VM-1, G-12, G-13, G-14); offen
 blieben, was die Tabelle unten nennt, darunter PF-7, PF-10, PF-13 und AK-1 (Entscheidungen offen) sowie FB-19 aus der direkten Abfrage. Die Hausregel
-für Actors ist eine Build-Prüfung (CQRS112/113, docs/06 §6.7).
+für Actors ist eine Build-Prüfung (CQRS112/113, docs/06 §6.7). G-18 und PF-36 sind mit dem Vorrat der Seite im Funktions-Actor erledigt (§13.6).
 
 | ID | Kurz | Prio |
 |---|---|:--:|
-| G-18 | Nach dem harten Neustart unter Last bleibt mitunter eine Partition einer Funktion für immer stehen (VT `NeustartTests.Nach_dem_harten_Neustart_unter_Last…`, Funktion `Verteilabwicklung` der Prüfdomäne): ihre Position rückt nicht mehr vor, obwohl der Takt (2 s) weckt — die anderen sieben Partitionen laufen durch. Exactly-once bleibt (kein Eingang wirkt zweimal), die Vollständigkeit nicht: ≈ 100–800 Verteilungen bleiben offen. Daten (2026-10-29, Lauf auf `73ade32`): Partition 5 steht bei Position 229 997, die übrigen bei 296 194; der nächste Eingang dahinter (seq 229 998) ist ein `PostenReserviert` mit fremdem Beleg, für den die Funktion nichts ausgibt — er dürfte sofort fertig sein. Verdacht: ein Lauf, der nie endet, hält den einzigen Slot der Partition (PF-33), danach liest der Actor nicht mehr (`Lies`: keine freien Slots). Älter als Phase 9: gegen `3e16e9a` (Phase 8) 1 von 3 Läufen rot, gegen `73ade32` 3 von 4; davor war der Test in den Läufen der Phasen 7 und 8 grün | P1 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
 | G-16 | Lesen nach Schreiben im Verhaltens-Netz einmal verfehlt (`ClientVerhaltenTests.Nach_dem_eigenen_Command_sieht_die_naechste_Query…`, 1 von 3 Läufen am 2026-10-28): die Query direkt nach der Quittung zeigte den eigenen Stand nicht; vermutlich derselbe Mechanismus wie G-14 oder der damalige Redis-Index (nach dem Commit geschrieben, überschreibend, mit Ablauf); seit Phase 6 kommt der Stand aus dem Guard der Projektion (mit den Wirkungen in einer Transaktion) — am 2026-10-28 mit diesem Stand wieder einmal in drei vollen Läufen rot — der Redis-Index war es also nicht. Seit Phase 7 wartet die Leseseite selbst auf „mindestens S auf v“ (keine Nachfrage im Client mehr); ob G-16 damit weg ist, zeigt erst eine Reihe voller Läufe | P2 |
 | G-15 | Hinweise zwischen zwei Actors ohne zugesicherte Reihenfolge: der Plan (§2.9) sagt „zwischen zwei Actors bleibt die Reihenfolge“, der Bote meldet aber jede Nachricht für sich — zwei Hinweise desselben Absenders an dieselbe Adresse können sich überholen; ohne Nachweis-Test | P2 |
-| PF-36 | Seit dem Wecker (Phase 6) liegt S5 unter Parallelität niedriger: A-B-B-A nur S5 gegen den Code von Phase 5 — S5-8 343/415 (A) gegen 243/293 (B) Vorgänge/s, Mittel 0,71 ×; S5-64 329/363 gegen 224/334, 0,81 ×; S5-1 dagegen 1,09 ×, S3-64 1,15 ×, S1 gleich. Die Läufe streuen stark (A in S5-8 343 bis 415); Transaktionen und Queries je Vorgang sind gleich, der Host ist in B weniger ausgelastet — er wartet. Ursache offen (Verdacht: Zeitpunkt des Weckrufs am Commit statt nach der Antwort des Aggregats im Zusammenspiel mit einem Slot je Partition, PF-33). Profil unter S5-8 nur für B (`…_server-pf36-sonde-b`, 255 Vorgänge/s, Host 4,5 Kerne): ≈ 66 % der arbeitenden Host-CPU liest Events (`LeseEventsAsync`) — bei einem Slot je Partition liest ein Funktions-Actor nach jedem fertigen Eingang wieder eine volle Seite (bis 500), um einen zu starten; davon 30 % in `EventEnvelope..ctor` (`Guid.NewGuid` als Vorgabe für `EventId`, `CausationId`, `CorrelationId`, vom Leser sofort überschrieben) und 24 % JSON. Dasselbe Profil für A (`…_server-pf36-sonde-a`, 220 Vorgänge/s, Host 4,3 Kerne) hat dieselbe Gestalt (`LeseEventsAsync` 64 %, `EventEnvelope..ctor` 30 %, JSON 23 %), Transaktionen und Queries je Vorgang sind gleich; unter dem Profiler liegt B sogar vorn (255 gegen 220). Der Unterschied A-B ist im Profil also nicht zu sehen — kein Umbau, solange er nicht belegt ist. B enthielt hier schon die Behebung von G-17 (`pg_sequence_last_value` in der Probe), das A-B-B-A noch nicht; ein neues A-B-B-A nur für S5-8 (≈ 20 min) klärt, ob die Senkung bleibt. Unabhängig davon ist das Neulesen der Seite der größte Hebel unter Last, in A wie in B. Die erste Gesamtprüfung (2026-10-29, `05ed98a`, Profil `…_gesamtpruefung-profil`) zeigt dasselbe unter S5-64: der Host liest in 13 s 1,4 GB aus Postgres (bis 287 MB/s) und belegt 8 GB Speicher — ≈ 450 KB gelesen und 2,7 MB belegt je Vorgang; im Profil `Materialisiere` 41 % und JSON 24 % der arbeitenden Stichproben (unter Linux auch Threads, die während einer Speicherbereinigung an ihrer Belegung stehen). S5-8 liest je Vorgang so viel wie mit dem Code von Phase 6 (≈ 0,3 MB) — nicht neu, aber unverändert der größte Posten | P2 |
 | PF-34 | Eine Funktion mit Zustand rechnet einen Eingang zugleich (Slots gelten nicht) und startet während ihrer Sicherung nichts; die Last je Sicherung wächst mit dem Zustand (Intervall `Zustand:SichernAlleSekunden`) — ungemessen | P3 |
 | PF-35 | Bindung je Adresse (A8) für jede Funktion draußen, auch ohne Zustand: die Adressen verteilen sich gerecht über die Träger, aber eine Adresse läuft nie über zwei Träger zugleich; bei einem Slot je Partition (PF-33) ohne Wirkung, mit vielen Slots je Partition ungemessen | P3 |
 | PF-33 | Funktionen laufen ohne Eintrag in der Umgebung mit einem Slot je Partition: S5-8/S5-64 fallen auf ≈ 300 Vorgänge/s (0,22 × bzw. 0,13 × der Basis); mit 16 Slots 1,18 × bzw. 0,56 × — Standard und Rest bei 64 Sendern offen | P1 |
@@ -356,6 +354,33 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
   `QueryForward`/`QueryResponseFromClient`, der Zweig in `SitzungsActor` und im Python-Router) ist zurückgebaut, ohne Ersatz — er widersprach R4
   (eine Query hat genau ein Ziel, Reader oder Aggregat) und hatte keine Nutzer. Wer etwas wissen will, das draußen berechnet wird, lässt eine
   Funktion draußen ihr Ergebnis ins Log schreiben und fragt einen Reader.
+
+- **PF-36 · S5 unter Parallelität langsam und streuend (2026-10-29, Messserver; docs/04 §4.4):** seit Phase 6 lag S5 mit 8 und 64
+  Sendern niedrig (≈ 220–360 Vorgänge/s) und streute beim selben Commit um bis zu 1,5 ×; das A-B-B-A gegen Phase 5 zeigte den Unterschied im
+  Profil nicht. Beide Profile (A wie B) und das der ersten Gesamtprüfung zeigten dieselbe Ursache: ≈ 66 % der arbeitenden Host-CPU lasen Events,
+  unter S5-64 1,4 GB in 13 s (≈ 450 KB je Vorgang) — mit einem Slot je Partition las der Funktions-Actor nach jedem fertigen Eingang eine volle
+  Seite neu, um genau einen zu starten. Behoben mit G-18 (unten: Vorrat der Seite). S5 A-B-B-A, A = `90798a7` ohne, B = `f49bbf5` mit Vorrat:
+  S5-8 300/214 gegen 833/866 Vorgänge/s (≈ 3,3 ×), S5-64 297/250 gegen 933/940 (≈ 3,4 ×), p99 von 8–12 s auf 2–3 s, Queries je Vorgang
+  39 → 27 bzw. 38 → 23, S5-1 gleich; die B-Läufe streuen kaum (`…_pf36-vorrat-*`). Ob die Senkung seit Phase 6 eine zweite Ursache hatte, ist
+  damit gegenstandslos. Offen bleibt der Standard der Slots (PF-33). Die drei überflüssigen `Guid.NewGuid` je materialisiertem Event
+  (`EventEnvelope`-Vorgaben) bleiben, bis ein Profil sie wieder zeigt — gelesen wird jetzt etwa einmal je Seite statt je Eingang.
+- **G-18 · Nach dem harten Neustart holte eine Partition einer Funktion ihren Rückstand nicht auf (2026-10-29, Messserver; docs/04 §4.4):** der
+  Verdacht war ein Lauf, der nie endet und den einzigen Slot der Partition hält. Die Daten zeigten etwas anderes. Mit Diagnose-Logging im
+  Funktions-Actor (Stillstand ≥ 10 s bei einer Weckung) und einem Wächter am Wecker stand in einem roten Lauf keine Partition je still:
+  `Verteilabwicklung:2` schrieb ihren Stand bis zum Stopp fast jede Sekunde (Version 216 in ≈ 217 s), war aber zu langsam — 20 658 Eingänge in
+  ≈ 217 s, also ≈ 100 Eingänge/s (`Auftragsabwicklung:6` ≈ 73/s). Die Eingänge verteilen sich schief (24 Posten-Streams auf acht Partitionen,
+  1 100 bis 22 000 je Partition), und eine Verteilung läuft in vier Schritten durch dieselben heißen Partitionen; eine „offene“ Verteilung des
+  Berichts wurde Sekunden vor dem Stopp doch abgeschlossen. Die Stände in der ersten Meldung waren nach dem Ende des Hosts abgelesen — da steht
+  jede Partition. Ursache: mit einem Slot las der Actor nach jedem fertigen Eingang eine volle Seite (bis 500 Events samt JSON) und startete daraus
+  genau einen. Jetzt behält `FunktionsLauf` den Rest der Seite als Vorrat (höchstens eine Seite) und startet daraus, sobald ein Slot frei ist
+  (`Naechste`); neu gelesen wird erst, wenn der Vorrat nichts Startbares mehr hat. Nebenbei behoben: eine volle Seite, deren Eingänge alle schon
+  liefen oder fertig waren, galt bis zur gesetzten Sequenz als vollständig, und die Position übersprang Ungelesenes (mit einem Slot nur über
+  geparkte Streams erreichbar). Der Test selbst nahm „vollständig“ in einem Augenblick ab, in dem `Auftragsabwicklung` noch Rückstand hatte und
+  gleich neue Auslöser schrieb; er wartet jetzt zusätzlich auf Rückstand 0 (`/monitoring/metrics`). Nachweis: Prüfstand `FunktionsActorLeseTests`
+  (200 Eingänge, Seite 50: höchstens 7 Lesungen, ohne Vorrat 201) und zwei Fälle in `FunktionsLaufTests`; `NeustartTests` 5 von 5 grün, je 77–85 s statt
+  184–232 s. Gegenproben per `sed`: ohne Start aus dem Vorrat `FunktionsActorLeseTests` rot (201 Lesungen) (`NeustartTests` blieb dabei einmal grün, brauchte aber 197 s statt ≈ 80 s — als Gegenprobe zu
+  unscharf); die alte
+  Grenze der vollen Seite rot (Position 100 statt 2).
 
 - **G-17 und G-11 · Leser rückten über Events, die noch niemand gezogen hatte (2026-10-28, Messserver; docs/03 §3.3, docs/11 §11.4):** die Probe
   des Horizonts der Vollständigkeit las den Sequenzzähler mit `select last_value from mt_events_sequence` — ohne Sperre der Sequenz-Seite. Jeder
