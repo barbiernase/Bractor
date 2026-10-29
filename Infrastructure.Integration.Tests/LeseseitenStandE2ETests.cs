@@ -17,7 +17,7 @@ using Domain.Laufzeit;
 namespace Infrastructure.Integration.Tests;
 
 /// <summary>
-/// Ebene 2 — „Passt die Leseseite zum Code?" gegen echtes Postgres (docs/konzept-werkbank.md §4.6 und §12.3 E9, Werkbank P3.4):
+/// Ebene 2 — „Passt die Leseseite zum Code?" gegen echtes Postgres (docs/06 §6.5, docs/04 §4.3, Werkbank P3.4):
 /// ein Sim-Host, dessen gespeicherter Projektions-Stand nicht zum Code-Hash passt, leert beim Start die Leseseite und baut sie aus dem
 /// Log neu auf; passt der Stand, bleibt sie unangetastet. Bewiesen über ein fremdes Read-Model-Dokument, das kein Stream erzeugt hat:
 /// es überlebt nur den Start ohne Code-Änderung.

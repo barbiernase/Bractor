@@ -10,7 +10,7 @@ using Infrastructure.Pruefstand.BatchKonsum;
 namespace Infrastructure.Pruefstand.Tests.BatchKonsum;
 
 /// <summary>
-/// Die Store-Klassen zur Laufzeit (Plan Pub/Sub-Neustrukturierung §2.4, R14): der Store einer Projektion wird aus ihren Fähigkeiten aufgelöst
+/// Die Store-Klassen zur Laufzeit (docs/04 §4.3, docs/10 R14): der Store einer Projektion wird aus ihren Fähigkeiten aufgelöst
 /// (dieselbe Instanz, genau eine Klasse, Klasse 3 nur mit Erlaubnis), und die Naht schreibt je Klasse richtig — Klasse 1 Wirkungen und
 /// Fortschritt zusammen, Klasse 2/3 erst die Wirkungen, dann den Fortschritt beim Framework, in der Generation aus dem Fortschritt.
 /// </summary>

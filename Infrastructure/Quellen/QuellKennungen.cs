@@ -5,7 +5,7 @@ using Weasel.Postgresql.Tables;
 namespace Infrastructure.Quellen;
 
 /// <summary>
-/// Das Kennungs-Verzeichnis der Quellen (Plan Pub/Sub-Neustrukturierung §4.2, Option „ein Stream je Schlüssel“): je Quell-Nachricht ihr Vorgang
+/// Das Kennungs-Verzeichnis der Quellen (docs/11, Option „ein Stream je Schlüssel“): je Quell-Nachricht ihr Vorgang
 /// (abgeleitet aus Typ und Kennung) als Primärschlüssel, geschrieben als Beilage in DERSELBEN Transaktion wie die Nachricht. Ein zweites Melden
 /// derselben Kennung scheitert am Schlüssel — genau einmal je Kennung, ohne Horizont (anders als die Inbox der Commands).
 /// </summary>

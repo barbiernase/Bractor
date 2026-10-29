@@ -13,7 +13,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Umgebung;
 
 /// <summary>
-/// Umgebungen (docs/konzept-werkbank.md §4), store-frei: Laden der Datei, Platzhalter, strikte Bindung, das Siegel als reiner
+/// Umgebungen (docs/06 §6.5), store-frei: Laden der Datei, Platzhalter, strikte Bindung, das Siegel als reiner
 /// Vergleich und der Funktions-Laufort als Konfig gegen die generierte Tabelle.
 /// </summary>
 [Trait("Kategorie", "Garantie")]

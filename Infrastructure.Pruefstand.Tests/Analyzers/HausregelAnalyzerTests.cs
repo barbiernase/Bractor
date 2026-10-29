@@ -11,7 +11,7 @@ using Hausregel.SourceGeneration;
 namespace Infrastructure.Pruefstand.Analyzers;
 
 /// <summary>
-/// Die Hausregel für Actors als Build-Prüfung (R18, Plan §1.7, Phase 10): <see cref="HausregelAnalyzer"/> meldet jedes Verbots-Muster in
+/// Die Hausregel für Actors als Build-Prüfung (R18, docs/06 §6.7): <see cref="HausregelAnalyzer"/> meldet jedes Verbots-Muster in
 /// einem Actor und in dem, was er besitzt (Feld, primärer Konstruktor, Typ-Argument), schweigt außerhalb, beim erwiesen fertigen Task und
 /// bei einer begründeten Ausnahme; eine Ausnahme ohne Begründung ist selbst ein Fehler.
 /// </summary>

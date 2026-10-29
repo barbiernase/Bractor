@@ -45,7 +45,7 @@ static class Projektstruktur
     public enum Primitive
     {
         Aggregat, Decider, Applier, Command, Event, Quelle, Wertobjekt, Enum,
-        /// <summary>Eine Query, die ein Aggregat beantwortet (<c>Frage</c> im Decider, Plan Pub/Sub-Neustrukturierung §2.6), und ihre Antwort: sie liegen
+        /// <summary>Eine Query, die ein Aggregat beantwortet (<c>Frage</c> im Decider, docs/03 §3.2), und ihre Antwort: sie liegen
         /// bei der Schreibseite, denn der Decider sieht die Leseseite nicht. Eine Query an einen Reader ist <see cref="Query"/>.</summary>
         AggregatQuery, AggregatAntwort,
         ReadModel, Query, Antwort, StoreBuendel, StoreFaehigkeit, Projektion, Reader,

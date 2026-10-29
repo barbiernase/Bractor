@@ -12,7 +12,7 @@ public sealed record KreislaufErgebnis(bool Ok, string Stand, IReadOnlyList<Schr
     IReadOnlyList<BootMeldung> Boot, IReadOnlyList<string>? Rueckfrage, DateTimeOffset Zeit);
 
 /// <summary>
-/// Der Werkbank-Server (docs/konzept-werkbank.md §5, Werkbank P3): ⟳ = Bauen (Codegen-Prepass, Proto, Generatoren, Analyzer) → Python-Basen
+/// Der Werkbank-Server (CLAUDE.md W6, Werkbank P3): ⟳ = Bauen (Codegen-Prepass, Proto, Generatoren, Analyzer) → Python-Basen
 /// → Board neu lesen → Daten prüfen (Sim-DB) → Infrastruktur → Host ersetzen. Je ein Weg; ein Fehler steht an der Karte, die ihn hat.
 /// </summary>
 public sealed class WerkbankServer

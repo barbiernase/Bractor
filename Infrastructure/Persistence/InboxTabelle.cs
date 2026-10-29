@@ -11,7 +11,7 @@ using Weasel.Postgresql.Tables;
 namespace Infrastructure.Persistence;
 
 /// <summary>
-/// Die Inbox der Schreibseite (docs/04 §4.6, Plan Phase 4): eine Tabelle <c>cqrs_inbox</c> im Event-Schema, je Command eine Quittung
+/// Die Inbox der Schreibseite (docs/04 §4.6): eine Tabelle <c>cqrs_inbox</c> im Event-Schema, je Command eine Quittung
 /// (<c>command_id</c> eindeutig, <c>stream_id</c>, <c>abgelehnt</c>, <c>zeit</c> = <c>now()</c> der schreibenden Transaktion). Geschrieben
 /// in derselben Transaktion wie die Events des Commands; ein zweites Mal scheitert am Primärschlüssel und rollt die Events mit zurück.
 ///
@@ -20,7 +20,7 @@ namespace Infrastructure.Persistence;
 /// würde Weasel beim Abgleich löschen. Der Zeit-Index ist ein B-Baum: die Zeit wächst nur, neue Einträge kommen an seinen rechten Rand (billig
 /// wie der Index auf <c>seq_id</c>), und der <see cref="InboxAufraeumer"/> findet die ältesten, ohne die Tabelle zu durchsuchen (PF-27).
 ///
-/// Eine Quittung ohne Events (ein Noop, eine Ablehnung — Plan Pub/Sub-Neustrukturierung Phase 5: keine Marken im Log) prüft in derselben
+/// Eine Quittung ohne Events (ein Noop, eine Ablehnung — keine Marken im Log) prüft in derselben
 /// Transaktion den Kopf ihres Streams (<see cref="Kopf"/>): die Entscheidung fiel auf einem Stand, und nur wenn der Stream noch dort steht, gilt
 /// sie. Sonst hätte eine zweite Aktivierung auf einem veralteten Stand abgelehnt oder nichts getan, und das wäre dauerhaft (docs/11 §11.2, „nur
 /// einer gewinnt“). Die Prüfung sperrt die Kopfzeile in <c>mt_streams</c> bis zum Commit, wie ein Append mit erwarteter Version.

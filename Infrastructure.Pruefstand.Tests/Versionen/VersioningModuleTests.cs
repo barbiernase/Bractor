@@ -6,7 +6,7 @@ using FluentAssertions;
 namespace Infrastructure.Pruefstand.Versionen;
 
 /// <summary>
-/// Eine Version je Aggregat beim Client (Plan Pub/Sub-Neustrukturierung Phase 5): sie kommt aus Event-Pushes (der Kopf nach dem Commit) und aus
+/// Eine Version je Aggregat beim Client: sie kommt aus Event-Pushes (der Kopf nach dem Commit) und aus
 /// Antworten (die Versionen der gezeigten Aggregate) und ist die ExpectedVersion des nächsten Commands — auch für ein Aggregat, das der Client
 /// nur aus einer Antwort kennt.
 /// </summary>

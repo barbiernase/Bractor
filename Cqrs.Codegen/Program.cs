@@ -17,9 +17,9 @@ using Struktur = Abstractions.Projektstruktur;
 //   1. <Wurzel>.Leitung/domain.proto               (Domänen-DTOs der Leitung, für protoc — nur mit Leitungs-Projekt)
 //   2. EventJsonSerializerContext.g.cs             (für den STJ-Source-Generator, Marten-Storage — in die Komposition)
 //   3. CqrsWireJsonContext.g.cs                    (für den STJ-Source-Generator, Cross-Node-Wire — in die Komposition)
-//   4. domain_client/generated/vertraege.py        (Client-Verträge → Python-Basisklassen, docs/konzept-akteure.md §3)
+//   4. domain_client/generated/vertraege.py        (Client-Verträge → Python-Basisklassen, docs/konzept-akteure.md §6)
 //   5. domain_client/generated/funktionen.py       (Funktions-Schnittstellen → Python-Basisklassen, Laufort Extern)
-//      + funktions_tabelle.py                   (Funktion → Basis, Modul, Klasse der Implementierung — der generische Worker, konzept-werkbank §12.3 E13)
+//      + funktions_tabelle.py                   (Funktion → Basis, Modul, Klasse der Implementierung — der generische Worker, docs/09 §9.5)
 //   6. domain_client/generated/nutzlast_tabelle.py (Nutzlast.typ → DTO-Klasse, Gegenstück zu GeneratedNutzlast, dieselbe Namensregel)
 //   (4–6 nur mit Python-Worker-Projekt der Anwendung.)
 //
@@ -242,7 +242,7 @@ int Erzeuge(string wurzel)
 
         // ────────────────────────────────────────────────────────────────────
         // 5. Funktions-Schnittstellen → Python (ein Worker trägt sie: <Funktion>Basis mit der Eingangs-Methode) + die Tabelle des
-        //    generischen Workers (Funktion → Basis, Modul, Klasse der Implementierung, konzept-werkbank §12.3 E13)
+        //    generischen Workers (Funktion → Basis, Modul, Klasse der Implementierung, docs/09 §9.5)
         // ────────────────────────────────────────────────────────────────────
         var (funktionenPy, funktionAnzahl) = PythonFunktionsEmitter.Emit(assemblies);
         WriteIfChanged(Pfad(Art.Funktionen), funktionenPy);

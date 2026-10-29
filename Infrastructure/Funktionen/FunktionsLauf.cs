@@ -3,7 +3,7 @@ using Abstractions;
 namespace Infrastructure.Funktionen;
 
 /// <summary>
-/// Der Lauf einer Funktion über EINE Partition des Logs (Plan Pub/Sub-Neustrukturierung §2.2) — die reine Buchführung, ohne Ein-/Ausgabe: der
+/// Der Lauf einer Funktion über EINE Partition des Logs (docs/10 §10.1) — die reine Buchführung, ohne Ein-/Ausgabe: der
 /// Funktions-Actor ruft sie nur aus seiner Mailbox, liest und arbeitet neben ihr.
 /// <list type="bullet">
 /// <item><b>Slots:</b> höchstens so viele Eingänge zugleich in Arbeit; neue holt der Actor erst, wenn einer frei ist — der Rückstau liegt im

@@ -14,9 +14,9 @@ namespace Domain.SourceGeneration
         public string ApplierName { get; }
         public List<DecideMethodInfo> DecideMethods { get; }
         public List<string> EventTypes { get; }
-        /// <summary>Die Fragen an das Aggregat (Plan §2.6): Query-Typ und ob die Antwort ein OneOf ist.</summary>
+        /// <summary>Die Fragen an das Aggregat (docs/03 §3.2): Query-Typ und ob die Antwort ein OneOf ist.</summary>
         public List<(string Query, bool OneOf)> Fragen { get; }
-        /// <summary>Code-Hash der Daten-Seite (State + Applier, ohne Decider) — Snapshot-Version (konzept-werkbank §12.3 E9).</summary>
+        /// <summary>Code-Hash der Daten-Seite (State + Applier, ohne Decider) — Snapshot-Version (docs/04 §4.3).</summary>
         public string CodeHash { get; }
 
         public HandlerGeneratorModel(
@@ -59,7 +59,7 @@ namespace Domain.SourceGeneration
             var commandCases = string.Join("\n", model.DecideMethods.Select(m =>
             {
                 if (m.ReturnsOneOf)
-                    // Eine Frist (Frist<TCmd>, Plan Pub/Sub-Neustrukturierung Phase 3) geht als FristGesetzt ins Log; jedes andere Element ist ein Event.
+                    // Eine Frist (Frist<TCmd>) geht als FristGesetzt ins Log; jedes andere Element ist ein Event.
                     return $"                case {m.CommandType} cmd: return _decider.Decide(cmd).Select(o => global::Abstractions.Entscheidungsausgabe.Als(o.Value));";
                 else
                     return $"                case {m.CommandType} cmd: return _decider.Decide(cmd);";
@@ -113,7 +113,7 @@ namespace Domain.SourceGeneration
                                  }
                              }
 
-                             // Die direkte Abfrage (Plan Pub/Sub-Neustrukturierung §2.6): die Frage des Deciders, nur lesend auf den Zustand.
+                             // Die direkte Abfrage (docs/03 §3.2): die Frage des Deciders, nur lesend auf den Zustand.
                              public override IQueryResponse Frage(IQuery query)
                              {
                                  switch (query)

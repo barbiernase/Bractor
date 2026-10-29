@@ -5,7 +5,7 @@ using Record = DomainEditor.Record;
 namespace Infrastructure.Pruefstand.Tests;
 
 /// <summary>
-/// Die Kompositions-Sprache des Domänen-Editors (<c>docs/konzept-editor-komposition.md</c>): Phase 1 Grammatik als EINE Quelle
+/// Die Kompositions-Sprache des Domänen-Editors (Editor-Komposition, Konzept im Git-Verlauf bei 861ea7f): Phase 1 Grammatik als EINE Quelle
 /// (<see cref="Grammatik"/> — Daten für ⊕ und die Liste „Regel → Build-Gegenstück“; geprüft wird im Build, Analyzer-Tests unter
 /// <c>Analyzers/</c>) und Phase 2 Kapselung (<see cref="Module"/>:
 /// Namespace = Modul, Ports abgeleitet aus dem Nachrichtenfluss, offene Ports beim Entwurf von oben nach unten).
@@ -54,7 +54,7 @@ public sealed class DomainEditorKompositionTests
         Grammatik.KonsumVon(Grammatik.Event, Grammatik.Funktion)!.Kardinalitaet.Should().Be(Grammatik.Beliebig);
         Grammatik.KonsumVon(Grammatik.Command, Grammatik.Funktion).Should().BeNull("ein Command geht nur an sein Aggregat");
         Grammatik.ErzeugungVon(Grammatik.Projektion, Grammatik.Event).Should().BeNull("eine Projektion schreibt keine Fakten");
-        // Plan §3.4/§3.5: ein Hinweis geht nie in eine Projektion, eine Projektion erzeugt keine Nachricht, die Frist nimmt die Uhr.
+        // docs/10 §10.5: ein Hinweis geht nie in eine Projektion, eine Projektion erzeugt keine Nachricht, die Frist nimmt die Uhr.
         Grammatik.KonsumVon(Grammatik.Transient, Grammatik.Projektion).Should().BeNull("Hinweise hören Funktionen und Clients");
         Grammatik.Erzeugungen.Should().NotContain(e => e.Baustein == Grammatik.Projektion);
         Grammatik.KonsumVon(Grammatik.Frist, Grammatik.Uhr)!.Kardinalitaet.Should().Be(Grammatik.GenauEins);

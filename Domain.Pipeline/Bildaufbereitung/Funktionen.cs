@@ -4,7 +4,7 @@ using Domain.ImagePair;
 namespace Domain.Pipeline.Bildaufbereitung;
 
 // ═══════════════════════════════════════════════════
-// FUNKTIONEN der Bildaufbereitung (Plan Pub/Sub-Neustrukturierung §3.3)
+// FUNKTIONEN der Bildaufbereitung (docs/10 §10.3)
 //
 // Eine Funktion als Schnittstelle läuft draußen ODER im Host mit einer Implementierung — welche, sagt die Umgebung (Funktionen:<F>:Laufort):
 // im Host OpenCV (OpenCvBildaufbereitung), draußen ein Python-Worker, der sie trägt. Bilder reisen als Dateipfade: das Ergebnis nennt die

@@ -2,8 +2,8 @@ using Abstractions;
 using Leihwesen.Ausleihe.Befehle;
 
 // SONDE — Aggregat mit Commands in eigenem Sub-Namespace, Property-Records, if/else-Guards, alles in EINER Datei. Die Ausleihe setzt eine
-//         FRIST (Plan §3.1): die Uhr schickt nach Ablauf der Leihdauer die Mahnung an DENSELBEN Leihvorgang; ist er schon zurück, wirkt sie nicht.
-//         Der Leihvorgang beantwortet eine Query DIREKT (Frage im Decider, Plan §2.6): Ziel ist das Glied Id<Leihvorgang>, die Antwort ein OneOf.
+//         FRIST (docs/10 §10.2): die Uhr schickt nach Ablauf der Leihdauer die Mahnung an DENSELBEN Leihvorgang; ist er schon zurück, wirkt sie nicht.
+//         Der Leihvorgang beantwortet eine Query DIREKT (Frage im Decider, docs/03 §3.2): Ziel ist das Glied Id<Leihvorgang>, die Antwort ein OneOf.
 
 namespace Leihwesen.Ausleihe.Befehle
 {

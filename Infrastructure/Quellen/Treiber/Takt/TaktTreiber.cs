@@ -5,7 +5,7 @@ using Microsoft.Extensions.Logging;
 namespace Infrastructure.Quellen.Treiber.Takt;
 
 /// <summary>
-/// Der TAKT-Treiber (Plan Pub/Sub-Neustrukturierung Phase 3, ersetzt den Timer-Trigger): je Intervall eine Quell-Nachricht, Kennung = Beginn des
+/// Der TAKT-Treiber (ersetzt den Timer-Trigger): je Intervall eine Quell-Nachricht, Kennung = Beginn des
 /// Intervalls (UTC, ISO 8601) — dieselbe auf jedem Knoten und nach jedem Neustart, also genau einmal im Log (Version 0 bzw. die Kennung im
 /// Verzeichnis der Quelle). Gezählt wird mit der Datenbank-Uhr (eine Uhr, G-10; in Sim samt Versatz). Ein Intervall, das während einer Pause
 /// aller Knoten verstrich, kommt nicht nach — es zählt der nächste erreichte Zeitpunkt. Läuft standardmäßig einmal im Cluster (Lease); ein

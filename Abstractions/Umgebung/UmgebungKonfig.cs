@@ -4,7 +4,7 @@ using System.Collections.Generic;
 namespace Abstractions;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// UMGEBUNGEN (docs/konzept-werkbank.md §4): je Umgebung EINE Datei `umgebungen/umgebung.<name>.json`. Struktur ist Code (was
+// UMGEBUNGEN (docs/06 §6.5): je Umgebung EINE Datei `umgebungen/umgebung.<name>.json`. Struktur ist Code (was
 // existiert), Auswahl und Werte sind Konfig (was aktiv ist). Sim und Prod unterscheiden sich nur hier — nie im Code. Die Typen
 // unten sind zugleich das Schema, aus dem die Werkbank ihr Formular zeichnet (generischer Formular-Renderer).
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -117,7 +117,7 @@ public sealed class FunktionsKonfig
     public int Wiederholungen { get; set; }
     /// <summary>Nur Extern: wie die Werkbank den Worker startet (▶ Worker starten). Der Host liest es nie.</summary>
     public WorkerKonfig? Worker { get; set; }
-    /// <summary>Nur eine Funktion mit Zustand (<c>IZustand&lt;T&gt;</c>, Plan §2.9): wo und wie oft er gesichert wird. Ohne Eintrag: im Dokument,
+    /// <summary>Nur eine Funktion mit Zustand (<c>IZustand&lt;T&gt;</c>, docs/04 §4.4): wo und wie oft er gesichert wird. Ohne Eintrag: im Dokument,
     /// höchstens einmal je Sekunde.</summary>
     public ZustandKonfig? Zustand { get; set; }
 }
@@ -126,7 +126,7 @@ public sealed class FunktionsKonfig
 public enum ZustandsAblage { Dokument, Datei }
 
 /// <summary>
-/// Die Sicherung des Zustands einer Funktion (Abschnitt <c>Funktionen:&lt;F&gt;:Zustand</c>, Plan §2.9, A5): Ablage, Verzeichnis der Dateien, und wie oft
+/// Die Sicherung des Zustands einer Funktion (Abschnitt <c>Funktionen:&lt;F&gt;:Zustand</c>, docs/04 §4.4, docs/10 A5): Ablage, Verzeichnis der Dateien, und wie oft
 /// höchstens gesichert wird (Sekunden; beim Stoppen, Passivieren und Umziehen immer). Großer Zustand bremst bei kurzem Intervall den Durchsatz, ein
 /// langes kostet nach einem Absturz Nachrechnen.
 /// </summary>
@@ -138,7 +138,7 @@ public sealed class ZustandKonfig
 }
 
 /// <summary>
-/// Ein externer Funktions-Worker als Prozess (Werkbank, konzept-werkbank §12.3 E10): <c>Python Skript Argumente…</c>. Die Werkbank setzt <c>CQRS_GRPC_HOST</c>,
+/// Ein externer Funktions-Worker als Prozess (Werkbank, docs/06 §6.5): <c>Python Skript Argumente…</c>. Die Werkbank setzt <c>CQRS_GRPC_HOST</c>,
 /// <c>CQRS_GRPC_PORT</c> und <c>CQRS_AKTEUR_TOKEN</c> (aus <see cref="Token"/>) — der Worker meldet sich damit am gRPC-Port an.
 /// </summary>
 public sealed class WorkerKonfig
@@ -153,7 +153,7 @@ public sealed class WorkerKonfig
 }
 
 /// <summary>
-/// Welche Implementierung ein Domänen-Dienst (<c>IDienst</c>) in dieser Umgebung hat (Abschnitt <c>Dienste:&lt;IDienst&gt;</c>, konzept-werkbank §12.3 E11). Ohne
+/// Welche Implementierung ein Domänen-Dienst (<c>IDienst</c>) in dieser Umgebung hat (Abschnitt <c>Dienste:&lt;IDienst&gt;</c>, docs/06 §6.5). Ohne
 /// Eintrag gilt die einzige Implementierung; gibt es mehrere, muss sie hier stehen.
 /// </summary>
 public sealed class DienstKonfig
@@ -176,7 +176,7 @@ public sealed class ClientKonfig
 }
 
 /// <summary>
-/// Wo ein Store im Dateisystem liegt (Abschnitt <c>Stores:&lt;Store&gt;</c>, Klassenname des Stores; Plan Pub/Sub-Neustrukturierung §2.4). Ohne Eintrag
+/// Wo ein Store im Dateisystem liegt (Abschnitt <c>Stores:&lt;Store&gt;</c>, Klassenname des Stores; docs/04 §4.3). Ohne Eintrag
 /// unter dem Temp-Verzeichnis je Datenbank und Schema des Logs.
 /// </summary>
 public sealed class StoreKonfig

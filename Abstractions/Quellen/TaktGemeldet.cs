@@ -3,7 +3,7 @@ using System;
 namespace Abstractions;
 
 /// <summary>
-/// Was der TAKT-Treiber meldet (Plan Pub/Sub-Neustrukturierung Phase 3, ersetzt den Timer-Trigger der Handle-Welt): ein Zeitpunkt ist erreicht — je
+/// Was der TAKT-Treiber meldet (ersetzt den Timer-Trigger der Handle-Welt): ein Zeitpunkt ist erreicht — je
 /// Intervall genau einmal im Log (die Kennung ist der Beginn des Intervalls, über Knoten und Neustarts hinweg derselbe). Die Domäne benennt die Quelle
 /// nur als Typ: <c>public sealed record Stundentakt : TaktGemeldet;</c> (CQRS070); wie oft, sagt die Konfig (<c>Quellen:&lt;Typ&gt;:Intervall</c>).
 /// Gezählt wird mit der Uhr der Datenbank (eine Uhr, G-10); ein Intervall, das während einer Pause aller Knoten verstrich, kommt nicht nach.

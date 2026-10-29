@@ -9,7 +9,7 @@ using System.Text;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Funktionen in Baustein-Form (Plan Pub/Sub-Neustrukturierung §2.2, §3.3, Phase 3): erzeugt <c>GeneratedFunktionsBausteine</c> — je Funktion
+    /// Funktionen in Baustein-Form (docs/10 §10.1, docs/10 §10.3): erzeugt <c>GeneratedFunktionsBausteine</c> — je Funktion
     /// Eingänge, Ausgaben, Lese-Fähigkeiten, ob sie gleichbleibend ist (R12), wie sie gebaut wird, den reflexionsfreien Dispatch in Einzel- und
     /// Seiten-Form und den Hinweisplan (Hinweis-Typ → Funktions-Actors; den Weckplan erzeugt der WeckplanGenerator). Alles NUR aus der Signatur (<see cref="Funktionsform"/>):
     /// <code>public sealed class Mahnwesen(IMailversand mail) : IFunktion { public OneOf&lt;EroeffneMahnung&gt;? Auf(ZahlungUeberfaellig e, Herkunft h) … }</code>

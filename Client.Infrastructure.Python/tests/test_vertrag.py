@@ -1,5 +1,5 @@
 """
-Client-Verträge (docs/konzept-akteure.md §4, Plan Pub/Sub-Neustrukturierung §2.7) — die Basis, von der die generierten Client-Basen erben.
+Client-Verträge (docs/konzept-akteure.md §4, docs/konzept-akteure.md §5) — die Basis, von der die generierten Client-Basen erben.
 
 Ohne Server: eine Client-Basis wird hier so deklariert, wie Cqrs.Codegen sie erzeugt (TRAEGT + HOERT + abstrakte Methoden), dagegen ein Client.
 Bewiesen wird: Kenntnis-Dispatch aus HOERT, eine Kenntnis gibt nichts aus, fehlende Methode = kein Start, getragene Funktionen werden mit dem

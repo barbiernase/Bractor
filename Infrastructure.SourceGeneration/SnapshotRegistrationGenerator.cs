@@ -45,7 +45,7 @@ namespace Infrastructure.SourceGeneration
 
         /// <summary>
         /// Die Snapshot-Version: Struktur-Hash (Form des States) plus der Code-Hash von State + Applier, den der Domain-Generator in den
-        /// Aggregat-Handler schreibt (<c>{State}AggregateHandler.CodeHash</c>, konzept-werkbank §12.3 E9) — eine geänderte Apply-Logik macht Snapshots so
+        /// Aggregat-Handler schreibt (<c>{State}AggregateHandler.CodeHash</c>, docs/04 §4.3) — eine geänderte Apply-Logik macht Snapshots so
         /// ebenfalls ungültig. Der Handler ist ein Code-Fakt der Domain-Assembly (Konstante, über Metadaten lesbar).
         /// </summary>
         private static string Version(INamedTypeSymbol s, Compilation comp)

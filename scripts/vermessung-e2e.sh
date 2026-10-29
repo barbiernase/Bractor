@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# E2E-Messung (docs/plan-garantien-und-durchsatz.md §0.1/§0.2): ein Befehl, feste Parameter, echte Hosts, echte Eingänge, Exactly-once-Prüfung.
+# E2E-Messung (docs/12 §12.5): ein Befehl, feste Parameter, echte Hosts, echte Eingänge, Exactly-once-Prüfung.
 #
 #   scripts/vermessung-e2e.sh --anlass baseline --spalte Baseline                     Höchstlast S1–S5 (≈ 5 min)
 #   scripts/vermessung-e2e.sh --anlass phase-1 --spalte "Phase 1"                     dieselbe Messung nach einer Phase

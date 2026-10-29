@@ -16,7 +16,7 @@ public enum EingangsAusgang
 }
 
 /// <summary>
-/// Die Rechnung einer Funktion mit Zustand an EINEM Eingang in dieser Aktivierung (Plan §2.9, A5): sobald <c>Auf</c> auf dem Zustand gelaufen ist,
+/// Die Rechnung einer Funktion mit Zustand an EINEM Eingang in dieser Aktivierung (docs/04 §4.4, docs/10 A5): sobald <c>Auf</c> auf dem Zustand gelaufen ist,
 /// stehen hier seine Ausgaben — ein Wiederholen (Command „unbekannt“, Festhalten gescheitert) rechnet nicht noch einmal, sonst wirkte der Eingang
 /// zweimal auf den Zustand. Der Funktions-Actor hält sie, bis der Eingang fertig ist.
 /// </summary>
@@ -33,7 +33,7 @@ public sealed class EingangsRechnung
 public delegate Task BieteAn(EingangAnbieten angebot, CancellationToken ct);
 
 /// <summary>
-/// Die Arbeit an EINEM Eingang (Plan Pub/Sub-Neustrukturierung §2.2, §4.2) — neben der Mailbox des Funktions-Actors, ohne dessen Zustand:
+/// Die Arbeit an EINEM Eingang (docs/10 §10.1, docs/11) — neben der Mailbox des Funktions-Actors, ohne dessen Zustand:
 /// <list type="number">
 /// <item><b>Gleichbleibend</b> (R12) und ohne Events in der Ausgabe: rechnen und senden — dieselbe Rechnung ergibt beim Wiederholen dieselben
 ///   Commands mit denselben Ids, die Inbox des Ziels verwirft das Zweite.</item>
@@ -175,7 +175,7 @@ public sealed class FunktionsArbeit
     }
 
     /// <summary>
-    /// Eine Funktion mit Zustand (Plan §2.9, A5): <c>Auf</c> läuft je Eingang und Aktivierung GENAU EINMAL auf dem Zustand — auch wenn die Ausgabe
+    /// Eine Funktion mit Zustand (docs/04 §4.4, docs/10 A5): <c>Auf</c> läuft je Eingang und Aktivierung GENAU EINMAL auf dem Zustand — auch wenn die Ausgabe
     /// schon festgehalten ist (dann rechnet die Aktivierung nach einem Absturz den Eingang auf dem gesicherten Zustand nach, gesendet wird das
     /// Festgehaltene, Hinweise nicht noch einmal). Sonst wird der Rest der Ausgabe festgehalten (was ein abgebrochener Lauf schon festhielt, gilt)
     /// und gesendet; die Hinweise schickt nur, wer den Lauf abschließt.
@@ -231,7 +231,7 @@ public sealed class FunktionsArbeit
     }
 
     /// <summary>
-    /// Ein HINWEIS-Eingang (Plan §2.9, E7, A7): höchstens einmal — keine Position, nichts festgehalten. Die Rechnung hält die Ausgabe des einen Laufs
+    /// Ein HINWEIS-Eingang (docs/04 §4.4, docs/10 E7, A7): höchstens einmal — keine Position, nichts festgehalten. Die Rechnung hält die Ausgabe des einen Laufs
     /// (ein Wiederholen nach „unbekannt“ rechnet nicht noch einmal und schickt die Hinweise nicht noch einmal); Commands gehen mit der Id aus Funktion,
     /// Hinweis-Kennung, Stelle, Typ und Ziel in den Aggregat-Mechanismus, Hinweise mit einer abgeleiteten Kennung weiter ins Netz.
     /// </summary>
@@ -276,7 +276,7 @@ public sealed class FunktionsArbeit
     }
 
     /// <summary>
-    /// Ein Hinweis-Eingang draußen (Plan §2.9, E9): derselbe Weg wie ein Log-Eingang — anbieten beim Vermittler (die Adresse bindet ihn an den Träger
+    /// Ein Hinweis-Eingang draußen (docs/04 §4.4, docs/10 E9): derselbe Weg wie ein Log-Eingang — anbieten beim Vermittler (die Adresse bindet ihn an den Träger
     /// dieses Actors, A8), die Sitzung reicht ihn als <c>ArbeitsAuftrag</c> weiter —, nur dass die Antwort nicht festgehalten wird: sie kommt mit ihren
     /// Ausgaben zurück. Kommt in der Geduld keine, verfällt der Hinweis (höchstens einmal; ein zweites Anbieten nähme der Vermittler nach „erledigt“
     /// ohnehin nicht mehr an).

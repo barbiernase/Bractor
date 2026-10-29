@@ -8,14 +8,14 @@ using System.Linq;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Was der Konstruktor einer Funktions- oder Dienst-Implementierung nimmt (konzept-werkbank §12.3 E11) — die EINE Lesart für <c>FunktionsGenerator</c> und
+    /// Was der Konstruktor einer Funktions- oder Dienst-Implementierung nimmt (docs/06 §6.5) — die EINE Lesart für <c>FunktionsGenerator</c> und
     /// <c>DienstGenerator</c>: Dienste (<c>IDienst</c>), Konfig-Records (Werte aus <c>Konfig:&lt;Record&gt;</c>) und <c>ILogger&lt;T&gt;</c>.
     /// Gebaut wird die Implementierung per generierter Fabrik (<c>sp =&gt; new Impl(sp.GetRequiredService&lt;P&gt;(), …)</c>) — ohne
     /// reflektierten Aktivator. Was nicht passt, meldet der Analyzer (CQRS090); hier wird es trotzdem aus dem Container geholt.
     /// </summary>
     internal static class Ctorbindung
     {
-        /// <summary>Was ein Konstruktor-Parameter ist; <see cref="Zustand"/> nur in einer Funktions-Klasse (<c>IZustand&lt;T&gt;</c>, Plan §2.9).</summary>
+        /// <summary>Was ein Konstruktor-Parameter ist; <see cref="Zustand"/> nur in einer Funktions-Klasse (<c>IZustand&lt;T&gt;</c>, docs/04 §4.4).</summary>
         public enum Art { Dienst, Konfig, Logger, Zustand, Fremd }
 
         /// <summary>Der Konstruktor, den die Fabrik benutzt: der öffentliche mit den meisten Parametern (wie der DI-Aktivator).</summary>

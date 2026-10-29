@@ -12,7 +12,7 @@ using static Pruefdomaene.Integration.Tests.Pruefstand;
 namespace Pruefdomaene.Integration.Tests;
 
 /// <summary>
-/// Funktionen in Baustein-Form im echten Cluster gegen echtes Marten (Plan Pub/Sub-Neustrukturierung Phase 3): der Funktions-Actor je (Funktion,
+/// Funktionen in Baustein-Form im echten Cluster gegen echtes Marten: der Funktions-Actor je (Funktion,
 /// Partition) liest ab seiner Position, rechnet, hält fest (außer gleichbleibend), sendet aus dem Festgehaltenen mit abgeleiteten Command-Ids;
 /// eine Funktion draußen wartet auf die Antwort von Hand. Geprüft wird die Wirkung im Log — genau einmal je Eingang.
 /// </summary>

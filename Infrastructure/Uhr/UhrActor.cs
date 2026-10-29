@@ -12,7 +12,7 @@ using Proto.Cluster;
 namespace Infrastructure.Uhr;
 
 /// <summary>
-/// Die Arbeit der Uhr (Plan Pub/Sub-Neustrukturierung §2.2, §4.2): die fälligen Fristen lesen, je Frist ihren Command senden — mit der Command-Id
+/// Die Arbeit der Uhr (docs/10 §10.1, docs/11): die fälligen Fristen lesen, je Frist ihren Command senden — mit der Command-Id
 /// aus dem Frist-Event (Stream, Version), also beim zweiten Feuern derselben: doppelt gefeuert, einmal gewirkt. Entschieden (zugestellt oder
 /// abgelehnt) → aus dem Verzeichnis; unbekannt → liegen lassen, der nächste Takt feuert erneut. Die Uhr ist gleichbleibend und hält nichts fest:
 /// der Command steht im Frist-Event.

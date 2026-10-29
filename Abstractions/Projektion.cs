@@ -1,7 +1,7 @@
 namespace Abstractions;
 
 /// <summary>
-/// Eine Projektion (Plan Pub/Sub-Neustrukturierung §3.3): hört Events aus dem Log und schreibt ihren Store über Fähigkeiten — sonst nichts.
+/// Eine Projektion (docs/10 §10.3): hört Events aus dem Log und schreibt ihren Store über Fähigkeiten — sonst nichts.
 /// <code>
 /// public sealed class Kontoauszug : IProjektion
 /// {
@@ -16,7 +16,7 @@ namespace Abstractions;
 public interface IProjektion { }
 
 /// <summary>
-/// Ein Reader (Plan §3.3): beantwortet Queries über Lese-Fähigkeiten.
+/// Ein Reader (docs/10 §10.3): beantwortet Queries über Lese-Fähigkeiten.
 /// <code>
 /// public sealed class Kontoabfragen : IReader
 /// {

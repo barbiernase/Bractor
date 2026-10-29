@@ -39,7 +39,7 @@ public class RehydrationGarantieTests
     public async Task Neustart_zaehlt_Eintraege_des_Rahmens_in_der_Version_und_wendet_sie_nicht_an()
     {
         // Eine Frist (FristGesetzt, ein Eintrag des Rahmens) zählt die Version hoch (die nächste OCC passt), der Zustand sieht sie nie. Ein Noop
-        // und eine Ablehnung stehen nicht im Log (Plan Pub/Sub-Neustrukturierung Phase 5); dass ihre Wiederholung nach dem Neustart nicht erneut
+        // und eine Ablehnung stehen nicht im Log; dass ihre Wiederholung nach dem Neustart nicht erneut
         // wirkt, trägt die Inbox-Tabelle (Prüfdomäne, SchreibGarantieTests).
         var id = Guid.NewGuid();
         var log = new[]

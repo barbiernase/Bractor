@@ -43,7 +43,7 @@ public sealed class SpeicherAblage : IAusgabeAblage
 }
 
 /// <summary>
-/// Die Arbeit an einem Eingang (Plan Pub/Sub-Neustrukturierung §2.2, §4.2), store-frei: gleichbleibend ohne Festhalten, sonst erst festhalten, dann aus dem
+/// Die Arbeit an einem Eingang (docs/10 §10.1, docs/11), store-frei: gleichbleibend ohne Festhalten, sonst erst festhalten, dann aus dem
 /// Festgehaltenen senden; ein Strom hält stückweise fest und setzt nach einem Abbruch fort; die erste Antwort gewinnt; Commands tragen abgeleitete Ids.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
@@ -106,7 +106,7 @@ public class FunktionsArbeitTests
     [Fact]
     public async Task Mit_Zustand_laeuft_Auf_je_Eingang_und_Aktivierung_genau_einmal_auch_beim_Wiederholen()
     {
-        // Plan §2.9, A5: ein Wiederholen in derselben Aktivierung (Command „unbekannt“) rechnet nicht noch einmal — sonst wirkte der Eingang
+        // docs/04 §4.4, docs/10 A5: ein Wiederholen in derselben Aktivierung (Command „unbekannt“) rechnet nicht noch einmal — sonst wirkte der Eingang
         //   zweimal auf den Zustand; gesendet wird dasselbe mit denselben Ids.
         var ablage = new SpeicherAblage();
         var zaehler = 0;

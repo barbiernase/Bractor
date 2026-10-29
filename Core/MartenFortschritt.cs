@@ -14,7 +14,7 @@ public interface IFortschrittImLog
 }
 
 /// <summary>
-/// Der Fortschritt einer Projektion in Marten (Plan Pub/Sub-Neustrukturierung §2.4) an EINER Stelle: je Partition ein
+/// Der Fortschritt einer Projektion in Marten (docs/04 §4.3) an EINER Stelle: je Partition ein
 /// <see cref="PartitionsCheckpoint"/> mit numerischer Revision (<see cref="KonsumSchema"/>), je (Projektion, Stream) ein
 /// <see cref="ProjectionCheckpoint"/> (Guard). Zwei Nutzer: der Marten-Store der Klasse 1 legt ihn in derselben Session ab wie seine Wirkungen
 /// (<see cref="MartenStore"/>), das Framework hält ihn für die Klassen 2 und 3 allein (<c>Infrastructure.Projections.FortschrittBeimFramework</c>).

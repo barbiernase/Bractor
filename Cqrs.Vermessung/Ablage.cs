@@ -7,7 +7,7 @@ using System.Text.Json.Nodes;
 namespace Cqrs.Vermessung;
 
 /// <summary>
-/// Der Ergebnis-Ordner eines Laufs (docs/plan-garantien-und-durchsatz.md §0.1): <c>vermessung/ergebnisse/&lt;JJJJ-MM-TT_HHMM&gt;_&lt;commit&gt;_&lt;anlass&gt;/</c>
+/// Der Ergebnis-Ordner eines Laufs (docs/12 §12.5): <c>vermessung/ergebnisse/&lt;JJJJ-MM-TT_HHMM&gt;_&lt;commit&gt;_&lt;anlass&gt;/</c>
 /// mit <c>ergebnis.json</c>, <c>latenzen/&lt;szenario&gt;.csv[.gz]</c>, <c>pg_stat_statements.csv</c>, <c>host.csv</c>, <c>zusammenfassung.md</c>.
 /// Nur anhängen: existiert der Ordner schon, bricht der Lauf ab. Host-Logs landen im Scratch-Verzeichnis (nicht im Repo), nur ihr Ende im Ordner.
 /// </summary>

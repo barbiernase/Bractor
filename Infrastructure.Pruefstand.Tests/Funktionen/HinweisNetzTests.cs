@@ -15,7 +15,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Funktionen;
 
 /// <summary>
-/// Das Hinweis-Netz (Plan Pub/Sub-Neustrukturierung §2.9, E7, E8, A6, A7), store-frei: die Routing-Tabelle schickt einen Hinweis direkt an die Adresse
+/// Das Hinweis-Netz (docs/04 §4.4, docs/10 E7, E8, A6, A7), store-frei: die Routing-Tabelle schickt einen Hinweis direkt an die Adresse
 /// jeder hörenden Funktion (Partition des Herkunfts-Streams bzw. die eine Adresse); ein Hinweis-Eingang rechnet einmal, Commands tragen eine Id aus
 /// Funktion, Hinweis-Kennung, Stelle, Typ und Ziel — ein Wiederholen nach „unbekannt“ sendet dieselben Ids, ohne neu zu rechnen; Kennungen sind
 /// abgeleitet (dasselbe Nachrechnen ergibt dieselbe Kennung).

@@ -1,7 +1,6 @@
 # 04 — Konsum, Funktionen und Uhr
 
-Stand 2026-10-28 (Plan Pub/Sub-Neustrukturierung Phase 7: Wecker am Commit, Verteiler je Knoten für die Clients, Stand je Id aus Guard und Log), gegen den Code geprüft.
-Ziel für den weiteren Umbau: docs/plan-pubsub-neustrukturierung.md.
+Stand 2026-10-29, gegen den Code geprüft. Wie man Projektion, Reader, Funktion und Quelle schreibt, steht in [10](10-entwickler-api.md).
 
 Was auf ein Event hin geschieht, ist eines von zwei Dingen: eine **Projektion** schreibt ein Read-Model (replaybar), eine **Funktion** sendet
 Commands oder schreibt Ergebnis-Events (wirkt in die Welt, nie blind neu abgespielt). Beide sind durable Konsumenten des Logs und folgen
@@ -53,7 +52,7 @@ Aus dem Guard je Stream folgt der **Stand je Id**, den eine Antwort trägt (`Pro
 derselben Transaktion, Klasse 2/3 nach ihnen — nie vor den Daten sichtbar, sinkt nie), und dahinter das Log — folgen nach ihm nur Events, die die Projektion nicht hört, gilt ihr
 Inhalt bis zum nächsten gehörten Event bzw. bis zum Kopf des Streams. So taugt der Stand als Version des nächsten Commands, auch wenn danach eine
 Frist oder ein fremdes Event kam. Vor dem Reader wartet der Query-Dienst begrenzt (3 s, `MindestensFrist`), bis jeder Stream aus „mindestens S auf v“
-so weit ist (Read-your-writes, Plan Pub/Sub-Neustrukturierung §2.7); reicht die Frist nicht, trägt die Antwort `noch_nicht`. Welche Ids eine
+so weit ist (Read-your-writes, docs/konzept-akteure.md §5); reicht die Frist nicht, trägt die Antwort `noch_nicht`. Welche Ids eine
 Antwort zeigt, findet der Generator selbst: jedes `Id<T>`-Feld der Antwort (auch geschachtelt, in Listen) und der Query, nach der gefragt wurde;
 welche Projektionen hinter einer Frage stehen, folgt aus ihren Lese-Fähigkeiten (die Projektionen, die in denselben Store schreiben) — bei mehreren
 gilt je Stream der kleinste Stand. Liegt der Fortschritt im Postgres des Logs (Marten-Store, Fortschritt beim Framework), liest eine Abfrage Guard und
@@ -89,7 +88,7 @@ hier eine Karenz von 3 s gegen den Event-Zeitstempel; eine länger offene Transa
   Innerhalb eines Batches sehen sich zwei Streams auf demselben geteilten Dokument über die Identity-Map (read-your-writes) — kein Konflikt.
 - Wirft etwas anderes (Datenbank weg), endet der Durchlauf; der nächste beginnt beim durablen Stand.
 
-**Weckung** (Plan §2.3, `Infrastructure/Wecken/`). Es gibt **eine** Stelle, an der nach einem Commit geweckt wird: nach dem `SaveChanges` des
+**Weckung** (docs/03 §3.5, `Infrastructure/Wecken/`). Es gibt **eine** Stelle, an der nach einem Commit geweckt wird: nach dem `SaveChanges` des
 Group-Commits (`MartenEventBatchWriter`) und des Einzel-Appends (`MartenEventStore`, auch der Rückfall `IsolateAsync` und der Betrieb ohne
 Bündeln). Alle Schreiber gehen durch sie — Aggregat, Quelle, festgehaltene Ausgabe einer Funktion. Der **Weckplan** (`WeckplanGenerator`, nur aus
 Signaturen) sagt je Event-Typ, wen der Commit weckt: den Batch-Leser jeder Projektion, die den Typ hört (`batch-<Projektion>`, Partition des
@@ -120,7 +119,7 @@ Die Messung wartet diesen Nachlauf ab (alle Partitions-Stände am Kopf des Logs)
 ## 4.2 Woraus folgt, was ein Konsument ist
 
 Eine **Projektion** ist eine Klasse mit `IProjektion` und je gehörtem Event einem `Task Auf(TEvent e[, Herkunft h], Schreib-Fähigkeiten…[,
-CancellationToken ct])` (Plan Pub/Sub-Neustrukturierung §3.3); ihre Kennung ist der Typname (`Projektionsvertrag.Kennung`). Gelesen wird sie über
+CancellationToken ct])` (docs/10 §10.3); ihre Kennung ist der Typname (`Projektionsvertrag.Kennung`). Gelesen wird sie über
 **eine** Lesart (`Infrastructure.SourceGeneration/Projektionsform.cs`) — dieselbe für Batch-Kinds, Weckplan, Akteur-Rechte, Analyzer und Extractor.
 Der `PullPathGenerator` erzeugt in der Komposition je Projektion den Dispatch (`switch` über den Event-Typ → ihr `Auf`, die `Herkunft` aus dem
 Event, die Fähigkeiten aus dem Bereich), die gehörten Typen, ein Batch-Kind `batch-<Projektion>` und einen `Projektionseintrag`
@@ -156,7 +155,7 @@ Fähigkeiten nehmen `Id<T>`.
 
 **Theorie (der gültige Kern).** Exactly-once-*Zustellung* gibt es nicht (Wirkung und Quittung lassen sich über eine Grenze nie atomar
 koppeln); erreichbar ist exactly-once-*Wirksamkeit*. Das Framework schreibt keine Datenform vor; von einem Store braucht es nur eine von drei
-Zusagen (Plan §2.4, `Abstractions/Projektionsziel.cs`), und jeder Store implementiert **genau eine**:
+Zusagen (docs/04 §4.3, `Abstractions/Projektionsziel.cs`), und jeder Store implementiert **genau eine**:
 
 | Klasse | Schnittstelle | Zusage | genau einmal, weil | Treiber im Framework |
 |---|---|---|---|---|
@@ -249,7 +248,7 @@ es ein Boot-Fehler, der den Eintrag nennt. Eine Funktion mit Lese-Fähigkeit lä
   gibt) — ein Zustand im Worker sieht so alles, was zu ihm gehört (A8); eine freie Adresse bindet der Holende, wenn er nicht schon mehr trägt als
   ein anderer lebender Träger. Endet eine Sitzung, meldet sie sich ab (`TraegerAbgemeldet`) und ihre Adressen sind sofort frei.
 
-**Zustand** (`IZustand<T>`, Plan §2.9, A5, A6). Steht `IZustand<T>` im Konstruktor einer Funktions-Klasse, hat sie gekapselten, durablen Zustand —
+**Zustand** (`IZustand<T>`, docs/04 §4.4, docs/10 A5, A6). Steht `IZustand<T>` im Konstruktor einer Funktions-Klasse, hat sie gekapselten, durablen Zustand —
 kein Domänen-Zustand, keine Zustands-Events, keine Faltung aus dem Log; Vorbild ist der Aggregat-Actor:
 ```csharp
 [EineAdresse]                                                   // ein Zustand für alle Messstellen (sonst einer je Partition)
@@ -283,7 +282,7 @@ einem `readonly`-Feld; was gesichert werden muss, gehört in `IZustand<T>`. Beis
 Aktivierung rechnet. Eine Funktion mit Lebenszyklus ist nie gleichbleibend; CQRS107 erlaubt ihn nur an Funktions-Klassen und `VorDemSichernAsync` nur
 mit Zustand. Draußen hat die Python-Basis die Gegenstücke `beim_start` (einmal je Worker, vor dem Anbieten) und `beim_ende`.
 
-**Hinweis-Netz** (`HinweisNetz.cs`, Plan §2.9, E7, E8). Hinweise, die nicht zur Fachdomäne gehören (Merkmale, Messwerte, Ablehnungen), gehen im
+**Hinweis-Netz** (`HinweisNetz.cs`, docs/04 §4.4, docs/10 E7, E8). Hinweise, die nicht zur Fachdomäne gehören (Merkmale, Messwerte, Ablehnungen), gehen im
 Speicher von Baustein zu Funktions-Actor — nie in den Log, kein Broker, keine Abos. Die Routing-Tabelle ist der generierte Hinweisplan (Hinweis-Typ →
 Funktionen); gibt eine Funktion, ein Aggregat (eine Ablehnung aus dem Decide) oder ein Client (`TransientEvent` über die Leitung) einen Hinweis aus,
 schickt der Rahmen ihn per `Bote.Melde` direkt an jede Adresse: die Partition seines Herkunfts-Streams bzw. die eine Adresse (A6). Er trägt eine
@@ -350,7 +349,7 @@ quittiert den Ausgang des ersten Mals. Vor dem Append erkennt ein kleiner Cache 
 häufige Wiederholung kurz nach dem ersten Mal schon **vor** der OCC-Prüfung. Exactly-once gilt innerhalb des Horizonts
 (`Schreibpfad.InboxHorizontTage`, Standard 30 Tage).
 
-**Keine Marken im Log** (Plan Pub/Sub-Neustrukturierung Phase 5). Ein Noop und eine fachliche Ablehnung schreiben kein Event, nur ihre
+**Keine Marken im Log** (Umbau-Phase 5). Ein Noop und eine fachliche Ablehnung schreiben kein Event, nur ihre
 Quittung (gewirkt bzw. abgelehnt) — die Version des Ziels bleibt, ein Aggregat hat **eine** Version, die Zahl seiner Events. Eine Wiederholung
 derselben CommandId bekommt denselben Ausgang, auch nach einem Neustart (Inbox vor OCC). Die Quittung ohne Events gilt nur auf dem Stand, auf dem
 entschieden wurde (Kopf-Prüfung, [03 §3.3](03-schreibseite.md)). Die Ablehnung selbst ist ein Hinweis: gezielt an die Sitzung des Aufrufers und

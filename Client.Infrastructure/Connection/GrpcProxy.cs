@@ -216,7 +216,7 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
     }
 
     /// <summary>
-    /// Liest das Log ab <paramref name="ab"/> (Plan Pub/Sub-Neustrukturierung §2.7): die Events, die diese Sitzung hören darf, bis zum Horizont —
+    /// Liest das Log ab <paramref name="ab"/> (docs/konzept-akteure.md §5): die Events, die diese Sitzung hören darf, bis zum Horizont —
     /// wer ab <see cref="LogLesung.Bis"/> weiterliest, verpasst nichts (auch nach dem Wiederverbinden).
     /// </summary>
     public async Task<LogLesung> LiesLogAsync(long ab, int hoechstens = 500, CancellationToken ct = default)

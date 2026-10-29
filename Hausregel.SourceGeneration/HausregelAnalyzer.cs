@@ -9,7 +9,7 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Hausregel.SourceGeneration
 {
     /// <summary>
-    /// Die Hausregel für Actors als Build-Prüfung (R18, Plan Pub/Sub-Neustrukturierung §1.7, Phase 10): ein Weg je Absicht im Actor.
+    /// Die Hausregel für Actors als Build-Prüfung (R18, docs/06 §6.7): ein Weg je Absicht im Actor.
     /// Geprüft werden alle Typen, die <c>Proto.IActor</c> implementieren, und alle Typen, die ein solcher Actor besitzt — als Feld, als
     /// Parameter seines primären Konstruktors, als Typ-Argument eines Feldes, transitiv, soweit sie im selben Projekt stehen. Darin verboten
     /// (<b>CQRS112</b>, Fehler):
@@ -40,7 +40,7 @@ namespace Hausregel.SourceGeneration
         private static readonly DiagnosticDescriptor Verstoss = new(
             VerstossId,
             "Hausregel für Actors verletzt",
-            "{0} in '{1}' — {2} (Hausregel R18, Plan §1.7; Ausnahme nur mit [HausregelAusnahme(\"Begründung\")])",
+            "{0} in '{1}' — {2} (Hausregel R18, docs/06 §6.7; Ausnahme nur mit [HausregelAusnahme(\"Begründung\")])",
             Kategorie,
             DiagnosticSeverity.Error,
             isEnabledByDefault: true,

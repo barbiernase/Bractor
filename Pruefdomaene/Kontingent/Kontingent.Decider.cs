@@ -25,7 +25,7 @@ public partial class Kontingent
             yield return new KontingentEntlastet(cmd.Plaetze, cmd.Beleg);
         }
 
-        /// <summary>Die direkte Abfrage (Plan §2.6): die freien Plätze, auf denen die nächste Belegung entschieden würde.</summary>
+        /// <summary>Die direkte Abfrage (docs/03 §3.2): die freien Plätze, auf denen die nächste Belegung entschieden würde.</summary>
         public OneOf<KontingentStand, KontingentUnbekannt> Frage(HoleKontingent q) =>
             this.State.Existiert ? new KontingentStand(q.Kontingent, this.State.Frei) : new KontingentUnbekannt(q.Kontingent);
     }

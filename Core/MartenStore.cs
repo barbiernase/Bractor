@@ -4,7 +4,7 @@ using Marten;
 namespace Core;
 
 /// <summary>
-/// Der Marten-Store der <b>Klasse 1</b> (<see cref="IAtomaresZiel"/>, Plan Pub/Sub-Neustrukturierung §2.4) — die technikspezifische, in ALLEN
+/// Der Marten-Store der <b>Klasse 1</b> (<see cref="IAtomaresZiel"/>, docs/04 §4.3) — die technikspezifische, in ALLEN
 /// Marten-Stores identische Exactly-once-Maschinerie an EINER Stelle. Wirkungen werden nur GEPUFFERT; <see cref="SchreibeMitFortschrittAsync"/>
 /// spielt die Wirkungen eines Batches (viele Streams einer Partition), die Guards seiner Streams und den Fortschritt der Partition mit erwarteter
 /// Revision in EINER Marten-<c>IdentitySession</c> ab und committet mit EINEM <c>SaveChangesAsync</c> → Wirkungen und Fortschritt werden gemeinsam

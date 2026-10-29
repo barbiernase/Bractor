@@ -13,7 +13,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Analyzers;
 
 /// <summary>
-/// Die Regeln der Wiederholbarkeit (Plan Pub/Sub-Neustrukturierung §3.6): R2 (CQRS101, ein Auf/Handle je Eingang), R11 (CQRS102, Aggregat und
+/// Die Regeln der Wiederholbarkeit (docs/10 §10.6): R2 (CQRS101, ein Auf/Handle je Eingang), R11 (CQRS102, Aggregat und
 /// Projektion rechnen gleich), R12 (CQRS103, gleichbleibende Funktion ohne Uhr und Zufall), R13 (CQRS104, neue Ids nur abgeleitet).
 /// </summary>
 [Trait("Kategorie", "Garantie")]

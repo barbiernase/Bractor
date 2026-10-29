@@ -45,7 +45,7 @@ sudo setcap 'cap_net_bind_service=+ep' "$BLAZOR_DIR/Host.Blazor"
 # --- Start Host.Grpc ---
 echo "Starting..."
 cd "$GRPC_DIR"
-# Alle Werte stehen in umgebungen/umgebung.prod.json (mit dem Host veröffentlicht, docs/konzept-werkbank.md §4).
+# Alle Werte stehen in umgebungen/umgebung.prod.json (mit dem Host veröffentlicht, docs/06 §6.5).
 DOTNET_ENVIRONMENT=Development \
 nohup ./Host.Grpc --umgebung prod > /opt/cqrs/grpc.log 2>&1 &
 

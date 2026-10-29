@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    Das VERHALTENS-NETZ (Plan Pub/Sub-Neustrukturierung §6, Phase 0): echte Hosts als Prozesse, angesprochen nur von außen — über die
+    Das VERHALTENS-NETZ (docs/12 §12.6): echte Hosts als Prozesse, angesprochen nur von außen — über die
     gRPC-Leitung mit dem echten C#-Client, den JSON-Eingang, das Quell-Verzeichnis und Queries; geprüft wird das fachliche Soll im Log.
     Nichts hier hängt an der Verdrahtung des Frameworks (Broker, Dirigent, Prozess-Events): das Netz soll den Umbau überstehen.
   -->

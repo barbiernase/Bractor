@@ -20,7 +20,7 @@ public sealed record BausteinBindung(string Funktion, FunktionsLaufort Laufort =
     int Wiederholungen = 0, ZustandsBindung? Zustand = null);
 
 /// <summary>
-/// Die Verdrahtung der Funktionen in Baustein-Form (Plan Pub/Sub-Neustrukturierung Phase 3), für jede Anwendung gleich — aus der generierten Tabelle
+/// Die Verdrahtung der Funktionen in Baustein-Form, für jede Anwendung gleich — aus der generierten Tabelle
 /// <c>Anwendung.Funktionen.Bausteine</c>, ohne Domänen-Typ im Framework:
 /// <list type="bullet">
 /// <item>je Funktion ein Cluster-Kind <c>funktion-&lt;F&gt;</c> (Identität = Partition) mit dem <see cref="FunktionsActor"/>;</item>
@@ -53,7 +53,7 @@ public static class FunktionsBausteinWiring
             services.AddHostedService<BatchKonsumStartupService>();   // idempotent (TryAddEnumerable), auch wenn die Projektionen ihn schon anmeldeten
             services.TryAddSingleton<IKonsumRueckstand, KonsumRueckstand>();
         }
-        // Das Hinweis-Netz (Plan §2.9): die generierte Routing-Tabelle Hinweis-Typ → Funktions-Adressen, Versand direkt über den Bote.
+        // Das Hinweis-Netz (docs/04 §4.4): die generierte Routing-Tabelle Hinweis-Typ → Funktions-Adressen, Versand direkt über den Bote.
         if (Anwendung.Funktionen.Hinweisplan.Count > 0)
             services.TryAddSingleton(sp => new HinweisNetz(bausteine, Anwendung.Funktionen.Hinweisplan, sp.GetService<Konsum>() ?? Konsum.Standard,
                 () => new Bote(sp.GetRequiredService<ActorSystem>().Cluster(), sp.GetService<ILoggerFactory>()?.CreateLogger("Hinweisnetz")),
@@ -118,7 +118,7 @@ internal sealed class FunktionsKind(FunktionsBaustein baustein) : IClusterKindCo
         var logger = provider.GetService<ILoggerFactory>()?.CreateLogger("Funktion." + baustein.Name);
         var typen = FunktionsActor.TypenVon(baustein);
         var umsetzung = bindung.Laufort == FunktionsLaufort.Host ? FunktionsBausteinWiring.Umsetzung(baustein, bindung) : null;
-        // Mit Zustand (Plan §2.9): Laden und Sichern über den Stand-Store, große Zustände als Datei in der Ablage der Umgebung.
+        // Mit Zustand (docs/04 §4.4): Laden und Sichern über den Stand-Store, große Zustände als Datei in der Ablage der Umgebung.
         var zustand = bindung.Zustand ?? ZustandsBindung.Standard;
         var sicherung = umsetzung is not null && baustein.Zustand is not null
             ? new ZustandsSicherung(provider.GetRequiredService<IFunktionsStand>(), zustand,
@@ -131,7 +131,7 @@ internal sealed class FunktionsKind(FunktionsBaustein baustein) : IClusterKindCo
             var bote = new Bote(system.Cluster(), logger);
             var emitter = new CommandEmitter(bote, logger);
             var verteilung = provider.GetService<Infrastructure.Verteilen.Verteilung>();
-            // Die Umsetzung je Aktivierung, samt ihren Diensten in einem eigenen Bereich (Plan §2.9); bei Slots > 1 teilen sich die Eingänge
+            // Die Umsetzung je Aktivierung, samt ihren Diensten in einem eigenen Bereich (docs/04 §4.4); bei Slots > 1 teilen sich die Eingänge
             //   dieser Aktivierung die Instanz — sie muss dann thread-sicher sein.
             var aktivierung = umsetzung is null ? null : new FunktionsAktivierung(provider, umsetzung.Baue, baustein.Zustand);
             var arbeit = new FunktionsArbeit(baustein,

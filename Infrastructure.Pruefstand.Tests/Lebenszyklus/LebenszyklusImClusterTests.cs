@@ -18,7 +18,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Lebenszyklus;
 
 /// <summary>
-/// Die Befunde der Actor-Praxis (Plan Pub/Sub-Neustrukturierung §1.7) an den echten Actors in einem Cluster im Speicher (Mitgliedschaft
+/// Die Befunde der Actor-Praxis (docs/06 §6.7) an den echten Actors in einem Cluster im Speicher (Mitgliedschaft
 /// in-memory, ohne Store — Log und Tracker sind die Seams des Batch-Konsums):
 /// <list type="bullet">
 /// <item>der Batch-Leser gibt seinen Bereich beim Stopp nicht frei, solange der Durchlauf ihn nutzt (vorher: freigegeben im <c>Stopped</c>);</item>

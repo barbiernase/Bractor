@@ -1,11 +1,11 @@
 using Abstractions;
 using Core;
 
-// SONDE — fremdes Szenario 2 (Plan Pub/Sub-Neustrukturierung §6, Phase 0): SENSOR-STROM MIT ALARM.
+// SONDE — fremdes Szenario 2 (docs/12 §12.6): SENSOR-STROM MIT ALARM.
 //
 // Viele Messwerte, wenige Fakten: ein Sensor zählt Überschreitungen seines Grenzwerts hintereinander (Zähl-Aggregat) und löst nach N den
 // Alarm aus; ein Messwert im Rahmen ändert nichts. Der Alarm öffnet eine Störung (je Sensor ein Störungsfall, die Leitstelle quittiert).
-// Ein Messwert kommt als Command an den Sensor oder als Hinweis, den eine Funktion hört (Plan §3.1, §3.4); der Alarm öffnet die Störung
+// Ein Messwert kommt als Command an den Sensor oder als Hinweis, den eine Funktion hört (docs/10 §10.2, docs/10 §10.5); der Alarm öffnet die Störung
 // über eine gleichbleibende Funktion, deren Ziel-Id die des Sensors ist (Herkunft.Stream).
 
 namespace Anlagen.Messung;
@@ -97,7 +97,7 @@ public sealed class StoerungBeiAlarm : IFunktion
     public OeffneStoerung Auf(AlarmAusgeloest e, Herkunft h) => new(new Id<Stoerungsfall>(h.Stream), e.Wert);
 }
 
-// Funktion auf einem Hinweis (Plan §3.4, Phase 3): das Sensornetz schickt jeden Rohwert als Hinweis (verlierbar, höchstens einmal); eine
+// Funktion auf einem Hinweis (docs/10 §10.5): das Sensornetz schickt jeden Rohwert als Hinweis (verlierbar, höchstens einmal); eine
 // gleichbleibende Funktion im Host macht aus einem verwertbaren Wert den Command an den Sensor — ein unlesbarer Wert ergibt nichts (T?).
 public record MesswertGemessen(Id<Sensor> SensorId, double Wert, DateTimeOffset GemessenAm) : ITransientEvent;
 
@@ -107,7 +107,7 @@ public sealed class Messwertpruefung : IFunktion
         double.IsNaN(m.Wert) || double.IsInfinity(m.Wert) ? null : new MeldeMesswert(m.SensorId, m.Wert, m.GemessenAm);
 }
 
-// Ein Takt als Quelle (Plan Phase 3, statt Timer-Trigger): je Intervall genau eine Quell-Nachricht; wie oft, sagt die Konfig (Quellen:Messzyklus).
+// Ein Takt als Quelle (statt Timer-Trigger): je Intervall genau eine Quell-Nachricht; wie oft, sagt die Konfig (Quellen:Messzyklus).
 public sealed record Messzyklus : TaktGemeldet;
 
 // Wer hineingibt: das Sensornetz (Maschine) meldet Messwerte, die Schichtleitung richtet ein und quittiert.

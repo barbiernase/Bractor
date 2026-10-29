@@ -8,7 +8,7 @@ using System.Linq;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Die EINE Lesart von Projektion und Reader (Plan Pub/Sub-Neustrukturierung §3.3) — für die Batch-Kinds und den Weckplan (eine Erkennung für
+    /// Die EINE Lesart von Projektion und Reader (docs/10 §10.3) — für die Batch-Kinds und den Weckplan (eine Erkennung für
     /// beide, FB-12), den Query-Dienst, die Analyzer, die Lage-Regeln und den Extractor. Nur Code-Fakten: die Marker <c>IProjektion</c> und
     /// <c>IReader</c>, die Methoden <c>Auf</c> bzw. <c>Frage</c> und ihre Signaturen, die Store-Klasse eines Stores. Verglichen wird über volle
     /// Namen, nie über Symbol-Identität — so liest sie auch Typen aus anderen Compilations. Dazu die Frage an ein Aggregat (§2.6): die
@@ -306,7 +306,7 @@ namespace Infrastructure.SourceGeneration
         }
 
         // ─────────────────────────────────────────────────────────────
-        // Was eine Antwort zeigt: ihre Id<T>-Felder (Plan §2.5)
+        // Was eine Antwort zeigt: ihre Id<T>-Felder (docs/10 §10.4)
         // ─────────────────────────────────────────────────────────────
 
         /// <summary>Ist <paramref name="t"/> eine typisierte Id (<c>Id&lt;T&gt;</c>)?</summary>

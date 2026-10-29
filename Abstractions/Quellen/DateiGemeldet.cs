@@ -3,7 +3,7 @@ using System;
 namespace Abstractions;
 
 /// <summary>
-/// Was jeder DATEI-Treiber meldet (docs/konzept-werkbank.md §3): eine fertig geschriebene Datei. Der Treiber befüllt alle Felder —
+/// Was jeder DATEI-Treiber meldet (docs/04 §4.7): eine fertig geschriebene Datei. Der Treiber befüllt alle Felder —
 /// eine Domäne benennt ihre Quelle nur als Typ: <c>public sealed record DateiErkannt : DateiGemeldet;</c> (keine eigenen Member,
 /// CQRS070). Die Treiber-Wahl ist damit ein Code-Fakt (der Basistyp), die Werte (Pfad, Muster, Fertig-Erkennung …) sind Konfig der
 /// Umgebung (<c>Quellen:&lt;Typ&gt;</c>).

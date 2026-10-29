@@ -6,7 +6,7 @@ using Proto.Cluster;
 namespace Infrastructure.Lebenszyklus;
 
 /// <summary>
-/// Die zwei Verben, mit denen Framework-Code einen virtuellen Cluster-Actor anspricht (Plan Pub/Sub-Neustrukturierung §1.7, Phase 2) — es
+/// Die zwei Verben, mit denen Framework-Code einen virtuellen Cluster-Actor anspricht (docs/06 §6.7) — es
 /// gibt keinen dritten Weg und keine Anfrage ohne Frist:
 /// <list type="bullet">
 /// <item><see cref="Melde"/> — <b>verlierbar, ohne Antwort.</b> Der Aufrufer wartet nicht; die Zustellung ist intern gebunden
@@ -16,7 +16,7 @@ namespace Infrastructure.Lebenszyklus;
 ///   abgelaufen, Ziel nicht platzierbar, Transportfehler, Abbruch des Aufrufers), liefert sie <c>null</c>; eine Ausnahme verlässt den Boten nie.
 ///   „Keine Antwort“ heißt „unbekannt“, nie „nicht gewirkt“ — wer wiederholt, wiederholt mit derselben Identität der Nachricht.</item>
 /// </list>
-/// Dazu für die Actors mit festem Namen je Knoten (der Verteiler, Plan §2.7) <see cref="MeldeAnKnoten"/> — ebenso verlierbar, ohne Platzierung.
+/// Dazu für die Actors mit festem Namen je Knoten (der Verteiler, docs/konzept-akteure.md §5) <see cref="MeldeAnKnoten"/> — ebenso verlierbar, ohne Platzierung.
 /// Proto.Cluster wiederholt eine Anfrage ohne Frist unbegrenzt (Platzierung, tote PID) — der Grund, warum keine Stelle mehr
 /// <c>Cluster.RequestAsync</c> selbst ruft. Die Anfrage selbst ist eine Naht (<see cref="Anfrage"/>): live der Cluster, im Prüfstand ein Fake.
 /// </summary>

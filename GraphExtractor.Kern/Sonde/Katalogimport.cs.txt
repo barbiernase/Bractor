@@ -2,14 +2,14 @@ using System.Text;
 using Abstractions;
 using Core;
 
-// SONDE — fremdes Szenario 3 (Plan Pub/Sub-Neustrukturierung §6, Phase 0): MASSEN-IMPORT MIT FORTSCHRITT.
+// SONDE — fremdes Szenario 3 (docs/12 §12.6): MASSEN-IMPORT MIT FORTSCHRITT.
 //
 // EINE Quell-Nachricht (eine abgelegte Katalog-Datei) wird zu vielen Fakten: der Import-Vorgang ist ein Aggregat, ein Import-Dienst draußen
 // liest die Datei und gibt als STROM je Zeile einen Artikel und zwischendurch den Fortschritt aus; die Leseseite zeigt den Stand. Der Strom ist
-// eine Funktion draußen (Plan §2.2, Phase 3): Position und Fortschritt hält das Framework — nach einem Absturz geht es bei der nächsten Zeile
+// eine Funktion draußen (docs/10 §10.1): Position und Fortschritt hält das Framework — nach einem Absturz geht es bei der nächsten Zeile
 // weiter; die Artikel-Ids leitet sie aus der Herkunft ab (R13). Getragen wird sie vom Import-Werk (ITraegt), das der Import-Dienst verkörpert.
 //
-// Die Leseseite zeigt die beiden Store-Klassen ohne Transaktion (Plan §2.4, R14): der Stand liegt in Dateien (Klasse 2, wiederholungsfest — jede
+// Die Leseseite zeigt die beiden Store-Klassen ohne Transaktion (docs/04 §4.3, docs/10 R14): der Stand liegt in Dateien (Klasse 2, wiederholungsfest — jede
 // Schreib-Fähigkeit nimmt die Herkunft und schreibt bedingt), und eine Metrik zählt angelegte Artikel (Klasse 3, mindestens einmal — nur mit
 // ausdrücklicher Erlaubnis an der Projektion).
 

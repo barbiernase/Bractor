@@ -1,7 +1,7 @@
 namespace Abstractions;
 
 /// <summary>
-/// Gekapselter, durabler ZUSTAND einer Funktion (Plan Pub/Sub-Neustrukturierung §2.9, E6, R19) — kein Domänen-Zustand, sondern was die Technik
+/// Gekapselter, durabler ZUSTAND einer Funktion (docs/04 §4.4, docs/10 E6, R19) — kein Domänen-Zustand, sondern was die Technik
 /// hinter einer Funktion über ihre Aufrufe hinweg braucht: ein Modell, das weiterlernt, gelernte Gewichte, ein Zähler, ein Cache, der nach einem
 /// Umzug nicht kalt sein soll. Code-Fakt: steht <c>IZustand&lt;T&gt;</c> im Konstruktor einer Funktions-Klasse, hat sie Zustand; der Generator sieht
 /// es über Roslyn und verdrahtet ihn ohne Reflection.
@@ -32,7 +32,7 @@ public interface IZustand<T> where T : class, new()
 }
 
 /// <summary>
-/// Die Funktion hat EINE Adresse statt einer je Partition (Plan §2.9, A6): ein einziger Funktions-Actor liest alle Partitionen des Logs und hört
+/// Die Funktion hat EINE Adresse statt einer je Partition (docs/04 §4.4, docs/10 A6): ein einziger Funktions-Actor liest alle Partitionen des Logs und hört
 /// alle Hinweise — für einen Zustand, der für alles gilt (ein Netz, ein Modell über alle Streams). Ohne das Attribut hat eine Funktion eine Adresse
 /// je Partition (<c>funktion-&lt;F&gt;/&lt;Partition&gt;</c>), ein Hinweis geht an die Partition seines Herkunfts-Streams. Gilt für C# und Python gleich
 /// (an der Klasse bzw. an der Schnittstelle einer Funktion draußen).

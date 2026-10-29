@@ -7,7 +7,7 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Domain.SourceGeneration;
 
 /// <summary>
-/// CQRS070 — die Form eines Quellen-Typs (docs/konzept-werkbank.md §3.2): ein Typ, der von einer Treiber-Basis erbt
+/// CQRS070 — die Form eines Quellen-Typs (docs/04 §4.7): ein Typ, der von einer Treiber-Basis erbt
 /// (<c>DateiGemeldet</c>, <see cref="Abstractions.Treibervertrag"/>), ist ein <c>sealed record</c> OHNE eigene Member und ohne
 /// Parameterliste — der Treiber befüllt nur die Felder seiner Basis, eigene Felder könnte er nicht setzen. Die Domäne benennt die
 /// Quelle nur als Typ: <c>public sealed record DateiErkannt : DateiGemeldet;</c>

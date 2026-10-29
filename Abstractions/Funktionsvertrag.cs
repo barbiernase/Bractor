@@ -1,7 +1,7 @@
 namespace Abstractions;
 
 /// <summary>
-/// Die Namen, über die Generatoren und Werkzeuge eine Funktion (<c>IFunktion</c>, Plan §3.3) erkennen und binden: ihre Methode <see cref="Auf"/>,
+/// Die Namen, über die Generatoren und Werkzeuge eine Funktion (<c>IFunktion</c>, docs/10 §10.3) erkennen und binden: ihre Methode <see cref="Auf"/>,
 /// das Cluster-Kind ihres Actors, ihr Stand, ihre Python-Implementierung. Die EINE Quelle dieser Regeln — Generatoren (per Link eingebunden,
 /// netstandard2.0) und Extractor lesen sie von hier, statt sie je für sich zu kennen (wie <see cref="Aggregatvertrag"/>).
 /// </summary>
@@ -17,13 +17,13 @@ public static class Funktionsvertrag
     /// <summary>Der volle Name der <c>Herkunft</c> (optionaler Parameter eines <see cref="Auf"/>).</summary>
     public const string Herkunft = "Abstractions.Herkunft";
 
-    /// <summary>Der volle Metadaten-Name des Zustands einer Funktion (<c>IZustand&lt;T&gt;</c> im Konstruktor, Plan §2.9).</summary>
+    /// <summary>Der volle Metadaten-Name des Zustands einer Funktion (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4).</summary>
     public const string Zustand = "Abstractions.IZustand`1";
 
-    /// <summary>Der volle Name des optionalen Lebenszyklus einer Funktion im Host (Plan §2.9, E10).</summary>
+    /// <summary>Der volle Name des optionalen Lebenszyklus einer Funktion im Host (docs/04 §4.4, docs/10 E10).</summary>
     public const string Lebenszyklus = "Abstractions.ILebenszyklus";
 
-    /// <summary>Der volle Name des Attributs „eine Adresse statt einer je Partition“ (Plan §2.9, A6).</summary>
+    /// <summary>Der volle Name des Attributs „eine Adresse statt einer je Partition“ (docs/04 §4.4, docs/10 A6).</summary>
     public const string EineAdresse = "Abstractions.EineAdresseAttribute";
 
     /// <summary>Die Identität des einen Funktions-Actors einer Funktion mit <see cref="EineAdresse"/> (er liest alle Partitionen).</summary>
@@ -38,7 +38,7 @@ public static class Funktionsvertrag
     /// <summary>Die Id des Stands einer Funktion (Position je Partition, wie bei Projektionen <c>&lt;Id&gt;:&lt;Partition&gt;</c>).</summary>
     public static string StandId(string funktion) => "funktion:" + funktion;
 
-    // ── Python (Laufort Extern, konzept-werkbank §12.3 E13): die generierte Basis und wo die Implementierung liegt ──
+    // ── Python (Laufort Extern, docs/09 §9.5): die generierte Basis und wo die Implementierung liegt ──
 
     /// <summary>Der Ordner der Python-Implementierungen im Worker-Projekt (ein Paket, je Funktion eine Datei).</summary>
     public const string PythonOrdner = "funktionen";

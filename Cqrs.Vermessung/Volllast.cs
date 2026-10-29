@@ -39,7 +39,7 @@ internal sealed record Block(string Phase, int Sender, int Angenommen, int Fehle
 }
 
 /// <summary>
-/// Höchstlast (docs/plan-garantien-und-durchsatz.md §0.1): <c>sender</c> gleichzeitige Sender schicken so schnell, wie der Eingang annimmt,
+/// Höchstlast (docs/12 §12.5): <c>sender</c> gleichzeitige Sender schicken so schnell, wie der Eingang annimmt,
 /// höchstens <c>fenster</c> lang (bzw. bis <c>maxAnzahl</c> Vorgänge gestartet sind) — danach hört die Last auf, und es zählt, wie lange der
 /// Rückstand bis „alles sichtbar“ braucht. Die Last ist zeitlich begrenzt: Dauerüberlast an einem heißen Aggregat kippt in den Retry-Sturm
 /// (PF-9); ob der Rückstand danach sauber abgebaut wird, ist selbst ein Ergebnis.

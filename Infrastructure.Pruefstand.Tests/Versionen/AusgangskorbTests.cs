@@ -18,7 +18,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Versionen;
 
 /// <summary>
-/// Der Ausgangskorb des Clients (Plan Pub/Sub-Neustrukturierung §4.2, „Client → Aggregat“): ein Command liegt darin, bevor er gesendet wird;
+/// Der Ausgangskorb des Clients (docs/11, „Client → Aggregat“): ein Command liegt darin, bevor er gesendet wird;
 /// bricht die Verbindung, geht er nach dem Wiederverbinden mit DERSELBEN Command-Id und Korrelation an die neue Sitzung — die Inbox des Ziels
 /// lässt ihn genau einmal wirken. Mit der Antwort ist er erledigt. Der Korb als Verzeichnis übersteht einen Neustart des Clients.
 /// </summary>

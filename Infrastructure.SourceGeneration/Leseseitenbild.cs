@@ -10,7 +10,7 @@ namespace Infrastructure.SourceGeneration
     /// <summary>
     /// Die Leseseite einer Anwendung, wie die Komposition sie sieht (nur dort sind Projektionen, Reader und Store-Klassen zugleich sichtbar):
     /// Projektionen und Reader in ihrer Lesart (<see cref="Projektionsform"/>), je Fähigkeit die Store-Klassen, die sie implementieren, je
-    /// Projektion ihre Stores und je Frage die Projektionen dahinter (die in dieselben Stores schreiben). Dazu die Fragen an Aggregate (Plan §2.6):
+    /// Projektion ihre Stores und je Frage die Projektionen dahinter (die in dieselben Stores schreiben). Dazu die Fragen an Aggregate (docs/03 §3.2):
     /// eine Query geht an einen Reader oder an ein Aggregat (R4).
     /// </summary>
     internal sealed class Leseseitenbild

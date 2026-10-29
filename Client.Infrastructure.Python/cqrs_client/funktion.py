@@ -1,6 +1,6 @@
 # REPO-PFAD: Client.Infrastructure.Python/cqrs_client/funktion.py
 """
-Funktionen draußen TRAGEN (Plan Pub/Sub-Neustrukturierung §2.2, §2.7: `ITraegt<F>`, Laufort Extern).
+Funktionen draußen TRAGEN (docs/10 §10.1, docs/konzept-akteure.md §5: `ITraegt<F>`, Laufort Extern).
 
 Eine Funktion ist ein Vertrag in der Domäne (C#, eine Quelle) — als Schnittstelle deklariert, läuft sie draußen:
 
@@ -30,7 +30,7 @@ Was das SDK übernimmt — der Worker schreibt nichts davon von Hand:
     kommt; nach einem Abbruch übernimmt ein anderer Träger beim nächsten nicht festgehaltenen Stück;
   - Genau einmal: festgehalten wird beim Server unter „Funktion, Eingang“ — die erste Antwort gewinnt. Wirkungen nach außen (Dateien, Mails)
     sollten über `h.schluessel` (gleich bei jeder Wiederholung) deduplizieren.
-  - Hinweise (Plan §2.9): ein `auf_…`, dessen Eingang ein Hinweis aus dem Hinweis-Netz ist (`Eingang(..., hinweis=True)`, auf der Leitung
+  - Hinweise (docs/04 §4.4): ein `auf_…`, dessen Eingang ein Hinweis aus dem Hinweis-Netz ist (`Eingang(..., hinweis=True)`, auf der Leitung
     `ArbeitsAuftrag.hinweis`), läuft höchstens einmal — nichts wird festgehalten; die Antwort geht als Ganzes zurück (auch ein Strom), ihre Commands
     und Hinweise sendet der Funktions-Actor. Dieselbe Adresse wie in C#: alle Eingänge eines Funktions-Actors rechnet derselbe Träger, solange er
     lebt — ein Zustand im Worker (ein Modell) sieht so alles, was zu ihm gehört; ihn zu sichern, ist Sache des Workers.

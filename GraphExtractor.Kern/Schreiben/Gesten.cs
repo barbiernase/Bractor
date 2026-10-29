@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.Text;
 namespace GraphExtractor;
 
 /// <summary>
-/// Was eine Geste an den Karten ändert (Werkbank P7.2, docs/konzept-werkbank.md §8.2): je Sammlung die geänderten bzw. neuen Karten (ganz) und die
+/// Was eine Geste an den Karten ändert (Werkbank P7.2, CLAUDE.md W4): je Sammlung die geänderten bzw. neuen Karten (ganz) und die
 /// Schlüssel der entfernten. Schlüssel sind natürlich (<see cref="KartenSchluessel"/>) — dieselbe Regel im Editor und hier.
 /// </summary>
 public sealed record KartenDelta

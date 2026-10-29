@@ -7,7 +7,7 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Projections.SourceGeneration;
 
 /// <summary>
-/// <b>CQRS109 — die Klasse eines Stores (R14, Plan Pub/Sub-Neustrukturierung §2.4).</b> Ein Store, in den eine Projektion schreibt (eine Klasse mit
+/// <b>CQRS109 — die Klasse eines Stores (R14, docs/04 §4.3).</b> Ein Store, in den eine Projektion schreibt (eine Klasse mit
 /// Schreib-Fähigkeiten), implementiert GENAU EINE Store-Klasse: <c>IAtomaresZiel</c> (1), <c>IWiederholungsfestesZiel</c> (2) oder
 /// <c>INurMindestensEinmal</c> (3) — davon hängt ab, wie der Batch-Leser ihn schreibt. Ein Store der Klasse 2 bekommt den Fortschritt vom Framework
 /// erst nach seinen Wirkungen; damit eine Wiederholung dasselbe ergibt, braucht jede Schreib-Fähigkeit die Event-Identität — sie nimmt die

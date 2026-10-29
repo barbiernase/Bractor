@@ -14,7 +14,7 @@ namespace Werkbank.Server;
 public sealed record LeseMessung(DateTimeOffset Zeit, string Art, int Dateien, long UebersetzenMs, long LesenMs, IReadOnlyDictionary<string, long> Phasen);
 
 /// <summary>
-/// Der warme Roslyn-Workspace der Werkbank (Werkbank P7.1, docs/konzept-werkbank.md §8.2): die Solution wird EINMAL geladen (MSBuildWorkspace, kalt:
+/// Der warme Roslyn-Workspace der Werkbank (Werkbank P7.1, CLAUDE.md W4): die Solution wird EINMAL geladen (MSBuildWorkspace, kalt:
 /// ganze Lage samt Laufzeit und Hosts), danach hält ein Dateiwächter den Stand aktuell (<see cref="Solution.WithDocumentText"/> — nur im
 /// Speicher, der Workspace schreibt nie auf die Platte). Neu gelesen wird nur aus den Compilations unterhalb der Laufzeit (E7): Roslyn übersetzt
 /// dabei nur die geänderten Projekte und ihre Abhängigen; das Routing kommt aus den Decide-Signaturen, die Composition Root aus dem kalten Lesen.
@@ -100,7 +100,7 @@ public sealed class Arbeitsbereich : IDisposable
             var stand = _solution!;
             foreach (var p in pfade.Where(p => p.EndsWith(".cs", StringComparison.Ordinal))) stand = await UebernimmAsync(stand, p);
             // Nur Dateien außerhalb der Projekte — außer Python (die Rümpfe der Client-Implementierungen gehören zum Board, P7.4) und den
-            //   Umgebungs-Dateien (Werte je Umgebung, z. B. der Webhook einer Quelle, konzept-werkbank §12.3 E12): sie lesen das Board neu.
+            //   Umgebungs-Dateien (Werte je Umgebung, z. B. der Webhook einer Quelle, docs/06 §6.6): sie lesen das Board neu.
             if (ReferenceEquals(stand, _solution) && !pfade.Any(p => p.EndsWith(".py", StringComparison.Ordinal) || IstUmgebung(p))) return _letzte;
             var lage = await _kalt!.NurDomänenAsync(stand, ct);
             var lesung = await Lesen.LiesAsync(stand, lage, _root, _zusammensetzung, uhr.Elapsed);
@@ -207,7 +207,7 @@ public sealed class Arbeitsbereich : IDisposable
         .Where(a => a.SupportedDiagnostics.Any(d => d.Id.StartsWith("CQRS", StringComparison.Ordinal))).ToImmutableArray();
 
     /// <summary>
-    /// Prüfen = Bauen, ohne zu schreiben (Werkbank P7.4, konzept-werkbank A.5): die Datei <paramref name="pfad"/> probeweise mit <paramref name="neuText"/> in den
+    /// Prüfen = Bauen, ohne zu schreiben (Werkbank P7.4, CLAUDE.md W5): die Datei <paramref name="pfad"/> probeweise mit <paramref name="neuText"/> in den
     /// warmen Stand setzen, ihr Projekt übersetzen (mit seinen echten Generatoren) und die Befunde der Datei holen — Compiler UND die Analyzer
     /// des Projekts (CQRS050, CQRS066/067, CQRS073 ff. …). Es zählen nur NEUE Fehler gegenüber dem unveränderten Stand; der Fork wird verworfen.
     /// </summary>

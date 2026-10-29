@@ -15,7 +15,7 @@ namespace Infrastructure.Funktionen;
 public sealed record HandEingang(EingangAnbieten Eingang, FunktionsBaustein Funktion, DateTimeOffset Seit);
 
 /// <summary>
-/// Laufort <c>Hand</c> (docs/konzept-werkbank.md §6, Werkbank P5.2): ein MENSCH beantwortet die Eingänge einer Funktion — die Werkbank ist der
+/// Laufort <c>Hand</c> (CLAUDE.md W6, Werkbank P5.2): ein MENSCH beantwortet die Eingänge einer Funktion — die Werkbank ist der
 /// Träger. Derselbe Weg wie ein Python-Worker: eine <see cref="BausteinSitzung"/> holt die Eingänge beim Vermittler (Pull), legt sie hier ab, statt
 /// sie über gRPC weiterzureichen, und hält ihre Lease mit Lebenszeichen, solange der Mensch überlegt. Die Antwort wird unter „Funktion F,
 /// Eingang X“ festgehalten (die erste gewinnt) und vom Funktions-Actor gesendet — er merkt nicht, dass ein Mensch rechnete.

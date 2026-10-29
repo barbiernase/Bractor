@@ -44,7 +44,7 @@ public sealed class PruefdomaeneHost : IAsyncLifetime
 }
 
 /// <summary>
-/// Exactly-once je Ablauf der Prüfdomäne als FACHLICHES Soll (Plan §6, Phase 0): Auftrag (Diamant mit Join), Auftrag mit Kompensation,
+/// Exactly-once je Ablauf der Prüfdomäne als FACHLICHES Soll (docs/12 §12.6): Auftrag (Diamant mit Join), Auftrag mit Kompensation,
 /// Verteilung (Fan-out, Count-Join), Nachschub-Reaktion. Je Szenario eigene Aggregate, damit die Zahl der Fakten je Stream das Soll ist —
 /// gezählt im Log, nie über Prozess-Events. Auch der doppelt geschickte Start (dieselbe CommandId) wirkt genau einmal.
 /// </summary>

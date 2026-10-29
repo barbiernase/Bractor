@@ -10,7 +10,7 @@ using static Pruefdomaene.Integration.Tests.Pruefstand;
 namespace Pruefdomaene.Integration.Tests.Garantien;
 
 /// <summary>
-/// Die direkte Abfrage eines Aggregats (Plan Pub/Sub-Neustrukturierung §2.6, Phase 9), im echten Cluster gegen echtes Marten: die Antwort ist der
+/// Die direkte Abfrage eines Aggregats (docs/03 §3.2), im echten Cluster gegen echtes Marten: die Antwort ist der
 /// Stand, auf dem der nächste Command entschieden würde, und trägt seine Version als OCC-Stand. Beweiskraft: das Log — der Stand aus den Events bis
 /// zur Version der Antwort, und was der nächste Command mit dieser Version entscheidet.
 /// </summary>

@@ -116,7 +116,7 @@ public static partial class QuellenExtensions
 {
     /// <summary>
     /// Bindet die Quellen aus der generierten Tabelle (<c>GeneratedQuellen.Alle</c>) an ihre Konfig (Abschnitt <c>Quellen:&lt;Typ&gt;</c>).
-    /// Start-Prüfungen (docs/konzept-werkbank.md §3.4): jede Quelle braucht einen Abschnitt; ein Abschnitt ohne Typ und unbekannte
+    /// Start-Prüfungen (docs/06 §6.5): jede Quelle braucht einen Abschnitt; ein Abschnitt ohne Typ und unbekannte
     /// Felder sind Fehler; ein beim Start nicht erreichbares Verzeichnis ist nur eine Warnung (der Treiber versucht es weiter).
     /// </summary>
     public static IServiceCollection AddQuellen(this IServiceCollection services, IConfiguration konfig)

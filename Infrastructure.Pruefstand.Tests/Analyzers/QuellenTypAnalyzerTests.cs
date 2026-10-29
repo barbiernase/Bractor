@@ -13,7 +13,7 @@ namespace Infrastructure.Pruefstand.Analyzers;
 
 /// <summary>
 /// CQRS070 — ein Quellen-Typ ist <c>public sealed record X : DateiGemeldet;</c> ohne eigene Member und ohne Parameterliste
-/// (docs/konzept-werkbank.md §3.2). Ein IQuellNachricht ohne Treiber-Basis (Webhook-/Test-Quelle) prüft er nicht.
+/// (docs/04 §4.7). Ein IQuellNachricht ohne Treiber-Basis (Webhook-/Test-Quelle) prüft er nicht.
 /// </summary>
 public class QuellenTypAnalyzerTests
 {

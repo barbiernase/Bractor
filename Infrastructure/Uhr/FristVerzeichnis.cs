@@ -20,7 +20,7 @@ public interface IFaelligkeiten
 }
 
 /// <summary>
-/// Das Fälligkeits-Verzeichnis der Uhr (Plan Pub/Sub-Neustrukturierung Phase 3): eine Tabelle im Event-Schema, je Frist eine Zeile (Schlüssel = das
+/// Das Fälligkeits-Verzeichnis der Uhr: eine Tabelle im Event-Schema, je Frist eine Zeile (Schlüssel = das
 /// Frist-Event, Stream und Version), geschrieben als Beilage in DERSELBEN Transaktion wie das <see cref="FristGesetzt"/> — es gibt keine Frist im
 /// Log ohne Zeile. Die Fälligkeit rechnet die Datenbank aus der Log-Zeit des Events plus der Dauer (eine Uhr, G-10). Abgeleitet, nicht maßgeblich:
 /// die Wahrheit ist das Frist-Event; die Zeile verschwindet erst, wenn der Command entschieden ist.

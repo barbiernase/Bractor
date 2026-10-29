@@ -167,7 +167,7 @@ public sealed class P : IProjektion {
     public Task<Gemacht> Auf(Gemacht e) => Task.FromResult(e); }"))
             .Should().Equal(HandlerFormAnalyzer.FormId);
 
-    // Die Frage an ein Aggregat (Plan Pub/Sub-Neustrukturierung §2.6): im Decider, eine Query mit genau einem Glied Id<TAggregat>, synchron.
+    // Die Frage an ein Aggregat (docs/03 §3.2): im Decider, eine Query mit genau einem Glied Id<TAggregat>, synchron.
     private const string Kasse = @"
 public record Zaehle(Id<Kasse> AggregateId) : ICommand<Kasse>;
 public record Gezaehlt() : IEvent;

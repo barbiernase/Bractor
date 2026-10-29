@@ -1,7 +1,7 @@
 namespace Abstractions;
 
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// Die Store-Klassen (Plan Pub/Sub-Neustrukturierung §2.4). Das Framework schreibt keine Datenform vor; von einem Store braucht es nur eine
+// Die Store-Klassen (docs/04 §4.3). Das Framework schreibt keine Datenform vor; von einem Store braucht es nur eine
 // von drei Zusagen. Jeder Store implementiert GENAU EINE (R14, Analyzer CQRS109); ob ein Treiber sie einhält, zeigt der allgemeine Store-Test
 // (Infrastructure.Projections.Storetest), den jeder Treiber besteht.
 // ═════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════

@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 namespace Infrastructure.Quellen.Treiber.Datei;
 
 /// <summary>
-/// Der Datei-Treiber (docs/konzept-werkbank.md §3.5). Er LIEST nur — er legt nichts an, verschiebt und löscht nichts.
+/// Der Datei-Treiber (docs/04 §4.7). Er LIEST nur — er legt nichts an, verschiebt und löscht nichts.
 /// <list type="number">
 /// <item>Start: alle passenden Dateien listen und gebündelt im Log nachsehen, welche Vorgänge es schon gibt (kein eigener Stand).</item>
 /// <item>Schleife: ein Weckruf (Intervall oder, bei <c>EreignisUndAbfrage</c>, ein Dateisystem-Ereignis) löst einen Scan aus; der Scan

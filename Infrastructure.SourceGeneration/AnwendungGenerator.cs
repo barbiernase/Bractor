@@ -132,7 +132,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine();
 
             // Der Einstieg der Hosts: AddCqrs meldet die Anwendung an und verdrahtet den Host nach der Umgebung.
-            sb.AppendLine("    /// <summary>Der Host in einer Zeile mit dieser Anwendung (docs/konzept-werkbank.md §4.2).</summary>");
+            sb.AppendLine("    /// <summary>Der Host in einer Zeile mit dieser Anwendung (docs/06 §6.5).</summary>");
             sb.AppendLine("    public static class CqrsAnwendung");
             sb.AppendLine("    {");
             sb.AppendLine("        public static global::Abstractions.UmgebungKonfig AddCqrs(this global::Microsoft.AspNetCore.Builder.WebApplicationBuilder builder, string[] args)");

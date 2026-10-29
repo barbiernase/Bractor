@@ -115,7 +115,7 @@ __pycache__/
 .venv/
 .pytest_cache/
 
-# LLM-Konsole: erzeugte Kontexte, Protokoll (docs/konzept-llm-minimalkontext.md)
+# LLM-Konsole: erzeugte Kontexte, Protokoll (LLM-Minimalkontext, Konzept im Git-Verlauf bei 861ea7f)
 .llm-kontext/
 
 # Werkbank: Compose-Projekte, Proto-Stand je Sim-DB, gewählte Umgebung (lokal)

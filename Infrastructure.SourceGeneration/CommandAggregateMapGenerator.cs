@@ -9,7 +9,7 @@ using System.Text;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Das Command→Aggregat-Routing aus dem TYP des Commands (Plan §2.5, R3): ein Command ist <c>ICommand&lt;TAggregat&gt;</c>, sein Ziel steht
+    /// Das Command→Aggregat-Routing aus dem TYP des Commands (docs/10 §10.4, R3): ein Command ist <c>ICommand&lt;TAggregat&gt;</c>, sein Ziel steht
     /// im Typ-Argument — Routing über Typen (Inv. 3), ohne Konvention. Die Decide-Signaturen liefern die Kanten Command → Events
     /// (<c>CommandToEvents</c>) und müssen im Ziel-Aggregat stehen: ein <c>Decide(TCommand)</c> in einem anderen Aggregat bricht den Build
     /// (CQRS010). Ein Command ohne typisiertes Ziel meldet CQRS013 (<c>ModellAnalyzer</c>), einer ohne Decide CQRS086.

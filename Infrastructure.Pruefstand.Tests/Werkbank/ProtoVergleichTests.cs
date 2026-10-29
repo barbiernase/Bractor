@@ -5,7 +5,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Werkbank;
 
 /// <summary>
-/// Die Daten-Prüfung von ⟳ (docs/konzept-werkbank.md §4.6) liest die Events aus dem ECHTEN Anwendungs-Proto — seit der getrennten Leitung aus dem
+/// Die Daten-Prüfung von ⟳ (docs/06 §6.5) liest die Events aus dem ECHTEN Anwendungs-Proto — seit der getrennten Leitung aus dem
 /// Abschnitt „EVENT PAYLOADS“, bei einem alten gespeicherten Stand aus dem damaligen Event-Umschlag. Ohne das fand sie im neuen Proto keine Events
 /// und prüfte nichts (bzw. meldete gegen einen alten Stand jedes Event als verschwunden).
 /// </summary>

@@ -5,7 +5,7 @@ using Proto;
 namespace Infrastructure.Lebenszyklus;
 
 /// <summary>
-/// Der Lebenszyklus jedes Framework-Actors (Plan Pub/Sub-Neustrukturierung §1.7, Phase 2) — einmal hier statt je Actor von Hand:
+/// Der Lebenszyklus jedes Framework-Actors (docs/06 §6.7) — einmal hier statt je Actor von Hand:
 /// <list type="number">
 /// <item><b>Bereich:</b> mit einer <see cref="IFaehigkeitsFabrik"/> öffnet der Rahmen beim <see cref="Started"/> einen Fähigkeits-Bereich
 ///   (<see cref="Bereich"/>, ein DI-Scope: jede Fähigkeit eines Stores liefert darin dieselbe Instanz) und gibt ihn frei, wenn der Actor

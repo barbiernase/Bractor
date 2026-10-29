@@ -11,7 +11,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Wecken;
 
 /// <summary>
-/// Der Weckplan (Plan Pub/Sub-Neustrukturierung §2.3, Phase 6) entsteht NUR aus Signaturen: eine Projektion mit <c>Auf(TEvent …)</c> steht mit ihrem
+/// Der Weckplan (docs/03 §3.5) entsteht NUR aus Signaturen: eine Projektion mit <c>Auf(TEvent …)</c> steht mit ihrem
 /// Batch-Kind unter TEvent (gelesen wie im PullPathGenerator, eine Lesart), eine Funktion mit <c>Auf(TEvent …)</c> mit ihrem Funktions-Kind (eine
 /// Adresse, wenn sie <c>[EineAdresse]</c> trägt), die Uhr unter <c>FristGesetzt</c>; ein Hinweis-Eingang steht nicht darin. Was eine Funktion aus dem
 /// Log hören soll und der Plan nicht führen kann (Schnittstelle, abstrakt), ist schon ein Formfehler (CQRS057 bzw. CQRS100) und steht nicht im Plan.

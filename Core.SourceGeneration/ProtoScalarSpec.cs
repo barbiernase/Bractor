@@ -54,7 +54,7 @@ namespace Core.SourceGeneration
         public static bool TryGet(string csharpType, out ProtoScalarSpec spec)
         {
             if (ByCSharpType.TryGetValue((csharpType ?? "").Trim(), out spec)) return true;
-            // Eine typisierte Id (Id<TAggregat>, Plan §2.5) reist als UUID-String wie Guid; beim Auspacken wird sie wieder zur Id ihres Ziels.
+            // Eine typisierte Id (Id<TAggregat>, docs/10 §10.4) reist als UUID-String wie Guid; beim Auspacken wird sie wieder zur Id ihres Ziels.
             if (Abstractions.Idvertrag.IstId(csharpType, out var ziel, out var nullable))
             {
                 var typ = Abstractions.Idvertrag.IdTyp(ziel);

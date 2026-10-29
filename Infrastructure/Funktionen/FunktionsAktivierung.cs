@@ -4,13 +4,13 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Infrastructure.Funktionen;
 
 /// <summary>
-/// Was eine Aktivierung eines Funktions-Actors hält (Plan Pub/Sub-Neustrukturierung §2.9, E6) — gebaut beim Aktivieren, freigegeben beim Stoppen,
+/// Was eine Aktivierung eines Funktions-Actors hält (docs/04 §4.4, docs/10 E6) — gebaut beim Aktivieren, freigegeben beim Stoppen,
 /// Passivieren und vor einem Neustart, nach dem Vorbild des Bereichs eines Aggregat-Actors:
 /// <list type="bullet">
 /// <item>ein eigener DI-Bereich: die Dienste der Funktion (<c>IDienst</c>, im Bereich gebunden) leben genau so lange wie die Aktivierung — eine
 ///   Datenbank-Verbindung, ein geladenes Modell, ein Cache;</item>
 /// <item>die Umsetzung im Host, über die generierte Fabrik in diesem Bereich gebaut (nie einmal je Knoten neben den Actors);</item>
-/// <item>ihr Zustand (<c>IZustand&lt;T&gt;</c>, Plan §2.9): frisch beim Aktivieren, geladen und gesichert über die generierte Form
+/// <item>ihr Zustand (<c>IZustand&lt;T&gt;</c>, docs/04 §4.4): frisch beim Aktivieren, geladen und gesichert über die generierte Form
 ///   (<see cref="FunktionsZustandsform"/>) — der Actor lädt ihn, bevor das erste <c>Auf</c> läuft;</item>
 /// <item>ihr optionaler Lebenszyklus (<see cref="ILebenszyklus"/>, E10): <see cref="AktiviereAsync"/> nach dem Laden des Zustands,
 ///   <see cref="SichereAsync"/> ruft vor dem Serialisieren <c>VorDemSichernAsync</c>.</item>

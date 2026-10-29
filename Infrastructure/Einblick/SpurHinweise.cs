@@ -10,7 +10,7 @@ namespace Infrastructure.Einblick;
 public sealed record SpurHinweis(DateTimeOffset Zeit, string Art, string? Wirker, string? Ursache, string? Korrelation, string Text);
 
 /// <summary>
-/// Hinweise an die Spur (<c>docs/konzept-werkbank.md</c> §7.1): best-effort, VERLIERBAR (Invariante 6) — das System liest sie nie, nur die
+/// Hinweise an die Spur (docs/04 §4.9): best-effort, VERLIERBAR (Invariante 6) — das System liest sie nie, nur die
 /// Werkbank zeigt sie (rot bzw. gestrichelt). Wer etwas Verlierbares tut, meldet es hier; ist kein Schreiber aktiv (Prod, Tests), verpufft
 /// die Meldung. Die Arten: <see cref="Ablehnung"/> (ein Decide lehnte ab — der Client-Pfad hinterlässt keine Marke im Log) und
 /// <see cref="Transient"/> (ein reaktives Event ging nur über den Broker).

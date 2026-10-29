@@ -16,7 +16,7 @@ using Domain.Laufzeit;
 namespace Infrastructure.Integration.Tests;
 
 /// <summary>
-/// Ebene 2 — UMGEBUNGEN gegen echtes Postgres (docs/konzept-werkbank.md §4, Werkbank P2):
+/// Ebene 2 — UMGEBUNGEN gegen echtes Postgres (docs/06 §6.5, Werkbank P2):
 /// <list type="bullet">
 /// <item>das Siegel: ein Sim-Host startet nicht gegen eine Datenbank mit Siegel <c>Prod</c> (und umgekehrt);</item>
 /// <item>zwei Umgebungen parallel auf einer Maschine stören sich nicht — eigene DB, eigener Cluster (Einzelknoten);</item>

@@ -1,7 +1,7 @@
 namespace Abstractions;
 
 /// <summary>
-/// Der Weg eines Log-Eintrags über die Karten des Editors (<c>docs/konzept-werkbank.md</c> §7.3): <see cref="Karten"/> sind die Karten, über
+/// Der Weg eines Log-Eintrags über die Karten des Editors (docs/04 §4.9): <see cref="Karten"/> sind die Karten, über
 /// die der Schritt lief (Absender → Command → Wirker → Event; Wirker-Ids bzw. <c>rec:Typ</c>), <see cref="Paare"/> die gegangenen Kanten —
 /// inklusive Ursache → Absender. Rein aus den Spur-Headern (<see cref="Spur"/>); der Editor schlägt die Ids nur nach.
 /// </summary>

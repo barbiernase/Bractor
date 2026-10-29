@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.Operations;
 namespace Domain.SourceGeneration;
 
 /// <summary>
-/// Gleiche Eingabe, gleiche Rechnung (Plan Pub/Sub-Neustrukturierung §3.6) — was eine Wiederholung voraussetzt, prüft der Build:
+/// Gleiche Eingabe, gleiche Rechnung (docs/10 §10.6) — was eine Wiederholung voraussetzt, prüft der Build:
 /// <list type="bullet">
 /// <item><b>CQRS102 (R11)</b> — ein Aggregat (Decider, Applier, State) und eine Projektion (Handle mit Schreib-Fähigkeit) rechnen bei gleicher Eingabe
 ///   gleich: keine Uhr, kein Zufall, kein Lesen fremder Daten (Dateien, Netz, Umgebungsvariablen). Sonst ergäbe ein Neuaufbau einen anderen Stand,

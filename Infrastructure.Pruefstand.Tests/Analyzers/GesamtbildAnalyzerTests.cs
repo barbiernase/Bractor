@@ -73,7 +73,7 @@ public sealed record Kunde : IMensch, IDarf<Eroeffne>, IDarf<Hole>;
         befunde.Should().OnlyContain(d => d.Location == Location.None, "die Typen liegen in der Domänen-Referenz — der Name führt zur Karte");
     }
 
-    // R4 (Plan Pub/Sub-Neustrukturierung §2.6, §3.6): eine Query hat genau ein Ziel — einen Reader oder ein Aggregat (Frage im Decider).
+    // R4 (docs/03 §3.2, docs/10 §10.6): eine Query hat genau ein Ziel — einen Reader oder ein Aggregat (Frage im Decider).
     private const string Kasse = @"
 public record Zaehle(Id<Kasse> AggregateId) : ICommand<Kasse>;
 public record Gezaehlt() : IEvent;

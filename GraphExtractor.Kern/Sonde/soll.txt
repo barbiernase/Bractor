@@ -1,7 +1,7 @@
 # SOLL der Agnostik-Sonde — VON HAND aus dem Sonden-Quelltext abgeleitet, NICHT aus einer Extractor-Ausgabe.
 # Ein Fakt je Zeile. Was der Editor über die unbekannte Domäne wissen MUSS (Reihenfolge egal).
 
-# ── Ausleihe: Commands im Sub-Namespace, Property-Records, if/else; eine FRIST in der Entscheidung (Plan §3.1): die Uhr schickt die Mahnung
+# ── Ausleihe: Commands im Sub-Namespace, Property-Records, if/else; eine FRIST in der Entscheidung (docs/10 §10.2): die Uhr schickt die Mahnung
 #    an denselben Leihvorgang ──
 record Leihwesen.Ausleihe.Befehle.LeiheAus command erzeugung aggregat=Leihvorgang | AggregateId:Id<Leihvorgang>, Medium:Signatur, LeserId:Guid, Tage:int=14
 record Leihwesen.Ausleihe.Befehle.GibZurueck command aggregat=Leihvorgang | AggregateId:Id<Leihvorgang> { get; init; }, Zustand:Zustand { get; init; }
@@ -20,7 +20,7 @@ decide Leihvorgang.MahneRueckgabe -> RueckgabeAngemahnt
 apply Leihvorgang.Ausgeliehen
 apply Leihvorgang.Zurueckgegeben
 apply Leihvorgang.RueckgabeAngemahnt
-# Direkte Abfrage (Plan §2.6): der Leihvorgang beantwortet HoleLeihstand selbst (Frage im Decider); Query und Antworten liegen bei der Schreibseite
+# Direkte Abfrage (docs/03 §3.2): der Leihvorgang beantwortet HoleLeihstand selbst (Frage im Decider); Query und Antworten liegen bei der Schreibseite
 record Leihwesen.Ausleihe.HoleLeihstand query aggregat=Leihvorgang | Vorgang:Id<Leihvorgang>
 record Leihwesen.Ausleihe.Leihstand queryresponse aggregat=Leihvorgang | Vorgang:Id<Leihvorgang>, LeserId:Guid
 record Leihwesen.Ausleihe.NichtVerliehen queryresponse aggregat=Leihvorgang | Vorgang:Id<Leihvorgang>
@@ -47,13 +47,13 @@ record Leihwesen.Gebuehren.SchadenGeschaetzt event | LeserId:Guid, Betrag:decima
 record Leihwesen.Gebuehren.NichtSchaetzbar rejection | Grund:string
 funktion-auf Leihwesen.Gebuehren.ISchadensSchaetzung schnittstelle | SchadenGemeldet herkunft -> SchadenGeschaetzt; NichtSchaetzbar umsetzung Schadensschaetzer(tabelle:IWertTabelle)
 funktion-auf Leihwesen.Gebuehren.MahnungNachSchaetzung klasse() | SchadenGeschaetzt herkunft -> EroeffneMahnung
-# Domänen-Dienst (konzept-werkbank §12.3 E11): Interface mit IDienst (Methoden, Typen wie geschrieben) + Implementierung mit Konstruktor; der Record im Konstruktor ist
+# Domänen-Dienst (docs/06 §6.5): Interface mit IDienst (Methoden, Typen wie geschrieben) + Implementierung mit Konstruktor; der Record im Konstruktor ist
 #    Konfig (Werte aus Konfig:<Record>), kein Value Object
 dienst Leihwesen.Gebuehren.IWertTabelle | Restwert(neuwert:decimal, alterJahre:int):decimal; IstSchaetzbarAsync(leserId:Guid):Task<bool> | impl LineareWertTabelle(konfig:WertTabellenKonfig)
 record Leihwesen.Gebuehren.WertTabellenKonfig konfig | Mindestwert:decimal, Abschreibungsjahre:int=5
 sicht Leihwesen.Gebuehren.IWertTabelle dienst domaene=Leihwesen.Gebuehren block=§geteilt
 # Gezeichnet: ein neuer Dienst mit Implementierungs-Stub vom Scaffolder — noch ohne Funktion, die ihn nimmt (Funktionen zeichnet der Editor erst
-#    wieder mit Plan E4), daher eine Insel
+#    wieder mit docs/10 E4), daher eine Insel
 dienst Leihwesen.Pruefung.IPruefgeraet | Messe(seriennummer:string):bool | impl Pruefgeraet()
 sicht Leihwesen.Pruefung.IPruefgeraet dienst domaene=Leihwesen.Pruefung block=§geteilt insel
 
@@ -124,7 +124,7 @@ ausgang VormerkAuskunft.Vormerkungen einzeln | response:VormerkungenAntwort; sto
 akteur Leihwesen.Lesen.Theke | darf LeiheAus, GibZurueck, OffeneAusleihen
 # ── Eine KI als Akteur ──
 akteur Leihwesen.Lesen.Gutachterin Ki | darf EroeffneMahnung
-# ── Funktionen draußen (Plan §2.7): ein Akteur darf eine Funktion RECHNEN (IDarf<F>, F eine Schnittstelle) — ihre Ausgaben gibt er hinein.
+# ── Funktionen draußen (docs/konzept-akteure.md §5): ein Akteur darf eine Funktion RECHNEN (IDarf<F>, F eine Schnittstelle) — ihre Ausgaben gibt er hinein.
 #    IRegal: zwei Eingänge, einer einzeln, einer als Strom; im Code. Die Mahnstelle ist gezeichnet und darf die Schadens-Schätzung rechnen,
 #    die zugleich eine Umsetzung im Host hat (der Laufort steht in der Umgebung). ──
 akteur Leihwesen.Lesen.Archiv Maschine | darf IRegal
@@ -167,7 +167,7 @@ sicht Leihwesen.Gebuehren.Mahnstelle akteur domaene=Leihwesen.Ausleihe block=§a
 sicht Leihwesen.Lesen.Gutachterin akteur domaene=Leihwesen.Gebuehren block=§akteure
 sicht Leihwesen.Lesen.Archiv akteur domaene=Leihwesen.Gebuehren block=§akteure
 
-# ══ FREMDE SZENARIEN (Plan Pub/Sub-Neustrukturierung §6, Phase 0) — eigene Wurzeln neben „Leihwesen“, damit das Modell nicht auf eine
+# ══ FREMDE SZENARIEN (docs/12 §12.6) — eigene Wurzeln neben „Leihwesen“, damit das Modell nicht auf eine
 #    Beispieldomäne passt. In der Grammatik des Plans (§3, seit Phase 4). ══
 
 # ── Kundenportal (Konten.cs.txt): Benutzer mit EINDEUTIGER E-Mail — die Adresse ist das Eindeutigkeits-Aggregat, die Absage ein Fakt,
@@ -381,7 +381,7 @@ lage SchadenAusPruefung -> Domain.Pipeline
 lage SchadenBeiRueckgabe -> Domain.Pipeline
 lage StoerungBeiAlarm -> Domain.Pipeline
 
-# ── Wetterdienst (Vorhersage.cs.txt): FUNKTIONEN ALS ACTORS (Plan §2.9) — ein Prognosemodell mit gekapseltem ZUSTAND (IZustand, EINE Adresse) lernt
+# ── Wetterdienst (Vorhersage.cs.txt): FUNKTIONEN ALS ACTORS (docs/04 §4.4) — ein Prognosemodell mit gekapseltem ZUSTAND (IZustand, EINE Adresse) lernt
 #    aus dem Log (Auf ohne Ausgabe) und aus einem Hinweis des Aggregats; eine gleichbleibende Funktion bildet einen HINWEIS (Tendenz), den eine
 #    Funktion im Host und eine draußen (Schnittstelle, getragen von einer App) hören — die eine gibt einen Command aus, die andere einen Hinweis. ──
 record Wetterdienst.Vorhersage.MeldeTemperatur command aggregat=Station | AggregateId:Id<Station>, Grad:double
@@ -400,7 +400,7 @@ funktion-auf Wetterdienst.Vorhersage.Tendenzbildung klasse() | TemperaturGemelde
 funktion-auf Wetterdienst.Vorhersage.Prognosemodell klasse(gewichte:IZustand<Gewichte>) zustand=Gewichte eineadresse lebenszyklus | TemperaturGemeldet herkunft -> lernt || StationStillgelegt hinweis -> lernt || Tendenz hinweis -> VermerkePrognose
 funktion-auf Wetterdienst.Vorhersage.IUnwetterwarnung schnittstelle | Tendenz hinweis -> Unwetter
 client Wetterdienst.Vorhersage.IWetterApp | traegt IUnwetterwarnung; sendet ; fragt ; hoert Unwetter
-# Der Zustand ist eine eigene Klasse ohne Marker — eine Code-Karte (wo der Editor sie zeigt, ist mit der Oberfläche zurückgestellt, Plan E4).
+# Der Zustand ist eine eigene Klasse ohne Marker — eine Code-Karte (wo der Editor sie zeigt, ist mit der Oberfläche zurückgestellt, docs/10 E4).
 code Wetterdienst.Vorhersage.Gewichte class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
 code Wetterdienst.Vorhersage.Arbeitsmodell class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
 lage Tendenzbildung -> Domain.Pipeline

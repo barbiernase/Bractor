@@ -12,7 +12,7 @@ public sealed record GestenAntwort(bool Ok, string? Fehler, string Titel, IReadO
     IReadOnlyList<Diagnose> Befunde, long Ms);
 
 /// <summary>
-/// Geste → Patch → Workspace → Board (Werkbank P7.2, docs/konzept-werkbank.md §8.2). Jede Geste ist ein Patch am Code: Karten ändern/anlegen/löschen
+/// Geste → Patch → Workspace → Board (Werkbank P7.2, CLAUDE.md W4). Jede Geste ist ein Patch am Code: Karten ändern/anlegen/löschen
 /// über den Schreiber (<see cref="GraphExtractor.Gesten"/>), Umbenennen über den Roslyn-Renamer, ↶ über den <see cref="Verlauf"/>. Danach liest
 /// der warme Workspace neu; die Antwort trägt die Compiler-Befunde der berührten Dateien. Eine Geste nach der anderen; nie auf <c>main</c>.
 /// </summary>
@@ -97,7 +97,7 @@ public sealed class GestenDienst(string slnRoot, Arbeitsbereich arbeitsbereich, 
     }, ct);
 
     /// <summary>
-    /// Umgebungs-Werte (Host-Rahmen, docs/konzept-werkbank.md §4.1) als Geste: die Datei <paramref name="datei"/> (relativ zur Solution) bekommt
+    /// Umgebungs-Werte (Host-Rahmen, docs/06 §6.5) als Geste: die Datei <paramref name="datei"/> (relativ zur Solution) bekommt
     /// <paramref name="text"/> — mit Verlauf, ↶ und Branch-Sperre wie jede andere Geste; danach liest der warme Workspace neu.
     /// </summary>
     public Task<GestenAntwort> UmgebungAsync(string titel, string datei, string text, CancellationToken ct) => AusfuehrenAsync("umgebung", titel, () =>

@@ -1,7 +1,7 @@
 namespace Abstractions;
 
 /// <summary>
-/// Eine Quell-Nachricht, die ein CLIENT hineingibt (Plan Pub/Sub-Neustrukturierung §3.1, Phase 3): ein Fakt von draußen ohne Treiber — etwa „Import
+/// Eine Quell-Nachricht, die ein CLIENT hineingibt (docs/10 §10.2): ein Fakt von draußen ohne Treiber — etwa „Import
 /// angefordert“. Die Kennung ist die Command-Id der Nachricht: der Client vergibt sie und schickt sie beim Wiederholen wieder mit (wie bei einem
 /// Command, er hält sie vor dem Senden fest) — genau einmal im Log je Kennung. Die Domäne benennt nur ihre Felder:
 /// <c>public sealed record ImportAngefordert(int Zeilen) : ClientGemeldet;</c>; die Kennung setzt der Eingang. Wer sie schicken darf, sagt

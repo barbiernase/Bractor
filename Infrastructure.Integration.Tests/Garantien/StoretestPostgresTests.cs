@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Infrastructure.Integration.Tests.Garantien;
 
 /// <summary>
-/// Der allgemeine Store-Test (Plan Pub/Sub-Neustrukturierung §2.4, §4.4 Nr. 2; <see cref="Storetest"/>) für die drei Treiber, die das Framework
+/// Der allgemeine Store-Test (docs/04 §4.3, docs/11 §11.14; <see cref="Storetest"/>) für die drei Treiber, die das Framework
 /// mitliefert: den Marten-Store (Klasse 1, <see cref="MartenStore"/>), das Datei-Ziel (Klasse 2, <see cref="DateiZiel"/>) und die Datei-Senke
 /// (Klasse 3, <see cref="DateiSink"/>) — je gegen ein echtes Log in einem eigenen Schema und den echten Batch-Leser. Batch-Abbruch,
 /// Wiederholung, zweite Aktivierung mit älterem Stand und Neuaufbau über Generationen.

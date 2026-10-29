@@ -3,7 +3,7 @@ using Abstractions;
 namespace Infrastructure.Akteure;
 
 /// <summary>
-/// Der Vertrag EINES Clients (<c>IClientVertrag</c>, <c>docs/konzept-akteure.md</c> §4, Plan Pub/Sub-Neustrukturierung §2.7) — generiert in
+/// Der Vertrag EINES Clients (<c>IClientVertrag</c>, <c>docs/konzept-akteure.md</c> §4, docs/konzept-akteure.md §5) — generiert in
 /// <see cref="GeneratedClientVertraege"/>. Ein Client ist die Software an der Leitung (eine Verbindung, eine Sitzung); er kann mehrere Akteure
 /// verkörpern, und ein Akteur kann über mehrere Clients laufen.
 /// </summary>

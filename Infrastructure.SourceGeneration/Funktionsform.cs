@@ -8,7 +8,7 @@ using System.Linq;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Die EINE Lesart einer Funktion in Baustein-Form (Plan Pub/Sub-Neustrukturierung §3.3) — für den <c>FunktionsBausteinGenerator</c>, die
+    /// Die EINE Lesart einer Funktion in Baustein-Form (docs/10 §10.3) — für den <c>FunktionsBausteinGenerator</c>, die
     /// Analyzer (R2, R12), die Lage-Regeln und den Extractor. Nur Code-Fakten: der Marker <c>IFunktion</c>, die Methoden <c>Auf</c> und ihre
     /// Signaturen (Eingang, <c>Herkunft</c>, Lese-Fähigkeiten, Abbruch, Rückgabe). Verglichen wird über volle Namen, nie über Symbol-Identität —
     /// so liest sie auch Typen aus anderen Compilations.
@@ -38,7 +38,7 @@ namespace Infrastructure.SourceGeneration
             public string Abbildung = "";
             public List<INamedTypeSymbol> Ausgaben = new List<INamedTypeSymbol>();
             /// <summary>Ein <c>Auf</c> ohne Ausgabe (<c>void</c>, <c>Task</c>, <c>ValueTask</c>): nur mit Zustand — der Eingang wirkt allein auf ihn (die
-            /// Funktion lernt, Plan §2.9).</summary>
+            /// Funktion lernt, docs/04 §4.4).</summary>
             public bool Keine;
         }
 
@@ -52,7 +52,7 @@ namespace Infrastructure.SourceGeneration
             public List<(string Text, Location Ort)> Fehler = new List<(string, Location)>();
             /// <summary>Eingangstypen mit mehr als einem <c>Auf</c> (R2).</summary>
             public List<(INamedTypeSymbol Eingang, Location Ort)> Doppelt = new List<(INamedTypeSymbol, Location)>();
-            /// <summary>Der Typ des Zustands (<c>IZustand&lt;T&gt;</c> im Konstruktor einer Klasse, Plan §2.9) — null = ohne Zustand.</summary>
+            /// <summary>Der Typ des Zustands (<c>IZustand&lt;T&gt;</c> im Konstruktor einer Klasse, docs/04 §4.4) — null = ohne Zustand.</summary>
             public INamedTypeSymbol? Zustand;
             /// <summary><c>[EineAdresse]</c>: ein Funktions-Actor statt einer je Partition (A6).</summary>
             public bool EineAdresse;
@@ -251,7 +251,7 @@ namespace Infrastructure.SourceGeneration
                 if (auf.Hinweis && Hat(a, A + "IEvent") && !Hat(a, A + "ITransientEvent"))
                 {
                     fehler.Add(($"die Ausgabe '{a.Name}' ist ein Event, der Eingang '{eingang.Name}' ein Hinweis — aus einem Hinweis (höchstens einmal, nicht im "
-                        + "Log) gehen nur Commands und Hinweise hervor; was fachlich zählt, verlässt das Hinweis-Netz als Command an ein Aggregat (Plan §2.9)", ort));
+                        + "Log) gehen nur Commands und Hinweise hervor; was fachlich zählt, verlässt das Hinweis-Netz als Command an ein Aggregat (docs/04 §4.4)", ort));
                     return null;
                 }
                 auf.Ausgaben.Add(a);

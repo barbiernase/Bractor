@@ -74,7 +74,7 @@ public class SchreibGarantieTests
     public async Task Eine_Wiederholung_nach_dem_Neustart_wirkt_nicht_erneut_weder_Absage_noch_Ablehnung()
     {
         // Nach dem Neustart kennt kein Actor-Cache etwas, und der Stand ist weitergegangen: eine Wiederholung der ersten Reservierung würde jetzt
-        //   abgesagt (Bestand erschöpft), eine Wiederholung der Absage (ein Fakt, Plan §3.1) würde jetzt wirken (Bestand zugebucht). Dazu eine
+        //   abgesagt (Bestand erschöpft), eine Wiederholung der Absage (ein Fakt, docs/10 §10.2) würde jetzt wirken (Bestand zugebucht). Dazu eine
         //   Ablehnung (ein Hinweis: Posten unbekannt). Alle bekommen den Ausgang des ersten Mals, keine schreibt etwas.
         var schema = "pruef_inbox_neustart";
         Guid p, q = Guid.NewGuid(), gewirkt = Guid.NewGuid(), abgesagt = Guid.NewGuid(), abgelehnt = Guid.NewGuid(), clientAbgelehnt = Guid.NewGuid();
@@ -92,7 +92,7 @@ public class SchreibGarantieTests
                 erst.Abgelehnt.Should().BeTrue();
                 var es = host.Services.GetRequiredService<IEventStoreRepository>();
                 (await es.ReadStreamAsync(p, 0, default)).Count(e => e.Payload is ReservierungAbgelehnt).Should().Be(1);
-                // Eine Ablehnung (ein Hinweis) steht nur in der Inbox, nie im Log — sie legt auch keinen Stream an (Plan Phase 5: keine Marken).
+                // Eine Ablehnung (ein Hinweis) steht nur in der Inbox, nie im Log — sie legt auch keinen Stream an (keine Marken).
                 (await es.KopfAsync(q, default)).Should().Be(0, "eine Ablehnung schreibt kein Event, auch keinen Stream");
                 (await es.AusgangAsync(abgelehnt, default)).Should().Be(KommandoAusgang.Abgelehnt);
 
@@ -294,7 +294,7 @@ public class SchreibGarantieTests
     [Fact]
     public async Task Eine_Ablehnung_auf_einem_veralteten_Stand_wird_nicht_gueltig()
     {
-        // Eine Ablehnung schreibt kein Event, nur ihre Quittung (Plan Phase 5). Die Quittung gilt nur, wenn der Stream noch auf dem Stand der
+        // Eine Ablehnung schreibt kein Event, nur ihre Quittung. Die Quittung gilt nur, wenn der Stream noch auf dem Stand der
         //   Entscheidung steht: hier hat ein zweiter Schreiber (zweite Aktivierung, anderer Knoten) den Posten eröffnet, während der Actor noch
         //   „gibt es nicht“ weiß. Seine Ablehnung darf nicht dauerhaft werden — er lädt frisch und entscheidet auf dem aktuellen Stand.
         using var host = Cluster("garantie-veraltet");
@@ -344,7 +344,7 @@ public class SchreibGarantieTests
     [Fact]
     public async Task Ein_Command_an_eine_fremde_Identitaet_wird_abgelehnt_bevor_etwas_geladen_ist()
     {
-        // Die Id des Aggregat-Actors ist seine Cluster-Identität (Plan §1.7, Phase 1). Erreicht ihn ein Command mit einem anderen Ziel (falsch
+        // Die Id des Aggregat-Actors ist seine Cluster-Identität (docs/06 §6.7). Erreicht ihn ein Command mit einem anderen Ziel (falsch
         // geroutet), lehnt er ab, ohne einen Stream zu lesen — früher hätte der erste Envelope die Aktivierung initialisiert und den fremden
         // Stream unter dieser Identität geladen (zwei Schreiber für einen Stream).
         var lesen = new StreamLeser();

@@ -49,7 +49,7 @@ namespace Infrastructure.SourceGeneration
             var wire = new List<INamedTypeSymbol>();
             var commands = new List<INamedTypeSymbol>();
             var events = new List<INamedTypeSymbol>();
-            // Queries und Antworten reisen geschachtelt in der Frage an ein Aggregat (AggregatFrage/AggregatAntwort, Plan §2.6).
+            // Queries und Antworten reisen geschachtelt in der Frage an ein Aggregat (AggregatFrage/AggregatAntwort, docs/03 §3.2).
             var queries = new List<INamedTypeSymbol>();
             var antworten = new List<INamedTypeSymbol>();
 

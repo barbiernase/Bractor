@@ -1,7 +1,7 @@
 namespace Abstractions;
 
 /// <summary>
-/// Marker einer FUNKTION (Plan Pub/Sub-Neustrukturierung §2.2, §3.3; Code-Fakt über <see cref="Funktionsvertrag"/>):
+/// Marker einer FUNKTION (docs/10 §10.1, docs/10 §10.3; Code-Fakt über <see cref="Funktionsvertrag"/>):
 /// je Eingangstyp eine Methode <c>Auf(TEingang e[, Herkunft h][, Lese-Fähigkeiten…][,
 ///   CancellationToken])</c> mit freier Ausgabe in der Signatur — ein konkreter Typ, <c>OneOf&lt;…&gt;</c>, <c>T?</c> (nichts), ein Strom
 ///   (<c>IEnumerable</c>/<c>IAsyncEnumerable</c>), je auch als <c>Task&lt;…&gt;</c>. Als <b>Klasse</b> läuft sie im Host (Dienste im Konstruktor), als

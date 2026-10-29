@@ -22,7 +22,7 @@ public sealed class PostenEroeffnet_V1_Wandlung : IUpcast<PostenEroeffnet_V1, Po
 public record PostenReserviert(int Menge, int Fehlmenge, Beleg Beleg) : IEvent;
 
 /// <summary>
-/// Die Reservierung für den Beleg ist abgelehnt — ein FAKT, kein Hinweis: der Vorgang des Belegs hängt an ihr (Plan §3.1: ist eine Ablehnung für einen
+/// Die Reservierung für den Beleg ist abgelehnt — ein FAKT, kein Hinweis: der Vorgang des Belegs hängt an ihr (docs/10 §10.2: ist eine Ablehnung für einen
 /// Ablauf wichtig, entscheidet der Modellierer sie als Event). Ändert den Bestand nicht.
 /// </summary>
 public record ReservierungAbgelehnt(int Verfuegbar, int Angefordert, Beleg Beleg) : IEvent;

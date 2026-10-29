@@ -47,7 +47,7 @@ class ClientMessage(betterproto.Message):
 @dataclass(eq=False, repr=False)
 class LiesLog(betterproto.Message):
     """
-    Verlässliches Lesen (Plan Pub/Sub-Neustrukturierung §2.7): das Log ab einer Position, gefiltert auf das, was die Sitzung hören darf, nur bis
+    Verlässliches Lesen (docs/konzept-akteure.md §5): das Log ab einer Position, gefiltert auf das, was die Sitzung hören darf, nur bis
      zum Horizont der Vollständigkeit — wer ab „bis“ weiterliest, verpasst nichts. So führt ein Client eine Projektion bei sich, und ein Client,
      der wieder verbindet, liest nach, was er verpasst hat; der Push bleibt die Abkürzung. ab = 0: von Anfang an.
     """
@@ -67,14 +67,14 @@ class CapabilitiesRequest(betterproto.Message):
     """
     Der Handshake: der Client nennt seinen Vertrag (der Server nimmt die Befugnisse aus SEINER Tabelle, Vertrag ∩ Token) — ein Client ohne
      Vertrag nennt, was er hören, senden und fragen will (message_types), und was er beantwortet (handle_queries); wirksam ist auch dann nur,
-     was das Token erlaubt. Was die Sitzung hört, meldet der Server beim Verteiler seines Knotens an (Plan Pub/Sub-Neustrukturierung §2.7).
+     was das Token erlaubt. Was die Sitzung hört, meldet der Server beim Verteiler seines Knotens an (docs/konzept-akteure.md §5).
     """
 
     message_types: List[str] = betterproto.string_field(2)
     handle_queries: List[str] = betterproto.string_field(4)
     vertrag: str = betterproto.string_field(5)
     """
-    Akteur-Vertrag (docs/konzept-akteure.md §3): "ich bin Vertrag X" — der Server nimmt die Fähigkeiten aus der
+    Client-Vertrag (docs/konzept-akteure.md §5.2): "ich bin Vertrag X" — der Server nimmt die Fähigkeiten aus der
      generierten Tabelle statt aus der Selbstauskunft; der Hash erkennt einen Client, der gegen einen anderen Stand gebaut ist.
     """
 
@@ -87,7 +87,7 @@ class QueryRequest(betterproto.Message):
     payload: "Nutzlast" = betterproto.message_field(2)
     mindestens: List["StreamStand"] = betterproto.message_field(4)
     """
-    Read-your-writes (Plan Pub/Sub-Neustrukturierung §2.7): „mindestens S auf v“ je Stream, den der Client zuletzt beschrieben hat (Version aus
+    Read-your-writes (docs/konzept-akteure.md §5): „mindestens S auf v“ je Stream, den der Client zuletzt beschrieben hat (Version aus
      der Quittung). Der Reader wartet begrenzt, bis seine Projektion jeden so weit verarbeitet hat; reicht die Frist nicht, sagt die Antwort
      noch_nicht. Die Streams zählen zu den gezeigten — ihr Stand kommt in deps mit, auch wenn ein Objekt nicht ins Ergebnis fällt.
     """
@@ -205,7 +205,7 @@ class QueryResponseFromClient(betterproto.Message):
 @dataclass(eq=False, repr=False)
 class FunktionenAnbieten(betterproto.Message):
     """
-    Funktionen draußen ausführen (Plan Pub/Sub-Neustrukturierung §2.2, §2.7: ITraegt): ein Client bietet Funktionen an, die er trägt; der Server
+    Funktionen draußen ausführen (docs/10 §10.1, docs/konzept-akteure.md §5: ITraegt): ein Client bietet Funktionen an, die er trägt; der Server
      holt für ihn Eingänge beim Vermittler (Pull, Slots = Gleichzeitigkeit, Lease), reicht sie weiter und hält die Antwort unter „Funktion, Eingang“
      fest — die erste gewinnt. Gesendet wird beim Funktions-Actor; der Client ist nur die Hand.
     """
@@ -228,7 +228,7 @@ class ArbeitsAuftrag(betterproto.Message):
     """
     Ein Eingang einer Funktion: der Schlüssel „Funktion, Eingang“ (vorgang), die Funktion, das Event und seine Herkunft; ab = so viele Ausgaben
      (Strom) sind schon festgehalten — ein neuer Träger lässt sie aus und macht beim nächsten Stück weiter. hinweis = der Eingang ist ein Hinweis aus
-     dem Hinweis-Netz (Plan Pub/Sub-Neustrukturierung §2.9): höchstens einmal, nichts wird festgehalten — die Antwort kommt als Ganzes (auch ein Strom),
+     dem Hinweis-Netz (docs/04 §4.4): höchstens einmal, nichts wird festgehalten — die Antwort kommt als Ganzes (auch ein Strom),
      ihre Commands und Hinweise sendet der Funktions-Actor; stream/version nennen den Eingang, aus dem der Hinweis hervorging.
     """
 

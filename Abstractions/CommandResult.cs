@@ -1,7 +1,7 @@
 namespace Abstractions;
 
 /// <summary>
-/// Die Antwort des Aggregats auf einen Command (Plan Pub/Sub-Neustrukturierung Phase 2): nur der <b>Ausgang</b> (gewirkt, abgelehnt,
+/// Die Antwort des Aggregats auf einen Command: nur der <b>Ausgang</b> (gewirkt, abgelehnt,
 /// technischer Fehler), die <b>Versionen</b> und die <b>Ablehnung</b>. Die Events, die der Command geschrieben hat, stehen im Log
 /// (<see cref="ErsteVersion"/> … <see cref="NewVersion"/>) — wer sie zeigen will, liest sie dort (die Wahrheit ist der Log, Invariante 1).
 /// </summary>

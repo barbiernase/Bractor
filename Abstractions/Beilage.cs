@@ -24,13 +24,13 @@ public abstract record Beilage
 public sealed record Quittung(Guid CommandId, KommandoAusgang Ausgang) : Beilage;
 
 /// <summary>
-/// Eine Frist für das Fälligkeits-Verzeichnis der Uhr (Plan Pub/Sub-Neustrukturierung Phase 3): das <see cref="FristGesetzt"/> an
+/// Eine Frist für das Fälligkeits-Verzeichnis der Uhr: das <see cref="FristGesetzt"/> an
 /// <paramref name="Version"/> des Streams, sein Command (Diskriminator und Wire-JSON), die Dauer ab seiner Log-Zeit und der Akteur der Kette.
 /// </summary>
 public sealed record FristFaellig(int Version, string Befehl, string Daten, TimeSpan Nach, string? Akteur) : Beilage;
 
 /// <summary>
-/// Die Kennung einer Quell-Nachricht in einem Stream je Schlüssel (Plan Pub/Sub-Neustrukturierung §4.2): ihr Vorgang (abgeleitet aus Typ und Kennung)
+/// Die Kennung einer Quell-Nachricht in einem Stream je Schlüssel (docs/11): ihr Vorgang (abgeleitet aus Typ und Kennung)
 /// steht eindeutig im Kennungs-Verzeichnis — ein zweites Melden derselben Kennung scheitert am Schlüssel, nichts wird geschrieben.
 /// </summary>
 public sealed record QuellKennung(Guid Vorgang) : Beilage;

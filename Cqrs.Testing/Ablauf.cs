@@ -21,7 +21,7 @@ public sealed record AblaufSchritt
 }
 
 /// <summary>
-/// Einstieg in die Ablauf-DSL (Plan Pub/Sub-Neustrukturierung Phase 4: Abläufe sind Aggregate + Funktionen + Fristen): <c>Gegeben (Historien) →
+/// Einstieg in die Ablauf-DSL (Abläufe sind Aggregate + Funktionen + Fristen): <c>Gegeben (Historien) →
 /// Wenn (Command von außen) → Dann (Commands der Funktionen, Endzustände, Fristen)</c>. Treibt die ECHTEN Decider/Applier über die generierte Fabrik
 /// und die ECHTEN Funktionen über ihre <c>Auf</c>-Methoden — store-frei, ohne Reflection: Aggregate und Kanten meldet der Test typisiert an.
 /// Was der Funktions-Actor garantiert (Festhalten, Inbox, Position), prüft dieses Werkzeug nicht — nur, was die Bausteine fachlich entscheiden.

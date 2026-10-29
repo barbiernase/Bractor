@@ -32,7 +32,7 @@ public sealed class BeispielAblaufHost : IAsyncLifetime
 }
 
 /// <summary>
-/// Exactly-once je Ablauf der Beispieldomäne als FACHLICHES Soll (Plan §6, Phase 0): was am Ende im Log und in den Antworten steht — nicht,
+/// Exactly-once je Ablauf der Beispieldomäne als FACHLICHES Soll (docs/12 §12.6): was am Ende im Log und in den Antworten steht — nicht,
 /// über welchen Mechanismus (Dirigent, Fluss, Prozess-Events, Funktions-Streams) es entstand. Angestoßen nur von außen: Quell-Verzeichnis und
 /// JSON-Eingang mit dem Token des Akteurs.
 /// </summary>

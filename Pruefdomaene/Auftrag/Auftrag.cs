@@ -3,7 +3,7 @@ using Abstractions;
 namespace Pruefdomaene.Auftrag;
 
 /// <summary>
-/// Aggregat <see cref="Auftrag"/> — ein VORGANGS-Aggregat (Plan Pub/Sub-Neustrukturierung §2.2 „Warten gehört in ein Aggregat“): zwei Zweige laufen
+/// Aggregat <see cref="Auftrag"/> — ein VORGANGS-Aggregat (docs/10 §10.1 „Warten gehört in ein Aggregat“): zwei Zweige laufen
 /// unabhängig (Posten reservieren, Kontingent belegen) und melden sich hier zurück, in beliebiger Reihenfolge. Bestätigt wird erst, wenn BEIDE gelangen;
 /// scheitert einer, wird der gelungene genau einmal zurückgenommen — auch wenn seine Rückmeldung erst nach der Absage kommt. Die Kanten Event →
 /// Command trägt die Funktion <c>Auftragsabwicklung</c>; den Zustand über mehrere Ereignisse hält nur dieses Aggregat.

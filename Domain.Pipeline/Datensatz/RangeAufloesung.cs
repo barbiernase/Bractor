@@ -6,7 +6,7 @@ using Domain.Projections.ImagePair;
 namespace Domain.Pipeline.Datensatz;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// DATENSATZ-RESOLVER als Funktionen mit LESE-Fähigkeit (Plan Pub/Sub-Neustrukturierung Phase 4). Der reine Decider löst die zwei I/O-behafteten
+// DATENSATZ-RESOLVER als Funktionen mit LESE-Fähigkeit. Der reine Decider löst die zwei I/O-behafteten
 // Halbschritte nicht selbst — eine Funktion hört das Anfordern, liest das Read-Model und schickt dem Datensatz den aufgelösten Command:
 //
 //   RangeAngefordert ──ƒ RangeAufloesung (ISearchImagePairs) ──▶ NimmRangeAuf

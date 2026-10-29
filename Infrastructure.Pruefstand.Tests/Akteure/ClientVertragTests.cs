@@ -18,7 +18,7 @@ using Domain.Projections.Modell;
 namespace Infrastructure.Pruefstand.Akteure;
 
 /// <summary>
-/// Client-Verträge (<c>docs/konzept-akteure.md</c> §4, Plan Pub/Sub-Neustrukturierung §2.7: ITraegt, ISendet, IFragt, IHoert): die generierte
+/// Client-Verträge (<c>docs/konzept-akteure.md</c> §4, docs/konzept-akteure.md §5: ITraegt, ISendet, IFragt, IHoert): die generierte
 /// Tabelle, die Schnittmenge Vertrag ∩ Token, der Handshake je Client (Hört statt Selbstauskunft, getragene Funktionen nur mit Befugnis) und die
 /// Hash-Gleichheit mit dem Python-Generat — rein, ohne gRPC.
 /// </summary>

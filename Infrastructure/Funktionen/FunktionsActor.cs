@@ -8,23 +8,23 @@ using Proto.Cluster;
 namespace Infrastructure.Funktionen;
 
 /// <summary>
-/// Der FUNKTIONS-ACTOR je Adresse (Plan Pub/Sub-Neustrukturierung §2.2, §2.9): ein virtueller Cluster-Actor, Kind <c>funktion-&lt;F&gt;</c>, Identität =
+/// Der FUNKTIONS-ACTOR je Adresse (docs/10 §10.1, docs/04 §4.4): ein virtueller Cluster-Actor, Kind <c>funktion-&lt;F&gt;</c>, Identität =
 /// Partition (bzw. die eine Adresse einer Funktion mit <c>[EineAdresse]</c>, A6). Er trägt, was eine Funktion nie selbst trägt: Position und
 /// Fortschritt (der Stand beim Framework), Gleichzeitigkeit (Slots; Eingänge eines Streams nacheinander), Wiederholung mit Backoff, Parken, das
 /// Festhalten der Ausgabe und das Senden aus dem Festgehaltenen (<see cref="FunktionsArbeit"/>). Rechnet die Funktion draußen, bietet er den Eingang
 /// über den Vermittler an — die Garantie bleibt hier.
-/// <para><b>Wecken</b> (Plan §2.3): wie ein Partitions-Leser einer Projektion — der Wecker am Commit weckt die Partition schnell (Weckplan), der
+/// <para><b>Wecken</b> (docs/03 §3.5): wie ein Partitions-Leser einer Projektion — der Wecker am Commit weckt die Partition schnell (Weckplan), der
 /// Takt (alle 30 s je Partition) holt nach, was ein verlorener Weckruf liegen ließ. Jede Weckung führt zu höchstens einer Lese-Runde mehr.</para>
 /// <para><b>Lebenszyklus</b> (Rahmen): beim Aktivieren baut der Actor die Umsetzung im Host samt ihren Diensten in einem eigenen Bereich
 /// (<see cref="FunktionsAktivierung"/>), beim Stoppen, Passivieren und vor einem Neustart gibt er sie frei. Lesen und Arbeiten laufen neben der
 /// Mailbox (<see cref="RahmenActor.Neben"/>); der Lauf (<see cref="FunktionsLauf"/>) wird nur in der Mailbox geändert. Beim Stopp bricht die Arbeit
 /// ab — was nicht fertig wurde, rechnet die nächste Aktivierung erneut (wiederholungsfest über das Festgehaltene bzw. abgeleitete Command-Ids); der
 /// Stand wird zuletzt noch geschrieben.</para>
-/// <para><b>Hinweise</b> (Plan §2.9, E7, A7): ein Hinweis kommt direkt aus dem Hinweis-Netz (<see cref="HinweisZustellen"/>, verlierbar) — ohne
+/// <para><b>Hinweise</b> (docs/04 §4.4, docs/10 E7, A7): ein Hinweis kommt direkt aus dem Hinweis-Netz (<see cref="HinweisZustellen"/>, verlierbar) — ohne
 /// Position, ohne Festhalten, höchstens einmal. Bis zur Slot-Grenze laufen Hinweise neben den Log-Eingängen; was nicht gleich starten kann, wartet in
 /// einer gedeckelten Schlange (läuft sie über, fallen die ältesten weg). Bleibt ein Command „unbekannt“, sendet der Actor nach Backoff dieselben
 /// Commands mit denselben Ids erneut. Eine Funktion, die nur Hinweise hört, hat keinen Log-Leser, keine Position und keinen Takt.</para>
-/// <para><b>Zustand</b> (<c>IZustand&lt;T&gt;</c>, Plan §2.9, A5) — nach dem Vorbild des Aggregat-Actors: geladen beim Aktivieren (zusammen mit dem
+/// <para><b>Zustand</b> (<c>IZustand&lt;T&gt;</c>, docs/04 §4.4, docs/10 A5) — nach dem Vorbild des Aggregat-Actors: geladen beim Aktivieren (zusammen mit dem
 /// Stand, bevor das erste <c>Auf</c> läuft); immer nur EIN Eingang zugleich (ein Schreiber je Adresse); gesichert nur in einem RUHEPUNKT — kein
 /// Eingang in Arbeit, also enthält der Zustand genau die Log-Eingänge bis zur Position — in EINER Transaktion mit dem Stand, höchstens so oft wie
 /// die Umgebung sagt und beim Stoppen. Während einer Sicherung startet nichts. Verliert die Sicherung gegen eine zweite Aktivierung, beginnt die

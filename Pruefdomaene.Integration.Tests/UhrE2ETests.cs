@@ -11,7 +11,7 @@ using static Pruefdomaene.Integration.Tests.Pruefstand;
 namespace Pruefdomaene.Integration.Tests;
 
 /// <summary>
-/// Die Uhr im echten Cluster gegen echtes Marten (Plan Pub/Sub-Neustrukturierung §4.2, Phase 3): ein Aggregat entscheidet eine Frist; sie steht als
+/// Die Uhr im echten Cluster gegen echtes Marten (docs/11): ein Aggregat entscheidet eine Frist; sie steht als
 /// <c>FristGesetzt</c> in seinem Stream und — in derselben Transaktion — im Fälligkeits-Verzeichnis; fällig zur Log-Zeit plus Dauer sendet die Uhr den
 /// Command mit der Id aus dem Frist-Event. Doppelt gefeuert wirkt er einmal.
 /// </summary>

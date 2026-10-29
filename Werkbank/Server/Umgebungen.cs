@@ -8,7 +8,7 @@ using Microsoft.Extensions.Configuration;
 namespace Werkbank.Server;
 
 /// <summary>
-/// Die Umgebungs-Dateien der Solution (<c>umgebungen/umgebung.&lt;name&gt;.json</c>, docs/konzept-werkbank.md §4): lesen, als Text für eine
+/// Die Umgebungs-Dateien der Solution (<c>umgebungen/umgebung.&lt;name&gt;.json</c>, docs/06 §6.5): lesen, als Text für eine
 /// Geste aufbereiten und auflösen. Aufgelöst wird mit DERSELBEN Regel wie im Host (<see cref="UmgebungLader.LadeDatei"/>: <c>${branch}</c> =
 /// Git-Branch dieser Werkbank, <c>${env:NAME}</c> — fehlt die Variable, ist das ein Fehler —, Umgebungsvariablen überschreiben, strenge
 /// Bindung); Tokens nach <see cref="AkteurTokens"/>.

@@ -8,7 +8,7 @@ namespace Werkbank.Server;
 public sealed record BootMeldung(string Text, string? Karte);
 
 /// <summary>
-/// Der Laufzeit-Host als Prozess (docs/konzept-werkbank.md §5 Schritt 5): <c>dotnet Host.Grpc.dll --umgebung &lt;name&gt;</c> aus dem
+/// Der Laufzeit-Host als Prozess (CLAUDE.md W6 Schritt 5): <c>dotnet Host.Grpc.dll --umgebung &lt;name&gt;</c> aus dem
 /// Build-Ausgang, <c>CQRS_BRANCH</c> = Branch der Werkbank. Starten ersetzt einen laufenden Host; bereit ist er, wenn <c>/health</c> auf
 /// dem Einblick-Port antwortet. Boot-Fehler kommen als Zeile <c>CQRS-BOOT {json}</c> (bzw. als unbehandelte Ausnahme) zurück.
 /// </summary>

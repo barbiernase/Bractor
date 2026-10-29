@@ -1,7 +1,7 @@
 namespace Abstractions;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// DIE UHR (Plan Pub/Sub-Neustrukturierung §2.2, §3.1, §4.2, Phase 3): ein Aggregat entscheidet eine FRIST wie ein Event — in der Signatur seines
+// DIE UHR (docs/10 §10.1, docs/10 §10.2, docs/11): ein Aggregat entscheidet eine FRIST wie ein Event — in der Signatur seines
 // Decide (`OneOf<…, Frist<PruefeZahlung>>`). Im Log steht sie als Framework-Event FristGesetzt im Stream des Aggregats; das Fälligkeits-Verzeichnis
 // entsteht in DERSELBEN Transaktion. Fällig ist sie zur Log-Zeit ihres Events plus Nach — das Aggregat braucht keine Uhr (R11). Die Uhr des
 // Frameworks sendet den Command zur Fälligkeit mit einer Command-Id aus dem Frist-Event (Stream, Version): doppelt gefeuert, einmal gewirkt.

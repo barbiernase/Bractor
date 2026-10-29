@@ -23,7 +23,7 @@ public interface IKi : IAkteur { }
 /// Der VERTRAG eines CLIENTS — der Software, die an der Leitung hängt (Python-Worker, Blazor-Arbeitsplatz …),
 /// <c>docs/konzept-akteure.md</c> §4. Ein Client ist nicht ein Akteur: er kann mehrere Akteure verkörpern, und ein Akteur
 /// kann über mehrere Clients laufen. Der Client-Vertrag ist ein Interface, das zusammenstellt, was über SEINE Leitung geht
-/// (Plan Pub/Sub-Neustrukturierung §2.7):
+/// (docs/konzept-akteure.md §5):
 /// <code>public interface IMlWorker : IClientVertrag, ITraegt&lt;IBildpaarBeurteilung&gt;, ISendet&lt;KlassifiziereEinzelBildDurchKi&gt;, IFragt&lt;HoleAktivesModell&gt;, IHoert&lt;ModellAktiviert&gt;;</code>
 /// <list type="bullet">
 /// <item><see cref="ITraegt{TFunktion}"/> → Funktionen, deren Code er ausführt (draußen gerechnet, die Garantie bleibt beim Funktions-Actor);</item>
@@ -32,7 +32,7 @@ public interface IKi : IAkteur { }
 /// </list>
 /// Was er trägt, sendet oder fragt, muss ein verkörperter Akteur dürfen (<c>IDarf</c>); welche Akteure er verkörpert, wird daraus abgeleitet
 /// (<see cref="Clientvertragsregeln.Verkoerpert"/>). Wirksam ist am Handshake die Schnittmenge mit den Akteuren des Tokens. Die client-INTERNEN
-/// Commands/Events (Intents, ClientEvents, Python-State) stehen hier nie — der Vertrag ist nur der Rand (CQRS063–065).
+/// Commands/Events (Intents, ClientEvents, Python-State) stehen hier nie — der Vertrag ist nur der Rand (CQRS063, CQRS064).
 /// </summary>
 public interface IClientVertrag { }
 
@@ -59,14 +59,14 @@ public interface ISendet<T> { }
 public interface IFragt<T> { }
 
 /// <summary>
-/// Am Client-Vertrag (<see cref="IClientVertrag"/>): der Client hört <typeparamref name="T"/> — Kenntnis, verlierbar (Plan §2.7, §3.4): ein Event
-/// oder ein Hinweis, gepusht, ohne Garantie und ohne Ausgabe. Verlässlich liest ein Client nur über „lies das Log ab Position“ (Plan Phase 7).
+/// Am Client-Vertrag (<see cref="IClientVertrag"/>): der Client hört <typeparamref name="T"/> — Kenntnis, verlierbar (docs/konzept-akteure.md §5, docs/10 §10.5): ein Event
+/// oder ein Hinweis, gepusht, ohne Garantie und ohne Ausgabe. Verlässlich liest ein Client nur über „lies das Log ab Position“.
 /// </summary>
 public interface IHoert<T> { }
 
 /// <summary>
 /// Am Client-Vertrag (<see cref="IClientVertrag"/>): der Client TRÄGT die Funktion <typeparamref name="TFunktion"/> — er führt ihren Code aus
-/// (Plan §2.7, §3.3: eine Funktion, als Schnittstelle deklariert, läuft draußen). Er holt ihre Eingänge über die Vermittlung mit Lease, antwortet
+/// (docs/konzept-akteure.md §5, docs/10 §10.3: eine Funktion, als Schnittstelle deklariert, läuft draußen). Er holt ihre Eingänge über die Vermittlung mit Lease, antwortet
 /// mit den Ausgaben ihrer Signatur; festgehalten und gesendet wird beim Funktions-Actor, die erste Antwort gewinnt. Ein verkörperter Akteur muss
 /// <c>IDarf&lt;TFunktion&gt;</c> haben; eine getragene Funktion ohne Bindung in der Umgebung läuft dort (Laufort Extern).
 /// </summary>

@@ -168,16 +168,16 @@ public class ConnectionModule : IAsyncDisposable
             return;
         }
 
-        // Read-Your-Writes: dieses Aggregat als "gerade geschrieben" merken → geht als
-        // expected_fresh_ids mit künftigen Queries mit, bis die Projektion es eingeholt hat.
+        // Read-Your-Writes: dieses Aggregat als "gerade geschrieben" merken → künftige Queries tragen dafür „mindestens S auf v“
+        // (IVersioning.Mindestens), der Reader wartet begrenzt, bis seine Projektion so weit ist (docs/08 §8.3).
         _versioning.MarkWritten(command.Ziel);
 
         try
         {
             // ExpectedVersion-Logik:
             //   ICreationCommand → immer 0 (Aggregat darf noch nicht existieren).
-            //   Sonst die Version, die der Client kennt — aus einem Event-Push oder aus einer Antwort (eine Version je Aggregat,
-            //     Plan Pub/Sub-Neustrukturierung Phase 5) → OCC (CommandModus.Client).
+            //   Sonst die Version, die der Client kennt — aus einem Event-Push oder aus einer Antwort (eine Version je Aggregat)
+            //     → OCC (CommandModus.Client).
             //   Kennt er das Aggregat gar nicht → Sentinel -1: der Server mappt negativ auf CommandModus.Emittiert (kein OCC, Inbox-Dedup).
             var expectedVersion = command is ICreationCommand
                 ? 0

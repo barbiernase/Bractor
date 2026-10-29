@@ -19,7 +19,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Quellen;
 
 /// <summary>
-/// Quellen = Treiber + Konfig (docs/konzept-werkbank.md §3), store-frei bewiesen: der Scan-Kern (Kennung, Fertig-Erkennung, Gedächtnis),
+/// Quellen = Treiber + Konfig (docs/04 §4.7), store-frei bewiesen: der Scan-Kern (Kennung, Fertig-Erkennung, Gedächtnis),
 /// die Lease von „EinmalImCluster", die Start-Prüfungen der Konfig, der Treiber gegen ein echtes Temp-Verzeichnis (Log als Funktion)
 /// und der Proto-Round-trip eines Quellen-Typs mit geerbten required-init-Feldern.
 /// </summary>
@@ -152,7 +152,7 @@ public class DateiTreiberTests
         k.Laufmodus.Should().Be(QuellLaufmodus.JederKnoten);
     }
 
-    // ── Webhook als Konfig (konzept-werkbank §12.3 E12) ──
+    // ── Webhook als Konfig (docs/06 §6.6) ──
 
     [Fact]
     public void Konfig_Webhook_ist_eine_Route()

@@ -1,5 +1,5 @@
 """
-Funktionen draußen tragen (Plan Pub/Sub-Neustrukturierung §2.7) — gegen das ECHTE Generat.
+Funktionen draußen tragen (docs/konzept-akteure.md §5) — gegen das ECHTE Generat.
 
 `domain_client/generated/funktionen.py` (Cqrs.Codegen) bindet je Funktion ihre Eingänge und Ausgaben an die betterproto-Typen; ein Worker erbt die
 Basis und füllt `auf_<eingang>(e, h)`. Bewiesen wird der ganze Draht des Workers ohne Server: der echte GrpcProxy baut die ClientMessages

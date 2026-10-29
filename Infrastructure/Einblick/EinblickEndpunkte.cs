@@ -10,7 +10,7 @@ using Infrastructure.Komposition;
 namespace Infrastructure.Einblick;
 
 /// <summary>
-/// Die Einblick-API des Hosts (<c>docs/konzept-werkbank.md</c> §7.2, Werkbank P4.7) — NUR LESEND, nur auf dem Einblick-Port (HTTP/1.1, E6).
+/// Die Einblick-API des Hosts (docs/04 §4.9, Werkbank P4.7) — NUR LESEND, nur auf dem Einblick-Port (HTTP/1.1, E6).
 /// Die Werkbank holt ab ihrem Cursor nach (<c>/einblick/spur?ab=&lt;seq&gt;</c>); <c>/einblick/neu</c> (SSE) meldet nur „neu bis seq“ — ein
 /// verlorenes Signal oder ein Neustart schadet nicht, es wird ab dem Cursor nachgelesen (dasselbe Muster wie Wecker + Lesen ab Position im Kern).
 /// </summary>

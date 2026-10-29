@@ -42,7 +42,7 @@ public sealed record SitzungsDienste(
     ILogger Logger);
 
 /// <summary>
-/// Die Sitzung einer gRPC-Verbindung als Actor (Plan Pub/Sub-Neustrukturierung §2.7, Phase 7): der <b>einzige Schreiber</b> auf den
+/// Die Sitzung einer gRPC-Verbindung als Actor (docs/konzept-akteure.md §5): der <b>einzige Schreiber</b> auf den
 /// Antwort-Stream. Die Lese-Schleife der Verbindung reicht jede Nachricht des Clients nur weiter (<see cref="VonClient"/>); Pushes kommen vom
 /// Verteiler des Knotens (<see cref="Zustellung"/>, begrenzt über den <see cref="Rueckstau"/>); was wartet (Query, Antwort einer Funktion
 /// draußen, Weiterleitung an einen zuständigen Client), läuft neben der Mailbox, geschrieben wird danach wieder im Actor.
@@ -64,7 +64,7 @@ public sealed class SitzungsActor : RahmenActor
     /// <summary>So viele Antworten beobachtet eine Sitzung höchstens (die ältesten fallen heraus).</summary>
     public const int HoechstensAntworten = 200;
 
-    /// <summary>Zeigt eine Antwort mehr Ids, beobachtet die Sitzung ihre Projektion grob statt jeder Id (Plan §7, Risiko 6).</summary>
+    /// <summary>Zeigt eine Antwort mehr Ids, beobachtet die Sitzung ihre Projektion grob statt jeder Id (docs/13 §13.7).</summary>
     public const int HoechstensIds = 1_000;
 
     /// <summary>Was eine gehaltene Antwort zeigt: die Projektion, die antwortete, und die Streams ihrer Ids (leer = grob, die ganze Projektion).</summary>
@@ -83,7 +83,7 @@ public sealed class SitzungsActor : RahmenActor
     //   Eingang sieht so, dass die erste ihn schon erledigt hat); gewartet wird neben der Mailbox.
     private readonly Queue<Func<IContext, CancellationToken, Task<Func<Task>?>>> _anbieterArbeit = new();
     private bool _anbieterLaeuft;
-    // Beobachtung (Plan §2.7, „P hat S weiterverarbeitet“): je gehaltener Antwort, was sie zeigt; die betroffenen Queries sammeln sich bis zur
+    // Beobachtung (docs/konzept-akteure.md §5, „P hat S weiterverarbeitet“): je gehaltener Antwort, was sie zeigt; die betroffenen Queries sammeln sich bis zur
     //   nächsten Aktualisierung an den Client.
     private readonly Dictionary<IQuery, Beobachtung> _beobachtungen = new();
     private readonly Queue<IQuery> _beobachtungsReihe = new();

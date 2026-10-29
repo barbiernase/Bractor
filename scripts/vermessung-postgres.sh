@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Postgres-Grundgrößen für die Konsum- und Schreibseite (docs/12 §12.5, docs/plan-garantien-und-durchsatz.md).
+# Postgres-Grundgrößen für die Konsum- und Schreibseite (docs/12 §12.5).
 # Misst mit pgbench IM Postgres-Container, rohes SQL ohne Marten und ohne Netzwerk — die absoluten Werte sind eine Obergrenze,
 # belastbar sind die Verhältnisse. Legt eine eigene Datenbank an und löscht sie am Ende wieder; andere Datenbanken bleiben unberührt.
 #
@@ -12,7 +12,7 @@ DAUER="${2:-15}"
 ANLASS="${3:-postgres-grundgroessen}"
 DB="cqrs_vermessung_tmp"
 
-# Ablage (docs/plan-garantien-und-durchsatz.md §0.1): jeder Lauf bekommt einen eigenen Ordner, nur anhängen, nie überschreiben.
+# Ablage (docs/12 §12.5): jeder Lauf bekommt einen eigenen Ordner, nur anhängen, nie überschreiben.
 WURZEL="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 COMMIT="$(git -C "$WURZEL" rev-parse --short HEAD)"
 ORDNER="$WURZEL/vermessung/ergebnisse/$(date +%Y-%m-%d_%H%M)_${COMMIT}_${ANLASS}"

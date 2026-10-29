@@ -18,7 +18,7 @@ name: cqrs-multinode
 # Cluster__Rolle=Mitglied: alle laufen mit AutoCreate.None (kein Runtime-Lazy-Create) — der dedizierte
 # `migrate`-Service (Role=migrator) legt das Marten-Schema vorher eager + lock-gesichert an.
 x-cluster-env: &cluster-env
-  # Alle Werte stehen in umgebungen/umgebung.multinode.json (docs/konzept-werkbank.md §4); je Node nur Rolle + AdvertisedHost.
+  # Alle Werte stehen in umgebungen/umgebung.multinode.json (docs/06 §6.5); je Node nur Rolle + AdvertisedHost.
   CQRS_UMGEBUNG: multinode
   Cluster__Rolle: Mitglied
 

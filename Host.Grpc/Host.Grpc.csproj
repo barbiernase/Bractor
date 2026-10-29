@@ -21,7 +21,7 @@
     <Content Include="..\umgebungen\*.json" Link="umgebungen\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
-  <!-- Spur (docs/konzept-werkbank.md §7.1): der Build-Stand. Die Werkbank baut mit -p:CqrsStand=<hash> (dieselbe Hash-Funktion wie ihr
+  <!-- Spur (docs/04 §4.9): der Build-Stand. Die Werkbank baut mit -p:CqrsStand=<hash> (dieselbe Hash-Funktion wie ihr
        Kopfzeilen-Stand); daraus wird beim Bauen eine Konstante, die der Host beim Laden setzt (keine Reflection). Ohne Property: kein Stand. -->
   <PropertyGroup>
     <CqrsStand Condition="'$(CqrsStand)' == ''"></CqrsStand>

@@ -5,7 +5,7 @@ namespace Infrastructure.Quellen.Treiber.Datei;
 public sealed record DateiStand(string Pfad, string RelativerPfad, string Name, long Groesse, DateTimeOffset GeaendertAm, bool MarkerDa);
 
 /// <summary>
-/// Der store-freie Kern des Datei-Treibers (docs/konzept-werkbank.md §3.5): Kennung bilden, Fertig-Erkennung (Stabil/Marker),
+/// Der store-freie Kern des Datei-Treibers (docs/04 §4.7): Kennung bilden, Fertig-Erkennung (Stabil/Marker),
 /// Wartezone und die begrenzte „schon gemeldet"-Menge. Kein Dateisystem, keine Uhr, kein Log — alles kommt als Argument, damit der
 /// Prüfstand ihn vollständig beweisen kann. Die Wahrheit, ob eine Datei schon einen Vorgang hat, bleibt der Log (Start-Abgleich im
 /// Treiber); die Menge hier spart nur wiederholtes Melden innerhalb eines Laufs.

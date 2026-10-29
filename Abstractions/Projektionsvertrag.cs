@@ -2,7 +2,7 @@ namespace Abstractions;
 
 /// <summary>
 /// Die Namen, über die Generatoren und Werkzeuge eine Projektion (<c>IProjektion</c>), einen Reader (<c>IReader</c>) und die Klasse eines Stores
-/// erkennen und binden (Plan Pub/Sub-Neustrukturierung §2.4, §3.3). Die EINE Quelle dieser Regeln — Generatoren (per Link eingebunden,
+/// erkennen und binden (docs/04 §4.3, docs/10 §10.3). Die EINE Quelle dieser Regeln — Generatoren (per Link eingebunden,
 /// netstandard2.0) und Extractor lesen sie von hier, statt sie je für sich zu kennen (wie <see cref="Funktionsvertrag"/>).
 /// </summary>
 #if VERTRAG_INTERN

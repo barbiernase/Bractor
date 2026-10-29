@@ -33,7 +33,7 @@ public class MartenEventStore : IEventStoreRepository
     /// Postgres über die Transaktionsnummern (<see cref="Horizont"/>); eine lange offene Transaktion hält die Marken an, statt überholt zu werden.
     /// </summary>
     private readonly Horizont _horizont;
-    /// <summary>Weckt nach dem Commit, wen der Weckplan nennt (Plan §2.3) — auch im Rückfall des Group-Commits auf Einzel-Appends.</summary>
+    /// <summary>Weckt nach dem Commit, wen der Weckplan nennt (docs/03 §3.5) — auch im Rückfall des Group-Commits auf Einzel-Appends.</summary>
     private readonly Infrastructure.Wecken.Wecker? _wecker;
     private long _letzteHorizontWarnung = long.MinValue;
 

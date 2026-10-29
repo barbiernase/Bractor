@@ -3,7 +3,7 @@ using Client.Infrastructure.Abstractions;
 namespace Client.Infrastructure.Versioning;
 
 /// <summary>
-/// Die Version je Aggregat, wie der Client sie kennt — EINE Version (Plan Pub/Sub-Neustrukturierung Phase 5): ohne Marken im Log ist die Version
+/// Die Version je Aggregat, wie der Client sie kennt — EINE Version: ohne Marken im Log ist die Version
 /// eines Streams die Zahl seiner Events. Sie ist die <c>ExpectedVersion</c> des nächsten Commands (OCC) und das Ziel, bis zu dem eine Antwort
 /// aufgeschlossen haben muss (Lesen nach Schreiben, <c>QueryBridge</c>).
 ///

@@ -1,6 +1,6 @@
 # REPO-PFAD: Client.Infrastructure.Python/cqrs_client/vertrag.py
 """
-Client-Verträge (docs/konzept-akteure.md §4, Plan Pub/Sub-Neustrukturierung §2.7) — die Basis, von der die GENERIERTEN Client-Basen erben.
+Client-Verträge (docs/konzept-akteure.md §4, docs/konzept-akteure.md §5) — die Basis, von der die GENERIERTEN Client-Basen erben.
 
 Der Vertrag steht in der Domäne (C#, eine Quelle):
 

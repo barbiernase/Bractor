@@ -7,7 +7,7 @@ using Infrastructure.Komposition;
 namespace Infrastructure.Funktionen;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// FESTHALTEN DER AUSGABE (Plan Pub/Sub-Neustrukturierung §4.2, R12, A1): eine Funktion hält ihre Ausgabe im Log fest, BEVOR sie wirkt — unter
+// FESTHALTEN DER AUSGABE (docs/11, docs/10 R12, A1): eine Funktion hält ihre Ausgabe im Log fest, BEVOR sie wirkt — unter
 // dem eindeutigen Schlüssel „Funktion F, Eingang X“: ein eigener Stream je (F, X), Id abgeleitet, angehängt mit Versionsprüfung. Wer zuerst
 // festhält, gewinnt; ein zweiter Lauf (zweite Aktivierung, zweiter Worker, Wiederholung nach Absturz) findet den Eintrag und sendet aus ihm.
 // Was im Eintrag steht: die Events der Ausgabe selbst (sie sind Fakten im Log), je Command ein BefehlFestgehalten (der Command als generiertes
@@ -44,13 +44,13 @@ public static class FunktionsIds
     public static Guid Festhalten(string funktion, Guid stream, int version) => Herkunft.Ableite($"festgehalten:{funktion}:{stream:N}:{version}");
 
     /// <summary>
-    /// Die Command-Id der Ausgabe an <paramref name="stelle"/> (Plan §4.2: Funktion, Eingang, Stelle, Typ, Ziel): ein erneutes Senden aus dem
+    /// Die Command-Id der Ausgabe an <paramref name="stelle"/> (docs/11: Funktion, Eingang, Stelle, Typ, Ziel): ein erneutes Senden aus dem
     /// Festgehaltenen trägt dieselbe Id, die Inbox des Ziels verwirft es.
     /// </summary>
     public static Guid Befehl(string funktion, Guid stream, int version, int stelle, ICommand befehl) =>
         Herkunft.Ableite($"funktionsbefehl:{funktion}:{stream:N}:{version}:{stelle}:{befehl.GetType().FullName}:{befehl.Ziel:N}");
 
-    // ── Hinweis-Netz (Plan §2.9, A7): die Kennung eines Hinweises vergibt der Absender, abgeleitet — dasselbe Nachrechnen ergibt dieselbe Kennung ──
+    // ── Hinweis-Netz (docs/04 §4.4, docs/10 A7): die Kennung eines Hinweises vergibt der Absender, abgeleitet — dasselbe Nachrechnen ergibt dieselbe Kennung ──
 
     /// <summary>Die Kennung des Hinweises an <paramref name="stelle"/> der Ausgabe einer Funktion zum Log-Eingang (Stream, Version).</summary>
     public static Guid Hinweis(string funktion, Guid stream, int version, int stelle) =>
@@ -63,7 +63,7 @@ public static class FunktionsIds
     public static Guid HinweisAusCommand(Guid commandId) => Herkunft.Ableite($"hinweis:command:{commandId:N}");
 
     /// <summary>
-    /// Die Command-Id der Ausgabe an <paramref name="stelle"/> zum Hinweis-Eingang mit der Kennung <paramref name="hinweis"/> (Plan §4.2: Funktion,
+    /// Die Command-Id der Ausgabe an <paramref name="stelle"/> zum Hinweis-Eingang mit der Kennung <paramref name="hinweis"/> (docs/11: Funktion,
     /// Hinweis-Kennung, Stelle, Typ, Ziel) — ein Wiederholen des Emitters trägt dieselbe Id, die Inbox des Ziels verwirft es.
     /// </summary>
     public static Guid BefehlAusHinweis(string funktion, Guid hinweis, int stelle, ICommand befehl) =>

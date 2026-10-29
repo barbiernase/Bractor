@@ -1,6 +1,6 @@
 # 06 — Transport, Multi-Node & Betrieb
 
-Stand 2026-10-28 (Plan Pub/Sub-Neustrukturierung Phase 6: Wecker statt Signale, ohne Redis), gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
+Stand 2026-10-29, gegen den Code geprüft.
 
 Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses Kapitel verweisen.
 
@@ -10,12 +10,12 @@ Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses K
 |---|---|
 | **Host.Grpc** | der einzige Cluster-tragende Prozess: Marten + ActorSystem (Einzelknoten oder Consul) + gRPC + Einblick-Port |
 | **Host.Blazor** | Beispiel-GUI der Beispieldomäne, ein gRPC-**Client** mit Vertrag (kein ActorSystem, kein Cluster); Verbindung aus `Clients:<Name>` der Umgebung (Kapitel [08](08-frontend-blazor-client.md)) |
-| **Werkbank** | Entwurfs-Oberfläche (`dotnet run --project Werkbank`); startet den Host als eigenen Prozess (`HostProzess`), **nur in einer Sim-Umgebung** — bei Prod endet ⟳ nach dem Lesen (`konzept-werkbank.md` §5) |
+| **Werkbank** | Entwurfs-Oberfläche (`dotnet run --project Werkbank`); startet den Host als eigenen Prozess (`HostProzess`), **nur in einer Sim-Umgebung** — bei Prod endet ⟳ nach dem Lesen (CLAUDE.md W6) |
 | **Python-Worker externer Funktionen** | generischer `funktions_worker.py` für Funktionen mit Laufort `Extern`; meldet sich wie jeder Client am gRPC-Port an (Token, dessen Akteur `IDarf<F>` hat) und holt Aufträge beim Vermittler. Gestartet über „▶ Worker“ der Werkbank (`Werkbank/Server/Worker.cs`, aus `Funktionen:<F>:Worker`) oder von Hand (Kapitel [09](09-python-sdk.md)) |
 
 ### Host.Grpc-Bootstrap (`Host.Grpc/Program.cs`)
 
-`Program.cs` ist nur `var umgebung = builder.AddCqrs(args); … await app.LaufeAsync(umgebung);` — ohne Domänen-Zeile (`konzept-werkbank.md` §4.2);
+`Program.cs` ist nur `var umgebung = builder.AddCqrs(args); … await app.LaufeAsync(umgebung);` — ohne Domänen-Zeile (docs/06 §6.5);
 `AddCqrs(args)` generiert die Komposition (`Domain.Laufzeit`, `GeneratedAnwendung`), die der Host referenziert.
 
 - **Umgebung:** `--umgebung <name>` bzw. `CQRS_UMGEBUNG` → `umgebungen/umgebung.<name>.json` (mit dem Host veröffentlicht). Umgebungsvariablen
@@ -29,14 +29,14 @@ Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses K
   (§6.6). Mit Rolle `Migrator` legt es nur das Schema an und endet (§6.3).
 - **Umgebungs-Siegel** (`<schema>.umgebung`): ein Host startet nur gegen eine DB mit passendem Namen, passender Art und passendem Cluster-Namen;
   eine Sim-DB legt der Host bei Bedarf an. **Uhr** (`<schema>.uhr`): Versatz nur in Sim wirksam.
-  Details `konzept-werkbank.md` §4.3–§4.4.
+  Details docs/06 §6.5.
 - **Cluster:** `Cluster:Art = Einzelknoten` (Mitgliedschaft in-memory über den `TestProvider` von Proto.Cluster, kein Consul — Standard in Sim)
   oder `Consul` (`ConsulProvider` als Discovery, kein statischer Seed). In beiden Fällen `PartitionIdentityLookup`. Die Kinds werden beim
   Start aggregiert: Aggregate und alle `IClusterKindContributor` (Batch-Leser, Funktions-Actors, Funktions-Vermittler, Uhr, Quellen-Halter); dazu
   spawnt jeder Knoten seinen Verteiler (lokaler Actor mit festem Namen `verteiler`, `VerteilerStart`). Cluster-Start mit hartem 30-s-Timeout (`ClusterStartupService`), danach die **Start-Sperre** (`Bereitschaft`): 32 Proben-Identitäten, die über
   die Mitglieder streuen, werden gefragt, bis jede antwortet (höchstens 90 s, dann mit Warnung weiter) — erst dann starten Takt und Eingänge. Nach
   dem harten Ende eines Knotens steht er noch in der Mitgliederliste, und der Cluster legt Aktivierungen auf ihn; ohne die Sperre arbeitete ein
-  neu gestarteter Host Minuten lang gegen Fristen (vorher leistete das unausgesprochen die Aktivierung der Broker beim Start).
+  neu gestarteter Host Minuten lang gegen Fristen.
 - **Boot-Fehler** gehen als Zeile `CQRS-BOOT {text, karte, art}` auf stderr; die Werkbank hängt sie an die Karte.
 
 ## 6.2 Der Wire-Transport (Multi-Node-Herzstück)
@@ -44,15 +44,17 @@ Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses K
 Ohne Serializer wären die internen Actor-Nachrichten rohe CLR-Records → de facto single-node.
 
 **Marker.** `IWireMessage` (`Abstractions/IWireMessage.cs`) markiert genau die **Top-Level-Transporthüllen** — nicht die Domänen-`ICommand`/
-`IEvent`/`IAuftrag`, die reisen *geschachtelt* als polymorphe Payloads. Implementierer je Plane (prüfen mit
+`IEvent`/`IQuery`/`IQueryResponse`, die reisen *geschachtelt* als polymorphe Payloads. Implementierer je Plane (prüfen mit
 `rg -n ": IWireMessage" -g '*.cs' Infrastructure Abstractions`):
 
 | Plane | Hüllen |
 |---|---|
-| Command/Pull | `CommandEnvelope`, `CommandResult`, `EventEnvelope`, `Wake`/`WakeAck` |
-| PubSub | `Subscribe`, `Unsubscribe`, `Publish`, `Ack`, `Activate`, `GetSubscriberCount`, `SubscriberCountResponse` |
-| Prozess | `ProzessWake` |
-| Funktionen | `AuftragAnbieten`, `HoleArbeit`, `ArbeitZugeteilt`, `ArbeitErledigt`, `ArbeitLebt`, `ListeOffene`, `OffeneAuftraege` (`Infrastructure/Funktionen/FunktionsVermittlung.cs`) |
+| Command | `CommandEnvelope`, `CommandResult`, `EventEnvelope` (`Abstractions/`) |
+| Direkte Abfrage | `AggregatFrage`, `AggregatAntwort` (`Infrastructure/Aggregate/ActorSystem/AggregatAbfrage.cs`) |
+| Wecken | `Wake`, `WakeAck` (`Infrastructure/Projections/AdapterMessages.cs`) |
+| Verteilen | `Verteile` (Pushes je Commit), `Verarbeitet` („P hat S weiterverarbeitet“) (`Infrastructure/Verteilen/Verteiler.cs`) |
+| Hinweis-Netz | `HinweisZustellen` (`Infrastructure/Funktionen/HinweisNetz.cs`) |
+| Funktionen draußen | `EingangAnbieten`, `HoleEingaenge`, `EingaengeZugeteilt`, `EingangBeantwortet`, `ArbeitLebt`, `ArbeitErledigt`, `TraegerAbgemeldet`, `ListeOffene`, `OffeneAuftraege` (`Infrastructure/Funktionen/FunktionsVermittlung.cs`) |
 | Quellen | `HalteQuelle`, `QuelleGehalten` (Lease für `Laufmodus: EinmalImCluster`, `Infrastructure/Quellen/QuellenHalter.cs`) |
 
 **Generator (reflexionsfrei)** — `WireSerializerGenerator` (Infrastructure.SourceGeneration) emittiert `GeneratedWire` (Top-Level-Whitelist:
@@ -79,7 +81,7 @@ Protobuf-`IMessage` bleiben beim Default-Serializer. Registriert an `.WithSerial
 serialisierbar; (b) jeder Command/Event/Trigger aus `GeneratedTypeRegistry` hat eine `JsonTypeInfo` im Kontext — sonst
 **Start-Abbruch**. Backstop gegen Registry↔Kontext-Drift neben dem Compile-Zeit-Guard des Generators.
 
-**Clients: Sitzung und Verteiler** (Plan Pub/Sub-Neustrukturierung §2.7). Je gRPC-Verbindung ist die Sitzung ein Actor (`SitzungsActor`), der
+**Clients: Sitzung und Verteiler** (docs/konzept-akteure.md §5). Je gRPC-Verbindung ist die Sitzung ein Actor (`SitzungsActor`), der
 einzige Schreiber auf den Antwort-Stream; die Lese-Schleife der Verbindung reicht jede Nachricht des Clients nur weiter, was wartet (Query,
 Antwort einer Funktion draußen, Weiterleitung an einen zuständigen Client) läuft neben der Mailbox. Ihre Id nennt den Knoten
 (`<Adresse>#<Nummer>`). Nach dem Handshake meldet sie ihre wirksame Liste (Vertrag ∩ Token) beim **Verteiler** ihres Knotens an — einem lokalen
@@ -98,7 +100,7 @@ Antworten nur an den Knoten der Sitzungs-Id. Liest ein Client nicht nach, verwir
 `docker-compose.yml` + `Dockerfile`. Alle Werte stehen in `umgebungen/umgebung.multinode.json` (`CQRS_UMGEBUNG=multinode`, `Cluster:Art =
 Consul`); je Node setzt Compose nur `Cluster__Rolle` und `Cluster__AdvertisedHost`. Topologie: ein Docker-Netz, Service-Namen als DNS.
 
-- **Infra**: `consul` (`agent -dev`), `postgres:16-alpine` — mit Healthchecks (kein Redis mehr, Plan Phase 6).
+- **Infra**: `consul` (`agent -dev`), `postgres:16-alpine` — mit Healthchecks (kein Redis).
 - **Nodes**: `grpc1/2/3` (identisches Image) und ein `migrate`-Init-Node.
 - **Cold-Start über einen dedizierten Migrator**: `migrate` (`Cluster__Rolle=Migrator`) legt **alle** Marten-Objekte (inkl. der sonst lazy
   erzeugten Snapshot-Tabellen) eager und advisory-lock-gesichert an (`CqrsSchemaMigrator`), dann `exit 0`, `restart: no`. Die Nodes
@@ -133,7 +135,7 @@ kommt aus der Beispieldomäne (Bildverarbeitung), nicht aus dem Framework.
 
 Für Nutzer gibt es **eine** Konfiguration je Umgebung: `umgebungen/umgebung.<name>.json`. Die Abschnitte und Felder sind Typen in
 `Abstractions/Umgebung/UmgebungKonfig.cs` — **sie sind das Schema** (eine Quelle; die Werkbank rendert daraus das Formular). Die vollständige
-Abschnitts-Tabelle steht in `konzept-werkbank.md` §4.1; hier nur der Überblick:
+Abschnitts-Tabelle steht in docs/06 §6.5; hier nur der Überblick:
 
 - **Backend:** `Umgebung` (Name, Art `Sim`/`Prod`), `EventStore`, `Cluster`
   (Art, Name, Consul, AdvertisedHost, Rolle), `Schreibpfad` (generiertes JSON, Group-Commit, Batch, Linger, Drain, Snapshot-Schwelle,
@@ -154,7 +156,7 @@ Host.Blazor 5010 (`Clients:<Name>:Urls`); Postgres 5432, Consul 8500. Ohne Angab
 
 ### Betriebs-Kommandos
 - Infra: `docker compose -f docker-compose.infrastructure.yml up -d` (bzw. in Sim: ⟳ der Werkbank startet fehlende Container,
-  `konzept-werkbank.md` §4.5)
+  docs/06 §6.5)
 - Host lokal: `dotnet run --project Host.Grpc -- --umgebung sim-main`
 - Single-Node nativ: `./start-server.sh {start|stop|status}` bzw. systemd (siehe „Veraltet“ in §6.4)
 - Build-Pakete: `./build.sh linux|windows`
@@ -171,13 +173,13 @@ Beide Endpunkte sind ohne Port-Bindung gemappt; per HTTP/1.1 erreichbar sind sie
 
 **Am Einblick-Port** (nur dort, `RequireHost`):
 - **Einblick-API** `/einblick/*` (`Infrastructure/Einblick/EinblickEndpunkte.cs`): `stand`, `spur?ab=`, `vorgaenge`, `vorgang/{k}`,
-  `auftraege`, `hinweise`, SSE `neu` — die Spur aus den Log-Headern (`konzept-werkbank.md` §7).
+  `auftraege`, `hinweise`, SSE `neu` — die Spur aus den Log-Headern (docs/04 §4.9).
 - **JSON-Eingang** `/eingang/*` (`Infrastructure/Eingang/JsonEingang.cs`): `command`, `query`, `rechte`, `auftraege`, `ergebnis` — Commands und
   Queries als Akteur (Header `akteur-token` → Akteur-Tor), Antworten für Laufort `Hand`. Nur mit `Transport:JsonEingang` (Sim an, Prod aus;
-  `konzept-werkbank.md` §6).
+  CLAUDE.md W6).
 - **Quell-Webhooks**: je Quelle mit `Quellen:<Typ>:Webhook` mappt `MapQuellWebhooks` generisch `POST <route>` (Nachricht als JSON über den
   Wire-Kontext, Antwort `202 {vorgang}`, gleiche Nachricht = derselbe Vorgang); ohne Einblick-Port ist das ein Boot-Fehler
-  (`konzept-werkbank.md` §3.6). Eine Route steht nicht im Programm.
+  (docs/04 §4.7). Eine Route steht nicht im Programm.
 
 Keine Prometheus-Exposition, kein OpenTelemetry (docs/13 P2-10).
 
@@ -202,4 +204,4 @@ Keine Prometheus-Exposition, kein OpenTelemetry (docs/13 P2-10).
 
 Offene Punkte stehen nur in `docs/13`: Multi-Node nur container-erprobt, Consul im `-dev`-Modus (P1-1); kein TLS, keine Identitäten für Prod,
 Webhook ohne Akteur-Tor (P1-2); Monitoring schmal und Default-Credentials (P2-10); Reflection im Codegen (W10-1). Der Migrator ist ein
-Init-Job, kein laufender Migrationsdienst; Schema-Evolution ist kein Ziel der Werkbank (`konzept-werkbank.md` §1).
+Init-Job, kein laufender Migrationsdienst; Schema-Evolution ist kein Ziel der Werkbank (CLAUDE.md W1–W12).

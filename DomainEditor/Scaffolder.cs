@@ -114,7 +114,7 @@ public static class Scaffolder
             dateien.Add(Platziert(agg.ApplierDatei, v, $"{agg.Name}.{rahmen.ApplierKlasse}.cs", ApplierDatei(agg, applier, modell), DateiArt.Applier));
         }
 
-        // ── Domänen-Dienste (konzept-werkbank §12.3 E11) → je Dienst seine Schnittstelle; je NEUE Implementierung (ohne Datei) ihre Klasse mit throw-Stubs ──
+        // ── Domänen-Dienste (docs/06 §6.5) → je Dienst seine Schnittstelle; je NEUE Implementierung (ohne Datei) ihre Klasse mit throw-Stubs ──
         foreach (var d in modell.Dienste)
         {
             dateien.Add(Platziert(d.Datei, Verzeichnis(modell, d.Namespace), $"{d.Name}.cs", DienstDatei(d, modell), DateiArt.Typen));
@@ -240,7 +240,7 @@ public static class Scaffolder
 
     /// <summary>
     /// Die Basisliste eines Client-Vertrags: <c>IClientVertrag, ITraegt&lt;F&gt;…, ISendet&lt;C&gt;…, IFragt&lt;Q&gt;…, IHoert&lt;E&gt;…</c> — der ganze Rand
-    /// steht in ihr (Plan Pub/Sub-Neustrukturierung §2.7).
+    /// steht in ihr (docs/konzept-akteure.md §5).
     /// </summary>
     public static IReadOnlyList<string> ClientBasen(Client c) =>
         [IClientVertrag, .. c.Traegt.Select(f => $"{ITraegt}<{f}>"), .. c.Sendet.Select(s => $"{ISendet}<{s}>"), .. c.Fragt.Select(q => $"{IFragt}<{q}>"),
@@ -303,7 +303,7 @@ public static class Scaffolder
                 if (i < enums.Count - 1) b.AppendLine();
             }
         });
-        // Commands: das Ziel steht im Typ (ICommand<TAggregat>, Plan §2.5) — das Aggregat aus dem Code bzw. dem Decide, das ihn entscheidet. Ohne
+        // Commands: das Ziel steht im Typ (ICommand<TAggregat>, docs/10 §10.4) — das Aggregat aus dem Code bzw. dem Decide, das ihn entscheidet. Ohne
         //   Aggregat bleibt er unfertig (ICommand ohne Ziel baut nicht, W1); das Ziel-Feld des Editors (Guid) wird die Id des Aggregats.
         var commands = records.Where(r => r.Kind == RecordArt.Command).Select(r => MitZiel(r, modell)).ToList();
         if (commands.Count > 0) abschnitte.Add(() =>
@@ -354,7 +354,7 @@ public static class Scaffolder
         return b.ToString();
     }
 
-    // ── Domänen-Dienst (konzept-werkbank §12.3 E11): Schnittstelle + Implementierungs-Stub ─────────────────────────
+    // ── Domänen-Dienst (docs/06 §6.5): Schnittstelle + Implementierungs-Stub ─────────────────────────
     private static readonly string IDienst = nameof(Abstractions.IDienst);
 
     private static IEnumerable<string> DienstTypen(Dienst d) =>

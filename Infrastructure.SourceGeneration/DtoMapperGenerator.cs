@@ -49,7 +49,7 @@ namespace Infrastructure.SourceGeneration
                 var analyzer = DomainGraphAnalyzer.Create(context.Compilation, useGlobalNamespace: true);
                 var graphs = analyzer.AnalyzeMessagePayloads();
 
-                // Events des Rahmens (IRahmenEvent: Frist gesetzt, Inbox-Marken) aus dem Proto-Mapping ausschließen: sie gehen nie über die
+                // Events des Rahmens (IRahmenEvent: FristGesetzt) aus dem Proto-Mapping ausschließen: sie gehen nie über die
                 // Leitung. Für Marten/Replay bleiben sie in der Typ-Registry.
                 var rahmenGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IRahmenEvent");
                 var rahmenNames = new HashSet<string>(rahmenGraphs.Select(g => g.FullName));

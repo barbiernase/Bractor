@@ -149,7 +149,7 @@ public sealed class GraphBuilder
         var readerByQuery = _dom.Readers
             .SelectMany(r => r.QueryNames.Select(q => (q, r)))
             .GroupBy(x => x.q).ToDictionary(g => g.Key, g => g.First().r, StringComparer.Ordinal);
-        // Aggregate liefern Query→Aggregat (Frage im Decider, Plan §2.6).
+        // Aggregate liefern Query→Aggregat (Frage im Decider, docs/03 §3.2).
         var aggregatByQuery = _dom.Aggregates
             .SelectMany(a => a.Fragen.Select(f => (q: f.QueryFull, a.Name)))
             .GroupBy(x => x.q).ToDictionary(g => g.Key, g => g.First().Name, StringComparer.Ordinal);
@@ -189,7 +189,7 @@ public sealed class GraphBuilder
             foreach (var d in a.Darf)
                 if (NachrichtId(d) is { } ziel) kanten.Add((aid, ziel, EdgeKind.darf, null));
         }
-        // Clients (docs/konzept-akteure.md §4, Plan §2.7): client:X —traegt→ Funktion, —sendet→ Command, —fragt→ Query, Event —hoert→ client,
+        // Clients (docs/konzept-akteure.md §4, docs/konzept-akteure.md §5): client:X —traegt→ Funktion, —sendet→ Command, —fragt→ Query, Event —hoert→ client,
         //   client —verkoerpert→ akteur (abgeleitet wie AkteurRechteGenerator).
         foreach (var c in _dom.Clients)
         {

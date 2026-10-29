@@ -1,19 +1,18 @@
 # 13 — Reifegrad, Schulden & Bewertung
 
 **Die eine Quelle für „offen“.** Andere Dokumente (`CLAUDE.md`, Kapitel 01–12, Konzepte) nennen Schulden höchstens kurz und verweisen
-hierher. Stand: 2026-10-28, nach Phase 4b des Plans Pub/Sub-Neustrukturierung (Funktionen als Actors mit Zustand, Ressourcen je Aktivierung und
-Hinweis-Netz; davor Phase 4: Dirigent, Reaktion, Fluss-DSL, Katalog-Form und Handle-/Trigger-Welt zurückgebaut). Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
-(`docs/konzept-werkbank.md` §2). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
+hierher. Stand: 2026-10-29, nach dem Umbau Pub/Sub-Neustrukturierung (Umbau-Phasen 0–10; die Grammatik steht in
+[10](10-entwickler-api.md), die Garantien in [11](11-garantien.md)). Maßstab sind die sechs Invarianten und die Werkbank-Leitsätze W1–W12
+(`CLAUDE.md`). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
 
 ## 13.0 Offen auf einen Blick
 
-**Umbau (2026-10-26):** [plan-pubsub-neustrukturierung.md](plan-pubsub-neustrukturierung.md) löst Broker, Signale, Prozess-Manager, Fluss- und
-Prozess-Sprache, Handle-/Trigger-Welt und den Redis-Versionsindex ab. Mit Phase 4 sind W11-1, W11-2, PF-4b, PF-25, PF-26, P2-5, P3-3, FB-2, FB-3
-und VM-1 erledigt (§13.6), mit Phase 4b FB-1 (Hinweise erreichen Funktionen über das Hinweis-Netz), mit Phase 5 die Marken im Log (keine
-eigene ID; Noop und Ablehnung nur noch in der Inbox, eine Version je Aggregat, §13.6), mit Phase 6 die Signale und der Redis-Versionsindex
-samt PF-6 (Wecker am Commit, Stand je Id aus dem Fortschritt der Projektion, §13.6); PF-7, PF-10, PF-13 und AK-1 werden mit den späteren Phasen
-abgeschlossen oder umgeschrieben. Mit Phase 7 sind der Broker, G-12, G-13, G-14 und FB-10 erledigt (Sitzung als Actor, Verteiler je Knoten, „mindestens S auf v“, §13.6). Phase 9
-(direkte Abfrage eines Aggregats) lässt FB-19 offen. Mit Phase 10 ist die Hausregel für Actors eine Build-Prüfung (CQRS112/113). Die Befunde der Actor-Praxis vom 2026-10-18 stehen im Plan §1.7.
+**Umbau Pub/Sub-Neustrukturierung (2026-10-26 bis 2026-10-29, Umbau-Phasen 0–10):** Broker, Signale, Prozess-Manager, Fluss- und
+Prozess-Sprache, Handle-/Trigger-Welt, Marken im Log und der Redis-Versionsindex sind abgelöst durch Wecker am Commit, Funktionen als Actors,
+Hinweis-Netz, Uhr, Sitzung und Verteiler, Store-Klassen und die direkte Aggregat-Abfrage (Grammatik [10](10-entwickler-api.md)). Was er
+erledigt hat, steht in §13.6 (u. a. W11-1, W11-2, PF-4b, PF-6, PF-25, PF-26, P2-5, P3-3, FB-1, FB-2, FB-3, FB-10, VM-1, G-12, G-13, G-14); offen
+blieben, was die Tabelle unten nennt, darunter PF-7, PF-10, PF-13 und AK-1 (Entscheidungen offen) sowie FB-19 aus der direkten Abfrage. Die Hausregel
+für Actors ist eine Build-Prüfung (CQRS112/113, docs/06 §6.7).
 
 | ID | Kurz | Prio |
 |---|---|:--:|
@@ -35,16 +34,21 @@ abgeschlossen oder umgeschrieben. Mit Phase 7 sind der Broker, G-12, G-13, G-14 
 | FB-9 | Wechselt die Zustands-Ablage einer Funktion (Datei ↔ Dokument) oder geht das Verzeichnis verloren, lädt die Aktivierung den gesicherten Zustand nicht mehr (lauter Fehler, kein stiller Neubeginn); eine Migration oder ein bewusster Neubeginn fehlt | P3 |
 | FB-5 | Kreise Funktion ↔ Aggregat: keine Build-Prüfung (R6 des Plans). Ein Kreis ist der Normalfall eines Ablaufs (Vorgang → Funktion → Vorgang); ob und wie ein Kreis ohne fortschreitenden Zustand erkannt werden soll, ist offen | P3 |
 | FB-6 | Quell-Nachricht vom Client nur über den JSON-Eingang: das Trigger-Protokoll der Leitung ist entfernt, einen gRPC-Weg (und SDK-Aufrufe) gibt es auch nach Phase 7 nicht — Phase 7 hat Sitzung, Verteiler, Lesen und Ausgangskorb gebaut, nicht `ISendet<Quell-Nachricht>` | P2 |
-| FB-14 | Das Python-SDK kennt nur die Leitung von Phase 7 (neue Nachrichten werden erkannt, `aktualisiert` nur geloggt), aber weder Lesen ab Position noch Ausgangskorb noch neu Fragen — die stehen nur im C#-Client (`GrpcProxy.LiesLogAsync`, `IAusgangskorb`) | P3 |
+| FB-14 | Das Python-SDK kennt nur die Leitung von Phase 7 (neue Nachrichten werden erkannt, `aktualisiert` nur geloggt), aber weder Lesen ab Position noch Ausgangskorb noch neu Fragen — die stehen nur im C#-Client (`GrpcProxy.LiesLogAsync`, `IAusgangskorb`); Command-Ids aus Python-Handlern sind gewürfelt (`uuid4`), ein Vertrags-Client hat keinen Aufruf, um einen `ISendet`-Command von sich aus zu senden (`SPONTAN` geht nur in den Handshake), und ein Hinweis aus Python trägt keine Kennung (der Server würfelt sie) | P3 |
 | FB-15 | Überlast an einer Sitzung: über 1000 offenen Zustellungen verwirft der Verteiler (`Rueckstau`) und schreibt nur eine Warnung ins Log, keinen Spur-Hinweis; die Nachrichten des Clients selbst (Commands, Queries) laufen ohne Grenze in die Mailbox der Sitzung | P3 |
 | FB-16 | Neuaufbau ohne Schutz vor altem Code: eine Generation trennt nur, was eine alte Aktivierung NACH dem Zurücksetzen noch mit ihrem alten Fortschritt schreibt; ein Knoten mit altem Projektions-Code, der danach den neuen Fortschritt lädt, schreibt mit altem Code in die neue Generation (die Generation trägt keinen Code-Stand). Dazu schaltet nur der `ProjectionRebuilder` erst nach dem Aufbau um; der Sim-Start (`ProjektionsStandDienst`) schaltet sofort um (leere Sicht während des Aufbaus), einen Neuaufbau in Prod löst nichts aus | P3 |
 | FB-17 | Marten kann `Id<T>` nicht als Dokument-Identität (sein Codegen bricht an generischen Ids, Probe 2026-10-28): ein Read-Model mit typisierter Id bekommt eine generierte Speicher-Identität `Schluessel` (die UUID steht damit zweimal im JSON) und muss `partial` sein (CQRS111); LINQ über `Id<T>`-Felder geht über `RegisterValueType` je verwendetem `Id<X>` | P3 |
 | FB-18 | Datei-Stores liegen ohne Eintrag `Stores:<Store>:Verzeichnis` unter dem Temp-Verzeichnis je Datenbank und Schema des Logs (`StoreOrte`); wird die Datenbank gelöscht, bleiben die Dateien — in Sim baut der Start dann neu auf (neue Generation), in Prod nicht. Der Rückstand (`KonsumRueckstand`) liest den Fortschritt aus Marten: richtig für den Marten-Store und den Fortschritt beim Framework, nicht für einen künftigen Store der Klasse 1 außerhalb von Marten | P3 |
 | FB-19 | Die Antwort eines Aggregats auf eine direkte Query (Phase 9) wird nicht beobachtet: die Sitzung beobachtet nur Antworten mit Projektionen dahinter, ein späterer Commit des Aggregats bringt dem Client kein `Aktualisiert` — wer den Stand live braucht, hört die Events des Aggregats (`IHoert`) oder fragt neu. Ein Weg über die Verteiler hinge am heißen Pfad (je Commit eine Meldung, auch für Typen, die kein Client hört) | P3 |
 | FB-20 | Python-DTOs ohne Drift-Prüfung: der Codegen-Prepass schreibt beim Build die Nutzlast-Tabelle des Python-Workers (`nutzlast_tabelle.py`, `vertraege.py`), die betterproto-DTOs (`generated/__init__.py`) aber nur `build_python.sh` (in der Werkbank Schritt 2 von ⟳). Eine neue Domänen-Nachricht lässt den Worker beim Import scheitern, bis jemand das Skript startet; weder `codegen.sh --check` noch das Gate prüfen es (Phase 9: `AblaufE2ETests.Bildeingang_mit_Python_Worker…` rot, „Worker hat sich nicht angemeldet“) | P2 |
-| PF-37 | „P hat S weiterverarbeitet“ geht nach JEDEM Commit einer Projektion, der Events anwandte, als Nachricht an den Verteiler jedes Knotens — auch wenn keine Sitzung beobachtet; nicht gemessen (Plan §8: Zusammenfassungs-Takt und Grenze der Abhängigkeitsmengen „in Phase 7 messen“) | P3 |
+| FB-21 | Python-Generate und Worker passen nicht ganz zu den Funktionen draußen: `funktions_tabelle.py` nennt Module (`funktionen.bildpaar_beurteilung`, `funktionen.training`) auch für Funktionen, die ein Client-Vertrag trägt und die es als Modul nicht gibt; `funktions_worker.py` sagt bei fehlender Implementierung „die Werkbank legt sie mit ⟳ an“, `PythonSync` legt aber nur Client-Implementierungen an; eine getragene Funktion (`GetrageneFunktion`) hat nur die leeren `beim_start`/`beim_ende` | P3 |
+| FB-22 | C#-Client: Quittung und Wiederverbinden lückenhaft. Ein Erfolg ist für den Client nur sichtbar, wenn er die entstandenen Events hört — ein Noop, ungehörte Events und eine idempotent beantwortete Wiederholung bleiben still, er sendet noch zweimal und meldet `CommandUnbestaetigt`; „mindestens S auf v“ nimmt dann die alte Version. `GrpcProxy` verbindet nicht von selbst neu (`Reconnecting` wird nie gesetzt), niemand ruft `ConnectAsync` erneut, in `Host.Blazor` liegt der Ausgangskorb nur im Speicher je Circuit — er wird praktisch nie nachgesendet; ein Command, der ohne Verbindung kommt, landet nicht im Korb; ein `ErrorResponse` zu einem Command (`COMMAND_MAPPING_FAILED`) wird nur geloggt (docs/08 §8.4) | P2 |
+| FB-23 | Ein Client kann noch Queries beantworten (`handle_queries`/`QueryForward` im Python-SDK, `QueryHandlerRegistry`, `AkteurTor.Wende`) — das steht weder im Client-Vertrag noch in der Grammatik (R4: eine Query hat genau ein Ziel, Reader oder Aggregat; docs/10 §10.5) und ist nur möglich, weil CQRS086 eine Warnung ist. *Entscheidung (Tobi):* Weg zurückbauen oder als Wort in den Vertrag | P2 |
+| FB-24 | Der Akteur einer Funktion draußen ist uneinheitlich: Extractor und `AkteurHerkunft` sagen, ihre Ausgaben kommen vom Akteur mit `IDarf<F>`; zur Laufzeit erbt `FunktionsArbeit` den Akteur des Eingangs (Kette). Mehrdeutige `IDarf`-Halter einer Quell-Nachricht heißen still „kein Akteur“, ohne Build- oder Start-Prüfung; der JSON-Eingang fällt ohne Akteur auf `system` zurück, gRPC lässt ihn leer (docs/konzept-akteure.md §2.3, §5.1) | P3 |
+| FB-25 | CQRS020/021 (ein Emit-Weg, Command-Send mit Frist) laufen nur in den Kompositionen und der Leitung (`CommandEmitAnalyzer` in `Infrastructure.SourceGeneration`), nicht in `Infrastructure` selbst — gerade dort liegen die beiden erlaubten Sender; ein roher Send im Framework fiele nur in Actors und dem, was sie besitzen, auf (CQRS112). Nachweis heute nur über `CommandEmitAnalyzerTests` | P3 |
+| PF-37 | „P hat S weiterverarbeitet“ geht nach JEDEM Commit einer Projektion, der Events anwandte, als Nachricht an den Verteiler jedes Knotens — auch wenn keine Sitzung beobachtet; nicht gemessen (Zusammenfassungs-Takt 200 ms und Grenze der Abhängigkeitsmengen 1000 Ids sind gesetzt, nicht vermessen) | P3 |
 | FB-7 | Eine Funktion draußen ohne verbundenen Träger staut ihre Eingänge still im Log (Rückstand in `/health`, aber keine eigene Meldung „kein Träger“); ein Träger, der Eingänge annimmt und nicht beantwortet, hält bei einem Slot je Partition die übrigen Streams der Partition bis zum Ablauf der Lease (30 s) auf | P3 |
-| FB-4 | Werkzeuge: Extractor und Karten zeigen `Frist<TCmd>` als Ausgang eines Decide nicht als Kante zur Uhr; das Werkbank-Schema kennt nur die Datei-Konfig (Takt fehlt); der Zustandstyp einer Funktion (`IZustand<T>`) ist eine Code-Karte im geteilten Block statt an seiner Funktion, das Hinweis-Netz hat keine eigene Kante; Editor-Oberfläche zurückgestellt (Plan E4); die Oberfläche nennt noch den entfallenen Umgebungs-Abschnitt `VersionIndex` und einen Schalter „TrackDeps (Redis-Deps)“ | P3 |
+| FB-4 | Werkzeuge: Extractor und Karten zeigen `Frist<TCmd>` als Ausgang eines Decide nicht als Kante zur Uhr; das Werkbank-Schema kennt nur die Datei-Konfig (Takt fehlt); der Zustandstyp einer Funktion (`IZustand<T>`) ist eine Code-Karte im geteilten Block statt an seiner Funktion, das Hinweis-Netz hat keine eigene Kante; Editor-Oberfläche zurückgestellt (docs/10 E4); die Oberfläche nennt noch den entfallenen Umgebungs-Abschnitt `VersionIndex` und einen Schalter „TrackDeps (Redis-Deps)“ | P3 |
 | PF-31 | Entscheidung offen: ein Wechsel der Snapshot-Schema-Version faltet heiße Aggregate einmal voll; eine neue Funktion liest die Geschichte ab 0 | P3 |
 | PF-32 | Wachstum ohne Laufzeit-Risiko: Guards je Stream und Festhalte-Streams je (Funktion, Eingang) nie gelöscht, DLQ ohne Aufräumen und Index, Einblick-Scans, Kopfzeilen 140 Byte je Event | P3 |
 | PF-17 | Rest: die Zeitstempel-Regel kostet in Sim ≈ 20–35 µs je eingefügtem Event (Versatz je Zeile aus `uhr`); in Prod nur die Datenbankzeit | P3 |
@@ -119,18 +123,18 @@ Die Reihe **PF** sind Kosten der Garantien ([11](11-garantien.md) §11.12): die 
 
 **PF-10 · Datei-Treiber meldet seriell.** Der Datei-Treiber meldet die nächste Datei erst, wenn die vorige im Log steht (Rückstau, docs/11 §11.8).
 In S1 ist genau das die Decke: je Sekunde werden halb so viele Paare komplett, wie Dateien gemeldet werden (Phase-2- und Phase-3-Code gleich);
-die Leseseite hält in Echtzeit mit. Das Ziel „S1 ≥ 3 × Baseline“ (Plan E5) ist deshalb mit dem Konsum nicht zu erreichen. *Optionen (Tobi):* in
+die Leseseite hält in Echtzeit mit. Das frühere Ziel „S1 ≥ 3 × Baseline“ ist deshalb mit dem Konsum nicht zu erreichen. *Optionen (Tobi):* in
 Bündeln melden (mehrere `StartStream` in einer Transaktion, Rückstau je Bündel; „genau einmal je Kennung“ bleibt) oder das S1-Ziel neu fassen.
 
 
 **W10-1 · Reflection in Werkzeugen.** `Cqrs.Codegen` liest die gebauten Domänen-DLLs per `MetadataLoadContext` und erzeugt daraus `domain.proto`,
 die STJ-Kontexte und die Python-Generate (`vertraege.py`, `funktionen.py`, `funktions_tabelle.py`, `nutzlast_tabelle.py`). Daneben existiert mit `Proto.SourceGeneration` ein
-zweiter, Roslyn-basierter Leseweg, der schon abweicht (Filter `IProzessIntern`). Der Python-Vertrags-Emitter liest Verträge anders als
+zweiter, Roslyn-basierter Leseweg. Der Python-Vertrags-Emitter liest Verträge anders als
 `Infrastructure.SourceGeneration/Clientvertragslesart.cs` (Ausgaben nicht auf `ICommand` gefiltert, Kenntnis nicht auf Events), der
 Handshake-Hash kann also abweichen. `Werkbank/Server/Schema.cs` liest die Konfig-Typen per `GetProperties`/`Activator` aus der eigenen DLL
 (das Formular veraltet nach einer Änderung der Konfig-Typen bis zum Neustart).
 *Empfehlung:* ein Codegen-Kern über `IAssemblySymbol`, der nur bestehende Roslyn-Leser nutzt (`DomainGraphAnalyzer`/`FileGenerator` wie der
-DtoMapper, `Clientvertragslesart`, Lesart des `FunktionsGenerator`); Wirte: warmer Workspace bei ⟳ und ein MSBuild-Schritt mit
+DtoMapper, `Clientvertragslesart`, `Funktionsform`); Wirte: warmer Workspace bei ⟳ und ein MSBuild-Schritt mit
 `CSharpCompilation` über MetadataReferences. Schema aus den Symbolen des warmen Workspace. `Proto.SourceGeneration` darin aufgehen lassen.
 
 **W10-2 · Reflektive Serialisierung zur Laufzeit.** Marten serialisiert Events und Dokumente per Default reflektiv (`Schreibpfad.GeneriertesJson`
@@ -147,8 +151,8 @@ DtoMapper, `Clientvertragslesart`, Lesart des `FunktionsGenerator`); Wirte: warm
   ein schlankes Leitungs-Framework.
 - Framework-Code im Domänen-Projekt: der generische `funktions_worker.py` in `Domain.Client.Worker.Python.ML`.
 - Generate der Komposition tragen noch Framework-Namespaces (`Infrastructure.Mapping.GeneratedTypeRegistry` u. a. in `Domain.Laufzeit`).
-- Identitäten aus einfachen Typnamen (`BrokerIdentity`, `GeneratedAkteurRechte`). (Das vom Client gesetzte Cluster-Kind ist seit Phase 1 des
-  Plans Pub/Sub-Neustrukturierung erledigt: Ziel und Aggregat folgen `ICommand<TAggregat>`, eine abweichende Hülle wird an der Leitung abgelehnt.)
+- Identitäten aus einfachen Typnamen (`BrokerIdentity`, `GeneratedAkteurRechte`). (Das vom Client gesetzte Cluster-Kind ist seit Umbau-Phase 1
+   erledigt: Ziel und Aggregat folgen `ICommand<TAggregat>`, eine abweichende Hülle wird an der Leitung abgelehnt.)
 *Empfehlung:* Leitungs-Framework für Client und Server, Generat-Namespaces = Komposition; unabhängig davon
 `AggregateType` serverseitig aus der Routing-Tabelle, Identitäten aus vollen Typnamen.
 *Plan (2026-10-14, noch nicht umgesetzt):*
@@ -172,10 +176,10 @@ DtoMapper, `Clientvertragslesart`, Lesart des `FunktionsGenerator`); Wirte: warm
    Akteure beim Namen — dort bleibt der einfache Name als Anzeigename, geprüft auf Eindeutigkeit).
 
 **LLM-1 · 🤖-Rümpfe fachlich ungeprüft.** 🤖 füllen prüft einen Kandidaten nur probeweise im warmen Workspace (Compiler + Analyzer, bis drei
-Runden, `konzept-llm-minimalkontext.md` §2) — ob der Rumpf tut, was der Auftrag sagt, prüft nichts. Die Test-DSL `Cqrs.Testing` (`Szenario`,
+Runden, LLM-Minimalkontext §2, im Git-Verlauf bei `861ea7f`) — ob der Rumpf tut, was der Auftrag sagt, prüft nichts. Die Test-DSL `Cqrs.Testing` (`Szenario`,
 `SagaSzenario`, `FlussLaufwerk`) gibt es, sie wird aber nur von Hand im Prüfstand benutzt. Dabei sind die meisten Slots reine Funktionen
 (`--slots`: Decide/Apply 100 % isoliert, Projektion 90 %) und die Store-Fähigkeiten kommen als Parameter — sie sind isoliert testbar, ohne einen
-Event-Store zu faken. *Plan:* `konzept-llm-minimalkontext.md` §11 („Fachlich prüfen“): Beispiele je Slot als Testcode in einer neuen Rolle
+Event-Store zu faken. *Plan:* LLM-Minimalkontext §11, im Git-Verlauf bei `861ea7f` („Fachlich prüfen“): Beispiele je Slot als Testcode in einer neuen Rolle
 `<Wurzel>.Beispiele`, Beispiele unabhängig vom Rumpf (Mensch, getrennter LLM-Aufruf ohne Rumpf, aus der Spur eines Sim-Laufs), 🤖-Schleife um
 „Beispiele grün“ erweitert (eigener Prozess, keine Reflection in der Werkbank), Lücken in `Cqrs.Testing` (P3-3, Helfer für Projektion/Reaktion/
 Reader aus den Signaturen generiert, pytest-Vorlage je Python-Basis), Kartenwand. Store-Implementierungen bleiben beim Marten-Test.
@@ -202,7 +206,7 @@ vorher bis 2 326. Mit 16 Slots S5-8 1,18 × der Basis, S5-64 0,56 ×. *Entscheid
 halten nichts fest, Slots kosten nur gleichzeitige Emits) oder Slots je Umgebung setzen; danach den Rest bei 64 Sendern untersuchen (Kandidat: je
 Stream nacheinander auf den 50 heißen Posten-Streams, auf denen `Nachschub` und `Auftragsabwicklung` hören).
 
-**FB-4 … FB-7 · Funktionen und Uhr, bewusst offen nach Plan Phase 4** (2026-10-26). Was erst spätere Phasen tragen, ist mit Absicht nicht
+**FB-4 … FB-7 · Funktionen und Uhr, bewusst offen nach Umbau-Phase 4** (2026-10-26). Was erst spätere Phasen tragen, ist mit Absicht nicht
 vorgezogen, weil jede Vorab-Lösung ein zweiter Weg wäre, der wieder verschwände. (FB-1, Hinweise als Eingang, ist mit Phase 4b erledigt, §13.6.) **FB-4:** reine Darstellungs-Lücken
 der Werkzeuge; die Garantien hängen nicht daran. **FB-5:** R6 des Plans wollte Kreise im Signatur-Graph als Warnung; aber jeder Ablauf mit
 Vorgangs-Aggregat ist ein Kreis (Auftrag → `Auftragsabwicklung` → Posten → `Auftragsabwicklung` → Auftrag), und der Build soll nicht vor
@@ -213,12 +217,12 @@ ab; der Rückstand steht in `/health`, eine eigene Meldung fehlt. Nimmt ein Trä
 bis zum Ablauf der Lease; gesehen im Verhaltens-Netz, dort trägt die Umgebung deshalb acht Slots. In der Messung hält dieselbe Lage die
 Position der Funktion `IBildpaarBeurteilung` fest (kein Klassifizierer gestartet): L1 wird nie still.
 
-**G-15, FB-8, FB-9, PF-34, PF-35 · Funktionen als Actors** (Plan Phase 4b, 2026-10-28). **G-15:** `Bote.Melde` stellt jede Meldung als eigene
+**G-15, FB-8, FB-9, PF-34, PF-35 · Funktionen als Actors** (Umbau-Phase 4b, 2026-10-28). **G-15:** `Bote.Melde` stellt jede Meldung als eigene
 Anfrage zu; zwei Hinweise desselben Absenders an dieselbe Adresse können sich überholen — der Plan versprach die Reihenfolge zwischen zwei Actors.
 Fachlich hängt nichts daran (Hinweise sind höchstens einmal, was zählt, geht als Command ins Aggregat), aber die Zusage stimmt nicht; ein Weg wäre
 ein Absender-Actor je Ziel oder `Send` an eine zwischengespeicherte PID. Einen Test, der die Überholung sicher herbeiführt, gibt es nicht. **FB-8:**
 die Beispieldomäne hat keinen Hinweis, den eine Funktion draußen fachlich hören müsste; die Prüfdomäne hat keine Leitung. Kandidat ist das Beispiel
-aus Plan §2.9 (Vorverarbeitung → Merkmale → Klassifikator mit Zustand) — es änderte den Bildeingang und S1, daher nicht ungefragt. **FB-9:** der
+aus docs/04 §4.4 (Vorverarbeitung → Merkmale → Klassifikator mit Zustand) — es änderte den Bildeingang und S1, daher nicht ungefragt. **FB-9:** der
 Verweis im Zustands-Dokument zeigt in die Ablage, mit der gesichert wurde; die Prüfdomäne zeigt es (der Absturz-Test sichert deshalb in einem eigenen
 Schema und setzt dessen Zustand zu Beginn zurück). **PF-34:** Folge der Garantie „ein Schreiber, gesichert im Ruhepunkt mit der Position“ (Risiko 9
 des Plans). **PF-35:** Folge von A8 — eine Bindung nur für Funktionen mit Zustand bräuchte einen Code-Fakt „Zustand draußen“ an der Schnittstelle.
@@ -313,7 +317,7 @@ Allgemeingültigkeit oder Hygiene.
 
 ## 13.5 Empfohlene Reihenfolge
 
-Ziel ist die vollständige Werkbank nach `docs/konzept-werkbank.md` (W1–W12). Zuerst das Sicherheitsnetz, dann je Absicht ein Weg, dann die
+Ziel ist die vollständige Werkbank nach CLAUDE.md W1–W12 (W1–W12). Zuerst das Sicherheitsnetz, dann je Absicht ein Weg, dann die
 Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zuletzt Treiber, Rückbau und Produktion.
 
 **Vorab zu entscheiden** (blockiert die genannten Schritte nicht, ändert aber ihren Umfang):
@@ -323,17 +327,13 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 - **Daten-Prüfung von ⟳** gegen das Proto (heute) oder gegen die gespeicherte JSON-Form der Events (Marten/STJ, die eigentliche Wahrheit);
 - **Tor am Webhook** einer Quelle (Token → Akteur) und Identitäten für Prod (P1-2).
 
-0. **G und PF** (Garantie-Lücken und ihre Kosten) laufen als eigener Strang nach [plan-garantien-und-durchsatz.md](plan-garantien-und-durchsatz.md):
-   Phase 0 Abgleich und E2E-Messung, 1 Emit-Ausgang und Emittenten-Cursor (G-1, G-2 Emittent, G-7, P1-6, PF-9), 2 Actor-Lebenszyklus (G-3, PF-5), 3 Batch-Konsum (PF-1, PF-2,
-   G-4), 4 Inbox als Tabelle (G-2, PF-3), 5 Prozess-Poll (PF-4), 6 Rest. Ein Agent setzt ihn allein um; die Schritte 1–10 unten ruhen so lange.
-   Gemessen wird nach jeder Phase Ende-zu-Ende an den realen Domänen (Plan §0.1). Stand: Phase 0, 1 (Emit-Ausgang, Emittenten-Cursor,
-   G-1, G-7, P1-6, PF-9), 2 (Actor-Lebenszyklus, G-3, PF-5), 3 (Batch-Konsum, PF-1, PF-2, G-4), 5 (Prozess-Poll, PF-4, G-8) und 4 (Inbox als Tabelle, G-2, PF-3)
-   umgesetzt; Stand und Messung im Plan §8.
+0. ~~**G und PF** (Garantie-Lücken und ihre Kosten)~~ liefen als eigener Strang (Plan „Garantien und Durchsatz“, Phasen 0–5, 2026-10-15;
+   der Plan liegt im Git-Verlauf bei `861ea7f`); Ergebnisse in §13.6, Messungen in docs/12. Was offen blieb, steht in §13.0.
 1. ~~WB-2/WB-3~~ Sicherheitsnetz steht (2026-10-15): ⟳-Abnahmetest inkl. „▶ Worker“ und Gate „frischer Checkout baut“ (§13.6).
 2. ~~W11-1 (Schreibwege)/WB-1~~ je Absicht ein Weg (2026-10-15, §13.6).
 3. **LLM-1** 🤖 fachlich prüfen: neue Rolle `<Wurzel>.Beispiele` (Strukturtabelle, Lageart, CQRS098), Beispiele an der Karte (Gegeben/Wenn/Dann)
    als Testcode, unabhängige Herkunft der Beispiele, 🤖-Schleife „baut → regelkonform → Beispiele grün“, `Cqrs.Testing` vervollständigen (P3-3,
-   generierte Helfer für Projektion/Reaktion/Reader, pytest-Vorlagen), Kartenwand (`konzept-llm-minimalkontext.md` §11).
+   generierte Helfer für Projektion/Reaktion/Reader, pytest-Vorlagen), Kartenwand (LLM-Minimalkontext §11, im Git-Verlauf bei `861ea7f`).
 4. **W3-1** Ableitungen auf den Server: Karten-Ids, Hör-Menge, Lambda-Parameter, Auto-Zuordnung, Port-Kardinalität aus `board.sicht`/`/api/werkbank/*`.
 5. **W10-1** Formular-Schema aus dem warmen Workspace (statt `Schema.cs` per Reflection), Codegen auf Roslyn; danach **W10-2** Laufzeit-Serialisierung
    generiert und Reflection-Sperre.
@@ -406,7 +406,7 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
   - **FB-1 Hinweis als Eingang einer Funktion:** zugestellt über das Hinweis-Netz — von Funktionen, Aggregaten (Ablehnung) und Clients
     (`TransientEvent`), im Host und draußen (`ArbeitsAuftrag.hinweis`). Nachweis P `HinweisNetzTests`; PD `FunktionsZustandGarantieTests`
     (Hinweis-Kette bis zum Command, Commands aus einem doppelten Hinweis wirken einmal, eine Funktion draußen hört einen Hinweis).
-  - Die Lücke „gleichbleibende Funktion mit Feldern“ (ohne Nummer, Plan R19): CQRS105 verbietet veränderliche Felder, Setter und Sammlungen hinter
+  - Die Lücke „gleichbleibende Funktion mit Feldern“ (ohne Nummer, docs/10 R19): CQRS105 verbietet veränderliche Felder, Setter und Sammlungen hinter
     `readonly` in Funktions-Klassen. Nachweis P `ZustandAnalyzerTests`.
 
 - **Phase 4 Pub/Sub-Neustrukturierung (2026-10-26, Messserver; docs/04, docs/11 §11.6/§11.7):** die Domänen sind auf Aggregat + Funktion + Frist
@@ -500,7 +500,7 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
   Knoten noch einige Sekunden als Mitglied (`ConsulProviderConfig`: TTL 3 s, Abmeldung nach 10 s), der Cluster legte Broker-Aktivierungen auf ihn,
   und der Start versuchte jede genau einmal — `TimeoutException` aus `PubSubStartupService`, Abbruch (Störungsläufe „Prod-Konfig“ ungültig). Jetzt
   wiederholen Aktivieren und Abonnieren der Broker Timeouts mit Backoff bis 60 s (heute `ClusterExtensions.FrageMitWiederholungAsync`: je Versuch
-  eine Frage des Boten mit Frist; seit Phase 2 des Plans Pub/Sub-Neustrukturierung zählt jeder Versuch ohne Antwort gleich, gleich aus welchem Grund). Gemessen: zwei Störungsläufe mit Consul grün (53 019 und 52 756 Vorgänge), in beiden gelang beim Host der Prüfdomäne eine Aktivierung
+  eine Frage des Boten mit Frist; seit Umbau-Phase 2 zählt jeder Versuch ohne Antwort gleich, gleich aus welchem Grund). Gemessen: zwei Störungsläufe mit Consul grün (53 019 und 52 756 Vorgänge), in beiden gelang beim Host der Prüfdomäne eine Aktivierung
   im zweiten Versuch. Nachweis: P `BrokerWiederholungTests`.
 
 - **PF-18 · Schema lazy im Betrieb (2026-10-17; docs/03 §3.3):** ein Standalone-Host legte Tabellen und Funktionen eines Dokumenttyps erst beim
@@ -526,7 +526,7 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
   Gemessen (Messserver, `a78c21d`, docs/12 §12.5): gültig, zwei Störungsläufe grün; S1 Datenbankzeit je Paar 20,3 → 9,5 ms (gesetzte Sequenz
   entfällt, Partitionsseite 7,1 → 0,6 ms), Durchsatz im Band (S1 1,13 ×, S5 0,93–1,08 ×). Rest: PF-17.
 
-- **G-10 · Zwei Uhren im Zeitlimit (2026-10-16; docs/03 §3.3, docs/konzept-werkbank.md §4.4):** die Aktivierung eines Zeitlimits ist der
+- **G-10 · Zwei Uhren im Zeitlimit (2026-10-16; docs/03 §3.3, docs/04 §4.7):** die Aktivierung eines Zeitlimits ist der
   Zeitstempel des jüngsten gematchten Events, verglichen mit der DB-Uhr (`IDbClock`) — den Zeitstempel setzte Marten aber mit der Uhr des Hosts.
   Mit mehreren Knoten lief ein Zeitlimit je nach Uhr des schreibenden Knotens früher oder später ab; in der Sim stand nach einem Zeitsprung jedes
   neue Event in der ungesprungenen Zeit, jede neue Aktivierung wirkte um den Sprung alt (gemessen: ohne die Regel liegt der Zeitstempel um den
@@ -740,4 +740,10 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 - Ein formales **Sicherheits-Audit** (AuthN/AuthZ, Tenant-Isolation, TLS end-to-end) wurde nicht durchgeführt.
 - **Absolute Perf-Zahlen** (+48 % Batching, 9× Prozess-Reads) stammen aus Läufen des inzwischen entfernten LoadHarness und wurden seitdem nicht
   reproduziert.
+- **Risiken des Zielbilds**, die nur der Betrieb zeigt: eine Lücke im Weckplan merkt man nicht am Verlust, sondern an Latenz bis zum Takt
+  (dagegen GR-WECKPLAN und je Konsumentenart ein Latenz-Test); Festhalten kostet je Funktionslauf einen Eintrag (wird die Ausnahme R12 zu eng,
+  steigt die Last); ein Melden an eine umgezogene Aktivierung geht verloren (der Takt heilt; Hinweise bleiben verloren — fachlich Wichtiges gehört als
+  Command ins Aggregat); lange Funktionen halten die Position ihrer Partition (die Liste „dahinter fertig“ ist gedeckelt); für große Abhängigkeitsmengen in
+  Antworten ist eine Grenze von 1000 Ids je Antwort gesetzt, nicht gemessen (PF-37); großer Zustand einer Funktion macht das Sichern teuer — das
+  Sicher-Intervall entscheidet zwischen Durchsatz und Nachrechnen nach einem Absturz.
 - Nebenbefund beim Laden des Workspaces: Marten 8.20.0 meldet zwei kritische Advisories (GHSA-rfx3-98h7-v3xp, GHSA-vmw2-qwm8-x84c).

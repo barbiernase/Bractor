@@ -10,7 +10,7 @@ using static Pruefdomaene.Integration.Tests.Pruefstand;
 namespace Pruefdomaene.Integration.Tests.Garantien;
 
 /// <summary>
-/// Die Store-Klassen 2 und 3 im echten Cluster (Plan Pub/Sub-Neustrukturierung §2.4, Phase 8): die Messreihe schreibt in ein Datei-Ziel
+/// Die Store-Klassen 2 und 3 im echten Cluster (docs/04 §4.3): die Messreihe schreibt in ein Datei-Ziel
 /// (Klasse 2, Fortschritt beim Framework), der Messzähler in eine Datei-Senke (Klasse 3, ausdrücklich erlaubt) — derselbe generierte Batch-Leser,
 /// derselbe Query-Dienst wie für den Marten-Store. Read-your-writes über den Fortschritt beim Framework: die Query mit „mindestens S auf v“ sieht
 /// den eigenen Stand, und die Antwort trägt den Stand der gezeigten Id.

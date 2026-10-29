@@ -1,7 +1,7 @@
 namespace Abstractions;
 
 /// <summary>
-/// Optionaler LEBENSZYKLUS einer Funktion im Host (Plan Pub/Sub-Neustrukturierung §2.9, E10): was eine Aktivierung laden muss, bevor sie rechnet (ein
+/// Optionaler LEBENSZYKLUS einer Funktion im Host (docs/04 §4.4, docs/10 E10): was eine Aktivierung laden muss, bevor sie rechnet (ein
 /// neuronales Netz auf die GPU, eine Verbindung, einen Cache), und was sie vor dem Sichern ihres Zustands zurückschreiben muss. Beide Methoden sind
 /// vorbelegt — eine Funktion überschreibt nur, was sie braucht. Das Ende ist <see cref="IAsyncDisposable"/> (bzw. <see cref="IDisposable"/>) der
 /// Funktion und ihrer Dienste.

@@ -12,10 +12,10 @@ namespace Infrastructure.SourceGeneration;
 /// Darum laufen sie in der Laufzeit-Compilation, die alle Domänen-Projekte referenziert, und lesen nur Signaturen aus den Metadaten
 /// (Decide, Handles, Funktionen, Akteure, Clients) — Rümpfe werden nicht gebraucht (R1: der Ausgang steht in der Signatur).
 /// <list type="bullet">
-/// <item>CQRS084 (GR-QUERY, R4) — eine Query hat genau ein Ziel: einen Reader oder ein Aggregat (<c>Frage</c> im Decider, Plan §2.6).</item>
+/// <item>CQRS084 (GR-QUERY, R4) — eine Query hat genau ein Ziel: einen Reader oder ein Aggregat (<c>Frage</c> im Decider, docs/03 §3.2).</item>
 /// <item>CQRS085 (GR-MODUL-AUSGANG-OFFEN, UNUSED-EVENT; Warnung) — ein Event, eine Ablehnung oder eine Response, die niemand erzeugt.</item>
 /// <item>CQRS106 (R20, GR-HINWEIS-NETZ; Fehler) — eine Funktion hört einen Hinweis, den im Hinweis-Netz niemand erzeugt (kein Decide, keine Funktion
-///   nennt ihn in der Signatur, kein Client sendet ihn): ihre Adresse bekäme ihn nie (Plan Pub/Sub-Neustrukturierung §2.9).</item>
+///   nennt ihn in der Signatur, kein Client sendet ihn): ihre Adresse bekäme ihn nie (docs/04 §4.4).</item>
 /// <item>CQRS086 (GR-MODUL-EINGANG-OFFEN; Warnung) — ein Command ohne Decider, eine Query ohne Reader und ohne Aggregat.</item>
 /// <item>CQRS087 (GR-GETRAGEN; Warnung) — eine Funktion als Schnittstelle ohne Umsetzung im Host, die kein Client trägt (<c>ITraegt</c>): sie läuft
 ///   nur mit einer Bindung von Hand (R17), sonst ist sie ein Boot-Fehler.</item>
@@ -105,7 +105,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                     erzeugt.UnionWith(Faelle(m.ReturnType));
                     imNetz.UnionWith(Faelle(m.ReturnType));
                 }
-                // Die Fragen an das Aggregat (Plan §2.6, dieselbe Lesart wie Generator und Extractor): Ziel der Query, Erzeuger der Antworten.
+                // Die Fragen an das Aggregat (docs/03 §3.2, dieselbe Lesart wie Generator und Extractor): Ziel der Query, Erzeuger der Antworten.
                 if (Projektionsform.StateVonDecider(t) is { } state)
                     foreach (var f in Projektionsform.LiesAggregatfragen(t, state).Fragen)
                     {

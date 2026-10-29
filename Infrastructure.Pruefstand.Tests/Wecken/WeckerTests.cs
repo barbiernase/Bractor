@@ -15,7 +15,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Wecken;
 
 /// <summary>
-/// Der Wecker am Commit (Plan Pub/Sub-Neustrukturierung §2.3, Phase 6): je geschriebenem Event die Ziele aus dem Weckplan, je Commit und Ziel einmal —
+/// Der Wecker am Commit (docs/03 §3.5): je geschriebenem Event die Ziele aus dem Weckplan, je Commit und Ziel einmal —
 /// die Partition des Streams bzw. die eine Adresse; Events, die niemand hört, wecken niemanden. Die Start-Prüfung findet einen Hörer, der nicht im
 /// Plan steht.
 /// </summary>

@@ -161,7 +161,7 @@ public sealed class Nachrichtenfluss
             var aussen = n.Sorte switch
             {
                 Grammatik.Command or Grammatik.Query => !erzeugt,
-                // Eine Quell-Nachricht kommt immer von außen: vom Treiber oder vom Webhook der Umgebung (Quellen:<Typ>, konzept-werkbank §12.3 E12).
+                // Eine Quell-Nachricht kommt immer von außen: vom Treiber oder vom Webhook der Umgebung (Quellen:<Typ>, docs/06 §6.6).
                 Grammatik.Quelle => true,
                 _ => false,
             };

@@ -47,11 +47,11 @@ public static class JsonContextEmitter
             GenerationMode = JsonSourceGenerationMode.Metadata,
             Converters = new System.Type[]
             {
-                // Der Command einer Frist (FristGesetzt, Plan Pub/Sub-Neustrukturierung Phase 3) — über die generierten Tabellen, ohne Reflection.
+                // Der Command einer Frist (FristGesetzt) — über die generierten Tabellen, ohne Reflection.
                 typeof(ICommandJsonConverter),
         /*ID-KONVERTER*/
             })]
-        // ── Framework: festgehaltene Ausgabe der Funktionen (Plan Pub/Sub-Neustrukturierung Phase 3) ──
+        // ── Framework: festgehaltene Ausgabe der Funktionen ──
         [JsonSerializable(typeof(Infrastructure.Funktionen.BefehlFestgehalten))]
         [JsonSerializable(typeof(Infrastructure.Funktionen.AusgabeFestgehalten))]
         // ── Framework: die Frist eines Aggregats (Uhr) ──
@@ -154,7 +154,7 @@ public static class JsonContextEmitter
                 if (isEvent && !isTransient) persistableEvents.Add(name);
                 if (isEvent || isCommand || isWire || isQuery) wire.Add(name);
 
-                // Der Zustand einer Funktion (IZustand<T> im Konstruktor, Plan Pub/Sub-Neustrukturierung §2.9): gesichert über denselben Speicher-
+                // Der Zustand einer Funktion (IZustand<T> im Konstruktor, docs/04 §4.4): gesichert über denselben Speicher-
                 //   Kontext (GeneratedFunktionsBausteine koppelt Default.{T} zur Compile-Zeit).
                 if (ifaces.Contains("Abstractions.IFunktion"))
                     foreach (var c in t.GetConstructors(BindingFlags.Public | BindingFlags.Instance))

@@ -9,7 +9,7 @@ using Infrastructure.Komposition;
 namespace Infrastructure.Dienste;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// DIENST-BINDUNG (docs/konzept-werkbank.md §12.3 E11): WAS es gibt, ist Code — Dienste (`interface IX : IDienst`), ihre
+// DIENST-BINDUNG (docs/06 §6.5): WAS es gibt, ist Code — Dienste (`interface IX : IDienst`), ihre
 // Implementierungen und die Konfig-Records in den Konstruktoren (generierte Tabelle `GeneratedDienste`). WELCHE Implementierung läuft
 // und mit welchen Werten, sagt die Umgebung (`Dienste:<IX>:Implementierung`, `Konfig:<Record>`). Der Start prüft gegen den Bedarf der
 // gebundenen Funktions-Implementierungen: fehlt etwas, ist es mehrdeutig oder zyklisch, startet nichts.

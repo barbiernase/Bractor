@@ -4,7 +4,7 @@ using Abstractions;
 namespace Infrastructure.Funktionen;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// FUNKTION ALS BAUSTEIN (Plan Pub/Sub-Neustrukturierung §2.2, §3.3, Phase 3): je Funktion (Klasse = im Host, Schnittstelle = draußen) ein
+// FUNKTION ALS BAUSTEIN (docs/10 §10.1, docs/10 §10.3): je Funktion (Klasse = im Host, Schnittstelle = draußen) ein
 // generierter Eintrag — Eingänge, Ausgaben, Lese-Fähigkeiten, ob sie nachweislich gleichbleibend ist (R12), wie sie gebaut wird und der
 // reflexionsfreie Dispatch (Einzel- und Seiten-Form). Den Lauf trägt der Funktions-Actor (Position, Slots, Festhalten), nicht die Funktion.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -43,7 +43,7 @@ public sealed record FunktionsUmsetzung(string Name, Type Typ, Func<IServiceProv
 /// <param name="Gleichbleibend">Nachweislich gleichbleibend (R12): eine Klasse ohne Konstruktor-Parameter und ohne Lese-Fähigkeit — derselbe
 /// Eingang ergibt dieselbe Ausgabe (Uhr und Zufall verbietet CQRS103). Nur sie darf ihre Ausgabe ohne Festhalten senden.</param>
 /// <param name="Dienste">Was der Konstruktor der Klasse braucht (Dienste, Konfig-Records) — für die Boot-Prüfung der Bindung.</param>
-/// <param name="Zustand">Der gekapselte Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, Plan §2.9) — null = ohne Zustand.</param>
+/// <param name="Zustand">Der gekapselte Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4) — null = ohne Zustand.</param>
 /// <param name="EineAdresse">Eine Adresse statt einer je Partition (<c>[EineAdresse]</c>, A6): ein Actor liest alle Partitionen.</param>
 public sealed record FunktionsBaustein(
     Type Typ,

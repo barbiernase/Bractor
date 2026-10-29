@@ -4,7 +4,7 @@ using FluentAssertions;
 namespace Werkbank.Abnahme.Tests;
 
 /// <summary>
-/// Abnahme der Werkbank ohne Browser (docs/konzept-werkbank.md §5–§8, docs/13 WB-2): derselbe Weg, den der Editor über HTTP geht, gegen eine echte
+/// Abnahme der Werkbank ohne Browser (CLAUDE.md W6, docs/13 WB-2): derselbe Weg, den der Editor über HTTP geht, gegen eine echte
 /// Werkbank, einen echten Host in Umgebung <c>sim</c> und eine eigene Sim-DB (<see cref="Werkbanklauf"/>). Ein einziger Lauf, weil jeder Schritt auf
 /// dem vorigen aufbaut:
 /// <list type="number">
@@ -21,7 +21,7 @@ public class KreislaufAbnahmeTests
 {
     private static readonly string[] Schritte = ["Bauen", "Python-Basen", "Neu lesen", "Daten prüfen", "Infrastruktur", "Starten"];
 
-    [Fact(Skip = "Editor zurückgestellt (plan-pubsub-neustrukturierung E4)")]
+    [Fact(Skip = "Editor zurückgestellt (docs/10 E4)")]
     public async Task Kreislauf_Durchspielen_Worker_Geste_und_Daten_Pruefung()
     {
         await using var w = await Werkbanklauf.StarteAsync();

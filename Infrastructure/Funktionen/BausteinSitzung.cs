@@ -20,7 +20,7 @@ public enum ErgebnisAusgang
 }
 
 /// <summary>
-/// Ein Ausführer draußen für Funktionen (Plan Pub/Sub-Neustrukturierung §2.2, Laufort Hand oder Extern — ein Mensch an der Werkbank, ein Worker oder
+/// Ein Ausführer draußen für Funktionen (docs/10 §10.1, Laufort Hand oder Extern — ein Mensch an der Werkbank, ein Worker oder
 /// ein Client, der die Funktion trägt): holt Eingänge beim Vermittler der Funktion (Pull, so viele wie Slots frei sind, mit Lease), reicht sie weiter,
 /// hält Lebenszeichen und nimmt die Antwort an. Die Antwort wird unter dem Schlüssel „F, X“ festgehalten — die ERSTE gewinnt (zwei Worker mit
 /// verschiedenen Antworten: eine gilt); ein STROM (Training) kommt in Stücken, jedes wird an seiner Stelle festgehalten und dem Funktions-Actor
@@ -52,7 +52,7 @@ public sealed class BausteinSitzung : IAsyncDisposable
     /// <param name="sende">Einen zugeteilten Eingang weiterreichen (an den Menschen, den Worker) — mit der Zahl der schon festgehaltenen Ausgaben
     /// (Strom: ein neuer Träger macht beim nächsten nicht festgehaltenen Stück weiter, Fortschritt wie im Host).</param>
     /// <param name="beantwortet">An den Funktions-Actor der Partition: die Antwort liegt fest (bzw. Fehler; mit <c>teil</c> nur ein Stück eines
-    /// Stroms) — verlierbar. Für einen Hinweis als Eingang trägt sie die Ausgaben selbst (nichts wird festgehalten, Plan §2.9).</param>
+    /// Stroms) — verlierbar. Für einen Hinweis als Eingang trägt sie die Ausgaben selbst (nichts wird festgehalten, docs/04 §4.4).</param>
     public BausteinSitzung(string sitzung, Func<string, FunktionsBaustein?> loese,
         Func<FunktionsBaustein, HoleEingaenge, CancellationToken, Task<EingaengeZugeteilt?>> hole, Func<FunktionsBaustein, object, Task> melde,
         Func<EingangAnbieten, FunktionsBaustein, int, Task> sende, IAusgabeAblage ablage,
@@ -171,7 +171,7 @@ public sealed class BausteinSitzung : IAsyncDisposable
             }
             if (eingang!.Hinweis)
             {
-                // Ein Hinweis als Eingang (Plan §2.9): höchstens einmal, nichts festgehalten — die Ausgaben gehen mit der Meldung an den Funktions-Actor,
+                // Ein Hinweis als Eingang (docs/04 §4.4): höchstens einmal, nichts festgehalten — die Ausgaben gehen mit der Meldung an den Funktions-Actor,
                 //   der sie sendet (die Garantie bleibt dort). Ein Strom kommt hier nur als Ganzes an (der Träger sammelt ihn).
                 if (!fertig)
                 {

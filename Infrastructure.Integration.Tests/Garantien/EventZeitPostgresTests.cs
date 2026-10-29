@@ -51,7 +51,7 @@ public class EventZeitPostgresTests
     [Fact]
     public async Task Ein_Zeitsprung_der_Sim_verschiebt_Event_Zeitstempel_und_Uhr_gemeinsam()
     {
-        // Die Sim-Uhr: Zeit der Datenbank plus Versatz aus <schema>.uhr (docs/konzept-werkbank.md §4.4). Nach einem Sprung um zwei Stunden
+        // Die Sim-Uhr: Zeit der Datenbank plus Versatz aus <schema>.uhr (docs/04 §4.7). Nach einem Sprung um zwei Stunden
         // muss ein neues Event in der gesprungenen Zeit stehen — sonst wirkt jede neue Aktivierung sofort zwei Stunden alt, und jedes Zeitlimit
         // unter zwei Stunden liefe beim ersten Hinsehen ab.
         const string schema = "garantie_eventzeit_sim_it";

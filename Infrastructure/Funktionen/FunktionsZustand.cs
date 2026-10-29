@@ -6,7 +6,7 @@ using Marten.Exceptions;
 namespace Infrastructure.Funktionen;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// ZUSTAND EINER FUNKTION (Plan Pub/Sub-Neustrukturierung §2.9, E6, A5, A6): gekapselt in der Aktivierung des Funktions-Actors, gesichert
+// ZUSTAND EINER FUNKTION (docs/04 §4.4, docs/10 E6, A5, A6): gekapselt in der Aktivierung des Funktions-Actors, gesichert
 // ZUSAMMEN MIT DER POSITION — ein Dokument je Adresse, geschrieben in derselben Transaktion wie der Stand der Partition (beide mit erwarteter
 // Version: eine zweite Aktivierung derselben Adresse verliert ihren ganzen Schreibversuch). Ein großer Zustand liegt als Datei in einer Ablage der
 // Umgebung; dann wird ZUERST die Datei geschrieben, DANN Position und Verweis — ein Absturz dazwischen lässt nur eine verwaiste Datei zurück,

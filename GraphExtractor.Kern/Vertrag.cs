@@ -17,7 +17,7 @@ public static class Vertrag
     public static readonly string IState = typeof(IState).FullName!;
     public static readonly string ICommand = typeof(ICommand).FullName!;
     public static readonly string ICreationCommand = typeof(ICreationCommand).FullName!;
-    /// <summary>Das typisierte Command-Ziel (<c>ICommand&lt;TAggregat&gt;</c>, Plan §2.5): das Aggregat eines Commands steht im Typ.</summary>
+    /// <summary>Das typisierte Command-Ziel (<c>ICommand&lt;TAggregat&gt;</c>, docs/10 §10.4): das Aggregat eines Commands steht im Typ.</summary>
     public static readonly string ICommandZiel = typeof(ICommand<>).FullName!;
     public static readonly string IEvent = typeof(IEvent).FullName!;
     public static readonly string ITransientEvent = typeof(ITransientEvent).FullName!;

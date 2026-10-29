@@ -10,7 +10,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Lebenszyklus;
 
 /// <summary>
-/// Der Lebenszyklus jedes Framework-Actors (<see cref="RahmenActor"/>, Plan Pub/Sub-Neustrukturierung Phase 2): der Fähigkeits-Bereich wird nach
+/// Der Lebenszyklus jedes Framework-Actors (<see cref="RahmenActor"/>): der Fähigkeits-Bereich wird nach
 /// Passivierung, Stopp und Neustart frei — aber erst, wenn keine Arbeit ihn mehr nutzt; ein Stopp bricht ab und wartet begrenzt; ein Fehler wird
 /// ehrlich beantwortet; Weckungen während eines Durchlaufs ergeben genau einen weiteren. Lokales <see cref="ActorSystem"/> ohne Cluster und eine
 /// Proben-Unterklasse; die echten Actors im Cluster prüft <see cref="LebenszyklusImClusterTests"/>. Zeitkritisch (echte Uhr).
@@ -157,7 +157,7 @@ public class RahmenActorTests
     [Fact]
     public async Task Ein_Stopp_wartet_nur_begrenzt_und_der_Bereich_gehoert_dem_Durchlauf_bis_zu_seinem_Ende()
     {
-        // Gegenprobe zum Befund (Plan §1.7): der alte Batch-Leser gab den Bereich beim Stopp frei, während der Durchlauf ihn noch nutzte.
+        // Gegenprobe zum Befund (docs/06 §6.7): der alte Batch-Leser gab den Bereich beim Stopp frei, während der Durchlauf ihn noch nutzte.
         var w = new Werkzeug();                                    // hört nicht auf das Token (etwa ein laufender Datenbank-Befehl)
         var (system, pid) = Starte(w, abwarten: TimeSpan.FromMilliseconds(300));
         system.Root.Send(pid, "wecke");

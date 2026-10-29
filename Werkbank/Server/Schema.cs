@@ -5,7 +5,7 @@ using Abstractions;
 namespace Werkbank.Server;
 
 /// <summary>
-/// Das Formular-Schema der Umgebung (docs/konzept-werkbank.md §8.1): aus den Konfig-Typen (<see cref="UmgebungKonfig"/>, Quellen-Konfig,
+/// Das Formular-Schema der Umgebung (CLAUDE.md W1–W12): aus den Konfig-Typen (<see cref="UmgebungKonfig"/>, Quellen-Konfig,
 /// Funktions-Laufort) — Klasse → Felder, Enum → Auswahl, Default aus dem leeren Objekt. Der Editor zeichnet daraus JEDES Panel des
 /// Host-Rahmens mit EINEM generischen Renderer, keine handgebauten Formulare je Karte. (Werkbank-Werkzeug, nicht Laufzeit.)
 /// </summary>
@@ -31,7 +31,7 @@ public static class Schema
                 ["VertragStreng"] = new JsonObject { ["typ"] = "bool", ["standard"] = "false" },
             },
         };
-        // Dienste (konzept-werkbank §12.3 E11): je Dienst die gewählte Implementierung — die Auswahl kommt aus dem Code (Implementierungen der Dienst-Karte).
+        // Dienste (docs/06 §6.5): je Dienst die gewählte Implementierung — die Auswahl kommt aus dem Code (Implementierungen der Dienst-Karte).
         var dienste = new JsonObject();
         foreach (var d in Liste(board?["dienste"]))
             dienste[(string?)d["name"] ?? "?"] = new JsonObject
@@ -60,7 +60,7 @@ public static class Schema
             ["art"] = "je", ["schluessel"] = "Client", ["wert"] = Klasse(typeof(ClientKonfig)), ["eintraege"] = clients,
             ["hilfe"] = "je Client (IClientVertrag) sein Token (Identitaeten), die gRPC-Adresse (leer = localhost:Transport.GrpcPort), URLs, Datei-Verzeichnisse",
         };
-        // Konfig-Records (konzept-werkbank §12.3 E11): je Record ein Abschnitt mit seinen Feldern (Typen aus dem Code).
+        // Konfig-Records (docs/06 §6.5): je Record ein Abschnitt mit seinen Feldern (Typen aus dem Code).
         var konfigs = new JsonObject();
         var enums = Liste(board?["enums"]).ToDictionary(e => (string?)e["name"] ?? "", e => e, StringComparer.Ordinal);
         foreach (var r in Liste(board?["records"]).Where(r => (string?)r["kind"] == "konfig"))

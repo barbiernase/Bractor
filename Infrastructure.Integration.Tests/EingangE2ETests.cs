@@ -19,7 +19,7 @@ using Domain.Laufzeit;
 namespace Infrastructure.Integration.Tests;
 
 /// <summary>
-/// Ebene 2 — DURCHSPIELEN gegen echtes Postgres (docs/konzept-werkbank.md §6, Werkbank P5): der JSON-Eingang des Hosts.
+/// Ebene 2 — DURCHSPIELEN gegen echtes Postgres (CLAUDE.md W6, Werkbank P5): der JSON-Eingang des Hosts.
 /// <list type="bullet">
 /// <item>Als Akteur handeln: ein Token → Akteur-Tor → Aggregat (Event im Log, Ablehnung als Ablehnungs-Event), Verweigerung ohne Befugnis
 ///   bzw. ohne gültiges Token, Query an den Reader;</item>
@@ -53,7 +53,7 @@ public class EingangE2ETests
         {
             ["Quellen:DateiErkannt:Pfad"] = Path.Combine(verz, "eingang"),
             ["Konfig:BildaufbereitungKonfig:AusgabePfad"] = Path.Combine(verz, ".preprocessed"),
-            // konzept-werkbank §12.3 E12: der Webhook der Quelle ist Konfig — kein MapQuellWebhook im Programm.
+            // docs/06 §6.6: der Webhook der Quelle ist Konfig — kein MapQuellWebhook im Programm.
             ["Quellen:DateiErkannt:Webhook"] = "/webhook/datei",
             ["Identitaeten:Tokens:t-ki"] = "KIOperator",
             ["Identitaeten:Tokens:t-inspekteur"] = "Inspekteur",
@@ -99,7 +99,7 @@ public class EingangE2ETests
             var nochmal = await Lies(await Sende("/eingang/command", new { typ = "ErstelleDatensatz", daten = new { AggregateId = ds, Name = "Werkbank" } }, "t-ki"));
             nochmal.GetProperty("ablehnung").GetProperty("typ").GetString().Should().Be("DatensatzExistiertBereits");
             nochmal.GetProperty("events").ValueKind.Should().Be(System.Text.Json.JsonValueKind.Null, "ohne Wunsch liest der Eingang das Log nicht");
-            // Eine Ablehnung steht nicht im Log (Plan Pub/Sub-Neustrukturierung Phase 5): der Stream bleibt, wie er war, der Einblick kennt keinen
+            // Eine Ablehnung steht nicht im Log: der Stream bleibt, wie er war, der Einblick kennt keinen
             //   Vorgang dazu — „abgelehnt“ hält nur die Inbox-Tabelle.
             (await es.ReadStreamAsync(ds, 0, default)).Should().HaveCount(log.Count, "eine Ablehnung schreibt kein Event");
             var leser = new SpurLeser(u);
@@ -173,7 +173,7 @@ public class EingangE2ETests
             (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").GetArrayLength().Should().Be(0);
             vorgang.Should().NotBe(Guid.Empty);
 
-            // ── Webhook aus der Konfig (konzept-werkbank §12.3 E12): POST auf die Route startet genau einen Vorgang — zweimal gesendet, derselbe Vorgang ──
+            // ── Webhook aus der Konfig (docs/06 §6.6): POST auf die Route startet genau einen Vorgang — zweimal gesendet, derselbe Vorgang ──
             var t2 = t.AddMinutes(7);
             var datei2 = $"{t2:yyyy_MM_dd_HH_mm_ss_fff}_DC0.tiff";
             var body = new { Name = datei2, Pfad = Path.Combine(verz, datei2), RelativerPfad = datei2, Groesse = 1, GeaendertAm = t2, ErkanntAm = t2, Kennung = datei2 + "|1" };

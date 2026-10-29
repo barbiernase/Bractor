@@ -15,7 +15,7 @@ namespace Infrastructure.Serialization;
     GenerationMode = JsonSourceGenerationMode.Metadata,
     Converters = new System.Type[]
     {
-        // Der Command einer Frist (FristGesetzt, Plan Pub/Sub-Neustrukturierung Phase 3) — über die generierten Tabellen, ohne Reflection.
+        // Der Command einer Frist (FristGesetzt) — über die generierten Tabellen, ohne Reflection.
         typeof(ICommandJsonConverter),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Abrechnung.Kundenkonto>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Abrechnung.Rechnung>),
@@ -26,7 +26,7 @@ namespace Infrastructure.Serialization;
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Posten.Posten>),
         typeof(global::Abstractions.IdJsonKonverter<global::Pruefdomaene.Verteilung.Verteilung>),
     })]
-// ── Framework: festgehaltene Ausgabe der Funktionen (Plan Pub/Sub-Neustrukturierung Phase 3) ──
+// ── Framework: festgehaltene Ausgabe der Funktionen ──
 [JsonSerializable(typeof(Infrastructure.Funktionen.BefehlFestgehalten))]
 [JsonSerializable(typeof(Infrastructure.Funktionen.AusgabeFestgehalten))]
 // ── Framework: die Frist eines Aggregats (Uhr) ──

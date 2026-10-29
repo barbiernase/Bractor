@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Der E2E-Treiber der Vermessung (docs/plan-garantien-und-durchsatz.md §0.1/§0.2): startet die ECHTEN Hosts in den Umgebungen
+  <!-- Der E2E-Treiber der Vermessung (docs/12 §12.5): startet die ECHTEN Hosts in den Umgebungen
        vermessung bzw. vermessung-pruefdomaene, gibt Last nur über die echten Eingänge (Datei-Quelle, JSON-Eingang mit Akteur-Token),
        misst bis zum fachlich sichtbaren Ergebnis, prüft Exactly-once über Queries und den Log und legt alles unter vermessung/ergebnisse/ ab.
        Aufruf über scripts/vermessung-e2e.sh. Keine Reflection: JSON nur über JsonNode/JsonDocument. -->

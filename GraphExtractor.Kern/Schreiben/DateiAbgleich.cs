@@ -94,7 +94,7 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
             Datei(a.Datei!, $"state {a.Namespace}.{a.Name}", t => StateFelder(t, a));
         foreach (var d in modell.Decider.Where(d => d.Datei != null && Herkunft.Geaendert(d.Herkunft, Herkunft.Von(d))))
             Datei(d.Datei!, $"decide {d.Aggregat}.{d.Command}", t => DecideRueckgabe(t, d));
-        // Domänen-Dienst (konzept-werkbank §12.3 E11): die Methoden am Interface und an jeder Implementierung (fehlende als throw-Stub); je Implementierung ihr
+        // Domänen-Dienst (docs/06 §6.5): die Methoden am Interface und an jeder Implementierung (fehlende als throw-Stub); je Implementierung ihr
         //   Konstruktor. Rümpfe gehören dem Code (✎ am Rumpf); der Name ist die Identität (Umbenennen ist ein Refactoring).
         foreach (var d in modell.Dienste.Where(d => d.Datei != null && Herkunft.Geaendert(d.Herkunft, Herkunft.Von(d))))
         {

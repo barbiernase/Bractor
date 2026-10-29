@@ -14,7 +14,7 @@ using static Pruefdomaene.Integration.Tests.Pruefstand;
 namespace Pruefdomaene.Integration.Tests.Garantien;
 
 /// <summary>
-/// Funktionen als Actors mit Zustand und das Hinweis-Netz (Plan Pub/Sub-Neustrukturierung §2.9, §4.2, Phase 4b) gegen echtes Marten, am allgemeinen
+/// Funktionen als Actors mit Zustand und das Hinweis-Netz (docs/04 §4.4, docs/11) gegen echtes Marten, am allgemeinen
 /// Fall der Prüfdomäne (Messung): Messwerte im Log → Merkmalsbildung (gleichbleibend) → Merkmal (Hinweis, nie im Log) → Schätzer mit Zustand und einer
 /// Adresse bzw. Ausreißerprüfung (Schnittstelle, im Host oder draußen) → Command an die Messstelle. Geprüft wird am Log und am gesicherten Zustand:
 /// jeder Log-Eingang wirkt genau einmal auf den gesicherten Zustand — nach Absturz, Umzug und mit zwei Aktivierungen —, Ressourcen schließen beim

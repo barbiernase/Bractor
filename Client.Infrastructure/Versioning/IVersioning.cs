@@ -1,7 +1,7 @@
 namespace Client.Infrastructure.Versioning;
 
 /// <summary>
-/// Die Version je Aggregat, wie der Client sie kennt (eine Version, Plan Pub/Sub-Neustrukturierung Phase 5): ConnectionModule nutzt
+/// Die Version je Aggregat, wie der Client sie kennt (eine Version): ConnectionModule nutzt
 /// <see cref="GetVersion"/> als ExpectedVersion eines Commands, die QueryBridge als Ziel für Lesen nach Schreiben.
 /// </summary>
 public interface IVersioningModule

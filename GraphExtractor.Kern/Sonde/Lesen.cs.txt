@@ -96,7 +96,7 @@ public sealed record Theke : IAkteur, IDarf<LeiheAus>, IDarf<GibZurueck>, IDarf<
 // Eine KI als Akteur (frei benannt, Art in der Basisliste).
 public sealed record Gutachterin : IKi, IDarf<EroeffneMahnung>;
 
-// Ein Akteur, der DRAUSSEN rechnet (docs/konzept-akteure.md, Plan §2.7): frei benannt — die Funktion ist eine Schnittstelle (läuft draußen),
+// Ein Akteur, der DRAUSSEN rechnet (docs/konzept-akteure.md, docs/konzept-akteure.md §5): frei benannt — die Funktion ist eine Schnittstelle (läuft draußen),
 // der Akteur darf sie rechnen (IDarf<IRegal>: ihre Ausgaben gibt er hinein). Zwei Eingänge: einer einzeln, einer als Strom.
 public sealed record Archiv : IMaschine, IDarf<IRegal>;
 public interface IRegal : IFunktion

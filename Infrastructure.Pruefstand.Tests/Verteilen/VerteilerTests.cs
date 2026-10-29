@@ -12,7 +12,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Verteilen;
 
 /// <summary>
-/// Der Verteiler eines Knotens (Plan Pub/Sub-Neustrukturierung §2.7, Phase 7): ein Commit geht an jede Sitzung, die einen seiner Typen hört — je
+/// Der Verteiler eines Knotens (docs/konzept-akteure.md §5): ein Commit geht an jede Sitzung, die einen seiner Typen hört — je
 /// Sitzung eine Zustellung, in Log-Reihenfolge; eine gezielte Antwort geht an genau ihre Sitzung, auch wenn sie den Typ nicht hört; eine beendete
 /// Sitzung ist ausgetragen; liest eine Sitzung nicht nach, verwirft er über der Grenze ihres Rückstaus. Lokales <see cref="ActorSystem"/>, Proben als
 /// Sitzungen.

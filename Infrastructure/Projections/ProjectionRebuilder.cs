@@ -3,7 +3,7 @@ using Abstractions;
 namespace Infrastructure.Projections;
 
 /// <summary>
-/// Der Neuaufbau einer Projektion über eine neue Generation (docs/04 §4.3, Plan Pub/Sub-Neustrukturierung A4) — „Neuaufbau IST der Batch-Konsum
+/// Der Neuaufbau einer Projektion über eine neue Generation (docs/04 §4.3, docs/10 A4) — „Neuaufbau IST der Batch-Konsum
 /// ab Position 0“, kein zweiter Codepfad:
 ///   1. ein leeres Ziel der neuen Generation vorbereiten (<see cref="IProjektionsZiel.NeueGenerationAsync"/>; gelesen wird weiter die alte),
 ///   2. den Fortschritt aller Partitionen auf Anfang in der neuen Generation (<see cref="IFortschrittsAblage.FortschrittZuruecksetzenAsync"/>; neue

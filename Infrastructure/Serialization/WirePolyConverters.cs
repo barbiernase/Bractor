@@ -64,7 +64,7 @@ public sealed class ICommandJsonConverter : JsonConverter<ICommand>
     }
 }
 
-/// <summary>Die Query einer Frage an ein Aggregat (<c>AggregatFrage.Query</c>, Plan Pub/Sub-Neustrukturierung §2.6).</summary>
+/// <summary>Die Query einer Frage an ein Aggregat (<c>AggregatFrage.Query</c>, docs/03 §3.2).</summary>
 public sealed class IQueryJsonConverter : JsonConverter<IQuery>
 {
     public override void Write(Utf8JsonWriter writer, IQuery value, JsonSerializerOptions options)
@@ -87,7 +87,7 @@ public sealed class IQueryJsonConverter : JsonConverter<IQuery>
     }
 }
 
-/// <summary>Die Antwort eines Aggregats (<c>AggregatAntwort.Antwort</c>, Plan Pub/Sub-Neustrukturierung §2.6).</summary>
+/// <summary>Die Antwort eines Aggregats (<c>AggregatAntwort.Antwort</c>, docs/03 §3.2).</summary>
 public sealed class IQueryResponseJsonConverter : JsonConverter<IQueryResponse>
 {
     public override void Write(Utf8JsonWriter writer, IQueryResponse value, JsonSerializerOptions options)

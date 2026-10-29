@@ -15,7 +15,7 @@ public record AuftragBestaetigt() : IEvent;
 public record AuftragGescheitert(string Grund) : IEvent;
 
 /// <summary>
-/// KOMPENSATION, ausgeschrieben (Plan Risiko 4): der Auftrag ist gescheitert, die Reservierung war gelungen — sie muss zurück. Das Aggregat entscheidet
+/// KOMPENSATION, ausgeschrieben (docs/13 §13.7): der Auftrag ist gescheitert, die Reservierung war gelungen — sie muss zurück. Das Aggregat entscheidet
 /// den Gegenzug genau einmal (sein Zustand merkt es sich), die Auftragsabwicklung sendet ihn.
 /// </summary>
 public record PostenFreigabeAngeordnet(Id<Posten.Posten> PostenId, int Menge) : IEvent;

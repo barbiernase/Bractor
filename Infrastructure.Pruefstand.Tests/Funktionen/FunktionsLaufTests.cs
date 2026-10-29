@@ -9,7 +9,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Funktionen;
 
 /// <summary>
-/// Die Buchführung des Funktions-Actors je Partition (Plan Pub/Sub-Neustrukturierung §2.2), store-frei: Slots, Eingänge eines Streams nacheinander,
+/// Die Buchführung des Funktions-Actors je Partition (docs/10 §10.1), store-frei: Slots, Eingänge eines Streams nacheinander,
 /// Position beim ältesten Unfertigen (nie über die gesetzte Sequenz oder das Ende einer vollen Seite), der Deckel für „dahinter fertig“ und das Parken.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
@@ -118,7 +118,7 @@ public class FunktionsLaufTests
     [Fact]
     public void Ein_Einzelversuch_der_nur_teilweise_durchlaeuft_rueckt_den_Stand_des_geparkten_Streams_vor()
     {
-        // Was der Einzelversuch schon geschafft hat, rechnet der nächste nicht noch einmal (mit Zustand wirkte es sonst zweimal auf ihn, Plan §2.9).
+        // Was der Einzelversuch schon geschafft hat, rechnet der nächste nicht noch einmal (mit Zustand wirkte es sonst zweimal auf ihn, docs/04 §4.4).
         var l = Lauf(slots: 2);
         l.Nimm(new PartitionsSeite(new[] { E(1, A, 1) }, 1, false));
         l.Parke(1, "wirft", DateTimeOffset.UnixEpoch);

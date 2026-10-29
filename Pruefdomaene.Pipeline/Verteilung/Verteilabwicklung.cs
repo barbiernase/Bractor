@@ -5,7 +5,7 @@ using Pruefdomaene.Verteilung;
 namespace Pruefdomaene.Pipeline.Verteilung;
 
 /// <summary>
-/// Die Kanten der Verteilung (Plan Pub/Sub-Neustrukturierung Phase 4): die Quelle reserviert die Gesamtmenge; gelingt es, ordnet die Verteilung die
+/// Die Kanten der Verteilung: die Quelle reserviert die Gesamtmenge; gelingt es, ordnet die Verteilung die
 /// Zubuchungen an, und diese Funktion bucht jedes Ziel zu (FAN-OUT als Strom von Commands); jede Zubuchung mit dem Beleg der Verteilung wird dort
 /// gezählt (COUNT-JOIN im Zähl-Aggregat). Gleichbleibend (R12).
 /// </summary>

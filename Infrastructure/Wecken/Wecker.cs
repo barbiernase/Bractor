@@ -8,7 +8,7 @@ using Proto.Cluster;
 namespace Infrastructure.Wecken;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// WECKEN (Plan Pub/Sub-Neustrukturierung §2.3, Phase 6): es gibt EINE Stelle, an der nach einem Commit geweckt wird — nach dem Commit eines
+// WECKEN (docs/03 §3.5): es gibt EINE Stelle, an der nach einem Commit geweckt wird — nach dem Commit eines
 // Appends (Group-Commit, sein Rückfall auf Einzel-Appends, der Einzel-Append ohne Bündeln). Alle Schreiber gehen durch sie: Aggregat, Quelle,
 // festgehaltene Ausgabe einer Funktion. Der generierte Weckplan sagt je Event-Typ, wen der Commit weckt; geweckt wird gezielt, je Commit und Ziel
 // einmal, ohne Inhalt — der Weckruf trägt nur sein Ziel und darf verloren, doppelt, ungeordnet sein. Das Ziel liest ab seiner eigenen Position
@@ -94,7 +94,7 @@ public sealed class Wecker
     }
 
     /// <summary>
-    /// Die Prüfung des Weckplans beim Start (Plan §7 Risiko 1): jeder registrierte Konsument steht mit jedem Typ, den er hört, im Plan — mit seinem
+    /// Die Prüfung des Weckplans beim Start (docs/13 §13.7): jeder registrierte Konsument steht mit jedem Typ, den er hört, im Plan — mit seinem
     /// Kind und seiner Adressierung. Eine Lücke merkte man sonst nicht am Verlust, sondern nur an der Latenz bis zum Takt.
     /// </summary>
     /// <exception cref="Infrastructure.Umgebung.BootFehler">Ein Hörer fehlt im Plan.</exception>

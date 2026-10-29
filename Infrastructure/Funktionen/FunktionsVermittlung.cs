@@ -3,7 +3,7 @@ using Abstractions;
 namespace Infrastructure.Funktionen;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// VERMITTLUNG (Plan Pub/Sub-Neustrukturierung §2.2): je Funktion, die draußen rechnet (Laufort Extern oder Hand), EIN Vermittler, der die
+// VERMITTLUNG (docs/10 §10.1): je Funktion, die draußen rechnet (Laufort Extern oder Hand), EIN Vermittler, der die
 // offenen Eingänge hält. Die Träger HOLEN sich Arbeit, sobald sie einen Slot frei haben (Pull) — ein Python-Worker über gRPC, ein Mensch an der
 // Werkbank. So verteilt sich die Last von selbst, auch über Rechner und Sprachen. Jeder geholte Eingang hat eine Lease; läuft sie ab (der Träger
 // ist weg), wird er neu ausgegeben. Die Antwort wirkt trotzdem genau einmal (festgehalten unter „Funktion F, Eingang X“, die erste gewinnt).
@@ -24,9 +24,9 @@ public interface IArbeit
 }
 
 /// <summary>
-/// Ein Eingang einer Funktion in Baustein-Form, die draußen rechnet (Plan Pub/Sub-Neustrukturierung §2.2): Schlüssel „F, X“ (<see cref="Vorgang"/>,
+/// Ein Eingang einer Funktion in Baustein-Form, die draußen rechnet (docs/10 §10.1): Schlüssel „F, X“ (<see cref="Vorgang"/>,
 /// der Stream des Festhaltens), Funktion, der Eingang selbst und seine Herkunft. Wer antwortet, hält die Ausgabe unter dem Schlüssel fest — die
-/// erste Antwort gewinnt; gesendet wird beim Funktions-Actor. Ein Hinweis als Eingang (Plan §2.9) wird nicht festgehalten: die Antwort geht mit ihren
+/// erste Antwort gewinnt; gesendet wird beim Funktions-Actor. Ein Hinweis als Eingang (docs/04 §4.4) wird nicht festgehalten: die Antwort geht mit ihren
 /// Ausgaben an den Funktions-Actor (<see cref="EingangBeantwortet"/>). <paramref name="Adresse"/> ist die Identität des Funktions-Actors — alle seine
 /// Eingänge rechnet derselbe Träger, solange er lebt (A8).
 /// </summary>
@@ -52,7 +52,7 @@ public sealed record EingaengeZugeteilt(IReadOnlyList<EingangAnbieten> Eingaenge
 /// <summary>
 /// An den Funktions-Actor: die Antwort auf den Eingang mit diesem Schlüssel liegt vor (festgehalten), oder draußen ist er gescheitert
 /// (<paramref name="Fehler"/>); mit <paramref name="Teil"/> nur ein Stück eines Stroms — es kommt noch mehr. Verlierbar — der Actor sieht nach einer
-/// Geduld ohnehin nach. Für einen HINWEIS als Eingang (nichts festgehalten, Plan §2.9) trägt sie die Ausgaben selbst: die Commands und die Hinweise,
+/// Geduld ohnehin nach. Für einen HINWEIS als Eingang (nichts festgehalten, docs/04 §4.4) trägt sie die Ausgaben selbst: die Commands und die Hinweise,
 /// je in der Reihenfolge der Antwort.
 /// </summary>
 public sealed record EingangBeantwortet(Guid Schluessel, string? Fehler = null, bool Teil = false, IReadOnlyList<ICommand>? Befehle = null,

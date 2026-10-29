@@ -9,7 +9,7 @@ using System.Text;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// QUELLEN als Treiber + Konfig (docs/konzept-werkbank.md §3.3): findet jeden Quellen-Typ — einen Record, der von einer
+    /// QUELLEN als Treiber + Konfig (docs/04 §4.7): findet jeden Quellen-Typ — einen Record, der von einer
     /// Treiber-Basis erbt (<see cref="Abstractions.Treibervertrag"/>, z. B. <c>sealed record DateiErkannt : DateiGemeldet;</c>) — und
     /// erzeugt <c>GeneratedQuellen.Alle</c>: je Quelle Typ, Treiber, Konfig-Abschnitt (= Typname), Wirker-Id und eine Fabrik
     /// <c>daten =&gt; new DateiErkannt { … }</c>, damit der Treiber ohne Reflection baut (Inv. 4). Die Form prüft CQRS070 in der Domäne.

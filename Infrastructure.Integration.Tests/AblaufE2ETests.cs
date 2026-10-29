@@ -22,7 +22,7 @@ using OpenCvSharp;
 namespace Infrastructure.Integration.Tests;
 
 /// <summary>
-/// Ebene 2 — die ABLÄUFE der Beispieldomäne gegen echtes Marten/Consul (Plan Pub/Sub-Neustrukturierung Phase 4): Aggregate entscheiden,
+/// Ebene 2 — die ABLÄUFE der Beispieldomäne gegen echtes Marten/Consul: Aggregate entscheiden,
 /// Funktionen tragen die Kanten Event → Command, Fristen tragen die Zeit — ohne Dirigent. Der Bildeingang läuft über die ganze Kette —
 ///
 ///   Quell-Nachricht ──QuellEingang (StartStream je Kennung, Commit gemeldet)──▶ ƒ IBildaufbereitung (OpenCV im Host bzw. Python-Worker über
@@ -134,7 +134,7 @@ public class AblaufE2ETests
         // Der Interpreter der Sim-Umgebung (Umgebung:Python, sonst CQRS_PYTHON/python3) — dieselbe Regel wie die Werkbank.
         var python = Infrastructure.Umgebung.UmgebungLader.Lade(new ConfigurationManager(), "sim-main", []).Python();
         (python == "python3" || File.Exists(python)).Should().BeTrue($"Python für den Worker fehlt ({python}) — Umgebung:Python oder CQRS_PYTHON setzen");
-        // Der GENERISCHE Worker (konzept-werkbank §12.3 E13) mit der Tabelle aus dem Codegen; die Test-Implementierung (funktionen/bildaufbereitung.py,
+        // Der GENERISCHE Worker (docs/09 §9.5) mit der Tabelle aus dem Codegen; die Test-Implementierung (funktionen/bildaufbereitung.py,
         //   Vorschau „_py") liegt per --pfad vor der des Projekts.
         var skript = Path.Combine(RepoWurzel(), Projektstruktur.PythonWorker(Projektstruktur.StandardWurzel), "funktions_worker.py");
         var testImpls = Path.Combine(RepoWurzel(), "Infrastructure.Integration.Tests", "Python");
@@ -265,7 +265,7 @@ public class AblaufE2ETests
     }
 
     /// <summary>
-    /// P1 (docs/konzept-werkbank.md §3.5): der echte Datei-Treiber gegen ein Temp-Verzeichnis — eine Datei steht genau einmal im Log und führt bis
+    /// P1 (docs/04 §4.7): der echte Datei-Treiber gegen ein Temp-Verzeichnis — eine Datei steht genau einmal im Log und führt bis
     /// BildVerfuegbar; nach einem Neustart (neuer Host, derselbe Log) gleicht der Treiber gebündelt mit dem Log ab und meldet nichts erneut. Läuft im
     /// Default-Laufmodus EinmalImCluster (Lease über die Cluster-Identität quelle/DateiErkannt).
     /// </summary>

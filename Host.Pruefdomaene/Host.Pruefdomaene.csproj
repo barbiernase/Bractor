@@ -2,7 +2,7 @@
 
   <!-- Der Host der Prüfdomäne — derselbe Laufzeit-Host wie Host.Grpc (AddCqrs + LaufeAsync), nur mit der Komposition der zweiten
        Anwendung (eine Komposition je Prozess, docs/07). Ohne Leitung startet er keinen gRPC-Dienst; hinein geht es über den JSON-Eingang.
-       Gebraucht von der E2E-Messung S5 (docs/plan-garantien-und-durchsatz.md §0.1). -->
+       Gebraucht von der E2E-Messung S5 (docs/12 §12.5). -->
   <ItemGroup>
     <ProjectReference Include="..\Pruefdomaene.Laufzeit\Pruefdomaene.Laufzeit.csproj" />
   </ItemGroup>

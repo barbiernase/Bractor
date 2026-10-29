@@ -300,7 +300,7 @@ public static class ModellMapper
         root["rahmen"]!.AsObject()["grammatik"] = JsonSerializer.SerializeToNode(Grammatik.AlsJson(), EditorModell.JsonOptionen);
         // Von welchem Akteur kommt was (direkt / über die Kette) — Grundlage der Sicht (Akteure je Karte, Akteur-Rahmen, Pfade).
         root["rahmen"]!.AsObject()["akteurMengen"] = JsonSerializer.SerializeToNode(AkteurAnteile.Aus(modell).AlsJson(), EditorModell.JsonOptionen);
-        // Quellen (docs/konzept-werkbank.md §3): die fest codierten Treiber (Basis + Felder, zum Anlegen neuer Quellen-Typen); dazu die
+        // Quellen (docs/04 §4.7): die fest codierten Treiber (Basis + Felder, zum Anlegen neuer Quellen-Typen); dazu die
         //   Umgebungen (§4) roh — die Quellkarte zeigt die Werte je Umgebung, der Editor rechnet nichts davon nach.
         root["rahmen"]!.AsObject()["treiber"] = Knoten(dom.Treiber.ToDictionary(kv => kv.Key,
             kv => new { basis = kv.Value.Basis, felder = kv.Value.Felder.Select(FeldJson).ToArray() }));

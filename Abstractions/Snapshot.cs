@@ -13,7 +13,7 @@ namespace Abstractions;
 /// Voll-Replay, nie ein Fehler. Ein Dokument pro Aggregat (Id = AggregateId), abgelegt als jsonb pro
 /// State-Typ (<c>Snapshot&lt;Konto&gt;</c> → <c>mt_doc_snapshot_konto</c>).
 ///
-/// WICHTIG: <see cref="Version"/> zählt ALLE Events inkl. der internen Marken (<see cref="IRahmenEvent"/>), damit der Tail-Read bündig
+/// WICHTIG: <see cref="Version"/> zählt ALLE Events inkl. der Events des Rahmens (<see cref="IRahmenEvent"/>, etwa <c>FristGesetzt</c>), damit der Tail-Read bündig
 /// aufsetzt und die OCC-Assertion beim nächsten Append passt. Die Inbox reist nicht mit — sie ist eine eigene Tabelle des Stores (docs/04 §4.6).
 /// </summary>
 public sealed class Snapshot<TState> where TState : class, IState
@@ -21,7 +21,7 @@ public sealed class Snapshot<TState> where TState : class, IState
     /// <summary>Identität = die Aggregat-GUID (die ClusterIdentity des Actors).</summary>
     public Guid Id { get; set; }
 
-    /// <summary>Stream-Position, die dieser Snapshot repräsentiert — inkl. der internen Marken.</summary>
+    /// <summary>Stream-Position, die dieser Snapshot repräsentiert — inkl. der Events des Rahmens.</summary>
     public int Version { get; set; }
 
     /// <summary>

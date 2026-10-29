@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Domain.SourceGeneration;
 
 /// <summary>
-/// Ein Read-Model, das ein Aggregat abbildet, trägt dessen typisierte Id (<c>Id&lt;T&gt; Id</c>, Plan Pub/Sub-Neustrukturierung §2.5). Ein Store, der
+/// Ein Read-Model, das ein Aggregat abbildet, trägt dessen typisierte Id (<c>Id&lt;T&gt; Id</c>, docs/10 §10.4). Ein Store, der
 /// einen einfachen Schlüssel braucht (Marten kann <c>Id&lt;T&gt;</c> nicht als Dokument-Identität — sein Codegen bricht an generischen Ids), bekommt
 /// dafür eine generierte Speicher-Identität: <c>Schluessel</c>, dieselbe UUID, beim Setzen zurück in <c>Id</c>. Der Fachcode sieht und setzt nur
 /// <c>Id</c>.

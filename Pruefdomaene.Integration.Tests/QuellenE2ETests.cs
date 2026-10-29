@@ -10,7 +10,7 @@ using static Pruefdomaene.Integration.Tests.Pruefstand;
 namespace Pruefdomaene.Integration.Tests;
 
 /// <summary>
-/// Quell-Nachrichten gegen echtes Marten (Plan Pub/Sub-Neustrukturierung §4.2, Phase 3): vom Client mit der Command-Id als Kennung — genau einmal im
+/// Quell-Nachrichten gegen echtes Marten (docs/11): vom Client mit der Command-Id als Kennung — genau einmal im
 /// Log, derselbe Vorgang beim Wiederholen —, und die Option „ein Stream je Schlüssel“: viele Nachrichten in einem Stream, genau einmal je Kennung über
 /// das Kennungs-Verzeichnis in derselben Transaktion.
 /// </summary>

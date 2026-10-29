@@ -16,13 +16,13 @@ internal sealed class BeilagenSchreiber
     private List<bool>? _abgelehnt;
     private List<Guid>? _kopfStreams;
     private List<long>? _kopfVersionen;
-    // Fristen für das Fälligkeits-Verzeichnis der Uhr (Plan Pub/Sub-Neustrukturierung Phase 3).
+    // Fristen für das Fälligkeits-Verzeichnis der Uhr.
     private List<Guid>? _fristStreams;
     private List<int>? _fristVersionen;
     private List<TimeSpan>? _fristNach;
     private List<string>? _fristBefehle, _fristDaten;
     private List<string?>? _fristAkteure;
-    // Kennungen der Quell-Nachrichten in einem Stream je Schlüssel (Plan Pub/Sub-Neustrukturierung Phase 3).
+    // Kennungen der Quell-Nachrichten in einem Stream je Schlüssel.
     private List<Guid>? _kennungen, _kennungStreams;
 
     public void Lege(IDocumentSession session, Guid streamId, IReadOnlyList<Beilage>? beilagen)

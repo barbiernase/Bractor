@@ -7,7 +7,7 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Domain.SourceGeneration;
 
 /// <summary>
-/// <b>CQRS107</b> — der Lebenszyklus (<c>ILebenszyklus</c>, Plan Pub/Sub-Neustrukturierung §2.9, E10) gehört an eine Funktions-Klasse im Host (Baustein oder
+/// <b>CQRS107</b> — der Lebenszyklus (<c>ILebenszyklus</c>, docs/04 §4.4, docs/10 E10) gehört an eine Funktions-Klasse im Host (Baustein oder
 /// Umsetzung einer Funktion draußen): nur dort ruft ihn der Funktions-Actor. An einer Schnittstelle wäre er wirkungslos (draußen gehört der Lebenszyklus
 /// dem Worker), an einem Dienst ebenso (die Funktion ruft ihren Dienst selbst, in der Reihenfolge, die sie kennt). <c>VorDemSichernAsync</c> ruft der
 /// Actor nur bei einer Funktion mit Zustand (<c>IZustand&lt;T&gt;</c>) — ohne Zustand liefe eine Umsetzung davon nie. Nur Code-Fakten: Marker,
@@ -19,7 +19,7 @@ public sealed class LebenszyklusAnalyzer : DiagnosticAnalyzer
     public const string Id = "CQRS107";
 
     private static readonly DiagnosticDescriptor Regel = new(Id, "Lebenszyklus nur an einer Funktions-Klasse",
-        "'{0}': {1} (ILebenszyklus, Plan §2.9)", "CQRS.Funktion", DiagnosticSeverity.Error, isEnabledByDefault: true);
+        "'{0}': {1} (ILebenszyklus, docs/04 §4.4)", "CQRS.Funktion", DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Regel);
 

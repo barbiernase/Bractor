@@ -18,7 +18,7 @@ using Infrastructure.Komposition;
 namespace Infrastructure.Umgebung;
 
 /// <summary>
-/// Der Host in einer Zeile (docs/konzept-werkbank.md §4.2): WAS existiert, liefern die generierten Tabellen (Aggregate, Projektionen,
+/// Der Host in einer Zeile (docs/06 §6.5): WAS existiert, liefern die generierten Tabellen (Aggregate, Projektionen,
 /// Funktionen, Quellen, Uhr, Akteur-Rechte); WAS aktiv ist und mit welchen Werten, sagt die Umgebung. Alle
 /// Implementierungen sind einkompiliert — ein Umgebungswechsel ist nie ein Code-Wechsel.
 /// </summary>
@@ -91,7 +91,7 @@ public static class CqrsUmgebungExtensions
         // Die Uhr der Umgebung (Versatz nur in Sim) ersetzt die nackte DB-Uhr — die letzte Registrierung gewinnt.
         s.AddSingleton<IDbClock>(_ => new UmgebungsDbClock(u));
 
-        // Passt die Leseseite zum Code (konzept-werkbank §12.3 E9)? Vor dem Pull-Pfad (Hosted Services starten in Registrierungs-Reihenfolge).
+        // Passt die Leseseite zum Code (docs/04 §4.3)? Vor dem Pull-Pfad (Hosted Services starten in Registrierungs-Reihenfolge).
         if (u.Cluster.Rolle != KnotenRolle.Mitglied) s.AddHostedService<Infrastructure.Projections.ProjektionsStandDienst>();
         Anwendung.Aktuell.RegistrierePullPfade(s);
         s.AddBackendMonitoring();

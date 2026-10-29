@@ -3,7 +3,7 @@
 > Die Projekt- und Ordnerstruktur einer Anwendung ist eine **feste Konvention des Frameworks** — bewusst gesetzt, damit Generatoren, Extractor
 > und Werkbank wissen, wo etwas liegt, und damit ein Entwickler (und später ein geführter Entwicklungsprozess) weiß, wohin etwas gehört. Dieses
 > Kapitel beschreibt sie; im Code steht sie genau einmal: `Abstractions/Projektstruktur.cs` (per Link auch in den Generatoren), geprüft von
-> CQRS098 und `--check`. Maßstab: `docs/konzept-werkbank.md` (Leitsatz W2).
+> CQRS098 und `--check`. Maßstab: CLAUDE.md W1–W12 (Leitsatz W2).
 
 ## 7.1 Grundsatz: Ort ist Konvention, Bedeutung ist Code-Fakt
 

@@ -13,7 +13,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Analyzers;
 
 /// <summary>
-/// R19 (CQRS105, Plan Pub/Sub-Neustrukturierung §2.9): Zustand einer Funktion nur über <c>IZustand&lt;T&gt;</c> im Konstruktor einer Funktions-Klasse —
+/// R19 (CQRS105, docs/04 §4.4): Zustand einer Funktion nur über <c>IZustand&lt;T&gt;</c> im Konstruktor einer Funktions-Klasse —
 /// kein veränderliches Feld, keine Eigenschaft mit Setter, keine Sammlung hinter <c>readonly</c>; <c>IZustand&lt;T&gt;</c> nirgends sonst. Schließt
 /// die Lücke „gleichbleibende Funktion mit Feldern“ (sie rechnete beim Wiederholen anders).
 /// </summary>

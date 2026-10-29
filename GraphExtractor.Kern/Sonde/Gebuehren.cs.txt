@@ -2,7 +2,7 @@ using Abstractions;
 using Leihwesen.Ausleihe;
 
 // SONDE — ZWEI Aggregate im SELBEN Namespace, Decider in eigener Datei (Mahnvorgang.Decider.cs.txt), dazu der Ablauf zwischen ihnen aus
-//         FUNKTIONEN (Plan §3.3; früher eine Saga mit expliziter Interface-Implementierung):
+//         FUNKTIONEN (docs/10 §10.3; früher eine Saga mit expliziter Interface-Implementierung):
 //         · eine GLEICHBLEIBENDE Funktion im Host (Klasse, kein Dienst, keine Lese-Fähigkeit), die aus der Herkunft eine neue Id ableitet (R13)
 //           und auf einem Teil der Fälle nichts ausgibt (T?);
 //         · eine Funktion als SCHNITTSTELLE mit einer Umsetzung im Host, die einen DOMÄNEN-DIENST (IDienst) im Konstruktor nimmt — ihre Ausgabe

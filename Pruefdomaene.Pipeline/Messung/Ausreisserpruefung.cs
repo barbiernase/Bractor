@@ -4,7 +4,7 @@ using Pruefdomaene.Messung;
 namespace Pruefdomaene.Pipeline.Messung;
 
 /// <summary>
-/// Eine Funktion, die einen Hinweis hört, als Schnittstelle (Plan §2.9, E9): unter derselben Adresse rechnet sie im Host (<see cref="Schwellenpruefung"/>)
+/// Eine Funktion, die einen Hinweis hört, als Schnittstelle (docs/04 §4.4, docs/10 E9): unter derselben Adresse rechnet sie im Host (<see cref="Schwellenpruefung"/>)
 /// oder draußen bei einem Träger (Worker, Mensch) — der Absender sieht nie, was dahinter rechnet.
 /// </summary>
 public interface IAusreisserpruefung : IFunktion

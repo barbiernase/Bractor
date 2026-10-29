@@ -5,7 +5,7 @@ using Marten.Exceptions;
 namespace Infrastructure.Funktionen;
 
 /// <summary>
-/// Der Stand einer Funktion je Partition (Plan Pub/Sub-Neustrukturierung §2.2: „Position und Fortschritt beim Framework“): Position im Log und
+/// Der Stand einer Funktion je Partition (docs/10 §10.1: „Position und Fortschritt beim Framework“): Position im Log und
 /// geparkte Streams, geschrieben mit erwarteter Version — eine zweite Aktivierung derselben Partition verliert ihren Schreibversuch
 /// (<see cref="PartitionsKonfliktException"/>) und lädt neu. Dasselbe Dokument wie der Partitions-Checkpoint einer Projektion, Id
 /// <c>funktion:&lt;F&gt;:&lt;Partition&gt;</c>; so zählt auch der Rückstand (<c>/health</c>) die Funktionen mit.
@@ -17,7 +17,7 @@ public interface IFunktionsStand
     /// <summary>Schreibt den Stand mit erwarteter Version (<see cref="PartitionsCheckpoint.Version"/>); liefert die neue Version.</summary>
     Task<int> SchreibeAsync(PartitionsCheckpoint stand, CancellationToken ct);
 
-    /// <summary>Der gesicherte Zustand einer Funktion an einer Adresse (Plan §2.9), oder null.</summary>
+    /// <summary>Der gesicherte Zustand einer Funktion an einer Adresse (docs/04 §4.4), oder null.</summary>
     Task<FunktionsZustandsDokument?> LadeZustandAsync(string id, CancellationToken ct);
 
     /// <summary>

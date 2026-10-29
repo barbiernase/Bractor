@@ -1,6 +1,6 @@
 # 03 — Die Schreibseite (Command → Decider → Event → Store)
 
-Stand 2026-10-29 (Plan Pub/Sub-Neustrukturierung Phase 9), gegen den Code geprüft. Ziel für den Umbau: docs/plan-pubsub-neustrukturierung.md.
+Stand 2026-10-29, gegen den Code geprüft. Die Grammatik (wie man Aggregat, Command, Event schreibt) steht in [10](10-entwickler-api.md).
 
 Der Schreibpfad ist das dichte Zentrum des Frameworks. `AggregateActorBase`
 (`Infrastructure/Aggregate/ActorSystem/AggregateActorBase.cs`) trägt fast alle Invarianten und Audit-Fixes und ist ausführlich
@@ -25,7 +25,7 @@ kommentiert. Die Schalter des Schreibpfads stehen für Nutzer in der Umgebungs-D
   auf das `CommandResult` (`ProtoActorAggregateDispatcher.FrageAsync`, ein Versuch, eine Frage mit Frist). Ohne angegebene Version läuft der
   Command im Modus `Emittiert`. Die Antwort nennt Ausgang, Versionen (`version`, `ersteVersion`) und Ablehnung; die geschriebenen Events liest
   der Eingang nur auf Wunsch (`"zeigeEvents": true`) aus dem Log — die Werkbank wünscht sie, ein Treiber unter Last nicht.
-- **Emittiert** (Reaktion, Prozess, Fluss — der Dirigent ist der Prozess-Manager): ausschließlich über `CommandEmitter.EmitAsync`
+- **Emittiert** (Ausgaben von Funktionen, fällige Fristen der Uhr): ausschließlich über `CommandEmitter.EmitAsync`
   (`Infrastructure/PubSub/CommandEmitter.cs`) — deterministische CommandId, `CommandModus.Emittiert`, eine Frage des Boten mit Pflicht-Frist
   (§3.6), at-least-once auf dem Draht; Akteur der Kette und Spur (`Ursache`, `Wirker`) reisen im Envelope. Andere Wege sind per Analyzer
   verboten (CQRS020/021; CQRS020 erkennt auch `FrageAsync<CommandResult>`).
@@ -34,8 +34,7 @@ Quell-Nachrichten gehen nicht durch einen Decider: der Treiber hängt sie als er
 an (`StartStream`, genau einmal je Kennung, `Infrastructure/Quellen/Quellen.cs`).
 
 **(b) Routing — Dispatcher zu Cluster-Identität.**
-Das Ziel eines Commands steht in seinem Typ: `record … : ICommand<TAggregat>` mit `Id<TAggregat> AggregateId` (Plan Pub/Sub-Neustrukturierung
-§2.5). Die Framework-Sicht ist `ICommand.Ziel` (die Stream-Id), der `CommandEnvelope` leitet seine `AggregateId` daraus ab — keine zweite Angabe.
+Das Ziel eines Commands steht in seinem Typ: `record … : ICommand<TAggregat>` mit `Id<TAggregat> AggregateId` (docs/10 §10.4). Die Framework-Sicht ist `ICommand.Ziel` (die Stream-Id), der `CommandEnvelope` leitet seine `AggregateId` daraus ab — keine zweite Angabe.
 `ProtoActorAggregateDispatcher.Dispatch` (`Infrastructure/Aggregate/ActorSystem/AggregateDispatcher.cs`) baut die Ziel-Identität
 typbasiert: `ClusterIdentity.Create(guid, envelope.AggregateType)`. Der Send ist eine Frage des Boten (`FrageAsync<CommandResult>`, Frist
 10 s je Versuch, 3 Versuche). Sind die Versuche erschöpft: LogError, durabler Dead-Letter und ein gemeldetes (verlierbares) targeted
@@ -84,7 +83,7 @@ Der gemeinsame Kern `HandleCommandCoreAsync` (das Ziel ist schon beim Empfang ge
 5. **Reine Ablehnung** → kein Event, kein Apply, die Version bleibt; nur die Quittung (Ausgang abgelehnt). Danach geht die Ablehnung als
    Hinweis gezielt an die Sitzung des Aufrufers und an die Funktionen, die sie hören (verlierbar, der Turn wartet nicht), und als verlierbarer
    Hinweis an die Spur. Eine Ablehnung legt auch keinen Stream an. Ist sie für einen Ablauf wichtig, ist sie ein Fakt (Event) — das entscheidet
-   der Modellierer über den Typ (Plan Pub/Sub-Neustrukturierung §3.1).
+   der Modellierer über den Typ (docs/10 §10.2).
 6. **Erfolg**: `AppendeAsync` schreibt die Events; die Quittung des Commands (`Quittung`, Ausgang gewirkt) reist in derselben Transaktion in
    die Inbox-Tabelle (§3.3). Jeder der drei Wege (Effekt, Noop, Ablehnung) trägt so eine Quittung; im Log stehen nur Effekte — **eine
    Version je Aggregat**, die Zahl seiner Events. Eine Quittung **ohne** Events gilt nur, wenn der Stream noch auf dem Stand der
@@ -108,10 +107,10 @@ sind in [04 §4.8](04-konsum-und-prozess-maschine.md) beschrieben.
 
 **Passivierung** (PF-5): hört ein Aggregat-Actor `Lebenszyklus.AggregatLeerlaufSekunden` lang nichts (Standard 600), stoppt er sich
 (Rahmen, §3.6; Proto-`ReceiveTimeout`) — nie, solange ein Commit läuft oder Commands warten; beim Stoppen schreibt er seinen Snapshot, die
-nächste Nachricht aktiviert ihn frisch (Snapshot + Tail; der Inbox-Cache ist dann leer, die Inbox-Tabelle bleibt). Emittenten-Adapter und Prozess-Manager passivieren genauso; die Batch-Leser der
-Projektionen (je Projektion und Partition) nicht ([04](04-konsum-und-prozess-maschine.md) §4.1).
+nächste Nachricht aktiviert ihn frisch (Snapshot + Tail; der Inbox-Cache ist dann leer, die Inbox-Tabelle bleibt). Funktions-Actors und die Batch-Leser der
+Projektionen (je Partition) passivieren nicht ([04](04-konsum-und-prozess-maschine.md) §4.1, §4.4).
 
-**(d) Direkte Abfrage** (Plan Pub/Sub-Neustrukturierung §2.6). Eine Query darf statt an einen Reader an ein Aggregat gehen: die `Frage` im
+**(d) Direkte Abfrage** (docs/03 §3.2). Eine Query darf statt an einen Reader an ein Aggregat gehen: die `Frage` im
 Decider (§3.2) beantwortet sie aus dem Zustand, nur lesend und synchron. Die Query nennt ihr Aggregat mit genau einem Glied `Id<TAggregat>`;
 der generierte Query-Dienst (`GeneratedQueryDienst`, derselbe Weg für gRPC und JSON-Eingang) schickt sie über `AggregatAbfrage`
 (`Infrastructure/Aggregate/ActorSystem/AggregatAbfrage.cs`) als `AggregatFrage` an die Cluster-Identität aus dieser Id — eine Frage des Boten
@@ -204,7 +203,7 @@ Noop und Ablehnung stehen nicht im Log; „gewirkt/abgelehnt“ je CommandId hä
   `ConcurrencyException`, wie der Versionskonflikt eines Appends mit Events; Polly nimmt `CQ409` ebenfalls aus. Im Group-Commit eine Anweisung
   für alle Köpfe des Batches (`select cqrs_kopf(s, v) from unnest(…)`).
   Der `InboxAufraeumer` (je Knoten, alle 10 min, seitenweise, Lease über einen Transaktions-Advisory-Lock) löscht Quittungen älter als
-  `Schreibpfad.InboxHorizontTage` (Standard 30, E2): innerhalb des Horizonts wirkt ein Command genau einmal. Er sucht über den Index, die
+  `Schreibpfad.InboxHorizontTage` (Standard 30): innerhalb des Horizonts wirkt ein Command genau einmal. Er sucht über den Index, die
   ältesten zuerst, und erst ab der Grenze, bis zu der er zuletzt gelöscht hat (abzüglich 5 min) — so kostet eine Seite, was sie löscht, nicht die
   Größe der Tabelle und nicht die toten Einträge früherer Seiten (PF-27; BRIN verfiel, sobald VACUUM Seiten für neue Quittungen freigab).
 - **OCC**: `EventStreamUnexpectedMaxEventIdException` und die Doppel-Erstellung werden zu `ConcurrencyException`.
@@ -244,8 +243,6 @@ Noop und Ablehnung stehen nicht im Log; „gewirkt/abgelehnt“ je CommandId hä
   offen ist, kommt höchstens alle 5 ms eine neue (dazwischen prüft eine Runde nur die älteste laufende Nummer); ein Leser ohne
   Mitleser (ein Poll) wartet bis 250 ms auf seine eigene Probe, damit seine Marke nicht ein Poll-Intervall zurücksteht. Im Modus `Rich` (zieht
   die Sequenzen vor der Transaktion) verweigert der Horizont den Dienst.
-- **Poll-Backstop** (`ReadChangedStreamsAsync`, Emittenten und Dirigent): die High-Water-Mark rückt nur bis zum Horizont vor — schützt gegen
-  in umgekehrter Reihenfolge sichtbare Commits, auch gegen eine Transaktion, die lange offen ist.
 - **Partitions-Seite** (`ReadPartitionAsync`, Batch-Konsum der Projektionen): erst die gesetzte Sequenz (der Horizont, in derselben Runde wie
   „steht dahinter etwas?“), dann die Events einer Partition (`PartitionsAusdruck`: `get_byte(uuid_send(stream_id), 15) % P`) jenseits der Position, nur die abonnierten
   Typen samt Upcasting-Herkunft, ohne schon Erledigtes, `order by seq_id limit N` — festes SQL wie die Event-Reads (PF-22); materialisiert wie `ReadStreamAsync`
@@ -277,7 +274,7 @@ Messwerte: [12](12-tests-und-vermessung.md).
 
 Was nach einem Commit geschieht, ist für jeden Schreiber gleich (Aggregat, Quelle, festgehaltene Ausgabe einer Funktion) und nie Teil der Wahrheit:
 
-- **Wecker** (`Infrastructure/Wecken/Wecker.cs`, Plan §2.3): nach dem `SaveChanges` des Group-Commits und des Einzel-Appends schlägt er je
+- **Wecker** (`Infrastructure/Wecken/Wecker.cs`, docs/03 §3.5): nach dem `SaveChanges` des Group-Commits und des Einzel-Appends schlägt er je
   geschriebenem Event den generierten Weckplan nach und weckt jedes Ziel einmal — die Partitionen der Projektionen und Funktionen, die den Typ
   hören, und die Uhr bei einer Frist. Der Weckruf trägt nur sein Ziel, darf verloren, doppelt, ungeordnet sein; das Ziel liest ab seiner Position,
   der Takt je Partition (30 s) holt Verlorenes. Einzelheiten [04](04-konsum-und-prozess-maschine.md) §4.1.
@@ -301,7 +298,7 @@ Wiring in `Infrastructure/Extensions/CqrsServiceExtension.cs`:
   Single-Activation → Single-Writer pro Stream (tragend für Batching und OCC).
 - **Multi-Node**: generierter Wire-Serializer `CqrsWireSerializer` an `WithRemote`; `WireSerializerBootCheck` bricht bei einer Lücke ab.
   Siehe [06](06-transport-multinode-betrieb.md).
-- **Lebenszyklus** (Plan Pub/Sub-Neustrukturierung Phase 2): jeder Framework-Actor erbt `RahmenActor`
+- **Lebenszyklus** (Umbau-Phase 2): jeder Framework-Actor erbt `RahmenActor`
   (`Infrastructure/Lebenszyklus/RahmenActor.cs`). Er öffnet den Fähigkeits-Bereich der Aktivierung, bricht beim Stopp die Arbeit neben der
   Mailbox ab und wartet begrenzt (10 s) auf sie, gibt den Bereich erst frei, wenn nichts ihn mehr nutzt, passiviert nur, wenn der Actor nicht
   beschäftigt ist, beantwortet einen Fehler ehrlich (danach startet Proto den Actor neu) und fasst Weckungen zusammen („läuft → noch einmal“).

@@ -9,7 +9,7 @@ using System.Text;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Der WECKPLAN (Plan Pub/Sub-Neustrukturierung §2.3, Phase 6): je Event-Typ, wen ein Commit weckt — die Batch-Leser der Projektionen, die ihn
+    /// Der WECKPLAN (docs/03 §3.5): je Event-Typ, wen ein Commit weckt — die Batch-Leser der Projektionen, die ihn
     /// hören (<c>batch-&lt;Projektion&gt;</c>, je Partition), die Funktions-Actors, die ihn aus dem Log hören (<c>funktion-&lt;F&gt;</c>, je Partition
     /// bzw. die eine Adresse), und die Uhr (<c>FristGesetzt</c>). Alles NUR aus den Signaturen:
     /// <code>public Task Auf(BildErfasst e, Herkunft h, ISchreibeBild s)                                      → batch-BildProjektion</code>

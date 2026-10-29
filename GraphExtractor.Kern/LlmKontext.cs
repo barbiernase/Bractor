@@ -10,7 +10,7 @@ using DomainEditor;
 namespace GraphExtractor;
 
 // ════════════════════════════════════════════════════════════════════════════
-//  LLM-Kontext je Code-Block (docs/konzept-llm-minimalkontext.md)
+//  LLM-Kontext je Code-Block (LLM-Minimalkontext, Konzept im Git-Verlauf bei 861ea7f)
 //
 //  Ein Aufruf = FESTER TEIL (Graph-Skelett, für alle Slots gleich) + SLOT-TEIL (je Code-Block). Alles aus Code-Fakten:
 //  Roslyn-Symbole [S], Graph-/Editor-Kanten [K], Nachbar-Rümpfe [N]. Einzige menschliche Eingabe ist der Auftrag [L] —

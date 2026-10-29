@@ -13,7 +13,7 @@ using Projections.SourceGeneration;
 namespace Infrastructure.Pruefstand.Analyzers;
 
 /// <summary>
-/// R14 (Plan Pub/Sub-Neustrukturierung §2.4, §3.6) im Build: CQRS109 — ein Store mit Schreib-Fähigkeiten implementiert genau eine Store-Klasse, und
+/// R14 (docs/04 §4.3, docs/10 §10.6) im Build: CQRS109 — ein Store mit Schreib-Fähigkeiten implementiert genau eine Store-Klasse, und
 /// jede Schreib-Fähigkeit eines Stores der Klasse 2 nimmt die Herkunft; CQRS110 — eine Projektion schreibt nur mit <c>[MindestensEinmal]</c> in einen
 /// Store der Klasse 3. Dazu CQRS111 — ein Read-Model mit typisierter Id ist partial (die Speicher-Identität wird generiert).
 /// </summary>

@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Die ABLÄUFE der Prüfdomäne (docs/07, Rolle Ablaeufe): Funktionen (Plan Pub/Sub-Neustrukturierung Phase 3/4) — gleichbleibende (ohne
+  <!-- Die ABLÄUFE der Prüfdomäne (docs/07, Rolle Ablaeufe): Funktionen (docs/04 §4.4) — gleichbleibende (ohne
        Festhalten: Gutschrift, Nachschub, die Kanten von Auftrag und Verteilung), eine mit Dienst (festhaltend), eine mit Strom-Ausgabe und
        Fortschritt, eine draußen (Schnittstelle) — und ihre Dienste. Domänenneutral, nur für Framework-Tests. -->
   <PropertyGroup>

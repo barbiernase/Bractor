@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- Die Leseseite der Prüfdomäne (docs/07, Rolle Leseseite): Projektionen und Reader, die das Framework domänenneutral zeigen — hier die
-       Store-Klassen 2 (Dateien, wiederholungsfest) und 3 (Senke, nur mindestens einmal), Plan Pub/Sub-Neustrukturierung §2.4. -->
+       Store-Klassen 2 (Dateien, wiederholungsfest) und 3 (Senke, nur mindestens einmal), docs/04 §4.3. -->
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

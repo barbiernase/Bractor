@@ -29,7 +29,7 @@ public partial class Trainingslauf
 
         /// <summary>
         /// Das Training läuft — und der Wächter dazu: meldet es binnen <see cref="Waechterfrist"/> kein Ende, bekommt das Aggregat
-        /// <see cref="MarkiereAlsHaengengeblieben"/> (eine Frist, Plan Pub/Sub-Neustrukturierung §3.1; ein Ende davor macht sie wirkungslos).
+        /// <see cref="MarkiereAlsHaengengeblieben"/> (eine Frist, docs/10 §10.2; ein Ende davor macht sie wirkungslos).
         /// </summary>
         public IEnumerable<OneOf<TrainingBegonnen, Frist<MarkiereAlsHaengengeblieben>, TrainingslaufNichtGefunden, TrainingBereitsBeendet>> Decide(
             MeldeTrainingBegonnen cmd)

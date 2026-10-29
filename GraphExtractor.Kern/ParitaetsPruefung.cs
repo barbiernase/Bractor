@@ -275,7 +275,7 @@ public static class ParitaetsPruefung
                         }
                         if (decl is InterfaceDeclarationSyntax)
                         {
-                            // Domänen-Dienst (IDienst, konzept-werkbank §12.3 E11): ein eigener Baustein — Signatur + Implementierungen.
+                            // Domänen-Dienst (IDienst, docs/06 §6.5): ein eigener Baustein — Signatur + Implementierungen.
                             if (iDienst != null && Sym.Implements(t, iDienst)) { inv.Dienste.Add(full); continue; }
                             // Client-Vertrag (IClientVertrag): sein Rand aus der Basisliste (direkt): ITraegt, ISendet, IFragt, IHoert.
                             if (iClient != null && Sym.Implements(t, iClient))
@@ -324,7 +324,7 @@ public static class ParitaetsPruefung
                         if (istProjektion) inv.Projektionen.Add(full);
                         // Projektion/Reader/Store-Impl: Records im öffentlichen Ctor = Konfiguration.
                         var istStoreImpl = t.TypeKind != TypeKind.Interface && (Sym.Implements(t, iWStore) || Sym.Implements(t, iRStore));
-                        // … ebenso Funktionen im Host und Dienst-Implementierungen (konzept-werkbank §12.3 E11: ihre Records kommen aus Konfig:<Record>).
+                        // … ebenso Funktionen im Host und Dienst-Implementierungen (docs/06 §6.5: ihre Records kommen aus Konfig:<Record>).
                         var istImpl = t.TypeKind == TypeKind.Class && ((iFunktion != null && Sym.Implements(t, iFunktion)) || (iDienst != null && Sym.Implements(t, iDienst)));
                         if (istProjektion || istReader || istStoreImpl || istImpl)
                             foreach (var c in t.InstanceConstructors.Where(c => c.DeclaredAccessibility == Accessibility.Public))

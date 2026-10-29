@@ -12,7 +12,7 @@ Die Teststrategie folgt den Invarianten „die Wahrheit ist der Log“ und „ni
 | 1 — Prüfstand | `Infrastructure.Pruefstand.Tests` | in-memory, **store-frei** | Decider/Applier, Fold, Routing, Weckplan und Wecker, Wire, Analyzer und Generatoren (über eine eigene `CSharpCompilation`), Extractor/Gesten/Sicht, Funktionen, Akteure, Quellen-Treiber, Umgebung, Spur | ja |
 | 2 — Integration | `Infrastructure.Integration.Tests` | **echtes** Marten/Postgres, Consul, Kestrel | Store-Semantik und Ende-zu-Ende-Verhalten im Cluster (Beispielanwendung) | **nein** (sequentiell erzwungen) |
 | 2 — Prüfdomäne | `Pruefdomaene.Integration.Tests` | **echtes** Marten/Postgres, Consul; eigene Schemata `pruef_*` | Framework-Verhalten domänenneutral an der zweiten Anwendung `Pruefdomaene`: Prozess-Diamant, Kompensation, Fan-out + Count-Join, Snapshot, Upcasting, Marking-Cursor-Äquivalenz | **nein** (sequentiell erzwungen; nie gleichzeitig mit der anderen Integrations-Suite) |
-| Verhaltens-Netz | `Verhalten.Tests` | **echte** Hosts als Prozesse (`Host.Grpc`, `Host.Pruefdomaene`) in einer eigenen Umgebung je Klasse (Art Sim, eigene DB, eigenes Quell-Verzeichnis, bei Bedarf zwei Knoten über Consul) — angesprochen nur von außen: gRPC-Leitung mit dem Client-Stack des Blazor-Arbeitsplatzes bzw. roh, JSON-Eingang, Quell-Verzeichnis, Queries | das Verhalten, das der Umbau (Plan Pub/Sub-Neustrukturierung) nicht ändern darf: was ein Client sieht, darf, quittiert bekommt, liest; Exactly-once je Ablauf als fachliches Soll im Log — nie Prozess-Events, Marken oder Framework-Verdrahtung | **nein** (sequentiell; nie gleichzeitig mit den anderen Integrations-Suiten oder einer Messung) |
+| Verhaltens-Netz | `Verhalten.Tests` | **echte** Hosts als Prozesse (`Host.Grpc`, `Host.Pruefdomaene`) in einer eigenen Umgebung je Klasse (Art Sim, eigene DB, eigenes Quell-Verzeichnis, bei Bedarf zwei Knoten über Consul) — angesprochen nur von außen: gRPC-Leitung mit dem Client-Stack des Blazor-Arbeitsplatzes bzw. roh, JSON-Eingang, Quell-Verzeichnis, Queries | das Verhalten, das der Umbau nicht ändern darf: was ein Client sieht, darf, quittiert bekommt, liest; Exactly-once je Ablauf als fachliches Soll im Log — nie Prozess-Events, Marken oder Framework-Verdrahtung | **nein** (sequentiell; nie gleichzeitig mit den anderen Integrations-Suiten oder einer Messung) |
 | Client (C#) | `Client.Infrastructure.CollectionTests` | in-memory | `VirtualCollection`, `PendingCommandTracker` | ja |
 | Client (Python) | `Client.Infrastructure.Python/tests`, `Domain.Client.Worker.Python.ML/tests` | pytest | SDK (Vertrag, Funktion, Query, Reconnect, Mapper), Worker (Verträge, Funktionen, generischer Worker) | ja |
 | Werkbank-Abnahme | `Werkbank.Abnahme.Tests` | **echte** Werkbank (Prozess) auf einer Kopie des Arbeitsbaums, echter Host in `sim`, eigene Sim-DB, Python-Worker | ⟳ (alle Schritte, Stände), JSON-Eingang als Akteur, Projektion, Spur, „▶ Worker“ bis zum Fakt, Geste/↶ byte-gleich, Daten-Prüfung meldet ein entferntes Feld | **nein** (sequentiell; nie gleichzeitig mit den anderen Integrations-Suiten) |
@@ -33,23 +33,23 @@ Integration **49 + 0** sequentiell (≈ 105 s), Prüfdomäne **23 + 1** (G-2) se
 Integration 31 + 0, Prüfdomäne 18 + 1;
 Werkbank-Abnahme **1/1** sequentiell (≈ 110 s), `Client.Infrastructure.CollectionTests` **30/30**, Python SDK **34/34**, Worker **21/21**;
 `--check` grün (alle Bereiche inkl. „Lage“), `--sonde` grün (111 Soll-Fakten, Lage-Soll 56 Typen); Gate `./pruefe-checkout.sh` grün.
-**Stand 2026-10-26 (Plan Pub/Sub-Neustrukturierung, Phase 0):** Verhaltens-Netz **13 grün + 3 übersprungen** (G-12, G-13, G-14; ohne Skip rot
+**Stand 2026-10-26 (Umbau-Phase 0):** Verhaltens-Netz **13 grün + 3 übersprungen** (G-12, G-13, G-14; ohne Skip rot
 gesehen) sequentiell (≈ 2 min); Garantie-Suite Prüfstand 179 + 1, Integration 50 + 0 (ein Lauf davor rot an
 `SequenceGapPostgresTests.Eine_lange_offene_Transaktion…` mit einem Marten-Befehlsfehler, einzeln und im Wiederholungslauf grün), Prüfdomäne 46 + 0;
 `--sonde` grün mit den drei fremden Szenarien (226 Soll-Fakten, Lage-Soll 80 Typen); Client 30/30.
-**Stand 2026-10-26 (Plan Pub/Sub-Neustrukturierung, Phase 1 — typisierte Ids, `3011d8a`):** Prüfstand **620 grün + 1 übersprungen** (G-5),
+**Stand 2026-10-26 (Umbau-Phase 1 — typisierte Ids, `3011d8a`):** Prüfstand **620 grün + 1 übersprungen** (G-5),
 davon Garantie 184 + 1; Integration **69/69** (≈ 6 min, davon 50 Garantie); Prüfdomäne **52/52** (davon 47 Garantie, neu
 `SchreibGarantieTests.Ein_Command_an_eine_fremde_Identitaet…`); Verhaltens-Netz **13 grün + 3 übersprungen** (G-12, G-13, G-14, unverändert);
 Client 30/30, Python SDK 34/34, Worker 21/21; `codegen --check`, `--check`, `--sonde` und `./pruefe-checkout.sh` grün. Neu im Prüfstand:
 `Ids/TypisierteIdTests` (Ziel im Typ, Log/Wire/Leitung als UUID, abweichende Hülle abgelehnt), CQRS013 in `ModellAnalyzerTests`, Routing aus dem
 Typ in `BuildGarantieTests`.
-**Stand 2026-10-26 (Plan Pub/Sub-Neustrukturierung, Phase 2 — Actor-Lebenszyklus und zwei Verben, `1cc53e9`):** Prüfstand **638 grün + 1
+**Stand 2026-10-26 (Umbau-Phase 2 — Actor-Lebenszyklus und zwei Verben, `1cc53e9`):** Prüfstand **638 grün + 1
 übersprungen** (G-5), davon Garantie 202 + 1; neu 18 Tests in `Lebenszyklus/` (`RahmenActorTests`, `BoteTests`, `LebenszyklusImClusterTests`),
 Gegenprobe je Mechanismus per `sed` im Server-Lauf rot gesehen (Freigabe ohne Warten, kein Zusammenfassen, keine Fehlerantwort, Frage ohne Frist,
 Passivierung trotz Arbeit). Integration **69/69** (50 Garantie), Prüfdomäne **52/52** (47 Garantie), Verhaltens-Netz **13 grün + 3 übersprungen**
 (G-12, G-13, G-14, Tests unverändert), Client 30/30, Python SDK 34/34, Worker 21/21, Werkbank-Abnahme 1/1; `codegen --check`, `--check`, `--sonde`
 und `./pruefe-checkout.sh` grün. Keine Messung (der heiße Pfad ist bis auf gebundene Fristen unverändert).
-**Stand 2026-10-26 (Plan Pub/Sub-Neustrukturierung, Phase 3 — Funktion als Baustein, Uhr, Quellen vom Client, `1a793bb`):** Prüfstand
+**Stand 2026-10-26 (Umbau-Phase 3 — Funktion als Baustein, Uhr, Quellen vom Client, `1a793bb`):** Prüfstand
 **686 grün + 1 übersprungen** (G-5), davon Garantie 231 + 1; neu 48 Tests (Funktion als Baustein und Uhr 40, `WiederholungAnalyzerTests` 4,
 Takt in `QuellenTypAnalyzerTests` 2, Lage der Host-Funktion 1, `RahmenActorTests` 1). Integration **69/69** (50 Garantie, ≈ 6 min), Prüfdomäne
 **66/66** (61 Garantie; neu `FunktionsBausteinE2ETests` 5, `UhrE2ETests` 3, `QuellenE2ETests` 2, `FunktionsGarantieTests` 4), Verhaltens-Netz
@@ -60,18 +60,18 @@ abgeleitet (Abbruch vor der Position), Konflikt beim Festhalten als gewonnen gew
 Position über laufende Eingänge, Eingänge eines Streams parallel, Quelle je Schlüssel ohne Kennungs-Verzeichnis, Fortschritt eines Stroms
 vergessen, `Neben` ohne Schutz vor synchronem Wurf. Keine Messung: der heiße Pfad der Aggregate ist bis auf die Prüfung auf Fristen im
 Append unverändert; die Uhr fügt eine Abfrage je Sekunde Grundlast hinzu (docs/13 PF-15).
-**Stand 2026-10-26 (Plan Pub/Sub-Neustrukturierung, Phase 4 — Domänen umgeschrieben, Altes zurückgebaut, `a2b812b`):** Prüfstand **471 grün + 1
+**Stand 2026-10-26 (Umbau-Phase 4 — Domänen umgeschrieben, Altes zurückgebaut, `a2b812b`):** Prüfstand **471 grün + 1
 übersprungen** (G-5), davon Garantie 187 + 1 — gegenüber Phase 3 sind rund 215 Tests der Alt-Welt entfallen (Dirigent, Marking, Fluss-DSL,
 Katalog-Funktion, Handle-/Trigger-Welt, Emittenten, Akteur-Vertrag und -Dienst, Werkzeug-Tests zu Fluss und Saga). Integration **61/61** (44
 Garantie), Prüfdomäne **45/45** (40 Garantie; neu `AblaufE2ETests` 6, entfallen `ProzessE2ETests`, `MarkingCursorAequivalenzTests`), Verhaltens-Netz
 **13 grün + 3 übersprungen** (G-12, G-13, G-14; geändert ist nur die Umgebung: `IBildpaarBeurteilung` mit acht Slots, docs/13 FB-7), Client
-30/30, Python SDK 33/33, Worker 21/21, Werkbank-Abnahme 0 + 1 übersprungen (Editor, Plan E4); `codegen --check`, `--check` (0 Befunde), `--sonde`
+30/30, Python SDK 33/33, Worker 21/21, Werkbank-Abnahme 0 + 1 übersprungen (Editor, docs/10 E4); `codegen --check`, `--check` (0 Befunde), `--sonde`
 (229 Soll-Fakten, 70 Lage-Typen), `--grammatik` und `./pruefe-checkout.sh` grün. Gegenprobe je neuem oder geändertem Mechanismus per `sed` im
 Server-Lauf rot gesehen: der Applier überspringt `IRahmenEvent` nicht mehr (Trainingslauf), CQRS057 für Projektionen aus, CQRS087 aus, die
 Quelle meldet ihren Commit nicht (FB-3: dreimal je unter 5 s), die Leitung bietet getragene Funktionen nicht an (FB-2: Python-Worker), die Uhr
 als Vergleich je Zeile (Fälligkeits-Abfrage liest das ganze Verzeichnis).
 
-**Stand 2026-10-28 (Plan Pub/Sub-Neustrukturierung, Phase 4b — Funktionen als Actors: Zustand, Ressourcen, Hinweis-Netz):** Prüfstand **500 grün + 1
+**Stand 2026-10-28 (Umbau-Phase 4b — Funktionen als Actors: Zustand, Ressourcen, Hinweis-Netz):** Prüfstand **500 grün + 1
 übersprungen** (G-5), davon Garantie 209 + 1; neu u. a. `FunktionsAktivierungTests`, `HinweisNetzTests`, `ZustandAnalyzerTests`, Zustand und eine
 Adresse in `FunktionsBausteinGeneratorTests`, A8 in `FunktionsVermittlungTests`, R20 in `GesamtbildAnalyzerTests`. Integration **61/61** (44 Garantie),
 Prüfdomäne **53/53** (48 Garantie; neu `Garantien/FunktionsZustandGarantieTests` 8 am allgemeinen Fall Messung), Verhaltens-Netz **13 grün + 3
@@ -97,7 +97,7 @@ Abläufe mit Python-Worker 5/5, Verhaltens-Netz **13 grün + 3 übersprungen**, 
 gesehen: Lebenszyklus nicht nach dem Laden gerufen (Umzug), `VorDemSichernAsync` nicht vor der Sicherung (Absturz, Umzug, Prüfstand), kein Neubeginn
 nach verlorenem Konflikt (der neue Test; der Test mit zwei Knoten erzwingt den Konflikt nicht und blieb unter dieser Sabotage grün). Ein Lauf war rot an
 einem Fehler im Actor — die Sicherung lief als `async`-Lambda an `Func<…, Task>` und verlor ihre neue Version; behoben.
-**Stand 2026-10-28 (Plan Pub/Sub-Neustrukturierung, Phase 5 — Marken aus dem Log, `ad66d61`):** Prüfstand **505 grün + 1 übersprungen** (G-5;
+**Stand 2026-10-28 (Umbau-Phase 5 — Marken aus dem Log, `ad66d61`):** Prüfstand **505 grün + 1 übersprungen** (G-5;
 entfallen 5 Tests der Marken — `AblehnungsMarkeTests` 3, ein Rundlauf der Marke, ein Spur-Weg der Ablehnung —, neu `VersioningModuleTests` 3),
 Integration **63/63** (neu `GarantiePostgresTests.Eine_Quittung_ohne_Events_gilt_nur_auf_dem_Kopf…` je Rich und Quick; `EingangE2ETests`: eine
 Ablehnung von außen schreibt nichts und erscheint nicht im Einblick), Prüfdomäne **55/55** (neu `SchreibGarantieTests.Eine_Ablehnung_auf_einem_veralteten_Stand…`;
@@ -112,7 +112,7 @@ Namen wie die übrigen Vertrags-Typen, danach zweimal hintereinander grün. Mess
 gültig, Exactly-once in allen Szenarien grün, neu geprüft „kein abgelehnter Command hat geschrieben“) gegen Phase 4: S1 162 gegen 159 Paare/s bis
 alles sichtbar, S3-64 1392 gegen 1469 Teile/s, S5-64 306 gegen 302 Vorgänge/s, Transaktionen und Queries je Vorgang gleich — keine Änderung über das
 Rauschen hinaus. Erwartet: die Szenarien entscheiden kaum Noops oder Hinweis-Ablehnungen (die Absage in S5 ist ein Fakt), der Weg mit Events ist unverändert.
-**Stand 2026-10-28 (Plan Pub/Sub-Neustrukturierung, Phase 6 — Wecker statt Broker, ohne Redis, `4f43172`):** Prüfstand **504 grün + 1
+**Stand 2026-10-28 (Umbau-Phase 6 — Wecker statt Broker, ohne Redis, `4f43172`):** Prüfstand **504 grün + 1
 übersprungen** (G-5), davon Garantie 217 + 1 (entfallen die 10 Signal-Tests `SignalTypeGeneratorTests`, `SignalEmitTests`,
 `SignalWireRoundTripTests`; neu `WeckplanGeneratorTests` 5, `WeckerTests` 4), Integration **63/63 (davon 47 Garantie)** (`SignalDeliveryClusterTests` entfällt; neu
 `LiveCommandE2ETests.Ein_Commit_weckt_die_Projektion…`, der Stand je Id aus dem Fortschritt statt des Redis-Schlüssels), Prüfdomäne **59/59** (neu
@@ -137,7 +137,7 @@ in `tests.sh schnell` wie die Last-Tests der Integration ausgenommen). Ohne die 
 Nachschübe, bis 180 Zubuchungen fehlten, auch schon vor dem Abbruch), danach dreimal grün; Gegenprobe (Zähler wieder ohne Sperre): beide Tests rot,
 `ZaehlerstandPostgresTests` mit ≈ 60 000 Proben in 8 s. Zwei Störungsläufe gültig, Exactly-once grün (`…_server-pubsub-g17-stoerung-1/2`: S5 113 194
 und 108 342 Vorgänge, je 182 bzw. 181 Paare in S1).
-**Stand 2026-10-28 (Plan Pub/Sub-Neustrukturierung, Phase 7 — Clients, `403f058` … `70cda54`, Start-Sperre `d9b2676`):** volle Stufe auf
+**Stand 2026-10-28 (Umbau-Phase 7 — Clients, `403f058` … `70cda54`, Start-Sperre `d9b2676`):** volle Stufe auf
 `70cda54`: Prüfstand **508 grün + 1 übersprungen** (neu `VerteilerTests` 5, `AusgangskorbTests` 2; entfallen `BrokerIdentityTests`,
 `BrokerWiederholungTests`), Integration **64/64** (mit Last), Prüfdomäne **59/59**, Verhaltens-Netz **21 grün, ohne Skip** (G-12, G-13, G-14 grün;
 neu `ClientVerhaltenTests.Eine_fachliche_Ablehnung_erreicht_die_Sitzung_an_der_rohen_Leitung`, `…Eine_Datensatz_Ansicht_zeigt_das_Label…`
@@ -148,9 +148,9 @@ Ende eines Knotens wieder platzierte — jetzt die Start-Sperre `Bereitschaft`; 
 (einmal, danach das Verhaltens-Netz 21/21). Gegenproben rot gesehen: Verteiler ohne gezielte Zustellung (Ablehnung im Client-Stack und an der rohen
 Leitung, `CommandFailed` am Akteur-Tor, zwei Knoten), Read-your-writes ohne Warten (`Nach_dem_eigenen_Command…`), Beobachtung abgeschaltet
 (transitive Aktualisierung), Seite des Logs ohne Einträge (Wiederverbinden), Ausgangskorb ohne Ablegen (`AusgangskorbTests`). Nicht gemessen
-(Plan Phase 7 verlangt keine Messung; PF-37).
+(Umbau-Phase 7 verlangt keine Messung; PF-37).
 
-**Stand 2026-10-28 (Plan Pub/Sub-Neustrukturierung, Phase 8 — Stores und Projektionsform, `86092d0` … `b01b789`):** volle Stufe auf `496e384`
+**Stand 2026-10-28 (Umbau-Phase 8 — Stores und Projektionsform, `86092d0` … `b01b789`):** volle Stufe auf `496e384`
 grün bis auf `--check` und `--sonde` (die Werkzeuge schrieben `using`-Aliase und `partial` an Read-Models nicht zurück; behoben, auf `b01b789` beide
 grün): Prüfstand **519 grün + 1 übersprungen** (neu `StoreKlassenTests` 5, `StoreKlasseAnalyzerTests` 5, Formfälle in `HandlerFormAnalyzerTests`;
 entfallen `GaEinsPruefungTests`), Integration **67/67** (mit Last; neu `StoretestPostgresTests` 3: der allgemeine Store-Test für Marten, Datei-Ziel
@@ -174,7 +174,7 @@ Stand verfehlt; `StoreKlassenE2ETests`: Read-your-writes `noch_nicht`). Neues Pa
 `…_server-pubsub-pf38-ab-{a,b}`, gültig, grün): 155 → 152 Paare/s, p50 2,79 → 2,80 s, p99 3,81 → 3,84 s, Queries je Vorgang 91,8 → 104 (vorher 122),
 Transaktionen gleich. Was bleibt, ist die eine Stand-Abfrage je Query (627 → 10 345) — gewollt, weil eine Antwort jetzt auch „noch nicht da“ mit Stand zeigt.
 
-**Stand 2026-10-29 (Plan Pub/Sub-Neustrukturierung, Phase 9 — direkte Aggregat-Abfrage, `562a84c` … `73ade32`):** volle Stufe auf `73ade32` grün bis
+**Stand 2026-10-29 (Umbau-Phase 9 — direkte Aggregat-Abfrage, `562a84c` … `73ade32`):** volle Stufe auf `73ade32` grün bis
 auf einen Verhaltens-Test: Prüfstand **527 grün + 1 übersprungen** (neu: R4 in `GesamtbildAnalyzerTests` 2, Form der Frage im Decider in
 `HandlerFormAnalyzerTests` 1 + 5 Fälle), Integration **67/67** (mit Last), Prüfdomäne **64/64** (neu `AggregatAbfrageGarantieTests` 4: Antwort =
 Stand des nächsten Commands, unter 60 gleichzeitigen Commands jede Antwort = Log an ihrer Version, eine Frage während eines scheiternden Commits,
@@ -189,7 +189,7 @@ im Gesamtbild (CQRS086 statt still, CQRS084 fehlt), CQRS057 für die Frage im De
 beantwortet (zuerst grün: Proto.Cluster stellt die unbeantwortete Anfrage nach ≈ 5 s erneut zu, dann antwortet der Actor — der Test verlangt jetzt
 die Antwort binnen 2 s nach dem Commit, danach rot). Keine Messung: der heiße Pfad ist bis auf eine leere Warteschlange je Commit unverändert.
 
-**Stand 2026-10-29 (Plan Pub/Sub-Neustrukturierung, Phase 10 — Hausregel für Actors als Build-Prüfung, `90798a7`, `daee0c5`):** volle Stufe
+**Stand 2026-10-29 (Umbau-Phase 10 — Hausregel für Actors als Build-Prüfung, `90798a7`, `daee0c5`):** volle Stufe
 auf `90798a7` grün bis auf 7 neue Prüfstand-Fälle: Integration **67/67** (mit Last), Prüfdomäne **64/64**, Verhaltens-Netz **23/23** (auch
 `NeustartTests`, G-18 bleibt offen), Client 30/30, Python SDK und Worker grün, Codegen-Drift, `--check`, `--sonde`, `--grammatik` grün; das Gate rot
 nur wegen derselben 7 Fälle. Die 7 Fälle waren Fehler der Proben, nicht des Analyzers: `Task.Run(…)` als Anweisung ist zugleich ein eigener Faden
@@ -213,17 +213,17 @@ Statisch gezählt:
 | Client.Infrastructure.CollectionTests | 31 | 0 | 2 |
 | Werkbank.Abnahme.Tests | 1 | 0 | 1 |
 
-Gezählt (2026-10-28, nach Plan Pub/Sub-Neustrukturierung Phase 4b): Zeilen `[Fact` bzw. `[Theory`, Dateien = Dateien mit Tests. Die Differenz zu
+Gezählt (2026-10-28, nach Umbau-Phase 4b): Zeilen `[Fact` bzw. `[Theory`, Dateien = Dateien mit Tests. Die Differenz zu
 den Läufen kommt von den expandierten `[Theory]`-Fällen.
 
 ## 12.3 Was getestet ist
 
-**Prüfstand (Ebene 1), nach Bereich (Testmethoden, Stand Plan Pub/Sub-Neustrukturierung Phase 4):**
+**Prüfstand (Ebene 1), nach Bereich (Testmethoden, Stand Umbau-Phase 4):**
 
 | Bereich | Tests | Klassen |
 |---|---:|---|
 | Analyzer | 74 | `ZustandAnalyzerTests` (CQRS105, R19: Felder, Setter, Sammlungen, IZustand außerhalb einer Funktions-Klasse), `AkteurAnalyzerTests` (17), `FaehigkeitAnalyzerTests` mit `HandlerFormAnalyzerTests` (CQRS051/054/055, CQRS057 auch für eine Projektion, die etwas ausgibt), `ModellAnalyzerTests`, `QuellenTypAnalyzerTests`, `StoreZugriffAnalyzerTests`, `AusgabeVertragAnalyzerTests`, `GesamtbildAnalyzerTests` (CQRS084–087: Funktion ohne Umsetzung und ohne Träger; CQRS106, R20: gehörter Hinweis ohne Erzeuger), `LageAnalyzerTests`, `WiederholungAnalyzerTests` (R2/R11/R12/R13), `CommandEmitAnalyzerTests` |
-| Editor-Modell, Scaffolder, Grammatik | 55 | `DomainEditorLeseseiteTests`, `DomainEditorAkteurTests` (Kette über eine Funktion, Akteur darf eine Funktion draußen rechnen), `DomainEditorScaffolderTests`, `DomainEditorStrukturortTests`, `DomainEditorKompositionTests` (Grammatik nach Plan §3: Hinweis nur an Funktion und Client, Projektion erzeugt nichts, Frist über die Uhr), `PythonQuelleTests` |
+| Editor-Modell, Scaffolder, Grammatik | 55 | `DomainEditorLeseseiteTests`, `DomainEditorAkteurTests` (Kette über eine Funktion, Akteur darf eine Funktion draußen rechnen), `DomainEditorScaffolderTests`, `DomainEditorStrukturortTests`, `DomainEditorKompositionTests` (Grammatik nach docs/10: Hinweis nur an Funktion und Client, Projektion erzeugt nichts, Frist über die Uhr), `PythonQuelleTests` |
 | Extractor, Gesten, Sicht, Werkbank | 41 | `GestenTests` (22), `SichtTests`, `LesenToleranzTests`, `UsingsTests`, `GitKopfTests`, `ProtoVergleichTests` |
 | Funktionen und Uhr | 60 | `FunktionsBausteinGeneratorTests` (Dispatch, erlaubte Rückgaben, draußen und Umsetzungen, gleichbleibend, Hinweisplan, Zustand im Konstruktor samt Kontext und eine Adresse, lernendes `Auf`, CQRS100/101), `FunktionsLaufTests` (Slots, ein Stream nacheinander, Position, gedeckelte Liste, Parken, Stand eines geparkten Streams rückt mit), `FunktionsArbeitTests` (Festhalten, Abbruch, zwei Läufe, Strom, unbekannter Emit-Ausgang, Hinweise vom Gewinner, draußen mit und ohne Antwort, zwei Worker, Antwort außerhalb der Signatur; mit Zustand: `Auf` je Eingang einmal, Nachrechnen bei festgehaltener Ausgabe, kein Festhalten ohne Ausgabe), `FunktionsAktivierungTests` (Umsetzung und Dienste je Aktivierung, Freigabe-Reihenfolge), `HinweisNetzTests` (Routing an die Adresse, Kennungen, Command-Ids aus der Kennung, Wiederholen ohne Neurechnen, Boot-Fehler), `FunktionsVermittlungTests` (dazu A8: Bindung je Adresse), `BildeingangTests`, `UhrTests` |
 | Akteure, Clients | 34 | `AkteurRechteTests`, `ClientVertragTests`, `ClientCodeVertragTests` |
@@ -266,7 +266,7 @@ den Läufen kommt von den expandierten `[Theory]`-Fällen.
 | `UhrE2ETests` | 3 | fällige Frist mit der Id aus ihrem Event, vor der Fälligkeit erledigt, doppelt gefeuert wirkt einmal |
 | `QuellenE2ETests` | 2 | Quell-Nachricht vom Client genau einmal und über eine Funktion weiter — dreimal je unter 5 s bei 30 s Takt (der Wecker am Commit der Quelle); ein Stream je Schlüssel |
 | `Garantien/FunktionsGarantieTests` | 4 | Abbruch nach dem Festhalten vor den Commands, Abbruch nach den Commands vor der Position, zwei Aktivierungen, zwei Worker |
-| `Garantien/FunktionsZustandGarantieTests` | 9 | am allgemeinen Fall Messung (Plan Phase 4b; der Schätzer rechnet mit Lebenszyklus auf einem Arbeitsmodell): verliert eine Sicherung, beginnt die Aktivierung neu mit dem Stand des Gewinners; Hinweis-Kette bis zum Command ohne Log-Eintrag des Hinweises; Umzug einer Aktivierung (der Zustand kommt mit); Absturz zwischen Sicherung (Datei) und Position — jeder Log-Eingang wirkt genau einmal auf den gesicherten Zustand; zwei Aktivierungen derselben Adresse; zwei Sicherungen mit derselben Version (eine gewinnt ganz); Ressource beim Stoppen geschlossen; Commands aus einem doppelten Hinweis wirken einmal; eine Funktion draußen hört einen Hinweis über die Sitzung der Leitung |
+| `Garantien/FunktionsZustandGarantieTests` | 9 | am allgemeinen Fall Messung (Umbau-Phase 4b; der Schätzer rechnet mit Lebenszyklus auf einem Arbeitsmodell): verliert eine Sicherung, beginnt die Aktivierung neu mit dem Stand des Gewinners; Hinweis-Kette bis zum Command ohne Log-Eintrag des Hinweises; Umzug einer Aktivierung (der Zustand kommt mit); Absturz zwischen Sicherung (Datei) und Position — jeder Log-Eingang wirkt genau einmal auf den gesicherten Zustand; zwei Aktivierungen derselben Adresse; zwei Sicherungen mit derselben Version (eine gewinnt ganz); Ressource beim Stoppen geschlossen; Commands aus einem doppelten Hinweis wirken einmal; eine Funktion draußen hört einen Hinweis über die Sitzung der Leitung |
 | `Garantien/WeckerGarantieTests` | 4 | Latenz Funktion (dreimal unter 5 s) und Uhr (Frist von 1 s in Sekunden); verlorene Weckrufe holt der Takt genau einmal nach; doppelte Weckrufe wirken genau einmal |
 | `Garantien/AblaufGarantieTests` | 2 | die Funktion `Nachschub` wirkt genau einmal über Wecker und Takt; Neustart des Hosts mitten im Auftrag führt ihn zu Ende |
 
@@ -287,7 +287,7 @@ Knoten, G-13), `NeustartTests` (1, Kategorie Last).
 - **Reihenfolge der Hinweise zwischen zwei Actors** — nicht zugesichert, ohne Test (docs/13 G-15).
 - **Spur über Funktionen und Commands als lückenlose Kette** — nur indirekt (Treiber S3 ordnet über die Ursache zu); der Prüfstand-Test dazu lief
   über die entfernte Katalog-Welt.
-- **Werkbank-Abnahme** — ihr einziger Test ist zurückgestellt (Editor, Plan E4).
+- **Werkbank-Abnahme** — ihr einziger Test ist zurückgestellt (Editor, docs/10 E4).
 - **Paralleler Drain / Schreibpfad-Skalierung** — kein Assertion-Test (früher nur im LoadHarness beobachtet).
 - **Shard-Rebalance / Node-Ausfall** — nur simuliert.
 - **Blazor-Client** jenseits `VirtualCollection`/`PendingCommandTracker` (Bus, Store, Transport).
@@ -629,7 +629,7 @@ grün (je ≈ 19 800 Vorgänge, Rückstand am Ende 715–908 statt 32 763, Abbau
   Reset“: S3-64 1,98 ×, S3-8 1,63 ×, S5-64 1,16 ×, S5-8 1,10 ×; Host-CPU in S5 0,66–0,81 ×. Störungslauf grün (29 794 Vorgänge).
   Gegen die Server-Baseline damit S3-64 1,85 ×, S3-8 1,77 ×, S5-64 1,94 ×, S5-8 1,21 ×.
 
-**Schlanker Schreibweg (Plan Phase 4, 2026-10-15, Messserver, Spalten „Inbox-Tabelle“ und „Schnell anhängen“):**
+**Schlanker Schreibweg (Umbau-Phase 4, 2026-10-15, Messserver, Spalten „Inbox-Tabelle“ und „Schnell anhängen“):**
 - *Inbox als Tabelle* (`aef3d46`, `…_2152_…_server-inbox`, Störungslauf `…_2156_…` grün, 28 004 Vorgänge): eine Wirkung schreibt keine
   Marke mehr, die Quittung geht als eine Anweisung je Group-Commit in `cqrs_inbox`. Je Vorgang (pg_stat_statements, Nenner = Vorgänge des
   Blocks) S5-8: Event-Inserts 11,5 → 6,9, Inbox-Inserts 0 → 1,2, DB-Zeit 3,6 → 2,9 ms; S5-64 Event-Inserts 12,0 → 6,7, DB-Zeit 4,3 → 3,3 ms;
@@ -859,7 +859,7 @@ teurer wird. Bestandsaufnahme aus Code, `pg_stat_statements` und `pg_stat_user_t
 - Lokal einmal gesehen, nicht reproduziert: der volle Prüfstand hing in `PipelineFlussTests.Bestellung_Oder…(karte)`, während daneben gebaut
   wurde; zwölf Wiederholungen der Fluss- und Garantie-Tests und zwei volle Läufe danach grün.
 
-**Basis des Umbaus Pub/Sub-Neustrukturierung (2026-10-26, Messserver, `b1af87e`, Spalte „Baseline“, Plan Phase 0):** der erste Lauf nach dem
+**Basis des Umbaus Pub/Sub-Neustrukturierung (2026-10-26, Messserver, `b1af87e`, Spalte „Baseline“, Umbau-Phase 0):** der erste Lauf nach dem
 Schnitt und die Referenz für alle Phasen des Plans; gültig, Exactly-once grün (`…_0539_b1af87e_server-pubsub-basis`). Gemessen S1, S3, S5 (der
 Treiber wählt S3-64 und S5-64 nur mit ihren Geschwistern; L1 und L5 laufen mit): S1 61,9 Paare/s bis alles sichtbar bei 22,6 Transaktionen und
 171 Queries je Paar (623 % CPU); S3-64 1 341 Teile/s, Latenz p50 591 ms; S5-64 2 326 Vorgänge/s, p50 177 ms; L1 5,2 Queries/s und 2,5 % CPU.
@@ -944,7 +944,7 @@ Cache-Ausgaben, `deploy-*/` aus `build.sh` und die bewusst ignorierten Altdateie
 temporären `git worktree` (nur committete Dateien — nicht committete Änderungen prüft es nicht), fährt dort `./codegen.sh --check` und den
 Prüfstand und verlangt, dass der Build den Checkout nicht verändert. Der Worktree wird immer entfernt; Exit-Code 0 = grün. Dauer ≈ 2½ min (144 s auf `e26bc15`).
 
-**Verhaltens-Netz (`Verhalten.Tests`, Plan Pub/Sub-Neustrukturierung Phase 0):** jede Klasse schreibt sich eine Umgebung
+**Verhaltens-Netz (`Verhalten.Tests`, Umbau-Phase 0):** jede Klasse schreibt sich eine Umgebung
 (`Geruest/Testumgebung.cs`, `umgebung.verhalten-….json` im Temp-Verzeichnis, gefunden über `CQRS_UMGEBUNGEN`), löscht ihre Datenbank und
 startet die gebauten Hosts als Prozesse (`Geruest/Hostlauf.cs`; Ports je Prozess über `Transport__GrpcPort`/`__EinblickPort`, so teilen zwei
 Knoten eine Umgebung). Gesprochen wird nur über äußere Wege: `Geruest/Arbeitsplatz.cs` (Bus, Verbindung, Query-Brücke, Versionen und das
@@ -958,7 +958,7 @@ Uhr der Sim (`Testumgebung.StelleUhrVorAsync`), nicht über Warten. Läuft nur a
 HTTP). `Werkbanklauf` kopiert alle Quell-Dateien (`git ls-files -co --exclude-standard`, also auch nicht committete Änderungen) in ein Temp-Verzeichnis,
 legt dort `git init -b abnahme-<id>` an (Branch → Sim-DB `cqrs_sim_abnahme_<id>`, Cluster) und schreibt `umgebung.abnahme.json` aus
 `sim-main` mit freien Ports, Daten-Pfaden im Temp-Verzeichnis und der Bildaufbereitung auf Laufort `Extern`. Ihr einziger Test ist bis zur
-neuen Editor-Oberfläche zurückgestellt (Plan E4). Arbeitsbaum, `.werkbank/` und Sim-DB des
+neuen Editor-Oberfläche zurückgestellt (docs/10 E4). Arbeitsbaum, `.werkbank/` und Sim-DB des
 Entwicklers bleiben unberührt; am Ende SIGTERM an die Werkbank (sie hält Host und Worker an), eigene DB löschen, Kopie löschen.
 
 ## 12.7 Fallstricke

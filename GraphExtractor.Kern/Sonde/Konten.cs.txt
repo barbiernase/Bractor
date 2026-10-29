@@ -1,11 +1,11 @@
 using Abstractions;
 
-// SONDE — fremdes Szenario 1 (Plan Pub/Sub-Neustrukturierung §6, Phase 0): BENUTZER MIT EINDEUTIGER E-MAIL.
+// SONDE — fremdes Szenario 1 (docs/12 §12.6): BENUTZER MIT EINDEUTIGER E-MAIL.
 //
 // „Keine zwei Benutzer mit derselben Adresse“ ist eine Invariante über viele Benutzer — sie gehört in EIN Aggregat: die Adresse selbst
 // (Eindeutigkeits-Aggregat, Id aus der normalisierten Adresse abgeleitet). Der Benutzer beantragt, die Adresse reserviert oder sagt ab;
 // die Absage ist ein FAKT (der Modellierer entscheidet über den Typ), weil der Ablauf an ihr weitergeht. Die Zugehörigkeit zum Benutzer
-// ist ein fachliches Feld im Event (Plan A2). Eine gleichbleibende Funktion verbindet die beiden Aggregate (je Eingangstyp ein Auf, R2).
+// ist ein fachliches Feld im Event (docs/10 A2). Eine gleichbleibende Funktion verbindet die beiden Aggregate (je Eingangstyp ein Auf, R2).
 
 namespace Kundenportal.Konten;
 

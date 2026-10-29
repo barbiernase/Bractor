@@ -22,7 +22,7 @@ public sealed record Vorgang(
     string Zustand, string? WurzelTyp, string? WurzelWirker, string? Akteur);
 
 /// <summary>
-/// Liest die Spur aus dem Log (<c>docs/konzept-werkbank.md</c> §7, Werkbank P4.4/P4.6) — nur lesend, direkt über die globale Sequenz
+/// Liest die Spur aus dem Log (docs/04 §4.9, Werkbank P4.4/P4.6) — nur lesend, direkt über die globale Sequenz
 /// (<c>mt_events.seq_id</c>) samt Headern. Die „Spur-Projektion“ ist bewusst keine zweite gespeicherte Wahrheit: Knoten sind die Log-Einträge,
 /// Kanten ihre <c>ursache</c>; ein Vorgang ist die Menge einer <c>CorrelationId</c>, sein Zustand folgt aus der letzten Aktivität. Ob ein Vorgang FACHLICH fertig ist, sagt sein Aggregat (ein Fakt), nicht der Einblick. So gilt dasselbe in Sim und Prod; die
 /// Werkbank holt ab ihrem Cursor nach (§7.2).

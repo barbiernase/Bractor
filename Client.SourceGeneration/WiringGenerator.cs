@@ -266,7 +266,7 @@ public class WiringGenerator : IIncrementalGenerator
     {
         var fqn = symbol.ToDisplayString();
 
-        // Ein Command nennt sein Ziel-Aggregat im Typ (ICommand<TAggregat>, Plan §2.5) — dieselbe Identität wie am Server ([AggregatName] oder Name).
+        // Ein Command nennt sein Ziel-Aggregat im Typ (ICommand<TAggregat>, docs/10 §10.4) — dieselbe Identität wie am Server ([AggregatName] oder Name).
         if (iCommand != null && symbol.AllInterfaces.Any(i =>
             SymbolEqualityComparer.Default.Equals(i, iCommand)))
             return new WiringDomainTypeInfo(fqn, DomainTypeKind.Command, Ziel(symbol, iCommandZiel));

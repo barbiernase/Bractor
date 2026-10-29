@@ -3,7 +3,7 @@ using Abstractions;
 namespace Pruefdomaene.Abrechnung;
 
 /// <summary>
-/// Aggregat <see cref="Rechnung"/> (Plan Pub/Sub-Neustrukturierung Phase 3): gestellt, freigegeben oder gesperrt, bezahlt; eine fällige Prüfung der
+/// Aggregat <see cref="Rechnung"/>: gestellt, freigegeben oder gesperrt, bezahlt; eine fällige Prüfung der
 /// Zahlung meldet sie überfällig. Prüfling der Funktionen in Baustein-Form (Gutschrift gleichbleibend, Mahnwesen mit Dienst, Freigabe draußen).
 /// </summary>
 public partial class Rechnung : IState

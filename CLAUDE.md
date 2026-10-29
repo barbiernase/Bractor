@@ -1,14 +1,13 @@
 # CLAUDE.md
 
 Projektgedächtnis für Claude Code — bewusst schlank, nur Wissen, kein Changelog (Historie steht in Git).
-**Maßstab im Zweig `pubsub_neustrukturierung` ist `docs/plan-pubsub-neustrukturierung.md`** (Zielbild, Grammatik, Garantien, Phasen des
-Umbaus; noch nicht umgesetzt). Wo etwas widerspricht, gilt der Plan als Ziel und der Code als Ist. Wegweiser: `docs/README.md`.
-Offenes und Schulden: `docs/13-reifegrad-schulden-bewertung.md` §13.0. Zahlen und Messwerte: `docs/12-tests-und-vermessung.md`.
-Das Bild unten („Das tragende Bild“) beschreibt den **Ist-Zustand** nach Phase 10 des Umbaus.
+Die Kapitel unter `docs/` beschreiben den Ist-Zustand; für Fakten gilt der Code. Grammatik („Wie schreibe ich X?“), Regeln R1–R20 und die
+Entscheidungen E1–E10/A1–A8: `docs/10-entwickler-api.md`. Wegweiser: `docs/README.md`. Offenes und Schulden:
+`docs/13-reifegrad-schulden-bewertung.md` §13.0. Zahlen und Messwerte: `docs/12-tests-und-vermessung.md`.
 
 ## Was das Projekt ist
 
-Ein **allgemeines** signalbasiertes CQRS-/Event-Sourcing-Framework auf **Proto.Actor** (virtuelle Cluster-Actors), **Marten/PostgreSQL**
+Ein **allgemeines** CQRS-/Event-Sourcing-Framework auf **Proto.Actor** (virtuelle Cluster-Actors), **Marten/PostgreSQL**
 (Event-Store, einzige Wahrheit). Events werden geordnet und genau einmal wirksam an
 Projektionen, Reaktionen, Prozesse und Flüsse zugestellt; alles Dispatchende ist zur Compile-Zeit generiert. Dazu gehört die **Werkbank**:
 ein Editor, in dem eine Anwendung entworfen, als Code erzeugt, gebaut, im echten Host durchgespielt und über die Spur nachvollzogen wird.
@@ -17,14 +16,13 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 ## Die sechs Invarianten
 
 1. Die Wahrheit ist der Log. Ordnung, Vollständigkeit und Wiederholbarkeit kommen NUR aus dem Event-Store-Read.
-2. Das Signal ist nur ein Weckruf: trägt nur `(StreamId, Version)`, darf verloren, doppelt, ungeordnet sein.
+2. Der Weckruf trägt nur sein Ziel; er darf verloren, doppelt, ungeordnet sein (Wecker am Commit, Takt als Netz).
 3. Routing über Typen — nie ein handgebauter Identitäts-String.
 4. **Keine Reflection.** Die Laufzeit nutzt generierte Tabellen/Kontexte; Werkzeuge (Codegen, Schema, Extractor) lesen über Roslyn.
-5. Der Fachcode bleibt rein: Cursor, Signal, Ordnung, Exactly-once, Sharding, Prozess-Maschinerie tauchen im Entwickler-Code nie auf.
+5. Der Fachcode bleibt rein: Cursor, Weckruf, Ordnung, Exactly-once, Sharding, Prozess-Maschinerie tauchen im Entwickler-Code nie auf.
 6. Persistent genau dann, wenn ein durabler Konsument abhängt. Verlierbares (Tick, Ablehnung, UI-Feedback, Kenntnis-Push an Clients) bleibt
    auf dem schnellen Kanal. Quell-Nachrichten (z. B. vom Datei-Treiber) sind durabel: genau einmal je Kennung im Log.
 
-Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er darf verloren, doppelt, ungeordnet sein“ (Plan §2.3).
 
 ## Werkbank-Leitsätze (Kurzform; das ausführliche Werkbank-Konzept liegt im Git-Verlauf, die Editor-Oberfläche ist im Umbau zurückgestellt)
 
@@ -42,12 +40,12 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
 - **W11** Allgemeines Framework: eine Primitive bleibt, wenn sie allgemein gebraucht wird — nicht, weil die Beispieldomäne sie nutzt. Je Absicht ein Weg.
 - **W12** Keine GUIs im Editor (Clients nur als Vertrag), keine Schema-Evolution im Editor (`IUpcast` bleibt als Backend-Primitive), kein Deploy.
 
-## Das tragende Bild (Ist-Zustand nach Plan-Phase 10)
+## Das tragende Bild
 
 - **Schreibseite:** Command → Aggregat-Actor (Single-Writer, Inbox-Tabelle) → `Decide` (`OneOf<Event, Hinweis, Frist<TCmd>>`) → Events →
   Group-Commit → **Wecker** am Commit (generierter Weckplan, für jeden Schreiber gleich: Aggregat, Quelle, Funktions-Ausgabe) + Push an Clients
-  (`Commitmeldung` → `Verteilung`: je Commit eine Nachricht an den Verteiler jedes Knotens). **Keine Marken im Log**
-  (Phase 5): Noop und Ablehnung schreiben nur ihre Quittung in die Inbox, mit Kopf-Prüfung des Streams in derselben Transaktion
+  (`Commitmeldung` → `Verteilung`: je Commit eine Nachricht an den Verteiler jedes Knotens). **Keine Marken im Log**:
+  Noop und Ablehnung schreiben nur ihre Quittung in die Inbox, mit Kopf-Prüfung des Streams in derselben Transaktion
   (`cqrs_kopf`); eine Version je Aggregat (= Zahl seiner Events), beim Client aus Pushes und Antworten (`VersioningModule`).
 - **Zwei durable Konsumenten:** **Projektion** (`IProjektion`, `Task Auf(Event[, Herkunft], Schreib-Fähigkeiten genau eines Stores)`, Kennung =
   Typname; `BatchLeser` je Projektion und Partition, replaybar) und **Funktion** (`IFunktion` mit `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])`;
@@ -56,20 +54,20 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
   Partition. **Reader** (`IReader`, `Frage(Query, Lese-Fähigkeiten)`): die gezeigten Ids findet der Generator in den `Id<T>`-Feldern von Antwort
   und Query, die Projektionen dahinter aus den Lese-Fähigkeiten (`GeneratedQueryDienst`); Stand je gezeigter Id = Guard der Projektionen, dahinter
   das Log (`ProjektionsStaende`); Read-your-writes „mindestens S auf v“ wartet begrenzt darauf, sonst `noch_nicht`.
-- **Direkte Abfrage** (Plan §2.6, Phase 9): eine Query hat genau ein Ziel (R4, CQRS084/086) — einen Reader oder ein Aggregat. `Frage(Query)` im
+- **Direkte Abfrage** (docs/03 §3.2): eine Query hat genau ein Ziel (R4, CQRS084/086) — einen Reader oder ein Aggregat. `Frage(Query)` im
   Decider (nur lesend, synchron; die Query nennt ihr Aggregat mit genau einem Glied `Id<TAggregat>`, CQRS057; Query und Antwort liegen bei der
   Schreibseite); der Query-Dienst schickt sie über `AggregatAbfrage` an den Aggregat-Actor, der im Turn auf dem committeten Stand antwortet (während
   eines Commits wartet sie bis danach); die Antwort zeigt das Aggregat mit seiner Version als OCC-Stand.
-- **Store-Klassen** (Plan §2.4): ein Store implementiert genau eine — `IAtomaresZiel` (1: Wirkungen und Fortschritt in einer Transaktion,
+- **Store-Klassen** (docs/04 §4.3): ein Store implementiert genau eine — `IAtomaresZiel` (1: Wirkungen und Fortschritt in einer Transaktion,
   `MartenStore`), `IWiederholungsfestesZiel` (2: Fortschritt beim Framework nach den Wirkungen, Schreib-Fähigkeiten nehmen die `Herkunft`,
   `DateiZiel`), `INurMindestensEinmal` (3: nur mit `[MindestensEinmal]`, `DateiSink`); CQRS109/110; jeder Treiber besteht den allgemeinen
   Store-Test (`Storetest`); Neuaufbau über Generationen (`NeueGenerationAsync`/`UmschaltenAsync`, Klasse 1 = Leeren).
-- **Clients** (Plan §2.7, Phase 7): Sitzung als Actor je Verbindung (`SitzungsActor`, einziger Schreiber am gRPC-Stream, Id `<Knoten>#<Nr>`);
+- **Clients** (docs/konzept-akteure.md §5): Sitzung als Actor je Verbindung (`SitzungsActor`, einziger Schreiber am gRPC-Stream, Id `<Knoten>#<Nr>`);
   **Verteiler** je Knoten (`VerteilerActor`, fester Name, Typ → Sitzungen, Rückstau mit Grenze) für Pushes, gezielte Antworten (Ablehnung,
   `CommandFailed`, ohne Abo) und Hinweise an Clients; nach jedem Projektions-Commit „P hat S weiterverarbeitet“ → die Sitzung nennt dem Client die
   betroffenen Queries (`Aktualisiert`), er fragt neu; Lesen ab Position (`LiesLog`, nur Hörbares, nur bis zum Horizont); Ausgangskorb im C#-Client.
   Kein Broker, keine Abos.
-- **Funktion als Actor** (Plan §2.9, Phase 4b): Umsetzung und Dienste je Aktivierung (DI-Bereich, geschlossen beim Stoppen); gekapselter Zustand
+- **Funktion als Actor** (docs/04 §4.4): Umsetzung und Dienste je Aktivierung (DI-Bereich, geschlossen beim Stoppen); gekapselter Zustand
   über `IZustand<T>` im Konstruktor (gesichert mit der Position in einer Transaktion, ein `Auf` zugleich, CQRS105); optionaler Lebenszyklus
   `ILebenszyklus` (`BeimAktivierenAsync` nach dem Laden, `VorDemSichernAsync` vor jeder Sicherung, CQRS107); **Hinweis-Netz**: Hinweise
   (`ITransientEvent`) aus Funktionen, Aggregaten und Clients gehen über die generierte Tabelle direkt per `Bote.Melde` an die hörenden Funktionen,
@@ -87,7 +85,7 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
 
 | Bereich | Ort |
 |---|---|
-| Verträge, Marker, geteilte Regeln (eine Quelle) | `Abstractions/` (z. B. `Akteurvertrag.cs`, `Funktionsvertrag.cs`, `Dienstvertrag.cs`, `Projektstruktur.cs`, `Spur/WirkerId.cs`, `Spur/SpurWeg.cs`, `StoreZugriff.cs`, `Umgebung/UmgebungKonfig.cs`) |
+| Verträge, Marker, geteilte Regeln (eine Quelle) | `Abstractions/` (z. B. `Akteur.cs`, `Funktionsvertrag.cs`, `Dienstvertrag.cs`, `Projektstruktur.cs`, `Spur/WirkerId.cs`, `Spur/SpurWeg.cs`, `StoreZugriff.cs`, `Umgebung/UmgebungKonfig.cs`) |
 | Laufzeit (Framework) | `Infrastructure/` (Projections, Wecken, Verteilen, Funktionen, Uhr, Quellen/Treiber, Dienste, Umgebung, Einblick, Eingang, Akteure); referenziert keine Domäne, liest sie über `Komposition/Anwendung.cs` (`IAnwendung`) |
 | Leitung | `Cqrs.Leitung/cqrs.proto` (Framework: Dienst, Hüllen, `Nutzlast`); je Anwendung `<Wurzel>.Leitung` (Domänen-DTOs + `GeneratedNutzlast`) |
 | Komposition | `<Wurzel>.Laufzeit` (hier `Domain.Laufzeit`): Laufzeit-Generate, `GeneratedAnwendung`, `AddCqrs(args)` der Hosts |
@@ -156,7 +154,7 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
 - Werkbank-Abnahme (echte Werkbank auf einer Kopie, eigene Sim-DB, sequentiell, nach `dotnet build`):
   `dotnet test Werkbank.Abnahme.Tests/Werkbank.Abnahme.Tests.csproj`
 - Werkbank: `dotnet run --project Werkbank` → http://localhost:5178/editor/ (in `.claude/launch.json` als „Werkbank“). ⟳ baut und startet den echten
-  Host in der gewählten Umgebung (Oberfläche im Umbau zurückgestellt, Plan E4).
+  Host in der gewählten Umgebung (Oberfläche im Umbau zurückgestellt, docs/10 E4).
 - Hosts: `dotnet run --project Host.Grpc -- --umgebung sim-main` bzw. `Host.Blazor -- --umgebung sim-main` (Sim-DB `cqrs_sim_<branch>` über `CQRS_BRANCH`).
 - Multi-Node (3 Nodes + Consul): `docker compose -f deploy-multinode/docker-compose.yml up -d --build` (`docs/06-transport-multinode-betrieb.md`).
 - Gate „frischer Checkout baut“ (vor jedem Push): `./pruefe-checkout.sh` (Worktree des Commits: ignorierte Quellen, Build, Drift, Prüfstand)
@@ -170,12 +168,11 @@ Im Umbau ändert sich Invariante 2 zu „Der Weckruf trägt nur sein Ziel; er da
 
 | Frage | Dokument |
 |---|---|
-| Ziel des Umbaus, neue Grammatik, Garantien, Schritte | `docs/plan-pubsub-neustrukturierung.md` |
+| Wie schreibe ich X? Grammatik, Regeln, Entscheidungen | `docs/10-entwickler-api.md` |
 | Was ist heute garantiert (Wirkung, Ordnung, Zustellung)? | `docs/11-garantien.md` |
 | Wie funktioniert es heute? | `docs/03` (Schreibseite), `docs/04` (Konsum, Funktionen, Uhr), `docs/05` (Generatoren), `docs/06` (Transport) |
 | Akteure, Verträge, Clients | `docs/konzept-akteure.md`, `docs/08` (Blazor), `docs/09` (Python) |
 | Offen, Schulden | `docs/13-reifegrad-schulden-bewertung.md` §13.0 |
 | Tests, Zahlen, Messwerte | `docs/12-tests-und-vermessung.md` |
 
-**Hinweis (2026-10-26):** Für den Umbau wurden veraltete und nicht benötigte Dokumente gelöscht (Liste in `docs/README.md`, Stand im Git-Verlauf
-bei `861ea7f`). Verweise darauf in Kapiteln und Code-Kommentaren werden in Phase 11 des Plans nachgezogen. Für Fakten gilt der Code.
+Gelöschte Dokumente (Werkbank-Konzept, Editor- und LLM-Konzepte, der Plan Pub/Sub-Neustrukturierung) liegen im Git-Verlauf.

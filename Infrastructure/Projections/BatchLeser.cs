@@ -68,7 +68,7 @@ public sealed class BatchLeser
     /// <param name="typen">Speicher-Diskriminatoren der abonnierten Typen samt Upcasting-Vorgängern (<see cref="TypenAus"/>); null = ohne Typfilter.</param>
     /// <param name="absturzVorCommit">Prüf-Naht: läuft nach dem Dispatch eines Batches, vor seinem Commit (Absturz mitten im Batch, zweite Aktivierung).</param>
     /// <param name="verarbeitet">nach jedem Commit, der Events anwandte: die Streams dieser Events („P hat S weiterverarbeitet“ an die Verteiler,
-    /// Plan Pub/Sub-Neustrukturierung §2.7) — Mechanik nach dem Commit, die Projektion gibt dabei nichts aus.</param>
+    /// docs/konzept-akteure.md §5) — Mechanik nach dem Commit, die Projektion gibt dabei nichts aus.</param>
     public BatchLeser(
         IEventStoreRepository eventStore,
         Projektionsnaht naht,

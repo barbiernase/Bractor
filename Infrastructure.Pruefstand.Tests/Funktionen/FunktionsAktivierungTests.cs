@@ -9,7 +9,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Funktionen;
 
 /// <summary>
-/// Die Umsetzung einer Funktion lebt je Aktivierung (Plan Pub/Sub-Neustrukturierung §2.9, Phase 4b): gebaut beim Aktivieren in einem eigenen Bereich,
+/// Die Umsetzung einer Funktion lebt je Aktivierung (docs/04 §4.4): gebaut beim Aktivieren in einem eigenen Bereich,
 /// beim Stoppen zuerst die Umsetzung, dann ihre Dienste freigegeben; die nächste Aktivierung baut beides neu.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
@@ -82,7 +82,7 @@ public class FunktionsAktivierungTests
         p.Should().HaveCount(1);
     }
 
-    // ── Lebenszyklus (ILebenszyklus, Plan §2.9, E10) ──
+    // ── Lebenszyklus (ILebenszyklus, docs/04 §4.4, docs/10 E10) ──
 
     private sealed class Netz { public int Gewicht { get; set; } }
 

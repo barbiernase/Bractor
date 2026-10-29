@@ -9,7 +9,7 @@ namespace GraphExtractor;
 public sealed record SichtKarte(string Id, string Art, string Name, JsonObject Ref, SichtKarte? Besitzer = null);
 
 /// <summary>
-/// Die ABLEITUNGEN des Boards (Werkbank P7.3, <c>docs/konzept-werkbank.md</c> §8.3): alles, was der Editor früher aus dem Board nachrechnete —
+/// Die ABLEITUNGEN des Boards (Werkbank P7.3, CLAUDE.md W3): alles, was der Editor früher aus dem Board nachrechnete —
 /// Karten und Kanten, Domäne, Block (Aggregat), Akteur-Mengen und Akteur-Rahmen, Store-Scope, Inseln, eingeklappte Details, die statische
 /// Kette einer Karte, die Anschlussleiste der Clients und „was passt an diesen Port“ (⊕). Gerechnet wird NUR hier;
 /// der Editor zeichnet, was ankommt (<c>board.sicht</c>, <c>/api/werkbank/kette</c>, <c>/api/werkbank/passt</c>).
@@ -137,7 +137,7 @@ public sealed partial class Sicht
         foreach (var d in _decider) k.Add(new("dec:" + S(d, "_id"), "decider", S(d, "command"), d));
         foreach (var a in _applier) k.Add(new("app:" + S(a, "_id"), "applier", S(a, "event"), a));
         foreach (var e in _enums) k.Add(new("enum:" + S(e, "name"), "enum", S(e, "name"), e));
-        // Funktionen: eine Karte je Funktion (die Darstellung im Editor kommt mit der Editor-Arbeit, Plan E4).
+        // Funktionen: eine Karte je Funktion (die Darstellung im Editor kommt mit der Editor-Arbeit, docs/10 E4).
         foreach (var f in _bausteinFunktionen) k.Add(new("fb:" + S(f, "_id"), "bausteinfunktion", S(f, "name"), f));
         foreach (var d in _dienste) k.Add(new("dn:" + S(d, "_id"), "dienst", S(d, "name"), d));
         foreach (var rm in _readModels) k.Add(new("rm:" + S(rm, "_id"), "readmodel", S(rm, "name"), rm));
@@ -273,14 +273,14 @@ public sealed partial class Sicht
             if (S(a, "aggregat").Length > 0) P(aid, "agg:" + S(a, "aggregat"));
         }
         foreach (var s in _states) if (S(s, "aggregat").Length > 0) P("st:" + S(s, "_id"), "agg:" + S(s, "aggregat"));
-        // Direkte Abfrage (Plan Pub/Sub-Neustrukturierung §2.6): Query → Aggregat → Antworten (die Frage im Decider).
+        // Direkte Abfrage (docs/03 §3.2): Query → Aggregat → Antworten (die Frage im Decider).
         foreach (var a in _aggregate)
             foreach (var f in Alle(a["fragen"]))
             {
                 if (IstRec(S(f, "query"))) P(Rec(S(f, "query")), "agg:" + S(a, "name"));
                 foreach (var x in L(f, "antworten")) if (IstRec(x)) P("agg:" + S(a, "name"), Rec(x));
             }
-        // Funktionen (Plan §3.3): Eingang → Funktion → Ausgaben, Lese-Fähigkeit, Dienst im Konstruktor (der Klasse bzw. einer Umsetzung).
+        // Funktionen (docs/10 §10.3): Eingang → Funktion → Ausgaben, Lese-Fähigkeit, Dienst im Konstruktor (der Klasse bzw. einer Umsetzung).
         foreach (var f in _bausteinFunktionen)
         {
             var fid = "fb:" + S(f, "_id");

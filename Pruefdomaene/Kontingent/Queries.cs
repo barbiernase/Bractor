@@ -2,5 +2,5 @@ using Abstractions;
 
 namespace Pruefdomaene.Kontingent;
 
-/// <summary>Der exakte Stand eines Kontingents, direkt vom Aggregat (Plan Pub/Sub-Neustrukturierung §2.6) — mit seiner Version als OCC-Stand.</summary>
+/// <summary>Der exakte Stand eines Kontingents, direkt vom Aggregat (docs/03 §3.2) — mit seiner Version als OCC-Stand.</summary>
 public record HoleKontingent(Id<Kontingent> Kontingent) : IQuery;

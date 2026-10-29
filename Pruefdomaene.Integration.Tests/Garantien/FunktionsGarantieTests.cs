@@ -13,7 +13,7 @@ using static Pruefdomaene.Integration.Tests.Pruefstand;
 namespace Pruefdomaene.Integration.Tests.Garantien;
 
 /// <summary>
-/// Die Übergabe „Funktion → Ausgaben“ unter Störung, gegen echtes Marten (Plan Pub/Sub-Neustrukturierung §4.2, §4.4): Abbruch nach dem Festhalten vor
+/// Die Übergabe „Funktion → Ausgaben“ unter Störung, gegen echtes Marten (docs/11, docs/11 §11.14): Abbruch nach dem Festhalten vor
 /// den Commands, Abbruch nach den Commands vor der Position, zwei Aktivierungen derselben Partition, zwei Worker mit verschiedenen Antworten. Geprüft
 /// wird die Wirkung im Log — je Eingang genau eine, auch wenn die Außenwelt (der Versand) bei jedem Aufruf anders antwortet.
 /// </summary>

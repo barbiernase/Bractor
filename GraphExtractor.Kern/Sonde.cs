@@ -31,7 +31,7 @@ public static class Sonde
 {
     /// <summary>
     /// Die Wurzel-Namespaces der Sonde — gelesen aus ihren eigenen Quelltexten (erstes Segment jeder Namespace-Deklaration), nie getippt:
-    /// neben „Leihwesen“ liegen fremde Szenarien in eigenen Wurzeln (Plan Pub/Sub-Neustrukturierung §6, Phase 0), damit das Modell nicht
+    /// neben „Leihwesen“ liegen fremde Szenarien in eigenen Wurzeln (docs/12 §12.6), damit das Modell nicht
     /// auf eine Beispieldomäne passt.
     /// </summary>
     private static readonly IReadOnlySet<string> Wurzeln = Quellen()
@@ -175,12 +175,12 @@ public static class Sonde
                 S(o, "event"))));
         foreach (var a in A(b, "applier").Where(a => sondenAggregate.Contains(S(a, "aggregat"))))
             z.Add($"apply {S(a, "aggregat")}.{S(a, "event")}");
-        // Direkte Abfrage (Plan §2.6): die Fragen im Decider — Query und Antworten aus der Signatur.
+        // Direkte Abfrage (docs/03 §3.2): die Fragen im Decider — Query und Antworten aus der Signatur.
         foreach (var a in A(b, "aggregate").Where(Sonde))
             foreach (var f in A(a, "fragen"))
                 z.Add($"frage {S(a, "name")}.{S(f, "query")} -> {string.Join("|", A(f, "antworten").Select(x => (string?)x))}");
         string Konstruktor(JsonNode? n) => "(" + string.Join(", ", A(n, "konstruktor").Select(p => $"{S(p, "name")}:{S(p, "typ")}")) + ")";
-        // Funktionen: Klasse oder Schnittstelle (mit Zustand und einer Adresse, Plan §2.9), je Eingang Herkunft/Hinweis, Ausgaben (Strom; keine =
+        // Funktionen: Klasse oder Schnittstelle (mit Zustand und einer Adresse, docs/04 §4.4), je Eingang Herkunft/Hinweis, Ausgaben (Strom; keine =
         //   „lernt“), Lese-Fähigkeiten; Konstruktor, Umsetzungen.
         foreach (var f in A(b, "bausteinFunktionen").Where(Sonde))
             z.Add($"funktion-auf {S(f, "namespace")}.{S(f, "name")} {(f["klasse"]?.GetValue<bool>() == true ? "klasse" + Konstruktor(f) : "schnittstelle")}"
@@ -192,7 +192,7 @@ public static class Sonde
                     + (A(e, "ausgaben").Any() ? string.Join("; ", A(e, "ausgaben").Select(x => (string?)x)) : "lernt")
                     + (A(e, "faehigkeiten").Any() ? " liest " + string.Join(", ", A(e, "faehigkeiten").Select(p => $"{S(p, "typ")} {S(p, "name")}")) : "")))
                 + (A(f, "umsetzungen").Any() ? " umsetzung " + string.Join(", ", A(f, "umsetzungen").Select(u => S(u, "name") + Konstruktor(u))) : ""));
-        // Domänen-Dienste (konzept-werkbank §12.3 E11): Signatur (Methoden) und Implementierungen mit Konstruktor.
+        // Domänen-Dienste (docs/06 §6.5): Signatur (Methoden) und Implementierungen mit Konstruktor.
         foreach (var d in A(b, "dienste").Where(Sonde))
             z.Add($"dienst {S(d, "namespace")}.{S(d, "name")} | "
                   + string.Join("; ", A(d, "methoden").Select(m => $"{S(m, "name")}({string.Join(", ", A(m, "parameter").Select(p => $"{S(p, "name")}:{S(p, "typ")}"))}):{S(m, "rueckgabe")}"))

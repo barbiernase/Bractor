@@ -7,7 +7,7 @@ public partial class ImagePair
     public partial class Decider : IDecider<ImagePair>
     {
         // ═══════════════════════════════════════════════════
-        // DIREKTE ABFRAGE (Plan Pub/Sub-Neustrukturierung §2.6)
+        // DIREKTE ABFRAGE (docs/03 §3.2)
         // ═══════════════════════════════════════════════════
 
         /// <summary>Der exakte Stand des Paars — nur lesend; die Version hängt das Framework an.</summary>

@@ -58,7 +58,7 @@ public sealed class ZweiKnotenTests
     }
 
     /// <summary>
-    /// Hartes Ende eines Knotens (Plan Pub/Sub-Neustrukturierung Phase 6, §7 Risiko 3): zwei Knoten der Prüfdomäne, Knoten B wird mit SIGKILL beendet.
+    /// Hartes Ende eines Knotens (docs/13 §13.7): zwei Knoten der Prüfdomäne, Knoten B wird mit SIGKILL beendet.
     /// Danach weckt jeder Commit auf Knoten A die Funktion <c>Nachschub</c> in jeder Partition — auch in denen, die auf B aktiv waren und neu
     /// platziert werden — ohne auf den Takt (30 s) zu warten: sobald der Cluster B ausgetragen hat, kommt eine Runde aus je einem Posten je Partition
     /// dreimal hintereinander in unter 5 s durch. Jeder Eingang wirkt genau einmal, auch die aus der Übergangszeit.

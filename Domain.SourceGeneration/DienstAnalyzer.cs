@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Domain.SourceGeneration;
 
 /// <summary>
-/// Die Dienst-Bindung (konzept-werkbank §12.3 E11) im Build — was die generierte Bindung (<c>DienstGenerator</c>, <c>BindeDienste</c>) voraussetzt:
+/// Die Dienst-Bindung (docs/06 §6.5) im Build — was die generierte Bindung (<c>DienstGenerator</c>, <c>BindeDienste</c>) voraussetzt:
 /// <list type="bullet">
 /// <item>CQRS089 (GR-DIENST) — ein Dienst (<c>IDienst</c>) steht nur im Konstruktor einer Funktions- oder Dienst-Implementierung; als Parameter
 ///   eines Handles/Decide, als Feld oder Eigenschaft im Fachcode (Aggregat, Projektion, Reader …) wäre er eine unsichtbare

@@ -4,7 +4,7 @@ using Abstractions;
 namespace Core;
 
 /// <summary>
-/// Ein Store der <b>Klasse 2</b> im Dateisystem (<see cref="IWiederholungsfestesZiel"/>, Plan Pub/Sub-Neustrukturierung §2.4) — der Nachweis, dass
+/// Ein Store der <b>Klasse 2</b> im Dateisystem (<see cref="IWiederholungsfestesZiel"/>, docs/04 §4.3) — der Nachweis, dass
 /// das Framework keine Transaktion des Stores braucht. Den Fortschritt hält das Framework und rückt ihn erst vor, wenn <see cref="SchreibeAsync"/>
 /// durch ist; ein Abbruch dazwischen wiederholt die Wirkungen. Darum ergibt jede Wirkung wiederholt dasselbe:
 /// <list type="bullet">

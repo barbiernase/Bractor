@@ -1,7 +1,7 @@
 """
 Reconnect: nach einem Verbindungsabbruch verbindet der Client neu, bietet seine Funktionen wieder an UND verarbeitet weiter.
 
-Regression (docs/konzept-editor-pipelines.md §14.9): früher endeten Lese- und Verarbeitungsschleife mit der ersten Verbindung;
+Regression: früher endeten Lese- und Verarbeitungsschleife mit der ersten Verbindung;
 der Monitor verband zwar neu und meldete die Funktionen erneut an, aber niemand las mehr — der Worker war taub, seine Aufträge
 liefen nur noch per Lease-Ablauf zu anderen. Ohne Server: der Proxy ist ein Fake, der je Verbindung genau einen Auftrag liefert
 und dann die Verbindung verliert.

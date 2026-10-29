@@ -4,7 +4,7 @@ using System.Text;
 namespace Abstractions;
 
 /// <summary>
-/// Woher der Eingang eines Bausteins kommt (Plan Pub/Sub-Neustrukturierung §3.1, §3.3): der Log-Eintrag — Stream, Version, Log-Zeit —, der
+/// Woher der Eingang eines Bausteins kommt (docs/10 §10.2, docs/10 §10.3): der Log-Eintrag — Stream, Version, Log-Zeit —, der
 /// Akteur der Kette und die Ableitung neuer Ids. Ein Baustein bekommt sie als Parameter (<c>Auf(ZahlungUeberfaellig e, Herkunft h)</c>), nie über
 /// eine Uhr oder einen Zufall: so rechnet derselbe Eingang beim zweiten Mal gleich (R11, R12), und eine neue Id ist beim Wiederholen dieselbe (R13).
 /// </summary>

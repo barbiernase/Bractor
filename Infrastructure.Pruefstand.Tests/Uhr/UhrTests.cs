@@ -13,7 +13,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Uhr;
 
 /// <summary>
-/// Die Uhr (Plan Pub/Sub-Neustrukturierung §2.2, §4.2, Phase 3), store-frei: eine Frist ist Ausgabe eines Decide und geht als <see cref="FristGesetzt"/>
+/// Die Uhr (docs/10 §10.1, docs/11), store-frei: eine Frist ist Ausgabe eines Decide und geht als <see cref="FristGesetzt"/>
 /// ins Log; die Uhr feuert fällige Fristen mit einer Command-Id aus dem Frist-Event — doppelt gefeuert, dieselbe Id —, nimmt sie erst bei
 /// entschiedenem Ausgang aus dem Verzeichnis und lässt sie bei unbekanntem liegen. Dazu der Takt-Treiber: je Intervall genau eine Meldung.
 /// </summary>

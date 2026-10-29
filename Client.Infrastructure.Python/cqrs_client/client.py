@@ -121,7 +121,7 @@ class CqrsClient(HandlerBase, Generic[S]):
         return self._proxy.is_connected
 
     # ═══════════════════════════════════════════════════
-    # ASK-SEITE — Queries stellen (docs/09 §9.4, docs/02 P16)
+    # ASK-SEITE — Queries stellen (docs/09 §9.4)
     # ═══════════════════════════════════════════════════
 
     async def query(self, query_dto):

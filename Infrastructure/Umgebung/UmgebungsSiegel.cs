@@ -5,7 +5,7 @@ using Npgsql;
 namespace Infrastructure.Umgebung;
 
 /// <summary>
-/// Das Umgebungs-Siegel (docs/konzept-werkbank.md §4.3): jede Datenbank trägt in <c>&lt;schema&gt;.umgebung</c> Name, Art und
+/// Das Umgebungs-Siegel (docs/06 §6.5): jede Datenbank trägt in <c>&lt;schema&gt;.umgebung</c> Name, Art und
 /// Cluster-Namen ihrer Umgebung. Ein Host startet nur, wenn seine Umgebung zum Siegel passt — ein Sim-Host schreibt so nie in die
 /// Prod-DB und umgekehrt. Eine leere DB bekommt das Siegel beim ersten Start; eine Sim-DB legt der Host bei Bedarf an (nie Prod).
 /// Dazu die Tabelle <c>&lt;schema&gt;.uhr</c> (Versatz der DB-Uhr, nur in Sim wirksam, §4.4).
@@ -123,7 +123,7 @@ public sealed class UmgebungsSiegel(UmgebungKonfig umgebung) : IHostedService
 }
 
 /// <summary>
-/// Die DB-Uhr einer Umgebung (docs/konzept-werkbank.md §4.4): die Zeit der Datenbank plus <c>versatz</c> aus <c>&lt;schema&gt;.uhr</c> — nur in
+/// Die DB-Uhr einer Umgebung (docs/04 §4.7): die Zeit der Datenbank plus <c>versatz</c> aus <c>&lt;schema&gt;.uhr</c> — nur in
 /// Sim; in Prod ohne Versatz. Derselbe Ausdruck setzt den Zeitstempel jedes Events (G-10, <c>Persistence.EventZeit</c>): Zeitlimits, Warte-Knoten
 /// und Fristen vergleichen Zeit aus dem Log mit Zeit aus derselben Uhr, auch nach einem Zeitsprung der Sim.
 /// </summary>

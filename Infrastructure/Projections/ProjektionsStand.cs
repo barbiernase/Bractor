@@ -22,7 +22,7 @@ public sealed record Projektionseintrag(
 }
 
 /// <summary>
-/// „Passt die Leseseite noch zum Code?" (docs/konzept-werkbank.md §4.6, §12.3 E9). Läuft beim Start nach dem Siegel und VOR dem
+/// „Passt die Leseseite noch zum Code?" (docs/04 §4.3). Läuft beim Start nach dem Siegel und VOR dem
 /// Pull-Pfad: der Code-Hash jeder Projektion (Klasse + Store) wird mit dem in <c>&lt;schema&gt;.stand</c> gespeicherten verglichen.
 /// Zum Stand gehört auch die Form des Konsums (<see cref="KonsumForm"/>, Partitionen): ein Wechsel der Partitionszahl ist ein Neuaufbau.
 /// <list type="bullet">

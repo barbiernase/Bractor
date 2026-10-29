@@ -56,7 +56,7 @@ public sealed class ReflectionTypeAnalyzer
         foreach (var type in _allTypes.Values)
         {
             var ifaces = type.GetInterfaces();
-            // IRahmenEvent = Event des Rahmens im Aggregat-Stream (Frist gesetzt, Inbox-Marken) — proto-frei.
+            // IRahmenEvent = Event des Rahmens im Aggregat-Stream (FristGesetzt) — proto-frei.
             if (ifaces.Any(i => i.FullName == "Abstractions.IRahmenEvent"))
                 continue;
             if (ifaces.Any(i => i.FullName == interfaceFullName))

@@ -13,7 +13,7 @@ using static Pruefdomaene.Integration.Tests.Pruefstand;
 namespace Pruefdomaene.Integration.Tests.Garantien;
 
 /// <summary>
-/// Der Wecker am Commit im echten Cluster (Plan Pub/Sub-Neustrukturierung §2.3, §7 Risiko 1, Phase 6), am Beispiel der Funktion <c>Nachschub</c>
+/// Der Wecker am Commit im echten Cluster (docs/03 §3.5, docs/13 §13.7), am Beispiel der Funktion <c>Nachschub</c>
 /// (Aggregat-Event → Funktion → Command an das Aggregat):
 /// <list type="bullet">
 /// <item><b>Latenz:</b> ein Commit weckt die Funktion, die das Event hört — sie wartet nicht auf den Takt (30 s); eine gesetzte Frist weckt die Uhr

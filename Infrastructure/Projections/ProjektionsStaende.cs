@@ -7,7 +7,7 @@ using Npgsql;
 namespace Infrastructure.Projections;
 
 /// <summary>
-/// Der Stand einer Projektion je Stream (Plan Pub/Sub-Neustrukturierung §2.7): wie weit sie den Stream verarbeitet hat. Zwei Quellen:
+/// Der Stand einer Projektion je Stream (docs/konzept-akteure.md §5): wie weit sie den Stream verarbeitet hat. Zwei Quellen:
 /// <list type="number">
 ///   <item>der Guard je (Projektion, Stream) aus ihrem Fortschritt — beim Store der Klasse 1 in DERSELBEN Transaktion geschrieben wie ihre
 ///     Wirkungen, bei Klasse 2 und 3 vom Framework NACH ihnen (<see cref="Projektionsnaht.Ablage"/>): die Version des letzten Events, das sie

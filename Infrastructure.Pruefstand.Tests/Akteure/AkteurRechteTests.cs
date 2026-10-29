@@ -77,7 +77,7 @@ public class AkteurRechteTests
         p.DarfHoeren(typeof(TrainingAngefordert)).Should().BeFalse();
     }
 
-    // ── Funktionen draußen (Plan §2.7): ein Akteur darf eine Funktion rechnen (IDarf<IFunktion-Typ>) — ein Client, der ihn verkörpert, darf sie tragen ──
+    // ── Funktionen draußen (docs/konzept-akteure.md §5): ein Akteur darf eine Funktion rechnen (IDarf<IFunktion-Typ>) — ein Client, der ihn verkörpert, darf sie tragen ──
 
     [Fact]
     public void Ein_Akteur_darf_Funktionen_rechnen_ihre_Ausgaben_gibt_der_Funktions_Actor()

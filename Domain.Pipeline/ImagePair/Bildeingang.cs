@@ -5,7 +5,7 @@ using Domain.Pipeline.Bildaufbereitung;
 namespace Domain.Pipeline.ImagePair;
 
 /// <summary>
-/// Der BILDEINGANG des Kamerasystems (Plan Pub/Sub-Neustrukturierung Phase 4): eine aufbereitete Datei wird nach der Aufnahme-Konvention gedeutet
+/// Der BILDEINGANG des Kamerasystems: eine aufbereitete Datei wird nach der Aufnahme-Konvention gedeutet
 /// ({Zeitstempel}_{Version}.tiff → Paar + Version) und dem Paar übergeben — „anlegen oder ergänzen“ entscheidet das Aggregat (<see cref="NimmBildAuf"/>).
 /// Gleichbleibend (R12): rein aus dem Eingang, ohne Dienst und Uhr — die Funktion hält nichts fest, die Inbox des Paars verwirft Wiederholungen.
 /// Ein Name außerhalb der Konvention ist nur ein Hinweis.

@@ -10,7 +10,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Funktionen;
 
 /// <summary>
-/// Ebene 1 — der ECHTE Bildeingang der Domäne (Plan Pub/Sub-Neustrukturierung Phase 4): die gleichbleibende Funktion <see cref="Bildeingang"/>
+/// Ebene 1 — der ECHTE Bildeingang der Domäne: die gleichbleibende Funktion <see cref="Bildeingang"/>
 /// deutet eine aufbereitete Datei nach der Aufnahme-Konvention und übergibt sie dem Paar; das ImagePair entscheidet „anlegen oder ergänzen“ in einem
 /// Command (<see cref="NimmBildAuf"/>). Bewiesen: erste und zweite Datei eines Paars kommen an, ohne dass eine Ablehnung den Weg trägt; dieselbe
 /// Version zweimal ist nur ein Hinweis; ein unbekannter Name ergibt keinen Command.

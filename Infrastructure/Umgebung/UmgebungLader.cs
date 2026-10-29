@@ -6,7 +6,7 @@ using Microsoft.Extensions.Configuration;
 namespace Infrastructure.Umgebung;
 
 /// <summary>
-/// Lädt die Umgebung (docs/konzept-werkbank.md §4.1): <c>umgebungen/umgebung.&lt;name&gt;.json</c>, Name aus <c>--umgebung &lt;name&gt;</c>
+/// Lädt die Umgebung (docs/06 §6.5): <c>umgebungen/umgebung.&lt;name&gt;.json</c>, Name aus <c>--umgebung &lt;name&gt;</c>
 /// bzw. <c>CQRS_UMGEBUNG</c>. Umgebungsvariablen und Kommandozeile überschreiben wie gewohnt; <c>${env:NAME}</c> und <c>${branch}</c>
 /// werden ersetzt. Ein unbekannter Abschnitt oder ein unbekanntes Feld ist ein Start-Fehler — die Bindung ist generiert, nicht reflektiert.
 /// </summary>

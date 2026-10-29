@@ -13,7 +13,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Analyzers;
 
 /// <summary>
-/// CQRS107 (Plan Pub/Sub-Neustrukturierung §2.9, E10): der Lebenszyklus (<c>ILebenszyklus</c>) gehört an eine Funktions-Klasse im Host — nicht an eine
+/// CQRS107 (docs/04 §4.4, docs/10 E10): der Lebenszyklus (<c>ILebenszyklus</c>) gehört an eine Funktions-Klasse im Host — nicht an eine
 /// Schnittstelle (draußen gehört er dem Worker), nicht an einen Dienst; <c>VorDemSichernAsync</c> nur mit Zustand. Dazu: eine Funktion mit Lebenszyklus
 /// ist nie gleichbleibend (Generator).
 /// </summary>

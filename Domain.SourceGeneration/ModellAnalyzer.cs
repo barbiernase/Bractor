@@ -17,7 +17,7 @@ namespace Domain.SourceGeneration;
 /// <item>CQRS083 (GR-ZUSTAND, Regel Z, Warnung) — eine Projektion hält Zustand in Instanzfeldern; Gedächtnis gehört in ein Aggregat bzw.
 ///   Lesemodell.</item>
 /// <item>CQRS013 (R7) — ein Command ohne typisiertes Ziel: er implementiert <c>ICommand</c>, aber nicht genau ein <c>ICommand&lt;TAggregat&gt;</c>
-///   (etwa mit einer handgeschriebenen <c>Ziel</c>-Guid). Das Ziel eines Commands steht im Typ (Plan §2.5).</item>
+///   (etwa mit einer handgeschriebenen <c>Ziel</c>-Guid). Das Ziel eines Commands steht im Typ (docs/10 §10.4).</item>
 /// </list>
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]

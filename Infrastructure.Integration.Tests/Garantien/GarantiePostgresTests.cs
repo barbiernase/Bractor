@@ -67,7 +67,7 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
     [Theory, InlineData(false), InlineData(true)]   // Martens Anhänge-Modus: Standard (Rich) und schnell (Quick, so läuft der Host)
     public async Task Eine_Quittung_ohne_Events_gilt_nur_auf_dem_Kopf_ihrer_Entscheidung(bool schnell)
     {
-        // Ein Noop oder eine Ablehnung schreibt nur die Quittung (Plan Phase 5: keine Marken im Log). Sie gilt nur, wenn der Stream noch auf dem
+        // Ein Noop oder eine Ablehnung schreibt nur die Quittung (keine Marken im Log). Sie gilt nur, wenn der Stream noch auf dem
         //   Stand der Entscheidung steht — sonst hätte ein zweiter Schreiber auf einem veralteten Stand dauerhaft abgelehnt. Auch ohne Stream
         //   (Kopf 0): eine Ablehnung legt keinen an. Derselbe Weg im Group-Commit.
         var es = EventStore(schnell: schnell);

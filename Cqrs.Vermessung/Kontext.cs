@@ -2,7 +2,7 @@ using System.Text.Json.Nodes;
 
 namespace Cqrs.Vermessung;
 
-/// <summary>Eine Exactly-once-Prüfung (docs/plan-garantien-und-durchsatz.md §0.2): Soll gegen Ist aus Queries und Log.</summary>
+/// <summary>Eine Exactly-once-Prüfung (docs/12 §12.5): Soll gegen Ist aus Queries und Log.</summary>
 internal sealed record Pruefung(string Name, bool Ok, string Soll, string Ist)
 {
     public static Pruefung Gleich(string name, long soll, long ist) => new(name, soll == ist, soll.ToString(), ist.ToString());

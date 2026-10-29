@@ -30,9 +30,9 @@ public sealed class DomainModel
     public List<RecordRaw> ReadModels { get; } = new();
     /// <summary>Enums in Domain-Assemblies.</summary>
     public List<EnumRaw> Enums { get; } = new();
-    /// <summary>Funktionen (<c>Auf</c>, Plan Pub/Sub-Neustrukturierung §3.3): je Eingang die Ausgaben aus der Signatur.</summary>
+    /// <summary>Funktionen (<c>Auf</c>, docs/10 §10.3): je Eingang die Ausgaben aus der Signatur.</summary>
     public List<BausteinFunktionRaw> BausteinFunktionen { get; } = new();
-    /// <summary>Domänen-Dienste (<c>interface IX : IDienst</c>, konzept-werkbank §12.3 E11): Signatur + Implementierungen.</summary>
+    /// <summary>Domänen-Dienste (<c>interface IX : IDienst</c>, docs/06 §6.5): Signatur + Implementierungen.</summary>
     public List<DienstRaw> Dienste { get; } = new();
     /// <summary>
     /// Konfigurations-Records: Records ohne Nachrichten-Rolle, die per DI in den KONSTRUKTOR einer Funktion, Dienst-Implementierung,
@@ -140,9 +140,9 @@ public sealed class RecordRaw
 }
 
 /// <summary>
-/// Eine Funktion (Plan Pub/Sub-Neustrukturierung §3.3): als Klasse im Host, als Schnittstelle draußen. Gelesen wird nur die
+/// Eine Funktion (docs/10 §10.3): als Klasse im Host, als Schnittstelle draußen. Gelesen wird nur die
 /// Signatur (<see cref="Infrastructure.SourceGeneration.Funktionsform"/>, dieselbe Lesart wie der Generator): je <c>Auf</c> Eingang, Herkunft,
-/// Lese-Fähigkeiten, Ausgaben, Strom. Nur gelesen — die Editor-Oberfläche dafür ist zurückgestellt (Plan E4).
+/// Lese-Fähigkeiten, Ausgaben, Strom. Nur gelesen — die Editor-Oberfläche dafür ist zurückgestellt (docs/10 E4).
 /// </summary>
 public sealed class BausteinFunktionRaw
 {
@@ -156,7 +156,7 @@ public sealed class BausteinFunktionRaw
     public List<string> UmsetzungenFull = new();
     /// <summary>Je Umsetzung ihr Konstruktor (Typ wie geschrieben, Name) — ein Dienst darin ist die Kante Funktion → Dienst.</summary>
     public Dictionary<string, List<(string Typ, string Name)>> UmsetzungsKonstruktoren = new(StringComparer.Ordinal);
-    /// <summary>Der Zustand (<c>IZustand&lt;T&gt;</c>, voller Name von T) — null ohne; <c>[EineAdresse]</c> als Code-Fakt (Plan §2.9).</summary>
+    /// <summary>Der Zustand (<c>IZustand&lt;T&gt;</c>, voller Name von T) — null ohne; <c>[EineAdresse]</c> als Code-Fakt (docs/04 §4.4).</summary>
     public string? ZustandFull;
     public bool EineAdresse, Lebenszyklus;
     public string? Doku, Datei;
@@ -237,7 +237,7 @@ public sealed class AggregateRaw
     public Dictionary<string, List<string>> DecideOutcomes = new();
     /// <summary>Parametername je Command-FullName (der Rumpf referenziert ihn).</summary>
     public Dictionary<string, string> DecideParams = new();
-    /// <summary>Die Fragen an das Aggregat (Plan Pub/Sub-Neustrukturierung §2.6): Query-FullName → Antwort-FullNames, aus der Signatur der Frage im
+    /// <summary>Die Fragen an das Aggregat (docs/03 §3.2): Query-FullName → Antwort-FullNames, aus der Signatur der Frage im
     /// Decider (Lesart <c>Projektionsform</c>). Der Quelltext der Frage bleibt im Decider-Zusatz.</summary>
     public List<(string QueryFull, List<string> AntwortenFull)> Fragen = new();
 
@@ -313,7 +313,7 @@ public sealed class ReaderRaw
     public string Name = "", Full = "", Namespace = "";
     /// <summary>
     /// Die Projektionen hinter dem Reader (nach Namen): die, die in einen Store schreiben, dessen Lese-Fähigkeiten er nimmt — dieselbe
-    /// Store-Implementierung, ohne Implementierung dasselbe Bündel (Plan §3.3). Aus den Signaturen, nie aus Rümpfen.
+    /// Store-Implementierung, ohne Implementierung dasselbe Bündel (docs/10 §10.3). Aus den Signaturen, nie aus Rümpfen.
     /// </summary>
     public List<string> Projektionen = new();
     public List<string> QueryNames = new();
@@ -415,7 +415,7 @@ public sealed class StoreRaw
     /// <summary>Die EINZIGE Impl-Klasse (sonst null): Name, Namespace, Datei der Deklaration, Datei der Schreib-/Lese-Methoden.</summary>
     public (string Name, string Ns, string? Datei, string? SchreibDatei, string? LeseDatei)? Impl;
     /// <summary>
-    /// Die Store-Klassen (1, 2, 3; Plan §2.4, R14), die seine Implementierungen tragen (<c>IAtomaresZiel</c>, <c>IWiederholungsfestesZiel</c>,
+    /// Die Store-Klassen (1, 2, 3; docs/04 §4.3, docs/10 R14), die seine Implementierungen tragen (<c>IAtomaresZiel</c>, <c>IWiederholungsfestesZiel</c>,
     /// <c>INurMindestensEinmal</c> — auch über die Basisklasse), aufsteigend. Richtig ist genau eine (CQRS109).
     /// </summary>
     public List<int> Klassen = new();
@@ -526,7 +526,7 @@ public sealed partial class DomainExtractor
             if (Sym.Implements(t, _iQuery)) m.Queries.Add(ReadQuery(t));
             if (TryReadReader(t) is { } reader) m.Readers.Add(reader);
         }
-        // Hinter einem Reader: die Projektionen, die dorthin schreiben, woher er liest (Plan §3.3) — nur aus den Fähigkeiten.
+        // Hinter einem Reader: die Projektionen, die dorthin schreiben, woher er liest (docs/10 §10.3) — nur aus den Fähigkeiten.
         foreach (var r in m.Readers)
             r.Projektionen = m.Projections.Where(p => p.Ziele.Overlaps(r.Quellen)).Select(p => p.Name)
                 .Distinct(StringComparer.Ordinal).OrderBy(n => n, StringComparer.Ordinal).ToList();
@@ -659,7 +659,7 @@ public sealed partial class DomainExtractor
             }
             // Funktion (Auf): Klasse im Host oder Schnittstelle draußen — nur ihre Signatur zählt.
             if (Infrastructure.SourceGeneration.Funktionsform.IstBaustein(t)) { m.BausteinFunktionen.Add(ReadBausteinFunktion(t)); continue; }
-            // Domänen-Dienst (konzept-werkbank §12.3 E11): ein Interface mit IDienst — Signatur; die Implementierungen hängt LinkDienstImpls an.
+            // Domänen-Dienst (docs/06 §6.5): ein Interface mit IDienst — Signatur; die Implementierungen hängt LinkDienstImpls an.
             if (t.TypeKind == TypeKind.Interface && _iDienst != null && Sym.Implements(t, _iDienst)) { m.Dienste.Add(ReadDienst(t)); continue; }
             // Client-Vertrag (IClientVertrag): die Software an der Leitung.
             if (t.TypeKind == TypeKind.Interface && IstClient(t)) { m.Clients.Add(ReadClient(t)); continue; }
@@ -832,7 +832,7 @@ public sealed partial class DomainExtractor
     {
         var voByFull = m.ValueObjects.GroupBy(v => v.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var storeImpls = m.Stores.SelectMany(s => s.ImplsFull).ToHashSet(StringComparer.Ordinal);
-        // Funktionen und Dienst-Implementierungen (konzept-werkbank §12.3 E11): ihre Konstruktor-Records sind Konfig aus Konfig:<Record> —
+        // Funktionen und Dienst-Implementierungen (docs/06 §6.5): ihre Konstruktor-Records sind Konfig aus Konfig:<Record> —
         //   bei einer Funktion die Klasse selbst bzw. die Umsetzungen der Schnittstelle.
         storeImpls.UnionWith(m.BausteinFunktionen.Where(f => f.Klasse).Select(f => f.Full));
         storeImpls.UnionWith(m.BausteinFunktionen.SelectMany(f => f.UmsetzungenFull));
@@ -1624,7 +1624,7 @@ public sealed partial class DomainExtractor
     /// <summary>Alle Event-Typen aus einem Decide-Rückgabetyp <c>IEnumerable&lt;OneOf&lt;…&gt;&gt;</c> / <c>IEnumerable&lt;E&gt;</c> in Signatur-Reihenfolge.</summary>
     /// <summary>
     /// Die Ausgänge einer Entscheidung in Deklarations-Reihenfolge: Events und Hinweise voll qualifiziert, eine Frist als <c>Frist&lt;Command&gt;</c>
-    /// (Code-Fakt: <c>Abstractions.Frist&lt;TCmd&gt;</c> im OneOf, Plan §3.1) — die Uhr macht aus ihr den Command an dasselbe Aggregat.
+    /// (Code-Fakt: <c>Abstractions.Frist&lt;TCmd&gt;</c> im OneOf, docs/10 §10.2) — die Uhr macht aus ihr den Command an dasselbe Aggregat.
     /// </summary>
     private List<string> DecideAusgaenge(ITypeSymbol returnType)
     {

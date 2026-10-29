@@ -1,4 +1,4 @@
-# GENERIERT von Cqrs.Codegen aus den Funktionen draußen (IFunktion mit Auf, konzept-werkbank §12.3 E13). Nicht von Hand ändern.
+# GENERIERT von Cqrs.Codegen aus den Funktionen draußen (IFunktion mit Auf, docs/09 §9.5). Nicht von Hand ändern.
 #
 # Die Tabelle des generischen Funktions-Workers (funktions_worker.py): je Funktion mit Python-Basis die Basis (generated/funktionen.py),
 # das Modul und die Klasse ihrer Implementierung (funktionen/<modul>.py, die Klasse erbt die Basis und füllt `auf_…`).

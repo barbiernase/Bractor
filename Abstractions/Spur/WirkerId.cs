@@ -4,7 +4,7 @@ using System.Linq;
 namespace Abstractions;
 
 /// <summary>
-/// Das Format der WIRKER-Id (<c>docs/konzept-werkbank.md</c> §7.1) an EINER Stelle: der Baustein, der einen Log-Eintrag geschrieben hat —
+/// Das Format der WIRKER-Id (docs/04 §4.9) an EINER Stelle: der Baustein, der einen Log-Eintrag geschrieben hat —
 /// dieselbe Id wie seine Karte im Editor. Generatoren (netstandard2.0, per Link), Extractor und Laufzeit lesen sie von hier.
 /// <list type="bullet">
 /// <item><c>decide:&lt;Aggregat&gt;/&lt;Command&gt;</c></item>
@@ -27,7 +27,7 @@ static class WirkerId
     public const string Projektion = "projektion";
     public const string Akteur = "akteur";
 
-    /// <summary>Der Wirker der Uhr des Frameworks (sie sendet fällige Fristen; eine Karte hat sie nicht, Plan Pub/Sub-Neustrukturierung §5).</summary>
+    /// <summary>Der Wirker der Uhr des Frameworks (sie sendet fällige Fristen; eine Karte hat sie nicht).</summary>
     public const string Uhr = "uhr";
 
     /// <summary>Die Arten in fester Reihenfolge.</summary>

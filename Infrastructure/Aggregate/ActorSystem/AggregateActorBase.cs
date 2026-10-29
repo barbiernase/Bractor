@@ -24,7 +24,7 @@ namespace Infrastructure.Aggregate.ActorSystem;
 ///   CommandFailed bleibt für technische Fehler (catch-Block).
 ///
 /// ★ Das <see cref="CommandResult"/> trägt nur Ausgang, Versionen und Ablehnung; die Events stehen im Log.
-/// ★ Direkte Abfrage (Plan Pub/Sub-Neustrukturierung §2.6): eine <see cref="AggregatFrage"/> beantwortet die <c>Frage</c> des Deciders im Turn, auf dem
+/// ★ Direkte Abfrage (docs/03 §3.2): eine <see cref="AggregatFrage"/> beantwortet die <c>Frage</c> des Deciders im Turn, auf dem
 ///   committeten Stand — exakt dem, auf dem der nächste Command entschieden würde; läuft ein Commit, wartet sie bis danach.
 /// ★ Lebenszyklus aus dem Rahmen (<see cref="RahmenActor"/>): Passivierung nur, wenn kein Commit läuft und kein Command wartet.
 /// </summary>
@@ -34,7 +34,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     private readonly IAggregateHandlerFactory _handlerFactory;
     private readonly IEventStoreRepository _eventStore;
     private readonly Infrastructure.Verteilen.Verteilung? _verteilung;
-    // Das Hinweis-Netz (Plan Pub/Sub-Neustrukturierung §2.9): ein Hinweis aus dem Decide (eine Ablehnung), den eine Funktion hört, geht direkt an
+    // Das Hinweis-Netz (docs/04 §4.4): ein Hinweis aus dem Decide (eine Ablehnung), den eine Funktion hört, geht direkt an
     //   ihre Adresse — ohne Log, ohne Broker, höchstens einmal. Null = keine Funktion hört Hinweise.
     private readonly Infrastructure.Funktionen.HinweisNetz? _hinweisNetz;
     private readonly ILogger? _logger;
@@ -54,7 +54,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
 
     private IAggregateHandler? _handler;  // Wird nach State-Load erstellt!
     private TState? _state;
-    // Die Id kommt aus der Cluster-Identität (Plan §1.7, Phase 1), nicht aus dem ersten Envelope: ein Command an eine andere Id wird abgelehnt,
+    // Die Id kommt aus der Cluster-Identität (docs/06 §6.7), nicht aus dem ersten Envelope: ein Command an eine andere Id wird abgelehnt,
     //   bevor etwas geladen ist — sonst lüde der Actor dieser Identität den fremden Stream.
     private Guid _id;
     private bool _identitaetGueltig;
@@ -78,7 +78,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     // Wem der Einzel-Pfad antwortet (der Absender des Commands, den er gerade behandelt — nicht unbedingt die aktuelle Nachricht).
     private PID? _antwortAn;
 
-    // ★ Direkte Abfrage (Plan §2.6): während eines Commits trägt der State die Entscheidungen des Bündels, die noch scheitern können — eine Frage
+    // ★ Direkte Abfrage (docs/03 §3.2): während eines Commits trägt der State die Entscheidungen des Bündels, die noch scheitern können — eine Frage
     //   in dieser Zeit wartet hier und wird nach dem Commit beantwortet, bevor das nächste Bündel entschieden wird.
     private readonly Queue<(AggregatFrage Frage, PID? An)> _fragen = new();
 
@@ -174,7 +174,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         context.Respond(new CommandResult { Success = false, ErrorMessage = grund });
     }
 
-    // ─── Direkte Abfrage (Plan Pub/Sub-Neustrukturierung §2.6) ───
+    // ─── Direkte Abfrage (docs/03 §3.2) ───
 
     /// <summary>
     /// Eine Frage an dieses Aggregat: im Turn beantwortet, auf dem committeten Stand. Läuft ein Commit, wartet sie bis danach (der State trägt
@@ -307,8 +307,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
 
     /// <summary>
     /// Der eine Append-Weg des Actors: die Events eines Commands mit seiner Quittung in derselben Transaktion — bei einem Noop oder einer
-    /// Ablehnung nur die Quittung, gültig, wenn der Stream noch auf dem Stand der Entscheidung steht (Plan Pub/Sub-Neustrukturierung Phase 5:
-    /// keine Marken im Log, die Inbox-Tabelle hält „gewirkt/abgelehnt“). Kennt die Inbox die CommandId schon (eine Wiederholung, die der Cache nicht kannte), ist nichts geschrieben und der Stand
+    /// Ablehnung nur die Quittung, gültig, wenn der Stream noch auf dem Stand der Entscheidung steht (/// keine Marken im Log, die Inbox-Tabelle hält „gewirkt/abgelehnt“). Kennt die Inbox die CommandId schon (eine Wiederholung, die der Cache nicht kannte), ist nichts geschrieben und der Stand
     /// bleibt gültig: der Ausgang des ersten Mals wird quittiert. Scheitert der Append sonst — Versionskonflikt durch einen zweiten Schreiber,
     /// ein Commit, dessen Quittung verloren ging, ein DB-Fehler —, ist der In-Memory-Stand nicht mehr verlässlich: der Actor rehydriert frisch
     /// aus dem Log (G-3) und schlägt in der Inbox nach. Steht die CommandId dort, hat der Command gewirkt bzw. ist abgelehnt — der mehrdeutige
@@ -347,7 +346,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     }
 
     /// <summary>
-    /// Die Fristen einer Entscheidung (Plan Pub/Sub-Neustrukturierung Phase 3): je <see cref="FristGesetzt"/> die Beilage für das
+    /// Die Fristen einer Entscheidung: je <see cref="FristGesetzt"/> die Beilage für das
     /// Fälligkeits-Verzeichnis der Uhr an der Version, die das Event im Stream bekommt (ab <paramref name="versionVorher"/>) — in derselben
     /// Transaktion wie die Events. Eine Frist zielt auf einen Command DIESES Aggregats (R5); eine fremde ist ein Fehler, nichts wird geschrieben.
     /// </summary>
@@ -398,7 +397,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     }
 
     private static IDisposable SpurVon(CommandEnvelope env)
-        // Spur (docs/konzept-werkbank.md §7.1): die Events dieses Commands schreibt decide:<Aggregat>/<Command>, ausgelöst von dem Log-Eintrag,
+        // Spur (docs/04 §4.9): die Events dieses Commands schreibt decide:<Aggregat>/<Command>, ausgelöst von dem Log-Eintrag,
         //   den der Absender in den Envelope gelegt hat; der Absender selbst (Fluss-Knoten, Regel, Reaktion, Akteur) steht als „ueber" daneben.
         => Spur.Von(env.Ursache, WirkerId.FuerDecide(typeof(TState).Name, env.Payload.GetType().Name), env.Wirker);
 
@@ -1099,7 +1098,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     /// </summary>
     private void MeldeAblehnung(CommandEnvelope cmdEnvelope, IEvent rejection)
     {
-        // An die Funktionen, die den Hinweis hören (Hinweis-Netz, Plan §2.9): Kennung aus der Command-Id (A7), Herkunft der eigene Stream.
+        // An die Funktionen, die den Hinweis hören (Hinweis-Netz, docs/04 §4.4): Kennung aus der Command-Id (A7), Herkunft der eigene Stream.
         if (_hinweisNetz is { } netz && netz.Hoert(rejection.GetType()))
         {
             var version = _state?.Version ?? 0;

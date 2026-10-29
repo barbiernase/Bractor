@@ -7,7 +7,7 @@ using Infrastructure.Serialization;
 namespace Client.Infrastructure.Connection;
 
 /// <summary>
-/// Der Ausgangskorb des Clients (Plan Pub/Sub-Neustrukturierung §4.2, „Client → Aggregat“): ein Command liegt darin, BEVOR er gesendet wird, und
+/// Der Ausgangskorb des Clients (docs/11, „Client → Aggregat“): ein Command liegt darin, BEVOR er gesendet wird, und
 /// bleibt, bis seine Antwort kam (Event, Ablehnung oder <c>CommandFailed</c> mit seiner Korrelation). Nach dem Wiederverbinden — mit einem
 /// dauerhaften Korb auch nach einem Neustart des Clients — geht jeder offene noch einmal hinaus, mit DERSELBEN Command-Id: die Inbox des Ziels
 /// sorgt dafür, dass er genau einmal wirkt.

@@ -146,7 +146,7 @@ class PayloadMapper:
         aggregate_id: UUID | None = None,
         correlation_id: str = "",
     ) -> EventEnvelopeDto:
-        """Ein TransientEvent in einer EventEnvelopeDto-Hülle (TransientEventRequest → BrokerPublisher)."""
+        """Ein TransientEvent in einer EventEnvelopeDto-Hülle (TransientEventRequest → Sitzung → Hinweis-Netz)."""
         return EventEnvelopeDto(
             event_id=str(uuid4()),
             aggregate_id=str(aggregate_id) if aggregate_id else "",

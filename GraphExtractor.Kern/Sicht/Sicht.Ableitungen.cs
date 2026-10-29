@@ -24,7 +24,7 @@ public sealed partial class Sicht
     {
         var a = _decider.Where(d => S(d, "command") == n || Alle(d["ergibt"]).Any(o => S(o, "event") == n)).Select(d => S(d, "aggregat"))
             .Concat(_applier.Where(x => S(x, "event") == n).Select(x => S(x, "aggregat")))
-            // Die Query, die ein Aggregat beantwortet, und ihre Antworten (Frage im Decider, Plan Pub/Sub-Neustrukturierung §2.6).
+            // Die Query, die ein Aggregat beantwortet, und ihre Antworten (Frage im Decider, docs/03 §3.2).
             .Concat(_aggregate.Where(g => Alle(g["fragen"]).Any(f => S(f, "query") == n || L(f, "antworten").Contains(n))).Select(g => S(g, "name"))).ToList();
         return a.Count > 0 ? Eindeutig(a) : "";
     }
@@ -218,7 +218,7 @@ public sealed partial class Sicht
 
     private readonly Dictionary<string, List<string>> _akteurOrdnung = new(StringComparer.Ordinal);
     /// <summary>
-    /// Die Akteur-Rahmen einer Domäne in ihrer Reihenfolge (docs/konzept-akteure.md §8, konzept-werkbank §8.1): wer das Ding erschafft, dann Art
+    /// Die Akteur-Rahmen einer Domäne in ihrer Reihenfolge (docs/konzept-akteure.md §8, CLAUDE.md W1–W12): wer das Ding erschafft, dann Art
     /// (Maschine → KI → Mensch), dann Name. Gezählt werden die sichtbaren fachlichen Karten der Domäne (keine Inseln, keine eingeklappten Details).
     /// Eine gewünschte Reihenfolge (Ansicht) legt der Editor darüber.
     /// </summary>

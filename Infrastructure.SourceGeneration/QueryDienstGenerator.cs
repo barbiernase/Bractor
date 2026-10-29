@@ -6,7 +6,7 @@ using System.Text;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Der Query-Dienst der Leseseite (Plan Pub/Sub-Neustrukturierung §2.5, §3.3, Phase 8), generiert in der Komposition: je Query die
+    /// Der Query-Dienst der Leseseite (docs/10 §10.4, docs/10 §10.3), generiert in der Komposition: je Query die
     /// <c>Frage</c> eines Readers (<c>IReader</c>, gelesen über <see cref="Projektionsform"/>) mit ihren Lese-Fähigkeiten aus einem Bereich.
     /// Was die Antwort zeigt, findet der Generator selbst — kein <c>ctx.Track</c>:
     /// <list type="bullet">

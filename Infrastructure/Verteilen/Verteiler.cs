@@ -6,7 +6,7 @@ using Proto;
 namespace Infrastructure.Verteilen;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// VERTEILEN (Plan Pub/Sub-Neustrukturierung §2.7, Phase 7): was an Clients geht — Pushes der Events, die ein Client hören darf, gezielte
+// VERTEILEN (docs/konzept-akteure.md §5): was an Clients geht — Pushes der Events, die ein Client hören darf, gezielte
 // Antworten an EINE Sitzung (Ablehnung, CommandFailed), Hinweise von Clients — geht je Commit als EINE Nachricht an den Verteiler jedes Knotens
 // (gezielt: nur an den Knoten, den die Sitzungs-Id nennt). Der Verteiler kennt die Sitzungen seines Knotens und was jede hört, und reicht weiter.
 // Kein Broker, keine Abos im Cluster, kein Dauer-Abo auf CommandFailed. Verlierbar (Invariante 6): verlässlich liest ein Client nur ab Position.

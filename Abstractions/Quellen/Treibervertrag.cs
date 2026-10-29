@@ -2,7 +2,7 @@
 namespace Abstractions;
 
 /// <summary>
-/// Die fest codierten Treiber (docs/konzept-werkbank.md §3): welcher Basistyp zu welchem Treiber gehört. Die EINE Quelle dieser
+/// Die fest codierten Treiber (docs/04 §4.7): welcher Basistyp zu welchem Treiber gehört. Die EINE Quelle dieser
 /// Zuordnung — der Quellen-Generator, der Analyzer (CQRS070) und der Extractor lesen sie von hier (per Link, netstandard2.0).
 /// Ein Quellen-Typ wählt seinen Treiber nur über den Basistyp, nie über einen Namen aus der Konfig (Inv. 3).
 /// </summary>
@@ -18,7 +18,7 @@ public static class Treibervertrag
     /// <summary>Anzeigename des Datei-Treibers (Kopf der Quellkarte).</summary>
     public const string Datei = "Datei";
 
-    /// <summary>Voller Name der Basis des Takt-Treibers (Plan Pub/Sub-Neustrukturierung Phase 3).</summary>
+    /// <summary>Voller Name der Basis des Takt-Treibers.</summary>
     public const string TaktBasis = "Abstractions.TaktGemeldet";
 
     /// <summary>Anzeigename des Takt-Treibers.</summary>

@@ -33,7 +33,7 @@ internal sealed class Lageart
             if (Infrastructure.SourceGeneration.Funktionsform.IstBaustein(t))
                 foreach (var a in Infrastructure.SourceGeneration.Funktionsform.Lies(t).Aufs)
                     foreach (var e in a.Ausgaben) _ergebnisse.Add(Name(e));
-            // Fragen an ein Aggregat (Frage im Decider, Plan §2.6): ihre Query und ihre Antworten liegen bei der Schreibseite.
+            // Fragen an ein Aggregat (Frage im Decider, docs/03 §3.2): ihre Query und ihre Antworten liegen bei der Schreibseite.
             if (Infrastructure.SourceGeneration.Projektionsform.StateVonDecider(t) is { } state)
                 foreach (var f in Infrastructure.SourceGeneration.Projektionsform.LiesAggregatfragen(t, state).Fragen)
                 {

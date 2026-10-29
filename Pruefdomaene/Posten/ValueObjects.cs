@@ -3,7 +3,7 @@ using Abstractions;
 namespace Pruefdomaene.Posten;
 
 /// <summary>
-/// Wofür eine Buchung am Posten geschieht (Plan Pub/Sub-Neustrukturierung, Annahme A2): die Zugehörigkeit zu einem Vorgang ist ein FACHLICHES Feld,
+/// Wofür eine Buchung am Posten geschieht (Annahme A2): die Zugehörigkeit zu einem Vorgang ist ein FACHLICHES Feld,
 /// keine versteckte Korrelation — wie Belegart und Belegnummer einer Lagerbuchung. Die Funktion eines Vorgangs erkennt an ihm, welche Reservierung
 /// oder Zubuchung ihr gehört; <see cref="Ohne"/> gehört keinem Vorgang (Nachschub, Hand).
 /// </summary>

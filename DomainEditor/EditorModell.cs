@@ -31,14 +31,14 @@ public sealed record EditorModell
     /// <summary>Applier (Event → State-Faltung) — je Regel EIGENSTÄNDIG, referenziert sein Aggregat.</summary>
     public IReadOnlyList<ApplyRegel> Applier { get; init; } = [];
     /// <summary>
-    /// Domänen-Dienste (<c>interface IX : IDienst</c>, konzept-werkbank §12.3 E11): die Technik hinter einer Funktion — Signatur (Methoden) und Implementierungen
+    /// Domänen-Dienste (<c>interface IX : IDienst</c>, docs/06 §6.5): die Technik hinter einer Funktion — Signatur (Methoden) und Implementierungen
     /// (Klassen, die das Interface implementieren). Eine Funktion im Host nimmt sie im Konstruktor (<see cref="BausteinFunktion.Konstruktor"/>);
     /// welche Implementierung läuft, wählt die Umgebung (<c>Dienste:&lt;IX&gt;</c>).
     /// </summary>
     public IReadOnlyList<Dienst> Dienste { get; init; } = [];
     /// <summary>
-    /// Funktionen (Plan Pub/Sub-Neustrukturierung §3.3): je Eingang ein <c>Auf</c> mit freier Ausgabe; als Klasse im Host, als
-    /// Schnittstelle draußen. Nur gelesen — Gesten und Darstellung dafür kommen mit der Editor-Arbeit (Plan E4); der Scaffolder schreibt sie nicht.
+    /// Funktionen (docs/10 §10.3): je Eingang ein <c>Auf</c> mit freier Ausgabe; als Klasse im Host, als
+    /// Schnittstelle draußen. Nur gelesen — Gesten und Darstellung dafür kommen mit der Editor-Arbeit (docs/10 E4); der Scaffolder schreibt sie nicht.
     /// </summary>
     public IReadOnlyList<BausteinFunktion> BausteinFunktionen { get; init; } = [];
     /// <summary>
@@ -139,7 +139,7 @@ public sealed record Record
     /// <summary>Attribut-Listen des Typs verbatim (mehrere zeilengetrennt).</summary>
     public string? Attribute { get; init; }
     /// <summary>
-    /// Nur Quellen-Typen (docs/konzept-werkbank.md §3): der fest codierte Treiber, gewählt über den Basistyp (<c>Datei</c> für
+    /// Nur Quellen-Typen (docs/04 §4.7): der fest codierte Treiber, gewählt über den Basistyp (<c>Datei</c> für
     /// <c>DateiGemeldet</c>). Gesetzt ⇒ Event der Sorte „Quelle", geschrieben als <c>public sealed record X : DateiGemeldet;</c>.
     /// </summary>
     public string? Treiber { get; init; }
@@ -210,7 +210,7 @@ public sealed record Aggregat
     public string? Datei { get; init; }
     public string? DeciderDatei { get; init; }
     public string? ApplierDatei { get; init; }
-    /// <summary>Die Fragen an das Aggregat (Plan Pub/Sub-Neustrukturierung §2.6) — Signatur-Fakt der <c>Frage</c> im Decider, nur gelesen; ihr
+    /// <summary>Die Fragen an das Aggregat (docs/03 §3.2) — Signatur-Fakt der <c>Frage</c> im Decider, nur gelesen; ihr
     /// Quelltext steht im <see cref="DeciderZusatz"/>.</summary>
     public IReadOnlyList<AggregatFrage> Fragen { get; init; } = [];
     /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
@@ -269,7 +269,7 @@ public sealed record ApplyRegel
     public string? Datei { get; init; }
 }
 
-/// <summary>Eine Funktion (nur gelesen, Plan E4): Klasse (im Host) oder Schnittstelle (draußen), je Eingang die Signatur.</summary>
+/// <summary>Eine Funktion (nur gelesen, docs/10 E4): Klasse (im Host) oder Schnittstelle (draußen), je Eingang die Signatur.</summary>
 public sealed record BausteinFunktion
 {
     public required string Name { get; init; }
@@ -281,7 +281,7 @@ public sealed record BausteinFunktion
     public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
     /// <summary>Bei einer Schnittstelle: ihre Umsetzungen im Host (Klasse und Konstruktor).</summary>
     public IReadOnlyList<FunktionsUmsetzung> Umsetzungen { get; init; } = [];
-    /// <summary>Der gekapselte Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, Plan §2.9): der einfache Name von T, sonst null.</summary>
+    /// <summary>Der gekapselte Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4): der einfache Name von T, sonst null.</summary>
     public string? Zustand { get; init; }
     /// <summary><c>[EineAdresse]</c>: ein Funktions-Actor für alles statt einer je Partition (A6).</summary>
     public bool EineAdresse { get; init; }
@@ -310,7 +310,7 @@ public sealed record BausteinEingang
 }
 
 /// <summary>
-/// Ein Domänen-Dienst (konzept-werkbank §12.3 E11): <c>public interface {Name} : IDienst { {Rückgabe} {Methode}({Parameter}); … }</c> und seine Implementierungen
+/// Ein Domänen-Dienst (docs/06 §6.5): <c>public interface {Name} : IDienst { {Rückgabe} {Methode}({Parameter}); … }</c> und seine Implementierungen
 /// (<c>public sealed class X({Konstruktor}) : {Name} { … }</c>). Deklariert wird er nur an seiner Karte; eine Funktion nimmt ihn per ⊕.
 /// </summary>
 public sealed record Dienst
@@ -443,7 +443,7 @@ public sealed record Store
     /// <summary>Datei des Bündel-Interfaces (relativ zur Solution) — null = noch nicht geschrieben.</summary>
     public string? Datei { get; init; }
     /// <summary>
-    /// Die Store-Klassen (1 atomar, 2 wiederholungsfest, 3 mindestens einmal; Plan §2.4, R14), die seine Implementierungen tragen — Code-Fakt der
+    /// Die Store-Klassen (1 atomar, 2 wiederholungsfest, 3 mindestens einmal; docs/04 §4.3, docs/10 R14), die seine Implementierungen tragen — Code-Fakt der
     /// Basisliste (<c>IAtomaresZiel</c>, <c>IWiederholungsfestesZiel</c>, <c>INurMindestensEinmal</c>, auch über die Basisklasse), nur gelesen, nie
     /// geschrieben. Richtig ist genau eine (CQRS109); leer = keine Implementierung bzw. keine Klasse.
     /// </summary>

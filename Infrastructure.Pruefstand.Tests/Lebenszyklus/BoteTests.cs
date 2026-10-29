@@ -11,7 +11,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Lebenszyklus;
 
 /// <summary>
-/// Die zwei Verben (<see cref="Bote"/>, Plan Pub/Sub-Neustrukturierung Phase 2) über die Naht: eine Frage ohne Antwort läuft in ihre Frist
+/// Die zwei Verben (<see cref="Bote"/>) über die Naht: eine Frage ohne Antwort läuft in ihre Frist
 /// und liefert „keine Antwort“, eine Ausnahme verlässt sie nie, ohne Frist gibt es keine Frage; eine Meldung kehrt sofort zurück und ist
 /// trotzdem gebunden. Gegen den echten Cluster: <see cref="LebenszyklusImClusterTests"/>. Zeitkritisch (echte Uhr).
 /// </summary>

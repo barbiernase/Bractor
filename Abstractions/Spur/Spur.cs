@@ -1,7 +1,7 @@
 namespace Abstractions;
 
 /// <summary>
-/// Die SPUR eines Log-Eintrags (<c>docs/konzept-werkbank.md</c> §7.1): vier Header, vom Framework gesetzt und unsichtbar für den Fachcode
+/// Die SPUR eines Log-Eintrags (docs/04 §4.9): vier Header, vom Framework gesetzt und unsichtbar für den Fachcode
 /// (Inv. 5) — <see cref="UrsacheHeader"/> (der Log-Eintrag, der ihn ausgelöst hat: <c>Stream:Version</c>), <see cref="WirkerHeader"/> (der
 /// Baustein, der geschrieben hat: <see cref="WirkerId"/> = Karte im Editor), <see cref="UeberHeader"/> (wer den Command bzw. Auftrag
 /// abgeschickt hat, den der Wirker verarbeitet: Fluss-Knoten, Regel, Reaktion, Akteur — der Weg über die Karten dazwischen) und

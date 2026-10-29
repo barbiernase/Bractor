@@ -42,7 +42,7 @@ public sealed class BeispielHost : IAsyncLifetime
 }
 
 /// <summary>
-/// Das Verhalten an der Leitung, wie es ein Client erlebt (Plan §6, Phase 0) — gefahren mit dem echten Client-Stack des Blazor-Arbeitsplatzes
+/// Das Verhalten an der Leitung, wie es ein Client erlebt (docs/12 §12.6) — gefahren mit dem echten Client-Stack des Blazor-Arbeitsplatzes
 /// bzw. der rohen Leitung gegen einen echten Host. Hat den Umbau von Broker, Sitzung und Verteiler (Phasen 5–7) unverändert überstanden.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
@@ -77,7 +77,7 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
     [Fact]
     public async Task Ein_Client_fragt_das_Aggregat_direkt_und_entscheidet_mit_dessen_Version()
     {
-        // Plan Pub/Sub-Neustrukturierung §2.6 (Phase 9): die Antwort eines Aggregats ist sein exakter Stand und trägt die Version, auf der der nächste
+        // docs/03 §3.2 (Phase 9): die Antwort eines Aggregats ist sein exakter Stand und trägt die Version, auf der der nächste
         //   Command entschieden würde — von außen über den JSON-Eingang und über die Leitung mit dem Client-Stack des Arbeitsplatzes.
         var paar = await b.KomplettesPaarAsync();
         var kopf = (await b.Log.StreamAsync(paar.Id)).Max(e => e.Version);
@@ -261,7 +261,7 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
     }
 
     /// <summary>
-    /// Transitive Aktualisierung (Plan Pub/Sub-Neustrukturierung §2.7, Abnahme Phase 7): ein Client zeigt die Paare eines Datensatzes; ein ANDERER
+    /// Transitive Aktualisierung (docs/konzept-akteure.md §5, Abnahme Phase 7): ein Client zeigt die Paare eines Datensatzes; ein ANDERER
     /// Client labelt eines davon. Die Projektion, die das Paar führt, meldet nach ihrem Commit „Stream des Paares weiterverarbeitet“; die Sitzung
     /// des ersten Clients hält eine Antwort, die dieses Paar zeigt, und nennt ihm die Query — er fragt von sich aus neu und sieht das Label,
     /// ohne dass er das Label-Event hört oder die Abhängigkeit Datensatz → Paar kennt.
@@ -290,7 +290,7 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
     }
 
     /// <summary>
-    /// Wiederverbinden mit Nachlesen (Plan Pub/Sub-Neustrukturierung §2.7, Abnahme Phase 7): ein Client liest das Log bis zum Horizont und trennt;
+    /// Wiederverbinden mit Nachlesen (docs/konzept-akteure.md §5, Abnahme Phase 7): ein Client liest das Log bis zum Horizont und trennt;
     /// was dann geschieht, verpasst er als Push. Verbindet er wieder und liest ab seiner Position, bekommt er es — genau einmal, nur, was er
     /// hören darf, und alles hinter seiner Position.
     /// </summary>
@@ -324,7 +324,7 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
 
     /// <summary>
     /// Kennt der Client ein Aggregat nur aus einer Antwort — er war nicht verbunden, als es entstand, und hat keinen Push dazu gesehen —, trägt
-    /// sein nächster Command die Version aus der Antwort (eine Version je Aggregat, Plan Phase 5): der Server prüft gegen sie (OCC), statt den
+    /// sein nächster Command die Version aus der Antwort (eine Version je Aggregat): der Server prüft gegen sie (OCC), statt den
     /// Command ungeprüft anzunehmen, und weil keine Marke die Version verschiebt, passt sie.
     /// </summary>
     [Fact]

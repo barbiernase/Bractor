@@ -141,7 +141,7 @@ namespace Projections.SourceGeneration
             }
 
 
-            // Stand der Leseseite (konzept-werkbank §12.3 E9): Code-Hash je Store-Klasse (normalisierte Syntax aller Teile) und die Read-Model-Typen —
+            // Stand der Leseseite (docs/04 §4.3): Code-Hash je Store-Klasse (normalisierte Syntax aller Teile) und die Read-Model-Typen —
             // daraus entscheidet der Host einer Sim-Umgebung beim Start, ob die Projektionen neu aufgebaut werden.
             sb.AppendLine();
             foreach (var store in stores)

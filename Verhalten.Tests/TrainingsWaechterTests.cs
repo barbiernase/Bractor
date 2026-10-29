@@ -6,7 +6,7 @@ namespace Verhalten.Tests;
 /// <summary>
 /// Der Trainings-Wächter als fachliches Soll: ein Training, das nach dem Beginn sechs Stunden nichts meldet, gilt genau einmal als hängen
 /// geblieben; eines, das vorher endet, nie; eine Meldung nach der Markierung ändert nichts mehr. Die Meldungen kommen, wie im Betrieb, als
-/// Ausgaben der Funktion ITraining von ihrem Träger draußen (Plan §2.7). Die Zeit läuft über die Uhr der Sim
+/// Ausgaben der Funktion ITraining von ihrem Träger draußen (docs/konzept-akteure.md §5). Die Zeit läuft über die Uhr der Sim
 /// (Datenbank-Uhr samt Event-Zeitstempeln), nicht über Warten — mit eigenem Host, damit der Zeitsprung keinen anderen Ablauf trifft.
 /// </summary>
 [Trait("Kategorie", "Garantie")]

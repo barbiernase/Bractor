@@ -6,7 +6,7 @@ using Pruefdomaene.Posten;
 namespace Pruefdomaene.Pipeline.Auftrag;
 
 /// <summary>
-/// Die Kanten des Auftrags (Plan Pub/Sub-Neustrukturierung Phase 4, Risiko 4): ein gestarteter Auftrag reserviert den Posten und belegt das Kontingent;
+/// Die Kanten des Auftrags (docs/13 §13.7): ein gestarteter Auftrag reserviert den Posten und belegt das Kontingent;
 /// was Posten und Kontingent für SEINEN Beleg entscheiden, meldet sie dem Auftrag zurück; ordnet der Auftrag einen Gegenzug an, sendet sie ihn.
 /// Gleichbleibend (R12): nur Commands, abgeleitet aus dem Eingang — sie hält nichts fest, die Inbox der Ziele verwirft Wiederholungen. Warten,
 /// Join und Kompensation entscheidet das Aggregat; die Funktion kennt keinen Zustand.

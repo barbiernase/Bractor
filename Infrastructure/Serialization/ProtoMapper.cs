@@ -250,7 +250,7 @@ public partial class ProtoMessageMapper
     private CommandEnvelope CommandAusHuelle(CommandEnvelopeDto dto)
     {
         var payload = _tabelle.Command(dto.Payload);
-        // Das Ziel steht im Command (ICommand<TAggregat>, Plan §2.5): Id und Aggregat-Typ der Hülle wiederholen es nur. Weichen sie ab, ist der
+        // Das Ziel steht im Command (ICommand<TAggregat>, docs/10 §10.4): Id und Aggregat-Typ der Hülle wiederholen es nur. Weichen sie ab, ist der
         //   Command an eine fremde Id bzw. ein fremdes Aggregat gerichtet — abgelehnt, bevor er irgendwohin geht (der Aufrufer meldet den Fehler).
         var aggregat = Infrastructure.Extensions.AggregateDispatcherExtensions.ResolveAggregateType(payload);
         if (!string.IsNullOrEmpty(dto.AggregateId) && (!Guid.TryParse(dto.AggregateId, out var id) || id != payload.Ziel))

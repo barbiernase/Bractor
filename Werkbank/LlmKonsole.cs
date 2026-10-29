@@ -11,13 +11,13 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Werkbank;
 
 // ════════════════════════════════════════════════════════════════════════════
-//  LLM-Konsole (docs/konzept-llm-minimalkontext.md): einen Code-Block füllen, prüfen, anpassen, übernehmen.
+//  LLM-Konsole (LLM-Minimalkontext, Konzept im Git-Verlauf bei 861ea7f): einen Code-Block füllen, prüfen, anpassen, übernehmen.
 //
 //  • Kontext = die Dateien aus `GraphExtractor --kontexte .llm-kontext` (Graph-Skelett + Slot-Teil je Code-Block).
 //  • Jede Runde ist ein NEUER, zustandsloser Aufruf. Reihenfolge stabil → veränderlich:
 //      Anweisung · Graph-Skelett · Slot-Teil · Auftrag · [aktueller Rumpf · Befund/Anpassung]
 //    Nie ein Gesprächsverlauf — nur der letzte Rumpf reist mit.
-//  • Prüfen = Bauen (Werkbank P7.4, konzept-werkbank A.5): Syntax, dann der Kandidat probeweise im warmen Workspace — die Datei mit dem neuen Rumpf,
+//  • Prüfen = Bauen (Werkbank P7.4, CLAUDE.md W5): Syntax, dann der Kandidat probeweise im warmen Workspace — die Datei mit dem neuen Rumpf,
 //    ihr Projekt mit seinen echten Generatoren und Analyzern (CQRS050, CQRS066/067 …); Python über den Parser.
 //    Nur NEUE Fehler gegenüber dem Unveränderten zählen. Nichts wird geschrieben, der Fork wird verworfen.
 //  • Ausführen (Editor, ▶ am 🤖-Knoten): ein GEPRÜFTER Rumpf geht sofort in die echte Datei, danach laufen die Generatoren
@@ -364,7 +364,7 @@ public sealed class LlmKonsole
     // ── Übernehmen / Bauen ──
 
     /// <summary>
-    /// Einen Rumpf übernehmen = eine Rumpf-Geste (derselbe Weg wie ✎, docs/konzept-werkbank.md §8.4): C# über den Ort des Slots
+    /// Einen Rumpf übernehmen = eine Rumpf-Geste (derselbe Weg wie ✎, CLAUDE.md W1–W12): C# über den Ort des Slots
     /// (<see cref="GraphExtractor.Rumpf"/>, mit Prompt-Zeile), Python über <see cref="PythonSync"/>; der Patch steht im Verlauf der Werkbank,
     /// ↶ nimmt ihn zurück, auf <c>main</c> ist er gesperrt. <paramref name="basisHash"/> sperrt gegen eine seit dem Füllen geänderte Datei.
     /// </summary>

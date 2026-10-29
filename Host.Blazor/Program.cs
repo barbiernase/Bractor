@@ -13,7 +13,7 @@ using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ── Umgebung (docs/konzept-werkbank.md §4): wohin sich dieser Client verbindet, mit welchem Token, wo er lauscht und welche Dateien er
+// ── Umgebung (docs/06 §6.5): wohin sich dieser Client verbindet, mit welchem Token, wo er lauscht und welche Dateien er
 //    zeigen darf, steht unter Clients:<Vertrag> der Umgebung (--umgebung <name> bzw. CQRS_UMGEBUNG). Der Vertrag ist der des Codes
 //    ([assembly: IstClient<IArbeitsplatz>] → GeneratedWiring.Vertrag).
 var umgebungsName = UmgebungLader.NameAus(args)

@@ -26,7 +26,7 @@ internal sealed class Optionen
     public TimeSpan ZeitreiheNeustart => TimeSpan.FromSeconds(150);
     public TimeSpan ZeitreiheTakt => TimeSpan.FromSeconds(10);
 
-    // ── feste Parameter (Höchstlast, Plan §0.1) ──
+    // ── feste Parameter (Höchstlast, docs/10 §10.7) ──
     /// <summary>Wie lange ein Volllast-Block sendet.</summary>
     public TimeSpan Fenster => _fenster ?? (Probe ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(15));
     private TimeSpan? _fenster;

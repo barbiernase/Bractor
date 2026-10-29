@@ -19,7 +19,7 @@ public interface IStoretestTreiber
 }
 
 /// <summary>
-/// Der <b>allgemeine Store-Test</b> (Plan Pub/Sub-Neustrukturierung §2.4, §4.4 Nr. 2), den das Framework mitliefert: jeder Treiber besteht ihn einmal
+/// Der <b>allgemeine Store-Test</b> (docs/04 §4.3, docs/11 §11.14), den das Framework mitliefert: jeder Treiber besteht ihn einmal
 /// — gegen ein echtes Log (eigenes Schema, nur seine Events) und den echten Batch-Leser. Vier Fälle:
 /// <list type="number">
 ///   <item><b>Batch-Abbruch:</b> der erste Batch bricht nach dem Anwenden vor dem Schreiben ab; eine neue Aktivierung liest von vorn.</item>

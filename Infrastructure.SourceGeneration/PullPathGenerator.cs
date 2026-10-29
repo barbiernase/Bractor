@@ -6,7 +6,7 @@ using System.Text;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Verdrahtungs-Generator für den Konsum der PROJEKTIONEN (Plan Pub/Sub-Neustrukturierung §3.3, Phase 8). Findet jede Projektion (<c>IProjektion</c>,
+    /// Verdrahtungs-Generator für den Konsum der PROJEKTIONEN (docs/10 §10.3). Findet jede Projektion (<c>IProjektion</c>,
     /// gelesen über <see cref="Projektionsform"/> — dieselbe Lesart wie der Weckplan) und emittiert die komplette Verdrahtung:
     ///   - je Projektion den Dispatch (<c>switch</c> über den Event-Typ → ihr <c>Auf</c> mit Herkunft und Fähigkeiten aus dem Bereich), die gehörten
     ///     Typen und den Store aus einem Fähigkeits-Bereich (<c>GeneratedProjektionen</c>);

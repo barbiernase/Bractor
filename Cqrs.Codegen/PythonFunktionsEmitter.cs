@@ -6,14 +6,14 @@ namespace Cqrs.Codegen;
 /// <summary>
 /// Die Lesart einer Funktion draußen für den Python-Prepass (Metadaten der gebauten Domain-DLLs, wie der übrige Prepass): je <c>Auf</c> der Eingang,
 /// die Ausgaben mit ihrer Art (Command, Event, Hinweis) und ob die Ausgabe ein Strom ist — dieselbe Signatur, die der
-/// <c>FunktionsBausteinGenerator</c> am Server liest (Plan Pub/Sub-Neustrukturierung §3.3).
+/// <c>FunktionsBausteinGenerator</c> am Server liest (docs/10 §10.3).
 /// </summary>
 public static class PythonFunktionsform
 {
     private const string FunktionName = "Abstractions.IFunktion";
 
     public sealed record Ausgabe(string Typ, string Art);
-    /// <param name="Hinweis">Der Eingang ist ein Hinweis aus dem Hinweis-Netz (Plan §2.9): höchstens einmal, die Antwort kommt als Ganzes.</param>
+    /// <param name="Hinweis">Der Eingang ist ein Hinweis aus dem Hinweis-Netz (docs/04 §4.4): höchstens einmal, die Antwort kommt als Ganzes.</param>
     public sealed record Auf(string Eingang, List<Ausgabe> Ausgaben, bool Strom, bool Hinweis = false);
     public sealed record Funktion(Type Typ, List<Auf> Aufs);
 
@@ -78,7 +78,7 @@ public static class PythonFunktionsform
 }
 
 /// <summary>
-/// Funktionen draußen → Python (Plan Pub/Sub-Neustrukturierung §2.2, §2.7): je <c>interface IX : IFunktion</c> mit <c>Auf</c> eine abstrakte Klasse
+/// Funktionen draußen → Python (docs/10 §10.1, docs/konzept-akteure.md §5): je <c>interface IX : IFunktion</c> mit <c>Auf</c> eine abstrakte Klasse
 /// <c>XBasis(FunktionsBasis)</c> in <c>domain_client/generated/funktionen.py</c> — je <c>Auf</c> eine Methode <c>auf_&lt;eingang&gt;(e, h)</c>. Ein
 /// Worker erbt sie, füllt die Methoden und bietet die Funktion an; der Funktions-Actor merkt nicht, dass sie draußen rechnet.
 /// </summary>
@@ -93,13 +93,13 @@ public static class PythonFunktionsEmitter
     }
 
     /// <summary>
-    /// Die Tabelle des generischen Funktions-Workers (konzept-werkbank §12.3 E13): je Funktion mit Python-Basis die Basis, das Modul und die Klasse ihrer
+    /// Die Tabelle des generischen Funktions-Workers (docs/09 §9.5): je Funktion mit Python-Basis die Basis, das Modul und die Klasse ihrer
     /// Implementierung (<c>funktionen/&lt;modul&gt;.py</c>, Regel in <c>Abstractions.Funktionsvertrag</c>) — der Runner kennt keine Domäne.
     /// </summary>
     public static string Tabelle(IEnumerable<Assembly> assemblies)
     {
         var b = new StringBuilder();
-        b.AppendLine("# GENERIERT von Cqrs.Codegen aus den Funktionen draußen (IFunktion mit Auf, konzept-werkbank §12.3 E13). Nicht von Hand ändern.");
+        b.AppendLine("# GENERIERT von Cqrs.Codegen aus den Funktionen draußen (IFunktion mit Auf, docs/09 §9.5). Nicht von Hand ändern.");
         b.AppendLine("#");
         b.AppendLine("# Die Tabelle des generischen Funktions-Workers (funktions_worker.py): je Funktion mit Python-Basis die Basis (generated/funktionen.py),");
         b.AppendLine($"# das Modul und die Klasse ihrer Implementierung ({Abstractions.Funktionsvertrag.PythonOrdner}/<modul>.py, die Klasse erbt die Basis und füllt `auf_…`).");
@@ -122,7 +122,7 @@ public static class PythonFunktionsEmitter
     private static string Python(List<PythonFunktionsform.Funktion> funktionen)
     {
         var b = new StringBuilder();
-        b.AppendLine("# GENERIERT von Cqrs.Codegen aus den Funktionen draußen der Domäne (IFunktion mit Auf, Plan Pub/Sub-Neustrukturierung §2.7).");
+        b.AppendLine("# GENERIERT von Cqrs.Codegen aus den Funktionen draußen der Domäne (IFunktion mit Auf, docs/konzept-akteure.md §5).");
         b.AppendLine("# Nicht von Hand ändern — ./codegen.sh --force erzeugt die Datei neu, ./codegen.sh --check prüft auf Drift.");
         b.AppendLine("#");
         b.AppendLine("# Je Funktion eine abstrakte Basis: der Worker erbt sie, füllt je Eingang `auf_<eingang>(e, h)` und übergibt eine Instanz an seinen");

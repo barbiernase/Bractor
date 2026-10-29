@@ -6,7 +6,7 @@ namespace Infrastructure.Extensions;
 
 /// <summary>
 /// Sprechender Einstiegs-Dispatch OHNE Magic String: der Anwender schreibt nur den Command. Ziel-Aggregat und Id stehen im Typ des Commands
-/// (<see cref="ICommand{TAggregat}"/>, Plan §2.5): den Aggregat-Namen liefert die generierte Routing-Tabelle
+/// (<see cref="ICommand{TAggregat}"/>, docs/10 §10.4): den Aggregat-Namen liefert die generierte Routing-Tabelle
 /// (<see cref="GeneratedPipelines.CommandAggregateTypes"/>), die Id der Command selbst (<see cref="ICommand.Ziel"/>).
 /// </summary>
 public static class AggregateDispatcherExtensions

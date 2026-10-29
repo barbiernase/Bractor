@@ -46,7 +46,7 @@ app.Use(async (ctx, next) =>
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
-// ── WERKBANK (docs/konzept-werkbank.md §5, P3): ⟳ = bauen → Python-Basen → neu lesen → Daten prüfen → Infrastruktur → Host ersetzen.
+// ── WERKBANK (CLAUDE.md W6, P3): ⟳ = bauen → Python-Basen → neu lesen → Daten prüfen → Infrastruktur → Host ersetzen.
 //    Die Umgebung (Kopfzeile „Umgebung ▾") wählt Ports, DB und Cluster; der Host-Rahmen bearbeitet ihre Datei (generisches Formular).
 var slnRoot = SlnRoot();
 var werkbank = new Werkbank.Server.WerkbankServer(slnRoot);
@@ -125,7 +125,7 @@ app.MapPost("/api/werkbank/ansicht", (System.Text.Json.Nodes.JsonObject inhalt) 
 
 
 // ── CODE-SYNC: Board ⇄ echte .cs-Datei (Decider/Applier-Rümpfe). Anker = aus dem Graphen abgeleitet. ──
-// LLM-Code-Blöcke (docs/konzept-llm-minimalkontext.md): Kontexte + Füllen + Übernehmen. Fehlen die Kontexte, erzeugt
+// LLM-Code-Blöcke (LLM-Minimalkontext, Konzept im Git-Verlauf bei 861ea7f): Kontexte + Füllen + Übernehmen. Fehlen die Kontexte, erzeugt
 // die Werkbank sie beim Start im Hintergrund selbst (kein CLI-Schritt nötig).
 // Eine 🤖-Übernahme IST eine Rumpf-Geste (derselbe Schreibweg wie ✎: Verlauf, ↶, Branch-Sperre).
 var konsole = new LlmKonsole(slnRoot, werkbank.Arbeitsbereich, werkbank.Gesten);
@@ -143,7 +143,7 @@ app.MapPost("/api/editor/extract", async (CancellationToken ct) =>
     catch (InvalidOperationException e) { return Results.Json(new { ok = false, grund = e.Message }); }
 });
 
-// ── LLM-KONSOLE: einen Code-Block füllen → prüfen → anpassen → übernehmen (docs/konzept-llm-minimalkontext.md). ──
+// ── LLM-KONSOLE: einen Code-Block füllen → prüfen → anpassen → übernehmen (LLM-Minimalkontext, Konzept im Git-Verlauf bei 861ea7f). ──
 // Anbieter: ausschließlich Claude Code (`claude -p`) mit der Anmeldung dieses Rechners — Abo, keine API-Kosten
 // (ein gesetzter ANTHROPIC_API_KEY blockiert den Aufruf). BRACTOR_LLM_MODELL wählt optional das Modell.
 app.MapGet("/konsole", () => Results.Content(KonsoleSeite.Html, "text/html"));
@@ -246,7 +246,7 @@ app.MapPost("/api/werkbank/uhr", async (string versatz) =>
     }
     catch (Exception e) { return Results.Json(new { ok = false, fehler = e.Message }); }
 });
-// ── DURCHSPIELEN (docs/konzept-werkbank.md §6, P5): nur echte Eingänge — als Akteur (JSON-Eingang des Hosts), Hand-Funktionen beantworten,
+// ── DURCHSPIELEN (CLAUDE.md W6, P5): nur echte Eingänge — als Akteur (JSON-Eingang des Hosts), Hand-Funktionen beantworten,
 //   Datei in den Pfad der Quelle legen, Uhr vorstellen, externe Worker starten. Die Formulare kommen aus dem gelesenen Code.
 var durchspielen = new Werkbank.Server.Durchspielen(werkbank);
 var worker = new Werkbank.Server.Worker(slnRoot);
@@ -309,7 +309,7 @@ app.MapPost("/api/werkbank/worker/{funktion}/stopp", async (string funktion) =>
 });
 app.MapGet("/api/werkbank/worker/{funktion}/log", (string funktion, int? max) => Results.Json(worker.Log(funktion, max ?? 200)));
 
-// ── SPUR (docs/konzept-werkbank.md §7, P6): der Spiegel folgt dem laufenden Host (SSE + Cursor) und liefert Vorgänge, nummerierte Wege
+// ── SPUR (docs/04 §4.9, P6): der Spiegel folgt dem laufenden Host (SSE + Cursor) und liefert Vorgänge, nummerierte Wege
 //   und den Live-Puls fertig aus — der Editor schlägt nur Karten-Ids nach.
 var spur = new Werkbank.Server.SpurSpiegel(werkbank);
 _ = Task.Run(() => spur.LaufeAsync(app.Lifetime.ApplicationStopping));

@@ -32,7 +32,7 @@ public interface IAnwendung
     IFunktionsTabelle Funktionen { get; }
     IDienstTabelle Dienste { get; }
     IAggregatTabelle Aggregate { get; }
-    /// <summary>Der Weckplan (GeneratedWeckplan): Event-Typ → wen ein Commit weckt (Plan Pub/Sub-Neustrukturierung §2.3).</summary>
+    /// <summary>Der Weckplan (GeneratedWeckplan): Event-Typ → wen ein Commit weckt (docs/03 §3.5).</summary>
     IReadOnlyDictionary<Type, Infrastructure.Wecken.Weckziel[]> Weckplan { get; }
 
     /// <summary>Die Quellen-Typen und ihre Treiber (GeneratedQuellen).</summary>
@@ -114,7 +114,7 @@ public interface IAkteurTabelle
 
 public interface IFunktionsTabelle
 {
-    /// <summary>Die Funktionen (<c>Auf</c>, Plan Pub/Sub-Neustrukturierung §3.3, GeneratedFunktionsBausteine).</summary>
+    /// <summary>Die Funktionen (<c>Auf</c>, docs/10 §10.3, GeneratedFunktionsBausteine).</summary>
     IReadOnlyList<FunktionsBaustein> Bausteine { get; }
     /// <summary>Hinweis-Typ → Funktions-Actors, die ihn hören.</summary>
     IReadOnlyDictionary<Type, string[]> Hinweisplan { get; }

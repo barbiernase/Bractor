@@ -10,7 +10,7 @@ namespace Verhalten.Tests.Geruest;
 /// <summary>
 /// Die Leitung ohne Client-Stack (<c>Cqrs.Leitung/cqrs.proto</c>): ein Handshake mit Vertrag und Token, danach jede Server-Nachricht
 /// unverändert gesammelt. Für das, was der C#-Client nicht kann oder verdeckt: eine getragene Funktion anbieten und ihre Eingänge beantworten
-/// (wie die Python-Basen, Plan Pub/Sub-Neustrukturierung §2.7), einen Command mit behaupteter Version schicken, und ALLES sehen, was eine
+/// (wie die Python-Basen, docs/konzept-akteure.md §5), einen Command mit behaupteter Version schicken, und ALLES sehen, was eine
 /// Sitzung bekommt.
 /// </summary>
 public sealed class RoheLeitung : IAsyncDisposable

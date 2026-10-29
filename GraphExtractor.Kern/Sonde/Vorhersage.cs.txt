@@ -1,6 +1,6 @@
 using Abstractions;
 
-// SONDE — fremdes Szenario (Plan Pub/Sub-Neustrukturierung §2.9, Phase 4b): FUNKTIONEN ALS ACTORS MIT ZUSTAND UND HINWEIS-NETZ.
+// SONDE — fremdes Szenario (docs/04 §4.4): FUNKTIONEN ALS ACTORS MIT ZUSTAND UND HINWEIS-NETZ.
 //
 // Wetterstationen melden Temperaturen (Fakten im Log). Eine gleichbleibende Funktion bildet daraus eine Tendenz — einen HINWEIS, der nicht zur
 // Fachdomäne gehört und nie im Log steht. Ein Prognosemodell mit gekapseltem Zustand (IZustand, EINE Adresse für alle Stationen) lernt aus jeder

@@ -52,7 +52,7 @@ public partial class {0} : IState
     public class Applier : IApplier<{0}> {{ public void Apply(ProbeGemacht e) {{ }} }}
 }}";
 
-    // Das Ziel jedes Commands steht in seinem Typ (ICommand<TAggregat>, Plan §2.5).
+    // Das Ziel jedes Commands steht in seinem Typ (ICommand<TAggregat>, docs/10 §10.4).
     private static string Typen(string zielMach, string zielSchliess) => $@"namespace ProbeTypen {{
 public record ProbeMach(Id<{zielMach}> AggregateId) : ICommand<{zielMach}>;
 public record ProbeSchliess(Id<{zielSchliess}> AggregateId) : ICommand<{zielSchliess}>;

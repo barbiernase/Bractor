@@ -5,7 +5,7 @@ using Marten;
 namespace Infrastructure.Projections;
 
 /// <summary>
-/// Der Fortschritt, den das Framework für die Store-Klassen 2 und 3 hält (Plan Pub/Sub-Neustrukturierung §2.4): dieselben Dokumente wie beim
+/// Der Fortschritt, den das Framework für die Store-Klassen 2 und 3 hält (docs/04 §4.3): dieselben Dokumente wie beim
 /// Marten-Store der Klasse 1, aber in einer eigenen Transaktion NACH den Wirkungen des Stores.
 /// </summary>
 public interface IFortschrittBeimFramework : IFortschrittsAblage
@@ -47,7 +47,7 @@ public sealed class FortschrittBeimFramework(IDocumentStore store) : IFortschrit
 
 /// <summary>
 /// Die Naht zwischen Batch-Leser und Store einer Projektion: wo der Fortschritt liegt und wie ein Batch gültig wird — je nach Store-Klasse
-/// (Plan §2.4, §4.2):
+/// (docs/04 §4.3, docs/11):
 /// <list type="bullet">
 ///   <item><b>Klasse 1</b> (<see cref="IAtomaresZiel"/>): der Store hält den Fortschritt, Wirkungen und Fortschritt in einer Transaktion.</item>
 ///   <item><b>Klasse 2</b> (<see cref="IWiederholungsfestesZiel"/>) und <b>3</b> (<see cref="INurMindestensEinmal"/>): erst die Wirkungen
@@ -83,7 +83,7 @@ public sealed class Projektionsnaht
         if (klassen.Count(k => k) != 1)
             throw new InvalidOperationException(
                 $"{ziel.GetType().Name} implementiert {klassen.Count(k => k)} Store-Klassen — ein Store implementiert genau eine (IAtomaresZiel, "
-                + "IWiederholungsfestesZiel oder INurMindestensEinmal, Plan §2.4, R14).");
+                + "IWiederholungsfestesZiel oder INurMindestensEinmal, docs/04 §4.3, docs/10 R14).");
         return Array.IndexOf(klassen, true) + 1;
     }
 

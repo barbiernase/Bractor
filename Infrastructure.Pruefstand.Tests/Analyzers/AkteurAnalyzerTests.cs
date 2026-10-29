@@ -80,7 +80,7 @@ public interface IFremdPruefung : IFunktion { Storniere Auf(Gebucht2 e); }
     public async Task Ein_Dienst_ist_kein_Akteur()
         => (await Ids("public interface IRobo : IKi, IDarf<Buche> { }")).Should().Equal("CQRS058");
 
-    // ── CQRS063/064: Client-Vertrag (docs/konzept-akteure.md §4, Plan §2.7) ──
+    // ── CQRS063/064: Client-Vertrag (docs/konzept-akteure.md §4, docs/konzept-akteure.md §5) ──
 
     [Fact]
     public async Task Ein_Client_traegt_sendet_fragt_und_hoert()

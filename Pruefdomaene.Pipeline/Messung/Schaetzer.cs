@@ -10,7 +10,7 @@ public sealed class Lernstand
     public double Summe { get; set; }
 }
 
-/// <summary>Der Zustand des Schätzers (IZustand, Plan §2.9): je Messstelle Anzahl und Summe der gelernten Werte — kein Domänen-Zustand.</summary>
+/// <summary>Der Zustand des Schätzers (IZustand, docs/04 §4.4): je Messstelle Anzahl und Summe der gelernten Werte — kein Domänen-Zustand.</summary>
 public sealed class Schaetzmodell
 {
     public Dictionary<Guid, Lernstand> Je { get; set; } = new();
@@ -43,7 +43,7 @@ public sealed class Arbeitsmodell
 }
 
 /// <summary>
-/// Ein Modell, das weiterlernt (Plan §2.9, E6, E10): EIN Zustand für alle Messstellen (<c>[EineAdresse]</c>, A6) — es lernt aus jedem Messwert im Log
+/// Ein Modell, das weiterlernt (docs/04 §4.4, docs/10 E6, E10): EIN Zustand für alle Messstellen (<c>[EineAdresse]</c>, A6) — es lernt aus jedem Messwert im Log
 /// (genau einmal je Eingang auf dem gesicherten Zustand, auch nach Absturz und Umzug) und schätzt auf jedes Merkmal hin (Hinweis rein, Command raus).
 /// Gerechnet wird auf dem Arbeitsmodell der Aktivierung; der Lebenszyklus lädt es aus dem Zustand und schreibt es vor jeder Sicherung zurück.
 /// </summary>

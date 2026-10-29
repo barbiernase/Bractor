@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace Abstractions;
 
 /// <summary>
-/// Die typisierte Id eines Aggregats (Plan Pub/Sub-Neustrukturierung §2.5, E3): das Ziel jedes Commands (<see cref="ICommand{TAggregat}"/>)
+/// Die typisierte Id eines Aggregats (docs/10 §10.4, E3): das Ziel jedes Commands (<see cref="ICommand{TAggregat}"/>)
 /// und jeder Verweis auf ein Aggregat in Events, Queries und Antworten. Der Typ sagt, worauf die Id zeigt — Routing über Typen (Inv. 3)
 /// ohne Konvention, und Editor, LLM und Generatoren sehen es in der Signatur.
 ///

@@ -7,8 +7,8 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Domain.SourceGeneration;
 
 /// <summary>
-/// <b>CQRS105 (R19)</b> — Zustand einer Funktion nur über <c>IZustand&lt;T&gt;</c> im Konstruktor einer Funktions-Klasse (Plan Pub/Sub-Neustrukturierung
-/// §2.9, E6). Eine Funktion ist ein Actor, dessen Aktivierung umziehen, passivieren und neu starten kann: Zustand in einem Feld oder einer Eigenschaft
+/// <b>CQRS105 (R19)</b> — Zustand einer Funktion nur über <c>IZustand&lt;T&gt;</c> im Konstruktor einer Funktions-Klasse
+/// (docs/04 §4.4, docs/10 E6). Eine Funktion ist ein Actor, dessen Aktivierung umziehen, passivieren und neu starten kann: Zustand in einem Feld oder einer Eigenschaft
 /// ginge dabei still verloren (und eine gleichbleibende Funktion rechnete beim Wiederholen anders — derselbe Eingang, ein anderer Zähler). Geprüft
 /// wird an jeder Funktions-Klasse (Baustein und Umsetzung einer Funktion draußen):
 /// <list type="bullet">

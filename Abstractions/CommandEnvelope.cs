@@ -9,7 +9,7 @@ public record CommandEnvelope : IAggregateEnvelope, IWireMessage
     public Guid CommandId { get; init; } = Guid.NewGuid();
 
     /// <summary>Das Ziel — aus dem Command abgeleitet (<see cref="ICommand.Ziel"/>), keine zweite Angabe: Routing und Aggregat-Actor sehen
-    /// dieselbe Id, die der Command typisiert trägt (Plan §2.5).</summary>
+    /// dieselbe Id, die der Command typisiert trägt (docs/10 §10.4).</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public Guid AggregateId => Payload.Ziel;
 

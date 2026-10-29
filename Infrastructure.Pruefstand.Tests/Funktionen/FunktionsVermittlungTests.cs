@@ -12,7 +12,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Funktionen;
 
 /// <summary>
-/// Ebene 1 — die VERMITTLUNG der Funktionen draußen (Plan Pub/Sub-Neustrukturierung §2.2): Ausführer holen sich Eingänge (Pull),
+/// Ebene 1 — die VERMITTLUNG der Funktionen draußen (docs/10 §10.1): Ausführer holen sich Eingänge (Pull),
 /// jede Zuteilung hat eine Lease, Lebenszeichen verlängern sie, Abgelaufenes geht neu raus, Erledigtes verpufft bei erneutem
 /// Angebot. Dazu der Vermittler-Actor (Long-Poll) auf einem lokalen ActorSystem und der Draht-Round-trip eines Auftrags.
 /// </summary>

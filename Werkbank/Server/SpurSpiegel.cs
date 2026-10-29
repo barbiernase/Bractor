@@ -6,7 +6,7 @@ using Eintrag = Abstractions.SpurWeg.Eintrag;
 namespace Werkbank.Server;
 
 /// <summary>
-/// Der Spur-Spiegel der Werkbank (docs/konzept-werkbank.md §7.2, Werkbank P6): folgt dem laufenden Host über die Einblick-API — SSE
+/// Der Spur-Spiegel der Werkbank (docs/04 §4.9, Werkbank P6): folgt dem laufenden Host über die Einblick-API — SSE
 /// <c>/einblick/neu</c> meldet nur „neu bis seq“, nachgeholt wird ab dem eigenen Cursor (<c>/einblick/spur?ab=</c>). Ein verlorenes Signal
 /// oder ein Neustart schadet nicht (dasselbe Muster wie Wecker + Lesen ab Position im Kern). Daraus entsteht der <b>Live-Puls</b> (Zähler und „zuletzt“
 /// je Karte, Menge je Kante) und die Zuordnung Vorgang → Streams für den Filter. Vorgänge und Schritte holt er auf Anfrage beim Host und

@@ -1,5 +1,5 @@
 """
-Funktionen draußen tragen (Plan Pub/Sub-Neustrukturierung §2.2, §2.7: ITraegt) — domänenfrei, mit minimalen betterproto-Fakes.
+Funktionen draußen tragen (docs/10 §10.1, docs/konzept-akteure.md §5: ITraegt) — domänenfrei, mit minimalen betterproto-Fakes.
 
 Bewiesen wird der FunktionsLaeufer des SDK: Anbieten (Funktion + Slots), Eingang auspacken, `auf_<eingang>(e, h)` höchstens SLOTS-mal
 gleichzeitig, Lebenszeichen während langer Läufe, Signatur (falscher Typ, zwei Ausgaben ohne Strom oder Ausnahme → Fehler statt Antwort),
@@ -192,7 +192,7 @@ async def test_ein_strom_setzt_bei_der_schon_festgehaltenen_stelle_fort():
 
 
 class MerkmalBasis(FunktionsBasis):
-    """Eine Funktion, die einen Hinweis hört (Plan §2.9) — die generierte Basis trägt hinweis=True."""
+    """Eine Funktion, die einen Hinweis hört (docs/04 §4.4) — die generierte Basis trägt hinweis=True."""
     FUNKTION = "ISchaetzung"
     EINGAENGE = {DateiDto: Eingang("auf_datei", {MeldeDto: Ausgabe.COMMAND, SkalierteDto: Ausgabe.HINWEIS}, strom=True, hinweis=True)}
 

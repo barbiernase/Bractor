@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 namespace Werkbank.Server;
 
 /// <summary>
-/// Passen die Daten der Sim-DB noch zum Code? (docs/konzept-werkbank.md §4.6) — Vergleich des generierten <c>domain.proto</c> des
+/// Passen die Daten der Sim-DB noch zum Code? (docs/06 §6.5) — Vergleich des generierten <c>domain.proto</c> des
 /// letzten Laufs mit dem neuen: ein Event-Typ, der verschwindet, oder ein Feld, das entfällt oder seinen Typ wechselt, macht die
 /// gespeicherten Events unlesbar → die Sim-DB wird zurückgesetzt (Schema-Evolution ist kein Ziel). Neue Typen/Felder sind harmlos.
 /// </summary>

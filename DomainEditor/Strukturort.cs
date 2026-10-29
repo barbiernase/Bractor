@@ -67,7 +67,7 @@ public static class Strukturort
         m.BausteinFunktionen.SelectMany(f => f.Eingaenge).SelectMany(e => e.Ausgaben).ToHashSet(StringComparer.Ordinal);
 
     /// <summary>
-    /// Die Queries an Aggregate und ihre Antworten (Signatur-Fakt der <c>Frage</c> im Decider, Plan Pub/Sub-Neustrukturierung §2.6) — sie liegen bei
+    /// Die Queries an Aggregate und ihre Antworten (Signatur-Fakt der <c>Frage</c> im Decider, docs/03 §3.2) — sie liegen bei
     /// der Schreibseite (dieselbe Regel wie die Lage-Prüfung, <c>Domain.SourceGeneration/Lageart.cs</c>).
     /// </summary>
     public static ISet<string> Aggregatfragen(EditorModell m) =>

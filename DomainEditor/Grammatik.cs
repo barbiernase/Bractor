@@ -1,7 +1,7 @@
 namespace DomainEditor;
 
 /// <summary>
-/// Die GRAMMATIK der Kompositions-Sprache (Plan Pub/Sub-Neustrukturierung §3) als EINE Quelle: welche Nachrichtensorte
+/// Die GRAMMATIK der Kompositions-Sprache (docs/10) als EINE Quelle: welche Nachrichtensorte
 /// in welchen Baustein-Eingang darf (mit Kardinalität), welcher Baustein welche Sorten erzeugen darf, und die Zusatzregeln — je
 /// Regel mit ihrem Gegenstück im Build (Analyzer-/Generator-ID, Compiler, Boot-Guard oder „offen").
 ///
@@ -57,7 +57,7 @@ public static class Grammatik
         new(Aggregat, "Aggregat", true), new(Projektion, "Projektion", false), new(Reader, "Reader", false),
         new(Store, "Store", true), new(Aussenwelt, "Außenwelt", false),
         new(Akteur, "Akteur", false), new(Client, "Client", false), new(Funktion, "Funktion", false),
-        // Domänen-Dienst (konzept-werkbank §12.3 E11): seine Implementierung nimmt selbst Dienste im Konstruktor.
+        // Domänen-Dienst (docs/06 §6.5): seine Implementierung nimmt selbst Dienste im Konstruktor.
         new(DienstImpl, "Dienst-Implementierung", false),
         // Eingebaut: die Uhr sendet fällige Fristen als Command an das Aggregat, das sie setzte.
         new(Uhr, "Uhr", false),
@@ -89,14 +89,14 @@ public static class Grammatik
         new("GR-HINWEIS-NETZ", "Hinweis-Netz: hart verdrahtet, höchstens einmal", "Ein Hinweis aus einem Aggregat oder einer Funktion geht direkt an "
             + "die Adresse jeder Funktion, die ihn hört (Partition seines Herkunfts-Streams bzw. die eine Adresse) — im Speicher, ohne Log, ohne Broker, "
             + "höchstens einmal. Jeder Hinweis, den eine Funktion hört, hat einen Erzeuger im Netz; jede Adresse der Routing-Tabelle existiert; "
-            + "Commands aus einem Hinweis tragen eine Id aus Funktion, Hinweis-Kennung, Stelle, Typ und Ziel (R20, Plan §2.9).", "error",
+            + "Commands aus einem Hinweis tragen eine Id aus Funktion, Hinweis-Kennung, Stelle, Typ und Ziel (R20, docs/04 §4.4).", "error",
             [An("CQRS106", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (gehörter Hinweis ohne Erzeuger)"),
              new("boot", null, "Infrastructure/Funktionen/HinweisNetz.cs (jede Adresse der Routing-Tabelle gehört zu einer Funktion)")]),
         new("GR-WECKPLAN", "Weckplan: jeder Hörer mit jedem gehörten Typ", "Nach jedem Commit weckt der Wecker gezielt, wen der generierte Weckplan "
             + "zum Typ eines geschriebenen Events nennt: die Partition jeder Projektion und jeder Funktion, die ihn aus dem Log hört (bzw. die eine "
             + "Adresse), und die Uhr bei einer gesetzten Frist — verlierbar, der Takt je Partition holt nach. Ein Hörer aus dem Log hört nur konkrete, "
             + "persistente Events (der Plan sucht nach dem Typ des geschriebenen Events) — sonst ist schon seine Form falsch, denn Weckplan und Form "
-            + "lesen dieselbe Lesart; jeder registrierte Hörer steht mit jedem gehörten Typ im Plan (Plan §2.3, Phase 6).", "error",
+            + "lesen dieselbe Lesart; jeder registrierte Hörer steht mit jedem gehörten Typ im Plan (docs/03 §3.5).", "error",
             [An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Auf einer Projektion, Lesart Projektionsform)"),
              Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Eingang einer Funktion, Lesart Funktionsform)"),
              new("boot", null, "Infrastructure/Wecken/Wecker.cs (Pruefe: jeder registrierte Hörer steht mit jedem gehörten Typ im Plan)")]),
@@ -108,7 +108,7 @@ public static class Grammatik
         new("GR-QUERY", "Query → genau ein Ziel: Reader oder Aggregat", "Eine Query hat genau ein Ziel (R4): einen Reader (Frage über Lese-Fähigkeiten, "
             + "der Stand der Projektionen dahinter) oder ein Aggregat (Frage im Decider, nur lesend auf seinen Zustand; die Query nennt es mit genau einem "
             + "Glied Id<TAggregat>, der Actor antwortet im Turn auf dem committeten Stand — exakt dem, auf dem der nächste Command entschieden würde; die "
-            + "Antwort trägt seine Version als OCC-Stand, Plan §2.6).", "error",
+            + "Antwort trägt seine Version als OCC-Stand, docs/03 §3.2).", "error",
             [An("CQRS084", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (mehrere Ziele: Reader und/oder Aggregate)"),
              An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (kein Reader, kein Aggregat)"),
              An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Frage an ein Aggregat: eine Query, synchron, genau ein Glied Id<TAggregat>)")]),
@@ -126,7 +126,7 @@ public static class Grammatik
             + "Lese-Fähigkeiten. Welche Projektionen hinter einer Frage stehen, folgt aus ihnen: die, die in denselben Store schreiben; was eine Antwort "
             + "zeigt, sagen ihre Id<T>-Felder (und die der Query).", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)"), An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Frage eines Readers)")]),
-        // Funktion als Baustein und die Regeln der Wiederholbarkeit (Plan Pub/Sub-Neustrukturierung §3.6, Phase 3).
+        // Funktion als Baustein und die Regeln der Wiederholbarkeit (docs/10 §10.6).
         new("GR-FUNKTION-FORM", "Funktion: je Eingang ein Auf, freie Ausgabe", "Eine Funktion hat je Eingang (Event, Quell-Nachricht oder Hinweis) ein Auf "
             + "mit optional Herkunft, Lese-Fähigkeiten und Abbruch; ausgegeben werden Commands, Events und Hinweise (konkret, OneOf, T?, Strom, je auch als "
             + "Task) — vollständig in der Signatur. Als Klasse läuft sie im Host, als Schnittstelle draußen (Laufort aus der Umgebung); eine Schnittstelle "
@@ -148,7 +148,7 @@ public static class Grammatik
             + "nur über IZustand<T> im Konstruktor einer Funktions-Klasse: er wird mit der Position gesichert, kommt beim Umzug mit, und Auf läuft immer "
             + "nur einmal zugleich. Felder mit Setter, veränderliche Felder und Sammlungen hinter readonly sind verboten (sie gingen beim Umzug still "
             + "verloren); eine Funktion mit Zustand ist nie gleichbleibend und darf aus einem Eingang allein lernen (Auf ohne Ausgabe); ein Zustand für "
-            + "alles steht mit [EineAdresse] an der Funktion (R19, Plan §2.9).", "error",
+            + "alles steht mit [EineAdresse] an der Funktion (R19, docs/04 §4.4).", "error",
             [An("CQRS105", "Domain.SourceGeneration/ZustandAnalyzer.cs"),
              Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (höchstens ein Zustand, eigene Klasse; Auf ohne Ausgabe nur mit Zustand)"),
              new("generator", null, "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (mit Zustand nie gleichbleibend; Sichern über den generierten Kontext)")]),
@@ -156,7 +156,7 @@ public static class Grammatik
             + "(ILebenszyklus): BeimAktivierenAsync nach dem Bau und dem Laden des Zustands, vor dem ersten Auf (ein Netz laden); VorDemSichernAsync vor "
             + "jeder Sicherung des Zustands (Gewichte zurückholen); das Ende über IAsyncDisposable. Eine geladene Ressource darf in einem readonly-Feld "
             + "stehen, Zustand nur in IZustand<T>. Nicht an Schnittstellen (draußen gehört der Lebenszyklus dem Worker), nicht an Diensten; eine Funktion "
-            + "mit Lebenszyklus ist nie gleichbleibend (Plan §2.9, E10).", "error",
+            + "mit Lebenszyklus ist nie gleichbleibend (docs/04 §4.4, docs/10 E10).", "error",
             [An("CQRS107", "Domain.SourceGeneration/LebenszyklusAnalyzer.cs"),
              new("generator", null, "Infrastructure.SourceGeneration/Funktionsform.cs (mit Lebenszyklus nie gleichbleibend)"),
              new("laufzeit", null, "Infrastructure/Funktionen/FunktionsActor.cs (Aktivieren nach dem Laden, vor jeder Sicherung, Freigabe am Ende)")]),
@@ -164,7 +164,7 @@ public static class Grammatik
             + "abgeleitet (Herkunft.NeueId), nie mit Guid.NewGuid() oder Id<T>.Neu() — eine Wiederholung bekäme sonst ein anderes Ziel (R13). Clients "
             + "würfeln.", "error",
             [An("CQRS104", "Domain.SourceGeneration/GleichbleibendAnalyzer.cs")]),
-        // Domänen-Dienste (konzept-werkbank §12.3 E11): Abhängigkeiten der Implementierungen, gebunden nach der Umgebung.
+        // Domänen-Dienste (docs/06 §6.5): Abhängigkeiten der Implementierungen, gebunden nach der Umgebung.
         new("GR-DIENST", "Dienst nur im Konstruktor einer Implementierung", "Ein Dienst (interface IX : IDienst) steht nur im Konstruktor einer "
             + "Funktion im Host oder einer Dienst-Implementierung — nie als Parameter, Feld oder Eigenschaft im Fachcode (Aggregat, Projektion, Reader): "
             + "dort sind es Fähigkeiten als Parameter.", "error",
@@ -193,7 +193,7 @@ public static class Grammatik
         new("GR-STORE-KLASSE", "Store mit genau einer Klasse", "Ein Store, in den eine Projektion schreibt, implementiert genau eine Store-Klasse: "
             + "IAtomaresZiel (1: Wirkung und Fortschritt in einer Transaktion), IWiederholungsfestesZiel (2: jede Wirkung ergibt wiederholt dasselbe; "
             + "darum nimmt jede Schreib-Fähigkeit die Herkunft) oder INurMindestensEinmal (3: keine Zusage; nur für eine Projektion mit "
-            + "[MindestensEinmal]). Ob ein Treiber seine Klasse einhält, zeigt der allgemeine Store-Test (R14, Plan §2.4).", "error",
+            + "[MindestensEinmal]). Ob ein Treiber seine Klasse einhält, zeigt der allgemeine Store-Test (R14, docs/04 §4.3).", "error",
             [An("CQRS109", "Projections.SourceGeneration/StoreKlasseAnalyzer.cs (genau eine Klasse; Klasse 2: Herkunft in jeder Schreib-Fähigkeit)"),
              Gen("CQRS110", "Infrastructure.SourceGeneration/PullPathGenerator.cs (Klasse 3 nur mit [MindestensEinmal])"),
              new("boot", null, "Infrastructure/Projections/Projektionsnaht.cs (Projektionslauf.Ziel: genau eine Klasse, Klasse 3 nur mit Erlaubnis)"),
@@ -202,7 +202,7 @@ public static class Grammatik
             + "der Generator ergänzt den Speicher-Schlüssel (Schluessel) für Stores, die einen einfachen Schlüssel brauchen; Fähigkeiten nehmen Id<T>.", "error",
             [Gen("CQRS111", "Domain.SourceGeneration/ReadModelSchluesselGenerator.cs")]),
         new("GR-KREIS", "Kreise Funktion ↔ Aggregat", "Ein Ablauf ist ein Kreis (Vorgang → Funktion → anderes Aggregat → Funktion → Vorgang); er endet, "
-            + "weil das Decide des Vorgangs fortschreitenden Zustand trägt. Einen Kreis ohne Fortschritt erkennt der Build nicht (R6 des Plans).", "info",
+            + "weil das Decide des Vorgangs fortschreitenden Zustand trägt. Einen Kreis ohne Fortschritt erkennt der Build nicht (R6, docs/10 §10.6).", "info",
             [Offen("docs/13 FB-5: aus Signaturen allein nicht von einem Ablauf zu unterscheiden")]),
         new("GR-ZUSTAND", "Regel Z: Zustand nur in Aggregaten und Lesemodellen", "Projektionen sind zustandslose Übersetzer; Gedächtnis gehört in ein Aggregat.", "warning",
             [An("CQRS083", "Domain.SourceGeneration/ModellAnalyzer.cs (Instanzfelder, die Zustand halten)")]),

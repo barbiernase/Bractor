@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// E2E-MESSUNG (docs/plan-garantien-und-durchsatz.md §0.1, §0.2) — der echte Host, die realen Anwendungen, nur echte Eingänge.
+// E2E-MESSUNG (docs/12 §12.5) — der echte Host, die realen Anwendungen, nur echte Eingänge.
 //   scripts/vermessung-e2e.sh --anlass baseline --spalte Baseline        (Höchstlast S1–S5, wenige Minuten)
 //   scripts/vermessung-e2e.sh --art stoerung --anlass baseline-stoerung   (Störungslauf, etwa drei Minuten)
 //   scripts/vermessung-e2e.sh --art leerlauf --anlass pf-14 --szenarien S1,S3,S5   (Diagnose: Leerlauf als Zeitreihe, nicht im Repo)

@@ -4,7 +4,7 @@ using Npgsql;
 namespace Werkbank.Server;
 
 /// <summary>
-/// Die Sim-Datenbank (docs/konzept-werkbank.md §4.6), nur für Umgebungen der Art Sim: zurücksetzen (löschen — der Host legt sie beim
+/// Die Sim-Datenbank (docs/06 §6.5), nur für Umgebungen der Art Sim: zurücksetzen (löschen — der Host legt sie beim
 /// nächsten Start leer neu an und siegelt sie), Stand speichern (<c>CREATE DATABASE &lt;db&gt;_stand_&lt;x&gt; TEMPLATE &lt;db&gt;</c>), Stand laden,
 /// Prod-Stand übernehmen (<c>pg_dump | pg_restore</c> per Container, Siegel neu). Der Host muss dabei stehen (eine Vorlage verträgt keine
 /// Verbindungen) — das ordnet der Aufrufer an.

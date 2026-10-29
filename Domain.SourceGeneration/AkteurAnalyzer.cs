@@ -11,7 +11,7 @@ namespace Domain.SourceGeneration;
 /// Quell-Nachricht, Hinweis und die Ausgaben einer Funktion draußen (<c>IDarf&lt;IFunktion-Typ&gt;</c>). Alles andere (ein Event aus dem Log, eine
 /// Antwort, ein Wertobjekt …) kann man nicht „dürfen" — das Hören wird aus dem Graphen abgeleitet. Und <c>IDarf</c> gehört an einen
 /// <c>IAkteur</c>: an einem anderen Typ würde es niemand lesen. Beides ist ein Build-Fehler (docs/konzept-akteure.md).
-/// <para><b>CQRS063/064 — Client-Vertrag</b> (<c>docs/konzept-akteure.md</c> §4, Plan Pub/Sub-Neustrukturierung §2.7): <c>IClientVertrag</c> ist ein
+/// <para><b>CQRS063/064 — Client-Vertrag</b> (<c>docs/konzept-akteure.md</c> §4, docs/konzept-akteure.md §5): <c>IClientVertrag</c> ist ein
 /// Interface, das nur zusammenstellt — <c>ITraegt&lt;F&gt;</c>, <c>ISendet&lt;T&gt;</c>, <c>IFragt&lt;T&gt;</c>, <c>IHoert&lt;T&gt;</c> und andere
 /// Client-Verträge — und selbst nichts deklariert (063); was er trägt, sendet oder fragt, darf ein Akteur, was er hört, ist ein Event oder
 /// Hinweis (064).</para>

@@ -5,7 +5,7 @@ using Npgsql;
 namespace Werkbank.Server;
 
 /// <summary>
-/// Die Infrastruktur einer Umgebung (docs/konzept-werkbank.md §4.5): Postgres immer,
+/// Die Infrastruktur einer Umgebung (docs/06 §6.5): Postgres immer,
 /// Consul bei <c>Cluster = Consul</c>. Für <c>Verwaltet</c> erzeugt die Werkbank ein Docker-Compose-Projekt <c>cqrs-&lt;umgebung&gt;</c> und
 /// startet es — nur wenn der Dienst nicht schon erreichbar ist (ein lokal laufender Postgres auf demselben Port wird mitbenutzt).
 /// <c>Vorhanden</c> verwaltet sie nie.
@@ -46,7 +46,7 @@ public sealed class Infra(string slnRoot)
     /// <summary>Das Compose-Projekt der Umgebung (nur die verwalteten, noch nicht erreichbaren Dienste).</summary>
     public string Compose(string name, UmgebungKonfig u, IReadOnlyList<Dienst> fehlend)
     {
-        var b = new System.Text.StringBuilder("# Von der Werkbank erzeugt (docs/konzept-werkbank.md §4.5) — nicht von Hand ändern.\nservices:\n");
+        var b = new System.Text.StringBuilder("# Von der Werkbank erzeugt (docs/06 §6.5) — nicht von Hand ändern.\nservices:\n");
         foreach (var d in fehlend)
         {
             var bild = d.Name switch { "Postgres" => "postgres:16-alpine", _ => "hashicorp/consul:1.19" };

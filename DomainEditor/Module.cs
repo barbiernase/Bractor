@@ -25,7 +25,7 @@ public sealed record Modul
 }
 
 /// <summary>
-/// KAPSELUNG (<c>docs/konzept-editor-komposition.md</c> §5): jeder Namespace ist ein Modul, eingeklappt ein Baustein mit abgeleiteten
+/// KAPSELUNG (Editor-Komposition, Konzept im Git-Verlauf bei 861ea7f): jeder Namespace ist ein Modul, eingeklappt ein Baustein mit abgeleiteten
 /// Ports. Regel (auf dem <see cref="Nachrichtenfluss"/>): eine Kante Erzeuger → Nachricht bzw. Nachricht → Konsument, deren Enden auf verschiedenen
 /// Seiten der Modulgrenze liegen, ist ein Port — Eingang, wenn ihr Ziel drinnen liegt, Ausgang, wenn ihre Quelle drinnen liegt. Die
 /// Außenwelt (Client, Treiber) liegt außerhalb jedes Moduls. Dazu kommen die OFFENEN Ports: eine Nachricht im Modul, die einen

@@ -5,7 +5,7 @@ using Proto.Cluster;
 
 namespace Infrastructure.Aggregate.ActorSystem;
 
-/// <summary>Die Frage an einen Aggregat-Actor (Plan Pub/Sub-Neustrukturierung §2.6): die Query, nach der seine <c>Frage</c> antwortet, und ihr Ziel
+/// <summary>Die Frage an einen Aggregat-Actor (docs/03 §3.2): die Query, nach der seine <c>Frage</c> antwortet, und ihr Ziel
 /// (die Id aus ihrem Glied <c>Id&lt;TAggregat&gt;</c>) — eine Frage an eine fremde Identität beantwortet der Actor nicht.</summary>
 public sealed record AggregatFrage(IQuery Query, Guid Ziel) : IWireMessage;
 
@@ -16,7 +16,7 @@ public sealed record AggregatFrage(IQuery Query, Guid Ziel) : IWireMessage;
 public sealed record AggregatAntwort(IQueryResponse? Antwort, int Version, string? Fehler = null) : IWireMessage;
 
 /// <summary>
-/// Der Weg einer Query zu ihrem Aggregat (Plan Pub/Sub-Neustrukturierung §2.6): eine Frage des <see cref="Bote"/> mit Pflicht-Frist an die
+/// Der Weg einer Query zu ihrem Aggregat (docs/03 §3.2): eine Frage des <see cref="Bote"/> mit Pflicht-Frist an die
 /// Cluster-Identität aus der Id der Query. Der generierte Query-Dienst ruft ihn für jede Query, deren Ziel ein Aggregat ist (R4); die Antwort trägt
 /// als Stand je gezeigter Id genau dieses Aggregat mit seiner Version — exakt, ohne Warten auf eine Projektion.
 /// </summary>

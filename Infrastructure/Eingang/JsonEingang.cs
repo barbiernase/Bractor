@@ -15,7 +15,7 @@ using Infrastructure.Komposition;
 namespace Infrastructure.Eingang;
 
 /// <summary>
-/// Der JSON-Eingang des Hosts (docs/konzept-werkbank.md §6, Werkbank P5, §12.3 E5) — der Weg der Werkbank ins ECHTE System, nur auf dem
+/// Der JSON-Eingang des Hosts (CLAUDE.md W6, Werkbank P5, docs/06 §6.6) — der Weg der Werkbank ins ECHTE System, nur auf dem
 /// Einblick-Port und nur mit <c>Transport:JsonEingang</c> (Sim an, Prod aus):
 /// <list type="bullet">
 /// <item><c>POST /eingang/command</c>, <c>/eingang/query</c> — als Akteur: Token im Header <c>akteur-token</c> → <see cref="AkteurTor"/> →
@@ -101,7 +101,7 @@ public static class JsonEingang
             }, Json);
         });
 
-        // Eine Quell-Nachricht vom Client (Plan Pub/Sub-Neustrukturierung Phase 3): ein Fakt von draußen (: ClientGemeldet), Kennung = die Command-Id,
+        // Eine Quell-Nachricht vom Client: ein Fakt von draußen (: ClientGemeldet), Kennung = die Command-Id,
         //   die der Client vergibt und beim Wiederholen wieder schickt — genau einmal im Log je Kennung, derselbe Vorgang.
         g.MapPost("/quelle", async (HttpContext http, JsonElement body, IServiceProvider sp, CancellationToken ct) =>
         {
@@ -128,7 +128,7 @@ public static class JsonEingang
             try
             {
                 var antwort = await sp.GetRequiredService<IQueryDienst>().ExecuteAsync((IQuery)nachricht!);
-                // Der Stand je gezeigter Id — bei einer Frage an ein Aggregat seine Version, der OCC-Stand für den nächsten Command (Plan §2.6).
+                // Der Stand je gezeigter Id — bei einer Frage an ein Aggregat seine Version, der OCC-Stand für den nächsten Command (docs/03 §3.2).
                 var staende = (antwort.Deps ?? []).Select(d => new { id = d.Id, aggregat = d.AggregateType, version = d.Version });
                 return Results.Json(new { ok = true, antwort = Darstellung(antwort.Data), staende }, Json);
             }

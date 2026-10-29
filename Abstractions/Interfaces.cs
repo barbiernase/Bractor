@@ -23,7 +23,7 @@ public interface IEvent : IMessagePayload { }
 
 /// <summary>
 /// Die Framework-Sicht auf einen Command: sein Ziel als Stream-Id. Der Fachcode implementiert nie dieses Interface allein, sondern
-/// <see cref="ICommand{TAggregat}"/> — dort steht das Ziel typisiert (R7, Plan §3.6), und <see cref="Ziel"/> folgt daraus. Ein Command ohne
+/// <see cref="ICommand{TAggregat}"/> — dort steht das Ziel typisiert (R7, docs/10 §10.6), und <see cref="Ziel"/> folgt daraus. Ein Command ohne
 /// typisiertes Ziel baut nicht (der Compiler verlangt <see cref="Ziel"/>, CQRS013 verbietet den Umweg).
 /// </summary>
 public interface ICommand : IMessagePayload
@@ -33,7 +33,7 @@ public interface ICommand : IMessagePayload
 }
 
 /// <summary>
-/// Ein Command an genau ein Aggregat <typeparamref name="TAggregat"/> (Plan §3.1, R3): das Ziel steht im Typ. Routing, Aggregat-Actor, Leitung,
+/// Ein Command an genau ein Aggregat <typeparamref name="TAggregat"/> (docs/10 §10.2, R3): das Ziel steht im Typ. Routing, Aggregat-Actor, Leitung,
 /// Python und Client lesen es von hier — die Decide-Signatur muss im selben Aggregat stehen (CQRS014).
 /// </summary>
 public interface ICommand<TAggregat> : ICommand where TAggregat : IState
@@ -46,7 +46,7 @@ public interface ICommand<TAggregat> : ICommand where TAggregat : IState
 
 /// <summary>
 /// Marker-Interface für Queries. Eine Query hat genau ein Ziel (R4): einen Reader (<c>Frage</c> über Lese-Fähigkeiten) oder ein Aggregat
-/// (<c>Frage</c> im Decider, dann nennt sie es mit genau einem Glied <c>Id&lt;TAggregat&gt;</c>, Plan Pub/Sub-Neustrukturierung §2.6).
+/// (<c>Frage</c> im Decider, dann nennt sie es mit genau einem Glied <c>Id&lt;TAggregat&gt;</c>, docs/03 §3.2).
 /// Queries sind synchrone Request/Response (keine Zustellung über den Verteiler). Erbt bewusst NICHT von IMessagePayload.
 /// </summary>
 public interface IQuery { }
@@ -71,7 +71,7 @@ public interface IAggregateHandler
     IEnumerable<IEvent> HandleCommand(ICommand command);
     void ApplyEvent(IEvent @event);
 
-    /// <summary>Die direkte Abfrage (Plan Pub/Sub-Neustrukturierung §2.6): die <c>Frage</c> des Deciders zur Query, nur lesend auf den Zustand —
+    /// <summary>Die direkte Abfrage (docs/03 §3.2): die <c>Frage</c> des Deciders zur Query, nur lesend auf den Zustand —
     /// derselbe Stand, auf dem der nächste Command entschieden würde.</summary>
     IQueryResponse Frage(IQuery query);
 }
@@ -341,6 +341,6 @@ public interface IAggregateRepository
         public bool NochNicht { get; init; }
 
         /// <summary>Die Projektionen hinter der Frage (ihre Kennungen, aus den Lese-Fähigkeiten) — die Sitzung beobachtet sie grob, wenn die Antwort
-        /// keine Id zeigt, um den Client neu fragen zu lassen (Plan Pub/Sub-Neustrukturierung §2.7). Nicht auf der Leitung.</summary>
+        /// keine Id zeigt, um den Client neu fragen zu lassen (docs/konzept-akteure.md §5). Nicht auf der Leitung.</summary>
         public IReadOnlyList<string> Projektionen { get; init; } = Array.Empty<string>();
     }

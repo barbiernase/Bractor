@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 namespace GraphExtractor;
 
 /// <summary>
-/// Die Umgebungen der Solution (docs/konzept-werkbank.md §4.1): <c>umgebungen/umgebung.&lt;name&gt;.json</c> neben der <c>.sln</c>. Der
+/// Die Umgebungen der Solution (docs/06 §6.5): <c>umgebungen/umgebung.&lt;name&gt;.json</c> neben der <c>.sln</c>. Der
 /// Extractor liest sie roh (Struktur ist Code, Werte sind Konfig) und legt sie dem Board bei — die Quellkarte zeigt die Werte je
 /// Umgebung, der Host-Rahmen (P3) bearbeitet sie. Platzhalter (<c>${env:…}</c>, <c>${branch}</c>) bleiben unaufgelöst stehen.
 /// </summary>

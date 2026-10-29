@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- Die Stores der Prüfdomäne (docs/07, Rolle Speicher): ein Datei-Ziel der Klasse 2 und eine Datei-Senke der Klasse 3 — der Nachweis, dass das
-       Framework hinter derselben Naht keine Transaktion des Stores braucht (Plan Pub/Sub-Neustrukturierung §2.4, Phase 8). -->
+       Framework hinter derselben Naht keine Transaktion des Stores braucht (docs/04 §4.3). -->
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

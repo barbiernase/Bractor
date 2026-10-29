@@ -59,7 +59,7 @@ namespace Infrastructure.SourceGeneration
 
         private static readonly DiagnosticDescriptor SplitNichtBereit = new DiagnosticDescriptor(
             "CQRS046", "Split-Upcasting (1:N) noch nicht produktionsreif",
-            "Der Split-Upcaster von '{0}' ist erkannt und wird generator-/leseseitig materialisiert, aber die Consumer-Fabric (Projektions-Dedup-Schlüssel, Prozess-Korrelation, Pipeline-Emit um SubIndex) ist noch NICHT verdrahtet — ein Split würde an durablen Konsumenten (Projektion/Reaktion/Prozess) still falsch laufen. Bis die Fabric steht: nur 1:1-Upcaster (IUpcast<TAlt, TNeu>) verwenden. Ein echter Split wird zusammen mit der Fabric und einem Integrationstest geliefert.",
+            "Der Split-Upcaster von '{0}' ist erkannt und wird generator-/leseseitig materialisiert, aber die Consumer-Fabric (Guard der Projektion, Festhalten der Funktion je Eingang um einen SubIndex) ist noch NICHT verdrahtet — ein Split würde an durablen Konsumenten (Projektion, Funktion) still falsch laufen. Bis die Fabric steht: nur 1:1-Upcaster (IUpcast<TAlt, TNeu>) verwenden. Ein echter Split wird zusammen mit der Fabric und einem Integrationstest geliefert.",
             "Upcasting", DiagnosticSeverity.Error, true);
 
         public void Initialize(GeneratorInitializationContext context) { }

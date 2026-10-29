@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Analyzer des Frameworks über sich selbst (Plan Pub/Sub-Neustrukturierung §1.7, Phase 10): nur Analyzer, keine Generatoren — darum
+  <!-- Analyzer des Frameworks über sich selbst (docs/06 §6.7): nur Analyzer, keine Generatoren — darum
        ein eigenes Projekt; Infrastructure.SourceGeneration liefe im Framework selbst als Laufzeitprojekt an. -->
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>

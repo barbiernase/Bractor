@@ -7,7 +7,7 @@ namespace Infrastructure.Funktionen;
 public static class FunktionsLaufortExtensions
 {
     /// <summary>
-    /// Bindet die Funktionen nach dem Abschnitt <c>Funktionen</c> der Umgebung (docs/konzept-werkbank.md §4.2): je Funktion der Laufort (<c>Host</c> mit
+    /// Bindet die Funktionen nach dem Abschnitt <c>Funktionen</c> der Umgebung (docs/06 §6.5): je Funktion der Laufort (<c>Host</c> mit
     /// Umsetzung, <c>Extern</c>, <c>Hand</c>), Slots und Wiederholungen. Gelesen und geprüft (Umsetzung eindeutig, eine Funktion mit Lese-Fähigkeit nur im
     /// Host, eine getragene Schnittstelle ohne Umsetzung draußen) wird die Bindung vom Funktions-Actor (<see cref="FunktionsBausteinWiring"/>); ein Name,
     /// den es nicht gibt, ist ein Boot-Fehler.

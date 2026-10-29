@@ -2,8 +2,7 @@
 """
 TrainingWorker — der out-of-process Trainings-Job.
 
-Der Client TrainingsWorker (verkörpert den Akteur TrainingsSystem) — er TRÄGT die Funktion ITraining (Plan Pub/Sub-Neustrukturierung
-§2.7): der Server bietet ihm jedes angeforderte Training an; er zieht die eingefrorene Sample-Liste über den typisierten Query-Kanal
+Der Client TrainingsWorker (verkörpert den Akteur TrainingsSystem) — er TRÄGT die Funktion ITraining (docs/konzept-akteure.md §5): der Server bietet ihm jedes angeforderte Training an; er zieht die eingefrorene Sample-Liste über den typisierten Query-Kanal
 (`self.query(HoleDatensatzSamples…)`), fährt das Training in `asyncio.to_thread` (Event-Loop bleibt frei) und **yieldet über die Zeit
 mehrfach** Ausgaben — ein Strom: jedes Stück hält der Server fest und sendet es, bevor das nächste kommt:
 

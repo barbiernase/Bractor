@@ -13,7 +13,7 @@ using Proto;
 namespace Infrastructure.GrpcClient;
 
 /// <summary>
-/// Der gRPC-Dienst der Leitung (Plan Pub/Sub-Neustrukturierung §2.7): je Verbindung prüft er das Akteur-Token, startet die Sitzung als Actor
+/// Der gRPC-Dienst der Leitung (docs/konzept-akteure.md §5): je Verbindung prüft er das Akteur-Token, startet die Sitzung als Actor
 /// (<see cref="SitzungsActor"/>, einziger Schreiber auf den Antwort-Stream) und reicht in seiner Lese-Schleife jede Nachricht des Clients nur
 /// weiter. Endet der Stream oder die Sitzung von sich aus (Ablehnung am Handshake), stoppt er die Sitzung, bevor der Aufruf endet — danach
 /// schreibt niemand mehr.

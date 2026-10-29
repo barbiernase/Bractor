@@ -29,7 +29,7 @@ namespace Infrastructure.Integration.Tests;
 public class LiveCommandE2ETests
 {
     /// <summary>
-    /// Latenz der Projektion (Plan Pub/Sub-Neustrukturierung §7 Risiko 1): der Commit weckt den Batch-Leser der Partition, die das Event liest — die
+    /// Latenz der Projektion (docs/13 §13.7): der Commit weckt den Batch-Leser der Partition, die das Event liest — die
     /// Historie wächst in Sekunden, nicht erst mit dem Takt (30 s). Dreimal hintereinander je unter 5 s.
     /// </summary>
     [Fact]
@@ -131,7 +131,7 @@ public class LiveCommandE2ETests
                 TimeSpan.FromSeconds(30),
                 "ImagePairProjektion ist nach dem Command nicht über den Pull-Co-Commit-Pfad materialisiert.");
 
-            // Plan Phase 6: der Stand je Id, den eine Antwort trägt, kommt aus dem Fortschritt der Projektion (Guard je Stream, mit den
+            // der Stand je Id, den eine Antwort trägt, kommt aus dem Fortschritt der Projektion (Guard je Stream, mit den
             //   Wirkungen in einer Transaktion) — hier das eine Event des Paars.
             var staende = host.Services.GetRequiredService<Infrastructure.Projections.ProjektionsStaende>();
             var stand = await staende.LiesAsync(new[] { "ImagePairHistorieProjektion" }, new[] { pairId });

@@ -6,7 +6,7 @@ using Abstractions;
 namespace Cqrs.Codegen;
 
 /// <summary>
-/// Client-Verträge → Python (<c>docs/konzept-akteure.md</c> §4, Plan Pub/Sub-Neustrukturierung §2.7): je <c>interface IX : IClientVertrag</c> eine
+/// Client-Verträge → Python (<c>docs/konzept-akteure.md</c> §4, docs/konzept-akteure.md §5): je <c>interface IX : IClientVertrag</c> eine
 /// abstrakte Klasse <c>XBasis</c> in <c>domain_client/generated/vertraege.py</c>, gegen die der Client programmiert — je getragener Funktion
 /// (<c>ITraegt&lt;F&gt;</c>) eine Methode, die ihre Ausgaben zurückgibt, je Kenntnis (<c>IHoert&lt;T&gt;</c>) eine Methode <c>auf_&lt;event&gt;</c>.
 /// Gelesen wird nur die Signatur (Metadaten der gebauten Domain-DLLs). Der Vertrags-Hash kommt aus derselben Quelle wie auf dem Server

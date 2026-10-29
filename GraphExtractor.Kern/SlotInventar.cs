@@ -6,7 +6,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace GraphExtractor;
 
 // ════════════════════════════════════════════════════════════════════════════
-//  Slot-Inventar (docs/konzept-llm-minimalkontext.md §7)
+//  Slot-Inventar (LLM-Minimalkontext §7, Konzept im Git-Verlauf bei 861ea7f)
 //
 //  Alle Stellen, an denen ein Code-Block hängt (H-Slots), über ihre Marker gefunden — Decide, Apply, Projektion,
 //  Reader und Store-Implementierung — und je Rumpf jedes gebundene Symbol klassifiziert:

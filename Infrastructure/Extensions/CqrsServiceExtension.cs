@@ -95,7 +95,7 @@ public static class CqrsServiceExtensions
         // 3. Aggregate-Components -- GENERIERT
         services.AddCqrsAggregates();
         
-        // 5. Verteilen an Clients (Verteiler je Knoten, Plan §2.7)
+        // 5. Verteilen an Clients (Verteiler je Knoten, docs/konzept-akteure.md §5)
         services.AddCqrsVerteilen();
         
         // 6. Actor System mit Cluster
@@ -113,10 +113,10 @@ public static class CqrsServiceExtensions
         // 9. Hosted Services
         services.AddCqrsHostedServices();
 
-        // 10. Funktionen in Baustein-Form (Plan Pub/Sub-Neustrukturierung Phase 3): Funktions-Actors, Weckung, Festhalten, Stand.
+        // 10. Funktionen in Baustein-Form: Funktions-Actors, Weckung, Festhalten, Stand.
         Infrastructure.Funktionen.FunktionsBausteinWiring.AddFunktionsBausteine(services);
 
-        // 11. Die Uhr: fällige Fristen der Aggregate als Commands (Plan Pub/Sub-Neustrukturierung Phase 3).
+        // 11. Die Uhr: fällige Fristen der Aggregate als Commands.
         Infrastructure.Uhr.UhrExtensions.AddUhr(services);
         
         return services;
@@ -204,7 +204,7 @@ public static class CqrsServiceExtensions
             // Die Inbox der Schreibseite (docs/04 §4.6): je Command eine Quittung, eindeutig je CommandId, in derselben Transaktion wie
             // seine Events — Exactly-once innerhalb des Horizonts (InboxAufraeumer).
             InboxTabelle.Registriere(options);
-            // Das Fälligkeits-Verzeichnis der Uhr (Plan Pub/Sub-Neustrukturierung Phase 3): je Frist eine Zeile, geschrieben mit ihrem Event.
+            // Das Fälligkeits-Verzeichnis der Uhr: je Frist eine Zeile, geschrieben mit ihrem Event.
             Infrastructure.Uhr.FristVerzeichnis.Registriere(options);
             // Das Kennungs-Verzeichnis der Quellen mit einem Stream je Schlüssel (genau einmal je Kennung, ohne Horizont).
             Infrastructure.Quellen.QuellKennungen.Registriere(options);
@@ -285,7 +285,7 @@ public static class CqrsServiceExtensions
         services.AddSingleton(builder.Passivierung);
         // Batch-Konsum der Projektionen (docs/04 §4.1): Partitionen und Seitengröße — die Batch-Leser lesen sie beim Erzeugen.
         services.AddSingleton(builder.Konsum);
-        // Der Wecker (Plan §2.3): nach jedem Commit gezielt, wen der generierte Weckplan nennt — der Bote entsteht beim ersten Weckruf.
+        // Der Wecker (docs/03 §3.5): nach jedem Commit gezielt, wen der generierte Weckplan nennt — der Bote entsteht beim ersten Weckruf.
         services.AddSingleton(provider => new Infrastructure.Wecken.Wecker(Anwendung.Weckplan, builder.Konsum,
             () => new Infrastructure.Lebenszyklus.Bote(provider.GetRequiredService<ActorSystem>().Cluster(),
                 provider.GetService<ILoggerFactory>()?.CreateLogger("Wecker"))));
@@ -442,7 +442,7 @@ public static class CqrsServiceExtensions
             return new ProtoActorAggregateDispatcher(system, logger, deadLetters, verteilung);
         });
         Console.WriteLine("  + IAggregateDispatcher");
-        // Die direkte Abfrage eines Aggregats (Plan Pub/Sub-Neustrukturierung §2.6): der Query-Dienst fragt darüber den Aggregat-Actor.
+        // Die direkte Abfrage eines Aggregats (docs/03 §3.2): der Query-Dienst fragt darüber den Aggregat-Actor.
         services.AddSingleton<AggregatAbfrage>();
 
         Console.WriteLine();

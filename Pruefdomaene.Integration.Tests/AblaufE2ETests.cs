@@ -12,7 +12,7 @@ namespace Pruefdomaene.Integration.Tests;
 
 /// <summary>
 /// Ebene 2 — ABLÄUFE Ende zu Ende im echten Cluster (Postgres/Consul), domänenneutral: ein Vorgang ist ein Aggregat (Auftrag, Verteilung),
-/// seine Kanten Event → Command tragen gleichbleibende Funktionen (Plan Pub/Sub-Neustrukturierung §2.2, Phase 4). Beweiskraft: der Endzustand der
+/// seine Kanten Event → Command tragen gleichbleibende Funktionen (docs/10 §10.1). Beweiskraft: der Endzustand der
 /// Aggregate (Voll-Fold) und die Zahl der Fakten je Stream im Log — genau einmal je Schritt, die Kompensation genau einmal; keine Prozess-Events.
 /// </summary>
 [Trait("Kategorie", "Garantie")]

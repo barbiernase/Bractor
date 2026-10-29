@@ -308,7 +308,7 @@ public sealed class GestenTests : IDisposable
         Rumpf.Lies(Text("Lesen.cs"), ort).Should().Be((string?)fn["rumpf"]);
     }
 
-    // ══ Dienste (konzept-werkbank §12.3 E11): Interface, Methoden und Implementierungen als Geste ══
+    // ══ Dienste (docs/06 §6.5): Interface, Methoden und Implementierungen als Geste ══
 
     private static JsonObject Param(string typ, string name) => new() { ["typ"] = typ, ["name"] = name };
 

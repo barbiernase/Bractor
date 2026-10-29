@@ -9,7 +9,7 @@ public interface IQueryDienst
     /// <summary>Die Query-Typen, die ein Reader der Leseseite bedient.</summary>
     IReadOnlyList<Type> QueryTypen { get; }
 
-    /// <param name="mindestens">Read-your-writes (Plan Pub/Sub-Neustrukturierung §2.7): „mindestens Stream S auf Version v“ — der Reader wartet
+    /// <param name="mindestens">Read-your-writes (docs/konzept-akteure.md §5): „mindestens Stream S auf Version v“ — der Reader wartet
     /// begrenzt, bis seine Projektion jeden dieser Streams so weit verarbeitet hat; reicht die Frist nicht, sagt die Antwort
     /// <see cref="QueryResponse{T}.NochNicht"/>.</param>
     Task<QueryResponse<IQueryResponse>> ExecuteAsync(IQuery query, IReadOnlyList<StreamStand>? mindestens = null);

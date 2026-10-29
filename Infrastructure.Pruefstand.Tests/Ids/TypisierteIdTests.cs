@@ -10,7 +10,7 @@ using ImagePairAggregat = Domain.ImagePair.ImagePair;
 namespace Infrastructure.Pruefstand.Ids;
 
 /// <summary>
-/// Typisierte Ids (Plan Pub/Sub-Neustrukturierung §2.5, Phase 1): das Ziel eines Commands steht in seinem Typ (<see cref="ICommand{TAggregat}"/>),
+/// Typisierte Ids (docs/10 §10.4): das Ziel eines Commands steht in seinem Typ (<see cref="ICommand{TAggregat}"/>),
 /// und Log (Event-JSON), Wire (Cross-Node) und Leitung (Proto) tragen eine <see cref="Id{T}"/> als UUID — verlustfrei zurück in denselben Typ.
 /// Store-frei: über die generierten Kontexte, die generierte Routing-Tabelle und den Nutzlast-Mapper der Leitung.
 /// </summary>

@@ -5,7 +5,7 @@ using Abstractions;
 namespace Werkbank.Server;
 
 /// <summary>
-/// Externe Funktions-Worker als Prozesse der Werkbank (docs/konzept-werkbank.md §6 und §12.3 E10, Werkbank P5.5): „▶ Worker starten" an einer
+/// Externe Funktions-Worker als Prozesse der Werkbank (CLAUDE.md W6, docs/06 §6.5, Werkbank P5.5): „▶ Worker starten" an einer
 /// Funktion mit Laufort <c>Extern</c> startet <c>Funktionen:&lt;F&gt;:Worker</c> der gewählten Umgebung — <c>Python Skript Argumente…</c> mit
 /// <c>CQRS_GRPC_HOST</c>/<c>CQRS_GRPC_PORT</c>/<c>CQRS_AKTEUR_TOKEN</c>. Der Worker meldet sich wie jeder externe Ausführer am gRPC-Port an und
 /// holt Aufträge beim Vermittler; die Werkbank sammelt nur seine Ausgabe.
@@ -38,7 +38,7 @@ public sealed class Worker(string slnRoot)
     public IReadOnlyList<string> Log(string funktion, int max = 200)
         => _laeufe.TryGetValue(funktion, out var l) ? l.Log.Reverse().Take(max).Reverse().ToList() : [];
 
-    /// <summary>Der generische Funktions-Worker (konzept-werkbank §12.3 E13) — der Standard, wenn die Umgebung keinen eigenen nennt.</summary>
+    /// <summary>Der generische Funktions-Worker (docs/09 §9.5) — der Standard, wenn die Umgebung keinen eigenen nennt.</summary>
     public static readonly string GenerischesSkript = Abstractions.Projektstruktur.PythonWorker(Abstractions.Projektstruktur.StandardWurzel) + "/funktions_worker.py";
 
     /// <param name="standardToken">Ohne Token in der Umgebung: ein Token, dessen Akteur die Funktion anbieten darf (IDarf&lt;F&gt;), oder null.</param>
@@ -48,7 +48,7 @@ public sealed class Worker(string slnRoot)
         if (k.Laufort != FunktionsLaufort.Extern)
             throw new InvalidOperationException($"Laufort von {funktion} in {u.Umgebung.Name} ist {k.Laufort} — erst auf Extern stellen (🖥 Funktionen) und ⟳.");
         // Ohne eigenen Worker in der Umgebung: der generische Worker mit genau dieser Funktion (Implementierung aus der generierten Tabelle) —
-        //   außer dem Laufort braucht eine Funktion keine Konfig (konzept-werkbank §12.3 E13); Werte der Implementierung kämen als --konfig in die Argumente.
+        //   außer dem Laufort braucht eine Funktion keine Konfig (docs/09 §9.5); Werte der Implementierung kämen als --konfig in die Argumente.
         var w = k.Worker is { Skript.Length: > 0 } eigen ? eigen
             : new WorkerKonfig { Skript = GenerischesSkript, Argumente = ["--funktionen", funktion], Token = k.Worker?.Token ?? "", Python = k.Worker?.Python ?? "" };
         if (w.Token.Length == 0 && standardToken?.Invoke(funktion) is { } t) w = new WorkerKonfig { Skript = w.Skript, Argumente = w.Argumente, Python = w.Python, Token = t };

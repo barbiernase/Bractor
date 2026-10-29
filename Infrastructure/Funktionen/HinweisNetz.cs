@@ -7,7 +7,7 @@ using Proto.Cluster;
 namespace Infrastructure.Funktionen;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// HINWEIS-NETZ (Plan Pub/Sub-Neustrukturierung §2.9, E7, E8, A6, A7): Nachrichten, die nicht zur Fachdomäne gehören (Merkmale, Messwerte,
+// HINWEIS-NETZ (docs/04 §4.4, docs/10 E7, E8, A6, A7): Nachrichten, die nicht zur Fachdomäne gehören (Merkmale, Messwerte,
 // Ablehnungen), gehen von Baustein zu Funktions-Actor IM SPEICHER — nie in den Log, kein Broker, keine Abos. Hart verdrahtet: aus den
 // Signaturen kennt der Generator je Hinweis-Typ die Funktionen, die ihn hören (Hinweisplan); der Rahmen schlägt dort nach und schickt den
 // Hinweis per Bote.Melde DIREKT an jede Adresse (die Partition des Herkunfts-Streams bzw. die eine Adresse). Höchstens einmal: was im Flug

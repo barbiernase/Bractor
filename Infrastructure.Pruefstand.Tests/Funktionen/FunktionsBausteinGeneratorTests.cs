@@ -13,7 +13,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Funktionen;
 
 /// <summary>
-/// Funktion als Baustein (Plan Pub/Sub-Neustrukturierung §3.3, Phase 3): der <c>FunktionsBausteinGenerator</c> liest NUR Signaturen — je Eingang ein
+/// Funktion als Baustein (docs/10 §10.3): der <c>FunktionsBausteinGenerator</c> liest NUR Signaturen — je Eingang ein
 /// <c>Auf</c>, Herkunft, Lese-Fähigkeiten, freie Ausgabe (konkret, OneOf, T?, Strom, je auch als Task) — und erzeugt Dispatch (Einzel- und
 /// Seiten-Form), den Hinweisplan und die Bausteine-Tabelle (den Weckplan prüft WeckplanGeneratorTests). Jede erlaubte Form muss als Generat kompilieren; was nicht passt, ist CQRS100/101.
 /// </summary>

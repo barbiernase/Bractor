@@ -55,7 +55,7 @@ public sealed class MartenEventBatchWriter : IEventBatchWriter
     private readonly ILogger<MartenEventBatchWriter> _logger;
     private readonly Infrastructure.Wecken.Wecker? _wecker;
 
-    /// <param name="wecker">weckt nach dem Commit, wen der Weckplan nennt (Plan §2.3); null = niemand (Tests ohne Cluster).</param>
+    /// <param name="wecker">weckt nach dem Commit, wen der Weckplan nennt (docs/03 §3.5); null = niemand (Tests ohne Cluster).</param>
     public MartenEventBatchWriter(IDocumentStore store, ILogger<MartenEventBatchWriter> logger, Infrastructure.Wecken.Wecker? wecker = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));

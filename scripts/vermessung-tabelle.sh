@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Die fortlaufenden Messtabellen (docs/12 §12.5, docs/plan-garantien-und-durchsatz.md §0.1) — erzeugt aus den Ergebnis-Ordnern, nie von Hand.
+# Die fortlaufenden Messtabellen (docs/12 §12.5) — erzeugt aus den Ergebnis-Ordnern, nie von Hand.
 #
 #   scripts/vermessung-tabelle.sh             druckt die Tabellen (Markdown)
 #   scripts/vermessung-tabelle.sh --schreibe  ersetzt sie in docs/12 zwischen den Markern <!-- vermessung-tabelle:<rechner>:anfang/ende -->

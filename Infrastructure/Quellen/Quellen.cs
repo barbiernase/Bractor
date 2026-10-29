@@ -16,7 +16,7 @@ using Proto.Cluster;
 namespace Infrastructure.Quellen;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// QUELLEN = fest codierte Treiber + Konfig (docs/konzept-werkbank.md §3). Eine Domäne benennt ihre Quelle nur als Typ
+// QUELLEN = fest codierte Treiber + Konfig (docs/04 §4.7). Eine Domäne benennt ihre Quelle nur als Typ
 // (`sealed record DateiErkannt : DateiGemeldet;`); der Treiber (hier: Datei) liest, die Konfig der Umgebung (`Quellen:<Typ>`) sagt wie.
 // Jede Nachricht wird das erste Event ihres Streams — Id deterministisch aus Typ + Kennung, geschrieben per StartStream (oder, mit „ein Stream je
 // Schlüssel“, am Kopf mit Kennungs-Verzeichnis). Dieselbe Nachricht zweimal (Neustart, zweiter Knoten, Re-Scan) steht also genau einmal im Log.
@@ -153,7 +153,7 @@ public sealed class QuellEingang
 public static partial class QuellenExtensions
 {
     /// <summary>
-    /// Die Webhooks der Quellen (konzept-werkbank §12.3 E12) — aus der Konfig, nicht aus dem Programm: je Quelle mit <c>Quellen:&lt;Typ&gt;:Webhook</c> ein
+    /// Die Webhooks der Quellen (docs/06 §6.6) — aus der Konfig, nicht aus dem Programm: je Quelle mit <c>Quellen:&lt;Typ&gt;:Webhook</c> ein
     /// <c>POST {route}</c> auf dem Einblick-Port (HTTP/1.1) mit der Nachricht als JSON (gelesen über den generierten Wire-Kontext, keine
     /// Reflection) → genau einmal ins Log, Vorgang gestartet. Antwortet <c>202 Accepted</c> mit der Vorgangs-Id (dieselbe Nachricht zweimal →
     /// derselbe Vorgang), <c>400</c> bei einem Body, der nicht die Quell-Nachricht ist.
