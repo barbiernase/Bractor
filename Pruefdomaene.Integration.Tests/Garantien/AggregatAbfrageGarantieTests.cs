@@ -137,10 +137,13 @@ public class AggregatAbfrageGarantieTests
             frage.IsCompleted.Should().BeFalse("die Frage wartet, bis der Commit durch ist");
 
             await commit.Innen!.AppendEventsAsync(k, 1, new IEvent[] { new KontingentEntlastet(5, Beleg.Ohne) });   // der zweite Schreiber
+            var nachDemCommit = System.Diagnostics.Stopwatch.StartNew();
             commit.Freigabe.SetResult();
 
             (await belegung)!.Success.Should().BeTrue("auf dem frischen Stand neu entschieden");
             var (antwort, version) = await frage;
+            // Gleich nach dem Commit beantwortet, nicht erst, wenn Proto.Cluster die unbeantwortete Anfrage nach seiner Frist erneut zustellt.
+            nachDemCommit.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(2), "die wartende Frage beantwortet der Actor gleich nach dem Commit");
             (await FreiImLogAsync(host, k, version)).Should().Be(((KontingentStand)antwort).Frei, "die Antwort ist der Stand des Logs an ihrer Version");
             antwort.Should().NotBe(new KontingentStand(new(k), 7), "7 frei war die Entscheidung des gescheiterten Commits");
             var (danach, vDanach) = await FrageKontingentAsync(host, k);
