@@ -265,6 +265,20 @@ fast 20 in der Spitze, also die ganze Maschine; LWLock wartet bei 32 Partitionen
 bringen deshalb nichts mehr, sie verlagern Last auf Postgres. Queries je Vorgang 18–23 (S5-64) bzw. 34–42 (S5-8, kleinere Gruppen).
 Die DB-Zeit unter S5-64 (`pg_stat_statements`) trägt das Lesen der Konsumenten je Partition: 67 % bei 4 Slots (2,9 Aufrufe je Vorgang, 0,47 ms je Aufruf), 87 % bei 16 Slots (1,5 je Vorgang, 3,0 ms je Aufruf); danach das Anhängen der Events (17 % bzw. 7 %) und die Versionsprüfung der Streams (6 % bzw. 2 %). Weiter in docs/13 PF-40.
 
+**PF-40, Lesen ab der Seitengrenze (2026-10-29, A = `c6b6ec8` oben, B = `89a4cae`, gleiche Parameter, je ein Lauf):** der Plan derselben Abfrage
+auf der Mess-DB (Partition 3 von 8, Typen der `Auftragsabwicklung`, 500 Treffer ab Sequenz 300 000) ging ohne Ausschluss ≈ 5 700 Zeilen durch
+(allgemeiner Plan 1,3 ms), mit 4 500 ausgeschlossenen Erledigten ≈ 59 000 Zeilen (allgemeiner Plan 90 ms: die Liste wird Zeile für Zeile
+verglichen; der eigene Plan hasht sie, startet aber zwei parallele Worker). Der Actor liest seither ab der Grenze seiner letzten Seite. Alle
+gültig, Exactly-once grün; Prüfstand 562 grün + 1 übersprungen, Integration 65/65, Prüfdomäne 64/64, Verhaltens-Netz 23/23.
+
+| Slots / Partitionen | S5-64 durchgehend A → B | Abbau A → B | p99 S5-64 A → B | Lesen je Aufruf A → B | DB-Zeit S5-64 A → B | Postgres-CPU Mittel A → B |
+|---|---:|---:|---:|---:|---:|---:|
+| 4 / 8 | 1 758 → 1 830 | 2 113 → 2 194 | 19,7 → 18,0 s | 0,47 → 0,42 ms | 82 → 75 s | 4,1 → 4,1 Kerne |
+| 16 / 8 | 2 028 → 2 405 | 2 963 → 3 557 | 14,6 → 11,7 s | 3,0 → 0,69 ms | 207 → 107 s | 8,4 → 5,8 Kerne |
+
+S5-8 bleibt bei ≈ 1 550–1 580 (Sender-Takt). Mit 4 Slots wuchs die Ausschluss-Liste kaum, mit 16 Slots trug sie den größten Teil der Lesekosten.
+Das Lesen bleibt mit 65 % (4 Slots) bzw. 76 % (16 Slots) der größte Posten: jede Partition geht dasselbe Ende des Logs durch.
+
 Statisch gezählt:
 
 | Projekt | `[Fact]` | `[Theory]` | Dateien |
