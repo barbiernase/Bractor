@@ -263,6 +263,7 @@ Decke). Bei 64 Sendern nimmt die Schreibseite bis 8 500 Vorgänge/s an, 40 000 a
 bei 2 100–3 000. Der Host nutzt im Mittel 3,2–3,4 Kerne (Spitze 5,7). Postgres steigt mit Slots und Partitionen bis 11 Kerne im Mittel und
 fast 20 in der Spitze, also die ganze Maschine; LWLock wartet bei 32 Partitionen im Mittel 3,4 Verbindungen, Sperren nie. Mehr Partitionen
 bringen deshalb nichts mehr, sie verlagern Last auf Postgres. Queries je Vorgang 18–23 (S5-64) bzw. 34–42 (S5-8, kleinere Gruppen).
+Die DB-Zeit unter S5-64 (`pg_stat_statements`) trägt das Lesen der Konsumenten je Partition: 67 % bei 4 Slots (2,9 Aufrufe je Vorgang, 0,47 ms je Aufruf), 87 % bei 16 Slots (1,5 je Vorgang, 3,0 ms je Aufruf); danach das Anhängen der Events (17 % bzw. 7 %) und die Versionsprüfung der Streams (6 % bzw. 2 %). Weiter in docs/13 PF-40.
 
 Statisch gezählt:
 
