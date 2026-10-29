@@ -53,7 +53,9 @@ public class FunktionsLaufTests
         var gestartet = l.Nimm(new PartitionsSeite(new[] { E(1, A, 1), E(2, A, 2), E(3, B, 1) }, 3, false));
 
         gestartet.Select(e => e.Sequenz).Should().Equal(1, 3);
-        l.Ausser.Should().BeEquivalentTo(new long[] { 1, 3 }, "die laufenden schließt das nächste Lesen aus, der wartende kommt wieder");
+        l.LeseAb.Should().Be(3, "die Seite reichte bis zur gesetzten Sequenz: die laufenden und der wartende liest niemand neu");
+        l.Ausser.Should().BeEmpty("dahinter ist nichts bekannt");
+        l.ImVorrat.Should().Be(1, "der wartende bleibt im Vorrat");
         l.Fertig(3);
         l.Position.Should().Be(0);
         l.Nimm(new PartitionsSeite(new[] { E(2, A, 2) }, 3, false)).Should().BeEmpty("A ist noch belegt");
