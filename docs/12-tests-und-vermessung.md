@@ -189,6 +189,19 @@ im Gesamtbild (CQRS086 statt still, CQRS084 fehlt), CQRS057 für die Frage im De
 beantwortet (zuerst grün: Proto.Cluster stellt die unbeantwortete Anfrage nach ≈ 5 s erneut zu, dann antwortet der Actor — der Test verlangt jetzt
 die Antwort binnen 2 s nach dem Commit, danach rot). Keine Messung: der heiße Pfad ist bis auf eine leere Warteschlange je Commit unverändert.
 
+**Stand 2026-10-29 (Plan Pub/Sub-Neustrukturierung, Phase 10 — Hausregel für Actors als Build-Prüfung, `90798a7`, `daee0c5`):** volle Stufe
+auf `90798a7` grün bis auf 7 neue Prüfstand-Fälle: Integration **67/67** (mit Last), Prüfdomäne **64/64**, Verhaltens-Netz **23/23** (auch
+`NeustartTests`, G-18 bleibt offen), Client 30/30, Python SDK und Worker grün, Codegen-Drift, `--check`, `--sonde`, `--grammatik` grün; das Gate rot
+nur wegen derselben 7 Fälle. Die 7 Fälle waren Fehler der Proben, nicht des Analyzers: `Task.Run(…)` als Anweisung ist zugleich ein eigener Faden
+und ein nicht abgewarteter Task — zwei Meldungen, wo der Test eine erwartete (die Meldungen zeigen nebenbei alle fünf Besitz-Wege: Feld, primärer
+Konstruktor, Typ-Argument, Auto-Property, Array im abgeleiteten Actor). Nachlauf auf `daee0c5`: Prüfstand **552 grün + 1 übersprungen** (neu
+`HausregelAnalyzerTests` 25: jedes der 15 Muster im Actor, 5 Besitz-Wege, außerhalb und im nicht besessenen geschachtelten Typ still, fertiger Task
+und `await` erlaubt, nur nach Typ geprüftes Muster nicht, begründete Ausnahme still, leere Begründung CQRS113), Gate grün. Gegenproben am echten
+Code als Build (Analyzer): je Muster eine Methode eingesetzt — `FunktionsActor` (Task.Run, new Thread, lock, nicht abgewarteter Task, .Result,
+GetResult, `Cluster.RequestAsync`, `IContext.RequestAsync`, leere Begründung → CQRS113), `FunktionsLauf` als Feld-Typ (StartNew, `_ = …Async`),
+`Rueckstau` als Feld-Typ (Parallel, .Wait()), `Uhrwerk` als Typ des primären Konstruktors (ThreadPool, ContinueWith): alle 15 rot. Keine Messung:
+der heiße Pfad ist unverändert (der Snapshot läuft wie vorher neben dem Turn, das Dead-Letter-Schreiben nur beim Parken).
+
 Statisch gezählt:
 
 | Projekt | `[Fact]` | `[Theory]` | Dateien |
