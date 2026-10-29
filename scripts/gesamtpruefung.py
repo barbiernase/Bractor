@@ -37,6 +37,14 @@ BEWERTUNG = {
 LEERLAUF_KENNZAHLEN = {"queries_je_s", "cpu_prozent", "rss_mb", "nachlauf_s"}
 LAST_KENNZAHLEN = set(BEWERTUNG) - {"queries_je_s", "nachlauf_s"}
 
+# Szenarien, die auch beim selben Code weiter streuen als das Band: (Szenario, Kennzahl) → Band. S5 unter Parallelität (PF-36): derselbe
+#   Commit `4f43172` lieferte in S5-8 243 bis 314, in S5-64 224 bis 363 Vorgänge/s; p99 und Abbauzeit folgen dem Durchsatz.
+STREUUNG = {(sz, key): 0.40 for sz in ("S5-8", "S5-64") for key in ("durchsatz_je_s", "latenz_p99_ms", "abbau_s")}
+
+
+def kennzahlen(name):
+    return LEERLAUF_KENNZAHLEN if name.startswith("L") else LAST_KENNZAHLEN
+
 # Bekannte, unregelmäßig rote Tests mit ihrer Nummer in docs/13 — der Bericht nennt sie, statt sie zu verschweigen.
 BEKANNT = {
     "NeustartTests.Nach_dem_harten_Neustart_unter_Last": "G-18",
@@ -95,10 +103,11 @@ def zahl(x):
     return f"{x:,.0f}".replace(",", " ") if abs(x) >= 100 else f"{x:.1f}".replace(".", ",")
 
 
-def urteil(key, ist, soll):
+def urteil(name, key, ist, soll):
     if key not in BEWERTUNG or ist is None or soll is None or soll == 0 or ist != ist or soll != soll:
         return "–"
     band, mindest, hoeher_besser, _ = BEWERTUNG[key]
+    band = STREUUNG.get((name, key), band)
     rel = (ist - soll) / abs(soll)
     if abs(rel) <= band or abs(ist - soll) <= mindest:
         return "im Rauschen"
@@ -160,9 +169,8 @@ def bericht(a):
     for name, sz in sorted(m["szenarien"].items()):
         med = sz["median"]
         vmed = (v or {}).get("szenarien", {}).get(name, {}).get("median", {})
-        keys = LEERLAUF_KENNZAHLEN if name.startswith("L") else LAST_KENNZAHLEN
-        for key in [k_ for k_ in BEWERTUNG if k_ in keys and k_ in med]:
-            u = urteil(key, med.get(key), vmed.get(key))
+        for key in [k_ for k_ in BEWERTUNG if k_ in kennzahlen(name) and k_ in med]:
+            u = urteil(name, key, med.get(key), vmed.get(key))
             if u.startswith("**auffällig"):
                 auffaellig.add(name)
             w(f"| {name} {sz.get('titel', '')} | {BEWERTUNG[key][3]} | {zahl(med.get(key))} | {zahl(vmed.get(key))} | {u} |")
@@ -190,8 +198,9 @@ def bericht(a):
             if datei.startswith("profil-") and datei.endswith(".md"):
                 w(f"### {datei[7:-3]}")
                 w("")
-                inhalt = open(os.path.join(sonde, datei), encoding="utf-8").read().splitlines()
-                w("\n".join(inhalt[:40]))
+                # Ohne die eigene Überschrift des Profils; seine Abschnitte eine Ebene unter dem Abschnitt hier.
+                inhalt = open(os.path.join(sonde, datei), encoding="utf-8").read().splitlines()[:40]
+                w("\n".join("##" + z if z.startswith("## ") else z for z in inhalt if not z.startswith("# ")))
                 w("")
         if os.path.exists(os.path.join(sonde, "sonde.md")):
             w(f"Engpass-Sonde je Abschnitt (CPU je Prozess, Postgres-Wartezeiten, Zähler): `{os.path.relpath(os.path.join(sonde, 'auswertung.md'))}`")
@@ -209,9 +218,9 @@ def ab(a):
               "| Szenario | Kennzahl | A | B | Urteil |", "|---|---|---:|---:|---|"]
     for name, sz in sorted(eb["szenarien"].items()):
         amed = ea.get("szenarien", {}).get(name, {}).get("median", {})
-        for key in [k for k in BEWERTUNG if k in sz["median"]]:
+        for key in [k for k in BEWERTUNG if k in kennzahlen(name) and k in sz["median"]]:
             zeilen.append(f"| {name} | {BEWERTUNG[key][3]} | {zahl(amed.get(key))} | {zahl(sz['median'].get(key))} | "
-                          f"{urteil(key, sz['median'].get(key), amed.get(key))} |")
+                          f"{urteil(name, key, sz['median'].get(key), amed.get(key))} |")
     text = "\n".join(zeilen) + "\n"
     with open(os.path.join(a.messung, "gesamtpruefung.md"), "a", encoding="utf-8") as f:
         f.write("\n" + text)

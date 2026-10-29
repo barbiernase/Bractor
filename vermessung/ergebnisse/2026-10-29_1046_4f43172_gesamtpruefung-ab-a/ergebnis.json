@@ -1,0 +1,1675 @@
+{
+  "art": "e2e",
+  "anlass": "gesamtpruefung-ab-a",
+  "spalte": null,
+  "skript": "scripts/vermessung-e2e.sh --anlass gesamtpruefung-ab-a --szenarien S1,S3,S5",
+  "zeit": "2026-10-29T09:46:43.8900915+00:00",
+  "commit": "4f43172",
+  "branch": "HEAD",
+  "arbeitsbaum": "sauber",
+  "rechner": "Ubuntu-noble-latest-amd64-base, Ubuntu 24.04.4 LTS, 13th Gen Intel(R) Core(TM) i5-13500, 20 Kerne, 62 GiB",
+  "umgebungen": [
+    "vermessung",
+    "vermessung-pruefdomaene"
+  ],
+  "parameter": {
+    "szenarien": [
+      "S1",
+      "S3",
+      "S5"
+    ],
+    "wiederholungen": 1,
+    "probe": false,
+    "geaendert": false,
+    "fenster_s": 15,
+    "abbau_frist_s": 120,
+    "warmlauf_s": 30,
+    "s1_stoss_paare": 600,
+    "s2_stoss_paare": 200,
+    "s3_sender": [
+      8,
+      64
+    ],
+    "s3": "je Block ein Sammelvorgang (N = 1 000 000, die Barriere wird nicht erreicht); je Teil StarteTeilauftrag + SchließeTeilauftragAb",
+    "s5_sender": [
+      1,
+      8,
+      64
+    ],
+    "s3_hoechstens_teile_je_block": 2000,
+    "s5_hoechstens_vorgaenge_je_block": 3000,
+    "s5_muster": "je 10 Vorgänge: 8 Aufträge ok, 1 Auftrag gegen volles Kontingent (Kompensation), 1 Verteilung auf 4 Ziele; 50 Posten, 20 Ziele",
+    "leerlauf_s": 60,
+    "leerlauf": "erst nach dem Nachlauf (alle Poll-Cursor und Projektions-Positionen am Kopf des Logs, höchstens nachlauf_frist_s), dann das Fenster",
+    "nachlauf_frist_s": 180,
+    "sichtbar": "S1/S2: Query GetImagePair je offenem Paar (komplett), alle 100 ms; S3: TeilVerbucht im Log; S4: Query HoleDatensatz; S5: AuftragBestaetigt, PostenFreigegeben der Kompensation bzw. VerteilungAbgeschlossen im Log",
+    "transaktionen": "COMMITs aus pg_stat_statements (track = top); Queries = übrige Statements ohne BEGIN/COMMIT/ROLLBACK/DISCARD/SET/SHOW; ohne die Lese-Rolle des Treibers"
+  },
+  "fremdlast_vorher": "Last 2.15 2.93 5.12 2/709 4029041\n · CPU-stärkste: 368 dotnet; 2.1 consul; 1.3 redis-server; 1.2 redis-server; 0.2 containerd",
+  "fremdlast_nachher": "Last 1.05 1.51 3.63 3/683 4036197\n · CPU-stärkste: 17.8 dotnet; 4.0 postgres; 3.2 dotnet; 2.1 consul; 1.3 redis-server",
+  "szenarien": {
+    "L1": {
+      "titel": "Leerlauf Beispieldomäne",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "tx_je_s": 0,
+            "queries_je_s": 7.132,
+            "cpu_prozent": 2.146,
+            "rss_mb": 1034.562,
+            "rss_ende_mb": 1034.562,
+            "rss_lauf_max_mb": 1159.742,
+            "rss_ende_anteil": 0.892,
+            "aktive_actors": 4992,
+            "aktive_actors_hoechst": 4992,
+            "nachlauf_s": null,
+            "nachlauf_queries": 1492
+          },
+          "details": {
+            "mit_rueckstand": false,
+            "nachlauf_eingeholt": false,
+            "fremdlast_danach": "Last 0.27 1.43 3.91 2/840 4033917\n · CPU-stärkste: 100 ps;25.2 dotnet;21.5 dotnet; 2.8 dotnet; 2.1 consul"
+          }
+        }
+      ],
+      "median": {
+        "tx_je_s": 0,
+        "queries_je_s": 7.132,
+        "cpu_prozent": 2.146,
+        "rss_mb": 1034.562,
+        "rss_ende_mb": 1034.562,
+        "rss_lauf_max_mb": 1159.742,
+        "rss_ende_anteil": 0.892,
+        "aktive_actors": 4992,
+        "aktive_actors_hoechst": 4992,
+        "nachlauf_s": null,
+        "nachlauf_queries": 1492
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": []
+      }
+    },
+    "L5": {
+      "titel": "Leerlauf Prüfdomäne",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "tx_je_s": 0,
+            "queries_je_s": 5.866,
+            "cpu_prozent": 1.214,
+            "rss_mb": 870.973,
+            "rss_ende_mb": 870.098,
+            "rss_lauf_max_mb": 975.137,
+            "rss_ende_anteil": 0.892,
+            "aktive_actors": 9458,
+            "aktive_actors_hoechst": 9458,
+            "nachlauf_s": 3.019,
+            "nachlauf_queries": 297
+          },
+          "details": {
+            "mit_rueckstand": false,
+            "nachlauf_eingeholt": true,
+            "fremdlast_danach": "Last 1.05 1.51 3.63 2/814 4036146\n · CPU-stärkste: 83.9 dotnet;17.9 dotnet; 4.0 postgres; 3.2 dotnet; 2.1 consul"
+          }
+        }
+      ],
+      "median": {
+        "tx_je_s": 0,
+        "queries_je_s": 5.866,
+        "cpu_prozent": 1.214,
+        "rss_mb": 870.973,
+        "rss_ende_mb": 870.098,
+        "rss_lauf_max_mb": 975.137,
+        "rss_ende_anteil": 0.892,
+        "aktive_actors": 9458,
+        "aktive_actors_hoechst": 9458,
+        "nachlauf_s": 3.019,
+        "nachlauf_queries": 297
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": []
+      }
+    },
+    "S1": {
+      "titel": "Bildeingang Host, Stoß",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "angenommen_je_s": 9513.692,
+            "sichtbar_je_s": 0,
+            "durchsatz_je_s": 158.413,
+            "rueckstand": 600,
+            "abbau_s": 3.724,
+            "abgebaut": 1,
+            "latenz_p50_ms": 2637.125,
+            "latenz_p95_ms": 3624.92,
+            "latenz_p99_ms": 3724.769,
+            "fehler": 0,
+            "tx_je_s": 1506.925,
+            "queries_je_s": 13874.726,
+            "queries": 53918,
+            "tx_je_vorgang": 9.76,
+            "queries_je_vorgang": 89.863,
+            "cpu_prozent": 793.303,
+            "rss_mb": 978.887,
+            "xact_je_s_info": 8084.798,
+            "rss_ende_mb": 935.656,
+            "rss_lauf_max_mb": 978.887,
+            "rss_ende_anteil": 0.956,
+            "aktive_actors": 990,
+            "aktive_actors_hoechst": 990
+          },
+          "details": {
+            "block": {
+              "sender": 1,
+              "angenommen": 600,
+              "fehler": 0,
+              "sichtbar_im_fenster": 0,
+              "sichtbar": 600,
+              "fenster_s": 0.063,
+              "abbau_s": 3.724,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 1.76 2.72 4.96 1/875 4029922\n · CPU-stärkste: 128 dotnet; 106 dotnet; 4.5 dotnet; 2.1 consul; 1.3 redis-server"
+          }
+        }
+      ],
+      "median": {
+        "angenommen_je_s": 9513.692,
+        "sichtbar_je_s": 0,
+        "durchsatz_je_s": 158.413,
+        "rueckstand": 600,
+        "abbau_s": 3.724,
+        "abgebaut": 1,
+        "latenz_p50_ms": 2637.125,
+        "latenz_p95_ms": 3624.92,
+        "latenz_p99_ms": 3724.769,
+        "fehler": 0,
+        "tx_je_s": 1506.925,
+        "queries_je_s": 13874.726,
+        "queries": 53918,
+        "tx_je_vorgang": 9.76,
+        "queries_je_vorgang": 89.863,
+        "cpu_prozent": 793.303,
+        "rss_mb": 978.887,
+        "xact_je_s_info": 8084.798,
+        "rss_ende_mb": 935.656,
+        "rss_lauf_max_mb": 978.887,
+        "rss_ende_anteil": 0.956,
+        "aktive_actors": 990,
+        "aktive_actors_hoechst": 990
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": [
+          {
+            "name": "je Datei genau eine Quell-Nachricht im Log",
+            "ok": true,
+            "soll": "1220",
+            "ist": "1220",
+            "wiederholung": 1
+          },
+          {
+            "name": "keine Datei zweimal gemeldet",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "je Paar genau ein ImagePairErstellt",
+            "ok": true,
+            "soll": "610",
+            "ist": "610",
+            "wiederholung": 1
+          },
+          {
+            "name": "BildVerfuegbar genau einmal je Bild (2 je Paar)",
+            "ok": true,
+            "soll": "1220",
+            "ist": "1220",
+            "wiederholung": 1
+          },
+          {
+            "name": "kein Paar mit mehr als 2 BildVerfuegbar",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "je Paar genau ein ImagePairKomplett",
+            "ok": true,
+            "soll": "610",
+            "ist": "610",
+            "wiederholung": 1
+          },
+          {
+            "name": "Read-Model: komplette Paare = ImagePairKomplett im Log",
+            "ok": true,
+            "soll": "610",
+            "ist": "610",
+            "wiederholung": 1
+          },
+          {
+            "name": "Read-Model: Paare = ImagePairErstellt im Log",
+            "ok": true,
+            "soll": "610",
+            "ist": "610",
+            "wiederholung": 1
+          }
+        ]
+      }
+    },
+    "S3-64": {
+      "titel": "Sammelvorgang heiß, 64 Sender",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "angenommen_je_s": 4716.247,
+            "sichtbar_je_s": 502.28,
+            "durchsatz_je_s": 1431.944,
+            "rueckstand": 1787,
+            "abbau_s": 0.973,
+            "abgebaut": 1,
+            "latenz_p50_ms": 567.668,
+            "latenz_p95_ms": 867.938,
+            "latenz_p99_ms": 965.274,
+            "fehler": 0,
+            "tx_je_s": 821.773,
+            "queries_je_s": 14243.841,
+            "queries": 21857,
+            "tx_je_vorgang": 0.63,
+            "queries_je_vorgang": 10.928,
+            "cpu_prozent": 381.856,
+            "rss_mb": 1149.07,
+            "xact_je_s_info": 6726.023,
+            "rss_ende_mb": 1149.07,
+            "rss_lauf_max_mb": 1159.742,
+            "rss_ende_anteil": 0.991,
+            "aktive_actors": 4992,
+            "aktive_actors_hoechst": 4992
+          },
+          "details": {
+            "block": {
+              "sender": 64,
+              "angenommen": 2000,
+              "fehler": 0,
+              "sichtbar_im_fenster": 213,
+              "sichtbar": 2000,
+              "fenster_s": 0.424,
+              "abbau_s": 0.973,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 2.90 2.94 5.02 2/876 4029933\n · CPU-stärkste: 127 dotnet; 121 dotnet; 7.2 dotnet; 4.2 postgres; 2.1 consul"
+          }
+        }
+      ],
+      "median": {
+        "angenommen_je_s": 4716.247,
+        "sichtbar_je_s": 502.28,
+        "durchsatz_je_s": 1431.944,
+        "rueckstand": 1787,
+        "abbau_s": 0.973,
+        "abgebaut": 1,
+        "latenz_p50_ms": 567.668,
+        "latenz_p95_ms": 867.938,
+        "latenz_p99_ms": 965.274,
+        "fehler": 0,
+        "tx_je_s": 821.773,
+        "queries_je_s": 14243.841,
+        "queries": 21857,
+        "tx_je_vorgang": 0.63,
+        "queries_je_vorgang": 10.928,
+        "cpu_prozent": 381.856,
+        "rss_mb": 1149.07,
+        "xact_je_s_info": 6726.023,
+        "rss_ende_mb": 1149.07,
+        "rss_lauf_max_mb": 1159.742,
+        "rss_ende_anteil": 0.991,
+        "aktive_actors": 4992,
+        "aktive_actors_hoechst": 4992
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": [
+          {
+            "name": "S3 ×64: Fertig = Zahl der TeilVerbucht (Sammelvorgänge mit Abweichung)",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×64: TeilVerbucht = gestartete Teile",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×64: kein Sammelvorgang mit mehr TeilVerbucht als Teilen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×64: Barriere nur bei vollen Sammelvorgängen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×64: je Teil genau ein TeilauftragAbgeschlossen",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×64: kein Teil zweimal abgeschlossen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×64: je Teil genau ein TeilVerbucht (Ursache im Teil-Stream)",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×64: kein Teil zweimal verbucht",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          }
+        ]
+      }
+    },
+    "S3-8": {
+      "titel": "Sammelvorgang heiß, 8 Sender",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "angenommen_je_s": 1258.904,
+            "sichtbar_je_s": 986.981,
+            "durchsatz_je_s": 1252.534,
+            "rueckstand": 432,
+            "abbau_s": 0.008,
+            "abgebaut": 1,
+            "latenz_p50_ms": 14.66,
+            "latenz_p95_ms": 53.947,
+            "latenz_p99_ms": 84.624,
+            "fehler": 0,
+            "tx_je_s": 1549.231,
+            "queries_je_s": 12304.733,
+            "queries": 23335,
+            "tx_je_vorgang": 1.469,
+            "queries_je_vorgang": 11.668,
+            "cpu_prozent": 407.532,
+            "rss_mb": 1159.742,
+            "xact_je_s_info": 7717.153,
+            "rss_ende_mb": 1159.742,
+            "rss_lauf_max_mb": 1159.742,
+            "rss_ende_anteil": 1,
+            "aktive_actors": 2991,
+            "aktive_actors_hoechst": 2991
+          },
+          "details": {
+            "block": {
+              "sender": 8,
+              "angenommen": 2000,
+              "fehler": 0,
+              "sichtbar_im_fenster": 1568,
+              "sichtbar": 2000,
+              "fenster_s": 1.589,
+              "abbau_s": 0.008,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 2.90 2.94 5.02 2/876 4029929\n · CPU-stärkste: 124 dotnet; 117 dotnet; 6.3 dotnet; 2.8 postgres; 2.1 consul"
+          }
+        }
+      ],
+      "median": {
+        "angenommen_je_s": 1258.904,
+        "sichtbar_je_s": 986.981,
+        "durchsatz_je_s": 1252.534,
+        "rueckstand": 432,
+        "abbau_s": 0.008,
+        "abgebaut": 1,
+        "latenz_p50_ms": 14.66,
+        "latenz_p95_ms": 53.947,
+        "latenz_p99_ms": 84.624,
+        "fehler": 0,
+        "tx_je_s": 1549.231,
+        "queries_je_s": 12304.733,
+        "queries": 23335,
+        "tx_je_vorgang": 1.469,
+        "queries_je_vorgang": 11.668,
+        "cpu_prozent": 407.532,
+        "rss_mb": 1159.742,
+        "xact_je_s_info": 7717.153,
+        "rss_ende_mb": 1159.742,
+        "rss_lauf_max_mb": 1159.742,
+        "rss_ende_anteil": 1,
+        "aktive_actors": 2991,
+        "aktive_actors_hoechst": 2991
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": [
+          {
+            "name": "S3 ×8: Fertig = Zahl der TeilVerbucht (Sammelvorgänge mit Abweichung)",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×8: TeilVerbucht = gestartete Teile",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×8: kein Sammelvorgang mit mehr TeilVerbucht als Teilen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×8: Barriere nur bei vollen Sammelvorgängen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×8: je Teil genau ein TeilauftragAbgeschlossen",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×8: kein Teil zweimal abgeschlossen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×8: je Teil genau ein TeilVerbucht (Ursache im Teil-Stream)",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×8: kein Teil zweimal verbucht",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          }
+        ]
+      }
+    },
+    "S5-1": {
+      "titel": "Prüfdomäne verteilt, 1 Sender",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "angenommen_je_s": 428.631,
+            "sichtbar_je_s": 413.343,
+            "durchsatz_je_s": 428.191,
+            "rueckstand": 107,
+            "abbau_s": 0.007,
+            "abgebaut": 1,
+            "latenz_p50_ms": 7.312,
+            "latenz_p95_ms": 13.076,
+            "latenz_p99_ms": 18.135,
+            "fehler": 0,
+            "tx_je_s": 2288.295,
+            "queries_je_s": 19713.169,
+            "queries": 140085,
+            "tx_je_vorgang": 5.42,
+            "queries_je_vorgang": 46.695,
+            "cpu_prozent": 356.813,
+            "rss_mb": 865.266,
+            "xact_je_s_info": 11059.273,
+            "rss_ende_mb": 856.648,
+            "rss_lauf_max_mb": 865.266,
+            "rss_ende_anteil": 0.99,
+            "aktive_actors": 3458,
+            "aktive_actors_hoechst": 3458
+          },
+          "details": {
+            "block": {
+              "sender": 1,
+              "angenommen": 3000,
+              "fehler": 0,
+              "sichtbar_im_fenster": 2893,
+              "sichtbar": 3000,
+              "fenster_s": 6.999,
+              "abbau_s": 0.007,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 1.39 1.51 3.82 1/833 4034770\n · CPU-stärkste: 87.4 dotnet;22.1 dotnet; 9.4 postgres; 2.9 dotnet; 2.1 consul"
+          }
+        }
+      ],
+      "median": {
+        "angenommen_je_s": 428.631,
+        "sichtbar_je_s": 413.343,
+        "durchsatz_je_s": 428.191,
+        "rueckstand": 107,
+        "abbau_s": 0.007,
+        "abgebaut": 1,
+        "latenz_p50_ms": 7.312,
+        "latenz_p95_ms": 13.076,
+        "latenz_p99_ms": 18.135,
+        "fehler": 0,
+        "tx_je_s": 2288.295,
+        "queries_je_s": 19713.169,
+        "queries": 140085,
+        "tx_je_vorgang": 5.42,
+        "queries_je_vorgang": 46.695,
+        "cpu_prozent": 356.813,
+        "rss_mb": 865.266,
+        "xact_je_s_info": 11059.273,
+        "rss_ende_mb": 856.648,
+        "rss_lauf_max_mb": 865.266,
+        "rss_ende_anteil": 0.99,
+        "aktive_actors": 3458,
+        "aktive_actors_hoechst": 3458
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": []
+      }
+    },
+    "S5-64": {
+      "titel": "Prüfdomäne verteilt, 64 Sender",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "angenommen_je_s": 7867.794,
+            "sichtbar_je_s": 86.546,
+            "durchsatz_je_s": 334.167,
+            "rueckstand": 2967,
+            "abbau_s": 8.596,
+            "abgebaut": 1,
+            "latenz_p50_ms": 5347.866,
+            "latenz_p95_ms": 7822.064,
+            "latenz_p99_ms": 8439.408,
+            "fehler": 0,
+            "tx_je_s": 1237.456,
+            "queries_je_s": 12333.801,
+            "queries": 112578,
+            "tx_je_vorgang": 3.765,
+            "queries_je_vorgang": 37.526,
+            "cpu_prozent": 371.731,
+            "rss_mb": 975.137,
+            "xact_je_s_info": 6892.392,
+            "rss_ende_mb": 870.262,
+            "rss_lauf_max_mb": 975.137,
+            "rss_ende_anteil": 0.892,
+            "aktive_actors": 9458,
+            "aktive_actors_hoechst": 9458,
+            "nachschub_p50_ms": 2.233,
+            "nachschub_p99_ms": 35.912
+          },
+          "details": {
+            "block": {
+              "sender": 64,
+              "angenommen": 3000,
+              "fehler": 0,
+              "sichtbar_im_fenster": 33,
+              "sichtbar": 3000,
+              "fenster_s": 0.381,
+              "abbau_s": 8.596,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 2.94 1.84 3.89 1/832 4035099\n · CPU-stärkste: 171 dotnet;21.0 dotnet;12.1 postgres; 6.5 postgres; 5.9 postgres"
+          }
+        }
+      ],
+      "median": {
+        "angenommen_je_s": 7867.794,
+        "sichtbar_je_s": 86.546,
+        "durchsatz_je_s": 334.167,
+        "rueckstand": 2967,
+        "abbau_s": 8.596,
+        "abgebaut": 1,
+        "latenz_p50_ms": 5347.866,
+        "latenz_p95_ms": 7822.064,
+        "latenz_p99_ms": 8439.408,
+        "fehler": 0,
+        "tx_je_s": 1237.456,
+        "queries_je_s": 12333.801,
+        "queries": 112578,
+        "tx_je_vorgang": 3.765,
+        "queries_je_vorgang": 37.526,
+        "cpu_prozent": 371.731,
+        "rss_mb": 975.137,
+        "xact_je_s_info": 6892.392,
+        "rss_ende_mb": 870.262,
+        "rss_lauf_max_mb": 975.137,
+        "rss_ende_anteil": 0.892,
+        "aktive_actors": 9458,
+        "aktive_actors_hoechst": 9458,
+        "nachschub_p50_ms": 2.233,
+        "nachschub_p99_ms": 35.912
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": [
+          {
+            "name": "je gelingendem Auftrag genau ein AuftragBestaetigt",
+            "ok": true,
+            "soll": "7240",
+            "ist": "7240",
+            "wiederholung": 1
+          },
+          {
+            "name": "je abgelehntem Auftrag genau ein AuftragGescheitert",
+            "ok": true,
+            "soll": "905",
+            "ist": "905",
+            "wiederholung": 1
+          },
+          {
+            "name": "kein Auftrag mit zwei Ausgängen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "kein gelingender Auftrag gescheitert",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "jede Kompensation genau einmal (PostenFreigegeben je abgelehntem Auftrag)",
+            "ok": true,
+            "soll": "905",
+            "ist": "905",
+            "wiederholung": 1
+          },
+          {
+            "name": "keine Freigabe zweimal (je Auftrag höchstens ein PostenFreigegeben)",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "je Verteilung jedes Ziel genau einmal zugebucht",
+            "ok": true,
+            "soll": "3620",
+            "ist": "3620",
+            "wiederholung": 1
+          },
+          {
+            "name": "kein Ziel einer Verteilung zweimal zugebucht",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "je Verteilung genau ein VerteilungAbgeschlossen",
+            "ok": true,
+            "soll": "905",
+            "ist": "905",
+            "wiederholung": 1
+          },
+          {
+            "name": "Funktion: je Reservierung unter dem Mindestbestand genau ein Nachschub",
+            "ok": true,
+            "soll": "7932",
+            "ist": "7932",
+            "wiederholung": 1
+          },
+          {
+            "name": "Funktion: je Eingang genau eine Wirkung (Zubuchungen je Ursache = 1)",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          }
+        ]
+      }
+    },
+    "S5-8": {
+      "titel": "Prüfdomäne verteilt, 8 Sender",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "angenommen_je_s": 1451.262,
+            "sichtbar_je_s": 301.862,
+            "durchsatz_je_s": 313.791,
+            "rueckstand": 2376,
+            "abbau_s": 7.493,
+            "abgebaut": 1,
+            "latenz_p50_ms": 4334.329,
+            "latenz_p95_ms": 6835.014,
+            "latenz_p99_ms": 7434.632,
+            "fehler": 0,
+            "tx_je_s": 1166.685,
+            "queries_je_s": 12200.807,
+            "queries": 118339,
+            "tx_je_vorgang": 3.772,
+            "queries_je_vorgang": 39.446,
+            "cpu_prozent": 346.144,
+            "rss_mb": 896.785,
+            "xact_je_s_info": 7903.27,
+            "rss_ende_mb": 859.535,
+            "rss_lauf_max_mb": 896.785,
+            "rss_ende_anteil": 0.958,
+            "aktive_actors": 6458,
+            "aktive_actors_hoechst": 6458
+          },
+          "details": {
+            "block": {
+              "sender": 8,
+              "angenommen": 3000,
+              "fehler": 0,
+              "sichtbar_im_fenster": 624,
+              "sichtbar": 3000,
+              "fenster_s": 2.067,
+              "abbau_s": 7.493,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 2.07 1.65 3.84 1/836 4034936\n · CPU-stärkste: 136 dotnet;21.5 dotnet;12.3 postgres; 3.3 dotnet; 2.1 consul"
+          }
+        }
+      ],
+      "median": {
+        "angenommen_je_s": 1451.262,
+        "sichtbar_je_s": 301.862,
+        "durchsatz_je_s": 313.791,
+        "rueckstand": 2376,
+        "abbau_s": 7.493,
+        "abgebaut": 1,
+        "latenz_p50_ms": 4334.329,
+        "latenz_p95_ms": 6835.014,
+        "latenz_p99_ms": 7434.632,
+        "fehler": 0,
+        "tx_je_s": 1166.685,
+        "queries_je_s": 12200.807,
+        "queries": 118339,
+        "tx_je_vorgang": 3.772,
+        "queries_je_vorgang": 39.446,
+        "cpu_prozent": 346.144,
+        "rss_mb": 896.785,
+        "xact_je_s_info": 7903.27,
+        "rss_ende_mb": 859.535,
+        "rss_lauf_max_mb": 896.785,
+        "rss_ende_anteil": 0.958,
+        "aktive_actors": 6458,
+        "aktive_actors_hoechst": 6458
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": []
+      }
+    }
+  },
+  "global": [
+    {
+      "wiederholung": 1,
+      "anwendung": "Beispieldomäne",
+      "pruefungen": [
+        {
+          "name": "Beispieldomäne: keine CommandId zweimal gewirkt (Events je CommandId in genau einer Transaktion)",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        },
+        {
+          "name": "Beispieldomäne: kein abgelehnter Command hat geschrieben",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        },
+        {
+          "name": "Beispieldomäne: kein Stream mit doppelter Version",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        }
+      ]
+    },
+    {
+      "wiederholung": 1,
+      "anwendung": "Prüfdomäne",
+      "pruefungen": [
+        {
+          "name": "Prüfdomäne: keine CommandId zweimal gewirkt (Events je CommandId in genau einer Transaktion)",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        },
+        {
+          "name": "Prüfdomäne: kein abgelehnter Command hat geschrieben",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        },
+        {
+          "name": "Prüfdomäne: kein Stream mit doppelter Version",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        }
+      ]
+    }
+  ],
+  "exactly_once_ok": true,
+  "nicht_abgebaut": [],
+  "zusammenfassung": [
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "Queries im Nachlauf",
+      "einheit": "1",
+      "wert": 1492
+    },
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "Transaktionen",
+      "einheit": "/s",
+      "wert": 0
+    },
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "Queries",
+      "einheit": "/s",
+      "wert": 7.132
+    },
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "CPU Host",
+      "einheit": "% eines Kerns",
+      "wert": 2.146
+    },
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "RSS Host (max.)",
+      "einheit": "MB",
+      "wert": 1034.562
+    },
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "RSS Host am Fensterende",
+      "einheit": "MB",
+      "wert": 1034.562
+    },
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "RSS Host Höchststand des Laufs",
+      "einheit": "MB",
+      "wert": 1159.742
+    },
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "RSS am Ende / Höchststand",
+      "einheit": "1",
+      "wert": 0.892
+    },
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "Aktive Actors am Fensterende",
+      "einheit": "1",
+      "wert": 4992
+    },
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "Aktive Actors, Höchststand der Fensterenden",
+      "einheit": "1",
+      "wert": 4992
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "Nachlauf bis alle Konsumenten am Kopf",
+      "einheit": "s",
+      "wert": 3.019
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "Queries im Nachlauf",
+      "einheit": "1",
+      "wert": 297
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "Transaktionen",
+      "einheit": "/s",
+      "wert": 0
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "Queries",
+      "einheit": "/s",
+      "wert": 5.866
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "CPU Host",
+      "einheit": "% eines Kerns",
+      "wert": 1.214
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "RSS Host (max.)",
+      "einheit": "MB",
+      "wert": 870.973
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "RSS Host am Fensterende",
+      "einheit": "MB",
+      "wert": 870.098
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "RSS Host Höchststand des Laufs",
+      "einheit": "MB",
+      "wert": 975.137
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "RSS am Ende / Höchststand",
+      "einheit": "1",
+      "wert": 0.892
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "Aktive Actors am Fensterende",
+      "einheit": "1",
+      "wert": 9458
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "Aktive Actors, Höchststand der Fensterenden",
+      "einheit": "1",
+      "wert": 9458
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "angenommen",
+      "einheit": "Paare/s",
+      "wert": 9513.692
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "sichtbar im Fenster",
+      "einheit": "Paare/s",
+      "wert": 0
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Durchsatz bis alles sichtbar",
+      "einheit": "Paare/s",
+      "wert": 158.413
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Rückstand am Fensterende",
+      "einheit": "Vorgänge",
+      "wert": 600
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Abbauzeit",
+      "einheit": "s",
+      "wert": 3.724
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Latenz p50",
+      "einheit": "ms",
+      "wert": 2637.125
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Latenz p99",
+      "einheit": "ms",
+      "wert": 3724.769
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Transaktionen je Vorgang",
+      "einheit": "1",
+      "wert": 9.76
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Queries je Vorgang",
+      "einheit": "1",
+      "wert": 89.863
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Transaktionen",
+      "einheit": "/s",
+      "wert": 1506.925
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Queries",
+      "einheit": "/s",
+      "wert": 13874.726
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "CPU Host",
+      "einheit": "% eines Kerns",
+      "wert": 793.303
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "RSS Host (max.)",
+      "einheit": "MB",
+      "wert": 978.887
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "RSS Host am Fensterende",
+      "einheit": "MB",
+      "wert": 935.656
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "RSS Host Höchststand des Laufs",
+      "einheit": "MB",
+      "wert": 978.887
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "RSS am Ende / Höchststand",
+      "einheit": "1",
+      "wert": 0.956
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Aktive Actors am Fensterende",
+      "einheit": "1",
+      "wert": 990
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Aktive Actors, Höchststand der Fensterenden",
+      "einheit": "1",
+      "wert": 990
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "angenommen",
+      "einheit": "Teile/s",
+      "wert": 4716.247
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "sichtbar im Fenster",
+      "einheit": "Teile/s",
+      "wert": 502.28
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Durchsatz bis alles sichtbar",
+      "einheit": "Teile/s",
+      "wert": 1431.944
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Rückstand am Fensterende",
+      "einheit": "Vorgänge",
+      "wert": 1787
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Abbauzeit",
+      "einheit": "s",
+      "wert": 0.973
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Latenz p50",
+      "einheit": "ms",
+      "wert": 567.668
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Latenz p99",
+      "einheit": "ms",
+      "wert": 965.274
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Transaktionen je Vorgang",
+      "einheit": "1",
+      "wert": 0.63
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Queries je Vorgang",
+      "einheit": "1",
+      "wert": 10.928
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Transaktionen",
+      "einheit": "/s",
+      "wert": 821.773
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Queries",
+      "einheit": "/s",
+      "wert": 14243.841
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "CPU Host",
+      "einheit": "% eines Kerns",
+      "wert": 381.856
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "RSS Host (max.)",
+      "einheit": "MB",
+      "wert": 1149.07
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "RSS Host am Fensterende",
+      "einheit": "MB",
+      "wert": 1149.07
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "RSS Host Höchststand des Laufs",
+      "einheit": "MB",
+      "wert": 1159.742
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "RSS am Ende / Höchststand",
+      "einheit": "1",
+      "wert": 0.991
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Aktive Actors am Fensterende",
+      "einheit": "1",
+      "wert": 4992
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Aktive Actors, Höchststand der Fensterenden",
+      "einheit": "1",
+      "wert": 4992
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "angenommen",
+      "einheit": "Teile/s",
+      "wert": 1258.904
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "sichtbar im Fenster",
+      "einheit": "Teile/s",
+      "wert": 986.981
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Durchsatz bis alles sichtbar",
+      "einheit": "Teile/s",
+      "wert": 1252.534
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Rückstand am Fensterende",
+      "einheit": "Vorgänge",
+      "wert": 432
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Abbauzeit",
+      "einheit": "s",
+      "wert": 0.008
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Latenz p50",
+      "einheit": "ms",
+      "wert": 14.66
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Latenz p99",
+      "einheit": "ms",
+      "wert": 84.624
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Transaktionen je Vorgang",
+      "einheit": "1",
+      "wert": 1.469
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Queries je Vorgang",
+      "einheit": "1",
+      "wert": 11.668
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Transaktionen",
+      "einheit": "/s",
+      "wert": 1549.231
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Queries",
+      "einheit": "/s",
+      "wert": 12304.733
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "CPU Host",
+      "einheit": "% eines Kerns",
+      "wert": 407.532
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "RSS Host (max.)",
+      "einheit": "MB",
+      "wert": 1159.742
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "RSS Host am Fensterende",
+      "einheit": "MB",
+      "wert": 1159.742
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "RSS Host Höchststand des Laufs",
+      "einheit": "MB",
+      "wert": 1159.742
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "RSS am Ende / Höchststand",
+      "einheit": "1",
+      "wert": 1
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Aktive Actors am Fensterende",
+      "einheit": "1",
+      "wert": 2991
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Aktive Actors, Höchststand der Fensterenden",
+      "einheit": "1",
+      "wert": 2991
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "angenommen",
+      "einheit": "Vorgänge/s",
+      "wert": 428.631
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "sichtbar im Fenster",
+      "einheit": "Vorgänge/s",
+      "wert": 413.343
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Durchsatz bis alles sichtbar",
+      "einheit": "Vorgänge/s",
+      "wert": 428.191
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Rückstand am Fensterende",
+      "einheit": "Vorgänge",
+      "wert": 107
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Abbauzeit",
+      "einheit": "s",
+      "wert": 0.007
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Latenz p50",
+      "einheit": "ms",
+      "wert": 7.312
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Latenz p99",
+      "einheit": "ms",
+      "wert": 18.135
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Transaktionen je Vorgang",
+      "einheit": "1",
+      "wert": 5.42
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Queries je Vorgang",
+      "einheit": "1",
+      "wert": 46.695
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Transaktionen",
+      "einheit": "/s",
+      "wert": 2288.295
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Queries",
+      "einheit": "/s",
+      "wert": 19713.169
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "CPU Host",
+      "einheit": "% eines Kerns",
+      "wert": 356.813
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "RSS Host (max.)",
+      "einheit": "MB",
+      "wert": 865.266
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "RSS Host am Fensterende",
+      "einheit": "MB",
+      "wert": 856.648
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "RSS Host Höchststand des Laufs",
+      "einheit": "MB",
+      "wert": 865.266
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "RSS am Ende / Höchststand",
+      "einheit": "1",
+      "wert": 0.99
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Aktive Actors am Fensterende",
+      "einheit": "1",
+      "wert": 3458
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Aktive Actors, Höchststand der Fensterenden",
+      "einheit": "1",
+      "wert": 3458
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "angenommen",
+      "einheit": "Vorgänge/s",
+      "wert": 7867.794
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "sichtbar im Fenster",
+      "einheit": "Vorgänge/s",
+      "wert": 86.546
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Durchsatz bis alles sichtbar",
+      "einheit": "Vorgänge/s",
+      "wert": 334.167
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Rückstand am Fensterende",
+      "einheit": "Vorgänge",
+      "wert": 2967
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Abbauzeit",
+      "einheit": "s",
+      "wert": 8.596
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Latenz p50",
+      "einheit": "ms",
+      "wert": 5347.866
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Latenz p99",
+      "einheit": "ms",
+      "wert": 8439.408
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Nachschub p50",
+      "einheit": "ms",
+      "wert": 2.233
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Nachschub p99",
+      "einheit": "ms",
+      "wert": 35.912
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Transaktionen je Vorgang",
+      "einheit": "1",
+      "wert": 3.765
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Queries je Vorgang",
+      "einheit": "1",
+      "wert": 37.526
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Transaktionen",
+      "einheit": "/s",
+      "wert": 1237.456
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Queries",
+      "einheit": "/s",
+      "wert": 12333.801
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "CPU Host",
+      "einheit": "% eines Kerns",
+      "wert": 371.731
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "RSS Host (max.)",
+      "einheit": "MB",
+      "wert": 975.137
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "RSS Host am Fensterende",
+      "einheit": "MB",
+      "wert": 870.262
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "RSS Host Höchststand des Laufs",
+      "einheit": "MB",
+      "wert": 975.137
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "RSS am Ende / Höchststand",
+      "einheit": "1",
+      "wert": 0.892
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Aktive Actors am Fensterende",
+      "einheit": "1",
+      "wert": 9458
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Aktive Actors, Höchststand der Fensterenden",
+      "einheit": "1",
+      "wert": 9458
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "angenommen",
+      "einheit": "Vorgänge/s",
+      "wert": 1451.262
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "sichtbar im Fenster",
+      "einheit": "Vorgänge/s",
+      "wert": 301.862
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Durchsatz bis alles sichtbar",
+      "einheit": "Vorgänge/s",
+      "wert": 313.791
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Rückstand am Fensterende",
+      "einheit": "Vorgänge",
+      "wert": 2376
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Abbauzeit",
+      "einheit": "s",
+      "wert": 7.493
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Latenz p50",
+      "einheit": "ms",
+      "wert": 4334.329
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Latenz p99",
+      "einheit": "ms",
+      "wert": 7434.632
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Transaktionen je Vorgang",
+      "einheit": "1",
+      "wert": 3.772
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Queries je Vorgang",
+      "einheit": "1",
+      "wert": 39.446
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Transaktionen",
+      "einheit": "/s",
+      "wert": 1166.685
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Queries",
+      "einheit": "/s",
+      "wert": 12200.807
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "CPU Host",
+      "einheit": "% eines Kerns",
+      "wert": 346.144
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "RSS Host (max.)",
+      "einheit": "MB",
+      "wert": 896.785
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "RSS Host am Fensterende",
+      "einheit": "MB",
+      "wert": 859.535
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "RSS Host Höchststand des Laufs",
+      "einheit": "MB",
+      "wert": 896.785
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "RSS am Ende / Höchststand",
+      "einheit": "1",
+      "wert": 0.958
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Aktive Actors am Fensterende",
+      "einheit": "1",
+      "wert": 6458
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Aktive Actors, Höchststand der Fensterenden",
+      "einheit": "1",
+      "wert": 6458
+    }
+  ],
+  "gueltig": true,
+  "begruendung": []
+}

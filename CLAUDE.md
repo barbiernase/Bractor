@@ -144,7 +144,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   Kategorie `Last`, Prüfdomäne, Verhaltens-Netz), `… tests.sh voll` zur Abnahme (dazu `Last`, Codegen-Drift, Client, Python, `--check`, `--sonde`,
   `--grammatik`, Gate), `… tests.sh suite <Projekt> [Filter]` gezielt; Dauer je Suite und rote Tests mit Meldung. Tests, die auf den Takt warten,
   laufen mit kurzem Takt (Prüfdomäne 2 s); Latenz-Tests des Weckers behalten 30 s, sonst bestünden sie auch ohne Wecker.
-- **Gesamtprüfung** (Meilensteine, ≈ 45–50 min, nur nach Frage): `scripts/server.sh lauf scripts/gesamtpruefung.sh` — volle Stufe (rote Tests
+- **Gesamtprüfung** (Meilensteine, ≈ 65 min, nur nach Frage): `scripts/server.sh lauf scripts/gesamtpruefung.sh` — volle Stufe (rote Tests
   wiederholt: rot oder wackelt), Messung S1–S6 (S6 = Clients über gRPC), Störungslauf, Sonde mit CPU-Profilen; Bericht `gesamtpruefung.md` gegen
   den Vergleich mit Rausch-Bändern, auffällige Szenarien A/B nachgemessen (docs/12 §12.6).
 - Garantie-Suite (vor jedem Commit, Integration nacheinander): `--filter Kategorie=Garantie` auf Prüfstand, Integration, Prüfdomäne;

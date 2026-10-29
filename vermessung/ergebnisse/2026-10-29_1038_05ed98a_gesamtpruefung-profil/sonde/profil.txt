@@ -1,0 +1,2 @@
+S1-w1 host-beispiel 4018930 ab 2026-10-29T09:38:43.902+00:00 für 15 s
+S5-64-w1 host-pruefdomaene 4024009 ab 2026-10-29T09:43:57.603+00:00 für 15 s

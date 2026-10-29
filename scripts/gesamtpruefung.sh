@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
 # Die Gesamtprüfung (docs/12 §12.6): Korrektheit, Geschwindigkeit, Störung und Profil eines Commits in einem Lauf, mit einem Bericht —
-# für Meilensteine (vor einem Merge, nach einem Umbau), nicht für jeden Commit (≈ 45–50 min). Nur auf dem Messserver:
+# für Meilensteine (vor einem Merge, nach einem Umbau), nicht für jeden Commit (≈ 65 min). Nur auf dem Messserver:
 #
 #   scripts/server.sh lauf scripts/gesamtpruefung.sh [--vergleich <ergebnis-ordner>] [--spalte <name>] [--ohne-ab]
 #
 #   1 Korrektheit  scripts/tests.sh voll; jeder rote Test wird bis zu zweimal einzeln wiederholt → „rot“ oder „wackelt“ (mit bekannter Nummer)
 #   2 Messung      scripts/vermessung-e2e.sh (S1–S6, Leerlauf) mit Exactly-once; mit --spalte erscheint sie in der Tabelle von docs/12
 #   3 Störung      derselbe Treiber mit harten Abbrüchen: Exactly-once und Vollständigkeit danach
-#   4 Profil       scripts/sonde-engpass.sh über S1, S5, S6 mit CPU-Profilen der Abschnitte S1, S5-64 und S6-64
+#   4 Profil       scripts/sonde-engpass.sh über S1, S5, S6 mit CPU-Profilen der Abschnitte S1, S5-64 und S6-64 (je bis zu seinem Ende; S6
+#                  hier ohne Deckel, damit S6-64 das ganze Fenster läuft)
 #   Bericht        <Messung>/gesamtpruefung.md: Ampel je Teil, jede Kennzahl gegen den Vergleich (Rausch-Bänder in scripts/gesamtpruefung.py),
 #                  Profile; ist ein Szenario auffällig, misst es A gegen B nach (A = Commit des Vergleichs im Worktree /opt/bractor-a)
 #
@@ -54,7 +55,9 @@ STOERUNG="$(neuer_ordner "$vorher")"; STOERUNG="${STOERUNG:+$ERG/$STOERUNG}"
 
 echo "== 4/4 Profil"
 vorher="$(ls "$ERG" | sort)"
-scripts/sonde-engpass.sh --anlass gesamtpruefung-profil --szenarien S1,S5,S6 --wiederholungen 1 --profil S1-w1,S5-64-w1,S6-64-w1
+# S6 ohne Deckel: gedeckelt ist S6-64 nach 2 s vorbei — zu kurz für ein Profil; so läuft es das ganze Fenster (Diagnose, keine Messung).
+scripts/sonde-engpass.sh --anlass gesamtpruefung-profil --szenarien S1,S5,S6 --wiederholungen 1 --profil S1-w1,S5-64-w1,S6-64-w1 \
+  -- --hoechstens S6=1000000
 PROFIL="$(neuer_ordner "$vorher")"; PROFIL="${PROFIL:+$ERG/$PROFIL}"
 
 python3 scripts/gesamtpruefung.py bericht --korrektheit "$LOGS/korrektheit.json" --messung "$MESSUNG" --stoerung "$STOERUNG" --profil "$PROFIL" \

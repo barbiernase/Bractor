@@ -1,0 +1,69 @@
+{
+ "stufe": [
+  {
+   "name": "Build",
+   "ergebnis": "grün"
+  },
+  {
+   "name": "Codegen-Drift",
+   "ergebnis": "grün"
+  },
+  {
+   "name": "Infrastructure.Pruefstand.Tests",
+   "ergebnis": "558 grün, 0 rot, 1 übersprungen von 559"
+  },
+  {
+   "name": "Infrastructure.Integration.Tests",
+   "ergebnis": "67 grün, 0 rot, 0 übersprungen von 67"
+  },
+  {
+   "name": "Pruefdomaene.Integration.Tests",
+   "ergebnis": "64 grün, 0 rot, 0 übersprungen von 64"
+  },
+  {
+   "name": "Verhalten.Tests",
+   "ergebnis": "23 grün, 1 rot, 0 übersprungen von 24"
+  },
+  {
+   "name": "Client.Infrastructure.CollectionTests",
+   "ergebnis": "30 grün, 0 rot, 0 übersprungen von 30"
+  },
+  {
+   "name": "Python-SDK (pytest)",
+   "ergebnis": "grün"
+  },
+  {
+   "name": "Python-Worker (pytest)",
+   "ergebnis": "grün"
+  },
+  {
+   "name": "GraphExtractor --check",
+   "ergebnis": "grün"
+  },
+  {
+   "name": "GraphExtractor --sonde",
+   "ergebnis": "grün"
+  },
+  {
+   "name": "GraphExtractor --grammatik",
+   "ergebnis": "grün"
+  },
+  {
+   "name": "Gate frischer Checkout",
+   "ergebnis": "grün"
+  }
+ ],
+ "tests": [
+  {
+   "test": "Verhalten.Tests.NeustartTests.Nach_dem_harten_Neustart_unter_Last_wirkt_jede_Funktion_genau_einmal",
+   "projekt": "Verhalten.Tests",
+   "wiederholungen": [
+    "grün",
+    "grün"
+   ],
+   "bekannt": "G-18",
+   "urteil": "wackelt"
+  }
+ ],
+ "schritte_rot": []
+}

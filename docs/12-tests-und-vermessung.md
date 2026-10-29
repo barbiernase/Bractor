@@ -955,15 +955,26 @@ Redis im Host-Netzwerk ohne docker-proxy, `docker-compose.messserver.yml`, `--ne
 denen des MacBooks vergleichbar — Läufe dort tragen ein eigenes Anlass-Präfix (`server-…`) und erst eine eigene Baseline-Spalte, wenn die
 Tabelle nach Rechner getrennt ist.
 
-**Gesamtprüfung (für Meilensteine, ≈ 45–50 min):** `scripts/server.sh lauf scripts/gesamtpruefung.sh [--vergleich <ergebnis-ordner>] [--spalte <name>]
+**Gesamtprüfung (für Meilensteine, ≈ 65 min mit A/B-Nachmessung):** `scripts/server.sh lauf scripts/gesamtpruefung.sh [--vergleich <ergebnis-ordner>] [--spalte <name>]
 [--ohne-ab]` prüft einen Commit in einem Lauf, nacheinander: (1) die volle Test-Stufe — jeder rote Test wird bis zu zweimal einzeln wiederholt und
 heißt danach „rot“ oder „wackelt“, mit seiner Nummer in docs/13, wenn bekannt (`scripts/gesamtpruefung.py`, `BEKANNT`); (2) die Messung S1–S6 mit
 Exactly-once; (3) den Störungslauf; (4) die Engpass-Sonde über S1, S5 und S6 mit CPU-Profilen der Abschnitte S1, S5-64 und S6-64
-(`sonde-engpass.sh --profil` nimmt mehrere Abschnitte). Der Bericht `<Messung>/gesamtpruefung.md` nennt je Teil eine Ampel, jede Kennzahl gegen
+(`sonde-engpass.sh --profil` nimmt mehrere Abschnitte und zeichnet jeden in der Reihenfolge des Treibers von seinem Beginn bis zu seinem Ende auf, höchstens 15 s; S6 läuft hier ohne Deckel das ganze Fenster). Der Bericht `<Messung>/gesamtpruefung.md` nennt je Teil eine Ampel, jede Kennzahl gegen
 den Vergleich (ohne Angabe die letzte frühere Gesamtprüfung, sonst die Spalte „Phase 6“) mit Urteil „im Rauschen“, „besser“ oder „auffällig“ —
 auffällig erst außerhalb des Rausch-Bands der Kennzahl (aus den bisherigen Streuungen gleicher Commits, z. B. Durchsatz ±15 %, Kosten je Vorgang
-±5 %) und über einer Mindest-Abweichung in ihrer Einheit — sowie die Profile. Ist ein Szenario auffällig, misst die Gesamtprüfung es A gegen B nach
+±5 %; S5-8 und S5-64 streuen auch beim selben Commit um bis zu 1,5 × und haben für Durchsatz, p99 und Abbauzeit ein Band von ±40 %, PF-36) und über einer Mindest-Abweichung in ihrer Einheit — sowie die Profile. Ist ein Szenario auffällig, misst die Gesamtprüfung es A gegen B nach
 (A = Commit des Vergleichs im Worktree `/opt/bractor-a`, nur Szenarien, die es dort gibt) und hängt das Ergebnis an den Bericht.
+
+**Erste Gesamtprüfung (2026-10-29, Messserver, `05ed98a` gegen Phase 6 `4f43172`, 66 min, Ordner `…_gesamtpruefung{,-stoerung,-profil,-ab-a,-ab-b}`):**
+Korrektheit gelb — alles grün bis auf `NeustartTests` (G-18), das in beiden Wiederholungen grün war; Messung und Störungslauf gültig,
+Exactly-once grün. S6 (neu): 8 Clients 399, 64 Clients 2 836 Vorgänge/s bis sichtbar, Quittung p50 1,7 bzw. 4,7 ms, bis sichtbar p50 19 bzw.
+22 ms, kein Wiederverbinden, kein Command unbestätigt. Auffällig gegen Phase 6 und von der A/B-Nachmessung erklärt: S1 Queries je Vorgang
+90 → 105 (der Stand je gezeigter Id, eine Abfrage je Query seit Phase 7b, PF-39); L5 Nachlauf 3 → 55 s (die Prüfdomäne hat seit Phase 8 zwei
+Projektionen, deren Partitionen ohne Events erst der Takt an den Kopf rückt — in A gab es sie nicht, kein Rückschritt); S3 CPU gegen Phase 6
+(dessen 9,9 % in S3-8 waren unplausibel, A/B gleich); S5-8/S5-64 in A/B 0,83 × bzw. 0,74 ×, gegen die Spalte Phase 6 aber 1,34 × bzw. 1,20 ×
+— die Streuung von PF-36, seither mit eigenem Band. Profil S5-64: Events lesen ist der größte Posten (PF-36). Werkzeug-Fehler des ersten Laufs,
+behoben: das Profil von S6-64 fehlte (die Abschnitte wurden in der genannten statt der gefahrenen Reihenfolge erwartet), das von S1 lief 15 s
+in die beiden S6-Blöcke hinein.
 
 **Gate „frischer Checkout baut“ (vor jedem Push):** `./pruefe-checkout.sh` (Optionen `--verz <dir>` für den Ort des Worktrees, `--ohne-tests`).
 Es meldet zuerst lokal vorhandene Dateien, die eine Ignore-Regel schluckt (mit der greifenden Regel aus `git check-ignore -v`; Build- und

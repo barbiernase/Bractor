@@ -9,8 +9,8 @@
 #   -- --sender S5=64 --fenster 120 --hoechstens S5=1000000     (S5 nur mit 64 Sendern, 120 s lang, ohne Deckel)
 #
 # --horizont <db>: zusätzlich jede Sekunde die Teile der Horizont-Probe einzeln mit EXPLAIN ANALYZE (PF-17), nach sonde/horizont.csv.
-# --profil <abschnitt>[,<abschnitt> …]: zusätzlich je Abschnitt ein CPU-Profil des Hosts ab seinem Beginn (dotnet-trace; Dauer SONDE_PROFIL_DAUER,
-#   Standard 15 s), ausgewertet mit scripts/sonde-profil.py nach sonde/profil-<abschnitt>.md.
+# --profil <abschnitt>[,<abschnitt> …]: zusätzlich je Abschnitt ein CPU-Profil des Hosts von seinem Beginn bis zu seinem Ende (dotnet-trace;
+#   höchstens SONDE_PROFIL_DAUER, Standard 15 s; Reihenfolge wie im Treiber, ein schon vorbeigegangener Abschnitt bleibt ohne Profil), ausgewertet mit scripts/sonde-profil.py nach sonde/profil-<abschnitt>.md.
 #
 # Knöpfe (wirken nur auf den Checkout des Messservers, der vor jedem Lauf gesäubert wird; knopf.txt hält die Änderung fest):
 #   keiner            Stand des Commits

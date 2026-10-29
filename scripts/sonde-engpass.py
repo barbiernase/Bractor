@@ -384,38 +384,62 @@ def trace_dauer(sekunden):
 
 
 def profil_schleife(aus, ergebnisse, abschnitte, dauer):
-    """Je Abschnitt, in der Reihenfolge des Treibers: warten, bis er beginnt (neuester Ergebnis-Ordner, host.csv), dann den Host aufzeichnen."""
+    """Die Abschnitte in der Reihenfolge, in der der Treiber sie fährt (nicht in der genannten): jeden, sobald er läuft, bis er endet."""
     beginn = time.time()
-    for abschnitt in abschnitte:
-        if not profil_eines(aus, ergebnisse, abschnitt, dauer, beginn):
+    offen = list(abschnitte)
+    while offen:
+        abschnitt = profil_eines(aus, ergebnisse, offen, dauer, beginn)
+        if abschnitt is None:
             return
+        offen.remove(abschnitt)
 
 
-def profil_eines(aus, ergebnisse, abschnitt, dauer, beginn):
+def laufender_abschnitt(ergebnisse, beginn):
+    """Der Abschnitt, den der Treiber gerade fährt: die letzte Zeile der host.csv im neuesten Ergebnis-Ordner dieses Laufs ("" = keiner)."""
+    try:
+        ordner = [os.path.join(ergebnisse, d) for d in os.listdir(ergebnisse)]
+        ordner = [d for d in ordner if os.path.getmtime(d) >= beginn - 5 and os.path.exists(os.path.join(d, "host.csv"))]
+        if not ordner:
+            return ""
+        with open(os.path.join(max(ordner, key=os.path.getmtime), "host.csv"), encoding="utf-8-sig") as f:
+            zeilen = f.read().splitlines()
+        spalten = zeilen[-1].split(",") if len(zeilen) > 1 else []
+        return spalten[1] if len(spalten) > 1 else ""
+    except OSError:
+        return ""
+
+
+def profil_eines(aus, ergebnisse, offen, dauer, beginn):
+    """Wartet, bis einer der offenen Abschnitte läuft, und zeichnet den Host auf, bis der Abschnitt endet (höchstens dauer Sekunden; ein
+    kurzer Abschnitt — ein Stoß, ein gedeckelter Block — soll nicht den nächsten mit ins Profil ziehen). → der Abschnitt, None bei Stopp."""
     werkzeug = shutil.which("dotnet-trace") or os.path.expanduser("~/.dotnet/tools/dotnet-trace")
     while not STOP.wait(0.2):
-        try:
-            ordner = [os.path.join(ergebnisse, d) for d in os.listdir(ergebnisse)]
-            ordner = [d for d in ordner if os.path.getmtime(d) >= beginn - 5 and os.path.exists(os.path.join(d, "host.csv"))]
-        except OSError:
+        abschnitt = laufender_abschnitt(ergebnisse, beginn)
+        if abschnitt not in offen:
             continue
-        if not ordner:
-            continue
-        csvdatei = os.path.join(max(ordner, key=os.path.getmtime), "host.csv")
-        with open(csvdatei, encoding="utf-8-sig") as f:
-            if not any(f",{abschnitt}," in z for z in f):
-                continue
         rolle = "host-pruefdomaene" if abschnitt.startswith(("S5", "L5")) else "host-beispiel"
         pid = next((p for p, r in host_pids().items() if r == rolle), None)
         if pid is None:
             continue
         with open(os.path.join(aus, "profil.txt"), "a") as f:
-            f.write(f"{abschnitt} {rolle} {pid} ab {jetzt()} für {dauer} s\n")
-        subprocess.run([werkzeug, "collect", "--process-id", str(pid), "--profile", "dotnet-common,dotnet-sampled-thread-time",
-                        "--duration", trace_dauer(dauer), "--format", "Speedscope", "--output", os.path.join(aus, f"profil-{abschnitt}.nettrace")],
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, timeout=dauer + 120)
-        return True
-    return False
+            f.write(f"{abschnitt} {rolle} {pid} ab {jetzt()} für höchstens {dauer} s\n")
+        trace = subprocess.Popen([werkzeug, "collect", "--process-id", str(pid), "--profile", "dotnet-common,dotnet-sampled-thread-time",
+                                  "--duration", trace_dauer(dauer), "--format", "Speedscope",
+                                  "--output", os.path.join(aus, f"profil-{abschnitt}.nettrace")],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
+        start = time.time()
+        while trace.poll() is None and time.time() - start < dauer:
+            if STOP.wait(0.5) or laufender_abschnitt(ergebnisse, beginn) != abschnitt:
+                trace.send_signal(signal.SIGINT)   # dotnet-trace beendet die Sitzung und schreibt das Profil
+                break
+        with open(os.path.join(aus, "profil.txt"), "a") as f:
+            f.write(f"{abschnitt} bis {jetzt()} ({time.time() - start:.0f} s)\n")
+        try:
+            trace.wait(timeout=dauer + 120)
+        except subprocess.TimeoutExpired:
+            trace.kill()
+        return abschnitt
+    return None
 
 
 def main():
