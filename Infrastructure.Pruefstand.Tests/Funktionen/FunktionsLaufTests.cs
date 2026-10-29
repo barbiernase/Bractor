@@ -64,6 +64,38 @@ public class FunktionsLaufTests
     }
 
     [Fact]
+    public void Eine_gelesene_Seite_traegt_alle_ihre_Eingaenge_ohne_neue_Seite()
+    {
+        // G-18: mit einem Slot startete eine Seite genau einen Eingang — der Actor las nach jedem fertigen Eingang eine volle Seite neu.
+        var l = Lauf(slots: 1);
+        l.Nimm(new PartitionsSeite(new[] { E(1, A, 1), E(2, A, 2), E(3, B, 1) }, Gesetzt: 3, Voll: false)).Select(e => e.Sequenz).Should().Equal(1);
+        l.ImVorrat.Should().Be(2);
+        l.Naechste().Should().BeEmpty("der Slot ist belegt");
+        l.Fertig(1);
+        l.Naechste().Select(e => e.Sequenz).Should().Equal(2);
+        l.Position.Should().Be(1);
+        l.Fertig(2);
+        l.Naechste().Select(e => e.Sequenz).Should().Equal(3);
+        l.Fertig(3);
+        l.Position.Should().Be(3, "die Seite war bis zur gesetzten Sequenz vollständig");
+        l.Naechste().Should().BeEmpty();
+        l.ImVorrat.Should().Be(0, "erst jetzt liest der Actor wieder");
+    }
+
+    [Fact]
+    public void Eine_volle_Seite_aus_lauter_Erledigtem_reicht_nur_bis_zu_ihrem_letzten_Event()
+    {
+        // Die Seite ab der Position enthält nur Eingänge, die laufen oder fertig sind — vollständig ist sie trotzdem nur bis zu ihrem Ende; dahinter
+        //   liegt Ungelesenes. (Vorher reichte sie dann bis zur gesetzten Sequenz: die Position übersprang Eingänge.)
+        var l = Lauf(slots: 2);
+        l.Nimm(new PartitionsSeite(new[] { E(1, A, 1), E(2, B, 1) }, Gesetzt: 100, Voll: true)).Should().HaveCount(2);
+        l.Fertig(2);
+        l.Nimm(new PartitionsSeite(new[] { E(1, A, 1), E(2, B, 1) }, Gesetzt: 100, Voll: true)).Should().BeEmpty();
+        l.Fertig(1);
+        l.Position.Should().Be(2);
+    }
+
+    [Fact]
     public void Die_Position_ueberholt_weder_die_gesetzte_Sequenz_noch_das_Ende_einer_vollen_Seite()
     {
         var l = Lauf(slots: 8);
