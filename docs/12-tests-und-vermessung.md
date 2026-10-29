@@ -202,6 +202,19 @@ GetResult, `Cluster.RequestAsync`, `IContext.RequestAsync`, leere Begründung �
 `Rueckstau` als Feld-Typ (Parallel, .Wait()), `Uhrwerk` als Typ des primären Konstruktors (ThreadPool, ContinueWith): alle 15 rot. Keine Messung:
 der heiße Pfad ist unverändert (der Snapshot läuft wie vorher neben dem Turn, das Dead-Letter-Schreiben nur beim Parken).
 
+**Stand 2026-10-29 (Umbau-Phase 11 und die Befunde FB-22/FB-23, `de80da0` … `7ea2092`):** Phase 11 (Doku, Plan gelöscht) auf `de80da0` voll grün
+bis auf `NeustartTests` (G-18). Auf `7ea2092` (FB-23: kein Client beantwortet Queries, zweiter Query-Weg zurückgebaut; FB-22: `CommandQuittung`
+je Client-Command aus dem Dispatcher, der C#-Client verbindet selbst neu und sendet den Ausgangskorb nach, auch was ohne Verbindung kam): volle
+Stufe grün bis auf `NeustartTests` (G-18) — Prüfstand **558 grün + 1 übersprungen** (neu `DispatcherQuittungTests` 4, `ClientVerbindungTests` 3;
+entfallen der Zuständigkeits-Test der Query-Weiterleitung), Integration **67/67**, Prüfdomäne **64/64**, Verhaltens-Netz **23 von 24** (neu
+`ClientVerhaltenTests.Ein_Noop_wird_dem_Client_quittiert…`; die Ablehnung an der rohen Leitung prüft jetzt auch ihre Quittung), Client 30/30,
+Python SDK und Worker grün, Drift, `--check`, `--sonde`, `--grammatik`, Gate grün. In der schnellen Stufe davor war einmal
+`TwoNodeCommandDispatchTests` rot („Request timed out“, ohne den Dispatcher) — dreimal einzeln wiederholt grün, ein Wackler beim Aufbau zweier
+Knoten. Gegenproben am Server rot gesehen: Dispatcher ohne Quittung (Verhaltens-Fall rot), Client übernimmt die Version der Quittung nicht,
+kein Wiederverbinden, Command ohne Verbindung nicht im Korb, ein wartender Command nach dem Wiederverbinden nicht gleich nachgesendet. Keine
+Messung: der Messtreiber geht über den JSON-Eingang (Frage mit Antwort), den die Quittung nicht berührt; den gRPC-Weg misst die Vermessung bisher
+nicht.
+
 Statisch gezählt:
 
 | Projekt | `[Fact]` | `[Theory]` | Dateien |
