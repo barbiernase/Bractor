@@ -237,10 +237,10 @@ keinem Client-Vertrag; die Mehrfach-Auswahl beim Kuratieren schickt je Paar `Nim
 **Commands vom Client.** Die Sitzung setzt `OriginSessionId` auf ihre Id, stempelt mit Tor den Akteur (`AkteurFuer`, nicht vom Client
 behauptet) und prüft die Befugnis; leitet `AggregateType` aus dem Command-Typ ab, wenn er fehlt; eine negative `ExpectedVersion` heißt „ohne
 OCC“ (Modus `Emittiert`, nur Inbox-Dedup), sonst gilt OCC. Die Command-Id vergibt der Client und behält sie über alle Wiederholungen
-(Ausgangskorb); die Inbox des Ziels lässt jede Id genau einmal wirken. Was zurückkommt, ist kein eigenes Quittungs-Protokoll, sondern was die
-Sitzung zugestellt bekommt (§5.4): die Events, die sie hört, gezielt die fachliche Ablehnung (der Hinweis aus dem Decide) oder `CommandFailed`
-(Versionskonflikt, technischer Fehler, Akteur darf nicht — `AkteurVerweigerung`, Platzierung erschöpft — `AggregateDispatcher`), jeweils mit
-der Korrelation des Commands. Wie der C#-Client daraus Wiederholung und Ausgangskorb macht: [08](08-frontend-blazor-client.md) §8.4.
+(Ausgangskorb); die Inbox des Ziels lässt jede Id genau einmal wirken. Zurück kommt, gezielt an die Sitzung und mit der Korrelation des
+Commands (§5.4): die **Quittung** (`CommandQuittung`: Ausgang und Version des Aggregats danach, vom Dispatcher, sobald das Aggregat geantwortet
+hat — auch für einen Noop), die fachliche Ablehnung (der Hinweis aus dem Decide) oder `CommandFailed` (Versionskonflikt, technischer Fehler,
+Akteur darf nicht — `AkteurVerweigerung`, Platzierung erschöpft — `AggregateDispatcher`); dazu die Events, die sie hört. Alles verlierbar. Wie der C#-Client daraus Wiederholung und Ausgangskorb macht: [08](08-frontend-blazor-client.md) §8.4.
 
 **Antworten getragener Funktionen.** Eine Antwort auf einen Eingang reist als Ausgabe-Liste zurück (`ArbeitsErgebnis`, bei einem Strom in
 Stücken mit `ab`/`fertig`; Laufort Hand: `/eingang/ergebnis` des JSON-Eingangs). Der Server hält sie unter (Funktion, Eingang) fest, bevor sie

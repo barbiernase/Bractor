@@ -138,27 +138,34 @@ Der Client sendet at-least-once mit fester Command-Id; die Inbox des Ziels macht
   die bekannte Version aus dem `VersioningModule` (`CommandModus.Client`, OCC), ist keine bekannt, `-1` — der Server behandelt das wie einen
   emittierten Command (keine OCC, nur Inbox-Dedup).
 - **Ausgangskorb** (`Connection/Ausgangskorb.cs`: `IAusgangskorb`; im Speicher `Ausgangskorb`, als Verzeichnis `DateiAusgangskorb`, je Command
-  eine Datei mit der Proto-Hülle): der Command liegt darin, **bevor** er gesendet wird, bis seine korrelierte Antwort kam. Beim nächsten
-  `ConnectAsync` desselben `ConnectionModule` gehen die offenen mit derselben Command-Id und Korrelation an die neue Sitzung
+  eine Datei mit der Proto-Hülle): der Command liegt darin, **bevor** er gesendet wird — auch ohne Verbindung (`CommandWartetAufVerbindung`) —,
+  bis seine korrelierte Antwort kam. Nach jedem Verbinden gehen die offenen mit derselben Command-Id und Korrelation an die neue Sitzung
   (`SendeOffeneAsync`); mit dem Datei-Korb auch nach einem Neustart des Clients. Ohne Registrierung nimmt das `ConnectionModule` den Korb im
-  Speicher — so in `Host.Blazor`, wo jeder Circuit einen eigenen Stack hat.
-- **Wiederholung bei Stille** (`ConnectionModule.SendWithRetryAsync`, `PendingCommandTracker`): die Korrelation wird vor dem Senden registriert.
-  Kommt binnen 5 s keine korrelierte Antwort, sendet der Client dieselbe Hülle erneut, höchstens dreimal; danach ist der Command aus dem Korb
-  und es kommt `CommandUnbestaetigt`. Wirft das Senden (Verbindung weg), bleibt er im Korb (`CommandSendFailed`); ist der Client schon beim
-  Absenden nicht verbunden, kommt nur `CommandSendFailed`, und der Command liegt nicht im Korb.
+  Speicher — so in `Host.Blazor`, wo jeder Circuit einen eigenen Stack hat (stirbt der Host, sieht der Nutzer es ohnehin).
+- **Wiederverbinden** (`ConnectionModule.WiederverbindenAsync`): meldet `GrpcProxy` die Verbindung als `Failed` (Lesefehler oder ein Stream, den
+  der Server schließt), verbindet das Modul selbst neu — Versuch um Versuch mit wachsender Pause (1, 2, 5, 10, dann 30 s; `StandardPausen`), je
+  Versuch ein `ReconnectAttempt`, bis es gelingt oder der Client trennt. Danach `ConnectionEstablished` (die Module fragen ihren Stand neu) und
+  der Ausgangskorb.
+- **Wiederholung bei Stille** (`ConnectionModule.SendWithRetryAsync`, `PendingCommandTracker`): die Korrelation wird vor dem Senden registriert;
+  jeder Versuch geht an die Sitzung, die gerade besteht. Kommt binnen 5 s keine korrelierte Antwort, sendet der Client dieselbe Hülle erneut,
+  höchstens dreimal; bleibt es bei stehender Verbindung still, ist der Command aus dem Korb und es kommt `CommandUnbestaetigt`. Reißt die
+  Verbindung, bleibt er im Korb, und das Wiederverbinden sendet ihn.
 - **Server: Inbox vor OCC** (`Infrastructure/Aggregate/ActorSystem/CommandVorpruefung.cs`): eine bereits gewirkte Command-Id ergibt idempotent
   Erfolg, eine bereits abgelehnte dieselbe Ablehnung; erst ein frischer Command läuft in die Versionsprüfung. So liest eine Wiederholung keinen
   falschen Versionskonflikt.
-- **Was als Antwort zählt:** jeder Push mit derselben Korrelation — ein Event, das der Client hört, eine fachliche Ablehnung oder ein
-  `CommandFailed`. Ablehnung und `CommandFailed` gehen gezielt an die Sitzung aus `OriginSessionId`, gleich, was sie hört: die Ablehnung (das
+- **Was als Antwort zählt:** jeder Push mit derselben Korrelation — die **Quittung** (`Abstractions/CommandQuittung.cs`), ein Event, das der
+  Client hört, eine fachliche Ablehnung oder ein `CommandFailed`. Die Quittung schickt der Dispatcher (`AggregateDispatcher.BaueQuittung`),
+  sobald das Aggregat geantwortet hat: Ausgang (`Geschrieben`, `Abgelehnt`) und die Version des Aggregats danach — auch für einen Noop, für
+  Events, die der Client nicht hört, und für eine idempotent beantwortete Wiederholung; die Version übernimmt das `VersioningModule` (sie trägt
+  den nächsten Command und „mindestens S auf v“). Ablehnung und `CommandFailed` gehen gezielt an die Sitzung aus `OriginSessionId`, gleich, was sie hört: die Ablehnung (das
   transiente Event aus dem `OneOf` von Decide, nie im Log; die Inbox hält „abgelehnt“) aus dem Aggregat; `CommandFailed`
   (`Abstractions/CommandFailed.cs`, `ITransientEvent`) bei Versionskonflikt, technischem Fehler oder falschem Ziel im Aggregat
   (`AggregateActorBase`), bei Verweigerung am Akteur-Tor (`AkteurVerweigerung`) und wenn der Dispatcher nach allen Platzierungs-Versuchen aufgibt
-  (`AggregateDispatcher`, dazu Dead-Letter). Ein Erfolg, dessen Events der Client nicht hört, ein Noop und eine idempotent beantwortete Wiederholung
-  bringen keinen Push; sie enden als `CommandUnbestaetigt`.
-- **Client-Events** auf dem Bus (`Connection/ConnectionEvents.cs`): `CommandSendFailed` (nicht verbunden bzw. Senden warf),
-  `CommandUnbestaetigt` (Ausgang **unbekannt**, nicht „fehlgeschlagen“; erneutes Senden mit derselben Id ist sicher), `ConnectionEstablished`,
-  `ConnectionLost`; `ReconnectAttempt` ist definiert, wird aber nie ausgelöst (niemand setzt `ConnectionState.Reconnecting`).
+  (`AggregateDispatcher`, dazu Dead-Letter). Alle sind verlierbar (Invariante 6): geht die Quittung verloren, wiederholt der Client mit derselben
+  Id, und die Inbox quittiert noch einmal.
+- **Client-Events** auf dem Bus (`Connection/ConnectionEvents.cs`): `CommandWartetAufVerbindung` (liegt im Korb, geht nach dem Wiederverbinden),
+  `CommandSendFailed` (die Hülle ließ sich nicht bauen), `CommandUnbestaetigt` (bei stehender Verbindung still: Ausgang **unbekannt**, nicht
+  „fehlgeschlagen“; erneutes Senden mit derselben Id ist sicher), `ConnectionEstablished`, `ConnectionLost`, `ReconnectAttempt`.
 
 ## 8.5 Client.SourceGeneration
 

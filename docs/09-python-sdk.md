@@ -79,7 +79,7 @@ passen DTOs und Nutzlast-Tabelle nicht zusammen (docs/13 FB-20). `build_leitung.
 | **mapper** | `NutzlastTabelle` (`packe`/`entpacke`/`typ`, nur über die generierte Tabelle) und `PayloadMapper` (`wrap_command`, `wrap_transient_event`, `wrap_query`, `wrap_query_response`, `extract_*`) |
 | **proxy** | bidirektionaler gRPC-Transport über grpclib-Lowlevel (`STREAM_STREAM`, unabhängiges Senden/Empfangen, ein Sende-Lock); Akteur-Token im Header `akteur-token`; Queries über Futures (30 s); Senden von Commands, Hinweisen, Query-Antworten, `FunktionenAnbieten`, `ArbeitsErgebnis`, `ArbeitLebtMeldung`; `aktualisiert` wird nur geloggt |
 | **connection** | `ConnectionManager`: Reconnect mit exponentiellem Backoff (1 s → 30 s), Handshake erneut, danach `on_connected` |
-| **versioning** | `dict[UUID → höchste gesehene Version]`, aus Push-Events (`max(aggregate_version, stream_head_version)`) |
+| **versioning** | `dict[UUID → höchste gesehene Version]`, aus Push-Events (`max(aggregate_version, stream_head_version)`), auch aus der `CommandQuittung` eines eigenen Commands (sie trägt die Version des Aggregats danach) |
 | **proto_sync** | Laufzeit-Abgleich gegen `/api/proto/*` am Blazor-Host (§9.7) |
 
 **Routing über Typen:** eingehend `betterproto.which_one_of` → `type(payload)` → Methode; ausgehend `type(output)` → Kategorie → Hülle.
