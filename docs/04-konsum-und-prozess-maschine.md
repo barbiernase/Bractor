@@ -216,7 +216,10 @@ public sealed class TeilFertigMeldung : IFunktion
 **Funktions-Actor** (`Infrastructure/Funktionen/FunktionsActor.cs`, ein `RahmenActor` je Funktion und Adresse — die Partition, bzw. die eine
 Adresse einer Funktion mit `[EineAdresse]`, die dann alle Partitionen liest): liest seine Seite ab der
 Position aus dem Log, startet so viele Eingänge, wie Slots frei sind (Standard 1), je Stream höchstens einen (`FunktionsLauf`), und rückt die
-Position nur bis vor den ersten laufenden Eingang und nie über die gesetzte Sequenz (Horizont wie §4.1). Der Stand liegt im Partitions-Checkpoint
+Position nur bis vor den ersten laufenden Eingang und nie über die gesetzte Sequenz (Horizont wie §4.1), bei voller Seite nie über deren letztes
+Event. Was von der Seite noch nicht starten kann, bleibt als **Vorrat** (höchstens eine Seite) und startet, sobald ein Slot frei ist; neu gelesen
+wird erst, wenn der Vorrat nichts Startbares mehr hat — eine Seite trägt alle ihre Eingänge (G-18: vorher las ein Actor mit einem Slot nach jedem
+Eingang eine volle Seite neu, ≈ 100 Eingänge/s je Partition). Der Stand liegt im Partitions-Checkpoint
 mit der Id `funktion:<F>:<Partition>` und Revision (zwei Aktivierungen: die zweite bekommt einen Konflikt und lädt neu); so zählt `/health` den
 Rückstand der Funktionen mit. Ein Eingang, der wirft, wartet im Backoff 1 … 30 s; nach den eingestellten Wiederholungen wird sein Stream geparkt
 (Dead-Letter) und je Poll-Intervall einzeln versucht.
