@@ -98,9 +98,9 @@ public class ClientVerbindungTests
 
     private static readonly TimeSpan[] Kurz = [TimeSpan.FromMilliseconds(20)];
 
-    private static async Task BisAsync(Func<bool> bedingung, string meldung)
+    private static async Task BisAsync(Func<bool> bedingung, string meldung, double sekunden = 5)
     {
-        var bis = DateTime.UtcNow + TimeSpan.FromSeconds(5);
+        var bis = DateTime.UtcNow + TimeSpan.FromSeconds(sekunden);
         while (!bedingung())
         {
             if (DateTime.UtcNow > bis) throw new TimeoutException(meldung);
@@ -185,7 +185,10 @@ public class ClientVerbindungTests
         leitung.Schweigt = false;
         leitung.Reisse();
 
-        await BisAsync(() => leitung.Gesendet.Count >= 2 && korb.Offen().Count == 0, "der Command ging nach dem Wiederverbinden nicht noch einmal");
+        // Gleich nach dem Wiederverbinden, nicht erst, wenn seine 5 s Wartezeit abgelaufen sind — und an die neue Sitzung.
+        await BisAsync(() => leitung.Gesendet.Count >= 2 && korb.Offen().Count == 0, "der Command ging nach dem Wiederverbinden nicht gleich noch einmal",
+            sekunden: 2);
+        leitung.Gesendet.Last().Envelope.OriginSessionId.Should().Be(leitung.SessionId, "die Antwort soll die neue Sitzung erreichen");
         leitung.Gesendet.Select(g => g.Envelope.CommandId).Distinct().Should().ContainSingle("dieselbe Command-Id — die Inbox lässt ihn einmal wirken");
         gemeldet.OfType<CommandUnbestaetigt>().Should().BeEmpty("die Stille war der Abbruch, nicht ein unbekannter Ausgang");
         await verbindung.DisposeAsync();
