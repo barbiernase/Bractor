@@ -186,6 +186,8 @@ public abstract class RahmenActor : IActor, IAsyncDisposable
     private Task[] Offen() => _laeufe.Where(t => !t.IsCompleted).ToArray();
 
     /// <summary>Gibt den Bereich frei — sofort, oder wenn die letzte Arbeit endet, die ihn noch nutzt.</summary>
+    [HausregelAusnahme("Nach Stopped gibt es keine Mailbox mehr, in die eine Fortsetzung zurückkehren könnte: die Freigabe wartet auf die " +
+        "Läufe, die die Stopp-Frist überdauert haben, und gibt den Bereich danach frei; GibFreiNachAsync fängt deren Fehler.")]
     private void GibFrei()
     {
         var bereich = Interlocked.Exchange(ref _bereich, null);

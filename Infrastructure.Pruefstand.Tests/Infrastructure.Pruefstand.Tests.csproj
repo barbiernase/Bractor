@@ -36,6 +36,8 @@
     <ProjectReference Include="..\Domain.SourceGeneration\Domain.SourceGeneration.csproj" ReferenceOutputAssembly="true" />
     <!-- Ebenso Projections.SourceGeneration → nur um den StoreZugriffAnalyzer (CQRS066/067) zu instanziieren. -->
     <ProjectReference Include="..\Projections.SourceGeneration\Projections.SourceGeneration.csproj" ReferenceOutputAssembly="true" />
+    <!-- Ebenso Hausregel.SourceGeneration → nur um den HausregelAnalyzer (R18, CQRS112/113) zu instanziieren. -->
+    <ProjectReference Include="..\Hausregel.SourceGeneration\Hausregel.SourceGeneration.csproj" ReferenceOutputAssembly="true" />
     <!-- Ebenso Client.SourceGeneration → Wiring-Generator + ClientVertragAnalyzer (CQRS093–097) gegen eine Probe; Client.Infrastructure für ihre
          Typen (MessageContext, IClientEvent). -->
     <ProjectReference Include="..\Client.SourceGeneration\Client.SourceGeneration.csproj" ReferenceOutputAssembly="true" />

@@ -13,7 +13,7 @@ und VM-1 erledigt (§13.6), mit Phase 4b FB-1 (Hinweise erreichen Funktionen üb
 eigene ID; Noop und Ablehnung nur noch in der Inbox, eine Version je Aggregat, §13.6), mit Phase 6 die Signale und der Redis-Versionsindex
 samt PF-6 (Wecker am Commit, Stand je Id aus dem Fortschritt der Projektion, §13.6); PF-7, PF-10, PF-13 und AK-1 werden mit den späteren Phasen
 abgeschlossen oder umgeschrieben. Mit Phase 7 sind der Broker, G-12, G-13, G-14 und FB-10 erledigt (Sitzung als Actor, Verteiler je Knoten, „mindestens S auf v“, §13.6). Phase 9
-(direkte Abfrage eines Aggregats) lässt FB-19 offen. Die Befunde der Actor-Praxis vom 2026-10-18 stehen im Plan §1.7.
+(direkte Abfrage eines Aggregats) lässt FB-19 offen. Mit Phase 10 ist die Hausregel für Actors eine Build-Prüfung (CQRS112/113). Die Befunde der Actor-Praxis vom 2026-10-18 stehen im Plan §1.7.
 
 | ID | Kurz | Prio |
 |---|---|:--:|

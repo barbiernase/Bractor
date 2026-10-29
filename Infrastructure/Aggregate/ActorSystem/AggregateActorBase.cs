@@ -121,14 +121,13 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         return Task.CompletedTask;
     }
 
-    protected override Task BeimStoppenAsync(IContext context)
+    protected override async Task BeimStoppenAsync(IContext context)
     {
         _logger?.LogDebug("[Actor] Stopping for ID: {Id}", _id);
         // ★ Snapshot bei Deaktivierung (best-effort): wenn seit dem letzten Snapshot Events
-        //   kamen, den aktuellen State festhalten. Fire-and-forget — Stopping darf nicht blocken. Nie mitten in einem Bündel:
-        //   dann trüge der State noch nicht committete Entscheidungen.
-        if (!_imCommit) TryWriteSnapshot();
-        return Task.CompletedTask;
+        //   kamen, den aktuellen State festhalten — abgewartet mit Frist. Nie mitten in einem Bündel: dann trüge der State noch nicht
+        //   committete Entscheidungen.
+        if (!_imCommit) await SnapshotBeimStoppenAsync();
     }
 
     protected override async Task BehandleAsync(IContext context)
@@ -681,7 +680,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         }
         if (geschrieben)
         {
-            TrySnapshotOnThreshold();
+            TrySnapshotOnThreshold(context);
         }
     }
 
@@ -899,7 +898,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
 
 
                 // 7b. ★ Snapshot bei Schwellwert (best-effort, out-of-band): verkürzt künftige Rehydration.
-                TrySnapshotOnThreshold();
+                TrySnapshotOnThreshold(context);
 
                 // 8. Events an die Verteiler (Pushes an die Clients, die sie hören)
                 if (_verteilung != null)
@@ -1000,60 +999,65 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         }
     }
 
-    // ─── Snapshot (docs/04-konsum-und-prozess-maschine.md §4.8): capture-in-turn + fire-and-forget ───
+    // ─── Snapshot (docs/04-konsum-und-prozess-maschine.md §4.8): im Turn einfrieren, neben der Mailbox schreiben ───
+
+    /// <summary>Wie lange das Schreiben des Snapshots beim Stoppen höchstens dauern darf.</summary>
+    private static readonly TimeSpan SnapshotBeimStoppen = TimeSpan.FromSeconds(5);
 
     /// <summary>
-    /// Schreibt einen Snapshot, wenn seit dem letzten mindestens <c>_snapshotThreshold</c> Events kamen.
-    /// Best-effort, außerhalb der Command-Transaktion (Invariante 6). Ein Fehler ist folgenlos.
+    /// Schreibt einen Snapshot, wenn seit dem letzten mindestens <c>_snapshotThreshold</c> Events kamen: neben der Mailbox
+    /// (<see cref="RahmenActor.Neben"/>), der Command-Turn wartet nicht darauf. Best-effort, außerhalb der Command-Transaktion
+    /// (Invariante 6); ein Fehler ist folgenlos, die nächste Rehydration heilt.
     /// </summary>
-    private void TrySnapshotOnThreshold()
+    private void TrySnapshotOnThreshold(IContext context)
     {
         if (_snapshots is null || _snapshotThreshold <= 0 || _state is null) return;
         if (_state.Version - _lastSnapshotVersion < _snapshotThreshold) return;
-        WriteSnapshotDetached();
+        var snapshot = Einfrieren();
+        Neben(context, ct => _snapshots.SaveAsync(snapshot, ct), t =>
+        {
+            if (t.Exception is { } ex) SnapshotGescheitert(ex, snapshot.Version);
+            return Task.CompletedTask;
+        });
     }
 
     /// <summary>
-    /// Schreibt einen Snapshot bei Deaktivierung, wenn seit dem letzten neue Events kamen. Best-effort.
+    /// Schreibt einen Snapshot bei Deaktivierung, wenn seit dem letzten neue Events kamen — abgewartet, mit Frist
+    /// (<see cref="SnapshotBeimStoppen"/>): nach dem Stopp kehrte keine Arbeit neben der Mailbox mehr zurück. Best-effort.
     /// </summary>
-    private void TryWriteSnapshot()
+    private async Task SnapshotBeimStoppenAsync()
     {
         if (_snapshots is null || _state is null) return;
         if (_state.Version <= _lastSnapshotVersion) return;
-        WriteSnapshotDetached();
+        var snapshot = Einfrieren();
+        try
+        {
+            using var frist = new CancellationTokenSource(SnapshotBeimStoppen);
+            await _snapshots.SaveAsync(snapshot, frist.Token);
+        }
+        catch (Exception ex) { SnapshotGescheitert(ex, snapshot.Version); }
     }
 
     /// <summary>
-    /// Friert den State (Deep-Copy) IN-TURN ein — der spätere detached DB-Write kann das
-    /// weiter mutierende <c>_state</c> nicht mehr korrumpieren (Single-Writer-Turn, Capture-Race-Probe).
-    /// Dann fire-and-forget: der Command-Turn wartet nicht auf den DB-Write.
+    /// Friert den State (Deep-Copy) IM TURN ein — der spätere Write kann das weiter mutierende <c>_state</c> nicht mehr korrumpieren
+    /// (Single-Writer-Turn, Capture-Race-Probe).
     /// </summary>
-    private void WriteSnapshotDetached()
+    private Snapshot<TState> Einfrieren()
     {
-        var snapshot = new Snapshot<TState>
+        _lastSnapshotVersion = _state!.Version;
+        return new Snapshot<TState>
         {
             Id = _id,
-            Version = _state!.Version,
+            Version = _state.Version,
             SchemaVersion = _snapshotSchemaVersion ?? "",
             State = Clone(_state),
             UpdatedAt = DateTimeOffset.UtcNow
         };
-        _lastSnapshotVersion = _state.Version;
-
-        try
-        {
-            _ = _snapshots!.SaveAsync(snapshot, default)
-                .ContinueWith(t =>
-                    _logger?.LogWarning(t.Exception,
-                        "Snapshot für {Aggregate}/{Id} v{Version} fehlgeschlagen — folgenlos, " +
-                        "die nächste Rehydration heilt.", typeof(TState).Name, _id, snapshot.Version),
-                    TaskContinuationOptions.OnlyOnFaulted);
-        }
-        catch (Exception ex)
-        {
-            _logger?.LogWarning(ex, "Snapshot-Write konnte nicht gestartet werden — folgenlos.");
-        }
     }
+
+    private void SnapshotGescheitert(Exception ex, int version) =>
+        _logger?.LogWarning(ex, "Snapshot für {Aggregate}/{Id} v{Version} fehlgeschlagen — folgenlos, die nächste Rehydration heilt.",
+            typeof(TState).Name, _id, version);
 
     /// <summary>Deep-Copy des States per JSON-Round-Trip (Bibliotheks-Serializer, kein Eigen-Reflection).</summary>
     private static TState Clone(TState state)

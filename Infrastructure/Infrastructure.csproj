@@ -6,6 +6,8 @@
     <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
     <ProjectReference Include="..\Core\Core.csproj" />
     <ProjectReference Include="..\Cqrs.Leitung\Cqrs.Leitung.csproj" />
+    <!-- Die Hausregel für Actors als Build-Prüfung (R18, CQRS112/113): nur der Analyzer, keine Laufzeit-Referenz. -->
+    <ProjectReference Include="..\Hausregel.SourceGeneration\Hausregel.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
   <ItemGroup>

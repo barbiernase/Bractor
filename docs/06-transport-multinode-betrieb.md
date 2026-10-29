@@ -194,6 +194,9 @@ Keine Prometheus-Exposition, kein OpenTelemetry (docs/13 P2-10).
    ohne Antwort, intern gebunden) und `FrageAsync<T>` (Antwort mit Pflicht-Frist, ohne Antwort `null`). Ohne Frist wiederholt Proto.Cluster eine
    Anfrage unbegrenzt — bei einem toten oder noch nicht eingeschwungenen Knoten hinge der Aufrufer still. Die Antwort auf einen Command
    (`CommandResult`) trägt nur Ausgang, Versionen und Ablehnung, nicht die Events: über die Leitung reist so wenig wie möglich.
+8. **Ein Weg je Absicht im Actor** (R18, CQRS112) — der Build verbietet in Actors und dem, was sie besitzen, eigene Fäden, `lock`, Feuern und
+   Vergessen, `ContinueWith`, Blockieren und die rohe Cluster-API; Parallelität kommt von mehr Actors, lange I/O läuft neben der Mailbox
+   (`RahmenActor.Neben` über `ReenterAfter`).
 
 ## 6.8 Offen
 

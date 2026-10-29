@@ -20,6 +20,8 @@ namespace Infrastructure.Lebenszyklus;
 /// Proto.Cluster wiederholt eine Anfrage ohne Frist unbegrenzt (Platzierung, tote PID) — der Grund, warum keine Stelle mehr
 /// <c>Cluster.RequestAsync</c> selbst ruft. Die Anfrage selbst ist eine Naht (<see cref="Anfrage"/>): live der Cluster, im Prüfstand ein Fake.
 /// </summary>
+[HausregelAusnahme("Der Bote ist der eine Berührungspunkt mit dem Cluster: er ruft RequestAsync, immer mit Frist; Melde ist verlierbar " +
+    "per Vertrag und kehrt sofort zurück — MeldeAsync fängt jeden Fehler selbst.")]
 public sealed class Bote
 {
     /// <summary>Der eine Cluster-Berührungspunkt: eine Anfrage an eine Identität, gebunden durch das Token.</summary>

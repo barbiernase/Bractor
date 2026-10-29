@@ -384,7 +384,7 @@ Versionsprüfung). Danach meldet der Eingang den Commit (§4.4); Funktionen nehm
   **Nicht-autoritativ:** kein Treffer oder eine andere `SchemaVersion` → Voll-Replay (`AggregateRehydrator`). Die Schema-Version ist der
   Struktur-Hash des States plus der Code-Hash von State und Applier (`{State}AggregateHandler.CodeHash`) — eine geänderte Apply-Logik
   invalidiert alte Snapshots. Geschrieben wird nach einer Schwelle von Events und bei Deaktivierung: der State wird im Actor-Turn
-  kopiert (die Inbox reist nicht mit — sie ist eine Tabelle), der DB-Write läuft danach fire-and-forget. Die Kopie ist ein JSON-Round-Trip (docs/13 W10-2).
+  kopiert (die Inbox reist nicht mit — sie ist eine Tabelle); der DB-Write läuft nach der Schwelle neben der Mailbox (`Neben`, der Turn wartet nicht), bei Deaktivierung abgewartet mit 5 s Frist. Die Kopie ist ein JSON-Round-Trip (docs/13 W10-2).
 
 ## 4.9 Spur der Konsumenten
 

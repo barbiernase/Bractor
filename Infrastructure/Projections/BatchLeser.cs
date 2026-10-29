@@ -256,7 +256,7 @@ public sealed class BatchLeser
                 return;
             }
             // Poison: allein → parken; mit Verdacht (der Stream des werfenden Events) → der Rest ohne ihn, er allein; sonst halbieren.
-            if (teil.Count == 1) { Parke(teil[0], guards, r.Fehler!, geparkt); return; }
+            if (teil.Count == 1) { await ParkeAsync(teil[0], guards, r.Fehler!, geparkt, ct); return; }
             if (r.Verdacht is { } v && teil.Contains(v))
             {
                 offen.Enqueue(teil.Where(s => s != v).ToList());
@@ -279,8 +279,8 @@ public sealed class BatchLeser
         if (haengend.Count > 0 && _erledigt.Count + events.Count >= ErledigtHoechstens)
         {
             foreach (var h in haengend)
-                Parke(h, guards, new InvalidOperationException(
-                    $"hängt an Konflikten am geteilten Dokument, während {ErledigtHoechstens} spätere Events warten"), geparkt);
+                await ParkeAsync(h, guards, new InvalidOperationException(
+                    $"hängt an Konflikten am geteilten Dokument, während {ErledigtHoechstens} spätere Events warten"), geparkt, ct);
             haengend.Clear();
         }
 
@@ -312,7 +312,7 @@ public sealed class BatchLeser
             await Task.Delay(Random.Shared.Next(5, 25 * versuch), ct);
             var r = await VersucheAsync(events, new List<Guid> { stream }, guards, geparkt, _lese, ct);
             if (r.Ok) return r.Angewandt;
-            if (!r.Konflikt) { Parke(stream, guards, r.Fehler!, geparkt); return 0; }
+            if (!r.Konflikt) { await ParkeAsync(stream, guards, r.Fehler!, geparkt, ct); return 0; }
         }
         _logger?.LogWarning("[Konsum] {Projektion}/{Partition}: Stream {Stream} nach {N} Konflikten am geteilten Dokument zurückgestellt",
             _projektionsId, _partition, stream, KonfliktVersuche);
@@ -370,8 +370,8 @@ public sealed class BatchLeser
         return new Versuch(true, angewandt);
     }
 
-    /// <summary>Parkt einen Stream: ab dem nächsten Commit durabel im Checkpoint, Dead-Letter einmal (best-effort).</summary>
-    private void Parke(Guid stream, IReadOnlyDictionary<Guid, int> guards, Exception fehler, HashSet<Guid> geparkt)
+    /// <summary>Parkt einen Stream: ab dem nächsten Commit durabel im Checkpoint, Dead-Letter einmal (best-effort, im Durchlauf abgewartet).</summary>
+    private async Task ParkeAsync(Guid stream, IReadOnlyDictionary<Guid, int> guards, Exception fehler, HashSet<Guid> geparkt, CancellationToken ct)
     {
         if (!geparkt.Add(stream)) return;
         _naechsterParkVersuch = _jetzt() + _konsum.Takt;   // der Einzelversuch kommt mit dem nächsten Poll
@@ -382,11 +382,20 @@ public sealed class BatchLeser
         _stand!.Geparkt = _stand.Geparkt.Append(g).ToList();
         _logger?.LogWarning(fehler, "[Konsum] {Projektion}/{Partition}: Stream {Stream} geparkt ab v{Version} — die übrigen laufen weiter",
             _projektionsId, _partition, stream, g.Version + 1);
-        _ = _deadLetter?.WriteAsync(new DeadLetter
+        if (_deadLetter is null) return;
+        try
         {
-            Id = Guid.NewGuid(), Quelle = $"projektion:{_projektionsId}", CommandType = "(Projektion)", AggregateId = stream,
-            Grund = $"geparkt ab v{g.Version + 1}: {g.Grund}", Versuche = 1, ErfasstUtc = g.Seit
-        });
+            await _deadLetter.WriteAsync(new DeadLetter
+            {
+                Id = Guid.NewGuid(), Quelle = $"projektion:{_projektionsId}", CommandType = "(Projektion)", AggregateId = stream,
+                Grund = $"geparkt ab v{g.Version + 1}: {g.Grund}", Versuche = 1, ErfasstUtc = g.Seit
+            }, ct);
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            _logger?.LogWarning(ex, "[Konsum] {Projektion}/{Partition}: Dead-Letter für Stream {Stream} nicht geschrieben (best-effort)",
+                _projektionsId, _partition, stream);
+        }
     }
 
     // ─────────────────────────────────────────────────────────────

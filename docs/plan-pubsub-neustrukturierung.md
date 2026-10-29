@@ -454,7 +454,7 @@ Rückgaben: konkreter Typ, `OneOf<…>`, `T?` („nichts“), `IEnumerable<…>`
 | R15 | Die Garantie folgt dem Eingang: Event → genau einmal, Hinweis → höchstens einmal, Query → keine Wirkung | folgt aus den Typen |
 | R16 | Alles von draußen kommt von einem Akteur, der es darf; für einen Client gilt Vertrag ∩ Token | Generator + Start-Prüfung (heute) |
 | R17 | Ein Client sendet/fragt/hört/trägt nur, was seine Akteure dürfen; eine als Schnittstelle deklarierte Funktion braucht einen Träger (`ITraegt`) oder eine Bindung | Analyzer + Start-Prüfung (heute CQRS095–097, erweitert) |
-| R18 | Die Hausregel für Actors (§1.7) | Analyzer, **neu** (Phase 10) |
+| R18 | Die Hausregel für Actors (§1.7) | Analyzer, **neu** (Phase 10: CQRS112/113) |
 | R19 | Zustand einer Funktion nur über `IZustand<T>` im Konstruktor einer Klasse; sonst keine veränderlichen Felder; eine Funktion mit Zustand ist nie gleichbleibend | Analyzer + Generator, **neu** (Phase 4b) |
 | R20 | Jeder Hinweis-Typ, den eine Funktion hört, hat mindestens einen Erzeuger; jede Adresse der Routing-Tabelle existiert | Generator, **neu** (Phase 4b) |
 
@@ -737,6 +737,21 @@ fiel FB-20 auf. (3) Keine Messung: der heiße Pfad ist bis auf eine leere Wartes
 
 Analyzer R18 über alle `Proto.IActor`-Typen und die Typen, die ein Actor als Feld besitzt (Fehler; Ausnahme nur per Attribut mit Begründung);
 `Infrastructure.csproj` bindet den Analyzer ein. Gegenprobe je Verbots-Muster.
+
+*Umgesetzt (2026-10-29):* `HausregelAnalyzer` in einem eigenen Analyzer-Projekt `Hausregel.SourceGeneration` (die Generatoren von
+`Infrastructure.SourceGeneration` hielten `Infrastructure` selbst für eine Komposition und liefen dort an); `Infrastructure.csproj` bindet ihn ein.
+Geprüft werden alle Typen mit `Proto.IActor` und, transitiv, was sie besitzen: Typen ihrer Instanz-Felder (auch hinter Auto-Properties), ihres
+primären Konstruktors und der Typ-Argumente und Arrays darin, soweit sie im selben Projekt stehen — etwa der `Rueckstau` des Verteilers, das
+`Uhrwerk` der Uhr, der `FunktionsLauf` und der `BatchLeser`. Verboten (**CQRS112**): eigene Fäden (`Task.Run`, `TaskFactory.StartNew`, `Parallel`,
+`ThreadPool`, `new Thread`), `lock`, Feuern und Vergessen (`_ = …Async` und ein nicht abgewarteter Task als Anweisung), `ContinueWith`, Blockieren
+(`.Result`, `.Wait()`, `GetAwaiter().GetResult()`) und die rohe Cluster-API (Methoden von `Cluster`, auch Erweiterungen, und jedes `RequestAsync`
+von Proto). Erlaubt bleibt das Ergebnis eines erwiesen fertigen Tasks — `t is Task<T> { IsCompletedSuccessfully: true } a ? a.Result : …`, die Form
+der Fortsetzungen im Funktions-Actor. Ausnahme nur mit `[HausregelAusnahme("Begründung")]` am Member oder Typ, leer = **CQRS113**. Im Bestand
+fand er vier Stellen: der Snapshot des Aggregats lief als `_ = SaveAsync(…).ContinueWith(…)` (jetzt neben der Mailbox über `Neben`, beim Stoppen
+abgewartet mit 5 s Frist), das Dead-Letter-Schreiben beim Parken im `BatchLeser` (jetzt im Durchlauf abgewartet), und zwei begründete Ausnahmen:
+der `Bote` (der eine Berührungspunkt mit dem Cluster; `Melde` ist verlierbar per Vertrag) und `RahmenActor.GibFrei` (nach `Stopped` gibt es keine
+Mailbox mehr, in die eine Fortsetzung zurückkehren könnte). Abweichung: kein Gegenstück in `DomainEditor/Grammatik.cs` — die Grammatik beschreibt,
+was ein Entwickler schreibt; Actors schreibt nur das Framework (Inv. 5), wie bei CQRS020/021.
 
 ### Phase 11 · Doku einarbeiten, Plan löschen (2–3 PT)
 

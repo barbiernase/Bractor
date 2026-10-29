@@ -104,7 +104,7 @@ Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein Prozess fä
 
 ## 5.3 Die Regeln: Analyzer, Generator-Diagnosen, Boot-Guards
 
-Es gibt **zwölf Analyzer-Klassen**; dazu melden einzelne Generatoren eigene Diagnosen, und was erst mit DI und Umgebung prüfbar ist, prüft
+Es gibt **dreizehn Analyzer-Klassen**; dazu melden einzelne Generatoren eigene Diagnosen, und was erst mit DI und Umgebung prüfbar ist, prüft
 der Start. Die eine Quelle der Regeln ist der Code selbst; die Liste „Regel → Build-Gegenstück“ druckt
 `dotnet run --project GraphExtractor -- --grammatik` (aus `DomainEditor/Grammatik.cs`). Die Werkbank holt die CQRS-Befunde bei ⟳ und je Geste
 aus den Analyzern der warmen Compilations und hängt sie an die Karte (`Werkbank/Server/Arbeitsbereich.cs`).
@@ -121,6 +121,7 @@ aus den Analyzern der warmen Compilations und hängt sie an die Karte (`Werkbank
 | Proto | CQRS030 | `DtoMapperSourceGenerator` (Generator-Ausnahme wird lauter Fehler) |
 | Upcasting | CQRS040–046 | `EventUpcastingGenerator` |
 | Altlast | CQRS056 | `PipelineActorGenerator` (`Frist<TCmd>`) |
+| Framework: Hausregel für Actors (R18) | CQRS112/113 | `HausregelAnalyzer` (`Hausregel.SourceGeneration`, nur in `Infrastructure`: in Actors und dem, was sie besitzen, keine eigenen Fäden, kein `lock`, kein Feuern und Vergessen, kein `ContinueWith`, kein Blockieren, keine rohe Cluster-API; Ausnahme `[HausregelAusnahme("Begründung")]`) |
 
 Die neun Analyzer von `Domain.SourceGeneration` laufen in jedem Domänen-Projekt; der `GesamtbildAnalyzer` läuft in der
 `Infrastructure`-Compilation, sieht alle Domänen-Projekte und meldet ohne Quell-Ort (die Meldung beginnt mit `'Typ'`). Die Domänen-
