@@ -22,7 +22,7 @@ public class BildeingangTests
     private static readonly Guid Paar = ImagePairFileName.ToDeterministicGuid("2025_06_16_17_46_20_293");
     private static readonly DateTimeOffset Jetzt = new(2026, 10, 26, 12, 0, 0, TimeSpan.Zero);
 
-    private static BildAufbereitet Aufbereitet(string name) =>
+    private static VorschauErstellt Aufbereitet(string name) =>
         new(name, "/in/" + name, 4711, Jetzt, "/vorschau/" + name + ".png", 683, 512, Jetzt.AddSeconds(1));
 
     private static NimmBildAuf Aufnahme(string name) => (NimmBildAuf)new Bildeingang().Auf(Aufbereitet(name)).Value;

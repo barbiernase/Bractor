@@ -12,7 +12,9 @@
     "DateiErkannt": { "Pfad": "/data/input", "Kennung": "PfadGroesseZeit", "Laufmodus": "EinmalImCluster", "Webhook": "/webhook/datei" }
   },
   "Funktionen": {
-    "IBildaufbereitung": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 }
+    "IBildEinlesen": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 },
+    "IBildVerkleinerung": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 },
+    "IKontrastausgleich": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 }
   },
   "Clients": {
     "Arbeitsplatz": {

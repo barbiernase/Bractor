@@ -516,7 +516,31 @@ message ModellRegistriertDto {
     ModellMetrikenDto metriken = 6;
 }
 
-message BildAufbereitetDto {
+message BildEingelesenDto {
+    string dateiname = 1;
+    string pfad = 2;
+    int64 groesse = 3;
+    int64 erkannt_am = 4;
+    int32 breite_pixel = 5;
+    int32 hoehe_pixel = 6;
+}
+
+message BildNichtLesbarDto {
+    string pfad = 1;
+    string grund = 2;
+}
+
+message BildVerkleinertDto {
+    string dateiname = 1;
+    string pfad = 2;
+    int64 groesse = 3;
+    int64 erkannt_am = 4;
+    string verkleinert = 5;
+    int32 breite_pixel = 6;
+    int32 hoehe_pixel = 7;
+}
+
+message VorschauErstelltDto {
     string dateiname = 1;
     string pfad = 2;
     int64 groesse = 3;
@@ -525,11 +549,6 @@ message BildAufbereitetDto {
     int32 breite_pixel = 6;
     int32 hoehe_pixel = 7;
     int64 erstellt_am = 8;
-}
-
-message BildNichtLesbarDto {
-    string pfad = 1;
-    string grund = 2;
 }
 
 message KeinMitgliedAuffindbarDto {

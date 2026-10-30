@@ -6,7 +6,9 @@
 from __future__ import annotations
 
 TABELLE: dict[str, tuple[str, str, str]] = {
-    "IBildaufbereitung": ("BildaufbereitungBasis", "funktionen.bildaufbereitung", "Bildaufbereitung"),
+    "IBildEinlesen": ("BildEinlesenBasis", "funktionen.bild_einlesen", "BildEinlesen"),
+    "IBildVerkleinerung": ("BildVerkleinerungBasis", "funktionen.bild_verkleinerung", "BildVerkleinerung"),
+    "IKontrastausgleich": ("KontrastausgleichBasis", "funktionen.kontrastausgleich", "Kontrastausgleich"),
     "IBildpaarBeurteilung": ("BildpaarBeurteilungBasis", "funktionen.bildpaar_beurteilung", "BildpaarBeurteilung"),
     "ITraining": ("TrainingBasis", "funktionen.training", "Training"),
 }

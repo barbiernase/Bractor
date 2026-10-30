@@ -25,21 +25,24 @@ namespace Infrastructure.Integration.Tests;
 /// Ebene 2 — die ABLÄUFE der Beispieldomäne gegen echtes Marten/Consul: Aggregate entscheiden,
 /// Funktionen tragen die Kanten Event → Command, Fristen tragen die Zeit — ohne Dirigent. Der Bildeingang läuft über die ganze Kette —
 ///
-///   Quell-Nachricht ──QuellEingang (StartStream je Kennung, Commit gemeldet)──▶ ƒ IBildaufbereitung (OpenCV im Host bzw. Python-Worker über
-///     gRPC, Ausgabe festgehalten) ──BildAufbereitet──▶ ƒ Bildeingang (gleichbleibend) ──NimmBildAuf──▶ ImagePair („anlegen oder ergänzen“).
+///   Quell-Nachricht ──QuellEingang (StartStream je Kennung, Commit gemeldet)──▶ ƒ IBildEinlesen ──BildEingelesen──▶ ƒ IBildVerkleinerung
+///     ──BildVerkleinert──▶ ƒ IKontrastausgleich (OpenCV im Host bzw. Python-Worker über gRPC; jede Ausgabe festgehalten) ──VorschauErstellt──▶
+///     ƒ Bildeingang (gleichbleibend) ──NimmBildAuf──▶ ImagePair („anlegen oder ergänzen“).
 ///
-/// Beweiskraft: das Paar bekommt BildVerfuegbar mit einer Vorschau, die NUR die Bildaufbereitung erzeugt; die Spur führt lückenlos bis zur Quelle;
-/// dieselbe Datei zweimal steht genau einmal im Log. Im zweiten Test rechnet ein Python-Worker, der die Funktion über gRPC anbietet — sein
-/// Kennzeichen („_py") muss im Fakt landen.
+/// Beweiskraft: das Paar bekommt BildVerfuegbar mit einer Vorschau, die NUR die Kette der Bildaufbereitung erzeugt; die Spur führt lückenlos über
+/// jeden Schritt bis zur Quelle; dieselbe Datei zweimal steht genau einmal im Log. Im zweiten Test rechnet ein Python-Worker den letzten Schritt,
+/// den er über gRPC anbietet — sein Kennzeichen („_py") muss im Fakt landen.
 /// </summary>
 public class AblaufE2ETests
 {
     /// <summary>Die Host-Verdrahtung wie Host.Grpc: Framework (samt Funktionen und Uhr), Projektionen, Dienste mit Konfig.</summary>
-    private static void Verdrahte(IServiceCollection s, string ausgabe, string cluster, bool grpc, FunktionsLaufort bildaufbereitung)
+    private static void Verdrahte(IServiceCollection s, string ausgabe, string cluster, bool grpc, FunktionsLaufort kontrastausgleich)
     {
         s.AddCqrsFramework(opts => { opts.EnableGrpc = grpc; opts.ClusterName = cluster; });
         s.AddGeneratedPullPaths();   // die Projektionen füllen die Read-Models, die die Datensatz-Funktionen lesen
-        s.AddSingleton(new BausteinBindung(nameof(IBildaufbereitung), bildaufbereitung, Slots: 2, Wiederholungen: 1));
+        s.AddSingleton(new BausteinBindung(nameof(IBildEinlesen), FunktionsLaufort.Host, Slots: 2, Wiederholungen: 1));
+        s.AddSingleton(new BausteinBindung(nameof(IBildVerkleinerung), FunktionsLaufort.Host, Slots: 2, Wiederholungen: 1));
+        s.AddSingleton(new BausteinBindung(nameof(IKontrastausgleich), kontrastausgleich, Slots: 2, Wiederholungen: 1));
         var konfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             [$"{Dienstvertrag.KonfigAbschnitt}:{nameof(BildaufbereitungKonfig)}:{nameof(BildaufbereitungKonfig.AusgabePfad)}"] = ausgabe,
@@ -64,7 +67,7 @@ public class AblaufE2ETests
         new DateTimeOffset(2026, 10, tag, 8, 0, 0, Random.Shared.Next(0, 999), TimeSpan.Zero).AddMinutes(Random.Shared.Next(0, 100000));
 
     [Fact]
-    public async Task Bildeingang_Quelle_bis_Fakt_ueber_Bildaufbereitung_und_Bildeingang()
+    public async Task Bildeingang_Quelle_bis_Fakt_ueber_die_Kette_der_Bildaufbereitung_und_Bildeingang()
     {
         var verzeichnis = Path.Combine(Path.GetTempPath(), "ablauf-e2e-" + Guid.NewGuid().ToString("N"));
         var ausgabe = Path.Combine(verzeichnis, "vorschau");
@@ -88,7 +91,7 @@ public class AblaufE2ETests
             await eingang.NimmAufAsync(dc2, default);
 
             await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is ImagePairKomplett), TimeSpan.FromSeconds(60),
-                "Das Paar wurde nicht komplett — die Kette Quelle → Bildaufbereitung → Bildeingang → ImagePair lief nicht durch.");
+                "Das Paar wurde nicht komplett — die Kette Quelle → Einlesen → Verkleinern → Kontrastausgleich → Bildeingang → ImagePair lief nicht durch.");
             await Task.Delay(TimeSpan.FromSeconds(2));
 
             var stream = await es.ReadStreamAsync(paar, 0, default);
@@ -97,11 +100,11 @@ public class AblaufE2ETests
             var bilder = stream.Select(e => e.Payload).OfType<BildVerfuegbar>().ToList();
             bilder.Select(b => b.Version).Should().BeEquivalentTo(new[] { BildVersion.Dc0, BildVersion.Dc2 });
             bilder.Single(b => b.Version == BildVersion.Dc0).Pfad.Should().Be(Path.Combine(ausgabe, Path.GetFileNameWithoutExtension(dc0.Name) + "_vorschau.png"),
-                "die Vorschau entsteht nur durch die Bildaufbereitung (OpenCV im Host)");
+                "die Vorschau entsteht nur durch die Kette der Bildaufbereitung (OpenCV im Host)");
             File.Exists(bilder[0].Pfad).Should().BeTrue();
-            bilder.Single(b => b.Version == BildVersion.Dc0).Meta.HoehePixel.Should().Be(OpenCvBildaufbereitung.VorschauHoehe);
+            bilder.Single(b => b.Version == BildVersion.Dc0).Meta.HoehePixel.Should().Be(OpenCvBildVerkleinerung.VorschauHoehe);
 
-            // Spur: von BildVerfuegbar läuft eine lückenlose Ursache-Kette über beide Funktionen bis zur Quelle; jeder Eintrag trägt seinen Wirker.
+            // Spur: von BildVerfuegbar läuft eine lückenlose Ursache-Kette über alle vier Funktionen bis zur Quelle; jeder Eintrag trägt seinen Wirker.
             var bildEnv = stream.First(e => e.Payload is BildVerfuegbar);
             bildEnv.Wirker.Should().Be("decide:ImagePair/NimmBildAuf");
             bildEnv.Ueber.Should().Be("funktion:Bildeingang", "der Absender des Commands ist die Funktion, die ihn ausgab");
@@ -115,11 +118,13 @@ public class AblaufE2ETests
             }
             schritt.Payload.Should().BeOfType<DateiErkannt>("die Kette endet an der Quelle: " + string.Join(" ← ", kette.Select(e => e.Wirker)));
             schritt.Wirker.Should().Be("quelle:DateiErkannt");
-            kette.Should().Contain(e => e.Payload is BildAufbereitet && e.Wirker == "funktion:IBildaufbereitung", "die Aufbereitung ist festgehalten");
+            kette.Should().Contain(e => e.Payload is BildEingelesen && e.Wirker == "funktion:IBildEinlesen", "jeder Schritt ist festgehalten");
+            kette.Should().Contain(e => e.Payload is BildVerkleinert && e.Wirker == "funktion:IBildVerkleinerung");
+            kette.Should().Contain(e => e.Payload is VorschauErstellt && e.Wirker == "funktion:IKontrastausgleich");
 
-            // Genau so viel Log je Datei: die Quell-Nachricht, die festgehaltene Aufbereitung (Ausgabe + Abschluss), kein Prozess-Stream.
-            var festgehalten = await es.ReadStreamAsync(FunktionsIds.Festhalten(nameof(IBildaufbereitung), vorgang, 1), 0, default);
-            festgehalten.Select(e => e.Payload.GetType().Name).Should().Equal(nameof(BildAufbereitet), nameof(AusgabeFestgehalten));
+            // Genau so viel Log je Schritt: die festgehaltene Ausgabe + ihr Abschluss, kein Prozess-Stream.
+            var festgehalten = await es.ReadStreamAsync(FunktionsIds.Festhalten(nameof(IBildEinlesen), vorgang, 1), 0, default);
+            festgehalten.Select(e => e.Payload.GetType().Name).Should().Equal(nameof(BildEingelesen), nameof(AusgabeFestgehalten));
         }
         finally
         {
@@ -129,13 +134,13 @@ public class AblaufE2ETests
     }
 
     [Fact]
-    public async Task Bildeingang_mit_Python_Worker_der_die_Bildaufbereitung_ueber_gRPC_traegt()
+    public async Task Bildeingang_mit_Python_Worker_der_den_Kontrastausgleich_ueber_gRPC_traegt()
     {
         // Der Interpreter der Sim-Umgebung (Umgebung:Python, sonst CQRS_PYTHON/python3) — dieselbe Regel wie die Werkbank.
         var python = Infrastructure.Umgebung.UmgebungLader.Lade(new ConfigurationManager(), "sim-main", []).Python();
         (python == "python3" || File.Exists(python)).Should().BeTrue($"Python für den Worker fehlt ({python}) — Umgebung:Python oder CQRS_PYTHON setzen");
-        // Der GENERISCHE Worker (docs/09 §9.5) mit der Tabelle aus dem Codegen; die Test-Implementierung (funktionen/bildaufbereitung.py,
-        //   Vorschau „_py") liegt per --pfad vor der des Projekts.
+        // Der GENERISCHE Worker (docs/09 §9.5) mit der Tabelle aus dem Codegen; die Test-Implementierung (funktionen/kontrastausgleich.py,
+        //   Vorschau „_py") liegt per --pfad vor der des Projekts. Einlesen und Verkleinern rechnet der Host (OpenCV).
         var skript = Path.Combine(RepoWurzel(), Projektstruktur.PythonWorker(Projektstruktur.StandardWurzel), "funktions_worker.py");
         var testImpls = Path.Combine(RepoWurzel(), "Infrastructure.Integration.Tests", "Python");
 
@@ -155,7 +160,7 @@ public class AblaufE2ETests
         var ausgabe = new System.Collections.Concurrent.ConcurrentQueue<string>();
         using var worker = new Process
         {
-            StartInfo = new ProcessStartInfo(python, $"\"{skript}\" --funktionen IBildaufbereitung --slots 2 --pfad \"{testImpls}\"")
+            StartInfo = new ProcessStartInfo(python, $"\"{skript}\" --funktionen IKontrastausgleich --slots 2 --pfad \"{testImpls}\"")
             {
                 RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false,
                 WorkingDirectory = Path.GetDirectoryName(skript)!,
@@ -181,7 +186,7 @@ public class AblaufE2ETests
                 "Kein BildVerfuegbar — der Python-Worker hat den Eingang nicht geholt/beantwortet:\n" + string.Join("\n", ausgabe));
 
             var bild = (await es.ReadStreamAsync(paar, 0, default)).Select(e => e.Payload).OfType<BildVerfuegbar>().Single();
-            bild.Pfad.Should().Be(datei.Pfad + "_py.png", "die Bildaufbereitung hat der Python-Worker gerechnet (gRPC: Angebot → Eingang → Antwort)");
+            bild.Pfad.Should().Be(datei.Pfad + "_py.png", "den Kontrastausgleich hat der Python-Worker gerechnet (gRPC: Angebot → Eingang → Antwort)");
             ausgabe.Should().Contain(z => z.StartsWith("AUF " + datei.Pfad), "der Worker hat genau diesen Eingang beantwortet");
         }
         finally

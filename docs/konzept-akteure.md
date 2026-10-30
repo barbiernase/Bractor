@@ -66,7 +66,7 @@ public sealed record Inspekteur     : IMensch,   IDarf<LabelBildPaar>, IDarf<Mar
 | Akteur | Art | gibt selbst hinein (`IDarf`) |
 |---|---|---|
 | KameraSystem | Maschine | `DateiErkannt` (Quell-Nachricht über den Datei-Treiber) |
-| Bildrechner | Maschine | `IBildaufbereitung` (darf die Bildaufbereitung draußen rechnen) |
+| Bildrechner | Maschine | `IBildEinlesen`, `IBildVerkleinerung`, `IKontrastausgleich` (darf die Schritte der Bildaufbereitung draußen rechnen) |
 | TrainingsSystem | Maschine | `ITraining`, `HoleDatensatzSamples` |
 | Klassifizierer | KI | `IBildpaarBeurteilung`, `KlassifiziereEinzelBildDurchKi`, `HoleAktivesModell` |
 | Inspekteur | Mensch | Labeln (Paar, Einzelbild, Region), `MarkiereAlsInspiziert`, Lese-Queries der Bildpaare |
@@ -175,7 +175,8 @@ Leitung; client-interne Typen stehen nie im Vertrag.
 | `TrainingsWorker` (`training_worker.py`, `run_train_stub.py`) | TrainingsSystem | `ITraining` | — / `HoleDatensatzSamples` | `TrainingAbgebrochen` |
 | `Arbeitsplatz` (Blazor) | Inspekteur, KIOperator, Modellfreigeber, Produktpruefer | — | alle Commands und Queries der vier Akteure | die Events, auf die seine Stores hören |
 
-Die Bildaufbereitung (`IBildaufbereitung`, Akteur Bildrechner) trägt kein Client-Vertrag; sie rechnet der generische Funktions-Worker
+Die Schritte der Bildaufbereitung (`IBildEinlesen`, `IBildVerkleinerung`, `IKontrastausgleich`, Akteur Bildrechner) trägt kein Client-Vertrag;
+sie rechnet der generische Funktions-Worker
 (`funktions_worker.py`, Laufort `Extern`, [09](09-python-sdk.md) §9.5). Ein Ketten-Command wie `NimmRangeAuf` (nur aus der Funktion) steht in
 keinem Client-Vertrag; die Mehrfach-Auswahl beim Kuratieren schickt je Paar `NimmPaarAuf`.
 

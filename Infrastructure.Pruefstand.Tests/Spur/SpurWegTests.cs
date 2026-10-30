@@ -15,7 +15,7 @@ public class SpurWegTests
     private static readonly Dictionary<string, SpurWeg.Eintrag> Log = new()
     {
         ["q:1"] = new("DateiErkannt", "quelle:DateiErkannt", null),
-        ["a:1"] = new("BildAufbereitet", "funktion:IBildaufbereitung", null),
+        ["a:1"] = new("VorschauErstellt", "funktion:IKontrastausgleich", null),
     };
 
     private static SpurWeg.Eintrag? Nachschlagen(string u) => Log.GetValueOrDefault(u);
@@ -29,7 +29,7 @@ public class SpurWegTests
 
         w.Karten.Should().Equal("funktion:Bildeingang", "rec:NimmBildAuf", "decide:ImagePair/NimmBildAuf", "rec:ImagePairErstellt");
         Paare(w).Should().Equal(
-            "rec:BildAufbereitet → funktion:Bildeingang",
+            "rec:VorschauErstellt → funktion:Bildeingang",
             "funktion:Bildeingang → rec:NimmBildAuf",
             "rec:NimmBildAuf → decide:ImagePair/NimmBildAuf",
             "decide:ImagePair/NimmBildAuf → rec:ImagePairErstellt");
@@ -38,9 +38,9 @@ public class SpurWegTests
     [Fact]
     public void Ausgabe_einer_Funktion_haengt_an_ihrem_Eingang()
     {
-        var w = SpurWeg.Aus("BildAufbereitet", "funktion:IBildaufbereitung", null, "q:1", Nachschlagen);
+        var w = SpurWeg.Aus("BildEingelesen", "funktion:IBildEinlesen", null, "q:1", Nachschlagen);
 
-        Paare(w).Should().Equal("rec:DateiErkannt → funktion:IBildaufbereitung", "funktion:IBildaufbereitung → rec:BildAufbereitet");
+        Paare(w).Should().Equal("rec:DateiErkannt → funktion:IBildEinlesen", "funktion:IBildEinlesen → rec:BildEingelesen");
     }
 
     [Fact]

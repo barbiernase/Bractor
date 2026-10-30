@@ -18,17 +18,16 @@ from cqrs_client import Ausgabe, FunktionsBasis, FunktionsLaeufer, Herkunft
 from cqrs_client import leitung as L
 from cqrs_client.mapper import PayloadMapper
 from cqrs_client.proxy import GrpcProxy
-from domain_client.generated.funktionen import BildaufbereitungBasis, TrainingBasis
+from domain_client.generated.funktionen import BildEinlesenBasis, TrainingBasis
 
 
-class Aufbereitung(BildaufbereitungBasis):
+class Einlesen(BildEinlesenBasis):
     SLOTS = 3
 
     async def auf_datei_erkannt(self, e: g.DateiErkanntDto, h: Herkunft):
         if e.pfad.endswith(".kaputt"):
             return g.BildNichtLesbarDto(pfad=e.pfad, grund="unlesbar")
-        return g.BildAufbereitetDto(dateiname=e.name, pfad=e.pfad, groesse=e.groesse, erkannt_am=e.erkannt_am, vorschau=e.pfad + ".png",
-                                    breite_pixel=640, hoehe_pixel=512, erstellt_am=e.erkannt_am)
+        return g.BildEingelesenDto(dateiname=e.name, pfad=e.pfad, groesse=e.groesse, erkannt_am=e.erkannt_am, breite_pixel=640, hoehe_pixel=512)
 
 
 class MitschreibenderStrom:
@@ -54,7 +53,7 @@ def _verbunden():
 def _eingang_vom_server(vorgang, pfad):
     """So kommt er an: ServerMessage-Bytes → betterproto (wie im Read-Loop)."""
     msg = L.ServerMessage(arbeits_auftrag=L.ArbeitsAuftrag(
-        vorgang=vorgang, korrelation="k-1", funktion="IBildaufbereitung", akteur="KameraSystem", stream="s-1", version=1,
+        vorgang=vorgang, korrelation="k-1", funktion="IBildEinlesen", akteur="KameraSystem", stream="s-1", version=1,
         zeit_utc=1_700_000_000_000,
         eingang=L.Nutzlast(typ="DateiErkannt", daten=bytes(g.DateiErkanntDto(name="a.tiff", pfad=pfad, groesse=7)))))
     feld, eingang = betterproto.which_one_of(L.ServerMessage().parse(bytes(msg)), "message")
@@ -63,31 +62,31 @@ def _eingang_vom_server(vorgang, pfad):
 
 
 def test_generat_bindet_eingaenge_und_ausgaben_an_die_betterproto_typen():
-    assert issubclass(BildaufbereitungBasis, FunktionsBasis)
-    assert BildaufbereitungBasis.FUNKTION == "IBildaufbereitung"
-    e = BildaufbereitungBasis.EINGAENGE[g.DateiErkanntDto]
+    assert issubclass(BildEinlesenBasis, FunktionsBasis)
+    assert BildEinlesenBasis.FUNKTION == "IBildEinlesen"
+    e = BildEinlesenBasis.EINGAENGE[g.DateiErkanntDto]
     assert e.methode == "auf_datei_erkannt" and not e.strom
-    assert e.ausgaben == {g.BildAufbereitetDto: Ausgabe.EVENT, g.BildNichtLesbarDto: Ausgabe.EVENT}
+    assert e.ausgaben == {g.BildEingelesenDto: Ausgabe.EVENT, g.BildNichtLesbarDto: Ausgabe.EVENT}
     t = TrainingBasis.EINGAENGE[g.TrainingAngefordertDto]
     assert t.strom and all(a == Ausgabe.COMMAND for a in t.ausgaben.values())
     with pytest.raises(TypeError):
-        BildaufbereitungBasis()   # abstrakt: auf_datei_erkannt fehlt
+        BildEinlesenBasis()   # abstrakt: auf_datei_erkannt fehlt
 
 
 def test_anbieten_ueber_den_echten_draht():
     proxy, strom = _verbunden()
-    laeufer = FunktionsLaeufer([Aufbereitung()], proxy, PayloadMapper(NUTZLAST))
+    laeufer = FunktionsLaeufer([Einlesen()], proxy, PayloadMapper(NUTZLAST))
 
     asyncio.run(laeufer.biete_an())
 
     feld, anbieten = betterproto.which_one_of(strom.nachrichten()[0], "message")
     assert feld == "funktionen_anbieten"
-    assert [(a.funktion, a.slots) for a in anbieten.angebote] == [("IBildaufbereitung", 3)]
+    assert [(a.funktion, a.slots) for a in anbieten.angebote] == [("IBildEinlesen", 3)]
 
 
 def test_eingang_rein_antwort_raus_ueber_den_echten_draht():
     proxy, strom = _verbunden()
-    laeufer = FunktionsLaeufer([Aufbereitung()], proxy, PayloadMapper(NUTZLAST))
+    laeufer = FunktionsLaeufer([Einlesen()], proxy, PayloadMapper(NUTZLAST))
 
     async def lauf():
         await asyncio.gather(laeufer.nimm(_eingang_vom_server("v-1", "/roh/a.tiff")),
@@ -103,14 +102,14 @@ def test_eingang_rein_antwort_raus_ueber_den_echten_draht():
     mapper = PayloadMapper(NUTZLAST)
     assert a.fehler == "" and a.fertig and len(a.ausgaben) == 1
     art, nutzlast = betterproto.which_one_of(a.ausgaben[0], "art")
-    assert art == "event" and nutzlast.typ == "BildAufbereitet"
-    assert mapper.entpacke(nutzlast).vorschau == "/roh/a.tiff.png"
+    assert art == "event" and nutzlast.typ == "BildEingelesen"
+    assert mapper.entpacke(nutzlast).pfad == "/roh/a.tiff"
     _, nb = betterproto.which_one_of(b.ausgaben[0], "art")
     assert nb.typ == "BildNichtLesbar", "auch der zweite OneOf-Fall ist eine Antwort"
 
 
 def test_falsche_ausgabe_wird_zum_fehler_und_lebenszeichen_reisen_ueber_den_draht():
-    class Frech(BildaufbereitungBasis):
+    class Frech(BildEinlesenBasis):
         async def auf_datei_erkannt(self, e, h):
             await asyncio.sleep(0.05)
             return g.MeldeFortschrittDto()   # Ausgabe einer ANDEREN Funktion

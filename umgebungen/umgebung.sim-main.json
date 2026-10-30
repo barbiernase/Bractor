@@ -47,7 +47,7 @@
     }
   },
   "Funktionen": {
-    "IBildaufbereitung": {
+    "IBildEinlesen": {
       "Laufort": "Host",
       "Slots": 2,
       "Wiederholungen": 1,
@@ -55,7 +55,37 @@
         "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
         "Argumente": [
           "--funktionen",
-          "IBildaufbereitung",
+          "IBildEinlesen",
+          "--konfig",
+          "AusgabePfad=${env:HOME}/cqrs-sim/${branch}/preprocessed"
+        ],
+        "Token": "sim-bildrechner"
+      }
+    },
+    "IBildVerkleinerung": {
+      "Laufort": "Host",
+      "Slots": 2,
+      "Wiederholungen": 1,
+      "Worker": {
+        "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
+        "Argumente": [
+          "--funktionen",
+          "IBildVerkleinerung",
+          "--konfig",
+          "AusgabePfad=${env:HOME}/cqrs-sim/${branch}/preprocessed"
+        ],
+        "Token": "sim-bildrechner"
+      }
+    },
+    "IKontrastausgleich": {
+      "Laufort": "Host",
+      "Slots": 2,
+      "Wiederholungen": 1,
+      "Worker": {
+        "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
+        "Argumente": [
+          "--funktionen",
+          "IKontrastausgleich",
           "--konfig",
           "AusgabePfad=${env:HOME}/cqrs-sim/${branch}/preprocessed"
         ],

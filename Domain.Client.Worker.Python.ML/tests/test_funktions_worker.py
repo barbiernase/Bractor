@@ -31,9 +31,9 @@ def test_tabelle_nennt_je_funktion_eine_generierte_basis():
 
 
 def test_worker_laedt_die_implementierung_aus_der_tabelle_mit_slots_und_konfig(tmp_path):
-    f = worker.lade("IBildaufbereitung", 3, {"AusgabePfad": str(tmp_path)})
-    assert isinstance(f, basen.BildaufbereitungBasis)
-    assert (f.FUNKTION, f.slots, f.konfig) == ("IBildaufbereitung", 3, {"AusgabePfad": str(tmp_path)})
+    f = worker.lade("IBildVerkleinerung", 3, {"AusgabePfad": str(tmp_path)})
+    assert isinstance(f, basen.BildVerkleinerungBasis)
+    assert (f.FUNKTION, f.slots, f.konfig) == ("IBildVerkleinerung", 3, {"AusgabePfad": str(tmp_path)})
 
 
 def test_unbekannte_funktion_und_fehlende_implementierung_brechen_den_start():
@@ -51,17 +51,22 @@ def test_konfig_paare():
         worker.werte(["kaputt"])
 
 
-def test_bildaufbereitung_rechnet_ein_echtes_bild(tmp_path):
+def test_die_kette_der_bildaufbereitung_rechnet_ein_echtes_bild(tmp_path):
+    """Einlesen → Verkleinern → Kontrast ausgleichen: jeder Schritt hört das Ergebnis des vorigen, die Datei der Quelle reist mit."""
     quelle = tmp_path / "2026_10_13_10_00_00_000_DC0.png"
     cv2.imwrite(str(quelle), (np.random.default_rng(1).random((1024, 1536, 3)) * 255).astype(np.uint8))
-    ausgabe = tmp_path / "aus"
-    f = worker.lade("IBildaufbereitung", 1, {"AusgabePfad": str(ausgabe)})
+    konfig = {"AusgabePfad": str(tmp_path / "aus")}
+    einlesen, verkleinern, ausgleichen = (worker.lade(f, 1, konfig) for f in ("IBildEinlesen", "IBildVerkleinerung", "IKontrastausgleich"))
 
-    aus = asyncio.run(f.auf_datei_erkannt(g.DateiErkanntDto(name=quelle.name, pfad=str(quelle), groesse=7, erkannt_am=1), H))
-    assert isinstance(aus, g.BildAufbereitetDto)
-    assert (aus.breite_pixel, aus.hoehe_pixel) == (768, 512)
-    assert Path(aus.vorschau).name == quelle.stem + "_vorschau.png" and Path(aus.vorschau).exists()
-    assert (aus.dateiname, aus.pfad, aus.groesse, aus.erkannt_am) == (quelle.name, str(quelle), 7, 1)
+    gelesen = asyncio.run(einlesen.auf_datei_erkannt(g.DateiErkanntDto(name=quelle.name, pfad=str(quelle), groesse=7, erkannt_am=1), H))
+    assert isinstance(gelesen, g.BildEingelesenDto) and (gelesen.breite_pixel, gelesen.hoehe_pixel) == (1536, 1024)
+    klein = asyncio.run(verkleinern.auf_bild_eingelesen(gelesen, H))
+    assert (klein.breite_pixel, klein.hoehe_pixel) == (768, 512) and Path(klein.verkleinert).exists()
+    vorschau = asyncio.run(ausgleichen.auf_bild_verkleinert(klein, H))
+    assert isinstance(vorschau, g.VorschauErstelltDto)
+    assert (vorschau.breite_pixel, vorschau.hoehe_pixel) == (768, 512)
+    assert Path(vorschau.vorschau).name == quelle.stem + "_vorschau.png" and Path(vorschau.vorschau).exists()
+    assert (vorschau.dateiname, vorschau.pfad, vorschau.groesse, vorschau.erkannt_am) == (quelle.name, str(quelle), 7, 1)
 
-    nicht = asyncio.run(f.auf_datei_erkannt(g.DateiErkanntDto(name="fehlt.png", pfad=str(tmp_path / "fehlt.png")), H))
+    nicht = asyncio.run(einlesen.auf_datei_erkannt(g.DateiErkanntDto(name="fehlt.png", pfad=str(tmp_path / "fehlt.png")), H))
     assert isinstance(nicht, g.BildNichtLesbarDto)

@@ -209,8 +209,10 @@ Knapp, weil Prüfling, nicht Architektur:
 - **Training** (`domain_client/training_worker.py`, Rauchtest `run_train_stub.py`): erbt `TrainingsWorkerBasis` (`ITrainingsWorker`), trägt
   `ITraining` als Strom (`MeldeTrainingBegonnen`, `MeldeFortschritt` je Epoche, `MeldeTrainingAbgeschlossen` bzw. `MeldeTrainingGescheitert`),
   zieht die Samples per Query (`HoleDatensatzSamples`) und bricht auf `TrainingAbgebrochen` kooperativ ab; der Trainer ist ein Stub.
-- **Funktion als eigene Klasse:** `funktionen/bildaufbereitung.py` (`IBildaufbereitung`, OpenCV: verkleinern, Kontrast ausgleichen, PNG nach
-  `konfig["AusgabePfad"]`) — das Gegenstück zur Umsetzung im Host, gestartet über den generischen Worker.
+- **Funktion als eigene Klasse:** die Kette der Bildaufbereitung, je Schritt ein Modul — `funktionen/bild_einlesen.py` (`IBildEinlesen`:
+  lesbar? mit Maßen), `funktionen/bild_verkleinerung.py` (`IBildVerkleinerung`: auf die Vorschau-Höhe, Zwischenbild nach `konfig["AusgabePfad"]`),
+  `funktionen/kontrastausgleich.py` (`IKontrastausgleich`: Histogramm ausgleichen, Vorschau-PNG) — die Gegenstücke zu den Umsetzungen im Host,
+  gestartet über den generischen Worker (je Schritt oder alle in einem: `--funktionen IBildEinlesen,IBildVerkleinerung,IKontrastausgleich`).
 - `run.py`/`run_stub.py`/`run_train_stub.py` lesen Host/Port aus der eigenen `appsettings.json`; `domain_client/domain_registry.py` (die
   `CategoryRegistry` der Domäne) ist handgepflegt (docs/13 P2-11).
 

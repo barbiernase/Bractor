@@ -105,7 +105,9 @@ public sealed class Testumgebung
         JsonObject ImHost(int slots) => new() { ["Laufort"] = "Host", ["Slots"] = slots, ["Wiederholungen"] = 1 };
         json["Funktionen"] = new JsonObject
         {
-            ["IBildaufbereitung"] = ImHost(2),
+            ["IBildEinlesen"] = ImHost(2),
+            ["IBildVerkleinerung"] = ImHost(2),
+            ["IKontrastausgleich"] = ImHost(2),
             // Draußen getragen (IDarf<F> eines verkörperten Akteurs): mehrere Eingänge je Partition zugleich. Die rohen Träger der Client-Tests übernehmen beim Anbieten auch
             //   Eingänge früherer Tests, die sie nie beantworten; mit einem Slot sperrte jeder davon seine Partition bis zum Ablauf der Lease (30 s).
             ["IBildpaarBeurteilung"] = new JsonObject { ["Laufort"] = "Extern", ["Slots"] = 8 },

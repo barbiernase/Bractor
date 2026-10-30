@@ -44,7 +44,10 @@ public class EingangE2ETests
             Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = FreierPort(), JsonEingang = true },
             Funktionen = new(StringComparer.Ordinal)
             {
-                ["IBildaufbereitung"] = new() { Laufort = FunktionsLaufort.Hand },
+                // Die ganze Kette der Bildaufbereitung beantwortet ein Mensch — Schritt für Schritt.
+                ["IBildEinlesen"] = new() { Laufort = FunktionsLaufort.Hand },
+                ["IBildVerkleinerung"] = new() { Laufort = FunktionsLaufort.Hand },
+                ["IKontrastausgleich"] = new() { Laufort = FunktionsLaufort.Hand },
             },
         };
         var verz = Directory.CreateTempSubdirectory("eingang-it-").FullName;
@@ -120,7 +123,7 @@ public class EingangE2ETests
             }, TimeSpan.FromSeconds(30), "Die Projektion hat den Datensatz nicht geliefert.");
             antwort.GetProperty("antwort").GetProperty("daten").GetProperty("Name").GetString().Should().Be("Werkbank");
 
-            // ── Laufort Hand: die Bildaufbereitung (Funktion als Schnittstelle) beantwortet ein Mensch ──
+            // ── Laufort Hand: die Kette der Bildaufbereitung (Funktionen als Schnittstelle) beantwortet ein Mensch, Schritt für Schritt ──
             var t = new DateTimeOffset(2026, 10, 12, 9, 0, 0, Random.Shared.Next(0, 999), TimeSpan.Zero).AddMinutes(Random.Shared.Next(0, 100000));
             var dateiname = $"{t:yyyy_MM_dd_HH_mm_ss_fff}_DC0.tiff";
             var vorgang = await QuellEingang.Live(app.Services).NimmAufAsync(new DateiErkannt
@@ -129,47 +132,54 @@ public class EingangE2ETests
                 Kennung = dateiname + "|1",
             }, default);
 
-            JsonElement eingang = default;
-            await Warte(async () =>
+            // Wartet auf den einen offenen Eingang der Hand-Funktion.
+            async Task<JsonElement> Eingang(string funktion)
             {
-                var liste = (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").EnumerateArray().ToList();
-                if (liste.Count == 0) return false;
-                eingang = liste.Single();
-                return true;
-            }, TimeSpan.FromSeconds(30), "Der Eingang an die Hand-Funktion kam nicht an.");
-            eingang.GetProperty("funktion").GetString().Should().Be("IBildaufbereitung");
-            eingang.GetProperty("eingang").GetProperty("typ").GetString().Should().Be("DateiErkannt");
-            eingang.GetProperty("eingang").GetProperty("daten").GetProperty("Name").GetString().Should().Be(dateiname);
-            eingang.GetProperty("ausgaben").EnumerateArray().Select(x => x.GetString()).Should().BeEquivalentTo("BildAufbereitet", "BildNichtLesbar");
-            var vg = eingang.GetProperty("vorgang").GetString();
-
-            (await Sende("/eingang/ergebnis", new { vorgang = vg, ausgaben = new[] { new { typ = "NimmBildAuf", daten = new { } } } }, null))
-                .StatusCode.Should().Be(HttpStatusCode.BadRequest, "nur eine Ausgabe aus der Signatur der Funktion");
-
-            var antwortHand = await Lies(await Sende("/eingang/ergebnis", new
-            {
-                vorgang = vg,
-                ausgaben = new[]
+                JsonElement eingang = default;
+                await Warte(async () =>
                 {
-                    new
-                    {
-                        typ = "BildAufbereitet",
-                        daten = (object)new
-                        {
-                            Dateiname = dateiname, Pfad = Path.Combine(verz, dateiname), Groesse = 1L, ErkanntAm = t,
-                            Vorschau = Path.Combine(verz, "hand.png"), BreitePixel = 4, HoehePixel = 2, ErstelltAm = t,
-                        },
-                    },
-                },
-            }, null));
-            antwortHand.GetProperty("ausgang").GetString().Should().Be("Geschrieben", antwortHand.ToString());
+                    var liste = (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").EnumerateArray().ToList();
+                    eingang = liste.FirstOrDefault(x => x.GetProperty("funktion").GetString() == funktion);
+                    return eingang.ValueKind == JsonValueKind.Object;
+                }, TimeSpan.FromSeconds(30), $"Der Eingang an die Hand-Funktion {funktion} kam nicht an.");
+                return eingang;
+            }
+            async Task Beantworte(JsonElement eingang, string typ, object daten)
+            {
+                var antwort = await Lies(await Sende("/eingang/ergebnis",
+                    new { vorgang = eingang.GetProperty("vorgang").GetString(), ausgaben = new[] { new { typ, daten } } }, null));
+                antwort.GetProperty("ausgang").GetString().Should().Be("Geschrieben", antwort.ToString());
+            }
+            var pfad = Path.Combine(verz, dateiname);
+
+            // Schritt 1: Einlesen.
+            var einlesen = await Eingang("IBildEinlesen");
+            einlesen.GetProperty("eingang").GetProperty("typ").GetString().Should().Be("DateiErkannt");
+            einlesen.GetProperty("eingang").GetProperty("daten").GetProperty("Name").GetString().Should().Be(dateiname);
+            einlesen.GetProperty("ausgaben").EnumerateArray().Select(x => x.GetString()).Should().BeEquivalentTo("BildEingelesen", "BildNichtLesbar");
+            (await Sende("/eingang/ergebnis", new { vorgang = einlesen.GetProperty("vorgang").GetString(), ausgaben = new[] { new { typ = "NimmBildAuf", daten = new { } } } }, null))
+                .StatusCode.Should().Be(HttpStatusCode.BadRequest, "nur eine Ausgabe aus der Signatur der Funktion");
+            await Beantworte(einlesen, "BildEingelesen",
+                new { Dateiname = dateiname, Pfad = pfad, Groesse = 1L, ErkanntAm = t, BreitePixel = 8, HoehePixel = 4 });
+
+            // Schritt 2: Verkleinern — sein Eingang ist das Ergebnis von Schritt 1.
+            var verkleinern = await Eingang("IBildVerkleinerung");
+            verkleinern.GetProperty("eingang").GetProperty("typ").GetString().Should().Be("BildEingelesen");
+            await Beantworte(verkleinern, "BildVerkleinert",
+                new { Dateiname = dateiname, Pfad = pfad, Groesse = 1L, ErkanntAm = t, Verkleinert = Path.Combine(verz, "klein.png"), BreitePixel = 4, HoehePixel = 2 });
+
+            // Schritt 3: Kontrast ausgleichen — dann macht der Bildeingang daraus das Bild des Paars.
+            var ausgleichen = await Eingang("IKontrastausgleich");
+            ausgleichen.GetProperty("eingang").GetProperty("typ").GetString().Should().Be("BildVerkleinert");
+            await Beantworte(ausgleichen, "VorschauErstellt",
+                new { Dateiname = dateiname, Pfad = pfad, Groesse = 1L, ErkanntAm = t, Vorschau = Path.Combine(verz, "hand.png"), BreitePixel = 4, HoehePixel = 2, ErstelltAm = t });
 
             var paar = ImagePairFileName.Resolve(dateiname)!.AggregateId;
             await Warte(async () => (await es.ReadStreamAsync(paar.Wert, 0, default)).Any(e => e.Payload is ImagePairErstellt), TimeSpan.FromSeconds(30),
                 "Nach der Antwort von Hand lief es nicht weiter (kein ImagePairErstellt über den Bildeingang).");
-            var festgehalten = await es.ReadStreamAsync(Infrastructure.Funktionen.FunktionsIds.Festhalten("IBildaufbereitung", vorgang, 1), 0, default);
-            festgehalten.Should().ContainSingle(e => e.Payload is Domain.Pipeline.Bildaufbereitung.BildAufbereitet);
-            festgehalten.Should().OnlyContain(e => e.Wirker == "funktion:IBildaufbereitung", "die Ausgabe schreibt die Funktion — wo gerechnet wurde, ist eine Bindung");
+            var festgehalten = await es.ReadStreamAsync(Infrastructure.Funktionen.FunktionsIds.Festhalten("IBildEinlesen", vorgang, 1), 0, default);
+            festgehalten.Should().ContainSingle(e => e.Payload is Domain.Pipeline.Bildaufbereitung.BildEingelesen);
+            festgehalten.Should().OnlyContain(e => e.Wirker == "funktion:IBildEinlesen", "die Ausgabe schreibt die Funktion — wo gerechnet wurde, ist eine Bindung");
             (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").GetArrayLength().Should().Be(0);
             vorgang.Should().NotBe(Guid.Empty);
 
@@ -187,7 +197,7 @@ public class EingangE2ETests
             wurzel.Should().ContainSingle().Which.Payload.Should().BeOfType<DateiErkannt>().Which.Name.Should().Be(datei2);
             wurzel.Single().Wirker.Should().Be("quelle:DateiErkannt");
             await Warte(async () => (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").GetArrayLength() > 0,
-                TimeSpan.FromSeconds(30), "Der Webhook hat keinen Eingang an die Bildaufbereitung gegeben.");
+                TimeSpan.FromSeconds(30), "Der Webhook hat keinen Eingang an das Einlesen der Bildaufbereitung gegeben.");
             await Task.Delay(1500);
             (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").EnumerateArray()
                 .Should().ContainSingle("genau eine Nachricht im Log, also genau ein Eingang").Which.GetProperty("eingang").GetProperty("daten").GetProperty("Name").GetString()
@@ -225,7 +235,9 @@ public class EingangE2ETests
             Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = FreierPort(), JsonEingang = true },
             Funktionen = new(StringComparer.Ordinal)
             {
-                ["IBildaufbereitung"] = new() { Slots = 1 },
+                ["IBildEinlesen"] = new() { Slots = 1 },
+                ["IBildVerkleinerung"] = new() { Slots = 1 },
+                ["IKontrastausgleich"] = new() { Slots = 1 },
             },
         };
         var verz = Directory.CreateTempSubdirectory("wiederholung-it-").FullName;

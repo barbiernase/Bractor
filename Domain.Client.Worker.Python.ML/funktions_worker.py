@@ -6,7 +6,7 @@ Funktionen es gibt und wo ihre Implementierung liegt, sagt die generierte Tabell
 Funktion → Basis, Modul, Klasse); die Implementierungen stehen in funktionen/<modul>.py (Klasse erbt die generierte Basis, füllt `auf_…`).
 Gestartet von der Werkbank („▶ Worker starten" an der Funktions-Karte, Umgebung: Funktionen:<F>:Worker) oder von Hand:
 
-    python funktions_worker.py --funktionen IBildaufbereitung [--slots 2] [--konfig AusgabePfad=<verz> …] [--pfad <verz>]
+    python funktions_worker.py --funktionen IBildEinlesen,IBildVerkleinerung,IKontrastausgleich [--slots 2] [--konfig AusgabePfad=<verz> …] [--pfad <verz>]
 
 Adresse und Akteur kommen aus CQRS_GRPC_HOST / CQRS_GRPC_PORT / CQRS_AKTEUR_TOKEN (die Werkbank setzt sie). Der Akteur des Tokens braucht
 IDarf<F> für jede angebotene Funktion. `--konfig NAME=WERT` sind die Werte der Implementierungen (self.konfig), `--pfad` legt ein Verzeichnis
@@ -70,7 +70,7 @@ class FunktionsWorker(CqrsClient[Leer]):
 
 def main(argv: list[str] | None = None) -> None:
     a = argparse.ArgumentParser(description="Generischer Worker für Funktionen draußen (Laufort Extern)")
-    a.add_argument("--funktionen", required=True, help="kommagetrennt, z. B. IBildaufbereitung")
+    a.add_argument("--funktionen", required=True, help="kommagetrennt, z. B. IBildEinlesen,IBildVerkleinerung,IKontrastausgleich")
     a.add_argument("--slots", type=int, default=2)
     a.add_argument("--konfig", action="append", default=[], help="NAME=WERT (mehrfach) — die Werte der Implementierungen")
     a.add_argument("--pfad", action="append", default=[], help="Verzeichnis mit eigenen Implementierungen (Paket funktionen), vor dem Projekt")

@@ -96,7 +96,7 @@ public class UmgebungLaderTests
     }
 
     // ── Funktions-Laufort als Konfig ─────────────────────────────────────────────────────────────────────────────────
-    // Die Bausteine der Beispieldomäne: IBildaufbereitung (Schnittstelle, eine Umsetzung im Host), RangeAufloesung (Klasse mit Lese-Fähigkeit).
+    // Die Bausteine der Beispieldomäne: IBildVerkleinerung (Schnittstelle, eine Umsetzung im Host), RangeAufloesung (Klasse mit Lese-Fähigkeit).
 
     private static FunktionsBaustein Baustein(string name) => Infrastructure.Komposition.Anwendung.Funktionen.Bausteine.Single(b => b.Name == name);
 
@@ -105,25 +105,25 @@ public class UmgebungLaderTests
 
     [Fact]
     public void Laufort_Host_bindet_die_genannte_Umsetzung()
-        => Bindung("IBildaufbereitung", new() { Implementierung = "OpenCvBildaufbereitung", Slots = 3, Wiederholungen = 1 })
-            .Should().Be(new BausteinBindung("IBildaufbereitung", FunktionsLaufort.Host, "OpenCvBildaufbereitung", 3, 1));
+        => Bindung("IBildVerkleinerung", new() { Implementierung = "OpenCvBildVerkleinerung", Slots = 3, Wiederholungen = 1 })
+            .Should().Be(new BausteinBindung("IBildVerkleinerung", FunktionsLaufort.Host, "OpenCvBildVerkleinerung", 3, 1));
 
     [Fact]
     public void Laufort_Host_mit_unbekannter_Umsetzung_ist_ein_Boot_Fehler()
-        => FluentActions.Invoking(() => Bindung("IBildaufbereitung", new() { Implementierung = "Gibtsnicht" }))
-            .Should().Throw<BootFehler>().WithMessage("*genau eine Umsetzung*Gibtsnicht*OpenCvBildaufbereitung*");
+        => FluentActions.Invoking(() => Bindung("IBildVerkleinerung", new() { Implementierung = "Gibtsnicht" }))
+            .Should().Throw<BootFehler>().WithMessage("*genau eine Umsetzung*Gibtsnicht*OpenCvBildVerkleinerung*");
 
     [Fact]
     public void Laufort_Extern_braucht_eine_Schnittstelle_und_keine_Lese_Faehigkeit()
     {
-        Bindung("IBildaufbereitung", new() { Laufort = FunktionsLaufort.Extern }).Laufort.Should().Be(FunktionsLaufort.Extern);
+        Bindung("IBildVerkleinerung", new() { Laufort = FunktionsLaufort.Extern }).Laufort.Should().Be(FunktionsLaufort.Extern);
         FluentActions.Invoking(() => Bindung("RangeAufloesung", new() { Laufort = FunktionsLaufort.Extern }))
             .Should().Throw<BootFehler>().WithMessage("*Lese-Fähigkeit*");
     }
 
     [Fact]
     public void Ohne_Eintrag_laeuft_eine_Schnittstelle_mit_einer_Umsetzung_im_Host()
-        => FunktionsBausteinWiring.BindungVon(Baustein("IBildaufbereitung"), []).Laufort.Should().Be(FunktionsLaufort.Host);
+        => FunktionsBausteinWiring.BindungVon(Baustein("IBildVerkleinerung"), []).Laufort.Should().Be(FunktionsLaufort.Host);
 
     [Fact]
     public void Ein_unbekannter_Funktionsname_ist_ein_Boot_Fehler_Hand_bindet_den_Hand_Ausfuehrer_einmal()
@@ -132,11 +132,11 @@ public class UmgebungLaderTests
             .Should().Throw<BootFehler>().WithMessage("*IGibtsNicht*keine Funktion dieses Namens*");
         var s = new ServiceCollection().BindeFunktionen(new Dictionary<string, FunktionsKonfig>
         {
-            ["IBildaufbereitung"] = new() { Laufort = FunktionsLaufort.Hand },
+            ["IBildEinlesen"] = new() { Laufort = FunktionsLaufort.Hand },
             ["TeilFertigMeldung"] = new() { Laufort = FunktionsLaufort.Hand },
         });
         s.Where(d => d.ServiceType == typeof(BausteinBindung)).Select(d => ((BausteinBindung)d.ImplementationInstance!).Funktion)
-            .Should().BeEquivalentTo("IBildaufbereitung", "TeilFertigMeldung");
+            .Should().BeEquivalentTo("IBildEinlesen", "TeilFertigMeldung");
         s.Count(d => d.ServiceType == typeof(HandAusfuehrer)).Should().Be(1);
     }
 
@@ -155,8 +155,11 @@ public class UmgebungLaderTests
         if (name == "sim-main")
         {
             u.Transport.JsonEingang.Should().BeTrue("Sim: die Werkbank handelt als Akteur");
-            u.Funktionen["IBildaufbereitung"].Worker!.Skript.Should().EndWith("funktions_worker.py");
-            u.Funktionen["IBildaufbereitung"].Worker!.Argumente.Should().Contain(a => a.EndsWith("/cqrs-sim/main/preprocessed"));
+            foreach (var f in new[] { "IBildEinlesen", "IBildVerkleinerung", "IKontrastausgleich" })
+            {
+                u.Funktionen[f].Worker!.Skript.Should().EndWith("funktions_worker.py");
+                u.Funktionen[f].Worker!.Argumente.Should().Contain(a => a.EndsWith("/cqrs-sim/main/preprocessed"));
+            }
         }
         else u.Transport.JsonEingang.Should().BeFalse("Prod: kein JSON-Eingang");
     }
@@ -165,9 +168,13 @@ public class UmgebungLaderTests
     public void Die_generierte_Tabelle_kennt_die_Funktionen_des_Bestands_mit_ihrem_Laufort_aus_der_Form()
     {
         var b = GeneratedFunktionsBausteine.Alle.ToDictionary(x => x.Name);
-        b.Keys.Should().Contain(["IBildaufbereitung", "IBildpaarBeurteilung", "ITraining", "Bildeingang", "RangeAufloesung", "MitgliederEinfrieren"]);
-        b["IBildaufbereitung"].Draussen.Should().BeTrue("eine Schnittstelle");
-        b["IBildaufbereitung"].Umsetzungen.Select(u => u.Name).Should().Equal(["OpenCvBildaufbereitung"], "genau eine Umsetzung im Host");
+        b.Keys.Should().Contain(["IBildEinlesen", "IBildVerkleinerung", "IKontrastausgleich", "IBildpaarBeurteilung", "ITraining", "Bildeingang",
+            "RangeAufloesung", "MitgliederEinfrieren"]);
+        foreach (var (f, u) in new[] { ("IBildEinlesen", "OpenCvBildEinlesen"), ("IBildVerkleinerung", "OpenCvBildVerkleinerung"), ("IKontrastausgleich", "OpenCvKontrastausgleich") })
+        {
+            b[f].Draussen.Should().BeTrue("eine Schnittstelle");
+            b[f].Umsetzungen.Select(x => x.Name).Should().Equal([u], "genau eine Umsetzung im Host");
+        }
         b["IBildpaarBeurteilung"].Umsetzungen.Should().BeEmpty("nur draußen getragen");
         b["Bildeingang"].Gleichbleibend.Should().BeTrue("eine Klasse ohne Dienst und Lese-Fähigkeit");
         b["RangeAufloesung"].Liest.Should().BeTrue("mit Lese-Fähigkeit: läuft im Host und hält fest");

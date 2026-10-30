@@ -82,10 +82,12 @@ internal static class Messung
                 if (o.Diagnose) await NeustartZeitreiheAsync(k, k.Beispiel, "Host.Grpc", $"beispiel-neustart-w{w}", "L1-neustart");
                 if (o.Szenarien.Contains("S2"))
                 {
-                    var extern_ = new Dictionary<string, string> { ["Funktionen__IBildaufbereitung__Laufort"] = "Extern" };
+                    // Die ganze Kette der Bildaufbereitung im Python-Worker: je Schritt ein Worker nach dem Worker-Block seiner Funktion.
+                    string[] kette = ["IBildEinlesen", "IBildVerkleinerung", "IKontrastausgleich"];
+                    var extern_ = kette.ToDictionary(f => $"Funktionen__{f}__Laufort", _ => "Extern");
                     await using var lauf = await Anwendungslauf.StarteAsync(k, k.Beispiel, "Host.Grpc", "host", $"beispiel-s2-w{w}", zuruecksetzen: false,
                         extern_);
-                    await lauf.StarteWorkerAsync(k.Beispiel, "IBildaufbereitung", $"worker-bildaufbereitung-w{w}");
+                    foreach (var f in kette) await lauf.StarteWorkerAsync(k.Beispiel, f, $"worker-{f}-w{w}");
                     Merke("S2", await StossAsync(k, lauf, "S2", 2031, w, o.StossS2));
                 }
                 Global("Beispieldomäne", w, await GlobalePruefung.PruefeAsync(new Datenbank(k.Beispiel.Verbindung, k.Beispiel.Datenbank, k.Beispiel.Schema), "Beispieldomäne"));

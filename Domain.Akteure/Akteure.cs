@@ -28,9 +28,9 @@ namespace Domain.Akteure;
 public sealed record KameraSystem : IMaschine,
     IDarf<DateiErkannt>;
 
-/// <summary>Rechnet die Bildaufbereitung außerhalb des Hosts (Python-Worker <c>funktions_worker.py</c>, Laufort <c>Extern</c>).</summary>
+/// <summary>Rechnet die Schritte der Bildaufbereitung außerhalb des Hosts (Python-Worker <c>funktions_worker.py</c>, Laufort <c>Extern</c>).</summary>
 public sealed record Bildrechner : IMaschine,
-    IDarf<IBildaufbereitung>;
+    IDarf<IBildEinlesen>, IDarf<IBildVerkleinerung>, IDarf<IKontrastausgleich>;
 
 /// <summary>GPU-Worker: trainiert auf einer eingefrorenen Datensatz-Version und meldet den Fortschritt (Funktion <see cref="ITraining"/>).</summary>
 public sealed record TrainingsSystem : IMaschine,

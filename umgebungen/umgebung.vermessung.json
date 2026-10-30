@@ -43,7 +43,7 @@
     }
   },
   "Funktionen": {
-    "IBildaufbereitung": {
+    "IBildEinlesen": {
       "Laufort": "Host",
       "Slots": 2,
       "Wiederholungen": 1,
@@ -51,7 +51,41 @@
         "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
         "Argumente": [
           "--funktionen",
-          "IBildaufbereitung",
+          "IBildEinlesen",
+          "--slots",
+          "2",
+          "--konfig",
+          "AusgabePfad=${env:HOME}/cqrs-vermessung/preprocessed"
+        ],
+        "Token": "vermessung-bildrechner"
+      }
+    },
+    "IBildVerkleinerung": {
+      "Laufort": "Host",
+      "Slots": 2,
+      "Wiederholungen": 1,
+      "Worker": {
+        "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
+        "Argumente": [
+          "--funktionen",
+          "IBildVerkleinerung",
+          "--slots",
+          "2",
+          "--konfig",
+          "AusgabePfad=${env:HOME}/cqrs-vermessung/preprocessed"
+        ],
+        "Token": "vermessung-bildrechner"
+      }
+    },
+    "IKontrastausgleich": {
+      "Laufort": "Host",
+      "Slots": 2,
+      "Wiederholungen": 1,
+      "Worker": {
+        "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
+        "Argumente": [
+          "--funktionen",
+          "IKontrastausgleich",
           "--slots",
           "2",
           "--konfig",

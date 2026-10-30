@@ -7,7 +7,7 @@ from __future__ import annotations
 from . import (
     AktivesModellAntwortDto,
     ArchiviereModellDto,
-    BildAufbereitetDto,
+    BildEingelesenDto,
     BildNichtLesbarDto,
     BildNichtVerfuegbarDto,
     BildPaarDurchKiKlassifiziertDto,
@@ -16,6 +16,7 @@ from . import (
     BildPaarUnbekanntDto,
     BildRegionGelabeltDto,
     BildVerfuegbarDto,
+    BildVerkleinertDto,
     BildVersionBereitsVerfuegbarDto,
     BricheTrainingAbDto,
     CommandFailedDto,
@@ -142,12 +143,13 @@ from . import (
     TrainingslaufListeDto,
     TrainingslaufNichtGefundenAntwortDto,
     TrainingslaufNichtGefundenDto,
+    VorschauErstelltDto,
 )
 
 TABELLE: dict[str, type] = {
     "AktivesModellAntwort": AktivesModellAntwortDto,
     "ArchiviereModell": ArchiviereModellDto,
-    "BildAufbereitet": BildAufbereitetDto,
+    "BildEingelesen": BildEingelesenDto,
     "BildNichtLesbar": BildNichtLesbarDto,
     "BildNichtVerfuegbar": BildNichtVerfuegbarDto,
     "BildPaarDurchKiKlassifiziert": BildPaarDurchKiKlassifiziertDto,
@@ -156,6 +158,7 @@ TABELLE: dict[str, type] = {
     "BildPaarUnbekannt": BildPaarUnbekanntDto,
     "BildRegionGelabelt": BildRegionGelabeltDto,
     "BildVerfuegbar": BildVerfuegbarDto,
+    "BildVerkleinert": BildVerkleinertDto,
     "BildVersionBereitsVerfuegbar": BildVersionBereitsVerfuegbarDto,
     "BricheTrainingAb": BricheTrainingAbDto,
     "CommandFailed": CommandFailedDto,
@@ -282,4 +285,5 @@ TABELLE: dict[str, type] = {
     "TrainingslaufListe": TrainingslaufListeDto,
     "TrainingslaufNichtGefunden": TrainingslaufNichtGefundenDto,
     "TrainingslaufNichtGefundenAntwort": TrainingslaufNichtGefundenAntwortDto,
+    "VorschauErstellt": VorschauErstelltDto,
 }

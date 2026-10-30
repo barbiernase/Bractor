@@ -12,8 +12,9 @@ from typing import AsyncIterator, ClassVar
 from cqrs_client.funktion import Ausgabe, Eingang, FunktionsBasis, Herkunft
 
 from . import (
-    BildAufbereitetDto,
+    BildEingelesenDto,
     BildNichtLesbarDto,
+    BildVerkleinertDto,
     DateiErkanntDto,
     ImagePairKomplettDto,
     KlassifiziereBildPaarDurchKiDto,
@@ -22,20 +23,49 @@ from . import (
     MeldeTrainingBegonnenDto,
     MeldeTrainingGescheitertDto,
     TrainingAngefordertDto,
+    VorschauErstelltDto,
 )
 
 
-class BildaufbereitungBasis(FunktionsBasis):
-    """Funktion Domain.Pipeline.Bildaufbereitung.IBildaufbereitung: DateiErkannt → BildAufbereitet | BildNichtLesbar."""
+class BildEinlesenBasis(FunktionsBasis):
+    """Funktion Domain.Pipeline.Bildaufbereitung.IBildEinlesen: DateiErkannt → BildEingelesen | BildNichtLesbar."""
 
-    FUNKTION: ClassVar[str] = "IBildaufbereitung"
+    FUNKTION: ClassVar[str] = "IBildEinlesen"
     EINGAENGE: ClassVar[dict] = {
-        DateiErkanntDto: Eingang("auf_datei_erkannt", {BildAufbereitetDto: Ausgabe.EVENT, BildNichtLesbarDto: Ausgabe.EVENT}),
+        DateiErkanntDto: Eingang("auf_datei_erkannt", {BildEingelesenDto: Ausgabe.EVENT, BildNichtLesbarDto: Ausgabe.EVENT}),
     }
 
     @abstractmethod
-    async def auf_datei_erkannt(self, e: DateiErkanntDto, h: Herkunft) -> BildAufbereitetDto | BildNichtLesbarDto | None:
-        """OneOf<BildAufbereitet, BildNichtLesbar> Auf(DateiErkannt e) — höchstens eine Ausgabe"""
+    async def auf_datei_erkannt(self, e: DateiErkanntDto, h: Herkunft) -> BildEingelesenDto | BildNichtLesbarDto | None:
+        """OneOf<BildEingelesen, BildNichtLesbar> Auf(DateiErkannt e) — höchstens eine Ausgabe"""
+        ...
+
+
+class BildVerkleinerungBasis(FunktionsBasis):
+    """Funktion Domain.Pipeline.Bildaufbereitung.IBildVerkleinerung: BildEingelesen → BildVerkleinert."""
+
+    FUNKTION: ClassVar[str] = "IBildVerkleinerung"
+    EINGAENGE: ClassVar[dict] = {
+        BildEingelesenDto: Eingang("auf_bild_eingelesen", {BildVerkleinertDto: Ausgabe.EVENT}),
+    }
+
+    @abstractmethod
+    async def auf_bild_eingelesen(self, e: BildEingelesenDto, h: Herkunft) -> BildVerkleinertDto | None:
+        """BildVerkleinert Auf(BildEingelesen e) — höchstens eine Ausgabe"""
+        ...
+
+
+class KontrastausgleichBasis(FunktionsBasis):
+    """Funktion Domain.Pipeline.Bildaufbereitung.IKontrastausgleich: BildVerkleinert → VorschauErstellt."""
+
+    FUNKTION: ClassVar[str] = "IKontrastausgleich"
+    EINGAENGE: ClassVar[dict] = {
+        BildVerkleinertDto: Eingang("auf_bild_verkleinert", {VorschauErstelltDto: Ausgabe.EVENT}),
+    }
+
+    @abstractmethod
+    async def auf_bild_verkleinert(self, e: BildVerkleinertDto, h: Herkunft) -> VorschauErstelltDto | None:
+        """VorschauErstellt Auf(BildVerkleinert e) — höchstens eine Ausgabe"""
         ...
 
 
@@ -68,7 +98,9 @@ class TrainingBasis(FunktionsBasis):
 
 
 __all__ = [
-    "BildaufbereitungBasis",
+    "BildEinlesenBasis",
+    "BildVerkleinerungBasis",
+    "KontrastausgleichBasis",
     "BildpaarBeurteilungBasis",
     "TrainingBasis",
 ]

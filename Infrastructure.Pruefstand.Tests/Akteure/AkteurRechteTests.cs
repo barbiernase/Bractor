@@ -84,7 +84,8 @@ public class AkteurRechteTests
     {
         R("Klassifizierer").Funktionen.Should().BeEquivalentTo(new[] { typeof(Domain.Pipeline.ImagePair.IBildpaarBeurteilung) });
         R("TrainingsSystem").Funktionen.Should().BeEquivalentTo(new[] { typeof(Domain.Pipeline.Trainingslauf.ITraining) });
-        R("Bildrechner").Funktionen.Should().BeEquivalentTo(new[] { typeof(Domain.Pipeline.Bildaufbereitung.IBildaufbereitung) });
+        R("Bildrechner").Funktionen.Should().BeEquivalentTo(new[] { typeof(Domain.Pipeline.Bildaufbereitung.IBildEinlesen),
+            typeof(Domain.Pipeline.Bildaufbereitung.IBildVerkleinerung), typeof(Domain.Pipeline.Bildaufbereitung.IKontrastausgleich) });
         R("Klassifizierer").DarfRechnen(typeof(Domain.Pipeline.ImagePair.IBildpaarBeurteilung)).Should().BeTrue();
         R("Inspekteur").DarfRechnen(typeof(Domain.Pipeline.ImagePair.IBildpaarBeurteilung)).Should().BeFalse();
         // Die Ausgaben einer getragenen Funktion sendet der Funktions-Actor — von sich aus darf der Akteur sie nicht hineingeben.

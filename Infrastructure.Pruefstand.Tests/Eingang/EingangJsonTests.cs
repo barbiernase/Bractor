@@ -65,7 +65,7 @@ public class EingangJsonTests
     public void Fehlende_Daten_gelten_als_leeres_Objekt_und_Unsinn_ist_ein_Fehler()
     {
         EingangJson.Lies(default, typeof(HoleDatensaetze)).Should().BeOfType<HoleDatensaetze>();
-        FluentActions.Invoking(() => EingangJson.Lies(J("""{ "BreitePixel": "breit" }"""), typeof(BildAufbereitet))).Should().Throw<JsonException>();
+        FluentActions.Invoking(() => EingangJson.Lies(J("""{ "BreitePixel": "breit" }"""), typeof(VorschauErstellt))).Should().Throw<JsonException>();
         FluentActions.Invoking(() => EingangJson.Lies(J("{}"), typeof(EingangJsonTests))).Should().Throw<NotSupportedException>().WithMessage("*Wire-Kontext*");
     }
 }
