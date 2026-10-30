@@ -254,6 +254,8 @@ public static class Grammatik
         new(Faehigkeit, Funktion, Beliebig, "GR-FUNKTION-FORM"),
         new(Dienst, Funktion, Beliebig, "GR-DIENST"), new(Dienst, DienstImpl, Beliebig, "GR-DIENST"),
         new(Event, Client, Beliebig, "GR-EVENT"), new(Transient, Client, Beliebig, "GR-TRANSIENT"),
+        // Eine Quell-Nachricht ist ein Event aus dem Log (GR-QUELLE): Funktionen und Projektionen hören sie, ein Client kann sie hören.
+        new(Quelle, Funktion, Beliebig, "GR-QUELLE"), new(Quelle, Projektion, Beliebig, "GR-QUELLE"), new(Quelle, Client, Beliebig, "GR-QUELLE"),
         new(Frist, Uhr, GenauEins, "GR-FRIST"),
     ];
 
