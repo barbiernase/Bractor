@@ -1033,7 +1033,8 @@
   const besitzRoh=id=>(SICHT().besitz||{})[id]||null;
   const besitzVon=id=>{const b=besitzRoh(id);return b?b.replace(/!$/,""):null;};
   const mehrdeutig=n=>!!n&&(besitzRoh(n.id)||"").endsWith("!");
-  function regionVon(n){if(!n)return null;let id=n.id,b=besitzVon(id);
+  function regionVon(n){if(!n)return null;if(n.kind==="rumpf")return regionVon(n.own);   // die Code-Kachel steht unter ihrem Besitzer
+    let id=n.id,b=besitzVon(id);
     for(let i=0;b&&!b.startsWith("§")&&i<8;i++){id=b;b=besitzVon(b);}
     return b===ANW_KEY?id:b;}
   const istRegionKarte=ns=>typeof ns==="string"&&/^(agg|fb|dn|sto):/.test(ns);
@@ -2052,7 +2053,8 @@
   // Block einer Karte (Aggregat, SHARED_KEY = Brücke, AKTEUR_KEY = Akteur-Band) — vom Server (board.sicht).
   //   Seit der Hierarchie: je Region EIN Block — der Rand mit den Akteur-Spalten, die Begriffe mit den geteilten Spalten, ein Block mit den
   //   Aggregat-Spalten (Schreibfluss, dann Leseseite).
-  function groupKeyOf(n){const rg=regionVon(n);if(rg===RAND_KEY)return AKTEUR_KEY;if(rg===BEGR_KEY)return SHARED_KEY;if(rg)return rg;
+  function groupKeyOf(n){if(n.kind==="rumpf"&&n.own)return groupKeyOf(n.own);   // Code-Kachel + LLM-Platz: im Block ihres Besitzers
+    const rg=regionVon(n);if(rg===RAND_KEY)return AKTEUR_KEY;if(rg===BEGR_KEY)return SHARED_KEY;if(rg)return rg;
     const k=sk(n);if(k)return k.block;return n.kind==="akteur"||n.kind==="auf"?AKTEUR_KEY:SHARED_KEY;}
   // ── MESS-BASIERTES PACKING: nach dem Rendern die ECHTEN Knotengrößen messen und die Aggregat-
   //    Blöcke ÜBERLAPPUNGSFREI per Shelf-Packing setzen. Nur frische/Seed-Boards (alle x/y leer);
