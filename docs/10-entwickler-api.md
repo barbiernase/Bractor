@@ -150,7 +150,7 @@ public sealed class SchadenBeiRueckgabe : IFunktion
         e.Zustand == Zustand.Beschaedigt ? new MeldeSchaden(h.NeueId<Schadensfall>(), e.LeserId) : null;
 }
 
-// draußen: eine Schnittstelle, getragen von einem Client (ITraegt) oder im Host umgesetzt; der Laufort steht in der Umgebung
+// draußen: eine Schnittstelle, getragen von einem Client (er verkörpert einen Akteur, der sie rechnen darf) oder im Host umgesetzt; der Laufort steht in der Umgebung
 public interface IImportLauf : IFunktion
 {
     IAsyncEnumerable<OneOf<LegeArtikelAn, MeldeImportFortschritt, SchliesseImportAb>> Auf(ImportGestartet e, Herkunft h);
@@ -203,11 +203,13 @@ Die Domäne benennt eine Quelle nur als Typ; Treiber und Werte (Pfad, Intervall,
 public sealed record Theke : IAkteur, IDarf<LeiheAus>, IDarf<GibZurueck>, IDarf<OffeneAusleihen>;   // auch IMensch, IMaschine, IKi
 public sealed record Archiv : IMaschine, IDarf<IRegal>;                                               // darf eine Funktion draußen rechnen
 
-public interface ILesesaal : IClientVertrag, ITraegt<IRegal>, ISendet<LeiheAus>, IFragt<OffeneAusleihen>, IHoert<MahnungEroeffnet> { }
+public interface ILesesaal : IClientVertrag, IVerkoerpert<Theke>, IVerkoerpert<Archiv>, IHoert<MahnungEroeffnet> { }
 ```
 
-Alles, was hineinkommt, kommt von einem Akteur, der es darf (`IDarf<T>`, R16). Ein Client-Vertrag sagt, was eine Software an einer Leitung tut:
-sendet (`ISendet`), fragt (`IFragt`), hört (`IHoert`, verlierbar), trägt Funktionen (`ITraegt`). Wirksam ist Vertrag ∩ Token (R17); ein C#-Client
+Alles, was hineinkommt, kommt von einem Akteur, der es darf (`IDarf<T>`, R16). Ein Client-Vertrag sagt, für wen eine Software an einer Leitung
+spricht (`IVerkoerpert<A>`) und was sie hört (`IHoert`, verlierbar). Was über die Leitung geht, sind die `IDarf` dieser Akteure, nach der Art des
+Typs: Commands, Quell-Nachrichten und Hinweise sendet sie, Queries fragt sie, Funktionen trägt sie. Wirksam ist verkörperte Akteure ∩ Token (R17);
+ein C#-Client
 erklärt sich mit `[assembly: IstClient<IX>]`. Ausführlich: [konzept-akteure.md](konzept-akteure.md).
 
 ### 10.3.7 … einen Ablauf
@@ -247,7 +249,7 @@ Wiederholen dieselbe Id. Ein Client darf neue Ids würfeln: er hält die Command
 | Reader | Antworten (nur Lese-Fähigkeiten) | – |
 | Funktion | Commands, Events, Quell-Nachrichten, Hinweise; nach außen nur über Dienste | – |
 | Quelle | Quell-Nachrichten | – |
-| Client | Commands, Quell-Nachrichten, Hinweise (`ISendet`), Queries (`IFragt`), Ausgaben getragener Funktionen (`ITraegt`) | – |
+| Client | was seine verkörperten Akteure dürfen (`IDarf`): Commands, Quell-Nachrichten, Hinweise, Queries, Ausgaben getragener Funktionen | – |
 | Uhr | Commands aus fälligen Fristen | – |
 
 ## 10.6 Regeln und ihr Gegenstück im Build

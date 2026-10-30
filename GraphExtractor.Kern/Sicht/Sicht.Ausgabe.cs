@@ -65,25 +65,32 @@ public sealed partial class Sicht
     private static JsonArray Paare(IEnumerable<(string, string)> ps) => new(ps.Select(p => (JsonNode?)Arr([p.Item1, p.Item2])).ToArray());
 
     // ══ CLIENTS: die Anschlussleiste (= ihr Vertrag) ══
-    private List<string> DarfHalter(string nm) => _akteure.Where(a => L(a, "darf").Contains(nm)).Select(a => S(a, "name")).ToList();
-    /// <summary>Verkörpert — dieselbe Regel wie der AkteurRechteGenerator (<c>Abstractions.Clientvertragsregeln.Verkoerpert</c>).</summary>
-    public List<string> ClientAkteure(JsonObject c) =>
-        Abstractions.Clientvertragsregeln.Verkoerpert(L(c, "traegt").Concat(L(c, "sendet")).Concat(L(c, "fragt")).Select(DarfHalter));
-    /// <summary>Die Ports der Anschlussleiste: Richtung, Nachricht bzw. getragene Funktion, in wessen Namen (Akteur), Ziel-Karte.</summary>
+    /// <summary>Verkörpert — die Akteure aus der Basisliste (<c>IVerkoerpert&lt;A&gt;</c>).</summary>
+    public List<string> ClientAkteure(JsonObject c) => L(c, "verkoerpert").ToList();
+    /// <summary>
+    /// Die Art, wie ein <c>IDarf</c> über die Leitung geht (die Regel <c>Abstractions.Clientvertragsregeln.Art</c>, hier aus dem Modell):
+    /// eine Funktion wird getragen, eine Query gefragt, alles andere gesendet.
+    /// </summary>
+    internal string LeitungsArt(string nm) =>
+        BausteinFunktion(nm) != null ? "traegt" : RecByName(nm) is { } r && S(r, "kind") == "query" ? "fragt" : "sendet";
+    /// <summary>
+    /// Die Ports der Anschlussleiste: je <c>IDarf</c> eines verkörperten Akteurs (getragen, gesendet, gefragt — in seinem Namen) und je Kenntnis;
+    /// Richtung, Nachricht bzw. getragene Funktion, Akteur, Ziel-Karte.
+    /// </summary>
     public JsonArray ClientPorts(JsonObject c)
     {
         var p = new JsonArray();
-        var ver = ClientAkteure(c);
         string? Node(string nm) => IstRec(nm) ? "rec:" + nm : null;
-        List<string> Als(string nm) { var hs = DarfHalter(nm); var drin = hs.Where(ver.Contains).ToList(); return drin.Count > 0 ? drin : hs; }
-        foreach (var t in L(c, "traegt"))
-            p.Add(new JsonObject
+        foreach (var an in ClientAkteure(c))
+            foreach (var nm in _akteure.Where(a => S(a, "name") == an).SelectMany(a => L(a, "darf")).Distinct())
             {
-                ["ri"] = "traegt", ["msg"] = t, ["akteure"] = Arr(Als(t)),
-                ["node"] = BausteinFunktion(t) is { } f ? "fb:" + S(f, "_id") : null,
-            });
-        foreach (var nm in L(c, "sendet")) p.Add(new JsonObject { ["ri"] = "sendet", ["msg"] = nm, ["akteure"] = Arr(Als(nm)), ["node"] = Node(nm) });
-        foreach (var nm in L(c, "fragt")) p.Add(new JsonObject { ["ri"] = "fragt", ["msg"] = nm, ["akteure"] = Arr(Als(nm)), ["node"] = Node(nm) });
+                var ri = LeitungsArt(nm);
+                p.Add(new JsonObject
+                {
+                    ["ri"] = ri, ["msg"] = nm, ["akteure"] = Arr([an]),
+                    ["node"] = ri == "traegt" ? (BausteinFunktion(nm) is { } f ? "fb:" + S(f, "_id") : null) : Node(nm),
+                });
+            }
         foreach (var nm in L(c, "kenntnis")) p.Add(new JsonObject { ["ri"] = "kenntnis", ["msg"] = nm, ["akteure"] = new JsonArray(), ["node"] = Node(nm) });
         return p;
     }

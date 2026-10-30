@@ -366,11 +366,15 @@ public sealed class AkteurRaw
     public string? Datei, Doku;
 }
 
-/// <summary>Ein Client (<c>IClientVertrag</c>): getragene Funktionen, Sendet/Fragt, Kenntnis — alles aus der Basisliste.</summary>
+/// <summary>
+/// Ein Client (<c>IClientVertrag</c>): die verkörperten Akteure und die Kenntnis aus der Basisliste; abgeleitet daraus (nicht editierbar)
+/// was er trägt, sendet und fragt — die <c>IDarf</c> seiner Akteure (<c>Abstractions.Clientvertragsregeln.Art</c>).
+/// </summary>
 public sealed class ClientRaw
 {
     public string Name = "", Namespace = "", Full = "";
-    public List<string> Traegt = new(), Sendet = new(), Fragt = new(), Kenntnis = new();
+    public List<string> Verkoerpert = new(), Kenntnis = new();
+    public List<string> Traegt = new(), Sendet = new(), Fragt = new();
     public string? Datei, Doku;
 }
 
@@ -439,8 +443,8 @@ public sealed partial class DomainExtractor
     /// <summary>Die globalen usings der Domänen-Compilations (ImplicitUsings + global using) + der Vertrags-Namespace — nie „explizit".</summary>
     private readonly HashSet<string> _impliziteUsings;
     private readonly INamedTypeSymbol? _iDecider, _iApplier,
-        _iWriteStore, _iReadStore, _iStore, _iWertobjekt, _iAkteur, _iDarf, _iHoert, _iTraegt,
-        _iClient, _iSendet, _iFragt, _iDienst;
+        _iWriteStore, _iReadStore, _iStore, _iWertobjekt, _iAkteur, _iDarf, _iHoert,
+        _iClient, _iVerkoerpert, _iDienst;
     /// <summary>State-FullName → die Typen, die <c>IDecider&lt;State&gt;</c> bzw. <c>IApplier&lt;State&gt;</c> implementieren (egal wo deklariert).</summary>
     private readonly Dictionary<string, List<INamedTypeSymbol>> _deciderJeState = new(StringComparer.Ordinal), _applierJeState = new(StringComparer.Ordinal);
 
@@ -475,10 +479,8 @@ public sealed partial class DomainExtractor
         _iStore = Get(Vertrag.IStore);
         _iAkteur = Get(Vertrag.IAkteur);
         _iHoert = Get(Vertrag.IHoert);
-        _iTraegt = Get(Vertrag.ITraegt);
         _iClient = Get(Vertrag.IClientVertrag);
-        _iSendet = Get(Vertrag.ISendet);
-        _iFragt = Get(Vertrag.IFragt);
+        _iVerkoerpert = Get(Vertrag.IVerkoerpert);
         _iDarf = Get(Vertrag.IDarf);
         _iWertobjekt = Get(Vertrag.IWertobjekt);
         _iDienst = Get(Abstractions.Dienstvertrag.Marker);
@@ -863,20 +865,27 @@ public sealed partial class DomainExtractor
     private bool IstClient(INamedTypeSymbol t) => _iClient != null && Sym.Implements(t, _iClient);
 
     /// <summary>
-    /// Ein Client-Vertrag — nur Code-Fakten der Basisliste: <c>ITraegt&lt;F&gt;</c> (→ <c>Traegt</c>), <c>ISendet&lt;T&gt;</c>/<c>IFragt&lt;T&gt;</c>,
-    /// <c>IHoert&lt;T&gt;</c> (→ Kenntnis). Geerbte Client-Verträge liest der Editor nicht auf.
+    /// Ein Client-Vertrag — nur Code-Fakten der Basisliste: <c>IVerkoerpert&lt;A&gt;</c> (→ <c>Verkoerpert</c>), <c>IHoert&lt;T&gt;</c>
+    /// (→ Kenntnis). Trägt/Sendet/Fragt sind die <c>IDarf</c> der verkörperten Akteure, nach dem Marker ihres Typs. Geerbte Client-Verträge
+    /// liest der Editor nicht auf.
     /// </summary>
     private ClientRaw ReadClient(INamedTypeSymbol t)
     {
         var decl = QuellDeklarationen(t).FirstOrDefault();
         bool Gen(INamedTypeSymbol i, INamedTypeSymbol? g) => g != null && i.OriginalDefinition.Fq() == g.Fq() && i.TypeArguments.Length == 1;
+        var akteure = t.Interfaces.Where(i => Gen(i, _iVerkoerpert)).Select(i => i.TypeArguments[0]).OfType<INamedTypeSymbol>().ToList();
+        var darf = akteure.SelectMany(a => a.AllInterfaces.Where(i => Gen(i, _iDarf)).Select(i => i.TypeArguments[0]))
+            .Distinct<ITypeSymbol>(SymbolEqualityComparer.Default).ToList();
+        List<string> Je(Abstractions.Clientvertragsregeln.Befugnisart art) => darf.Where(d => Abstractions.Clientvertragsregeln.Art(
+            m => d.Fq() == m || d.AllInterfaces.Any(i => i.OriginalDefinition.Fq() == m), d.TypeKind == TypeKind.Interface) == art).Select(d => d.Name).ToList();
         return new ClientRaw
         {
             Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(),
-            Traegt = t.Interfaces.Where(i => Gen(i, _iTraegt)).Select(i => i.TypeArguments[0].Name).ToList(),
-            Sendet = t.Interfaces.Where(i => Gen(i, _iSendet)).Select(i => i.TypeArguments[0].Name).ToList(),
-            Fragt = t.Interfaces.Where(i => Gen(i, _iFragt)).Select(i => i.TypeArguments[0].Name).ToList(),
+            Verkoerpert = akteure.Select(a => a.Name).ToList(),
             Kenntnis = t.Interfaces.Where(i => Gen(i, _iHoert)).Select(i => i.TypeArguments[0].Name).ToList(),
+            Traegt = Je(Abstractions.Clientvertragsregeln.Befugnisart.Traegt),
+            Sendet = Je(Abstractions.Clientvertragsregeln.Befugnisart.Sendet),
+            Fragt = Je(Abstractions.Clientvertragsregeln.Befugnisart.Fragt),
             Datei = decl?.SyntaxTree.FilePath, Doku = decl == null ? null : Summary(decl),
         };
     }

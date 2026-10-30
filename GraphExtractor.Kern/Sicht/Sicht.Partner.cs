@@ -90,7 +90,8 @@ public sealed partial class Sicht
                     if (S(ein2, "eingang") == n) P(a, "fb:" + S(f, "_id"), txt, "Auf");
                 }
         }
-        // Akteure, die diesen Typ hineingeben dürfen (◀ kommt aus; ✕ entzieht das Recht), und Clients, deren Vertrag ihn sendet bzw. fragt.
+        // Akteure, die diesen Typ hineingeben dürfen (◀ kommt aus; ✕ entzieht das Recht), und Clients, die einen davon verkörpern (sie senden
+        //   bzw. fragen ihn in seinem Namen; lösen geht nur am Akteur).
         void AkteurePartner(List<Partner> e, string n)
         {
             foreach (var a in _akteure)
@@ -98,8 +99,8 @@ public sealed partial class Sicht
             foreach (var c in _clients)
             {
                 var id = "cl:" + S(c, "_id");
-                if (L(c, "sendet").Contains(n)) P(e, id, "Client " + ClientAnzeige(c), "sendet", AusListe(id, "sendet", n));
-                if (L(c, "fragt").Contains(n)) P(e, id, "Client " + ClientAnzeige(c), "fragt", AusListe(id, "fragt", n));
+                var als = _akteure.Where(a => L(c, "verkoerpert").Contains(S(a, "name")) && L(a, "darf").Contains(n)).Select(a => S(a, "name")).ToList();
+                if (als.Count > 0) P(e, id, "Client " + ClientAnzeige(c) + " als " + string.Join("/", als), LeitungsArt(n));
             }
         }
     }

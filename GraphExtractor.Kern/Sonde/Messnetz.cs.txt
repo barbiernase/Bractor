@@ -114,6 +114,6 @@ public sealed record Messzyklus : TaktGemeldet;
 public sealed record Sensornetz : IMaschine, IDarf<MeldeMesswert>, IDarf<MesswertGemessen>;
 public sealed record Schichtleitung : IMensch, IDarf<RichteSensorEin>, IDarf<QuittiereStoerung>;
 
-public interface ISensorGateway : IClientVertrag, ISendet<MeldeMesswert>, ISendet<MesswertGemessen> { }
+public interface ISensorGateway : IClientVertrag, IVerkoerpert<Sensornetz> { }
 
-public interface ILeitstand : IClientVertrag, ISendet<RichteSensorEin>, ISendet<QuittiereStoerung>, IHoert<AlarmAusgeloest>, IHoert<StoerungGeoeffnet> { }
+public interface ILeitstand : IClientVertrag, IVerkoerpert<Schichtleitung>, IHoert<AlarmAusgeloest>, IHoert<StoerungGeoeffnet> { }

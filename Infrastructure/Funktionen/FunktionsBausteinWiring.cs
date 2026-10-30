@@ -66,8 +66,8 @@ public static class FunktionsBausteinWiring
 
     /// <summary>
     /// Die Bindung einer Funktion ohne Prüfung: die letzte registrierte, sonst der Standard — eine Klasse läuft im Host, eine Schnittstelle mit genau
-    /// einer Umsetzung ebenso (wie ein Dienst mit einer Implementierung); eine Schnittstelle ohne Umsetzung, die ein Client trägt
-    /// (<c>ITraegt&lt;F&gt;</c>), läuft draußen (Laufort Extern); sonst keine.
+    /// einer Umsetzung ebenso (wie ein Dienst mit einer Implementierung); eine Schnittstelle ohne Umsetzung, die ein Client trägt (er verkörpert
+    /// einen Akteur mit <c>IDarf&lt;F&gt;</c>), läuft draußen (Laufort Extern); sonst keine.
     /// </summary>
     public static BausteinBindung? Gebunden(FunktionsBaustein b, IEnumerable<BausteinBindung> bindungen) =>
         bindungen.LastOrDefault(x => x.Funktion == b.Name)
@@ -75,7 +75,7 @@ public static class FunktionsBausteinWiring
             : b.Umsetzungen.Count == 0 && Getragen(b) ? new BausteinBindung(b.Name, FunktionsLaufort.Extern)
             : null);
 
-    /// <summary>Trägt irgendein Client die Funktion (<c>ITraegt&lt;F&gt;</c> in einem Client-Vertrag)?</summary>
+    /// <summary>Trägt irgendein Client die Funktion (verkörpert er einen Akteur, der sie rechnen darf: <c>IDarf&lt;F&gt;</c>)?</summary>
     public static bool Getragen(FunktionsBaustein b) => Anwendung.Akteure.ClientVertraege.Values.Any(c => c.Traegt.Contains(b.Typ));
 
     /// <summary>
@@ -87,7 +87,7 @@ public static class FunktionsBausteinWiring
         var bindung = Gebunden(b, bindungen)
             ?? throw new Infrastructure.Umgebung.BootFehler($"Die Funktion '{b.Name}' ist eine Schnittstelle (läuft draußen), hat keine Bindung und keinen "
                 + $"Träger — in der Umgebung fehlt Funktionen:{b.Name} (Laufort Hand oder Extern, oder Host mit Implementierung), oder ein Client-Vertrag "
-                + $"trägt sie nicht (ITraegt<{b.Name}>).", "funktion:" + b.Name);
+                + $"trägt sie nicht (kein verkörperter Akteur mit IDarf<{b.Name}>).", "funktion:" + b.Name);
         if (bindung.Laufort != FunktionsLaufort.Host && b.Liest)
             throw new Infrastructure.Umgebung.BootFehler($"Funktionen:{b.Name}: eine Funktion mit Lese-Fähigkeit läuft nur im Host (Laufort Host).", "funktion:" + b.Name);
         if (bindung.Laufort == FunktionsLaufort.Extern && !b.Draussen)

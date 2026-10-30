@@ -26,13 +26,14 @@ Der Python-Teil ist ein Client am selben bidirektionalen gRPC-Stream (`CqrsClien
 | `vertrag.ClientVertragBasis` | Client-Vertrag + `GeneratedWiring_<Assembly>` |
 
 Er ist **kein** durabler Konsument (kein Cursor, keine Position), sondern ein Client am Rand. Was er tut, sagt sein Client-Vertrag
-(`IClientVertrag`, Grammatik in [10](10-entwickler-api.md) §10.3.6, Begriffe in [konzept-akteure.md](konzept-akteure.md)):
+(`IClientVertrag`, Grammatik in [10](10-entwickler-api.md) §10.3.6, Begriffe in [konzept-akteure.md](konzept-akteure.md)): er verkörpert Akteure
+(`IVerkoerpert<A>`), und was über seine Leitung geht, sind ihre `IDarf`:
 
 - **hört** (`IHoert<T>`): Events und Hinweise als Push über den Verteiler seines Knotens — verlierbar, nur zur Kenntnis;
-- **fragt** (`IFragt<T>`): Queries mit typisierter Antwort;
-- **trägt Funktionen** (`ITraegt<F>`): er rechnet die Eingänge einer Funktion draußen; Festhalten, Senden und Wiederholen bleiben beim
+- **fragt** (`IDarf` auf eine Query): Queries mit typisierter Antwort;
+- **trägt Funktionen** (`IDarf<F>` auf eine Funktions-Schnittstelle): er rechnet die Eingänge einer Funktion draußen; Festhalten, Senden und Wiederholen bleiben beim
   Funktions-Actor des Servers (§9.5);
-- **sendet** (`ISendet<T>`): steht im Handshake; einen eigenen Sende-Aufruf hat das SDK nicht (§9.4).
+- **sendet** (`IDarf` auf einen Command, eine Quell-Nachricht oder einen Hinweis): steht im Handshake; einen eigenen Sende-Aufruf hat das SDK nicht (§9.4).
 
 Exactly-once bleibt serverseitig: die Ausgaben einer getragenen Funktion hält der Server unter „Funktion, Eingang“ fest, die erste Antwort gewinnt,
 gesendet wird mit abgeleiteten Command-Ids aus dem Festgehaltenen ([11](11-garantien.md) §11.6). Der Zustand des Clients lebt im Prozess
@@ -47,7 +48,7 @@ Methoden.
 |---|---|---|
 | `domain_client/generated/__init__.py` | `Domain.Client.Worker.Python.ML/build_python.sh` (`grpc_tools.protoc --python_betterproto_out` aus `Domain.Leitung/domain.proto`) | betterproto-DTOs (`…Dto`) der Anwendung; `Id<T>` ist darin ein UUID-Text |
 | `cqrs_client/leitung/__init__.py` (SDK) | `Client.Infrastructure.Python/build_leitung.sh` (aus `Cqrs.Leitung/cqrs.proto`, committet) | die Leitung des Frameworks: `ClientMessage`/`ServerMessage`, Hüllen, `Nutzlast` |
-| `domain_client/generated/vertraege.py` | `Cqrs.Codegen` (`PythonVertragsEmitter`) | je Client-Vertrag (`IClientVertrag`) eine abstrakte Basis `<Client>Basis` mit `CLIENT`, `AKTEURE`, `VERTRAG`, `VERTRAG_HASH`, `TRAEGT`, `HOERT`, `SPONTAN` (`ISendet`), `FRAGT`; je getragener Funktion eine Methode `<funktion>(e, h, state)`, je gehörtem Typ `auf_<typ>(e, ctx, state)` |
+| `domain_client/generated/vertraege.py` | `Cqrs.Codegen` (`PythonVertragsEmitter`) | je Client-Vertrag (`IClientVertrag`) eine abstrakte Basis `<Client>Basis` mit `CLIENT`, `AKTEURE`, `VERTRAG`, `VERTRAG_HASH`, `TRAEGT`, `HOERT`, `SPONTAN` (Commands der Akteure), `FRAGT`; je getragener Funktion eine Methode `<funktion>(e, h, state)`, je gehörtem Typ `auf_<typ>(e, ctx, state)` |
 | `domain_client/generated/funktionen.py` | `Cqrs.Codegen` (`PythonFunktionsEmitter`) | je Funktions-Schnittstelle ohne Lese-Fähigkeit eine Basis `<Funktion>Basis` mit `FUNKTION`, `EINGAENGE` und je `Auf` abstrakt `auf_<eingang>(e, h)` |
 | `domain_client/generated/funktions_tabelle.py` | `Cqrs.Codegen` | `TABELLE`: Funktion → (Basis, Modul, Klasse der Implementierung) für den generischen Worker |
 | `domain_client/generated/nutzlast_tabelle.py` | `Cqrs.Codegen` (`PythonNutzlastEmitter`) | `TABELLE`: `Nutzlast.typ` → DTO-Klasse — Gegenstück zu `GeneratedNutzlast`, dieselbe Namensregel (`NameSanitizer.NutzlastTyp`); der Client bekommt sie als `nutzlast=` |
@@ -93,10 +94,11 @@ weil das SDK keine `causation_id` setzt.
 Der Vertrag steht in C# (eine Quelle, `Domain.Akteure/Clients.cs`):
 
 ```csharp
+public sealed record Klassifizierer : IKi,                     // Domain.Akteure/Akteure.cs
+    IDarf<IBildpaarBeurteilung>, IDarf<KlassifiziereEinzelBildDurchKi>, IDarf<HoleAktivesModell>;
+
 public interface IKlassifikationsWorker : IClientVertrag,
-    ITraegt<IBildpaarBeurteilung>,
-    ISendet<KlassifiziereEinzelBildDurchKi>,
-    IFragt<HoleAktivesModell>,
+    IVerkoerpert<Klassifizierer>,
     IHoert<BildVerfuegbar>, IHoert<ModellAktiviert>;
 ```
 
@@ -116,7 +118,7 @@ class StubClassifier(KlassifikationsWorkerBasis[StubState]):
     async def auf_bild_verfuegbar(self, e: BildVerfuegbarDto, ctx, state: StubState):     # IHoert: gibt nichts aus
         state.bilder.setdefault(ctx.aggregate_id, {})[e.version] = e.pfad
 
-    async def bildpaar_beurteilung(self, e: ImagePairKomplettDto, h: Herkunft, state: StubState):   # ITraegt
+    async def bildpaar_beurteilung(self, e: ImagePairKomplettDto, h: Herkunft, state: StubState):   # getragen (IDarf<IBildpaarBeurteilung> des Klassifizierers)
         return KlassifiziereBildPaarDurchKiDto(aggregate_id=h.stream, label=0)
 
     async def auf_modell_aktiviert(self, e: ModellAktiviertDto, ctx, state: StubState): ...
@@ -136,7 +138,7 @@ Was die Basis übernimmt (`cqrs_client/vertrag.py`):
   Query außerhalb von `FRAGT` ist eine `VertragsVerletzung`. Read-your-writes (`mindestens`) setzt das SDK nicht.
 - **Getragene Funktionen:** je Eintrag in `TRAEGT` eine `GetrageneFunktion` mit Zugriff auf `state`; Gleichzeitigkeit über `SLOTS`
   (Funktion → Zahl, Standard 1); Ablauf wie §9.5.
-- **Senden (`ISendet`):** `SPONTAN` geht in den Handshake (`message_types`); einen Aufruf, mit dem ein Vertrags-Client von sich aus einen Command
+- **Senden:** `SPONTAN` geht in den Handshake (`message_types`); einen Aufruf, mit dem ein Vertrags-Client von sich aus einen Command
   sendet, hat das SDK nicht.
 
 Der Entwickler schreibt nur Fachlogik: State-Dataclass, die Methoden des Vertrags, Rückgaben bzw. `yield`. Transport, Hüllen, Versioning, oneof,
@@ -153,7 +155,7 @@ Eine Funktion draußen ist eine Schnittstelle `: IFunktion` in C# ([10](10-entwi
 (`Funktionen:<F>:Laufort = Extern`, `FunktionsKonfig`). In Python gibt es sie in zwei Formen, beide mit derselben Mechanik
 (`FunktionsLaeufer`, `cqrs_client/funktion.py`):
 
-- **getragen von einem Client-Vertrag** (`ITraegt<F>`): Methode `<funktion>(e, h, state)` der Client-Basis (§9.4);
+- **getragen von einem Client-Vertrag** (er verkörpert einen Akteur mit `IDarf<F>`): Methode `<funktion>(e, h, state)` der Client-Basis (§9.4);
 - **als eigene Klasse:** erbt `<Funktion>Basis` aus `generated/funktionen.py`, füllt `async def auf_<eingang>(self, e, h)`, setzt `SLOTS`
   (bzw. `slots=`) und bekommt Werte als `konfig=`; die Instanz geht als `funktionen=[…]` an einen `CqrsClient`.
 
@@ -168,7 +170,7 @@ nach außen). Ids von Aggregaten stehen als UUID-Text im DTO, z. B. `aggregate_i
    Hinweis-Netz) und bietet ihn als `EingangAnbieten` dem `FunktionsVermittlerActor` der Funktion an (je Funktion einer im Cluster, nicht
    maßgeblich — geht er verloren, bietet der Actor neu an; `FunktionsVermittlung.cs`).
 2. Der Client meldet nach jedem Handshake `FunktionenAnbieten` (Funktion + Slots, `FunktionsLaeufer.biete_an`). Seine Sitzung prüft die Befugnis
-   (`IDarf<F>` des Akteurs bzw. `ITraegt<F>` des Vertrags; sonst `FUNKTION_NICHT_BEFUGT`, unbekannt `FUNKTION_UNBEKANNT`) und startet je Funktion
+   (`IDarf<F>` des Akteurs bzw. der verkörperten Akteure des Vertrags; sonst `FUNKTION_NICHT_BEFUGT`, unbekannt `FUNKTION_UNBEKANNT`) und startet je Funktion
    eine Hol-Schleife (`BausteinSitzung`): Long-Poll beim Vermittler (`HoleEingaenge`, 4 s), so viele Eingänge wie Slots frei sind, jeder mit
    **Lease** (30 s, `FunktionsAnbieter.Lease`).
 3. Die Sitzung reicht den Eingang als `ArbeitsAuftrag` weiter (`vorgang`, `funktion`, `eingang` als Nutzlast, `akteur`, `stream`, `version`,

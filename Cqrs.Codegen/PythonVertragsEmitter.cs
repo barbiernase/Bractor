@@ -8,17 +8,15 @@ namespace Cqrs.Codegen;
 /// <summary>
 /// Client-Verträge → Python (<c>docs/konzept-akteure.md</c> §4, docs/konzept-akteure.md §5): je <c>interface IX : IClientVertrag</c> eine
 /// abstrakte Klasse <c>XBasis</c> in <c>domain_client/generated/vertraege.py</c>, gegen die der Client programmiert — je getragener Funktion
-/// (<c>ITraegt&lt;F&gt;</c>) eine Methode, die ihre Ausgaben zurückgibt, je Kenntnis (<c>IHoert&lt;T&gt;</c>) eine Methode <c>auf_&lt;event&gt;</c>.
+/// (<c>IDarf&lt;F&gt;</c> eines verkörperten Akteurs) eine Methode, die ihre Ausgaben zurückgibt, je Kenntnis (<c>IHoert&lt;T&gt;</c>) eine Methode <c>auf_&lt;event&gt;</c>.
 /// Gelesen wird nur die Signatur (Metadaten der gebauten Domain-DLLs). Der Vertrags-Hash kommt aus derselben Quelle wie auf dem Server
 /// (<see cref="Clientvertragsregeln"/>) — so erkennt der Handshake einen Client, der gegen einen anderen Stand gebaut wurde.
 /// </summary>
 public static class PythonVertragsEmitter
 {
     private const string ClientVertragName = "Abstractions.IClientVertrag";
-    private const string SendetName = "Abstractions.ISendet`1";
-    private const string FragtName = "Abstractions.IFragt`1";
+    private const string VerkoerpertName = "Abstractions.IVerkoerpert`1";
     private const string HoertName = "Abstractions.IHoert`1";
-    private const string TraegtName = "Abstractions.ITraegt`1";
     private const string DarfName = "Abstractions.IDarf`1";
     private const string Dto = Core.SourceGeneration.NameSanitizer.DtoSuffix;   // die Namensregel der Leitung
 
@@ -39,25 +37,26 @@ public static class PythonVertragsEmitter
     {
         var typen = assemblies.SelectMany(PythonFunktionsform.TypenVon).ToList();
         var interfaces = typen.Where(t => t.IsInterface && t.Namespace != "Abstractions").OrderBy(t => t.FullName, StringComparer.Ordinal).ToList();
-        var akteure = typen.Where(t => !t.IsInterface && !t.IsAbstract).ToList();
         var clients = new List<ClientInfo>();
         foreach (var c in interfaces.Where(IstClient))
         {
             var name = Clientvertragsregeln.ClientName(c.Name);
             var basen = new[] { c }.Concat(c.GetInterfaces().Where(IstClient)).Distinct().ToList();
-            List<Type> Generisch(string meta) => basen.SelectMany(b => b.GetInterfaces())
+            List<Type> Generisch(IEnumerable<Type> von, string meta) => von.SelectMany(b => b.GetInterfaces())
                 .Where(i => i.IsGenericType && i.GetGenericTypeDefinition().FullName == meta).Select(i => i.GetGenericArguments()[0]).Distinct().ToList();
-            var sendet = Generisch(SendetName);
-            var fragt = Generisch(FragtName);
-            var hoert = Generisch(HoertName);
-            var traegt = Generisch(TraegtName).OrderBy(f => f.Name, StringComparer.Ordinal)
+            var akteure = Generisch(basen, VerkoerpertName).OrderBy(a => a.Name, StringComparer.Ordinal).ToList();
+            var hoert = Generisch(basen, HoertName);
+            // Trägt, sendet, fragt: die IDarf der verkörperten Akteure — EINE Regel mit dem Server (Clientvertragsregeln.Art).
+            var darf = Generisch(akteure, DarfName);
+            List<Type> Je(Clientvertragsregeln.Befugnisart art) => darf.Where(t => Clientvertragsregeln.Art(
+                m => t.FullName == m || t.GetInterfaces().Any(i => (i.IsGenericType ? i.GetGenericTypeDefinition() : i).FullName == m), t.IsInterface) == art).ToList();
+            var sendet = Je(Clientvertragsregeln.Befugnisart.Sendet);
+            var fragt = Je(Clientvertragsregeln.Befugnisart.Fragt);
+            var traegt = Je(Clientvertragsregeln.Befugnisart.Traegt).OrderBy(f => f.Name, StringComparer.Ordinal)
                 .Select(PythonFunktionsform.Lies).Where(f => f != null).Select(f => f!)
                 .Select(f => new Getragen(f, f.Aufs.Select(a => (a, Methode(f.Typ, a, f.Aufs.Count))).ToList())).ToList();
-            // verkörpert: EINE Regel mit dem Server (Clientvertragsregeln.Verkoerpert).
-            var verk = Clientvertragsregeln.Verkoerpert(traegt.Select(g => g.Funktion.Typ).Concat(sendet).Concat(fragt).Select(t =>
-                akteure.Where(a => a.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition().FullName == DarfName
-                                                             && i.GetGenericArguments()[0] == t)).Select(a => a.Name)));
-            var kanon = Clientvertragsregeln.ClientKanon(name,
+            var verk = akteure.Select(a => a.Name).ToList();
+            var kanon = Clientvertragsregeln.ClientKanon(name, verk,
                 traegt.Select(g => new KeyValuePair<string, IEnumerable<Clientvertragsregeln.Eingang>>(g.Funktion.Typ.Name,
                     g.Funktion.Aufs.Select(a => new Clientvertragsregeln.Eingang(a.Eingang, a.Ausgaben.Select(x => x.Typ).ToList(), a.Strom)))),
                 sendet.Select(t => t.Name), fragt.Select(t => t.Name), hoert.Select(t => t.Name));
@@ -76,7 +75,7 @@ public static class PythonVertragsEmitter
         b.AppendLine("# GENERIERT von Cqrs.Codegen aus den Client-Verträgen der Domäne (IClientVertrag, docs/konzept-akteure.md §4).");
         b.AppendLine("# Nicht von Hand ändern — ./codegen.sh --force erzeugt die Datei neu, ./codegen.sh --check prüft auf Drift.");
         b.AppendLine("#");
-        b.AppendLine("# Je Client eine abstrakte Basis: der Client erbt sie und füllt je getragener Funktion (ITraegt) eine Methode, die die Ausgaben");
+        b.AppendLine("# Je Client eine abstrakte Basis: der Client erbt sie und füllt je getragener Funktion (IDarf<F> eines verkörperten Akteurs) eine Methode, die die Ausgaben");
         b.AppendLine("# ihrer Signatur zurückgibt, und je Kenntnis (IHoert) eine Methode `auf_<event>`. Die Basis bietet die Funktionen an, verdrahtet");
         b.AppendLine("# den Dispatch und meldet Client + Hash am Handshake. Ein Client kann mehrere Akteure verkörpern.");
         b.AppendLine("from __future__ import annotations");
@@ -114,7 +113,7 @@ public static class PythonVertragsEmitter
             if (c.Traegt.Count == 0) b.AppendLine("    TRAEGT: ClassVar[dict] = {}");
             else
             {
-                b.AppendLine("    TRAEGT: ClassVar[dict] = {   # ITraegt: Funktionen, deren Code der Client ausführt");
+                b.AppendLine("    TRAEGT: ClassVar[dict] = {   # IDarf<F> der Akteure: Funktionen, deren Code der Client ausführt");
                 foreach (var g in c.Traegt)
                 {
                     b.AppendLine($"        \"{g.Funktion.Typ.Name}\": {{");
@@ -131,8 +130,8 @@ public static class PythonVertragsEmitter
                 foreach (var h in c.Hoert) b.AppendLine($"        {h}{Dto}: \"auf_{Snake(h)}\",");
                 b.AppendLine("    }");
             }
-            b.AppendLine($"    SPONTAN: ClassVar[tuple] = {Tupel(c.Sendet)}   # ISendet: von sich aus");
-            b.AppendLine($"    FRAGT: ClassVar[tuple] = {Tupel(c.Fragt)}   # IFragt: die Queries des Clients");
+            b.AppendLine($"    SPONTAN: ClassVar[tuple] = {Tupel(c.Sendet)}   # IDarf der Akteure: von sich aus");
+            b.AppendLine($"    FRAGT: ClassVar[tuple] = {Tupel(c.Fragt)}   # IDarf der Akteure: ihre Queries");
             foreach (var g in c.Traegt)
                 foreach (var (a, m) in g.Aufs)
                 {

@@ -17,7 +17,7 @@ namespace Infrastructure.SourceGeneration;
 /// <item>CQRS106 (R20, GR-HINWEIS-NETZ; Fehler) — eine Funktion hört einen Hinweis, den im Hinweis-Netz niemand erzeugt (kein Decide, keine Funktion
 ///   nennt ihn in der Signatur, kein Client sendet ihn): ihre Adresse bekäme ihn nie (docs/04 §4.4).</item>
 /// <item>CQRS086 (GR-MODUL-EINGANG-OFFEN; Warnung) — ein Command ohne Decider, eine Query ohne Reader und ohne Aggregat.</item>
-/// <item>CQRS087 (GR-GETRAGEN; Warnung) — eine Funktion als Schnittstelle ohne Umsetzung im Host, die kein Client trägt (<c>ITraegt</c>): sie läuft
+/// <item>CQRS087 (GR-GETRAGEN; Warnung) — eine Funktion als Schnittstelle ohne Umsetzung im Host, die kein Client trägt (kein verkörperter Akteur mit <c>IDarf&lt;F&gt;</c>): sie läuft
 ///   nur mit einer Bindung von Hand (R17), sonst ist sie ein Boot-Fehler.</item>
 /// </list>
 /// Die Befunde haben keinen Quell-Ort in dieser Compilation (die Typen liegen in den Domänen-Projekten); jede Meldung beginnt deshalb mit dem
@@ -38,7 +38,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor EingangOffen = D(EingangOffenId, "Eingang ohne Konsument",
         "'{0}' ({1}) nimmt niemand an — {2} (GR-MODUL-EINGANG-OFFEN)", DiagnosticSeverity.Warning);
     private static readonly DiagnosticDescriptor Getragen = D(GetragenId, "Funktion ohne Träger",
-        "'{0}': die Funktion hat keine Umsetzung im Host und kein Client trägt sie (ITraegt<{0}>) — sie läuft nur mit einer Bindung von Hand (GR-GETRAGEN)",
+        "'{0}': die Funktion hat keine Umsetzung im Host und kein Client trägt sie (kein verkörperter Akteur mit IDarf<{0}>) — sie läuft nur mit einer Bindung von Hand (GR-GETRAGEN)",
         DiagnosticSeverity.Warning);
 
     private static readonly DiagnosticDescriptor HinweisOhneErzeuger = D(HinweisOhneErzeugerId, "Gehörter Hinweis ohne Erzeuger",
@@ -52,6 +52,8 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
     {
         "IState", "IDecider`1", "IApplier`1", "ICommand", "IEvent", "IQuery", "IQueryResponse", "IReadModel", "IWriteStore", "IReadStore",
         "IProjektion", "IReader", "IFunktion", "IQuellNachricht", "IWertobjekt",
+        // Der Rand (Domain.Akteure): wer was hineingeben darf und welcher Client eine Funktion trägt.
+        "IAkteur", "IClientVertrag",
     };
 
     public override void Initialize(AnalysisContext context)
@@ -68,7 +70,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         INamedTypeSymbol? G(string n) => c.GetTypeByMetadataName("Abstractions." + n);
         var (iEvent, iTransient, iCommand, iQuery, iResponse) = (G("IEvent"), G("ITransientEvent"), G("ICommand"), G("IQuery"), G("IQueryResponse"));
         var (iDecider, iFunktion, iAkteur, iDarf) = (G("IDecider`1"), G("IFunktion"), G("IAkteur"), G("IDarf`1"));
-        var (iClient, iSendet, iTraegt, iQuelle) = (G("IClientVertrag"), G("ISendet`1"), G("ITraegt`1"), G("IQuellNachricht"));
+        var (iClient, iQuelle) = (G("IClientVertrag"), G("IQuellNachricht"));
         if (iEvent == null || iCommand == null || iDecider == null) return;
         var rollen = DomaenenRollen.Select(G).Where(x => x != null).Select(x => x!).ToList();
 
@@ -82,6 +84,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         if (typen.Count == 0) return;
 
         bool IstT(ITypeSymbol t, INamedTypeSymbol? i) => i != null && Ist(t, i);
+        var clientVertraege = typen.Where(t => t.TypeKind == TypeKind.Interface && IstT(t, iClient)).Select(t => Clientvertragslesart.Lies(t, c)).ToList();
         bool Generisch(INamedTypeSymbol t, INamedTypeSymbol? g) => g != null && t.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, g));
         IEnumerable<IMethodSymbol> Methoden(INamedTypeSymbol t, string? name = null) => t.GetMembers().OfType<IMethodSymbol>()
             .Where(m => m.MethodKind == MethodKind.Ordinary && m.DeclaredAccessibility == Accessibility.Public && m.Parameters.Length > 0 && (name == null || m.Name == name));
@@ -135,13 +138,11 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                 }
             if (IstT(t, iAkteur))
                 erzeugt.UnionWith(t.AllInterfaces.Where(i => iDarf != null && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iDarf)).Select(i => i.TypeArguments[0]));
-            if (t.TypeKind == TypeKind.Interface && IstT(t, iClient))
-            {
-                var gesendet = t.AllInterfaces.Where(i => iSendet != null && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iSendet))
-                    .Select(i => i.TypeArguments[0]).ToList();
-                erzeugt.UnionWith(gesendet);
-                imNetz.UnionWith(gesendet);   // ein Hinweis, den ein Client sendet, geht ins Hinweis-Netz
-            }
+        }
+        foreach (var v in clientVertraege)
+        {
+            erzeugt.UnionWith(v.Sendet);
+            imNetz.UnionWith(v.Sendet);   // ein Hinweis, den ein Client für seinen Akteur sendet, geht ins Hinweis-Netz
         }
 
         // GR-QUERY und offene Eingänge.
@@ -177,9 +178,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                 ctx.ReportDiagnostic(Diagnostic.Create(HinweisOhneErzeuger, a.Methode.Locations.FirstOrDefault() ?? Location.None, f.Name, a.Eingang.Name));
 
         // GR-GETRAGEN: eine Funktion als Schnittstelle braucht eine Umsetzung im Host oder einen Träger (sonst nur eine Bindung von Hand).
-        var getragen = new HashSet<ITypeSymbol>(typen.Where(t => t.TypeKind == TypeKind.Interface && IstT(t, iClient))
-            .SelectMany(cl => cl.AllInterfaces.Where(i => iTraegt != null && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iTraegt)))
-            .Select(i => i.TypeArguments[0]), SymbolEqualityComparer.Default);
+        var getragen = new HashSet<ITypeSymbol>(clientVertraege.SelectMany(v => v.Traegt).Select(x => x.Funktion), SymbolEqualityComparer.Default);
         var umgesetzt = new HashSet<ITypeSymbol>(typen.Where(t => t.TypeKind == TypeKind.Class && !t.IsAbstract).SelectMany(Funktionsform.Umsetzt),
             SymbolEqualityComparer.Default);
         foreach (var f in typen.Where(t => t.TypeKind == TypeKind.Interface && Funktionsform.IstBaustein(t) && !getragen.Contains(t) && !umgesetzt.Contains(t)))

@@ -130,14 +130,8 @@
           {
             "name": "IMahnportal",
             "namespace": "Leihwesen.Gebuehren",
-            "traegt": [
-              "ISchadensSchaetzung"
-            ],
-            "sendet": [
-              "EroeffneMahnung"
-            ],
-            "fragt": [
-              "Vormerkungen"
+            "verkoerpert": [
+              "Mahnstelle"
             ],
             "kenntnis": [
               "Zurueckgegeben"

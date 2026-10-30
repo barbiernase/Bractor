@@ -483,7 +483,7 @@ public sealed class SitzungsActor : RahmenActor
     }
 
     // ═════════════════════════════════════════
-    // FUNKTIONEN DRAUSSEN (ITraegt, Laufort Extern)
+    // FUNKTIONEN DRAUSSEN (IDarf<F> eines verkörperten Akteurs, Laufort Extern)
     // ═════════════════════════════════════════
 
     /// <summary>
@@ -538,13 +538,13 @@ public sealed class SitzungsActor : RahmenActor
             await FehlerAsync("FUNKTIONEN_NICHT_VERFUEGBAR", "Dieser Host hat keine Funktion, die draußen rechnet", "");
             return;
         }
-        // Akteur-Tor: mit angemeldetem Akteur nur, was er rechnen darf (IDarf<F>, bei einem Client ∩ ITraegt); ohne Tor/Akteur offen.
+        // Akteur-Tor: mit angemeldetem Akteur nur, was er rechnen darf (IDarf<F>, bei einem Client: seiner verkörperten Akteure); ohne Tor/Akteur offen.
         var akteur = _sitzung.Akteur;
         var unbekannt = _anbieter.Biete(request.Angebote.Select(a => (a.Funktion, a.Slots)),
             akteur is null ? null : akteur.DarfRechnen, out var nichtBefugt);
         if (nichtBefugt.Count > 0)
             await FehlerAsync("FUNKTION_NICHT_BEFUGT",
-                $"{akteur!.Name} darf nicht rechnen: {string.Join(", ", nichtBefugt)} (IDarf<…> am Akteur bzw. ITraegt<…> im Client-Vertrag fehlt)", "");
+                $"{akteur!.Name} darf nicht rechnen: {string.Join(", ", nichtBefugt)} (IDarf<…> am Akteur bzw. am verkörperten Akteur des Client-Vertrags fehlt)", "");
         if (unbekannt.Count > 0)
         {
             _logger.LogWarning("{Session} bietet unbekannte Funktionen an: [{Unbekannt}]", _id, string.Join(", ", unbekannt));

@@ -10,11 +10,11 @@ namespace Infrastructure.Akteure;
 /// <param name="Name">Handshake-Name (Interface ohne führendes I, <see cref="Clientvertragsregeln.ClientName"/>).</param>
 /// <param name="Typ">Das Client-Vertrags-Interface.</param>
 /// <param name="Hash">Client-Hash (<see cref="Clientvertragsregeln.ClientKanon"/>) — der Client meldet ihn am Handshake mit.</param>
-/// <param name="Traegt">die Funktionen, deren Code er ausführt (<c>ITraegt&lt;F&gt;</c>).</param>
-/// <param name="Sendet">was der Client von sich aus hineingibt (<c>ISendet&lt;T&gt;</c>).</param>
-/// <param name="Fragt">die Queries des Clients (<c>IFragt&lt;T&gt;</c>).</param>
+/// <param name="Traegt">die Funktionen, deren Code er ausführt: <c>IDarf&lt;F&gt;</c> eines verkörperten Akteurs.</param>
+/// <param name="Sendet">was der Client von sich aus hineingibt: Commands, Quell-Nachrichten, Hinweise der verkörperten Akteure.</param>
+/// <param name="Fragt">die Queries der verkörperten Akteure.</param>
 /// <param name="Hoert">Kenntnis (<c>IHoert&lt;T&gt;</c>) — genau das wird abonniert.</param>
-/// <param name="Verkoerpert">abgeleitet: je getragener Funktion, gesendetem und gefragtem Typ die IDarf-Halter (<see cref="Clientvertragsregeln.Verkoerpert"/>).</param>
+/// <param name="Verkoerpert">die Akteure, für die er spricht (<c>IVerkoerpert&lt;A&gt;</c>) — Trägt, Sendet und Fragt sind ihre <c>IDarf</c>.</param>
 public sealed record ClientVertrag(
     string Name,
     Type Typ,
@@ -26,9 +26,9 @@ public sealed record ClientVertrag(
     IReadOnlyList<string> Verkoerpert)
 {
     /// <summary>
-    /// Die Befugnisse einer Sitzung, die diesen Client spricht — <b>Vertrag ∩ Akteure des Tokens</b> (Akteur-Konzept §4.3). Je verkörpertem
-    /// Akteur ein Teil (<see cref="AkteurRechte.Teile"/>): Commands = Sendet ∩ IDarf, Queries = Fragt ∩ IDarf, Funktionen = Trägt ∩ IDarf. Oben
-    /// stehen die Vereinigung und das Gehörte des Vertrags (Kenntnis braucht keinen Akteur).
+    /// Die Befugnisse einer Sitzung, die diesen Client spricht — <b>verkörperte Akteure ∩ Akteure des Tokens</b> (Akteur-Konzept §4.3). Je
+    /// solchem Akteur ein Teil (<see cref="AkteurRechte.Teile"/>) mit seinen Befugnissen; oben stehen ihre Vereinigung und das Gehörte des
+    /// Vertrags (Kenntnis braucht keinen Akteur).
     /// </summary>
     /// <param name="akteure">die generierte Akteur-Tabelle (<see cref="GeneratedAkteurRechte.Alle"/>)</param>
     /// <param name="token">die Befugnis des Tokens (null = Tor aus → alle verkörperten Akteure)</param>
@@ -42,18 +42,7 @@ public sealed record ClientVertrag(
         {
             if (erlaubt != null && !erlaubt.Contains(name)) continue;
             if (!akteure.TryGetValue(name, out var a)) continue;
-            teile.Add(new AkteurRechte(name, a.Typ,
-                Sendet.Where(a.Commands.Contains).ToHashSet(),
-                Fragt.Where(a.Queries.Contains).ToHashSet(),
-                Sendet.Where(a.Quellen.Contains).ToHashSet(),
-                Sendet.Where(a.TransientEvents.Contains).ToHashSet(),
-                new HashSet<Type>(),
-                a.Art)
-            {
-                VertragTyp = Typ,
-                VertragHash = Hash,
-                Funktionen = Traegt.Where(a.Funktionen.Contains).ToHashSet(),
-            });
+            teile.Add(a with { Hoert = new HashSet<Type>(), VertragTyp = Typ, VertragHash = Hash });
         }
         if (teile.Count == 0) return null;
 

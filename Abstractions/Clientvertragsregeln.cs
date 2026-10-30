@@ -6,7 +6,7 @@ namespace Abstractions;
 
 /// <summary>
 /// Die Regeln eines CLIENT-VERTRAGS (<see cref="IClientVertrag"/>, <c>docs/konzept-akteure.md</c> §4) an EINER Stelle: der Handshake-Name, die
-/// kanonische Form, aus der der Vertrags-Hash entsteht, und welche Akteure ein Client verkörpert. Server-Generator (<c>AkteurRechteGenerator</c>,
+/// kanonische Form, aus der der Vertrags-Hash entsteht, und wie ein <c>IDarf</c> der verkörperten Akteure über die Leitung geht. Server-Generator (<c>AkteurRechteGenerator</c>,
 /// per Link eingebunden, netstandard2.0), Client-Generator, Analyzer, Extractor und der Python-Prepass (<c>Cqrs.Codegen</c>) lesen sie von hier —
 /// so ergibt derselbe Vertrag überall denselben Hash, und ein Client, der gegen einen älteren Stand gebaut wurde, fällt am Handshake auf.
 /// <para>In den Generatoren (netstandard2.0, per Link) ist die Klasse <c>internal</c> — sonst sähe ein Projekt, das Abstractions UND
@@ -60,36 +60,49 @@ static class Clientvertragsregeln
     }
 
     /// <summary>
-    /// Kanonische Textform eines Client-Vertrags: <c>Client|T:&lt;Kanon der getragenen Funktion&gt;|…|S:…|F:…|H:…</c> — getragene Funktionen nach
-    /// Namen sortiert, <c>S</c> = sendet, <c>F</c> = fragt, <c>H</c> = hört (jeweils sortierte einfache Namen).
+    /// Kanonische Textform eines Client-Vertrags: <c>Client|A:…|T:&lt;Kanon der getragenen Funktion&gt;|…|S:…|F:…|H:…</c> — <c>A</c> = die
+    /// verkörperten Akteure, getragene Funktionen nach Namen sortiert, <c>S</c> = sendet, <c>F</c> = fragt, <c>H</c> = hört (jeweils sortierte
+    /// einfache Namen). Trägt, sendet und fragt sind die <c>IDarf</c> der Akteure (<see cref="Art"/>): bekommt ein Akteur eine Befugnis dazu,
+    /// ändert sich der Hash jedes Clients, der ihn verkörpert.
     /// </summary>
-    public static string ClientKanon(string client, IEnumerable<KeyValuePair<string, IEnumerable<Eingang>>> traegt,
+    public static string ClientKanon(string client, IEnumerable<string> akteure, IEnumerable<KeyValuePair<string, IEnumerable<Eingang>>> traegt,
         IEnumerable<string> sendet, IEnumerable<string> fragt, IEnumerable<string> hoert)
     {
         string Liste(IEnumerable<string> x) => string.Join(",", x.Distinct().OrderBy(n => n, System.StringComparer.Ordinal));
-        var sb = new StringBuilder(client);
+        var sb = new StringBuilder(client).Append("|A:").Append(Liste(akteure));
         foreach (var t in traegt.OrderBy(t => t.Key, System.StringComparer.Ordinal))
             sb.Append("|T:").Append(Kanon(t.Key, t.Value));
         sb.Append("|S:").Append(Liste(sendet)).Append("|F:").Append(Liste(fragt)).Append("|H:").Append(Liste(hoert));
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Welche Akteure ein Client VERKÖRPERT (docs/konzept-akteure.md §4.2) — EINE Regel für Server-Generator, Python-Prepass, Wissensgraph und
-    /// Editor: je getragener Funktion, gesendetem und gefragtem Typ sein einziger <c>IDarf</c>-Halter (Pflicht); darf ein Typ mehrere, kommt nur
-    /// dann jemand hinzu, wenn noch keiner seiner Halter verkörpert ist (dann alle — der Vertrag sagt nicht, welcher). So wird der Arbeitsplatz
-    /// über <c>HoleDatensatzSamples</c> nicht auch das TrainingsSystem. Mehrdeutige Typen in fester Reihenfolge (sortierte Halter-Liste), damit
-    /// überall dasselbe herauskommt. Was ein Client nur hört, verkörpert keinen Akteur.
-    /// </summary>
-    public static List<string> Verkoerpert(IEnumerable<IEnumerable<string>> halterJeTyp)
+    /// <summary>Wie ein Client ein <c>IDarf&lt;T&gt;</c> seiner verkörperten Akteure über die Leitung gibt.</summary>
+    public enum Befugnisart
     {
-        var verk = new SortedSet<string>(System.StringComparer.Ordinal);
-        var listen = halterJeTyp.Select(h => h.Distinct().OrderBy(x => x, System.StringComparer.Ordinal).ToList()).Where(h => h.Count > 0).ToList();
-        foreach (var h in listen.Where(h => h.Count == 1)) verk.Add(h[0]);
-        foreach (var h in listen.Where(h => h.Count > 1).OrderBy(h => string.Join(",", h), System.StringComparer.Ordinal))
-            if (!h.Any(verk.Contains)) verk.UnionWith(h);
-        return verk.ToList();
+        /// <summary>Kein Weg über die Leitung (CQRS058 meldet so ein <c>IDarf</c>).</summary>
+        Keine,
+        /// <summary>Von sich aus hinein: ein Command, eine Quell-Nachricht oder ein Hinweis.</summary>
+        Sendet,
+        /// <summary>Eine Query.</summary>
+        Fragt,
+        /// <summary>Eine Funktion als Schnittstelle: der Client führt ihren Code aus.</summary>
+        Traegt,
     }
+
+    /// <summary>Die Marker (volle Namen), an denen <see cref="Art"/> die Befugnisart abliest.</summary>
+    public const string IFunktion = "Abstractions.IFunktion", IQuery = "Abstractions.IQuery", ICommand = "Abstractions.ICommand",
+        IQuellNachricht = "Abstractions.IQuellNachricht", ITransientEvent = "Abstractions.ITransientEvent";
+
+    /// <summary>
+    /// Die Befugnisart eines <c>IDarf&lt;T&gt;</c> — EINE Regel für Server-Generator, Client-Generator, Analyzer, Python-Prepass und Extractor:
+    /// die Art steht am Marker von <c>T</c>, kein zweites Wort am Client-Vertrag. <paramref name="hat"/> sagt, ob <c>T</c> den Marker (voller Name)
+    /// trägt; <paramref name="schnittstelle"/>, ob <c>T</c> ein Interface ist.
+    /// </summary>
+    public static Befugnisart Art(System.Func<string, bool> hat, bool schnittstelle) =>
+        schnittstelle ? (hat(IFunktion) ? Befugnisart.Traegt : Befugnisart.Keine)
+        : hat(IQuery) ? Befugnisart.Fragt
+        : hat(ICommand) || hat(IQuellNachricht) || hat(ITransientEvent) ? Befugnisart.Sendet
+        : Befugnisart.Keine;
 
     /// <summary>Ein Eingang einer getragenen Funktion (ein <c>Auf</c>): sein Typ (einfacher Name), die erlaubten Ausgaben, Strom ja/nein.</summary>
     public sealed class Eingang

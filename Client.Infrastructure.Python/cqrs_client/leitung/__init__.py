@@ -185,7 +185,7 @@ class TransientEventRequest(betterproto.Message):
 @dataclass(eq=False, repr=False)
 class FunktionenAnbieten(betterproto.Message):
     """
-    Funktionen draußen ausführen (docs/10 §10.1, docs/konzept-akteure.md §5: ITraegt): ein Client bietet Funktionen an, die er trägt; der Server
+    Funktionen draußen ausführen (docs/10 §10.1, docs/konzept-akteure.md §5: IDarf<F> eines verkörperten Akteurs): ein Client bietet Funktionen an, die er trägt; der Server
      holt für ihn Eingänge beim Vermittler (Pull, Slots = Gleichzeitigkeit, Lease), reicht sie weiter und hält die Antwort unter „Funktion, Eingang“
      fest — die erste gewinnt. Gesendet wird beim Funktions-Actor; der Client ist nur die Hand.
     """

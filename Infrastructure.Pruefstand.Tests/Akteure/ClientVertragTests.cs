@@ -18,7 +18,7 @@ using Domain.Projections.Modell;
 namespace Infrastructure.Pruefstand.Akteure;
 
 /// <summary>
-/// Client-Verträge (<c>docs/konzept-akteure.md</c> §4, docs/konzept-akteure.md §5: ITraegt, ISendet, IFragt, IHoert): die generierte
+/// Client-Verträge (<c>docs/konzept-akteure.md</c> §4, docs/konzept-akteure.md §5: IVerkoerpert, IHoert): die generierte
 /// Tabelle, die Schnittmenge Vertrag ∩ Token, der Handshake je Client (Hört statt Selbstauskunft, getragene Funktionen nur mit Befugnis) und die
 /// Hash-Gleichheit mit dem Python-Generat — rein, ohne gRPC.
 /// </summary>
@@ -48,19 +48,23 @@ public class ClientVertragTests
     }
 
     [Fact]
-    public void Verkoerpert_nimmt_nur_Akteure_hinzu_die_der_Client_braucht()
-        => C("KlassifikationsWorker").Verkoerpert.Should().NotContain("Modellfreigeber",
-            "HoleAktivesModell darf auch der Modellfreigeber — der Klassifizierer (eindeutiger Halter der getragenen Funktion) darf es schon");
+    public void Traegt_sendet_und_fragt_sind_die_IDarf_der_verkoerperten_Akteure()
+    {
+        var ml = C("KlassifikationsWorker");
+        ml.Sendet.Should().BeEquivalentTo(new[] { typeof(KlassifiziereEinzelBildDurchKi) });
+        ml.Fragt.Should().BeEquivalentTo(new[] { typeof(HoleAktivesModell) });
+        ml.Verkoerpert.Should().NotContain("Modellfreigeber", "HoleAktivesModell darf auch der Modellfreigeber — verkörpert ist nur, wen der Vertrag nennt");
+    }
 
     [Fact]
-    public void Der_Rand_schneidet_aus_der_Befugnis()
+    public void Der_Rand_ist_die_Befugnis_der_Akteure()
     {
         var r = C("Arbeitsplatz").Rechte(GeneratedAkteurRechte.Alle, token: null)!;
         r.Teile.Select(t => t.Name).Should().BeEquivalentTo("Inspekteur", "KIOperator", "Modellfreigeber", "Produktpruefer");
         r.DarfHinein(typeof(LabelBildPaar)).Should().BeTrue();
         r.DarfHinein(typeof(SetzeModellAktiv)).Should().BeTrue();
-        r.DarfHinein(typeof(LabelEinzelBild)).Should().BeFalse("der Inspekteur darf es, aber der Arbeitsplatz sendet es nicht (kein ISendet)");
-        r.DarfHinein(typeof(NimmRangeAuf)).Should().BeFalse("niemand darf es direkt — der Vertrag erweitert die Befugnis nie");
+        r.DarfHinein(typeof(LabelEinzelBild)).Should().BeTrue("der Inspekteur darf es — befugt ist der Akteur, nicht die Software");
+        r.DarfHinein(typeof(NimmRangeAuf)).Should().BeFalse("niemand darf es direkt — der Vertrag nennt keine eigene Befugnis");
         r.AkteurFuer(typeof(SetzeModellAktiv)).Should().Be("Modellfreigeber");
         r.AkteurFuer(typeof(LabelPhysischesProdukt)).Should().Be("Produktpruefer");
     }
@@ -137,10 +141,10 @@ public class ClientVertragTests
     [Fact]
     public void Der_Client_Hash_kommt_aus_der_kanonischen_Form()
     {
-        var kanon = Abstractions.Clientvertragsregeln.ClientKanon("KlassifikationsWorker",
+        var kanon = Abstractions.Clientvertragsregeln.ClientKanon("KlassifikationsWorker", ["Klassifizierer"],
             [new("IBildpaarBeurteilung", [new Abstractions.Clientvertragsregeln.Eingang("ImagePairKomplett", ["KlassifiziereBildPaarDurchKi"], false)])],
             ["KlassifiziereEinzelBildDurchKi"], ["HoleAktivesModell"], ["ModellAktiviert", "BildVerfuegbar"]);
-        kanon.Should().Be("KlassifikationsWorker|T:IBildpaarBeurteilung:ImagePairKomplett>KlassifiziereBildPaarDurchKi"
+        kanon.Should().Be("KlassifikationsWorker|A:Klassifizierer|T:IBildpaarBeurteilung:ImagePairKomplett>KlassifiziereBildPaarDurchKi"
             + "|S:KlassifiziereEinzelBildDurchKi|F:HoleAktivesModell|H:BildVerfuegbar,ModellAktiviert");
         C("KlassifikationsWorker").Hash.Should().Be(Abstractions.Clientvertragsregeln.Hash(kanon)).And.HaveLength(16);
     }

@@ -36,7 +36,7 @@ public partial class ProbeZiel : IState { public int Version { get; set; } publi
     public sealed record Passiert(Guid Id) : IEvent;
     public sealed record Anders(Guid Id) : IEvent;
     public sealed record Gast : IMensch, IDarf<Mach>, IDarf<Frag>;
-    public interface IPult : IClientVertrag, ISendet<Mach>, IFragt<Frag>, IHoert<Passiert> { }
+    public interface IPult : IClientVertrag, IVerkoerpert<Gast>, IHoert<Passiert> { }
     public sealed record Getippt : IClientEvent;
 }
 ";
@@ -99,7 +99,7 @@ public partial class ProbeZiel : IState { public int Version { get; set; } publi
         var (server, _) = Generiert(comp, new Infrastructure.SourceGeneration.AkteurRechteGenerator());
         Regex.Match(server, "\\[\"Pult\"\\] = new ClientVertrag\\(\"Pult\", typeof\\([^)]*\\), \"(\\w+)\"").Groups[1].Value
             .Should().Be(clientHash).And.HaveLength(16);
-        // Abonniert wird die Kenntnis, gesendet nur ISendet, gefragt nur IFragt — keine Selbstauskunft über „alle Events/Commands".
+        // Abonniert wird die Kenntnis, gesendet und gefragt nur, was der Gast darf — keine Selbstauskunft über „alle Events/Commands".
         var events = Abschnitt(client, "ServerEventTypes");
         events.Should().Contain("typeof(Probe.Passiert)").And.NotContain("Probe.Anders").And.NotContain("Domain.");
         Abschnitt(client, "CommandTypes").Should().Contain("typeof(Probe.Mach)").And.NotContain("Probe.Verboten").And.NotContain("Domain.");
@@ -120,7 +120,7 @@ public partial class ProbeZiel : IState { public int Version { get; set; } publi
 namespace Probe {
     public interface IGastPruefung : IFunktion { Mach Auf(Anders e); }
     public sealed record Rechner : IMaschine, IDarf<IGastPruefung>;
-    public interface IPultMitTeil : IClientVertrag, ITraegt<IGastPruefung>, IHoert<Passiert> { }
+    public interface IPultMitTeil : IClientVertrag, IVerkoerpert<Rechner>, IHoert<Passiert> { }
 }", vertrag: "Probe.IPultMitTeil");
         var (_, diag) = Generiert(comp, new WiringGenerator().AsSourceGenerator());
         diag.Select(d => d.Id).Should().Equal("CQRS094");

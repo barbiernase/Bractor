@@ -1,5 +1,5 @@
 """
-Funktionen draußen tragen (docs/10 §10.1, docs/konzept-akteure.md §5: ITraegt) — domänenfrei, mit minimalen betterproto-Fakes.
+Funktionen draußen tragen (docs/10 §10.1, docs/konzept-akteure.md §5: IDarf<F> eines verkörperten Akteurs) — domänenfrei, mit minimalen betterproto-Fakes.
 
 Bewiesen wird der FunktionsLaeufer des SDK: Anbieten (Funktion + Slots), Eingang auspacken, `auf_<eingang>(e, h)` höchstens SLOTS-mal
 gleichzeitig, Lebenszeichen während langer Läufe, Signatur (falscher Typ, zwei Ausgaben ohne Strom oder Ausnahme → Fehler statt Antwort),

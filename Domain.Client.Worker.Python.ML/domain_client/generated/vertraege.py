@@ -1,7 +1,7 @@
 # GENERIERT von Cqrs.Codegen aus den Client-Verträgen der Domäne (IClientVertrag, docs/konzept-akteure.md §4).
 # Nicht von Hand ändern — ./codegen.sh --force erzeugt die Datei neu, ./codegen.sh --check prüft auf Drift.
 #
-# Je Client eine abstrakte Basis: der Client erbt sie und füllt je getragener Funktion (ITraegt) eine Methode, die die Ausgaben
+# Je Client eine abstrakte Basis: der Client erbt sie und füllt je getragener Funktion (IDarf<F> eines verkörperten Akteurs) eine Methode, die die Ausgaben
 # ihrer Signatur zurückgibt, und je Kenntnis (IHoert) eine Methode `auf_<event>`. Die Basis bietet die Funktionen an, verdrahtet
 # den Dispatch und meldet Client + Hash am Handshake. Ein Client kann mehrere Akteure verkörpern.
 from __future__ import annotations
@@ -27,10 +27,13 @@ from . import (
     ErstelleDatensatzDto,
     FriereEinDto,
     FuegeRangeHinzuDto,
+    GetImagePairDto,
     GetImagePairHistorieDto,
     GetImagePairStatistikDto,
     GetProduktionsStripDto,
     GetProduktionsTageDto,
+    GetProduktionsVerlaufDto,
+    GetUnklassifizierteImagePairsDto,
     HoleAktivesModellDto,
     HoleBildPaarStandDto,
     HoleDatensaetzeDto,
@@ -47,6 +50,8 @@ from . import (
     KlassifiziereBildPaarDurchKiDto,
     KlassifiziereEinzelBildDurchKiDto,
     LabelBildPaarDto,
+    LabelBildRegionDto,
+    LabelEinzelBildDto,
     LabelPhysischesProduktDto,
     MarkiereAlsInspiziertDto,
     MeldeFortschrittDto,
@@ -85,7 +90,7 @@ class ArbeitsplatzBasis(ClientVertragBasis[S]):
     CLIENT: ClassVar[str] = "Arbeitsplatz"
     AKTEURE: ClassVar[tuple] = ("Inspekteur", "KIOperator", "Modellfreigeber", "Produktpruefer")
     VERTRAG: ClassVar[str] = "IArbeitsplatz"
-    VERTRAG_HASH: ClassVar[str] = "0499158fd8dc4638"
+    VERTRAG_HASH: ClassVar[str] = "095f9149cfc76d4d"
     TRAEGT: ClassVar[dict] = {}
     HOERT: ClassVar[dict] = {   # IHoert: Kenntnis, verlierbar
         BildPaarDurchKiKlassifiziertDto: "auf_bild_paar_durch_ki_klassifiziert",
@@ -114,8 +119,8 @@ class ArbeitsplatzBasis(ClientVertragBasis[S]):
         TrainingGescheitertDto: "auf_training_gescheitert",
         TrainingHaengengebliebenDto: "auf_training_haengengeblieben",
     }
-    SPONTAN: ClassVar[tuple] = (LabelBildPaarDto, MarkiereAlsInspiziertDto, LabelPhysischesProduktDto, ErstelleDatensatzDto, FuegeRangeHinzuDto, NimmPaarAufDto, EntfernePaarDto, SetzeSplitDto, FriereEinDto, StarteTrainingDto, BricheTrainingAbDto, RegistriereModellDto, SetzeModellAktivDto, ArchiviereModellDto,)   # ISendet: von sich aus
-    FRAGT: ClassVar[tuple] = (SucheImagePairsDto, GetImagePairHistorieDto, GetImagePairStatistikDto, GetProduktionsTageDto, GetProduktionsStripDto, HoleBildPaarStandDto, HoleDatensaetzeDto, HoleDatensatzDto, HoleDatensatzPaareDto, HoleDatensaetzeFuerPaarDto, HoleTrainingslaeufeDto, HoleTrainingslaufDto, HoleModelleDto, HoleDatensatzSamplesDto,)   # IFragt: die Queries des Clients
+    SPONTAN: ClassVar[tuple] = (LabelBildPaarDto, LabelEinzelBildDto, LabelBildRegionDto, MarkiereAlsInspiziertDto, ErstelleDatensatzDto, FuegeRangeHinzuDto, NimmPaarAufDto, EntfernePaarDto, SetzeSplitDto, FriereEinDto, StarteTrainingDto, BricheTrainingAbDto, RegistriereModellDto, SetzeModellAktivDto, ArchiviereModellDto, LabelPhysischesProduktDto,)   # IDarf der Akteure: von sich aus
+    FRAGT: ClassVar[tuple] = (SucheImagePairsDto, GetImagePairDto, GetImagePairHistorieDto, GetImagePairStatistikDto, GetProduktionsTageDto, GetProduktionsStripDto, GetProduktionsVerlaufDto, GetUnklassifizierteImagePairsDto, HoleBildPaarStandDto, HoleDatensaetzeDto, HoleDatensatzDto, HoleDatensatzPaareDto, HoleDatensaetzeFuerPaarDto, HoleTrainingslaeufeDto, HoleTrainingslaufDto, HoleDatensatzSamplesDto, HoleModelleDto, HoleAktivesModellDto,)   # IDarf der Akteure: ihre Queries
 
     @abstractmethod
     async def auf_bild_paar_durch_ki_klassifiziert(self, e: BildPaarDurchKiKlassifiziertDto, ctx: MessageContext, state: S) -> None:
@@ -249,8 +254,8 @@ class KlassifikationsWorkerBasis(ClientVertragBasis[S]):
     CLIENT: ClassVar[str] = "KlassifikationsWorker"
     AKTEURE: ClassVar[tuple] = ("Klassifizierer",)
     VERTRAG: ClassVar[str] = "IKlassifikationsWorker"
-    VERTRAG_HASH: ClassVar[str] = "5fb289722d93822e"
-    TRAEGT: ClassVar[dict] = {   # ITraegt: Funktionen, deren Code der Client ausführt
+    VERTRAG_HASH: ClassVar[str] = "ae7f3846c1298672"
+    TRAEGT: ClassVar[dict] = {   # IDarf<F> der Akteure: Funktionen, deren Code der Client ausführt
         "IBildpaarBeurteilung": {
             ImagePairKomplettDto: Eingang("bildpaar_beurteilung", {KlassifiziereBildPaarDurchKiDto: Ausgabe.COMMAND}),
         },
@@ -259,8 +264,8 @@ class KlassifikationsWorkerBasis(ClientVertragBasis[S]):
         BildVerfuegbarDto: "auf_bild_verfuegbar",
         ModellAktiviertDto: "auf_modell_aktiviert",
     }
-    SPONTAN: ClassVar[tuple] = (KlassifiziereEinzelBildDurchKiDto,)   # ISendet: von sich aus
-    FRAGT: ClassVar[tuple] = (HoleAktivesModellDto,)   # IFragt: die Queries des Clients
+    SPONTAN: ClassVar[tuple] = (KlassifiziereEinzelBildDurchKiDto,)   # IDarf der Akteure: von sich aus
+    FRAGT: ClassVar[tuple] = (HoleAktivesModellDto,)   # IDarf der Akteure: ihre Queries
 
     @abstractmethod
     async def bildpaar_beurteilung(self, e: ImagePairKomplettDto, h: Herkunft, state: S) -> KlassifiziereBildPaarDurchKiDto | None:
@@ -284,8 +289,8 @@ class TrainingsWorkerBasis(ClientVertragBasis[S]):
     CLIENT: ClassVar[str] = "TrainingsWorker"
     AKTEURE: ClassVar[tuple] = ("TrainingsSystem",)
     VERTRAG: ClassVar[str] = "ITrainingsWorker"
-    VERTRAG_HASH: ClassVar[str] = "275c8a5d782a1fb3"
-    TRAEGT: ClassVar[dict] = {   # ITraegt: Funktionen, deren Code der Client ausführt
+    VERTRAG_HASH: ClassVar[str] = "568ebca3779d7e95"
+    TRAEGT: ClassVar[dict] = {   # IDarf<F> der Akteure: Funktionen, deren Code der Client ausführt
         "ITraining": {
             TrainingAngefordertDto: Eingang("training", {MeldeTrainingBegonnenDto: Ausgabe.COMMAND, MeldeFortschrittDto: Ausgabe.COMMAND, MeldeTrainingAbgeschlossenDto: Ausgabe.COMMAND, MeldeTrainingGescheitertDto: Ausgabe.COMMAND}, strom=True),
         },
@@ -293,8 +298,8 @@ class TrainingsWorkerBasis(ClientVertragBasis[S]):
     HOERT: ClassVar[dict] = {   # IHoert: Kenntnis, verlierbar
         TrainingAbgebrochenDto: "auf_training_abgebrochen",
     }
-    SPONTAN: ClassVar[tuple] = ()   # ISendet: von sich aus
-    FRAGT: ClassVar[tuple] = (HoleDatensatzSamplesDto,)   # IFragt: die Queries des Clients
+    SPONTAN: ClassVar[tuple] = ()   # IDarf der Akteure: von sich aus
+    FRAGT: ClassVar[tuple] = (HoleDatensatzSamplesDto,)   # IDarf der Akteure: ihre Queries
 
     @abstractmethod
     async def training(self, e: TrainingAngefordertDto, h: Herkunft, state: S) -> AsyncIterator[MeldeTrainingBegonnenDto | MeldeFortschrittDto | MeldeTrainingAbgeschlossenDto | MeldeTrainingGescheitertDto]:

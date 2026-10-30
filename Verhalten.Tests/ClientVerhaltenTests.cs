@@ -219,7 +219,7 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
     }
 
     /// <summary>
-    /// Ein Client, der eine Funktion trägt (IKlassifikationsWorker: ITraegt&lt;IBildpaarBeurteilung&gt;), beantwortet ihren Eingang — die Antwort
+    /// Ein Client, der eine Funktion trägt (IKlassifikationsWorker verkörpert den Klassifizierer: IDarf&lt;IBildpaarBeurteilung&gt;), beantwortet ihren Eingang — die Antwort
     /// wirkt genau einmal: noch einmal geschickt, nach dem Neuverbinden oder von einem zweiten Träger, der den Eingang nicht hält, ändert sie nichts.
     /// (Phase 4: früher hörte der Client das Event und schickte eine Zusage mit Ursache; jetzt reicht der Funktions-Actor den Eingang über die
     /// Vermittlung mit Lease weiter, hält die erste Antwort fest und sendet sie selbst. Das fachliche Soll — genau eine Klassifikation je Paar —

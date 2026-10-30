@@ -8,7 +8,7 @@ Zwei Ebenen, streng getrennt (W11):
 
 - **Framework** — ein generierter Redux/Flux-Bus-/Store-Stack mit gRPC-Anbindung und Client-Vertrag: `Client.Infrastructure`
   (Transport, Bus, Store, Virtualisierung), `Client.SourceGeneration` (Generatoren + Vertrags-Analyzer) und der Client-Vertrag in
-  `Abstractions/Akteur.cs` (`IClientVertrag`, `ISendet<T>`, `IFragt<T>`, `IHoert<T>`, `ITraegt<F>`, `[assembly: IstClient<T>]`). Er hängt
+  `Abstractions/Akteur.cs` (`IClientVertrag`, `IVerkoerpert<A>`, `IHoert<T>`, `[assembly: IstClient<T>]`). Er hängt
   über **eine bidirektionale gRPC-Verbindung** (`CqrsClientService.Connect`, `Cqrs.Leitung/cqrs.proto`) an `Host.Grpc`; dort ist sie eine
   Sitzung (§8.3).
 - **Beispiel-App** — die Blazor-Server-GUI (MudBlazor) der Beispieldomäne Bildinspektion: `Host.Blazor` (Shell, Startup) +
@@ -27,23 +27,23 @@ Ein C#-Client nennt seinen Vertrag per Assembly-Attribut; der Code ist dann gege
 
 // Beispieldomäne: Domain.Akteure/Clients.cs
 public interface IArbeitsplatz : IClientVertrag,
-    ISendet<LabelBildPaar>, IFragt<SucheImagePairs>, IHoert<ImagePairErstellt>, …;
+    IVerkoerpert<Inspekteur>, IVerkoerpert<KIOperator>, …, IHoert<ImagePairErstellt>, …;
 ```
 
 - **Generiert** (`WiringGenerator`, Klasse `GeneratedWiring_<Assembly>`): `Vertrag` (Handshake-Name = Interface ohne führendes `I`),
   `VertragHash` (dieselbe Lesart wie der Server: `Infrastructure.SourceGeneration/Clientvertragslesart.cs` per Link), `ServerEventTypes`
-  (= `IHoert`), `CommandTypes` (= `ISendet`), `RegisterQueries` (= `IFragt`), `CommandAggregateTypes` (das Ziel-Aggregat jedes gesendeten
+  (= `IHoert`), `CommandTypes` und `RegisterQueries` (= Commands und Queries der verkörperten Akteure, ihre `IDarf`), `CommandAggregateTypes` (das Ziel-Aggregat jedes gesendeten
   Commands aus `ICommand<TAggregat>`), `HydrationStores`, `SubscribeAll`/`UnsubscribeAll` und `AddClientDomain_<Assembly>`, das alles als
   `ClientWiringConfig` registriert.
 - **Handshake ohne Selbstauskunft:** der Client schickt im `CapabilitiesRequest` nur Vertrag + Hash (`GrpcProxy.ConnectAsync`). Der Server
   (`SitzungsActor.HandshakeAsync`, `Infrastructure/Akteure/ClientVertragsPruefung.cs`) sucht den Vertrag in **seiner** generierten Tabelle
-  (`GeneratedClientVertraege`); wirksam ist Vertrag ∩ Akteure des Tokens, gehört wird genau, was der Vertrag hört. Ein unbekannter Vertrag oder ein
+  (`GeneratedClientVertraege`); wirksam sind die verkörperten Akteure ∩ Akteure des Tokens, gehört wird genau, was der Vertrag hört. Ein unbekannter Vertrag oder ein
   Token, das keinen seiner Akteure verkörpert, beendet die Sitzung (`VERTRAG_ABGELEHNT`); ein abweichender Hash ist eine Warnung, im strengen
   Modus (`AkteurOptionen.VertragStreng`) eine Ablehnung. Der Client prüft die Antwort: nennt sie nicht seinen Vertrag, bricht `ConnectionModule.ConnectAsync`
   ab; weicht nur der Hash ab, meldet er es auf `stderr` (Client gegen anderen Stand gebaut).
-- **Build-Regeln** (`Client.SourceGeneration/ClientVertrag.cs`): CQRS093 (Client-Assembly ohne Vertrag) und CQRS094 (C#-Client trägt Funktionen,
-  `ITraegt`; das kann heute nur das Python-SDK) meldet der `WiringGenerator`; der `ClientVertragAnalyzer` meldet CQRS095 (erzeugter Command nicht
-  in `ISendet`), CQRS096 (gestellte Query nicht in `IFragt`), CQRS097 (`Handle(E, MessageContext)` auf ein Server-Event ohne `IHoert<E>`).
+- **Build-Regeln** (`Client.SourceGeneration/ClientVertrag.cs`): CQRS093 (Client-Assembly ohne Vertrag) und CQRS094 (C#-Client trägt Funktionen:
+  ein verkörperter Akteur darf eine rechnen; das kann heute nur das Python-SDK) meldet der `WiringGenerator`; der `ClientVertragAnalyzer` meldet
+  CQRS095 (erzeugter Command, den kein verkörperter Akteur darf), CQRS096 (gestellte Query, die kein verkörperter Akteur darf), CQRS097 (`Handle(E, MessageContext)` auf ein Server-Event ohne `IHoert<E>`).
   Gelesen werden Code-Fakten (Objekterzeugung, Signatur), keine Namen.
 - **Verbindung** aus der Umgebung: `Clients:<Vertrag>` (Token, Adresse, Urls, Dateien) — §8.6.
 
@@ -60,7 +60,7 @@ public interface IArbeitsplatz : IClientVertrag,
 | Server → Client | `CapabilitiesResponse`, `EventNotification` (Push, gezielte Antwort), `QueryResponse` (`deps` = Stand je gezeigter Id, `noch_nicht`), `Aktualisiert` (Queries), `LogSeite`, `ErrorResponse` | `GrpcProxy.HandleServerMessageAsync` |
 
 Hinweise (`TransientEventRequest`), Antworten auf weitergeleitete Queries und getragene Funktionen (`FunktionenAnbieten`, `ArbeitsAuftrag`,
-`ArbeitsErgebnis`) nutzt nur das Python-SDK ([09](09-python-sdk.md)); der C#-Client sendet von `ISendet` nur Commands (`ConnectionModule`
+`ArbeitsErgebnis`) nutzt nur das Python-SDK ([09](09-python-sdk.md)); der C#-Client sendet von den Befugnissen seiner Akteure nur Commands (`ConnectionModule`
 abonniert alle `CommandTypes`, gibt aber nur `ICommand` weiter).
 
 **Am Server** ([06](06-transport-multinode-betrieb.md) für den Transport):
@@ -122,7 +122,7 @@ eine Facette oder einen Selektor), `On<TEvent>(…)`, `Dispatch(msg)`; in `Dispo
 Seiten-Nachforderung über eine `baueQuery`-Closure.
 
 **Startup-Choreografie** (`ClientStartupService.cs`, Eingabe `ClientWiringConfig` aus dem Generat): `BootstrapState`
-Connecting → Hydrating → Ready (bzw. Failed). Reihenfolge: `SubscribeAll` → `RegisterQueries` (nur `IFragt`) → Module aktivieren
+Connecting → Hydrating → Ready (bzw. Failed). Reihenfolge: `SubscribeAll` → `RegisterQueries` (nur die Queries der verkörperten Akteure) → Module aktivieren
 (`ConnectionModule` mit `CommandTypes`, `VersioningModule` mit `ServerEventTypes`, `FileBridge`) → `ConnectAsync` als dieser Vertrag
 (publiziert `ConnectionEstablished` → RefreshHandler feuern Start-Queries) → warten, bis alle `IHydrationStore.IsHydrated` (Timeout 15 s) →
 `Ready`. Das schließt das „leere Liste beim Start“-Rennen konstruktiv aus. `StopAsync` setzt die Hydration zurück, trennt die Stores vom Bus und

@@ -225,10 +225,9 @@ public static class Sonde
                   + string.Join("; ", A(r, "handles").Select(h => $"{S(h, "query")} -> {Fns(h)} => {string.Join("|", A(h, "responses").Select(x => (string?)x))}")));
         foreach (var ak in A(b, "akteure").Where(Sonde))
             z.Add($"akteur {S(ak, "namespace")}.{S(ak, "name")}{(ak["art"]?.GetValue<string>() is { Length: > 0 } art ? " " + art : "")} | darf {string.Join(", ", A(ak, "darf").Select(x => (string?)x))}");
-        // Clients (docs/konzept-akteure.md §4): je Client sein Rand — trägt (Funktionen), sendet, fragt, hört.
+        // Clients (docs/konzept-akteure.md §4): je Client sein Rand — wen er verkörpert, was er hört (was er hineingibt, sagen die Akteur-Zeilen).
         foreach (var c in A(b, "clients").Where(Sonde))
-            z.Add($"client {S(c, "namespace")}.{S(c, "name")} | traegt {string.Join(", ", A(c, "traegt").Select(x => (string?)x))}; "
-                  + $"sendet {string.Join(", ", A(c, "sendet").Select(x => (string?)x))}; fragt {string.Join(", ", A(c, "fragt").Select(x => (string?)x))}; "
+            z.Add($"client {S(c, "namespace")}.{S(c, "name")} | verkoerpert {string.Join(", ", A(c, "verkoerpert").Select(x => (string?)x))}; "
                   + $"hoert {string.Join(", ", A(c, "kenntnis").Select(x => (string?)x))}");
         // Regel Z: Zustandsfelder der zustandslosen Übersetzer (Symbol-Fakt, im Build CQRS083 GR-ZUSTAND).
         foreach (var o in A(b, "projektionen").Where(Sonde).Where(o => A(o["code"], "zustand").Any()))

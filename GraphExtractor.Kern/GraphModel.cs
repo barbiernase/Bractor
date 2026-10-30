@@ -67,18 +67,20 @@ public sealed class Node
 }
 
 /// <summary>
-/// Ein Client (<c>interface IX : IClientVertrag</c>, docs/konzept-akteure.md §4) — die Software an der Leitung: getragene
-/// Funktionen, was er sendet/fragt, was er nur zur Kenntnis hört; verkörpert ist abgeleitet.
+/// Ein Client (<c>interface IX : IClientVertrag</c>, docs/konzept-akteure.md §4) — die Software an der Leitung: die Akteure, die er
+/// verkörpert, und was er nur zur Kenntnis hört; abgeleitet daraus, was er trägt, sendet und fragt (die <c>IDarf</c> seiner Akteure).
 /// </summary>
 public sealed class ClientInfo
 {
     /// <summary>Handshake-Name (Interface ohne führendes I).</summary>
     public string Handshake { get; set; } = "";
+    /// <summary><c>IVerkoerpert&lt;A&gt;</c>: die Akteure, für die er spricht.</summary>
+    public List<string> Verkoerpert { get; set; } = new();
+    public List<string> Kenntnis { get; set; } = new();
+    /// <summary>Abgeleitet: die Funktionen, Commands/Quell-Nachrichten/Hinweise und Queries, die seine Akteure dürfen.</summary>
     public List<string> Traegt { get; set; } = new();
     public List<string> Sendet { get; set; } = new();
     public List<string> Fragt { get; set; } = new();
-    public List<string> Kenntnis { get; set; } = new();
-    public List<string> Verkoerpert { get; set; } = new();
 }
 
 /// <summary>Ein Akteur (<c>IAkteur</c>): Art und was er hineingeben darf (<c>IDarf&lt;T&gt;</c>, einfache Namen).</summary>
@@ -183,11 +185,8 @@ public enum EdgeKind
     readsFrom,      // query    → projection  (Lese-Fähigkeiten des Readers ↔ Schreib-Fähigkeiten der Projektion, derselbe Store)
     answeredBy,     // query    → aggregate   (Frage im Decider, docs/03 §3.2: exakter Stand)
     darf,           // akteur   → command/query (IDarf<T>)
-    traegt,         // client   → funktion    (ITraegt<F>)
-    sendet,         // client   → command     (ISendet<T>)
-    fragt,          // client   → query       (IFragt<T>)
     hoert,          // event    → client      (IHoert<E>: Kenntnis)
-    verkoerpert     // client   → akteur      (abgeleitet: Teil-Akteure + IDarf-Halter von Sendet/Fragt)
+    verkoerpert     // client   → akteur      (IVerkoerpert<A>; was über die Leitung geht, sind die darf-Kanten des Akteurs)
 }
 
 public sealed class Edge

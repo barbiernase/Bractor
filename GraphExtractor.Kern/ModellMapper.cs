@@ -162,7 +162,7 @@ public static class ModellMapper
             }).ToList(),
             Clients = dom.Clients.Select(x => new Client
             {
-                Name = x.Name, Namespace = x.Namespace, Traegt = x.Traegt, Sendet = x.Sendet, Fragt = x.Fragt, Kenntnis = x.Kenntnis,
+                Name = x.Name, Namespace = x.Namespace, Verkoerpert = x.Verkoerpert, Kenntnis = x.Kenntnis,
                 Doku = x.Doku, Datei = Rel(x.Datei),
                 // Handshake-Name = Interface ohne führendes I — derselbe Name, unter dem die generierte Python-Basis den Client führt.
                 Implementierungen = pyImpls.GetValueOrDefault(x.Name.Length > 1 && x.Name[0] == 'I' && char.IsUpper(x.Name[1]) ? x.Name[1..] : x.Name) ?? [],

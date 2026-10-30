@@ -167,7 +167,7 @@ public static class ParitaetsPruefung
             var (c, full) = (k.Ref, Voll(k));
             if (!soll.Clients.TryGetValue(full, out var sollRand)) continue;
             IEnumerable<string> L(string feld, string pre) => (c[feld]?.AsArray() ?? new JsonArray()).Select(x => pre + (string?)x);
-            var istRand = L("traegt", "T:").Concat(L("sendet", "S:")).Concat(L("fragt", "F:")).Concat(L("kenntnis", "K:"))
+            var istRand = L("verkoerpert", "A:").Concat(L("kenntnis", "K:"))
                 .Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal);
             Vergleiche($"Client-Vertrag ({k.Name})", sollRand.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istRand, befunde);
         }
@@ -243,8 +243,8 @@ public static class ParitaetsPruefung
             var iDecider = Get(Vertrag.IDecider); var iApplier = Get(Vertrag.IApplier);
             var iWStore = Get(Vertrag.IWriteStore); var iRStore = Get(Vertrag.IReadStore); var iStore = Get(Vertrag.IStore);
             var iWert = Get(Vertrag.IWertobjekt);
-            var iAkteur = Get(Vertrag.IAkteur); var iDarf = Get(Vertrag.IDarf); var iHoert = Get(Vertrag.IHoert); var iTraegt = Get(Vertrag.ITraegt);
-            var iClient = Get(Vertrag.IClientVertrag); var iSendet = Get(Vertrag.ISendet); var iFragt = Get(Vertrag.IFragt);
+            var iAkteur = Get(Vertrag.IAkteur); var iDarf = Get(Vertrag.IDarf); var iHoert = Get(Vertrag.IHoert);
+            var iClient = Get(Vertrag.IClientVertrag); var iVerkoerpert = Get(Vertrag.IVerkoerpert);
             var iFunktion = Get(Vertrag.IFunktion); var iDienst = Get(Abstractions.Dienstvertrag.Marker);
             bool Domäne(IAssemblySymbol? a) => a != null && domänen.Contains(a.Name);
 
@@ -277,15 +277,13 @@ public static class ParitaetsPruefung
                         {
                             // Domänen-Dienst (IDienst, docs/06 §6.5): ein eigener Baustein — Signatur + Implementierungen.
                             if (iDienst != null && Sym.Implements(t, iDienst)) { inv.Dienste.Add(full); continue; }
-                            // Client-Vertrag (IClientVertrag): sein Rand aus der Basisliste (direkt): ITraegt, ISendet, IFragt, IHoert.
+                            // Client-Vertrag (IClientVertrag): sein Rand aus der Basisliste (direkt): IVerkoerpert, IHoert.
                             if (iClient != null && Sym.Implements(t, iClient))
                             {
                                 bool G(INamedTypeSymbol i, INamedTypeSymbol? g) => g != null && i.OriginalDefinition.Fq() == g.Fq();
                                 var rand = new HashSet<string>(StringComparer.Ordinal);
                                 foreach (var b in t.Interfaces)
-                                    if (G(b, iSendet)) rand.Add("S:" + b.TypeArguments[0].Name);
-                                    else if (G(b, iFragt)) rand.Add("F:" + b.TypeArguments[0].Name);
-                                    else if (G(b, iTraegt)) rand.Add("T:" + b.TypeArguments[0].Name);
+                                    if (G(b, iVerkoerpert)) rand.Add("A:" + b.TypeArguments[0].Name);
                                     else if (G(b, iHoert)) rand.Add("K:" + b.TypeArguments[0].Name);
                                 inv.Clients[full] = rand;
                                 continue;

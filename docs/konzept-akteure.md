@@ -16,18 +16,18 @@
 |---|---|---|---|
 | **Akteur** | *Wer* handelt fachlich, was darf er hineingeben? | `record X : IMensch\|IMaschine\|IKi, IDarf<T>…` (`Abstractions/Akteur.cs`) | Inspekteur darf `LabelBildPaar` |
 | **Funktion draußen** | Was rechnet eine Software außerhalb des Hosts auf einen Eingang hin? | eine Funktions-Schnittstelle `interface IF : IFunktion { … Auf(E e); }` | `IBildpaarBeurteilung`: `ImagePairKomplett` → `KlassifiziereBildPaarDurchKi` |
-| **Client-Vertrag** | *Welche Software* hängt an der Leitung, was geht über sie? | `interface IX : IClientVertrag, ITraegt<F>, ISendet<T>, IFragt<Q>, IHoert<E>` | `IKlassifikationsWorker` (Python), `IArbeitsplatz` (Blazor) |
-| **trägt** | Welche Funktion rechnet der Client? | `ITraegt<F>` (früher „Zusage“) | der KlassifikationsWorker trägt `IBildpaarBeurteilung` |
+| **Client-Vertrag** | *Welche Software* hängt an der Leitung, für wen spricht sie? | `interface IX : IClientVertrag, IVerkoerpert<A>, IHoert<E>` | `IKlassifikationsWorker` (Python), `IArbeitsplatz` (Blazor) |
+| **verkörpert** | Für welche Akteure spricht der Client? Was über seine Leitung geht, sind ihre `IDarf` | `IVerkoerpert<A>` | der KlassifikationsWorker verkörpert den Klassifizierer und trägt damit `IBildpaarBeurteilung` |
 | **hört** | Welches Event oder welchen Hinweis nimmt er nur zur Kenntnis? | `IHoert<E>` (früher „Kenntnis“) | der Worker lädt bei `ModellAktiviert` das neue Modell |
 | **Identität** | Wer meldet sich an? | Token → Akteur-Menge (Umgebung, `Identitaeten:Tokens`) | Token `sim-arbeitsplatz` → {Inspekteur, KIOperator, Modellfreigeber, Produktpruefer} |
 
-Was ein Akteur draußen rechnet, ist eine **Funktion**: ihre Signatur steht einmal in den Abläufen, ein Client trägt sie (`ITraegt<F>`), ein
-Akteur darf sie rechnen (`IDarf<F>`). Für sie gelten dieselben Garantien wie für jede Funktion (Festhalten, Lease, die erste Antwort gewinnt —
+Was ein Akteur draußen rechnet, ist eine **Funktion**: ihre Signatur steht einmal in den Abläufen, ein
+Akteur darf sie rechnen (`IDarf<F>`), und ein Client, der ihn verkörpert, trägt sie. Für sie gelten dieselben Garantien wie für jede Funktion (Festhalten, Lease, die erste Antwort gewinnt —
 [04](04-konsum-und-prozess-maschine.md) §4.4, [11](11-garantien.md) §11.6). Einen eigenen Akteur-Vertrag mit `Auf` oder einen Dienst eines
 Akteurs gibt es nicht.
 
 **Leitlinie:** so wenig Begriffe wie möglich, alles Code-Fakt in Basisliste oder Signatur (keine Namenskonvention, keine Attribute zum Raten).
-Was abgeleitet werden kann (was ein Akteur hört, welche Akteure ein Client verkörpert, von wem eine Nachricht über die Kette stammt), wird nicht
+Was abgeleitet werden kann (was ein Akteur hört, was über die Leitung eines Clients geht, von wem eine Nachricht über die Kette stammt), wird nicht
 deklariert.
 
 ```
@@ -132,39 +132,35 @@ public interface ITraining : IFunktion
 namespace Domain.Akteure;   // Domain.Akteure/Clients.cs — eigenes, leichtes Projekt: ein Client referenziert seinen Vertrag, nicht die Verarbeitung
 
 public interface IKlassifikationsWorker : IClientVertrag,
-    ITraegt<IBildpaarBeurteilung>,                   // rechnet diese Funktion
-    ISendet<KlassifiziereEinzelBildDurchKi>,         // von sich aus (muss ein Akteur dürfen)
-    IFragt<HoleAktivesModell>,                       // Query
+    IVerkoerpert<Klassifizierer>,                    // spricht für den Klassifizierer: was er darf, geht über die Leitung
     IHoert<BildVerfuegbar>, IHoert<ModellAktiviert>; // hören, verlierbar
 
 public interface IArbeitsplatz : IClientVertrag,
-    ISendet<LabelBildPaar>, ISendet<FriereEin>, ISendet<SetzeModellAktiv> /* … */,
-    IFragt<SucheImagePairs>, IFragt<HoleDatensaetze> /* … */,
+    IVerkoerpert<Inspekteur>, IVerkoerpert<Produktpruefer>, IVerkoerpert<KIOperator>, IVerkoerpert<Modellfreigeber>,
     IHoert<ImagePairKomplett> /* … Live-Aktualisierung */;
 ```
 
 - Ein Client ist **eine Verbindung, eine Sitzung, ein Vertrag**. Er kann mehrere Akteure verkörpern, und ein Akteur kann über mehrere Clients
   laufen (n:m).
-- Der Vertrag **stellt nur zusammen**: `ITraegt<F>`, `ISendet<T>`, `IFragt<Q>`, `IHoert<E>` und andere Client-Verträge; er deklariert selbst
-  nichts (CQRS063). Gelesen wird er an einer Stelle (`Infrastructure.SourceGeneration/Clientvertragslesart.cs`), auch geerbte Client-Verträge.
+- Der Vertrag **nennt nur**, wen er verkörpert (`IVerkoerpert<A>`) und was er hört (`IHoert<E>`), dazu andere Client-Verträge, die er erbt; er
+  deklariert selbst nichts (CQRS063). Gelesen wird er an einer Stelle (`Infrastructure.SourceGeneration/Clientvertragslesart.cs`), auch geerbte
+  Client-Verträge.
 - Handshake-Name = Interface ohne führendes I (`IKlassifikationsWorker` → `KlassifikationsWorker`, `Clientvertragsregeln.ClientName`); Akteur-
   und Client-Namen sind zusammen eindeutig (CQRS059).
 
-### 4.2 Verkörpert (abgeleitet)
+### 4.2 Was über die Leitung geht (abgeleitet)
 
-Je getragener Funktion, `ISendet` und `IFragt` sein **einziger** `IDarf`-Halter (Pflicht); darf ein Typ **mehrere**, kommen sie alle nur dann
-hinzu, wenn noch **keiner** seiner Halter verkörpert ist (sonst wäre der Arbeitsplatz über `HoleDatensatzSamples` auch das TrainingsSystem).
-Was ein Client nur hört, verkörpert keinen Akteur. Eine Regel für Server-Generator, Python-Codegen, Extractor und Editor-Sicht:
-`Abstractions/Clientvertragsregeln.cs` (`Verkoerpert`).
+Die `IDarf<T>` der verkörperten Akteure, nach dem Marker von `T` (`Clientvertragsregeln.Art`, eine Regel für Server-Generator, Client-Generator,
+Python-Codegen, Extractor und Editor-Sicht): eine Funktion als Schnittstelle **trägt** er, eine Query **fragt** er, einen Command, eine
+Quell-Nachricht oder einen Hinweis **sendet** er. Ein eigenes Wort am Vertrag gibt es dafür nicht — befugt ist der Akteur, nicht die Software.
+Bekommt ein Akteur eine Befugnis dazu, ändert sich der Hash jedes Clients, der ihn verkörpert (`Clientvertragsregeln.ClientKanon`).
 
 ### 4.3 Rechte
 
-- **Wirksam = Vertrag ∩ Token-Akteure** (`Infrastructure/Akteure/ClientVertrag.cs`, `Rechte`): je verkörpertem Akteur, den das Token nennt,
-  Commands, Quell-Nachrichten und Hinweise = Sendet ∩ `IDarf`, Queries = Fragt ∩ `IDarf`, Funktionen = Traegt ∩ `IDarf`; gehört wird das ganze
-  `IHoert` des Vertrags. Ohne Tor gelten alle verkörperten Akteure. Verkörpert das Token keinen Akteur des Clients, lehnt der Handshake ab;
+- **Wirksam = verkörperte Akteure ∩ Token-Akteure** (`Infrastructure/Akteure/ClientVertrag.cs`, `Rechte`): je verkörpertem Akteur, den das Token
+  nennt, seine Befugnisse; gehört wird das ganze `IHoert` des Vertrags. Ohne Tor gelten alle verkörperten Akteure. Verkörpert das Token keinen Akteur des Clients, lehnt der Handshake ab;
   bietet der Client eine Funktion an, die keiner seiner Akteure rechnen darf, lehnt der Server das Angebot ab (`FUNKTION_NICHT_BEFUGT`).
-- Der Client-Vertrag **schneidet aus der Befugnis, er erweitert sie nie** (CQRS064: was er trägt, sendet oder fragt, darf ein Akteur; hören kann
-  er nur Events und Hinweise).
+- Der Client-Vertrag **nennt keine eigene Befugnis** (CQRS064: verkörpern kann er nur konkrete Akteure, hören nur Events und Hinweise).
 
 ### 4.4 Innen und Rand
 
@@ -177,7 +173,7 @@ Leitung; client-interne Typen stehen nie im Vertrag.
 |---|---|---|---|---|
 | `KlassifikationsWorker` (`classifier.py`, `run_stub.py`) | Klassifizierer | `IBildpaarBeurteilung` | `KlassifiziereEinzelBildDurchKi` / `HoleAktivesModell` | `BildVerfuegbar`, `ModellAktiviert` |
 | `TrainingsWorker` (`training_worker.py`, `run_train_stub.py`) | TrainingsSystem | `ITraining` | — / `HoleDatensatzSamples` | `TrainingAbgebrochen` |
-| `Arbeitsplatz` (Blazor) | Inspekteur, KIOperator, Modellfreigeber, Produktpruefer | — | Commands und Queries der vier Akteure | die Events, auf die seine Stores hören |
+| `Arbeitsplatz` (Blazor) | Inspekteur, KIOperator, Modellfreigeber, Produktpruefer | — | alle Commands und Queries der vier Akteure | die Events, auf die seine Stores hören |
 
 Die Bildaufbereitung (`IBildaufbereitung`, Akteur Bildrechner) trägt kein Client-Vertrag; sie rechnet der generische Funktions-Worker
 (`funktions_worker.py`, Laufort `Extern`, [09](09-python-sdk.md) §9.5). Ein Ketten-Command wie `NimmRangeAuf` (nur aus der Funktion) steht in
@@ -188,7 +184,7 @@ keinem Client-Vertrag; die Mehrfach-Auswahl beim Kuratieren schickt je Paar `Nim
 - Die Client-Assembly nennt ihren Vertrag: `[assembly: IstClient<IArbeitsplatz>]` (`Domain.Client.Modules.Blazor/Arbeitsplatz.cs`).
 - Der Client-Generator (`Client.SourceGeneration/WiringGenerator.cs`, `ClientVertrag.cs`) liest ihn mit **derselben** Lesart wie der Server
   (`Clientvertragslesart`, per Link) und erzeugt `Vertrag`, `VertragHash` (derselbe Hash wie `GeneratedClientVertraege`), `ServerEventTypes` =
-  `IHoert`, `CommandTypes` = `ISendet`, `RegisterQueries` = `IFragt`.
+  `IHoert`, `CommandTypes` und `RegisterQueries` = Commands bzw. Queries der verkörperten Akteure.
 - Der Handshake nennt nur `vertrag` und `vertrag_hash`. Nennt die Antwort einen anderen Vertrag, startet die Verbindung nicht
   (`ConnectionModule.ConnectAsync`); ein abweichender Hash steht als Warnung im Client, im strengen Modus lehnt schon der Server ab (§5.2).
 - Build-Regeln: §7 (CQRS093–097).
@@ -300,8 +296,8 @@ vergebene Id, genau einmal im Log je Kennung), nicht über gRPC (§9).
 |---|---|---|
 | `GeneratedAkteurRechte` | `Infrastructure.SourceGeneration/AkteurRechteGenerator.cs` | je Akteur: Art, Commands, Queries, Quellen, Hinweise, Funktionen (alles aus `IDarf`), Hören (abgeleitet, §2.1) |
 | `GeneratedClientVertraege` | dito | je Client: Traegt, Sendet, Fragt, Hoert, Verkörpert, Client-Hash |
-| `GeneratedWiring_<Assembly>` (C#-Client) | `Client.SourceGeneration/WiringGenerator.cs` | `Vertrag`, `VertragHash`, `ServerEventTypes` (`IHoert`), `CommandTypes` (`ISendet`), `RegisterQueries` (`IFragt`) — aus `[assembly: IstClient<IX>]` |
-| `domain_client/generated/vertraege.py` | `Cqrs.Codegen/PythonVertragsEmitter.cs` (Codegen-Schritt im Build) | je Client `<Client>Basis` (`CLIENT`, `AKTEURE`, `VERTRAG_HASH`, `TRAEGT` je Funktion und Eingang, `HOERT`, `SPONTAN` = `ISendet`, `FRAGT`, abstrakte Methode je getragener Funktion und je gehörtem Typ) |
+| `GeneratedWiring_<Assembly>` (C#-Client) | `Client.SourceGeneration/WiringGenerator.cs` | `Vertrag`, `VertragHash`, `ServerEventTypes` (`IHoert`), `CommandTypes` und `RegisterQueries` (die `IDarf` der verkörperten Akteure) — aus `[assembly: IstClient<IX>]` |
+| `domain_client/generated/vertraege.py` | `Cqrs.Codegen/PythonVertragsEmitter.cs` (Codegen-Schritt im Build) | je Client `<Client>Basis` (`CLIENT`, `AKTEURE`, `VERTRAG_HASH`, `TRAEGT` je Funktion und Eingang, `HOERT`, `SPONTAN` (Commands der Akteure), `FRAGT`, abstrakte Methode je getragener Funktion und je gehörtem Typ) |
 
 - **Kanon und Hash** an einer Stelle (`Abstractions/Clientvertragsregeln.cs`: `Kanon`, `ClientKanon`, `Hash` = 16 Hex von SHA-256): Server,
   Python und Extractor ergeben denselben Hash; ein Client gegen einen anderen Stand fällt am Handshake auf. Die Generatoren laufen nur in der
@@ -318,10 +314,10 @@ vergebene Id, genau einmal im Log je Kennung), nicht über gRPC (§9).
 |---|---|---|
 | CQRS058 | GR-AKTEUR | `IDarf<T>` nur für Hineingehendes (Command, Query, Quell-Nachricht, Hinweis, Funktions-Schnittstelle), nur an einem `IAkteur` |
 | CQRS059 | GR-AKTEUR | Akteur- und Client-Namen eindeutig (Generator-Diagnose) |
-| CQRS063 | GR-CLIENT | Client: Interface; erbt nur `ITraegt`/`ISendet`/`IFragt`/`IHoert`/Client-Verträge; deklariert selbst nichts |
-| CQRS064 | GR-CLIENT-BEFUGT | Trägt/Sendet/Fragt: ein Akteur hat `IDarf<T>`; Hört = Event oder Hinweis |
+| CQRS063 | GR-CLIENT | Client: Interface; erbt nur `IVerkoerpert`/`IHoert`/Client-Verträge; deklariert selbst nichts |
+| CQRS064 | GR-CLIENT-BEFUGT | Verkörpert = ein konkreter Akteur; Hört = Event oder Hinweis |
 | CQRS087 | GR-GETRAGEN | eine Funktion als Schnittstelle ohne Umsetzung im Host trägt mindestens ein Client (Warnung; sonst nur Laufort Hand) |
-| CQRS093–097 | GR-CLIENT-CODE | C#-Client: Vertrag genannt (093), trägt keine Funktionen (094), erzeugte Commands in `ISendet` (095), gestellte Queries in `IFragt` (096), `Handle(E, MessageContext)` auf ein Server-Event nur mit `IHoert` (097) — `Client.SourceGeneration/ClientVertrag.cs` |
+| CQRS093–097 | GR-CLIENT-CODE | C#-Client: Vertrag genannt (093), trägt keine Funktionen (094), erzeugte Commands (095) und gestellte Queries (096) darf ein verkörperter Akteur, `Handle(E, MessageContext)` auf ein Server-Event nur mit `IHoert` (097) — `Client.SourceGeneration/ClientVertrag.cs` |
 | — (Laufzeit-Tor) | GR-HERKUNFT | jeder Command und jede Query kommt von einem Akteur, direkt oder über die Kette (Warnung in der Grammatik; das Tor weist ohne `IDarf` ab) |
 
 Die Grammatik ist eine Quelle (`DomainEditor/Grammatik.cs`, [10](10-entwickler-api.md) §10.6: R16, R17); `--check` prüft, dass jede genannte
@@ -339,7 +335,7 @@ wird im Backend):
   Fixpunkt über Mengen. Der Extractor legt sie als `rahmen.akteurMengen` ins Board (`GraphExtractor.Kern/ModellMapper.cs`).
 - **Sicht** (`GraphExtractor.Kern/Sicht/`): je Karte die Akteure und den Akteur-Rahmen (Rahmen je Domäne × Akteur, Reihenfolge: wer das Ding
   erschafft, dann Maschine → KI → Mensch, dann Name; was keinem Akteur zuzuordnen ist, steht im Rahmen „ohne Akteur“, GR-HERKUNFT), je Client die
-  verkörperten Akteure (`Clientvertragsregeln.Verkoerpert`) und die **Anschlussleiste** (Ports trägt/sendet/fragt/hört mit Akteur und Ziel-Karte).
+  verkörperten Akteure (`IVerkoerpert`) und die **Anschlussleiste** (Ports trägt/sendet/fragt/hört mit Akteur und Ziel-Karte).
 - Gesten schreiben Akteur-Record bzw. Client-Interface als Code (`DomainEditor/Scaffolder.cs`, `GraphExtractor.Kern/Schreiben/DateiAbgleich.cs`).
 
 Zur Laufzeit trägt ein Command genau einen Akteur (§2.3, §5.1).

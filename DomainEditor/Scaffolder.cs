@@ -224,8 +224,7 @@ public static class Scaffolder
 
     // ── Clients ─────────────────────────────────────────────────────────────────────────────────
     private static readonly string IClientVertrag = nameof(Abstractions.IClientVertrag);
-    private static readonly string ISendet = typeof(ISendet<>).Name.Split('`')[0];
-    private static readonly string IFragt = typeof(IFragt<>).Name.Split('`')[0];
+    private static readonly string IVerkoerpert = typeof(IVerkoerpert<>).Name.Split('`')[0];
 
     private static string ClientZiel(EditorModell m, string ns)
     {
@@ -236,24 +235,22 @@ public static class Scaffolder
     }
 
     private static readonly string IHoert = typeof(IHoert<>).Name.Split('`')[0];
-    private static readonly string ITraegt = typeof(ITraegt<>).Name.Split('`')[0];
 
     /// <summary>
-    /// Die Basisliste eines Client-Vertrags: <c>IClientVertrag, ITraegt&lt;F&gt;…, ISendet&lt;C&gt;…, IFragt&lt;Q&gt;…, IHoert&lt;E&gt;…</c> — der ganze Rand
-    /// steht in ihr (docs/konzept-akteure.md §5).
+    /// Die Basisliste eines Client-Vertrags: <c>IClientVertrag, IVerkoerpert&lt;A&gt;…, IHoert&lt;E&gt;…</c> — der ganze Rand steht in ihr
+    /// (docs/konzept-akteure.md §5).
     /// </summary>
     public static IReadOnlyList<string> ClientBasen(Client c) =>
-        [IClientVertrag, .. c.Traegt.Select(f => $"{ITraegt}<{f}>"), .. c.Sendet.Select(s => $"{ISendet}<{s}>"), .. c.Fragt.Select(q => $"{IFragt}<{q}>"),
-         .. c.Kenntnis.Select(e => $"{IHoert}<{e}>")];
+        [IClientVertrag, .. c.Verkoerpert.Select(a => $"{IVerkoerpert}<{a}>"), .. c.Kenntnis.Select(e => $"{IHoert}<{e}>")];
 
     /// <summary>Gehört dieser Basistyp zum Client-Vertrag (wird vom Abgleich verwaltet)?</summary>
-    public static bool IstClientBasis(string basis, ISet<string> teile)
+    public static bool IstClientBasis(string basis)
     {
         var name = basis.Split('<')[0].Split('.').Last().Trim();
-        return name == IClientVertrag || name == ISendet || name == IFragt || name == IHoert || name == ITraegt;
+        return name == IClientVertrag || name == IVerkoerpert || name == IHoert;
     }
 
-    /// <summary>Ein Client-Vertrag: <c>public interface IX : IClientVertrag, ITraegt&lt;F&gt;, …;</c> — ohne eigene Member.</summary>
+    /// <summary>Ein Client-Vertrag: <c>public interface IX : IClientVertrag, IVerkoerpert&lt;A&gt;, …;</c> — ohne eigene Member.</summary>
     public static string ClientInterface(Client c)
     {
         var b = new StringBuilder();
@@ -263,9 +260,9 @@ public static class Scaffolder
 
     private static string ClientDatei(string ns, List<Client> clients, EditorModell modell)
     {
-        // usings: getragene Funktionen und Nachrichten bei ihren Typen.
+        // usings: verkörperte Akteure und gehörte Nachrichten bei ihren Typen.
         var b = Kopf(ns, Usings(ns, modell, [modell.Rahmen.VertragsNamespace],
-            clients.SelectMany(c => c.Traegt.Concat(c.Sendet).Concat(c.Fragt).Concat(c.Kenntnis)), []));
+            clients.SelectMany(c => c.Verkoerpert.Concat(c.Kenntnis)), []));
         for (var i = 0; i < clients.Count; i++)
         {
             Doku(b, clients[i].Doku, "");
@@ -800,8 +797,9 @@ public static class Scaffolder
             foreach (var f in st.Fns) nsVon.TryAdd(f.Name, f.Namespace ?? st.Namespace);
         }
         foreach (var k in modell.Lesen?.Konsumenten ?? []) nsVon.TryAdd(k.Name, k.Namespace);
-        foreach (var f in modell.BausteinFunktionen) nsVon.TryAdd(f.Name, f.Namespace);   // z. B. IDarf<IFunktion> am Akteur, ITraegt<IFunktion> am Client
+        foreach (var f in modell.BausteinFunktionen) nsVon.TryAdd(f.Name, f.Namespace);   // z. B. IDarf<IFunktion> am Akteur, Client über einen verkörperten Akteur
         foreach (var d in modell.Dienste) nsVon.TryAdd(d.Name, d.Namespace);      // ein Dienst im Konstruktor einer Implementierung
+        foreach (var a in modell.Akteure) nsVon.TryAdd(a.Name, a.Namespace);      // IVerkoerpert<Akteur> am Client
 
         var menge = new SortedSet<string>(basis.Concat(explizit), StringComparer.Ordinal);
         foreach (var typ in typen)

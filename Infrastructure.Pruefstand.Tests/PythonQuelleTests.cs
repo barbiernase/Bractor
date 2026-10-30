@@ -15,7 +15,7 @@ public class PythonQuelleTests
             \"\"\"Client-Vertrag Shop.IKasse.\"\"\"
 
             CLIENT: ClassVar[str] = "Kasse"
-            TRAEGT: ClassVar[dict] = {   # ITraegt: Funktionen, deren Code der Client ausführt
+            TRAEGT: ClassVar[dict] = {   # IDarf<F> der Akteure: Funktionen, deren Code der Client ausführt
                 "IKassierung": {
                     BestelltDto: Eingang("kassierung", {KassiereDto: Ausgabe.COMMAND}),
                 },
@@ -26,7 +26,7 @@ public class PythonQuelleTests
 
             @abstractmethod
             async def kassierung(self, e: BestelltDto, h: Herkunft, state: S) -> KassiereDto | None:
-                \"\"\"ITraegt<IKassierung>\"\"\"
+                \"\"\"IDarf<IKassierung>\"\"\"
                 raise NotImplementedError
 
             @abstractmethod

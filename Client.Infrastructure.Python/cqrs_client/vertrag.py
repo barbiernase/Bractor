@@ -4,10 +4,13 @@ Client-Verträge (docs/konzept-akteure.md §4, docs/konzept-akteure.md §5) — 
 
 Der Vertrag steht in der Domäne (C#, eine Quelle):
 
+    public sealed record Klassifizierer : IKi,
+        IDarf<IBildpaarBeurteilung>,                // Funktion, deren Code der Client ausführt
+        IDarf<KlassifiziereEinzelBildDurchKi>,      // von sich aus
+        IDarf<HoleAktivesModell>;                   // eine Query
+
     public interface IKlassifikationsWorker : IClientVertrag,
-        ITraegt<IBildpaarBeurteilung>,              // Funktion, deren Code der Client ausführt
-        ISendet<KlassifiziereEinzelBildDurchKi>,    // von sich aus
-        IFragt<HoleAktivesModell>,
+        IVerkoerpert<Klassifizierer>,                      // was über die Leitung geht: seine IDarf
         IHoert<BildVerfuegbar>, IHoert<ModellAktiviert>;   // Kenntnis, verlierbar
 
 `Cqrs.Codegen` erzeugt daraus `domain_client/generated/vertraege.py` mit einer Basis je Client (`KlassifikationsWorkerBasis`). Der Worker erbt
@@ -66,7 +69,7 @@ def _kenntnis(eingang: type, methode: str):
         async for aus in _ausgaben(getattr(self, methode)(payload, ctx, state)):
             raise VertragsVerletzung(
                 f"{type(self).__name__}.{methode}: gibt {type(aus).__name__} aus — {eingang.__name__} ist nur Kenntnis (IHoert); "
-                f"eine Ausgabe auf ein Event ist eine Funktion, die der Client trägt (ITraegt)")
+                f"eine Ausgabe auf ein Event ist eine Funktion, die der Client trägt (IDarf<F> eines verkörperten Akteurs)")
         if False:   # macht reagiere zum Generator (der Dispatch erwartet einen Strom)
             yield None
 
@@ -80,8 +83,8 @@ class ClientVertragBasis(CqrsClient[S], metaclass=VertragsMeta):
         CLIENT, AKTEURE, VERTRAG, VERTRAG_HASH — Handshake-Name, verkörperte Akteure, Vertrag, Stand;
         TRAEGT  — Funktions-Name → {Eingangs-DTO: Eingang(Methode, Ausgaben, Strom)}: die getragenen Funktionen;
         HOERT   — Event-DTO → Methode `auf_<event>`: die Kenntnis;
-        SPONTAN — Commands, die von sich aus hineingehen (ISendet);
-        FRAGT   — die Queries (IFragt; leer = nicht geprüft).
+        SPONTAN — Commands, die von sich aus hineingehen (IDarf der verkörperten Akteure);
+        FRAGT   — die Queries (IDarf der verkörperten Akteure; leer = nicht geprüft).
     Wie viele Eingänge einer getragenen Funktion gleichzeitig laufen, sagt `SLOTS` (Funktion → Zahl, Standard 1).
     """
 
@@ -118,7 +121,7 @@ class ClientVertragBasis(CqrsClient[S], metaclass=VertragsMeta):
         return request
 
     async def query(self, query_dto):
-        """Eine Query stellen — mit Client-Vertrag nur die, die er nennt (`IFragt<T>`)."""
+        """Eine Query stellen — mit Client-Vertrag nur die, die seine Akteure dürfen (`IDarf<T>`)."""
         if self.FRAGT and not isinstance(query_dto, self.FRAGT):
             erlaubt = ", ".join(t.__name__ for t in self.FRAGT)
             raise VertragsVerletzung(

@@ -605,7 +605,7 @@ public sealed class KontextBauer
                 var quellen = new List<string>();
                 if (cmd != null)
                 {
-                    foreach (var e in _graph.Edges.Where(e => e.To == cmd.Id && e.Kind is EdgeKind.darf or EdgeKind.sendet))
+                    foreach (var e in _graph.Edges.Where(e => e.To == cmd.Id && e.Kind is EdgeKind.darf))
                         quellen.Add(e.Kind == EdgeKind.darf ? $"Akteur {e.From["akteur:".Length..]}" : $"Client {e.From["client:".Length..]}");
                 }
                 // Funktionen, deren Signatur den Command ausgibt (je Auf ein Eingang).

@@ -78,8 +78,9 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - **Laufort** einer Funktion (Host/Extern/Hand) steht in der Umgebung; draußen über Vermittler + `BausteinSitzung` mit Lease. Technik hinter
   einer Funktion ist ein Domänen-Dienst (`IDienst`).
 - **Emit:** genau ein Weg (`CommandEmitter`, Id vom Aufrufer abgeleitet), erzwungen durch CQRS020/021.
-- **Akteure und Clients:** alles, was hineinkommt, kommt von einem Akteur (`IDarf<T>`); ein Client-Vertrag trägt Funktionen (`ITraegt<F>`),
-  sendet (`ISendet<T>`), fragt (`IFragt<T>`) und hört (`IHoert<T>`); wirksam = Vertrag ∩ Token.
+- **Akteure und Clients:** alles, was hineinkommt, kommt von einem Akteur (`IDarf<T>`); ein Client-Vertrag verkörpert Akteure
+  (`IVerkoerpert<A>`) und hört (`IHoert<T>`); was über seine Leitung geht (tragen, senden, fragen), sind die `IDarf` seiner Akteure;
+  wirksam = verkörperte Akteure ∩ Token.
 
 ## Wo was liegt
 
@@ -116,8 +117,9 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   CQRS051; Bündel `: IStore`). Nie Store/`IFristplan` in Ctor/Feld (CQRS054), nie `new …Store()` (CQRS055).
 - **Grammatik = eine Quelle** (`DomainEditor/Grammatik.cs`): neue Regel ⇒ Analyzer + Test + Gegenstück in der Grammatik.
 - **Akteur und Client-Vertrag** nicht vermischen (`docs/konzept-akteure.md`): Akteur = `IDarf` für das, was er selbst hineingibt (auch auf
-  Funktions-Schnittstellen); Client-Vertrag = was eine Software an einer Leitung tut: trägt Funktionen (`ITraegt<F>`, früher „Zusage“), sendet,
-  fragt, hört (`IHoert<T>`, früher „Kenntnis“); wirksam = Vertrag ∩ Token, C#-Client per `[assembly: IstClient<IX>]`.
+  Funktions-Schnittstellen); Client-Vertrag = für wen eine Software an einer Leitung spricht (`IVerkoerpert<A>`) und was sie hört (`IHoert<T>`,
+  früher „Kenntnis“) — sie trägt, sendet und fragt genau die `IDarf` ihrer Akteure, kein eigenes Wort dafür; wirksam = verkörperte Akteure ∩
+  Token, C#-Client per `[assembly: IstClient<IX>]`.
 - **Kein `InMemoryEventStore`:** Store-Semantik nur gegen echtes Marten (Integration); der Prüfstand testet nur store-freie Logik.
 - **Actors:** jeder Framework-Actor erbt `RahmenActor` (Bereich, Stopp, Passivierung, Fehlerantwort, Zusammenfassen); Cluster-Nachrichten nur
   über den `Bote` — `Melde` (verlierbar) oder `FrageAsync` (Pflicht-Frist), nie `Cluster.RequestAsync` direkt (`Infrastructure/Lebenszyklus/`).

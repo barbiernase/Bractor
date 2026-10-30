@@ -102,10 +102,10 @@ public class ClientStartupService
         // 1. Stores + Handler subscriben (Stores vor Handlern; AttachToBus je Store)
         config.SubscribeAll(_serviceProvider, _bus);
 
-        // 2. Query→Response-Mappings registrieren (nur die Queries des Vertrags: IFragt)
+        // 2. Query→Response-Mappings registrieren (nur die Queries, die die verkörperten Akteure dürfen)
         config.RegisterQueries(_queryBridge, _bus);
 
-        // 3. Module aktivieren (gesendet wird nur, was der Vertrag sendet: ISendet; versioniert, was er hört)
+        // 3. Module aktivieren (gesendet wird nur, was die verkörperten Akteure dürfen; versioniert, was er hört)
         _connectionModule.Activate(_bus, config.CommandTypes, config.CommandAggregateTypes);
         _versioningModule.Activate(_bus, config.ServerEventTypes);
         _fileBridge.Activate(_bus);

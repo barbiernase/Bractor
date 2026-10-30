@@ -130,12 +130,12 @@ akteur Leihwesen.Lesen.Gutachterin Ki | darf EroeffneMahnung
 akteur Leihwesen.Lesen.Archiv Maschine | darf IRegal
 funktion-auf Leihwesen.Lesen.IRegal schnittstelle | Zurueckgegeben herkunft -> MeldeSchaden || SchadenGemeldet herkunft -> strom EroeffneMahnung; MeldeSchaden
 akteur Leihwesen.Gebuehren.Mahnstelle | darf EroeffneMahnung, Vormerkungen, ISchadensSchaetzung
-# ── Clients (docs/konzept-akteure.md §4): IClientVertrag ist der Anker; der Rand steht ganz in der Basisliste: ITraegt<F>, ISendet, IFragt, IHoert.
-#    Lesesaal verkörpert zwei Akteure (Archiv über die getragene Funktion + Theke), das Archiv läuft über zwei Clients (Lesesaal + Depot);
+# ── Clients (docs/konzept-akteure.md §4): IClientVertrag ist der Anker; der Rand steht ganz in der Basisliste: IVerkoerpert<A>, IHoert<E>.
+#    Lesesaal verkörpert zwei Akteure (Archiv, das die Funktion rechnet, + Theke), das Archiv läuft über zwei Clients (Lesesaal + Depot);
 #    Mahnportal ist gezeichnet. ──
-client Leihwesen.Lesen.ILesesaal | traegt IRegal; sendet LeiheAus; fragt OffeneAusleihen; hoert MahnungEroeffnet
-client Leihwesen.Lesen.IDepot | traegt IRegal; sendet ; fragt ; hoert Ausgeliehen
-client Leihwesen.Gebuehren.IMahnportal | traegt ISchadensSchaetzung; sendet EroeffneMahnung; fragt Vormerkungen; hoert Zurueckgegeben
+client Leihwesen.Lesen.ILesesaal | verkoerpert Theke, Archiv; hoert MahnungEroeffnet
+client Leihwesen.Lesen.IDepot | verkoerpert Archiv; hoert Ausgeliehen
+client Leihwesen.Gebuehren.IMahnportal | verkoerpert Mahnstelle; hoert Zurueckgegeben
 
 # ── Sicht (Werkbank P7.3): Domäne und Block aus dem GRAPH, nie aus dem Namespace. Die Leseseite in Leihwesen.Lesen gehört zum Leihvorgang,
 #    dessen Events sie liest (Projektion → Reader/Store/ReadModel/Query/Response); Wert-Typen zum Aggregat ihrer Records; ein Akteur in der
@@ -197,7 +197,7 @@ apply Adresse.AdresseReserviert
 apply Adresse.AdresseVergeben
 funktion-auf Kundenportal.Konten.Registrierung klasse() | RegistrierungBeantragt -> ReserviereAdresse || AdresseReserviert -> BestaetigeBenutzer || AdresseVergeben -> LehneRegistrierungAb
 akteur Kundenportal.Konten.Besucher Mensch | darf RegistriereBenutzer
-client Kundenportal.Konten.IRegistrierungsseite | traegt ; sendet RegistriereBenutzer; fragt ; hoert BenutzerBestaetigt, RegistrierungAbgelehnt
+client Kundenportal.Konten.IRegistrierungsseite | verkoerpert Besucher; hoert BenutzerBestaetigt, RegistrierungAbgelehnt
 code Kundenportal.Konten.Adressschluessel class teile=1 domaene=Kundenportal.Konten block=§geteilt
 sicht Kundenportal.Konten.Kontostatus enum domaene=Kundenportal.Konten block=Benutzer
 sicht Kundenportal.Konten.Besucher akteur domaene=Kundenportal.Konten block=§akteure
@@ -235,14 +235,14 @@ apply Stoerungsfall.StoerungQuittiert
 funktion-auf Anlagen.Messung.StoerungBeiAlarm klasse() | AlarmAusgeloest herkunft -> OeffneStoerung
 akteur Anlagen.Messung.Sensornetz Maschine | darf MeldeMesswert, MesswertGemessen
 akteur Anlagen.Messung.Schichtleitung Mensch | darf RichteSensorEin, QuittiereStoerung
-client Anlagen.Messung.ISensorGateway | traegt ; sendet MeldeMesswert, MesswertGemessen; fragt ; hoert
-client Anlagen.Messung.ILeitstand | traegt ; sendet RichteSensorEin, QuittiereStoerung; fragt ; hoert AlarmAusgeloest, StoerungGeoeffnet
+client Anlagen.Messung.ISensorGateway | verkoerpert Sensornetz; hoert
+client Anlagen.Messung.ILeitstand | verkoerpert Schichtleitung; hoert AlarmAusgeloest, StoerungGeoeffnet
 sicht Anlagen.Messung.Sensornetz akteur domaene=Anlagen.Messung block=§akteure
 sicht Anlagen.Messung.Schichtleitung akteur domaene=Anlagen.Messung block=§akteure
 
 # ── Warenkatalog (Katalogimport.cs.txt): MASSEN-IMPORT MIT FORTSCHRITT — EINE Quell-Nachricht (Datei-Treiber) startet über eine gleichbleibende
 #    Funktion den Import-Vorgang (Id = Stream der Quelle), ein Import-Dienst draußen antwortet als STROM (Artikel je Zeile, Fortschritt, Abschluss),
-#    getragen von seinem Client (ITraegt); die Leseseite zeigt den Stand in einem Store der Klasse 2 (Dateien, jede Schreib-Fähigkeit nimmt die
+#    getragen von seinem Client (er verkörpert den Import-Dienst); die Leseseite zeigt den Stand in einem Store der Klasse 2 (Dateien, jede Schreib-Fähigkeit nimmt die
 #    Herkunft) und zählt angelegte Artikel in einem Store der Klasse 3 (nur mit [MindestensEinmal] an der Projektion; ohne Herkunft, mit Abbruch). ──
 record Warenkatalog.Import.KatalogDateiAbgelegt event typart=public sealed record treiber=Datei | Name:string { get; init; } required, Pfad:string { get; init; } required, RelativerPfad:string { get; init; } required, Groesse:long { get; init; } required, GeaendertAm:DateTimeOffset { get; init; } required, ErkanntAm:DateTimeOffset { get; init; } required, Kennung:string { get; init; } required
 record Warenkatalog.Import.StarteImport command erzeugung aggregat=Importlauf | AggregateId:Id<Importlauf>, Pfad:string
@@ -272,9 +272,9 @@ funktion-auf Warenkatalog.Import.Katalogeingang klasse() | KatalogDateiAbgelegt 
 funktion-auf Warenkatalog.Import.IImportLauf schnittstelle | ImportGestartet herkunft -> strom LegeArtikelAn; MeldeImportFortschritt; SchliesseImportAb
 akteur Warenkatalog.Import.Ablage Maschine | darf KatalogDateiAbgelegt
 akteur Warenkatalog.Import.Katalogpflege Mensch | darf HoleImportstand
-client Warenkatalog.Import.IKatalogpflegeOberflaeche | traegt ; sendet ; fragt HoleImportstand; hoert ImportFortgeschritten, ImportAbgeschlossen
+client Warenkatalog.Import.IKatalogpflegeOberflaeche | verkoerpert Katalogpflege; hoert ImportFortgeschritten, ImportAbgeschlossen
 akteur Warenkatalog.Import.Importdienst Maschine | darf IImportLauf
-client Warenkatalog.Import.IImportWerk | traegt IImportLauf; sendet ; fragt ; hoert
+client Warenkatalog.Import.IImportWerk | verkoerpert Importdienst; hoert
 readmodel Warenkatalog.Import.Importstand store=IImportUebersicht | Id:Guid { get; set; }, Pfad:string="" { get; set; }, Zeilen:int { get; set; }, Fertig:bool { get; set; }
 store Warenkatalog.Import.IImportUebersicht klasse=2 | schreibt BeginneAsync(importId:Guid, pfad:string, h:Herkunft), SetzeAsync(importId:Guid, zeilen:int, fertig:bool, h:Herkunft) | liest FindeAsync(importId:Guid):Importstand?
 faehigkeit Warenkatalog.Import.IBeginneImportstand schreibt IImportUebersicht.BeginneAsync
@@ -399,7 +399,9 @@ apply Station.PrognoseVermerkt
 funktion-auf Wetterdienst.Vorhersage.Tendenzbildung klasse() | TemperaturGemeldet herkunft -> Tendenz
 funktion-auf Wetterdienst.Vorhersage.Prognosemodell klasse(gewichte:IZustand<Gewichte>) zustand=Gewichte eineadresse lebenszyklus | TemperaturGemeldet herkunft -> lernt || StationStillgelegt hinweis -> lernt || Tendenz hinweis -> VermerkePrognose
 funktion-auf Wetterdienst.Vorhersage.IUnwetterwarnung schnittstelle | Tendenz hinweis -> Unwetter
-client Wetterdienst.Vorhersage.IWetterApp | traegt IUnwetterwarnung; sendet ; fragt ; hoert Unwetter
+akteur Wetterdienst.Vorhersage.Warndienst Maschine | darf IUnwetterwarnung
+client Wetterdienst.Vorhersage.IWetterApp | verkoerpert Warndienst; hoert Unwetter
+sicht Wetterdienst.Vorhersage.Warndienst akteur domaene=Wetterdienst.Vorhersage block=§akteure
 # Der Zustand ist eine eigene Klasse ohne Marker — eine Code-Karte (wo der Editor sie zeigt, ist mit der Oberfläche zurückgestellt, docs/10 E4).
 code Wetterdienst.Vorhersage.Gewichte class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
 code Wetterdienst.Vorhersage.Arbeitsmodell class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
@@ -409,3 +411,4 @@ lage IUnwetterwarnung -> Domain.Pipeline
 lage Tendenz -> Domain.Pipeline
 lage Unwetter -> Domain.Pipeline
 lage IWetterApp -> Domain.Akteure
+lage Warndienst -> Domain.Akteure

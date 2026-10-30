@@ -20,8 +20,8 @@
 //   - SubscribeAll(IServiceProvider, IBus)
 //   - UnsubscribeAll(IServiceProvider)
 //   - Vertrag, VertragHash (aus [assembly: IstClient<IVertrag>], docs/konzept-akteure.md §4)
-//   - ServerEventTypes (= Eingänge des Vertrags), CommandTypes (= ISendet), CommandAggregateTypes
-//   - RegisterQueries(QueryBridge, ClientBus) (= IFragt)
+//   - ServerEventTypes (= Eingänge des Vertrags), CommandTypes (= IDarf der verkörperten Akteure), CommandAggregateTypes
+//   - RegisterQueries(QueryBridge, ClientBus) (= ihre Queries)
 //
 // Kritische Subscription-Reihenfolge:
 //   1. Store-Baum depth-first (Eltern vor Kindern)
@@ -328,7 +328,7 @@ public class WiringGenerator : IIncrementalGenerator
         var syncHandlers = handleClasses.Where(h => !h.IsStore && h.HasSyncHandlers).ToList();
         var asyncHandlers = handleClasses.Where(h => !h.IsStore && h.HasAsyncHandlers).ToList();
 
-        // Der Rand ist der Vertrag: gesendet wird nur ISendet, gefragt nur IFragt, abonniert nur IHoert.
+        // Der Rand ist der Vertrag: gesendet und gefragt wird nur, was die verkörperten Akteure dürfen, abonniert nur IHoert.
         var commands = vertrag.Sendet.Select(f => new WiringDomainTypeInfo(f, DomainTypeKind.Command)).ToList();
         var serverEvents = vertrag.Hoert.Select(f => new WiringDomainTypeInfo(f, DomainTypeKind.ServerEvent)).ToList();
         var queries = vertrag.Fragt.Select(f => new WiringDomainTypeInfo(f, DomainTypeKind.Query)).ToList();

@@ -129,7 +129,7 @@ public sealed class RoheLeitung : IAsyncDisposable
         await SchreibeAsync(new ClientMessage { Command = new CommandRequest { Envelope = dto } });
     }
 
-    // ── Funktionen tragen (ITraegt): anbieten, Eingänge sehen, beantworten ──
+    // ── Funktionen tragen (IDarf<F> der verkörperten Akteure): anbieten, Eingänge sehen, beantworten ──
 
     /// <summary>Bietet eine getragene Funktion an (der Server holt dann Eingänge für diese Sitzung beim Vermittler).</summary>
     public Task BieteAnAsync(string funktion, int slots = 1) =>

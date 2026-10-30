@@ -49,8 +49,8 @@ public sealed record EditorModell
     public IReadOnlyList<Akteur> Akteure { get; init; } = [];
     /// <summary>
     /// Clients (<c>docs/konzept-akteure.md</c> §4): die Software an der Leitung — je Client EIN Vertrag
-    /// (<c>interface IX : IClientVertrag, …</c>): getragene Funktionen, Sendet/Fragt, Kenntnis (Hört). Welche Akteure er
-    /// verkörpert, ist abgeleitet, nicht Modell.
+    /// (<c>interface IX : IClientVertrag, …</c>): die Akteure, die er verkörpert, und was er hört (Kenntnis). Was er trägt, sendet und
+    /// fragt, sind die <c>IDarf</c> dieser Akteure — abgeleitet, nicht Modell.
     /// </summary>
     public IReadOnlyList<Client> Clients { get; init; } = [];
     /// <summary>
@@ -589,21 +589,18 @@ public sealed record Akteur
 
 /// <summary>
 /// Ein CLIENT — die Software an der Leitung (Python-Worker, Blazor-Arbeitsplatz …), <c>docs/konzept-akteure.md</c> §4:
-/// <c>public interface {Name} : IClientVertrag, ITraegt&lt;F&gt;…, ISendet&lt;C&gt;…, IFragt&lt;Q&gt;…, IHoert&lt;E&gt;…;</c>. Ein Client kann mehrere
-/// Akteure verkörpern, ein Akteur über mehrere Clients laufen; je Client genau dieser eine Vertrag. Nur der RAND steht hier — die
-/// client-internen Commands/Events (Intents, ClientEvents, Python-State) nie.
+/// <c>public interface {Name} : IClientVertrag, IVerkoerpert&lt;A&gt;…, IHoert&lt;E&gt;…;</c>. Ein Client kann mehrere Akteure verkörpern, ein
+/// Akteur über mehrere Clients laufen; je Client genau dieser eine Vertrag. Was über seine Leitung hineingeht (tragen, senden, fragen), sind die
+/// <c>IDarf</c> seiner Akteure — es steht nur dort. Nur der RAND steht hier — die client-internen Commands/Events (Intents, ClientEvents,
+/// Python-State) nie.
 /// </summary>
 public sealed record Client
 {
     /// <summary>Der Interface-Name wie im Code (<c>IArbeitsplatz</c>); der Handshake-Name ist er ohne führendes I.</summary>
     public string Name { get; init; } = "";
     public string Namespace { get; init; } = "";
-    /// <summary><c>ITraegt&lt;F&gt;</c>: getragene Funktionen (Schnittstellen-Namen) — der Client führt ihren Code aus.</summary>
-    public IReadOnlyList<string> Traegt { get; init; } = [];
-    /// <summary><c>ISendet&lt;T&gt;</c>: Command, Quell-Nachricht oder Hinweis, von sich aus (muss ein Akteur dürfen).</summary>
-    public IReadOnlyList<string> Sendet { get; init; } = [];
-    /// <summary><c>IFragt&lt;T&gt;</c>: die Queries des Clients (muss ein Akteur dürfen).</summary>
-    public IReadOnlyList<string> Fragt { get; init; } = [];
+    /// <summary><c>IVerkoerpert&lt;A&gt;</c>: die Akteure (Record-Namen), für die der Client spricht.</summary>
+    public IReadOnlyList<string> Verkoerpert { get; init; } = [];
     /// <summary><c>IHoert&lt;E&gt;</c>: nur zur Kenntnis (UI-Aktualisierung), keine Ausgabe.</summary>
     public IReadOnlyList<string> Kenntnis { get; init; } = [];
     public string? Doku { get; init; }

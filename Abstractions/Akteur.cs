@@ -22,41 +22,35 @@ public interface IKi : IAkteur { }
 /// <summary>
 /// Der VERTRAG eines CLIENTS — der Software, die an der Leitung hängt (Python-Worker, Blazor-Arbeitsplatz …),
 /// <c>docs/konzept-akteure.md</c> §4. Ein Client ist nicht ein Akteur: er kann mehrere Akteure verkörpern, und ein Akteur
-/// kann über mehrere Clients laufen. Der Client-Vertrag ist ein Interface, das zusammenstellt, was über SEINE Leitung geht
+/// kann über mehrere Clients laufen. Der Client-Vertrag ist ein Interface, das nur nennt, WEN der Client verkörpert und WAS er hört
 /// (docs/konzept-akteure.md §5):
-/// <code>public interface IMlWorker : IClientVertrag, ITraegt&lt;IBildpaarBeurteilung&gt;, ISendet&lt;KlassifiziereEinzelBildDurchKi&gt;, IFragt&lt;HoleAktivesModell&gt;, IHoert&lt;ModellAktiviert&gt;;</code>
+/// <code>public interface IMlWorker : IClientVertrag, IVerkoerpert&lt;Klassifizierer&gt;, IHoert&lt;ModellAktiviert&gt;;</code>
 /// <list type="bullet">
-/// <item><see cref="ITraegt{TFunktion}"/> → Funktionen, deren Code er ausführt (draußen gerechnet, die Garantie bleibt beim Funktions-Actor);</item>
-/// <item><see cref="ISendet{T}"/> / <see cref="IFragt{T}"/> → was er von sich aus hineingibt bzw. fragt;</item>
+/// <item><see cref="IVerkoerpert{TAkteur}"/> → die Akteure, für die er spricht: was über seine Leitung hineingehen darf, sind ihre <c>IDarf</c>
+/// (Commands, Quell-Nachrichten und Hinweise sendet er, Queries fragt er, Funktionen trägt er — die Art steht am Typ, nicht an einem Wort);</item>
 /// <item><see cref="IHoert{T}"/> → Kenntnis (UI-Aktualisierung, verlierbar), nie eine Ausgabe.</item>
 /// </list>
-/// Was er trägt, sendet oder fragt, muss ein verkörperter Akteur dürfen (<c>IDarf</c>); welche Akteure er verkörpert, wird daraus abgeleitet
-/// (<see cref="Clientvertragsregeln.Verkoerpert"/>). Wirksam ist am Handshake die Schnittmenge mit den Akteuren des Tokens. Die client-INTERNEN
-/// Commands/Events (Intents, ClientEvents, Python-State) stehen hier nie — der Vertrag ist nur der Rand (CQRS063, CQRS064).
+/// Wirksam ist am Handshake die Schnittmenge der verkörperten Akteure mit den Akteuren des Tokens. Die client-INTERNEN Commands/Events
+/// (Intents, ClientEvents, Python-State) stehen hier nie — der Vertrag ist nur der Rand (CQRS063, CQRS064).
 /// </summary>
 public interface IClientVertrag { }
 
 /// <summary>
 /// Diese Client-Assembly IST der Client <typeparamref name="TVertrag"/> (<c>[assembly: IstClient&lt;IArbeitsplatz&gt;]</c>, docs/konzept-akteure.md §4):
-/// der Client-Generator nimmt Handshake-Name, Vertrags-Hash und die abonnierten Events aus dem Vertrag (<see cref="IHoert{T}"/>), leitet nur die Commands seines <see cref="ISendet{T}"/> weiter und stellt nur die Queries seines <see cref="IFragt{T}"/>. Der
-/// Analyzer hält den Client-Code dagegen: ein erzeugter Command/eine Query ohne Vertrag, ein Handle auf ein Server-Event ohne Kenntnis ist
-/// ein Build-Fehler (CQRS093–097).
+/// der Client-Generator nimmt Handshake-Name, Vertrags-Hash und die abonnierten Events aus dem Vertrag (<see cref="IHoert{T}"/>), leitet nur die
+/// Commands weiter und stellt nur die Queries, die ein verkörperter Akteur darf. Der Analyzer hält den Client-Code dagegen: ein erzeugter
+/// Command/eine Query, die kein verkörperter Akteur darf, ein Handle auf ein Server-Event ohne Kenntnis ist ein Build-Fehler (CQRS093–097).
 /// </summary>
 [AttributeUsage(AttributeTargets.Assembly, AllowMultiple = false)]
 public sealed class IstClientAttribute<TVertrag> : Attribute where TVertrag : IClientVertrag { }
 
 /// <summary>
-/// Am Client-Vertrag (<see cref="IClientVertrag"/>): der Client gibt <typeparamref name="T"/> von sich aus hinein — ein Command, ein
-/// eine Quell-Nachricht oder ein Hinweis. Ein verkörperter Akteur muss <c>IDarf&lt;T&gt;</c> haben (CQRS064): der Client-Vertrag schneidet aus
-/// der Befugnis, er erweitert sie nie.
+/// Am Client-Vertrag (<see cref="IClientVertrag"/>): der Client spricht für den Akteur <typeparamref name="TAkteur"/>. Über seine Leitung darf
+/// hinein, was der Akteur darf (<c>IDarf&lt;T&gt;</c>) — ein Command oder eine Quell-Nachricht oder ein Hinweis wird gesendet, eine Query
+/// gefragt, eine Funktion getragen (ihr Code läuft dann draußen, die Garantie bleibt beim Funktions-Actor; eine Funktion ohne Bindung in der
+/// Umgebung, die ein verkörperter Akteur rechnen darf, läuft dort: Laufort Extern). Befugt ist der Akteur, nicht die Software.
 /// </summary>
-public interface ISendet<T> { }
-
-/// <summary>
-/// Am Client-Vertrag (<see cref="IClientVertrag"/>): der Client stellt die Query <typeparamref name="T"/> (und bekommt ihre Response).
-/// Ein verkörperter Akteur muss <c>IDarf&lt;T&gt;</c> haben (CQRS064).
-/// </summary>
-public interface IFragt<T> { }
+public interface IVerkoerpert<TAkteur> where TAkteur : IAkteur { }
 
 /// <summary>
 /// Am Client-Vertrag (<see cref="IClientVertrag"/>): der Client hört <typeparamref name="T"/> — Kenntnis, verlierbar (docs/konzept-akteure.md §5, docs/10 §10.5): ein Event
@@ -65,16 +59,10 @@ public interface IFragt<T> { }
 public interface IHoert<T> { }
 
 /// <summary>
-/// Am Client-Vertrag (<see cref="IClientVertrag"/>): der Client TRÄGT die Funktion <typeparamref name="TFunktion"/> — er führt ihren Code aus
-/// (docs/konzept-akteure.md §5, docs/10 §10.3: eine Funktion, als Schnittstelle deklariert, läuft draußen). Er holt ihre Eingänge über die Vermittlung mit Lease, antwortet
-/// mit den Ausgaben ihrer Signatur; festgehalten und gesendet wird beim Funktions-Actor, die erste Antwort gewinnt. Ein verkörperter Akteur muss
-/// <c>IDarf&lt;TFunktion&gt;</c> haben; eine getragene Funktion ohne Bindung in der Umgebung läuft dort (Laufort Extern).
-/// </summary>
-public interface ITraegt<TFunktion> where TFunktion : IFunktion { }
-
-/// <summary>
 /// Der Akteur darf <typeparamref name="T"/> in das System hineingeben — EIN Wort für alles, was hineingeht:
 /// Command (auslösen), Query (fragen), Quell-Nachricht, Hinweis, und die Ausgaben einer Funktion, deren Code er draußen rechnet (<c>IDarf&lt;IFunktion-Typ&gt;</c>).
+/// Ein Client, der den Akteur verkörpert (<see cref="IVerkoerpert{TAkteur}"/>), darf genau das über seine Leitung — die Art (senden, fragen,
+/// tragen) folgt aus dem Marker von <typeparamref name="T"/> (<see cref="Clientvertragsregeln.Art"/>).
 /// Andere <typeparamref name="T"/> meldet der Analyzer CQRS058.
 /// </summary>
 public interface IDarf<T> { }

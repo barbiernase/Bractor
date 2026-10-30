@@ -28,7 +28,8 @@
     m.codeKarten=m.codeKarten||[];
     // Akteur (docs/konzept-akteure.md): wer von außen hineingibt — darf[] = die Typen seiner IDarf<T> (Command/Query/Trigger).
     m.akteure=m.akteure||[];m.akteure.forEach(a=>{if(!a._id)a._id="ak"+(NID++);a.darf=a.darf||[];});   /* art bewusst nicht vorbelegen (Herkunfts-Hash) */
-    // Client (docs/konzept-akteure.md §4): die Software an der Leitung — traegt[] = Akteur-Vertrags-Teile, sendet/fragt/kenntnis = der Rand.
+    // Client (docs/konzept-akteure.md §4): die Software an der Leitung — verkoerpert[] = die Akteure (IVerkoerpert<A>), kenntnis = was er hört.
+    // Was über seine Leitung hineingeht, sind die IDarf dieser Akteure (vom Server abgeleitet: board.sicht.clients).
     // Katalog-Funktion (IFunktion): Auftrag → Ergebnis-Events; ein Prozess ruft sie mit Rufe<F> (Dann ƒ an der Regel).
     m.funktionen=m.funktionen||[];m.funktionen.forEach(f=>{if(!f._id)f._id="fk"+(NID++);f.ergebnisse=f.ergebnisse||[];f.konstruktor=f.konstruktor||[];});
     // Domänen-Dienst (IDienst, konzept-werkbank §12.3 E11): Signatur (Methoden) + Implementierungen mit Konstruktor; eine Funktions-Implementierung nimmt ihn im Konstruktor.
@@ -36,7 +37,7 @@
       d.implementierungen=d.implementierungen||[];d.implementierungen.forEach(i=>{i.konstruktor=i.konstruktor||[];});});
     // Pipeline als Fluss (§14): Knoten (Name = Identität) mit Eingängen aus Drähten; _ids nur fürs Board.
     m.fluesse=m.fluesse||[];m.fluesse.forEach(f=>{if(!f._id)f._id="fl"+(NID++);f.knoten=f.knoten||[];f.knoten.forEach(k=>{if(!k._id)k._id="fs"+(NID++);k.eingaenge=k.eingaenge||[];k.eingaenge.forEach(e=>{e.draehte=e.draehte||[];});});});
-    m.clients=m.clients||[];m.clients.forEach(c=>{if(!c._id)c._id="cl"+(NID++);c.traegt=c.traegt||[];c.sendet=c.sendet||[];c.fragt=c.fragt||[];c.kenntnis=c.kenntnis||[];});
+    m.clients=m.clients||[];m.clients.forEach(c=>{if(!c._id)c._id="cl"+(NID++);c.verkoerpert=c.verkoerpert||[];c.kenntnis=c.kenntnis||[];});
     // Reaktion = emittierender Konsument (ISubscriber → IAsyncEnumerable<OneOf<Cmd>>): Trigger-Event → Handle → OneOf-Commands.
     m.reaktionen.forEach(r=>{if(!r._id)r._id="rk"+(NID++);r.handles=r.handles||[];r.handles.forEach(hd=>{hd.sends=hd.sends||[];hd.publishes=hd.publishes||[];});});
     // Jedes Objekt-Feld bekommt eine stabile _id → Feld-Ports eindeutig (auch bei gleichnamigen Feldern) und rename-fest.
@@ -182,7 +183,7 @@
     else if(kind==="dienst")neuerDienst(defaultNs(),pos);
     else if(kind==="quelle")neueQuelle(defaultNs(),"NeueQuelle",pos);
     else if(kind==="akteur")MODEL.akteure.push({_id:"ak"+(NID++),name:uniq("NeuerAkteur"),namespace:haeufigsterNs(MODEL.akteure)||defaultNs(),darf:[],...pos});
-    else if(kind==="client")MODEL.clients.push({_id:"cl"+(NID++),name:uniq("INeuerClient"),namespace:haeufigsterNs(MODEL.clients)||defaultNs(),traegt:[],sendet:[],fragt:[],kenntnis:[],...pos});
+    else if(kind==="client")MODEL.clients.push({_id:"cl"+(NID++),name:uniq("INeuerClient"),namespace:haeufigsterNs(MODEL.clients)||defaultNs(),verkoerpert:[],kenntnis:[],...pos});
     else MODEL.records.push({name:uniq("Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"&&ID_FELD()?[{_id:"f"+(NID++),name:ID_FELD(),typ:"Guid"}]:[],...pos});
     // Heimat-Domäne in der Ansicht merken: trägt Namespace-lose Arten (📝/🤖 …) und hält Abhängige
     //   (Decider/Applier/State/Regel) in ihrer Domäne, auch wenn ihr Besitzer gelöscht wird. Der Code-Namespace geht vor (domKey).
@@ -223,7 +224,8 @@
   // Handshake-Name = Interface ohne führendes I (IArbeitsplatz → Arbeitsplatz), wie Abstractions.Akteurvertrag.ClientName.
   const clientAnzeige=c=>{const n=(c&&c.name)||"";return n.length>1&&n[0]==="I"&&n[1]!==n[1].toLowerCase()?n.slice(1):n;};
   const darfHalter=nm=>MODEL.akteure.filter(a=>(a.darf||[]).includes(nm)).map(a=>a.name);
-  const clientTraeger=teil=>MODEL.clients.filter(c=>(c.traegt||[]).includes(teil));
+  // Clients, die einen Akteur verkörpern, der teil (eine Funktion) rechnen darf — sie tragen sie.
+  const clientTraeger=teil=>MODEL.clients.filter(c=>(c.verkoerpert||[]).some(n=>((MODEL.akteure.find(a=>a.name===n)||{}).darf||[]).includes(teil)));
   // Die Anschlussleiste eines Clients — vom Server (board.sicht.clients): die Ports (Richtung, Nachricht, in wessen Namen, Ziel-Karte), die
   //   verkörperten Akteure (wie der AkteurRechteGenerator: Akteure der getragenen Teile + IDarf-Halter von Sendet/Fragt) und je getragenem
   //   Vertrags-Teil sein Akteur. Ein Client, den es im Code noch nicht gibt, hat noch keine.
@@ -1024,9 +1026,10 @@
     {const oi=port("event");oi.classList.add("i");reg("akt:auf:"+a._id+":open",oi,{type:"evtUse",dir:"in",akt:a._id,aufIdx:"open"});
       body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Zusage ⊕ (Event)")));}
     // 🔌 Clients (docs/konzept-akteure.md §4): wer diesen Vertrag trägt (Port für „trägt ⊕") und wo der Akteur sonst ankommt.
-    if((a.vertrag||[]).length){const tp=port("traegt");tp.classList.add("i");reg("akt:traegt:"+a._id,tp,{type:"traegt",dir:"in",akt:a._id});
-      const tr=clientTraeger(vertragsTyp(a));
-      body.append(h("div",{class:"slotrow"},tp,h("span",{class:"slotlbl",style:"flex:1"},"🔌 getragen von: "+(tr.length?tr.map(clientAnzeige).join(", "):"⚠ keinem Client (GR-GETRAGEN)"))));}
+    // 🔌 verkörpert von: Port für „verkörpert ⊕" am Client (IVerkoerpert<A>).
+    {const tp=port("traegt");tp.classList.add("i");reg("akt:verkoerpert:"+a._id,tp,{type:"verkoerpert",dir:"in",akt:a._id});
+      const cs=MODEL.clients.filter(c=>(c.verkoerpert||[]).includes(a.name));
+      body.append(h("div",{class:"slotrow"},tp,h("span",{class:"slotlbl",style:"flex:1"},"🔌 verkörpert von: "+(cs.length?cs.map(clientAnzeige).join(", "):"keinem Client"))));}
     {const cs=MODEL.clients.filter(c=>clientAkteure(c).includes(a.name));
       if(cs.length)body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px;cursor:default"},h("span",{class:"slotlbl"},"🔌 Clients:"),
         ...cs.map(c=>h("button",{class:"akt-dom",onclick:()=>waehle("cl:"+c._id)},clientAnzeige(c)))));}
@@ -1035,8 +1038,8 @@
       :"abgeleitet: Events der Aggregate seiner Commands + Events der Projektionen hinter seinen Queries"},"hört (abgeleitet)"));
     body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},hoert.length?hoert.join(", "):"— nichts"));
   }
-  // 🔌 CLIENT-Panel (docs/konzept-akteure.md §4): der eine Vertrag dieses Clients — trägt (Akteur-Vertrags-Teile) · sendet/fragt ·
-  //   hört (Kenntnis). Je Abschnitt ⊕ → passende Karten leuchten → anklicken = verbinden / ✓ = lösen. Verkörpert ist abgeleitet.
+  // 🔌 CLIENT-Panel (docs/konzept-akteure.md §4): der eine Vertrag dieses Clients — verkörpert (Akteure) · hört (Kenntnis). Je Abschnitt
+  //   ⊕ → passende Karten leuchten → anklicken = verbinden / ✓ = lösen. Was er trägt, sendet und fragt, folgt aus den IDarf der Akteure.
   function clientCard(body,c){
     body.append(h("div",{class:"gsec",title:"public interface "+c.name+" : IClientVertrag, …"},"Name (Interface) · Namespace"));
     if(!c.datei)body.append(nameInp(c,"name","IClient","client"));
@@ -1044,26 +1047,18 @@
     body.append(h("input",{value:c.namespace??"",oninput:e=>c.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
     body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},"Handshake: „"+clientAnzeige(c)+"“ · Python-Basis "+clientAnzeige(c)
       +"Basis (domain_client/generated/vertraege.py) · Server: GeneratedClientVertraege"));
-    const akt=clientAkteure(c);
-    body.append(h("div",{class:"gsec",title:"abgeleitet: Akteure der getragenen Teile + IDarf-Halter von Sendet/Fragt (falls kein Teil-Akteur es darf). Am Handshake gilt: ∩ Akteure des Tokens"},"verkörpert (abgeleitet)"));
-    body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px;cursor:default"},...(akt.length?akt.map(n=>{const a=MODEL.akteure.find(x=>x.name===n);
-      return h("button",{class:"akt-dom",onclick:()=>a&&waehle("akt:"+a._id)},(ART_SYM[a&&a.art]||"👤 ")+n);}):[h("span",{},"— noch keiner")])));
-    // ↺ trägt: Akteur-Vertrags-Teile (⊕ → Akteure mit Vertrag leuchten).
-    body.append(h("div",{class:"gsec",title:"interface "+c.name+" : …, IKlassifizierer — die Zusagen des Teils gehen über diese Leitung, im Namen seines Akteurs"},"↺ trägt (Akteur-Verträge)"));
-    (c.traegt||[]).forEach(t=>{const a=teilAkteur(c,t),s=anchorDot("traegt");s.classList.add("o");reg("cl:traegt:"+c._id+":"+t,s,{type:"traegt",dir:"out",client:c._id,anker:true});
-      const n=clientPorts(c).filter(p=>p.ri==="zusage"&&p.teil===t&&!p.fehlt).length;
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},t+(a?" · "+a.name+" · "+n+(n===1?" Zusage":" Zusagen"):" · ⚠ kein Akteur-Vertrag")),
-        h("button",{class:"rm",title:"nicht mehr tragen",onclick:()=>{c.traegt=ohneX(c.traegt,t);render();}},"✕"),s));});
-    body.append(slotRow("traegt","+ trägt ⊕ (Akteur mit Vertrag) ▶","r",{type:"traegt",dir:"out",client:c._id},"cl:traegt:"+c._id+":open"));
-    // ▶ sendet / ? fragt: der spontane Rand — nur, was ein Akteur darf (sonst ⚠, GR-CLIENT-BEFUGT).
-    body.append(h("div",{class:"gsec",title:"ISendet<T> / IFragt<T> — muss ein Akteur per IDarf dürfen; der Client-Vertrag schneidet aus der Befugnis"},"▶ sendet · ? fragt"));
-    [...(c.sendet||[]).map(x=>["sendet",x]),...(c.fragt||[]).map(x=>["fragt",x])].forEach(([f,nm])=>{
-      const s=anchorDot("darf");s.classList.add("o");reg("cl:darf:"+c._id+":"+nm,s,{type:"darf",dir:"out",client:c._id,anker:true});
-      const hs=darfHalter(nm);
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},(f==="sendet"?"▶ ":"? ")+nm
-          +(hs.length?" · als "+hs.join("/"):" · ⚠ kein Akteur darf es")),
-        h("button",{class:"rm",title:"aus dem Vertrag nehmen",onclick:()=>{c[f]=ohneX(c[f],nm);render();}},"✕"),s));});
-    body.append(slotRow("darf","+ sendet / fragt ⊕ (Command · Query · Trigger) ▶","r",{type:"darf",dir:"out",client:c._id},"cl:darf:"+c._id+":open"));
+    // 👤 verkörpert: die Akteure (IVerkoerpert<A>) — ⊕ → Akteure leuchten → anklicken = verbinden; ✕ = lösen.
+    body.append(h("div",{class:"gsec",title:"IVerkoerpert<A> — befugt ist der Akteur: was über die Leitung geht, sind seine IDarf. Am Handshake gilt: ∩ Akteure des Tokens"},"👤 verkörpert"));
+    (c.verkoerpert||[]).forEach(n=>{const a=MODEL.akteure.find(x=>x.name===n),s=anchorDot("traegt");s.classList.add("o");
+      reg("cl:verkoerpert:"+c._id+":"+n,s,{type:"verkoerpert",dir:"out",client:c._id,anker:true});
+      body.append(h("div",{class:"slotrow o"},h("button",{class:"akt-dom",style:"flex:1;text-align:right",onclick:()=>a&&waehle("akt:"+a._id)},(ART_SYM[a&&a.art]||"👤 ")+n+(a?"":" · ⚠ kein Akteur")),
+        h("button",{class:"rm",title:"nicht mehr verkörpern",onclick:()=>{c.verkoerpert=ohneX(c.verkoerpert,n);render();}},"✕"),s));});
+    body.append(slotRow("traegt","+ verkörpert ⊕ (Akteur) ▶","r",{type:"verkoerpert",dir:"out",client:c._id},"cl:verkoerpert:"+c._id+":open"));
+    // ↺ trägt · ▶ sendet · ? fragt: abgeleitet aus den IDarf der verkörperten Akteure (nur lesend; ändern am Akteur).
+    {const ps=clientPorts(c).filter(p=>p.ri!=="kenntnis");
+      body.append(h("div",{class:"gsec",title:"die IDarf der verkörperten Akteure — getragen (Funktion), gesendet (Command, Quell-Nachricht, Hinweis), gefragt (Query)"},"über die Leitung (abgeleitet)"));
+      body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},ps.length
+        ?ps.map(p=>(p.ri==="traegt"?"↺ ":p.ri==="fragt"?"? ":"▶ ")+p.msg+" · als "+(p.akteure||[]).join("/")).join("\n"):"— nichts"));}
     // ◀ hört: eigene Kenntnis (void Auf(E)) — ohne Ausgabe.
     body.append(h("div",{class:"gsec",title:"void Auf(E e) im Client-Vertrag — nur zur Kenntnis (UI-Aktualisierung), verlierbar zugestellt"},"◀ hört (Kenntnis)"));
     (c.kenntnis||[]).forEach(nm=>{const s=anchorDot("event");s.classList.add("i");reg("cl:kenntnis:"+c._id+":"+nm,s,{type:"evtUse",dir:"in",client:c._id,anker:true});
@@ -1117,7 +1112,7 @@
     // Der Name ist nur im Entwurf frei — ein Vertrag aus dem Code behält seinen (Umbenennen ist ein Refactoring, kein Zeichnen).
     if(!a.datei)body.append(h("div",{class:"frow",title:"Name des Vertrags-Interfaces (leer = I + Akteur)"},h("span",{class:"slotlbl"},"Vertrag"),
       inp(a.vertragName,v=>{const alt=vertragsTyp(a);a.vertragName=v||undefined;const neu=vertragsTyp(a);
-        MODEL.clients.forEach(c=>{c.traegt=(c.traegt||[]).map(t=>t===alt?neu:t);});},"I"+a.name)));
+        },"I"+a.name)));
     const sl=port("event");sl.classList.add("i");reg("auf:in:"+a._id+":"+i,sl,{type:"evtUse",dir:"in",akt:a._id,aufIdx:i});
     body.append(h("div",{class:"slotrow"},sl,h("span",{class:"slotlbl",style:"flex:1"},"◀ Auf "+(r.eingang||"?")),
       h("button",{class:"rm",title:"Zusage entfernen",onclick:()=>{a.vertrag.splice(i,1);render();}},"✕")));
@@ -1397,8 +1392,8 @@
     if(kind==="dienst"){const um=p=>{if(String(p.typ||"").replace(/\?$/,"").trim()===old)p.typ=nv;};
       MODEL.funktionen.forEach(f=>(f.konstruktor||[]).forEach(um));MODEL.dienste.forEach(q=>(q.implementierungen||[]).forEach(im=>(im.konstruktor||[]).forEach(um)));}
     if(kind==="akteur"){
-      // Ein Vertrag ohne eigenen Namen heißt I+Akteur — Clients, die ihn tragen, ziehen mit.
-      if(!obj.vertragName)MODEL.clients.forEach(c=>{c.traegt=(c.traegt||[]).map(t=>t==="I"+old?"I"+nv:t);});}
+      // Clients, die ihn verkörpern, ziehen mit (IVerkoerpert<A> folgt dem Akteur).
+      MODEL.clients.forEach(c=>{c.verkoerpert=(c.verkoerpert||[]).map(t=>t===old?nv:t);});}
     if(kind==="aggregate"){
       MODEL.decider.forEach(d=>{if(d.aggregat===old)d.aggregat=nv;});
       MODEL.applier.forEach(a=>{if(a.aggregat===old)a.aggregat=nv;});
@@ -1409,8 +1404,8 @@
       // Akteure dürfen den Typ unter seinem neuen Namen (IDarf<T> folgt dem Typ).
       MODEL.akteure.forEach(a=>{a.darf=(a.darf||[]).map(x=>x===old?nv:x);
         (a.vertrag||[]).forEach(r=>{if(r.eingang===old)r.eingang=nv;r.ausgaenge=(r.ausgaenge||[]).map(x=>x===old?nv:x);});});
-      // … und der Rand der Clients (ISendet/IFragt/Kenntnis folgen dem Typ).
-      MODEL.clients.forEach(c=>["sendet","fragt","kenntnis"].forEach(f=>{c[f]=(c[f]||[]).map(x=>x===old?nv:x);}));
+      // … und die Kenntnis der Clients (IHoert folgt dem Typ).
+      MODEL.clients.forEach(c=>{c.kenntnis=(c.kenntnis||[]).map(x=>x===old?nv:x);});
       if(obj.kind==="valueobject")retypeFelder(old,nv);   // Typ-Komposition: Feldtypen mitziehen
       if(obj.kind==="command"){
         MODEL.decider.forEach(d=>{if(d.command===old)d.command=nv;});
@@ -2235,8 +2230,8 @@
     {const nm=MODEL.records.includes(ref)?ref.name:null;if(nm)MODEL.akteure.forEach(a=>{if((a.darf||[]).includes(nm))a.darf=ohneX(a.darf,nm);
       // … und aus den Verträgen: als Eingang fällt die ganze Zusage weg, als Ausgang nur der Ausgang.
       if((a.vertrag||[]).length)a.vertrag=a.vertrag.filter(r=>r.eingang!==nm).map(r=>(r.ausgaenge||[]).includes(nm)?{...r,ausgaenge:ohneX(r.ausgaenge,nm)}:r);});
-      // … und aus dem Rand der Clients (sendet/fragt/kenntnis).
-      MODEL.clients.forEach(c=>{["sendet","fragt","kenntnis"].forEach(f=>{if((c[f]||[]).includes(nm))c[f]=ohneX(c[f],nm);});});}
+      // … und aus der Kenntnis der Clients.
+      MODEL.clients.forEach(c=>{if((c.kenntnis||[]).includes(nm))c.kenntnis=ohneX(c.kenntnis,nm);});}
     {const nm=MODEL.records.includes(ref)&&(ref.kind==="event"||ref.kind==="rejection")?ref.name:null;
       if(nm)MODEL.clients.forEach(c=>{if((c.kenntnis||[]).includes(nm))c.kenntnis=ohneX(c.kenntnis,nm);});}
     // … und aus den Funktionen: ein gelöschtes Ergebnis fällt aus dem OneOf, ein gelöschter Auftrag lässt den Eingang offen.
@@ -2261,7 +2256,8 @@
     else if(k==="dienst"){MODEL.dienste.splice(MODEL.dienste.indexOf(ref),1);
       MODEL.funktionen.forEach(f=>{if((f.konstruktor||[]).some(p=>dienstByName(p.typ)===ref))f.konstruktor=f.konstruktor.filter(p=>dienstByName(p.typ)!==ref);});
       MODEL.dienste.forEach(q=>(q.implementierungen||[]).forEach(im=>{im.konstruktor=(im.konstruktor||[]).filter(p=>p.typ.replace(/\?$/,"").trim()!==ref.name);}));}
-    else if(k==="akteur")MODEL.akteure.splice(MODEL.akteure.indexOf(ref),1);
+    else if(k==="akteur"){MODEL.akteure.splice(MODEL.akteure.indexOf(ref),1);
+      MODEL.clients.forEach(c=>{if((c.verkoerpert||[]).includes(ref.name))c.verkoerpert=ohneX(c.verkoerpert,ref.name);});}
     else if(k==="client"){MODEL.clients.splice(MODEL.clients.indexOf(ref),1);AUF=null;}
     else if(k==="auf"){const v=n.own.ref.vertrag||[];v.splice(v.indexOf(ref),1);}
     else if(k==="handle"){const hs=n.own.ref.handles||[];hs.splice(hs.indexOf(ref),1);}
@@ -2401,10 +2397,8 @@
 
   function applyLink(a,b){
     const O=a.__slot.dir==="out"?a.__slot:b.__slot, I=a.__slot.dir==="out"?b.__slot:a.__slot;gTitel("verbinden ("+O.type+")");
-    if(O.type==="darf"&&O.client){const c=MODEL.clients.find(x=>x._id===O.client);if(c&&I.rec){const f=(recByName(I.rec)||{}).kind==="query"?"fragt":"sendet";
-        if(!(c[f]=c[f]||[]).includes(I.rec))c[f].push(I.rec);if(!darfHalter(I.rec).length)deFlash("⚠ kein Akteur darf "+I.rec+" — GR-CLIENT-BEFUGT (erst darf ⊕ beim Akteur)",false);}}
-    else if(O.type==="traegt"){const c=MODEL.clients.find(x=>x._id===O.client),a=MODEL.akteure.find(x=>x._id===I.akt);
-      if(c&&a){const t=vertragsTyp(a);if(!(c.traegt=c.traegt||[]).includes(t))c.traegt.push(t);}}
+    if(O.type==="verkoerpert"){const c=MODEL.clients.find(x=>x._id===O.client),a=MODEL.akteure.find(x=>x._id===I.akt);
+      if(c&&a&&!(c.verkoerpert=c.verkoerpert||[]).includes(a.name))c.verkoerpert.push(a.name);}
     else if(O.type==="darf"){const ak=MODEL.akteure.find(x=>x._id===O.akt);if(ak&&I.rec&&!(ak.darf=ak.darf||[]).includes(I.rec))ak.darf.push(I.rec);}
     else if(O.type==="cmd"){const d=dec(I.dec);if(d)d.command=O.rec;}
     // Rufe<F>: eine Prozess-Regel („Dann rufe") bzw. ein Pipeline-Knoten ƒ ruft die Funktion; die Zuordnung wird neu vorgeschlagen.
@@ -2502,8 +2496,7 @@
     const O=a.__slot.dir==="out"?a.__slot:b.__slot, I=a.__slot.dir==="out"?b.__slot:a.__slot;gTitel("lösen ("+O.type+")");
     const ohne=(arr,x)=>(arr||[]).filter(v=>v!==x);
     const handle=(liste,id,idx)=>{const o=liste.find(x=>x._id===id);return o&&typeof idx==="number"?(o.handles||[])[idx]:null;};
-    if(O.type==="darf"&&O.client){const c=MODEL.clients.find(x=>x._id===O.client);if(c){c.sendet=ohne(c.sendet,I.rec);c.fragt=ohne(c.fragt,I.rec);}}
-    else if(O.type==="traegt"){const c=MODEL.clients.find(x=>x._id===O.client),a=MODEL.akteure.find(x=>x._id===I.akt);if(c&&a)c.traegt=ohne(c.traegt,vertragsTyp(a));}
+    if(O.type==="verkoerpert"){const c=MODEL.clients.find(x=>x._id===O.client),a=MODEL.akteure.find(x=>x._id===I.akt);if(c&&a)c.verkoerpert=ohne(c.verkoerpert,a.name);}
     else if(O.type==="darf"){const ak=MODEL.akteure.find(x=>x._id===O.akt);if(ak)ak.darf=ohne(ak.darf,I.rec);}
     else if(O.type==="cmd"){const d=dec(I.dec);if(d&&d.command===O.rec)d.command="";}
     else if(O.type==="rufe"){if(O.flk){const k=flKnotenById(O.flk);if(k)k.typ="";}
@@ -2803,9 +2796,9 @@
     // Client-Vertrag (docs/konzept-akteure.md §4): die bestehenden Verbindungen kennt der Verbinden-Modus (✓/lösen) über KANTEN —
     //   gezeichnet werden sie als BÜNDEL (unten); Einzelkanten nur aufgefächert (AUF, durch eine Handlung).
     MODEL.clients.forEach(c=>{
-      (c.sendet||[]).concat(c.fragt||[]).forEach(nm=>{if(SLOTS["cl:darf:"+c._id+":"+nm]&&SLOTS["darf:in:"+nm])KANTEN.push(["cl:darf:"+c._id+":"+nm,"darf:in:"+nm]);});
       (c.kenntnis||[]).forEach(nm=>{if(SLOTS["cl:kenntnis:"+c._id+":"+nm]&&SLOTS["evt:out:"+nm])KANTEN.push(["evt:out:"+nm,"cl:kenntnis:"+c._id+":"+nm]);});
-      (c.traegt||[]).forEach(t=>{const a=teilAkteur(c,t);if(a&&SLOTS["cl:traegt:"+c._id+":"+t]&&SLOTS["akt:traegt:"+a._id])KANTEN.push(["cl:traegt:"+c._id+":"+t,"akt:traegt:"+a._id]);});});
+      (c.verkoerpert||[]).forEach(n=>{const a=MODEL.akteure.find(x=>x.name===n);
+        if(a&&SLOTS["cl:verkoerpert:"+c._id+":"+n]&&SLOTS["akt:verkoerpert:"+a._id])KANTEN.push(["cl:verkoerpert:"+c._id+":"+n,"akt:verkoerpert:"+a._id]);});});
     MODEL.decider.forEach(d=>{
       if(d.command)add("cmd:out:"+d.command,"dec:cmdin:"+d._id,"#4a86d6");
       if(d.aggregat)add("dec:aggout:"+d._id,"agg:left:"+d.aggregat+":"+d._id,"#33b1a6",true);
@@ -3130,13 +3123,11 @@
       teile.forEach((t,i)=>{if(i)z.append(", ");z.append(t);});box.append(z);};
     const sym=a=>(ART_SYM[(MODEL.akteure.find(x=>x.name===a)||{}).art]||"👤 ")+a;
     const grp=ri=>{const m=new Map();P.filter(p=>p.ri===ri).forEach(p=>{const k=(p.akteure||[]).join(" / ");if(!m.has(k))m.set(k,[]);m.get(k).push(p);});return m;};
-    (c.traegt||[]).forEach(t=>{const a=teilAkteur(c,t);
-      zeile("↺ trägt "+t+(a?" · als "+sym(a.name):" · ⚠ kein Akteur-Vertrag"),[],"lt");
-      P.filter(p=>p.ri==="zusage"&&p.teil===t&&!p.fehlt).forEach(p=>zeile("   ◀",[name(p,p.msg+((p.aus||[]).length?" → "+p.aus.join(", ")+(p.strom?" (Strom)":""):" · Kenntnis"))],"lr"));});
-    [["sendet","▶ sendet"],["fragt","? fragt"]].forEach(([ri,kopf])=>grp(ri).forEach((ps,k)=>
+    if((c.verkoerpert||[]).length)zeile("👤 verkörpert "+c.verkoerpert.map(sym).join(", "),[],"lt");
+    [["traegt","↺ trägt"],["sendet","▶ sendet"],["fragt","? fragt"]].forEach(([ri,kopf])=>grp(ri).forEach((ps,k)=>
       zeile(kopf+(k?" als "+k.split(" / ").map(sym).join(" / "):" · ⚠ kein Akteur darf es"),ps.map(p=>name(p)),k?"":"lwarn")));
     if(P.some(p=>p.ri==="kenntnis"))zeile("◀ hört",P.filter(p=>p.ri==="kenntnis").map(p=>name(p)));
-    if(!P.length)box.append(h("div",{class:"lz lleer"},"— leerer Vertrag: im Panel ⊕ trägt / sendet / hört"));
+    if(!P.length)box.append(h("div",{class:"lz lleer"},"— leerer Vertrag: im Panel ⊕ verkörpert / hört"));
     return box;}
   function kurzfassung(n){if(n.kind==="client")return anschlussleiste(n);if(n.kind==="host")return hostKurz(n);const r=n.ref,k=n.kind;let t="";
     if(k==="code")t=(r.unaufgeloest||[]).length?"⚠ "+r.unaufgeloest.join(", ")+" nicht aufgelöst":(r.art||"Typ")+" · kein Baustein — roh";

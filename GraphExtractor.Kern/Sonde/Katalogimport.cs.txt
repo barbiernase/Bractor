@@ -7,7 +7,7 @@ using Core;
 // EINE Quell-Nachricht (eine abgelegte Katalog-Datei) wird zu vielen Fakten: der Import-Vorgang ist ein Aggregat, ein Import-Dienst draußen
 // liest die Datei und gibt als STROM je Zeile einen Artikel und zwischendurch den Fortschritt aus; die Leseseite zeigt den Stand. Der Strom ist
 // eine Funktion draußen (docs/10 §10.1): Position und Fortschritt hält das Framework — nach einem Absturz geht es bei der nächsten Zeile
-// weiter; die Artikel-Ids leitet sie aus der Herkunft ab (R13). Getragen wird sie vom Import-Werk (ITraegt), das der Import-Dienst verkörpert.
+// weiter; die Artikel-Ids leitet sie aus der Herkunft ab (R13). Getragen wird sie vom Import-Werk, das den Import-Dienst verkörpert (der sie rechnen darf).
 //
 // Die Leseseite zeigt die beiden Store-Klassen ohne Transaktion (docs/04 §4.3, docs/10 R14): der Stand liegt in Dateien (Klasse 2, wiederholungsfest — jede
 // Schreib-Fähigkeit nimmt die Herkunft und schreibt bedingt), und eine Metrik zählt angelegte Artikel (Klasse 3, mindestens einmal — nur mit
@@ -180,8 +180,8 @@ public sealed class Importauskunft : IReader
 public sealed record Ablage : IMaschine, IDarf<KatalogDateiAbgelegt>;
 public sealed record Katalogpflege : IMensch, IDarf<HoleImportstand>;
 
-public interface IKatalogpflegeOberflaeche : IClientVertrag, IFragt<HoleImportstand>, IHoert<ImportFortgeschritten>, IHoert<ImportAbgeschlossen> { }
+public interface IKatalogpflegeOberflaeche : IClientVertrag, IVerkoerpert<Katalogpflege>, IHoert<ImportFortgeschritten>, IHoert<ImportAbgeschlossen> { }
 
 // Draußen: der Import-Dienst rechnet den Strom, sein Client trägt die Funktion.
 public sealed record Importdienst : IMaschine, IDarf<IImportLauf>;
-public interface IImportWerk : IClientVertrag, ITraegt<IImportLauf> { }
+public interface IImportWerk : IClientVertrag, IVerkoerpert<Importdienst> { }

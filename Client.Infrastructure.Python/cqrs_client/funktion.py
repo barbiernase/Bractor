@@ -1,6 +1,6 @@
 # REPO-PFAD: Client.Infrastructure.Python/cqrs_client/funktion.py
 """
-Funktionen draußen TRAGEN (docs/10 §10.1, docs/konzept-akteure.md §5: `ITraegt<F>`, Laufort Extern).
+Funktionen draußen TRAGEN (docs/10 §10.1, docs/konzept-akteure.md §5: `IDarf<F>` eines verkörperten Akteurs, Laufort Extern).
 
 Eine Funktion ist ein Vertrag in der Domäne (C#, eine Quelle) — als Schnittstelle deklariert, läuft sie draußen:
 
@@ -18,7 +18,7 @@ abstrakten Methode `auf_<eingang>(e, h)`. Der Worker erbt sie und füllt die Met
             ...
             return BildAufbereitetDto(...)
 
-Ein Client mit Vertrag (`ITraegt<F>` im Client-Vertrag) bekommt die getragenen Funktionen als Methoden seiner generierten Client-Basis
+Ein Client mit Vertrag (er verkörpert einen Akteur mit `IDarf<F>`) bekommt die getragenen Funktionen als Methoden seiner generierten Client-Basis
 (`vertrag.py`) — dieselbe Mechanik, nur mit Zugriff auf seinen Zustand.
 
 Was das SDK übernimmt — der Worker schreibt nichts davon von Hand:

@@ -217,7 +217,7 @@ class GrpcProxy:
         await self._send(msg)
 
     # ═══════════════════════════════════════════════════
-    # FUNKTIONEN DRAUSSEN (ITraegt, Laufort Extern)
+    # FUNKTIONEN DRAUSSEN (IDarf<F> eines verkörperten Akteurs, Laufort Extern)
     # ═══════════════════════════════════════════════════
 
     async def send_funktionen_anbieten(self, angebote: list[tuple[str, int]]) -> None:

@@ -106,7 +106,8 @@ public interface IRegal : IFunktion
 }
 
 // Clients (docs/konzept-akteure.md §4): frei benannt — IClientVertrag ist der einzige Anker. EIN Client verkörpert ZWEI Akteure
-// (das Archiv über die getragene Funktion, die Theke über ISendet/IFragt), und ein Akteur läuft über ZWEI Clients (das Archiv: Lesesaal + Depot).
+// (das Archiv, das die Funktion rechnet, und die Theke), und ein Akteur läuft über ZWEI Clients (das Archiv: Lesesaal + Depot). Was über die
+// Leitung geht, sind die IDarf der Akteure — getragen, gesendet, gefragt.
 // Kenntnis (IHoert) gehört dem Client, nicht einem Akteur.
-public interface ILesesaal : IClientVertrag, ITraegt<IRegal>, ISendet<LeiheAus>, IFragt<OffeneAusleihen>, IHoert<MahnungEroeffnet> { }
-public interface IDepot : IClientVertrag, ITraegt<IRegal>, IHoert<Ausgeliehen> { }
+public interface ILesesaal : IClientVertrag, IVerkoerpert<Theke>, IVerkoerpert<Archiv>, IHoert<MahnungEroeffnet> { }
+public interface IDepot : IClientVertrag, IVerkoerpert<Archiv>, IHoert<Ausgeliehen> { }

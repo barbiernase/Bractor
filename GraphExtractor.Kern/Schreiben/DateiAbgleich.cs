@@ -472,21 +472,20 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         return (MitNamespaces(Anwenden(text, [(at, at, " : " + neu)]), a.Darf), "Befugnisse");
     }
 
-    // ── Client-Vertrag (docs/konzept-akteure.md §4): die Basisliste (ITraegt, ISendet, IFragt, IHoert) gehört dem Modell; fremde Basistypen
+    // ── Client-Vertrag (docs/konzept-akteure.md §4): die Basisliste (IVerkoerpert, IHoert) gehört dem Modell; fremde Basistypen
     //    (z. B. ein geerbter Client-Vertrag) bleiben stehen. ──
     private (string, string)? ClientVertrag(string text, Client c)
     {
         var root = Parse(text);
         if (root.DescendantNodes().OfType<InterfaceDeclarationSyntax>().FirstOrDefault(i => i.Identifier.Text == c.Name) is not { } decl)
             return (text, $"Client {c.Name} nicht gefunden");
-        var teile = c.Traegt.ToHashSet(StringComparer.Ordinal);
         var edits = new List<(int, int, string)>();
         var soll = Scaffolder.ClientBasen(c);
-        var fremd = decl.BaseList?.Types.Select(t => t.ToString().Trim()).Where(t => !Scaffolder.IstClientBasis(t, teile)).ToList() ?? [];
+        var fremd = decl.BaseList?.Types.Select(t => t.ToString().Trim()).Where(t => !Scaffolder.IstClientBasis(t)).ToList() ?? [];
         var neu = string.Join(", ", soll.Take(1).Concat(fremd).Concat(soll.Skip(1)));
         if (decl.BaseList is { } bl && N(string.Join(",", bl.Types.Select(t => t.ToString()))) != N(neu))
             edits.Add((bl.Types[0].SpanStart, bl.Types[^1].Span.End, neu));
-        return edits.Count == 0 ? null : (MitNamespaces(Anwenden(text, edits), c.Traegt.Concat(c.Sendet).Concat(c.Fragt).Concat(c.Kenntnis).ToList()), "Client-Vertrag");
+        return edits.Count == 0 ? null : (MitNamespaces(Anwenden(text, edits), c.Verkoerpert.Concat(c.Kenntnis).ToList()), "Client-Vertrag");
     }
 
     // ── Bausteine ──────────────────────────────────────────────────────────────────────────────
@@ -527,10 +526,12 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
     {
         _nsVon ??= modell.Records.Select(r => (r.Name, r.Namespace)).Concat(modell.Enums.Select(e => (e.Name, e.Namespace)))
             .Concat((modell.Lesen?.Stores ?? []).SelectMany(s => s.Fns.Select(f => (f.Name, f.Namespace ?? s.Namespace)).Append((s.Name, s.Namespace))))
-            // Funktionen: ein Akteur, der eine rechnen darf (IDarf<IFunktion>), bzw. ein Client, der sie trägt, braucht ihren Namespace.
+            // Funktionen: ein Akteur, der eine rechnen darf (IDarf<IFunktion>), braucht ihren Namespace.
             .Concat(modell.BausteinFunktionen.Select(f => (f.Name, f.Namespace)))
             // Domänen-Dienste: eine Implementierung, die einen nimmt, braucht seinen Namespace.
             .Concat(modell.Dienste.Select(d => (d.Name, d.Namespace)))
+            // Akteure: ein Client, der einen verkörpert (IVerkoerpert<A>), braucht seinen Namespace.
+            .Concat(modell.Akteure.Select(a => (a.Name, a.Namespace)))
             .GroupBy(x => x.Name).ToDictionary(g => g.Key, g => g.First().Item2, StringComparer.Ordinal);
         var root = Parse(text);
         var dateiNs = root.DescendantNodes().OfType<BaseNamespaceDeclarationSyntax>().FirstOrDefault()?.Name.ToString();

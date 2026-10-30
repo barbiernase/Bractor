@@ -17,7 +17,7 @@ public static class Herkunft
     public static string Von(Aggregat a) => Hash(a.State.Select(f => f with { ElementTyp = null }).ToList());
     public static string Von(DecideRegel d) => Hash(new { d.Aggregat, d.Command, d.Ergibt });
     public static string Von(Akteur a) => Hash(new { a.Name, a.Darf, a.Art });
-    public static string Von(Client c) => Hash(new { c.Name, c.Traegt, c.Sendet, c.Fragt, c.Kenntnis });
+    public static string Von(Client c) => Hash(new { c.Name, c.Verkoerpert, c.Kenntnis });
     // Ein Dienst: seine Methoden-Signaturen und je Implementierung ihr Konstruktor (Rümpfe gehören dem Code).
     public static string Von(Dienst d) => Hash(new
     {

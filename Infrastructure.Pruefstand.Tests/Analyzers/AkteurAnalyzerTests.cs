@@ -83,20 +83,20 @@ public interface IFremdPruefung : IFunktion { Storniere Auf(Gebucht2 e); }
     // ── CQRS063/064: Client-Vertrag (docs/konzept-akteure.md §4, docs/konzept-akteure.md §5) ──
 
     [Fact]
-    public async Task Ein_Client_traegt_sendet_fragt_und_hoert()
-        => (await Ids("public interface IKassenplatz : IClientVertrag, ITraegt<IPruefung>, ISendet<Buche>, ISendet<Storniere>, IFragt<Zeige>, "
+    public async Task Ein_Client_verkoerpert_Akteure_und_hoert()
+        => (await Ids("public interface IKassenplatz : IClientVertrag, IVerkoerpert<Kassierer>, IVerkoerpert<Revisor>, IVerkoerpert<Leser>, "
                       + "IHoert<Gebucht2>, IHoert<Hinweis> { }"))
-            .Should().BeEmpty("zwei Akteure (Kassierer, Revisor, Leser) in EINEM Client sind erlaubt");
+            .Should().BeEmpty("mehrere Akteure in EINEM Client sind erlaubt");
 
     [Fact]
     public async Task Ein_Akteur_ueber_zwei_Clients_ist_ok()
-        => (await Ids(@"public interface IKasseA : IClientVertrag, ITraegt<IPruefung> { }
-            public interface IKasseB : IClientVertrag, ITraegt<IPruefung>, ISendet<Buche> { }")).Should().BeEmpty();
+        => (await Ids(@"public interface IKasseA : IClientVertrag, IVerkoerpert<Kassierer> { }
+            public interface IKasseB : IClientVertrag, IVerkoerpert<Kassierer>, IVerkoerpert<Revisor> { }")).Should().BeEmpty();
 
     [Fact]
     public async Task Ein_Client_setzt_sich_aus_Clients_zusammen()
-        => (await Ids(@"public interface IKasseA : IClientVertrag, ITraegt<IPruefung> { }
-            public interface IKasse : IKasseA, ISendet<Buche> { }")).Should().BeEmpty();
+        => (await Ids(@"public interface IKasseA : IClientVertrag, IVerkoerpert<Kassierer> { }
+            public interface IKasse : IKasseA, IVerkoerpert<Revisor> { }")).Should().BeEmpty();
 
     [Fact]
     public async Task Ein_Client_ist_ein_Interface()
@@ -114,20 +114,14 @@ public interface IFremdPruefung : IFunktion { Storniere Auf(Gebucht2 e); }
     }
 
     [Fact]
-    public async Task Senden_nur_was_ein_Akteur_darf()
-        => (await Ids("public interface IKassenplatz : IClientVertrag, ISendet<Sperre> { }")).Should().Equal("CQRS064");
+    public async Task Ein_Client_nennt_keine_eigene_Befugnis()
+        => (await Ids("public interface IKassenplatz : IClientVertrag, IDarf<Sperre> { }")).Should().Contain("CQRS063",
+            "was über die Leitung geht, sind die IDarf der verkörperten Akteure — der Vertrag nennt keine eigene");
 
     [Fact]
-    public async Task Tragen_nur_was_ein_Akteur_darf_und_nur_Funktionen_als_Schnittstelle()
-    {
-        (await Ids("public interface IKassenplatz : IClientVertrag, ITraegt<IFremdPruefung> { }")).Should().Equal("CQRS064");
-        (await Ids("public sealed class Pruefung : IFunktion { public Storniere Auf(Gebucht e) => null!; } "
-                   + "public interface IKassenplatz : IClientVertrag, ITraegt<Pruefung> { }")).Should().Equal("CQRS064");
-    }
-
-    [Fact]
-    public async Task Fragen_nur_Queries_senden_keine_Queries()
-        => (await Ids("public interface IKassenplatz : IClientVertrag, ISendet<Zeige>, IFragt<Buche> { }")).Should().Equal("CQRS064", "CQRS064");
+    public async Task Verkoerpern_nur_einen_konkreten_Akteur()
+        => (await Ids("public interface IRolle : IAkteur { } public interface IKassenplatz : IClientVertrag, IVerkoerpert<IRolle> { }"))
+            .Should().Contain("CQRS064");
 
     [Fact]
     public async Task Hoeren_nur_Events_und_Hinweise()

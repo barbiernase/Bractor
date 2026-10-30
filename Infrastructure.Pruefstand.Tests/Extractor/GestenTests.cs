@@ -225,14 +225,14 @@ public sealed class GestenTests : IDisposable
     }
 
     [Fact]
-    public async Task Client_sendet_einen_weiteren_Command()
+    public async Task Client_verkoerpert_einen_weiteren_Akteur()
     {
         var karte = Karte(await BoardAsync(), "clients", c => (string?)c["name"] == "ILesesaal");
-        karte["sendet"]!.AsArray().Add("GibZurueck");
+        karte["verkoerpert"]!.AsArray().Add("Gutachterin");
 
         await GesteAsync(Geaendert("clients", karte));
 
-        Text("Lesen.cs").Should().Contain("ISendet<LeiheAus>, ISendet<GibZurueck>").And.Contain("IHoert<MahnungEroeffnet>");
+        Text("Lesen.cs").Should().Contain("IVerkoerpert<Theke>, IVerkoerpert<Archiv>, IVerkoerpert<Gutachterin>").And.Contain("IHoert<MahnungEroeffnet>");
     }
 
     [Fact]

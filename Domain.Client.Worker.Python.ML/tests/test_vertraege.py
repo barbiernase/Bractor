@@ -2,7 +2,7 @@
 Die Worker programmieren gegen ihre generierten Client-Verträge (docs/konzept-akteure.md §4) — offline, ohne Server, ohne Torch.
 
 Bewiesen wird gegen das ECHTE Generat (domain_client/generated/vertraege.py aus Cqrs.Codegen): die Worker erben die Client-Basis,
-tragen ihre Funktionen (ITraegt) und hören ihre Kenntnis (IHoert); der Handshake nennt Client + Hash, und eine Kenntnis gibt nichts aus.
+tragen die Funktionen ihrer Akteure (IDarf<F>) und hören ihre Kenntnis (IHoert); der Handshake nennt Client + Hash, und eine Kenntnis gibt nichts aus.
 """
 
 import asyncio

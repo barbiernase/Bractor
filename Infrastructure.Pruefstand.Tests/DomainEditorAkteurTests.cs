@@ -164,7 +164,7 @@ public sealed class DomainEditorAkteurTests
 
     private static DomainEditor.Client Laden => new()
     {
-        Name = "ILaden", Namespace = "Shop.Clients", Traegt = ["IFolge"], Sendet = ["Bestelle"], Fragt = ["Bestellungen"], Kenntnis = ["Bestellt"],
+        Name = "ILaden", Namespace = "Shop.Clients", Verkoerpert = ["Gutachter"], Kenntnis = ["Bestellt"],
     };
 
     private static EditorModell MitClients(params DomainEditor.Client[] clients) =>
@@ -175,14 +175,12 @@ public sealed class DomainEditorAkteurTests
     {
         var text = Scaffolder.ClientInterface(Laden);
         text.Should().Contain("public interface ILaden : IClientVertrag,")
-            .And.Contain("ITraegt<IFolge>").And.Contain("ISendet<Bestelle>").And.Contain("IFragt<Bestellungen>")
-            .And.Contain("IHoert<Bestellt>").And.NotContain("void Auf");
-        Scaffolder.IstClientBasis("ISendet<Bestelle>", new HashSet<string>()).Should().BeTrue();
-        Scaffolder.IstClientBasis("ITraegt<IFolge>", new HashSet<string>()).Should().BeTrue();
-        Scaffolder.IstClientBasis("IHoert<Bestellt>", new HashSet<string>()).Should().BeTrue();
-        Scaffolder.IstClientBasis("IDisposable", new HashSet<string> { "IFolge" }).Should().BeFalse("fremde Basistypen gehören dem Code");
+            .And.Contain("IVerkoerpert<Gutachter>").And.Contain("IHoert<Bestellt>").And.NotContain("void Auf");
+        Scaffolder.IstClientBasis("IVerkoerpert<Gutachter>").Should().BeTrue();
+        Scaffolder.IstClientBasis("IHoert<Bestellt>").Should().BeTrue();
+        Scaffolder.IstClientBasis("IDisposable").Should().BeFalse("fremde Basistypen gehören dem Code");
         var dateien = Scaffolder.Generiere(MitClients(Laden));
-        dateien.Should().Contain(d => d.Inhalt.Contains("public interface ILaden : IClientVertrag"));
+        dateien.Should().Contain(d => d.Inhalt.Contains("public interface ILaden : IClientVertrag") && d.Inhalt.Contains("using Shop.Akteure;"));
     }
 
     [Fact]
@@ -190,7 +188,7 @@ public sealed class DomainEditorAkteurTests
     {
         var m = Herkunft.Stempeln(MitClients(Laden));
         Herkunft.Geaenderte(m).Should().BeEmpty();
-        var geaendert = m with { Clients = [m.Clients[0] with { Sendet = [] }] };
+        var geaendert = m with { Clients = [m.Clients[0] with { Verkoerpert = [] }] };
         Herkunft.Geaenderte(geaendert).Should().Contain("client Shop.Clients.ILaden");
     }
 }

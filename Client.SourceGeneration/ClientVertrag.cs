@@ -23,7 +23,7 @@ internal sealed class ClientVertragInfo
     public List<string> Fragt { get; private set; } = new List<string>();
     /// <summary>Was der Client hört (<c>IHoert&lt;T&gt;</c>) — genau das wird abonniert.</summary>
     public List<string> Hoert { get; private set; } = new List<string>();
-    /// <summary>Getragene Funktionen (<c>ITraegt&lt;F&gt;</c>) — ein C#-Client trägt (noch) keine (CQRS094).</summary>
+    /// <summary>Getragene Funktionen (<c>IDarf&lt;F&gt;</c> eines verkörperten Akteurs) — ein C#-Client trägt (noch) keine (CQRS094).</summary>
     public List<string> Traegt { get; private set; } = new List<string>();
 
     public static readonly ClientVertragInfo Leer = new ClientVertragInfo();
@@ -60,24 +60,24 @@ internal static class ClientVertragDiagnosen
     public static readonly DiagnosticDescriptor OhneVertrag = new DiagnosticDescriptor(
         "CQRS093", "Client ohne Vertrag",
         "Die Client-Assembly '{0}' nennt ihren Vertrag nicht — [assembly: IstClient<IMeinClient>] ergänzen (IMeinClient : IClientVertrag); "
-        + "ohne Vertrag wüsste niemand, was sie sendet, fragt und hört (docs/konzept-akteure.md §4)",
+        + "ohne Vertrag wüsste niemand, für welche Akteure sie spricht und was sie hört (docs/konzept-akteure.md §4)",
         Kategorie, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor TeileImCSharpClient = new DiagnosticDescriptor(
         "CQRS094", "C#-Client trägt Funktionen",
-        "Der Client-Vertrag '{0}' trägt Funktionen ({1}) — draußen trägt sie heute nur das Python-SDK (generierte Basen); ein C#-Client nennt "
-        + "ISendet/IFragt/IHoert",
+        "Der Client-Vertrag '{0}' trägt Funktionen ({1}): ein verkörperter Akteur darf sie rechnen (IDarf<F>) — draußen trägt sie heute nur "
+        + "das Python-SDK (generierte Basen); ein C#-Client verkörpert Akteure, die keine Funktion rechnen",
         Kategorie, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor CommandOhneSendet = new DiagnosticDescriptor(
         "CQRS095", "Command nicht im Client-Vertrag",
-        "Der Client erzeugt '{0}', sein Vertrag '{1}' nennt ISendet<{0}> nicht — der Server würde den Command ablehnen; in den Vertrag "
-        + "aufnehmen (ein verkörperter Akteur muss ihn dürfen) oder im Client einen anderen Weg wählen",
+        "Der Client erzeugt '{0}', aber kein Akteur, den sein Vertrag '{1}' verkörpert, darf ihn (IDarf<{0}>) — der Server würde den Command "
+        + "ablehnen; einen Akteur verkörpern, der ihn darf (IVerkoerpert<A>), oder im Client einen anderen Weg wählen",
         Kategorie, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor QueryOhneFragt = new DiagnosticDescriptor(
         "CQRS096", "Query nicht im Client-Vertrag",
-        "Der Client stellt '{0}', sein Vertrag '{1}' nennt IFragt<{0}> nicht — der Server würde die Query ablehnen",
+        "Der Client stellt '{0}', aber kein Akteur, den sein Vertrag '{1}' verkörpert, darf sie (IDarf<{0}>) — der Server würde die Query ablehnen",
         Kategorie, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor EventOhneKenntnis = new DiagnosticDescriptor(
@@ -88,8 +88,8 @@ internal static class ClientVertragDiagnosen
 }
 
 /// <summary>
-/// Hält den Client-Code gegen seinen Vertrag (CQRS095–097): jede erzeugte Domänen-Nachricht (Command, Query) muss der Vertrag senden bzw.
-/// fragen, jeder <c>Handle(E, MessageContext)</c> auf ein Server-Event muss es kennen. Code-Fakten: Objekterzeugung und Signatur, keine Namen.
+/// Hält den Client-Code gegen seinen Vertrag (CQRS095–097): jede erzeugte Domänen-Nachricht (Command, Query) muss ein verkörperter Akteur
+/// dürfen, jeder <c>Handle(E, MessageContext)</c> auf ein Server-Event muss es kennen. Code-Fakten: Objekterzeugung und Signatur, keine Namen.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class ClientVertragAnalyzer : DiagnosticAnalyzer

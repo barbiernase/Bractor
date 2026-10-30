@@ -189,13 +189,12 @@ public sealed class GraphBuilder
             foreach (var d in a.Darf)
                 if (NachrichtId(d) is { } ziel) kanten.Add((aid, ziel, EdgeKind.darf, null));
         }
-        // Clients (docs/konzept-akteure.md §4, docs/konzept-akteure.md §5): client:X —traegt→ Funktion, —sendet→ Command, —fragt→ Query, Event —hoert→ client,
-        //   client —verkoerpert→ akteur (abgeleitet wie AkteurRechteGenerator).
+        // Clients (docs/konzept-akteure.md §4, docs/konzept-akteure.md §5): client:X —verkoerpert→ akteur, Event —hoert→ client. Was über die Leitung
+        //   hineingeht, sind die darf-Kanten seiner Akteure — keine zweite Kante.
         foreach (var c in _dom.Clients)
         {
             var cid = $"client:{c.Name}";
-            var verk = Abstractions.Clientvertragsregeln.Verkoerpert(
-                c.Traegt.Concat(c.Sendet).Concat(c.Fragt).Select(t => _dom.Akteure.Where(a => a.Darf.Contains(t)).Select(a => a.Name)));
+            var verk = c.Verkoerpert;
             Add(new Node
             {
                 Id = cid, Kind = NodeKind.client, Name = c.Name, FullName = c.Full, Namespace = c.Namespace,
@@ -205,10 +204,6 @@ public sealed class GraphBuilder
                     Fragt = c.Fragt.ToList(), Kenntnis = c.Kenntnis.ToList(), Verkoerpert = verk.ToList(),
                 },
             });
-            foreach (var t in c.Traegt)
-                if (_dom.BausteinFunktionen.FirstOrDefault(f => f.Name == t) is { } f) kanten.Add((cid, $"funktion:{f.Name}", EdgeKind.traegt, t));
-            foreach (var s in c.Sendet) if (NachrichtId(s) is { } ziel) kanten.Add((cid, ziel, EdgeKind.sendet, null));
-            foreach (var q in c.Fragt) if (NachrichtId(q) is { } ziel) kanten.Add((cid, ziel, EdgeKind.fragt, null));
             foreach (var e in c.Kenntnis) if (NachrichtId(e) is { } ein) kanten.Add((ein, cid, EdgeKind.hoert, null));
             foreach (var a in verk) kanten.Add((cid, $"akteur:{a}", EdgeKind.verkoerpert, null));
         }

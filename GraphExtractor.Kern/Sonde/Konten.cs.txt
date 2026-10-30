@@ -108,4 +108,4 @@ public sealed class Registrierung : IFunktion
 // Wer hineingibt: ein Mensch am Registrierungs-Formular; der Client hört, wie es ausgeht.
 public sealed record Besucher : IMensch, IDarf<RegistriereBenutzer>;
 
-public interface IRegistrierungsseite : IClientVertrag, ISendet<RegistriereBenutzer>, IHoert<BenutzerBestaetigt>, IHoert<RegistrierungAbgelehnt> { }
+public interface IRegistrierungsseite : IClientVertrag, IVerkoerpert<Besucher>, IHoert<BenutzerBestaetigt>, IHoert<RegistrierungAbgelehnt> { }

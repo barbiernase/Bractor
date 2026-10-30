@@ -95,7 +95,8 @@ public sealed class Prognosemodell(IZustand<Gewichte> gewichte) : IFunktion, ILe
         gewichte.Wert.Anzahl.TryGetValue(t.Station.Wert, out var n) ? new VermerkePrognose(t.Station, gewichte.Wert.Mittel[t.Station.Wert], n) : null;
 }
 
-// Draußen: eine Warnung hört die Tendenz und gibt selbst einen Hinweis aus — getragen von der Wetter-App.
+// Draußen: eine Warnung hört die Tendenz und gibt selbst einen Hinweis aus — der Warndienst rechnet sie, getragen von der Wetter-App, die ihn
+// verkörpert.
 public record Unwetter(Id<Station> Station, string Stufe) : ITransientEvent;
 
 public interface IUnwetterwarnung : IFunktion
@@ -103,4 +104,6 @@ public interface IUnwetterwarnung : IFunktion
     Unwetter? Auf(Tendenz t);
 }
 
-public interface IWetterApp : IClientVertrag, ITraegt<IUnwetterwarnung>, IHoert<Unwetter> { }
+public sealed record Warndienst : IMaschine, IDarf<IUnwetterwarnung>;
+
+public interface IWetterApp : IClientVertrag, IVerkoerpert<Warndienst>, IHoert<Unwetter> { }

@@ -216,25 +216,25 @@ public static class Grammatik
             + "Rahmen „ohne Akteur“.", "warning",
             [new("laufzeit", null, "Infrastructure/Akteure/AkteurTor.cs (ohne IDarf abgewiesen)"),
              Offen("Editor-Sicht: Rahmen „ohne Akteur“ (board.sicht); Fixpunkt im Generator (docs/konzept-akteure.md §2.3)")]),
-        new("GR-CLIENT", "Client-Vertrag: nur der Rand", "Ein Client (interface IX : IClientVertrag) stellt in seiner Basisliste zusammen, was über SEINE "
-            + "Leitung geht: getragene Funktionen (ITraegt<F>), ISendet<T>/IFragt<T> und Kenntnis (IHoert<E>) — keine eigenen Member, keine "
-            + "client-internen Typen.", "error",
+        new("GR-CLIENT", "Client-Vertrag: nur der Rand", "Ein Client (interface IX : IClientVertrag) nennt in seiner Basisliste, wen er verkörpert "
+            + "(IVerkoerpert<A>) und was er hört (IHoert<E>) — keine eigenen Member, keine client-internen Typen. Was über seine Leitung hineingeht, "
+            + "sind die IDarf seiner Akteure: Commands, Quell-Nachrichten und Hinweise sendet er, Queries fragt er, Funktionen trägt er.", "error",
             [An("CQRS063", "Domain.SourceGeneration/AkteurAnalyzer.cs (Form)"),
              new("generator", null, "Infrastructure.SourceGeneration/AkteurRechteGenerator.cs (GeneratedClientVertraege, Client-Hash)"),
              new("laufzeit", null, "Infrastructure/GrpcClient/CqrsClientService.cs (Handshake je Client, Vertrag ∩ Token)")]),
-        new("GR-CLIENT-BEFUGT", "Client sendet nur, was ein Akteur darf", "Was ein Client trägt (ITraegt), sendet (ISendet) oder fragt (IFragt), muss ein "
-            + "Akteur per IDarf<T> dürfen — der Client-Vertrag schneidet aus der Befugnis, er erweitert sie nie.", "error",
-            [An("CQRS064", "Domain.SourceGeneration/AkteurAnalyzer.cs"), new("laufzeit", null, "Infrastructure/Akteure/ClientVertrag.cs (Rechte = Vertrag ∩ IDarf ∩ Token)")]),
+        new("GR-CLIENT-BEFUGT", "Client verkörpert Akteure", "Ein Client verkörpert nur konkrete Akteure (IVerkoerpert<A>) und hört nur Events und "
+            + "Hinweise (IHoert<E>); befugt ist der Akteur, nicht die Software — der Vertrag nennt keine eigene Befugnis.", "error",
+            [An("CQRS064", "Domain.SourceGeneration/AkteurAnalyzer.cs"), new("laufzeit", null, "Infrastructure/Akteure/ClientVertrag.cs (Rechte = verkörperte Akteure ∩ Token)")]),
         new("GR-CLIENT-CODE", "Client-Code = Vertrag", "Eine Client-Assembly nennt ihren Vertrag ([assembly: IstClient<IX>]); was ihr Code an "
-            + "Commands erzeugt, sendet der Vertrag (ISendet), was er an Queries stellt, fragt er (IFragt), worauf ein Handler hört, kennt er "
-            + "(IHoert) — abonniert, gesendet und gefragt wird nur, was im Vertrag steht. Funktionen trägt draußen nur das Python-SDK.", "error",
+            + "Commands erzeugt und an Queries stellt, muss ein verkörperter Akteur dürfen (IDarf), worauf ein Handler hört, kennt der Vertrag "
+            + "(IHoert) — abonniert wird nur, was er hört, gesendet und gefragt nur, was seine Akteure dürfen. Funktionen trägt draußen nur das Python-SDK.", "error",
             [Gen("CQRS093", "Client.SourceGeneration/ClientVertrag.cs (Client ohne Vertrag)"),
              Gen("CQRS094", "Client.SourceGeneration/ClientVertrag.cs (C#-Client trägt Funktionen)"),
-             An("CQRS095", "Client.SourceGeneration/ClientVertrag.cs (Command nicht gesendet)"),
-             An("CQRS096", "Client.SourceGeneration/ClientVertrag.cs (Query nicht gefragt)"),
+             An("CQRS095", "Client.SourceGeneration/ClientVertrag.cs (Command darf kein verkörperter Akteur)"),
+             An("CQRS096", "Client.SourceGeneration/ClientVertrag.cs (Query darf kein verkörperter Akteur)"),
              An("CQRS097", "Client.SourceGeneration/ClientVertrag.cs (Server-Event nicht Kenntnis)")]),
         new("GR-GETRAGEN", "Jede Funktion draußen hat einen Träger", "Eine Funktion, die als Schnittstelle deklariert ist und keine Umsetzung im Host "
-            + "hat, wird von mindestens einem Client getragen (ITraegt<F>) — sonst läuft sie nur mit einer Bindung von Hand.", "warning",
+            + "hat, wird von mindestens einem Client getragen (er verkörpert einen Akteur mit IDarf<F>) — sonst läuft sie nur mit einer Bindung von Hand.", "warning",
             [An("CQRS087", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Warnung — Funktion ohne Träger)")]),
         new("GR-MODUL-EINGANG-OFFEN", "Eingang ohne Konsument", "Ein Command oder eine Query, die niemand konsumiert — offener Eingang des Moduls.", "warning",
             [An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Command ohne Decider, Query ohne Reader und ohne Aggregat)")]),

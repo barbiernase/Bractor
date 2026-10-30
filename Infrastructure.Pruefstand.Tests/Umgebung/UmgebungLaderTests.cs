@@ -168,7 +168,7 @@ public class UmgebungLaderTests
         b.Keys.Should().Contain(["IBildaufbereitung", "IBildpaarBeurteilung", "ITraining", "Bildeingang", "RangeAufloesung", "MitgliederEinfrieren"]);
         b["IBildaufbereitung"].Draussen.Should().BeTrue("eine Schnittstelle");
         b["IBildaufbereitung"].Umsetzungen.Select(u => u.Name).Should().Equal(["OpenCvBildaufbereitung"], "genau eine Umsetzung im Host");
-        b["IBildpaarBeurteilung"].Umsetzungen.Should().BeEmpty("nur draußen getragen (ITraegt)");
+        b["IBildpaarBeurteilung"].Umsetzungen.Should().BeEmpty("nur draußen getragen");
         b["Bildeingang"].Gleichbleibend.Should().BeTrue("eine Klasse ohne Dienst und Lese-Fähigkeit");
         b["RangeAufloesung"].Liest.Should().BeTrue("mit Lese-Fähigkeit: läuft im Host und hält fest");
     }

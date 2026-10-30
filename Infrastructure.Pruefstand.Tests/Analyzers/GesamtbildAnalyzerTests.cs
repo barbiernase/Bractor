@@ -120,7 +120,8 @@ public partial class Kasse : IState
         var befunde = await Befunde(funktion);
         befunde.Should().ContainSingle().Which.Id.Should().Be(GesamtbildAnalyzer.GetragenId);
         befunde[0].GetMessage().Should().StartWith("'IRechnen'");
-        (await Ids(funktion + "public interface IKasse : IClientVertrag, ITraegt<IRechnen> { }")).Should().BeEmpty("ein Client trägt sie");
+        (await Ids(funktion + "public sealed record Rechner : IMaschine, IDarf<IRechnen>; public interface IKasse : IClientVertrag, IVerkoerpert<Rechner> { }"))
+            .Should().BeEmpty("ein Client trägt sie: er verkörpert einen Akteur, der sie rechnen darf");
         (await Ids(funktion + "public sealed class Rechnen : IRechnen { public OneOf<Eroeffne> Auf(Eroeffnet e) => default!; }"))
             .Should().BeEmpty("sie hat eine Umsetzung im Host");
     }
