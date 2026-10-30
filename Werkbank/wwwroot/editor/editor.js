@@ -31,6 +31,8 @@
     // Client (docs/konzept-akteure.md §4): die Software an der Leitung — verkoerpert[] = die Akteure (IVerkoerpert<A>), kenntnis = was er hört.
     // Was über seine Leitung hineingeht, sind die IDarf dieser Akteure (vom Server abgeleitet: board.sicht.clients).
     // Katalog-Funktion (IFunktion): Auftrag → Ergebnis-Events; ein Prozess ruft sie mit Rufe<F> (Dann ƒ an der Regel).
+    // Funktion (IFunktion, ein Block der Hierarchie): Eingänge (Auf) mit Ausgaben, Konstruktor, Umsetzungen — vom Server gelesen.
+    m.bausteinFunktionen=m.bausteinFunktionen||[];m.bausteinFunktionen.forEach(f=>{f.eingaenge=f.eingaenge||[];f.umsetzungen=f.umsetzungen||[];});
     m.funktionen=m.funktionen||[];m.funktionen.forEach(f=>{if(!f._id)f._id="fk"+(NID++);f.ergebnisse=f.ergebnisse||[];f.konstruktor=f.konstruktor||[];});
     // Domänen-Dienst (IDienst, konzept-werkbank §12.3 E11): Signatur (Methoden) + Implementierungen mit Konstruktor; eine Funktions-Implementierung nimmt ihn im Konstruktor.
     m.dienste=m.dienste||[];m.dienste.forEach(d=>{if(!d._id)d._id="dn"+(NID++);d.methoden=d.methoden||[];d.methoden.forEach(x=>{x.parameter=x.parameter||[];});
@@ -978,6 +980,19 @@
   // Der Sicht-Eintrag einer Karte (bzw. ihres Besitzers bei Rumpf-Kacheln); null = (noch) nicht im Code.
   function sk(n){if(!n)return null;const k=SICHT().karten[n.id];if(k)return k;
     if(n.kind==="rumpf")return SICHT().karten[n.own.id]||null;return null;}
+  // ── BESITZ (vom Server, board.sicht.besitz): je Karte ihr Elternknoten — Hierarchie Anwendung → Blöcke → Glieder, nur aus den Signaturen.
+  //   Die oberste Ebene unter der Anwendung ist die REGION einer Karte: ein Block (Aggregat, Funktion, Dienst, Sicht = Store-Bündel), die
+  //   Begriffe (gemeinsame Typen) oder der Rand (Akteure, Clients, Quellen). „!" = mehrdeutig (zwei Erzeuger, zwei Antwortende, zwei Stores).
+  const RAND_KEY="§rand",BEGR_KEY="§begriffe",ANW_KEY="§anwendung";
+  const besitzRoh=id=>(SICHT().besitz||{})[id]||null;
+  const besitzVon=id=>{const b=besitzRoh(id);return b?b.replace(/!$/,""):null;};
+  const mehrdeutig=n=>!!n&&(besitzRoh(n.id)||"").endsWith("!");
+  function regionVon(n){if(!n)return null;let id=n.id,b=besitzVon(id);
+    for(let i=0;b&&!b.startsWith("§")&&i<8;i++){id=b;b=besitzVon(b);}
+    return b===ANW_KEY?id:b;}
+  const istRegionKarte=ns=>typeof ns==="string"&&/^(agg|fb|dn|sto):/.test(ns);
+  const regionArt=ns=>ns===RAND_KEY?"Rand":ns===BEGR_KEY?"Begriffe":ns.startsWith("agg:")?"Aggregat":ns.startsWith("fb:")?"Funktion":ns.startsWith("dn:")?"Dienst":ns.startsWith("sto:")?"Sicht":"";
+  const regionRang=ns=>ns===RAND_KEY?0:ns.startsWith("agg:")?1:ns.startsWith("fb:")?2:ns.startsWith("dn:")?3:ns.startsWith("sto:")?4:ns===BEGR_KEY?5:6;
   // 👤 AKTEUR: Name, Namespace, und EINE Liste — was er darf (IDarf<T>). ⊕ „+ darf" → passende Commands/Queries
   //   leuchten → anklicken = erlauben, ✓-Karte = entziehen. Was er HÖREN darf, ist abgeleitet (Generator), keine Eingabe.
   function akteurCard(body,a){
@@ -1231,7 +1246,7 @@
   //    Applier→Aggregat(rechts) · Applier→State-Feld(oben, optionale Zuweisungs-Markierung).
   const SVGNS="http://www.w3.org/2000/svg";
   const GRID=20;
-  const NODELABEL={host:"Host",akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",quelle:"Quelle",fluss:"Fluss",rumpf:"Code",code:"Code",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",funktion:"Funktion",dienst:"Dienst",auftrag:"Auftrag",flussknoten:"Pipeline"};
+  const NODELABEL={host:"Host",bausteinfunktion:"Funktion",akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",quelle:"Quelle",fluss:"Fluss",rumpf:"Code",code:"Code",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",funktion:"Funktion",dienst:"Dienst",auftrag:"Auftrag",flussknoten:"Pipeline"};
   let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
   // Typ-Navigation: HLKIND = aktuell hervorgehobener Node-Typ (Board+Minimap); JUMPIX = Sprung-Cursor je Typ.
   let HLKIND=null; const JUMPIX={};
@@ -1941,6 +1956,7 @@
             ...MODEL.transitions.map(t=>({id:"tr:"+t._id,name:((t.dann||[]).map(d=>d.rufe||d.sende).filter(Boolean).join(", ")),kind:"transition",ref:t})),
             ...MODEL.funktionen.map(f=>({id:"fk:"+f._id,name:f.name,kind:"funktion",ref:f})),
             ...MODEL.dienste.map(d=>({id:"dn:"+d._id,name:d.name,kind:"dienst",ref:d})),
+            ...(MODEL.bausteinFunktionen||[]).map(f=>({id:"fb:"+f._id,name:f.name,kind:"bausteinfunktion",ref:f})),
             ...MODEL.readModels.map(rm=>({id:"rm:"+rm._id,name:rm.name,kind:"readmodel",ref:rm})),
             ...MODEL.stores.map(s=>({id:"sto:"+s._id,name:s.name,kind:"store",ref:s})),
             ...MODEL.projektionen.map(p=>({id:"prj:"+p._id,name:p.name,kind:"projektion",ref:p})),
@@ -1956,17 +1972,17 @@
   // Das AKTEUR-BAND (docs/konzept-akteure.md §8): ein eigener Block je Domäne — ganz links, auf der Eingangsseite, vor den
   //   Aggregat-Blöcken. Kommt DAZU, ersetzt keine Spalte. Domäne aus dem Graphen (alle IDarf-Ziele in einer Domäne → dort).
   const AKTEUR_KEY="§akteure";
-  const ROLE_AKTEUR={akteur:0,auf:1};   // Spalte „Zusage" (Vertrag, Akteur-Konzept §3) neben dem Akteur
+  const ROLE_AKTEUR={akteur:0,auf:1,client:2,event:3,rejection:3,command:3,query:3,valueobject:4,enum:4};   // Spalte „Zusage" (Vertrag, Akteur-Konzept §3) neben dem Akteur
   // Rollen-Spalten innerhalb eines Aggregat-Blocks (links→rechts = Schreibfluss, dann Leseseite).
   //   Leseseite: Projektion (Hub) → ihre Handles → Store-Fns → Store/ReadModel; Query → Reader-Handle → Response, Reader (Hub).
   //   Nach dem Event der Prozess (Regel → Auftrag → ƒ → Ergebnis),
   //   der in die Command-Spalte zurück sendet — so liest sich ein Ablauf in EINEM Block.
   const ROLE_AGG={command:3,decider:4,aggregate:5,state:5,event:6,rejection:6,applier:7,
     saga:8,transition:9,auftrag:10,funktion:11,ergebnis:12,dienst:12.5,valueobject:13,enum:13,projektion:14,"handle:projektion":15,"handle:reaktion":15,
-    fn:16,store:17,readmodel:17,query:18,"handle:reader":19,queryresponse:20,reader:21};
+    fn:16,store:17,readmodel:17,query:18,"handle:reader":19,queryresponse:20,reader:21,bausteinfunktion:11,konfig:13,code:22};
   // Rollen-Spalten im Geteilt-Band.
   const ROLE_SHARED={saga:0,transition:1,auftrag:2,funktion:3,ergebnis:3.5,dienst:4,reaktion:2,"handle:reaktion":3,konfig:7,valueobject:8,enum:8,command:9,event:9,rejection:9,
-    fn:10,store:11,readmodel:11,"handle:projektion":12,projektion:13,"handle:reader":14,reader:15,query:14,queryresponse:16,rumpf:17,code:17};
+    fn:10,store:11,readmodel:11,bausteinfunktion:3,"handle:projektion":12,projektion:13,"handle:reader":14,reader:15,query:14,queryresponse:16,rumpf:17,code:17};
   // Rolle eines Knotens (vom Server): Handles je Besitzer-Art (Projektions- vs. Reader-Handle liegen in verschiedenen Spalten), Ergebnis-Events
   //   einer Funktion hinter ihr (Spalte „ergebnis“), sonst die Art. Funktionen einer Kette: je Tiefe eine eigene Spalte (11.01, 11.02 …).
   const rolle=(n,map)=>{const sr=(SICHT().karten[n.id]||{}).rolle,k=sr||(n.kind==="handle"?"handle:"+n.own.kind:n.kind);
@@ -1988,7 +2004,10 @@
   function subGroupOf(n){const g=groupKeyOf(n);return g===SHARED_KEY?null:g;}
 
   // Block einer Karte (Aggregat, SHARED_KEY = Brücke, AKTEUR_KEY = Akteur-Band) — vom Server (board.sicht).
-  function groupKeyOf(n){const k=sk(n);if(k)return k.block;return n.kind==="akteur"||n.kind==="auf"?AKTEUR_KEY:SHARED_KEY;}
+  //   Seit der Hierarchie: je Region EIN Block — der Rand mit den Akteur-Spalten, die Begriffe mit den geteilten Spalten, ein Block mit den
+  //   Aggregat-Spalten (Schreibfluss, dann Leseseite).
+  function groupKeyOf(n){const rg=regionVon(n);if(rg===RAND_KEY)return AKTEUR_KEY;if(rg===BEGR_KEY)return SHARED_KEY;if(rg)return rg;
+    const k=sk(n);if(k)return k.block;return n.kind==="akteur"||n.kind==="auf"?AKTEUR_KEY:SHARED_KEY;}
   // ── MESS-BASIERTES PACKING: nach dem Rendern die ECHTEN Knotengrößen messen und die Aggregat-
   //    Blöcke ÜBERLAPPUNGSFREI per Shelf-Packing setzen. Nur frische/Seed-Boards (alle x/y leer);
   //    vollständig arrangierte Boards (Handanordnung) bleiben unberührt. Zwei Ebenen:
@@ -2190,7 +2209,7 @@
       h("span",{class:"gtitle"+(n.name?" hatname":""),title:title+(n.name?" · "+n.name:"")},h("span",{class:"gk"},title+(n.name?" · ":"")),h("span",{class:"gn"},n.name||"")),
       dg.length?h("span",{class:"gdiag"+(nurWarn?" warn":""),title:dg.map(d=>d.text).join("\n")},(nurWarn?"⚠ ":"⛔ ")+dg.length):null,
       dsBadge(n),
-      n.kind==="host"||n.kind==="code"||n.kind==="rumpf"?null:h("span",{class:"gx",title:"Löschen",onclick:()=>delNode(n)},"✕"));
+      n.kind==="host"||n.kind==="code"||n.kind==="rumpf"||n.kind==="bausteinfunktion"?null:h("span",{class:"gx",title:"Löschen",onclick:()=>delNode(n)},"✕"));
     head.onpointerdown=e=>{if(e.target.classList.contains("gx")||e.target.classList.contains("gcol"))return;startMove(e,el,P(n),()=>waehle(n.id));};
     el.append(head);
     el.append(kurzfassung(n));
@@ -2591,7 +2610,7 @@
   // Geladen, wenn seine DOMÄNE (Graph-Zuordnung, domKey — z. B. ImagePairProjektion → ImagePair) ODER sein eigener Namespace
   //   (z. B. „Projections“ ausdrücklich gewählt) in der Auswahl liegt. Die Domänen-Gehörigkeit steht über dem Namespace.
   function geladen(n){if(n.kind==="client")return LADEN===null||clientPorts(n.ref).some(p=>{const m=p.node&&NODEBY.get(p.node);return m&&m.kind!=="client"&&geladen(m);});
-    if(LADEN===null||!ausCodeVon(n))return true;const x=nsVon(n),d=domKey(n);
+    if(LADEN===null||!ausCodeVon(n))return true;const x=nsVon(n),d=domNs(n);
     if(istFlussDom(d)){const f=flussVonDom(d),hm=FLHEIM.get(d);return LADEN.some(g=>(f&&f.namespace&&drinNs(g,f.namespace))||(hm&&drinNs(g,hm)));}
     return LADEN.some(g=>(x&&drinNs(g,x))||(d!==OHNE_DOM&&drinNs(g,d)));}
   window.deLaden=function(){START_OFFEN=true;render();};
@@ -2622,7 +2641,7 @@
   let START_ERST=false;
   // Code-Elemente je Namespace (rekursiv) für die Anzeige im Dialog.
   function basisZaehl(alle,zahl){graphNodes().forEach(n=>{if(["handle","fn","rumpf","state","decider","applier","transition"].includes(n.kind)||!ausCodeVon(n))return;
-      const x=nsVon(n),d=domKey(n);alle.forEach(m=>{if((x&&drinNs(m,x))||(d!==OHNE_DOM&&drinNs(m,d)))zahl.set(m,(zahl.get(m)||0)+1);});});}
+      const x=nsVon(n),d=domNs(n);alle.forEach(m=>{if((x&&drinNs(m,x))||(d!==OHNE_DOM&&drinNs(m,d)))zahl.set(m,(zahl.get(m)||0)+1);});});}
 
   // ══ VERBINDEN-MODUS (Hybrid, docs/konzept-werkbank.md §8.5 + A.3 „⊕-Modus“): Port im Panel anklicken → alle PASSENDEN
   //   Knoten leuchten auf dem Graphen (Ablauf-Ansicht, Rest abgeblendet) → Karte anklicken = verbinden, ✓-Karte = lösen.
@@ -3140,6 +3159,8 @@
     else if(k==="flussknoten")t=flussKurz(n);
     else if(k==="saga")t="Auslöser: "+(r.triggerEvent||"—")+" · "+transOf(r).length+" Regeln";
     else if(k==="transition")t="WENN "+kurz(r.wenn)+" → "+kurz((r.dann||[]).map(d=>d.rufe?"ƒ "+d.rufe+(d.zeitlimit?" ⏳":""):d.sende+(d.zeitlimit?" ⏳":"")));
+    else if(k==="bausteinfunktion")t=(r.eingaenge||[]).map(e=>"Auf("+(e.eingang||"?")+(e.hinweis?" ·Hinweis":"")+") → "+((e.ausgaben||[]).length?kurz(e.ausgaben):"—")+(e.strom?" (Strom)":"")).join(" · ")
+      +((r.umsetzungen||[]).length?" · Umsetzung "+kurz(r.umsetzungen.map(u=>u.name)):r.klasse?"":" · draußen");
     else if(k==="funktion"){const dn=KETTE.filter(x=>x.art==="dann"&&x.von==="fk:"+r._id).map(x=>x.d.rufe?"ƒ "+x.d.rufe:x.d.sende);
       t=(r.auftrag||"?")+" → "+((r.ergebnisse||[]).length?kurz(r.ergebnisse):"(kein Ergebnis)")+(dn.length?" · dann "+kurz(dn):"");}
     else if(k==="auftrag")t="Eingang von ƒ "+(r.funktion||"—");
@@ -3194,19 +3215,27 @@
   //   Clients und Pipelines haben eigene Rahmen, Zusagen stehen beim Akteur, ein Akteur in der ersten Domäne, in der er wirkt. Darüber nur die
   //   Ansicht: die Heimat namespace-loser Karten (VIEW.heim). Eine Karte, die es im Code noch nicht gibt, steht bis zum Board in ihrem Namespace.
   let FRGEO=new Map();   // FRGEO: Rahmen-Geometrie je Schlüssel (Domäne|Akteur, §vertrag:Akteur) — Ziel der Client-Leitungen
+  // Die REGION einer Karte (Layout und Rahmen): ihr oberster Besitzer unter der Anwendung (board.sicht.besitz). Was (noch) keinen Besitz hat
+  //   (Host, Pipeline-Knoten, neue Karten), fällt auf die Namespace-Domäne zurück.
   function domKey(n){if(n.kind==="host")return HOST_KEY;
+    if(n.kind==="rumpf")return domKey(n.own);
+    return regionVon(n)||domNs(n);}
+  // Die Namespace-Domäne einer Karte (Laden und Zählen im Start-Dialog): Graph-Zuordnung vom Server, sonst der eigene Namespace.
+  function domNs(n){if(n.kind==="host")return HOST_KEY;
     // Der Rumpf einer Client-Implementierung steht in der Domäne des Client-Namespaces (der Client-Rahmen ist nur die Anschlussleiste).
     if(n.kind==="rumpf"&&n.own.kind==="client")return nsVon(n.own)||OHNE_DOM;
     const k=sk(n);if(k&&k.domaene)return k.domaene;
     if(!k){if(n.kind==="client")return CL_PRE+n.ref.name;if(n.kind==="flussknoten")return FL_PRE+n.own.ref._id;
-      if(n.kind==="rumpf")return domKey(n.own);}
+      if(n.kind==="rumpf")return domNs(n.own);}
     return (!k&&nsVon(n))||(VIEW.heim||{})[n.id]||OHNE_DOM;}
-  const domLabel=ns=>ns===OHNE_DOM?"⋯ ohne Domäne":istHostDom(ns)?"🖥 Host · "+(WB.zustand&&WB.zustand.aktiv||"Umgebung"):istClientDom(ns)?"🔌 "+clientAnzeige({name:ns.slice(CL_PRE.length)}):istFlussDom(ns)?"⛓ "+((flussVonDom(ns)||{}).name||"Pipeline"):letztesSeg(ns);
+  const domLabel=ns=>ns===RAND_KEY?"🚪 Rand":ns===BEGR_KEY?"📚 Begriffe":istRegionKarte(ns)?(({agg:"▣ ",fb:"ƒ ",dn:"🧩 ",sto:"👁 "})[ns.split(":")[0]])+((NODEBY.get(ns)||{}).name||ns.replace(/^\w+:(\w+:)?/,""))
+    :ns===OHNE_DOM?"⋯ ohne Domäne":istHostDom(ns)?"🖥 Host · "+(WB.zustand&&WB.zustand.aktiv||"Umgebung"):istClientDom(ns)?"🔌 "+clientAnzeige({name:ns.slice(CL_PRE.length)}):istFlussDom(ns)?"⛓ "+((flussVonDom(ns)||{}).name||"Pipeline"):letztesSeg(ns);
   // Block (Aggregat bzw. Brücke) eines Knotens: aus dem Graphen; ein über eine Spalte angelegter, noch unverdrahteter Knoten
   //   behält bis zur Verdrahtung den Block dieser Spalte (VIEW.heimBlk) — statt im Inselkasten zu landen.
   const blockVon=n=>subGroupOf(n)||(VIEW.heimBlk||{})[n.id]||SHARED_KEY;
   const istInselLage=n=>ISLE.has(n.id)&&!(VIEW.heimBlk||{})[n.id];
-  const domOrd=(a,b)=>istAussenDom(a)!==istAussenDom(b)?(istAussenDom(a)?1:-1):a===OHNE_DOM?1:b===OHNE_DOM?-1:a.localeCompare(b);
+  const domOrd=(a,b)=>istAussenDom(a)!==istAussenDom(b)?(istAussenDom(a)?1:-1):a===OHNE_DOM?1:b===OHNE_DOM?-1
+    :regionRang(a)-regionRang(b)||domLabel(a).localeCompare(domLabel(b));
   const bausteine=z=>z+(z===1?" Baustein":" Bausteine");
   // Gemeinsame Wurzel (z. B. „Domain“) — darunter beginnen die Domänen (wie im Start-Dialog).
   function domWurzel(){const alle=new Set();graphNodes().forEach(n=>{const x=domKey(n)===OHNE_DOM||istAussenDom(domKey(n))?null:domKey(n);if(x)for(let p=x;p;p=elternNs(p))alle.add(p);});
@@ -3283,13 +3312,14 @@
       const hue=domHue(r.ns===OHNE_DOM?SHARED_KEY:r.ns);
       const fr=h("div",{class:"grahmen"+(r.tiefe?" unter":"")+(akteurOrdnung(r.ns).length?" mitakt":"")});fr.dataset.ns=r.ns;
       Object.assign(fr.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});fr.style.setProperty("--dc","hsl("+hue+" 45% 55%)");
-      const k=h("div",{class:"grahmen-k",title:r.ns===OHNE_DOM?"Knoten ohne Namespace":r.ns},
-        h("span",{class:"gr-t"},domLabel(r.ns)),h("span",{class:"gr-p"},r.ns===OHNE_DOM?"":r.ns),
+      const reg=regionArt(r.ns),karte=istRegionKarte(r.ns)?NODEBY.get(r.ns):null;
+      const k=h("div",{class:"grahmen-k",title:r.ns===OHNE_DOM?"Knoten ohne Namespace":reg?reg+(karte?" · "+(nsVon(karte)||""):""):r.ns},
+        h("span",{class:"gr-t",onclick:karte?e=>{e.stopPropagation();waehle(karte.id);}:null},domLabel(r.ns)),h("span",{class:"gr-p"},r.ns===OHNE_DOM?"":reg||r.ns),
         akteurOrdnung(r.ns).length?h("span",{class:"gr-p",title:"Akteur-Rahmen dieser Domäne (Reihenfolge = wo Geteiltes steht)"},"👤 "+akteurOrdnung(r.ns).join(" › ")):null,
         h("span",{class:"gr-z"},r.leer?"leer":bausteine(r.z)),
         akteurOrdnung(r.ns).length?null:steckerZeile(STK.get(r.ns+"|"),[r.ns+"|"]),
-        h("button",{title:"Baustein in dieser Domäne anlegen",onclick:e=>{e.stopPropagation();bausteinMenue(e.clientX,e.clientY,r.ns);}},"＋"),
-        r.ns!==OHNE_DOM?h("button",{title:"Unterdomäne anlegen",onclick:e=>{e.stopPropagation();neueDomaene(e.clientX,e.clientY,r.ns);}},"＋ ▤"):null,
+        h("button",{title:"Baustein anlegen",onclick:e=>{e.stopPropagation();bausteinMenue(e.clientX,e.clientY,karte?nsVon(karte)||defaultNs():reg?defaultNs():r.ns);}},"＋"),
+        r.ns!==OHNE_DOM&&!reg?h("button",{title:"Unterdomäne anlegen",onclick:e=>{e.stopPropagation();neueDomaene(e.clientX,e.clientY,r.ns);}},"＋ ▤"):null,
         h("button",{title:"Domäne einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"),
         h("button",{title:"Mehr",onclick:e=>{e.stopPropagation();domMenue(e.clientX,e.clientY,r);}},"⋯"));
       k.oncontextmenu=e=>{e.preventDefault();e.stopPropagation();domMenue(e.clientX,e.clientY,r);};
