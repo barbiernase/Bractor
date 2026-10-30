@@ -289,6 +289,8 @@ public sealed record BausteinFunktion
     public bool Lebenszyklus { get; init; }
     public string? Doku { get; init; }
     public string? Datei { get; init; }
+    /// <summary>Herkunfts-Stempel (<see cref="DomainEditor.Herkunft"/>): Abweichung = im Editor geändert; null = neu.</summary>
+    public string? Herkunft { get; init; }
 }
 
 /// <summary>Eine Umsetzung einer Funktion im Host: die Klasse und ihr Konstruktor (ein Dienst darin ist die Kante Funktion → Dienst).</summary>
@@ -296,6 +298,8 @@ public sealed record FunktionsUmsetzung
 {
     public required string Name { get; init; }
     public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
+    /// <summary>Datei der Klasse (relativ zur Solution); null = neu.</summary>
+    public string? Datei { get; init; }
 }
 
 /// <summary>Ein Eingang (ein <c>Auf</c>): Eingangstyp, ob Hinweis, ob mit Herkunft, ob Strom, Lese-Fähigkeiten, Ausgaben (einfache Namen).</summary>

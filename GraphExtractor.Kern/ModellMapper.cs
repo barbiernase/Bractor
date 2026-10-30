@@ -139,6 +139,7 @@ public static class ModellMapper
                 {
                     Name = Kurz(u),
                     Konstruktor = f.UmsetzungsKonstruktoren.GetValueOrDefault(u, []).Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
+                    Datei = Rel(f.UmsetzungsDateien.GetValueOrDefault(u)),
                 }).ToList(),
             }).ToList(),
             Dienste = dom.Dienste.Select(d => new Dienst

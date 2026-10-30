@@ -156,6 +156,8 @@ public sealed class BausteinFunktionRaw
     public List<string> UmsetzungenFull = new();
     /// <summary>Je Umsetzung ihr Konstruktor (Typ wie geschrieben, Name) — ein Dienst darin ist die Kante Funktion → Dienst.</summary>
     public Dictionary<string, List<(string Typ, string Name)>> UmsetzungsKonstruktoren = new(StringComparer.Ordinal);
+    /// <summary>Je Umsetzung die Datei ihrer Deklaration.</summary>
+    public Dictionary<string, string?> UmsetzungsDateien = new(StringComparer.Ordinal);
     /// <summary>Der Zustand (<c>IZustand&lt;T&gt;</c>, voller Name von T) — null ohne; <c>[EineAdresse]</c> als Code-Fakt (docs/04 §4.4).</summary>
     public string? ZustandFull;
     public bool EineAdresse, Lebenszyklus;
@@ -779,13 +781,31 @@ public sealed partial class DomainExtractor
                 if (a.Parameter[i].Art == "faehigkeit") e.Faehigkeiten.Add((Geschrieben(a.Methode, i, a.Methode.Parameters[i].Type), a.Methode.Parameters[i].Name));
             f.Eingaenge.Add(e);
         }
+        // Unfertig (W1: Unfertiges = Code, der nicht baut): ein Auf, das die Funktionsform (noch) nicht annimmt — z. B. ohne Ausgabe, frisch im
+        //   Editor angelegt —, bleibt als Eingang ohne Ausgaben sichtbar; den Fehler meldet der Build an seiner Stelle.
+        var gelesen = form.Aufs.Select(a => a.Eingang.Fq()).ToHashSet(StringComparer.Ordinal);
+        foreach (var m in t.GetMembers(Abstractions.Funktionsvertrag.Auf).OfType<IMethodSymbol>()
+                     .Where(m => m.DeclaredAccessibility == Accessibility.Public && m.Parameters.Length > 0 && m.Parameters[0].Type is INamedTypeSymbol))
+        {
+            var ein = (INamedTypeSymbol)m.Parameters[0].Type;
+            if (!gelesen.Add(ein.Fq())) continue;
+            f.Eingaenge.Add(new BausteinEingangRaw
+            {
+                EingangFull = ein.Fq(), Hinweis = ein.AllInterfaces.Any(i => i.Fq() == Vertrag.ITransientEvent),
+                Herkunft = m.Parameters.Skip(1).Any(p => p.Type.Name == nameof(Abstractions.Herkunft)),
+            });
+        }
         if (!form.Draussen) f.Konstruktor = KonstruktorWieGeschrieben(t);
         if (form.Draussen)
         {
             var umsetzungen = _types.Where(c => c.TypeKind == TypeKind.Class && !c.IsAbstract && c.AllInterfaces.Contains(t, SymbolEqualityComparer.Default))
                 .OrderBy(c => c.Fq(), StringComparer.Ordinal).ToList();
             f.UmsetzungenFull = umsetzungen.Select(c => c.Fq()).ToList();
-            foreach (var c in umsetzungen) f.UmsetzungsKonstruktoren[c.Fq()] = KonstruktorWieGeschrieben(c);
+            foreach (var c in umsetzungen)
+            {
+                f.UmsetzungsKonstruktoren[c.Fq()] = KonstruktorWieGeschrieben(c);
+                f.UmsetzungsDateien[c.Fq()] = QuellDeklarationen(c).FirstOrDefault()?.SyntaxTree.FilePath;
+            }
         }
         return f;
     }

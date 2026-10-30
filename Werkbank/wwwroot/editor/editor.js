@@ -775,10 +775,9 @@
   //    sie nur als Verweis (Klick öffnet die Karte), verbunden wird per ⊕, „＋" legt eine neue Typ-Karte an und verbindet sie gleich.
   //    Deklariert (Name, Felder) wird ein Typ nur an seiner Karte — nie im Knoten, der ihn benutzt (auch nicht am rufenden Fluss-Knoten).
   // Eine neue Funktion — EIN Weg (Palette, Fluss, Prozess): I<Stamm> mit Auftrag <Stamm>Auftrag und einem Ergebnis <Stamm>Erledigt.
-  function neueFunktion(ns,pos){const nm=uniq("INeueFunktion"),stamm=nm.replace(/^I(?=[A-ZÄÖÜ])/,"");
-    const an=uniq(stamm+"Auftrag"),en=uniq(stamm+"Erledigt");
-    MODEL.records.push({name:an,kind:"auftrag",funktion:nm,namespace:ns,felder:[]},{name:en,kind:"event",namespace:ns,felder:[]});
-    MODEL.funktionen.push({_id:"fk"+(NID++),name:nm,namespace:ns,auftrag:an,ergebnisse:[en],...(pos||{})});return nm;}
+  // Eine neue Funktion (IFunktion): als Klasse im Host, noch ohne Eingang — Eingänge und Ausgaben verbindet man an ihrer Karte (⊕).
+  function neueFunktion(ns,pos){const nm=uniq("NeueFunktion");
+    MODEL.bausteinFunktionen.push({_id:"fb"+(NID++),name:nm,namespace:ns,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[],...(pos||{})});return nm;}
   // Ein Typ an einem Element = VERWEIS auf seine Karte: Name und Felder nur zum Lesen, Klick öffnet die Karte, ✕ löst nur die Verbindung.
   function typVerweis(name,o){o=o||{};const r=name?recByName(name):null,rechts=o.seite==="o";
     const row=h("div",{class:"slotrow"+(rechts?" o":"")});
@@ -898,6 +897,47 @@
     return h("div",{class:"slotrow o"},d?h("button",{class:"rm",title:"Dienst lösen (der Dienst bleibt)",onclick:loese},"✕"):null,
       h("span",{class:"slotlbl",style:"flex:1;text-align:right"+(d||rec?";cursor:pointer":""),title:d?"Klick: "+d.name+" öffnen":rec?"Werte aus Konfig:"+rec.name+" der Umgebung":"",
         onclick:d?()=>zeigeLadend("dn:"+d._id):rec?()=>zeigeLadend("rec:"+rec.name):null},(d?"🧩 ":rec?"⚙ ":"· ")+p.typ+" "+p.name+(rec?" (Konfig)":"")),s);}
+  // ƒ FUNKTION (IFunktion, ein Block der Hierarchie): je Eingang ein Auf — ◀ Eingang ⊕ (Event · Hinweis · Quelle), Ausgaben ▶ ⊕ (Command bzw.
+  //   Event/Hinweis) oder ＋ ein neues Ergebnis-Event, das ihr gehört. Die Ausgaben stehen in der Signatur (CQRS050). Eine Klasse läuft im
+  //   Host und nimmt im Konstruktor Dienste und Konfig; eine Schnittstelle läuft draußen bzw. mit ihrer Umsetzung (Laufort: Umgebung).
+  function funktionsKarte(body,f){
+    body.append(h("div",{class:"gsec"},"Name · Namespace · Form"));
+    if(!f.datei){body.append(nameInp(f,"name","Funktion","bausteinfunktion"));
+      body.append(h("input",{value:f.namespace??"",oninput:e=>f.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
+      body.append(h("label",{class:"cbx",title:"Klasse: läuft im Host. Schnittstelle: läuft draußen oder mit einer Umsetzung (Laufort in der Umgebung)"},
+        h("input",{type:"checkbox",onchange:e=>{f.klasse=e.target.checked;render();},...(f.klasse?{checked:"checked"}:{})}),"Klasse (läuft im Host)"));}
+    else body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},f.name+" — "+(f.klasse?"Klasse im Host"
+      :"Schnittstelle"+((f.umsetzungen||[]).length?" · Umsetzung "+f.umsetzungen.map(u=>u.name).join(", "):" · läuft draußen"))));
+    body.append(h("div",{class:"gsec",title:"je Eingang ein Auf(Eingang[, Herkunft]) — was entstehen kann, steht in seiner Rückgabe"},"◀ Eingänge · Ausgaben ▶"));
+    (f.eingaenge||[]).forEach((e,i)=>{
+      const ip=anchorDot(recArt(e.eingang)==="rejection"?"rejection":"event");ip.classList.add("i");
+      reg("fb:ein:"+f._id+":"+i,ip,{type:"evtUse",dir:"in",fb:f._id,fk:f._id,ein:i,anker:true});
+      body.append(h("div",{class:"slotrow"},ip,h("span",{class:"slotlbl",style:"flex:1;cursor:pointer",title:"Klick: "+e.eingang+" öffnen",onclick:()=>zeigeLadend("rec:"+e.eingang)},
+          "Auf("+e.eingang+")"+(e.hinweis?" · Hinweis":"")),
+        h("label",{class:"cbx",title:"Strom: beliebig viele Ausgaben über die Zeit (IAsyncEnumerable)"},h("input",{type:"checkbox",onchange:ev=>{e.strom=ev.target.checked;render();},...(e.strom?{checked:"checked"}:{})}),"Strom"),
+        h("button",{class:"rm",title:"Eingang entfernen (das Auf fällt weg)",onclick:()=>{f.eingaenge.splice(i,1);gTitel("Eingang "+e.eingang+" entfernen");render();}},"✕")));
+      (e.ausgaben||[]).forEach(a=>{const cmd=recArt(a)==="command",s=anchorDot(cmd?"sagacmd":recArt(a)==="rejection"?"rejection":"event");s.classList.add("o");
+        reg("fb:aus:"+f._id+":"+i+":"+a,s,{type:cmd?"sagaCmd":"evtOut",dir:"out",fb:f._id,fk:f._id,ein:i,anker:true});
+        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",title:"Ausgabe lösen (der Typ bleibt)",onclick:()=>{e.ausgaben=ohneX(e.ausgaben,a);render();}},"✕"),
+          h("span",{class:"slotlbl",style:"flex:1;text-align:right;cursor:pointer",title:"Klick: "+a+" öffnen",onclick:()=>zeigeLadend("rec:"+a)},"→ "+a+(cmd?" (Command)":"")),s));});
+      body.append(slotRow("event","+ Ausgabe ⊕ (Event · Hinweis) ▶","r",{type:"evtOut",dir:"out",fb:f._id,fk:f._id,ein:i},"fb:ausE:"+f._id+":"+i));
+      body.append(slotRow("sagacmd","+ Ausgabe ⊕ (Command) ▶","r",{type:"sagaCmd",dir:"out",fb:f._id,fk:f._id,ein:i},"fb:ausC:"+f._id+":"+i));
+      body.append(h("div",{class:"slotrow o"},neuKnopf("Neues Ergebnis-Event anlegen — es gehört dieser Funktion (sie gibt es aus)",()=>{
+          const stamm=(f.name||"Funktion").replace(/^I(?=[A-ZÄÖÜ])/,""),vorher=new Set(MODEL.records.map(x=>x.name));
+          neuerKnoten("event",undefined,undefined,{ns:f.namespace,reg:"fb:"+f._id,name:stamm+"Ergebnis"});
+          const neu=MODEL.records.find(x=>!vorher.has(x.name));if(neu){(e.ausgaben=e.ausgaben||[]).push(neu.name);render();}}),
+        h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"＋ neues Ergebnis-Event")));});
+    body.append(slotRow("event","+ Eingang ⊕ (Event · Hinweis · Quelle)","l",{type:"evtUse",dir:"in",fb:f._id,fk:f._id,ein:"open"},"fb:ein:"+f._id+":open"));
+    if(f.klasse){body.append(h("div",{class:"gsec",title:"Konstruktor der Klasse: Dienste (IDienst), Konfig-Records (Konfig:<Record>)"},"🧩 braucht (Konstruktor)"));
+      (f.konstruktor||[]).forEach((p,i)=>body.append(konstruktorZeile(p,"dn:out:fb:"+f._id+":"+i,{type:"dienst",dir:"out",fb:f._id},
+        ()=>{f.konstruktor.splice(i,1);gTitel("🧩 "+p.typ+" lösen");render();})));
+      const op=port("dienst");op.classList.add("o");reg("dn:out:fb:"+f._id+":open",op,{type:"dienst",dir:"out",fb:f._id});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"+ Dienst ⊕ (🧩) ▶"),op));
+      body.append(h("div",{class:"slotrow o"},neuKnopf("Neuen Konfig-Record anlegen und in den Konstruktor nehmen",()=>{const vorher=new Set(MODEL.records.map(x=>x.name));
+          neuerKnoten("konfig",undefined,undefined,{ns:f.namespace,reg:"fb:"+f._id,name:(f.name||"").replace(/^I(?=[A-ZÄÖÜ])/,"")+"Konfig"});
+          const neu=MODEL.records.find(x=>!vorher.has(x.name));if(neu){(f.konstruktor=f.konstruktor||[]).push({typ:neu.name,name:"konfig"});render();}}),
+        h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"＋ Konfig")));}}
+  const recArt=nm=>(recByName(nm)||{}).kind||"";
   function funktionDienste(body,f){
     body.append(h("div",{class:"gsec",title:"Konstruktor der C#-Implementierung: Dienste (IDienst), Konfig-Records (Konfig:<Record>), ILogger<T>"},"🧩 braucht (Konstruktor)"));
     (f.konstruktor||[]).forEach((p,i)=>body.append(konstruktorZeile(p,"dn:out:fk:"+f._id+":"+i,{type:"dienst",dir:"out",fk:f._id},
@@ -2240,6 +2280,7 @@
     else if(n.kind==="funktion")funktionCard(body,n.ref);
     else if(n.kind==="dienst")dienstCard(body,n.ref);
     else if(n.kind==="akteur")akteurCard(body,n.ref);
+    else if(n.kind==="bausteinfunktion")funktionsKarte(body,n.ref);
     else if(n.kind==="client")clientCard(body,n.ref);
     else if(n.kind==="auf")aufCard(body,n);
     else if(n.kind==="rumpf")rumpfKachelCard(body,n);
@@ -2449,6 +2490,14 @@
       else if(O.proj){const p=MODEL.projektionen.find(x=>x._id===O.proj);const hd=p&&p.handles[O.handleIdx];if(hd){hd.publishes=hd.publishes||[];if(!hd.publishes.includes(I.rec))hd.publishes.push(I.rec);}}
       else if(O.reaktion){const r=MODEL.reaktionen.find(x=>x._id===O.reaktion);const hd=r&&r.handles[O.handleIdx];if(hd){hd.publishes=hd.publishes||[];if(!hd.publishes.includes(I.rec))hd.publishes.push(I.rec);}}}
     else if(O.type==="prozess"){const t=MODEL.transitions.find(x=>x._id===O.trans);if(t)t.prozess=I.saga;}
+    else if(O.type==="evtUse"&&I.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===I.fb);if(f){f.eingaenge=f.eingaenge||[];
+        const hin=recArt(O.rec)==="rejection",neu={eingang:O.rec,hinweis:hin,herkunft:!hin,strom:false,faehigkeiten:[],ausgaben:[]};
+        if(I.ein==="open"){if(!f.eingaenge.some(e=>e.eingang===O.rec))f.eingaenge.push(neu);}
+        else if(f.eingaenge[I.ein])Object.assign(f.eingaenge[I.ein],{eingang:O.rec,hinweis:hin,herkunft:!hin});}}
+    else if((O.type==="evtOut"||O.type==="sagaCmd")&&O.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb),e=f&&(f.eingaenge||[])[O.ein];
+      if(e&&I.rec&&!(e.ausgaben=e.ausgaben||[]).includes(I.rec))e.ausgaben.push(I.rec);}
+    else if(O.type==="dienst"&&O.fb){const d=MODEL.dienste.find(x=>x._id===I.dn),f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb);
+      if(d&&f&&!(f.konstruktor=f.konstruktor||[]).some(p=>dienstByName(p.typ)===d))f.konstruktor.push({typ:d.name,name:paramName(d.name,f.konstruktor.map(p=>p.name))});}
     else if(O.type==="evtUse"){
       // Event → Pipeline-Knoten: Quelle (meldet / Event aus dem Log) bzw. Warten (eines von mehreren Events im Strom).
       if(I.flk){const k=flKnotenById(I.flk);if(k){if(I.role==="warte"){const l=flWarteAuf(k);if(!l.includes(O.rec))l.push(O.rec);k.warteAuf=l;k.typ=l[0];}else k.typ=O.rec;}}
@@ -2537,6 +2586,9 @@
       else if(O.dec){const d=dec(O.dec);if(d)d.ergibt=(d.ergibt||[]).filter(x=>x.event!==I.rec);}
       else{const hd=handle(O.proj?MODEL.projektionen:MODEL.reaktionen,O.proj||O.reaktion,O.handleIdx);if(hd)hd.publishes=ohne(hd.publishes,I.rec);}}
     else if(O.type==="prozess"){const t=MODEL.transitions.find(x=>x._id===O.trans);if(t)t.prozess="";}
+    else if(O.type==="evtUse"&&I.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===I.fb);if(f)f.eingaenge=(f.eingaenge||[]).filter(e=>e.eingang!==O.rec);}
+    else if((O.type==="evtOut"||O.type==="sagaCmd")&&O.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb),e=f&&(f.eingaenge||[])[O.ein];if(e)e.ausgaben=ohne(e.ausgaben,I.rec);}
+    else if(O.type==="dienst"&&O.fb){const d=MODEL.dienste.find(x=>x._id===I.dn),f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb);if(d&&f)f.konstruktor=(f.konstruktor||[]).filter(p=>dienstByName(p.typ)!==d);}
     else if(O.type==="evtUse"){
       if(I.flk){const k=flKnotenById(I.flk);if(k){if(I.role==="warte"){k.warteAuf=flWarteAuf(k).filter(x=>x!==O.rec);k.typ=k.warteAuf[0]||"";}else k.typ="";}}
       else if(I.client){const c=MODEL.clients.find(x=>x._id===I.client);if(c)c.kenntnis=ohne(c.kenntnis,O.rec);}
@@ -2815,6 +2867,10 @@
       const p=mkE(ende(a),ende(b),color,dash);p.dataset.a=knotenIdVon(a);p.dataset.b=knotenIdVon(b);};
     // Akteur → was er darf (rosa): vom Akteur-Band zur Nachricht.
     MODEL.akteure.forEach(a=>(a.darf||[]).forEach(nm=>add("akt:darf:"+a._id+":"+nm,"darf:in:"+nm,"#e07ab4")));
+    // Funktion: Event → Auf(Event) · Auf → Ausgabe (Command bzw. Event/Hinweis) · Konstruktor → Dienst.
+    (MODEL.bausteinFunktionen||[]).forEach(f=>{(f.eingaenge||[]).forEach((e,i)=>{add("evt:out:"+e.eingang,"fb:ein:"+f._id+":"+i,"#4fb06a");
+        (e.ausgaben||[]).forEach(x=>add("fb:aus:"+f._id+":"+i+":"+x,(recArt(x)==="command"?"cmd:in:":"evt:in:")+x,recArt(x)==="command"?"#4a86d6":"#4fb06a"));});
+      (f.konstruktor||[]).forEach((p,i)=>{const d=dienstByName(p.typ);if(d)add("dn:out:fb:"+f._id+":"+i,"dn:in:"+d._id,"#b48ead");});});
     // Vertrag (Akteur-Konzept §3): Event → Zusage → Commands (rosa) — die Kette läuft durch den Akteur draußen.
     vertragsZusagen().forEach(({a,r,i})=>{if(r.eingang)add("evt:out:"+r.eingang,"auf:in:"+a._id+":"+i,"#e07ab4");
       (r.ausgaenge||[]).forEach(c=>{if(c)add("auf:send:"+a._id+":"+i+":"+c,"cmd:in:"+c,"#e07ab4");});});
@@ -3730,7 +3786,7 @@
   //   geänderte/neue Karten ganz, entfernte als Schlüssel — und schickt ihn als Geste. Der Server schreibt den Patch (Schreiber, Löschen am
   //   Ort), liest warm neu und schickt das Board zurück: das ist der neue Stand. Umbenennen ist eine eigene Geste (Roslyn-Renamer), ↶ nimmt
   //   den letzten Patch zurück. Solange ein Eingabefeld den Fokus hat, wartet die Geste (sonst ein Patch je Tastendruck).
-  const GSAMMLUNGEN=["records","enums","aggregate","decider","applier","sagas","fluesse","funktionen","dienste","akteure","clients","readModels","stores","projektionen","reaktionen","reader"];
+  const GSAMMLUNGEN=["records","enums","aggregate","decider","applier","sagas","fluesse","funktionen","bausteinFunktionen","dienste","akteure","clients","readModels","stores","projektionen","reaktionen","reader"];
   // Natürliche Schlüssel — dieselbe Regel wie der Server (GraphExtractor.KartenSchluessel).
   const GKEY=c=>c==="decider"?(d=>(d.aggregat||"")+"|"+(d.command||"")):c==="applier"?(a=>(a.aggregat||"")+"|"+(a.event||""))
     :["readModels","stores","projektionen","reaktionen","reader"].includes(c)?(x=>x.name||""):(x=>(x.namespace||"")+"|"+(x.name||""));

@@ -122,6 +122,11 @@ public static class Scaffolder
                 dateien.Add(Platziert(null, Verzeichnis(modell, d.Namespace), $"{i.Name}.cs", DienstImplDatei(d, i, modell), DateiArt.Typen));
         }
 
+        // ── Funktionen (IFunktion, docs/04 §4.4) → je NEUE Funktion ihre Klasse (im Host, throw-Stubs; eigene Datei) bzw. ihre Schnittstelle
+        //    (draußen oder mit Umsetzung; Sammeldatei Funktionen.cs) — eine bestehende gehört dem Code, ihre Signaturen gleicht der Abgleich ab ──
+        foreach (var f in modell.BausteinFunktionen.Where(f => f.Datei == null))
+            dateien.Add(Platziert(null, Verzeichnis(modell, f.Namespace), f.Klasse ? $"{f.Name}.cs" : "Funktionen.cs", FunktionsDatei(f, modell), DateiArt.Typen));
+
         if (modell.Lesen is { } lesen) dateien.AddRange(LeseseitenDateien(modell, lesen));
 
         return dateien.OrderBy(d => d.Pfad, StringComparer.Ordinal).ToList();
@@ -347,6 +352,61 @@ public static class Scaffolder
         {
             if (i > 0) b.AppendLine();
             abschnitte[i]();
+        }
+        return b.ToString();
+    }
+
+    // ── Funktion (IFunktion): je Eingang ein Auf — die Ausgaben stehen in der Signatur (CQRS050), nie im Rumpf ───────────────
+    private static readonly string IFunktion = nameof(Abstractions.IFunktion);
+    private static readonly string OneOfName = typeof(Abstractions.OneOf<>).Name.Split('`')[0];
+
+    /// <summary>
+    /// Die Rückgabe eines Auf aus seinen Ausgaben: keine → <c>void</c> (nur mit Zustand erlaubt); eine → <c>X?</c>; mehrere → <c>OneOf&lt;…&gt;?</c>
+    /// (<c>?</c> = der Eingang darf auch nichts ergeben); als Strom <c>IAsyncEnumerable&lt;…&gt;</c>.
+    /// </summary>
+    public static string FunktionsRueckgabe(BausteinEingang e)
+    {
+        var innen = e.Ausgaben.Count switch { 0 => null, 1 => e.Ausgaben[0], _ => $"{OneOfName}<{string.Join(", ", e.Ausgaben)}>" };
+        if (innen == null) return "void";
+        return e.Strom ? $"IAsyncEnumerable<{innen}>" : innen + "?";
+    }
+
+    /// <summary>Die Parameter eines Auf: der Eingang, ohne Hinweis die Herkunft (Position im Log → Ids über <c>h.NeueId</c>), dann die Lese-Fähigkeiten.</summary>
+    public static IReadOnlyList<Parameter> FunktionsParameter(BausteinEingang e) =>
+        [new Parameter { Typ = e.Eingang, Name = e.Hinweis ? "hinweis" : "e" },
+         .. (e.Herkunft && !e.Hinweis ? [new Parameter { Typ = nameof(Abstractions.Herkunft), Name = "h" }] : Array.Empty<Parameter>()),
+         .. e.Faehigkeiten];
+
+    public static string FunktionsKopf(BausteinEingang e) =>
+        $"{FunktionsRueckgabe(e)} {Abstractions.Funktionsvertrag.Auf}({ParameterListe(FunktionsParameter(e))})";
+
+    /// <summary>Ein Auf als throw-Stub in einer Klasse (Funktion im Host bzw. Umsetzung).</summary>
+    public static string FunktionsStub(string klasse, BausteinEingang e, string einzug) =>
+        $"{einzug}public {FunktionsKopf(e)}\n{einzug}{{\n{einzug}    throw new NotImplementedException(\"TODO: {klasse}.Auf({e.Eingang})\");\n{einzug}}}\n";
+
+    private static string FunktionsDatei(BausteinFunktion f, EditorModell modell)
+    {
+        var typen = f.Eingaenge.SelectMany(e => FunktionsParameter(e).Select(p => p.Typ).Concat(e.Ausgaben)).Concat(f.Konstruktor.Select(p => p.Typ));
+        var b = Kopf(f.Namespace, Usings(f.Namespace, modell, [modell.Rahmen.VertragsNamespace], typen, []));
+        Doku(b, f.Doku, "");
+        if (f.Klasse)
+        {
+            var ctor = f.Konstruktor.Count > 0 ? $"({ParameterListe(f.Konstruktor)})" : "";
+            b.AppendLine($"public sealed class {f.Name}{ctor} : {IFunktion}");
+            b.AppendLine("{");
+            for (var i = 0; i < f.Eingaenge.Count; i++)
+            {
+                if (i > 0) b.AppendLine();
+                b.Append(FunktionsStub(f.Name, f.Eingaenge[i], "    "));
+            }
+            b.AppendLine("}");
+        }
+        else
+        {
+            b.AppendLine($"public interface {f.Name} : {IFunktion}");
+            b.AppendLine("{");
+            foreach (var e in f.Eingaenge) b.AppendLine($"    {FunktionsKopf(e)};");
+            b.AppendLine("}");
         }
         return b.ToString();
     }

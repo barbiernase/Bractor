@@ -106,6 +106,17 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
                 Datei(i.Datei!, was, t => Konstruktor(t, i.Name, i.Konstruktor));
             }
         }
+        // Funktion (IFunktion): je Eingang ein Auf — an der Klasse bzw. Schnittstelle und an jeder Umsetzung (fehlende als throw-Stub, Rückgabe
+        //   aus den Ausgaben, die Hülle bleibt); entfernte Eingänge fallen an Klasse bzw. Schnittstelle weg (eine Umsetzung behält ihren Rumpf).
+        //   Der Konstruktor einer Klasse wird abgeglichen. Rümpfe gehören dem Code.
+        foreach (var f in modell.BausteinFunktionen.Where(f => f.Datei != null && Herkunft.Geaendert(f.Herkunft, Herkunft.Von(f))))
+        {
+            var was = $"funktion {f.Namespace}.{f.Name}";
+            Datei(f.Datei!, was, t => FunktionsMethoden(t, f.Name, f, stub: f.Klasse, entfernen: true));
+            if (f.Klasse) Datei(f.Datei!, was, t => Konstruktor(t, f.Name, f.Konstruktor));
+            foreach (var u in f.Umsetzungen.Where(u => u.Datei != null))
+                Datei(u.Datei!, was, t => FunktionsMethoden(t, u.Name, f, stub: true, entfernen: false));
+        }
         foreach (var a in modell.Akteure.Where(a => a.Datei != null && Herkunft.Geaendert(a.Herkunft, Herkunft.Von(a))))
             Datei(a.Datei!, $"akteur {a.Namespace}.{a.Name}", t => AkteurBefugnisse(t, a));
         foreach (var c in modell.Clients.Where(c => c.Datei != null && Herkunft.Geaendert(c.Herkunft, Herkunft.Von(c))))
@@ -332,6 +343,70 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
             }
         }
         return notiz.Count == 0 ? null : (text, "Methoden " + string.Join(", ", notiz));
+    }
+
+    // ── Funktion: je Eingang das Auf (Schlüssel: der Eingangstyp), Rückgabe aus den Ausgaben bei gleicher Hülle; fehlende anhängen ──
+    private (string, string)? FunktionsMethoden(string text, string klasse, BausteinFunktion f, bool stub, bool entfernen)
+    {
+        var notiz = new List<string>();
+        TypeDeclarationSyntax? Typ(string t) => Parse(t).DescendantNodes().OfType<TypeDeclarationSyntax>().FirstOrDefault(x => x.Identifier.Text == klasse);
+        IEnumerable<MethodDeclarationSyntax> Aufs(TypeDeclarationSyntax t) =>
+            t.Members.OfType<MethodDeclarationSyntax>().Where(m => m.Identifier.Text == Abstractions.Funktionsvertrag.Auf);
+        if (Typ(text) is null) return (text, $"{klasse} nicht gefunden");
+        foreach (var e in f.Eingaenge)
+        {
+            var typ = Typ(text)!;
+            if (Aufs(typ).FirstOrDefault(m => ErsterTyp(m) == e.Eingang) is { } m)
+            {
+                var soll = FunktionsRueckgabe(m.ReturnType.ToString(), e);
+                if (N(m.ReturnType.ToString()) == N(soll)) continue;
+                text = MitNamespaces(text[..m.ReturnType.SpanStart] + soll + text[m.ReturnType.Span.End..], e.Ausgaben);
+                notiz.Add($"Auf({e.Eingang}) → {(e.Ausgaben.Count == 0 ? "—" : string.Join("/", e.Ausgaben))}");
+                continue;
+            }
+            var zeile = stub ? Scaffolder.FunktionsStub(klasse, e, "    ") : $"    {Scaffolder.FunktionsKopf(e)};\n";
+            var vor = typ.CloseBraceToken.SpanStart;
+            var leer = typ.Members.Count > 0 && stub ? "\n" : "";
+            text = MitNamespaces(text[..vor] + leer + zeile + text[vor..], Scaffolder.FunktionsParameter(e).Select(p => p.Typ).Concat(e.Ausgaben));
+            notiz.Add($"+Auf({e.Eingang})");
+        }
+        if (entfernen)
+        {
+            var typ = Typ(text)!;
+            foreach (var x in Aufs(typ).Where(x => f.Eingaenge.All(e => e.Eingang != ErsterTyp(x))).OrderByDescending(x => x.SpanStart).ToList())
+            {
+                var von = x.GetLeadingTrivia().FirstOrDefault(t => t.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)) is { } doku && doku != default
+                    ? doku.SpanStart : x.SpanStart;
+                while (von > 0 && text[von - 1] is ' ' or '\t') von--;
+                var bis = x.Span.End;
+                if (bis < text.Length && text[bis] == '\n') bis++;
+                if (von > 1 && text[von - 1] == '\n' && text[von - 2] == '\n') von--;   // die Leerzeile davor mit
+                notiz.Add($"−Auf({ErsterTyp(x)})");
+                text = text[..von] + text[bis..];
+            }
+        }
+        return notiz.Count == 0 ? null : (text, string.Join(", ", notiz));
+    }
+
+    /// <summary>
+    /// Die Rückgabe eines bestehenden Auf auf neue Ausgaben bringen und dabei seine Form behalten: Hülle (<c>Task</c>/<c>ValueTask</c>), Strom
+    /// (<c>IEnumerable</c>/<c>IAsyncEnumerable</c>), <c>?</c>. Ohne Ausgaben: <c>void</c> bzw. die bloße Hülle.
+    /// </summary>
+    private static string FunktionsRueckgabe(string alt, BausteinEingang e)
+    {
+        var t = alt.Trim();
+        string? huelle = null, strom = null;
+        foreach (var w in new[] { "Task", "ValueTask" })
+            if (t.StartsWith(w + "<", StringComparison.Ordinal) && t.EndsWith('>')) { huelle = w; t = t[(w.Length + 1)..^1].Trim(); break; }
+        foreach (var w in new[] { "IAsyncEnumerable", "IEnumerable" })
+            if (t.StartsWith(w + "<", StringComparison.Ordinal) && t.EndsWith('>')) { strom = w; t = t[(w.Length + 1)..^1].Trim(); break; }
+        if (t is "Task" or "ValueTask") huelle = t;
+        var frage = strom == null && (t.EndsWith('?') || t is "void" or "Task" or "ValueTask");
+        var innen = e.Ausgaben.Count switch { 0 => null, 1 => e.Ausgaben[0], _ => $"{OneOf}<{string.Join(", ", e.Ausgaben)}>" };
+        if (innen == null) return huelle ?? "void";
+        if (strom == null && e.Strom) strom = huelle == null ? "IAsyncEnumerable" : "IEnumerable";
+        var kern = strom != null ? $"{strom}<{innen}>" : innen + (frage ? "?" : "");
+        return huelle != null ? $"{huelle}<{kern}>" : kern;
     }
 
     // ── Konstruktor einer Dienst-Implementierung: nur die Parameterliste — Primär-Konstruktor bzw. der öffentliche Konstruktor ──

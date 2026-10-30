@@ -23,6 +23,7 @@ public static class Strukturort
             Records = m.Records.Select(r => r.Datei != null ? r : r with { Namespace = Ns(r.Namespace, Rolle(Primitive(r, ergebnisse, anAggregat))) }).ToList(),
             Aggregate = m.Aggregate.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Schreibseite) }).ToList(),
             Dienste = m.Dienste.Select(d => d.Datei != null ? d : d with { Namespace = Ns(d.Namespace, P.Rolle.Ablaeufe) }).ToList(),
+            BausteinFunktionen = m.BausteinFunktionen.Select(f => f.Datei != null ? f : f with { Namespace = Ns(f.Namespace, P.Rolle.Ablaeufe) }).ToList(),
             Akteure = m.Akteure.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Akteure) }).ToList(),
             Clients = m.Clients.Select(c => c.Datei != null ? c : c with { Namespace = Ns(c.Namespace, P.Rolle.Akteure) }).ToList(),
             Lesen = lesen == null ? null : lesen with

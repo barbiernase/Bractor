@@ -236,6 +236,35 @@ public sealed class GestenTests : IDisposable
     }
 
     [Fact]
+    public async Task Funktion_bekommt_eine_weitere_Ausgabe()
+    {
+        var karte = Karte(await BoardAsync(), "bausteinFunktionen", f => (string?)f["name"] == "SchadenBeiRueckgabe");
+        var ein = karte["eingaenge"]!.AsArray().OfType<JsonObject>().Single(e => (string?)e["eingang"] == "Zurueckgegeben");
+        ein["ausgaben"]!.AsArray().Add("EroeffneMahnung");
+
+        await GesteAsync(Geaendert("bausteinFunktionen", karte));
+
+        Text("Gebuehren.cs").Should().Contain("OneOf<MeldeSchaden, EroeffneMahnung>? Auf(Zurueckgegeben e, Herkunft h)",
+            "die Ausgaben stehen in der Signatur (CQRS050); der Ausdrucks-Rumpf bleibt");
+    }
+
+    [Fact]
+    public async Task Neue_Funktion_wird_eine_Klasse_mit_einem_Auf_je_Eingang()
+    {
+        var neu = new JsonObject
+        {
+            ["name"] = "Mahnlauf", ["namespace"] = "Leihwesen.Gebuehren", ["klasse"] = true,
+            ["eingaenge"] = new JsonArray(new JsonObject { ["eingang"] = "MahnungEroeffnet", ["herkunft"] = true, ["ausgaben"] = Liste("MeldeSchaden") }),
+            ["konstruktor"] = new JsonArray(new JsonObject { ["typ"] = "WertTabellenKonfig", ["name"] = "konfig" }),
+        };
+
+        await GesteAsync(Geaendert("bausteinFunktionen", neu));
+
+        Text("Mahnlauf.cs").Should().Contain("public sealed class Mahnlauf(WertTabellenKonfig konfig) : IFunktion")
+            .And.Contain("public MeldeSchaden? Auf(MahnungEroeffnet e, Herkunft h)").And.Contain("NotImplementedException");
+    }
+
+    [Fact]
     public async Task Umbenennen_zieht_alle_Verweise_mit()
     {
         var board = await BoardAsync();
