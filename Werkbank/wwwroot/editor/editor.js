@@ -186,10 +186,16 @@
     else if(kind==="quelle")neueQuelle(defaultNs(),"NeueQuelle",pos);
     else if(kind==="akteur")MODEL.akteure.push({_id:"ak"+(NID++),name:uniq("NeuerAkteur"),namespace:haeufigsterNs(MODEL.akteure)||defaultNs(),darf:[],...pos});
     else if(kind==="client")MODEL.clients.push({_id:"cl"+(NID++),name:uniq("INeuerClient"),namespace:haeufigsterNs(MODEL.clients)||defaultNs(),verkoerpert:[],kenntnis:[],...pos});
-    else MODEL.records.push({name:uniq("Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"&&ID_FELD()?[{_id:"f"+(NID++),name:ID_FELD(),typ:"Guid"}]:[],...pos});
+    else MODEL.records.push({name:uniq((opt&&opt.name)||"Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"&&ID_FELD()?[{_id:"f"+(NID++),name:ID_FELD(),typ:"Guid"}]:[],
+      // Ein Command, der im Block eines Aggregats entsteht, zielt auf es (ICommand<TAggregat>) — damit gehört er ihm.
+      ...(kind==="command"&&AGG&&opt&&opt.reg?{aggregat:AGG}:{}),...pos});
     // Heimat-Domäne in der Ansicht merken: trägt Namespace-lose Arten (📝/🤖 …) und hält Abhängige
     //   (Decider/Applier/State/Regel) in ihrer Domäne, auch wenn ihr Besitzer gelöscht wird. Der Code-Namespace geht vor (domKey).
-    if(opt&&opt.ns){const neu=graphNodes().find(n=>!vorher.has(n.id));if(neu){VIEW.heim={...(VIEW.heim||{}),[neu.id]:opt.ns};if(opt.blk)VIEW.heimBlk={...(VIEW.heimBlk||{}),[neu.id]:opt.blk};speichereAnsicht();}}
+    if(opt&&opt.ns){const neu=graphNodes().find(n=>!vorher.has(n.id));if(neu){VIEW.heim={...(VIEW.heim||{}),[neu.id]:opt.ns};if(opt.blk)VIEW.heimBlk={...(VIEW.heimBlk||{}),[neu.id]:opt.blk};
+      if(opt.reg)VIEW.heimReg={...(VIEW.heimReg||{}),[neu.id]:opt.reg};speichereAnsicht();}}
+    // In einem Decide angelegt (Event/Ablehnung): das Decide gibt die neue Nachricht aus (OneOf) — damit gehört sie seinem Aggregat.
+    if(opt&&opt.ausDecide){const neu=graphNodes().find(n=>!vorher.has(n.id)),d=MODEL.decider.find(x=>x._id===opt.ausDecide);
+      if(neu&&d&&!(d.ergibt=d.ergibt||[]).some(o=>o.event===neu.ref.name))d.ergibt.push({event:neu.ref.name});}
     // Im Akteur-Rahmen angelegt: der Akteur darf den neuen Eingang sofort (IDarf) — so bleibt er auch in seinem Rahmen.
     if(opt&&opt.akt){const neu=graphNodes().find(n=>!vorher.has(n.id)),ak=MODEL.akteure.find(a=>a.name===opt.akt);
       if(neu&&ak){const nm=neu.ref.name;if(nm&&!(ak.darf=ak.darf||[]).includes(nm))ak.darf.push(nm);
@@ -3217,9 +3223,13 @@
   let FRGEO=new Map();   // FRGEO: Rahmen-Geometrie je Schlüssel (Domäne|Akteur, §vertrag:Akteur) — Ziel der Client-Leitungen
   // Die REGION einer Karte (Layout und Rahmen): ihr oberster Besitzer unter der Anwendung (board.sicht.besitz). Was (noch) keinen Besitz hat
   //   (Host, Pipeline-Knoten, neue Karten), fällt auf die Namespace-Domäne zurück.
+  //   Eine in einem Block angelegte, noch unverdrahtete Karte (Begriffe ohne Nutzer bzw. noch nicht im Code) bleibt in der Region, in der sie
+  //   angelegt wurde (VIEW.heimReg) — bis eine Signatur sie einem Besitzer gibt.
   function domKey(n){if(n.kind==="host")return HOST_KEY;
     if(n.kind==="rumpf")return domKey(n.own);
-    return regionVon(n)||domNs(n);}
+    const rg=regionVon(n),heim=(VIEW.heimReg||{})[n.id];
+    if(heim&&(!rg||(rg===BEGR_KEY&&!mehrdeutig(n))))return heim;
+    return rg||domNs(n);}
   // Die Namespace-Domäne einer Karte (Laden und Zählen im Start-Dialog): Graph-Zuordnung vom Server, sonst der eigene Namespace.
   function domNs(n){if(n.kind==="host")return HOST_KEY;
     // Der Rumpf einer Client-Implementierung steht in der Domäne des Client-Namespaces (der Client-Rahmen ist nur die Anschlussleiste).
@@ -3318,7 +3328,7 @@
         akteurOrdnung(r.ns).length?h("span",{class:"gr-p",title:"Akteur-Rahmen dieser Domäne (Reihenfolge = wo Geteiltes steht)"},"👤 "+akteurOrdnung(r.ns).join(" › ")):null,
         h("span",{class:"gr-z"},r.leer?"leer":bausteine(r.z)),
         akteurOrdnung(r.ns).length?null:steckerZeile(STK.get(r.ns+"|"),[r.ns+"|"]),
-        h("button",{title:"Baustein anlegen",onclick:e=>{e.stopPropagation();bausteinMenue(e.clientX,e.clientY,karte?nsVon(karte)||defaultNs():reg?defaultNs():r.ns);}},"＋"),
+        h("button",{title:reg?"In diesem Block anlegen — was hier entsteht, gehört ihm":"Baustein anlegen",onclick:e=>{e.stopPropagation();bausteinMenue(e.clientX,e.clientY,r.ns);}},"＋"),
         r.ns!==OHNE_DOM&&!reg?h("button",{title:"Unterdomäne anlegen",onclick:e=>{e.stopPropagation();neueDomaene(e.clientX,e.clientY,r.ns);}},"＋ ▤"):null,
         h("button",{title:"Domäne einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"),
         h("button",{title:"Mehr",onclick:e=>{e.stopPropagation();domMenue(e.clientX,e.clientY,r);}},"⋯"));
@@ -3431,7 +3441,9 @@
   function spaltenNeu(c){if(c.role==="insel"||c.role==="code")return [];
     const map=rollenVon(c.blk);
     return Object.keys(map).filter(k=>map[k]===c.role&&!k.includes(":")&&!NICHT_FREI.has(k));}
-  function spalteAnlegen(c,kind){const agg=c.blk&&c.blk!==SHARED_KEY&&c.blk!==AKTEUR_KEY?c.blk:(MODEL.aggregate.find(a=>a.namespace===c.dom)||{}).name,
+  function spalteAnlegen(c,kind){if(regionArt(c.dom)){const k=regionKontext(c.dom);
+      neuerKnoten(kind,undefined,undefined,{ns:k.ns,agg:k.agg,reg:c.dom,blk:c.blk||SHARED_KEY});return;}
+    const agg=c.blk&&c.blk!==SHARED_KEY&&c.blk!==AKTEUR_KEY?c.blk:(MODEL.aggregate.find(a=>a.namespace===c.dom)||{}).name,
     sg=MODEL.sagas.find(s=>s.namespace===c.dom);
     neuerKnoten(kind,undefined,undefined,{ns:c.dom===OHNE_DOM?null:c.dom,agg,saga:sg&&sg.name,blk:c.blk||SHARED_KEY});}
   function einpassenRahmen(r){if(!CV.w)return;const w=r.x2-r.x1,hh=r.y2-r.y1,s=Math.max(0.08,Math.min(1,(CV.w-80)/w,(CV.h-80)/hh));
@@ -3479,7 +3491,25 @@
   const BAU_GRUPPEN=[["Außen",["akteur","client"]],["Schreibseite",["command","event","rejection","aggregate","state","decider","applier"]],
     ["Typen",["valueobject","enum","konfig"]],["Abläufe",["saga","transition","funktion","dienst","reaktion","quelle"]],
     ["Leseseite",["readmodel","store","projektion","query","queryresponse","reader"]]];
-  function bausteinMenue(cx,cy,ns){const agg=MODEL.aggregate.find(a=>a.namespace===ns),sg=MODEL.sagas.find(s=>s.namespace===ns);
+  // ＋ IN EINER REGION (Hierarchie): was man hier anlegt, gehört dem Block — die Geste schreibt das Signatur-Fakt, aus dem der Besitz folgt.
+  //   Aggregat: Command (zielt auf es) und je Decide ein Event bzw. eine Ablehnung (das Decide gibt sie aus). Rand: Akteur, Client, Quelle.
+  //   Begriffe: Wertobjekt, Enum, Konfig. Sicht: Read Model, Projektion, Reader, Query. Funktion/Dienst: Konfig (ihr Konstruktor nimmt sie).
+  function regionKontext(ns){const karte=istRegionKarte(ns)?NODEBY.get(ns):null;
+    return {karte,ns:karte?nsVon(karte)||defaultNsGlobal():defaultNsGlobal(),agg:ns.startsWith("agg:")&&karte?karte.name:"",reg:ns};}
+  function regionMenue(cx,cy,ns){const c=regionKontext(ns),art=regionArt(ns);
+    const neu=(k,extra,t)=>({t:t||"＋ "+(NODELABEL[k]||k),fn:()=>neuerKnoten(k,undefined,undefined,{ns:c.ns,agg:c.agg,reg:ns,...(extra||{})})});
+    let it=[];
+    if(art==="Aggregat"){it.push({kopf:"Eingang"},neu("command",null,"＋ Command an "+c.agg));
+      const dec=MODEL.decider.filter(d=>d.aggregat===c.agg&&d.command);
+      it.push({kopf:"Ausgang eines Decide"});
+      if(!dec.length)it.push({t:"— erst ein Command mit Decide",aus:true});
+      dec.forEach(d=>{it.push(neu("event",{ausDecide:d._id},"＋ Event aus Decide("+d.command+")"),neu("rejection",{ausDecide:d._id},"＋ Ablehnung aus Decide("+d.command+")"));});}
+    else if(art==="Rand")it.push(neu("akteur"),neu("client"),neu("quelle"));
+    else if(art==="Begriffe")it.push(neu("valueobject"),neu("enum"),neu("konfig"));
+    else if(art==="Sicht")it.push(neu("readmodel"),neu("projektion"),neu("reader"),neu("query"));
+    else if(art==="Funktion"||art==="Dienst")it.push(neu("konfig"),{t:"＋ Ergebnis-Event — schreibt der Editor noch nicht (Signatur der Funktion im Code)",aus:true});
+    menue(cx,cy,"＋ in "+domLabel(ns),it);}
+  function bausteinMenue(cx,cy,ns){if(regionArt(ns))return regionMenue(cx,cy,ns);const agg=MODEL.aggregate.find(a=>a.namespace===ns),sg=MODEL.sagas.find(s=>s.namespace===ns);
     const it=[];BAU_GRUPPEN.forEach(([g,ks])=>{it.push({kopf:g});ks.forEach(k=>it.push({t:"＋ "+(NODELABEL[k]||k),
       fn:()=>neuerKnoten(k,undefined,undefined,{ns:ns===OHNE_DOM?null:ns,agg:agg&&agg.name,saga:sg&&sg.name})}));});
     menue(cx,cy,"＋ in "+domLabel(ns),it);}
