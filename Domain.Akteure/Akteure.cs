@@ -74,5 +74,3 @@ public sealed record Modellfreigeber : IMensch,
 /// <summary>Beispiel-Domäne Sammelvorgang: startet Sammelvorgänge und ihre Teilaufträge und schließt Teilaufträge ab.</summary>
 public sealed record Disponent : IMensch,
     IDarf<StarteSammelvorgang>, IDarf<StarteTeilauftrag>, IDarf<SchließeTeilauftragAb>;
-
-public sealed record NeuerAkteur : IAkteur;
