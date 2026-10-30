@@ -52,6 +52,7 @@ public sealed partial class Sicht
         return new JsonObject
         {
             ["karten"] = karten,
+            ["besitz"] = BesitzJson(),
             ["kanten"] = Paare(Kanten),
             ["kontrakt"] = Paare(Kontrakt()),
             ["akteurOrdnung"] = ordnung,

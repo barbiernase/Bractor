@@ -247,6 +247,12 @@ public static class Sonde
             z.Add($"sicht {S(k.Ref, "namespace")}.{k.Name} {k.Art} domaene={sicht.Domaene(k)} block={sicht.Block(k)}"
                   + (sicht.Inseln.Contains(k.Id) ? " insel" : ""));
 
+        // Der Besitz (Hierarchie Anwendung → Blöcke → Glieder): je Typ, der kein Block ist, sein Besitzer — aus den Signaturen.
+        string Eltern(string id) => id.StartsWith('§') ? id : sicht.KarteVon.TryGetValue(id, out var e) ? $"{e.Art}:{e.Name}" : id;
+        foreach (var k in sicht.Karten.Where(k => k.Art is "command" or "event" or "rejection" or "valueobject" or "query" or "queryresponse" or "konfig"
+                                                       or "enum" or "readmodel" or "projektion" or "reader" or "code" && Sonde(k.Ref)))
+            z.Add($"besitz {S(k.Ref, "namespace")}.{k.Name} {k.Art} -> {Eltern(sicht.Besitzer(k))}{(sicht.Mehrdeutig(k) ? " mehrdeutig" : "")}");
+
         // Code-Karten (Werkbank P7.4): Hilfscode ohne Baustein-Rolle, roh — mit der Zahl seiner Deklarationen (partial: _ort + _teile).
         foreach (var k in sicht.Karten.Where(k => k.Art == "code" && Sonde(k.Ref)))
             z.Add($"code {S(k.Ref, "namespace")}.{k.Name} {S(k.Ref, "art")} teile={1 + A(k.Ref, "_teile").Count()} domaene={sicht.Domaene(k)} block={sicht.Block(k)}");
