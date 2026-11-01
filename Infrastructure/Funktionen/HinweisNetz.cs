@@ -32,12 +32,17 @@ public sealed class HinweisNetz
     private readonly Konsum _konsum;
     private readonly Lazy<Bote> _bote;
     private readonly ILogger? _logger;
+    private readonly Verkettung _verkettung;
+    private readonly Func<IFunktionsWege>? _wege;
 
+    /// <param name="verkettung">Die Funktionen vor dem Aggregat, die einen Hinweis hören (docs/04 §4.4) — sie bekommen ihn über die Wege.</param>
     /// <param name="hinweisplan">Hinweis-Typ → Cluster-Kinds der Funktions-Actors, die ihn hören (generiert).</param>
     /// <exception cref="Infrastructure.Umgebung.BootFehler">Eine Adresse der Tabelle gehört zu keiner Funktion (R20: jede Adresse existiert).</exception>
     public HinweisNetz(IReadOnlyList<FunktionsBaustein> bausteine, IReadOnlyDictionary<Type, string[]> hinweisplan, Konsum konsum, Func<Bote> bote,
-        ILogger? logger = null)
+        ILogger? logger = null, Verkettung? verkettung = null, Func<IFunktionsWege>? wege = null)
     {
+        _verkettung = verkettung ?? Verkettung.Leer;
+        _wege = wege;
         var jeKind = bausteine.ToDictionary(b => b.KindName, StringComparer.Ordinal);
         _hoerer = hinweisplan.ToDictionary(e => e.Key, e => e.Value.Select(kind => jeKind.TryGetValue(kind, out var b) ? b
             : throw new Infrastructure.Umgebung.BootFehler($"Hinweisplan: {e.Key.Name} → '{kind}' — keine Funktion dieses Actors (R20).", "hinweis:" + e.Key.Name)).ToArray());
@@ -47,7 +52,7 @@ public sealed class HinweisNetz
     }
 
     /// <summary>Hört irgendeine Funktion diesen Hinweis-Typ?</summary>
-    public bool Hoert(Type hinweis) => _hoerer.ContainsKey(hinweis);
+    public bool Hoert(Type hinweis) => _hoerer.ContainsKey(hinweis) || _verkettung.Hoerer(hinweis).Count > 0;
 
     /// <summary>Die Funktionen, die den Hinweis-Typ hören (leer = keine).</summary>
     public IReadOnlyList<FunktionsBaustein> Hoerer(Type hinweis) => _hoerer.TryGetValue(hinweis, out var b) ? b : Array.Empty<FunktionsBaustein>();
@@ -61,9 +66,13 @@ public sealed class HinweisNetz
     /// </summary>
     public int Verteile(HinweisZustellen h)
     {
-        if (!_hoerer.TryGetValue(h.Hinweis.GetType(), out var hoerer)) return 0;
+        var vor = _wege is null ? Array.Empty<string>() : _verkettung.Hoerer(h.Hinweis.GetType());
+        foreach (var f in vor)
+            _wege!().Melde(new EingangZustellen(Eingangsvertrag.Eingang(h.Kennung, f), f, h.Hinweis, Eingangsart.Hinweis, h.Stream, h.Version, h.Zeit,
+                h.Akteur, h.Korrelation, h.Ursache));
+        if (!_hoerer.TryGetValue(h.Hinweis.GetType(), out var hoerer)) return vor.Count;
         foreach (var f in hoerer) _bote.Value.Melde(Adresse(f, h), h);
-        _logger?.LogDebug("[Hinweis] {Typ} {Kennung} an {Anzahl} Funktion(en)", h.Hinweis.GetType().Name, h.Kennung, hoerer.Length);
-        return hoerer.Length;
+        _logger?.LogDebug("[Hinweis] {Typ} {Kennung} an {Anzahl} Funktion(en)", h.Hinweis.GetType().Name, h.Kennung, hoerer.Length + vor.Count);
+        return hoerer.Length + vor.Count;
     }
 }

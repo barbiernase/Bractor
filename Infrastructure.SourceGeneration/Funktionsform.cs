@@ -24,6 +24,8 @@ namespace Infrastructure.SourceGeneration
             public IMethodSymbol Methode = null!;
             public INamedTypeSymbol Eingang = null!;
             public bool Hinweis;
+            /// <summary>Der Eingang ist eine Nachricht ohne Marker (eine Folge, ein Zwischenergebnis — Nachrichtenform), kein Event.</summary>
+            public bool Nachricht;
             /// <summary>Die Parameter in Reihenfolge: <c>e</c> (Eingang), <c>h</c> (Herkunft), <c>ct</c> (Abbruch) oder eine Lese-Fähigkeit.</summary>
             public List<(string Art, INamedTypeSymbol? Typ, string Name)> Parameter = new List<(string, INamedTypeSymbol?, string)>();
             public List<INamedTypeSymbol> Faehigkeiten = new List<INamedTypeSymbol>();
@@ -60,6 +62,12 @@ namespace Infrastructure.SourceGeneration
             public bool EineAdresse;
             /// <summary>Die Klasse hat einen Lebenszyklus (<c>ILebenszyklus</c>, E10): sie lädt etwas beim Aktivieren.</summary>
             public bool Lebenszyklus;
+            /// <summary>
+            /// Die Funktion steht VOR dem Aggregat (docs/04 §4.4): keiner ihrer Eingänge ist ein Event im Log — nur Nachrichten ohne Marker und Hinweise.
+            /// Sie liest nie das Log; Eingänge bringt ihr die Laufzeit über Wurzel, Parent und Kinder. Im Umbau laufen Funktionen mit Log-Eingängen
+            /// und solche, die nur Hinweise hören, noch auf dem Funktions-Actor je Partition.
+            /// </summary>
+            public bool VorDemAggregat => Aufs.Any(a => a.Nachricht) && Aufs.All(a => a.Nachricht || a.Hinweis);
         }
 
         public static string Name(ITypeSymbol t) =>
@@ -181,6 +189,21 @@ namespace Infrastructure.SourceGeneration
                 gesehen[schluessel] = auf;
                 f.Aufs.Add(auf);
             }
+            // Im Umbau: Log-Eingänge und Nachrichten ohne Marker nicht an einer Funktion (die eine läuft auf dem Funktions-Actor, die andere davor).
+            if (f.Aufs.Any(a => a.Nachricht) && f.Aufs.Any(a => !a.Nachricht && !a.Hinweis))
+                f.Fehler.Add(("die Funktion hört Events aus dem Log und Nachrichten ohne Marker — eine Funktion vor dem Aggregat liest nie das Log; "
+                    + "teile sie oder mache aus dem Event eine Folge des Decide", ort));
+            // Ein Zwischenergebnis gibt nur eine Funktion vor dem Aggregat aus, ein Event (ins Log) nur eine mit Log-Eingängen.
+            if (f.VorDemAggregat)
+                foreach (var a in f.Aufs)
+                    foreach (var x in a.Ausgaben.Where(x => Hat(x, A + "IEvent") && !Hat(x, A + "ITransientEvent")))
+                        f.Fehler.Add(($"die Ausgabe '{x.Name}' ist ein Event — eine Funktion vor dem Aggregat schreibt nie ins Log: sie gibt Commands, "
+                            + "Zwischenergebnisse (schlichte Records) und Hinweise aus", a.Methode.Locations.FirstOrDefault() ?? ort));
+            else
+                foreach (var a in f.Aufs)
+                    foreach (var x in a.Ausgaben.Where(Nachrichtenform.IstSchlicht))
+                        f.Fehler.Add(($"die Ausgabe '{x.Name}' ist ein Zwischenergebnis (ein schlichter Record) — das gibt nur eine Funktion vor dem Aggregat "
+                            + "aus, deren Eingänge Nachrichten ohne Marker oder Hinweise sind", a.Methode.Locations.FirstOrDefault() ?? ort));
             if (!f.Gerufen && gesehen.Count == 0 && f.Doppelt.Count == 0 && f.Fehler.Count == 0)
                 f.Fehler.Add(($"'{t.Name}' hat weder ein {Abstractions.Funktionsvertrag.Auf} noch eine gerufene Methode — eine Funktion hört mindestens einen "
                     + "Eingang oder bietet ihrem Halter mindestens eine Methode", ort));
@@ -191,15 +214,17 @@ namespace Infrastructure.SourceGeneration
         {
             if (m.Parameters.Length == 0 || m.Parameters[0].Type is not INamedTypeSymbol eingang)
             {
-                fehler.Add(("ein Auf nimmt als ersten Parameter seinen Eingang (ein Event, eine Quell-Nachricht oder einen Hinweis)", ort));
+                fehler.Add(("ein Auf nimmt als ersten Parameter seinen Eingang (eine Nachricht ohne Marker, ein Event, eine Quell-Nachricht oder einen Hinweis)", ort));
                 return null;
             }
-            if (eingang.TypeKind == TypeKind.Interface || eingang.IsAbstract || !Hat(eingang, A + "IEvent"))
+            var nachricht = Nachrichtenform.IstSchlicht(eingang);
+            if (!nachricht && (eingang.TypeKind == TypeKind.Interface || eingang.IsAbstract || !Hat(eingang, A + "IEvent")))
             {
-                fehler.Add(($"der Eingang '{eingang.Name}' ist kein konkretes Event, keine Quell-Nachricht und kein Hinweis", ort));
+                fehler.Add(($"der Eingang '{eingang.Name}' ist keine Nachricht ohne Marker (Folge, Zwischenergebnis), kein konkretes Event, keine Quell-Nachricht "
+                    + "und kein Hinweis", ort));
                 return null;
             }
-            var auf = new Auf { Methode = m, Eingang = eingang, Hinweis = Hat(eingang, A + "ITransientEvent") };
+            var auf = new Auf { Methode = m, Eingang = eingang, Hinweis = Hat(eingang, A + "ITransientEvent"), Nachricht = nachricht };
             auf.Parameter.Add(("e", eingang, m.Parameters[0].Name));
             var mitAbbruch = false;
             foreach (var p in m.Parameters.Skip(1))
@@ -280,10 +305,10 @@ namespace Infrastructure.SourceGeneration
             foreach (var x in faelle)
             {
                 if (x is not INamedTypeSymbol a || a.TypeKind == TypeKind.Interface || a.IsAbstract || a.TypeKind == TypeKind.TypeParameter
-                    || !(Hat(a, A + "ICommand") || Hat(a, A + "IEvent")))
+                    || !(Hat(a, A + "ICommand") || Hat(a, A + "IEvent") || Nachrichtenform.IstSchlicht(a)))
                 {
-                    fehler.Add(($"die Ausgabe '{x.ToDisplayString()}' ist kein konkreter Command, kein konkretes Event und kein Hinweis — "
-                        + "was eine Funktion ausgibt, steht vollständig in der Signatur", ort));
+                    fehler.Add(($"die Ausgabe '{x.ToDisplayString()}' ist kein konkreter Command, kein Zwischenergebnis (schlichter Record), kein konkretes Event "
+                        + "und kein Hinweis — was eine Funktion ausgibt, steht vollständig in der Signatur", ort));
                     return null;
                 }
                 if (Hat(a, A + "IQuellNachricht"))

@@ -56,8 +56,13 @@ public sealed record FunktionsBaustein(
     FunktionsAufruf Rufe,
     FunktionsSeite RufeSeite,
     FunktionsZustandsform? Zustand = null,
-    bool EineAdresse = false)
+    bool EineAdresse = false,
+    FunktionsRechnung? Rechne = null)
 {
+    /// <summary>Die Funktion steht vor dem Aggregat (docs/04 §4.4): sie hört nur Nachrichten ohne Marker und Hinweise, rechnet über <see cref="Rechne"/>
+    /// auf Wurzel, Parent und Kindern und liest nie das Log. Im Umbau hat eine Funktion mit Log-Eingängen kein <see cref="Rechne"/>.</summary>
+    public bool VorDemAggregat => Rechne is not null;
+
     /// <summary>Das Cluster-Kind des Funktions-Actors (Identität = Partition bzw. die eine Adresse).</summary>
     public string KindName => Funktionsvertrag.Kind(Name);
 
@@ -108,24 +113,24 @@ public static class Ausgaben
         yield break;
     }
 
-    public static async IAsyncEnumerable<IAusgabe> Einzeln<T>(T wert, Func<T, IAusgabe?> abbildung)
+    public static async IAsyncEnumerable<TA> Einzeln<T, TA>(T wert, Func<T, TA?> abbildung) where TA : class
     {
         await Task.CompletedTask;
         if (abbildung(wert) is { } a) yield return a;
     }
 
-    public static async IAsyncEnumerable<IAusgabe> EinzelnAsync<T>(Task<T> wert, Func<T, IAusgabe?> abbildung)
+    public static async IAsyncEnumerable<TA> EinzelnAsync<T, TA>(Task<T> wert, Func<T, TA?> abbildung) where TA : class
     {
         if (abbildung(await wert.ConfigureAwait(false)) is { } a) yield return a;
     }
 
-    public static async IAsyncEnumerable<IAusgabe> EinzelnAsync<T>(ValueTask<T> wert, Func<T, IAusgabe?> abbildung)
+    public static async IAsyncEnumerable<TA> EinzelnAsync<T, TA>(ValueTask<T> wert, Func<T, TA?> abbildung) where TA : class
     {
         if (abbildung(await wert.ConfigureAwait(false)) is { } a) yield return a;
     }
 
-    public static async IAsyncEnumerable<IAusgabe> Strom<T>(IEnumerable<T>? strom, Func<T, IAusgabe?> abbildung,
-        [EnumeratorCancellation] CancellationToken ct = default)
+    public static async IAsyncEnumerable<TA> Strom<T, TA>(IEnumerable<T>? strom, Func<T, TA?> abbildung,
+        [EnumeratorCancellation] CancellationToken ct = default) where TA : class
     {
         await Task.CompletedTask;
         if (strom is null) yield break;
@@ -136,14 +141,14 @@ public static class Ausgaben
         }
     }
 
-    public static async IAsyncEnumerable<IAusgabe> StromAsync<T>(Task<IEnumerable<T>> strom, Func<T, IAusgabe?> abbildung,
-        [EnumeratorCancellation] CancellationToken ct = default)
+    public static async IAsyncEnumerable<TA> StromAsync<T, TA>(Task<IEnumerable<T>> strom, Func<T, TA?> abbildung,
+        [EnumeratorCancellation] CancellationToken ct = default) where TA : class
     {
         await foreach (var a in Strom(await strom.ConfigureAwait(false), abbildung, ct).WithCancellation(ct)) yield return a;
     }
 
-    public static async IAsyncEnumerable<IAusgabe> StromAsync<T>(IAsyncEnumerable<T>? strom, Func<T, IAusgabe?> abbildung,
-        [EnumeratorCancellation] CancellationToken ct = default)
+    public static async IAsyncEnumerable<TA> StromAsync<T, TA>(IAsyncEnumerable<T>? strom, Func<T, TA?> abbildung,
+        [EnumeratorCancellation] CancellationToken ct = default) where TA : class
     {
         if (strom is null) yield break;
         await foreach (var x in strom.WithCancellation(ct).ConfigureAwait(false))

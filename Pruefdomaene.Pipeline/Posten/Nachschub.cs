@@ -4,12 +4,11 @@ using Pruefdomaene.Posten;
 namespace Pruefdomaene.Pipeline.Posten;
 
 /// <summary>
-/// Drückt eine Reservierung den verfügbaren Bestand eines Postens unter seinen Mindestbestand, wird die Fehlmenge nachgebucht (früher eine Reaktion).
-/// Sie hört die langlebigen Posten-Streams (jede Reservierung eines Auftrags oder einer Verteilung landet dort) — der Prüfling dafür, ob die Kosten
-/// einer Funktion mit der Stream-Länge wachsen. Gleichbleibend (R12): derselbe Eingang ergibt dieselbe Zubuchung mit derselben Command-Id.
+/// Drückt eine Reservierung den verfügbaren Bestand eines Postens unter seinen Mindestbestand, wird die Fehlmenge nachgebucht. Eine Funktion vor dem
+/// Aggregat (docs/04 §4.4): sie hört die Folge <see cref="Unterschritten"/> des Decide — nicht das Log —, je Entscheidung genau einen offenen Eingang;
+/// die Command-Id folgt aus seiner Kennung, die Inbox des Postens verwirft eine Wiederholung.
 /// </summary>
 public sealed class Nachschub : IFunktion
 {
-    public BuchePostenZu? Auf(PostenReserviert e, Herkunft h) =>
-        e.Fehlmenge > 0 ? new BuchePostenZu(new(h.Stream), e.Fehlmenge, Beleg.Ohne) : null;
+    public BuchePostenZu Auf(Unterschritten f) => new(f.Posten, f.Fehlmenge, Beleg.Ohne);
 }

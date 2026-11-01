@@ -36,6 +36,9 @@ public sealed class OffeneEingaenge(IDocumentStore store) : IOffeneEingaenge
 {
     public const string Tabelle = "cqrs_eingaenge";
 
+    /// <summary>So lange hat der schnelle Weg (direkt nach dem Commit an die Funktion), bevor der Zusteller einen offenen Eingang selbst bringt.</summary>
+    public static readonly TimeSpan SchnellerWeg = TimeSpan.FromSeconds(5);
+
     public static void Registriere(StoreOptions options)
     {
         var t = new Table(new PostgresqlObjectName(options.Events.DatabaseSchemaName, Tabelle));
@@ -57,8 +60,9 @@ public sealed class OffeneEingaenge(IDocumentStore store) : IOffeneEingaenge
     public static string Name(IDocumentStore store) => $"{store.Options.Events.DatabaseSchemaName}.{Tabelle}";
 
     /// <summary>
-    /// Die offenen Eingänge eines Appends bzw. Group-Commits in EINE Anweisung derselben Transaktion — sofort fällig, Zeit und Fälligkeit nach der Uhr
-    /// des Stores. Eine schon bekannte Kennung (ein wiederholter Command) schreibt nichts.
+    /// Die offenen Eingänge eines Appends bzw. Group-Commits in EINE Anweisung derselben Transaktion — fällig nach <see cref="SchnellerWeg"/> (bis dahin
+    /// hat der schnelle Weg nach dem Commit sie zugestellt), Zeit und Fälligkeit nach der Uhr des Stores. Eine schon bekannte Kennung (ein
+    /// wiederholter Command) schreibt nichts.
     /// </summary>
     public static void Lege(IDocumentSession session, IDocumentStore store, List<Guid> kennungen, List<string> funktionen, List<string> typen,
         List<string> daten, List<Guid> streams, List<int> versionen, List<string?> akteure, List<string?> korrelationen)
@@ -66,7 +70,7 @@ public sealed class OffeneEingaenge(IDocumentStore store) : IOffeneEingaenge
         var uhr = Persistence.EventZeit.Uhr(store);
         session.QueueSqlCommand(
             $"insert into {Name(store)} (kennung, funktion, typ, daten, stream_id, version, zeit, akteur, korrelation, faellig) "
-            + $"select e.k, e.f, e.t, e.d, e.s, e.v, {uhr}, e.a, e.r, {uhr} "
+            + $"select e.k, e.f, e.t, e.d, e.s, e.v, {uhr}, e.a, e.r, {uhr} + interval '{(int)SchnellerWeg.TotalSeconds} seconds' "
             + "from unnest(?::uuid[], ?::text[], ?::text[], ?::text[], ?::uuid[], ?::int[], ?::text[], ?::text[]) as e(k, f, t, d, s, v, a, r) "
             + "on conflict do nothing",
             kennungen.ToArray(), funktionen.ToArray(), typen.ToArray(), daten.ToArray(), streams.ToArray(), versionen.ToArray(), akteure.ToArray(),

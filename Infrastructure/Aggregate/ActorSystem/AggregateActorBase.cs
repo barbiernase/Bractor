@@ -38,7 +38,8 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     //   ihre Adresse — ohne Log, ohne Broker, höchstens einmal. Null = keine Funktion hört Hinweise.
     private readonly Infrastructure.Funktionen.HinweisNetz? _hinweisNetz;
     // Wer die Folgen einer Entscheidung hört (docs/03 §3.1): je Folge und Hörer ein offener Eingang in derselben Transaktion.
-    private readonly Infrastructure.Eingaenge.Folgenplan _folgen;
+    private readonly Infrastructure.Funktionen.Verkettung _folgen;
+    private readonly Infrastructure.Funktionen.IFunktionsWege? _wege;
     private readonly ILogger? _logger;
 
     // ★ Snapshot-Naht (docs/04-konsum-und-prozess-maschine.md §4.8): abgeleiteter, nicht-autoritativer Cache. Null → aus,
@@ -95,12 +96,14 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         IDeadLetterSink? deadLetters = null,
         Passivierung? passivierung = null,
         Infrastructure.Funktionen.HinweisNetz? hinweisNetz = null,
-        Infrastructure.Eingaenge.Folgenplan? folgen = null)
+        Infrastructure.Funktionen.Verkettung? folgen = null,
+        Infrastructure.Funktionen.IFunktionsWege? wege = null)
         // PF-5: Leerlauf bis zur Passivierung (Snapshot beim Stoppen, die nächste Nachricht rehydriert).
         : base(logger, (passivierung ?? Passivierung.Standard).Aggregat)
     {
         _hinweisNetz = hinweisNetz;
-        _folgen = folgen ?? Infrastructure.Eingaenge.Folgenplan.Leer;
+        _folgen = folgen ?? Infrastructure.Funktionen.Verkettung.Leer;
+        _wege = wege;
         _handlerFactory = handlerFactory;
         _eventStore = eventStore;
         _verteilung = verteilung;
@@ -425,6 +428,8 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         public IEvent? Ablehnung { get; set; }
         public int VersionVorher { get; set; }
         public int VersionNachher { get; set; }
+        /// <summary>Die offenen Eingänge der Folgen (nach dem Commit auf dem schnellen Weg an die Funktionen).</summary>
+        public IReadOnlyList<(EingangOffen Eingang, object Folge)> Eingaenge { get; set; } = Array.Empty<(EingangOffen, object)>();
         public CommandResult? Ergebnis { get; set; }
         public bool Beantwortet { get; set; }
     }
@@ -597,7 +602,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
 
         // Die offenen Eingänge der Folgen — vor jedem Apply (ein Fehler hier, etwa eine nicht serialisierbare Folge, lässt den Zustand unberührt);
         //   ihre Herkunft ist der Stand nach der Entscheidung.
-        IReadOnlyList<Beilage> eingaenge;
+        IReadOnlyList<(EingangOffen Eingang, object Folge)> eingaenge;
         try { eingaenge = Infrastructure.Eingaenge.Folgenbeilagen.Von(folgen, _folgen, env.CommandId, _state.Version + persistent.Count, env.UserId, env.CorrelationId); }
         catch (Exception ex)
         {
@@ -639,8 +644,9 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             }
         }
         e.VersionNachher = _state.Version;
+        e.Eingaenge = eingaenge;
         e.Teil = new AppendTeil(schreibe, env.CorrelationId, env.CommandId.ToString(), env.UserId, e.Spur,
-            [new Quittung(env.CommandId, e.Ausgang), .. fristen, .. eingaenge]);
+            [new Quittung(env.CommandId, e.Ausgang), .. fristen, .. eingaenge.Select(x => (Beilage)x.Eingang)]);
     }
 
     /// <summary>
@@ -681,6 +687,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                 {
                     geschrieben = true;
                     _verarbeiteteCommandIds.Add(e.Env.CommandId);
+                    if (e.Eingaenge.Count > 0 && _wege is not null) Infrastructure.Eingaenge.Folgenbeilagen.StelleZu(e.Eingaenge, _wege, _id);
                     if (e.Persistent.Count > 0 && _verteilung != null)
                     {
                         try { await PublishEventsAsync(e.Persistent, e.Env, e.VersionVorher); }
@@ -807,8 +814,9 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                 throw new InvalidOperationException($"Decider für {cmdEnvelope.Payload.GetType().Name} lieferte eine Ablehnung und {folgen.Count} Folge(n) — "
                     + "eine Ablehnung (ITransientEvent) muss die einzige Ausgabe sein.");
             // Die offenen Eingänge der Folgen (docs/03 §3.1): Herkunft ist der Stand nach der Entscheidung.
-            var eingaenge = Infrastructure.Eingaenge.Folgenbeilagen.Von(folgen, _folgen, cmdEnvelope.CommandId, expectedVersion + allEvents.Count,
+            var zuzustellen = Infrastructure.Eingaenge.Folgenbeilagen.Von(folgen, _folgen, cmdEnvelope.CommandId, expectedVersion + allEvents.Count,
                 cmdEnvelope.UserId, cmdEnvelope.CorrelationId);
+            var eingaenge = zuzustellen.Select(x => (Beilage)x.Eingang).ToList();
 
             // 2. Noop — keine Events (z.B. DeaktiviereLagerartikel bei bereits inaktivem Artikel): nur die Quittung, die Version bleibt. Die Inbox
             //    kennt die CommandId, eine Wiederholung bleibt ein Noop.
@@ -819,6 +827,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                     QuittiereEntschieden(context, noop);
                     return;
                 }
+                if (zuzustellen.Count > 0 && _wege is not null) Infrastructure.Eingaenge.Folgenbeilagen.StelleZu(zuzustellen, _wege, _id);
 
                 Antworte(context, new CommandResult
                 {
@@ -909,6 +918,8 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             //   darf nicht mit halb-mutiertem _state weiterlaufen (sonst dauerhafte spurious Concurrency-Conflicts
             //   bis zum Recycling). Darum: der äußere catch fängt nur PRE-Append-Fehler; ein POST-Append-Fehler
             //   rehydriert den State frisch aus dem (nun aktuellen) Log und quittiert WAHR (Erfolg).
+            // Die offenen Eingänge der Folgen auf dem schnellen Weg (verlierbar — die Zeile ist das Netz).
+            if (zuzustellen.Count > 0 && _wege is not null) Infrastructure.Eingaenge.Folgenbeilagen.StelleZu(zuzustellen, _wege, _id);
             try
             {
                 // 6. Events applyen (Applier) — mutiert _state.

@@ -48,7 +48,7 @@ namespace Infrastructure.SourceGeneration
 
         /// <summary>Die Decide-Methoden eines Deciders (öffentlich, erster Parameter ein Command).</summary>
         public static IEnumerable<IMethodSymbol> Decides(INamedTypeSymbol decider) =>
-            decider.GetMembers(Abstractions.Aggregatvertrag.Decide).OfType<IMethodSymbol>()
+            decider.GetMembers("Decide").OfType<IMethodSymbol>()
                 .Where(m => !m.IsStatic && m.DeclaredAccessibility == Accessibility.Public && m.Parameters.Length > 0
                             && m.Parameters[0].Type.AllInterfaces.Any(i => i.ToDisplayString() == A + "ICommand"));
 

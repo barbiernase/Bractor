@@ -121,6 +121,8 @@ public interface IFunktionsTabelle
     IReadOnlyList<FunktionsBaustein> Bausteine { get; }
     /// <summary>Hinweis-Typ → Funktions-Actors, die ihn hören.</summary>
     IReadOnlyDictionary<Type, string[]> Hinweisplan { get; }
+    /// <summary>Nachrichten-Typ → die Funktionen vor dem Aggregat, die ihn hören (Folge, Zwischenergebnis, Hinweis; docs/04 §4.4).</summary>
+    IReadOnlyDictionary<Type, string[]> Verkettung { get; }
 }
 
 /// <summary>Die gerufenen Funktionen (<c>IFunktion</c> ohne <c>Auf</c>, GeneratedGerufene): Namen, Umsetzungen, Konstruktor-Bedarf, Konfig-Records.</summary>

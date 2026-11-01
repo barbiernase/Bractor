@@ -33,7 +33,7 @@ public class FolgeGarantieTests
 
     private static Action<IServiceCollection> Mit(Probe probe, params string[] hoerer) => s =>
     {
-        s.AddSingleton(new Folgenplan(new Dictionary<Type, string[]> { [typeof(Unterschritten)] = hoerer }));
+        s.AddSingleton(new global::Infrastructure.Funktionen.Verkettung(new Dictionary<Type, string[]> { [typeof(Unterschritten)] = hoerer }));
         s.AddSingleton<IEingangsZustellung>(probe);
     };
 
@@ -45,6 +45,16 @@ public class FolgeGarantieTests
         await using var cmd = new Npgsql.NpgsqlCommand($"select count(*) from {OffeneEingaenge.Name(store)} where stream_id = $1", conn);
         cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = stream });
         return Convert.ToInt32(await cmd.ExecuteScalarAsync());
+    }
+
+    private static async Task RaeumeAufAsync(IHost host, Guid stream)
+    {
+        var store = host.Services.GetRequiredService<Marten.IDocumentStore>();
+        await using var conn = store.Storage.Database.CreateConnection();
+        await conn.OpenAsync();
+        await using var cmd = new Npgsql.NpgsqlCommand($"delete from {OffeneEingaenge.Name(store)} where stream_id = $1", conn);
+        cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = stream });
+        await cmd.ExecuteNonQueryAsync();
     }
 
     [Fact]
@@ -117,6 +127,7 @@ public class FolgeGarantieTests
             await Task.Delay(TimeSpan.FromSeconds(4));
             probe.Gesehen.Count(e => e.Stream == p).Should().Be(1, "angenommen ist er erst nach der Frist wieder fällig");
             (await OffenAsync(host, p)).Should().Be(1, "ohne „fertig“ bleibt der Eingang offen");
+            await RaeumeAufAsync(host, p);   // keine offene Zeile für die Probe, die kein Knoten hält, für die übrigen Tests
         }
         finally { await host.StopAsync(); }
     }

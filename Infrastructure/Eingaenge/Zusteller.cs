@@ -126,13 +126,13 @@ internal sealed class ZustellerKind : IClusterKindContributor
 public static class EingangsExtensions
 {
     /// <summary>
-    /// Die offenen Eingänge: Tabelle, Folgenplan (ohne eigenen der leere) und — wenn eine Zustellung registriert ist — der Zusteller mit Cluster-Kind
+    /// Die offenen Eingänge: Tabelle, Verkettung (die generierte) und — wenn eine Zustellung registriert ist — der Zusteller mit Cluster-Kind
     /// und Takt je Knoten.
     /// </summary>
     public static IServiceCollection AddEingaenge(this IServiceCollection services)
     {
         services.AddSingleton<IOffeneEingaenge>(sp => new OffeneEingaenge(sp.GetRequiredService<Marten.IDocumentStore>()));
-        services.TryAddSingleton(Folgenplan.Leer);
+        services.TryAddSingleton(_ => new Infrastructure.Funktionen.Verkettung(Infrastructure.Komposition.Anwendung.Funktionen.Verkettung));
         services.AddSingleton<IClusterKindContributor, ZustellerKind>();
         services.AddHostedService(sp => new ZustellTakt(sp.GetRequiredService<ActorSystem>(), sp.GetService<ILogger<ZustellTakt>>(),
             sp.GetService<IEingangsZustellung>() is not null));

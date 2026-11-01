@@ -19,6 +19,7 @@
         <Compile Include="..\Infrastructure.SourceGeneration\Clientvertragslesart.cs" Link="Vertrag\Clientvertragslesart.cs" />
         <Compile Include="..\Infrastructure.SourceGeneration\Vertragsassemblies.cs" Link="Vertrag\Vertragsassemblies.cs" />
         <Compile Include="..\Infrastructure.SourceGeneration\Funktionsform.cs" Link="Vertrag\Funktionsform.cs" />
+        <Compile Include="..\Infrastructure.SourceGeneration\Nachrichtenform.cs" Link="Vertrag\Nachrichtenform.cs" />
         <Compile Include="..\Abstractions\Funktionsvertrag.cs" Link="Vertrag\Funktionsvertrag.cs" />
         <Compile Include="..\Infrastructure.SourceGeneration\Ctorbindung.cs" Link="Vertrag\Ctorbindung.cs" />
     </ItemGroup>

@@ -38,8 +38,12 @@ public static class FunktionsBausteinWiring
 {
     public static IServiceCollection AddFunktionsBausteine(this IServiceCollection services)
     {
-        var bausteine = Anwendung.Funktionen.Bausteine;
-        if (bausteine.Count == 0) return services;
+        // Funktionen vor dem Aggregat (docs/04 §4.4) laufen auf Wurzel, Parent und Kindern (FunktionsLaufzeitWiring); hier nur die mit Log-Eingängen.
+        FunktionsLaufzeitWiring.AddFunktionsLaufzeit(services);
+        var alle = Anwendung.Funktionen.Bausteine;
+        var bausteine = alle.Where(b => !b.VorDemAggregat).ToList();
+        var hinweiseVorDem = Anwendung.Funktionen.Verkettung.Keys.Any(t => typeof(ITransientEvent).IsAssignableFrom(t));
+        if (bausteine.Count == 0 && !hinweiseVorDem) return services;
         services.TryAddSingleton<IAusgabeAblage>(sp => new LogAusgabeAblage(sp.GetRequiredService<IEventStoreRepository>(), sp.GetService<Infrastructure.Verteilen.Verteilung>()));
         services.TryAddSingleton<IFunktionsStand>(sp => new MartenFunktionsStand(sp.GetRequiredService<Marten.IDocumentStore>()));
         foreach (var b in bausteine)
@@ -54,13 +58,13 @@ public static class FunktionsBausteinWiring
             services.TryAddSingleton<IKonsumRueckstand, KonsumRueckstand>();
         }
         // Das Hinweis-Netz (docs/04 §4.4): die generierte Routing-Tabelle Hinweis-Typ → Funktions-Adressen, Versand direkt über den Bote.
-        if (Anwendung.Funktionen.Hinweisplan.Count > 0)
+        if (Anwendung.Funktionen.Hinweisplan.Count > 0 || hinweiseVorDem)
             services.TryAddSingleton(sp => new HinweisNetz(bausteine, Anwendung.Funktionen.Hinweisplan, sp.GetService<Konsum>() ?? Konsum.Standard,
                 () => new Bote(sp.GetRequiredService<ActorSystem>().Cluster(), sp.GetService<ILoggerFactory>()?.CreateLogger("Hinweisnetz")),
-                sp.GetService<ILoggerFactory>()?.CreateLogger("Hinweisnetz")));
+                sp.GetService<ILoggerFactory>()?.CreateLogger("Hinweisnetz"), sp.GetRequiredService<Verkettung>(), sp.GetRequiredService<IFunktionsWege>));
         if (bausteine.Any(b => b.Draussen) && !services.Any(d => d.ImplementationType == typeof(FunktionsVermittlerKind)))
             services.AddSingleton<IClusterKindContributor, FunktionsVermittlerKind>();
-        Console.WriteLine($"[CQRS] {bausteine.Count} Funktion(en) als Baustein: " + string.Join(", ", bausteine.Select(b => b.Name)));
+        Console.WriteLine($"[CQRS] {bausteine.Count} Funktion(en) mit Log-Eingängen: " + string.Join(", ", bausteine.Select(b => b.Name)));
         return services;
     }
 

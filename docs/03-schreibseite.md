@@ -184,7 +184,7 @@ Events (dann mit der Quittung und der Kopf-Prüfung). Die Kennung ist abgeleitet
 (`Eingangsvertrag`): ein wiederholter Command legt keinen zweiten Eingang. Ihre Herkunft ist der Stand nach der Entscheidung (Stream, Version,
 Log-Zeit des Commits, Akteur, Korrelation). Eine Ablehnung bleibt die einzige Ausgabe — mit einer Folge zusammen ist sie ein Fehler. Welche Typen
 Folgen sind, liest die `Nachrichtenform` aus den Decide-Signaturen (Wire-Form `GeneratedWirePoly.Nachricht`, der Codegen nimmt sie in den
-Wire-Kontext); wer sie hört, sagt der `Folgenplan` (docs/04 §4.4). Einträge des Rahmens
+Wire-Kontext); wer sie hört, sagt die `Verkettung` (docs/04 §4.4). Einträge des Rahmens
 (`IRahmenEvent`, heute nur `FristGesetzt`) werden beim Falten übersprungen (aber versionsgezählt) — der Decider sieht sie nie. Command → Aggregat folgt aus
 `ICommand<TAggregat>`, nicht aus Namespaces; das Decide muss im Ziel-Aggregat stehen (CQRS010), ein Command ohne typisiertes Ziel baut nicht
 (CQRS013, `CommandAggregateMapGenerator`, `ModellAnalyzer`).

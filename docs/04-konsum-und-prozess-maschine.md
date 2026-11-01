@@ -313,7 +313,7 @@ CQRS106); eine Adresse der Tabelle ohne Funktion ist ein Boot-Fehler. Hinweise a
 **Zusteller** (`ZustellerActor`, ein virtueller Cluster-Actor, Kind `zusteller`, nach dem Vorbild der Uhr: Takt je Knoten jede Sekunde, höchstens ein
 Durchlauf zugleich) liest die fälligen Zeilen und bringt jede über die `IEingangsZustellung` hin: „fertig“ trägt sie aus, „angenommen“ macht sie
 nach 60 s wieder fällig (kommt bis dahin kein „fertig“, geht sie erneut hinaus — mindestens einmal), „später“ oder ein Fehler nach 2 s. Wer eine
-Folge hört, sagt der `Folgenplan` (Folge-Typ → Funktionen). Im Umbau „Funktionen vor dem Aggregat“ hört noch keine Funktion eine Folge: der Plan
+Folge hört, sagt die `Verkettung` (Nachrichten-Typ → Funktionen, generiert). Im Umbau „Funktionen vor dem Aggregat“ hört noch keine Funktion eine Folge: der Plan
 ist leer, eine Zustellung ist nicht registriert und der Takt schweigt; die Prüfdomäne gibt die Folge `Unterschritten` aus, die Tests setzen Plan
 und Zustellung selbst.
 

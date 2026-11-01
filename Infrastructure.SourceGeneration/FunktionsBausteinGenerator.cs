@@ -120,12 +120,13 @@ namespace Infrastructure.SourceGeneration
                     sb.AppendLine($"                    new FunktionsUmsetzung(\"{k.Name}\", typeof({T(k)}), (sp, z) => new {T(k)}({Ctorbindung.Argumente(Ctorbindung.Konstruktor(k), fq, "z")})),");
                 sb.AppendLine("                },");
                 sb.AppendLine($"                new Type[] {{ {string.Join(", ", dienste)} }},");
-                sb.AppendLine($"                Rufe{i}, Seite{i}{(f.Zustand != null ? ", Zustand: " + Ctorbindung.Zustandsform(f.Zustand, fq) : "")}{(f.EineAdresse ? ", EineAdresse: true" : "")}),");
+                sb.AppendLine($"                Rufe{i}, Seite{i}{(f.Zustand != null ? ", Zustand: " + Ctorbindung.Zustandsform(f.Zustand, fq) : "")}{(f.EineAdresse ? ", EineAdresse: true" : "")}"
+                    + $"{(f.VorDemAggregat ? $", Rechne: Rechne{i}" : "")}),");
             }
             sb.AppendLine("        };");
             sb.AppendLine();
 
-            var hinweise = fs.SelectMany(f => f.Aufs.Where(a => a.Hinweis).Select(a => (Eingang: T(a.Eingang), Kind: Abstractions.Funktionsvertrag.Kind(f.Typ.Name))))
+            var hinweise = fs.Where(f => !f.VorDemAggregat).SelectMany(f => f.Aufs.Where(a => a.Hinweis).Select(a => (Eingang: T(a.Eingang), Kind: Abstractions.Funktionsvertrag.Kind(f.Typ.Name))))
                 .GroupBy(x => x.Eingang).OrderBy(g => g.Key, System.StringComparer.Ordinal);
             sb.AppendLine("        /// <summary>Hinweis-Typ → die Funktions-Actors, die ihn hören (verlierbar, höchstens einmal; zugestellt vom Hinweis-Netz).</summary>");
             sb.AppendLine("        public static readonly IReadOnlyDictionary<Type, string[]> Hinweisplan = new Dictionary<Type, string[]>");
@@ -133,11 +134,27 @@ namespace Infrastructure.SourceGeneration
             foreach (var g in hinweise)
                 sb.AppendLine($"            [typeof({g.Key})] = new[] {{ {string.Join(", ", g.Select(x => "\"" + x.Kind + "\"").Distinct())} }},");
             sb.AppendLine("        };");
+            sb.AppendLine();
+
+            // Die Verkettung (docs/04 §4.4): Nachrichten-Typ → die Funktionen vor dem Aggregat, die ihn hören (Folge, Zwischenergebnis, Hinweis).
+            var kette = fs.Where(f => f.VorDemAggregat).SelectMany(f => f.Aufs.Select(a => (Eingang: T(a.Eingang), Name: f.Typ.Name)))
+                .GroupBy(x => x.Eingang).OrderBy(g => g.Key, System.StringComparer.Ordinal);
+            sb.AppendLine("        /// <summary>Nachrichten-Typ → die Funktionen vor dem Aggregat, die ihn hören (Folge, Zwischenergebnis, Hinweis).</summary>");
+            sb.AppendLine("        public static readonly IReadOnlyDictionary<Type, string[]> Verkettung = new Dictionary<Type, string[]>");
+            sb.AppendLine("        {");
+            foreach (var g in kette)
+                sb.AppendLine($"            [typeof({g.Key})] = new[] {{ {string.Join(", ", g.Select(x => "\"" + x.Name + "\"").Distinct())} }},");
+            sb.AppendLine("        };");
 
             for (var i = 0; i < fs.Count; i++)
             {
                 var f = fs[i];
                 sb.AppendLine();
+                if (f.VorDemAggregat)
+                {
+                    EmitRechne(sb, f, i, T);
+                    continue;
+                }
                 sb.AppendLine($"        private static IAsyncEnumerable<IAusgabe> Rufe{i}(object o, IEvent eingang, Herkunft h, IFaehigkeiten? b, CancellationToken ct)");
                 sb.AppendLine("        {");
                 sb.AppendLine($"            var f = ({T(f.Typ)})o;");
@@ -192,6 +209,46 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("    }");
             sb.AppendLine("}");
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// Eine Funktion vor dem Aggregat: <c>Rechne{i}</c> nimmt den Eingang als Objekt und liefert die Ausgaben als Objekte (Commands, Zwischenergebnisse,
+        /// Hinweise). Die Einzel- und Seiten-Form des Funktions-Actors gibt es für sie nicht.
+        /// </summary>
+        private static void EmitRechne(StringBuilder sb, Funktionsform.Form f, int i, System.Func<ITypeSymbol, string> T)
+        {
+            sb.AppendLine($"        private static IAsyncEnumerable<object> Rechne{i}(object o, object eingang, Herkunft h, IFaehigkeiten? b, CancellationToken ct)");
+            sb.AppendLine("        {");
+            sb.AppendLine($"            var f = ({T(f.Typ)})o;");
+            sb.AppendLine("            switch (eingang)");
+            sb.AppendLine("            {");
+            foreach (var a in f.Aufs)
+            {
+                var args = string.Join(", ", a.Parameter.Select(p => p.Art switch
+                {
+                    "e" => "e",
+                    "h" => "h",
+                    "ct" => "ct",
+                    _ => $"b!.Hole<{T(p.Typ!)}>()",
+                }));
+                var aufruf = $"f.{Abstractions.Funktionsvertrag.Auf}({args})";
+                var abbildung = "y => (object?)y" + a.Abbildung;
+                string adapter;
+                if (a.Strom) adapter = a.StromAsync || a.Huelle == "Task" ? "StromAsync" : "Strom";
+                else adapter = a.Huelle.Length > 0 ? "EinzelnAsync" : "Einzeln";
+                var mitCt = a.Strom ? ", ct" : "";
+                sb.AppendLine($"                case {T(a.Eingang)} e: return Ausgaben.{adapter}({aufruf}, {abbildung}{mitCt});");
+            }
+            sb.AppendLine($"                default: throw new NotSupportedException($\"{f.Typ.Name} hört '{{eingang.GetType().Name}}' nicht.\");");
+            sb.AppendLine("            }");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+            sb.AppendLine($"        private static IAsyncEnumerable<IAusgabe> Rufe{i}(object o, IEvent eingang, Herkunft h, IFaehigkeiten? b, CancellationToken ct) =>");
+            sb.AppendLine($"            throw new NotSupportedException(\"{f.Typ.Name} steht vor dem Aggregat — sie liest nie das Log.\");");
+            sb.AppendLine();
+            sb.AppendLine($"        private static IAsyncEnumerable<(int Index, IAusgabe Ausgabe)> Seite{i}(object o, IReadOnlyList<(IEvent Eingang, Herkunft Herkunft)> seite,");
+            sb.AppendLine("            IFaehigkeiten? b, CancellationToken ct) =>");
+            sb.AppendLine($"            throw new NotSupportedException(\"{f.Typ.Name} steht vor dem Aggregat — sie liest nie das Log.\");");
         }
     }
 }

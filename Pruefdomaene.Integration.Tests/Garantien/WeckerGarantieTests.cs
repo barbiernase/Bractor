@@ -7,16 +7,17 @@ using Microsoft.Extensions.DependencyInjection;
 using Proto;
 using Proto.Cluster;
 using Pruefdomaene.Abrechnung;
-using Pruefdomaene.Posten;
+using Pruefdomaene.Messung;
+using Pruefdomaene.Projections.Messung;
 using static Pruefdomaene.Integration.Tests.Pruefstand;
 
 namespace Pruefdomaene.Integration.Tests.Garantien;
 
 /// <summary>
-/// Der Wecker am Commit im echten Cluster (docs/03 §3.5, docs/13 §13.7), am Beispiel der Funktion <c>Nachschub</c>
-/// (Aggregat-Event → Funktion → Command an das Aggregat):
+/// Der Wecker am Commit im echten Cluster (docs/03 §3.5, docs/13 §13.7), am Beispiel der Projektion <c>MesszaehlerProjektion</c> (Aggregat-Event →
+/// Projektion; Funktionen vor dem Aggregat weckt er nicht, sie lesen nie das Log):
 /// <list type="bullet">
-/// <item><b>Latenz:</b> ein Commit weckt die Funktion, die das Event hört — sie wartet nicht auf den Takt (30 s); eine gesetzte Frist weckt die Uhr
+/// <item><b>Latenz:</b> ein Commit weckt die Projektion, die das Event hört — sie wartet nicht auf den Takt (30 s); eine gesetzte Frist weckt die Uhr
 ///   (ihr eigener Takt ist eine Sekunde, die Latenz-Prüfung der Uhr unterscheidet Weckruf und Takt darum nicht);</item>
 /// <item><b>verlorene Weckrufe:</b> geht jeder Weckruf eines Commits verloren, wirkt der Eingang erst mit dem Takt — und genau einmal;</item>
 /// <item><b>doppelte Weckrufe:</b> kommt jeder Weckruf zweimal, wirkt jeder Eingang trotzdem genau einmal (das Ziel liest ab seiner Position).</item>
@@ -36,34 +37,34 @@ public class WeckerGarantieTests
             return new Bote(anfrage((ziel, nachricht, ct) => cluster.RequestAsync<object?>(ziel, nachricht, ct)));
         }));
 
-    private static async Task<Guid> PostenMitFehlmengeAsync(Microsoft.Extensions.Hosting.IHost host)
+    private static async Task<Id<Messstelle>> MesswertAsync(Microsoft.Extensions.Hosting.IHost host)
     {
-        var p = Guid.NewGuid();
-        (await FrageAsync(host, new EroeffnePosten(new(p), 100, Mindestbestand: 98), Guid.NewGuid()))!.Success.Should().BeTrue();
-        (await FrageAsync(host, new ReservierePosten(new(p), 5, Beleg.Ohne), Guid.NewGuid()))!.Success.Should().BeTrue();   // Fehlmenge 3
-        return p;
+        var stelle = Id<Messstelle>.Neu();
+        (await FrageAsync(host, new ErfasseMesswert(stelle, 1.5), Guid.NewGuid()))!.Success.Should().BeTrue();
+        return stelle;
     }
 
-    private static async Task<int> Nachschuebe(Microsoft.Extensions.Hosting.IHost host, Guid p) =>
-        (await host.Services.GetRequiredService<IEventStoreRepository>().ReadStreamAsync(p, 0, default)).Count(e => e.Payload is PostenZugebucht);
+    /// <summary>Wie oft die Projektion den Messwert gezählt hat (Klasse 3, ohne Störung genau einmal je Event).</summary>
+    private static async Task<int> Gezaehlt(Microsoft.Extensions.Hosting.IHost host, Id<Messstelle> stelle) =>
+        ((Messzaehler)(await host.Services.GetRequiredService<IQueryDienst>().ExecuteAsync(new HoleMesszaehler(stelle))).Data).Anzahl;
 
     [Fact]
-    public async Task Ein_Commit_weckt_die_Funktion_die_sein_Event_hoert_ohne_auf_den_Takt_zu_warten()
+    public async Task Ein_Commit_weckt_die_Projektion_die_sein_Event_hoert_ohne_auf_den_Takt_zu_warten()
     {
         using var host = Cluster("wecker-latenz", takt: Konsum.StandardTakt);   // der lange Takt: sonst bestünde die Prüfung auch ohne Wecker
         await host.StartAsync();
         try
         {
-            // Aufwärmen: Aktivierung des Funktions-Actors, erster Takt (2 s nach dem Start).
-            var warm = await PostenMitFehlmengeAsync(host);
-            await Warte(async () => await Nachschuebe(host, warm) == 1, TimeSpan.FromSeconds(60), "Aufwärmen: der Nachschub kommt nicht");
+            // Aufwärmen: Aktivierung des Batch-Lesers, erster Takt (2 s nach dem Start).
+            var warm = await MesswertAsync(host);
+            await Warte(async () => await Gezaehlt(host, warm) == 1, TimeSpan.FromSeconds(60), "Aufwärmen: die Projektion zählt nicht");
 
             // Dreimal hintereinander je unter 5 s: dass der Takt (30 s) dreimal zufällig passt, ist ausgeschlossen.
             for (var i = 0; i < 3; i++)
             {
-                var p = await PostenMitFehlmengeAsync(host);
-                await Warte(async () => await Nachschuebe(host, p) == 1, Schnell,
-                    $"Durchlauf {i + 1}: der Commit weckt die Funktion nicht (nur der Takt holte sie) — fehlt sie im Weckplan oder weckt der Wecker nicht?");
+                var p = await MesswertAsync(host);
+                await Warte(async () => await Gezaehlt(host, p) == 1, Schnell,
+                    $"Durchlauf {i + 1}: der Commit weckt die Projektion nicht (nur der Takt holte sie) — fehlt sie im Weckplan oder weckt der Wecker nicht?");
             }
         }
         finally { await host.StopAsync(); }
@@ -97,20 +98,20 @@ public class WeckerGarantieTests
         await host.StartAsync();
         try
         {
-            var warm = await PostenMitFehlmengeAsync(host);
-            await Warte(async () => await Nachschuebe(host, warm) == 1, TimeSpan.FromSeconds(60), "Aufwärmen: der Nachschub kommt nicht");
+            var warm = await MesswertAsync(host);
+            await Warte(async () => await Gezaehlt(host, warm) == 1, TimeSpan.FromSeconds(60), "Aufwärmen: die Projektion zählt nicht");
             await Task.Delay(TimeSpan.FromSeconds(2));   // der Lauf des Aufwärmens ist zu Ende
 
             Volatile.Write(ref verloren, true);
-            var p = await PostenMitFehlmengeAsync(host);
+            var p = await MesswertAsync(host);
             await Task.Delay(TimeSpan.FromSeconds(4));
-            (await Nachschuebe(host, p)).Should().Be(0, "ohne Weckruf weckt nur der Takt — der Eingang wartet noch");
+            (await Gezaehlt(host, p)).Should().Be(0, "ohne Weckruf weckt nur der Takt — der Eingang wartet noch");
             Volatile.Write(ref verloren, false);
 
             // Der Takt (hier der kurze der Prüfdomäne) weckt die Partition; sie liest ab ihrer Position.
-            await Warte(async () => await Nachschuebe(host, p) == 1, TimeSpan.FromSeconds(45), "der Takt holt den Eingang nicht nach");
+            await Warte(async () => await Gezaehlt(host, p) == 1, TimeSpan.FromSeconds(45), "der Takt holt den Eingang nicht nach");
             await Task.Delay(TimeSpan.FromSeconds(3));
-            (await Nachschuebe(host, p)).Should().Be(1, "der nachgeholte Eingang wirkt genau einmal");
+            (await Gezaehlt(host, p)).Should().Be(1, "der nachgeholte Eingang wirkt genau einmal");
         }
         finally { await host.StopAsync(); }
     }
@@ -128,16 +129,13 @@ public class WeckerGarantieTests
         await host.StartAsync();
         try
         {
-            var posten = new List<Guid>();
-            for (var i = 0; i < 6; i++) posten.Add(await PostenMitFehlmengeAsync(host));
-            foreach (var p in posten)
-                await Warte(async () => await Nachschuebe(host, p) >= 1, TimeSpan.FromSeconds(60), $"Posten {p}: der Nachschub kommt nicht");
+            var stellen = new List<Id<Messstelle>>();
+            for (var i = 0; i < 6; i++) stellen.Add(await MesswertAsync(host));
+            foreach (var p in stellen)
+                await Warte(async () => await Gezaehlt(host, p) >= 1, TimeSpan.FromSeconds(60), $"Stelle {p}: die Projektion zählt nicht");
             await Task.Delay(TimeSpan.FromSeconds(3));
-            foreach (var p in posten)
-            {
-                (await Nachschuebe(host, p)).Should().Be(1, "jeder Eingang wirkt genau einmal, gleich wie oft geweckt wurde");
-                (await Zustand<Posten.Posten>(host.Services, p)).Bestand.Should().Be(103);
-            }
+            foreach (var p in stellen)
+                (await Gezaehlt(host, p)).Should().Be(1, "jeder Eingang wirkt genau einmal, gleich wie oft geweckt wurde");
         }
         finally { await host.StopAsync(); }
     }

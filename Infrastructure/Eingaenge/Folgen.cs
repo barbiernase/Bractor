@@ -6,18 +6,6 @@ using Infrastructure.Komposition;
 
 namespace Infrastructure.Eingaenge;
 
-/// <summary>
-/// Wer eine Folge hört (docs/03 §3.1, docs/04 §4.4): Folge-Typ → die Funktionen, für die ihre Entscheidung je einen offenen Eingang legt. Hört
-/// niemand, legt sie keinen.
-/// </summary>
-public sealed class Folgenplan(IReadOnlyDictionary<Type, string[]> hoerer)
-{
-    /// <summary>Der Plan ohne Hörer.</summary>
-    public static readonly Folgenplan Leer = new(new Dictionary<Type, string[]>());
-
-    public IReadOnlyList<string> Hoerer(Type folge) => hoerer.TryGetValue(folge, out var f) ? f : Array.Empty<string>();
-}
-
 /// <summary>Eine Nachricht ohne Marker als Diskriminator und Wire-JSON (die generierten Tabellen, <c>GeneratedWirePoly</c>) — und zurück.</summary>
 public static class Nachrichtenform
 {
@@ -37,15 +25,16 @@ public static class Nachrichtenform
 }
 
 /// <summary>
-/// Die Folgen einer Entscheidung als Beilagen (<see cref="EingangOffen"/>): je Folge und hörende Funktion ein offener Eingang mit der Kennung aus
+/// Die Folgen einer Entscheidung als Beilagen (<see cref="EingangOffen"/>): je Folge und hörende Funktion (die Verkettung) ein offener Eingang mit der Kennung aus
 /// Command-Id, Stelle und Funktion (<see cref="Eingangsvertrag"/>) — derselbe Command ergibt dieselben Kennungen.
 /// </summary>
 public static class Folgenbeilagen
 {
-    public static IReadOnlyList<Beilage> Von(IReadOnlyList<object> folgen, Folgenplan plan, Guid commandId, int version, string? akteur, string? korrelation)
+    public static IReadOnlyList<(EingangOffen Eingang, object Folge)> Von(IReadOnlyList<object> folgen, Infrastructure.Funktionen.Verkettung plan, Guid commandId,
+        int version, string? akteur, string? korrelation)
     {
-        if (folgen.Count == 0) return Array.Empty<Beilage>();
-        var aus = new List<Beilage>();
+        if (folgen.Count == 0) return Array.Empty<(EingangOffen, object)>();
+        var aus = new List<(EingangOffen, object)>();
         for (var stelle = 0; stelle < folgen.Count; stelle++)
         {
             var hoerer = plan.Hoerer(folgen[stelle].GetType());
@@ -53,9 +42,20 @@ public static class Folgenbeilagen
             var kennung = Eingangsvertrag.Folge(commandId, stelle);
             var (typ, daten) = Nachrichtenform.Schreibe(folgen[stelle]);
             foreach (var funktion in hoerer)
-                aus.Add(new EingangOffen(Eingangsvertrag.Eingang(kennung, funktion), funktion, typ, daten, version,
-                    ImAuftrag.IstAkteur(akteur) ? akteur : null, korrelation));
+                aus.Add((new EingangOffen(Eingangsvertrag.Eingang(kennung, funktion), funktion, typ, daten, version,
+                    ImAuftrag.IstAkteur(akteur) ? akteur : null, korrelation), folgen[stelle]));
         }
         return aus;
+    }
+
+    /// <summary>
+    /// Der schnelle Weg nach dem Commit (docs/04 §4.4): jeder offene Eingang geht sofort an den Parent seiner Funktion — verlierbar, die Zeile in
+    /// <c>cqrs_eingaenge</c> bleibt das Netz (der Zusteller bringt sie, wenn sie nach ihrer Frist noch offen ist).
+    /// </summary>
+    public static void StelleZu(IReadOnlyList<(EingangOffen Eingang, object Folge)> eingaenge, Infrastructure.Funktionen.IFunktionsWege wege, Guid stream)
+    {
+        foreach (var (e, folge) in eingaenge)
+            wege.Melde(new Infrastructure.Funktionen.EingangZustellen(e.Kennung, e.Funktion, folge, Infrastructure.Funktionen.Eingangsart.Durabel, stream,
+                e.Version, DateTimeOffset.UtcNow, e.Akteur, e.Korrelation, Spur.Ursache(stream, e.Version)));
     }
 }
