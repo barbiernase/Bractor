@@ -32,7 +32,7 @@ public sealed record Messwert(double Wert) : ITransientEvent;
 public sealed record Datei : DateiGemeldet;
 public interface ISucheKonto : IReadStore { Task<int> StufeAsync(Guid konto); }
 public interface ISchreibeKonto : IWriteStore { Task SetzeAsync(Guid konto); }
-public interface IPost : IDienst { Task SendeAsync(string an); }
+public interface IPost : IFunktion { Task SendeAsync(string an); }
 }
 ";
 
@@ -122,7 +122,7 @@ public interface IPost : IDienst { Task SendeAsync(string an); }
     }
 
     [Fact]
-    public void Dienst_oder_Lese_Faehigkeit_heisst_nicht_gleichbleibend()
+    public void Gerufene_Funktion_oder_Lese_Faehigkeit_heisst_nicht_gleichbleibend()
     {
         var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
             public sealed class MitPost(IPost post) : IFunktion { public Mahne? Auf(Ueberfaellig e) => null; }
@@ -131,7 +131,7 @@ public interface IPost : IDienst { Task SendeAsync(string an); }
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty();
         quelle.Should().Contain("\"MitPost\", Draussen: false, Gleichbleibend: false,");
-        quelle.Should().Contain("new Type[] { typeof(global::Probe.IPost) }", "der Dienst steht im Bedarf der Funktion");
+        quelle.Should().Contain("new Type[] { typeof(global::Probe.IPost) }", "die gerufene Funktion steht im Bedarf");
         quelle.Should().Contain("\"MitLesen\", Draussen: false, Gleichbleibend: false,");
         quelle.Should().Contain("f.Auf(e, b!.Hole<global::Probe.ISucheKonto>())", "die Lese-Fähigkeit kommt je Aufruf aus dem Bereich");
     }
@@ -180,7 +180,7 @@ public interface IPost : IDienst { Task SendeAsync(string an); }
         quelle.Should().Contain("EineAdresse: true");
         quelle.Should().Contain("case global::Probe.Bezahlt e: f.Auf(e, h); return Ausgaben.Leer;");
         quelle.Should().Contain("case global::Probe.Ueberfaellig e: return Ausgaben.KeineAsync(f.Auf(e));");
-        quelle.Should().Contain("new Type[] { typeof(global::Probe.IPost) }", "der Zustand ist kein Dienst im Bedarf");
+        quelle.Should().Contain("new Type[] { typeof(global::Probe.IPost) }", "der Zustand ist keine gerufene Funktion im Bedarf");
     }
 
     [Fact]

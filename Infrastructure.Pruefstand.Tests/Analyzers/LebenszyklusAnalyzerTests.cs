@@ -14,7 +14,7 @@ namespace Infrastructure.Pruefstand.Analyzers;
 
 /// <summary>
 /// CQRS107 (docs/04 §4.4, docs/10 E10): der Lebenszyklus (<c>ILebenszyklus</c>) gehört an eine Funktions-Klasse im Host — nicht an eine
-/// Schnittstelle (draußen gehört er dem Worker), nicht an einen Dienst; <c>VorDemSichernAsync</c> nur mit Zustand. Dazu: eine Funktion mit Lebenszyklus
+/// Schnittstelle (draußen gehört er dem Worker), nicht an eine gerufene Funktion; <c>VorDemSichernAsync</c> nur mit Zustand. Dazu: eine Funktion mit Lebenszyklus
 /// ist nie gleichbleibend (Generator).
 /// </summary>
 public class LebenszyklusAnalyzerTests
@@ -25,7 +25,7 @@ public class LebenszyklusAnalyzerTests
         public sealed record Gemessen(double Wert) : IEvent;
         public sealed record Auffaellig(double Wert) : ITransientEvent;
         public sealed class Netz { public double Gewicht { get; set; } }
-        public interface IGpu : IDienst { Task<double> LadeAsync(); }
+        public interface IGpu : IFunktion { Task<double> LadeAsync(); }
         """;
 
     private static async Task<(string Id, string Text)[]> Befunde(string code)

@@ -89,8 +89,6 @@ public static partial class UmgebungLader
         };
         foreach (var f in konfig.GetSection(UmgebungsAbschnitte.Funktionen).GetChildren())
             u.Funktionen[f.Key] = f.Get<FunktionsKonfig>(o => o.ErrorOnUnknownConfiguration = true) ?? new FunktionsKonfig();
-        foreach (var d in konfig.GetSection(UmgebungsAbschnitte.Dienste).GetChildren())
-            u.Dienste[d.Key] = d.Get<DienstKonfig>(o => o.ErrorOnUnknownConfiguration = true) ?? new DienstKonfig();
         foreach (var c in konfig.GetSection(UmgebungsAbschnitte.Clients).GetChildren())
             u.Clients[c.Key] = c.Get<ClientKonfig>(o => o.ErrorOnUnknownConfiguration = true) ?? new ClientKonfig();
         return u;

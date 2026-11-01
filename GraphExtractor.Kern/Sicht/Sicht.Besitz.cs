@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 namespace GraphExtractor;
 
 // Der BESITZ je Karte — die Hierarchie Anwendung → Blöcke → Glieder, nur aus den Signaturen (nie aus Namespace oder Name):
-//   - Blöcke: das Aggregat, die Funktion, der Dienst (gerufen), die Sicht (Anker: das Store-Bündel); dazu Begriffe und Rand der Anwendung.
+//   - Blöcke: das Aggregat, die Funktion (mit Eingängen oder gerufen), die Sicht (Anker: das Store-Bündel); dazu Begriffe und Rand der Anwendung.
 //   - Ein Command gehört dem Aggregat, auf das er zielt; was eine Methode zurückgibt, dem Typ der Methode; eine Query dem, dessen Frage sie
 //     nimmt; ein Typ, der nur als Feld bzw. im Konstruktor vorkommt, seinem einzigen Nutzer (mehrere → Begriffe); was von außen kommt
 //     (Quelle, Befugnis eines Akteurs ohne Erzeuger im Code), dem Rand.
@@ -14,14 +14,14 @@ public sealed partial class Sicht
     public const string Begriffe = "§begriffe";
     public const string Rand = "§rand";
 
-    private static readonly HashSet<string> BlockArten = ["aggregate", "bausteinfunktion", "dienst", "store"];
+    private static readonly HashSet<string> BlockArten = ["aggregate", "bausteinfunktion", "store"];
     private static readonly Regex Bezeichner = new(@"[A-Za-z_]\w*", RegexOptions.Compiled);
 
     private readonly Dictionary<string, string> _besitz = new(StringComparer.Ordinal);
     private readonly HashSet<string> _besitzInArbeit = new(StringComparer.Ordinal);
     private readonly HashSet<string> _mehrdeutig = new(StringComparer.Ordinal);
 
-    /// <summary>Ist die Karte ein Block (Aggregat, Funktion, Dienst, Sicht)?</summary>
+    /// <summary>Ist die Karte ein Block (Aggregat, Funktion, Sicht)?</summary>
     public static bool IstBlock(SichtKarte n) => BlockArten.Contains(n.Art);
 
     /// <summary>Hat die Karte keinen eindeutigen Besitzer (zwei Erzeuger, zwei Antwortende, zwei Stores) und liegt deshalb bei den Begriffen?</summary>
@@ -45,7 +45,7 @@ public sealed partial class Sicht
         var name = n.Name;
         switch (n.Art)
         {
-            case "aggregate": case "bausteinfunktion": case "dienst": case "store": return Anwendung;
+            case "aggregate": case "bausteinfunktion": case "store": return Anwendung;
             case "akteur": case "client": return Rand;
             case "state": case "decider": case "applier": return AggId(S(r, "aggregat")) ?? Begriffe;
             case "handle": return n.Besitzer?.Id ?? Begriffe;
@@ -110,11 +110,9 @@ public sealed partial class Sicht
         foreach (var r in _records.Where(r => S(r, "name") != t && Felder(r, "felder"))) nutzer.Add(BlockDes("rec:" + S(r, "name")));
         foreach (var rm in _readModels.Where(x => S(x, "name") != t && Felder(x, "felder"))) nutzer.Add(BlockDes("rm:" + S(rm, "_id")));
         foreach (var g in _aggregate.Where(g => Felder(g, "state"))) nutzer.Add("agg:" + S(g, "name"));
-        foreach (var f in _bausteinFunktionen.Where(f => Felder(f, "konstruktor") || Alle(f["umsetzungen"]).Any(u => Felder(u, "konstruktor"))))
+        foreach (var f in _bausteinFunktionen.Where(f => Felder(f, "konstruktor") || Alle(f["umsetzungen"]).Any(u => Felder(u, "konstruktor"))
+                                                         || Alle(f["methoden"]).Any(m => Nutzt(S(m, "rueckgabe")) || Felder(m, "parameter"))))
             nutzer.Add("fb:" + S(f, "_id"));
-        foreach (var d in _dienste.Where(d => Alle(d["implementierungen"]).Any(i => Felder(i, "konstruktor"))
-                                              || Alle(d["methoden"]).Any(m => Nutzt(S(m, "rueckgabe")) || Felder(m, "parameter"))))
-            nutzer.Add("dn:" + S(d, "_id"));
         foreach (var st in _stores.Where(s => Alle(s["writeFns"]).Concat(Alle(s["readFns"])).Any(f => Felder(f, "params") || Nutzt(S(f["sig"], "rueckgabe")))))
             nutzer.Add("sto:" + S(st, "_id"));
         return Einer(n, nutzer, mehrdeutig: false);

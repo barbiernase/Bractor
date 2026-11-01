@@ -30,7 +30,7 @@ public class WiederholungAnalyzerTests
         }
         public sealed record Mahne(Id<Konto> AggregateId, DateTimeOffset Am) : ICommand<Konto>;
         public sealed record Gemahnt(DateTimeOffset Am) : IEvent;
-        public interface IPost : IDienst { Task<string> SendeAsync(); }
+        public interface IPost : IFunktion { Task<string> SendeAsync(); }
         public interface ISchreibe : IWriteStore { Task SetzeAsync(Guid id); }
         """;
 
@@ -102,7 +102,7 @@ public class WiederholungAnalyzerTests
     }
 
     [Fact]
-    public async Task R12_eine_gleichbleibende_Funktion_mit_Uhr_ist_CQRS103_mit_Dienst_haelt_das_Framework_fest()
+    public async Task R12_eine_gleichbleibende_Funktion_mit_Uhr_ist_CQRS103_mit_gerufener_Funktion_haelt_das_Framework_fest()
     {
         (await Befunde("""
             public sealed class Mahner : IFunktion
@@ -115,7 +115,7 @@ public class WiederholungAnalyzerTests
             {
                 public Mahne Auf(Ueberfaellig e, Herkunft h) => new(h.NeueId<Konto>(), DateTimeOffset.Now);
             }
-            """)).Should().BeEmpty("mit Dienst hält das Framework die Ausgabe fest — die Uhr ist dann erlaubt");
+            """)).Should().BeEmpty("mit gerufener Funktion hält das Framework die Ausgabe fest — die Uhr ist dann erlaubt");
         (await Befunde("""
             public sealed class Mahner : IFunktion
             {

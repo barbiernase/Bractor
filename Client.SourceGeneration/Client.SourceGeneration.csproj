@@ -21,7 +21,6 @@
         <Compile Include="..\Infrastructure.SourceGeneration\Funktionsform.cs" Link="Vertrag\Funktionsform.cs" />
         <Compile Include="..\Abstractions\Funktionsvertrag.cs" Link="Vertrag\Funktionsvertrag.cs" />
         <Compile Include="..\Infrastructure.SourceGeneration\Ctorbindung.cs" Link="Vertrag\Ctorbindung.cs" />
-        <Compile Include="..\Abstractions\Dienstvertrag.cs" Link="Vertrag\Dienstvertrag.cs" />
     </ItemGroup>
 
     <ItemGroup>

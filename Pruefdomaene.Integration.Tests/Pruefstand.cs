@@ -40,9 +40,9 @@ internal static class Pruefstand
             opts.Konsum = Konsum.Standard with { Takt = takt ?? KurzerTakt };
         });
         builder.Services.AddGeneratedPullPaths();
-        // Die Dienste der Funktionen wie im Host ohne Wahl in der Umgebung: je Dienst die eine Implementierung (Tests ersetzen sie über dienste).
-        global::Infrastructure.Dienste.DienstExtensions.BindeDienste(builder.Services, new Dictionary<string, DienstKonfig>(),
-            new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build().GetSection(Dienstvertrag.KonfigAbschnitt));
+        // Die gerufenen Funktionen wie im Host ohne Wahl in der Umgebung: je eine die eine Umsetzung (Tests ersetzen sie über dienste).
+        global::Infrastructure.Funktionen.GerufeneExtensions.BindeGerufene(builder.Services, new Dictionary<string, FunktionsKonfig>(),
+            new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build().GetSection(Funktionsvertrag.KonfigAbschnitt));
         dienste?.Invoke(builder.Services);
         return builder.Build();
     }

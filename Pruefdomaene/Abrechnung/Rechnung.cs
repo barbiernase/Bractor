@@ -4,7 +4,7 @@ namespace Pruefdomaene.Abrechnung;
 
 /// <summary>
 /// Aggregat <see cref="Rechnung"/>: gestellt, freigegeben oder gesperrt, bezahlt; eine fällige Prüfung der
-/// Zahlung meldet sie überfällig. Prüfling der Funktionen in Baustein-Form (Gutschrift gleichbleibend, Mahnwesen mit Dienst, Freigabe draußen).
+/// Zahlung meldet sie überfällig. Prüfling der Funktionen in Baustein-Form (Gutschrift gleichbleibend, Mahnwesen ruft den Mahnversand, Freigabe draußen).
 /// </summary>
 public partial class Rechnung : IState
 {

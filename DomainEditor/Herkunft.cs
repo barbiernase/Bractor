@@ -18,18 +18,15 @@ public static class Herkunft
     public static string Von(DecideRegel d) => Hash(new { d.Aggregat, d.Command, d.Ergibt });
     public static string Von(Akteur a) => Hash(new { a.Name, a.Darf, a.Art });
     public static string Von(Client c) => Hash(new { c.Name, c.Verkoerpert, c.Kenntnis });
-    // Ein Dienst: seine Methoden-Signaturen und je Implementierung ihr Konstruktor (Rümpfe gehören dem Code).
-    public static string Von(Dienst d) => Hash(new
-    {
-        d.Name, Methoden = d.Methoden.Select(m => new { m.Name, m.Rueckgabe, m.Parameter }).ToList(),
-        Impls = d.Implementierungen.Select(i => new { i.Name, i.Konstruktor }).ToList(),
-    });
-    // Eine Funktion: ihre Form, je Eingang (Auf) Eingang und Ausgaben, der Konstruktor der Klasse — Rümpfe und Umsetzungen gehören dem Code.
+    // Eine Funktion: ihre Form, je Eingang (Auf) Eingang und Ausgaben bzw. je gerufene Methode ihre Signatur, der Konstruktor der Klasse und je
+    //   Umsetzung ihr Konstruktor — Rümpfe gehören dem Code.
     public static string Von(BausteinFunktion f) => Hash(new
     {
         f.Name, f.Klasse,
         Eingaenge = f.Eingaenge.Select(e => new { e.Eingang, e.Hinweis, e.Herkunft, e.Strom, e.Ausgaben }).ToList(),
+        Methoden = f.Methoden.Select(m => new { m.Name, m.Rueckgabe, m.Parameter }).ToList(),
         f.Konstruktor,
+        Umsetzungen = f.Umsetzungen.Select(u => new { u.Name, u.Konstruktor }).ToList(),
     });
     public static string Von(Faehigkeit f) => Hash(new { f.Name, f.Methode, f.Lesen, f.Rueckgabe, f.Parameter });
     public static string Von(Handle h) => Hash(new { h.Eingang, h.Faehigkeiten, h.Ausgaenge, h.Rueckgabe });
@@ -47,7 +44,6 @@ public static class Herkunft
             Enums = m.Enums.Select(e => e with { Herkunft = Von(e) }).ToList(),
             Aggregate = m.Aggregate.Select(a => a with { Herkunft = Von(a) }).ToList(),
             Decider = m.Decider.Select(d => d with { Herkunft = Von(d) }).ToList(),
-            Dienste = m.Dienste.Select(d => d with { Herkunft = Von(d) }).ToList(),
             BausteinFunktionen = m.BausteinFunktionen.Select(f => f with { Herkunft = Von(f) }).ToList(),
             Akteure = m.Akteure.Select(a => a with { Herkunft = Von(a) }).ToList(),
             Clients = m.Clients.Select(c => c with { Herkunft = Von(c) }).ToList(),
@@ -69,7 +65,6 @@ public static class Herkunft
         foreach (var e in m.Enums) Pruefe(e.Herkunft, Von(e), $"enum {e.Namespace}.{e.Name}");
         foreach (var a in m.Aggregate) Pruefe(a.Herkunft, Von(a), $"state {a.Namespace}.{a.Name}");
         foreach (var d in m.Decider) Pruefe(d.Herkunft, Von(d), $"decide {d.Aggregat}.{d.Command}");
-        foreach (var d in m.Dienste) Pruefe(d.Herkunft, Von(d), $"dienst {d.Namespace}.{d.Name}");
         foreach (var f in m.BausteinFunktionen) Pruefe(f.Herkunft, Von(f), $"funktion {f.Namespace}.{f.Name}");
         foreach (var a in m.Akteure) Pruefe(a.Herkunft, Von(a), $"akteur {a.Namespace}.{a.Name}");
         foreach (var c in m.Clients) Pruefe(c.Herkunft, Von(c), $"client {c.Namespace}.{c.Name}");

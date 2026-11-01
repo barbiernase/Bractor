@@ -14,11 +14,11 @@ namespace GraphExtractor;
 /// Die Sonden-Domäne „Leihwesen" (eingebettete Ressourcen <c>Sonde/*.cs.txt</c>) nutzt absichtlich jede gültige
 /// Schreibweise, die eine Konvention brechen würde: fremder Wurzel-Namespace, Commands in eigenem Sub-Namespace,
 /// Property-Records, zwei Aggregate in einem Namespace, Decider in eigener Datei, Fristen in der Entscheidung, Funktionen als
-/// Klasse und als Schnittstelle (mit Dienst, Lese-Fähigkeit, Strom), frei benannte Stores, class-ReadModel, OneOf-Antwort,
+/// Klasse und als Schnittstelle (mit gerufener Funktion, Lese-Fähigkeit, Strom), frei benannte Stores, class-ReadModel, OneOf-Antwort,
 /// Stores aller drei Klassen (atomar, wiederholungsfest, mindestens einmal).
 ///
 /// Dazu Bausteine, die im Editor GEZEICHNET werden (<c>Sonde/Gezeichnet.gesten.json</c>: neuer Store mit einer im Panel benannten
-/// und einer abgeleiteten Fähigkeit, Projektion, Reader, Query/Response/ReadModel, Akteur, Client, Dienst): ein
+/// und einer abgeleiteten Fähigkeit, Projektion, Reader, Query/Response/ReadModel, Akteur, Client, gerufene Funktion): ein
 /// Gesten-Skript — je Geste ein Karten-Delta wie aus dem Browser, geschrieben vom Gesten-Motor (<see cref="Gesten"/>) in den Fork, danach neu
 /// gelesen (Werkbank P7.3). Das Soll beschreibt, was der Extractor daraus wieder lesen MUSS.
 ///
@@ -182,7 +182,8 @@ public static class Sonde
         string Konstruktor(JsonNode? n) => "(" + string.Join(", ", A(n, "konstruktor").Select(p => $"{S(p, "name")}:{S(p, "typ")}")) + ")";
         // Funktionen: Klasse oder Schnittstelle (mit Zustand und einer Adresse, docs/04 §4.4), je Eingang Herkunft/Hinweis, Ausgaben (Strom; keine =
         //   „lernt“), Lese-Fähigkeiten; Konstruktor, Umsetzungen.
-        foreach (var f in A(b, "bausteinFunktionen").Where(Sonde))
+        bool Gerufen(JsonNode f) => A(f, "methoden").Any() && !A(f, "eingaenge").Any();
+        foreach (var f in A(b, "bausteinFunktionen").Where(Sonde).Where(f => !Gerufen(f)))
             z.Add($"funktion-auf {S(f, "namespace")}.{S(f, "name")} {(f["klasse"]?.GetValue<bool>() == true ? "klasse" + Konstruktor(f) : "schnittstelle")}"
                 + (f["zustand"] is { } zu ? $" zustand={zu}" : "") + (f["eineAdresse"]?.GetValue<bool>() == true ? " eineadresse" : "")
                 + (f["lebenszyklus"]?.GetValue<bool>() == true ? " lebenszyklus" : "") + " | "
@@ -192,11 +193,11 @@ public static class Sonde
                     + (A(e, "ausgaben").Any() ? string.Join("; ", A(e, "ausgaben").Select(x => (string?)x)) : "lernt")
                     + (A(e, "faehigkeiten").Any() ? " liest " + string.Join(", ", A(e, "faehigkeiten").Select(p => $"{S(p, "typ")} {S(p, "name")}")) : "")))
                 + (A(f, "umsetzungen").Any() ? " umsetzung " + string.Join(", ", A(f, "umsetzungen").Select(u => S(u, "name") + Konstruktor(u))) : ""));
-        // Domänen-Dienste (docs/06 §6.5): Signatur (Methoden) und Implementierungen mit Konstruktor.
-        foreach (var d in A(b, "dienste").Where(Sonde))
-            z.Add($"dienst {S(d, "namespace")}.{S(d, "name")} | "
-                  + string.Join("; ", A(d, "methoden").Select(m => $"{S(m, "name")}({string.Join(", ", A(m, "parameter").Select(p => $"{S(p, "name")}:{S(p, "typ")}"))}):{S(m, "rueckgabe")}"))
-                  + " | " + string.Join("; ", A(d, "implementierungen").Select(i => $"impl {S(i, "name")}{Konstruktor(i)}")));
+        // Gerufene Funktionen (docs/06 §6.5): Klasse oder Schnittstelle, Signatur (Methoden) und Umsetzungen mit Konstruktor.
+        foreach (var f in A(b, "bausteinFunktionen").Where(Sonde).Where(Gerufen))
+            z.Add($"funktion-gerufen {S(f, "namespace")}.{S(f, "name")} {(f["klasse"]?.GetValue<bool>() == true ? "klasse" + Konstruktor(f) : "schnittstelle")} | "
+                  + string.Join("; ", A(f, "methoden").Select(m => $"{S(m, "name")}({string.Join(", ", A(m, "parameter").Select(p => $"{S(p, "name")}:{S(p, "typ")}"))}):{S(m, "rueckgabe")}"))
+                  + (A(f, "umsetzungen").Any() ? " | " + string.Join("; ", A(f, "umsetzungen").Select(u => $"umsetzung {S(u, "name")}{Konstruktor(u)}")) : ""));
 
         // Leseseite: Store-Fn-Ids → „Store.Fn" auflösen.
         var fnName = new Dictionary<string, string>();
@@ -243,7 +244,7 @@ public static class Sonde
         // Die Sicht (Werkbank P7.3): Domäne und Block je Karte, wie sie der Editor vom Server bekommt — aus dem Graphen, nie aus dem Namespace.
         var sicht = Sicht.Aus(b);
         foreach (var k in sicht.Karten.Where(k => k.Art is "valueobject" or "enum" or "query" or "queryresponse" or "readmodel" or "store" or "projektion"
-                                                       or "reader" or "akteur" or "dienst" && Sonde(k.Ref)))
+                                                       or "reader" or "akteur" && Sonde(k.Ref)))
             z.Add($"sicht {S(k.Ref, "namespace")}.{k.Name} {k.Art} domaene={sicht.Domaene(k)} block={sicht.Block(k)}"
                   + (sicht.Inseln.Contains(k.Id) ? " insel" : ""));
 

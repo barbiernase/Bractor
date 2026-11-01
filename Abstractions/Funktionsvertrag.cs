@@ -2,7 +2,7 @@ namespace Abstractions;
 
 /// <summary>
 /// Die Namen, über die Generatoren und Werkzeuge eine Funktion (<c>IFunktion</c>, docs/10 §10.3) erkennen und binden: ihre Methode <see cref="Auf"/>,
-/// das Cluster-Kind ihres Actors, ihr Stand, ihre Python-Implementierung. Die EINE Quelle dieser Regeln — Generatoren (per Link eingebunden,
+/// das Cluster-Kind ihres Actors, ihr Stand, ihre Python-Implementierung und was ihr Konstruktor nehmen darf (gerufene Funktionen, Konfig-Records). Die EINE Quelle dieser Regeln — Generatoren (per Link eingebunden,
 /// netstandard2.0) und Extractor lesen sie von hier, statt sie je für sich zu kennen (wie <see cref="Aggregatvertrag"/>).
 /// </summary>
 #if VERTRAG_INTERN
@@ -37,6 +37,25 @@ public static class Funktionsvertrag
 
     /// <summary>Die Id des Stands einer Funktion (Position je Partition, wie bei Projektionen <c>&lt;Id&gt;:&lt;Partition&gt;</c>).</summary>
     public static string StandId(string funktion) => "funktion:" + funktion;
+
+    // ── Bindung der Konstruktoren (docs/06 §6.5): gerufene Funktionen, Konfig-Records, Logger ──
+
+    /// <summary>Abschnitt der Umgebung: je Konfig-Record (einfacher Typname) seine Werte.</summary>
+    public const string KonfigAbschnitt = "Konfig";
+
+    /// <summary>Der eine Rahmen-Typ, den ein Konstruktor außer gerufenen Funktionen, Konfig-Records und Zustand nehmen darf.</summary>
+    public const string Logger = "Microsoft.Extensions.Logging.ILogger`1";
+
+    /// <summary>
+    /// Feld-Typen eines Konfig-Records, die aus der Umgebung gebunden werden (voller Name; dazu jedes Enum und <c>string[]</c>).
+    /// </summary>
+    public static readonly string[] Feldtypen =
+    {
+        "System.String", "System.Boolean", "System.Int32", "System.Int64", "System.Double", "System.Decimal", "System.TimeSpan", "System.Guid",
+    };
+
+    /// <summary>Ist der volle Typname ein bindbarer Feld-Typ (ohne Enum/Array — die prüft der Aufrufer am Symbol)?</summary>
+    public static bool IstFeldtyp(string vollerName) => System.Array.IndexOf(Feldtypen, vollerName) >= 0;
 
     // ── Python (Laufort Extern, docs/09 §9.5): die generierte Basis und wo die Implementierung liegt ──
 

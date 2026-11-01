@@ -85,7 +85,7 @@ melden die Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein 
 | `SnapshotRegistrationGenerator` | `IState` | `RegisteredSnapshotTypes`, `GeneratedSnapshotSchema` (Datei `GeneratedSnapshotRegistration.g.cs`) | Marten-Registrierung; Schema-Version = FNV-1a-Struktur-Hash + `CodeHash` |
 | `EventJsonGenerator` | persistierte Events (`IEvent` ohne `ITransientEvent`) | `GeneratedEventJson` | Event-JSON über `EventJsonSerializerContext.Default.{Typ}` |
 | `WireSerializerGenerator` | `IWireMessage` + Payload-Wurzeln (Command, Event, Query, Antwort) | `GeneratedWire`, `GeneratedWirePoly` | Cross-Node-Wire über `CqrsWireJsonContext.Default.{Typ}` ([06](06-transport-multinode-betrieb.md) §6.2) |
-| `DienstGenerator` | `IDienst` + Konstruktoren der Implementierungen (`Ctorbindung`) | `GeneratedDienste` | Fabriken ohne Reflection, Bedarf je Konstruktor, Konfig-Records Feld für Feld |
+| `GerufeneGenerator` | `IFunktion` ohne `Auf` (`Funktionsform.IstGerufen`) + Konstruktoren der Umsetzungen (`Ctorbindung`) | `GeneratedGerufene` | Fabriken ohne Reflection, Bedarf je Konstruktor, Konfig-Records Feld für Feld |
 | `QuellenGenerator` | Record, der von einer Treiber-Basis erbt (`DateiGemeldet`, `TaktGemeldet`; `Treibervertrag`) | `GeneratedQuellen` | je Quelle Treiber, Konfig-Abschnitt, Wirker-Id, Fabrik |
 | `AkteurRechteGenerator` | `IAkteur` + `IDarf<T>`, `IClientVertrag` | `GeneratedAkteurRechte`, `GeneratedClientVertraege` | Befugnisse, abgeleitete Hör-Menge, Funktionen draußen je Akteur, Verträge + Hash (CQRS059) |
 | `EventUpcastingGenerator` | `IUpcast<…>` | `GeneratedEventUpcasting` | Backend-Primitive für Schema-Evolution in Prod, kein Editor-Konzept (CQRS040–042, CQRS044–046; 1:N bricht bewusst den Build) |
@@ -121,7 +121,7 @@ Alle Diagnosen sind Fehler, außer den Warnungen CQRS080, 081, 083, 085, 086, 08
 | Schreibseite & Routing | CQRS010/011 · CQRS013, 079–081, 083 · CQRS020/021 · CQRS050 · CQRS057 | `CommandAggregateMapGenerator` (Decide außerhalb des Ziels, zwei Aggregate mit gleicher Identität) · `ModellAnalyzer` (Command ohne typisiertes Ziel, Apply fehlt, Faltung ohne Decide, Enum-Wert 0, Projektion mit Zustand in Feldern) · `CommandEmitAnalyzer` (ein Emit-Weg, Send mit Frist) · `AusgabeVertragAnalyzer` · `HandlerFormAnalyzer` (Form von Projektion, Reader und Frage an ein Aggregat) |
 | Eingang und Wiederholung | CQRS101 · CQRS102–104 | `EinEingangAnalyzer` (je Eingang ein `Auf` bzw. eine `Frage`, R2) · `GleichbleibendAnalyzer` (R11 gleiche Rechnung, R12 gleichbleibende Funktion, R13 abgeleitete Ids) |
 | Funktionen | CQRS100/101 · CQRS105 · CQRS107 · CQRS106 | `FunktionsBausteinGenerator` (Form, doppelter Eingang) · `ZustandAnalyzer` (R19) · `LebenszyklusAnalyzer` · `GesamtbildAnalyzer` (Hinweis ohne Erzeuger, R20) |
-| Dienste, Quellen | CQRS089–092 · CQRS070 | `DienstAnalyzer` · `QuellenTypAnalyzer` |
+| Gerufene Funktionen, Quellen | CQRS089–092 · CQRS070 | `GerufenAnalyzer` · `QuellenTypAnalyzer` |
 | Projektstruktur | CQRS098 | `LageAnalyzer` (Ordner, Namespace, Datei prüft `--check`, docs/07) |
 | Leseseite & Store | CQRS051, 054, 055 · CQRS052, 110 · CQRS053 · CQRS066/067 · CQRS109 · CQRS111 | `FaehigkeitAnalyzer` · `PullPathGenerator` · `ProjectionServicesGenerator` · `StoreZugriffAnalyzer` · `StoreKlasseAnalyzer` · `ReadModelSchluesselGenerator` |
 | Akteure, Verträge, Clients | CQRS058, 063, 064 · CQRS059 · CQRS093/094 · CQRS095–097 | `AkteurAnalyzer` · `AkteurRechteGenerator` · `WiringGenerator` · `ClientVertragAnalyzer` (`ClientVertrag.cs`) |

@@ -32,10 +32,8 @@ public sealed class DomainModel
     public List<EnumRaw> Enums { get; } = new();
     /// <summary>Funktionen (<c>Auf</c>, docs/10 §10.3): je Eingang die Ausgaben aus der Signatur.</summary>
     public List<BausteinFunktionRaw> BausteinFunktionen { get; } = new();
-    /// <summary>Domänen-Dienste (<c>interface IX : IDienst</c>, docs/06 §6.5): Signatur + Implementierungen.</summary>
-    public List<DienstRaw> Dienste { get; } = new();
     /// <summary>
-    /// Konfigurations-Records: Records ohne Nachrichten-Rolle, die per DI in den KONSTRUKTOR einer Funktion, Dienst-Implementierung,
+    /// Konfigurations-Records: Records ohne Nachrichten-Rolle, die per DI in den KONSTRUKTOR einer Funktion bzw. Funktions-Umsetzung,
     /// Projektion, eines Readers oder einer Store-Impl injiziert werden — keine Value Objects der Domäne.
     /// </summary>
     public List<RecordRaw> Konfigs { get; } = new();
@@ -140,9 +138,9 @@ public sealed class RecordRaw
 }
 
 /// <summary>
-/// Eine Funktion (docs/10 §10.3): als Klasse im Host, als Schnittstelle draußen. Gelesen wird nur die
+/// Eine Funktion (docs/10 §10.3): als Klasse im Host, als Schnittstelle draußen oder mit Umsetzungen. Gelesen wird nur die
 /// Signatur (<see cref="Infrastructure.SourceGeneration.Funktionsform"/>, dieselbe Lesart wie der Generator): je <c>Auf</c> Eingang, Herkunft,
-/// Lese-Fähigkeiten, Ausgaben, Strom. Nur gelesen — die Editor-Oberfläche dafür ist zurückgestellt (docs/10 E4).
+/// Lese-Fähigkeiten, Ausgaben, Strom — bzw. bei einer gerufenen Funktion (kein <c>Auf</c>) ihre Methoden und je Umsetzung deren Rümpfe.
 /// </summary>
 public sealed class BausteinFunktionRaw
 {
@@ -150,14 +148,20 @@ public sealed class BausteinFunktionRaw
     /// <summary>Als Klasse deklariert (läuft im Host); sonst Schnittstelle (draußen).</summary>
     public bool Klasse;
     public List<BausteinEingangRaw> Eingaenge = new();
-    /// <summary>Konstruktor der Klasse (Typ wie geschrieben, Name): Dienste, Konfig-Records, Logger.</summary>
+    /// <summary>Gerufen (kein <c>Auf</c>): ihre Methoden (Deklarations-Reihenfolge, Typen wie geschrieben).</summary>
+    public List<FunktionsMethodeRaw> Methoden = new();
+    /// <summary>Konstruktor der Klasse (Typ wie geschrieben, Name): gerufene Funktionen, Konfig-Records, Logger.</summary>
     public List<(string Typ, string Name)> Konstruktor = new();
     /// <summary>Bei einer Schnittstelle: die Klassen der Domänen-Quellen, die sie implementieren (Umsetzungen im Host).</summary>
     public List<string> UmsetzungenFull = new();
-    /// <summary>Je Umsetzung ihr Konstruktor (Typ wie geschrieben, Name) — ein Dienst darin ist die Kante Funktion → Dienst.</summary>
+    /// <summary>Je Umsetzung ihr Konstruktor (Typ wie geschrieben, Name) — eine gerufene Funktion darin ist die Kante Funktion → gerufene Funktion.</summary>
     public Dictionary<string, List<(string Typ, string Name)>> UmsetzungsKonstruktoren = new(StringComparer.Ordinal);
     /// <summary>Je Umsetzung die Datei ihrer Deklaration.</summary>
     public Dictionary<string, string?> UmsetzungsDateien = new(StringComparer.Ordinal);
+    /// <summary>Je Umsetzung die Klassen-Deklaration (Umbenennen per Renamer).</summary>
+    public Dictionary<string, Ort?> UmsetzungsOrte = new(StringComparer.Ordinal);
+    /// <summary>Gerufen: je Umsetzung und Methode der Rumpf und der Ort ihrer Methode (Rumpf-Edit).</summary>
+    public Dictionary<string, List<(string Methode, string? Rumpf, Ort? Ort)>> UmsetzungsRumpfe = new(StringComparer.Ordinal);
     /// <summary>Der Zustand (<c>IZustand&lt;T&gt;</c>, voller Name von T) — null ohne; <c>[EineAdresse]</c> als Code-Fakt (docs/04 §4.4).</summary>
     public string? ZustandFull;
     public bool EineAdresse, Lebenszyklus;
@@ -173,36 +177,14 @@ public sealed class BausteinEingangRaw
     public List<string> AusgabenFull = new();
 }
 
-/// <summary>
-/// Ein Domänen-Dienst (<c>interface IX : IDienst</c>) — Signatur (Methoden, Typen wie geschrieben) und seine Implementierungen: jede Klasse der
-/// Domänen-Quellen, die das Interface implementiert (Code-Fakt über das Interface, nie über Namen).
-/// </summary>
-public sealed class DienstRaw
-{
-    public string Name = "", Full = "", Namespace = "";
-    public string? Doku, Datei;
-    public List<DienstMethodeRaw> Methoden = new();
-    public List<DienstImplRaw> Impls = new();
-}
-
-public sealed class DienstMethodeRaw
+/// <summary>Eine gerufene Methode einer Funktion: <c>{Rueckgabe} {Name}({Parameter})</c> — Typen wie geschrieben.</summary>
+public sealed class FunktionsMethodeRaw
 {
     public string Name = "", Rueckgabe = "";
     public List<(string Typ, string Name)> Parameter = new();
     public string? Doku;
-    /// <summary>Die Deklaration am Interface (Umbenennen per Renamer).</summary>
+    /// <summary>Die Deklaration (Umbenennen per Renamer).</summary>
     public Ort? Ort;
-}
-
-public sealed class DienstImplRaw
-{
-    public string Name = "", Full = "";
-    public string? Datei;
-    /// <summary>Die Klassen-Deklaration (Umbenennen per Renamer).</summary>
-    public Ort? Ort;
-    public List<(string Typ, string Name)> Konstruktor = new();
-    /// <summary>Je Methode des Dienstes: der Rumpf der Implementierung und der Ort ihrer Methode (Rumpf-Edit).</summary>
-    public List<(string Methode, string? Rumpf, Ort? Ort)> Rumpfe = new();
 }
 
 public sealed class EnumRaw
@@ -446,7 +428,7 @@ public sealed partial class DomainExtractor
     private readonly HashSet<string> _impliziteUsings;
     private readonly INamedTypeSymbol? _iDecider, _iApplier,
         _iWriteStore, _iReadStore, _iStore, _iWertobjekt, _iAkteur, _iDarf, _iHoert,
-        _iClient, _iVerkoerpert, _iDienst;
+        _iClient, _iVerkoerpert;
     /// <summary>State-FullName → die Typen, die <c>IDecider&lt;State&gt;</c> bzw. <c>IApplier&lt;State&gt;</c> implementieren (egal wo deklariert).</summary>
     private readonly Dictionary<string, List<INamedTypeSymbol>> _deciderJeState = new(StringComparer.Ordinal), _applierJeState = new(StringComparer.Ordinal);
 
@@ -485,7 +467,6 @@ public sealed partial class DomainExtractor
         _iVerkoerpert = Get(Vertrag.IVerkoerpert);
         _iDarf = Get(Vertrag.IDarf);
         _iWertobjekt = Get(Vertrag.IWertobjekt);
-        _iDienst = Get(Abstractions.Dienstvertrag.Marker);
 
         // Aggregat-Komposition über den TYP: wer IDecider<T>/IApplier<T> implementiert, gehört zum State T.
         foreach (var t in _types)
@@ -536,7 +517,6 @@ public sealed partial class DomainExtractor
                 .Distinct(StringComparer.Ordinal).OrderBy(n => n, StringComparer.Ordinal).ToList();
 
         CatalogDomainTypes(m);
-        LinkDienstImpls(m);
         SeparateKonfigs(m);
         LinkReadModelStores(m);
 
@@ -661,10 +641,8 @@ public sealed partial class DomainExtractor
                 m.Enums.Add(ReadEnum(t));
                 continue;
             }
-            // Funktion (Auf): Klasse im Host oder Schnittstelle draußen — nur ihre Signatur zählt.
-            if (Infrastructure.SourceGeneration.Funktionsform.IstBaustein(t)) { m.BausteinFunktionen.Add(ReadBausteinFunktion(t)); continue; }
-            // Domänen-Dienst (docs/06 §6.5): ein Interface mit IDienst — Signatur; die Implementierungen hängt LinkDienstImpls an.
-            if (t.TypeKind == TypeKind.Interface && _iDienst != null && Sym.Implements(t, _iDienst)) { m.Dienste.Add(ReadDienst(t)); continue; }
+            // Funktion (mit Eingängen oder gerufen): Klasse im Host oder Schnittstelle — nur ihre Signatur zählt.
+            if (Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t)) { m.BausteinFunktionen.Add(ReadBausteinFunktion(t)); continue; }
             // Client-Vertrag (IClientVertrag): die Software an der Leitung.
             if (t.TypeKind == TypeKind.Interface && IstClient(t)) { m.Clients.Add(ReadClient(t)); continue; }
             // Geschachtelte Typen gehören zum Handcode ihres Containers (Zusatz), keine eigenen Bausteine.
@@ -690,71 +668,20 @@ public sealed partial class DomainExtractor
         m.Responses.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.ReadModels.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.BausteinFunktionen.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
-        m.Dienste.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
     }
 
-    /// <summary>
-    /// Je Domänen-Dienst seine Implementierungen: jede konkrete Klasse der Domänen-Quellen, die das Interface implementiert — mit Konstruktor und
-    /// je Interface-Methode dem Rumpf der Implementierung (Ort für den Rumpf-Edit).
-    /// </summary>
-    private void LinkDienstImpls(DomainModel m)
-    {
-        if (m.Dienste.Count == 0) return;
-        var klassen = DomainQuellTypen().Where(t => t.TypeKind == TypeKind.Class && !t.IsAbstract).OrderBy(t => t.Fq(), StringComparer.Ordinal).ToList();
-        foreach (var d in m.Dienste)
-            foreach (var impl in klassen.Where(k => k.AllInterfaces.Any(i => i.Fq() == d.Full)))
-            {
-                var iface = impl.AllInterfaces.First(i => i.Fq() == d.Full);
-                var raw = new DienstImplRaw
-                {
-                    Name = impl.Name, Full = impl.Fq(), Konstruktor = Konstruktor(impl),
-                    Datei = QuellDeklarationen(impl).FirstOrDefault()?.SyntaxTree.FilePath,
-                    Ort = QuellDeklarationen(impl).OfType<BaseTypeDeclarationSyntax>().FirstOrDefault() is { } idecl ? Ort.Von(idecl) : null,
-                };
-                foreach (var me in iface.GetMembers().OfType<IMethodSymbol>().Where(x => x.MethodKind == MethodKind.Ordinary))
-                {
-                    var im = Sym.Implementierung(impl, me) as IMethodSymbol;
-                    var syn = im?.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() as MethodDeclarationSyntax;
-                    raw.Rumpfe.Add((me.Name, im == null ? null : MethodBody(im), syn == null ? null : Ort.Von(syn)));
-                }
-                d.Impls.Add(raw);
-            }
-    }
-
-    /// <summary>
-    /// Der Konstruktor einer Implementierung, wie die generierte Bindung ihn ruft (der öffentliche mit den meisten Parametern; Primär-Konstruktor
-    /// eingeschlossen) — Typ so, wie er im Code steht.
-    /// </summary>
-    private static List<(string Typ, string Name)> Konstruktor(INamedTypeSymbol t)
-    {
-        var ctor = t.InstanceConstructors.Where(c => c.DeclaredAccessibility == Accessibility.Public).OrderByDescending(c => c.Parameters.Length).FirstOrDefault();
-        if (ctor == null) return new();
-        return ctor.Parameters.Select(p => (
-            (p.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() as ParameterSyntax)?.Type?.ToString() ?? ShortType(p.Type), p.Name)).ToList();
-    }
-
-    /// <summary>Die Signatur eines Dienstes: seine Methoden (Deklarations-Reihenfolge), Typen wie geschrieben.</summary>
-    private DienstRaw ReadDienst(INamedTypeSymbol t)
-    {
-        var decl = QuellDeklarationen(t).FirstOrDefault();
-        var d = new DienstRaw
-        {
-            Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq(),
-            Doku = decl == null ? null : Summary(decl), Datei = decl?.SyntaxTree.FilePath,
-        };
-        foreach (var me in t.GetMembers().OfType<IMethodSymbol>().Where(x => x.MethodKind == MethodKind.Ordinary)
-                     .OrderBy(x => x.Locations.FirstOrDefault()?.SourceSpan.Start ?? 0))
+    /// <summary>Die gerufenen Methoden einer Funktion (Deklarations-Reihenfolge), Typen wie geschrieben.</summary>
+    private static List<FunktionsMethodeRaw> GerufeneMethoden(INamedTypeSymbol t) =>
+        Infrastructure.SourceGeneration.Funktionsform.GerufeneMethoden(t).OrderBy(x => x.Locations.FirstOrDefault()?.SourceSpan.Start ?? 0).Select(me =>
         {
             var syn = me.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).OfType<MethodDeclarationSyntax>().FirstOrDefault();
-            d.Methoden.Add(new DienstMethodeRaw
+            return new FunktionsMethodeRaw
             {
                 Name = me.Name, Rueckgabe = syn?.ReturnType.ToString() ?? ShortType(me.ReturnType),
                 Parameter = me.Parameters.Select((p, i) => (syn?.ParameterList.Parameters.ElementAtOrDefault(i)?.Type?.ToString() ?? ShortType(p.Type), p.Name)).ToList(),
                 Doku = syn == null ? null : Summary(syn), Ort = syn == null ? null : Ort.Von(syn),
-            });
-        }
-        return d;
-    }
+            };
+        }).ToList();
 
     /// <summary>Die Signatur einer Funktion (Funktionsform: dieselbe Lesart wie der FunktionsBausteinGenerator).</summary>
     private BausteinFunktionRaw ReadBausteinFunktion(INamedTypeSymbol t)
@@ -795,6 +722,7 @@ public sealed partial class DomainExtractor
                 Herkunft = m.Parameters.Skip(1).Any(p => p.Type.Name == nameof(Abstractions.Herkunft)),
             });
         }
+        if (form.Gerufen) f.Methoden = GerufeneMethoden(t);
         if (!form.Draussen) f.Konstruktor = KonstruktorWieGeschrieben(t);
         if (form.Draussen)
         {
@@ -805,6 +733,17 @@ public sealed partial class DomainExtractor
             {
                 f.UmsetzungsKonstruktoren[c.Fq()] = KonstruktorWieGeschrieben(c);
                 f.UmsetzungsDateien[c.Fq()] = QuellDeklarationen(c).FirstOrDefault()?.SyntaxTree.FilePath;
+                f.UmsetzungsOrte[c.Fq()] = QuellDeklarationen(c).OfType<BaseTypeDeclarationSyntax>().FirstOrDefault() is { } idecl ? Ort.Von(idecl) : null;
+                if (!form.Gerufen) continue;
+                // Gerufen: je Methode der Schnittstelle der Rumpf der Umsetzung (Ort für den Rumpf-Edit).
+                var rumpfe = new List<(string, string?, Ort?)>();
+                foreach (var me in t.GetMembers().OfType<IMethodSymbol>().Where(x => x.MethodKind == MethodKind.Ordinary))
+                {
+                    var im = Sym.Implementierung(c, me) as IMethodSymbol;
+                    var syn = im?.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() as MethodDeclarationSyntax;
+                    rumpfe.Add((me.Name, im == null ? null : MethodBody(im), syn == null ? null : Ort.Von(syn)));
+                }
+                f.UmsetzungsRumpfe[c.Fq()] = rumpfe;
             }
         }
         return f;
@@ -847,18 +786,17 @@ public sealed partial class DomainExtractor
     }
 
     /// <summary>
-    /// Konfigurations-Records von Value Objects trennen: ein Record, der im Konstruktor einer Funktion, Dienst-Implementierung,
+    /// Konfigurations-Records von Value Objects trennen: ein Record, der im Konstruktor einer Funktion bzw. Funktions-Umsetzung,
     /// Projektion, eines Readers oder einer Store-Impl steht, ist per DI injizierte Konfiguration — kein Fachwert.
     /// </summary>
     private void SeparateKonfigs(DomainModel m)
     {
         var voByFull = m.ValueObjects.GroupBy(v => v.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var storeImpls = m.Stores.SelectMany(s => s.ImplsFull).ToHashSet(StringComparer.Ordinal);
-        // Funktionen und Dienst-Implementierungen (docs/06 §6.5): ihre Konstruktor-Records sind Konfig aus Konfig:<Record> —
+        // Funktionen und ihre Umsetzungen (docs/06 §6.5): ihre Konstruktor-Records sind Konfig aus Konfig:<Record> —
         //   bei einer Funktion die Klasse selbst bzw. die Umsetzungen der Schnittstelle.
         storeImpls.UnionWith(m.BausteinFunktionen.Where(f => f.Klasse).Select(f => f.Full));
         storeImpls.UnionWith(m.BausteinFunktionen.SelectMany(f => f.UmsetzungenFull));
-        storeImpls.UnionWith(m.Dienste.SelectMany(d => d.Impls).Select(i => i.Full));
         var injiziert = new HashSet<string>(StringComparer.Ordinal);
         foreach (var t in _types)
         {
@@ -1434,7 +1372,7 @@ public sealed partial class DomainExtractor
 
     /// <summary>
     /// Regel Z als Symbol-Fakt (kein Rumpf): Instanzfelder, die ZUSTAND halten — nicht <c>readonly</c>, oder <c>readonly</c> mit einem
-    /// Referenztyp, der weder der Typ eines Konstruktor-Parameters (injiziert: Konfig, Dienst, Logger) noch <c>string</c> ist.
+    /// Referenztyp, der weder der Typ eines Konstruktor-Parameters (injiziert: Konfig, gerufene Funktion, Logger) noch <c>string</c> ist.
     /// Compiler-erzeugte Felder (Auto-Properties, primäre Konstruktoren) zählen nicht.
     /// </summary>
     private static List<string> ZustandsFelder(INamedTypeSymbol t)

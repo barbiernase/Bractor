@@ -6,7 +6,6 @@ using System.Threading.Tasks;
 using Abstractions;
 using Domain.SourceGeneration;
 using FluentAssertions;
-using Infrastructure.Dienste;
 using Infrastructure.Funktionen;
 using Infrastructure.Umgebung;
 using Microsoft.CodeAnalysis;
@@ -16,22 +15,22 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
-namespace Infrastructure.Pruefstand.Dienste;
+namespace Infrastructure.Pruefstand.Funktionen;
 
 /// <summary>
-/// Die Dienst-Bindung (docs/06 §6.5): der <c>DienstGenerator</c> liest Dienste, Implementierungen und Konfig-Records nur aus Code-Fakten; die
-/// Bindung beim Start wählt nach der Umgebung und bricht laut bei fehlender, mehrdeutiger oder zyklischer Implementierung bzw. fehlender
-/// Konfig; der Analyzer (CQRS089–CQRS092) hält die Form im Build.
+/// Die Bindung der gerufenen Funktionen (docs/06 §6.5): der <c>GerufeneGenerator</c> liest gerufene Funktionen (<c>IFunktion</c> ohne <c>Auf</c>),
+/// Umsetzungen und Konfig-Records nur aus Code-Fakten; die Bindung beim Start wählt nach der Umgebung (<c>Funktionen:&lt;Name&gt;:Implementierung</c>)
+/// und bricht laut bei fehlender, mehrdeutiger oder zyklischer Umsetzung bzw. fehlender Konfig; der Analyzer (CQRS089–CQRS092) hält die Form im Build.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
-public class DienstBindungTests
+public class GerufeneBindungTests
 {
     // ── Generator ───────────────────────────────────────────────────────────────────────────────────────────────────
 
     private static readonly ImmutableArray<MetadataReference> Refs = Referenzen();
     private static ImmutableArray<MetadataReference> Referenzen()
     {
-        var dazu = new[] { typeof(IDienst).Assembly.Location, typeof(Microsoft.Extensions.Logging.ILogger<>).Assembly.Location };
+        var dazu = new[] { typeof(IFunktion).Assembly.Location, typeof(Microsoft.Extensions.Logging.ILogger<>).Assembly.Location };
         return AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location)).Select(a => a.Location)
             .Concat(dazu).Distinct().Select(l => (MetadataReference)MetadataReference.CreateFromFile(l)).ToImmutableArray();
     }
@@ -40,7 +39,7 @@ public class DienstBindungTests
 
     private static CSharpCompilation Probe(string code)
     {
-        var comp = CSharpCompilation.Create("DienstProbe", new[] { CSharpSyntaxTree.ParseText(Vorspann + code) }, Refs,
+        var comp = CSharpCompilation.Create("GerufenProbe", new[] { CSharpSyntaxTree.ParseText(Vorspann + code) }, Refs,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         comp.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).Should().BeEmpty("die Probe selbst muss kompilieren");
         return comp;
@@ -48,7 +47,7 @@ public class DienstBindungTests
 
     private static string Generiert(string code)
     {
-        CSharpGeneratorDriver.Create(new Infrastructure.SourceGeneration.DienstGenerator()).RunGeneratorsAndUpdateCompilation(Probe(code), out var neu, out _);
+        CSharpGeneratorDriver.Create(new Infrastructure.SourceGeneration.GerufeneGenerator()).RunGeneratorsAndUpdateCompilation(Probe(code), out var neu, out _);
         return string.Join("\n", neu.SyntaxTrees.Skip(1).Select(t => t.ToString()));
     }
 
@@ -56,7 +55,7 @@ public class DienstBindungTests
         public sealed record Gemacht(string X) : IEvent;
         public sealed record Angefordert(string X) : IEvent;
         public interface IMach : IFunktion { Gemacht Auf(Angefordert e); }
-        public interface ISkalierer : IDienst { int Skaliere(int x); }
+        public interface ISkalierer : IFunktion { int Skaliere(int x); }
         public sealed class Skalierer(ILogger<Skalierer> log) : ISkalierer { public int Skaliere(int x) => x; }
         public enum Modus { Schnell = 1, Gruendlich = 2 }
         public record BildKonfig(string Ausgabe, int Hoehe, Modus Modus, TimeSpan Frist, bool Laut = false, string[]? Endungen = null);
@@ -64,11 +63,11 @@ public class DienstBindungTests
     }";
 
     [Fact]
-    public void Dienst_Implementierung_Bedarf_und_Konfig_Record_werden_aus_dem_Code_gelesen()
+    public void Gerufene_Funktion_Umsetzung_Bedarf_und_Konfig_Record_werden_aus_dem_Code_gelesen()
     {
         var q = Generiert(Bild);
         q.Should().Contain("[\"ISkalierer\"] = typeof(global::Probe.ISkalierer)");
-        q.Should().Contain("new DienstImplementierung(typeof(global::Probe.ISkalierer), \"Skalierer\", typeof(global::Probe.Skalierer), "
+        q.Should().Contain("new GerufeneUmsetzung(typeof(global::Probe.ISkalierer), \"Skalierer\", typeof(global::Probe.Skalierer), "
                            + "s => s.AddScoped<global::Probe.ISkalierer>(sp => new global::Probe.Skalierer(");
         q.Should().Contain("GetRequiredService<global::Microsoft.Extensions.Logging.ILogger<global::Probe.Skalierer>>(sp)", "die Fabrik ruft den Konstruktor direkt");
         q.Should().Contain("[typeof(global::Probe.Mach)] = new Type[] { typeof(global::Probe.ISkalierer), typeof(global::Probe.BildKonfig) }");
@@ -80,14 +79,27 @@ public class DienstBindungTests
     }
 
     [Fact]
+    public void Eine_Funktion_mit_Eingaengen_ist_nicht_gerufen()
+        => Generiert(Bild).Should().NotContain("[\"IMach\"]", "sie ruft das Framework — ihre Bindung steht in GeneratedFunktionsBausteine");
+
+    [Fact]
+    public void Eine_gerufene_Klasse_ist_ihre_eigene_Umsetzung()
+    {
+        var q = Generiert(Bild + " namespace Probe { public sealed class Zaehler : IFunktion { public int Plus(int x) => x + 1; } }");
+        q.Should().Contain("[\"Zaehler\"] = typeof(global::Probe.Zaehler)");
+        q.Should().Contain("new GerufeneUmsetzung(typeof(global::Probe.Zaehler), \"Zaehler\", typeof(global::Probe.Zaehler), "
+                           + "s => s.AddScoped<global::Probe.Zaehler>(sp => new global::Probe.Zaehler()))");
+    }
+
+    [Fact]
     public void Eine_nicht_oeffentliche_Implementierung_fehlt_in_der_Tabelle()
         => Generiert(Bild.Replace("public sealed class Skalierer", "internal sealed class Skalierer"))
             .Should().NotContain("typeof(global::Probe.Skalierer)", "die generierte Fabrik kann sie nicht bauen (CQRS092 meldet es im Build)");
 
     // ── Bindung beim Start ─────────────────────────────────────────────────────────────────────────────────────────────
 
-    private interface ID1 : IDienst;
-    private interface ID2 : IDienst;
+    private interface ID1 : IFunktion;
+    private interface ID2 : IFunktion;
     private sealed record K(string Wert);
     private sealed class FImpl;
     private sealed class D1a;
@@ -96,13 +108,12 @@ public class DienstBindungTests
 
     private sealed record Lauf(IServiceCollection S, List<string> Gebunden);
 
-    private static Lauf Binde(Dictionary<string, DienstKonfig> wahl, Dictionary<string, string?> konfig, Dictionary<Type, Type[]> braucht,
+    private static Lauf Binde(Dictionary<string, string?> wahl, Dictionary<string, string?> konfig, Dictionary<Type, Type[]> braucht,
         bool zweiImpls = false)
     {
         var gebunden = new List<string>();
         var s = new ServiceCollection();
-        var namen = new Dictionary<string, Type> { ["ID1"] = typeof(ID1), ["ID2"] = typeof(ID2) };
-        var impls = new List<DienstImplementierung>
+        var impls = new List<GerufeneUmsetzung>
         {
             new(typeof(ID1), "D1a", typeof(D1a), _ => gebunden.Add("ID1 → D1a")),
             new(typeof(ID2), "D2a", typeof(D2a), _ => gebunden.Add("ID2 → D2a")),
@@ -110,7 +121,7 @@ public class DienstBindungTests
         if (zweiImpls) impls.Add(new(typeof(ID1), "D1b", typeof(D1b), _ => gebunden.Add("ID1 → D1b")));
         var konfigs = new[] { new KonfigRecord(typeof(K), "K", sec => { KonfigLeser.NurBekannte(sec, "Wert"); return new K(KonfigLeser.Text(sec, "Wert")); }) };
         var cfg = new ConfigurationBuilder().AddInMemoryCollection(konfig).Build();
-        s.BindeDienste(wahl, cfg.GetSection("Konfig"), [typeof(FImpl)], namen, impls, braucht, konfigs);
+        s.BindeGerufene(wahl, cfg.GetSection("Konfig"), [typeof(FImpl)], impls, braucht, konfigs);
         return new Lauf(s, gebunden);
     }
 
@@ -131,26 +142,21 @@ public class DienstBindungTests
     public void Mehrdeutig_braucht_die_Wahl_der_Umgebung()
     {
         FluentActions.Invoking(() => Binde(new(), new(), new() { [typeof(FImpl)] = [typeof(ID1)] }, zweiImpls: true))
-            .Should().Throw<BootFehler>().Where(e => e.Karte == "dienst:ID1").WithMessage("*mehrere Implementierungen (D1a, D1b)*Dienste:ID1:Implementierung*");
-        Binde(new() { ["ID1"] = new() { Implementierung = "D1b" } }, new(), new() { [typeof(FImpl)] = [typeof(ID1)] }, zweiImpls: true)
+            .Should().Throw<BootFehler>().Where(e => e.Karte == "funktion:ID1").WithMessage("*mehrere Umsetzungen (D1a, D1b)*Funktionen:ID1:Implementierung*");
+        Binde(new() { ["ID1"] = "D1b" }, new(), new() { [typeof(FImpl)] = [typeof(ID1)] }, zweiImpls: true)
             .Gebunden.Should().Equal("ID1 → D1b");
     }
 
     [Fact]
-    public void Fehlende_Implementierung_unbekannter_Name_und_unbekannter_Dienst_brechen_den_Start()
-    {
-        var ohne = new Dictionary<Type, Type[]> { [typeof(FImpl)] = [typeof(ID1)] };
-        FluentActions.Invoking(() => Binde(new() { ["ID1"] = new() { Implementierung = "Gibts" } }, new(), ohne))
-            .Should().Throw<BootFehler>().WithMessage("*Implementierung = 'Gibts' gibt es nicht (gefunden: D1a)*");
-        FluentActions.Invoking(() => Binde(new() { ["IUnbekannt"] = new() }, new(), ohne))
-            .Should().Throw<BootFehler>().Where(e => e.Karte == "host:Dienste").WithMessage("*Dienste:IUnbekannt*");
-    }
+    public void Ein_unbekannter_Umsetzungsname_bricht_den_Start()
+        => FluentActions.Invoking(() => Binde(new() { ["ID1"] = "Gibts" }, new(), new() { [typeof(FImpl)] = [typeof(ID1)] }))
+            .Should().Throw<BootFehler>().WithMessage("Funktionen:ID1:Implementierung = 'Gibts' gibt es nicht (gefunden: D1a)*");
 
     [Fact]
-    public void Ein_Kreis_ueber_Dienste_bricht_den_Start()
+    public void Ein_Kreis_ueber_gerufene_Funktionen_bricht_den_Start()
         => FluentActions.Invoking(() => Binde(new(), new(),
                 new() { [typeof(FImpl)] = [typeof(ID1)], [typeof(D1a)] = [typeof(ID2)], [typeof(D2a)] = [typeof(ID1)] }))
-            .Should().Throw<BootFehler>().WithMessage("Dienste im Kreis: ID1 → ID2 → ID1*");
+            .Should().Throw<BootFehler>().WithMessage("Gerufene Funktionen im Kreis: ID1 → ID2 → ID1*");
 
     [Fact]
     public void Konfig_fehlt_hat_unbekannte_Felder_oder_unbekannte_Records()
@@ -179,21 +185,21 @@ public class DienstBindungTests
     }
 
     [Fact]
-    public void Der_Bestand_hat_zwei_Bild_Dienste_und_den_Konfig_Record_BildaufbereitungKonfig()
+    public void Der_Bestand_hat_zwei_gerufene_Bild_Funktionen_und_den_Konfig_Record_BildaufbereitungKonfig()
     {
-        GeneratedDienste.Namen.Keys.Should().BeEquivalentTo("IImageResizer", "IHistogramEqualizer");
-        GeneratedDienste.Implementierungen.Select(i => i.Name).Should().BeEquivalentTo("ImageResizer", "HistogramEqualizer");
-        GeneratedDienste.Konfigs.Select(k => k.Name).Should().Equal("BildaufbereitungKonfig");
+        GeneratedGerufene.Namen.Keys.Should().BeEquivalentTo("IImageResizer", "IHistogramEqualizer");
+        GeneratedGerufene.Umsetzungen.Select(i => i.Name).Should().BeEquivalentTo("ImageResizer", "HistogramEqualizer");
+        GeneratedGerufene.Konfigs.Select(k => k.Name).Should().Equal("BildaufbereitungKonfig");
     }
 
     // ── Analyzer CQRS089–CQRS092 ──────────────────────────────────────────────────────────────────────────────────────
 
     private static async Task<string[]> Befunde(string code)
-        => (await Probe(code).WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(new DienstAnalyzer())).GetAnalyzerDiagnosticsAsync())
+        => (await Probe(code).WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(new GerufenAnalyzer())).GetAnalyzerDiagnosticsAsync())
             .Select(d => d.Id).ToArray();
 
     [Fact]
-    public async Task Der_Dienst_im_Konstruktor_einer_Implementierung_ist_still()
+    public async Task Die_gerufene_Funktion_im_Konstruktor_einer_Umsetzung_ist_still()
         => (await Befunde(Bild)).Should().BeEmpty();
 
     [Theory]
@@ -201,19 +207,24 @@ public class DienstBindungTests
     [InlineData("public sealed class Projektion(ISkalierer s) { public int X => s.Skaliere(1); }")]                       // Konstruktor im Fachcode
     [InlineData("public sealed class Halter { public ISkalierer? S; }")]                                                   // Feld
     [InlineData("public sealed class Halter2 { public System.Func<ISkalierer>? Fabrik { get; set; } }")]                              // im Typ-Argument
-    public async Task Ein_Dienst_ausserhalb_einer_Implementierung_ist_CQRS089(string code)
-        => (await Befunde(Bild + " namespace Probe { " + code + " }")).Should().Contain(DienstAnalyzer.OrtId);
+    public async Task Eine_gerufene_Funktion_ausserhalb_eines_Konstruktors_ist_CQRS089(string code)
+        => (await Befunde(Bild + " namespace Probe { " + code + " }")).Should().Contain(GerufenAnalyzer.OrtId);
 
     [Fact]
     public async Task Ein_Konstruktor_Parameter_den_die_Umgebung_nicht_bindet_ist_CQRS090()
         => (await Befunde(Bild.Replace("Mach(ISkalierer s, BildKonfig k)", "Mach(ISkalierer s, BildKonfig k, System.Net.Http.HttpClient h)")))
-            .Should().Equal(DienstAnalyzer.CtorId);
+            .Should().Equal(GerufenAnalyzer.CtorId);
+
+    [Fact]
+    public async Task Eine_Funktion_mit_Eingaengen_im_Konstruktor_ist_CQRS090()
+        => (await Befunde(Bild.Replace("Skalierer(ILogger<Skalierer> log)", "Skalierer(ILogger<Skalierer> log, IMach m)")))
+            .Should().Equal(GerufenAnalyzer.CtorId);
 
     [Fact]
     public async Task Ein_Konfig_Feld_das_die_Konfig_nicht_lesen_kann_ist_CQRS091()
-        => (await Befunde(Bild.Replace("bool Laut = false", "System.Uri? Laut = null"))).Should().Equal(DienstAnalyzer.KonfigFeldId);
+        => (await Befunde(Bild.Replace("bool Laut = false", "System.Uri? Laut = null"))).Should().Equal(GerufenAnalyzer.KonfigFeldId);
 
     [Fact]
     public async Task Eine_nicht_oeffentliche_Implementierung_ist_CQRS092()
-        => (await Befunde(Bild.Replace("public sealed class Skalierer", "internal sealed class Skalierer"))).Should().Equal(DienstAnalyzer.BaubarId);
+        => (await Befunde(Bild.Replace("public sealed class Skalierer", "internal sealed class Skalierer"))).Should().Equal(GerufenAnalyzer.BaubarId);
 }

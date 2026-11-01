@@ -41,21 +41,18 @@ apply Schadensfall.SchadenGemeldet
 apply Mahnvorgang.MahnungEroeffnet
 # Gleichbleibende Funktion (Klasse ohne Konstruktor, R12): Herkunft für die neue Id (R13), „nichts“ als Ausgang (T?)
 funktion-auf Leihwesen.Gebuehren.SchadenBeiRueckgabe klasse() | Zurueckgegeben herkunft -> MeldeSchaden
-# Funktion als Schnittstelle mit einer Umsetzung im Host, die einen Domänen-Dienst nimmt (Kante Funktion → Dienst); Ausgaben: ein Event der
+# Funktion als Schnittstelle mit einer Umsetzung im Host, die eine gerufene Funktion nimmt (Kante Funktion → gerufene Funktion); Ausgaben: ein Event der
 #    Funktion (kein Aggregat) oder ein Hinweis
 record Leihwesen.Gebuehren.SchadenGeschaetzt event | LeserId:Guid, Betrag:decimal
 record Leihwesen.Gebuehren.NichtSchaetzbar rejection | Grund:string
 funktion-auf Leihwesen.Gebuehren.ISchadensSchaetzung schnittstelle | SchadenGemeldet herkunft -> SchadenGeschaetzt; NichtSchaetzbar umsetzung Schadensschaetzer(tabelle:IWertTabelle)
 funktion-auf Leihwesen.Gebuehren.MahnungNachSchaetzung klasse() | SchadenGeschaetzt herkunft -> EroeffneMahnung
-# Domänen-Dienst (docs/06 §6.5): Interface mit IDienst (Methoden, Typen wie geschrieben) + Implementierung mit Konstruktor; der Record im Konstruktor ist
-#    Konfig (Werte aus Konfig:<Record>), kein Value Object
-dienst Leihwesen.Gebuehren.IWertTabelle | Restwert(neuwert:decimal, alterJahre:int):decimal; IstSchaetzbarAsync(leserId:Guid):Task<bool> | impl LineareWertTabelle(konfig:WertTabellenKonfig)
+# Gerufene Funktion (docs/06 §6.5): Schnittstelle mit IFunktion ohne Auf (Methoden, Typen wie geschrieben) + Umsetzung mit Konstruktor; der Record im
+#    Konstruktor ist Konfig (Werte aus Konfig:<Record>), kein Value Object
+funktion-gerufen Leihwesen.Gebuehren.IWertTabelle schnittstelle | Restwert(neuwert:decimal, alterJahre:int):decimal; IstSchaetzbarAsync(leserId:Guid):Task<bool> | umsetzung LineareWertTabelle(konfig:WertTabellenKonfig)
 record Leihwesen.Gebuehren.WertTabellenKonfig konfig | Mindestwert:decimal, Abschreibungsjahre:int=5
-sicht Leihwesen.Gebuehren.IWertTabelle dienst domaene=Leihwesen.Gebuehren block=§geteilt
-# Gezeichnet: ein neuer Dienst mit Implementierungs-Stub vom Scaffolder — noch ohne Funktion, die ihn nimmt (Funktionen zeichnet der Editor erst
-#    wieder mit docs/10 E4), daher eine Insel
-dienst Leihwesen.Pruefung.IPruefgeraet | Messe(seriennummer:string):bool | impl Pruefgeraet()
-sicht Leihwesen.Pruefung.IPruefgeraet dienst domaene=Leihwesen.Pruefung block=§geteilt insel
+# Gezeichnet: eine neue gerufene Funktion mit Umsetzungs-Stub vom Scaffolder — noch ohne Funktion, die sie nimmt
+funktion-gerufen Leihwesen.Pruefung.IPruefgeraet schnittstelle | Messe(seriennummer:string):bool | umsetzung Pruefgeraet()
 
 # ── Ablauf ohne Fluss-Sprache (Sonde/Fluss.cs.txt): eigene Quell-Nachricht (IQuellNachricht) und Quelle mit Treiber; Start als gleichbleibende
 #    Funktion; der Vorgang als ZÄHL-AGGREGAT (Zähler statt Collection) mit FRIST als Rennen gegen die Zeit; Fan-out als STROM einer Funktion draußen,
@@ -466,7 +463,7 @@ besitz Leihwesen.Gebuehren.NichtSchaetzbar rejection -> bausteinfunktion:ISchade
 besitz Leihwesen.Gebuehren.SchadenExistiert rejection -> aggregate:Schadensfall
 besitz Leihwesen.Gebuehren.SchadenGemeldet event -> aggregate:Schadensfall
 besitz Leihwesen.Gebuehren.SchadenGeschaetzt event -> bausteinfunktion:ISchadensSchaetzung
-besitz Leihwesen.Gebuehren.WertTabellenKonfig konfig -> dienst:IWertTabelle
+besitz Leihwesen.Gebuehren.WertTabellenKonfig konfig -> bausteinfunktion:IWertTabelle
 besitz Leihwesen.Lesen.Ausleihzaehler readmodel -> §begriffe
 besitz Leihwesen.Lesen.KeineAusleihen queryresponse -> reader:LeihAuskunftLeser
 besitz Leihwesen.Lesen.LeihAuskunftLeser reader -> store:ILeihBuch

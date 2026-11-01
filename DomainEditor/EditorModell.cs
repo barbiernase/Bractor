@@ -31,14 +31,9 @@ public sealed record EditorModell
     /// <summary>Applier (Event → State-Faltung) — je Regel EIGENSTÄNDIG, referenziert sein Aggregat.</summary>
     public IReadOnlyList<ApplyRegel> Applier { get; init; } = [];
     /// <summary>
-    /// Domänen-Dienste (<c>interface IX : IDienst</c>, docs/06 §6.5): die Technik hinter einer Funktion — Signatur (Methoden) und Implementierungen
-    /// (Klassen, die das Interface implementieren). Eine Funktion im Host nimmt sie im Konstruktor (<see cref="BausteinFunktion.Konstruktor"/>);
-    /// welche Implementierung läuft, wählt die Umgebung (<c>Dienste:&lt;IX&gt;</c>).
-    /// </summary>
-    public IReadOnlyList<Dienst> Dienste { get; init; } = [];
-    /// <summary>
-    /// Funktionen (docs/10 §10.3): je Eingang ein <c>Auf</c> mit freier Ausgabe; als Klasse im Host, als
-    /// Schnittstelle draußen. Nur gelesen — Gesten und Darstellung dafür kommen mit der Editor-Arbeit (docs/10 E4); der Scaffolder schreibt sie nicht.
+    /// Funktionen (<c>IFunktion</c>, docs/10 §10.3) — aufrufbare Objekte: mit Eingängen (je Eingang ein <c>Auf</c> mit freier Ausgabe, das Framework
+    /// ruft sie) oder gerufen (frei benannte Methoden, ihr Halter nimmt sie im Konstruktor, docs/06 §6.5); als Klasse im Host, als Schnittstelle
+    /// draußen bzw. mit Umsetzungen (welche läuft, wählt die Umgebung: <c>Funktionen:&lt;Name&gt;</c>).
     /// </summary>
     public IReadOnlyList<BausteinFunktion> BausteinFunktionen { get; init; } = [];
     /// <summary>
@@ -89,7 +84,7 @@ public static class RecordArt
     public const string Query = "query";            // : IQuery → Queries.cs
     public const string Antwort = "queryresponse";  // : IQueryResponse → Responses.cs
     public const string ReadModel = "readmodel";    // : IReadModel → ReadModels.cs
-    public const string Konfig = "konfig";          // reiner Record, per Ctor in eine Funktion/Dienst-Implementierung injiziert → Konfigs.cs
+    public const string Konfig = "konfig";          // reiner Record, per Ctor in eine Funktion bzw. ihre Umsetzung injiziert → Konfigs.cs
 
     public static readonly IReadOnlyList<string> Alle = [Command, Event, Rejection, ValueObject, Query, Antwort, ReadModel, Konfig];
 }
@@ -269,7 +264,10 @@ public sealed record ApplyRegel
     public string? Datei { get; init; }
 }
 
-/// <summary>Eine Funktion (nur gelesen, docs/10 E4): Klasse (im Host) oder Schnittstelle (draußen), je Eingang die Signatur.</summary>
+/// <summary>
+/// Eine Funktion: Klasse (im Host) oder Schnittstelle (draußen bzw. mit Umsetzungen) — mit Eingängen (je Eingang die Signatur) oder gerufen
+/// (<see cref="Methoden"/>, kein Eingang); beides an einer Funktion ist ein Formfehler.
+/// </summary>
 public sealed record BausteinFunktion
 {
     public required string Name { get; init; }
@@ -277,7 +275,9 @@ public sealed record BausteinFunktion
     /// <summary>Als Klasse deklariert: läuft im Host. Sonst Schnittstelle: draußen oder mit einer Umsetzung im Host (Laufort aus der Umgebung).</summary>
     public bool Klasse { get; init; }
     public IReadOnlyList<BausteinEingang> Eingaenge { get; init; } = [];
-    /// <summary>Konstruktor der Klasse (Dienste, Konfig-Records, Logger).</summary>
+    /// <summary>Gerufen: die Methoden, die ihr Halter ruft (Signatur, Deklarations-Reihenfolge). Leer bei einer Funktion mit Eingängen.</summary>
+    public IReadOnlyList<FunktionsMethode> Methoden { get; init; } = [];
+    /// <summary>Konstruktor der Klasse (gerufene Funktionen, Konfig-Records, Logger).</summary>
     public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
     /// <summary>Bei einer Schnittstelle: ihre Umsetzungen im Host (Klasse und Konstruktor).</summary>
     public IReadOnlyList<FunktionsUmsetzung> Umsetzungen { get; init; } = [];
@@ -293,13 +293,18 @@ public sealed record BausteinFunktion
     public string? Herkunft { get; init; }
 }
 
-/// <summary>Eine Umsetzung einer Funktion im Host: die Klasse und ihr Konstruktor (ein Dienst darin ist die Kante Funktion → Dienst).</summary>
+/// <summary>
+/// Eine Umsetzung einer Funktion im Host: die Klasse und ihr Konstruktor (eine gerufene Funktion darin ist die Kante Funktion → gerufene Funktion);
+/// bei einer gerufenen Funktion je Methode ihr Rumpf.
+/// </summary>
 public sealed record FunktionsUmsetzung
 {
     public required string Name { get; init; }
     public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
     /// <summary>Datei der Klasse (relativ zur Solution); null = neu.</summary>
     public string? Datei { get; init; }
+    /// <summary>Gerufen: je Methode der Rumpf der Umsetzung (Spiegel der Datei; geändert wird er mit ✎ am Rumpf).</summary>
+    public IReadOnlyList<MethodenRumpf> Rumpfe { get; init; } = [];
 }
 
 /// <summary>Ein Eingang (ein <c>Auf</c>): Eingangstyp, ob Hinweis, ob mit Herkunft, ob Strom, Lese-Fähigkeiten, Ausgaben (einfache Namen).</summary>
@@ -313,26 +318,8 @@ public sealed record BausteinEingang
     public IReadOnlyList<string> Ausgaben { get; init; } = [];
 }
 
-/// <summary>
-/// Ein Domänen-Dienst (docs/06 §6.5): <c>public interface {Name} : IDienst { {Rückgabe} {Methode}({Parameter}); … }</c> und seine Implementierungen
-/// (<c>public sealed class X({Konstruktor}) : {Name} { … }</c>). Deklariert wird er nur an seiner Karte; eine Funktion nimmt ihn per ⊕.
-/// </summary>
-public sealed record Dienst
-{
-    public required string Name { get; init; }
-    public required string Namespace { get; init; }
-    /// <summary>Die Methoden des Interfaces (Signatur, Deklarations-Reihenfolge).</summary>
-    public IReadOnlyList<DienstMethode> Methoden { get; init; } = [];
-    /// <summary>Die Implementierungen aus dem Code (Klassen, die das Interface implementieren).</summary>
-    public IReadOnlyList<DienstImpl> Implementierungen { get; init; } = [];
-    public string? Doku { get; init; }
-    public string? Datei { get; init; }
-    /// <summary>Herkunfts-Stempel (<see cref="DomainEditor.Herkunft"/>): Abweichung = im Editor geändert; null = neu.</summary>
-    public string? Herkunft { get; init; }
-}
-
-/// <summary>Eine Methode eines Dienstes: <c>{Rueckgabe} {Name}({Parameter});</c> — Typen wie geschrieben.</summary>
-public sealed record DienstMethode
+/// <summary>Eine gerufene Methode einer Funktion: <c>{Rueckgabe} {Name}({Parameter});</c> — Typen wie geschrieben.</summary>
+public sealed record FunktionsMethode
 {
     public required string Name { get; init; }
     public string Rueckgabe { get; init; } = "void";
@@ -340,18 +327,8 @@ public sealed record DienstMethode
     public string? Doku { get; init; }
 }
 
-/// <summary>Eine Implementierung eines Dienstes: Klasse, Datei, Konstruktor (Dienste, Konfig-Records, Logger) und je Methode ihr Rumpf.</summary>
-public sealed record DienstImpl
-{
-    public required string Name { get; init; }
-    public string? Datei { get; init; }
-    public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
-    /// <summary>Je Methode des Dienstes der Rumpf der Implementierung (Spiegel der Datei; geändert wird er mit ✎ am Rumpf).</summary>
-    public IReadOnlyList<DienstRumpf> Rumpfe { get; init; } = [];
-}
-
-/// <summary>Der Rumpf einer Dienst-Methode in einer Implementierung.</summary>
-public sealed record DienstRumpf
+/// <summary>Der Rumpf einer gerufenen Methode in einer Umsetzung.</summary>
+public sealed record MethodenRumpf
 {
     public required string Methode { get; init; }
     public string? Rumpf { get; init; }
@@ -547,7 +524,7 @@ public sealed record Konsument
     /// <summary>
     /// Regel Z (Code-Fakt, nur gelesen, nie geschrieben — die Felder stehen verbatim im <see cref="Zusatz"/>): die Instanzfelder, die
     /// ZUSTAND halten — nicht <c>readonly</c>, oder <c>readonly</c> mit einem Referenztyp, der weder Konstruktor-Parameter-Typ
-    /// (injiziert: Konfig, Dienst, Logger) noch <c>string</c> ist (z. B. <c>HashSet&lt;string&gt; _seen = new()</c>). Null/leer = zustandslos.
+    /// (injiziert: Konfig, gerufene Funktion, Logger) noch <c>string</c> ist (z. B. <c>HashSet&lt;string&gt; _seen = new()</c>). Null/leer = zustandslos.
     /// </summary>
     public IReadOnlyList<string>? Zustand { get; init; }
 }

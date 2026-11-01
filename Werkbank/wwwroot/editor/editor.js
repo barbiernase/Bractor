@@ -4,7 +4,7 @@
   // Vertrags-Fakten aus dem Rahmen (vom Extractor aus dem Code gelesen).
   const ID_FELD=()=>((MODEL.rahmen&&MODEL.rahmen.aggregatIdFeld)||"");
   const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"],konfig:["Konfiguration","vo"],query:["Query","qry"],queryresponse:["Response","qrsp"],auftrag:["Auftrag","cmd"]};
-  let MODEL={schemaVersion:"2",akteure:[],clients:[],records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],fluesse:[],codeKarten:[],dienste:[]};
+  let MODEL={schemaVersion:"2",akteure:[],clients:[],records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],fluesse:[],codeKarten:[]};
   let NID=1;
   // Die ANSICHT (Werkbank P7.2): Positionen, Domänen-Filter, Akteur-Reihenfolge und die 🤖-Knoten — eine Datei auf dem Server
   //   (.werkbank/ansicht.json, Schlüssel = Karten-Id). Sie gehört weder zum Code noch zum Board; der Code ist die einzige Wahrheit.
@@ -31,12 +31,10 @@
     // Client (docs/konzept-akteure.md §4): die Software an der Leitung — verkoerpert[] = die Akteure (IVerkoerpert<A>), kenntnis = was er hört.
     // Was über seine Leitung hineingeht, sind die IDarf dieser Akteure (vom Server abgeleitet: board.sicht.clients).
     // Katalog-Funktion (IFunktion): Auftrag → Ergebnis-Events; ein Prozess ruft sie mit Rufe<F> (Dann ƒ an der Regel).
-    // Funktion (IFunktion, ein Block der Hierarchie): Eingänge (Auf) mit Ausgaben, Konstruktor, Umsetzungen — vom Server gelesen.
-    m.bausteinFunktionen=m.bausteinFunktionen||[];m.bausteinFunktionen.forEach(f=>{f.eingaenge=f.eingaenge||[];f.umsetzungen=f.umsetzungen||[];});
+    // Funktion (IFunktion, ein Block der Hierarchie): Eingänge (Auf) mit Ausgaben ODER gerufene Methoden, Konstruktor, Umsetzungen — vom Server gelesen.
+    m.bausteinFunktionen=m.bausteinFunktionen||[];m.bausteinFunktionen.forEach(f=>{f.eingaenge=f.eingaenge||[];f.umsetzungen=f.umsetzungen||[];
+      f.methoden=f.methoden||[];f.methoden.forEach(x=>{x.parameter=x.parameter||[];});f.umsetzungen.forEach(u=>{u.konstruktor=u.konstruktor||[];});});
     m.funktionen=m.funktionen||[];m.funktionen.forEach(f=>{if(!f._id)f._id="fk"+(NID++);f.ergebnisse=f.ergebnisse||[];f.konstruktor=f.konstruktor||[];});
-    // Domänen-Dienst (IDienst, konzept-werkbank §12.3 E11): Signatur (Methoden) + Implementierungen mit Konstruktor; eine Funktions-Implementierung nimmt ihn im Konstruktor.
-    m.dienste=m.dienste||[];m.dienste.forEach(d=>{if(!d._id)d._id="dn"+(NID++);d.methoden=d.methoden||[];d.methoden.forEach(x=>{x.parameter=x.parameter||[];});
-      d.implementierungen=d.implementierungen||[];d.implementierungen.forEach(i=>{i.konstruktor=i.konstruktor||[];});});
     // Pipeline als Fluss (§14): Knoten (Name = Identität) mit Eingängen aus Drähten; _ids nur fürs Board.
     m.fluesse=m.fluesse||[];m.fluesse.forEach(f=>{if(!f._id)f._id="fl"+(NID++);f.knoten=f.knoten||[];f.knoten.forEach(k=>{if(!k._id)k._id="fs"+(NID++);k.eingaenge=k.eingaenge||[];k.eingaenge.forEach(e=>{e.draehte=e.draehte||[];});});});
     m.clients=m.clients||[];m.clients.forEach(c=>{if(!c._id)c._id="cl"+(NID++);c.verkoerpert=c.verkoerpert||[];c.kenntnis=c.kenntnis||[];});
@@ -132,7 +130,7 @@
 
   // Eindeutiger Name — Namen sind der Referenzschlüssel für Kanten/Decider/Applier.
   function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.akteure.map(x=>x.name),...MODEL.clients.map(x=>x.name),...MODEL.funktionen.map(x=>x.name),...MODEL.fluesse.map(x=>x.name),
-    ...MODEL.dienste.flatMap(x=>[x.name,...(x.implementierungen||[]).map(i=>i.name)]),...MODEL.funktionen.map(x=>x.implementierung).filter(Boolean)]);
+    ...MODEL.bausteinFunktionen.flatMap(x=>[x.name,...(x.umsetzungen||[]).map(u=>u.name)]),...MODEL.funktionen.map(x=>x.implementierung).filter(Boolean)]);
     if(!all.has(base))return base;let i=2;while(all.has(base+i))i++;return base+i;}
 
   function enumCard(e,ei){const c=h("div",{class:"card"});
@@ -182,7 +180,7 @@
     else if(kind==="reader")MODEL.reader.push({_id:"rd"+(NID++),name:uniq("NeuReader"),namespace:defaultNs(),stores:[],trackDeps:true,handles:[],...pos});
     else if(kind==="reaktion")MODEL.reaktionen.push({_id:"rk"+(NID++),name:uniq("NeueReaktion"),namespace:defaultNs(),pull:true,handles:[],...pos});
     else if(kind==="funktion")neueFunktion(defaultNs(),pos);
-    else if(kind==="dienst")neuerDienst(defaultNs(),pos);
+    else if(kind==="gerufen")neueGerufene(defaultNs(),pos);
     else if(kind==="quelle")neueQuelle(defaultNs(),"NeueQuelle",pos);
     else if(kind==="akteur")MODEL.akteure.push({_id:"ak"+(NID++),name:uniq("NeuerAkteur"),namespace:haeufigsterNs(MODEL.akteure)||defaultNs(),darf:[],...pos});
     else if(kind==="client")MODEL.clients.push({_id:"cl"+(NID++),name:uniq("INeuerClient"),namespace:haeufigsterNs(MODEL.clients)||defaultNs(),verkoerpert:[],kenntnis:[],...pos});
@@ -472,9 +470,9 @@
         if(r.python)t.push(T("rufe · Python",r.python.rumpf,null,"funktionpy|"+r.name+"@"+r.python.klasse,true,
           {kachel:r.python.klasse+".rufe (Python)",python:{datei:r.python.datei,klasse:r.python.klasse,methode:r.python.methode||"rufe",signatur:r.python.signatur||null}}));
         return t;}
-      // Dienst: je Implementierung je Methode ihr Rumpf (aus der Datei); ✎ als Geste an der Methode.
-      case "dienst":return (r.implementierungen||[]).flatMap((im,ii)=>(im.rumpfe||[]).map(x=>T(im.name+"."+x.methode,x.rumpf,x._rumpf,null,true,
-        {kachel:im.name+"."+x.methode,impl:ii,methode:x.methode})));
+      // Gerufene Funktion: je Umsetzung je Methode ihr Rumpf (aus der Datei); ✎ als Geste an der Methode.
+      case "bausteinfunktion":return istGerufen(r)?(r.umsetzungen||[]).flatMap((u,ii)=>(u.rumpfe||[]).map(x=>T(u.name+"."+x.methode,x.rumpf,x._rumpf,null,true,
+        {kachel:u.name+"."+x.methode,impl:ii,methode:x.methode}))):null;
       case "client":return (r.implementierungen||[]).length?(r.implementierungen||[]).flatMap(im=>(im.rumpfe||[]).map(x=>T(im.klasse+"."+x.methode,x.rumpf,null,
         "zusage|"+clientAnzeige(r)+"|"+x.event+"@"+im.klasse,im.klasse+"."+x.methode,{python:{datei:im.datei,klasse:im.klasse,methode:x.methode,signatur:x.signatur||null},event:x.event,impl:im}))):null;
       case "transition":{const sg=MODEL.sagas.find(x=>x.name===r.prozess),folge=sg?regelFolge(sg,MODEL.transitions):[];
@@ -503,7 +501,7 @@
     else if(t.k==="regelLambda"){id="tr:"+t.trans;const tr=MODEL.transitions.find(x=>x._id===t.trans),d=tr&&(tr.dann||[])[t.dannIdx];
       i=(rumpfTeile(NODEBY.get(id))||[]).findIndex(x=>x.dann===d&&(x.teil||"sende")===(t.teil||"sende"));}
     else if(t.k==="funktionPy"){id="fk:"+t.fk;i=(rumpfTeile(NODEBY.get(id))||[]).findIndex(x=>!!x.python);}
-    else if(t.k==="dienst"){id="dn:"+t.dn;i=(rumpfTeile(NODEBY.get(id))||[]).findIndex(x=>x.impl===t.impl&&x.methode===t.methode);}
+    else if(t.k==="gerufen"){id="fb:"+t.fb;i=(rumpfTeile(NODEBY.get(id))||[]).findIndex(x=>x.impl===t.impl&&x.methode===t.methode);}
     else if(t.k==="flussLambda"){const f=MODEL.fluesse.find(x=>x._id===t.fluss),k=f&&(f.knoten||[]).find(z=>z._id===t.knoten);if(k)id="fs:"+k._id;i=t.ei==null?0:t.ei;}
     const n=id&&NODEBY.get(id),teile=n&&rumpfTeile(n);return teile&&i>=0&&teile[i]?{n,i,teil:teile[i]}:null;}
   function codePort(key,target,_alt,label){const s=port("code");s.classList.add("i");reg(key,s,{type:"code",dir:"in",target});
@@ -876,38 +874,62 @@
       if(lo.length)body.append(h("div",{class:"gsec",style:"opacity:.8"},"Laufort je Umgebung: "+lo.map(([n,k])=>n+" = "+(k?(k.Laufort||"Host")+(k.Slots?" ×"+k.Slots:""):"⚠ nicht gebunden")).join(" · ")));}
   }
 
-  // ══ LOGIK-ELEMENT „Domänen-Dienst" (IDienst, konzept-werkbank §12.3 E11): Signatur (Methoden) · Implementierungen (je ihr Konstruktor, ⊕ weitere Dienste) ·
-  //   Rümpfe aus der Datei. Ein Dienst steht nur im Konstruktor einer Funktions- bzw. Dienst-Implementierung (CQRS089) — ⊕ an der Funktion
-  //   „🧩 braucht". Welche Implementierung läuft, sagt die Umgebung (🖥 Host-Rahmen → Dienste); gebunden wird generiert (GeneratedDienste).
-  const dienstByName=nm=>MODEL.dienste.find(d=>d.name===String(nm||"").replace(/\?$/,"").trim());
+  // ══ GERUFENE FUNKTION (IFunktion ohne Auf, docs/06 §6.5): Signatur (Methoden) · Umsetzungen (je ihr Konstruktor, ⊕ weitere gerufene) · Rümpfe aus
+  //   der Datei. Sie steht nur im Konstruktor einer Funktion bzw. Umsetzung (CQRS089) — ⊕ „🧩 braucht". Welche Umsetzung läuft, sagt die Umgebung
+  //   (🖥 Host-Rahmen → Funktionen); gebunden wird generiert (GeneratedGerufene).
+  const istGerufen=f=>!!f&&(f.methoden||[]).length>0&&!(f.eingaenge||[]).length;
+  const gerufenByName=nm=>MODEL.bausteinFunktionen.find(f=>f.name===String(nm||"").replace(/\?$/,"").trim()&&istGerufen(f));
   const paramName=(t,belegt)=>{let n=String(t||"x").replace(/^I(?=[A-ZÄÖÜ])/,"");n=n.charAt(0).toLowerCase()+n.slice(1);
     const b=new Set(belegt||[]);if(!b.has(n))return n;let i=2;while(b.has(n+i))i++;return n+i;};
   // „Typ name, Typ name" → Parameter (Kommas in <…> gehören zum Typ).
   function parseParams(text){const teile=[];let tiefe=0,akt="";for(const ch of String(text||"")){if(ch==="<")tiefe++;if(ch===">")tiefe--;
       if(ch===","&&tiefe===0){teile.push(akt);akt="";}else akt+=ch;}if(akt.trim())teile.push(akt);
     return teile.map(x=>x.trim()).filter(Boolean).map(x=>{const i=x.lastIndexOf(" ");return i<0?{typ:x,name:paramName(x)}:{typ:x.slice(0,i).trim(),name:x.slice(i+1).trim()};});}
-  // Ein neuer Dienst — EIN Weg (Funktion „＋", Domänen-Menü): I<Stamm> mit einer Methode und einer Implementierung <Stamm>.
-  function neuerDienst(ns,pos){const nm=uniq("INeuerDienst"),impl=uniq(nm.replace(/^I(?=[A-ZÄÖÜ])/,""));
-    const d={_id:"dn"+(NID++),name:nm,namespace:ns,methoden:[{name:"Fuehre",rueckgabe:"string",parameter:[{typ:"string",name:"eingabe"}]}],
-      implementierungen:[{name:impl,konstruktor:[]}],...(pos||{})};
-    MODEL.dienste.push(d);return d;}
-  // Eine Konstruktor-Zeile: Dienst (🧩, ✕ löst), Konfig-Record (⚙ Konfig:<Record>) oder Rahmen (ILogger) — Klick öffnet die Karte.
-  function konstruktorZeile(p,key,info,loese){const d=dienstByName(p.typ),rec=!d&&recByName(p.typ),s=d?port("dienst"):null;
+  // Eine neue gerufene Funktion — EIN Weg (Funktion „＋", Menü): Schnittstelle I<Stamm> mit einer Methode und einer Umsetzung <Stamm>.
+  function neueGerufene(ns,pos){const nm=uniq("INeueFunktion"),impl=uniq(nm.replace(/^I(?=[A-ZÄÖÜ])/,""));
+    const f={_id:"fb"+(NID++),name:nm,namespace:ns,klasse:false,eingaenge:[],konstruktor:[],
+      methoden:[{name:"Fuehre",rueckgabe:"string",parameter:[{typ:"string",name:"eingabe"}]}],umsetzungen:[{name:impl,konstruktor:[]}],...(pos||{})};
+    MODEL.bausteinFunktionen.push(f);return f;}
+  // Eine gerufene Funktion in einen Konstruktor nehmen (einmal je Konstruktor, nie sich selbst).
+  function nimmGerufene(liste,g,selbst){if(!g||g===selbst||liste.some(p=>gerufenByName(p.typ)===g))return;liste.push({typ:g.name,name:paramName(g.name,liste.map(p=>p.name))});}
+  // Die Konstruktoren einer Funktion: der Klasse bzw. der Umsetzung Nr. impl.
+  const ctorVon=(f,impl)=>impl==null?(f.konstruktor=f.konstruktor||[]):((f.umsetzungen||[])[impl]||{}).konstruktor;
+  // Eine Konstruktor-Zeile: gerufene Funktion (🧩, ✕ löst), Konfig-Record (⚙ Konfig:<Record>) oder Rahmen (ILogger) — Klick öffnet die Karte.
+  function konstruktorZeile(p,key,info,loese){const d=gerufenByName(p.typ),rec=!d&&recByName(p.typ),s=d?port("gerufen"):null;
     if(s){s.classList.add("o");reg(key,s,info);}
-    return h("div",{class:"slotrow o"},d?h("button",{class:"rm",title:"Dienst lösen (der Dienst bleibt)",onclick:loese},"✕"):null,
+    return h("div",{class:"slotrow o"},d||rec?h("button",{class:"rm",title:"Aus dem Konstruktor lösen (der Typ bleibt)",onclick:loese},"✕"):null,
       h("span",{class:"slotlbl",style:"flex:1;text-align:right"+(d||rec?";cursor:pointer":""),title:d?"Klick: "+d.name+" öffnen":rec?"Werte aus Konfig:"+rec.name+" der Umgebung":"",
-        onclick:d?()=>zeigeLadend("dn:"+d._id):rec?()=>zeigeLadend("rec:"+rec.name):null},(d?"🧩 ":rec?"⚙ ":"· ")+p.typ+" "+p.name+(rec?" (Konfig)":"")),s);}
+        onclick:d?()=>zeigeLadend("fb:"+d._id):rec?()=>zeigeLadend("rec:"+rec.name):null},(d?"🧩 ":rec?"⚙ ":"· ")+p.typ+" "+p.name+(rec?" (Konfig)":"")),s);}
+  // „🧩 braucht": die Konstruktor-Zeilen einer Klasse bzw. Umsetzung mit ⊕ für eine weitere gerufene Funktion (＋ legt eine neue an) und ＋ Konfig.
+  function ctorAbschnitt(body,f,impl){const liste=ctorVon(f,impl)||[],sfx=impl==null?"":":u"+impl,info={type:"gerufen",dir:"out",fb:f._id,fk:f._id,...(impl==null?{}:{impl})};
+    liste.forEach((p,i)=>body.append(konstruktorZeile(p,"gr:out:fb:"+f._id+sfx+":"+i,info,()=>{liste.splice(i,1);gTitel("🧩 "+p.typ+" lösen");render();})));
+    const op=port("gerufen");op.classList.add("o");reg("gr:out:fb:"+f._id+sfx+":open",op,info);
+    body.append(h("div",{class:"slotrow o"},neuKnopf("Neue gerufene Funktion als eigene Karte anlegen und in den Konstruktor nehmen",()=>{const g=neueGerufene(f.namespace);
+        nimmGerufene(ctorVon(f,impl),g,f);render();deFlash("＋ "+g.name+" angelegt und verbunden — Methoden und Umsetzung an ihrer Karte",true);}),
+      h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"+ gerufene Funktion ⊕ (🧩) ▶"),op));
+    body.append(h("div",{class:"slotrow o"},neuKnopf("Neuen Konfig-Record anlegen und in den Konstruktor nehmen",()=>{const vorher=new Set(MODEL.records.map(x=>x.name));
+        neuerKnoten("konfig",undefined,undefined,{ns:f.namespace,reg:"fb:"+f._id,name:(f.name||"").replace(/^I(?=[A-ZÄÖÜ])/,"")+"Konfig"});
+        const neu=MODEL.records.find(x=>!vorher.has(x.name));if(neu){ctorVon(f,impl).push({typ:neu.name,name:"konfig"});render();}}),
+      h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"＋ Konfig")));}
   // ƒ FUNKTION (IFunktion, ein Block der Hierarchie): je Eingang ein Auf — ◀ Eingang ⊕ (Event · Hinweis · Quelle), Ausgaben ▶ ⊕ (Command bzw.
-  //   Event/Hinweis) oder ＋ ein neues Ergebnis-Event, das ihr gehört. Die Ausgaben stehen in der Signatur (CQRS050). Eine Klasse läuft im
-  //   Host und nimmt im Konstruktor Dienste und Konfig; eine Schnittstelle läuft draußen bzw. mit ihrer Umsetzung (Laufort: Umgebung).
+  //   Event/Hinweis) oder ＋ ein neues Ergebnis-Event, das ihr gehört. Die Ausgaben stehen in der Signatur (CQRS050). Ohne Auf ist sie gerufen:
+  //   frei benannte Methoden, ihr Halter nimmt sie im Konstruktor (◀ genutzt von). Eine Klasse läuft im Host und nimmt im Konstruktor gerufene
+  //   Funktionen und Konfig; eine Schnittstelle läuft draußen bzw. mit ihren Umsetzungen (Laufort bzw. Wahl: Umgebung).
   function funktionsKarte(body,f){
+    const gerufen=istGerufen(f);
+    if(gerufen){body.append(topSlot("gerufen","◀ genutzt von ⊕ (Funktion · Umsetzung)",{type:"gerufen",dir:"in",fb:f._id,fk:f._id},"gr:in:"+f._id));
+      const nutzer=MODEL.bausteinFunktionen.filter(q=>q!==f&&[q.konstruktor||[],...(q.umsetzungen||[]).map(u=>u.konstruktor||[])].some(l=>l.some(p=>gerufenByName(p.typ)===f)));
+      if(nutzer.length)body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px;cursor:default"},
+        ...nutzer.map(q=>h("button",{class:"akt-dom",onclick:()=>waehle("fb:"+q._id)},"ƒ "+q.name))));}
     body.append(h("div",{class:"gsec"},"Name · Namespace · Form"));
     if(!f.datei){body.append(nameInp(f,"name","Funktion","bausteinfunktion"));
       body.append(h("input",{value:f.namespace??"",oninput:e=>f.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
       body.append(h("label",{class:"cbx",title:"Klasse: läuft im Host. Schnittstelle: läuft draußen oder mit einer Umsetzung (Laufort in der Umgebung)"},
         h("input",{type:"checkbox",onchange:e=>{f.klasse=e.target.checked;render();},...(f.klasse?{checked:"checked"}:{})}),"Klasse (läuft im Host)"));}
-    else body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},f.name+" — "+(f.klasse?"Klasse im Host"
-      :"Schnittstelle"+((f.umsetzungen||[]).length?" · Umsetzung "+f.umsetzungen.map(u=>u.name).join(", "):" · läuft draußen"))));
+    else body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},f.name+" — "+(gerufen?"gerufen · ":"")+(f.klasse?"Klasse im Host"
+      :"Schnittstelle"+((f.umsetzungen||[]).length?" · Umsetzung "+f.umsetzungen.map(u=>u.name).join(", "):gerufen?" · ⚠ ohne Umsetzung":" · läuft draußen"))));
+    if(!(f.eingaenge||[]).length)methodenAbschnitt(body,f);
+    if(!gerufen){
     body.append(h("div",{class:"gsec",title:"je Eingang ein Auf(Eingang[, Herkunft]) — was entstehen kann, steht in seiner Rückgabe"},"◀ Eingänge · Ausgaben ▶"));
     (f.eingaenge||[]).forEach((e,i)=>{
       const ip=anchorDot(recArt(e.eingang)==="rejection"?"rejection":"event");ip.classList.add("i");
@@ -927,67 +949,53 @@
           neuerKnoten("event",undefined,undefined,{ns:f.namespace,reg:"fb:"+f._id,name:stamm+"Ergebnis"});
           const neu=MODEL.records.find(x=>!vorher.has(x.name));if(neu){(e.ausgaben=e.ausgaben||[]).push(neu.name);render();}}),
         h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"＋ neues Ergebnis-Event")));});
-    body.append(slotRow("event","+ Eingang ⊕ (Event · Hinweis · Quelle)","l",{type:"evtUse",dir:"in",fb:f._id,fk:f._id,ein:"open"},"fb:ein:"+f._id+":open"));
-    if(f.klasse){body.append(h("div",{class:"gsec",title:"Konstruktor der Klasse: Dienste (IDienst), Konfig-Records (Konfig:<Record>)"},"🧩 braucht (Konstruktor)"));
-      (f.konstruktor||[]).forEach((p,i)=>body.append(konstruktorZeile(p,"dn:out:fb:"+f._id+":"+i,{type:"dienst",dir:"out",fb:f._id},
-        ()=>{f.konstruktor.splice(i,1);gTitel("🧩 "+p.typ+" lösen");render();})));
-      const op=port("dienst");op.classList.add("o");reg("dn:out:fb:"+f._id+":open",op,{type:"dienst",dir:"out",fb:f._id});
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"+ Dienst ⊕ (🧩) ▶"),op));
-      body.append(h("div",{class:"slotrow o"},neuKnopf("Neuen Konfig-Record anlegen und in den Konstruktor nehmen",()=>{const vorher=new Set(MODEL.records.map(x=>x.name));
-          neuerKnoten("konfig",undefined,undefined,{ns:f.namespace,reg:"fb:"+f._id,name:(f.name||"").replace(/^I(?=[A-ZÄÖÜ])/,"")+"Konfig"});
-          const neu=MODEL.records.find(x=>!vorher.has(x.name));if(neu){(f.konstruktor=f.konstruktor||[]).push({typ:neu.name,name:"konfig"});render();}}),
-        h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"＋ Konfig")));}}
-  const recArt=nm=>(recByName(nm)||{}).kind||"";
-  function funktionDienste(body,f){
-    body.append(h("div",{class:"gsec",title:"Konstruktor der C#-Implementierung: Dienste (IDienst), Konfig-Records (Konfig:<Record>), ILogger<T>"},"🧩 braucht (Konstruktor)"));
-    (f.konstruktor||[]).forEach((p,i)=>body.append(konstruktorZeile(p,"dn:out:fk:"+f._id+":"+i,{type:"dienst",dir:"out",fk:f._id},
-      ()=>{f.konstruktor.splice(i,1);gTitel("🧩 "+p.typ+" lösen");render();})));
-    const op=port("dienst");op.classList.add("o");reg("dn:out:fk:"+f._id+":open",op,{type:"dienst",dir:"out",fk:f._id});
-    body.append(h("div",{class:"slotrow o"},neuKnopf("Neuen Dienst als eigene Karte anlegen und verbinden",()=>{const d=neuerDienst(f.namespace);
-        verbindeInfo({type:"dienst",dir:"out",fk:f._id},{type:"dienst",dir:"in",dn:d._id});
-        deFlash("＋ "+d.name+" angelegt und verbunden — Methoden und Implementierung an seiner Karte",true);}),
-      h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"+ Dienst ⊕ (🧩) ▶"),op));}
-  function dienstCard(body,d){
-    body.append(topSlot("dienst","◀ genutzt von ⊕ (Funktion · Dienst-Implementierung)",{type:"dienst",dir:"in",dn:d._id},"dn:in:"+d._id));
-    const nutzer=[...MODEL.funktionen.filter(f=>(f.konstruktor||[]).some(p=>dienstByName(p.typ)===d)).map(f=>["fk:"+f._id,"ƒ "+f.name]),
-      ...MODEL.dienste.filter(q=>q!==d&&(q.implementierungen||[]).some(im=>(im.konstruktor||[]).some(p=>dienstByName(p.typ)===d))).map(q=>["dn:"+q._id,"🧩 "+q.name])];
-    if(nutzer.length)body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px;cursor:default"},
-      ...nutzer.map(([id,t])=>h("button",{class:"akt-dom",onclick:()=>waehle(id)},t))));
-    body.append(h("div",{class:"gsec"},"Name · Namespace"));
-    if(d.datei)body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default"},d.name+" — aus dem Code (Umbenennen ist ein Refactoring)"));
-    else body.append(nameInp(d,"name","Dienst","dienst"));
-    body.append(h("input",{value:d.namespace??"",oninput:e=>d.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
-    body.append(h("div",{class:"gsec",title:"public interface "+d.name+" : IDienst { Rückgabe Methode(Typ name, …); … }"},"Signatur (Methoden)"));
-    (d.methoden||[]).forEach((m,mi)=>body.append(h("div",{class:"frow"},
+    body.append(slotRow("event","+ Eingang ⊕ (Event · Hinweis · Quelle)","l",{type:"evtUse",dir:"in",fb:f._id,fk:f._id,ein:"open"},"fb:ein:"+f._id+":open"));}
+    if(f.klasse){body.append(h("div",{class:"gsec",title:"Konstruktor der Klasse: gerufene Funktionen, Konfig-Records (Konfig:<Record>), ILogger<T>"},"🧩 braucht (Konstruktor)"));
+      ctorAbschnitt(body,f,null);}
+    else umsetzungsAbschnitt(body,f,gerufen);}
+  // Signatur einer gerufenen Funktion: je Methode Rückgabe, Name, Parameter (an der Schnittstelle bzw. Klasse; eine Umsetzung bekommt einen Stub).
+  function methodenAbschnitt(body,f){
+    body.append(h("div",{class:"gsec",title:(f.klasse?"public sealed class ":"public interface ")+f.name+" : IFunktion { Rückgabe Methode(Typ name, …); … } — ohne Auf: ihr Halter ruft sie"},
+      "🧩 gerufene Methoden"+((f.methoden||[]).length?"":" (keine — mit ＋ wird die Funktion gerufen statt Eingänge zu hören)")));
+    (f.methoden||[]).forEach((m,mi)=>body.append(h("div",{class:"frow"},
       h("input",{value:m.rueckgabe??"",list:"de-typen",placeholder:"Rückgabe",style:"max-width:90px",onchange:e=>{m.rueckgabe=e.target.value.trim()||"void";render();}}),
-      // Eine Methode aus dem Code: Umbenennen ist ein Refactoring (Renamer — Interface UND Implementierungen); neu: einfach der Name.
+      // Eine Methode aus dem Code: Umbenennen ist ein Refactoring (Renamer — Schnittstelle UND Umsetzungen); neu: einfach der Name.
       h("input",{value:m.name??"",placeholder:"Methode",style:"max-width:110px",onchange:e=>{const v=e.target.value.trim(),alt=m.name;if(!v||v===alt)return;
-        if(m._ort&&d.ausCode){gUmbenennen(m,v,alt);return;}m.name=v;render();}}),
+        if(m._ort&&f.datei){gUmbenennen(m,v,alt);return;}m.name=v;render();}}),
       h("input",{value:(m.parameter||[]).map(p=>p.typ+" "+p.name).join(", "),placeholder:"Typ name, …",title:"Parameter: Typ name, Typ name",
         onchange:e=>{m.parameter=parseParams(e.target.value);render();}}),
-      h("button",{class:"rm",title:"Methode entfernen (am Interface; die Implementierungen behalten ihren Code)",onclick:()=>{d.methoden.splice(mi,1);render();}},"✕"))));
-    body.append(h("button",{class:"add",onclick:()=>{const da=new Set((d.methoden||[]).map(x=>x.name));let n="Neu",i=2;while(da.has(n))n="Neu"+(i++);
-      (d.methoden=d.methoden||[]).push({name:n,rueckgabe:"void",parameter:[]});render();}},"+ Methode"));
-    body.append(h("div",{class:"gsec",title:"Klassen, die "+d.name+" implementieren — welche läuft, wählt die Umgebung (Dienste:"+d.name+":Implementierung)"},"Implementierungen"));
-    if(!(d.implementierungen||[]).length)body.append(h("div",{class:"gsec",style:"opacity:.7"},"⚠ keine — ohne Implementierung bricht der Start, sobald eine Funktion den Dienst braucht."));
-    (d.implementierungen||[]).forEach((im,ii)=>{
-      body.append(h("div",{class:"frow",title:"public sealed class "+im.name+"(…) : "+d.name},h("span",{class:"slotlbl"},"▸"),
-        h("input",{value:im.name,placeholder:"Klasse",onchange:e=>{const v=e.target.value.trim(),alt=im.name;if(!v||v===alt)return;
-          if(im._ort&&d.ausCode){gUmbenennen(im,v,alt);return;}im.name=v;render();}}),im.datei?null:h("span",{class:"gp-mark"}," neu")));
-      (im.konstruktor||[]).forEach((p,pi)=>body.append(konstruktorZeile(p,"dn:out:dn:"+d._id+":"+ii+":"+pi,{type:"dienst",dir:"out",dn:d._id,impl:ii},
-        ()=>{im.konstruktor.splice(pi,1);render();})));
-      const op=port("dienst");op.classList.add("o");reg("dn:out:dn:"+d._id+":"+ii+":open",op,{type:"dienst",dir:"out",dn:d._id,impl:ii});
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"+ braucht Dienst ⊕ (🧩) ▶"),op));
-      (d.methoden||[]).forEach(m=>body.append(codePort("dn:impl:"+d._id+":"+ii+":"+m.name,{k:"dienst",dn:d._id,impl:ii,methode:m.name},null,im.name+"."+m.name)));});
+      h("button",{class:"rm",title:"Methode entfernen (an der Schnittstelle; die Umsetzungen behalten ihren Code)",onclick:()=>{f.methoden.splice(mi,1);render();}},"✕"))));
+    body.append(h("button",{class:"add",onclick:()=>{const da=new Set((f.methoden||[]).map(x=>x.name));let n="Neu",i=2;while(da.has(n))n="Neu"+(i++);
+      (f.methoden=f.methoden||[]).push({name:n,rueckgabe:"void",parameter:[]});render();}},"+ Methode"));}
+  // Umsetzungen einer Schnittstelle: je Klasse ihr Konstruktor (⊕ gerufene Funktionen), bei einer gerufenen je Methode ihr Rumpf; ＋ weitere.
+  function umsetzungsAbschnitt(body,f,gerufen){
+    body.append(h("div",{class:"gsec",title:"Klassen, die "+f.name+" implementieren — welche läuft, wählt die Umgebung (Funktionen:"+f.name+":Implementierung)"},"Umsetzungen"));
+    if(!(f.umsetzungen||[]).length)body.append(h("div",{class:"gsec",style:"opacity:.7"},gerufen
+      ?"⚠ keine — ohne Umsetzung bricht der Start, sobald eine Funktion sie braucht.":"keine — sie läuft draußen (Worker, Client, Hand)."));
+    (f.umsetzungen||[]).forEach((u,ii)=>{
+      body.append(h("div",{class:"frow",title:"public sealed class "+u.name+"(…) : "+f.name},h("span",{class:"slotlbl"},"▸"),
+        h("input",{value:u.name,placeholder:"Klasse",onchange:e=>{const v=e.target.value.trim(),alt=u.name;if(!v||v===alt)return;
+          if(u._ort&&u.datei){gUmbenennen(u,v,alt);return;}u.name=v;render();}}),u.datei?null:h("span",{class:"gp-mark"}," neu")));
+      ctorAbschnitt(body,f,ii);
+      if(gerufen)(f.methoden||[]).forEach(m=>body.append(codePort("gr:impl:"+f._id+":"+ii+":"+m.name,{k:"gerufen",fb:f._id,impl:ii,methode:m.name},null,u.name+"."+m.name)));});
     {const ein=h("input",{placeholder:"Klassenname …"});
-      body.append(h("div",{class:"frow"},ein,h("button",{class:"act",title:"Eine weitere Implementierung (Klasse mit throw-Stubs) — z. B. ein Fake für die Sim-Umgebung",
+      body.append(h("div",{class:"frow"},ein,h("button",{class:"act",title:"Eine weitere Umsetzung (Klasse mit throw-Stubs) — z. B. ein Fake für die Sim-Umgebung",
         onclick:()=>{const n=ein.value.trim();if(!n||uniq(n)!==n){deFlash("⚠ Name fehlt oder ist vergeben",false);return;}
-          (d.implementierungen=d.implementierungen||[]).push({name:n,konstruktor:[]});render();}},"＋ Implementierung")));}
-    {const lo=Object.entries((MODEL.rahmen||{}).umgebungen||{}).map(([n,u])=>[n,((u||{}).Dienste||{})[d.name]]);
-      const einzig=(d.implementierungen||[]).length===1?d.implementierungen[0].name:null;
-      if(lo.length)body.append(h("div",{class:"gsec",style:"opacity:.8"},"Implementierung je Umgebung: "+lo.map(([n,k])=>n+" = "+(k&&k.Implementierung?k.Implementierung
-        :einzig?einzig+" (die einzige)":"⚠ wählen")).join(" · ")+" — eingestellt im 🖥 Host-Rahmen (Dienste)"));}
-  }
+          (f.umsetzungen=f.umsetzungen||[]).push({name:n,konstruktor:[]});render();}},"＋ Umsetzung")));}
+    if(gerufen){const lo=Object.entries((MODEL.rahmen||{}).umgebungen||{}).map(([n,u])=>[n,((u||{}).Funktionen||{})[f.name]]);
+      const einzig=(f.umsetzungen||[]).length===1?f.umsetzungen[0].name:null;
+      if(lo.length)body.append(h("div",{class:"gsec",style:"opacity:.8"},"Umsetzung je Umgebung: "+lo.map(([n,k])=>n+" = "+(k&&k.Implementierung?k.Implementierung
+        :einzig?einzig+" (die einzige)":"⚠ wählen")).join(" · ")+" — eingestellt im 🖥 Host-Rahmen (Funktionen)"));}}
+  const recArt=nm=>(recByName(nm)||{}).kind||"";
+  function funktionDienste(body,f){
+    body.append(h("div",{class:"gsec",title:"Konstruktor der C#-Implementierung: gerufene Funktionen, Konfig-Records (Konfig:<Record>), ILogger<T>"},"🧩 braucht (Konstruktor)"));
+    (f.konstruktor||[]).forEach((p,i)=>body.append(konstruktorZeile(p,"gr:out:fk:"+f._id+":"+i,{type:"gerufen",dir:"out",fk:f._id},
+      ()=>{f.konstruktor.splice(i,1);gTitel("🧩 "+p.typ+" lösen");render();})));
+    const op=port("gerufen");op.classList.add("o");reg("gr:out:fk:"+f._id+":open",op,{type:"gerufen",dir:"out",fk:f._id});
+    body.append(h("div",{class:"slotrow o"},neuKnopf("Neue gerufene Funktion als eigene Karte anlegen und verbinden",()=>{const g=neueGerufene(f.namespace);
+        verbindeInfo({type:"gerufen",dir:"out",fk:f._id},{type:"gerufen",dir:"in",fb:g._id});
+        deFlash("＋ "+g.name+" angelegt und verbunden — Methoden und Umsetzung an ihrer Karte",true);}),
+      h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"+ gerufene Funktion ⊕ (🧩) ▶"),op));}
 
   // ══ AKTEURE: von wem kommt was? (docs/konzept-akteure.md §2 und §8) ══
   //   Deklariert ist nur IDarf (direkt); alles Abgeleitete (Kette, Akteur-Menge je Karte, Akteur-Rahmen, Reihenfolge, Pfade) rechnet der Server
@@ -1027,7 +1035,7 @@
   function sk(n){if(!n)return null;const k=SICHT().karten[n.id];if(k)return k;
     if(n.kind==="rumpf")return SICHT().karten[n.own.id]||null;return null;}
   // ── BESITZ (vom Server, board.sicht.besitz): je Karte ihr Elternknoten — Hierarchie Anwendung → Blöcke → Glieder, nur aus den Signaturen.
-  //   Die oberste Ebene unter der Anwendung ist die REGION einer Karte: ein Block (Aggregat, Funktion, Dienst, Sicht = Store-Bündel), die
+  //   Die oberste Ebene unter der Anwendung ist die REGION einer Karte: ein Block (Aggregat, Funktion, Sicht = Store-Bündel), die
   //   Begriffe (gemeinsame Typen) oder der Rand (Akteure, Clients, Quellen). „!" = mehrdeutig (zwei Erzeuger, zwei Antwortende, zwei Stores).
   const RAND_KEY="§rand",BEGR_KEY="§begriffe",ANW_KEY="§anwendung";
   const besitzRoh=id=>(SICHT().besitz||{})[id]||null;
@@ -1038,8 +1046,8 @@
     for(let i=0;b&&!b.startsWith("§")&&i<8;i++){id=b;b=besitzVon(b);}
     return b===ANW_KEY?id:b;}
   const istRegionKarte=ns=>typeof ns==="string"&&/^(agg|fb|dn|sto):/.test(ns);
-  const regionArt=ns=>ns===RAND_KEY?"Rand":ns===BEGR_KEY?"Begriffe":ns.startsWith("agg:")?"Aggregat":ns.startsWith("fb:")?"Funktion":ns.startsWith("dn:")?"Dienst":ns.startsWith("sto:")?"Sicht":"";
-  const regionRang=ns=>ns===RAND_KEY?0:ns.startsWith("agg:")?1:ns.startsWith("fb:")?2:ns.startsWith("dn:")?3:ns.startsWith("sto:")?4:ns===BEGR_KEY?5:6;
+  const regionArt=ns=>ns===RAND_KEY?"Rand":ns===BEGR_KEY?"Begriffe":ns.startsWith("agg:")?"Aggregat":ns.startsWith("fb:")?"Funktion":ns.startsWith("sto:")?"Sicht":"";
+  const regionRang=ns=>ns===RAND_KEY?0:ns.startsWith("agg:")?1:ns.startsWith("fb:")?2:ns.startsWith("sto:")?4:ns===BEGR_KEY?5:6;
   // 👤 AKTEUR: Name, Namespace, und EINE Liste — was er darf (IDarf<T>). ⊕ „+ darf" → passende Commands/Queries
   //   leuchten → anklicken = erlauben, ✓-Karte = entziehen. Was er HÖREN darf, ist abgeleitet (Generator), keine Eingabe.
   function akteurCard(body,a){
@@ -1293,7 +1301,7 @@
   //    Applier→Aggregat(rechts) · Applier→State-Feld(oben, optionale Zuweisungs-Markierung).
   const SVGNS="http://www.w3.org/2000/svg";
   const GRID=20;
-  const NODELABEL={host:"Host",bausteinfunktion:"Funktion",akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",quelle:"Quelle",fluss:"Fluss",rumpf:"Code",code:"Code",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",funktion:"Funktion",dienst:"Dienst",auftrag:"Auftrag",flussknoten:"Pipeline"};
+  const NODELABEL={host:"Host",bausteinfunktion:"Funktion",akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",quelle:"Quelle",fluss:"Fluss",rumpf:"Code",code:"Code",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",funktion:"Funktion",gerufen:"gerufene Funktion",auftrag:"Auftrag",flussknoten:"Pipeline"};
   let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
   // Typ-Navigation: HLKIND = aktuell hervorgehobener Node-Typ (Board+Minimap); JUMPIX = Sprung-Cursor je Typ.
   let HLKIND=null; const JUMPIX={};
@@ -1450,9 +1458,11 @@
     if(kind==="funktion"){MODEL.transitions.forEach(t=>(t.dann||[]).forEach(d=>{if(d.rufe===old)d.rufe=nv;}));
       MODEL.akteure.forEach(a=>{a.darf=(a.darf||[]).map(x=>x===old?nv:x);});
       MODEL.records.forEach(r=>{if(r.kind==="auftrag"&&r.funktion===old)r.funktion=nv;});}
-    // Ein noch nicht geschriebener Dienst: die Konstruktoren, die ihn nehmen, ziehen mit (aus dem Code: Roslyn-Renamer).
-    if(kind==="dienst"){const um=p=>{if(String(p.typ||"").replace(/\?$/,"").trim()===old)p.typ=nv;};
-      MODEL.funktionen.forEach(f=>(f.konstruktor||[]).forEach(um));MODEL.dienste.forEach(q=>(q.implementierungen||[]).forEach(im=>(im.konstruktor||[]).forEach(um)));}
+    // Eine noch nicht geschriebene Funktion: die Konstruktoren, die sie nehmen, ziehen mit (aus dem Code: Roslyn-Renamer).
+    if(kind==="bausteinfunktion"){const um=p=>{if(String(p.typ||"").replace(/\?$/,"").trim()===old)p.typ=nv;};
+      MODEL.funktionen.forEach(f=>(f.konstruktor||[]).forEach(um));
+      MODEL.bausteinFunktionen.forEach(q=>{(q.konstruktor||[]).forEach(um);(q.umsetzungen||[]).forEach(u=>(u.konstruktor||[]).forEach(um));});
+      MODEL.akteure.forEach(a=>{a.darf=(a.darf||[]).map(x=>x===old?nv:x);});}
     if(kind==="akteur"){
       // Clients, die ihn verkörpern, ziehen mit (IVerkoerpert<A> folgt dem Akteur).
       MODEL.clients.forEach(c=>{c.verkoerpert=(c.verkoerpert||[]).map(t=>t===old?nv:t);});}
@@ -2002,7 +2012,6 @@
             ...MODEL.sagas.map(s=>({id:"saga:"+s.name,name:s.name,kind:"saga",ref:s})),
             ...MODEL.transitions.map(t=>({id:"tr:"+t._id,name:((t.dann||[]).map(d=>d.rufe||d.sende).filter(Boolean).join(", ")),kind:"transition",ref:t})),
             ...MODEL.funktionen.map(f=>({id:"fk:"+f._id,name:f.name,kind:"funktion",ref:f})),
-            ...MODEL.dienste.map(d=>({id:"dn:"+d._id,name:d.name,kind:"dienst",ref:d})),
             ...(MODEL.bausteinFunktionen||[]).map(f=>({id:"fb:"+f._id,name:f.name,kind:"bausteinfunktion",ref:f})),
             ...MODEL.readModels.map(rm=>({id:"rm:"+rm._id,name:rm.name,kind:"readmodel",ref:rm})),
             ...MODEL.stores.map(s=>({id:"sto:"+s._id,name:s.name,kind:"store",ref:s})),
@@ -2025,10 +2034,10 @@
   //   Nach dem Event der Prozess (Regel → Auftrag → ƒ → Ergebnis),
   //   der in die Command-Spalte zurück sendet — so liest sich ein Ablauf in EINEM Block.
   const ROLE_AGG={command:3,decider:4,aggregate:5,state:5,event:6,rejection:6,applier:7,
-    saga:8,transition:9,auftrag:10,funktion:11,ergebnis:12,dienst:12.5,valueobject:13,enum:13,projektion:14,"handle:projektion":15,"handle:reaktion":15,
+    saga:8,transition:9,auftrag:10,funktion:11,ergebnis:12,valueobject:13,enum:13,projektion:14,"handle:projektion":15,"handle:reaktion":15,
     fn:16,store:17,readmodel:17,query:18,"handle:reader":19,queryresponse:20,reader:21,bausteinfunktion:11,konfig:13,code:22};
   // Rollen-Spalten im Geteilt-Band.
-  const ROLE_SHARED={saga:0,transition:1,auftrag:2,funktion:3,ergebnis:3.5,dienst:4,reaktion:2,"handle:reaktion":3,konfig:7,valueobject:8,enum:8,command:9,event:9,rejection:9,
+  const ROLE_SHARED={saga:0,transition:1,auftrag:2,funktion:3,ergebnis:3.5,reaktion:2,"handle:reaktion":3,konfig:7,valueobject:8,enum:8,command:9,event:9,rejection:9,
     fn:10,store:11,readmodel:11,bausteinfunktion:3,"handle:projektion":12,projektion:13,"handle:reader":14,reader:15,query:14,queryresponse:16,rumpf:17,code:17};
   // Rolle eines Knotens (vom Server): Handles je Besitzer-Art (Projektions- vs. Reader-Handle liegen in verschiedenen Spalten), Ergebnis-Events
   //   einer Funktion hinter ihr (Spalte „ergebnis“), sonst die Art. Funktionen einer Kette: je Tiefe eine eigene Spalte (11.01, 11.02 …).
@@ -2257,7 +2266,7 @@
       h("span",{class:"gtitle"+(n.name?" hatname":""),title:title+(n.name?" · "+n.name:"")},h("span",{class:"gk"},title+(n.name?" · ":"")),h("span",{class:"gn"},n.name||"")),
       dg.length?h("span",{class:"gdiag"+(nurWarn?" warn":""),title:dg.map(d=>d.text).join("\n")},(nurWarn?"⚠ ":"⛔ ")+dg.length):null,
       dsBadge(n),
-      n.kind==="host"||n.kind==="code"||n.kind==="rumpf"||n.kind==="bausteinfunktion"?null:h("span",{class:"gx",title:"Löschen",onclick:()=>delNode(n)},"✕"));
+      n.kind==="host"||n.kind==="code"||n.kind==="rumpf"||n.kind==="bausteinfunktion"&&n.ref.datei?null:h("span",{class:"gx",title:"Löschen",onclick:()=>delNode(n)},"✕"));
     head.onpointerdown=e=>{if(e.target.classList.contains("gx")||e.target.classList.contains("gcol"))return;startMove(e,el,P(n),()=>waehle(n.id));};
     el.append(head);
     el.append(kurzfassung(n));
@@ -2280,7 +2289,6 @@
     else if(n.kind==="reader")readerCard(body,n.ref);
     else if(n.kind==="reaktion")reaktionCard(body,n.ref);
     else if(n.kind==="funktion")funktionCard(body,n.ref);
-    else if(n.kind==="dienst")dienstCard(body,n.ref);
     else if(n.kind==="akteur")akteurCard(body,n.ref);
     else if(n.kind==="bausteinfunktion")funktionsKarte(body,n.ref);
     else if(n.kind==="client")clientCard(body,n.ref);
@@ -2320,10 +2328,12 @@
     else if(k==="reader")MODEL.reader.splice(MODEL.reader.indexOf(ref),1);
     else if(k==="reaktion")MODEL.reaktionen.splice(MODEL.reaktionen.indexOf(ref),1);
     else if(k==="funktion"){MODEL.funktionen.splice(MODEL.funktionen.indexOf(ref),1);MODEL.akteure.forEach(a=>{a.darf=ohneX(a.darf,ref.name);});}
-    // Ein gelöschter Dienst fällt aus jedem Konstruktor (Funktions- und Dienst-Implementierungen) — dieselbe Geste.
-    else if(k==="dienst"){MODEL.dienste.splice(MODEL.dienste.indexOf(ref),1);
-      MODEL.funktionen.forEach(f=>{if((f.konstruktor||[]).some(p=>dienstByName(p.typ)===ref))f.konstruktor=f.konstruktor.filter(p=>dienstByName(p.typ)!==ref);});
-      MODEL.dienste.forEach(q=>(q.implementierungen||[]).forEach(im=>{im.konstruktor=(im.konstruktor||[]).filter(p=>p.typ.replace(/\?$/,"").trim()!==ref.name);}));}
+    // Eine gelöschte (noch nicht geschriebene) Funktion fällt aus jedem Konstruktor und jedem IDarf — dieselbe Geste.
+    else if(k==="bausteinfunktion"){MODEL.bausteinFunktionen.splice(MODEL.bausteinFunktionen.indexOf(ref),1);
+      const ohneSie=l=>(l||[]).filter(p=>String(p.typ||"").replace(/\?$/,"").trim()!==ref.name);
+      MODEL.funktionen.forEach(f=>{f.konstruktor=ohneSie(f.konstruktor);});
+      MODEL.bausteinFunktionen.forEach(q=>{q.konstruktor=ohneSie(q.konstruktor);(q.umsetzungen||[]).forEach(u=>{u.konstruktor=ohneSie(u.konstruktor);});});
+      MODEL.akteure.forEach(a=>{a.darf=ohneX(a.darf,ref.name);});}
     else if(k==="akteur"){MODEL.akteure.splice(MODEL.akteure.indexOf(ref),1);
       MODEL.clients.forEach(c=>{if((c.verkoerpert||[]).includes(ref.name))c.verkoerpert=ohneX(c.verkoerpert,ref.name);});}
     else if(k==="client"){MODEL.clients.splice(MODEL.clients.indexOf(ref),1);AUF=null;}
@@ -2498,8 +2508,9 @@
         else if(f.eingaenge[I.ein])Object.assign(f.eingaenge[I.ein],{eingang:O.rec,hinweis:hin,herkunft:!hin});}}
     else if((O.type==="evtOut"||O.type==="sagaCmd")&&O.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb),e=f&&(f.eingaenge||[])[O.ein];
       if(e&&I.rec&&!(e.ausgaben=e.ausgaben||[]).includes(I.rec))e.ausgaben.push(I.rec);}
-    else if(O.type==="dienst"&&O.fb){const d=MODEL.dienste.find(x=>x._id===I.dn),f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb);
-      if(d&&f&&!(f.konstruktor=f.konstruktor||[]).some(p=>dienstByName(p.typ)===d))f.konstruktor.push({typ:d.name,name:paramName(d.name,f.konstruktor.map(p=>p.name))});}
+    // 🧩 Eine gerufene Funktion in den Konstruktor einer Funktions-Klasse bzw. einer Umsetzung (O.impl).
+    else if(O.type==="gerufen"&&O.fb){const g=MODEL.bausteinFunktionen.find(x=>x._id===I.fb),f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb),l=f&&ctorVon(f,O.impl);
+      if(istGerufen(g)&&l)nimmGerufene(l,g,f);}
     else if(O.type==="evtUse"){
       // Event → Pipeline-Knoten: Quelle (meldet / Event aus dem Log) bzw. Warten (eines von mehreren Events im Strom).
       if(I.flk){const k=flKnotenById(I.flk);if(k){if(I.role==="warte"){const l=flWarteAuf(k);if(!l.includes(O.rec))l.push(O.rec);k.warteAuf=l;k.typ=l[0];}else k.typ=O.rec;}}
@@ -2536,12 +2547,10 @@
     else if(O.type==="wcall"){const p=MODEL.projektionen.find(x=>x._id===O.proj);const hd=p&&p.handles[O.handleIdx];if(hd){hd.fns=hd.fns||[];if(!hd.fns.includes(I.fn))hd.fns.push(I.fn);}}
     // Reader-Handle ruft eine Read-Fn (auch über mehrere Stores) — anhängen, dedup.
     // Funktion liest über eine Store-Fähigkeit: ihr Interface wird ein Parameter (nur Read-Fns mit Fähigkeits-Interface).
-    // 🧩 Dienst in den Konstruktor einer Funktions- bzw. Dienst-Implementierung (fehlt die C#-Implementierung der Funktion: sie entsteht mit).
-    else if(O.type==="dienst"){const d=MODEL.dienste.find(x=>x._id===I.dn);
-      if(d&&O.fk){const f=MODEL.funktionen.find(x=>x._id===O.fk);if(f&&!(f.konstruktor=f.konstruktor||[]).some(p=>dienstByName(p.typ)===d)){
-        f.konstruktor.push({typ:d.name,name:paramName(d.name,f.konstruktor.map(p=>p.name))});if(!f.implementierung&&f.entwurf==null)f.entwurf="";}}
-      else if(d&&O.dn){const q=MODEL.dienste.find(x=>x._id===O.dn),im=q&&(q.implementierungen||[])[O.impl];
-        if(im&&q!==d&&!(im.konstruktor=im.konstruktor||[]).some(p=>dienstByName(p.typ)===d))im.konstruktor.push({typ:d.name,name:paramName(d.name,im.konstruktor.map(p=>p.name))});}}
+    // 🧩 Gerufene Funktion in den Konstruktor einer Katalog-Funktion (fehlt deren C#-Implementierung: sie entsteht mit).
+    else if(O.type==="gerufen"&&O.fk){const g=MODEL.bausteinFunktionen.find(x=>x._id===I.fb),f=MODEL.funktionen.find(x=>x._id===O.fk);
+      if(istGerufen(g)&&f){const n=(f.konstruktor=f.konstruktor||[]).length;nimmGerufene(f.konstruktor,g,null);
+        if(f.konstruktor.length>n&&!f.implementierung&&f.entwurf==null)f.entwurf="";}}
     else if(O.type==="rcall"&&O.fk){const f=MODEL.funktionen.find(x=>x._id===O.fk),z=fnById(I.fn);if(f&&z){
       const t=z.fn.faehigkeit||(z.fn.sig?null:faehigkeitVorschlag(z.store,z.fn));
       if(!t)deFlash("⚠ "+z.store.name+"."+z.fn.name+" hat kein Fähigkeits-Interface (CQRS051) — als Parameter nicht nutzbar",false);
@@ -2590,7 +2599,8 @@
     else if(O.type==="prozess"){const t=MODEL.transitions.find(x=>x._id===O.trans);if(t)t.prozess="";}
     else if(O.type==="evtUse"&&I.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===I.fb);if(f)f.eingaenge=(f.eingaenge||[]).filter(e=>e.eingang!==O.rec);}
     else if((O.type==="evtOut"||O.type==="sagaCmd")&&O.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb),e=f&&(f.eingaenge||[])[O.ein];if(e)e.ausgaben=ohne(e.ausgaben,I.rec);}
-    else if(O.type==="dienst"&&O.fb){const d=MODEL.dienste.find(x=>x._id===I.dn),f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb);if(d&&f)f.konstruktor=(f.konstruktor||[]).filter(p=>dienstByName(p.typ)!==d);}
+    else if(O.type==="gerufen"&&O.fb){const g=MODEL.bausteinFunktionen.find(x=>x._id===I.fb),f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb),l=f&&ctorVon(f,O.impl);
+      if(g&&l)l.splice(0,l.length,...l.filter(p=>gerufenByName(p.typ)!==g));}
     else if(O.type==="evtUse"){
       if(I.flk){const k=flKnotenById(I.flk);if(k){if(I.role==="warte"){k.warteAuf=flWarteAuf(k).filter(x=>x!==O.rec);k.typ=k.warteAuf[0]||"";}else k.typ="";}}
       else if(I.client){const c=MODEL.clients.find(x=>x._id===I.client);if(c)c.kenntnis=ohne(c.kenntnis,O.rec);}
@@ -2612,9 +2622,8 @@
     else if(O.type==="wcall"){const hd=handle(MODEL.projektionen,O.proj,O.handleIdx);if(hd)hd.fns=ohne(hd.fns,I.fn);}
     else if(O.type==="rcall"&&O.fk){const f=MODEL.funktionen.find(x=>x._id===O.fk),z=fnById(I.fn);
       if(f&&z)f.faehigkeiten=(f.faehigkeiten||[]).filter(p=>p.typ!==z.fn.faehigkeit);}
-    else if(O.type==="dienst"){const d=MODEL.dienste.find(x=>x._id===I.dn);
-      if(d&&O.fk){const f=MODEL.funktionen.find(x=>x._id===O.fk);if(f)f.konstruktor=(f.konstruktor||[]).filter(p=>dienstByName(p.typ)!==d);}
-      else if(d&&O.dn){const q=MODEL.dienste.find(x=>x._id===O.dn),im=q&&(q.implementierungen||[])[O.impl];if(im)im.konstruktor=(im.konstruktor||[]).filter(p=>dienstByName(p.typ)!==d);}}
+    else if(O.type==="gerufen"&&O.fk){const g=MODEL.bausteinFunktionen.find(x=>x._id===I.fb),f=MODEL.funktionen.find(x=>x._id===O.fk);
+      if(g&&f)f.konstruktor=(f.konstruktor||[]).filter(p=>gerufenByName(p.typ)!==g);}
     else if(O.type==="rcall"){const hd=handle(MODEL.reader,O.reader,O.handleIdx);if(hd)hd.fns=ohne(hd.fns,I.fn);}
     else if(O.type==="projref"){const r=MODEL.reader.find(x=>x._id===O.reader);if(r)r.projektion="";}
     else if(O.type==="query"){const r=MODEL.reader.find(x=>x._id===I.reader);if(r)r.handles=(r.handles||[]).filter(h=>h.query!==O.rec);}
@@ -2869,10 +2878,11 @@
       const p=mkE(ende(a),ende(b),color,dash);p.dataset.a=knotenIdVon(a);p.dataset.b=knotenIdVon(b);};
     // Akteur → was er darf (rosa): vom Akteur-Band zur Nachricht.
     MODEL.akteure.forEach(a=>(a.darf||[]).forEach(nm=>add("akt:darf:"+a._id+":"+nm,"darf:in:"+nm,"#e07ab4")));
-    // Funktion: Event → Auf(Event) · Auf → Ausgabe (Command bzw. Event/Hinweis) · Konstruktor → Dienst.
+    // Funktion: Event → Auf(Event) · Auf → Ausgabe (Command bzw. Event/Hinweis) · Konstruktor (der Klasse bzw. einer Umsetzung) → gerufene Funktion.
     (MODEL.bausteinFunktionen||[]).forEach(f=>{(f.eingaenge||[]).forEach((e,i)=>{add("evt:out:"+e.eingang,"fb:ein:"+f._id+":"+i,"#4fb06a");
         (e.ausgaben||[]).forEach(x=>add("fb:aus:"+f._id+":"+i+":"+x,(recArt(x)==="command"?"cmd:in:":"evt:in:")+x,recArt(x)==="command"?"#4a86d6":"#4fb06a"));});
-      (f.konstruktor||[]).forEach((p,i)=>{const d=dienstByName(p.typ);if(d)add("dn:out:fb:"+f._id+":"+i,"dn:in:"+d._id,"#b48ead");});});
+      (f.konstruktor||[]).forEach((p,i)=>{const g=gerufenByName(p.typ);if(g&&g!==f)add("gr:out:fb:"+f._id+":"+i,"gr:in:"+g._id,"#b48ead");});
+      (f.umsetzungen||[]).forEach((u,ii)=>(u.konstruktor||[]).forEach((p,i)=>{const g=gerufenByName(p.typ);if(g&&g!==f)add("gr:out:fb:"+f._id+":u"+ii+":"+i,"gr:in:"+g._id,"#b48ead");}));});
     // Vertrag (Akteur-Konzept §3): Event → Zusage → Commands (rosa) — die Kette läuft durch den Akteur draußen.
     vertragsZusagen().forEach(({a,r,i})=>{if(r.eingang)add("evt:out:"+r.eingang,"auf:in:"+a._id+":"+i,"#e07ab4");
       (r.ausgaenge||[]).forEach(c=>{if(c)add("auf:send:"+a._id+":"+i+":"+c,"cmd:in:"+c,"#e07ab4");});});
@@ -2917,10 +2927,8 @@
       (f.ergebnisse||[]).forEach(e=>{if(e)add("fk:out:"+f._id+":"+e,"evt:in:"+e,"#4fb06a");});
       // ⚙ Lese-Fähigkeit (Parameter) → die Read-Fn, deren Interface sie ist.
       (f.faehigkeiten||[]).forEach((p,i)=>{const z=leseFnZu(p.typ);if(z)add("rcall:out:fk:"+f._id+":"+i,"rcall:in:"+z.store._id+":"+z.fn._id,"#c08a3e");});
-      // 🧩 Dienst im Konstruktor → der Dienst.
-      (f.konstruktor||[]).forEach((p,i)=>{const d=dienstByName(p.typ);if(d)add("dn:out:fk:"+f._id+":"+i,"dn:in:"+d._id,"#7d9b55",true);});});
-    MODEL.dienste.forEach(q=>(q.implementierungen||[]).forEach((im,ii)=>(im.konstruktor||[]).forEach((p,i)=>{const d=dienstByName(p.typ);
-      if(d&&d!==q)add("dn:out:dn:"+q._id+":"+ii+":"+i,"dn:in:"+d._id,"#7d9b55",true);})));
+      // 🧩 Gerufene Funktion im Konstruktor → ihre Karte.
+      (f.konstruktor||[]).forEach((p,i)=>{const g=gerufenByName(p.typ);if(g)add("gr:out:fk:"+f._id+":"+i,"gr:in:"+g._id,"#7d9b55",true);});});
     // Verbindungen, die schon anders gezeichnet werden (Fluss-Kanten, Ablauf-Kette) — hier nur als Port-Paar für ✓/Lösen im Verbinden-Modus.
     const nurPaar=(k1,k2)=>{if(SLOTS[k1]&&SLOTS[k2])KANTEN.push([k1,k2]);};
     MODEL.fluesse.forEach(f=>(f.knoten||[]).forEach(z=>{
@@ -3223,12 +3231,12 @@
     else if(k==="flussknoten")t=flussKurz(n);
     else if(k==="saga")t="Auslöser: "+(r.triggerEvent||"—")+" · "+transOf(r).length+" Regeln";
     else if(k==="transition")t="WENN "+kurz(r.wenn)+" → "+kurz((r.dann||[]).map(d=>d.rufe?"ƒ "+d.rufe+(d.zeitlimit?" ⏳":""):d.sende+(d.zeitlimit?" ⏳":"")));
+    else if(k==="bausteinfunktion"&&istGerufen(r))t="🧩 "+kurz(r.methoden.map(m=>m.name))+" · "+((r.umsetzungen||[]).length?"⚙ "+kurz(r.umsetzungen.map(u=>u.name)):r.klasse?"Klasse":"⚠ keine Umsetzung");
     else if(k==="bausteinfunktion")t=(r.eingaenge||[]).map(e=>"Auf("+(e.eingang||"?")+(e.hinweis?" ·Hinweis":"")+") → "+((e.ausgaben||[]).length?kurz(e.ausgaben):"—")+(e.strom?" (Strom)":"")).join(" · ")
       +((r.umsetzungen||[]).length?" · Umsetzung "+kurz(r.umsetzungen.map(u=>u.name)):r.klasse?"":" · draußen");
     else if(k==="funktion"){const dn=KETTE.filter(x=>x.art==="dann"&&x.von==="fk:"+r._id).map(x=>x.d.rufe?"ƒ "+x.d.rufe:x.d.sende);
       t=(r.auftrag||"?")+" → "+((r.ergebnisse||[]).length?kurz(r.ergebnisse):"(kein Ergebnis)")+(dn.length?" · dann "+kurz(dn):"");}
     else if(k==="auftrag")t="Eingang von ƒ "+(r.funktion||"—");
-    else if(k==="dienst")t=((r.methoden||[]).length?kurz(r.methoden.map(m=>m.name)):"keine Methode")+" · "+((r.implementierungen||[]).length?"⚙ "+kurz(r.implementierungen.map(i=>i.name)):"⚠ keine Implementierung");
     else if(k==="store")t=(r.writeFns||[]).length+" schreibend · "+(r.readFns||[]).length+" lesend";
     else if(k==="readmodel"&&r.geteilt)t="⇄ geteilt";
     else if(k==="auf")t="◀ "+(r.eingang||"?")+" → "+((r.ausgaenge||[]).length?kurz(r.ausgaenge)+(r.strom?" (Strom)":""):"zur Kenntnis");
@@ -3296,7 +3304,7 @@
     if(!k){if(n.kind==="client")return CL_PRE+n.ref.name;if(n.kind==="flussknoten")return FL_PRE+n.own.ref._id;
       if(n.kind==="rumpf")return domNs(n.own);}
     return (!k&&nsVon(n))||(VIEW.heim||{})[n.id]||OHNE_DOM;}
-  const domLabel=ns=>ns===RAND_KEY?"🚪 Rand":ns===BEGR_KEY?"📚 Begriffe":istRegionKarte(ns)?(({agg:"▣ ",fb:"ƒ ",dn:"🧩 ",sto:"👁 "})[ns.split(":")[0]])+((NODEBY.get(ns)||{}).name||ns.replace(/^\w+:(\w+:)?/,""))
+  const domLabel=ns=>ns===RAND_KEY?"🚪 Rand":ns===BEGR_KEY?"📚 Begriffe":istRegionKarte(ns)?(({agg:"▣ ",fb:"ƒ ",sto:"👁 "})[ns.split(":")[0]])+((NODEBY.get(ns)||{}).name||ns.replace(/^\w+:(\w+:)?/,""))
     :ns===OHNE_DOM?"⋯ ohne Domäne":istHostDom(ns)?"🖥 Host · "+(WB.zustand&&WB.zustand.aktiv||"Umgebung"):istClientDom(ns)?"🔌 "+clientAnzeige({name:ns.slice(CL_PRE.length)}):istFlussDom(ns)?"⛓ "+((flussVonDom(ns)||{}).name||"Pipeline"):letztesSeg(ns);
   // Block (Aggregat bzw. Brücke) eines Knotens: aus dem Graphen; ein über eine Spalte angelegter, noch unverdrahteter Knoten
   //   behält bis zur Verdrahtung den Block dieser Spalte (VIEW.heimBlk) — statt im Inselkasten zu landen.
@@ -3547,11 +3555,11 @@
         deFlash("＋ Domäne "+ns,true);return null;});}
   // ＋ in der Menüleiste: Baustein IN dieser Domäne (Namespace; Decider/Applier/State ans Aggregat, Regel an den Prozess der Domäne).
   const BAU_GRUPPEN=[["Außen",["akteur","client"]],["Schreibseite",["command","event","rejection","aggregate","state","decider","applier"]],
-    ["Typen",["valueobject","enum","konfig"]],["Abläufe",["saga","transition","funktion","dienst","reaktion","quelle"]],
+    ["Typen",["valueobject","enum","konfig"]],["Abläufe",["saga","transition","funktion","gerufen","reaktion","quelle"]],
     ["Leseseite",["readmodel","store","projektion","query","queryresponse","reader"]]];
   // ＋ IN EINER REGION (Hierarchie): was man hier anlegt, gehört dem Block — die Geste schreibt das Signatur-Fakt, aus dem der Besitz folgt.
   //   Aggregat: Command (zielt auf es) und je Decide ein Event bzw. eine Ablehnung (das Decide gibt sie aus). Rand: Akteur, Client, Quelle.
-  //   Begriffe: Wertobjekt, Enum, Konfig. Sicht: Read Model, Projektion, Reader, Query. Funktion/Dienst: Konfig (ihr Konstruktor nimmt sie).
+  //   Begriffe: Wertobjekt, Enum, Konfig. Sicht: Read Model, Projektion, Reader, Query. Funktion: Konfig (ihr Konstruktor nimmt sie), gerufene Funktion.
   function regionKontext(ns){const karte=istRegionKarte(ns)?NODEBY.get(ns):null;
     return {karte,ns:karte?nsVon(karte)||defaultNsGlobal():defaultNsGlobal(),agg:ns.startsWith("agg:")&&karte?karte.name:"",reg:ns};}
   function regionMenue(cx,cy,ns){const c=regionKontext(ns),art=regionArt(ns);
@@ -3565,7 +3573,7 @@
     else if(art==="Rand")it.push(neu("akteur"),neu("client"),neu("quelle"));
     else if(art==="Begriffe")it.push(neu("valueobject"),neu("enum"),neu("konfig"));
     else if(art==="Sicht")it.push(neu("readmodel"),neu("projektion"),neu("reader"),neu("query"));
-    else if(art==="Funktion"||art==="Dienst")it.push(neu("konfig"),{t:"＋ Ergebnis-Event — schreibt der Editor noch nicht (Signatur der Funktion im Code)",aus:true});
+    else if(art==="Funktion")it.push(neu("konfig"),neu("gerufen"));
     menue(cx,cy,"＋ in "+domLabel(ns),it);}
   function bausteinMenue(cx,cy,ns){if(regionArt(ns))return regionMenue(cx,cy,ns);const agg=MODEL.aggregate.find(a=>a.namespace===ns),sg=MODEL.sagas.find(s=>s.namespace===ns);
     const it=[];BAU_GRUPPEN.forEach(([g,ks])=>{it.push({kopf:g});ks.forEach(k=>it.push({t:"＋ "+(NODELABEL[k]||k),
@@ -3788,7 +3796,7 @@
   //   geänderte/neue Karten ganz, entfernte als Schlüssel — und schickt ihn als Geste. Der Server schreibt den Patch (Schreiber, Löschen am
   //   Ort), liest warm neu und schickt das Board zurück: das ist der neue Stand. Umbenennen ist eine eigene Geste (Roslyn-Renamer), ↶ nimmt
   //   den letzten Patch zurück. Solange ein Eingabefeld den Fokus hat, wartet die Geste (sonst ein Patch je Tastendruck).
-  const GSAMMLUNGEN=["records","enums","aggregate","decider","applier","sagas","fluesse","funktionen","bausteinFunktionen","dienste","akteure","clients","readModels","stores","projektionen","reaktionen","reader"];
+  const GSAMMLUNGEN=["records","enums","aggregate","decider","applier","sagas","fluesse","funktionen","bausteinFunktionen","akteure","clients","readModels","stores","projektionen","reaktionen","reader"];
   // Natürliche Schlüssel — dieselbe Regel wie der Server (GraphExtractor.KartenSchluessel).
   const GKEY=c=>c==="decider"?(d=>(d.aggregat||"")+"|"+(d.command||"")):c==="applier"?(a=>(a.aggregat||"")+"|"+(a.event||""))
     :["readModels","stores","projektionen","reaktionen","reader"].includes(c)?(x=>x.name||""):(x=>(x.namespace||"")+"|"+(x.name||""));
@@ -3910,8 +3918,8 @@
   //   stehen an der Karte, die sie betreffen. Alle Daten kommen fertig vom Server (Frontend-Bauregel P3): das JS kennt kein
   //   Umgebungs-Modell, nur das Schema und die Datei, wie sie ist.
   const WB={zustand:null,schema:null,umg:null,umgName:null,dirty:false,uhr:null,diag:[],boot:[],letzter:null,refs:{},ver:0,es:null};
-  const HOST_ORDNUNG=["Umgebung","EventStore","VersionIndex","Cluster","Schreibpfad","Lebenszyklus","Konsum","Transport","Identitaeten","Quellen","Funktionen","Dienste","Konfig"];
-  const HOST_SYM={Umgebung:"🏷",EventStore:"🗄",VersionIndex:"⚡",Cluster:"🕸",Schreibpfad:"✍",Lebenszyklus:"⏳",Konsum:"📥",Transport:"🔗",Identitaeten:"🪪",Quellen:"📁",Funktionen:"ƒ",Dienste:"🧩",Konfig:"⚙",Uhr:"🕰"};
+  const HOST_ORDNUNG=["Umgebung","EventStore","VersionIndex","Cluster","Schreibpfad","Lebenszyklus","Konsum","Transport","Identitaeten","Quellen","Funktionen","Konfig"];
+  const HOST_SYM={Umgebung:"🏷",EventStore:"🗄",VersionIndex:"⚡",Cluster:"🕸",Schreibpfad:"✍",Lebenszyklus:"⏳",Konsum:"📥",Transport:"🔗",Identitaeten:"🪪",Quellen:"📁",Funktionen:"ƒ",Konfig:"⚙",Uhr:"🕰"};
   function hostKnoten(){if(!WB.schema)return [];
     const ab=[...HOST_ORDNUNG.filter(k=>WB.schema[k]),...Object.keys(WB.schema).filter(k=>!HOST_ORDNUNG.includes(k)),"Uhr"];
     return ab.map(k=>({id:"host:"+k,name:(HOST_SYM[k]||"")+" "+k,kind:"host",ref:WB.refs[k]||(WB.refs[k]={abschnitt:k})}));}
@@ -3966,7 +3974,7 @@
     return box;}
   function wbJe(sch,obj,setze){const box=h("div",{class:"wb-je"});
     const neu=v=>{obj=v;setze(Object.keys(v).length?v:undefined);};
-    // Schlüssel aus dem Code (eintraege: je Dienst/Konfig-Record sein eigenes Schema) — das Formular kommt fertig vom Server.
+    // Schlüssel aus dem Code (eintraege: je gerufene Funktion/Konfig-Record sein eigenes Schema) — das Formular kommt fertig vom Server.
     const eig=sch.eintraege||{};
     Object.keys(obj).forEach(name=>{
       const zeile=h("details",{class:"wb-eintrag",open:""},h("summary",{},name,eig[name]||!sch.eintraege?null:h("span",{class:"gp-mark",title:"Im Code gibt es keinen "+(sch.schluessel||"Eintrag")+" dieses Namens"}," ⚠ unbekannt"),

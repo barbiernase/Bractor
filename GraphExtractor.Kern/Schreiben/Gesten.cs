@@ -37,7 +37,7 @@ public static class KartenSchluessel
     /// <summary>Die Sammlungen, die aus dem Code kommen und von Gesten geändert werden.</summary>
     public static readonly string[] Sammlungen =
     [
-        "records", "enums", "aggregate", "decider", "applier", "dienste", "bausteinFunktionen", "akteure", "clients",
+        "records", "enums", "aggregate", "decider", "applier", "bausteinFunktionen", "akteure", "clients",
         "readModels", "stores", "projektionen", "reader",
     ];
 
@@ -117,7 +117,6 @@ public static class Gesten
         var en = Nach(code.Enums, e => e.Namespace + "|" + e.Name);
         var agg = Nach(code.Aggregate, a => a.Namespace + "|" + a.Name);
         var dec = Nach(code.Decider, d => d.Aggregat + "|" + d.Command);
-        var dst = Nach(code.Dienste, d => d.Namespace + "|" + d.Name);
         var fkt = Nach(code.BausteinFunktionen, f => f.Namespace + "|" + f.Name);
         var akt = Nach(code.Akteure, a => a.Namespace + "|" + a.Name);
         var cli = Nach(code.Clients, c => c.Namespace + "|" + c.Name);
@@ -138,7 +137,6 @@ public static class Gesten
             Enums = soll.Enums.Select(e => e with { Herkunft = en.GetValueOrDefault(e.Namespace + "|" + e.Name)?.Herkunft }).ToList(),
             Aggregate = soll.Aggregate.Select(a => a with { Herkunft = agg.GetValueOrDefault(a.Namespace + "|" + a.Name)?.Herkunft }).ToList(),
             Decider = soll.Decider.Select(d => d with { Herkunft = dec.GetValueOrDefault(d.Aggregat + "|" + d.Command)?.Herkunft }).ToList(),
-            Dienste = soll.Dienste.Select(d => d with { Herkunft = dst.GetValueOrDefault(d.Namespace + "|" + d.Name)?.Herkunft }).ToList(),
             BausteinFunktionen = soll.BausteinFunktionen.Select(f => f with { Herkunft = fkt.GetValueOrDefault(f.Namespace + "|" + f.Name)?.Herkunft }).ToList(),
             Akteure = soll.Akteure.Select(a => a with { Herkunft = akt.GetValueOrDefault(a.Namespace + "|" + a.Name)?.Herkunft }).ToList(),
             Clients = soll.Clients.Select(c => c with { Herkunft = cli.GetValueOrDefault(c.Namespace + "|" + c.Name)?.Herkunft }).ToList(),

@@ -235,7 +235,8 @@ Lauf, der festhielt. Commands gehen immer über den `CommandEmitter` (§4.6); ei
 
 **Laufort ist Konfig, nicht Code.** Die Umgebungs-Datei sagt je Funktion `Funktionen:<F>:Laufort` (`Host` · `Extern` · `Hand`), dazu
 `Implementierung`, `Slots`, `Wiederholungen` (`Abstractions/Umgebung/UmgebungKonfig.cs`); `AddCqrs` bindet daraus beim Start
-(`BindeFunktionen`), danach die Domänen-Dienste der Umsetzungen (`BindeDienste`, `GeneratedDienste`). Ohne Eintrag läuft eine Klasse im Host,
+(`BindeFunktionen`), danach die gerufenen Funktionen, die die Umsetzungen im Konstruktor nehmen (`BindeGerufene`, `GeneratedGerufene`; eine
+gerufene Funktion nennt unter `Funktionen:<Name>` nur ihre `Implementierung`). Ohne Eintrag läuft eine Klasse im Host,
 eine Schnittstelle mit genau einer Umsetzung ebenso, eine Schnittstelle ohne Umsetzung, die ein Client trägt (er verkörpert einen Akteur mit `IDarf<F>`), draußen; sonst ist
 es ein Boot-Fehler, der den Eintrag nennt. Eine Funktion mit Lese-Fähigkeit läuft nur im Host.
 - **Host:** die Umsetzung **je Aktivierung** (`FunktionsAktivierung`): beim Aktivieren in einem eigenen DI-Bereich gebaut, samt ihren Diensten

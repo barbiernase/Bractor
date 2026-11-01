@@ -16,9 +16,9 @@ namespace Domain.SourceGeneration;
 /// <item>kein <c>readonly</c>-Feld einer veränderlichen Sammlung (Liste, Wörterbuch, Menge, Array, <c>StringBuilder</c>) — das wäre Zustand durch die
 ///   Hintertür;</item>
 /// <item><c>IZustand&lt;T&gt;</c> steht nur im Konstruktor einer Funktions-Klasse (nicht in einer Umsetzung einer Schnittstelle — draußen lebt der
-///   Zustand im Worker, A8 —, nicht in einem Dienst, Aggregat oder sonst wo).</item>
+///   Zustand im Worker, A8 —, nicht in einer gerufenen Funktion, einem Aggregat oder sonst wo).</item>
 /// </list>
-/// Dienste im Konstruktor (gehalten in <c>readonly</c>-Feldern oder Parametern) sind Ressourcen der Aktivierung, kein Zustand. Nur Code-Fakten:
+/// Gerufene Funktionen im Konstruktor (gehalten in <c>readonly</c>-Feldern oder Parametern) sind Ressourcen der Aktivierung, kein Zustand. Nur Code-Fakten:
 /// Marker, Konstruktor-Parameter, Feld- und Eigenschafts-Symbole.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
@@ -66,7 +66,9 @@ public sealed class ZustandAnalyzer : DiagnosticAnalyzer
                 foreach (var p in c.Parameters.Where(p => Funktionsform.IstZustand(p.Type)))
                     ctx.ReportDiagnostic(Diagnostic.Create(Regel, p.Locations.FirstOrDefault() ?? t.Locations.FirstOrDefault(), t.Name, umsetzung
                         ? $"die Umsetzung einer Funktion draußen nimmt '{p.Type.ToDisplayString()}' — Zustand hat nur eine Funktions-Klasse (draußen lebt er im Worker)"
-                        : $"'{p.Type.ToDisplayString()}' steht im Konstruktor von etwas, das keine Funktion ist"));
+                        : Funktionsform.IstGerufen(t) || Funktionsform.Umsetzt(t).Any(Funktionsform.IstGerufen)
+                            ? $"die gerufene Funktion nimmt '{p.Type.ToDisplayString()}' — Zustand hat (noch) nur eine Funktion mit Eingängen"
+                            : $"'{p.Type.ToDisplayString()}' steht im Konstruktor von etwas, das keine Funktion ist"));
 
         if (!baustein && !umsetzung) return;
         foreach (var m in t.GetMembers().Where(m => !m.IsImplicitlyDeclared))

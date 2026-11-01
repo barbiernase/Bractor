@@ -94,28 +94,22 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
             Datei(a.Datei!, $"state {a.Namespace}.{a.Name}", t => StateFelder(t, a));
         foreach (var d in modell.Decider.Where(d => d.Datei != null && Herkunft.Geaendert(d.Herkunft, Herkunft.Von(d))))
             Datei(d.Datei!, $"decide {d.Aggregat}.{d.Command}", t => DecideRueckgabe(t, d));
-        // Domänen-Dienst (docs/06 §6.5): die Methoden am Interface und an jeder Implementierung (fehlende als throw-Stub); je Implementierung ihr
-        //   Konstruktor. Rümpfe gehören dem Code (✎ am Rumpf); der Name ist die Identität (Umbenennen ist ein Refactoring).
-        foreach (var d in modell.Dienste.Where(d => d.Datei != null && Herkunft.Geaendert(d.Herkunft, Herkunft.Von(d))))
-        {
-            var was = $"dienst {d.Namespace}.{d.Name}";
-            Datei(d.Datei!, was, t => DienstMethoden(t, d.Name, d, null));
-            foreach (var i in d.Implementierungen.Where(i => i.Datei != null))
-            {
-                Datei(i.Datei!, was, t => DienstMethoden(t, i.Name, d, i));
-                Datei(i.Datei!, was, t => Konstruktor(t, i.Name, i.Konstruktor));
-            }
-        }
-        // Funktion (IFunktion): je Eingang ein Auf — an der Klasse bzw. Schnittstelle und an jeder Umsetzung (fehlende als throw-Stub, Rückgabe
-        //   aus den Ausgaben, die Hülle bleibt); entfernte Eingänge fallen an Klasse bzw. Schnittstelle weg (eine Umsetzung behält ihren Rumpf).
-        //   Der Konstruktor einer Klasse wird abgeglichen. Rümpfe gehören dem Code.
+        // Funktion (IFunktion): je Eingang ein Auf bzw. je gerufene Methode ihre Signatur — an der Klasse bzw. Schnittstelle und an jeder Umsetzung
+        //   (fehlende als throw-Stub, Rückgabe aus den Ausgaben, die Hülle bleibt); entfernte fallen an der Schnittstelle (Auf auch an der Klasse) weg,
+        //   eine Umsetzung behält ihren Rumpf. Der Konstruktor der Klasse und jeder Umsetzung wird abgeglichen. Rümpfe gehören dem Code (✎ am Rumpf);
+        //   der Name ist die Identität (Umbenennen ist ein Refactoring).
         foreach (var f in modell.BausteinFunktionen.Where(f => f.Datei != null && Herkunft.Geaendert(f.Herkunft, Herkunft.Von(f))))
         {
             var was = $"funktion {f.Namespace}.{f.Name}";
             Datei(f.Datei!, was, t => FunktionsMethoden(t, f.Name, f, stub: f.Klasse, entfernen: true));
+            Datei(f.Datei!, was, t => GerufeneMethoden(t, f.Name, f, stub: f.Klasse, entfernen: !f.Klasse));
             if (f.Klasse) Datei(f.Datei!, was, t => Konstruktor(t, f.Name, f.Konstruktor));
             foreach (var u in f.Umsetzungen.Where(u => u.Datei != null))
+            {
                 Datei(u.Datei!, was, t => FunktionsMethoden(t, u.Name, f, stub: true, entfernen: false));
+                Datei(u.Datei!, was, t => GerufeneMethoden(t, u.Name, f, stub: true, entfernen: false));
+                Datei(u.Datei!, was, t => Konstruktor(t, u.Name, u.Konstruktor));
+            }
         }
         foreach (var a in modell.Akteure.Where(a => a.Datei != null && Herkunft.Geaendert(a.Herkunft, Herkunft.Von(a))))
             Datei(a.Datei!, $"akteur {a.Namespace}.{a.Name}", t => AkteurBefugnisse(t, a));
@@ -305,11 +299,11 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         return Signatur(text, m, f.Rueckgabe, f.Parameter);
     }
 
-    // ── Dienst: Methoden-Signaturen (Abgleich je Name), fehlende Methoden anhängen; am Interface fallen entfernte weg ──
-    private (string, string)? DienstMethoden(string text, string klasse, Dienst d, DienstImpl? impl)
+    // ── Gerufene Methoden: Signaturen (Abgleich je Name), fehlende anhängen (an einer Klasse als Stub); an der Schnittstelle fallen entfernte weg ──
+    private (string, string)? GerufeneMethoden(string text, string klasse, BausteinFunktion f, bool stub, bool entfernen)
     {
         var notiz = new List<string>();
-        foreach (var m in d.Methoden)
+        foreach (var m in f.Methoden)
         {
             var root = Parse(text);
             if (root.DescendantNodes().OfType<TypeDeclarationSyntax>().FirstOrDefault(t => t.Identifier.Text == klasse) is not { } typ)
@@ -320,17 +314,18 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
                 continue;
             }
             var einzug = "    ";
-            var zeile = impl == null ? $"{einzug}{Scaffolder.DienstMethodeKopf(m)};\n" : Scaffolder.DienstMethodeStub(d, impl, m, einzug);
+            var zeile = stub ? Scaffolder.MethodenStub(klasse, m, einzug) : $"{einzug}{Scaffolder.MethodenKopf(m)};\n";
             var vor = typ.CloseBraceToken.SpanStart;
-            var leer = typ.Members.Count > 0 && impl != null ? "\n" : "";
+            var leer = typ.Members.Count > 0 && stub ? "\n" : "";
             text = MitNamespaces(text[..vor] + leer + zeile + text[vor..], m.Parameter.Select(p => p.Typ).Append(m.Rueckgabe));
             notiz.Add("+" + m.Name);
         }
-        if (impl == null)
+        if (entfernen)
         {
             var root = Parse(text);
             var typ = root.DescendantNodes().OfType<InterfaceDeclarationSyntax>().FirstOrDefault(t => t.Identifier.Text == klasse);
-            var weg = typ?.Members.OfType<MethodDeclarationSyntax>().Where(x => d.Methoden.All(m => m.Name != x.Identifier.Text)).ToList() ?? [];
+            var weg = typ?.Members.OfType<MethodDeclarationSyntax>()
+                .Where(x => x.Identifier.Text != Abstractions.Funktionsvertrag.Auf && f.Methoden.All(m => m.Name != x.Identifier.Text)).ToList() ?? [];
             foreach (var x in weg.OrderByDescending(x => x.SpanStart))
             {
                 var von = x.GetLeadingTrivia().FirstOrDefault(t => t.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)) is { } doku && doku != default
@@ -409,7 +404,7 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         return huelle != null ? $"{huelle}<{kern}>" : kern;
     }
 
-    // ── Konstruktor einer Dienst-Implementierung: nur die Parameterliste — Primär-Konstruktor bzw. der öffentliche Konstruktor ──
+    // ── Konstruktor einer Funktions-Klasse bzw. Umsetzung: nur die Parameterliste — Primär-Konstruktor bzw. der öffentliche Konstruktor ──
     private (string, string)? Konstruktor(string text, string klasse, IReadOnlyList<Parameter> soll)
     {
         var root = Parse(text);
@@ -601,10 +596,8 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
     {
         _nsVon ??= modell.Records.Select(r => (r.Name, r.Namespace)).Concat(modell.Enums.Select(e => (e.Name, e.Namespace)))
             .Concat((modell.Lesen?.Stores ?? []).SelectMany(s => s.Fns.Select(f => (f.Name, f.Namespace ?? s.Namespace)).Append((s.Name, s.Namespace))))
-            // Funktionen: ein Akteur, der eine rechnen darf (IDarf<IFunktion>), braucht ihren Namespace.
+            // Funktionen: ein Akteur, der eine rechnen darf (IDarf<IFunktion>), und eine Umsetzung, die eine gerufene nimmt, brauchen ihren Namespace.
             .Concat(modell.BausteinFunktionen.Select(f => (f.Name, f.Namespace)))
-            // Domänen-Dienste: eine Implementierung, die einen nimmt, braucht seinen Namespace.
-            .Concat(modell.Dienste.Select(d => (d.Name, d.Namespace)))
             // Akteure: ein Client, der einen verkörpert (IVerkoerpert<A>), braucht seinen Namespace.
             .Concat(modell.Akteure.Select(a => (a.Name, a.Namespace)))
             .GroupBy(x => x.Name).ToDictionary(g => g.Key, g => g.First().Item2, StringComparer.Ordinal);

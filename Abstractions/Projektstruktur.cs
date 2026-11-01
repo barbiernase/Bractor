@@ -29,7 +29,7 @@ static class Projektstruktur
         Schreibseite,
         /// <summary><c>&lt;Wurzel&gt;.Projections</c>: ReadModels, Queries, Antworten, Store-Fähigkeiten, Projektionen, Reader.</summary>
         Leseseite,
-        /// <summary><c>&lt;Wurzel&gt;.Pipeline</c>: Funktionen (Klasse im Host, Schnittstelle draußen), ihre Events, Domänen-Dienste, Konfig-Records.</summary>
+        /// <summary><c>&lt;Wurzel&gt;.Pipeline</c>: Funktionen (mit Eingängen und gerufene; Klasse im Host, Schnittstelle mit Umsetzungen oder draußen), ihre Events, Konfig-Records.</summary>
         Ablaeufe,
         /// <summary><c>&lt;Wurzel&gt;.Akteure</c>: Akteure und Client-Verträge — der äußerste Ring.</summary>
         Akteure,
@@ -49,7 +49,7 @@ static class Projektstruktur
         /// bei der Schreibseite, denn der Decider sieht die Leseseite nicht. Eine Query an einen Reader ist <see cref="Query"/>.</summary>
         AggregatQuery, AggregatAntwort,
         ReadModel, Query, Antwort, StoreBuendel, StoreFaehigkeit, Projektion, Reader,
-        Funktion, FunktionsErgebnis, FunktionsImplementierung, Dienst, DienstImplementierung, Konfig,
+        Funktion, FunktionsErgebnis, FunktionsImplementierung, Konfig,
         /// <summary>Eine Funktion als Klasse (Baustein-Form, <c>Auf</c>): sie läuft im Host; als Schnittstelle ist sie <see cref="Funktion"/> (draußen).</summary>
         HostFunktion,
         Akteur, ClientVertrag,
@@ -166,7 +166,7 @@ static class Projektstruktur
             case Primitive.Projektion: case Primitive.Reader:
                 return new[] { Rolle.Leseseite };
             case Primitive.Funktion: case Primitive.FunktionsErgebnis:
-            case Primitive.FunktionsImplementierung: case Primitive.Dienst: case Primitive.DienstImplementierung: case Primitive.Konfig:
+            case Primitive.FunktionsImplementierung: case Primitive.Konfig:
             case Primitive.HostFunktion:
                 return new[] { Rolle.Ablaeufe };
             case Primitive.Akteur: case Primitive.ClientVertrag:
@@ -285,8 +285,6 @@ static class Projektstruktur
             case Primitive.HostFunktion: return "eine Funktion im Host";
             case Primitive.FunktionsErgebnis: return "ein Event einer Funktion";
             case Primitive.FunktionsImplementierung: return "eine Funktions-Implementierung";
-            case Primitive.Dienst: return "ein Domänen-Dienst";
-            case Primitive.DienstImplementierung: return "eine Dienst-Implementierung";
             case Primitive.Konfig: return "ein Konfig-Record";
             case Primitive.Akteur: return "ein Akteur";
             case Primitive.ClientVertrag: return "ein Client-Vertrag";

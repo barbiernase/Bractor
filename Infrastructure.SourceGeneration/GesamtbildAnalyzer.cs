@@ -123,7 +123,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                     Ziel(f.Query, "Reader " + t.Name);
                     erzeugt.UnionWith(f.Antworten);
                 }
-            if (t.TypeKind == TypeKind.Interface && iFunktion != null && IstT(t, iFunktion) && !SymbolEqualityComparer.Default.Equals(t, iFunktion))
+            if (t.TypeKind == TypeKind.Interface && iFunktion != null && IstT(t, iFunktion) && Funktionsform.IstBaustein(t))
                 foreach (var m in t.GetMembers().OfType<IMethodSymbol>().Where(m => m.IsAbstract))
                 {
                     erzeugt.UnionWith(Faelle(m.ReturnType));

@@ -107,7 +107,10 @@ public sealed class TransportKonfig
     public bool JsonEingang { get; set; }
 }
 
-/// <summary>Laufort einer Funktion (Abschnitt <c>Funktionen:&lt;IFunktion&gt;</c>).</summary>
+/// <summary>
+/// Eine Funktion in dieser Umgebung (Abschnitt <c>Funktionen:&lt;Name&gt;</c>): ihre Implementierung und — nur mit Eingängen — Laufort, Slots,
+/// Wiederholungen, Worker und Zustand. Eine gerufene Funktion (ohne <c>Auf</c>) läuft im Prozess ihres Halters: bei ihr steht nur die Implementierung.
+/// </summary>
 public sealed class FunktionsKonfig
 {
     public FunktionsLaufort Laufort { get; set; } = FunktionsLaufort.Host;
@@ -157,16 +160,6 @@ public sealed class WorkerKonfig
 }
 
 /// <summary>
-/// Welche Implementierung ein Domänen-Dienst (<c>IDienst</c>) in dieser Umgebung hat (Abschnitt <c>Dienste:&lt;IDienst&gt;</c>, docs/06 §6.5). Ohne
-/// Eintrag gilt die einzige Implementierung; gibt es mehrere, muss sie hier stehen.
-/// </summary>
-public sealed class DienstKonfig
-{
-    /// <summary>Der Klassenname der Implementierung.</summary>
-    public string? Implementierung { get; set; }
-}
-
-/// <summary>
 /// Wie sich ein Client (<c>IClientVertrag</c>, Handshake-Name) in dieser Umgebung verbindet (Abschnitt <c>Clients:&lt;Name&gt;</c>): das Akteur-Token
 /// (Abschnitt <c>Identitaeten</c>; sein Akteur-Satz muss die Akteure des Vertrags verkörpern), die Adresse des gRPC-Servers (leer =
 /// <c>http://localhost:&lt;Transport:GrpcPort&gt;</c>), die eigenen URLs (Blazor) und die Verzeichnisse, aus denen er Dateien zeigen darf.
@@ -199,7 +192,6 @@ public sealed class UmgebungKonfig
     public KonsumKonfig Konsum { get; set; } = new();
     public TransportKonfig Transport { get; set; } = new();
     public Dictionary<string, FunktionsKonfig> Funktionen { get; set; } = new(StringComparer.Ordinal);
-    public Dictionary<string, DienstKonfig> Dienste { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, ClientKonfig> Clients { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, StoreKonfig> Stores { get; set; } = new(StringComparer.Ordinal);
 
@@ -222,10 +214,10 @@ public static class UmgebungsAbschnitte
 {
     public const string Umgebung = "Umgebung", EventStore = "EventStore", Cluster = "Cluster",
         Schreibpfad = "Schreibpfad", Lebenszyklus = "Lebenszyklus", Konsum = "Konsum", Transport = "Transport", Identitaeten = "Identitaeten", Quellen = "Quellen",
-        Funktionen = "Funktionen", Dienste = "Dienste", Clients = "Clients", Stores = "Stores", Konfig = "Konfig", Logging = "Logging";
+        Funktionen = "Funktionen", Clients = "Clients", Stores = "Stores", Konfig = "Konfig", Logging = "Logging";
 
     public static readonly IReadOnlyList<string> Alle =
-        [Umgebung, EventStore, Cluster, Schreibpfad, Lebenszyklus, Konsum, Transport, Identitaeten, Quellen, Funktionen, Dienste, Clients, Stores, Konfig, Logging];
+        [Umgebung, EventStore, Cluster, Schreibpfad, Lebenszyklus, Konsum, Transport, Identitaeten, Quellen, Funktionen, Clients, Stores, Konfig, Logging];
 }
 
 /// <summary>

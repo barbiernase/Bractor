@@ -11,15 +11,14 @@ namespace Werkbank.Server;
 /// </summary>
 public static class Schema
 {
-    /// <param name="board">Das gelesene Board (warmer Workspace) — liefert je Dienst seine Implementierungen und je Konfig-Record seine Felder
-    /// (Code-Fakten), damit das Formular sie anbietet; ohne Board bleiben Dienste/Konfig frei.</param>
+    /// <param name="board">Das gelesene Board (warmer Workspace) — liefert je gerufene Funktion ihre Umsetzungen und je Konfig-Record seine Felder
+    /// (Code-Fakten), damit das Formular sie anbietet; ohne Board bleiben Funktionen/Konfig frei.</param>
     public static JsonObject Umgebung(JsonObject? board = null)
     {
         var aus = new JsonObject();
         foreach (var p in typeof(UmgebungKonfig).GetProperties().Where(p => p.PropertyType.IsClass && p.PropertyType != typeof(string)
                      && !p.PropertyType.IsGenericType))
             aus[p.Name] = Klasse(p.PropertyType);
-        aus[UmgebungsAbschnitte.Funktionen] = new JsonObject { ["art"] = "je", ["schluessel"] = "Funktion", ["wert"] = Klasse(typeof(FunktionsKonfig)) };
         aus[UmgebungsAbschnitte.Quellen] = new JsonObject { ["art"] = "je", ["schluessel"] = "Quelle", ["wert"] = Klasse(typeof(DateiQuellKonfig)) };
         aus[UmgebungsAbschnitte.Identitaeten] = new JsonObject
         {
@@ -31,25 +30,26 @@ public static class Schema
                 ["VertragStreng"] = new JsonObject { ["typ"] = "bool", ["standard"] = "false" },
             },
         };
-        // Dienste (docs/06 §6.5): je Dienst die gewählte Implementierung — die Auswahl kommt aus dem Code (Implementierungen der Dienst-Karte).
-        var dienste = new JsonObject();
-        foreach (var d in Liste(board?["dienste"]))
-            dienste[(string?)d["name"] ?? "?"] = new JsonObject
+        // Funktionen: je Funktion mit Eingängen Laufort, Slots …; je gerufene (ohne Auf, docs/06 §6.5) nur die gewählte Umsetzung — die Auswahl
+        //   kommt aus dem Code (Umsetzungen der Funktions-Karte).
+        var gerufene = new JsonObject();
+        foreach (var f in Liste(board?["bausteinFunktionen"]).Where(f => Liste(f["methoden"]).Any() && !Liste(f["eingaenge"]).Any()))
+            gerufene[(string?)f["name"] ?? "?"] = new JsonObject
             {
                 ["art"] = "klasse",
                 ["felder"] = new JsonObject
                 {
-                    [nameof(DienstKonfig.Implementierung)] = new JsonObject
+                    [nameof(FunktionsKonfig.Implementierung)] = new JsonObject
                     {
-                        ["typ"] = "enum", ["werte"] = new JsonArray(Liste(d["implementierungen"]).Select(i => (JsonNode?)(string?)i["name"]).ToArray()),
+                        ["typ"] = "enum", ["werte"] = new JsonArray(Liste(f["umsetzungen"]).Select(u => (JsonNode?)(string?)u["name"]).ToArray()),
                         ["hilfe"] = "Die Klasse, die hier läuft — ohne Eintrag die einzige",
                     },
                 },
             };
-        aus[UmgebungsAbschnitte.Dienste] = new JsonObject
+        aus[UmgebungsAbschnitte.Funktionen] = new JsonObject
         {
-            ["art"] = "je", ["schluessel"] = "Dienst", ["wert"] = Klasse(typeof(DienstKonfig)), ["eintraege"] = dienste,
-            ["hilfe"] = "je Dienst (IDienst) die Implementierung — nötig, wenn es mehrere gibt",
+            ["art"] = "je", ["schluessel"] = "Funktion", ["wert"] = Klasse(typeof(FunktionsKonfig)), ["eintraege"] = gerufene,
+            ["hilfe"] = "je Funktion Laufort und Umsetzung; eine gerufene (ohne Auf) nennt nur ihre Umsetzung — nötig, wenn es mehrere gibt",
         };
         // Clients (docs/konzept-akteure.md §4): je Client-Vertrag (Handshake-Name) Token, Adresse, URLs und Datei-Verzeichnisse.
         var clients = new JsonObject();
@@ -73,7 +73,7 @@ public static class Schema
         aus[UmgebungsAbschnitte.Konfig] = board == null
             ? new JsonObject { ["art"] = "frei", ["hilfe"] = "je Konfig-Record der Domäne ein Abschnitt (Feldname → Wert)" }
             : new JsonObject { ["art"] = "je", ["schluessel"] = "Konfig-Record", ["wert"] = new JsonObject { ["art"] = "klasse", ["felder"] = new JsonObject() },
-                ["eintraege"] = konfigs, ["hilfe"] = "je Konfig-Record (im Konstruktor einer Funktions-/Dienst-Implementierung) seine Werte" };
+                ["eintraege"] = konfigs, ["hilfe"] = "je Konfig-Record (im Konstruktor einer Funktion bzw. Umsetzung) seine Werte" };
         return aus;
     }
 

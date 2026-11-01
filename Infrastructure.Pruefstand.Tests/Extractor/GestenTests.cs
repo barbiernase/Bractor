@@ -337,47 +337,47 @@ public sealed class GestenTests : IDisposable
         Rumpf.Lies(Text("Lesen.cs"), ort).Should().Be((string?)fn["rumpf"]);
     }
 
-    // ══ Dienste (docs/06 §6.5): Interface, Methoden und Implementierungen als Geste ══
+    // ══ Gerufene Funktionen (docs/06 §6.5): Schnittstelle, Methoden und Umsetzungen als Geste ══
 
     private static JsonObject Param(string typ, string name) => new() { ["typ"] = typ, ["name"] = name };
 
-    [Fact]
-    public async Task Neuer_Dienst_per_Plus_legt_Interface_und_Implementierung_an()
+    private static JsonObject Leuchte() => new()
     {
-        var dienst = new JsonObject
-        {
-            ["name"] = "ILeuchte", ["namespace"] = "Leihwesen.Gebuehren",
-            ["methoden"] = new JsonArray(new JsonObject { ["name"] = "Hell", ["rueckgabe"] = "bool", ["parameter"] = new JsonArray(Param("int", "stufe")) }),
-            ["implementierungen"] = new JsonArray(new JsonObject { ["name"] = "Leuchte" }),
-        };
+        ["name"] = "ILeuchte", ["namespace"] = "Leihwesen.Gebuehren", ["klasse"] = false,
+        ["methoden"] = new JsonArray(new JsonObject { ["name"] = "Hell", ["rueckgabe"] = "bool", ["parameter"] = new JsonArray(Param("int", "stufe")) }),
+        ["umsetzungen"] = new JsonArray(new JsonObject { ["name"] = "Leuchte" }),
+    };
 
-        var bericht = await GesteAsync(new KartenDelta { Karten = new() { ["dienste"] = [dienst] } });
+    [Fact]
+    public async Task Neue_gerufene_Funktion_per_Plus_legt_Schnittstelle_und_Umsetzung_an()
+    {
+        var bericht = await GesteAsync(new KartenDelta { Karten = new() { ["bausteinFunktionen"] = [Leuchte()] } });
 
-        bericht.Patch.Select(p => p.Datei).Should().BeEquivalentTo("Leihwesen/ILeuchte.cs", "Leihwesen/Leuchte.cs");
-        Text("ILeuchte.cs").Should().Contain("public interface ILeuchte : IDienst").And.Contain("    bool Hell(int stufe);");
+        bericht.Patch.Select(p => p.Datei).Should().BeEquivalentTo("Leihwesen/Funktionen.cs", "Leihwesen/Leuchte.cs");
+        Text("Funktionen.cs").Should().Contain("public interface ILeuchte : IFunktion").And.Contain("    bool Hell(int stufe);");
         Text("Leuchte.cs").Should().Contain("public sealed class Leuchte : ILeuchte").And.Contain("public bool Hell(int stufe)")
             .And.Contain("throw new NotImplementedException(\"TODO: Leuchte.Hell\");");
     }
 
     [Fact]
-    public async Task Methode_am_Dienst_kommt_ans_Interface_und_als_Stub_an_jede_Implementierung()
+    public async Task Methode_an_der_gerufenen_Funktion_kommt_an_die_Schnittstelle_und_als_Stub_an_jede_Umsetzung()
     {
-        var dienst = Karte(await BoardAsync(), "dienste", d => (string?)d["name"] == "IWertTabelle");
-        dienst["methoden"]!.AsArray().Add(new JsonObject { ["name"] = "Runde", ["rueckgabe"] = "decimal", ["parameter"] = new JsonArray(Param("decimal", "betrag")) });
+        var f = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "IWertTabelle");
+        f["methoden"]!.AsArray().Add(new JsonObject { ["name"] = "Runde", ["rueckgabe"] = "decimal", ["parameter"] = new JsonArray(Param("decimal", "betrag")) });
 
-        await GesteAsync(Geaendert("dienste", dienst));
+        await GesteAsync(Geaendert("bausteinFunktionen", f));
 
         Text("Gebuehren.cs").Should().Contain("    Task<bool> IstSchaetzbarAsync(Guid leserId);\n    decimal Runde(decimal betrag);\n}")
             .And.Contain("    public decimal Runde(decimal betrag)\n    {\n        throw new NotImplementedException(\"TODO: LineareWertTabelle.Runde\");");
     }
 
     [Fact]
-    public async Task Zweite_Implementierung_eines_Dienstes_ist_eine_neue_Klasse_mit_Stubs()
+    public async Task Zweite_Umsetzung_einer_gerufenen_Funktion_ist_eine_neue_Klasse_mit_Stubs()
     {
-        var dienst = Karte(await BoardAsync(), "dienste", d => (string?)d["name"] == "IWertTabelle");
-        dienst["implementierungen"]!.AsArray().Add(new JsonObject { ["name"] = "FesteWertTabelle" });
+        var f = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "IWertTabelle");
+        f["umsetzungen"]!.AsArray().Add(new JsonObject { ["name"] = "FesteWertTabelle" });
 
-        var bericht = await GesteAsync(Geaendert("dienste", dienst));
+        var bericht = await GesteAsync(Geaendert("bausteinFunktionen", f));
 
         bericht.Patch.Select(p => p.Datei).Should().Equal("Leihwesen/FesteWertTabelle.cs");
         Text("FesteWertTabelle.cs").Should().Contain("public sealed class FesteWertTabelle : IWertTabelle")
@@ -385,18 +385,23 @@ public sealed class GestenTests : IDisposable
     }
 
     [Fact]
+    public async Task Eine_gerufene_Funktion_in_den_Konstruktor_einer_Umsetzung_nehmen()
+    {
+        var f = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "ISchadensSchaetzung");
+        f["umsetzungen"]![0]!["konstruktor"]!.AsArray().Add(Param("WertTabellenKonfig", "konfig"));
+
+        await GesteAsync(Geaendert("bausteinFunktionen", f));
+
+        Text("Gebuehren.cs").Should().Contain("public sealed class Schadensschaetzer(IWertTabelle tabelle, WertTabellenKonfig konfig) : ISchadensSchaetzung");
+    }
+
+    [Fact]
     public async Task Umbenennen_eines_Typs_in_seiner_eigenen_Datei_zieht_die_Datei_mit()
     {
-        var dienst = new JsonObject
-        {
-            ["name"] = "ILeuchte", ["namespace"] = "Leihwesen.Gebuehren",
-            ["methoden"] = new JsonArray(new JsonObject { ["name"] = "Hell", ["rueckgabe"] = "bool", ["parameter"] = new JsonArray(Param("int", "stufe")) }),
-            ["implementierungen"] = new JsonArray(new JsonObject { ["name"] = "Leuchte" }),
-        };
-        await GesteAsync(new KartenDelta { Karten = new() { ["dienste"] = [dienst] } });
-        var karte = Karte(await BoardAsync(), "dienste", d => (string?)d["name"] == "ILeuchte");
+        await GesteAsync(new KartenDelta { Karten = new() { ["bausteinFunktionen"] = [Leuchte()] } });
+        var karte = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "ILeuchte");
         var methode = karte["methoden"]![0]!["_ort"]!;
-        var impl = karte["implementierungen"]![0]!["_ort"]!;
+        var impl = karte["umsetzungen"]![0]!["_ort"]!;
         ((string?)impl["datei"]).Should().Be("Leihwesen/Leuchte.cs", "die Implementierung trägt ihren Ort — ihr Name ist umbenennbar");
 
         var (patch, _) = await Umbenennen.Async(Loesung(), Path.Combine(_wurzel, (string)impl["datei"]!), (int)impl["start"]!, "Lampe", _wurzel);
@@ -405,7 +410,7 @@ public sealed class GestenTests : IDisposable
             .And.Contain(p => p.Datei == "Leihwesen/Lampe.cs" && p.Vorher == null && p.Nachher!.Contains("public sealed class Lampe : ILeuchte"), "… und heißt wie der Typ");
 
         (patch, _) = await Umbenennen.Async(Loesung(), Path.Combine(_wurzel, (string)methode["datei"]!), (int)methode["start"]!, "Strahlt", _wurzel);
-        patch.Select(p => p.Datei).Should().BeEquivalentTo(["Leihwesen/ILeuchte.cs", "Leihwesen/Leuchte.cs"], "eine Methode benennt Interface und Implementierung um, keine Datei zieht");
+        patch.Select(p => p.Datei).Should().BeEquivalentTo(["Leihwesen/Funktionen.cs", "Leihwesen/Leuchte.cs"], "eine Methode benennt Schnittstelle und Umsetzung um, keine Datei zieht");
         patch.Should().OnlyContain(p => p.Nachher!.Contains("Strahlt(int stufe)"));
     }
 

@@ -1,5 +1,6 @@
 using Abstractions;
 using Domain.ImagePair;
+using OpenCvSharp;
 
 namespace Domain.Pipeline.Bildaufbereitung;
 
@@ -36,4 +37,33 @@ public interface IBildVerkleinerung : IFunktion
 public interface IKontrastausgleich : IFunktion
 {
     Task<VorschauErstellt> Auf(BildVerkleinert e);
+}
+
+// ── Gerufen: die Technik hinter den Schritten, im Konstruktor ihrer Umsetzung (kein Auf, ihr Halter ruft sie) ──
+
+/// <summary>
+/// Skaliert ein Bild auf eine Zielhöhe (Breite proportional).
+/// Arbeitet auf OpenCV Mat — kein Disk-I/O, reine Speicher-Operation.
+/// </summary>
+public interface IImageResizer : IFunktion
+{
+    /// <summary>
+    /// Skaliert das Bild so, dass die Höhe targetHeight Pixel beträgt.
+    /// Breite wird proportional angepasst.
+    /// </summary>
+    Mat Resize(Mat input, int targetHeight);
+}
+
+/// <summary>
+/// Führt einen Histogrammausgleich auf einem Bild durch.
+/// Verbessert den Kontrast — besonders bei schlecht belichteten Aufnahmen.
+/// Arbeitet auf OpenCV Mat — kein Disk-I/O, reine Speicher-Operation.
+/// </summary>
+public interface IHistogramEqualizer : IFunktion
+{
+    /// <summary>
+    /// Histogrammausgleich. Bei Farbbildern wird nur der
+    /// Helligkeitskanal (Y/V) equalisiert, nicht die Farbkanäle.
+    /// </summary>
+    Mat Equalize(Mat input);
 }

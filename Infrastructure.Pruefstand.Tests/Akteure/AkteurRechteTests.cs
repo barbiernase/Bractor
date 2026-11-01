@@ -41,8 +41,8 @@ public class AkteurRechteTests
     }
 
     [Fact]
-    public void Ein_Dienst_ist_kein_Akteur()
-        => GeneratedAkteurRechte.Alle.Keys.Should().NotContain(k => k.StartsWith("I") && char.IsUpper(k[1]), "Akteure sind Records, keine Dienst-Verträge");
+    public void Ein_Interface_ist_kein_Akteur()
+        => GeneratedAkteurRechte.Alle.Keys.Should().NotContain(k => k.StartsWith("I") && char.IsUpper(k[1]), "Akteure sind Records, keine Schnittstellen");
 
     [Fact]
     public void Ein_Command_kann_mehrere_Akteure_haben()

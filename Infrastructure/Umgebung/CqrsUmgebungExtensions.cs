@@ -2,7 +2,6 @@ using Infrastructure.Einblick;
 using Infrastructure.Eingang;
 using Abstractions;
 using Infrastructure.Akteure;
-using Infrastructure.Dienste;
 using Infrastructure.Extensions;
 using Infrastructure.Funktionen;
 using Infrastructure.GrpcClient;
@@ -98,7 +97,7 @@ public static class CqrsUmgebungExtensions
         s.AddAkteure(builder.Configuration.GetSection(UmgebungsAbschnitte.Identitaeten));
         s.AddQuellen(builder.Configuration);
         s.BindeFunktionen(u.Funktionen);
-        s.BindeDienste(u, builder.Configuration);   // nach den Funktionen: gebunden wird, was deren Implementierungen brauchen
+        s.BindeGerufene(u, builder.Configuration);   // nach den Funktionen: gebunden wird, was deren Umsetzungen brauchen
         s.AddEinblick(u);
         return builder;
     }

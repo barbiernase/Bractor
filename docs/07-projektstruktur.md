@@ -22,7 +22,7 @@
 |---|---|---|
 | `Domain` | Aggregate (State, Decider, Applier), Commands, Events, Ablehnungen, Wertobjekte, Enums, Quellen-Typen; Queries an ein Aggregat und ihre Antworten (`Frage` im Decider — er sieht die Leseseite nicht) | Abstractions, Core |
 | `Domain.Projections` | ReadModels, Queries an Reader, Antworten, Store-Fähigkeiten und -Bündel, Projektionen, Reader | Domain |
-| `Domain.Pipeline` | Funktionen — als Klasse (im Host) oder Schnittstelle (draußen) mit `Auf`, samt ihren Ausgabe-Events und den Umsetzungen einer Schnittstelle —, Domänen-Dienste (Schnittstelle, Implementierung), Konfig-Records | Domain, Domain.Projections |
+| `Domain.Pipeline` | Funktionen — mit `Auf` (das Framework ruft sie) oder gerufen (ihr Halter ruft sie), als Klasse (im Host) oder Schnittstelle, samt ihren Ausgabe-Events und den Umsetzungen einer Schnittstelle —, Konfig-Records | Domain, Domain.Projections |
 | `Domain.Akteure` | Akteure, Client-Verträge | Domain, Domain.Projections, Domain.Pipeline |
 | `Domain.Infrastructure` | Store-Implementierungen | Domain, Domain.Projections |
 | `Domain.Leitung` | die Domänen-DTOs der Leitung (`domain.proto`, vom Codegen) und ihr Nutzlast-Mapper (`GeneratedNutzlast`) — nichts Handgeschriebenes | Domain, Domain.Projections, Domain.Pipeline |
@@ -63,10 +63,10 @@ Vertrag hört auf beliebige Events, auch auf Ergebnis-Events von Funktionen.
 | | `I<Store>.cs` | Store-Bündel mit seinen Fähigkeiten |
 | | `<Projektion>.cs`, `<Reader>.cs` | je Klasse eine Datei |
 | `Domain.Akteure/` | `Akteure.cs`, `Clients.cs` | Akteure; Client-Verträge |
-| `Domain.Pipeline/<Bereich>/` | `Funktionen.cs`, `Events.cs` | Funktions-Schnittstellen (draußen); Ausgabe-Events der Funktionen |
+| `Domain.Pipeline/<Bereich>/` | `Funktionen.cs`, `Events.cs` | Funktions-Schnittstellen (mit `Auf` oder gerufen); Ausgabe-Events der Funktionen |
 | | `<Funktion>.cs` | je Funktion als Klasse (im Host, Primitive `HostFunktion`) eine Datei |
-| | `<Implementierung>.cs` | je Funktions- bzw. Dienst-Implementierung eine Datei |
-| | `I<Dienst>.cs`, `Konfigs.cs` | Dienst-Schnittstelle; Konfig-Records |
+| | `<Implementierung>.cs` | je Umsetzung einer Funktions-Schnittstelle eine Datei |
+| | `Konfigs.cs` | Konfig-Records |
 | `Domain.Infrastructure/<Bereich>/` | `<Store>.cs`, `<Store>.Lesen.cs` | Store-Implementierung (Schreib- und Leseteil) |
 
 Typnamen sind frei; Klassen tragen ihren Namen als Dateinamen, Sammeldateien (`Commands.cs` …) bündeln Records einer Art. Hilfscode, der keine

@@ -3,7 +3,6 @@ using System.Text.Json.Serialization;
 using Abstractions;
 using Cqrs.Leitung;
 using Infrastructure.Akteure;
-using Infrastructure.Dienste;
 using Infrastructure.Funktionen;
 using Infrastructure.Quellen;
 using Marten;
@@ -30,7 +29,7 @@ public interface IAnwendung
     IUpcastingTabelle Upcasting { get; }
     IAkteurTabelle Akteure { get; }
     IFunktionsTabelle Funktionen { get; }
-    IDienstTabelle Dienste { get; }
+    IGerufenenTabelle Gerufene { get; }
     IAggregatTabelle Aggregate { get; }
     /// <summary>Der Weckplan (GeneratedWeckplan): Event-Typ → wen ein Commit weckt (docs/03 §3.5).</summary>
     IReadOnlyDictionary<Type, Infrastructure.Wecken.Weckziel[]> Weckplan { get; }
@@ -120,10 +119,11 @@ public interface IFunktionsTabelle
     IReadOnlyDictionary<Type, string[]> Hinweisplan { get; }
 }
 
-public interface IDienstTabelle
+/// <summary>Die gerufenen Funktionen (<c>IFunktion</c> ohne <c>Auf</c>, GeneratedGerufene): Namen, Umsetzungen, Konstruktor-Bedarf, Konfig-Records.</summary>
+public interface IGerufenenTabelle
 {
     IReadOnlyDictionary<string, Type> Namen { get; }
-    IReadOnlyList<DienstImplementierung> Implementierungen { get; }
+    IReadOnlyList<GerufeneUmsetzung> Umsetzungen { get; }
     IReadOnlyDictionary<Type, Type[]> Braucht { get; }
     IReadOnlyList<KonfigRecord> Konfigs { get; }
 }
@@ -163,7 +163,7 @@ public static class Anwendung
     public static IUpcastingTabelle Upcasting => Aktuell.Upcasting;
     public static IAkteurTabelle Akteure => Aktuell.Akteure;
     public static IFunktionsTabelle Funktionen => Aktuell.Funktionen;
-    public static IDienstTabelle Dienste => Aktuell.Dienste;
+    public static IGerufenenTabelle Gerufene => Aktuell.Gerufene;
     public static IAggregatTabelle Aggregate => Aktuell.Aggregate;
     public static IReadOnlyDictionary<Type, Infrastructure.Wecken.Weckziel[]> Weckplan => Aktuell.Weckplan;
     public static IReadOnlyList<QuellTyp> Quellen => Aktuell.Quellen;

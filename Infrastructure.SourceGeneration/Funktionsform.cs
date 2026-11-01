@@ -8,8 +8,8 @@ using System.Linq;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Die EINE Lesart einer Funktion in Baustein-Form (docs/10 §10.3) — für den <c>FunktionsBausteinGenerator</c>, die
-    /// Analyzer (R2, R12), die Lage-Regeln und den Extractor. Nur Code-Fakten: der Marker <c>IFunktion</c>, die Methoden <c>Auf</c> und ihre
+    /// Die EINE Lesart einer Funktion (docs/10 §10.3) — mit Eingängen (Baustein) oder gerufen — für den <c>FunktionsBausteinGenerator</c>, die
+    /// Bindung der gerufenen (<c>GerufeneGenerator</c>), die Analyzer (R2, R12), die Lage-Regeln und den Extractor. Nur Code-Fakten: der Marker <c>IFunktion</c>, die Methoden <c>Auf</c> und ihre
     /// Signaturen (Eingang, <c>Herkunft</c>, Lese-Fähigkeiten, Abbruch, Rückgabe). Verglichen wird über volle Namen, nie über Symbol-Identität —
     /// so liest sie auch Typen aus anderen Compilations.
     /// </summary>
@@ -48,6 +48,8 @@ namespace Infrastructure.SourceGeneration
             public INamedTypeSymbol Typ = null!;
             /// <summary>Als Schnittstelle deklariert (läuft draußen oder mit einer Implementierung im Host).</summary>
             public bool Draussen;
+            /// <summary>Gerufen (kein <c>Auf</c>, frei benannte Methoden, <see cref="IstGerufen"/>): ihr Halter ruft sie über den Konstruktor.</summary>
+            public bool Gerufen;
             public List<Auf> Aufs = new List<Auf>();
             public List<(string Text, Location Ort)> Fehler = new List<(string, Location)>();
             /// <summary>Eingangstypen mit mehr als einem <c>Auf</c> (R2).</summary>
@@ -67,17 +69,44 @@ namespace Infrastructure.SourceGeneration
             Name(t) == vollerName || t.AllInterfaces.Any(i => Name(i) == vollerName);
 
         /// <summary>
-        /// Ist <paramref name="t"/> eine Funktion? Eine Schnittstelle <c>: IFunktion</c> (draußen oder mit Umsetzung im Host), oder eine konkrete Klasse,
-        /// die <c>IFunktion</c> direkt trägt (keine abgeleitete Funktions-Schnittstelle — dann wäre sie deren Umsetzung).
+        /// Ist <paramref name="t"/> ein aufrufbares Objekt (<c>IFunktion</c>)? Eine Schnittstelle <c>: IFunktion</c>, oder eine konkrete Klasse, die
+        /// <c>IFunktion</c> direkt trägt (keine abgeleitete Funktions-Schnittstelle — dann wäre sie deren Umsetzung).
         /// </summary>
-        public static bool IstBaustein(INamedTypeSymbol t)
+        public static bool IstFunktion(INamedTypeSymbol t)
         {
             if (Name(t) == IFunktion || !Hat(t, IFunktion)) return false;
             if (t.TypeKind == TypeKind.Interface) return true;
             return t.TypeKind == TypeKind.Class && !t.IsAbstract && !Umsetzt(t).Any();
         }
 
-        /// <summary>Die Funktions-Schnittstellen, die eine Klasse implementiert (sie ist deren Umsetzung im Host).</summary>
+        /// <summary>
+        /// Eine Funktion MIT EINGÄNGEN (Baustein, das Framework ruft sie): jede <see cref="IstFunktion"/>, die nicht <see cref="IstGerufen"/> ist —
+        /// auch eine ohne jede Methode (sie meldet dann „kein Auf“).
+        /// </summary>
+        public static bool IstBaustein(INamedTypeSymbol t) => IstFunktion(t) && !IstGerufen(t);
+
+        /// <summary>
+        /// Eine GERUFENE Funktion (ihr Halter ruft sie über den Konstruktor): kein <c>Auf</c>, aber mindestens eine öffentliche Methode — die Technik
+        /// hinter einer Funktion. Eingänge und gerufene Methoden an einem Objekt sind ein Formfehler (<see cref="Lies"/>).
+        /// </summary>
+        public static bool IstGerufen(INamedTypeSymbol t) =>
+            IstFunktion(t) && !HatAuf(t) && GerufeneMethoden(t).Any();
+
+        /// <summary>Hat <paramref name="t"/> eine Methode <c>Auf</c> (einen Eingang)?</summary>
+        public static bool HatAuf(INamedTypeSymbol t) =>
+            t.GetMembers(Abstractions.Funktionsvertrag.Auf).OfType<IMethodSymbol>().Any(m => m.MethodKind == MethodKind.Ordinary);
+
+        /// <summary>
+        /// Die gerufenen Methoden: öffentliche Instanz-Methoden außer <c>Auf</c> (an einer Klasse nur die selbst deklarierten, ohne Lebenszyklus und
+        /// Freigabe).
+        /// </summary>
+        public static IEnumerable<IMethodSymbol> GerufeneMethoden(INamedTypeSymbol t) =>
+            t.GetMembers().OfType<IMethodSymbol>().Where(m => m.MethodKind == MethodKind.Ordinary && !m.IsStatic
+                && m.Name != Abstractions.Funktionsvertrag.Auf
+                && (t.TypeKind == TypeKind.Interface || m.DeclaredAccessibility == Accessibility.Public)
+                && !(t.TypeKind == TypeKind.Class && m.Name is "Dispose" or "DisposeAsync" or "BeimAktivierenAsync" or "VorDemSichernAsync"));
+
+        /// <summary>Die Funktions-Schnittstellen (mit Eingängen oder gerufen), die eine Klasse implementiert (sie ist deren Umsetzung im Host).</summary>
         public static IEnumerable<INamedTypeSymbol> Umsetzt(INamedTypeSymbol t) =>
             t.AllInterfaces.Where(i => Name(i) != IFunktion && Hat(i, IFunktion));
 
@@ -97,7 +126,7 @@ namespace Infrastructure.SourceGeneration
         {
             var f = new Form
             {
-                Typ = t, Draussen = t.TypeKind == TypeKind.Interface, EineAdresse = HatEineAdresse(t),
+                Typ = t, Draussen = t.TypeKind == TypeKind.Interface, Gerufen = IstGerufen(t), EineAdresse = HatEineAdresse(t),
                 Lebenszyklus = t.TypeKind == TypeKind.Class && Hat(t, Abstractions.Funktionsvertrag.Lebenszyklus),
             };
             var ort = t.Locations.FirstOrDefault() ?? Location.None;
@@ -116,9 +145,11 @@ namespace Infrastructure.SourceGeneration
                     else f.Zustand = z;
                 }
             }
-            if (f.Draussen)
-                foreach (var m in t.GetMembers().OfType<IMethodSymbol>().Where(m => m.MethodKind == MethodKind.Ordinary && m.Name != Abstractions.Funktionsvertrag.Auf))
-                    f.Fehler.Add(($"die Schnittstelle hat die Methode '{m.Name}' — eine Funktion draußen hat nur {Abstractions.Funktionsvertrag.Auf}", m.Locations.FirstOrDefault() ?? ort));
+            // Eingänge oder gerufen, nie beides: hat die Schnittstelle ein Auf, ruft sie das Framework — eine weitere Methode riefe niemand.
+            if (f.Draussen && HatAuf(t))
+                foreach (var m in GerufeneMethoden(t))
+                    f.Fehler.Add(($"die Schnittstelle hat neben {Abstractions.Funktionsvertrag.Auf} die Methode '{m.Name}' — eine Funktion hat Eingänge (das "
+                        + "Framework ruft sie) oder gerufene Methoden (ihr Halter ruft sie), nie beides; teile sie in zwei Funktionen", m.Locations.FirstOrDefault() ?? ort));
             if (!f.Draussen && t.IsGenericType)
                 f.Fehler.Add(("eine Funktion ist nicht generisch", ort));
 
@@ -139,8 +170,9 @@ namespace Infrastructure.SourceGeneration
                 gesehen[schluessel] = auf;
                 f.Aufs.Add(auf);
             }
-            if (gesehen.Count == 0 && f.Doppelt.Count == 0 && f.Fehler.Count == 0)
-                f.Fehler.Add(($"'{t.Name}' hat kein {Abstractions.Funktionsvertrag.Auf} — eine Funktion hört mindestens einen Eingang", ort));
+            if (!f.Gerufen && gesehen.Count == 0 && f.Doppelt.Count == 0 && f.Fehler.Count == 0)
+                f.Fehler.Add(($"'{t.Name}' hat weder ein {Abstractions.Funktionsvertrag.Auf} noch eine gerufene Methode — eine Funktion hört mindestens einen "
+                    + "Eingang oder bietet ihrem Halter mindestens eine Methode", ort));
             return f;
         }
 

@@ -4,7 +4,7 @@ using Pruefdomaene.Abrechnung;
 namespace Pruefdomaene.Pipeline.Abrechnung;
 
 /// <summary>
-/// Eine Funktion mit Dienst: der Mahnversand ist Außenwelt (nicht gleichbleibend), also hält das Framework die Ausgabe fest, bevor sie wirkt (A1, R12)
+/// Eine Funktion, die eine andere ruft: der Mahnversand ist Außenwelt (nicht gleichbleibend), also hält das Framework die Ausgabe fest, bevor sie wirkt (A1, R12)
 /// — eine zweite Aktivierung oder ein Absturz nach dem Versand vermerkt dieselbe Mahnung, nie eine zweite mit anderer Versandnummer.
 /// </summary>
 public sealed class Mahnwesen(IMahnversand versand) : IFunktion

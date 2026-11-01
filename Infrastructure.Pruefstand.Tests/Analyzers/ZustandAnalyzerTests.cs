@@ -26,7 +26,7 @@ public class ZustandAnalyzerTests
         public sealed record Gemessen(double Wert) : IEvent;
         public sealed record Auffaellig(double Wert) : ITransientEvent;
         public sealed class Modell { public double Summe { get; set; } public int Anzahl { get; set; } }
-        public interface IVerbindung : IDienst { Task<int> ZaehleAsync(); }
+        public interface IVerbindung : IFunktion { Task<int> ZaehleAsync(); }
         """;
 
     private static async Task<(string Id, string Text)[]> Befunde(string code)
@@ -44,7 +44,7 @@ public class ZustandAnalyzerTests
     }
 
     [Fact]
-    public async Task Zustand_ueber_IZustand_und_Dienste_im_Konstruktor_sind_erlaubt()
+    public async Task Zustand_ueber_IZustand_und_gerufene_Funktionen_im_Konstruktor_sind_erlaubt()
     {
         (await Befunde("""
             public sealed class Lerner(IZustand<Modell> modell, IVerbindung db) : IFunktion

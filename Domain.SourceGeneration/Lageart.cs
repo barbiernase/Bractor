@@ -40,15 +40,13 @@ internal sealed class Lageart
                     _aggregatQueries.Add(Name(f.Query));
                     foreach (var a in f.Antworten) _aggregatAntworten.Add(Name(a));
                 }
-            // Konfig-Records: was der Konstruktor einer Funktions-/Dienst-Implementierung als Konfig bindet (Ctorbindung, CQRS090).
-            if (t.TypeKind == TypeKind.Class && !t.IsAbstract && (Hat(t, "IFunktion") || Hat(t, Dienst)))
+            // Konfig-Records: was der Konstruktor einer Funktion bzw. Umsetzung als Konfig bindet (Ctorbindung, CQRS090).
+            if (t.TypeKind == TypeKind.Class && !t.IsAbstract && Hat(t, "IFunktion"))
                 foreach (var p in Infrastructure.SourceGeneration.Ctorbindung.Konstruktor(t)?.Parameters ?? Enumerable.Empty<IParameterSymbol>())
-                    if (Infrastructure.SourceGeneration.Ctorbindung.ArtVon(p.Type, null) == Infrastructure.SourceGeneration.Ctorbindung.Art.Konfig
+                    if (Infrastructure.SourceGeneration.Ctorbindung.ArtVon(p.Type) == Infrastructure.SourceGeneration.Ctorbindung.Art.Konfig
                         && p.Type is INamedTypeSymbol k) _konfigs.Add(Name(k));
         }
     }
-
-    private static readonly string Dienst = Dienstvertrag.Marker.Substring(A.Length);
 
     /// <summary>Die Primitive eines im Quelltext deklarierten Typs; <c>null</c> für verschachtelte Typen außer Decider/Applier.</summary>
     public Projektstruktur.Primitive? Von(INamedTypeSymbol t)
@@ -64,7 +62,6 @@ internal sealed class Lageart
         if (t.TypeKind == TypeKind.Interface)
         {
             if (IstFunktion(t)) return Projektstruktur.Primitive.Funktion;
-            if (Name(t) != Dienstvertrag.Marker && Hat(t, Dienst)) return Projektstruktur.Primitive.Dienst;
             if (Hat(t, "IStore")) return Projektstruktur.Primitive.StoreBuendel;
             if (Hat(t, "IReadStore") || Hat(t, "IWriteStore")) return Projektstruktur.Primitive.StoreFaehigkeit;
             if (Hat(t, "IClientVertrag")) return Projektstruktur.Primitive.ClientVertrag;
@@ -81,8 +78,7 @@ internal sealed class Lageart
         if (Hat(t, "IProjektion")) return Projektstruktur.Primitive.Projektion;
         if (Hat(t, "IReader")) return Projektstruktur.Primitive.Reader;
         if (Hat(t, "IFunktion"))
-            return Infrastructure.SourceGeneration.Funktionsform.IstBaustein(t) ? Projektstruktur.Primitive.HostFunktion : Projektstruktur.Primitive.FunktionsImplementierung;
-        if (Hat(t, Dienst)) return Projektstruktur.Primitive.DienstImplementierung;
+            return Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t) ? Projektstruktur.Primitive.HostFunktion : Projektstruktur.Primitive.FunktionsImplementierung;
         if (Hat(t, "IAkteur")) return Projektstruktur.Primitive.Akteur;
         if (Hat(t, "IStore") || Hat(t, "IReadStore") || Hat(t, "IWriteStore")) return Projektstruktur.Primitive.StoreImplementierung;
         if (_konfigs.Contains(Name(t))) return Projektstruktur.Primitive.Konfig;

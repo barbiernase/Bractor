@@ -17,11 +17,11 @@ public static class Grammatik
 {
     // ── Alphabet: Nachrichtensorten (die Kanten) ──────────────────────────────────────────────────────────────────────
     public const string Command = "command", Event = "event", Transient = "transient", Frist = "frist", Query = "query", Response = "response",
-        Faehigkeit = "faehigkeit", Quelle = "quelle", Dienst = "dienst";
+        Faehigkeit = "faehigkeit", Quelle = "quelle", Gerufen = "gerufen";
 
     // ── Alphabet: Bausteine (die Knoten) ─────────────────────────────────────────────────────────────────────────────
     public const string Aggregat = "aggregat", Projektion = "projektion", Reader = "reader", Store = "store", Aussenwelt = "aussenwelt",
-        Akteur = "akteur", Client = "client", Funktion = "funktion", DienstImpl = "dienstimpl", Uhr = "uhr";
+        Akteur = "akteur", Client = "client", Funktion = "funktion", Uhr = "uhr";
 
     /// <summary>Kardinalität eines Konsum-Eingangs.</summary>
     public const string GenauEins = "eins", Beliebig = "beliebig";
@@ -49,7 +49,8 @@ public static class Grammatik
         new(Response, "Antwort", "↩", "synchron; trägt den Stand der gezeigten Ids", "Rückgabe eines Readers oder eines Aggregats (dann mit seiner Version als OCC-Stand)"),
         new(Faehigkeit, "Fähigkeit", "⚙", "als Parameter von Auf bzw. Frage", "Store-Funktion (Lesen/Schreiben)"),
         new(Quelle, "Quell-Nachricht", "⛲", "durabel (genau einmal je Kennung)", "Anstoß von außen (Datei, Webhook …) — ein Event, das Funktionen und Projektionen hören"),
-        new(Dienst, "Dienst", "🧩", "im Konstruktor (gebunden nach der Umgebung)", "Technik hinter einer Funktion (IDienst) — keine Nachricht, eine Abhängigkeit"),
+        new(Gerufen, "Gerufene Funktion", "🧩", "im Konstruktor (gebunden nach der Umgebung)",
+            "Technik hinter einer Funktion (IFunktion ohne Auf) — keine Nachricht, eine Abhängigkeit, läuft im Prozess ihres Halters"),
     ];
 
     public static readonly IReadOnlyList<BausteinInfo> Bausteine =
@@ -57,8 +58,6 @@ public static class Grammatik
         new(Aggregat, "Aggregat", true), new(Projektion, "Projektion", false), new(Reader, "Reader", false),
         new(Store, "Store", true), new(Aussenwelt, "Außenwelt", false),
         new(Akteur, "Akteur", false), new(Client, "Client", false), new(Funktion, "Funktion", false),
-        // Domänen-Dienst (docs/06 §6.5): seine Implementierung nimmt selbst Dienste im Konstruktor.
-        new(DienstImpl, "Dienst-Implementierung", false),
         // Eingebaut: die Uhr sendet fällige Fristen als Command an das Aggregat, das sie setzte.
         new(Uhr, "Uhr", false),
     ];
@@ -130,7 +129,8 @@ public static class Grammatik
         new("GR-FUNKTION-FORM", "Funktion: je Eingang ein Auf, freie Ausgabe", "Eine Funktion hat je Eingang (Event, Quell-Nachricht oder Hinweis) ein Auf "
             + "mit optional Herkunft, Lese-Fähigkeiten und Abbruch; ausgegeben werden Commands, Events und Hinweise (konkret, OneOf, T?, Strom, je auch als "
             + "Task) — vollständig in der Signatur. Als Klasse läuft sie im Host, als Schnittstelle draußen (Laufort aus der Umgebung); eine Schnittstelle "
-            + "ohne eindeutige Umsetzung braucht eine Bindung, eine Funktion mit Lese-Fähigkeit läuft nur im Host.", "error",
+            + "ohne eindeutige Umsetzung braucht eine Bindung, eine Funktion mit Lese-Fähigkeit läuft nur im Host. Eine Funktion ohne Auf ist gerufen "
+            + "(GR-GERUFEN); Eingänge und gerufene Methoden an einem Objekt sind ein Formfehler.", "error",
             [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Form der Funktion)"),
              new("boot", null, "Infrastructure/Funktionen/FunktionsBausteinWiring.cs (BindungVon: Laufort, Umsetzung, Lese-Fähigkeit nur im Host)")]),
         new("GR-EIN-EINGANG", "Je Baustein und Eingangstyp eine Methode", "Ein Baustein nimmt jeden Eingangstyp mit höchstens einer Methode — ein Auf "
@@ -140,7 +140,7 @@ public static class Grammatik
             + "kein Zufall, kein Lesen fremder Daten — Zeit kommt aus dem Event bzw. der Herkunft (R11).", "error",
             [An("CQRS102", "Domain.SourceGeneration/GleichbleibendAnalyzer.cs")]),
         new("GR-FESTHALTEN", "Funktion hält ihre Ausgabe fest", "Eine Funktion hält ihre Ausgabe im Log fest, bevor sie wirkt; ohne Festhalten sendet nur "
-            + "eine nachweislich gleichbleibende — eine Klasse ohne Dienst und ohne Lese-Fähigkeit, deren Rumpf weder Uhr noch Zufall noch fremde Daten "
+            + "eine nachweislich gleichbleibende — eine Klasse ohne gerufene Funktion und ohne Lese-Fähigkeit, deren Rumpf weder Uhr noch Zufall noch fremde Daten "
             + "nutzt (R12).", "error",
             [An("CQRS103", "Domain.SourceGeneration/GleichbleibendAnalyzer.cs (gleichbleibend heißt ohne Uhr und Zufall)"),
              new("generator", null, "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Gleichbleibend aus der Signatur)")]),
@@ -155,7 +155,7 @@ public static class Grammatik
         new("GR-FUNKTION-LEBENSZYKLUS", "Lebenszyklus einer Funktion optional", "Eine Funktions-Klasse im Host kann einen Lebenszyklus haben "
             + "(ILebenszyklus): BeimAktivierenAsync nach dem Bau und dem Laden des Zustands, vor dem ersten Auf (ein Netz laden); VorDemSichernAsync vor "
             + "jeder Sicherung des Zustands (Gewichte zurückholen); das Ende über IAsyncDisposable. Eine geladene Ressource darf in einem readonly-Feld "
-            + "stehen, Zustand nur in IZustand<T>. Nicht an Schnittstellen (draußen gehört der Lebenszyklus dem Worker), nicht an Diensten; eine Funktion "
+            + "stehen, Zustand nur in IZustand<T>. Nicht an Schnittstellen (draußen gehört der Lebenszyklus dem Worker), nicht an gerufenen Funktionen; eine Funktion "
             + "mit Lebenszyklus ist nie gleichbleibend (docs/04 §4.4, docs/10 E10).", "error",
             [An("CQRS107", "Domain.SourceGeneration/LebenszyklusAnalyzer.cs"),
              new("generator", null, "Infrastructure.SourceGeneration/Funktionsform.cs (mit Lebenszyklus nie gleichbleibend)"),
@@ -164,21 +164,23 @@ public static class Grammatik
             + "abgeleitet (Herkunft.NeueId), nie mit Guid.NewGuid() oder Id<T>.Neu() — eine Wiederholung bekäme sonst ein anderes Ziel (R13). Clients "
             + "würfeln.", "error",
             [An("CQRS104", "Domain.SourceGeneration/GleichbleibendAnalyzer.cs")]),
-        // Domänen-Dienste (docs/06 §6.5): Abhängigkeiten der Implementierungen, gebunden nach der Umgebung.
-        new("GR-DIENST", "Dienst nur im Konstruktor einer Implementierung", "Ein Dienst (interface IX : IDienst) steht nur im Konstruktor einer "
-            + "Funktion im Host oder einer Dienst-Implementierung — nie als Parameter, Feld oder Eigenschaft im Fachcode (Aggregat, Projektion, Reader): "
-            + "dort sind es Fähigkeiten als Parameter.", "error",
-            [An("CQRS089", "Domain.SourceGeneration/DienstAnalyzer.cs")]),
-        new("GR-DIENST-BINDBAR", "Implementierung baubar, Konstruktor bindbar", "Eine Funktion im Host oder eine Dienst-Implementierung ist öffentlich "
-            + "und nicht generisch; ihr Konstruktor nimmt nur Dienste, Konfig-Records (Felder: Text, Zahl, Wahrheitswert, Dauer, Guid, Enum, Text-Liste) "
-            + "und ILogger<T> — gebaut wird sie per generierter Fabrik, ohne Reflection.", "error",
-            [An("CQRS090", "Domain.SourceGeneration/DienstAnalyzer.cs (Konstruktor-Parameter)"), An("CQRS091", "Domain.SourceGeneration/DienstAnalyzer.cs (Konfig-Feld)"),
-             An("CQRS092", "Domain.SourceGeneration/DienstAnalyzer.cs (öffentlich, nicht generisch)"),
-             new("generator", null, "Infrastructure.SourceGeneration/DienstGenerator.cs (GeneratedDienste: Implementierungen, Bedarf, Konfig-Bindung)")]),
-        new("GR-DIENST-GEBUNDEN", "Gebrauchter Dienst ist gebunden", "Was eine gebundene Funktion (transitiv) braucht, ist in der Umgebung eindeutig: "
-            + "je Dienst genau eine Implementierung (sonst Dienste:<IX>:Implementierung), je Konfig-Record ein Abschnitt Konfig:<Record>, kein Kreis über "
-            + "Dienste — sonst bricht der Start.", "error",
-            [new("boot", null, "Infrastructure/Dienste/Dienste.cs (BindeDienste: fehlend, mehrdeutig, Kreis, Konfig)")]),
+        // Gerufene Funktionen (docs/06 §6.5): Abhängigkeiten der Funktionen und ihrer Umsetzungen, gebunden nach der Umgebung.
+        new("GR-GERUFEN", "Gerufene Funktion nur im Konstruktor", "Eine Funktion ohne Auf (IFunktion mit frei benannten Methoden) ruft ihr Halter: "
+            + "sie steht nur im Konstruktor einer Funktion bzw. ihrer Umsetzung — nie als Parameter, Feld oder Eigenschaft im Fachcode (Aggregat, "
+            + "Projektion, Reader): dort sind es Fähigkeiten als Parameter. Sie läuft im Prozess ihres Halters, hat keinen Laufort und kein IDarf, und "
+            + "eine Funktion mit Eingängen steht nie in einem Konstruktor (sie ruft das Framework).", "error",
+            [An("CQRS089", "Domain.SourceGeneration/GerufenAnalyzer.cs"), An("CQRS058", "Domain.SourceGeneration/AkteurAnalyzer.cs (kein IDarf auf eine gerufene)"),
+             new("boot", null, "Infrastructure/Funktionen/FunktionsExtensions.cs (BindeFunktionen: unter Funktionen nur die Implementierung)")]),
+        new("GR-GERUFEN-BINDBAR", "Umsetzung baubar, Konstruktor bindbar", "Eine Funktion im Host und jede Umsetzung ist öffentlich und nicht "
+            + "generisch; ihr Konstruktor nimmt nur gerufene Funktionen, Konfig-Records (Felder: Text, Zahl, Wahrheitswert, Dauer, Guid, Enum, Text-Liste), "
+            + "ILogger<T> und — nur mit Eingängen — ihren Zustand; gebaut wird sie per generierter Fabrik, ohne Reflection.", "error",
+            [An("CQRS090", "Domain.SourceGeneration/GerufenAnalyzer.cs (Konstruktor-Parameter)"), An("CQRS091", "Domain.SourceGeneration/GerufenAnalyzer.cs (Konfig-Feld)"),
+             An("CQRS092", "Domain.SourceGeneration/GerufenAnalyzer.cs (öffentlich, nicht generisch)"),
+             new("generator", null, "Infrastructure.SourceGeneration/GerufeneGenerator.cs (GeneratedGerufene: Umsetzungen, Bedarf, Konfig-Bindung)")]),
+        new("GR-GERUFEN-GEBUNDEN", "Gebrauchte gerufene Funktion ist gebunden", "Was eine gebundene Funktion (transitiv) braucht, ist in der Umgebung "
+            + "eindeutig: je gerufene Funktion genau eine Umsetzung (sonst Funktionen:<Name>:Implementierung), je Konfig-Record ein Abschnitt "
+            + "Konfig:<Record>, kein Kreis über gerufene Funktionen — sonst bricht der Start.", "error",
+            [new("boot", null, "Infrastructure/Funktionen/Gerufene.cs (BindeGerufene: fehlend, mehrdeutig, Kreis, Konfig)")]),
         new("GR-QUELLE", "Quell-Nachricht von außen", "Eine Quell-Nachricht (record … : IQuellNachricht) wird genau einmal je Kennung ins Log "
             + "geschrieben; Funktionen und Projektionen hören sie wie jedes Event. Sie kommt von außen (die Maschine/der Akteur hinter der Quelle, IDarf).", "error",
             [new("laufzeit", null, "Infrastructure/Quellen/Quellen.cs (QuellEingang: StartStream je Kennung)")]),
@@ -252,7 +254,7 @@ public static class Grammatik
         new(Query, Reader, GenauEins, "GR-QUERY"), new(Query, Aggregat, GenauEins, "GR-QUERY"),
         new(Faehigkeit, Projektion, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Reader, Beliebig, "GR-FAEHIGKEIT"),
         new(Faehigkeit, Funktion, Beliebig, "GR-FUNKTION-FORM"),
-        new(Dienst, Funktion, Beliebig, "GR-DIENST"), new(Dienst, DienstImpl, Beliebig, "GR-DIENST"),
+        new(Gerufen, Funktion, Beliebig, "GR-GERUFEN"),
         new(Event, Client, Beliebig, "GR-EVENT"), new(Transient, Client, Beliebig, "GR-TRANSIENT"),
         // Eine Quell-Nachricht ist ein Event aus dem Log (GR-QUELLE): Funktionen und Projektionen hören sie, ein Client kann sie hören.
         new(Quelle, Funktion, Beliebig, "GR-QUELLE"), new(Quelle, Projektion, Beliebig, "GR-QUELLE"), new(Quelle, Client, Beliebig, "GR-QUELLE"),
@@ -266,7 +268,7 @@ public static class Grammatik
         new(Funktion, Command, "GR-FUNKTION-FORM"), new(Funktion, Event, "GR-FUNKTION-FORM"), new(Funktion, Transient, "GR-FUNKTION-FORM"),
         new(Reader, Response, "GR-AUS-READER"), new(Aggregat, Response, "GR-AUS-AGGREGAT"),
         new(Store, Faehigkeit, "GR-FAEHIGKEIT"),
-        new(DienstImpl, Dienst, "GR-DIENST"),
+        new(Funktion, Gerufen, "GR-GERUFEN"),
         new(Aussenwelt, Command, "GR-COMMAND"), new(Aussenwelt, Query, "GR-QUERY"),
         new(Akteur, Command, "GR-AKTEUR"), new(Akteur, Query, "GR-AKTEUR"), new(Akteur, Transient, "GR-AKTEUR"),
         new(Akteur, Quelle, "GR-AKTEUR"), new(Aussenwelt, Quelle, "GR-QUELLE"),
@@ -306,18 +308,18 @@ public static class Grammatik
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string> EditorPortSorte = new Dictionary<string, string>
     {
-        ["wcall"] = Faehigkeit, ["rcall"] = Faehigkeit, ["dienst"] = Dienst,
+        ["wcall"] = Faehigkeit, ["rcall"] = Faehigkeit, ["gerufen"] = Gerufen,
     };
     public static readonly IReadOnlyList<(string Schluessel, string Baustein)> EditorPortBaustein =
     [
         ("dec", Aggregat), ("app", Aggregat), ("proj", Projektion), ("reader", Reader), ("akt", Akteur), ("client", Client),
-        ("fk", Funktion), ("dn", DienstImpl),
+        ("fk", Funktion),
     ];
     /// <summary>
     /// Editor-Ports, an denen der Baustein des AUSGANGS die Sorte GEBRAUCHT statt sie zu erzeugen: Auf/Frage → Store-Fähigkeit (der Port
     /// sitzt am Eingang, die Fähigkeit selbst erzeugt der Store). Geprüft wird dort der Konsum (Sorte × Baustein des Ausgangs).
     /// </summary>
-    public static readonly IReadOnlyList<string> EditorPortGebrauch = ["wcall", "rcall", "dienst"];
+    public static readonly IReadOnlyList<string> EditorPortGebrauch = ["wcall", "rcall", "gerufen"];
 
     /// <summary>
     /// Der Katalog im Verbinden-Modus: welche Record-Arten an einen Editor-Port passen KÖNNEN (Port-Typ + Richtung der Gegenseite), auch wenn

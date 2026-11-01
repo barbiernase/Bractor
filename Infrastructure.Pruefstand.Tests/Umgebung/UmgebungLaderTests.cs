@@ -140,6 +140,21 @@ public class UmgebungLaderTests
         s.Count(d => d.ServiceType == typeof(HandAusfuehrer)).Should().Be(1);
     }
 
+    [Fact]
+    public void Eine_gerufene_Funktion_nennt_unter_Funktionen_nur_ihre_Implementierung()
+    {
+        var s = new ServiceCollection().BindeFunktionen(new Dictionary<string, FunktionsKonfig>
+        {
+            ["IImageResizer"] = new() { Implementierung = "ImageResizer" },
+        });
+        s.Should().NotContain(d => d.ServiceType == typeof(BausteinBindung), "sie hat keinen eigenen Actor — sie läuft im Prozess ihres Halters");
+        FluentActions.Invoking(() => new ServiceCollection().BindeFunktionen(new Dictionary<string, FunktionsKonfig>
+            {
+                ["IImageResizer"] = new() { Laufort = FunktionsLaufort.Extern },
+            }))
+            .Should().Throw<BootFehler>().Where(e => e.Karte == "funktion:IImageResizer").WithMessage("*gerufene Funktion*nur ihre Implementierung*");
+    }
+
     [Theory]
     [InlineData("sim-main")]
     [InlineData("prod")]
@@ -176,7 +191,7 @@ public class UmgebungLaderTests
             b[f].Umsetzungen.Select(x => x.Name).Should().Equal([u], "genau eine Umsetzung im Host");
         }
         b["IBildpaarBeurteilung"].Umsetzungen.Should().BeEmpty("nur draußen getragen");
-        b["Bildeingang"].Gleichbleibend.Should().BeTrue("eine Klasse ohne Dienst und Lese-Fähigkeit");
+        b["Bildeingang"].Gleichbleibend.Should().BeTrue("eine Klasse ohne gerufene Funktion und Lese-Fähigkeit");
         b["RangeAufloesung"].Liest.Should().BeTrue("mit Lese-Fähigkeit: läuft im Host und hält fest");
     }
 }

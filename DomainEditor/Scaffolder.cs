@@ -91,7 +91,6 @@ public static class Scaffolder
             dateien.Add(new(pfad, TypDatei(g.Ns, g.Records, g.Enums, modell), DateiArt.Typen, !pfad.StartsWith(Unplatziert, StringComparison.Ordinal)));
 
         // ── Akteure → ihre echte Datei; sonst die (eine) Akteur-Datei ihres Namespace; sonst Akteure.cs im Verzeichnis ──
-        //    Ein bestehender Dienst-Vertrag gehört dem Code (Methoden!) — nur seine Basisliste gleicht der Abgleich ab.
         foreach (var g in modell.Akteure
                      .GroupBy(a => (Pfad: a.Datei ?? AkteurZiel(modell, a.Namespace), a.Namespace)))
             dateien.Add(new(g.Key.Pfad, AkteurDatei(g.Key.Namespace, g.ToList(), modell), DateiArt.Typen,
@@ -114,18 +113,16 @@ public static class Scaffolder
             dateien.Add(Platziert(agg.ApplierDatei, v, $"{agg.Name}.{rahmen.ApplierKlasse}.cs", ApplierDatei(agg, applier, modell), DateiArt.Applier));
         }
 
-        // ── Domänen-Dienste (docs/06 §6.5) → je Dienst seine Schnittstelle; je NEUE Implementierung (ohne Datei) ihre Klasse mit throw-Stubs ──
-        foreach (var d in modell.Dienste)
-        {
-            dateien.Add(Platziert(d.Datei, Verzeichnis(modell, d.Namespace), $"{d.Name}.cs", DienstDatei(d, modell), DateiArt.Typen));
-            foreach (var i in d.Implementierungen.Where(i => i.Datei == null))
-                dateien.Add(Platziert(null, Verzeichnis(modell, d.Namespace), $"{i.Name}.cs", DienstImplDatei(d, i, modell), DateiArt.Typen));
-        }
-
         // ── Funktionen (IFunktion, docs/04 §4.4) → je NEUE Funktion ihre Klasse (im Host, throw-Stubs; eigene Datei) bzw. ihre Schnittstelle
-        //    (draußen oder mit Umsetzung; Sammeldatei Funktionen.cs) — eine bestehende gehört dem Code, ihre Signaturen gleicht der Abgleich ab ──
-        foreach (var f in modell.BausteinFunktionen.Where(f => f.Datei == null))
-            dateien.Add(Platziert(null, Verzeichnis(modell, f.Namespace), f.Klasse ? $"{f.Name}.cs" : "Funktionen.cs", FunktionsDatei(f, modell), DateiArt.Typen));
+        //    (draußen oder mit Umsetzung; Sammeldatei Funktionen.cs) — mit Eingängen (Auf) oder gerufen (Methoden); je NEUE Umsetzung einer
+        //    Schnittstelle ihre Klasse mit throw-Stubs. Eine bestehende gehört dem Code, ihre Signaturen gleicht der Abgleich ab ──
+        foreach (var f in modell.BausteinFunktionen)
+        {
+            if (f.Datei == null)
+                dateien.Add(Platziert(null, Verzeichnis(modell, f.Namespace), f.Klasse ? $"{f.Name}.cs" : "Funktionen.cs", FunktionsDatei(f, modell), DateiArt.Typen));
+            foreach (var u in f.Umsetzungen.Where(u => u.Datei == null && !f.Klasse))
+                dateien.Add(Platziert(null, Verzeichnis(modell, f.Namespace), $"{u.Name}.cs", UmsetzungsDatei(f, u, modell), DateiArt.Typen));
+        }
 
         if (modell.Lesen is { } lesen) dateien.AddRange(LeseseitenDateien(modell, lesen));
 
@@ -384,21 +381,21 @@ public static class Scaffolder
     public static string FunktionsStub(string klasse, BausteinEingang e, string einzug) =>
         $"{einzug}public {FunktionsKopf(e)}\n{einzug}{{\n{einzug}    throw new NotImplementedException(\"TODO: {klasse}.Auf({e.Eingang})\");\n{einzug}}}\n";
 
+    /// <summary>Die Typen, die eine Funktion nennt (Eingänge, Ausgaben, Lese-Fähigkeiten, gerufene Methoden) — für ihre usings.</summary>
+    private static IEnumerable<string> FunktionsTypen(BausteinFunktion f) =>
+        f.Eingaenge.SelectMany(e => FunktionsParameter(e).Select(p => p.Typ).Concat(e.Ausgaben))
+            .Concat(f.Methoden.SelectMany(m => m.Parameter.Select(p => p.Typ).Append(m.Rueckgabe)));
+
     private static string FunktionsDatei(BausteinFunktion f, EditorModell modell)
     {
-        var typen = f.Eingaenge.SelectMany(e => FunktionsParameter(e).Select(p => p.Typ).Concat(e.Ausgaben)).Concat(f.Konstruktor.Select(p => p.Typ));
-        var b = Kopf(f.Namespace, Usings(f.Namespace, modell, [modell.Rahmen.VertragsNamespace], typen, []));
+        var b = Kopf(f.Namespace, Usings(f.Namespace, modell, [modell.Rahmen.VertragsNamespace], FunktionsTypen(f).Concat(f.Konstruktor.Select(p => p.Typ)), []));
         Doku(b, f.Doku, "");
         if (f.Klasse)
         {
             var ctor = f.Konstruktor.Count > 0 ? $"({ParameterListe(f.Konstruktor)})" : "";
             b.AppendLine($"public sealed class {f.Name}{ctor} : {IFunktion}");
             b.AppendLine("{");
-            for (var i = 0; i < f.Eingaenge.Count; i++)
-            {
-                if (i > 0) b.AppendLine();
-                b.Append(FunktionsStub(f.Name, f.Eingaenge[i], "    "));
-            }
+            b.Append(Stubs(f, f.Name));
             b.AppendLine("}");
         }
         else
@@ -406,68 +403,40 @@ public static class Scaffolder
             b.AppendLine($"public interface {f.Name} : {IFunktion}");
             b.AppendLine("{");
             foreach (var e in f.Eingaenge) b.AppendLine($"    {FunktionsKopf(e)};");
+            foreach (var m in f.Methoden)
+            {
+                Doku(b, m.Doku, "    ");
+                b.AppendLine($"    {MethodenKopf(m)};");
+            }
             b.AppendLine("}");
         }
         return b.ToString();
     }
 
-    // ── Domänen-Dienst (docs/06 §6.5): Schnittstelle + Implementierungs-Stub ─────────────────────────
-    private static readonly string IDienst = nameof(Abstractions.IDienst);
-
-    private static IEnumerable<string> DienstTypen(Dienst d) =>
-        d.Methoden.SelectMany(m => m.Parameter.Select(p => p.Typ).Append(m.Rueckgabe));
-
-    private static string DienstDatei(Dienst d, EditorModell modell)
+    /// <summary>Die throw-Stubs einer Klasse: je Eingang ein Auf, je gerufene Methode die Methode.</summary>
+    private static string Stubs(BausteinFunktion f, string klasse)
     {
-        var b = Kopf(d.Namespace, Usings(d.Namespace, modell, [modell.Rahmen.VertragsNamespace], DienstTypen(d), []));
-        Doku(b, d.Doku, "");
-        b.Append(DienstInterface(d));
-        return b.ToString();
+        var teile = f.Eingaenge.Select(e => FunktionsStub(klasse, e, "    ")).Concat(f.Methoden.Select(m => MethodenStub(klasse, m, "    ")));
+        return string.Join("\n", teile);
     }
 
-    /// <summary><c>public interface IX : IDienst { R M(P p); … }</c></summary>
-    public static string DienstInterface(Dienst d)
+    /// <summary><c>public sealed class X(Konstruktor) : IF { … Stubs … }</c> — eine neue Umsetzung einer Funktions-Schnittstelle.</summary>
+    private static string UmsetzungsDatei(BausteinFunktion f, FunktionsUmsetzung u, EditorModell modell)
     {
-        var b = new StringBuilder();
-        b.AppendLine($"public interface {d.Name} : {IDienst}");
+        var b = Kopf(f.Namespace, Usings(f.Namespace, modell, [modell.Rahmen.VertragsNamespace], FunktionsTypen(f).Concat(u.Konstruktor.Select(p => p.Typ)), []));
+        b.AppendLine($"public sealed class {u.Name}{(u.Konstruktor.Count == 0 ? "" : $"({ParameterListe(u.Konstruktor)})")} : {f.Name}");
         b.AppendLine("{");
-        foreach (var m in d.Methoden)
-        {
-            Doku(b, m.Doku, "    ");
-            b.AppendLine($"    {DienstMethodeKopf(m)};");
-        }
+        b.Append(Stubs(f, u.Name));
         b.AppendLine("}");
         return b.ToString();
     }
 
-    /// <summary><c>R M(P p)</c> — Rückgabe und Parameter wie im Modell.</summary>
-    public static string DienstMethodeKopf(DienstMethode m) => $"{m.Rueckgabe} {m.Name}({ParameterListe(m.Parameter)})";
+    /// <summary><c>R M(P p)</c> — Rückgabe und Parameter einer gerufenen Methode wie im Modell.</summary>
+    public static string MethodenKopf(FunktionsMethode m) => $"{m.Rueckgabe} {m.Name}({ParameterListe(m.Parameter)})";
 
-    /// <summary>Die Methode einer Implementierung als Stub: <c>public R M(P p) { throw … }</c> (ohne async — passt für jeden Rückgabetyp).</summary>
-    public static string DienstMethodeStub(Dienst d, DienstImpl i, DienstMethode m, string einzug)
-        => $"{einzug}public {DienstMethodeKopf(m)}\n{einzug}{{\n{einzug}    throw new NotImplementedException(\"TODO: {i.Name}.{m.Name}\");\n{einzug}}}\n";
-
-    /// <summary>Name einer neuen Implementierung: das Interface ohne führendes I (bei Kollision + „Impl").</summary>
-    public static string DienstImplName(Dienst d, EditorModell modell)
-    {
-        var n = d.Name.Length > 1 && d.Name[0] == 'I' && char.IsUpper(d.Name[1]) ? d.Name[1..] : d.Name + "Impl";
-        return modell.Records.Any(r => r.Name == n) || modell.Dienste.Any(x => x.Name == n || x.Implementierungen.Any(y => y.Name == n)) ? n + "Impl" : n;
-    }
-
-    /// <summary><c>public sealed class X(Konstruktor) : IX { public R M(P p) { throw … } … }</c></summary>
-    private static string DienstImplDatei(Dienst d, DienstImpl i, EditorModell modell)
-    {
-        var b = Kopf(d.Namespace, Usings(d.Namespace, modell, [modell.Rahmen.VertragsNamespace], DienstTypen(d).Concat(i.Konstruktor.Select(p => p.Typ)), []));
-        b.AppendLine($"public sealed class {i.Name}{(i.Konstruktor.Count == 0 ? "" : $"({ParameterListe(i.Konstruktor)})")} : {d.Name}");
-        b.AppendLine("{");
-        for (var k = 0; k < d.Methoden.Count; k++)
-        {
-            if (k > 0) b.AppendLine();
-            b.Append(DienstMethodeStub(d, i, d.Methoden[k], "    "));
-        }
-        b.AppendLine("}");
-        return b.ToString();
-    }
+    /// <summary>Eine gerufene Methode als Stub: <c>public R M(P p) { throw … }</c> (ohne async — passt für jeden Rückgabetyp).</summary>
+    public static string MethodenStub(string klasse, FunktionsMethode m, string einzug)
+        => $"{einzug}public {MethodenKopf(m)}\n{einzug}{{\n{einzug}    throw new NotImplementedException(\"TODO: {klasse}.{m.Name}\");\n{einzug}}}\n";
 
     /// <summary>
     /// Ein Record in SEINER deklarierten Form: Doku, Attribute, <c>{Typart} X(Positions-Felder) : Marker, Basen</c>, im Rumpf
@@ -858,7 +827,6 @@ public static class Scaffolder
         }
         foreach (var k in modell.Lesen?.Konsumenten ?? []) nsVon.TryAdd(k.Name, k.Namespace);
         foreach (var f in modell.BausteinFunktionen) nsVon.TryAdd(f.Name, f.Namespace);   // z. B. IDarf<IFunktion> am Akteur, Client über einen verkörperten Akteur
-        foreach (var d in modell.Dienste) nsVon.TryAdd(d.Name, d.Namespace);      // ein Dienst im Konstruktor einer Implementierung
         foreach (var a in modell.Akteure) nsVon.TryAdd(a.Name, a.Namespace);      // IVerkoerpert<Akteur> am Client
 
         var menge = new SortedSet<string>(basis.Concat(explizit), StringComparer.Ordinal);

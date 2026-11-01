@@ -165,10 +165,9 @@ public sealed partial class Sicht
                 else Add(MengeListe(S(r, "query")));
                 break;
             }
-            case "dienst":
-                foreach (var f in BausteinDienstNutzer(r)) Add(AkteureId("fb:" + S(f, "_id")));
-                break;
             case "bausteinfunktion":
+                // Gerufen: wer ihre Nutzer anstößt.
+                foreach (var f in GerufenNutzer(r)) Add(AkteureId("fb:" + S(f, "_id")));
                 foreach (var a in _akteure.Where(a => L(a, "darf").Contains(name))) Add([S(a, "name")]);
                 foreach (var e in Alle(r["eingaenge"])) Add(MengeListe(S(e, "eingang")));
                 break;

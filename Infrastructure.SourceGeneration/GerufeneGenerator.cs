@@ -1,5 +1,5 @@
 // In Projekt: Infrastructure.SourceGeneration
-// Dateiname: DienstGenerator.cs
+// Dateiname: GerufeneGenerator.cs
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -10,14 +10,14 @@ using System.Text;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Domänen-Dienste (<c>Abstractions.IDienst</c>, docs/06 §6.5): erzeugt <c>GeneratedDienste</c> — die Tabelle Dienst → Implementierungen (Code-Fakt:
-    /// jede öffentliche Klasse, die das Interface implementiert) mit generierter Fabrik je Implementierung, dazu was jeder Konstruktor einer
-    /// Funktions- bzw. Dienst-Implementierung braucht (Dienste, Konfig-Records) und je Konfig-Record die Bindung aus <c>Konfig:&lt;Record&gt;</c>.
-    /// Welche Implementierung läuft, wählt die Umgebung (<c>Dienste:&lt;IDienst&gt;</c>); gebunden und geprüft wird beim Start (BindeDienste).
-    /// Alles ohne Reflection: Fabriken rufen den Konstruktor direkt, Konfig-Records werden Feld für Feld gelesen.
+    /// Gerufene Funktionen (<c>IFunktion</c> ohne <c>Auf</c>, docs/06 §6.5): erzeugt <c>GeneratedGerufene</c> — die Tabelle Funktion → Umsetzungen
+    /// (Code-Fakt: jede öffentliche Klasse, die die Schnittstelle implementiert; eine Klasse ist ihre eigene) mit generierter Fabrik je Umsetzung, dazu
+    /// was jeder Konstruktor einer Funktion bzw. Umsetzung braucht (gerufene Funktionen, Konfig-Records) und je Konfig-Record die Bindung aus
+    /// <c>Konfig:&lt;Record&gt;</c>. Welche Umsetzung läuft, wählt die Umgebung (<c>Funktionen:&lt;Name&gt;:Implementierung</c>); gebunden und geprüft
+    /// wird beim Start (<c>BindeGerufene</c>). Alles ohne Reflection: Fabriken rufen den Konstruktor direkt, Konfig-Records werden Feld für Feld gelesen.
     /// </summary>
     [Generator]
-    public class DienstGenerator : ISourceGenerator
+    public class GerufeneGenerator : ISourceGenerator
     {
         public void Initialize(GeneratorInitializationContext context) { }
 
@@ -25,66 +25,62 @@ namespace Infrastructure.SourceGeneration
         {
             if (!Laufzeitprojekt.Ist(context.Compilation)) return;   // nur in der Komposition (docs/07)
             var c = context.Compilation;
-            var iDienst = c.GetTypeByMetadataName(Abstractions.Dienstvertrag.Marker);
-            var iFunktion = c.GetTypeByMetadataName("Abstractions.IFunktion");
-            if (iDienst == null || iFunktion == null) return;
+            if (c.GetTypeByMetadataName(Funktionsform.IFunktion) == null) return;
             var fq = SymbolDisplayFormat.FullyQualifiedFormat;
 
-            var schnitt = Ctorbindung.Interfaces(c);
-            var dienste = schnitt.Where(t => t.AllInterfaces.Contains(iDienst, SymbolEqualityComparer.Default))
-                .OrderBy(t => t.ToDisplayString(), System.StringComparer.Ordinal).ToList();
-            var funktionen = schnitt.Where(t => t.AllInterfaces.Contains(iFunktion, SymbolEqualityComparer.Default)).ToList();
-
             var klassen = Ctorbindung.Klassen(c).Where(Ctorbindung.Baubar).OrderBy(k => k.ToDisplayString(), System.StringComparer.Ordinal).ToList();
+            var gerufene = Ctorbindung.Interfaces(c).Concat(klassen).Where(Funktionsform.IstGerufen)
+                .OrderBy(t => t.ToDisplayString(), System.StringComparer.Ordinal).ToList();
 
             bool Implementiert(INamedTypeSymbol k, INamedTypeSymbol i) => k.AllInterfaces.Contains(i, SymbolEqualityComparer.Default);
-            var dienstImpls = dienste.Select(d => (Dienst: d, Impls: klassen.Where(k => Implementiert(k, d)).ToList())).ToList();
-            // Funktions-Implementierungen: Klassen einer Funktions-Schnittstelle (beider Formen) und Funktionen als Klasse (Baustein-Form, im Host).
-            var funktionsImpls = klassen.Where(k => funktionen.Any(f => Implementiert(k, f)) || Funktionsform.IstBaustein(k)).ToList();
+            var gerufenUm = gerufene.Select(g => (Funktion: g, Umsetzungen: g.TypeKind == TypeKind.Interface
+                ? klassen.Where(k => Implementiert(k, g)).ToList() : new List<INamedTypeSymbol> { g })).ToList();
+            // Umsetzungen der Funktionen mit Eingängen: Klassen einer Funktions-Schnittstelle und Funktionen als Klasse (im Host).
+            var bausteinUm = klassen.Where(k => Funktionsform.Umsetzt(k).Any(Funktionsform.IstBaustein) || Funktionsform.IstBaustein(k)).ToList();
 
-            // Was die Konstruktoren brauchen — und daraus die Konfig-Records (nur die, die eine Implementierung wirklich nimmt).
-            var nutzer = dienstImpls.SelectMany(x => x.Impls).Concat(funktionsImpls).Distinct(SymbolEqualityComparer.Default).Cast<INamedTypeSymbol>()
+            // Was die Konstruktoren brauchen — und daraus die Konfig-Records (nur die, die eine Umsetzung wirklich nimmt).
+            var nutzer = gerufenUm.SelectMany(x => x.Umsetzungen).Concat(bausteinUm).Distinct(SymbolEqualityComparer.Default).Cast<INamedTypeSymbol>()
                 .OrderBy(k => k.ToDisplayString(), System.StringComparer.Ordinal).ToList();
-            var braucht = nutzer.Select(k => (Impl: k, Braucht: Ctorbindung.Braucht(Ctorbindung.Konstruktor(k), iDienst).ToList())).ToList();
-            var konfigs = braucht.SelectMany(x => x.Braucht).Where(t => Ctorbindung.ArtVon(t, iDienst) == Ctorbindung.Art.Konfig)
+            var braucht = nutzer.Select(k => (Impl: k, Braucht: Ctorbindung.Braucht(Ctorbindung.Konstruktor(k)).ToList())).ToList();
+            var konfigs = braucht.SelectMany(x => x.Braucht).Where(t => Ctorbindung.ArtVon(t) == Ctorbindung.Art.Konfig)
                 .Distinct(SymbolEqualityComparer.Default).Cast<INamedTypeSymbol>()
                 .OrderBy(k => k.ToDisplayString(), System.StringComparer.Ordinal).ToList();
 
-            context.AddSource("GeneratedDienste.g.cs", Emit(dienstImpls, braucht, konfigs, fq));
+            context.AddSource("GeneratedGerufene.g.cs", Emit(gerufenUm, braucht, konfigs, fq));
         }
 
-        private static string Emit(List<(INamedTypeSymbol Dienst, List<INamedTypeSymbol> Impls)> dienste,
+        private static string Emit(List<(INamedTypeSymbol Funktion, List<INamedTypeSymbol> Umsetzungen)> gerufene,
             List<(INamedTypeSymbol Impl, List<INamedTypeSymbol> Braucht)> braucht, List<INamedTypeSymbol> konfigs, SymbolDisplayFormat fq)
         {
             var sb = new StringBuilder();
             sb.AppendLine("// <auto-generated/>");
-            sb.AppendLine("// Domänen-Dienste: Implementierungen, Konstruktor-Bedarf, Konfig-Records (DienstGenerator). Nicht editieren.");
+            sb.AppendLine("// Gerufene Funktionen: Umsetzungen, Konstruktor-Bedarf, Konfig-Records (GerufeneGenerator). Nicht editieren.");
             sb.AppendLine("#nullable enable");
             sb.AppendLine("using System;");
             sb.AppendLine("using System.Collections.Generic;");
             sb.AppendLine("using Microsoft.Extensions.Configuration;");
             sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
             sb.AppendLine();
-            sb.AppendLine("namespace Infrastructure.Dienste");
+            sb.AppendLine("namespace Infrastructure.Funktionen");
             sb.AppendLine("{");
-            sb.AppendLine("    public static class GeneratedDienste");
+            sb.AppendLine("    public static class GeneratedGerufene");
             sb.AppendLine("    {");
-            sb.AppendLine("        /// <summary>Einfacher Name → Dienst (für den Abschnitt Dienste:&lt;Name&gt; der Umgebung).</summary>");
+            sb.AppendLine("        /// <summary>Einfacher Name → gerufene Funktion (für den Abschnitt Funktionen:&lt;Name&gt; der Umgebung).</summary>");
             sb.AppendLine("        public static readonly IReadOnlyDictionary<string, Type> Namen = new Dictionary<string, Type>(StringComparer.Ordinal)");
             sb.AppendLine("        {");
-            foreach (var (d, _) in dienste) sb.AppendLine($"            [\"{d.Name}\"] = typeof({d.ToDisplayString(fq)}),");
+            foreach (var (g, _) in gerufene) sb.AppendLine($"            [\"{g.Name}\"] = typeof({g.ToDisplayString(fq)}),");
             sb.AppendLine("        };");
             sb.AppendLine();
-            sb.AppendLine("        /// <summary>Die Implementierungen je Dienst (Code-Fakt) mit ihrer Fabrik — welche läuft, wählt die Umgebung.</summary>");
-            sb.AppendLine("        public static readonly IReadOnlyList<DienstImplementierung> Implementierungen = new DienstImplementierung[]");
+            sb.AppendLine("        /// <summary>Die Umsetzungen je gerufener Funktion (Code-Fakt) mit ihrer Fabrik — welche läuft, wählt die Umgebung.</summary>");
+            sb.AppendLine("        public static readonly IReadOnlyList<GerufeneUmsetzung> Umsetzungen = new GerufeneUmsetzung[]");
             sb.AppendLine("        {");
-            foreach (var (d, impls) in dienste)
-                foreach (var k in impls)
-                    sb.AppendLine($"            new DienstImplementierung(typeof({d.ToDisplayString(fq)}), \"{k.Name}\", typeof({k.ToDisplayString(fq)}), "
-                        + $"s => s.AddScoped<{d.ToDisplayString(fq)}>(sp => new {k.ToDisplayString(fq)}({Ctorbindung.Argumente(Ctorbindung.Konstruktor(k), fq)}))),");
+            foreach (var (g, ums) in gerufene)
+                foreach (var k in ums)
+                    sb.AppendLine($"            new GerufeneUmsetzung(typeof({g.ToDisplayString(fq)}), \"{k.Name}\", typeof({k.ToDisplayString(fq)}), "
+                        + $"s => s.AddScoped<{g.ToDisplayString(fq)}>(sp => new {k.ToDisplayString(fq)}({Ctorbindung.Argumente(Ctorbindung.Konstruktor(k), fq)}))),");
             sb.AppendLine("        };");
             sb.AppendLine();
-            sb.AppendLine("        /// <summary>Implementierung (Funktion oder Dienst) → was ihr Konstruktor braucht: Dienste und Konfig-Records.</summary>");
+            sb.AppendLine("        /// <summary>Umsetzung (einer Funktion mit Eingängen oder einer gerufenen) → was ihr Konstruktor braucht: gerufene Funktionen und Konfig-Records.</summary>");
             sb.AppendLine("        public static readonly IReadOnlyDictionary<Type, Type[]> Braucht = new Dictionary<Type, Type[]>");
             sb.AppendLine("        {");
             foreach (var (k, b) in braucht.Where(x => x.Braucht.Count > 0))

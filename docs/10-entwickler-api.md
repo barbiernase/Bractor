@@ -161,11 +161,12 @@ public interface IImportLauf : IFunktion
 - **Ausgaben:** Commands (gehen über den einen Emit-Weg in den Aggregat-Mechanismus), Events (ohne Aggregat, kein `Apply`), Quell-Nachrichten,
   Hinweise. Ein Strom (`IAsyncEnumerable`) hat einen Fortschritt: nach einem Absturz geht es bei der nächsten Ausgabe weiter.
 - **Festhalten:** das Framework hält die Ausgabe unter „Funktion, Eingang“ fest, bevor sie wirkt (A1); nur eine nachweislich **gleichbleibende**
-  Funktion (Klasse im Host, kein Dienst, keine Lese-Fähigkeit, keine Uhr, kein Zufall, kein Zustand) spart das (R12).
+  Funktion (Klasse im Host, keine gerufene Funktion, keine Lese-Fähigkeit, keine Uhr, kein Zufall, kein Zustand) spart das (R12).
 - **Neue Ids** nur abgeleitet: `h.NeueId<T>()` bzw. `h.NeueId<T>(zeile)` (R13).
-- **Dienst:** Technik hinter einer Funktion ist ein Domänen-Dienst — ein Interface mit `IDienst`, eine Implementierung, Konfig als Record
-  (`Konfig:<Record>` in der Umgebung, Bindung `Dienste:<I>:Implementierung`); er steht nur im Konstruktor einer Funktion oder einer
-  Dienst-Implementierung (R10). Eine Funktion mit Lese-Fähigkeit läuft im Host.
+- **Gerufen:** Technik hinter einer Funktion ist selbst eine Funktion, nur ohne `Auf` — frei benannte Methoden, eine Schnittstelle mit
+  Umsetzungen (oder eine Klasse), Konfig als Record (`Konfig:<Record>` in der Umgebung, Wahl `Funktionen:<I>:Implementierung`). Ihr Halter
+  nimmt sie im Konstruktor (R10), sie läuft in seinem Prozess, hat keinen Laufort und kein `IDarf`. Eingänge und gerufene Methoden an einem
+  Objekt sind ein Formfehler. Eine Funktion mit Lese-Fähigkeit läuft im Host.
 - **Zustand** (R19): `IZustand<T>` im Konstruktor einer Funktions-Klasse; sonst keine veränderlichen Felder. Gesichert mit der Position (A5);
   mit `[EineAdresse]` hat die Funktion einen Zustand für alle Partitionen.
 
@@ -269,7 +270,7 @@ Prüfen heißt Bauen (W5). Die Liste „Regel → Build-Gegenstück“ der Gramm
 | R7 | Ids sind typisiert; Command-Ziele sind `Id<T>` | Compiler, CQRS013 |
 | R8 | Fähigkeiten nur als Parameter (eine Funktion je Fähigkeit, ein Store bündelt), nie in Konstruktor, Feld oder `new` | CQRS051, CQRS054, CQRS055 |
 | R9 | Eine Projektion schreibt in genau einen Store | CQRS052 |
-| R10 | Dienste nur im Konstruktor von Funktionen und Dienst-Implementierungen; eine Funktion mit Lese-Fähigkeit läuft im Host | CQRS089–092, Start-Prüfung |
+| R10 | Gerufene Funktionen (`IFunktion` ohne `Auf`) nur im Konstruktor einer Funktion bzw. Umsetzung; eine Funktion mit Lese-Fähigkeit läuft im Host | CQRS089–092, Start-Prüfung |
 | R11 | Aggregate und Projektionen rechnen bei gleicher Eingabe gleich: keine Uhr, kein Zufall, kein `Guid.NewGuid()`, kein Lesen fremder Daten | CQRS102 |
 | R12 | Funktionen halten ihre Ausgabe fest, bevor sie wirkt; Ausnahme nur nachweislich gleichbleibend | CQRS103, Generator |
 | R13 | Neue Ids auf der Server-Seite nur abgeleitet (`Herkunft.NeueId`) | CQRS104 |

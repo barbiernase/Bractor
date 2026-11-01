@@ -134,27 +134,18 @@ public static class ModellMapper
                     Faehigkeiten = e.Faehigkeiten.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
                     Ausgaben = e.AusgabenFull.Select(Kurz).ToList(),
                 }).ToList(),
+                Methoden = f.Methoden.Select(me => new FunktionsMethode
+                {
+                    Name = me.Name, Rueckgabe = me.Rueckgabe, Doku = me.Doku,
+                    Parameter = me.Parameter.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
+                }).ToList(),
                 Konstruktor = f.Konstruktor.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
                 Umsetzungen = f.UmsetzungenFull.Select(u => new FunktionsUmsetzung
                 {
                     Name = Kurz(u),
                     Konstruktor = f.UmsetzungsKonstruktoren.GetValueOrDefault(u, []).Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
                     Datei = Rel(f.UmsetzungsDateien.GetValueOrDefault(u)),
-                }).ToList(),
-            }).ToList(),
-            Dienste = dom.Dienste.Select(d => new Dienst
-            {
-                Name = d.Name, Namespace = d.Namespace, Doku = d.Doku, Datei = Rel(d.Datei),
-                Methoden = d.Methoden.Select(me => new DienstMethode
-                {
-                    Name = me.Name, Rueckgabe = me.Rueckgabe, Doku = me.Doku,
-                    Parameter = me.Parameter.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
-                }).ToList(),
-                Implementierungen = d.Impls.Select(i => new DienstImpl
-                {
-                    Name = i.Name, Datei = Rel(i.Datei),
-                    Konstruktor = i.Konstruktor.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
-                    Rumpfe = i.Rumpfe.Select(r => new DienstRumpf { Methode = r.Methode, Rumpf = r.Rumpf }).ToList(),
+                    Rumpfe = f.UmsetzungsRumpfe.GetValueOrDefault(u, []).Select(r => new MethodenRumpf { Methode = r.Methode, Rumpf = r.Rumpf }).ToList(),
                 }).ToList(),
             }).ToList(),
             Akteure = dom.Akteure.Select(x => new Akteur
@@ -497,7 +488,7 @@ public static class ModellMapper
         }
     }
 
-    /// <summary>Alle Spannen, die Karten belegen (<c>_ort</c> und <c>_teile</c>, auch an verschachtelten Karten wie Dienst-Methoden), je Datei.</summary>
+    /// <summary>Alle Spannen, die Karten belegen (<c>_ort</c> und <c>_teile</c>, auch an verschachtelten Karten wie gerufenen Methoden), je Datei.</summary>
     public static Dictionary<string, List<(int Start, int Ende)>> Abdeckung(params JsonNode?[] knoten)
     {
         var aus = new Dictionary<string, List<(int, int)>>(StringComparer.Ordinal);
@@ -557,7 +548,7 @@ public static class ModellMapper
             return l.FirstOrDefault(o => datei != null && Relativ(dom.Wurzel, o.Datei) == datei) ?? l[0];
         }
         // Die übrigen Deklarationen, die zur Karte gehören (weitere partial-Teile; Decider/Applier außerhalb des State; die Umsetzungen
-        //   einer Funktion; die Implementierungen eines Dienstes oder Stores) — „_teile": beim Löschen der Karte gehen sie mit. Verschachteltes
+        //   einer Funktion; die Implementierung eines Stores) — „_teile": beim Löschen der Karte gehen sie mit. Verschachteltes
         //   zählt nicht extra.
         void Teile(JsonObject k, Ort? haupt, IEnumerable<string> weitereTypen)
         {
@@ -568,30 +559,27 @@ public static class ModellMapper
             if (orte.Count > 0) k["_teile"] = new JsonArray(orte.Select(o => (JsonNode?)OrtJson(dom, o)).Where(x => x != null).ToArray());
         }
         var storeVon = dom.Stores.GroupBy(x => x.Namespace + "." + x.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-        var dienstVon = dom.Dienste.GroupBy(d => d.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var bausteinVon = dom.BausteinFunktionen.GroupBy(f => f.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-        foreach (var sammlung in new[] { "records", "enums", "bausteinFunktionen", "dienste", "akteure", "clients", "readModels", "projektionen", "reader", "stores" })
+        foreach (var sammlung in new[] { "records", "enums", "bausteinFunktionen", "akteure", "clients", "readModels", "projektionen", "reader", "stores" })
             foreach (var k in Alle(root[sammlung]))
             {
                 var full = S(k, "namespace") + "." + S(k, "name");
                 var haupt = TypOrt(full, (string?)k["datei"]);
                 k["_ort"] = OrtJson(dom, haupt);
                 var weitere = new List<string> { full };
-                // Eine Funktion draußen: ihre Umsetzungen im Host gehören zur Karte.
-                if (sammlung == "bausteinFunktionen" && bausteinVon.TryGetValue(full, out var bf)) weitere.AddRange(bf.UmsetzungenFull);
-                // Ein Dienst: seine Implementierungen gehören zur Karte; je Methode steht der Rumpf in der Implementierung.
-                if (sammlung == "dienste" && dienstVon.GetValueOrDefault(full) is { } draw)
+                // Eine Funktion: ihre Umsetzungen im Host gehören zur Karte; bei einer gerufenen steht je Methode der Rumpf in der Umsetzung.
+                if (sammlung == "bausteinFunktionen" && bausteinVon.TryGetValue(full, out var bf))
                 {
-                    foreach (var (m, mraw) in Alle(k["methoden"]).Zip(draw.Methoden)) if (OrtJson(dom, mraw.Ort) is { } mo) m["_ort"] = mo;
-                    foreach (var (dimpl, iraw) in Alle(k["implementierungen"]).Zip(draw.Impls))
+                    weitere.AddRange(bf.UmsetzungenFull);
+                    foreach (var (m, mraw) in Alle(k["methoden"]).Zip(bf.Methoden)) if (OrtJson(dom, mraw.Ort) is { } mo) m["_ort"] = mo;
+                    foreach (var (u, ufull) in Alle(k["umsetzungen"]).Zip(bf.UmsetzungenFull))
                     {
-                        weitere.Add(iraw.Full);
-                        if (OrtJson(dom, iraw.Ort) is { } io) dimpl["_ort"] = io;
-                        foreach (var (r, rraw) in Alle(dimpl["rumpfe"]).Zip(iraw.Rumpfe))
+                        if (OrtJson(dom, bf.UmsetzungsOrte.GetValueOrDefault(ufull)) is { } uo) u["_ort"] = uo;
+                        foreach (var (r, rraw) in Alle(u["rumpfe"]).Zip(bf.UmsetzungsRumpfe.GetValueOrDefault(ufull) ?? []))
                             if (OrtJson(dom, rraw.Ort) is { } ro) r["_rumpf"] = ro;
                     }
                 }
-                // Die Implementierung eines Stores gehört zu seiner Karte (wie bei Diensten).
+                // Die Implementierung eines Stores gehört zu seiner Karte (wie die Umsetzungen einer Funktion).
                 if (sammlung == "stores" && storeVon.GetValueOrDefault(full) is { } st)
                 {
                     if (st.Impl is { } si) weitere.Add(si.Ns + "." + si.Name);
@@ -652,7 +640,6 @@ public static class ModellMapper
         foreach (var d in Alle(root["decider"])) d["_id"] = Abstractions.WirkerId.FuerDecide(S(d, "aggregat"), S(d, "command"));
         foreach (var a in Alle(root["applier"])) a["_id"] = "apply:" + S(a, "aggregat") + "/" + S(a, "event");
         foreach (var f in Alle(root["bausteinFunktionen"])) f["_id"] = Abstractions.WirkerId.FuerFunktion(S(f, "name"));
-        foreach (var d in Alle(root["dienste"])) d["_id"] = KartenIds.Dienst + S(d, "name");
         foreach (var a in Alle(root["akteure"])) a["_id"] = Abstractions.WirkerId.FuerAkteur(S(a, "name"));
         foreach (var c in Alle(root["clients"])) c["_id"] = "client:" + S(c, "name");
     }

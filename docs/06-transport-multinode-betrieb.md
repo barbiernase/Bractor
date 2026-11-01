@@ -24,7 +24,7 @@ Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses K
   `cqrs_sim_${branch}`.
 - **`AddCqrs`** (`Infrastructure/Umgebung/CqrsUmgebungExtensions.cs`) bindet der Reihe nach: Kestrel (gRPC-Port HTTP/2; Einblick-Port
   HTTP/1.1+2, 0 = aus), Umgebungs-Siegel, `AddCqrsFramework` (Werte aus der Umgebung), `IDbClock` mit Versatz, Projektions-Stand,
-  Pull-Pfade, Prozesse und Flüsse, Monitoring, Fristen, Akteure (`Identitaeten`), Quellen, Funktionen (Laufort), Dienste, Einblick.
+  Pull-Pfade, Prozesse und Flüsse, Monitoring, Fristen, Akteure (`Identitaeten`), Quellen, Funktionen (Laufort bzw. Umsetzung), Einblick.
 - **`LaufeAsync`** mappt gRPC (`CqrsClientService`, bidirektionaler Stream `Connect`), Monitoring, Einblick, JSON-Eingang und die Quell-Webhooks
   (§6.6). Mit Rolle `Migrator` legt es nur das Schema an und endet (§6.3).
 - **Umgebungs-Siegel** (`<schema>.umgebung`): ein Host startet nur gegen eine DB mit passendem Namen, passender Art und passendem Cluster-Namen;
@@ -141,8 +141,8 @@ Abschnitts-Tabelle steht in docs/06 §6.5; hier nur der Überblick:
   (Art, Name, Consul, AdvertisedHost, Rolle), `Schreibpfad` (generiertes JSON, Group-Commit, Batch, Linger, Drain, Snapshot-Schwelle,
   Inbox-Grenze), `Lebenszyklus` (Leerlauf bis zur Passivierung je Actor-Art), `Konsum` (Partitionen, Seitengröße und Takt je Partition des Batch-Konsums), `Transport` (gRPC-Port, Einblick-Port, JSON-Eingang).
 - **Was aktiv ist:** `Identitaeten` (Token → Akteure; ohne Abschnitt ist das Akteur-Tor offen), `Quellen` (Treiber-Konfig inkl. Webhook),
-  `Funktionen` (Laufort `Host`/`Extern`/`Hand`, Implementierung, Slots, Wiederholungen, `Worker`), `Dienste` (Implementierung je
-  Dienst-Interface), `Konfig` (Konfig-Records der Domäne, Feld für Feld), `Clients` (Token, Adresse, Urls, Dateien je Client-Vertrag),
+  `Funktionen` (Laufort `Host`/`Extern`/`Hand`, Implementierung, Slots, Wiederholungen, `Worker`; eine gerufene Funktion nur ihre
+  Implementierung), `Konfig` (Konfig-Records der Domäne, Feld für Feld), `Clients` (Token, Adresse, Urls, Dateien je Client-Vertrag),
   `Logging`.
 
 Jeder Wert lässt sich per `__`-Variable überschreiben, z. B. `Cluster__AdvertisedHost=grpc1`. Die **Rolle** eines Knotens heißt

@@ -48,7 +48,6 @@ namespace Infrastructure.SourceGeneration
             if (!Laufzeitprojekt.Ist(context.Compilation)) return;   // nur in der Komposition (docs/07)
             var c = context.Compilation;
             if (c.GetTypeByMetadataName(Funktionsform.IFunktion) == null) return;
-            var iDienst = c.GetTypeByMetadataName(Abstractions.Dienstvertrag.Marker);
             var fq = SymbolDisplayFormat.FullyQualifiedFormat;
 
             var typen = Vertragsassemblies.Typen(c);
@@ -75,7 +74,7 @@ namespace Infrastructure.SourceGeneration
                     .OrderBy(k => k.ToDisplayString(), System.StringComparer.Ordinal).ToList()
                 : new List<INamedTypeSymbol> { f.Typ }, (IEqualityComparer<INamedTypeSymbol>)SymbolEqualityComparer.Default);
 
-            context.AddSource("GeneratedFunktionsBausteine.g.cs", Emit(gut, umsetzungen, iDienst, fq));
+            context.AddSource("GeneratedFunktionsBausteine.g.cs", Emit(gut, umsetzungen, fq));
         }
 
         /// <summary>
@@ -93,7 +92,7 @@ namespace Infrastructure.SourceGeneration
                 + $"z => (({huelle})z).Wert = new {typ}())";
         }
 
-        private static string Emit(List<Funktionsform.Form> fs, Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>> umsetzungen, INamedTypeSymbol? iDienst,
+        private static string Emit(List<Funktionsform.Form> fs, Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>> umsetzungen,
             SymbolDisplayFormat fq)
         {
             string T(ITypeSymbol t) => t.ToDisplayString(fq);
@@ -119,7 +118,7 @@ namespace Infrastructure.SourceGeneration
             {
                 var f = fs[i];
                 var ctor = f.Draussen ? null : Ctorbindung.Konstruktor(f.Typ);
-                var dienste = Ctorbindung.Braucht(ctor, iDienst).Select(d => $"typeof({T(d)})");
+                var dienste = Ctorbindung.Braucht(ctor).Select(d => $"typeof({T(d)})");
                 sb.AppendLine($"            new FunktionsBaustein(typeof({T(f.Typ)}), \"{f.Typ.Name}\", Draussen: {(f.Draussen ? "true" : "false")}, "
                     + $"Gleichbleibend: {(Funktionsform.Gleichbleibend(f) ? "true" : "false")},");
                 sb.AppendLine("                new FunktionsEingang[]");

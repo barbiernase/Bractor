@@ -35,7 +35,7 @@ namespace Infrastructure.Integration.Tests;
 /// </summary>
 public class AblaufE2ETests
 {
-    /// <summary>Die Host-Verdrahtung wie Host.Grpc: Framework (samt Funktionen und Uhr), Projektionen, Dienste mit Konfig.</summary>
+    /// <summary>Die Host-Verdrahtung wie Host.Grpc: Framework (samt Funktionen und Uhr), Projektionen, gerufene Funktionen mit Konfig.</summary>
     private static void Verdrahte(IServiceCollection s, string ausgabe, string cluster, bool grpc, FunktionsLaufort kontrastausgleich)
     {
         s.AddCqrsFramework(opts => { opts.EnableGrpc = grpc; opts.ClusterName = cluster; });
@@ -45,9 +45,9 @@ public class AblaufE2ETests
         s.AddSingleton(new BausteinBindung(nameof(IKontrastausgleich), kontrastausgleich, Slots: 2, Wiederholungen: 1));
         var konfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
-            [$"{Dienstvertrag.KonfigAbschnitt}:{nameof(BildaufbereitungKonfig)}:{nameof(BildaufbereitungKonfig.AusgabePfad)}"] = ausgabe,
+            [$"{Funktionsvertrag.KonfigAbschnitt}:{nameof(BildaufbereitungKonfig)}:{nameof(BildaufbereitungKonfig.AusgabePfad)}"] = ausgabe,
         }).Build();
-        Infrastructure.Dienste.DienstExtensions.BindeDienste(s, new Dictionary<string, DienstKonfig>(), konfig.GetSection(Dienstvertrag.KonfigAbschnitt));
+        GerufeneExtensions.BindeGerufene(s, new Dictionary<string, FunktionsKonfig>(), konfig.GetSection(Funktionsvertrag.KonfigAbschnitt));
     }
 
     /// <summary>Ein echtes, kleines TIFF (OpenCV liest es) im Eingangs-Verzeichnis.</summary>

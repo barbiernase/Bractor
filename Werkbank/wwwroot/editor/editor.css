@@ -180,7 +180,6 @@
 #de .gnode2.n-saga{border-color:#8a5cc0;width:300px}
 #de .gnode2.n-transition{border-color:#8a6fc8;width:276px}
 #de .gnode2.n-funktion{border-color:#c08a2e;width:290px}
-#de .gnode2.n-dienst{border-color:#7d9b55;width:270px}
 #de .gnode2.n-auftrag{border-color:#c08a2e}
 #de .gnode2.n-state{border-color:#c9a24b;width:250px}
 #de .gnode2.n-readmodel{border-color:#b98a3c;width:250px}
@@ -222,7 +221,6 @@
 #de .gnode2.n-saga .ghead{background:#9d78d6}
 #de .gnode2.n-transition .ghead{background:#a48fd6}
 #de .gnode2.n-funktion .ghead{background:#c08a2e}
-#de .gnode2.n-dienst .ghead{background:#7d9b55}
 #de .gnode2.n-auftrag .ghead{background:#d6a85a}
 #de .gnode2.n-state .ghead{background:#d4b45f}
 #de .gnode2.n-readmodel .ghead{background:#d0a45a}
@@ -279,7 +277,7 @@
 #de .slot.s-state{background:#e0b64d}
 #de .slot.s-readmodel{background:#d0a45a}
 #de .slot.s-store{background:#3fb0a6}
-#de .slot.s-dienst{background:#7d9b55}
+#de .slot.s-gerufen{background:#7d9b55}
 #de .slot.s-query{background:#5b8fd0}
 #de .slot.s-qrsp{background:#49a996}
 #de .slot.s-code{background:#9aa0aa}
@@ -479,7 +477,7 @@
 #de .kc-readmodel{background:#d0a45a}#de .kc-store{background:#3fb0a6}#de .kc-projektion{background:#57b673}#de .kc-reaktion{background:#d0885a}
 #de .kc-pipeline{background:#e08a44}#de .kc-trigger{background:#d29a4a}#de .kc-reader{background:#9678d6}#de .kc-query{background:#5b8fd0}
 #de .kc-queryresponse{background:#49a996}#de .kc-rumpf{background:#9aa0aa}
-#de .kc-frist,#de .kc-dienst,#de .kc-hostsetting{background:#c9a24b}
+#de .kc-frist,#de .kc-gerufen,#de .kc-hostsetting{background:#c9a24b}
 #de .kc-akteur{background:#e07ab4}#de .kc-auf{background:#eaa0c9}
 /* Semantischer Zoom: Landkarte (<0.4) · Ablauf (<0.75) · Detail */
 #de .gcanvas.ablauf .gnode2 .gbody,#de .gcanvas.ablauf .gnode2 .gsum{display:none}

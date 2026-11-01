@@ -54,7 +54,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine($"        public {K}IUpcastingTabelle Upcasting {{ get; }} = new UpcastingTabelle();");
             sb.AppendLine($"        public {K}IAkteurTabelle Akteure {{ get; }} = new AkteurTabelle();");
             sb.AppendLine($"        public {K}IFunktionsTabelle Funktionen {{ get; }} = new FunktionsTabelle();");
-            sb.AppendLine($"        public {K}IDienstTabelle Dienste {{ get; }} = new DienstTabelle();");
+            sb.AppendLine($"        public {K}IGerufenenTabelle Gerufene {{ get; }} = new GerufenenTabelle();");
             sb.AppendLine($"        public {K}IAggregatTabelle Aggregate {{ get; }} = new AggregatTabelle();");
             sb.AppendLine("        public IReadOnlyDictionary<Type, global::Infrastructure.Wecken.Weckziel[]> Weckplan => global::Infrastructure.Wecken.GeneratedWeckplan.Plan;");
             sb.AppendLine("        public IReadOnlyList<global::Infrastructure.Quellen.QuellTyp> Quellen => global::Infrastructure.Quellen.GeneratedQuellen.Alle;");
@@ -118,10 +118,10 @@ namespace Infrastructure.SourceGeneration
                 "IReadOnlyList<global::Infrastructure.Funktionen.FunktionsBaustein> Bausteine => {0}.Alle",
                 "IReadOnlyDictionary<Type, string[]> Hinweisplan => {0}.Hinweisplan",
             });
-            Tabelle(sb, "DienstTabelle", "IDienstTabelle", "global::Infrastructure.Dienste.GeneratedDienste", new[]
+            Tabelle(sb, "GerufenenTabelle", "IGerufenenTabelle", "global::Infrastructure.Funktionen.GeneratedGerufene", new[]
             {
-                "IReadOnlyDictionary<string, Type> Namen", "IReadOnlyList<global::Infrastructure.Dienste.DienstImplementierung> Implementierungen",
-                "IReadOnlyDictionary<Type, Type[]> Braucht", "IReadOnlyList<global::Infrastructure.Dienste.KonfigRecord> Konfigs",
+                "IReadOnlyDictionary<string, Type> Namen", "IReadOnlyList<global::Infrastructure.Funktionen.GerufeneUmsetzung> Umsetzungen",
+                "IReadOnlyDictionary<Type, Type[]> Braucht", "IReadOnlyList<global::Infrastructure.Funktionen.KonfigRecord> Konfigs",
             }, new string[0]);
             Tabelle(sb, "AggregatTabelle", "IAggregatTabelle", "global::Infrastructure.Aggregate.ActorSystem.GeneratedAggregates", new string[0], new[]
             {
