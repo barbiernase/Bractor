@@ -90,7 +90,8 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
             var antworten = b.Eingaenge.Where(e => !e.Hinweis && typeof(IEvent).IsAssignableFrom(e.Typ)).Select(e => e.Typ).ToHashSet();
             var traeger = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, umsetzung.Baue, b.Zustand, b.Name, gerufenerZustand), b.Rechne!, b.Liest,
                 antworten);
-            var konfig = new FunktionsOrtKonfig(Parallel: bindung.Slots,
+            // Im Umbau: Slots (je Partition) ohne eigene Angabe heißt der Standard für Parallel (je Knoten).
+            var konfig = new FunktionsOrtKonfig(Parallel: bindung.Slots == FunktionsKonfig.StandardSlots ? FunktionsOrtKonfig.StandardParallel : bindung.Slots,
                 Wiederholungen: bindung.Wiederholungen > 0 ? bindung.Wiederholungen : FunktionsOrtKonfig.StandardWiederholungen);
             var kindLogger = logs?.CreateLogger("Funktion." + b.Name);
             plaene.Add(new ParentPlan(traeger, konfig, () => new FunktionsParent(traeger, konfig,
