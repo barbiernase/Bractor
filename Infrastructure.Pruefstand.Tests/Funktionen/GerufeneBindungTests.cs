@@ -98,8 +98,9 @@ public class GerufeneBindungTests
 
     // ── Bindung beim Start ─────────────────────────────────────────────────────────────────────────────────────────────
 
-    private interface ID1 : IFunktion;
-    private interface ID2 : IFunktion;
+    // Nur Schlüssel der Bindung — keine IFunktion: die Test-Assembly ist selbst eine Vertrags-Assembly, eine leere Funktion wäre ein Formfehler.
+    private interface ID1;
+    private interface ID2;
     private sealed record K(string Wert);
     private sealed class FImpl;
     private sealed class D1a;

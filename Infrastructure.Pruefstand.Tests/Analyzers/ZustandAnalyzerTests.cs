@@ -81,10 +81,19 @@ public class ZustandAnalyzerTests
     }
 
     [Fact]
-    public async Task IZustand_ausserhalb_einer_Funktion_ist_CQRS105()
+    public async Task IZustand_in_einer_gerufenen_Funktion_ist_CQRS105()
     {
         var befunde = await Befunde("""
             public sealed class Verbindung(IZustand<Modell> m) : IVerbindung { public Task<int> ZaehleAsync() => Task.FromResult(0); }
+            """);
+        befunde.Should().ContainSingle(b => b.Id == ZustandAnalyzer.Id).Which.Text.Should().Contain("gerufene Funktion");
+    }
+
+    [Fact]
+    public async Task IZustand_ausserhalb_einer_Funktion_ist_CQRS105()
+    {
+        var befunde = await Befunde("""
+            public sealed class Halter(IZustand<Modell> m) { }
             """);
         befunde.Should().ContainSingle(b => b.Id == ZustandAnalyzer.Id).Which.Text.Should().Contain("keine Funktion");
     }
