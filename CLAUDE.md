@@ -48,11 +48,15 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   (`Commitmeldung` → `Verteilung`: je Commit eine Nachricht an den Verteiler jedes Knotens). **Keine Marken im Log**:
   Noop und Ablehnung schreiben nur ihre Quittung in die Inbox, mit Kopf-Prüfung des Streams in derselben Transaktion
   (`cqrs_kopf`); eine Version je Aggregat (= Zahl seiner Events), beim Client aus Pushes und Antworten (`VersioningModule`).
-- **Zwei durable Konsumenten:** **Projektion** (`IProjektion`, `Task Auf(Event[, Herkunft], Schreib-Fähigkeiten genau eines Stores)`, Kennung =
-  Typname; `BatchLeser` je Projektion und Partition, replaybar) und **Funktion** (`IFunktion` mit `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])`;
-  `FunktionsActor` je Funktion und Adresse — Partition, oder eine mit `[EineAdresse]` —, Ausgabe festgehalten oder gleichbleibend, nie replayt).
-  Beide: Wecker am Commit schnell (je Commit und Ziel ein `Wake`, Weckplan aus den Signaturen, beim Start geprüft: GR-WECKPLAN) + Takt 30 s je
-  Partition. **Reader** (`IReader`, `Frage(Query, Lese-Fähigkeiten)`): die gezeigten Ids findet der Generator in den `Id<T>`-Feldern von Antwort
+- **Durabler Konsument des Logs ist die Projektion** (`IProjektion`, `Task Auf(Event[, Herkunft], Schreib-Fähigkeiten genau eines Stores)`,
+  Kennung = Typname; `BatchLeser` je Projektion und Partition, replaybar; Wecker am Commit schnell — je Commit und Ziel ein `Wake`, Weckplan aus den
+  Signaturen, beim Start geprüft: GR-WECKPLAN — + Takt 30 s je Partition).
+- **Funktion vor dem Aggregat** (docs/04 §4.4): `IFunktion` mit `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])`, liest NIE das Log. Eingänge: eine
+  **Folge** (schlichter Record aus einem Decide), ein **Zwischenergebnis** (schlichter Record aus einer Funktion), eine Quell-Nachricht, ein Hinweis;
+  ein Event nur als Antwort auf einen eigenen Command (`CommandResult.Antwort`). Ausgaben: Commands, Zwischenergebnisse, Hinweise. Folge und
+  Quell-Nachricht legen im selben Commit je Hörer einen offenen Eingang (`cqrs_eingaenge`, schneller Weg danach, Zusteller nach 5 s); Command-Ids aus
+  Eingangs-Kennung, Funktion und Stelle; nichts festgehalten. Laufzeit: Wurzel `funktionen` je Knoten, Parent je Funktion (Warteschlange, Wiederholungen,
+  Doppelte an der Kennung), Kinder bis `Parallel`, Orte im Gossip-Zustand, Wege über den Bote; Generat: Rechnung + Verkettung. **Reader** (`IReader`, `Frage(Query, Lese-Fähigkeiten)`): die gezeigten Ids findet der Generator in den `Id<T>`-Feldern von Antwort
   und Query, die Projektionen dahinter aus den Lese-Fähigkeiten (`GeneratedQueryDienst`); Stand je gezeigter Id = Guard der Projektionen, dahinter
   das Log (`ProjektionsStaende`); Read-your-writes „mindestens S auf v“ wartet begrenzt darauf, sonst `noch_nicht`.
 - **Direkte Abfrage** (docs/03 §3.2): eine Query hat genau ein Ziel (R4, CQRS084/086) — einen Reader oder ein Aggregat. `Frage(Query)` im
@@ -68,16 +72,16 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   `CommandFailed`, ohne Abo) und Hinweise an Clients; nach jedem Projektions-Commit „P hat S weiterverarbeitet“ → die Sitzung nennt dem Client die
   betroffenen Queries (`Aktualisiert`), er fragt neu; Lesen ab Position (`LiesLog`, nur Hörbares, nur bis zum Horizont); Ausgangskorb im C#-Client.
   Kein Broker, keine Abos.
-- **Funktion als Actor** (docs/04 §4.4): Umsetzung und Dienste je Aktivierung (DI-Bereich, geschlossen beim Stoppen); gekapselter Zustand
-  über `IZustand<T>` im Konstruktor (gesichert mit der Position in einer Transaktion, ein `Auf` zugleich, CQRS105); optionaler Lebenszyklus
-  `ILebenszyklus` (`BeimAktivierenAsync` nach dem Laden, `VorDemSichernAsync` vor jeder Sicherung, CQRS107); **Hinweis-Netz**: Hinweise
-  (`ITransientEvent`) aus Funktionen, Aggregaten und Clients gehen über die generierte Tabelle direkt per `Bote.Melde` an die hörenden Funktionen,
-  ohne Log, höchstens einmal; Commands daraus mit Ids aus der Hinweis-Kennung (CQRS106: gehörter Hinweis braucht einen Erzeuger).
+- **Aktivierung einer Funktion** (docs/04 §4.4): Umsetzung und Dienste je Kind (DI-Bereich, geschlossen beim Stoppen); `IZustand<T>` im Konstruktor
+  ist ein Cache der Aktivierung (nicht gesichert, CQRS105); optionaler Lebenszyklus `ILebenszyklus` (`BeimAktivierenAsync`, CQRS107);
+  **Hinweis-Netz**: Hinweise (`ITransientEvent`) aus Funktionen, Aggregaten und Clients gehen über die Verkettung an die Parents der hörenden
+  Funktionen, ohne Log, höchstens einmal; Commands daraus mit Ids aus der Hinweis-Kennung (CQRS106: gehörter Hinweis braucht einen Erzeuger).
 - **Abläufe** sind ein Vorgangs-Aggregat (Join, Zählung, Kompensation, Frist im Decide) plus Funktionen als Kanten; die Zugehörigkeit ist ein
   fachliches Feld (A2). Kein Dirigent, keine Saga, keine Fluss-DSL, keine Reaktion als eigene Art.
 - **Uhr:** `Frist<TCmd>` aus dem Decide → `FristGesetzt` (`IRahmenEvent`) + Beilage `cqrs_fristen` → die Uhr sendet fällig mit Id aus dem Frist-Event.
-- **Laufort** einer Funktion (Host/Extern/Hand) steht in der Umgebung; draußen rechnet ein Arbeiter (Worker-Sitzung, Hand) in der `Werkstatt` des
-  Knotens, ein Kind gibt ihm den Eingang (vor dem Aggregat; Funktionen mit Log-Eingängen noch über Vermittler + `BausteinSitzung`). Technik hinter
+- **Laufort** einer Funktion (Host/Extern/Hand) steht in der Umgebung (`Funktionen:<F>`: Laufort, Implementierung, Parallel, Warteschlange,
+  Vorwaermen, Wiederholungen); draußen rechnet ein Arbeiter (Worker-Sitzung, Hand) in der `Werkstatt` des Knotens, ein Kind gibt ihm den Eingang
+  (`ArbeitsAuftrag`) und nimmt nur seine Antwort an; kein Vermittler, keine Lease. Technik hinter
   einer Funktion ist eine **gerufene Funktion** (`IFunktion` ohne `Auf`, frei benannte Methoden): sie steht im Konstruktor ihres Halters und
   läuft in dessen Prozess; Eingänge oder gerufen, nie beides; Umsetzung je Umgebung `Funktionen:<Name>:Implementierung` (`GeneratedGerufene`).
 - **Emit:** genau ein Weg (`CommandEmitter`, Id vom Aufrufer abgeleitet), erzwungen durch CQRS020/021.

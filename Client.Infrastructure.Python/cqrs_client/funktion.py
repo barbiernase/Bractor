@@ -23,17 +23,17 @@ Ein Client mit Vertrag (er verkörpert einen Akteur mit `IDarf<F>`) bekommt die 
 
 Was das SDK übernimmt — der Worker schreibt nichts davon von Hand:
   - Anbieten: nach dem Handshake (und nach jedem Reconnect) `FunktionenAnbieten` (Funktion + Slots);
-  - Pull: der Server holt Eingänge beim Vermittler, höchstens so viele wie Slots — hier laufen höchstens SLOTS gleichzeitig;
-  - Lebenszeichen: alle 10 s `ArbeitLebtMeldung`, solange `auf_…` läuft (lange Läufe verlieren ihre Lease nicht);
-  - Signatur: jede Ausgabe muss ein Fall der Signatur sein, sonst geht ein Fehler hinaus; eine Ausnahme in `auf_…` ebenso;
-  - Strom: ein `async for`-Generator (Training) schickt jede Ausgabe sofort als Stück — der Server hält es fest und sendet es, bevor das nächste
-    kommt; nach einem Abbruch übernimmt ein anderer Träger beim nächsten nicht festgehaltenen Stück;
-  - Genau einmal: festgehalten wird beim Server unter „Funktion, Eingang“ — die erste Antwort gewinnt. Wirkungen nach außen (Dateien, Mails)
-    sollten über `h.schluessel` (gleich bei jeder Wiederholung) deduplizieren.
+  - Arbeiter: die Sitzung ist ein Arbeiter in der Werkstatt ihres Knotens; ein Kind der Funktion gibt ihr Eingänge, höchstens so viele wie Slots —
+    hier laufen höchstens SLOTS gleichzeitig;
+  - Lebenszeichen: alle 10 s `ArbeitLebtMeldung`, solange `auf_…` läuft (ohne Regung scheitert der Lauf nach 60 s);
+  - Signatur: jede Ausgabe muss ein Fall der Signatur sein (Command, Zwischenergebnis oder Hinweis), sonst geht ein Fehler hinaus; eine Ausnahme in
+    `auf_…` ebenso;
+  - Strom: ein `async for`-Generator (Training) schickt jede Ausgabe sofort als Stück — der Server sendet sie, bevor das nächste kommt; nach einem
+    Abbruch rechnet ein anderer Träger den Eingang von vorn (die Inbox der Ziele verwirft schon Gesendetes);
+  - Genau einmal: es zählt die erste Antwort dieser Sitzung; die Commands tragen Ids aus Eingang, Funktion und Stelle. Wirkungen nach außen (Dateien,
+    Mails) sollten über `h.schluessel` (die Kennung des Eingangs, gleich bei jeder Wiederholung) deduplizieren.
   - Hinweise (docs/04 §4.4): ein `auf_…`, dessen Eingang ein Hinweis aus dem Hinweis-Netz ist (`Eingang(..., hinweis=True)`, auf der Leitung
-    `ArbeitsAuftrag.hinweis`), läuft höchstens einmal — nichts wird festgehalten; die Antwort geht als Ganzes zurück (auch ein Strom), ihre Commands
-    und Hinweise sendet der Funktions-Actor. Dieselbe Adresse wie in C#: alle Eingänge eines Funktions-Actors rechnet derselbe Träger, solange er
-    lebt — ein Zustand im Worker (ein Modell) sieht so alles, was zu ihm gehört; ihn zu sichern, ist Sache des Workers.
+    `ArbeitsAuftrag.hinweis`), läuft höchstens einmal. Einen Zustand im Worker (ein Modell) sichert das Framework nicht.
   - Lebenszyklus (optional, Gegenstück zu `ILebenszyklus` im Host): `async def beim_start(self)` läuft einmal, bevor der Worker die Funktion
     anbietet (ein Netz laden), `async def beim_ende(self)` einmal beim Herunterfahren (Ressourcen schließen, Zustand selbst sichern).
 """
@@ -224,11 +224,11 @@ class FunktionsLaeufer:
         """Ein ArbeitsAuftrag (ein Eingang) vom Server: läuft entkoppelt (blockiert die Verarbeitungsschleife nicht)."""
         vorgang = auftrag_msg.vorgang
         if auftrag_msg.funktion not in self._funktionen:
-            # Nie angeboten → nicht unsere Arbeit; die Lease läuft ab, der Vermittler gibt sie anderen.
+            # Nie angeboten → nicht unsere Arbeit; ohne Regung scheitert der Lauf beim Server und geht an einen anderen Arbeiter.
             log.error("Eingang %s für %s — hier nicht angeboten", vorgang, auftrag_msg.funktion)
             return None
         if vorgang in self._laufend:
-            return self._laufend[vorgang]   # derselbe Eingang erneut zugeteilt: läuft schon
+            return self._laufend[vorgang]   # derselbe Eingang erneut gegeben: läuft schon
         task = asyncio.ensure_future(self._fuehre_aus(auftrag_msg))
         self._laufend[vorgang] = task
         task.add_done_callback(lambda _t: self._laufend.pop(vorgang, None))
@@ -252,14 +252,14 @@ class FunktionsLaeufer:
                      akteur=msg.akteur, korrelation=msg.korrelation, schluessel=msg.vorgang)
         async with self._slots(msg.funktion):
             herz = asyncio.ensure_future(self._lebenszeichen(msg.vorgang))
-            # Ein Strom, den ein früherer Träger begonnen hat: so viele Ausgaben sind schon festgehalten — sie werden ausgelassen.
+            # ab: so viele Ausgaben überspringen (der Server schickt 0 — er hält nichts fest).
             schon = getattr(msg, "ab", 0) or 0
             gesendet = 0
             try:
                 try:
                     e = self._mapper.entpacke(msg.eingang)
                     eingang = f.eingang(type(e))
-                    # Ein Hinweis als Eingang: nichts ist festgehalten — die Antwort geht als Ganzes zurück (auch ein Strom).
+                    # Ein Hinweis als Eingang: die Antwort geht als Ganzes zurück (auch ein Strom).
                     hinweis = bool(getattr(msg, "hinweis", False)) or eingang.hinweis
                     stueckweise = eingang.strom and not hinweis
                     puffer = []
@@ -269,7 +269,7 @@ class FunktionsLaeufer:
                             gesendet += 1
                             continue
                         if stueckweise:
-                            # Ein Strom: jedes Stück sofort — der Server hält es fest und sendet es, bevor das nächste kommt.
+                            # Ein Strom: jedes Stück sofort — der Server sendet es, bevor das nächste kommt.
                             await self._proxy.send_arbeits_ergebnis(msg.vorgang, [(art, self._mapper.packe(aus))], ab=gesendet, fertig=False)
                             gesendet += 1
                         else:
@@ -280,7 +280,7 @@ class FunktionsLaeufer:
                     log.info("→ Antwort %s (%s): %d Ausgabe(n)", msg.vorgang[:8], f.FUNKTION, gesendet + len(puffer))
                 except asyncio.CancelledError:
                     raise
-                except Exception as fehler:   # gescheitert → zählt beim Funktions-Actor gegen die Wiederholungen
+                except Exception as fehler:   # gescheitert → der Lauf scheitert, der Parent wiederholt den Eingang
                     log.warning("Funktion %s (%s) gescheitert: %s", f.FUNKTION, msg.vorgang, fehler)
                     try:
                         await self._proxy.send_arbeits_ergebnis(msg.vorgang, [], fehler=f"{type(fehler).__name__}: {fehler}")
@@ -298,7 +298,7 @@ class FunktionsLaeufer:
             await asyncio.sleep(self._lebenszeichen_s)
             try:
                 await self._proxy.send_arbeit_lebt(vorgang)
-            except Exception as e:   # verlierbar: die nächste Meldung (oder die Lease) heilt
+            except Exception as e:   # verlierbar: die nächste Meldung heilt
                 log.debug("Lebenszeichen %s verloren: %s", vorgang, e)
 
 

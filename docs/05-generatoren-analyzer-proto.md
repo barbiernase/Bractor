@@ -80,7 +80,7 @@ melden die Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein 
 | `AggregateActorGenerator` | `IState` | `AggregateActors`, `GeneratedAggregates` | Proto.Actor-Actor + Cluster-Kinds |
 | `PullPathGenerator` | `IProjektion` + `Auf` (über `Projektionsform`) | `GeneratedProjektionen`, `GeneratedPullPaths` | je Projektion Dispatch auf ihr `Auf`, gehörte Typen, Store aus dem Fähigkeits-Bereich, Batch-Kind `batch-<Projektion>`, `Projektionseintrag` mit Code-Stand; ein Store je Projektion (CQRS052), Klasse 3 nur mit `[MindestensEinmal]` (CQRS110) ([04](04-konsum-und-prozess-maschine.md) §4.1–§4.3) |
 | `WeckplanGenerator` | `Auf` der Projektionen und der Funktionen mit Log-Eingang (dieselben Lesarten), `FristGesetzt` | `GeneratedWeckplan` | je Event-Typ, wen ein Commit weckt: `batch-<P>` je Partition, `funktion-<F>` je Partition bzw. die eine Adresse, die Uhr ([03](03-schreibseite.md) §3.5) |
-| `FunktionsBausteinGenerator` | `IFunktion` (Klasse oder Schnittstelle) + `Auf` (über `Funktionsform`), Umsetzungen im Host | `GeneratedFunktionsBausteine` | je Funktion Eingänge, Ausgaben, Lese-Fähigkeiten, ob gleichbleibend (R12), Bau, Dispatch in Einzel- und Seiten-Form; der **Hinweisplan** (Hinweis-Typ → Funktions-Actors) für das Hinweis-Netz (CQRS100, CQRS101) ([04](04-konsum-und-prozess-maschine.md) §4.4) |
+| `FunktionsBausteinGenerator` | `IFunktion` (Klasse oder Schnittstelle) + `Auf` (über `Funktionsform`), Umsetzungen im Host | `GeneratedFunktionsBausteine` | je Funktion Eingänge, Ausgaben, Lese-Fähigkeiten, Bau und die Rechnung (`Rechne`, Eingang und Ausgaben als Objekte); die **Verkettung** (Nachrichten-Typ → Funktionen, die ihn hören: Folge, Zwischenergebnis, Quell-Nachricht, Hinweis) (CQRS100: Form, eine Funktion hört nie nur Events und gibt nie ein Event aus; CQRS101) ([04](04-konsum-und-prozess-maschine.md) §4.4) |
 | `QueryDienstGenerator` | `IReader` + `Frage`, `Frage` im Decider (über `Projektionsform`) | `GeneratedQueryDienst : IQueryDienst` | je Query die Frage mit Lese-Fähigkeiten; die Projektionen dahinter aus den Fähigkeiten (dieselben Stores), die gezeigten Ids aus den `Id<T>`-Feldern von Antwort und Query; eine Query an ein Aggregat geht über `AggregatAbfrage` an die Identität aus ihrem Glied `Id<TAggregat>`, Stand = das Aggregat mit seiner Version |
 | `SnapshotRegistrationGenerator` | `IState` | `RegisteredSnapshotTypes`, `GeneratedSnapshotSchema` (Datei `GeneratedSnapshotRegistration.g.cs`) | Marten-Registrierung; Schema-Version = FNV-1a-Struktur-Hash + `CodeHash` |
 | `EventJsonGenerator` | persistierte Events (`IEvent` ohne `ITransientEvent`) | `GeneratedEventJson` | Event-JSON über `EventJsonSerializerContext.Default.{Typ}` |
@@ -119,7 +119,7 @@ Alle Diagnosen sind Fehler, außer den Warnungen CQRS080, 081, 083, 085, 086, 08
 | Bereich | IDs | Ort |
 |---|---|---|
 | Schreibseite & Routing | CQRS010/011 · CQRS013, 079–081, 083 · CQRS020/021 · CQRS050 · CQRS057 | `CommandAggregateMapGenerator` (Decide außerhalb des Ziels, zwei Aggregate mit gleicher Identität) · `ModellAnalyzer` (Command ohne typisiertes Ziel, Apply fehlt, Faltung ohne Decide, Enum-Wert 0, Projektion mit Zustand in Feldern) · `CommandEmitAnalyzer` (ein Emit-Weg, Send mit Frist) · `AusgabeVertragAnalyzer` · `HandlerFormAnalyzer` (Form von Projektion, Reader und Frage an ein Aggregat) |
-| Eingang und Wiederholung | CQRS101 · CQRS102–104 | `EinEingangAnalyzer` (je Eingang ein `Auf` bzw. eine `Frage`, R2) · `GleichbleibendAnalyzer` (R11 gleiche Rechnung, R12 gleichbleibende Funktion, R13 abgeleitete Ids) |
+| Eingang und Wiederholung | CQRS101 · CQRS102, CQRS104 | `EinEingangAnalyzer` (je Eingang ein `Auf` bzw. eine `Frage`, R2) · `GleichbleibendAnalyzer` (R11 gleiche Rechnung, R13 abgeleitete Ids) |
 | Funktionen | CQRS100/101 · CQRS105 · CQRS107 · CQRS106 | `FunktionsBausteinGenerator` (Form, doppelter Eingang) · `ZustandAnalyzer` (R19) · `LebenszyklusAnalyzer` · `GesamtbildAnalyzer` (Hinweis ohne Erzeuger, R20) |
 | Gerufene Funktionen, Quellen | CQRS089–092 · CQRS070 | `GerufenAnalyzer` · `QuellenTypAnalyzer` |
 | Projektstruktur | CQRS098 | `LageAnalyzer` (Ordner, Namespace, Datei prüft `--check`, docs/07) |
@@ -143,7 +143,6 @@ mit der Karte, an der er hängt, `Infrastructure/Umgebung/BootFehler.cs`):
 | Umgebung angegeben, Abschnitte bekannt, Datenbank gehört der Umgebung | `CqrsUmgebungExtensions`, `UmgebungLader.PruefeAbschnitte`, `UmgebungsSiegel` |
 | jeder Wire-Typ serialisierbar | `WireSerializerBootCheck` |
 | jeder Hörer aus dem Log steht mit jedem gehörten Typ im Weckplan (GR-WECKPLAN) | `Wecker.Pruefe` |
-| jede Adresse des Hinweisplans gehört zu einer Funktion (R20) | `HinweisNetz` |
 | jede Funktion hat einen Laufort (Umsetzung im Host, Träger, Bindung); Lese-Fähigkeit nur im Host | `FunktionsBausteinWiring`, `FunktionsExtensions` |
 | Dienst-Bindung (fehlend, mehrdeutig, Kreis, Konfig) | `Infrastructure/Dienste/Dienste.cs` |
 | Quellen-Konfig | `Infrastructure/Quellen/Quellen.cs`, `QuellenDienst.cs` |
@@ -185,7 +184,7 @@ Build-Verbot gegen `System.Reflection` fehlt (docs/13 W10-2).
   `PullPathGenerator` in der Komposition gelesen). Die Domänen-Analyzer lesen dagegen auch referenzierte Assemblies, die den Vertrag nutzen
   (`Domain.SourceGeneration/Typen.cs`) — etwa die Lage-Prüfung oder die Regeln über Funktionen in `Domain.Pipeline`.
 - **Infrastructure-Seite:** sieht die kompilierten Domänen-Symbole aller Rollen-Projekte. Deshalb liegen das *aggregatübergreifende* Routing,
-  Weckplan, Hinweisplan und die Regeln über alle Domänen-Projekte (`GesamtbildAnalyzer`) hier, in der Komposition.
+  Weckplan, Verkettung und die Regeln über alle Domänen-Projekte (`GesamtbildAnalyzer`) hier, in der Komposition.
 - **Client-Seite:** syntax-lokal, außer `WiringGenerator`, der per `CompilationProvider` referenzierte Assemblies (den Vertrag in
   `Domain.Akteure`) liest.
 

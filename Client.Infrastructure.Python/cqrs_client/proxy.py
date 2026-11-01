@@ -221,7 +221,7 @@ class GrpcProxy:
     # ═══════════════════════════════════════════════════
 
     async def send_funktionen_anbieten(self, angebote: list[tuple[str, int]]) -> None:
-        """„Ich biete Funktion F mit n Slots“ — der Server holt dann für diese Session Eingänge beim Vermittler."""
+        """„Ich biete Funktion F mit n Slots“ — die Sitzung wird ein Arbeiter in der Werkstatt des Knotens, der Server gibt ihr Eingänge."""
         msg = L.ClientMessage(
             funktionen_anbieten=L.FunktionenAnbieten(
                 angebote=[L.FunktionsAngebot(funktion=f, slots=s) for f, s in angebote]
@@ -242,7 +242,7 @@ class GrpcProxy:
         await self._send(msg)
 
     async def send_arbeit_lebt(self, vorgang: str) -> None:
-        """Lebenszeichen eines laufenden Eingangs — verlängert seine Lease beim Vermittler."""
+        """Lebenszeichen eines laufenden Eingangs — ohne Regung scheitert der Lauf beim Server nach 60 s."""
         msg = L.ClientMessage(arbeit_lebt=L.ArbeitLebtMeldung(vorgang=vorgang))
         await self._send(msg)
 

@@ -23,8 +23,8 @@ Kenntnis eine Methode `auf_<event>(e, ctx, state)` (gibt nichts aus):
         async def auf_bild_verfuegbar(self, e, ctx, state): ...
 
 Was die Basis übernimmt — der Worker schreibt nichts davon von Hand:
-  - getragene Funktionen: sie werden nach jedem Handshake angeboten; der Server reicht ihre Eingänge weiter, die Antwort hält er fest (die
-    erste gewinnt) und sendet sie selbst — der Client ist nur die Hand, die Garantie bleibt beim Funktions-Actor;
+  - getragene Funktionen: sie werden nach jedem Handshake angeboten; der Server reicht ihre Eingänge weiter, nimmt die erste Antwort an und
+    sendet ihre Commands selbst — der Client ist nur die Hand, die Garantie bleibt beim Server;
   - Kenntnis: Dispatch Event-Typ → `auf_<event>`; eine Kenntnis gibt nichts aus (`VertragsVerletzung`);
   - Vollständigkeit: fehlt eine Methode, lässt sich der Worker nicht instanziieren (ABC) — der Bruch fällt beim Start auf;
   - Handshake: der CapabilitiesRequest nennt Client + Hash (der Server nimmt die Fähigkeiten aus SEINER Tabelle); `FRAGT` sind die Queries des

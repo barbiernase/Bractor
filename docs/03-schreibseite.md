@@ -107,7 +107,7 @@ sind in [04 §4.8](04-konsum-und-prozess-maschine.md) beschrieben.
 
 **Passivierung** (PF-5): hört ein Aggregat-Actor `Lebenszyklus.AggregatLeerlaufSekunden` lang nichts (Standard 600), stoppt er sich
 (Rahmen, §3.6; Proto-`ReceiveTimeout`) — nie, solange ein Commit läuft oder Commands warten; beim Stoppen schreibt er seinen Snapshot, die
-nächste Nachricht aktiviert ihn frisch (Snapshot + Tail; der Inbox-Cache ist dann leer, die Inbox-Tabelle bleibt). Funktions-Actors und die Batch-Leser der
+nächste Nachricht aktiviert ihn frisch (Snapshot + Tail; der Inbox-Cache ist dann leer, die Inbox-Tabelle bleibt). Die Batch-Leser der
 Projektionen (je Partition) passivieren nicht ([04](04-konsum-und-prozess-maschine.md) §4.1, §4.4).
 
 **(d) Direkte Abfrage** (docs/03 §3.2). Eine Query darf statt an einen Reader an ein Aggregat gehen: die `Frage` im
@@ -283,7 +283,7 @@ Messwerte: [12](12-tests-und-vermessung.md).
 
 ## 3.5 Nach dem Commit: Wecker und Push
 
-Was nach einem Commit geschieht, ist für jeden Schreiber gleich (Aggregat, Quelle, festgehaltene Ausgabe einer Funktion) und nie Teil der Wahrheit:
+Was nach einem Commit geschieht, ist für jeden Schreiber gleich (Aggregat, Quelle) und nie Teil der Wahrheit:
 
 - **Wecker** (`Infrastructure/Wecken/Wecker.cs`, docs/03 §3.5): nach dem `SaveChanges` des Group-Commits und des Einzel-Appends schlägt er je
   geschriebenem Event den generierten Weckplan nach und weckt jedes Ziel einmal — die Partitionen der Projektionen und Funktionen, die den Typ

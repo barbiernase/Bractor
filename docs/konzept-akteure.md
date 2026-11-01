@@ -22,7 +22,7 @@
 | **Identität** | Wer meldet sich an? | Token → Akteur-Menge (Umgebung, `Identitaeten:Tokens`) | Token `sim-arbeitsplatz` → {Inspekteur, KIOperator, Modellfreigeber, Produktpruefer} |
 
 Was ein Akteur draußen rechnet, ist eine **Funktion**: ihre Signatur steht einmal in den Abläufen, ein
-Akteur darf sie rechnen (`IDarf<F>`), und ein Client, der ihn verkörpert, trägt sie. Für sie gelten dieselben Garantien wie für jede Funktion (Festhalten, Lease, die erste Antwort gewinnt —
+Akteur darf sie rechnen (`IDarf<F>`), und ein Client, der ihn verkörpert, trägt sie. Für sie gelten dieselben Garantien wie für jede Funktion (offener Eingang bis „fertig“, nur die Antwort des Arbeiters, der den Auftrag hält, die erste gewinnt —
 [04](04-konsum-und-prozess-maschine.md) §4.4, [11](11-garantien.md) §11.6). Einen eigenen Akteur-Vertrag mit `Auf` oder einen Dienst eines
 Akteurs gibt es nicht.
 
@@ -120,7 +120,7 @@ public interface ITraining : IFunktion
 - Wo sie läuft, sagt die Umgebung (`Funktionen:<F>:Laufort` = Host, Extern oder Hand); eine Schnittstelle ohne Umsetzung im Host läuft draußen,
   wenn ein Client sie trägt — trägt sie keiner, warnt der Build (CQRS087), und sie läuft nur mit einer Bindung von Hand.
 - Die Antwort des Clients prüft der Server gegen die Signatur, hält sie fest (die erste gewinnt) und sendet sie selbst; der Client ist nur die
-  Hand, die Garantie bleibt beim Funktions-Actor (§5.3).
+  Hand, die Garantie bleibt beim Kind der Funktion (§5.3).
 
 ---
 
@@ -223,11 +223,10 @@ keinem Client-Vertrag; die Mehrfach-Auswahl beim Kuratieren schickt je Paar `Nim
 - Die `CapabilitiesResponse` nennt den angenommenen Vertrag mit dem Server-Hash. Danach meldet die Sitzung ihre wirksame Hör-Liste beim
   **Verteiler** ihres Knotens an (`SitzungMeldetAn`, ersetzt die vorige; schon beim Start mit leerer Liste, damit gezielte Antworten sie vor dem
   Handshake erreichen).
-- **Getragene Funktionen:** der Client bietet sie nach dem Handshake an (`FunktionenAnbieten`: Funktion, Slots). Die Sitzung holt als
-  `BausteinSitzung` beim Vermittler der Funktion (`FunktionsVermittlerActor`) Eingänge mit Lease (30 s, verlängert durch `ArbeitLebt`) und reicht
-  sie als `ArbeitsAuftrag` weiter. Jeder Eingang trägt die Adresse seines Funktions-Actors; alle Eingänge einer Adresse rechnet derselbe Träger,
-  solange er lebt ([10](10-entwickler-api.md) A8) — ein Zustand im Worker sieht so alles, was zu ihm gehört. Endet die Sitzung, sind ihre
-  Adressen sofort frei. Hinter einer Adresse rechnet die Umsetzung im Host oder die tragende Sitzung; der Absender sieht den Unterschied nicht.
+- **Getragene Funktionen:** der Client bietet sie nach dem Handshake an (`FunktionenAnbieten`: Funktion, Slots). Die Sitzung wird ein Arbeiter in
+  der Werkstatt ihres Knotens (docs/04 §4.4); ein Kind der Funktion gibt ihr einen Eingang als `ArbeitsAuftrag` und wartet auf die Antwort (Geduld
+  60 s ohne Regung, verlängert durch `ArbeitLebt`). Endet die Sitzung, scheitern ihre Läufe sofort und werden anderswo erneut gerechnet. Ob die
+  Umsetzung im Host oder eine tragende Sitzung rechnet, sieht der Absender nicht.
 
 ### 5.3 Antworten und CommandId
 
@@ -240,16 +239,14 @@ hat — auch für einen Noop), die fachliche Ablehnung (der Hinweis aus dem Deci
 Akteur darf nicht — `AkteurVerweigerung`, Platzierung erschöpft — `AggregateDispatcher`); dazu die Events, die sie hört. Alles verlierbar. Wie der C#-Client daraus Wiederholung und Ausgangskorb macht: [08](08-frontend-blazor-client.md) §8.4.
 
 **Antworten getragener Funktionen.** Eine Antwort auf einen Eingang reist als Ausgabe-Liste zurück (`ArbeitsErgebnis`, bei einem Strom in
-Stücken mit `ab`/`fertig`; Laufort Hand: `/eingang/ergebnis` des JSON-Eingangs). Der Server hält sie unter (Funktion, Eingang) fest, bevor sie
-wirkt, und leitet die Command-Ids daraus ab (`FunktionsIds`, `Infrastructure/Funktionen/Festhalten.cs`) — doppelt geantwortet, von zwei Trägern
-oder nach dem Neuverbinden, wirkt sie einmal (VT `ClientVerhaltenTests.Die_Antwort_eines_Traegers_wirkt_genau_einmal…`). Die Id enthält keinen
-Client. Eine zu späte Antwort meldet `ARBEIT_UNBEKANNT`.
+Stücken mit `ab`/`fertig`; Laufort Hand: `/eingang/ergebnis` des JSON-Eingangs). Es zählt nur die Antwort des Arbeiters, der den Auftrag hält, und
+von ihm die erste; das Kind sendet ihre Commands mit Ids aus Eingangs-Kennung, Funktion und Stelle (`Kettenvertrag`) — doppelt geantwortet, von
+einem zweiten Träger oder nach dem Neuverbinden, wirkt sie einmal (VT `ClientVerhaltenTests.Die_Antwort_eines_Traegers_wirkt_genau_einmal…`). Die
+Id enthält keinen Client. Eine zu späte oder fremde Antwort meldet `ARBEIT_UNBEKANNT`.
 
-Ist der Eingang ein **Hinweis** aus dem Hinweis-Netz (`ArbeitsAuftrag.hinweis = true`, [04](04-konsum-und-prozess-maschine.md) §4.4), wird
-nichts festgehalten: die Antwort kommt als Ganzes (auch ein Strom — das SDK sammelt ihn), ihre Commands und Hinweise gehen mit der Meldung an den
-Funktions-Actor, der sie sendet; die Command-Ids leitet er aus der Kennung des Hinweises ab (`FunktionsIds.BefehlAusHinweis`). Höchstens einmal:
-antwortet niemand in 30 s (`FunktionsArbeit.AntwortGeduld`), verfällt der Hinweis. Den Zustand eines Workers sichert das Framework nicht (A8);
-was er laden oder schließen muss, steht in den optionalen Haken `beim_start`/`beim_ende` der Python-Basis ([09](09-python-sdk.md)).
+Ist der Eingang ein **Hinweis** aus dem Hinweis-Netz (`ArbeitsAuftrag.hinweis = true`, [04](04-konsum-und-prozess-maschine.md) §4.4), gilt
+derselbe Weg, nur höchstens einmal: scheitert der Lauf, verfällt der Hinweis. Den Zustand eines Workers sichert das Framework nicht; was er laden
+oder schließen muss, steht in den optionalen Haken `beim_start`/`beim_ende` der Python-Basis ([09](09-python-sdk.md)).
 
 **Hinweise vom Client** (`TransientEventRequest`, nur `ITransientEvent`, mit Tor nur mit `IDarf`): gehen an die Clients, die sie hören (Verteiler),
 und an die Funktionen, die sie hören (Hinweis-Netz); die Kennung vergibt der Client (`CausationId`).
@@ -261,15 +258,15 @@ vergebene Id, genau einmal im Log je Kennung), nicht über gRPC (§9).
 
 - **Verteiler je Knoten** (`Infrastructure/Verteilen/`): ein lokaler Actor mit festem Namen `verteiler` (`VerteilerActor`), Tabelle Typ →
   Sitzungen seines Knotens und Sitzungs-Id → Sitzung; er beobachtet jede Sitzung (`Watch`) und trägt sie aus, wenn sie endet. Jeder Schreiber
-  (Aggregat, Quelle, festgehaltene Ausgabe einer Funktion) meldet je Commit **eine** Nachricht (`Verteile`) an den Verteiler jedes Knotens, nur
+  (Aggregat, Quelle) meldet je Commit **eine** Nachricht (`Verteile`) an den Verteiler jedes Knotens, nur
   mit Typen, die irgendein Client hören darf (`Verteilung.Hoerbar`); gezielte Envelopes (`ZielSitzung`) nur an den Knoten, den die Sitzungs-Id
   nennt. Der Verteiler fasst je Commit und Sitzung zu einer `Zustellung` zusammen. Kein Broker, keine Abos im Cluster.
 - **Hören:** verlierbarer Push (Invariante 6) an jede Sitzung, deren wirksame Liste den Typ nennt — Events aus dem Log und Hinweise (aus
   Funktionen und von Clients). **Gezielt**, gleich was die Sitzung hört: die Ablehnung eines Aggregats und `CommandFailed` an die Sitzung des
   Commands (`OriginSessionId`).
 - **Rückstau:** liest ein Client nicht nach, verwirft der Verteiler über 1000 offenen Zustellungen je Sitzung (`Rueckstau`).
-- **Funktionen:** durabel über den Funktions-Actor — der Eingang bleibt offen, bis eine Antwort festgehalten ist; ein Client, der wegbricht,
-  verliert seine Lease, der Eingang geht an den nächsten Träger.
+- **Funktionen:** durabel über die offenen Eingänge — ein Eingang bleibt offen, bis die Funktion ihn fertig meldet; ein Client, der wegbricht,
+  lässt seine Läufe scheitern, der Eingang geht an den nächsten Träger.
 - Wer es durabel braucht, liest ab Position oder fragt per Query (§5.5).
 
 ### 5.5 Lesen: Queries, Aktualisierung, Log

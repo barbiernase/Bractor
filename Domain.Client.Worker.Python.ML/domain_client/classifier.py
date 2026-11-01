@@ -112,7 +112,7 @@ class ImageClassifier(KlassifikationsWorkerBasis[ClassifierState]):
         elif tensors:
             label = KEINE_ANOMALIE
         else:
-            # Ohne Bilder lässt sich nicht urteilen: ein Fehler — der Funktions-Actor wiederholt den Eingang später.
+            # Ohne Bilder lässt sich nicht urteilen: ein Fehler — der Server wiederholt den Eingang später.
             raise RuntimeError(f"Paar {agg_id}: keine Bilder geladen")
 
         state.pairs_klassifiziert += 1

@@ -9,23 +9,23 @@ allgemeine Primitive einmal benutzt; die Beispieldomäne (Bildpaare, Datensätze
 
 ## 10.1 Das Modell in wenigen Sätzen
 
-Das **Log in Postgres ist die einzige Wahrheit.** Geschrieben wird von **Aggregaten** (was sie entschieden haben), **Quellen** (was von draußen
-kam) und **Funktionen** (ihre festgehaltene Ausgabe) — jedes Mal genau einmal. Alles andere **liest das Log ab seiner eigenen Position**:
-**Projektionen** falten Events in ihren Store und geben nichts aus; **Funktionen** nehmen einen Eingang und geben aus, was sie wollen — sie sind
-Actors mit optional gekapseltem Zustand und tauschen untereinander auch **ohne Log** Hinweise aus; was fachlich zählt, verlässt dieses Netz als
-Command an ein Aggregat. **Clients** hängen am Rand: sie schicken Commands, Quell-Nachrichten, Hinweise und Queries hinein und bekommen über
+Das **Log in Postgres ist die einzige Wahrheit.** Geschrieben wird von **Aggregaten** (was sie entschieden haben) und **Quellen** (was von draußen
+kam) — jedes Mal genau einmal. **Projektionen** lesen das Log ab ihrer eigenen Position, falten Events in ihren Store und geben nichts aus.
+**Funktionen** stehen **vor dem Aggregat** und lesen das Log nie: sie hören, was ein Aggregat ihnen als **Folge** sagt, was eine andere Funktion als
+**Zwischenergebnis** weitergibt, eine Quell-Nachricht oder einen Hinweis, und senden Commands — genau einmal wirksam über offene Eingänge und die
+Inbox ihrer Ziele; was fachlich zählt, verlässt dieses Netz als Command an ein Aggregat. **Clients** hängen am Rand: sie schicken Commands, Quell-Nachrichten, Hinweise und Queries hinein und bekommen über
 einen Verteiler je Knoten mit, was sie hören dürfen.
 
-Der Entwickler schreibt nur, *was* fachlich passiert — in der **Signatur** einer Methode. `Auf(AlarmAusgeloest e)` in einer Funktion heißt „diese
-Funktion hört dieses Event“, der Rückgabetyp sagt, was herauskommt. *Wie* es läuft (Cursor, Weckruf, Ordnung, Exactly-once, Partition,
-Festhalten, Laufort), wählt der Generator aus dieser Signatur; nichts davon taucht im Fachcode auf (Invariante 5).
+Der Entwickler schreibt nur, *was* fachlich passiert — in der **Signatur** einer Methode. `Auf(AlarmZuMelden f)` in einer Funktion heißt „diese
+Funktion hört diese Folge“, der Rückgabetyp sagt, was herauskommt. *Wie* es läuft (Cursor, Weckruf, Ordnung, Exactly-once, Partition, offene
+Eingänge, Laufort), wählt der Generator aus dieser Signatur; nichts davon taucht im Fachcode auf (Invariante 5).
 
 | Baustein | tut | Laufzeit |
 |---|---|---|
-| **Aggregat** | entscheidet: Command rein, Events, Hinweise und Fristen raus; einziger Schreiber seines Streams; darf direkt gefragt werden | virtueller Actor je `Id<T>` (Bündel, Inbox-Tabelle, Passivierung, Snapshot) — [03](03-schreibseite.md) |
+| **Aggregat** | entscheidet: Command rein, Events, Hinweise, Fristen und Folgen raus; einziger Schreiber seines Streams; darf direkt gefragt werden | virtueller Actor je `Id<T>` (Bündel, Inbox-Tabelle, Passivierung, Snapshot) — [03](03-schreibseite.md) |
 | **Projektion** | hört Events, schreibt ihren Store über Fähigkeiten, gibt nichts aus | `BatchLeser` je (Projektion, Partition) — [04](04-konsum-und-prozess-maschine.md) §4.1, §4.3 |
 | **Reader** | beantwortet Queries über Lese-Fähigkeiten | im Query-Dienst des Hosts |
-| **Funktion** | ein Eingang (Event aus dem Log oder Hinweis im Speicher), beliebige Ausgaben (Commands, Events, Hinweise); optional Zustand und Ressourcen | `FunktionsActor` je (Funktion, Partition) bzw. einer je Funktion; Laufort Host, draußen (getragen von einem Client) oder Hand — §4.4 |
+| **Funktion** | ein Eingang (Folge, Zwischenergebnis, Quell-Nachricht, Hinweis; ein Event nur als Antwort auf einen eigenen Command), beliebige Ausgaben (Commands, Zwischenergebnisse, Hinweise); optional Zustand (Cache) und Ressourcen | Wurzel je Knoten, Parent je Funktion, Kinder bis `Parallel`; Laufort Host, draußen (getragen von einem Client) oder Hand — §4.4 |
 | **Quelle** | fester Treiber und Konfig bringen Nachrichten genau einmal ins Log | ein Treiber je Quelle im Cluster (Lease) — §4.7 |
 | Store, Dienst | Technik hinter Projektion/Reader bzw. Funktion | – |
 | Akteur, Client | wer welche Typen darf; welche Software für welche Akteure spricht | Sitzung als Actor je Verbindung, Verteiler je Knoten — [konzept-akteure.md](konzept-akteure.md) |
@@ -147,46 +147,45 @@ Eine Query hat genau ein Ziel — einen Reader **oder** ein Aggregat (R4).
 ### 10.3.4 … eine Funktion
 
 ```csharp
-// im Host: eine Klasse, je Eingangstyp ein Auf (R2)
+// im Host: eine Klasse, je Eingangstyp ein Auf (R2); sie hört eine Folge (ein schlichter Record aus einem Decide)
 public sealed class SchadenBeiRueckgabe : IFunktion
 {
-    public MeldeSchaden? Auf(Zurueckgegeben e, Herkunft h) =>
-        e.Zustand == Zustand.Beschaedigt ? new MeldeSchaden(h.NeueId<Schadensfall>(), e.LeserId) : null;
+    public MeldeSchaden Auf(SchadenFeststellen f, Herkunft h) => new MeldeSchaden(h.NeueId<Schadensfall>(), f.LeserId);
 }
 
 // draußen: eine Schnittstelle, getragen von einem Client (er verkörpert einen Akteur, der sie rechnen darf) oder im Host umgesetzt; der Laufort steht in der Umgebung
 public interface IImportLauf : IFunktion
 {
-    IAsyncEnumerable<OneOf<LegeArtikelAn, MeldeImportFortschritt, SchliesseImportAb>> Auf(ImportGestartet e, Herkunft h);
+    IAsyncEnumerable<OneOf<LegeArtikelAn, MeldeImportFortschritt, SchliesseImportAb>> Auf(ImportZuLaufen f, Herkunft h);
 }
 ```
 
-- Form: `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten][, CancellationToken])`. Eingang ist ein Event aus dem Log oder ein Hinweis.
-- **Ausgaben:** Commands (gehen über den einen Emit-Weg in den Aggregat-Mechanismus), Events (ohne Aggregat, kein `Apply`), Quell-Nachrichten,
-  Hinweise. Ein Strom (`IAsyncEnumerable`) hat einen Fortschritt: nach einem Absturz geht es bei der nächsten Ausgabe weiter.
-- **Festhalten:** das Framework hält die Ausgabe unter „Funktion, Eingang“ fest, bevor sie wirkt (A1); nur eine nachweislich **gleichbleibende**
-  Funktion (Klasse im Host, keine gerufene Funktion, keine Lese-Fähigkeit, keine Uhr, kein Zufall, kein Zustand) spart das (R12).
+- Form: `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten][, CancellationToken])`. Eingang ist eine **Folge** (ein schlichter Record in der Signatur eines
+  Decide), ein **Zwischenergebnis** (ein schlichter Record in der Rückgabe einer anderen Funktion), eine Quell-Nachricht oder ein Hinweis; ein Event
+  nur als **Antwort** auf einen eigenen Command (das Ziel entschied es, die Funktion rechnet gleich weiter). Wer nur Events hört, hat keinen Einstieg
+  (CQRS100).
+- **Ausgaben:** Commands (über den einen Emit-Weg, Ids aus Eingang, Funktion und Stelle), Zwischenergebnisse (an jede Funktion, die sie hört) und
+  Hinweise — nie ein Event (CQRS100). Ein Strom (`IAsyncEnumerable`): jede Ausgabe geht hinaus, bevor die nächste kommt.
+- **Genau einmal** ohne Festhalten: Folge und Quell-Nachricht legen im selben Commit je Hörer einen offenen Eingang; rechnet die Funktion ihn erneut,
+  wirkt von jedem Command der erste (dieselbe Id, die Inbox des Ziels verwirft das Zweite).
 - **Neue Ids** nur abgeleitet: `h.NeueId<T>()` bzw. `h.NeueId<T>(zeile)` (R13).
 - **Gerufen:** Technik hinter einer Funktion ist selbst eine Funktion, nur ohne `Auf` — frei benannte Methoden, eine Schnittstelle mit
   Umsetzungen (oder eine Klasse), Konfig als Record (`Konfig:<Record>` in der Umgebung, Wahl `Funktionen:<I>:Implementierung`). Ihr Halter
   nimmt sie im Konstruktor (R10), sie läuft in seinem Prozess, hat keinen Laufort und kein `IDarf`. Eingänge und gerufene Methoden an einem
   Objekt sind ein Formfehler. Eine Funktion mit Lese-Fähigkeit läuft im Host.
-- **Zustand** (R19): `IZustand<T>` im Konstruktor einer Funktions-Klasse; sonst keine veränderlichen Felder. Gesichert mit der Position (A5);
-  mit `[EineAdresse]` hat die Funktion einen Zustand für alle Partitionen.
+- **Zustand** (R19): `IZustand<T>` im Konstruktor einer Funktions-Klasse; sonst keine veränderlichen Felder. Ein Cache der Aktivierung (A5) — was
+  fachlich gelernt wird, gehört in eine Projektion, die Funktion liest es über eine Lese-Fähigkeit.
 
   ```csharp
-  [EineAdresse]
   public sealed class Prognosemodell(IZustand<Gewichte> gewichte) : IFunktion, ILebenszyklus
   {
-      public Task BeimAktivierenAsync(CancellationToken ct) => …;      // nach Bau und Laden, vor dem ersten Auf
-      public Task VorDemSichernAsync(CancellationToken ct) => …;       // vor jeder Sicherung
-      public void Auf(TemperaturGemeldet e, Herkunft h) { … }         // lernt aus dem Log
-      public VermerkePrognose? Auf(Tendenz t) => …;                    // Hinweis rein, Command raus
+      public Task BeimAktivierenAsync(CancellationToken ct) => …;      // nach dem Bau, vor dem ersten Auf
+      public VermerkePrognose? Auf(Tendenz t, ITemperaturreihe reihe) => …;   // Hinweis rein, Projektion lesen, Command raus
   }
   ```
 
-- **Hinweis-Netz:** ein Hinweis, den ein Aggregat, eine Funktion oder ein Client ausgibt, geht über eine generierte Tabelle direkt an die
-  Funktionen, die ihn hören — im Speicher, höchstens einmal; jeder gehörte Hinweis braucht einen Erzeuger (R20).
+- **Hinweis-Netz:** ein Hinweis, den ein Aggregat, eine Funktion oder ein Client ausgibt, geht über die generierte Verkettung an die Funktionen, die
+  ihn hören — im Speicher, höchstens einmal; jeder gehörte Hinweis braucht einen Erzeuger (R20).
 
 ### 10.3.5 … eine Quelle
 
@@ -276,14 +275,14 @@ Prüfen heißt Bauen (W5). Die Liste „Regel → Build-Gegenstück“ der Gramm
 | R9 | Eine Projektion schreibt in genau einen Store | CQRS052 |
 | R10 | Gerufene Funktionen (`IFunktion` ohne `Auf`) nur im Konstruktor einer Funktion bzw. Umsetzung; eine Funktion mit Lese-Fähigkeit läuft im Host | CQRS089–092, Start-Prüfung |
 | R11 | Aggregate und Projektionen rechnen bei gleicher Eingabe gleich: keine Uhr, kein Zufall, kein `Guid.NewGuid()`, kein Lesen fremder Daten | CQRS102 |
-| R12 | Funktionen halten ihre Ausgabe fest, bevor sie wirkt; Ausnahme nur nachweislich gleichbleibend | CQRS103, Generator |
+| R12 | Eine Funktion liest nie das Log und schreibt nie ein Event: Eingänge Folge, Zwischenergebnis, Quell-Nachricht, Hinweis (ein Event nur als Antwort), Ausgaben Commands, Zwischenergebnisse, Hinweise | CQRS100 |
 | R13 | Neue Ids auf der Server-Seite nur abgeleitet (`Herkunft.NeueId`) | CQRS104 |
 | R14 | Jeder Store implementiert genau eine Store-Klasse; Klasse 3 nur mit `[MindestensEinmal]`; Schreib-Fähigkeiten eines Klasse-2-Stores nehmen die `Herkunft` | CQRS109, CQRS110, Start-Prüfung; Einhaltung: allgemeiner Store-Test |
 | R15 | Die Garantie folgt dem Eingang: Event → genau einmal, Hinweis → höchstens einmal, Query → keine Wirkung | folgt aus den Typen |
 | R16 | Alles von draußen kommt von einem Akteur, der es darf | Generator, Start-Prüfung |
 | R17 | Ein Client sendet, fragt, hört und trägt nur, was seine Akteure dürfen; eine Funktion draußen braucht einen Träger oder eine Bindung | CQRS095–097, CQRS087 (Warnung), Start-Prüfung |
 | R18 | Die Hausregel für Actors: ein Weg je Absicht (nur Framework-Code) | CQRS112/113 |
-| R19 | Zustand einer Funktion nur über `IZustand<T>` im Konstruktor einer Klasse; eine Funktion mit Zustand ist nie gleichbleibend; Lebenszyklus nur an Funktions-Klassen im Host | CQRS105, CQRS107 |
+| R19 | Zustand einer Funktion nur über `IZustand<T>` im Konstruktor einer Klasse; Lebenszyklus nur an Funktions-Klassen im Host | CQRS105, CQRS107 |
 | R20 | Jeder Hinweis-Typ, den eine Funktion hört, hat einen Erzeuger; jede Adresse der Routing-Tabelle existiert | CQRS106, Start-Prüfung |
 
 Dazu die Projektstruktur ([07](07-projektstruktur.md), CQRS098): wo eine Primitive liegt, sagt die Tabelle `Abstractions/Projektstruktur.cs`.
@@ -299,26 +298,23 @@ Entschieden von Tobi (2026-10-26 bis 2026-10-28); Code-Kommentare zitieren sie m
 | E3 | Typisierte Ids | ja, Pflicht für Command-Ziele; in Antworten die Grundlage für feine Updates an Clients (§10.4) |
 | E4 | Editor-Oberfläche | zurückgestellt; Werkbank und GraphExtractor bauen und `--check`/`--sonde` sind grün, `Werkbank/wwwroot/editor/` bleibt unberührt |
 | E5 | Umsetzen | phasenweise, je Phase auf Tobis Wort |
-| E6 | Darf eine Funktion Zustand haben? | ja, gekapselt und durabel, kein Domänen-Zustand (ein lernendes Netz, ein Cache, eine Verbindung); `IZustand<T>` im Konstruktor, Ressourcen je Aktivierung, keine neuen Event-Typen |
+| E6 | Darf eine Funktion Zustand haben? | ja, gekapselt, als Cache der Aktivierung, kein Domänen-Zustand (Gewichte, ein Zähler, eine Verbindung); `IZustand<T>` im Konstruktor, Ressourcen je Aktivierung; Gelerntes gehört in Projektionen |
 | E7 | Nachrichten zwischen Funktionen ohne Log | ja, als Hinweis (`ITransientEvent`), im Speicher, nie im Log (Invariante 6) |
 | E8 | Wie kommen sie an? | hart verdrahtet: generierte Tabelle Hinweis-Typ → Adressen, direkt über den Boten; kein Broker, keine Abos, kein Pub/Sub von Proto.Cluster |
 | E9 | C# und Python | eine Adresse je Funktion; dahinter rechnet die Umsetzung im Host oder die Sitzung eines Clients, der sie trägt; Ausgaben Commands und Hinweise |
-| E10 | Lebenszyklus einer Funktion | optional, `ILebenszyklus` mit `BeimAktivierenAsync` und `VorDemSichernAsync`; das Ende ist `IAsyncDisposable`; draußen `beim_start`/`beim_ende` im Python-SDK |
+| E10 | Lebenszyklus einer Funktion | optional, `ILebenszyklus` mit `BeimAktivierenAsync`; das Ende ist `IAsyncDisposable`; draußen `beim_start`/`beim_ende` im Python-SDK |
 
 Annahmen (sicherer Default, gelten, solange Tobi nicht widerspricht):
 
-- **A1** Funktionen halten ihre Ausgabe standardmäßig im Log fest, bevor sie wirkt; nur nachweislich gleichbleibende sparen das.
+- **A1** Eine Funktion hält nichts fest: genau einmal wirkt sie über die offenen Eingänge (im Commit des Auslösers) und die abgeleiteten Command-Ids.
 - **A2** Die Zugehörigkeit zu einem Vorgang ist ein fachliches Feld im Event, keine versteckte Korrelation in den Metadaten.
 - **A3** Wiederholungsfeste Stores (Klasse 2) schreiben mit der Event-Identität im Schlüssel oder bedingt nach Position.
 - **A4** Der Neuaufbau einer Projektion geht über Generationen; Leeren ist der Sonderfall.
-- **A5** Der Zustand einer Funktion wird mit ihrer Position gesichert (eine Transaktion; bei großem Zustand erst die Ablage, dann Position und
-  Verweis), höchstens einmal je Sekunde und immer beim Stoppen, Passivieren und Umziehen; nach einem Absturz wirkt jeder Log-Eingang genau einmal
-  auf den gesicherten Zustand, Hinweise im Flug gehen verloren.
-- **A6** Die Adresse einer Funktion ist `funktion-<F>/<Partition>`; ein Hinweis geht an die Partition seines Herkunfts-Streams; mit
-  `[EineAdresse]` gibt es eine Adresse für alles.
+- **A5** Der Zustand einer Funktion ist ein Cache der Aktivierung (je Kind eine), frisch bei jeder Aktivierung, nicht gesichert.
+- **A6** Eine Funktion hat je Knoten, der sie hält, einen Parent `funktionen/<F>`; ein Eingang geht an den eigenen Knoten, sonst reihum (Gossip).
 - **A7** Ein Hinweis trägt eine Kennung, die der Absender vergibt; Command-Ids aus einem Hinweis-Eingang werden daraus abgeleitet.
-- **A8** Rechnet eine Funktion mit Zustand draußen, lebt der Zustand im Worker; der Funktions-Actor bindet seine Eingänge an eine tragende
-  Sitzung (Lease je Funktions-Actor). Das Sichern ist Sache des Workers.
+- **A8** Rechnet eine Funktion draußen, gibt ein Kind den Eingang dem Arbeiter mit dem meisten freien Platz; einen Zustand im Worker sichert der
+  Worker.
 
 ## 10.8 Was bewusst nicht kommt
 

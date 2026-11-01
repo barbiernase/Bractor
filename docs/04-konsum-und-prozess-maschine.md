@@ -1,17 +1,17 @@
 # 04 — Konsum, Funktionen und Uhr
 
-Stand 2026-10-29, gegen den Code geprüft. Wie man Projektion, Reader, Funktion und Quelle schreibt, steht in [10](10-entwickler-api.md).
+Stand 2026-11-01, gegen den Code geprüft. Wie man Projektion, Reader, Funktion und Quelle schreibt, steht in [10](10-entwickler-api.md).
 
-Was auf ein Event hin geschieht, ist eines von zwei Dingen: eine **Projektion** schreibt ein Read-Model (replaybar), eine **Funktion** sendet
-Commands oder schreibt Ergebnis-Events (wirkt in die Welt, nie blind neu abgespielt). Beide sind durable Konsumenten des Logs und folgen
-demselben Muster: der Wecker am Commit weckt schnell, der Takt je Partition heilt verlorene Weckrufe, gelesen wird geordnet aus dem Event-Store (Invariante 1), der
-Fortschritt liegt durabel im Store. Was ein Konsument ist, folgt aus seiner Code-Form (Marker-Interface, Fähigkeits-Parameter, Rückgabetyp);
-einen zweiten Marker gibt es nicht. Zeit kommt über die **Uhr**: ein Decide setzt eine Frist, die Uhr sendet sie fällig.
+Durabler Konsument des Logs ist nur die **Projektion**: sie schreibt ein Read-Model (replaybar); der Wecker am Commit weckt schnell, der Takt je
+Partition heilt verlorene Weckrufe, gelesen wird geordnet aus dem Event-Store (Invariante 1), der Fortschritt liegt durabel im Store. Eine
+**Funktion** steht vor dem Aggregat und liest nie das Log: sie hört Folgen, Zwischenergebnisse, Quell-Nachrichten und Hinweise und sendet Commands —
+genau einmal wirksam über die offenen Eingänge und die Inbox ihrer Ziele (§4.4). Was ein Baustein ist, folgt aus seiner Code-Form (Marker-Interface,
+Fähigkeits-Parameter, Signatur); einen zweiten Marker gibt es nicht. Zeit kommt über die **Uhr**: ein Decide setzt eine Frist, die Uhr sendet sie fällig.
 
 | Konsument | Code-Form | Schleife | Fortschritt | Neu abspielbar |
 |---|---|---|---|---|
 | Projektion | `IProjektion`; `Task Auf(Event[, Herkunft], Schreib-Fähigkeiten eines Stores)` | `BatchLeser` je (Projektion, Partition) | Fortschritt (Position, Revision, Generation) und Guard je Stream — beim Store der Klasse 1 in seiner Transaktion, sonst beim Framework (§4.3) | ja (Neuaufbau über Generationen) |
-| Funktion | `IFunktion` mit `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])` | `FunktionsActor` je (Funktion, Partition) | Funktions-Stand (Position, Revision) und festgehaltene Ausgabe je Eingang | nein |
+| Funktion | `IFunktion` mit `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])` | Wurzel je Knoten, Parent je Funktion, Kinder bis `Parallel` | offene Eingänge (`cqrs_eingaenge`) bis „fertig“; nichts festgehalten | nein (nie aus dem Log) |
 
 **Abläufe sind kein eigener Baustein mehr.** Was früher ein Prozess, eine Saga oder ein Fluss war, ist heute ein **Aggregat**, das den Ablauf
 entscheidet (Zustand, Join, Kompensation, Frist), plus **Funktionen**, die die Kanten zwischen Aggregaten ziehen (Event → Command). §4.5 zeigt
@@ -64,15 +64,14 @@ Ids, eine Antwort von P), nennt dem Client nach höchstens 200 ms die betroffene
 Abhängigkeit (eine Datensatz-Ansicht zeigt Labels von Bildpaaren) hat die Projektion beim Falten hergestellt — der Client kennt sie nicht.
 
 **Position und Nachzügler.** Vor jeder Seite bestimmt `ReadPartitionAsync` die *gesetzte* Sequenz: bis dorthin ist jede Sequenz endgültig — der
-Horizont der Vollständigkeit aus den Transaktionsnummern von Postgres, ohne Uhr ([03](03-schreibseite.md) §3.3, G-9; dieselbe Regel wie beim
-Funktions-Actor, §4.4). Die Position rückt nie darüber hinaus, bei voller Seite nie über deren Ende und
+Horizont der Vollständigkeit aus den Transaktionsnummern von Postgres, ohne Uhr ([03](03-schreibseite.md) §3.3, G-9). Die Position rückt nie darüber hinaus, bei voller Seite nie über deren Ende und
 nie über das erste Event eines hängenden Streams (unten). Jüngere Events werden trotzdem angewandt (Latenz); welche schon erledigt sind, merkt
 sich die Aktivierung und schließt sie beim nächsten Lesen aus, nach einer Neuaktivierung fängt der Guard sie ab. So überholt die Position keine
 noch unsichtbare kleinere Sequenz. Die Liste der Erledigten ist gedeckelt (`BatchLeser.ErledigtHoechstens`, 5 000, PF-28): steht der Horizont
 (eine lange offene Transaktion irgendwo im selben Postgres) oder hängt ein Stream, wüchse sie sonst mit jedem Event und ginge mit jeder Seite
 an die Datenbank. Ist sie voll, wendet der Leser nur noch an, was bis zur gesetzten Sequenz reicht, und wartet sonst; ein hängender Stream wird
 dann geparkt statt hinter ihm weiter zu sammeln. Gesetzte Sequenz und „steht dahinter überhaupt ein Event?“ kommen aus **einer** Abfrage; steht hinter der
-Position nichts, entfällt die Seite — eine Weckung ohne Neues kostet eine Abfrage statt zwei (PF-14; ebenso der Funktions-Actor). Gelesen wird ab einer Lese-Position im Speicher: durabel wird sie mit jedem Commit eines Batches; über fremde
+Position nichts, entfällt die Seite — eine Weckung ohne Neues kostet eine Abfrage statt zwei (PF-14). Gelesen wird ab einer Lese-Position im Speicher: durabel wird sie mit jedem Commit eines Batches; über fremde
 Events hinweg (leere Seite) höchstens einmal je Poll-Intervall — sonst committete unter Last jede Weckung nur eine Zahl. Eine Transaktion, die
 lange offen ist, hält die Position an (nicht die Zustellung: jüngere Events werden weiter angewandt), sie wird nie überholt. Bis 2026-10-16 galt
 hier eine Karenz von 3 s gegen den Event-Zeitstempel; eine länger offene Transaktion wurde überholt und ihr Event nie gelesen (G-9).
@@ -90,14 +89,13 @@ hier eine Karenz von 3 s gegen den Event-Zeitstempel; eine länger offene Transa
 
 **Weckung** (docs/03 §3.5, `Infrastructure/Wecken/`). Es gibt **eine** Stelle, an der nach einem Commit geweckt wird: nach dem `SaveChanges` des
 Group-Commits (`MartenEventBatchWriter`) und des Einzel-Appends (`MartenEventStore`, auch der Rückfall `IsolateAsync` und der Betrieb ohne
-Bündeln). Alle Schreiber gehen durch sie — Aggregat, Quelle, festgehaltene Ausgabe einer Funktion. Der **Weckplan** (`WeckplanGenerator`, nur aus
-Signaturen) sagt je Event-Typ, wen der Commit weckt: den Batch-Leser jeder Projektion, die den Typ hört (`batch-<Projektion>`, Partition des
-Streams), jeden Funktions-Actor, der ihn aus dem Log hört (`funktion-<F>`, Partition bzw. die eine Adresse), und die Uhr bei `FristGesetzt`. Der
+Bündeln). Alle Schreiber gehen durch sie — Aggregat und Quelle. Der **Weckplan** (`WeckplanGenerator`, nur aus Signaturen) sagt je Event-Typ, wen
+der Commit weckt: den Batch-Leser jeder Projektion, die den Typ hört (`batch-<Projektion>`, Partition des Streams), und die Uhr bei `FristGesetzt`. Der
 **Wecker** schickt je Commit und Ziel genau einen `Wake` (ohne Inhalt, verlierbar); je Ziel ist beim Absender höchstens einer unterwegs, was
 währenddessen kommt, wird zu genau einem weiteren (`Weckungen`). Das Ziel quittiert sofort und merkt sich während eines Durchlaufs „noch
 einmal“ (`RahmenActor.Wecke`). Der **Takt** (`BatchKonsumStartupService`) weckt alle 30 s jede Partition — das Netz für verlorene Weckrufe; beim
 Start prüft er, dass jeder registrierte Hörer mit jedem gehörten Typ im Plan steht (Boot-Fehler sonst, GR-WECKPLAN; dass ein Hörer aus dem Log nur
-konkrete, persistente Events hört, sichert im Build die Form: CQRS057 Projektion, CQRS100 Funktion). Weckplan und Batch-Kinds lesen eine Projektion
+konkrete, persistente Events hört, sichert im Build die Form: CQRS057). Weckplan und Batch-Kinds lesen eine Projektion
 über dieselbe Lesart (`Projektionsform`) — sie können nicht auseinanderlaufen. Ein Commit, dessen Ausgang mehrdeutig blieb (G-3), weckt nicht — ihn holt der Takt. Die
 Batch-Leser passivieren nicht (es gibt nur Projektionen × Partitionen davon, der Takt weckt sie ohnehin).
 
@@ -110,10 +108,10 @@ Batch-Leser passivieren nicht (es gibt nur Projektionen × Partitionen davon, de
 Kommt nichts hinein, arbeiten nur die Takte (gemessen auf dem Messserver, Diagnose `--art leerlauf`, docs/12 §12.5, PF-14):
 - **Batch-Poll** alle 30 s je Projektion und Partition eine Weckung, ohne Neues eine Abfrage (Beispieldomäne: 5 Projektionen × 8 Partitionen =
   40 Abfragen je 30 s — er wächst mit Projektionen × Partitionen, PF-15);
-- **Funktions-Poll** ebenso alle 30 s je Funktion und Partition;
+- **Zusteller** jede Sekunde je Knoten die fälligen offenen Eingänge (eine Abfrage über den Index von `cqrs_eingaenge`);
 - **Uhr** jede Sekunde die DB-Uhr und die fälligen Fristen (eine Abfrage über den Index von `cqrs_fristen`).
 
-**Nachlauf.** Nach einer Last schreiben Batch-Leser und Funktions-Actors ihre Position über fremde Events einmal fest; danach ist der Host still.
+**Nachlauf.** Nach einer Last schreiben die Batch-Leser ihre Position über fremde Events einmal fest; danach ist der Host still.
 Die Messung wartet diesen Nachlauf ab (alle Partitions-Stände am Kopf des Logs) und weist ihn eigens aus.
 
 ## 4.2 Woraus folgt, was ein Konsument ist
@@ -142,7 +140,7 @@ Frage, die Projektionen dahinter (aus den Lese-Fähigkeiten: die Projektionen, d
 sie ein Aggregat beantworten (`Frage` im Decider, exakter Stand mit seiner Version, ohne Projektion dahinter — [03](03-schreibseite.md) §3.1 (d)).
 
 Eine Funktion erkennt der `FunktionsBausteinGenerator` an `IFunktion` und den `Auf`-Methoden (§4.4). Sie darf Lese-Fähigkeiten nehmen, nie
-Schreib-Fähigkeiten: was sie bewirkt, geht als Command an ein Aggregat oder als Ergebnis-Event ins Log.
+Schreib-Fähigkeiten: was sie bewirkt, geht als Command an ein Aggregat.
 
 ## 4.3 Projektionen und Store-Klassen
 
@@ -194,178 +192,111 @@ Projektion eine neue Generation (Fortschritt auf Anfang, sofort umgeschaltet; de
 
 ## 4.4 Funktionen
 
-**Form.** Eine Funktion ist eine Klasse (läuft im Host) oder eine Schnittstelle (läuft draußen, ihre Umsetzungen sind Klassen) `: IFunktion`
-mit Methoden `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten])` — je Eingangstyp genau eine (R2, CQRS101). Was herauskommen kann, steht in der
-Rückgabe: ein konkreter Typ, `OneOf<…>`, `T?`, `IEnumerable<…>` oder `IAsyncEnumerable<…>` (auch in `Task<…>`); erlaubt sind Commands und
-Events und Hinweise. `Herkunft` nennt Stream, Version, Zeit und Akteur des Eingangs und leitet neue Ids ab (`h.NeueId<T>(…)`, R13). Eingänge sind
-Events aus dem Log (auch Quell-Nachrichten und Ergebnisse anderer Funktionen) und **Hinweise** (`ITransientEvent`) aus dem Hinweis-Netz (unten);
-aus einem Hinweis gehen nur Commands und Hinweise hervor, keine Events (CQRS100). Eine Funktion mit Zustand darf aus einem Eingang allein
-lernen (`void`/`Task` ohne Ausgabe). Der `FunktionsBausteinGenerator` erzeugt Dispatch, Seiten-Form, den **Weckplan** (welche Log-Typen welche
-Funktion wecken) und den **Hinweisplan** (welche Hinweis-Typen welche Funktion hören) als Tabelle `GeneratedFunktionsBausteine` (CQRS100).
-Lage: Klasse und Schnittstelle in der Rolle Abläufe (`HostFunktion` bzw. `Funktion`, docs/07); ein Hinweis, den eine Funktion ausgibt, ebenda.
+**Form.** Eine Funktion ist eine Klasse (läuft im Host) oder eine Schnittstelle (läuft draußen oder mit einer Umsetzung im Host) `: IFunktion` mit
+Methoden `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten][, CancellationToken])` — je Eingangstyp genau eine (R2, CQRS101). Eine Funktion steht **vor dem
+Aggregat**: sie liest nie das Log. Ihre Eingänge sind eine **Folge** eines Decide (docs/03 §3.2) oder ein **Zwischenergebnis** einer anderen Funktion
+(schlichte Records ohne Marker), eine **Quell-Nachricht** (§4.7) oder ein **Hinweis** (`ITransientEvent`); ein Event hört sie nur als **Antwort** auf
+einen eigenen Command — wer nur Events hört, hätte keinen Einstieg (CQRS100). Was herauskommen kann, steht in der Rückgabe: ein konkreter Typ,
+`OneOf<…>`, `T?`, `IEnumerable<…>` oder `IAsyncEnumerable<…>` (auch in `Task<…>`); erlaubt sind Commands, Zwischenergebnisse und Hinweise, nie ein
+Event (CQRS100). `Herkunft` nennt Stream, Version, Zeit und Akteur des Eingangs und leitet neue Ids ab (`h.NeueId<T>(…)`, R13). Eine Funktion mit
+Zustand darf aus einem Eingang allein lernen (`void`/`Task` ohne Ausgabe). Der `FunktionsBausteinGenerator` erzeugt je Funktion ihre Rechnung
+(`FunktionsBaustein.Rechne`, Eingang und Ausgaben als Objekte, reflexionsfrei) und die **Verkettung** (Nachrichten-Typ → Funktionen, die ihn hören,
+`Anwendung.Funktionen.Verkettung`) als Tabelle `GeneratedFunktionsBausteine`. Lage: Klasse und Schnittstelle in der Rolle Abläufe (`HostFunktion` bzw.
+`Funktion`, docs/07), Zwischenergebnisse in `Zwischenergebnisse.cs` ebenda, Folgen bei ihrem Aggregat (`Folgen.cs`).
 
-Beispiel (Beispieldomäne, `Domain.Pipeline/Sammelvorgang/TeilFertigMeldung.cs`) — die kleinste Funktion, eine Kante Event → Command:
+Beispiel (Beispieldomäne, `Domain.Pipeline/Sammelvorgang/TeilFertigMeldung.cs`) — die kleinste Funktion, eine Kante Folge → Command:
 ```csharp
 public sealed class TeilFertigMeldung : IFunktion
 {
-    public MeldeTeilFertig Auf(TeilauftragAbgeschlossen e) => new(e.SammelvorgangId);
+    public MeldeTeilFertig Auf(TeilFertig f) => new(f.Sammelvorgang);
 }
 ```
 
-**Funktionen vor dem Aggregat** (Umbau „Funktionen vor dem Aggregat“, `Infrastructure/Funktionen/`: `FunktionenWurzel`, `FunktionsParent`,
-`FunktionsKindActor`, `FunktionsWege`, `Werkstatt`). Eine Funktion, die eine **Nachricht ohne Marker** hört — eine Folge eines Decide (docs/03 §3.2)
-oder ein **Zwischenergebnis** einer anderen Funktion (ein schlichter Record in deren Rückgabe) — oder einen Hinweis, steht **vor dem Aggregat**:
-sie liest nie das Log und gibt nie ein Event aus, nur Commands, Zwischenergebnisse und Hinweise (CQRS100). Der Generator erzeugt ihre Rechnung
-(`FunktionsBaustein.Rechne`, Eingang und Ausgaben als Objekte) und die **Verkettung** (Nachrichten-Typ → Funktionen, `Anwendung.Funktionen.Verkettung`).
-Je Knoten spawnt der Host nach dem Cluster-Beitritt eine **Wurzel** `funktionen` (kein virtueller Actor) mit je einem **Parent** `funktionen/<F>`
-je solcher Funktion und meldet sie im Gossip-Zustand des Clusters (Schlüssel `funktionen`, `FunktionsOrte`); die **Wege** schicken einen Eingang
-an den eigenen Knoten, wenn er die Funktion hält, sonst reihum an einen, der sie hält (`Bote.FrageAnKnotenAsync`). Ein Eingang
-(`EingangZustellen`) trägt eine abgeleitete **Kennung**, die Nachricht (auf demselben Knoten als Objekt, zwischen Knoten in ihrer Wire-Form) und
-die Herkunft der Kette. Der Parent ist eine begrenzte Warteschlange (`Warteschlange`, Standard 10 000: voll → „später“, der Rückstau reicht bis
-zum durablen Rand) mit Kindern bis `Parallel` (Standard 256 — ein Kind rechnet einen Eingang samt den Antworten auf seine Commands, eine ganze
-Kette, und wartet dabei auf jede Antwort; je Umsetzung eine Aktivierung, erzeugt beim ersten Eingang, mit `Vorwaermen` beim Start); er erkennt
-einen doppelten Eingang an der Kennung (in Arbeit: er hängt sich an; fertig: sofort „fertig“, Gedächtnis 10 000) und rechnet einen scheiternden
-erneut bis `Wiederholungen` (Standard 3), danach „gescheitert“. Die Werte stehen in der Umgebung je Funktion (`Funktionen:<F>:Parallel`, `Warteschlange`, `Vorwaermen`, `Wiederholungen`; `Slots` gilt nur noch für Funktionen mit Log-Eingängen). Das Kind rechnet einen Eingang zugleich: Commands der Reihe nach über den Emitter mit
-der Id aus Eingang, Funktion und Stelle (`Kettenvertrag.Befehl`; unbekannt → derselbe Command erneut, bis acht Versuche), Zwischenergebnisse an
-jede Funktion, die sie hört (Kennung aus Ausgabe und Funktion; gewartet wird, bis der Nachfolger fertig ist — „später“ oder keine Antwort in 60 s
-→ erneut), Hinweise verlierbar. Die **Antwort** auf einen Command trägt die Events, die das Ziel entschied, mit ihren Versionen
-(`CommandResult.Antwort`, auch bei einer erkannten Wiederholung: der Aggregat-Actor sucht sie über die `causation_id` im eigenen Stream); hört die
-Funktion einen dieser Typen, rechnet das Kind ihn gleich weiter (Kennung `Kettenvertrag.Antwort` aus Eingang, Stelle und Nummer, Herkunft das
-Ziel). Ein Event-Eingang einer Funktion vor dem Aggregat ist immer eine solche Antwort, nie das Log. **Fertig** ist ein Eingang, wenn seine Commands beantwortet und seine Nachfolger fertig sind; ein durabler wird dann
-ausgetragen (`cqrs_eingaenge`), einem Absender aus einer Kette antwortet der Parent erst dann. Durable Eingänge bringt der Aggregat-Actor direkt
-nach dem Commit (schneller Weg, verlierbar), die Zeile wird erst nach 5 s fällig, danach bringt sie der Zusteller (`WegeZustellung`). Nichts wird
-festgehalten: rechnet eine Funktion einen Eingang erneut (Absturz, Wiederholung), wirkt von jedem Command der erste (dieselbe Id), eine Außenwelt
-dahinter (ein Versand) ist mindestens einmal. Reihenfolge nur bei `Parallel` 1. Im Umbau laufen Funktionen mit Log-Eingängen noch auf dem
-Funktions-Actor je Partition (unten); das `IZustand` einer Funktion vor dem Aggregat ist ein Cache je Aktivierung (nicht gesichert).
+**Laufzeit** (`Infrastructure/Funktionen/`: `FunktionenWurzel`, `FunktionsParent`, `FunktionsKindActor`, `FunktionsWege`, `Werkstatt`). Je Knoten spawnt
+der Host nach dem Cluster-Beitritt eine **Wurzel** `funktionen` (kein virtueller Actor) mit je einem **Parent** `funktionen/<F>` je Funktion, die er
+hält, und meldet sie im Gossip-Zustand des Clusters (Schlüssel `funktionen`, `FunktionsOrte`); die **Wege** schicken einen Eingang an den eigenen
+Knoten, wenn er die Funktion hält, sonst reihum an einen, der sie hält (`Bote.FrageAnKnotenAsync`). Ein Eingang (`EingangZustellen`) trägt eine
+abgeleitete **Kennung**, die Nachricht (auf demselben Knoten als Objekt, zwischen Knoten in ihrer Wire-Form) und die Herkunft der Kette. Der Parent
+ist eine begrenzte Warteschlange (`Warteschlange`, Standard 10 000: voll → „später“, der Rückstau reicht bis zum durablen Rand) mit Kindern bis
+`Parallel` (Standard 256 — ein Kind rechnet einen Eingang samt den Antworten auf seine Commands, eine ganze Kette, und wartet dabei auf jede
+Antwort; je Kind eine Aktivierung, erzeugt beim ersten Eingang, mit `Vorwaermen` beim Start); er erkennt einen doppelten Eingang an der Kennung (in
+Arbeit: er hängt sich an; fertig: sofort „fertig“, Gedächtnis 10 000) und rechnet einen scheiternden erneut bis `Wiederholungen` (Standard 3),
+danach „gescheitert“. Das Kind rechnet einen Eingang zugleich: Commands der Reihe nach über den Emitter (§4.6) mit der Id aus Eingang, Funktion und
+Stelle (`Kettenvertrag.Befehl`; unbekannt → derselbe Command erneut, bis acht Versuche), Zwischenergebnisse an jede Funktion, die sie hört (Kennung
+aus Ausgabe und Funktion; gewartet wird, bis der Nachfolger fertig ist — „später“ oder keine Antwort in 60 s → erneut), Hinweise verlierbar. Die
+**Antwort** auf einen Command trägt die Events, die das Ziel entschied, mit ihren Versionen (`CommandResult.Antwort`, auch bei einer erkannten
+Wiederholung: der Aggregat-Actor sucht sie über die `causation_id` im eigenen Stream); hört die Funktion einen dieser Typen, rechnet das Kind ihn
+gleich weiter (Kennung `Kettenvertrag.Antwort` aus Eingang, Stelle und Nummer, Herkunft das Ziel). **Fertig** ist ein Eingang, wenn seine Commands
+beantwortet und seine Nachfolger fertig sind; ein durabler wird dann ausgetragen (`cqrs_eingaenge`), einem Absender aus einer Kette antwortet der
+Parent erst dann. **Nichts wird festgehalten:** rechnet eine Funktion einen Eingang erneut (Absturz, Wiederholung), wirkt von jedem Command der erste
+(dieselbe Id, die Inbox des Ziels verwirft das Zweite), eine Außenwelt dahinter (ein Versand) ist mindestens einmal. Reihenfolge nur bei `Parallel` 1.
 
 **Draußen** (Laufort `Extern` oder `Hand`) rechnet ein **Arbeiter** (`IArbeiter`): die Sitzung eines Workers oder Clients, der die Funktion trägt
-(`SitzungsActor`, nach `FunktionenAnbieten`), oder der Mensch an der Werkbank (`HandAusfuehrer`). Er meldet sich mit seinen Slots bei der
-**Werkstatt** seines Knotens an; der erste Arbeiter einer Funktion lässt die Wurzel ihren Parent anlegen (Parallel = Summe der Slots, `ParallelSetzen`
-bei jeder Änderung), mit dem letzten hält der Knoten die Funktion nicht mehr. Ein Kind dieses Parents hat keine Aktivierung: es gibt den Eingang dem
-Arbeiter mit dem meisten freien Platz (`Werkstatt.RechneAsync`, über die Leitung als `ArbeitsAuftrag` mit der Kennung als `vorgang`) und nimmt seine
-Ausgaben in Reihenfolge entgegen (`ArbeitsErgebnis`, ein Strom in Stücken), geprüft gegen die Signatur; hinausgebracht werden sie wie die einer
-Umsetzung im Host. Die erste vollständige Antwort gewinnt (jede weitere ist „unbekannt“). Geht der Arbeiter, scheitern seine Läufe sofort;
-ohne Regung (Ausgabe oder `ArbeitLebtMeldung`) länger als die Geduld (Worker 60 s, Hand unbegrenzt) scheitert der Lauf ebenso — der Parent
-rechnet den Eingang erneut, der durable Rand bringt ihn wieder. Kein Vermittler, keine Lease, nichts festgehalten. Nachrichten ohne Marker reisen
-über die Leitung als eigene Nutzlast-Kategorie (`{Typ}Dto`-Message im Proto der Anwendung, `INutzlastTabelle.Nachricht`), ein Zwischenergebnis als
-`FunktionsAusgabe.zwischenergebnis`. Prüfdomäne: `Nachschub` (Folge `Unterschritten`), `Gutschrift` (`Gutschreibung`), `Mahnwesen` (`Mahnfall`),
-`Merkmalsbildung` (`NeuerWert`), `Auftragsabwicklung` (`AuftragAbzuwickeln` und Antworten), `Verteilabwicklung` (`VerteilungAbzuwickeln` und
-Antworten), `IFreigabe` (`Freizugeben`; im Host der `Freigabeautomat`, draußen von Hand), `IAusreisserpruefung` und `Schaetzer` (Hinweis `Merkmal`),
-`Importannahme` (Quell-Nachricht `ImportAngefordert`), `Importlauf` (Folge `ImportZuLaufen`, ein Strom von Commands). Beispieldomäne: die Bildkette —
-`IBildEinlesen` (Quell-Nachricht `DateiErkannt`) → `BildEingelesen` → `IBildVerkleinerung` → `BildVerkleinert` → `IKontrastausgleich` →
-`VorschauErstellt` → `Bildeingang` → `NimmBildAuf`; die Zwischenergebnisse gehen nie ins Log, „nicht lesbar“ ist ein Hinweis. Dazu `RangeAufloesung`
-(`RangeAufzuloesen`), `MitgliederEinfrieren` (`EinfrierenAbzuschliessen`), `TeilFertigMeldung` (`TeilFertig`), `IBildpaarBeurteilung`
-(`PaarZuBeurteilen`, draußen beim Klassifikations-Worker) und `ITraining` (`TrainingZuRechnen`, draußen beim Trainings-Worker, ein Strom). Das
-Event daneben (`RangeAngefordert`, `ImagePairKomplett`, `TrainingAngefordert` …) bleibt ein Fakt im Log für Projektionen und Clients. Keine Funktion
-der beiden Domänen hört mehr ein Event aus dem Log; der Funktions-Actor unten fällt mit dem nächsten Schritt weg.
-
-**Funktions-Actor** (`Infrastructure/Funktionen/FunktionsActor.cs`, ein `RahmenActor` je Funktion und Adresse — die Partition, bzw. die eine
-Adresse einer Funktion mit `[EineAdresse]`, die dann alle Partitionen liest): liest seine Seite ab der
-Position aus dem Log, startet so viele Eingänge, wie Slots frei sind (Standard 4, PF-33), je Stream höchstens einen (`FunktionsLauf`), und rückt die
-Position nur bis vor den ersten laufenden Eingang und nie über die gesetzte Sequenz (Horizont wie §4.1), bei voller Seite nie über deren letztes
-Event. Was von der Seite noch nicht starten kann, bleibt als **Vorrat** (höchstens eine Seite) und startet, sobald ein Slot frei ist; neu gelesen
-wird erst, wenn der Vorrat nichts Startbares mehr hat — eine Seite trägt alle ihre Eingänge (G-18: vorher las ein Actor mit einem Slot nach jedem
-Eingang eine volle Seite neu, ≈ 100 Eingänge/s je Partition). Die nächste Seite beginnt an der Grenze der gelesenen (bis dorthin ist jeder Eingang
-erledigt, in Arbeit oder im Vorrat), ergänzt den Vorrat und schließt nur aus, was jenseits davon schon bekannt ist (PF-40: ab der Position ging
-Postgres alles Erledigte dahinter je Seite noch einmal durch, gegen eine Liste von bis zu 5 000 Sequenzen). Der Stand liegt im Partitions-Checkpoint
-mit der Id `funktion:<F>:<Partition>` und Revision (zwei Aktivierungen: die zweite bekommt einen Konflikt und lädt neu); so zählt `/health` den
-Rückstand der Funktionen mit. Ein Eingang, der wirft, wartet im Backoff 1 … 30 s; nach den eingestellten Wiederholungen wird sein Stream geparkt
-(Dead-Letter) und je Poll-Intervall einzeln versucht.
-
-**Festhalten** (`FunktionsArbeit`, `Festhalten.cs`). Eine **gleichbleibende** Funktion — Klasse ohne Konstruktor-Parameter und ohne
-Fähigkeiten, die nur Commands ausgibt — rechnet beim Wiederholen dasselbe (R12, CQRS103 verbietet Uhr, Zufall, Datei, Netz); sie sendet
-direkt, mit abgeleiteten Command-Ids (Funktion, Eingang, Stelle, Typ, Ziel). Jede andere **hält ihre Ausgabe fest**, bevor etwas wirkt: ein
-Stream je (Funktion, Eingang) nimmt die Events der Ausgabe, je Command ein `BefehlFestgehalten` und als Ende `AusgabeFestgehalten`. Wer
-zuerst festhält, gewinnt (Anhängen ab der erwarteten Version); ein zweiter Lauf verwirft seine Rechnung und sendet das Festgehaltene. Ein
-Strom wird in Stücken zu 100 festgehalten, ein Abbruch setzt bei der nächsten Ausgabe fort. Hinweise (`ITransientEvent`) schickt nur der
-Lauf, der festhielt. Commands gehen immer über den `CommandEmitter` (§4.6); ein unbekannter Ausgang heißt „später“, die Position bleibt.
+(`SitzungsActor`, nach `FunktionenAnbieten`), oder der Mensch an der Werkbank (`HandAusfuehrer`, JSON-Eingang `/eingang/auftraege` und
+`/eingang/ergebnis`). Er meldet sich mit seinen Slots bei der **Werkstatt** seines Knotens an; der erste Arbeiter einer Funktion lässt die Wurzel
+ihren Parent anlegen (Parallel = Summe der Slots, `ParallelSetzen` bei jeder Änderung), mit dem letzten hält der Knoten die Funktion nicht mehr. Ein
+Kind dieses Parents hat keine Aktivierung: es gibt den Eingang dem Arbeiter mit dem meisten freien Platz (`Werkstatt.RechneAsync`, über die Leitung
+als `ArbeitsAuftrag` mit der Kennung als `vorgang`) und nimmt seine Ausgaben in Reihenfolge entgegen (`ArbeitsErgebnis`, ein Strom in Stücken),
+geprüft gegen die Signatur; hinausgebracht werden sie wie die einer Umsetzung im Host. Es zählt nur die Antwort des Arbeiters, der den Auftrag hält,
+und von ihm die erste vollständige; jede andere ist „unbekannt“ (`ARBEIT_UNBEKANNT`). Geht der Arbeiter, scheitern seine Läufe sofort; ohne Regung
+(Ausgabe oder `ArbeitLebtMeldung`) länger als die Geduld (Worker 60 s, Hand unbegrenzt) scheitert der Lauf ebenso — der Parent rechnet den Eingang
+erneut, der durable Rand bringt ihn wieder. Kein Vermittler, keine Lease, nichts festgehalten. Nachrichten ohne Marker reisen über die Leitung als
+eigene Nutzlast-Kategorie (`{Typ}Dto`-Message im Proto der Anwendung, `INutzlastTabelle.Nachricht`), ein Zwischenergebnis als
+`FunktionsAusgabe.zwischenergebnis`.
 
 **Laufort ist Konfig, nicht Code.** Die Umgebungs-Datei sagt je Funktion `Funktionen:<F>:Laufort` (`Host` · `Extern` · `Hand`), dazu
-`Implementierung`, `Slots`, `Wiederholungen` (`Abstractions/Umgebung/UmgebungKonfig.cs`); `AddCqrs` bindet daraus beim Start
-(`BindeFunktionen`), danach die gerufenen Funktionen, die die Umsetzungen im Konstruktor nehmen (`BindeGerufene`, `GeneratedGerufene`; eine
-gerufene Funktion nennt unter `Funktionen:<Name>` nur ihre `Implementierung`). Ohne Eintrag läuft eine Klasse im Host,
-eine Schnittstelle mit genau einer Umsetzung ebenso, eine Schnittstelle ohne Umsetzung, die ein Client trägt (er verkörpert einen Akteur mit `IDarf<F>`), draußen; sonst ist
-es ein Boot-Fehler, der den Eintrag nennt. Eine Funktion mit Lese-Fähigkeit läuft nur im Host.
-- **Host:** die Umsetzung **je Aktivierung** (`FunktionsAktivierung`): beim Aktivieren in einem eigenen DI-Bereich gebaut, samt ihren Diensten
-  (im Bereich gebunden — eine Datenbank-Verbindung, ein geladenes Modell), beim Stoppen, Passivieren und vor einem Neustart in umgekehrter
-  Reihenfolge freigegeben (`IAsyncDisposable`/`IDisposable`; `RahmenActor.FreigebenAsync`). Bei Slots > 1 (Standard 4) teilen sich die Eingänge
-  einer Aktivierung die Instanz: sie muss thread-sicher sein, sonst nennt die Umgebung für sie `Slots: 1`.
-- **Extern und Hand:** der Actor bietet den Eingang über den **Vermittler** seiner Funktion an (`FunktionsVermittlerActor`, ein virtueller
-  Cluster-Actor je Funktion; `EingangAnbieten`, nicht maßgeblich — geht er verloren, bietet der Actor neu an). Ausführer draußen holen per Pull,
-  so viele wie Slots frei sind, mit **Lease** und Lebenszeichen, über eine `BausteinSitzung`: extern die Sitzung eines Clients über die Leitung
-  (gRPC, z. B. der generische Python-Worker, der die Funktion trägt), von Hand der `HandAusfuehrer` (Werkbank, JSON-Eingang
-  `/eingang/auftraege` und `/eingang/ergebnis`). Die Sitzung prüft die Antwort gegen die Signatur und hält sie fest — die erste gewinnt; ein
-  Strom kommt in Stücken, jedes an seiner Stelle festgehalten. Die Garantie bleibt beim Actor: läuft die Lease ab, geht der Eingang an den
-  nächsten Ausführer, der beim nächsten nicht festgehaltenen Stück weitermacht; wartet der Actor vergeblich, heißt der Eingang „später“. Jedes
-  Angebot trägt die **Adresse** des Funktions-Actors: alle Eingänge einer Adresse rechnet derselbe Träger, solange er lebt (holt oder Lebenszeichen
-  gibt) — ein Zustand im Worker sieht so alles, was zu ihm gehört (A8); eine freie Adresse bindet der Holende, wenn er nicht schon mehr trägt als
-  ein anderer lebender Träger. Endet eine Sitzung, meldet sie sich ab (`TraegerAbgemeldet`) und ihre Adressen sind sofort frei.
+`Implementierung`, `Parallel`, `Warteschlange`, `Vorwaermen`, `Wiederholungen` (`Abstractions/Umgebung/UmgebungKonfig.cs`); `AddCqrs` bindet daraus
+beim Start (`BindeFunktionen`), danach die gerufenen Funktionen, die die Umsetzungen im Konstruktor nehmen (`BindeGerufene`, `GeneratedGerufene`;
+eine gerufene Funktion nennt unter `Funktionen:<Name>` nur ihre `Implementierung`). Ohne Eintrag läuft eine Klasse im Host, eine Schnittstelle mit
+genau einer Umsetzung ebenso, eine Schnittstelle ohne Umsetzung, die ein Client trägt (er verkörpert einen Akteur mit `IDarf<F>`), draußen; sonst ist
+es ein Boot-Fehler, der den Eintrag nennt. Eine Funktion mit Lese-Fähigkeit läuft nur im Host. Im Host lebt die Umsetzung **je Aktivierung**
+(`FunktionsAktivierung`, eine je Kind): in einem eigenen DI-Bereich gebaut, samt ihren Diensten (eine Datenbank-Verbindung, ein geladenes Modell),
+beim Stoppen in umgekehrter Reihenfolge freigegeben (`IAsyncDisposable`/`IDisposable`).
 
-**Zustand** (`IZustand<T>`, docs/04 §4.4, docs/10 A5, A6). Steht `IZustand<T>` im Konstruktor einer Funktions-Klasse, hat sie gekapselten, durablen Zustand —
-kein Domänen-Zustand, keine Zustands-Events, keine Faltung aus dem Log; Vorbild ist der Aggregat-Actor. Gedacht ist er als **Cache** (Gewichte, die
-nach einem Umzug nicht kalt sein sollen, ein Zähler); was aus Fakten **gelernt** wird, gehört in eine Projektion, die Funktion liest es per
-Lese-Fähigkeit — so ist es replaybar und unabhängig davon, wo die Funktion läuft:
+**Zustand** (`IZustand<T>`). Steht `IZustand<T>` im Konstruktor einer Funktions-Klasse oder einer gerufenen Funktion (deren Zustand gehört der
+Aktivierung ihres Halters, `AktivierungsZustaende`), hat die Aktivierung gekapselten Zustand — einen **Cache**: frisch bei jeder Aktivierung (je Kind
+eine), derzeit nie gesichert, keine Wahrheit. Was aus Fakten **gelernt** wird, gehört in eine Projektion; die Funktion liest es per Lese-Fähigkeit — so
+ist es replaybar und unabhängig davon, wo und wie oft sie läuft:
 ```csharp
 public sealed class Schaetzer(IZaehlwerk zaehler) : IFunktion          // Prüfdomäne Pruefdomaene.Pipeline/Messung
 {
     public async Task<VermerkeSchaetzung> Auf(Merkmal m, IHoleMessreihe reihe) => …;   // Hinweis rein, Messreihe (Projektion) lesen, Command raus
 }
-public sealed class Zaehlwerk(IZustand<Zaehlstand> stand) : IZaehlwerk { … }          // gerufen, mit Zustand: zählt die Schätzungen
+public sealed class Zaehlwerk(IZustand<Zaehlstand> stand) : IZaehlwerk { … }          // gerufen, mit Zustand: zählt die Schätzungen (Cache)
 ```
-Der Generator erkennt den Konstruktor-Parameter, reicht den Zustand aus der Aktivierung hinein (nie aus
-dem Container) und sichert ihn über den Speicher-Kontext der Komposition (`EventJsonSerializerContext`, der Codegen nimmt jedes `T` auf — ohne
-Reflection). Der Actor lädt Zustand und Stand beim Aktivieren, bevor das erste `Auf` läuft; er rechnet **einen** Eingang zugleich (Log oder Hinweis);
-er sichert nur in einem **Ruhepunkt** — kein Eingang in Arbeit, der Zustand enthält genau die Log-Eingänge bis zur Position — Zustand und Stand
-in **einer Transaktion**, beide mit erwarteter Version (`FunktionsZustandsDokument` je Adresse, Id `zustand:<F>:<Adresse>`). Ein großer Zustand
-liegt als Datei in einer Ablage der Umgebung (`Funktionen:<F>:Zustand:Ablage = Datei`, `Verzeichnis`): erst die Datei, dann Position und Verweis;
-ein Absturz dazwischen lässt nur eine verwaiste Datei, die gleich wieder entfernt wird. Gesichert wird höchstens so oft wie
-`Zustand:SichernAlleSekunden` (Standard 1 s, wie der Stand) und beim Stoppen, sofern gerade Ruhe ist. Nach einem Absturz liest die nächste
-Aktivierung ab der gesicherten Position erneut: `Auf` läuft auf dem gesicherten Zustand auch für Eingänge, deren Ausgabe schon festgehalten ist
-(gesendet wird das Festgehaltene, Hinweise nicht noch einmal) — jeder Log-Eingang wirkt so **genau einmal** auf den gesicherten Zustand; in
-derselben Aktivierung läuft `Auf` je Eingang genau einmal, auch beim Wiederholen (`EingangsRechnung`). Verliert eine Sicherung gegen eine zweite
-Aktivierung derselben Adresse, beginnt die Aktivierung über die Supervision neu (Freigabe, Bau, Laden des Gewinner-Stands, Lebenszyklus). Eine Funktion mit Zustand ist nie gleichbleibend (sie
-hält fest, R12); Zustand in Feldern oder Eigenschaften verbietet CQRS105 (R19) — er ginge beim Umzug still verloren. Rechnet eine Funktion draußen,
-lebt ein Zustand im Worker (A8, gebunden an die Adresse); ihn zu sichern, ist Sache des Workers.
-
-**Zustand einer gerufenen Funktion.** Auch eine gerufene Funktion (ohne `Auf`) kann `IZustand<T>` im Konstruktor nehmen (ihre Klasse bzw. die
-Umsetzung ihrer Schnittstelle). Ihr Zustand gehört der **Aktivierung ihres Halters**: die generierte Fabrik holt ihn aus dem Bereich der Aktivierung
-(`AktivierungsZustaende`, unter dem Namen der gerufenen Funktion — je Aktivierung eine Instanz), und die Aktivierung lädt und sichert alle Zustände
-als EIN Dokument mit der Position des Halters, je Funktion ihr Eintrag: `{"Schaetzer": {…}, "IZaehlwerk": {…}}`. Ob ein Halter so Zustand trägt,
-folgt beim Start aus seiner Konstruktor-Kette und den gewählten Umsetzungen (`GerufeneWahl`); dann rechnet er wie mit eigenem Zustand einen
-Eingang zugleich, und jeder Log-Eingang wirkt genau einmal auch auf den Zustand der gerufenen Funktion (Prüfdomäne: `Zaehlwerk` im `Schaetzer`).
+Zustand in Feldern oder Eigenschaften verbietet CQRS105 (R19). Offen: eine Funktion mit Zustand auf genau einer Aktivierung im Cluster (Advisory-Lock)
+und ihr Sichern als warmer Cache (docs/13).
 
 **Lebenszyklus** (`ILebenszyklus`, optional, E10). Muss eine Funktion beim Aktivieren etwas laden — ein Netz auf die GPU, eine Verbindung —,
-implementiert sie `ILebenszyklus` und überschreibt, was sie braucht: `BeimAktivierenAsync` läuft je Aktivierung nach dem Bau und dem Laden des Zustands,
-vor dem ersten `Auf` (bis dahin warten Eingänge und Hinweise in der Mailbox); `VorDemSichernAsync` läuft vor jeder Sicherung im Ruhepunkt und beim
-Stoppen (Gewichte von der GPU nach `Zustand.Wert`); das Ende ist `IAsyncDisposable` der Funktion, danach werden ihre Dienste frei. Wirft
-`BeimAktivierenAsync`, ist die Aktivierung gescheitert, nicht ein Eingang: sie beginnt neu, kein Stream wird geparkt. Die geladene Ressource steht in
-einem `readonly`-Feld; was gesichert werden muss, gehört in `IZustand<T>`. Beispiel ist das Prognosemodell der Sonde (`Vorhersage.cs.txt`), das auf einem
-Arbeitsmodell der Aktivierung rechnet. Eine Funktion mit Lebenszyklus ist nie gleichbleibend; CQRS107 erlaubt ihn nur an Funktions-Klassen und `VorDemSichernAsync` nur
-mit Zustand. Draußen hat die Python-Basis die Gegenstücke `beim_start` (einmal je Worker, vor dem Anbieten) und `beim_ende`.
+implementiert sie `ILebenszyklus`: `BeimAktivierenAsync` läuft je Aktivierung nach dem Bau, vor dem ersten `Auf`; das Ende ist `IAsyncDisposable` der
+Funktion, danach werden ihre Dienste frei. Die geladene Ressource steht in einem `readonly`-Feld. CQRS107 erlaubt ihn nur an Funktions-Klassen.
+Draußen hat die Python-Basis die Gegenstücke `beim_start` (einmal je Worker, vor dem Anbieten) und `beim_ende`.
 
-**Hinweis-Netz** (`HinweisNetz.cs`, docs/04 §4.4, docs/10 E7, E8). Hinweise, die nicht zur Fachdomäne gehören (Merkmale, Messwerte, Ablehnungen), gehen im
-Speicher von Baustein zu Funktions-Actor — nie in den Log, kein Broker, keine Abos. Die Routing-Tabelle ist der generierte Hinweisplan (Hinweis-Typ →
-Funktionen); gibt eine Funktion, ein Aggregat (eine Ablehnung aus dem Decide) oder ein Client (`TransientEvent` über die Leitung) einen Hinweis aus,
-schickt der Rahmen ihn per `Bote.Melde` direkt an jede Adresse: die Partition seines Herkunfts-Streams bzw. die eine Adresse (A6). Er trägt eine
-**Kennung**, die der Absender ableitet (A7: aus Funktion, Eingang und Stelle; aus der Command-Id bei einem Aggregat). Im Funktions-Actor hat ein
-Hinweis keine Position: er wartet in einer gedeckelten Schlange auf einen Slot (mit Zustand auf den Ruhepunkt) und läuft **höchstens einmal**;
-Commands daraus tragen eine Id aus Funktion, Hinweis-Kennung, Stelle, Typ und Ziel — bleibt einer „unbekannt“, sendet der Actor dieselben
-Commands erneut, ohne neu zu rechnen. Eine Funktion, die nur Hinweise hört, hat keinen Log-Leser, keine Position und keinen Takt. Draußen geht ein
-Hinweis denselben Weg wie ein Log-Eingang (Vermittler, Sitzung, `ArbeitsAuftrag` mit `hinweis = true`), nur wird die Antwort nicht festgehalten:
-sie kommt mit ihren Commands und Hinweisen zum Actor, der sendet. Hört niemand einen Hinweis, den eine Funktion hören will, bricht der Build (R20,
-CQRS106); eine Adresse der Tabelle ohne Funktion ist ein Boot-Fehler. Hinweise an Clients gehen über die Verteiler an die Sitzungen, die sie hören.
+**Hinweis-Netz** (`HinweisNetz.cs`, docs/10 E7). Hinweise, die nicht zur Fachdomäne gehören (Merkmale, Messwerte, Ablehnungen), gehen im Speicher
+zu den Funktionen, die sie hören — nie in den Log, kein Broker, keine Abos. Gibt eine Funktion, ein Aggregat (eine Ablehnung aus dem Decide) oder ein
+Client (`TransientEvent` über die Leitung) einen Hinweis aus, geht er je hörende Funktion (die Verkettung) als Eingang über die Wege an ihren Parent
+(`Eingangsart.Hinweis`, verlierbar, höchstens einmal). Er trägt eine **Kennung**, die der Absender ableitet (A7: aus Eingang, Funktion und Stelle;
+aus der Command-Id bei einem Aggregat, `Eingangsvertrag.HinweisAusCommand`); Commands daraus tragen Ids aus dieser Kennung. Hört niemand einen
+Hinweis, den eine Funktion hören will, bricht der Build (R20, CQRS106). Hinweise an Clients gehen über die Verteiler an die Sitzungen, die sie hören.
 
-**Offene Eingänge** (`Infrastructure/Eingaenge/`). Die Folge eines Decide (docs/03 §3.2) legt je hörende Funktion eine Zeile in `cqrs_eingaenge`
-(Kennung, Funktion, Nachricht als Diskriminator und Wire-JSON, Herkunft, Fälligkeit, Versuche), in derselben Transaktion wie die Entscheidung. Der
-**Zusteller** (`ZustellerActor`, ein virtueller Cluster-Actor, Kind `zusteller`, nach dem Vorbild der Uhr: Takt je Knoten jede Sekunde, höchstens ein
-Durchlauf zugleich) liest die fälligen Zeilen und bringt jede über die `IEingangsZustellung` hin: „fertig“ trägt sie aus, „angenommen“ macht sie
-nach 60 s wieder fällig (kommt bis dahin kein „fertig“, geht sie erneut hinaus — mindestens einmal), „später“ oder ein Fehler nach 2 s. Wer eine
-Folge hört, sagt die `Verkettung` (Nachrichten-Typ → Funktionen, generiert); zugestellt wird über die Wege an den Parent der Funktion
-(`WegeZustellung`).
+**Offene Eingänge** (`Infrastructure/Eingaenge/`). Die Folge eines Decide (docs/03 §3.2) und eine Quell-Nachricht (§4.7) legen je hörende Funktion
+eine Zeile in `cqrs_eingaenge` (Kennung, Funktion, Nachricht als Diskriminator und Wire-JSON, Herkunft, Fälligkeit, Versuche), in derselben
+Transaktion wie die Entscheidung bzw. die Nachricht. Direkt nach dem Commit geht der Eingang auf dem **schnellen Weg** zur Funktion (verlierbar); die
+Zeile wird erst nach 5 s fällig. Der **Zusteller** (`ZustellerActor`, ein virtueller Cluster-Actor, Kind `zusteller`, nach dem Vorbild der Uhr: Takt je
+Knoten jede Sekunde, höchstens ein Durchlauf zugleich) liest die fälligen Zeilen und bringt jede über die Wege hin (`WegeZustellung`): „fertig“ trägt
+sie aus, „angenommen“ macht sie nach 60 s wieder fällig (kommt bis dahin kein „fertig“, geht sie erneut hinaus — mindestens einmal), „später“ oder ein
+Fehler nach 2 s. Der Einblick zeigt sie je Funktion (`/einblick/auftraege`). Den Clients meldet jeder Schreiber nach seinem Commit den Envelope je
+Event an die Verteiler (`Infrastructure/Verteilen/Commitmeldung.cs`).
 
-**Wecken.** Jede Funktion mit Log-Eingängen meldet sich wie eine Projektion beim `BatchKonsumStartupService` an (Takt, Prüfung gegen den
-Weckplan); der Wecker am Commit weckt ihre Partition bzw. ihre eine Adresse (§4.1). Den Clients meldet jeder Schreiber nach seinem Commit
-den Envelope je Event an die Verteiler (`Infrastructure/Verteilen/Commitmeldung.cs`).
+**Bestand.** Prüfdomäne: `Nachschub` (Folge `Unterschritten`), `Gutschrift` (`Gutschreibung`), `Mahnwesen` (`Mahnfall`), `Merkmalsbildung`
+(`NeuerWert`), `Auftragsabwicklung` (`AuftragAbzuwickeln` und Antworten), `Verteilabwicklung` (`VerteilungAbzuwickeln` und Antworten), `IFreigabe`
+(`Freizugeben`; im Host der `Freigabeautomat`, draußen von Hand), `IAusreisserpruefung` und `Schaetzer` (Hinweis `Merkmal`), `Importannahme`
+(Quell-Nachricht `ImportAngefordert`), `Importlauf` (Folge `ImportZuLaufen`, ein Strom von Commands). Beispieldomäne: die Bildkette — `IBildEinlesen`
+(Quell-Nachricht `DateiErkannt`) → `BildEingelesen` → `IBildVerkleinerung` → `BildVerkleinert` → `IKontrastausgleich` → `VorschauErstellt` →
+`Bildeingang` → `NimmBildAuf`; „nicht lesbar“ ist ein Hinweis. Dazu `RangeAufloesung` (`RangeAufzuloesen`), `MitgliederEinfrieren`
+(`EinfrierenAbzuschliessen`), `TeilFertigMeldung` (`TeilFertig`), `IBildpaarBeurteilung` (`PaarZuBeurteilen`, draußen beim Klassifikations-Worker)
+und `ITraining` (`TrainingZuRechnen`, draußen beim Trainings-Worker, ein Strom). Das Event neben einer Folge (`RangeAngefordert`, `ImagePairKomplett`,
+`TrainingAngefordert` …) bleibt ein Fakt im Log für Projektionen und Clients.
 
 ## 4.5 Abläufe: Aggregat, Funktion und Frist
 
@@ -459,8 +390,8 @@ Versionsprüfung). Danach meldet der Eingang den Commit (§4.4). Projektionen le
 Jeder Log-Eintrag trägt die Header `ursache`, `wirker`, `ueber`, `stand` (`Abstractions/Spur/Spur.cs`, geschrieben in
 `Infrastructure/Persistence/SpurHeader.cs`). Die Konsumenten setzen sie per `Spur.Von(…)` um ihren Ausgang; der `CommandEmitter` legt Ursache
 und Wirker in den Command-Envelope, das Ziel-Aggregat schreibt mit `wirker = decide:<Aggregat>/<Command>` und dem Absender als `ueber`:
-- **Funktion:** Ursache = der Eingang (`Stream:Version`), Wirker `funktion:<F>`; der Akteur der Kette reist mit. Festgehaltene Ergebnis-Events
-  stehen mit derselben Spur im Ausgabe-Stream.
+- **Funktion:** Ursache = die Ursache ihres Eingangs (die Entscheidung bzw. Quell-Nachricht, aus der die Kette hervorging), `ueber =
+  funktion:<F>` am Command; der Akteur der Kette reist mit. Zwischenergebnisse stehen nie im Log.
 - **Uhr:** Ursache = das Frist-Event, Wirker `uhr` (ohne Karte).
 - **Quelle:** `QuellEingang` schreibt mit `quelle:<Typ>` und ohne Ursache (Wurzel).
 - **Akteur:** ein Command von draußen trägt `ueber = akteur:<Akteur>`.

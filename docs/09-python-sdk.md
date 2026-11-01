@@ -31,8 +31,8 @@ Er ist **kein** durabler Konsument (kein Cursor, keine Position), sondern ein Cl
 
 - **hört** (`IHoert<T>`): Events und Hinweise als Push über den Verteiler seines Knotens — verlierbar, nur zur Kenntnis;
 - **fragt** (`IDarf` auf eine Query): Queries mit typisierter Antwort;
-- **trägt Funktionen** (`IDarf<F>` auf eine Funktions-Schnittstelle): er rechnet die Eingänge einer Funktion draußen; Festhalten, Senden und Wiederholen bleiben beim
-  Funktions-Actor des Servers (§9.5);
+- **trägt Funktionen** (`IDarf<F>` auf eine Funktions-Schnittstelle): er rechnet die Eingänge einer Funktion draußen; Senden und Wiederholen bleiben
+  beim Kind der Funktion im Server (§9.5);
 - **sendet** (`IDarf` auf einen Command, eine Quell-Nachricht oder einen Hinweis): steht im Handshake; einen eigenen Sende-Aufruf hat das SDK nicht (§9.4).
 
 Exactly-once bleibt serverseitig: die Ausgaben einer getragenen Funktion hält der Server unter „Funktion, Eingang“ fest, die erste Antwort gewinnt,
@@ -166,28 +166,24 @@ nach außen). Ids von Aggregaten stehen als UUID-Text im DTO, z. B. `aggregate_i
 
 **Der Weg eines Eingangs** (Server: `Infrastructure/Funktionen/`, `Infrastructure/GrpcClient/SitzungsActor.cs`):
 
-1. Der `FunktionsActor` der Adresse (Partition bzw. `[EineAdresse]`) liest den Eingang aus dem Log (oder bekommt einen Hinweis aus dem
-   Hinweis-Netz) und bietet ihn als `EingangAnbieten` dem `FunktionsVermittlerActor` der Funktion an (je Funktion einer im Cluster, nicht
-   maßgeblich — geht er verloren, bietet der Actor neu an; `FunktionsVermittlung.cs`).
+1. Eine Folge, ein Zwischenergebnis, eine Quell-Nachricht oder ein Hinweis erreicht den Parent der Funktion auf einem Knoten, der sie hält
+   ([04](04-konsum-und-prozess-maschine.md) §4.4); ein Kind nimmt den Eingang.
 2. Der Client meldet nach jedem Handshake `FunktionenAnbieten` (Funktion + Slots, `FunktionsLaeufer.biete_an`). Seine Sitzung prüft die Befugnis
-   (`IDarf<F>` des Akteurs bzw. der verkörperten Akteure des Vertrags; sonst `FUNKTION_NICHT_BEFUGT`, unbekannt `FUNKTION_UNBEKANNT`) und startet je Funktion
-   eine Hol-Schleife (`BausteinSitzung`): Long-Poll beim Vermittler (`HoleEingaenge`, 4 s), so viele Eingänge wie Slots frei sind, jeder mit
-   **Lease** (30 s, `FunktionsAnbieter.Lease`).
-3. Die Sitzung reicht den Eingang als `ArbeitsAuftrag` weiter (`vorgang`, `funktion`, `eingang` als Nutzlast, `akteur`, `stream`, `version`,
-   `zeit_utc`, `ab`, `hinweis`). Das SDK rechnet ihn entkoppelt von der Verarbeitungsschleife, höchstens `SLOTS` zugleich, und sendet alle 10 s
-   `ArbeitLebtMeldung`, solange er läuft.
-4. Die Antwort kommt als `ArbeitsErgebnis` (`ausgaben` als `FunktionsAusgabe` mit Art `command`/`event`/`hinweis`, `ab`, `fertig`, `fehler`).
-   Der Server prüft sie gegen die Signatur, hält sie unter „Funktion, Eingang“ fest (`IAusgabeAblage`, die erste gewinnt) und meldet
-   `EingangBeantwortet` an den Funktions-Actor, der aus dem Festgehaltenen sendet. Ein `fehler` (auch eine Ausnahme oder eine Verletzung der
-   Signatur im SDK) zählt beim Actor gegen die Wiederholungen.
+   (`IDarf<F>` des Akteurs bzw. der verkörperten Akteure des Vertrags; sonst `FUNKTION_NICHT_BEFUGT`, unbekannt `FUNKTION_UNBEKANNT`) und meldet sich
+   als **Arbeiter** in der Werkstatt ihres Knotens an; die Slots aller Arbeiter sind die Parallelität des Parents dort.
+3. Das Kind gibt den Eingang dem Arbeiter mit dem meisten freien Platz: die Sitzung reicht ihn als `ArbeitsAuftrag` weiter (`vorgang` = Kennung des
+   Eingangs, `funktion`, `eingang` als Nutzlast — ein Event oder eine Nachricht ohne Marker —, `akteur`, `stream`, `version`, `zeit_utc`, `ab` = 0,
+   `hinweis`). Das SDK rechnet ihn entkoppelt von der Verarbeitungsschleife, höchstens `SLOTS` zugleich, und sendet alle 10 s `ArbeitLebtMeldung`,
+   solange er läuft (ohne Regung scheitert der Lauf nach 60 s).
+4. Die Antwort kommt als `ArbeitsErgebnis` (`ausgaben` als `FunktionsAusgabe` mit Art `command`/`zwischenergebnis`/`hinweis`, `ab`, `fertig`,
+   `fehler`). Der Server prüft sie gegen die Signatur; es zählt nur die Antwort dieser Sitzung und von ihr die erste. Das Kind sendet die Commands
+   (Ids aus Eingangs-Kennung, Funktion und Stelle), reicht Zwischenergebnisse an ihre Hörer weiter und meldet den Eingang fertig. Ein `fehler`
+   (auch eine Ausnahme oder eine Verletzung der Signatur im SDK) lässt den Lauf scheitern; der Parent wiederholt ihn.
 
-- **Strom:** jede Ausgabe geht sofort als Stück (`fertig = false`, `ab` = ihre Stelle); der Server hält es fest und sendet es, bevor das nächste
-  kommt. Übernimmt ein neuer Träger, nennt `ab` im Auftrag, wie viele Ausgaben schon festgehalten sind — das SDK lässt sie aus.
-- **Hinweis als Eingang** (`hinweis = true`): höchstens einmal, nichts wird festgehalten; die Antwort kommt als Ganzes (auch ein Strom), ihre
-  Commands und Hinweise sendet der Funktions-Actor ([04](04-konsum-und-prozess-maschine.md) §4.4).
-- **Bindung je Adresse:** alle Eingänge eines Funktions-Actors rechnet derselbe Träger, solange er lebt (Lease je Funktions-Actor, `Vermittlung`);
-  endet seine Sitzung, meldet sie ihn ab (`TraegerAbgemeldet`), seine Adressen sind sofort frei. So sieht ein Zustand im Worker (ein Modell)
-  alles, was zu ihm gehört — gesichert wird er nicht vom Framework.
+- **Strom:** jede Ausgabe geht sofort als Stück (`fertig = false`, `ab` = ihre Stelle); das Kind sendet es, bevor das nächste kommt. Rechnet ein
+  anderer Träger den Eingang erneut, beginnt er von vorn — die Inbox der Ziele verwirft schon Gesendetes (dieselben Ids).
+- **Hinweis als Eingang** (`hinweis = true`): höchstens einmal — scheitert der Lauf, verfällt er.
+- **Zustand im Worker** (ein Modell) sichert das Framework nicht; der Worker lädt ihn in `beim_start`.
 - **Lebenszyklus** (optional, Gegenstück zu `ILebenszyklus`): `async def beim_start(self)` einmal je Worker, bevor die Funktion angeboten wird
   (wirft es, startet der Worker nicht); `async def beim_ende(self)` einmal beim Herunterfahren, nachdem laufende Eingänge abgewartet sind
   (`FunktionsLaeufer.starte`/`beende`). Eine getragene Funktion eines Vertrags hat diese Haken nicht; sie nutzt den Zustand des Clients.
@@ -205,7 +201,7 @@ Knapp, weil Prüfling, nicht Architektur:
 - **Klassifikation** (`domain_client/classifier.py`, Start `run.py`; Rauchtest ohne Modell `run_stub.py`): erbt `KlassifikationsWorkerBasis`
   (`IKlassifikationsWorker`), merkt sich auf `BildVerfuegbar` die Bildpfade je Aggregat, trägt `IBildpaarBeurteilung`: lädt beide Bilder über
   `/api/files/` des Blazor-Hosts (`image_loader.py`), führt TorchScript-Inferenz in `asyncio.to_thread` aus und gibt
-  `KlassifiziereBildPaarDurchKi` zurück; ohne Bilder wirft sie (der Funktions-Actor wiederholt). Auf `ModellAktiviert` lädt er das neue Modell.
+  `KlassifiziereBildPaarDurchKi` zurück; ohne Bilder wirft sie (der Parent wiederholt). Auf `ModellAktiviert` lädt er das neue Modell.
 - **Training** (`domain_client/training_worker.py`, Rauchtest `run_train_stub.py`): erbt `TrainingsWorkerBasis` (`ITrainingsWorker`), trägt
   `ITraining` als Strom (`MeldeTrainingBegonnen`, `MeldeFortschritt` je Epoche, `MeldeTrainingAbgeschlossen` bzw. `MeldeTrainingGescheitert`),
   zieht die Samples per Query (`HoleDatensatzSamples`) und bricht auf `TrainingAbgebrochen` kooperativ ab; der Trainer ist ein Stub.
@@ -233,7 +229,8 @@ tragende Weg ist der Build (§9.2).
 3. **Typ-Kenntnis aus generierten Basen** — was ein Client hört, sendet, fragt und trägt, steht in den aus dem C#-Vertrag generierten Basen, nicht
    in Laufzeit-Introspektion der Domäne.
 4. **Eine Quelle:** der C#-Vertrag; `domain.proto` und die Python-Basen werden daraus erzeugt.
-5. **Die Garantie bleibt beim Server:** der Client ist bei Funktionen nur die Hand — festgehalten und gesendet wird beim Funktions-Actor.
+5. **Die Garantie bleibt beim Server:** der Client ist bei Funktionen nur die Hand — gesendet wird beim Kind der Funktion, der Eingang bleibt offen,
+   bis es ihn fertig meldet.
 
 ## 9.9 Offen
 
