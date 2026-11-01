@@ -74,7 +74,7 @@ public class FolgeGarantieTests
             var folge = Eingangsvertrag.Folge(reservierung, 0);
             foreach (var funktion in new[] { "Probe", "Zweite" })
             {
-                var e = probe.Gesehen.Single(x => x.Funktion == funktion);
+                var e = probe.Gesehen.Single(x => x.Funktion == funktion && x.Stream == p);
                 e.Kennung.Should().Be(Eingangsvertrag.Eingang(folge, funktion), "die Kennung ist abgeleitet: Command, Stelle, Funktion");
                 e.Version.Should().Be(2, "Herkunft ist der Stand nach der Entscheidung");
                 Nachrichtenform.Lies(e.Typ, e.Daten).Should().Be(new Unterschritten(new(p), 3));
