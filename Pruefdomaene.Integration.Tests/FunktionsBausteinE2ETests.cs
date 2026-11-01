@@ -57,7 +57,7 @@ public class FunktionsBausteinE2ETests
     }
 
     [Fact]
-    public async Task Eine_Funktion_mit_Dienst_haelt_ihre_Ausgabe_fest_bevor_sie_wirkt()
+    public async Task Eine_Funktion_vor_dem_Aggregat_mit_Dienst_wirkt_genau_einmal_ohne_etwas_festzuhalten()
     {
         var versand = new ZaehlenderVersand();
         using var host = Cluster("pruef-funktion-mahnwesen", dienste: s => s.AddSingleton<IMahnversand>(versand));
@@ -71,13 +71,11 @@ public class FunktionsBausteinE2ETests
 
             await Warte(async () => (await Zustand<Kundenkonto>(host.Services, konto.Wert)).Mahnungen == 1, Frist, "die Mahnung kommt nicht an");
             var ueberfaellig = (await Log(host, rechnung.Wert)).Single(e => e.Payload is ZahlungUeberfaellig);
-            var fest = await Log(host, FunktionsIds.Festhalten(nameof(Mahnwesen), rechnung.Wert, ueberfaellig.AggregateVersion));
-            fest.Select(e => e.Payload.GetType().Name).Should().Equal(nameof(BefehlFestgehalten), nameof(AusgabeFestgehalten));
+            (await Log(host, FunktionsIds.Festhalten(nameof(Mahnwesen), rechnung.Wert, ueberfaellig.AggregateVersion))).Should().BeEmpty(
+                "eine Funktion vor dem Aggregat hält nichts fest");
 
             await Task.Delay(TimeSpan.FromSeconds(2));
-            var vermerkt = (await Log(host, konto.Wert)).Where(e => e.Payload is MahnungVermerkt).ToList();
-            vermerkt.Should().ContainSingle("genau eine Mahnung, auch wenn der Versand jedes Mal anders antwortet");
-            ((BefehlFestgehalten)fest[0].Payload).Daten.Should().Contain(((MahnungVermerkt)vermerkt[0].Payload).Versand, "gewirkt hat das Festgehaltene");
+            (await Log(host, konto.Wert)).Where(e => e.Payload is MahnungVermerkt).Should().ContainSingle("genau eine Mahnung");
             versand.Aufrufe.Should().Be(1);
         }
         finally { await host.StopAsync(); }

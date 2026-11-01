@@ -13,9 +13,10 @@ using static Pruefdomaene.Integration.Tests.Pruefstand;
 namespace Pruefdomaene.Integration.Tests.Garantien;
 
 /// <summary>
-/// Die Übergabe „Funktion → Ausgaben“ unter Störung, gegen echtes Marten (docs/11, docs/11 §11.14): Abbruch nach dem Festhalten vor
-/// den Commands, Abbruch nach den Commands vor der Position, zwei Aktivierungen derselben Partition, zwei Worker mit verschiedenen Antworten. Geprüft
-/// wird die Wirkung im Log — je Eingang genau eine, auch wenn die Außenwelt (der Versand) bei jedem Aufruf anders antwortet.
+/// Die Übergabe „Funktion → Ausgaben“ unter Störung, gegen echtes Marten (docs/11, docs/11 §11.14), am Mahnwesen (eine Funktion vor dem Aggregat mit
+/// gerufenem Versand): ein scheiternder Versand wird wiederholt, ein Abbruch mitten im Eingang holt der Zusteller beim nächsten Host nach, derselbe
+/// Eingang zweimal zugestellt wirkt einmal; dazu zwei Worker mit verschiedenen Antworten (Funktion mit Log-Eingang, im Umbau). Geprüft wird die
+/// Wirkung im Log — je Eingang genau eine, auch wenn die Außenwelt (der Versand) bei jedem Aufruf anders antwortet.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class FunktionsGarantieTests
@@ -49,132 +50,87 @@ public class FunktionsGarantieTests
     private static async Task<IReadOnlyList<EventEnvelope>> Log(IHost host, Guid stream) =>
         await host.Services.GetRequiredService<IEventStoreRepository>().ReadStreamAsync(stream, 0, default);
 
-    private static async Task<IReadOnlyList<EventEnvelope>> Festgehalten(IHost host, Id<Rechnung> rechnung)
-    {
-        var ueberfaellig = (await Log(host, rechnung.Wert)).Single(e => e.Payload is ZahlungUeberfaellig);
-        return await Log(host, FunktionsIds.Festhalten(nameof(Mahnwesen), rechnung.Wert, ueberfaellig.AggregateVersion));
-    }
+    private static async Task<int> Vermerkt(IHost host, Id<Kundenkonto> konto) =>
+        (await Log(host, konto.Wert)).Count(e => e.Payload is MahnungVermerkt);
 
-    /// <summary>Hält fest — und „stürzt“ danach einmal ab, bevor gesendet wird.</summary>
-    private sealed class AbsturzNachDemFesthalten(IAusgabeAblage innen) : IAusgabeAblage
+    /// <summary>Ein Versand, der beim ersten Aufruf scheitert.</summary>
+    private sealed class ErstScheiternd : IMahnversand
     {
-        public int Abstuerze;
-        public Task<Festgehalten> LiesAsync(FunktionsEingabe e, CancellationToken ct) => innen.LiesAsync(e, ct);
-        public async Task<bool> HalteFestAsync(FunktionsEingabe e, int ab, IReadOnlyList<IAusgabe> a, bool abgeschlossen, CancellationToken ct)
-        {
-            var ok = await innen.HalteFestAsync(e, ab, a, abgeschlossen, ct);
-            if (ok && abgeschlossen && e.Funktion == nameof(Mahnwesen) && Interlocked.Increment(ref Abstuerze) == 1)
-                throw new InvalidOperationException("Absturz nach dem Festhalten, vor den Commands");
-            return ok;
-        }
+        public int Aufrufe;
+        public Task<string> VersendeAsync(Id<Kundenkonto> konto, Id<Rechnung> rechnung, int stufe) =>
+            Interlocked.Increment(ref Aufrufe) == 1 ? throw new InvalidOperationException("der Versand ist kurz weg")
+                : Task.FromResult($"brief-{Guid.NewGuid():N}");
     }
 
     [Fact]
-    public async Task Abbruch_nach_dem_Festhalten_vor_den_Commands_wirkt_beim_naechsten_Versuch_genau_einmal()
+    public async Task Scheitert_der_Versand_rechnet_ein_Kind_den_Eingang_erneut_und_er_wirkt_genau_einmal()
     {
-        var versand = new Versand();
-        AbsturzNachDemFesthalten? ablage = null;
-        using var host = Cluster("garantie-funktion-festhalten", dienste: s =>
-        {
-            s.AddSingleton<IMahnversand>(versand);
-            s.AddSingleton(new BausteinBindung(nameof(Mahnwesen), Wiederholungen: 3));
-            Dekoriere<IAusgabeAblage>(s, (_, innen) => ablage = new AbsturzNachDemFesthalten(innen));
-        });
+        var versand = new ErstScheiternd();
+        using var host = Cluster("garantie-funktion-wiederholt", dienste: s => s.AddSingleton<IMahnversand>(versand));
         await host.StartAsync();
         try
         {
-            var (rechnung, konto) = await UeberfaelligAsync(host);
-            await Warte(async () => (await Zustand<Kundenkonto>(host.Services, konto.Wert)).Mahnungen == 1, Frist, "die Mahnung kommt nicht an");
+            var (_, konto) = await UeberfaelligAsync(host);
+            await Warte(async () => await Vermerkt(host, konto) == 1, Frist, "die Mahnung kommt nach der Wiederholung nicht an");
             await Task.Delay(TimeSpan.FromSeconds(2));
-            ablage!.Abstuerze.Should().BeGreaterThanOrEqualTo(1);
-            (await Log(host, konto.Wert)).Count(e => e.Payload is MahnungVermerkt).Should().Be(1);
-            versand.Aufrufe.Should().Be(1, "der zweite Versuch findet den festgehaltenen Eintrag und rechnet nicht neu");
+            (await Vermerkt(host, konto)).Should().Be(1, "je Eingang eine Wirkung");
+            versand.Aufrufe.Should().Be(2, "einmal gescheitert, einmal gelungen");
         }
         finally { await host.StopAsync(); }
     }
 
-    /// <summary>Ein Stand, der nie geschrieben wird: nach einem Neustart beginnt die Funktion wieder vor dem schon bearbeiteten Eingang.</summary>
-    private sealed class StandOhneSchreiben(IFunktionsStand innen) : IFunktionsStand
-    {
-        public Task<Abstractions.PartitionsCheckpoint> LadeAsync(string id, int partition, CancellationToken ct) => innen.LadeAsync(id, partition, ct);
-        public Task<int> SchreibeAsync(Abstractions.PartitionsCheckpoint stand, CancellationToken ct) =>
-            throw new InvalidOperationException("Absturz nach den Commands, vor der Position");
-        public Task<FunktionsZustandsDokument?> LadeZustandAsync(string id, CancellationToken ct) => innen.LadeZustandAsync(id, ct);
-        public Task<(int? Stand, int Zustand)> SichereAsync(Abstractions.PartitionsCheckpoint? stand, FunktionsZustandsDokument zustand, CancellationToken ct) =>
-            throw new InvalidOperationException("Absturz nach den Commands, vor der Position");
-    }
-
     [Fact]
-    public async Task Abbruch_nach_den_Commands_vor_der_Position_sendet_nach_dem_Neustart_dieselben_Ids()
+    public async Task Bricht_der_Host_mitten_im_Eingang_ab_bringt_der_Zusteller_ihn_dem_naechsten_und_er_wirkt_genau_einmal()
     {
-        var versand = new Versand();
+        // Der erste Host nimmt den Eingang an (schneller Weg nach dem Commit), sein Versand kommt nie zurück — er wird gestoppt. Die Zeile in
+        //   cqrs_eingaenge bleibt offen; der Zusteller des zweiten Hosts bringt sie nach ihrer Frist, der Versand antwortet, die Mahnung wirkt einmal.
+        var haengt = new Versand(zusammen: int.MaxValue);
         Id<Kundenkonto> konto;
-        Id<Rechnung> rechnung;
-        using (var erster = Cluster("garantie-funktion-position-1", dienste: s =>
-               {
-                   s.AddSingleton<IMahnversand>(versand);
-                   Dekoriere<IFunktionsStand>(s, (_, innen) => new StandOhneSchreiben(innen));
-               }))
+        using (var a = Cluster("garantie-funktion-abbruch-a", dienste: s => s.AddSingleton<IMahnversand>(haengt)))
         {
-            await erster.StartAsync();
+            await a.StartAsync();
             try
             {
-                (rechnung, konto) = await UeberfaelligAsync(erster);
-                await Warte(async () => (await Zustand<Kundenkonto>(erster.Services, konto.Wert)).Mahnungen == 1, Frist, "die Mahnung kommt nicht an");
+                (_, konto) = await UeberfaelligAsync(a);
+                await Warte(() => Task.FromResult(haengt.Aufrufe == 1), Frist, "der erste Host rechnet den Eingang nicht");
             }
-            finally { await erster.StopAsync(); }
+            finally { await a.StopAsync(); }
         }
-
-        // Der Neustart liest die Partition ab dem alten Stand: derselbe Eingang, der festgehaltene Eintrag, dieselben Command-Ids.
-        using var zweiter = Cluster("garantie-funktion-position-2", dienste: s => s.AddSingleton<IMahnversand>(versand));
-        await zweiter.StartAsync();
+        using var b = Cluster("garantie-funktion-abbruch-b");
+        await b.StartAsync();
         try
         {
-            var ueberfaellig = (await Log(zweiter, rechnung.Wert)).Single(e => e.Payload is ZahlungUeberfaellig);
-            var p = Partitionierung.Von(rechnung.Wert, global::Infrastructure.Projections.Konsum.Standard.Partitionen);
-            var staende = zweiter.Services.GetRequiredService<IFunktionsStand>();
-            var seq = await Sequenz(ueberfaellig);
-            await Warte(async () => (await staende.LadeAsync(Funktionsvertrag.StandId(nameof(Mahnwesen)), p, default)).Position >= seq, Frist,
-                "die Funktion holt den Eingang nach dem Neustart nicht nach");
-            (await Log(zweiter, konto.Wert)).Count(e => e.Payload is MahnungVermerkt).Should().Be(1, "dieselbe Stelle, dieselbe Command-Id — die Inbox verwirft es");
-            versand.Aufrufe.Should().Be(1, "festgehalten wird einmal; der zweite Lauf sendet aus dem Eintrag");
+            await Warte(async () => await Vermerkt(b, konto) == 1, Frist, "der Zusteller bringt den offenen Eingang nicht zum nächsten Host");
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            (await Vermerkt(b, konto)).Should().Be(1);
         }
-        finally { await zweiter.StopAsync(); }
-    }
-
-    private static async Task<long> Sequenz(EventEnvelope e)
-    {
-        await using var conn = new Npgsql.NpgsqlConnection(Verbindung);
-        await conn.OpenAsync();
-        await using var cmd = new Npgsql.NpgsqlCommand("select seq_id from pruef_e2e.mt_events where stream_id = $1 and version = $2", conn);
-        cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = e.AggregateId });
-        cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = (long)e.AggregateVersion });
-        return (long)(await cmd.ExecuteScalarAsync())!;
+        finally { await b.StopAsync(); }
     }
 
     [Fact]
-    public async Task Zwei_Aktivierungen_derselben_Partition_wirken_einmal_es_gilt_der_zuerst_festgehaltene_Lauf()
+    public async Task Derselbe_Eingang_zweimal_zugestellt_wirkt_einmal()
     {
-        // Zwei Cluster auf demselben Log: je eine Aktivierung derselben Funktions-Partition. Der Versand wartet, bis beide gerechnet haben —
-        //   dann hält einer fest, der andere findet den Eintrag und sendet aus ihm.
-        var versand = new Versand(zusammen: 2);
-        using var a = Cluster("garantie-funktion-zwei-a", dienste: s => s.AddSingleton<IMahnversand>(versand));
-        using var b = Cluster("garantie-funktion-zwei-b", dienste: s => s.AddSingleton<IMahnversand>(versand));
+        // Zwei Hosts auf demselben Log: ein Eingang mit derselben Kennung an beide Parents (etwa schneller Weg und Zusteller auf verschiedenen
+        //   Knoten). Beide rechnen; die Command-Id folgt aus Kennung, Funktion und Stelle — die Inbox des Kundenkontos verwirft die zweite.
+        using var a = Cluster("garantie-funktion-doppelt-a");
+        using var b = Cluster("garantie-funktion-doppelt-b");
         await a.StartAsync();
         await b.StartAsync();
         try
         {
-            var (rechnung, konto) = await UeberfaelligAsync(a);
-            await Warte(async () => (await Zustand<Kundenkonto>(a.Services, konto.Wert)).Mahnungen >= 1, Frist, "die Mahnung kommt nicht an");
-            await Warte(() => Task.FromResult(versand.Aufrufe >= 2), Frist, "die zweite Aktivierung rechnet nicht");
-            await Task.Delay(TimeSpan.FromSeconds(3));
-
-            var fest = await Festgehalten(a, rechnung);
-            fest.Select(e => e.Payload.GetType().Name).Should().Equal(new[] { nameof(BefehlFestgehalten), nameof(AusgabeFestgehalten) }.AsEnumerable(),
-                "genau ein Lauf ist festgehalten");
-            var vermerkt = (await Log(a, konto.Wert)).Where(e => e.Payload is MahnungVermerkt).ToList();
-            vermerkt.Should().ContainSingle("zwei Rechnungen, eine Wirkung");
-            ((BefehlFestgehalten)fest[0].Payload).Daten.Should().Contain(((MahnungVermerkt)vermerkt[0].Payload).Versand);
+            var konto = Id<Kundenkonto>.Neu();
+            var rechnung = Id<Rechnung>.Neu();
+            var kennung = Guid.NewGuid();
+            var eingang = new EingangZustellen(kennung, nameof(Mahnwesen), new Mahnfall(rechnung, konto, 99m, 1), Eingangsart.Kette, rechnung.Wert, 2,
+                DateTimeOffset.UtcNow, null, null, null);
+            foreach (var h in new[] { a, b })
+            {
+                var system = h.Services.GetRequiredService<ActorSystem>();
+                var q = await system.Root.RequestAsync<EingangQuittung>(PID.FromAddress(system.Address, FunktionenWurzel.Name(nameof(Mahnwesen))), eingang,
+                    TimeSpan.FromSeconds(30));
+                q.Ausgang.Should().Be(Quittungsart.Fertig);
+            }
+            (await Vermerkt(a, konto)).Should().Be(1, "zweimal gerechnet, einmal gewirkt");
         }
         finally
         {

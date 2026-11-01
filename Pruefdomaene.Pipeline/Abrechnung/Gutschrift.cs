@@ -4,10 +4,10 @@ using Pruefdomaene.Abrechnung;
 namespace Pruefdomaene.Pipeline.Abrechnung;
 
 /// <summary>
-/// Eine gleichbleibende Funktion (R12): keine gerufene Funktion, keine Lese-Fähigkeit, weder Uhr noch Zufall — derselbe Eingang ergibt denselben Command mit
-/// derselben Id. Sie sendet ohne Festhalten: eine bezahlte Rechnung wird dem Kundenkonto gutgeschrieben (die eine Kante Event → Command).
+/// Eine Funktion vor dem Aggregat (docs/04 §4.4): eine bezahlte Rechnung wird dem Kundenkonto gutgeschrieben — sie hört die Folge <see cref="Gutschreibung"/>
+/// des Decide, die Command-Id folgt aus der Kennung des Eingangs.
 /// </summary>
 public sealed class Gutschrift : IFunktion
 {
-    public BucheGutschrift Auf(RechnungBezahlt e) => new(e.Konto, e.Rechnung, e.Betrag);
+    public BucheGutschrift Auf(Gutschreibung f) => new(f.Konto, f.Rechnung, f.Betrag);
 }

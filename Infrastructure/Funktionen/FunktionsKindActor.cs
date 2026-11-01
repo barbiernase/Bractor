@@ -25,7 +25,8 @@ public sealed class FunktionsKindActor(
     Func<ICommand, Guid, Guid, CancellationToken, Task<EmitAusgang>> sende,
     IFaehigkeitsFabrik? faehigkeiten = null,
     ILogger? logger = null,
-    TimeSpan? frist = null) : RahmenActor(logger)
+    TimeSpan? frist = null,
+    Action<HinweisZustellen>? hinweise = null) : RahmenActor(logger)
 {
     /// <summary>So lange wartet ein Kind auf die Antwort eines Nachfolgers, bevor es den Eingang erneut zustellt (derselbe, dieselbe Kennung).</summary>
     public static readonly TimeSpan StandardFrist = TimeSpan.FromSeconds(60);
@@ -87,8 +88,13 @@ public sealed class FunktionsKindActor(
                     await SendeAsync(c, Kettenvertrag.Befehl(e.Kennung, traeger.Name, i, c), e, ct);
                     break;
                 case ITransientEvent h:
-                    foreach (var f in verkettung.Hoerer(h.GetType()))
-                        wege.Melde(Weiter(e, h, Kettenvertrag.Ausgabe(e.Kennung, traeger.Name, i), f, Eingangsart.Hinweis));
+                    // Über das Hinweis-Netz, wenn es eins gibt (es erreicht auch Funktionen mit Log-Eingängen und Clients), sonst über die Wege.
+                    if (hinweise is not null)
+                        hinweise(new HinweisZustellen(Kettenvertrag.Ausgabe(e.Kennung, traeger.Name, i), h, e.Stream, e.Version, e.Zeit, e.Korrelation, e.Akteur,
+                            e.Ursache ?? Spur.Ursache(e.Stream, e.Version)));
+                    else
+                        foreach (var f in verkettung.Hoerer(h.GetType()))
+                            wege.Melde(Weiter(e, h, Kettenvertrag.Ausgabe(e.Kennung, traeger.Name, i), f, Eingangsart.Hinweis));
                     break;
                 case IEvent ev:
                     throw new InvalidOperationException($"{traeger.Name} gab das Event {ev.GetType().Name} aus — eine Funktion schreibt nie ins Log (docs/04 §4.4).");

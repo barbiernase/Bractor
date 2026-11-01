@@ -66,6 +66,18 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
     {
         var logger = logs?.CreateLogger("Funktionen");
         var emitter = new CommandEmitter(new Bote(system.Cluster(), logger), logger);
+        var netz = dienste.GetService<HinweisNetz>();
+        var verteilung = dienste.GetService<Infrastructure.Verteilen.Verteilung>();
+        Action<HinweisZustellen>? hinweise = netz is null && verteilung is null ? null : h =>
+        {
+            // An die hörenden Funktionen (Hinweis-Netz: beide Laufzeiten); an die Clients, die ihn hören, über die Verteiler.
+            netz?.Verteile(h);
+            verteilung?.Melde(new EventEnvelope
+            {
+                AggregateId = h.Stream, AggregateVersion = h.Version, CorrelationId = h.Korrelation, UserId = h.Akteur, Payload = h.Hinweis,
+                AggregateType = "Funktion",
+            });
+        };
         var bindungen = dienste.GetServices<BausteinBindung>().ToList();
         var plaene = new List<ParentPlan>();
         foreach (var b in Anwendung.Funktionen.Bausteine.Where(b => b.VorDemAggregat))
@@ -81,13 +93,21 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
             var kindLogger = logs?.CreateLogger("Funktion." + b.Name);
             plaene.Add(new ParentPlan(traeger, konfig, () => new FunktionsParent(traeger, konfig,
                 () => new FunktionsKindActor(traeger, dienste, wege, verkettung, async (cmd, id, korrelation, t) => await emitter.EmitAsync(cmd, id, korrelation, t),
-                    dienste.GetService<IFaehigkeitsFabrik>(), kindLogger),
+                    dienste.GetService<IFaehigkeitsFabrik>(), kindLogger, hinweise: hinweise),
                 dienste.GetService<IOffeneEingaenge>(), kindLogger)));
         }
-        system.Root.SpawnNamed(Props.FromProducer(() => new FunktionenWurzel(plaene, orte, logger)), FunktionenWurzel.Wurzelname);
+        _wurzel = system.Root.SpawnNamed(Props.FromProducer(() => new FunktionenWurzel(plaene, orte, logger)), FunktionenWurzel.Wurzelname);
         Console.WriteLine($"  ✓ Funktionen vor dem Aggregat {system.Address}/{FunktionenWurzel.Wurzelname}: " + string.Join(", ", plaene.Select(p => p.Traeger.Name)));
         return Task.CompletedTask;
     }
 
-    public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
+    private PID? _wurzel;
+
+    /// <summary>Stoppt die Wurzel samt Parents und Kindern geordnet (vor dem Cluster): jede Aktivierung gibt ihre Ressourcen frei.</summary>
+    public async Task StopAsync(CancellationToken ct)
+    {
+        if (_wurzel is null) return;
+        try { await system.Root.StopAsync(_wurzel).WaitAsync(TimeSpan.FromSeconds(15), ct); }
+        catch (Exception) when (!ct.IsCancellationRequested) { /* ein hängender Stopp hält den Host nicht auf */ }
+    }
 }
