@@ -73,6 +73,19 @@ public sealed record Kunde : IMensch, IDarf<Eroeffne>, IDarf<Hole>;
         befunde.Should().OnlyContain(d => d.Location == Location.None, "die Typen liegen in der Domänen-Referenz — der Name führt zur Karte");
     }
 
+    // GR-ANTWORT (docs/04 §4.4): ein Event erreicht eine Funktion nur als Antwort auf einen eigenen Command.
+    [Fact]
+    public async Task Eine_Antwort_die_kein_eigener_Command_entscheiden_kann_ist_CQRS108()
+    {
+        (await Ids("public record Anstoss(Id<Konto> Konto); public sealed class Kette : IFunktion { public Eroeffne Auf(Anstoss a) => default!; "
+                   + "public Eroeffne? Auf(Eroeffnet e) => null; }"))
+            .Should().NotContain(GesamtbildAnalyzer.AntwortOhneCommandId, "Eroeffne kann Eroeffnet entscheiden");
+        var befunde = await Befunde("public record Anstoss(Id<Konto> Konto); public record Anderes() : IEvent; "
+                                    + "public sealed class Lauscher : IFunktion { public Eroeffne Auf(Anstoss a) => default!; public Eroeffne? Auf(Anderes e) => null; }");
+        befunde.Should().Contain(d => d.Id == GesamtbildAnalyzer.AntwortOhneCommandId)
+            .Which.GetMessage().Should().StartWith("Die Funktion 'Lauscher' hört 'Anderes'").And.Contain("Eroeffne");
+    }
+
     // R4 (docs/03 §3.2, docs/10 §10.6): eine Query hat genau ein Ziel — einen Reader oder ein Aggregat (Frage im Decider).
     private const string Kasse = @"
 public record Zaehle(Id<Kasse> AggregateId) : ICommand<Kasse>;

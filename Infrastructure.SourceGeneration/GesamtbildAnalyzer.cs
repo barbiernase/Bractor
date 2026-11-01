@@ -16,6 +16,8 @@ namespace Infrastructure.SourceGeneration;
 /// <item>CQRS085 (GR-MODUL-AUSGANG-OFFEN, UNUSED-EVENT; Warnung) — ein Event, eine Ablehnung oder eine Response, die niemand erzeugt.</item>
 /// <item>CQRS106 (R20, GR-HINWEIS-NETZ; Fehler) — eine Funktion hört einen Hinweis, den im Hinweis-Netz niemand erzeugt (kein Decide, keine Funktion
 ///   nennt ihn in der Signatur, kein Client sendet ihn): ihre Adresse bekäme ihn nie (docs/04 §4.4).</item>
+/// <item>CQRS108 (GR-ANTWORT; Fehler) — eine Funktion hört ein Event, das keiner ihrer Commands entscheiden kann: eine Funktion liest nie das Log, ein
+///   Event erreicht sie nur als Antwort auf einen eigenen Command (docs/04 §4.4) — dieses käme nie.</item>
 /// <item>CQRS086 (GR-MODUL-EINGANG-OFFEN; Warnung) — ein Command ohne Decider, eine Query ohne Reader und ohne Aggregat.</item>
 /// <item>CQRS087 (GR-GETRAGEN; Warnung) — eine Funktion als Schnittstelle ohne Umsetzung im Host, die kein Client trägt (kein verkörperter Akteur mit <c>IDarf&lt;F&gt;</c>): sie läuft
 ///   nur mit einer Bindung von Hand (R17), sonst ist sie ein Boot-Fehler.</item>
@@ -26,7 +28,8 @@ namespace Infrastructure.SourceGeneration;
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
 {
-    public const string QueryId = "CQRS084", AusgangOffenId = "CQRS085", EingangOffenId = "CQRS086", GetragenId = "CQRS087", HinweisOhneErzeugerId = "CQRS106";
+    public const string QueryId = "CQRS084", AusgangOffenId = "CQRS085", EingangOffenId = "CQRS086", GetragenId = "CQRS087", HinweisOhneErzeugerId = "CQRS106",
+        AntwortOhneCommandId = "CQRS108";
 
     private static DiagnosticDescriptor D(string id, string titel, string text, DiagnosticSeverity s) =>
         new(id, titel, text, "CQRS.Gesamtbild", s, isEnabledByDefault: true);
@@ -45,7 +48,12 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         "Die Funktion '{0}' hört den Hinweis '{1}', aber im Hinweis-Netz erzeugt ihn niemand — kein Decide und keine Funktion nennt ihn in der Signatur, kein Client sendet ihn "
         + "(R20, GR-HINWEIS-NETZ)", DiagnosticSeverity.Error);
 
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Query, AusgangOffen, EingangOffen, Getragen, HinweisOhneErzeuger);
+    private static readonly DiagnosticDescriptor AntwortOhneCommand = D(AntwortOhneCommandId, "Antwort ohne eigenen Command",
+        "Die Funktion '{0}' hört '{1}', aber keiner ihrer Commands kann es entscheiden ({2}) — eine Funktion liest nie das Log, ein Event erreicht sie nur "
+        + "als Antwort auf einen eigenen Command; was sie aus einer Entscheidung braucht, sagt ihr das Aggregat als Folge (GR-ANTWORT)", DiagnosticSeverity.Error);
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
+        ImmutableArray.Create(Query, AusgangOffen, EingangOffen, Getragen, HinweisOhneErzeuger, AntwortOhneCommand);
 
     /// <summary>Die Rollen-Marker, deren Implementierung eine Assembly zur Domäne macht (wie die Projektlage des Extractors).</summary>
     private static readonly string[] DomaenenRollen =
@@ -91,6 +99,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         var erzeugt = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
         var imNetz = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);   // was ins Hinweis-Netz gelangt: Ausgaben von Decide und Funktionen
         var entschieden = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+        var entscheidet = new Dictionary<ITypeSymbol, HashSet<ITypeSymbol>>(SymbolEqualityComparer.Default);   // Command → was sein Decide ausgeben kann
         var zieleJeQuery = new Dictionary<ITypeSymbol, List<string>>(SymbolEqualityComparer.Default);
         void Ziel(ITypeSymbol query, string ziel)
         {
@@ -105,6 +114,9 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                 foreach (var m in Methoden(t, Abstractions.Aggregatvertrag.Decide))
                 {
                     entschieden.Add(m.Parameters[0].Type);
+                    if (!entscheidet.TryGetValue(m.Parameters[0].Type, out var aus))
+                        entscheidet[m.Parameters[0].Type] = aus = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+                    aus.UnionWith(Faelle(m.ReturnType));
                     erzeugt.UnionWith(Faelle(m.ReturnType));
                     imNetz.UnionWith(Faelle(m.ReturnType));
                 }
@@ -176,6 +188,18 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         foreach (var f in typen.Where(t => (t.TypeKind == TypeKind.Interface || (t.TypeKind == TypeKind.Class && !t.IsAbstract)) && Funktionsform.IstBaustein(t)))
             foreach (var a in Funktionsform.Lies(f).Aufs.Where(a => a.Hinweis && !imNetz.Contains(a.Eingang)))
                 ctx.ReportDiagnostic(Diagnostic.Create(HinweisOhneErzeuger, a.Methode.Locations.FirstOrDefault() ?? Location.None, f.Name, a.Eingang.Name));
+
+        // GR-ANTWORT: ein Event-Eingang einer Funktion ist eine Antwort — einer ihrer Commands (aus irgendeinem Auf) muss es entscheiden können.
+        foreach (var f in typen.Where(t => (t.TypeKind == TypeKind.Interface || (t.TypeKind == TypeKind.Class && !t.IsAbstract)) && Funktionsform.IstBaustein(t)))
+        {
+            var form = Funktionsform.Lies(f);
+            if (form.Fehler.Count > 0) continue;   // CQRS100 meldet der Generator
+            var befehle = form.Aufs.SelectMany(a => a.Ausgaben).Where(x => IstT(x, iCommand)).Distinct<ITypeSymbol>(SymbolEqualityComparer.Default).ToList();
+            foreach (var a in form.Aufs.Where(form.IstAntwort))
+                if (!befehle.Any(b => entscheidet.TryGetValue(b, out var aus) && aus.Contains(a.Eingang)))
+                    ctx.ReportDiagnostic(Diagnostic.Create(AntwortOhneCommand, a.Methode.Locations.FirstOrDefault() ?? Location.None, f.Name, a.Eingang.Name,
+                        befehle.Count == 0 ? "sie gibt keinen Command aus" : "ihre Commands: " + string.Join(", ", befehle.Select(b => b.Name))));
+        }
 
         // GR-GETRAGEN: eine Funktion als Schnittstelle braucht eine Umsetzung im Host oder einen Träger (sonst nur eine Bindung von Hand).
         var getragen = new HashSet<ITypeSymbol>(clientVertraege.SelectMany(v => v.Traegt).Select(x => x.Funktion), SymbolEqualityComparer.Default);

@@ -85,6 +85,11 @@ public static class Grammatik
             + "den die Laufzeit zustellt, bis die Funktion ihn fertig meldet — genau einmal wirksam (docs/03 §3.2, docs/04 §4.4).", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag: Folgen stehen in der Signatur)"),
              new("laufzeit", null, "Infrastructure/Eingaenge/Folgen.cs (offene Eingänge im Commit, schneller Weg danach)")]),
+        new("GR-ANTWORT", "Antwort → die Funktion, die den Command schickte", "Ein Event hört eine Funktion nur als Antwort auf einen eigenen Command: "
+            + "die Antwort trägt die Events, die das Ziel entschied, und das Kind rechnet sie gleich weiter. Ein Event-Eingang, den keiner ihrer Commands "
+            + "entscheiden kann, käme nie (docs/04 §4.4).", "error",
+            [An("CQRS108", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Antwort ohne eigenen Command)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsKindActor.cs (Antwort aus CommandResult.Antwort weitergerechnet)")]),
         new("GR-ZWISCHENERGEBNIS", "Zwischenergebnis → die nächste Funktion", "Eine Funktion gibt Commands, Zwischenergebnisse (schlichte Records) und "
             + "Hinweise aus, nie ein Event. Ein Zwischenergebnis geht an jede Funktion, die es hört; fertig ist ein Eingang erst, wenn alle Nachfolger fertig "
             + "sind (docs/04 §4.4).", "error",

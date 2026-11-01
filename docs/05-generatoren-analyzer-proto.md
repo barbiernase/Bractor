@@ -120,7 +120,7 @@ Alle Diagnosen sind Fehler, außer den Warnungen CQRS080, 081, 083, 085, 086, 08
 |---|---|---|
 | Schreibseite & Routing | CQRS010/011 · CQRS013, 079–081, 083 · CQRS020/021 · CQRS050 · CQRS057 | `CommandAggregateMapGenerator` (Decide außerhalb des Ziels, zwei Aggregate mit gleicher Identität) · `ModellAnalyzer` (Command ohne typisiertes Ziel, Apply fehlt, Faltung ohne Decide, Enum-Wert 0, Projektion mit Zustand in Feldern) · `CommandEmitAnalyzer` (ein Emit-Weg, Send mit Frist) · `AusgabeVertragAnalyzer` · `HandlerFormAnalyzer` (Form von Projektion, Reader und Frage an ein Aggregat) |
 | Eingang und Wiederholung | CQRS101 · CQRS102, CQRS104 | `EinEingangAnalyzer` (je Eingang ein `Auf` bzw. eine `Frage`, R2) · `GleichbleibendAnalyzer` (R11 gleiche Rechnung, R13 abgeleitete Ids) |
-| Funktionen | CQRS100/101 · CQRS105 · CQRS107 · CQRS106 | `FunktionsBausteinGenerator` (Form, doppelter Eingang) · `ZustandAnalyzer` (R19) · `LebenszyklusAnalyzer` · `GesamtbildAnalyzer` (Hinweis ohne Erzeuger, R20) |
+| Funktionen | CQRS100/101 · CQRS105 · CQRS107 · CQRS106 · CQRS108 | `FunktionsBausteinGenerator` (Form, doppelter Eingang, nur Events gehört, Event ausgegeben) · `ZustandAnalyzer` (R19) · `LebenszyklusAnalyzer` · `GesamtbildAnalyzer` (Hinweis ohne Erzeuger, R20; Antwort ohne eigenen Command, GR-ANTWORT) |
 | Gerufene Funktionen, Quellen | CQRS089–092 · CQRS070 | `GerufenAnalyzer` · `QuellenTypAnalyzer` |
 | Projektstruktur | CQRS098 | `LageAnalyzer` (Ordner, Namespace, Datei prüft `--check`, docs/07) |
 | Leseseite & Store | CQRS051, 054, 055 · CQRS052, 110 · CQRS053 · CQRS066/067 · CQRS109 · CQRS111 | `FaehigkeitAnalyzer` · `PullPathGenerator` · `ProjectionServicesGenerator` · `StoreZugriffAnalyzer` · `StoreKlasseAnalyzer` · `ReadModelSchluesselGenerator` |
