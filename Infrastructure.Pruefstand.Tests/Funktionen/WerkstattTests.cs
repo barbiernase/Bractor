@@ -172,4 +172,27 @@ public class WerkstattTests
         ende.Cancel();
         foreach (var l in laeufe) await FluentActions.Awaiting(() => l).Should().ThrowAsync<OperationCanceledException>();
     }
+
+    [Fact]
+    public async Task Ist_kein_Platz_frei_wartet_der_Lauf_und_ein_Platz_wird_mit_der_vollstaendigen_Antwort_frei()
+    {
+        var w = new Werkstatt();
+        var a = new Arbeiter("w1");
+        w.Anmelden(a, "IProbe", 1);
+        var (k1, k2) = (Guid.NewGuid(), Guid.NewGuid());
+        var e1 = w.RechneAsync(Funktion(), k1, new Eingang(1), H, null, false, default).GetAsyncEnumerator();
+        var erster = e1.MoveNextAsync().AsTask();
+        var lauf2 = Sammle(w.RechneAsync(Funktion(), k2, new Eingang(2), H, null, false, default));
+        await Task.Delay(100);
+        a.Auftraege.Should().HaveCount(1, "ein Slot: der zweite Lauf wartet auf einen freien Platz");
+
+        w.Ergebnis(a, k1, new object[] { new Weiter(1) }, 0, true, null).Should().Be(Werkstattausgang.Angenommen);
+        (await erster).Should().BeTrue("die Ausgabe ist da — das Kind hat sie noch nicht hinausgebracht");
+        await Task.Delay(100);
+        a.Auftraege.Should().HaveCount(2, "der Platz ist mit der vollständigen Antwort frei, nicht erst, wenn das Kind sie hinausgebracht hat");
+
+        w.Ergebnis(a, k2, new object[] { new Weiter(2) }, 0, true, null).Should().Be(Werkstattausgang.Angenommen);
+        (await lauf2).Should().Equal(new Weiter(2));
+        (await e1.MoveNextAsync()).Should().BeFalse();
+    }
 }

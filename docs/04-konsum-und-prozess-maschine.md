@@ -234,10 +234,11 @@ Parent erst dann. **Nichts wird festgehalten:** rechnet eine Funktion einen Eing
 **Draußen** (Laufort `Extern` oder `Hand`) rechnet ein **Arbeiter** (`IArbeiter`): die Sitzung eines Workers oder Clients, der die Funktion trägt
 (`SitzungsActor`, nach `FunktionenAnbieten`), oder der Mensch an der Werkbank (`HandAusfuehrer`, JSON-Eingang `/eingang/auftraege` und
 `/eingang/ergebnis`). Er meldet sich mit seinen Slots bei der **Werkstatt** seines Knotens an; der erste Arbeiter einer Funktion lässt die Wurzel
-ihren Parent anlegen (Parallel = Summe der Slots, `ParallelSetzen` bei jeder Änderung), mit dem letzten hält der Knoten die Funktion nicht mehr. Ein
-Kind dieses Parents hat keine Aktivierung: es gibt den Eingang dem Arbeiter mit dem meisten freien Platz (`Werkstatt.RechneAsync`, über die Leitung
-als `ArbeitsAuftrag` mit der Kennung als `vorgang`) und nimmt seine Ausgaben in Reihenfolge entgegen (`ArbeitsErgebnis`, ein Strom in Stücken),
-geprüft gegen die Signatur; hinausgebracht werden sie wie die einer Umsetzung im Host. Es zählt nur die Antwort des Arbeiters, der den Auftrag hält,
+ihren Parent anlegen (Kinder bis `Parallel` wie im Host), mit dem letzten hält der Knoten die Funktion nicht mehr. Ein Kind dieses Parents hat keine
+Aktivierung: es gibt den Eingang einem Arbeiter mit freiem Platz (`Werkstatt.RechneAsync`; ist keiner frei, wartet es; über die Leitung als
+`ArbeitsAuftrag` mit der Kennung als `vorgang`) und nimmt seine Ausgaben in Reihenfolge entgegen (`ArbeitsErgebnis`, ein Strom in Stücken), geprüft
+gegen die Signatur; hinausgebracht werden sie wie die einer Umsetzung im Host. Der Platz wird frei, sobald die Antwort vollständig ist — nicht erst,
+wenn das Kind sie hinausgebracht hat; so wartet der Arbeiter nicht auf die Kette dahinter. Es zählt nur die Antwort des Arbeiters, der den Auftrag hält,
 und von ihm die erste vollständige; jede andere ist „unbekannt“ (`ARBEIT_UNBEKANNT`). Geht der Arbeiter, scheitern seine Läufe sofort; ohne Regung
 (Ausgabe oder `ArbeitLebtMeldung`) länger als die Geduld (Worker 60 s, Hand unbegrenzt) scheitert der Lauf ebenso — der Parent rechnet den Eingang
 erneut, der durable Rand bringt ihn wieder. Kein Vermittler, keine Lease, nichts festgehalten. Nachrichten ohne Marker reisen über die Leitung als

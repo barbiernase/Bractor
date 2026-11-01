@@ -46,8 +46,8 @@ public enum Werkstattausgang
 /// der Parent rechnet den Eingang erneut, der durable Rand stellt ihn nach seiner Frist wieder zu. Es zählt nur die Antwort des Arbeiters, der den
 /// Auftrag hält — die erste, weil das Kind den Lauf nach ihr beendet.
 ///
-/// Die Slots aller Arbeiter einer Funktion sind die Parallelität ihres Parents auf diesem Knoten: meldet sich der erste Arbeiter an, entsteht er, geht
-/// der letzte, endet er (<see cref="Beobachte"/>).
+/// Meldet sich der erste Arbeiter einer Funktion an, entsteht ihr Parent auf diesem Knoten, geht der letzte, hält der Knoten sie nicht mehr
+/// (<see cref="Beobachte"/>). Wie viele Aufträge zugleich bei den Arbeitern sind, begrenzen ihre Slots; die Kinder des Parents warten auf einen freien Platz.
 /// </summary>
 public sealed class Werkstatt
 {
@@ -73,6 +73,8 @@ public sealed class Werkstatt
 
     private readonly ConcurrentDictionary<string, ImmutableList<Platz>> _plaetze = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<Guid, Lauf> _laeufe = new();
+    /// <summary>Je Funktion ein Signal „ein Platz ist frei geworden“ (ein Arbeiter kam, eine Antwort ist vollständig) — es weckt, wer auf einen Platz wartet.</summary>
+    private readonly ConcurrentDictionary<string, TaskCompletionSource> _frei = new(StringComparer.Ordinal);
     private Action<string, int>? _beobachter;
 
     /// <summary>Die Slots aller Arbeiter der Funktion auf diesem Knoten.</summary>
@@ -83,7 +85,7 @@ public sealed class Werkstatt
 
     /// <summary>
     /// Meldet jede Änderung der Slots einer Funktion (Funktion, Slots; 0 = kein Arbeiter mehr) — sofort für alle, die schon Arbeiter haben. Die Wurzel
-    /// der Funktionen legt daraus die Parents an, passt ihre Parallelität an und beendet sie.
+    /// der Funktionen legt daraus die Parents an bzw. hält die Funktion nicht mehr.
     /// </summary>
     public void Beobachte(Action<string, int> beobachter)
     {
@@ -97,6 +99,7 @@ public sealed class Werkstatt
         var platz = new Platz(arbeiter, Math.Max(1, slots));
         _plaetze.AddOrUpdate(funktion, _ => ImmutableList.Create(platz), (_, l) => l.RemoveAll(p => ReferenceEquals(p.Arbeiter, arbeiter)).Add(platz));
         _beobachter?.Invoke(funktion, Slots(funktion));
+        Wecke(funktion);
     }
 
     /// <summary>Der Arbeiter ist fort (seine Sitzung endete): seine Plätze verschwinden, seine laufenden Aufträge scheitern sofort.</summary>
@@ -107,25 +110,38 @@ public sealed class Werkstatt
             if (!plaetze.Any(p => ReferenceEquals(p.Arbeiter, arbeiter))) continue;
             _plaetze.AddOrUpdate(funktion, _ => ImmutableList<Platz>.Empty, (_, l) => l.RemoveAll(p => ReferenceEquals(p.Arbeiter, arbeiter)));
             _beobachter?.Invoke(funktion, Slots(funktion));
+            Wecke(funktion);   // wer auf einen Platz wartet, sieht nun: keiner mehr da
         }
         foreach (var lauf in _laeufe.Values.Where(l => ReferenceEquals(l.Platz.Arbeiter, arbeiter)))
             if (Interlocked.Exchange(ref lauf.Beantwortet, 1) == 0) lauf.Kanal.Writer.TryWrite(new Regung(null, 0, true, $"{arbeiter.Name} ist fort"));
     }
 
     /// <summary>
-    /// Rechnet einen Eingang draußen: ein Arbeiter der Funktion mit dem meisten freien Platz bekommt ihn, seine Ausgaben kommen in Reihenfolge zurück
-    /// (die Fälle der Signatur des Eingangs). Ohne Arbeiter, mit einem gemeldeten Fehler, ohne Regung über die Geduld hinaus oder wenn der Arbeiter
-    /// geht, wirft der Lauf — der Eingang wird wiederholt.
+    /// Rechnet einen Eingang draußen: ein Arbeiter der Funktion mit freiem Platz bekommt ihn (gibt es gerade keinen, wartet der Lauf darauf), seine
+    /// Ausgaben kommen in Reihenfolge zurück (die Fälle der Signatur des Eingangs). Der Platz wird frei, sobald die Antwort vollständig ist — nicht erst,
+    /// wenn das Kind sie hinausgebracht hat (so wartet der Arbeiter nicht auf die Kette dahinter). Ohne Arbeiter, mit einem gemeldeten Fehler, ohne Regung
+    /// über die Geduld hinaus oder wenn der Arbeiter geht, wirft der Lauf — der Eingang wird wiederholt.
     /// </summary>
     public async IAsyncEnumerable<object> RechneAsync(FunktionsBaustein funktion, Guid vorgang, object nachricht, Herkunft herkunft, string? korrelation,
         bool hinweis, [EnumeratorCancellation] CancellationToken ct)
     {
         var eingang = funktion.Eingang(nachricht.GetType())
             ?? throw new InvalidOperationException($"{funktion.Name} hört {nachricht.GetType().Name} nicht.");
-        var platz = Waehle(funktion.Name) ?? throw new InvalidOperationException($"{funktion.Name}: kein Arbeiter draußen auf diesem Knoten.");
+        var platz = await NimmPlatzAsync(funktion.Name, ct);
         var lauf = new Lauf(platz, eingang);
-        if (!_laeufe.TryAdd(vorgang, lauf)) throw new InvalidOperationException($"{funktion.Name}: {vorgang} läuft auf diesem Knoten schon.");
-        Interlocked.Increment(ref platz.Belegt);
+        if (!_laeufe.TryAdd(vorgang, lauf))
+        {
+            GibPlatzFrei(funktion.Name, platz);
+            throw new InvalidOperationException($"{funktion.Name}: {vorgang} läuft auf diesem Knoten schon.");
+        }
+        var frei = false;
+        void Freigeben()
+        {
+            if (frei) return;
+            frei = true;
+            _laeufe.TryRemove(new KeyValuePair<Guid, Lauf>(vorgang, lauf));
+            GibPlatzFrei(funktion.Name, platz);
+        }
         try
         {
             platz.Arbeiter.Sende(new AuftragDraussen(vorgang, funktion, nachricht, herkunft, korrelation, hinweis));
@@ -134,6 +150,7 @@ public sealed class Werkstatt
             {
                 var r = await LiesAsync(lauf, ct);
                 if (ReferenceEquals(r, Lebt)) continue;
+                if (r.Fertig || r.Fehler is not null) Freigeben();   // die Antwort ist vollständig: der Platz gehört dem nächsten Auftrag
                 if (r.Fehler is not null) throw new InvalidOperationException($"{funktion.Name} ist draußen gescheitert: {r.Fehler}");
                 var ausgaben = r.Ausgaben ?? Array.Empty<object>();
                 for (var i = 0; i < ausgaben.Count; i++)
@@ -148,9 +165,38 @@ public sealed class Werkstatt
         }
         finally
         {
-            _laeufe.TryRemove(new KeyValuePair<Guid, Lauf>(vorgang, lauf));
-            Interlocked.Decrement(ref platz.Belegt);
+            Freigeben();
         }
+    }
+
+    /// <summary>
+    /// Ein freier Platz der Funktion (der mit dem meisten freien Raum, gemessen an seinen Slots): belegt, sobald gefunden; ist keiner frei, wartet der Lauf
+    /// auf das Signal der Funktion. Ohne Arbeiter wirft er.
+    /// </summary>
+    private async Task<Platz> NimmPlatzAsync(string funktion, CancellationToken ct)
+    {
+        while (true)
+        {
+            var signal = _frei.GetOrAdd(funktion, _ => new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously)).Task;
+            if (!_plaetze.TryGetValue(funktion, out var plaetze) || plaetze.IsEmpty)
+                throw new InvalidOperationException($"{funktion}: kein Arbeiter draußen auf diesem Knoten.");
+            foreach (var p in plaetze.OrderBy(x => (double)Volatile.Read(ref x.Belegt) / x.Slots))
+                for (var b = Volatile.Read(ref p.Belegt); b < p.Slots; b = Volatile.Read(ref p.Belegt))
+                    if (Interlocked.CompareExchange(ref p.Belegt, b + 1, b) == b) return p;
+            await signal.WaitAsync(ct);
+        }
+    }
+
+    private void GibPlatzFrei(string funktion, Platz platz)
+    {
+        Interlocked.Decrement(ref platz.Belegt);
+        Wecke(funktion);
+    }
+
+    /// <summary>Weckt, wer auf einen Platz der Funktion wartet (das nächste Warten holt sich ein neues Signal).</summary>
+    private void Wecke(string funktion)
+    {
+        if (_frei.TryRemove(funktion, out var signal)) signal.TrySetResult();
     }
 
     private static async Task<Regung> LiesAsync(Lauf lauf, CancellationToken ct)
@@ -164,12 +210,6 @@ public sealed class Werkstatt
             throw new TimeoutException($"{lauf.Platz.Arbeiter.Name}: keine Regung in {geduld.TotalSeconds:0} s.");
         }
     }
-
-    /// <summary>Der Platz mit dem meisten freien Raum (gemessen an seinen Slots); null = kein Arbeiter.</summary>
-    private Platz? Waehle(string funktion) =>
-        _plaetze.TryGetValue(funktion, out var p) && !p.IsEmpty
-            ? p.OrderBy(x => (double)Volatile.Read(ref x.Belegt) / x.Slots).First()
-            : null;
 
     /// <summary>
     /// Die Antwort eines Arbeiters auf einen Auftrag — ganz oder als Stück eines Stroms (<paramref name="ab"/> = Stelle der ersten Ausgabe,

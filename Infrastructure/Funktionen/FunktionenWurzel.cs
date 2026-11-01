@@ -8,12 +8,12 @@ namespace Infrastructure.Funktionen;
 public sealed record ParentPlan(FunktionsTraeger Traeger, FunktionsOrtKonfig Konfig, Func<FunktionsParent> Neu);
 
 /// <summary>
-/// Eine Funktion, deren Parent erst bei Bedarf entsteht: draußen, sobald sich ein Arbeiter meldet (so viele Kinder, wie die Arbeiter Slots haben);
-/// mit Zustand, sobald dieser Knoten ihre Sperre hält (ein Kind, <see cref="ZustandsSperre"/>).
+/// Eine Funktion, deren Parent erst bei Bedarf entsteht: draußen, sobald sich ein Arbeiter meldet (die Kinder warten in der Werkstatt auf einen
+/// freien Platz); mit Zustand, sobald dieser Knoten ihre Sperre hält (ein Kind, <see cref="ZustandsSperre"/>).
 /// </summary>
 public sealed record BedarfsPlan(string Funktion, Func<int, FunktionsParent> Neu);
 
-/// <summary>An die Wurzel: so viele Kinder darf die Funktion auf diesem Knoten haben (0 = der Knoten hält sie nicht mehr).</summary>
+/// <summary>An die Wurzel: die Funktion hat auf diesem Knoten Bedarf (Slots bzw. 1) oder keinen mehr (0 = der Knoten hält sie nicht mehr).</summary>
 public sealed record PlaetzeGeaendert(string Funktion, int Slots);
 
 /// <summary>
@@ -47,8 +47,7 @@ public sealed class FunktionenWurzel(IReadOnlyList<ParentPlan> plaene, Funktions
         if (context.Message is not PlaetzeGeaendert g || bedarf?.FirstOrDefault(d => d.Funktion == g.Funktion) is not { } plan) return Task.CompletedTask;
         if (g.Slots > 0)
         {
-            if (_draussen.TryGetValue(g.Funktion, out var parent)) context.Send(parent, new ParallelSetzen(g.Slots));
-            else _draussen[g.Funktion] = context.SpawnNamed(Props.FromProducer(() => plan.Neu(g.Slots)), g.Funktion);
+            if (!_draussen.ContainsKey(g.Funktion)) _draussen[g.Funktion] = context.SpawnNamed(Props.FromProducer(() => plan.Neu(g.Slots)), g.Funktion);
             if (_mitArbeiter.Add(g.Funktion)) Melde();
         }
         else if (_mitArbeiter.Remove(g.Funktion))

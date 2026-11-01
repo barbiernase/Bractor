@@ -109,13 +109,16 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
                 dienste.GetService<IOffeneEingaenge>(), kindLogger);
             if (bindung.Laufort != FunktionsLaufort.Host)
             {
-                // Draußen: kein Bereich, keine Umsetzung — ein Arbeiter in der Werkstatt rechnet; so viele Kinder, wie die Arbeiter Slots haben.
+                // Draußen: kein Bereich, keine Umsetzung — ein Arbeiter in der Werkstatt rechnet. Die Kinder warten dort auf einen freien Platz; ein
+                //   Platz wird frei, sobald die Antwort vollständig ist, das Kind bringt sie danach hinaus (so wartet der Arbeiter nicht auf die Kette).
                 var baustein = b;
                 var traeger = new FunktionsTraeger(b.Name, null, null, false, antworten,
                     (kennung, nachricht, herkunft, korrelation, hinweis, t) => werkstatt.RechneAsync(baustein, kennung, nachricht, herkunft, korrelation, hinweis, t));
-                var schlange = bindung.Warteschlange > 0 ? bindung.Warteschlange : FunktionsOrtKonfig.StandardWarteschlange;
-                bedarf.Add(new BedarfsPlan(b.Name, slots => Parent(traeger, new FunktionsOrtKonfig(Parallel: slots, Warteschlange: schlange,
-                    Wiederholungen: wiederholungen))));
+                var draussen = new FunktionsOrtKonfig(
+                    Parallel: bindung.Parallel > 0 ? bindung.Parallel : FunktionsOrtKonfig.StandardParallel,
+                    Warteschlange: bindung.Warteschlange > 0 ? bindung.Warteschlange : FunktionsOrtKonfig.StandardWarteschlange,
+                    Wiederholungen: wiederholungen);
+                bedarf.Add(new BedarfsPlan(b.Name, _ => Parent(traeger, draussen)));
                 continue;
             }
             var umsetzung = FunktionsBausteinWiring.Umsetzung(b, bindung);

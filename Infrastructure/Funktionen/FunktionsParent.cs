@@ -5,8 +5,6 @@ using Proto;
 
 namespace Infrastructure.Funktionen;
 
-/// <summary>An den Parent: so viele Kinder dürfen jetzt zugleich rechnen (draußen: die Slots aller Arbeiter auf diesem Knoten).</summary>
-public sealed record ParallelSetzen(int Parallel);
 
 /// <summary>
 /// Der PARENT einer Funktion auf einem Knoten (docs/04 §4.4, Actor <c>funktionen/&lt;Name&gt;</c>): seine Mailbox ist eine begrenzte Warteschlange,
@@ -39,7 +37,7 @@ public sealed class FunktionsParent(
     private readonly Stack<PID> _frei = new();
     private readonly List<Guid> _auszutragen = new();
     private int _kinder;
-    private int _parallel = Math.Max(1, konfig.Parallel);
+    private readonly int _parallel = Math.Max(1, konfig.Parallel);
 
     /// <summary>Kein Passivieren mit offenen Eingängen.</summary>
     protected override bool Beschaeftigt => base.Beschaeftigt || _offen.Count > 0;
@@ -57,7 +55,6 @@ public sealed class FunktionsParent(
         {
             case EingangZustellen e: Nimm(context, e); break;
             case KindFertig f: Fertig(context, f); break;
-            case ParallelSetzen p: _parallel = Math.Max(1, p.Parallel); Verteile(context); break;
         }
         return Task.CompletedTask;
     }
@@ -87,7 +84,7 @@ public sealed class FunktionsParent(
 
     private void Verteile(IContext context)
     {
-        // Höchstens so viele rechnen zugleich, wie Parallel sagt (sinkt es, bleiben die übrigen Kinder frei, bis es wieder steigt).
+        // Höchstens so viele rechnen zugleich, wie Parallel sagt.
         while (_schlange.Count > 0 && _kinder - _frei.Count < _parallel)
         {
             var kind = _frei.Count > 0 ? _frei.Pop() : Kind(context);
