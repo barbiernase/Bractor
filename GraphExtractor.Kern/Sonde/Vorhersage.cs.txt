@@ -90,8 +90,6 @@ public sealed class Prognosemodell(IZustand<Gewichte> gewichte, IStatistik stati
         return Task.CompletedTask;
     }
 
-    public Task VorDemSichernAsync(CancellationToken ct) => Task.CompletedTask;
-
     public void Auf(TemperaturGemeldet e, Herkunft h)
     {
         statistik.Zaehle(h.Stream);

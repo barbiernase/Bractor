@@ -14,8 +14,7 @@ namespace Infrastructure.Pruefstand.Analyzers;
 
 /// <summary>
 /// CQRS107 (docs/04 §4.4, docs/10 E10): der Lebenszyklus (<c>ILebenszyklus</c>) gehört an eine Funktions-Klasse im Host — nicht an eine
-/// Schnittstelle (draußen gehört er dem Worker), nicht an eine gerufene Funktion; <c>VorDemSichernAsync</c> nur mit Zustand. Dazu: eine Funktion mit Lebenszyklus
-/// ist nie gleichbleibend (Generator).
+/// Schnittstelle (draußen gehört er dem Worker), nicht an eine gerufene Funktion.
 /// </summary>
 public class LebenszyklusAnalyzerTests
 {
@@ -49,7 +48,6 @@ public class LebenszyklusAnalyzerTests
             public sealed class Klassifikator(IZustand<Netz> netz, IGpu gpu) : IFunktion, ILebenszyklus
             {
                 public async Task BeimAktivierenAsync(CancellationToken ct) => netz.Wert.Gewicht = await gpu.LadeAsync();
-                public Task VorDemSichernAsync(CancellationToken ct) => Task.CompletedTask;
                 public Auffaellig? Auf(Gemessen e) => null;
             }
             public sealed class Laden(IGpu gpu) : IFunktion, ILebenszyklus
@@ -63,7 +61,6 @@ public class LebenszyklusAnalyzerTests
     [Theory]
     [InlineData("public interface IDraussen : IFunktion, ILebenszyklus { Auffaellig? Auf(Gemessen e); }", "Schnittstelle")]
     [InlineData("public sealed class Gpu : IGpu, ILebenszyklus { public Task<double> LadeAsync() => Task.FromResult(1.0); }", "Funktions-Klasse")]
-    [InlineData("public sealed class OhneZustand : IFunktion, ILebenszyklus { public Task VorDemSichernAsync(CancellationToken ct) => Task.CompletedTask; public Auffaellig? Auf(Gemessen e) => null; }", "nie gerufen")]
     public async Task Lebenszyklus_am_falschen_Ort_ist_CQRS107(string code, string worum)
     {
         (await Befunde(code)).Should().ContainSingle(b => b.Id == LebenszyklusAnalyzer.Id).Which.Text.Should().Contain(worum);

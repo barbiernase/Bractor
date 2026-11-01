@@ -7,20 +7,24 @@ namespace Infrastructure.Funktionen;
 /// <summary>Ein Parent, den die Wurzel anlegt: die Funktion und wie sie an diesem Knoten läuft.</summary>
 public sealed record ParentPlan(FunktionsTraeger Traeger, FunktionsOrtKonfig Konfig, Func<FunktionsParent> Neu);
 
-/// <summary>Eine Funktion draußen: wie ihr Parent mit so vielen Kindern entsteht, wie ihre Arbeiter Slots haben.</summary>
-public sealed record DraussenPlan(string Funktion, Func<int, FunktionsParent> Neu);
+/// <summary>
+/// Eine Funktion, deren Parent erst bei Bedarf entsteht: draußen, sobald sich ein Arbeiter meldet (so viele Kinder, wie die Arbeiter Slots haben);
+/// mit Zustand, sobald dieser Knoten ihre Sperre hält (ein Kind, <see cref="ZustandsSperre"/>).
+/// </summary>
+public sealed record BedarfsPlan(string Funktion, Func<int, FunktionsParent> Neu);
 
-/// <summary>An die Wurzel: die Slots der Arbeiter einer Funktion draußen auf diesem Knoten (0 = kein Arbeiter mehr).</summary>
-public sealed record DraussenGeaendert(string Funktion, int Slots);
+/// <summary>An die Wurzel: so viele Kinder darf die Funktion auf diesem Knoten haben (0 = der Knoten hält sie nicht mehr).</summary>
+public sealed record PlaetzeGeaendert(string Funktion, int Slots);
 
 /// <summary>
 /// Die WURZEL „Funktionen“ je Knoten (docs/04 §4.4, Actor mit festem Namen <see cref="Wurzelname"/>, kein virtueller Actor): beim Start legt sie je
 /// Funktion im Host, die dieser Knoten laut Konfig halten darf, einen Parent an (<c>funktionen/&lt;Name&gt;</c>); für eine Funktion draußen entsteht er,
-/// sobald sich auf diesem Knoten ein Arbeiter für sie meldet (<see cref="Werkstatt"/>); geht der letzte, hält der Knoten sie nicht mehr. Was der Knoten hält, meldet sie in
+/// sobald sich auf diesem Knoten ein Arbeiter für sie meldet (<see cref="Werkstatt"/>), für eine mit Zustand, sobald der Knoten ihre Sperre hält
+/// (<see cref="ZustandsSperre"/>); fällt der Bedarf weg, hält der Knoten sie nicht mehr. Was der Knoten hält, meldet sie in
 /// der Mitgliedschaft (<see cref="FunktionsOrte"/>). Ein Parent, der scheitert, beginnt über die Supervision neu.
 /// </summary>
 public sealed class FunktionenWurzel(IReadOnlyList<ParentPlan> plaene, FunktionsOrte orte, ILogger? logger = null,
-    IReadOnlyList<DraussenPlan>? draussen = null) : RahmenActor(logger)
+    IReadOnlyList<BedarfsPlan>? bedarf = null) : RahmenActor(logger)
 {
     public const string Wurzelname = "funktionen";
 
@@ -40,7 +44,7 @@ public sealed class FunktionenWurzel(IReadOnlyList<ParentPlan> plaene, Funktions
 
     protected override Task BehandleAsync(IContext context)
     {
-        if (context.Message is not DraussenGeaendert g || draussen?.FirstOrDefault(d => d.Funktion == g.Funktion) is not { } plan) return Task.CompletedTask;
+        if (context.Message is not PlaetzeGeaendert g || bedarf?.FirstOrDefault(d => d.Funktion == g.Funktion) is not { } plan) return Task.CompletedTask;
         if (g.Slots > 0)
         {
             if (_draussen.TryGetValue(g.Funktion, out var parent)) context.Send(parent, new ParallelSetzen(g.Slots));
@@ -49,8 +53,9 @@ public sealed class FunktionenWurzel(IReadOnlyList<ParentPlan> plaene, Funktions
         }
         else if (_mitArbeiter.Remove(g.Funktion))
         {
-            // Der letzte Arbeiter ist fort: der Knoten hält die Funktion nicht mehr (neue Eingänge gehen an Knoten mit Arbeiter); was der Parent noch
-            //   hat, scheitert ohne Arbeiter, der durable Rand bringt es wieder. Der Parent bleibt (sein Name ist fest), bis ein Arbeiter zurückkommt.
+            // Kein Bedarf mehr (der letzte Arbeiter ist fort, die Sperre verloren): der Knoten hält die Funktion nicht mehr — neue Eingänge gehen an
+            //   andere Knoten; was der Parent noch hat, rechnet er zu Ende oder es scheitert, der durable Rand bringt es wieder. Der Parent bleibt (sein
+            //   Name ist fest), bis der Bedarf zurückkommt.
             Melde();
         }
         return Task.CompletedTask;

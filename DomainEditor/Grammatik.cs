@@ -151,15 +151,16 @@ public static class Grammatik
             [An("CQRS102", "Domain.SourceGeneration/GleichbleibendAnalyzer.cs")]),
         new("GR-FUNKTION-ZUSTAND", "Zustand einer Funktion nur über IZustand<T>", "Eine Funktion hält Zustand (ein Modell, das weiterlernt, ein Zähler) "
             + "nur über IZustand<T> im Konstruktor einer Funktions-Klasse oder einer gerufenen Funktion (deren Zustand gehört der Aktivierung ihres Halters): "
-            + "er ist ein Cache der Aktivierung, keine Wahrheit — was fachlich zählt, steht im Log und wird in Projektionen gelernt. Felder mit Setter, "
+            + "er ist ein Cache der Aktivierung, keine Wahrheit — was fachlich zählt, steht im Log und wird in Projektionen gelernt; damit er alles "
+            + "sieht, rechnet eine Funktion mit Zustand auf genau einer Aktivierung im Cluster (Advisory-Lock). Felder mit Setter, "
             + "veränderliche Felder und Sammlungen hinter readonly sind verboten; eine Funktion mit Zustand darf aus einem Eingang allein lernen (Auf "
             + "ohne Ausgabe) (R19, docs/04 §4.4).", "error",
             [An("CQRS105", "Domain.SourceGeneration/ZustandAnalyzer.cs"),
              Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (höchstens ein Zustand, eigene Klasse; Auf ohne Ausgabe nur mit Zustand)"),
-             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsAktivierung.cs (je Aktivierung ihr Zustand, gerufene über AktivierungsZustaende)")]),
+             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsAktivierung.cs (je Aktivierung ihr Zustand, gerufene über AktivierungsZustaende)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/ZustandsSperre.cs (eine Aktivierung im Cluster, wer die Sperre hält)")]),
         new("GR-FUNKTION-LEBENSZYKLUS", "Lebenszyklus einer Funktion optional", "Eine Funktions-Klasse im Host kann einen Lebenszyklus haben "
-            + "(ILebenszyklus): BeimAktivierenAsync nach dem Bau und dem Laden des Zustands, vor dem ersten Auf (ein Netz laden); VorDemSichernAsync vor "
-            + "jeder Sicherung des Zustands (Gewichte zurückholen); das Ende über IAsyncDisposable. Eine geladene Ressource darf in einem readonly-Feld "
+            + "(ILebenszyklus): BeimAktivierenAsync nach dem Bau, vor dem ersten Auf (ein Netz laden); das Ende über IAsyncDisposable. Eine geladene Ressource darf in einem readonly-Feld "
             + "stehen, Zustand nur in IZustand<T>. Nicht an Schnittstellen (draußen gehört der Lebenszyklus dem Worker), nicht an gerufenen Funktionen "
             + "(docs/04 §4.4, docs/10 E10).", "error",
             [An("CQRS107", "Domain.SourceGeneration/LebenszyklusAnalyzer.cs"),

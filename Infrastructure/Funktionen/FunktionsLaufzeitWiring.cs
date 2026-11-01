@@ -29,10 +29,22 @@ public static class FunktionsLaufzeitWiring
         });
         if (Anwendung.Funktionen.Bausteine.Count == 0) return services;
         services.TryAddSingleton<Werkstatt>();
+        // Funktionen mit Zustand (im Host): genau eine Aktivierung im Cluster, wer die Sperre hält.
+        services.TryAddSingleton(sp => new ZustandsSperre(sp.GetRequiredService<Marten.IDocumentStore>(),
+            Anwendung.Funktionen.Bausteine.Where(b => MitZustand(b, sp)).Select(b => b.Name).ToList(), sp.GetService<ILogger<ZustandsSperre>>()));
+        services.AddHostedService(sp => sp.GetRequiredService<ZustandsSperre>());
         services.TryAddSingleton<IEingangsZustellung>(sp => new WegeZustellung(sp.GetRequiredService<IFunktionsWege>()));
         services.AddHostedService<FunktionsOrteTakt>();
         services.AddHostedService<FunktionenStart>();
         return services;
+    }
+
+    /// <summary>Rechnet die Funktion im Host mit Zustand — ihrem eigenen oder dem einer gerufenen Funktion in der Konstruktor-Kette ihrer Umsetzung?</summary>
+    public static bool MitZustand(FunktionsBaustein b, IServiceProvider dienste)
+    {
+        var bindung = FunktionsBausteinWiring.BindungVon(b, dienste.GetServices<BausteinBindung>());
+        if (bindung.Laufort != FunktionsLaufort.Host) return false;
+        return b.Zustand is not null || dienste.GetService<GerufeneWahl>()?.MitZustand(FunktionsBausteinWiring.Umsetzung(b, bindung).Typ) == true;
     }
 }
 
@@ -59,10 +71,11 @@ public sealed class WegeZustellung(IFunktionsWege wege) : IEingangsZustellung
 /// <summary>
 /// Spawnt beim Start (nach dem Cluster-Beitritt) die Wurzel der Funktionen dieses Knotens: je Funktion vor dem Aggregat im Host ein Parent mit der
 /// Umsetzung aus ihrer Bindung; für eine Funktion draußen (Laufort Extern oder Hand) den Plan, nach dem die Wurzel ihren Parent anlegt, sobald sich ein
-/// Arbeiter in der <see cref="Werkstatt"/> meldet — seine Kinder geben ihre Eingänge an die Arbeiter.
+/// Arbeiter in der <see cref="Werkstatt"/> meldet — seine Kinder geben ihre Eingänge an die Arbeiter; für eine Funktion mit Zustand den Plan mit genau
+/// einem Kind, angelegt, sobald dieser Knoten ihre <see cref="ZustandsSperre"/> hält.
 /// </summary>
 public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system, FunktionsOrte orte, IFunktionsWege wege, Verkettung verkettung,
-    Werkstatt werkstatt, ILoggerFactory? logs = null) : IHostedService
+    Werkstatt werkstatt, ZustandsSperre sperre, ILoggerFactory? logs = null) : IHostedService
 {
     public Task StartAsync(CancellationToken ct)
     {
@@ -82,7 +95,7 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
         };
         var bindungen = dienste.GetServices<BausteinBindung>().ToList();
         var plaene = new List<ParentPlan>();
-        var draussen = new List<DraussenPlan>();
+        var bedarf = new List<BedarfsPlan>();
         foreach (var b in Anwendung.Funktionen.Bausteine)
         {
             var bindung = FunktionsBausteinWiring.BindungVon(b, bindungen);
@@ -101,7 +114,7 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
                 var traeger = new FunktionsTraeger(b.Name, null, null, false, antworten,
                     (kennung, nachricht, herkunft, korrelation, hinweis, t) => werkstatt.RechneAsync(baustein, kennung, nachricht, herkunft, korrelation, hinweis, t));
                 var schlange = bindung.Warteschlange > 0 ? bindung.Warteschlange : FunktionsOrtKonfig.StandardWarteschlange;
-                draussen.Add(new DraussenPlan(b.Name, slots => Parent(traeger, new FunktionsOrtKonfig(Parallel: slots, Warteschlange: schlange,
+                bedarf.Add(new BedarfsPlan(b.Name, slots => Parent(traeger, new FunktionsOrtKonfig(Parallel: slots, Warteschlange: schlange,
                     Wiederholungen: wiederholungen))));
                 continue;
             }
@@ -113,13 +126,21 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
                 Parallel: bindung.Parallel > 0 ? bindung.Parallel : FunktionsOrtKonfig.StandardParallel,
                 Warteschlange: bindung.Warteschlange > 0 ? bindung.Warteschlange : FunktionsOrtKonfig.StandardWarteschlange,
                 Vorwaermen: bindung.Vorwaermen, Wiederholungen: wiederholungen);
+            if (sperre.Funktionen.Contains(b.Name))
+            {
+                // Mit Zustand: ein Kind — eine Aktivierung im Cluster, auf dem Knoten, der die Sperre hält (der Zustand ist ein Cache und soll alles sehen).
+                var einKind = konfig with { Parallel = 1 };
+                bedarf.Add(new BedarfsPlan(b.Name, _ => Parent(imHost, einKind)));
+                continue;
+            }
             plaene.Add(new ParentPlan(imHost, konfig, () => Parent(imHost, konfig)));
         }
-        _wurzel = system.Root.SpawnNamed(Props.FromProducer(() => new FunktionenWurzel(plaene, orte, logger, draussen)), FunktionenWurzel.Wurzelname);
+        _wurzel = system.Root.SpawnNamed(Props.FromProducer(() => new FunktionenWurzel(plaene, orte, logger, bedarf)), FunktionenWurzel.Wurzelname);
         var wurzel = _wurzel;
-        werkstatt.Beobachte((f, slots) => system.Root.Send(wurzel, new DraussenGeaendert(f, slots)));
-        Console.WriteLine($"  ✓ Funktionen vor dem Aggregat {system.Address}/{FunktionenWurzel.Wurzelname}: " + string.Join(", ", plaene.Select(p => p.Traeger.Name))
-            + (draussen.Count > 0 ? "; draußen: " + string.Join(", ", draussen.Select(d => d.Funktion)) : ""));
+        werkstatt.Beobachte((f, slots) => system.Root.Send(wurzel, new PlaetzeGeaendert(f, slots)));
+        sperre.Beobachte((f, gehalten) => system.Root.Send(wurzel, new PlaetzeGeaendert(f, gehalten)));
+        Console.WriteLine($"  ✓ Funktionen {system.Address}/{FunktionenWurzel.Wurzelname}: " + string.Join(", ", plaene.Select(p => p.Traeger.Name))
+            + (bedarf.Count > 0 ? "; bei Bedarf (draußen, mit Zustand): " + string.Join(", ", bedarf.Select(d => d.Funktion)) : ""));
         return Task.CompletedTask;
     }
 

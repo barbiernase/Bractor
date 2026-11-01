@@ -167,4 +167,38 @@ public class FunktionsZustandGarantieTests
         }
         finally { await host.StopAsync(); }
     }
+
+    [Fact]
+    public async Task Eine_Funktion_mit_Zustand_rechnet_auf_genau_einem_Knoten_der_ihre_Sperre_haelt()
+    {
+        // Zwei Hosts auf derselben Datenbank: der Schätzer trägt über sein Zählwerk Zustand — nur einer hält seine Sperre (Advisory-Lock); endet er,
+        //   nimmt der andere sie.
+        var a = Cluster("garantie-sperre-a");
+        var b = Cluster("garantie-sperre-b");
+        await a.StartAsync();
+        await b.StartAsync();
+        var gestoppt = new HashSet<IHost>();
+        try
+        {
+            bool Haelt(IHost h) => h.Services.GetRequiredService<ZustandsSperre>().Gehalten.Contains(nameof(Schaetzer));
+            await Warte(() => Task.FromResult(Haelt(a) || Haelt(b)), Frist, "niemand nimmt die Sperre des Schätzers");
+            await Task.Delay(TimeSpan.FromSeconds(3));
+            (Haelt(a) && Haelt(b)).Should().BeFalse("genau ein Knoten hält die Sperre");
+            var (halter, anderer) = Haelt(a) ? (a, b) : (b, a);
+            halter.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Schaetzer)).Should().BeTrue("der Halter hält die Funktion im Gossip-Zustand");
+            anderer.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Schaetzer)).Should().BeFalse();
+
+            await halter.StopAsync();
+            gestoppt.Add(halter);
+            await Warte(() => Task.FromResult(Haelt(anderer)), Frist, "der andere Knoten übernimmt die Sperre nicht");
+            await Warte(() => Task.FromResult(anderer.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Schaetzer))), Frist,
+                "der andere Knoten hält die Funktion nicht");
+        }
+        finally
+        {
+            foreach (var h in new[] { a, b }.Where(h => !gestoppt.Contains(h))) await h.StopAsync();
+            a.Dispose();
+            b.Dispose();
+        }
+    }
 }

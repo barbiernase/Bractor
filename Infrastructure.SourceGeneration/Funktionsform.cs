@@ -116,7 +116,7 @@ namespace Infrastructure.SourceGeneration
             t.GetMembers().OfType<IMethodSymbol>().Where(m => m.MethodKind == MethodKind.Ordinary && !m.IsStatic
                 && m.Name != Abstractions.Funktionsvertrag.Auf
                 && (t.TypeKind == TypeKind.Interface || m.DeclaredAccessibility == Accessibility.Public)
-                && !(t.TypeKind == TypeKind.Class && m.Name is "Dispose" or "DisposeAsync" or "BeimAktivierenAsync" or "VorDemSichernAsync"));
+                && !(t.TypeKind == TypeKind.Class && m.Name is "Dispose" or "DisposeAsync" or "BeimAktivierenAsync"));
 
         /// <summary>Die Funktions-Schnittstellen (mit Eingängen oder gerufen), die eine Klasse implementiert (sie ist deren Umsetzung im Host).</summary>
         public static IEnumerable<INamedTypeSymbol> Umsetzt(INamedTypeSymbol t) =>

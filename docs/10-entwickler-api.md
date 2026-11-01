@@ -310,7 +310,8 @@ Annahmen (sicherer Default, gelten, solange Tobi nicht widerspricht):
 - **A2** Die Zugehörigkeit zu einem Vorgang ist ein fachliches Feld im Event, keine versteckte Korrelation in den Metadaten.
 - **A3** Wiederholungsfeste Stores (Klasse 2) schreiben mit der Event-Identität im Schlüssel oder bedingt nach Position.
 - **A4** Der Neuaufbau einer Projektion geht über Generationen; Leeren ist der Sonderfall.
-- **A5** Der Zustand einer Funktion ist ein Cache der Aktivierung (je Kind eine), frisch bei jeder Aktivierung, nicht gesichert.
+- **A5** Der Zustand einer Funktion ist ein Cache der Aktivierung, frisch bei jeder Aktivierung, nicht gesichert; eine Funktion mit Zustand rechnet
+  im Cluster auf genau einer Aktivierung (Advisory-Lock, `ZustandsSperre`).
 - **A6** Eine Funktion hat je Knoten, der sie hält, einen Parent `funktionen/<F>`; ein Eingang geht an den eigenen Knoten, sonst reihum (Gossip).
 - **A7** Ein Hinweis trägt eine Kennung, die der Absender vergibt; Command-Ids aus einem Hinweis-Eingang werden daraus abgeleitet.
 - **A8** Rechnet eine Funktion draußen, gibt ein Kind den Eingang dem Arbeiter mit dem meisten freien Platz; einen Zustand im Worker sichert der

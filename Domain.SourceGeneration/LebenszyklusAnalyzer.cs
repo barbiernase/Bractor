@@ -8,10 +8,9 @@ namespace Domain.SourceGeneration;
 
 /// <summary>
 /// <b>CQRS107</b> — der Lebenszyklus (<c>ILebenszyklus</c>, docs/04 §4.4, docs/10 E10) gehört an eine Funktions-Klasse im Host (Baustein oder
-/// Umsetzung einer Funktion draußen): nur dort ruft ihn der Funktions-Actor. An einer Schnittstelle wäre er wirkungslos (draußen gehört der Lebenszyklus
-/// dem Worker), an einer gerufenen Funktion ebenso (ihr Halter ruft sie selbst, in der Reihenfolge, die er kennt). <c>VorDemSichernAsync</c> ruft der
-/// Actor nur bei einer Funktion mit Zustand (<c>IZustand&lt;T&gt;</c>) — ohne Zustand liefe eine Umsetzung davon nie. Nur Code-Fakten: Marker,
-/// Interface-Implementierungen, Konstruktor-Parameter.
+/// Umsetzung einer Funktion draußen): nur dort ruft ihn das Kind. An einer Schnittstelle wäre er wirkungslos (draußen gehört der Lebenszyklus
+/// dem Worker), an einer gerufenen Funktion ebenso (ihr Halter ruft sie selbst, in der Reihenfolge, die er kennt). Nur Code-Fakten: Marker und
+/// Interface-Implementierungen.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class LebenszyklusAnalyzer : DiagnosticAnalyzer
@@ -49,11 +48,5 @@ public sealed class LebenszyklusAnalyzer : DiagnosticAnalyzer
                 "nur eine Funktions-Klasse mit Eingängen hat einen Lebenszyklus (eine gerufene Funktion lädt ihr Halter, freigegeben über IAsyncDisposable)"));
             return;
         }
-        var vorDemSichern = lz.GetMembers("VorDemSichernAsync").OfType<IMethodSymbol>().FirstOrDefault();
-        if (vorDemSichern != null && t.FindImplementationForInterfaceMember(vorDemSichern) is IMethodSymbol impl
-            && !SymbolEqualityComparer.Default.Equals(impl.ContainingType, lz)
-            && !Funktionsform.ZustandsParameter(t).Any())
-            ctx.ReportDiagnostic(Diagnostic.Create(Regel, impl.Locations.FirstOrDefault() ?? ort, t.Name,
-                "VorDemSichernAsync ohne Zustand wird nie gerufen — gesichert wird nur ein IZustand<T> im Konstruktor"));
     }
 }

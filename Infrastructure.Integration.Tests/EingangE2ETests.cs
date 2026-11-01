@@ -148,7 +148,7 @@ public class EingangE2ETests
             {
                 var antwort = await Lies(await Sende("/eingang/ergebnis",
                     new { vorgang = eingang.GetProperty("vorgang").GetString(), ausgaben = new[] { new { typ, daten } } }, null));
-                antwort.GetProperty("ausgang").GetString().Should().Be("Geschrieben", antwort.ToString());
+                antwort.GetProperty("ausgang").GetString().Should().Be("Angenommen", antwort.ToString());
             }
             var pfad = Path.Combine(verz, dateiname);
 

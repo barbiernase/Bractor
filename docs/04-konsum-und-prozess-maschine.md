@@ -264,8 +264,10 @@ public sealed class Schaetzer(IZaehlwerk zaehler) : IFunktion          // Prüfd
 }
 public sealed class Zaehlwerk(IZustand<Zaehlstand> stand) : IZaehlwerk { … }          // gerufen, mit Zustand: zählt die Schätzungen (Cache)
 ```
-Zustand in Feldern oder Eigenschaften verbietet CQRS105 (R19). Offen: eine Funktion mit Zustand auf genau einer Aktivierung im Cluster (Advisory-Lock)
-und ihr Sichern als warmer Cache (docs/13).
+Damit der Cache alles sieht, was zur Funktion gehört, rechnet eine Funktion mit Zustand im Cluster auf **genau einer Aktivierung**: jeder Knoten
+versucht je solche Funktion einen Postgres-Advisory-Lock zu nehmen (`ZustandsSperre`, Sitzungs-Lock auf eigener Verbindung, Schlüssel aus dem Namen,
+alle 2 s); wer ihn hält, legt ihren Parent mit einem Kind an und hält sie im Gossip-Zustand; reißt die Verbindung, gibt er sie ab und ein anderer
+Knoten nimmt sie (kurz können zwei Aktivierungen rechnen — ein Cache, keine Wahrheit). Zustand in Feldern oder Eigenschaften verbietet CQRS105 (R19).
 
 **Lebenszyklus** (`ILebenszyklus`, optional, E10). Muss eine Funktion beim Aktivieren etwas laden — ein Netz auf die GPU, eine Verbindung —,
 implementiert sie `ILebenszyklus`: `BeimAktivierenAsync` läuft je Aktivierung nach dem Bau, vor dem ersten `Auf`; das Ende ist `IAsyncDisposable` der

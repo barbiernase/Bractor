@@ -89,9 +89,8 @@ public class FunktionsAktivierungTests
 
     private sealed class Lernend(Abstractions.IZustand<Netz> netz, Protokoll p) : Abstractions.ILebenszyklus
     {
-        public int Gpu;   // nur im Test: die Ressource der Aktivierung
-        public Task BeimAktivierenAsync(System.Threading.CancellationToken ct) { Gpu = netz.Wert.Gewicht; p.Add($"aktiviert mit {Gpu}"); return Task.CompletedTask; }
-        public Task VorDemSichernAsync(System.Threading.CancellationToken ct) { netz.Wert.Gewicht = Gpu; p.Add("zurückgeschrieben"); return Task.CompletedTask; }
+        public Abstractions.IZustand<Netz> Netz => netz;
+        public Task BeimAktivierenAsync(System.Threading.CancellationToken ct) { p.Add($"aktiviert mit {netz.Wert.Gewicht}"); return Task.CompletedTask; }
     }
 
     private static FunktionsZustandsform Form() => new(typeof(Netz), () => new Zustand<Netz>(),
@@ -100,19 +99,15 @@ public class FunktionsAktivierungTests
         z => ((Zustand<Netz>)z).Wert = new Netz());
 
     [Fact]
-    public async Task Der_Lebenszyklus_laeuft_nach_dem_Laden_des_Zustands_und_vor_jeder_Sicherung()
+    public async Task Der_Lebenszyklus_laeuft_nach_dem_Bau_auf_einem_frischen_Zustand()
     {
         var (wurzel, p) = Container();
         Lernend? f = null;
         var a = new FunktionsAktivierung(wurzel, (sp, z) => f = new Lernend((Abstractions.IZustand<Netz>)z!, p), Form(), "Lernend");
+        a.MitZustand.Should().BeTrue();
         await a.BeginneAsync();
-        a.Lade(System.Text.Encoding.UTF8.GetBytes("""{"Lernend":7}"""));   // der Actor lädt den gesicherten Zustand …
-        await a.AktiviereAsync(default);                                     // … dann der Lebenszyklus: er sieht ihn
-        f!.Gpu.Should().Be(7);
-
-        f.Gpu = 9;                                                           // gerechnet wird auf der Ressource
-        System.Text.Encoding.UTF8.GetString(await a.SichereAsync(default)).Should().Be("""{"Lernend":9}""", "vor dem Sichern schreibt die Funktion zurück");
-        p.Should().Equal("aktiviert mit 7", "zurückgeschrieben");
+        await a.AktiviereAsync(default);
+        p.Should().Equal("aktiviert mit 0", "der Zustand ist ein Cache: frisch bei jeder Aktivierung");
         await a.DisposeAsync();
     }
 
@@ -126,13 +121,11 @@ public class FunktionsAktivierungTests
         await a.DisposeAsync();
     }
 
-    // ── Zustand einer gerufenen Funktion: gehört der Aktivierung des Halters (AktivierungsZustaende), gesichert im selben Dokument ──
+    // ── Zustand einer gerufenen Funktion: gehört der Aktivierung des Halters (AktivierungsZustaende), je Aktivierung frisch ──
 
     private sealed class Zaehler { public int N { get; set; } }
 
     private sealed class Zaehlwerk(Abstractions.IZustand<Zaehler> z) { public void Zaehle() => z.Wert.N++; public int N => z.Wert.N; }
-
-    private sealed class Halter(Abstractions.IZustand<Netz> netz, Zaehlwerk werk) { public Abstractions.IZustand<Netz> Netz => netz; public Zaehlwerk Werk => werk; }
 
     private static FunktionsZustandsform ZaehlerForm() => new(typeof(Zaehler), () => new Zustand<Zaehler>(),
         z => System.Text.Encoding.UTF8.GetBytes(((Zustand<Zaehler>)z).Wert.N.ToString()),
@@ -140,31 +133,7 @@ public class FunktionsAktivierungTests
         z => ((Zustand<Zaehler>)z).Wert = new Zaehler());
 
     [Fact]
-    public async Task Der_Zustand_einer_gerufenen_Funktion_wird_mit_dem_des_Halters_geladen_und_gesichert()
-    {
-        var s = new ServiceCollection();
-        s.AddScoped<AktivierungsZustaende>();
-        s.AddScoped(sp => new Zaehlwerk((Abstractions.IZustand<Zaehler>)AktivierungsZustaende.Von(sp).Hole("IZaehlwerk", ZaehlerForm())));
-        var wurzel = s.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
-        Halter? h = null;
-        var a = new FunktionsAktivierung(wurzel, (sp, z) => h = new Halter((Abstractions.IZustand<Netz>)z!, sp.GetRequiredService<Zaehlwerk>()), Form(),
-            "Halter", gerufenerZustand: true);
-        a.MitZustand.Should().BeTrue();
-        await a.BeginneAsync();
-
-        a.Lade(System.Text.Encoding.UTF8.GetBytes("""{"Halter":3,"IZaehlwerk":5}"""));
-        h!.Netz.Wert.Gewicht.Should().Be(3);
-        h.Werk.N.Should().Be(5, "die gerufene Funktion lädt ihren Eintrag aus demselben Dokument");
-        h.Werk.Zaehle();
-        System.Text.Encoding.UTF8.GetString(a.Sichere()).Should().Be("""{"Halter":3,"IZaehlwerk":6}""");
-
-        a.Lade(System.Text.Encoding.UTF8.GetBytes("""{"Halter":4}"""));
-        h.Werk.N.Should().Be(0, "fehlt ihr Eintrag, beginnt sie mit dem Anfangszustand");
-        await a.DisposeAsync();
-    }
-
-    [Fact]
-    public async Task Ein_Halter_ohne_eigenen_Zustand_sichert_nur_die_gerufenen()
+    public async Task Der_Zustand_einer_gerufenen_Funktion_gehoert_der_Aktivierung_des_Halters_und_beginnt_frisch()
     {
         var s = new ServiceCollection();
         s.AddScoped<AktivierungsZustaende>();
@@ -172,10 +141,15 @@ public class FunktionsAktivierungTests
         var wurzel = s.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         Zaehlwerk? w = null;
         var a = new FunktionsAktivierung(wurzel, (sp, _) => w = sp.GetRequiredService<Zaehlwerk>(), null, "Halter", gerufenerZustand: true);
+        a.MitZustand.Should().BeTrue();
         await a.BeginneAsync();
-        a.Lade(null);
         w!.Zaehle();
-        System.Text.Encoding.UTF8.GetString(a.Sichere()).Should().Be("""{"IZaehlwerk":1}""");
+        w.N.Should().Be(1);
         await a.DisposeAsync();
+
+        var b = new FunktionsAktivierung(wurzel, (sp, _) => w = sp.GetRequiredService<Zaehlwerk>(), null, "Halter", gerufenerZustand: true);
+        await b.BeginneAsync();
+        w.N.Should().Be(0, "die nächste Aktivierung baut ihren Zustand neu");
+        await b.DisposeAsync();
     }
 }
