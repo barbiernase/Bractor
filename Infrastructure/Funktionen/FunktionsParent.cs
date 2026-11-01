@@ -100,7 +100,7 @@ public sealed class FunktionsParent(
 
     private void Fertig(IContext context, KindFertig f)
     {
-        if (context.Sender is { } kind) _frei.Push(kind);
+        _frei.Push(f.Kind);
         if (!_offen.TryGetValue(f.Kennung, out var o)) { Verteile(context); return; }
         if (f.Fehler is not null && o.Eingang.Art != Eingangsart.Hinweis && o.Versuche < konfig.Wiederholungen)
         {
