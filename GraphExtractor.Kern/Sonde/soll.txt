@@ -378,7 +378,7 @@ lage SchadenAusPruefung -> Domain.Pipeline
 lage SchadenBeiRueckgabe -> Domain.Pipeline
 lage StoerungBeiAlarm -> Domain.Pipeline
 
-# ── Wetterdienst (Vorhersage.cs.txt): FUNKTIONEN ALS ACTORS (docs/04 §4.4) — ein Prognosemodell mit gekapseltem ZUSTAND (IZustand, EINE Adresse) lernt
+# ── Wetterdienst (Vorhersage.cs.txt): FUNKTIONEN ALS ACTORS (docs/04 §4.4) — ein Prognosemodell mit gekapseltem ZUSTAND (IZustand) lernt
 #    aus dem Log (Auf ohne Ausgabe) und aus einem Hinweis des Aggregats; eine gleichbleibende Funktion bildet einen HINWEIS (Tendenz), den eine
 #    Funktion im Host und eine draußen (Schnittstelle, getragen von einer App) hören — die eine gibt einen Command aus, die andere einen Hinweis. ──
 record Wetterdienst.Vorhersage.MeldeTemperatur command aggregat=Station | AggregateId:Id<Station>, Grad:double
@@ -394,7 +394,7 @@ decide Station.VermerkePrognose -> PrognoseVermerkt
 apply Station.TemperaturGemeldet
 apply Station.PrognoseVermerkt
 funktion-auf Wetterdienst.Vorhersage.Tendenzbildung klasse() | TemperaturGemeldet herkunft -> Tendenz
-funktion-auf Wetterdienst.Vorhersage.Prognosemodell klasse(gewichte:IZustand<Gewichte>, statistik:IStatistik) zustand=Gewichte eineadresse lebenszyklus | TemperaturGemeldet herkunft -> lernt || StationStillgelegt hinweis -> lernt || Tendenz hinweis -> VermerkePrognose
+funktion-auf Wetterdienst.Vorhersage.Prognosemodell klasse(gewichte:IZustand<Gewichte>, statistik:IStatistik) zustand=Gewichte lebenszyklus | TemperaturGemeldet herkunft -> lernt || StationStillgelegt hinweis -> lernt || Tendenz hinweis -> VermerkePrognose
 funktion-auf Wetterdienst.Vorhersage.IUnwetterwarnung schnittstelle | Tendenz hinweis -> Unwetter
 akteur Wetterdienst.Vorhersage.Warndienst Maschine | darf IUnwetterwarnung
 client Wetterdienst.Vorhersage.IWetterApp | verkoerpert Warndienst; hoert Unwetter

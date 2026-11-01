@@ -3,7 +3,7 @@ using Abstractions;
 namespace Infrastructure.Verteilen;
 
 /// <summary>
-/// Was nach einem Commit an die Clients geht — für JEDEN Schreiber gleich (Aggregat, Quelle, festgehaltene Ausgabe einer Funktion): je Event der
+/// Was nach einem Commit an die Clients geht — für JEDEN Schreiber gleich (Aggregat, Quelle): je Event der
 /// Envelope, als eine Nachricht je Knoten an die Verteiler (<see cref="Verteilung"/>). Verlierbar, ohne Warten (Invariante 6). Die durablen
 /// Konsumenten weckt nicht sie, sondern der Wecker am Commit (<see cref="Infrastructure.Wecken.Wecker"/>).
 /// </summary>

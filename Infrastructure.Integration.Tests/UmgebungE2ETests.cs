@@ -35,9 +35,9 @@ public class UmgebungE2ETests
         Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = 0 },
         Funktionen = new(StringComparer.Ordinal)
         {
-            ["IBildEinlesen"] = new() { Slots = 1 },
-            ["IBildVerkleinerung"] = new() { Slots = 1 },
-            ["IKontrastausgleich"] = new() { Slots = 1 },
+            ["IBildEinlesen"] = new() { Parallel = 1 },
+            ["IBildVerkleinerung"] = new() { Parallel = 1 },
+            ["IKontrastausgleich"] = new() { Parallel = 1 },
         },
     };
 

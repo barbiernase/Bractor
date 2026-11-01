@@ -13,9 +13,10 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Funktionen;
 
 /// <summary>
-/// Funktion als Baustein (docs/10 §10.3): der <c>FunktionsBausteinGenerator</c> liest NUR Signaturen — je Eingang ein
-/// <c>Auf</c>, Herkunft, Lese-Fähigkeiten, freie Ausgabe (konkret, OneOf, T?, Strom, je auch als Task) — und erzeugt Dispatch (Einzel- und
-/// Seiten-Form), den Hinweisplan und die Bausteine-Tabelle (den Weckplan prüft WeckplanGeneratorTests). Jede erlaubte Form muss als Generat kompilieren; was nicht passt, ist CQRS100/101.
+/// Funktion als Baustein (docs/04 §4.4, docs/10 §10.3): der <c>FunktionsBausteinGenerator</c> liest NUR Signaturen — je Eingang (Folge,
+/// Zwischenergebnis, Quell-Nachricht, Hinweis, Antwort) ein <c>Auf</c>, Herkunft, Lese-Fähigkeiten, freie Ausgabe (konkret, OneOf, T?, Strom, je auch als
+/// Task) — und erzeugt die Rechnung, die Verkettung und die Bausteine-Tabelle. Jede erlaubte Form muss als Generat kompilieren; was nicht passt, ist
+/// CQRS100/101.
 /// </summary>
 public class FunktionsBausteinGeneratorTests
 {
@@ -24,9 +25,10 @@ using System; using System.Collections.Generic; using System.Threading; using Sy
 namespace Probe {
 public partial class Konto : IState { public int Version { get; set; } public Guid Id { get; set; } }
 public sealed record Mahne(Id<Konto> AggregateId, int Stufe) : ICommand<Konto>;
-public sealed record Gemahnt(int Stufe) : IEvent;
-public sealed record Ueberfaellig(int Tage) : IEvent;
-public sealed record Bezahlt(decimal Betrag) : IEvent;
+public sealed record Gemahnt(int Stufe);
+public sealed record Ueberfaellig(int Tage);
+public sealed record Bezahlt(decimal Betrag);
+public sealed record Gebucht(int Stufe) : IEvent;
 public sealed record Unnoetig() : ITransientEvent;
 public sealed record Messwert(double Wert) : ITransientEvent;
 public sealed record Datei : DateiGemeldet;
@@ -70,12 +72,12 @@ public interface IPost : IFunktion { Task SendeAsync(string an); }
 
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty();
-        quelle.Should().Contain("new FunktionsBaustein(typeof(global::Probe.Mahnwesen), \"Mahnwesen\", Draussen: false, Gleichbleibend: true,");
-        quelle.Should().Contain("new FunktionsEingang(typeof(global::Probe.Ueberfaellig), Hinweis: false, Strom: false, MitEvents: false, "
+        quelle.Should().Contain("new FunktionsBaustein(typeof(global::Probe.Mahnwesen), \"Mahnwesen\", Draussen: false,");
+        quelle.Should().Contain("new FunktionsEingang(typeof(global::Probe.Ueberfaellig), Hinweis: false, Strom: false, "
             + "new Type[] { typeof(global::Probe.Mahne), typeof(global::Probe.Unnoetig) }, new Type[] {  })");
-        quelle.Should().Contain("case global::Probe.Ueberfaellig e: return Ausgaben.Einzeln(f.Auf(e, h), y => (global::Abstractions.IAusgabe?)y.Value);");
+        quelle.Should().Contain("case global::Probe.Ueberfaellig e: return Ausgaben.Einzeln(f.Auf(e, h), y => (object?)y.Value);");
         quelle.Should().Contain("new FunktionsUmsetzung(\"Mahnwesen\", typeof(global::Probe.Mahnwesen), (sp, z) => new global::Probe.Mahnwesen())");
-        quelle.Should().Contain("Seite0(object o, IReadOnlyList<(IEvent Eingang, Herkunft Herkunft)> seite", "die Seiten-Form kommt aus der Einzel-Form");
+        quelle.Should().Contain("[typeof(global::Probe.Ueberfaellig)] = new[] { \"Mahnwesen\" }", "die Verkettung: wer die Folge hört");
     }
 
     [Fact]
@@ -97,14 +99,13 @@ public interface IPost : IFunktion { Task SendeAsync(string an); }
 
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty("jede Form der Signatur hat ihren Adapter im Generat");
-        quelle.Should().Contain("return Ausgaben.Einzeln(f.Auf(e), y => y);");
-        quelle.Should().Contain("return Ausgaben.Einzeln(f.Auf(e), y => (global::Abstractions.IAusgabe?)y?.Value);");
-        quelle.Should().Contain("return Ausgaben.EinzelnAsync(f.Auf(e), y => (global::Abstractions.IAusgabe?)y.Value);");
-        quelle.Should().Contain("return Ausgaben.Strom(f.Auf(e), y => (global::Abstractions.IAusgabe?)y.Value, ct);");
-        quelle.Should().Contain("return Ausgaben.StromAsync(f.Auf(e, h, ct), y => (global::Abstractions.IAusgabe?)y.Value, ct);");
-        quelle.Should().Contain("return Ausgaben.StromAsync(f.Auf(e), y => y, ct);", "ein Strom im Task ist ein Strom");
-        quelle.Should().Contain("Strom: true", "ein Strom bekommt Fortschritt beim Framework");
-        quelle.Should().Contain("MitEvents: true", "ein Event in der Ausgabe steht immer im festgehaltenen Eintrag");
+        quelle.Should().Contain("return Ausgaben.Einzeln(f.Auf(e), y => (object?)y);");
+        quelle.Should().Contain("return Ausgaben.Einzeln(f.Auf(e), y => (object?)y?.Value);");
+        quelle.Should().Contain("return Ausgaben.EinzelnAsync(f.Auf(e), y => (object?)y.Value);");
+        quelle.Should().Contain("return Ausgaben.Strom(f.Auf(e), y => (object?)y.Value, ct);");
+        quelle.Should().Contain("return Ausgaben.StromAsync(f.Auf(e, h, ct), y => (object?)y.Value, ct);");
+        quelle.Should().Contain("return Ausgaben.StromAsync(f.Auf(e), y => (object?)y, ct);", "ein Strom im Task ist ein Strom");
+        quelle.Should().Contain("Strom: true", "ein Strom: jede Ausgabe geht hinaus, bevor die nächste kommt");
     }
 
     [Fact]
@@ -116,13 +117,13 @@ public interface IPost : IFunktion { Task SendeAsync(string an); }
 
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty();
-        quelle.Should().Contain("typeof(global::Probe.IPruefung), \"IPruefung\", Draussen: true, Gleichbleibend: false,");
+        quelle.Should().Contain("typeof(global::Probe.IPruefung), \"IPruefung\", Draussen: true,");
         quelle.Should().Contain("new FunktionsUmsetzung(\"Pruefung\", typeof(global::Probe.Pruefung), (sp, z) => new global::Probe.Pruefung(");
         quelle.Should().NotContain("\"Pruefung\", Draussen", "die Implementierung ist keine eigene Funktion");
     }
 
     [Fact]
-    public void Gerufene_Funktion_oder_Lese_Faehigkeit_heisst_nicht_gleichbleibend()
+    public void Gerufene_Funktion_und_Lese_Faehigkeit_stehen_im_Bedarf_bzw_im_Aufruf()
     {
         var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
             public sealed class MitPost(IPost post) : IFunktion { public Mahne? Auf(Ueberfaellig e) => null; }
@@ -130,9 +131,9 @@ public interface IPost : IFunktion { Task SendeAsync(string an); }
 
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty();
-        quelle.Should().Contain("\"MitPost\", Draussen: false, Gleichbleibend: false,");
+        quelle.Should().Contain("\"MitPost\", Draussen: false,");
         quelle.Should().Contain("new Type[] { typeof(global::Probe.IPost) }", "die gerufene Funktion steht im Bedarf");
-        quelle.Should().Contain("\"MitLesen\", Draussen: false, Gleichbleibend: false,");
+        quelle.Should().Contain("\"MitLesen\", Draussen: false,");
         quelle.Should().Contain("f.Auf(e, b!.Hole<global::Probe.ISucheKonto>())", "die Lese-Fähigkeit kommt je Aufruf aus dem Bereich");
     }
 
@@ -146,7 +147,7 @@ public interface IPost : IFunktion { Task SendeAsync(string an); }
         fehler.Should().BeEmpty();
         quelle.Should().Contain("new FunktionsEingang(typeof(global::Probe.Messwert), Hinweis: true,");
         quelle.Should().Contain("[typeof(global::Probe.Messwert)] = new[] { \"Sensorik\" }");
-        quelle.Should().Contain("Rechne: Rechne0", "sie liest nie das Log: Wurzel, Parent und Kinder bringen ihr den Hinweis");
+        quelle.Should().Contain("Rechne0", "Wurzel, Parent und Kinder bringen ihr den Hinweis");
     }
 
     /// <summary>Der Serializer-Kontext der Komposition, wie ihn der Codegen-Prepass um die Zustände ergänzt (hier von Hand, für die Probe).</summary>
@@ -163,41 +164,42 @@ public interface IPost : IFunktion { Task SendeAsync(string an); }
     {
         var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
             public sealed class Mittelwerte { public Dictionary<Guid, double> Je { get; set; } = new(); public int Anzahl { get; set; } }
-            [EineAdresse]
             public sealed class Schaetzer(IZustand<Mittelwerte> modell, IPost post) : IFunktion
             {
-                public void Auf(Bezahlt e, Herkunft h) { modell.Wert.Anzahl++; }                    // lernt aus dem Log, ohne Ausgabe
+                public void Auf(Bezahlt e, Herkunft h) { modell.Wert.Anzahl++; }                    // lernt aus einer Folge, ohne Ausgabe
                 public Task Auf(Ueberfaellig e) => Task.CompletedTask;                                 // ebenso, asynchron
                 public Mahne? Auf(Messwert m) => modell.Wert.Anzahl > 0 ? null : null;                 // Hinweis rein, Command raus
             } }" + Kontext);
 
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty("das Generat kompiliert gegen den Kontext");
-        quelle.Should().Contain("\"Schaetzer\", Draussen: false, Gleichbleibend: false,", "eine Funktion mit Zustand ist nie gleichbleibend (R12, R19)");
+        quelle.Should().Contain("\"Schaetzer\", Draussen: false,");
         quelle.Should().Contain("(sp, z) => new global::Probe.Schaetzer((global::Abstractions.IZustand<global::Probe.Mittelwerte>)z!, ",
             "der Zustand kommt aus der Aktivierung, nie aus dem Container");
         quelle.Should().Contain("Zustand: new global::Infrastructure.Funktionen.FunktionsZustandsform(typeof(global::Probe.Mittelwerte), () => new global::Infrastructure.Funktionen.Zustand<global::Probe.Mittelwerte>()");
         quelle.Should().Contain("global::Infrastructure.Serialization.EventJsonSerializerContext.Default.Mittelwerte", "ohne Reflection: der generierte Kontext");
-        quelle.Should().Contain("EineAdresse: true");
         quelle.Should().Contain("case global::Probe.Bezahlt e: f.Auf(e, h); return Ausgaben.Leer;");
         quelle.Should().Contain("case global::Probe.Ueberfaellig e: return Ausgaben.KeineAsync(f.Auf(e));");
         quelle.Should().Contain("new Type[] { typeof(global::Probe.IPost) }", "der Zustand ist keine gerufene Funktion im Bedarf");
     }
 
     [Fact]
-    public void Eine_Funktion_mit_Lebenszyklus_ist_nie_gleichbleibend()
+    public void Eine_Funktion_die_nur_Events_hoert_hat_keinen_Einstieg_und_eine_gibt_nie_ein_Event_aus()
     {
-        var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
-            public sealed class Laedt : IFunktion, ILebenszyklus { public Mahne? Auf(Ueberfaellig e) => null; } }");
-        ids.Should().BeEmpty();
+        Bausteine(@"namespace Probe { public sealed class Lauscher : IFunktion { public Mahne? Auf(Gebucht e) => null; } }")
+            .Ids.Should().Contain("CQRS100", "eine Funktion liest nie das Log");
+        Bausteine(@"namespace Probe { public sealed class Schreiber : IFunktion { public Gebucht? Auf(Ueberfaellig e) => null; } }")
+            .Ids.Should().Contain("CQRS100", "eine Funktion schreibt nie ins Log");
+        var (_, ids, fehler) = Bausteine(@"namespace Probe {
+            public sealed class Kette : IFunktion { public Mahne Auf(Ueberfaellig e) => null!; public Gemahnt? Auf(Gebucht e) => null; } }");
+        ids.Should().BeEmpty("ein Event neben einer Folge ist die Antwort auf einen eigenen Command");
         fehler.Should().BeEmpty();
-        quelle.Should().Contain("\"Laedt\", Draussen: false, Gleichbleibend: false,", "sie lädt etwas beim Aktivieren — ihre Ausgabe wird festgehalten");
     }
 
     [Theory]
     [InlineData("public sealed class Z(IZustand<Zahl> a, IZustand<Zahl> b) : IFunktion { public Mahne? Auf(Ueberfaellig e) => null; }", "zwei Zustände")]
     [InlineData("public sealed class Z(IZustand<List<int>> a) : IFunktion { public Mahne? Auf(Ueberfaellig e) => null; }", "generischer Zustand")]
-    [InlineData("public sealed class Z(IZustand<Zahl> a) : IFunktion { public Gemahnt? Auf(Messwert m) => null; }", "Event aus einem Hinweis")]
+    [InlineData("public sealed class Z(IZustand<Zahl> a) : IFunktion { public Gebucht? Auf(Messwert m) => null; }", "Event aus einem Hinweis")]
     public void Zustand_und_Hinweis_ausser_Form_sind_CQRS100(string klasse, string worum)
     {
         var (quelle, ids, _) = Bausteine("namespace Probe { public sealed class Zahl { public int N { get; set; } } " + klasse + " }");
@@ -270,9 +272,9 @@ public interface IPost : IFunktion { Task SendeAsync(string an); }
     [Fact]
     public async Task Die_Adapter_bringen_jede_Rueckgabe_auf_einen_Strom_und_null_heisst_nichts()
     {
-        static async Task<List<IAusgabe>> Alle(IAsyncEnumerable<IAusgabe> s)
+        static async Task<List<object>> Alle(IAsyncEnumerable<object> s)
         {
-            var l = new List<IAusgabe>();
+            var l = new List<object>();
             await foreach (var a in s) l.Add(a);
             return l;
         }

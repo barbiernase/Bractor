@@ -13,9 +13,6 @@ namespace Domain.SourceGeneration;
 /// <item><b>CQRS102 (R11)</b> — ein Aggregat (Decider, Applier, State) und eine Projektion (Handle mit Schreib-Fähigkeit) rechnen bei gleicher Eingabe
 ///   gleich: keine Uhr, kein Zufall, kein Lesen fremder Daten (Dateien, Netz, Umgebungsvariablen). Sonst ergäbe ein Neuaufbau einen anderen Stand,
 ///   und nach einem halb geschriebenen Batch stünden Werte aus zwei Läufen nebeneinander. Zeit kommt aus dem Event bzw. der <c>Herkunft</c>.</item>
-/// <item><b>CQRS103 (R12)</b> — eine Funktion, die das Framework als gleichbleibend behandelt (Klasse ohne Konstruktor-Parameter und ohne
-///   Lese-Fähigkeit, <see cref="Funktionsform.Gleichbleibend"/>), sendet ihre Ausgabe OHNE sie festzuhalten — sie darf deshalb weder Uhr noch Zufall
-///   noch fremde Daten nutzen. Was sich ändern kann, gehört in einen Dienst; dann hält das Framework die Ausgabe fest.</item>
 /// <item><b>CQRS104 (R13)</b> — neue Ids auf der Server-Seite nur abgeleitet (<c>Herkunft.NeueId</c>), nie <c>Guid.NewGuid()</c> oder
 ///   <c>Id&lt;T&gt;.Neu()</c> in Aggregat, Projektion, Reader oder Funktion im Host: eine Wiederholung bekäme sonst ein anderes Ziel, also eine
 ///   andere Command-Id — die Inbox erkennte sie nicht. Clients würfeln (sie halten die Command-Id fest).</item>
@@ -25,20 +22,17 @@ namespace Domain.SourceGeneration;
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class GleichbleibendAnalyzer : DiagnosticAnalyzer
 {
-    public const string GleichId = "CQRS102", GleichbleibendId = "CQRS103", NeueIdId = "CQRS104";
+    public const string GleichId = "CQRS102", NeueIdId = "CQRS104";
 
     private static DiagnosticDescriptor D(string id, string titel, string text) =>
         new(id, titel, text, "CQRS.Wiederholung", DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     private static readonly DiagnosticDescriptor Gleich = D(GleichId, "Aggregat oder Projektion rechnet nicht gleich",
         "'{0}' ist {1} und nutzt {2} ({3}) — bei gleicher Eingabe muss gleich gerechnet werden (R11); Zeit kommt aus dem Event bzw. der Herkunft");
-    private static readonly DiagnosticDescriptor Gleichbleibend = D(GleichbleibendId, "Gleichbleibende Funktion nutzt Uhr, Zufall oder fremde Daten",
-        "Die Funktion '{0}' hat weder Dienst noch Lese-Fähigkeit und sendet ihre Ausgabe deshalb ohne sie festzuhalten — sie nutzt aber {1} ({2}). "
-        + "Nimm die Herkunft (Zeit, NeueId) oder einen Dienst im Konstruktor; dann hält das Framework die Ausgabe fest (R12)");
     private static readonly DiagnosticDescriptor NeueId = D(NeueIdId, "Neue Id nicht abgeleitet",
         "'{0}' ({1}) würfelt eine neue Id mit {2} — auf der Server-Seite nur abgeleitet: Herkunft.NeueId<T>(…), sonst bekommt eine Wiederholung ein anderes Ziel (R13)");
 
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Gleich, Gleichbleibend, NeueId);
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Gleich, NeueId);
 
     public override void Initialize(AnalysisContext context)
     {
@@ -104,11 +98,9 @@ public sealed class GleichbleibendAnalyzer : DiagnosticAnalyzer
         }
         if (baustein.Value.Art is BausteinArt.Aggregat or BausteinArt.Projektion)
             ctx.ReportDiagnostic(Diagnostic.Create(Gleich, ort, oben.Name, baustein.Value.Text, Text(v.Art), v.Was));
-        else if (baustein.Value.Art == BausteinArt.GleichbleibendeFunktion)
-            ctx.ReportDiagnostic(Diagnostic.Create(Gleichbleibend, ort, oben.Name, Text(v.Art), v.Was));
     }
 
-    private enum BausteinArt { Aggregat, Projektion, Reader, Funktion, GleichbleibendeFunktion }
+    private enum BausteinArt { Aggregat, Projektion, Reader, Funktion }
 
     /// <summary>Welcher Baustein der Server-Seite <paramref name="t"/> ist — nur aus Markern und Signaturen; null = keiner (Client, Hilfscode …).</summary>
     private static (BausteinArt Art, string Text)? Baustein(INamedTypeSymbol t)
@@ -116,8 +108,7 @@ public sealed class GleichbleibendAnalyzer : DiagnosticAnalyzer
         if (Funktionsform.Hat(t, "Abstractions.IState")) return (BausteinArt.Aggregat, "ein Aggregat");
         if (Funktionsform.Hat(t, "Abstractions.IProjektion")) return (BausteinArt.Projektion, "eine Projektion");
         if (Funktionsform.Hat(t, "Abstractions.IReader")) return (BausteinArt.Reader, "ein Reader");
-        if (t.TypeKind == TypeKind.Class && Funktionsform.IstBaustein(t))
-            return Funktionsform.Gleichbleibend(Funktionsform.Lies(t)) ? (BausteinArt.GleichbleibendeFunktion, "eine Funktion") : (BausteinArt.Funktion, "eine Funktion");
+        if (t.TypeKind == TypeKind.Class && Funktionsform.IstBaustein(t)) return (BausteinArt.Funktion, "eine Funktion");
         // Die Umsetzung einer Funktion draußen (Schnittstelle mit Auf), wenn sie im Host rechnet.
         if (t.TypeKind == TypeKind.Class && Funktionsform.Umsetzt(t).Any(Funktionsform.IstBaustein)) return (BausteinArt.Funktion, "eine Funktion");
         return null;

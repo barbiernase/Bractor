@@ -24,9 +24,6 @@ namespace Infrastructure.Serialization;
         typeof(global::Abstractions.IdJsonKonverter<global::Domain.Teilauftrag.Teilauftrag>),
         typeof(global::Abstractions.IdJsonKonverter<global::Domain.Trainingslauf.Trainingslauf>),
     })]
-// ── Framework: festgehaltene Ausgabe der Funktionen ──
-[JsonSerializable(typeof(Infrastructure.Funktionen.BefehlFestgehalten))]
-[JsonSerializable(typeof(Infrastructure.Funktionen.AusgabeFestgehalten))]
 // ── Framework: die Frist eines Aggregats (Uhr) ──
 [JsonSerializable(typeof(Abstractions.FristGesetzt))]
 // ── Domänen-Events (Domain.*, persistierbar) und Zustände der Funktionen (IZustand<T>) (gescannt) ──

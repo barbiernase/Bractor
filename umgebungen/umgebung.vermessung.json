@@ -45,7 +45,6 @@
   "Funktionen": {
     "IBildEinlesen": {
       "Laufort": "Host",
-      "Slots": 2,
       "Wiederholungen": 1,
       "Worker": {
         "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
@@ -62,7 +61,6 @@
     },
     "IBildVerkleinerung": {
       "Laufort": "Host",
-      "Slots": 2,
       "Wiederholungen": 1,
       "Worker": {
         "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
@@ -79,7 +77,6 @@
     },
     "IKontrastausgleich": {
       "Laufort": "Host",
-      "Slots": 2,
       "Wiederholungen": 1,
       "Worker": {
         "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",

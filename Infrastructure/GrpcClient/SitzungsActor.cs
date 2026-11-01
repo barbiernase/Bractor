@@ -32,7 +32,6 @@ public sealed record SitzungsDienste(
     IQueryDienst Queries,
     Verteilung? Verteilung,
     AkteurTor? Tor,
-    IAusgabeAblage? Ausgaben,
     Konsum Konsum,
     HinweisNetz? HinweisNetz,
     IEventStoreRepository? Log,
@@ -75,14 +74,9 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
     private readonly TaskCompletionSource _ende;
     private readonly Rueckstau _rueckstau = new();
     private readonly ILogger _logger;
-    private BausteinSitzung? _anbieter;
     private PID? _verteiler;
     private ActorSystem? _system;
     private PID? _selbst;
-    // Antworten und Lebenszeichen der Funktionen draußen in der Reihenfolge des Clients, eine nach der anderen (eine zweite Antwort auf denselben
-    //   Eingang sieht so, dass die erste ihn schon erledigt hat); gewartet wird neben der Mailbox.
-    private readonly Queue<Func<IContext, CancellationToken, Task<Func<Task>?>>> _anbieterArbeit = new();
-    private bool _anbieterLaeuft;
     // Beobachtung (docs/konzept-akteure.md §5, „P hat S weiterverarbeitet“): je gehaltener Antwort, was sie zeigt; die betroffenen Queries sammeln sich bis zur
     //   nächsten Aktualisierung an den Client.
     private readonly Dictionary<IQuery, Beobachtung> _beobachtungen = new();
@@ -111,21 +105,14 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
         _system = context.System;
         _selbst = context.Self;
         MeldeAn(context, new HashSet<Type>());   // gezielte Antworten schon vor dem Handshake
-        if (_d.Ausgaben is { } ausgaben) _anbieter = BaueAnbieter(context, ausgaben);
         return Task.CompletedTask;
     }
 
-    protected override async Task BeimStoppenAsync(IContext context)
+    protected override Task BeimStoppenAsync(IContext context)
     {
-        // Funktionen vor dem Aggregat: der Arbeiter ist fort, seine laufenden Aufträge scheitern sofort und werden anderswo erneut gerechnet.
+        // Funktionen draußen: der Arbeiter ist fort, seine laufenden Aufträge scheitern sofort und werden anderswo erneut gerechnet.
         _d.Werkstatt?.Abmelden(this);
-        // Funktionen draußen: Hol-Schleifen beenden; Laufendes nicht erledigt melden — die Leases laufen ab, der Vermittler gibt die Eingänge
-        //   neu aus (anderer Träger, oder dieser nach dem Neuverbinden), und der Funktions-Actor sendet nur, was festgehalten ist.
-        if (_anbieter is { } a)
-        {
-            try { await a.DisposeAsync(); }
-            catch (Exception ex) { _logger.LogDebug(ex, "{Session} Funktions-Anbieter: Ende mit Fehler", _id); }
-        }
+        return Task.CompletedTask;
     }
 
     protected override async Task BehandleAsync(IContext context)
@@ -220,12 +207,10 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
                 await FunktionenAnbietenAsync(m.FunktionenAnbieten);
                 break;
             case Leitung.ClientMessage.MessageOneofCase.ArbeitsErgebnis:
-                await ArbeitsErgebnisAsync(context, m.ArbeitsErgebnis);
+                await ArbeitsErgebnisAsync(m.ArbeitsErgebnis);
                 break;
             case Leitung.ClientMessage.MessageOneofCase.ArbeitLebt:
-                if (!Guid.TryParse(m.ArbeitLebt.Vorgang, out var lebt)) break;
-                if (_d.Werkstatt?.Regt(lebt) == true) break;
-                if (_anbieter is { } a) AnbieterArbeit(context, async (_, _) => { await a.LebtAsync(lebt); return null; });
+                if (Guid.TryParse(m.ArbeitLebt.Vorgang, out var lebt)) _d.Werkstatt?.Regt(this, lebt);
                 break;
             default:
                 _logger.LogWarning("{Session} unknown message type: {MessageCase}", _id, m.MessageCase);
@@ -497,51 +482,6 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
     // FUNKTIONEN DRAUSSEN (IDarf<F> eines verkörperten Akteurs, Laufort Extern)
     // ═════════════════════════════════════════
 
-    /// <summary>
-    /// Die Anbieter-Sitzung dieser Verbindung: Hol-/Melde-Wege zum Vermittler im Cluster, Weiterreichen über diesen Actor (ein Schreiber am
-    /// Stream), Festhalten der Antwort unter „Funktion, Eingang" und die Meldung an den Funktions-Actor der Partition, der sendet.
-    /// </summary>
-    private BausteinSitzung BaueAnbieter(IContext context, IAusgabeAblage ausgaben)
-    {
-        var bote = new Bote(context.System.Cluster(), _logger);
-        var selbst = context.Self;
-        var root = context.System.Root;
-        var draussen = Anwendung.Funktionen.Bausteine.Where(b => b.Draussen).ToList();
-        return new BausteinSitzung(
-            _id,   // Arbeiter-Name am Vermittler: die Sitzungs-Id nennt den Knoten, eindeutig über Knoten hinweg
-            name => draussen.FirstOrDefault(b => b.Name == name),
-            (b, anfrage, ct) => bote.FrageAsync<EingaengeZugeteilt>(FunktionsVermittlerActor.Identitaet(b.Typ), anfrage,
-                TimeSpan.FromMilliseconds(Math.Max(0, anfrage.WarteMs)) + TimeSpan.FromSeconds(5), ct),
-            (b, nachricht) => { bote.Melde(FunktionsVermittlerActor.Identitaet(b.Typ), nachricht); return Task.CompletedTask; },
-            (e, b, ab) =>
-            {
-                root.Send(selbst, new ServerNachricht(new Leitung.ServerMessage
-                {
-                    ArbeitsAuftrag = new Leitung.ArbeitsAuftrag
-                    {
-                        Vorgang = e.Vorgang.ToString(),
-                        Korrelation = e.KorrelationsText ?? "",
-                        Funktion = b.Name,
-                        Eingang = _d.Mapper.MapToDto(e.Eingang),
-                        Akteur = e.Akteur ?? "",
-                        Stream = e.Stream.ToString(),
-                        Version = e.Version,
-                        ZeitUtc = e.Zeit.ToUnixTimeMilliseconds(),
-                        Ab = ab,
-                        Hinweis = e.IstHinweis,
-                    }
-                }));
-                return Task.CompletedTask;
-            },
-            ausgaben,
-            (b, e, fehler, teil, aus) =>
-            {
-                bote.Melde(FunktionsActor.IdentitaetFuer(b, e.Stream, _d.Konsum), EingangBeantwortet.Aus(e.Vorgang, fehler, teil, aus));
-                return Task.CompletedTask;
-            },
-            _logger);
-    }
-
     string IArbeiter.Name => _id;
 
     TimeSpan? IArbeiter.Geduld => GeduldDraussen;
@@ -568,32 +508,27 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
         }));
     }
 
+    /// <summary>
+    /// Der Client bietet Funktionen an, die er trägt: die Sitzung wird ein Arbeiter in der Werkstatt dieses Knotens (je Funktion mit ihren Slots) — mit
+    /// angemeldetem Akteur nur, was er rechnen darf (IDarf&lt;F&gt;, bei einem Client: seiner verkörperten Akteure); ohne Tor/Akteur offen.
+    /// </summary>
     private async Task FunktionenAnbietenAsync(Leitung.FunktionenAnbieten request)
     {
-        // Funktionen vor dem Aggregat (docs/04 §4.4): die Sitzung ist ein Arbeiter in der Werkstatt dieses Knotens — mit angemeldetem Akteur nur, was er
-        //   rechnen darf.
-        var vorDem = Anwendung.Funktionen.Bausteine.Where(b => b.VorDemAggregat && b.Draussen).ToDictionary(b => b.Name, StringComparer.Ordinal);
-        var akteurVorDem = _sitzung.Akteur;
-        var verweigert = new List<string>();
-        foreach (var a in request.Angebote.Where(a => vorDem.ContainsKey(a.Funktion)))
-        {
-            if (_d.Werkstatt is null || akteurVorDem is not null && !akteurVorDem.DarfRechnen(vorDem[a.Funktion].Typ)) { verweigert.Add(a.Funktion); continue; }
-            _d.Werkstatt.Anmelden(this, a.Funktion, a.Slots);
-        }
-        if (verweigert.Count > 0)
-            await FehlerAsync("FUNKTION_NICHT_BEFUGT",
-                $"{akteurVorDem?.Name ?? "Die Sitzung"} darf nicht rechnen: {string.Join(", ", verweigert)} (IDarf<…> am Akteur bzw. am verkörperten Akteur des Client-Vertrags fehlt)", "");
-        request = new Leitung.FunktionenAnbieten { Angebote = { request.Angebote.Where(a => !vorDem.ContainsKey(a.Funktion)) } };
-        if (request.Angebote.Count == 0) return;
-        if (_anbieter == null)
+        if (_d.Werkstatt is not { } werkstatt)
         {
             await FehlerAsync("FUNKTIONEN_NICHT_VERFUEGBAR", "Dieser Host hat keine Funktion, die draußen rechnet", "");
             return;
         }
-        // Akteur-Tor: mit angemeldetem Akteur nur, was er rechnen darf (IDarf<F>, bei einem Client: seiner verkörperten Akteure); ohne Tor/Akteur offen.
+        var draussen = Anwendung.Funktionen.Bausteine.Where(b => b.Draussen).ToDictionary(b => b.Name, StringComparer.Ordinal);
         var akteur = _sitzung.Akteur;
-        var unbekannt = _anbieter.Biete(request.Angebote.Select(a => (a.Funktion, a.Slots)),
-            akteur is null ? null : akteur.DarfRechnen, out var nichtBefugt);
+        var unbekannt = new List<string>();
+        var nichtBefugt = new List<string>();
+        foreach (var a in request.Angebote)
+        {
+            if (!draussen.TryGetValue(a.Funktion, out var f)) { unbekannt.Add(a.Funktion); continue; }
+            if (akteur is not null && !akteur.DarfRechnen(f.Typ)) { nichtBefugt.Add(a.Funktion); continue; }
+            werkstatt.Anmelden(this, a.Funktion, a.Slots);
+        }
         if (nichtBefugt.Count > 0)
             await FehlerAsync("FUNKTION_NICHT_BEFUGT",
                 $"{akteur!.Name} darf nicht rechnen: {string.Join(", ", nichtBefugt)} (IDarf<…> am Akteur bzw. am verkörperten Akteur des Client-Vertrags fehlt)", "");
@@ -605,64 +540,27 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
         }
     }
 
-    private async Task ArbeitsErgebnisAsync(IContext context, Leitung.ArbeitsErgebnis request)
+    /// <summary>Die Antwort des Workers auf einen Auftrag (ganz oder ein Stück eines Stroms, oder ein Fehler) an die Werkstatt.</summary>
+    private async Task ArbeitsErgebnisAsync(Leitung.ArbeitsErgebnis request)
     {
-        if (_d.Werkstatt is { } werkstatt && Guid.TryParse(request.Vorgang, out var auftrag) && (werkstatt.Laeuft(auftrag) || _anbieter is null))
+        if (_d.Werkstatt is not { } werkstatt || !Guid.TryParse(request.Vorgang, out var auftrag))
         {
-            string? fehlerDraussen = string.IsNullOrEmpty(request.Fehler) ? null : request.Fehler;
-            List<object>? aus = null;
-            if (fehlerDraussen is null)
-            {
-                try { aus = request.Ausgaben.Select(_d.Mapper.Ausgabe).ToList(); }
-                catch (Exception ex) { fehlerDraussen = $"Antwort nicht lesbar: {ex.Message}"; }
-            }
-            var ausgang = werkstatt.Ergebnis(auftrag, aus, request.Ab, request.Fertig, fehlerDraussen);
-            if (ausgang == Werkstattausgang.Abgelehnt && fehlerDraussen is null)
-                await FehlerAsync("ARBEITS_ERGEBNIS_ABGELEHNT", $"Antwort auf {auftrag} außerhalb der Signatur oder außer der Reihe — der Eingang wird wiederholt", request.Vorgang);
-            else if (ausgang == Werkstattausgang.Unbekannt)
-                await FehlerAsync("ARBEIT_UNBEKANNT", $"Eingang {auftrag} läuft auf diesem Knoten nicht (schon beantwortet, abgebrochen oder nie vergeben)", request.Vorgang);
-            return;
-        }
-        if (_anbieter is not { } anbieter || !Guid.TryParse(request.Vorgang, out var vorgang))
-        {
-            await FehlerAsync("ARBEITS_ERGEBNIS_UNGUELTIG",
-                $"Antwort ohne gültigen Eingang oder ohne Funktion draußen: '{request.Vorgang}'", request.Vorgang);
+            await FehlerAsync("ARBEITS_ERGEBNIS_UNGUELTIG", $"Antwort ohne gültigen Eingang oder ohne Funktion draußen: '{request.Vorgang}'", request.Vorgang);
             return;
         }
         var fehler = string.IsNullOrEmpty(request.Fehler) ? null : request.Fehler;
-        List<IAusgabe>? ausgaben = null;
-        if (fehler == null)
+        List<object>? ausgaben = null;
+        if (fehler is null)
         {
-            try { ausgaben = request.Ausgaben.Select(a => (IAusgabe)_d.Mapper.Ausgabe(a)).ToList(); }
+            try { ausgaben = request.Ausgaben.Select(_d.Mapper.Ausgabe).ToList(); }
             catch (Exception ex) { fehler = $"Antwort nicht lesbar: {ex.Message}"; }
         }
-        AnbieterArbeit(context, async (_, ct) =>
-        {
-            var ausgang = await anbieter.AntwortAsync(vorgang, ausgaben, fehler, ct, request.Ab, request.Fertig);
-            _logger.LogDebug("{Session} Antwort {Vorgang} (ab {Ab}, fertig {Fertig}): {Ausgang}", _id, vorgang, request.Ab, request.Fertig, ausgang);
-            return ausgang == ErgebnisAusgang.Unbekannt
-                ? () => FehlerAsync("ARBEIT_UNBEKANNT", $"Eingang {vorgang} läuft in dieser Sitzung nicht (Lease abgelaufen oder schon erledigt)", request.Vorgang)
-                : null;
-        });
-    }
-
-    /// <summary>Reiht Arbeit der Funktionen draußen ein: eine nach der anderen neben der Mailbox; was sie danach schreiben will, schreibt der Actor.</summary>
-    private void AnbieterArbeit(IContext context, Func<IContext, CancellationToken, Task<Func<Task>?>> arbeit)
-    {
-        _anbieterArbeit.Enqueue(arbeit);
-        if (!_anbieterLaeuft) NaechsteAnbieterArbeit(context);
-    }
-
-    private void NaechsteAnbieterArbeit(IContext context)
-    {
-        if (!_anbieterArbeit.TryDequeue(out var arbeit)) { _anbieterLaeuft = false; return; }
-        _anbieterLaeuft = true;
-        Neben(context, ct => arbeit(context, ct), async t =>
-        {
-            if (t.IsCompletedSuccessfully && await (Task<Func<Task>?>)t is { } danach) await danach();
-            else if (t.IsFaulted) _logger.LogWarning(t.Exception, "{Session} Funktion draußen: Antwort nicht verarbeitet", _id);
-            NaechsteAnbieterArbeit(context);
-        });
+        var ausgang = werkstatt.Ergebnis(this, auftrag, ausgaben, request.Ab, request.Fertig, fehler);
+        if (ausgang == Werkstattausgang.Abgelehnt && string.IsNullOrEmpty(request.Fehler))
+            await FehlerAsync("ARBEITS_ERGEBNIS_ABGELEHNT", $"Antwort auf {auftrag} außerhalb der Signatur, außer der Reihe oder nicht lesbar — der Eingang wird wiederholt",
+                request.Vorgang);
+        else if (ausgang == Werkstattausgang.Unbekannt)
+            await FehlerAsync("ARBEIT_UNBEKANNT", $"Eingang {auftrag} läuft auf diesem Knoten nicht (schon beantwortet, abgebrochen oder nie vergeben)", request.Vorgang);
     }
 
     // ═════════════════════════════════════════

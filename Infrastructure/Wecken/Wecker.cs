@@ -9,21 +9,23 @@ namespace Infrastructure.Wecken;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 // WECKEN (docs/03 §3.5): es gibt EINE Stelle, an der nach einem Commit geweckt wird — nach dem Commit eines
-// Appends (Group-Commit, sein Rückfall auf Einzel-Appends, der Einzel-Append ohne Bündeln). Alle Schreiber gehen durch sie: Aggregat, Quelle,
-// festgehaltene Ausgabe einer Funktion. Der generierte Weckplan sagt je Event-Typ, wen der Commit weckt; geweckt wird gezielt, je Commit und Ziel
+// Appends (Group-Commit, sein Rückfall auf Einzel-Appends, der Einzel-Append ohne Bündeln). Alle Schreiber gehen durch sie: Aggregat und Quelle. Der generierte Weckplan sagt je Event-Typ, wen der Commit weckt; geweckt wird gezielt, je Commit und Ziel
 // einmal, ohne Inhalt — der Weckruf trägt nur sein Ziel und darf verloren, doppelt, ungeordnet sein. Das Ziel liest ab seiner eigenen Position
 // im Log; was ein verlorener Weckruf liegen lässt, holt der Takt je Partition (30 s). Kein Broker, keine Abos, keine Signale.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 /// <summary>
-/// Ein Ziel des Weckplans: das Cluster-Kind eines Konsumenten (Batch-Leser einer Projektion, Funktions-Actor, Uhr) und ob er EINE Adresse hat
-/// (<see cref="Funktionsvertrag.EinzigeIdentitaet"/>) oder je Partition des Streams liest.
+/// Ein Ziel des Weckplans: das Cluster-Kind eines Konsumenten (Batch-Leser einer Projektion, Uhr) und ob er EINE Adresse hat
+/// (<see cref="EinzigeIdentitaet"/>) oder je Partition des Streams liest.
 /// </summary>
 public sealed record Weckziel(string Kind, bool EineAdresse = false)
 {
+    /// <summary>Die Identität eines Ziels mit einer Adresse (die Uhr).</summary>
+    public const string EinzigeIdentitaet = "0";
+
     /// <summary>Die Identität, die die Events des Streams <paramref name="stream"/> liest.</summary>
     public string Identitaet(Guid stream, int partitionen) =>
-        EineAdresse ? Funktionsvertrag.EinzigeIdentitaet : Partitionierung.Von(stream, partitionen).ToString();
+        EineAdresse ? EinzigeIdentitaet : Partitionierung.Von(stream, partitionen).ToString();
 }
 
 /// <summary>

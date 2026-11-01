@@ -21,7 +21,7 @@ namespace Infrastructure.Uhr;
 public sealed class Uhrwerk(IFaelligkeiten verzeichnis, Func<ICommand, Guid, Guid, CancellationToken, Task<EmitAusgang>> sende, ILogger? logger = null,
     int seite = Uhrwerk.Seite, Func<string, string, ICommand>? befehl = null)
 {
-    private readonly Func<string, string, ICommand> _befehl = befehl ?? ((typ, daten) => Funktionen.Befehlsform.Lies(new Funktionen.BefehlFestgehalten(typ, daten)));
+    private readonly Func<string, string, ICommand> _befehl = befehl ?? Befehlsform.Lies;
 
     /// <summary>So viele fällige Fristen holt ein Durchlauf je Abfrage.</summary>
     public const int Seite = 500;

@@ -34,7 +34,6 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         Verteilung? verteilung = null,
         AkteurTor? akteurTor = null,
         ILogger<CqrsClientServiceImpl>? logger = null,
-        IAusgabeAblage? ausgaben = null,
         Konsum? konsum = null,
         HinweisNetz? hinweisNetz = null,
         IEventStoreRepository? log = null,
@@ -44,12 +43,11 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         _akteurTor = akteurTor;   // null = Akteure nicht konfiguriert → offen (opt-in)
         _logger = logger ?? NullLogger<CqrsClientServiceImpl>.Instance;
         _dienste = new SitzungsDienste(mapper, dispatcher, queryService, verteilung, akteurTor,
-            ausgaben,   // null = keine Funktion draußen in dieser Anwendung → Anbieten wird abgewiesen
             konsum ?? Konsum.Standard,
             hinweisNetz,   // null = keine Funktion hört Hinweise
             log,
             _logger,
-            werkstatt);   // null = keine Funktion vor dem Aggregat in dieser Anwendung
+            werkstatt);   // null = keine Funktion in dieser Anwendung → Anbieten wird abgewiesen
     }
 
     public override async Task Connect(

@@ -23,20 +23,6 @@ public static class Funktionsvertrag
     /// <summary>Der volle Name des optionalen Lebenszyklus einer Funktion im Host (docs/04 §4.4, docs/10 E10).</summary>
     public const string Lebenszyklus = "Abstractions.ILebenszyklus";
 
-    /// <summary>Der volle Name des Attributs „eine Adresse statt einer je Partition“ (docs/04 §4.4, docs/10 A6).</summary>
-    public const string EineAdresse = "Abstractions.EineAdresseAttribute";
-
-    /// <summary>Die Identität des einen Funktions-Actors einer Funktion mit <see cref="EineAdresse"/> (er liest alle Partitionen).</summary>
-    public const string EinzigeIdentitaet = "0";
-
-    /// <summary>Das Cluster-Kind des Funktions-Actors einer Funktion (Identität = Partition bzw. <see cref="EinzigeIdentitaet"/>).</summary>
-    public static string Kind(string funktion) => "funktion-" + funktion;
-
-    /// <summary>Die Id des gesicherten Zustands einer Funktion an einer Adresse (Identität des Funktions-Actors).</summary>
-    public static string ZustandId(string funktion, string identitaet) => "zustand:" + funktion + ":" + identitaet;
-
-    /// <summary>Die Id des Stands einer Funktion (Position je Partition, wie bei Projektionen <c>&lt;Id&gt;:&lt;Partition&gt;</c>).</summary>
-    public static string StandId(string funktion) => "funktion:" + funktion;
 
     // ── Bindung der Konstruktoren (docs/06 §6.5): gerufene Funktionen, Konfig-Records, Logger ──
 

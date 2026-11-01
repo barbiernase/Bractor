@@ -82,12 +82,18 @@ public sealed class OffeneEingaenge(IDocumentStore store) : IOffeneEingaenge
         $"select kennung, funktion, typ, daten, stream_id, version, zeit, akteur, korrelation, versuche from {Name(store)} "
         + $"where faellig <= (select {Persistence.EventZeit.Uhr(store)}) order by faellig limit $1";
 
-    public async Task<IReadOnlyList<OffenerEingang>> FaelligeAsync(int hoechstens, CancellationToken ct)
+    public Task<IReadOnlyList<OffenerEingang>> FaelligeAsync(int hoechstens, CancellationToken ct) => LiesAsync(FaelligeAbfrage(store), hoechstens, ct);
+
+    /// <summary>Einblick: die offenen Eingänge (fällig oder nicht), die frühesten zuerst, höchstens <paramref name="hoechstens"/> — der Stau je Funktion.</summary>
+    public Task<IReadOnlyList<OffenerEingang>> OffeneAsync(int hoechstens, CancellationToken ct) => LiesAsync(
+        $"select kennung, funktion, typ, daten, stream_id, version, zeit, akteur, korrelation, versuche from {Name(store)} order by faellig limit $1", hoechstens, ct);
+
+    private async Task<IReadOnlyList<OffenerEingang>> LiesAsync(string sql, int hoechstens, CancellationToken ct)
     {
         await Persistence.InboxTabelle.SicherAsync(store, ct);   // rohes SQL löst Martens AutoCreate nicht aus (dieselbe Ablage wie die Inbox)
         await using var conn = store.Storage.Database.CreateConnection();
         await conn.OpenAsync(ct);
-        await using var cmd = new NpgsqlCommand(FaelligeAbfrage(store), conn);
+        await using var cmd = new NpgsqlCommand(sql, conn);
         cmd.Parameters.Add(new NpgsqlParameter { Value = hoechstens });
         var aus = new List<OffenerEingang>();
         await using var r = await cmd.ExecuteReaderAsync(ct);

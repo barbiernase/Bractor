@@ -366,7 +366,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             if (f.Befehl.Ziel != _id)
                 throw new InvalidOperationException($"{typeof(TState).Name}: die Frist {f.Befehl.GetType().Name} zielt auf {f.Befehl.Ziel}, nicht auf dieses "
                     + $"Aggregat ({_id}) — eine Frist geht an einen Command des eigenen Aggregats (R5).");
-            var form = Infrastructure.Funktionen.Befehlsform.Schreibe(f.Befehl);
+            var form = Infrastructure.Uhr.Befehlsform.Schreibe(f.Befehl);
             (fristen ??= new()).Add(new FristFaellig(versionVorher + 1 + i, form.Typ, form.Daten, f.Nach, ImAuftrag.IstAkteur(akteur) ? akteur : null));
         }
         return fristen ?? (IReadOnlyList<Beilage>)Array.Empty<Beilage>();
@@ -1144,7 +1144,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
 
         // ★ Perf: Publish ist reine Benachrichtigung — der Command ist bereits im Log committet (Schritt 5). Zustellung ist best-effort
         //   (Invariante 2); die durablen Konsumenten heilen über Log-Read + Takt. Darum NICHT im Single-Writer-Turn auf die Verteiler warten.
-        //   Dieselbe Meldung wie jeder andere Schreiber (Quelle, festgehaltene Ausgabe einer Funktion): der Envelope je Event an die Clients;
+        //   Dieselbe Meldung wie jeder andere Schreiber (Quelle): der Envelope je Event an die Clients;
         //   die Konsumenten weckt der Wecker am Commit.
         Infrastructure.Verteilen.Commitmeldung.Melde(_verteilung!, envelopes);
 
@@ -1161,7 +1161,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         if (_hinweisNetz is { } netz && netz.Hoert(rejection.GetType()))
         {
             var version = _state?.Version ?? 0;
-            netz.Verteile(new Infrastructure.Funktionen.HinweisZustellen(Infrastructure.Funktionen.FunktionsIds.HinweisAusCommand(cmdEnvelope.CommandId),
+            netz.Verteile(new Infrastructure.Funktionen.HinweisZustellen(Eingangsvertrag.HinweisAusCommand(cmdEnvelope.CommandId),
                 rejection, _id, version, DateTimeOffset.UtcNow, cmdEnvelope.CorrelationId, ImAuftrag.IstAkteur(cmdEnvelope.UserId) ? cmdEnvelope.UserId : null,
                 Spur.Ursache(_id, version)));
         }

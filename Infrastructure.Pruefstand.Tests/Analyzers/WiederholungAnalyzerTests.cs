@@ -102,29 +102,6 @@ public class WiederholungAnalyzerTests
     }
 
     [Fact]
-    public async Task R12_eine_gleichbleibende_Funktion_mit_Uhr_ist_CQRS103_mit_gerufener_Funktion_haelt_das_Framework_fest()
-    {
-        (await Befunde("""
-            public sealed class Mahner : IFunktion
-            {
-                public Mahne Auf(Ueberfaellig e, Herkunft h) => new(h.NeueId<Konto>(), DateTimeOffset.Now);
-            }
-            """)).Should().ContainSingle(b => b.Id == GleichbleibendAnalyzer.GleichbleibendId);
-        (await Befunde("""
-            public sealed class Mahner(IPost post) : IFunktion
-            {
-                public Mahne Auf(Ueberfaellig e, Herkunft h) => new(h.NeueId<Konto>(), DateTimeOffset.Now);
-            }
-            """)).Should().BeEmpty("mit gerufener Funktion hält das Framework die Ausgabe fest — die Uhr ist dann erlaubt");
-        (await Befunde("""
-            public sealed class Mahner : IFunktion
-            {
-                public Mahne Auf(Ueberfaellig e, Herkunft h) => new(h.NeueId<Konto>(), h.Zeit);
-            }
-            """)).Should().BeEmpty("die Zeit aus der Herkunft ist gleichbleibend");
-    }
-
-    [Fact]
     public async Task R13_eine_gewuerfelte_Id_in_Funktion_Aggregat_oder_Reader_ist_CQRS104_beim_Client_nicht()
     {
         (await Befunde("""

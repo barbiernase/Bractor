@@ -30,10 +30,10 @@ public class WerkstattTests
         public void Sende(AuftragDraussen auftrag) => Auftraege.Enqueue(auftrag);
     }
 
-    private static FunktionsBaustein Funktion(bool strom = false) => new(typeof(object), "IProbe", Draussen: true, Gleichbleibend: false,
-        new[] { new FunktionsEingang(typeof(Eingang), false, strom, false, new[] { typeof(Weiter) }, Type.EmptyTypes) },
+    private static FunktionsBaustein Funktion(bool strom = false) => new(typeof(object), "IProbe", Draussen: true,
+        new[] { new FunktionsEingang(typeof(Eingang), false, strom, new[] { typeof(Weiter) }, Type.EmptyTypes) },
         Array.Empty<FunktionsUmsetzung>(), Array.Empty<Type>(),
-        (_, _, _, _, _) => throw new InvalidOperationException("draußen"), (_, _, _, _) => throw new InvalidOperationException("draußen"));
+        (_, _, _, _, _) => throw new InvalidOperationException("draußen"));
 
     private static readonly Herkunft H = new(Guid.NewGuid(), 3, DateTimeOffset.UtcNow, null, "funktion:IProbe");
 
@@ -67,14 +67,14 @@ public class WerkstattTests
         var auftrag = await Warte(a);
         auftrag.Vorgang.Should().Be(kennung, "die Kennung des Eingangs ist draußen der Schlüssel (gleich bei jeder Wiederholung)");
         auftrag.Eingang.Should().Be(new Eingang(1));
-        w.Ergebnis(kennung, new object[] { new Weiter(2) }, 0, true, null).Should().Be(Werkstattausgang.Angenommen);
+        w.Ergebnis(a, kennung, new object[] { new Weiter(2) }, 0, true, null).Should().Be(Werkstattausgang.Angenommen);
 
         (await lauf).Should().Equal(new Weiter(2));
         w.Laeuft(kennung).Should().BeFalse();
     }
 
     [Fact]
-    public async Task Die_erste_Antwort_gewinnt_jede_weitere_ist_unbekannt()
+    public async Task Die_erste_Antwort_des_Arbeiters_der_den_Auftrag_haelt_gewinnt_jede_andere_ist_unbekannt()
     {
         var w = new Werkstatt();
         var a = new Arbeiter("w1");
@@ -83,8 +83,10 @@ public class WerkstattTests
         var lauf = Sammle(w.RechneAsync(Funktion(), kennung, new Eingang(1), H, null, false, default));
         await Warte(a);
 
-        w.Ergebnis(kennung, new object[] { new Weiter(1) }, 0, true, null).Should().Be(Werkstattausgang.Angenommen);
-        w.Ergebnis(kennung, new object[] { new Weiter(9) }, 0, true, null).Should().Be(Werkstattausgang.Unbekannt);
+        w.Ergebnis(new Arbeiter("fremd"), kennung, new object[] { new Weiter(7) }, 0, true, null).Should().Be(Werkstattausgang.Unbekannt,
+            "nur der Arbeiter, der den Auftrag hält, antwortet");
+        w.Ergebnis(a, kennung, new object[] { new Weiter(1) }, 0, true, null).Should().Be(Werkstattausgang.Angenommen);
+        w.Ergebnis(a, kennung, new object[] { new Weiter(9) }, 0, true, null).Should().Be(Werkstattausgang.Unbekannt);
         (await lauf).Should().Equal(new Weiter(1));
     }
 
@@ -98,7 +100,7 @@ public class WerkstattTests
         var lauf = Sammle(w.RechneAsync(Funktion(), kennung, new Eingang(1), H, null, false, default));
         await Warte(a);
 
-        w.Ergebnis(kennung, new object[] { new Fremd() }, 0, true, null).Should().Be(Werkstattausgang.Abgelehnt);
+        w.Ergebnis(a, kennung, new object[] { new Fremd() }, 0, true, null).Should().Be(Werkstattausgang.Abgelehnt);
         await FluentActions.Awaiting(() => lauf).Should().ThrowAsync<InvalidOperationException>().WithMessage("*außerhalb der Signatur*");
     }
 
@@ -112,16 +114,16 @@ public class WerkstattTests
         var einzeln = Guid.NewGuid();
         var lauf1 = Sammle(w.RechneAsync(Funktion(), einzeln, new Eingang(1), H, null, false, default));
         await Warte(a);
-        w.Ergebnis(einzeln, new object[] { new Weiter(1), new Weiter(2) }, 0, true, null).Should().Be(Werkstattausgang.Abgelehnt);
+        w.Ergebnis(a, einzeln, new object[] { new Weiter(1), new Weiter(2) }, 0, true, null).Should().Be(Werkstattausgang.Abgelehnt);
         await FluentActions.Awaiting(() => lauf1).Should().ThrowAsync<InvalidOperationException>();
 
         var strom = Guid.NewGuid();
         var lauf2 = Sammle(w.RechneAsync(Funktion(strom: true), strom, new Eingang(2), H, null, false, default));
         await Task.Delay(50);
-        w.Ergebnis(strom, new object[] { new Weiter(1) }, 0, false, null).Should().Be(Werkstattausgang.Angenommen);
-        w.Ergebnis(strom, new object[] { new Weiter(1) }, 0, false, null).Should().Be(Werkstattausgang.Angenommen, "ein doppeltes Stück wird übersprungen");
-        w.Regt(strom).Should().BeTrue();
-        w.Ergebnis(strom, new object[] { new Weiter(2), new Weiter(3) }, 1, true, null).Should().Be(Werkstattausgang.Angenommen);
+        w.Ergebnis(a, strom, new object[] { new Weiter(1) }, 0, false, null).Should().Be(Werkstattausgang.Angenommen);
+        w.Ergebnis(a, strom, new object[] { new Weiter(1) }, 0, false, null).Should().Be(Werkstattausgang.Angenommen, "ein doppeltes Stück wird übersprungen");
+        w.Regt(a, strom).Should().BeTrue();
+        w.Ergebnis(a, strom, new object[] { new Weiter(2), new Weiter(3) }, 1, true, null).Should().Be(Werkstattausgang.Angenommen);
         (await lauf2).Should().Equal(new Weiter(1), new Weiter(2), new Weiter(3));
     }
 

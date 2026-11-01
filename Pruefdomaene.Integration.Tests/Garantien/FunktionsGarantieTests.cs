@@ -139,8 +139,15 @@ public class FunktionsGarantieTests
         }
     }
 
+    private sealed class Fremder : IArbeiter
+    {
+        public string Name => "fremd";
+        public TimeSpan? Geduld => null;
+        public void Sende(AuftragDraussen auftrag) { }
+    }
+
     [Fact]
-    public async Task Zwei_Antworten_auf_denselben_Eingang_es_wirkt_die_erste()
+    public async Task Nur_die_erste_Antwort_des_Arbeiters_der_den_Eingang_haelt_wirkt()
     {
         using var host = Cluster("garantie-funktion-worker", dienste: s =>
         {
@@ -157,15 +164,17 @@ public class FunktionsGarantieTests
             await Warte(() => Task.FromResult((offen = hand.OffeneEingaenge.FirstOrDefault(e => e.Stream == rechnung.Wert)) is not null),
                 Frist, "der Eingang wartet nicht von Hand");
 
-            // Ein zweiter Arbeiter antwortet auf denselben Eingang (seine Kennung) anders und schneller — die Werkstatt nimmt die erste Antwort.
+            // Ein fremder Arbeiter, der den Auftrag nie bekam, antwortet anders und schneller — es zählt nur die Antwort dessen, der ihn hält, und
+            //   von ihm die erste.
             var werkstatt = host.Services.GetRequiredService<Werkstatt>();
-            werkstatt.Ergebnis(offen!.Vorgang, new object[] { new GibRechnungFrei(rechnung) }, 0, true, null).Should().Be(Werkstattausgang.Angenommen);
-            (await hand.AntworteAsync(offen.Vorgang, new IAusgabe[] { new SperreRechnung(rechnung, "zu spät") }, null, default))
-                .Should().Be(ErgebnisAusgang.Unbekannt, "die erste Antwort beendete den Lauf — die zweite verfällt");
+            werkstatt.Ergebnis(new Fremder(), offen!.Vorgang, new object[] { new GibRechnungFrei(rechnung) }, 0, true, null).Should().Be(Werkstattausgang.Unbekannt);
+            hand.Antworte(offen.Vorgang, new IAusgabe[] { new SperreRechnung(rechnung, "von Hand") }, null).Should().Be(Werkstattausgang.Angenommen);
+            hand.Antworte(offen.Vorgang, new IAusgabe[] { new GibRechnungFrei(rechnung) }, null)
+                .Should().Be(Werkstattausgang.Unbekannt, "die erste Antwort beendete den Lauf — die zweite verfällt");
 
-            await Warte(async () => (await Zustand<Rechnung>(host.Services, rechnung.Wert)).Freigegeben, Frist, "die erste Antwort wirkt nicht");
+            await Warte(async () => (await Zustand<Rechnung>(host.Services, rechnung.Wert)).Gesperrt, Frist, "die Antwort von Hand wirkt nicht");
             await Task.Delay(TimeSpan.FromSeconds(2));
-            (await Zustand<Rechnung>(host.Services, rechnung.Wert)).Gesperrt.Should().BeFalse();
+            (await Zustand<Rechnung>(host.Services, rechnung.Wert)).Freigegeben.Should().BeFalse();
         }
         finally { await host.StopAsync(); }
     }

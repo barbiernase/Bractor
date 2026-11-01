@@ -11,10 +11,9 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Wecken;
 
 /// <summary>
-/// Der Weckplan (docs/03 §3.5) entsteht NUR aus Signaturen: eine Projektion mit <c>Auf(TEvent …)</c> steht mit ihrem
-/// Batch-Kind unter TEvent (gelesen wie im PullPathGenerator, eine Lesart), eine Funktion mit <c>Auf(TEvent …)</c> mit ihrem Funktions-Kind (eine
-/// Adresse, wenn sie <c>[EineAdresse]</c> trägt), die Uhr unter <c>FristGesetzt</c>; ein Hinweis-Eingang steht nicht darin. Was eine Funktion aus dem
-/// Log hören soll und der Plan nicht führen kann (Schnittstelle, abstrakt), ist schon ein Formfehler (CQRS057 bzw. CQRS100) und steht nicht im Plan.
+/// Der Weckplan (docs/03 §3.5) entsteht NUR aus Signaturen: eine Projektion mit <c>Auf(TEvent …)</c> steht mit ihrem Batch-Kind unter TEvent (gelesen
+/// wie im PullPathGenerator, eine Lesart), die Uhr unter <c>FristGesetzt</c>. Eine Funktion liest nie das Log (docs/04 §4.4) und steht nie darin. Was
+/// eine Projektion hören soll und der Plan nicht führen kann (Schnittstelle, abstrakt, Hinweis), ist schon ein Formfehler (CQRS057).
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class WeckplanGeneratorTests
@@ -59,16 +58,17 @@ public interface ISchreibeKonto : IWriteStore { Task SetzeAsync(Guid konto); }
         } }";
 
     [Fact]
-    public void Projektion_Funktion_und_Uhr_stehen_mit_ihren_Kinds_im_Plan()
+    public void Projektion_und_Uhr_stehen_mit_ihren_Kinds_im_Plan_eine_Funktion_nie()
     {
         var (quelle, ids) = Lauf(Projektion + @"namespace Probe {
-            public sealed class Mahnwesen : IFunktion { public Mahne? Auf(Ueberfaellig e) => null; }
-            [EineAdresse] public sealed class Statistik : IFunktion { public Mahne? Auf(Bezahlt e) => null; } }");
+            public sealed record Folge(int Tage);
+            public sealed class Mahnwesen : IFunktion { public Mahne? Auf(Folge f) => null; public Mahne? Auf(Bezahlt e) => null; } }");
 
         ids.Should().BeEmpty();
-        quelle.Should().Contain("[typeof(global::Probe.Ueberfaellig)] = new[] { new Weckziel(\"batch-KontoProjektion\"), new Weckziel(\"funktion-Mahnwesen\") }");
-        quelle.Should().Contain("[typeof(global::Probe.Bezahlt)] = new[] { new Weckziel(\"batch-KontoProjektion\"), new Weckziel(\"funktion-Statistik\", EineAdresse: true) }",
-            "eine Funktion mit einer Adresse wird an dieser geweckt, nicht je Partition");
+        quelle.Should().Contain("[typeof(global::Probe.Ueberfaellig)] = new[] { new Weckziel(\"batch-KontoProjektion\") }");
+        quelle.Should().Contain("[typeof(global::Probe.Bezahlt)] = new[] { new Weckziel(\"batch-KontoProjektion\") }",
+            "die Funktion hört Bezahlt nur als Antwort auf einen eigenen Command, nie aus dem Log");
+        quelle.Should().NotContain("funktion-");
         quelle.Should().Contain("[typeof(global::Abstractions.FristGesetzt)] = new[] { new Weckziel(\"uhr\", EineAdresse: true) }", "eine gesetzte Frist weckt die Uhr");
     }
 
@@ -97,6 +97,6 @@ public interface ISchreibeKonto : IWriteStore { Task SetzeAsync(Guid konto); }
 
         ids.Should().BeEmpty("die Form meldet es (CQRS057 bzw. CQRS100), nicht der Weckplan");
         quelle.Should().NotContain("batch-Falsch").And.NotContain("funktion-IFalsch",
-            "ein Hörer aus dem Log hört nur konkrete, persistente Events — alles andere ist ein Formfehler oder ein Hinweis-Eingang");
+            "ein Hörer aus dem Log hört nur konkrete, persistente Events — alles andere ist ein Formfehler");
     }
 }

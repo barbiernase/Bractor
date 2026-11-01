@@ -283,8 +283,6 @@ public sealed record BausteinFunktion
     public IReadOnlyList<FunktionsUmsetzung> Umsetzungen { get; init; } = [];
     /// <summary>Der gekapselte Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4): der einfache Name von T, sonst null.</summary>
     public string? Zustand { get; init; }
-    /// <summary><c>[EineAdresse]</c>: ein Funktions-Actor für alles statt einer je Partition (A6).</summary>
-    public bool EineAdresse { get; init; }
     /// <summary>Die Klasse hat einen Lebenszyklus (<c>ILebenszyklus</c>, E10): sie lädt beim Aktivieren etwas.</summary>
     public bool Lebenszyklus { get; init; }
     public string? Doku { get; init; }

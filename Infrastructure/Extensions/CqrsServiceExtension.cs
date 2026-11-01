@@ -113,7 +113,7 @@ public static class CqrsServiceExtensions
         // 9. Hosted Services
         services.AddCqrsHostedServices();
 
-        // 10. Funktionen in Baustein-Form: Funktions-Actors, Weckung, Festhalten, Stand.
+        // 10. Funktionen: Wurzel, Parents, Kinder, Werkstatt, offene Eingänge, Hinweis-Netz.
         Infrastructure.Funktionen.FunktionsBausteinWiring.AddFunktionsBausteine(services);
 
         // 11. Die Uhr: fällige Fristen der Aggregate als Commands.
@@ -401,7 +401,7 @@ public static class CqrsServiceExtensions
         
             Console.WriteLine($"  + {aggregateKinds.Length} Aggregate-Kinds registriert");
         
-            // Die übrigen Kinds (Batch-Leser, Funktions-Actors, Vermittler, Uhr, Quellen) bringen ihre Beiträger mit
+            // Die übrigen Kinds (Batch-Leser, Uhr, Quellen, Zusteller) bringen ihre Beiträger mit
             //   (VOR StartMemberAsync, sonst nicht registrierbar).
             var kindContributors = provider
                 .GetServices<Infrastructure.Projections.IClusterKindContributor>().ToList();

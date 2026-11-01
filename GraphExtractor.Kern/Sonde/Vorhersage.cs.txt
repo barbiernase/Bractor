@@ -3,7 +3,7 @@ using Abstractions;
 // SONDE — fremdes Szenario (docs/04 §4.4): FUNKTIONEN ALS ACTORS MIT ZUSTAND UND HINWEIS-NETZ.
 //
 // Wetterstationen melden Temperaturen (Fakten im Log). Eine gleichbleibende Funktion bildet daraus eine Tendenz — einen HINWEIS, der nicht zur
-// Fachdomäne gehört und nie im Log steht. Ein Prognosemodell mit gekapseltem Zustand (IZustand, EINE Adresse für alle Stationen) lernt aus jeder
+// Fachdomäne gehört und nie im Log steht. Ein Prognosemodell mit gekapseltem Zustand (IZustand, ein Cache der Aktivierung) lernt aus jeder
 // Meldung im Log, vergisst eine Station, die das Aggregat ablehnt (Hinweis aus einem Decide), und gibt auf jede Tendenz eine Prognose ab — als
 // Command an die Station. Eine Unwetter-Warnung hört die Tendenz draußen (eine Schnittstelle, getragen von einer App) und gibt selbst einen
 // Hinweis aus.
@@ -80,7 +80,6 @@ public sealed class Statistik(IZustand<Zaehlung> zaehlung) : IStatistik
     public void Zaehle(Guid station) => zaehlung.Wert.Je[station] = zaehlung.Wert.Je.GetValueOrDefault(station) + 1;
 }
 
-[EineAdresse]
 public sealed class Prognosemodell(IZustand<Gewichte> gewichte, IStatistik statistik) : IFunktion, ILebenszyklus
 {
     private readonly Arbeitsmodell _modell = new();

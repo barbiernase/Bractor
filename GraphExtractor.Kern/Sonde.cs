@@ -185,7 +185,7 @@ public static class Sonde
         bool Gerufen(JsonNode f) => A(f, "methoden").Any() && !A(f, "eingaenge").Any();
         foreach (var f in A(b, "bausteinFunktionen").Where(Sonde).Where(f => !Gerufen(f)))
             z.Add($"funktion-auf {S(f, "namespace")}.{S(f, "name")} {(f["klasse"]?.GetValue<bool>() == true ? "klasse" + Konstruktor(f) : "schnittstelle")}"
-                + (f["zustand"] is { } zu ? $" zustand={zu}" : "") + (f["eineAdresse"]?.GetValue<bool>() == true ? " eineadresse" : "")
+                + (f["zustand"] is { } zu ? $" zustand={zu}" : "")
                 + (f["lebenszyklus"]?.GetValue<bool>() == true ? " lebenszyklus" : "") + " | "
                 + string.Join(" || ", A(f, "eingaenge").Select(e => S(e, "eingang")
                     + (e["hinweis"]?.GetValue<bool>() == true ? " hinweis" : "") + (e["herkunft"]?.GetValue<bool>() == true ? " herkunft" : "")

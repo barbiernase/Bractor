@@ -60,14 +60,12 @@ namespace Infrastructure.SourceGeneration
             public List<(INamedTypeSymbol Eingang, Location Ort)> Doppelt = new List<(INamedTypeSymbol, Location)>();
             /// <summary>Der Typ des Zustands (<c>IZustand&lt;T&gt;</c> im Konstruktor einer Klasse, docs/04 §4.4) — null = ohne Zustand.</summary>
             public INamedTypeSymbol? Zustand;
-            /// <summary><c>[EineAdresse]</c>: ein Funktions-Actor statt einer je Partition (A6).</summary>
-            public bool EineAdresse;
             /// <summary>Die Klasse hat einen Lebenszyklus (<c>ILebenszyklus</c>, E10): sie lädt etwas beim Aktivieren.</summary>
             public bool Lebenszyklus;
             /// <summary>
             /// Die Funktion steht VOR dem Aggregat (docs/04 §4.4): ihre Eingänge sind Nachrichten ohne Marker, Quell-Nachrichten und Hinweise, ihre
-            /// Event-Eingänge Antworten. Sie liest nie das Log; Eingänge bringt ihr die Laufzeit über Wurzel, Parent und Kinder. Im Umbau laufen
-            /// Funktionen, die nur Events hören, noch auf dem Funktions-Actor je Partition.
+            /// Event-Eingänge Antworten. Sie liest nie das Log; Eingänge bringt ihr die Laufzeit über Wurzel, Parent und Kinder. Jede Funktion mit
+            /// Eingängen muss es sein (CQRS100): wer nur Events hört, hätte keinen Einstieg.
             /// </summary>
             public bool VorDemAggregat => Aufs.Any(a => a.Nachricht || a.Hinweis || a.Quelle);
 
@@ -156,16 +154,13 @@ namespace Infrastructure.SourceGeneration
             return z;
         }
 
-        /// <summary>Trägt <paramref name="t"/> das Attribut <c>[EineAdresse]</c>?</summary>
-        public static bool HatEineAdresse(INamedTypeSymbol t) =>
-            t.GetAttributes().Any(a => a.AttributeClass != null && Name(a.AttributeClass) == Abstractions.Funktionsvertrag.EineAdresse);
 
         /// <summary>Liest die Form einer Funktion (<see cref="IstBaustein"/> vorausgesetzt).</summary>
         public static Form Lies(INamedTypeSymbol t)
         {
             var f = new Form
             {
-                Typ = t, Draussen = t.TypeKind == TypeKind.Interface, Gerufen = IstGerufen(t), EineAdresse = HatEineAdresse(t),
+                Typ = t, Draussen = t.TypeKind == TypeKind.Interface, Gerufen = IstGerufen(t),
                 Lebenszyklus = t.TypeKind == TypeKind.Class && Hat(t, Abstractions.Funktionsvertrag.Lebenszyklus),
             };
             var ort = t.Locations.FirstOrDefault() ?? Location.None;
@@ -195,17 +190,15 @@ namespace Infrastructure.SourceGeneration
                 gesehen[schluessel] = auf;
                 f.Aufs.Add(auf);
             }
-            // Ein Zwischenergebnis gibt nur eine Funktion vor dem Aggregat aus, ein Event (ins Log) nur eine mit Log-Eingängen.
-            if (f.VorDemAggregat)
-                foreach (var a in f.Aufs)
-                    foreach (var x in a.Ausgaben.Where(x => Hat(x, A + "IEvent") && !Hat(x, A + "ITransientEvent")))
-                        f.Fehler.Add(($"die Ausgabe '{x.Name}' ist ein Event — eine Funktion vor dem Aggregat schreibt nie ins Log: sie gibt Commands, "
-                            + "Zwischenergebnisse (schlichte Records) und Hinweise aus", a.Methode.Locations.FirstOrDefault() ?? ort));
-            else
-                foreach (var a in f.Aufs)
-                    foreach (var x in a.Ausgaben.Where(Nachrichtenform.IstSchlicht))
-                        f.Fehler.Add(($"die Ausgabe '{x.Name}' ist ein Zwischenergebnis (ein schlichter Record) — das gibt nur eine Funktion vor dem Aggregat "
-                            + "aus, deren Eingänge Nachrichten ohne Marker, Quell-Nachrichten oder Hinweise sind", a.Methode.Locations.FirstOrDefault() ?? ort));
+            // Eine Funktion steht vor dem Aggregat: wer nur Events hört, hätte keinen Einstieg — ein Event hört sie nur als Antwort auf einen eigenen Command.
+            if (!f.Gerufen && f.Aufs.Count > 0 && !f.VorDemAggregat)
+                f.Fehler.Add(("sie hört nur Events — eine Funktion liest nie das Log: sie hört eine Folge oder ein Zwischenergebnis (schlichte Records), "
+                    + "eine Quell-Nachricht oder einen Hinweis; ein Event nur als Antwort auf einen eigenen Command", ort));
+            // Sie schreibt nie ins Log: ihre Ausgaben sind Commands, Zwischenergebnisse und Hinweise.
+            foreach (var a in f.Aufs)
+                foreach (var x in a.Ausgaben.Where(x => Hat(x, A + "IEvent") && !Hat(x, A + "ITransientEvent")))
+                    f.Fehler.Add(($"die Ausgabe '{x.Name}' ist ein Event — eine Funktion schreibt nie ins Log: sie gibt Commands, "
+                        + "Zwischenergebnisse (schlichte Records) und Hinweise aus", a.Methode.Locations.FirstOrDefault() ?? ort));
             if (!f.Gerufen && gesehen.Count == 0 && f.Doppelt.Count == 0 && f.Fehler.Count == 0)
                 f.Fehler.Add(($"'{t.Name}' hat weder ein {Abstractions.Funktionsvertrag.Auf} noch eine gerufene Methode — eine Funktion hört mindestens einen "
                     + "Eingang oder bietet ihrem Halter mindestens eine Methode", ort));
@@ -332,15 +325,5 @@ namespace Infrastructure.SourceGeneration
         }
 
         private static bool IstOneOf(INamedTypeSymbol t) => t.IsGenericType && Name(t).StartsWith(A + "OneOf`", System.StringComparison.Ordinal);
-
-        /// <summary>
-        /// Nachweislich gleichbleibend (R12, aus der Signatur): eine Klasse ohne Konstruktor-Parameter, deren <c>Auf</c> keine Lese-Fähigkeit nimmt.
-        /// Dass ihr Rumpf weder Uhr noch Zufall nutzt, prüft CQRS103, dass sie keinen Zustand in Feldern hält, CQRS105 (R19) — eine Funktion mit
-        /// <c>IZustand&lt;T&gt;</c> hat einen Konstruktor-Parameter und ist damit nie gleichbleibend; eine mit Lebenszyklus lädt etwas und ist es
-        /// ebenso nie.
-        /// </summary>
-        public static bool Gleichbleibend(Form f) =>
-            !f.Draussen && !f.Lebenszyklus && f.Aufs.All(a => a.Faehigkeiten.Count == 0)
-            && (Ctorbindung.Konstruktor(f.Typ)?.Parameters.Length ?? 0) == 0;
     }
 }

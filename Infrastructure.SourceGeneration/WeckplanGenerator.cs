@@ -42,16 +42,6 @@ namespace Infrastructure.SourceGeneration
                     foreach (var a in p.Aufs)
                         eintraege.Add((a.Eingang, Abstractions.Projektionsvertrag.Kind(t.Name), false));
                 }
-
-                // Funktionen: Auf mit einem Event aus dem Log (Hinweise gehen übers Hinweis-Netz, nicht über den Weckplan). Eine Funktion vor dem
-                //   Aggregat liest nie das Log — sie weckt kein Commit, ihre Eingänge bringen die Wege (docs/04 §4.4).
-                if (Funktionsform.IstBaustein(t))
-                {
-                    var f = Funktionsform.Lies(t);
-                    if (f.Fehler.Count > 0 || f.Doppelt.Count > 0 || f.VorDemAggregat) continue;   // CQRS100/101 meldet der Baustein-Generator
-                    foreach (var a in f.Aufs.Where(a => !a.Hinweis))
-                        eintraege.Add((a.Eingang, Abstractions.Funktionsvertrag.Kind(t.Name), f.EineAdresse));
-                }
             }
 
             // Die Uhr: eine gesetzte Frist kann sofort fällig sein — sie wartet nicht auf ihren Takt.

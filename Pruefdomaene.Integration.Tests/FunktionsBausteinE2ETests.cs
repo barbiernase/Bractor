@@ -34,7 +34,7 @@ public class FunktionsBausteinE2ETests
         await host.Services.GetRequiredService<IEventStoreRepository>().ReadStreamAsync(stream, 0, default);
 
     [Fact]
-    public async Task Eine_gleichbleibende_Funktion_wirkt_genau_einmal_ohne_etwas_festzuhalten()
+    public async Task Eine_Funktion_ohne_Dienst_wirkt_genau_einmal()
     {
         using var host = Cluster("pruef-funktion-gutschrift");
         await host.StartAsync();
@@ -49,9 +49,6 @@ public class FunktionsBausteinE2ETests
             await Task.Delay(TimeSpan.FromSeconds(2));
             (await Log(host, konto.Wert)).Count(e => e.Payload is GutschriftGebucht).Should().Be(1, "genau einmal je Eingang");
 
-            var bezahlt = (await Log(host, rechnung.Wert)).Single(e => e.Payload is RechnungBezahlt);
-            (await Log(host, FunktionsIds.Festhalten(nameof(Gutschrift), rechnung.Wert, bezahlt.AggregateVersion))).Should()
-                .BeEmpty("eine gleichbleibende Funktion mit nur Commands in der Ausgabe schreibt nichts ins Log");
         }
         finally { await host.StopAsync(); }
     }
@@ -70,9 +67,6 @@ public class FunktionsBausteinE2ETests
             (await FrageAsync(host, new PruefeZahlung(rechnung), Guid.NewGuid()))!.Success.Should().BeTrue();
 
             await Warte(async () => (await Zustand<Kundenkonto>(host.Services, konto.Wert)).Mahnungen == 1, Frist, "die Mahnung kommt nicht an");
-            var ueberfaellig = (await Log(host, rechnung.Wert)).Single(e => e.Payload is ZahlungUeberfaellig);
-            (await Log(host, FunktionsIds.Festhalten(nameof(Mahnwesen), rechnung.Wert, ueberfaellig.AggregateVersion))).Should().BeEmpty(
-                "eine Funktion vor dem Aggregat hält nichts fest");
 
             await Task.Delay(TimeSpan.FromSeconds(2));
             (await Log(host, konto.Wert)).Where(e => e.Payload is MahnungVermerkt).Should().ContainSingle("genau eine Mahnung");
@@ -97,7 +91,6 @@ public class FunktionsBausteinE2ETests
             for (var i = 0; i < zeilen; i += 23)
                 (await Zustand<Posten.Posten>(host.Services, herkunft.NeueId<Posten.Posten>(i).Wert)).Existiert.Should().BeTrue($"Posten der Zeile {i}");
 
-            (await Log(host, FunktionsIds.Festhalten("Importlauf", import.Wert, 1))).Should().BeEmpty("vor dem Aggregat wird nichts festgehalten");
             await Task.Delay(TimeSpan.FromSeconds(2));
             (await Log(host, import.Wert)).Count(e => e.Payload is ImportStandGemeldet)
                 .Should().Be((zeilen + Pipeline.Import.Importlauf.StandAlle - 1) / Pipeline.Import.Importlauf.StandAlle, "jeder Stand genau einmal");
@@ -137,10 +130,10 @@ public class FunktionsBausteinE2ETests
             await Warte(() => Task.FromResult((offen = hand.OffeneEingaenge.FirstOrDefault(e => e.Stream == rechnung.Wert)) is not null),
                 Frist, "der Eingang wartet nicht von Hand");
 
-            (await hand.AntworteAsync(offen!.Vorgang, new IAusgabe[] { new SperreRechnung(rechnung, "von Hand") }, null, default))
-                .Should().Be(ErgebnisAusgang.Geschrieben);
-            (await hand.AntworteAsync(offen.Vorgang, new IAusgabe[] { new GibRechnungFrei(rechnung) }, null, default))
-                .Should().Be(ErgebnisAusgang.Unbekannt, "beantwortet ist er nicht mehr offen");
+            hand.Antworte(offen!.Vorgang, new IAusgabe[] { new SperreRechnung(rechnung, "von Hand") }, null)
+                .Should().Be(Werkstattausgang.Angenommen);
+            hand.Antworte(offen.Vorgang, new IAusgabe[] { new GibRechnungFrei(rechnung) }, null)
+                .Should().Be(Werkstattausgang.Unbekannt, "beantwortet ist er nicht mehr offen");
             await Warte(async () => (await Zustand<Rechnung>(host.Services, rechnung.Wert)).Gesperrt, Frist, "die Antwort von Hand wirkt nicht");
             (await Zustand<Rechnung>(host.Services, rechnung.Wert)).Freigegeben.Should().BeFalse();
         }

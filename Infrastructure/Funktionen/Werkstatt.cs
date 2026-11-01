@@ -43,8 +43,8 @@ public enum Werkstattausgang
 /// kein Festhalten: ein Kind der Funktion rechnet einen Eingang, indem es ihn über <see cref="RechneAsync"/> einem Arbeiter mit freiem Platz gibt und
 /// seine Ausgaben in Reihenfolge entgegennimmt (bei einem Strom in Stücken); hinausgebracht werden sie vom Kind wie die einer Umsetzung im Host
 /// (Command-Ids aus Eingang, Funktion und Stelle). Scheitert der Arbeiter, meldet er sich ab oder regt er sich zu lange nicht, scheitert der Lauf —
-/// der Parent rechnet den Eingang erneut, der durable Rand stellt ihn nach seiner Frist wieder zu. Die erste Antwort gewinnt, weil das Kind den Lauf
-/// nach ihr beendet.
+/// der Parent rechnet den Eingang erneut, der durable Rand stellt ihn nach seiner Frist wieder zu. Es zählt nur die Antwort des Arbeiters, der den
+/// Auftrag hält — die erste, weil das Kind den Lauf nach ihr beendet.
 ///
 /// Die Slots aller Arbeiter einer Funktion sind die Parallelität ihres Parents auf diesem Knoten: meldet sich der erste Arbeiter an, entsteht er, geht
 /// der letzte, endet er (<see cref="Beobachte"/>).
@@ -174,11 +174,13 @@ public sealed class Werkstatt
     /// <summary>
     /// Die Antwort eines Arbeiters auf einen Auftrag — ganz oder als Stück eines Stroms (<paramref name="ab"/> = Stelle der ersten Ausgabe,
     /// <paramref name="fertig"/> = der Lauf ist vollständig), oder ein Fehler. Eine Ausgabe außerhalb der Signatur oder mehr als eine ohne Strom
-    /// lässt den Lauf scheitern. Die erste vollständige Antwort gewinnt: jede danach (ein zweiter Arbeiter, eine späte Antwort) ist unbekannt.
+    /// lässt den Lauf scheitern. Es zählt nur die Antwort des Arbeiters, der den Auftrag hält, und von ihm die erste vollständige: jede andere (ein
+    /// zweiter Arbeiter, eine späte Antwort, eine nach dem Neuverbinden) ist unbekannt.
     /// </summary>
-    public Werkstattausgang Ergebnis(Guid vorgang, IReadOnlyList<object>? ausgaben, int ab, bool fertig, string? fehler)
+    public Werkstattausgang Ergebnis(IArbeiter von, Guid vorgang, IReadOnlyList<object>? ausgaben, int ab, bool fertig, string? fehler)
     {
-        if (!_laeufe.TryGetValue(vorgang, out var lauf) || Volatile.Read(ref lauf.Beantwortet) == 1) return Werkstattausgang.Unbekannt;
+        if (!_laeufe.TryGetValue(vorgang, out var lauf) || !ReferenceEquals(lauf.Platz.Arbeiter, von) || Volatile.Read(ref lauf.Beantwortet) == 1)
+            return Werkstattausgang.Unbekannt;
         if (fehler is null && ausgaben?.FirstOrDefault(a => !lauf.Eingang.Ausgaben.Contains(a.GetType())) is { } fremd)
             fehler = $"{fremd.GetType().Name} liegt außerhalb der Signatur ({string.Join(", ", lauf.Eingang.Ausgaben.Select(t => t.Name))})";
         if (fehler is null && !lauf.Eingang.Strom && (ab + (ausgaben?.Count ?? 0) > 1 || !fertig))
@@ -188,8 +190,9 @@ public sealed class Werkstatt
         return fehler is null ? Werkstattausgang.Angenommen : Werkstattausgang.Abgelehnt;
     }
 
-    /// <summary>Lebenszeichen eines laufenden Auftrags (ein langer Lauf): die Geduld beginnt von vorn.</summary>
-    public bool Regt(Guid vorgang) => _laeufe.TryGetValue(vorgang, out var lauf) && lauf.Kanal.Writer.TryWrite(Lebt);
+    /// <summary>Lebenszeichen eines laufenden Auftrags (ein langer Lauf) von dem Arbeiter, der ihn hält: die Geduld beginnt von vorn.</summary>
+    public bool Regt(IArbeiter von, Guid vorgang) =>
+        _laeufe.TryGetValue(vorgang, out var lauf) && ReferenceEquals(lauf.Platz.Arbeiter, von) && lauf.Kanal.Writer.TryWrite(Lebt);
 
     /// <summary>Läuft der Auftrag auf diesem Knoten?</summary>
     public bool Laeuft(Guid vorgang) => _laeufe.ContainsKey(vorgang);

@@ -108,47 +108,26 @@ public sealed class TransportKonfig
 }
 
 /// <summary>
-/// Eine Funktion in dieser Umgebung (Abschnitt <c>Funktionen:&lt;Name&gt;</c>): ihre Implementierung und — nur mit Eingängen — Laufort, Slots,
-/// Wiederholungen, Worker und Zustand. Eine gerufene Funktion (ohne <c>Auf</c>) läuft im Prozess ihres Halters: bei ihr steht nur die Implementierung.
+/// Eine Funktion in dieser Umgebung (Abschnitt <c>Funktionen:&lt;Name&gt;</c>): ihre Implementierung und — nur mit Eingängen — Laufort, Parallel,
+/// Warteschlange, Vorwärmen, Wiederholungen und Worker. Eine gerufene Funktion (ohne <c>Auf</c>) läuft im Prozess ihres Halters: bei ihr steht nur die
+/// Implementierung.
 /// </summary>
 public sealed class FunktionsKonfig
 {
     public FunktionsLaufort Laufort { get; set; } = FunktionsLaufort.Host;
     /// <summary>Nur Host: der Klassenname der Implementierung — nötig, wenn es mehrere gibt.</summary>
     public string? Implementierung { get; set; }
-    /// <summary>Eingänge zugleich je Partition (verschiedene Streams; je Stream bleibt es nacheinander, mit Zustand gilt einer). Mehr als einer ⇒
-    /// die Umsetzung teilt ihre Instanz und muss thread-sicher sein.</summary>
-    public int Slots { get; set; } = StandardSlots;
-    /// <summary>Slots ohne Eintrag in der Umgebung (PF-33: mit einem Slot staute S5-64 bei ≈ 800 Vorgängen/s, mit vier ≈ 2 000).</summary>
-    public const int StandardSlots = 4;
+    /// <summary>So oft rechnet ein Parent einen scheiternden Eingang erneut, bevor er „gescheitert“ meldet; 0 = der Standard.</summary>
     public int Wiederholungen { get; set; }
-    /// <summary>Vor dem Aggregat (docs/04 §4.4): so viele Eingänge rechnet ein Knoten zugleich (Kinder seines Parents); 0 = der Standard. Draußen
-    /// bestimmen die Slots der Arbeiter.</summary>
+    /// <summary>So viele Eingänge rechnet ein Knoten zugleich (Kinder seines Parents, docs/04 §4.4); 0 = der Standard. Jedes Kind hat seine eigene
+    /// Aktivierung. Draußen bestimmen die Slots der Arbeiter.</summary>
     public int Parallel { get; set; }
-    /// <summary>Vor dem Aggregat: so viele Eingänge wartet ein Parent höchstens (voll → „später“, der Rückstau reicht bis zum durablen Rand); 0 = der Standard.</summary>
+    /// <summary>So viele Eingänge wartet ein Parent höchstens (voll → „später“, der Rückstau reicht bis zum durablen Rand); 0 = der Standard.</summary>
     public int Warteschlange { get; set; }
-    /// <summary>Vor dem Aggregat: alle Kinder schon beim Start anlegen (eine Umsetzung, die lange lädt).</summary>
+    /// <summary>Alle Kinder schon beim Start anlegen (eine Umsetzung, die lange lädt).</summary>
     public bool Vorwaermen { get; set; }
     /// <summary>Nur Extern: wie die Werkbank den Worker startet (▶ Worker starten). Der Host liest es nie.</summary>
     public WorkerKonfig? Worker { get; set; }
-    /// <summary>Nur eine Funktion mit Zustand (<c>IZustand&lt;T&gt;</c>, docs/04 §4.4): wo und wie oft er gesichert wird. Ohne Eintrag: im Dokument,
-    /// höchstens einmal je Sekunde.</summary>
-    public ZustandKonfig? Zustand { get; set; }
-}
-
-/// <summary>Wo der Zustand einer Funktion liegt: im Dokument neben der Position (klein) oder als Datei in einem Verzeichnis (groß, Netzgewichte).</summary>
-public enum ZustandsAblage { Dokument, Datei }
-
-/// <summary>
-/// Die Sicherung des Zustands einer Funktion (Abschnitt <c>Funktionen:&lt;F&gt;:Zustand</c>, docs/04 §4.4, docs/10 A5): Ablage, Verzeichnis der Dateien, und wie oft
-/// höchstens gesichert wird (Sekunden; beim Stoppen, Passivieren und Umziehen immer). Großer Zustand bremst bei kurzem Intervall den Durchsatz, ein
-/// langes kostet nach einem Absturz Nachrechnen.
-/// </summary>
-public sealed class ZustandKonfig
-{
-    public ZustandsAblage Ablage { get; set; } = ZustandsAblage.Dokument;
-    public string? Verzeichnis { get; set; }
-    public double SichernAlleSekunden { get; set; } = 1;
 }
 
 /// <summary>

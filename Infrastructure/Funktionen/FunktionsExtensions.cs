@@ -21,17 +21,17 @@ public static class FunktionsLaufortExtensions
         {
             if (gerufen.ContainsKey(name))
             {
-                // Gerufen läuft im Prozess ihres Halters: kein eigener Laufort, kein Worker, kein Zustand.
-                if (k.Laufort != FunktionsLaufort.Host || k.Worker is not null || k.Zustand is not null)
+                // Gerufen läuft im Prozess ihres Halters: kein eigener Laufort, kein Worker.
+                if (k.Laufort != FunktionsLaufort.Host || k.Worker is not null)
                     throw new Infrastructure.Umgebung.BootFehler($"Funktionen:{name} ist eine gerufene Funktion (ohne Auf) — sie läuft im Prozess ihres "
-                        + "Halters; hier steht nur ihre Implementierung (kein Laufort, Worker oder Zustand).", "funktion:" + name);
+                        + "Halters; hier steht nur ihre Implementierung (kein Laufort oder Worker).", "funktion:" + name);
                 continue;
             }
             if (!bausteine.Contains(name))
                 throw new Infrastructure.Umgebung.BootFehler($"Funktionen:{name} — keine Funktion dieses Namens (bekannt: "
                     + string.Join(", ", bausteine.Concat(gerufen.Keys).OrderBy(n => n, StringComparer.Ordinal)) + ").", "host:Funktionen");
-            services.AddSingleton(new BausteinBindung(name, k.Laufort, k.Implementierung, Math.Max(1, k.Slots), Math.Max(0, k.Wiederholungen),
-                k.Zustand is null ? null : ZustandsBindung.Aus(k.Zustand), Math.Max(0, k.Parallel), Math.Max(0, k.Warteschlange), k.Vorwaermen));
+            services.AddSingleton(new BausteinBindung(name, k.Laufort, k.Implementierung, Math.Max(0, k.Wiederholungen), Math.Max(0, k.Parallel),
+                Math.Max(0, k.Warteschlange), k.Vorwaermen));
             if (k.Laufort == FunktionsLaufort.Hand) services.AddHandAusfuehrer();
         }
         return services;

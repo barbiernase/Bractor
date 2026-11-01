@@ -75,29 +75,39 @@ public static class Grammatik
             [Comp("ICommand verlangt Ziel; ICommand<TAggregat> liefert es aus Id<TAggregat> AggregateId"), An("CQRS013", "Domain.SourceGeneration/ModellAnalyzer.cs (Command ohne typisiertes Ziel)"),
              Gen("CQRS010", "Infrastructure.SourceGeneration/CommandAggregateMapGenerator.cs (Decide außerhalb des Ziel-Aggregats)"),
              An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Command ohne Decider)")]),
-        new("GR-EVENT", "Event → beliebig viele Konsumenten", "Ein persistentes Event (auch eine Quell-Nachricht) hören Projektionen und Funktionen "
-            + "(beliebig viele) und Clients zur Kenntnis (IHoert); gefaltet wird es im eigenen Aggregat.", "error",
+        new("GR-EVENT", "Event → Projektionen, Clients, das eigene Aggregat", "Ein persistentes Event hören Projektionen (beliebig viele) und Clients zur "
+            + "Kenntnis (IHoert); gefaltet wird es im eigenen Aggregat. Eine Funktion liest nie das Log: sie hört ein Event nur als Antwort auf einen "
+            + "eigenen Command; eine Quell-Nachricht hört sie als durablen Eingang (docs/04 §4.4).", "error",
             [Comp("Auf-Parameter : IEvent"), An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Auf einer Projektion)"),
-             Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Eingang einer Funktion)")]),
+             Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (eine Funktion, die nur Events hört, hat keinen Einstieg)")]),
+        new("GR-FOLGE", "Folge → die Funktionen, die sie hören", "Ein Decide kann neben Events eine Folge ausgeben: einen schlichten Record ohne Marker. "
+            + "Sie geht nicht ins Log; je Funktion, die sie hört, steht in derselben Transaktion ein offener Eingang (Kennung aus Command und Stelle), "
+            + "den die Laufzeit zustellt, bis die Funktion ihn fertig meldet — genau einmal wirksam (docs/03 §3.2, docs/04 §4.4).", "error",
+            [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag: Folgen stehen in der Signatur)"),
+             new("laufzeit", null, "Infrastructure/Eingaenge/Folgen.cs (offene Eingänge im Commit, schneller Weg danach)")]),
+        new("GR-ZWISCHENERGEBNIS", "Zwischenergebnis → die nächste Funktion", "Eine Funktion gibt Commands, Zwischenergebnisse (schlichte Records) und "
+            + "Hinweise aus, nie ein Event. Ein Zwischenergebnis geht an jede Funktion, die es hört; fertig ist ein Eingang erst, wenn alle Nachfolger fertig "
+            + "sind (docs/04 §4.4).", "error",
+            [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Ausgabe einer Funktion, Verkettung)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsKindActor.cs (an die Hörer, gewartet bis fertig)")]),
         new("GR-FALTUNG", "Event → genau ein Aggregat faltet", "Ein Event faltet genau ein Aggregat (Applier) — das, das es entscheidet.", "warning",
             [An("CQRS080", "Domain.SourceGeneration/ModellAnalyzer.cs (Apply ohne Decide)"), An("CQRS079", "Domain.SourceGeneration/ModellAnalyzer.cs (Decide ohne Apply)")]),
         new("GR-TRANSIENT", "Hinweis → Funktion/Client", "Einen Hinweis (ITransientEvent: Ablehnung, Fortschritt) hören Funktionen (höchstens einmal) "
             + "und Clients (IHoert) — nie eine Projektion, nie ein Aggregat. Ist eine Ablehnung für einen Ablauf wichtig, ist sie ein Event.", "error",
-            [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Hinweisplan; aus einem Hinweis nur Commands und Hinweise)"),
-             new("laufzeit", null, "Infrastructure/Funktionen/HinweisNetz.cs (direkt an die Adresse, ohne Log und Broker)")]),
-        new("GR-HINWEIS-NETZ", "Hinweis-Netz: hart verdrahtet, höchstens einmal", "Ein Hinweis aus einem Aggregat oder einer Funktion geht direkt an "
-            + "die Adresse jeder Funktion, die ihn hört (Partition seines Herkunfts-Streams bzw. die eine Adresse) — im Speicher, ohne Log, ohne Broker, "
-            + "höchstens einmal. Jeder Hinweis, den eine Funktion hört, hat einen Erzeuger im Netz; jede Adresse der Routing-Tabelle existiert; "
-            + "Commands aus einem Hinweis tragen eine Id aus Funktion, Hinweis-Kennung, Stelle, Typ und Ziel (R20, docs/04 §4.4).", "error",
+            [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Verkettung; aus einem Hinweis nur Commands, Zwischenergebnisse und Hinweise)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/HinweisNetz.cs (über die Wege an den Parent, ohne Log und Broker)")]),
+        new("GR-HINWEIS-NETZ", "Hinweis-Netz: hart verdrahtet, höchstens einmal", "Ein Hinweis aus einem Aggregat, einer Funktion oder einem Client "
+            + "geht an jede Funktion, die ihn hört (die generierte Verkettung) — im Speicher, ohne Log, ohne Broker, höchstens einmal. Jeder Hinweis, "
+            + "den eine Funktion hört, hat einen Erzeuger im Netz; Commands aus einem Hinweis tragen eine Id aus Eingangs-Kennung, Funktion und Stelle "
+            + "(R20, docs/04 §4.4).", "error",
             [An("CQRS106", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (gehörter Hinweis ohne Erzeuger)"),
-             new("boot", null, "Infrastructure/Funktionen/HinweisNetz.cs (jede Adresse der Routing-Tabelle gehört zu einer Funktion)")]),
+             new("laufzeit", null, "Infrastructure/Funktionen/HinweisNetz.cs (je hörende Funktion ein Eingang über die Wege)")]),
         new("GR-WECKPLAN", "Weckplan: jeder Hörer mit jedem gehörten Typ", "Nach jedem Commit weckt der Wecker gezielt, wen der generierte Weckplan "
-            + "zum Typ eines geschriebenen Events nennt: die Partition jeder Projektion und jeder Funktion, die ihn aus dem Log hört (bzw. die eine "
-            + "Adresse), und die Uhr bei einer gesetzten Frist — verlierbar, der Takt je Partition holt nach. Ein Hörer aus dem Log hört nur konkrete, "
+            + "zum Typ eines geschriebenen Events nennt: die Partition jeder Projektion, die ihn hört, und die Uhr bei einer gesetzten Frist — "
+            + "verlierbar, der Takt je Partition holt nach. Ein Hörer aus dem Log hört nur konkrete, "
             + "persistente Events (der Plan sucht nach dem Typ des geschriebenen Events) — sonst ist schon seine Form falsch, denn Weckplan und Form "
             + "lesen dieselbe Lesart; jeder registrierte Hörer steht mit jedem gehörten Typ im Plan (docs/03 §3.5).", "error",
             [An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Auf einer Projektion, Lesart Projektionsform)"),
-             Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Eingang einer Funktion, Lesart Funktionsform)"),
              new("boot", null, "Infrastructure/Wecken/Wecker.cs (Pruefe: jeder registrierte Hörer steht mit jedem gehörten Typ im Plan)")]),
         new("GR-FRIST", "Frist → Uhr → Command an dasselbe Aggregat", "Eine Frist (Frist<TCmd> aus dem Decide eines Aggregats) nimmt die Uhr; fällig "
             + "sendet sie den Command an das Aggregat, das sie setzte (R5) — mindestens einmal, mit der Id aus dem Frist-Event.", "error",
@@ -115,20 +125,20 @@ public static class Grammatik
             + "(eine Implementierung); Auf und Frage nehmen sie als Parameter.", "error",
             [Gen("CQRS053", "Projections.SourceGeneration/ProjectionServicesGenerator.cs"), An("CQRS051", "Domain.SourceGeneration (FaehigkeitAnalyzer)")]),
         // Erzeugung: Baustein-Ausgang → Sorte
-        new("GR-AUS-AGGREGAT", "Aggregat erzeugt Events", "Ein Aggregat (Decide) erzeugt Events, Hinweise und Fristen — keine Commands; auf eine "
-            + "direkte Query (Frage) Antworten.", "error",
+        new("GR-AUS-AGGREGAT", "Aggregat erzeugt Events", "Ein Aggregat (Decide) erzeugt Events, Hinweise, Fristen und Folgen — keine Commands; auf "
+            + "eine direkte Query (Frage) Antworten.", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)")]),
         new("GR-AUS-PROJEKTION", "Projektion erzeugt keine Nachricht", "Eine Projektion wirkt nur in ihrem Store (Schreib-Fähigkeiten genau eines Stores, R9) "
-            + "und gibt nichts aus (Auf liefert Task) — was auf ein Event hin etwas sendet, ist eine Funktion.", "error",
+            + "und gibt nichts aus (Auf liefert Task) — was auf eine Entscheidung hin etwas sendet, hört ihre Folge (eine Funktion).", "error",
             [An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Rückgabe Task)"), Gen("CQRS052", "Infrastructure.SourceGeneration/PullPathGenerator.cs (ein Store je Projektion)")]),
         new("GR-AUS-READER", "Reader erzeugt Antworten", "Ein Reader antwortet je Frage mit einer Antwort oder OneOf<…> (auch als Task) und liest nur über "
             + "Lese-Fähigkeiten. Welche Projektionen hinter einer Frage stehen, folgt aus ihnen: die, die in denselben Store schreiben; was eine Antwort "
             + "zeigt, sagen ihre Id<T>-Felder (und die der Query).", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)"), An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Frage eines Readers)")]),
         // Funktion als Baustein und die Regeln der Wiederholbarkeit (docs/10 §10.6).
-        new("GR-FUNKTION-FORM", "Funktion: je Eingang ein Auf, freie Ausgabe", "Eine Funktion hat je Eingang (Event, Quell-Nachricht oder Hinweis) ein Auf "
-            + "mit optional Herkunft, Lese-Fähigkeiten und Abbruch; ausgegeben werden Commands, Events und Hinweise (konkret, OneOf, T?, Strom, je auch als "
-            + "Task) — vollständig in der Signatur. Als Klasse läuft sie im Host, als Schnittstelle draußen (Laufort aus der Umgebung); eine Schnittstelle "
+        new("GR-FUNKTION-FORM", "Funktion: je Eingang ein Auf, freie Ausgabe", "Eine Funktion hat je Eingang (Folge, Zwischenergebnis, Quell-Nachricht, "
+            + "Hinweis oder ein Event als Antwort auf einen eigenen Command) ein Auf mit optional Herkunft, Lese-Fähigkeiten und Abbruch; ausgegeben werden "
+            + "Commands, Zwischenergebnisse und Hinweise (konkret, OneOf, T?, Strom, je auch als Task) — vollständig in der Signatur. Als Klasse läuft sie im Host, als Schnittstelle draußen (Laufort aus der Umgebung); eine Schnittstelle "
             + "ohne eindeutige Umsetzung braucht eine Bindung, eine Funktion mit Lese-Fähigkeit läuft nur im Host. Eine Funktion ohne Auf ist gerufen "
             + "(GR-GERUFEN); Eingänge und gerufene Methoden an einem Objekt sind ein Formfehler.", "error",
             [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Form der Funktion)"),
@@ -139,29 +149,21 @@ public static class Grammatik
         new("GR-GLEICH-RECHNEN", "Aggregat und Projektion rechnen gleich", "Aggregate und Projektionen rechnen bei gleicher Eingabe gleich: keine Uhr, "
             + "kein Zufall, kein Lesen fremder Daten — Zeit kommt aus dem Event bzw. der Herkunft (R11).", "error",
             [An("CQRS102", "Domain.SourceGeneration/GleichbleibendAnalyzer.cs")]),
-        new("GR-FESTHALTEN", "Funktion hält ihre Ausgabe fest", "Eine Funktion hält ihre Ausgabe im Log fest, bevor sie wirkt; ohne Festhalten sendet nur "
-            + "eine nachweislich gleichbleibende — eine Klasse ohne gerufene Funktion und ohne Lese-Fähigkeit, deren Rumpf weder Uhr noch Zufall noch fremde Daten "
-            + "nutzt (R12).", "error",
-            [An("CQRS103", "Domain.SourceGeneration/GleichbleibendAnalyzer.cs (gleichbleibend heißt ohne Uhr und Zufall)"),
-             new("generator", null, "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Gleichbleibend aus der Signatur)")]),
         new("GR-FUNKTION-ZUSTAND", "Zustand einer Funktion nur über IZustand<T>", "Eine Funktion hält Zustand (ein Modell, das weiterlernt, ein Zähler) "
             + "nur über IZustand<T> im Konstruktor einer Funktions-Klasse oder einer gerufenen Funktion (deren Zustand gehört der Aktivierung ihres Halters): "
-            + "er wird mit der Position gesichert, kommt beim Umzug mit, und Auf läuft immer "
-            + "nur einmal zugleich. Felder mit Setter, veränderliche Felder und Sammlungen hinter readonly sind verboten (sie gingen beim Umzug still "
-            + "verloren); eine Funktion mit Zustand ist nie gleichbleibend und darf aus einem Eingang allein lernen (Auf ohne Ausgabe); ein Zustand für "
-            + "alles steht mit [EineAdresse] an der Funktion (R19, docs/04 §4.4).", "error",
+            + "er ist ein Cache der Aktivierung, keine Wahrheit — was fachlich zählt, steht im Log und wird in Projektionen gelernt. Felder mit Setter, "
+            + "veränderliche Felder und Sammlungen hinter readonly sind verboten; eine Funktion mit Zustand darf aus einem Eingang allein lernen (Auf "
+            + "ohne Ausgabe) (R19, docs/04 §4.4).", "error",
             [An("CQRS105", "Domain.SourceGeneration/ZustandAnalyzer.cs"),
              Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (höchstens ein Zustand, eigene Klasse; Auf ohne Ausgabe nur mit Zustand)"),
-             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsAktivierung.cs (je Funktion ihr Zustand in EINEM Dokument, gerufene über AktivierungsZustaende)"),
-             new("generator", null, "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (mit Zustand nie gleichbleibend; Sichern über den generierten Kontext)")]),
+             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsAktivierung.cs (je Aktivierung ihr Zustand, gerufene über AktivierungsZustaende)")]),
         new("GR-FUNKTION-LEBENSZYKLUS", "Lebenszyklus einer Funktion optional", "Eine Funktions-Klasse im Host kann einen Lebenszyklus haben "
             + "(ILebenszyklus): BeimAktivierenAsync nach dem Bau und dem Laden des Zustands, vor dem ersten Auf (ein Netz laden); VorDemSichernAsync vor "
             + "jeder Sicherung des Zustands (Gewichte zurückholen); das Ende über IAsyncDisposable. Eine geladene Ressource darf in einem readonly-Feld "
-            + "stehen, Zustand nur in IZustand<T>. Nicht an Schnittstellen (draußen gehört der Lebenszyklus dem Worker), nicht an gerufenen Funktionen; eine Funktion "
-            + "mit Lebenszyklus ist nie gleichbleibend (docs/04 §4.4, docs/10 E10).", "error",
+            + "stehen, Zustand nur in IZustand<T>. Nicht an Schnittstellen (draußen gehört der Lebenszyklus dem Worker), nicht an gerufenen Funktionen "
+            + "(docs/04 §4.4, docs/10 E10).", "error",
             [An("CQRS107", "Domain.SourceGeneration/LebenszyklusAnalyzer.cs"),
-             new("generator", null, "Infrastructure.SourceGeneration/Funktionsform.cs (mit Lebenszyklus nie gleichbleibend)"),
-             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsActor.cs (Aktivieren nach dem Laden, vor jeder Sicherung, Freigabe am Ende)")]),
+             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsKindActor.cs (Aktivieren beim Beginn des Kinds, Freigabe am Ende)")]),
         new("GR-NEUE-ID", "Neue Ids nur abgeleitet", "Auf der Server-Seite (Aggregat, Projektion, Reader, Funktion im Host) entstehen neue Ids nur "
             + "abgeleitet (Herkunft.NeueId), nie mit Guid.NewGuid() oder Id<T>.Neu() — eine Wiederholung bekäme sonst ein anderes Ziel (R13). Clients "
             + "würfeln.", "error",

@@ -41,9 +41,20 @@ public static class EinblickEndpunkte
         g.MapGet("/vorgang/{korrelation}", async (SpurLeser leser, string korrelation, CancellationToken ct)
             => Results.Json(new { korrelation, eintraege = await leser.VorgangAsync(korrelation, ct) }, Json));
 
-        // Offene Aufträge je Funktion (Vermittler, nicht maßgeblich) — Stau an der Funktions-Karte.
-        g.MapGet("/auftraege", async (ActorSystem system, CancellationToken ct)
-            => Results.Json(new { auftraege = await FunktionsAnbieter.ListeOffeneAsync(system, Anwendung.Funktionen.Bausteine.Select(b => b.Typ), ct) }, Json));
+        // Offene Eingänge je Funktion (cqrs_eingaenge, maßgeblich) — Stau an der Funktions-Karte.
+        g.MapGet("/auftraege", async (IServiceProvider sp, int? n, CancellationToken ct) =>
+        {
+            var offene = sp.GetService<Infrastructure.Eingaenge.OffeneEingaenge>()
+                ?? new Infrastructure.Eingaenge.OffeneEingaenge(sp.GetRequiredService<Marten.IDocumentStore>());
+            var liste = await offene.OffeneAsync(n ?? 1_000, ct);
+            return Results.Json(new
+            {
+                auftraege = liste.GroupBy(e => e.Funktion).ToDictionary(g => g.Key, g => g.Select(e => new
+                {
+                    vorgang = e.Kennung, korrelation = e.Korrelation, auftrag = e.Typ, versuche = e.Versuche, stream = e.Stream, version = e.Version,
+                }).ToList()),
+            }, Json);
+        });
 
         // Verlierbares (Ablehnungen, transiente Events) — nur in Sim geschrieben.
         g.MapGet("/hinweise", async (long? ab, int? n, CancellationToken ct)

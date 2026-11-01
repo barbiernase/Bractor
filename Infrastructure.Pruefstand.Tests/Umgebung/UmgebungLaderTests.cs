@@ -101,12 +101,12 @@ public class UmgebungLaderTests
     private static FunktionsBaustein Baustein(string name) => Infrastructure.Komposition.Anwendung.Funktionen.Bausteine.Single(b => b.Name == name);
 
     private static BausteinBindung Bindung(string name, FunktionsKonfig k)
-        => FunktionsBausteinWiring.BindungVon(Baustein(name), [new BausteinBindung(name, k.Laufort, k.Implementierung, Math.Max(1, k.Slots), k.Wiederholungen)]);
+        => FunktionsBausteinWiring.BindungVon(Baustein(name), [new BausteinBindung(name, k.Laufort, k.Implementierung, k.Wiederholungen)]);
 
     [Fact]
     public void Laufort_Host_bindet_die_genannte_Umsetzung()
-        => Bindung("IBildVerkleinerung", new() { Implementierung = "OpenCvBildVerkleinerung", Slots = 3, Wiederholungen = 1 })
-            .Should().Be(new BausteinBindung("IBildVerkleinerung", FunktionsLaufort.Host, "OpenCvBildVerkleinerung", 3, 1));
+        => Bindung("IBildVerkleinerung", new() { Implementierung = "OpenCvBildVerkleinerung", Wiederholungen = 1 })
+            .Should().Be(new BausteinBindung("IBildVerkleinerung", FunktionsLaufort.Host, "OpenCvBildVerkleinerung", 1));
 
     [Fact]
     public void Laufort_Host_mit_unbekannter_Umsetzung_ist_ein_Boot_Fehler()
@@ -191,7 +191,7 @@ public class UmgebungLaderTests
             b[f].Umsetzungen.Select(x => x.Name).Should().Equal([u], "genau eine Umsetzung im Host");
         }
         b["IBildpaarBeurteilung"].Umsetzungen.Should().BeEmpty("nur draußen getragen");
-        b["Bildeingang"].Gleichbleibend.Should().BeTrue("eine Klasse ohne gerufene Funktion und Lese-Fähigkeit");
-        b["RangeAufloesung"].Liest.Should().BeTrue("mit Lese-Fähigkeit: läuft im Host und hält fest");
+        b["Bildeingang"].Draussen.Should().BeFalse("eine Klasse rechnet im Host");
+        b["RangeAufloesung"].Liest.Should().BeTrue("mit Lese-Fähigkeit: läuft nur im Host");
     }
 }

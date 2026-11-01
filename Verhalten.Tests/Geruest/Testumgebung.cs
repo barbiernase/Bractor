@@ -102,15 +102,14 @@ public sealed class Testumgebung
                 ["Laufmodus"] = "EinmalImCluster",
             },
         };
-        JsonObject ImHost(int slots) => new() { ["Laufort"] = "Host", ["Slots"] = slots, ["Wiederholungen"] = 1 };
+        JsonObject ImHost() => new() { ["Laufort"] = "Host", ["Wiederholungen"] = 1 };
         json["Funktionen"] = new JsonObject
         {
-            ["IBildEinlesen"] = ImHost(2),
-            ["IBildVerkleinerung"] = ImHost(2),
-            ["IKontrastausgleich"] = ImHost(2),
-            // Draußen getragen (IDarf<F> eines verkörperten Akteurs): mehrere Eingänge je Partition zugleich. Die rohen Träger der Client-Tests übernehmen beim Anbieten auch
-            //   Eingänge früherer Tests, die sie nie beantworten; mit einem Slot sperrte jeder davon seine Partition bis zum Ablauf der Lease (30 s).
-            ["IBildpaarBeurteilung"] = new JsonObject { ["Laufort"] = "Extern", ["Slots"] = 8 },
+            ["IBildEinlesen"] = ImHost(),
+            ["IBildVerkleinerung"] = ImHost(),
+            ["IKontrastausgleich"] = ImHost(),
+            // Draußen getragen (IDarf<F> eines verkörperten Akteurs): wie viele Eingänge zugleich, sagen die Slots der Träger beim Anbieten.
+            ["IBildpaarBeurteilung"] = new JsonObject { ["Laufort"] = "Extern" },
         };
         json["Konfig"] = new JsonObject { ["BildaufbereitungKonfig"] = new JsonObject { ["AusgabePfad"] = Path.Combine(Verzeichnis, "aufbereitet") } };
         return json;

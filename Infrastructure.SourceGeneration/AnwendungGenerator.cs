@@ -119,7 +119,6 @@ namespace Infrastructure.SourceGeneration
             Tabelle(sb, "FunktionsTabelle", "IFunktionsTabelle", "global::Infrastructure.Funktionen.GeneratedFunktionsBausteine", new string[0], new[]
             {
                 "IReadOnlyList<global::Infrastructure.Funktionen.FunktionsBaustein> Bausteine => {0}.Alle",
-                "IReadOnlyDictionary<Type, string[]> Hinweisplan => {0}.Hinweisplan",
                 "IReadOnlyDictionary<Type, string[]> Verkettung => {0}.Verkettung",
             });
             Tabelle(sb, "GerufenenTabelle", "IGerufenenTabelle", "global::Infrastructure.Funktionen.GeneratedGerufene", new[]

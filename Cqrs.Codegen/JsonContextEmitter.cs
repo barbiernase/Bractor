@@ -51,9 +51,6 @@ public static class JsonContextEmitter
                 typeof(ICommandJsonConverter),
         /*ID-KONVERTER*/
             })]
-        // ── Framework: festgehaltene Ausgabe der Funktionen ──
-        [JsonSerializable(typeof(Infrastructure.Funktionen.BefehlFestgehalten))]
-        [JsonSerializable(typeof(Infrastructure.Funktionen.AusgabeFestgehalten))]
         // ── Framework: die Frist eines Aggregats (Uhr) ──
         [JsonSerializable(typeof(Abstractions.FristGesetzt))]
         """;
@@ -100,26 +97,15 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(EventEnvelope))]
         [JsonSerializable(typeof(Verteile))]
         [JsonSerializable(typeof(Verarbeitet))]
-        [JsonSerializable(typeof(ArbeitLebt))]
-        [JsonSerializable(typeof(ArbeitErledigt))]
-        [JsonSerializable(typeof(ListeOffene))]
-        [JsonSerializable(typeof(OffeneAuftraege))]
-        [JsonSerializable(typeof(EingangAnbieten))]
-        [JsonSerializable(typeof(HoleEingaenge))]
-        [JsonSerializable(typeof(EingaengeZugeteilt))]
-        [JsonSerializable(typeof(EingangBeantwortet))]
         [JsonSerializable(typeof(HinweisZustellen))]
         [JsonSerializable(typeof(EingangZustellen))]
         [JsonSerializable(typeof(EingangQuittung))]
         [JsonSerializable(typeof(Antwortereignis))]
-        [JsonSerializable(typeof(TraegerAbgemeldet))]
         [JsonSerializable(typeof(HalteQuelle))]
         [JsonSerializable(typeof(QuelleGehalten))]
-        // ── Framework: Ergebnis-Events, Festhalten, Frist (reisen im Wire) ──
+        // ── Framework: Ergebnis-Events, Frist (reisen im Wire) ──
         [JsonSerializable(typeof(CommandFailed))]
         [JsonSerializable(typeof(CommandQuittung))]
-        [JsonSerializable(typeof(BefehlFestgehalten))]
-        [JsonSerializable(typeof(AusgabeFestgehalten))]
         [JsonSerializable(typeof(FristGesetzt))]
         """;
 

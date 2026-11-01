@@ -11,4 +11,7 @@ public static class Eingangsvertrag
 
     /// <summary>Die Kennung des Eingangs, den die Nachricht <paramref name="nachricht"/> bei der Funktion <paramref name="funktion"/> öffnet.</summary>
     public static Guid Eingang(Guid nachricht, string funktion) => Herkunft.Ableite($"eingang:{funktion}:{nachricht:N}");
+
+    /// <summary>Die Kennung des Hinweises, den ein Aggregat auf den Command <paramref name="commandId"/> hin ausgab (eine Ablehnung, docs/04 §4.4).</summary>
+    public static Guid HinweisAusCommand(Guid commandId) => Herkunft.Ableite($"hinweis:command:{commandId:N}");
 }

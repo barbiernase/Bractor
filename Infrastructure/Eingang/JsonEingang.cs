@@ -156,8 +156,8 @@ public static class JsonEingang
             }, Json);
         });
 
-        // Die Antwort ist eine Liste von Ausgaben [{typ, daten}] (oder ein Fehler) — die erste Antwort gewinnt am Schlüssel „F, X“.
-        g.MapPost("/ergebnis", async (JsonElement body, IServiceProvider sp, CancellationToken ct) =>
+        // Die Antwort ist eine Liste von Ausgaben [{typ, daten}] (oder ein Fehler) — die erste Antwort gewinnt (sie beendet den Lauf).
+        g.MapPost("/ergebnis", (JsonElement body, IServiceProvider sp) =>
         {
             var hand = sp.GetService<HandAusfuehrer>();
             if (hand is null) return Results.Json(new { ok = false, fehler = "keine Funktion mit Laufort Hand in dieser Umgebung" }, Json, statusCode: 404);
@@ -179,9 +179,9 @@ public static class JsonEingang
                     catch (Exception e) when (e is JsonException or InvalidOperationException or NotSupportedException)
                     { return Results.Json(new { ok = false, fehler = $"{typ.Name} nicht lesbar: {e.Message}" }, Json, statusCode: 400); }
                 }
-            var ausgang = await hand.AntworteAsync(vorgang, fehler is null ? ausgaben : null, fehler, ct);
-            return Results.Json(new { ok = ausgang is ErgebnisAusgang.Geschrieben or ErgebnisAusgang.Ueberholt or ErgebnisAusgang.Abgelehnt, ausgang = ausgang.ToString() }, Json,
-                statusCode: ausgang is ErgebnisAusgang.Unbekannt ? 404 : ausgang is ErgebnisAusgang.NichtGeschrieben ? 503 : 200);
+            var ausgang = hand.Antworte(vorgang, fehler is null ? ausgaben : null, fehler);
+            return Results.Json(new { ok = ausgang is not Werkstattausgang.Unbekannt, ausgang = ausgang.ToString() }, Json,
+                statusCode: ausgang is Werkstattausgang.Unbekannt ? 404 : 200);
         });
     }
 

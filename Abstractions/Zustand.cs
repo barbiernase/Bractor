@@ -31,12 +31,3 @@ public interface IZustand<T> where T : class, new()
     /// <summary>Der Zustand dieser Aktivierung — lesen, ändern oder ersetzen; gesichert wird, was hier steht.</summary>
     T Wert { get; set; }
 }
-
-/// <summary>
-/// Die Funktion hat EINE Adresse statt einer je Partition (docs/04 §4.4, docs/10 A6): ein einziger Funktions-Actor liest alle Partitionen des Logs und hört
-/// alle Hinweise — für einen Zustand, der für alles gilt (ein Netz, ein Modell über alle Streams). Ohne das Attribut hat eine Funktion eine Adresse
-/// je Partition (<c>funktion-&lt;F&gt;/&lt;Partition&gt;</c>), ein Hinweis geht an die Partition seines Herkunfts-Streams. Gilt für C# und Python gleich
-/// (an der Klasse bzw. an der Schnittstelle einer Funktion draußen).
-/// </summary>
-[AttributeUsage(AttributeTargets.Class | AttributeTargets.Interface, AllowMultiple = false, Inherited = false)]
-public sealed class EineAdresseAttribute : Attribute { }

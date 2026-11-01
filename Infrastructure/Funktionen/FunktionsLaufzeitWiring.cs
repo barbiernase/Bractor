@@ -27,7 +27,7 @@ public static class FunktionsLaufzeitWiring
             var logger = sp.GetService<ILoggerFactory>()?.CreateLogger("Funktionen");
             return new FunktionsWege(new Bote(sp.GetRequiredService<ActorSystem>().Cluster(), logger), sp.GetRequiredService<FunktionsOrte>(), logger);
         });
-        if (!Anwendung.Funktionen.Bausteine.Any(b => b.VorDemAggregat)) return services;
+        if (Anwendung.Funktionen.Bausteine.Count == 0) return services;
         services.TryAddSingleton<Werkstatt>();
         services.TryAddSingleton<IEingangsZustellung>(sp => new WegeZustellung(sp.GetRequiredService<IFunktionsWege>()));
         services.AddHostedService<FunktionsOrteTakt>();
@@ -83,7 +83,7 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
         var bindungen = dienste.GetServices<BausteinBindung>().ToList();
         var plaene = new List<ParentPlan>();
         var draussen = new List<DraussenPlan>();
-        foreach (var b in Anwendung.Funktionen.Bausteine.Where(b => b.VorDemAggregat))
+        foreach (var b in Anwendung.Funktionen.Bausteine)
         {
             var bindung = FunktionsBausteinWiring.BindungVon(b, bindungen);
             var antworten = b.Eingaenge.Where(e => !e.Hinweis && typeof(IEvent).IsAssignableFrom(e.Typ) && !typeof(IQuellNachricht).IsAssignableFrom(e.Typ))
@@ -107,7 +107,7 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
             }
             var umsetzung = FunktionsBausteinWiring.Umsetzung(b, bindung);
             var gerufenerZustand = dienste.GetService<GerufeneWahl>()?.MitZustand(umsetzung.Typ) == true;
-            var imHost = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, umsetzung.Baue, b.Zustand, b.Name, gerufenerZustand), b.Rechne!, b.Liest,
+            var imHost = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, umsetzung.Baue, b.Zustand, b.Name, gerufenerZustand), b.Rechne, b.Liest,
                 antworten);
             var konfig = new FunktionsOrtKonfig(
                 Parallel: bindung.Parallel > 0 ? bindung.Parallel : FunktionsOrtKonfig.StandardParallel,

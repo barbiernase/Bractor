@@ -40,9 +40,9 @@ public class AblaufE2ETests
     {
         s.AddCqrsFramework(opts => { opts.EnableGrpc = grpc; opts.ClusterName = cluster; });
         s.AddGeneratedPullPaths();   // die Projektionen füllen die Read-Models, die die Datensatz-Funktionen lesen
-        s.AddSingleton(new BausteinBindung(nameof(IBildEinlesen), FunktionsLaufort.Host, Slots: 2, Wiederholungen: 1));
-        s.AddSingleton(new BausteinBindung(nameof(IBildVerkleinerung), FunktionsLaufort.Host, Slots: 2, Wiederholungen: 1));
-        s.AddSingleton(new BausteinBindung(nameof(IKontrastausgleich), kontrastausgleich, Slots: 2, Wiederholungen: 1));
+        s.AddSingleton(new BausteinBindung(nameof(IBildEinlesen), FunktionsLaufort.Host, Wiederholungen: 1));
+        s.AddSingleton(new BausteinBindung(nameof(IBildVerkleinerung), FunktionsLaufort.Host, Wiederholungen: 1));
+        s.AddSingleton(new BausteinBindung(nameof(IKontrastausgleich), kontrastausgleich, Wiederholungen: 1));
         var konfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             [$"{Funktionsvertrag.KonfigAbschnitt}:{nameof(BildaufbereitungKonfig)}:{nameof(BildaufbereitungKonfig.AusgabePfad)}"] = ausgabe,
@@ -120,8 +120,6 @@ public class AblaufE2ETests
             schritt.Wirker.Should().Be("quelle:DateiErkannt");
             kette.Should().HaveCount(2, "die Schritte stehen vor dem Aggregat: ihre Zwischenergebnisse gehen nie ins Log, die Ursache des Commands ist die Quell-Nachricht");
 
-            // Kein Log je Schritt: nichts festgehalten, kein Prozess-Stream.
-            (await es.ReadStreamAsync(FunktionsIds.Festhalten(nameof(IBildEinlesen), vorgang, 1), 0, default)).Should().BeEmpty();
         }
         finally
         {

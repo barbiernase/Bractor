@@ -1,72 +1,31 @@
 using Abstractions;
 using Infrastructure.Komposition;
-using Infrastructure.Lebenszyklus;
-using Infrastructure.Projections;   // IClusterKindContributor, BatchRegistrierung, BatchKonsumStartupService, Konsum
-using Infrastructure.Emit;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Logging;
-using Proto;
-using Proto.Cluster;
 
 namespace Infrastructure.Funktionen;
 
 /// <summary>
-/// Wo und wie eine Funktion in Baustein-Form läuft (Umgebung <c>Funktionen:&lt;Name&gt;</c>, sonst der Standard): Laufort, die Umsetzung im Host
-/// (bei mehreren nach Name), Slots je Partition und Wiederholungen, bevor ein werfender Eingang seinen Stream parkt; für eine Funktion mit Zustand
-/// dazu, wo und wie oft er gesichert wird (ohne Angabe <see cref="ZustandsBindung.Standard"/>). Vor dem Aggregat (docs/04 §4.4) gelten statt der Slots
-/// Parallel, Warteschlange und Vorwärmen je Knoten (0 = der Standard, <see cref="FunktionsOrtKonfig"/>).
+/// Wo und wie eine Funktion läuft (Umgebung <c>Funktionen:&lt;Name&gt;</c>, sonst der Standard): Laufort, die Umsetzung im Host (bei mehreren nach
+/// Name), Wiederholungen, Parallel, Warteschlange und Vorwärmen je Knoten (0 = der Standard, <see cref="FunktionsOrtKonfig"/>).
 /// </summary>
 public sealed record BausteinBindung(string Funktion, FunktionsLaufort Laufort = FunktionsLaufort.Host, string? Umsetzung = null,
-    int Slots = FunktionsKonfig.StandardSlots, int Wiederholungen = 0, ZustandsBindung? Zustand = null, int Parallel = 0, int Warteschlange = 0,
-    bool Vorwaermen = false);
+    int Wiederholungen = 0, int Parallel = 0, int Warteschlange = 0, bool Vorwaermen = false);
 
 /// <summary>
-/// Die Verdrahtung der Funktionen in Baustein-Form, für jede Anwendung gleich — aus der generierten Tabelle
-/// <c>Anwendung.Funktionen.Bausteine</c>, ohne Domänen-Typ im Framework:
-/// <list type="bullet">
-/// <item>je Funktion ein Cluster-Kind <c>funktion-&lt;F&gt;</c> (Identität = Partition) mit dem <see cref="FunktionsActor"/>;</item>
-/// <item>je Funktion mit Eingängen aus dem Log eine Weck-Registrierung wie bei einer Projektion: der Wecker am Commit weckt die Partition
-///   (Weckplan), der Takt (30 s) jede Partition. Ihr Stand liegt im selben Dokument wie der einer Projektion, so zählt
-///   <c>/health</c> ihren Rückstand mit;</item>
-/// <item>das Festhalten im Log (<see cref="LogAusgabeAblage"/>) und der Stand im Dokument-Store (<see cref="MartenFunktionsStand"/>);</item>
-/// <item>das Hinweis-Netz (<see cref="HinweisNetz"/>), wenn irgendeine Funktion einen Hinweis hört: Hinweise aus Funktionen und Aggregaten gehen
-///   direkt an die hörenden Funktions-Actors, ohne Log;</item>
-/// <item>für Funktionen draußen der Vermittler (Lease) — die Hand-Seite über den <see cref="HandAusfuehrer"/>, die Leitung (Laufort Extern) über die
-///   Sitzung des Clients, der sie trägt (<c>CqrsClientService</c>).</item>
-/// </list>
+/// Die Verdrahtung der Funktionen, für jede Anwendung gleich — aus der generierten Tabelle <c>Anwendung.Funktionen.Bausteine</c>, ohne Domänen-Typ im
+/// Framework: die Laufzeit vor dem Aggregat (<see cref="FunktionsLaufzeitWiring"/>: Wurzel, Parents, Kinder, Werkstatt) und das Hinweis-Netz
+/// (<see cref="HinweisNetz"/>), wenn irgendeine Funktion einen Hinweis hört.
 /// </summary>
 public static class FunktionsBausteinWiring
 {
     public static IServiceCollection AddFunktionsBausteine(this IServiceCollection services)
     {
-        // Funktionen vor dem Aggregat (docs/04 §4.4) laufen auf Wurzel, Parent und Kindern (FunktionsLaufzeitWiring); hier nur die mit Log-Eingängen.
         FunktionsLaufzeitWiring.AddFunktionsLaufzeit(services);
-        var alle = Anwendung.Funktionen.Bausteine;
-        var bausteine = alle.Where(b => !b.VorDemAggregat).ToList();
-        var hinweiseVorDem = Anwendung.Funktionen.Verkettung.Keys.Any(t => typeof(ITransientEvent).IsAssignableFrom(t));
-        if (bausteine.Count == 0 && !hinweiseVorDem) return services;
-        services.TryAddSingleton<IAusgabeAblage>(sp => new LogAusgabeAblage(sp.GetRequiredService<IEventStoreRepository>(), sp.GetService<Infrastructure.Verteilen.Verteilung>()));
-        services.TryAddSingleton<IFunktionsStand>(sp => new MartenFunktionsStand(sp.GetRequiredService<Marten.IDocumentStore>()));
-        foreach (var b in bausteine)
-        {
-            services.AddSingleton<IClusterKindContributor>(new FunktionsKind(b));
-            if (b.HoertLog)
-                services.AddSingleton(new BatchRegistrierung(b.KindName, b.StandId, b.LogEingaenge.Select(e => e.Typ).ToList(), EineAdresse: b.EineAdresse));
-        }
-        if (bausteine.Any(b => b.HoertLog))
-        {
-            services.AddHostedService<BatchKonsumStartupService>();   // idempotent (TryAddEnumerable), auch wenn die Projektionen ihn schon anmeldeten
-            services.TryAddSingleton<IKonsumRueckstand, KonsumRueckstand>();
-        }
-        // Das Hinweis-Netz (docs/04 §4.4): die generierte Routing-Tabelle Hinweis-Typ → Funktions-Adressen, Versand direkt über den Bote.
-        if (Anwendung.Funktionen.Hinweisplan.Count > 0 || hinweiseVorDem)
-            services.TryAddSingleton(sp => new HinweisNetz(bausteine, Anwendung.Funktionen.Hinweisplan, sp.GetService<Konsum>() ?? Konsum.Standard,
-                () => new Bote(sp.GetRequiredService<ActorSystem>().Cluster(), sp.GetService<ILoggerFactory>()?.CreateLogger("Hinweisnetz")),
-                sp.GetService<ILoggerFactory>()?.CreateLogger("Hinweisnetz"), sp.GetRequiredService<Verkettung>(), sp.GetRequiredService<IFunktionsWege>));
-        if (bausteine.Any(b => b.Draussen) && !services.Any(d => d.ImplementationType == typeof(FunktionsVermittlerKind)))
-            services.AddSingleton<IClusterKindContributor, FunktionsVermittlerKind>();
-        Console.WriteLine($"[CQRS] {bausteine.Count} Funktion(en) mit Log-Eingängen: " + string.Join(", ", bausteine.Select(b => b.Name)));
+        if (Anwendung.Funktionen.Verkettung.Keys.Any(t => typeof(ITransientEvent).IsAssignableFrom(t)))
+            services.TryAddSingleton(sp => new HinweisNetz(sp.GetRequiredService<Verkettung>(), sp.GetRequiredService<IFunktionsWege>,
+                sp.GetService<ILoggerFactory>()?.CreateLogger("Hinweisnetz")));
         return services;
     }
 
@@ -112,56 +71,4 @@ public static class FunktionsBausteinWiring
     /// <summary>Die Umsetzung im Host nach der Bindung (gebaut je Aktivierung über die generierte Fabrik, <see cref="FunktionsAktivierung"/>).</summary>
     public static FunktionsUmsetzung Umsetzung(FunktionsBaustein b, BausteinBindung bindung) =>
         b.Umsetzungen.Single(u => bindung.Umsetzung is null || u.Name == bindung.Umsetzung);
-}
-
-/// <summary>Das Cluster-Kind des Funktions-Actors einer Funktion (Identität = Partition).</summary>
-internal sealed class FunktionsKind(FunktionsBaustein baustein) : IClusterKindContributor
-{
-    public ClusterKind CreateKind(ActorSystem system, IServiceProvider provider)
-    {
-        var bindung = FunktionsBausteinWiring.BindungVon(baustein, provider.GetServices<BausteinBindung>());
-        var konsum = provider.GetService<Konsum>() ?? Konsum.Standard;
-        var logger = provider.GetService<ILoggerFactory>()?.CreateLogger("Funktion." + baustein.Name);
-        var typen = FunktionsActor.TypenVon(baustein);
-        var umsetzung = bindung.Laufort == FunktionsLaufort.Host ? FunktionsBausteinWiring.Umsetzung(baustein, bindung) : null;
-        // Mit Zustand (docs/04 §4.4) — der Funktion selbst oder einer gerufenen in ihrer Konstruktor-Kette (aus der Wahl beim Start): Laden und
-        //   Sichern über den Stand-Store, große Zustände als Datei in der Ablage der Umgebung.
-        var zustand = bindung.Zustand ?? ZustandsBindung.Standard;
-        var gerufenerZustand = umsetzung is not null && provider.GetService<GerufeneWahl>()?.MitZustand(umsetzung.Typ) == true;
-        var sicherung = umsetzung is not null && (baustein.Zustand is not null || gerufenerZustand)
-            ? new ZustandsSicherung(provider.GetRequiredService<IFunktionsStand>(), zustand,
-                zustand.Verzeichnis is { } verz ? new VerzeichnisZustandsDateien(verz) : null)
-            : null;
-        var netz = provider.GetService<HinweisNetz>();   // Start-Prüfung der Routing-Tabelle (R20: jede Adresse existiert)
-        return new ClusterKind(baustein.KindName, Props.FromProducer(() =>
-        {
-            // Der Cluster ist hier fertig (Spawn-Zeit): Emitter und Bote erst jetzt bauen.
-            var bote = new Bote(system.Cluster(), logger);
-            var emitter = new CommandEmitter(bote, logger);
-            var verteilung = provider.GetService<Infrastructure.Verteilen.Verteilung>();
-            // Die Umsetzung je Aktivierung, samt ihren gerufenen Funktionen in einem eigenen Bereich (docs/04 §4.4); bei Slots > 1 teilen sich die
-            //   Eingänge dieser Aktivierung die Instanz — sie muss dann thread-sicher sein.
-            var aktivierung = umsetzung is null ? null : new FunktionsAktivierung(provider, umsetzung.Baue, baustein.Zustand, baustein.Name, gerufenerZustand);
-            var arbeit = new FunktionsArbeit(baustein,
-                aktivierung is null ? null : () => aktivierung.Umsetzung,
-                provider.GetRequiredService<IAusgabeAblage>(),
-                async (cmd, id, korrelation, ct) => await emitter.EmitAsync(cmd, id, korrelation, ct),
-                verteilung is null && netz is null ? null : h =>
-                {
-                    // An die hörenden Funktionen direkt (Hinweis-Netz); an die Clients, die ihn hören, über die Verteiler.
-                    netz?.Verteile(h);
-                    verteilung?.Melde(new EventEnvelope
-                    {
-                        AggregateId = h.Stream, AggregateVersion = h.Version, CorrelationId = h.Korrelation, UserId = h.Akteur, Payload = h.Hinweis,
-                        AggregateType = "Funktion:" + baustein.Name,
-                    });
-                },
-                provider.GetService<IFaehigkeitsFabrik>(),
-                (angebot, ct) => bote.FrageAsync<WakeAck>(FunktionsVermittlerActor.Identitaet(baustein.Typ), angebot, TimeSpan.FromSeconds(5), ct),
-                logger, partitionen: konsum.Partitionen);
-            return new FunktionsActor(baustein, arbeit, provider.GetRequiredService<IEventStoreRepository>(), provider.GetRequiredService<IFunktionsStand>(),
-                konsum, bindung.Slots, bindung.Wiederholungen, provider.GetService<IDeadLetterSink>(), logger, typen: typen, aktivierung: aktivierung,
-                sicherung: sicherung);
-        }));
-    }
 }

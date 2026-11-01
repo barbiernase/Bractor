@@ -162,9 +162,9 @@ public sealed class BausteinFunktionRaw
     public Dictionary<string, Ort?> UmsetzungsOrte = new(StringComparer.Ordinal);
     /// <summary>Gerufen: je Umsetzung und Methode der Rumpf und der Ort ihrer Methode (Rumpf-Edit).</summary>
     public Dictionary<string, List<(string Methode, string? Rumpf, Ort? Ort)>> UmsetzungsRumpfe = new(StringComparer.Ordinal);
-    /// <summary>Der Zustand (<c>IZustand&lt;T&gt;</c>, voller Name von T) — null ohne; <c>[EineAdresse]</c> als Code-Fakt (docs/04 §4.4).</summary>
+    /// <summary>Der Zustand (<c>IZustand&lt;T&gt;</c>, voller Name von T) — null ohne (docs/04 §4.4).</summary>
     public string? ZustandFull;
-    public bool EineAdresse, Lebenszyklus;
+    public bool Lebenszyklus;
     public string? Doku, Datei;
 }
 
@@ -695,7 +695,7 @@ public sealed partial class DomainExtractor
         {
             Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq(), Klasse = !form.Draussen,
             Doku = decl == null ? null : Summary(decl), Datei = decl?.SyntaxTree.FilePath,
-            ZustandFull = form.Zustand?.Fq(), EineAdresse = form.EineAdresse, Lebenszyklus = form.Lebenszyklus,
+            ZustandFull = form.Zustand?.Fq(), Lebenszyklus = form.Lebenszyklus,
         };
         foreach (var a in form.Aufs)
         {

@@ -6,13 +6,14 @@ namespace Abstractions;
 /// <list type="bullet">
 /// <item><b>Mit Eingängen</b>: je Eingangstyp eine Methode <c>Auf(TEingang e[, Herkunft h][, Lese-Fähigkeiten…][, CancellationToken])</c> mit
 ///   freier Ausgabe in der Signatur — ein konkreter Typ, <c>OneOf&lt;…&gt;</c>, <c>T?</c> (nichts), ein Strom (<c>IEnumerable</c>/<c>IAsyncEnumerable</c>),
-///   je auch als <c>Task&lt;…&gt;</c>. Eingang ist ein Event (auch eine Quell-Nachricht) oder ein Hinweis; ausgegeben werden Commands, Events und
-///   Hinweise. Das Framework ruft sie: Position, Fortschritt, Gleichzeitigkeit, Wiederholung und das Festhalten der Ausgabe (R12) trägt der
-///   Funktions-Actor. Nur sie hat einen Laufort (Host, Extern, Hand) und kann einem Akteur zum Rechnen gegeben werden (<c>IDarf&lt;F&gt;</c>).</item>
+///   je auch als <c>Task&lt;…&gt;</c>. Eingang ist eine Folge oder ein Zwischenergebnis (schlichte Records), eine Quell-Nachricht, ein Hinweis oder —
+///   als Antwort auf einen eigenen Command — ein Event; ausgegeben werden Commands, Zwischenergebnisse und Hinweise. Sie steht vor dem Aggregat und
+///   liest nie das Log (docs/04 §4.4); Gleichzeitigkeit und Wiederholung tragen Parent und Kinder. Nur sie hat einen Laufort (Host, Extern, Hand)
+///   und kann einem Akteur zum Rechnen gegeben werden (<c>IDarf&lt;F&gt;</c>).</item>
 /// <item><b>Gerufen</b> (kein <c>Auf</c>, frei benannte öffentliche Methoden): die Technik hinter einer Funktion — Bild skalieren, ein Modell laden,
 ///   einen Brief versenden. Sie steht im Konstruktor ihres Halters (einer Funktion oder eines anderen gerufenen Objekts, CQRS089) und läuft in
 ///   dessen Prozess, je Aktivierung des Halters neu gebaut und mit ihr freigegeben (<c>IAsyncDisposable</c>/<c>IDisposable</c>). Ihr Zustand
-///   (<c>IZustand&lt;T&gt;</c>) gehört der Aktivierung des Halters und wird mit dessen Position gesichert.</item>
+///   (<c>IZustand&lt;T&gt;</c>) gehört der Aktivierung des Halters, ein Cache wie der des Halters.</item>
 /// </list>
 /// Als <b>Klasse</b> ist sie ihre eigene Umsetzung; als <b>Schnittstelle</b> hat sie Umsetzungen (öffentliche Klassen, die sie implementieren) —
 /// welche läuft, wählt die Umgebung (<c>Funktionen:&lt;Name&gt;:Implementierung</c>, Default: die einzige); eine Schnittstelle mit Eingängen kann

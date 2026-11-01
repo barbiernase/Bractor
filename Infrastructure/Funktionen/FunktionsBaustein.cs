@@ -4,31 +4,17 @@ using Abstractions;
 namespace Infrastructure.Funktionen;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// FUNKTION ALS BAUSTEIN (docs/10 §10.1, docs/10 §10.3): je Funktion (Klasse = im Host, Schnittstelle = draußen) ein
-// generierter Eintrag — Eingänge, Ausgaben, Lese-Fähigkeiten, ob sie nachweislich gleichbleibend ist (R12), wie sie gebaut wird und der
-// reflexionsfreie Dispatch (Einzel- und Seiten-Form). Den Lauf trägt der Funktions-Actor (Position, Slots, Festhalten), nicht die Funktion.
+// FUNKTION ALS BAUSTEIN (docs/04 §4.4, docs/10 §10.3): je Funktion (Klasse = im Host, Schnittstelle = draußen oder mit Umsetzung im Host) ein
+// generierter Eintrag — Eingänge, Ausgaben, Lese-Fähigkeiten, wie sie gebaut wird und ihre reflexionsfreie Rechnung. Den Lauf tragen Wurzel, Parent
+// und Kinder (FunktionsLaufzeitWiring), nicht die Funktion.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
-/// <summary>Ein Aufruf der Einzel-Form: Eingang → Strom der Ausgaben (Commands, Events, Hinweise), wie die Signatur sie zulässt.</summary>
-/// <param name="funktion">Die gebaute Funktion (Klasse bzw. Implementierung der Schnittstelle).</param>
-/// <param name="faehigkeiten">Der Bereich für die Lese-Fähigkeiten dieses Aufrufs; null, wenn das <c>Auf</c> keine nimmt.</param>
-public delegate IAsyncEnumerable<IAusgabe> FunktionsAufruf(object funktion, IEvent eingang, Herkunft herkunft, IFaehigkeiten? faehigkeiten,
-    CancellationToken ct);
-
-/// <summary>
-/// Die Seiten-Form (Batch, vom Generator aus der Einzel-Form gebaut): eine Seite von Eingängen in einem Aufruf, die Ausgaben mit dem Index ihres
-/// Eingangs — der Actor nimmt sie für kurze, gleichbleibende Funktionen (ein Bereich, eine Aufzählung je Seite).
-/// </summary>
-public delegate IAsyncEnumerable<(int Index, IAusgabe Ausgabe)> FunktionsSeite(object funktion, IReadOnlyList<(IEvent Eingang, Herkunft Herkunft)> seite,
-    IFaehigkeiten? faehigkeiten, CancellationToken ct);
-
 /// <summary>Ein Eingang einer Funktion (ein <c>Auf</c>): sein Typ, ob er ein Hinweis ist, ob die Ausgabe ein Strom ist, was herauskommen kann.</summary>
-/// <param name="Hinweis">Der Eingang ist ein Hinweis (verlierbar, nicht im Log): höchstens einmal, keine Position.</param>
-/// <param name="Strom">Die Ausgabe ist ein Strom (viele Ausgaben je Eingang, Fortschritt beim Framework).</param>
-/// <param name="MitEvents">Unter den Ausgaben sind Events für das Log (keine Hinweise) — sie stehen dann immer im festgehaltenen Eintrag.</param>
+/// <param name="Hinweis">Der Eingang ist ein Hinweis (verlierbar, nicht im Log): höchstens einmal.</param>
+/// <param name="Strom">Die Ausgabe ist ein Strom (viele Ausgaben je Eingang, jede gesendet, bevor die nächste kommt).</param>
 /// <param name="Ausgaben">Die konkreten Ausgabe-Typen (die Fälle der Signatur).</param>
 /// <param name="Faehigkeiten">Die Lese-Fähigkeiten des <c>Auf</c> (eine solche Funktion läuft nur im Host).</param>
-public sealed record FunktionsEingang(Type Typ, bool Hinweis, bool Strom, bool MitEvents, IReadOnlyList<Type> Ausgaben, IReadOnlyList<Type> Faehigkeiten);
+public sealed record FunktionsEingang(Type Typ, bool Hinweis, bool Strom, IReadOnlyList<Type> Ausgaben, IReadOnlyList<Type> Faehigkeiten);
 
 /// <summary>
 /// Eine Umsetzung, die im Host rechnen kann: die Klasse selbst bzw. eine Implementierung der Schnittstelle, gebaut per generierter Fabrik — im
@@ -40,52 +26,23 @@ public sealed record FunktionsUmsetzung(string Name, Type Typ, Func<IServiceProv
 /// Eine Funktion in Baustein-Form (generiert, <c>GeneratedFunktionsBausteine</c>).
 /// </summary>
 /// <param name="Draussen">Als Schnittstelle deklariert: sie rechnet draußen (Worker, Client, Hand) oder mit einer Implementierung im Host.</param>
-/// <param name="Gleichbleibend">Nachweislich gleichbleibend (R12): eine Klasse ohne Konstruktor-Parameter und ohne Lese-Fähigkeit — derselbe
-/// Eingang ergibt dieselbe Ausgabe (Uhr und Zufall verbietet CQRS103). Nur sie darf ihre Ausgabe ohne Festhalten senden.</param>
 /// <param name="Dienste">Was der Konstruktor der Klasse braucht (Dienste, Konfig-Records) — für die Boot-Prüfung der Bindung.</param>
-/// <param name="Zustand">Der gekapselte Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4) — null = ohne Zustand.</param>
-/// <param name="EineAdresse">Eine Adresse statt einer je Partition (<c>[EineAdresse]</c>, A6): ein Actor liest alle Partitionen.</param>
+/// <param name="Rechne">Die Rechnung: Eingang → Strom der Ausgaben (Commands, Zwischenergebnisse, Hinweise), wie die Signatur sie zulässt.</param>
+/// <param name="Zustand">Der gekapselte Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4, ein Cache) — null = ohne Zustand.</param>
 public sealed record FunktionsBaustein(
     Type Typ,
     string Name,
     bool Draussen,
-    bool Gleichbleibend,
     IReadOnlyList<FunktionsEingang> Eingaenge,
     IReadOnlyList<FunktionsUmsetzung> Umsetzungen,
     IReadOnlyList<Type> Dienste,
-    FunktionsAufruf Rufe,
-    FunktionsSeite RufeSeite,
-    FunktionsZustandsform? Zustand = null,
-    bool EineAdresse = false,
-    FunktionsRechnung? Rechne = null)
+    FunktionsRechnung Rechne,
+    FunktionsZustandsform? Zustand = null)
 {
-    /// <summary>Die Funktion steht vor dem Aggregat (docs/04 §4.4): sie hört nur Nachrichten ohne Marker und Hinweise, rechnet über <see cref="Rechne"/>
-    /// auf Wurzel, Parent und Kindern und liest nie das Log. Im Umbau hat eine Funktion mit Log-Eingängen kein <see cref="Rechne"/>.</summary>
-    public bool VorDemAggregat => Rechne is not null;
-
-    /// <summary>Das Cluster-Kind des Funktions-Actors (Identität = Partition bzw. die eine Adresse).</summary>
-    public string KindName => Funktionsvertrag.Kind(Name);
-
-    /// <summary>In wie viele Partitionen die Funktion das Log liest: eine bei <see cref="EineAdresse"/>, sonst die des Konsums.</summary>
-    public int Partitionen(int konsum) => EineAdresse ? 1 : konsum;
-
-    /// <summary>Die Adresse (Identität des Funktions-Actors), die einen Eingang des Streams <paramref name="stream"/> rechnet (A6).</summary>
-    public string Adresse(Guid stream, int konsumPartitionen) =>
-        EineAdresse ? Funktionsvertrag.EinzigeIdentitaet : Partitionierung.Von(stream, konsumPartitionen).ToString();
-
-    /// <summary>Hört die Funktion etwas aus dem Log? Sonst hat sie keinen Leser, keine Position, keinen Takt (nur Hinweise).</summary>
-    public bool HoertLog => Eingaenge.Any(e => !e.Hinweis);
-
-    /// <summary>Die Id des Stands (Position je Partition).</summary>
-    public string StandId => Funktionsvertrag.StandId(Name);
-
     /// <summary>Der Wirker im Log (Spur): <c>funktion:&lt;Name&gt;</c>.</summary>
     public string Wirker => WirkerId.FuerFunktion(Name);
 
-    /// <summary>Die Eingänge aus dem Log (Events, Quell-Nachrichten) — sie haben eine Position; Hinweise nicht.</summary>
-    public IEnumerable<FunktionsEingang> LogEingaenge => Eingaenge.Where(e => !e.Hinweis);
-
-    /// <summary>Der Eingang für einen Event-Typ, oder null.</summary>
+    /// <summary>Der Eingang für einen Typ, oder null.</summary>
     public FunktionsEingang? Eingang(Type typ) => Eingaenge.FirstOrDefault(e => e.Typ == typ);
 
     /// <summary>Hat irgendein Eingang Lese-Fähigkeiten? Dann läuft die Funktion nur im Host.</summary>
@@ -99,15 +56,15 @@ public sealed record FunktionsBaustein(
 public static class Ausgaben
 {
     /// <summary>Ein <c>Auf</c> ohne Ausgabe (nur mit Zustand: der Eingang wirkt allein auf ihn).</summary>
-    public static IAsyncEnumerable<IAusgabe> Leer => KeineAsync(Task.CompletedTask);
+    public static IAsyncEnumerable<object> Leer => KeineAsync(Task.CompletedTask);
 
-    public static async IAsyncEnumerable<IAusgabe> KeineAsync(Task lauf)
+    public static async IAsyncEnumerable<object> KeineAsync(Task lauf)
     {
         await lauf.ConfigureAwait(false);
         yield break;
     }
 
-    public static async IAsyncEnumerable<IAusgabe> KeineAsync(ValueTask lauf)
+    public static async IAsyncEnumerable<object> KeineAsync(ValueTask lauf)
     {
         await lauf.ConfigureAwait(false);
         yield break;

@@ -55,9 +55,6 @@ public class FunktionsZustandGarantieTests
             await conn.OpenAsync();
             await using (var cmd = new Npgsql.NpgsqlCommand("select count(*) from pruef_e2e.mt_events where type = 'merkmal'", conn))
                 ((long)(await cmd.ExecuteScalarAsync())!).Should().Be(0, "ein Hinweis steht nie im Log");
-            foreach (var e in (await Log(host, a.Wert)).Where(e => e.Payload is MesswertErfasst))
-                (await Log(host, FunktionsIds.Festhalten(nameof(Merkmalsbildung), a.Wert, e.AggregateVersion))).Should().BeEmpty(
-                    "die Merkmalsbildung ist gleichbleibend — sie hält nichts fest");
         }
         finally { await host.StopAsync(); }
     }
@@ -163,8 +160,8 @@ public class FunktionsZustandGarantieTests
                 "der Hinweis erreicht die Funktion draußen nicht");
             offen!.Eingang.Should().BeOfType<Merkmal>().Which.Wert.Should().Be(3_000);
 
-            (await hand.AntworteAsync(offen.Vorgang, new IAusgabe[] { new MeldeAusreisser(stelle, 3_000) }, null, default))
-                .Should().Be(ErgebnisAusgang.Geschrieben);
+            hand.Antworte(offen.Vorgang, new IAusgabe[] { new MeldeAusreisser(stelle, 3_000) }, null)
+                .Should().Be(Werkstattausgang.Angenommen);
             await Warte(async () => (await Log(host, stelle.Wert)).Any(e => e.Payload is AusreisserGemeldet), Frist, "die Antwort von draußen wirkt nicht");
             (await Log(host, offen.Vorgang)).Should().BeEmpty("eine Antwort auf einen Hinweis wird nicht festgehalten");
         }
