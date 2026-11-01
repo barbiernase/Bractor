@@ -19,7 +19,7 @@ public sealed record FunktionsOrtKonfig(int Parallel = FunktionsOrtKonfig.Standa
 {
     /// <summary>Standard für <see cref="Parallel"/>: ein Kind rechnet einen Eingang samt den Antworten auf seine Commands (eine ganze Kette) — so viele
     /// zugleich, wie früher Partitionen mal Slots Eingänge einzeln liefen, und mehr.</summary>
-    public const int StandardParallel = 64, StandardWarteschlange = 1_000, StandardWiederholungen = 3;
+    public const int StandardParallel = 256, StandardWarteschlange = 10_000, StandardWiederholungen = 3;
 }
 
 /// <summary>
