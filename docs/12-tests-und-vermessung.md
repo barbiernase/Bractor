@@ -417,6 +417,14 @@ Laufzeit (Folge und Antworten statt Log, Wurzel/Parent/Kinder). Gegen die Spalte
 S5-64 2 086 → 3 292 Vorgänge/s; S5-64 p50/p99 807/1 121 → 267/366 ms; Exactly-once grün. Mit 4 bzw. 64 Kindern je Parent brach S5-64 auf ≈ 300 bzw.
 473 ein — ein Kind wartet auf jede Antwort seiner Kette, `Parallel` steht darum standardmäßig auf 256 (Ordner `*_funktionen-4c-s5*`).
 
+**Nachher-Messung Umbau „Funktionen vor dem Aggregat“ (2026-11-01, Messserver, je ein Lauf):** volle Messung auf `2172f4f` gegen
+„Funktionen vorher“ (`4dee5c0`), gültig, Exactly-once grün: S5-1 372 → 415, S5-8 1 246 → 1 838, S5-64 2 086 → 3 269 Vorgänge/s (S5-64 p50
+807 → 304 ms); S1 128 → 135 Paare/s; S3, S4 und S6 im Band (0,94–1,05 ×). S2 fiel dort auf 37,3 Paare/s (0,72 ×): das Kind hielt den Platz beim
+Worker, bis es die ganze Kette dahinter gesendet hatte, der Worker wartete also auf das Aggregat. Seit `8f9bca1` wird der Platz mit der
+vollständigen Antwort frei, und die Kinder einer Funktion draußen warten in der Werkstatt auf einen freien Platz; S2 nachgemessen
+(`…_8f9bca1_funktionen-nachher-s2`): 51,8 → 57,9 Paare/s (1,12 ×), p50/p99 2 884/3 841 → 2 951/3 436 ms, Transaktionen je Paar 15,2 → 8,5
+(kein Festhalten, keine Positionen), CPU des Workers 3,4 → 2,8 Kerne.
+
 **Ende zu Ende an den realen Domänen, unter Höchstlast (seit 2026-10-15, `scripts/vermessung-e2e.sh`, ≈ 5 min, Plan Garantien und Durchsatz
 §0.1).** Gemessen wird der echte Host im Release-Build (`Host.Grpc` in `umgebungen/umgebung.vermessung.json`, `Host.Pruefdomaene` in
 `umgebung.vermessung-pruefdomaene.json`, je eigene DB; bis Phase 5 dazu ein eigener Redis), Last nur über die echten Eingänge, gezählt bis zum
