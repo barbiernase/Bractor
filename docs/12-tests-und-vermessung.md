@@ -412,6 +412,11 @@ Folgerungen (Verhältnisse):
   bei K = 20 rund 400 — vor dem Overhead von Marten und Netzwerk. Der Schreibpfad ist nicht die Decke. Gegen den echten Host gemessen ist das
   noch nicht — das tut die E2E-Messung unten.
 
+**Zwischenmessung Umbau „Funktionen vor dem Aggregat“ (2026-11-01, Messserver, nur S5):** Auftrag, Verteilung und Nachschub laufen auf der neuen
+Laufzeit (Folge und Antworten statt Log, Wurzel/Parent/Kinder). Gegen die Spalte „Funktionen vorher“ (`4dee5c0`): S5-1 372 → 476, S5-8 1 246 → 1 802,
+S5-64 2 086 → 3 292 Vorgänge/s; S5-64 p50/p99 807/1 121 → 267/366 ms; Exactly-once grün. Mit 4 bzw. 64 Kindern je Parent brach S5-64 auf ≈ 300 bzw.
+473 ein — ein Kind wartet auf jede Antwort seiner Kette, `Parallel` steht darum standardmäßig auf 256 (Ordner `*_funktionen-4c-s5*`).
+
 **Ende zu Ende an den realen Domänen, unter Höchstlast (seit 2026-10-15, `scripts/vermessung-e2e.sh`, ≈ 5 min, Plan Garantien und Durchsatz
 §0.1).** Gemessen wird der echte Host im Release-Build (`Host.Grpc` in `umgebungen/umgebung.vermessung.json`, `Host.Pruefdomaene` in
 `umgebung.vermessung-pruefdomaene.json`, je eigene DB; bis Phase 5 dazu ein eigener Redis), Last nur über die echten Eingänge, gezählt bis zum
