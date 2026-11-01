@@ -407,6 +407,8 @@ code Wetterdienst.Vorhersage.Zaehlung class teile=1 domaene=Wetterdienst.Vorhers
 code Wetterdienst.Vorhersage.Arbeitsmodell class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
 lage Tendenzbildung -> Domain.Pipeline
 lage Prognosemodell -> Domain.Pipeline
+lage IStatistik -> Domain.Pipeline
+lage Statistik -> Domain.Pipeline
 lage IUnwetterwarnung -> Domain.Pipeline
 lage Tendenz -> Domain.Pipeline
 lage Unwetter -> Domain.Pipeline
