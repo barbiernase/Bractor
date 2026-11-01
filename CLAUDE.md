@@ -76,7 +76,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - **Abläufe** sind ein Vorgangs-Aggregat (Join, Zählung, Kompensation, Frist im Decide) plus Funktionen als Kanten; die Zugehörigkeit ist ein
   fachliches Feld (A2). Kein Dirigent, keine Saga, keine Fluss-DSL, keine Reaktion als eigene Art.
 - **Uhr:** `Frist<TCmd>` aus dem Decide → `FristGesetzt` (`IRahmenEvent`) + Beilage `cqrs_fristen` → die Uhr sendet fällig mit Id aus dem Frist-Event.
-- **Laufort** einer Funktion (Host/Extern/Hand) steht in der Umgebung; draußen über Vermittler + `BausteinSitzung` mit Lease. Technik hinter
+- **Laufort** einer Funktion (Host/Extern/Hand) steht in der Umgebung; draußen rechnet ein Arbeiter (Worker-Sitzung, Hand) in der `Werkstatt` des
+  Knotens, ein Kind gibt ihm den Eingang (vor dem Aggregat; Funktionen mit Log-Eingängen noch über Vermittler + `BausteinSitzung`). Technik hinter
   einer Funktion ist eine **gerufene Funktion** (`IFunktion` ohne `Auf`, frei benannte Methoden): sie steht im Konstruktor ihres Halters und
   läuft in dessen Prozess; Eingänge oder gerufen, nie beides; Umsetzung je Umgebung `Funktionen:<Name>:Implementierung` (`GeneratedGerufene`).
 - **Emit:** genau ein Weg (`CommandEmitter`, Id vom Aufrufer abgeleitet), erzwungen durch CQRS020/021.

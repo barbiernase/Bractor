@@ -137,7 +137,7 @@ public interface IPost : IFunktion { Task SendeAsync(string an); }
     }
 
     [Fact]
-    public void Ein_Hinweis_als_Eingang_steht_im_Hinweisplan()
+    public void Eine_Funktion_mit_Hinweis_als_Eingang_steht_vor_dem_Aggregat_in_der_Verkettung()
     {
         var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
             public sealed class Sensorik : IFunktion { public Mahne? Auf(Messwert m) => null; } }");
@@ -145,7 +145,8 @@ public interface IPost : IFunktion { Task SendeAsync(string an); }
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty();
         quelle.Should().Contain("new FunktionsEingang(typeof(global::Probe.Messwert), Hinweis: true,");
-        quelle.Should().Contain("[typeof(global::Probe.Messwert)] = new[] { \"funktion-Sensorik\" }");
+        quelle.Should().Contain("[typeof(global::Probe.Messwert)] = new[] { \"Sensorik\" }");
+        quelle.Should().Contain("Rechne: Rechne0", "sie liest nie das Log: Wurzel, Parent und Kinder bringen ihr den Hinweis");
     }
 
     /// <summary>Der Serializer-Kontext der Komposition, wie ihn der Codegen-Prepass um die Zustände ergänzt (hier von Hand, für die Probe).</summary>

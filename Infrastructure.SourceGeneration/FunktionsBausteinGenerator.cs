@@ -136,11 +136,12 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("        };");
             sb.AppendLine();
 
-            // Die Verkettung (docs/04 §4.4): Nachrichten-Typ → die Funktionen vor dem Aggregat, die ihn hören (Folge, Zwischenergebnis, Hinweis); eine
+            // Die Verkettung (docs/04 §4.4): Nachrichten-Typ → die Funktionen vor dem Aggregat, die ihn hören (Folge, Zwischenergebnis, Quell-Nachricht,
+            //   Hinweis); eine
             //   Antwort (ein Event auf einen eigenen Command) geht nicht über die Verkettung, das Kind rechnet sie gleich weiter.
             var kette = fs.Where(f => f.VorDemAggregat).SelectMany(f => f.Aufs.Where(a => !f.IstAntwort(a)).Select(a => (Eingang: T(a.Eingang), Name: f.Typ.Name)))
                 .GroupBy(x => x.Eingang).OrderBy(g => g.Key, System.StringComparer.Ordinal);
-            sb.AppendLine("        /// <summary>Nachrichten-Typ → die Funktionen vor dem Aggregat, die ihn hören (Folge, Zwischenergebnis, Hinweis).</summary>");
+            sb.AppendLine("        /// <summary>Nachrichten-Typ → die Funktionen vor dem Aggregat, die ihn hören (Folge, Zwischenergebnis, Quell-Nachricht, Hinweis).</summary>");
             sb.AppendLine("        public static readonly IReadOnlyDictionary<Type, string[]> Verkettung = new Dictionary<Type, string[]>");
             sb.AppendLine("        {");
             foreach (var g in kette)
@@ -233,6 +234,14 @@ namespace Infrastructure.SourceGeneration
                     _ => $"b!.Hole<{T(p.Typ!)}>()",
                 }));
                 var aufruf = $"f.{Abstractions.Funktionsvertrag.Auf}({args})";
+                if (a.Keine)
+                {
+                    // Ohne Ausgabe (nur mit Zustand): der Eingang wirkt allein auf den Zustand.
+                    sb.AppendLine(a.Huelle.Length == 0
+                        ? $"                case {T(a.Eingang)} e: {aufruf}; return Ausgaben.Leer;"
+                        : $"                case {T(a.Eingang)} e: return Ausgaben.KeineAsync({aufruf});");
+                    continue;
+                }
                 var abbildung = "y => (object?)y" + a.Abbildung;
                 string adapter;
                 if (a.Strom) adapter = a.StromAsync || a.Huelle == "Task" ? "StromAsync" : "Strom";
