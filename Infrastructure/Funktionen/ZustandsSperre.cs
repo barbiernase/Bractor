@@ -64,15 +64,24 @@ public sealed class ZustandsSperre(IDocumentStore store, IReadOnlyList<string> f
 
     private async Task PruefeAsync(string funktion, Halter h, CancellationToken ct)
     {
-        try
+        if (h.Verbindung is { } v)
         {
-            if (h.Verbindung is { } v)
+            try
             {
                 await using var probe = new NpgsqlCommand("select 1", v);
                 await probe.ExecuteScalarAsync(ct);
-                return;
             }
-            var neu = (NpgsqlConnection)store.Storage.Database.CreateConnection();
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                logger?.LogWarning(ex, "[Funktionen] {Funktion}: Sperre verloren (Verbindung fort)", funktion);
+                await GibFreiAsync(h);
+                _beobachter?.Invoke(funktion, 0);
+            }
+            return;
+        }
+        var neu = (NpgsqlConnection)store.Storage.Database.CreateConnection();
+        try
+        {
             await neu.OpenAsync(ct);
             await using var cmd = new NpgsqlCommand("select pg_try_advisory_lock($1)", neu);
             cmd.Parameters.Add(new NpgsqlParameter { Value = Schluessel(funktion) });
@@ -82,21 +91,31 @@ public sealed class ZustandsSperre(IDocumentStore store, IReadOnlyList<string> f
                 logger?.LogInformation("[Funktionen] {Funktion}: Sperre gehalten — die Funktion mit Zustand rechnet auf diesem Knoten", funktion);
                 _beobachter?.Invoke(funktion, 1);
             }
-            else await neu.DisposeAsync();
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            if (h.Verbindung is null) return;
-            logger?.LogWarning(ex, "[Funktionen] {Funktion}: Sperre verloren (Verbindung fort)", funktion);
-            await GibFreiAsync(h);
-            _beobachter?.Invoke(funktion, 0);
+            logger?.LogDebug(ex, "[Funktionen] {Funktion}: Sperre nicht versucht (Datenbank?) — beim nächsten Takt wieder", funktion);
+        }
+        finally
+        {
+            if (!ReferenceEquals(h.Verbindung, neu)) await neu.DisposeAsync();
         }
     }
 
+    /// <summary>
+    /// Gibt den Lock frei: ausdrücklich, denn die Verbindung kommt aus dem Pool — geschlossen ginge sie nur dorthin zurück, ihre Sitzung (und mit ihr der
+    /// Lock) bliebe bestehen. Ist die Verbindung schon gerissen, ist die Sitzung fort und der Lock mit ihr.
+    /// </summary>
     private static async Task GibFreiAsync(Halter h)
     {
         if (h.Verbindung is not { } v) return;
         h.Verbindung = null;
-        try { await v.DisposeAsync(); } catch { /* der Lock fällt mit der Sitzung */ }
+        try
+        {
+            await using var cmd = new NpgsqlCommand("select pg_advisory_unlock_all()", v);
+            await cmd.ExecuteNonQueryAsync();
+        }
+        catch { /* gerissen: der Lock fällt mit der Sitzung */ }
+        try { await v.DisposeAsync(); } catch { /* ebenso */ }
     }
 }
