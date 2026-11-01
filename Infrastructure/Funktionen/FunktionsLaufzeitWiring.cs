@@ -87,12 +87,14 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
                 throw new Infrastructure.Umgebung.BootFehler($"Funktionen:{b.Name}: eine Funktion vor dem Aggregat läuft im Umbau nur im Host.", "funktion:" + b.Name);
             var umsetzung = FunktionsBausteinWiring.Umsetzung(b, bindung);
             var gerufenerZustand = dienste.GetService<GerufeneWahl>()?.MitZustand(umsetzung.Typ) == true;
-            var traeger = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, umsetzung.Baue, b.Zustand, b.Name, gerufenerZustand), b.Rechne!, b.Liest);
+            var antworten = b.Eingaenge.Where(e => !e.Hinweis && typeof(IEvent).IsAssignableFrom(e.Typ)).Select(e => e.Typ).ToHashSet();
+            var traeger = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, umsetzung.Baue, b.Zustand, b.Name, gerufenerZustand), b.Rechne!, b.Liest,
+                antworten);
             var konfig = new FunktionsOrtKonfig(Parallel: bindung.Slots,
                 Wiederholungen: bindung.Wiederholungen > 0 ? bindung.Wiederholungen : FunktionsOrtKonfig.StandardWiederholungen);
             var kindLogger = logs?.CreateLogger("Funktion." + b.Name);
             plaene.Add(new ParentPlan(traeger, konfig, () => new FunktionsParent(traeger, konfig,
-                () => new FunktionsKindActor(traeger, dienste, wege, verkettung, async (cmd, id, korrelation, t) => await emitter.EmitAsync(cmd, id, korrelation, t),
+                () => new FunktionsKindActor(traeger, dienste, wege, verkettung, async (cmd, id, korrelation, t) => await emitter.EmitMitAntwortAsync(cmd, id, korrelation, t),
                     dienste.GetService<IFaehigkeitsFabrik>(), kindLogger, hinweise: hinweise),
                 dienste.GetService<IOffeneEingaenge>(), kindLogger)));
         }

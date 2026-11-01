@@ -22,7 +22,7 @@ public sealed class FunktionsKindActor(
     IServiceProvider dienste,
     IFunktionsWege wege,
     Verkettung verkettung,
-    Func<ICommand, Guid, Guid, CancellationToken, Task<EmitAusgang>> sende,
+    Func<ICommand, Guid, Guid, CancellationToken, Task<Infrastructure.Emit.EmitAntwort>> sende,
     IFaehigkeitsFabrik? faehigkeiten = null,
     ILogger? logger = null,
     TimeSpan? frist = null,
@@ -69,14 +69,23 @@ public sealed class FunktionsKindActor(
 
     private async Task RechneAsync(EingangZustellen e, CancellationToken ct)
     {
-        var nachricht = e.Nachricht;
-        var herkunft = e.Herkunft();
-        using var spur = Spur.Von(e.Ursache ?? Spur.Ursache(e.Stream, e.Version), WirkerId.FuerFunktion(traeger.Name));
         using var akteur = Akteure.AkteurHerkunft.Aus(e.Akteur);
         using var bereich = traeger.Liest
             ? (faehigkeiten ?? throw new InvalidOperationException($"{traeger.Name} liest Fähigkeiten, aber es gibt keine Fähigkeits-Fabrik.")).Oeffne()
             : null;
         var warten = new List<Task>();
+        await RechneAsync(e, e.Nachricht, e.Herkunft(), e.Kennung, e.Ursache ?? Spur.Ursache(e.Stream, e.Version), bereich, warten, ct);
+        await Task.WhenAll(warten);
+    }
+
+    /// <summary>
+    /// Rechnet die Funktion zu einer Nachricht — dem Eingang selbst oder einem Event, das ein Ziel auf einen ihrer Commands hin entschied (eine Antwort,
+    /// Kennung aus Eingang, Stelle und Nummer); Zwischenergebnisse kommen in <paramref name="warten"/>, auf ihre Nachfolger wird am Ende gewartet.
+    /// </summary>
+    private async Task RechneAsync(EingangZustellen e, object nachricht, Herkunft herkunft, Guid kennung, string ursache, IFaehigkeiten? bereich,
+        List<Task> warten, CancellationToken ct)
+    {
+        using var spur = Spur.Von(ursache, WirkerId.FuerFunktion(traeger.Name));
         var stelle = 0;
         await foreach (var a in traeger.Rechne(_aktivierung!.Umsetzung, nachricht, herkunft, bereich, ct).WithCancellation(ct))
         {
@@ -84,40 +93,47 @@ public sealed class FunktionsKindActor(
             switch (a)
             {
                 case ICommand c:
-                    // Commands der Reihe nach (ein Ziel sieht sie in der Reihenfolge der Funktion).
-                    await SendeAsync(c, Kettenvertrag.Befehl(e.Kennung, traeger.Name, i, c), e, ct);
+                    // Commands der Reihe nach (ein Ziel sieht sie in der Reihenfolge der Funktion); die Antwort rechnet die Funktion gleich weiter.
+                    var antwort = await SendeAsync(c, Kettenvertrag.Befehl(kennung, traeger.Name, i, c), e, ct);
+                    for (var j = 0; j < antwort.Events.Count; j++)
+                    {
+                        var (ev, version) = (antwort.Events[j].Event, antwort.Events[j].Version);
+                        if (traeger.Antworten?.Contains(ev.GetType()) != true) continue;
+                        await RechneAsync(e, ev, new Herkunft(c.Ziel, version, e.Zeit, herkunft.Akteur, WirkerId.FuerFunktion(traeger.Name)), Kettenvertrag.Antwort(kennung, traeger.Name, i, j),
+                            Spur.Ursache(c.Ziel, version), bereich, warten, ct);
+                    }
                     break;
                 case ITransientEvent h:
                     // Über das Hinweis-Netz, wenn es eins gibt (es erreicht auch Funktionen mit Log-Eingängen und Clients), sonst über die Wege.
                     if (hinweise is not null)
-                        hinweise(new HinweisZustellen(Kettenvertrag.Ausgabe(e.Kennung, traeger.Name, i), h, e.Stream, e.Version, e.Zeit, e.Korrelation, e.Akteur,
-                            e.Ursache ?? Spur.Ursache(e.Stream, e.Version)));
+                        hinweise(new HinweisZustellen(Kettenvertrag.Ausgabe(kennung, traeger.Name, i), h, e.Stream, e.Version, e.Zeit, e.Korrelation, e.Akteur,
+                            ursache));
                     else
                         foreach (var f in verkettung.Hoerer(h.GetType()))
-                            wege.Melde(Weiter(e, h, Kettenvertrag.Ausgabe(e.Kennung, traeger.Name, i), f, Eingangsart.Hinweis));
+                            wege.Melde(Weiter(e, h, Kettenvertrag.Ausgabe(kennung, traeger.Name, i), f, Eingangsart.Hinweis));
                     break;
                 case IEvent ev:
                     throw new InvalidOperationException($"{traeger.Name} gab das Event {ev.GetType().Name} aus — eine Funktion schreibt nie ins Log (docs/04 §4.4).");
                 default:
-                    var kennung = Kettenvertrag.Ausgabe(e.Kennung, traeger.Name, i);
+                    var ausgabe = Kettenvertrag.Ausgabe(kennung, traeger.Name, i);
                     foreach (var f in verkettung.Hoerer(a.GetType()))
-                        warten.Add(ReicheWeiterAsync(Weiter(e, a, kennung, f, Eingangsart.Kette), ct));
+                        warten.Add(ReicheWeiterAsync(Weiter(e, a, ausgabe, f, Eingangsart.Kette), ct));
                     break;
             }
         }
-        await Task.WhenAll(warten);
     }
 
     /// <summary>Der Eingang einer Ausgabe bei der nächsten Funktion: Kennung aus Ausgabe und Funktion, die Herkunft der Kette reist mit.</summary>
     private static EingangZustellen Weiter(EingangZustellen e, object nachricht, Guid ausgabe, string funktion, Eingangsart art) =>
         new(Eingangsvertrag.Eingang(ausgabe, funktion), funktion, nachricht, art, e.Stream, e.Version, e.Zeit, e.Akteur, e.Korrelation, e.Ursache);
 
-    private async Task SendeAsync(ICommand c, Guid id, EingangZustellen e, CancellationToken ct)
+    private async Task<Infrastructure.Emit.EmitAntwort> SendeAsync(ICommand c, Guid id, EingangZustellen e, CancellationToken ct)
     {
         var korrelation = Guid.TryParse(e.Korrelation, out var k) ? k : e.Kennung;
         for (var versuch = 1; ; versuch++)
         {
-            if ((await sende(c, id, korrelation, ct)).IstEntschieden()) return;
+            var antwort = await sende(c, id, korrelation, ct);
+            if (antwort.Ausgang.IstEntschieden()) return antwort;
             if (versuch >= Versuche)
                 throw new InvalidOperationException($"{traeger.Name}: Command {c.GetType().Name} an {c.Ziel} bleibt nach {versuch} Versuchen unbekannt.");
             await Task.Delay(Pause(versuch), ct);

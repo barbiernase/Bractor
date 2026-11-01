@@ -7,11 +7,12 @@ namespace Pruefdomaene.Pipeline.Verteilung;
 /// <summary>
 /// Die Kanten der Verteilung: die Quelle reserviert die Gesamtmenge; gelingt es, ordnet die Verteilung die
 /// Zubuchungen an, und diese Funktion bucht jedes Ziel zu (FAN-OUT als Strom von Commands); jede Zubuchung mit dem Beleg der Verteilung wird dort
-/// gezählt (COUNT-JOIN im Zähl-Aggregat). Gleichbleibend (R12).
+/// gezählt (COUNT-JOIN im Zähl-Aggregat). Eine Funktion vor dem Aggregat (docs/04 §4.4): ihr Eingang ist die Folge <see cref="VerteilungAbzuwickeln"/>,
+/// die Events hört sie als Antwort auf ihre eigenen Commands.
 /// </summary>
 public sealed class Verteilabwicklung : IFunktion
 {
-    public ReservierePosten Auf(VerteilungGestartet e) =>
+    public ReservierePosten Auf(VerteilungAbzuwickeln e) =>
         new(e.QuelleId, e.MengeJeZiel * e.Ziele.Count, new Beleg(Belegart.Verteilung, e.VerteilungId.Wert));
 
     public VermerkeQuellreservierung? Auf(PostenReserviert e) =>

@@ -6,10 +6,11 @@ public partial class Auftrag
 {
     public partial class Decider : IDecider<Auftrag>
     {
-        public IEnumerable<OneOf<AuftragGestartet, AuftragExistiertBereits>> Decide(StarteAuftrag cmd)
+        public IEnumerable<OneOf<AuftragGestartet, AuftragAbzuwickeln, AuftragExistiertBereits>> Decide(StarteAuftrag cmd)
         {
             if (this.State.Existiert) { yield return new AuftragExistiertBereits(cmd.AggregateId); yield break; }
             yield return new AuftragGestartet(cmd.AggregateId, cmd.PostenId, cmd.KontingentId, cmd.Menge);
+            yield return new AuftragAbzuwickeln(cmd.AggregateId, cmd.PostenId, cmd.KontingentId, cmd.Menge);
         }
 
         /// <summary>Die Reservierung ist gelungen: zusammen mit der Belegung bestätigt sie den Auftrag — ist er schon gescheitert, geht sie zurück.</summary>

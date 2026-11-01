@@ -39,22 +39,25 @@ public class FunktionsLaufzeitTests
         public readonly ConcurrentQueue<EingangZustellen> Hinweise = new();
         public readonly ConcurrentQueue<Guid> Ausgetragen = new();
         public Func<ICommand, EmitAusgang> Ausgang = _ => EmitAusgang.Zugestellt;
+        public Func<ICommand, IReadOnlyList<Antwortereignis>> Antwort = _ => Array.Empty<Antwortereignis>();
         private readonly Dictionary<string, PID> _parents = new();
         private readonly ServiceProvider _dienste = new ServiceCollection().BuildServiceProvider();
         public Verkettung Verkettung = Verkettung.Leer;
 
-        public void Funktion(string name, FunktionsRechnung rechne, FunktionsOrtKonfig? konfig = null, Action? beimBau = null)
+        public void Funktion(string name, FunktionsRechnung rechne, FunktionsOrtKonfig? konfig = null, Action? beimBau = null, params Type[] antworten)
         {
-            var traeger = new FunktionsTraeger(name, sp => new FunktionsAktivierung(sp, (_, _) => { beimBau?.Invoke(); return new object(); }, name: name), rechne);
+            var traeger = new FunktionsTraeger(name, sp => new FunktionsAktivierung(sp, (_, _) => { beimBau?.Invoke(); return new object(); }, name: name), rechne,
+                Antworten: antworten.ToHashSet());
             var k = konfig ?? new FunktionsOrtKonfig();
             _parents[name] = System.Root.SpawnNamed(Props.FromProducer(() => new FunktionsParent(traeger, k,
                 () => new FunktionsKindActor(traeger, _dienste, this, Verkettung, SendeAsync), new Offene(this))), FunktionenWurzel.Name(name));
         }
 
-        private Task<EmitAusgang> SendeAsync(ICommand c, Guid id, Guid korrelation, CancellationToken ct)
+        private Task<Infrastructure.Emit.EmitAntwort> SendeAsync(ICommand c, Guid id, Guid korrelation, CancellationToken ct)
         {
             Gesendet.Enqueue((c, id));
-            return Task.FromResult(Ausgang(c));
+            var ausgang = Ausgang(c);
+            return Task.FromResult(new Infrastructure.Emit.EmitAntwort(ausgang, ausgang == EmitAusgang.Zugestellt ? Antwort(c) : Array.Empty<Antwortereignis>()));
         }
 
         public async Task<EingangQuittung?> StelleZuAsync(EingangZustellen eingang, TimeSpan frist, CancellationToken ct)
@@ -224,6 +227,34 @@ public class FunktionsLaufzeitTests
         w.Hinweise.Single().Art.Should().Be(Eingangsart.Hinweis);
         (await w.StelleZuAsync(Eingang("Schreiber", new Rohwert(1)), TimeSpan.FromSeconds(10), default))!.Ausgang.Should().Be(Quittungsart.Gescheitert,
             "eine Funktion schreibt nie ins Log");
+    }
+
+    private sealed record Gebucht(int Wert) : IEvent;
+    private sealed record Bestaetige(Id<Ziel> AggregateId) : ICommand<Ziel>;
+
+    [Fact]
+    public async Task Eine_Antwort_auf_den_eigenen_Command_rechnet_die_Funktion_gleich_weiter()
+    {
+        await using var w = new Welt();
+        var ziel = Id<Ziel>.Neu();
+        w.Antwort = c => c is Buche b ? new[] { new Antwortereignis(new Gebucht(b.Wert), 5) } : Array.Empty<Antwortereignis>();
+        Herkunft? gesehen = null;
+        w.Funktion("A", (_, e, h, _, _) => e switch
+        {
+            Rohwert r => Strom(new Buche(ziel, r.Wert)),
+            Gebucht g => Strom(Merke(h, new Bestaetige(ziel))),
+            _ => Strom(),
+        }, antworten: typeof(Gebucht));
+
+        object Merke(Herkunft h, object x) { gesehen = h; return x; }
+
+        var eingang = Eingang("A", new Rohwert(3));
+        (await w.StelleZuAsync(eingang, TimeSpan.FromSeconds(10), default))!.Ausgang.Should().Be(Quittungsart.Fertig);
+        w.Gesendet.Select(x => x.Befehl).Should().Equal(new Buche(ziel, 3), new Bestaetige(ziel));
+        var antwort = Kettenvertrag.Antwort(eingang.Kennung, "A", 0, 0);
+        w.Gesendet.Last().Id.Should().Be(Kettenvertrag.Befehl(antwort, "A", 0, new Bestaetige(ziel)), "die Kennung der Antwort folgt aus Eingang, Stelle und Nummer");
+        gesehen!.Stream.Should().Be(ziel.Wert, "die Herkunft einer Antwort ist das Ziel");
+        gesehen.Version.Should().Be(5);
     }
 
     [Fact]

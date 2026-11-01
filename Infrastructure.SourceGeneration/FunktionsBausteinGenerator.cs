@@ -136,8 +136,9 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("        };");
             sb.AppendLine();
 
-            // Die Verkettung (docs/04 §4.4): Nachrichten-Typ → die Funktionen vor dem Aggregat, die ihn hören (Folge, Zwischenergebnis, Hinweis).
-            var kette = fs.Where(f => f.VorDemAggregat).SelectMany(f => f.Aufs.Select(a => (Eingang: T(a.Eingang), Name: f.Typ.Name)))
+            // Die Verkettung (docs/04 §4.4): Nachrichten-Typ → die Funktionen vor dem Aggregat, die ihn hören (Folge, Zwischenergebnis, Hinweis); eine
+            //   Antwort (ein Event auf einen eigenen Command) geht nicht über die Verkettung, das Kind rechnet sie gleich weiter.
+            var kette = fs.Where(f => f.VorDemAggregat).SelectMany(f => f.Aufs.Where(a => !f.IstAntwort(a)).Select(a => (Eingang: T(a.Eingang), Name: f.Typ.Name)))
                 .GroupBy(x => x.Eingang).OrderBy(g => g.Key, System.StringComparer.Ordinal);
             sb.AppendLine("        /// <summary>Nachrichten-Typ → die Funktionen vor dem Aggregat, die ihn hören (Folge, Zwischenergebnis, Hinweis).</summary>");
             sb.AppendLine("        public static readonly IReadOnlyDictionary<Type, string[]> Verkettung = new Dictionary<Type, string[]>");

@@ -6,10 +6,11 @@ public partial class Verteilung
 {
     public partial class Decider : IDecider<Verteilung>
     {
-        public IEnumerable<OneOf<VerteilungGestartet, VerteilungExistiertBereits>> Decide(StarteVerteilung cmd)
+        public IEnumerable<OneOf<VerteilungGestartet, VerteilungAbzuwickeln, VerteilungExistiertBereits>> Decide(StarteVerteilung cmd)
         {
             if (this.State.Existiert) { yield return new VerteilungExistiertBereits(cmd.AggregateId); yield break; }
             yield return new VerteilungGestartet(cmd.AggregateId, cmd.QuelleId, cmd.Ziele, cmd.MengeJeZiel);
+            yield return new VerteilungAbzuwickeln(cmd.AggregateId, cmd.QuelleId, cmd.Ziele, cmd.MengeJeZiel);
         }
 
         public IEnumerable<OneOf<ZubuchungenAngeordnet, VerteilungNichtGefunden>> Decide(VermerkeQuellreservierung cmd)

@@ -392,15 +392,33 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     }
 
     /// <summary>Die Quittung für einen Command, der laut Log schon entschieden ist (nach einem mehrdeutigen Commit).</summary>
-    private void QuittiereEntschieden(IContext context, AppendErgebnis ergebnis)
+    private async Task QuittiereEntschiedenAsync(IContext context, CommandEnvelope env, AppendErgebnis ergebnis)
         => Antworte(context, ergebnis == AppendErgebnis.SchonAbgelehnt
             ? new CommandResult { Success = false, Abgelehnt = true, ErrorMessage = "Vorgang bereits abgelehnt (Framework-Inbox)", NewVersion = _state!.Version }
-            : new CommandResult { Success = true, NewVersion = _state!.Version });
+            : await MitAntwortAsync(env, new CommandResult { Success = true, NewVersion = _state!.Version }));
 
     /// <summary>Antwortet dem Absender des Commands, den der Einzel-Pfad gerade behandelt.</summary>
     private void Antworte(IContext context, CommandResult ergebnis)
     {
         if (_antwortAn is { } an) context.Send(an, ergebnis);
+    }
+
+    /// <summary>Die Antwort-Events eines frisch entschiedenen, emittierten Commands (ohne Einträge des Rahmens), ab <paramref name="versionVorher"/>.</summary>
+    private static List<Antwortereignis>? AntwortVon(CommandEnvelope env, IReadOnlyList<IEvent> events, int versionVorher) =>
+        env.Modus is not CommandModus.Emittiert ? null
+            : events.Select((e, i) => (e, i)).Where(x => x.e is not IRahmenEvent).Select(x => new Antwortereignis(x.e, versionVorher + 1 + x.i)).ToList();
+
+    /// <summary>
+    /// Die Antwort auf eine erkannte Wiederholung eines emittierten Commands trägt die Events des ersten Mals (docs/04 §4.4: eine Funktion vor dem
+    /// Aggregat hört sie als Antwort) — gesucht über die causation_id im eigenen Stream. Selten (nur nach einem verlorenen Ausgang).
+    /// </summary>
+    private async Task<CommandResult> MitAntwortAsync(CommandEnvelope env, CommandResult r)
+    {
+        if (!r.Success || r.Antwort is not null || env.Modus is not CommandModus.Emittiert) return r;
+        var id = env.CommandId.ToString();
+        r.Antwort = (await _eventStore.ReadStreamAsync(_id, 0, default))
+            .Where(x => x.CausationId == id && x.Payload is not IRahmenEvent).Select(x => new Antwortereignis(x.Payload, x.AggregateVersion)).ToList();
+        return r;
     }
 
     private static IDisposable SpurVon(CommandEnvelope env)
@@ -667,7 +685,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                 else if (e.Sofort is { } sofort)
                 {
                     if (e.Fehler is { } fehler) MeldeCommandFailed(e.Env, fehler);
-                    e.Ergebnis = sofort;
+                    e.Ergebnis = await MitAntwortAsync(e.Env, sofort);
                 }
                 else if (e.Ausgang == KommandoAusgang.Abgelehnt)
                 {
@@ -696,6 +714,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                     e.Ergebnis = new CommandResult
                     {
                         Success = true, NewVersion = e.VersionNachher, ErsteVersion = e.Persistent.Count > 0 ? e.VersionVorher + 1 : 0,
+                        Antwort = AntwortVon(e.Env, e.Persistent, e.VersionVorher),
                     };
                 }
             }
@@ -770,7 +789,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                         expectedVersion))
             {
                 case CommandVorpruefung.Ergebnis.IdempotenterErfolg:
-                    Antworte(context, new CommandResult { Success = true, NewVersion = _state.Version });
+                    Antworte(context, await MitAntwortAsync(cmdEnvelope, new CommandResult { Success = true, NewVersion = _state.Version }));
                     return;
 
                 case CommandVorpruefung.Ergebnis.IdempotenteAblehnung:
@@ -788,7 +807,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                     //   entschieden ist, weiß nur die Inbox. Nur auf diesem Weg und nach einem gescheiterten Append fragt der Actor sie.
                     if (await NachgeschlagenAsync(cmdEnvelope.CommandId, wiederholung: true) is { } schon)
                     {
-                        QuittiereEntschieden(context, schon);
+                        await QuittiereEntschiedenAsync(context, cmdEnvelope, schon);
                         return;
                     }
                     var errorMsg = $"Concurrency conflict: expected version {expectedVersion}, actual {_state.Version}";
@@ -824,7 +843,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             {
                 if (await QuittiereOhneEventsAsync(cmdEnvelope, expectedVersion, KommandoAusgang.Gewirkt, eingaenge) is var noop and not AppendErgebnis.Geschrieben)
                 {
-                    QuittiereEntschieden(context, noop);
+                    await QuittiereEntschiedenAsync(context, cmdEnvelope, noop);
                     return;
                 }
                 if (zuzustellen.Count > 0 && _wege is not null) Infrastructure.Eingaenge.Folgenbeilagen.StelleZu(zuzustellen, _wege, _id);
@@ -870,7 +889,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                 if (await QuittiereOhneEventsAsync(cmdEnvelope, expectedVersion, KommandoAusgang.Abgelehnt) is var schon
                     and not AppendErgebnis.Geschrieben)
                 {
-                    QuittiereEntschieden(context, schon);
+                    await QuittiereEntschiedenAsync(context, cmdEnvelope, schon);
                     return;
                 }
 
@@ -906,7 +925,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                     try { await PublishEventsAsync(persistentEvents, cmdEnvelope, expectedVersion); }
                     catch (Exception ex) { _logger?.LogWarning(ex, "[Actor] Pushes nach mehrdeutigem Commit nicht veröffentlicht"); }
                 }
-                QuittiereEntschieden(context, append);
+                await QuittiereEntschiedenAsync(context, cmdEnvelope, append);
                 return;
             }
 
@@ -950,6 +969,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                     Success = true,
                     NewVersion = _state.Version,
                     ErsteVersion = expectedVersion + 1,
+                    Antwort = AntwortVon(cmdEnvelope, persistentEvents, expectedVersion),
                 });
             }
             catch (Exception postAppendEx)
@@ -972,7 +992,8 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                 Antworte(context, new CommandResult
                 {
                     Success = true,
-                    NewVersion = _state?.Version ?? (expectedVersion + persistentEvents.Count)
+                    NewVersion = _state?.Version ?? (expectedVersion + persistentEvents.Count),
+                    Antwort = AntwortVon(cmdEnvelope, persistentEvents, expectedVersion),
                 });
             }
         }

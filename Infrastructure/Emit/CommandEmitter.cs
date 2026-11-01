@@ -67,13 +67,20 @@ public sealed class CommandEmitter
     /// Sendet den Command mit der VORGEGEBENEN CommandId (Funktion: aus Eingang und Ausgabe-Index; Uhr: aus der Frist). Die Korrelation reist
     /// explizit (→ Ziel-Event-Metadatum). Bounded (W2), <see cref="CommandModus.Emittiert"/> (KEINE Version, §4.2), Ausgang an den Aufrufer.
     /// </summary>
-    public async Task<EmitAusgang> EmitAsync(ICommand cmd, Guid commandId, Guid korrelation, CancellationToken ct)
+    public async Task<EmitAusgang> EmitAsync(ICommand cmd, Guid commandId, Guid korrelation, CancellationToken ct) =>
+        (await EmitMitAntwortAsync(cmd, commandId, korrelation, ct)).Ausgang;
+
+    /// <summary>
+    /// Wie <see cref="EmitAsync"/>, dazu die Antwort des Ziels: die Events, die der Command entschieden hat (auch bei einer erkannten Wiederholung die des
+    /// ersten Mals) — eine Funktion vor dem Aggregat hört sie als Antwort auf ihren Command (docs/04 §4.4).
+    /// </summary>
+    public async Task<EmitAntwort> EmitMitAntwortAsync(ICommand cmd, Guid commandId, Guid korrelation, CancellationToken ct)
     {
         if (!Anwendung.Routing.CommandToAggregate.TryGetValue(cmd.GetType(), out var aggregateType))
         {
             // Ein Command ohne Aggregat verhindert der Build (CQRS010); kommt es trotzdem vor, ist nichts gewirkt.
             _logger.LogError("[Emit] keine AggregateType-Zuordnung für {Command} — nicht routbar", cmd.GetType().Name);
-            return EmitAusgang.Unbekannt;
+            return EmitAntwort.Unbekannt;
         }
 
         // Der Envelope entsteht SYNCHRON vor dem ersten await: Spur und Akteur sind AsyncLocal-Bereiche des Aufrufers.
@@ -97,7 +104,7 @@ public sealed class CommandEmitter
         if (platz is null)
         {
             _logger.LogDebug("[Emit] Drossel an {AggregateType}/{AggregateId} voll — nicht gesendet", aggregateType, cmd.Ziel);
-            return EmitAusgang.Unbekannt;
+            return EmitAntwort.Unbekannt;
         }
 
         // Frage mit Pflicht-Frist (W2): keine Antwort in der Frist (abgelaufen, Identität nicht auflösbar, Knoten weg, Abbruch) heißt: ob
@@ -105,10 +112,10 @@ public sealed class CommandEmitter
         var ergebnis = await _bote.FrageAsync<CommandResult>(identity, envelope, _sendeFrist, ct);
         return ergebnis switch
         {
-            null => EmitAusgang.Unbekannt,
-            { Success: true } => EmitAusgang.Zugestellt,
-            { Abgelehnt: true } => EmitAusgang.Abgelehnt,
-            _ => Technisch(ergebnis, aggregateType, cmd),
+            null => EmitAntwort.Unbekannt,
+            { Success: true } => new EmitAntwort(EmitAusgang.Zugestellt, ergebnis.Antwort ?? (IReadOnlyList<Antwortereignis>)Array.Empty<Antwortereignis>()),
+            { Abgelehnt: true } => new EmitAntwort(EmitAusgang.Abgelehnt, Array.Empty<Antwortereignis>()),
+            _ => new EmitAntwort(Technisch(ergebnis, aggregateType, cmd), Array.Empty<Antwortereignis>()),
         };
     }
 
@@ -187,4 +194,10 @@ public sealed class EmitDrossel
             drossel.Verlasse(ziel, e);
         }
     }
+}
+
+/// <summary>Der Ausgang eines emittierten Commands und die Events, die er entschied (die Antwort, docs/04 §4.4).</summary>
+public sealed record EmitAntwort(EmitAusgang Ausgang, IReadOnlyList<Antwortereignis> Events)
+{
+    public static readonly EmitAntwort Unbekannt = new(EmitAusgang.Unbekannt, Array.Empty<Antwortereignis>());
 }

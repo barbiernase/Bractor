@@ -56,6 +56,9 @@ public static class Kettenvertrag
     /// <summary>Die Kennung der Ausgabe an <paramref name="stelle"/> der Funktion <paramref name="funktion"/> zum Eingang <paramref name="eingang"/>.</summary>
     public static Guid Ausgabe(Guid eingang, string funktion, int stelle) => Herkunft.Ableite($"ausgabe:{funktion}:{eingang:N}:{stelle}");
 
+    /// <summary>Die Kennung des <paramref name="nummer"/>-ten Events der Antwort auf den Command an <paramref name="stelle"/> zum Eingang <paramref name="eingang"/>.</summary>
+    public static Guid Antwort(Guid eingang, string funktion, int stelle, int nummer) => Herkunft.Ableite($"antwort:{funktion}:{eingang:N}:{stelle}:{nummer}");
+
     /// <summary>Die Command-Id der Ausgabe an <paramref name="stelle"/> (Eingang, Funktion, Stelle, Typ, Ziel): ein erneutes Rechnen trägt dieselbe Id.</summary>
     public static Guid Befehl(Guid eingang, string funktion, int stelle, ICommand befehl) =>
         Herkunft.Ableite($"befehl:{funktion}:{eingang:N}:{stelle}:{befehl.GetType().FullName}:{befehl.Ziel:N}");

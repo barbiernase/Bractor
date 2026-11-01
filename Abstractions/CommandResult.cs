@@ -44,4 +44,13 @@ public class CommandResult : IWireMessage
     /// ohne <see cref="Abgelehnt"/>), dessen Wirkung unbekannt ist (<c>EmitAusgang</c>).
     /// </summary>
     public bool Abgelehnt { get; set; }
+
+    /// <summary>
+    /// Die Events, die DIESER Command entschieden hat, mit ihrer Version — nur für einen emittierten Command (eine Funktion vor dem Aggregat hört
+    /// sie als Antwort auf ihren Command, docs/04 §4.4), auch bei einer erkannten Wiederholung (dann die des ersten Mals); ohne Einträge des Rahmens.
+    /// </summary>
+    public List<Antwortereignis>? Antwort { get; set; }
 }
+
+/// <summary>Ein Event einer Antwort auf einen Command und seine Version im Stream des Ziels.</summary>
+public sealed record Antwortereignis(IEvent Event, int Version);

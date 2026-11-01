@@ -111,6 +111,7 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(HinweisZustellen))]
         [JsonSerializable(typeof(EingangZustellen))]
         [JsonSerializable(typeof(EingangQuittung))]
+        [JsonSerializable(typeof(Antwortereignis))]
         [JsonSerializable(typeof(TraegerAbgemeldet))]
         [JsonSerializable(typeof(HalteQuelle))]
         [JsonSerializable(typeof(QuelleGehalten))]

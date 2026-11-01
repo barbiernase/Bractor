@@ -9,7 +9,9 @@ public delegate IAsyncEnumerable<object> FunktionsRechnung(object umsetzung, obj
 /// Was die Laufzeit von einer Funktion braucht (docs/04 §4.4): ihr Name, wie eine Aktivierung entsteht (Bereich, Umsetzung, Zustand, Lebenszyklus),
 /// wie sie rechnet und ob ihr <c>Auf</c> Lese-Fähigkeiten nimmt.
 /// </summary>
-public sealed record FunktionsTraeger(string Name, Func<IServiceProvider, FunktionsAktivierung> Aktivierung, FunktionsRechnung Rechne, bool Liest = false);
+/// <param name="Antworten">Die Event-Typen, die die Funktion als Antwort auf ihre eigenen Commands hört (das Ziel entschied sie, docs/04 §4.4).</param>
+public sealed record FunktionsTraeger(string Name, Func<IServiceProvider, FunktionsAktivierung> Aktivierung, FunktionsRechnung Rechne, bool Liest = false,
+    IReadOnlySet<Type>? Antworten = null);
 
 /// <summary>Wie eine Funktion an einem Knoten läuft (Konfig <c>Funktionen:&lt;Name&gt;</c>): Parallel, Warteschlange, Vorwärmen, Wiederholungen.</summary>
 public sealed record FunktionsOrtKonfig(int Parallel = FunktionsOrtKonfig.StandardParallel, int Warteschlange = FunktionsOrtKonfig.StandardWarteschlange,

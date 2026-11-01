@@ -67,7 +67,11 @@ namespace Infrastructure.SourceGeneration
             /// Sie liest nie das Log; Eingänge bringt ihr die Laufzeit über Wurzel, Parent und Kinder. Im Umbau laufen Funktionen mit Log-Eingängen
             /// und solche, die nur Hinweise hören, noch auf dem Funktions-Actor je Partition.
             /// </summary>
-            public bool VorDemAggregat => Aufs.Any(a => a.Nachricht) && Aufs.All(a => a.Nachricht || a.Hinweis);
+            public bool VorDemAggregat => Aufs.Any(a => a.Nachricht);
+
+            /// <summary>Ein Event-Eingang einer Funktion vor dem Aggregat ist eine ANTWORT: ein Ziel entschied es auf einen ihrer Commands hin; sie hört
+            /// es nur so, nie aus dem Log (dass einer ihrer Commands es entscheiden kann, prüft das Gesamtbild).</summary>
+            public bool IstAntwort(Auf a) => VorDemAggregat && !a.Nachricht && !a.Hinweis;
         }
 
         public static string Name(ITypeSymbol t) =>
@@ -189,10 +193,11 @@ namespace Infrastructure.SourceGeneration
                 gesehen[schluessel] = auf;
                 f.Aufs.Add(auf);
             }
-            // Im Umbau: Log-Eingänge und Nachrichten ohne Marker nicht an einer Funktion (die eine läuft auf dem Funktions-Actor, die andere davor).
-            if (f.Aufs.Any(a => a.Nachricht) && f.Aufs.Any(a => !a.Nachricht && !a.Hinweis))
-                f.Fehler.Add(("die Funktion hört Events aus dem Log und Nachrichten ohne Marker — eine Funktion vor dem Aggregat liest nie das Log; "
-                    + "teile sie oder mache aus dem Event eine Folge des Decide", ort));
+            // Im Umbau: eine Quell-Nachricht hört eine Funktion vor dem Aggregat noch nicht (sie kommt aus dem Log).
+            if (f.VorDemAggregat)
+                foreach (var a in f.Aufs.Where(a => Hat(a.Eingang, A + "IQuellNachricht")))
+                    f.Fehler.Add(($"der Eingang '{a.Eingang.Name}' ist eine Quell-Nachricht — eine Funktion vor dem Aggregat hört sie im Umbau noch nicht; "
+                        + "ihre Event-Eingänge sind Antworten auf ihre eigenen Commands", a.Methode.Locations.FirstOrDefault() ?? ort));
             // Ein Zwischenergebnis gibt nur eine Funktion vor dem Aggregat aus, ein Event (ins Log) nur eine mit Log-Eingängen.
             if (f.VorDemAggregat)
                 foreach (var a in f.Aufs)
