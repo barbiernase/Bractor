@@ -122,6 +122,13 @@ public sealed class FunktionsKonfig
     /// <summary>Slots ohne Eintrag in der Umgebung (PF-33: mit einem Slot staute S5-64 bei ≈ 800 Vorgängen/s, mit vier ≈ 2 000).</summary>
     public const int StandardSlots = 4;
     public int Wiederholungen { get; set; }
+    /// <summary>Vor dem Aggregat (docs/04 §4.4): so viele Eingänge rechnet ein Knoten zugleich (Kinder seines Parents); 0 = der Standard. Draußen
+    /// bestimmen die Slots der Arbeiter.</summary>
+    public int Parallel { get; set; }
+    /// <summary>Vor dem Aggregat: so viele Eingänge wartet ein Parent höchstens (voll → „später“, der Rückstau reicht bis zum durablen Rand); 0 = der Standard.</summary>
+    public int Warteschlange { get; set; }
+    /// <summary>Vor dem Aggregat: alle Kinder schon beim Start anlegen (eine Umsetzung, die lange lädt).</summary>
+    public bool Vorwaermen { get; set; }
     /// <summary>Nur Extern: wie die Werkbank den Worker startet (▶ Worker starten). Der Host liest es nie.</summary>
     public WorkerKonfig? Worker { get; set; }
     /// <summary>Nur eine Funktion mit Zustand (<c>IZustand&lt;T&gt;</c>, docs/04 §4.4): wo und wie oft er gesichert wird. Ohne Eintrag: im Dokument,

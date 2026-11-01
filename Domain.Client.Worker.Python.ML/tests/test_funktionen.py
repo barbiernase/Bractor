@@ -66,7 +66,7 @@ def test_generat_bindet_eingaenge_und_ausgaben_an_die_betterproto_typen():
     assert BildEinlesenBasis.FUNKTION == "IBildEinlesen"
     e = BildEinlesenBasis.EINGAENGE[g.DateiErkanntDto]
     assert e.methode == "auf_datei_erkannt" and not e.strom
-    assert e.ausgaben == {g.BildEingelesenDto: Ausgabe.EVENT, g.BildNichtLesbarDto: Ausgabe.EVENT}
+    assert e.ausgaben == {g.BildEingelesenDto: Ausgabe.ZWISCHENERGEBNIS, g.BildNichtLesbarDto: Ausgabe.HINWEIS}
     t = TrainingBasis.EINGAENGE[g.TrainingAngefordertDto]
     assert t.strom and all(a == Ausgabe.COMMAND for a in t.ausgaben.values())
     with pytest.raises(TypeError):
@@ -102,10 +102,10 @@ def test_eingang_rein_antwort_raus_ueber_den_echten_draht():
     mapper = PayloadMapper(NUTZLAST)
     assert a.fehler == "" and a.fertig and len(a.ausgaben) == 1
     art, nutzlast = betterproto.which_one_of(a.ausgaben[0], "art")
-    assert art == "event" and nutzlast.typ == "BildEingelesen"
+    assert art == "zwischenergebnis" and nutzlast.typ == "BildEingelesen"
     assert mapper.entpacke(nutzlast).pfad == "/roh/a.tiff"
-    _, nb = betterproto.which_one_of(b.ausgaben[0], "art")
-    assert nb.typ == "BildNichtLesbar", "auch der zweite OneOf-Fall ist eine Antwort"
+    art_b, nb = betterproto.which_one_of(b.ausgaben[0], "art")
+    assert art_b == "hinweis" and nb.typ == "BildNichtLesbar", "auch der zweite OneOf-Fall ist eine Antwort"
 
 
 def test_falsche_ausgabe_wird_zum_fehler_und_lebenszeichen_reisen_ueber_den_draht():

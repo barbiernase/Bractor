@@ -86,7 +86,8 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
         foreach (var b in Anwendung.Funktionen.Bausteine.Where(b => b.VorDemAggregat))
         {
             var bindung = FunktionsBausteinWiring.BindungVon(b, bindungen);
-            var antworten = b.Eingaenge.Where(e => !e.Hinweis && typeof(IEvent).IsAssignableFrom(e.Typ)).Select(e => e.Typ).ToHashSet();
+            var antworten = b.Eingaenge.Where(e => !e.Hinweis && typeof(IEvent).IsAssignableFrom(e.Typ) && !typeof(IQuellNachricht).IsAssignableFrom(e.Typ))
+                .Select(e => e.Typ).ToHashSet();
             var wiederholungen = bindung.Wiederholungen > 0 ? bindung.Wiederholungen : FunktionsOrtKonfig.StandardWiederholungen;
             var kindLogger = logs?.CreateLogger("Funktion." + b.Name);
             FunktionsParent Parent(FunktionsTraeger traeger, FunktionsOrtKonfig konfig) => new(traeger, konfig,
@@ -99,16 +100,19 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
                 var baustein = b;
                 var traeger = new FunktionsTraeger(b.Name, null, null, false, antworten,
                     (kennung, nachricht, herkunft, korrelation, hinweis, t) => werkstatt.RechneAsync(baustein, kennung, nachricht, herkunft, korrelation, hinweis, t));
-                draussen.Add(new DraussenPlan(b.Name, slots => Parent(traeger, new FunktionsOrtKonfig(Parallel: slots, Wiederholungen: wiederholungen))));
+                var schlange = bindung.Warteschlange > 0 ? bindung.Warteschlange : FunktionsOrtKonfig.StandardWarteschlange;
+                draussen.Add(new DraussenPlan(b.Name, slots => Parent(traeger, new FunktionsOrtKonfig(Parallel: slots, Warteschlange: schlange,
+                    Wiederholungen: wiederholungen))));
                 continue;
             }
             var umsetzung = FunktionsBausteinWiring.Umsetzung(b, bindung);
             var gerufenerZustand = dienste.GetService<GerufeneWahl>()?.MitZustand(umsetzung.Typ) == true;
             var imHost = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, umsetzung.Baue, b.Zustand, b.Name, gerufenerZustand), b.Rechne!, b.Liest,
                 antworten);
-            // Im Umbau: Slots (je Partition) ohne eigene Angabe heißt der Standard für Parallel (je Knoten).
-            var konfig = new FunktionsOrtKonfig(Parallel: bindung.Slots == FunktionsKonfig.StandardSlots ? FunktionsOrtKonfig.StandardParallel : bindung.Slots,
-                Wiederholungen: wiederholungen);
+            var konfig = new FunktionsOrtKonfig(
+                Parallel: bindung.Parallel > 0 ? bindung.Parallel : FunktionsOrtKonfig.StandardParallel,
+                Warteschlange: bindung.Warteschlange > 0 ? bindung.Warteschlange : FunktionsOrtKonfig.StandardWarteschlange,
+                Vorwaermen: bindung.Vorwaermen, Wiederholungen: wiederholungen);
             plaene.Add(new ParentPlan(imHost, konfig, () => Parent(imHost, konfig)));
         }
         _wurzel = system.Root.SpawnNamed(Props.FromProducer(() => new FunktionenWurzel(plaene, orte, logger, draussen)), FunktionenWurzel.Wurzelname);

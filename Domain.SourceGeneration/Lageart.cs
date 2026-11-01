@@ -17,6 +17,7 @@ internal sealed class Lageart
     private readonly HashSet<string> _konfigs = new();
     private readonly HashSet<string> _aggregatQueries = new(), _aggregatAntworten = new();
     private readonly HashSet<string> _folgen = new();
+    private readonly HashSet<string> _zwischen = new();
 
     /// <summary>Ist der Vertrag (Abstractions) in der Compilation? Sonst gibt es nichts zu prüfen.</summary>
     public bool Bereit { get; }
@@ -34,6 +35,9 @@ internal sealed class Lageart
             if (Infrastructure.SourceGeneration.Funktionsform.IstBaustein(t))
                 foreach (var a in Infrastructure.SourceGeneration.Funktionsform.Lies(t).Aufs)
                     foreach (var e in a.Ausgaben) _ergebnisse.Add(Name(e));
+            // Zwischenergebnisse: die schlichten Ein- und Ausgaben der Funktionen (Nachrichtenform, docs/04 §4.4) — eine Folge bleibt Folge.
+            if (Infrastructure.SourceGeneration.Nachrichtenform.IstFunktion(t))
+                foreach (var z in Infrastructure.SourceGeneration.Nachrichtenform.VonFunktion(t)) _zwischen.Add(Name(z));
             // Fragen an ein Aggregat (Frage im Decider, docs/03 §3.2): ihre Query und ihre Antworten liegen bei der Schreibseite.
             if (Infrastructure.SourceGeneration.Projektionsform.StateVonDecider(t) is { } state)
                 foreach (var f in Infrastructure.SourceGeneration.Projektionsform.LiesAggregatfragen(t, state).Fragen)
@@ -87,6 +91,7 @@ internal sealed class Lageart
         if (Hat(t, "IAkteur")) return Projektstruktur.Primitive.Akteur;
         if (Hat(t, "IStore") || Hat(t, "IReadStore") || Hat(t, "IWriteStore")) return Projektstruktur.Primitive.StoreImplementierung;
         if (_folgen.Contains(Name(t))) return Projektstruktur.Primitive.Folge;
+        if (_zwischen.Contains(Name(t))) return Projektstruktur.Primitive.Zwischenergebnis;
         if (_konfigs.Contains(Name(t))) return Projektstruktur.Primitive.Konfig;
         return Projektstruktur.Primitive.Hilfscode;
     }

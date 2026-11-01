@@ -53,6 +53,9 @@ static class Projektstruktur
         Folge,
         ReadModel, Query, Antwort, StoreBuendel, StoreFaehigkeit, Projektion, Reader,
         Funktion, FunktionsErgebnis, FunktionsImplementierung, Konfig,
+        /// <summary>Ein Zwischenergebnis (docs/04 §4.4): ein schlichter Record in der Rückgabe eines <c>Auf</c>, weder Event noch Command — er geht an die
+        /// Funktionen, die ihn hören, nie ins Log, und liegt bei den Abläufen.</summary>
+        Zwischenergebnis,
         /// <summary>Eine Funktion als Klasse (Baustein-Form, <c>Auf</c>): sie läuft im Host; als Schnittstelle ist sie <see cref="Funktion"/> (draußen).</summary>
         HostFunktion,
         Akteur, ClientVertrag,
@@ -168,7 +171,7 @@ static class Projektstruktur
             case Primitive.ReadModel: case Primitive.Query: case Primitive.Antwort: case Primitive.StoreBuendel: case Primitive.StoreFaehigkeit:
             case Primitive.Projektion: case Primitive.Reader:
                 return new[] { Rolle.Leseseite };
-            case Primitive.Funktion: case Primitive.FunktionsErgebnis:
+            case Primitive.Funktion: case Primitive.FunktionsErgebnis: case Primitive.Zwischenergebnis:
             case Primitive.FunktionsImplementierung: case Primitive.Konfig:
             case Primitive.HostFunktion:
                 return new[] { Rolle.Ablaeufe };
@@ -192,6 +195,7 @@ static class Projektstruktur
             case Primitive.Event: case Primitive.FunktionsErgebnis: return "Events.cs";
             case Primitive.Quelle: return "Quellen.cs";
             case Primitive.Folge: return "Folgen.cs";
+            case Primitive.Zwischenergebnis: return "Zwischenergebnisse.cs";
             case Primitive.Wertobjekt: return "ValueObjects.cs";
             case Primitive.Enum: return "Enums.cs";
             case Primitive.ReadModel: return "ReadModels.cs";
@@ -282,6 +286,7 @@ static class Projektstruktur
             case Primitive.AggregatQuery: return "eine Query an ein Aggregat";
             case Primitive.AggregatAntwort: return "eine Antwort eines Aggregats";
             case Primitive.Folge: return "eine Folge (eines Decide)";
+            case Primitive.Zwischenergebnis: return "ein Zwischenergebnis (einer Funktion)";
             case Primitive.StoreBuendel: return "ein Store-Bündel";
             case Primitive.StoreFaehigkeit: return "eine Store-Fähigkeit";
             case Primitive.Projektion: return "eine Projektion";

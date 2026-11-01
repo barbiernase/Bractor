@@ -174,6 +174,39 @@ class ImagePairFilterDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class BildEingelesenDto(betterproto.Message):
+    dateiname: str = betterproto.string_field(1)
+    pfad: str = betterproto.string_field(2)
+    groesse: int = betterproto.int64_field(3)
+    erkannt_am: int = betterproto.int64_field(4)
+    breite_pixel: int = betterproto.int32_field(5)
+    hoehe_pixel: int = betterproto.int32_field(6)
+
+
+@dataclass(eq=False, repr=False)
+class BildVerkleinertDto(betterproto.Message):
+    dateiname: str = betterproto.string_field(1)
+    pfad: str = betterproto.string_field(2)
+    groesse: int = betterproto.int64_field(3)
+    erkannt_am: int = betterproto.int64_field(4)
+    verkleinert: str = betterproto.string_field(5)
+    breite_pixel: int = betterproto.int32_field(6)
+    hoehe_pixel: int = betterproto.int32_field(7)
+
+
+@dataclass(eq=False, repr=False)
+class VorschauErstelltDto(betterproto.Message):
+    dateiname: str = betterproto.string_field(1)
+    pfad: str = betterproto.string_field(2)
+    groesse: int = betterproto.int64_field(3)
+    erkannt_am: int = betterproto.int64_field(4)
+    vorschau: str = betterproto.string_field(5)
+    breite_pixel: int = betterproto.int32_field(6)
+    hoehe_pixel: int = betterproto.int32_field(7)
+    erstellt_am: int = betterproto.int64_field(8)
+
+
+@dataclass(eq=False, repr=False)
 class EntfernePaarDto(betterproto.Message):
     """
     ============================================================================
@@ -614,42 +647,9 @@ class ModellRegistriertDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class BildEingelesenDto(betterproto.Message):
-    dateiname: str = betterproto.string_field(1)
-    pfad: str = betterproto.string_field(2)
-    groesse: int = betterproto.int64_field(3)
-    erkannt_am: int = betterproto.int64_field(4)
-    breite_pixel: int = betterproto.int32_field(5)
-    hoehe_pixel: int = betterproto.int32_field(6)
-
-
-@dataclass(eq=False, repr=False)
 class BildNichtLesbarDto(betterproto.Message):
     pfad: str = betterproto.string_field(1)
     grund: str = betterproto.string_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class BildVerkleinertDto(betterproto.Message):
-    dateiname: str = betterproto.string_field(1)
-    pfad: str = betterproto.string_field(2)
-    groesse: int = betterproto.int64_field(3)
-    erkannt_am: int = betterproto.int64_field(4)
-    verkleinert: str = betterproto.string_field(5)
-    breite_pixel: int = betterproto.int32_field(6)
-    hoehe_pixel: int = betterproto.int32_field(7)
-
-
-@dataclass(eq=False, repr=False)
-class VorschauErstelltDto(betterproto.Message):
-    dateiname: str = betterproto.string_field(1)
-    pfad: str = betterproto.string_field(2)
-    groesse: int = betterproto.int64_field(3)
-    erkannt_am: int = betterproto.int64_field(4)
-    vorschau: str = betterproto.string_field(5)
-    breite_pixel: int = betterproto.int32_field(6)
-    hoehe_pixel: int = betterproto.int32_field(7)
-    erstellt_am: int = betterproto.int64_field(8)
 
 
 @dataclass(eq=False, repr=False)

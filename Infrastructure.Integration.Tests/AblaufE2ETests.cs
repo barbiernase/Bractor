@@ -25,12 +25,12 @@ namespace Infrastructure.Integration.Tests;
 /// Ebene 2 — die ABLÄUFE der Beispieldomäne gegen echtes Marten/Consul: Aggregate entscheiden,
 /// Funktionen tragen die Kanten Event → Command, Fristen tragen die Zeit — ohne Dirigent. Der Bildeingang läuft über die ganze Kette —
 ///
-///   Quell-Nachricht ──QuellEingang (StartStream je Kennung, Commit gemeldet)──▶ ƒ IBildEinlesen ──BildEingelesen──▶ ƒ IBildVerkleinerung
-///     ──BildVerkleinert──▶ ƒ IKontrastausgleich (OpenCV im Host bzw. Python-Worker über gRPC; jede Ausgabe festgehalten) ──VorschauErstellt──▶
+///   Quell-Nachricht ──QuellEingang (StartStream je Kennung, offener Eingang, Commit gemeldet)──▶ ƒ IBildEinlesen ──BildEingelesen──▶ ƒ IBildVerkleinerung
+///     ──BildVerkleinert──▶ ƒ IKontrastausgleich (OpenCV im Host bzw. Python-Worker über gRPC; Zwischenergebnisse, nie im Log) ──VorschauErstellt──▶
 ///     ƒ Bildeingang (gleichbleibend) ──NimmBildAuf──▶ ImagePair („anlegen oder ergänzen“).
 ///
-/// Beweiskraft: das Paar bekommt BildVerfuegbar mit einer Vorschau, die NUR die Kette der Bildaufbereitung erzeugt; die Spur führt lückenlos über
-/// jeden Schritt bis zur Quelle; dieselbe Datei zweimal steht genau einmal im Log. Im zweiten Test rechnet ein Python-Worker den letzten Schritt,
+/// Beweiskraft: das Paar bekommt BildVerfuegbar mit einer Vorschau, die NUR die Kette der Bildaufbereitung erzeugt; die Spur führt bis zur Quelle;
+/// dieselbe Datei zweimal steht genau einmal im Log. Im zweiten Test rechnet ein Python-Worker den letzten Schritt,
 /// den er über gRPC anbietet — sein Kennzeichen („_py") muss im Fakt landen.
 /// </summary>
 public class AblaufE2ETests
@@ -104,7 +104,7 @@ public class AblaufE2ETests
             File.Exists(bilder[0].Pfad).Should().BeTrue();
             bilder.Single(b => b.Version == BildVersion.Dc0).Meta.HoehePixel.Should().Be(OpenCvBildVerkleinerung.VorschauHoehe);
 
-            // Spur: von BildVerfuegbar läuft eine lückenlose Ursache-Kette über alle vier Funktionen bis zur Quelle; jeder Eintrag trägt seinen Wirker.
+            // Spur: von BildVerfuegbar führt die Ursache direkt zur Quelle (die Kette reist mit den Eingängen); der Command trägt die letzte Funktion.
             var bildEnv = stream.First(e => e.Payload is BildVerfuegbar);
             bildEnv.Wirker.Should().Be("decide:ImagePair/NimmBildAuf");
             bildEnv.Ueber.Should().Be("funktion:Bildeingang", "der Absender des Commands ist die Funktion, die ihn ausgab");
@@ -118,13 +118,10 @@ public class AblaufE2ETests
             }
             schritt.Payload.Should().BeOfType<DateiErkannt>("die Kette endet an der Quelle: " + string.Join(" ← ", kette.Select(e => e.Wirker)));
             schritt.Wirker.Should().Be("quelle:DateiErkannt");
-            kette.Should().Contain(e => e.Payload is BildEingelesen && e.Wirker == "funktion:IBildEinlesen", "jeder Schritt ist festgehalten");
-            kette.Should().Contain(e => e.Payload is BildVerkleinert && e.Wirker == "funktion:IBildVerkleinerung");
-            kette.Should().Contain(e => e.Payload is VorschauErstellt && e.Wirker == "funktion:IKontrastausgleich");
+            kette.Should().HaveCount(2, "die Schritte stehen vor dem Aggregat: ihre Zwischenergebnisse gehen nie ins Log, die Ursache des Commands ist die Quell-Nachricht");
 
-            // Genau so viel Log je Schritt: die festgehaltene Ausgabe + ihr Abschluss, kein Prozess-Stream.
-            var festgehalten = await es.ReadStreamAsync(FunktionsIds.Festhalten(nameof(IBildEinlesen), vorgang, 1), 0, default);
-            festgehalten.Select(e => e.Payload.GetType().Name).Should().Equal(nameof(BildEingelesen), nameof(AusgabeFestgehalten));
+            // Kein Log je Schritt: nichts festgehalten, kein Prozess-Stream.
+            (await es.ReadStreamAsync(FunktionsIds.Festhalten(nameof(IBildEinlesen), vorgang, 1), 0, default)).Should().BeEmpty();
         }
         finally
         {

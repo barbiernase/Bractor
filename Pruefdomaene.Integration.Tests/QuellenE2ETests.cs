@@ -39,14 +39,14 @@ public class QuellenE2ETests
             await Warte(async () => (await Zustand<Importauftrag>(host.Services, import.Wert)).Stand == 12, TimeSpan.FromSeconds(90),
                 "die Anforderung startet den Import nicht");
 
-            // FB-3: der Commit einer Quelle weckt wie jeder Commit (Wecker am Commit) — die Funktion wacht sofort auf, nicht erst mit dem
-            //   Takt (30 s). Dreimal hintereinander je unter 5 s: dass der Takt dreimal zufällig passt, ist ausgeschlossen.
+            // FB-3: nach dem Commit einer Quelle geht ihr offener Eingang sofort an die Funktion (schneller Weg), nicht erst mit dem Zusteller
+            //   (fällig nach 5 s). Dreimal hintereinander je unter 5 s.
             for (var i = 0; i < 3; i++)
             {
                 var neu = await eingang.NimmAufAsync(new ImportAngefordert(3) { Kennung = Guid.NewGuid().ToString() }, default);
                 var weiterer = new Herkunft(neu, 1, default, null, WirkerId.FuerFunktion("Importannahme")).NeueId<Importauftrag>();
                 await Warte(async () => (await Zustand<Importauftrag>(host.Services, weiterer.Wert)).Existiert, TimeSpan.FromSeconds(5),
-                    $"Durchlauf {i + 1}: die Quell-Nachricht weckt ihre Funktion nicht über den Wecker (nur der Takt holte sie)");
+                    $"Durchlauf {i + 1}: die Quell-Nachricht erreicht ihre Funktion nicht auf dem schnellen Weg");
             }
         }
         finally { await host.StopAsync(); }

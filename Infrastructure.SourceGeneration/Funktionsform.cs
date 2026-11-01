@@ -26,6 +26,8 @@ namespace Infrastructure.SourceGeneration
             public bool Hinweis;
             /// <summary>Der Eingang ist eine Nachricht ohne Marker (eine Folge, ein Zwischenergebnis — Nachrichtenform), kein Event.</summary>
             public bool Nachricht;
+            /// <summary>Der Eingang ist eine Quell-Nachricht (<c>IQuellNachricht</c>): sie steht genau einmal im Log, ihr Eingang ist durabel.</summary>
+            public bool Quelle;
             /// <summary>Die Parameter in Reihenfolge: <c>e</c> (Eingang), <c>h</c> (Herkunft), <c>ct</c> (Abbruch) oder eine Lese-Fähigkeit.</summary>
             public List<(string Art, INamedTypeSymbol? Typ, string Name)> Parameter = new List<(string, INamedTypeSymbol?, string)>();
             public List<INamedTypeSymbol> Faehigkeiten = new List<INamedTypeSymbol>();
@@ -63,15 +65,15 @@ namespace Infrastructure.SourceGeneration
             /// <summary>Die Klasse hat einen Lebenszyklus (<c>ILebenszyklus</c>, E10): sie lädt etwas beim Aktivieren.</summary>
             public bool Lebenszyklus;
             /// <summary>
-            /// Die Funktion steht VOR dem Aggregat (docs/04 §4.4): keiner ihrer Eingänge ist ein Event im Log — nur Nachrichten ohne Marker und Hinweise.
-            /// Sie liest nie das Log; Eingänge bringt ihr die Laufzeit über Wurzel, Parent und Kinder. Im Umbau laufen Funktionen mit Log-Eingängen
-            /// noch auf dem Funktions-Actor je Partition.
+            /// Die Funktion steht VOR dem Aggregat (docs/04 §4.4): ihre Eingänge sind Nachrichten ohne Marker, Quell-Nachrichten und Hinweise, ihre
+            /// Event-Eingänge Antworten. Sie liest nie das Log; Eingänge bringt ihr die Laufzeit über Wurzel, Parent und Kinder. Im Umbau laufen
+            /// Funktionen, die nur Events hören, noch auf dem Funktions-Actor je Partition.
             /// </summary>
-            public bool VorDemAggregat => Aufs.Any(a => a.Nachricht || a.Hinweis);
+            public bool VorDemAggregat => Aufs.Any(a => a.Nachricht || a.Hinweis || a.Quelle);
 
             /// <summary>Ein Event-Eingang einer Funktion vor dem Aggregat ist eine ANTWORT: ein Ziel entschied es auf einen ihrer Commands hin; sie hört
             /// es nur so, nie aus dem Log (dass einer ihrer Commands es entscheiden kann, prüft das Gesamtbild).</summary>
-            public bool IstAntwort(Auf a) => VorDemAggregat && !a.Nachricht && !a.Hinweis;
+            public bool IstAntwort(Auf a) => VorDemAggregat && !a.Nachricht && !a.Hinweis && !a.Quelle;
         }
 
         public static string Name(ITypeSymbol t) =>
@@ -193,11 +195,6 @@ namespace Infrastructure.SourceGeneration
                 gesehen[schluessel] = auf;
                 f.Aufs.Add(auf);
             }
-            // Im Umbau: eine Quell-Nachricht hört eine Funktion vor dem Aggregat noch nicht (sie kommt aus dem Log).
-            if (f.VorDemAggregat)
-                foreach (var a in f.Aufs.Where(a => Hat(a.Eingang, A + "IQuellNachricht")))
-                    f.Fehler.Add(($"der Eingang '{a.Eingang.Name}' ist eine Quell-Nachricht — eine Funktion vor dem Aggregat hört sie im Umbau noch nicht; "
-                        + "ihre Event-Eingänge sind Antworten auf ihre eigenen Commands", a.Methode.Locations.FirstOrDefault() ?? ort));
             // Ein Zwischenergebnis gibt nur eine Funktion vor dem Aggregat aus, ein Event (ins Log) nur eine mit Log-Eingängen.
             if (f.VorDemAggregat)
                 foreach (var a in f.Aufs)
@@ -208,7 +205,7 @@ namespace Infrastructure.SourceGeneration
                 foreach (var a in f.Aufs)
                     foreach (var x in a.Ausgaben.Where(Nachrichtenform.IstSchlicht))
                         f.Fehler.Add(($"die Ausgabe '{x.Name}' ist ein Zwischenergebnis (ein schlichter Record) — das gibt nur eine Funktion vor dem Aggregat "
-                            + "aus, deren Eingänge Nachrichten ohne Marker oder Hinweise sind", a.Methode.Locations.FirstOrDefault() ?? ort));
+                            + "aus, deren Eingänge Nachrichten ohne Marker, Quell-Nachrichten oder Hinweise sind", a.Methode.Locations.FirstOrDefault() ?? ort));
             if (!f.Gerufen && gesehen.Count == 0 && f.Doppelt.Count == 0 && f.Fehler.Count == 0)
                 f.Fehler.Add(($"'{t.Name}' hat weder ein {Abstractions.Funktionsvertrag.Auf} noch eine gerufene Methode — eine Funktion hört mindestens einen "
                     + "Eingang oder bietet ihrem Halter mindestens eine Methode", ort));
@@ -229,7 +226,8 @@ namespace Infrastructure.SourceGeneration
                     + "und kein Hinweis", ort));
                 return null;
             }
-            var auf = new Auf { Methode = m, Eingang = eingang, Hinweis = Hat(eingang, A + "ITransientEvent"), Nachricht = nachricht };
+            var auf = new Auf { Methode = m, Eingang = eingang, Hinweis = Hat(eingang, A + "ITransientEvent"), Nachricht = nachricht,
+                Quelle = Hat(eingang, A + "IQuellNachricht") };
             auf.Parameter.Add(("e", eingang, m.Parameters[0].Name));
             var mitAbbruch = false;
             foreach (var p in m.Parameters.Skip(1))

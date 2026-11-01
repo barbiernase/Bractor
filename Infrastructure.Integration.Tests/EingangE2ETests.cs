@@ -177,9 +177,8 @@ public class EingangE2ETests
             var paar = ImagePairFileName.Resolve(dateiname)!.AggregateId;
             await Warte(async () => (await es.ReadStreamAsync(paar.Wert, 0, default)).Any(e => e.Payload is ImagePairErstellt), TimeSpan.FromSeconds(30),
                 "Nach der Antwort von Hand lief es nicht weiter (kein ImagePairErstellt über den Bildeingang).");
-            var festgehalten = await es.ReadStreamAsync(Infrastructure.Funktionen.FunktionsIds.Festhalten("IBildEinlesen", vorgang, 1), 0, default);
-            festgehalten.Should().ContainSingle(e => e.Payload is Domain.Pipeline.Bildaufbereitung.BildEingelesen);
-            festgehalten.Should().OnlyContain(e => e.Wirker == "funktion:IBildEinlesen", "die Ausgabe schreibt die Funktion — wo gerechnet wurde, ist eine Bindung");
+            (await es.ReadStreamAsync(Infrastructure.Funktionen.FunktionsIds.Festhalten("IBildEinlesen", vorgang, 1), 0, default))
+                .Should().BeEmpty("die Schritte stehen vor dem Aggregat: nichts wird festgehalten, die Zwischenergebnisse gehen nie ins Log");
             (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").GetArrayLength().Should().Be(0);
             vorgang.Should().NotBe(Guid.Empty);
 

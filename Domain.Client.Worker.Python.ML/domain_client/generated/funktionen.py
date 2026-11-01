@@ -32,7 +32,7 @@ class BildEinlesenBasis(FunktionsBasis):
 
     FUNKTION: ClassVar[str] = "IBildEinlesen"
     EINGAENGE: ClassVar[dict] = {
-        DateiErkanntDto: Eingang("auf_datei_erkannt", {BildEingelesenDto: Ausgabe.EVENT, BildNichtLesbarDto: Ausgabe.EVENT}),
+        DateiErkanntDto: Eingang("auf_datei_erkannt", {BildEingelesenDto: Ausgabe.ZWISCHENERGEBNIS, BildNichtLesbarDto: Ausgabe.HINWEIS}),
     }
 
     @abstractmethod
@@ -46,7 +46,7 @@ class BildVerkleinerungBasis(FunktionsBasis):
 
     FUNKTION: ClassVar[str] = "IBildVerkleinerung"
     EINGAENGE: ClassVar[dict] = {
-        BildEingelesenDto: Eingang("auf_bild_eingelesen", {BildVerkleinertDto: Ausgabe.EVENT}),
+        BildEingelesenDto: Eingang("auf_bild_eingelesen", {BildVerkleinertDto: Ausgabe.ZWISCHENERGEBNIS}),
     }
 
     @abstractmethod
@@ -60,7 +60,7 @@ class KontrastausgleichBasis(FunktionsBasis):
 
     FUNKTION: ClassVar[str] = "IKontrastausgleich"
     EINGAENGE: ClassVar[dict] = {
-        BildVerkleinertDto: Eingang("auf_bild_verkleinert", {VorschauErstelltDto: Ausgabe.EVENT}),
+        BildVerkleinertDto: Eingang("auf_bild_verkleinert", {VorschauErstelltDto: Ausgabe.ZWISCHENERGEBNIS}),
     }
 
     @abstractmethod

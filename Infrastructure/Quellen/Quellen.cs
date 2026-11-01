@@ -77,15 +77,22 @@ public sealed class QuellEingang
     private readonly Gemeldet? _melde;
     private readonly Func<Type, string?> _akteur;
     private readonly IStreamBestand? _bestand;
+    private readonly Infrastructure.Funktionen.Verkettung? _verkettung;
+    private readonly Infrastructure.Funktionen.IFunktionsWege? _wege;
 
     /// <param name="melde">Meldet den Commit an die Clients (Push); null = kein Push.</param>
     /// <param name="akteur">Der Akteur, der diesen Nachrichtentyp liefert (IDarf), oder null.</param>
-    public QuellEingang(IEventStoreRepository store, Gemeldet? melde = null, Func<Type, string?>? akteur = null, IStreamBestand? bestand = null)
+    /// <param name="verkettung">Welche Funktionen vor dem Aggregat den Typ hören: je eine ein offener Eingang in derselben Transaktion (docs/04 §4.4).</param>
+    /// <param name="wege">Der schnelle Weg nach dem Commit zu ihnen (verlierbar; die Zeile ist das Netz).</param>
+    public QuellEingang(IEventStoreRepository store, Gemeldet? melde = null, Func<Type, string?>? akteur = null, IStreamBestand? bestand = null,
+        Infrastructure.Funktionen.Verkettung? verkettung = null, Infrastructure.Funktionen.IFunktionsWege? wege = null)
     {
         _store = store;
         _melde = melde;
         _akteur = akteur ?? (_ => null);
         _bestand = bestand;
+        _verkettung = verkettung;
+        _wege = wege;
     }
 
     /// <summary>Der Eingang live: Marten-Log, Commit-Meldung an die Verteiler, Akteur aus den IDarf-Befugnissen.</summary>
@@ -94,14 +101,20 @@ public sealed class QuellEingang
         var verteilung = sp.GetService<Verteilung>();
         return new QuellEingang(sp.GetRequiredService<IEventStoreRepository>(),
             (events, stream, typ, vorher, korrelation, ursache, akteur) => Commitmeldung.Melde(verteilung, events, stream, typ, vorher, korrelation, ursache, akteur),
-            AkteurHerkunft.EindeutigerHalter, sp.GetService<IStreamBestand>() ?? new Infrastructure.Persistence.MartenStreamBestand(sp.GetRequiredService<Marten.IDocumentStore>()));
+            AkteurHerkunft.EindeutigerHalter, sp.GetService<IStreamBestand>() ?? new Infrastructure.Persistence.MartenStreamBestand(sp.GetRequiredService<Marten.IDocumentStore>()),
+            sp.GetService<Infrastructure.Funktionen.Verkettung>(), sp.GetService<Infrastructure.Funktionen.IFunktionsWege>());
     }
+
+    /// <summary>Die offenen Eingänge der Funktionen vor dem Aggregat, die den Typ hören (leer ohne Verkettung).</summary>
+    private IReadOnlyList<(EingangOffen Eingang, object Folge)> Eingaenge(IQuellNachricht nachricht, Guid vorgang, int version, string? akteur) =>
+        _verkettung is null ? Array.Empty<(EingangOffen, object)>() : Infrastructure.Eingaenge.Folgenbeilagen.VonQuelle(nachricht, _verkettung, vorgang, version, akteur);
 
     /// <summary>
     /// Nimmt eine Quell-Nachricht auf: genau einmal ins Log, dann den Commit melden. Liefert den Vorgang (die Id aus Typ und Kennung).
     /// Ohne <paramref name="schluessel"/> wird sie das erste Event ihres eigenen Streams (Version 0 — der Stream ist der Vorgang); mit Schlüssel geht
     /// sie in den Stream des Schlüssels, und die Kennung steht in derselben Transaktion im Kennungs-Verzeichnis (<see cref="QuellKennung"/>).
-    /// <paramref name="akteur"/>: wer sie hineingab (das Tor des Eingangs); sonst der eine Akteur mit <c>IDarf</c>.
+    /// <paramref name="akteur"/>: wer sie hineingab (das Tor des Eingangs); sonst der eine Akteur mit <c>IDarf</c>. Hört eine Funktion vor dem Aggregat
+    /// den Typ, steht ihr Eingang in derselben Transaktion in <c>cqrs_eingaenge</c> und geht nach dem Commit auf dem schnellen Weg zu ihr.
     /// </summary>
     public async Task<Guid> NimmAufAsync(IQuellNachricht nachricht, CancellationToken ct, string? schluessel = null, string? akteur = null)
     {
@@ -112,10 +125,12 @@ public sealed class QuellEingang
         var wer = akteur ?? _akteur(typ);
         if (schluessel is null)
         {
+            var eingaenge = Eingaenge(nachricht, vorgang, 1, wer);
             try
             {
                 await _store.AppendEventsAsync(vorgang, 0, new IEvent[] { nachricht },
-                    correlationId: vorgang.ToString(), causationId: vorgang.ToString(), aggregateType: $"Quelle:{typ.Name}", akteur: wer);
+                    correlationId: vorgang.ToString(), causationId: vorgang.ToString(), aggregateType: $"Quelle:{typ.Name}", akteur: wer,
+                    beilagen: eingaenge.Count == 0 ? null : eingaenge.Select(e => (Beilage)e.Eingang).ToList());
             }
             catch (Exception)
             {
@@ -124,6 +139,7 @@ public sealed class QuellEingang
                 return vorgang;
             }
             _melde?.Invoke(new IEvent[] { nachricht }, vorgang, $"Quelle:{typ.Name}", 0, vorgang.ToString(), vorgang.ToString(), wer);
+            if (_wege is not null) Infrastructure.Eingaenge.Folgenbeilagen.StelleZu(eingaenge, _wege, vorgang);
             return vorgang;
         }
 
@@ -132,11 +148,14 @@ public sealed class QuellEingang
         for (var versuch = 1; ; versuch++)
         {
             var kopf = await _store.KopfAsync(stream, ct);
+            var eingaenge = Eingaenge(nachricht, vorgang, kopf + 1, wer);
             try
             {
                 await _store.AppendEventsAsync(stream, kopf, new IEvent[] { nachricht }, correlationId: vorgang.ToString(),
-                    causationId: vorgang.ToString(), aggregateType: $"Quelle:{typ.Name}", akteur: wer, beilagen: [new QuellKennung(vorgang)]);
+                    causationId: vorgang.ToString(), aggregateType: $"Quelle:{typ.Name}", akteur: wer,
+                    beilagen: eingaenge.Select(e => (Beilage)e.Eingang).Prepend(new QuellKennung(vorgang)).ToList());
                 _melde?.Invoke(new IEvent[] { nachricht }, stream, $"Quelle:{typ.Name}", kopf, vorgang.ToString(), vorgang.ToString(), wer);
+                if (_wege is not null) Infrastructure.Eingaenge.Folgenbeilagen.StelleZu(eingaenge, _wege, stream);
                 return vorgang;
             }
             catch (Exception) when (!ct.IsCancellationRequested)

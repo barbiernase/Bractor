@@ -13,7 +13,8 @@ namespace Domain.Pipeline.Bildaufbereitung;
 // Jeder Schritt ist für sich: er hört genau ein Ergebnis des vorigen, gibt genau sein eigenes aus, und sein Laufort steht für sich in der Umgebung
 // (Funktionen:<F>:Laufort) — im Host OpenCV, draußen ein Python-Worker, der ihn trägt. Bilder reisen als Dateipfade: ein Ergebnis nennt die
 // geschriebene Datei, nicht ihre Bytes. Jedes Ergebnis trägt die Datei der Quelle weiter (Name, Pfad, Größe, wann erkannt) — die Zugehörigkeit
-// ist ein fachliches Feld (A2). Was herauskommt, hält der Funktions-Actor fest, bevor es wirkt.
+// ist ein fachliches Feld (A2). Die Schritte stehen vor dem Aggregat: die Quell-Nachricht ist ein durabler Eingang (genau einmal im Log), die
+// Zwischenergebnisse gehen von Schritt zu Schritt, nie ins Log; erst der Bildeingang schickt einen Command an das Paar.
 // ═══════════════════════════════════════════════════
 
 /// <summary>

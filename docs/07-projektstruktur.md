@@ -65,6 +65,7 @@ Vertrag hört auf beliebige Events, auch auf Ergebnis-Events von Funktionen.
 | | `<Projektion>.cs`, `<Reader>.cs` | je Klasse eine Datei |
 | `Domain.Akteure/` | `Akteure.cs`, `Clients.cs` | Akteure; Client-Verträge |
 | `Domain.Pipeline/<Bereich>/` | `Funktionen.cs`, `Events.cs` | Funktions-Schnittstellen (mit `Auf` oder gerufen); Ausgabe-Events der Funktionen |
+| | `Zwischenergebnisse.cs` | Zwischenergebnisse: schlichte Records in den Ein- und Ausgaben der Funktionen, die keine Folge sind (Primitive `Zwischenergebnis`, docs/04 §4.4) |
 | | `<Funktion>.cs` | je Funktion als Klasse (im Host, Primitive `HostFunktion`) eine Datei |
 | | `<Implementierung>.cs` | je Umsetzung einer Funktions-Schnittstelle eine Datei |
 | | `Konfigs.cs` | Konfig-Records |
