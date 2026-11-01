@@ -212,6 +212,30 @@ public sealed class TeilFertigMeldung : IFunktion
 }
 ```
 
+**Funktionen vor dem Aggregat** (Umbau „Funktionen vor dem Aggregat“, `Infrastructure/Funktionen/`: `FunktionenWurzel`, `FunktionsParent`,
+`FunktionsKindActor`, `FunktionsWege`). Eine Funktion, die mindestens eine **Nachricht ohne Marker** hört — eine Folge eines Decide (docs/03 §3.2)
+oder ein **Zwischenergebnis** einer anderen Funktion (ein schlichter Record in deren Rückgabe) — und sonst nur Hinweise, steht **vor dem Aggregat**:
+sie liest nie das Log und gibt nie ein Event aus, nur Commands, Zwischenergebnisse und Hinweise (CQRS100). Der Generator erzeugt ihre Rechnung
+(`FunktionsBaustein.Rechne`, Eingang und Ausgaben als Objekte) und die **Verkettung** (Nachrichten-Typ → Funktionen, `Anwendung.Funktionen.Verkettung`).
+Je Knoten spawnt der Host nach dem Cluster-Beitritt eine **Wurzel** `funktionen` (kein virtueller Actor) mit je einem **Parent** `funktionen/<F>`
+je solcher Funktion und meldet sie im Gossip-Zustand des Clusters (Schlüssel `funktionen`, `FunktionsOrte`); die **Wege** schicken einen Eingang
+an den eigenen Knoten, wenn er die Funktion hält, sonst reihum an einen, der sie hält (`Bote.FrageAnKnotenAsync`). Ein Eingang
+(`EingangZustellen`) trägt eine abgeleitete **Kennung**, die Nachricht (auf demselben Knoten als Objekt, zwischen Knoten in ihrer Wire-Form) und
+die Herkunft der Kette. Der Parent ist eine begrenzte Warteschlange (`Warteschlange`, Standard 1 000: voll → „später“, der Rückstau reicht bis
+zum durablen Rand) mit Kindern bis `Parallel` (je Umsetzung eine Aktivierung, erzeugt beim ersten Eingang, mit `Vorwaermen` beim Start); er erkennt
+einen doppelten Eingang an der Kennung (in Arbeit: er hängt sich an; fertig: sofort „fertig“, Gedächtnis 10 000) und rechnet einen scheiternden
+erneut bis `Wiederholungen` (Standard 3), danach „gescheitert“. Das Kind rechnet einen Eingang zugleich: Commands der Reihe nach über den Emitter mit
+der Id aus Eingang, Funktion und Stelle (`Kettenvertrag.Befehl`; unbekannt → derselbe Command erneut, bis acht Versuche), Zwischenergebnisse an
+jede Funktion, die sie hört (Kennung aus Ausgabe und Funktion; gewartet wird, bis der Nachfolger fertig ist — „später“ oder keine Antwort in 60 s
+→ erneut), Hinweise verlierbar. **Fertig** ist ein Eingang, wenn seine Commands beantwortet und seine Nachfolger fertig sind; ein durabler wird dann
+ausgetragen (`cqrs_eingaenge`), einem Absender aus einer Kette antwortet der Parent erst dann. Durable Eingänge bringt der Aggregat-Actor direkt
+nach dem Commit (schneller Weg, verlierbar), die Zeile wird erst nach 5 s fällig, danach bringt sie der Zusteller (`WegeZustellung`). Nichts wird
+festgehalten: rechnet eine Funktion einen Eingang erneut (Absturz, Wiederholung), wirkt von jedem Command der erste (dieselbe Id), eine Außenwelt
+dahinter (ein Versand) ist mindestens einmal. Reihenfolge nur bei `Parallel` 1. Im Umbau laufen Funktionen mit Log-Eingängen und solche, die nur
+Hinweise hören, noch auf dem Funktions-Actor je Partition (unten); eine Funktion vor dem Aggregat läuft vorerst nur im Host, ihr `IZustand` ist ein
+Cache je Aktivierung (nicht gesichert). Prüfdomäne: `Nachschub` (Folge `Unterschritten`), `Gutschrift` (`Gutschreibung`), `Mahnwesen`
+(`Mahnfall`), `Merkmalsbildung` (`NeuerWert`).
+
 **Funktions-Actor** (`Infrastructure/Funktionen/FunktionsActor.cs`, ein `RahmenActor` je Funktion und Adresse — die Partition, bzw. die eine
 Adresse einer Funktion mit `[EineAdresse]`, die dann alle Partitionen liest): liest seine Seite ab der
 Position aus dem Log, startet so viele Eingänge, wie Slots frei sind (Standard 4, PF-33), je Stream höchstens einen (`FunktionsLauf`), und rückt die
