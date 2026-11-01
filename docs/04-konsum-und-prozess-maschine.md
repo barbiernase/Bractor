@@ -255,16 +255,17 @@ es ein Boot-Fehler, der den Eintrag nennt. Eine Funktion mit Lese-Fähigkeit lä
   ein anderer lebender Träger. Endet eine Sitzung, meldet sie sich ab (`TraegerAbgemeldet`) und ihre Adressen sind sofort frei.
 
 **Zustand** (`IZustand<T>`, docs/04 §4.4, docs/10 A5, A6). Steht `IZustand<T>` im Konstruktor einer Funktions-Klasse, hat sie gekapselten, durablen Zustand —
-kein Domänen-Zustand, keine Zustands-Events, keine Faltung aus dem Log; Vorbild ist der Aggregat-Actor:
+kein Domänen-Zustand, keine Zustands-Events, keine Faltung aus dem Log; Vorbild ist der Aggregat-Actor. Gedacht ist er als **Cache** (Gewichte, die
+nach einem Umzug nicht kalt sein sollen, ein Zähler); was aus Fakten **gelernt** wird, gehört in eine Projektion, die Funktion liest es per
+Lese-Fähigkeit — so ist es replaybar und unabhängig davon, wo die Funktion läuft:
 ```csharp
-[EineAdresse]                                                   // ein Zustand für alle Messstellen (sonst einer je Partition)
-public sealed class Schaetzer(IZustand<Schaetzmodell> modell) : IFunktion
+public sealed class Schaetzer(IZaehlwerk zaehler) : IFunktion          // Prüfdomäne Pruefdomaene.Pipeline/Messung
 {
-    public void Auf(MesswertErfasst e, Herkunft h) => modell.Wert.Lerne(h.Stream, e.Wert);           // lernt aus dem Log
-    public VermerkeSchaetzung Auf(Merkmal m) => …;                                                 // Hinweis rein, Command raus
+    public async Task<VermerkeSchaetzung> Auf(Merkmal m, IHoleMessreihe reihe) => …;   // Hinweis rein, Messreihe (Projektion) lesen, Command raus
 }
+public sealed class Zaehlwerk(IZustand<Zaehlstand> stand) : IZaehlwerk { … }          // gerufen, mit Zustand: zählt die Schätzungen
 ```
-(Prüfdomäne `Pruefdomaene.Pipeline/Messung`.) Der Generator erkennt den Konstruktor-Parameter, reicht den Zustand aus der Aktivierung hinein (nie aus
+Der Generator erkennt den Konstruktor-Parameter, reicht den Zustand aus der Aktivierung hinein (nie aus
 dem Container) und sichert ihn über den Speicher-Kontext der Komposition (`EventJsonSerializerContext`, der Codegen nimmt jedes `T` auf — ohne
 Reflection). Der Actor lädt Zustand und Stand beim Aktivieren, bevor das erste `Auf` läuft; er rechnet **einen** Eingang zugleich (Log oder Hinweis);
 er sichert nur in einem **Ruhepunkt** — kein Eingang in Arbeit, der Zustand enthält genau die Log-Eingänge bis zur Position — Zustand und Stand
@@ -291,8 +292,8 @@ implementiert sie `ILebenszyklus` und überschreibt, was sie braucht: `BeimAktiv
 vor dem ersten `Auf` (bis dahin warten Eingänge und Hinweise in der Mailbox); `VorDemSichernAsync` läuft vor jeder Sicherung im Ruhepunkt und beim
 Stoppen (Gewichte von der GPU nach `Zustand.Wert`); das Ende ist `IAsyncDisposable` der Funktion, danach werden ihre Dienste frei. Wirft
 `BeimAktivierenAsync`, ist die Aktivierung gescheitert, nicht ein Eingang: sie beginnt neu, kein Stream wird geparkt. Die geladene Ressource steht in
-einem `readonly`-Feld; was gesichert werden muss, gehört in `IZustand<T>`. Beispiel ist der Schätzer der Prüfdomäne, der auf einem Arbeitsmodell der
-Aktivierung rechnet. Eine Funktion mit Lebenszyklus ist nie gleichbleibend; CQRS107 erlaubt ihn nur an Funktions-Klassen und `VorDemSichernAsync` nur
+einem `readonly`-Feld; was gesichert werden muss, gehört in `IZustand<T>`. Beispiel ist das Prognosemodell der Sonde (`Vorhersage.cs.txt`), das auf einem
+Arbeitsmodell der Aktivierung rechnet. Eine Funktion mit Lebenszyklus ist nie gleichbleibend; CQRS107 erlaubt ihn nur an Funktions-Klassen und `VorDemSichernAsync` nur
 mit Zustand. Draußen hat die Python-Basis die Gegenstücke `beim_start` (einmal je Worker, vor dem Anbieten) und `beim_ende`.
 
 **Hinweis-Netz** (`HinweisNetz.cs`, docs/04 §4.4, docs/10 E7, E8). Hinweise, die nicht zur Fachdomäne gehören (Merkmale, Messwerte, Ablehnungen), gehen im

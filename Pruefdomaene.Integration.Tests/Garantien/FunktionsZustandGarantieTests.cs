@@ -1,4 +1,3 @@
-using System.Text.Json;
 using Abstractions;
 using FluentAssertions;
 using Infrastructure.Funktionen;
@@ -14,17 +13,15 @@ using static Pruefdomaene.Integration.Tests.Pruefstand;
 namespace Pruefdomaene.Integration.Tests.Garantien;
 
 /// <summary>
-/// Funktionen als Actors mit Zustand und das Hinweis-Netz (docs/04 §4.4, docs/11) gegen echtes Marten, am allgemeinen
-/// Fall der Prüfdomäne (Messung): Messwerte im Log → Merkmalsbildung (gleichbleibend) → Merkmal (Hinweis, nie im Log) → Schätzer mit Zustand und einer
-/// Adresse bzw. Ausreißerprüfung (Schnittstelle, im Host oder draußen) → Command an die Messstelle. Geprüft wird am Log und am gesicherten Zustand:
-/// jeder Log-Eingang wirkt genau einmal auf den gesicherten Zustand — nach Absturz, Umzug und mit zwei Aktivierungen —, Ressourcen schließen beim
-/// Stoppen, Commands aus einem Hinweis wirken einmal.
+/// Funktionen als Actors und das Hinweis-Netz (docs/04 §4.4, docs/11) gegen echtes Marten, am allgemeinen Fall der Prüfdomäne (Messung): Messwerte im
+/// Log → Merkmalsbildung (gleichbleibend) → Merkmal (Hinweis, nie im Log) → Schätzer (liest die Messreihe, eine Projektion) bzw. Ausreißerprüfung
+/// (Schnittstelle, im Host oder draußen) → Command an die Messstelle. Geprüft wird am Log: Ressourcen schließen beim Stoppen, Commands aus einem
+/// Hinweis wirken einmal, die Schätzung beruht auf dem, was die Projektion gelernt hat.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class FunktionsZustandGarantieTests
 {
     private static readonly TimeSpan Frist = TimeSpan.FromSeconds(90);
-    private static readonly string ZustandsId = Funktionsvertrag.ZustandId(nameof(Schaetzer), Funktionsvertrag.EinzigeIdentitaet);
 
     private static async Task<IReadOnlyList<EventEnvelope>> Log(IHost host, Guid stream) =>
         await host.Services.GetRequiredService<IEventStoreRepository>().ReadStreamAsync(stream, 0, default);
@@ -33,35 +30,6 @@ public class FunktionsZustandGarantieTests
     {
         foreach (var w in werte) (await FrageAsync(host, new ErfasseMesswert(stelle, w), Guid.NewGuid()))!.Success.Should().BeTrue();
     }
-
-    /// <summary>
-    /// Was der gesicherte Zustand des Schätzers über eine Messstelle weiß (Anzahl gelernter Werte), was sein gerufenes Zählwerk gezählt hat (im selben
-    /// Dokument, je Funktion ihr Eintrag), seine Position und die des Stands.
-    /// </summary>
-    private static async Task<(int Anzahl, int Gezaehlt, long Position, long Stand)> GesichertAsync(IHost host, Id<Messstelle> stelle)
-    {
-        var staende = host.Services.GetRequiredService<IFunktionsStand>();
-        var dok = await staende.LadeZustandAsync(ZustandsId, default);
-        var stand = await staende.LadeAsync(Funktionsvertrag.StandId(nameof(Schaetzer)), 0, default);
-        if (dok is null) return (0, 0, 0, stand.Position);
-        var daten = dok.Daten ?? await File.ReadAllTextAsync(Path.Combine(Verzeichnis(host), dok.Verweis!));
-        using var json = JsonDocument.Parse(daten);
-        var anzahl = json.RootElement.GetProperty(nameof(Schaetzer)).GetProperty(nameof(Schaetzmodell.Je)).TryGetProperty(stelle.Wert.ToString(), out var je)
-            ? je.GetProperty(nameof(Lernstand.Anzahl)).GetInt32() : 0;
-        var gezaehlt = json.RootElement.TryGetProperty(nameof(IZaehlwerk), out var zw)
-                       && zw.GetProperty(nameof(Zaehlstand.Je)).TryGetProperty(stelle.Wert.ToString(), out var z) ? z.GetInt32() : 0;
-        return (anzahl, gezaehlt, dok.Position, stand.Position);
-    }
-
-    /// <summary>Das gerufene Zählwerk hat genau so oft gezählt, wie der Schätzer gelernt hat — sein Zustand folgt derselben Position (genau einmal).</summary>
-    private static async Task GezaehltWieGelernt(IHost host, Id<Messstelle> stelle, int anzahl) =>
-        (await GesichertAsync(host, stelle)).Gezaehlt.Should().Be(anzahl, "der Zustand der gerufenen Funktion wird mit dem des Halters gesichert und geladen");
-
-    private static readonly Dictionary<IHost, string> Verzeichnisse = new();
-    private static string Verzeichnis(IHost host) => Verzeichnisse.GetValueOrDefault(host) ?? "";
-
-    private static Task Gelernt(IHost host, Id<Messstelle> stelle, int anzahl, string meldung) =>
-        Warte(async () => await GesichertAsync(host, stelle) is var g && g.Anzahl == anzahl && g.Position == g.Stand, Frist, meldung);
 
     [Fact]
     public async Task Hinweis_Kette_bis_zum_Command_ohne_Log_Eintrag_des_Hinweises_und_ohne_Festhalten_der_gleichbleibenden_Funktion()
@@ -95,204 +63,24 @@ public class FunktionsZustandGarantieTests
     }
 
     [Fact]
-    public async Task Umzug_einer_Aktivierung_der_Zustand_kommt_mit()
+    public async Task Die_Schaetzung_beruht_auf_dem_was_die_Projektion_gelernt_hat()
     {
-        var stelle = Id<Messstelle>.Neu();
-        using (var a = Cluster("garantie-zustand-umzug-a"))
-        {
-            await a.StartAsync();
-            try
-            {
-                await MissAsync(a, stelle, 1, 2, 3, 4);
-                await Gelernt(a, stelle, 4, "der Schätzer lernt nicht");
-                await Warte(async () => (await Log(a, stelle.Wert)).Count(e => e.Payload is SchaetzungVermerkt) == 4, Frist, "die Schätzungen fehlen");
-            }
-            finally { await a.StopAsync(); }
-        }
-        using var b = Cluster("garantie-zustand-umzug-b");
-        await b.StartAsync();
-        try
-        {
-            await MissAsync(b, stelle, 5, 6);
-            await Gelernt(b, stelle, 6, "die neue Aktivierung kennt den Zustand der alten nicht (oder lernt doppelt)");
-            await GezaehltWieGelernt(b, stelle, 6);
-            // Die Schätzungen nach dem Umzug beruhen auf dem mitgekommenen Zustand (≥ 4 gelernt) — nie auf einem neuen ab 0. (Wie viel genau, hängt
-            //   davon ab, ob der Hinweis vor oder nach dem Log-Eingang ankam: zwei getrennte Wege.)
-            await Warte(async () => (await Log(b, stelle.Wert)).Count(e => e.Payload is SchaetzungVermerkt) == 6, Frist, "die Schätzungen nach dem Umzug fehlen");
-            (await Log(b, stelle.Wert)).Select(e => e.Payload).OfType<SchaetzungVermerkt>().Skip(4).Should().OnlyContain(s => s.Anzahl >= 4,
-                "die neue Aktivierung schätzt mit dem Zustand der alten");
-        }
-        finally { await b.StopAsync(); }
-    }
-
-    /// <summary>Sichert einmal — danach „stürzt“ jede Sicherung ab, nachdem die Datei geschrieben ist, bevor Position und Verweis gelten.</summary>
-    private sealed class AbsturzNachDerDatei(IFunktionsStand innen) : IFunktionsStand
-    {
-        public int Gesichert, Abstuerze;
-        public Task<PartitionsCheckpoint> LadeAsync(string id, int partition, CancellationToken ct) => innen.LadeAsync(id, partition, ct);
-        public Task<int> SchreibeAsync(PartitionsCheckpoint stand, CancellationToken ct) => innen.SchreibeAsync(stand, ct);
-        public Task<FunktionsZustandsDokument?> LadeZustandAsync(string id, CancellationToken ct) => innen.LadeZustandAsync(id, ct);
-        public async Task<(int? Stand, int Zustand)> SichereAsync(PartitionsCheckpoint? stand, FunktionsZustandsDokument zustand, CancellationToken ct)
-        {
-            if (Interlocked.Increment(ref Gesichert) > 1)
-            {
-                Interlocked.Increment(ref Abstuerze);
-                throw new InvalidOperationException("Absturz zwischen Sicherung (Datei) und Position");
-            }
-            return await innen.SichereAsync(stand, zustand, ct);
-        }
-    }
-
-    [Fact]
-    public async Task Absturz_zwischen_Sicherung_und_Position_jeder_Log_Eingang_wirkt_genau_einmal_auf_den_gesicherten_Zustand()
-    {
-        var verzeichnis = Path.Combine(Path.GetTempPath(), "cqrs-zustand-" + Guid.NewGuid().ToString("N")[..8]);
-        var bindung = new BausteinBindung(nameof(Schaetzer), Zustand: new ZustandsBindung(ZustandsAblage.Datei, verzeichnis, TimeSpan.FromMilliseconds(200)));
-        var stelle = Id<Messstelle>.Neu();
-        AbsturzNachDerDatei? stoerung = null;
-        // Ein eigenes Schema: der gesicherte Zustand verweist auf die Datei-Ablage dieses Tests (die anderen Tests sichern im Dokument). Ein früherer
-        //   Lauf hat seine Ablage gelöscht — sein Zustand und Stand gehen mit (frischer Anfang, die Messstellen sind ohnehin neu).
-        const string schema = "pruef_zustand_absturz";
-        await using (var conn = new Npgsql.NpgsqlConnection(Verbindung))
-        {
-            await conn.OpenAsync();
-            foreach (var sql in new[] { $"delete from {schema}.mt_doc_funktionszustandsdokument",
-                         $"delete from {schema}.mt_doc_partitionscheckpoint where id like 'funktion:{nameof(Schaetzer)}:%'" })
-            {
-                try { await using var cmd = new Npgsql.NpgsqlCommand(sql, conn); await cmd.ExecuteNonQueryAsync(); }
-                catch (Npgsql.PostgresException) { /* erster Lauf: die Tabelle gibt es noch nicht */ }
-            }
-        }
-        using (var a = Cluster("garantie-zustand-absturz-a", schema: schema, dienste: s =>
-               {
-                   s.AddSingleton(bindung);
-                   Dekoriere<IFunktionsStand>(s, (_, innen) => stoerung = new AbsturzNachDerDatei(innen));
-               }))
-        {
-            Verzeichnisse[a] = verzeichnis;
-            await a.StartAsync();
-            try
-            {
-                await MissAsync(a, stelle, 1, 2, 3);
-                await Warte(() => Task.FromResult(Volatile.Read(ref stoerung!.Gesichert) >= 1), Frist, "die erste Sicherung kommt nicht");
-                await Task.Delay(TimeSpan.FromMilliseconds(300));   // länger als das Intervall: die nächste Sicherung folgt dem nächsten Eingang
-                await MissAsync(a, stelle, 4, 5);
-                await Warte(() => Task.FromResult(Volatile.Read(ref stoerung!.Abstuerze) >= 1), Frist, "die Sicherung stürzt nicht ab");
-                await Warte(async () => (await Log(a, stelle.Wert)).Count(e => e.Payload is SchaetzungVermerkt) == 5, Frist, "die Aktivierung rechnet nicht weiter");
-            }
-            finally { await a.StopAsync(); }   // auch die Sicherung beim Stopp „stürzt ab“ — gesichert bleibt der Stand der ersten Sicherung
-        }
-
-        using var b = Cluster("garantie-zustand-absturz-b", schema: schema, dienste: s => s.AddSingleton(bindung));
-        Verzeichnisse[b] = verzeichnis;
-        await b.StartAsync();
-        try
-        {
-            await MissAsync(b, stelle, 6);
-            await Gelernt(b, stelle, 6, "nach dem Absturz ist der gesicherte Zustand nicht genau einmal je Eingang (fehlt etwas oder zählt doppelt?)");
-            await GezaehltWieGelernt(b, stelle, 6);
-            var dok = await b.Services.GetRequiredService<IFunktionsStand>().LadeZustandAsync(ZustandsId, default);
-            dok!.Verweis.Should().NotBeNull("großer Zustand liegt als Datei, das Dokument verweist darauf");
-            File.Exists(Path.Combine(verzeichnis, dok.Verweis!)).Should().BeTrue();
-            Directory.GetFiles(verzeichnis, "*.json", SearchOption.AllDirectories).Should().HaveCount(1,
-                "eine Datei je gültiger Sicherung — die verworfenen und die abgelösten sind entfernt");
-        }
-        finally
-        {
-            await b.StopAsync();
-            try { Directory.Delete(verzeichnis, recursive: true); } catch { /* aufräumen */ }
-        }
-    }
-
-    [Fact]
-    public async Task Zwei_Aktivierungen_derselben_Adresse_der_gesicherte_Zustand_stammt_aus_einer_und_passt_zur_Position()
-    {
-        var stelle = Id<Messstelle>.Neu();
-        using var a = Cluster("garantie-zustand-zwei-a");
-        using var b = Cluster("garantie-zustand-zwei-b");
-        await a.StartAsync();
-        await b.StartAsync();
-        try
-        {
-            // Beide Knoten haben eine Aktivierung derselben Adresse (Schaetzer/0); beide lesen das Log und sichern — eine gewinnt je Version.
-            for (var i = 0; i < 6; i++) await MissAsync(a, stelle, i);
-            await Gelernt(a, stelle, 6, "zwei Aktivierungen: der gesicherte Zustand zählt nicht genau einmal je Eingang");
-            await Task.Delay(TimeSpan.FromSeconds(3));
-            var g = await GesichertAsync(a, stelle);
-            g.Anzahl.Should().Be(6);
-            g.Position.Should().Be(g.Stand, "Zustand und Position aus derselben Sicherung");
-
-            // Nur noch b: hat seine Aktivierung einmal verloren, hat sie neu begonnen (Laden, Lebenszyklus) und sichert weiter.
-            await a.StopAsync();
-            await MissAsync(b, stelle, 6, 7);
-            await Gelernt(b, stelle, 8, "die verbliebene Aktivierung sichert nach einem verlorenen Konflikt nicht weiter");
-        }
-        finally
-        {
-            await b.StopAsync();
-            await a.StopAsync();
-        }
-        (await GesichertAsync(b, stelle)).Anzahl.Should().Be(8, "auch nach dem Stopp beider gilt eine Sicherung, kein Gemisch");
-    }
-
-    [Fact]
-    public async Task Verliert_eine_Sicherung_beginnt_die_Aktivierung_neu_mit_dem_Stand_des_Gewinners()
-    {
-        // Eine zweite Aktivierung (hier: der Test) sichert dazwischen einen anderen Stand derselben Adresse. Die laufende Aktivierung verliert ihre
-        //   nächste Sicherung, beginnt neu (Bau, Laden, Lebenszyklus) und lernt auf dem Stand des Gewinners weiter — nie auf ihrem eigenen.
-        using var host = Cluster("garantie-zustand-neubeginn");
+        using var host = Cluster("garantie-schaetzung-projektion");
         await host.StartAsync();
         try
         {
             var stelle = Id<Messstelle>.Neu();
-            await MissAsync(host, stelle, 1);
-            await Gelernt(host, stelle, 1, "der Schätzer lernt nicht");
+            await MissAsync(host, stelle, 1, 2, 3);
+            var queries = host.Services.GetRequiredService<IQueryDienst>();
+            await Warte(async () => ((Pruefdomaene.Projections.Messung.Messreihe)(await queries.ExecuteAsync(
+                new Pruefdomaene.Projections.Messung.HoleMessreihe(stelle))).Data).Werte.Count == 3, Frist, "die Messreihe lernt nicht");
+            await Warte(async () => (await Log(host, stelle.Wert)).Count(e => e.Payload is SchaetzungVermerkt) == 3, Frist, "die Schätzungen fehlen");
 
-            var staende = host.Services.GetRequiredService<IFunktionsStand>();
-            for (var versuch = 0; ; versuch++)
-            {
-                var dok = (await staende.LadeZustandAsync(ZustandsId, default))!;
-                var stand = await staende.LadeAsync(Funktionsvertrag.StandId(nameof(Schaetzer)), 0, default);
-                if (dok.Position != stand.Position) continue;
-                var json = System.Text.Json.Nodes.JsonNode.Parse(dok.Daten!)!;
-                json[nameof(Schaetzer)]![nameof(Schaetzmodell.Je)]![stelle.Wert.ToString()]![nameof(Lernstand.Anzahl)] = 100;
-                var fremd = new FunktionsZustandsDokument
-                {
-                    Id = dok.Id, Funktion = dok.Funktion, Adresse = dok.Adresse, Position = dok.Position, Daten = json.ToJsonString(), Version = dok.Version,
-                };
-                try { await staende.SichereAsync(stand, fremd, default); break; }
-                catch (PartitionsKonfliktException) when (versuch < 10) { /* die Aktivierung sicherte gerade selbst — noch einmal */ }
-            }
-
-            await MissAsync(host, stelle, 2, 3);
-            await Gelernt(host, stelle, 102, "nach dem verlorenen Konflikt lernt die Aktivierung nicht auf dem Stand des Gewinners weiter");
-        }
-        finally { await host.StopAsync(); }
-    }
-
-    [Fact]
-    public async Task Zwei_Sicherungen_mit_derselben_erwarteten_Version_eine_gewinnt_die_andere_verliert_ganz()
-    {
-        using var host = Cluster("garantie-zustand-sicherung");
-        await host.StartAsync();
-        try
-        {
-            var staende = host.Services.GetRequiredService<IFunktionsStand>();
-            var id = "zwei-" + Guid.NewGuid().ToString("N")[..8];
-            var stand = PartitionsCheckpoint.Neu("funktion:" + id, 0);
-            FunktionsZustandsDokument Dok(string daten) => new()
-            {
-                Id = Funktionsvertrag.ZustandId(id, "0"), Funktion = id, Adresse = "0", Position = 7, Daten = daten, Version = 0,
-            };
-            stand.Position = 7;
-            var erste = staende.SichereAsync(stand, Dok("""{"von":"a"}"""), default);
-            var zweite = staende.SichereAsync(stand, Dok("""{"von":"b"}"""), default);
-            var ergebnisse = await Task.WhenAll(erste.ContinueWith(t => t.Exception?.GetBaseException()), zweite.ContinueWith(t => t.Exception?.GetBaseException()));
-            ergebnisse.Count(e => e is null).Should().Be(1, "nur eine Aktivierung gewinnt");
-            ergebnisse.Count(e => e is PartitionsKonfliktException).Should().Be(1, "die andere verliert ihren ganzen Versuch");
-            var gewinner = ergebnisse[0] is null ? "a" : "b";
-            (await staende.LadeZustandAsync(Funktionsvertrag.ZustandId(id, "0"), default))!.Daten.Should().Contain(gewinner);
-            (await staende.LadeAsync("funktion:" + id, 0, default)).Version.Should().Be(1, "Stand und Zustand in einer Transaktion — vom Gewinner");
+            await MissAsync(host, stelle, 6);
+            await Warte(async () => (await Log(host, stelle.Wert)).Count(e => e.Payload is SchaetzungVermerkt) == 4, Frist, "die vierte Schätzung fehlt");
+            var vierte = (await Log(host, stelle.Wert)).Select(e => e.Payload).OfType<SchaetzungVermerkt>().Last();
+            vierte.Anzahl.Should().BeGreaterThanOrEqualTo(3, "die Funktion liest die Messreihe, die schon drei Werte kennt");
+            vierte.Erwartet.Should().Be(vierte.Anzahl == 3 ? 2 : 3, "der Mittelwert dessen, was die Projektion kennt");
         }
         finally { await host.StopAsync(); }
     }

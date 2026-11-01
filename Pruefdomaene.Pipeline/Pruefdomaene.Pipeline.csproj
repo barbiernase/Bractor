@@ -13,6 +13,7 @@
     <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
     <ProjectReference Include="..\Core\Core.csproj" />
     <ProjectReference Include="..\Pruefdomaene\Pruefdomaene.csproj" />
+    <ProjectReference Include="..\Pruefdomaene.Projections\Pruefdomaene.Projections.csproj" />
     <ProjectReference Include="..\Domain.SourceGeneration\Domain.SourceGeneration.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />

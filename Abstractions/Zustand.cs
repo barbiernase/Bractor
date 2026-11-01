@@ -2,16 +2,15 @@ namespace Abstractions;
 
 /// <summary>
 /// Gekapselter, durabler ZUSTAND einer Funktion (docs/04 §4.4, docs/10 E6, R19) — kein Domänen-Zustand, sondern was die Technik
-/// hinter einer Funktion über ihre Aufrufe hinweg braucht: ein Modell, das weiterlernt, gelernte Gewichte, ein Zähler, ein Cache, der nach einem
-/// Umzug nicht kalt sein soll. Code-Fakt: steht <c>IZustand&lt;T&gt;</c> im Konstruktor einer Funktions-Klasse, hat sie Zustand; der Generator sieht
+/// hinter einer Funktion über ihre Aufrufe hinweg braucht: geladene Gewichte, ein Zähler, ein Cache, der nach einem Umzug nicht kalt sein soll.
+/// Was aus Fakten gelernt wird, gehört in eine Projektion; die Funktion liest es per Lese-Fähigkeit. Code-Fakt: steht <c>IZustand&lt;T&gt;</c> im Konstruktor einer Funktions-Klasse, hat sie Zustand; der Generator sieht
 /// es über Roslyn und verdrahtet ihn ohne Reflection. Ebenso eine gerufene Funktion (Klasse bzw. Umsetzung einer gerufenen Schnittstelle): ihr
 /// Zustand gehört der Aktivierung ihres Halters — gesichert wird er im selben Dokument (je Funktion ihr Eintrag) mit dessen Position, und der Halter
 /// ist damit wie mit eigenem Zustand: ein Eingang zugleich, nie gleichbleibend.
 /// <code>
-/// public sealed class Schaetzer(IZustand&lt;Schaetzmodell&gt; modell) : IFunktion
+/// public sealed class Zaehlwerk(IZustand&lt;Zaehlstand&gt; stand) : IZaehlwerk
 /// {
-///     public void Auf(MesswertErfasst e, Herkunft h) => modell.Wert.Lerne(h.Stream, e.Wert);            // lernt aus dem Log
-///     public VermerkeSchaetzung? Auf(Merkmal m) => modell.Wert.Schaetze(m);                              // Hinweis rein, Command raus
+///     public void Zaehle(Guid stelle) => stand.Wert.Je[stelle] = stand.Wert.Je.GetValueOrDefault(stelle) + 1;
 /// }
 /// </code>
 /// Was das Framework daraus macht (Vorbild Aggregat-Actor: ein Schreiber, Aktivierung, Passivierung, Snapshot, Rehydration — ohne Zustands-Events):
