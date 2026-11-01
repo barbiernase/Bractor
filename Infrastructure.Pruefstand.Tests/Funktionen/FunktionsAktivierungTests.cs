@@ -107,7 +107,7 @@ public class FunktionsAktivierungTests
         a.MitZustand.Should().BeTrue();
         await a.BeginneAsync();
         await a.AktiviereAsync(default);
-        p.Should().Equal("aktiviert mit 0", "der Zustand ist ein Cache: frisch bei jeder Aktivierung");
+        p.Should().ContainSingle().Which.Should().Be("aktiviert mit 0", "der Zustand ist ein Cache: frisch bei jeder Aktivierung");
         await a.DisposeAsync();
     }
 
