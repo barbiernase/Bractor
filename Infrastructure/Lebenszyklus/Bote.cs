@@ -27,6 +27,9 @@ public sealed class Bote
     /// <summary>Der eine Cluster-Berührungspunkt: eine Anfrage an eine Identität, gebunden durch das Token.</summary>
     public delegate Task<object?> Anfrage(ClusterIdentity ziel, object nachricht, CancellationToken ct);
 
+    /// <summary>Eine Anfrage an einen Actor mit festem Namen auf einem Knoten (kein virtueller Actor), gebunden durch das Token.</summary>
+    public delegate Task<object?> AnfrageAnKnoten(PID ziel, object nachricht, CancellationToken ct);
+
     /// <summary>Wie lange eine Meldung höchstens unterwegs ist (Platzierung inklusive), bevor sie als verloren gilt.</summary>
     public static readonly TimeSpan StandardMeldeFrist = TimeSpan.FromSeconds(10);
 
@@ -34,22 +37,59 @@ public sealed class Bote
     private readonly ILogger _logger;
     private readonly TimeSpan _meldeFrist;
     private readonly Action<PID, object>? _sende;
+    private readonly AnfrageAnKnoten? _anfrageAnKnoten;
 
     /// <summary>Live: an den Cluster gebunden.</summary>
     public Bote(Cluster cluster, ILogger? logger = null)
         : this((ziel, nachricht, ct) => cluster.RequestAsync<object?>(ziel, nachricht, ct), logger,
-            sende: (pid, nachricht) => cluster.System.Root.Send(pid, nachricht))
+            sende: (pid, nachricht) => cluster.System.Root.Send(pid, nachricht),
+            anfrageAnKnoten: (pid, nachricht, ct) => cluster.System.Root.RequestAsync<object?>(pid, nachricht, ct))
     {
         ArgumentNullException.ThrowIfNull(cluster);
     }
 
-    /// <summary>Naht/Test: eine eingesetzte Anfrage (und, für <see cref="MeldeAnKnoten"/>, ein eingesetztes Senden).</summary>
-    public Bote(Anfrage anfrage, ILogger? logger = null, TimeSpan? meldeFrist = null, Action<PID, object>? sende = null)
+    /// <summary>Live ohne Cluster (ein Knoten, nur Actors mit festem Namen): Senden und Fragen an Knoten über das Actor-System.</summary>
+    public Bote(ActorSystem system, ILogger? logger = null)
+        : this((_, _, _) => Task.FromException<object?>(new InvalidOperationException("Bote ohne Cluster kennt keine virtuellen Actors")), logger,
+            sende: (pid, nachricht) => system.Root.Send(pid, nachricht),
+            anfrageAnKnoten: (pid, nachricht, ct) => system.Root.RequestAsync<object?>(pid, nachricht, ct))
+    {
+    }
+
+    /// <summary>Naht/Test: eine eingesetzte Anfrage (und, für <see cref="MeldeAnKnoten"/> und <see cref="FrageAnKnotenAsync{T}"/>, eingesetztes
+    /// Senden und Fragen).</summary>
+    public Bote(Anfrage anfrage, ILogger? logger = null, TimeSpan? meldeFrist = null, Action<PID, object>? sende = null,
+        AnfrageAnKnoten? anfrageAnKnoten = null)
     {
         _anfrage = anfrage ?? throw new ArgumentNullException(nameof(anfrage));
         _logger = logger ?? NullLogger.Instance;
         _meldeFrist = meldeFrist ?? StandardMeldeFrist;
         _sende = sende;
+        _anfrageAnKnoten = anfrageAnKnoten;
+    }
+
+    /// <summary>
+    /// Mit Antwort und Pflicht-Frist an den Actor mit festem Namen <paramref name="name"/> auf dem Knoten <paramref name="adresse"/>: die Antwort,
+    /// wenn sie in <paramref name="frist"/> als <typeparamref name="T"/> kommt — sonst <c>null</c> (Actor oder Knoten fort, Frist um). Wirft nie.
+    /// </summary>
+    public async Task<T?> FrageAnKnotenAsync<T>(string adresse, string name, object nachricht, TimeSpan frist, CancellationToken ct) where T : class
+    {
+        ArgumentNullException.ThrowIfNull(nachricht);
+        if (frist <= TimeSpan.Zero || frist == Timeout.InfiniteTimeSpan)
+            throw new ArgumentOutOfRangeException(nameof(frist), frist, "Eine Frage braucht eine endliche Frist (Pflicht-Frist).");
+        if (_anfrageAnKnoten is null) throw new InvalidOperationException("Bote ohne Fragen an Knoten (Naht ohne anfrageAnKnoten)");
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(frist);
+        try
+        {
+            var antwort = await _anfrageAnKnoten(PID.FromAddress(adresse, name), nachricht, cts.Token).ConfigureAwait(false);
+            return antwort as T;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "[Bote] {Nachricht} an {Adresse}/{Name}: keine Antwort in {Frist} s", nachricht.GetType().Name, adresse, name, frist.TotalSeconds);
+            return null;
+        }
     }
 
     /// <summary>

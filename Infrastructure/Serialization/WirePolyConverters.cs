@@ -156,3 +156,42 @@ public sealed class CommandModusJsonConverter : JsonConverter<CommandModus>
         return modus;
     }
 }
+
+/// <summary>
+/// Die Nachricht eines Eingangs (<c>EingangZustellen.Nachricht</c>, docs/04 §4.4) zwischen Knoten: <c>["E", "Name", {…}]</c> für ein Event bzw. einen
+/// Hinweis (Event-Form), <c>["N", "Name", {…}]</c> für eine Nachricht ohne Marker (Folge, Zwischenergebnis, Client-Nachricht) — über die generierten
+/// Tabellen, ohne Reflection.
+/// </summary>
+public sealed class NachrichtJsonConverter : JsonConverter<object>
+{
+    public override void Write(Utf8JsonWriter writer, object value, JsonSerializerOptions options)
+    {
+        writer.WriteStartArray();
+        if (value is IEvent e)
+        {
+            writer.WriteStringValue("E");
+            writer.WriteStringValue(Anwendung.WirePoly.EventDiskriminator(e));
+            Anwendung.WirePoly.WriteEvent(writer, e);
+        }
+        else
+        {
+            writer.WriteStringValue("N");
+            writer.WriteStringValue(Anwendung.WirePoly.NachrichtDiskriminator(value));
+            Anwendung.WirePoly.WriteNachricht(writer, value);
+        }
+        writer.WriteEndArray();
+    }
+
+    public override object Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw new JsonException("Erwartet: StartArray für eine Nachricht.");
+        reader.Read();
+        var art = reader.GetString();
+        reader.Read();
+        var disc = reader.GetString() ?? throw new JsonException("Erwartet: Diskriminator der Nachricht (string).");
+        reader.Read();
+        object wert = art == "E" ? Anwendung.WirePoly.ReadEvent(disc, ref reader) : Anwendung.WirePoly.ReadNachricht(disc, ref reader);
+        reader.Read(); // EndArray
+        return wert;
+    }
+}

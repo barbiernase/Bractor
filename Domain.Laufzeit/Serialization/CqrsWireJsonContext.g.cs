@@ -52,6 +52,8 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(EingaengeZugeteilt))]
 [JsonSerializable(typeof(EingangBeantwortet))]
 [JsonSerializable(typeof(HinweisZustellen))]
+[JsonSerializable(typeof(EingangZustellen))]
+[JsonSerializable(typeof(EingangQuittung))]
 [JsonSerializable(typeof(TraegerAbgemeldet))]
 [JsonSerializable(typeof(HalteQuelle))]
 [JsonSerializable(typeof(QuelleGehalten))]
