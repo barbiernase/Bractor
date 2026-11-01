@@ -30,7 +30,7 @@ public static class Schema
                 ["VertragStreng"] = new JsonObject { ["typ"] = "bool", ["standard"] = "false" },
             },
         };
-        // Funktionen: je Funktion mit Eingängen Laufort, Slots …; je gerufene (ohne Auf, docs/06 §6.5) nur die gewählte Umsetzung — die Auswahl
+        // Funktionen: je Funktion mit Eingängen Laufort, Parallel …; je gerufene (ohne Auf, docs/06 §6.5) nur die gewählte Umsetzung — die Auswahl
         //   kommt aus dem Code (Umsetzungen der Funktions-Karte).
         var gerufene = new JsonObject();
         foreach (var f in Liste(board?["bausteinFunktionen"]).Where(f => Liste(f["methoden"]).Any() && !Liste(f["eingaenge"]).Any()))
