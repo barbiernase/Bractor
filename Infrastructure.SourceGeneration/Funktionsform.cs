@@ -117,6 +117,31 @@ namespace Infrastructure.SourceGeneration
         public static IEnumerable<IParameterSymbol> ZustandsParameter(INamedTypeSymbol t) =>
             Ctorbindung.Konstruktor(t)?.Parameters.Where(p => IstZustand(p.Type)) ?? Enumerable.Empty<IParameterSymbol>();
 
+        /// <summary>
+        /// Der Zustand einer Klasse (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4) — einer Funktion mit Eingängen, einer gerufenen Klasse oder der
+        /// Umsetzung einer gerufenen Schnittstelle: T oder null; Formfehler (mehr als einer, T nicht serialisierbar ohne Reflection) in <paramref name="fehler"/>.
+        /// </summary>
+        public static INamedTypeSymbol? ZustandVon(INamedTypeSymbol t, List<(string Text, Location Ort)> fehler)
+        {
+            var ort = t.Locations.FirstOrDefault() ?? Location.None;
+            var zustaende = ZustandsParameter(t).ToList();
+            if (zustaende.Count > 1)
+            {
+                fehler.Add(("der Konstruktor nimmt mehr als einen IZustand<T> — eine Funktion hat höchstens einen Zustand (fasse ihn in einer Klasse zusammen)",
+                    zustaende[1].Locations.FirstOrDefault() ?? ort));
+                return null;
+            }
+            if (zustaende.Count == 0) return null;
+            var z = ((INamedTypeSymbol)zustaende[0].Type).TypeArguments[0] as INamedTypeSymbol;
+            if (z == null || z.TypeKind != TypeKind.Class || z.IsGenericType || z.IsAbstract || z.ContainingType != null)
+            {
+                fehler.Add(($"der Zustand '{zustaende[0].Type.ToDisplayString()}' ist keine eigene, nicht generische, nicht geschachtelte Klasse — "
+                    + "nur so entsteht sein Serializer ohne Reflection", zustaende[0].Locations.FirstOrDefault() ?? ort));
+                return null;
+            }
+            return z;
+        }
+
         /// <summary>Trägt <paramref name="t"/> das Attribut <c>[EineAdresse]</c>?</summary>
         public static bool HatEineAdresse(INamedTypeSymbol t) =>
             t.GetAttributes().Any(a => a.AttributeClass != null && Name(a.AttributeClass) == Abstractions.Funktionsvertrag.EineAdresse);
@@ -130,21 +155,7 @@ namespace Infrastructure.SourceGeneration
                 Lebenszyklus = t.TypeKind == TypeKind.Class && Hat(t, Abstractions.Funktionsvertrag.Lebenszyklus),
             };
             var ort = t.Locations.FirstOrDefault() ?? Location.None;
-            if (!f.Draussen)
-            {
-                var zustaende = ZustandsParameter(t).ToList();
-                if (zustaende.Count > 1)
-                    f.Fehler.Add(("der Konstruktor nimmt mehr als einen IZustand<T> — eine Funktion hat höchstens einen Zustand (fasse ihn in einer Klasse zusammen)",
-                        zustaende[1].Locations.FirstOrDefault() ?? ort));
-                else if (zustaende.Count == 1)
-                {
-                    var z = ((INamedTypeSymbol)zustaende[0].Type).TypeArguments[0] as INamedTypeSymbol;
-                    if (z == null || z.TypeKind != TypeKind.Class || z.IsGenericType || z.IsAbstract || z.ContainingType != null)
-                        f.Fehler.Add(($"der Zustand '{zustaende[0].Type.ToDisplayString()}' ist keine eigene, nicht generische, nicht geschachtelte Klasse — "
-                            + "nur so entsteht sein Serializer ohne Reflection", zustaende[0].Locations.FirstOrDefault() ?? ort));
-                    else f.Zustand = z;
-                }
-            }
+            if (!f.Draussen) f.Zustand = ZustandVon(t, f.Fehler);
             // Eingänge oder gerufen, nie beides: hat die Schnittstelle ein Auf, ruft sie das Framework — eine weitere Methode riefe niemand.
             if (f.Draussen && HatAuf(t))
                 foreach (var m in GerufeneMethoden(t))

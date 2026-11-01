@@ -394,13 +394,16 @@ decide Station.VermerkePrognose -> PrognoseVermerkt
 apply Station.TemperaturGemeldet
 apply Station.PrognoseVermerkt
 funktion-auf Wetterdienst.Vorhersage.Tendenzbildung klasse() | TemperaturGemeldet herkunft -> Tendenz
-funktion-auf Wetterdienst.Vorhersage.Prognosemodell klasse(gewichte:IZustand<Gewichte>) zustand=Gewichte eineadresse lebenszyklus | TemperaturGemeldet herkunft -> lernt || StationStillgelegt hinweis -> lernt || Tendenz hinweis -> VermerkePrognose
+funktion-auf Wetterdienst.Vorhersage.Prognosemodell klasse(gewichte:IZustand<Gewichte>, statistik:IStatistik) zustand=Gewichte eineadresse lebenszyklus | TemperaturGemeldet herkunft -> lernt || StationStillgelegt hinweis -> lernt || Tendenz hinweis -> VermerkePrognose
 funktion-auf Wetterdienst.Vorhersage.IUnwetterwarnung schnittstelle | Tendenz hinweis -> Unwetter
 akteur Wetterdienst.Vorhersage.Warndienst Maschine | darf IUnwetterwarnung
 client Wetterdienst.Vorhersage.IWetterApp | verkoerpert Warndienst; hoert Unwetter
 sicht Wetterdienst.Vorhersage.Warndienst akteur domaene=Wetterdienst.Vorhersage block=§akteure
 # Der Zustand ist eine eigene Klasse ohne Marker — eine Code-Karte (wo der Editor sie zeigt, ist mit der Oberfläche zurückgestellt, docs/10 E4).
 code Wetterdienst.Vorhersage.Gewichte class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
+# Gerufene Funktion mit eigenem Zustand (IZustand in der Umsetzung): gehört der Aktivierung des Prognosemodells, gesichert mit dessen Position
+funktion-gerufen Wetterdienst.Vorhersage.IStatistik schnittstelle | Zaehle(station:Guid):void | umsetzung Statistik(zaehlung:IZustand<Zaehlung>)
+code Wetterdienst.Vorhersage.Zaehlung class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
 code Wetterdienst.Vorhersage.Arbeitsmodell class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
 lage Tendenzbildung -> Domain.Pipeline
 lage Prognosemodell -> Domain.Pipeline
@@ -506,6 +509,7 @@ besitz Warenkatalog.Import.SchliesseImportAb command -> aggregate:Importlauf
 besitz Warenkatalog.Import.StarteImport command -> aggregate:Importlauf
 besitz Wetterdienst.Vorhersage.Arbeitsmodell code -> §begriffe
 besitz Wetterdienst.Vorhersage.Gewichte code -> bausteinfunktion:Prognosemodell
+besitz Wetterdienst.Vorhersage.Zaehlung code -> bausteinfunktion:IStatistik
 besitz Wetterdienst.Vorhersage.MeldeTemperatur command -> aggregate:Station
 besitz Wetterdienst.Vorhersage.PrognoseVermerkt event -> aggregate:Station
 besitz Wetterdienst.Vorhersage.StationStillgelegt rejection -> aggregate:Station

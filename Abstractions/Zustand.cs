@@ -4,7 +4,9 @@ namespace Abstractions;
 /// Gekapselter, durabler ZUSTAND einer Funktion (docs/04 §4.4, docs/10 E6, R19) — kein Domänen-Zustand, sondern was die Technik
 /// hinter einer Funktion über ihre Aufrufe hinweg braucht: ein Modell, das weiterlernt, gelernte Gewichte, ein Zähler, ein Cache, der nach einem
 /// Umzug nicht kalt sein soll. Code-Fakt: steht <c>IZustand&lt;T&gt;</c> im Konstruktor einer Funktions-Klasse, hat sie Zustand; der Generator sieht
-/// es über Roslyn und verdrahtet ihn ohne Reflection.
+/// es über Roslyn und verdrahtet ihn ohne Reflection. Ebenso eine gerufene Funktion (Klasse bzw. Umsetzung einer gerufenen Schnittstelle): ihr
+/// Zustand gehört der Aktivierung ihres Halters — gesichert wird er im selben Dokument (je Funktion ihr Eintrag) mit dessen Position, und der Halter
+/// ist damit wie mit eigenem Zustand: ein Eingang zugleich, nie gleichbleibend.
 /// <code>
 /// public sealed class Schaetzer(IZustand&lt;Schaetzmodell&gt; modell) : IFunktion
 /// {

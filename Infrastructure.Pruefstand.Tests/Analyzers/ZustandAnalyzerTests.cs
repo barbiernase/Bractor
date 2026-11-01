@@ -81,12 +81,14 @@ public class ZustandAnalyzerTests
     }
 
     [Fact]
-    public async Task IZustand_in_einer_gerufenen_Funktion_ist_CQRS105()
+    public async Task IZustand_in_einer_gerufenen_Funktion_ist_erlaubt_hoechstens_einer()
     {
-        var befunde = await Befunde("""
-            public sealed class Verbindung(IZustand<Modell> m) : IVerbindung { public Task<int> ZaehleAsync() => Task.FromResult(0); }
-            """);
-        befunde.Should().ContainSingle(b => b.Id == ZustandAnalyzer.Id).Which.Text.Should().Contain("gerufene Funktion");
+        (await Befunde("""
+            public sealed class Verbindung(IZustand<Modell> m) : IVerbindung { public Task<int> ZaehleAsync() => Task.FromResult(m.Wert.Anzahl); }
+            """)).Should().NotContain(b => b.Id == ZustandAnalyzer.Id, "ihr Zustand gehört der Aktivierung ihres Halters");
+        (await Befunde("""
+            public sealed class Verbindung(IZustand<Modell> m, IZustand<Modell> n) : IVerbindung { public Task<int> ZaehleAsync() => Task.FromResult(0); }
+            """)).Should().ContainSingle(b => b.Id == ZustandAnalyzer.Id).Which.Text.Should().Contain("mehr als einen IZustand");
     }
 
     [Fact]

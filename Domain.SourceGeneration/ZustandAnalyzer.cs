@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using Infrastructure.SourceGeneration;
@@ -15,8 +16,10 @@ namespace Domain.SourceGeneration;
 /// <item>kein veränderliches Feld (Instanz oder statisch, nicht <c>readonly</c>/<c>const</c>), keine Eigenschaft mit <c>set</c>;</item>
 /// <item>kein <c>readonly</c>-Feld einer veränderlichen Sammlung (Liste, Wörterbuch, Menge, Array, <c>StringBuilder</c>) — das wäre Zustand durch die
 ///   Hintertür;</item>
-/// <item><c>IZustand&lt;T&gt;</c> steht nur im Konstruktor einer Funktions-Klasse (nicht in einer Umsetzung einer Schnittstelle — draußen lebt der
-///   Zustand im Worker, A8 —, nicht in einer gerufenen Funktion, einem Aggregat oder sonst wo).</item>
+/// <item><c>IZustand&lt;T&gt;</c> steht nur im Konstruktor einer Funktions-Klasse oder einer gerufenen Funktion (Klasse bzw. Umsetzung einer gerufenen
+///   Schnittstelle — ihr Zustand gehört der Aktivierung ihres Halters und wird mit dessen Position gesichert); nicht in der Umsetzung einer
+///   Schnittstelle mit Eingängen (draußen lebt der Zustand im Worker, A8), nicht in einem Aggregat oder sonst wo. Je Klasse höchstens einer, T eine
+///   eigene, nicht generische Klasse.</item>
 /// </list>
 /// Gerufene Funktionen im Konstruktor (gehalten in <c>readonly</c>-Feldern oder Parametern) sind Ressourcen der Aktivierung, kein Zustand. Nur Code-Fakten:
 /// Marker, Konstruktor-Parameter, Feld- und Eigenschafts-Symbole.
@@ -59,16 +62,22 @@ public sealed class ZustandAnalyzer : DiagnosticAnalyzer
         if (t.TypeKind != TypeKind.Class) return;
         var baustein = !t.IsAbstract && Funktionsform.IstBaustein(t);
         var umsetzung = !baustein && Funktionsform.Umsetzt(t).Any(Funktionsform.IstBaustein);
+        var gerufen = !t.IsAbstract && (Funktionsform.IstGerufen(t) || Funktionsform.Umsetzt(t).Any(Funktionsform.IstGerufen));
 
-        // IZustand<T> außerhalb einer Funktions-Klasse.
-        if (!baustein)
+        // IZustand<T> außerhalb einer Funktions-Klasse bzw. gerufenen Funktion.
+        if (!baustein && !gerufen)
             foreach (var c in t.InstanceConstructors.Where(c => !c.IsImplicitlyDeclared))
                 foreach (var p in c.Parameters.Where(p => Funktionsform.IstZustand(p.Type)))
                     ctx.ReportDiagnostic(Diagnostic.Create(Regel, p.Locations.FirstOrDefault() ?? t.Locations.FirstOrDefault(), t.Name, umsetzung
                         ? $"die Umsetzung einer Funktion draußen nimmt '{p.Type.ToDisplayString()}' — Zustand hat nur eine Funktions-Klasse (draußen lebt er im Worker)"
-                        : Funktionsform.IstGerufen(t) || Funktionsform.Umsetzt(t).Any(Funktionsform.IstGerufen)
-                            ? $"die gerufene Funktion nimmt '{p.Type.ToDisplayString()}' — Zustand hat (noch) nur eine Funktion mit Eingängen"
-                            : $"'{p.Type.ToDisplayString()}' steht im Konstruktor von etwas, das keine Funktion ist"));
+                        : $"'{p.Type.ToDisplayString()}' steht im Konstruktor von etwas, das keine Funktion ist"));
+        // Die Form des Zustands einer gerufenen Funktion (bei einer Funktion mit Eingängen prüft sie der Generator, CQRS100).
+        if (gerufen)
+        {
+            var fehler = new List<(string Text, Location Ort)>();
+            Funktionsform.ZustandVon(t, fehler);
+            foreach (var (text, ort) in fehler) ctx.ReportDiagnostic(Diagnostic.Create(Regel, ort, t.Name, text));
+        }
 
         if (!baustein && !umsetzung) return;
         foreach (var m in t.GetMembers().Where(m => !m.IsImplicitlyDeclared))

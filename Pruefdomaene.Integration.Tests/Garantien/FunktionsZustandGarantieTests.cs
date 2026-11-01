@@ -34,19 +34,28 @@ public class FunktionsZustandGarantieTests
         foreach (var w in werte) (await FrageAsync(host, new ErfasseMesswert(stelle, w), Guid.NewGuid()))!.Success.Should().BeTrue();
     }
 
-    /// <summary>Was der gesicherte Zustand des Schätzers über eine Messstelle weiß (Anzahl gelernter Werte), seine Position und die des Stands.</summary>
-    private static async Task<(int Anzahl, long Position, long Stand)> GesichertAsync(IHost host, Id<Messstelle> stelle)
+    /// <summary>
+    /// Was der gesicherte Zustand des Schätzers über eine Messstelle weiß (Anzahl gelernter Werte), was sein gerufenes Zählwerk gezählt hat (im selben
+    /// Dokument, je Funktion ihr Eintrag), seine Position und die des Stands.
+    /// </summary>
+    private static async Task<(int Anzahl, int Gezaehlt, long Position, long Stand)> GesichertAsync(IHost host, Id<Messstelle> stelle)
     {
         var staende = host.Services.GetRequiredService<IFunktionsStand>();
         var dok = await staende.LadeZustandAsync(ZustandsId, default);
         var stand = await staende.LadeAsync(Funktionsvertrag.StandId(nameof(Schaetzer)), 0, default);
-        if (dok is null) return (0, 0, stand.Position);
+        if (dok is null) return (0, 0, 0, stand.Position);
         var daten = dok.Daten ?? await File.ReadAllTextAsync(Path.Combine(Verzeichnis(host), dok.Verweis!));
         using var json = JsonDocument.Parse(daten);
-        var anzahl = json.RootElement.GetProperty(nameof(Schaetzmodell.Je)).TryGetProperty(stelle.Wert.ToString(), out var je)
+        var anzahl = json.RootElement.GetProperty(nameof(Schaetzer)).GetProperty(nameof(Schaetzmodell.Je)).TryGetProperty(stelle.Wert.ToString(), out var je)
             ? je.GetProperty(nameof(Lernstand.Anzahl)).GetInt32() : 0;
-        return (anzahl, dok.Position, stand.Position);
+        var gezaehlt = json.RootElement.TryGetProperty(nameof(IZaehlwerk), out var zw)
+                       && zw.GetProperty(nameof(Zaehlstand.Je)).TryGetProperty(stelle.Wert.ToString(), out var z) ? z.GetInt32() : 0;
+        return (anzahl, gezaehlt, dok.Position, stand.Position);
     }
+
+    /// <summary>Das gerufene Zählwerk hat genau so oft gezählt, wie der Schätzer gelernt hat — sein Zustand folgt derselben Position (genau einmal).</summary>
+    private static async Task GezaehltWieGelernt(IHost host, Id<Messstelle> stelle, int anzahl) =>
+        (await GesichertAsync(host, stelle)).Gezaehlt.Should().Be(anzahl, "der Zustand der gerufenen Funktion wird mit dem des Halters gesichert und geladen");
 
     private static readonly Dictionary<IHost, string> Verzeichnisse = new();
     private static string Verzeichnis(IHost host) => Verzeichnisse.GetValueOrDefault(host) ?? "";
@@ -106,6 +115,7 @@ public class FunktionsZustandGarantieTests
         {
             await MissAsync(b, stelle, 5, 6);
             await Gelernt(b, stelle, 6, "die neue Aktivierung kennt den Zustand der alten nicht (oder lernt doppelt)");
+            await GezaehltWieGelernt(b, stelle, 6);
             // Die Schätzungen nach dem Umzug beruhen auf dem mitgekommenen Zustand (≥ 4 gelernt) — nie auf einem neuen ab 0. (Wie viel genau, hängt
             //   davon ab, ob der Hinweis vor oder nach dem Log-Eingang ankam: zwei getrennte Wege.)
             await Warte(async () => (await Log(b, stelle.Wert)).Count(e => e.Payload is SchaetzungVermerkt) == 6, Frist, "die Schätzungen nach dem Umzug fehlen");
@@ -180,6 +190,7 @@ public class FunktionsZustandGarantieTests
         {
             await MissAsync(b, stelle, 6);
             await Gelernt(b, stelle, 6, "nach dem Absturz ist der gesicherte Zustand nicht genau einmal je Eingang (fehlt etwas oder zählt doppelt?)");
+            await GezaehltWieGelernt(b, stelle, 6);
             var dok = await b.Services.GetRequiredService<IFunktionsStand>().LadeZustandAsync(ZustandsId, default);
             dok!.Verweis.Should().NotBeNull("großer Zustand liegt als Datei, das Dokument verweist darauf");
             File.Exists(Path.Combine(verzeichnis, dok.Verweis!)).Should().BeTrue();
@@ -244,7 +255,7 @@ public class FunktionsZustandGarantieTests
                 var stand = await staende.LadeAsync(Funktionsvertrag.StandId(nameof(Schaetzer)), 0, default);
                 if (dok.Position != stand.Position) continue;
                 var json = System.Text.Json.Nodes.JsonNode.Parse(dok.Daten!)!;
-                json[nameof(Schaetzmodell.Je)]![stelle.Wert.ToString()]![nameof(Lernstand.Anzahl)] = 100;
+                json[nameof(Schaetzer)]![nameof(Schaetzmodell.Je)]![stelle.Wert.ToString()]![nameof(Lernstand.Anzahl)] = 100;
                 var fremd = new FunktionsZustandsDokument
                 {
                     Id = dok.Id, Funktion = dok.Funktion, Adresse = dok.Adresse, Position = dok.Position, Daten = json.ToJsonString(), Version = dok.Version,

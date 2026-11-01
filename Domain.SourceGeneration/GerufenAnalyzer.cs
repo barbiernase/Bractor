@@ -14,7 +14,7 @@ namespace Domain.SourceGeneration;
 ///   Umsetzung; als Parameter eines Handles/Decide, als Feld oder Eigenschaft im Fachcode (Aggregat, Projektion, Reader …) wäre sie eine unsichtbare
 ///   Abhängigkeit — dort sind es Fähigkeiten als Parameter.</item>
 /// <item>CQRS090 (GR-GERUFEN-BINDBAR) — der Konstruktor einer Funktion bzw. Umsetzung nimmt nur, was die Umgebung binden kann: gerufene Funktionen,
-///   Konfig-Records, <c>ILogger&lt;T&gt;</c> (und eine Funktion mit Eingängen ihren Zustand). Eine Funktion mit Eingängen ruft das Framework, nie ein
+///   Konfig-Records, <c>ILogger&lt;T&gt;</c> und ihren Zustand (<c>IZustand&lt;T&gt;</c>). Eine Funktion mit Eingängen ruft das Framework, nie ein
 ///   Halter.</item>
 /// <item>CQRS091 (GR-GERUFEN-BINDBAR) — ein Konfig-Record hat nur Felder, die aus der Konfig lesbar sind (Text, Zahl, Wahrheitswert, Dauer,
 ///   Guid, Enum, Text-Liste).</item>
@@ -34,7 +34,7 @@ public sealed class GerufenAnalyzer : DiagnosticAnalyzer
         "'{0}' nimmt die gerufene Funktion '{1}' als {2} — eine gerufene Funktion steht nur im Konstruktor einer Funktion bzw. ihrer Umsetzung; "
         + "im Fachcode sind es Fähigkeiten als Parameter (GR-GERUFEN)");
     private static readonly DiagnosticDescriptor Ctor = D(CtorId, "Konstruktor nicht bindbar",
-        "Der Konstruktor von '{0}' nimmt '{1}' ({2}) — die Umgebung bindet nur gerufene Funktionen (IFunktion ohne Auf), Konfig-Records und ILogger<T>{3} (GR-GERUFEN-BINDBAR)");
+        "Der Konstruktor von '{0}' nimmt '{1}' ({2}) — die Umgebung bindet nur gerufene Funktionen (IFunktion ohne Auf), Konfig-Records, ILogger<T> und IZustand<T>{3} (GR-GERUFEN-BINDBAR)");
     private static readonly DiagnosticDescriptor KonfigFeld = D(KonfigFeldId, "Konfig-Feld nicht bindbar",
         "Der Konfig-Record '{0}' hat das Feld '{1}' vom Typ '{2}' — aus Konfig:{0} lesbar sind Text, Zahl, Wahrheitswert, Dauer, Guid, Enum und Text-Liste (GR-GERUFEN-BINDBAR)");
     private static readonly DiagnosticDescriptor Baubar = D(BaubarId, "Umsetzung nicht baubar",

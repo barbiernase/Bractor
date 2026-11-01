@@ -118,9 +118,11 @@ internal sealed class FunktionsKind(FunktionsBaustein baustein) : IClusterKindCo
         var logger = provider.GetService<ILoggerFactory>()?.CreateLogger("Funktion." + baustein.Name);
         var typen = FunktionsActor.TypenVon(baustein);
         var umsetzung = bindung.Laufort == FunktionsLaufort.Host ? FunktionsBausteinWiring.Umsetzung(baustein, bindung) : null;
-        // Mit Zustand (docs/04 §4.4): Laden und Sichern über den Stand-Store, große Zustände als Datei in der Ablage der Umgebung.
+        // Mit Zustand (docs/04 §4.4) — der Funktion selbst oder einer gerufenen in ihrer Konstruktor-Kette (aus der Wahl beim Start): Laden und
+        //   Sichern über den Stand-Store, große Zustände als Datei in der Ablage der Umgebung.
         var zustand = bindung.Zustand ?? ZustandsBindung.Standard;
-        var sicherung = umsetzung is not null && baustein.Zustand is not null
+        var gerufenerZustand = umsetzung is not null && provider.GetService<GerufeneWahl>()?.MitZustand(umsetzung.Typ) == true;
+        var sicherung = umsetzung is not null && (baustein.Zustand is not null || gerufenerZustand)
             ? new ZustandsSicherung(provider.GetRequiredService<IFunktionsStand>(), zustand,
                 zustand.Verzeichnis is { } verz ? new VerzeichnisZustandsDateien(verz) : null)
             : null;
@@ -131,9 +133,9 @@ internal sealed class FunktionsKind(FunktionsBaustein baustein) : IClusterKindCo
             var bote = new Bote(system.Cluster(), logger);
             var emitter = new CommandEmitter(bote, logger);
             var verteilung = provider.GetService<Infrastructure.Verteilen.Verteilung>();
-            // Die Umsetzung je Aktivierung, samt ihren Diensten in einem eigenen Bereich (docs/04 §4.4); bei Slots > 1 teilen sich die Eingänge
-            //   dieser Aktivierung die Instanz — sie muss dann thread-sicher sein.
-            var aktivierung = umsetzung is null ? null : new FunktionsAktivierung(provider, umsetzung.Baue, baustein.Zustand);
+            // Die Umsetzung je Aktivierung, samt ihren gerufenen Funktionen in einem eigenen Bereich (docs/04 §4.4); bei Slots > 1 teilen sich die
+            //   Eingänge dieser Aktivierung die Instanz — sie muss dann thread-sicher sein.
+            var aktivierung = umsetzung is null ? null : new FunktionsAktivierung(provider, umsetzung.Baue, baustein.Zustand, baustein.Name, gerufenerZustand);
             var arbeit = new FunktionsArbeit(baustein,
                 aktivierung is null ? null : () => aktivierung.Umsetzung,
                 provider.GetRequiredService<IAusgabeAblage>(),

@@ -92,6 +92,31 @@ public class GerufeneBindungTests
     }
 
     [Fact]
+    public void Eine_Umsetzung_mit_Zustand_holt_ihn_aus_der_Aktivierung_unter_dem_Namen_ihrer_Funktion()
+    {
+        var q = Generiert(Bild + @" namespace Probe {
+            public sealed class Zaehlstand { public int N { get; set; } }
+            public interface IZaehlwerk : IFunktion { void Zaehle(); }
+            public sealed class Zaehlwerk(IZustand<Zaehlstand> stand) : IZaehlwerk { public void Zaehle() => stand.Wert.N++; } }");
+        q.Should().MatchRegex(@"private static readonly FunktionsZustandsform Zustand0 = new global::Infrastructure\.Funktionen\.FunktionsZustandsform\(typeof\(global::Probe\.Zaehlstand\)");
+        q.Should().Contain("new global::Probe.Zaehlwerk((global::Abstractions.IZustand<global::Probe.Zaehlstand>)AktivierungsZustaende.Von(sp).Hole(\"IZaehlwerk\", Zustand0)!)),"
+                           + " Zustand0),", "der Zustand gehört der Aktivierung des Halters, nie dem Container");
+        q.IndexOf("Zustand0 =", StringComparison.Ordinal).Should().BeLessThan(q.IndexOf("Umsetzungen =", StringComparison.Ordinal),
+            "die Form steht vor der Tabelle (statische Felder in Reihenfolge)");
+    }
+
+    [Fact]
+    public void Gewaehlt_mit_Zustand_folgt_der_Konstruktor_Kette()
+    {
+        var mit = new GerufeneUmsetzung(typeof(ID2), "D2a", typeof(D2a), _ => { }, new FunktionsZustandsform(typeof(K), () => new object(), _ => [], (_, _) => { }, _ => { }));
+        var ohne = new GerufeneUmsetzung(typeof(ID1), "D1a", typeof(D1a), _ => { });
+        var wahl = new GerufeneWahl(new Dictionary<Type, GerufeneUmsetzung> { [typeof(ID1)] = ohne, [typeof(ID2)] = mit },
+            new Dictionary<Type, Type[]> { [typeof(FImpl)] = [typeof(ID1)], [typeof(D1a)] = [typeof(ID2)] });
+        wahl.MitZustand(typeof(FImpl)).Should().BeTrue("FImpl → ID1 (D1a) → ID2 (D2a mit Zustand)");
+        wahl.MitZustand(typeof(D2a)).Should().BeFalse();
+    }
+
+    [Fact]
     public void Eine_nicht_oeffentliche_Implementierung_fehlt_in_der_Tabelle()
         => Generiert(Bild.Replace("public sealed class Skalierer", "internal sealed class Skalierer"))
             .Should().NotContain("typeof(global::Probe.Skalierer)", "die generierte Fabrik kann sie nicht bauen (CQRS092 meldet es im Build)");

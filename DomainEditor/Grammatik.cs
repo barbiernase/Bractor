@@ -145,12 +145,14 @@ public static class Grammatik
             [An("CQRS103", "Domain.SourceGeneration/GleichbleibendAnalyzer.cs (gleichbleibend heißt ohne Uhr und Zufall)"),
              new("generator", null, "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Gleichbleibend aus der Signatur)")]),
         new("GR-FUNKTION-ZUSTAND", "Zustand einer Funktion nur über IZustand<T>", "Eine Funktion hält Zustand (ein Modell, das weiterlernt, ein Zähler) "
-            + "nur über IZustand<T> im Konstruktor einer Funktions-Klasse: er wird mit der Position gesichert, kommt beim Umzug mit, und Auf läuft immer "
+            + "nur über IZustand<T> im Konstruktor einer Funktions-Klasse oder einer gerufenen Funktion (deren Zustand gehört der Aktivierung ihres Halters): "
+            + "er wird mit der Position gesichert, kommt beim Umzug mit, und Auf läuft immer "
             + "nur einmal zugleich. Felder mit Setter, veränderliche Felder und Sammlungen hinter readonly sind verboten (sie gingen beim Umzug still "
             + "verloren); eine Funktion mit Zustand ist nie gleichbleibend und darf aus einem Eingang allein lernen (Auf ohne Ausgabe); ein Zustand für "
             + "alles steht mit [EineAdresse] an der Funktion (R19, docs/04 §4.4).", "error",
             [An("CQRS105", "Domain.SourceGeneration/ZustandAnalyzer.cs"),
              Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (höchstens ein Zustand, eigene Klasse; Auf ohne Ausgabe nur mit Zustand)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsAktivierung.cs (je Funktion ihr Zustand in EINEM Dokument, gerufene über AktivierungsZustaende)"),
              new("generator", null, "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (mit Zustand nie gleichbleibend; Sichern über den generierten Kontext)")]),
         new("GR-FUNKTION-LEBENSZYKLUS", "Lebenszyklus einer Funktion optional", "Eine Funktions-Klasse im Host kann einen Lebenszyklus haben "
             + "(ILebenszyklus): BeimAktivierenAsync nach dem Bau und dem Laden des Zustands, vor dem ersten Auf (ein Netz laden); VorDemSichernAsync vor "
@@ -173,7 +175,7 @@ public static class Grammatik
              new("boot", null, "Infrastructure/Funktionen/FunktionsExtensions.cs (BindeFunktionen: unter Funktionen nur die Implementierung)")]),
         new("GR-GERUFEN-BINDBAR", "Umsetzung baubar, Konstruktor bindbar", "Eine Funktion im Host und jede Umsetzung ist öffentlich und nicht "
             + "generisch; ihr Konstruktor nimmt nur gerufene Funktionen, Konfig-Records (Felder: Text, Zahl, Wahrheitswert, Dauer, Guid, Enum, Text-Liste), "
-            + "ILogger<T> und — nur mit Eingängen — ihren Zustand; gebaut wird sie per generierter Fabrik, ohne Reflection.", "error",
+            + "ILogger<T> und ihren Zustand (IZustand<T>); gebaut wird sie per generierter Fabrik, ohne Reflection.", "error",
             [An("CQRS090", "Domain.SourceGeneration/GerufenAnalyzer.cs (Konstruktor-Parameter)"), An("CQRS091", "Domain.SourceGeneration/GerufenAnalyzer.cs (Konfig-Feld)"),
              An("CQRS092", "Domain.SourceGeneration/GerufenAnalyzer.cs (öffentlich, nicht generisch)"),
              new("generator", null, "Infrastructure.SourceGeneration/GerufeneGenerator.cs (GeneratedGerufene: Umsetzungen, Bedarf, Konfig-Bindung)")]),

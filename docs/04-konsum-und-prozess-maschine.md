@@ -279,6 +279,13 @@ Aktivierung derselben Adresse, beginnt die Aktivierung über die Supervision neu
 hält fest, R12); Zustand in Feldern oder Eigenschaften verbietet CQRS105 (R19) — er ginge beim Umzug still verloren. Rechnet eine Funktion draußen,
 lebt ein Zustand im Worker (A8, gebunden an die Adresse); ihn zu sichern, ist Sache des Workers.
 
+**Zustand einer gerufenen Funktion.** Auch eine gerufene Funktion (ohne `Auf`) kann `IZustand<T>` im Konstruktor nehmen (ihre Klasse bzw. die
+Umsetzung ihrer Schnittstelle). Ihr Zustand gehört der **Aktivierung ihres Halters**: die generierte Fabrik holt ihn aus dem Bereich der Aktivierung
+(`AktivierungsZustaende`, unter dem Namen der gerufenen Funktion — je Aktivierung eine Instanz), und die Aktivierung lädt und sichert alle Zustände
+als EIN Dokument mit der Position des Halters, je Funktion ihr Eintrag: `{"Schaetzer": {…}, "IZaehlwerk": {…}}`. Ob ein Halter so Zustand trägt,
+folgt beim Start aus seiner Konstruktor-Kette und den gewählten Umsetzungen (`GerufeneWahl`); dann rechnet er wie mit eigenem Zustand einen
+Eingang zugleich, und jeder Log-Eingang wirkt genau einmal auch auf den Zustand der gerufenen Funktion (Prüfdomäne: `Zaehlwerk` im `Schaetzer`).
+
 **Lebenszyklus** (`ILebenszyklus`, optional, E10). Muss eine Funktion beim Aktivieren etwas laden — ein Netz auf die GPU, eine Verbindung —,
 implementiert sie `ILebenszyklus` und überschreibt, was sie braucht: `BeimAktivierenAsync` läuft je Aktivierung nach dem Bau und dem Laden des Zustands,
 vor dem ersten `Auf` (bis dahin warten Eingänge und Hinweise in der Mailbox); `VorDemSichernAsync` läuft vor jeder Sicherung im Ruhepunkt und beim

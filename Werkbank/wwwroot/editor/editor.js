@@ -899,7 +899,8 @@
     if(s){s.classList.add("o");reg(key,s,info);}
     return h("div",{class:"slotrow o"},d||rec?h("button",{class:"rm",title:"Aus dem Konstruktor lösen (der Typ bleibt)",onclick:loese},"✕"):null,
       h("span",{class:"slotlbl",style:"flex:1;text-align:right"+(d||rec?";cursor:pointer":""),title:d?"Klick: "+d.name+" öffnen":rec?"Werte aus Konfig:"+rec.name+" der Umgebung":"",
-        onclick:d?()=>zeigeLadend("fb:"+d._id):rec?()=>zeigeLadend("rec:"+rec.name):null},(d?"🧩 ":rec?"⚙ ":"· ")+p.typ+" "+p.name+(rec?" (Konfig)":"")),s);}
+        onclick:d?()=>zeigeLadend("fb:"+d._id):rec?()=>zeigeLadend("rec:"+rec.name):null},
+        (d?"🧩 ":rec?"⚙ ":/^IZustand</.test(p.typ||"")?"💾 ":"· ")+p.typ+" "+p.name+(rec?" (Konfig)":/^IZustand</.test(p.typ||"")?" (Zustand, gesichert mit der Position)":"")),s);}
   // „🧩 braucht": die Konstruktor-Zeilen einer Klasse bzw. Umsetzung mit ⊕ für eine weitere gerufene Funktion (＋ legt eine neue an) und ＋ Konfig.
   function ctorAbschnitt(body,f,impl){const liste=ctorVon(f,impl)||[],sfx=impl==null?"":":u"+impl,info={type:"gerufen",dir:"out",fb:f._id,fk:f._id,...(impl==null?{}:{impl})};
     liste.forEach((p,i)=>body.append(konstruktorZeile(p,"gr:out:fb:"+f._id+sfx+":"+i,info,()=>{liste.splice(i,1);gTitel("🧩 "+p.typ+" lösen");render();})));

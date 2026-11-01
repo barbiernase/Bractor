@@ -77,21 +77,6 @@ namespace Infrastructure.SourceGeneration
             context.AddSource("GeneratedFunktionsBausteine.g.cs", Emit(gut, umsetzungen, fq));
         }
 
-        /// <summary>
-        /// Die Form des Zustands: frisch, sichern, laden, zurücksetzen — über den Serializer-Kontext der Komposition
-        /// (<c>EventJsonSerializerContext</c>, vom Codegen-Prepass um die Zustände ergänzt; fehlt der Typ dort, bricht der Build).
-        /// </summary>
-        private static string Zustandsform(INamedTypeSymbol z, System.Func<ITypeSymbol, string> T)
-        {
-            var typ = T(z);
-            var huelle = $"global::Infrastructure.Funktionen.Zustand<{typ}>";
-            var info = $"global::Infrastructure.Serialization.EventJsonSerializerContext.Default.{z.Name}";
-            return $"new FunktionsZustandsform(typeof({typ}), () => new {huelle}(), "
-                + $"z => global::System.Text.Json.JsonSerializer.SerializeToUtf8Bytes((({huelle})z).Wert, {info}), "
-                + $"(z, d) => (({huelle})z).Wert = global::System.Text.Json.JsonSerializer.Deserialize(d, {info}) ?? new {typ}(), "
-                + $"z => (({huelle})z).Wert = new {typ}())";
-        }
-
         private static string Emit(List<Funktionsform.Form> fs, Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>> umsetzungen,
             SymbolDisplayFormat fq)
         {
@@ -135,7 +120,7 @@ namespace Infrastructure.SourceGeneration
                     sb.AppendLine($"                    new FunktionsUmsetzung(\"{k.Name}\", typeof({T(k)}), (sp, z) => new {T(k)}({Ctorbindung.Argumente(Ctorbindung.Konstruktor(k), fq, "z")})),");
                 sb.AppendLine("                },");
                 sb.AppendLine($"                new Type[] {{ {string.Join(", ", dienste)} }},");
-                sb.AppendLine($"                Rufe{i}, Seite{i}{(f.Zustand != null ? ", Zustand: " + Zustandsform(f.Zustand, T) : "")}{(f.EineAdresse ? ", EineAdresse: true" : "")}),");
+                sb.AppendLine($"                Rufe{i}, Seite{i}{(f.Zustand != null ? ", Zustand: " + Ctorbindung.Zustandsform(f.Zustand, fq) : "")}{(f.EineAdresse ? ", EineAdresse: true" : "")}),");
             }
             sb.AppendLine("        };");
             sb.AppendLine();

@@ -71,13 +71,28 @@ namespace Infrastructure.SourceGeneration
             foreach (var (g, _) in gerufene) sb.AppendLine($"            [\"{g.Name}\"] = typeof({g.ToDisplayString(fq)}),");
             sb.AppendLine("        };");
             sb.AppendLine();
+            // Der Zustand einer Umsetzung (IZustand<T>, docs/04 §4.4): gehört der Aktivierung des Halters, unter dem Namen der gerufenen Funktion —
+            //   die Fabrik holt ihn dort (AktivierungsZustaende), gesichert wird er mit dem Zustand des Halters. Die Formen stehen VOR der Tabelle
+            //   (statische Felder werden in Reihenfolge belegt).
+            var zustaende = new List<(INamedTypeSymbol Funktion, INamedTypeSymbol Umsetzung, INamedTypeSymbol Zustand)>();
+            foreach (var (g, ums) in gerufene)
+                foreach (var k in ums)
+                    if (Funktionsform.ZustandVon(k, new List<(string, Location)>()) is { } z) zustaende.Add((g, k, z));
+            for (var i = 0; i < zustaende.Count; i++)
+                sb.AppendLine($"        private static readonly FunktionsZustandsform Zustand{i} = {Ctorbindung.Zustandsform(zustaende[i].Zustand, fq)};");
+            if (zustaende.Count > 0) sb.AppendLine();
             sb.AppendLine("        /// <summary>Die Umsetzungen je gerufener Funktion (Code-Fakt) mit ihrer Fabrik — welche läuft, wählt die Umgebung.</summary>");
             sb.AppendLine("        public static readonly IReadOnlyList<GerufeneUmsetzung> Umsetzungen = new GerufeneUmsetzung[]");
             sb.AppendLine("        {");
             foreach (var (g, ums) in gerufene)
                 foreach (var k in ums)
+                {
+                    var zi = zustaende.FindIndex(x => SymbolEqualityComparer.Default.Equals(x.Funktion, g) && SymbolEqualityComparer.Default.Equals(x.Umsetzung, k));
+                    var zustand = zi < 0 ? null : $"AktivierungsZustaende.Von(sp).Hole(\"{g.Name}\", Zustand{zi})";
                     sb.AppendLine($"            new GerufeneUmsetzung(typeof({g.ToDisplayString(fq)}), \"{k.Name}\", typeof({k.ToDisplayString(fq)}), "
-                        + $"s => s.AddScoped<{g.ToDisplayString(fq)}>(sp => new {k.ToDisplayString(fq)}({Ctorbindung.Argumente(Ctorbindung.Konstruktor(k), fq)}))),");
+                        + $"s => s.AddScoped<{g.ToDisplayString(fq)}>(sp => new {k.ToDisplayString(fq)}({Ctorbindung.Argumente(Ctorbindung.Konstruktor(k), fq, zustand)}))"
+                        + (zi < 0 ? "" : $", Zustand{zi}") + "),");
+                }
             sb.AppendLine("        };");
             sb.AppendLine();
             sb.AppendLine("        /// <summary>Umsetzung (einer Funktion mit Eingängen oder einer gerufenen) → was ihr Konstruktor braucht: gerufene Funktionen und Konfig-Records.</summary>");

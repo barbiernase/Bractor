@@ -3,6 +3,7 @@ using Abstractions;
 using Infrastructure.Umgebung;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Infrastructure.Komposition;
 
 namespace Infrastructure.Funktionen;
@@ -16,9 +17,48 @@ namespace Infrastructure.Funktionen;
 
 /// <summary>
 /// Eine Umsetzung einer gerufenen Funktion (aus <c>GeneratedGerufene.Umsetzungen</c>): Name, Typ und generierte Bindung — bei einer Klasse ist
-/// sie selbst ihre einzige Umsetzung.
+/// sie selbst ihre einzige Umsetzung; mit <see cref="Zustand"/>, wenn ihr Konstruktor <c>IZustand&lt;T&gt;</c> nimmt.
 /// </summary>
-public sealed record GerufeneUmsetzung(Type Funktion, string Name, Type Typ, Action<IServiceCollection> Binde);
+public sealed record GerufeneUmsetzung(Type Funktion, string Name, Type Typ, Action<IServiceCollection> Binde, FunktionsZustandsform? Zustand = null);
+
+/// <summary>
+/// Die Zustände der gerufenen Funktionen EINER Aktivierung (im DI-Bereich der Aktivierung, docs/04 §4.4): die generierte Fabrik einer Umsetzung mit
+/// <c>IZustand&lt;T&gt;</c> holt ihren Zustand hier, unter dem Namen der gerufenen Funktion (je Bereich einer — dieselbe gerufene Funktion hat in einer
+/// Aktivierung eine Instanz). Die Aktivierung lädt und sichert sie zusammen mit dem Zustand ihrer Funktion (<see cref="FunktionsAktivierung"/>).
+/// </summary>
+public sealed class AktivierungsZustaende
+{
+    private readonly Dictionary<string, (FunktionsZustandsform Form, object Zustand)> _je = new(StringComparer.Ordinal);
+
+    /// <summary>Die Zustände des Bereichs — gebaut wird eine gerufene Funktion mit Zustand nur in der Aktivierung einer Funktion.</summary>
+    public static AktivierungsZustaende Von(IServiceProvider sp) => sp.GetService<AktivierungsZustaende>()
+        ?? throw new InvalidOperationException("Eine gerufene Funktion mit Zustand (IZustand<T>) wird nur in der Aktivierung einer Funktion gebaut (BindeGerufene).");
+
+    /// <summary>Der Zustand der gerufenen Funktion <paramref name="funktion"/> in dieser Aktivierung (beim ersten Mal frisch).</summary>
+    public object Hole(string funktion, FunktionsZustandsform form)
+    {
+        if (!_je.TryGetValue(funktion, out var z)) _je[funktion] = z = (form, form.Neu());
+        return z.Zustand;
+    }
+
+    /// <summary>Name der gerufenen Funktion → Form und Zustand.</summary>
+    public IReadOnlyDictionary<string, (FunktionsZustandsform Form, object Zustand)> Alle => _je;
+}
+
+/// <summary>
+/// Die beim Start gewählten Umsetzungen der gerufenen Funktionen (<see cref="GerufeneExtensions.BindeGerufene(IServiceCollection, IReadOnlyDictionary{string, string?}, IConfigurationSection, IReadOnlyCollection{Type}, IReadOnlyList{GerufeneUmsetzung}, IReadOnlyDictionary{Type, Type[]}, IReadOnlyList{KonfigRecord})"/>):
+/// daraus folgt vor dem ersten Bau, ob eine Funktion über ihre Konstruktor-Kette Zustand trägt.
+/// </summary>
+public sealed class GerufeneWahl(IReadOnlyDictionary<Type, GerufeneUmsetzung> gewaehlt, IReadOnlyDictionary<Type, Type[]> braucht)
+{
+    /// <summary>Trägt eine gerufene Funktion in der Konstruktor-Kette der Klasse <paramref name="umsetzung"/> Zustand?</summary>
+    public bool MitZustand(Type umsetzung)
+    {
+        foreach (var t in braucht.GetValueOrDefault(umsetzung) ?? [])
+            if (gewaehlt.TryGetValue(t, out var u) && (u.Zustand is not null || MitZustand(u.Typ))) return true;
+        return false;
+    }
+}
 
 /// <summary>Ein Konfig-Record (aus <c>GeneratedGerufene.Konfigs</c>): Typ, Abschnitt unter <c>Konfig</c> und generierte Bindung.</summary>
 public sealed record KonfigRecord(Type Typ, string Name, Func<IConfigurationSection, object> Binde);
@@ -159,6 +199,8 @@ public static class GerufeneExtensions
             }
         }
         foreach (var impl in start) Besuche(impl);
+        services.AddSingleton(new GerufeneWahl(gebunden, braucht));
+        services.TryAddScoped<AktivierungsZustaende>();
         if (gebunden.Count + konfigGebunden.Count > 0)
             Console.WriteLine($"[CQRS] Gerufen: {string.Join(", ", gebunden.Select(x => x.Key.Name + " → " + x.Value.Name).DefaultIfEmpty("keine"))}"
                 + $" · Konfig: {string.Join(", ", konfigGebunden.Select(t => t.Name).DefaultIfEmpty("keine"))}");

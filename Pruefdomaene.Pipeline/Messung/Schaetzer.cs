@@ -45,10 +45,11 @@ public sealed class Arbeitsmodell
 /// <summary>
 /// Ein Modell, das weiterlernt (docs/04 §4.4, docs/10 E6, E10): EIN Zustand für alle Messstellen (<c>[EineAdresse]</c>, A6) — es lernt aus jedem Messwert im Log
 /// (genau einmal je Eingang auf dem gesicherten Zustand, auch nach Absturz und Umzug) und schätzt auf jedes Merkmal hin (Hinweis rein, Command raus).
-/// Gerechnet wird auf dem Arbeitsmodell der Aktivierung; der Lebenszyklus lädt es aus dem Zustand und schreibt es vor jeder Sicherung zurück.
+/// Gerechnet wird auf dem Arbeitsmodell der Aktivierung; der Lebenszyklus lädt es aus dem Zustand und schreibt es vor jeder Sicherung zurück. Daneben
+/// zählt eine gerufene Funktion mit eigenem Zustand (<see cref="IZaehlwerk"/>) — gesichert im selben Dokument, mit derselben Position.
 /// </summary>
 [EineAdresse]
-public sealed class Schaetzer(IZustand<Schaetzmodell> modell) : IFunktion, ILebenszyklus
+public sealed class Schaetzer(IZustand<Schaetzmodell> modell, IZaehlwerk zaehler) : IFunktion, ILebenszyklus
 {
     private readonly Arbeitsmodell _arbeit = new();
 
@@ -64,7 +65,11 @@ public sealed class Schaetzer(IZustand<Schaetzmodell> modell) : IFunktion, ILebe
         return Task.CompletedTask;
     }
 
-    public void Auf(MesswertErfasst e, Herkunft h) => _arbeit.Lerne(h.Stream, e.Wert);
+    public void Auf(MesswertErfasst e, Herkunft h)
+    {
+        _arbeit.Lerne(h.Stream, e.Wert);
+        zaehler.Zaehle(h.Stream);
+    }
 
     /// <summary>Auf jedes Merkmal eine Schätzung — hat das Modell die Messstelle noch nicht gelernt (der Hinweis war schneller als das Log), schätzt
     /// es den Wert selbst, mit Anzahl 0.</summary>

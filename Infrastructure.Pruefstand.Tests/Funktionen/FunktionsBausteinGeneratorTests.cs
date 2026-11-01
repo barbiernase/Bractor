@@ -175,7 +175,7 @@ public interface IPost : IFunktion { Task SendeAsync(string an); }
         quelle.Should().Contain("\"Schaetzer\", Draussen: false, Gleichbleibend: false,", "eine Funktion mit Zustand ist nie gleichbleibend (R12, R19)");
         quelle.Should().Contain("(sp, z) => new global::Probe.Schaetzer((global::Abstractions.IZustand<global::Probe.Mittelwerte>)z!, ",
             "der Zustand kommt aus der Aktivierung, nie aus dem Container");
-        quelle.Should().Contain("Zustand: new FunktionsZustandsform(typeof(global::Probe.Mittelwerte), () => new global::Infrastructure.Funktionen.Zustand<global::Probe.Mittelwerte>()");
+        quelle.Should().Contain("Zustand: new global::Infrastructure.Funktionen.FunktionsZustandsform(typeof(global::Probe.Mittelwerte), () => new global::Infrastructure.Funktionen.Zustand<global::Probe.Mittelwerte>()");
         quelle.Should().Contain("global::Infrastructure.Serialization.EventJsonSerializerContext.Default.Mittelwerte", "ohne Reflection: der generierte Kontext");
         quelle.Should().Contain("EineAdresse: true");
         quelle.Should().Contain("case global::Probe.Bezahlt e: f.Auf(e, h); return Ausgaben.Leer;");

@@ -16,7 +16,7 @@ namespace Infrastructure.SourceGeneration
     /// </summary>
     internal static class Ctorbindung
     {
-        /// <summary>Was ein Konstruktor-Parameter ist; <see cref="Zustand"/> nur in einer Funktions-Klasse mit Eingängen (<c>IZustand&lt;T&gt;</c>, docs/04 §4.4).</summary>
+        /// <summary>Was ein Konstruktor-Parameter ist; <see cref="Zustand"/> = <c>IZustand&lt;T&gt;</c> (docs/04 §4.4), aus der Aktivierung, nie aus dem Container.</summary>
         public enum Art { Gerufen, Konfig, Logger, Zustand, Fremd }
 
         /// <summary>Der Konstruktor, den die Fabrik benutzt: der öffentliche mit den meisten Parametern (wie der DI-Aktivator).</summary>
@@ -44,12 +44,27 @@ namespace Infrastructure.SourceGeneration
 
         /// <summary>
         /// Die Argumente der Fabrik: je Parameter <c>sp.GetRequiredService&lt;T&gt;()</c> — ein Zustand (<c>IZustand&lt;T&gt;</c>) kommt aus der
-        /// Aktivierung (<paramref name="zustand"/>, der Name der Variablen in der Fabrik), nie aus dem Container.
+        /// Aktivierung (<paramref name="zustand"/>: der Ausdruck in der Fabrik, der ihn liefert), nie aus dem Container.
         /// </summary>
         public static string Argumente(IMethodSymbol? ctor, SymbolDisplayFormat fq, string? zustand = null) => ctor == null ? ""
             : string.Join(", ", ctor.Parameters.Select(p => zustand != null && ArtVon(p.Type) == Art.Zustand
                 ? $"({p.Type.ToDisplayString(fq)}){zustand}!"
                 : $"global::Microsoft.Extensions.DependencyInjection.ServiceProviderServiceExtensions.GetRequiredService<{p.Type.ToDisplayString(fq)}>(sp)"));
+
+        /// <summary>
+        /// Die Form eines Zustands (<c>FunktionsZustandsform</c>): frisch, sichern, laden, zurücksetzen — über den Serializer-Kontext der Komposition
+        /// (<c>EventJsonSerializerContext</c>, vom Codegen-Prepass um die Zustände ergänzt; fehlt der Typ dort, bricht der Build).
+        /// </summary>
+        public static string Zustandsform(INamedTypeSymbol z, SymbolDisplayFormat fq)
+        {
+            var typ = z.ToDisplayString(fq);
+            var huelle = $"global::Infrastructure.Funktionen.Zustand<{typ}>";
+            var info = $"global::Infrastructure.Serialization.EventJsonSerializerContext.Default.{z.Name}";
+            return $"new global::Infrastructure.Funktionen.FunktionsZustandsform(typeof({typ}), () => new {huelle}(), "
+                + $"z => global::System.Text.Json.JsonSerializer.SerializeToUtf8Bytes((({huelle})z).Wert, {info}), "
+                + $"(z, d) => (({huelle})z).Wert = global::System.Text.Json.JsonSerializer.Deserialize(d, {info}) ?? new {typ}(), "
+                + $"z => (({huelle})z).Wert = new {typ}())";
+        }
 
         /// <summary>Was die Bindung prüfen muss (gerufene Funktionen und Konfig-Records des Konstruktors).</summary>
         public static IEnumerable<INamedTypeSymbol> Braucht(IMethodSymbol? ctor) => ctor == null
