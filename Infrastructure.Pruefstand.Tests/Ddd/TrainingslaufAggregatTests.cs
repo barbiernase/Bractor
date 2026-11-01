@@ -35,7 +35,7 @@ public class TrainingslaufAggregatTests
         public IReadOnlyList<IEvent> Wende(ICommand cmd)
         {
             LetzteAblehnungen.Clear();
-            var events = Handler.HandleCommand(cmd).ToList();
+            var events = Handler.HandleCommand(cmd).OfType<IEvent>().ToList();
             foreach (var e in events)
             {
                 if (e is ITransientEvent) { LetzteAblehnungen.Add(e); continue; }

@@ -16,6 +16,7 @@ internal sealed class Lageart
     private readonly HashSet<string> _ergebnisse = new();
     private readonly HashSet<string> _konfigs = new();
     private readonly HashSet<string> _aggregatQueries = new(), _aggregatAntworten = new();
+    private readonly HashSet<string> _folgen = new();
 
     /// <summary>Ist der Vertrag (Abstractions) in der Compilation? Sonst gibt es nichts zu prüfen.</summary>
     public bool Bereit { get; }
@@ -40,6 +41,10 @@ internal sealed class Lageart
                     _aggregatQueries.Add(Name(f.Query));
                     foreach (var a in f.Antworten) _aggregatAntworten.Add(Name(a));
                 }
+            // Folgen: die schlichten Records der Decide-Signaturen (Nachrichtenform, docs/03 §3.1).
+            if (Infrastructure.SourceGeneration.Nachrichtenform.IstDecider(t))
+                foreach (var d in Infrastructure.SourceGeneration.Nachrichtenform.Decides(t))
+                    foreach (var f in Infrastructure.SourceGeneration.Nachrichtenform.FolgenVon(d)) _folgen.Add(Name(f));
             // Konfig-Records: was der Konstruktor einer Funktion bzw. Umsetzung als Konfig bindet (Ctorbindung, CQRS090).
             if (t.TypeKind == TypeKind.Class && !t.IsAbstract && Hat(t, "IFunktion"))
                 foreach (var p in Infrastructure.SourceGeneration.Ctorbindung.Konstruktor(t)?.Parameters ?? Enumerable.Empty<IParameterSymbol>())
@@ -81,6 +86,7 @@ internal sealed class Lageart
             return Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t) ? Projektstruktur.Primitive.HostFunktion : Projektstruktur.Primitive.FunktionsImplementierung;
         if (Hat(t, "IAkteur")) return Projektstruktur.Primitive.Akteur;
         if (Hat(t, "IStore") || Hat(t, "IReadStore") || Hat(t, "IWriteStore")) return Projektstruktur.Primitive.StoreImplementierung;
+        if (_folgen.Contains(Name(t))) return Projektstruktur.Primitive.Folge;
         if (_konfigs.Contains(Name(t))) return Projektstruktur.Primitive.Konfig;
         return Projektstruktur.Primitive.Hilfscode;
     }

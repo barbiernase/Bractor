@@ -58,6 +58,7 @@ Vertrag hört auf beliebige Events, auch auf Ergebnis-Events von Funktionen.
 | | `Commands.cs`, `Events.cs` | Commands; Events und Ablehnungen |
 | | `ValueObjects.cs`, `Enums.cs` | Wertobjekte, Enums |
 | | `Quellen.cs` | Quellen-Typen (`sealed record X : DateiGemeldet;`) |
+| | `Folgen.cs` | Folgen: schlichte Records in Decide-Signaturen, weder Event noch Frist (Primitive `Folge`, docs/03 §3.1) |
 | | `Queries.cs`, `Responses.cs` | Queries an das Aggregat und ihre Antworten (Primitive `AggregatQuery`/`AggregatAntwort`, erkannt an der `Frage` im Decider) |
 | `Domain.Projections/<Bereich>/` | `ReadModels.cs`, `Queries.cs`, `Responses.cs` | Read-Models, Queries, Antworten |
 | | `I<Store>.cs` | Store-Bündel mit seinen Fähigkeiten |

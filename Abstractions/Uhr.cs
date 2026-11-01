@@ -30,8 +30,14 @@ public sealed record Frist<TCmd>(TCmd Befehl, TimeSpan Nach) : IFrist where TCmd
 /// </summary>
 public sealed record FristGesetzt(ICommand Befehl, TimeSpan Nach) : IEvent, IRahmenEvent;
 
-/// <summary>Wie die Ausgabe eines <c>Decide</c> ins Log geht: ein Event bleibt es selbst, eine Frist wird <see cref="FristGesetzt"/>.</summary>
+/// <summary>
+/// Wie die Ausgabe eines <c>Decide</c> weitergeht: ein Event bleibt es selbst, eine Frist wird <see cref="FristGesetzt"/>, alles andere ist eine
+/// <b>Folge</b> (ein schlichter Record ohne Marker, docs/03 §3.1) — sie geht nicht ins Log, sondern als offener Eingang an die Funktionen, die sie hören.
+/// </summary>
 public static class Entscheidungsausgabe
 {
-    public static IEvent Als(IAusgabe ausgabe) => ausgabe is IFrist f ? new FristGesetzt(f.Befehl, f.Nach) : (IEvent)ausgabe;
+    public static object Als(object ausgabe) => ausgabe is IFrist f ? new FristGesetzt(f.Befehl, f.Nach) : ausgabe;
+
+    /// <summary>Eine Folge: weder Event (auch kein Hinweis) noch Frist.</summary>
+    public static bool IstFolge(object ausgabe) => ausgabe is not IEvent and not IFrist;
 }

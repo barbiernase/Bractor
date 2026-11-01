@@ -163,6 +163,15 @@ public static class JsonContextEmitter
                             if (p.ParameterType.IsGenericType && p.ParameterType.GetGenericTypeDefinition().FullName == Abstractions.Funktionsvertrag.Zustand)
                                 zustaende.Add("global::" + FullyQualified(p.ParameterType.GetGenericArguments()[0]));
 
+                // Die Folgen eines Decide (docs/03 §3.1): schlichte Records der Signatur, weder Event noch Frist — sie reisen als offener Eingang
+                //   über denselben Wire-Kontext (GeneratedWirePoly koppelt Default.{T} zur Compile-Zeit; die Lesart dort ist Nachrichtenform).
+                if (t.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition().FullName == "Abstractions.IDecider`1"))
+                    foreach (var m in t.GetMethods(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly))
+                        if (m.Name == "Decide" && m.GetParameters() is { Length: > 0 } ps
+                            && ps[0].ParameterType.GetInterfaces().Any(i => i.FullName == "Abstractions.ICommand"))
+                            foreach (var f in Faelle(m.ReturnType).Where(IstSchlicht))
+                                wire.Add("global::" + FullyQualified(f));
+
                 // Schema-Evolution (IUpcast<TAlt, …>): die früheren Gestalten liegen als alte Bytes im Store — Marten liest sie über
                 // denselben Kontext (GeneratedEventUpcasting koppelt Default.{TAlt} zur Compile-Zeit). Alle Typ-Argumente der Kante.
                 foreach (var kante in t.GetInterfaces().Where(i => i.IsGenericType
@@ -211,6 +220,20 @@ public static class JsonContextEmitter
         }
         foreach (var a in args) SammleIds(a, ids);
     }
+
+    /// <summary>Die Fälle einer Decide-Rückgabe: IEnumerable/Task abgewickelt, bei OneOf seine Typargumente (wie Nachrichtenform).</summary>
+    private static IEnumerable<Type> Faelle(Type t)
+    {
+        while (t.IsGenericType && t.GetGenericArguments().Length == 1
+               && t.Name is "IEnumerable`1" or "IAsyncEnumerable`1" or "Task`1" or "ValueTask`1" or "Nullable`1")
+            t = t.GetGenericArguments()[0];
+        return t.IsGenericType && t.Namespace == "Abstractions" && t.Name.StartsWith("OneOf`", StringComparison.Ordinal) ? t.GetGenericArguments() : new[] { t };
+    }
+
+    /// <summary>Ein schlichter Record ohne Marker des Vertrags (wie Nachrichtenform.IstSchlicht).</summary>
+    private static bool IstSchlicht(Type t) =>
+        t.IsClass && !t.IsAbstract && !t.IsGenericType && t.Namespace != "System"
+        && !t.GetInterfaces().Any(i => i.Namespace == "Abstractions" && i.Name is "IEvent" or "IFrist" or "ICommand" or "IQuery" or "IQueryResponse" or "IAusgabe");
 
     private static IEnumerable<Type> AlleTypen(Assembly assembly)
     {

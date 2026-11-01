@@ -308,6 +308,15 @@ Hinweis denselben Weg wie ein Log-Eingang (Vermittler, Sitzung, `ArbeitsAuftrag`
 sie kommt mit ihren Commands und Hinweisen zum Actor, der sendet. Hört niemand einen Hinweis, den eine Funktion hören will, bricht der Build (R20,
 CQRS106); eine Adresse der Tabelle ohne Funktion ist ein Boot-Fehler. Hinweise an Clients gehen über die Verteiler an die Sitzungen, die sie hören.
 
+**Offene Eingänge** (`Infrastructure/Eingaenge/`). Die Folge eines Decide (docs/03 §3.2) legt je hörende Funktion eine Zeile in `cqrs_eingaenge`
+(Kennung, Funktion, Nachricht als Diskriminator und Wire-JSON, Herkunft, Fälligkeit, Versuche), in derselben Transaktion wie die Entscheidung. Der
+**Zusteller** (`ZustellerActor`, ein virtueller Cluster-Actor, Kind `zusteller`, nach dem Vorbild der Uhr: Takt je Knoten jede Sekunde, höchstens ein
+Durchlauf zugleich) liest die fälligen Zeilen und bringt jede über die `IEingangsZustellung` hin: „fertig“ trägt sie aus, „angenommen“ macht sie
+nach 60 s wieder fällig (kommt bis dahin kein „fertig“, geht sie erneut hinaus — mindestens einmal), „später“ oder ein Fehler nach 2 s. Wer eine
+Folge hört, sagt der `Folgenplan` (Folge-Typ → Funktionen). Im Umbau „Funktionen vor dem Aggregat“ hört noch keine Funktion eine Folge: der Plan
+ist leer, eine Zustellung ist nicht registriert und der Takt schweigt; die Prüfdomäne gibt die Folge `Unterschritten` aus, die Tests setzen Plan
+und Zustellung selbst.
+
 **Wecken.** Jede Funktion mit Log-Eingängen meldet sich wie eine Projektion beim `BatchKonsumStartupService` an (Takt, Prüfung gegen den
 Weckplan); der Wecker am Commit weckt ihre Partition bzw. ihre eine Adresse (§4.1). Den Clients meldet jeder Schreiber nach seinem Commit
 den Envelope je Event an die Verteiler (`Infrastructure/Verteilen/Commitmeldung.cs`).

@@ -48,6 +48,9 @@ static class Projektstruktur
         /// <summary>Eine Query, die ein Aggregat beantwortet (<c>Frage</c> im Decider, docs/03 §3.2), und ihre Antwort: sie liegen
         /// bei der Schreibseite, denn der Decider sieht die Leseseite nicht. Eine Query an einen Reader ist <see cref="Query"/>.</summary>
         AggregatQuery, AggregatAntwort,
+        /// <summary>Eine Folge (docs/03 §3.1): ein schlichter Record in der Signatur eines <c>Decide</c>, weder Event noch Frist — er liegt bei der
+        /// Schreibseite wie die Events seines Aggregats.</summary>
+        Folge,
         ReadModel, Query, Antwort, StoreBuendel, StoreFaehigkeit, Projektion, Reader,
         Funktion, FunktionsErgebnis, FunktionsImplementierung, Konfig,
         /// <summary>Eine Funktion als Klasse (Baustein-Form, <c>Auf</c>): sie läuft im Host; als Schnittstelle ist sie <see cref="Funktion"/> (draußen).</summary>
@@ -160,7 +163,7 @@ static class Projektstruktur
         switch (p)
         {
             case Primitive.Aggregat: case Primitive.Decider: case Primitive.Applier: case Primitive.Command: case Primitive.Event:
-            case Primitive.Quelle: case Primitive.Wertobjekt: case Primitive.AggregatQuery: case Primitive.AggregatAntwort:
+            case Primitive.Quelle: case Primitive.Wertobjekt: case Primitive.AggregatQuery: case Primitive.AggregatAntwort: case Primitive.Folge:
                 return new[] { Rolle.Schreibseite };
             case Primitive.ReadModel: case Primitive.Query: case Primitive.Antwort: case Primitive.StoreBuendel: case Primitive.StoreFaehigkeit:
             case Primitive.Projektion: case Primitive.Reader:
@@ -188,6 +191,7 @@ static class Projektstruktur
             case Primitive.Command: return "Commands.cs";
             case Primitive.Event: case Primitive.FunktionsErgebnis: return "Events.cs";
             case Primitive.Quelle: return "Quellen.cs";
+            case Primitive.Folge: return "Folgen.cs";
             case Primitive.Wertobjekt: return "ValueObjects.cs";
             case Primitive.Enum: return "Enums.cs";
             case Primitive.ReadModel: return "ReadModels.cs";
@@ -277,6 +281,7 @@ static class Projektstruktur
             case Primitive.Antwort: return "eine Antwort";
             case Primitive.AggregatQuery: return "eine Query an ein Aggregat";
             case Primitive.AggregatAntwort: return "eine Antwort eines Aggregats";
+            case Primitive.Folge: return "eine Folge (eines Decide)";
             case Primitive.StoreBuendel: return "ein Store-Bündel";
             case Primitive.StoreFaehigkeit: return "eine Store-Fähigkeit";
             case Primitive.Projektion: return "eine Projektion";

@@ -42,7 +42,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 
 ## Das tragende Bild
 
-- **Schreibseite:** Command → Aggregat-Actor (Single-Writer, Inbox-Tabelle) → `Decide` (`OneOf<Event, Hinweis, Frist<TCmd>>`) → Events →
+- **Schreibseite:** Command → Aggregat-Actor (Single-Writer, Inbox-Tabelle) → `Decide` (`OneOf<Event, Hinweis, Frist<TCmd>, Folge>`; eine Folge ist
+  ein schlichter Record, nicht im Log: je Hörer ein offener Eingang `cqrs_eingaenge` im selben Commit, der Zusteller bringt ihn hin) → Events →
   Group-Commit → **Wecker** am Commit (generierter Weckplan, für jeden Schreiber gleich: Aggregat, Quelle, Funktions-Ausgabe) + Push an Clients
   (`Commitmeldung` → `Verteilung`: je Commit eine Nachricht an den Verteiler jedes Knotens). **Keine Marken im Log**:
   Noop und Ablehnung schreiben nur ihre Quittung in die Inbox, mit Kopf-Prüfung des Streams in derselben Transaktion

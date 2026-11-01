@@ -168,7 +168,8 @@ namespace Infrastructure.SourceGeneration
                         _ => $"b!.Hole<{T(p.Typ!)}>()",
                     }));
                     var aufruf = $"f.{Abstractions.Funktionsvertrag.Auf}({args})";
-                    var abbildung = a.Abbildung.Length == 0 ? "y => y" : "y => y" + a.Abbildung;
+                    // OneOf.Value ist object (ohne Schranke, docs/03 §3.1): die Funktionsform hat die Fälle geprüft, die Abbildung wandelt zurück.
+                    var abbildung = a.Abbildung.Length == 0 ? "y => y" : "y => (global::Abstractions.IAusgabe?)y" + a.Abbildung;
                     string adapter;
                     if (a.Strom) adapter = a.StromAsync || a.Huelle == "Task" ? "StromAsync" : "Strom";
                     else adapter = a.Huelle.Length > 0 ? "EinzelnAsync" : "Einzeln";

@@ -17,7 +17,7 @@ namespace Core
             _applier = applier;
         }
 
-        public abstract IEnumerable<IEvent> HandleCommand(ICommand command);
+        public abstract IEnumerable<object> HandleCommand(ICommand command);
         public abstract void ApplyEvent(IEvent @event);
         public abstract IQueryResponse Frage(IQuery query);
     }

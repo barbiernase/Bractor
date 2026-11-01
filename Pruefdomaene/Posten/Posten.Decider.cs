@@ -12,7 +12,7 @@ public partial class Posten
             yield return new PostenEroeffnet(cmd.Bestand, cmd.Mindestbestand);
         }
 
-        public IEnumerable<OneOf<PostenReserviert, ReservierungAbgelehnt, PostenNichtGefunden>> Decide(ReservierePosten cmd)
+        public IEnumerable<OneOf<PostenReserviert, Unterschritten, ReservierungAbgelehnt, PostenNichtGefunden>> Decide(ReservierePosten cmd)
         {
             if (!this.State.Existiert) { yield return new PostenNichtGefunden(cmd.AggregateId); yield break; }
             if (this.State.Verfuegbar < cmd.Menge)
@@ -20,7 +20,9 @@ public partial class Posten
                 yield return new ReservierungAbgelehnt(this.State.Verfuegbar, cmd.Menge, cmd.Beleg);
                 yield break;
             }
-            yield return new PostenReserviert(cmd.Menge, Math.Max(0, this.State.Mindestbestand - (this.State.Verfuegbar - cmd.Menge)), cmd.Beleg);
+            var fehlmenge = Math.Max(0, this.State.Mindestbestand - (this.State.Verfuegbar - cmd.Menge));
+            yield return new PostenReserviert(cmd.Menge, fehlmenge, cmd.Beleg);
+            if (fehlmenge > 0) yield return new Unterschritten(cmd.AggregateId, fehlmenge);   // eine Folge: an die Funktionen, die sie hören
         }
 
         public IEnumerable<OneOf<PostenFreigegeben, PostenNichtGefunden>> Decide(GibPostenFrei cmd)

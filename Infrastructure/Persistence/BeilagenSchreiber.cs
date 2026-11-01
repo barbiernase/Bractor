@@ -24,6 +24,11 @@ internal sealed class BeilagenSchreiber
     private List<string?>? _fristAkteure;
     // Kennungen der Quell-Nachrichten in einem Stream je Schlüssel.
     private List<Guid>? _kennungen, _kennungStreams;
+    // Offene Eingänge der Funktionen (Folgen).
+    private List<Guid>? _eingaenge, _eingangStreams;
+    private List<string>? _eingangFunktionen, _eingangTypen, _eingangDaten;
+    private List<int>? _eingangVersionen;
+    private List<string?>? _eingangAkteure, _eingangKorrelationen;
 
     public void Lege(IDocumentSession session, Guid streamId, IReadOnlyList<Beilage>? beilagen)
     {
@@ -40,6 +45,16 @@ internal sealed class BeilagenSchreiber
                 case QuellKennung k:
                     (_kennungen ??= new()).Add(k.Vorgang);
                     (_kennungStreams ??= new()).Add(streamId);
+                    break;
+                case EingangOffen e:
+                    (_eingaenge ??= new()).Add(e.Kennung);
+                    (_eingangFunktionen ??= new()).Add(e.Funktion);
+                    (_eingangTypen ??= new()).Add(e.Typ);
+                    (_eingangDaten ??= new()).Add(e.Daten);
+                    (_eingangStreams ??= new()).Add(streamId);
+                    (_eingangVersionen ??= new()).Add(e.Version);
+                    (_eingangAkteure ??= new()).Add(e.Akteur);
+                    (_eingangKorrelationen ??= new()).Add(e.Korrelation);
                     break;
                 case FristFaellig f:
                     (_fristStreams ??= new()).Add(streamId);
@@ -70,6 +85,9 @@ internal sealed class BeilagenSchreiber
                 _kennungen.ToArray(), _kennungStreams!.ToArray());
         if (_fristStreams is not null)
             Infrastructure.Uhr.FristVerzeichnis.Lege(session, store, _fristStreams, _fristVersionen!, _fristNach!, _fristBefehle!, _fristDaten!, _fristAkteure!);
+        if (_eingaenge is not null)
+            Infrastructure.Eingaenge.OffeneEingaenge.Lege(session, store, _eingaenge, _eingangFunktionen!, _eingangTypen!, _eingangDaten!, _eingangStreams!,
+                _eingangVersionen!, _eingangAkteure!, _eingangKorrelationen!);
     }
 
     /// <summary>Die CommandIds der Quittungen (für die Ausnahme einer Wiederholung).</summary>

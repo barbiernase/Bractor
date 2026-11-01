@@ -93,6 +93,10 @@ public interface IWirePolyTabelle
     string AntwortDiskriminator(IQueryResponse value);
     void WriteAntwort(Utf8JsonWriter writer, IQueryResponse value);
     IQueryResponse ReadAntwort(string diskriminator, ref Utf8JsonReader reader);
+    /// <summary>Nachrichten ohne Marker (docs/03 §3.1): die Folgen der Decide-Signaturen (<c>Nachrichtenform</c>).</summary>
+    string NachrichtDiskriminator(object value);
+    void WriteNachricht(Utf8JsonWriter writer, object value);
+    object ReadNachricht(string diskriminator, ref Utf8JsonReader reader);
 }
 
 public interface IUpcastingTabelle

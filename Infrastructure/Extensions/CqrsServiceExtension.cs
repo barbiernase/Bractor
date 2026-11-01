@@ -118,6 +118,7 @@ public static class CqrsServiceExtensions
 
         // 11. Die Uhr: fällige Fristen der Aggregate als Commands.
         Infrastructure.Uhr.UhrExtensions.AddUhr(services);
+        Infrastructure.Eingaenge.EingangsExtensions.AddEingaenge(services);
         
         return services;
     }
@@ -208,6 +209,8 @@ public static class CqrsServiceExtensions
             Infrastructure.Uhr.FristVerzeichnis.Registriere(options);
             // Das Kennungs-Verzeichnis der Quellen mit einem Stream je Schlüssel (genau einmal je Kennung, ohne Horizont).
             Infrastructure.Quellen.QuellKennungen.Registriere(options);
+            // Die offenen Eingänge der Funktionen: je Folge und hörende Funktion eine Zeile, geschrieben mit der Entscheidung (docs/04 §4.4).
+            Infrastructure.Eingaenge.OffeneEingaenge.Registriere(options);
             EventZeit.Registriere(options, builder.DbUhr);
 
             // Die Dokumente des Frameworks (Dead-Letter u. a.) — eine Quelle, auch für die Plan-Tests.

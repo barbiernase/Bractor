@@ -133,6 +133,47 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         (await Fristen()).Should().Be(1);
     }
 
+    [Theory, InlineData(false), InlineData(true)]
+    public async Task Der_offene_Eingang_einer_Folge_wird_mit_der_Entscheidung_gueltig_einmal_je_Kennung(bool schnell)
+    {
+        // Die offenen Eingänge (docs/04 §4.4) reisen als Beilage im Append der Entscheidung, auch ohne Events (ein Noop mit Folge, nur die Quittung
+        //   mit Kopf-Prüfung): scheitert der Append an der Version, gibt es keinen Eingang; dieselbe Kennung ein zweites Mal legt keinen zweiten.
+        var es = EventStore(schnell: schnell);
+        var store = schnell ? _fx.Store : _fx.Rich;
+        var k = Guid.NewGuid();
+        var kennung = Guid.NewGuid();
+        async Task<(int Anzahl, int? Version)> Eingaenge()
+        {
+            await using var conn = store.Storage.Database.CreateConnection();
+            await conn.OpenAsync();
+            await using var cmd = new Npgsql.NpgsqlCommand(
+                $"select count(*), max(version) from {Infrastructure.Eingaenge.OffeneEingaenge.Name(store)} where stream_id = $1", conn);
+            cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = k });
+            await using var r = await cmd.ExecuteReaderAsync();
+            await r.ReadAsync();
+            return (Convert.ToInt32(r.GetInt64(0)), r.IsDBNull(1) ? null : r.GetInt32(1));
+        }
+        EingangOffen Eingang(Guid id, int version) => new(id, "Probe", "X", "{}", version, null, null);
+
+        await es.AppendEventsAsync(k, 0, new IEvent[] { new ImagePairInspiziert() });
+        var konflikt = () => es.AppendEventsAsync(k, 0, Array.Empty<IEvent>(), beilagen: [new Quittung(Guid.NewGuid(), KommandoAusgang.Gewirkt), Eingang(kennung, 0)]);
+        await konflikt.Should().ThrowAsync<ConcurrencyException>();
+        (await Eingaenge()).Anzahl.Should().Be(0, "die Entscheidung fiel auf Version 0, der Stream steht auf 1");
+
+        await es.AppendEventsAsync(k, 1, Array.Empty<IEvent>(), beilagen: [new Quittung(Guid.NewGuid(), KommandoAusgang.Gewirkt), Eingang(kennung, 1)]);
+        (await Eingaenge()).Should().Be((1, 1));
+        await es.AppendEventsAsync(k, 1, new IEvent[] { new ImagePairInspiziert() }, beilagen: [Eingang(kennung, 2)]);
+        (await Eingaenge()).Should().Be((1, 1), "dieselbe Kennung legt keinen zweiten Eingang");
+
+        var eingaenge = new Infrastructure.Eingaenge.OffeneEingaenge(store);
+        var faellig = (await eingaenge.FaelligeAsync(10_000, default)).Single(e => e.Kennung == kennung);
+        faellig.Should().Match<Infrastructure.Eingaenge.OffenerEingang>(e => e.Funktion == "Probe" && e.Stream == k && e.Version == 1 && e.Versuche == 0);
+        await eingaenge.VerschiebeAsync([kennung], TimeSpan.FromHours(1), default);
+        (await eingaenge.FaelligeAsync(10_000, default)).Should().NotContain(e => e.Kennung == kennung, "verschoben ist er erst in einer Stunde fällig");
+        await eingaenge.ErledigtAsync([kennung], default);
+        (await Eingaenge()).Anzahl.Should().Be(0, "fertig verlässt er die Tabelle");
+    }
+
     [Theory, InlineData(false), InlineData(true)]   // Martens Anhänge-Modus: Standard (Rich) und schnell (Quick, so läuft der Host)
     public async Task Zwei_Schreiber_mit_derselben_Version_genau_einer_gewinnt_kein_Update_geht_still_verloren(bool schnell)
     {

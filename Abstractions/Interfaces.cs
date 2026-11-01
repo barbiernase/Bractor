@@ -68,7 +68,9 @@ public interface IApplier<TState> where TState : IState { }
     
 public interface IAggregateHandler
 {
-    IEnumerable<IEvent> HandleCommand(ICommand command);
+    /// <summary>Die Entscheidung über einen Command in der Reihenfolge des Decide: Events (eine Frist schon als <see cref="FristGesetzt"/>) und
+    /// Folgen (schlichte Records, docs/03 §3.1) — <see cref="Entscheidungsausgabe"/>.</summary>
+    IEnumerable<object> HandleCommand(ICommand command);
     void ApplyEvent(IEvent @event);
 
     /// <summary>Die direkte Abfrage (docs/03 §3.2): die <c>Frage</c> des Deciders zur Query, nur lesend auf den Zustand —

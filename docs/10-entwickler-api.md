@@ -46,6 +46,7 @@ nicht (§10.3.7).
 | **Query** | Frage, wirkt nicht | synchron | `record … : IQuery` |
 | **Antwort** | Rückgabe eines Readers oder Aggregats | trägt den Stand der gezeigten Ids | `record … : IQueryResponse` |
 | **Frist** | „schick mir Command C nach Zeit t“ | mindestens einmal gefeuert, genau einmal wirksam | `Frist<TCmd>` als Ausgabe eines Decide |
+| **Folge** | was eine Entscheidung den Funktionen sagt, die sie hören | je Hörer genau ein offener Eingang, zugestellt mindestens einmal; nie im Log | schlichter `record …` (ohne Marker) als Ausgabe eines Decide, in `Folgen.cs` |
 
 Es gibt **keine Marken im Log**: ob ein Command gewirkt hat oder abgelehnt wurde, hält die Inbox-Tabelle je Command-Id (eine Wiederholung liefert
 dieselbe Antwort). Ist eine Absage für einen Ablauf wichtig, ist sie ein **Fakt** (Event) — das entscheidet der Modellierer über den Typ; sonst
@@ -92,6 +93,9 @@ public partial class Sensor : IState
   haben kein `Apply`.
 - **Frist:** `yield return new Frist<BrichPruefungAb>(new BrichPruefungAb(c.AggregateId), TimeSpan.FromSeconds(30));` — die Uhr schickt den
   Command zur Zeit an **dasselbe** Aggregat; ist der Vorgang dann fertig, ist er ein Noop (§10.3.7).
+- **Folge:** `if (fehlmenge > 0) yield return new Unterschritten(c.AggregateId, fehlmenge);` mit `record Unterschritten(Id<Posten> Posten, int
+  Fehlmenge);` — ein schlichter Record in der Signatur, weder Event noch Frist: kein `Apply`, nicht im Log, keine Version; je hörende Funktion ein
+  offener Eingang im selben Commit ([03](03-schreibseite.md) §3.2). Nie zusammen mit einer Ablehnung.
 - **Direkte Abfrage:** `public OneOf<Leihstand, NichtVerliehen> Frage(HoleLeihstand q) => …` im Decider, synchron, nur lesend. Die Query nennt
   ihr Aggregat mit genau einem Glied `Id<TAggregat>`; der Actor antwortet auf dem committeten Stand, die Antwort zeigt das Aggregat mit seiner
   Version als OCC-Stand ([03](03-schreibseite.md) §3.2). Query und Antwort liegen bei der Schreibseite.

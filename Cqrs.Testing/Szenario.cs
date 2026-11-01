@@ -110,7 +110,7 @@ public sealed class SzenarioBauer<TState> where TState : class, IState, new()
     {
         var vorher = Zustandsspiegel.Von(state);
         var ausgang = new List<Ereignis>();
-        foreach (var e in handler.HandleCommand(cmd).ToList())
+        foreach (var e in handler.HandleCommand(cmd).OfType<IEvent>().ToList())   // Folgen (docs/03 §3.1) prüft das Szenario nicht
         {
             var persistent = e is not ITransientEvent;
             ausgang.Add(new Ereignis(e, persistent));

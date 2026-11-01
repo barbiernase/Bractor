@@ -174,7 +174,17 @@ public partial class Leihvorgang : IState
 
 **Wie der Fachcode rein bleibt:** `this.State` und der Konstruktor `Decider(Leihvorgang state)` (`Domain.SourceGeneration/Generator.cs`)
 sowie `Id`/`Version` (`StateGenerator`) sind generiert. OCC, Weckruf, Cursor, Idempotenz und Spur erscheinen ausschließlich im Framework.
-Noop und Ablehnung stehen nicht im Log; „gewirkt/abgelehnt“ je CommandId hält die Inbox-Tabelle des Stores. Einträge des Rahmens
+Noop und Ablehnung stehen nicht im Log; „gewirkt/abgelehnt“ je CommandId hält die Inbox-Tabelle des Stores.
+
+**Folge.** Neben Events, einer Ablehnung und einer Frist kann ein Decide eine **Folge** ausgeben: einen schlichten Record ohne Marker in seiner
+Signatur, z. B. `IEnumerable<OneOf<PostenReserviert, Unterschritten, …>>` mit `record Unterschritten(Id<Posten> Posten, int Fehlmenge)` in
+`Folgen.cs` (Primitive `Folge`, docs/07). Sie geht nicht ins Log und zählt nicht in der Version; je Funktion, die sie hört, legt die Entscheidung
+in derselben Transaktion einen **offenen Eingang** (Beilage `EingangOffen`, Tabelle `cqrs_eingaenge`, §3.3), auch bei einer Entscheidung ohne
+Events (dann mit der Quittung und der Kopf-Prüfung). Die Kennung ist abgeleitet aus Command-Id, Stelle unter den Folgen und Funktion
+(`Eingangsvertrag`): ein wiederholter Command legt keinen zweiten Eingang. Ihre Herkunft ist der Stand nach der Entscheidung (Stream, Version,
+Log-Zeit des Commits, Akteur, Korrelation). Eine Ablehnung bleibt die einzige Ausgabe — mit einer Folge zusammen ist sie ein Fehler. Welche Typen
+Folgen sind, liest die `Nachrichtenform` aus den Decide-Signaturen (Wire-Form `GeneratedWirePoly.Nachricht`, der Codegen nimmt sie in den
+Wire-Kontext); wer sie hört, sagt der `Folgenplan` (docs/04 §4.4). Einträge des Rahmens
 (`IRahmenEvent`, heute nur `FristGesetzt`) werden beim Falten übersprungen (aber versionsgezählt) — der Decider sieht sie nie. Command → Aggregat folgt aus
 `ICommand<TAggregat>`, nicht aus Namespaces; das Decide muss im Ziel-Aggregat stehen (CQRS010), ein Command ohne typisiertes Ziel baut nicht
 (CQRS013, `CommandAggregateMapGenerator`, `ModellAnalyzer`).
@@ -190,7 +200,8 @@ Noop und Ablehnung stehen nicht im Log; „gewirkt/abgelehnt“ je CommandId hä
   hinterließ bei einem gescheiterten Commit Tombstones (G-7).
 - **Beilagen** (`Abstractions/Beilage.cs`, `BeilagenSchreiber`): Framework-Buchhaltung, die ein Append in derselben Transaktion mitschreibt —
   `Quittung` (Inbox, unten), `FristFaellig` (Eintrag im Fälligkeits-Verzeichnis der Uhr, mit `FristGesetzt`,
-  [04 §4.7](04-konsum-und-prozess-maschine.md)), die Kennung einer Quell-Nachricht. Ein Weg für Einzel-Append und Group-Commit; die Quittungen eines Batches
+  [04 §4.7](04-konsum-und-prozess-maschine.md)), die Kennung einer Quell-Nachricht, `EingangOffen` (ein offener Eingang einer Funktion aus einer
+  Folge, §3.2: Zeile in `cqrs_eingaenge`, `on conflict do nothing`). Ein Weg für Einzel-Append und Group-Commit; die Quittungen eines Batches
   gehen in eine Anweisung, die Dokumente als Operationen derselben Session.
 - **Inbox** (`InboxTabelle`): Tabelle `cqrs_inbox` im Event-Schema (`command_id` Primärschlüssel, `stream_id`, `abgelehnt`, `zeit` =
   `now()` der schreibenden Transaktion, B-Baum auf `zeit`), ein von Marten verwaltetes Schema-Objekt (`Storage.ExtendedSchemaObjects`).

@@ -130,6 +130,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.PostenZugebucht))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.ReservierePosten))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.ReservierungAbgelehnt))]
+[JsonSerializable(typeof(global::Pruefdomaene.Posten.Unterschritten))]
 [JsonSerializable(typeof(global::Pruefdomaene.Projections.Messung.HoleMessreihe))]
 [JsonSerializable(typeof(global::Pruefdomaene.Projections.Messung.HoleMesszaehler))]
 [JsonSerializable(typeof(global::Pruefdomaene.Projections.Messung.Messreihe))]

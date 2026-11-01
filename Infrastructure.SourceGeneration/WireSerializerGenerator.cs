@@ -12,7 +12,8 @@ namespace Infrastructure.SourceGeneration
     ///   (Whitelist) und <c>WireMessageTypes</c>. Verwendet vom <c>CqrsWireSerializer</c> (Proto.Remote-ISerializer)
     ///   und vom <c>WireSerializerBootCheck</c>.
     /// - <c>GeneratedWirePoly</c> — die polymorphen Payloads (alle <c>ICommand</c>/<c>IEvent</c>):
-    ///   <c>Write/Read/Diskriminator</c> je Wurzel. Verwendet von den <c>WirePolyConverters</c>.
+    ///   <c>Write/Read/Diskriminator</c> je Wurzel. Verwendet von den <c>WirePolyConverters</c>. Dazu die Nachrichten ohne Marker
+    ///   (<c>Nachrichtenform</c>: die Folgen der Decide-Signaturen) als Wurzel <c>object</c>.
     ///
     /// Alles geht über <c>CqrsWireJsonContext.Default.{Typ}</c> → keine Laufzeit-Reflection. Der Switch
     /// referenziert je Typ <c>Default.{Typ}</c>: fehlt der Typ im hand-gepflegten <c>CqrsWireJsonContext</c>,
@@ -151,6 +152,9 @@ namespace Infrastructure.SourceGeneration
             EmitPoly(sb, "Query", "IQuery", queries, full);
             sb.AppendLine();
             EmitPoly(sb, "Antwort", "IQueryResponse", antworten, full);
+            sb.AppendLine();
+            // Nachrichten ohne Marker (docs/03 §3.1): die Folgen der Decide-Signaturen — eine Lesart mit dem Codegen (Nachrichtenform).
+            EmitPoly(sb, "Nachricht", "object", Nachrichtenform.Folgen(compilation), full);
             sb.AppendLine("}");
 
             context.AddSource("GeneratedWire.g.cs", sb.ToString());

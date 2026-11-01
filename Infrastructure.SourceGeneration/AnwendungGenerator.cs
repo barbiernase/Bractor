@@ -98,6 +98,9 @@ namespace Infrastructure.SourceGeneration
                 "IQuery ReadQuery(string diskriminator, ref Utf8JsonReader reader) => {0}.ReadQuery(diskriminator, ref reader)",
                 "string AntwortDiskriminator(IQueryResponse value) => {0}.AntwortDiskriminator(value)",
                 "void WriteAntwort(Utf8JsonWriter writer, IQueryResponse value) => {0}.WriteAntwort(writer, value)",
+                "string NachrichtDiskriminator(object value) => {0}.NachrichtDiskriminator(value)",
+                "void WriteNachricht(Utf8JsonWriter writer, object value) => {0}.WriteNachricht(writer, value)",
+                "object ReadNachricht(string diskriminator, ref Utf8JsonReader reader) => {0}.ReadNachricht(diskriminator, ref reader)",
                 "IQueryResponse ReadAntwort(string diskriminator, ref Utf8JsonReader reader) => {0}.ReadAntwort(diskriminator, ref reader)",
             });
             Tabelle(sb, "UpcastingTabelle", "IUpcastingTabelle", "global::Infrastructure.Serialization.GeneratedEventUpcasting",
