@@ -133,12 +133,12 @@ public class FunktionsBausteinE2ETests
             (await FrageAsync(host, new StelleRechnung(rechnung, Id<Kundenkonto>.Neu(), 50m), Guid.NewGuid()))!.Success.Should().BeTrue();
             var hand = host.Services.GetRequiredService<HandAusfuehrer>();
             HandEingang? offen = null;
-            await Warte(() => Task.FromResult((offen = hand.OffeneEingaenge.FirstOrDefault(e => e.Eingang.Stream == rechnung.Wert)) is not null),
+            await Warte(() => Task.FromResult((offen = hand.OffeneEingaenge.FirstOrDefault(e => e.Stream == rechnung.Wert)) is not null),
                 Frist, "der Eingang wartet nicht von Hand");
 
-            (await hand.AntworteAsync(offen!.Eingang.Vorgang, new IAusgabe[] { new SperreRechnung(rechnung, "von Hand") }, null, default))
+            (await hand.AntworteAsync(offen!.Vorgang, new IAusgabe[] { new SperreRechnung(rechnung, "von Hand") }, null, default))
                 .Should().Be(ErgebnisAusgang.Geschrieben);
-            (await hand.AntworteAsync(offen.Eingang.Vorgang, new IAusgabe[] { new GibRechnungFrei(rechnung) }, null, default))
+            (await hand.AntworteAsync(offen.Vorgang, new IAusgabe[] { new GibRechnungFrei(rechnung) }, null, default))
                 .Should().Be(ErgebnisAusgang.Unbekannt, "beantwortet ist er nicht mehr offen");
             await Warte(async () => (await Zustand<Rechnung>(host.Services, rechnung.Wert)).Gesperrt, Frist, "die Antwort von Hand wirkt nicht");
             (await Zustand<Rechnung>(host.Services, rechnung.Wert)).Freigegeben.Should().BeFalse();

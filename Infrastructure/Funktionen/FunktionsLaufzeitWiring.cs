@@ -28,6 +28,7 @@ public static class FunktionsLaufzeitWiring
             return new FunktionsWege(new Bote(sp.GetRequiredService<ActorSystem>().Cluster(), logger), sp.GetRequiredService<FunktionsOrte>(), logger);
         });
         if (!Anwendung.Funktionen.Bausteine.Any(b => b.VorDemAggregat)) return services;
+        services.TryAddSingleton<Werkstatt>();
         services.TryAddSingleton<IEingangsZustellung>(sp => new WegeZustellung(sp.GetRequiredService<IFunktionsWege>()));
         services.AddHostedService<FunktionsOrteTakt>();
         services.AddHostedService<FunktionenStart>();
@@ -56,11 +57,12 @@ public sealed class WegeZustellung(IFunktionsWege wege) : IEingangsZustellung
 }
 
 /// <summary>
-/// Spawnt beim Start (nach dem Cluster-Beitritt) die Wurzel der Funktionen dieses Knotens: je Funktion vor dem Aggregat ein Parent mit der Umsetzung
-/// aus ihrer Bindung. Im Umbau läuft eine solche Funktion nur im Host.
+/// Spawnt beim Start (nach dem Cluster-Beitritt) die Wurzel der Funktionen dieses Knotens: je Funktion vor dem Aggregat im Host ein Parent mit der
+/// Umsetzung aus ihrer Bindung; für eine Funktion draußen (Laufort Extern oder Hand) den Plan, nach dem die Wurzel ihren Parent anlegt, sobald sich ein
+/// Arbeiter in der <see cref="Werkstatt"/> meldet — seine Kinder geben ihre Eingänge an die Arbeiter.
 /// </summary>
 public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system, FunktionsOrte orte, IFunktionsWege wege, Verkettung verkettung,
-    ILoggerFactory? logs = null) : IHostedService
+    Werkstatt werkstatt, ILoggerFactory? logs = null) : IHostedService
 {
     public Task StartAsync(CancellationToken ct)
     {
@@ -80,27 +82,40 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
         };
         var bindungen = dienste.GetServices<BausteinBindung>().ToList();
         var plaene = new List<ParentPlan>();
+        var draussen = new List<DraussenPlan>();
         foreach (var b in Anwendung.Funktionen.Bausteine.Where(b => b.VorDemAggregat))
         {
             var bindung = FunktionsBausteinWiring.BindungVon(b, bindungen);
+            var antworten = b.Eingaenge.Where(e => !e.Hinweis && typeof(IEvent).IsAssignableFrom(e.Typ)).Select(e => e.Typ).ToHashSet();
+            var wiederholungen = bindung.Wiederholungen > 0 ? bindung.Wiederholungen : FunktionsOrtKonfig.StandardWiederholungen;
+            var kindLogger = logs?.CreateLogger("Funktion." + b.Name);
+            FunktionsParent Parent(FunktionsTraeger traeger, FunktionsOrtKonfig konfig) => new(traeger, konfig,
+                () => new FunktionsKindActor(traeger, dienste, wege, verkettung, async (cmd, id, korrelation, t) => await emitter.EmitMitAntwortAsync(cmd, id, korrelation, t),
+                    dienste.GetService<IFaehigkeitsFabrik>(), kindLogger, hinweise: hinweise),
+                dienste.GetService<IOffeneEingaenge>(), kindLogger);
             if (bindung.Laufort != FunktionsLaufort.Host)
-                throw new Infrastructure.Umgebung.BootFehler($"Funktionen:{b.Name}: eine Funktion vor dem Aggregat läuft im Umbau nur im Host.", "funktion:" + b.Name);
+            {
+                // Draußen: kein Bereich, keine Umsetzung — ein Arbeiter in der Werkstatt rechnet; so viele Kinder, wie die Arbeiter Slots haben.
+                var baustein = b;
+                var traeger = new FunktionsTraeger(b.Name, null, null, false, antworten,
+                    (kennung, nachricht, herkunft, korrelation, hinweis, t) => werkstatt.RechneAsync(baustein, kennung, nachricht, herkunft, korrelation, hinweis, t));
+                draussen.Add(new DraussenPlan(b.Name, slots => Parent(traeger, new FunktionsOrtKonfig(Parallel: slots, Wiederholungen: wiederholungen))));
+                continue;
+            }
             var umsetzung = FunktionsBausteinWiring.Umsetzung(b, bindung);
             var gerufenerZustand = dienste.GetService<GerufeneWahl>()?.MitZustand(umsetzung.Typ) == true;
-            var antworten = b.Eingaenge.Where(e => !e.Hinweis && typeof(IEvent).IsAssignableFrom(e.Typ)).Select(e => e.Typ).ToHashSet();
-            var traeger = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, umsetzung.Baue, b.Zustand, b.Name, gerufenerZustand), b.Rechne!, b.Liest,
+            var imHost = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, umsetzung.Baue, b.Zustand, b.Name, gerufenerZustand), b.Rechne!, b.Liest,
                 antworten);
             // Im Umbau: Slots (je Partition) ohne eigene Angabe heißt der Standard für Parallel (je Knoten).
             var konfig = new FunktionsOrtKonfig(Parallel: bindung.Slots == FunktionsKonfig.StandardSlots ? FunktionsOrtKonfig.StandardParallel : bindung.Slots,
-                Wiederholungen: bindung.Wiederholungen > 0 ? bindung.Wiederholungen : FunktionsOrtKonfig.StandardWiederholungen);
-            var kindLogger = logs?.CreateLogger("Funktion." + b.Name);
-            plaene.Add(new ParentPlan(traeger, konfig, () => new FunktionsParent(traeger, konfig,
-                () => new FunktionsKindActor(traeger, dienste, wege, verkettung, async (cmd, id, korrelation, t) => await emitter.EmitMitAntwortAsync(cmd, id, korrelation, t),
-                    dienste.GetService<IFaehigkeitsFabrik>(), kindLogger, hinweise: hinweise),
-                dienste.GetService<IOffeneEingaenge>(), kindLogger)));
+                Wiederholungen: wiederholungen);
+            plaene.Add(new ParentPlan(imHost, konfig, () => Parent(imHost, konfig)));
         }
-        _wurzel = system.Root.SpawnNamed(Props.FromProducer(() => new FunktionenWurzel(plaene, orte, logger)), FunktionenWurzel.Wurzelname);
-        Console.WriteLine($"  ✓ Funktionen vor dem Aggregat {system.Address}/{FunktionenWurzel.Wurzelname}: " + string.Join(", ", plaene.Select(p => p.Traeger.Name)));
+        _wurzel = system.Root.SpawnNamed(Props.FromProducer(() => new FunktionenWurzel(plaene, orte, logger, draussen)), FunktionenWurzel.Wurzelname);
+        var wurzel = _wurzel;
+        werkstatt.Beobachte((f, slots) => system.Root.Send(wurzel, new DraussenGeaendert(f, slots)));
+        Console.WriteLine($"  ✓ Funktionen vor dem Aggregat {system.Address}/{FunktionenWurzel.Wurzelname}: " + string.Join(", ", plaene.Select(p => p.Traeger.Name))
+            + (draussen.Count > 0 ? "; draußen: " + string.Join(", ", draussen.Select(d => d.Funktion)) : ""));
         return Task.CompletedTask;
     }
 

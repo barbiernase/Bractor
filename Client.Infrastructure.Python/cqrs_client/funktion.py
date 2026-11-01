@@ -54,10 +54,12 @@ LEBENSZEICHEN_S = 10.0
 
 
 class Ausgabe:
-    """Die Art einer Ausgabe auf der Leitung (FunktionsAusgabe): ein Command, ein Event für das Log oder ein Hinweis."""
+    """Die Art einer Ausgabe auf der Leitung (FunktionsAusgabe): ein Command, ein Event für das Log, ein Hinweis oder ein Zwischenergebnis (eine
+    Nachricht ohne Marker an die Funktionen, die sie hören — nie ins Log)."""
     COMMAND = "command"
     EVENT = "event"
     HINWEIS = "hinweis"
+    ZWISCHENERGEBNIS = "zwischenergebnis"
 
 
 @dataclass(frozen=True)

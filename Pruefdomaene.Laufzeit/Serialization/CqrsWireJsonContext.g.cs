@@ -69,6 +69,7 @@ namespace Infrastructure.Serialization;
 // ── Domänen-Commands/Events/Queries (Domain.*) (gescannt) ──
 [JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.BezahleRechnung))]
 [JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.BucheGutschrift))]
+[JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.Freizugeben))]
 [JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.GibRechnungFrei))]
 [JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.Gutschreibung))]
 [JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.GutschriftGebucht))]

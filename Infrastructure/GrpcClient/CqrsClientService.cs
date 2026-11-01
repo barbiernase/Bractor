@@ -37,7 +37,8 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         IAusgabeAblage? ausgaben = null,
         Konsum? konsum = null,
         HinweisNetz? hinweisNetz = null,
-        IEventStoreRepository? log = null)
+        IEventStoreRepository? log = null,
+        Werkstatt? werkstatt = null)
     {
         _actorSystem = actorSystem ?? throw new ArgumentNullException(nameof(actorSystem));
         _akteurTor = akteurTor;   // null = Akteure nicht konfiguriert → offen (opt-in)
@@ -47,7 +48,8 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
             konsum ?? Konsum.Standard,
             hinweisNetz,   // null = keine Funktion hört Hinweise
             log,
-            _logger);
+            _logger,
+            werkstatt);   // null = keine Funktion vor dem Aggregat in dieser Anwendung
     }
 
     public override async Task Connect(

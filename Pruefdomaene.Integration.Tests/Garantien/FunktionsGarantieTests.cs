@@ -140,7 +140,7 @@ public class FunktionsGarantieTests
     }
 
     [Fact]
-    public async Task Zwei_Worker_mit_verschiedenen_Antworten_es_wirkt_die_erste()
+    public async Task Zwei_Antworten_auf_denselben_Eingang_es_wirkt_die_erste()
     {
         using var host = Cluster("garantie-funktion-worker", dienste: s =>
         {
@@ -154,30 +154,14 @@ public class FunktionsGarantieTests
             (await FrageAsync(host, new StelleRechnung(rechnung, Id<Kundenkonto>.Neu(), 500m), Guid.NewGuid()))!.Success.Should().BeTrue();
             var hand = host.Services.GetRequiredService<HandAusfuehrer>();
             HandEingang? offen = null;
-            await Warte(() => Task.FromResult((offen = hand.OffeneEingaenge.FirstOrDefault(e => e.Eingang.Stream == rechnung.Wert)) is not null),
+            await Warte(() => Task.FromResult((offen = hand.OffeneEingaenge.FirstOrDefault(e => e.Stream == rechnung.Wert)) is not null),
                 Frist, "der Eingang wartet nicht von Hand");
 
-            // Ein zweiter Worker hat denselben Eingang (etwa nach Ablauf der Lease des ersten) — er antwortet anders und schneller.
-            var system = host.Services.GetRequiredService<ActorSystem>();
-            var bote = new Bote(system.Cluster());
-            var baustein = global::Infrastructure.Komposition.Anwendung.Funktionen.Bausteine.Single(b => b.Name == nameof(IFreigabe));
-            await using var zweiter = new BausteinSitzung("zweiter-worker", n => n == baustein.Name ? baustein : null,
-                (_, _, _) => Task.FromResult<EingaengeZugeteilt?>(new EingaengeZugeteilt(new[] { offen!.Eingang })),
-                (b, nachricht) => { bote.Melde(FunktionsVermittlerActor.Identitaet(b.Typ), nachricht); return Task.CompletedTask; },
-                (_, _, _) => Task.CompletedTask, host.Services.GetRequiredService<IAusgabeAblage>(),
-                (b, e, fehler, teil, ausgaben) =>
-                {
-                    bote.Melde(FunktionsActor.IdentitaetFuer(b, e.Stream, global::Infrastructure.Projections.Konsum.Standard),
-                        EingangBeantwortet.Aus(e.Vorgang, fehler, teil, ausgaben));
-                    return Task.CompletedTask;
-                });
-            zweiter.Biete(new[] { (baustein.Name, 1) });
-            await Warte(() => Task.FromResult(zweiter.Laufende.Count == 1), Frist, "der zweite Worker bekommt den Eingang nicht");
-
-            (await zweiter.AntwortAsync(offen!.Eingang.Vorgang, new IAusgabe[] { new GibRechnungFrei(rechnung) }, null, default))
-                .Should().Be(ErgebnisAusgang.Geschrieben);
-            (await hand.AntworteAsync(offen.Eingang.Vorgang, new IAusgabe[] { new SperreRechnung(rechnung, "zu spät") }, null, default))
-                .Should().Be(ErgebnisAusgang.Ueberholt, "die erste Antwort ist festgehalten — die zweite verfällt");
+            // Ein zweiter Arbeiter antwortet auf denselben Eingang (seine Kennung) anders und schneller — die Werkstatt nimmt die erste Antwort.
+            var werkstatt = host.Services.GetRequiredService<Werkstatt>();
+            werkstatt.Ergebnis(offen!.Vorgang, new object[] { new GibRechnungFrei(rechnung) }, 0, true, null).Should().Be(Werkstattausgang.Angenommen);
+            (await hand.AntworteAsync(offen.Vorgang, new IAusgabe[] { new SperreRechnung(rechnung, "zu spät") }, null, default))
+                .Should().Be(ErgebnisAusgang.Unbekannt, "die erste Antwort beendete den Lauf — die zweite verfällt");
 
             await Warte(async () => (await Zustand<Rechnung>(host.Services, rechnung.Wert)).Freigegeben, Frist, "die erste Antwort wirkt nicht");
             await Task.Delay(TimeSpan.FromSeconds(2));

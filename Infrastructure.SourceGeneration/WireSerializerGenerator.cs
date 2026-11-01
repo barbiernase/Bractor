@@ -154,7 +154,7 @@ namespace Infrastructure.SourceGeneration
             EmitPoly(sb, "Antwort", "IQueryResponse", antworten, full);
             sb.AppendLine();
             // Nachrichten ohne Marker (docs/03 §3.1): die Folgen der Decide-Signaturen — eine Lesart mit dem Codegen (Nachrichtenform).
-            EmitPoly(sb, "Nachricht", "object", Nachrichtenform.Folgen(compilation), full);
+            EmitPoly(sb, "Nachricht", "object", Nachrichtenform.Alle(compilation), full);
             sb.AppendLine("}");
 
             context.AddSource("GeneratedWire.g.cs", sb.ToString());

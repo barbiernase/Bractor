@@ -67,6 +67,9 @@ public sealed class ReflectionTypeAnalyzer
         return results;
     }
 
+    /// <summary>Die Graphen bestimmter Typen (die Nachrichten ohne Marker, über ihre Signaturen gefunden statt über einen Marker).</summary>
+    public List<TypeNode> Analysiere(IEnumerable<Type> typen) => typen.Select(t => BuildTypeNode(_allTypes.GetValueOrDefault(DisplayName(t)) ?? t)).ToList();
+
     private TypeNode BuildTypeNode(Type type)
     {
         var fullName = DisplayName(type);

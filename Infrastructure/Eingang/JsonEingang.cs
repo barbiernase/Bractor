@@ -144,14 +144,14 @@ public static class JsonEingang
                 funktionen = hand?.Bausteine.Select(b => b.Name) ?? [],
                 eingaenge = (hand?.OffeneEingaenge ?? []).Select(e => new
                 {
-                    vorgang = e.Eingang.Vorgang,
+                    vorgang = e.Vorgang,
                     funktion = e.Funktion.Name,
-                    eingang = Darstellung(e.Eingang.Eingang),
-                    stream = e.Eingang.Stream,
-                    version = e.Eingang.Version,
-                    akteur = e.Eingang.Akteur,
+                    eingang = Darstellung(e.Eingang),
+                    stream = e.Stream,
+                    version = e.Version,
+                    akteur = e.Akteur,
                     seit = e.Seit,
-                    ausgaben = e.Funktion.Eingang(e.Eingang.Eingang.GetType())?.Ausgaben.Select(t => t.Name) ?? [],
+                    ausgaben = e.Funktion.Eingang(e.Eingang.GetType())?.Ausgaben.Select(t => t.Name) ?? [],
                 }),
             }, Json);
         });
@@ -163,11 +163,11 @@ public static class JsonEingang
             if (hand is null) return Results.Json(new { ok = false, fehler = "keine Funktion mit Laufort Hand in dieser Umgebung" }, Json, statusCode: 404);
             if (!body.TryGetProperty("vorgang", out var vg) || !Guid.TryParse(vg.GetString(), out var vorgang))
                 return Results.Json(new { ok = false, fehler = "vorgang fehlt" }, Json, statusCode: 400);
-            if (hand.OffeneEingaenge.FirstOrDefault(e => e.Eingang.Vorgang == vorgang) is not { } offen)
+            if (hand.OffeneEingaenge.FirstOrDefault(e => e.Vorgang == vorgang) is not { } offen)
                 return Results.Json(new { ok = false, fehler = $"Eingang {vorgang} wartet hier nicht (mehr)" }, Json, statusCode: 404);
             var fehler = body.TryGetProperty("fehler", out var fb) && fb.GetString() is { Length: > 0 } feb ? feb : null;
-            var moeglich = offen.Funktion.Eingang(offen.Eingang.Eingang.GetType())?.Ausgaben ?? [];
-            var ausgaben = new List<IAusgabe>();
+            var moeglich = offen.Funktion.Eingang(offen.Eingang.GetType())?.Ausgaben ?? [];
+            var ausgaben = new List<object>();
             if (fehler is null && body.TryGetProperty("ausgaben", out var liste) && liste.ValueKind == JsonValueKind.Array)
                 foreach (var a in liste.EnumerateArray())
                 {
@@ -175,7 +175,7 @@ public static class JsonEingang
                     var typ = moeglich.FirstOrDefault(x => x.Name == name);
                     if (typ is null)
                         return Results.Json(new { ok = false, fehler = $"{name} ist keine Ausgabe von {offen.Funktion.Name} ({string.Join(", ", moeglich.Select(x => x.Name))})" }, Json, statusCode: 400);
-                    try { ausgaben.Add((IAusgabe)EingangJson.Lies(a.TryGetProperty("daten", out var dd) ? dd : default, typ)); }
+                    try { ausgaben.Add(EingangJson.Lies(a.TryGetProperty("daten", out var dd) ? dd : default, typ)); }
                     catch (Exception e) when (e is JsonException or InvalidOperationException or NotSupportedException)
                     { return Results.Json(new { ok = false, fehler = $"{typ.Name} nicht lesbar: {e.Message}" }, Json, statusCode: 400); }
                 }

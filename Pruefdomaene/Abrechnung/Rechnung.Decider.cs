@@ -6,11 +6,12 @@ public partial class Rechnung
 {
     public partial class Decider : IDecider<Rechnung>
     {
-        /// <summary>Mit Zahlungsziel setzt die Rechnung eine Frist: die Uhr prüft nach Ablauf, ob gezahlt ist.</summary>
-        public IEnumerable<OneOf<RechnungGestellt, Frist<PruefeZahlung>, RechnungExistiert>> Decide(StelleRechnung cmd)
+        /// <summary>Mit Zahlungsziel setzt die Rechnung eine Frist: die Uhr prüft nach Ablauf, ob gezahlt ist. Die Freigabe hört die Folge.</summary>
+        public IEnumerable<OneOf<RechnungGestellt, Frist<PruefeZahlung>, RechnungExistiert, Freizugeben>> Decide(StelleRechnung cmd)
         {
             if (this.State.Existiert) { yield return new RechnungExistiert(cmd.AggregateId); yield break; }
             yield return new RechnungGestellt(cmd.AggregateId, cmd.Konto, cmd.Betrag);
+            yield return new Freizugeben(cmd.AggregateId, cmd.Betrag);
             if (cmd.ZahlungszielSekunden > 0)
                 yield return new Frist<PruefeZahlung>(new PruefeZahlung(cmd.AggregateId), TimeSpan.FromSeconds(cmd.ZahlungszielSekunden));
         }

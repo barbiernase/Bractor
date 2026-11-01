@@ -5,6 +5,9 @@ using Proto;
 
 namespace Infrastructure.Funktionen;
 
+/// <summary>An den Parent: so viele Kinder dürfen jetzt zugleich rechnen (draußen: die Slots aller Arbeiter auf diesem Knoten).</summary>
+public sealed record ParallelSetzen(int Parallel);
+
 /// <summary>
 /// Der PARENT einer Funktion auf einem Knoten (docs/04 §4.4, Actor <c>funktionen/&lt;Name&gt;</c>): seine Mailbox ist eine begrenzte Warteschlange,
 /// seine Kinder sind die Umsetzungen — bis <see cref="FunktionsOrtKonfig.Parallel"/>, erzeugt beim ersten Eingang oder beim Start
@@ -36,6 +39,7 @@ public sealed class FunktionsParent(
     private readonly Stack<PID> _frei = new();
     private readonly List<Guid> _auszutragen = new();
     private int _kinder;
+    private int _parallel = Math.Max(1, konfig.Parallel);
 
     /// <summary>Kein Passivieren mit offenen Eingängen.</summary>
     protected override bool Beschaeftigt => base.Beschaeftigt || _offen.Count > 0;
@@ -43,7 +47,7 @@ public sealed class FunktionsParent(
     protected override Task BeginneAsync(IContext context)
     {
         if (konfig.Vorwaermen)
-            while (_kinder < Math.Max(1, konfig.Parallel)) _frei.Push(Kind(context));
+            while (_kinder < _parallel) _frei.Push(Kind(context));
         return Task.CompletedTask;
     }
 
@@ -53,6 +57,7 @@ public sealed class FunktionsParent(
         {
             case EingangZustellen e: Nimm(context, e); break;
             case KindFertig f: Fertig(context, f); break;
+            case ParallelSetzen p: _parallel = Math.Max(1, p.Parallel); Verteile(context); break;
         }
         return Task.CompletedTask;
     }
@@ -82,12 +87,10 @@ public sealed class FunktionsParent(
 
     private void Verteile(IContext context)
     {
-        while (_schlange.Count > 0)
+        // Höchstens so viele rechnen zugleich, wie Parallel sagt (sinkt es, bleiben die übrigen Kinder frei, bis es wieder steigt).
+        while (_schlange.Count > 0 && _kinder - _frei.Count < _parallel)
         {
-            PID kind;
-            if (_frei.Count > 0) kind = _frei.Pop();
-            else if (_kinder < Math.Max(1, konfig.Parallel)) kind = Kind(context);
-            else return;
+            var kind = _frei.Count > 0 ? _frei.Pop() : Kind(context);
             context.Send(kind, new KindRechne(_schlange.Dequeue().Eingang));
         }
     }

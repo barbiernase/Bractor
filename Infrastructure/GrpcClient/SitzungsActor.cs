@@ -36,7 +36,8 @@ public sealed record SitzungsDienste(
     Konsum Konsum,
     HinweisNetz? HinweisNetz,
     IEventStoreRepository? Log,
-    ILogger Logger);
+    ILogger Logger,
+    Werkstatt? Werkstatt = null);
 
 /// <summary>
 /// Die Sitzung einer gRPC-Verbindung als Actor (docs/konzept-akteure.md §5): der <b>einzige Schreiber</b> auf den
@@ -47,8 +48,11 @@ public sealed record SitzungsDienste(
 /// erreichen sie über ihre Sitzungs-Id, gleich, was sie hört. Endet die Sitzung (Stream zu, Ablehnung am Handshake), beendet sie
 /// <see cref="Ende"/>; den Status bekommt der Client vom <see cref="CqrsClientServiceImpl"/>.
 /// </summary>
-public sealed class SitzungsActor : RahmenActor
+public sealed class SitzungsActor : RahmenActor, IArbeiter
 {
+    /// <summary>So lange darf ein Auftrag an einen Worker ohne Regung bleiben (das SDK meldet alle 10 s ein Lebenszeichen).</summary>
+    public static readonly TimeSpan GeduldDraussen = TimeSpan.FromSeconds(60);
+
     /// <summary>So lange sammelt die Sitzung „P hat S weiterverarbeitet“, bevor sie dem Client die betroffenen Queries nennt.</summary>
     public static readonly TimeSpan Zusammenfassen = TimeSpan.FromMilliseconds(200);
 
@@ -73,6 +77,8 @@ public sealed class SitzungsActor : RahmenActor
     private readonly ILogger _logger;
     private BausteinSitzung? _anbieter;
     private PID? _verteiler;
+    private ActorSystem? _system;
+    private PID? _selbst;
     // Antworten und Lebenszeichen der Funktionen draußen in der Reihenfolge des Clients, eine nach der anderen (eine zweite Antwort auf denselben
     //   Eingang sieht so, dass die erste ihn schon erledigt hat); gewartet wird neben der Mailbox.
     private readonly Queue<Func<IContext, CancellationToken, Task<Func<Task>?>>> _anbieterArbeit = new();
@@ -102,6 +108,8 @@ public sealed class SitzungsActor : RahmenActor
     protected override Task BeginneAsync(IContext context)
     {
         _verteiler = PID.FromAddress(context.System.Address, VerteilerActor.Name);
+        _system = context.System;
+        _selbst = context.Self;
         MeldeAn(context, new HashSet<Type>());   // gezielte Antworten schon vor dem Handshake
         if (_d.Ausgaben is { } ausgaben) _anbieter = BaueAnbieter(context, ausgaben);
         return Task.CompletedTask;
@@ -109,6 +117,8 @@ public sealed class SitzungsActor : RahmenActor
 
     protected override async Task BeimStoppenAsync(IContext context)
     {
+        // Funktionen vor dem Aggregat: der Arbeiter ist fort, seine laufenden Aufträge scheitern sofort und werden anderswo erneut gerechnet.
+        _d.Werkstatt?.Abmelden(this);
         // Funktionen draußen: Hol-Schleifen beenden; Laufendes nicht erledigt melden — die Leases laufen ab, der Vermittler gibt die Eingänge
         //   neu aus (anderer Träger, oder dieser nach dem Neuverbinden), und der Funktions-Actor sendet nur, was festgehalten ist.
         if (_anbieter is { } a)
@@ -213,8 +223,9 @@ public sealed class SitzungsActor : RahmenActor
                 await ArbeitsErgebnisAsync(context, m.ArbeitsErgebnis);
                 break;
             case Leitung.ClientMessage.MessageOneofCase.ArbeitLebt:
-                if (_anbieter is { } a && Guid.TryParse(m.ArbeitLebt.Vorgang, out var lebt))
-                    AnbieterArbeit(context, async (_, _) => { await a.LebtAsync(lebt); return null; });
+                if (!Guid.TryParse(m.ArbeitLebt.Vorgang, out var lebt)) break;
+                if (_d.Werkstatt?.Regt(lebt) == true) break;
+                if (_anbieter is { } a) AnbieterArbeit(context, async (_, _) => { await a.LebtAsync(lebt); return null; });
                 break;
             default:
                 _logger.LogWarning("{Session} unknown message type: {MessageCase}", _id, m.MessageCase);
@@ -531,8 +542,49 @@ public sealed class SitzungsActor : RahmenActor
             _logger);
     }
 
+    string IArbeiter.Name => _id;
+
+    TimeSpan? IArbeiter.Geduld => GeduldDraussen;
+
+    /// <summary>Ein Auftrag der Werkstatt an diesen Worker: als Server-Nachricht an den Actor (der einzige Schreiber am Stream).</summary>
+    void IArbeiter.Sende(AuftragDraussen a)
+    {
+        if (_system is null || _selbst is null) return;
+        var nutzlast = _d.Mapper.Nachricht(a.Eingang);
+        _system.Root.Send(_selbst, new ServerNachricht(new Leitung.ServerMessage
+        {
+            ArbeitsAuftrag = new Leitung.ArbeitsAuftrag
+            {
+                Vorgang = a.Vorgang.ToString(),
+                Korrelation = a.Korrelation ?? "",
+                Funktion = a.Funktion.Name,
+                Eingang = nutzlast,
+                Akteur = a.Herkunft.Akteur ?? "",
+                Stream = a.Herkunft.Stream.ToString(),
+                Version = a.Herkunft.Version,
+                ZeitUtc = a.Herkunft.Zeit.ToUnixTimeMilliseconds(),
+                Hinweis = a.Hinweis,
+            }
+        }));
+    }
+
     private async Task FunktionenAnbietenAsync(Leitung.FunktionenAnbieten request)
     {
+        // Funktionen vor dem Aggregat (docs/04 §4.4): die Sitzung ist ein Arbeiter in der Werkstatt dieses Knotens — mit angemeldetem Akteur nur, was er
+        //   rechnen darf.
+        var vorDem = Anwendung.Funktionen.Bausteine.Where(b => b.VorDemAggregat && b.Draussen).ToDictionary(b => b.Name, StringComparer.Ordinal);
+        var akteurVorDem = _sitzung.Akteur;
+        var verweigert = new List<string>();
+        foreach (var a in request.Angebote.Where(a => vorDem.ContainsKey(a.Funktion)))
+        {
+            if (_d.Werkstatt is null || akteurVorDem is not null && !akteurVorDem.DarfRechnen(vorDem[a.Funktion].Typ)) { verweigert.Add(a.Funktion); continue; }
+            _d.Werkstatt.Anmelden(this, a.Funktion, a.Slots);
+        }
+        if (verweigert.Count > 0)
+            await FehlerAsync("FUNKTION_NICHT_BEFUGT",
+                $"{akteurVorDem?.Name ?? "Die Sitzung"} darf nicht rechnen: {string.Join(", ", verweigert)} (IDarf<…> am Akteur bzw. am verkörperten Akteur des Client-Vertrags fehlt)", "");
+        request = new Leitung.FunktionenAnbieten { Angebote = { request.Angebote.Where(a => !vorDem.ContainsKey(a.Funktion)) } };
+        if (request.Angebote.Count == 0) return;
         if (_anbieter == null)
         {
             await FehlerAsync("FUNKTIONEN_NICHT_VERFUEGBAR", "Dieser Host hat keine Funktion, die draußen rechnet", "");
@@ -555,6 +607,20 @@ public sealed class SitzungsActor : RahmenActor
 
     private async Task ArbeitsErgebnisAsync(IContext context, Leitung.ArbeitsErgebnis request)
     {
+        if (_d.Werkstatt is { } werkstatt && Guid.TryParse(request.Vorgang, out var auftrag) && werkstatt.Laeuft(auftrag))
+        {
+            string? fehlerDraussen = string.IsNullOrEmpty(request.Fehler) ? null : request.Fehler;
+            List<object>? aus = null;
+            if (fehlerDraussen is null)
+            {
+                try { aus = request.Ausgaben.Select(_d.Mapper.Ausgabe).ToList(); }
+                catch (Exception ex) { fehlerDraussen = $"Antwort nicht lesbar: {ex.Message}"; }
+            }
+            var ausgang = werkstatt.Ergebnis(auftrag, aus, request.Ab, request.Fertig, fehlerDraussen);
+            if (ausgang == Werkstattausgang.Abgelehnt && fehlerDraussen is null)
+                await FehlerAsync("ARBEITS_ERGEBNIS_ABGELEHNT", $"Antwort auf {auftrag} außerhalb der Signatur oder außer der Reihe — der Eingang wird wiederholt", request.Vorgang);
+            return;
+        }
         if (_anbieter is not { } anbieter || !Guid.TryParse(request.Vorgang, out var vorgang))
         {
             await FehlerAsync("ARBEITS_ERGEBNIS_UNGUELTIG",
@@ -565,7 +631,7 @@ public sealed class SitzungsActor : RahmenActor
         List<IAusgabe>? ausgaben = null;
         if (fehler == null)
         {
-            try { ausgaben = request.Ausgaben.Select(_d.Mapper.Ausgabe).ToList(); }
+            try { ausgaben = request.Ausgaben.Select(a => (IAusgabe)_d.Mapper.Ausgabe(a)).ToList(); }
             catch (Exception ex) { fehler = $"Antwort nicht lesbar: {ex.Message}"; }
         }
         AnbieterArbeit(context, async (_, ct) =>

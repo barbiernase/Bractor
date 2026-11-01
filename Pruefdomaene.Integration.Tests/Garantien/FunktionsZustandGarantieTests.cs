@@ -147,8 +147,8 @@ public class FunktionsZustandGarantieTests
     [Fact]
     public async Task Eine_Funktion_draussen_hoert_einen_Hinweis_ueber_den_Weg_der_Leitung_nichts_wird_festgehalten()
     {
-        // Dieselbe Sitzung wie für einen Python-Worker (BausteinSitzung hinter dem Hand-Ausführer): Vermittler, Lease, ArbeitsAuftrag — nur die
-        //   Antwort auf einen Hinweis geht mit ihren Ausgaben zum Funktions-Actor, der sie sendet.
+        // Derselbe Weg wie für einen Python-Worker: der Hand-Ausführer ist ein Arbeiter in der Werkstatt, ein Kind der Funktion gibt ihm den Hinweis
+        //   und sendet die Ausgaben seiner Antwort — nichts wird festgehalten.
         using var host = Cluster("garantie-hinweis-draussen", dienste: s =>
         {
             s.AddSingleton(new BausteinBindung(nameof(IAusreisserpruefung), FunktionsLaufort.Hand));
@@ -161,20 +161,15 @@ public class FunktionsZustandGarantieTests
             await MissAsync(host, stelle, 3_000);
             var hand = host.Services.GetRequiredService<HandAusfuehrer>();
             HandEingang? offen = null;
-            await Warte(() => Task.FromResult((offen = hand.OffeneEingaenge.FirstOrDefault(e => e.Eingang.Stream == stelle.Wert)) is not null), Frist,
+            await Warte(() => Task.FromResult((offen = hand.OffeneEingaenge.FirstOrDefault(e => e.Stream == stelle.Wert)) is not null), Frist,
                 "der Hinweis erreicht die Funktion draußen nicht");
-            offen!.Eingang.IstHinweis.Should().BeTrue();
-            offen.Eingang.Eingang.Should().BeOfType<Merkmal>().Which.Wert.Should().Be(3_000);
-            offen.Eingang.Adresse.Should().Be(pruefungsAdresse(stelle), "die Adresse des Funktions-Actors reist mit (A8)");
+            offen!.Eingang.Should().BeOfType<Merkmal>().Which.Wert.Should().Be(3_000);
 
-            (await hand.AntworteAsync(offen.Eingang.Vorgang, new IAusgabe[] { new MeldeAusreisser(stelle, 3_000) }, null, default))
+            (await hand.AntworteAsync(offen.Vorgang, new IAusgabe[] { new MeldeAusreisser(stelle, 3_000) }, null, default))
                 .Should().Be(ErgebnisAusgang.Geschrieben);
             await Warte(async () => (await Log(host, stelle.Wert)).Any(e => e.Payload is AusreisserGemeldet), Frist, "die Antwort von draußen wirkt nicht");
-            (await Log(host, offen.Eingang.Vorgang)).Should().BeEmpty("eine Antwort auf einen Hinweis wird nicht festgehalten");
+            (await Log(host, offen.Vorgang)).Should().BeEmpty("eine Antwort auf einen Hinweis wird nicht festgehalten");
         }
         finally { await host.StopAsync(); }
-
-        static string pruefungsAdresse(Id<Messstelle> s) =>
-            Partitionierung.Von(s.Wert, global::Infrastructure.Projections.Konsum.Standard.Partitionen).ToString();
     }
 }

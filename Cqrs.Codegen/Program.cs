@@ -187,9 +187,12 @@ int Erzeuge(string wurzel)
     // ────────────────────────────────────────────────────────────────────────
     Console.WriteLine("Analysiere Typen (Proto)...");
     var analyzer = new ReflectionTypeAnalyzer(protoScanAssemblies);
+    // Die Nachrichten ohne Marker (Folgen, Zwischenergebnisse): Wertobjekte mit {Typ}Dto-Message, eine eigene Nutzlast-Kategorie (Nachrichtenform).
+    var nachrichten = Nachrichtenlesart.Alle(assemblies);
     var allGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IMessagePayload")
         .Concat(analyzer.AnalyzeTypesImplementing("Abstractions.IQuery"))
         .Concat(analyzer.AnalyzeTypesImplementing("Abstractions.IQueryResponse"))
+        .Concat(analyzer.Analysiere(nachrichten))
         .ToList();
 
     var aggregator = new TypeAggregator();
@@ -200,6 +203,8 @@ int Erzeuge(string wurzel)
     var eventTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Event");
     var queryTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Query");
     var queryResponseTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "QueryResponse");
+    var nachrichtNamen = nachrichten.Select(ReflectionTypeAnalyzer.DisplayName).ToHashSet(StringComparer.Ordinal);
+    var nachrichtTypes = objectTypes.Where(t => nachrichtNamen.Contains(t.Node.FullName)).ToList();
 
     if (Hat(Art.Proto))
     {
@@ -253,7 +258,7 @@ int Erzeuge(string wurzel)
         // ────────────────────────────────────────────────────────────────────
         // 6. Nutzlast-Tabelle → Python (typ → DTO-Klasse; dieselben Kategorien und dieselbe Namensregel wie GeneratedNutzlast in C#)
         // ────────────────────────────────────────────────────────────────────
-        var (nutzlastPy, nutzlastAnzahl) = PythonNutzlastEmitter.Emit(commandTypes, eventTypes, queryTypes, queryResponseTypes);
+        var (nutzlastPy, nutzlastAnzahl) = PythonNutzlastEmitter.Emit(commandTypes, eventTypes, queryTypes, queryResponseTypes, nachrichtTypes);
         WriteIfChanged(Pfad(Art.NutzlastTabelle), nutzlastPy);
         Console.WriteLine($"✅ {Pfad(Art.NutzlastTabelle)} ({nutzlastAnzahl} Nutzlast-Typen)");
     }

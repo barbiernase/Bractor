@@ -206,7 +206,9 @@ class FunktionsAngebot(betterproto.Message):
 @dataclass(eq=False, repr=False)
 class ArbeitsAuftrag(betterproto.Message):
     """
-    Ein Eingang einer Funktion: der Schlüssel „Funktion, Eingang“ (vorgang), die Funktion, das Event und seine Herkunft; ab = so viele Ausgaben
+    Ein Eingang einer Funktion: der Schlüssel „Funktion, Eingang“ (vorgang), die Funktion, das Event und seine Herkunft. Eine Funktion vor dem Aggregat
+     (docs/04 §4.4) bekommt eine Nachricht ohne Marker (Folge, Zwischenergebnis), einen Hinweis oder die Antwort auf einen eigenen Command; vorgang ist die
+     Kennung des Eingangs (gleich bei jeder Wiederholung), ab ist dort immer 0 — es wird nichts festgehalten. Sonst (Funktion mit Log-Eingängen): ab = so viele Ausgaben
      (Strom) sind schon festgehalten — ein neuer Träger lässt sie aus und macht beim nächsten Stück weiter. hinweis = der Eingang ist ein Hinweis aus
      dem Hinweis-Netz (docs/04 §4.4): höchstens einmal, nichts wird festgehalten — die Antwort kommt als Ganzes (auch ein Strom),
      ihre Commands und Hinweise sendet der Funktions-Actor; stream/version nennen den Eingang, aus dem der Hinweis hervorging.
@@ -227,12 +229,14 @@ class ArbeitsAuftrag(betterproto.Message):
 @dataclass(eq=False, repr=False)
 class FunktionsAusgabe(betterproto.Message):
     """
-    Eine Ausgabe in der Reihenfolge der Funktion: ein Command, ein Event oder ein Hinweis.
+    Eine Ausgabe in der Reihenfolge der Funktion: ein Command, ein Event, ein Hinweis oder ein Zwischenergebnis (eine Nachricht ohne Marker,
+     die an die Funktionen geht, die sie hören — nie ins Log).
     """
 
     command: "Nutzlast" = betterproto.message_field(1, group="art")
     event: "Nutzlast" = betterproto.message_field(2, group="art")
     hinweis: "Nutzlast" = betterproto.message_field(3, group="art")
+    zwischenergebnis: "Nutzlast" = betterproto.message_field(4, group="art")
 
 
 @dataclass(eq=False, repr=False)

@@ -12,8 +12,8 @@ public sealed record KindRechne(EingangZustellen Eingang);
 public sealed record KindFertig(Guid Kennung, string? Fehler, PID Kind);
 
 /// <summary>
-/// Ein KIND einer Funktion (docs/04 §4.4): eine Umsetzung mit ihrer Aktivierung (Bereich, Dienste, Zustand, Lebenszyklus), ein Eingang zugleich. Es
-/// rechnet das <c>Auf</c> und bringt jede Ausgabe hinaus — einen Command über den Emitter mit der Id aus Eingang, Funktion und Stelle (die Inbox
+/// Ein KIND einer Funktion (docs/04 §4.4): eine Umsetzung mit ihrer Aktivierung (Bereich, Dienste, Zustand, Lebenszyklus), ein Eingang zugleich — oder,
+/// draußen, der Platz eines Arbeiters in der <see cref="Werkstatt"/>. Es rechnet das <c>Auf</c> und bringt jede Ausgabe hinaus — einen Command über den Emitter mit der Id aus Eingang, Funktion und Stelle (die Inbox
 /// verwirft eine Wiederholung), ein Zwischenergebnis an jede Funktion, die es hört (gewartet wird, bis sie fertig ist), einen Hinweis verlierbar.
 /// Fertig ist der Eingang, wenn alle Commands beantwortet und alle Nachfolger fertig sind; das meldet das Kind seinem Parent.
 /// </summary>
@@ -39,6 +39,7 @@ public sealed class FunktionsKindActor(
 
     protected override async Task BeginneAsync(IContext context)
     {
+        if (traeger.Aktivierung is null) return;   // draußen: ein Arbeiter rechnet
         _aktivierung = traeger.Aktivierung(dienste);
         await _aktivierung.BeginneAsync();
         await _aktivierung.AktiviereAsync(Stopp);
@@ -87,7 +88,10 @@ public sealed class FunktionsKindActor(
     {
         using var spur = Spur.Von(ursache, WirkerId.FuerFunktion(traeger.Name));
         var stelle = 0;
-        await foreach (var a in traeger.Rechne(_aktivierung!.Umsetzung, nachricht, herkunft, bereich, ct).WithCancellation(ct))
+        var ausgaben = traeger.Draussen is { } draussen
+            ? draussen(kennung, nachricht, herkunft, e.Korrelation, e.Art == Eingangsart.Hinweis, ct)
+            : traeger.Rechne!(_aktivierung!.Umsetzung, nachricht, herkunft, bereich, ct);
+        await foreach (var a in ausgaben.WithCancellation(ct))
         {
             var i = stelle++;
             switch (a)

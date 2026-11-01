@@ -65,9 +65,9 @@ namespace Infrastructure.SourceGeneration
             /// <summary>
             /// Die Funktion steht VOR dem Aggregat (docs/04 §4.4): keiner ihrer Eingänge ist ein Event im Log — nur Nachrichten ohne Marker und Hinweise.
             /// Sie liest nie das Log; Eingänge bringt ihr die Laufzeit über Wurzel, Parent und Kinder. Im Umbau laufen Funktionen mit Log-Eingängen
-            /// und solche, die nur Hinweise hören, noch auf dem Funktions-Actor je Partition.
+            /// noch auf dem Funktions-Actor je Partition.
             /// </summary>
-            public bool VorDemAggregat => Aufs.Any(a => a.Nachricht);
+            public bool VorDemAggregat => Aufs.Any(a => a.Nachricht || a.Hinweis);
 
             /// <summary>Ein Event-Eingang einer Funktion vor dem Aggregat ist eine ANTWORT: ein Ziel entschied es auf einen ihrer Commands hin; sie hört
             /// es nur so, nie aus dem Log (dass einer ihrer Commands es entscheiden kann, prüft das Gesamtbild).</summary>

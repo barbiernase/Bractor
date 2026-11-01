@@ -59,8 +59,13 @@ namespace Infrastructure.SourceGeneration
                 var queryGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IQuery");
                 var queryResponseGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IQueryResponse");
 
+                // Nachrichten ohne Marker (Folgen, Zwischenergebnisse — Nachrichtenform): Eingänge und Ausgaben von Funktionen draußen. Sie werden
+                //   Wertobjekte mit {Typ}Dto-Message und reisen als eigene Nutzlast-Kategorie.
+                var nachrichten = Nachrichtenform.Alle(context.Compilation).Select(n => n.ToDisplayString()).ToList();
+                var nachrichtGraphs = nachrichten.Select(analyzer.AnalyzeType).ToList();
+
                 // Alle Graphen kombinieren
-                var allGraphs = graphs.Concat(queryGraphs).Concat(queryResponseGraphs).ToList();
+                var allGraphs = graphs.Concat(queryGraphs).Concat(queryResponseGraphs).Concat(nachrichtGraphs).ToList();
                 
                 debugInfo.Add($"Gefundene Type-Graphen: {allGraphs.Count}");
 
@@ -84,6 +89,7 @@ namespace Infrastructure.SourceGeneration
                 GenerateDebugOutput(context, debugInfo, objectTypes, commandTypes, eventTypes, queryTypes, queryResponseTypes);
 
                 // 4. Generiere echten Mapper Code
+                _nachrichten = objectTypes.Where(t => nachrichten.Contains(t.Node.FullName)).ToList();
                 GenerateMapperCode(context, objectTypes, commandTypes, eventTypes, queryTypes, queryResponseTypes);
             }
             catch (Exception ex)
@@ -172,6 +178,9 @@ namespace Infrastructure.SourceGeneration
             context.AddSource("ProtoMessageMapper.Generated.cs", sb.ToString());
         }
 
+        /// <summary>Die Nachrichten ohne Marker unter den Wertobjekten (eigene Nutzlast-Kategorie).</summary>
+        private List<TypeAggregationResult> _nachrichten = new List<TypeAggregationResult>();
+
         private void GenerateNutzlastKlasse(StringBuilder sb)
         {
             const string N = "global::Cqrs.Leitung.Nutzlast";
@@ -185,6 +194,33 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"        public {iface} {art}({N} n) => {helper}.MapToDomain(n);");
                 sb.AppendLine($"        public {N} Packe{art}({iface} x) => {helper}.MapToDto(x);");
             }
+            sb.AppendLine($"        public object Nachricht({N} n) => ProtoNachrichtMappingHelpers.MapToDomain(n);");
+            sb.AppendLine($"        public {N} PackeNachricht(object x) => ProtoNachrichtMappingHelpers.MapToDto(x);");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+
+            // Die Nachrichten ohne Marker: Typname ↔ Wertobjekt über die Helfer der Wertobjekte.
+            sb.AppendLine("    internal static class ProtoNachrichtMappingHelpers");
+            sb.AppendLine("    {");
+            sb.AppendLine($"        public static object MapToDomain({N} n) => n.Typ switch");
+            sb.AppendLine("        {");
+            foreach (var t in _nachrichten)
+            {
+                var name = NameSanitizer.SanitizeName(GetSimpleTypeName(t.Node.FullName));
+                sb.AppendLine($"            \"{NameSanitizer.NutzlastTyp(t.Node.FullName)}\" => ProtoValueObjectHelpers.Map{name}({name}Dto.Parser.ParseFrom(n.Daten)),");
+            }
+            sb.AppendLine("            _ => throw new NotSupportedException($\"Unknown nachricht type: {n.Typ}\"),");
+            sb.AppendLine("        };");
+            sb.AppendLine();
+            sb.AppendLine($"        public static {N} MapToDto(object x) => x switch");
+            sb.AppendLine("        {");
+            foreach (var t in _nachrichten)
+            {
+                var simple = GetSimpleTypeName(t.Node.FullName);
+                sb.AppendLine($"            {simple} v => new {N} {{ Typ = \"{NameSanitizer.NutzlastTyp(t.Node.FullName)}\", Daten = global::Google.Protobuf.MessageExtensions.ToByteString(ProtoValueObjectHelpers.MapToDto(v)) }},");
+            }
+            sb.AppendLine("            _ => throw new NotSupportedException($\"Unknown nachricht type: {x.GetType().Name}\"),");
+            sb.AppendLine("        };");
             sb.AppendLine("    }");
             sb.AppendLine();
         }

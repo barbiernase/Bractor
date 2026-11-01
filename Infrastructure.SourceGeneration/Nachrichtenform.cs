@@ -52,6 +52,32 @@ namespace Infrastructure.SourceGeneration
                 .Where(m => !m.IsStatic && m.DeclaredAccessibility == Accessibility.Public && m.Parameters.Length > 0
                             && m.Parameters[0].Type.AllInterfaces.Any(i => i.ToDisplayString() == A + "ICommand"));
 
+        /// <summary>Ist <paramref name="t"/> eine Funktion (Klasse oder Schnittstelle, die <c>IFunktion</c> erweitert)?</summary>
+        public static bool IstFunktion(INamedTypeSymbol t) =>
+            (t.TypeKind == TypeKind.Class || t.TypeKind == TypeKind.Interface) && t.ToDisplayString() != A + "IFunktion"
+            && t.AllInterfaces.Any(i => i.ToDisplayString() == A + "IFunktion");
+
+        /// <summary>Die schlichten Typen der <c>Auf</c> einer Funktion: Eingänge (Folgen, Zwischenergebnisse) und Ausgaben (Zwischenergebnisse).</summary>
+        public static IEnumerable<INamedTypeSymbol> VonFunktion(INamedTypeSymbol funktion) =>
+            funktion.GetMembers("Auf").OfType<IMethodSymbol>()
+                .Where(m => !m.IsStatic && m.Parameters.Length > 0)
+                .SelectMany(m => new[] { m.Parameters[0].Type }.Concat(Faelle(m.ReturnType)))
+                .Where(IstSchlicht).OfType<INamedTypeSymbol>();
+
+        /// <summary>
+        /// Alle Nachrichten ohne Marker der Anwendung — die Folgen der Decides und die schlichten Ein- und Ausgaben der Funktionen —, nach Namen
+        /// sortiert, jede einmal. Sie reisen im Cluster (Wire-JSON) und über die Leitung (Nutzlast, {Typ}Dto-Message) zu Funktionen draußen.
+        /// </summary>
+        public static List<INamedTypeSymbol> Alle(Compilation c)
+        {
+            var aus = Folgen(c);
+            foreach (var t in Vertragsassemblies.Typen(c).Where(IstFunktion))
+                foreach (var n in VonFunktion(t))
+                    if (!aus.Contains(n, SymbolEqualityComparer.Default)) aus.Add(n);
+            aus.Sort((a, b) => string.Compare(a.Name, b.Name, System.StringComparison.Ordinal));
+            return aus;
+        }
+
         /// <summary>Alle Folgen der Anwendung (eigene und referenzierte Vertrags-Assemblies), nach Namen sortiert, jede einmal.</summary>
         public static List<INamedTypeSymbol> Folgen(Compilation c)
         {

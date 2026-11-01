@@ -18,4 +18,8 @@ public interface INutzlastTabelle
     Nutzlast PackeEvent(IEvent evt);
     Nutzlast PackeQuery(IQuery query);
     Nutzlast PackeAntwort(IQueryResponse antwort);
+
+    /// <summary>Eine Nachricht ohne Marker (eine Folge, ein Zwischenergebnis — Eingang oder Ausgabe einer Funktion draußen).</summary>
+    object Nachricht(Nutzlast n);
+    Nutzlast PackeNachricht(object nachricht);
 }
