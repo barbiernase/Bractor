@@ -316,6 +316,7 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
             Infrastructure.Persistence.IdSerialisierung.Registriere(opts);
             InboxTabelle.Registriere(opts);
             Infrastructure.Uhr.FristVerzeichnis.Registriere(opts);
+            Infrastructure.Eingaenge.OffeneEingaenge.Registriere(opts);
         });
 
         public void Dispose() { Store.Dispose(); Rich.Dispose(); }
