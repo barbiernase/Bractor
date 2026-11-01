@@ -28,7 +28,8 @@ def _worker():
 
 
 def _angefordert(epochen: int = 3):
-    return g.TrainingAngefordertDto(
+    return g.TrainingZuRechnenDto(
+        lauf=str(uuid4()),
         datensatz_id=str(uuid4()),
         datensatz_version=1,
         hyperparameter=g.HyperparameterDto(

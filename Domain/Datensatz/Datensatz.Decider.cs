@@ -28,7 +28,7 @@ public partial class Datensatz
         // RANGE — Variante A (zweiphasig)
         // ═══════════════════════════════════════════════════
 
-        public IEnumerable<OneOf<RangeAngefordert, DatensatzBereitsEingefroren>> Decide(
+        public IEnumerable<OneOf<RangeAngefordert, DatensatzBereitsEingefroren, RangeAufzuloesen>> Decide(
             FuegeRangeHinzu cmd)
         {
             if (this.State.IstEingefroren)
@@ -40,6 +40,7 @@ public partial class Datensatz
             // Rein: keine Suche im Decider. Nur die Kriterien als Provenienz festhalten;
             // der server-seitige Resolver löst sie auf.
             yield return new RangeAngefordert(cmd.Kriterien);
+            yield return new RangeAufzuloesen(cmd.AggregateId, cmd.Kriterien);
         }
 
         public IEnumerable<OneOf<PaareAufgenommen, RangeLeer, DatensatzBereitsEingefroren>> Decide(
@@ -123,7 +124,7 @@ public partial class Datensatz
         // EINFRIEREN — zweiphasig
         // ═══════════════════════════════════════════════════
 
-        public IEnumerable<OneOf<EinfrierenAngefordert, DatensatzBereitsEingefroren, DatensatzLeer>> Decide(
+        public IEnumerable<OneOf<EinfrierenAngefordert, DatensatzBereitsEingefroren, DatensatzLeer, EinfrierenAbzuschliessen>> Decide(
             FriereEin cmd)
         {
             if (this.State.IstEingefroren)
@@ -139,8 +140,9 @@ public partial class Datensatz
             }
 
             // Autoritative Mitgliedschaft + Split aus dem State mitgeben (Invariante 1).
-            yield return new EinfrierenAngefordert(
-                this.State.DraftMitglieder.ToList(), this.State.Split);
+            var mitglieder = this.State.DraftMitglieder.ToList();
+            yield return new EinfrierenAngefordert(mitglieder, this.State.Split);
+            yield return new EinfrierenAbzuschliessen(cmd.AggregateId, mitglieder, this.State.Split);
         }
 
         public IEnumerable<OneOf<DatensatzEingefroren, DatensatzBereitsEingefroren, DatensatzLeer>> Decide(

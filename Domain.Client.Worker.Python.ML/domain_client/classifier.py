@@ -20,7 +20,7 @@ import torch
 from cqrs_client.funktion import Herkunft
 from domain_client.generated import (
     BildVerfuegbarDto,
-    ImagePairKomplettDto,
+    PaarZuBeurteilenDto,
     KlassifiziereBildPaarDurchKiDto,
     ModellAktiviertDto,
 )
@@ -83,7 +83,7 @@ class ImageClassifier(KlassifikationsWorkerBasis[ClassifierState]):
         log.info("BildVerfuegbar: %s %s", str(agg_id)[:8], version_name)
 
     async def bildpaar_beurteilung(
-        self, event: ImagePairKomplettDto, h: Herkunft, state: ClassifierState
+        self, event: PaarZuBeurteilenDto, h: Herkunft, state: ClassifierState
     ) -> KlassifiziereBildPaarDurchKiDto | None:
         agg_id = UUID(h.stream)
         pair_bilder = state.bilder.get(agg_id, {})

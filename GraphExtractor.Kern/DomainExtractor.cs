@@ -1605,6 +1605,9 @@ public sealed partial class DomainExtractor
                 l.Add($"Frist<{f.TypeArguments[0].Fq()}>");
             else if (ta is INamedTypeSymbol et && Sym.Implements(et, _iEvent))
                 l.Add(et.Fq());
+            // Eine Folge (docs/03 §3.1): ein schlichter Record der Signatur — sie gehört zum Ausgang wie ein Event (Nachrichtenform).
+            else if (ta is INamedTypeSymbol folge && Infrastructure.SourceGeneration.Nachrichtenform.IstSchlicht(folge))
+                l.Add(folge.Fq());
         return l;
     }
 

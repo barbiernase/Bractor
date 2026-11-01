@@ -32,7 +32,7 @@ from typing import Callable
 
 from cqrs_client.funktion import Herkunft
 from domain_client.generated import (
-    TrainingAngefordertDto,
+    TrainingZuRechnenDto,
     TrainingAbgebrochenDto,
     HoleDatensatzSamplesDto,
     DatensatzSampleDto,
@@ -73,7 +73,7 @@ class TrainingWorker(TrainingsWorkerBasis[TrainingState]):
     # ═══════════════════════════════════════════════════
 
     async def training(
-        self, event: TrainingAngefordertDto, h: Herkunft, state: TrainingState
+        self, event: TrainingZuRechnenDto, h: Herkunft, state: TrainingState
     ):
         training_id = str(h.stream)
         state.laeufe += 1

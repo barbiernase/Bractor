@@ -133,7 +133,7 @@ public class PythonQuelleTests
         var impl = PythonClients.Lies(wurzel)["TrainingsWorker"].Single(i => i.Klasse == "TrainingWorker");
         impl.Datei.Should().Be("Domain.Client.Worker.Python.ML/domain_client/training_worker.py");
         var r = impl.Rumpfe.Single(x => x.Funktion == "ITraining");
-        (r.Event, r.Methode).Should().Be(("TrainingAngefordert", "training"));
+        (r.Event, r.Methode).Should().Be(("TrainingZuRechnen", "training"));
         r.Ausgaenge.Should().Contain("MeldeTrainingBegonnen");
         r.Rumpf.Should().NotBeNullOrWhiteSpace("der Rumpf ist die Logik draußen");
     }

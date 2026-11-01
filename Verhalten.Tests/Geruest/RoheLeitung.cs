@@ -141,7 +141,12 @@ public sealed class RoheLeitung : IAsyncDisposable
     /// <summary>Die Fehler, die der Server dieser Sitzung meldete (Code).</summary>
     public IEnumerable<string> Fehler => _empfangen.Where(m => m.Error != null).Select(m => m.Error.Code);
 
-    public static IEvent Eingang(ArbeitsAuftrag a) => Tabelle.Event(a.Eingang);
+    /// <summary>Der Eingang eines Auftrags: ein Event (Antwort, Hinweis) oder eine Nachricht ohne Marker (Folge, Zwischenergebnis).</summary>
+    public static object Eingang(ArbeitsAuftrag a)
+    {
+        try { return Tabelle.Event(a.Eingang); }
+        catch (NotSupportedException) { return Tabelle.Nachricht(a.Eingang); }
+    }
 
     public async Task<ArbeitsAuftrag> WarteAufEingangAsync(Func<ArbeitsAuftrag, bool> bedingung, TimeSpan frist, string meldung)
     {

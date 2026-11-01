@@ -151,6 +151,21 @@ message ImagePairFilterDto {
     int32 seiten_groesse = 11;
 }
 
+message EinfrierenAbzuschliessenDto {
+    string datensatz = 1;
+    repeated string mitglieder = 2;
+    SplitKonfigDto split = 3;
+}
+
+message RangeAufzuloesenDto {
+    string datensatz = 1;
+    RangeKriterienDto kriterien = 2;
+}
+
+message PaarZuBeurteilenDto {
+    string paar = 1;
+}
+
 message BildEingelesenDto {
     string dateiname = 1;
     string pfad = 2;
@@ -179,6 +194,17 @@ message VorschauErstelltDto {
     int32 breite_pixel = 6;
     int32 hoehe_pixel = 7;
     int64 erstellt_am = 8;
+}
+
+message TeilFertigDto {
+    string sammelvorgang = 1;
+}
+
+message TrainingZuRechnenDto {
+    string lauf = 1;
+    string datensatz_id = 2;
+    int32 datensatz_version = 3;
+    HyperparameterDto hyperparameter = 4;
 }
 
 // ============================================================================

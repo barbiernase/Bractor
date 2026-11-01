@@ -251,9 +251,13 @@ rechnet den Eingang erneut, der durable Rand bringt ihn wieder. Kein Vermittler,
 `FunktionsAusgabe.zwischenergebnis`. Prüfdomäne: `Nachschub` (Folge `Unterschritten`), `Gutschrift` (`Gutschreibung`), `Mahnwesen` (`Mahnfall`),
 `Merkmalsbildung` (`NeuerWert`), `Auftragsabwicklung` (`AuftragAbzuwickeln` und Antworten), `Verteilabwicklung` (`VerteilungAbzuwickeln` und
 Antworten), `IFreigabe` (`Freizugeben`; im Host der `Freigabeautomat`, draußen von Hand), `IAusreisserpruefung` und `Schaetzer` (Hinweis `Merkmal`),
-`Importannahme` (Quell-Nachricht `ImportAngefordert`). Beispieldomäne: die Bildkette — `IBildEinlesen` (Quell-Nachricht `DateiErkannt`) →
-`BildEingelesen` → `IBildVerkleinerung` → `BildVerkleinert` → `IKontrastausgleich` → `VorschauErstellt` → `Bildeingang` → `NimmBildAuf`; die
-Zwischenergebnisse gehen nie ins Log, „nicht lesbar“ ist ein Hinweis.
+`Importannahme` (Quell-Nachricht `ImportAngefordert`), `Importlauf` (Folge `ImportZuLaufen`, ein Strom von Commands). Beispieldomäne: die Bildkette —
+`IBildEinlesen` (Quell-Nachricht `DateiErkannt`) → `BildEingelesen` → `IBildVerkleinerung` → `BildVerkleinert` → `IKontrastausgleich` →
+`VorschauErstellt` → `Bildeingang` → `NimmBildAuf`; die Zwischenergebnisse gehen nie ins Log, „nicht lesbar“ ist ein Hinweis. Dazu `RangeAufloesung`
+(`RangeAufzuloesen`), `MitgliederEinfrieren` (`EinfrierenAbzuschliessen`), `TeilFertigMeldung` (`TeilFertig`), `IBildpaarBeurteilung`
+(`PaarZuBeurteilen`, draußen beim Klassifikations-Worker) und `ITraining` (`TrainingZuRechnen`, draußen beim Trainings-Worker, ein Strom). Das
+Event daneben (`RangeAngefordert`, `ImagePairKomplett`, `TrainingAngefordert` …) bleibt ein Fakt im Log für Projektionen und Clients. Keine Funktion
+der beiden Domänen hört mehr ein Event aus dem Log; der Funktions-Actor unten fällt mit dem nächsten Schritt weg.
 
 **Funktions-Actor** (`Infrastructure/Funktionen/FunktionsActor.cs`, ein `RahmenActor` je Funktion und Adresse — die Partition, bzw. die eine
 Adresse einer Funktion mit `[EineAdresse]`, die dann alle Partitionen liest): liest seine Seite ab der

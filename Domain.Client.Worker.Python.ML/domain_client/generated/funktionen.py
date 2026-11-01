@@ -16,13 +16,13 @@ from . import (
     BildNichtLesbarDto,
     BildVerkleinertDto,
     DateiErkanntDto,
-    ImagePairKomplettDto,
     KlassifiziereBildPaarDurchKiDto,
     MeldeFortschrittDto,
     MeldeTrainingAbgeschlossenDto,
     MeldeTrainingBegonnenDto,
     MeldeTrainingGescheitertDto,
-    TrainingAngefordertDto,
+    PaarZuBeurteilenDto,
+    TrainingZuRechnenDto,
     VorschauErstelltDto,
 )
 
@@ -70,30 +70,30 @@ class KontrastausgleichBasis(FunktionsBasis):
 
 
 class BildpaarBeurteilungBasis(FunktionsBasis):
-    """Funktion Domain.Pipeline.ImagePair.IBildpaarBeurteilung: ImagePairKomplett → KlassifiziereBildPaarDurchKi."""
+    """Funktion Domain.Pipeline.ImagePair.IBildpaarBeurteilung: PaarZuBeurteilen → KlassifiziereBildPaarDurchKi."""
 
     FUNKTION: ClassVar[str] = "IBildpaarBeurteilung"
     EINGAENGE: ClassVar[dict] = {
-        ImagePairKomplettDto: Eingang("auf_image_pair_komplett", {KlassifiziereBildPaarDurchKiDto: Ausgabe.COMMAND}),
+        PaarZuBeurteilenDto: Eingang("auf_paar_zu_beurteilen", {KlassifiziereBildPaarDurchKiDto: Ausgabe.COMMAND}),
     }
 
     @abstractmethod
-    async def auf_image_pair_komplett(self, e: ImagePairKomplettDto, h: Herkunft) -> KlassifiziereBildPaarDurchKiDto | None:
-        """KlassifiziereBildPaarDurchKi Auf(ImagePairKomplett e) — höchstens eine Ausgabe"""
+    async def auf_paar_zu_beurteilen(self, e: PaarZuBeurteilenDto, h: Herkunft) -> KlassifiziereBildPaarDurchKiDto | None:
+        """KlassifiziereBildPaarDurchKi Auf(PaarZuBeurteilen e) — höchstens eine Ausgabe"""
         ...
 
 
 class TrainingBasis(FunktionsBasis):
-    """Funktion Domain.Pipeline.Trainingslauf.ITraining: TrainingAngefordert → MeldeTrainingBegonnen | MeldeFortschritt | MeldeTrainingAbgeschlossen | MeldeTrainingGescheitert (Strom)."""
+    """Funktion Domain.Pipeline.Trainingslauf.ITraining: TrainingZuRechnen → MeldeTrainingBegonnen | MeldeFortschritt | MeldeTrainingAbgeschlossen | MeldeTrainingGescheitert (Strom)."""
 
     FUNKTION: ClassVar[str] = "ITraining"
     EINGAENGE: ClassVar[dict] = {
-        TrainingAngefordertDto: Eingang("auf_training_angefordert", {MeldeTrainingBegonnenDto: Ausgabe.COMMAND, MeldeFortschrittDto: Ausgabe.COMMAND, MeldeTrainingAbgeschlossenDto: Ausgabe.COMMAND, MeldeTrainingGescheitertDto: Ausgabe.COMMAND}, strom=True),
+        TrainingZuRechnenDto: Eingang("auf_training_zu_rechnen", {MeldeTrainingBegonnenDto: Ausgabe.COMMAND, MeldeFortschrittDto: Ausgabe.COMMAND, MeldeTrainingAbgeschlossenDto: Ausgabe.COMMAND, MeldeTrainingGescheitertDto: Ausgabe.COMMAND}, strom=True),
     }
 
     @abstractmethod
-    async def auf_training_angefordert(self, e: TrainingAngefordertDto, h: Herkunft) -> AsyncIterator[MeldeTrainingBegonnenDto | MeldeFortschrittDto | MeldeTrainingAbgeschlossenDto | MeldeTrainingGescheitertDto]:
-        """IAsyncEnumerable<OneOf<MeldeTrainingBegonnen, MeldeFortschritt, MeldeTrainingAbgeschlossen, MeldeTrainingGescheitert>> Auf(TrainingAngefordert e) — Strom: beliebig viele yields"""
+    async def auf_training_zu_rechnen(self, e: TrainingZuRechnenDto, h: Herkunft) -> AsyncIterator[MeldeTrainingBegonnenDto | MeldeFortschrittDto | MeldeTrainingAbgeschlossenDto | MeldeTrainingGescheitertDto]:
+        """IAsyncEnumerable<OneOf<MeldeTrainingBegonnen, MeldeFortschritt, MeldeTrainingAbgeschlossen, MeldeTrainingGescheitert>> Auf(TrainingZuRechnen e) — Strom: beliebig viele yields"""
         ...
 
 

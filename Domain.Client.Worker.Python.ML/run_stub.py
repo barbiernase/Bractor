@@ -23,7 +23,7 @@ from cqrs_client.funktion import Herkunft
 from domain_client.domain_registry import create_registry
 from domain_client.generated import (
     BildVerfuegbarDto,
-    ImagePairKomplettDto,
+    PaarZuBeurteilenDto,
     KlassifiziereBildPaarDurchKiDto,
     ModellAktiviertDto,
 )
@@ -61,7 +61,7 @@ class StubClassifier(KlassifikationsWorkerBasis[StubState]):
         state.bilder[agg][event.version] = event.pfad
         log.info("📥 BildVerfuegbar #%d: %s %s → %s", state.events, str(agg)[:8], v, event.pfad)
 
-    async def bildpaar_beurteilung(self, event: ImagePairKomplettDto, h: Herkunft, state: StubState):
+    async def bildpaar_beurteilung(self, event: PaarZuBeurteilenDto, h: Herkunft, state: StubState):
         state.events += 1
         agg = UUID(h.stream)
         pfade = state.bilder.get(agg, {})

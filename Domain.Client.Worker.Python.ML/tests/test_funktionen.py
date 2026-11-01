@@ -67,7 +67,7 @@ def test_generat_bindet_eingaenge_und_ausgaben_an_die_betterproto_typen():
     e = BildEinlesenBasis.EINGAENGE[g.DateiErkanntDto]
     assert e.methode == "auf_datei_erkannt" and not e.strom
     assert e.ausgaben == {g.BildEingelesenDto: Ausgabe.ZWISCHENERGEBNIS, g.BildNichtLesbarDto: Ausgabe.HINWEIS}
-    t = TrainingBasis.EINGAENGE[g.TrainingAngefordertDto]
+    t = TrainingBasis.EINGAENGE[g.TrainingZuRechnenDto]
     assert t.strom and all(a == Ausgabe.COMMAND for a in t.ausgaben.values())
     with pytest.raises(TypeError):
         BildEinlesenBasis()   # abstrakt: auf_datei_erkannt fehlt

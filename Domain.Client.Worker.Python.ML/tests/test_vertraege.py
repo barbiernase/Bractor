@@ -43,10 +43,10 @@ def test_generat_traegt_funktionen_und_hoert_kenntnis():
     assert KlassifikationsWorkerBasis.CLIENT == "KlassifikationsWorker"
     assert KlassifikationsWorkerBasis.AKTEURE == ("Klassifizierer",)
     assert re.fullmatch(r"[0-9a-f]{16}", KlassifikationsWorkerBasis.VERTRAG_HASH)
-    e = KlassifikationsWorkerBasis.TRAEGT["IBildpaarBeurteilung"][g.ImagePairKomplettDto]
+    e = KlassifikationsWorkerBasis.TRAEGT["IBildpaarBeurteilung"][g.PaarZuBeurteilenDto]
     assert e.methode == "bildpaar_beurteilung" and not e.strom and e.ausgaben == {g.KlassifiziereBildPaarDurchKiDto: Ausgabe.COMMAND}
     assert set(KlassifikationsWorkerBasis.HOERT) == {g.BildVerfuegbarDto, g.ModellAktiviertDto}
-    t = TrainingsWorkerBasis.TRAEGT["ITraining"][g.TrainingAngefordertDto]
+    t = TrainingsWorkerBasis.TRAEGT["ITraining"][g.TrainingZuRechnenDto]
     assert t.methode == "training" and t.strom
     assert TrainingsWorkerBasis.HOERT == {g.TrainingAbgebrochenDto: "auf_training_abgebrochen"}
     assert TrainingsWorkerBasis.FRAGT == (g.HoleDatensatzSamplesDto,)
@@ -76,9 +76,9 @@ def test_stub_classifier_beurteilt_das_paar_mit_genau_einer_ausgabe():
     agg = uuid4()
     f = _getragen(s, "IBildpaarBeurteilung")
     h = Herkunft(stream=str(agg), version=3, zeit=datetime.now(timezone.utc))
-    aus = asyncio.run(f.rufe(g.ImagePairKomplettDto(), h))
+    aus = asyncio.run(f.rufe(g.PaarZuBeurteilenDto(), h))
     assert isinstance(aus, g.KlassifiziereBildPaarDurchKiDto) and aus.aggregate_id == str(agg)
-    assert f.pruefe(f.eingang(g.ImagePairKomplettDto), aus) == Ausgabe.COMMAND
+    assert f.pruefe(f.eingang(g.PaarZuBeurteilenDto), aus) == Ausgabe.COMMAND
     assert asyncio.run(_hoere(s, g.ModellAktiviertDto(pfad="m.pt", name="m"), MessageContext())) == []
     req = s._build_capabilities_request()
     assert req.vertrag == "KlassifikationsWorker" and "ModellAktiviert" in req.message_types

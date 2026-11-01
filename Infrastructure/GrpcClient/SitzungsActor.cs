@@ -607,7 +607,7 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
 
     private async Task ArbeitsErgebnisAsync(IContext context, Leitung.ArbeitsErgebnis request)
     {
-        if (_d.Werkstatt is { } werkstatt && Guid.TryParse(request.Vorgang, out var auftrag) && werkstatt.Laeuft(auftrag))
+        if (_d.Werkstatt is { } werkstatt && Guid.TryParse(request.Vorgang, out var auftrag) && (werkstatt.Laeuft(auftrag) || _anbieter is null))
         {
             string? fehlerDraussen = string.IsNullOrEmpty(request.Fehler) ? null : request.Fehler;
             List<object>? aus = null;
@@ -619,6 +619,8 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
             var ausgang = werkstatt.Ergebnis(auftrag, aus, request.Ab, request.Fertig, fehlerDraussen);
             if (ausgang == Werkstattausgang.Abgelehnt && fehlerDraussen is null)
                 await FehlerAsync("ARBEITS_ERGEBNIS_ABGELEHNT", $"Antwort auf {auftrag} außerhalb der Signatur oder außer der Reihe — der Eingang wird wiederholt", request.Vorgang);
+            else if (ausgang == Werkstattausgang.Unbekannt)
+                await FehlerAsync("ARBEIT_UNBEKANNT", $"Eingang {auftrag} läuft auf diesem Knoten nicht (schon beantwortet, abgebrochen oder nie vergeben)", request.Vorgang);
             return;
         }
         if (_anbieter is not { } anbieter || !Guid.TryParse(request.Vorgang, out var vorgang))

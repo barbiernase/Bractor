@@ -82,7 +82,7 @@ public class FunktionsBausteinE2ETests
     }
 
     [Fact]
-    public async Task Ein_Strom_wird_stueckweise_festgehalten_und_jede_Ausgabe_wirkt_genau_einmal()
+    public async Task Ein_Strom_aus_einer_Folge_wirkt_je_Ausgabe_genau_einmal_ohne_etwas_festzuhalten()
     {
         using var host = Cluster("pruef-funktion-import");
         await host.StartAsync();
@@ -97,9 +97,10 @@ public class FunktionsBausteinE2ETests
             for (var i = 0; i < zeilen; i += 23)
                 (await Zustand<Posten.Posten>(host.Services, herkunft.NeueId<Posten.Posten>(i).Wert)).Existiert.Should().BeTrue($"Posten der Zeile {i}");
 
-            var fest = await Log(host, FunktionsIds.Festhalten("Importlauf", import.Wert, 1));
-            fest.Count(e => e.Payload is BefehlFestgehalten).Should().Be(zeilen + zeilen / Pipeline.Import.Importlauf.StandAlle, "jede Ausgabe genau einmal festgehalten");
-            fest.Last().Payload.Should().BeOfType<AusgabeFestgehalten>();
+            (await Log(host, FunktionsIds.Festhalten("Importlauf", import.Wert, 1))).Should().BeEmpty("vor dem Aggregat wird nichts festgehalten");
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            (await Log(host, import.Wert)).Count(e => e.Payload is ImportStandGemeldet)
+                .Should().Be((zeilen + Pipeline.Import.Importlauf.StandAlle - 1) / Pipeline.Import.Importlauf.StandAlle, "jeder Stand genau einmal");
         }
         finally { await host.StopAsync(); }
     }

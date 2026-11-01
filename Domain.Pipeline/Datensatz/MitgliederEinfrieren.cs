@@ -12,7 +12,7 @@ namespace Domain.Pipeline.Datensatz;
 /// </summary>
 public sealed class MitgliederEinfrieren : IFunktion
 {
-    public async Task<OneOf<SchliesseEinfrierenAb, KeinMitgliedAuffindbar>> Auf(EinfrierenAngefordert e, Herkunft h, IFindImagePair finde)
+    public async Task<OneOf<SchliesseEinfrierenAb, KeinMitgliedAuffindbar>> Auf(EinfrierenAbzuschliessen e, IFindImagePair finde)
     {
         var modelle = new Dictionary<Guid, ImagePairReadModel>();
         foreach (var pid in e.Mitglieder)
@@ -29,7 +29,7 @@ public sealed class MitgliederEinfrieren : IFunktion
                 Dc0Pfad: kv.Value.Dc0Pfad ?? "",
                 Dc2Pfad: kv.Value.Dc2Pfad ?? ""))
             .ToList();
-        return new SchliesseEinfrierenAb(new Id<Domain.Datensatz.Datensatz>(h.Stream), mitglieder);
+        return new SchliesseEinfrierenAb(e.Datensatz, mitglieder);
     }
 
     /// <summary>

@@ -64,6 +64,7 @@ from . import (
     NimmPaarAufDto,
     PaarAufgenommenDto,
     PaarEntferntDto,
+    PaarZuBeurteilenDto,
     PaareAufgenommenDto,
     PhysischesProduktGelabeltDto,
     RegistriereModellDto,
@@ -79,6 +80,7 @@ from . import (
     TrainingFortschrittDto,
     TrainingGescheitertDto,
     TrainingHaengengebliebenDto,
+    TrainingZuRechnenDto,
 )
 
 S = TypeVar("S")
@@ -254,10 +256,10 @@ class KlassifikationsWorkerBasis(ClientVertragBasis[S]):
     CLIENT: ClassVar[str] = "KlassifikationsWorker"
     AKTEURE: ClassVar[tuple] = ("Klassifizierer",)
     VERTRAG: ClassVar[str] = "IKlassifikationsWorker"
-    VERTRAG_HASH: ClassVar[str] = "ae7f3846c1298672"
+    VERTRAG_HASH: ClassVar[str] = "628ec53c0d602ca5"
     TRAEGT: ClassVar[dict] = {   # IDarf<F> der Akteure: Funktionen, deren Code der Client ausführt
         "IBildpaarBeurteilung": {
-            ImagePairKomplettDto: Eingang("bildpaar_beurteilung", {KlassifiziereBildPaarDurchKiDto: Ausgabe.COMMAND}),
+            PaarZuBeurteilenDto: Eingang("bildpaar_beurteilung", {KlassifiziereBildPaarDurchKiDto: Ausgabe.COMMAND}),
         },
     }
     HOERT: ClassVar[dict] = {   # IHoert: Kenntnis, verlierbar
@@ -268,8 +270,8 @@ class KlassifikationsWorkerBasis(ClientVertragBasis[S]):
     FRAGT: ClassVar[tuple] = (HoleAktivesModellDto,)   # IDarf der Akteure: ihre Queries
 
     @abstractmethod
-    async def bildpaar_beurteilung(self, e: ImagePairKomplettDto, h: Herkunft, state: S) -> KlassifiziereBildPaarDurchKiDto | None:
-        """IBildpaarBeurteilung: KlassifiziereBildPaarDurchKi Auf(ImagePairKomplett e) — höchstens eine Ausgabe"""
+    async def bildpaar_beurteilung(self, e: PaarZuBeurteilenDto, h: Herkunft, state: S) -> KlassifiziereBildPaarDurchKiDto | None:
+        """IBildpaarBeurteilung: KlassifiziereBildPaarDurchKi Auf(PaarZuBeurteilen e) — höchstens eine Ausgabe"""
         ...
 
     @abstractmethod
@@ -289,10 +291,10 @@ class TrainingsWorkerBasis(ClientVertragBasis[S]):
     CLIENT: ClassVar[str] = "TrainingsWorker"
     AKTEURE: ClassVar[tuple] = ("TrainingsSystem",)
     VERTRAG: ClassVar[str] = "ITrainingsWorker"
-    VERTRAG_HASH: ClassVar[str] = "568ebca3779d7e95"
+    VERTRAG_HASH: ClassVar[str] = "b0452f2014f9dbc3"
     TRAEGT: ClassVar[dict] = {   # IDarf<F> der Akteure: Funktionen, deren Code der Client ausführt
         "ITraining": {
-            TrainingAngefordertDto: Eingang("training", {MeldeTrainingBegonnenDto: Ausgabe.COMMAND, MeldeFortschrittDto: Ausgabe.COMMAND, MeldeTrainingAbgeschlossenDto: Ausgabe.COMMAND, MeldeTrainingGescheitertDto: Ausgabe.COMMAND}, strom=True),
+            TrainingZuRechnenDto: Eingang("training", {MeldeTrainingBegonnenDto: Ausgabe.COMMAND, MeldeFortschrittDto: Ausgabe.COMMAND, MeldeTrainingAbgeschlossenDto: Ausgabe.COMMAND, MeldeTrainingGescheitertDto: Ausgabe.COMMAND}, strom=True),
         },
     }
     HOERT: ClassVar[dict] = {   # IHoert: Kenntnis, verlierbar
@@ -302,8 +304,8 @@ class TrainingsWorkerBasis(ClientVertragBasis[S]):
     FRAGT: ClassVar[tuple] = (HoleDatensatzSamplesDto,)   # IDarf der Akteure: ihre Queries
 
     @abstractmethod
-    async def training(self, e: TrainingAngefordertDto, h: Herkunft, state: S) -> AsyncIterator[MeldeTrainingBegonnenDto | MeldeFortschrittDto | MeldeTrainingAbgeschlossenDto | MeldeTrainingGescheitertDto]:
-        """ITraining: IAsyncEnumerable<OneOf<MeldeTrainingBegonnen, MeldeFortschritt, MeldeTrainingAbgeschlossen, MeldeTrainingGescheitert>> Auf(TrainingAngefordert e) — Strom: beliebig viele yields"""
+    async def training(self, e: TrainingZuRechnenDto, h: Herkunft, state: S) -> AsyncIterator[MeldeTrainingBegonnenDto | MeldeFortschrittDto | MeldeTrainingAbgeschlossenDto | MeldeTrainingGescheitertDto]:
+        """ITraining: IAsyncEnumerable<OneOf<MeldeTrainingBegonnen, MeldeFortschritt, MeldeTrainingAbgeschlossen, MeldeTrainingGescheitert>> Auf(TrainingZuRechnen e) — Strom: beliebig viele yields"""
         ...
 
     @abstractmethod

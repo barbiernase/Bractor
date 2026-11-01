@@ -221,31 +221,30 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
     /// <summary>
     /// Ein Client, der eine Funktion trägt (IKlassifikationsWorker verkörpert den Klassifizierer: IDarf&lt;IBildpaarBeurteilung&gt;), beantwortet ihren Eingang — die Antwort
     /// wirkt genau einmal: noch einmal geschickt, nach dem Neuverbinden oder von einem zweiten Träger, der den Eingang nicht hält, ändert sie nichts.
-    /// (Phase 4: früher hörte der Client das Event und schickte eine Zusage mit Ursache; jetzt reicht der Funktions-Actor den Eingang über die
-    /// Vermittlung mit Lease weiter, hält die erste Antwort fest und sendet sie selbst. Das fachliche Soll — genau eine Klassifikation je Paar —
-    /// ist dasselbe.)
+    /// (Die Funktion steht vor dem Aggregat: das komplette Paar ist eine Folge; ein Kind gibt sie einem Arbeiter in der Werkstatt, die erste Antwort
+    /// beendet den Lauf, jede weitere ist „unbekannt“. Das fachliche Soll — genau eine Klassifikation je Paar — ist dasselbe.)
     /// </summary>
     [Fact]
     public async Task Die_Antwort_eines_Traegers_wirkt_genau_einmal_auch_doppelt_von_zwei_Traegern_und_nach_dem_Neuverbinden()
     {
         var eins = await RoheLeitung.VerbindeAsync(b.Host, "KlassifikationsWorker", Testumgebung.TokenKlassifizierer);
         await using var zwei = await RoheLeitung.VerbindeAsync(b.Host, "KlassifikationsWorker", Testumgebung.TokenKlassifizierer);
-        // Viele Slots: Paare früherer Tests dieser Klasse warten (ohne Träger) beim Vermittler und werden zuerst vergeben.
+        // Viele Slots: Paare früherer Tests dieser Klasse warten (ohne Träger) als offene Eingänge und kommen zuerst.
         await eins.BieteAnAsync("IBildpaarBeurteilung", slots: 100);
         await zwei.BieteAnAsync("IBildpaarBeurteilung", slots: 100);
         var paar = await b.KomplettesPaarAsync();
-        bool Fuer(Cqrs.Leitung.ArbeitsAuftrag a) => a.Stream == paar.Id.ToString() && a.Eingang.Typ == nameof(ImagePairKomplett);
+        bool Fuer(Cqrs.Leitung.ArbeitsAuftrag a) => a.Stream == paar.Id.ToString() && a.Eingang.Typ == nameof(PaarZuBeurteilen);
         await Warte.BisAsync(() => Task.FromResult(eins.Eingaenge.Any(Fuer) || zwei.Eingaenge.Any(Fuer)), Kurz, "kein Träger bekam das komplette Paar", b.Host);
         var (traeger, anderer) = eins.Eingaenge.Any(Fuer) ? (eins, zwei) : (zwei, eins);
         var eingang = traeger.Eingaenge.First(Fuer);
-        RoheLeitung.Eingang(eingang).Should().BeOfType<ImagePairKomplett>();
+        RoheLeitung.Eingang(eingang).Should().BeOfType<PaarZuBeurteilen>().Which.Paar.Wert.Should().Be(paar.Id);
 
         var antwort = new KlassifiziereBildPaarDurchKi(new(paar.Id), Klassifikation.Anomalie);
         await traeger.AntworteAsync(eingang, antwort);
         await traeger.AntworteAsync(eingang, antwort);                                                      // noch einmal geschickt
-        await anderer.AntworteAsync(eingang, new KlassifiziereBildPaarDurchKi(new(paar.Id), Klassifikation.KeineAnomalie));   // ohne Lease
+        await anderer.AntworteAsync(eingang, new KlassifiziereBildPaarDurchKi(new(paar.Id), Klassifikation.KeineAnomalie));   // ein anderer, zu spät
         // Erst trennen, wenn der Server die Antworten gelesen hat (die doppelte quittiert er mit ARBEIT_UNBEKANNT): die Leitung schließt hart
-        //   (Reset), ein noch nicht gesendetes Stück ginge sonst verloren — und dann hielte der getrennte Träger den Eingang bis zum Ablauf der Lease.
+        //   (Reset), ein noch nicht gesendetes Stück ginge sonst verloren — und dann scheiterte der Lauf mit dem getrennten Träger und käme erneut.
         await Warte.BisAsync(() => Task.FromResult(traeger.Fehler.Contains("ARBEIT_UNBEKANNT")), Kurz, "der Server hat die Antworten des Trägers nicht gelesen", b.Host);
         if (ReferenceEquals(traeger, eins))
         {

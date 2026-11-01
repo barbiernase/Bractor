@@ -25,7 +25,7 @@ public class SammelvorgangKaskadeTests
 
     private static AblaufBauer Welt() => Ablauf.Mit(Fabrik)
         .Aggregat<Sammelvorgang>().Aggregat<Teilauftrag>()
-        .Funktion<TeilauftragAbgeschlossen>(nameof(TeilFertigMeldung), (e, h) => new TeilFertigMeldung().Auf(e));
+        .Funktion<TeilFertig>(nameof(TeilFertigMeldung), (f, h) => new TeilFertigMeldung().Auf(f));
 
     [Fact]
     public void Fanout_dann_Fanin_Barriere_feuert_erst_beim_letzten_Teil()

@@ -10,7 +10,7 @@ public partial class Trainingslauf
         // START
         // ═══════════════════════════════════════════════════
 
-        public IEnumerable<OneOf<TrainingAngefordert, TrainingslaufExistiertBereits>> Decide(
+        public IEnumerable<OneOf<TrainingAngefordert, TrainingslaufExistiertBereits, TrainingZuRechnen>> Decide(
             StarteTraining cmd)
         {
             if (this.State.Existiert)
@@ -21,6 +21,7 @@ public partial class Trainingslauf
 
             yield return new TrainingAngefordert(
                 cmd.DatensatzId, cmd.DatensatzVersion, cmd.Hyperparameter);
+            yield return new TrainingZuRechnen(cmd.AggregateId, cmd.DatensatzId, cmd.DatensatzVersion, cmd.Hyperparameter);
         }
 
         // ═══════════════════════════════════════════════════

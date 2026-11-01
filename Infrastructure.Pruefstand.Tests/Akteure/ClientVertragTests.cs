@@ -142,9 +142,9 @@ public class ClientVertragTests
     public void Der_Client_Hash_kommt_aus_der_kanonischen_Form()
     {
         var kanon = Abstractions.Clientvertragsregeln.ClientKanon("KlassifikationsWorker", ["Klassifizierer"],
-            [new("IBildpaarBeurteilung", [new Abstractions.Clientvertragsregeln.Eingang("ImagePairKomplett", ["KlassifiziereBildPaarDurchKi"], false)])],
+            [new("IBildpaarBeurteilung", [new Abstractions.Clientvertragsregeln.Eingang("PaarZuBeurteilen", ["KlassifiziereBildPaarDurchKi"], false)])],
             ["KlassifiziereEinzelBildDurchKi"], ["HoleAktivesModell"], ["ModellAktiviert", "BildVerfuegbar"]);
-        kanon.Should().Be("KlassifikationsWorker|A:Klassifizierer|T:IBildpaarBeurteilung:ImagePairKomplett>KlassifiziereBildPaarDurchKi"
+        kanon.Should().Be("KlassifikationsWorker|A:Klassifizierer|T:IBildpaarBeurteilung:PaarZuBeurteilen>KlassifiziereBildPaarDurchKi"
             + "|S:KlassifiziereEinzelBildDurchKi|F:HoleAktivesModell|H:BildVerfuegbar,ModellAktiviert");
         C("KlassifikationsWorker").Hash.Should().Be(Abstractions.Clientvertragsregeln.Hash(kanon)).And.HaveLength(16);
     }

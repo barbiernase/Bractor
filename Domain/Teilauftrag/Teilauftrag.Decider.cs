@@ -18,7 +18,7 @@ public partial class Teilauftrag
             yield return new TeilauftragGestartet(cmd.SammelvorgangId);
         }
 
-        public IEnumerable<OneOf<TeilauftragAbgeschlossen, TeilauftragNichtGefunden, TeilauftragBereitsFertig>> Decide(
+        public IEnumerable<OneOf<TeilauftragAbgeschlossen, TeilauftragNichtGefunden, TeilauftragBereitsFertig, TeilFertig>> Decide(
             SchließeTeilauftragAb cmd)
         {
             if (!this.State.Existiert)
@@ -34,6 +34,7 @@ public partial class Teilauftrag
             }
 
             yield return new TeilauftragAbgeschlossen(this.State.SammelvorgangId);
+            yield return new TeilFertig(this.State.SammelvorgangId);
         }
     }
 }
