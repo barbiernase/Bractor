@@ -89,20 +89,17 @@ internal sealed class Bildeingang : ILast, IAsyncDisposable
         }
     }
 
-    /// <summary>Exactly-once (§0.2): je Datei genau ein Vorgang, je Paar genau ein ImagePair, BildVerfuegbar genau einmal je Bild, Read-Model = Log.</summary>
+    /// <summary>
+    /// Exactly-once (§0.2): je Paar genau ein ImagePair, BildVerfuegbar genau einmal je Bild (je Datei ein Lauf des Wächters — er steht nicht im Log,
+    /// die Datei zählt erst an ihrem Bild), Read-Model = Log.
+    /// </summary>
     public async Task<List<Pruefung>> PruefeAsync(Datenbank db, int dateien, bool vollstaendig = true)
     {
         Pruefung P(string name, long soll, long ist) => Pruefung.Erwartet(name, soll, ist, vollstaendig);
         var ids = _paare.ToArray();
         var s = db.Schema;
-        var praefix = Jahr + "%";
         var p = new List<Pruefung>
         {
-            P("je Datei genau eine Quell-Nachricht im Log", dateien,
-                await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'datei_erkannt' and data->>'Name' like @p", ("p", praefix))),
-            Pruefung.Gleich("keine Datei zweimal gemeldet", 0, await db.ZahlAsync(
-                $"select count(*) from (select data->>'Name' from {s}.mt_events where type = 'datei_erkannt' and data->>'Name' like @p group by 1 having count(*) > 1) x",
-                ("p", praefix))),
             P("je Paar genau ein ImagePairErstellt", ids.Length,
                 await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'image_pair_erstellt' and stream_id = any(@ids)", ("ids", ids))),
             P("BildVerfuegbar genau einmal je Bild (2 je Paar)", 2L * ids.Length,
