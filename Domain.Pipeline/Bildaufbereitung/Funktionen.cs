@@ -6,16 +6,17 @@ using OpenCvSharp;
 namespace Domain.Pipeline.Bildaufbereitung;
 
 // ═══════════════════════════════════════════════════
-// FUNKTIONEN der Bildaufbereitung (docs/10 §10.3) — eine KETTE, je Schritt eine Funktion:
+// FUNKTIONEN der Bildaufbereitung (docs/10 §10.3) — ein FORK-JOIN, je Schritt eine Funktion:
 //
-//   DateiErkannt ─▶ ƒ IBildEinlesen ─▶ BildEingelesen ─▶ ƒ IBildVerkleinerung ─▶ BildVerkleinert ─▶ ƒ IKontrastausgleich ─▶ VorschauErstellt
-//   (─▶ ƒ Bildeingang ─▶ NimmBildAuf an das Bildpaar)
+//   DateiErkannt ─▶ ƒ IBildEinlesen ─▶ BildEingelesen ─┬─▶ ƒ IBildVerkleinerung ─▶ BildVerkleinert ─▶ ƒ IKontrastausgleich ─▶ VorschauErstellt ─┐
+//                                                     └──────────────────────────────────────────────────────────────────────────────────────┴─▶ ƒ Bildeingang
+//   (ƒ Bildeingang ─▶ NimmBildAuf an das Bildpaar)
 //
-// Jeder Schritt ist für sich: er hört genau ein Ergebnis des vorigen, gibt genau sein eigenes aus, und sein Laufort steht für sich in der Umgebung
-// (Funktionen:<F>:Laufort) — im Host OpenCV, draußen ein Python-Worker, der ihn trägt. Bilder reisen als Dateipfade: ein Ergebnis nennt die
-// geschriebene Datei, nicht ihre Bytes. Jedes Ergebnis trägt die Datei der Quelle weiter (Name, Pfad, Größe, wann erkannt) — die Zugehörigkeit
-// ist ein fachliches Feld (A2). Die Schritte stehen vor dem Aggregat: die Quell-Nachricht ist ein durabler Eingang (genau einmal im Log), die
-// Zwischenergebnisse gehen von Schritt zu Schritt, nie ins Log; erst der Bildeingang schickt einen Command an das Paar.
+// Jeder Schritt ist für sich: er nimmt, was er braucht, gibt genau sein eigenes aus, und sein Laufort steht am Knoten der Instanz — im Host OpenCV,
+// draußen ein Python-Worker, der ihn trägt. Bilder reisen als Dateipfade: ein Ergebnis nennt die geschriebene Datei, nicht ihre Bytes. Was zusammengehört,
+// führt der Lauf zusammen (der Bildeingang nimmt das eingelesene Bild und seine Vorschau desselben Laufs). Die Schritte stehen vor dem Aggregat: die
+// Quell-Nachricht ist ein durabler Eingang (genau einmal im Log), die Commands zwischen den Knoten gehen nie ins Log; erst der Bildeingang schickt
+// einen Command an das Paar.
 // ═══════════════════════════════════════════════════
 
 /// <summary>

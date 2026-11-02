@@ -96,16 +96,29 @@ public static class Grammatik
             [An("CQRS108", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Antwort ohne eigenen Command)"),
              new("laufzeit", null, "Infrastructure/Funktionen/FunktionsKindActor.cs (Antwort aus CommandResult.Antwort weitergerechnet)")]),
         new("GR-KANTE", "Command ohne Ziel → Knoten desselben Graphen", "Eine Funktion gibt Commands und Hinweise aus, nie ein Event. Einen Command ohne "
-            + "Ziel bekommt jeder Knoten desselben Graphen, der ihn nimmt — die Kante folgt aus den Typen, geschrieben wird sie nie; fertig ist ein Eingang "
-            + "erst, wenn alle Nachfolger fertig sind (docs/04 §4.4).", "error",
+            + "Ziel bekommt jeder Knoten desselben Graphen, der ihn nimmt — die Kante folgt aus den Typen, geschrieben wird sie nie (docs/04 §4.4).", "error",
             [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Ausgabe einer Funktion)"),
-             new("generator", null, "Infrastructure.SourceGeneration/GraphGenerator.cs (GeneratedGraphen: Kanten aus den Typen)"),
-             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsKindActor.cs (an die Knoten der Kante, gewartet bis fertig)")]),
+             new("generator", null, "Infrastructure.SourceGeneration/GraphGenerator.cs (GeneratedGraphen: Ports mit ihren Erzeugern aus den Typen)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/Lauf.cs (die Ausgaben eines Aufrufs gehen an die Ports seiner Abnehmer)")]),
         new("GR-GRAPH", "Graph: Knoten als Parameter, Kanten aus den Typen", "Ein Graph ist ein Record mit IGraph; jeder Parameter ist ein Knoten (eine "
-            + "Funktion, je Funktion einer; Name = Konfig-Schlüssel). Eingänge, die kein Knoten erzeugt, sind seine Köpfe — je Command bzw. Quell-Nachricht "
-            + "genau einer; der Graph ist kreisfrei. Kein Builder, keine ausdrücklichen Kanten, keine Knotenarten (docs/04 §4.4).", "error",
+            + "Funktion — eine generische mit Typargument — oder ein anderer Graph; Name = Konfig-Schlüssel, in einem inneren Graphen mit Punkt). Ein Graph "
+            + "im Graphen ist eine Schachtel: hinein geht nur, was er nimmt und innen keiner erzeugt, heraus nur, was er erzeugt und innen keiner nimmt (seine "
+            + "Signatur). Eingänge, die kein Knoten erzeugt, sind die Köpfe — je Command bzw. Quell-Nachricht genau einer; der Graph ist kreisfrei. Kein "
+            + "Builder, keine ausdrücklichen Kanten, keine Knotenarten (docs/04 §4.4).", "error",
             [An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Form des Graphen, Lesart Graphform)"),
              An("CQRS117", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (eine Funktion in keinem Graphen läuft nie)")]),
+        new("GR-JOIN", "Ports: T, T?, OneOf, IReadOnlyList", "Die Command-Parameter eines Auf sind seine Ports, und ihr Typ sagt, was er erwartet: T genau "
+            + "einen je Lauf (warten), T? höchstens einen (null, wenn keiner kommt oder das Zeitlimit des Knotens um ist), OneOf<A, B> den ersten (die "
+            + "übrigen Zweige brechen ab), IReadOnlyList<T> alle aus den Unterläufen eine Ebene tiefer (ein Strom öffnet je Element einen). Alle Ports eines "
+            + "Auf liegen auf einer Ebene; vom nächsten gemeinsamen Vorfahren aus ist ein T-Port hinter einer Wahl T? oder Teil eines OneOf — der Befund nennt "
+            + "den passenden Typ (docs/04 §4.4).", "error",
+            [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Port-Formen, mehrere Ports nur mit Commands ohne Ziel)"),
+             An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Ebenen und Vielfachheit, Lesart Graphform)")]),
+        new("GR-LAUF", "Ein Lauf je Kopf", "Jede Nachricht im Graphen gehört zu einem Lauf, den eine Kopf-Nachricht startet; Läufe verschiedener Köpfe "
+            + "kommen nie zusammen. Fertig ist der Kopf, wenn jeder Aufruf fertig ist oder nie kommt; wirft ein Knoten auch nach seinen Wiederholungen, "
+            + "scheitert der Lauf: offene Zweige brechen ab, der Kopf wird geparkt, LaufGescheitert geht an die Hörer (docs/04 §4.4).", "error",
+            [new("laufzeit", null, "Infrastructure/Funktionen/GraphActor.cs (Koordinator der Läufe einer Instanz)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/Lauf.cs (Buchführung: Pfade, Ports, Sammeln, Rennen, Zeitlimit)")]),
         new("GR-INSTANZ", "Graph läuft als Instanz", "Ein Graph läuft erst als Instanz: eine Datei je Instanz (umgebungen/<name>/graphen/<instanz>.json) "
             + "mit Graph, bei einem Quellkopf dem Akteur (er darf, was den Graphen verlässt) und je Knoten Laufort, Parallel, Warteschlange, Wiederholungen, "
             + "Technik und die Felder seiner Konfig-Records. Ein Graph mit Command-Kopf läuft je Umgebung genau einmal (docs/04 §4.4).", "error",

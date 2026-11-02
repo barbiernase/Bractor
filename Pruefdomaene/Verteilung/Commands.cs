@@ -10,8 +10,8 @@ public record VermerkeQuellreservierung(Id<Verteilung> AggregateId) : ICommand<V
 /// <summary>Die Quelle reicht nicht: die Verteilung scheitert, nichts wird zugebucht.</summary>
 public record VermerkeQuellabsage(Id<Verteilung> AggregateId, int Verfuegbar) : ICommand<Verteilung>;
 
-/// <summary>Ein Ziel ist zugebucht (je Ziel genau einmal: die Command-Id folgt aus der Zubuchung, die Inbox verwirft das Zweite).</summary>
-public record ZaehleZubuchung(Id<Verteilung> AggregateId, int Menge) : ICommand<Verteilung>;
+/// <summary>Alle Ziele sind gebucht (die Liste der Zubuchungen sammelt der Graph, je Lauf genau einmal: die Command-Id folgt aus dem Lauf).</summary>
+public record SchliesseVerteilungAb(Id<Verteilung> AggregateId, int Zugebucht, int Ziele) : ICommand<Verteilung>;
 
 /// <summary>
 /// Ein Command ohne Ziel aus dem Decide (docs/03 §3.2): die Verteilung ist gestartet — die Abwicklung reserviert die Quelle. Was die Ziele darauf entscheiden, hört sie als
@@ -19,5 +19,5 @@ public record ZaehleZubuchung(Id<Verteilung> AggregateId, int Menge) : ICommand<
 /// </summary>
 public record VerteilungAbzuwickeln(Id<Verteilung> VerteilungId, Id<Posten.Posten> QuelleId, IReadOnlyList<Id<Posten.Posten>> Ziele, int MengeJeZiel) : ICommand;
 
-/// <summary>Ein Command ohne Ziel aus dem Decide: die Quelle ist reserviert, jedes Ziel wird zugebucht (FAN-OUT, gesendet von der Verteilabwicklung).</summary>
+/// <summary>Ein Command ohne Ziel aus dem Decide: die Quelle ist reserviert, jedes Ziel wird zugebucht (JE: ein Unterlauf je Ziel, danach SAMMELN).</summary>
 public record Zubuchen(Id<Verteilung> VerteilungId, IReadOnlyList<Id<Posten.Posten>> Ziele, int MengeJeZiel) : ICommand;

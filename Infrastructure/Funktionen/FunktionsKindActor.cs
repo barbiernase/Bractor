@@ -157,7 +157,7 @@ public sealed class FunktionsKindActor(
 
     /// <summary>Der Eingang einer Ausgabe am Kopf einer Instanz: Kennung aus Ausgabe und Instanz, die Herkunft des Laufs reist mit.</summary>
     private static EingangZustellen Fremd(KnotenAufruf a, object nachricht, Guid ausgabe, string instanz, Eingangsart art) =>
-        new(Eingangsvertrag.Eingang(ausgabe, instanz), instanz, null, nachricht, art, a.Kontext.Stream, a.Kontext.Version, a.Kontext.Zeit,
+        new(Eingangsvertrag.Eingang(ausgabe, instanz), instanz, nachricht, art, a.Kontext.Stream, a.Kontext.Version, a.Kontext.Zeit,
             a.Kontext.Akteur, a.Kontext.Korrelation, a.Kontext.Ursache);
 
     private async Task<Infrastructure.Emit.EmitAntwort> SendeAsync(IAggregatCommand c, Guid id, KnotenAufruf a, CancellationToken ct)

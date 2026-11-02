@@ -74,8 +74,8 @@ public interface IPost { Task SendeAsync(string an); }
         fehler.Should().BeEmpty();
         quelle.Should().Contain("new FunktionsBaustein(typeof(global::Probe.Mahnwesen), \"Mahnwesen\", Draussen: false,");
         quelle.Should().Contain("new FunktionsEingang(typeof(global::Probe.Ueberfaellig), Hinweis: false, Strom: false, "
-            + "new Type[] { typeof(global::Probe.Mahne), typeof(global::Probe.Unnoetig) }, new Type[] {  })");
-        quelle.Should().Contain("case global::Probe.Ueberfaellig e: return Ausgaben.Einzeln(f.Auf(e, h), y => (object?)y.Value);");
+            + "new Type[] { typeof(global::Probe.Mahne), typeof(global::Probe.Unnoetig) }, new Type[] {  }, new Type[] { typeof(global::Probe.Ueberfaellig) })");
+        quelle.Should().Contain("case 0: return Ausgaben.Einzeln(f.Auf((global::Probe.Ueberfaellig)a[0]!, h), y => (object?)y.Value);");
         quelle.Should().Contain("new FunktionsUmsetzung(\"Mahnwesen\", typeof(global::Probe.Mahnwesen), (sp, z) => new global::Probe.Mahnwesen())");
     }
 
@@ -96,12 +96,12 @@ public interface IPost { Task SendeAsync(string an); }
 
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty("jede Form der Signatur hat ihren Adapter im Generat");
-        quelle.Should().Contain("return Ausgaben.Einzeln(f.Auf(e), y => (object?)y);");
-        quelle.Should().Contain("return Ausgaben.Einzeln(f.Auf(e), y => (object?)y.Value);");
-        quelle.Should().Contain("return Ausgaben.EinzelnAsync(f.Auf(e), y => (object?)y.Value);");
-        quelle.Should().Contain("return Ausgaben.EinzelnAsync(f.Auf(e), y => (object?)y);");
-        quelle.Should().Contain("return Ausgaben.Strom(f.Auf(e), y => (object?)y.Value, ct);");
-        quelle.Should().Contain("return Ausgaben.StromAsync(f.Auf(e, h, ct), y => (object?)y.Value, ct);");
+        quelle.Should().Contain("return Ausgaben.Einzeln(f.Auf((global::Probe.Ueberfaellig)a[0]!), y => (object?)y);");
+        quelle.Should().Contain("return Ausgaben.Einzeln(f.Auf((global::Probe.Ueberfaellig)a[0]!), y => (object?)y.Value);");
+        quelle.Should().Contain("return Ausgaben.EinzelnAsync(f.Auf((global::Probe.Ueberfaellig)a[0]!), y => (object?)y.Value);");
+        quelle.Should().Contain("return Ausgaben.EinzelnAsync(f.Auf((global::Probe.Ueberfaellig)a[0]!), y => (object?)y);");
+        quelle.Should().Contain("return Ausgaben.Strom(f.Auf((global::Probe.Ueberfaellig)a[0]!), y => (object?)y.Value, ct);");
+        quelle.Should().Contain("return Ausgaben.StromAsync(f.Auf((global::Probe.Ueberfaellig)a[0]!, h, ct), y => (object?)y.Value, ct);");
         quelle.Should().Contain("Strom: true", "ein Strom: jede Ausgabe geht hinaus, bevor die nächste kommt");
     }
 
@@ -131,7 +131,60 @@ public interface IPost { Task SendeAsync(string an); }
         quelle.Should().Contain("\"MitPost\", Draussen: false,");
         quelle.Should().Contain("new Type[] { typeof(global::Probe.IPost) }", "die Technik steht im Bedarf");
         quelle.Should().Contain("\"MitLesen\", Draussen: false,");
-        quelle.Should().Contain("f.Auf(e, b!.Hole<global::Probe.ISucheKonto>())", "die Lese-Fähigkeit kommt je Aufruf aus dem Bereich");
+        quelle.Should().Contain("f.Auf((global::Probe.Ueberfaellig)a[0]!, b!.Hole<global::Probe.ISucheKonto>())", "die Lese-Fähigkeit kommt je Aufruf aus dem Bereich");
+    }
+
+    [Fact]
+    public void Ein_Join_nimmt_seine_Ports_als_T_T_nullable_OneOf_und_Liste()
+    {
+        var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
+            public sealed class Zusammen : IFunktion
+            {
+                public Mahne Auf(Ueberfaellig u, Gemahnt? g, OneOf<Bezahlt, Gemahnt2> erster, IReadOnlyList<Teil> alle, Herkunft h) => null!;
+            }
+            public sealed record Gemahnt2(int Stufe) : ICommand;
+            public sealed record Teil(int Nr) : ICommand; }");
+
+        ids.Should().BeEmpty();
+        fehler.Should().BeEmpty("jede Port-Form hat ihren Ausdruck im Generat");
+        quelle.Should().Contain("f.Auf((global::Probe.Ueberfaellig)a[0]!, (global::Probe.Gemahnt?)a[1], (a[2] switch { global::Probe.Bezahlt x => "
+            + "(global::Abstractions.OneOf<global::Probe.Bezahlt, global::Probe.Gemahnt2>)x, global::Probe.Gemahnt2 x => "
+            + "(global::Abstractions.OneOf<global::Probe.Bezahlt, global::Probe.Gemahnt2>)x, _ => throw new InvalidOperationException(\"erster: kein Fall\") }), "
+            + "Ausgaben.Liste<global::Probe.Teil>(a[3]), h)");
+        quelle.Should().Contain("new Type[] { typeof(global::Probe.Ueberfaellig), typeof(global::Probe.Gemahnt), typeof(global::Probe.Bezahlt), "
+            + "typeof(global::Probe.Gemahnt2), typeof(global::Probe.Teil) })", "alle Typen der Ports");
+    }
+
+    [Theory]
+    [InlineData("public Mahne Auf(Ueberfaellig u, Messwert m) => null!;", "ein Hinweis steht allein")]
+    [InlineData("public Mahne Auf(IReadOnlyList<Messwert> m) => null!;", "eine Liste nur von Commands ohne Ziel")]
+    [InlineData("public Mahne Auf(OneOf<Ueberfaellig, Gebucht> m) => null!;", "ein Rennen nur unter Commands ohne Ziel")]
+    [InlineData("public Mahne Auf(Ueberfaellig u, Gebucht g) => null!;", "eine Antwort steht allein")]
+    public void Ein_Join_ausser_Form_ist_CQRS100(string methode, string worum)
+    {
+        var (quelle, ids, _) = Bausteine("namespace Probe { public sealed class Falsch : IFunktion { " + methode + " } }");
+        ids.Should().Contain("CQRS100", worum);
+        quelle.Should().NotContain("\"Falsch\", Draussen");
+    }
+
+    [Fact]
+    public void Eine_generische_Funktion_wird_je_Typargument_eines_Knotens_ein_Baustein()
+    {
+        var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
+            public interface IFormat { }
+            public sealed record Vorschau : IFormat;
+            public sealed record Gross : IFormat;
+            public sealed record Verkleinert<TFormat>(int Breite) : ICommand where TFormat : IFormat;
+            public sealed class Lies : IFunktion { public Gemahnt Auf(Ueberfaellig u) => new(1); }
+            public sealed class Verkleinerung<TFormat> : IFunktion where TFormat : IFormat { public Verkleinert<TFormat> Auf(Gemahnt g) => new(1); }
+            public sealed class Melde : IFunktion { public Mahne Auf(Verkleinert<Vorschau> v, Verkleinert<Gross> g) => null!; }
+            public sealed record Aufbereitung(Lies Lies, Verkleinerung<Vorschau> Klein, Verkleinerung<Gross> Gross, Melde Melde) : IGraph; }");
+
+        ids.Should().BeEmpty();
+        fehler.Should().BeEmpty("die konstruierten Bausteine kompilieren");
+        quelle.Should().Contain("new FunktionsBaustein(typeof(global::Probe.Verkleinerung<global::Probe.Vorschau>), \"Verkleinerung<Vorschau>\", Draussen: false,");
+        quelle.Should().Contain("new FunktionsBaustein(typeof(global::Probe.Verkleinerung<global::Probe.Gross>), \"Verkleinerung<Gross>\", Draussen: false,");
+        quelle.Should().NotContain("Verkleinerung<TFormat>", "die offene Definition ist eine Blaupause");
     }
 
     [Fact]
@@ -173,7 +226,7 @@ public interface IPost { Task SendeAsync(string an); }
             "der Zustand kommt aus der Aktivierung, nie aus dem Container");
         quelle.Should().Contain("Zustand: new global::Infrastructure.Funktionen.FunktionsZustandsform(typeof(global::Probe.Mittelwerte), () => new global::Infrastructure.Funktionen.Zustand<global::Probe.Mittelwerte>()");
         quelle.Should().Contain("global::Infrastructure.Serialization.EventJsonSerializerContext.Default.Mittelwerte", "ohne Reflection: der generierte Kontext");
-        quelle.Should().Contain("case global::Probe.Bezahlt e: return Ausgaben.Strom(f.Auf(e, h), y => (object?)y, ct);", "ein leerer Strom heißt nichts");
+        quelle.Should().Contain("case 0: return Ausgaben.Strom(f.Auf((global::Probe.Bezahlt)a[0]!, h), y => (object?)y, ct);", "ein leerer Strom heißt nichts");
         quelle.Should().Contain("new Type[] { typeof(global::Probe.IPost) }", "der Zustand ist keine Technik im Bedarf");
     }
 

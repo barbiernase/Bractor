@@ -4,8 +4,9 @@ using Domain.Pipeline.ImagePair;
 namespace Domain.Pipeline.Bildaufbereitung;
 
 /// <summary>
-/// Die Bildaufbereitung (docs/04 §4.4): eine erkannte Datei wird gelesen, verkleinert, im Kontrast ausgeglichen und als Bild ihres Paars gemeldet. Der
-/// Kopf nimmt die Quell-Nachricht <see cref="DateiErkannt"/>; die Kanten folgen aus den Typen (BildEingelesen → Verkleinern → Kontrast → Eingang);
-/// hinaus geht <c>NimmBildAuf</c> an das Paar und die Hinweise.
+/// Die Bildaufbereitung (docs/04 §4.4) als FORK-JOIN: eine erkannte Datei wird gelesen; das eingelesene Bild gabelt — ein Zweig verkleinert es und gleicht
+/// den Kontrast aus (die Vorschau), der andere geht mit der Datei direkt zum Eingang, der beide im selben Lauf zusammenführt und das Bild seines Paars
+/// meldet. Der Kopf nimmt die Quell-Nachricht <see cref="DateiErkannt"/>; die Kanten folgen aus den Typen (BildEingelesen → Verkleinern und Eingang,
+/// BildVerkleinert → Kontrast, VorschauErstellt → Eingang); hinaus geht <c>NimmBildAuf</c> an das Paar und die Hinweise.
 /// </summary>
 public sealed record Bildaufbereitung(IBildEinlesen Einlesen, IBildVerkleinerung Verkleinern, IKontrastausgleich Kontrast, Bildeingang Eingang) : IGraph;

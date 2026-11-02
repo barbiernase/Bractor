@@ -59,7 +59,7 @@ public sealed class WegeZustellung(IFunktionsWege wege) : IEingangsZustellung
 
     public async Task<Zustellausgang> StelleZuAsync(OffenerEingang e, CancellationToken ct)
     {
-        var eingang = new EingangZustellen(e.Kennung, e.Instanz, null, Nachrichtenform.Lies(e.Typ, e.Daten), Eingangsart.Durabel, e.Stream, e.Version, e.Zeit,
+        var eingang = new EingangZustellen(e.Kennung, e.Instanz, Nachrichtenform.Lies(e.Typ, e.Daten), Eingangsart.Durabel, e.Stream, e.Version, e.Zeit,
             e.Akteur, e.Korrelation, Spur.Ursache(e.Stream, e.Version));
         return (await wege.StelleZuAsync(eingang, Frist, ct))?.Ausgang switch
         {

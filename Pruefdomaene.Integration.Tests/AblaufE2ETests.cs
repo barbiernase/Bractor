@@ -140,10 +140,9 @@ public class AblaufE2ETests
                 Guid.NewGuid()))!.Success.Should().BeTrue();
 
             await Warte(async () => (await Zustand<Verteilung.Verteilung>(host.Services, verteilung)).Abgeschlossen, Frist,
-                "Die Verteilung wurde nicht abgeschlossen — Fan-out oder Zählung lief nicht durch.");
+                "Die Verteilung wurde nicht abgeschlossen — Je oder Sammeln lief nicht durch.");
             await Task.Delay(TimeSpan.FromSeconds(2));
-            (await Zustand<Verteilung.Verteilung>(host.Services, verteilung)).Zugebucht.Should().Be(20, "das Zähl-Aggregat sah alle vier Zubuchungen");
-            (await Zahl<ZubuchungGezaehlt>(host, verteilung)).Should().Be(4);
+            (await Zustand<Verteilung.Verteilung>(host.Services, verteilung)).Zugebucht.Should().Be(20, "der Abschluss sammelte alle vier Zubuchungen");
             (await Zahl<VerteilungAbgeschlossen>(host, verteilung)).Should().Be(1);
             foreach (var z in ziele)
             {

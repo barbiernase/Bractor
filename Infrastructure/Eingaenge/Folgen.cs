@@ -81,7 +81,7 @@ public static class Folgenbeilagen
     public static void StelleZu(IReadOnlyList<(EingangOffen Eingang, object Folge)> eingaenge, Infrastructure.Funktionen.IFunktionsWege wege, Guid stream)
     {
         foreach (var (e, folge) in eingaenge)
-            wege.Melde(new Infrastructure.Funktionen.EingangZustellen(e.Kennung, e.Instanz, null, folge, Infrastructure.Funktionen.Eingangsart.Durabel, stream,
+            wege.Melde(new Infrastructure.Funktionen.EingangZustellen(e.Kennung, e.Instanz, folge, Infrastructure.Funktionen.Eingangsart.Durabel, stream,
                 e.Version, DateTimeOffset.UtcNow, e.Akteur, e.Korrelation, Spur.Ursache(stream, e.Version)));
     }
 }

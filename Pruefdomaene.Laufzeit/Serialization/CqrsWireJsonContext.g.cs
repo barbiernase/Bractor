@@ -118,6 +118,8 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Messung.NeuerWert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Messung.SchaetzungVermerkt))]
 [JsonSerializable(typeof(global::Pruefdomaene.Messung.VermerkeSchaetzung))]
+[JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Verteilung.ZielGebucht))]
+[JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Verteilung.ZielZubuchen))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.BuchePostenZu))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.EroeffnePosten))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.GibPostenFrei))]
@@ -135,6 +137,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Projections.Messung.Messreihe))]
 [JsonSerializable(typeof(global::Pruefdomaene.Projections.Messung.Messzaehler))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.QuelleReserviert))]
+[JsonSerializable(typeof(global::Pruefdomaene.Verteilung.SchliesseVerteilungAb))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.StarteVerteilung))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.VermerkeQuellabsage))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.VermerkeQuellreservierung))]
@@ -144,9 +147,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.VerteilungGescheitert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.VerteilungGestartet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.VerteilungNichtGefunden))]
-[JsonSerializable(typeof(global::Pruefdomaene.Verteilung.ZaehleZubuchung))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.Zubuchen))]
-[JsonSerializable(typeof(global::Pruefdomaene.Verteilung.ZubuchungGezaehlt))]
 public partial class CqrsWireJsonContext : JsonSerializerContext
 {
 }

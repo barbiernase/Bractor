@@ -196,7 +196,7 @@ public class FunktionsLaufzeitTests
     }
 
     private static EingangZustellen Eingang(string instanz, object nachricht, Eingangsart art = Eingangsart.Kette, Guid? kennung = null) =>
-        new(kennung ?? Guid.NewGuid(), instanz, null, nachricht, art, Stream, 7, DateTimeOffset.UnixEpoch, null, null, null);
+        new(kennung ?? Guid.NewGuid(), instanz, nachricht, art, Stream, 7, DateTimeOffset.UnixEpoch, null, null, null);
 
     private static FunktionsRechnung Einzeln(Func<object?[], object?> f) => (_, _, a, _, _, _) => Strom(f(a));
 
@@ -418,8 +418,8 @@ public class FunktionsLaufzeitTests
         w.Instanz("G",
             new K("Teile", (_, _, a, _, _, _) => Strom(Enumerable.Range(1, ((Start)a[0]!).Wert).Select(i => (object)new Teil(i)).ToArray()))
                 .Op([typeof(Teil)], strom: true, ports: Eins<Start>()),
-            new K("Pruefe", (_, _, a, _, _, _) => ((Teil)a[0]!).Wert == 2 ? Strom() : Strom(new Befund(((Teil)a[0]!).Wert * 10)))
-                .Op([typeof(Befund)], strom: true, ports: Eins<Teil>()),
+            new K("Pruefe", (_, _, a, _, _, _) => ((Teil)a[0]!).Wert == 2 ? Strom(new Gemerkt(2)) : Strom(new Befund(((Teil)a[0]!).Wert * 10)))
+                .Op([typeof(Befund), typeof(Gemerkt)], ports: Eins<Teil>()),
             new K("Sammle", Einzeln(a =>
             {
                 var alle = (object?[])a[0]!;

@@ -10,7 +10,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Funktionen;
 
 /// <summary>
-/// Ebene 1 — der ECHTE Bildeingang der Domäne: die gleichbleibende Funktion <see cref="Bildeingang"/>
+/// Ebene 1 — der ECHTE Bildeingang der Domäne: die gleichbleibende Funktion <see cref="Bildeingang"/> (der Join aus eingelesenem Bild und Vorschau)
 /// deutet eine aufbereitete Datei nach der Aufnahme-Konvention und übergibt sie dem Paar; das ImagePair entscheidet „anlegen oder ergänzen“ in einem
 /// Command (<see cref="NimmBildAuf"/>). Bewiesen: erste und zweite Datei eines Paars kommen an, ohne dass eine Ablehnung den Weg trägt; dieselbe
 /// Version zweimal ist nur ein Hinweis; ein unbekannter Name ergibt keinen Command.
@@ -22,10 +22,12 @@ public class BildeingangTests
     private static readonly Guid Paar = ImagePairFileName.ToDeterministicGuid("2025_06_16_17_46_20_293");
     private static readonly DateTimeOffset Jetzt = new(2026, 10, 26, 12, 0, 0, TimeSpan.Zero);
 
+    private static BildEingelesen Eingelesen(string name) => new(name, "/in/" + name, 4711, Jetzt, 2048, 1536);
+
     private static VorschauErstellt Aufbereitet(string name) =>
         new(name, "/in/" + name, 4711, Jetzt, "/vorschau/" + name + ".png", 683, 512, Jetzt.AddSeconds(1));
 
-    private static NimmBildAuf Aufnahme(string name) => (NimmBildAuf)new Bildeingang().Auf(Aufbereitet(name)).Value;
+    private static NimmBildAuf Aufnahme(string name) => (NimmBildAuf)new Bildeingang().Auf(Eingelesen(name), Aufbereitet(name)).Value;
 
     [Fact]
     public void Eine_aufbereitete_Datei_wird_gedeutet_und_dem_Paar_mit_Vorschau_und_Metadaten_uebergeben()
@@ -40,7 +42,7 @@ public class BildeingangTests
     [Fact]
     public void Ein_Name_ausserhalb_der_Konvention_ist_nur_ein_Hinweis()
     {
-        new Bildeingang().Auf(Aufbereitet("urlaub.jpg")).Value.Should().BeOfType<DateinameUnbekannt>().Which.Dateiname.Should().Be("urlaub.jpg");
+        new Bildeingang().Auf(Eingelesen("urlaub.jpg"), Aufbereitet("urlaub.jpg")).Value.Should().BeOfType<DateinameUnbekannt>().Which.Dateiname.Should().Be("urlaub.jpg");
     }
 
     [Fact]

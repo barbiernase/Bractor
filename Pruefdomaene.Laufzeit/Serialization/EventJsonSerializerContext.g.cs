@@ -61,7 +61,6 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.VerteilungAbgeschlossen))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.VerteilungGescheitert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.VerteilungGestartet))]
-[JsonSerializable(typeof(global::Pruefdomaene.Verteilung.ZubuchungGezaehlt))]
 [JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Messung.Zaehlstand))]
 public partial class EventJsonSerializerContext : JsonSerializerContext
 {

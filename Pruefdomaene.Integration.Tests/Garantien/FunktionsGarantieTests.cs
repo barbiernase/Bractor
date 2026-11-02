@@ -110,8 +110,8 @@ public class FunktionsGarantieTests
     [Fact]
     public async Task Derselbe_Eingang_zweimal_zugestellt_wirkt_einmal()
     {
-        // Zwei Hosts auf demselben Log: ein Eingang mit derselben Kennung an beide Parents (etwa schneller Weg und Zusteller auf verschiedenen
-        //   Knoten). Beide rechnen; die Command-Id folgt aus Kennung, Funktion und Stelle — die Inbox des Kundenkontos verwirft die zweite.
+        // Zwei Hosts auf demselben Log: ein Kopf mit derselben Kennung an beide Graph-Actors (etwa schneller Weg und Zusteller auf verschiedenen
+        //   Knoten). Beide rechnen einen Lauf; die Command-Id folgt aus Lauf, Pfad, Knoten und Stelle — die Inbox des Kundenkontos verwirft die zweite.
         using var a = Cluster("garantie-funktion-doppelt-a");
         using var b = Cluster("garantie-funktion-doppelt-b");
         await a.StartAsync();
@@ -121,7 +121,7 @@ public class FunktionsGarantieTests
             var konto = Id<Kundenkonto>.Neu();
             var rechnung = Id<Rechnung>.Neu();
             var kennung = Guid.NewGuid();
-            var eingang = new EingangZustellen(kennung, nameof(Abrechnungsablauf), nameof(Abrechnungsablauf.Mahnwesen), new Mahnfall(rechnung, konto, 99m, 1),
+            var eingang = new EingangZustellen(kennung, nameof(Abrechnungsablauf), new Mahnfall(rechnung, konto, 99m, 1),
                 Eingangsart.Kette, rechnung.Wert, 2,
                 DateTimeOffset.UtcNow, null, null, null);
             foreach (var h in new[] { a, b })

@@ -154,7 +154,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                 {
                     erzeugt.UnionWith(a.Ausgaben);
                     imNetz.UnionWith(a.Ausgaben);
-                    if (a.Command) genommen.Add(a.Eingang);
+                    if (a.Command) genommen.UnionWith(a.Eingaenge);
                 }
             if (IstT(t, iAkteur))
                 erzeugt.UnionWith(t.AllInterfaces.Where(i => iDarf != null && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iDarf)).Select(i => i.TypeArguments[0]));
@@ -176,7 +176,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
             }
             else if (IstT(t, iAggregatCommand) && !entschieden.Contains(t))
                 ctx.ReportDiagnostic(Diagnostic.Create(EingangOffen, Location.None, t.Name, "Command", "kein Aggregat entscheidet ihn (Decide)"));
-            else if (IstT(t, iCommand) && !IstT(t, iAggregatCommand) && !genommen.Contains(t))
+            else if (IstT(t, iCommand) && !IstT(t, iAggregatCommand) && !t.IsGenericType && !genommen.Contains(t))
                 ctx.ReportDiagnostic(Diagnostic.Create(EingangOffen, Location.None, t.Name, "Command ohne Ziel", "kein Knoten eines Graphen nimmt ihn"));
         }
 
