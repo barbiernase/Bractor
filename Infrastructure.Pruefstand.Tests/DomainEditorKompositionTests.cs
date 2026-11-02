@@ -47,19 +47,20 @@ public sealed class DomainEditorKompositionTests
         var bausteine = Grammatik.Bausteine.Select(b => b.Id).ToHashSet();
         Grammatik.Konsume.Should().OnlyContain(k => sorten.Contains(k.Sorte) && bausteine.Contains(k.Baustein));
         Grammatik.Erzeugungen.Should().OnlyContain(e => sorten.Contains(e.Sorte) && bausteine.Contains(e.Baustein));
-        // Die Tabelle aus §3: Command genau ein Aggregat, Query genau ein Reader, Event beliebig viele Projektionen und Funktionen.
+        // Die Tabelle aus §3: Command genau ein Empfänger, Query genau ein Reader, Event beliebig viele Projektionen und Funktionen.
         Grammatik.KonsumVon(Grammatik.Command, Grammatik.Aggregat)!.Kardinalitaet.Should().Be(Grammatik.GenauEins);
         Grammatik.KonsumVon(Grammatik.Query, Grammatik.Reader)!.Kardinalitaet.Should().Be(Grammatik.GenauEins);
         Grammatik.KonsumVon(Grammatik.Event, Grammatik.Projektion)!.Kardinalitaet.Should().Be(Grammatik.Beliebig);
         Grammatik.KonsumVon(Grammatik.Event, Grammatik.Funktion)!.Kardinalitaet.Should().Be(Grammatik.Beliebig);
-        Grammatik.KonsumVon(Grammatik.Command, Grammatik.Funktion).Should().BeNull("ein Command geht nur an sein Aggregat");
+        Grammatik.KonsumVon(Grammatik.Command, Grammatik.Funktion)!.Regel.Should().Be("GR-KANTE", "ein Command ohne Ziel geht an die Knoten desselben Graphen");
+        Grammatik.KonsumVon(Grammatik.Command, Grammatik.Akteur)!.Kardinalitaet.Should().Be(Grammatik.GenauEins, "Arbeit hat genau einen Empfänger");
         Grammatik.ErzeugungVon(Grammatik.Projektion, Grammatik.Event).Should().BeNull("eine Projektion schreibt keine Fakten");
         // docs/10 §10.5: ein Hinweis geht nie in eine Projektion, eine Projektion erzeugt keine Nachricht, die Frist nimmt die Uhr.
-        Grammatik.KonsumVon(Grammatik.Transient, Grammatik.Projektion).Should().BeNull("Hinweise hören Funktionen und Clients");
+        Grammatik.KonsumVon(Grammatik.Transient, Grammatik.Projektion).Should().BeNull("Hinweise hören nur Akteure");
         Grammatik.Erzeugungen.Should().NotContain(e => e.Baustein == Grammatik.Projektion);
         Grammatik.KonsumVon(Grammatik.Frist, Grammatik.Uhr)!.Kardinalitaet.Should().Be(Grammatik.GenauEins);
         Grammatik.ErzeugungVon(Grammatik.Uhr, Grammatik.Command).Should().NotBeNull();
-        Grammatik.ErzeugungVon(Grammatik.Aggregat, Grammatik.Command).Should().BeNull("ein Aggregat sendet keine Commands");
+        Grammatik.ErzeugungVon(Grammatik.Aggregat, Grammatik.Command)!.Regel.Should().Be("GR-DECIDE-COMMAND", "ein Decide gibt nur Commands ohne Ziel aus");
         // Fürs Board: die Editor-Port-Abbildung reist mit (das JS kodiert nichts hart).
         var json = System.Text.Json.JsonSerializer.Serialize(Grammatik.AlsJson(), EditorModell.JsonOptionen);
         json.Should().Contain("\"portBaustein\"").And.Contain("\"recordSorte\"").And.Contain("CQRS010");
