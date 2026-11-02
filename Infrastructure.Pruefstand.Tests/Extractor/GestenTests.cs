@@ -399,6 +399,10 @@ public sealed class GestenTests : IDisposable
     public async Task Umbenennen_eines_Typs_in_seiner_eigenen_Datei_zieht_die_Datei_mit()
     {
         await GesteAsync(new KartenDelta { Karten = new() { ["bausteinFunktionen"] = [Leuchte()] } });
+        // Technik ist, was der Konstruktor einer Funktion nimmt: erst im Konstruktor einer Umsetzung wird ILeuchte eine Karte.
+        var schaetzung = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "ISchadensSchaetzung");
+        schaetzung["umsetzungen"]![0]!["konstruktor"]!.AsArray().Add(Param("ILeuchte", "leuchte"));
+        await GesteAsync(Geaendert("bausteinFunktionen", schaetzung));
         var karte = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "ILeuchte");
         var methode = karte["methoden"]![0]!["_ort"]!;
         var impl = karte["umsetzungen"]![0]!["_ort"]!;

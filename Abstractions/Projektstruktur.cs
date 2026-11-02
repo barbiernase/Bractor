@@ -58,6 +58,9 @@ static class Projektstruktur
         Zwischenergebnis,
         /// <summary>Eine Funktion als Klasse (Baustein-Form, <c>Auf</c>): sie läuft im Host; als Schnittstelle ist sie <see cref="Funktion"/> (draußen).</summary>
         HostFunktion,
+        /// <summary>Technik hinter einer Funktion (ohne Marker: was der Konstruktor einer Funktion nimmt, und ihre Umsetzungen) — bei den Abläufen,
+        /// je Typ eine eigene Datei.</summary>
+        Technik,
         Akteur, ClientVertrag,
         StoreImplementierung,
         /// <summary>Kein Rollen-Marker: liegt im Bereichs-Ordner seines Projekts, in eigener Datei oder einer Sammeldatei des Projekts.</summary>
@@ -173,7 +176,7 @@ static class Projektstruktur
                 return new[] { Rolle.Leseseite };
             case Primitive.Funktion: case Primitive.FunktionsErgebnis: case Primitive.Zwischenergebnis:
             case Primitive.FunktionsImplementierung: case Primitive.Konfig:
-            case Primitive.HostFunktion:
+            case Primitive.HostFunktion: case Primitive.Technik:
                 return new[] { Rolle.Ablaeufe };
             case Primitive.Akteur: case Primitive.ClientVertrag:
                 return new[] { Rolle.Akteure };

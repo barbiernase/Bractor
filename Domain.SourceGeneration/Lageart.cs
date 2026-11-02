@@ -18,6 +18,7 @@ internal sealed class Lageart
     private readonly HashSet<string> _aggregatQueries = new(), _aggregatAntworten = new();
     private readonly HashSet<string> _folgen = new();
     private readonly HashSet<string> _zwischen = new();
+    private readonly Infrastructure.SourceGeneration.Funktionsform.Technikmenge _technik = new();
 
     /// <summary>Ist der Vertrag (Abstractions) in der Compilation? Sonst gibt es nichts zu prüfen.</summary>
     public bool Bereit { get; }
@@ -29,7 +30,7 @@ internal sealed class Lageart
         Bereit = c.GetTypeByMetadataName(A + "IState") != null;
         if (!Bereit) return;
         var alle = typen.ToList();
-        var technik = Infrastructure.SourceGeneration.Funktionsform.Techniken(alle);
+        var technik = _technik = Infrastructure.SourceGeneration.Funktionsform.Techniken(alle);
         foreach (var t in alle)
         {
             // Ergebnis-Events: die Ausgaben jeder Funktion (die Fälle jedes Auf, Funktionsform). Commands unter ihnen bleiben Commands
@@ -76,6 +77,7 @@ internal sealed class Lageart
             if (Hat(t, "IStore")) return Projektstruktur.Primitive.StoreBuendel;
             if (Hat(t, "IReadStore") || Hat(t, "IWriteStore")) return Projektstruktur.Primitive.StoreFaehigkeit;
             if (Hat(t, "IClientVertrag")) return Projektstruktur.Primitive.ClientVertrag;
+            if (_technik.IstTechnik(t)) return Projektstruktur.Primitive.Technik;
             return Projektstruktur.Primitive.Hilfscode;
         }
         if (Hat(t, "IState")) return Projektstruktur.Primitive.Aggregat;
@@ -95,6 +97,7 @@ internal sealed class Lageart
         if (_folgen.Contains(Name(t))) return Projektstruktur.Primitive.Folge;
         if (_zwischen.Contains(Name(t))) return Projektstruktur.Primitive.Zwischenergebnis;
         if (_konfigs.Contains(Name(t))) return Projektstruktur.Primitive.Konfig;
+        if (_technik.IstTechnik(t) || _technik.IstUmsetzung(t)) return Projektstruktur.Primitive.Technik;
         return Projektstruktur.Primitive.Hilfscode;
     }
 

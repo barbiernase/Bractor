@@ -324,8 +324,8 @@ public static class ParitaetsPruefung
                         if (istProjektion) inv.Projektionen.Add(full);
                         // Projektion/Reader/Store-Impl: Records im öffentlichen Ctor = Konfiguration.
                         var istStoreImpl = t.TypeKind != TypeKind.Interface && (Sym.Implements(t, iWStore) || Sym.Implements(t, iRStore));
-                        // … ebenso Funktionen im Host und ihre Umsetzungen (docs/06 §6.5: ihre Records kommen aus Konfig:<Record>).
-                        var istImpl = t.TypeKind == TypeKind.Class && iFunktion != null && Sym.Implements(t, iFunktion);
+                        // … ebenso Funktionen im Host, ihre Umsetzungen und Technik-Umsetzungen (docs/06 §6.5: ihre Records kommen aus Konfig:<Record>).
+                        var istImpl = t.TypeKind == TypeKind.Class && (iFunktion != null && Sym.Implements(t, iFunktion) || technik.IstUmsetzung(t));
                         if (istProjektion || istReader || istStoreImpl || istImpl)
                             foreach (var c in t.InstanceConstructors.Where(c => c.DeclaredAccessibility == Accessibility.Public))
                                 foreach (var prm in c.Parameters)

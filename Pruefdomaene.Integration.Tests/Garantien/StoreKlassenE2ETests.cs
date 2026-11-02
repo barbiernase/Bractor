@@ -29,16 +29,21 @@ public class StoreKlassenE2ETests
         {
             var stelle = Id<Messstelle>.Neu();
             var werte = Enumerable.Range(1, 20).Select(i => i * 1.5).ToList();
+            var stand = 0;
             foreach (var w in werte)
-                (await FrageAsync(host, new ErfasseMesswert(stelle, w), Guid.NewGuid()))!.Success.Should().BeTrue();
+            {
+                var r = (await FrageAsync(host, new ErfasseMesswert(stelle, w), Guid.NewGuid()))!;
+                r.Success.Should().BeTrue();
+                stand = r.NewVersion;   // die Funktionen der Messung hängen eigene Events an die Stelle: der Stand des letzten Messwerts, nicht ihre Zahl
+            }
 
             var queries = host.Services.GetRequiredService<IQueryDienst>();
-            var antwort = await queries.ExecuteAsync(new HoleMessreihe(stelle), new[] { new StreamStand(stelle.Wert, werte.Count) });
+            var antwort = await queries.ExecuteAsync(new HoleMessreihe(stelle), new[] { new StreamStand(stelle.Wert, stand) });
             antwort.NochNicht.Should().BeFalse("die Projektion holt den Stand in der Frist ein (Fortschritt beim Framework)");
             var reihe = (Messreihe)antwort.Data;
             reihe.Werte.Should().Equal(werte, "je Event genau ein Messpunkt, in Log-Reihenfolge");
             reihe.Letzter.Should().Be(werte[^1]);
-            antwort.Deps.Should().ContainSingle(d => d.Id == stelle.Wert && d.Version >= werte.Count,
+            antwort.Deps.Should().ContainSingle(d => d.Id == stelle.Wert && d.Version >= stand,
                 "die Antwort trägt den Stand der gezeigten Id (die Funktionen der Messung hängen weitere Events an die Stelle)");
             antwort.Projektionen.Should().Equal("MessreiheProjektion");
 

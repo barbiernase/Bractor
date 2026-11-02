@@ -400,7 +400,6 @@ code Wetterdienst.Vorhersage.Gewichte class teile=1 domaene=Wetterdienst.Vorhers
 # Technik mit eigenem Zustand (IZustand in der Umsetzung): gehört der Aktivierung des Prognosemodells, gesichert mit dessen Position
 technik Wetterdienst.Vorhersage.IStatistik schnittstelle | Zaehle(station:Guid):void | umsetzung Statistik(zaehlung:IZustand<Zaehlung>)
 code Wetterdienst.Vorhersage.Zaehlung class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
-code Wetterdienst.Vorhersage.Arbeitsmodell class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
 lage Tendenzbildung -> Domain.Pipeline
 lage Prognosemodell -> Domain.Pipeline
 lage IStatistik -> Domain.Pipeline
@@ -414,7 +413,7 @@ lage Warndienst -> Domain.Akteure
 # ── Besitz (Hierarchie Anwendung → Blöcke → Glieder), nur aus den Signaturen: ein Command gehört seinem Aggregat, was eine Methode
 #    zurückgibt dem Typ der Methode, eine Query dem, dessen Frage sie nimmt; was nur als Feld/Parameter/Konstruktor vorkommt, seinem einzigen
 #    Nutzer (mehrere oder keiner → §begriffe); was von außen kommt (Quelle, Befugnis eines Akteurs ohne Erzeuger) → §rand. Die Leseseite hängt
-#    an ihrem Store-Bündel (Sicht), Antworten eines Readers am Reader. Ein privates Feld ist Rumpf, kein Signatur-Fakt (Arbeitsmodell). ──
+#    an ihrem Store-Bündel (Sicht), Antworten eines Readers am Reader. ──
 besitz Anlagen.Messung.AlarmAusgeloest event -> aggregate:Sensor
 besitz Anlagen.Messung.GrenzwertUeberschritten event -> aggregate:Sensor
 besitz Anlagen.Messung.KeineStoerung rejection -> aggregate:Stoerungsfall
@@ -505,7 +504,6 @@ besitz Warenkatalog.Import.LegeArtikelAn command -> aggregate:Artikel
 besitz Warenkatalog.Import.MeldeImportFortschritt command -> aggregate:Importlauf
 besitz Warenkatalog.Import.SchliesseImportAb command -> aggregate:Importlauf
 besitz Warenkatalog.Import.StarteImport command -> aggregate:Importlauf
-besitz Wetterdienst.Vorhersage.Arbeitsmodell code -> §begriffe
 besitz Wetterdienst.Vorhersage.Gewichte code -> bausteinfunktion:Prognosemodell
 besitz Wetterdienst.Vorhersage.Zaehlung code -> bausteinfunktion:IStatistik
 besitz Wetterdienst.Vorhersage.MeldeTemperatur command -> aggregate:Station
