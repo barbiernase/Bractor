@@ -59,7 +59,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
     private static readonly string[] DomaenenRollen =
     {
         "IState", "IDecider`1", "IApplier`1", "ICommand", "IEvent", "IQuery", "IQueryResponse", "IReadModel", "IWriteStore", "IReadStore",
-        "IProjektion", "IReader", "IFunktion", "IGraph", "IQuellNachricht", "IWertobjekt",
+        "IProjektion", "IReader", "IFunktion", "IGraph", "IWertobjekt",
         // Der Rand (Domain.Akteure): wer was hineingibt und hört, und welcher Client wen verkörpert.
         "IAkteur", "IClient",
     };
@@ -79,7 +79,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         var (iEvent, iTransient, iCommand, iQuery, iResponse) = (G("IEvent"), G("ITransientEvent"), G("ICommand"), G("IQuery"), G("IQueryResponse"));
         var (iDecider, iFunktion, iAkteur, iDarf) = (G("IDecider`1"), G("IFunktion"), G("IAkteur"), G("IDarf`1"));
         var iAggregatCommand = G("IAggregatCommand");
-        var (iClient, iQuelle) = (G("IClient"), G("IQuellNachricht"));
+        var iClient = G("IClient");
         if (iEvent == null || iCommand == null || iDecider == null) return;
         var rollen = DomaenenRollen.Select(G).Where(x => x != null).Select(x => x!).ToList();
 
@@ -165,14 +165,14 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                 ctx.ReportDiagnostic(Diagnostic.Create(EingangOffen, Location.None, t.Name, "Command ohne Ziel", "kein Knoten eines Graphen nimmt ihn, kein Akteur hört ihn"));
         }
 
-        // Offene Ausgänge: Events/Ablehnungen ohne Erzeuger (Quell-Nachrichten erzeugt der Treiber bzw. die Außenwelt), Responses ohne Reader-Handle.
+        // Offene Ausgänge: Events/Ablehnungen ohne Erzeuger, Responses ohne Reader-Handle.
         var alsFeld = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
         foreach (var r in typen.Where(t => IstT(t, iResponse)))
             foreach (var p in r.GetMembers().OfType<IPropertySymbol>())
                 foreach (var x in MitArgumenten(p.Type)) alsFeld.Add(x);
         foreach (var t in typen.Where(t => !t.IsAbstract && t.TypeKind != TypeKind.Interface))
         {
-            if (IstT(t, iEvent) && !IstT(t, iQuelle) && !erzeugt.Contains(t))
+            if (IstT(t, iEvent) && !erzeugt.Contains(t))
                 ctx.ReportDiagnostic(Diagnostic.Create(AusgangOffen, Location.None, t.Name, IstT(t, iTransient) ? "Ablehnung/Hinweis" : "Event",
                     "kein Decide, keine Funktion und kein Akteur nennt es in seiner Signatur"));
             else if (IstT(t, iResponse) && !erzeugt.Contains(t) && !alsFeld.Contains(t))

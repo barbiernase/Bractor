@@ -1,65 +1,60 @@
 # 13 — Reifegrad, Schulden & Bewertung
 
 **Die eine Quelle für „offen“.** Andere Dokumente (`CLAUDE.md`, Kapitel 01–12, Konzepte) nennen Schulden höchstens kurz und verweisen
-hierher. Stand: 2026-10-29, nach dem Umbau Pub/Sub-Neustrukturierung (Umbau-Phasen 0–10; die Grammatik steht in
+hierher. Stand: 2026-11-02, nach dem Umbau „Commands und Funktionsgraphen“ (die Grammatik steht in
 [10](10-entwickler-api.md), die Garantien in [11](11-garantien.md)). Maßstab sind die sechs Invarianten und die Werkbank-Leitsätze W1–W12
 (`CLAUDE.md`). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
 
 ## 13.0 Offen auf einen Blick
 
-**Umbau Pub/Sub-Neustrukturierung (2026-10-26 bis 2026-10-29, Umbau-Phasen 0–10):** Broker, Signale, Prozess-Manager, Fluss- und
-Prozess-Sprache, Handle-/Trigger-Welt, Marken im Log und der Redis-Versionsindex sind abgelöst durch Wecker am Commit, Funktionen als Actors,
-Hinweis-Netz, Uhr, Sitzung und Verteiler, Store-Klassen und die direkte Aggregat-Abfrage (Grammatik [10](10-entwickler-api.md)). Was er
-erledigt hat, steht in §13.6 (u. a. W11-1, W11-2, PF-4b, PF-6, PF-25, PF-26, P2-5, P3-3, FB-1, FB-2, FB-3, FB-10, VM-1, G-12, G-13, G-14); offen
-blieben, was die Tabelle unten nennt, darunter PF-7, PF-10, PF-13 und AK-1 (Entscheidungen offen) sowie FB-19 aus der direkten Abfrage. Die Hausregel
-für Actors ist eine Build-Prüfung (CQRS112/113, docs/06 §6.7). G-18 und PF-36 sind mit dem Vorrat der Seite im Funktions-Actor erledigt, PF-33 mit dem Standard von 4 Slots (§13.6); die Decke danach ist PF-40.
+**Umbau „Commands und Funktionsgraphen“ (2026-11-02, Branch `funktionsgraphen`):** es gibt drei Arten von Nachrichten — Command (mit Ziel an ein
+Aggregat, ohne Ziel an genau einen Empfänger), Event, Hinweis. Gerechnet wird in Graphen (Funktionen als Klassen mit typisierten Ports, Kanten aus
+den Typen, Instanzen mit eigener Konfig in `umgebungen/<name>/graphen/`), Quellen sind Katalogfunktionen mit gesichertem Zustand statt
+Quell-Nachrichten im Log, Hinweise gehen nur an Akteure, ein Akteur hört (`IHoert`: Arbeit oder Kenntnis), ein Client ist ein Record, der Akteure
+verkörpert ([04](04-konsum-und-prozess-maschine.md) §4.4, §4.7, [10](10-entwickler-api.md)). Damit erledigt: FV-1, FV-2, FB-6, FB-8, FB-21, PF-7
+(§13.6); neu offen: GF-1 bis GF-6.
 
-**Umbau „Funktionen vor dem Aggregat“ (2026-11-01, Branch `claude/funktionen-vor-aggregat`):** Funktionen lesen das Log nicht mehr. Ihre
-Eingänge sind Folgen (schlichte Records aus einem Decide), Zwischenergebnisse, Quell-Nachrichten und Hinweise, ein Event nur als Antwort auf einen
-eigenen Command (CQRS100, CQRS108); Folge und Quell-Nachricht legen im selben Commit offene Eingänge (`cqrs_eingaenge`), die Laufzeit ist Wurzel,
-Parent und Kinder je Knoten (Gossip, Bote), draußen eine Werkstatt mit Arbeitern statt Vermittler und Lease; Funktions-Actor, Festhalten,
-Positionen, `[EineAdresse]`, Hinweisplan, gleichbleibend (CQRS103) und Slots sind entfallen, `IZustand` ist ein Cache auf genau einer Aktivierung
-(Advisory-Lock) ([04](04-konsum-und-prozess-maschine.md) §4.4). Damit gegenstandslos: PF-35, FB-9, FB-13 (der Weckruf an den Funktions-Actor); PF-34 ist neu
-gefasst, PF-40, PF-15, PF-31, PF-32 und FB-7 sind auf den Rest gekürzt. Neu offen: FV-1 bis FV-5.
+**Frühere Umbauten:** Pub/Sub-Neustrukturierung (2026-10-26 bis 2026-10-29) und „Funktionen vor dem Aggregat“ (2026-11-01); was sie erledigt
+haben, steht in §13.6. Die Hausregel für Actors ist eine Build-Prüfung (CQRS112/113, docs/06 §6.7).
 
 | ID | Kurz | Prio |
 |---|---|:--:|
-| FV-1 | Client-Nachricht als Eingang einer Funktion fehlt: ein Client kann einer Funktion heute nur über eine Quell-Nachricht (durabel, im Log) oder einen Hinweis (verlierbar) etwas sagen; eine schlichte Nachricht vom Client mit offenem Eingang (ohne Log) gibt es nicht | P2 |
-| FV-2 | Werkzeuge kennen Folge und Zwischenergebnis nur halb: der Extractor liest Folgen im Ausgang eines Decide, im Editor-Modell sind Folgen und Zwischenergebnisse aber Wertobjekte (keine eigene Record-Art); die Sonde deckt beide nicht ab und ihre Funktionen hören noch Events (im Build wäre das CQRS100 — die Sonde läuft ohne Generator); Karten und LLM-Kontexte zeigen die Verkettung nicht | P2 |
-| FV-3 | Eine Funktion von Hand mitten in einer Kette: der Vorgänger wartet auf „fertig“ (acht Mal 60 s, dann scheitert er und wird wiederholt); ein Mensch, der länger überlegt, lässt die Kette mehrfach neu laufen (die Inbox verwirft die Commands, die Außenwelt dahinter ist mindestens einmal) | P3 |
-| FV-4 | Hält kein Knoten eine Funktion (draußen ohne Arbeiter, mit Zustand ohne Sperre), bringt der Zusteller ihre offenen Eingänge alle 2 s erneut („später“) — sichtbar im Einblick (`/einblick/auftraege`), aber ohne eigene Meldung und ohne Rückstand in `/health` | P3 |
-| FV-5 | Alte Logs mit `BefehlFestgehalten`/`AusgabeFestgehalten` (Festhalte-Streams vor dem Umbau): die Typen sind entfernt; Projektionen lesen sie nicht (Typ-Filter), ob Einblick und Spur über unbekannte Event-Typen stolpern, ist ungeprüft — Sim-Datenbanken neu anlegen | P3 |
+| GF-1 | Ein Command ohne Ziel von einem Akteur an den Kopf eines Graphen geht nur über den JSON-Eingang (`/eingang/command`, nur mit `Transport:JsonEingang`, in Prod aus); über gRPC dispatcht die Sitzung nur an Aggregate, C#-Client und Python-SDK haben keinen Aufruf dafür | P2 |
+| GF-2 | Der `Webhook` nimmt Aufrufe nur am JSON-Eingang an (in Prod aus) und ohne Akteur-Tor; sein Postfach liegt je Prozess — ein Aufruf an einen Cluster-Knoten, der die Instanz nicht hält, bleibt dort liegen | P2 |
+| GF-3 | Werkzeuge noch nicht ganz auf dem Graphen-Modell: die Editor-Oberfläche zeichnet keine Graph-Karten (die Graph-Lesart steht im Extractor, `--graph <Typ>` als Text; Oberfläche zurückgestellt, docs/10 E4); die Sonde (`soll.txt`) und die Extractor-Tests auf ihr (`SichtTests`, `GestenTests`, übersprungen) folgen dem neuen Modell erst mit ihrer Neufassung | P2 |
+| GF-4 | Reste im Code: `Projektstruktur.Primitive.Quelle` mit der Sammeldatei `Quellen.cs`, `Funktionen.cs` als Sammeldatei der Abläufe, `Lageart` prüft noch `IQuellNachricht`; Kommentare nennen Laufort, Folge, „Cache der Aktivierung“ (`Abstractions/Funktion.cs`, `Zustand.cs`, `Infrastructure/Funktionen/ZustandsSperre.cs`, `Verkettung.cs`, `Werkstatt.cs`, `Eingang/JsonEingang.cs`, `WeckplanGenerator`), die Grammatik-Regel GR-FUNKTION-ZUSTAND ebenso | P3 |
+| GF-5 | Eine Ablehnung (der Hinweis aus einem Decide) geht nur gezielt an die Sitzung des Absenders, nicht an die Akteure, die ihren Typ hören — wer sie zur Kenntnis braucht, bekommt sie nicht | P3 |
+| GF-6 | Kein Messblock für Arbeit draußen (S2 ist entfallen) und keiner für einen Graphen unter Last außer der Zubuchung in S5 | P3 |
+| FV-3 | Arbeit von Hand mitten in einem Lauf: gibt ein Knoten Arbeit an einen Akteur, den die Werkbank von Hand verkörpert (`Umgebung:Hand`), wartet sein Kind auf das Ende jenes Laufs (acht Mal 60 s, dann scheitert der Aufruf und wird wiederholt); ein Mensch, der länger überlegt, lässt den Lauf davor mehrfach neu rechnen (die Inbox verwirft die Commands, die Außenwelt dahinter ist mindestens einmal) | P3 |
+| FV-4 | Hält kein Cluster-Knoten eine Instanz (Arbeit ohne Arbeiter, Zustand oder Quelle ohne Sperre), bringt der Zusteller ihre offenen Eingänge alle 2 s erneut („später“) — sichtbar im Einblick (`/einblick/auftraege`), aber ohne eigene Meldung und ohne Rückstand in `/health` | P3 |
+| FV-5 | Alte Logs mit Typen, die es nicht mehr gibt (`BefehlFestgehalten`, `AusgabeFestgehalten`, Quell-Nachrichten wie `DateiErkannt` samt ihrer Quell-Vorgänge): Projektionen lesen sie nicht (Typ-Filter), ob Einblick und Spur über unbekannte Event-Typen stolpern, ist ungeprüft — Sim-Datenbanken neu anlegen | P3 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
 | G-16 | Lesen nach Schreiben im Verhaltens-Netz einmal verfehlt (`ClientVerhaltenTests.Nach_dem_eigenen_Command_sieht_die_naechste_Query…`, 1 von 3 Läufen am 2026-10-28): die Query direkt nach der Quittung zeigte den eigenen Stand nicht; vermutlich derselbe Mechanismus wie G-14 oder der damalige Redis-Index (nach dem Commit geschrieben, überschreibend, mit Ablauf); seit Phase 6 kommt der Stand aus dem Guard der Projektion (mit den Wirkungen in einer Transaktion) — am 2026-10-28 mit diesem Stand wieder einmal in drei vollen Läufen rot — der Redis-Index war es also nicht. Seit Phase 7 wartet die Leseseite selbst auf „mindestens S auf v“ (keine Nachfrage im Client mehr); ob G-16 damit weg ist, zeigt erst eine Reihe voller Läufe | P2 |
-| G-15 | Hinweise zwischen zwei Actors ohne zugesicherte Reihenfolge: der Plan (§2.9) sagt „zwischen zwei Actors bleibt die Reihenfolge“, der Bote meldet aber jede Nachricht für sich — zwei Hinweise desselben Absenders an dieselbe Adresse können sich überholen; ohne Nachweis-Test | P2 |
-| PF-34 | Eine Funktion mit Zustand rechnet im Cluster auf genau einer Aktivierung mit einem Kind (Advisory-Lock): ihr Durchsatz ist der eines Kinds — ungemessen | P3 |
+| G-15 | Hinweise zwischen zwei Actors ohne zugesicherte Reihenfolge: der Bote meldet jede Nachricht für sich — zwei Hinweise desselben Absenders an denselben Verteiler können sich überholen; ohne Nachweis-Test | P3 |
+| PF-34 | Eine Instanz mit Zustand oder Quelle rechnet im Cluster auf genau einem Knoten: ihr Durchsatz ist der der Kinder dieses Knotens; dazu die Sicherung in `cqrs_zustaende` nach fertigen Läufen — beides ungemessen | P3 |
 | PF-40 | Decke von S5 bei ≈ 1 800 (4 Slots) bzw. 2 400 (16 Slots) Vorgängen/s durchgehend; Postgres trägt die Last, der Host nutzt 3–4 Kerne. Die DB-Zeit trägt das Lesen der Konsumenten je Partition (Partition über `get_byte(uuid_send(stream_id), …) % n`, Typ-Filter, Ausschluss-Liste). Erster Teil erledigt (`195a83d`): der Funktions-Actor liest ab der Grenze seiner letzten Seite statt ab der Position — mit 16 Slots je Aufruf 3,0 → 0,69 ms, DB-Zeit 207 → 107 s, S5-64 2 028 → 2 405 Vorgänge/s; mit 4 Slots kaum Unterschied (0,47 → 0,42 ms, 1 758 → 1 830, im Rauschen). Offen: auch so trägt das Lesen 65–76 % der DB-Zeit, weil jede Partition dasselbe Ende des Logs durchgeht und ≈ 9 von 10 Zeilen verwirft (Plan auf der Mess-DB: 500 Treffer aus ≈ 5 700 Zeilen). Kandidat: ein Index über Partition und Sequenz für die eingestellte Zahl der Partitionen — Entscheidung offen (docs/12). Seit dem Umbau „Funktionen vor dem Aggregat“ lesen nur noch die Projektionen | P1 |
-| PF-13 | Unter S5-64: der Nachschub (früher Reaktion, seit Phase 4 die Funktion `Nachschub`) wartet am heißen Posten hinter den Reservierungen — p99 im Sekundenbereich (Zahlen docs/12) | P3 |
-| PF-10 | Datei-Treiber meldet eine Datei nach der anderen ins Log (Rückstau): das Melde-Tempo ist die Decke von S1 — Entscheidung offen | P2 |
-| PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16; seit Phase 3 dazu die Uhr (eine Abfrage je Sekunde); der Poll je Funktion und Partition ist mit dem Umbau „Funktionen vor dem Aggregat“ entfallen, dafür fragt der Zusteller je Knoten jede Sekunde die fälligen offenen Eingänge | P3 |
-| FB-8 | „Python-Funktion hört einen Hinweis“ ist nur geteilt nachgewiesen: das SDK (pytest, Antwort als Ganzes) und der Weg des Servers über die Werkstatt (Hand-Ausführer als Arbeiter) — kein echter Python-Prozess über gRPC, weil keine Anwendung mit Leitung eine Funktion draußen hat, die einen Hinweis hört | P2 |
+| PF-13 | Unter S5-64: der Nachschub (Graph `Nachschubablauf`) wartet am heißen Posten hinter den Reservierungen — p99 im Sekundenbereich (Zahlen docs/12) | P3 |
+| PF-10 | Der Dateiwächter meldet eine Datei nach der anderen (das nächste Element erst, wenn der Graph-Actor den Lauf angenommen hat): das Melde-Tempo bestimmt S1 mit — ob eine Quelle mehrere Läufe zugleich anstoßen soll, ist offen | P2 |
+| PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr, Fristen und je Knoten die fälligen offenen Eingänge (Zusteller), dazu die Quellen nach ihrem Intervall — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16 | P3 |
 | FB-11 | Ein Commit, dessen Ausgang mehrdeutig blieb (G-3: die Events stehen im Log, das `SaveChanges` meldete trotzdem einen Fehler), weckt niemanden — der Wecker hängt am erfolgreichen Commit; die Konsumenten holt erst der Takt (bis 30 s). Selten, folgenlos für Exactly-once | P3 |
 | FB-5 | Kreise Funktion ↔ Aggregat: keine Build-Prüfung (R6 des Plans). Ein Kreis ist der Normalfall eines Ablaufs (Vorgang → Funktion → Vorgang); ob und wie ein Kreis ohne fortschreitenden Zustand erkannt werden soll, ist offen | P3 |
-| FB-6 | Quell-Nachricht vom Client nur über den JSON-Eingang: das Trigger-Protokoll der Leitung ist entfernt, einen gRPC-Weg (und SDK-Aufrufe) gibt es auch nach Phase 7 nicht — Phase 7 hat Sitzung, Verteiler, Lesen und Ausgangskorb gebaut, nicht das Senden einer Quell-Nachricht | P2 |
-| FB-14 | Das Python-SDK kennt nur die Leitung von Phase 7 (neue Nachrichten werden erkannt, `aktualisiert` nur geloggt), aber weder Lesen ab Position noch Ausgangskorb noch neu Fragen — die stehen nur im C#-Client (`GrpcProxy.LiesLogAsync`, `IAusgangskorb`); Command-Ids aus Python-Handlern sind gewürfelt (`uuid4`), ein Vertrags-Client hat keinen Aufruf, um einen Command seiner Akteure von sich aus zu senden (`SPONTAN` geht nur in den Handshake), und ein Hinweis aus Python trägt keine Kennung (der Server würfelt sie) | P3 |
+| FB-14 | Das Python-SDK kennt weder Lesen ab Position noch Ausgangskorb noch neu Fragen (`aktualisiert` nur geloggt) — die stehen nur im C#-Client (`GrpcProxy.LiesLogAsync`, `IAusgangskorb`); Command-Ids aus Python-Handlern sind gewürfelt (`uuid4`), ein Client hat keinen Aufruf, um einen Command seiner Akteure von sich aus zu senden (`SPONTAN` geht nur in den Handshake), und ein Hinweis aus Python trägt keine Kennung (der Server würfelt sie) | P3 |
 | FB-15 | Überlast an einer Sitzung: über 1000 offenen Zustellungen verwirft der Verteiler (`Rueckstau`) und schreibt nur eine Warnung ins Log, keinen Spur-Hinweis; die Nachrichten des Clients selbst (Commands, Queries) laufen ohne Grenze in die Mailbox der Sitzung | P3 |
 | FB-16 | Neuaufbau ohne Schutz vor altem Code: eine Generation trennt nur, was eine alte Aktivierung NACH dem Zurücksetzen noch mit ihrem alten Fortschritt schreibt; ein Knoten mit altem Projektions-Code, der danach den neuen Fortschritt lädt, schreibt mit altem Code in die neue Generation (die Generation trägt keinen Code-Stand). Dazu schaltet nur der `ProjectionRebuilder` erst nach dem Aufbau um; der Sim-Start (`ProjektionsStandDienst`) schaltet sofort um (leere Sicht während des Aufbaus), einen Neuaufbau in Prod löst nichts aus | P3 |
 | FB-17 | Marten kann `Id<T>` nicht als Dokument-Identität (sein Codegen bricht an generischen Ids, Probe 2026-10-28): ein Read-Model mit typisierter Id bekommt eine generierte Speicher-Identität `Schluessel` (die UUID steht damit zweimal im JSON) und muss `partial` sein (CQRS111); LINQ über `Id<T>`-Felder geht über `RegisterValueType` je verwendetem `Id<X>` | P3 |
 | FB-18 | Datei-Stores liegen ohne Eintrag `Stores:<Store>:Verzeichnis` unter dem Temp-Verzeichnis je Datenbank und Schema des Logs (`StoreOrte`); wird die Datenbank gelöscht, bleiben die Dateien — in Sim baut der Start dann neu auf (neue Generation), in Prod nicht. Der Rückstand (`KonsumRueckstand`) liest den Fortschritt aus Marten: richtig für den Marten-Store und den Fortschritt beim Framework, nicht für einen künftigen Store der Klasse 1 außerhalb von Marten | P3 |
 | FB-19 | Die Antwort eines Aggregats auf eine direkte Query (Phase 9) wird nicht beobachtet: die Sitzung beobachtet nur Antworten mit Projektionen dahinter, ein späterer Commit des Aggregats bringt dem Client kein `Aktualisiert` — wer den Stand live braucht, hört die Events des Aggregats (`IHoert`) oder fragt neu. Ein Weg über die Verteiler hinge am heißen Pfad (je Commit eine Meldung, auch für Typen, die kein Client hört) | P3 |
 | FB-20 | Python-DTOs ohne Drift-Prüfung: der Codegen-Prepass schreibt beim Build die Nutzlast-Tabelle des Python-Workers (`nutzlast_tabelle.py`, `vertraege.py`), die betterproto-DTOs (`generated/__init__.py`) aber nur `build_python.sh` (in der Werkbank Schritt 2 von ⟳). Eine neue Domänen-Nachricht lässt den Worker beim Import scheitern, bis jemand das Skript startet; weder `codegen.sh --check` noch das Gate prüfen es (Phase 9: `AblaufE2ETests.Bildeingang_mit_Python_Worker…` rot, „Worker hat sich nicht angemeldet“) | P2 |
-| FB-21 | Python-Generate und Worker passen nicht ganz zu den Funktionen draußen: `funktions_tabelle.py` nennt Module (`funktionen.bildpaar_beurteilung`, `funktionen.training`) auch für Funktionen, die ein Client-Vertrag trägt und die es als Modul nicht gibt; `funktions_worker.py` sagt bei fehlender Implementierung „die Werkbank legt sie mit ⟳ an“, `PythonSync` legt aber nur Client-Implementierungen an; eine getragene Funktion (`GetrageneFunktion`) hat nur die leeren `beim_start`/`beim_ende` | P3 |
-| FB-24 | Der Akteur einer Funktion draußen ist uneinheitlich: Extractor und `AkteurHerkunft` sagen, ihre Ausgaben kommen vom Akteur mit `IDarf<F>`; zur Laufzeit erbt das Kind den Akteur des Eingangs (Kette). Mehrdeutige `IDarf`-Halter einer Quell-Nachricht heißen still „kein Akteur“, ohne Build- oder Start-Prüfung; der JSON-Eingang fällt ohne Akteur auf `system` zurück, gRPC lässt ihn leer (docs/konzept-akteure.md §2.3, §5.1) | P3 |
+| FB-24 | Herkunft ohne Kette: mehrdeutige `IDarf`-Halter eines Commands heißen still „kein Akteur“, ohne Build- oder Start-Prüfung; der JSON-Eingang fällt ohne Akteur auf `system` zurück, gRPC lässt ihn leer (docs/konzept-akteure.md §2.3, §5.1) | P3 |
 | FB-25 | CQRS020/021 (ein Emit-Weg, Command-Send mit Frist) laufen nur in den Kompositionen und der Leitung (`CommandEmitAnalyzer` in `Infrastructure.SourceGeneration`), nicht in `Infrastructure` selbst — gerade dort liegen die beiden erlaubten Sender; ein roher Send im Framework fiele nur in Actors und dem, was sie besitzen, auf (CQRS112). Nachweis heute nur über `CommandEmitAnalyzerTests` | P3 |
 | PF-39 | Der Stand je gezeigter Id (read-your-writes, `ProjektionsStaende.StaendeAsync`) kostet je Query eine eigene Abfrage: in der ersten Gesamtprüfung S1 +15 % Queries je Vorgang gegen Phase 6 (19 % der Datenbank-Zeit), unter S6 (Clients über gRPC, jede Frage mit „mindestens S auf v“) 40 % der Datenbank-Zeit bei 0,12–0,26 ms je Aufruf; Lesen und Stand in einer Abfrage ungemessen | P3 |
 | PF-37 | „P hat S weiterverarbeitet“ geht nach JEDEM Commit einer Projektion, der Events anwandte, als Nachricht an den Verteiler jedes Knotens — auch wenn keine Sitzung beobachtet; nicht gemessen (Zusammenfassungs-Takt 200 ms und Grenze der Abhängigkeitsmengen 1000 Ids sind gesetzt, nicht vermessen) | P3 |
-| FB-7 | Eine Funktion draußen ohne verbundenen Träger staut ihre Eingänge als offene Eingänge (FV-4), ohne eigene Meldung „kein Träger“ | P3 |
-| FB-4 | Werkzeuge: Extractor und Karten zeigen `Frist<TCmd>` als Ausgang eines Decide nicht als Kante zur Uhr; das Werkbank-Schema kennt nur die Datei-Konfig (Takt fehlt); der Zustandstyp einer Funktion (`IZustand<T>`) ist eine Code-Karte im geteilten Block statt an seiner Funktion, das Hinweis-Netz hat keine eigene Kante; Editor-Oberfläche zurückgestellt (docs/10 E4); die Oberfläche nennt noch den entfallenen Umgebungs-Abschnitt `VersionIndex` und einen Schalter „TrackDeps (Redis-Deps)“ | P3 |
+| FB-7 | Arbeit ohne verbundenen Arbeiter staut ihre Aufträge als offene Eingänge (FV-4), ohne eigene Meldung „kein Arbeiter“ | P3 |
+| FB-4 | Werkzeuge: Extractor und Karten zeigen `Frist<TCmd>` als Ausgang eines Decide nicht als Kante zur Uhr; der Zustandstyp einer Funktion (`IZustand<T>`) ist eine Code-Karte im geteilten Block statt an seiner Funktion; Editor-Oberfläche zurückgestellt (docs/10 E4); die Oberfläche nennt noch den entfallenen Umgebungs-Abschnitt `VersionIndex` und einen Schalter „TrackDeps (Redis-Deps)“ | P3 |
 | PF-31 | Entscheidung offen: ein Wechsel der Snapshot-Schema-Version faltet heiße Aggregate einmal voll | P3 |
 | PF-32 | Wachstum ohne Laufzeit-Risiko: Guards je Stream nie gelöscht, DLQ ohne Aufräumen und Index, Einblick-Scans, Kopfzeilen 140 Byte je Event | P3 |
 | PF-17 | Rest: die Zeitstempel-Regel kostet in Sim ≈ 20–35 µs je eingefügtem Event (Versatz je Zeile aus `uhr`); in Prod nur die Datenbankzeit | P3 |
-| PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
 | W10-2 | Reflektive Serialisierung zur Laufzeit (Marten-Default, Snapshot-`Clone`, HTTP-Antworten); kein Reflection-Verbot im Build | P1 |
 | W10-3 | Reflection im Test-Werkzeug: `Cqrs.Testing` spiegelt den Zustand eines Aggregats per Reflection (Vergleich in `Dann`) | P3 |
@@ -72,8 +67,8 @@ gefasst, PF-40, PF-15, PF-31, PF-32 und FB-7 sind auf den Rest gekürzt. Neu off
 | WB-1 | Werkbank: Geste p50 unter Fremdlast 346–470 ms (Ziel 300 ms), LLM-Kontexte kalt, CLI `--schreiben`, Renamer ohne String-Literale | P2 |
 | WB-4 | Die Werkbank kennt genau eine Anwendung (`StandardWurzel`, `ServerHost`); eine Anwendung anlegen ist nicht beschrieben — Entscheidung offen | P2 |
 | WB-5 | Der Einblick der Werkbank kennt keinen fachlichen Zustand „fertig“ mehr (früher `ProzessBeendet`) und seit Phase 5 auch kein „gescheitert“ (eine Ablehnung steht nicht im Log, sie kommt nur als verlierbarer Spur-Hinweis): ein Vorgang läuft oder ruht | P3 |
-| WZ-1 | Prüf-Lücken der Werkzeuge: Grammatik-Gate bestätigt sich selbst, Fixpunkt ohne Akteure/Verträge/Clients/Funktionen/Dienste, Sonde ohne `SendeJe`/Count-Join/Kompensation/`IMensch`/`IstClient` | P2 |
-| AK-1 | Akteure/Clients: `als` im Envelope, Funktionen über C# tragen, Anmeldung je Person | P2 |
+| WZ-1 | Prüf-Lücken der Werkzeuge: Grammatik-Gate bestätigt sich selbst, Fixpunkt ohne Akteure/Clients/Technik | P2 |
+| AK-1 | Akteure/Clients: `als` im Envelope, Arbeit über einen C#-Client annehmen (CQRS094), Anmeldung je Person | P2 |
 | P2-6 | Schreibpfad: paralleler Drain skaliert sublinear | P2 |
 | P2-8 | Hartkodierte Test-Verbindungsdaten und übrige Intervalle (der Takt je Partition ist seit 2026-10-28 einstellbar: Umgebung `Konsum.TaktSekunden`) | P2 |
 | P2-9 | Toter Lesepfad `LoadStateAsync`, Identitäts-Vertrag nur per Kommentar | P2 |
@@ -97,7 +92,7 @@ Werkzeuge lesen teils per Reflection. Die alte Handle-/Trigger-Welt und der Diri
 | Subsystem | Reife |
 |---|:--:|
 | Schreibseite | 🟢 / 🟡 (G-5) |
-| Konsum, Funktionen, Uhr | 🟢 / 🟡 (PF-13, G-15, FB-8) |
+| Konsum, Graphen, Uhr | 🟢 / 🟡 (PF-13, GF-1, GF-2) |
 | Generatoren & Analyzer | 🟢 / 🟡 (W10-1, W2-1) |
 | Multi-Node / Transport | 🟢 / 🟡 (P1-1, P1-2) |
 | Werkbank (Extractor, Editor, Server) | 🟢 / 🟡 (LLM-1, W3-1, WB-1, WB-4, WZ-1) |
@@ -108,9 +103,9 @@ Werkzeuge lesen teils per Reflection. Die alte Handle-/Trigger-Welt und der Diri
 
 1. **Invarianten-Disziplin über Sprachgrenzen.** Dieselben Invarianten tragen Backend, Blazor und Python.
 2. **Compile-Zeit statt Laufzeit.** Analyzer, Generator-Diagnosen und Boot-Guards verwandeln ganze Fehlerklassen (Fehlrouting,
-   Dangling-Command, unbounded Token, Wire-Drift, offene Ausgänge, Funktionen ohne Laufort) in Build-Fehler.
-3. **Wenige Bausteine.** Ein Ablauf ist ein Aggregat plus Funktionen plus Frist — kein eigener Ablauf-Interpreter; Exactly-once kommt aus der
-   Inbox des Aggregats und dem Festhalten der Funktion, beides einmal geschrieben.
+   Dangling-Command, unbounded Token, Wire-Drift, offene Ausgänge, Commands ohne Empfänger, Graphen mit falschen Ports) in Build-Fehler.
+3. **Wenige Bausteine.** Ein Ablauf ist ein Aggregat plus Graphen plus Frist — kein eigener Ablauf-Interpreter, Kanten aus den Typen;
+   Exactly-once kommt aus der Inbox des Aggregats, den abgeleiteten Command-Ids und dem offenen Eingang am Kopf eines Laufs.
 4. **Ehrliche Nicht-Autoritativität.** Jeder Beschleuniger (Redis, Snapshot) hat einen Voll-Read-Fallback.
 5. **Selbstbeobachtung.** Die Werkbank zeigt das System als Karten aus dem Code; durchgespielt wird das echte System, sichtbar über die Spur.
 6. **Test-Kultur.** Store-Semantik nur gegen echtes Marten; generative Vollständigkeits-Guards; Fremd-Domäne als Agnostik-Beweis (`--sonde`).
@@ -156,7 +151,6 @@ DtoMapper, `Clientvertragslesart`, `Funktionsform`); Wirte: warmer Workspace bei
 `IAnwendung`) sind seit 2026-10-14 umgesetzt (§13.6). Offen bleibt:
 - Das Client-Framework `Client.Infrastructure` referenziert `Infrastructure` (Server-Framework) nur für `ProtoMessageMapper`; der Mapper gehört in
   ein schlankes Leitungs-Framework.
-- Framework-Code im Domänen-Projekt: der generische `funktions_worker.py` in `Domain.Client.Worker.Python.ML`.
 - Generate der Komposition tragen noch Framework-Namespaces (`Infrastructure.Mapping.GeneratedTypeRegistry` u. a. in `Domain.Laufzeit`).
 - Identitäten aus einfachen Typnamen (`BrokerIdentity`, `GeneratedAkteurRechte`). (Das vom Client gesetzte Cluster-Kind ist seit Umbau-Phase 1
    erledigt: Ziel und Aggregat folgen `ICommand<TAggregat>`, eine abweichende Hülle wird an der Leitung abgelehnt.)
@@ -346,6 +340,13 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **Umbau „Commands und Funktionsgraphen“ (2026-11-02):** **FV-1** (keine Client-Nachricht als Eingang einer Funktion) — ein Akteur gibt einen
+  Command ohne Ziel an den Kopf eines Graphen (über den JSON-Eingang; über gRPC GF-1). **FV-2** (Werkzeuge kannten Folge und Zwischenergebnis nur
+  halb) — beide gibt es nicht mehr, zwischen Funktionen fließen Commands. **FB-6** (Quell-Nachricht vom Client nur über JSON) — Quell-Nachrichten
+  gibt es nicht mehr. **FB-8** (Python-Funktion mit Hinweis-Eingang) — Funktionen hören keine Hinweise, draußen gibt es nur Arbeit. **FB-21**
+  (`funktions_tabelle.py`, `funktions_worker.py`) — beide entfallen, ein Python-Client erbt eine Basis je Client. **PF-7** (ein Stream je
+  Quell-Nachricht) — eine Quelle schreibt nicht ins Log.
 
 - **Quittung und Wiederverbinden im C#-Client (früher FB-22, 2026-10-29):** die Leitung kannte für einen Command nur „Event, das der Client
   hört“ oder „Fehler“ — ein Noop, ungehörte Events und eine idempotent beantwortete Wiederholung endeten als `CommandUnbestaetigt`, und

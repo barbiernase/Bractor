@@ -23,8 +23,8 @@ namespace Infrastructure.Eingang;
 ///   die generierte Registry, die Felder über den generierten Wire-Kontext (keine Reflection). Die Antwort auf einen Command nennt Ausgang und
 ///   Versionen; mit <c>"zeigeEvents": true</c> dazu die geschriebenen Events, gelesen aus dem Log. Die Antwort auf eine Query nennt den Stand je
 ///   gezeigter Id (<c>staende</c>) — fragt sie ein Aggregat, seine Version als OCC-Stand.</item>
-/// <item><c>GET /eingang/auftraege</c>, <c>POST /eingang/ergebnis</c> — Laufort <c>Hand</c>: die Werkbank beantwortet die Eingänge einer Funktion
-///   (<see cref="HandAusfuehrer"/>).</item>
+/// <item><c>GET /eingang/auftraege</c>, <c>POST /eingang/ergebnis</c> — Hand (<c>Umgebung:Hand</c>): die Werkbank beantwortet die Arbeit der Akteure,
+///   die sie verkörpert (<see cref="HandAusfuehrer"/>).</item>
 /// </list>
 /// </summary>
 public static class JsonEingang

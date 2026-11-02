@@ -1,6 +1,6 @@
 # 06 — Transport, Multi-Node & Betrieb
 
-Stand 2026-10-29, gegen den Code geprüft.
+Stand 2026-11-02, gegen den Code geprüft.
 
 Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses Kapitel verweisen.
 
@@ -9,32 +9,34 @@ Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses K
 | Prozess | Rolle |
 |---|---|
 | **Host.Grpc** | der einzige Cluster-tragende Prozess: Marten + ActorSystem (Einzelknoten oder Consul) + gRPC + Einblick-Port |
-| **Host.Blazor** | Beispiel-GUI der Beispieldomäne, ein gRPC-**Client** mit Vertrag (kein ActorSystem, kein Cluster); Verbindung aus `Clients:<Name>` der Umgebung (Kapitel [08](08-frontend-blazor-client.md)) |
+| **Host.Blazor** | Beispiel-GUI der Beispieldomäne, ein gRPC-**Client** (`Arbeitsplatz`; kein ActorSystem, kein Cluster); Verbindung aus `Clients:<Name>` der Umgebung (Kapitel [08](08-frontend-blazor-client.md)) |
 | **Werkbank** | Entwurfs-Oberfläche (`dotnet run --project Werkbank`); startet den Host als eigenen Prozess (`HostProzess`), **nur in einer Sim-Umgebung** — bei Prod endet ⟳ nach dem Lesen (CLAUDE.md W6) |
-| **Python-Worker externer Funktionen** | generischer `funktions_worker.py` für Funktionen mit Laufort `Extern`; meldet sich wie jeder Client am gRPC-Port an (Token, dessen Akteur `IDarf<F>` hat) und wird ein Arbeiter in der Werkstatt des Knotens, der ihm Aufträge gibt. Gestartet über „▶ Worker“ der Werkbank (`Werkbank/Server/Worker.cs`, aus `Funktionen:<F>:Worker`) oder von Hand (Kapitel [09](09-python-sdk.md)) |
+| **Python-Clients** | ein Client, der Akteure mit Arbeit verkörpert (`KlassifikationsWorker`, `TrainingsWorker`); meldet sich wie jeder Client am gRPC-Port an (Token, das einen seiner Akteure nennt), nimmt die Arbeit seiner Akteure an (`ArbeitAnnehmen`) und wird ein Arbeiter in der Werkstatt seines Knotens. Gestartet über „▶ Worker“ der Werkbank (`Werkbank/Server/Worker.cs`, aus `Clients:<Name>:Worker`) oder von Hand (Kapitel [09](09-python-sdk.md)) |
 
 ### Host.Grpc-Bootstrap (`Host.Grpc/Program.cs`)
 
 `Program.cs` ist nur `var umgebung = builder.AddCqrs(args); … await app.LaufeAsync(umgebung);` — ohne Domänen-Zeile (docs/06 §6.5);
 `AddCqrs(args)` generiert die Komposition (`Domain.Laufzeit`, `GeneratedAnwendung`), die der Host referenziert.
 
-- **Umgebung:** `--umgebung <name>` bzw. `CQRS_UMGEBUNG` → `umgebungen/umgebung.<name>.json` (mit dem Host veröffentlicht). Umgebungsvariablen
-  und Argumente überschreiben (`Quellen__DateiErkannt__Pfad=…`), `${env:NAME}` und `${branch}` (aus `CQRS_BRANCH`) werden ersetzt; ein
+- **Umgebung:** `--umgebung <name>` bzw. `CQRS_UMGEBUNG` → der Ordner `umgebungen/<name>/` (mit dem Host veröffentlicht): `umgebung.json` und je
+  Instanz eines Graphen `graphen/<instanz>.json` (der Lader hängt sie unter `Graphen:<instanz>`). Umgebungsvariablen und Argumente überschreiben
+  (`Graphen__linienimport__Eingang__Pfad=…`), `${env:NAME}` und `${branch}` (aus `CQRS_BRANCH`) werden ersetzt; ein
   unbekannter Abschnitt oder ein unbekanntes Feld ist ein Startfehler (Lader: `Infrastructure/Umgebung/UmgebungLader.cs`). Sim-DB je Branch:
   `cqrs_sim_${branch}`.
 - **`AddCqrs`** (`Infrastructure/Umgebung/CqrsUmgebungExtensions.cs`) bindet der Reihe nach: Kestrel (gRPC-Port HTTP/2; Einblick-Port
   HTTP/1.1+2, 0 = aus), Umgebungs-Siegel, `AddCqrsFramework` (Werte aus der Umgebung), `IDbClock` mit Versatz, Projektions-Stand,
-  Pull-Pfade, Prozesse und Flüsse, Monitoring, Fristen, Akteure (`Identitaeten`), Quellen, Funktionen (Laufort bzw. Umsetzung), Einblick.
-- **`LaufeAsync`** mappt gRPC (`CqrsClientService`, bidirektionaler Stream `Connect`), Monitoring, Einblick, JSON-Eingang und die Quell-Webhooks
+  Pull-Pfade, Monitoring, Fristen, Akteure (`Identitaeten`), die Instanzen der Graphen (`BindeGraphen`, dazu die Arbeit der Akteure und
+  `Umgebung:Hand`), Technik und Konfig-Werte je Knoten (`BindeTechnik`), Einblick.
+- **`LaufeAsync`** mappt gRPC (`CqrsClientService`, bidirektionaler Stream `Connect`), Monitoring, Einblick und den JSON-Eingang samt Webhooks
   (§6.6). Mit Rolle `Migrator` legt es nur das Schema an und endet (§6.3).
 - **Umgebungs-Siegel** (`<schema>.umgebung`): ein Host startet nur gegen eine DB mit passendem Namen, passender Art und passendem Cluster-Namen;
   eine Sim-DB legt der Host bei Bedarf an. **Uhr** (`<schema>.uhr`): Versatz nur in Sim wirksam.
   Details docs/06 §6.5.
 - **Cluster:** `Cluster:Art = Einzelknoten` (Mitgliedschaft in-memory über den `TestProvider` von Proto.Cluster, kein Consul — Standard in Sim)
   oder `Consul` (`ConsulProvider` als Discovery, kein statischer Seed). In beiden Fällen `PartitionIdentityLookup`. Die Kinds werden beim
-  Start aggregiert: Aggregate und alle `IClusterKindContributor` (Batch-Leser, Uhr, Quellen-Halter, Zusteller); dazu
+  Start aggregiert: Aggregate und alle `IClusterKindContributor` (Batch-Leser, Uhr, Zusteller); dazu
   spawnt jeder Knoten seinen Verteiler (lokaler Actor mit festem Namen `verteiler`, `VerteilerStart`) und die Wurzel seiner Funktionen (`funktionen`,
-  `FunktionenStart`, Orte im Gossip-Zustand). Cluster-Start mit hartem 30-s-Timeout (`ClusterStartupService`), danach die **Start-Sperre** (`Bereitschaft`): 32 Proben-Identitäten, die über
+  `FunktionenStart`: je Instanz ein Graph-Actor, Orte im Gossip-Zustand). Cluster-Start mit hartem 30-s-Timeout (`ClusterStartupService`), danach die **Start-Sperre** (`Bereitschaft`): 32 Proben-Identitäten, die über
   die Mitglieder streuen, werden gefragt, bis jede antwortet (höchstens 90 s, dann mit Warnung weiter) — erst dann starten Takt und Eingänge. Nach
   dem harten Ende eines Knotens steht er noch in der Mitgliederliste, und der Cluster legt Aktivierungen auf ihn; ohne die Sperre arbeitete ein
   neu gestarteter Host Minuten lang gegen Fristen.
@@ -54,9 +56,7 @@ Ohne Serializer wären die internen Actor-Nachrichten rohe CLR-Records → de fa
 | Direkte Abfrage | `AggregatFrage`, `AggregatAntwort` (`Infrastructure/Aggregate/ActorSystem/AggregatAbfrage.cs`) |
 | Wecken | `Wake`, `WakeAck` (`Infrastructure/Projections/AdapterMessages.cs`) |
 | Verteilen | `Verteile` (Pushes je Commit), `Verarbeitet` („P hat S weiterverarbeitet“) (`Infrastructure/Verteilen/Verteiler.cs`) |
-| Hinweis-Netz | `HinweisZustellen` (`Infrastructure/Funktionen/HinweisNetz.cs`) |
-| Funktionen draußen | `EingangAnbieten`, `HoleEingaenge`, `EingaengeZugeteilt`, `EingangBeantwortet`, `ArbeitLebt`, `ArbeitErledigt`, `TraegerAbgemeldet`, `ListeOffene`, `OffeneAuftraege` (`Infrastructure/Funktionen/FunktionsVermittlung.cs`) |
-| Quellen | `HalteQuelle`, `QuelleGehalten` (Lease für `Laufmodus: EinmalImCluster`, `Infrastructure/Quellen/QuellenHalter.cs`) |
+| Graphen | `EingangZustellen`, `EingangQuittung` (ein Eingang am Kopf einer Instanz und seine Antwort, `Infrastructure/Funktionen/Eingang.cs`) |
 
 **Generator (reflexionsfrei)** — `WireSerializerGenerator` (Infrastructure.SourceGeneration) emittiert `GeneratedWire` (Top-Level-Whitelist:
 `Serialize/Deserialize/TypeName/CanSerialize`) und `GeneratedWirePoly` (polymorpher Payload-Dispatch je Wurzel Event, Command).
@@ -84,8 +84,8 @@ serialisierbar; (b) jeder Command/Event/Trigger aus `GeneratedTypeRegistry` hat 
 
 **Clients: Sitzung und Verteiler** (docs/konzept-akteure.md §5). Je gRPC-Verbindung ist die Sitzung ein Actor (`SitzungsActor`), der
 einzige Schreiber auf den Antwort-Stream; die Lese-Schleife der Verbindung reicht jede Nachricht des Clients nur weiter, was wartet (Query,
-Antwort einer Funktion draußen) läuft neben der Mailbox. Ihre Id nennt den Knoten
-(`<Adresse>#<Nummer>`). Nach dem Handshake meldet sie ihre wirksame Liste (Vertrag ∩ Token) beim **Verteiler** ihres Knotens an — einem lokalen
+Antwort auf Arbeit) läuft neben der Mailbox. Ihre Id nennt den Knoten
+(`<Adresse>#<Nummer>`). Nach dem Handshake meldet sie ihre wirksame Hör-Liste (was die verkörperten Akteure ∩ Token hören) beim **Verteiler** ihres Knotens an — einem lokalen
 Actor mit festem Namen `verteiler`, der Typ → Sitzungen hält und jede Sitzung beobachtet (`Watch`). Ein Commit geht als EINE Nachricht
 (`Verteile`) an den Verteiler jedes Knotens (Mitgliederliste, `Bote.MeldeAnKnoten`), nur mit Typen, die irgendein Client hören darf; gezielte
 Antworten nur an den Knoten der Sitzungs-Id. Liest ein Client nicht nach, verwirft der Verteiler über 1000 offenen Zustellungen je Sitzung
@@ -98,7 +98,7 @@ Antworten nur an den Knoten der Sitzungs-Id. Liest ein Client nicht nach, verwir
 
 ## 6.3 Multi-Node-Betrieb (`deploy-multinode/`)
 
-`docker-compose.yml` + `Dockerfile`. Alle Werte stehen in `umgebungen/umgebung.multinode.json` (`CQRS_UMGEBUNG=multinode`, `Cluster:Art =
+`docker-compose.yml` + `Dockerfile`. Alle Werte stehen im Ordner `umgebungen/multinode/` (`CQRS_UMGEBUNG=multinode`, `Cluster:Art =
 Consul`); je Node setzt Compose nur `Cluster__Rolle` und `Cluster__AdvertisedHost`. Topologie: ein Docker-Netz, Service-Namen als DNS.
 
 - **Infra**: `consul` (`agent -dev`), `postgres:16-alpine` — mit Healthchecks (kein Redis).
@@ -108,7 +108,7 @@ Consul`); je Node setzt Compose nur `Cluster__Rolle` und `Cluster__AdvertisedHos
   (`Cluster__Rolle=Mitglied`, AutoCreate.None) warten per `depends_on: migrate: service_completed_successfully` → kein gleichzeitiges
   `CREATE TABLE`-Race (23505).
 - **Der Multi-Node-Hebel**: `Cluster__AdvertisedHost` = eigener Service-Name je Node — nur so erreichen sich die Member über die Leitung.
-- **Ports**: nur `grpc1` exponiert `127.0.0.1:5001` (gRPC, h2c) und `127.0.0.1:5002` (Einblick: `/health`, Quell-Webhook); grpc2/3 nur
+- **Ports**: nur `grpc1` exponiert `127.0.0.1:5001` (gRPC, h2c) und `127.0.0.1:5002` (Einblick: `/health`); grpc2/3 nur
   netzintern.
 - **Dockerfile**: Multi-Stage (sdk:9.0 → aspnet:9.0), parametrisiert über `PROJECT`/`ENTRY_DLL`; `dotnet publish` zieht nur den
   Abhängigkeitsgraphen von Host.Grpc. Die Kommentare im Dockerfile und in `docker-compose.yml` nennen noch den entfernten
@@ -130,23 +130,27 @@ kommt aus der Beispieldomäne (Bildverarbeitung), nicht aus dem Framework.
 **Veraltet:** Die Start-Skripte für Host.Blazor (`deploy/deploy.sh`, `deploy/deploy_clients.sh`, `deploy/cqrs-blazor.env`,
 `deploy-linux/start-server.sh`, `deploy-windows/start.ps1`) setzen noch `Pipeline__WatchPath`, `Blazor__Urls` und `GrpcServer__Address`;
 `deploy-linux/start-server.sh` startet beide Hosts ohne Umgebung und setzt `ConnectionStrings__EventStore`. Heute gilt: beide Hosts brauchen
-`--umgebung` bzw. `CQRS_UMGEBUNG`; Host.Blazor liest `Clients:<Name>` der Umgebung, die Quelle `Quellen:<Typ>:Pfad`.
+`--umgebung` bzw. `CQRS_UMGEBUNG`; Host.Blazor liest `Clients:<Name>` der Umgebung, das Verzeichnis des Dateiwächters steht in der Instanz des
+Linienimports (`graphen/linienimport.json`, `Eingang:Pfad`).
 
 ## 6.5 Konfiguration: die Umgebungs-Datei
 
-Für Nutzer gibt es **eine** Konfiguration je Umgebung: `umgebungen/umgebung.<name>.json`. Die Abschnitte und Felder sind Typen in
-`Abstractions/Umgebung/UmgebungKonfig.cs` — **sie sind das Schema** (eine Quelle; die Werkbank rendert daraus das Formular). Die vollständige
-Abschnitts-Tabelle steht in docs/06 §6.5; hier nur der Überblick:
+Für Nutzer ist eine Umgebung **ein Ordner**: `umgebungen/<name>/umgebung.json` und je Instanz eines Graphen `graphen/<instanz>.json`. Die
+Abschnitte und Felder sind Typen in `Abstractions/Umgebung/UmgebungKonfig.cs` — **sie sind das Schema** (eine Quelle; die Werkbank rendert daraus
+das Formular):
 
-- **Backend:** `Umgebung` (Name, Art `Sim`/`Prod`), `EventStore`, `Cluster`
+- **Backend:** `Umgebung` (Name, Art `Sim`/`Prod`, `Python`, `Hand` — die Akteure, deren Arbeit die Werkbank von Hand beantwortet), `EventStore`, `Cluster`
   (Art, Name, Consul, AdvertisedHost, Rolle), `Schreibpfad` (generiertes JSON, Group-Commit, Batch, Linger, Drain, Snapshot-Schwelle,
   Inbox-Grenze), `Lebenszyklus` (Leerlauf bis zur Passivierung je Actor-Art), `Konsum` (Partitionen, Seitengröße und Takt je Partition des Batch-Konsums), `Transport` (gRPC-Port, Einblick-Port, JSON-Eingang).
-- **Was aktiv ist:** `Identitaeten` (Token → Akteure; ohne Abschnitt ist das Akteur-Tor offen), `Quellen` (Treiber-Konfig inkl. Webhook),
-  `Funktionen` (Laufort `Host`/`Extern`/`Hand`, Implementierung, Slots, Wiederholungen, `Worker`; eine gerufene Funktion nur ihre
-  Implementierung), `Konfig` (Konfig-Records der Domäne, Feld für Feld), `Clients` (Token, Adresse, Urls, Dateien je Client-Vertrag),
-  `Logging`.
+- **Was aktiv ist:** `Identitaeten` (Token → Akteure; ohne Abschnitt ist das Akteur-Tor offen), `Clients` (je Client Token, Adresse, Urls,
+  Dateien und `Worker` — wie die Werkbank ihn als Prozess startet: Skript, Argumente, Interpreter), `Stores`, `Logging`.
+- **Die Instanzen** (`graphen/<instanz>.json`, `GraphInstanzKonfig`): `Graph`, bei einem Quellkopf `Akteur`, je Knoten (Pfad bei inneren Graphen,
+  `Aufbereitung.Verkleinern`) `Parallel`, `Warteschlange`, `Wiederholungen`, `Vorwaermen`, `Zeitlimit`, `Technik` (Schnittstelle → Umsetzung) und die
+  Felder seiner Konfig-Records ([04](04-konsum-und-prozess-maschine.md) §4.4). Ohne Datei läuft ein Graph nicht; ein Graph mit Command-Kopf läuft
+  je Umgebung genau einmal.
 
-Jeder Wert lässt sich per `__`-Variable überschreiben, z. B. `Cluster__AdvertisedHost=grpc1`. Die **Rolle** eines Knotens heißt
+Jeder Wert lässt sich per `__`-Variable überschreiben, z. B. `Cluster__AdvertisedHost=grpc1`, ein Wert einer Instanz unter
+`Graphen__<instanz>__<Knoten>__<Feld>`. Die **Rolle** eines Knotens heißt
 `Cluster__Rolle` mit den Werten `Allein` (Standard) / `Migrator` / `Mitglied`.
 
 Intern übersetzt `AddCqrs` die Umgebung in den `CqrsFrameworkBuilder` (`AddCqrsFramework`); der Builder ist kein Nutzer-Schalter. Der Typ
@@ -175,12 +179,10 @@ Beide Endpunkte sind ohne Port-Bindung gemappt; per HTTP/1.1 erreichbar sind sie
 **Am Einblick-Port** (nur dort, `RequireHost`):
 - **Einblick-API** `/einblick/*` (`Infrastructure/Einblick/EinblickEndpunkte.cs`): `stand`, `spur?ab=`, `vorgaenge`, `vorgang/{k}`,
   `auftraege`, `hinweise`, SSE `neu` — die Spur aus den Log-Headern (docs/04 §4.9).
-- **JSON-Eingang** `/eingang/*` (`Infrastructure/Eingang/JsonEingang.cs`): `command`, `query`, `rechte`, `auftraege`, `ergebnis` — Commands und
-  Queries als Akteur (Header `akteur-token` → Akteur-Tor), Antworten für Laufort `Hand`. Nur mit `Transport:JsonEingang` (Sim an, Prod aus;
-  CLAUDE.md W6).
-- **Quell-Webhooks**: je Quelle mit `Quellen:<Typ>:Webhook` mappt `MapQuellWebhooks` generisch `POST <route>` (Nachricht als JSON über den
-  Wire-Kontext, Antwort `202 {vorgang}`, gleiche Nachricht = derselbe Vorgang); ohne Einblick-Port ist das ein Boot-Fehler
-  (docs/04 §4.7). Eine Route steht nicht im Programm.
+- **JSON-Eingang** `/eingang/*` (`Infrastructure/Eingang/JsonEingang.cs`): `command`, `query`, `rechte`, `auftraege`, `ergebnis`, `webhook/<Pfad>` —
+  Commands und Queries als Akteur (Header `akteur-token` → Akteur-Tor; ein Command ohne Ziel wird ein offener Eingang am Kopf der Instanz, die ihn
+  nimmt), die Arbeit der Akteure unter `Umgebung:Hand` und ihre Antworten, Aufrufe an einen `Webhook` (Postfach seines Pfads, Kopf `kennung` vom
+  Absender, Antwort `202 {kennung}`, voll `503`; docs/04 §4.7). Nur mit `Transport:JsonEingang` (Sim an, Prod aus; CLAUDE.md W6).
 
 Keine Prometheus-Exposition, kein OpenTelemetry (docs/13 P2-10).
 
@@ -204,5 +206,5 @@ Keine Prometheus-Exposition, kein OpenTelemetry (docs/13 P2-10).
 ## 6.8 Offen
 
 Offene Punkte stehen nur in `docs/13`: Multi-Node nur container-erprobt, Consul im `-dev`-Modus (P1-1); kein TLS, keine Identitäten für Prod,
-Webhook ohne Akteur-Tor (P1-2); Monitoring schmal und Default-Credentials (P2-10); Reflection im Codegen (W10-1). Der Migrator ist ein
+Webhook ohne Akteur-Tor (P1-2), nur mit JSON-Eingang und mit einem Postfach je Prozess (GF-2); Commands ohne Ziel über gRPC (GF-1); Monitoring schmal und Default-Credentials (P2-10); Reflection im Codegen (W10-1). Der Migrator ist ein
 Init-Job, kein laufender Migrationsdienst; Schema-Evolution ist kein Ziel der Werkbank (CLAUDE.md W1–W12).

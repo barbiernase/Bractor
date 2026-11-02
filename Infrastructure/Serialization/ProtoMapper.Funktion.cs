@@ -11,6 +11,13 @@ public partial class ProtoMessageMapper
     /// <summary>Der Auftrag als Nutzlast: ein Command ohne Ziel.</summary>
     public Nutzlast Nachricht(object eingang) => eingang is IEvent e ? _tabelle.PackeEvent(e) : _tabelle.PackeNachricht(eingang);
 
+    /// <summary>Ein Command ohne Ziel in einer Nutzlast (an einen Graph-Kopf oder einen Akteur); null = ein Command an ein Aggregat.</summary>
+    public ICommand? CommandOhneZiel(Nutzlast n)
+    {
+        try { _tabelle.Command(n); return null; }
+        catch (NotSupportedException) { return _tabelle.Nachricht(n) as ICommand; }
+    }
+
     /// <summary>
     /// Ein Command der Antwort — an ein Aggregat oder ohne Ziel (an den Kopf eines Graphen); nur die Nutzlast: Stream, Korrelation und Akteur stempelt
     /// der Server selbst, ein Client muss sie nicht (und darf sie nicht) setzen.

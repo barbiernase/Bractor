@@ -19,7 +19,7 @@ public delegate IAsyncEnumerable<object> FunktionsRechnungDraussen(Guid kennung,
 /// </summary>
 /// <param name="Antworten">Die Event-Typen, die die Funktion als Antwort auf ihre eigenen Commands hört (das Ziel entschied sie, docs/04 §4.4), je mit der
 /// Nummer ihres <c>Auf</c>.</param>
-/// <param name="Draussen">Draußen (Laufort Extern oder Hand): ein Arbeiter rechnet, das Kind hat keine Aktivierung.</param>
+/// <param name="Draussen">Draußen (die Arbeit eines Akteurs): ein Arbeiter rechnet, das Kind hat keine Aktivierung.</param>
 public sealed record FunktionsTraeger(string Name, Func<IServiceProvider, FunktionsAktivierung>? Aktivierung, FunktionsRechnung? Rechne, bool Liest = false,
     IReadOnlyDictionary<Type, int>? Antworten = null, FunktionsRechnungDraussen? Draussen = null)
 {

@@ -1,10 +1,10 @@
 # 03 — Die Schreibseite (Command → Decider → Event → Store)
 
-Stand 2026-10-29, gegen den Code geprüft. Die Grammatik (wie man Aggregat, Command, Event schreibt) steht in [10](10-entwickler-api.md).
+Stand 2026-11-02, gegen den Code geprüft. Die Grammatik (wie man Aggregat, Command, Event schreibt) steht in [10](10-entwickler-api.md).
 
 Der Schreibpfad ist das dichte Zentrum des Frameworks. `AggregateActorBase`
 (`Infrastructure/Aggregate/ActorSystem/AggregateActorBase.cs`) trägt fast alle Invarianten und Audit-Fixes und ist ausführlich
-kommentiert. Die Schalter des Schreibpfads stehen für Nutzer in der Umgebungs-Datei (`umgebungen/umgebung.<name>.json`, Typen in
+kommentiert. Die Schalter des Schreibpfads stehen für Nutzer in der Umgebungs-Datei (`umgebungen/<name>/umgebung.json`, Typen in
 `Abstractions/Umgebung/UmgebungKonfig.cs`); `CqrsUmgebungExtensions` übersetzt sie in den internen `CqrsFrameworkBuilder`.
 
 ## 3.1 Command-Flow end-to-end
@@ -25,16 +25,18 @@ kommentiert. Die Schalter des Schreibpfads stehen für Nutzer in der Umgebungs-D
   auf das `CommandResult` (`ProtoActorAggregateDispatcher.FrageAsync`, ein Versuch, eine Frage mit Frist). Ohne angegebene Version läuft der
   Command im Modus `Emittiert`. Die Antwort nennt Ausgang, Versionen (`version`, `ersteVersion`) und Ablehnung; die geschriebenen Events liest
   der Eingang nur auf Wunsch (`"zeigeEvents": true`) aus dem Log — die Werkbank wünscht sie, ein Treiber unter Last nicht.
-- **Emittiert** (Ausgaben von Funktionen, fällige Fristen der Uhr): ausschließlich über `CommandEmitter.EmitAsync`
+- **Emittiert** (Commands an Aggregate aus den Knoten eines Graphen, fällige Fristen der Uhr): ausschließlich über `CommandEmitter.EmitAsync`
   (`Infrastructure/PubSub/CommandEmitter.cs`) — deterministische CommandId, `CommandModus.Emittiert`, eine Frage des Boten mit Pflicht-Frist
   (§3.6), at-least-once auf dem Draht; Akteur der Kette und Spur (`Ursache`, `Wirker`) reisen im Envelope. Andere Wege sind per Analyzer
   verboten (CQRS020/021; CQRS020 erkennt auch `FrageAsync<CommandResult>`).
 
-Quell-Nachrichten gehen nicht durch einen Decider: der Treiber hängt sie als erstes Event eines Vorgangs-Streams mit deterministischer Id
-an (`StartStream`, genau einmal je Kennung, `Infrastructure/Quellen/Quellen.cs`).
+Ins Log schreiben nur Aggregate. Ein Command **ohne Ziel** (`ICommand` ohne Typargument) geht nie an einen Aggregat-Actor: aus einem Decide wird
+er ein offener Eingang (§3.2), von einem Akteur nimmt ihn der JSON-Eingang an (`/eingang/command`, ein offener Eingang am Kopf der Instanz, die
+ihn nimmt, Kennung aus Command-Id und Instanz — [04](04-konsum-und-prozess-maschine.md) §4.4). Über die gRPC-Leitung gehen nur Commands an
+Aggregate (docs/13).
 
 **(b) Routing — Dispatcher zu Cluster-Identität.**
-Das Ziel eines Commands steht in seinem Typ: `record … : ICommand<TAggregat>` mit `Id<TAggregat> AggregateId` (docs/10 §10.4). Die Framework-Sicht ist `ICommand.Ziel` (die Stream-Id), der `CommandEnvelope` leitet seine `AggregateId` daraus ab — keine zweite Angabe.
+Das Ziel eines Commands steht in seinem Typ: `record … : ICommand<TAggregat>` mit `Id<TAggregat> AggregateId` (docs/10 §10.4). Die Framework-Sicht ist `IAggregatCommand.Ziel` (die Stream-Id), der `CommandEnvelope` leitet seine `AggregateId` daraus ab — keine zweite Angabe.
 `ProtoActorAggregateDispatcher.Dispatch` (`Infrastructure/Aggregate/ActorSystem/AggregateDispatcher.cs`) baut die Ziel-Identität
 typbasiert: `ClusterIdentity.Create(guid, envelope.AggregateType)`. Der Send ist eine Frage des Boten (`FrageAsync<CommandResult>`, Frist
 10 s je Versuch, 3 Versuche). Sind die Versuche erschöpft: LogError, durabler Dead-Letter und ein gemeldetes (verlierbares) targeted
@@ -81,8 +83,7 @@ Der gemeinsame Kern `HandleCommandCoreAsync` (das Ziel ist schon beim Empfang ge
    (`QuittiereOhneEventsAsync`). Eine Wiederholung bleibt ein Noop.
 4. Trennung persistenter Events von Ablehnungen (`ITransientEvent`); ein *gemischtes* Ergebnis oder mehrere Ablehnungen werfen laut.
 5. **Reine Ablehnung** → kein Event, kein Apply, die Version bleibt; nur die Quittung (Ausgang abgelehnt). Danach geht die Ablehnung als
-   Hinweis gezielt an die Sitzung des Aufrufers und an die Funktionen, die sie hören (verlierbar, der Turn wartet nicht), und als verlierbarer
-   Hinweis an die Spur. Eine Ablehnung legt auch keinen Stream an. Ist sie für einen Ablauf wichtig, ist sie ein Fakt (Event) — das entscheidet
+   Hinweis gezielt an die Sitzung des Aufrufers (verlierbar, der Turn wartet nicht) und als verlierbarer Hinweis an die Spur. Eine Ablehnung legt auch keinen Stream an. Ist sie für einen Ablauf wichtig, ist sie ein Fakt (Event) — das entscheidet
    der Modellierer über den Typ (docs/10 §10.2).
 6. **Erfolg**: `AppendeAsync` schreibt die Events; die Quittung des Commands (`Quittung`, Ausgang gewirkt) reist in derselben Transaktion in
    die Inbox-Tabelle (§3.3). Jeder der drei Wege (Effekt, Noop, Ablehnung) trägt so eine Quittung; im Log stehen nur Effekte — **eine
@@ -176,15 +177,18 @@ public partial class Leihvorgang : IState
 sowie `Id`/`Version` (`StateGenerator`) sind generiert. OCC, Weckruf, Cursor, Idempotenz und Spur erscheinen ausschließlich im Framework.
 Noop und Ablehnung stehen nicht im Log; „gewirkt/abgelehnt“ je CommandId hält die Inbox-Tabelle des Stores.
 
-**Folge.** Neben Events, einer Ablehnung und einer Frist kann ein Decide eine **Folge** ausgeben: einen schlichten Record ohne Marker in seiner
-Signatur, z. B. `IEnumerable<OneOf<PostenReserviert, Unterschritten, …>>` mit `record Unterschritten(Id<Posten> Posten, int Fehlmenge)` in
-`Folgen.cs` (Primitive `Folge`, docs/07). Sie geht nicht ins Log und zählt nicht in der Version; je Funktion, die sie hört, legt die Entscheidung
-in derselben Transaktion einen **offenen Eingang** (Beilage `EingangOffen`, Tabelle `cqrs_eingaenge`, §3.3), auch bei einer Entscheidung ohne
-Events (dann mit der Quittung und der Kopf-Prüfung). Die Kennung ist abgeleitet aus Command-Id, Stelle unter den Folgen und Funktion
-(`Eingangsvertrag`): ein wiederholter Command legt keinen zweiten Eingang. Ihre Herkunft ist der Stand nach der Entscheidung (Stream, Version,
-Log-Zeit des Commits, Akteur, Korrelation). Eine Ablehnung bleibt die einzige Ausgabe — mit einer Folge zusammen ist sie ein Fehler. Welche Typen
-Folgen sind, liest die `Nachrichtenform` aus den Decide-Signaturen (Wire-Form `GeneratedWirePoly.Nachricht`, der Codegen nimmt sie in den
-Wire-Kontext); wer sie hört, sagt die `Verkettung` (docs/04 §4.4). Einträge des Rahmens
+**Was ein Decide ausgibt.** Events, eine Ablehnung (ein Hinweis), eine Frist und **Commands ohne Ziel** — nie einen Command an ein Aggregat
+(CQRS114): Aggregate reden nur über Graphen oder Akteure miteinander. Beispiel aus der Prüfdomäne:
+`IEnumerable<OneOf<PostenReserviert, Unterschritten, ReservierungAbgelehnt, PostenNichtGefunden>> Decide(ReservierePosten c)` mit
+`record Unterschritten(Id<Posten> Posten, int Fehlmenge) : ICommand` in `Commands.cs` der Schreibseite. Den Empfänger nennt der Command nicht: es
+ist der Kopf genau eines Graphen, der ihn nimmt (hier der Nachschub), oder ein Akteur, der ihn als Arbeit hört (`PaarZuBeurteilen` → Klassifizierer,
+CQRS116). Er geht nicht ins Log und zählt nicht in der Version; je Empfänger — die Instanz, deren Graph ihn am Kopf nimmt, bzw. die Instanz der
+Arbeit des Akteurs — legt die Entscheidung in derselben Transaktion einen **offenen Eingang** (Beilage `EingangOffen`, Tabelle `cqrs_eingaenge`,
+§3.3), auch bei einer Entscheidung ohne Events (dann mit der Quittung und der Kopf-Prüfung). Die Kennung ist abgeleitet aus Command-Id, Stelle
+unter den Ausgaben und Instanz (`Eingangsvertrag`, `Folgenbeilagen`): ein wiederholter Command legt keinen zweiten Eingang. Seine Herkunft ist der
+Stand nach der Entscheidung (Stream, Version, Log-Zeit des Commits, Akteur, Korrelation). Nach dem Commit geht jeder Eingang auf dem schnellen Weg
+an seine Instanz, der Zusteller ist das Netz (docs/04 §4.4). Eine Ablehnung bleibt die einzige Ausgabe — mit einem Command zusammen ist sie ein
+Fehler. Welche Köpfe einen Typ nehmen, sagt die Tabelle der Köpfe aus den Graphen und Instanzen (`Verkettung`). Einträge des Rahmens
 (`IRahmenEvent`, heute nur `FristGesetzt`) werden beim Falten übersprungen (aber versionsgezählt) — der Decider sieht sie nie. Command → Aggregat folgt aus
 `ICommand<TAggregat>`, nicht aus Namespaces; das Decide muss im Ziel-Aggregat stehen (CQRS010), ein Command ohne typisiertes Ziel baut nicht
 (CQRS013, `CommandAggregateMapGenerator`, `ModellAnalyzer`).
@@ -200,8 +204,8 @@ Wire-Kontext); wer sie hört, sagt die `Verkettung` (docs/04 §4.4). Einträge d
   hinterließ bei einem gescheiterten Commit Tombstones (G-7).
 - **Beilagen** (`Abstractions/Beilage.cs`, `BeilagenSchreiber`): Framework-Buchhaltung, die ein Append in derselben Transaktion mitschreibt —
   `Quittung` (Inbox, unten), `FristFaellig` (Eintrag im Fälligkeits-Verzeichnis der Uhr, mit `FristGesetzt`,
-  [04 §4.7](04-konsum-und-prozess-maschine.md)), die Kennung einer Quell-Nachricht, `EingangOffen` (ein offener Eingang einer Funktion aus einer
-  Folge, §3.2: Zeile in `cqrs_eingaenge`, `on conflict do nothing`). Ein Weg für Einzel-Append und Group-Commit; die Quittungen eines Batches
+  [04 §4.7](04-konsum-und-prozess-maschine.md)), `EingangOffen` (ein offener Eingang am Kopf einer Instanz aus einem Command ohne Ziel, §3.2:
+  Zeile in `cqrs_eingaenge`, `on conflict do nothing`). Ein Weg für Einzel-Append und Group-Commit; die Quittungen eines Batches
   gehen in eine Anweisung, die Dokumente als Operationen derselben Session.
 - **Inbox** (`InboxTabelle`): Tabelle `cqrs_inbox` im Event-Schema (`command_id` Primärschlüssel, `stream_id`, `abgelehnt`, `zeit` =
   `now()` der schreibenden Transaktion, B-Baum auf `zeit`), ein von Marten verwaltetes Schema-Objekt (`Storage.ExtendedSchemaObjects`).
@@ -227,7 +231,7 @@ Wire-Kontext); wer sie hört, sagt die `Verkettung` (docs/04 §4.4). Einträge d
   sonst erst beim ersten Zugriff) und die Regel für den Event-Zeitstempel. Im Verkehr entsteht kein Schema mehr.
 - **Metadaten** in **derselben** Transaktion: `CorrelationId`, `CausationId` und die Header
   - `aggregate_type` — der Aggregat-Typ,
-  - `akteur` — der Akteur der Kette (`ImAuftrag.Header`; reist mit den Events zu Flüssen, Prozessen, Fristen),
+  - `akteur` — der Akteur der Kette (`ImAuftrag.Header`; reist mit den Events zu Fristen und mit den offenen Eingängen in die Läufe der Graphen),
   - die Spur `ursache` (`Stream:Version` des auslösenden Log-Eintrags), `wirker` (Karten-Id des schreibenden Bausteins, z. B.
     `decide:Leihvorgang/LeiheAus`), `ueber` (der Absender des Commands), `stand` (Code-Stand des Hosts) — geschrieben an einer Stelle
     (`Infrastructure/Persistence/SpurHeader.cs`, Konstanten in `Abstractions/Spur/Spur.cs`), fehlende Werte werden weggelassen.
@@ -283,11 +287,11 @@ Messwerte: [12](12-tests-und-vermessung.md).
 
 ## 3.5 Nach dem Commit: Wecker und Push
 
-Was nach einem Commit geschieht, ist für jeden Schreiber gleich (Aggregat, Quelle) und nie Teil der Wahrheit:
+Was nach einem Commit geschieht, ist nie Teil der Wahrheit:
 
 - **Wecker** (`Infrastructure/Wecken/Wecker.cs`, docs/03 §3.5): nach dem `SaveChanges` des Group-Commits und des Einzel-Appends schlägt er je
-  geschriebenem Event den generierten Weckplan nach und weckt jedes Ziel einmal — die Partitionen der Projektionen und Funktionen, die den Typ
-  hören, und die Uhr bei einer Frist. Der Weckruf trägt nur sein Ziel, darf verloren, doppelt, ungeordnet sein; das Ziel liest ab seiner Position,
+  geschriebenem Event den generierten Weckplan nach und weckt jedes Ziel einmal — die Partitionen der Projektionen, die den Typ hören, und die
+  Uhr bei einer Frist. Der Weckruf trägt nur sein Ziel, darf verloren, doppelt, ungeordnet sein; das Ziel liest ab seiner Position,
   der Takt je Partition (30 s) holt Verlorenes. Einzelheiten [04](04-konsum-und-prozess-maschine.md) §4.1.
 - **Push an Clients** (`Infrastructure/Verteilen/Commitmeldung.cs`): je Event der Envelope mit Version und Kopf nach dem Commit, als EINE Nachricht
   je Commit an den Verteiler jedes Knotens (`Verteilung`, nur Typen, die irgendein Client hören darf), der ihn an die Sitzungen seines Knotens

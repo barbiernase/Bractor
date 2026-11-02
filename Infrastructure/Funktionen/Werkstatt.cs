@@ -13,8 +13,8 @@ namespace Infrastructure.Funktionen;
 public sealed record AuftragDraussen(Guid Vorgang, FunktionsBaustein Funktion, object Eingang, Herkunft Herkunft, string? Korrelation);
 
 /// <summary>
-/// Ein ARBEITER draußen (docs/04 §4.4): eine Sitzung eines Workers oder Clients, der die Funktion trägt, oder der Mensch an der Werkbank (Laufort
-/// Hand). Er bekommt Aufträge und meldet ihre Ausgaben an die <see cref="Werkstatt"/> seines Knotens.
+/// Ein ARBEITER draußen (docs/konzept-akteure.md §3): eine Sitzung eines Clients, der einen Akteur mit Arbeit verkörpert, oder der Mensch an der
+/// Werkbank (<c>Umgebung:Hand</c>). Er bekommt Aufträge und meldet ihre Antwort an die <see cref="Werkstatt"/> seines Knotens.
 /// </summary>
 public interface IArbeiter
 {

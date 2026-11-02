@@ -25,6 +25,7 @@ public static class Strukturort
             BausteinFunktionen = m.BausteinFunktionen.Select(f => f.Datei != null ? f : f with { Namespace = Ns(f.Namespace, P.Rolle.Ablaeufe) }).ToList(),
             Akteure = m.Akteure.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Akteure) }).ToList(),
             Clients = m.Clients.Select(c => c.Datei != null ? c : c with { Namespace = Ns(c.Namespace, P.Rolle.Akteure) }).ToList(),
+            Graphen = m.Graphen.Select(g => g.Datei != null ? g : g with { Namespace = Ns(g.Namespace, P.Rolle.Ablaeufe) }).ToList(),
             Lesen = lesen == null ? null : lesen with
             {
                 Stores = lesen.Stores.Select(s => (s.Datei != null ? s : s with { Namespace = Ns(s.Namespace, P.Rolle.Leseseite) }) with
@@ -83,7 +84,6 @@ public static class Strukturort
     {
         RecordArt.Command when funktionsErgebnisse.Contains(r.Name) => P.Primitive.KnotenCommand,
         RecordArt.Command => P.Primitive.Command,
-        RecordArt.Event when r.Treiber != null => P.Primitive.Quelle,
         RecordArt.Event or RecordArt.Rejection => P.Primitive.Event,
         RecordArt.ValueObject => P.Primitive.Wertobjekt,
         RecordArt.Query when aggregatfragen.Contains(r.Name) => P.Primitive.AggregatQuery,

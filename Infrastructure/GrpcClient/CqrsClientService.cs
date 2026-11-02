@@ -36,7 +36,10 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         ILogger<CqrsClientServiceImpl>? logger = null,
         Konsum? konsum = null,
         IEventStoreRepository? log = null,
-        Werkstatt? werkstatt = null)
+        Werkstatt? werkstatt = null,
+        Infrastructure.Funktionen.Verkettung? koepfe = null,
+        Infrastructure.Eingaenge.IOffeneEingaenge? offene = null,
+        Infrastructure.Funktionen.IFunktionsWege? wege = null)
     {
         _actorSystem = actorSystem ?? throw new ArgumentNullException(nameof(actorSystem));
         _akteurTor = akteurTor;   // null = Akteure nicht konfiguriert → offen (opt-in)
@@ -45,7 +48,8 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
             konsum ?? Konsum.Standard,
             log,
             _logger,
-            werkstatt);   // null = keine Funktion in dieser Anwendung → Anbieten wird abgewiesen
+            werkstatt,    // null = keine Arbeit in dieser Anwendung → Annehmen wird abgewiesen
+            koepfe, offene, wege);   // Commands ohne Ziel an Graph-Köpfe und Akteure
     }
 
     public override async Task Connect(

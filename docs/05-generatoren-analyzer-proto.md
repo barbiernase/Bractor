@@ -1,6 +1,6 @@
 # 05 — Generatoren, Analyzer & Codegen
 
-Stand 2026-10-29, gegen den Code geprüft.
+Stand 2026-11-02, gegen den Code geprüft.
 
 Alles Dispatchende wird zur Compile-Zeit erzeugt, ohne Runtime-Reflection (Invariante 4). Drei Bausteine tragen das, alle laufen bei jedem
 `dotnet build` mit:
@@ -19,7 +19,7 @@ Dieses Kapitel sagt, **wo** sie im Code stehen und was die Generatoren lesen und
 |---|---|---|
 | `Abstractions.SourceGeneration` | net9.0 | Modell-Bibliothek (`TypeNode`), kein `[Generator]` |
 | `Core.SourceGeneration` | net9.0 | Analyse-Kern ohne `[Generator]`: `DomainGraphAnalyzer`, `TypeAggregator`, `CompilationTypeResolver`, `TypeMappingHelper`, `ProtoScalarSpec`, `NameSanitizer` |
-| `Domain.SourceGeneration` | netstandard2.0 | sechs Generatoren der Domänen-Seite (syntax-lokal) und zwölf Analyzer |
+| `Domain.SourceGeneration` | netstandard2.0 | sechs Generatoren der Domänen-Seite (syntax-lokal) und elf Analyzer |
 | `Infrastructure.SourceGeneration` | netstandard2.0 | sechzehn Generatoren der Laufzeit-Seite (symbol-basiert) und zwei Analyzer |
 | `Projections.SourceGeneration` | netstandard2.0 | DI-Verdrahtung der Leseseite (ein Generator) und zwei Analyzer |
 | `Client.SourceGeneration` | netstandard2.0 | vier Generatoren des Blazor-Clients und ein Analyzer |
@@ -29,10 +29,9 @@ Dieses Kapitel sagt, **wo** sie im Code stehen und was die Generatoren lesen und
 
 `Core.SourceGeneration` und `Abstractions.SourceGeneration` werden in `Infrastructure.SourceGeneration` per Link mitkompiliert. Ebenso hängen
 die **Verträge** als verlinkte Quelle in Generatoren und Laufzeit — eine Regel, eine Datei: `Abstractions/Aggregatvertrag.cs`, `Idvertrag.cs`
-(typisierte Ids und Command-Ziel), `Funktionsvertrag.cs`, `Projektionsvertrag.cs`, `Dienstvertrag.cs`, `Clientvertragsregeln.cs`,
-`Quellen/Treibervertrag.cs`, `Projektstruktur.cs` (docs/07), `Kodehash.cs`, `Spur/WirkerId.cs`, `StoreZugriff.cs`. Dazu die **Lesarten**, die
+(typisierte Ids und Command-Ziel), `Funktionsvertrag.cs`, `Projektionsvertrag.cs`, `Clientvertragsregeln.cs`, `Projektstruktur.cs` (docs/07), `Kodehash.cs`, `Spur/WirkerId.cs`, `StoreZugriff.cs`. Dazu die **Lesarten**, die
 Generatoren, Analyzer und Extractor teilen (verlinkt in die übrigen Generator-Projekte und `GraphExtractor.Kern`):
-`Infrastructure.SourceGeneration/Funktionsform.cs` (Funktionen), `Projektionsform.cs` (Projektion, Reader, Frage im Decider), `Ctorbindung.cs`,
+`Infrastructure.SourceGeneration/Funktionsform.cs` (Funktionen), `Graphform.cs` (Graphen: Knoten, Ports, Kanten, Köpfe, Ebenen), `Projektionsform.cs` (Projektion, Reader, Frage im Decider), `Ctorbindung.cs`,
 `Vertragsassemblies.cs`, `Clientvertragslesart.cs` (dieselbe Lesart für Server und C#-Client), `Domain.SourceGeneration/Lageart.cs` (WAS ein Typ
 für die Lage-Prüfung ist; dieselbe Lesart für CQRS098 und `--check`), `Kodeform.cs` (Code-Hash) und `Core.SourceGeneration/ProtoScalarSpec.cs`.
 
@@ -54,7 +53,7 @@ Domänen-Projekt. Die Komposition der Anwendung (`<Wurzel>.Laufzeit`, hier `Doma
 nur dort laufen die Laufzeit-Generatoren. Der `AnwendungGenerator` fasst ihre Tabellen zu
 `GeneratedAnwendung : Infrastructure.Komposition.IAnwendung` zusammen und erzeugt das `AddCqrs(args)` der Hosts, das die Anwendung anmeldet
 (`Anwendung.Setze`); das Framework liest die Tabellen nur über `Infrastructure/Komposition/Anwendung.cs` (`Anwendung.Typen`, `Routing`, `Wire`,
-`WirePoly`, `Upcasting`, `Akteure`, `Funktionen`, `Dienste`, `Aggregate`, `Weckplan`, `Quellen`, `QueryTypen`, `WireJson`, `EventJson`). Tests
+`WirePoly`, `Upcasting`, `Akteure`, `Funktionen` (Bausteine und Graphen), `Technik`, `Aggregate`, `Weckplan`, `QueryTypen`, `Nutzlast`, `WireJson`, `EventJson`). Tests
 melden die Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein Prozess fährt eine Anwendung.
 
 ## 5.2 Die Generatoren
@@ -79,15 +78,15 @@ melden die Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein 
 | `CommandAggregateMapGenerator` | jeder `ICommand<TAggregat>` (Ziel) + `IDecider<T>.Decide(TCommand)` mit OneOf-Rückgaben | `GeneratedCommandRouting` (ns `Infrastructure.Mapping`) | **Dispatch-Kern** (§5.4): `CommandToAggregate` (aus dem Typ), `CommandToEvents`, `Produziert()` (CQRS010, CQRS011) |
 | `AggregateActorGenerator` | `IState` | `AggregateActors`, `GeneratedAggregates` | Proto.Actor-Actor + Cluster-Kinds |
 | `PullPathGenerator` | `IProjektion` + `Auf` (über `Projektionsform`) | `GeneratedProjektionen`, `GeneratedPullPaths` | je Projektion Dispatch auf ihr `Auf`, gehörte Typen, Store aus dem Fähigkeits-Bereich, Batch-Kind `batch-<Projektion>`, `Projektionseintrag` mit Code-Stand; ein Store je Projektion (CQRS052), Klasse 3 nur mit `[MindestensEinmal]` (CQRS110) ([04](04-konsum-und-prozess-maschine.md) §4.1–§4.3) |
-| `WeckplanGenerator` | `Auf` der Projektionen und der Funktionen mit Log-Eingang (dieselben Lesarten), `FristGesetzt` | `GeneratedWeckplan` | je Event-Typ, wen ein Commit weckt: `batch-<P>` je Partition, `funktion-<F>` je Partition bzw. die eine Adresse, die Uhr ([03](03-schreibseite.md) §3.5) |
-| `FunktionsBausteinGenerator` | `IFunktion` (Klasse oder Schnittstelle) + `Auf` (über `Funktionsform`), Umsetzungen im Host | `GeneratedFunktionsBausteine` | je Funktion Eingänge, Ausgaben, Lese-Fähigkeiten, Bau und die Rechnung (`Rechne`, Eingang und Ausgaben als Objekte); die **Verkettung** (Nachrichten-Typ → Funktionen, die ihn hören: Folge, Zwischenergebnis, Quell-Nachricht, Hinweis) (CQRS100: Form, eine Funktion hört nie nur Events und gibt nie ein Event aus; CQRS101) ([04](04-konsum-und-prozess-maschine.md) §4.4) |
+| `WeckplanGenerator` | `Auf` der Projektionen (dieselbe Lesart), `FristGesetzt` | `GeneratedWeckplan` | je Event-Typ, wen ein Commit weckt: `batch-<P>` je Partition, die Uhr ([03](03-schreibseite.md) §3.5) |
+| `FunktionsBausteinGenerator` | Klasse mit `IFunktion` + `Auf` bzw. `Lausche` (über `Funktionsform`), generische je Typargument eines Knotens | `GeneratedFunktionsBausteine` | je Funktion Operationen mit Ports, Ausgaben, Lese-Fähigkeiten, Bau und die Rechnung (`Rechne`, Ports und Ausgaben als Objekte) (CQRS100: Form — Schnittstelle, Port außer Form, Hinweis als Port, nur Events gehört, Event ausgegeben; CQRS101) ([04](04-konsum-und-prozess-maschine.md) §4.4) |
+| `GraphGenerator` | Record mit `IGraph` (über `Graphform`) | `GeneratedGraphen` | je Graph die Knoten (aufgefaltet, mit Pfad), je Operation die Ports mit Form und Erzeugern, Köpfe, Ausgänge, Ebenen; die Kanten folgen aus den Typen (Formfehler meldet CQRS115) |
 | `QueryDienstGenerator` | `IReader` + `Frage`, `Frage` im Decider (über `Projektionsform`) | `GeneratedQueryDienst : IQueryDienst` | je Query die Frage mit Lese-Fähigkeiten; die Projektionen dahinter aus den Fähigkeiten (dieselben Stores), die gezeigten Ids aus den `Id<T>`-Feldern von Antwort und Query; eine Query an ein Aggregat geht über `AggregatAbfrage` an die Identität aus ihrem Glied `Id<TAggregat>`, Stand = das Aggregat mit seiner Version |
 | `SnapshotRegistrationGenerator` | `IState` | `RegisteredSnapshotTypes`, `GeneratedSnapshotSchema` (Datei `GeneratedSnapshotRegistration.g.cs`) | Marten-Registrierung; Schema-Version = FNV-1a-Struktur-Hash + `CodeHash` |
 | `EventJsonGenerator` | persistierte Events (`IEvent` ohne `ITransientEvent`) | `GeneratedEventJson` | Event-JSON über `EventJsonSerializerContext.Default.{Typ}` |
 | `WireSerializerGenerator` | `IWireMessage` + Payload-Wurzeln (Command, Event, Query, Antwort) | `GeneratedWire`, `GeneratedWirePoly` | Cross-Node-Wire über `CqrsWireJsonContext.Default.{Typ}` ([06](06-transport-multinode-betrieb.md) §6.2) |
-| `GerufeneGenerator` | `IFunktion` ohne `Auf` (`Funktionsform.IstGerufen`) + Konstruktoren der Umsetzungen (`Ctorbindung`) | `GeneratedGerufene` | Fabriken ohne Reflection, Bedarf je Konstruktor, Konfig-Records Feld für Feld |
-| `QuellenGenerator` | Record, der von einer Treiber-Basis erbt (`DateiGemeldet`, `TaktGemeldet`; `Treibervertrag`) | `GeneratedQuellen` | je Quelle Treiber, Konfig-Abschnitt, Wirker-Id, Fabrik |
-| `AkteurRechteGenerator` | `IAkteur` + `IDarf<T>`, `IClientVertrag` | `GeneratedAkteurRechte`, `GeneratedClientVertraege` | Befugnisse, abgeleitete Hör-Menge, Funktionen draußen je Akteur, Verträge + Hash (CQRS059) |
+| `TechnikGenerator` | was der Konstruktor einer Funktion nimmt und kein Konfig-Record, Logger oder Zustand ist (`Funktionsform.Techniken`), ihre Umsetzungen (`Ctorbindung`) | `GeneratedTechnik` | Fabriken ohne Reflection, Bedarf je Konstruktor, Konfig-Records Feld für Feld mit Bindung aus den Werten eines Knotens |
+| `AkteurRechteGenerator` | `IAkteur` + `IDarf<T>`/`IHoert<T>`, Record mit `IClient` + `IVerkoerpert<A>` | `GeneratedAkteurRechte`, `GeneratedClientVertraege` | je Akteur Commands, Queries, Hinweise, Kenntnis und Arbeit; je Client die verkörperten Akteure und der Hash (CQRS059) |
 | `EventUpcastingGenerator` | `IUpcast<…>` | `GeneratedEventUpcasting` | Backend-Primitive für Schema-Evolution in Prod, kein Editor-Konzept (CQRS040–042, CQRS044–046; 1:N bricht bewusst den Build) |
 | `DtoMapperSourceGenerator` (`DtoMapperGenerator.cs`) | Domänen-Graph (`DomainGraphAnalyzer`), ohne `IRahmenEvent`; läuft nur im Leitungs-Projekt (`<Wurzel>.Leitung`) | `GeneratedNutzlast : Cqrs.Leitung.INutzlastTabelle` (Datei `ProtoMessageMapper.Generated.cs`) | Domain ↔ `{Typ}Dto` ↔ `Nutzlast { typ, daten }` an der gRPC-Grenze (CQRS030) |
 | `TypeRegistryGenerator` | `IEvent`, `ICommand`, `IQuery`, `IQueryResponse`, `ITransientEvent` | `GeneratedTypeRegistry` | Name ↔ Typ |
@@ -108,29 +107,29 @@ melden die Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein 
 
 ## 5.3 Die Regeln: Analyzer, Generator-Diagnosen, Boot-Guards
 
-Es gibt **achtzehn Analyzer-Klassen** (zwölf in `Domain.SourceGeneration`, je zwei in `Infrastructure.SourceGeneration` und
+Es gibt **siebzehn Analyzer-Klassen** (elf in `Domain.SourceGeneration`, je zwei in `Infrastructure.SourceGeneration` und
 `Projections.SourceGeneration`, je einer in `Client.SourceGeneration` und `Hausregel.SourceGeneration`); dazu melden einzelne Generatoren
 eigene Diagnosen, und was erst mit DI und Umgebung prüfbar ist, prüft der Start. Die eine Quelle der Regeln ist der Code selbst; die Liste
 „Regel → Build-Gegenstück“ druckt `dotnet run --project GraphExtractor -- --grammatik` (aus `DomainEditor/Grammatik.cs`). Die Werkbank holt die
 CQRS-Befunde bei ⟳ und je Geste aus den Analyzern der warmen Compilations und hängt sie an die Karte (`Werkbank/Server/Arbeitsbereich.cs`).
 
-Alle Diagnosen sind Fehler, außer den Warnungen CQRS080, 081, 083, 085, 086, 087. Nummern, die hier fehlen, sind nicht vergeben.
+Alle Diagnosen sind Fehler, außer den Warnungen CQRS080, 081, 083, 085, 086, 117. Nummern, die hier fehlen, sind nicht vergeben.
 
 | Bereich | IDs | Ort |
 |---|---|---|
 | Schreibseite & Routing | CQRS010/011 · CQRS013, 079–081, 083 · CQRS020/021 · CQRS050 · CQRS057 | `CommandAggregateMapGenerator` (Decide außerhalb des Ziels, zwei Aggregate mit gleicher Identität) · `ModellAnalyzer` (Command ohne typisiertes Ziel, Apply fehlt, Faltung ohne Decide, Enum-Wert 0, Projektion mit Zustand in Feldern) · `CommandEmitAnalyzer` (ein Emit-Weg, Send mit Frist) · `AusgabeVertragAnalyzer` · `HandlerFormAnalyzer` (Form von Projektion, Reader und Frage an ein Aggregat) |
 | Eingang und Wiederholung | CQRS101 · CQRS102, CQRS104 | `EinEingangAnalyzer` (je Eingang ein `Auf` bzw. eine `Frage`, R2) · `GleichbleibendAnalyzer` (R11 gleiche Rechnung, R13 abgeleitete Ids) |
-| Funktionen | CQRS100/101 · CQRS105 · CQRS107 · CQRS106 · CQRS108 | `FunktionsBausteinGenerator` (Form, doppelter Eingang, nur Events gehört, Event ausgegeben) · `ZustandAnalyzer` (R19) · `LebenszyklusAnalyzer` · `GesamtbildAnalyzer` (Hinweis ohne Erzeuger, R20; Antwort ohne eigenen Command, GR-ANTWORT) |
-| Gerufene Funktionen, Quellen | CQRS089–092 · CQRS070 | `GerufenAnalyzer` · `QuellenTypAnalyzer` |
+| Funktionen und Graphen | CQRS100/101 · CQRS105 · CQRS115 · CQRS108 | `FunktionsBausteinGenerator` (Form, Ports, doppelter Eingang, nur Events gehört, Event ausgegeben, Hinweis als Port) · `ZustandAnalyzer` (R19) · `GraphAnalyzer` (Form des Graphen, Köpfe, Kreise, Ebenen und Vielfachheit mit Vorschlag, eine Quelle je Graph) · `GesamtbildAnalyzer` (Antwort ohne eigenen Command, GR-ANTWORT) |
+| Technik | CQRS089–092 | `TechnikAnalyzer` (nur im Konstruktor, bindbarer Konstruktor, Konfig-Feld, öffentlich) |
 | Projektstruktur | CQRS098 | `LageAnalyzer` (Ordner, Namespace, Datei prüft `--check`, docs/07) |
 | Leseseite & Store | CQRS051, 054, 055 · CQRS052, 110 · CQRS053 · CQRS066/067 · CQRS109 · CQRS111 | `FaehigkeitAnalyzer` · `PullPathGenerator` · `ProjectionServicesGenerator` · `StoreZugriffAnalyzer` · `StoreKlasseAnalyzer` · `ReadModelSchluesselGenerator` |
 | Akteure, Verträge, Clients | CQRS058, 063, 064 · CQRS059 · CQRS093/094 · CQRS095–097 | `AkteurAnalyzer` · `AkteurRechteGenerator` · `WiringGenerator` · `ClientVertragAnalyzer` (`ClientVertrag.cs`) |
-| Gesamtbild | CQRS084–087, 106 | `GesamtbildAnalyzer` (Query mit mehreren Zielen — R4: ein Reader oder ein Aggregat —, Ausgang ohne Erzeuger, Eingang ohne Konsument, Funktion draußen ohne Umsetzung und ohne Träger, Hinweis ohne Erzeuger) |
+| Gesamtbild | CQRS084–086, 116, 117 · CQRS114 | `GesamtbildAnalyzer` (Query mit mehreren Zielen — R4: ein Reader oder ein Aggregat —, Ausgang ohne Erzeuger, Eingang ohne Konsument, Command ohne Ziel ohne bzw. mit mehreren Empfängern, Funktion in keinem Graphen) · `AusgabeVertragAnalyzer` (Decide gibt einen Command an ein Aggregat aus) |
 | Proto | CQRS030 | `DtoMapperSourceGenerator` (Generator-Ausnahme wird lauter Fehler) |
 | Upcasting | CQRS040–042, 044–046 | `EventUpcastingGenerator` |
 | Framework: Hausregel für Actors (R18) | CQRS112/113 | `HausregelAnalyzer` (nur in `Infrastructure`: in Actors und dem, was sie besitzen, keine eigenen Fäden, kein `lock`, kein Feuern und Vergessen, kein `ContinueWith`, kein Blockieren, keine rohe Cluster-API; Ausnahme `[HausregelAusnahme("Begründung")]`, leere Begründung = CQRS113) |
 
-Die zwölf Analyzer von `Domain.SourceGeneration` laufen in jedem Rollen-Projekt der Domäne (§5.1). Der `GesamtbildAnalyzer` läuft in der
+Die elf Analyzer von `Domain.SourceGeneration` laufen in jedem Rollen-Projekt der Domäne (§5.1). Der `GesamtbildAnalyzer` läuft in der
 Komposition, sieht alle Domänen-Projekte und meldet ohne Quell-Ort (die Meldung beginnt mit `'Typ'`, daran hängt die Werkbank sie an die
 Karte). Die Domänen-Dispatch-Generatoren melden selbst nichts; ein nicht erkannter Fall wird zum generierten Laufzeit-`throw` — dass Decider,
 Projektionen, Reader und Funktionen die erkannte Form haben, sichern die Analyzer davor.
@@ -143,9 +142,8 @@ mit der Karte, an der er hängt, `Infrastructure/Umgebung/BootFehler.cs`):
 | Umgebung angegeben, Abschnitte bekannt, Datenbank gehört der Umgebung | `CqrsUmgebungExtensions`, `UmgebungLader.PruefeAbschnitte`, `UmgebungsSiegel` |
 | jeder Wire-Typ serialisierbar | `WireSerializerBootCheck` |
 | jeder Hörer aus dem Log steht mit jedem gehörten Typ im Weckplan (GR-WECKPLAN) | `Wecker.Pruefe` |
-| jede Funktion hat einen Laufort (Umsetzung im Host, Träger, Bindung); Lese-Fähigkeit nur im Host | `FunktionsBausteinWiring`, `FunktionsExtensions` |
-| Dienst-Bindung (fehlend, mehrdeutig, Kreis, Konfig) | `Infrastructure/Dienste/Dienste.cs` |
-| Quellen-Konfig | `Infrastructure/Quellen/Quellen.cs`, `QuellenDienst.cs` |
+| Instanzen: Graph bekannt, Knoten-Schlüssel, Akteur ∩ `IDarf`, Graph mit Command-Kopf einmal, Name einer Arbeit frei | `GraphInstanzen.Aus` (`Infrastructure/Funktionen/Graph.cs`) |
+| Technik und Konfig-Werte je Knoten (fehlend, mehrdeutig, unbekannt, Kreis) | `BindeTechnik` (`Infrastructure/Funktionen/Technik.cs`) |
 | Akteure der Konfiguration bekannt | `AkteurOptionen.Pruefe` |
 | Store einer Projektion: ein Store, genau eine Klasse, Klasse 3 nur mit Erlaubnis (R14, beim ersten Spawn) | `Projektionslauf.Ziel` (`Infrastructure/Projections/Projektionsnaht.cs`) |
 
@@ -227,7 +225,7 @@ generiert frisch und prüft per `git diff` auf Drift (CI-Gate).
 
 Innen: `ReflectionTypeAnalyzer` liest die Typen, `FileGenerator` (aus `Proto.SourceGeneration`) schreibt das Proto über die eine
 Skalar-Tabelle `Core.SourceGeneration/ProtoScalarSpec.cs` (dieselbe, die der `DtoMapperSourceGenerator` liest), `JsonContextEmitter` die
-beiden STJ-Kontexte, `PythonVertragsEmitter`, `PythonFunktionsEmitter` und `PythonNutzlastEmitter` die Python-Generate. Ausgenommen von Proto
+beiden STJ-Kontexte, `PythonVertragsEmitter` und `PythonNutzlastEmitter` die Python-Generate. Ausgenommen von Proto
 und Nutzlast sind die Events des Rahmens (`IRahmenEvent`, etwa `FristGesetzt`): sie gehen nie über die Leitung.
 
 Schuld: das Werkzeug liest per Reflection (`MetadataLoadContext`), und der Python-Vertrags-Emitter liest Verträge anders als

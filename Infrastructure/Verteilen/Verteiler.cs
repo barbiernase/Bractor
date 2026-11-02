@@ -171,12 +171,9 @@ public sealed class VerteilerActor : RahmenActor
 
         foreach (var e in envelopes)
         {
-            if (e.ZielSitzung is { } ziel)
-            {
-                if (_sitzungen.ContainsKey(ziel)) Fuer(ziel, e);
-            }
-            else if (_hoerer.TryGetValue(e.Payload.GetType(), out var hoerer))
-                foreach (var id in hoerer) Fuer(id, e);
+            if (e.ZielSitzung is { } ziel && _sitzungen.ContainsKey(ziel)) Fuer(ziel, e);
+            if ((e.ZielSitzung is null || e.AuchAnHoerer) && _hoerer.TryGetValue(e.Payload.GetType(), out var hoerer))
+                foreach (var id in hoerer.Where(id => id != e.ZielSitzung)) Fuer(id, e);
         }
         if (je is null) return;
 

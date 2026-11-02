@@ -25,7 +25,7 @@ static class Projektstruktur
     /// <summary>Die Rolle eines Projekts der Anwendung (docs/07 §7.2).</summary>
     public enum Rolle
     {
-        /// <summary><c>&lt;Wurzel&gt;</c>: Aggregate, Commands, Events, Hinweise, Wertobjekte, Enums, Quellen-Typen; Queries an Aggregate und ihre Antworten.</summary>
+        /// <summary><c>&lt;Wurzel&gt;</c>: Aggregate, Commands, Events, Hinweise, Wertobjekte, Enums; Queries an Aggregate und ihre Antworten.</summary>
         Schreibseite,
         /// <summary><c>&lt;Wurzel&gt;.Projections</c>: ReadModels, Queries, Antworten, Store-Fähigkeiten, Projektionen, Reader.</summary>
         Leseseite,
@@ -47,7 +47,7 @@ static class Projektstruktur
     {
         /// <summary>Ein Command an ein Aggregat (<c>ICommand&lt;T&gt;</c>) oder ein Command ohne Ziel, den ein <c>Decide</c> abgibt: bei der Schreibseite.</summary>
         Command,
-        Aggregat, Decider, Applier, Event, Quelle, Wertobjekt, Enum,
+        Aggregat, Decider, Applier, Event, Wertobjekt, Enum,
         /// <summary>Eine Query, die ein Aggregat beantwortet (<c>Frage</c> im Decider, docs/03 §3.2), und ihre Antwort: sie liegen
         /// bei der Schreibseite, denn der Decider sieht die Leseseite nicht. Eine Query an einen Reader ist <see cref="Query"/>.</summary>
         AggregatQuery, AggregatAntwort,
@@ -120,7 +120,7 @@ static class Projektstruktur
     public static readonly IReadOnlyList<Eintrag> Rollen = new[]
     {
         new Eintrag(Rolle.Schreibseite, "", true, new Rolle[0],
-            new[] { "Commands.cs", "Events.cs", "ValueObjects.cs", "Enums.cs", "Quellen.cs", "Queries.cs", "Responses.cs" }),
+            new[] { "Commands.cs", "Events.cs", "ValueObjects.cs", "Enums.cs", "Queries.cs", "Responses.cs" }),
         new Eintrag(Rolle.Leseseite, ".Projections", true, new[] { Rolle.Schreibseite },
             new[] { "ReadModels.cs", "Queries.cs", "Responses.cs", "Enums.cs" }),
         new Eintrag(Rolle.Ablaeufe, ".Pipeline", true, new[] { Rolle.Schreibseite, Rolle.Leseseite },
@@ -178,7 +178,7 @@ static class Projektstruktur
         switch (p)
         {
             case Primitive.Aggregat: case Primitive.Decider: case Primitive.Applier: case Primitive.Command: case Primitive.Event:
-            case Primitive.Quelle: case Primitive.Wertobjekt: case Primitive.AggregatQuery: case Primitive.AggregatAntwort:
+            case Primitive.Wertobjekt: case Primitive.AggregatQuery: case Primitive.AggregatAntwort:
                 return new[] { Rolle.Schreibseite };
             case Primitive.ReadModel: case Primitive.Query: case Primitive.Antwort: case Primitive.StoreBuendel: case Primitive.StoreFaehigkeit:
             case Primitive.Projektion: case Primitive.Reader:
@@ -204,7 +204,6 @@ static class Projektstruktur
         {
             case Primitive.Command: case Primitive.KnotenCommand: return "Commands.cs";
             case Primitive.Event: return "Events.cs";
-            case Primitive.Quelle: return "Quellen.cs";
             case Primitive.Graph: return "Graphen.cs";
             case Primitive.Wertobjekt: return "ValueObjects.cs";
             case Primitive.Enum: return "Enums.cs";
@@ -286,7 +285,6 @@ static class Projektstruktur
             case Primitive.Applier: return "ein Applier";
             case Primitive.Command: return "ein Command";
             case Primitive.Event: return "ein Event";
-            case Primitive.Quelle: return "ein Quellen-Typ";
             case Primitive.Wertobjekt: return "ein Wertobjekt";
             case Primitive.Enum: return "ein Enum";
             case Primitive.ReadModel: return "ein ReadModel";

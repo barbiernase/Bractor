@@ -58,14 +58,15 @@ public sealed class Verteilung
         Dictionary<string, List<EventEnvelope>>? gezielt = null;
         foreach (var e in envelopes)
         {
-            if (e.ZielSitzung is { } ziel)
+            if (e.ZielSitzung is { } ziel && !e.AuchAnHoerer)
             {
                 if (Knoten(ziel) is not { } knoten) continue;
                 gezielt ??= new Dictionary<string, List<EventEnvelope>>(StringComparer.Ordinal);
                 if (!gezielt.TryGetValue(knoten, out var liste)) gezielt[knoten] = liste = new List<EventEnvelope>();
                 liste.Add(e);
             }
-            else if (_hoerbar.Contains(e.Payload.GetType()))
+            // An die Hörer — mit Ziel-Sitzung auch an sie: jeder Verteiler stellt der Ziel-Sitzung zu, wenn sie bei ihm lebt (einmal je Sitzung).
+            else if (e.ZielSitzung is not null || _hoerbar.Contains(e.Payload.GetType()))
                 (alle ??= new List<EventEnvelope>()).Add(e);
         }
 

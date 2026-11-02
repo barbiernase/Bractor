@@ -73,9 +73,9 @@ public sealed class WegeZustellung(IFunktionsWege wege) : IEingangsZustellung
 
 /// <summary>
 /// Spawnt beim Start (nach dem Cluster-Beitritt) die Wurzel der Graphen dieses Knotens: je Instanz ein Graph-Actor mit je Knoten einem Parent — im
-/// Host mit der Umsetzung aus seiner Bindung (eine Aktivierung je Kind, mit dem Knoten-Bereich für Konfig-Records und Technik); draußen (Laufort Extern
-/// oder Hand) geben die Kinder ihre Eingänge an die Arbeiter der <see cref="Werkstatt"/>; ein Knoten mit Zustand rechnet mit genau einem Kind. Die
-/// Wurzel meldet eine Instanz als gehalten, sobald ihre Arbeiter da sind bzw. dieser Knoten ihre <see cref="ZustandsSperre"/> hält.
+/// Host mit seiner Funktion (eine Aktivierung je Kind, mit dem Knoten-Bereich für Konfig-Records und Technik); die Arbeit eines Akteurs (draußen) geben
+/// die Kinder an die Arbeiter der <see cref="Werkstatt"/>; ein Knoten mit Zustand rechnet mit genau einem Kind. Die Wurzel meldet eine Instanz als
+/// gehalten, sobald ihre Arbeiter da sind bzw. dieser Knoten ihre <see cref="ZustandsSperre"/> hält.
 /// </summary>
 public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system, FunktionsOrte orte, IFunktionsWege wege, Verkettung koepfe,
     GraphInstanzen instanzen, Werkstatt werkstatt, ZustandsSperre sperre, ILoggerFactory? logs = null) : IHostedService

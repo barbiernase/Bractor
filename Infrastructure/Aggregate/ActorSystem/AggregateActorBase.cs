@@ -1147,14 +1147,14 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     }
 
     /// <summary>
-    /// Meldet ein Ablehnungs-Event gezielt an die Sitzung des Aufrufers (verlierbar, Invariante 6; der Turn wartet nicht).
-    /// Verwendet OriginSessionId für die direkte Zustellung. Das Ablehnungs-Event ist das typisierte Domänen-Event (z.B. BestandNichtAusreichend).
+    /// Meldet ein Ablehnungs-Event an die Sitzung des Aufrufers (gezielt über die OriginSessionId) und an die Akteure, die es hören (verlierbar,
+    /// Invariante 6; der Turn wartet nicht). Das Ablehnungs-Event ist das typisierte Domänen-Event (z. B. BestandNichtAusreichend).
     /// </summary>
     private void MeldeAblehnung(CommandEnvelope cmdEnvelope, IEvent rejection)
     {
-        if (_verteilung == null || string.IsNullOrEmpty(cmdEnvelope.OriginSessionId))
+        if (_verteilung == null)
         {
-            _logger?.LogDebug("[Actor] Cannot publish rejection: keine Verteilung oder keine Sitzung");
+            _logger?.LogDebug("[Actor] Cannot publish rejection: keine Verteilung");
             return;
         }
 
@@ -1167,7 +1167,9 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             CausationId = cmdEnvelope.CommandId.ToString(),
             UserId = cmdEnvelope.UserId,
             Payload = rejection,
-            ZielSitzung = cmdEnvelope.OriginSessionId
+            // An die Sitzung des Absenders (gezielt) und an die Akteure, die die Ablehnung hören (Entscheidung 14) — jede Sitzung einmal.
+            ZielSitzung = string.IsNullOrEmpty(cmdEnvelope.OriginSessionId) ? null : cmdEnvelope.OriginSessionId,
+            AuchAnHoerer = true,
         });
         _logger?.LogDebug("[Actor] Rejection {Rejection} an '{Session}' gemeldet", rejection.GetType().Name, cmdEnvelope.OriginSessionId);
     }

@@ -20,16 +20,16 @@
 
 | Projekt (Rolle) | gehört hinein | referenziert |
 |---|---|---|
-| `Domain` | Aggregate (State, Decider, Applier), Commands, Events, Ablehnungen, Wertobjekte, Enums, Quellen-Typen; Queries an ein Aggregat und ihre Antworten (`Frage` im Decider — er sieht die Leseseite nicht) | Abstractions, Core |
+| `Domain` | Aggregate (State, Decider, Applier), Commands an Aggregate und die Commands ohne Ziel, die ein Decide abgibt, Events, Hinweise (auch die aus Funktionen), Wertobjekte, Enums; Queries an ein Aggregat und ihre Antworten (`Frage` im Decider — er sieht die Leseseite nicht) | Abstractions, Core |
 | `Domain.Projections` | ReadModels, Queries an Reader, Antworten, Store-Fähigkeiten und -Bündel, Projektionen, Reader | Domain |
-| `Domain.Pipeline` | Funktionen — mit `Auf` (das Framework ruft sie) oder gerufen (ihr Halter ruft sie), als Klasse (im Host) oder Schnittstelle, samt ihren Ausgabe-Events und den Umsetzungen einer Schnittstelle —, Konfig-Records | Domain, Domain.Projections |
-| `Domain.Akteure` | Akteure, Client-Verträge | Domain, Domain.Projections, Domain.Pipeline |
+| `Domain.Pipeline` | Funktionen (Klassen), Graphen, die Commands, die nur Knoten einander geben, Konfig-Records, Technik und ihre Umsetzungen | Domain, Domain.Projections |
+| `Domain.Akteure` | Akteure, Clients | Domain, Domain.Projections, Domain.Pipeline |
 | `Domain.Infrastructure` | Store-Implementierungen | Domain, Domain.Projections |
 | `Domain.Leitung` | die Domänen-DTOs der Leitung (`domain.proto`, vom Codegen) und ihr Nutzlast-Mapper (`GeneratedNutzlast`) — nichts Handgeschriebenes | Domain, Domain.Projections, Domain.Pipeline |
 | `Domain.Laufzeit` | die Komposition: alle Laufzeit-Generate, `GeneratedAnwendung`, `AddCqrs` der Hosts, die STJ-Kontexte — nichts Handgeschriebenes | alle Rollen-Projekte + Infrastructure |
-| `Domain.Client.Worker.Python.*` | Python-Implementierungen getragener Funktionen (`funktionen/<modul>.py`), generierte Basen unter `domain_client/generated/` | — |
+| `Domain.Client.Worker.Python.*` | Python-Clients: Implementierungen der generierten Client-Basen (`domain_client/`), Generate unter `domain_client/generated/` | — |
 | `Domain.Client.Modules.*` | GUI-Clients (außerhalb des Editors, W12) | Client.Infrastructure |
-| `umgebungen/` | `umgebung.<name>.json` je Umgebung (Ordnername: `Projektstruktur.UmgebungsOrdner`) | — |
+| `umgebungen/` | je Umgebung ein Ordner `<name>/` mit `umgebung.json` und `graphen/<instanz>.json` je Instanz (`Projektstruktur.UmgebungsOrdner`, `UmgebungsDatei`, `GraphenOrdner`) | — |
 
 **Rollen als Suffix zur Wurzel.** Die Projektnamen sind Suffixe zu einer Anwendungs-Wurzel (`""`, `.Projections`, `.Pipeline`, `.Akteure`,
 `.Infrastructure`, `.Leitung`, `.Laufzeit`); die Beispielanwendung hat die Wurzel `Domain`, eine zweite Anwendung (z. B. eine Test-Domäne) eine eigene. Nicht jede Rolle muss
@@ -39,8 +39,8 @@ Die Referenzrichtung ist fest: `Domain` ← `Domain.Projections` ← `Domain.Pip
 alle ← `Domain.Laufzeit` (die Komposition, die die Hosts referenzieren). Das Framework (`Infrastructure`, `Core`, `Cqrs.Leitung`) referenziert kein
 Rollen-Projekt; es liest die Anwendung über `IAnwendung`, die die Komposition generiert und anmeldet.
 Deshalb gehören Funktionen mit Lese-Fähigkeit (brauchen Leseseiten-Typen) und Akteure mit `IDarf<Query>` nicht nach `Domain`. Die Akteure sind der
-äußerste Ring: ein Akteur darf jede Eingangsart haben — Command, Query, Quelle, Funktion (`IDarf<IFunktion>`, er bietet sie an) — und sein
-Vertrag hört auf beliebige Events, auch auf Ergebnis-Events von Funktionen.
+äußerste Ring: ein Akteur darf Commands, Queries und Hinweise aus allen Rollen nennen (`IDarf`) und hören (`IHoert`), auch die Commands, die ein
+Graph verlässt; ein Client nennt nur Akteure.
 
 ## 7.3 Bereichs-Ordner und Namespaces
 
@@ -55,20 +55,18 @@ Vertrag hört auf beliebige Events, auch auf Ergebnis-Events von Funktionen.
 |---|---|---|
 | `Domain/<Bereich>/` | `<Aggregat>.cs` | State |
 | | `<Aggregat>.Decider.cs`, `<Aggregat>.Applier.cs` | Decide- und Apply-Methoden |
-| | `Commands.cs`, `Events.cs` | Commands; Events und Ablehnungen |
+| | `Commands.cs`, `Events.cs` | Commands an Aggregate und die Commands ohne Ziel, die ein Decide abgibt; Events und Hinweise (auch die aus Funktionen) |
 | | `ValueObjects.cs`, `Enums.cs` | Wertobjekte, Enums |
-| | `Quellen.cs` | Quellen-Typen (`sealed record X : DateiGemeldet;`) |
-| | `Folgen.cs` | Folgen: schlichte Records in Decide-Signaturen, weder Event noch Frist (Primitive `Folge`, docs/03 §3.1) |
 | | `Queries.cs`, `Responses.cs` | Queries an das Aggregat und ihre Antworten (Primitive `AggregatQuery`/`AggregatAntwort`, erkannt an der `Frage` im Decider) |
 | `Domain.Projections/<Bereich>/` | `ReadModels.cs`, `Queries.cs`, `Responses.cs` | Read-Models, Queries, Antworten |
 | | `I<Store>.cs` | Store-Bündel mit seinen Fähigkeiten |
 | | `<Projektion>.cs`, `<Reader>.cs` | je Klasse eine Datei |
-| `Domain.Akteure/` | `Akteure.cs`, `Clients.cs` | Akteure; Client-Verträge |
-| `Domain.Pipeline/<Bereich>/` | `Funktionen.cs`, `Events.cs` | Funktions-Schnittstellen (mit `Auf` oder gerufen); Ausgabe-Events der Funktionen |
-| | `Zwischenergebnisse.cs` | Zwischenergebnisse: schlichte Records in den Ein- und Ausgaben der Funktionen, die keine Folge sind (Primitive `Zwischenergebnis`, docs/04 §4.4) |
-| | `<Funktion>.cs` | je Funktion als Klasse (im Host, Primitive `HostFunktion`) eine Datei |
-| | `<Implementierung>.cs` | je Umsetzung einer Funktions-Schnittstelle eine Datei |
+| `Domain.Akteure/` | `Akteure.cs`, `Clients.cs` | Akteure (`record … : IAkteur`); Clients (`record … : IClient`) |
+| `Domain.Pipeline/<Bereich>/` | `<Funktion>.cs` | je Funktion eine Datei (Primitive `Funktion`, eine Klasse mit Rumpf) |
+| | `Graphen.cs` | Graphen (Primitive `Graph`, `record … : IGraph`) |
+| | `Commands.cs` | Commands ohne Ziel, die nur Knoten einander geben — kein Decide gibt sie ab (Primitive `KnotenCommand`) |
 | | `Konfigs.cs` | Konfig-Records |
+| | `<Technik>.cs` | je Technik (Schnittstelle oder Klasse im Konstruktor einer Funktion) und je Umsetzung eine Datei (Primitive `Technik`) |
 | `Domain.Infrastructure/<Bereich>/` | `<Store>.cs`, `<Store>.Lesen.cs` | Store-Implementierung (Schreib- und Leseteil) |
 
 Typnamen sind frei; Klassen tragen ihren Namen als Dateinamen, Sammeldateien (`Commands.cs` …) bündeln Records einer Art. Hilfscode, der keine
@@ -87,17 +85,19 @@ Primitive ist, liegt im Bereichs-Ordner seines Projekts und erscheint im Editor 
 | `--check` (Bereich „Lage“) | Rollen-Projekte, Referenzrichtung, Codegen-Referenzen, je Typ Projekt, Ordner, Namespace und Datei | `GraphExtractor.Kern/Lagepruefung.cs` |
 | `--sonde` | die fremde Sonden-Domäne liegt absichtlich in einem Projekt: die Lage-Prüfung muss jeden ihrer Typen ins Projekt seiner Rolle weisen (`soll.txt`, `lage …`) | `GraphExtractor.Kern/Sonde.cs` |
 
-WAS ein Typ ist (die Primitive), bestimmt `Domain.SourceGeneration/Lageart.cs` nur aus Markern und Signaturen (Ergebnis-Events aus der
-Funktions-Signatur — bei der Baustein-Form die Fälle jedes `Auf`, gelesen über `Infrastructure.SourceGeneration/Funktionsform.cs`, dieselbe Lesart
-wie Generator und Extractor —, eine Klasse mit `IFunktion` und `Auf` ist eine Funktion im Host, Konfig-Records aus dem Implementierungs-Konstruktor, Fähigkeiten aus dem Bündel) — dieselbe Lesart für Analyzer und `--check`.
+WAS ein Typ ist (die Primitive), bestimmt `Domain.SourceGeneration/Lageart.cs` nur aus Markern und Signaturen: ein Command ohne Ziel ist ein
+`Command` der Schreibseite, wenn ein Decide ihn in seiner Signatur abgibt, sonst ein `KnotenCommand`; eine Klasse mit `IFunktion` ist eine Funktion,
+ein Record mit `IGraph` ein Graph; Technik und Konfig-Records folgen aus den Konstruktoren der Funktionen und ihrer Umsetzungen (gelesen über
+`Infrastructure.SourceGeneration/Funktionsform.cs`, dieselbe Lesart wie Generator und Extractor), Fähigkeiten aus dem Bündel — dieselbe Lesart für
+Analyzer und `--check`.
 
 ## 7.6 Offen
 
 - Die Wurzel der Werkzeuge (Werkbank, Scaffolder, `--check`) ist `Projektstruktur.StandardWurzel`; Generatoren leiten sie aus dem Projektnamen
   ab, der Codegen aus dem Projekt, das ihn auslöst (`--projekt`). Die zweite Anwendung der Solution ist die Prüfdomäne (`Pruefdomaene`,
-  `Pruefdomaene.Pipeline` mit den Funktionen `Auftragsabwicklung`, `Verteilabwicklung` und `Nachschub`, Komposition `Pruefdomaene.Laufzeit`, Host `Host.Pruefdomaene` für die
-  E2E-Messung, Tests in `Pruefdomaene.Integration.Tests`); damit das Werkzeug ihre DLLs hat, referenziert `Cqrs.Codegen` auch sie. Sie hat keine
-  Leitung — eine Anwendung ohne Leitung startet keinen gRPC-Dienst (`IAnwendung.Nutzlast` ist dann `null`); hinein geht es über den JSON-Eingang
-  und die Quellen.
+  `Pruefdomaene.Pipeline` mit ihren Graphen — Abrechnung, Auftrag, Import, Merkmalbildung, Nachschub, Verteilung, Zubuchung —,
+  `Pruefdomaene.Akteure` mit dem `Rechnungspruefer`, Komposition `Pruefdomaene.Laufzeit`, Host `Host.Pruefdomaene` für die E2E-Messung, Tests in
+  `Pruefdomaene.Integration.Tests`); damit das Werkzeug ihre DLLs hat, referenziert `Cqrs.Codegen` auch sie. Sie hat keine Leitung — eine Anwendung
+  ohne Leitung startet keinen gRPC-Dienst (`IAnwendung.Nutzlast` ist dann `null`); hinein geht es über den JSON-Eingang.
 - Fremde Namespaces (außerhalb der Rollen-Projekte der Wurzel) platziert der Scaffolder wie bisher nach Namespace → Verzeichnis; die Lage-Prüfung
   meldet sie.

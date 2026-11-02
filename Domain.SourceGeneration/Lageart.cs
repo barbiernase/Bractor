@@ -73,7 +73,6 @@ internal sealed class Lageart
         if (Hat(t, "IAggregatCommand")) return Projektstruktur.Primitive.Command;
         if (Hat(t, "ICommand")) return _ausDecide.Contains(Name(t)) ? Projektstruktur.Primitive.Command : Projektstruktur.Primitive.KnotenCommand;
         if (Hat(t, "IGraph")) return Projektstruktur.Primitive.Graph;
-        if (Hat(t, "IQuellNachricht")) return Projektstruktur.Primitive.Quelle;
         if (Hat(t, "IEvent")) return Projektstruktur.Primitive.Event;
         if (Hat(t, "IWertobjekt")) return Projektstruktur.Primitive.Wertobjekt;
         if (Hat(t, "IReadModel")) return Projektstruktur.Primitive.ReadModel;

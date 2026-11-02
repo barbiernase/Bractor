@@ -1,62 +1,65 @@
 # 10 — Entwickler-API: Wie schreibe ich X?
 
-Stand 2026-10-29, gegen den Code geprüft. Dieses Kapitel ist die **eine Quelle für die Grammatik**: welche Bausteine es gibt, wie man sie
+Stand 2026-11-02, gegen den Code geprüft. Dieses Kapitel ist die **eine Quelle für die Grammatik**: welche Bausteine es gibt, wie man sie
 schreibt, wer was hört und erzeugt, welche Regel der Build prüft und welche Entscheidungen dahinter stehen. Wie es zur Laufzeit läuft, steht in
-[03](03-schreibseite.md) (Schreibseite), [04](04-konsum-und-prozess-maschine.md) (Konsum, Funktionen, Uhr) und
+[03](03-schreibseite.md) (Schreibseite), [04](04-konsum-und-prozess-maschine.md) (Konsum, Graphen, Uhr) und
 [06](06-transport-multinode-betrieb.md) (Transport, Clients); was garantiert ist, in [11](11-garantien.md); wo etwas liegt, in
-[07](07-projektstruktur.md). Alle Beispiele stammen aus der Sonde (`GraphExtractor.Kern/Sonde/*.cs.txt`), einer fremden Domäne, die jede
+[07](07-projektstruktur.md). Die Beispiele stammen aus der Sonde (`GraphExtractor.Kern/Sonde/*.cs.txt`), einer fremden Domäne, die jede
 allgemeine Primitive einmal benutzt; die Beispieldomäne (Bildpaare, Datensätze, Training) und die Prüfdomäne sind Prüflinge, nicht der Maßstab.
 
 ## 10.1 Das Modell in wenigen Sätzen
 
-Das **Log in Postgres ist die einzige Wahrheit.** Geschrieben wird von **Aggregaten** (was sie entschieden haben) und **Quellen** (was von draußen
-kam) — jedes Mal genau einmal. **Projektionen** lesen das Log ab ihrer eigenen Position, falten Events in ihren Store und geben nichts aus.
-**Funktionen** stehen **vor dem Aggregat** und lesen das Log nie: sie hören, was ein Aggregat ihnen als **Folge** sagt, was eine andere Funktion als
-**Zwischenergebnis** weitergibt, eine Quell-Nachricht oder einen Hinweis, und senden Commands — genau einmal wirksam über offene Eingänge und die
-Inbox ihrer Ziele; was fachlich zählt, verlässt dieses Netz als Command an ein Aggregat. **Clients** hängen am Rand: sie schicken Commands, Quell-Nachrichten, Hinweise und Queries hinein und bekommen über
-einen Verteiler je Knoten mit, was sie hören dürfen.
+Das **Log in Postgres ist die einzige Wahrheit.** Geschrieben wird es nur von **Aggregaten** (was sie entschieden haben) — jedes Mal genau einmal.
+**Projektionen** lesen das Log ab ihrer eigenen Position, falten Events in ihren Store und geben nichts aus. Gerechnet wird vor dem Aggregat in
+**Graphen**: eine **Funktion** ist eine Klasse mit typisierten Ports, ein Graph nennt Funktionen als Knoten, die Kanten folgen aus den Typen; ein
+Graph läuft als **Instanz** mit eigener Konfig, jede Kopf-Nachricht startet einen **Lauf**. Eine **Quelle** ist eine Funktion am Kopf eines Graphen,
+die lauscht. Zwischen allen fließen **Commands**; was einen Graphen verlässt, wirkt genau einmal über die Inbox seines Ziels. **Akteure** stehen
+draußen: sie geben hinein, was sie dürfen, und bekommen, was sie hören — Arbeit oder Kenntnis; ein **Client** ist die Software, die Akteure
+verkörpert.
 
-Der Entwickler schreibt nur, *was* fachlich passiert — in der **Signatur** einer Methode. `Auf(AlarmZuMelden f)` in einer Funktion heißt „diese
-Funktion hört diese Folge“, der Rückgabetyp sagt, was herauskommt. *Wie* es läuft (Cursor, Weckruf, Ordnung, Exactly-once, Partition, offene
-Eingänge, Laufort), wählt der Generator aus dieser Signatur; nichts davon taucht im Fachcode auf (Invariante 5).
+Der Entwickler schreibt nur, *was* fachlich passiert — in der **Signatur** einer Methode und in der Basisliste eines Records. `Auf(BildEingelesen
+bild, VorschauErstellt vorschau)` heißt „dieser Knoten wartet im selben Lauf auf beides“, der Rückgabetyp sagt, was herauskommt; `record
+Bildaufbereitung(Bildeinlesen Einlesen, …) : IGraph` sagt, welche Knoten zusammen rechnen. *Wie* es läuft (Cursor, Weckruf, Ordnung,
+Exactly-once, Partition, offene Eingänge, Läufe, Orte), wählt der Generator aus diesen Code-Fakten; nichts davon taucht im Fachcode auf
+(Invariante 5).
 
 | Baustein | tut | Laufzeit |
 |---|---|---|
-| **Aggregat** | entscheidet: Command rein, Events, Hinweise, Fristen und Folgen raus; einziger Schreiber seines Streams; darf direkt gefragt werden | virtueller Actor je `Id<T>` (Bündel, Inbox-Tabelle, Passivierung, Snapshot) — [03](03-schreibseite.md) |
+| **Aggregat** | entscheidet: Command rein, Events, Hinweise, Fristen und Commands ohne Ziel raus; einziger Schreiber seines Streams; darf direkt gefragt werden | virtueller Actor je `Id<T>` (Bündel, Inbox-Tabelle, Passivierung, Snapshot) — [03](03-schreibseite.md) |
 | **Projektion** | hört Events, schreibt ihren Store über Fähigkeiten, gibt nichts aus | `BatchLeser` je (Projektion, Partition) — [04](04-konsum-und-prozess-maschine.md) §4.1, §4.3 |
 | **Reader** | beantwortet Queries über Lese-Fähigkeiten | im Query-Dienst des Hosts |
-| **Funktion** | ein Eingang (Folge, Zwischenergebnis, Quell-Nachricht, Hinweis; ein Event nur als Antwort auf einen eigenen Command), beliebige Ausgaben (Commands, Zwischenergebnisse, Hinweise); optional Zustand (Cache) und Ressourcen | Wurzel je Knoten, Parent je Funktion, Kinder bis `Parallel`; Laufort Host, draußen (getragen von einem Client) oder Hand — §4.4 |
-| **Quelle** | fester Treiber und Konfig bringen Nachrichten genau einmal ins Log | ein Treiber je Quelle im Cluster (Lease) — §4.7 |
-| Store, Dienst | Technik hinter Projektion/Reader bzw. Funktion | – |
-| Akteur, Client | wer welche Typen darf; welche Software für welche Akteure spricht | Sitzung als Actor je Verbindung, Verteiler je Knoten — [konzept-akteure.md](konzept-akteure.md) |
+| **Funktion** | ein Knoten: Commands an seinen Ports rein (ein Event nur als Antwort auf den eigenen Command), Commands und Hinweise raus; optional Zustand und Technik | Parent je Knoten und Instanz, Kinder bis `Parallel` — §4.4 |
+| **Graph** | nennt Knoten (Funktionen, Graphen); Kanten aus den Typen; läuft als Instanz, je Kopf-Nachricht ein Lauf | Graph-Actor je Instanz und Cluster-Knoten — §4.4 |
+| **Quelle** | eine Funktion mit `Lausche` am Kopf eines Graphen (Katalog: `Dateiwaechter`, `Taktgeber`, `Webhook`) | eine Quellinstanz genau einmal im Cluster — §4.7 |
+| Store, Technik | Speicher hinter Projektion/Reader bzw. Technik im Konstruktor einer Funktion | – |
+| **Akteur**, **Client** | wer was hineingibt und was zu ihm kommt; welche Software für welche Akteure spricht | Sitzung als Actor je Verbindung, Werkstatt und Verteiler je Knoten — [konzept-akteure.md](konzept-akteure.md) |
 | *eingebaut:* Uhr, Verteiler | macht aus fälligen Fristen Commands; stellt Pushes und Hinweise an Clients zu | – |
 
-**Warten** (Join, „alle N“, Zeitlimit, Kompensation) ist Zustand über mehrere Ereignisse und gehört in ein **Aggregat**: ein Vorgang ist ein
-Aggregat mit der Vorgangs-Id, Fan-in zählt ein Zähl-Aggregat, Zeit ist eine Frist. Einen Dirigenten, eine Saga oder eine Fluss-Sprache gibt es
-nicht (§10.3.7).
+**Warten** hat zwei Formen. Innerhalb eines Laufs ist es eine Typ-Form der Ports (Join, Sammeln, Rennen, Warten mit Frist). Über Läufe hinweg (auf
+fremde Rückmeldungen warten, zählen, zurücknehmen, eine Frist überwachen) ist es Zustand und gehört in ein **Aggregat**: ein Vorgang ist ein
+Aggregat mit der Vorgangs-Id, Zeit ist eine Frist. Einen Dirigenten, eine Saga, einen Builder oder ausdrückliche Kanten gibt es nicht (§10.3.7).
 
 ## 10.2 Nachrichten
 
 | Nachricht | Bedeutung | Garantie | Code |
 |---|---|---|---|
-| **Command** | Absicht an genau ein Aggregat | wirkt genau einmal (Command-Id, Inbox) | `record … : ICommand<TAggregat>` mit `Id<TAggregat> AggregateId`; ein anlegender Command zusätzlich `ICreationCommand` |
-| **Event** | Fakt im Log | durabel; wirkt bei jedem Hörer genau einmal | `record … : IEvent` |
-| **Quell-Nachricht** | Event von draußen (Treiber oder Client) | genau einmal je Kennung | `record … : IQuellNachricht` mit `Kennung`, oder abgeleitet von einer Treiber-Basis (`DateiGemeldet`, `TaktGemeldet`) |
-| **Hinweis** | flüchtig: Ablehnung, Fortschritt, Messwert, Live-Anzeige | höchstens einmal, nie im Log | `record … : ITransientEvent` |
+| **Command an ein Aggregat** | Absicht an genau ein Aggregat | wirkt genau einmal (Command-Id, Inbox) | `record … : ICommand<TAggregat>` mit `Id<TAggregat> AggregateId`; ein anlegender Command zusätzlich `ICreationCommand` |
+| **Command ohne Ziel** | Absicht an genau einen Empfänger, den der Absender nicht nennt: den Knoten desselben Graphen, der ihn nimmt, sonst den Kopf genau eines Graphen oder einen Akteur, der ihn hört (Arbeit) | am Kopf und als Arbeit durabel bis zum Ende des Laufs bzw. bis zur Antwort; zwischen Knoten im Speicher des Laufs; nie im Log | `record … : ICommand` |
+| **Event** | Fakt im Log, nur aus einem Decide | durabel; wirkt bei jedem Hörer genau einmal | `record … : IEvent` |
+| **Hinweis** | flüchtig: Ablehnung, Fortschritt, „nicht lesbar“, Live-Anzeige — nur an Akteure draußen | höchstens einmal, nie im Log | `record … : ITransientEvent` |
 | **Query** | Frage, wirkt nicht | synchron | `record … : IQuery` |
 | **Antwort** | Rückgabe eines Readers oder Aggregats | trägt den Stand der gezeigten Ids | `record … : IQueryResponse` |
 | **Frist** | „schick mir Command C nach Zeit t“ | mindestens einmal gefeuert, genau einmal wirksam | `Frist<TCmd>` als Ausgabe eines Decide |
-| **Folge** | was eine Entscheidung den Funktionen sagt, die sie hören | je Hörer genau ein offener Eingang, zugestellt mindestens einmal; nie im Log | schlichter `record …` (ohne Marker) als Ausgabe eines Decide, in `Folgen.cs` |
 
 Es gibt **keine Marken im Log**: ob ein Command gewirkt hat oder abgelehnt wurde, hält die Inbox-Tabelle je Command-Id (eine Wiederholung liefert
 dieselbe Antwort). Ist eine Absage für einen Ablauf wichtig, ist sie ein **Fakt** (Event) — das entscheidet der Modellierer über den Typ; sonst
-ist sie ein Hinweis an die Sitzung. Kanten ohne eigene Nachricht: **Fähigkeit** (Store-Funktion als Parameter), **Dienst** (im Konstruktor einer
+ist sie ein Hinweis an die Sitzung. Kanten ohne eigene Nachricht: **Fähigkeit** (Store-Funktion als Parameter), **Technik** (im Konstruktor einer
 Funktion), **Herkunft** (Parameter: Stream, Version, Log-Zeit, Akteur, `NeueId`, §10.4).
 
 ## 10.3 Wie schreibe ich …
 
-Rückgaben sind immer ein konkreter Typ, `OneOf<…>` konkreter Typen, `T?` („nichts“), `IEnumerable<…>` bzw. `IAsyncEnumerable<…>` (Strom),
-jeweils auch als `Task<…>`. **Was entstehen kann, steht nur in der Signatur** (R1); Generatoren, Extractor und Editor lesen keine Rümpfe.
+Rückgaben sind immer ein konkreter Typ, `OneOf<…>` konkreter Typen, `IEnumerable<…>` bzw. `IAsyncEnumerable<…>` (Strom), jeweils auch als `Task<…>`.
+**Was entstehen kann, steht nur in der Signatur** (R1); Generatoren, Extractor und Editor lesen keine Rümpfe.
 
 ### 10.3.1 … ein Aggregat
 
@@ -64,43 +67,43 @@ Ein Aggregat ist ein `partial` State mit einem `Decider` (entscheiden, fragen) u
 Dateien stehen (`partial`).
 
 ```csharp
-public record MeldeMesswert(Id<Sensor> AggregateId, double Wert, DateTimeOffset GemessenAm) : ICommand<Sensor>;
-public record AlarmAusgeloest(double Wert, DateTimeOffset GemessenAm) : IEvent;
-public record SensorUnbekannt(Id<Sensor> SensorId) : ITransientEvent;                  // Hinweis: flüchtige Ablehnung
+public record MeldeSchaden(Id<Schadensfall> AggregateId, Guid LeserId) : ICommand<Schadensfall>, ICreationCommand;
+public record SchadenGemeldet(Guid LeserId) : IEvent;
+public record SchadenExistiert(Id<Schadensfall> Id) : ITransientEvent;                // Hinweis: flüchtige Ablehnung
+public record SchaetzeSchaden(Id<Schadensfall> Fall, Guid LeserId) : ICommand;           // ohne Ziel: an den Kopf eines Graphen
 
-public partial class Sensor : IState
+public partial class Schadensfall : IState
 {
-    public int Hintereinander { get; set; }
+    public bool Gemeldet { get; set; }
 
-    public partial class Decider : IDecider<Sensor>
+    public partial class Decider : IDecider<Schadensfall>
     {
-        public IEnumerable<OneOf<GrenzwertUeberschritten, AlarmAusgeloest, WertWiederImRahmen, SensorUnbekannt>> Decide(MeldeMesswert c)
+        public IEnumerable<OneOf<SchadenGemeldet, SchaetzeSchaden, SchadenExistiert>> Decide(MeldeSchaden c)
         {
-            if (this.State.Version == 0) { yield return new SensorUnbekannt(c.AggregateId); yield break; }
-            …
+            if (this.State.Gemeldet) { yield return new SchadenExistiert(c.AggregateId); yield break; }
+            yield return new SchadenGemeldet(c.LeserId);
+            yield return new SchaetzeSchaden(c.AggregateId, c.LeserId);
         }
     }
 
-    public partial class Applier : IApplier<Sensor>
+    public partial class Applier : IApplier<Schadensfall>
     {
-        public void Apply(GrenzwertUeberschritten e) { this.State.Hintereinander = e.Hintereinander; }
-        …
+        public void Apply(SchadenGemeldet e) { this.State.Gemeldet = true; }
     }
 }
 ```
 
-- Je Command ein `Decide`; jedes entschiedene Event hat ein `Apply`, jedes `Apply` ein entscheidendes Decide (R3). Ein Hinweis und eine Frist
-  haben kein `Apply`.
+- Je Command ein `Decide`; jedes entschiedene Event hat ein `Apply`, jedes `Apply` ein entscheidendes Decide (R3). Ein Hinweis, eine Frist und ein
+  Command haben kein `Apply`.
+- **Command ohne Ziel:** ein Decide gibt nie einen Command an ein Aggregat aus (CQRS114) — Aggregate reden nur über Graphen oder Akteure miteinander.
+  Sein Empfänger ist der Kopf genau eines Graphen oder ein Akteur, der ihn hört (CQRS116); er geht nicht ins Log und zählt nicht in der Version, je
+  Empfänger entsteht im selben Commit ein offener Eingang ([03](03-schreibseite.md) §3.2). Nie zusammen mit einer Ablehnung.
 - **Frist:** `yield return new Frist<BrichPruefungAb>(new BrichPruefungAb(c.AggregateId), TimeSpan.FromSeconds(30));` — die Uhr schickt den
   Command zur Zeit an **dasselbe** Aggregat; ist der Vorgang dann fertig, ist er ein Noop (§10.3.7).
-- **Folge:** `if (fehlmenge > 0) yield return new Unterschritten(c.AggregateId, fehlmenge);` mit `record Unterschritten(Id<Posten> Posten, int
-  Fehlmenge);` — ein schlichter Record in der Signatur, weder Event noch Frist: kein `Apply`, nicht im Log, keine Version; je hörende Funktion ein
-  offener Eingang im selben Commit ([03](03-schreibseite.md) §3.2). Nie zusammen mit einer Ablehnung.
 - **Direkte Abfrage:** `public OneOf<Leihstand, NichtVerliehen> Frage(HoleLeihstand q) => …` im Decider, synchron, nur lesend. Die Query nennt
   ihr Aggregat mit genau einem Glied `Id<TAggregat>`; der Actor antwortet auf dem committeten Stand, die Antwort zeigt das Aggregat mit seiner
   Version als OCC-Stand ([03](03-schreibseite.md) §3.2). Query und Antwort liegen bei der Schreibseite.
-- Keine Uhr, kein Zufall, kein `Guid.NewGuid()`, kein Lesen fremder Daten (R11); keine Collections, die über Vorgänge wachsen — Fan-in zählt ein
-  Zähl-Aggregat.
+- Keine Uhr, kein Zufall, kein `Guid.NewGuid()`, kein Lesen fremder Daten (R11); keine Collections, die über Vorgänge wachsen.
 - Eine Invariante über viele Objekte gehört in **ein** Aggregat: „keine zwei Benutzer mit derselben Adresse“ ist das Aggregat `Adresse` mit einer
   aus der normalisierten Adresse abgeleiteten Id (Sonde `Konten.cs.txt`).
 
@@ -144,116 +147,152 @@ Form: `Frage(Query, Lese-Fähigkeiten[, CancellationToken])`. Der Reader nennt k
 Die gezeigten Ids findet der Generator in den `Id<T>`-Feldern von Antwort und Query; der Stand je Id kommt aus dem Fortschritt der Projektion.
 Eine Query hat genau ein Ziel — einen Reader **oder** ein Aggregat (R4).
 
-### 10.3.4 … eine Funktion
+### 10.3.4 … eine Funktion und einen Graphen
 
 ```csharp
-// im Host: eine Klasse, je Eingangstyp ein Auf (R2); sie hört eine Folge (ein schlichter Record aus einem Decide)
-public sealed class SchadenBeiRueckgabe : IFunktion
+// Funktionen: Klassen, Ports = Typen (Sonde Gebuehren.cs.txt)
+public sealed class Schadensaufnahme : IFunktion                                       // WAHL: genau einer der Fälle je Lauf
 {
-    public MeldeSchaden Auf(SchadenFeststellen f, Herkunft h) => new MeldeSchaden(h.NeueId<Schadensfall>(), f.LeserId);
+    public OneOf<SchadenErfasst, BegutachteVorOrt, NichtSchaetzbar> Auf(SchaetzeSchaden s) => …;
+}
+public sealed class Schadensschaetzer(IWertTabelle tabelle) : IFunktion                 // FORK, Zweig 1: Technik im Konstruktor
+{
+    public async Task<SchadenGeschaetzt> Auf(SchadenErfasst e) => …;
+}
+public sealed class Gutachtenanfrage(GutachtenKonfig konfig) : IFunktion                // FORK, Zweig 2: Konfig-Record (Werte am Knoten)
+{
+    public async Task<GutachtenErhalten> Auf(SchadenErfasst e) => …;
+}
+public sealed class MahnungNachSchaetzung : IFunktion                                  // JOIN mit Warten mit Frist
+{
+    public EroeffneMahnung Auf(SchadenGeschaetzt g, GutachtenErhalten? gutachten, Herkunft h) => new(h.NeueId<Mahnvorgang>(), …);
 }
 
-// draußen: eine Schnittstelle, getragen von einem Client (er verkörpert einen Akteur, der sie rechnen darf) oder im Host umgesetzt; der Laufort steht in der Umgebung
-public interface IImportLauf : IFunktion
-{
-    IAsyncEnumerable<OneOf<LegeArtikelAn, MeldeImportFortschritt, SchliesseImportAb>> Auf(ImportZuLaufen f, Herkunft h);
-}
+// Graph: Knoten als Parameter, Kanten aus den Typen
+public sealed record Schadensbewertung(Schadensaufnahme Aufnahme, Schadensschaetzer Schaetzung, Gutachtenanfrage Gutachten,
+    MahnungNachSchaetzung Mahnung) : IGraph;
 ```
 
-- Form: `Auf(Eingang[, Herkunft][, Lese-Fähigkeiten][, CancellationToken])`. Eingang ist eine **Folge** (ein schlichter Record in der Signatur eines
-  Decide), ein **Zwischenergebnis** (ein schlichter Record in der Rückgabe einer anderen Funktion), eine Quell-Nachricht oder ein Hinweis; ein Event
-  nur als **Antwort** auf einen eigenen Command (das Ziel entschied es, die Funktion rechnet gleich weiter). Wer nur Events hört, hat keinen Einstieg
-  (CQRS100).
-- **Ausgaben:** Commands (über den einen Emit-Weg, Ids aus Eingang, Funktion und Stelle), Zwischenergebnisse (an jede Funktion, die sie hört) und
-  Hinweise — nie ein Event (CQRS100). Ein Strom (`IAsyncEnumerable`): jede Ausgabe geht hinaus, bevor die nächste kommt.
-- **Genau einmal** ohne Festhalten: Folge und Quell-Nachricht legen im selben Commit je Hörer einen offenen Eingang; rechnet die Funktion ihn erneut,
-  wirkt von jedem Command der erste (dieselbe Id, die Inbox des Ziels verwirft das Zweite).
-- **Neue Ids** nur abgeleitet: `h.NeueId<T>()` bzw. `h.NeueId<T>(zeile)` (R13).
-- **Gerufen:** Technik hinter einer Funktion ist selbst eine Funktion, nur ohne `Auf` — frei benannte Methoden, eine Schnittstelle mit
-  Umsetzungen (oder eine Klasse), Konfig als Record (`Konfig:<Record>` in der Umgebung, Wahl `Funktionen:<I>:Implementierung`). Ihr Halter
-  nimmt sie im Konstruktor (R10), sie läuft in seinem Prozess, hat keinen Laufort und kein `IDarf`. Eingänge und gerufene Methoden an einem
-  Objekt sind ein Formfehler. Eine Funktion mit Lese-Fähigkeit läuft im Host.
-- **Zustand** (R19): `IZustand<T>` im Konstruktor einer Funktions-Klasse; sonst keine veränderlichen Felder. Ein Cache der Aktivierung (A5) — was
-  fachlich gelernt wird, gehört in eine Projektion, die Funktion liest es über eine Lese-Fähigkeit.
+- **Funktion:** eine Klasse `: IFunktion` (eine Schnittstelle mit `IFunktion` ist CQRS100). Je `Auf` sind die Command-Parameter die
+  **Eingangsports**, dazu optional `Herkunft`, Lese-Fähigkeiten und ein `CancellationToken`; mehrere `Auf` sind mehrere Operationen desselben
+  Knotens, je Eingangstyp höchstens eines (R2). Ein Event hört eine Funktion nur als **Antwort** auf ihren eigenen Command an ein Aggregat (das Ziel
+  entschied es, CQRS108), einen Hinweis nie.
+- **Ports und Vielfachheit:** `T` genau einer je Lauf (warten), `T?` höchstens einer (`null`, wenn keiner kommt oder das `Zeitlimit` des Knotens
+  abläuft), `OneOf<A, B>` der erste (die übrigen Zweige brechen ab), `IReadOnlyList<T>` alle aus den Unterläufen eine Ebene tiefer. Ein Ausgang `T`
+  liefert genau einen, ein `OneOf`-Fall keinen oder einen, ein Strom keinen bis viele — je Element einen Unterlauf. Der Build prüft die Ports vom
+  nächsten gemeinsamen Vorfahren aus und nennt den passenden Typ (CQRS115). Folge, Fork, Wahl, Join, Je, Sammeln, Rennen und Warten mit Frist sind
+  so Typ-Formen; N von M ist `IReadOnlyList<T>` plus eine Mindestzahl in der Konfig.
+- **Ausgaben:** Commands und Hinweise — kein Event, kein `void`, kein `T?`, kein `ValueTask`; ein leerer Strom heißt „nichts“ (CQRS100). Ein Strom
+  (`IAsyncEnumerable`): jede Ausgabe geht hinaus, bevor die nächste kommt.
+- **Graph:** `record X(Knoten …) : IGraph` in `Graphen.cs`; jeder Parameter ist ein Knoten (Name = Konfig-Schlüssel, Typ = eine Funktion — eine
+  generische mit Typargument — oder ein Graph), die Reihenfolge bedeutet nichts. Gibt ein Knoten `T` aus, bekommt es jeder Knoten desselben Graphen,
+  der `T` nimmt; was keiner nimmt, verlässt den Graphen. Köpfe = Eingänge, die kein Knoten erzeugt, je Eingangstyp genau einer; kreisfrei; ein Graph
+  im Graphen ist eine Schachtel mit seiner Signatur (CQRS115). Eine Funktion in keinem Graphen läuft nie (CQRS117). Passt ein Typ nicht, ist der
+  Adapter eine eigene kleine Funktion — Klebecode zwischen Knoten gibt es nicht. Zeigen: `dotnet run --project GraphExtractor -- --graph <Typ>`.
+- **Genau einmal** ohne Festhalten: der Kopf eines Laufs ist ein offener Eingang, bis der Lauf fertig ist; rechnet ein Knoten erneut, wirkt von
+  jedem Command der erste (Ids aus Instanz, Lauf-Pfad, Knoten und Stelle; die Inbox des Ziels verwirft das Zweite). Eine Funktion, die draußen
+  etwas bewirkt (eine Datei schreibt), muss Wiederholung vertragen.
+- **Neue Ids** nur abgeleitet: `h.NeueId<T>()` bzw. `h.NeueId<T>(zweck)` (R13).
+- **Technik** (R10): jede Schnittstelle oder Klasse im Konstruktor einer Funktion, die weder Konfig-Record noch `ILogger<T>` noch `IZustand<T>` ist —
+  ohne Marker, nur im Konstruktor (CQRS089), bindbar (CQRS090–092). Sie läuft im Prozess ihres Halters, lädt beim ersten Aufruf und wird über
+  `IAsyncDisposable` freigegeben; bei mehreren Umsetzungen wählt der Knoten der Instanz (`Technik`).
+- **Zustand** (R19): `IZustand<T>` im Konstruktor einer Funktion oder einer Technik-Umsetzung; sonst keine veränderlichen Felder (CQRS105). Er ist
+  gesichert je Instanz und Knoten, wenn der Lauf fertig ist, in der Reihenfolge der Läufe; eine Instanz mit Zustand rechnet im Cluster auf genau einer
+  Aktivierung. Was fachlich gelernt wird, gehört in eine Projektion, die Funktion liest es über eine Lese-Fähigkeit.
 
   ```csharp
-  public sealed class Prognosemodell(IZustand<Gewichte> gewichte) : IFunktion, ILebenszyklus
+  public sealed class Prognosemodell(IZustand<Gewichte> gewichte, IStatistik statistik) : IFunktion      // Sonde Vorhersage.cs.txt
   {
-      public Task BeimAktivierenAsync(CancellationToken ct) => …;      // nach dem Bau, vor dem ersten Auf
-      public VermerkePrognose? Auf(Tendenz t, ITemperaturreihe reihe) => …;   // Hinweis rein, Projektion lesen, Command raus
+      public OneOf<VermerkePrognose, Unwetter> Auf(Geglaettet<Kurzfenster> kurz, Geglaettet<Langfenster> lang) => …;   // Join, Zustand, Wahl
   }
   ```
 
-- **Hinweis-Netz:** ein Hinweis, den ein Aggregat, eine Funktion oder ein Client ausgibt, geht über die generierte Verkettung an die Funktionen, die
-  ihn hören — im Speicher, höchstens einmal; jeder gehörte Hinweis braucht einen Erzeuger (R20).
+### 10.3.5 … eine Instanz und eine Quelle
 
-### 10.3.5 … eine Quelle
+Ein Graph läuft erst als **Instanz**: eine Datei je Instanz in der Umgebung, `umgebungen/<name>/graphen/<instanz>.json`, mit `Graph`, bei einem
+Quellkopf dem `Akteur` (er gibt hinein, was den Graphen verlässt, und muss es dürfen) und je Knoten (Pfad bei inneren Graphen) die Felder seiner
+Konfig-Records sowie `Parallel`, `Warteschlange`, `Wiederholungen`, `Vorwaermen`, `Zeitlimit`, `Technik`. Dieselbe Blaupause läuft beliebig oft;
+ein Graph mit Command-Kopf läuft je Umgebung genau einmal. Der Start prüft jede Instanz gegen ihren Graphen ([04](04-konsum-und-prozess-maschine.md)
+§4.4).
+
+Eine **Quelle** ist eine Funktion mit `Lausche(CancellationToken)` statt `Auf`, am Kopf ihres Graphen (sie ist dann sein einziger Kopf, CQRS115).
+Das Framework bringt einen Katalog mit (`Core/Katalog`: `Dateiwaechter` → `DateiGefunden`, `Taktgeber` → `Takt`, `Webhook` → `Aufruf`); die Domäne
+nennt ihn als Knoten (`Katalogimport(Dateiwaechter Eingang, Katalogeingang Annahme, …) : IGraph`, Sonde `Katalogimport.cs.txt`). Eine eigene Quelle
+schreibt man genauso:
 
 ```csharp
-public sealed record KatalogDateiAbgelegt : DateiGemeldet;     // der Datei-Treiber befüllt die geerbten Felder, die Kennung sagt die Konfig
-public sealed record Messzyklus : TaktGemeldet;                 // je Intervall genau eine Quell-Nachricht
-public sealed record RueckgabeGescannt(Guid LeserId, string Code, IReadOnlyList<string> Seiten) : IQuellNachricht
+public sealed class Sensorabfrage(SensorabfrageKonfig konfig, IZustand<Abfragestand> stand, ISensorbus bus) : IFunktion   // Sonde Messnetz.cs.txt
 {
-    public string Kennung => Code;                              // von einem Client gesendet; genau einmal je Kennung
+    public async IAsyncEnumerable<Rohwert> Lausche([EnumeratorCancellation] CancellationToken ct) { … }
 }
+public sealed record Messkette(Sensorabfrage Abfrage, Messwertaufbereitung Aufbereitung) : IGraph;
 ```
 
-Die Domäne benennt eine Quelle nur als Typ; Treiber und Werte (Pfad, Intervall, Webhook) stehen in der Umgebung (`Quellen:<Typ>`,
-[04](04-konsum-und-prozess-maschine.md) §4.7).
+Was eine Quelle meldet, steht nicht im Log; Doppeltes vermeiden und nach einem Neustart weitermachen regelt sie über ihren gesicherten Zustand
+(Gesehen-Liste, Sequenznummer, Hochwassermarke) — jedes Element startet einen Lauf.
 
 ### 10.3.6 … Akteure und Clients
 
 ```csharp
-public sealed record Theke : IAkteur, IDarf<LeiheAus>, IDarf<GibZurueck>, IDarf<OffeneAusleihen>;   // auch IMensch, IMaschine, IKi
-public sealed record Archiv : IMaschine, IDarf<IRegal>;                                               // darf eine Funktion draußen rechnen
+// Sonde Lesen.cs.txt
+public sealed record Theke : IAkteur, IDarf<LeiheAus>, IDarf<GibZurueck>, IDarf<OffeneAusleihen>, IDarf<RueckgabeGescannt>,
+    IHoert<NichtAusgeliehen>, IHoert<NichtSchaetzbar>, IHoert<LaufGescheitert>;              // Kenntnis: Hinweise
+public sealed record Archiv : IAkteur, IHoert<BegutachteVorOrt>, IDarf<EroeffneMahnung>, IHoert<Ausgeliehen>;   // Arbeit + Antwort + Kenntnis
 
-public interface ILesesaal : IClientVertrag, IVerkoerpert<Theke>, IVerkoerpert<Archiv>, IHoert<MahnungEroeffnet> { }
+public sealed record Lesesaal : IClient, IVerkoerpert<Theke>, IVerkoerpert<Archiv>;
 ```
 
-Alles, was hineinkommt, kommt von einem Akteur, der es darf (`IDarf<T>`, R16). Ein Client-Vertrag sagt, für wen eine Software an einer Leitung
-spricht (`IVerkoerpert<A>`) und was sie hört (`IHoert`, verlierbar). Was über die Leitung geht, sind die `IDarf` dieser Akteure, nach der Art des
-Typs: Commands, Quell-Nachrichten und Hinweise sendet sie, Queries fragt sie, Funktionen trägt sie. Wirksam ist verkörperte Akteure ∩ Token (R17);
-ein C#-Client
-erklärt sich mit `[assembly: IstClient<IX>]`. Ausführlich: [konzept-akteure.md](konzept-akteure.md).
+Alles, was hineinkommt, kommt von einem Akteur, der es darf (`IDarf<T>`: Command, Query, Hinweis; R16). Was zu ihm kommt, hört er (`IHoert<T>`):
+ein Command ohne Ziel ist **Arbeit** — die Werkstatt gibt ihn einer Sitzung, die den Akteur verkörpert, bis eine Antwort kommt (die erste gewinnt;
+die Antwort sind Commands seines `IDarf`) —, ein Event oder Hinweis ist **Kenntnis** (verlierbar, ohne Ausgabe). Ein **Client** ist ein Record, der
+nur nennt, wen er verkörpert; über seine Leitung gehen genau `IDarf` und `IHoert` dieser Akteure. Wirksam ist „verkörpert ∩ Token“, für beide
+Richtungen (R17); ein C#-Client erklärt sich mit `[assembly: IstClient<X>]`. Ausführlich: [konzept-akteure.md](konzept-akteure.md).
 
 ### 10.3.7 … einen Ablauf
 
-Ein Ablauf über mehrere Aggregate ist ein **Vorgangs-Aggregat** plus **Funktionen** als Kanten (Sonde `Fluss.cs.txt`): eine Funktion startet den
-Vorgang (`StartePruefung` mit `h.NeueId<Seitenpruefung>()`), eine Funktion draußen verteilt die Arbeit als Strom (je Seite ein `ZaehleSeite`),
-das Aggregat zählt die Rückmeldungen (Fan-in) und entscheidet den Abschluss, eine Frist desselben Aggregats bricht nach Zeit ab, eine weitere
-Funktion zieht die Folge. Die Zugehörigkeit fremder Events zum Vorgang ist ein **fachliches Feld** im Event (A2). Kompensation ist ein Decide,
-das den Gegenzug als Event entscheidet.
+Ein Ablauf über mehrere Aggregate ist ein **Vorgangs-Aggregat** plus **Graphen** als Kanten (Sonde `Fluss.cs.txt`): ein Akteur gibt einen Command
+ohne Ziel an den Kopf des Graphen (`RueckgabeGescannt`); der Start legt den Vorgang an (`StartePruefung` mit `h.NeueId<Seitenpruefung>()`) und hört
+dessen Event als Antwort auf seinen Command; die Antwort öffnet als Strom je Seite einen Unterlauf (Je), die Bilanz nimmt alle Befunde als Liste
+(Sammeln) und schließt den Vorgang ab; eine Frist desselben Aggregats bricht nach Zeit ab. Was je Auslöser zusammengehört, hält der Lauf; was über
+Läufe hinweg gilt (fremde Rückmeldungen, Zählung, Kompensation), das Aggregat — es gibt dazu Commands ohne Ziel an Graphen aus. Die Zugehörigkeit fremder Events zum Vorgang ist ein
+**fachliches Feld** im Event (A2). Kompensation ist ein Decide, das den Gegenzug als Command ohne Ziel ausgibt.
 
 ## 10.4 Typisierte Ids und Herkunft
 
-`Id<TAggregat>` ist das Ziel jedes Commands und der Verweis auf ein Aggregat überall sonst (Events, Queries, Antworten, Read-Models,
-Fähigkeiten). Wirkung: Routing über Typen ohne Konvention (Invariante 3); Antworten sagen, was sie zeigen (der Stand jeder gezeigten Id kommt ohne
-Zutun mit); Editor und LLM sehen, worauf ein Feld zeigt. Auf Leitung, Log und Wire ist `Id<T>` eine UUID (Namensregel `Abstractions/Idvertrag.cs`).
+`Id<TAggregat>` ist das Ziel jedes Commands an ein Aggregat und der Verweis auf ein Aggregat überall sonst (Events, Commands ohne Ziel, Queries,
+Antworten, Read-Models, Fähigkeiten). Wirkung: Routing über Typen ohne Konvention (Invariante 3); Antworten sagen, was sie zeigen (der Stand jeder
+gezeigten Id kommt ohne Zutun mit); Editor und LLM sehen, worauf ein Feld zeigt. Auf Leitung, Log und Wire ist `Id<T>` eine UUID (Namensregel
+`Abstractions/Idvertrag.cs`). Command-Ids leitet das Framework ab, nie der Entwickler.
 
 Die **Herkunft** (`Abstractions/Herkunft.cs`) ist der Parameter, über den ein Baustein von seinem Eingang erfährt: `Stream`, `Version`, `Zeit`
-(Log-Zeit, nie die Uhr des Hosts), `Akteur`, `Id<T>()` (der Stream als Id eines Aggregats) und `NeueId<T>(zweck)` — dieselbe Eingabe ergibt beim
-Wiederholen dieselbe Id. Ein Client darf neue Ids würfeln: er hält die Command-Id vor dem Senden fest (Ausgangskorb).
+(Log-Zeit, nie die Uhr des Hosts; aus einer Quelle die Zeit ihres Elements), `Akteur`, `Id<T>()` (der Stream als Id eines Aggregats) und
+`NeueId<T>(zweck)` — dieselbe Eingabe ergibt beim Wiederholen dieselbe Id. Ein Client darf neue Ids würfeln: er hält die Command-Id vor dem Senden
+fest (Ausgangskorb).
 
 ## 10.5 Wer hört, wer erzeugt
 
+Die Tabellen folgen der Grammatik (`DomainEditor/Grammatik.cs`, `Konsume` und `Erzeugungen`).
+
 | Nachricht | darf in | Anzahl |
 |---|---|---|
-| Command | Aggregat | genau eins |
-| Event (auch Quell-Nachricht) | Projektion, Funktion | beliebig viele |
+| Command an ein Aggregat | das Aggregat in seinem Typ | genau eins |
+| Command ohne Ziel | die Knoten desselben Graphen, die ihn nehmen; sonst den Kopf genau eines Graphen oder einen Akteur (`IHoert`, Arbeit) | genau ein Empfänger |
+| Event | Projektion; Akteur (`IHoert`, Kenntnis); eine Funktion nur als Antwort auf ihren eigenen Command | beliebig viele |
 | Event, vom Aggregat entschieden | sein `Apply` | genau das entscheidende Aggregat |
-| Hinweis | Funktion (höchstens einmal, direkt an ihre Adresse), Client (`IHoert`) | beliebig viele; nie Projektion, nie Aggregat |
+| Hinweis | Akteur draußen (`IHoert`, über den Verteiler an seine Sitzungen) | beliebig viele; nie Funktion, Projektion, Aggregat |
 | Query | Reader **oder** Aggregat | genau eins |
 | Frist | Uhr → Command an **dasselbe** Aggregat | genau eins |
-| Antwort | der fragende Client | – |
+| Fähigkeit | Projektion (schreibend), Reader und Funktion (lesend) | beliebig viele |
+| Technik | Funktion (im Konstruktor) | beliebig viele |
+| Antwort | der Fragende | – |
 
 | Baustein | erzeugt | sonst nichts |
 |---|---|---|
-| Aggregat | Events, Hinweise, Fristen; Antworten auf direkte Queries | keine Commands |
+| Aggregat | Events, Hinweise, Fristen, Commands ohne Ziel; Antworten auf direkte Queries | keine Commands an Aggregate |
 | Projektion | Wirkungen in ihrem Store (nur Schreib-Fähigkeiten) | keine Nachricht |
 | Reader | Antworten (nur Lese-Fähigkeiten) | – |
-| Funktion | Commands, Events, Quell-Nachrichten, Hinweise; nach außen nur über Dienste | – |
-| Quelle | Quell-Nachrichten | – |
-| Client | was seine verkörperten Akteure dürfen (`IDarf`): Commands, Quell-Nachrichten, Hinweise, Queries, Ausgaben getragener Funktionen | – |
+| Funktion | Commands (an Aggregate oder ohne Ziel), Hinweise; nach außen nur über Technik | keine Events |
+| Akteur, Client | was die Akteure dürfen (`IDarf`): Commands, Queries, Hinweise; auf Arbeit Commands | – |
 | Uhr | Commands aus fälligen Fristen | – |
 
 ## 10.6 Regeln und ihr Gegenstück im Build
@@ -264,32 +303,32 @@ Prüfen heißt Bauen (W5). Die Liste „Regel → Build-Gegenstück“ der Gramm
 
 | # | Regel | geprüft durch |
 |---|---|---|
-| R1 | Der Ausgang steht in der Signatur (`Decide`, `Auf`, `Frage`); der Graph entsteht nur daraus, nie aus Rümpfen | CQRS050, CQRS100, CQRS057 |
+| R1 | Der Ausgang steht in der Signatur (`Decide`, `Auf`, `Lausche`, `Frage`), die Knoten eines Graphen in seinem Record; der Graph entsteht nur daraus, nie aus Rümpfen | CQRS050, CQRS100, CQRS057, CQRS115 |
 | R2 | Je Baustein und Eingangstyp höchstens ein `Auf` bzw. eine `Frage` | CQRS101 |
-| R3 | Ein Command gehört genau einem Aggregat (`ICommand<TAggregat>`); jedes entschiedene Event hat ein `Apply` im selben Aggregat und umgekehrt; Events aus Funktionen und Quellen haben kein `Apply` | Compiler, CQRS010/011, CQRS079/080 |
+| R3 | Ein Command an ein Aggregat gehört genau einem Aggregat (`ICommand<TAggregat>`); jedes entschiedene Event hat ein `Apply` im selben Aggregat und umgekehrt; ein Decide gibt keinen Command an ein Aggregat aus | Compiler, CQRS010/011, CQRS079/080, CQRS114 |
 | R4 | Eine Query hat genau ein Ziel (Reader oder Aggregat) | CQRS084/086, CQRS057 |
 | R5 | Eine Frist steht nur in einem Decide und zielt auf einen Command des eigenen Aggregats | Generator (`Frist<TCmd>`), Prüfung beim Schreiben im Actor |
-| R6 | Ein Kreis Funktion → Command → Aggregat → Event → dieselbe Funktion endet nur, wenn das Decide fortschreitenden Zustand trägt | **nicht im Build** (aus Signaturen nicht von einem Ablauf zu unterscheiden, GR-KREIS, docs/13 FB-5); der Test-Ablauf bricht einen Kreis ab (`Cqrs.Testing/Ablauf.cs`) |
+| R6 | Ein Kreis Graph → Command → Aggregat → Command ohne Ziel → derselbe Graph endet nur, wenn das Decide fortschreitenden Zustand trägt | **nicht im Build** (aus Signaturen nicht von einem Ablauf zu unterscheiden, GR-KREIS, docs/13 FB-5); der Test-Ablauf bricht einen Kreis ab (`Cqrs.Testing/Ablauf.cs`) |
 | R7 | Ids sind typisiert; Command-Ziele sind `Id<T>` | Compiler, CQRS013 |
 | R8 | Fähigkeiten nur als Parameter (eine Funktion je Fähigkeit, ein Store bündelt), nie in Konstruktor, Feld oder `new` | CQRS051, CQRS054, CQRS055 |
 | R9 | Eine Projektion schreibt in genau einen Store | CQRS052 |
-| R10 | Gerufene Funktionen (`IFunktion` ohne `Auf`) nur im Konstruktor einer Funktion bzw. Umsetzung; eine Funktion mit Lese-Fähigkeit läuft im Host | CQRS089–092, Start-Prüfung |
+| R10 | Technik nur im Konstruktor einer Funktion bzw. einer Umsetzung, bindbar und eindeutig gewählt | CQRS089–092, Start-Prüfung (`BindeTechnik`) |
 | R11 | Aggregate und Projektionen rechnen bei gleicher Eingabe gleich: keine Uhr, kein Zufall, kein `Guid.NewGuid()`, kein Lesen fremder Daten | CQRS102 |
-| R12 | Eine Funktion liest nie das Log und schreibt nie ein Event: Eingänge Folge, Zwischenergebnis, Quell-Nachricht, Hinweis (ein Event nur als Antwort), Ausgaben Commands, Zwischenergebnisse, Hinweise | CQRS100 |
+| R12 | Eine Funktion ist eine Klasse, liest nie das Log und gibt nie ein Event aus: Ports sind Commands (ein Event nur als Antwort auf den eigenen Command), Ausgaben Commands und Hinweise | CQRS100, CQRS108 |
 | R13 | Neue Ids auf der Server-Seite nur abgeleitet (`Herkunft.NeueId`) | CQRS104 |
 | R14 | Jeder Store implementiert genau eine Store-Klasse; Klasse 3 nur mit `[MindestensEinmal]`; Schreib-Fähigkeiten eines Klasse-2-Stores nehmen die `Herkunft` | CQRS109, CQRS110, Start-Prüfung; Einhaltung: allgemeiner Store-Test |
 | R15 | Die Garantie folgt dem Eingang: Event → genau einmal, Hinweis → höchstens einmal, Query → keine Wirkung | folgt aus den Typen |
-| R16 | Alles von draußen kommt von einem Akteur, der es darf | Generator, Start-Prüfung |
-| R17 | Ein Client sendet, fragt, hört und trägt nur, was seine Akteure dürfen; eine Funktion draußen braucht einen Träger oder eine Bindung | CQRS095–097, CQRS087 (Warnung), Start-Prüfung |
+| R16 | Alles von draußen kommt von einem Akteur, der es darf | Generator, Start-Prüfung, Akteur-Tor |
+| R17 | Ein Client sendet, fragt, hört und nimmt Arbeit nur für die Akteure an, die er verkörpert, geschnitten mit dem Token | CQRS063/064, CQRS093–097, Handshake |
 | R18 | Die Hausregel für Actors: ein Weg je Absicht (nur Framework-Code) | CQRS112/113 |
-| R19 | Zustand einer Funktion nur über `IZustand<T>` im Konstruktor einer Klasse; Lebenszyklus nur an Funktions-Klassen im Host | CQRS105, CQRS107 |
-| R20 | Jeder Hinweis-Typ, den eine Funktion hört, hat einen Erzeuger; jede Adresse der Routing-Tabelle existiert | CQRS106, Start-Prüfung |
+| R19 | Zustand einer Funktion nur über `IZustand<T>` im Konstruktor | CQRS105, CQRS100 |
+| R20 | Ein Command ohne Ziel hat genau einen Empfänger (Knoten desselben Graphen, Graph-Kopf oder Akteur); ein Graph ist kreisfrei, hat je Eingangstyp einen Kopf und Ports in passender Vielfachheit; jede Instanz passt zu ihrem Graphen | CQRS116, CQRS115, CQRS117 (Warnung), Start-Prüfung (`GraphInstanzen.Aus`) |
 
 Dazu die Projektstruktur ([07](07-projektstruktur.md), CQRS098): wo eine Primitive liegt, sagt die Tabelle `Abstractions/Projektstruktur.cs`.
 
 ## 10.7 Entscheidungen und Annahmen
 
-Entschieden von Tobi (2026-10-26 bis 2026-10-28); Code-Kommentare zitieren sie mit ihrer Nummer.
+Entschieden von Tobi; Code-Kommentare zitieren sie mit ihrer Nummer.
 
 | # | Frage | Entscheidung |
 |---|---|---|
@@ -297,29 +336,35 @@ Entschieden von Tobi (2026-10-26 bis 2026-10-28); Code-Kommentare zitieren sie m
 | E2 | Direkte Abfrage eines Aggregats | ja, als eigener Lesepfad neben dem Reader (§10.3.1) |
 | E3 | Typisierte Ids | ja, Pflicht für Command-Ziele; in Antworten die Grundlage für feine Updates an Clients (§10.4) |
 | E4 | Editor-Oberfläche | zurückgestellt; Werkbank und GraphExtractor bauen und `--check`/`--sonde` sind grün, `Werkbank/wwwroot/editor/` bleibt unberührt |
-| E5 | Umsetzen | phasenweise, je Phase auf Tobis Wort |
-| E6 | Darf eine Funktion Zustand haben? | ja, gekapselt, als Cache der Aktivierung, kein Domänen-Zustand (Gewichte, ein Zähler, eine Verbindung); `IZustand<T>` im Konstruktor, Ressourcen je Aktivierung; Gelerntes gehört in Projektionen |
-| E7 | Nachrichten zwischen Funktionen ohne Log | ja, als Hinweis (`ITransientEvent`), im Speicher, nie im Log (Invariante 6) |
-| E8 | Wie kommen sie an? | hart verdrahtet: generierte Tabelle Hinweis-Typ → Adressen, direkt über den Boten; kein Broker, keine Abos, kein Pub/Sub von Proto.Cluster |
-| E9 | C# und Python | eine Adresse je Funktion; dahinter rechnet die Umsetzung im Host oder die Sitzung eines Clients, der sie trägt; Ausgaben Commands und Hinweise |
-| E10 | Lebenszyklus einer Funktion | optional, `ILebenszyklus` mit `BeimAktivierenAsync`; das Ende ist `IAsyncDisposable`; draußen `beim_start`/`beim_ende` im Python-SDK |
+| E5 | Umsetzen | schrittweise, je Schritt auf Tobis Wort |
+| E6 | Darf eine Funktion Zustand haben? | ja, gekapselt, kein Domänen-Zustand (Gewichte, ein Zähler, eine Gesehen-Liste); `IZustand<T>` im Konstruktor, gesichert je Instanz und Knoten nach fertigem Lauf; Gelerntes gehört in Projektionen |
+| E7 | Was fließt zwischen Funktionen? | ein Command ohne Ziel, im Speicher des Laufs, nie im Log (Invariante 6); kein eigener Nachrichten-Marker |
+| E8 | Wie kommt er an? | die Kanten folgen aus den Typen (generierte Graph-Tabelle); an einen Kopf über einen offenen Eingang oder den Boten; kein Broker, keine Abos |
+| E9 | C# und Python | eine Funktion läuft im Host; was draußen gerechnet wird, ist Arbeit eines Akteurs, die ein Client annimmt; denselben Schritt je Umgebung zwischen Host und draußen umzuschalten ist bewusst aufgegeben |
+| E10 | Lebenszyklus einer Funktion | kein eigener: Technik lädt beim ersten Aufruf, Freigabe über `IAsyncDisposable` |
+| E11 | Nachrichtenarten | drei: Command (mit oder ohne Ziel), Event, Hinweis; dazu Query und Frist |
+| E12 | Empfänger eines Commands | genau einer, vom Absender aus: Ziel im Typ → Aggregat; sonst der Knoten desselben Graphen; sonst der Kopf genau eines Graphen oder ein Akteur, der ihn hört |
+| E13 | Graph | ein eigener Typ (`IGraph`), Knoten als Parameter, Kanten aus den Typen, Ablaufformen als Typ-Formen der Ports; läuft als Instanz mit eigener Konfig, beliebig oft |
+| E14 | Quellen | Katalogfunktionen am Kopf eines Graphen, nicht im Log; durabel über den gesicherten Zustand |
+| E15 | Umgebung | ein Ordner (`umgebung.json` + `graphen/<instanz>.json`); der Akteur einer Quellinstanz steht in ihrer Datei, geprüft gegen sein `IDarf` |
+| E16 | Akteur und Client | Akteur = `IDarf` + `IHoert` (ohne Art); Client = Record, der nur verkörpert; ein C#-Client nennt ihn mit `[assembly: IstClient<X>]`; Hinweise gehen nur an Akteure |
 
 Annahmen (sicherer Default, gelten, solange Tobi nicht widerspricht):
 
-- **A1** Eine Funktion hält nichts fest: genau einmal wirkt sie über die offenen Eingänge (im Commit des Auslösers) und die abgeleiteten Command-Ids.
+- **A1** Eine Funktion hält nichts fest: genau einmal wirkt ein Lauf über den offenen Eingang an seinem Kopf und die abgeleiteten Command-Ids.
 - **A2** Die Zugehörigkeit zu einem Vorgang ist ein fachliches Feld im Event, keine versteckte Korrelation in den Metadaten.
 - **A3** Wiederholungsfeste Stores (Klasse 2) schreiben mit der Event-Identität im Schlüssel oder bedingt nach Position.
 - **A4** Der Neuaufbau einer Projektion geht über Generationen; Leeren ist der Sonderfall.
-- **A5** Der Zustand einer Funktion ist ein Cache der Aktivierung, frisch bei jeder Aktivierung, nicht gesichert; eine Funktion mit Zustand rechnet
-  im Cluster auf genau einer Aktivierung (Advisory-Lock, `ZustandsSperre`).
-- **A6** Eine Funktion hat je Knoten, der sie hält, einen Parent `funktionen/<F>`; ein Eingang geht an den eigenen Knoten, sonst reihum (Gossip).
-- **A7** Ein Hinweis trägt eine Kennung, die der Absender vergibt; Command-Ids aus einem Hinweis-Eingang werden daraus abgeleitet.
-- **A8** Rechnet eine Funktion draußen, gibt ein Kind den Eingang dem Arbeiter mit dem meisten freien Platz; einen Zustand im Worker sichert der
-  Worker.
+- **A5** Eine Instanz mit Zustand oder Quelle rechnet im Cluster auf genau einer Aktivierung (Advisory-Lock je Instanz, `ZustandsSperre`).
+- **A6** Jeder Cluster-Knoten hat von jeder Instanz einen Graph-Actor `funktionen/<instanz>`; ein Lauf bleibt in dem, der seinen Kopf annahm; ein
+  Eingang geht an den eigenen Knoten, sonst reihum (Gossip).
+- **A7** Ein Hinweis trägt eine Kennung, die der Absender vergibt.
+- **A8** Arbeit gibt die Werkstatt dem Arbeiter mit dem meisten freien Platz; einen Zustand im Worker sichert der Worker.
 
 ## 10.8 Was bewusst nicht kommt
 
 Kein Geltungsbereich und keine Daten-Rechte je Objekt (E1); der Platz bleibt frei: die `Herkunft` trägt den Akteur, `Decide` darf ihn sehen; ein
 Bereich wäre später eine weitere Kopfzeile plus Filter in Verteiler, Reader und Lesen ab Position. Kein Löschen- und Aufbewahren-Konzept (Option:
-verschlüsselbare Felder als Typ-Fakt). Keine Schema-Evolution im Editor; `IUpcast` bleibt Backend-Primitive. Kein Dirigent, keine Saga, keine
-Fluss-Sprache, keine Reaktion als eigene Art. Offenes steht in [13](13-reifegrad-schulden-bewertung.md) §13.0.
+verschlüsselbare Felder als Typ-Fakt). Keine Schema-Evolution im Editor; `IUpcast` bleibt Backend-Primitive. Kein Dirigent, keine Saga, kein
+Builder und keine ausdrücklichen Kanten, keine Knotenarten, keine Reaktion als eigene Art, keine Schleifen im Graphen. Offenes steht in
+[13](13-reifegrad-schulden-bewertung.md) §13.0.

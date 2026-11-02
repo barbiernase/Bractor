@@ -78,6 +78,12 @@ public record EventEnvelope : IEventEnvelope, IWireMessage
     /// </summary>
     public string? ZielSitzung { get; init; }
 
+    /// <summary>
+    /// Mit <see cref="ZielSitzung"/>: geht AUCH an jede Sitzung, die den Typ hört (eine Ablehnung: an den Absender und an die Akteure, die sie hören,
+    /// Entscheidung 14) — jede Sitzung genau einmal.
+    /// </summary>
+    public bool AuchAnHoerer { get; init; }
+
     /// <summary>Spur (<see cref="Spur"/>): der auslösende Log-Eintrag (<c>Stream:Version</c>); null = Wurzel (von außen).</summary>
     public string? Ursache { get; init; }
 

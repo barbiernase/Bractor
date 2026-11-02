@@ -35,7 +35,10 @@ public sealed record SitzungsDienste(
     Konsum Konsum,
     IEventStoreRepository? Log,
     ILogger Logger,
-    Werkstatt? Werkstatt = null);
+    Werkstatt? Werkstatt = null,
+    Infrastructure.Funktionen.Verkettung? Koepfe = null,
+    Infrastructure.Eingaenge.IOffeneEingaenge? Offene = null,
+    Infrastructure.Funktionen.IFunktionsWege? Wege = null);
 
 /// <summary>
 /// Die Sitzung einer gRPC-Verbindung als Actor (docs/konzept-akteure.md §5): der <b>einzige Schreiber</b> auf den
@@ -191,7 +194,10 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
                 await HandshakeAsync(context, m.Capabilities);
                 break;
             case Leitung.ClientMessage.MessageOneofCase.Command:
-                await CommandAsync(m.Command);
+                // Ein Command ohne Ziel geht an den Kopf eines Graphen bzw. an einen Akteur (Arbeit); einer an ein Aggregat an sein Aggregat.
+                if (m.Command.Envelope?.Payload is { } nutzlast && _d.Mapper.CommandOhneZiel(nutzlast) is { } ohneZiel)
+                    await AnKopfAsync(context, m.Command.Envelope, ohneZiel);
+                else await CommandAsync(m.Command);
                 break;
             case Leitung.ClientMessage.MessageOneofCase.Query:
                 await QueryAsync(context, m.Query);
@@ -338,6 +344,44 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
         _d.Dispatcher.Dispatch(envelope);
     }
 
+    /// <summary>
+    /// Ein Command ohne Ziel von einem Akteur (docs/04 §4.4): ein offener Eingang je Empfänger (der Kopf eines Graphen bzw. ein Akteur, der ihn als
+    /// Arbeit hört; Kennung aus der Command-Id — wer wiederholt, schickt dieselbe), danach der schnelle Weg. Genau einmal am Empfänger.
+    /// </summary>
+    private async Task AnKopfAsync(IContext context, Leitung.CommandEnvelopeDto dto, ICommand command)
+    {
+        var typ = command.GetType();
+        var akteur = _sitzung.Akteur;
+        if (akteur != null && !akteur.DarfHinein(typ))
+        {
+            await FehlerAsync("AKTEUR_DARF_NICHT", $"Akteur '{akteur.Name}' darf {typ.Name} nicht (kein IDarf<{typ.Name}>)", dto.CorrelationId);
+            return;
+        }
+        if (_d.Koepfe is not { } koepfe || _d.Offene is not { } offene)
+        {
+            await FehlerAsync("KEIN_EMPFAENGER", $"{typ.Name}: dieser Host nimmt keine Commands ohne Ziel an", dto.CorrelationId);
+            return;
+        }
+        var kennung = Guid.TryParse(dto.CommandId, out var id) ? id : Guid.NewGuid();
+        var wer = akteur?.AkteurFuer(typ) ?? AkteurHerkunft.EindeutigerHalter(typ);
+        var korrelation = string.IsNullOrEmpty(dto.CorrelationId) ? kennung.ToString() : dto.CorrelationId;
+        var eingaenge = Infrastructure.Eingaenge.Folgenbeilagen.VonAkteur(command, koepfe, kennung, wer, korrelation);
+        if (eingaenge.Count == 0)
+        {
+            await FehlerAsync("KEIN_EMPFAENGER", $"{typ.Name}: kein Graph nimmt ihn am Kopf, kein Akteur hört ihn (fehlt eine Instanz?)", korrelation);
+            return;
+        }
+        Neben(context, ct => offene.LegeAsync(eingaenge.Select(e => e.Eingang).ToList(), kennung, ct), async t =>
+        {
+            if (t.IsFaulted)
+            {
+                await FehlerAsync("EINGANG_NICHT_GELEGT", t.Exception?.GetBaseException().Message ?? "", korrelation);
+                return;
+            }
+            if (_d.Wege is { } wege) Infrastructure.Eingaenge.Folgenbeilagen.StelleZu(eingaenge, wege, kennung);
+        });
+    }
+
     // ═════════════════════════════════════════
     // QUERY
     // ═════════════════════════════════════════
@@ -474,7 +518,7 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
     }
 
     // ═════════════════════════════════════════
-    // FUNKTIONEN DRAUSSEN (IDarf<F> eines verkörperten Akteurs, Laufort Extern)
+    // ARBEIT FÜR AKTEURE (IHoert eines Commands ohne Ziel an einem verkörperten Akteur)
     // ═════════════════════════════════════════
 
     string IArbeiter.Name => _id;

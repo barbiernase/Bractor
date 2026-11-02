@@ -1,15 +1,13 @@
 # 09 — Python-SDK und Worker
 
-Stand 2026-10-29, gegen den Code geprüft.
+Stand 2026-11-02, gegen den Code geprüft.
 
 Zwei Teile, streng getrennt (W11):
 
-- **Framework:** das domänenfreie Paket `cqrs_client` (`Client.Infrastructure.Python/cqrs_client/`) und der generische Funktions-Worker
-  (`funktions_worker.py`, liegt heute im Projekt der Beispieldomäne, §9.5).
-- **Beispieldomäne:** `Domain.Client.Worker.Python.ML/` — Klassifikation und Training der Bildinspektion, dazu die Python-Umsetzung einer
-  Funktion draußen.
+- **Framework:** das domänenfreie Paket `cqrs_client` (`Client.Infrastructure.Python/cqrs_client/`).
+- **Beispieldomäne:** `Domain.Client.Worker.Python.ML/` — die Clients für Klassifikation und Training der Bildinspektion.
 
-Python läuft mit dem Interpreter der Umgebung: der des Workers (`Funktionen:<F>:Worker:Python`), sonst `Umgebung:Python`, sonst `CQRS_PYTHON`,
+Python läuft mit dem Interpreter der Umgebung: der des Workers (`Clients:<Name>:Worker:Python`), sonst `Umgebung:Python`, sonst `CQRS_PYTHON`,
 sonst `python3` (eine Regel: `UmgebungKonfig.Python`, `Abstractions/Umgebung/UmgebungKonfig.cs`); die Werkbank nimmt ihn für Worker und
 `build_python.sh`.
 
@@ -23,21 +21,19 @@ Der Python-Teil ist ein Client am selben bidirektionalen gRPC-Stream (`CqrsClien
 | `mapper.PayloadMapper`, `mapper.NutzlastTabelle` | `ProtoMessageMapper`, `GeneratedNutzlast` |
 | `versioning.VersionTracker` | `Client.Infrastructure/Versioning/VersioningModule.cs` |
 | `proxy.GrpcProxy` | `Client.Infrastructure/Connection/GrpcProxy.cs` |
-| `vertrag.ClientVertragBasis` | Client-Vertrag + `GeneratedWiring_<Assembly>` |
+| `vertrag.ClientVertragBasis` | `GeneratedWiring_<Assembly>` aus `[assembly: IstClient<X>]` |
 
-Er ist **kein** durabler Konsument (kein Cursor, keine Position), sondern ein Client am Rand. Was er tut, sagt sein Client-Vertrag
-(`IClientVertrag`, Grammatik in [10](10-entwickler-api.md) §10.3.6, Begriffe in [konzept-akteure.md](konzept-akteure.md)): er verkörpert Akteure
-(`IVerkoerpert<A>`), und was über seine Leitung geht, sind ihre `IDarf`:
+Er ist **kein** durabler Konsument (kein Cursor, keine Position), sondern ein Client am Rand. Was er tut, sagen die Akteure, die er verkörpert
+(Grammatik in [10](10-entwickler-api.md) §10.3.6, Begriffe in [konzept-akteure.md](konzept-akteure.md)) — über seine Leitung gehen ihr `IDarf` und
+ihr `IHoert`:
 
-- **hört** (`IHoert<T>`): Events und Hinweise als Push über den Verteiler seines Knotens — verlierbar, nur zur Kenntnis;
+- **Arbeit** (`IHoert` eines Commands ohne Ziel): er nimmt sie an und antwortet mit Commands aus dem `IDarf` des Akteurs (§9.5);
+- **Kenntnis** (`IHoert` eines Events oder Hinweises): Push über den Verteiler seines Knotens — verlierbar, ohne Ausgabe;
 - **fragt** (`IDarf` auf eine Query): Queries mit typisierter Antwort;
-- **trägt Funktionen** (`IDarf<F>` auf eine Funktions-Schnittstelle): er rechnet die Eingänge einer Funktion draußen; Senden und Wiederholen bleiben
-  beim Kind der Funktion im Server (§9.5);
-- **sendet** (`IDarf` auf einen Command, eine Quell-Nachricht oder einen Hinweis): steht im Handshake; einen eigenen Sende-Aufruf hat das SDK nicht (§9.4).
+- **sendet** (`IDarf` auf einen Command oder Hinweis): steht im Handshake; einen eigenen Sende-Aufruf hat das SDK nicht (§9.4).
 
-Exactly-once bleibt serverseitig: die Ausgaben einer getragenen Funktion hält der Server unter „Funktion, Eingang“ fest, die erste Antwort gewinnt,
-gesendet wird mit abgeleiteten Command-Ids aus dem Festgehaltenen ([11](11-garantien.md) §11.6). Der Zustand des Clients lebt im Prozess
-(`state`, in-memory); ihn zu sichern, ist Sache des Workers.
+Exactly-once bleibt serverseitig: die Antwort auf einen Auftrag sendet der Server, die erste gewinnt, die Command-Ids leitet er aus dem Auftrag ab
+([11](11-garantien.md) §11.6). Der Zustand des Clients lebt im Prozess (`state`, in-memory); ihn zu sichern, ist Sache des Workers.
 
 ## 9.2 Wie Python-Code entsteht: generierte Basen und DTOs
 
@@ -48,15 +44,8 @@ Methoden.
 |---|---|---|
 | `domain_client/generated/__init__.py` | `Domain.Client.Worker.Python.ML/build_python.sh` (`grpc_tools.protoc --python_betterproto_out` aus `Domain.Leitung/domain.proto`) | betterproto-DTOs (`…Dto`) der Anwendung; `Id<T>` ist darin ein UUID-Text |
 | `cqrs_client/leitung/__init__.py` (SDK) | `Client.Infrastructure.Python/build_leitung.sh` (aus `Cqrs.Leitung/cqrs.proto`, committet) | die Leitung des Frameworks: `ClientMessage`/`ServerMessage`, Hüllen, `Nutzlast` |
-| `domain_client/generated/vertraege.py` | `Cqrs.Codegen` (`PythonVertragsEmitter`) | je Client-Vertrag (`IClientVertrag`) eine abstrakte Basis `<Client>Basis` mit `CLIENT`, `AKTEURE`, `VERTRAG`, `VERTRAG_HASH`, `TRAEGT`, `HOERT`, `SPONTAN` (Commands der Akteure), `FRAGT`; je getragener Funktion eine Methode `<funktion>(e, h, state)`, je gehörtem Typ `auf_<typ>(e, ctx, state)` |
-| `domain_client/generated/funktionen.py` | `Cqrs.Codegen` (`PythonFunktionsEmitter`) | je Funktions-Schnittstelle ohne Lese-Fähigkeit eine Basis `<Funktion>Basis` mit `FUNKTION`, `EINGAENGE` und je `Auf` abstrakt `auf_<eingang>(e, h)` |
-| `domain_client/generated/funktions_tabelle.py` | `Cqrs.Codegen` | `TABELLE`: Funktion → (Basis, Modul, Klasse der Implementierung) für den generischen Worker |
+| `domain_client/generated/vertraege.py` | `Cqrs.Codegen` (`PythonVertragsEmitter`) | je Client (`record X : IClient`) eine abstrakte Basis `<Client>Basis` mit `CLIENT`, `AKTEURE`, `VERTRAG_HASH`, `ARBEIT` (je Akteur: gehörter Command → `Arbeit(methode, antworten)`), `HOERT` (Kenntnis → Methode), `SPONTAN` (Commands und Hinweise der Akteure), `FRAGT` (ihre Queries); je gehörtem Command abstrakt `auf_<command>(c, h, state)`, je Kenntnis `auf_<event>(e, ctx, state)` |
 | `domain_client/generated/nutzlast_tabelle.py` | `Cqrs.Codegen` (`PythonNutzlastEmitter`) | `TABELLE`: `Nutzlast.typ` → DTO-Klasse — Gegenstück zu `GeneratedNutzlast`, dieselbe Namensregel (`NameSanitizer.NutzlastTyp`); der Client bekommt sie als `nutzlast=` |
-
-Die Basen lesen nur Signaturen (`PythonFunktionsform`, `Cqrs.Codegen/PythonFunktionsEmitter.cs`): je `Auf` Eingang, Ausgaben mit ihrer Art
-(`COMMAND`, `EVENT`, `HINWEIS`), ob die Ausgabe ein Strom ist (`IEnumerable`/`IAsyncEnumerable`) und ob der Eingang ein Hinweis ist
-(`ITransientEvent`). Eine Funktion mit einem Parameter außer Eingang, `Herkunft` und `CancellationToken` (Lese-Fähigkeit) läuft nur im Host und
-bekommt keine Basis.
 
 `Cqrs.Codegen` läuft **automatisch** im Codegen-Prepass jedes Builds (Target `CqrsCodegenPrepass`, `Cqrs.Codegen/CqrsCodegen.targets`), zusammen
 mit `domain.proto` und den STJ-Kontexten; er schreibt die Python-Generate nur, wenn das Projekt des Python-Workers der Wurzel existiert
@@ -71,43 +60,43 @@ passen DTOs und Nutzlast-Tabelle nicht zusammen (docs/13 FB-20). `build_leitung.
 
 | Modul | Rolle |
 |---|---|
-| **client** | `CqrsClient[S]`: Lebenszyklus (Proxy, Mapper, Router, Verbindung, Versioning, `FunktionsLaeufer`), Handshake, `query()` (typisierte Antwort), `run(host, port)`; je Verbindung eine Sitzung (Lesen + Verarbeiten), nach Abbruch neu verbinden und Funktionen neu anbieten; Akteur-Token aus der Konfig oder `CQRS_AKTEUR_TOKEN` |
+| **client** | `CqrsClient[S]`: Lebenszyklus (Proxy, Mapper, Router, Verbindung, Versioning, `ArbeitsLaeufer`), Handshake, `query()` (typisierte Antwort), `run(host, port)`; je Verbindung eine Sitzung (Lesen + Verarbeiten), nach Abbruch neu verbinden und die Arbeit neu annehmen; Akteur-Token aus der Konfig oder `CQRS_AKTEUR_TOKEN` |
 | **vertrag** | `ClientVertragBasis`, `VertragsVerletzung`, `VertragsMeta` — Basis der generierten Client-Basen (§9.4) |
-| **funktion** | `FunktionsBasis`, `GetrageneFunktion`, `FunktionsLaeufer`, `Eingang`, `Ausgabe`, `Herkunft`, `FunktionsVerletzung` — Funktionen draußen (§9.5) |
+| **arbeit** | `Arbeit`, `AkteursArbeit`, `ArbeitsLaeufer`, `Herkunft`, `ArbeitsVerletzung` — die Arbeit der verkörperten Akteure (§9.5) |
 | **dispatch** | Typ-Dispatch: Eingangs-Typ → Methode (`HandleDescriptor`, `@handle.register`, Metaklasse `HandlerMeta`) |
-| **registry** | `CategoryRegistry`: betterproto-Typ → EVENT/COMMAND/QUERY/QUERY_RESPONSE; `ergaenzt(...)` nimmt die Typen eines Vertrags auf |
-| **router** | `MessageRouter`: Verarbeitungsschleife über die Eingangs-Queue — `event` → Dispatch → Ausgaben nach Kategorie zurück; `query_forward` → Antwort; `arbeits_auftrag` → `FunktionsLaeufer.nimm` (läuft entkoppelt) |
-| **mapper** | `NutzlastTabelle` (`packe`/`entpacke`/`typ`, nur über die generierte Tabelle) und `PayloadMapper` (`wrap_command`, `wrap_transient_event`, `wrap_query`, `wrap_query_response`, `extract_*`) |
-| **proxy** | bidirektionaler gRPC-Transport über grpclib-Lowlevel (`STREAM_STREAM`, unabhängiges Senden/Empfangen, ein Sende-Lock); Akteur-Token im Header `akteur-token`; Queries über Futures (30 s); Senden von Commands, Hinweisen, Query-Antworten, `FunktionenAnbieten`, `ArbeitsErgebnis`, `ArbeitLebtMeldung`; `aktualisiert` wird nur geloggt |
-| **connection** | `ConnectionManager`: Reconnect mit exponentiellem Backoff (1 s → 30 s), Handshake erneut, danach `on_connected` |
+| **registry** | `CategoryRegistry`: betterproto-Typ → EVENT/COMMAND/QUERY/QUERY_RESPONSE; `ergaenzt(...)` nimmt die Typen einer Client-Basis auf |
+| **router** | `MessageRouter`: Verarbeitungsschleife über die Eingangs-Queue — `event` → Dispatch → Ausgaben nach Kategorie zurück; `arbeits_auftrag` → `ArbeitsLaeufer.nimm` (läuft entkoppelt) |
+| **mapper** | `NutzlastTabelle` (`packe`/`entpacke`/`typ`, nur über die generierte Tabelle) und `PayloadMapper` (`wrap_command`, `wrap_transient_event`, `wrap_query`, `extract_*`) |
+| **proxy** | bidirektionaler gRPC-Transport über grpclib-Lowlevel (`STREAM_STREAM`, unabhängiges Senden/Empfangen, ein Sende-Lock); Akteur-Token im Header `akteur-token`; Queries über Futures (30 s); Senden von Commands, Hinweisen, `ArbeitAnnehmen`, `ArbeitsErgebnis`, `ArbeitLebtMeldung`; `aktualisiert` wird nur geloggt |
+| **connection** | `ConnectionManager`: Reconnect mit exponentiellem Backoff (1 s → 30 s), Handshake erneut, danach `on_connected` (die Arbeit annehmen) |
 | **versioning** | `dict[UUID → höchste gesehene Version]`, aus Push-Events (`max(aggregate_version, stream_head_version)`), auch aus der `CommandQuittung` eines eigenen Commands (sie trägt die Version des Aggregats danach) |
 | **proto_sync** | Laufzeit-Abgleich gegen `/api/proto/*` am Blazor-Host (§9.7) |
 
 **Routing über Typen:** eingehend `betterproto.which_one_of` → `type(payload)` → Methode; ausgehend `type(output)` → Kategorie → Hülle.
-Ein Command, den ein Handler ausgibt, geht als `CommandRequest` mit gewürfelter `command_id` und `expected_version = -1` hinaus — der Server
-sendet ihn im Modus `Emittiert` ohne Versionsprüfung, die Inbox des Ziels dedupliziert über die Command-Id. Eine Ausgabe der Kategorie EVENT
-geht als Hinweis (`TransientEventRequest`) an den Server, der ihn an den Verteiler und das Hinweis-Netz gibt; die Kennung würfelt der Server,
-weil das SDK keine `causation_id` setzt.
+Ein Command, den ein Handler ohne Client-Basis ausgibt, geht als `CommandRequest` mit gewürfelter `command_id` und `expected_version = -1` hinaus —
+der Server sendet ihn im Modus `Emittiert` ohne Versionsprüfung, die Inbox des Ziels dedupliziert über die Command-Id. Eine Ausgabe der Kategorie
+EVENT geht als Hinweis (`TransientEventRequest`) an den Server, der ihn an die Verteiler gibt (an die Akteure, die ihn hören); die Kennung würfelt
+der Server, weil das SDK keine `causation_id` setzt.
 
-## 9.4 Client-Vertrag: hören, fragen, senden
+## 9.4 Client-Basis: Arbeit, Kenntnis, Fragen
 
-Der Vertrag steht in C# (eine Quelle, `Domain.Akteure/Clients.cs`):
+Akteur und Client stehen in C# (eine Quelle, `Domain.Akteure/Akteure.cs` und `Clients.cs`):
 
 ```csharp
-public sealed record Klassifizierer : IKi,                     // Domain.Akteure/Akteure.cs
-    IDarf<IBildpaarBeurteilung>, IDarf<KlassifiziereEinzelBildDurchKi>, IDarf<HoleAktivesModell>;
+public sealed record Klassifizierer : IAkteur,
+    IHoert<PaarZuBeurteilen>,                                   // Arbeit: ein Command ohne Ziel
+    IDarf<KlassifiziereBildPaarDurchKi>, IDarf<KlassifiziereEinzelBildDurchKi>, IDarf<HoleAktivesModell>,
+    IHoert<BildVerfuegbar>, IHoert<ModellAktiviert>;            // Kenntnis, verlierbar
 
-public interface IKlassifikationsWorker : IClientVertrag,
-    IVerkoerpert<Klassifizierer>,
-    IHoert<BildVerfuegbar>, IHoert<ModellAktiviert>;
+public sealed record KlassifikationsWorker : IClient, IVerkoerpert<Klassifizierer>;
 ```
 
-Python erbt die generierte Basis und füllt je getragener Funktion eine Methode und je gehörtem Typ `auf_<typ>` (nach
+Python erbt die generierte Basis und füllt je gehörtem Command `auf_<command>` und je Kenntnis `auf_<event>` (nach
 `Domain.Client.Worker.Python.ML/run_stub.py`):
 
 ```python
-from cqrs_client.funktion import Herkunft
-from domain_client.generated import BildVerfuegbarDto, ImagePairKomplettDto, KlassifiziereBildPaarDurchKiDto, ModellAktiviertDto
+from cqrs_client.arbeit import Herkunft
+from domain_client.generated import BildVerfuegbarDto, KlassifiziereBildPaarDurchKiDto, ModellAktiviertDto, PaarZuBeurteilenDto
 from domain_client.generated.vertraege import KlassifikationsWorkerBasis
 
 @dataclass
@@ -115,11 +104,11 @@ class StubState:
     bilder: dict[UUID, dict[int, str]] = field(default_factory=dict)
 
 class StubClassifier(KlassifikationsWorkerBasis[StubState]):
-    async def auf_bild_verfuegbar(self, e: BildVerfuegbarDto, ctx, state: StubState):     # IHoert: gibt nichts aus
+    async def auf_bild_verfuegbar(self, e: BildVerfuegbarDto, ctx, state: StubState):        # Kenntnis: gibt nichts aus
         state.bilder.setdefault(ctx.aggregate_id, {})[e.version] = e.pfad
 
-    async def bildpaar_beurteilung(self, e: ImagePairKomplettDto, h: Herkunft, state: StubState):   # getragen (IDarf<IBildpaarBeurteilung> des Klassifizierers)
-        return KlassifiziereBildPaarDurchKiDto(aggregate_id=h.stream, label=0)
+    async def auf_paar_zu_beurteilen(self, c: PaarZuBeurteilenDto, h: Herkunft, state: StubState):   # Arbeit des Klassifizierers
+        return KlassifiziereBildPaarDurchKiDto(aggregate_id=c.paar, label=0)
 
     async def auf_modell_aktiviert(self, e: ModellAktiviertDto, ctx, state: StubState): ...
 
@@ -128,92 +117,76 @@ StubClassifier(registry=create_registry(), nutzlast=TABELLE).run(host, port)
 ```
 
 Was die Basis übernimmt (`cqrs_client/vertrag.py`):
-- **Hören:** Dispatch gehörter Typ → `auf_<typ>`; gibt die Methode etwas aus, ist das eine `VertragsVerletzung` — eine Ausgabe auf ein Event ist
-  eine getragene Funktion, keine Kenntnis.
-- **Vollständigkeit:** fehlt eine Methode, lässt sich die Klasse nicht instanziieren (ABC) — der Bruch fällt beim Start auf.
-- **Registry:** die Typen aus `HOERT`, `SPONTAN` und `FRAGT` ergänzt die Basis in der übergebenen `CategoryRegistry`.
-- **Handshake:** der `CapabilitiesRequest` nennt Client (`vertrag`) und `vertrag_hash`; Befugnisse nimmt der Server aus seiner Tabelle, wirksam
-  ist Vertrag ∩ Token. Ein abweichender Hash kommt in `CapabilitiesResponse.vertrag_hash` zurück.
+- **Arbeit:** je Akteur in `ARBEIT` eine `AkteursArbeit` mit Zugriff auf `state`; angenommen wird sie nach jedem Handshake, je Akteur mit
+  `PLAETZE` (Standard 1); Ablauf §9.5.
+- **Kenntnis:** Dispatch gehörter Typ → `auf_<event>`; gibt die Methode etwas aus, ist das eine `VertragsVerletzung` — eine Antwort gibt es nur
+  auf Arbeit.
+- **Vollständigkeit:** fehlt eine Methode, lässt sich die Klasse nicht instanziieren (ABC) — wer einen Akteur verkörpert, muss seine Arbeit
+  annehmen können; der Bruch fällt beim Start auf.
+- **Registry:** die Typen aus `ARBEIT` (Commands und ihre Antworten), `HOERT`, `SPONTAN` und `FRAGT` ergänzt die Basis in der übergebenen
+  `CategoryRegistry`.
+- **Handshake:** der `CapabilitiesRequest` nennt den Client (`vertrag`) und seinen Hash (`vertrag_hash`); Befugnisse nimmt der Server aus seiner
+  Tabelle, wirksam ist „verkörpert ∩ Token“ für beide Richtungen. Ein abweichender Hash kommt in `CapabilitiesResponse.vertrag_hash` zurück.
 - **Fragen:** `await self.query(dto)` liefert die typisierte Antwort (`QueryRequest`/`QueryResponse`, Fehler als `proxy.ServerError`); eine
   Query außerhalb von `FRAGT` ist eine `VertragsVerletzung`. Read-your-writes (`mindestens`) setzt das SDK nicht.
-- **Getragene Funktionen:** je Eintrag in `TRAEGT` eine `GetrageneFunktion` mit Zugriff auf `state`; Gleichzeitigkeit über `SLOTS`
-  (Funktion → Zahl, Standard 1); Ablauf wie §9.5.
-- **Senden:** `SPONTAN` geht in den Handshake (`message_types`); einen Aufruf, mit dem ein Vertrags-Client von sich aus einen Command
-  sendet, hat das SDK nicht.
+- **Senden:** `SPONTAN` geht in den Handshake (`message_types`); einen Aufruf, mit dem ein Client von sich aus einen Command sendet, hat das SDK
+  nicht.
 
-Der Entwickler schreibt nur Fachlogik: State-Dataclass, die Methoden des Vertrags, Rückgaben bzw. `yield`. Transport, Hüllen, Versioning, oneof,
-Reconnect und Vertragsprüfung liegen im SDK (Invariante 5).
+Der Entwickler schreibt nur Fachlogik: State-Dataclass, die Methoden der Basis, Rückgaben bzw. `yield`. Transport, Hüllen, Versioning, oneof,
+Reconnect und Prüfungen liegen im SDK (Invariante 5).
 
-**Ohne Vertrag:** ein `CqrsClient[S]` mit `@handle.register`-Methoden nennt im Handshake selbst, was er hört (`message_types`), sendet
+**Ohne Client-Basis:** ein `CqrsClient[S]` mit `@handle.register`-Methoden nennt im Handshake selbst, was er hört (`message_types`), sendet
 (`_declared_command_types`); wirksam ist auch dann nur, was das Token erlaubt (`Infrastructure/GrpcClient/Handshake.cs`,
 `Infrastructure/Akteure/AkteurTor.cs`). Seine Handler dürfen Commands und Hinweise ausgeben. Queries beantwortet ein Client nie: eine Query hat genau
 ein Ziel, einen Reader oder ein Aggregat ([10](10-entwickler-api.md) §10.5) — ein Handler auf einer Query bricht den Start ab.
 
-## 9.5 Funktionen draußen (Laufort `Extern`)
+## 9.5 Arbeit
 
-Eine Funktion draußen ist eine Schnittstelle `: IFunktion` in C# ([10](10-entwickler-api.md) §10.3.4); ihr Laufort steht in der Umgebung
-(`Funktionen:<F>:Laufort = Extern`, `FunktionsKonfig`). In Python gibt es sie in zwei Formen, beide mit derselben Mechanik
-(`FunktionsLaeufer`, `cqrs_client/funktion.py`):
+Hört ein Akteur einen Command ohne Ziel, ist das seine Arbeit ([04](04-konsum-und-prozess-maschine.md) §4.4): die Werkstatt eines Cluster-Knotens
+gibt sie einer Sitzung, deren Client den Akteur verkörpert und deren Token ihn nennt, und stellt sie erneut zu, bis eine Antwort kommt. Das SDK
+(`cqrs_client/arbeit.py`, `ArbeitsLaeufer`) macht daraus Methodenaufrufe:
 
-- **getragen von einem Client-Vertrag** (er verkörpert einen Akteur mit `IDarf<F>`): Methode `<funktion>(e, h, state)` der Client-Basis (§9.4);
-- **als eigene Klasse:** erbt `<Funktion>Basis` aus `generated/funktionen.py`, füllt `async def auf_<eingang>(self, e, h)`, setzt `SLOTS`
-  (bzw. `slots=`) und bekommt Werte als `konfig=`; die Instanz geht als `funktionen=[…]` an einen `CqrsClient`.
+1. Nach jedem Handshake meldet der Client `ArbeitAnnehmen` (je Akteur mit Arbeit sein Name und seine Plätze). Die Sitzung prüft, dass sie den Akteur
+   verkörpert und das Token ihn nennt (sonst `ARBEIT_NICHT_BEFUGT`; ein Akteur ohne Arbeit: `ARBEIT_UNBEKANNT_AKTEUR`), und meldet sich als
+   **Arbeiter** in der Werkstatt ihres Knotens an.
+2. Ein `ArbeitsAuftrag` nennt `vorgang` (die Kennung, gleich bei jeder Wiederholung), `fuer` (den Akteur), `eingang` (den Command als Nutzlast) und die
+   Herkunft (`akteur`, `stream`, `version`, `zeit_utc`). Das SDK ruft `auf_<command>` dieses Akteurs entkoppelt von der Verarbeitungsschleife,
+   höchstens so viele zugleich, wie er Plätze hat, und sendet alle 10 s `ArbeitLebtMeldung`, solange die Methode läuft (ohne Regung gibt der Server
+   den Auftrag nach 60 s weiter).
+3. Die Antwort — ein Wert, eine Liste, `None` (keine Antwort) oder Stücke (`yield`) — muss aus Commands bestehen, die der Akteur senden darf
+   (`AkteursArbeit.pruefe`, sonst `ArbeitsVerletzung`); sie geht als `ArbeitsErgebnis` hinaus (`commands`, `ab` = Stelle des ersten Commands des
+   Stücks, `fertig`). Eine Ausnahme oder Verletzung geht als `fehler` hinaus; der Server stellt den Auftrag erneut zu.
+4. Der Server sendet die Commands selbst, mit Ids aus dem Auftrag; es zählt nur die Antwort des Arbeiters, der den Auftrag hält, und von ihm die
+   erste.
 
-Die Methode gibt einen Wert, `None` oder einen Strom (Async-Generator) zurück; jede Ausgabe muss ein Fall der Signatur sein (`FunktionsBasis.pruefe`),
-mehr als eine Ausgabe ohne Strom ist eine `FunktionsVerletzung`. `h` ist die `Herkunft` des Eingangs: `stream`, `version`, `zeit` (Log-Zeit),
-`akteur`, `korrelation` und `schluessel` (der Schlüssel „Funktion, Eingang“, gleich bei jeder Wiederholung — zum Deduplizieren von Wirkungen
-nach außen). Ids von Aggregaten stehen als UUID-Text im DTO, z. B. `aggregate_id=h.stream`.
+`h` ist die `Herkunft` des Auftrags: `stream`, `version`, `zeit` (Log-Zeit), `akteur`, `korrelation` und `schluessel` (die Kennung des Auftrags, gleich
+bei jeder Wiederholung — zum Deduplizieren von Wirkungen nach außen). Ids von Aggregaten stehen als UUID-Text im DTO, z. B. `aggregate_id=c.paar`.
 
-**Der Weg eines Eingangs** (Server: `Infrastructure/Funktionen/`, `Infrastructure/GrpcClient/SitzungsActor.cs`):
+- **Stücke:** ein Generator (Training) schickt jedes Stück sofort (`fertig = false`); der Server sendet es, bevor das nächste kommt. Rechnet ein
+  anderer Arbeiter den Auftrag erneut, beginnt er von vorn — die Inbox der Ziele verwirft schon Gesendetes (dieselben Ids).
+- **Zustand im Worker** (ein Modell) sichert das Framework nicht; der Worker lädt ihn selbst, etwa auf eine Kenntnis hin (`ModellAktiviert`).
 
-1. Eine Folge, ein Zwischenergebnis, eine Quell-Nachricht oder ein Hinweis erreicht den Parent der Funktion auf einem Knoten, der sie hält
-   ([04](04-konsum-und-prozess-maschine.md) §4.4); ein Kind nimmt den Eingang.
-2. Der Client meldet nach jedem Handshake `FunktionenAnbieten` (Funktion + Slots, `FunktionsLaeufer.biete_an`). Seine Sitzung prüft die Befugnis
-   (`IDarf<F>` des Akteurs bzw. der verkörperten Akteure des Vertrags; sonst `FUNKTION_NICHT_BEFUGT`, unbekannt `FUNKTION_UNBEKANNT`) und meldet sich
-   als **Arbeiter** in der Werkstatt ihres Knotens an; die Slots aller Arbeiter sind die Parallelität des Parents dort.
-3. Das Kind gibt den Eingang dem Arbeiter mit dem meisten freien Platz: die Sitzung reicht ihn als `ArbeitsAuftrag` weiter (`vorgang` = Kennung des
-   Eingangs, `funktion`, `eingang` als Nutzlast — ein Event oder eine Nachricht ohne Marker —, `akteur`, `stream`, `version`, `zeit_utc`, `ab` = 0,
-   `hinweis`). Das SDK rechnet ihn entkoppelt von der Verarbeitungsschleife, höchstens `SLOTS` zugleich, und sendet alle 10 s `ArbeitLebtMeldung`,
-   solange er läuft (ohne Regung scheitert der Lauf nach 60 s).
-4. Die Antwort kommt als `ArbeitsErgebnis` (`ausgaben` als `FunktionsAusgabe` mit Art `command`/`zwischenergebnis`/`hinweis`, `ab`, `fertig`,
-   `fehler`). Der Server prüft sie gegen die Signatur; es zählt nur die Antwort dieser Sitzung und von ihr die erste. Das Kind sendet die Commands
-   (Ids aus Eingangs-Kennung, Funktion und Stelle), reicht Zwischenergebnisse an ihre Hörer weiter und meldet den Eingang fertig. Ein `fehler`
-   (auch eine Ausnahme oder eine Verletzung der Signatur im SDK) lässt den Lauf scheitern; der Parent wiederholt ihn.
+Gestartet wird ein Python-Client über „▶ Worker“ in der Werkbank (`Werkbank/Server/Worker.cs`: `Clients:<Name>:Worker` der Umgebung — Skript,
+Argumente, Interpreter, Token) oder von Hand; Adresse und Akteur kommen aus `CQRS_GRPC_HOST`/`CQRS_GRPC_PORT`/`CQRS_AKTEUR_TOKEN`.
 
-- **Strom:** jede Ausgabe geht sofort als Stück (`fertig = false`, `ab` = ihre Stelle); das Kind sendet es, bevor das nächste kommt. Rechnet ein
-  anderer Träger den Eingang erneut, beginnt er von vorn — die Inbox der Ziele verwirft schon Gesendetes (dieselben Ids).
-- **Hinweis als Eingang** (`hinweis = true`): höchstens einmal — scheitert der Lauf, verfällt er.
-- **Zustand im Worker** (ein Modell) sichert das Framework nicht; der Worker lädt ihn in `beim_start`.
-- **Lebenszyklus** (optional, Gegenstück zu `ILebenszyklus`): `async def beim_start(self)` einmal je Worker, bevor die Funktion angeboten wird
-  (wirft es, startet der Worker nicht); `async def beim_ende(self)` einmal beim Herunterfahren, nachdem laufende Eingänge abgewartet sind
-  (`FunktionsLaeufer.starte`/`beende`). Eine getragene Funktion eines Vertrags hat diese Haken nicht; sie nutzt den Zustand des Clients.
-
-**Generischer Worker** `funktions_worker.py --funktionen F1,F2 [--slots n] [--konfig NAME=WERT …] [--pfad <verz>]` (Standard 2 Slots): kennt keine
-Domäne, lädt je Funktion die Implementierung nach `funktions_tabelle.TABELLE` (`funktionen/<modul>.py`) und prüft, dass sie die Basis erbt.
-Adresse und Akteur kommen aus `CQRS_GRPC_HOST`/`CQRS_GRPC_PORT`/`CQRS_AKTEUR_TOKEN`; der Akteur des Tokens braucht `IDarf<F>`. Gestartet über
-„▶ Worker“ in der Werkbank (`Werkbank/Server/Worker.cs`: `Funktionen:<F>:Worker` der Umgebung, sonst dieser Worker mit `--funktionen <F>`) oder
-von Hand. Er liegt im Projekt der Beispieldomäne und importiert `domain_client.domain_registry` (docs/13 W2-1).
-
-## 9.6 Beispieldomäne: Klassifikation, Training, Bildaufbereitung
+## 9.6 Beispieldomäne: Klassifikation und Training
 
 Knapp, weil Prüfling, nicht Architektur:
 
 - **Klassifikation** (`domain_client/classifier.py`, Start `run.py`; Rauchtest ohne Modell `run_stub.py`): erbt `KlassifikationsWorkerBasis`
-  (`IKlassifikationsWorker`), merkt sich auf `BildVerfuegbar` die Bildpfade je Aggregat, trägt `IBildpaarBeurteilung`: lädt beide Bilder über
-  `/api/files/` des Blazor-Hosts (`image_loader.py`), führt TorchScript-Inferenz in `asyncio.to_thread` aus und gibt
-  `KlassifiziereBildPaarDurchKi` zurück; ohne Bilder wirft sie (der Parent wiederholt). Auf `ModellAktiviert` lädt er das neue Modell.
-- **Training** (`domain_client/training_worker.py`, Rauchtest `run_train_stub.py`): erbt `TrainingsWorkerBasis` (`ITrainingsWorker`), trägt
-  `ITraining` als Strom (`MeldeTrainingBegonnen`, `MeldeFortschritt` je Epoche, `MeldeTrainingAbgeschlossen` bzw. `MeldeTrainingGescheitert`),
-  zieht die Samples per Query (`HoleDatensatzSamples`) und bricht auf `TrainingAbgebrochen` kooperativ ab; der Trainer ist ein Stub.
-- **Funktion als eigene Klasse:** die Kette der Bildaufbereitung, je Schritt ein Modul — `funktionen/bild_einlesen.py` (`IBildEinlesen`:
-  lesbar? mit Maßen), `funktionen/bild_verkleinerung.py` (`IBildVerkleinerung`: auf die Vorschau-Höhe, Zwischenbild nach `konfig["AusgabePfad"]`),
-  `funktionen/kontrastausgleich.py` (`IKontrastausgleich`: Histogramm ausgleichen, Vorschau-PNG) — die Gegenstücke zu den Umsetzungen im Host,
-  gestartet über den generischen Worker (je Schritt oder alle in einem: `--funktionen IBildEinlesen,IBildVerkleinerung,IKontrastausgleich`).
-- `run.py`/`run_stub.py`/`run_train_stub.py` lesen Host/Port aus der eigenen `appsettings.json`; `domain_client/domain_registry.py` (die
-  `CategoryRegistry` der Domäne) ist handgepflegt (docs/13 P2-11).
+  (Client `KlassifikationsWorker`, Akteur `Klassifizierer`), merkt sich auf `BildVerfuegbar` die Bildpfade je Aggregat und beantwortet die Arbeit
+  `PaarZuBeurteilen`: lädt beide Bilder über `/api/files/` des Blazor-Hosts (`image_loader.py`), führt TorchScript-Inferenz in `asyncio.to_thread`
+  aus und gibt `KlassifiziereBildPaarDurchKi` zurück; ohne Bilder wirft sie (der Server stellt erneut zu). Auf `ModellAktiviert` lädt er das neue
+  Modell.
+- **Training** (`domain_client/training_worker.py`, Rauchtest `run_train_stub.py`): erbt `TrainingsWorkerBasis` (Client `TrainingsWorker`, Akteur
+  `TrainingsSystem`), beantwortet `TrainingZuRechnen` in Stücken (`MeldeTrainingBegonnen`, `MeldeFortschritt` je Epoche,
+  `MeldeTrainingAbgeschlossen` bzw. `MeldeTrainingGescheitert`), zieht die Samples per Query (`HoleDatensatzSamples`) und bricht auf
+  `TrainingAbgebrochen` kooperativ ab; der Trainer ist ein Stub.
+- `run.py`/`run_stub.py`/`run_train_stub.py` lesen Host/Port aus der eigenen `appsettings.json`, Umgebungsvariablen gehen vor;
+  `domain_client/domain_registry.py` (die `CategoryRegistry` der Domäne) ist handgepflegt (docs/13 P2-11).
 
-Tests: `Client.Infrastructure.Python/tests` (SDK: Vertrag, Funktion, Query, Reconnect, Mapper) und `Domain.Client.Worker.Python.ML/tests`
-(Verträge, Funktionen, generischer Worker, Training); Zahlen in [12](12-tests-und-vermessung.md).
+Tests: `Client.Infrastructure.Python/tests` (SDK: `test_arbeit`, `test_vertrag`, `test_client_query`, `test_client_reconnect`, `test_mapper_*`) und
+`Domain.Client.Worker.Python.ML/tests` (`test_vertraege`, `test_training_worker`); Zahlen in [12](12-tests-und-vermessung.md).
 
 ## 9.7 Proto-Abgleich zur Laufzeit
 
@@ -225,17 +198,16 @@ tragende Weg ist der Build (§9.2).
 ## 9.8 Prinzipien
 
 1. **Typen sind die Wahrheit, nicht Strings** (Invariante 3) — Python-Typen sind die Routing-Schlüssel.
-2. **Fachcode bleibt rein** (Invariante 5) — Methoden sehen nur Payload + `ctx` + `state` bzw. Eingang + `Herkunft` (+ `state`).
-3. **Typ-Kenntnis aus generierten Basen** — was ein Client hört, sendet, fragt und trägt, steht in den aus dem C#-Vertrag generierten Basen, nicht
+2. **Fachcode bleibt rein** (Invariante 5) — Methoden sehen nur Payload bzw. Command + `ctx` bzw. `Herkunft` + `state`.
+3. **Typ-Kenntnis aus generierten Basen** — was ein Client annimmt, hört, sendet und fragt, steht in den aus seinen Akteuren generierten Basen, nicht
    in Laufzeit-Introspektion der Domäne.
-4. **Eine Quelle:** der C#-Vertrag; `domain.proto` und die Python-Basen werden daraus erzeugt.
-5. **Die Garantie bleibt beim Server:** der Client ist bei Funktionen nur die Hand — gesendet wird beim Kind der Funktion, der Eingang bleibt offen,
-   bis es ihn fertig meldet.
+4. **Eine Quelle:** Akteure und Clients in C#; `domain.proto` und die Python-Basen werden daraus erzeugt.
+5. **Die Garantie bleibt beim Server:** der Client ist bei Arbeit nur die Hand — gesendet wird beim Server, der Auftrag bleibt offen, bis eine
+   Antwort kam.
 
 ## 9.9 Offen
 
 Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md) §13.0: kein TLS (`Channel(host, port)` unverschlüsselt), Bild-Download über
-`http://` (P1-2); Python-DTOs ohne Drift-Prüfung (FB-20); Lesen ab Position, Ausgangskorb und neu Fragen fehlen im SDK (FB-14); Python-Funktion
-mit Hinweis-Eingang nur geteilt nachgewiesen (FB-8); Funktion draußen ohne Träger staut still (FB-7); Bindung je Adresse ungemessen (PF-35);
-Reflection im Codegen und abweichende Vertrags-Lesart zwischen Python-Emitter und Server (W10-1); generischer Worker im Domänen-Projekt (W2-1);
-handgepflegte Registry und Kleinkram im SDK (P2-11); nicht gemappte Proto-Endpunkte (P3-2); Akteure und Clients (AK-1).
+`http://` (P1-2); Python-DTOs ohne Drift-Prüfung (FB-20); Lesen ab Position, Ausgangskorb und neu Fragen fehlen im SDK (FB-14); Arbeit ohne
+verbundenen Arbeiter staut still (FB-7); Reflection im Codegen (W10-1); handgepflegte Registry und Kleinkram im SDK (P2-11); nicht gemappte
+Proto-Endpunkte (P3-2); Akteure und Clients (AK-1).

@@ -9,18 +9,18 @@ Die Teststrategie folgt den Invarianten „die Wahrheit ist der Log“ und „ni
 
 | Ebene | Projekt | Läuft gegen | Testet | Parallel? |
 |---|---|---|---|---|
-| 1 — Prüfstand | `Infrastructure.Pruefstand.Tests` | in-memory, **store-frei** | Decider/Applier, Fold, Routing, Weckplan und Wecker, Wire, Analyzer und Generatoren (über eine eigene `CSharpCompilation`), Extractor/Gesten/Sicht, Funktionen, Akteure, Quellen-Treiber, Umgebung, Spur | ja |
+| 1 — Prüfstand | `Infrastructure.Pruefstand.Tests` | in-memory, **store-frei** | Decider/Applier, Fold, Routing, Weckplan und Wecker, Wire, Analyzer und Generatoren (über eine eigene `CSharpCompilation`), Extractor/Gesten/Sicht, Graphen und Läufe, Werkstatt und Arbeit, Katalogfunktionen, Akteure, Umgebung, Spur | ja |
 | 2 — Integration | `Infrastructure.Integration.Tests` | **echtes** Marten/Postgres, Consul, Kestrel | Store-Semantik und Ende-zu-Ende-Verhalten im Cluster (Beispielanwendung) | **nein** (sequentiell erzwungen) |
-| 2 — Prüfdomäne | `Pruefdomaene.Integration.Tests` | **echtes** Marten/Postgres, Consul; eigene Schemata `pruef_*` | Framework-Verhalten domänenneutral an der zweiten Anwendung `Pruefdomaene`: Prozess-Diamant, Kompensation, Fan-out + Count-Join, Snapshot, Upcasting, Marking-Cursor-Äquivalenz | **nein** (sequentiell erzwungen; nie gleichzeitig mit der anderen Integrations-Suite) |
+| 2 — Prüfdomäne | `Pruefdomaene.Integration.Tests` | **echtes** Marten/Postgres, Consul; eigene Schemata `pruef_*` | Framework-Verhalten domänenneutral an der zweiten Anwendung `Pruefdomaene`: Abläufe (Auftrag mit Kompensation, Verteilung mit Je und Sammeln), Arbeit von Hand, Zustand und Sperre, Uhr, Snapshot, Upcasting | **nein** (sequentiell erzwungen; nie gleichzeitig mit der anderen Integrations-Suite) |
 | Verhaltens-Netz | `Verhalten.Tests` | **echte** Hosts als Prozesse (`Host.Grpc`, `Host.Pruefdomaene`) in einer eigenen Umgebung je Klasse (Art Sim, eigene DB, eigenes Quell-Verzeichnis, bei Bedarf zwei Knoten über Consul) — angesprochen nur von außen: gRPC-Leitung mit dem Client-Stack des Blazor-Arbeitsplatzes bzw. roh, JSON-Eingang, Quell-Verzeichnis, Queries | das Verhalten, das der Umbau nicht ändern darf: was ein Client sieht, darf, quittiert bekommt, liest; Exactly-once je Ablauf als fachliches Soll im Log — nie Prozess-Events, Marken oder Framework-Verdrahtung | **nein** (sequentiell; nie gleichzeitig mit den anderen Integrations-Suiten oder einer Messung) |
 | Client (C#) | `Client.Infrastructure.CollectionTests` | in-memory | `VirtualCollection`, `PendingCommandTracker` | ja |
-| Client (Python) | `Client.Infrastructure.Python/tests`, `Domain.Client.Worker.Python.ML/tests` | pytest | SDK (Vertrag, Funktion, Query, Reconnect, Mapper), Worker (Verträge, Funktionen, generischer Worker) | ja |
+| Client (Python) | `Client.Infrastructure.Python/tests`, `Domain.Client.Worker.Python.ML/tests` | pytest | SDK (Arbeit, Client-Basis, Query, Reconnect, Mapper), Worker (Client-Basen, Training) | ja |
 | Werkbank-Abnahme | `Werkbank.Abnahme.Tests` | **echte** Werkbank (Prozess) auf einer Kopie des Arbeitsbaums, echter Host in `sim`, eigene Sim-DB, Python-Worker | ⟳ (alle Schritte, Stände), JSON-Eingang als Akteur, Projektion, Spur, „▶ Worker“ bis zum Fakt, Geste/↶ byte-gleich, Daten-Prüfung meldet ein entferntes Feld | **nein** (sequentiell; nie gleichzeitig mit den anderen Integrations-Suiten) |
 | Werkbank (Oberfläche) | `Werkbank` + Browser | echter Host gegen die Sim-DB | Sichtprüfung im Browser (Board, Panels, Spur-Überlagerung) — die Abläufe prüft die Abnahme oben | n/a |
 | Werkzeug-Gates | `GraphExtractor -- --check`, `-- --sonde` | Solution bzw. fremde Domäne im Speicher | Code ⇄ Karten, Fixpunkt, Wirker, Routing; Agnostik | n/a |
 | Gate frischer Checkout | `./pruefe-checkout.sh` | der Commit `HEAD` in einem temporären `git worktree` | ignorierte Quellen, Build, Codegen-Drift, Prüfstand, Build verändert den Checkout nicht | n/a |
 | Garantie-Suite | `--filter Kategorie=Garantie` auf Prüfstand, Integration, Prüfdomäne | wie die jeweilige Ebene | jede Garantie aus [11](11-garantien.md) unter Störung; offene Lücken als Skip-Tests (`G-n offen (docs/13)`) | je Ebene wie oben |
-| E2E-Vermessung | `scripts/vermessung-e2e.sh` (Treiber `Cqrs.Vermessung`) | echte Hosts (`Host.Grpc`, `Host.Pruefdomaene`, Release) in den Umgebungen `vermessung` bzw. `vermessung-pruefdomaene`, eigene DBs, Python-Worker | Höchstlast mit 1/8/64 Sendern: Durchsatz, Rückstand, Latenz, Last je Vorgang; Exactly-once nach jedem Lauf; Störungslauf (§12.5) | **nein** (nie gleichzeitig mit einer Integrations-Suite oder der Werkbank-Abnahme) |
+| E2E-Vermessung | `scripts/vermessung-e2e.sh` (Treiber `Cqrs.Vermessung`) | echte Hosts (`Host.Grpc`, `Host.Pruefdomaene`, Release) in den Umgebungen `vermessung` bzw. `vermessung-pruefdomaene`, eigene DBs | Höchstlast mit 1/8/64 Sendern: Durchsatz, Rückstand, Latenz, Last je Vorgang; Exactly-once nach jedem Lauf; Störungslauf (§12.5) | **nein** (nie gleichzeitig mit einer Integrations-Suite oder der Werkbank-Abnahme) |
 
 **Prinzip:** Ebene 1 testet nur, was ohne Store deterministisch entscheidbar ist. Store-Semantik (Co-Commit-Atomarität, `seq_id`-Lücken, geteilte
 Dokumente, Metadaten) wird **ausschließlich** gegen echtes Marten geprüft. Es gibt bewusst **keinen `InMemoryEventStore`**; In-Memory-Doubles gibt
@@ -299,15 +299,15 @@ den Läufen kommt von den expandierten `[Theory]`-Fällen.
 
 | Bereich | Tests | Klassen |
 |---|---:|---|
-| Analyzer | 74 | `ZustandAnalyzerTests` (CQRS105, R19: Felder, Setter, Sammlungen, IZustand außerhalb einer Funktions-Klasse), `AkteurAnalyzerTests` (17), `FaehigkeitAnalyzerTests` mit `HandlerFormAnalyzerTests` (CQRS051/054/055, CQRS057 auch für eine Projektion, die etwas ausgibt), `ModellAnalyzerTests`, `QuellenTypAnalyzerTests`, `StoreZugriffAnalyzerTests`, `AusgabeVertragAnalyzerTests`, `GesamtbildAnalyzerTests` (CQRS084–087: Funktion ohne Umsetzung und ohne Träger; CQRS106, R20: gehörter Hinweis ohne Erzeuger), `LageAnalyzerTests`, `WiederholungAnalyzerTests` (R2/R11/R12/R13), `CommandEmitAnalyzerTests` |
-| Editor-Modell, Scaffolder, Grammatik | 55 | `DomainEditorLeseseiteTests`, `DomainEditorAkteurTests` (Kette über eine Funktion, Akteur darf eine Funktion draußen rechnen), `DomainEditorScaffolderTests`, `DomainEditorStrukturortTests`, `DomainEditorKompositionTests` (Grammatik nach docs/10: Hinweis nur an Funktion und Client, Projektion erzeugt nichts, Frist über die Uhr), `PythonQuelleTests` |
+| Analyzer | – | `ZustandAnalyzerTests` (CQRS105, R19), `AkteurAnalyzerTests` (CQRS058/063/064: `IDarf`, `IHoert`, Client als Record), `GraphAnalyzerTests` (CQRS115: Fork-Join, Wahl, Je und Sammeln, Rennen, Graph im Graphen, Kreis, Quelle als Kopf), `FaehigkeitAnalyzerTests` mit `HandlerFormAnalyzerTests` (CQRS051/054/055, CQRS057 auch für eine Projektion, die etwas ausgibt), `ModellAnalyzerTests`, `StoreZugriffAnalyzerTests`, `AusgabeVertragAnalyzerTests` (CQRS050, CQRS114), `GesamtbildAnalyzerTests` (CQRS084–086, CQRS108, CQRS116: genau ein Empfänger eines Commands ohne Ziel, CQRS117), `LageAnalyzerTests`, `WiederholungAnalyzerTests` (R2/R11/R13), `CommandEmitAnalyzerTests`, `TechnikBindungTests` (CQRS089–092 und die Bindung je Knoten) |
+| Editor-Modell, Scaffolder, Grammatik | 55 | `DomainEditorLeseseiteTests`, `DomainEditorAkteurTests`, `DomainEditorScaffolderTests`, `DomainEditorStrukturortTests`, `DomainEditorKompositionTests` (Grammatik nach docs/10), `PythonQuelleTests` |
 | Extractor, Gesten, Sicht, Werkbank | 41 | `GestenTests` (22), `SichtTests`, `LesenToleranzTests`, `UsingsTests`, `GitKopfTests`, `ProtoVergleichTests` |
-| Funktionen und Uhr | – | `FunktionsBausteinGeneratorTests` (Rechnung, erlaubte Rückgaben, draußen und Umsetzungen, Verkettung, Zustand im Konstruktor samt Kontext, lernendes `Auf`, nur Events hören bzw. Event ausgeben ist CQRS100, CQRS101), `FunktionsAktivierungTests` (Umsetzung und Dienste je Aktivierung, Freigabe-Reihenfolge), `HinweisNetzTests` (je hörende Funktion ein Eingang, abgeleitete Kennungen), `BildeingangTests`, `UhrTests`, `FunktionsLaufzeitTests` (Kette über ein Zwischenergebnis, Doppelte an der Kennung, durabel angenommen und ausgetragen, Warteschlange und Parallel, Wiederholungen, Vorwärmen, Hinweise, unbekannter Command), `WerkstattTests` (Arbeiter draußen: Auftrag und Antwort, die erste gewinnt, Signatur, Strom in Stücken, Arbeiter fort, Geduld, freiester Platz) und `ZustellwerkTests` |
+| Funktionen, Graphen, Arbeit und Uhr | – | `FunktionsBausteinGeneratorTests` (Rechnung, erlaubte Rückgaben, Ports `T`/`T?`/`OneOf`/Liste, generische Funktion je Typargument, Quellfunktion mit `Lausche`, Zustand im Konstruktor samt Kontext, eine Schnittstelle bzw. ein Hinweis als Port ist CQRS100, CQRS101), `FunktionsAktivierungTests` (Umsetzung und Technik je Aktivierung, Freigabe-Reihenfolge), `FunktionsLaufzeitTests` (Ids aus Lauf, Pfad, Knoten und Stelle, doppelter Kopf, Warteschlange und Parallel, Vorwärmen, Hinweise nur an Akteure, Antwort, unbekannter Command; Fork-Join, Wahl, Je und Sammeln, Fork-Join je Element, Rennen, Warten mit Frist, gescheiterter Lauf, Abbruch mitten im Lauf, Quelle mit Nummer, Zustand nach dem Lauf gesichert), `WerkstattTests` (Auftrag und Antwort, die erste gewinnt, Signatur, Stücke, Arbeiter fort, Geduld, freiester Platz, Platz mit der vollständigen Antwort frei), `ArbeitTests` (je Akteur mit Arbeit eine Instanz), `KatalogTests` (Dateiwächter, Taktgeber, Webhook, Zustandsbild), `BildeingangTests`, `UhrTests` und `ZustellwerkTests` |
 | Akteure, Clients | 34 | `AkteurRechteTests`, `ClientVertragTests`, `ClientCodeVertragTests` |
 | Schreibpfad, Serialisierung, Ids | 20 | `EventJsonSerializationTests`, `EventVersioningTests`, `AppendBatchingTests`, `DtoMapperRoundTripTests`, `TypisierteIdTests`, `CommandVorpruefungTests`, `DispatcherCommandFailedTests` |
 | Beispiel-Aggregate | 40 | `DatensatzAggregatTests`, `TrainingslaufAggregatTests` (Frist des Wächters im Decide), `SammelvorgangBarriereTests`, `SammelvorgangKaskadeTests`, `BoundedInboxTests` |
-| Quellen, Umgebung, Spur, Dienste | 59 | `DateiTreiberTests` (18), `UmgebungLaderTests` (Laufort-Bindung der Funktionen: genannte Umsetzung, unbekannte Umsetzung, Extern nur ohne Lese-Fähigkeit, Standard ohne Eintrag, unbekannter Name, Hand), `ProjektionsStandTests`, `SpurTests`, `WirkerIdTests`, `SpurWegTests`, `DienstBindungTests` (15) |
-| Konsum, Projektionen, Wecken | 28 | `BatchLeserTests`, `ProjectionRebuilderTests`, `GaEinsPruefungTests`, `WeckungenTests`, `WeckplanGeneratorTests` (Kinds aus den Signaturen, eine Adresse, Uhr, Hinweis nicht im Plan, CQRS108), `WeckerTests` (Ziele je Commit, Group-Commit, verlorener Weckruf, Start-Prüfung), `TransientPersistiertSplitTests`, `DeadLetterReadStoreTests` |
+| Umgebung, Spur | – | `UmgebungLaderTests` (Ordner, Instanzen, unbekannte Felder), `ProjektionsStandTests`, `SpurTests`, `WirkerIdTests`, `SpurWegTests` |
+| Konsum, Projektionen, Wecken | 28 | `BatchLeserTests`, `ProjectionRebuilderTests`, `GaEinsPruefungTests`, `WeckungenTests`, `WeckplanGeneratorTests` (Kinds aus den Signaturen, Uhr), `WeckerTests` (Ziele je Commit, Group-Commit, verlorener Weckruf, Start-Prüfung), `TransientPersistiertSplitTests`, `DeadLetterReadStoreTests` |
 | Lebenszyklus, zwei Verben (Sammlung „Zeitkritisch“) | 19 | `RahmenActorTests`, `BoteTests`, `PassivierungTests` (Leerlauf stoppt, Nachricht schiebt hinaus, 0 = nie), `LebenszyklusImClusterTests` (Batch-Leser gibt seinen Bereich erst nach dem Durchlauf frei; eine Frage an einen schweigenden Actor läuft in ihre Frist) |
 | Übrige | 9 | `BackendMonitoringTests`, `EingangJsonTests` |
 | Clients: Verteiler, Ausgangskorb | 7 | `VerteilerTests` (je Sitzung eine Zustellung in Log-Reihenfolge, nur Gehörtes; gezielte Antwort nur an ihre Sitzung, auch ohne Abo; beendete Sitzung ausgetragen, neue Anmeldung ersetzt; über der Grenze des Rückstaus verworfen; Sitzungs-Id nennt den Knoten), `AusgangskorbTests` (nach dem Abriss dieselbe Command-Id an die neue Sitzung, mit der Antwort erledigt; der Datei-Korb übersteht einen Neustart) |
@@ -324,9 +324,9 @@ den Läufen kommt von den expandierten `[Theory]`-Fällen.
 | `Garantien/AnhaengeReihenfolgePostgresTests`, `Garantien/ZaehlerstandPostgresTests`, `Garantien/EventZeitPostgresTests`, `DbUhrPostgresTests` | 1 + 1 + 3 + 1 | Wächter des Horizonts: Martens Reihenfolge, der Zählerstand der Probe eilt nie voraus (G-17, acht ziehende Verbindungen, ≈ 8 s); eine Uhr (G-10); DB-Uhr mit Versatz |
 | `MetadataPostgresTests` | 3 | Header-Readback |
 | `LiveCommandE2ETests`, `TwoNodeCommandDispatchTests`, `RemotePidDeliverySmokeTests` | 4 | Command → Event → Projektion im Cluster, Stand je Id aus dem Fortschritt der Projektion; Latenz: der Commit weckt die Projektion (dreimal unter 5 s); Cross-Node |
-| `AblaufE2ETests` | 5 | Beispieldomäne im echten Cluster: Bildeingang Quelle → Einlesen → Verkleinern → Kontrastausgleich → Bildeingang → Fakt (je Schritt eine Funktion, festgehalten), auch mit Python-Worker, der den Kontrastausgleich über gRPC trägt (Laufort Extern, FB-2); Wächterfrist im Stream des Laufs; Lese-Fähigkeit; Datei-Treiber genau einmal auch nach Neustart |
-| `UmgebungE2ETests`, `LeseseitenStandE2ETests`, `EingangE2ETests`, `MonitoringHttpTests` | 4 + 1 + 2 + 2 | Siegel, Uhr-Versatz über das Fälligkeits-Verzeichnis, Projektions-Stand nach Code-Änderung, JSON-Eingang (Hand), Client-Wiederholung, `/health` |
-| `Garantien/GarantiePostgresTests` | 7 | ein Append ganz oder gar nicht, zwei Schreiber ohne verlorenes Update, Frist und Events gemeinsam gültig; Batch-Konsum: zwei Aktivierungen (G-4), Poison parken und nachholen, Neuaufbau nimmt einem laufenden Leser den Commit |
+| `AblaufE2ETests` | 6 | Beispieldomäne im echten Cluster: Linienimport vom Dateiwächter über die Bildaufbereitung (Fork-Join) bis zum Fakt; ein komplettes Paar ist Arbeit des Klassifizierers, die ein Python-Worker über gRPC beantwortet; Wächterfrist im Stream des Laufs; Lese-Fähigkeit; Dateiwächter genau einmal auch nach Neustart; zwei Instanzen des Linienimports auf zwei Verzeichnissen |
+| `UmgebungE2ETests`, `LeseseitenStandE2ETests`, `EingangE2ETests`, `MonitoringHttpTests` | 4 + 1 + 2 + 2 | Siegel, Uhr-Versatz über das Fälligkeits-Verzeichnis, Projektions-Stand nach Code-Änderung, JSON-Eingang (als Akteur handeln und Arbeit von Hand beantworten), Client-Wiederholung, `/health` |
+| `Garantien/GarantiePostgresTests` | 9 | ein Append ganz oder gar nicht, Effekt und Quittung gemeinsam, Quittung ohne Events nur auf dem Kopf, zwei Schreiber ohne verlorenes Update, Frist und Events gemeinsam gültig, der offene Eingang eines Commands ohne Ziel mit der Entscheidung; Batch-Konsum: zwei Aktivierungen (G-4), Poison parken und nachholen, Neuaufbau nimmt einem laufenden Leser den Commit |
 | `Garantien/AbfragePlanGarantieTests` | 2 Theorien (4 Läufe) | die häufigen Abfragen (Horizont „dahinter?“, Seite einer Partition, Stream ab Version, Rückstand ab Position 0, fällige Fristen der Uhr) lesen bei 500 000 Events und 200 000 Fristen weniger als 200 Blöcke — mit zugeschnittenem und allgemeinem Plan, veralteter und frischer Statistik |
 | `Garantien/HorizontStressGarantieTests`, `Garantien/HorizontAbbruchGarantieTests`, `Garantien/InboxAufraeumenGarantieTests` | 1 + 1 + 1 | G-11-Stress; Abbruch am Horizont; Aufräumen der Inbox je Seite (PF-27) |
 
@@ -339,32 +339,32 @@ den Läufen kommt von den expandierten `[Theory]`-Fällen.
 | `Garantien/SchreibGarantieTests` | 11 | doppelt und gleichzeitig zugestellter Command, alte CommandId jenseits des Caches, Wiederholung nach Neustart (Absage und Ablehnung), Duplikat im Group-Commit, Horizont der Inbox, heißer Posten, Bündel, zweiter Schreiber, Versionskonflikt, mehrdeutiger Commit, fremde Identität |
 | `Garantien/EventReadGarantieTests` | 3 | festes SQL liest dasselbe wie Martens LINQ (auch Partitions-Seiten), archivierte Streams und Tombstones liest keiner (G-7) |
 | `Garantien/LebenszyklusGarantieTests` | 1 | Passivierung und Reaktivierung: derselbe Stand, dieselbe Inbox |
-| `FunktionsBausteinE2ETests` | 5 | Funktion ohne Dienst genau einmal, Funktion mit Dienst genau einmal, Strom aus einer Folge, Schnittstelle mit einer Umsetzung im Host, Laufort Hand (die erste Antwort gewinnt) |
+| `FunktionsBausteinE2ETests` | 5 | Funktion ohne Technik genau einmal, Funktion mit Technik genau einmal, ein Strom wirkt je Ausgabe genau einmal, der Freigabeautomat gibt kleine Rechnungen im Host frei, eine große Rechnung ist Arbeit des Rechnungsprüfers von Hand (die erste Antwort gewinnt) |
 | `UhrE2ETests` | 3 | fällige Frist mit der Id aus ihrem Event, vor der Fälligkeit erledigt, doppelt gefeuert wirkt einmal |
-| `QuellenE2ETests` | 2 | Quell-Nachricht vom Client genau einmal und als offener Eingang über eine Funktion weiter — dreimal je unter 5 s (schneller Weg nach dem Commit); ein Stream je Schlüssel |
+| `KopfEingangE2ETests` | 1 | ein Command ohne Ziel vom Akteur startet über den Kopf genau einen Import, auch wiederholt |
 | `Garantien/FunktionsGarantieTests` | 4 | am Mahnwesen (vor dem Aggregat): ein scheiternder Versand wird wiederholt, ein Abbruch mitten im Eingang holt der Zusteller beim nächsten Host nach, derselbe Eingang zweimal zugestellt wirkt einmal; nur die erste Antwort des Arbeiters, der den Eingang hält, wirkt (Hand) |
-| `Garantien/FolgeGarantieTests` | 3 | eine Folge öffnet je Hörer einen Eingang, fertig trägt aus, ein wiederholter Command keinen zweiten; ohne Hörer kein Eingang; ein angenommener Eingang bleibt offen bis zur Frist |
-| `Garantien/FunktionsZustandGarantieTests` | 5 | am allgemeinen Fall Messung (der Schätzer liest die Messreihe, eine Projektion): Hinweis-Kette bis zum Command ohne Log-Eintrag des Hinweises; die Schätzung beruht auf dem, was die Projektion gelernt hat; Ressource beim Stoppen geschlossen; Commands aus einem doppelten Hinweis wirken einmal; eine Funktion draußen hört einen Hinweis über die Sitzung der Leitung |
+| `Garantien/FolgeGarantieTests` | 3 | ein Command ohne Ziel aus einem Decide öffnet je Empfänger einen Eingang, fertig trägt aus, ein wiederholter Command keinen zweiten; ohne Empfänger kein Eingang; ein angenommener Eingang bleibt offen bis zur Frist |
+| `Garantien/FunktionsZustandGarantieTests` | 4 | am Graphen Merkmalbildung: Fork bis zum Command ohne Log-Eintrag des Merkmals; die Schätzung beruht auf dem, was die Projektion gelernt hat; Ressource beim Stoppen geschlossen; eine Instanz mit Zustand rechnet auf genau einem Knoten, der ihre Sperre hält |
 | `Garantien/WeckerGarantieTests` | 4 | Latenz einer Projektion (Messzähler, dreimal unter 5 s) und Uhr (Frist von 1 s in Sekunden); verlorene Weckrufe holt der Takt genau einmal nach; doppelte Weckrufe wirken genau einmal |
-| `Garantien/AblaufGarantieTests` | 2 | die Funktion `Nachschub` wirkt genau einmal über Wecker und Takt; Neustart des Hosts mitten im Auftrag führt ihn zu Ende |
+| `Garantien/AblaufGarantieTests` | 2 | der Nachschub wirkt genau einmal über den offenen Eingang und den Zusteller; Neustart des Hosts mitten im Auftrag führt ihn zu Ende |
 
 **Verhaltens-Netz (`Verhalten.Tests`):** `BeispielAblaufTests` (3), `PruefdomaeneAblaufTests` (4), `TrainingsWaechterTests` (1),
 `ClientVerhaltenTests` (11: Pushes mit Kopf-Version, Quittung über die Korrelation, Ablehnung als Quittung im Client-Stack und an der rohen Leitung,
-Vertrag ∩ Token, Träger-Antwort genau einmal, Lesen nach Schreiben, nach dem Anlegen (G-14), Version aus der Antwort, transitive Aktualisierung,
+verkörpert ∩ Token, Antwort auf Arbeit genau einmal, Lesen nach Schreiben, nach dem Anlegen (G-14), Version aus der Antwort, transitive Aktualisierung,
 Wiederverbinden mit Nachlesen), `ZweiKnotenTests` (2: Weckrufe nach dem harten Ende eines Knotens; Ablehnung an der richtigen Sitzung bei zwei
 Knoten, G-13), `NeustartTests` (1, Kategorie Last).
 
-**Client:** `VirtualCollectionTests` (26), `PendingCommandTrackerTests` (5). **Python:** SDK `test_vertrag`, `test_funktion`, `test_client_query`,
-`test_client_reconnect`, `test_mapper_*` (inkl. Nutzlast-Tabelle); Worker `test_vertraege`, `test_funktionen`, `test_funktions_worker`, `test_training_worker`.
+**Client:** `VirtualCollectionTests` (26), `PendingCommandTrackerTests` (5). **Python:** SDK `test_arbeit`, `test_vertrag`, `test_client_query`,
+`test_client_reconnect`, `test_mapper_*` (inkl. Nutzlast-Tabelle); Worker `test_vertraege`, `test_training_worker`.
 
 ## 12.4 Was nicht getestet ist
 
 - **Kreise Funktion ↔ Aggregat ohne Fortschritt** — der Build erkennt sie nicht (docs/13 FB-5).
-- **Echter Python-Prozess mit Hinweis-Eingang über gRPC** — nachgewiesen sind das SDK (pytest) und der Weg des Servers über dieselbe Sitzung
-  (docs/13 FB-8).
 - **Reihenfolge der Hinweise zwischen zwei Actors** — nicht zugesichert, ohne Test (docs/13 G-15).
-- **Spur über Funktionen und Commands als lückenlose Kette** — nur indirekt (Treiber S3 ordnet über die Ursache zu); der Prüfstand-Test dazu lief
-  über die entfernte Katalog-Welt.
+- **Spur über die Knoten eines Laufs als lückenlose Kette** — nur indirekt (Treiber S3 ordnet über die Ursache zu; `SpurWegTests` rechnen den Weg
+  über die Karten).
+- **Ein Command ohne Ziel über gRPC an einen Graph-Kopf** — den Weg gibt es nicht (docs/13 GF-1).
+- **Webhook im Cluster** — nur der Prüfstand (`KatalogTests`); ein Aufruf an einen Knoten, der die Instanz nicht hält, ist ungeprüft (docs/13 GF-2).
 - **Werkbank-Abnahme** — ihr einziger Test ist zurückgestellt (Editor, docs/10 E4).
 - **Paralleler Drain / Schreibpfad-Skalierung** — kein Assertion-Test (früher nur im LoadHarness beobachtet).
 - **Shard-Rebalance / Node-Ausfall** — nur simuliert.
@@ -433,19 +433,18 @@ entfällt (der Wächter schreibt nicht ins Log, Entscheidung 8). S2 ist nicht me
 `Funktionen:<F>:Laufort` nach draußen, den Abschnitt gibt es seit Schritt 2 nicht mehr; mit Schritt 6 entfallen Laufort Extern und der Bild-Worker.
 
 **Ende zu Ende an den realen Domänen, unter Höchstlast (seit 2026-10-15, `scripts/vermessung-e2e.sh`, ≈ 5 min, Plan Garantien und Durchsatz
-§0.1).** Gemessen wird der echte Host im Release-Build (`Host.Grpc` in `umgebungen/umgebung.vermessung.json`, `Host.Pruefdomaene` in
-`umgebung.vermessung-pruefdomaene.json`, je eigene DB; bis Phase 5 dazu ein eigener Redis), Last nur über die echten Eingänge, gezählt bis zum
+§0.1).** Gemessen wird der echte Host im Release-Build (`Host.Grpc` in `umgebungen/vermessung/`, `Host.Pruefdomaene` in
+`umgebungen/vermessung-pruefdomaene/`, je eigene DB; bis Phase 5 dazu ein eigener Redis), Last nur über die echten Eingänge, gezählt bis zum
 fachlich sichtbaren Ergebnis. Beide Umgebungen sind **Art Prod** — im Host läuft derselbe Code wie im Betrieb (seit 2026-10-16, Spalte „Art Prod“;
 vorher Sim: die Uhr las je Event den Versatz, und Spur-Hinweise wurden geschrieben) — und folgen seit 2026-10-17 (Spalte „Prod-Konfig“) der
-Konfiguration von `umgebung.prod.json`: Cluster über Consul (ein Knoten), 2 Slots je Bildfunktion, Datei fertig nach 1 s Stabilität, Erkennung per
+Konfiguration von `umgebungen/prod/`: Cluster über Consul (ein Knoten), 2 Slots je Bildfunktion, Datei fertig nach 1 s Stabilität, Erkennung per
 Abfrage, Kennung Name und Größe, Webhook. Bewusst anders: das Muster `*.tiff` (der Treiber legt Fertig-Marken daneben), der JSON-Eingang ist an
-(über ihn treibt der Treiber S3–S5 an), die Worker-Abschnitte für S2 (Prod rechnet im Host), und
+(über ihn treibt der Treiber S3–S5 an), und
 Treiber, Host und Postgres teilen einen Rechner. Jeder Block sendet höchstens 15 s so schnell, wie der Eingang annimmt, dann baut der Rückstand ab:
 
 | Block | Eingang | sichtbar, wenn |
 |---|---|---|
 | S1 Bildeingang Host | Stoß von 600 TIFF-Paaren (96 × 64) ins Quell-Verzeichnis, verschoben, dann Fertig-Marke | `GetImagePair` liefert das Paar komplett (je offenes Paar alle 100 ms) |
-| S2 wie S1, Bild-Funktionen im Python-Worker (`Laufort Extern`, zwei Worker) | Stoß von 200 Paaren | wie S1 |
 | S3-8, S3-64 Sammelvorgang heiß | 8 bzw. 64 Sender, je Teil `StarteTeilauftrag` + `SchließeTeilauftragAb` an EINEN Sammelvorgang (höchstens 2 000 Teile) | `TeilVerbucht` des Teils im Log (keine Query vorhanden) |
 | S4 Datensatz | als KI-Operator `ErstelleDatensatz`, `FuegeRangeHinzu` (alle Paare aus S1), `FriereEin` | `HoleDatensatz`: alle Paare Mitglied, dann `Eingefroren` |
 | S5-1, S5-8, S5-64 Prüfdomäne verteilt | 1, 8 bzw. 64 Sender, je zehn Vorgänge 8 Aufträge (Diamant), 1 Auftrag gegen ein volles Kontingent (Kompensation), 1 Verteilung (Fan-out 4, Count-Join), höchstens 3 000 je Block; jede Reservierung unter dem Mindestbestand weckt die Reaktion | `ProzessBeendet` im Log; die Reaktion gesondert (Reservierung → Nachschub) |
@@ -455,7 +454,7 @@ Treiber, Host und Postgres teilen einen Rechner. Jeder Block sendet höchstens 1
 Kennzahlen je Block: angenommen je Sekunde (Schreibseite), sichtbar je Sekunde im Fenster und Durchsatz bis „alles sichtbar“ (Ende zu Ende),
 Rückstand am Fensterende und Abbauzeit (ein nicht abgebauter Rückstand ist ein Ergebnis), Latenz p50/p95/p99, Transaktionen und Queries je
 Sekunde und je Vorgang (`pg_stat_statements`, `track = top`, Transaktionen = COMMITs, ohne die Lese-Rolle des Treibers), CPU und RSS des Hosts,
-„erster Vorgang sichtbar nach“. Bei einem Stoß (S1, S2) entfallen „sichtbar im Fenster“ und „Rückstand am Fensterende“ — der Stoß ist angenommen,
+„erster Vorgang sichtbar nach“. Bei einem Stoß (S1) entfallen „sichtbar im Fenster“ und „Rückstand am Fensterende“ — der Stoß ist angenommen,
 bevor das erste Paar fertig ist, beide wären immer 0 bzw. der ganze Stoß. Die Fremdlast vor und nach dem Lauf ist die CPU je Prozess über eine
 Sekunde aus `/proc` (nicht `ps -o pcpu`, das den Durchschnitt über die Lebenszeit eines Prozesses nennt).
 Eine Aufwärmrunde vor S1 und S5 zählt nicht. Jeder Lauf auf frischen DBs; danach die Exactly-once-Prüfung ([11](11-garantien.md) §11.14) — mit
@@ -1003,8 +1002,8 @@ Signal→Wake-Mapping; Kompensations-Dedup und Count-Join ohne verfrühtes Feuer
 - **Integration:** Store-Semantik gegen echtes Marten, Vorlage `CoCommitPostgresTests`. Infrastruktur extern starten
   (`docker compose -f docker-compose.infrastructure.yml up -d` bzw. `docker start cqrs-postgres cqrs-consul`), kein
   Testcontainers. Fixtures je Klasse; Sequentialität per `xunit.runner.json`; Verbindungsdaten je Klasse hartkodiert (`docs/13` P2-8).
-- **Python:** nur mit dem Interpreter der Umgebung (`Umgebung:Python` in `umgebung.<name>.json`, sonst `CQRS_PYTHON`, sonst `python3`; lokal
-  `gpu_env`), weil betterproto/pytest dort installiert sind. Der Fluss-E2E-Test mit Python-Worker liest ihn aus `umgebung.sim-main.json`.
+- **Python:** nur mit dem Interpreter der Umgebung (`Umgebung:Python` in `umgebungen/<name>/umgebung.json`, sonst `CQRS_PYTHON`, sonst `python3`;
+  lokal `gpu_env`), weil betterproto/pytest dort installiert sind. Der E2E-Test mit Python-Worker liest ihn aus `umgebungen/sim-main/umgebung.json`.
 
 **Test-Stufen (seit 2026-10-28, `scripts/tests.sh`):** `schnell` je Teilschritt — Build, Prüfstand, Integration ohne die Kategorie `Last` (die
 beiden Stresstests des Horizonts, zusammen ≈ 3,8 min), Prüfdomäne, Verhaltens-Netz: ≈ 7 min statt ≈ 13,5 (Integration 301 → 74 s, Prüfdomäne
@@ -1023,7 +1022,7 @@ vorgegebener CommandId, Modus `Emittiert`).
 (≈ 3 min); `--probe` ist ein verkürzter Funktionstest des Treibers und schreibt nicht ins Repo. `--art leerlauf` ist eine Diagnose (PF-14),
 kein Messlauf: dieselben Blöcke, der Leerlauf aber als Zeitreihe in 10-s-Scheiben (vor der Last 60 s, danach 300 s, nach einem Neustart des Hosts
 auf demselben Bestand 150 s) mit Statements und Konsumenten-Ständen je Scheibe (`zeitreihe.csv`, `zeitreihe_statements.csv`, Ordner im
-Temp-Verzeichnis wie bei `--probe`); `--szenarien S1,S3,S4,S5` lässt S2 weg.
+Temp-Verzeichnis wie bei `--probe`); `--szenarien S1,S3,S4,S5` wählt Blöcke.
 Engpass-Diagnose (nur Messserver): `scripts/sonde-engpass.sh --anlass server-sonde-<x> [--knopf sync-aus|drossel-64|auto-prepare-20|drain-8]`
 — der Treiber mit S3/S5 und drei Wiederholungen, daneben die Sonde (§12.5 „Engpass-Sonden“); kein Messlauf für die Tabelle.
 Danach `scripts/vermessung-tabelle.sh --schreibe` und den Ordner mitcommitten. Das Skript schaltet `pg_stat_statements` und `max_connections = 300`
@@ -1068,10 +1067,10 @@ temporären `git worktree` (nur committete Dateien — nicht committete Änderun
 Prüfstand und verlangt, dass der Build den Checkout nicht verändert. Der Worktree wird immer entfernt; Exit-Code 0 = grün. Dauer ≈ 2½ min (144 s auf `e26bc15`).
 
 **Verhaltens-Netz (`Verhalten.Tests`, Umbau-Phase 0):** jede Klasse schreibt sich eine Umgebung
-(`Geruest/Testumgebung.cs`, `umgebung.verhalten-….json` im Temp-Verzeichnis, gefunden über `CQRS_UMGEBUNGEN`), löscht ihre Datenbank und
+(`Geruest/Testumgebung.cs`, ein Umgebungs-Ordner `verhalten-…/` mit `umgebung.json` und `graphen/` im Temp-Verzeichnis, gefunden über `CQRS_UMGEBUNGEN`), löscht ihre Datenbank und
 startet die gebauten Hosts als Prozesse (`Geruest/Hostlauf.cs`; Ports je Prozess über `Transport__GrpcPort`/`__EinblickPort`, so teilen zwei
 Knoten eine Umgebung). Gesprochen wird nur über äußere Wege: `Geruest/Arbeitsplatz.cs` (Bus, Verbindung, Query-Brücke, Versionen und das
-generierte Wiring des Blazor-Arbeitsplatzes, ohne Stores), `Geruest/RoheLeitung.cs` (die Leitung ohne Client-Stack: Funktion tragen und Eingänge beantworten,
+generierte Wiring des Blazor-Arbeitsplatzes, ohne Stores), `Geruest/RoheLeitung.cs` (die Leitung ohne Client-Stack: Arbeit annehmen und beantworten,
 Command mit behaupteter Version, alles sehen, was eine Sitzung bekommt), `Geruest/JsonEingang.cs`, `Geruest/Bildpaare.cs` (TIFF-Paare ins
 Quell-Verzeichnis). Geprüft wird das fachliche Soll im Log (`Geruest/Log.cs`, `mt_events` je Stream und Typ) und in Antworten. Zeit über die
 Uhr der Sim (`Testumgebung.StelleUhrVorAsync`), nicht über Warten. Läuft nur auf dem Messserver:
@@ -1079,8 +1078,8 @@ Uhr der Sim (`Testumgebung.StelleUhrVorAsync`), nicht über Warten. Läuft nur a
 
 **Werkbank-Abnahme (Ebene 2, `Werkbank.Abnahme.Tests`):** braucht vorher `dotnet build` (startet die gebaute Werkbank-DLL als Prozess, Black-Box über
 HTTP). `Werkbanklauf` kopiert alle Quell-Dateien (`git ls-files -co --exclude-standard`, also auch nicht committete Änderungen) in ein Temp-Verzeichnis,
-legt dort `git init -b abnahme-<id>` an (Branch → Sim-DB `cqrs_sim_abnahme_<id>`, Cluster) und schreibt `umgebung.abnahme.json` aus
-`sim-main` mit freien Ports, Daten-Pfaden im Temp-Verzeichnis und der Bildaufbereitung auf Laufort `Extern`. Ihr einziger Test ist bis zur
+legt dort `git init -b abnahme-<id>` an (Branch → Sim-DB `cqrs_sim_abnahme_<id>`, Cluster) und schreibt den Umgebungs-Ordner `abnahme/` aus
+`sim-main` (samt Instanzen) mit freien Ports und Daten-Pfaden im Temp-Verzeichnis; der Klassifikations-Worker ist ein Client wie dort. Ihr einziger Test ist bis zur
 neuen Editor-Oberfläche zurückgestellt (docs/10 E4). Arbeitsbaum, `.werkbank/` und Sim-DB des
 Entwicklers bleiben unberührt; am Ende SIGTERM an die Werkbank (sie hält Host und Worker an), eigene DB löschen, Kopie löschen.
 

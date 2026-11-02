@@ -8,11 +8,11 @@ using Npgsql;
 namespace Infrastructure.Funktionen;
 
 /// <summary>
-/// Die SPERRE einer Funktion mit Zustand (docs/04 §4.4): ihr <c>IZustand</c> ist ein Cache der Aktivierung — damit er alles sieht, was zur Funktion
-/// gehört, rechnet sie im Cluster auf genau einer Aktivierung. Jeder Knoten versucht, je solche Funktion einen Postgres-Advisory-Lock zu nehmen
-/// (Sitzungs-Lock auf einer eigenen Verbindung, Schlüssel aus dem Namen); wer ihn hält, meldet „ein Kind“ (<see cref="Beobachte"/>), die Wurzel
-/// legt den Parent an und der Knoten hält die Funktion im Gossip-Zustand. Reißt die Verbindung, ist der Lock frei: der Knoten meldet „keins“, ein
-/// anderer nimmt ihn. Kurz können zwei Aktivierungen rechnen (bis der Verlust bemerkt ist) — der Zustand ist ein Cache, keine Wahrheit.
+/// Die SPERRE einer Instanz mit Zustand (docs/04 §4.4): ihr <c>IZustand</c> ist je Instanz und Knoten gesichert und hat genau einen Schreiber —
+/// die Instanz rechnet im Cluster auf genau einem Knoten. Jeder Knoten versucht, je solche Instanz einen Postgres-Advisory-Lock zu nehmen
+/// (Sitzungs-Lock auf einer eigenen Verbindung, Schlüssel aus dem Namen); wer ihn hält, meldet „gehalten“ (<see cref="Beobachte"/>), die Wurzel
+/// legt den Graph-Actor an, er lädt den gesicherten Zustand, und der Knoten hält die Instanz im Gossip-Zustand. Reißt die Verbindung, ist der Lock
+/// frei: der Knoten meldet „keins“, ein anderer nimmt ihn und rechnet ab dem zuletzt gesicherten Zustand weiter.
 /// </summary>
 public sealed class ZustandsSperre(IDocumentStore store, IReadOnlyList<string> funktionen, ILogger<ZustandsSperre>? logger = null) : BackgroundService
 {

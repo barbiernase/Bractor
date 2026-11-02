@@ -1,17 +1,14 @@
 namespace Abstractions;
 
 /// <summary>
-/// Marker einer FUNKTION (docs/10 §10.3; Code-Fakt über <see cref="Funktionsvertrag"/>): je Eingangstyp eine Methode
-/// <c>Auf(TEingang e[, Herkunft h][, Lese-Fähigkeiten…][, CancellationToken])</c> mit freier Ausgabe in der Signatur — ein konkreter Typ,
-/// <c>OneOf&lt;…&gt;</c>, <c>T?</c> (nichts), ein Strom (<c>IEnumerable</c>/<c>IAsyncEnumerable</c>), je auch als <c>Task&lt;…&gt;</c>. Eingang ist eine
-/// Folge oder ein Zwischenergebnis (schlichte Records), eine Quell-Nachricht, ein Hinweis oder — als Antwort auf einen eigenen Command — ein Event;
-/// ausgegeben werden Commands, Zwischenergebnisse und Hinweise. Sie steht vor dem Aggregat und liest nie das Log (docs/04 §4.4); Gleichzeitigkeit und
-/// Wiederholung tragen Parent und Kinder. Sie hat einen Laufort (Host, Extern, Hand) und kann einem Akteur zum Rechnen gegeben werden
-/// (<c>IDarf&lt;F&gt;</c>).
-/// <para>Als <b>Klasse</b> ist sie ihre eigene Umsetzung; als <b>Schnittstelle</b> hat sie Umsetzungen (öffentliche Klassen, die sie implementieren) —
-/// welche läuft, wählt die Umgebung (<c>Funktionen:&lt;Name&gt;:Implementierung</c>, Default: die einzige); eine Schnittstelle kann auch draußen laufen
-/// (Worker, Client, Hand).</para>
-/// <para>Ihr Konstruktor nimmt Konfig-Records (<c>Konfig:&lt;Record&gt;</c>), <c>ILogger&lt;T&gt;</c>, ihren Zustand (<c>IZustand&lt;T&gt;</c>) und
+/// Marker einer FUNKTION (docs/04 §4.4, docs/10 §10.3; Code-Fakt über <see cref="Funktionsvertrag"/>): eine Klasse, je Operation eine Methode
+/// <c>Auf(Ports…[, Herkunft h][, Lese-Fähigkeiten…][, CancellationToken])</c>. Die Ports sind Commands ohne Ziel (<c>T</c>, <c>T?</c>, <c>OneOf&lt;…&gt;</c>,
+/// <c>IReadOnlyList&lt;T&gt;</c>), allein auch ein Event als Antwort auf einen eigenen Command; die Fälle der Rückgabe sind die Ausgänge — ein konkreter
+/// Typ, <c>OneOf&lt;…&gt;</c>, ein Strom (<c>IEnumerable</c>/<c>IAsyncEnumerable</c>), <c>T</c> und <c>OneOf</c> auch als <c>Task&lt;…&gt;</c> —, mit
+/// Commands und Hinweisen. Eine Funktion ist ein Knoten eines Graphen (<see cref="IGraph"/>), steht vor dem Aggregat, liest nie das Log und hört keine
+/// Hinweise; Gleichzeitigkeit und Wiederholung tragen Parent und Kinder. Eine Quellfunktion hat <c>Lausche(CancellationToken)</c> statt <c>Auf</c>.
+/// Was draußen gerechnet wird, ist keine Funktion, sondern Arbeit eines Akteurs (<c>IHoert</c> eines Commands ohne Ziel).
+/// <para>Ihr Konstruktor nimmt Konfig-Records (die Werte am Knoten der Instanz), <c>ILogger&lt;T&gt;</c>, ihren Zustand (<c>IZustand&lt;T&gt;</c>) und
 /// <b>Technik</b>: jede andere Schnittstelle oder Klasse der Anwendung, ohne Marker — Bild skalieren, ein Modell laden, einen Brief versenden. Technik
 /// läuft im Prozess ihres Halters, je Aktivierung neu gebaut und mit ihr freigegeben (<c>IAsyncDisposable</c>/<c>IDisposable</c>); was sie laden muss,
 /// lädt sie beim ersten Aufruf. Geschachtelt nimmt eine Technik-Umsetzung selbst Technik. Gebunden wird generiert, ohne Reflection (CQRS090).</para>

@@ -181,9 +181,9 @@ public static class Grammatik
             + "kein Zufall, kein Lesen fremder Daten — Zeit kommt aus dem Event bzw. der Herkunft (R11).", "error",
             [An("CQRS102", "Domain.SourceGeneration/GleichbleibendAnalyzer.cs")]),
         new("GR-FUNKTION-ZUSTAND", "Zustand einer Funktion nur über IZustand<T>", "Eine Funktion hält Zustand (ein Modell, das weiterlernt, ein Zähler) "
-            + "nur über IZustand<T> im Konstruktor einer Funktions-Klasse oder einer Technik-Umsetzung (deren Zustand gehört der Aktivierung ihres Halters): "
-            + "er ist ein Cache der Aktivierung, keine Wahrheit — was fachlich zählt, steht im Log und wird in Projektionen gelernt; damit er alles "
-            + "sieht, rechnet eine Funktion mit Zustand auf genau einer Aktivierung im Cluster (Advisory-Lock). Felder mit Setter, "
+            + "nur über IZustand<T> im Konstruktor einer Funktions-Klasse oder einer Technik-Umsetzung (deren Zustand gehört dem Knoten ihres Halters): "
+            + "er ist je Instanz und Knoten gesichert, wenn der Lauf, der ihn änderte, fertig ist, in der Reihenfolge der Läufe; eine Instanz mit Zustand "
+            + "rechnet im Cluster auf genau einem Knoten (Advisory-Lock). Was fachlich zählt, steht im Log. Felder mit Setter, "
             + "veränderliche Felder und Sammlungen hinter readonly sind verboten; eine Funktion mit Zustand darf aus einem Eingang allein lernen (Auf "
             + "ohne Ausgabe) (R19, docs/04 §4.4).", "error",
             [An("CQRS105", "Domain.SourceGeneration/ZustandAnalyzer.cs"),
