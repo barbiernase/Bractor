@@ -118,8 +118,13 @@ schnell` und ist ein eigener Commit.
 1. **Lesart, Regeln, Bestand.** Attribute, `Graphform` (Kanten, Köpfe, Ausgänge, Signatur, neue Prüfungen), `CQRS115`-Texte, Grammatik (GR-GRAPH,
    GR-KANTE, GR-KOPF, GR-JOIN), alle Graphen in Domäne und Prüfdomäne, die Tests mit Graphen im Quelltext samt den neuen Fällen. Laufzeit und
    Generat müssen unverändert tragen (Integration, Prüfdomäne, Verhaltens-Netz in der schnellen Stufe).
-2. **Werkzeuge.** Extractor, Modell, Scaffolder, Gesten, Parität, `--graph`; `--check` grün.
-3. **Sonde.** Proben, `soll.txt`, Gesten; `--sonde` und `--grammatik` grün.
+   **Nachgezogen:** `GestenTests` und `SichtTests` (Prüfstand, schnelle Stufe) lesen die Sonden-Domäne über `Graphform` und schreiben über den
+   Scaffolder — ohne `Kopf`/`Von` dort wäre Schritt 1 rot. Schritt 1 nimmt deshalb mit: die bestehenden Graph-Records der Sonde und die
+   Graph-Gesten in `Gezeichnet.gesten.json` (nur die Attribute), das Lesen und Schreiben von `Kopf`/`Von` am Knoten (`GraphRaw`, `GraphKnoten` im
+   `EditorModell`, `ModellMapper`, `Scaffolder.GraphRecord`, `DateiAbgleich`; ein entfernter Knoten nimmt seine `Von` mit).
+2. **Werkzeuge.** Gesten „verbinden“, „trennen“ und „Kopf“, Parität, `--graph`; `--check` grün.
+3. **Sonde.** Die neuen Muster (Funktion zweimal, Kette gleichen Typs, Knoten mit `Kopf` und `Von`, Graph im Graphen mit `Von`), `soll.txt`, Gesten;
+   `--sonde` und `--grammatik` grün.
 4. **Doku und Abnahme.** docs/04, docs/05, docs/10, CLAUDE.md; `scripts/server.sh lauf scripts/tests.sh voll` grün; dieses Dokument in eigenem
    Commit löschen (Verweis in docs/README.md entfernen, CLAUDE.md „Gelöschte Dokumente“ ergänzen).
 
