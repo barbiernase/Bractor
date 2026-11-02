@@ -169,9 +169,9 @@ public sealed class NeustartTests
             return Convert.ToInt64(await cmd.ExecuteScalarAsync());
         }
         var ausloeser = await Zahl($"select count(*) from {s}.mt_events where type = 'posten_reserviert' and (data->>'Fehlmenge')::int > 0");
-        var nachschuebe = await Zahl($"select count(distinct headers->>'ursache') from {s}.mt_events where type = 'posten_zugebucht' and headers->>'ueber' = 'funktion:Nachschub'");
+        var nachschuebe = await Zahl($"select count(distinct headers->>'ursache') from {s}.mt_events where type = 'posten_zugebucht' and headers->>'ueber' like 'knoten:%/Nachschub'");
         var zweimal = await Zahl($"""
-            select count(*) from (select headers->>'ursache' from {s}.mt_events where type = 'posten_zugebucht' and headers->>'ueber' = 'funktion:Nachschub'
+            select count(*) from (select headers->>'ursache' from {s}.mt_events where type = 'posten_zugebucht' and headers->>'ueber' like 'knoten:%/Nachschub'
               group by 1 having count(*) > 1) x
             """);
         var zubuchungen = await Zahl($"select count(*) from {s}.mt_events where type = 'posten_zugebucht' and {beleg} = any(@v)");
@@ -183,7 +183,7 @@ public sealed class NeustartTests
                            + $"Verteilungen abgeschlossen {abgeschlossen} von {gestartet} (gesendet {verteilungen.Length}); Abbruch {getoetet:HH:mm:ss.fff}");
         if (!mitBericht) return new Befund(ausloeser, nachschuebe, zubuchungen, gestartet * 4, abgeschlossen, gestartet, zweimal, bericht.ToString());
         await using (var cmd = new NpgsqlCommand($"""
-            with zu as (select headers->>'ursache' u from {s}.mt_events where type = 'posten_zugebucht' and headers->>'ueber' = 'funktion:Nachschub')
+            with zu as (select headers->>'ursache' u from {s}.mt_events where type = 'posten_zugebucht' and headers->>'ueber' like 'knoten:%/Nachschub')
             select r.stream_id, r.version, r.seq_id, get_byte(uuid_send(r.stream_id), 15) % 8, extract(epoch from r.timestamp - @t)::numeric(10, 3)
             from {s}.mt_events r left join zu on zu.u = r.stream_id::text || ':' || r.version
             where r.type = 'posten_reserviert' and (r.data->>'Fehlmenge')::int > 0 and zu.u is null

@@ -17,8 +17,8 @@ internal sealed class Pruefdomaene : ILast
 {
     private const int Posten = 50, Ziele = 20;
 
-    /// <summary>Der Wirker der Funktion Nachschub (Spur-Header <c>ueber</c> ihrer Zubuchungen).</summary>
-    private const string NachschubWirker = "funktion:Nachschub";
+    /// <summary>Der Wirker des Knotens Nachschub der Instanz <c>nachschub</c> (Spur-Header <c>ueber</c> seiner Zubuchungen).</summary>
+    private static readonly string NachschubWirker = WirkerId.FuerKnoten("nachschub", "Nachschub");
 
     private readonly Eingang _eingang;
     private readonly TimeSpan _uhrversatz;
