@@ -252,7 +252,7 @@ public static class ModellMapper
         Doku = meta.Doku, Zusatz = meta.Zusatz, Usings = meta.Usings, Datei = Relativ(wurzel, meta.Datei),
         Typart = meta.Typart == "public record" ? null : meta.Typart,
         OhneParameterliste = meta.OhneParameterliste,
-        Basen = meta.Basen, Attribute = meta.Attribute, Treiber = meta.Treiber,
+        Basen = meta.Basen, Attribute = meta.Attribute,
     };
 
     /// <summary>Pfad relativ zur Solution, „/"-getrennt (für den Editor/die Werkbank); null, wenn außerhalb oder unbekannt.</summary>
@@ -300,10 +300,7 @@ public static class ModellMapper
         root["rahmen"]!.AsObject()["grammatik"] = JsonSerializer.SerializeToNode(Grammatik.AlsJson(), EditorModell.JsonOptionen);
         // Von welchem Akteur kommt was (direkt / über die Kette) — Grundlage der Sicht (Akteure je Karte, Akteur-Rahmen, Pfade).
         root["rahmen"]!.AsObject()["akteurMengen"] = JsonSerializer.SerializeToNode(AkteurAnteile.Aus(modell).AlsJson(), EditorModell.JsonOptionen);
-        // Quellen (docs/04 §4.7): die fest codierten Treiber (Basis + Felder, zum Anlegen neuer Quellen-Typen); dazu die
-        //   Umgebungen (§4) roh — die Quellkarte zeigt die Werte je Umgebung, der Editor rechnet nichts davon nach.
-        root["rahmen"]!.AsObject()["treiber"] = Knoten(dom.Treiber.ToDictionary(kv => kv.Key,
-            kv => new { basis = kv.Value.Basis, felder = kv.Value.Felder.Select(FeldJson).ToArray() }));
+        // Die Umgebungen (§4) roh — der Editor zeigt die Werte je Umgebung und rechnet nichts davon nach.
         root["rahmen"]!.AsObject()["umgebungen"] = umgebungen?.DeepClone() ?? new JsonObject();
         var records = root["records"]!.AsArray();
         StabileIds(root);
@@ -635,7 +632,7 @@ public static class ModellMapper
         ohneParameterliste = meta.OhneParameterliste ? true : (bool?)null, basen = meta.Basen, attribute = meta.Attribute,
     };
 
-    private static object FeldJson(FieldInfo f) => new { name = f.Name, typ = f.Type, standard = f.Default, zugriff = f.Zugriff, pflicht = f.Pflicht ? true : (bool?)null, elementTyp = f.ElementTyp, geerbt = f.Geerbt ? true : (bool?)null };
+    private static object FeldJson(FieldInfo f) => new { name = f.Name, typ = f.Type, standard = f.Default, zugriff = f.Zugriff, pflicht = f.Pflicht ? true : (bool?)null, elementTyp = f.ElementTyp };
 
     private static JsonNode Knoten(object o) => JsonSerializer.SerializeToNode(o, BoardOpts)!;
 
@@ -660,7 +657,7 @@ public static class ModellMapper
     private static string FnId(string store, string methode, bool lesen) => (lesen ? "rf:" : "wf:") + store + "." + methode;
 
     private static Feld MappeFeld(FieldInfo f) =>
-        new() { Name = f.Name, Typ = f.Type, Ausdruck = f.Expr, Standard = f.Default, NurGet = f.NurGet, Zugriff = f.Zugriff, Pflicht = f.Pflicht, ElementTyp = f.ElementTyp, Geerbt = f.Geerbt };
+        new() { Name = f.Name, Typ = f.Type, Ausdruck = f.Expr, Standard = f.Default, NurGet = f.NurGet, Zugriff = f.Zugriff, Pflicht = f.Pflicht, ElementTyp = f.ElementTyp };
 
     private static string KurzEvt(DomainModel dom, string full) =>
         dom.Events.TryGetValue(full, out var e) ? e.Simple : Kurz(full);

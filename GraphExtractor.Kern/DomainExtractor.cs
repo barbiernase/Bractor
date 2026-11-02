@@ -55,8 +55,6 @@ public sealed class DomainModel
     public Dictionary<string, string> ProjektWurzeln { get; } = new(StringComparer.Ordinal);
     /// <summary>Solution-Verzeichnis (absolut) — Bezug für relative Pfade im Editor-Modell.</summary>
     public string Wurzel { get; set; } = "";
-    /// <summary>Die fest codierten Treiber (Name → Basistyp + seine Felder) — der Editor legt damit neue Quellen-Typen an.</summary>
-    public Dictionary<string, (string Basis, List<FieldInfo> Felder)> Treiber { get; } = new(StringComparer.Ordinal);
 
     /// <summary>Event-FullName → (Simple, Persisted, Felder, Meta).</summary>
     public Dictionary<string, EventType> Events { get; } = new(StringComparer.Ordinal);
@@ -121,7 +119,7 @@ public sealed class UnaufgeloestRaw
 /// <param name="Attribute">Attribut-Listen des Typs verbatim (null = keine).</param>
 /// <param name="OhneParameterliste">Record ohne <c>(…)</c> bzw. jede Klasse/Struct (Felder dann nur als Properties).</param>
 public sealed record TypMeta(string Namespace, string Assembly, string? Doku, string? Zusatz, List<string> Usings, bool IstDomäne = false, string? Datei = null,
-    string Typart = "public record", List<string>? Basen = null, string? Attribute = null, bool OhneParameterliste = false, string? Treiber = null);
+    string Typart = "public record", List<string>? Basen = null, string? Attribute = null, bool OhneParameterliste = false);
 
 public sealed record EventType(string Simple, bool Persisted, List<FieldInfo> Fields, TypMeta Meta);
 public sealed record CommandType(string Simple, bool IsCreation, List<FieldInfo> Fields, TypMeta Meta, string? Ziel = null);
@@ -1317,21 +1315,7 @@ public sealed partial class DomainExtractor
         return new TypMeta(t.ContainingNamespace.Fq(), t.ContainingAssembly?.Name ?? "",
             decl == null ? null : Summary(decl), zusatz, decl == null ? new() : DateiUsings(decl).ToList(),
             IstDomänenAssembly(t.ContainingAssembly), decl?.SyntaxTree.FilePath, typart, basen, attribute,
-            decl is TypeDeclarationSyntax { ParameterList: null }, TreiberVon(t));
-    }
-
-    /// <summary>Quellen-Typ mit Treiber-Basis gibt es nicht mehr (Quellen sind Katalogfunktionen, docs/04 §4.7); die Karten dafür zieht Schritt 7 nach.</summary>
-    private static string? TreiberVon(INamedTypeSymbol t) => null;
-
-    /// <summary>Die Felder der Treiber-Basis eines Quellen-Typs (public init, Basis zuerst) — sichtbar, aber nie zurückgeschrieben.</summary>
-    private static List<FieldInfo> GeerbteFelder(INamedTypeSymbol t, bool mitSelbst = false)
-    {
-        var kette = new List<INamedTypeSymbol>();
-        for (var b = mitSelbst ? t : t.BaseType; b != null && b.SpecialType != SpecialType.System_Object; b = b.BaseType) kette.Insert(0, b);
-        return kette.SelectMany(b => b.GetMembers().OfType<IPropertySymbol>())
-            .Where(p => !p.IsStatic && !p.IsIndexer && p.DeclaredAccessibility == Accessibility.Public && p.SetMethod != null && p.Name != "EqualityContract")
-            .Select(p => new FieldInfo { Name = p.Name, Type = ShortType(p.Type), Zugriff = "{ get; init; }", Pflicht = p.IsRequired, Geerbt = true })
-            .ToList();
+            decl is TypeDeclarationSyntax { ParameterList: null });
     }
 
     private IEnumerable<string> DateiUsings(SyntaxNode decl)
@@ -1594,9 +1578,7 @@ public sealed partial class DomainExtractor
     /// </summary>
     private List<FieldInfo> Felder(INamedTypeSymbol t)
     {
-        var felder = TreiberVon(t) != null ? GeerbteFelder(t) : new List<FieldInfo>();
-        felder.AddRange(DeklarierteFelder(t));
-        return felder;
+        return DeklarierteFelder(t).ToList();
     }
 
     private List<FieldInfo> DeklarierteFelder(INamedTypeSymbol t)

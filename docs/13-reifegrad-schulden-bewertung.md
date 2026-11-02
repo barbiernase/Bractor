@@ -127,7 +127,7 @@ Bündeln melden (mehrere `StartStream` in einer Transaktion, Rückstau je Bünde
 
 
 **W10-1 · Reflection in Werkzeugen.** `Cqrs.Codegen` liest die gebauten Domänen-DLLs per `MetadataLoadContext` und erzeugt daraus `domain.proto`,
-die STJ-Kontexte und die Python-Generate (`vertraege.py`, `funktionen.py`, `funktions_tabelle.py`, `nutzlast_tabelle.py`). Daneben existiert mit `Proto.SourceGeneration` ein
+die STJ-Kontexte und die Python-Generate (`vertraege.py`, `nutzlast_tabelle.py`). Daneben existiert mit `Proto.SourceGeneration` ein
 zweiter, Roslyn-basierter Leseweg. Der Python-Vertrags-Emitter liest Verträge anders als
 `Infrastructure.SourceGeneration/Clientvertragslesart.cs` (Ausgaben nicht auf `ICommand` gefiltert, Kenntnis nicht auf Events), der
 Handshake-Hash kann also abweichen. `Werkbank/Server/Schema.cs` liest die Konfig-Typen per `GetProperties`/`Activator` aus der eigenen DLL
@@ -235,8 +235,8 @@ beschreibt das Zielbild nicht. *Entscheidung offen:* „eine Werkbank = eine Anw
 
 **WZ-1 · Prüf-Lücken der Werkzeuge.** Das Grammatik-Gate in `--check` sucht die IDs als Text in der Solution und findet sie auch in `Grammatik.cs`
 selbst; die Ortsangaben prüft es nicht (CQRS056 steht dort falsch als Analyzer in Domain.SourceGeneration). 18 Diagnose-IDs haben keine
-Grammatik-Regel. Der Fixpunkt prüft Akteure, Verträge, Clients, Funktionen und Dienste nicht; Funktion und Dienst werden im Inventar nur nach
-Namen verglichen. Die Sonde deckt `SendeJe`, Count-Join, Kompensation, `IMensch`, `IstClient`, Laufort und Webhook nicht ab.
+Grammatik-Regel. Funktion und Technik werden im Inventar nur nach Namen verglichen. Die Sonde deckt seit Schritt 7 des Umbaus die Graph-Muster, Arbeit,
+Kenntnis, Clients und eine Quellfunktion ab; Count-Join und Kompensation im Vorgangs-Aggregat noch nicht.
 
 **AK-1 · Akteure und Clients** (`konzept-akteure.md` §9): `als` im Envelope bei mehreren verkörperten Akteuren, Funktionen über C#-Clients tragen
 (CQRS094), Anmeldung je Person; kein Boot-Check, ob `Clients:<Name>:Token` die Akteure des Vertrags verkörpert. (Die durable Zustellung an Clients
@@ -249,7 +249,7 @@ festlegen, ob eine neue Funktion die Geschichte nachholt oder am Kopf beginnt.
 
 **PF-7 · Quelle als Stream je Nachricht.** Genau einmal je Kennung entsteht über einen eigenen Stream und Vorgang je Quell-Nachricht. Für
 hochfrequente Quellen (Maschinendaten) ist das teuer. *Entscheidung offen:* Dedup-Tabelle je Kennung und Sammel-Streams gegen „ein Vorgang je
-Meldung“; zusammen mit den flüchtigen Quellen (W11-2/§13.5 Schritt 7).
+Meldung“ (§13.5 Schritt 7).
 
 **G-6 · Garantie ohne eigenen Nachweis-Test** (Garantie-Matrix, [11](11-garantien.md)). Für „durabel nach Erfolg“ (P10) prüft der
 mehrdeutige Commit den Append selbst (PD `SchreibGarantieTests`, seit Phase 2 grün); dass ein Fehler **nach** dem Append im Actor frisch
@@ -313,8 +313,6 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 
 **Vorab zu entscheiden** (blockiert die genannten Schritte nicht, ändert aber ihren Umfang):
 - **WB-4** eine Anwendung je Werkbank oder Wurzel wählbar;
-- **W11-1** Prozess- und Fluss-DSL: eine Schreibweise oder beide;
-- **`IAkteurDienst<A>`** behalten oder durch Funktion + `IDarf<F>` ersetzen;
 - **Daten-Prüfung von ⟳** gegen das Proto (heute) oder gegen die gespeicherte JSON-Form der Events (Marten/STJ, die eigentliche Wahrheit);
 - **Tor am Webhook** einer Quelle (Token → Akteur) und Identitäten für Prod (P1-2).
 
@@ -328,10 +326,9 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 4. **W3-1** Ableitungen auf den Server: Karten-Ids, Hör-Menge, Lambda-Parameter, Auto-Zuordnung, Port-Kardinalität aus `board.sicht`/`/api/werkbank/*`.
 5. **W10-1** Formular-Schema aus dem warmen Workspace (statt `Schema.cs` per Reflection), Codegen auf Roslyn; danach **W10-2** Laufzeit-Serialisierung
    generiert und Reflection-Sperre.
-6. **WZ-1** Prüfungen schärfen: Grammatik-Gate prüft Ort und Gegenstück, Fixpunkt über Akteure/Verträge/Clients/Funktionen/Dienste, Sonde für alle
-   allgemeinen Primitive (`SendeJe`, Count-Join, Kompensation, `IMensch`, `IstClient`, Laufort, Webhook).
-7. **W11-1/W11-2** Treiber (Takt, flüchtige Quellen, Client meldet Quell-Nachricht), danach Rückbau der Handle-/Trigger-Welt samt Grammatik-Regeln;
-   Zeitlimits über den Fristplaner; DSL nach Entscheidung.
+6. **WZ-1** Prüfungen schärfen: Grammatik-Gate prüft Ort und Gegenstück, Inventar vergleicht Funktion und Technik nach Signatur, Sonde für
+   Count-Join und Kompensation.
+7. **PF-7** Quellen mit hoher Frequenz (Sammel-Streams statt eines Vorgangs je Meldung).
 8. **W2-1** Rest (Leitungs-Framework = `Cqrs.Leitung`, Generat-Namespaces = Komposition, Identitäten aus vollen Typnamen).
 9. **WB-1** Geste p50 unter Fremdlast auf 300 ms; Renamer für String-Literale; LLM-Kontexte warm.
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).

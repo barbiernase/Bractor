@@ -20,7 +20,7 @@ namespace Abstractions.SourceGeneration
         public string DictionaryValueType { get; set; }
         public List<TypeNode> ConstructorParameters { get; set; } = new List<TypeNode>();
         // Kein Konstruktor mit Parametern, sondern öffentliche init/set-Properties (auch geerbte, Basis zuerst) — z. B. ein
-        // Quellen-Typ `sealed record DateiErkannt : DateiGemeldet;`. ConstructorParameters tragen dann die Property-Namen, und der
+        // Record mit geerbten init-Properties. ConstructorParameters tragen dann die Property-Namen, und der
         // DtoMapper baut den Typ per Objekt-Initialisierer statt per Konstruktor.
         public bool ViaInitialisierer { get; set; }
         

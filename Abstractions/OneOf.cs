@@ -5,8 +5,7 @@ namespace Abstractions;
 /// <summary>
 /// Typsicherer Union-Typ für Rückgaben: was ein Decide, eine Funktion oder ein Reader erzeugen kann, steht in der Signatur (CQRS050, CQRS100).
 /// Nur die deklarierten Typen können ge-yielded/returned werden; der private Konstruktor und die impliziten Konversionen erzwingen den Kontrakt.
-/// Ohne Schranke: neben Commands, Events, Antworten und Fristen steht hier auch ein schlichter Record ohne Marker — im Decide eine Folge (docs/03
-/// §3.1), bei einer Funktion ein Zwischenergebnis. Welche Typen wo erlaubt sind, prüfen die Analyzer (CQRS050, CQRS100), nicht der Compiler.
+/// Ohne Schranke: Commands, Events, Hinweise, Antworten und Fristen stehen hier nebeneinander (docs/03 §3.1). Welche Typen wo erlaubt sind, prüfen die Analyzer (CQRS050, CQRS100), nicht der Compiler.
 ///
 /// Decide:   IEnumerable&lt;OneOf&lt;WarenabgangGebucht, AbgangAbgelehnt&gt;&gt; Decide(...)
 /// Funktion: IEnumerable&lt;OneOf&lt;ReservierePosten, BelegeKontingent&gt;&gt; Auf(AuftragGestartet e)

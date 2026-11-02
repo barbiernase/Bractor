@@ -59,7 +59,7 @@ namespace Infrastructure.SourceGeneration
                 var queryGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IQuery");
                 var queryResponseGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IQueryResponse");
 
-                // Nachrichten ohne Marker (Folgen, Zwischenergebnisse — Nachrichtenform): Eingänge und Ausgaben von Funktionen draußen. Sie werden
+                // Commands ohne Ziel (Nachrichtenform): zwischen Knoten, an den Kopf eines Graphen, als Arbeit an einen Akteur draußen. Sie werden
                 //   Wertobjekte mit {Typ}Dto-Message und reisen als eigene Nutzlast-Kategorie.
                 var nachrichten = Nachrichtenform.Alle(context.Compilation).Select(n => n.ToDisplayString()).ToList();
                 var nachrichtGraphs = nachrichten.Select(analyzer.AnalyzeType).ToList();
@@ -178,7 +178,7 @@ namespace Infrastructure.SourceGeneration
             context.AddSource("ProtoMessageMapper.Generated.cs", sb.ToString());
         }
 
-        /// <summary>Die Nachrichten ohne Marker unter den Wertobjekten (eigene Nutzlast-Kategorie).</summary>
+        /// <summary>Die Commands ohne Ziel unter den Wertobjekten (eigene Nutzlast-Kategorie).</summary>
         private List<TypeAggregationResult> _nachrichten = new List<TypeAggregationResult>();
 
         private void GenerateNutzlastKlasse(StringBuilder sb)
@@ -199,7 +199,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("    }");
             sb.AppendLine();
 
-            // Die Nachrichten ohne Marker: Typname ↔ Wertobjekt über die Helfer der Wertobjekte.
+            // Die Commands ohne Ziel: Typname ↔ Wertobjekt über die Helfer der Wertobjekte.
             sb.AppendLine("    internal static class ProtoNachrichtMappingHelpers");
             sb.AppendLine("    {");
             sb.AppendLine($"        public static object MapToDomain({N} n) => n.Typ switch");

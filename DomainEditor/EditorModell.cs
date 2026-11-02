@@ -136,11 +136,6 @@ public sealed record Record
     public IReadOnlyList<string>? Basen { get; init; }
     /// <summary>Attribut-Listen des Typs verbatim (mehrere zeilengetrennt).</summary>
     public string? Attribute { get; init; }
-    /// <summary>
-    /// Nur Quellen-Typen (docs/04 §4.7): der fest codierte Treiber, gewählt über den Basistyp (<c>Datei</c> für
-    /// <c>DateiGemeldet</c>). Gesetzt ⇒ Event der Sorte „Quelle", geschrieben als <c>public sealed record X : DateiGemeldet;</c>.
-    /// </summary>
-    public string? Treiber { get; init; }
     /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
     public string? Herkunft { get; init; }
 }
@@ -167,9 +162,6 @@ public sealed record Feld
     public bool Pflicht { get; init; }
     /// <summary>Sammlungs-Feld: der Element-Typ (vom Extractor per Symbol bestimmt). Null = keine Sammlung bzw. noch nicht übersetzt.</summary>
     public string? ElementTyp { get; init; }
-    /// <summary>Von der Treiber-Basis eines Quellen-Typs geerbt: zum Lesen und Zuordnen da, nie geschrieben.</summary>
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    public bool Geerbt { get; init; }
 }
 
 /// <summary>Ein Enum-Typ der Domäne (→ <c>Enums.cs</c>).</summary>
@@ -276,7 +268,7 @@ public sealed record BausteinFunktion
 {
     public required string Name { get; init; }
     public required string Namespace { get; init; }
-    /// <summary>Als Klasse deklariert: läuft im Host. Sonst Schnittstelle: draußen oder mit einer Umsetzung im Host (Laufort aus der Umgebung).</summary>
+    /// <summary>Als Klasse deklariert (eine Funktion oder Technik ohne Schnittstelle). Sonst Schnittstelle: Technik mit ihren Umsetzungen (welche, sagt die Umgebung).</summary>
     public bool Klasse { get; init; }
     public IReadOnlyList<BausteinEingang> Eingaenge { get; init; } = [];
     /// <summary>Technik: die Methoden, die ihr Halter ruft (Signatur, Deklarations-Reihenfolge). Leer bei einer Funktion.</summary>
@@ -558,7 +550,7 @@ public sealed record Leser
 }
 
 /// <summary>
-/// Ein Akteur — ein Domänen-Experte: <c>public sealed record {Name} : IMensch, IDarf&lt;A&gt;, IDarf&lt;B&gt;;</c>
+/// Ein Akteur: <c>public sealed record {Name} : IAkteur, IDarf&lt;A&gt;, IHoert&lt;B&gt;;</c>
 /// (<c>docs/konzept-akteure.md</c> §2). <see cref="Darf"/> = einfache Typnamen in Deklarations-Reihenfolge — nur, was er SELBST
 /// hineingibt; was eine Kette in seinem Namen erzeugt, wird abgeleitet (<see cref="AkteurAnteile"/>).
 /// </summary>

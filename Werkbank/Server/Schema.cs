@@ -5,8 +5,7 @@ using Abstractions;
 namespace Werkbank.Server;
 
 /// <summary>
-/// Das Formular-Schema der Umgebung (CLAUDE.md W1–W12): aus den Konfig-Typen (<see cref="UmgebungKonfig"/>, Quellen-Konfig,
-/// Funktions-Laufort) — Klasse → Felder, Enum → Auswahl, Default aus dem leeren Objekt. Der Editor zeichnet daraus JEDES Panel des
+/// Das Formular-Schema der Umgebung (CLAUDE.md W1–W12): aus den Konfig-Typen (<see cref="UmgebungKonfig"/>) — Klasse → Felder, Enum → Auswahl, Default aus dem leeren Objekt. Der Editor zeichnet daraus JEDES Panel des
 /// Host-Rahmens mit EINEM generischen Renderer, keine handgebauten Formulare je Karte. (Werkbank-Werkzeug, nicht Laufzeit.)
 /// </summary>
 public static class Schema

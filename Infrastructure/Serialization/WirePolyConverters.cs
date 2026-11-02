@@ -159,7 +159,7 @@ public sealed class CommandModusJsonConverter : JsonConverter<CommandModus>
 
 /// <summary>
 /// Die Nachricht eines Eingangs (<c>EingangZustellen.Nachricht</c>, docs/04 §4.4) zwischen Knoten: <c>["E", "Name", {…}]</c> für ein Event bzw. einen
-/// Hinweis (Event-Form), <c>["N", "Name", {…}]</c> für eine Nachricht ohne Marker (Folge, Zwischenergebnis, Client-Nachricht) — über die generierten
+/// Hinweis (Event-Form), <c>["N", "Name", {…}]</c> für einen Command ohne Ziel — über die generierten
 /// Tabellen, ohne Reflection.
 /// </summary>
 public sealed class NachrichtJsonConverter : JsonConverter<object>

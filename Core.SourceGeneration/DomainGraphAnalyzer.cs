@@ -109,7 +109,7 @@ namespace Core.SourceGeneration
                     .FirstOrDefault();
 
                 // Daten-Glieder: die Konstruktor-Parameter — ohne solche die öffentlichen init/set-Properties (auch geerbte,
-                // Basis zuerst), gebaut per Objekt-Initialisierer (z. B. `sealed record DateiErkannt : DateiGemeldet;`).
+                // Basis zuerst), gebaut per Objekt-Initialisierer.
                 List<(ITypeSymbol Type, string Name)> glieder;
                 if (constructor != null && constructor.Parameters.Length > 0)
                     glieder = constructor.Parameters.Select(p => ((ITypeSymbol)p.Type, p.Name)).ToList();

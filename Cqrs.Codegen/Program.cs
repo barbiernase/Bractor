@@ -18,10 +18,8 @@ using Struktur = Abstractions.Projektstruktur;
 //   2. EventJsonSerializerContext.g.cs             (für den STJ-Source-Generator, Marten-Storage — in die Komposition)
 //   3. CqrsWireJsonContext.g.cs                    (für den STJ-Source-Generator, Cross-Node-Wire — in die Komposition)
 //   4. domain_client/generated/vertraege.py        (Client-Verträge → Python-Basisklassen, docs/konzept-akteure.md §6)
-//   5. domain_client/generated/funktionen.py       (Funktions-Schnittstellen → Python-Basisklassen, Laufort Extern)
-//      + funktions_tabelle.py                   (Funktion → Basis, Modul, Klasse der Implementierung — der generische Worker, docs/09 §9.5)
-//   6. domain_client/generated/nutzlast_tabelle.py (Nutzlast.typ → DTO-Klasse, Gegenstück zu GeneratedNutzlast, dieselbe Namensregel)
-//   (4–6 nur mit Python-Worker-Projekt der Anwendung.)
+//   5. domain_client/generated/nutzlast_tabelle.py (Nutzlast.typ → DTO-Klasse, Gegenstück zu GeneratedNutzlast, dieselbe Namensregel)
+//   (4–5 nur mit Python-Worker-Projekt der Anwendung.)
 //
 // Früher öffnete dieser Prepass die ganze Solution über MSBuildWorkspace (geschachteltes
 // MSBuild, fragil, plattformabhängig). Jetzt liest er nur die Metadaten der gebauten
@@ -187,7 +185,7 @@ int Erzeuge(string wurzel)
     // ────────────────────────────────────────────────────────────────────────
     Console.WriteLine("Analysiere Typen (Proto)...");
     var analyzer = new ReflectionTypeAnalyzer(protoScanAssemblies);
-    // Die Nachrichten ohne Marker (Folgen, Zwischenergebnisse): Wertobjekte mit {Typ}Dto-Message, eine eigene Nutzlast-Kategorie (Nachrichtenform).
+    // Die Commands ohne Ziel: Wertobjekte mit {Typ}Dto-Message, eine eigene Nutzlast-Kategorie (Nachrichtenform).
     var nachrichten = Nachrichtenlesart.Alle(protoScanAssemblies);
     var allGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IMessagePayload")
         .Concat(analyzer.AnalyzeTypesImplementing("Abstractions.IQuery"))
