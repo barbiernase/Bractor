@@ -117,7 +117,8 @@ public sealed class AkteurAnalyzer : DiagnosticAnalyzer
             Melde(ClientForm, ort, $"nennt {b.Name} — ein Client nennt nur, wen er verkörpert (IVerkoerpert<A>); was über seine Leitung geht, sind "
                 + "die IDarf und IHoert seiner Akteure");
         // 063: selbst deklariert er nichts.
-        foreach (var m in typ.GetMembers().Where(m => !m.IsImplicitlyDeclared && m is not IMethodSymbol { MethodKind: MethodKind.Constructor }))
+        foreach (var m in typ.GetMembers().Where(m => !m.IsImplicitlyDeclared
+                     && m is not IMethodSymbol { MethodKind: MethodKind.Constructor or MethodKind.PropertyGet or MethodKind.PropertySet }))
             Melde(ClientForm, m.Locations.FirstOrDefault(), $"'{m.Name}' — ein Client deklariert nichts selbst; was er hört und hineingibt, steht an seinen Akteuren");
         // 064: IVerkoerpert: ein konkreter Akteur (Record, kein Interface).
         foreach (var t in typ.Interfaces.Where(b => Ist(b, x.Verkoerpert)).Select(b => b.TypeArguments[0]))

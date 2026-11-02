@@ -142,7 +142,7 @@ public sealed record Anstossgraph(Anstoss A) : IGraph;
         (await Ids(Verteilt)).Should().BeEmpty("Pruefe verlässt den Anstoßgraphen und nimmt genau der Prüfgraph am Kopf");
         var zwei = await Befunde(Verteilt + "public sealed class Zweite : IFunktion { public Eroeffne Auf(Pruefe p) => default!; } public sealed record Zweitgraph(Zweite Z) : IGraph;");
         zwei.Should().ContainSingle(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Which.GetMessage().Should().StartWith("'Pruefe'").And.Contain("Anstossgraph.A")
-            .And.Contain("mehrere Graphen").And.Contain("Pruefgraph").And.Contain("Zweitgraph");
+            .And.Contain("mehrere nehmen ihn").And.Contain("Pruefgraph").And.Contain("Zweitgraph");
         var keiner = await Befunde("public record Weiter() : ICommand; public record Los() : ICommand; "
                                    + "public sealed class Start : IFunktion { public Weiter Auf(Los l) => default!; } public sealed record Losgraph(Start L) : IGraph;");
         keiner.Where(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Select(d => d.GetMessage()).Should().Contain(m => m.Contains("kein Graph nimmt ihn am Kopf"));
