@@ -181,18 +181,18 @@ public class FunktionsZustandGarantieTests
         var gestoppt = new HashSet<IHost>();
         try
         {
-            bool Haelt(IHost h) => h.Services.GetRequiredService<ZustandsSperre>().Gehalten.Contains(nameof(Schaetzer));
+            bool Haelt(IHost h) => h.Services.GetRequiredService<ZustandsSperre>().Gehalten.Contains(nameof(Schaetzung));
             await Warte(() => Task.FromResult(Haelt(a) || Haelt(b)), Frist, "niemand nimmt die Sperre des Schätzers");
             await Task.Delay(TimeSpan.FromSeconds(3));
             (Haelt(a) && Haelt(b)).Should().BeFalse("genau ein Knoten hält die Sperre");
             var (halter, anderer) = Haelt(a) ? (a, b) : (b, a);
-            halter.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Schaetzer)).Should().BeTrue("der Halter hält die Funktion im Gossip-Zustand");
-            anderer.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Schaetzer)).Should().BeFalse();
+            halter.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Schaetzung)).Should().BeTrue("der Halter hält die Funktion im Gossip-Zustand");
+            anderer.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Schaetzung)).Should().BeFalse();
 
             await halter.StopAsync();
             gestoppt.Add(halter);
             await Warte(() => Task.FromResult(Haelt(anderer)), Frist, "der andere Knoten übernimmt die Sperre nicht");
-            await Warte(() => Task.FromResult(anderer.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Schaetzer))), Frist,
+            await Warte(() => Task.FromResult(anderer.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Schaetzung))), Frist,
                 "der andere Knoten hält die Funktion nicht");
         }
         finally
