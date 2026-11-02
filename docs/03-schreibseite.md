@@ -83,7 +83,8 @@ Der gemeinsame Kern `HandleCommandCoreAsync` (das Ziel ist schon beim Empfang ge
    (`QuittiereOhneEventsAsync`). Eine Wiederholung bleibt ein Noop.
 4. Trennung persistenter Events von Ablehnungen (`ITransientEvent`); ein *gemischtes* Ergebnis oder mehrere Ablehnungen werfen laut.
 5. **Reine Ablehnung** → kein Event, kein Apply, die Version bleibt; nur die Quittung (Ausgang abgelehnt). Danach geht die Ablehnung als
-   Hinweis gezielt an die Sitzung des Aufrufers (verlierbar, der Turn wartet nicht) und als verlierbarer Hinweis an die Spur. Eine Ablehnung legt auch keinen Stream an. Ist sie für einen Ablauf wichtig, ist sie ein Fakt (Event) — das entscheidet
+   Hinweis gezielt an die Sitzung des Aufrufers und an die Akteure, die sie hören (verlierbar, der Turn wartet nicht, jede Sitzung einmal), und als
+   verlierbarer Hinweis an die Spur. Eine Ablehnung legt auch keinen Stream an. Ist sie für einen Ablauf wichtig, ist sie ein Fakt (Event) — das entscheidet
    der Modellierer über den Typ (docs/10 §10.2).
 6. **Erfolg**: `AppendeAsync` schreibt die Events; die Quittung des Commands (`Quittung`, Ausgang gewirkt) reist in derselben Transaktion in
    die Inbox-Tabelle (§3.3). Jeder der drei Wege (Effekt, Noop, Ablehnung) trägt so eine Quittung; im Log stehen nur Effekte — **eine
@@ -296,7 +297,8 @@ Was nach einem Commit geschieht, ist nie Teil der Wahrheit:
 - **Push an Clients** (`Infrastructure/Verteilen/Commitmeldung.cs`): je Event der Envelope mit Version und Kopf nach dem Commit, als EINE Nachricht
   je Commit an den Verteiler jedes Knotens (`Verteilung`, nur Typen, die irgendein Client hören darf), der ihn an die Sitzungen seines Knotens
   reicht, die ihn hören — verlierbar (Invariante 6). Ablehnung und `CommandFailed` gehen gezielt: die Sitzungs-Id nennt den Knoten, die Nachricht
-  geht an dessen Verteiler und dort an genau diese Sitzung, gleich, was sie hört ([06](06-transport-multinode-betrieb.md) §6.2).
+  geht an dessen Verteiler und dort an genau diese Sitzung, gleich, was sie hört ([06](06-transport-multinode-betrieb.md) §6.2); eine Ablehnung geht
+  dazu an jede Sitzung, deren Akteure sie hören (`AuchAnHoerer`, jede Sitzung einmal).
 
 Es gibt keine Signal-Typen, keinen Broker und keinen Versionsindex. Die Version, die eine Query-Antwort je gezeigter Id trägt, kommt aus dem
 Fortschritt der Projektion ([04](04-konsum-und-prozess-maschine.md) §4.1), bei einer Frage an ein Aggregat aus ihm selbst (§3.1 (d)).

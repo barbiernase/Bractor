@@ -363,7 +363,7 @@ Knoten, G-13), `NeustartTests` (1, Kategorie Last).
 - **Reihenfolge der Hinweise zwischen zwei Actors** — nicht zugesichert, ohne Test (docs/13 G-15).
 - **Spur über die Knoten eines Laufs als lückenlose Kette** — nur indirekt (Treiber S3 ordnet über die Ursache zu; `SpurWegTests` rechnen den Weg
   über die Karten).
-- **Ein Command ohne Ziel über gRPC an einen Graph-Kopf** — den Weg gibt es nicht (docs/13 GF-1).
+- **Ein Command ohne Ziel über gRPC an einen Graph-Kopf** — der Weg der Sitzung (`SitzungsActor.AnKopfAsync`) hat keinen eigenen Test; geprüft ist der gleiche Weg über den JSON-Eingang.
 - **Webhook im Cluster** — nur der Prüfstand (`KatalogTests`); ein Aufruf an einen Knoten, der die Instanz nicht hält, ist ungeprüft (docs/13 GF-2).
 - **Werkbank-Abnahme** — ihr einziger Test ist zurückgestellt (Editor, docs/10 E4).
 - **Paralleler Drain / Schreibpfad-Skalierung** — kein Assertion-Test (früher nur im LoadHarness beobachtet).

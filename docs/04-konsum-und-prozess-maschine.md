@@ -474,7 +474,6 @@ Das Format steht an einer Stelle (`Abstractions/Spur/WirkerId.cs`), den Weg eine
 
 ## 4.10 Offen
 
-Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): Commands ohne Ziel von einem Akteur nur über den JSON-Eingang, nicht über
-gRPC (GF-1), der Webhook nur mit JSON-Eingang und je Prozess (GF-2), Durchsatz einer Instanz mit Zustand (PF-34), Arbeit von Hand mitten in einem
+Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): der Webhook nur mit JSON-Eingang und je Prozess (GF-2), Durchsatz einer Instanz mit Zustand (PF-34), Arbeit von Hand mitten in einem
 Lauf (FV-3), Instanzen ohne Ort (FV-4), Kreise Graph ↔ Aggregat (FB-5), hartkodierte Intervalle P2-8, reflektive Snapshot-Kopie W10-2,
 Projektlage W2-1.

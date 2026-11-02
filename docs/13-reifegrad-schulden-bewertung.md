@@ -12,18 +12,15 @@ Aggregat, ohne Ziel an genau einen Empfänger), Event, Hinweis. Gerechnet wird i
 den Typen, Instanzen mit eigener Konfig in `umgebungen/<name>/graphen/`), Quellen sind Katalogfunktionen mit gesichertem Zustand statt
 Quell-Nachrichten im Log, Hinweise gehen nur an Akteure, ein Akteur hört (`IHoert`: Arbeit oder Kenntnis), ein Client ist ein Record, der Akteure
 verkörpert ([04](04-konsum-und-prozess-maschine.md) §4.4, §4.7, [10](10-entwickler-api.md)). Damit erledigt: FV-1, FV-2, FB-6, FB-8, FB-21, PF-7
-(§13.6); neu offen: GF-1 bis GF-6.
+(§13.6); offen: GF-2, GF-3, GF-6.
 
 **Frühere Umbauten:** Pub/Sub-Neustrukturierung (2026-10-26 bis 2026-10-29) und „Funktionen vor dem Aggregat“ (2026-11-01); was sie erledigt
 haben, steht in §13.6. Die Hausregel für Actors ist eine Build-Prüfung (CQRS112/113, docs/06 §6.7).
 
 | ID | Kurz | Prio |
 |---|---|:--:|
-| GF-1 | Ein Command ohne Ziel von einem Akteur an den Kopf eines Graphen geht nur über den JSON-Eingang (`/eingang/command`, nur mit `Transport:JsonEingang`, in Prod aus); über gRPC dispatcht die Sitzung nur an Aggregate, C#-Client und Python-SDK haben keinen Aufruf dafür | P2 |
 | GF-2 | Der `Webhook` nimmt Aufrufe nur am JSON-Eingang an (in Prod aus) und ohne Akteur-Tor; sein Postfach liegt je Prozess — ein Aufruf an einen Cluster-Knoten, der die Instanz nicht hält, bleibt dort liegen | P2 |
 | GF-3 | Werkzeuge noch nicht ganz auf dem Graphen-Modell: die Editor-Oberfläche zeichnet keine Graph-Karten (die Graph-Lesart steht im Extractor, `--graph <Typ>` als Text; Oberfläche zurückgestellt, docs/10 E4); die Sonde (`soll.txt`) und die Extractor-Tests auf ihr (`SichtTests`, `GestenTests`, übersprungen) folgen dem neuen Modell erst mit ihrer Neufassung | P2 |
-| GF-4 | Reste im Code: `Projektstruktur.Primitive.Quelle` mit der Sammeldatei `Quellen.cs`, `Funktionen.cs` als Sammeldatei der Abläufe, `Lageart` prüft noch `IQuellNachricht`; Kommentare nennen Laufort, Folge, „Cache der Aktivierung“ (`Abstractions/Funktion.cs`, `Zustand.cs`, `Infrastructure/Funktionen/ZustandsSperre.cs`, `Verkettung.cs`, `Werkstatt.cs`, `Eingang/JsonEingang.cs`, `WeckplanGenerator`), die Grammatik-Regel GR-FUNKTION-ZUSTAND ebenso | P3 |
-| GF-5 | Eine Ablehnung (der Hinweis aus einem Decide) geht nur gezielt an die Sitzung des Absenders, nicht an die Akteure, die ihren Typ hören — wer sie zur Kenntnis braucht, bekommt sie nicht | P3 |
 | GF-6 | Kein Messblock für Arbeit draußen (S2 ist entfallen) und keiner für einen Graphen unter Last außer der Zubuchung in S5 | P3 |
 | FV-3 | Arbeit von Hand mitten in einem Lauf: gibt ein Knoten Arbeit an einen Akteur, den die Werkbank von Hand verkörpert (`Umgebung:Hand`), wartet sein Kind auf das Ende jenes Laufs (acht Mal 60 s, dann scheitert der Aufruf und wird wiederholt); ein Mensch, der länger überlegt, lässt den Lauf davor mehrfach neu rechnen (die Inbox verwirft die Commands, die Außenwelt dahinter ist mindestens einmal) | P3 |
 | FV-4 | Hält kein Cluster-Knoten eine Instanz (Arbeit ohne Arbeiter, Zustand oder Quelle ohne Sperre), bringt der Zusteller ihre offenen Eingänge alle 2 s erneut („später“) — sichtbar im Einblick (`/einblick/auftraege`), aber ohne eigene Meldung und ohne Rückstand in `/health` | P3 |
@@ -92,7 +89,7 @@ Werkzeuge lesen teils per Reflection. Die alte Handle-/Trigger-Welt und der Diri
 | Subsystem | Reife |
 |---|:--:|
 | Schreibseite | 🟢 / 🟡 (G-5) |
-| Konsum, Graphen, Uhr | 🟢 / 🟡 (PF-13, GF-1, GF-2) |
+| Konsum, Graphen, Uhr | 🟢 / 🟡 (PF-13, GF-2) |
 | Generatoren & Analyzer | 🟢 / 🟡 (W10-1, W2-1) |
 | Multi-Node / Transport | 🟢 / 🟡 (P1-1, P1-2) |
 | Werkbank (Extractor, Editor, Server) | 🟢 / 🟡 (LLM-1, W3-1, WB-1, WB-4, WZ-1) |
@@ -342,7 +339,7 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 ## 13.6 Erledigt (früher hier offen)
 
 - **Umbau „Commands und Funktionsgraphen“ (2026-11-02):** **FV-1** (keine Client-Nachricht als Eingang einer Funktion) — ein Akteur gibt einen
-  Command ohne Ziel an den Kopf eines Graphen (über den JSON-Eingang; über gRPC GF-1). **FV-2** (Werkzeuge kannten Folge und Zwischenergebnis nur
+  Command ohne Ziel an den Kopf eines Graphen (über den JSON-Eingang und über gRPC). **FV-2** (Werkzeuge kannten Folge und Zwischenergebnis nur
   halb) — beide gibt es nicht mehr, zwischen Funktionen fließen Commands. **FB-6** (Quell-Nachricht vom Client nur über JSON) — Quell-Nachrichten
   gibt es nicht mehr. **FB-8** (Python-Funktion mit Hinweis-Eingang) — Funktionen hören keine Hinweise, draußen gibt es nur Arbeit. **FB-21**
   (`funktions_tabelle.py`, `funktions_worker.py`) — beide entfallen, ein Python-Client erbt eine Basis je Client. **PF-7** (ein Stream je

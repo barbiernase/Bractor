@@ -206,5 +206,5 @@ Keine Prometheus-Exposition, kein OpenTelemetry (docs/13 P2-10).
 ## 6.8 Offen
 
 Offene Punkte stehen nur in `docs/13`: Multi-Node nur container-erprobt, Consul im `-dev`-Modus (P1-1); kein TLS, keine Identitäten für Prod,
-Webhook ohne Akteur-Tor (P1-2), nur mit JSON-Eingang und mit einem Postfach je Prozess (GF-2); Commands ohne Ziel über gRPC (GF-1); Monitoring schmal und Default-Credentials (P2-10); Reflection im Codegen (W10-1). Der Migrator ist ein
+Webhook ohne Akteur-Tor (P1-2), nur mit JSON-Eingang und mit einem Postfach je Prozess (GF-2); Monitoring schmal und Default-Credentials (P2-10); Reflection im Codegen (W10-1). Der Migrator ist ein
 Init-Job, kein laufender Migrationsdienst; Schema-Evolution ist kein Ziel der Werkbank (CLAUDE.md W1–W12).

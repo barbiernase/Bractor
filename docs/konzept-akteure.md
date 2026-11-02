@@ -246,7 +246,7 @@ Auftrag — doppelt geantwortet, von einem zweiten Arbeiter oder nach dem Neuver
   Kein Broker, keine Abos im Cluster.
 - **Kenntnis:** verlierbarer Push (Invariante 6) an jede Sitzung, deren wirksame Liste den Typ nennt — Events aus dem Log und Hinweise (aus Graphen,
   gescheiterte Läufe, von Clients). **Gezielt**, gleich was die Sitzung hört: die Ablehnung eines Aggregats und `CommandFailed` an die Sitzung des
-  Commands (`OriginSessionId`).
+  Commands (`OriginSessionId`); die Ablehnung dazu an jede Sitzung, deren Akteure sie hören — jede Sitzung einmal.
 - **Rückstau:** liest ein Client nicht nach, verwirft der Verteiler über 1000 offenen Zustellungen je Sitzung (`Rueckstau`).
 - **Arbeit:** durabel über den Kopf ihrer Instanz — ein Auftrag bleibt offen, bis eine Antwort kam; ein Client, der wegbricht, lässt seine Aufträge
   scheitern, der nächste Arbeiter bekommt sie.
@@ -328,7 +328,6 @@ Steht in [13](13-reifegrad-schulden-bewertung.md) §13.0:
 
 - **AK-1** — `als` im Envelope bei mehreren verkörperten Akteuren (heute der erste, der darf), Arbeit über eine C#-Leitung annehmen (CQRS094),
   Anmeldung je Person am Arbeitsplatz (heute ein Token je Umgebung), kein Start-Check, ob `Clients:<Name>:Token` die Akteure des Clients nennt.
-- **GF-1** — ein Command ohne Ziel von einem Akteur an den Kopf eines Graphen nur über den JSON-Eingang, nicht über gRPC.
 - **FB-14** — das Python-SDK kennt weder Lesen ab Position noch Ausgangskorb noch neu Fragen nach `Aktualisiert`.
 - **FB-15** — Überlast an einer Sitzung: Verwerfen nur mit Log-Warnung; Nachrichten des Clients ohne Grenze in der Mailbox.
 - **FB-19** — Antworten eines Aggregats auf eine direkte Query werden nicht beobachtet (kein `Aktualisiert`).
