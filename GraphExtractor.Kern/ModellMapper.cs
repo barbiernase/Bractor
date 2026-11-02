@@ -150,14 +150,20 @@ public static class ModellMapper
             }).ToList(),
             Akteure = dom.Akteure.Select(x => new Akteur
             {
-                Name = x.Name, Namespace = x.Namespace, Darf = x.Darf, Art = x.Art, Doku = x.Doku, Datei = Rel(x.Datei),
+                Name = x.Name, Namespace = x.Namespace, Darf = x.Darf, Hoert = x.Hoert, Doku = x.Doku, Datei = Rel(x.Datei),
             }).ToList(),
             Clients = dom.Clients.Select(x => new Client
             {
                 Name = x.Name, Namespace = x.Namespace, Verkoerpert = x.Verkoerpert, Kenntnis = x.Kenntnis,
                 Doku = x.Doku, Datei = Rel(x.Datei),
-                // Handshake-Name = Interface ohne führendes I — derselbe Name, unter dem die generierte Python-Basis den Client führt.
-                Implementierungen = pyImpls.GetValueOrDefault(x.Name.Length > 1 && x.Name[0] == 'I' && char.IsUpper(x.Name[1]) ? x.Name[1..] : x.Name) ?? [],
+                // Handshake-Name = Record-Name — derselbe Name, unter dem die generierte Python-Basis den Client führt.
+                Implementierungen = pyImpls.GetValueOrDefault(x.Name) ?? [],
+            }).ToList(),
+            Graphen = dom.Graphen.Select(x => new Graph
+            {
+                Name = x.Name, Namespace = x.Namespace, Knoten = x.Knoten.Select(k => new Parameter { Typ = k.Typ, Name = k.Name }).ToList(),
+                Koepfe = x.Koepfe, Ausgaenge = x.Ausgaenge, Kanten = x.Kanten.Select(k => new GraphKante(k.Von, k.Typ, k.Nach)).ToList(), Quelle = x.Quelle, Usings = x.Usings,
+                Doku = x.Doku, Datei = Rel(x.Datei),
             }).ToList(),
             Lesen = Leseseite(dom),
         });

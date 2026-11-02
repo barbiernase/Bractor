@@ -142,7 +142,8 @@ public sealed class FunktionsKindActor(
     private async Task RechneAsync(KnotenAufruf a, int auf, object?[] argumente, Herkunft herkunft, Guid kennung, string ursache, IFaehigkeiten? bereich,
         List<KnotenAusgabe> ausgaben, List<Task> warten, CancellationToken ct)
     {
-        using var spur = Spur.Von(ursache, WirkerId.FuerFunktion(traeger.Name));
+        // Die Spur nennt den Schritt des Laufs (Instanz und Knoten) — seine Karte; Herkunft und Ids leiten weiter aus der Funktion ab.
+        using var spur = Spur.Von(ursache, traeger.Instanz is { Length: > 0 } i ? WirkerId.FuerKnoten(i, traeger.Knoten) : WirkerId.FuerFunktion(traeger.Name));
         var stelle = 0;
         var strom = traeger.Draussen is { } draussen
             ? draussen(kennung, argumente.Length == 1 ? argumente[0]! : throw new InvalidOperationException($"{traeger.Ort}: draußen rechnet ein Auf mit genau einem Eingang"),

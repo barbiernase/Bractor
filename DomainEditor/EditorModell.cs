@@ -37,17 +37,20 @@ public sealed record EditorModell
     /// </summary>
     public IReadOnlyList<BausteinFunktion> BausteinFunktionen { get; init; } = [];
     /// <summary>
-    /// Akteure (<c>docs/konzept-akteure.md</c>): wer von außen hineingibt — je Akteur die Typen, die er darf
-    /// (<c>IDarf&lt;T&gt;</c>: Commands, Queries, Quell-Nachrichten, Hinweise, Funktionen, die er draußen rechnet). Was er hören darf, ist
-    /// abgeleitet, nicht Modell.
+    /// Akteure (<c>docs/konzept-akteure.md</c>): wer draußen steht — je Akteur, was er hineingibt (<c>IDarf&lt;T&gt;</c>: Commands, Queries,
+    /// Hinweise) und was zu ihm kommt (<c>IHoert&lt;T&gt;</c>: ein Command ohne Ziel ist Arbeit, ein Event oder Hinweis Kenntnis).
     /// </summary>
     public IReadOnlyList<Akteur> Akteure { get; init; } = [];
     /// <summary>
-    /// Clients (<c>docs/konzept-akteure.md</c> §4): die Software an der Leitung — je Client EIN Vertrag
-    /// (<c>interface IX : IClientVertrag, …</c>): die Akteure, die er verkörpert, und was er hört (Kenntnis). Was er trägt, sendet und
-    /// fragt, sind die <c>IDarf</c> dieser Akteure — abgeleitet, nicht Modell.
+    /// Clients (<c>docs/konzept-akteure.md</c> §4): die Software an der Leitung — je Client ein Record (<c>record X : IClient, IVerkoerpert&lt;A&gt;…</c>):
+    /// die Akteure, die er verkörpert. Was er hört, sendet und fragt, sind das <c>IHoert</c> und <c>IDarf</c> dieser Akteure — abgeleitet.
     /// </summary>
     public IReadOnlyList<Client> Clients { get; init; } = [];
+    /// <summary>
+    /// Graphen (docs/04 §4.4): je Graph ein Record (<c>record X(Knoten…) : IGraph</c>) — seine Knoten (Parameter: Name und Typ, eine Funktion oder ein
+    /// Graph). Köpfe, Ausgänge und Kanten folgen aus den Typen — abgeleitet, nicht Modell.
+    /// </summary>
+    public IReadOnlyList<Graph> Graphen { get; init; } = [];
     /// <summary>
     /// Die LESESEITE als Signatur-Fakten: Stores (Fähigkeiten + Bündel + Impl-Klasse), Projektionen und Reader.
     /// ReadModels/Queries/Responses sind <see cref="Record"/>s (eigene Arten).
@@ -556,8 +559,8 @@ public sealed record Akteur
     public string Name { get; init; } = "";
     public string Namespace { get; init; } = "";
     public IReadOnlyList<string> Darf { get; init; } = [];
-    /// <summary>Art aus der Basisliste: „Mensch" (<c>IMensch</c>), „Maschine" (<c>IMaschine</c>), „Ki" (<c>IKi</c>); null = nur <c>IAkteur</c>.</summary>
-    public string? Art { get; init; }
+    /// <summary><c>IHoert&lt;T&gt;</c>: was zu ihm kommt — ein Command ohne Ziel ist Arbeit, ein Event oder Hinweis Kenntnis.</summary>
+    public IReadOnlyList<string> Hoert { get; init; } = [];
     public string? Doku { get; init; }
     /// <summary>Datei der Deklaration (relativ zur Solution); null = neu im Editor.</summary>
     public string? Datei { get; init; }
@@ -566,19 +569,18 @@ public sealed record Akteur
 
 /// <summary>
 /// Ein CLIENT — die Software an der Leitung (Python-Worker, Blazor-Arbeitsplatz …), <c>docs/konzept-akteure.md</c> §4:
-/// <c>public interface {Name} : IClientVertrag, IVerkoerpert&lt;A&gt;…, IHoert&lt;E&gt;…;</c>. Ein Client kann mehrere Akteure verkörpern, ein
-/// Akteur über mehrere Clients laufen; je Client genau dieser eine Vertrag. Was über seine Leitung hineingeht (tragen, senden, fragen), sind die
-/// <c>IDarf</c> seiner Akteure — es steht nur dort. Nur der RAND steht hier — die client-internen Commands/Events (Intents, ClientEvents,
-/// Python-State) nie.
+/// <c>public sealed record {Name} : IClient, IVerkoerpert&lt;A&gt;…;</c>. Ein Client kann mehrere Akteure verkörpern, ein Akteur über mehrere Clients
+/// laufen. Was über seine Leitung geht, sind das <c>IDarf</c> und <c>IHoert</c> seiner Akteure — es steht nur dort. Die client-internen
+/// Commands/Events (Intents, ClientEvents, Python-State) stehen hier nie.
 /// </summary>
 public sealed record Client
 {
-    /// <summary>Der Interface-Name wie im Code (<c>IArbeitsplatz</c>); der Handshake-Name ist er ohne führendes I.</summary>
+    /// <summary>Der Record-Name wie im Code (<c>Arbeitsplatz</c>) — zugleich der Handshake-Name.</summary>
     public string Name { get; init; } = "";
     public string Namespace { get; init; } = "";
     /// <summary><c>IVerkoerpert&lt;A&gt;</c>: die Akteure (Record-Namen), für die der Client spricht.</summary>
     public IReadOnlyList<string> Verkoerpert { get; init; } = [];
-    /// <summary><c>IHoert&lt;E&gt;</c>: nur zur Kenntnis (UI-Aktualisierung), keine Ausgabe.</summary>
+    /// <summary>Abgeleitet (nicht editierbar): die Kenntnis seiner Akteure (ihr <c>IHoert</c> auf Events und Hinweise).</summary>
     public IReadOnlyList<string> Kenntnis { get; init; } = [];
     public string? Doku { get; init; }
     /// <summary>Datei der Deklaration (relativ zur Solution); null = neu im Editor.</summary>
@@ -591,6 +593,35 @@ public sealed record Client
     /// </summary>
     public IReadOnlyList<ClientImpl> Implementierungen { get; init; } = [];
 }
+
+/// <summary>
+/// Ein GRAPH (docs/04 §4.4): <c>public sealed record {Name}({Typ} {Knoten}, …) : IGraph;</c> — die Knoten in Reihenfolge der Parameter; ein Knoten ist
+/// eine Funktion oder ein Graph (Graph im Graphen). Köpfe, Ausgänge und Kanten folgen aus den Typen (abgeleitet, nicht editierbar).
+/// </summary>
+public sealed record Graph
+{
+    public string Name { get; init; } = "";
+    public string Namespace { get; init; } = "";
+    /// <summary>Die Knoten: Name (Konfig-Schlüssel der Instanz) und Typ wie geschrieben (<c>Bildverkleinerung&lt;Vorschau&gt;</c>).</summary>
+    public IReadOnlyList<Parameter> Knoten { get; init; } = [];
+    /// <summary>Abgeleitet: die Eingänge des Graphen (Typen, die kein innerer Knoten erzeugt).</summary>
+    public IReadOnlyList<string> Koepfe { get; init; } = [];
+    /// <summary>Abgeleitet: was den Graphen verlässt (Commands an Aggregate, Akteure, andere Graphen; Hinweise).</summary>
+    public IReadOnlyList<string> Ausgaenge { get; init; } = [];
+    /// <summary>Abgeleitet: die Kanten aus den Typen (aufgefaltete Knoten-Pfade).</summary>
+    public IReadOnlyList<GraphKante> Kanten { get; init; } = [];
+    /// <summary>Abgeleitet: der Quellknoten (eine Funktion, die lauscht), oder null.</summary>
+    public string? Quelle { get; init; }
+    /// <summary>Die Namespaces der Knoten-Typen außerhalb der Domäne (z. B. <c>Core.Katalog</c> für eine Quellfunktion) — wie geschrieben.</summary>
+    public IReadOnlyList<string> Usings { get; init; } = [];
+    public string? Doku { get; init; }
+    /// <summary>Datei der Deklaration (relativ zur Solution); null = neu im Editor.</summary>
+    public string? Datei { get; init; }
+    public string? Herkunft { get; init; }
+}
+
+/// <summary>Eine Kante eines Graphen: vom Knoten <see cref="Von"/> über den Typ <see cref="Typ"/> zum Knoten <see cref="Nach"/>.</summary>
+public sealed record GraphKante(string Von, string Typ, string Nach);
 
 /// <summary>Eine Implementierung eines Clients: Sprache (heute <c>python</c>), Klasse, Datei und je Methode der Basis der Rumpf.</summary>
 public sealed record ClientImpl

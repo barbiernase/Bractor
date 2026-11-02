@@ -16,8 +16,9 @@ public static class Herkunft
     public static string Von(Enumeration e) => Hash(e with { Datei = null, Herkunft = null, Doku = null });
     public static string Von(Aggregat a) => Hash(a.State.Select(f => f with { ElementTyp = null }).ToList());
     public static string Von(DecideRegel d) => Hash(new { d.Aggregat, d.Command, d.Ergibt });
-    public static string Von(Akteur a) => Hash(new { a.Name, a.Darf, a.Art });
-    public static string Von(Client c) => Hash(new { c.Name, c.Verkoerpert, c.Kenntnis });
+    public static string Von(Akteur a) => Hash(new { a.Name, a.Darf, a.Hoert });
+    public static string Von(Client c) => Hash(new { c.Name, c.Verkoerpert });
+    public static string Von(Graph g) => Hash(new { g.Name, g.Knoten });
     // Eine Funktion: ihre Form, je Eingang (Auf) Eingang und Ausgaben bzw. je gerufene Methode ihre Signatur, der Konstruktor der Klasse und je
     //   Umsetzung ihr Konstruktor — Rümpfe gehören dem Code.
     public static string Von(BausteinFunktion f) => Hash(new
@@ -47,6 +48,7 @@ public static class Herkunft
             BausteinFunktionen = m.BausteinFunktionen.Select(f => f with { Herkunft = Von(f) }).ToList(),
             Akteure = m.Akteure.Select(a => a with { Herkunft = Von(a) }).ToList(),
             Clients = m.Clients.Select(c => c with { Herkunft = Von(c) }).ToList(),
+            Graphen = m.Graphen.Select(g => g with { Herkunft = Von(g) }).ToList(),
             Lesen = l == null ? null : l with
             {
                 Stores = l.Stores.Select(s => s with { Fns = s.Fns.Select(f => f with { Herkunft = Von(f) }).ToList() }).ToList(),

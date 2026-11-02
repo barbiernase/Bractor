@@ -12,7 +12,7 @@ public class WirkerIdTests
     {
         WirkerId.FuerDecide("Datensatz", "ErstelleDatensatz").Should().Be("decide:Datensatz/ErstelleDatensatz");
         WirkerId.FuerFunktion("IBildaufbereitung").Should().Be("funktion:IBildaufbereitung");
-        WirkerId.FuerQuelle("DateiErkannt").Should().Be("quelle:DateiErkannt");
+        WirkerId.FuerKnoten("linie1", "Aufbereitung.Vorschau").Should().Be("knoten:linie1/Aufbereitung.Vorschau");
         WirkerId.FuerProjektion("P").Should().Be("projektion:P");
         WirkerId.FuerAkteur("Disponent").Should().Be("akteur:Disponent");
         WirkerId.Zerlege("funktion:Bildeingang", out var art, out var rest).Should().BeTrue();

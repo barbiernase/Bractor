@@ -67,27 +67,26 @@ public sealed class Node
 }
 
 /// <summary>
-/// Ein Client (<c>interface IX : IClientVertrag</c>, docs/konzept-akteure.md §4) — die Software an der Leitung: die Akteure, die er
-/// verkörpert, und was er nur zur Kenntnis hört; abgeleitet daraus, was er trägt, sendet und fragt (die <c>IDarf</c> seiner Akteure).
+/// Ein Client (<c>record X : IClient</c>, docs/konzept-akteure.md §4) — die Software an der Leitung: die Akteure, die er verkörpert; abgeleitet
+/// daraus, was er hört, sendet und fragt (das <c>IHoert</c> und <c>IDarf</c> seiner Akteure).
 /// </summary>
 public sealed class ClientInfo
 {
-    /// <summary>Handshake-Name (Interface ohne führendes I).</summary>
+    /// <summary>Handshake-Name (der Record-Name).</summary>
     public string Handshake { get; set; } = "";
     /// <summary><c>IVerkoerpert&lt;A&gt;</c>: die Akteure, für die er spricht.</summary>
     public List<string> Verkoerpert { get; set; } = new();
     public List<string> Kenntnis { get; set; } = new();
-    /// <summary>Abgeleitet: die Funktionen, Commands/Quell-Nachrichten/Hinweise und Queries, die seine Akteure dürfen.</summary>
-    public List<string> Traegt { get; set; } = new();
+    /// <summary>Abgeleitet: die Commands/Hinweise und Queries, die seine Akteure dürfen.</summary>
     public List<string> Sendet { get; set; } = new();
     public List<string> Fragt { get; set; } = new();
 }
 
-/// <summary>Ein Akteur (<c>IAkteur</c>): Art und was er hineingeben darf (<c>IDarf&lt;T&gt;</c>, einfache Namen).</summary>
+/// <summary>Ein Akteur (<c>IAkteur</c>): was er hineingeben darf (<c>IDarf&lt;T&gt;</c>) und was zu ihm kommt (<c>IHoert&lt;T&gt;</c>), einfache Namen.</summary>
 public sealed class AkteurInfo
 {
-    public string? Art { get; set; }
     public List<string> Darf { get; set; } = new();
+    public List<string> Hoert { get; set; } = new();
 }
 
 public sealed class AggregateInfo

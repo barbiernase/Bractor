@@ -184,7 +184,7 @@ public sealed class GraphBuilder
             Add(new Node
             {
                 Id = aid, Kind = NodeKind.akteur, Name = a.Name, FullName = a.Full, Namespace = a.Namespace,
-                Akteur = new AkteurInfo { Art = a.Art, Darf = a.Darf.ToList() },
+                Akteur = new AkteurInfo { Darf = a.Darf.ToList(), Hoert = a.Hoert.ToList() },
             });
             foreach (var d in a.Darf)
                 if (NachrichtId(d) is { } ziel) kanten.Add((aid, ziel, EdgeKind.darf, null));
@@ -200,7 +200,7 @@ public sealed class GraphBuilder
                 Id = cid, Kind = NodeKind.client, Name = c.Name, FullName = c.Full, Namespace = c.Namespace,
                 Client = new ClientInfo
                 {
-                    Handshake = Abstractions.Clientvertragsregeln.ClientName(c.Name), Traegt = c.Traegt.ToList(), Sendet = c.Sendet.ToList(),
+                    Handshake = Abstractions.Clientvertragsregeln.ClientName(c.Name), Sendet = c.Sendet.ToList(),
                     Fragt = c.Fragt.ToList(), Kenntnis = c.Kenntnis.ToList(), Verkoerpert = verk.ToList(),
                 },
             });

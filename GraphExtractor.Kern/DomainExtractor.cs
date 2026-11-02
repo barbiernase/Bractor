@@ -19,8 +19,10 @@ public sealed class DomainModel
     public List<StoreRaw> Stores { get; } = new();
     /// <summary><c>IAkteur</c>-Typen: wer von außen hineingibt, mit seinen <c>IDarf&lt;T&gt;</c>.</summary>
     public List<AkteurRaw> Akteure { get; } = new();
-    /// <summary><c>IClientVertrag</c>-Interfaces: die Clients mit ihrem Vertrag (docs/konzept-akteure.md §4).</summary>
+    /// <summary><c>IClient</c>-Records: die Clients mit den Akteuren, die sie verkörpern (docs/konzept-akteure.md §4).</summary>
     public List<ClientRaw> Clients { get; } = new();
+    /// <summary><c>IGraph</c>-Records: die Graphen mit ihren Knoten (Graphform: dieselbe Lesart wie Generator und Analyzer).</summary>
+    public List<GraphRaw> Graphen { get; } = new();
 
     /// <summary>Records ohne Nachrichten-Marker in Domain-Assemblies (Value Objects).</summary>
     public List<RecordRaw> ValueObjects { get; } = new();
@@ -344,20 +346,38 @@ public sealed class AkteurRaw
 {
     public string Name = "", Namespace = "", Full = "";
     public List<string> Darf = new();
-    /// <summary>„Mensch" / „Maschine" / „Ki" aus der Basisliste, sonst null.</summary>
-    public string? Art;
+    /// <summary><c>IHoert&lt;T&gt;</c> aus der Basisliste: ein Command ohne Ziel ist Arbeit, ein Event oder Hinweis Kenntnis.</summary>
+    public List<string> Hoert = new();
     public string? Datei, Doku;
 }
 
 /// <summary>
-/// Ein Client (<c>IClientVertrag</c>): die verkörperten Akteure und die Kenntnis aus der Basisliste; abgeleitet daraus (nicht editierbar)
-/// was er trägt, sendet und fragt — die <c>IDarf</c> seiner Akteure (<c>Abstractions.Clientvertragsregeln.Art</c>).
+/// Ein Client (<c>record X : IClient</c>): die verkörperten Akteure aus der Basisliste; abgeleitet daraus (nicht editierbar) was er hört, sendet
+/// und fragt — das <c>IHoert</c> und <c>IDarf</c> seiner Akteure (<c>Abstractions.Clientvertragsregeln</c>).
 /// </summary>
 public sealed class ClientRaw
 {
     public string Name = "", Namespace = "", Full = "";
     public List<string> Verkoerpert = new(), Kenntnis = new();
-    public List<string> Traegt = new(), Sendet = new(), Fragt = new();
+    public List<string> Sendet = new(), Fragt = new();
+    public string? Datei, Doku;
+}
+
+/// <summary>
+/// Ein Graph (<c>record X(Knoten…) : IGraph</c>): die Knoten in Reihenfolge der Parameter (Name, Typ wie geschrieben); abgeleitet (nicht editierbar)
+/// die Köpfe, die Ausgänge und die Kanten aus den Typen (<c>Infrastructure.SourceGeneration.Graphform</c>).
+/// </summary>
+public sealed class GraphRaw
+{
+    public string Name = "", Namespace = "", Full = "";
+    public List<(string Name, string Typ)> Knoten = new();
+    public List<string> Koepfe = new(), Ausgaenge = new();
+    /// <summary>Die Kanten aus den Typen: Erzeuger-Knoten, Typ, nehmender Knoten (aufgefaltete Pfade, <c>Aufbereitung.Vorschau</c>).</summary>
+    public List<(string Von, string Typ, string Nach)> Kanten = new();
+    public string? Quelle;
+    public List<string> Fehler = new();
+    /// <summary>Die Namespaces der Knoten-Typen (samt Typargumenten), die nicht der des Graphen sind.</summary>
+    public List<string> Usings = new();
     public string? Datei, Doku;
 }
 
@@ -644,8 +664,10 @@ public sealed partial class DomainExtractor
             // Funktion: Klasse im Host oder Schnittstelle — nur ihre Signatur zählt; Technik: ihre Methoden und Umsetzungen.
             if (Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t)) { m.BausteinFunktionen.Add(ReadBausteinFunktion(t, technik: false)); continue; }
             if (t.ContainingType == null && technik.IstTechnik(t)) { m.BausteinFunktionen.Add(ReadBausteinFunktion(t, technik: true)); continue; }
-            // Client-Vertrag (IClientVertrag): die Software an der Leitung.
-            if (t.TypeKind == TypeKind.Interface && IstClient(t)) { m.Clients.Add(ReadClient(t)); continue; }
+            // Client (record X : IClient): die Software an der Leitung.
+            if (t.TypeKind != TypeKind.Interface && IstClient(t)) { m.Clients.Add(ReadClient(t)); continue; }
+            // Graph (record X(Knoten…) : IGraph): Knoten als Parameter, Kanten aus den Typen.
+            if (Infrastructure.SourceGeneration.Graphform.IstGraph(t)) { m.Graphen.Add(ReadGraph(t)); continue; }
             // Geschachtelte Typen gehören zum Handcode ihres Containers (Zusatz), keine eigenen Bausteine.
             if (t.ContainingType != null || t.TypeKind is not (TypeKind.Class or TypeKind.Struct) || t.IsStatic || t.IsAbstract) continue;
 
@@ -847,11 +869,39 @@ public sealed partial class DomainExtractor
         {
             Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(),
             Verkoerpert = akteure.Select(a => a.Name).ToList(),
-            Kenntnis = akteure.SelectMany(a => a.Interfaces.Where(i => Gen(i, _iHoert)).Select(i => i.TypeArguments[0].Name)).Distinct().ToList(),
+            Kenntnis = akteure.SelectMany(a => a.Interfaces.Where(i => Gen(i, _iHoert)).Select(i => i.TypeArguments[0]))
+                .Where(h => !Abstractions.Clientvertragsregeln.IstArbeit(m => h.Fq() == m || h.AllInterfaces.Any(i => i.OriginalDefinition.Fq() == m)))
+                .Select(h => h.Name).Distinct().ToList(),
             Sendet = Je(Abstractions.Clientvertragsregeln.Befugnisart.Sendet),
             Fragt = Je(Abstractions.Clientvertragsregeln.Befugnisart.Fragt),
             Datei = decl?.SyntaxTree.FilePath, Doku = decl == null ? null : Summary(decl),
         };
+    }
+
+    // ── Graphen: Knoten als Parameter des Records, Kanten aus den Typen (Graphform, eine Lesart mit Generator und Analyzer) ──────
+    private GraphRaw ReadGraph(INamedTypeSymbol t)
+    {
+        var decl = QuellDeklarationen(t).FirstOrDefault();
+        var g = Infrastructure.SourceGeneration.Graphform.Lies(t);
+        // Der Typ eines Knotens wie geschrieben (generische Funktionen mit Typargument: Bildverkleinerung<Vorschau>).
+        var geschrieben = decl is RecordDeclarationSyntax r && r.ParameterList is { } pl
+            ? pl.Parameters.ToDictionary(p => p.Identifier.Text, p => p.Type?.ToString() ?? "")
+            : new Dictionary<string, string>();
+        var ctor = t.InstanceConstructors.Where(c => !c.IsImplicitlyDeclared || c.Parameters.Length > 0).OrderByDescending(c => c.Parameters.Length).FirstOrDefault();
+        var raw = new GraphRaw
+        {
+            Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(), Datei = decl?.SyntaxTree.FilePath, Doku = decl == null ? null : Summary(decl),
+            Knoten = (ctor?.Parameters ?? []).Select(p => (p.Name, geschrieben.GetValueOrDefault(p.Name) is { Length: > 0 } w ? w : p.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat))).ToList(),
+            Koepfe = g.Koepfe.Select(k => k.Typ.Name).Distinct(StringComparer.Ordinal).ToList(),
+            Ausgaenge = g.Ausgaenge.Select(a => a.Typ.Name).Distinct(StringComparer.Ordinal).ToList(),
+            Quelle = g.Quelle?.Name,
+            Fehler = g.Fehler.Select(f => f.Text).ToList(),
+        };
+        IEnumerable<ITypeSymbol> MitArgumenten(ITypeSymbol x) => x is INamedTypeSymbol n ? new[] { x }.Concat(n.TypeArguments.SelectMany(MitArgumenten)) : [x];
+        raw.Usings = (ctor?.Parameters ?? []).SelectMany(p => MitArgumenten(p.Type)).Select(x => x.ContainingNamespace?.Fq() ?? "")
+            .Where(n => n.Length > 0 && n != raw.Namespace).Distinct(StringComparer.Ordinal).OrderBy(n => n, StringComparer.Ordinal).ToList();
+        raw.Kanten = g.Kanten.Select(k => (k.Von.Name, Infrastructure.SourceGeneration.Funktionsform.Anzeigename(k.Typ), k.Nach.Name)).Distinct().ToList();
+        return raw;
     }
 
     // ── Akteure: IAkteur + IDarf<T> in der Basisliste (Code-Fakt; Reihenfolge = Deklaration, Geerbtes danach) ───────
@@ -861,7 +911,10 @@ public sealed partial class DomainExtractor
         bool IstDarf(INamedTypeSymbol i) => _iDarf != null && i.OriginalDefinition.Fq() == _iDarf.Fq() && i.TypeArguments.Length == 1;
         var darf = t.Interfaces.Where(IstDarf).Concat(t.AllInterfaces.Where(IstDarf))
             .Select(i => i.TypeArguments[0].Name).Distinct(StringComparer.Ordinal).ToList();
-        return new AkteurRaw { Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(), Darf = darf,
+        bool IstHoert(INamedTypeSymbol i) => _iHoert != null && i.OriginalDefinition.Fq() == _iHoert.Fq() && i.TypeArguments.Length == 1;
+        var hoert = t.Interfaces.Where(IstHoert).Concat(t.AllInterfaces.Where(IstHoert))
+            .Select(i => i.TypeArguments[0].Name).Distinct(StringComparer.Ordinal).ToList();
+        return new AkteurRaw { Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(), Darf = darf, Hoert = hoert,
             Datei = decl?.SyntaxTree.FilePath, Doku = decl == null ? null : Summary(decl) };
     }
 

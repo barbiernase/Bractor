@@ -101,6 +101,11 @@ public static class Scaffolder
             dateien.Add(new(g.Key.Pfad, ClientDatei(g.Key.Namespace, g.ToList(), modell), DateiArt.Typen,
                 !g.Key.Pfad.StartsWith(Unplatziert, StringComparison.Ordinal)));
 
+        // ── Graphen (docs/04 §4.4) → ihre echte Datei; sonst die (eine) Graph-Datei ihres Namespace; sonst Graphen.cs im Verzeichnis ──
+        foreach (var g in modell.Graphen.GroupBy(x => (Pfad: x.Datei ?? GraphZiel(modell, x.Namespace), x.Namespace)))
+            dateien.Add(new(g.Key.Pfad, GraphDatei(g.Key.Namespace, g.ToList(), modell), DateiArt.Typen,
+                !g.Key.Pfad.StartsWith(Unplatziert, StringComparison.Ordinal)));
+
         // ── Aggregate → State; Decider/Applier je Aggregat aus den eigenständigen Regeln ──
         foreach (var agg in modell.Aggregate)
         {
@@ -204,8 +209,8 @@ public static class Scaffolder
         return v != null ? $"{v}/Akteure.cs" : $"{Unplatziert}Akteure.cs";
     }
 
-    /// <summary>Die Basisliste eines Akteurs: <c>IAkteur, IDarf&lt;A&gt;, IDarf&lt;B&gt;</c> — der ganze Akteur steht in ihr.</summary>
-    public static IReadOnlyList<string> AkteurBasen(Akteur a) => [IAkteur, .. a.Darf.Select(d => $"{IDarf}<{d}>")];
+    /// <summary>Die Basisliste eines Akteurs: <c>IAkteur, IDarf&lt;A&gt;…, IHoert&lt;B&gt;…</c> — der ganze Akteur steht in ihr.</summary>
+    public static IReadOnlyList<string> AkteurBasen(Akteur a) => [IAkteur, .. a.Darf.Select(d => $"{IDarf}<{d}>"), .. a.Hoert.Select(h => $"{IHoert}<{h}>")];
 
     /// <summary>Gehört dieser Basistyp zum Akteur (<c>IAkteur</c>, <c>IDarf&lt;…&gt;</c>, <c>IHoert&lt;…&gt;</c>)? Alles andere bleibt beim Abgleich stehen.</summary>
     public static bool IstAkteurBasis(string basis)
@@ -248,9 +253,8 @@ public static class Scaffolder
 
     private static string ClientDatei(string ns, List<Client> clients, EditorModell modell)
     {
-        // usings: verkörperte Akteure und gehörte Nachrichten bei ihren Typen.
-        var b = Kopf(ns, Usings(ns, modell, [modell.Rahmen.VertragsNamespace],
-            clients.SelectMany(c => c.Verkoerpert.Concat(c.Kenntnis)), []));
+        // usings: die verkörperten Akteure.
+        var b = Kopf(ns, Usings(ns, modell, [modell.Rahmen.VertragsNamespace], clients.SelectMany(c => c.Verkoerpert), []));
         for (var i = 0; i < clients.Count; i++)
         {
             Doku(b, clients[i].Doku, "");
@@ -260,9 +264,39 @@ public static class Scaffolder
         return b.ToString();
     }
 
+    // ── Graphen ─────────────────────────────────────────────────────────────────────────────────
+    private static readonly string IGraph = nameof(Abstractions.IGraph);
+
+    private static string GraphZiel(EditorModell m, string ns)
+    {
+        var dateien = m.Graphen.Where(g => g.Namespace == ns && g.Datei != null).Select(g => g.Datei!).Distinct(StringComparer.Ordinal).ToList();
+        if (dateien.Count == 1) return dateien[0];
+        var v = Verzeichnis(m, ns);
+        return v != null ? $"{v}/Graphen.cs" : $"{Unplatziert}Graphen.cs";
+    }
+
+    /// <summary>Ein Graph: <c>public sealed record X(T1 A, T2 B) : IGraph;</c> — die Knoten als Parameter, Kanten aus den Typen.</summary>
+    public static string GraphRecord(Graph g) =>
+        $"public sealed record {g.Name}({string.Join(", ", g.Knoten.Select(k => $"{k.Typ} {k.Name}"))}) : {IGraph};";
+
+    private static string GraphDatei(string ns, List<Graph> graphen, EditorModell modell)
+    {
+        // usings: die Typen der Knoten (Funktionen, Graphen; bei generischen auch die Typargumente).
+        var b = Kopf(ns, Usings(ns, modell, [modell.Rahmen.VertragsNamespace],
+            graphen.SelectMany(g => g.Knoten.SelectMany(k => k.Typ.Split('<', '>', ',').Select(x => x.Trim()).Where(x => x.Length > 0))),
+            graphen.SelectMany(g => g.Usings)));
+        for (var i = 0; i < graphen.Count; i++)
+        {
+            Doku(b, graphen[i].Doku, "");
+            b.AppendLine(GraphRecord(graphen[i]));
+            if (i < graphen.Count - 1) b.AppendLine();
+        }
+        return b.ToString();
+    }
+
     private static string AkteurDatei(string ns, List<Akteur> akteure, EditorModell modell)
     {
-        var b = Kopf(ns, Usings(ns, modell, [modell.Rahmen.VertragsNamespace], akteure.SelectMany(a => a.Darf), []));
+        var b = Kopf(ns, Usings(ns, modell, [modell.Rahmen.VertragsNamespace], akteure.SelectMany(a => a.Darf.Concat(a.Hoert)), []));
         for (var i = 0; i < akteure.Count; i++)
         {
             Doku(b, akteure[i].Doku, "");
@@ -816,6 +850,7 @@ public static class Scaffolder
         foreach (var k in modell.Lesen?.Konsumenten ?? []) nsVon.TryAdd(k.Name, k.Namespace);
         foreach (var f in modell.BausteinFunktionen) nsVon.TryAdd(f.Name, f.Namespace);   // z. B. IDarf<IFunktion> am Akteur, Client über einen verkörperten Akteur
         foreach (var a in modell.Akteure) nsVon.TryAdd(a.Name, a.Namespace);      // IVerkoerpert<Akteur> am Client
+        foreach (var g in modell.Graphen) nsVon.TryAdd(g.Name, g.Namespace);      // ein Graph als Knoten eines anderen
 
         var menge = new SortedSet<string>(basis.Concat(explizit), StringComparer.Ordinal);
         foreach (var typ in typen)

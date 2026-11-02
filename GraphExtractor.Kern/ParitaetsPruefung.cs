@@ -403,12 +403,13 @@ public static class ParitaetsPruefung
         var lesen = m1.Lesen ?? new Leseseite();
         var teil = new EditorModell
         {
-            Records = m1.Records, Enums = m1.Enums,
+            Records = m1.Records, Enums = m1.Enums, Graphen = m1.Graphen,
             Aggregate = m1.Aggregate, Decider = m1.Decider, Applier = m1.Applier, Rahmen = m1.Rahmen,
             Lesen = lesen with { Stores = lesen.Stores.Select(s => s with { Impl = null }).ToList() },
         };
         var abgedeckt = teil.Records.Select(r => $"{r.Namespace}.{r.Name}")
             .Concat(teil.Enums.Select(e => $"{e.Namespace}.{e.Name}"))
+            .Concat(teil.Graphen.Select(g => $"{g.Namespace}.{g.Name}"))
             .Concat(teil.Aggregate.Select(a => $"{a.Namespace}.{a.Name}"))
             .Concat(lesen.Stores.SelectMany(s => s.Fns.Select(f => $"{f.Namespace ?? s.Namespace}.{f.Name}")
                 .Concat(s.IstBuendel ? [$"{s.Namespace}.{s.Name}"] : [])))
@@ -500,6 +501,7 @@ public static class ParitaetsPruefung
         // Dateipfade und usings bewusst ausgenommen (der Fork legt neue Dateien an; usings prüft das Kompilat).
         Liste("Fixpunkt", "Record", m1.Records, m2.Records, r => $"{r.Namespace}.{r.Name}", r => r with { Usings = [], Datei = null }, befunde);
         Liste("Fixpunkt", "Enum", m1.Enums, m2.Enums, e => $"{e.Namespace}.{e.Name}", e => e with { Datei = null }, befunde);
+        Liste("Fixpunkt", "Graph", m1.Graphen, m2.Graphen, g => $"{g.Namespace}.{g.Name}", g => g with { Datei = null, Usings = [] }, befunde);
         Liste("Fixpunkt", "Aggregat", m1.Aggregate, m2.Aggregate, a => $"{a.Namespace}.{a.Name}", a => a with { Usings = [], Datei = null, DeciderDatei = null, ApplierDatei = null }, befunde);
         Liste("Fixpunkt", "Decider", m1.Decider, m2.Decider, d => $"{d.Aggregat}|{d.Command}", d => d with { Datei = null }, befunde);
         Liste("Fixpunkt", "Applier", m1.Applier, m2.Applier, a => $"{a.Aggregat}|{a.Event}", a => a with { Datei = null }, befunde);

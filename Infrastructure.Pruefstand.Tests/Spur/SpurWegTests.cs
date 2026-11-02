@@ -12,10 +12,10 @@ namespace Infrastructure.Pruefstand.SpurPruefung;
 /// </summary>
 public class SpurWegTests
 {
+    // Was im Log steht: Aggregat-Events (Wirker = Decide) — die Commands zwischen Knoten und die Elemente einer Quelle stehen nicht darin.
     private static readonly Dictionary<string, SpurWeg.Eintrag> Log = new()
     {
-        ["q:1"] = new("DateiErkannt", "quelle:DateiErkannt", null),
-        ["a:1"] = new("VorschauErstellt", "funktion:Kontrastausgleich", null),
+        ["p:1"] = new("ImagePairErstellt", "decide:ImagePair/NimmBildAuf", "knoten:linienimport/Aufbereitung.Eingang"),
     };
 
     private static SpurWeg.Eintrag? Nachschlagen(string u) => Log.GetValueOrDefault(u);
@@ -23,28 +23,25 @@ public class SpurWegTests
     private static string[] Paare(SpurWeg w) => w.Paare.Select(p => p[0] + " → " + p[1]).ToArray();
 
     [Fact]
-    public void Aggregat_Event_laeuft_ueber_Absender_Command_und_Decider()
+    public void Aggregat_Event_laeuft_ueber_den_Knoten_der_den_Command_gab_und_den_Decider()
     {
-        var w = SpurWeg.Aus("ImagePairErstellt", "decide:ImagePair/NimmBildAuf", "funktion:Bildeingang", "a:1", Nachschlagen);
+        // Der Lauf einer Quelle hat keinen Log-Eintrag: der Knoten, der den Command gab, ist die Wurzel des Wegs.
+        var w = SpurWeg.Aus("ImagePairErstellt", "decide:ImagePair/NimmBildAuf", "knoten:linienimport/Aufbereitung.Eingang", null, Nachschlagen);
 
-        w.Karten.Should().Equal("funktion:Bildeingang", "rec:NimmBildAuf", "decide:ImagePair/NimmBildAuf", "rec:ImagePairErstellt");
+        w.Karten.Should().Equal("knoten:linienimport/Aufbereitung.Eingang", "rec:NimmBildAuf", "decide:ImagePair/NimmBildAuf", "rec:ImagePairErstellt");
         Paare(w).Should().Equal(
-            "rec:VorschauErstellt → funktion:Bildeingang",
-            "funktion:Bildeingang → rec:NimmBildAuf",
+            "knoten:linienimport/Aufbereitung.Eingang → rec:NimmBildAuf",
             "rec:NimmBildAuf → decide:ImagePair/NimmBildAuf",
             "decide:ImagePair/NimmBildAuf → rec:ImagePairErstellt");
     }
 
     [Fact]
-    public void Ausgabe_einer_Funktion_haengt_an_ihrem_Eingang()
+    public void Ein_Knoten_der_auf_ein_Event_hin_einen_Command_gibt_haengt_an_dessen_Eintrag()
     {
-        var w = SpurWeg.Aus("BildEingelesen", "funktion:Bildeinlesen", null, "q:1", Nachschlagen);
+        // Die Arbeit des Klassifizierers kam aus dem Decide des Paars (Ursache p:1); seine Antwort entscheidet das Paar.
+        var w = SpurWeg.Aus("BildPaarDurchKiKlassifiziert", "decide:ImagePair/KlassifiziereBildPaarDurchKi", "knoten:Klassifizierer/Klassifizierer", "p:1", Nachschlagen);
 
-        Paare(w).Should().Equal("rec:DateiErkannt → funktion:Bildeinlesen", "funktion:Bildeinlesen → rec:BildEingelesen");
+        Paare(w).Should().Contain("rec:ImagePairErstellt → knoten:Klassifizierer/Klassifizierer")
+            .And.Contain("knoten:Klassifizierer/Klassifizierer → rec:KlassifiziereBildPaarDurchKi");
     }
-
-    [Fact]
-    public void Quelle_ist_Wurzel()
-        => SpurWeg.Aus("DateiErkannt", "quelle:DateiErkannt", null, null, Nachschlagen).Karten
-            .Should().Equal("quelle:DateiErkannt", "rec:DateiErkannt");
 }

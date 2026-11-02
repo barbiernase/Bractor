@@ -8,7 +8,9 @@ namespace Abstractions;
 /// dieselbe Id wie seine Karte im Editor. Generatoren (netstandard2.0, per Link), Extractor und Laufzeit lesen sie von hier.
 /// <list type="bullet">
 /// <item><c>decide:&lt;Aggregat&gt;/&lt;Command&gt;</c></item>
-/// <item><c>funktion:&lt;IFunktion&gt;</c>, <c>quelle:&lt;Typ&gt;</c>, <c>projektion:&lt;Typ&gt;</c>, <c>akteur:&lt;Akteur&gt;</c></item>
+/// <item><c>funktion:&lt;Funktion&gt;</c> (die Rechnung — so leiten <c>Herkunft</c> und Ids ab), <c>knoten:&lt;Instanz&gt;/&lt;Knoten&gt;</c> (der Schritt eines
+/// Laufs in der Spur: Instanz eines Graphen und Pfad des Knotens, <c>linie1/Aufbereitung.Vorschau</c>), <c>projektion:&lt;Typ&gt;</c>,
+/// <c>akteur:&lt;Akteur&gt;</c></item>
 /// </list>
 /// Alle Namen sind einfache Typ- bzw. Variablennamen (ohne Namespace).
 /// <para>In den Generatoren (netstandard2.0, per Link) ist die Klasse <c>internal</c> — sonst sähe ein Projekt, das Abstractions UND einen
@@ -23,7 +25,7 @@ static class WirkerId
 {
     public const string Decide = "decide";
     public const string Funktion = "funktion";
-    public const string Quelle = "quelle";
+    public const string Knoten = "knoten";
     public const string Projektion = "projektion";
     public const string Akteur = "akteur";
 
@@ -31,11 +33,12 @@ static class WirkerId
     public const string Uhr = "uhr";
 
     /// <summary>Die Arten in fester Reihenfolge.</summary>
-    public static readonly string[] Arten = { Decide, Funktion, Quelle, Projektion, Akteur };
+    public static readonly string[] Arten = { Decide, Funktion, Knoten, Projektion, Akteur };
 
     public static string FuerDecide(string aggregat, string command) => Decide + ":" + aggregat + "/" + command;
     public static string FuerFunktion(string funktion) => Funktion + ":" + funktion;
-    public static string FuerQuelle(string typ) => Quelle + ":" + typ;
+    /// <summary>Der Schritt eines Laufs: der Knoten <paramref name="knoten"/> (Pfad im Graphen) der Instanz <paramref name="instanz"/>.</summary>
+    public static string FuerKnoten(string instanz, string knoten) => Knoten + ":" + instanz + "/" + knoten;
     public static string FuerProjektion(string typ) => Projektion + ":" + typ;
     public static string FuerAkteur(string akteur) => Akteur + ":" + akteur;
 

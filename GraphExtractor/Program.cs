@@ -67,6 +67,21 @@ uhr.Restart();
 var lage = await Projektlage.ErmittleAsync(solution, Console.WriteLine);
 var compilations = lage.Compilations;
 
+// --graph <Typ>: ein Graph als Text (Knoten, Kanten mit Vielfachheit, Köpfe, Signatur) — dieselbe Lesart wie Generator und Analyzer.
+var gi = Array.IndexOf(args, "--graph");
+if (gi >= 0)
+{
+    var name = gi + 1 < args.Length ? args[gi + 1] : "";
+    if (GraphText.Text(lage.DomänenCompilations, name) is not { } text)
+    {
+        Console.Error.WriteLine($"❌ Kein Graph namens '{name}' (record X(…) : IGraph) in den Domänen-Projekten.");
+        return 1;
+    }
+    Console.WriteLine();
+    Console.WriteLine(text);
+    return 0;
+}
+
 if (sonde)
 {
     Console.WriteLine("\n── Agnostik-Sonde ──");
