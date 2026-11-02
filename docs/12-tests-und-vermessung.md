@@ -425,6 +425,13 @@ vollständigen Antwort frei, und die Kinder einer Funktion draußen warten in de
 (`…_8f9bca1_funktionen-nachher-s2`): 51,8 → 57,9 Paare/s (1,12 ×), p50/p99 2 884/3 841 → 2 951/3 436 ms, Transaktionen je Paar 15,2 → 8,5
 (kein Festhalten, keine Positionen), CPU des Workers 3,4 → 2,8 Kerne.
 
+**Messung Umbau „Commands und Funktionsgraphen“, Schritt 4–5 (2026-11-02, Messserver, ein Lauf, nur S1):** Quellen als Katalogfunktionen (der
+Dateiwächter am Kopf des Linienimports, gesicherter Zustand statt Quell-Nachrichten im Log), Bildaufbereitung als Fork-Join, Hinweise nur an Akteure;
+gemessen auf `55dbcd8` (`…_55dbcd8_graphen-schritt4-5`), gültig, Exactly-once grün: S1 135 → 141 Paare/s, p50/p99 3 171/4 195 ms, Transaktionen je
+Paar 9,7 → 4,0, Queries je Paar 90 → 69 (kein Append der Datei ins Log, kein Quell-Vorgang). Die Prüfung „je Datei genau eine Quell-Nachricht im Log“
+entfällt (der Wächter schreibt nicht ins Log, Entscheidung 8). S2 ist nicht mehr messbar: der Treiber schaltete die Bildkette über
+`Funktionen:<F>:Laufort` nach draußen, den Abschnitt gibt es seit Schritt 2 nicht mehr; mit Schritt 6 entfallen Laufort Extern und der Bild-Worker.
+
 **Ende zu Ende an den realen Domänen, unter Höchstlast (seit 2026-10-15, `scripts/vermessung-e2e.sh`, ≈ 5 min, Plan Garantien und Durchsatz
 §0.1).** Gemessen wird der echte Host im Release-Build (`Host.Grpc` in `umgebungen/umgebung.vermessung.json`, `Host.Pruefdomaene` in
 `umgebung.vermessung-pruefdomaene.json`, je eigene DB; bis Phase 5 dazu ein eigener Redis), Last nur über die echten Eingänge, gezählt bis zum
