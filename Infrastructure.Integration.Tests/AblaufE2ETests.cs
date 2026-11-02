@@ -289,6 +289,9 @@ public class AblaufE2ETests
         var t = Zufallszeit(12);
         var datei = Datei(Path.Combine(verzeichnis, "vorlage"), t, BildVersion.Dc0);
         var paar = ImagePairFileName.Resolve(datei.Name)!.AggregateId.Wert;
+        // Der Zustand gilt je Instanz über Neustarts — auch über die Tests dieser Klasse hinweg (geteilte DB, dieselbe Instanz „Linienimport“):
+        //   erwartet wird darum der Stand vor dem Test plus ein Lauf.
+        long vorher = 0;
         try
         {
             using (var host = Baue())
@@ -296,12 +299,13 @@ public class AblaufE2ETests
                 await host.StartAsync();
                 try
                 {
+                    vorher = (await host.Services.GetRequiredService<IZustandsAblage>().LadeAsync("Linienimport", "Eingang", default))?.Nummer ?? 0;
                     var es = host.Services.GetRequiredService<IEventStoreRepository>();
                     File.Copy(datei.Pfad, Path.Combine(eingangsOrdner, datei.Name));
                     await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is BildVerfuegbar), TimeSpan.FromSeconds(60),
                         "Die Datei führte nicht bis BildVerfuegbar — Dateiwächter → Bildaufbereitung lief nicht durch.");
                     var ablage = host.Services.GetRequiredService<IZustandsAblage>();
-                    await Warte(async () => await ablage.LadeAsync("Linienimport", "Eingang", default) is { Nummer: 1 }, TimeSpan.FromSeconds(30),
+                    await Warte(async () => (await ablage.LadeAsync("Linienimport", "Eingang", default))?.Nummer == vorher + 1, TimeSpan.FromSeconds(30),
                         "Der Zustand des Wächters wurde nach dem fertigen Lauf nicht gesichert.");
                 }
                 finally { await host.StopAsync(); }
@@ -317,7 +321,7 @@ public class AblaufE2ETests
                     (await es.ReadStreamAsync(paar, 0, default)).Count(e => e.Payload is ImagePairErstellt).Should().Be(1);
                     (await es.ReadStreamAsync(paar, 0, default)).Count(e => e.Payload is BildVerfuegbar).Should().Be(1,
                         "der gesicherte Zustand kennt die Datei — kein zweiter Lauf");
-                    (await host.Services.GetRequiredService<IZustandsAblage>().LadeAsync("Linienimport", "Eingang", default))!.Nummer.Should().Be(1);
+                    (await host.Services.GetRequiredService<IZustandsAblage>().LadeAsync("Linienimport", "Eingang", default))!.Nummer.Should().Be(vorher + 1);
                 }
                 finally { await host.StopAsync(); }
             }
@@ -354,7 +358,9 @@ public class AblaufE2ETests
         Directory.CreateDirectory(linie2);
         var builder = Host.CreateApplicationBuilder();
         builder.Services.AddCqrsFramework(opts => { opts.EnableGrpc = false; opts.ClusterName = "zwei-linien-" + Guid.NewGuid().ToString("N")[..8]; });
-        var instanzen = GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig> { ["linie1"] = Linie(linie1), ["linie2"] = Linie(linie2) },
+        // Eigene Instanz-Namen je Lauf: ihr Zustand bleibt in der geteilten DB über den Test hinaus.
+        var (n1, n2) = ("linie1-" + Guid.NewGuid().ToString("N")[..6], "linie2-" + Guid.NewGuid().ToString("N")[..6]);
+        var instanzen = GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig> { [n1] = Linie(linie1), [n2] = Linie(linie2) },
             Infrastructure.Komposition.Anwendung.Funktionen.Graphen);
         builder.Services.AddSingleton(instanzen);
         TechnikExtensions.BindeTechnik(builder.Services, instanzen);
@@ -370,7 +376,7 @@ public class AblaufE2ETests
             await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is ImagePairKomplett), TimeSpan.FromSeconds(60),
                 "Das Paar wurde nicht komplett — je Linie ein Wächter, je Datei ein Lauf.");
             var ablage = host.Services.GetRequiredService<IZustandsAblage>();
-            await Warte(async () => await ablage.LadeAsync("linie1", "Eingang", default) is { Nummer: 1 } && await ablage.LadeAsync("linie2", "Eingang", default) is { Nummer: 1 },
+            await Warte(async () => await ablage.LadeAsync(n1, "Eingang", default) is { Nummer: 1 } && await ablage.LadeAsync(n2, "Eingang", default) is { Nummer: 1 },
                 TimeSpan.FromSeconds(30), "jede Instanz sichert ihren eigenen Wächter-Zustand");
         }
         finally
