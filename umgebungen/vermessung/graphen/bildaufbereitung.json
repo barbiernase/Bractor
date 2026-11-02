@@ -1,0 +1,54 @@
+{
+  "Graph": "Bildaufbereitung",
+  "Akteur": "KameraSystem",
+  "Einlesen": {
+    "Laufort": "Host",
+    "Wiederholungen": 1,
+    "Worker": {
+      "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
+      "Argumente": [
+        "--funktionen",
+        "IBildEinlesen",
+        "--slots",
+        "2",
+        "--konfig",
+        "AusgabePfad=${env:HOME}/cqrs-vermessung/preprocessed"
+      ],
+      "Token": "vermessung-bildrechner"
+    }
+  },
+  "Verkleinern": {
+    "Laufort": "Host",
+    "Wiederholungen": 1,
+    "Worker": {
+      "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
+      "Argumente": [
+        "--funktionen",
+        "IBildVerkleinerung",
+        "--slots",
+        "2",
+        "--konfig",
+        "AusgabePfad=${env:HOME}/cqrs-vermessung/preprocessed"
+      ],
+      "Token": "vermessung-bildrechner"
+    },
+    "AusgabePfad": "${env:HOME}/cqrs-vermessung/preprocessed"
+  },
+  "Kontrast": {
+    "Laufort": "Host",
+    "Wiederholungen": 1,
+    "Worker": {
+      "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
+      "Argumente": [
+        "--funktionen",
+        "IKontrastausgleich",
+        "--slots",
+        "2",
+        "--konfig",
+        "AusgabePfad=${env:HOME}/cqrs-vermessung/preprocessed"
+      ],
+      "Token": "vermessung-bildrechner"
+    },
+    "AusgabePfad": "${env:HOME}/cqrs-vermessung/preprocessed"
+  }
+}

@@ -1,39 +1,26 @@
 using Abstractions;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Infrastructure.Komposition;
 
 namespace Infrastructure.Funktionen;
 
-public static class FunktionsLaufortExtensions
+public static class GraphInstanzExtensions
 {
     /// <summary>
-    /// Bindet die Funktionen nach dem Abschnitt <c>Funktionen</c> der Umgebung (docs/06 §6.5): je Funktion mit Eingängen der Laufort (<c>Host</c> mit
-    /// Umsetzung, <c>Extern</c>, <c>Hand</c>), Slots und Wiederholungen. Gelesen und geprüft (Umsetzung eindeutig, eine Funktion mit Lese-Fähigkeit nur im
-    /// Host, eine getragene Schnittstelle ohne Umsetzung draußen) wird die Bindung vom Funktions-Actor (<see cref="FunktionsBausteinWiring"/>). Eine
-    /// Technik nennt hier nur ihre Implementierung (gebunden von <see cref="TechnikExtensions.BindeTechnik(IServiceCollection, UmgebungKonfig, Microsoft.Extensions.Configuration.IConfiguration)"/>);
-    /// ein Name, den es nicht gibt, ist ein Boot-Fehler.
+    /// Bindet die Instanzen der Graphen aus der Umgebung (docs/04 §4.4, <c>umgebungen/&lt;name&gt;/graphen/*.json</c>): geprüft gegen die Graphen
+    /// (<see cref="GraphInstanzen.Aus"/>) und je Knoten seine Bindung (Laufort, Umsetzung, Lese-Fähigkeit nur im Host,
+    /// <see cref="FunktionsBausteinWiring.BindungVon"/>); ein Knoten mit Laufort Hand meldet den Hand-Ausführer an. Ersetzt die Instanzen des Rahmens
+    /// (ohne Umgebung je Graph eine). Danach bindet <see cref="TechnikExtensions.BindeTechnik(IServiceCollection, GraphInstanzen)"/>, was die Knoten im
+    /// Host brauchen.
     /// </summary>
-    public static IServiceCollection BindeFunktionen(this IServiceCollection services, IReadOnlyDictionary<string, FunktionsKonfig> konfig)
+    public static GraphInstanzen BindeGraphen(this IServiceCollection services, UmgebungKonfig u)
     {
-        var bausteine = Anwendung.Funktionen.Bausteine.Select(b => b.Name).ToHashSet(StringComparer.Ordinal);
-        var technik = Anwendung.Technik.Namen;
-        foreach (var (name, k) in konfig)
-        {
-            if (technik.ContainsKey(name))
-            {
-                // Technik läuft im Prozess ihres Halters: kein eigener Laufort, kein Worker.
-                if (k.Laufort != FunktionsLaufort.Host || k.Worker is not null)
-                    throw new Infrastructure.Umgebung.BootFehler($"Funktionen:{name} ist Technik (im Konstruktor einer Funktion) — sie läuft im Prozess "
-                        + "ihres Halters; hier steht nur ihre Implementierung (kein Laufort oder Worker).", "funktion:" + name);
-                continue;
-            }
-            if (!bausteine.Contains(name))
-                throw new Infrastructure.Umgebung.BootFehler($"Funktionen:{name} — keine Funktion dieses Namens (bekannt: "
-                    + string.Join(", ", bausteine.Concat(technik.Keys).OrderBy(n => n, StringComparer.Ordinal)) + ").", "host:Funktionen");
-            services.AddSingleton(new BausteinBindung(name, k.Laufort, k.Implementierung, Math.Max(0, k.Wiederholungen), Math.Max(0, k.Parallel),
-                Math.Max(0, k.Warteschlange), k.Vorwaermen));
-            if (k.Laufort == FunktionsLaufort.Hand) services.AddHandAusfuehrer();
-        }
-        return services;
+        var instanzen = GraphInstanzen.Aus(u.Graphen, Anwendung.Funktionen.Graphen, Anwendung.Akteure.Rechte);
+        services.Replace(ServiceDescriptor.Singleton(instanzen));
+        foreach (var (instanz, k, b, kk) in FunktionsBausteinWiring.Knoten(instanzen))
+            if (FunktionsBausteinWiring.BindungVon(b, kk, instanz.Ort(k.Name)).Laufort == FunktionsLaufort.Hand) services.AddHandAusfuehrer();
+        Console.WriteLine($"[CQRS] Instanzen: {string.Join(", ", instanzen.Alle.Select(i => i.Name + " (" + i.Graph.Name + ")").DefaultIfEmpty("keine"))}");
+        return instanzen;
     }
 }

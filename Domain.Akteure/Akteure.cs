@@ -20,13 +20,14 @@ namespace Domain.Akteure;
 // Deklariert wird nur, was ein Akteur SELBST hineingibt (IDarf<T>) — ein Command, eine Query, eine Quell-Nachricht oder die Ausgaben einer
 // Funktion, deren Code er draußen rechnet (IDarf<IFunktion-Typ>). Was eine Funktion oder eine Frist daraus erzeugt (NimmRangeAuf, NimmBildAuf,
 // MarkiereAlsHaengengeblieben …), trägt den Akteur der Kette — es steht hier bewusst NICHT: am Tor käme es so nie durch („nie von der GUI" ist
-// ein Typ-Fakt). Ein Command darf bei mehreren Akteuren stehen. Welche Software für welche Akteure an der Leitung spricht, steht in Clients.cs.
+// ein Typ-Fakt). Ausnahme: ein Akteur, für den eine Instanz mit Quellkopf hineingibt (Akteur in ihrer Datei), darf, was sie verlässt — der Start
+// prüft es (docs/04 §4.4). Ein Command darf bei mehreren Akteuren stehen. Welche Software für welche Akteure an der Leitung spricht, steht in Clients.cs.
 
 // ── Maschinen ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /// <summary>Nimmt die Bildpaare (dc0/dc2) an der Linie auf und legt sie auf dem Share ab.</summary>
 public sealed record KameraSystem : IMaschine,
-    IDarf<DateiErkannt>;
+    IDarf<DateiErkannt>, IDarf<NimmBildAuf>;   // NimmBildAuf: was die Instanz der Bildaufbereitung für das Kamerasystem hineingibt
 
 /// <summary>Rechnet die Schritte der Bildaufbereitung außerhalb des Hosts (Python-Worker <c>funktions_worker.py</c>, Laufort <c>Extern</c>).</summary>
 public sealed record Bildrechner : IMaschine,

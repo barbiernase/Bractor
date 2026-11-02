@@ -7,8 +7,8 @@ using Infrastructure.Komposition;
 namespace Infrastructure.Eingaenge;
 
 /// <summary>
-/// Der Eingang eines offenen Eingangs als Diskriminator und Wire-JSON (die generierten Tabellen, <c>GeneratedWirePoly</c>) — und zurück: eine Nachricht
-/// ohne Marker (Folge) oder eine Quell-Nachricht (ein Event, Diskriminator mit Vorsatz <see cref="EventVorsatz"/>).
+/// Der Eingang eines offenen Eingangs als Diskriminator und Wire-JSON (die generierten Tabellen, <c>GeneratedWirePoly</c>) — und zurück: ein Command
+/// ohne Ziel oder eine Quell-Nachricht (ein Event, Diskriminator mit Vorsatz <see cref="EventVorsatz"/>).
 /// </summary>
 public static class Nachrichtenform
 {
@@ -37,14 +37,14 @@ public static class Nachrichtenform
 }
 
 /// <summary>
-/// Die Folgen einer Entscheidung als Beilagen (<see cref="EingangOffen"/>): je Folge und hörende Funktion (die Verkettung) ein offener Eingang mit der Kennung aus
-/// Command-Id, Stelle und Funktion (<see cref="Eingangsvertrag"/>) — derselbe Command ergibt dieselben Kennungen.
+/// Die Commands ohne Ziel einer Entscheidung als Beilagen (<see cref="EingangOffen"/>): je Command und Instanz, deren Graph ihn am Kopf nimmt (die Köpfe),
+/// ein offener Eingang mit der Kennung aus Command-Id, Stelle und Instanz (<see cref="Eingangsvertrag"/>) — derselbe Command ergibt dieselben Kennungen.
 /// </summary>
 public static class Folgenbeilagen
 {
     /// <summary>
-    /// Eine Quell-Nachricht (docs/04 §4.7) als offene Eingänge: je hörende Funktion einer mit der Kennung aus dem Vorgang der Nachricht (Typ und Kennung)
-    /// und der Funktion — dieselbe Nachricht ergibt dieselben Kennungen, eine schon aufgenommene legt keine zweite Zeile.
+    /// Eine Quell-Nachricht (docs/04 §4.7) als offene Eingänge: je Instanz, die sie am Kopf nimmt, einer mit der Kennung aus dem Vorgang der Nachricht
+    /// (Typ und Kennung) und der Instanz — dieselbe Nachricht ergibt dieselben Kennungen, eine schon aufgenommene legt keine zweite Zeile.
     /// </summary>
     public static IReadOnlyList<(EingangOffen Eingang, object Folge)> VonQuelle(IQuellNachricht nachricht, Infrastructure.Funktionen.Verkettung plan,
         Guid vorgang, int version, string? akteur)
@@ -65,23 +65,23 @@ public static class Folgenbeilagen
         {
             var hoerer = plan.Hoerer(folgen[stelle].GetType());
             if (hoerer.Count == 0) continue;
-            var kennung = Eingangsvertrag.Folge(commandId, stelle);
+            var kennung = Eingangsvertrag.AusEntscheidung(commandId, stelle);
             var (typ, daten) = Nachrichtenform.Schreibe(folgen[stelle]);
-            foreach (var funktion in hoerer)
-                aus.Add((new EingangOffen(Eingangsvertrag.Eingang(kennung, funktion), funktion, typ, daten, version,
+            foreach (var instanz in hoerer)
+                aus.Add((new EingangOffen(Eingangsvertrag.Eingang(kennung, instanz), instanz, typ, daten, version,
                     ImAuftrag.IstAkteur(akteur) ? akteur : null, korrelation), folgen[stelle]));
         }
         return aus;
     }
 
     /// <summary>
-    /// Der schnelle Weg nach dem Commit (docs/04 §4.4): jeder offene Eingang geht sofort an den Parent seiner Funktion — verlierbar, die Zeile in
+    /// Der schnelle Weg nach dem Commit (docs/04 §4.4): jeder offene Eingang geht sofort an den Kopf seiner Instanz — verlierbar, die Zeile in
     /// <c>cqrs_eingaenge</c> bleibt das Netz (der Zusteller bringt sie, wenn sie nach ihrer Frist noch offen ist).
     /// </summary>
     public static void StelleZu(IReadOnlyList<(EingangOffen Eingang, object Folge)> eingaenge, Infrastructure.Funktionen.IFunktionsWege wege, Guid stream)
     {
         foreach (var (e, folge) in eingaenge)
-            wege.Melde(new Infrastructure.Funktionen.EingangZustellen(e.Kennung, e.Funktion, folge, Infrastructure.Funktionen.Eingangsart.Durabel, stream,
+            wege.Melde(new Infrastructure.Funktionen.EingangZustellen(e.Kennung, e.Instanz, null, folge, Infrastructure.Funktionen.Eingangsart.Durabel, stream,
                 e.Version, DateTimeOffset.UtcNow, e.Akteur, e.Korrelation, Spur.Ursache(stream, e.Version)));
     }
 }

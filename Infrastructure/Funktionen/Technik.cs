@@ -9,17 +9,17 @@ using Infrastructure.Komposition;
 namespace Infrastructure.Funktionen;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// BINDUNG DER TECHNIK (docs/06 §6.5): WAS es gibt, ist Code — Technik (ohne Marker: was der Konstruktor einer Funktion nimmt), ihre
-// Umsetzungen und die Konfig-Records in den Konstruktoren (generierte Tabelle `GeneratedTechnik`). WELCHE Umsetzung läuft und mit welchen
-// Werten, sagt die Umgebung (`Funktionen:<Name>:Implementierung` — derselbe Abschnitt wie für Funktionen mit Eingängen —, `Konfig:<Record>`).
-// Der Start prüft gegen den Bedarf der Funktionen, die im Host rechnen: fehlt etwas, ist es mehrdeutig oder zyklisch, startet nichts.
+// BINDUNG DER TECHNIK (docs/06 §6.5): WAS es gibt, ist Code — Technik (ohne Marker: was der Konstruktor einer Funktion nimmt), ihre Umsetzungen und
+// die Konfig-Records in den Konstruktoren (generierte Tabelle `GeneratedTechnik`). WELCHE Umsetzung läuft und mit welchen Werten, sagt der Knoten
+// einer Instanz (`Technik`, die Felder seiner Konfig-Records). Der Start prüft je Knoten, der im Host rechnet: fehlt etwas, ist es mehrdeutig, unbekannt
+// oder zyklisch, startet nichts. Gebaut wird je Aktivierung im Bereich des Knotens (`KnotenBereich`).
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 /// <summary>
-/// Eine Umsetzung einer Technik (aus <c>GeneratedTechnik.Umsetzungen</c>): Name, Typ und generierte Bindung — bei einer Klasse ist
-/// sie selbst ihre einzige Umsetzung; mit <see cref="Zustand"/>, wenn ihr Konstruktor <c>IZustand&lt;T&gt;</c> nimmt.
+/// Eine Umsetzung einer Technik (aus <c>GeneratedTechnik.Umsetzungen</c>): Name, Typ und generierte Fabrik — bei einer Klasse ist sie selbst ihre
+/// einzige Umsetzung; mit <see cref="Zustand"/>, wenn ihr Konstruktor <c>IZustand&lt;T&gt;</c> nimmt.
 /// </summary>
-public sealed record TechnikUmsetzung(Type Funktion, string Name, Type Typ, Action<IServiceCollection> Binde, FunktionsZustandsform? Zustand = null);
+public sealed record TechnikUmsetzung(Type Technik, string Name, Type Typ, Func<IServiceProvider, object> Fabrik, FunktionsZustandsform? Zustand = null);
 
 /// <summary>
 /// Die Zustände der Technik EINER Aktivierung (im DI-Bereich der Aktivierung, docs/04 §4.4): die generierte Fabrik einer Umsetzung mit
@@ -45,35 +45,76 @@ public sealed class AktivierungsZustaende
     public IReadOnlyDictionary<string, (FunktionsZustandsform Form, object Zustand)> Alle => _je;
 }
 
-/// <summary>
-/// Die beim Start gewählten Umsetzungen der Technik (<see cref="TechnikExtensions.BindeTechnik(IServiceCollection, IReadOnlyDictionary{string, string?}, IConfigurationSection, IReadOnlyCollection{Type}, IReadOnlyList{TechnikUmsetzung}, IReadOnlyDictionary{Type, Type[]}, IReadOnlyList{KonfigRecord})"/>):
-/// daraus folgt vor dem ersten Bau, ob eine Funktion über ihre Konstruktor-Kette Zustand trägt.
-/// </summary>
-public sealed class TechnikWahl(IReadOnlyDictionary<Type, TechnikUmsetzung> gewaehlt, IReadOnlyDictionary<Type, Type[]> braucht)
+/// <summary>Der Knoten einer Instanz, für den eine Aktivierung baut: Instanz, Knoten und seine Konfig (Technik-Wahl, Werte der Konfig-Records).</summary>
+public sealed record KnotenKontext(string Instanz, string Knoten, KnotenKonfig Konfig)
 {
-    /// <summary>Trägt eine Technik in der Konstruktor-Kette der Klasse <paramref name="umsetzung"/> Zustand?</summary>
-    public bool MitZustand(Type umsetzung)
+    public string Ort => Instanz + "/" + Knoten;
+}
+
+/// <summary>
+/// Der BEREICH eines Knotens (im DI-Bereich der Aktivierung): die generierten Registrierungen der Konfig-Records und der Technik lesen hier, für welchen
+/// Knoten gebaut wird — die Werte seiner Konfig-Records und welche Umsetzung er je Technik gewählt hat. Ohne Knoten (ein Prüfstand) gilt die einzige
+/// Umsetzung, ein Konfig-Record ist dann ein Fehler.
+/// </summary>
+public sealed class KnotenBereich
+{
+    private readonly Dictionary<Type, object> _konfigs = new();
+
+    /// <summary>Der Knoten, für den dieser Bereich baut (die Aktivierung setzt ihn vor dem Bau).</summary>
+    public KnotenKontext? Kontext { get; set; }
+
+    public static KnotenBereich Von(IServiceProvider sp) => sp.GetService<KnotenBereich>()
+        ?? throw new InvalidOperationException("Technik und Konfig-Records werden nur im Bereich eines Knotens gebaut (BindeTechnik).");
+
+    /// <summary>Der Konfig-Record <paramref name="rec"/> aus den Werten des Knotens (je Bereich einmal gebunden).</summary>
+    public object Konfig(KonfigRecord rec)
     {
-        foreach (var t in braucht.GetValueOrDefault(umsetzung) ?? [])
-            if (gewaehlt.TryGetValue(t, out var u) && (u.Zustand is not null || MitZustand(u.Typ))) return true;
-        return false;
+        if (_konfigs.TryGetValue(rec.Typ, out var k)) return k;
+        var kontext = Kontext ?? throw new BootFehler($"Der Konfig-Record {rec.Name} wird außerhalb eines Knotens gebraucht — Werte stehen am Knoten einer Instanz.",
+            "host:Graphen");
+        return _konfigs[rec.Typ] = rec.Binde(Abschnitt(kontext, rec));
+    }
+
+    /// <summary>Die Werte eines Knotens, die zu einem Konfig-Record gehören, als Abschnitt (Pfad <c>instanz/knoten:Feld</c> für die Meldungen).</summary>
+    public static IConfigurationSection Abschnitt(KnotenKontext kontext, KonfigRecord rec)
+    {
+        var werte = kontext.Konfig.Werte.Where(w => rec.Felder.Contains(w.Key.Split(':')[0], StringComparer.Ordinal))
+            .Select(w => new KeyValuePair<string, string?>(kontext.Ort + ":" + w.Key, w.Value));
+        return new ConfigurationBuilder().AddInMemoryCollection(werte).Build().GetSection(kontext.Ort);
+    }
+
+    /// <summary>Baut die Technik <paramref name="technik"/> mit der Umsetzung, die der Knoten gewählt hat (bei einer einzigen: diese).</summary>
+    public object Technik(Type technik, IReadOnlyList<TechnikUmsetzung> umsetzungen, IServiceProvider sp)
+    {
+        var wahl = Kontext?.Konfig.Technik.GetValueOrDefault(technik.Name);
+        var u = umsetzungen.Count == 1 && wahl is null ? umsetzungen[0]
+            : umsetzungen.FirstOrDefault(x => x.Name == wahl)
+              ?? throw new BootFehler($"{Kontext?.Ort ?? "?"}: keine Umsetzung von {technik.Name} gewählt (Technik:{technik.Name}; gefunden: "
+                  + string.Join(", ", umsetzungen.Select(x => x.Name)) + ").", "funktion:" + technik.Name);
+        return u.Fabrik(sp);
     }
 }
 
-/// <summary>Ein Konfig-Record (aus <c>GeneratedTechnik.Konfigs</c>): Typ, Abschnitt unter <c>Konfig</c> und generierte Bindung.</summary>
-public sealed record KonfigRecord(Type Typ, string Name, Func<IConfigurationSection, object> Binde);
+/// <summary>Je Knoten (Ort <c>instanz/knoten</c>), ob eine gewählte Technik in seiner Konstruktor-Kette Zustand trägt (beim Start ermittelt).</summary>
+public sealed class TechnikWahl(IReadOnlyDictionary<string, bool> jeOrt)
+{
+    public bool MitZustand(string ort) => jeOrt.GetValueOrDefault(ort);
+}
+
+/// <summary>Ein Konfig-Record (aus <c>GeneratedTechnik.Konfigs</c>): Typ, einfacher Name, seine Felder und die generierte Bindung.</summary>
+public sealed record KonfigRecord(Type Typ, string Name, IReadOnlyList<string> Felder, Func<IConfigurationSection, object> Binde);
 
 /// <summary>Liest ein Feld eines Konfig-Records streng (fehlt es oder passt der Wert nicht, ist das ein Boot-Fehler mit Ort).</summary>
 public static class KonfigLeser
 {
     private static string Wert(IConfigurationSection s, string feld) =>
-        s[feld] ?? throw new BootFehler($"{s.Path}:{feld} fehlt.", "host:" + Funktionsvertrag.KonfigAbschnitt);
+        s[feld] ?? throw new BootFehler($"{s.Path}:{feld} fehlt.", "host:" + UmgebungsAbschnitte.Graphen);
 
     private static T Parse<T>(IConfigurationSection s, string feld, Func<string, (bool, T)> parse, string art)
     {
         var w = Wert(s, feld);
         var (ok, v) = parse(w);
-        return ok ? v : throw new BootFehler($"{s.Path}:{feld} = '{w}' ist kein(e) {art}.", "host:" + Funktionsvertrag.KonfigAbschnitt);
+        return ok ? v : throw new BootFehler($"{s.Path}:{feld} = '{w}' ist kein(e) {art}.", "host:" + UmgebungsAbschnitte.Graphen);
     }
 
     public static bool Hat(IConfigurationSection s, string feld) => s[feld] != null || s.GetSection(feld).GetChildren().Any();
@@ -101,109 +142,108 @@ public static class KonfigLeser
 
     /// <summary>Ein Feld, dessen Typ nicht bindbar ist (CQRS091 bricht schon den Build) — hier nur der Vollständigkeit halber.</summary>
     public static T NichtBindbar<T>(IConfigurationSection s, string feld) =>
-        throw new BootFehler($"{s.Path}:{feld}: Typ {typeof(T).Name} ist nicht aus der Konfig bindbar (CQRS091).", "host:" + Funktionsvertrag.KonfigAbschnitt);
+        throw new BootFehler($"{s.Path}:{feld}: Typ {typeof(T).Name} ist nicht aus der Konfig bindbar (CQRS091).", "host:" + UmgebungsAbschnitte.Graphen);
 
     /// <summary>Unbekannte Felder sind ein Fehler (wie bei allen Abschnitten der Umgebung).</summary>
     public static void NurBekannte(IConfigurationSection s, params string[] felder)
     {
         var fremd = s.GetChildren().Select(k => k.Key).Where(k => !felder.Contains(k, StringComparer.Ordinal)).ToList();
         if (fremd.Count > 0)
-            throw new BootFehler($"{s.Path}: unbekannte Felder {string.Join(", ", fremd)} (bekannt: {string.Join(", ", felder)}).", "host:" + Funktionsvertrag.KonfigAbschnitt);
+            throw new BootFehler($"{s.Path}: unbekannte Felder {string.Join(", ", fremd)} (bekannt: {string.Join(", ", felder)}).", "host:" + UmgebungsAbschnitte.Graphen);
     }
 }
 
 public static class TechnikExtensions
 {
     /// <summary>
-    /// Bindet die Technik und die Konfig-Records, die die Funktionen im Host brauchen (transitiv über die Umsetzungen), nach den
-    /// Abschnitten <c>Funktionen</c> und <c>Konfig</c> der Umgebung. Muss NACH <c>BindeFunktionen</c> stehen.
+    /// Bindet die Technik und die Konfig-Records, die die Knoten der Instanzen im Host brauchen (transitiv über die Umsetzungen), aus den generierten
+    /// Tabellen der angemeldeten Anwendung. Muss NACH den Instanzen stehen.
     /// </summary>
-    public static IServiceCollection BindeTechnik(this IServiceCollection services, UmgebungKonfig u, IConfiguration konfig)
-        => services.BindeTechnik(u.Funktionen, konfig.GetSection(Funktionsvertrag.KonfigAbschnitt));
+    public static IServiceCollection BindeTechnik(this IServiceCollection services, GraphInstanzen instanzen)
+        => services.BindeTechnik(HostKnoten(instanzen), Anwendung.Technik.Umsetzungen, Anwendung.Technik.Braucht, Anwendung.Technik.Konfigs);
 
-    /// <summary>Wie oben, mit der Wahl und dem Konfig-Abschnitt direkt — gebunden wird für die Funktionen, die nach den schon registrierten
-    /// Bindungen (<c>BindeFunktionen</c>) im Host rechnen, aus den generierten Tabellen der angemeldeten Anwendung.</summary>
-    public static IServiceCollection BindeTechnik(this IServiceCollection services, IReadOnlyDictionary<string, FunktionsKonfig> wahl,
-        IConfigurationSection konfigAbschnitt)
+    /// <summary>Die Knoten der Instanzen, die im Host rechnen: ihr Kontext (Instanz, Knoten, Konfig) und die Klasse der Umsetzung ihrer Funktion.</summary>
+    public static IEnumerable<(KnotenKontext Knoten, Type Umsetzung)> HostKnoten(GraphInstanzen instanzen)
     {
-        // Die Funktionen, die im Host laufen: ihre Umsetzung (die Klasse selbst bzw. die gewählte Implementierung der Schnittstelle).
-        var bindungen = services.Select(d => d.ImplementationInstance).OfType<BausteinBindung>().ToList();
-        var umsetzungen = new List<Type>();
-        foreach (var b in Anwendung.Funktionen.Bausteine)
-            if (FunktionsBausteinWiring.Gebunden(b, bindungen) is { Laufort: FunktionsLaufort.Host } bindung
-                && b.Umsetzungen.Where(x => bindung.Umsetzung is null || x.Name == bindung.Umsetzung).ToList() is [var umsetzung])
-                umsetzungen.Add(umsetzung.Typ);
-        var technik = Anwendung.Technik.Namen;
-        return services.BindeTechnik(wahl.Where(w => technik.ContainsKey(w.Key)).ToDictionary(w => w.Key, w => w.Value.Implementierung),
-            konfigAbschnitt, umsetzungen, Anwendung.Technik.Umsetzungen, Anwendung.Technik.Braucht, Anwendung.Technik.Konfigs);
+        foreach (var (instanz, k, b, kk) in FunktionsBausteinWiring.Knoten(instanzen))
+        {
+            var bindung = FunktionsBausteinWiring.BindungVon(b, kk, instanz.Ort(k.Name));
+            if (bindung.Laufort == FunktionsLaufort.Host) yield return (new KnotenKontext(instanz.Name, k.Name, kk), FunktionsBausteinWiring.Umsetzung(b, bindung).Typ);
+        }
     }
 
-    /// <param name="wahl">Je Technik die gewählte Umsetzung (<c>Funktionen:&lt;Name&gt;:Implementierung</c>), null = die einzige.</param>
-    /// <param name="umsetzungen">Die Klassen der Funktionen, die auf diesem Knoten im Host rechnen — von ihrem Bedarf aus wird gebunden.</param>
-    public static IServiceCollection BindeTechnik(this IServiceCollection services, IReadOnlyDictionary<string, string?> wahl,
-        IConfigurationSection konfigAbschnitt, IReadOnlyCollection<Type> umsetzungen,
+    /// <param name="knoten">Die Knoten im Host — von der Klasse ihrer Umsetzung aus wird gebunden, je Knoten mit seiner Wahl und seinen Werten.</param>
+    public static IServiceCollection BindeTechnik(this IServiceCollection services, IEnumerable<(KnotenKontext Knoten, Type Umsetzung)> knoten,
         IReadOnlyList<TechnikUmsetzung> alleUmsetzungen, IReadOnlyDictionary<Type, Type[]> braucht, IReadOnlyList<KonfigRecord> konfigs)
     {
-        // 1. Die Umgebung nennt nur bekannte Konfig-Records (die Namen unter Funktionen prüft BindeFunktionen).
-        foreach (var k in konfigAbschnitt.GetChildren().Where(k => konfigs.All(r => r.Name != k.Key)))
-            throw new BootFehler($"{Funktionsvertrag.KonfigAbschnitt}:{k.Key} — kein Konfig-Record dieses Namens (bekannt: "
-                + string.Join(", ", konfigs.Select(r => r.Name).Order().DefaultIfEmpty("keine")) + ").", "host:" + Funktionsvertrag.KonfigAbschnitt);
-
-        // 2. Je Technik die gewählte Umsetzung (oder warum es keine gibt).
-        const string F = UmgebungsAbschnitte.Funktionen;
-        string Karte(Type f) => "funktion:" + f.Name;
-        TechnikUmsetzung Waehle(Type funktion)
+        var technikGebraucht = new HashSet<Type>();
+        var konfigGebraucht = new HashSet<Type>();
+        var zustandJeOrt = new Dictionary<string, bool>(StringComparer.Ordinal);
+        foreach (var (kontext, umsetzung) in knoten)
         {
-            var alle = alleUmsetzungen.Where(i => i.Funktion == funktion).ToList();
-            var gewaehlt = wahl.GetValueOrDefault(funktion.Name);
-            var passend = gewaehlt == null ? alle : alle.Where(i => i.Name == gewaehlt).ToList();
-            if (passend.Count == 1) return passend[0];
-            var gefunden = string.Join(", ", alle.Select(i => i.Name).DefaultIfEmpty("keine"));
-            throw new BootFehler(gewaehlt != null
-                ? $"{F}:{funktion.Name}:Implementierung = '{gewaehlt}' gibt es nicht (gefunden: {gefunden})."
-                : alle.Count == 0
-                    ? $"Die Technik '{funktion.Name}' wird gebraucht, hat aber keine Umsetzung (eine öffentliche Klasse, die {funktion.Name} implementiert)."
-                    : $"Die Technik '{funktion.Name}' hat mehrere Umsetzungen ({gefunden}) — die Umgebung wählt eine: {F}:{funktion.Name}:Implementierung.",
-                Karte(funktion));
-        }
-
-        // 3. Vom Bedarf der Funktionen im Host aus, transitiv; ein Kreis über Technik ist ein Fehler.
-        var start = umsetzungen.Distinct().ToList();
-        var gebunden = new Dictionary<Type, TechnikUmsetzung>();
-        var konfigGebunden = new HashSet<Type>();
-        var stapel = new List<Type>();
-        void Besuche(Type impl)
-        {
-            foreach (var t in braucht.GetValueOrDefault(impl) ?? [])
+            var kk = kontext.Konfig;
+            var records = new List<KonfigRecord>();
+            var zustand = false;
+            var stapel = new List<Type>();
+            string Karte(Type t) => "funktion:" + t.Name;
+            void Besuche(Type impl)
             {
-                if (konfigs.FirstOrDefault(r => r.Typ == t) is { } rec)
+                foreach (var t in braucht.GetValueOrDefault(impl) ?? [])
                 {
-                    if (!konfigGebunden.Add(t)) continue;
-                    var abschnitt = konfigAbschnitt.GetSection(rec.Name);
-                    if (!abschnitt.Exists())
-                        throw new BootFehler($"{Funktionsvertrag.KonfigAbschnitt}:{rec.Name} fehlt — {impl.Name} braucht den Konfig-Record {rec.Name}.", "host:" + Funktionsvertrag.KonfigAbschnitt);
-                    var wert = rec.Binde(abschnitt);
-                    services.AddSingleton(rec.Typ, wert);
-                    continue;
+                    if (konfigs.FirstOrDefault(r => r.Typ == t) is { } rec)
+                    {
+                        if (records.Contains(rec)) continue;
+                        records.Add(rec);
+                        konfigGebraucht.Add(t);
+                        continue;
+                    }
+                    if (stapel.Contains(t))
+                        throw new BootFehler("Technik im Kreis: " + string.Join(" → ", stapel.SkipWhile(x => x != t).Append(t).Select(x => x.Name))
+                            + " — eine Umsetzung darf sich nicht über andere Technik selbst brauchen.", Karte(t));
+                    var alle = alleUmsetzungen.Where(u => u.Technik == t).ToList();
+                    var wahl = kk.Technik.GetValueOrDefault(t.Name);
+                    var u = wahl is null && alle.Count == 1 ? alle[0] : alle.FirstOrDefault(x => x.Name == wahl);
+                    if (u is null)
+                        throw new BootFehler(wahl != null
+                            ? $"{kontext.Ort}: Technik:{t.Name} = '{wahl}' gibt es nicht (gefunden: {string.Join(", ", alle.Select(x => x.Name).DefaultIfEmpty("keine"))})."
+                            : alle.Count == 0
+                                ? $"{kontext.Ort}: die Technik '{t.Name}' wird gebraucht, hat aber keine Umsetzung (eine öffentliche Klasse, die {t.Name} implementiert)."
+                                : $"{kontext.Ort}: die Technik '{t.Name}' hat mehrere Umsetzungen ({string.Join(", ", alle.Select(x => x.Name))}) — der Knoten wählt "
+                                  + $"eine: Technik:{t.Name}.", Karte(t));
+                    technikGebraucht.Add(t);
+                    zustand |= u.Zustand is not null;
+                    stapel.Add(t);
+                    Besuche(u.Typ);
+                    stapel.RemoveAt(stapel.Count - 1);
                 }
-                if (stapel.Contains(t))
-                    throw new BootFehler("Technik im Kreis: " + string.Join(" → ", stapel.SkipWhile(x => x != t).Append(t).Select(x => x.Name))
-                        + " — eine Umsetzung darf sich nicht über andere Technik selbst brauchen.", Karte(t));
-                if (gebunden.ContainsKey(t)) continue;
-                var i = Waehle(t);
-                stapel.Add(t);
-                Besuche(i.Typ);
-                stapel.RemoveAt(stapel.Count - 1);
-                gebunden[t] = i;
-                i.Binde(services);
             }
+            Besuche(umsetzung);
+            zustandJeOrt[kontext.Ort] = zustand;
+
+            // Die Technik-Wahl nennt nur Technik dieses Knotens; die Werte nur Felder seiner Konfig-Records; jeder Record bindet (fehlt ein Feld, scheitert es hier).
+            foreach (var fremd in kk.Technik.Keys.Where(n => !alleUmsetzungen.Any(u => u.Technik.Name == n)))
+                throw new BootFehler($"{kontext.Ort}: Technik:{fremd} — keine Technik dieses Namens.", "instanz:" + kontext.Instanz);
+            var felder = records.SelectMany(r => r.Felder).ToHashSet(StringComparer.Ordinal);
+            var unbekannt = kk.Werte.Keys.Select(w => w.Split(':')[0]).Distinct().Where(f => !felder.Contains(f)).ToList();
+            if (unbekannt.Count > 0)
+                throw new BootFehler($"{kontext.Ort}: unbekannte Felder {string.Join(", ", unbekannt)} (bekannt: "
+                    + string.Join(", ", KnotenKonfig.Rahmenfelder.Concat(felder).Order(StringComparer.Ordinal)) + ").", "instanz:" + kontext.Instanz);
+            foreach (var rec in records) rec.Binde(KnotenBereich.Abschnitt(kontext, rec));
         }
-        foreach (var impl in start) Besuche(impl);
-        services.AddSingleton(new TechnikWahl(gebunden, braucht));
+
+        foreach (var t in technikGebraucht)
+        {
+            var umsetzungen = alleUmsetzungen.Where(u => u.Technik == t).ToList();
+            services.AddScoped(t, sp => KnotenBereich.Von(sp).Technik(t, umsetzungen, sp));
+        }
+        foreach (var rec in konfigs.Where(r => konfigGebraucht.Contains(r.Typ)))
+            services.AddScoped(rec.Typ, sp => KnotenBereich.Von(sp).Konfig(rec));
+        services.AddSingleton(new TechnikWahl(zustandJeOrt));
         services.TryAddScoped<AktivierungsZustaende>();
-        if (gebunden.Count + konfigGebunden.Count > 0)
-            Console.WriteLine($"[CQRS] Technik: {string.Join(", ", gebunden.Select(x => x.Key.Name + " → " + x.Value.Name).DefaultIfEmpty("keine"))}"
-                + $" · Konfig: {string.Join(", ", konfigGebunden.Select(t => t.Name).DefaultIfEmpty("keine"))}");
+        services.TryAddScoped<KnotenBereich>();
+        if (technikGebraucht.Count + konfigGebraucht.Count > 0)
+            Console.WriteLine($"[CQRS] Technik: {string.Join(", ", technikGebraucht.Select(t => t.Name).Order().DefaultIfEmpty("keine"))}"
+                + $" · Konfig: {string.Join(", ", konfigs.Where(r => konfigGebraucht.Contains(r.Typ)).Select(r => r.Name).DefaultIfEmpty("keine"))}");
         return services;
     }
 }

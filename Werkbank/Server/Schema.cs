@@ -11,8 +11,8 @@ namespace Werkbank.Server;
 /// </summary>
 public static class Schema
 {
-    /// <param name="board">Das gelesene Board (warmer Workspace) — liefert je gerufene Funktion ihre Umsetzungen und je Konfig-Record seine Felder
-    /// (Code-Fakten), damit das Formular sie anbietet; ohne Board bleiben Funktionen/Konfig frei.</param>
+    /// <param name="board">Das gelesene Board (warmer Workspace) — liefert die Clients (Code-Fakten), damit das Formular sie anbietet. Funktionen,
+    /// Technik und Konfig-Records stehen je Knoten in den Instanz-Dateien der Graphen (<c>graphen/&lt;instanz&gt;.json</c>), nicht in der Umgebung.</param>
     public static JsonObject Umgebung(JsonObject? board = null)
     {
         var aus = new JsonObject();
@@ -30,27 +30,6 @@ public static class Schema
                 ["VertragStreng"] = new JsonObject { ["typ"] = "bool", ["standard"] = "false" },
             },
         };
-        // Funktionen: je Funktion mit Eingängen Laufort, Parallel …; je gerufene (ohne Auf, docs/06 §6.5) nur die gewählte Umsetzung — die Auswahl
-        //   kommt aus dem Code (Umsetzungen der Funktions-Karte).
-        var gerufene = new JsonObject();
-        foreach (var f in Liste(board?["bausteinFunktionen"]).Where(f => Liste(f["methoden"]).Any() && !Liste(f["eingaenge"]).Any()))
-            gerufene[(string?)f["name"] ?? "?"] = new JsonObject
-            {
-                ["art"] = "klasse",
-                ["felder"] = new JsonObject
-                {
-                    [nameof(FunktionsKonfig.Implementierung)] = new JsonObject
-                    {
-                        ["typ"] = "enum", ["werte"] = new JsonArray(Liste(f["umsetzungen"]).Select(u => (JsonNode?)(string?)u["name"]).ToArray()),
-                        ["hilfe"] = "Die Klasse, die hier läuft — ohne Eintrag die einzige",
-                    },
-                },
-            };
-        aus[UmgebungsAbschnitte.Funktionen] = new JsonObject
-        {
-            ["art"] = "je", ["schluessel"] = "Funktion", ["wert"] = Klasse(typeof(FunktionsKonfig)), ["eintraege"] = gerufene,
-            ["hilfe"] = "je Funktion Laufort und Umsetzung; eine gerufene (ohne Auf) nennt nur ihre Umsetzung — nötig, wenn es mehrere gibt",
-        };
         // Clients (docs/konzept-akteure.md §4): je Client-Vertrag (Handshake-Name) Token, Adresse, URLs und Datei-Verzeichnisse.
         var clients = new JsonObject();
         foreach (var c in Liste(board?["clients"]))
@@ -60,20 +39,6 @@ public static class Schema
             ["art"] = "je", ["schluessel"] = "Client", ["wert"] = Klasse(typeof(ClientKonfig)), ["eintraege"] = clients,
             ["hilfe"] = "je Client (IClientVertrag) sein Token (Identitaeten), die gRPC-Adresse (leer = localhost:Transport.GrpcPort), URLs, Datei-Verzeichnisse",
         };
-        // Konfig-Records (docs/06 §6.5): je Record ein Abschnitt mit seinen Feldern (Typen aus dem Code).
-        var konfigs = new JsonObject();
-        var enums = Liste(board?["enums"]).ToDictionary(e => (string?)e["name"] ?? "", e => e, StringComparer.Ordinal);
-        foreach (var r in Liste(board?["records"]).Where(r => (string?)r["kind"] == "konfig"))
-        {
-            var felder = new JsonObject();
-            foreach (var f in Liste(r["felder"]))
-                felder[(string?)f["name"] ?? "?"] = FeldVonTyp(((string?)f["typ"] ?? "string").TrimEnd('?'), enums, (string?)f["standard"]);
-            konfigs[(string?)r["name"] ?? "?"] = new JsonObject { ["art"] = "klasse", ["felder"] = felder };
-        }
-        aus[UmgebungsAbschnitte.Konfig] = board == null
-            ? new JsonObject { ["art"] = "frei", ["hilfe"] = "je Konfig-Record der Domäne ein Abschnitt (Feldname → Wert)" }
-            : new JsonObject { ["art"] = "je", ["schluessel"] = "Konfig-Record", ["wert"] = new JsonObject { ["art"] = "klasse", ["felder"] = new JsonObject() },
-                ["eintraege"] = konfigs, ["hilfe"] = "je Konfig-Record (im Konstruktor einer Funktion bzw. Umsetzung) seine Werte" };
         return aus;
     }
 

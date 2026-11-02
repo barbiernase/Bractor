@@ -71,10 +71,10 @@ public class FolgeGarantieTests
             (await FrageAsync(host, new ReservierePosten(new(p), 5, Beleg.Ohne), reservierung))!.Success.Should().BeTrue();   // Fehlmenge 3
 
             await Warte(() => Task.FromResult(probe.Gesehen.Count(e => e.Stream == p) == 2), Frist, "der Zusteller bringt die Folge nicht zu beiden Hörern");
-            var folge = Eingangsvertrag.Folge(reservierung, 0);
+            var folge = Eingangsvertrag.AusEntscheidung(reservierung, 0);
             foreach (var funktion in new[] { "Probe", "Zweite" })
             {
-                var e = probe.Gesehen.Single(x => x.Funktion == funktion && x.Stream == p);
+                var e = probe.Gesehen.Single(x => x.Instanz == funktion && x.Stream == p);
                 e.Kennung.Should().Be(Eingangsvertrag.Eingang(folge, funktion), "die Kennung ist abgeleitet: Command, Stelle, Funktion");
                 e.Version.Should().Be(2, "Herkunft ist der Stand nach der Entscheidung");
                 Nachrichtenform.Lies(e.Typ, e.Daten).Should().Be(new Unterschritten(new(p), 3));

@@ -61,7 +61,7 @@ public sealed class Zustellwerk(IOffeneEingaenge eingaenge, IEingangsZustellung 
         try { return await zustellung.StelleZuAsync(e, ct); }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            logger?.LogWarning(ex, "[Zusteller] Eingang {Kennung} an {Funktion} nicht zugestellt — später erneut", e.Kennung, e.Funktion);
+            logger?.LogWarning(ex, "[Zusteller] Eingang {Kennung} an {Instanz} nicht zugestellt — später erneut", e.Kennung, e.Instanz);
             return Zustellausgang.Spaeter;
         }
     }
@@ -132,7 +132,7 @@ public static class EingangsExtensions
     public static IServiceCollection AddEingaenge(this IServiceCollection services)
     {
         services.AddSingleton<IOffeneEingaenge>(sp => new OffeneEingaenge(sp.GetRequiredService<Marten.IDocumentStore>()));
-        services.TryAddSingleton(_ => new Infrastructure.Funktionen.Verkettung(Infrastructure.Komposition.Anwendung.Funktionen.Verkettung));
+        services.TryAddSingleton(sp => sp.GetService<Infrastructure.Funktionen.GraphInstanzen>()?.Koepfe() ?? Infrastructure.Funktionen.Verkettung.Leer);
         services.AddSingleton<IClusterKindContributor, ZustellerKind>();
         services.AddHostedService(sp => new ZustellTakt(sp.GetRequiredService<ActorSystem>(), sp.GetService<ILogger<ZustellTakt>>(),
             sp.GetService<IEingangsZustellung>() is not null));

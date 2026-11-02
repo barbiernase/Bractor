@@ -82,15 +82,32 @@ internal sealed class Umgebungsdatei
     public int GrpcPort => (int)Json["Transport"]!["GrpcPort"]!;
     public string Python => Ersetze((string?)Json["Umgebung"]!["Python"] ?? "python3");
     public string? Quellpfad => Json["Quellen"]?["DateiErkannt"]?["Pfad"] is { } p ? Ersetze((string)p!) : null;
-    public string? Ausgabepfad => Json["Konfig"]?["BildaufbereitungKonfig"]?["AusgabePfad"] is { } p ? Ersetze((string)p!) : null;
+    /// <summary>Die Instanzen der Graphen (Ordner <c>graphen</c> der Umgebung): Name → Inhalt.</summary>
+    public Dictionary<string, JsonNode> Instanzen { get; init; } = new();
+
+    /// <summary>Der Ausgabe-Pfad der Bildaufbereitung (Wert <c>AusgabePfad</c> ihres Knotens <c>Verkleinern</c>).</summary>
+    public string? Ausgabepfad => Instanzen.Values.Select(i => i["Verkleinern"]?["AusgabePfad"]).FirstOrDefault(p => p != null) is { } p ? Ersetze((string)p!) : null;
 
     public static Umgebungsdatei Lies(string wurzel, string name)
-        => new() { Name = name, Json = JsonNode.Parse(File.ReadAllText(Path.Combine(wurzel, "umgebungen", $"umgebung.{name}.json")))! };
+    {
+        var ordner = Path.Combine(wurzel, "umgebungen", name);
+        var graphen = Path.Combine(ordner, "graphen");
+        return new()
+        {
+            Name = name, Json = JsonNode.Parse(File.ReadAllText(Path.Combine(ordner, "umgebung.json")))!,
+            Instanzen = Directory.Exists(graphen)
+                ? Directory.GetFiles(graphen, "*.json").ToDictionary(Path.GetFileNameWithoutExtension, d => JsonNode.Parse(File.ReadAllText(d))!)!
+                : new(),
+        };
+    }
 
-    /// <summary>Der Worker-Block einer Funktion (Skript, Argumente, Token) mit ersetzten <c>${env:X}</c>.</summary>
+    /// <summary>Der Worker-Block des Knotens, der eine Funktion rechnet (Skript, Argumente, Token) mit ersetzten <c>${env:X}</c> — gefunden über das
+    /// Argument <c>--funktionen &lt;Funktion&gt;</c> seines Workers.</summary>
     public (string Skript, List<string> Argumente, string Token) Worker(string wurzel, string funktion)
     {
-        var w = Json["Funktionen"]![funktion]!["Worker"]!;
+        var w = Instanzen.Values.SelectMany(i => i.AsObject()).Select(k => k.Value?["Worker"])
+            .FirstOrDefault(x => x?["Argumente"]?.AsArray().Any(a => (string?)a == funktion) == true)
+            ?? throw new InvalidOperationException($"Umgebung {Name}: kein Knoten mit einem Worker für {funktion}.");
         return (Path.Combine(wurzel, (string)w["Skript"]!), w["Argumente"]!.AsArray().Select(a => Ersetze((string)a!)).ToList(), (string)w["Token"]!);
     }
 

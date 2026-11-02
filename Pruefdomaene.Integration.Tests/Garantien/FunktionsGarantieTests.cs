@@ -121,12 +121,13 @@ public class FunktionsGarantieTests
             var konto = Id<Kundenkonto>.Neu();
             var rechnung = Id<Rechnung>.Neu();
             var kennung = Guid.NewGuid();
-            var eingang = new EingangZustellen(kennung, nameof(Mahnwesen), new Mahnfall(rechnung, konto, 99m, 1), Eingangsart.Kette, rechnung.Wert, 2,
+            var eingang = new EingangZustellen(kennung, nameof(Abrechnungsablauf), nameof(Abrechnungsablauf.Mahnwesen), new Mahnfall(rechnung, konto, 99m, 1),
+                Eingangsart.Kette, rechnung.Wert, 2,
                 DateTimeOffset.UtcNow, null, null, null);
             foreach (var h in new[] { a, b })
             {
                 var system = h.Services.GetRequiredService<ActorSystem>();
-                var q = await system.Root.RequestAsync<EingangQuittung>(PID.FromAddress(system.Address, FunktionenWurzel.Name(nameof(Mahnwesen))), eingang,
+                var q = await system.Root.RequestAsync<EingangQuittung>(PID.FromAddress(system.Address, FunktionenWurzel.Name(nameof(Abrechnungsablauf))), eingang,
                     TimeSpan.FromSeconds(30));
                 q.Ausgang.Should().Be(Quittungsart.Fertig);
             }
@@ -151,7 +152,8 @@ public class FunktionsGarantieTests
     {
         using var host = Cluster("garantie-funktion-worker", dienste: s =>
         {
-            s.AddSingleton(new BausteinBindung(nameof(IFreigabe), FunktionsLaufort.Hand));
+            s.AddSingleton(global::Infrastructure.Funktionen.GraphInstanzen.JeGraphEine(global::Infrastructure.Komposition.Anwendung.Funktionen.Graphen,
+                new Dictionary<string, KnotenKonfig> { [nameof(IFreigabe)] = new() { Laufort = FunktionsLaufort.Hand } }));
             s.AddHandAusfuehrer();
         });
         await host.StartAsync();

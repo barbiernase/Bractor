@@ -41,7 +41,7 @@ public class HinweisNetzTests
 
         netz.Verteile(h).Should().Be(2);
 
-        wege.Gemeldet.Select(e => e.Funktion).Should().Equal("Pruefung", "Schaetzer");
+        wege.Gemeldet.Select(e => e.Instanz).Should().Equal("Pruefung", "Schaetzer");
         wege.Gemeldet.Should().OnlyContain(e => e.Art == Eingangsart.Hinweis && e.Nachricht.Equals(h.Hinweis) && e.Stream == h.Stream && e.Version == 3
                                                 && e.Akteur == "Akteur" && e.Korrelation == h.Korrelation);
         wege.Gemeldet.Select(e => e.Kennung).Should().Equal(Eingangsvertrag.Eingang(kennung, "Pruefung"), Eingangsvertrag.Eingang(kennung, "Schaetzer"));

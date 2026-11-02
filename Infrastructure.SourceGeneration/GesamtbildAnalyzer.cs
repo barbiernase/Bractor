@@ -21,6 +21,10 @@ namespace Infrastructure.SourceGeneration;
 /// <item>CQRS086 (GR-MODUL-EINGANG-OFFEN; Warnung) — ein Command ohne Decider, eine Query ohne Reader und ohne Aggregat.</item>
 /// <item>CQRS087 (GR-GETRAGEN; Warnung) — eine Funktion als Schnittstelle ohne Umsetzung im Host, die kein Client trägt (kein verkörperter Akteur mit <c>IDarf&lt;F&gt;</c>): sie läuft
 ///   nur mit einer Bindung von Hand (R17), sonst ist sie ein Boot-Fehler.</item>
+/// <item>CQRS116 (GR-EMPFAENGER; Fehler) — ein Command ohne Ziel, der seinen Erzeuger verlässt (aus einem Decide, von einem Akteur, aus einem Knoten,
+///   den kein Knoten desselben Graphen nimmt), hat genau einen Empfänger: den Kopf genau eines Graphen (Plan „Commands und Funktionsgraphen“,
+///   Entscheidung 2). Kein Empfänger oder mehrere sind ein Fehler.</item>
+/// <item>CQRS117 (GR-GRAPH-KNOTEN; Warnung) — eine Funktion, die in keinem Graphen ein Knoten ist, läuft nie (ein Graph läuft als Instanz).</item>
 /// </list>
 /// Die Befunde haben keinen Quell-Ort in dieser Compilation (die Typen liegen in den Domänen-Projekten); jede Meldung beginnt deshalb mit dem
 /// einfachen Namen des Typs in Anführungszeichen — daran hängt die Werkbank sie an die Karte.
@@ -29,7 +33,7 @@ namespace Infrastructure.SourceGeneration;
 public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
 {
     public const string QueryId = "CQRS084", AusgangOffenId = "CQRS085", EingangOffenId = "CQRS086", GetragenId = "CQRS087", HinweisOhneErzeugerId = "CQRS106",
-        AntwortOhneCommandId = "CQRS108";
+        AntwortOhneCommandId = "CQRS108", EmpfaengerId = "CQRS116", OhneGraphId = "CQRS117";
 
     private static DiagnosticDescriptor D(string id, string titel, string text, DiagnosticSeverity s) =>
         new(id, titel, text, "CQRS.Gesamtbild", s, isEnabledByDefault: true);
@@ -52,14 +56,21 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         "Die Funktion '{0}' hört '{1}', aber keiner ihrer Commands kann es entscheiden ({2}) — eine Funktion liest nie das Log, ein Event erreicht sie nur "
         + "als Antwort auf einen eigenen Command; was sie aus einer Entscheidung braucht, sagt ihr das Aggregat als Folge (GR-ANTWORT)", DiagnosticSeverity.Error);
 
+    private static readonly DiagnosticDescriptor Empfaenger = D(EmpfaengerId, "Command ohne genau einen Empfänger",
+        "'{0}' (Command ohne Ziel, von {1}): {2} — ein Command hat genau einen Empfänger: einen Knoten desselben Graphen oder den Kopf genau eines Graphen "
+        + "(GR-EMPFAENGER)", DiagnosticSeverity.Error);
+
+    private static readonly DiagnosticDescriptor OhneGraph = D(OhneGraphId, "Funktion in keinem Graphen",
+        "'{0}' ist in keinem Graphen ein Knoten — sie läuft nie (ein Graph läuft als Instanz, docs/04 §4.4) (GR-GRAPH-KNOTEN)", DiagnosticSeverity.Warning);
+
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
-        ImmutableArray.Create(Query, AusgangOffen, EingangOffen, Getragen, HinweisOhneErzeuger, AntwortOhneCommand);
+        ImmutableArray.Create(Query, AusgangOffen, EingangOffen, Getragen, HinweisOhneErzeuger, AntwortOhneCommand, Empfaenger, OhneGraph);
 
     /// <summary>Die Rollen-Marker, deren Implementierung eine Assembly zur Domäne macht (wie die Projektlage des Extractors).</summary>
     private static readonly string[] DomaenenRollen =
     {
         "IState", "IDecider`1", "IApplier`1", "ICommand", "IEvent", "IQuery", "IQueryResponse", "IReadModel", "IWriteStore", "IReadStore",
-        "IProjektion", "IReader", "IFunktion", "IQuellNachricht", "IWertobjekt",
+        "IProjektion", "IReader", "IFunktion", "IGraph", "IQuellNachricht", "IWertobjekt",
         // Der Rand (Domain.Akteure): wer was hineingeben darf und welcher Client eine Funktion trägt.
         "IAkteur", "IClientVertrag",
     };
@@ -166,7 +177,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
             else if (IstT(t, iAggregatCommand) && !entschieden.Contains(t))
                 ctx.ReportDiagnostic(Diagnostic.Create(EingangOffen, Location.None, t.Name, "Command", "kein Aggregat entscheidet ihn (Decide)"));
             else if (IstT(t, iCommand) && !IstT(t, iAggregatCommand) && !genommen.Contains(t))
-                ctx.ReportDiagnostic(Diagnostic.Create(EingangOffen, Location.None, t.Name, "Command ohne Ziel", "keine Funktion nimmt ihn"));
+                ctx.ReportDiagnostic(Diagnostic.Create(EingangOffen, Location.None, t.Name, "Command ohne Ziel", "kein Knoten eines Graphen nimmt ihn"));
         }
 
         // Offene Ausgänge: Events/Ablehnungen ohne Erzeuger (Quell-Nachrichten erzeugt der Treiber bzw. die Außenwelt), Responses ohne Reader-Handle.
@@ -199,6 +210,38 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                     ctx.ReportDiagnostic(Diagnostic.Create(AntwortOhneCommand, a.Methode.Locations.FirstOrDefault() ?? Location.None, f.Name, a.Eingang.Name,
                         befehle.Count == 0 ? "sie gibt keinen Command aus" : "ihre Commands: " + string.Join(", ", befehle.Select(b => b.Name))));
         }
+
+        // GR-EMPFAENGER (Entscheidung 2): ein Command ohne Ziel, der seinen Erzeuger verlässt, nimmt genau ein Graph am Kopf.
+        var graphen = typen.Where(Graphform.IstGraph).Select(Graphform.Lies).Where(g => g.Fehler.Count == 0).ToList();
+        string N(ITypeSymbol t) => Funktionsform.Name(t);
+        var koepfe = new Dictionary<string, List<string>>();
+        foreach (var g in graphen)
+            foreach (var (typ, _) in g.Koepfe)
+                (koepfe.TryGetValue(N(typ), out var l) ? l : koepfe[N(typ)] = new List<string>()).Add(g.Typ.Name);
+        var verlassen = new List<(ITypeSymbol Typ, string Von)>();
+        foreach (var t in typen.Where(t => t.TypeKind == TypeKind.Class && Generisch(t, iDecider)))
+            foreach (var m in Methoden(t, Abstractions.Aggregatvertrag.Decide))
+                foreach (var x in Faelle(m.ReturnType).Where(Nachrichtenform.IstOhneZiel))
+                    verlassen.Add((x, "Decide " + m.Parameters[0].Type.Name));
+        foreach (var g in graphen)
+            foreach (var (von, typ) in g.Ausgaenge.Where(a => Nachrichtenform.IstOhneZiel(a.Typ)))
+                verlassen.Add((typ, $"{g.Typ.Name}.{von.Name}"));
+        foreach (var a in typen.Where(t => IstT(t, iAkteur)))
+            foreach (var d in a.AllInterfaces.Where(i => iDarf != null && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iDarf)))
+                if (Nachrichtenform.IstOhneZiel(d.TypeArguments[0])) verlassen.Add((d.TypeArguments[0], "Akteur " + a.Name));
+        foreach (var (typ, von) in verlassen.GroupBy(v => N(v.Typ) + "|" + v.Von).Select(x => x.First()))
+        {
+            var hier = koepfe.TryGetValue(N(typ), out var l) ? l.Distinct().ToList() : new List<string>();
+            if (hier.Count == 1) continue;
+            ctx.ReportDiagnostic(Diagnostic.Create(Empfaenger, Location.None, typ.Name, von,
+                hier.Count == 0 ? "kein Graph nimmt ihn am Kopf" : "mehrere Graphen nehmen ihn am Kopf (" + string.Join(", ", hier) + ")"));
+        }
+
+        // GR-GRAPH-KNOTEN: eine Funktion ohne Graph läuft nie.
+        var knoten = new HashSet<string>(graphen.SelectMany(g => g.Knoten).Select(k => N(k.Typ)));
+        foreach (var f in typen.Where(t => (t.TypeKind == TypeKind.Interface || (t.TypeKind == TypeKind.Class && !t.IsAbstract)) && Funktionsform.IstFunktion(t)
+                     && !knoten.Contains(N(t))))
+            ctx.ReportDiagnostic(Diagnostic.Create(OhneGraph, Location.None, f.Name));
 
         // GR-GETRAGEN: eine Funktion als Schnittstelle braucht eine Umsetzung im Host oder einen Träger (sonst nur eine Bindung von Hand).
         var getragen = new HashSet<ITypeSymbol>(clientVertraege.SelectMany(v => v.Traegt).Select(x => x.Funktion), SymbolEqualityComparer.Default);

@@ -24,8 +24,8 @@ public class FunktionsLaufzeitTests
 {
     private sealed class Ziel : IState { public int Version { get; set; } public Guid Id { get; set; } }
     private sealed record Buche(Id<Ziel> AggregateId, int Wert) : ICommand<Ziel>;
-    private sealed record Rohwert(int Wert);
-    private sealed record Verdoppelt(int Wert);
+    private sealed record Rohwert(int Wert) : ICommand;
+    private sealed record Verdoppelt(int Wert) : ICommand;
     private sealed record Gemerkt(int Wert) : ITransientEvent;
     private sealed record Falsch(int Wert) : IEvent;
 
@@ -53,7 +53,7 @@ public class FunktionsLaufzeitTests
                 () => new FunktionsKindActor(traeger, _dienste, this, Verkettung, SendeAsync), new Offene(this))), FunktionenWurzel.Name(name));
         }
 
-        private Task<Infrastructure.Emit.EmitAntwort> SendeAsync(ICommand c, Guid id, Guid korrelation, CancellationToken ct)
+        private Task<Infrastructure.Emit.EmitAntwort> SendeAsync(IAggregatCommand c, Guid id, Guid korrelation, CancellationToken ct)
         {
             Gesendet.Enqueue((c, id));
             var ausgang = Ausgang(c);
@@ -62,7 +62,7 @@ public class FunktionsLaufzeitTests
 
         public async Task<EingangQuittung?> StelleZuAsync(EingangZustellen eingang, TimeSpan frist, CancellationToken ct)
         {
-            if (!_parents.TryGetValue(eingang.Funktion, out var p)) return new EingangQuittung(eingang.Kennung, Quittungsart.Spaeter);
+            if (!_parents.TryGetValue(eingang.Instanz, out var p)) return new EingangQuittung(eingang.Kennung, Quittungsart.Spaeter);
             try { return await System.Root.RequestAsync<EingangQuittung>(p, eingang, frist); }
             catch (TimeoutException) { return null; }
         }
@@ -70,7 +70,7 @@ public class FunktionsLaufzeitTests
         public void Melde(EingangZustellen hinweis)
         {
             Hinweise.Enqueue(hinweis);
-            if (_parents.TryGetValue(hinweis.Funktion, out var p)) System.Root.Send(p, hinweis);
+            if (_parents.TryGetValue(hinweis.Instanz, out var p)) System.Root.Send(p, hinweis);
         }
 
         private sealed class Offene(Welt w) : IOffeneEingaenge
@@ -92,7 +92,7 @@ public class FunktionsLaufzeitTests
     }
 
     private static EingangZustellen Eingang(string funktion, object nachricht, Eingangsart art = Eingangsart.Kette, Guid? kennung = null) =>
-        new(kennung ?? Guid.NewGuid(), funktion, nachricht, art, Stream, 7, DateTimeOffset.UnixEpoch, null, null, null);
+        new(kennung ?? Guid.NewGuid(), funktion, null, nachricht, art, Stream, 7, DateTimeOffset.UnixEpoch, null, null, null);
 
     private static FunktionsRechnung Einzeln(Func<object, Herkunft, object?> f) => (_, e, h, _, ct) => Strom(f(e, h));
 

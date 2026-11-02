@@ -96,8 +96,8 @@ public static class CqrsUmgebungExtensions
         s.AddBackendMonitoring();
         s.AddAkteure(builder.Configuration.GetSection(UmgebungsAbschnitte.Identitaeten));
         s.AddQuellen(builder.Configuration);
-        s.BindeFunktionen(u.Funktionen);
-        s.BindeTechnik(u, builder.Configuration);   // nach den Funktionen: gebunden wird, was deren Umsetzungen brauchen
+        var instanzen = s.BindeGraphen(u);
+        s.BindeTechnik(instanzen);   // nach den Instanzen: gebunden wird, was die Umsetzungen ihrer Knoten brauchen
         s.AddEinblick(u);
         return builder;
     }

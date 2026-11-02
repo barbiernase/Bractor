@@ -52,7 +52,7 @@ public class ZustellwerkTests
         var t = new Tabelle();
         var (fertig, angenommen, spaeter, wirft) = (Zeile("fertig"), Zeile("angenommen"), Zeile("spaeter"), Zeile("wirft"));
         t.Zeilen.AddRange(new[] { fertig, angenommen, spaeter, wirft });
-        var z = new Zustellung(e => e.Funktion switch
+        var z = new Zustellung(e => e.Instanz switch
         {
             "fertig" => Zustellausgang.Fertig,
             "angenommen" => Zustellausgang.Angenommen,
@@ -74,9 +74,9 @@ public class ZustellwerkTests
     public void Kennungen_sind_abgeleitet_dieselbe_Entscheidung_ergibt_dieselben()
     {
         var cmd = Guid.NewGuid();
-        Eingangsvertrag.Folge(cmd, 0).Should().Be(Eingangsvertrag.Folge(cmd, 0));
-        Eingangsvertrag.Folge(cmd, 0).Should().NotBe(Eingangsvertrag.Folge(cmd, 1));
-        var folge = Eingangsvertrag.Folge(cmd, 0);
+        Eingangsvertrag.AusEntscheidung(cmd, 0).Should().Be(Eingangsvertrag.AusEntscheidung(cmd, 0));
+        Eingangsvertrag.AusEntscheidung(cmd, 0).Should().NotBe(Eingangsvertrag.AusEntscheidung(cmd, 1));
+        var folge = Eingangsvertrag.AusEntscheidung(cmd, 0);
         Eingangsvertrag.Eingang(folge, "A").Should().NotBe(Eingangsvertrag.Eingang(folge, "B"), "je hörende Funktion ein eigener Eingang");
     }
 

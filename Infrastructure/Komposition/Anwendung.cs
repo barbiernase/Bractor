@@ -119,8 +119,8 @@ public interface IFunktionsTabelle
 {
     /// <summary>Die Funktionen (<c>Auf</c>, docs/10 §10.3, GeneratedFunktionsBausteine).</summary>
     IReadOnlyList<FunktionsBaustein> Bausteine { get; }
-    /// <summary>Nachrichten-Typ → die Funktionen, die ihn hören (Folge, Zwischenergebnis, Quell-Nachricht, Hinweis; docs/04 §4.4).</summary>
-    IReadOnlyDictionary<Type, string[]> Verkettung { get; }
+    /// <summary>Die Graphen (Blaupausen, docs/04 §4.4, GeneratedGraphen): Knoten, Kanten, Köpfe.</summary>
+    IReadOnlyList<GraphPlan> Graphen { get; }
 }
 
 /// <summary>Die Technik hinter den Funktionen (ohne Marker, was ihr Konstruktor nimmt; GeneratedTechnik): Namen, Umsetzungen, Konstruktor-Bedarf, Konfig-Records.</summary>

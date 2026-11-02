@@ -48,7 +48,7 @@ internal sealed class BeilagenSchreiber
                     break;
                 case EingangOffen e:
                     (_eingaenge ??= new()).Add(e.Kennung);
-                    (_eingangFunktionen ??= new()).Add(e.Funktion);
+                    (_eingangFunktionen ??= new()).Add(e.Instanz);
                     (_eingangTypen ??= new()).Add(e.Typ);
                     (_eingangDaten ??= new()).Add(e.Daten);
                     (_eingangStreams ??= new()).Add(streamId);

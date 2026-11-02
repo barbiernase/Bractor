@@ -35,19 +35,25 @@ namespace Infrastructure.Integration.Tests;
 /// </summary>
 public class AblaufE2ETests
 {
-    /// <summary>Die Host-Verdrahtung wie Host.Grpc: Framework (samt Funktionen und Uhr), Projektionen, gerufene Funktionen mit Konfig.</summary>
+    /// <summary>Die Host-Verdrahtung wie Host.Grpc: Framework (samt Graphen und Uhr), Projektionen, je Graph eine Instanz, Technik mit den Werten ihrer Knoten.</summary>
     private static void Verdrahte(IServiceCollection s, string ausgabe, string cluster, bool grpc, FunktionsLaufort kontrastausgleich)
     {
         s.AddCqrsFramework(opts => { opts.EnableGrpc = grpc; opts.ClusterName = cluster; });
         s.AddGeneratedPullPaths();   // die Projektionen füllen die Read-Models, die die Datensatz-Funktionen lesen
-        s.AddSingleton(new BausteinBindung(nameof(IBildEinlesen), FunktionsLaufort.Host, Wiederholungen: 1));
-        s.AddSingleton(new BausteinBindung(nameof(IBildVerkleinerung), FunktionsLaufort.Host, Wiederholungen: 1));
-        s.AddSingleton(new BausteinBindung(nameof(IKontrastausgleich), kontrastausgleich, Wiederholungen: 1));
-        var konfig = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        KnotenKonfig Bild(FunktionsLaufort laufort, bool mitPfad)
         {
-            [$"{Funktionsvertrag.KonfigAbschnitt}:{nameof(BildaufbereitungKonfig)}:{nameof(BildaufbereitungKonfig.AusgabePfad)}"] = ausgabe,
-        }).Build();
-        TechnikExtensions.BindeTechnik(s, new Dictionary<string, FunktionsKonfig>(), konfig.GetSection(Funktionsvertrag.KonfigAbschnitt));
+            var k = new KnotenKonfig { Laufort = laufort, Wiederholungen = 1 };
+            if (mitPfad && laufort == FunktionsLaufort.Host) k.Werte[nameof(BildaufbereitungKonfig.AusgabePfad)] = ausgabe;
+            return k;
+        }
+        var instanzen = GraphInstanzen.JeGraphEine(Infrastructure.Komposition.Anwendung.Funktionen.Graphen, new Dictionary<string, KnotenKonfig>
+        {
+            [nameof(IBildEinlesen)] = Bild(FunktionsLaufort.Host, false),
+            [nameof(IBildVerkleinerung)] = Bild(FunktionsLaufort.Host, true),
+            [nameof(IKontrastausgleich)] = Bild(kontrastausgleich, true),
+        });
+        s.AddSingleton(instanzen);
+        TechnikExtensions.BindeTechnik(s, instanzen);
     }
 
     /// <summary>Ein echtes, kleines TIFF (OpenCV liest es) im Eingangs-Verzeichnis.</summary>

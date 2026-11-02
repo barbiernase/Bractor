@@ -8,7 +8,8 @@ namespace Infrastructure.Funktionen;
 /// dem Vorbild des Bereichs eines Aggregat-Actors:
 /// <list type="bullet">
 /// <item>ein eigener DI-Bereich: die Technik (was der Konstruktor nimmt, im Bereich gebunden) lebt genau so lange wie die Aktivierung — eine
-///   Datenbank-Verbindung, ein geladenes Modell, ein Cache; sie lädt beim ersten Aufruf;</item>
+///   Datenbank-Verbindung, ein geladenes Modell, ein Cache; sie lädt beim ersten Aufruf; Konfig-Records und Technik-Wahl kommen aus dem Knoten der
+///   Instanz (<see cref="KnotenBereich"/>);</item>
 /// <item>die Umsetzung im Host, über die generierte Fabrik in diesem Bereich gebaut (nie einmal je Knoten neben den Actors);</item>
 /// <item>ihr Zustand (<c>IZustand&lt;T&gt;</c>, docs/04 §4.4) und der Zustand jeder Technik in ihrer Konstruktor-Kette
 ///   (<see cref="AktivierungsZustaende"/>): frisch bei jeder Aktivierung, ein Cache, nie gesichert.</item>
@@ -23,6 +24,7 @@ public sealed class FunktionsAktivierung : IAsyncDisposable
     private readonly FunktionsZustandsform? _form;
     private readonly string _name;
     private readonly bool _technikZustand;
+    private readonly KnotenKontext? _knoten;
     private AsyncServiceScope? _bereich;
     private object? _umsetzung;
     private object? _zustand;
@@ -32,9 +34,11 @@ public sealed class FunktionsAktivierung : IAsyncDisposable
     /// <param name="zustand">Die Form des Zustands der Funktion; null = ohne eigenen Zustand.</param>
     /// <param name="name">Der Name der Funktion — ihr Schlüssel im gesicherten Dokument.</param>
     /// <param name="technikZustand">Trägt eine Technik in der Konstruktor-Kette Zustand (<see cref="TechnikWahl.MitZustand"/>)?</param>
+    /// <param name="knoten">Der Knoten der Instanz, für den gebaut wird: seine Konfig-Records und seine Technik-Wahl (<see cref="KnotenBereich"/>).</param>
     public FunktionsAktivierung(IServiceProvider wurzel, Func<IServiceProvider, object?, object> baue, FunktionsZustandsform? zustand = null,
-        string name = "", bool technikZustand = false)
+        string name = "", bool technikZustand = false, KnotenKontext? knoten = null)
     {
+        _knoten = knoten;
         _wurzel = wurzel;
         _baue = baue;
         _form = zustand;
@@ -59,6 +63,7 @@ public sealed class FunktionsAktivierung : IAsyncDisposable
         try
         {
             _zustand = _form?.Neu();
+            if (_knoten is not null && bereich.ServiceProvider.GetService<KnotenBereich>() is { } k) k.Kontext = _knoten;
             _umsetzung = _baue(bereich.ServiceProvider, _zustand);
             _bereich = bereich;
         }

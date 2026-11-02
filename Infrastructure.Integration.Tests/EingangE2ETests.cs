@@ -43,20 +43,14 @@ public class EingangE2ETests
             EventStore = new EventStoreKonfig { Verbindung = Verbindung, Datenbank = "cqrs_it_eingang_" + Guid.NewGuid().ToString("N")[..8], Schema = "es" },
             Cluster = new ClusterKonfig { Art = ClusterArt.Einzelknoten, Name = "cqrs-" + name },
             Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = FreierPort(), JsonEingang = true },
-            Funktionen = new(StringComparer.Ordinal)
-            {
-                // Die ganze Kette der Bildaufbereitung beantwortet ein Mensch — Schritt für Schritt.
-                ["IBildEinlesen"] = new() { Laufort = FunktionsLaufort.Hand },
-                ["IBildVerkleinerung"] = new() { Laufort = FunktionsLaufort.Hand },
-                ["IKontrastausgleich"] = new() { Laufort = FunktionsLaufort.Hand },
-            },
+            // Die ganze Kette der Bildaufbereitung beantwortet ein Mensch — Schritt für Schritt.
+            Graphen = Graphinstanzen.Beispieldomaene(null, FunktionsLaufort.Hand),
         };
         var verz = Directory.CreateTempSubdirectory("eingang-it-").FullName;
         var builder = WebApplication.CreateBuilder();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Quellen:DateiErkannt:Pfad"] = Path.Combine(verz, "eingang"),
-            ["Konfig:BildaufbereitungKonfig:AusgabePfad"] = Path.Combine(verz, ".preprocessed"),
             // docs/06 §6.6: der Webhook der Quelle ist Konfig — kein MapQuellWebhook im Programm.
             ["Quellen:DateiErkannt:Webhook"] = "/webhook/datei",
             ["Identitaeten:Tokens:t-ki"] = "KIOperator",
@@ -231,21 +225,15 @@ public class EingangE2ETests
             EventStore = new EventStoreKonfig { Verbindung = Verbindung, Datenbank = "cqrs_it_wiederholung_" + Guid.NewGuid().ToString("N")[..8], Schema = "es" },
             Cluster = new ClusterKonfig { Art = ClusterArt.Einzelknoten, Name = "cqrs-" + name },
             Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = FreierPort(), JsonEingang = true },
-            Funktionen = new(StringComparer.Ordinal)
-            {
-                ["IBildEinlesen"] = new() { Parallel = 1 },
-                ["IBildVerkleinerung"] = new() { Parallel = 1 },
-                ["IKontrastausgleich"] = new() { Parallel = 1 },
-            },
         };
         var verz = Directory.CreateTempSubdirectory("wiederholung-it-").FullName;
         var builder = WebApplication.CreateBuilder();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Quellen:DateiErkannt:Pfad"] = Path.Combine(verz, "eingang"),
-            ["Konfig:BildaufbereitungKonfig:AusgabePfad"] = Path.Combine(verz, ".preprocessed"),
             ["Identitaeten:Tokens:t-ki"] = "KIOperator",
         });
+        u.Graphen = Graphinstanzen.Beispieldomaene(Path.Combine(verz, ".preprocessed"), parallel: 1);
         builder.AddCqrs(u);
         await using var app = builder.Build();
         app.MapEingang(u);

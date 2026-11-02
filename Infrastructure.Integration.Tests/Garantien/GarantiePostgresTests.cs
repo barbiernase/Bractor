@@ -170,7 +170,7 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
             "fällig erst nach dem Fenster des schnellen Wegs (Zustellung direkt nach dem Commit)");
         await eingaenge.VerschiebeAsync([kennung], TimeSpan.Zero, default);
         var faellig = (await eingaenge.FaelligeAsync(10_000, default)).Single(e => e.Kennung == kennung);
-        faellig.Should().Match<Infrastructure.Eingaenge.OffenerEingang>(e => e.Funktion == "Probe" && e.Stream == k && e.Version == 1 && e.Versuche == 1);
+        faellig.Should().Match<Infrastructure.Eingaenge.OffenerEingang>(e => e.Instanz == "Probe" && e.Stream == k && e.Version == 1 && e.Versuche == 1);
         await eingaenge.VerschiebeAsync([kennung], TimeSpan.FromHours(1), default);
         (await eingaenge.FaelligeAsync(10_000, default)).Should().NotContain(e => e.Kennung == kennung, "verschoben ist er erst in einer Stunde fällig");
         await eingaenge.ErledigtAsync([kennung], default);

@@ -146,7 +146,8 @@ public class FunktionsZustandGarantieTests
         //   und sendet die Ausgaben seiner Antwort — nichts wird festgehalten.
         using var host = Cluster("garantie-hinweis-draussen", dienste: s =>
         {
-            s.AddSingleton(new BausteinBindung(nameof(IAusreisserpruefung), FunktionsLaufort.Hand));
+            s.AddSingleton(global::Infrastructure.Funktionen.GraphInstanzen.JeGraphEine(global::Infrastructure.Komposition.Anwendung.Funktionen.Graphen,
+                new Dictionary<string, KnotenKonfig> { [nameof(IAusreisserpruefung)] = new() { Laufort = FunktionsLaufort.Hand } }));
             s.AddHandAusfuehrer();
         });
         await host.StartAsync();

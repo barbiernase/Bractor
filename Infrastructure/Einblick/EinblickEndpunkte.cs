@@ -49,7 +49,7 @@ public static class EinblickEndpunkte
             var liste = await offene.OffeneAsync(n ?? 1_000, ct);
             return Results.Json(new
             {
-                auftraege = liste.GroupBy(e => e.Funktion).ToDictionary(g => g.Key, g => g.Select(e => new
+                auftraege = liste.GroupBy(e => e.Instanz).ToDictionary(g => g.Key, g => g.Select(e => new
                 {
                     vorgang = e.Kennung, korrelation = e.Korrelation, auftrag = e.Typ, versuche = e.Versuche, stream = e.Stream, version = e.Version,
                 }).ToList()),

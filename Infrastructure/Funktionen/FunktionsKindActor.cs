@@ -12,17 +12,17 @@ public sealed record KindRechne(EingangZustellen Eingang);
 public sealed record KindFertig(Guid Kennung, string? Fehler, PID Kind);
 
 /// <summary>
-/// Ein KIND einer Funktion (docs/04 §4.4): eine Umsetzung mit ihrer Aktivierung (Bereich, Technik, Zustand), ein Eingang zugleich — oder,
-/// draußen, der Platz eines Arbeiters in der <see cref="Werkstatt"/>. Es rechnet das <c>Auf</c> und bringt jede Ausgabe hinaus — einen Command an
-/// ein Aggregat über den Emitter mit der Id aus Eingang, Funktion und Stelle (die Inbox verwirft eine Wiederholung), einen Command ohne Ziel an die
-/// Funktion, die ihn nimmt (gewartet wird, bis sie fertig ist), einen Hinweis verlierbar.
-/// Fertig ist der Eingang, wenn alle Commands beantwortet und alle Nachfolger fertig sind; das meldet das Kind seinem Parent.
+/// Ein KIND eines Knotens (docs/04 §4.4): eine Umsetzung seiner Funktion mit ihrer Aktivierung (Bereich, Technik, Zustand), ein Eingang zugleich —
+/// oder, draußen, der Platz eines Arbeiters in der <see cref="Werkstatt"/>. Es rechnet das <c>Auf</c> und bringt jede Ausgabe hinaus — einen Command an
+/// ein Aggregat über den Emitter mit der Id aus Eingang, Ort und Stelle (die Inbox verwirft eine Wiederholung), einen Command ohne Ziel an die Knoten
+/// desselben Graphen, die ihn nehmen (die Kanten), sonst an den Kopf der Instanz, die ihn nimmt (gewartet wird, bis sie fertig sind), einen Hinweis
+/// verlierbar. Fertig ist der Eingang, wenn alle Commands beantwortet und alle Nachfolger fertig sind; das meldet das Kind seinem Parent.
 /// </summary>
 public sealed class FunktionsKindActor(
     FunktionsTraeger traeger,
     IServiceProvider dienste,
     IFunktionsWege wege,
-    Verkettung verkettung,
+    Verkettung koepfe,
     Func<IAggregatCommand, Guid, Guid, CancellationToken, Task<Infrastructure.Emit.EmitAntwort>> sende,
     IFaehigkeitsFabrik? faehigkeiten = null,
     ILogger? logger = null,
@@ -75,7 +75,7 @@ public sealed class FunktionsKindActor(
             ? (faehigkeiten ?? throw new InvalidOperationException($"{traeger.Name} liest Fähigkeiten, aber es gibt keine Fähigkeits-Fabrik.")).Oeffne()
             : null;
         var warten = new List<Task>();
-        await RechneAsync(e, e.Nachricht, e.Herkunft(), e.Kennung, e.Ursache ?? Spur.Ursache(e.Stream, e.Version), bereich, warten, ct);
+        await RechneAsync(e, e.Nachricht, e.Herkunft(traeger.Name), e.Kennung, e.Ursache ?? Spur.Ursache(e.Stream, e.Version), bereich, warten, ct);
         await Task.WhenAll(warten);
     }
 
@@ -98,29 +98,37 @@ public sealed class FunktionsKindActor(
             {
                 case IAggregatCommand c:
                     // Commands an Aggregate der Reihe nach (ein Ziel sieht sie in der Reihenfolge der Funktion); die Antwort rechnet die Funktion gleich weiter.
-                    var antwort = await SendeAsync(c, Kettenvertrag.Befehl(kennung, traeger.Name, i, c), e, ct);
+                    var antwort = await SendeAsync(c, Kettenvertrag.Befehl(kennung, traeger.Ort, i, c), e, ct);
                     for (var j = 0; j < antwort.Events.Count; j++)
                     {
                         var (ev, version) = (antwort.Events[j].Event, antwort.Events[j].Version);
                         if (traeger.Antworten?.Contains(ev.GetType()) != true) continue;
-                        await RechneAsync(e, ev, new Herkunft(c.Ziel, version, e.Zeit, herkunft.Akteur, WirkerId.FuerFunktion(traeger.Name)), Kettenvertrag.Antwort(kennung, traeger.Name, i, j),
+                        await RechneAsync(e, ev, new Herkunft(c.Ziel, version, e.Zeit, herkunft.Akteur, WirkerId.FuerFunktion(traeger.Name)), Kettenvertrag.Antwort(kennung, traeger.Ort, i, j),
                             Spur.Ursache(c.Ziel, version), bereich, warten, ct);
                     }
                     break;
                 case ITransientEvent h:
                     // Über das Hinweis-Netz, wenn es eins gibt (es erreicht auch Funktionen mit Log-Eingängen und Clients), sonst über die Wege.
                     if (hinweise is not null)
-                        hinweise(new HinweisZustellen(Kettenvertrag.Ausgabe(kennung, traeger.Name, i), h, e.Stream, e.Version, e.Zeit, e.Korrelation, e.Akteur,
+                        hinweise(new HinweisZustellen(Kettenvertrag.Ausgabe(kennung, traeger.Ort, i), h, e.Stream, e.Version, e.Zeit, e.Korrelation, e.Akteur,
                             ursache));
                     else
-                        foreach (var f in verkettung.Hoerer(h.GetType()))
-                            wege.Melde(Weiter(e, h, Kettenvertrag.Ausgabe(kennung, traeger.Name, i), f, Eingangsart.Hinweis));
+                        foreach (var instanz in koepfe.Hoerer(h.GetType()))
+                            wege.Melde(Weiter(e, h, Kettenvertrag.Ausgabe(kennung, traeger.Ort, i), instanz, null, Eingangsart.Hinweis));
                     break;
                 case ICommand weiter:
-                    // Ein Command ohne Ziel an die Funktion, die ihn nimmt; gewartet wird, bis sie fertig ist.
-                    var ausgabe = Kettenvertrag.Ausgabe(kennung, traeger.Name, i);
-                    foreach (var f in verkettung.Hoerer(weiter.GetType()))
-                        warten.Add(ReicheWeiterAsync(Weiter(e, weiter, ausgabe, f, Eingangsart.Kette), ct));
+                    // Ein Command ohne Ziel: an die Knoten desselben Graphen, die ihn nehmen (die Kanten, in dieser Instanz), sonst an den Kopf der
+                    //   Instanz, die ihn nimmt (Entscheidung 2: genau ein Empfänger); gewartet wird, bis sie fertig sind.
+                    var ausgabe = Kettenvertrag.Ausgabe(kennung, traeger.Ort, i);
+                    if (traeger.Kanten.TryGetValue(weiter.GetType(), out var nach))
+                        foreach (var k in nach)
+                            warten.Add(ReicheWeiterAsync(Weiter(e, weiter, ausgabe, traeger.Instanz, k, Eingangsart.Kette), ct));
+                    else if (koepfe.Hoerer(weiter.GetType()) is { Count: > 0 } instanzen)
+                        foreach (var instanz in instanzen)
+                            warten.Add(ReicheWeiterAsync(Weiter(e, weiter, ausgabe, instanz, null, Eingangsart.Kette), ct));
+                    else
+                        throw new InvalidOperationException($"{traeger.Ort}: {weiter.GetType().Name} nimmt kein Knoten des Graphen und keine Instanz am Kopf "
+                            + "(fehlt eine Instanz in der Umgebung?)");
                     break;
                 default:
                     throw new InvalidOperationException($"{traeger.Name} gab {a.GetType().Name} aus — eine Funktion gibt Commands und Hinweise aus, "
@@ -129,9 +137,10 @@ public sealed class FunktionsKindActor(
         }
     }
 
-    /// <summary>Der Eingang einer Ausgabe bei der nächsten Funktion: Kennung aus Ausgabe und Funktion, die Herkunft der Kette reist mit.</summary>
-    private static EingangZustellen Weiter(EingangZustellen e, object nachricht, Guid ausgabe, string funktion, Eingangsart art) =>
-        new(Eingangsvertrag.Eingang(ausgabe, funktion), funktion, nachricht, art, e.Stream, e.Version, e.Zeit, e.Akteur, e.Korrelation, e.Ursache);
+    /// <summary>Der Eingang einer Ausgabe beim nächsten Knoten (bzw. am Kopf einer Instanz): Kennung aus Ausgabe und Ziel, die Herkunft der Kette reist mit.</summary>
+    private static EingangZustellen Weiter(EingangZustellen e, object nachricht, Guid ausgabe, string instanz, string? knoten, Eingangsart art) =>
+        new(Eingangsvertrag.Eingang(ausgabe, knoten is null ? instanz : instanz + "/" + knoten), instanz, knoten, nachricht, art, e.Stream, e.Version, e.Zeit,
+            e.Akteur, e.Korrelation, e.Ursache);
 
     private async Task<Infrastructure.Emit.EmitAntwort> SendeAsync(IAggregatCommand c, Guid id, EingangZustellen e, CancellationToken ct)
     {
@@ -141,7 +150,7 @@ public sealed class FunktionsKindActor(
             var antwort = await sende(c, id, korrelation, ct);
             if (antwort.Ausgang.IstEntschieden()) return antwort;
             if (versuch >= Versuche)
-                throw new InvalidOperationException($"{traeger.Name}: Command {c.GetType().Name} an {c.Ziel} bleibt nach {versuch} Versuchen unbekannt.");
+                throw new InvalidOperationException($"{traeger.Ort}: Command {c.GetType().Name} an {c.Ziel} bleibt nach {versuch} Versuchen unbekannt.");
             await Task.Delay(Pause(versuch), ct);
         }
     }
@@ -154,10 +163,10 @@ public sealed class FunktionsKindActor(
             {
                 case Quittungsart.Fertig: return;
                 case Quittungsart.Gescheitert:
-                    throw new InvalidOperationException($"{traeger.Name}: der Nachfolger {weiter.Funktion} ist an {weiter.Kennung} gescheitert.");
+                    throw new InvalidOperationException($"{traeger.Ort}: der Nachfolger {weiter.Instanz}/{weiter.Knoten ?? "Kopf"} ist an {weiter.Kennung} gescheitert.");
             }
             if (versuch >= Versuche)
-                throw new InvalidOperationException($"{traeger.Name}: {weiter.Funktion} nimmt {weiter.Kennung} nach {versuch} Versuchen nicht an.");
+                throw new InvalidOperationException($"{traeger.Ort}: {weiter.Instanz}/{weiter.Knoten ?? "Kopf"} nimmt {weiter.Kennung} nach {versuch} Versuchen nicht an.");
             await Task.Delay(Pause(versuch), ct);
         }
     }

@@ -9,23 +9,23 @@ using Proto.Cluster;
 
 namespace Infrastructure.Funktionen;
 
-/// <summary>Wie ein Eingang zu einer Funktion kommt (Naht; live <see cref="FunktionsWege"/>).</summary>
+/// <summary>Wie ein Eingang zu einer Instanz eines Graphen kommt (Naht; live <see cref="FunktionsWege"/>).</summary>
 public interface IFunktionsWege
 {
     /// <summary>
-    /// Stellt den Eingang an die Funktion <see cref="EingangZustellen.Funktion"/> zu — an einen Knoten, der sie hält (der eigene zuerst, sonst
+    /// Stellt den Eingang an die Instanz <see cref="EingangZustellen.Instanz"/> zu — an einen Knoten, der sie hält (der eigene zuerst, sonst
     /// reihum). <c>null</c> = keine Antwort in der Frist (Knoten fort, Frist um); der Absender versucht es wieder, mit derselben Kennung.
     /// </summary>
     Task<EingangQuittung?> StelleZuAsync(EingangZustellen eingang, TimeSpan frist, CancellationToken ct);
 
-    /// <summary>Ein Hinweis: verlierbar, ohne Antwort, an einen Knoten, der die Funktion hält.</summary>
+    /// <summary>Ein Hinweis: verlierbar, ohne Antwort, an einen Knoten, der die Instanz hält.</summary>
     void Melde(EingangZustellen hinweis);
 }
 
 /// <summary>
-/// Welche Knoten welche Funktionen halten (docs/04 §4.4): jeder Knoten meldet im Gossip-Zustand des Clusters (Schlüssel <see cref="Schluessel"/>) die
-/// Funktionen, deren Parent bei ihm lebt; die Wege lesen daraus je Funktion die Adressen. Keine virtuellen Actors: ein Parent hat einen festen Namen
-/// je Knoten (<see cref="FunktionenWurzel.Name(string)"/>).
+/// Welche Knoten welche Instanzen halten (docs/04 §4.4): jeder Knoten meldet im Gossip-Zustand des Clusters (Schlüssel <see cref="Schluessel"/>) die
+/// Instanzen, deren Graph-Actor bei ihm Eingänge nimmt; die Wege lesen daraus je Instanz die Adressen. Keine virtuellen Actors: ein Graph-Actor hat
+/// einen festen Namen je Knoten (<see cref="FunktionenWurzel.Name(string)"/>).
 /// </summary>
 public sealed class FunktionsOrte(Cluster? cluster)
 {
@@ -74,24 +74,24 @@ public sealed class FunktionsOrte(Cluster? cluster)
     }
 }
 
-/// <summary>Die Wege über den Boten: an den Parent der Funktion auf dem gewählten Knoten; „später“ oder keine Antwort → beim nächsten Mal ein anderer.</summary>
+/// <summary>Die Wege über den Boten: an den Graph-Actor der Instanz auf dem gewählten Knoten; „später“ oder keine Antwort → beim nächsten Mal ein anderer.</summary>
 public sealed class FunktionsWege(Bote bote, FunktionsOrte orte, ILogger? logger = null) : IFunktionsWege
 {
     public async Task<EingangQuittung?> StelleZuAsync(EingangZustellen eingang, TimeSpan frist, CancellationToken ct)
     {
-        var adresse = orte.Waehle(eingang.Funktion);
+        var adresse = orte.Waehle(eingang.Instanz);
         if (adresse is null)
         {
-            logger?.LogDebug("[Funktionen] {Funktion} hält kein Knoten — {Kennung} später", eingang.Funktion, eingang.Kennung);
+            logger?.LogDebug("[Funktionen] {Instanz} hält kein Knoten — {Kennung} später", eingang.Instanz, eingang.Kennung);
             return new EingangQuittung(eingang.Kennung, Quittungsart.Spaeter);
         }
-        var q = await bote.FrageAnKnotenAsync<EingangQuittung>(adresse, FunktionenWurzel.Name(eingang.Funktion), eingang, frist, ct);
+        var q = await bote.FrageAnKnotenAsync<EingangQuittung>(adresse, FunktionenWurzel.Name(eingang.Instanz), eingang, frist, ct);
         return q;
     }
 
     public void Melde(EingangZustellen hinweis)
     {
-        if (orte.Waehle(hinweis.Funktion) is { } adresse) bote.MeldeAnKnoten(adresse, FunktionenWurzel.Name(hinweis.Funktion), hinweis);
+        if (orte.Waehle(hinweis.Instanz) is { } adresse) bote.MeldeAnKnoten(adresse, FunktionenWurzel.Name(hinweis.Instanz), hinweis);
     }
 }
 

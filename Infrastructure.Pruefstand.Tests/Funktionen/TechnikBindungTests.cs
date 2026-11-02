@@ -121,17 +121,6 @@ public class TechnikBindungTests
     }
 
     [Fact]
-    public void Gewaehlt_mit_Zustand_folgt_der_Konstruktor_Kette()
-    {
-        var mit = new TechnikUmsetzung(typeof(ID2), "D2a", typeof(D2a), _ => { }, new FunktionsZustandsform(typeof(K), () => new object(), _ => [], (_, _) => { }, _ => { }));
-        var ohne = new TechnikUmsetzung(typeof(ID1), "D1a", typeof(D1a), _ => { });
-        var wahl = new TechnikWahl(new Dictionary<Type, TechnikUmsetzung> { [typeof(ID1)] = ohne, [typeof(ID2)] = mit },
-            new Dictionary<Type, Type[]> { [typeof(FImpl)] = [typeof(ID1)], [typeof(D1a)] = [typeof(ID2)] });
-        wahl.MitZustand(typeof(FImpl)).Should().BeTrue("FImpl → ID1 (D1a) → ID2 (D2a mit Zustand)");
-        wahl.MitZustand(typeof(D2a)).Should().BeFalse();
-    }
-
-    [Fact]
     public void Eine_nicht_oeffentliche_Implementierung_fehlt_in_der_Tabelle()
         => Generiert(Bild.Replace("public sealed class Skalierer", "internal sealed class Skalierer"))
             .Should().NotContain("typeof(global::Probe.Skalierer)", "die generierte Fabrik kann sie nicht bauen (CQRS092 meldet es im Build)");
@@ -143,55 +132,71 @@ public class TechnikBindungTests
     private interface ID2;
     private sealed record K(string Wert);
     private sealed class FImpl;
-    private sealed class D1a;
-    private sealed class D1b;
-    private sealed class D2a;
+    private sealed class D1a : ID1;
+    private sealed class D1b : ID1;
+    private sealed class D2a : ID2;
 
-    private sealed record Lauf(IServiceCollection S, List<string> Gebunden);
+    private sealed record Lauf(IServiceCollection S, List<string> Gebaut, KnotenKontext Knoten);
 
-    private static Lauf Binde(Dictionary<string, string?> wahl, Dictionary<string, string?> konfig, Dictionary<Type, Type[]> braucht,
-        bool zweiImpls = false)
+    /// <summary>Bindet für einen Knoten (Umsetzung <see cref="FImpl"/>) mit seiner Technik-Wahl und seinen Werten.</summary>
+    private static Lauf Binde(Dictionary<string, string> wahl, Dictionary<string, string?> werte, Dictionary<Type, Type[]> braucht,
+        bool zweiImpls = false, bool d2MitZustand = false)
     {
-        var gebunden = new List<string>();
+        var gebaut = new List<string>();
         var s = new ServiceCollection();
+        var zustand = new FunktionsZustandsform(typeof(K), () => new object(), _ => [], (_, _) => { }, _ => { });
         var impls = new List<TechnikUmsetzung>
         {
-            new(typeof(ID1), "D1a", typeof(D1a), _ => gebunden.Add("ID1 → D1a")),
-            new(typeof(ID2), "D2a", typeof(D2a), _ => gebunden.Add("ID2 → D2a")),
+            new(typeof(ID1), "D1a", typeof(D1a), _ => { gebaut.Add("ID1 → D1a"); return new D1a(); }),
+            new(typeof(ID2), "D2a", typeof(D2a), _ => { gebaut.Add("ID2 → D2a"); return new D2a(); }, d2MitZustand ? zustand : null),
         };
-        if (zweiImpls) impls.Add(new(typeof(ID1), "D1b", typeof(D1b), _ => gebunden.Add("ID1 → D1b")));
-        var konfigs = new[] { new KonfigRecord(typeof(K), "K", sec => { KonfigLeser.NurBekannte(sec, "Wert"); return new K(KonfigLeser.Text(sec, "Wert")); }) };
-        var cfg = new ConfigurationBuilder().AddInMemoryCollection(konfig).Build();
-        s.BindeTechnik(wahl, cfg.GetSection("Konfig"), [typeof(FImpl)], impls, braucht, konfigs);
-        return new Lauf(s, gebunden);
+        if (zweiImpls) impls.Add(new(typeof(ID1), "D1b", typeof(D1b), _ => { gebaut.Add("ID1 → D1b"); return new D1b(); }));
+        var konfigs = new[] { new KonfigRecord(typeof(K), "K", ["Wert"], sec => { KonfigLeser.NurBekannte(sec, "Wert"); return new K(KonfigLeser.Text(sec, "Wert")); }) };
+        var knoten = new KnotenKontext("i", "k", new KnotenKonfig { Technik = wahl, Werte = werte });
+        s.BindeTechnik([(knoten, typeof(FImpl))], impls, braucht, konfigs);
+        return new Lauf(s, gebaut, knoten);
+    }
+
+    /// <summary>Baut <typeparamref name="T"/> im Bereich des Knotens (wie eine Aktivierung).</summary>
+    private static object Baue<T>(Lauf l)
+    {
+        using var sp = l.S.BuildServiceProvider();
+        using var bereich = sp.CreateScope();
+        bereich.ServiceProvider.GetRequiredService<KnotenBereich>().Kontext = l.Knoten;
+        return bereich.ServiceProvider.GetRequiredService(typeof(T));
     }
 
     [Fact]
-    public void Gebunden_wird_transitiv_was_die_Funktion_braucht_samt_Konfig()
+    public void Gebunden_wird_transitiv_was_die_Funktion_braucht_samt_Konfig_aus_den_Werten_des_Knotens()
     {
-        var l = Binde(new(), new() { ["Konfig:K:Wert"] = "x" },
+        var l = Binde(new(), new() { ["Wert"] = "x" },
             new() { [typeof(FImpl)] = [typeof(ID1), typeof(K)], [typeof(D1a)] = [typeof(ID2)] });
-        l.Gebunden.Should().Equal("ID2 → D2a", "ID1 → D1a");
-        l.S.Single(d => d.ServiceType == typeof(K)).ImplementationInstance.Should().Be(new K("x"));
+        l.S.Should().Contain(d => d.ServiceType == typeof(ID1)).And.Contain(d => d.ServiceType == typeof(ID2));
+        Baue<K>(l).Should().Be(new K("x"), "der Konfig-Record kommt aus den Werten des Knotens");
+        Baue<ID1>(l).Should().BeOfType<D1a>();
+        l.Gebaut.Should().Equal("ID1 → D1a");
     }
 
     [Fact]
     public void Nicht_Gebrauchtes_wird_nicht_gebunden()
-        => Binde(new(), new(), new()).Gebunden.Should().BeEmpty();
+        => Binde(new(), new(), new()).S.Should().NotContain(d => d.ServiceType == typeof(ID1) || d.ServiceType == typeof(K));
 
     [Fact]
-    public void Mehrdeutig_braucht_die_Wahl_der_Umgebung()
+    public void Mehrdeutig_braucht_die_Wahl_des_Knotens()
     {
         FluentActions.Invoking(() => Binde(new(), new(), new() { [typeof(FImpl)] = [typeof(ID1)] }, zweiImpls: true))
-            .Should().Throw<BootFehler>().Where(e => e.Karte == "funktion:ID1").WithMessage("*mehrere Umsetzungen (D1a, D1b)*Funktionen:ID1:Implementierung*");
-        Binde(new() { ["ID1"] = "D1b" }, new(), new() { [typeof(FImpl)] = [typeof(ID1)] }, zweiImpls: true)
-            .Gebunden.Should().Equal("ID1 → D1b");
+            .Should().Throw<BootFehler>().Where(e => e.Karte == "funktion:ID1").WithMessage("i/k: *mehrere Umsetzungen (D1a, D1b)*Technik:ID1*");
+        Baue<ID1>(Binde(new() { ["ID1"] = "D1b" }, new(), new() { [typeof(FImpl)] = [typeof(ID1)] }, zweiImpls: true)).Should().BeOfType<D1b>();
     }
 
     [Fact]
-    public void Ein_unbekannter_Umsetzungsname_bricht_den_Start()
-        => FluentActions.Invoking(() => Binde(new() { ["ID1"] = "Gibts" }, new(), new() { [typeof(FImpl)] = [typeof(ID1)] }))
-            .Should().Throw<BootFehler>().WithMessage("Funktionen:ID1:Implementierung = 'Gibts' gibt es nicht (gefunden: D1a)*");
+    public void Eine_unbekannte_Umsetzung_oder_Technik_bricht_den_Start()
+    {
+        FluentActions.Invoking(() => Binde(new() { ["ID1"] = "Gibts" }, new(), new() { [typeof(FImpl)] = [typeof(ID1)] }))
+            .Should().Throw<BootFehler>().WithMessage("i/k: Technik:ID1 = 'Gibts' gibt es nicht (gefunden: D1a)*");
+        FluentActions.Invoking(() => Binde(new() { ["IFremd"] = "X" }, new(), new() { [typeof(FImpl)] = [typeof(ID1)] }))
+            .Should().Throw<BootFehler>().WithMessage("i/k: Technik:IFremd — keine Technik dieses Namens*");
+    }
 
     [Fact]
     public void Ein_Kreis_ueber_Technik_bricht_den_Start()
@@ -200,14 +205,23 @@ public class TechnikBindungTests
             .Should().Throw<BootFehler>().WithMessage("Technik im Kreis: ID1 → ID2 → ID1*");
 
     [Fact]
-    public void Konfig_fehlt_hat_unbekannte_Felder_oder_unbekannte_Records()
+    public void Werte_fehlen_oder_sind_unbekannt()
     {
         var braucht = new Dictionary<Type, Type[]> { [typeof(FImpl)] = [typeof(K)] };
-        FluentActions.Invoking(() => Binde(new(), new(), braucht)).Should().Throw<BootFehler>().WithMessage("Konfig:K fehlt*");
-        FluentActions.Invoking(() => Binde(new(), new() { ["Konfig:K:Wert"] = "x", ["Konfig:K:Falsch"] = "y" }, braucht))
-            .Should().Throw<BootFehler>().WithMessage("*unbekannte Felder Falsch*");
-        FluentActions.Invoking(() => Binde(new(), new() { ["Konfig:Fremd:A"] = "x" }, new()))
-            .Should().Throw<BootFehler>().WithMessage("Konfig:Fremd — kein Konfig-Record*");
+        FluentActions.Invoking(() => Binde(new(), new(), braucht)).Should().Throw<BootFehler>().WithMessage("i/k:Wert fehlt*");
+        FluentActions.Invoking(() => Binde(new(), new() { ["Wert"] = "x", ["Falsch"] = "y" }, braucht))
+            .Should().Throw<BootFehler>().WithMessage("i/k: unbekannte Felder Falsch*");
+    }
+
+    [Fact]
+    public void Gewaehlt_mit_Zustand_folgt_der_Konstruktor_Kette_je_Knoten()
+    {
+        var mit = Binde(new(), new(), new() { [typeof(FImpl)] = [typeof(ID1)], [typeof(D1a)] = [typeof(ID2)] }, d2MitZustand: true);
+        using var sp = mit.S.BuildServiceProvider();
+        sp.GetRequiredService<TechnikWahl>().MitZustand("i/k").Should().BeTrue("FImpl → ID1 (D1a) → ID2 (D2a mit Zustand)");
+        var ohne = Binde(new(), new(), new() { [typeof(FImpl)] = [typeof(ID1)] }, d2MitZustand: true);
+        using var sp2 = ohne.S.BuildServiceProvider();
+        sp2.GetRequiredService<TechnikWahl>().MitZustand("i/k").Should().BeFalse();
     }
 
     [Fact]

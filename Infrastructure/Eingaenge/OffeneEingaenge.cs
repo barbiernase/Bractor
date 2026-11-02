@@ -7,10 +7,10 @@ using Weasel.Postgresql.Tables;
 namespace Infrastructure.Eingaenge;
 
 /// <summary>
-/// Ein offener Eingang einer Funktion, wie der Zusteller ihn liest: Kennung, Funktion, die Nachricht (Diskriminator, Wire-JSON), ihre Herkunft
+/// Ein offener Eingang am Kopf einer Instanz, wie der Zusteller ihn liest: Kennung, Instanz (Spalte <c>funktion</c>), die Nachricht (Diskriminator, Wire-JSON), ihre Herkunft
 /// (Stream und Version des Auslösers, Log-Zeit des Commits, Akteur, Korrelation) und wie oft er schon zugestellt wurde.
 /// </summary>
-public sealed record OffenerEingang(Guid Kennung, string Funktion, string Typ, string Daten, Guid Stream, int Version, DateTimeOffset Zeit, string? Akteur,
+public sealed record OffenerEingang(Guid Kennung, string Instanz, string Typ, string Daten, Guid Stream, int Version, DateTimeOffset Zeit, string? Akteur,
     string? Korrelation, int Versuche);
 
 /// <summary>Die offenen Eingänge, wie der Zusteller sie braucht (Naht; live die Tabelle <see cref="OffeneEingaenge"/>).</summary>

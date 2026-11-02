@@ -1,0 +1,18 @@
+{
+  "Graph": "Bildaufbereitung",
+  "Akteur": "KameraSystem",
+  "Einlesen": {
+    "Laufort": "Host",
+    "Wiederholungen": 1
+  },
+  "Verkleinern": {
+    "Laufort": "Host",
+    "Wiederholungen": 1,
+    "AusgabePfad": "/data/preprocessed"
+  },
+  "Kontrast": {
+    "Laufort": "Host",
+    "Wiederholungen": 1,
+    "AusgabePfad": "/data/preprocessed"
+  }
+}

@@ -33,12 +33,6 @@ public class UmgebungE2ETests
         EventStore = new EventStoreKonfig { Verbindung = Verbindung, Datenbank = db, Schema = "es" },
         Cluster = new ClusterKonfig { Art = ClusterArt.Einzelknoten, Name = "cqrs-" + name },
         Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = 0 },
-        Funktionen = new(StringComparer.Ordinal)
-        {
-            ["IBildEinlesen"] = new() { Parallel = 1 },
-            ["IBildVerkleinerung"] = new() { Parallel = 1 },
-            ["IKontrastausgleich"] = new() { Parallel = 1 },
-        },
     };
 
     private static async Task LoescheDatenbankAsync(string db)
@@ -103,8 +97,8 @@ public class UmgebungE2ETests
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Quellen:DateiErkannt:Pfad"] = Path.Combine(verz, "quelle"),
-            ["Konfig:BildaufbereitungKonfig:AusgabePfad"] = Path.Combine(verz, ".preprocessed"),
         });
+        u.Graphen = Graphinstanzen.Beispieldomaene(Path.Combine(verz, ".preprocessed"), parallel: 1);
         builder.AddCqrs(u);
         await using var host = builder.Build();
         try
@@ -147,8 +141,8 @@ public class UmgebungE2ETests
             builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Quellen:DateiErkannt:Pfad"] = Path.Combine(verz, u.Umgebung.Name),
-                ["Konfig:BildaufbereitungKonfig:AusgabePfad"] = Path.Combine(verz, u.Umgebung.Name, ".preprocessed"),
             });
+            u.Graphen = Graphinstanzen.Beispieldomaene(Path.Combine(verz, u.Umgebung.Name, ".preprocessed"), parallel: 1);
             builder.AddCqrs(u);
             return builder.Build();
         }

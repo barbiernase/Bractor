@@ -8,7 +8,7 @@ using Microsoft.Extensions.Configuration;
 namespace Werkbank.Server;
 
 /// <summary>
-/// Die Umgebungs-Dateien der Solution (<c>umgebungen/umgebung.&lt;name&gt;.json</c>, docs/06 §6.5): lesen, als Text für eine
+/// Die Umgebungs-Dateien der Solution (<c>umgebungen/&lt;name&gt;/umgebung.json</c>, docs/06 §6.5): lesen, als Text für eine
 /// Geste aufbereiten und auflösen. Aufgelöst wird mit DERSELBEN Regel wie im Host (<see cref="UmgebungLader.LadeDatei"/>: <c>${branch}</c> =
 /// Git-Branch dieser Werkbank, <c>${env:NAME}</c> — fehlt die Variable, ist das ein Fehler —, Umgebungsvariablen überschreiben, strenge
 /// Bindung); Tokens nach <see cref="AkteurTokens"/>.
@@ -18,11 +18,11 @@ public sealed class Umgebungen(string slnRoot)
     public string Verzeichnis => Path.Combine(slnRoot, Abstractions.Projektstruktur.UmgebungsOrdner);
 
     public IReadOnlyList<string> Namen() => Directory.Exists(Verzeichnis)
-        ? Directory.GetFiles(Verzeichnis, "umgebung.*.json").Select(d => Path.GetFileNameWithoutExtension(d)["umgebung.".Length..])
-            .Where(n => n != "schema").OrderBy(n => n, StringComparer.Ordinal).ToList()
+        ? Directory.GetDirectories(Verzeichnis).Where(d => File.Exists(Path.Combine(d, Abstractions.Projektstruktur.UmgebungsDatei)))
+            .Select(d => Path.GetFileName(d)).OrderBy(n => n, StringComparer.Ordinal).ToList()
         : [];
 
-    public string Datei(string name) => Path.Combine(Verzeichnis, $"umgebung.{name}.json");
+    public string Datei(string name) => Path.Combine(Verzeichnis, name, Abstractions.Projektstruktur.UmgebungsDatei);
 
     /// <summary>Die Datei relativ zur Solution (Pfad im Patch einer Geste).</summary>
     public string RelativeDatei(string name) => Path.GetRelativePath(slnRoot, Datei(name)).Replace('\\', '/');

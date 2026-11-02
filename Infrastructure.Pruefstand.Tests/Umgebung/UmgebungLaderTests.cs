@@ -19,11 +19,14 @@ namespace Infrastructure.Pruefstand.Umgebung;
 [Trait("Kategorie", "Garantie")]
 public class UmgebungLaderTests
 {
-    private static (ConfigurationManager Konfig, string Verz) Datei(string name, string json)
+    /// <summary>Eine Umgebung als Ordner (<c>umgebungen/&lt;name&gt;/umgebung.json</c>) mit ihren Instanz-Dateien (<c>graphen/&lt;instanz&gt;.json</c>).</summary>
+    private static (ConfigurationManager Konfig, string Verz) Datei(string name, string json, params (string Instanz, string Json)[] instanzen)
     {
         var verz = Directory.CreateTempSubdirectory("umgebung-").FullName;
-        Directory.CreateDirectory(Path.Combine(verz, "umgebungen"));
-        File.WriteAllText(Path.Combine(verz, "umgebungen", $"umgebung.{name}.json"), json);
+        var ordner = Path.Combine(verz, "umgebungen", name);
+        Directory.CreateDirectory(Path.Combine(ordner, "graphen"));
+        File.WriteAllText(Path.Combine(ordner, "umgebung.json"), json);
+        foreach (var (instanz, inhalt) in instanzen) File.WriteAllText(Path.Combine(ordner, "graphen", instanz + ".json"), inhalt);
         Environment.SetEnvironmentVariable("CQRS_UMGEBUNGEN", Path.Combine(verz, "umgebungen"));
         return (new ConfigurationManager(), verz);
     }
@@ -42,9 +45,11 @@ public class UmgebungLaderTests
         var (k, verz) = Datei("sim-t", """
             { "Umgebung": { "Name": "sim-t", "Art": "Sim" },
               "EventStore": { "Verbindung": "Host=db;Password=${env:CQRS_TEST_PW}", "Datenbank": "cqrs_sim_${branch}" },
-              "Cluster": { "Art": "Consul", "Name": "c-${branch}", "Rolle": "Mitglied" },
-              "Funktionen": { "IX": { "Laufort": "Extern" } } }
-            """);
+              "Cluster": { "Art": "Consul", "Name": "c-${branch}", "Rolle": "Mitglied" } }
+            """, ("linie1", """
+            { "Graph": "Bildaufbereitung", "Akteur": "KameraSystem",
+              "Verkleinern": { "Laufort": "Extern", "Parallel": 4, "Technik": { "IImageResizer": "ImageResizer" }, "AusgabePfad": "/daten/${branch}", "Endungen": [ "png", "tif" ] } }
+            """));
         try
         {
             var u = UmgebungLader.Lade(k, "sim-t", [], branch: "Feature/Werkbank-P2");
@@ -53,7 +58,14 @@ public class UmgebungLaderTests
             UmgebungLader.Verbindung(u.EventStore).Should().Contain("Password=geheim").And.Contain("Database=cqrs_sim_feature_werkbank_p2");
             u.Cluster.Art.Should().Be(ClusterArt.Consul);
             u.Cluster.Rolle.Should().Be(KnotenRolle.Mitglied);
-            u.Funktionen["IX"].Laufort.Should().Be(FunktionsLaufort.Extern);
+            var knoten = u.Graphen["linie1"].Knoten["Verkleinern"];
+            u.Graphen["linie1"].Graph.Should().Be("Bildaufbereitung", "die Instanz heißt wie ihre Datei");
+            u.Graphen["linie1"].Akteur.Should().Be("KameraSystem");
+            knoten.Laufort.Should().Be(FunktionsLaufort.Extern);
+            knoten.Parallel.Should().Be(4);
+            knoten.Technik.Should().Equal(new Dictionary<string, string> { ["IImageResizer"] = "ImageResizer" });
+            knoten.Werte.Should().Contain("AusgabePfad", "/daten/feature_werkbank_p2", "Platzhalter gelten auch in den Instanzen")
+                .And.Contain("Endungen:0", "png").And.Contain("Endungen:1", "tif");
         }
         finally { Directory.Delete(verz, true); }
     }
@@ -95,13 +107,12 @@ public class UmgebungLaderTests
         UmgebungsSiegel.Pruefe(prod, prod with { Cluster = "anders" }).Should().Contain("Cluster");
     }
 
-    // ── Funktions-Laufort als Konfig ─────────────────────────────────────────────────────────────────────────────────
+    // ── Knoten einer Instanz: Laufort als Konfig ───────────────────────────────────────────────────────────────────────
     // Die Bausteine der Beispieldomäne: IBildVerkleinerung (Schnittstelle, eine Umsetzung im Host), RangeAufloesung (Klasse mit Lese-Fähigkeit).
 
     private static FunktionsBaustein Baustein(string name) => Infrastructure.Komposition.Anwendung.Funktionen.Bausteine.Single(b => b.Name == name);
 
-    private static BausteinBindung Bindung(string name, FunktionsKonfig k)
-        => FunktionsBausteinWiring.BindungVon(Baustein(name), [new BausteinBindung(name, k.Laufort, k.Implementierung, k.Wiederholungen)]);
+    private static BausteinBindung Bindung(string name, KnotenKonfig k) => FunktionsBausteinWiring.BindungVon(Baustein(name), k);
 
     [Fact]
     public void Laufort_Host_bindet_die_genannte_Umsetzung()
@@ -123,36 +134,79 @@ public class UmgebungLaderTests
 
     [Fact]
     public void Ohne_Eintrag_laeuft_eine_Schnittstelle_mit_einer_Umsetzung_im_Host()
-        => FunktionsBausteinWiring.BindungVon(Baustein("IBildVerkleinerung"), []).Laufort.Should().Be(FunktionsLaufort.Host);
+        => FunktionsBausteinWiring.BindungVon(Baustein("IBildVerkleinerung"), null).Laufort.Should().Be(FunktionsLaufort.Host);
+
+    // ── Instanzen: geprüft gegen die Graphen ───────────────────────────────────────────────────────────────────────────
+
+    private static IReadOnlyList<GraphPlan> Graphen => Infrastructure.Komposition.Anwendung.Funktionen.Graphen;
 
     [Fact]
-    public void Ein_unbekannter_Funktionsname_ist_ein_Boot_Fehler_Hand_bindet_den_Hand_Ausfuehrer_einmal()
+    public void Eine_Instanz_eines_unbekannten_Graphen_oder_mit_fremdem_Knoten_ist_ein_Boot_Fehler()
     {
-        FluentActions.Invoking(() => new ServiceCollection().BindeFunktionen(new Dictionary<string, FunktionsKonfig> { ["IGibtsNicht"] = new() }))
-            .Should().Throw<BootFehler>().WithMessage("*IGibtsNicht*keine Funktion dieses Namens*");
-        var s = new ServiceCollection().BindeFunktionen(new Dictionary<string, FunktionsKonfig>
-        {
-            ["IBildEinlesen"] = new() { Laufort = FunktionsLaufort.Hand },
-            ["TeilFertigMeldung"] = new() { Laufort = FunktionsLaufort.Hand },
-        });
-        s.Where(d => d.ServiceType == typeof(BausteinBindung)).Select(d => ((BausteinBindung)d.ImplementationInstance!).Funktion)
-            .Should().BeEquivalentTo("IBildEinlesen", "TeilFertigMeldung");
-        s.Count(d => d.ServiceType == typeof(HandAusfuehrer)).Should().Be(1);
+        FluentActions.Invoking(() => GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig> { ["x"] = new() { Graph = "GibtsNicht" } }, Graphen))
+            .Should().Throw<BootFehler>().WithMessage("*GibtsNicht*gibt es nicht*");
+        FluentActions.Invoking(() => GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig>
+            {
+                ["x"] = new() { Graph = "Bildaufbereitung", Knoten = { ["Vorschau"] = new() } },
+            }, Graphen))
+            .Should().Throw<BootFehler>().WithMessage("*'Vorschau' ist kein Knoten von Bildaufbereitung*Einlesen*");
     }
 
     [Fact]
-    public void Technik_nennt_unter_Funktionen_nur_ihre_Implementierung()
+    public void Ein_Graph_mit_Command_Kopf_laeuft_nur_einmal_ein_Graph_mit_Quellkopf_beliebig_oft()
     {
-        var s = new ServiceCollection().BindeFunktionen(new Dictionary<string, FunktionsKonfig>
-        {
-            ["IImageResizer"] = new() { Implementierung = "ImageResizer" },
-        });
-        s.Should().NotContain(d => d.ServiceType == typeof(BausteinBindung), "sie hat keinen eigenen Actor — sie läuft im Prozess ihres Halters");
-        FluentActions.Invoking(() => new ServiceCollection().BindeFunktionen(new Dictionary<string, FunktionsKonfig>
+        FluentActions.Invoking(() => GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig>
             {
-                ["IImageResizer"] = new() { Laufort = FunktionsLaufort.Extern },
-            }))
-            .Should().Throw<BootFehler>().Where(e => e.Karte == "funktion:IImageResizer").WithMessage("*ist Technik*nur ihre Implementierung*");
+                ["a"] = new() { Graph = "Teilmeldung" }, ["b"] = new() { Graph = "Teilmeldung" },
+            }, Graphen))
+            .Should().Throw<BootFehler>().WithMessage("*Teilmeldung hat einen Command-Kopf*genau einmal*a, b*");
+        GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig>
+            {
+                ["linie1"] = new() { Graph = "Bildaufbereitung" }, ["linie2"] = new() { Graph = "Bildaufbereitung" },
+            }, Graphen).Alle.Select(i => i.Name).Should().Equal("linie1", "linie2");
+    }
+
+    [Fact]
+    public void Der_Akteur_einer_Instanz_darf_was_sie_verlaesst()
+    {
+        var rechte = Infrastructure.Komposition.Anwendung.Akteure.Rechte;
+        GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig> { ["linie1"] = new() { Graph = "Bildaufbereitung", Akteur = "KameraSystem" } },
+            Graphen, rechte).Alle.Single().Akteur.Should().Be("KameraSystem");
+        FluentActions.Invoking(() => GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig>
+            {
+                ["linie1"] = new() { Graph = "Bildaufbereitung", Akteur = "Inspekteur" },
+            }, Graphen, rechte))
+            .Should().Throw<BootFehler>().WithMessage("*Inspekteur darf NimmBildAuf nicht*");
+    }
+
+    [Fact]
+    public void Hand_an_einem_Knoten_bindet_den_Hand_Ausfuehrer_einmal()
+    {
+        var s = new ServiceCollection();
+        s.BindeGraphen(new UmgebungKonfig
+        {
+            Graphen =
+            {
+                ["linie1"] = new() { Graph = "Bildaufbereitung", Knoten = { ["Einlesen"] = new() { Laufort = FunktionsLaufort.Hand } } },
+                ["teile"] = new() { Graph = "Teilmeldung", Knoten = { ["Meldung"] = new() { Laufort = FunktionsLaufort.Hand } } },
+            },
+        });
+        s.Count(d => d.ServiceType == typeof(HandAusfuehrer)).Should().Be(1);
+        s.Single(d => d.ServiceType == typeof(GraphInstanzen)).ImplementationInstance.Should().BeOfType<GraphInstanzen>()
+            .Which.Alle.Select(i => i.Name).Should().Equal("linie1", "teile");
+    }
+
+    [Fact]
+    public void Die_Technik_eines_Knotens_braucht_ihre_Werte_und_nennt_nur_Bekanntes()
+    {
+        GraphInstanzen Mit(KnotenKonfig verkleinern) =>
+            GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig> { ["linie1"] = new() { Graph = "Bildaufbereitung", Knoten = { ["Verkleinern"] = verkleinern } } }, Graphen);
+        FluentActions.Invoking(() => new ServiceCollection().BindeTechnik(Mit(new KnotenKonfig())))
+            .Should().Throw<BootFehler>().WithMessage("*linie1/Verkleinern:AusgabePfad fehlt*");
+        FluentActions.Invoking(() => new ServiceCollection().BindeTechnik(Mit(new KnotenKonfig { Werte = { ["AusgabePfad"] = "/x", ["Breite"] = "256" } })))
+            .Should().Throw<BootFehler>().WithMessage("*linie1/Verkleinern: unbekannte Felder Breite*AusgabePfad*");
+        FluentActions.Invoking(() => new ServiceCollection().BindeTechnik(Mit(new KnotenKonfig { Werte = { ["AusgabePfad"] = "/x" }, Technik = { ["IImageResizer"] = "Gibtsnicht" } })))
+            .Should().Throw<BootFehler>().WithMessage("*Technik:IImageResizer = 'Gibtsnicht' gibt es nicht*");
     }
 
     [Theory]
@@ -167,14 +221,17 @@ public class UmgebungLaderTests
         Environment.SetEnvironmentVariable("CQRS_UMGEBUNGEN", Path.Combine(verz!, "umgebungen"));
         var u = UmgebungLader.Lade(new ConfigurationManager(), name, [], branch: "main");
         u.Umgebung.Name.Should().Be(name);
+        GraphInstanzen.Aus(u.Graphen, Graphen, Infrastructure.Komposition.Anwendung.Akteure.Rechte).Alle.Select(i => i.Graph.Name)
+            .Should().BeEquivalentTo(["Bildaufbereitung", "Datensatzpflege", "Teilmeldung", "Paarbeurteilung", "Trainingsrechnung"], "je Graph eine Instanz");
         if (name == "sim-main")
         {
             u.Transport.JsonEingang.Should().BeTrue("Sim: die Werkbank handelt als Akteur");
-            foreach (var f in new[] { "IBildEinlesen", "IBildVerkleinerung", "IKontrastausgleich" })
+            foreach (var k in new[] { "Einlesen", "Verkleinern", "Kontrast" })
             {
-                u.Funktionen[f].Worker!.Skript.Should().EndWith("funktions_worker.py");
-                u.Funktionen[f].Worker!.Argumente.Should().Contain(a => a.EndsWith("/cqrs-sim/main/preprocessed"));
+                u.Graphen["bildaufbereitung"].Knoten[k].Worker!.Skript.Should().EndWith("funktions_worker.py");
+                u.Graphen["bildaufbereitung"].Knoten[k].Worker!.Argumente.Should().Contain(a => a.EndsWith("/cqrs-sim/main/preprocessed"));
             }
+            u.Graphen["bildaufbereitung"].Knoten["Kontrast"].Werte["AusgabePfad"].Should().EndWith("/cqrs-sim/main/preprocessed");
         }
         else u.Transport.JsonEingang.Should().BeFalse("Prod: kein JSON-Eingang");
     }

@@ -26,6 +26,7 @@
         <Compile Include="..\Infrastructure.SourceGeneration\Vertragsassemblies.cs" Link="Vertrag\Vertragsassemblies.cs" />
         <!-- Die Lesart der Funktionen in Baustein-Form (eine Quelle mit FunktionsBausteinGenerator, Lage-Regeln und Extractor). -->
         <Compile Include="..\Infrastructure.SourceGeneration\Funktionsform.cs" Link="Vertrag\Funktionsform.cs" />
+        <Compile Include="..\Infrastructure.SourceGeneration\Graphform.cs" Link="Vertrag\Graphform.cs" />
         <Compile Include="..\Infrastructure.SourceGeneration\Nachrichtenform.cs" Link="Vertrag\Nachrichtenform.cs" />
         <Compile Include="..\Abstractions\Quellen\Treibervertrag.cs" Link="Vertrag\Treibervertrag.cs" />
         <Compile Include="..\Abstractions\Kodehash.cs" Link="Vertrag\Kodehash.cs" />

@@ -30,11 +30,12 @@ public sealed record Quittung(Guid CommandId, KommandoAusgang Ausgang) : Beilage
 public sealed record FristFaellig(int Version, string Befehl, string Daten, TimeSpan Nach, string? Akteur) : Beilage;
 
 /// <summary>
-/// Ein offener Eingang einer Funktion (docs/04 §4.4): die Folge eines Commands (bzw. später eine Quell- oder Client-Nachricht), je hörende Funktion
-/// eine Zeile — <paramref name="Kennung"/> abgeleitet (<see cref="Eingangsvertrag"/>), ein zweites Legen derselben Kennung schreibt nichts. Die
-/// Nachricht als Diskriminator und Wire-JSON, dazu ihre Herkunft: die Version des Streams nach der Entscheidung, Akteur und Korrelation der Kette.
+/// Ein offener Eingang am Kopf einer Instanz (docs/04 §4.4): ein Command ohne Ziel aus einem Decide (bzw. eine Quell- oder Client-Nachricht), je
+/// Instanz, deren Graph ihn am Kopf nimmt, eine Zeile — <paramref name="Kennung"/> abgeleitet (<see cref="Eingangsvertrag"/>), ein zweites Legen
+/// derselben Kennung schreibt nichts. Die Nachricht als Diskriminator und Wire-JSON, dazu ihre Herkunft: die Version des Streams nach der Entscheidung,
+/// Akteur und Korrelation der Kette.
 /// </summary>
-public sealed record EingangOffen(Guid Kennung, string Funktion, string Typ, string Daten, int Version, string? Akteur, string? Korrelation) : Beilage;
+public sealed record EingangOffen(Guid Kennung, string Instanz, string Typ, string Daten, int Version, string? Akteur, string? Korrelation) : Beilage;
 
 /// <summary>
 /// Die Kennung einer Quell-Nachricht in einem Stream je Schlüssel (docs/11): ihr Vorgang (abgeleitet aus Typ und Kennung)

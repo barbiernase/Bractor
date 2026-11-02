@@ -108,12 +108,16 @@ public sealed class TransportKonfig
 }
 
 /// <summary>
-/// Eine Funktion in dieser Umgebung (Abschnitt <c>Funktionen:&lt;Name&gt;</c>): ihre Implementierung und — nur mit Eingängen — Laufort, Parallel,
-/// Warteschlange, Vorwärmen, Wiederholungen und Worker. Technik (was der Konstruktor einer Funktion nimmt) läuft im Prozess ihres Halters: bei ihr steht nur die
-/// Implementierung.
+/// Ein Knoten einer Graph-Instanz (<c>umgebungen/&lt;name&gt;/graphen/&lt;instanz&gt;.json</c>, Schlüssel = Name des Knotens, docs/04 §4.4): wie seine
+/// Funktion läuft — Laufort, Implementierung, Parallel, Warteschlange, Vorwärmen, Wiederholungen, Worker —, welche Umsetzung jede Technik in ihrem
+/// Konstruktor hat (<see cref="Technik"/>, nötig bei mehreren) und die Felder ihrer Konfig-Records (<see cref="Werte"/>, flach, wie in der Datei).
 /// </summary>
-public sealed class FunktionsKonfig
+public sealed class KnotenKonfig
 {
+    /// <summary>Die Schlüssel eines Knotens, die keine Felder eines Konfig-Records sind.</summary>
+    public static readonly IReadOnlyList<string> Rahmenfelder =
+        [nameof(Laufort), nameof(Implementierung), nameof(Wiederholungen), nameof(Parallel), nameof(Warteschlange), nameof(Vorwaermen), nameof(Worker), nameof(Technik)];
+
     public FunktionsLaufort Laufort { get; set; } = FunktionsLaufort.Host;
     /// <summary>Nur Host: der Klassenname der Implementierung — nötig, wenn es mehrere gibt.</summary>
     public string? Implementierung { get; set; }
@@ -128,6 +132,22 @@ public sealed class FunktionsKonfig
     public bool Vorwaermen { get; set; }
     /// <summary>Nur Extern: wie die Werkbank den Worker startet (▶ Worker starten). Der Host liest es nie.</summary>
     public WorkerKonfig? Worker { get; set; }
+    /// <summary>Je Technik im Konstruktor (einfacher Name der Schnittstelle) die gewählte Umsetzung (Klassenname) — nötig, wenn es mehrere gibt.</summary>
+    public Dictionary<string, string> Technik { get; set; } = new(StringComparer.Ordinal);
+    /// <summary>Die Felder der Konfig-Records des Knotens (Schlüssel relativ zum Knoten, eine Liste als <c>Feld:0</c>, <c>Feld:1</c> …).</summary>
+    public Dictionary<string, string?> Werte { get; set; } = new(StringComparer.Ordinal);
+}
+
+/// <summary>
+/// Eine Instanz eines Graphen (docs/04 §4.4): eine Datei <c>umgebungen/&lt;name&gt;/graphen/&lt;instanz&gt;.json</c> — der Graph (Name des Records), bei
+/// einem Quellkopf der Akteur, für den sie hineingibt, und je Knoten seine Werte. Dieselbe Blaupause läuft beliebig oft; ein Graph mit Command-Kopf
+/// je Umgebung genau einmal.
+/// </summary>
+public sealed class GraphInstanzKonfig
+{
+    public string Graph { get; set; } = "";
+    public string? Akteur { get; set; }
+    public Dictionary<string, KnotenKonfig> Knoten { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>
@@ -167,7 +187,7 @@ public sealed class StoreKonfig
     public string? Verzeichnis { get; set; }
 }
 
-/// <summary>Die gebundene Umgebung (ohne Quellen, Identitäten, Konfig-Records — die binden ihre eigenen Abschnitte).</summary>
+/// <summary>Die gebundene Umgebung (ohne Quellen und Identitäten — die binden ihre eigenen Abschnitte) mit den Instanzen ihrer Graphen.</summary>
 public sealed class UmgebungKonfig
 {
     public UmgebungKopf Umgebung { get; set; } = new();
@@ -177,7 +197,8 @@ public sealed class UmgebungKonfig
     public LebenszyklusKonfig Lebenszyklus { get; set; } = new();
     public KonsumKonfig Konsum { get; set; } = new();
     public TransportKonfig Transport { get; set; } = new();
-    public Dictionary<string, FunktionsKonfig> Funktionen { get; set; } = new(StringComparer.Ordinal);
+    /// <summary>Die Instanzen der Graphen (Dateien im Ordner <c>graphen</c> der Umgebung): Name der Instanz (Dateiname) → Konfig.</summary>
+    public Dictionary<string, GraphInstanzKonfig> Graphen { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, ClientKonfig> Clients { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, StoreKonfig> Stores { get; set; } = new(StringComparer.Ordinal);
 
@@ -200,10 +221,13 @@ public static class UmgebungsAbschnitte
 {
     public const string Umgebung = "Umgebung", EventStore = "EventStore", Cluster = "Cluster",
         Schreibpfad = "Schreibpfad", Lebenszyklus = "Lebenszyklus", Konsum = "Konsum", Transport = "Transport", Identitaeten = "Identitaeten", Quellen = "Quellen",
-        Funktionen = "Funktionen", Clients = "Clients", Stores = "Stores", Konfig = "Konfig", Logging = "Logging";
+        Clients = "Clients", Stores = "Stores", Logging = "Logging";
+
+    /// <summary>Der Abschnitt, unter den der Lader die Instanz-Dateien hängt (<c>Graphen:&lt;instanz&gt;:…</c>) — er steht nie in <c>umgebung.json</c>.</summary>
+    public const string Graphen = "Graphen";
 
     public static readonly IReadOnlyList<string> Alle =
-        [Umgebung, EventStore, Cluster, Schreibpfad, Lebenszyklus, Konsum, Transport, Identitaeten, Quellen, Funktionen, Clients, Stores, Konfig, Logging];
+        [Umgebung, EventStore, Cluster, Schreibpfad, Lebenszyklus, Konsum, Transport, Identitaeten, Quellen, Clients, Stores, Logging];
 }
 
 /// <summary>

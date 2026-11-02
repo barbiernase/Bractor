@@ -117,7 +117,8 @@ public class FunktionsBausteinE2ETests
     {
         using var host = Cluster("pruef-funktion-hand", dienste: s =>
         {
-            s.AddSingleton(new BausteinBindung(nameof(IFreigabe), FunktionsLaufort.Hand));
+            s.AddSingleton(global::Infrastructure.Funktionen.GraphInstanzen.JeGraphEine(global::Infrastructure.Komposition.Anwendung.Funktionen.Graphen,
+                new Dictionary<string, KnotenKonfig> { [nameof(IFreigabe)] = new() { Laufort = FunktionsLaufort.Hand } }));
             s.AddHandAusfuehrer();
         });
         await host.StartAsync();

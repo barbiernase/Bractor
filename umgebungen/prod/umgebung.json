@@ -1,27 +1,36 @@
 {
-  "Umgebung": { "Name": "prod", "Art": "Prod" },
+  "Umgebung": {
+    "Name": "prod",
+    "Art": "Prod"
+  },
   "EventStore": {
     "Betrieb": "Vorhanden",
     "Verbindung": "Host=localhost;Port=5432;Username=postgres;Password=postgres",
     "Datenbank": "cqrs_events",
     "Schema": "es"
   },
-  "Cluster": { "Art": "Consul", "Name": "cqrs", "Consul": "localhost:8500", "AdvertisedHost": "localhost" },
-  "Transport": { "GrpcPort": 5001, "EinblickPort": 5002 },
+  "Cluster": {
+    "Art": "Consul",
+    "Name": "cqrs",
+    "Consul": "localhost:8500",
+    "AdvertisedHost": "localhost"
+  },
+  "Transport": {
+    "GrpcPort": 5001,
+    "EinblickPort": 5002
+  },
   "Quellen": {
     "DateiErkannt": {
       "Pfad": "/mnt/unlabeledgewebebilder/SNP/IO",
       "Intervall": "00:00:01",
-      "Fertig": { "Art": "Stabil", "Fenster": "00:00:01" },
+      "Fertig": {
+        "Art": "Stabil",
+        "Fenster": "00:00:01"
+      },
       "Kennung": "NameGroesse",
       "Laufmodus": "EinmalImCluster",
       "Webhook": "/webhook/datei"
     }
-  },
-  "Funktionen": {
-    "IBildEinlesen": { "Laufort": "Host", "Wiederholungen": 1 },
-    "IBildVerkleinerung": { "Laufort": "Host", "Wiederholungen": 1 },
-    "IKontrastausgleich": { "Laufort": "Host", "Wiederholungen": 1 }
   },
   "Clients": {
     "Arbeitsplatz": {
@@ -31,8 +40,5 @@
         "/home/wirksam/cqrs-data/preprocessed"
       ]
     }
-  },
-  "Konfig": {
-    "BildaufbereitungKonfig": { "AusgabePfad": "/home/wirksam/cqrs-data/preprocessed" }
   }
 }

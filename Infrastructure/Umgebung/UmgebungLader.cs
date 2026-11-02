@@ -6,9 +6,10 @@ using Microsoft.Extensions.Configuration;
 namespace Infrastructure.Umgebung;
 
 /// <summary>
-/// Lädt die Umgebung (docs/06 §6.5): <c>umgebungen/umgebung.&lt;name&gt;.json</c>, Name aus <c>--umgebung &lt;name&gt;</c>
-/// bzw. <c>CQRS_UMGEBUNG</c>. Umgebungsvariablen und Kommandozeile überschreiben wie gewohnt; <c>${env:NAME}</c> und <c>${branch}</c>
-/// werden ersetzt. Ein unbekannter Abschnitt oder ein unbekanntes Feld ist ein Start-Fehler — die Bindung ist generiert, nicht reflektiert.
+/// Lädt die Umgebung (docs/06 §6.5, W7: eine Umgebung = ein Ordner): <c>umgebungen/&lt;name&gt;/umgebung.json</c> und je Instanz eines Graphen
+/// <c>umgebungen/&lt;name&gt;/graphen/&lt;instanz&gt;.json</c>; Name aus <c>--umgebung &lt;name&gt;</c> bzw. <c>CQRS_UMGEBUNG</c>. Umgebungsvariablen und
+/// Kommandozeile überschreiben wie gewohnt; <c>${env:NAME}</c> und <c>${branch}</c> werden ersetzt. Ein unbekannter Abschnitt oder ein unbekanntes Feld
+/// ist ein Start-Fehler — die Bindung ist generiert, nicht reflektiert.
 /// </summary>
 public static partial class UmgebungLader
 {
@@ -24,10 +25,10 @@ public static partial class UmgebungLader
         return g?[(Argument.Length + 1)..] ?? Environment.GetEnvironmentVariable(Variable);
     }
 
-    /// <summary>Die Datei der Umgebung: <c>CQRS_UMGEBUNGEN</c>, neben dem Programm, oder aufwärts vom Arbeitsverzeichnis.</summary>
+    /// <summary>Die Datei der Umgebung (<c>&lt;name&gt;/umgebung.json</c>): unter <c>CQRS_UMGEBUNGEN</c>, neben dem Programm, oder aufwärts vom Arbeitsverzeichnis.</summary>
     public static string Datei(string name)
     {
-        var datei = $"umgebung.{name}.json";
+        var datei = Path.Combine(name, Abstractions.Projektstruktur.UmgebungsDatei);
         var kandidaten = new List<string>();
         if (Environment.GetEnvironmentVariable("CQRS_UMGEBUNGEN") is { Length: > 0 } verz) kandidaten.Add(Path.Combine(verz, datei));
         kandidaten.Add(Path.Combine(AppContext.BaseDirectory, Abstractions.Projektstruktur.UmgebungsOrdner, datei));
@@ -52,6 +53,7 @@ public static partial class UmgebungLader
     {
         PruefeAbschnitte(datei);
         konfig.AddJsonFile(datei, optional: false, reloadOnChange: false);
+        konfig.AddInMemoryCollection(Instanzen(Path.Combine(Path.GetDirectoryName(datei)!, Abstractions.Projektstruktur.GraphenOrdner)));
         konfig.AddEnvironmentVariables();
         konfig.AddCommandLine(args);
         Ersetze(konfig, branch ?? Environment.GetEnvironmentVariable("CQRS_BRANCH") ?? "main");
@@ -60,6 +62,22 @@ public static partial class UmgebungLader
         if (u.Umgebung.Name != name)
             throw new InvalidOperationException($"Umgebung: die Datei {Path.GetFileName(datei)} heißt innen '{u.Umgebung.Name}'.");
         return u;
+    }
+
+    /// <summary>
+    /// Die Instanz-Dateien eines Ordners als Konfig-Schlüssel unter <c>Graphen:&lt;instanz&gt;</c> (Name der Instanz = Dateiname) — sie gehen durch dieselbe
+    /// Ersetzung der Platzhalter wie die Umgebung.
+    /// </summary>
+    public static IEnumerable<KeyValuePair<string, string?>> Instanzen(string ordner)
+    {
+        if (!Directory.Exists(ordner)) yield break;
+        foreach (var datei in Directory.GetFiles(ordner, "*.json").OrderBy(d => d, StringComparer.Ordinal))
+        {
+            var instanz = Path.GetFileNameWithoutExtension(datei);
+            var werte = new ConfigurationBuilder().AddJsonFile(datei, optional: false, reloadOnChange: false).Build();
+            foreach (var (key, wert) in werte.AsEnumerable().Where(kv => kv.Value != null))
+                yield return new($"{UmgebungsAbschnitte.Graphen}:{instanz}:{key}", wert);
+        }
     }
 
     /// <summary>Nur die bekannten Abschnitte (<see cref="UmgebungsAbschnitte"/>) dürfen in einer Umgebungs-Datei stehen.</summary>
@@ -87,11 +105,33 @@ public static partial class UmgebungLader
             Konsum = Abschnitt<KonsumKonfig>(konfig, UmgebungsAbschnitte.Konsum),
             Transport = Abschnitt<TransportKonfig>(konfig, UmgebungsAbschnitte.Transport),
         };
-        foreach (var f in konfig.GetSection(UmgebungsAbschnitte.Funktionen).GetChildren())
-            u.Funktionen[f.Key] = f.Get<FunktionsKonfig>(o => o.ErrorOnUnknownConfiguration = true) ?? new FunktionsKonfig();
+        foreach (var g in konfig.GetSection(UmgebungsAbschnitte.Graphen).GetChildren())
+            u.Graphen[g.Key] = Instanz(g);
         foreach (var c in konfig.GetSection(UmgebungsAbschnitte.Clients).GetChildren())
             u.Clients[c.Key] = c.Get<ClientKonfig>(o => o.ErrorOnUnknownConfiguration = true) ?? new ClientKonfig();
         return u;
+    }
+
+    /// <summary>
+    /// Bindet eine Instanz: <c>Graph</c>, <c>Akteur</c> und jeder andere Schlüssel ein Knoten — seine Rahmenfelder streng
+    /// (<see cref="KnotenKonfig.Rahmenfelder"/>), alles andere als Werte seiner Konfig-Records (geprüft beim Start gegen den Graphen).
+    /// </summary>
+    public static GraphInstanzKonfig Instanz(IConfigurationSection g)
+    {
+        var i = new GraphInstanzKonfig { Graph = g[nameof(GraphInstanzKonfig.Graph)] ?? "", Akteur = g[nameof(GraphInstanzKonfig.Akteur)] };
+        foreach (var k in g.GetChildren().Where(k => k.Key is not (nameof(GraphInstanzKonfig.Graph) or nameof(GraphInstanzKonfig.Akteur))))
+        {
+            var knoten = new KnotenKonfig();
+            var rahmen = new ConfigurationBuilder().AddInMemoryCollection(k.AsEnumerable(makePathsRelative: true)
+                .Where(kv => kv.Value != null && KnotenKonfig.Rahmenfelder.Contains(kv.Key.Split(':')[0]) && kv.Key.Split(':')[0] != nameof(KnotenKonfig.Technik)))
+                .Build();
+            rahmen.Bind(knoten, o => o.ErrorOnUnknownConfiguration = true);
+            foreach (var t in k.GetSection(nameof(KnotenKonfig.Technik)).GetChildren()) knoten.Technik[t.Key] = t.Value ?? "";
+            foreach (var (key, wert) in k.AsEnumerable(makePathsRelative: true).Where(kv => kv.Value != null && !KnotenKonfig.Rahmenfelder.Contains(kv.Key.Split(':')[0])))
+                knoten.Werte[key] = wert;
+            i.Knoten[k.Key] = knoten;
+        }
+        return i;
     }
 
     [GeneratedRegex(@"\$\{env:([A-Za-z_][A-Za-z0-9_]*)\}")]

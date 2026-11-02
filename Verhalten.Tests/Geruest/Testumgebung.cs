@@ -57,7 +57,12 @@ public sealed class Testumgebung
         await conn.OpenAsync();
         await using var cmd = new NpgsqlCommand($"drop database if exists \"{u.Datenbank}\" with (force)", conn);
         await cmd.ExecuteNonQueryAsync();
-        await File.WriteAllTextAsync(Path.Combine(u.Verzeichnis, $"umgebung.{u.Name}.json"), u.Json().ToJsonString(new() { WriteIndented = true }));
+        // Eine Umgebung ist ein Ordner (docs/06 §6.5): umgebung.json und je Instanz eines Graphen eine Datei in graphen/.
+        var ordner = Path.Combine(u.Verzeichnis, u.Name);
+        Directory.CreateDirectory(Path.Combine(ordner, "graphen"));
+        await File.WriteAllTextAsync(Path.Combine(ordner, "umgebung.json"), u.Json().ToJsonString(new() { WriteIndented = true }));
+        foreach (var (instanz, inhalt) in u.Instanzen())
+            await File.WriteAllTextAsync(Path.Combine(ordner, "graphen", instanz + ".json"), inhalt.ToJsonString(new() { WriteIndented = true }));
         return u;
     }
 
@@ -102,17 +107,34 @@ public sealed class Testumgebung
                 ["Laufmodus"] = "EinmalImCluster",
             },
         };
-        JsonObject ImHost() => new() { ["Laufort"] = "Host", ["Wiederholungen"] = 1 };
-        json["Funktionen"] = new JsonObject
-        {
-            ["IBildEinlesen"] = ImHost(),
-            ["IBildVerkleinerung"] = ImHost(),
-            ["IKontrastausgleich"] = ImHost(),
-            // Draußen getragen (IDarf<F> eines verkörperten Akteurs): wie viele Eingänge zugleich, sagen die Slots der Träger beim Anbieten.
-            ["IBildpaarBeurteilung"] = new JsonObject { ["Laufort"] = "Extern" },
-        };
-        json["Konfig"] = new JsonObject { ["BildaufbereitungKonfig"] = new JsonObject { ["AusgabePfad"] = Path.Combine(Verzeichnis, "aufbereitet") } };
         return json;
+    }
+
+    /// <summary>Die Instanzen der Graphen (je Graph eine): die Bildaufbereitung im Host mit ihrem Ausgabe-Pfad, die Beurteilung draußen getragen.</summary>
+    private IEnumerable<(string Instanz, JsonObject Inhalt)> Instanzen()
+    {
+        if (Anwendung == Anwendung.Pruefdomaene)
+        {
+            foreach (var g in new[] { "Abrechnungsablauf", "Auftragsablauf", "Verteilungsablauf", "Importablauf", "Merkmalbildung", "Ausreisserkontrolle",
+                         "Schaetzung", "Nachschubablauf" })
+                yield return (g.ToLowerInvariant(), new JsonObject { ["Graph"] = g });
+            yield break;
+        }
+        JsonObject ImHost(bool mitPfad = false)
+        {
+            var k = new JsonObject { ["Laufort"] = "Host", ["Wiederholungen"] = 1 };
+            if (mitPfad) k["AusgabePfad"] = Path.Combine(Verzeichnis, "aufbereitet");
+            return k;
+        }
+        yield return ("bildaufbereitung", new JsonObject
+        {
+            ["Graph"] = "Bildaufbereitung", ["Akteur"] = "KameraSystem",
+            ["Einlesen"] = ImHost(), ["Verkleinern"] = ImHost(mitPfad: true), ["Kontrast"] = ImHost(mitPfad: true),
+        });
+        // Draußen getragen (IDarf<F> eines verkörperten Akteurs): wie viele Eingänge zugleich, sagen die Slots der Träger beim Anbieten.
+        yield return ("paarbeurteilung", new JsonObject { ["Graph"] = "Paarbeurteilung", ["Beurteilung"] = new JsonObject { ["Laufort"] = "Extern" } });
+        foreach (var g in new[] { "Datensatzpflege", "Teilmeldung", "Trainingsrechnung" })
+            yield return (g.ToLowerInvariant(), new JsonObject { ["Graph"] = g });
     }
 
     public static int FreierPort()

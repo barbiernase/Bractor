@@ -13,9 +13,9 @@ namespace Infrastructure.SourceGeneration
     /// Technik hinter den Funktionen (ohne Marker, docs/06 §6.5: was der Konstruktor einer Funktion nimmt, <c>Funktionsform.Techniken</c>): erzeugt
     /// <c>GeneratedTechnik</c> — die Tabelle Technik → Umsetzungen (Code-Fakt: jede öffentliche Klasse, die die Schnittstelle implementiert; eine Klasse ist
     /// ihre eigene) mit generierter Fabrik je Umsetzung, dazu was jeder Konstruktor einer Funktion bzw. Umsetzung braucht (Technik, Konfig-Records) und
-    /// je Konfig-Record die Bindung aus <c>Konfig:&lt;Record&gt;</c>. Welche Umsetzung läuft, wählt die Umgebung
-    /// (<c>Funktionen:&lt;Name&gt;:Implementierung</c>); gebunden und geprüft wird beim Start (<c>BindeTechnik</c>). Alles ohne Reflection: Fabriken
-    /// rufen den Konstruktor direkt, Konfig-Records werden Feld für Feld gelesen.
+    /// je Konfig-Record seine Felder und die Bindung aus den Werten eines Knotens. Welche Umsetzung läuft, wählt der Knoten einer Instanz
+    /// (<c>Technik</c>, bei mehreren); gebunden und geprüft wird beim Start (<c>BindeTechnik</c>). Alles ohne Reflection: Fabriken rufen den Konstruktor
+    /// direkt, Konfig-Records werden Feld für Feld gelesen.
     /// </summary>
     [Generator]
     public class TechnikGenerator : ISourceGenerator
@@ -67,7 +67,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("{");
             sb.AppendLine("    public static class GeneratedTechnik");
             sb.AppendLine("    {");
-            sb.AppendLine("        /// <summary>Einfacher Name → Technik (für den Abschnitt Funktionen:&lt;Name&gt; der Umgebung).</summary>");
+            sb.AppendLine("        /// <summary>Einfacher Name → Technik (für die Wahl der Umsetzung im Knoten einer Instanz, Technik:&lt;Name&gt;).</summary>");
             sb.AppendLine("        public static readonly IReadOnlyDictionary<string, Type> Namen = new Dictionary<string, Type>(StringComparer.Ordinal)");
             sb.AppendLine("        {");
             foreach (var (g, _) in technik) sb.AppendLine($"            [\"{g.Name}\"] = typeof({g.ToDisplayString(fq)}),");
@@ -92,7 +92,7 @@ namespace Infrastructure.SourceGeneration
                     var zi = zustaende.FindIndex(x => SymbolEqualityComparer.Default.Equals(x.Technik, g) && SymbolEqualityComparer.Default.Equals(x.Umsetzung, k));
                     var zustand = zi < 0 ? null : $"AktivierungsZustaende.Von(sp).Hole(\"{g.Name}\", Zustand{zi})";
                     sb.AppendLine($"            new TechnikUmsetzung(typeof({g.ToDisplayString(fq)}), \"{k.Name}\", typeof({k.ToDisplayString(fq)}), "
-                        + $"s => s.AddScoped<{g.ToDisplayString(fq)}>(sp => new {k.ToDisplayString(fq)}({Ctorbindung.Argumente(Ctorbindung.Konstruktor(k), fq, zustand)}))"
+                        + $"sp => new {k.ToDisplayString(fq)}({Ctorbindung.Argumente(Ctorbindung.Konstruktor(k), fq, zustand)})"
                         + (zi < 0 ? "" : $", Zustand{zi}") + "),");
                 }
             sb.AppendLine("        };");
@@ -104,11 +104,14 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"            [typeof({k.ToDisplayString(fq)})] = new Type[] {{ {string.Join(", ", b.Select(t => $"typeof({t.ToDisplayString(fq)})"))} }},");
             sb.AppendLine("        };");
             sb.AppendLine();
-            sb.AppendLine("        /// <summary>Die Konfig-Records: Typ, Abschnitt (einfacher Name), Bindung aus Konfig:&lt;Name&gt; (Feld für Feld, streng).</summary>");
+            sb.AppendLine("        /// <summary>Die Konfig-Records: Typ, einfacher Name, ihre Felder und die Bindung aus den Werten eines Knotens (Feld für Feld, streng).</summary>");
             sb.AppendLine("        public static readonly IReadOnlyList<KonfigRecord> Konfigs = new KonfigRecord[]");
             sb.AppendLine("        {");
             for (var i = 0; i < konfigs.Count; i++)
-                sb.AppendLine($"            new KonfigRecord(typeof({konfigs[i].ToDisplayString(fq)}), \"{konfigs[i].Name}\", Konfig{i}),");
+            {
+                var felder = (Ctorbindung.Konstruktor(konfigs[i])?.Parameters ?? System.Collections.Immutable.ImmutableArray<IParameterSymbol>.Empty).Select(p => $"\"{Feld(p)}\"");
+                sb.AppendLine($"            new KonfigRecord(typeof({konfigs[i].ToDisplayString(fq)}), \"{konfigs[i].Name}\", new[] {{ {string.Join(", ", felder)} }}, Konfig{i}),");
+            }
             sb.AppendLine("        };");
             for (var i = 0; i < konfigs.Count; i++)
             {

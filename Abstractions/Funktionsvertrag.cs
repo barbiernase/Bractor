@@ -21,10 +21,7 @@ public static class Funktionsvertrag
     public const string Zustand = "Abstractions.IZustand`1";
 
 
-    // ── Bindung der Konstruktoren (docs/06 §6.5): Technik, Konfig-Records, Logger ──
-
-    /// <summary>Abschnitt der Umgebung: je Konfig-Record (einfacher Typname) seine Werte.</summary>
-    public const string KonfigAbschnitt = "Konfig";
+    // ── Bindung der Konstruktoren (docs/06 §6.5): Technik, Konfig-Records (Werte am Knoten einer Instanz), Logger ──
 
     /// <summary>Der eine Rahmen-Typ, den ein Konstruktor außer Technik, Konfig-Records und Zustand nehmen darf.</summary>
     public const string Logger = "Microsoft.Extensions.Logging.ILogger`1";

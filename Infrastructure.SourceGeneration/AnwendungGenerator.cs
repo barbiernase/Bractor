@@ -119,7 +119,7 @@ namespace Infrastructure.SourceGeneration
             Tabelle(sb, "FunktionsTabelle", "IFunktionsTabelle", "global::Infrastructure.Funktionen.GeneratedFunktionsBausteine", new string[0], new[]
             {
                 "IReadOnlyList<global::Infrastructure.Funktionen.FunktionsBaustein> Bausteine => {0}.Alle",
-                "IReadOnlyDictionary<Type, string[]> Verkettung => {0}.Verkettung",
+                "IReadOnlyList<global::Infrastructure.Funktionen.GraphPlan> Graphen => global::Infrastructure.Funktionen.GeneratedGraphen.Alle",
             });
             Tabelle(sb, "TechnikTabelle", "ITechnikTabelle", "global::Infrastructure.Funktionen.GeneratedTechnik", new[]
             {

@@ -32,12 +32,6 @@ public class LeseseitenStandE2ETests
         EventStore = new EventStoreKonfig { Verbindung = Verbindung, Datenbank = db, Schema = "es" },
         Cluster = new ClusterKonfig { Art = ClusterArt.Einzelknoten, Name = "cqrs-" + name },
         Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = 0 },
-        Funktionen = new(StringComparer.Ordinal)
-        {
-            ["IBildEinlesen"] = new() { Parallel = 1 },
-            ["IBildVerkleinerung"] = new() { Parallel = 1 },
-            ["IKontrastausgleich"] = new() { Parallel = 1 },
-        },
     };
 
     [Fact]
@@ -48,7 +42,8 @@ public class LeseseitenStandE2ETests
         WebApplication Baue()
         {
             var builder = WebApplication.CreateBuilder();
-            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["Quellen:DateiErkannt:Pfad"] = verz, ["Konfig:BildaufbereitungKonfig:AusgabePfad"] = Path.Combine(verz, ".preprocessed") });
+            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["Quellen:DateiErkannt:Pfad"] = verz });
+            u.Graphen = Graphinstanzen.Beispieldomaene(Path.Combine(verz, ".preprocessed"), parallel: 1);
             builder.AddCqrs(u);
             return builder.Build();
         }
