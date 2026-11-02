@@ -328,6 +328,58 @@ public class AblaufE2ETests
         }
     }
 
+    /// <summary>
+    /// Entscheidung 10: dieselbe Blaupause läuft beliebig oft — zwei Instanzen des Linienimports auf zwei Verzeichnissen (je eine Datei des Paars) führen
+    /// beide bis zum Paar; jede Instanz hat ihren eigenen Wächter-Zustand.
+    /// </summary>
+    [Fact]
+    public async Task Zwei_Instanzen_desselben_Graphen_auf_zwei_Verzeichnissen()
+    {
+        var verzeichnis = Path.Combine(Path.GetTempPath(), "zwei-linien-" + Guid.NewGuid().ToString("N"));
+        var ausgabe = Path.Combine(verzeichnis, "vorschau");
+        KnotenKonfig Bild(bool mitPfad)
+        {
+            var k = new KnotenKonfig { Wiederholungen = 1 };
+            if (mitPfad) k.Werte[nameof(BildaufbereitungKonfig.AusgabePfad)] = ausgabe;
+            return k;
+        }
+        GraphInstanzKonfig Linie(string eingang) => new()
+        {
+            Graph = "Linienimport",
+            Knoten = { ["Eingang"] = Waechter(eingang), ["Aufbereitung.Verkleinern"] = Bild(true), ["Aufbereitung.Kontrast"] = Bild(true) },
+        };
+        var linie1 = Path.Combine(verzeichnis, "linie1");
+        var linie2 = Path.Combine(verzeichnis, "linie2");
+        Directory.CreateDirectory(linie1);
+        Directory.CreateDirectory(linie2);
+        var builder = Host.CreateApplicationBuilder();
+        builder.Services.AddCqrsFramework(opts => { opts.EnableGrpc = false; opts.ClusterName = "zwei-linien-" + Guid.NewGuid().ToString("N")[..8]; });
+        var instanzen = GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig> { ["linie1"] = Linie(linie1), ["linie2"] = Linie(linie2) },
+            Infrastructure.Komposition.Anwendung.Funktionen.Graphen);
+        builder.Services.AddSingleton(instanzen);
+        TechnikExtensions.BindeTechnik(builder.Services, instanzen);
+        using var host = builder.Build();
+        await host.StartAsync();
+        try
+        {
+            var t = Zufallszeit(14);
+            var dc0 = Datei(linie1, t, BildVersion.Dc0);
+            Datei(linie2, t, BildVersion.Dc2);
+            var paar = ImagePairFileName.Resolve(dc0.Name)!.AggregateId.Wert;
+            var es = host.Services.GetRequiredService<IEventStoreRepository>();
+            await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is ImagePairKomplett), TimeSpan.FromSeconds(60),
+                "Das Paar wurde nicht komplett — je Linie ein Wächter, je Datei ein Lauf.");
+            var ablage = host.Services.GetRequiredService<IZustandsAblage>();
+            await Warte(async () => await ablage.LadeAsync("linie1", "Eingang", default) is { Nummer: 1 } && await ablage.LadeAsync("linie2", "Eingang", default) is { Nummer: 1 },
+                TimeSpan.FromSeconds(30), "jede Instanz sichert ihren eigenen Wächter-Zustand");
+        }
+        finally
+        {
+            await host.StopAsync();
+            try { Directory.Delete(verzeichnis, recursive: true); } catch { /* egal */ }
+        }
+    }
+
     private static int FreierPort()
     {
         var l = new TcpListener(IPAddress.Loopback, 0);
