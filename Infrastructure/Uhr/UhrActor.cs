@@ -18,10 +18,10 @@ namespace Infrastructure.Uhr;
 /// der Command steht im Frist-Event.
 /// </summary>
 /// <param name="befehl">Liest den Command einer Frist (Diskriminator, Wire-JSON); live die generierten Tabellen (<c>Befehlsform</c>).</param>
-public sealed class Uhrwerk(IFaelligkeiten verzeichnis, Func<ICommand, Guid, Guid, CancellationToken, Task<EmitAusgang>> sende, ILogger? logger = null,
-    int seite = Uhrwerk.Seite, Func<string, string, ICommand>? befehl = null)
+public sealed class Uhrwerk(IFaelligkeiten verzeichnis, Func<IAggregatCommand, Guid, Guid, CancellationToken, Task<EmitAusgang>> sende, ILogger? logger = null,
+    int seite = Uhrwerk.Seite, Func<string, string, IAggregatCommand>? befehl = null)
 {
-    private readonly Func<string, string, ICommand> _befehl = befehl ?? Befehlsform.Lies;
+    private readonly Func<string, string, IAggregatCommand> _befehl = befehl ?? Befehlsform.Lies;
 
     /// <summary>So viele fällige Fristen holt ein Durchlauf je Abfrage.</summary>
     public const int Seite = 500;
@@ -47,7 +47,7 @@ public sealed class Uhrwerk(IFaelligkeiten verzeichnis, Func<ICommand, Guid, Gui
 
     private async Task<bool> FeuereAsync(FaelligeFrist f, CancellationToken ct)
     {
-        ICommand befehl;
+        IAggregatCommand befehl;
         try { befehl = _befehl(f.Befehl, f.Daten); }
         catch (Exception ex)
         {

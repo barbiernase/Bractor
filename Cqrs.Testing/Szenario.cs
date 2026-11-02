@@ -29,7 +29,7 @@ public sealed class SzenarioBauer<TState> where TState : class, IState, new()
     private readonly IAggregateHandlerFactory _fabrik;
     private readonly Guid _id;
     private readonly List<IEvent> _gegeben = new();
-    private readonly List<ICommand> _vorab = new();
+    private readonly List<IAggregatCommand> _vorab = new();
 
     internal SzenarioBauer(IAggregateHandlerFactory fabrik, Guid id)
     {
@@ -55,7 +55,7 @@ public sealed class SzenarioBauer<TState> where TState : class, IState, new()
     /// Bequem: der Test beschreibt die Vorgeschichte so, wie sie entstanden ist.
     /// Eine Ablehnung hier ist fast immer ein Setup-Fehler und wird deshalb laut.
     /// </summary>
-    public SzenarioBauer<TState> Vorab(params ICommand[] commands)
+    public SzenarioBauer<TState> Vorab(params IAggregatCommand[] commands)
     {
         _vorab.AddRange(commands);
         return this;
@@ -65,7 +65,7 @@ public sealed class SzenarioBauer<TState> where TState : class, IState, new()
     /// Führt Given-Events, dann Vorab-Commands, dann das getestete Command aus und liefert das
     /// inspizierbare Ergebnis.
     /// </summary>
-    public Ergebnis<TState> Wenn(ICommand command)
+    public Ergebnis<TState> Wenn(IAggregatCommand command)
     {
         var state = new TState { Id = _id, Version = 0 };
         var handler = _fabrik.CreateHandler(state);
@@ -106,7 +106,7 @@ public sealed class SzenarioBauer<TState> where TState : class, IState, new()
         Endzustand = Zustandsspiegel.Von(state),
     };
 
-    private static Schritt Ausführen(IAggregateHandler handler, TState state, ICommand cmd, SchrittHerkunft herkunft)
+    private static Schritt Ausführen(IAggregateHandler handler, TState state, IAggregatCommand cmd, SchrittHerkunft herkunft)
     {
         var vorher = Zustandsspiegel.Von(state);
         var ausgang = new List<Ereignis>();

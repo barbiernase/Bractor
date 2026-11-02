@@ -5,8 +5,8 @@ namespace Pruefdomaene.Verteilung;
 /// <summary>Die Verteilung beginnt: die Breite N steht im Start (Ziele) — das Aggregat zählt nur, wie viele angekommen sind.</summary>
 public record VerteilungGestartet(Id<Verteilung> VerteilungId, Id<Posten.Posten> QuelleId, IReadOnlyList<Id<Posten.Posten>> Ziele, int MengeJeZiel) : IEvent;
 
-/// <summary>Die Quelle ist reserviert: jedes Ziel wird zugebucht (FAN-OUT, gesendet von der Verteilabwicklung).</summary>
-public record ZubuchungenAngeordnet(IReadOnlyList<Id<Posten.Posten>> Ziele, int MengeJeZiel) : IEvent;
+/// <summary>Die Quelle ist reserviert: die Verteilung bucht ihre Ziele zu (der Command <see cref="Zubuchen"/> geht an die Verteilabwicklung).</summary>
+public record QuelleReserviert() : IEvent;
 
 /// <summary>Ein Ziel ist angekommen (COUNT-JOIN: ein Zähler, keine Liste).</summary>
 public record ZubuchungGezaehlt(int Menge) : IEvent;

@@ -28,7 +28,7 @@ namespace Infrastructure.SourceGeneration
             id: FormId,
             title: "Funktion hat nicht die Form",
             messageFormat: "Funktion '{0}': {1}. Form: je Eingang ein Auf(TEingang e[, Herkunft h][, Lese-Fähigkeiten…][, CancellationToken]) mit konkreten "
-                + "Commands, Zwischenergebnissen oder Hinweisen als Ausgabe (konkreter Typ, OneOf<…>, T?, Strom, je auch als Task).",
+                + "Commands oder Hinweisen als Ausgabe (konkreter Typ, OneOf<…> oder Task<…> davon, IEnumerable<…>, IAsyncEnumerable<…>).",
             category: "CQRS.Funktion",
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -145,7 +145,7 @@ namespace Infrastructure.SourceGeneration
         }
 
         /// <summary>
-        /// <c>Rechne{i}</c> nimmt den Eingang als Objekt und liefert die Ausgaben als Objekte (Commands, Zwischenergebnisse, Hinweise) — reflexionsfrei,
+        /// <c>Rechne{i}</c> nimmt den Eingang als Objekt und liefert die Ausgaben als Objekte (Commands, Hinweise) — reflexionsfrei,
         /// je Eingangstyp ein Fall.
         /// </summary>
         private static void EmitRechne(StringBuilder sb, Funktionsform.Form f, int i, System.Func<ITypeSymbol, string> T)
@@ -165,17 +165,9 @@ namespace Infrastructure.SourceGeneration
                     _ => $"b!.Hole<{T(p.Typ!)}>()",
                 }));
                 var aufruf = $"f.{Abstractions.Funktionsvertrag.Auf}({args})";
-                if (a.Keine)
-                {
-                    // Ohne Ausgabe (nur mit Zustand): der Eingang wirkt allein auf den Zustand.
-                    sb.AppendLine(a.Huelle.Length == 0
-                        ? $"                case {T(a.Eingang)} e: {aufruf}; return Ausgaben.Leer;"
-                        : $"                case {T(a.Eingang)} e: return Ausgaben.KeineAsync({aufruf});");
-                    continue;
-                }
                 var abbildung = "y => (object?)y" + a.Abbildung;
                 string adapter;
-                if (a.Strom) adapter = a.StromAsync || a.Huelle == "Task" ? "StromAsync" : "Strom";
+                if (a.Strom) adapter = a.StromAsync ? "StromAsync" : "Strom";
                 else adapter = a.Huelle.Length > 0 ? "EinzelnAsync" : "Einzeln";
                 var mitCt = a.Strom ? ", ct" : "";
                 sb.AppendLine($"                case {T(a.Eingang)} e: return Ausgaben.{adapter}({aufruf}, {abbildung}{mitCt});");

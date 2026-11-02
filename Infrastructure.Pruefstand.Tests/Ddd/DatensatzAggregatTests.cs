@@ -32,7 +32,7 @@ public class DatensatzAggregatTests
                 Wende(new ErstelleDatensatz(new(Id), "Charge-Juni"));
         }
 
-        public IReadOnlyList<IEvent> Wende(ICommand cmd)
+        public IReadOnlyList<IEvent> Wende(IAggregatCommand cmd)
         {
             LetzteAblehnungen.Clear();
             var events = Handler.HandleCommand(cmd).OfType<IEvent>().ToList();
@@ -215,7 +215,7 @@ public class DatensatzAggregatTests
 
     [Theory]
     [MemberData(nameof(AenderungsCommands))]
-    public void Jede_Aenderung_nach_dem_Einfrieren_wird_abgelehnt(ICommand cmd)
+    public void Jede_Aenderung_nach_dem_Einfrieren_wird_abgelehnt(IAggregatCommand cmd)
     {
         var f = Eingefroren();
         f.Wende(cmd);

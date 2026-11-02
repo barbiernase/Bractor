@@ -84,9 +84,9 @@ public interface IWirePolyTabelle
     string EventDiskriminator(IEvent value);
     void WriteEvent(Utf8JsonWriter writer, IEvent value);
     IEvent ReadEvent(string diskriminator, ref Utf8JsonReader reader);
-    string CommandDiskriminator(ICommand value);
-    void WriteCommand(Utf8JsonWriter writer, ICommand value);
-    ICommand ReadCommand(string diskriminator, ref Utf8JsonReader reader);
+    string CommandDiskriminator(IAggregatCommand value);
+    void WriteCommand(Utf8JsonWriter writer, IAggregatCommand value);
+    IAggregatCommand ReadCommand(string diskriminator, ref Utf8JsonReader reader);
     string QueryDiskriminator(IQuery value);
     void WriteQuery(Utf8JsonWriter writer, IQuery value);
     IQuery ReadQuery(string diskriminator, ref Utf8JsonReader reader);

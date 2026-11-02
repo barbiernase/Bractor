@@ -13,8 +13,9 @@ public sealed record KindFertig(Guid Kennung, string? Fehler, PID Kind);
 
 /// <summary>
 /// Ein KIND einer Funktion (docs/04 §4.4): eine Umsetzung mit ihrer Aktivierung (Bereich, Technik, Zustand), ein Eingang zugleich — oder,
-/// draußen, der Platz eines Arbeiters in der <see cref="Werkstatt"/>. Es rechnet das <c>Auf</c> und bringt jede Ausgabe hinaus — einen Command über den Emitter mit der Id aus Eingang, Funktion und Stelle (die Inbox
-/// verwirft eine Wiederholung), ein Zwischenergebnis an jede Funktion, die es hört (gewartet wird, bis sie fertig ist), einen Hinweis verlierbar.
+/// draußen, der Platz eines Arbeiters in der <see cref="Werkstatt"/>. Es rechnet das <c>Auf</c> und bringt jede Ausgabe hinaus — einen Command an
+/// ein Aggregat über den Emitter mit der Id aus Eingang, Funktion und Stelle (die Inbox verwirft eine Wiederholung), einen Command ohne Ziel an die
+/// Funktion, die ihn nimmt (gewartet wird, bis sie fertig ist), einen Hinweis verlierbar.
 /// Fertig ist der Eingang, wenn alle Commands beantwortet und alle Nachfolger fertig sind; das meldet das Kind seinem Parent.
 /// </summary>
 public sealed class FunktionsKindActor(
@@ -22,7 +23,7 @@ public sealed class FunktionsKindActor(
     IServiceProvider dienste,
     IFunktionsWege wege,
     Verkettung verkettung,
-    Func<ICommand, Guid, Guid, CancellationToken, Task<Infrastructure.Emit.EmitAntwort>> sende,
+    Func<IAggregatCommand, Guid, Guid, CancellationToken, Task<Infrastructure.Emit.EmitAntwort>> sende,
     IFaehigkeitsFabrik? faehigkeiten = null,
     ILogger? logger = null,
     TimeSpan? frist = null,
@@ -95,8 +96,8 @@ public sealed class FunktionsKindActor(
             var i = stelle++;
             switch (a)
             {
-                case ICommand c:
-                    // Commands der Reihe nach (ein Ziel sieht sie in der Reihenfolge der Funktion); die Antwort rechnet die Funktion gleich weiter.
+                case IAggregatCommand c:
+                    // Commands an Aggregate der Reihe nach (ein Ziel sieht sie in der Reihenfolge der Funktion); die Antwort rechnet die Funktion gleich weiter.
                     var antwort = await SendeAsync(c, Kettenvertrag.Befehl(kennung, traeger.Name, i, c), e, ct);
                     for (var j = 0; j < antwort.Events.Count; j++)
                     {
@@ -115,13 +116,15 @@ public sealed class FunktionsKindActor(
                         foreach (var f in verkettung.Hoerer(h.GetType()))
                             wege.Melde(Weiter(e, h, Kettenvertrag.Ausgabe(kennung, traeger.Name, i), f, Eingangsart.Hinweis));
                     break;
-                case IEvent ev:
-                    throw new InvalidOperationException($"{traeger.Name} gab das Event {ev.GetType().Name} aus — eine Funktion schreibt nie ins Log (docs/04 §4.4).");
-                default:
+                case ICommand weiter:
+                    // Ein Command ohne Ziel an die Funktion, die ihn nimmt; gewartet wird, bis sie fertig ist.
                     var ausgabe = Kettenvertrag.Ausgabe(kennung, traeger.Name, i);
-                    foreach (var f in verkettung.Hoerer(a.GetType()))
-                        warten.Add(ReicheWeiterAsync(Weiter(e, a, ausgabe, f, Eingangsart.Kette), ct));
+                    foreach (var f in verkettung.Hoerer(weiter.GetType()))
+                        warten.Add(ReicheWeiterAsync(Weiter(e, weiter, ausgabe, f, Eingangsart.Kette), ct));
                     break;
+                default:
+                    throw new InvalidOperationException($"{traeger.Name} gab {a.GetType().Name} aus — eine Funktion gibt Commands und Hinweise aus, "
+                        + "nie ein Event (docs/04 §4.4).");
             }
         }
     }
@@ -130,7 +133,7 @@ public sealed class FunktionsKindActor(
     private static EingangZustellen Weiter(EingangZustellen e, object nachricht, Guid ausgabe, string funktion, Eingangsart art) =>
         new(Eingangsvertrag.Eingang(ausgabe, funktion), funktion, nachricht, art, e.Stream, e.Version, e.Zeit, e.Akteur, e.Korrelation, e.Ursache);
 
-    private async Task<Infrastructure.Emit.EmitAntwort> SendeAsync(ICommand c, Guid id, EingangZustellen e, CancellationToken ct)
+    private async Task<Infrastructure.Emit.EmitAntwort> SendeAsync(IAggregatCommand c, Guid id, EingangZustellen e, CancellationToken ct)
     {
         var korrelation = Guid.TryParse(e.Korrelation, out var k) ? k : e.Kennung;
         for (var versuch = 1; ; versuch++)

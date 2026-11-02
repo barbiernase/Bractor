@@ -31,7 +31,7 @@ public sealed record Ereignis(IEvent Event, bool Persistent)
 /// </summary>
 public sealed record Schritt
 {
-    public required ICommand Command { get; init; }
+    public required IAggregatCommand Command { get; init; }
     public required Guid AggregatId { get; init; }
     public required string AggregatTyp { get; init; }
     public required SchrittHerkunft Herkunft { get; init; }

@@ -56,7 +56,7 @@ public static class JsonEingang
         {
             if (!Erkenne(http, sp, out var akteur, out var abgewiesen)) return abgewiesen!;
             if (!Lies(body, MessageCategory.Command, out var typ, out var nachricht, out var fehler)) return fehler!;
-            var cmd = (ICommand)nachricht!;
+            var cmd = (IAggregatCommand)nachricht!;
             if (akteur != null && !akteur.DarfHinein(typ!))
                 return Results.Json(new { ok = false, abgelehnt = $"Akteur '{akteur.Name}' darf {typ!.Name} nicht (kein IDarf<{typ.Name}>)" }, Json, statusCode: 403);
 

@@ -71,3 +71,9 @@ public record DatensatzBereitsEingefroren(Id<Datensatz> DatensatzId) : ITransien
 public record DatensatzLeer(Id<Datensatz> DatensatzId) : ITransientEvent;
 public record RangeLeer(Id<Datensatz> DatensatzId) : ITransientEvent;
 public record SplitUngueltig(int TrainProzent, int ValProzent, int TestProzent) : ITransientEvent;
+
+/// <summary>Hinweis: die Range traf kein Paar — nichts aufzunehmen.</summary>
+public record RangeOhneTreffer(RangeKriterien Kriterien) : ITransientEvent;
+
+/// <summary>Hinweis: kein Mitglied war im Read-Model auffindbar — das Einfrieren wird nicht abgeschlossen.</summary>
+public record KeinMitgliedAuffindbar(int Angefragt) : ITransientEvent;

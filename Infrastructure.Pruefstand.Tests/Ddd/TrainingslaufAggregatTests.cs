@@ -32,7 +32,7 @@ public class TrainingslaufAggregatTests
                 Wende(new StarteTraining(new(Id), new(Guid.NewGuid()), 1, StdHp));
         }
 
-        public IReadOnlyList<IEvent> Wende(ICommand cmd)
+        public IReadOnlyList<IEvent> Wende(IAggregatCommand cmd)
         {
             LetzteAblehnungen.Clear();
             var events = Handler.HandleCommand(cmd).OfType<IEvent>().ToList();

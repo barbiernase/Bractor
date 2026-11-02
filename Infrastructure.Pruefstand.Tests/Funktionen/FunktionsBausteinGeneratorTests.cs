@@ -283,7 +283,6 @@ public interface IPost { Task SendeAsync(string an); }
         (await Alle(Ausgaben.Einzeln<Aus?, Aus>(null, y => y))).Should().BeEmpty();
         (await Alle(Ausgaben.EinzelnAsync(Task.FromResult<Aus?>(new Aus(2)), y => y))).Should().ContainSingle();
         (await Alle(Ausgaben.Strom(new[] { new Aus(1), null, new Aus(3) }, y => y))).Should().HaveCount(2);
-        (await Alle(Ausgaben.StromAsync(Task.FromResult<IEnumerable<Aus>>(new[] { new Aus(1), new Aus(2) }), y => y))).Should().HaveCount(2);
         (await Alle(Ausgaben.StromAsync(Async(), y => y))).Select(a => ((Aus)a).N).Should().Equal(1, 2, 3);
 
         static async IAsyncEnumerable<Aus> Async()

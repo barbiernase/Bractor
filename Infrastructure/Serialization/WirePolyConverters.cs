@@ -8,7 +8,7 @@ namespace Infrastructure.Serialization;
 
 /// <summary>
 /// Polymorphe STJ-Converter für die Interface-Payloads, die GESCHACHTELT in einer Wire-Hülle reisen
-/// (<c>CommandEnvelope.Payload : ICommand</c>, <c>CommandResult.RejectionEvent : IEvent</c>, <c>AggregatFrage.Query : IQuery</c>,
+/// (<c>CommandEnvelope.Payload : IAggregatCommand</c>, <c>CommandResult.RejectionEvent : IEvent</c>, <c>AggregatFrage.Query : IQuery</c>,
 /// <c>AggregatAntwort.Antwort : IQueryResponse</c>).
 ///
 /// Reflexionsfrei (Invariante 4): der Diskriminator ist der Typ-Name (PascalCase, identisch zu den
@@ -42,9 +42,9 @@ public sealed class IEventJsonConverter : JsonConverter<IEvent>
     }
 }
 
-public sealed class ICommandJsonConverter : JsonConverter<ICommand>
+public sealed class ICommandJsonConverter : JsonConverter<IAggregatCommand>
 {
-    public override void Write(Utf8JsonWriter writer, ICommand value, JsonSerializerOptions options)
+    public override void Write(Utf8JsonWriter writer, IAggregatCommand value, JsonSerializerOptions options)
     {
         writer.WriteStartArray();
         writer.WriteStringValue(Anwendung.WirePoly.CommandDiskriminator(value));
@@ -52,7 +52,7 @@ public sealed class ICommandJsonConverter : JsonConverter<ICommand>
         writer.WriteEndArray();
     }
 
-    public override ICommand Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    public override IAggregatCommand Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType != JsonTokenType.StartArray) throw new JsonException("Erwartet: StartArray für ICommand-Payload.");
         reader.Read();

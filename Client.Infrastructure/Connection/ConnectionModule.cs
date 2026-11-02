@@ -97,10 +97,10 @@ public class ConnectionModule : IAsyncDisposable
 
         foreach (var cmdType in commandTypes)
         {
-            // Nicht-generisch: Handler bekommt object, castet zu ICommand
+            // Nicht-generisch: Handler bekommt object, castet zu IAggregatCommand (ein Command an ein Aggregat)
             var sub = bus.SubscribeAsync(cmdType, async (obj, ctx) =>
             {
-                if (obj is ICommand command)
+                if (obj is IAggregatCommand command)
                     await HandleCommandAsync(command, ctx);
             });
             _subscriptions.Add(sub);
@@ -217,7 +217,7 @@ public class ConnectionModule : IAsyncDisposable
     // UPSTREAM: Command → Envelope → gRPC
     // ═══════════════════════════════════════════════════════════
 
-    private async Task HandleCommandAsync(ICommand command, MessageContext ctx)
+    private async Task HandleCommandAsync(IAggregatCommand command, MessageContext ctx)
     {
         // Read-Your-Writes: dieses Aggregat als "gerade geschrieben" merken → künftige Queries tragen dafür „mindestens S auf v“
         // (IVersioning.Mindestens), der Reader wartet begrenzt, bis seine Projektion so weit ist (docs/08 §8.3).
@@ -274,7 +274,7 @@ public class ConnectionModule : IAsyncDisposable
     /// (das Wiederverbinden sendet ihn). Bleibt es bei stehender Verbindung nach allen Versuchen still, meldet der Loop
     /// <see cref="CommandUnbestaetigt"/> (Ausgang unbekannt, sicher wiederholbar) — NICHT „fehlgeschlagen".
     /// </summary>
-    private async Task SendWithRetryAsync(ICommand command, CommandEnvelope envelope)
+    private async Task SendWithRetryAsync(IAggregatCommand command, CommandEnvelope envelope)
     {
         var ct = _cts?.Token ?? CancellationToken.None;
         _pending.Register(envelope.CorrelationId);   // VOR dem Senden, sonst ginge ein früher Ack verloren
@@ -334,7 +334,7 @@ public class ConnectionModule : IAsyncDisposable
     /// Löst den AggregateType für einen Command auf.
     /// Erst Dictionary-Lookup, dann Fallback auf _defaultAggregateType.
     /// </summary>
-    private string ResolveAggregateType(ICommand command)
+    private string ResolveAggregateType(IAggregatCommand command)
     {
         if (_commandAggregateTypes != null &&
             _commandAggregateTypes.TryGetValue(command.GetType(), out var aggregateType))

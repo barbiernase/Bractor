@@ -57,3 +57,6 @@ public record MeldeTrainingGescheitert(
 public record MarkiereAlsHaengengeblieben(
     Id<Trainingslauf> AggregateId
 ) : ICommand<Trainingslauf>;
+
+/// <summary>Das Training ist angefordert: der Lauf ist auf dem Datensatz in dieser Version mit diesen Hyperparametern zu rechnen.</summary>
+public record TrainingZuRechnen(Id<Trainingslauf> Lauf, Id<Datensatz.Datensatz> DatensatzId, int DatensatzVersion, Hyperparameter Hyperparameter) : ICommand;

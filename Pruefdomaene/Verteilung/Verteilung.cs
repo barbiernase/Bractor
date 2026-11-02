@@ -11,7 +11,7 @@ public partial class Verteilung : IState
 {
     public IReadOnlyList<Id<Posten.Posten>> Ziele { get; set; } = Array.Empty<Id<Posten.Posten>>();
     public int MengeJeZiel { get; set; }
-    public bool Angeordnet { get; set; }
+    public bool QuelleReserviert { get; set; }
     public int Gezaehlt { get; set; }
     public int Zugebucht { get; set; }
     public bool Abgeschlossen { get; set; }

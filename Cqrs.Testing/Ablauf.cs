@@ -5,12 +5,12 @@ namespace Cqrs.Testing;
 /// <summary>Ein Command-Schritt eines Ablaufs: wer ihn gab (null = von außen, sonst die Funktion bzw. <c>uhr</c>), an welches Aggregat, mit welchem Ausgang.</summary>
 public sealed record AblaufSchritt
 {
-    public required ICommand Command { get; init; }
+    public required IAggregatCommand Command { get; init; }
     public string? Von { get; init; }
     public required Guid AggregatId { get; init; }
     public required string AggregatTyp { get; init; }
     public required IReadOnlyList<Ereignis> Ausgang { get; init; }
-    /// <summary>Die Folgen der Entscheidung (docs/03 §3.1) — schlichte Records, nicht im Log; die Kanten, die sie hören, rechnen sie.</summary>
+    /// <summary>Die Commands ohne Ziel der Entscheidung (docs/03 §3.1) — nicht im Log; die Kanten, die sie nehmen, rechnen sie.</summary>
     public IReadOnlyList<object> Folgen { get; init; } = Array.Empty<object>();
     public required IReadOnlyDictionary<string, object?> ZustandVorher { get; init; }
     public required IReadOnlyDictionary<string, object?> ZustandNachher { get; init; }
@@ -39,7 +39,7 @@ public sealed class AblaufBauer
     /// <summary>Ein Ablauf, der mehr Schritte braucht, kreist (R6) — der Test bricht ab, statt zu hängen.</summary>
     public const int HoechstensSchritte = 10_000;
 
-    private sealed record AggregatArt(string Typ, Func<ICommand, bool> Nimmt, Func<Guid, IState> Neu);
+    private sealed record AggregatArt(string Typ, Func<IAggregatCommand, bool> Nimmt, Func<Guid, IState> Neu);
     private sealed record Kante(string Funktion, Type Eingang, Func<object, Herkunft, IEnumerable<IAusgabe>> Auf);
     private sealed class Instanz(IState state, IAggregateHandler handler, string typ)
     {
@@ -68,7 +68,7 @@ public sealed class AblaufBauer
         return this;
     }
 
-    /// <summary>Eine Kante einer Funktion: ihr <c>Auf</c> für <typeparamref name="TEingang"/> (ein Event oder eine Folge), das nichts oder eine Ausgabe liefert.</summary>
+    /// <summary>Eine Kante einer Funktion: ihr <c>Auf</c> für <typeparamref name="TEingang"/> (ein Event oder ein Command ohne Ziel), das nichts oder eine Ausgabe liefert.</summary>
     public AblaufBauer Funktion<TEingang>(string funktion, Func<TEingang, Herkunft, IAusgabe?> auf) where TEingang : class
     {
         _kanten.Add(new Kante(funktion, typeof(TEingang), (e, h) => auf((TEingang)e, h) is { } a ? new[] { a } : Array.Empty<IAusgabe>()));
@@ -96,7 +96,7 @@ public sealed class AblaufBauer
     }
 
     /// <summary>Ein Command von außen — und alles, was Funktionen daraus machen, bis der Ablauf ruht. Fristen bleiben stehen (<see cref="Fristen"/>).</summary>
-    public AblaufErgebnis Wenn(ICommand command) => Laufe(new[] { ((ICommand)command, (string?)null) });
+    public AblaufErgebnis Wenn(IAggregatCommand command) => Laufe(new[] { (command, (string?)null) });
 
     /// <summary>Die Uhr: jede gesetzte, noch nicht gefeuerte Frist ist fällig — ihr Command geht an das Aggregat, das sie setzte.</summary>
     public AblaufErgebnis Fristen()
@@ -109,9 +109,17 @@ public sealed class AblaufBauer
     /// <summary>Die gesetzten, noch nicht gefeuerten Fristen.</summary>
     public IReadOnlyList<FristGesetzt> OffeneFristen => _fristen.Select(f => f.Frist).ToList();
 
-    private AblaufErgebnis Laufe(IEnumerable<(ICommand Command, string? Von)> start)
+    private AblaufErgebnis Laufe(IEnumerable<(IAggregatCommand Command, string? Von)> start)
     {
-        var schlange = new Queue<(ICommand, string?)>(start);
+        var schlange = new Queue<(IAggregatCommand, string?)>(start);
+        // Eine Ausgabe einer Kante: ein Command an ein Aggregat kommt in die Schlange, einer ohne Ziel gleich an die Kanten, die ihn nehmen.
+        void Weiter(IAusgabe a, string funktion, Herkunft h)
+        {
+            if (a is IAggregatCommand c) { schlange.Enqueue((c, funktion)); return; }
+            if (a is not ICommand weiter) return;
+            foreach (var k in _kanten.Where(k => k.Eingang == weiter.GetType()))
+                foreach (var b in k.Auf(weiter, new Herkunft(h.Stream, h.Version, h.Zeit, h.Akteur, WirkerId.FuerFunktion(k.Funktion)))) Weiter(b, k.Funktion, h);
+        }
         var schritte = new List<AblaufSchritt>();
         while (schlange.Count > 0)
         {
@@ -154,13 +162,13 @@ public sealed class AblaufBauer
             foreach (var f in folgen)
                 foreach (var k in _kanten.Where(k => k.Eingang == f.GetType()))
                     foreach (var a in k.Auf(f, new Herkunft(cmd.Ziel, i.State.Version, Zeit, null, WirkerId.FuerFunktion(k.Funktion))))
-                        if (a is ICommand c) schlange.Enqueue((c, k.Funktion));
+                        Weiter(a, k.Funktion, new Herkunft(cmd.Ziel, i.State.Version, Zeit, null, WirkerId.FuerFunktion(k.Funktion)));
             foreach (var (e, version) in neu)
             {
                 if (e is FristGesetzt f) { _fristen.Add((cmd.Ziel, version, f)); continue; }
                 foreach (var k in _kanten.Where(k => k.Eingang == e.GetType()))
                     foreach (var a in k.Auf(e, new Herkunft(cmd.Ziel, version, Zeit, null, WirkerId.FuerFunktion(k.Funktion))))
-                        if (a is ICommand c) schlange.Enqueue((c, k.Funktion));
+                        Weiter(a, k.Funktion, new Herkunft(cmd.Ziel, version, Zeit, null, WirkerId.FuerFunktion(k.Funktion)));
             }
         }
         _alle.AddRange(schritte);
@@ -196,12 +204,12 @@ public sealed class AblaufErgebnis
     public IReadOnlyList<AblaufSchritt> Schritte { get; }
 
     /// <summary>Die Commands, die Funktionen (oder die Uhr) in dieser Kaskade gaben.</summary>
-    public IReadOnlyList<ICommand> Gefeuert => Schritte.Where(s => s.Von is not null).Select(s => s.Command).ToList();
+    public IReadOnlyList<IAggregatCommand> Gefeuert => Schritte.Where(s => s.Von is not null).Select(s => s.Command).ToList();
 
     public string AlsText() => string.Join("\n", Schritte);
 
     /// <summary>Eine Funktion gab in dieser Kaskade (mindestens) einen <typeparamref name="TCommand"/>.</summary>
-    public AblaufErgebnis Feuert<TCommand>(int anzahl = -1) where TCommand : ICommand
+    public AblaufErgebnis Feuert<TCommand>(int anzahl = -1) where TCommand : IAggregatCommand
     {
         var n = Gefeuert.Count(c => c is TCommand);
         if (anzahl < 0 ? n == 0 : n != anzahl)

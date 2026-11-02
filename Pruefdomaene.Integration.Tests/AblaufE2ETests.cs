@@ -73,8 +73,7 @@ public class AblaufE2ETests
             (await Zustand<Kontingent.Kontingent>(host.Services, kontingent)).Frei.Should().Be(1, "die abgelehnte Belegung hat nichts verändert");
             (await Zahl<BelegungAbgelehnt>(host, kontingent)).Should().Be(1, "die Absage ist ein Fakt im Kontingent");
             (await Zahl<AuftragGescheitert>(host, auftrag)).Should().Be(1);
-            (await Zahl<PostenFreigabeAngeordnet>(host, auftrag)).Should().Be(1);
-            (await Zahl<KontingentEntlastungAngeordnet>(host, auftrag)).Should().Be(0, "die Belegung gelang nie — nichts zu entlasten");
+            (await Zahl<KontingentEntlastet>(host, kontingent)).Should().Be(0, "die Belegung gelang nie — nichts zu entlasten");
             (await Zustand<Auftrag.Auftrag>(host.Services, auftrag)).Bestaetigt.Should().BeFalse();
         }
         finally { await host.StopAsync(); }
@@ -175,7 +174,7 @@ public class AblaufE2ETests
             await Warte(async () => await Zahl<VerteilungGescheitert>(host, verteilung) == 1, Frist, "Die Verteilung scheitert nicht.");
             await Task.Delay(TimeSpan.FromSeconds(2));
             (await Zahl<PostenZugebucht>(host, ziel)).Should().Be(0);
-            (await Zahl<ZubuchungenAngeordnet>(host, verteilung)).Should().Be(0);
+            (await Zahl<QuelleReserviert>(host, verteilung)).Should().Be(0);
         }
         finally { await host.StopAsync(); }
     }

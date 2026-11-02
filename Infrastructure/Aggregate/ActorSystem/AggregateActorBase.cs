@@ -599,7 +599,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         {
             var entschieden = _handler!.HandleCommand(env.Payload).ToList();
             alle = entschieden.OfType<IEvent>().ToList();
-            folgen = entschieden.Where(Entscheidungsausgabe.IstFolge).ToList();
+            folgen = entschieden.Where(Entscheidungsausgabe.IstCommand).ToList();
         }
         catch (Exception ex)
         {
@@ -828,7 +828,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
             // 1. Events erzeugen (Decider) — wirft keine Exceptions mehr für Domänen-Ablehnungen
             var entschieden = _handler!.HandleCommand(cmdEnvelope.Payload).ToList();
             var allEvents = entschieden.OfType<IEvent>().ToList();
-            var folgen = entschieden.Where(Entscheidungsausgabe.IstFolge).ToList();
+            var folgen = entschieden.Where(Entscheidungsausgabe.IstCommand).ToList();
             if (folgen.Count > 0 && allEvents.Any(e => e is ITransientEvent))
                 throw new InvalidOperationException($"Decider für {cmdEnvelope.Payload.GetType().Name} lieferte eine Ablehnung und {folgen.Count} Folge(n) — "
                     + "eine Ablehnung (ITransientEvent) muss die einzige Ausgabe sein.");

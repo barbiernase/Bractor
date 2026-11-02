@@ -7,7 +7,7 @@ namespace Infrastructure.Extensions;
 /// <summary>
 /// Sprechender Einstiegs-Dispatch OHNE Magic String: der Anwender schreibt nur den Command. Ziel-Aggregat und Id stehen im Typ des Commands
 /// (<see cref="ICommand{TAggregat}"/>, docs/10 §10.4): den Aggregat-Namen liefert die generierte Routing-Tabelle
-/// (<see cref="GeneratedPipelines.CommandAggregateTypes"/>), die Id der Command selbst (<see cref="ICommand.Ziel"/>).
+/// (<see cref="GeneratedPipelines.CommandAggregateTypes"/>), die Id der Command selbst (<see cref="IAggregatCommand.Ziel"/>).
 /// </summary>
 public static class AggregateDispatcherExtensions
 {
@@ -15,7 +15,7 @@ public static class AggregateDispatcherExtensions
     /// <param name="expectedVersion">
     /// OCC-Erwartung; Default 0 (leerer Stream — der übliche Fall für einen Einstiegs-/Erzeugungs-Command).
     /// </param>
-    public static void Dispatch(this IAggregateDispatcher dispatcher, ICommand command, int expectedVersion = 0)
+    public static void Dispatch(this IAggregateDispatcher dispatcher, IAggregatCommand command, int expectedVersion = 0)
     {
         dispatcher.Dispatch(new CommandEnvelope
         {
@@ -29,7 +29,7 @@ public static class AggregateDispatcherExtensions
     /// Der Aggregat-Name (Cluster-Kind) für einen Command aus der generierten Routing-Tabelle. Sie enthält jeden Command der Anwendung — das
     /// Ziel steht in <see cref="ICommand{TAggregat}"/> —; fehlt einer, gehört er nicht zu dieser Anwendung.
     /// </summary>
-    public static string ResolveAggregateType(ICommand command)
+    public static string ResolveAggregateType(IAggregatCommand command)
     {
         if (Anwendung.Routing.CommandToAggregate.TryGetValue(command.GetType(), out var aggregateType))
             return aggregateType;

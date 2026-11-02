@@ -60,6 +60,6 @@ public static class Kettenvertrag
     public static Guid Antwort(Guid eingang, string funktion, int stelle, int nummer) => Herkunft.Ableite($"antwort:{funktion}:{eingang:N}:{stelle}:{nummer}");
 
     /// <summary>Die Command-Id der Ausgabe an <paramref name="stelle"/> (Eingang, Funktion, Stelle, Typ, Ziel): ein erneutes Rechnen trägt dieselbe Id.</summary>
-    public static Guid Befehl(Guid eingang, string funktion, int stelle, ICommand befehl) =>
+    public static Guid Befehl(Guid eingang, string funktion, int stelle, IAggregatCommand befehl) =>
         Herkunft.Ableite($"befehl:{funktion}:{eingang:N}:{stelle}:{befehl.GetType().FullName}:{befehl.Ziel:N}");
 }

@@ -43,12 +43,13 @@ public static class PythonFunktionsform
         return aufs.Count == 0 ? null : new Funktion(t, aufs);
     }
 
-    /// <summary>Die Art einer Ausgabe auf der Leitung (<c>FunktionsAusgabe</c>): command, hinweis, zwischenergebnis (Nachricht ohne Marker) oder event.</summary>
+    /// <summary>Die Art einer Ausgabe auf der Leitung (<c>FunktionsAusgabe</c>): command (an ein Aggregat), hinweis, zwischenergebnis (ein Command ohne
+    /// Ziel, er reist in der Nutzlast-Kategorie Nachricht) oder event.</summary>
     private static string Art(Type t)
     {
         var basen = t.GetInterfaces().Select(i => i.FullName).ToHashSet(StringComparer.Ordinal);
-        return basen.Contains("Abstractions.ICommand") ? "COMMAND" : basen.Contains("Abstractions.ITransientEvent") ? "HINWEIS"
-            : Nachrichtenlesart.IstSchlicht(t) ? "ZWISCHENERGEBNIS" : "EVENT";
+        return basen.Contains("Abstractions.IAggregatCommand") ? "COMMAND" : basen.Contains("Abstractions.ITransientEvent") ? "HINWEIS"
+            : Nachrichtenlesart.IstOhneZiel(t) ? "ZWISCHENERGEBNIS" : "EVENT";
     }
 
     /// <summary>Die Funktionen draußen (Schnittstellen mit <c>Auf</c>, ohne Lese-Fähigkeit), nach vollem Namen sortiert.</summary>

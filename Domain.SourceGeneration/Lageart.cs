@@ -13,11 +13,9 @@ namespace Domain.SourceGeneration;
 internal sealed class Lageart
 {
     private const string A = "Abstractions.";
-    private readonly HashSet<string> _ergebnisse = new();
     private readonly HashSet<string> _konfigs = new();
     private readonly HashSet<string> _aggregatQueries = new(), _aggregatAntworten = new();
-    private readonly HashSet<string> _folgen = new();
-    private readonly HashSet<string> _zwischen = new();
+    private readonly HashSet<string> _ausDecide = new();
     private readonly Infrastructure.SourceGeneration.Funktionsform.Technikmenge _technik = new();
 
     /// <summary>Ist der Vertrag (Abstractions) in der Compilation? Sonst gibt es nichts zu prüfen.</summary>
@@ -33,14 +31,6 @@ internal sealed class Lageart
         var technik = _technik = Infrastructure.SourceGeneration.Funktionsform.Techniken(alle);
         foreach (var t in alle)
         {
-            // Ergebnis-Events: die Ausgaben jeder Funktion (die Fälle jedes Auf, Funktionsform). Commands unter ihnen bleiben Commands
-            //   (Command wird vor Event erkannt).
-            if (Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t))
-                foreach (var a in Infrastructure.SourceGeneration.Funktionsform.Lies(t).Aufs)
-                    foreach (var e in a.Ausgaben) _ergebnisse.Add(Name(e));
-            // Zwischenergebnisse: die schlichten Ein- und Ausgaben der Funktionen (Nachrichtenform, docs/04 §4.4) — eine Folge bleibt Folge.
-            if (Infrastructure.SourceGeneration.Nachrichtenform.IstFunktion(t))
-                foreach (var z in Infrastructure.SourceGeneration.Nachrichtenform.VonFunktion(t)) _zwischen.Add(Name(z));
             // Fragen an ein Aggregat (Frage im Decider, docs/03 §3.2): ihre Query und ihre Antworten liegen bei der Schreibseite.
             if (Infrastructure.SourceGeneration.Projektionsform.StateVonDecider(t) is { } state)
                 foreach (var f in Infrastructure.SourceGeneration.Projektionsform.LiesAggregatfragen(t, state).Fragen)
@@ -48,10 +38,11 @@ internal sealed class Lageart
                     _aggregatQueries.Add(Name(f.Query));
                     foreach (var a in f.Antworten) _aggregatAntworten.Add(Name(a));
                 }
-            // Folgen: die schlichten Records der Decide-Signaturen (Nachrichtenform, docs/03 §3.1).
+            // Commands ohne Ziel aus einem Decide (Nachrichtenform, docs/03 §3.1): sie liegen bei der Schreibseite; die übrigen geben nur Knoten
+            //   einander (bei den Abläufen).
             if (Infrastructure.SourceGeneration.Nachrichtenform.IstDecider(t))
                 foreach (var d in Infrastructure.SourceGeneration.Nachrichtenform.Decides(t))
-                    foreach (var f in Infrastructure.SourceGeneration.Nachrichtenform.FolgenVon(d)) _folgen.Add(Name(f));
+                    foreach (var f in Infrastructure.SourceGeneration.Nachrichtenform.CommandsVon(d)) _ausDecide.Add(Name(f));
             // Konfig-Records: was der Konstruktor einer Funktion, ihrer Umsetzung oder einer Technik-Umsetzung als Konfig bindet (Ctorbindung, CQRS090).
             if (t.TypeKind == TypeKind.Class && !t.IsAbstract && (Hat(t, "IFunktion") || technik.IstUmsetzung(t)))
                 foreach (var p in Infrastructure.SourceGeneration.Ctorbindung.Konstruktor(t)?.Parameters ?? Enumerable.Empty<IParameterSymbol>())
@@ -81,9 +72,11 @@ internal sealed class Lageart
             return Projektstruktur.Primitive.Hilfscode;
         }
         if (Hat(t, "IState")) return Projektstruktur.Primitive.Aggregat;
-        if (Hat(t, "ICommand")) return Projektstruktur.Primitive.Command;
+        if (Hat(t, "IAggregatCommand")) return Projektstruktur.Primitive.Command;
+        if (Hat(t, "ICommand")) return _ausDecide.Contains(Name(t)) ? Projektstruktur.Primitive.Command : Projektstruktur.Primitive.KnotenCommand;
+        if (Hat(t, "IGraph")) return Projektstruktur.Primitive.Graph;
         if (Hat(t, "IQuellNachricht")) return Projektstruktur.Primitive.Quelle;
-        if (Hat(t, "IEvent")) return _ergebnisse.Contains(Name(t)) ? Projektstruktur.Primitive.FunktionsErgebnis : Projektstruktur.Primitive.Event;
+        if (Hat(t, "IEvent")) return Projektstruktur.Primitive.Event;
         if (Hat(t, "IWertobjekt")) return Projektstruktur.Primitive.Wertobjekt;
         if (Hat(t, "IReadModel")) return Projektstruktur.Primitive.ReadModel;
         if (Hat(t, "IQuery")) return _aggregatQueries.Contains(Name(t)) ? Projektstruktur.Primitive.AggregatQuery : Projektstruktur.Primitive.Query;
@@ -94,8 +87,6 @@ internal sealed class Lageart
             return Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t) ? Projektstruktur.Primitive.HostFunktion : Projektstruktur.Primitive.FunktionsImplementierung;
         if (Hat(t, "IAkteur")) return Projektstruktur.Primitive.Akteur;
         if (Hat(t, "IStore") || Hat(t, "IReadStore") || Hat(t, "IWriteStore")) return Projektstruktur.Primitive.StoreImplementierung;
-        if (_folgen.Contains(Name(t))) return Projektstruktur.Primitive.Folge;
-        if (_zwischen.Contains(Name(t))) return Projektstruktur.Primitive.Zwischenergebnis;
         if (_konfigs.Contains(Name(t))) return Projektstruktur.Primitive.Konfig;
         if (_technik.IstTechnik(t) || _technik.IstUmsetzung(t)) return Projektstruktur.Primitive.Technik;
         return Projektstruktur.Primitive.Hilfscode;

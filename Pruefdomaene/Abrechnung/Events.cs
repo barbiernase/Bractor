@@ -13,3 +13,6 @@ public record MahnungVermerkt(Id<Rechnung> Rechnung, string Versand, int Stufe) 
 
 public record RechnungExistiert(Id<Rechnung> RechnungId) : ITransientEvent;
 public record RechnungUnbekannt(Id<Rechnung> RechnungId) : ITransientEvent;
+
+/// <summary>Hinweis des Mahnwesens: für diese Rechnung ist keine Mahnung nötig (verlierbar, höchstens einmal).</summary>
+public record MahnungUnnoetig(Id<Rechnung> Rechnung) : ITransientEvent;

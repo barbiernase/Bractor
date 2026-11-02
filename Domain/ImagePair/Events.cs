@@ -73,3 +73,6 @@ public record RegionIndexUngueltig(int RegionIndex) : ITransientEvent;
 public record RegionLabelsUngueltig(int Anzahl) : ITransientEvent;
 public record PaarNichtKomplett() : ITransientEvent;
 public record ImagePairEingabeUngueltig(string Feld, string Grund) : ITransientEvent;
+
+/// <summary>Hinweis des Bildeingangs: der Name passt nicht zur Aufnahme-Konvention — die Datei gehört zu keinem Paar.</summary>
+public record DateinameUnbekannt(string Dateiname) : ITransientEvent;

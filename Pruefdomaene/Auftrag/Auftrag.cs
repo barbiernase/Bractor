@@ -17,8 +17,6 @@ public partial class Auftrag : IState
     public bool Belegt { get; set; }
     public bool Bestaetigt { get; set; }
     public bool Gescheitert { get; set; }
-    public bool PostenZurueck { get; set; }
-    public bool KontingentZurueck { get; set; }
 
     public bool Existiert => Version > 0;
 }

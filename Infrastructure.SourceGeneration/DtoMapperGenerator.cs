@@ -162,7 +162,7 @@ namespace Infrastructure.SourceGeneration
 
             // 2. Static Helper Classes — jede Kategorie Typname ↔ Domänen-Typ über die Nutzlast
             GenerateValueObjectHelpers(sb, objectTypes, typeLookup);
-            GenerateStandaloneHelpers(sb, commandTypes, objectTypes, "Command", "ICommand", "ProtoCommandMappingHelpers", typeLookup);
+            GenerateStandaloneHelpers(sb, commandTypes, objectTypes, "Command", "IAggregatCommand", "ProtoCommandMappingHelpers", typeLookup);
             GenerateStandaloneHelpers(sb, eventTypes, objectTypes, "Event", "IEvent", "ProtoEventMappingHelpers", typeLookup);
             
             // 3. Standalone-Kategorien — generisch (neue Kategorie = ein Eintrag)
@@ -188,7 +188,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("    public sealed class GeneratedNutzlast : global::Cqrs.Leitung.INutzlastTabelle");
             sb.AppendLine("    {");
             sb.AppendLine("        public static readonly GeneratedNutzlast Instanz = new GeneratedNutzlast();");
-            foreach (var (art, iface, helper) in new[] { ("Command", "ICommand", "ProtoCommandMappingHelpers"), ("Event", "IEvent", "ProtoEventMappingHelpers"),
+            foreach (var (art, iface, helper) in new[] { ("Command", "IAggregatCommand", "ProtoCommandMappingHelpers"), ("Event", "IEvent", "ProtoEventMappingHelpers"),
                          ("Query", "IQuery", "ProtoQueryMappingHelpers"), ("Antwort", "IQueryResponse", "ProtoQueryResponseMappingHelpers") })
             {
                 sb.AppendLine($"        public {iface} {art}({N} n) => {helper}.MapToDomain(n);");
@@ -330,7 +330,7 @@ namespace Infrastructure.SourceGeneration
         {
             var interfaceName = typeName switch
             {
-                "Command" => "ICommand",
+                "Command" => "IAggregatCommand",
                 "Event" => "IEvent",
                 "Query" => "IQuery",
                 "QueryResponse" => "IQueryResponse",

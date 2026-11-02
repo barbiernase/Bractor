@@ -19,32 +19,29 @@ namespace Infrastructure.SourceGeneration
         private const string A = "Abstractions.";
         public const string IFunktion = A + "IFunktion";
 
-        /// <summary>Was ein <c>Auf</c> ausgibt: Hülle (Task/ValueTask), Strom (sync/async) und die Abbildung eines Elements auf die Ausgabe.</summary>
+        /// <summary>Was ein <c>Auf</c> nimmt und ausgibt: Eingang, Hülle (Task), Strom (sync/async) und die Abbildung eines Elements auf die Ausgabe.</summary>
         internal sealed class Auf
         {
             public IMethodSymbol Methode = null!;
             public INamedTypeSymbol Eingang = null!;
             public bool Hinweis;
-            /// <summary>Der Eingang ist eine Nachricht ohne Marker (eine Folge, ein Zwischenergebnis — Nachrichtenform), kein Event.</summary>
-            public bool Nachricht;
+            /// <summary>Der Eingang ist ein Command ohne Ziel (Nachrichtenform): aus einem Decide, von einer anderen Funktion oder einem Akteur.</summary>
+            public bool Command;
             /// <summary>Der Eingang ist eine Quell-Nachricht (<c>IQuellNachricht</c>): sie steht genau einmal im Log, ihr Eingang ist durabel.</summary>
             public bool Quelle;
             /// <summary>Die Parameter in Reihenfolge: <c>e</c> (Eingang), <c>h</c> (Herkunft), <c>ct</c> (Abbruch) oder eine Lese-Fähigkeit.</summary>
             public List<(string Art, INamedTypeSymbol? Typ, string Name)> Parameter = new List<(string, INamedTypeSymbol?, string)>();
             public List<INamedTypeSymbol> Faehigkeiten = new List<INamedTypeSymbol>();
             public bool MitHerkunft;
-            /// <summary><c>""</c>, <c>"Task"</c> oder <c>"ValueTask"</c>.</summary>
+            /// <summary><c>""</c> oder <c>"Task"</c>.</summary>
             public string Huelle = "";
             public bool Strom;
             public bool StromAsync;
             /// <summary>Das Element der Rückgabe (bei einem Strom sein Element).</summary>
             public ITypeSymbol Element = null!;
-            /// <summary>Wie ein Element zur Ausgabe wird: <c>""</c> (es selbst), <c>".Value"</c> (OneOf), <c>"?.Value"</c> (OneOf?).</summary>
+            /// <summary>Wie ein Element zur Ausgabe wird: <c>""</c> (es selbst) oder <c>".Value"</c> (OneOf).</summary>
             public string Abbildung = "";
             public List<INamedTypeSymbol> Ausgaben = new List<INamedTypeSymbol>();
-            /// <summary>Ein <c>Auf</c> ohne Ausgabe (<c>void</c>, <c>Task</c>, <c>ValueTask</c>): nur mit Zustand — der Eingang wirkt allein auf ihn (die
-            /// Funktion lernt, docs/04 §4.4).</summary>
-            public bool Keine;
         }
 
         /// <summary>Eine gelesene Funktion: die Methoden <c>Auf</c> und die Formfehler (Text, Ort).</summary>
@@ -59,16 +56,13 @@ namespace Infrastructure.SourceGeneration
             public List<(INamedTypeSymbol Eingang, Location Ort)> Doppelt = new List<(INamedTypeSymbol, Location)>();
             /// <summary>Der Typ des Zustands (<c>IZustand&lt;T&gt;</c> im Konstruktor einer Klasse, docs/04 §4.4) — null = ohne Zustand.</summary>
             public INamedTypeSymbol? Zustand;
-            /// <summary>
-            /// Die Funktion steht VOR dem Aggregat (docs/04 §4.4): ihre Eingänge sind Nachrichten ohne Marker, Quell-Nachrichten und Hinweise, ihre
-            /// Event-Eingänge Antworten. Sie liest nie das Log; Eingänge bringt ihr die Laufzeit über Wurzel, Parent und Kinder. Jede Funktion mit
-            /// Eingängen muss es sein (CQRS100): wer nur Events hört, hätte keinen Einstieg.
-            /// </summary>
-            public bool VorDemAggregat => Aufs.Any(a => a.Nachricht || a.Hinweis || a.Quelle);
+            /// <summary>Hat die Funktion einen Einstieg — einen Command, eine Quell-Nachricht oder einen Hinweis? Wer nur Events hört, hätte keinen
+            /// (CQRS100): eine Funktion liest nie das Log.</summary>
+            public bool MitEinstieg => Aufs.Any(a => a.Command || a.Hinweis || a.Quelle);
 
-            /// <summary>Ein Event-Eingang einer Funktion vor dem Aggregat ist eine ANTWORT: ein Ziel entschied es auf einen ihrer Commands hin; sie hört
-            /// es nur so, nie aus dem Log (dass einer ihrer Commands es entscheiden kann, prüft das Gesamtbild).</summary>
-            public bool IstAntwort(Auf a) => VorDemAggregat && !a.Nachricht && !a.Hinweis && !a.Quelle;
+            /// <summary>Ein Event-Eingang ist eine ANTWORT: ein Ziel entschied es auf einen ihrer Commands hin; sie hört es nur so, nie aus dem Log
+            /// (dass einer ihrer Commands es entscheiden kann, prüft das Gesamtbild).</summary>
+            public bool IstAntwort(Auf a) => !a.Command && !a.Hinweis && !a.Quelle;
         }
 
         public static string Name(ITypeSymbol t) =>
@@ -207,43 +201,39 @@ namespace Infrastructure.SourceGeneration
                     continue;
                 }
                 if (m.IsGenericMethod) { f.Fehler.Add(("ein Auf ist nicht generisch", mOrt)); continue; }
-                var auf = LiesAuf(m, mOrt, f.Fehler, f.Zustand != null);
+                var auf = LiesAuf(m, mOrt, f.Fehler);
                 if (auf == null) continue;
                 var schluessel = Name(auf.Eingang);
                 if (gesehen.ContainsKey(schluessel)) { f.Doppelt.Add((auf.Eingang, mOrt)); continue; }
                 gesehen[schluessel] = auf;
                 f.Aufs.Add(auf);
             }
-            // Eine Funktion steht vor dem Aggregat: wer nur Events hört, hätte keinen Einstieg — ein Event hört sie nur als Antwort auf einen eigenen Command.
-            if (f.Aufs.Count > 0 && !f.VorDemAggregat)
-                f.Fehler.Add(("sie hört nur Events — eine Funktion liest nie das Log: sie hört eine Folge oder ein Zwischenergebnis (schlichte Records), "
-                    + "eine Quell-Nachricht oder einen Hinweis; ein Event nur als Antwort auf einen eigenen Command", ort));
-            // Sie schreibt nie ins Log: ihre Ausgaben sind Commands, Zwischenergebnisse und Hinweise.
-            foreach (var a in f.Aufs)
-                foreach (var x in a.Ausgaben.Where(x => Hat(x, A + "IEvent") && !Hat(x, A + "ITransientEvent")))
-                    f.Fehler.Add(($"die Ausgabe '{x.Name}' ist ein Event — eine Funktion schreibt nie ins Log: sie gibt Commands, "
-                        + "Zwischenergebnisse (schlichte Records) und Hinweise aus", a.Methode.Locations.FirstOrDefault() ?? ort));
+            // Eine Funktion liest nie das Log: wer nur Events hört, hätte keinen Einstieg — ein Event hört sie nur als Antwort auf einen eigenen Command.
+            if (f.Aufs.Count > 0 && !f.MitEinstieg)
+                f.Fehler.Add(("sie hört nur Events — eine Funktion liest nie das Log: sie nimmt einen Command (ohne Ziel), eine Quell-Nachricht oder einen "
+                    + "Hinweis; ein Event nur als Antwort auf einen eigenen Command", ort));
             if (gesehen.Count == 0 && f.Doppelt.Count == 0 && f.Fehler.Count == 0)
                 f.Fehler.Add(($"'{t.Name}' hat kein {Abstractions.Funktionsvertrag.Auf} — eine Funktion hört mindestens einen Eingang; Technik hinter einer "
                     + "Funktion trägt keinen Marker (sie steht nur im Konstruktor ihres Halters)", ort));
             return f;
         }
 
-        private static Auf? LiesAuf(IMethodSymbol m, Location ort, List<(string, Location)> fehler, bool mitZustand)
+        private static Auf? LiesAuf(IMethodSymbol m, Location ort, List<(string, Location)> fehler)
         {
             if (m.Parameters.Length == 0 || m.Parameters[0].Type is not INamedTypeSymbol eingang)
             {
-                fehler.Add(("ein Auf nimmt als ersten Parameter seinen Eingang (eine Nachricht ohne Marker, ein Event, eine Quell-Nachricht oder einen Hinweis)", ort));
+                fehler.Add(("ein Auf nimmt als ersten Parameter seinen Eingang (einen Command ohne Ziel, eine Quell-Nachricht, einen Hinweis oder ein Event "
+                    + "als Antwort)", ort));
                 return null;
             }
-            var nachricht = Nachrichtenform.IstSchlicht(eingang);
-            if (!nachricht && (eingang.TypeKind == TypeKind.Interface || eingang.IsAbstract || !Hat(eingang, A + "IEvent")))
+            var command = Nachrichtenform.IstOhneZiel(eingang);
+            if (!command && (eingang.TypeKind == TypeKind.Interface || eingang.IsAbstract || !Hat(eingang, A + "IEvent")))
             {
-                fehler.Add(($"der Eingang '{eingang.Name}' ist keine Nachricht ohne Marker (Folge, Zwischenergebnis), kein konkretes Event, keine Quell-Nachricht "
-                    + "und kein Hinweis", ort));
+                fehler.Add(($"der Eingang '{eingang.Name}' ist kein Command ohne Ziel, keine Quell-Nachricht, kein Hinweis und kein konkretes Event "
+                    + (Hat(eingang, A + "IAggregatCommand") ? "(ein Command an ein Aggregat nimmt nur sein Aggregat)" : ""), ort));
                 return null;
             }
-            var auf = new Auf { Methode = m, Eingang = eingang, Hinweis = Hat(eingang, A + "ITransientEvent"), Nachricht = nachricht,
+            var auf = new Auf { Methode = m, Eingang = eingang, Hinweis = Hat(eingang, A + "ITransientEvent"), Command = command,
                 Quelle = Hat(eingang, A + "IQuellNachricht") };
             auf.Parameter.Add(("e", eingang, m.Parameters[0].Name));
             var mitAbbruch = false;
@@ -273,31 +263,27 @@ namespace Infrastructure.SourceGeneration
                 }
             }
 
-            // Ohne Ausgabe (void, Task, ValueTask): nur mit Zustand — der Eingang wirkt allein auf ihn (die Funktion lernt).
-            if (m.ReturnsVoid || m.ReturnType is INamedTypeSymbol { IsGenericType: false } k
-                && (Name(k) == "System.Threading.Tasks.Task" || Name(k) == "System.Threading.Tasks.ValueTask"))
-            {
-                if (!mitZustand)
-                {
-                    fehler.Add(("ein Auf gibt etwas aus (void und Task ohne Ergebnis sind keine Funktion — nur eine Funktion mit Zustand darf aus einem Eingang "
-                        + "allein lernen)", ort));
-                    return null;
-                }
-                auf.Keine = true;
-                auf.Huelle = m.ReturnsVoid ? "" : ((INamedTypeSymbol)m.ReturnType).Name;
-                auf.Element = m.ReturnType;
-                return auf;
-            }
-
-            // Rückgabe: [Task<|ValueTask<] ( IEnumerable<X> | IAsyncEnumerable<X> | X ) mit X = konkreter Typ | OneOf<…> | OneOf<…>?
+            // Rückgabe: T | OneOf<…> | IEnumerable<…> | IAsyncEnumerable<…>, T und OneOf auch in Task<…>. Kein void, kein T?, kein ValueTask: was
+            //   „nichts“ sein kann, ist ein Strom (leer = nichts), was einer von mehreren ist, ein OneOf (Entscheidung 4).
             ITypeSymbol r = m.ReturnType;
-            if (r is INamedTypeSymbol { IsGenericType: true } h && (Name(h) == "System.Threading.Tasks.Task`1" || Name(h) == "System.Threading.Tasks.ValueTask`1"))
+            if (m.ReturnsVoid || r is INamedTypeSymbol { IsGenericType: false } k && (Name(k) == "System.Threading.Tasks.Task" || Name(k) == "System.Threading.Tasks.ValueTask"))
             {
-                auf.Huelle = h.Name;
+                fehler.Add(("ein Auf gibt etwas aus — void und Task ohne Ergebnis sind keine Funktion (was nichts ausgeben kann, ist ein Strom)", ort));
+                return null;
+            }
+            if (r is INamedTypeSymbol { IsGenericType: true } v && Name(v) == "System.Threading.Tasks.ValueTask`1")
+            {
+                fehler.Add(("ein Auf gibt keinen ValueTask zurück — asynchron ist es ein Task<…> oder ein IAsyncEnumerable<…>", ort));
+                return null;
+            }
+            if (r is INamedTypeSymbol { IsGenericType: true } h && Name(h) == "System.Threading.Tasks.Task`1")
+            {
+                auf.Huelle = "Task";
                 r = h.TypeArguments[0];
             }
             if (r is INamedTypeSymbol { IsGenericType: true } s && Name(s) == "System.Collections.Generic.IEnumerable`1")
             {
+                if (auf.Huelle.Length > 0) { fehler.Add(("ein Strom steht nicht in einem Task — asynchron ist er ein IAsyncEnumerable<…>", ort)); return null; }
                 auf.Strom = true;
                 r = s.TypeArguments[0];
             }
@@ -307,44 +293,32 @@ namespace Infrastructure.SourceGeneration
                 auf.Strom = auf.StromAsync = true;
                 r = sa.TypeArguments[0];
             }
-            if (auf.Huelle == "ValueTask" && auf.Strom) { fehler.Add(("ein Strom steht höchstens in einem Task, nicht in einem ValueTask", ort)); return null; }
+            if (r.NullableAnnotation == NullableAnnotation.Annotated || r is INamedTypeSymbol { IsGenericType: true } nl && Name(nl) == "System.Nullable`1")
+            {
+                fehler.Add(($"die Ausgabe '{r.ToDisplayString()}' ist nullable — was nichts sein kann, ist ein Strom (IEnumerable<…>, leer = nichts)", ort));
+                return null;
+            }
             auf.Element = r;
             IEnumerable<ITypeSymbol> faelle;
-            if (r is INamedTypeSymbol { IsGenericType: true } n && Name(n) == "System.Nullable`1" && n.TypeArguments[0] is INamedTypeSymbol o && IstOneOf(o))
-            {
-                auf.Abbildung = "?.Value";
-                faelle = o.TypeArguments;
-            }
-            else if (r is INamedTypeSymbol o2 && IstOneOf(o2))
+            if (r is INamedTypeSymbol o && IstOneOf(o))
             {
                 auf.Abbildung = ".Value";
-                faelle = o2.TypeArguments;
+                faelle = o.TypeArguments;
             }
             else faelle = new[] { r };
 
             foreach (var x in faelle)
             {
                 if (x is not INamedTypeSymbol a || a.TypeKind == TypeKind.Interface || a.IsAbstract || a.TypeKind == TypeKind.TypeParameter
-                    || !(Hat(a, A + "ICommand") || Hat(a, A + "IEvent") || Nachrichtenform.IstSchlicht(a)))
+                    || !(Hat(a, A + "ICommand") || Hat(a, A + "ITransientEvent")))
                 {
-                    fehler.Add(($"die Ausgabe '{x.ToDisplayString()}' ist kein konkreter Command, kein Zwischenergebnis (schlichter Record), kein konkretes Event "
-                        + "und kein Hinweis — was eine Funktion ausgibt, steht vollständig in der Signatur", ort));
-                    return null;
-                }
-                if (Hat(a, A + "IQuellNachricht"))
-                {
-                    fehler.Add(($"die Ausgabe '{a.Name}' ist eine Quell-Nachricht — Quell-Nachrichten bringen Quellen und Clients ins Log, nicht Funktionen", ort));
-                    return null;
-                }
-                if (auf.Hinweis && Hat(a, A + "IEvent") && !Hat(a, A + "ITransientEvent"))
-                {
-                    fehler.Add(($"die Ausgabe '{a.Name}' ist ein Event, der Eingang '{eingang.Name}' ein Hinweis — aus einem Hinweis (höchstens einmal, nicht im "
-                        + "Log) gehen nur Commands und Hinweise hervor; was fachlich zählt, verlässt das Hinweis-Netz als Command an ein Aggregat (docs/04 §4.4)", ort));
+                    fehler.Add(($"die Ausgabe '{x.ToDisplayString()}' ist kein konkreter Command und kein Hinweis — eine Funktion schreibt nie ins Log; was sie "
+                        + "ausgibt, steht vollständig in der Signatur", ort));
                     return null;
                 }
                 auf.Ausgaben.Add(a);
             }
-            if (auf.Ausgaben.Count == 0) { fehler.Add(("ein Auf gibt etwas aus (void und Task ohne Ergebnis sind keine Funktion)", ort)); return null; }
+            if (auf.Ausgaben.Count == 0) { fehler.Add(("ein Auf gibt etwas aus", ort)); return null; }
             return auf;
         }
 

@@ -20,14 +20,14 @@ public class TypisierteIdTests
 
     private static NimmRangeAuf Command() => new(Id<Datensatz>.Neu(), Paare, new RangeHerkunft(new RangeKriterien(), Paare.Length));
 
-    private static CommandEnvelope Huelle(ICommand cmd) => new() { AggregateType = "Datensatz", Modus = new CommandModus.Client(3), Payload = cmd };
+    private static CommandEnvelope Huelle(IAggregatCommand cmd) => new() { AggregateType = "Datensatz", Modus = new CommandModus.Client(3), Payload = cmd };
 
     [Fact]
     public void Das_Ziel_steht_im_Typ_und_die_Huelle_leitet_es_ab()
     {
         var cmd = Command();
         Anwendung.Routing.CommandToAggregate[typeof(NimmRangeAuf)].Should().Be("Datensatz", "das Routing liest ICommand<Datensatz>");
-        ((ICommand)cmd).Ziel.Should().Be(cmd.AggregateId.Wert);
+        ((IAggregatCommand)cmd).Ziel.Should().Be(cmd.AggregateId.Wert);
         Huelle(cmd).AggregateId.Should().Be(cmd.AggregateId.Wert, "der Envelope trägt keine zweite Angabe des Ziels");
     }
 

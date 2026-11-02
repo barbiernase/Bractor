@@ -391,6 +391,11 @@ message CommandQuittungDto {
     bool abgelehnt = 5;
 }
 
+message BildNichtLesbarDto {
+    string pfad = 1;
+    string grund = 2;
+}
+
 message DatensatzBereitsEingefrorenDto {
     string datensatz_id = 1;
 }
@@ -417,6 +422,10 @@ message EinfrierenAngefordertDto {
     SplitKonfigDto split = 2;
 }
 
+message KeinMitgliedAuffindbarDto {
+    int32 angefragt = 1;
+}
+
 message PaarAufgenommenDto {
     string image_pair_id = 1;
 }
@@ -436,6 +445,10 @@ message RangeAngefordertDto {
 
 message RangeLeerDto {
     string datensatz_id = 1;
+}
+
+message RangeOhneTrefferDto {
+    RangeKriterienDto kriterien = 1;
 }
 
 message SplitGesetztDto {
@@ -488,6 +501,10 @@ message DateiErkanntDto {
     int64 geaendert_am = 5;
     int64 erkannt_am = 6;
     string kennung = 7;
+}
+
+message DateinameUnbekanntDto {
+    string dateiname = 1;
 }
 
 message EinzelBildDurchKiKlassifiziertDto {
@@ -570,23 +587,6 @@ message ModellRegistriertDto {
     string name = 4;
     string pfad = 5;
     ModellMetrikenDto metriken = 6;
-}
-
-message BildNichtLesbarDto {
-    string pfad = 1;
-    string grund = 2;
-}
-
-message KeinMitgliedAuffindbarDto {
-    int32 angefragt = 1;
-}
-
-message RangeOhneTrefferDto {
-    RangeKriterienDto kriterien = 1;
-}
-
-message DateinameUnbekanntDto {
-    string dateiname = 1;
 }
 
 message SammelvorgangAbgeschlossenDto {

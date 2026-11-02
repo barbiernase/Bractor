@@ -16,8 +16,9 @@ namespace Domain.SourceGeneration;
 /// <item>CQRS081 (ENUM-ZERO, Warnung) — ein Enum-Wert 0 geht auf dem Proto-Wire als Default verloren (1-basiert empfohlen).</item>
 /// <item>CQRS083 (GR-ZUSTAND, Regel Z, Warnung) — eine Projektion hält Zustand in Instanzfeldern; Gedächtnis gehört in ein Aggregat bzw.
 ///   Lesemodell.</item>
-/// <item>CQRS013 (R7) — ein Command ohne typisiertes Ziel: er implementiert <c>ICommand</c>, aber nicht genau ein <c>ICommand&lt;TAggregat&gt;</c>
-///   (etwa mit einer handgeschriebenen <c>Ziel</c>-Guid). Das Ziel eines Commands steht im Typ (docs/10 §10.4).</item>
+/// <item>CQRS013 (R7) — das Ziel eines Commands steht im Typ (docs/10 §10.4): ein Command an ein Aggregat implementiert genau ein
+///   <c>ICommand&lt;TAggregat&gt;</c> (nie die Framework-Sicht <c>IAggregatCommand</c> von Hand); ein Command ohne Typargument hat kein Ziel — trägt er
+///   dennoch <c>Id&lt;T&gt; AggregateId</c>, fehlt ihm das Typargument.</item>
 /// </list>
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
@@ -42,8 +43,9 @@ public sealed class ModellAnalyzer : DiagnosticAnalyzer
         "'{0}' hält Zustand in {1} — eine Projektion ist ein zustandsloser Übersetzer; Gedächtnis gehört in ein Aggregat bzw. Lesemodell (GR-ZUSTAND, Regel Z)",
         DiagnosticSeverity.Warning);
 
-    private static readonly DiagnosticDescriptor Ziel = D(ZielId, "Command ohne typisiertes Ziel",
-        "Command '{0}' nennt sein Ziel nicht im Typ — ein Command implementiert genau ein ICommand<TAggregat> mit Id<TAggregat> AggregateId (R7)",
+    private static readonly DiagnosticDescriptor Ziel = D(ZielId, "Ziel eines Commands nicht im Typ",
+        "Command '{0}': {1} — ein Command an ein Aggregat implementiert genau ein ICommand<TAggregat> mit Id<TAggregat> AggregateId, ein Command ohne "
+        + "Typargument hat kein Ziel (R7)",
         DiagnosticSeverity.Error);
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(ApplyFehlt, Faltung, EnumNull, Zustand, Ziel);
@@ -63,13 +65,14 @@ public sealed class ModellAnalyzer : DiagnosticAnalyzer
 
     private sealed class Vertrag
     {
-        public readonly INamedTypeSymbol? IEvent, ITransient, ICommand, ICommandZiel, IState, IDecider, IApplier, IProjektion;
+        public readonly INamedTypeSymbol? IEvent, ITransient, ICommand, ICommandZiel, IAggregatCommand, IState, IDecider, IApplier, IProjektion;
         public Vertrag(Compilation c)
         {
             INamedTypeSymbol? G(string n) => c.GetTypeByMetadataName("Abstractions." + n);
             IEvent = G("IEvent"); ITransient = G("ITransientEvent"); ICommand = G("ICommand"); IState = G("IState");
             IDecider = G("IDecider`1"); IApplier = G("IApplier`1"); IProjektion = G("IProjektion");
             ICommandZiel = c.GetTypeByMetadataName(Abstractions.Idvertrag.CommandMetadatenName);
+            IAggregatCommand = G("IAggregatCommand");
         }
         public bool Ist(ITypeSymbol t, INamedTypeSymbol? i) => i != null && (SymbolEqualityComparer.Default.Equals(t, i) || t.AllInterfaces.Contains(i, SymbolEqualityComparer.Default));
     }
@@ -79,9 +82,17 @@ public sealed class ModellAnalyzer : DiagnosticAnalyzer
         var t = (INamedTypeSymbol)ctx.Symbol;
         if (t.TypeKind == TypeKind.Enum) { PruefeEnum(ctx, t); return; }
         if (v.Ist(t, v.IState) && !t.IsAbstract) PruefeAggregat(ctx, t, v);
-        if (t.TypeKind is TypeKind.Class or TypeKind.Struct && !t.IsAbstract && v.Ist(t, v.ICommand) && v.ICommandZiel != null
-            && t.AllInterfaces.Count(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, v.ICommandZiel)) != 1)
-            ctx.ReportDiagnostic(Diagnostic.Create(Ziel, t.Locations.FirstOrDefault(), t.Name));
+        if (t.TypeKind is TypeKind.Class or TypeKind.Struct && !t.IsAbstract && v.Ist(t, v.ICommand) && v.ICommandZiel != null)
+        {
+            var ziele = t.AllInterfaces.Count(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, v.ICommandZiel));
+            if (v.IAggregatCommand != null && v.Ist(t, v.IAggregatCommand) && ziele != 1)
+                ctx.ReportDiagnostic(Diagnostic.Create(Ziel, t.Locations.FirstOrDefault(), t.Name,
+                    ziele == 0 ? "er implementiert IAggregatCommand von Hand" : "er nennt mehr als ein ICommand<TAggregat>"));
+            else if (ziele == 0 && t.GetMembers(Abstractions.Idvertrag.CommandZiel).OfType<IPropertySymbol>()
+                         .Any(p => p.Type is INamedTypeSymbol { IsGenericType: true } n && n.OriginalDefinition.ToDisplayString() == "Abstractions.Id<T>"))
+                ctx.ReportDiagnostic(Diagnostic.Create(Ziel, t.Locations.FirstOrDefault(), t.Name,
+                    "er trägt Id<T> AggregateId, ist aber kein ICommand<T> — es fehlt das Typargument"));
+        }
         if (t.TypeKind == TypeKind.Class && !t.IsAbstract && v.Ist(t, v.IProjektion)) PruefeKonsument(ctx, t, v);
     }
 

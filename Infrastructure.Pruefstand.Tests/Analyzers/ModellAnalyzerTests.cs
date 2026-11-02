@@ -66,10 +66,17 @@ public partial class Konto : IState
     public async Task Ein_Command_ohne_typisiertes_Ziel_ist_ein_Fehler_CQRS013()
     {
         // Der Umweg an ICommand<TAggregat> vorbei: die Framework-Sicht (Ziel als Guid) von Hand implementiert.
-        var befunde = await Befunde("public record Umweg(Guid Ziel) : ICommand;");
+        var befunde = await Befunde("public record Umweg(Guid Ziel) : IAggregatCommand;");
         befunde.Should().ContainSingle().Which.Id.Should().Be(ModellAnalyzer.ZielId);
-        befunde[0].GetMessage().Should().Contain("'Umweg'");
+        befunde[0].GetMessage().Should().Contain("'Umweg'").And.Contain("von Hand");
+        // Ein Command ohne Typargument, der doch ein Aggregat-Ziel trägt: es fehlt das Typargument.
+        (await Befunde("public record Vergessen(Id<ProbeZiel> AggregateId) : ICommand;")).Should().ContainSingle()
+            .Which.GetMessage().Should().Contain("es fehlt das Typargument");
     }
+
+    [Fact]
+    public async Task Ein_Command_ohne_Ziel_ist_still()
+        => (await Ids("public record Weiter(Guid Paar) : ICommand;")).Should().BeEmpty("ein Command ohne Typargument hat kein Ziel — sein Empfänger folgt aus dem Graphen");
 
     [Fact]
     public async Task Ein_Command_mit_typisiertem_Ziel_ist_still()

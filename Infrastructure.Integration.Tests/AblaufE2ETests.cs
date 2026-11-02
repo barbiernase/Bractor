@@ -208,7 +208,7 @@ public class AblaufE2ETests
             var es = host.Services.GetRequiredService<IEventStoreRepository>();
             var dispatcher = host.Services.GetRequiredService<IAggregateDispatcher>();
             var lauf = Guid.NewGuid();
-            void Sende(ICommand c) => dispatcher.Dispatch(new CommandEnvelope
+            void Sende(IAggregatCommand c) => dispatcher.Dispatch(new CommandEnvelope
             { AggregateType = "Trainingslauf", Modus = new CommandModus.Emittiert(), Payload = c });
 
             Sende(new Domain.Trainingslauf.StarteTraining(new(lauf), new(Guid.NewGuid()), 1, new Domain.Trainingslauf.Hyperparameter(1, 0.1, 8, "r", 1)));
@@ -239,7 +239,7 @@ public class AblaufE2ETests
         {
             var es = host.Services.GetRequiredService<IEventStoreRepository>();
             var dispatcher = host.Services.GetRequiredService<IAggregateDispatcher>();
-            void Sende(string typ, ICommand c) => dispatcher.Dispatch(new CommandEnvelope
+            void Sende(string typ, IAggregatCommand c) => dispatcher.Dispatch(new CommandEnvelope
             { AggregateType = typ, Modus = new CommandModus.Emittiert(), Payload = c });
 
             var paar = Guid.NewGuid();

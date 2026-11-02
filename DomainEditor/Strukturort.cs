@@ -60,11 +60,15 @@ public static class Strukturort
         P.Projekte(wurzel).Any(p => ns == p || ns.StartsWith(p + ".", StringComparison.Ordinal));
 
     /// <summary>
-    /// Die Ausgaben aller Funktionen (Signatur-Fakt je <c>Auf</c>) — ein Event darunter ist ein Ergebnis einer Funktion und liegt bei den Abläufen
+    /// Die Commands ohne Ziel, die kein Decide abgibt (Signatur-Fakt je <c>Decide</c>) — nur Knoten geben sie einander, sie liegen bei den Abläufen
     /// (dieselbe Regel wie die Lage-Prüfung, <c>Domain.SourceGeneration/Lageart.cs</c>).
     /// </summary>
-    public static ISet<string> Funktionsergebnisse(EditorModell m) =>
-        m.BausteinFunktionen.SelectMany(f => f.Eingaenge).SelectMany(e => e.Ausgaben).ToHashSet(StringComparer.Ordinal);
+    public static ISet<string> Funktionsergebnisse(EditorModell m)
+    {
+        var ausDecide = m.Decider.SelectMany(d => d.Ergibt).Select(a => a.Event).ToHashSet(StringComparer.Ordinal);
+        return m.Records.Where(r => r.Kind == RecordArt.Command && string.IsNullOrEmpty(r.Aggregat) && !ausDecide.Contains(r.Name))
+            .Select(r => r.Name).ToHashSet(StringComparer.Ordinal);
+    }
 
     /// <summary>
     /// Die Queries an Aggregate und ihre Antworten (Signatur-Fakt der <c>Frage</c> im Decider, docs/03 §3.2) — sie liegen bei
@@ -77,9 +81,9 @@ public static class Strukturort
     /// <c>null</c> = nicht in der Tabelle.</summary>
     public static P.Primitive? Primitive(Record r, ISet<string> funktionsErgebnisse, ISet<string> aggregatfragen) => r.Kind switch
     {
+        RecordArt.Command when funktionsErgebnisse.Contains(r.Name) => P.Primitive.KnotenCommand,
         RecordArt.Command => P.Primitive.Command,
         RecordArt.Event when r.Treiber != null => P.Primitive.Quelle,
-        RecordArt.Event when funktionsErgebnisse.Contains(r.Name) => P.Primitive.FunktionsErgebnis,
         RecordArt.Event or RecordArt.Rejection => P.Primitive.Event,
         RecordArt.ValueObject => P.Primitive.Wertobjekt,
         RecordArt.Query when aggregatfragen.Contains(r.Name) => P.Primitive.AggregatQuery,

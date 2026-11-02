@@ -13,17 +13,18 @@ public partial class Verteilung
             yield return new VerteilungAbzuwickeln(cmd.AggregateId, cmd.QuelleId, cmd.Ziele, cmd.MengeJeZiel);
         }
 
-        public IEnumerable<OneOf<ZubuchungenAngeordnet, VerteilungNichtGefunden>> Decide(VermerkeQuellreservierung cmd)
+        public IEnumerable<OneOf<QuelleReserviert, Zubuchen, VerteilungNichtGefunden>> Decide(VermerkeQuellreservierung cmd)
         {
             if (!this.State.Existiert) { yield return new VerteilungNichtGefunden(cmd.AggregateId); yield break; }
-            if (this.State.Angeordnet || this.State.Gescheitert) yield break;
-            yield return new ZubuchungenAngeordnet(this.State.Ziele, this.State.MengeJeZiel);
+            if (this.State.QuelleReserviert || this.State.Gescheitert) yield break;
+            yield return new QuelleReserviert();
+            yield return new Zubuchen(cmd.AggregateId, this.State.Ziele, this.State.MengeJeZiel);
         }
 
         public IEnumerable<OneOf<VerteilungGescheitert, VerteilungNichtGefunden>> Decide(VermerkeQuellabsage cmd)
         {
             if (!this.State.Existiert) { yield return new VerteilungNichtGefunden(cmd.AggregateId); yield break; }
-            if (this.State.Angeordnet || this.State.Gescheitert) yield break;
+            if (this.State.QuelleReserviert || this.State.Gescheitert) yield break;
             yield return new VerteilungGescheitert(cmd.Verfuegbar);
         }
 

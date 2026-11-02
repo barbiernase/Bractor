@@ -29,7 +29,8 @@ static class Projektstruktur
         Schreibseite,
         /// <summary><c>&lt;Wurzel&gt;.Projections</c>: ReadModels, Queries, Antworten, Store-Fähigkeiten, Projektionen, Reader.</summary>
         Leseseite,
-        /// <summary><c>&lt;Wurzel&gt;.Pipeline</c>: Funktionen (mit Eingängen und gerufene; Klasse im Host, Schnittstelle mit Umsetzungen oder draußen), ihre Events, Konfig-Records.</summary>
+        /// <summary><c>&lt;Wurzel&gt;.Pipeline</c>: Funktionen (Klasse im Host, Schnittstelle mit Umsetzungen oder draußen), Graphen, die Commands, die nur
+        /// Knoten einander geben, Konfig-Records und Technik.</summary>
         Ablaeufe,
         /// <summary><c>&lt;Wurzel&gt;.Akteure</c>: Akteure und Client-Verträge — der äußerste Ring.</summary>
         Akteure,
@@ -44,18 +45,18 @@ static class Projektstruktur
     /// <summary>Was ein Typ ist — bestimmt aus Code-Fakten (Lageart), nie aus Name oder Ordner.</summary>
     public enum Primitive
     {
-        Aggregat, Decider, Applier, Command, Event, Quelle, Wertobjekt, Enum,
+        /// <summary>Ein Command an ein Aggregat (<c>ICommand&lt;T&gt;</c>) oder ein Command ohne Ziel, den ein <c>Decide</c> abgibt: bei der Schreibseite.</summary>
+        Command,
+        Aggregat, Decider, Applier, Event, Quelle, Wertobjekt, Enum,
         /// <summary>Eine Query, die ein Aggregat beantwortet (<c>Frage</c> im Decider, docs/03 §3.2), und ihre Antwort: sie liegen
         /// bei der Schreibseite, denn der Decider sieht die Leseseite nicht. Eine Query an einen Reader ist <see cref="Query"/>.</summary>
         AggregatQuery, AggregatAntwort,
-        /// <summary>Eine Folge (docs/03 §3.1): ein schlichter Record in der Signatur eines <c>Decide</c>, weder Event noch Frist — er liegt bei der
-        /// Schreibseite wie die Events seines Aggregats.</summary>
-        Folge,
         ReadModel, Query, Antwort, StoreBuendel, StoreFaehigkeit, Projektion, Reader,
-        Funktion, FunktionsErgebnis, FunktionsImplementierung, Konfig,
-        /// <summary>Ein Zwischenergebnis (docs/04 §4.4): ein schlichter Record in der Rückgabe eines <c>Auf</c>, weder Event noch Command — er geht an die
-        /// Funktionen, die ihn hören, nie ins Log, und liegt bei den Abläufen.</summary>
-        Zwischenergebnis,
+        Funktion, FunktionsImplementierung, Konfig,
+        /// <summary>Ein Command ohne Ziel, den nur Knoten einander geben (kein <c>Decide</c> gibt ihn ab): bei den Abläufen, in deren <c>Commands.cs</c>.</summary>
+        KnotenCommand,
+        /// <summary>Ein Graph (<c>record … : IGraph</c>, Knoten als Parameter): bei den Abläufen, in <c>Graphen.cs</c>.</summary>
+        Graph,
         /// <summary>Eine Funktion als Klasse (Baustein-Form, <c>Auf</c>): sie läuft im Host; als Schnittstelle ist sie <see cref="Funktion"/> (draußen).</summary>
         HostFunktion,
         /// <summary>Technik hinter einer Funktion (ohne Marker: was der Konstruktor einer Funktion nimmt, und ihre Umsetzungen) — bei den Abläufen,
@@ -115,7 +116,7 @@ static class Projektstruktur
         new Eintrag(Rolle.Leseseite, ".Projections", true, new[] { Rolle.Schreibseite },
             new[] { "ReadModels.cs", "Queries.cs", "Responses.cs", "Enums.cs" }),
         new Eintrag(Rolle.Ablaeufe, ".Pipeline", true, new[] { Rolle.Schreibseite, Rolle.Leseseite },
-            new[] { "Funktionen.cs", "Events.cs", "Konfigs.cs", "Enums.cs" }),
+            new[] { "Funktionen.cs", "Graphen.cs", "Commands.cs", "Konfigs.cs", "Enums.cs" }),
         new Eintrag(Rolle.Akteure, ".Akteure", false, new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Ablaeufe },
             new[] { "Akteure.cs", "Clients.cs" }),
         new Eintrag(Rolle.Speicher, ".Infrastructure", true, new[] { Rolle.Schreibseite, Rolle.Leseseite },
@@ -169,12 +170,12 @@ static class Projektstruktur
         switch (p)
         {
             case Primitive.Aggregat: case Primitive.Decider: case Primitive.Applier: case Primitive.Command: case Primitive.Event:
-            case Primitive.Quelle: case Primitive.Wertobjekt: case Primitive.AggregatQuery: case Primitive.AggregatAntwort: case Primitive.Folge:
+            case Primitive.Quelle: case Primitive.Wertobjekt: case Primitive.AggregatQuery: case Primitive.AggregatAntwort:
                 return new[] { Rolle.Schreibseite };
             case Primitive.ReadModel: case Primitive.Query: case Primitive.Antwort: case Primitive.StoreBuendel: case Primitive.StoreFaehigkeit:
             case Primitive.Projektion: case Primitive.Reader:
                 return new[] { Rolle.Leseseite };
-            case Primitive.Funktion: case Primitive.FunktionsErgebnis: case Primitive.Zwischenergebnis:
+            case Primitive.Funktion: case Primitive.KnotenCommand: case Primitive.Graph:
             case Primitive.FunktionsImplementierung: case Primitive.Konfig:
             case Primitive.HostFunktion: case Primitive.Technik:
                 return new[] { Rolle.Ablaeufe };
@@ -194,11 +195,10 @@ static class Projektstruktur
     {
         switch (p)
         {
-            case Primitive.Command: return "Commands.cs";
-            case Primitive.Event: case Primitive.FunktionsErgebnis: return "Events.cs";
+            case Primitive.Command: case Primitive.KnotenCommand: return "Commands.cs";
+            case Primitive.Event: return "Events.cs";
             case Primitive.Quelle: return "Quellen.cs";
-            case Primitive.Folge: return "Folgen.cs";
-            case Primitive.Zwischenergebnis: return "Zwischenergebnisse.cs";
+            case Primitive.Graph: return "Graphen.cs";
             case Primitive.Wertobjekt: return "ValueObjects.cs";
             case Primitive.Enum: return "Enums.cs";
             case Primitive.ReadModel: return "ReadModels.cs";
@@ -288,15 +288,15 @@ static class Projektstruktur
             case Primitive.Antwort: return "eine Antwort";
             case Primitive.AggregatQuery: return "eine Query an ein Aggregat";
             case Primitive.AggregatAntwort: return "eine Antwort eines Aggregats";
-            case Primitive.Folge: return "eine Folge (eines Decide)";
-            case Primitive.Zwischenergebnis: return "ein Zwischenergebnis (einer Funktion)";
             case Primitive.StoreBuendel: return "ein Store-Bündel";
             case Primitive.StoreFaehigkeit: return "eine Store-Fähigkeit";
             case Primitive.Projektion: return "eine Projektion";
             case Primitive.Reader: return "ein Reader";
             case Primitive.Funktion: return "eine Funktion (Schnittstelle)";
             case Primitive.HostFunktion: return "eine Funktion im Host";
-            case Primitive.FunktionsErgebnis: return "ein Event einer Funktion";
+            case Primitive.KnotenCommand: return "ein Command zwischen Knoten";
+            case Primitive.Graph: return "ein Graph";
+            case Primitive.Technik: return "Technik";
             case Primitive.FunktionsImplementierung: return "eine Funktions-Implementierung";
             case Primitive.Konfig: return "ein Konfig-Record";
             case Primitive.Akteur: return "ein Akteur";

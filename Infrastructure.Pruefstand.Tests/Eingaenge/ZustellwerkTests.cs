@@ -81,13 +81,15 @@ public class ZustellwerkTests
     }
 
     [Fact]
-    public void Eine_Frist_ist_keine_Folge_ein_Event_auch_nicht_ein_schlichter_Record_schon()
+    public void Ein_Command_ohne_Ziel_geht_an_einen_Graphen_ein_Event_und_ein_Command_an_ein_Aggregat_nicht()
     {
-        Entscheidungsausgabe.IstFolge(new Melde()).Should().BeTrue();
-        Entscheidungsausgabe.IstFolge(new Gemeldet()).Should().BeFalse();
-        Entscheidungsausgabe.Als(new Melde()).Should().BeOfType<Melde>("eine Folge bleibt sie selbst");
+        Entscheidungsausgabe.IstCommand(new Melde()).Should().BeTrue();
+        Entscheidungsausgabe.IstCommand(new Gemeldet()).Should().BeFalse();
+        Entscheidungsausgabe.IstCommand(new AnAggregat()).Should().BeFalse("ein Decide gibt keinen Command an ein Aggregat aus (CQRS114)");
+        Entscheidungsausgabe.Als(new Melde()).Should().BeOfType<Melde>("ein Command ohne Ziel bleibt er selbst");
     }
 
-    private sealed record Melde;
+    private sealed record Melde : ICommand;
+    private sealed record AnAggregat : IAggregatCommand { public Guid Ziel => Guid.Empty; }
     private sealed record Gemeldet : IEvent;
 }

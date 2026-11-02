@@ -14,10 +14,11 @@ namespace Core.SourceGeneration
         
         private static readonly HashSet<string> CommandInterfaces = new()
         {
-            "Abstractions.ICommand",
+            // Ein Command an ein Aggregat (ICommand<T>); ein Command ohne Ziel reist als Wert (Nutzlast-Kategorie Nachricht, Nachrichtenform).
+            "Abstractions.IAggregatCommand",
             "Abstractions.ICreationCommand",
             "ICreationCommand",
-            "ICommand"
+            "IAggregatCommand"
         };
         
         private static readonly HashSet<string> QueryInterfaces = new()

@@ -14,14 +14,5 @@ public record AuftragBestaetigt() : IEvent;
 /// <summary>Der erste abgelehnte Zweig: der Auftrag wird nie bestätigt.</summary>
 public record AuftragGescheitert(string Grund) : IEvent;
 
-/// <summary>
-/// KOMPENSATION, ausgeschrieben (docs/13 §13.7): der Auftrag ist gescheitert, die Reservierung war gelungen — sie muss zurück. Das Aggregat entscheidet
-/// den Gegenzug genau einmal (sein Zustand merkt es sich), die Auftragsabwicklung sendet ihn.
-/// </summary>
-public record PostenFreigabeAngeordnet(Id<Posten.Posten> PostenId, int Menge) : IEvent;
-
-/// <summary>Gegenzug der gelungenen Belegung eines gescheiterten Auftrags (wie <see cref="PostenFreigabeAngeordnet"/>).</summary>
-public record KontingentEntlastungAngeordnet(Id<Kontingent.Kontingent> KontingentId, int Menge) : IEvent;
-
 public record AuftragExistiertBereits(Id<Auftrag> AuftragId) : ITransientEvent;
 public record AuftragNichtGefunden(Id<Auftrag> AuftragId) : ITransientEvent;

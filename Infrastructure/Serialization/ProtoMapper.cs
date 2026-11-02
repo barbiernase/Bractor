@@ -262,7 +262,7 @@ public partial class ProtoMessageMapper
         return CommandAusHuelle(dto, payload, aggregat);
     }
 
-    private static CommandEnvelope CommandAusHuelle(CommandEnvelopeDto dto, ICommand payload, string aggregat) => new()
+    private static CommandEnvelope CommandAusHuelle(CommandEnvelopeDto dto, IAggregatCommand payload, string aggregat) => new()
     {
         CommandId = Guid.Parse(dto.CommandId),
         AggregateType = aggregat,
@@ -324,7 +324,7 @@ public partial class ProtoMessageMapper
     /// <summary>
     /// Mappt nur den Command Payload (ohne Envelope)
     /// </summary>
-    public ICommand MapCommandPayload(CommandEnvelopeDto dto)
+    public IAggregatCommand MapCommandPayload(CommandEnvelopeDto dto)
     {
         try
         {

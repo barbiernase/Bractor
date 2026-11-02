@@ -9,12 +9,12 @@ namespace Cqrs.Leitung;
 /// </summary>
 public interface INutzlastTabelle
 {
-    ICommand Command(Nutzlast n);
+    IAggregatCommand Command(Nutzlast n);
     IEvent Event(Nutzlast n);
     IQuery Query(Nutzlast n);
     IQueryResponse Antwort(Nutzlast n);
 
-    Nutzlast PackeCommand(ICommand command);
+    Nutzlast PackeCommand(IAggregatCommand command);
     Nutzlast PackeEvent(IEvent evt);
     Nutzlast PackeQuery(IQuery query);
     Nutzlast PackeAntwort(IQueryResponse antwort);

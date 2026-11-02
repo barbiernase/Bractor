@@ -66,7 +66,7 @@ internal static class Pruefstand
     /// derselbe Weg wie der JSON-Eingang (<c>ProtoActorAggregateDispatcher.FrageAsync</c>). Mit <paramref name="version"/> wie ein Client mit
     /// Versionsprüfung (Modus <c>Client</c>, OCC gegen diese Version).
     /// </summary>
-    public static Task<CommandResult?> FrageAsync(IHost host, ICommand cmd, Guid commandId, int? version = null)
+    public static Task<CommandResult?> FrageAsync(IHost host, IAggregatCommand cmd, Guid commandId, int? version = null)
         => global::Infrastructure.Aggregate.ActorSystem.ProtoActorAggregateDispatcher.FrageAsync(host.Services.GetRequiredService<Proto.ActorSystem>(),
             new CommandEnvelope
             {

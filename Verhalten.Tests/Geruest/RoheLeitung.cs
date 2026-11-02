@@ -114,7 +114,7 @@ public sealed class RoheLeitung : IAsyncDisposable
     }
 
     /// <summary>Ein Command auf der Leitung. Version &lt; 0 = ohne behauptete Version.</summary>
-    public async Task SendeAsync(ICommand command, string aggregatTyp, int erwarteteVersion, string korrelation)
+    public async Task SendeAsync(IAggregatCommand command, string aggregatTyp, int erwarteteVersion, string korrelation)
     {
         var dto = new CommandEnvelopeDto
         {
@@ -161,10 +161,10 @@ public sealed class RoheLeitung : IAsyncDisposable
     }
 
     /// <summary>Beantwortet einen Eingang mit Commands (ganz, <c>fertig</c>).</summary>
-    public Task AntworteAsync(ArbeitsAuftrag eingang, params ICommand[] ausgaben) => StueckAsync(eingang, 0, true, ausgaben);
+    public Task AntworteAsync(ArbeitsAuftrag eingang, params IAggregatCommand[] ausgaben) => StueckAsync(eingang, 0, true, ausgaben);
 
     /// <summary>Ein Stück eines Stroms: die Ausgaben ab Stelle <paramref name="ab"/>; <paramref name="fertig"/> beendet den Strom.</summary>
-    public Task StueckAsync(ArbeitsAuftrag eingang, int ab, bool fertig, params ICommand[] ausgaben)
+    public Task StueckAsync(ArbeitsAuftrag eingang, int ab, bool fertig, params IAggregatCommand[] ausgaben)
     {
         var e = new ArbeitsErgebnis { Vorgang = eingang.Vorgang, Ab = ab, Fertig = fertig };
         foreach (var c in ausgaben) e.Ausgaben.Add(new FunktionsAusgabe { Command = Tabelle.PackeCommand(c) });

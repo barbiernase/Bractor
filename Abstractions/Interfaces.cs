@@ -22,11 +22,18 @@ public interface IMessagePayload : IAusgabe { }
 public interface IEvent : IMessagePayload { }
 
 /// <summary>
-/// Die Framework-Sicht auf einen Command: sein Ziel als Stream-Id. Der Fachcode implementiert nie dieses Interface allein, sondern
-/// <see cref="ICommand{TAggregat}"/> — dort steht das Ziel typisiert (R7, docs/10 §10.6), und <see cref="Ziel"/> folgt daraus. Ein Command ohne
-/// typisiertes Ziel baut nicht (der Compiler verlangt <see cref="Ziel"/>, CQRS013 verbietet den Umweg).
+/// Ein COMMAND (docs/10 §10.2): eine Absicht an genau einen Empfänger. Ohne Typargument hat er kein Ziel im Typ — sein Empfänger folgt vom Absender
+/// aus: der Knoten desselben Graphen, der ihn nimmt, sonst genau einer in der Domäne (der Kopf eines Graphen). Ein Command an ein Aggregat ist
+/// <see cref="ICommand{TAggregat}"/>. Was zwischen Funktionen und aus einem Decide an einen Graphen fließt, ist ein Command ohne Ziel — es gibt keinen
+/// eigenen Nachrichten-Marker (Plan „Commands und Funktionsgraphen“, Entscheidung 1).
 /// </summary>
-public interface ICommand : IMessagePayload
+public interface ICommand : IMessagePayload { }
+
+/// <summary>
+/// Die Framework-Sicht auf einen Command an ein Aggregat: sein Ziel als Stream-Id. Der Fachcode implementiert nie dieses Interface, sondern
+/// <see cref="ICommand{TAggregat}"/> — dort steht das Ziel typisiert (R7, docs/10 §10.6), und <see cref="Ziel"/> folgt daraus (CQRS013).
+/// </summary>
+public interface IAggregatCommand : ICommand
 {
     /// <summary>Das Ziel-Aggregat als Stream-Id (= Cluster-Identität des Aggregat-Actors).</summary>
     Guid Ziel { get; }
@@ -36,12 +43,12 @@ public interface ICommand : IMessagePayload
 /// Ein Command an genau ein Aggregat <typeparamref name="TAggregat"/> (docs/10 §10.2, R3): das Ziel steht im Typ. Routing, Aggregat-Actor, Leitung,
 /// Python und Client lesen es von hier — die Decide-Signatur muss im selben Aggregat stehen (CQRS014).
 /// </summary>
-public interface ICommand<TAggregat> : ICommand where TAggregat : IState
+public interface ICommand<TAggregat> : IAggregatCommand where TAggregat : IState
 {
     /// <summary>Die Id des Ziel-Aggregats.</summary>
     Id<TAggregat> AggregateId { get; }
 
-    Guid ICommand.Ziel => AggregateId.Wert;
+    Guid IAggregatCommand.Ziel => AggregateId.Wert;
 }
 
 /// <summary>
@@ -60,7 +67,7 @@ public interface IQueryResponse : IMessagePayload { }
 
     
 /// <summary>Marker: ein erzeugender Command (der C#-Client sendet ihn mit erwarteter Version 0). Neben <see cref="ICommand{TAggregat}"/>.</summary>
-public interface ICreationCommand : ICommand{ }
+public interface ICreationCommand : IAggregatCommand { }
     
 public interface IDecider<TState> where TState : IState { }
     
@@ -69,8 +76,8 @@ public interface IApplier<TState> where TState : IState { }
 public interface IAggregateHandler
 {
     /// <summary>Die Entscheidung über einen Command in der Reihenfolge des Decide: Events (eine Frist schon als <see cref="FristGesetzt"/>) und
-    /// Folgen (schlichte Records, docs/03 §3.1) — <see cref="Entscheidungsausgabe"/>.</summary>
-    IEnumerable<object> HandleCommand(ICommand command);
+    /// Commands ohne Ziel (an den Kopf eines Graphen, docs/03 §3.1) — <see cref="Entscheidungsausgabe"/>.</summary>
+    IEnumerable<object> HandleCommand(IAggregatCommand command);
     void ApplyEvent(IEvent @event);
 
     /// <summary>Die direkte Abfrage (docs/03 §3.2): die <c>Frage</c> des Deciders zur Query, nur lesend auf den Zustand —

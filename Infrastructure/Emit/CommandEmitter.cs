@@ -67,14 +67,14 @@ public sealed class CommandEmitter
     /// Sendet den Command mit der VORGEGEBENEN CommandId (Funktion: aus Eingang und Ausgabe-Index; Uhr: aus der Frist). Die Korrelation reist
     /// explizit (→ Ziel-Event-Metadatum). Bounded (W2), <see cref="CommandModus.Emittiert"/> (KEINE Version, §4.2), Ausgang an den Aufrufer.
     /// </summary>
-    public async Task<EmitAusgang> EmitAsync(ICommand cmd, Guid commandId, Guid korrelation, CancellationToken ct) =>
+    public async Task<EmitAusgang> EmitAsync(IAggregatCommand cmd, Guid commandId, Guid korrelation, CancellationToken ct) =>
         (await EmitMitAntwortAsync(cmd, commandId, korrelation, ct)).Ausgang;
 
     /// <summary>
     /// Wie <see cref="EmitAsync"/>, dazu die Antwort des Ziels: die Events, die der Command entschieden hat (auch bei einer erkannten Wiederholung die des
     /// ersten Mals) — eine Funktion vor dem Aggregat hört sie als Antwort auf ihren Command (docs/04 §4.4).
     /// </summary>
-    public async Task<EmitAntwort> EmitMitAntwortAsync(ICommand cmd, Guid commandId, Guid korrelation, CancellationToken ct)
+    public async Task<EmitAntwort> EmitMitAntwortAsync(IAggregatCommand cmd, Guid commandId, Guid korrelation, CancellationToken ct)
     {
         if (!Anwendung.Routing.CommandToAggregate.TryGetValue(cmd.GetType(), out var aggregateType))
         {
@@ -119,7 +119,7 @@ public sealed class CommandEmitter
         };
     }
 
-    private EmitAusgang Technisch(CommandResult ergebnis, string aggregateType, ICommand cmd)
+    private EmitAusgang Technisch(CommandResult ergebnis, string aggregateType, IAggregatCommand cmd)
     {
         // Ein technischer Fehler im Ziel (DB weg, Append gescheitert): die Wirkung ist offen — wiederholen, die Inbox klärt es.
         _logger.LogWarning("[Emit] {Command} an {AggregateType}/{AggregateId} technisch gescheitert ({Fehler}) — Ausgang unbekannt",

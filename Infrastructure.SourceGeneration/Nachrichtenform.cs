@@ -8,11 +8,10 @@ using System.Linq;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Die eine Lesart der NACHRICHTEN ohne Marker (docs/03 §3.1, docs/04 §4.4) — nur aus Signaturen. Eine <b>Folge</b> ist ein Typ in der Signatur
-    /// eines <c>Decide</c> (<c>IEnumerable&lt;OneOf&lt;…&gt;&gt;</c> bzw. <c>IEnumerable&lt;X&gt;</c>), der weder Event (auch kein Hinweis) noch Frist ist: ein
-    /// schlichter Record. Sie geht nicht ins Log, sondern als offener Eingang an die Funktionen, die sie hören. Der Codegen (Wire-JSON-Kontext) liest
-    /// dieselbe Regel über die gebauten Assemblies (<c>JsonContextEmitter</c>); fehlt ihm ein Typ, bricht der Build am generierten
-    /// <c>Default.{Typ}</c>.
+    /// Die eine Lesart der COMMANDS OHNE ZIEL (docs/03 §3.1, docs/04 §4.4): ein konkreter Typ mit <c>ICommand</c>, aber ohne <c>ICommand&lt;T&gt;</c>.
+    /// Er fließt zwischen den Knoten eines Graphen und aus einem <c>Decide</c> an den Kopf eines Graphen (dann im selben Commit als offener Eingang),
+    /// nie ins Log. Er reist im Cluster (Wire-JSON) und über die Leitung (Nutzlast, {Typ}Dto-Message). Der Codegen liest dieselbe Regel über die
+    /// gebauten Assemblies (<c>Nachrichtenlesart</c>); fehlt ihm ein Typ, bricht der Build am generierten <c>Default.{Typ}</c>.
     /// </summary>
     internal static class Nachrichtenform
     {
@@ -30,62 +29,33 @@ namespace Infrastructure.SourceGeneration
             return new[] { t };
         }
 
-        /// <summary>Ein schlichter Record bzw. eine konkrete Klasse ohne Marker des Vertrags — weder Event noch Frist noch Command, Query oder Antwort.</summary>
-        public static bool IstSchlicht(ITypeSymbol t) =>
+        /// <summary>Ein Command ohne Ziel: konkret, nicht generisch, mit <c>ICommand</c>, ohne <c>IAggregatCommand</c> (also ohne <c>ICommand&lt;T&gt;</c>).</summary>
+        public static bool IstOhneZiel(ITypeSymbol t) =>
             t is INamedTypeSymbol { TypeKind: TypeKind.Class, IsAbstract: false, IsStatic: false, IsGenericType: false } n
-            && n.SpecialType == SpecialType.None
-            && !n.AllInterfaces.Any(i => i.ContainingNamespace?.ToDisplayString() == "Abstractions"
-                                         && (i.Name == "IEvent" || i.Name == "IFrist" || i.Name == "ICommand" || i.Name == "IQuery" || i.Name == "IQueryResponse"
-                                             || i.Name == "IAusgabe"));
+            && n.AllInterfaces.Any(i => i.ToDisplayString() == A + "ICommand")
+            && !n.AllInterfaces.Any(i => i.ToDisplayString() == A + "IAggregatCommand");
 
         /// <summary>Ist <paramref name="t"/> ein Decider (<c>IDecider&lt;T&gt;</c>)?</summary>
         public static bool IstDecider(INamedTypeSymbol t) =>
             t.TypeKind == TypeKind.Class && t.AllInterfaces.Any(i => i.OriginalDefinition.ToDisplayString() == A + "IDecider<TState>");
 
-        /// <summary>Die Folgen eines Decide (die schlichten Typen seiner Signatur).</summary>
-        public static IEnumerable<INamedTypeSymbol> FolgenVon(IMethodSymbol decide) =>
-            Faelle(decide.ReturnType).Where(IstSchlicht).OfType<INamedTypeSymbol>();
+        /// <summary>Die Commands ohne Ziel eines Decide (aus seiner Signatur).</summary>
+        public static IEnumerable<INamedTypeSymbol> CommandsVon(IMethodSymbol decide) =>
+            Faelle(decide.ReturnType).Where(IstOhneZiel).OfType<INamedTypeSymbol>();
 
-        /// <summary>Die Decide-Methoden eines Deciders (öffentlich, erster Parameter ein Command).</summary>
+        /// <summary>Die Decide-Methoden eines Deciders (öffentlich, erster Parameter ein Command an ein Aggregat).</summary>
         public static IEnumerable<IMethodSymbol> Decides(INamedTypeSymbol decider) =>
             decider.GetMembers("Decide").OfType<IMethodSymbol>()
                 .Where(m => !m.IsStatic && m.DeclaredAccessibility == Accessibility.Public && m.Parameters.Length > 0
-                            && m.Parameters[0].Type.AllInterfaces.Any(i => i.ToDisplayString() == A + "ICommand"));
-
-        /// <summary>Ist <paramref name="t"/> eine Funktion (Klasse oder Schnittstelle, die <c>IFunktion</c> erweitert)?</summary>
-        public static bool IstFunktion(INamedTypeSymbol t) =>
-            (t.TypeKind == TypeKind.Class || t.TypeKind == TypeKind.Interface) && t.ToDisplayString() != A + "IFunktion"
-            && t.AllInterfaces.Any(i => i.ToDisplayString() == A + "IFunktion");
-
-        /// <summary>Die schlichten Typen der <c>Auf</c> einer Funktion: Eingänge (Folgen, Zwischenergebnisse) und Ausgaben (Zwischenergebnisse).</summary>
-        public static IEnumerable<INamedTypeSymbol> VonFunktion(INamedTypeSymbol funktion) =>
-            funktion.GetMembers("Auf").OfType<IMethodSymbol>()
-                .Where(m => !m.IsStatic && m.Parameters.Length > 0)
-                .SelectMany(m => new[] { m.Parameters[0].Type }.Concat(Faelle(m.ReturnType)))
-                .Where(IstSchlicht).OfType<INamedTypeSymbol>();
+                            && m.Parameters[0].Type.AllInterfaces.Any(i => i.ToDisplayString() == A + "IAggregatCommand"));
 
         /// <summary>
-        /// Alle Nachrichten ohne Marker der Anwendung — die Folgen der Decides und die schlichten Ein- und Ausgaben der Funktionen —, nach Namen
-        /// sortiert, jede einmal. Sie reisen im Cluster (Wire-JSON) und über die Leitung (Nutzlast, {Typ}Dto-Message) zu Funktionen draußen.
+        /// Alle Commands ohne Ziel der Anwendung (eigene und referenzierte Vertrags-Assemblies), nach Namen sortiert, jeder einmal. Sie reisen im
+        /// Cluster (Wire-JSON) und über die Leitung (Nutzlast, {Typ}Dto-Message) zu Funktionen draußen.
         /// </summary>
         public static List<INamedTypeSymbol> Alle(Compilation c)
         {
-            var aus = Folgen(c);
-            foreach (var t in Vertragsassemblies.Typen(c).Where(IstFunktion))
-                foreach (var n in VonFunktion(t))
-                    if (!aus.Contains(n, SymbolEqualityComparer.Default)) aus.Add(n);
-            aus.Sort((a, b) => string.Compare(a.Name, b.Name, System.StringComparison.Ordinal));
-            return aus;
-        }
-
-        /// <summary>Alle Folgen der Anwendung (eigene und referenzierte Vertrags-Assemblies), nach Namen sortiert, jede einmal.</summary>
-        public static List<INamedTypeSymbol> Folgen(Compilation c)
-        {
-            var aus = new List<INamedTypeSymbol>();
-            foreach (var t in Vertragsassemblies.Typen(c).Where(IstDecider))
-                foreach (var d in Decides(t))
-                    foreach (var f in FolgenVon(d))
-                        if (!aus.Contains(f, SymbolEqualityComparer.Default)) aus.Add(f);
+            var aus = Vertragsassemblies.Typen(c).Where(IstOhneZiel).Distinct(SymbolEqualityComparer.Default).Cast<INamedTypeSymbol>().ToList();
             aus.Sort((a, b) => string.Compare(a.Name, b.Name, System.StringComparison.Ordinal));
             return aus;
         }

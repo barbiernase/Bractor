@@ -78,6 +78,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         INamedTypeSymbol? G(string n) => c.GetTypeByMetadataName("Abstractions." + n);
         var (iEvent, iTransient, iCommand, iQuery, iResponse) = (G("IEvent"), G("ITransientEvent"), G("ICommand"), G("IQuery"), G("IQueryResponse"));
         var (iDecider, iFunktion, iAkteur, iDarf) = (G("IDecider`1"), G("IFunktion"), G("IAkteur"), G("IDarf`1"));
+        var iAggregatCommand = G("IAggregatCommand");
         var (iClient, iQuelle) = (G("IClientVertrag"), G("IQuellNachricht"));
         if (iEvent == null || iCommand == null || iDecider == null) return;
         var rollen = DomaenenRollen.Select(G).Where(x => x != null).Select(x => x!).ToList();
@@ -99,6 +100,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         var erzeugt = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
         var imNetz = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);   // was ins Hinweis-Netz gelangt: Ausgaben von Decide und Funktionen
         var entschieden = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+        var genommen = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);   // Commands ohne Ziel, die eine Funktion nimmt
         var entscheidet = new Dictionary<ITypeSymbol, HashSet<ITypeSymbol>>(SymbolEqualityComparer.Default);   // Command → was sein Decide ausgeben kann
         var zieleJeQuery = new Dictionary<ITypeSymbol, List<string>>(SymbolEqualityComparer.Default);
         void Ziel(ITypeSymbol query, string ziel)
@@ -135,18 +137,13 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                     Ziel(f.Query, "Reader " + t.Name);
                     erzeugt.UnionWith(f.Antworten);
                 }
-            if (t.TypeKind == TypeKind.Interface && iFunktion != null && IstT(t, iFunktion) && Funktionsform.IstFunktion(t))
-                foreach (var m in t.GetMembers().OfType<IMethodSymbol>().Where(m => m.IsAbstract))
-                {
-                    erzeugt.UnionWith(Faelle(m.ReturnType));
-                    imNetz.UnionWith(Faelle(m.ReturnType));
-                }
-            // Eine Funktion als Klasse (Baustein-Form): die Fälle jedes Auf.
-            if (t.TypeKind == TypeKind.Class && Funktionsform.IstFunktion(t))
+            // Eine Funktion (Klasse oder Schnittstelle): die Fälle jedes Auf, und welche Commands ohne Ziel sie nimmt.
+            if ((t.TypeKind == TypeKind.Class || t.TypeKind == TypeKind.Interface) && Funktionsform.IstFunktion(t))
                 foreach (var a in Funktionsform.Lies(t).Aufs)
                 {
                     erzeugt.UnionWith(a.Ausgaben);
                     imNetz.UnionWith(a.Ausgaben);
+                    if (a.Command) genommen.Add(a.Eingang);
                 }
             if (IstT(t, iAkteur))
                 erzeugt.UnionWith(t.AllInterfaces.Where(i => iDarf != null && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iDarf)).Select(i => i.TypeArguments[0]));
@@ -166,8 +163,10 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                 if (r.Count > 1) ctx.ReportDiagnostic(Diagnostic.Create(Query, Location.None, t.Name, r.Count, string.Join(", ", r)));
                 if (r.Count == 0) ctx.ReportDiagnostic(Diagnostic.Create(EingangOffen, Location.None, t.Name, "Query", "kein Reader und kein Aggregat beantwortet sie"));
             }
-            else if (IstT(t, iCommand) && !entschieden.Contains(t))
+            else if (IstT(t, iAggregatCommand) && !entschieden.Contains(t))
                 ctx.ReportDiagnostic(Diagnostic.Create(EingangOffen, Location.None, t.Name, "Command", "kein Aggregat entscheidet ihn (Decide)"));
+            else if (IstT(t, iCommand) && !IstT(t, iAggregatCommand) && !genommen.Contains(t))
+                ctx.ReportDiagnostic(Diagnostic.Create(EingangOffen, Location.None, t.Name, "Command ohne Ziel", "keine Funktion nimmt ihn"));
         }
 
         // Offene Ausgänge: Events/Ablehnungen ohne Erzeuger (Quell-Nachrichten erzeugt der Treiber bzw. die Außenwelt), Responses ohne Reader-Handle.
@@ -194,7 +193,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         {
             var form = Funktionsform.Lies(f);
             if (form.Fehler.Count > 0) continue;   // CQRS100 meldet der Generator
-            var befehle = form.Aufs.SelectMany(a => a.Ausgaben).Where(x => IstT(x, iCommand)).Distinct<ITypeSymbol>(SymbolEqualityComparer.Default).ToList();
+            var befehle = form.Aufs.SelectMany(a => a.Ausgaben).Where(x => IstT(x, iAggregatCommand)).Distinct<ITypeSymbol>(SymbolEqualityComparer.Default).ToList();
             foreach (var a in form.Aufs.Where(form.IstAntwort))
                 if (!befehle.Any(b => entscheidet.TryGetValue(b, out var aus) && aus.Contains(a.Eingang)))
                     ctx.ReportDiagnostic(Diagnostic.Create(AntwortOhneCommand, a.Methode.Locations.FirstOrDefault() ?? Location.None, f.Name, a.Eingang.Name,

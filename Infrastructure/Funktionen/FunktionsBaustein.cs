@@ -27,7 +27,7 @@ public sealed record FunktionsUmsetzung(string Name, Type Typ, Func<IServiceProv
 /// </summary>
 /// <param name="Draussen">Als Schnittstelle deklariert: sie rechnet draußen (Worker, Client, Hand) oder mit einer Implementierung im Host.</param>
 /// <param name="Dienste">Was der Konstruktor der Klasse braucht (Dienste, Konfig-Records) — für die Boot-Prüfung der Bindung.</param>
-/// <param name="Rechne">Die Rechnung: Eingang → Strom der Ausgaben (Commands, Zwischenergebnisse, Hinweise), wie die Signatur sie zulässt.</param>
+/// <param name="Rechne">Die Rechnung: Eingang → Strom der Ausgaben (Commands, Hinweise), wie die Signatur sie zulässt.</param>
 /// <param name="Zustand">Der gekapselte Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4, ein Cache) — null = ohne Zustand.</param>
 public sealed record FunktionsBaustein(
     Type Typ,
@@ -50,26 +50,11 @@ public sealed record FunktionsBaustein(
 }
 
 /// <summary>
-/// Bringt jede erlaubte Rückgabe eines <c>Auf</c> (konkreter Typ, <c>OneOf</c>, <c>T?</c>, Strom, je auch als Task) auf einen Strom von Ausgaben —
-/// der Generator ruft die passende Form, mit einer Abbildung je Element (<c>x =&gt; x.Value</c> für OneOf). <c>null</c> heißt „nichts“.
+/// Bringt jede erlaubte Rückgabe eines <c>Auf</c> (konkreter Typ, <c>OneOf</c>, je auch als Task; ein Strom) auf einen Strom von Ausgaben — der
+/// Generator ruft die passende Form, mit einer Abbildung je Element (<c>x =&gt; x.Value</c> für OneOf). Ein leerer Strom heißt „nichts“.
 /// </summary>
 public static class Ausgaben
 {
-    /// <summary>Ein <c>Auf</c> ohne Ausgabe (nur mit Zustand: der Eingang wirkt allein auf ihn).</summary>
-    public static IAsyncEnumerable<object> Leer => KeineAsync(Task.CompletedTask);
-
-    public static async IAsyncEnumerable<object> KeineAsync(Task lauf)
-    {
-        await lauf.ConfigureAwait(false);
-        yield break;
-    }
-
-    public static async IAsyncEnumerable<object> KeineAsync(ValueTask lauf)
-    {
-        await lauf.ConfigureAwait(false);
-        yield break;
-    }
-
     public static async IAsyncEnumerable<TA> Einzeln<T, TA>(T wert, Func<T, TA?> abbildung) where TA : class
     {
         await Task.CompletedTask;
@@ -77,11 +62,6 @@ public static class Ausgaben
     }
 
     public static async IAsyncEnumerable<TA> EinzelnAsync<T, TA>(Task<T> wert, Func<T, TA?> abbildung) where TA : class
-    {
-        if (abbildung(await wert.ConfigureAwait(false)) is { } a) yield return a;
-    }
-
-    public static async IAsyncEnumerable<TA> EinzelnAsync<T, TA>(ValueTask<T> wert, Func<T, TA?> abbildung) where TA : class
     {
         if (abbildung(await wert.ConfigureAwait(false)) is { } a) yield return a;
     }
@@ -96,12 +76,6 @@ public static class Ausgaben
             ct.ThrowIfCancellationRequested();
             if (abbildung(x) is { } a) yield return a;
         }
-    }
-
-    public static async IAsyncEnumerable<TA> StromAsync<T, TA>(Task<IEnumerable<T>> strom, Func<T, TA?> abbildung,
-        [EnumeratorCancellation] CancellationToken ct = default) where TA : class
-    {
-        await foreach (var a in Strom(await strom.ConfigureAwait(false), abbildung, ct).WithCancellation(ct)) yield return a;
     }
 
     public static async IAsyncEnumerable<TA> StromAsync<T, TA>(IAsyncEnumerable<T>? strom, Func<T, TA?> abbildung,

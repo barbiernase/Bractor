@@ -21,6 +21,9 @@ namespace Domain.SourceGeneration;
 /// Die Ausgabe einer Funktion (<c>Auf</c>) prüft die Funktionsform (CQRS100).
 /// Offen ist X (bzw. ein OneOf-Typargument), wenn es ein Interface, ein Typ-Parameter, <c>object</c> oder eine abstrakte
 /// Klasse ist. <c>Task</c>/<c>ValueTask</c>/<c>void</c> ohne Ergebnis sind erlaubt (reine Effekte, z. B. Projektionen).
+///
+/// <b>CQRS114 — ein Decide gibt keinen Command an ein Aggregat aus</b> (Plan „Commands und Funktionsgraphen“, Entscheidung 3): seine Ausgaben sind
+/// Events, Hinweise, Fristen und Commands ohne Ziel (an den Kopf eines Graphen). Aggregate reden nur über Graphen miteinander.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class AusgabeVertragAnalyzer : DiagnosticAnalyzer
@@ -39,7 +42,18 @@ public sealed class AusgabeVertragAnalyzer : DiagnosticAnalyzer
                      "Eine offene Signatur (z. B. IAsyncEnumerable<ICommand>) würde Generatoren und Editor auf eine " +
                      "grundsätzlich unvollständige Rumpf-Analyse zurückwerfen.");
 
-    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Offen);
+    public const string AggregatCommandId = "CQRS114";
+
+    private static readonly DiagnosticDescriptor AggregatCommand = new(
+        AggregatCommandId,
+        "Decide gibt einen Command an ein Aggregat aus",
+        "'{0}' gibt den Command '{1}' an ein Aggregat aus — ein Decide gibt Events, Hinweise, Fristen und Commands ohne Ziel aus; Aggregate reden über "
+        + "Graphen miteinander: gib einen Command ohne Ziel aus, den ein Graph nimmt, und dort den Command an das Aggregat (GR-DECIDE-AUSGABE)",
+        "CQRS.Vertrag",
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Offen, AggregatCommand);
 
     public override void Initialize(AnalysisContext context)
     {
@@ -53,7 +67,8 @@ public sealed class AusgabeVertragAnalyzer : DiagnosticAnalyzer
                 c.GetTypeByMetadataName("Abstractions.ICommand"),
                 c.GetTypeByMetadataName("Abstractions.IEvent"),
                 c.GetTypeByMetadataName("Abstractions.IQuery"),
-                c.GetTypeByMetadataName("Abstractions.IReader"));
+                c.GetTypeByMetadataName("Abstractions.IReader"),
+                c.GetTypeByMetadataName("Abstractions.IAggregatCommand"));
             if (m.ICommand == null) return;   // kein CQRS-Vertrag in dieser Compilation
             start.RegisterSymbolAction(ctx => Pruefe(ctx, m), SymbolKind.Method);
         });
@@ -61,9 +76,9 @@ public sealed class AusgabeVertragAnalyzer : DiagnosticAnalyzer
 
     private sealed class Marker
     {
-        public readonly INamedTypeSymbol? IDecider, ICommand, IEvent, IQuery, IReader;
-        public Marker(INamedTypeSymbol? d, INamedTypeSymbol? c, INamedTypeSymbol? e, INamedTypeSymbol? q, INamedTypeSymbol? r)
-        { IDecider = d; ICommand = c; IEvent = e; IQuery = q; IReader = r; }
+        public readonly INamedTypeSymbol? IDecider, ICommand, IEvent, IQuery, IReader, IAggregatCommand;
+        public Marker(INamedTypeSymbol? d, INamedTypeSymbol? c, INamedTypeSymbol? e, INamedTypeSymbol? q, INamedTypeSymbol? r, INamedTypeSymbol? a)
+        { IDecider = d; ICommand = c; IEvent = e; IQuery = q; IReader = r; IAggregatCommand = a; }
     }
 
     private static void Pruefe(SymbolAnalysisContext ctx, Marker m)
@@ -80,7 +95,8 @@ public sealed class AusgabeVertragAnalyzer : DiagnosticAnalyzer
 
         ITypeSymbol? element = null;
         var rt = mm.ReturnType;
-        if (Hat(m.IDecider) && Ist(p0, m.ICommand))
+        var decide = Hat(m.IDecider) && Ist(p0, m.ICommand);
+        if (decide)
             element = Element(rt, enumerable: true, task: false);
         else if (Hat(m.IDecider) && mm.Name == Abstractions.Projektionsvertrag.Frage && Ist(p0, m.IQuery))
             element = IstOhneErgebnis(rt) ? null : rt;   // die Frage an ein Aggregat (docs/03 §3.2): synchron, die Antwort steht in der Signatur
@@ -88,6 +104,10 @@ public sealed class AusgabeVertragAnalyzer : DiagnosticAnalyzer
             element = Element(rt, enumerable: false, task: true) ?? (IstOhneErgebnis(rt) ? null : rt);
         else return;
         if (element == null) return;   // Task/void: reine Effekte
+
+        if (decide && m.IAggregatCommand != null)
+            foreach (var fall in Teile(element).Where(t => Ist(t, m.IAggregatCommand)))
+                ctx.ReportDiagnostic(Diagnostic.Create(AggregatCommand, mm.Locations.FirstOrDefault(), typ.Name + "." + mm.Name + "(" + p0.Name + ")", fall.Name));
 
         var offen = OffeneTypen(element).FirstOrDefault();
         if (offen == null) return;
@@ -115,12 +135,14 @@ public sealed class AusgabeVertragAnalyzer : DiagnosticAnalyzer
         rt.SpecialType == SpecialType.System_Void
         || rt.ToDisplayString() is "System.Threading.Tasks.Task" or "System.Threading.Tasks.ValueTask";
 
+    /// <summary>Die Fälle von X (bei OneOf: seine Typargumente).</summary>
+    private static System.Collections.Generic.IEnumerable<ITypeSymbol> Teile(ITypeSymbol x) =>
+        x is INamedTypeSymbol { Name: "OneOf" } o && o.ContainingNamespace?.ToDisplayString() == "Abstractions" ? o.TypeArguments.AsEnumerable() : new[] { x };
+
     /// <summary>Die nicht-konkreten Typen in X (bei OneOf: in seinen Typargumenten).</summary>
     private static System.Collections.Generic.IEnumerable<ITypeSymbol> OffeneTypen(ITypeSymbol x)
     {
-        var teile = x is INamedTypeSymbol { Name: "OneOf" } o && o.ContainingNamespace?.ToDisplayString() == "Abstractions"
-            ? o.TypeArguments.AsEnumerable()
-            : new[] { x };
+        var teile = Teile(x);
         return teile.Where(t => t.TypeKind is TypeKind.Interface or TypeKind.TypeParameter
                                 || t.SpecialType == SpecialType.System_Object
                                 || (t.TypeKind == TypeKind.Class && t.IsAbstract));

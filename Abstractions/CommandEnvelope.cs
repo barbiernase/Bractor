@@ -8,7 +8,7 @@ public record CommandEnvelope : IAggregateEnvelope, IWireMessage
 {
     public Guid CommandId { get; init; } = Guid.NewGuid();
 
-    /// <summary>Das Ziel — aus dem Command abgeleitet (<see cref="ICommand.Ziel"/>), keine zweite Angabe: Routing und Aggregat-Actor sehen
+    /// <summary>Das Ziel — aus dem Command abgeleitet (<see cref="IAggregatCommand.Ziel"/>), keine zweite Angabe: Routing und Aggregat-Actor sehen
     /// dieselbe Id, die der Command typisiert trägt (docs/10 §10.4).</summary>
     [System.Text.Json.Serialization.JsonIgnore]
     public Guid AggregateId => Payload.Ziel;
@@ -24,7 +24,7 @@ public record CommandEnvelope : IAggregateEnvelope, IWireMessage
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
     public string CorrelationId { get; init; } = Guid.NewGuid().ToString();
     public string UserId { get; init; } = "system";
-    public ICommand Payload { get; init; }
+    public IAggregatCommand Payload { get; init; }
     public string AggregateType { get; init; }
     
     /// <summary>

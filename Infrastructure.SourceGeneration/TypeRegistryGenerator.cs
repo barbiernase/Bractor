@@ -63,7 +63,7 @@ namespace Infrastructure.SourceGeneration
             var categories = new[]
             {
                 new CategoryDef("Abstractions.IEvent",             "Events",         "EVENTS (alle, inkl. ITransientEvent)"),
-                new CategoryDef("Abstractions.ICommand",           "Commands",        "COMMANDS (alle, inkl. ICreationCommand)"),
+                new CategoryDef("Abstractions.IAggregatCommand",   "Commands",        "COMMANDS an Aggregate (inkl. ICreationCommand)"),
                 new CategoryDef("Abstractions.IQuery",             "Queries",         "QUERIES"),
                 new CategoryDef("Abstractions.IQueryResponse",     "QueryResponses",  "QUERY RESPONSES"),
             };

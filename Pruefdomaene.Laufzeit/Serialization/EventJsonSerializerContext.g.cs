@@ -40,8 +40,6 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.AuftragGescheitert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.AuftragGestartet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.BelegungVermerkt))]
-[JsonSerializable(typeof(global::Pruefdomaene.Auftrag.KontingentEntlastungAngeordnet))]
-[JsonSerializable(typeof(global::Pruefdomaene.Auftrag.PostenFreigabeAngeordnet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.ReservierungVermerkt))]
 [JsonSerializable(typeof(global::Pruefdomaene.Import.ImportAngefordert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Import.ImportGestartet))]
@@ -59,11 +57,11 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.PostenReserviert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.PostenZugebucht))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.ReservierungAbgelehnt))]
+[JsonSerializable(typeof(global::Pruefdomaene.Verteilung.QuelleReserviert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.VerteilungAbgeschlossen))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.VerteilungGescheitert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.VerteilungGestartet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.ZubuchungGezaehlt))]
-[JsonSerializable(typeof(global::Pruefdomaene.Verteilung.ZubuchungenAngeordnet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Messung.Zaehlstand))]
 public partial class EventJsonSerializerContext : JsonSerializerContext
 {

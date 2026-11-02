@@ -9,7 +9,7 @@ namespace Pruefdomaene.Pipeline.Messung;
 /// </summary>
 public interface IAusreisserpruefung : IFunktion
 {
-    MeldeAusreisser? Auf(Merkmal m);
+    IEnumerable<MeldeAusreisser> Auf(Merkmal m);
 }
 
 /// <summary>Die Umsetzung im Host: ein Wert über der Schwelle ist ein Ausreißer.</summary>
@@ -17,5 +17,8 @@ public sealed class Schwellenpruefung : IAusreisserpruefung
 {
     public const double Schwelle = 1_000;
 
-    public MeldeAusreisser? Auf(Merkmal m) => m.Wert > Schwelle ? new MeldeAusreisser(m.Stelle, m.Wert) : null;
+    public IEnumerable<MeldeAusreisser> Auf(Merkmal m)
+    {
+        if (m.Wert > Schwelle) yield return new MeldeAusreisser(m.Stelle, m.Wert);
+    }
 }

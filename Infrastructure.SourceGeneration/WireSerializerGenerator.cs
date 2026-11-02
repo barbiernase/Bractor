@@ -36,7 +36,7 @@ namespace Infrastructure.SourceGeneration
             var compilation = context.Compilation;
 
             var iWire = compilation.GetTypeByMetadataName("Abstractions.IWireMessage");
-            var iCommand = compilation.GetTypeByMetadataName("Abstractions.ICommand");
+            var iCommand = compilation.GetTypeByMetadataName("Abstractions.IAggregatCommand");
             var iEvent = compilation.GetTypeByMetadataName("Abstractions.IEvent");
             var iQuery = compilation.GetTypeByMetadataName("Abstractions.IQuery");
             var iAntwort = compilation.GetTypeByMetadataName("Abstractions.IQueryResponse");
@@ -147,7 +147,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("{");
             EmitPoly(sb, "Event", "IEvent", events, full);
             sb.AppendLine();
-            EmitPoly(sb, "Command", "ICommand", commands, full);
+            EmitPoly(sb, "Command", "IAggregatCommand", commands, full);
             sb.AppendLine();
             EmitPoly(sb, "Query", "IQuery", queries, full);
             sb.AppendLine();

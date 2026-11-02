@@ -301,7 +301,8 @@ public sealed class ReflectionTypeAnalyzer
 
         if (interfaces.Contains("Abstractions.IEvent"))
             return DomainType.Event;
-        if (interfaces.Contains("Abstractions.ICommand") ||
+        // Ein Command an ein Aggregat; ein Command ohne Ziel ist ein Wert (Nutzlast-Kategorie Nachricht, Nachrichtenlesart).
+        if (interfaces.Contains("Abstractions.IAggregatCommand") ||
             interfaces.Contains("Abstractions.ICreationCommand"))
             return DomainType.Command;
         if (interfaces.Contains("Abstractions.IQuery"))

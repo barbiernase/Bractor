@@ -93,7 +93,7 @@ namespace Domain.SourceGeneration
                              public {{model.HandlerName}}({{model.StateTypeName}} state, {{model.DeciderName}} decider, {{model.ApplierName}} applier)
                                  : base(state, decider, applier) { }
                      
-                             public override IEnumerable<object> HandleCommand(ICommand command)
+                             public override IEnumerable<object> HandleCommand(IAggregatCommand command)
                              {
                                  switch (command)
                                  {
