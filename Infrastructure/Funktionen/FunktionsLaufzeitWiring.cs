@@ -39,12 +39,12 @@ public static class FunktionsLaufzeitWiring
         return services;
     }
 
-    /// <summary>Rechnet die Funktion im Host mit Zustand — ihrem eigenen oder dem einer gerufenen Funktion in der Konstruktor-Kette ihrer Umsetzung?</summary>
+    /// <summary>Rechnet die Funktion im Host mit Zustand — ihrem eigenen oder dem einer Technik in der Konstruktor-Kette ihrer Umsetzung?</summary>
     public static bool MitZustand(FunktionsBaustein b, IServiceProvider dienste)
     {
         var bindung = FunktionsBausteinWiring.BindungVon(b, dienste.GetServices<BausteinBindung>());
         if (bindung.Laufort != FunktionsLaufort.Host) return false;
-        return b.Zustand is not null || dienste.GetService<GerufeneWahl>()?.MitZustand(FunktionsBausteinWiring.Umsetzung(b, bindung).Typ) == true;
+        return b.Zustand is not null || dienste.GetService<TechnikWahl>()?.MitZustand(FunktionsBausteinWiring.Umsetzung(b, bindung).Typ) == true;
     }
 }
 
@@ -122,8 +122,8 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
                 continue;
             }
             var umsetzung = FunktionsBausteinWiring.Umsetzung(b, bindung);
-            var gerufenerZustand = dienste.GetService<GerufeneWahl>()?.MitZustand(umsetzung.Typ) == true;
-            var imHost = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, umsetzung.Baue, b.Zustand, b.Name, gerufenerZustand), b.Rechne, b.Liest,
+            var technikZustand = dienste.GetService<TechnikWahl>()?.MitZustand(umsetzung.Typ) == true;
+            var imHost = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, umsetzung.Baue, b.Zustand, b.Name, technikZustand), b.Rechne, b.Liest,
                 antworten);
             var konfig = new FunktionsOrtKonfig(
                 Parallel: bindung.Parallel > 0 ? bindung.Parallel : FunktionsOrtKonfig.StandardParallel,

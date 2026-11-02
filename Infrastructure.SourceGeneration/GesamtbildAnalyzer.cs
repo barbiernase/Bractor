@@ -135,14 +135,14 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                     Ziel(f.Query, "Reader " + t.Name);
                     erzeugt.UnionWith(f.Antworten);
                 }
-            if (t.TypeKind == TypeKind.Interface && iFunktion != null && IstT(t, iFunktion) && Funktionsform.IstBaustein(t))
+            if (t.TypeKind == TypeKind.Interface && iFunktion != null && IstT(t, iFunktion) && Funktionsform.IstFunktion(t))
                 foreach (var m in t.GetMembers().OfType<IMethodSymbol>().Where(m => m.IsAbstract))
                 {
                     erzeugt.UnionWith(Faelle(m.ReturnType));
                     imNetz.UnionWith(Faelle(m.ReturnType));
                 }
             // Eine Funktion als Klasse (Baustein-Form): die Fälle jedes Auf.
-            if (t.TypeKind == TypeKind.Class && Funktionsform.IstBaustein(t))
+            if (t.TypeKind == TypeKind.Class && Funktionsform.IstFunktion(t))
                 foreach (var a in Funktionsform.Lies(t).Aufs)
                 {
                     erzeugt.UnionWith(a.Ausgaben);
@@ -185,12 +185,12 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         }
 
         // R20: jeder Hinweis, den eine Funktion hört, hat einen Erzeuger im Hinweis-Netz (sonst bekäme ihre Adresse ihn nie).
-        foreach (var f in typen.Where(t => (t.TypeKind == TypeKind.Interface || (t.TypeKind == TypeKind.Class && !t.IsAbstract)) && Funktionsform.IstBaustein(t)))
+        foreach (var f in typen.Where(t => (t.TypeKind == TypeKind.Interface || (t.TypeKind == TypeKind.Class && !t.IsAbstract)) && Funktionsform.IstFunktion(t)))
             foreach (var a in Funktionsform.Lies(f).Aufs.Where(a => a.Hinweis && !imNetz.Contains(a.Eingang)))
                 ctx.ReportDiagnostic(Diagnostic.Create(HinweisOhneErzeuger, a.Methode.Locations.FirstOrDefault() ?? Location.None, f.Name, a.Eingang.Name));
 
         // GR-ANTWORT: ein Event-Eingang einer Funktion ist eine Antwort — einer ihrer Commands (aus irgendeinem Auf) muss es entscheiden können.
-        foreach (var f in typen.Where(t => (t.TypeKind == TypeKind.Interface || (t.TypeKind == TypeKind.Class && !t.IsAbstract)) && Funktionsform.IstBaustein(t)))
+        foreach (var f in typen.Where(t => (t.TypeKind == TypeKind.Interface || (t.TypeKind == TypeKind.Class && !t.IsAbstract)) && Funktionsform.IstFunktion(t)))
         {
             var form = Funktionsform.Lies(f);
             if (form.Fehler.Count > 0) continue;   // CQRS100 meldet der Generator
@@ -205,7 +205,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         var getragen = new HashSet<ITypeSymbol>(clientVertraege.SelectMany(v => v.Traegt).Select(x => x.Funktion), SymbolEqualityComparer.Default);
         var umgesetzt = new HashSet<ITypeSymbol>(typen.Where(t => t.TypeKind == TypeKind.Class && !t.IsAbstract).SelectMany(Funktionsform.Umsetzt),
             SymbolEqualityComparer.Default);
-        foreach (var f in typen.Where(t => t.TypeKind == TypeKind.Interface && Funktionsform.IstBaustein(t) && !getragen.Contains(t) && !umgesetzt.Contains(t)))
+        foreach (var f in typen.Where(t => t.TypeKind == TypeKind.Interface && Funktionsform.IstFunktion(t) && !getragen.Contains(t) && !umgesetzt.Contains(t)))
             ctx.ReportDiagnostic(Diagnostic.Create(Getragen, Location.None, f.Name));
     }
 

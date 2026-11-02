@@ -8,10 +8,11 @@ using System.Linq;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Die EINE Lesart einer Funktion (docs/10 §10.3) — mit Eingängen (Baustein) oder gerufen — für den <c>FunktionsBausteinGenerator</c>, die
-    /// Bindung der gerufenen (<c>GerufeneGenerator</c>), die Analyzer (R2, R12), die Lage-Regeln und den Extractor. Nur Code-Fakten: der Marker <c>IFunktion</c>, die Methoden <c>Auf</c> und ihre
-    /// Signaturen (Eingang, <c>Herkunft</c>, Lese-Fähigkeiten, Abbruch, Rückgabe). Verglichen wird über volle Namen, nie über Symbol-Identität —
-    /// so liest sie auch Typen aus anderen Compilations.
+    /// Die EINE Lesart einer Funktion (docs/10 §10.3) und ihrer Technik für den <c>FunktionsBausteinGenerator</c>, die Bindung der Technik
+    /// (<c>TechnikGenerator</c>), die Analyzer (R2, R12), die Lage-Regeln und den Extractor. Nur Code-Fakten: der Marker <c>IFunktion</c>, die
+    /// Methoden <c>Auf</c> und ihre Signaturen (Eingang, <c>Herkunft</c>, Lese-Fähigkeiten, Abbruch, Rückgabe), die Konstruktoren (Technik ist, was eine
+    /// Funktion dort nimmt, <see cref="Techniken"/>). Verglichen wird über volle Namen, nie über Symbol-Identität — so liest sie auch Typen aus
+    /// anderen Compilations.
     /// </summary>
     internal static class Funktionsform
     {
@@ -52,16 +53,12 @@ namespace Infrastructure.SourceGeneration
             public INamedTypeSymbol Typ = null!;
             /// <summary>Als Schnittstelle deklariert (läuft draußen oder mit einer Implementierung im Host).</summary>
             public bool Draussen;
-            /// <summary>Gerufen (kein <c>Auf</c>, frei benannte Methoden, <see cref="IstGerufen"/>): ihr Halter ruft sie über den Konstruktor.</summary>
-            public bool Gerufen;
             public List<Auf> Aufs = new List<Auf>();
             public List<(string Text, Location Ort)> Fehler = new List<(string, Location)>();
             /// <summary>Eingangstypen mit mehr als einem <c>Auf</c> (R2).</summary>
             public List<(INamedTypeSymbol Eingang, Location Ort)> Doppelt = new List<(INamedTypeSymbol, Location)>();
             /// <summary>Der Typ des Zustands (<c>IZustand&lt;T&gt;</c> im Konstruktor einer Klasse, docs/04 §4.4) — null = ohne Zustand.</summary>
             public INamedTypeSymbol? Zustand;
-            /// <summary>Die Klasse hat einen Lebenszyklus (<c>ILebenszyklus</c>, E10): sie lädt etwas beim Aktivieren.</summary>
-            public bool Lebenszyklus;
             /// <summary>
             /// Die Funktion steht VOR dem Aggregat (docs/04 §4.4): ihre Eingänge sind Nachrichten ohne Marker, Quell-Nachrichten und Hinweise, ihre
             /// Event-Eingänge Antworten. Sie liest nie das Log; Eingänge bringt ihr die Laufzeit über Wurzel, Parent und Kinder. Jede Funktion mit
@@ -81,7 +78,7 @@ namespace Infrastructure.SourceGeneration
             Name(t) == vollerName || t.AllInterfaces.Any(i => Name(i) == vollerName);
 
         /// <summary>
-        /// Ist <paramref name="t"/> ein aufrufbares Objekt (<c>IFunktion</c>)? Eine Schnittstelle <c>: IFunktion</c>, oder eine konkrete Klasse, die
+        /// Ist <paramref name="t"/> eine Funktion (<c>IFunktion</c>)? Eine Schnittstelle <c>: IFunktion</c>, oder eine konkrete Klasse, die
         /// <c>IFunktion</c> direkt trägt (keine abgeleitete Funktions-Schnittstelle — dann wäre sie deren Umsetzung).
         /// </summary>
         public static bool IstFunktion(INamedTypeSymbol t)
@@ -91,34 +88,62 @@ namespace Infrastructure.SourceGeneration
             return t.TypeKind == TypeKind.Class && !t.IsAbstract && !Umsetzt(t).Any();
         }
 
-        /// <summary>
-        /// Eine Funktion MIT EINGÄNGEN (Baustein, das Framework ruft sie): jede <see cref="IstFunktion"/>, die nicht <see cref="IstGerufen"/> ist —
-        /// auch eine ohne jede Methode (sie meldet dann „kein Auf“).
-        /// </summary>
-        public static bool IstBaustein(INamedTypeSymbol t) => IstFunktion(t) && !IstGerufen(t);
-
-        /// <summary>
-        /// Eine GERUFENE Funktion (ihr Halter ruft sie über den Konstruktor): kein <c>Auf</c>, aber mindestens eine öffentliche Methode — die Technik
-        /// hinter einer Funktion. Eingänge und gerufene Methoden an einem Objekt sind ein Formfehler (<see cref="Lies"/>).
-        /// </summary>
-        public static bool IstGerufen(INamedTypeSymbol t) =>
-            IstFunktion(t) && !HatAuf(t) && GerufeneMethoden(t).Any();
-
         /// <summary>Hat <paramref name="t"/> eine Methode <c>Auf</c> (einen Eingang)?</summary>
         public static bool HatAuf(INamedTypeSymbol t) =>
             t.GetMembers(Abstractions.Funktionsvertrag.Auf).OfType<IMethodSymbol>().Any(m => m.MethodKind == MethodKind.Ordinary);
 
         /// <summary>
-        /// Die gerufenen Methoden: öffentliche Instanz-Methoden außer <c>Auf</c> (an einer Klasse nur die selbst deklarierten, ohne Lebenszyklus und
-        /// Freigabe).
+        /// Die Methoden einer Technik, die ihr Halter ruft: öffentliche Instanz-Methoden (an einer Klasse nur die selbst deklarierten, ohne Freigabe).
         /// </summary>
-        public static IEnumerable<IMethodSymbol> GerufeneMethoden(INamedTypeSymbol t) =>
+        public static IEnumerable<IMethodSymbol> TechnikMethoden(INamedTypeSymbol t) =>
             t.GetMembers().OfType<IMethodSymbol>().Where(m => m.MethodKind == MethodKind.Ordinary && !m.IsStatic
-                && m.Name != Abstractions.Funktionsvertrag.Auf
                 && (t.TypeKind == TypeKind.Interface || m.DeclaredAccessibility == Accessibility.Public)
-                && !(t.TypeKind == TypeKind.Class && m.Name is "Dispose" or "DisposeAsync" or "BeimAktivierenAsync"));
+                && !(t.TypeKind == TypeKind.Class && m.Name is "Dispose" or "DisposeAsync"));
 
-        /// <summary>Die Funktions-Schnittstellen (mit Eingängen oder gerufen), die eine Klasse implementiert (sie ist deren Umsetzung im Host).</summary>
+        /// <summary>
+        /// Die TECHNIK unter <paramref name="typen"/> (docs/10 §10.3, ohne Marker): jeder Typ, den der Konstruktor einer Funktion (ihrer Klasse bzw.
+        /// einer Umsetzung ihrer Schnittstelle) oder — geschachtelt — einer Technik-Umsetzung nimmt und der weder Konfig-Record noch
+        /// <c>ILogger&lt;T&gt;</c> noch <c>IZustand&lt;T&gt;</c> ist (<see cref="Ctorbindung.Art.Technik"/>). Eine Schnittstelle hat als Umsetzungen die
+        /// Klassen unter <paramref name="typen"/>, die sie implementieren; eine Klasse ist ihre eigene. Mit den Klassen, die Technik umsetzen.
+        /// </summary>
+        public static Technikmenge Techniken(IEnumerable<INamedTypeSymbol> typen)
+        {
+            var alle = typen.ToList();
+            var klassen = alle.Where(k => k.TypeKind == TypeKind.Class && !k.IsAbstract).ToList();
+            var m = new Technikmenge();
+            var offen = new Queue<INamedTypeSymbol>(klassen.Where(k => IstFunktion(k) || Umsetzt(k).Any()));
+            var besucht = new HashSet<string>();
+            while (offen.Count > 0)
+            {
+                var k = offen.Dequeue();
+                if (!besucht.Add(Name(k))) continue;
+                foreach (var p in Ctorbindung.Konstruktor(k)?.Parameters ?? System.Collections.Immutable.ImmutableArray<IParameterSymbol>.Empty)
+                {
+                    if (p.Type is not INamedTypeSymbol t || Ctorbindung.ArtVon(t) != Ctorbindung.Art.Technik) continue;
+                    if (!m.Typen.ContainsKey(Name(t))) m.Typen[Name(t)] = t.OriginalDefinition;
+                    var ums = t.TypeKind == TypeKind.Interface
+                        ? klassen.Where(c => c.AllInterfaces.Any(i => Name(i) == Name(t))).ToList()
+                        : new List<INamedTypeSymbol> { t };
+                    foreach (var u in ums)
+                    {
+                        if (!m.Umsetzungen.ContainsKey(Name(u))) m.Umsetzungen[Name(u)] = u;
+                        offen.Enqueue(u);
+                    }
+                }
+            }
+            return m;
+        }
+
+        /// <summary>Die Technik einer Anwendung (<see cref="Techniken"/>): die Typen im Konstruktor und die Klassen, die sie umsetzen (voller Name).</summary>
+        internal sealed class Technikmenge
+        {
+            public readonly Dictionary<string, INamedTypeSymbol> Typen = new Dictionary<string, INamedTypeSymbol>();
+            public readonly Dictionary<string, INamedTypeSymbol> Umsetzungen = new Dictionary<string, INamedTypeSymbol>();
+            public bool IstTechnik(ITypeSymbol t) => Typen.ContainsKey(Name(t));
+            public bool IstUmsetzung(ITypeSymbol t) => Umsetzungen.ContainsKey(Name(t));
+        }
+
+        /// <summary>Die Funktions-Schnittstellen, die eine Klasse implementiert (sie ist deren Umsetzung im Host).</summary>
         public static IEnumerable<INamedTypeSymbol> Umsetzt(INamedTypeSymbol t) =>
             t.AllInterfaces.Where(i => Name(i) != IFunktion && Hat(i, IFunktion));
 
@@ -130,8 +155,7 @@ namespace Infrastructure.SourceGeneration
             Ctorbindung.Konstruktor(t)?.Parameters.Where(p => IstZustand(p.Type)) ?? Enumerable.Empty<IParameterSymbol>();
 
         /// <summary>
-        /// Der Zustand einer Klasse (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4) — einer Funktion mit Eingängen, einer gerufenen Klasse oder der
-        /// Umsetzung einer gerufenen Schnittstelle: T oder null; Formfehler (mehr als einer, T nicht serialisierbar ohne Reflection) in <paramref name="fehler"/>.
+        /// Der Zustand einer Klasse (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4) — einer Funktion oder einer Technik-Umsetzung: T oder null; Formfehler (mehr als einer, T nicht serialisierbar ohne Reflection) in <paramref name="fehler"/>.
         /// </summary>
         public static INamedTypeSymbol? ZustandVon(INamedTypeSymbol t, List<(string Text, Location Ort)> fehler)
         {
@@ -155,21 +179,21 @@ namespace Infrastructure.SourceGeneration
         }
 
 
-        /// <summary>Liest die Form einer Funktion (<see cref="IstBaustein"/> vorausgesetzt).</summary>
+        /// <summary>Liest die Form einer Funktion (<see cref="IstFunktion"/> vorausgesetzt).</summary>
         public static Form Lies(INamedTypeSymbol t)
         {
             var f = new Form
             {
-                Typ = t, Draussen = t.TypeKind == TypeKind.Interface, Gerufen = IstGerufen(t),
-                Lebenszyklus = t.TypeKind == TypeKind.Class && Hat(t, Abstractions.Funktionsvertrag.Lebenszyklus),
+                Typ = t, Draussen = t.TypeKind == TypeKind.Interface,
             };
             var ort = t.Locations.FirstOrDefault() ?? Location.None;
             if (!f.Draussen) f.Zustand = ZustandVon(t, f.Fehler);
-            // Eingänge oder gerufen, nie beides: hat die Schnittstelle ein Auf, ruft sie das Framework — eine weitere Methode riefe niemand.
-            if (f.Draussen && HatAuf(t))
-                foreach (var m in GerufeneMethoden(t))
+            // Eine Funktions-Schnittstelle hat nur Auf: das Framework ruft sie — eine weitere Methode riefe niemand (Technik ist eine eigene Schnittstelle).
+            if (f.Draussen)
+                foreach (var m in t.GetMembers().OfType<IMethodSymbol>().Where(m => m.MethodKind == MethodKind.Ordinary && !m.IsStatic
+                             && m.Name != Abstractions.Funktionsvertrag.Auf))
                     f.Fehler.Add(($"die Schnittstelle hat neben {Abstractions.Funktionsvertrag.Auf} die Methode '{m.Name}' — eine Funktion hat Eingänge (das "
-                        + "Framework ruft sie) oder gerufene Methoden (ihr Halter ruft sie), nie beides; teile sie in zwei Funktionen", m.Locations.FirstOrDefault() ?? ort));
+                        + "Framework ruft sie); was ihre Umsetzung ruft, ist Technik: eine eigene Schnittstelle in ihrem Konstruktor", m.Locations.FirstOrDefault() ?? ort));
             if (!f.Draussen && t.IsGenericType)
                 f.Fehler.Add(("eine Funktion ist nicht generisch", ort));
 
@@ -191,7 +215,7 @@ namespace Infrastructure.SourceGeneration
                 f.Aufs.Add(auf);
             }
             // Eine Funktion steht vor dem Aggregat: wer nur Events hört, hätte keinen Einstieg — ein Event hört sie nur als Antwort auf einen eigenen Command.
-            if (!f.Gerufen && f.Aufs.Count > 0 && !f.VorDemAggregat)
+            if (f.Aufs.Count > 0 && !f.VorDemAggregat)
                 f.Fehler.Add(("sie hört nur Events — eine Funktion liest nie das Log: sie hört eine Folge oder ein Zwischenergebnis (schlichte Records), "
                     + "eine Quell-Nachricht oder einen Hinweis; ein Event nur als Antwort auf einen eigenen Command", ort));
             // Sie schreibt nie ins Log: ihre Ausgaben sind Commands, Zwischenergebnisse und Hinweise.
@@ -199,9 +223,9 @@ namespace Infrastructure.SourceGeneration
                 foreach (var x in a.Ausgaben.Where(x => Hat(x, A + "IEvent") && !Hat(x, A + "ITransientEvent")))
                     f.Fehler.Add(($"die Ausgabe '{x.Name}' ist ein Event — eine Funktion schreibt nie ins Log: sie gibt Commands, "
                         + "Zwischenergebnisse (schlichte Records) und Hinweise aus", a.Methode.Locations.FirstOrDefault() ?? ort));
-            if (!f.Gerufen && gesehen.Count == 0 && f.Doppelt.Count == 0 && f.Fehler.Count == 0)
-                f.Fehler.Add(($"'{t.Name}' hat weder ein {Abstractions.Funktionsvertrag.Auf} noch eine gerufene Methode — eine Funktion hört mindestens einen "
-                    + "Eingang oder bietet ihrem Halter mindestens eine Methode", ort));
+            if (gesehen.Count == 0 && f.Doppelt.Count == 0 && f.Fehler.Count == 0)
+                f.Fehler.Add(($"'{t.Name}' hat kein {Abstractions.Funktionsvertrag.Auf} — eine Funktion hört mindestens einen Eingang; Technik hinter einer "
+                    + "Funktion trägt keinen Marker (sie steht nur im Konstruktor ihres Halters)", ort));
             return f;
         }
 

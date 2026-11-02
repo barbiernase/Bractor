@@ -10,7 +10,7 @@ public delegate IAsyncEnumerable<object> FunktionsRechnungDraussen(Guid kennung,
     CancellationToken ct);
 
 /// <summary>
-/// Was die Laufzeit von einer Funktion braucht (docs/04 §4.4): ihr Name, wie eine Aktivierung entsteht (Bereich, Umsetzung, Zustand, Lebenszyklus),
+/// Was die Laufzeit von einer Funktion braucht (docs/04 §4.4): ihr Name, wie eine Aktivierung entsteht (Bereich, Umsetzung, Zustand),
 /// wie sie rechnet und ob ihr <c>Auf</c> Lese-Fähigkeiten nimmt — oder, wenn sie draußen rechnet, nur der Weg dorthin (<see cref="Draussen"/>).
 /// </summary>
 /// <param name="Antworten">Die Event-Typen, die die Funktion als Antwort auf ihre eigenen Commands hört (das Ziel entschied sie, docs/04 §4.4).</param>

@@ -52,7 +52,7 @@ namespace Infrastructure.SourceGeneration
 
             var typen = Vertragsassemblies.Typen(c);
             var gut = new List<Funktionsform.Form>();
-            foreach (var t in typen.Where(Funktionsform.IstBaustein).OrderBy(t => t.ToDisplayString(), System.StringComparer.Ordinal))
+            foreach (var t in typen.Where(Funktionsform.IstFunktion).OrderBy(t => t.ToDisplayString(), System.StringComparer.Ordinal))
             {
                 var f = Funktionsform.Lies(t);
                 foreach (var (text, ort) in f.Fehler) context.ReportDiagnostic(Diagnostic.Create(FormFehler, ort, t.Name, text));

@@ -140,7 +140,7 @@ public sealed class RecordRaw
 /// <summary>
 /// Eine Funktion (docs/10 §10.3): als Klasse im Host, als Schnittstelle draußen oder mit Umsetzungen. Gelesen wird nur die
 /// Signatur (<see cref="Infrastructure.SourceGeneration.Funktionsform"/>, dieselbe Lesart wie der Generator): je <c>Auf</c> Eingang, Herkunft,
-/// Lese-Fähigkeiten, Ausgaben, Strom — bzw. bei einer gerufenen Funktion (kein <c>Auf</c>) ihre Methoden und je Umsetzung deren Rümpfe.
+/// Lese-Fähigkeiten, Ausgaben, Strom — bzw. bei Technik (ohne Marker, im Konstruktor einer Funktion) ihre Methoden und je Umsetzung deren Rümpfe.
 /// </summary>
 public sealed class BausteinFunktionRaw
 {
@@ -148,23 +148,22 @@ public sealed class BausteinFunktionRaw
     /// <summary>Als Klasse deklariert (läuft im Host); sonst Schnittstelle (draußen).</summary>
     public bool Klasse;
     public List<BausteinEingangRaw> Eingaenge = new();
-    /// <summary>Gerufen (kein <c>Auf</c>): ihre Methoden (Deklarations-Reihenfolge, Typen wie geschrieben).</summary>
+    /// <summary>Technik: ihre Methoden (Deklarations-Reihenfolge, Typen wie geschrieben).</summary>
     public List<FunktionsMethodeRaw> Methoden = new();
-    /// <summary>Konstruktor der Klasse (Typ wie geschrieben, Name): gerufene Funktionen, Konfig-Records, Logger.</summary>
+    /// <summary>Konstruktor der Klasse (Typ wie geschrieben, Name): Technik, Konfig-Records, Logger.</summary>
     public List<(string Typ, string Name)> Konstruktor = new();
     /// <summary>Bei einer Schnittstelle: die Klassen der Domänen-Quellen, die sie implementieren (Umsetzungen im Host).</summary>
     public List<string> UmsetzungenFull = new();
-    /// <summary>Je Umsetzung ihr Konstruktor (Typ wie geschrieben, Name) — eine gerufene Funktion darin ist die Kante Funktion → gerufene Funktion.</summary>
+    /// <summary>Je Umsetzung ihr Konstruktor (Typ wie geschrieben, Name) — eine Technik darin ist die Kante Funktion → Technik.</summary>
     public Dictionary<string, List<(string Typ, string Name)>> UmsetzungsKonstruktoren = new(StringComparer.Ordinal);
     /// <summary>Je Umsetzung die Datei ihrer Deklaration.</summary>
     public Dictionary<string, string?> UmsetzungsDateien = new(StringComparer.Ordinal);
     /// <summary>Je Umsetzung die Klassen-Deklaration (Umbenennen per Renamer).</summary>
     public Dictionary<string, Ort?> UmsetzungsOrte = new(StringComparer.Ordinal);
-    /// <summary>Gerufen: je Umsetzung und Methode der Rumpf und der Ort ihrer Methode (Rumpf-Edit).</summary>
+    /// <summary>Technik: je Umsetzung und Methode der Rumpf und der Ort ihrer Methode (Rumpf-Edit).</summary>
     public Dictionary<string, List<(string Methode, string? Rumpf, Ort? Ort)>> UmsetzungsRumpfe = new(StringComparer.Ordinal);
     /// <summary>Der Zustand (<c>IZustand&lt;T&gt;</c>, voller Name von T) — null ohne (docs/04 §4.4).</summary>
     public string? ZustandFull;
-    public bool Lebenszyklus;
     public string? Doku, Datei;
 }
 
@@ -634,15 +633,19 @@ public sealed partial class DomainExtractor
 
     private void CatalogDomainTypes(DomainModel m)
     {
-        foreach (var t in DomainQuellTypen())
+        var quell = DomainQuellTypen().ToList();
+        // Technik (ohne Marker): was der Konstruktor einer Funktion nimmt — dieselbe Lesart wie der Generator (Funktionsform.Techniken).
+        var technik = Infrastructure.SourceGeneration.Funktionsform.Techniken(quell);
+        foreach (var t in quell)
         {
             if (t.TypeKind == TypeKind.Enum)
             {
                 m.Enums.Add(ReadEnum(t));
                 continue;
             }
-            // Funktion (mit Eingängen oder gerufen): Klasse im Host oder Schnittstelle — nur ihre Signatur zählt.
-            if (Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t)) { m.BausteinFunktionen.Add(ReadBausteinFunktion(t)); continue; }
+            // Funktion: Klasse im Host oder Schnittstelle — nur ihre Signatur zählt; Technik: ihre Methoden und Umsetzungen.
+            if (Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t)) { m.BausteinFunktionen.Add(ReadBausteinFunktion(t, technik: false)); continue; }
+            if (t.ContainingType == null && technik.IstTechnik(t)) { m.BausteinFunktionen.Add(ReadBausteinFunktion(t, technik: true)); continue; }
             // Client-Vertrag (IClientVertrag): die Software an der Leitung.
             if (t.TypeKind == TypeKind.Interface && IstClient(t)) { m.Clients.Add(ReadClient(t)); continue; }
             // Geschachtelte Typen gehören zum Handcode ihres Containers (Zusatz), keine eigenen Bausteine.
@@ -670,9 +673,9 @@ public sealed partial class DomainExtractor
         m.BausteinFunktionen.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
     }
 
-    /// <summary>Die gerufenen Methoden einer Funktion (Deklarations-Reihenfolge), Typen wie geschrieben.</summary>
-    private static List<FunktionsMethodeRaw> GerufeneMethoden(INamedTypeSymbol t) =>
-        Infrastructure.SourceGeneration.Funktionsform.GerufeneMethoden(t).OrderBy(x => x.Locations.FirstOrDefault()?.SourceSpan.Start ?? 0).Select(me =>
+    /// <summary>Die Methoden einer Technik (Deklarations-Reihenfolge), Typen wie geschrieben.</summary>
+    private static List<FunktionsMethodeRaw> TechnikMethoden(INamedTypeSymbol t) =>
+        Infrastructure.SourceGeneration.Funktionsform.TechnikMethoden(t).OrderBy(x => x.Locations.FirstOrDefault()?.SourceSpan.Start ?? 0).Select(me =>
         {
             var syn = me.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).OfType<MethodDeclarationSyntax>().FirstOrDefault();
             return new FunktionsMethodeRaw
@@ -683,10 +686,16 @@ public sealed partial class DomainExtractor
             };
         }).ToList();
 
-    /// <summary>Die Signatur einer Funktion (Funktionsform: dieselbe Lesart wie der FunktionsBausteinGenerator).</summary>
-    private BausteinFunktionRaw ReadBausteinFunktion(INamedTypeSymbol t)
+    /// <summary>Die Signatur einer Funktion bzw. Technik (Funktionsform: dieselbe Lesart wie der FunktionsBausteinGenerator).</summary>
+    private BausteinFunktionRaw ReadBausteinFunktion(INamedTypeSymbol t, bool technik)
     {
-        var form = Infrastructure.SourceGeneration.Funktionsform.Lies(t);
+        var form = technik
+            ? new Infrastructure.SourceGeneration.Funktionsform.Form
+            {
+                Typ = t, Draussen = t.TypeKind == TypeKind.Interface,
+                Zustand = t.TypeKind == TypeKind.Interface ? null : Infrastructure.SourceGeneration.Funktionsform.ZustandVon(t, new()),
+            }
+            : Infrastructure.SourceGeneration.Funktionsform.Lies(t);
         var decl = QuellDeklarationen(t).FirstOrDefault();
         string Geschrieben(IMethodSymbol m, int i, ITypeSymbol typ) =>
             m.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).OfType<MethodDeclarationSyntax>().FirstOrDefault()
@@ -695,7 +704,7 @@ public sealed partial class DomainExtractor
         {
             Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq(), Klasse = !form.Draussen,
             Doku = decl == null ? null : Summary(decl), Datei = decl?.SyntaxTree.FilePath,
-            ZustandFull = form.Zustand?.Fq(), Lebenszyklus = form.Lebenszyklus,
+            ZustandFull = form.Zustand?.Fq(),
         };
         foreach (var a in form.Aufs)
         {
@@ -722,7 +731,7 @@ public sealed partial class DomainExtractor
                 Herkunft = m.Parameters.Skip(1).Any(p => p.Type.Name == nameof(Abstractions.Herkunft)),
             });
         }
-        if (form.Gerufen) f.Methoden = GerufeneMethoden(t);
+        if (technik) f.Methoden = TechnikMethoden(t);
         if (!form.Draussen) f.Konstruktor = KonstruktorWieGeschrieben(t);
         if (form.Draussen)
         {
@@ -734,8 +743,8 @@ public sealed partial class DomainExtractor
                 f.UmsetzungsKonstruktoren[c.Fq()] = KonstruktorWieGeschrieben(c);
                 f.UmsetzungsDateien[c.Fq()] = QuellDeklarationen(c).FirstOrDefault()?.SyntaxTree.FilePath;
                 f.UmsetzungsOrte[c.Fq()] = QuellDeklarationen(c).OfType<BaseTypeDeclarationSyntax>().FirstOrDefault() is { } idecl ? Ort.Von(idecl) : null;
-                if (!form.Gerufen) continue;
-                // Gerufen: je Methode der Schnittstelle der Rumpf der Umsetzung (Ort für den Rumpf-Edit).
+                if (!technik) continue;
+                // Technik: je Methode der Schnittstelle der Rumpf der Umsetzung (Ort für den Rumpf-Edit).
                 var rumpfe = new List<(string, string?, Ort?)>();
                 foreach (var me in t.GetMembers().OfType<IMethodSymbol>().Where(x => x.MethodKind == MethodKind.Ordinary))
                 {

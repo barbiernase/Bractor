@@ -9,49 +9,49 @@ using Infrastructure.Komposition;
 namespace Infrastructure.Funktionen;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// BINDUNG DER GERUFENEN FUNKTIONEN (docs/06 §6.5): WAS es gibt, ist Code — gerufene Funktionen (`IFunktion` ohne `Auf`), ihre
-// Umsetzungen und die Konfig-Records in den Konstruktoren (generierte Tabelle `GeneratedGerufene`). WELCHE Umsetzung läuft und mit welchen
+// BINDUNG DER TECHNIK (docs/06 §6.5): WAS es gibt, ist Code — Technik (ohne Marker: was der Konstruktor einer Funktion nimmt), ihre
+// Umsetzungen und die Konfig-Records in den Konstruktoren (generierte Tabelle `GeneratedTechnik`). WELCHE Umsetzung läuft und mit welchen
 // Werten, sagt die Umgebung (`Funktionen:<Name>:Implementierung` — derselbe Abschnitt wie für Funktionen mit Eingängen —, `Konfig:<Record>`).
 // Der Start prüft gegen den Bedarf der Funktionen, die im Host rechnen: fehlt etwas, ist es mehrdeutig oder zyklisch, startet nichts.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 /// <summary>
-/// Eine Umsetzung einer gerufenen Funktion (aus <c>GeneratedGerufene.Umsetzungen</c>): Name, Typ und generierte Bindung — bei einer Klasse ist
+/// Eine Umsetzung einer Technik (aus <c>GeneratedTechnik.Umsetzungen</c>): Name, Typ und generierte Bindung — bei einer Klasse ist
 /// sie selbst ihre einzige Umsetzung; mit <see cref="Zustand"/>, wenn ihr Konstruktor <c>IZustand&lt;T&gt;</c> nimmt.
 /// </summary>
-public sealed record GerufeneUmsetzung(Type Funktion, string Name, Type Typ, Action<IServiceCollection> Binde, FunktionsZustandsform? Zustand = null);
+public sealed record TechnikUmsetzung(Type Funktion, string Name, Type Typ, Action<IServiceCollection> Binde, FunktionsZustandsform? Zustand = null);
 
 /// <summary>
-/// Die Zustände der gerufenen Funktionen EINER Aktivierung (im DI-Bereich der Aktivierung, docs/04 §4.4): die generierte Fabrik einer Umsetzung mit
-/// <c>IZustand&lt;T&gt;</c> holt ihren Zustand hier, unter dem Namen der gerufenen Funktion (je Bereich einer — dieselbe gerufene Funktion hat in einer
+/// Die Zustände der Technik EINER Aktivierung (im DI-Bereich der Aktivierung, docs/04 §4.4): die generierte Fabrik einer Umsetzung mit
+/// <c>IZustand&lt;T&gt;</c> holt ihren Zustand hier, unter dem Namen der Technik (je Bereich einer — dieselbe Technik hat in einer
 /// Aktivierung eine Instanz). Die Aktivierung lädt und sichert sie zusammen mit dem Zustand ihrer Funktion (<see cref="FunktionsAktivierung"/>).
 /// </summary>
 public sealed class AktivierungsZustaende
 {
     private readonly Dictionary<string, (FunktionsZustandsform Form, object Zustand)> _je = new(StringComparer.Ordinal);
 
-    /// <summary>Die Zustände des Bereichs — gebaut wird eine gerufene Funktion mit Zustand nur in der Aktivierung einer Funktion.</summary>
+    /// <summary>Die Zustände des Bereichs — gebaut wird eine Technik mit Zustand nur in der Aktivierung einer Funktion.</summary>
     public static AktivierungsZustaende Von(IServiceProvider sp) => sp.GetService<AktivierungsZustaende>()
-        ?? throw new InvalidOperationException("Eine gerufene Funktion mit Zustand (IZustand<T>) wird nur in der Aktivierung einer Funktion gebaut (BindeGerufene).");
+        ?? throw new InvalidOperationException("Eine Technik mit Zustand (IZustand<T>) wird nur in der Aktivierung einer Funktion gebaut (BindeTechnik).");
 
-    /// <summary>Der Zustand der gerufenen Funktion <paramref name="funktion"/> in dieser Aktivierung (beim ersten Mal frisch).</summary>
+    /// <summary>Der Zustand der Technik <paramref name="funktion"/> in dieser Aktivierung (beim ersten Mal frisch).</summary>
     public object Hole(string funktion, FunktionsZustandsform form)
     {
         if (!_je.TryGetValue(funktion, out var z)) _je[funktion] = z = (form, form.Neu());
         return z.Zustand;
     }
 
-    /// <summary>Name der gerufenen Funktion → Form und Zustand.</summary>
+    /// <summary>Name der Technik → Form und Zustand.</summary>
     public IReadOnlyDictionary<string, (FunktionsZustandsform Form, object Zustand)> Alle => _je;
 }
 
 /// <summary>
-/// Die beim Start gewählten Umsetzungen der gerufenen Funktionen (<see cref="GerufeneExtensions.BindeGerufene(IServiceCollection, IReadOnlyDictionary{string, string?}, IConfigurationSection, IReadOnlyCollection{Type}, IReadOnlyList{GerufeneUmsetzung}, IReadOnlyDictionary{Type, Type[]}, IReadOnlyList{KonfigRecord})"/>):
+/// Die beim Start gewählten Umsetzungen der Technik (<see cref="TechnikExtensions.BindeTechnik(IServiceCollection, IReadOnlyDictionary{string, string?}, IConfigurationSection, IReadOnlyCollection{Type}, IReadOnlyList{TechnikUmsetzung}, IReadOnlyDictionary{Type, Type[]}, IReadOnlyList{KonfigRecord})"/>):
 /// daraus folgt vor dem ersten Bau, ob eine Funktion über ihre Konstruktor-Kette Zustand trägt.
 /// </summary>
-public sealed class GerufeneWahl(IReadOnlyDictionary<Type, GerufeneUmsetzung> gewaehlt, IReadOnlyDictionary<Type, Type[]> braucht)
+public sealed class TechnikWahl(IReadOnlyDictionary<Type, TechnikUmsetzung> gewaehlt, IReadOnlyDictionary<Type, Type[]> braucht)
 {
-    /// <summary>Trägt eine gerufene Funktion in der Konstruktor-Kette der Klasse <paramref name="umsetzung"/> Zustand?</summary>
+    /// <summary>Trägt eine Technik in der Konstruktor-Kette der Klasse <paramref name="umsetzung"/> Zustand?</summary>
     public bool MitZustand(Type umsetzung)
     {
         foreach (var t in braucht.GetValueOrDefault(umsetzung) ?? [])
@@ -60,7 +60,7 @@ public sealed class GerufeneWahl(IReadOnlyDictionary<Type, GerufeneUmsetzung> ge
     }
 }
 
-/// <summary>Ein Konfig-Record (aus <c>GeneratedGerufene.Konfigs</c>): Typ, Abschnitt unter <c>Konfig</c> und generierte Bindung.</summary>
+/// <summary>Ein Konfig-Record (aus <c>GeneratedTechnik.Konfigs</c>): Typ, Abschnitt unter <c>Konfig</c> und generierte Bindung.</summary>
 public sealed record KonfigRecord(Type Typ, string Name, Func<IConfigurationSection, object> Binde);
 
 /// <summary>Liest ein Feld eines Konfig-Records streng (fehlt es oder passt der Wert nicht, ist das ein Boot-Fehler mit Ort).</summary>
@@ -112,18 +112,18 @@ public static class KonfigLeser
     }
 }
 
-public static class GerufeneExtensions
+public static class TechnikExtensions
 {
     /// <summary>
-    /// Bindet die gerufenen Funktionen und Konfig-Records, die die Funktionen im Host brauchen (transitiv über die Umsetzungen), nach den
+    /// Bindet die Technik und die Konfig-Records, die die Funktionen im Host brauchen (transitiv über die Umsetzungen), nach den
     /// Abschnitten <c>Funktionen</c> und <c>Konfig</c> der Umgebung. Muss NACH <c>BindeFunktionen</c> stehen.
     /// </summary>
-    public static IServiceCollection BindeGerufene(this IServiceCollection services, UmgebungKonfig u, IConfiguration konfig)
-        => services.BindeGerufene(u.Funktionen, konfig.GetSection(Funktionsvertrag.KonfigAbschnitt));
+    public static IServiceCollection BindeTechnik(this IServiceCollection services, UmgebungKonfig u, IConfiguration konfig)
+        => services.BindeTechnik(u.Funktionen, konfig.GetSection(Funktionsvertrag.KonfigAbschnitt));
 
     /// <summary>Wie oben, mit der Wahl und dem Konfig-Abschnitt direkt — gebunden wird für die Funktionen, die nach den schon registrierten
     /// Bindungen (<c>BindeFunktionen</c>) im Host rechnen, aus den generierten Tabellen der angemeldeten Anwendung.</summary>
-    public static IServiceCollection BindeGerufene(this IServiceCollection services, IReadOnlyDictionary<string, FunktionsKonfig> wahl,
+    public static IServiceCollection BindeTechnik(this IServiceCollection services, IReadOnlyDictionary<string, FunktionsKonfig> wahl,
         IConfigurationSection konfigAbschnitt)
     {
         // Die Funktionen, die im Host laufen: ihre Umsetzung (die Klasse selbst bzw. die gewählte Implementierung der Schnittstelle).
@@ -133,26 +133,26 @@ public static class GerufeneExtensions
             if (FunktionsBausteinWiring.Gebunden(b, bindungen) is { Laufort: FunktionsLaufort.Host } bindung
                 && b.Umsetzungen.Where(x => bindung.Umsetzung is null || x.Name == bindung.Umsetzung).ToList() is [var umsetzung])
                 umsetzungen.Add(umsetzung.Typ);
-        var gerufen = Anwendung.Gerufene.Namen;
-        return services.BindeGerufene(wahl.Where(w => gerufen.ContainsKey(w.Key)).ToDictionary(w => w.Key, w => w.Value.Implementierung),
-            konfigAbschnitt, umsetzungen, Anwendung.Gerufene.Umsetzungen, Anwendung.Gerufene.Braucht, Anwendung.Gerufene.Konfigs);
+        var technik = Anwendung.Technik.Namen;
+        return services.BindeTechnik(wahl.Where(w => technik.ContainsKey(w.Key)).ToDictionary(w => w.Key, w => w.Value.Implementierung),
+            konfigAbschnitt, umsetzungen, Anwendung.Technik.Umsetzungen, Anwendung.Technik.Braucht, Anwendung.Technik.Konfigs);
     }
 
-    /// <param name="wahl">Je gerufene Funktion die gewählte Umsetzung (<c>Funktionen:&lt;Name&gt;:Implementierung</c>), null = die einzige.</param>
+    /// <param name="wahl">Je Technik die gewählte Umsetzung (<c>Funktionen:&lt;Name&gt;:Implementierung</c>), null = die einzige.</param>
     /// <param name="umsetzungen">Die Klassen der Funktionen, die auf diesem Knoten im Host rechnen — von ihrem Bedarf aus wird gebunden.</param>
-    public static IServiceCollection BindeGerufene(this IServiceCollection services, IReadOnlyDictionary<string, string?> wahl,
+    public static IServiceCollection BindeTechnik(this IServiceCollection services, IReadOnlyDictionary<string, string?> wahl,
         IConfigurationSection konfigAbschnitt, IReadOnlyCollection<Type> umsetzungen,
-        IReadOnlyList<GerufeneUmsetzung> alleUmsetzungen, IReadOnlyDictionary<Type, Type[]> braucht, IReadOnlyList<KonfigRecord> konfigs)
+        IReadOnlyList<TechnikUmsetzung> alleUmsetzungen, IReadOnlyDictionary<Type, Type[]> braucht, IReadOnlyList<KonfigRecord> konfigs)
     {
         // 1. Die Umgebung nennt nur bekannte Konfig-Records (die Namen unter Funktionen prüft BindeFunktionen).
         foreach (var k in konfigAbschnitt.GetChildren().Where(k => konfigs.All(r => r.Name != k.Key)))
             throw new BootFehler($"{Funktionsvertrag.KonfigAbschnitt}:{k.Key} — kein Konfig-Record dieses Namens (bekannt: "
                 + string.Join(", ", konfigs.Select(r => r.Name).Order().DefaultIfEmpty("keine")) + ").", "host:" + Funktionsvertrag.KonfigAbschnitt);
 
-        // 2. Je gerufene Funktion die gewählte Umsetzung (oder warum es keine gibt).
+        // 2. Je Technik die gewählte Umsetzung (oder warum es keine gibt).
         const string F = UmgebungsAbschnitte.Funktionen;
         string Karte(Type f) => "funktion:" + f.Name;
-        GerufeneUmsetzung Waehle(Type funktion)
+        TechnikUmsetzung Waehle(Type funktion)
         {
             var alle = alleUmsetzungen.Where(i => i.Funktion == funktion).ToList();
             var gewaehlt = wahl.GetValueOrDefault(funktion.Name);
@@ -162,14 +162,14 @@ public static class GerufeneExtensions
             throw new BootFehler(gewaehlt != null
                 ? $"{F}:{funktion.Name}:Implementierung = '{gewaehlt}' gibt es nicht (gefunden: {gefunden})."
                 : alle.Count == 0
-                    ? $"Die gerufene Funktion '{funktion.Name}' wird gebraucht, hat aber keine Umsetzung (eine öffentliche Klasse, die {funktion.Name} implementiert)."
-                    : $"Die gerufene Funktion '{funktion.Name}' hat mehrere Umsetzungen ({gefunden}) — die Umgebung wählt eine: {F}:{funktion.Name}:Implementierung.",
+                    ? $"Die Technik '{funktion.Name}' wird gebraucht, hat aber keine Umsetzung (eine öffentliche Klasse, die {funktion.Name} implementiert)."
+                    : $"Die Technik '{funktion.Name}' hat mehrere Umsetzungen ({gefunden}) — die Umgebung wählt eine: {F}:{funktion.Name}:Implementierung.",
                 Karte(funktion));
         }
 
-        // 3. Vom Bedarf der Funktionen im Host aus, transitiv; ein Kreis über gerufene Funktionen ist ein Fehler.
+        // 3. Vom Bedarf der Funktionen im Host aus, transitiv; ein Kreis über Technik ist ein Fehler.
         var start = umsetzungen.Distinct().ToList();
-        var gebunden = new Dictionary<Type, GerufeneUmsetzung>();
+        var gebunden = new Dictionary<Type, TechnikUmsetzung>();
         var konfigGebunden = new HashSet<Type>();
         var stapel = new List<Type>();
         void Besuche(Type impl)
@@ -187,8 +187,8 @@ public static class GerufeneExtensions
                     continue;
                 }
                 if (stapel.Contains(t))
-                    throw new BootFehler("Gerufene Funktionen im Kreis: " + string.Join(" → ", stapel.SkipWhile(x => x != t).Append(t).Select(x => x.Name))
-                        + " — eine Umsetzung darf sich nicht über andere gerufene Funktionen selbst brauchen.", Karte(t));
+                    throw new BootFehler("Technik im Kreis: " + string.Join(" → ", stapel.SkipWhile(x => x != t).Append(t).Select(x => x.Name))
+                        + " — eine Umsetzung darf sich nicht über andere Technik selbst brauchen.", Karte(t));
                 if (gebunden.ContainsKey(t)) continue;
                 var i = Waehle(t);
                 stapel.Add(t);
@@ -199,10 +199,10 @@ public static class GerufeneExtensions
             }
         }
         foreach (var impl in start) Besuche(impl);
-        services.AddSingleton(new GerufeneWahl(gebunden, braucht));
+        services.AddSingleton(new TechnikWahl(gebunden, braucht));
         services.TryAddScoped<AktivierungsZustaende>();
         if (gebunden.Count + konfigGebunden.Count > 0)
-            Console.WriteLine($"[CQRS] Gerufen: {string.Join(", ", gebunden.Select(x => x.Key.Name + " → " + x.Value.Name).DefaultIfEmpty("keine"))}"
+            Console.WriteLine($"[CQRS] Technik: {string.Join(", ", gebunden.Select(x => x.Key.Name + " → " + x.Value.Name).DefaultIfEmpty("keine"))}"
                 + $" · Konfig: {string.Join(", ", konfigGebunden.Select(t => t.Name).DefaultIfEmpty("keine"))}");
         return services;
     }

@@ -58,8 +58,8 @@ public interface IFremdPruefung : IFunktion { Storniere Auf(Gebucht2 e); }
     {
         (await Ids("public sealed record Rechner : IMaschine, IDarf<IFremdPruefung>;")).Should().BeEmpty();
         (await Ids("public interface IIrgendwas { } public sealed record Rechner : IMaschine, IDarf<IIrgendwas>;")).Should().Equal("CQRS058");
-        (await Ids("public interface ISkalierer : IFunktion { int Skaliere(int x); } public sealed record Rechner : IMaschine, IDarf<ISkalierer>;"))
-            .Should().Equal(["CQRS058"], "eine gerufene Funktion (ohne Auf) läuft im Prozess ihres Halters — niemand rechnet sie draußen");
+        (await Ids("public interface ISkalierer { int Skaliere(int x); } public sealed record Rechner : IMaschine, IDarf<ISkalierer>;"))
+            .Should().Equal(["CQRS058"], "Technik läuft im Prozess ihres Halters — niemand rechnet sie draußen");
     }
 
     [Fact]

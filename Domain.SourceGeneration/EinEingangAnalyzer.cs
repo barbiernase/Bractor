@@ -32,7 +32,7 @@ public sealed class EinEingangAnalyzer : DiagnosticAnalyzer
     private static void Pruefe(SymbolAnalysisContext ctx)
     {
         var t = (INamedTypeSymbol)ctx.Symbol;
-        if (Funktionsform.IstBaustein(t))
+        if (Funktionsform.IstFunktion(t))
         {
             foreach (var (eingang, ort) in Funktionsform.Lies(t).Doppelt)
                 ctx.ReportDiagnostic(Diagnostic.Create(Doppelt, ort, t.Name, eingang.Name, Abstractions.Funktionsvertrag.Auf));

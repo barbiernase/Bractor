@@ -87,7 +87,7 @@ namespace Infrastructure.SourceGeneration
 
         /// <summary>Die Eingänge einer getragenen Funktion aus ihren <c>Auf</c>-Methoden (die eine Lesart <see cref="Funktionsform"/>).</summary>
         public static List<GetragenerEingang> Eingaenge(INamedTypeSymbol funktion) =>
-            Funktionsform.IstBaustein(funktion)
+            Funktionsform.IstFunktion(funktion)
                 ? Funktionsform.Lies(funktion).Aufs.Select(a => new GetragenerEingang(a.Eingang, a.Ausgaben, a.Strom, a.MitHerkunft)).ToList()
                 : new List<GetragenerEingang>();
 

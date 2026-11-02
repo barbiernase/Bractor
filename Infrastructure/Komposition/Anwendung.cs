@@ -29,7 +29,7 @@ public interface IAnwendung
     IUpcastingTabelle Upcasting { get; }
     IAkteurTabelle Akteure { get; }
     IFunktionsTabelle Funktionen { get; }
-    IGerufenenTabelle Gerufene { get; }
+    ITechnikTabelle Technik { get; }
     IAggregatTabelle Aggregate { get; }
     /// <summary>Der Weckplan (GeneratedWeckplan): Event-Typ → wen ein Commit weckt (docs/03 §3.5).</summary>
     IReadOnlyDictionary<Type, Infrastructure.Wecken.Weckziel[]> Weckplan { get; }
@@ -123,11 +123,11 @@ public interface IFunktionsTabelle
     IReadOnlyDictionary<Type, string[]> Verkettung { get; }
 }
 
-/// <summary>Die gerufenen Funktionen (<c>IFunktion</c> ohne <c>Auf</c>, GeneratedGerufene): Namen, Umsetzungen, Konstruktor-Bedarf, Konfig-Records.</summary>
-public interface IGerufenenTabelle
+/// <summary>Die Technik hinter den Funktionen (ohne Marker, was ihr Konstruktor nimmt; GeneratedTechnik): Namen, Umsetzungen, Konstruktor-Bedarf, Konfig-Records.</summary>
+public interface ITechnikTabelle
 {
     IReadOnlyDictionary<string, Type> Namen { get; }
-    IReadOnlyList<GerufeneUmsetzung> Umsetzungen { get; }
+    IReadOnlyList<TechnikUmsetzung> Umsetzungen { get; }
     IReadOnlyDictionary<Type, Type[]> Braucht { get; }
     IReadOnlyList<KonfigRecord> Konfigs { get; }
 }
@@ -167,7 +167,7 @@ public static class Anwendung
     public static IUpcastingTabelle Upcasting => Aktuell.Upcasting;
     public static IAkteurTabelle Akteure => Aktuell.Akteure;
     public static IFunktionsTabelle Funktionen => Aktuell.Funktionen;
-    public static IGerufenenTabelle Gerufene => Aktuell.Gerufene;
+    public static ITechnikTabelle Technik => Aktuell.Technik;
     public static IAggregatTabelle Aggregate => Aktuell.Aggregate;
     public static IReadOnlyDictionary<Type, Infrastructure.Wecken.Weckziel[]> Weckplan => Aktuell.Weckplan;
     public static IReadOnlyList<QuellTyp> Quellen => Aktuell.Quellen;

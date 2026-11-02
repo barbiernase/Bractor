@@ -144,10 +144,9 @@ public static class JsonContextEmitter
                 if (isEvent && !isTransient) persistableEvents.Add(name);
                 if (isEvent || isCommand || isWire || isQuery) wire.Add(name);
 
-                // Der Zustand einer Funktion (IZustand<T> im Konstruktor, docs/04 §4.4): gesichert über denselben Speicher-
-                //   Kontext (GeneratedFunktionsBausteine koppelt Default.{T} zur Compile-Zeit).
-                if (ifaces.Contains("Abstractions.IFunktion"))
-                    foreach (var c in t.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
+                // Der Zustand einer Funktion oder ihrer Technik (IZustand<T> im Konstruktor, docs/04 §4.4; anderswo verbietet ihn CQRS105): gesichert
+                //   über denselben Speicher-Kontext (GeneratedFunktionsBausteine/GeneratedTechnik koppeln Default.{T} zur Compile-Zeit).
+                foreach (var c in t.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
                         foreach (var p in c.GetParameters())
                             if (p.ParameterType.IsGenericType && p.ParameterType.GetGenericTypeDefinition().FullName == Abstractions.Funktionsvertrag.Zustand)
                                 zustaende.Add("global::" + FullyQualified(p.ParameterType.GetGenericArguments()[0]));

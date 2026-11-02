@@ -47,7 +47,7 @@ public class AblaufE2ETests
         {
             [$"{Funktionsvertrag.KonfigAbschnitt}:{nameof(BildaufbereitungKonfig)}:{nameof(BildaufbereitungKonfig.AusgabePfad)}"] = ausgabe,
         }).Build();
-        GerufeneExtensions.BindeGerufene(s, new Dictionary<string, FunktionsKonfig>(), konfig.GetSection(Funktionsvertrag.KonfigAbschnitt));
+        TechnikExtensions.BindeTechnik(s, new Dictionary<string, FunktionsKonfig>(), konfig.GetSection(Funktionsvertrag.KonfigAbschnitt));
     }
 
     /// <summary>Ein echtes, kleines TIFF (OpenCV liest es) im Eingangs-Verzeichnis.</summary>

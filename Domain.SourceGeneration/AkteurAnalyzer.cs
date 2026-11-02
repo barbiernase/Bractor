@@ -83,18 +83,15 @@ public sealed class AkteurAnalyzer : DiagnosticAnalyzer
         foreach (var d in darf)
         {
             var t = d.TypeArguments[0];
-            // Eine Funktion draußen (Interface mit IFunktion und Eingängen): der Akteur darf sie RECHNEN — ihre Ausgaben gibt er hinein. Eine gerufene
-            //   (ohne Auf) läuft im Prozess ihres Halters und gibt nichts hinein.
-            if (iFunktion != null && t is INamedTypeSymbol { TypeKind: TypeKind.Interface } f && f.AllInterfaces.Contains(iFunktion, SymbolEqualityComparer.Default)
-                && !Infrastructure.SourceGeneration.Funktionsform.IstGerufen(f))
+            // Eine Funktion draußen (Interface mit IFunktion): der Akteur darf sie RECHNEN — ihre Ausgaben gibt er hinein.
+            if (iFunktion != null && t is INamedTypeSymbol { TypeKind: TypeKind.Interface } f && f.AllInterfaces.Contains(iFunktion, SymbolEqualityComparer.Default))
                 continue;
             var erlaubt = hinein.Any(h => SymbolEqualityComparer.Default.Equals(t, h)
                 || t.AllInterfaces.Contains(h, SymbolEqualityComparer.Default));
             if (!erlaubt || t.TypeKind == TypeKind.Interface || t.IsAbstract)
                 ctx.ReportDiagnostic(Diagnostic.Create(Befugnis, ort, typ.Name,
                     $"IDarf<{t.Name}> — dürfen kann man nur, was man hineingibt: einen konkreten Command, eine Query, "
-                    + "eine Quell-Nachricht, einen Hinweis oder die Ausgaben einer Funktion draußen (IDarf<IFunktion-Typ mit Auf>: er darf sie rechnen; eine gerufene "
-                    + "Funktion läuft im Prozess ihres Halters) — was "
+                    + "eine Quell-Nachricht, einen Hinweis oder die Ausgaben einer Funktion draußen (IDarf<IFunktion-Schnittstelle>: er darf sie rechnen) — was "
                     + "ein Akteur hört, wird aus dem Graphen abgeleitet"));
         }
     }

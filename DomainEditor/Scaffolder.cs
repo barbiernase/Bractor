@@ -390,17 +390,19 @@ public static class Scaffolder
     {
         var b = Kopf(f.Namespace, Usings(f.Namespace, modell, [modell.Rahmen.VertragsNamespace], FunktionsTypen(f).Concat(f.Konstruktor.Select(p => p.Typ)), []));
         Doku(b, f.Doku, "");
+        // Technik (Methoden, kein Eingang) trägt keinen Marker — sie ist, was der Konstruktor einer Funktion nimmt (docs/10 §10.3).
+        var basis = f.Methoden.Count > 0 && f.Eingaenge.Count == 0 ? "" : $" : {IFunktion}";
         if (f.Klasse)
         {
             var ctor = f.Konstruktor.Count > 0 ? $"({ParameterListe(f.Konstruktor)})" : "";
-            b.AppendLine($"public sealed class {f.Name}{ctor} : {IFunktion}");
+            b.AppendLine($"public sealed class {f.Name}{ctor}{basis}");
             b.AppendLine("{");
             b.Append(Stubs(f, f.Name));
             b.AppendLine("}");
         }
         else
         {
-            b.AppendLine($"public interface {f.Name} : {IFunktion}");
+            b.AppendLine($"public interface {f.Name}{basis}");
             b.AppendLine("{");
             foreach (var e in f.Eingaenge) b.AppendLine($"    {FunktionsKopf(e)};");
             foreach (var m in f.Methoden)

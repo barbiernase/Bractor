@@ -83,14 +83,13 @@ public class FunktionsAktivierungTests
         p.Should().HaveCount(1);
     }
 
-    // ── Lebenszyklus (ILebenszyklus, docs/04 §4.4, docs/10 E10) ──
+    // ── Zustand der Funktion (IZustand<T>, docs/04 §4.4): frisch bei jeder Aktivierung ──
 
     private sealed class Netz { public int Gewicht { get; set; } }
 
-    private sealed class Lernend(Abstractions.IZustand<Netz> netz, Protokoll p) : Abstractions.ILebenszyklus
+    private sealed class Lernend(Abstractions.IZustand<Netz> netz)
     {
         public Abstractions.IZustand<Netz> Netz => netz;
-        public Task BeimAktivierenAsync(System.Threading.CancellationToken ct) { p.Add($"aktiviert mit {netz.Wert.Gewicht}"); return Task.CompletedTask; }
     }
 
     private static FunktionsZustandsform Form() => new(typeof(Netz), () => new Zustand<Netz>(),
@@ -99,29 +98,22 @@ public class FunktionsAktivierungTests
         z => ((Zustand<Netz>)z).Wert = new Netz());
 
     [Fact]
-    public async Task Der_Lebenszyklus_laeuft_nach_dem_Bau_auf_einem_frischen_Zustand()
-    {
-        var (wurzel, p) = Container();
-        Lernend? f = null;
-        var a = new FunktionsAktivierung(wurzel, (sp, z) => f = new Lernend((Abstractions.IZustand<Netz>)z!, p), Form(), "Lernend");
-        a.MitZustand.Should().BeTrue();
-        await a.BeginneAsync();
-        await a.AktiviereAsync(default);
-        p.Should().ContainSingle().Which.Should().Be("aktiviert mit 0", "der Zustand ist ein Cache: frisch bei jeder Aktivierung");
-        await a.DisposeAsync();
-    }
-
-    [Fact]
-    public async Task Ohne_Lebenszyklus_ist_Aktivieren_nichts()
+    public async Task Jede_Aktivierung_baut_auf_einem_frischen_Zustand()
     {
         var (wurzel, _) = Container();
-        var a = new FunktionsAktivierung(wurzel, Baue);
+        Lernend? f = null;
+        var a = new FunktionsAktivierung(wurzel, (sp, z) => f = new Lernend((Abstractions.IZustand<Netz>)z!), Form(), "Lernend");
+        a.MitZustand.Should().BeTrue();
         await a.BeginneAsync();
-        await a.AktiviereAsync(default);
+        f!.Netz.Wert.Gewicht.Should().Be(0, "der Zustand ist ein Cache: frisch bei jeder Aktivierung");
+        f.Netz.Wert.Gewicht = 7;
+        await a.DisposeAsync();
+        await a.BeginneAsync();
+        f.Netz.Wert.Gewicht.Should().Be(0);
         await a.DisposeAsync();
     }
 
-    // ── Zustand einer gerufenen Funktion: gehört der Aktivierung des Halters (AktivierungsZustaende), je Aktivierung frisch ──
+    // ── Zustand einer Technik: gehört der Aktivierung des Halters (AktivierungsZustaende), je Aktivierung frisch ──
 
     private sealed class Zaehler { public int N { get; set; } }
 
@@ -133,21 +125,21 @@ public class FunktionsAktivierungTests
         z => ((Zustand<Zaehler>)z).Wert = new Zaehler());
 
     [Fact]
-    public async Task Der_Zustand_einer_gerufenen_Funktion_gehoert_der_Aktivierung_des_Halters_und_beginnt_frisch()
+    public async Task Der_Zustand_einer_Technik_gehoert_der_Aktivierung_des_Halters_und_beginnt_frisch()
     {
         var s = new ServiceCollection();
         s.AddScoped<AktivierungsZustaende>();
         s.AddScoped(sp => new Zaehlwerk((Abstractions.IZustand<Zaehler>)AktivierungsZustaende.Von(sp).Hole("IZaehlwerk", ZaehlerForm())));
         var wurzel = s.BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
         Zaehlwerk? w = null;
-        var a = new FunktionsAktivierung(wurzel, (sp, _) => w = sp.GetRequiredService<Zaehlwerk>(), null, "Halter", gerufenerZustand: true);
+        var a = new FunktionsAktivierung(wurzel, (sp, _) => w = sp.GetRequiredService<Zaehlwerk>(), null, "Halter", technikZustand: true);
         a.MitZustand.Should().BeTrue();
         await a.BeginneAsync();
         w!.Zaehle();
         w.N.Should().Be(1);
         await a.DisposeAsync();
 
-        var b = new FunktionsAktivierung(wurzel, (sp, _) => w = sp.GetRequiredService<Zaehlwerk>(), null, "Halter", gerufenerZustand: true);
+        var b = new FunktionsAktivierung(wurzel, (sp, _) => w = sp.GetRequiredService<Zaehlwerk>(), null, "Halter", technikZustand: true);
         await b.BeginneAsync();
         w.N.Should().Be(0, "die nächste Aktivierung baut ihren Zustand neu");
         await b.DisposeAsync();

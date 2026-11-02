@@ -109,7 +109,7 @@ public sealed class TransportKonfig
 
 /// <summary>
 /// Eine Funktion in dieser Umgebung (Abschnitt <c>Funktionen:&lt;Name&gt;</c>): ihre Implementierung und — nur mit Eingängen — Laufort, Parallel,
-/// Warteschlange, Vorwärmen, Wiederholungen und Worker. Eine gerufene Funktion (ohne <c>Auf</c>) läuft im Prozess ihres Halters: bei ihr steht nur die
+/// Warteschlange, Vorwärmen, Wiederholungen und Worker. Technik (was der Konstruktor einer Funktion nimmt) läuft im Prozess ihres Halters: bei ihr steht nur die
 /// Implementierung.
 /// </summary>
 public sealed class FunktionsKonfig

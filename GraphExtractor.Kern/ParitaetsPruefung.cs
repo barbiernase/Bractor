@@ -255,6 +255,11 @@ public static class ParitaetsPruefung
                         if (comp.GetSemanticModel(tree).GetDeclaredSymbol(decl) is INamedTypeSymbol b && Sym.Implements(b, iStore))
                             foreach (var i in b.AllInterfaces) imBuendel.Add(i.Fq());
 
+            // Technik (ohne Marker): was der Konstruktor einer Funktion nimmt — dieselbe Lesart wie Generator und Extractor.
+            var technik = Infrastructure.SourceGeneration.Funktionsform.Techniken(comps.Where(c => domänen.Contains(c.AssemblyName ?? ""))
+                .SelectMany(c => c.SyntaxTrees.Where(t => !quelltexte.IstGeneriert(t)).SelectMany(t => t.GetRoot().DescendantNodes().OfType<BaseTypeDeclarationSyntax>()
+                    .Select(d => c.GetSemanticModel(t).GetDeclaredSymbol(d)).OfType<INamedTypeSymbol>())));
+
             foreach (var comp in comps.Where(c => domänen.Contains(c.AssemblyName ?? "")))
                 foreach (var tree in comp.SyntaxTrees.Where(t => !quelltexte.IstGeneriert(t)))
                 {
@@ -266,8 +271,8 @@ public static class ParitaetsPruefung
                         if (t.ContainingType == null)
                             inv.Deklarationen.Add((full, tree.FilePath, decl.Span.Start, decl.Span.End, decl.GetLocation().GetLineSpan().StartLinePosition.Line + 1));
                         if (decl is EnumDeclarationSyntax) { inv.Enums.Add(full); continue; }
-                        // Funktion (IFunktion, mit Eingängen oder gerufen): Klasse im Host oder Schnittstelle — ein eigener Baustein.
-                        if (t.ContainingType == null && Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t))
+                        // Funktion (IFunktion) oder Technik: Klasse im Host oder Schnittstelle — ein eigener Baustein.
+                        if (t.ContainingType == null && (Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t) || technik.IstTechnik(t)))
                         {
                             inv.Funktionen.Add(full);
                             if (t.TypeKind == TypeKind.Interface) continue;   // eine Klasse zählt unten weiter (Konfig im Konstruktor)

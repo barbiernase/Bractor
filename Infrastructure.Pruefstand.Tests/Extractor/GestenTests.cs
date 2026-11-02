@@ -337,7 +337,7 @@ public sealed class GestenTests : IDisposable
         Rumpf.Lies(Text("Lesen.cs"), ort).Should().Be((string?)fn["rumpf"]);
     }
 
-    // ══ Gerufene Funktionen (docs/06 §6.5): Schnittstelle, Methoden und Umsetzungen als Geste ══
+    // ══ Technik (docs/06 §6.5, ohne Marker): Schnittstelle, Methoden und Umsetzungen als Geste ══
 
     private static JsonObject Param(string typ, string name) => new() { ["typ"] = typ, ["name"] = name };
 
@@ -349,18 +349,18 @@ public sealed class GestenTests : IDisposable
     };
 
     [Fact]
-    public async Task Neue_gerufene_Funktion_per_Plus_legt_Schnittstelle_und_Umsetzung_an()
+    public async Task Neue_Technik_per_Plus_legt_Schnittstelle_ohne_Marker_und_Umsetzung_an()
     {
         var bericht = await GesteAsync(new KartenDelta { Karten = new() { ["bausteinFunktionen"] = [Leuchte()] } });
 
         bericht.Patch.Select(p => p.Datei).Should().BeEquivalentTo("Leihwesen/Funktionen.cs", "Leihwesen/Leuchte.cs");
-        Text("Funktionen.cs").Should().Contain("public interface ILeuchte : IFunktion").And.Contain("    bool Hell(int stufe);");
+        Text("Funktionen.cs").Should().Contain("public interface ILeuchte\n{").And.Contain("    bool Hell(int stufe);");
         Text("Leuchte.cs").Should().Contain("public sealed class Leuchte : ILeuchte").And.Contain("public bool Hell(int stufe)")
             .And.Contain("throw new NotImplementedException(\"TODO: Leuchte.Hell\");");
     }
 
     [Fact]
-    public async Task Methode_an_der_gerufenen_Funktion_kommt_an_die_Schnittstelle_und_als_Stub_an_jede_Umsetzung()
+    public async Task Methode_an_der_Technik_kommt_an_die_Schnittstelle_und_als_Stub_an_jede_Umsetzung()
     {
         var f = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "IWertTabelle");
         f["methoden"]!.AsArray().Add(new JsonObject { ["name"] = "Runde", ["rueckgabe"] = "decimal", ["parameter"] = new JsonArray(Param("decimal", "betrag")) });
@@ -372,7 +372,7 @@ public sealed class GestenTests : IDisposable
     }
 
     [Fact]
-    public async Task Zweite_Umsetzung_einer_gerufenen_Funktion_ist_eine_neue_Klasse_mit_Stubs()
+    public async Task Zweite_Umsetzung_einer_Technik_ist_eine_neue_Klasse_mit_Stubs()
     {
         var f = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "IWertTabelle");
         f["umsetzungen"]!.AsArray().Add(new JsonObject { ["name"] = "FesteWertTabelle" });
@@ -385,7 +385,7 @@ public sealed class GestenTests : IDisposable
     }
 
     [Fact]
-    public async Task Eine_gerufene_Funktion_in_den_Konstruktor_einer_Umsetzung_nehmen()
+    public async Task Einen_Konfig_Record_in_den_Konstruktor_einer_Umsetzung_nehmen()
     {
         var f = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "ISchadensSchaetzung");
         f["umsetzungen"]![0]!["konstruktor"]!.AsArray().Add(Param("WertTabellenKonfig", "konfig"));

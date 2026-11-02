@@ -186,16 +186,16 @@ public static class Sonde
         foreach (var f in A(b, "bausteinFunktionen").Where(Sonde).Where(f => !Gerufen(f)))
             z.Add($"funktion-auf {S(f, "namespace")}.{S(f, "name")} {(f["klasse"]?.GetValue<bool>() == true ? "klasse" + Konstruktor(f) : "schnittstelle")}"
                 + (f["zustand"] is { } zu ? $" zustand={zu}" : "")
-                + (f["lebenszyklus"]?.GetValue<bool>() == true ? " lebenszyklus" : "") + " | "
+                + " | "
                 + string.Join(" || ", A(f, "eingaenge").Select(e => S(e, "eingang")
                     + (e["hinweis"]?.GetValue<bool>() == true ? " hinweis" : "") + (e["herkunft"]?.GetValue<bool>() == true ? " herkunft" : "")
                     + " -> " + (e["strom"]?.GetValue<bool>() == true ? "strom " : "")
                     + (A(e, "ausgaben").Any() ? string.Join("; ", A(e, "ausgaben").Select(x => (string?)x)) : "lernt")
                     + (A(e, "faehigkeiten").Any() ? " liest " + string.Join(", ", A(e, "faehigkeiten").Select(p => $"{S(p, "typ")} {S(p, "name")}")) : "")))
                 + (A(f, "umsetzungen").Any() ? " umsetzung " + string.Join(", ", A(f, "umsetzungen").Select(u => S(u, "name") + Konstruktor(u))) : ""));
-        // Gerufene Funktionen (docs/06 §6.5): Klasse oder Schnittstelle, Signatur (Methoden) und Umsetzungen mit Konstruktor.
+        // Technik (docs/06 §6.5, ohne Marker: was der Konstruktor einer Funktion nimmt): Klasse oder Schnittstelle, Signatur (Methoden) und Umsetzungen.
         foreach (var f in A(b, "bausteinFunktionen").Where(Sonde).Where(Gerufen))
-            z.Add($"funktion-gerufen {S(f, "namespace")}.{S(f, "name")} {(f["klasse"]?.GetValue<bool>() == true ? "klasse" + Konstruktor(f) : "schnittstelle")} | "
+            z.Add($"technik {S(f, "namespace")}.{S(f, "name")} {(f["klasse"]?.GetValue<bool>() == true ? "klasse" + Konstruktor(f) : "schnittstelle")} | "
                   + string.Join("; ", A(f, "methoden").Select(m => $"{S(m, "name")}({string.Join(", ", A(m, "parameter").Select(p => $"{S(p, "name")}:{S(p, "typ")}"))}):{S(m, "rueckgabe")}"))
                   + (A(f, "umsetzungen").Any() ? " | " + string.Join("; ", A(f, "umsetzungen").Select(u => $"umsetzung {S(u, "name")}{Konstruktor(u)}")) : ""));
 

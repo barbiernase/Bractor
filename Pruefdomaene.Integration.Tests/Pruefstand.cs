@@ -41,7 +41,7 @@ internal static class Pruefstand
         });
         builder.Services.AddGeneratedPullPaths();
         // Die gerufenen Funktionen wie im Host ohne Wahl in der Umgebung: je eine die eine Umsetzung (Tests ersetzen sie über dienste).
-        global::Infrastructure.Funktionen.GerufeneExtensions.BindeGerufene(builder.Services, new Dictionary<string, FunktionsKonfig>(),
+        global::Infrastructure.Funktionen.TechnikExtensions.BindeTechnik(builder.Services, new Dictionary<string, FunktionsKonfig>(),
             new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build().GetSection(Funktionsvertrag.KonfigAbschnitt));
         dienste?.Invoke(builder.Services);
         return builder.Build();

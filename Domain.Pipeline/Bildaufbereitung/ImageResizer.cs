@@ -3,6 +3,19 @@ using OpenCvSharp;
 namespace Domain.Pipeline.Bildaufbereitung;
 
 /// <summary>
+/// Skaliert ein Bild auf eine Zielhöhe (Breite proportional).
+/// Arbeitet auf OpenCV Mat — kein Disk-I/O, reine Speicher-Operation.
+/// </summary>
+public interface IImageResizer
+{
+    /// <summary>
+    /// Skaliert das Bild so, dass die Höhe targetHeight Pixel beträgt.
+    /// Breite wird proportional angepasst.
+    /// </summary>
+    Mat Resize(Mat input, int targetHeight);
+}
+
+/// <summary>
 /// Skaliert Bilder auf eine Zielhöhe mit proportionaler Breite.
 /// Nutzt INTER_AREA für Downscaling — schärfste Ergebnisse bei Verkleinerung.
 /// </summary>

@@ -3,7 +3,7 @@ using Leihwesen.Ausleihe;
 
 // SONDE — ZWEI Aggregate im SELBEN Namespace, Decider in eigener Datei (Mahnvorgang.Decider.cs.txt), dazu der Ablauf zwischen ihnen aus
 //         FUNKTIONEN (docs/10 §10.3; früher eine Saga mit expliziter Interface-Implementierung):
-//         · eine GLEICHBLEIBENDE Funktion im Host (Klasse, keine gerufene Funktion, keine Lese-Fähigkeit), die aus der Herkunft eine neue Id ableitet (R13)
+//         · eine GLEICHBLEIBENDE Funktion im Host (Klasse, keine Technik, keine Lese-Fähigkeit), die aus der Herkunft eine neue Id ableitet (R13)
 //           und auf einem Teil der Fälle nichts ausgibt (T?);
 //         · eine Funktion als SCHNITTSTELLE mit einer Umsetzung im Host, die eine GERUFENE FUNKTION (IFunktion ohne Auf) im Konstruktor nimmt — ihre Ausgabe
 //           ist ein Event (persistent, ohne Aggregat) oder ein Hinweis (flüchtig); der Laufort steht in der Umgebung;
@@ -35,8 +35,9 @@ public interface ISchadensSchaetzung : IFunktion
     Task<OneOf<SchadenGeschaetzt, NichtSchaetzbar>> Auf(SchadenGemeldet e, Herkunft h);
 }
 
-// Gerufen: die Technik hinter der Funktion — eine Schnittstelle mit IFunktion ohne Auf, eine Umsetzung mit Konfig-Record (Werte aus Konfig:<Record>).
-public interface IWertTabelle : IFunktion
+// Technik hinter der Funktion — eine Schnittstelle ohne Marker (der Schätzer nimmt sie im Konstruktor), eine Umsetzung mit Konfig-Record
+// (Werte aus Konfig:<Record>).
+public interface IWertTabelle
 {
     /// <summary>Der Restwert nach linearer Abschreibung.</summary>
     decimal Restwert(decimal neuwert, int alterJahre);

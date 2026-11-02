@@ -41,18 +41,16 @@ apply Schadensfall.SchadenGemeldet
 apply Mahnvorgang.MahnungEroeffnet
 # Gleichbleibende Funktion (Klasse ohne Konstruktor, R12): Herkunft für die neue Id (R13), „nichts“ als Ausgang (T?)
 funktion-auf Leihwesen.Gebuehren.SchadenBeiRueckgabe klasse() | Zurueckgegeben herkunft -> MeldeSchaden
-# Funktion als Schnittstelle mit einer Umsetzung im Host, die eine gerufene Funktion nimmt (Kante Funktion → gerufene Funktion); Ausgaben: ein Event der
+# Funktion als Schnittstelle mit einer Umsetzung im Host, die eine Technik nimmt (Kante Funktion → Technik); Ausgaben: ein Event der
 #    Funktion (kein Aggregat) oder ein Hinweis
 record Leihwesen.Gebuehren.SchadenGeschaetzt event | LeserId:Guid, Betrag:decimal
 record Leihwesen.Gebuehren.NichtSchaetzbar rejection | Grund:string
 funktion-auf Leihwesen.Gebuehren.ISchadensSchaetzung schnittstelle | SchadenGemeldet herkunft -> SchadenGeschaetzt; NichtSchaetzbar umsetzung Schadensschaetzer(tabelle:IWertTabelle)
 funktion-auf Leihwesen.Gebuehren.MahnungNachSchaetzung klasse() | SchadenGeschaetzt herkunft -> EroeffneMahnung
-# Gerufene Funktion (docs/06 §6.5): Schnittstelle mit IFunktion ohne Auf (Methoden, Typen wie geschrieben) + Umsetzung mit Konstruktor; der Record im
+# Technik (docs/06 §6.5): Schnittstelle ohne Marker im Konstruktor einer Funktion (Methoden, Typen wie geschrieben) + Umsetzung mit Konstruktor; der Record im
 #    Konstruktor ist Konfig (Werte aus Konfig:<Record>), kein Value Object
-funktion-gerufen Leihwesen.Gebuehren.IWertTabelle schnittstelle | Restwert(neuwert:decimal, alterJahre:int):decimal; IstSchaetzbarAsync(leserId:Guid):Task<bool> | umsetzung LineareWertTabelle(konfig:WertTabellenKonfig)
+technik Leihwesen.Gebuehren.IWertTabelle schnittstelle | Restwert(neuwert:decimal, alterJahre:int):decimal; IstSchaetzbarAsync(leserId:Guid):Task<bool> | umsetzung LineareWertTabelle(konfig:WertTabellenKonfig)
 record Leihwesen.Gebuehren.WertTabellenKonfig konfig | Mindestwert:decimal, Abschreibungsjahre:int=5
-# Gezeichnet: eine neue gerufene Funktion mit Umsetzungs-Stub vom Scaffolder — noch ohne Funktion, die sie nimmt
-funktion-gerufen Leihwesen.Pruefung.IPruefgeraet schnittstelle | Messe(seriennummer:string):bool | umsetzung Pruefgeraet()
 
 # ── Ablauf ohne Fluss-Sprache (Sonde/Fluss.cs.txt): eigene Quell-Nachricht (IQuellNachricht) und Quelle mit Treiber; Start als gleichbleibende
 #    Funktion; der Vorgang als ZÄHL-AGGREGAT (Zähler statt Collection) mit FRIST als Rennen gegen die Zeit; Fan-out als STROM einer Funktion draußen,
@@ -311,7 +309,6 @@ lage ILesesaal -> Domain.Akteure
 lage IMahnportal -> Domain.Akteure
 lage INotiereAusleihe -> Domain.Projections
 lage INotiereVormerkung -> Domain.Projections
-lage IPruefgeraet -> Domain.Pipeline
 lage ISchadensSchaetzung -> Domain.Pipeline
 lage ISchliesseAusleihe -> Domain.Projections
 lage ISeitenPruefung -> Domain.Pipeline
@@ -329,7 +326,6 @@ lage Mahnstelle -> Domain.Akteure
 lage NichtSchaetzbar -> Domain.Pipeline
 lage OffeneAusleihen -> Domain.Projections
 lage OffeneAusleihenAntwort -> Domain.Projections
-lage Pruefgeraet -> Domain.Pipeline
 lage SchadenGeschaetzt -> Domain.Pipeline
 lage Schadensschaetzer -> Domain.Pipeline
 lage Theke -> Domain.Akteure
@@ -394,15 +390,15 @@ decide Station.VermerkePrognose -> PrognoseVermerkt
 apply Station.TemperaturGemeldet
 apply Station.PrognoseVermerkt
 funktion-auf Wetterdienst.Vorhersage.Tendenzbildung klasse() | TemperaturGemeldet herkunft -> Tendenz
-funktion-auf Wetterdienst.Vorhersage.Prognosemodell klasse(gewichte:IZustand<Gewichte>, statistik:IStatistik) zustand=Gewichte lebenszyklus | TemperaturGemeldet herkunft -> lernt || StationStillgelegt hinweis -> lernt || Tendenz hinweis -> VermerkePrognose
+funktion-auf Wetterdienst.Vorhersage.Prognosemodell klasse(gewichte:IZustand<Gewichte>, statistik:IStatistik) zustand=Gewichte | TemperaturGemeldet herkunft -> lernt || StationStillgelegt hinweis -> lernt || Tendenz hinweis -> VermerkePrognose
 funktion-auf Wetterdienst.Vorhersage.IUnwetterwarnung schnittstelle | Tendenz hinweis -> Unwetter
 akteur Wetterdienst.Vorhersage.Warndienst Maschine | darf IUnwetterwarnung
 client Wetterdienst.Vorhersage.IWetterApp | verkoerpert Warndienst; hoert Unwetter
 sicht Wetterdienst.Vorhersage.Warndienst akteur domaene=Wetterdienst.Vorhersage block=§akteure
 # Der Zustand ist eine eigene Klasse ohne Marker — eine Code-Karte (wo der Editor sie zeigt, ist mit der Oberfläche zurückgestellt, docs/10 E4).
 code Wetterdienst.Vorhersage.Gewichte class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
-# Gerufene Funktion mit eigenem Zustand (IZustand in der Umsetzung): gehört der Aktivierung des Prognosemodells, gesichert mit dessen Position
-funktion-gerufen Wetterdienst.Vorhersage.IStatistik schnittstelle | Zaehle(station:Guid):void | umsetzung Statistik(zaehlung:IZustand<Zaehlung>)
+# Technik mit eigenem Zustand (IZustand in der Umsetzung): gehört der Aktivierung des Prognosemodells, gesichert mit dessen Position
+technik Wetterdienst.Vorhersage.IStatistik schnittstelle | Zaehle(station:Guid):void | umsetzung Statistik(zaehlung:IZustand<Zaehlung>)
 code Wetterdienst.Vorhersage.Zaehlung class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
 code Wetterdienst.Vorhersage.Arbeitsmodell class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
 lage Tendenzbildung -> Domain.Pipeline

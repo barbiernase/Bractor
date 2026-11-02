@@ -16,12 +16,12 @@ namespace Domain.SourceGeneration;
 /// <item>kein veränderliches Feld (Instanz oder statisch, nicht <c>readonly</c>/<c>const</c>), keine Eigenschaft mit <c>set</c>;</item>
 /// <item>kein <c>readonly</c>-Feld einer veränderlichen Sammlung (Liste, Wörterbuch, Menge, Array, <c>StringBuilder</c>) — das wäre Zustand durch die
 ///   Hintertür;</item>
-/// <item><c>IZustand&lt;T&gt;</c> steht nur im Konstruktor einer Funktions-Klasse oder einer gerufenen Funktion (Klasse bzw. Umsetzung einer gerufenen
-///   Schnittstelle — ihr Zustand gehört der Aktivierung ihres Halters und wird mit dessen Position gesichert); nicht in der Umsetzung einer
+/// <item><c>IZustand&lt;T&gt;</c> steht nur im Konstruktor einer Funktions-Klasse oder einer Technik-Umsetzung (im Konstruktor einer Funktion — ihr
+///   Zustand gehört der Aktivierung ihres Halters und wird mit dessen Position gesichert); nicht in der Umsetzung einer
 ///   Schnittstelle mit Eingängen (draußen lebt der Zustand im Worker, A8), nicht in einem Aggregat oder sonst wo. Je Klasse höchstens einer, T eine
 ///   eigene, nicht generische Klasse.</item>
 /// </list>
-/// Gerufene Funktionen im Konstruktor (gehalten in <c>readonly</c>-Feldern oder Parametern) sind Ressourcen der Aktivierung, kein Zustand. Nur Code-Fakten:
+/// Technik im Konstruktor (gehalten in <c>readonly</c>-Feldern oder Parametern) ist Ressource der Aktivierung, kein Zustand. Nur Code-Fakten:
 /// Marker, Konstruktor-Parameter, Feld- und Eigenschafts-Symbole.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
@@ -40,7 +40,11 @@ public sealed class ZustandAnalyzer : DiagnosticAnalyzer
     {
         context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
         context.EnableConcurrentExecution();
-        context.RegisterSymbolAction(Pruefe, SymbolKind.NamedType);
+        context.RegisterCompilationStartAction(start =>
+        {
+            var technik = Funktionsform.Techniken(Vertragsassemblies.Typen(start.Compilation));
+            start.RegisterSymbolAction(ctx => Pruefe(ctx, technik), SymbolKind.NamedType);
+        });
     }
 
     private static readonly string[] Sammlungen =
@@ -56,23 +60,23 @@ public sealed class ZustandAnalyzer : DiagnosticAnalyzer
     private static bool Veraenderlich(ITypeSymbol t) =>
         t is IArrayTypeSymbol || (t is INamedTypeSymbol n && Sammlungen.Contains(Funktionsform.Name(n)));
 
-    private static void Pruefe(SymbolAnalysisContext ctx)
+    private static void Pruefe(SymbolAnalysisContext ctx, Funktionsform.Technikmenge technik)
     {
         var t = (INamedTypeSymbol)ctx.Symbol;
         if (t.TypeKind != TypeKind.Class) return;
-        var baustein = !t.IsAbstract && Funktionsform.IstBaustein(t);
-        var umsetzung = !baustein && Funktionsform.Umsetzt(t).Any(Funktionsform.IstBaustein);
-        var gerufen = !t.IsAbstract && (Funktionsform.IstGerufen(t) || Funktionsform.Umsetzt(t).Any(Funktionsform.IstGerufen));
+        var baustein = !t.IsAbstract && Funktionsform.IstFunktion(t);
+        var umsetzung = !baustein && Funktionsform.Umsetzt(t).Any();
+        var technikUmsetzung = !t.IsAbstract && technik.IstUmsetzung(t);
 
-        // IZustand<T> außerhalb einer Funktions-Klasse bzw. gerufenen Funktion.
-        if (!baustein && !gerufen)
+        // IZustand<T> außerhalb einer Funktions-Klasse bzw. Technik-Umsetzung.
+        if (!baustein && !technikUmsetzung)
             foreach (var c in t.InstanceConstructors.Where(c => !c.IsImplicitlyDeclared))
                 foreach (var p in c.Parameters.Where(p => Funktionsform.IstZustand(p.Type)))
                     ctx.ReportDiagnostic(Diagnostic.Create(Regel, p.Locations.FirstOrDefault() ?? t.Locations.FirstOrDefault(), t.Name, umsetzung
                         ? $"die Umsetzung einer Funktion draußen nimmt '{p.Type.ToDisplayString()}' — Zustand hat nur eine Funktions-Klasse (draußen lebt er im Worker)"
                         : $"'{p.Type.ToDisplayString()}' steht im Konstruktor von etwas, das keine Funktion ist"));
-        // Die Form des Zustands einer gerufenen Funktion (bei einer Funktion mit Eingängen prüft sie der Generator, CQRS100).
-        if (gerufen)
+        // Die Form des Zustands einer Technik-Umsetzung (bei einer Funktion prüft sie der Generator, CQRS100).
+        if (technikUmsetzung)
         {
             var fehler = new List<(string Text, Location Ort)>();
             Funktionsform.ZustandVon(t, fehler);

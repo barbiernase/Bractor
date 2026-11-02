@@ -49,8 +49,8 @@ public static class Grammatik
         new(Response, "Antwort", "↩", "synchron; trägt den Stand der gezeigten Ids", "Rückgabe eines Readers oder eines Aggregats (dann mit seiner Version als OCC-Stand)"),
         new(Faehigkeit, "Fähigkeit", "⚙", "als Parameter von Auf bzw. Frage", "Store-Funktion (Lesen/Schreiben)"),
         new(Quelle, "Quell-Nachricht", "⛲", "durabel (genau einmal je Kennung)", "Anstoß von außen (Datei, Webhook …) — ein Event, das Funktionen und Projektionen hören"),
-        new(Gerufen, "Gerufene Funktion", "🧩", "im Konstruktor (gebunden nach der Umgebung)",
-            "Technik hinter einer Funktion (IFunktion ohne Auf) — keine Nachricht, eine Abhängigkeit, läuft im Prozess ihres Halters"),
+        new(Gerufen, "Technik", "🧩", "im Konstruktor (gebunden nach der Umgebung)",
+            "Technik hinter einer Funktion (ohne Marker: was ihr Konstruktor nimmt) — keine Nachricht, eine Abhängigkeit, läuft im Prozess ihres Halters"),
     ];
 
     public static readonly IReadOnlyList<BausteinInfo> Bausteine =
@@ -144,8 +144,8 @@ public static class Grammatik
         new("GR-FUNKTION-FORM", "Funktion: je Eingang ein Auf, freie Ausgabe", "Eine Funktion hat je Eingang (Folge, Zwischenergebnis, Quell-Nachricht, "
             + "Hinweis oder ein Event als Antwort auf einen eigenen Command) ein Auf mit optional Herkunft, Lese-Fähigkeiten und Abbruch; ausgegeben werden "
             + "Commands, Zwischenergebnisse und Hinweise (konkret, OneOf, T?, Strom, je auch als Task) — vollständig in der Signatur. Als Klasse läuft sie im Host, als Schnittstelle draußen (Laufort aus der Umgebung); eine Schnittstelle "
-            + "ohne eindeutige Umsetzung braucht eine Bindung, eine Funktion mit Lese-Fähigkeit läuft nur im Host. Eine Funktion ohne Auf ist gerufen "
-            + "(GR-GERUFEN); Eingänge und gerufene Methoden an einem Objekt sind ein Formfehler.", "error",
+            + "ohne eindeutige Umsetzung braucht eine Bindung, eine Funktion mit Lese-Fähigkeit läuft nur im Host. Eine Funktion ohne Auf ist ein "
+            + "Formfehler; eine Funktions-Schnittstelle hat nur Auf (was ihre Umsetzung ruft, ist Technik, GR-TECHNIK).", "error",
             [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Form der Funktion)"),
              new("boot", null, "Infrastructure/Funktionen/FunktionsBausteinWiring.cs (BindungVon: Laufort, Umsetzung, Lese-Fähigkeit nur im Host)")]),
         new("GR-EIN-EINGANG", "Je Baustein und Eingangstyp eine Methode", "Ein Baustein nimmt jeden Eingangstyp mit höchstens einer Methode — ein Auf "
@@ -155,42 +155,37 @@ public static class Grammatik
             + "kein Zufall, kein Lesen fremder Daten — Zeit kommt aus dem Event bzw. der Herkunft (R11).", "error",
             [An("CQRS102", "Domain.SourceGeneration/GleichbleibendAnalyzer.cs")]),
         new("GR-FUNKTION-ZUSTAND", "Zustand einer Funktion nur über IZustand<T>", "Eine Funktion hält Zustand (ein Modell, das weiterlernt, ein Zähler) "
-            + "nur über IZustand<T> im Konstruktor einer Funktions-Klasse oder einer gerufenen Funktion (deren Zustand gehört der Aktivierung ihres Halters): "
+            + "nur über IZustand<T> im Konstruktor einer Funktions-Klasse oder einer Technik-Umsetzung (deren Zustand gehört der Aktivierung ihres Halters): "
             + "er ist ein Cache der Aktivierung, keine Wahrheit — was fachlich zählt, steht im Log und wird in Projektionen gelernt; damit er alles "
             + "sieht, rechnet eine Funktion mit Zustand auf genau einer Aktivierung im Cluster (Advisory-Lock). Felder mit Setter, "
             + "veränderliche Felder und Sammlungen hinter readonly sind verboten; eine Funktion mit Zustand darf aus einem Eingang allein lernen (Auf "
             + "ohne Ausgabe) (R19, docs/04 §4.4).", "error",
             [An("CQRS105", "Domain.SourceGeneration/ZustandAnalyzer.cs"),
              Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (höchstens ein Zustand, eigene Klasse; Auf ohne Ausgabe nur mit Zustand)"),
-             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsAktivierung.cs (je Aktivierung ihr Zustand, gerufene über AktivierungsZustaende)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsAktivierung.cs (je Aktivierung ihr Zustand, Technik über AktivierungsZustaende)"),
              new("laufzeit", null, "Infrastructure/Funktionen/ZustandsSperre.cs (eine Aktivierung im Cluster, wer die Sperre hält)")]),
-        new("GR-FUNKTION-LEBENSZYKLUS", "Lebenszyklus einer Funktion optional", "Eine Funktions-Klasse im Host kann einen Lebenszyklus haben "
-            + "(ILebenszyklus): BeimAktivierenAsync nach dem Bau, vor dem ersten Auf (ein Netz laden); das Ende über IAsyncDisposable. Eine geladene Ressource darf in einem readonly-Feld "
-            + "stehen, Zustand nur in IZustand<T>. Nicht an Schnittstellen (draußen gehört der Lebenszyklus dem Worker), nicht an gerufenen Funktionen "
-            + "(docs/04 §4.4, docs/10 E10).", "error",
-            [An("CQRS107", "Domain.SourceGeneration/LebenszyklusAnalyzer.cs"),
-             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsKindActor.cs (Aktivieren beim Beginn des Kinds, Freigabe am Ende)")]),
         new("GR-NEUE-ID", "Neue Ids nur abgeleitet", "Auf der Server-Seite (Aggregat, Projektion, Reader, Funktion im Host) entstehen neue Ids nur "
             + "abgeleitet (Herkunft.NeueId), nie mit Guid.NewGuid() oder Id<T>.Neu() — eine Wiederholung bekäme sonst ein anderes Ziel (R13). Clients "
             + "würfeln.", "error",
             [An("CQRS104", "Domain.SourceGeneration/GleichbleibendAnalyzer.cs")]),
-        // Gerufene Funktionen (docs/06 §6.5): Abhängigkeiten der Funktionen und ihrer Umsetzungen, gebunden nach der Umgebung.
-        new("GR-GERUFEN", "Gerufene Funktion nur im Konstruktor", "Eine Funktion ohne Auf (IFunktion mit frei benannten Methoden) ruft ihr Halter: "
-            + "sie steht nur im Konstruktor einer Funktion bzw. ihrer Umsetzung — nie als Parameter, Feld oder Eigenschaft im Fachcode (Aggregat, "
-            + "Projektion, Reader): dort sind es Fähigkeiten als Parameter. Sie läuft im Prozess ihres Halters, hat keinen Laufort und kein IDarf, und "
-            + "eine Funktion mit Eingängen steht nie in einem Konstruktor (sie ruft das Framework).", "error",
-            [An("CQRS089", "Domain.SourceGeneration/GerufenAnalyzer.cs"), An("CQRS058", "Domain.SourceGeneration/AkteurAnalyzer.cs (kein IDarf auf eine gerufene)"),
+        // Technik (docs/06 §6.5): Abhängigkeiten der Funktionen und ihrer Umsetzungen, ohne Marker, gebunden nach der Umgebung.
+        new("GR-TECHNIK", "Technik ohne Marker, nur im Konstruktor", "Technik ist, was der Konstruktor einer Funktion (oder geschachtelt einer "
+            + "Technik-Umsetzung) nimmt und weder Konfig-Record noch ILogger<T> noch IZustand<T> ist: eine Schnittstelle oder Klasse der Anwendung, ohne "
+            + "Marker. Sie steht nur dort — nie als Parameter, Feld oder Eigenschaft im Fachcode (Aggregat, Projektion, Reader): dort sind es Fähigkeiten "
+            + "als Parameter. Sie läuft im Prozess ihres Halters, lädt beim ersten Aufruf und wird über IAsyncDisposable freigegeben; eine Funktion steht "
+            + "nie in einem Konstruktor (sie ruft das Framework).", "error",
+            [An("CQRS089", "Domain.SourceGeneration/TechnikAnalyzer.cs"),
              new("boot", null, "Infrastructure/Funktionen/FunktionsExtensions.cs (BindeFunktionen: unter Funktionen nur die Implementierung)")]),
-        new("GR-GERUFEN-BINDBAR", "Umsetzung baubar, Konstruktor bindbar", "Eine Funktion im Host und jede Umsetzung ist öffentlich und nicht "
-            + "generisch; ihr Konstruktor nimmt nur gerufene Funktionen, Konfig-Records (Felder: Text, Zahl, Wahrheitswert, Dauer, Guid, Enum, Text-Liste), "
-            + "ILogger<T> und ihren Zustand (IZustand<T>); gebaut wird sie per generierter Fabrik, ohne Reflection.", "error",
-            [An("CQRS090", "Domain.SourceGeneration/GerufenAnalyzer.cs (Konstruktor-Parameter)"), An("CQRS091", "Domain.SourceGeneration/GerufenAnalyzer.cs (Konfig-Feld)"),
-             An("CQRS092", "Domain.SourceGeneration/GerufenAnalyzer.cs (öffentlich, nicht generisch)"),
-             new("generator", null, "Infrastructure.SourceGeneration/GerufeneGenerator.cs (GeneratedGerufene: Umsetzungen, Bedarf, Konfig-Bindung)")]),
-        new("GR-GERUFEN-GEBUNDEN", "Gebrauchte gerufene Funktion ist gebunden", "Was eine gebundene Funktion (transitiv) braucht, ist in der Umgebung "
-            + "eindeutig: je gerufene Funktion genau eine Umsetzung (sonst Funktionen:<Name>:Implementierung), je Konfig-Record ein Abschnitt "
-            + "Konfig:<Record>, kein Kreis über gerufene Funktionen — sonst bricht der Start.", "error",
-            [new("boot", null, "Infrastructure/Funktionen/Gerufene.cs (BindeGerufene: fehlend, mehrdeutig, Kreis, Konfig)")]),
+        new("GR-TECHNIK-BINDBAR", "Umsetzung baubar, Konstruktor bindbar", "Eine Funktion im Host und jede Umsetzung ist öffentlich und nicht "
+            + "generisch; ihr Konstruktor nimmt nur Technik der Anwendung, Konfig-Records (Felder: Text, Zahl, Wahrheitswert, Dauer, Guid, Enum, "
+            + "Text-Liste), ILogger<T> und ihren Zustand (IZustand<T>); gebaut wird sie per generierter Fabrik, ohne Reflection.", "error",
+            [An("CQRS090", "Domain.SourceGeneration/TechnikAnalyzer.cs (Konstruktor-Parameter)"), An("CQRS091", "Domain.SourceGeneration/TechnikAnalyzer.cs (Konfig-Feld)"),
+             An("CQRS092", "Domain.SourceGeneration/TechnikAnalyzer.cs (öffentlich, nicht generisch)"),
+             new("generator", null, "Infrastructure.SourceGeneration/TechnikGenerator.cs (GeneratedTechnik: Umsetzungen, Bedarf, Konfig-Bindung)")]),
+        new("GR-TECHNIK-GEBUNDEN", "Gebrauchte Technik ist gebunden", "Was eine gebundene Funktion (transitiv) braucht, ist in der Umgebung "
+            + "eindeutig: je Technik genau eine Umsetzung (sonst Funktionen:<Name>:Implementierung), je Konfig-Record ein Abschnitt "
+            + "Konfig:<Record>, kein Kreis über Technik — sonst bricht der Start.", "error",
+            [new("boot", null, "Infrastructure/Funktionen/Technik.cs (BindeTechnik: fehlend, mehrdeutig, Kreis, Konfig)")]),
         new("GR-QUELLE", "Quell-Nachricht von außen", "Eine Quell-Nachricht (record … : IQuellNachricht) wird genau einmal je Kennung ins Log "
             + "geschrieben; Funktionen und Projektionen hören sie wie jedes Event. Sie kommt von außen (die Maschine/der Akteur hinter der Quelle, IDarf).", "error",
             [new("laufzeit", null, "Infrastructure/Quellen/Quellen.cs (QuellEingang: StartStream je Kennung)")]),
@@ -264,7 +259,7 @@ public static class Grammatik
         new(Query, Reader, GenauEins, "GR-QUERY"), new(Query, Aggregat, GenauEins, "GR-QUERY"),
         new(Faehigkeit, Projektion, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Reader, Beliebig, "GR-FAEHIGKEIT"),
         new(Faehigkeit, Funktion, Beliebig, "GR-FUNKTION-FORM"),
-        new(Gerufen, Funktion, Beliebig, "GR-GERUFEN"),
+        new(Gerufen, Funktion, Beliebig, "GR-TECHNIK"),
         new(Event, Client, Beliebig, "GR-EVENT"), new(Transient, Client, Beliebig, "GR-TRANSIENT"),
         // Eine Quell-Nachricht ist ein Event aus dem Log (GR-QUELLE): Funktionen und Projektionen hören sie, ein Client kann sie hören.
         new(Quelle, Funktion, Beliebig, "GR-QUELLE"), new(Quelle, Projektion, Beliebig, "GR-QUELLE"), new(Quelle, Client, Beliebig, "GR-QUELLE"),
@@ -278,7 +273,7 @@ public static class Grammatik
         new(Funktion, Command, "GR-FUNKTION-FORM"), new(Funktion, Event, "GR-FUNKTION-FORM"), new(Funktion, Transient, "GR-FUNKTION-FORM"),
         new(Reader, Response, "GR-AUS-READER"), new(Aggregat, Response, "GR-AUS-AGGREGAT"),
         new(Store, Faehigkeit, "GR-FAEHIGKEIT"),
-        new(Funktion, Gerufen, "GR-GERUFEN"),
+        new(Funktion, Gerufen, "GR-TECHNIK"),
         new(Aussenwelt, Command, "GR-COMMAND"), new(Aussenwelt, Query, "GR-QUERY"),
         new(Akteur, Command, "GR-AKTEUR"), new(Akteur, Query, "GR-AKTEUR"), new(Akteur, Transient, "GR-AKTEUR"),
         new(Akteur, Quelle, "GR-AKTEUR"), new(Aussenwelt, Quelle, "GR-QUELLE"),

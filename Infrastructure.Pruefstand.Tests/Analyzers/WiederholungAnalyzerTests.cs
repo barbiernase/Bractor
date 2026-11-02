@@ -30,7 +30,7 @@ public class WiederholungAnalyzerTests
         }
         public sealed record Mahne(Id<Konto> AggregateId, DateTimeOffset Am) : ICommand<Konto>;
         public sealed record Gemahnt(DateTimeOffset Am) : IEvent;
-        public interface IPost : IFunktion { Task<string> SendeAsync(); }
+        public interface IPost { Task<string> SendeAsync(); }
         public interface ISchreibe : IWriteStore { Task SetzeAsync(Guid id); }
         """;
 

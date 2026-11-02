@@ -58,14 +58,8 @@ public sealed class Gewichte
     public Dictionary<Guid, int> Anzahl { get; set; } = new();
 }
 
-// Mit Lebenszyklus (E10): beim Aktivieren lädt es ein Arbeitsmodell aus dem gesicherten Zustand, vor jeder Sicherung schreibt es zurück.
-public sealed class Arbeitsmodell
-{
-    public double Faktor { get; set; } = 1;
-}
-
-// Gerufen (kein Auf) mit eigenem Zustand: zählt die Meldungen — ihr Zustand gehört der Aktivierung des Modells und wird mit dessen Position gesichert.
-public interface IStatistik : IFunktion
+// Technik (ohne Marker, im Konstruktor des Modells) mit eigenem Zustand: zählt die Meldungen — ihr Zustand gehört der Aktivierung des Modells.
+public interface IStatistik
 {
     void Zaehle(Guid station);
 }
@@ -80,16 +74,8 @@ public sealed class Statistik(IZustand<Zaehlung> zaehlung) : IStatistik
     public void Zaehle(Guid station) => zaehlung.Wert.Je[station] = zaehlung.Wert.Je.GetValueOrDefault(station) + 1;
 }
 
-public sealed class Prognosemodell(IZustand<Gewichte> gewichte, IStatistik statistik) : IFunktion, ILebenszyklus
+public sealed class Prognosemodell(IZustand<Gewichte> gewichte, IStatistik statistik) : IFunktion
 {
-    private readonly Arbeitsmodell _modell = new();
-
-    public Task BeimAktivierenAsync(CancellationToken ct)
-    {
-        _modell.Faktor = gewichte.Wert.Anzahl.Count > 0 ? 1.0 / gewichte.Wert.Anzahl.Count : 1;
-        return Task.CompletedTask;
-    }
-
     public void Auf(TemperaturGemeldet e, Herkunft h)
     {
         statistik.Zaehle(h.Stream);

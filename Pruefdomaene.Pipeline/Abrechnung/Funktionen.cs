@@ -12,9 +12,3 @@ public interface IFreigabe : IFunktion
 {
     OneOf<GibRechnungFrei, SperreRechnung> Auf(Freizugeben f);
 }
-
-/// <summary>Gerufen (kein Auf): der Versand einer Mahnung (Außenwelt) — liefert die Versandnummer des Briefs.</summary>
-public interface IMahnversand : IFunktion
-{
-    Task<string> VersendeAsync(Id<Kundenkonto> konto, Id<Rechnung> rechnung, int stufe);
-}

@@ -141,7 +141,7 @@ public class UmgebungLaderTests
     }
 
     [Fact]
-    public void Eine_gerufene_Funktion_nennt_unter_Funktionen_nur_ihre_Implementierung()
+    public void Technik_nennt_unter_Funktionen_nur_ihre_Implementierung()
     {
         var s = new ServiceCollection().BindeFunktionen(new Dictionary<string, FunktionsKonfig>
         {
@@ -152,7 +152,7 @@ public class UmgebungLaderTests
             {
                 ["IImageResizer"] = new() { Laufort = FunktionsLaufort.Extern },
             }))
-            .Should().Throw<BootFehler>().Where(e => e.Karte == "funktion:IImageResizer").WithMessage("*gerufene Funktion*nur ihre Implementierung*");
+            .Should().Throw<BootFehler>().Where(e => e.Karte == "funktion:IImageResizer").WithMessage("*ist Technik*nur ihre Implementierung*");
     }
 
     [Theory]

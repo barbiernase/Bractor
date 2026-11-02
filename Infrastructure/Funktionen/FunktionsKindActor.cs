@@ -12,7 +12,7 @@ public sealed record KindRechne(EingangZustellen Eingang);
 public sealed record KindFertig(Guid Kennung, string? Fehler, PID Kind);
 
 /// <summary>
-/// Ein KIND einer Funktion (docs/04 §4.4): eine Umsetzung mit ihrer Aktivierung (Bereich, Dienste, Zustand, Lebenszyklus), ein Eingang zugleich — oder,
+/// Ein KIND einer Funktion (docs/04 §4.4): eine Umsetzung mit ihrer Aktivierung (Bereich, Technik, Zustand), ein Eingang zugleich — oder,
 /// draußen, der Platz eines Arbeiters in der <see cref="Werkstatt"/>. Es rechnet das <c>Auf</c> und bringt jede Ausgabe hinaus — einen Command über den Emitter mit der Id aus Eingang, Funktion und Stelle (die Inbox
 /// verwirft eine Wiederholung), ein Zwischenergebnis an jede Funktion, die es hört (gewartet wird, bis sie fertig ist), einen Hinweis verlierbar.
 /// Fertig ist der Eingang, wenn alle Commands beantwortet und alle Nachfolger fertig sind; das meldet das Kind seinem Parent.
@@ -42,7 +42,6 @@ public sealed class FunktionsKindActor(
         if (traeger.Aktivierung is null) return;   // draußen: ein Arbeiter rechnet
         _aktivierung = traeger.Aktivierung(dienste);
         await _aktivierung.BeginneAsync();
-        await _aktivierung.AktiviereAsync(Stopp);
     }
 
     protected override async ValueTask FreigebenAsync()

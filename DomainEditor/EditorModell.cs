@@ -275,7 +275,7 @@ public sealed record BausteinFunktion
     /// <summary>Als Klasse deklariert: läuft im Host. Sonst Schnittstelle: draußen oder mit einer Umsetzung im Host (Laufort aus der Umgebung).</summary>
     public bool Klasse { get; init; }
     public IReadOnlyList<BausteinEingang> Eingaenge { get; init; } = [];
-    /// <summary>Gerufen: die Methoden, die ihr Halter ruft (Signatur, Deklarations-Reihenfolge). Leer bei einer Funktion mit Eingängen.</summary>
+    /// <summary>Technik: die Methoden, die ihr Halter ruft (Signatur, Deklarations-Reihenfolge). Leer bei einer Funktion.</summary>
     public IReadOnlyList<FunktionsMethode> Methoden { get; init; } = [];
     /// <summary>Konstruktor der Klasse (gerufene Funktionen, Konfig-Records, Logger).</summary>
     public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
@@ -283,8 +283,6 @@ public sealed record BausteinFunktion
     public IReadOnlyList<FunktionsUmsetzung> Umsetzungen { get; init; } = [];
     /// <summary>Der gekapselte Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4): der einfache Name von T, sonst null.</summary>
     public string? Zustand { get; init; }
-    /// <summary>Die Klasse hat einen Lebenszyklus (<c>ILebenszyklus</c>, E10): sie lädt beim Aktivieren etwas.</summary>
-    public bool Lebenszyklus { get; init; }
     public string? Doku { get; init; }
     public string? Datei { get; init; }
     /// <summary>Herkunfts-Stempel (<see cref="DomainEditor.Herkunft"/>): Abweichung = im Editor geändert; null = neu.</summary>
@@ -301,7 +299,7 @@ public sealed record FunktionsUmsetzung
     public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
     /// <summary>Datei der Klasse (relativ zur Solution); null = neu.</summary>
     public string? Datei { get; init; }
-    /// <summary>Gerufen: je Methode der Rumpf der Umsetzung (Spiegel der Datei; geändert wird er mit ✎ am Rumpf).</summary>
+    /// <summary>Technik: je Methode der Rumpf der Umsetzung (Spiegel der Datei; geändert wird er mit ✎ am Rumpf).</summary>
     public IReadOnlyList<MethodenRumpf> Rumpfe { get; init; } = [];
 }
 

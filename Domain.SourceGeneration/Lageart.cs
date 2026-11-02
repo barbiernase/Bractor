@@ -28,11 +28,13 @@ internal sealed class Lageart
     {
         Bereit = c.GetTypeByMetadataName(A + "IState") != null;
         if (!Bereit) return;
-        foreach (var t in typen)
+        var alle = typen.ToList();
+        var technik = Infrastructure.SourceGeneration.Funktionsform.Techniken(alle);
+        foreach (var t in alle)
         {
             // Ergebnis-Events: die Ausgaben jeder Funktion (die Fälle jedes Auf, Funktionsform). Commands unter ihnen bleiben Commands
             //   (Command wird vor Event erkannt).
-            if (Infrastructure.SourceGeneration.Funktionsform.IstBaustein(t))
+            if (Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t))
                 foreach (var a in Infrastructure.SourceGeneration.Funktionsform.Lies(t).Aufs)
                     foreach (var e in a.Ausgaben) _ergebnisse.Add(Name(e));
             // Zwischenergebnisse: die schlichten Ein- und Ausgaben der Funktionen (Nachrichtenform, docs/04 §4.4) — eine Folge bleibt Folge.
@@ -49,8 +51,8 @@ internal sealed class Lageart
             if (Infrastructure.SourceGeneration.Nachrichtenform.IstDecider(t))
                 foreach (var d in Infrastructure.SourceGeneration.Nachrichtenform.Decides(t))
                     foreach (var f in Infrastructure.SourceGeneration.Nachrichtenform.FolgenVon(d)) _folgen.Add(Name(f));
-            // Konfig-Records: was der Konstruktor einer Funktion bzw. Umsetzung als Konfig bindet (Ctorbindung, CQRS090).
-            if (t.TypeKind == TypeKind.Class && !t.IsAbstract && Hat(t, "IFunktion"))
+            // Konfig-Records: was der Konstruktor einer Funktion, ihrer Umsetzung oder einer Technik-Umsetzung als Konfig bindet (Ctorbindung, CQRS090).
+            if (t.TypeKind == TypeKind.Class && !t.IsAbstract && (Hat(t, "IFunktion") || technik.IstUmsetzung(t)))
                 foreach (var p in Infrastructure.SourceGeneration.Ctorbindung.Konstruktor(t)?.Parameters ?? Enumerable.Empty<IParameterSymbol>())
                     if (Infrastructure.SourceGeneration.Ctorbindung.ArtVon(p.Type) == Infrastructure.SourceGeneration.Ctorbindung.Art.Konfig
                         && p.Type is INamedTypeSymbol k) _konfigs.Add(Name(k));

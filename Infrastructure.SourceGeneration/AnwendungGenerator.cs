@@ -54,7 +54,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine($"        public {K}IUpcastingTabelle Upcasting {{ get; }} = new UpcastingTabelle();");
             sb.AppendLine($"        public {K}IAkteurTabelle Akteure {{ get; }} = new AkteurTabelle();");
             sb.AppendLine($"        public {K}IFunktionsTabelle Funktionen {{ get; }} = new FunktionsTabelle();");
-            sb.AppendLine($"        public {K}IGerufenenTabelle Gerufene {{ get; }} = new GerufenenTabelle();");
+            sb.AppendLine($"        public {K}ITechnikTabelle Technik {{ get; }} = new TechnikTabelle();");
             sb.AppendLine($"        public {K}IAggregatTabelle Aggregate {{ get; }} = new AggregatTabelle();");
             sb.AppendLine("        public IReadOnlyDictionary<Type, global::Infrastructure.Wecken.Weckziel[]> Weckplan => global::Infrastructure.Wecken.GeneratedWeckplan.Plan;");
             sb.AppendLine("        public IReadOnlyList<global::Infrastructure.Quellen.QuellTyp> Quellen => global::Infrastructure.Quellen.GeneratedQuellen.Alle;");
@@ -121,9 +121,9 @@ namespace Infrastructure.SourceGeneration
                 "IReadOnlyList<global::Infrastructure.Funktionen.FunktionsBaustein> Bausteine => {0}.Alle",
                 "IReadOnlyDictionary<Type, string[]> Verkettung => {0}.Verkettung",
             });
-            Tabelle(sb, "GerufenenTabelle", "IGerufenenTabelle", "global::Infrastructure.Funktionen.GeneratedGerufene", new[]
+            Tabelle(sb, "TechnikTabelle", "ITechnikTabelle", "global::Infrastructure.Funktionen.GeneratedTechnik", new[]
             {
-                "IReadOnlyDictionary<string, Type> Namen", "IReadOnlyList<global::Infrastructure.Funktionen.GerufeneUmsetzung> Umsetzungen",
+                "IReadOnlyDictionary<string, Type> Namen", "IReadOnlyList<global::Infrastructure.Funktionen.TechnikUmsetzung> Umsetzungen",
                 "IReadOnlyDictionary<Type, Type[]> Braucht", "IReadOnlyList<global::Infrastructure.Funktionen.KonfigRecord> Konfigs",
             }, new string[0]);
             Tabelle(sb, "AggregatTabelle", "IAggregatTabelle", "global::Infrastructure.Aggregate.ActorSystem.GeneratedAggregates", new string[0], new[]

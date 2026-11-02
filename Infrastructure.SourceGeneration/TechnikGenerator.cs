@@ -1,5 +1,5 @@
 // In Projekt: Infrastructure.SourceGeneration
-// Dateiname: GerufeneGenerator.cs
+// Dateiname: TechnikGenerator.cs
 
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -10,14 +10,15 @@ using System.Text;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Gerufene Funktionen (<c>IFunktion</c> ohne <c>Auf</c>, docs/06 §6.5): erzeugt <c>GeneratedGerufene</c> — die Tabelle Funktion → Umsetzungen
-    /// (Code-Fakt: jede öffentliche Klasse, die die Schnittstelle implementiert; eine Klasse ist ihre eigene) mit generierter Fabrik je Umsetzung, dazu
-    /// was jeder Konstruktor einer Funktion bzw. Umsetzung braucht (gerufene Funktionen, Konfig-Records) und je Konfig-Record die Bindung aus
-    /// <c>Konfig:&lt;Record&gt;</c>. Welche Umsetzung läuft, wählt die Umgebung (<c>Funktionen:&lt;Name&gt;:Implementierung</c>); gebunden und geprüft
-    /// wird beim Start (<c>BindeGerufene</c>). Alles ohne Reflection: Fabriken rufen den Konstruktor direkt, Konfig-Records werden Feld für Feld gelesen.
+    /// Technik hinter den Funktionen (ohne Marker, docs/06 §6.5: was der Konstruktor einer Funktion nimmt, <c>Funktionsform.Techniken</c>): erzeugt
+    /// <c>GeneratedTechnik</c> — die Tabelle Technik → Umsetzungen (Code-Fakt: jede öffentliche Klasse, die die Schnittstelle implementiert; eine Klasse ist
+    /// ihre eigene) mit generierter Fabrik je Umsetzung, dazu was jeder Konstruktor einer Funktion bzw. Umsetzung braucht (Technik, Konfig-Records) und
+    /// je Konfig-Record die Bindung aus <c>Konfig:&lt;Record&gt;</c>. Welche Umsetzung läuft, wählt die Umgebung
+    /// (<c>Funktionen:&lt;Name&gt;:Implementierung</c>); gebunden und geprüft wird beim Start (<c>BindeTechnik</c>). Alles ohne Reflection: Fabriken
+    /// rufen den Konstruktor direkt, Konfig-Records werden Feld für Feld gelesen.
     /// </summary>
     [Generator]
-    public class GerufeneGenerator : ISourceGenerator
+    public class TechnikGenerator : ISourceGenerator
     {
         public void Initialize(GeneratorInitializationContext context) { }
 
@@ -29,32 +30,33 @@ namespace Infrastructure.SourceGeneration
             var fq = SymbolDisplayFormat.FullyQualifiedFormat;
 
             var klassen = Ctorbindung.Klassen(c).Where(Ctorbindung.Baubar).OrderBy(k => k.ToDisplayString(), System.StringComparer.Ordinal).ToList();
-            var gerufene = Ctorbindung.Interfaces(c).Concat(klassen).Where(Funktionsform.IstGerufen)
+            var technik = Funktionsform.Techniken(Vertragsassemblies.Typen(c)).Typen.Values
                 .OrderBy(t => t.ToDisplayString(), System.StringComparer.Ordinal).ToList();
 
             bool Implementiert(INamedTypeSymbol k, INamedTypeSymbol i) => k.AllInterfaces.Contains(i, SymbolEqualityComparer.Default);
-            var gerufenUm = gerufene.Select(g => (Funktion: g, Umsetzungen: g.TypeKind == TypeKind.Interface
-                ? klassen.Where(k => Implementiert(k, g)).ToList() : new List<INamedTypeSymbol> { g })).ToList();
-            // Umsetzungen der Funktionen mit Eingängen: Klassen einer Funktions-Schnittstelle und Funktionen als Klasse (im Host).
-            var bausteinUm = klassen.Where(k => Funktionsform.Umsetzt(k).Any(Funktionsform.IstBaustein) || Funktionsform.IstBaustein(k)).ToList();
+            var technikUm = technik.Select(g => (Technik: g, Umsetzungen: g.TypeKind == TypeKind.Interface
+                ? klassen.Where(k => Implementiert(k, g)).ToList()
+                : klassen.Where(k => SymbolEqualityComparer.Default.Equals(k, g)).ToList())).ToList();
+            // Umsetzungen der Funktionen: Klassen einer Funktions-Schnittstelle und Funktionen als Klasse (im Host).
+            var funktionUm = klassen.Where(k => Funktionsform.Umsetzt(k).Any() || Funktionsform.IstFunktion(k)).ToList();
 
             // Was die Konstruktoren brauchen — und daraus die Konfig-Records (nur die, die eine Umsetzung wirklich nimmt).
-            var nutzer = gerufenUm.SelectMany(x => x.Umsetzungen).Concat(bausteinUm).Distinct(SymbolEqualityComparer.Default).Cast<INamedTypeSymbol>()
+            var nutzer = technikUm.SelectMany(x => x.Umsetzungen).Concat(funktionUm).Distinct(SymbolEqualityComparer.Default).Cast<INamedTypeSymbol>()
                 .OrderBy(k => k.ToDisplayString(), System.StringComparer.Ordinal).ToList();
             var braucht = nutzer.Select(k => (Impl: k, Braucht: Ctorbindung.Braucht(Ctorbindung.Konstruktor(k)).ToList())).ToList();
             var konfigs = braucht.SelectMany(x => x.Braucht).Where(t => Ctorbindung.ArtVon(t) == Ctorbindung.Art.Konfig)
                 .Distinct(SymbolEqualityComparer.Default).Cast<INamedTypeSymbol>()
                 .OrderBy(k => k.ToDisplayString(), System.StringComparer.Ordinal).ToList();
 
-            context.AddSource("GeneratedGerufene.g.cs", Emit(gerufenUm, braucht, konfigs, fq));
+            context.AddSource("GeneratedTechnik.g.cs", Emit(technikUm, braucht, konfigs, fq));
         }
 
-        private static string Emit(List<(INamedTypeSymbol Funktion, List<INamedTypeSymbol> Umsetzungen)> gerufene,
+        private static string Emit(List<(INamedTypeSymbol Technik, List<INamedTypeSymbol> Umsetzungen)> technik,
             List<(INamedTypeSymbol Impl, List<INamedTypeSymbol> Braucht)> braucht, List<INamedTypeSymbol> konfigs, SymbolDisplayFormat fq)
         {
             var sb = new StringBuilder();
             sb.AppendLine("// <auto-generated/>");
-            sb.AppendLine("// Gerufene Funktionen: Umsetzungen, Konstruktor-Bedarf, Konfig-Records (GerufeneGenerator). Nicht editieren.");
+            sb.AppendLine("// Technik: Umsetzungen, Konstruktor-Bedarf, Konfig-Records (TechnikGenerator). Nicht editieren.");
             sb.AppendLine("#nullable enable");
             sb.AppendLine("using System;");
             sb.AppendLine("using System.Collections.Generic;");
@@ -63,39 +65,39 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine();
             sb.AppendLine("namespace Infrastructure.Funktionen");
             sb.AppendLine("{");
-            sb.AppendLine("    public static class GeneratedGerufene");
+            sb.AppendLine("    public static class GeneratedTechnik");
             sb.AppendLine("    {");
-            sb.AppendLine("        /// <summary>Einfacher Name → gerufene Funktion (für den Abschnitt Funktionen:&lt;Name&gt; der Umgebung).</summary>");
+            sb.AppendLine("        /// <summary>Einfacher Name → Technik (für den Abschnitt Funktionen:&lt;Name&gt; der Umgebung).</summary>");
             sb.AppendLine("        public static readonly IReadOnlyDictionary<string, Type> Namen = new Dictionary<string, Type>(StringComparer.Ordinal)");
             sb.AppendLine("        {");
-            foreach (var (g, _) in gerufene) sb.AppendLine($"            [\"{g.Name}\"] = typeof({g.ToDisplayString(fq)}),");
+            foreach (var (g, _) in technik) sb.AppendLine($"            [\"{g.Name}\"] = typeof({g.ToDisplayString(fq)}),");
             sb.AppendLine("        };");
             sb.AppendLine();
-            // Der Zustand einer Umsetzung (IZustand<T>, docs/04 §4.4): gehört der Aktivierung des Halters, unter dem Namen der gerufenen Funktion —
+            // Der Zustand einer Umsetzung (IZustand<T>, docs/04 §4.4): gehört der Aktivierung des Halters, unter dem Namen der Technik —
             //   die Fabrik holt ihn dort (AktivierungsZustaende), gesichert wird er mit dem Zustand des Halters. Die Formen stehen VOR der Tabelle
             //   (statische Felder werden in Reihenfolge belegt).
-            var zustaende = new List<(INamedTypeSymbol Funktion, INamedTypeSymbol Umsetzung, INamedTypeSymbol Zustand)>();
-            foreach (var (g, ums) in gerufene)
+            var zustaende = new List<(INamedTypeSymbol Technik, INamedTypeSymbol Umsetzung, INamedTypeSymbol Zustand)>();
+            foreach (var (g, ums) in technik)
                 foreach (var k in ums)
                     if (Funktionsform.ZustandVon(k, new List<(string, Location)>()) is { } z) zustaende.Add((g, k, z));
             for (var i = 0; i < zustaende.Count; i++)
                 sb.AppendLine($"        private static readonly FunktionsZustandsform Zustand{i} = {Ctorbindung.Zustandsform(zustaende[i].Zustand, fq)};");
             if (zustaende.Count > 0) sb.AppendLine();
-            sb.AppendLine("        /// <summary>Die Umsetzungen je gerufener Funktion (Code-Fakt) mit ihrer Fabrik — welche läuft, wählt die Umgebung.</summary>");
-            sb.AppendLine("        public static readonly IReadOnlyList<GerufeneUmsetzung> Umsetzungen = new GerufeneUmsetzung[]");
+            sb.AppendLine("        /// <summary>Die Umsetzungen je Technik (Code-Fakt) mit ihrer Fabrik — welche läuft, wählt die Umgebung.</summary>");
+            sb.AppendLine("        public static readonly IReadOnlyList<TechnikUmsetzung> Umsetzungen = new TechnikUmsetzung[]");
             sb.AppendLine("        {");
-            foreach (var (g, ums) in gerufene)
+            foreach (var (g, ums) in technik)
                 foreach (var k in ums)
                 {
-                    var zi = zustaende.FindIndex(x => SymbolEqualityComparer.Default.Equals(x.Funktion, g) && SymbolEqualityComparer.Default.Equals(x.Umsetzung, k));
+                    var zi = zustaende.FindIndex(x => SymbolEqualityComparer.Default.Equals(x.Technik, g) && SymbolEqualityComparer.Default.Equals(x.Umsetzung, k));
                     var zustand = zi < 0 ? null : $"AktivierungsZustaende.Von(sp).Hole(\"{g.Name}\", Zustand{zi})";
-                    sb.AppendLine($"            new GerufeneUmsetzung(typeof({g.ToDisplayString(fq)}), \"{k.Name}\", typeof({k.ToDisplayString(fq)}), "
+                    sb.AppendLine($"            new TechnikUmsetzung(typeof({g.ToDisplayString(fq)}), \"{k.Name}\", typeof({k.ToDisplayString(fq)}), "
                         + $"s => s.AddScoped<{g.ToDisplayString(fq)}>(sp => new {k.ToDisplayString(fq)}({Ctorbindung.Argumente(Ctorbindung.Konstruktor(k), fq, zustand)}))"
                         + (zi < 0 ? "" : $", Zustand{zi}") + "),");
                 }
             sb.AppendLine("        };");
             sb.AppendLine();
-            sb.AppendLine("        /// <summary>Umsetzung (einer Funktion mit Eingängen oder einer gerufenen) → was ihr Konstruktor braucht: gerufene Funktionen und Konfig-Records.</summary>");
+            sb.AppendLine("        /// <summary>Umsetzung (einer Funktion oder einer Technik) → was ihr Konstruktor braucht: Technik und Konfig-Records.</summary>");
             sb.AppendLine("        public static readonly IReadOnlyDictionary<Type, Type[]> Braucht = new Dictionary<Type, Type[]>");
             sb.AppendLine("        {");
             foreach (var (k, b) in braucht.Where(x => x.Braucht.Count > 0))
