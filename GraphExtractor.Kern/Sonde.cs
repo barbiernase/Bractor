@@ -1,9 +1,11 @@
+using System.Collections.Immutable;
 using System.Reflection;
 using System.Text.Json.Nodes;
 using DomainEditor;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace GraphExtractor;
 
@@ -11,16 +13,21 @@ namespace GraphExtractor;
 /// Die AGNOSTIK-SONDE (<c>dotnet run --project GraphExtractor -- --sonde</c>): beweist, dass der Extractor eine ihm
 /// UNBEKANNTE Domäne allein aus ihrem Code vollständig erkennt — ohne Vorwissen, Namenskonventionen oder Heuristiken.
 ///
-/// Die Sonden-Domäne „Leihwesen" (eingebettete Ressourcen <c>Sonde/*.cs.txt</c>) nutzt absichtlich jede gültige
-/// Schreibweise, die eine Konvention brechen würde: fremder Wurzel-Namespace, Commands in eigenem Sub-Namespace,
-/// Property-Records, zwei Aggregate in einem Namespace, Decider in eigener Datei, Fristen in der Entscheidung, Funktionen als
-/// Klasse und als Schnittstelle (mit gerufener Funktion, Lese-Fähigkeit, Strom), frei benannte Stores, class-ReadModel, OneOf-Antwort,
-/// Stores aller drei Klassen (atomar, wiederholungsfest, mindestens einmal).
+/// Die Sonden-Domänen (eingebettete Ressourcen <c>Sonde/*.cs.txt</c>: „Leihwesen“ und fremde Wurzeln) nutzen absichtlich jede gültige
+/// Schreibweise, die eine Konvention brechen würde: fremde Wurzel-Namespaces, Commands in eigenem Sub-Namespace, Property-Records, zwei Aggregate
+/// in einem Namespace, Decider in eigener Datei, Fristen in der Entscheidung, frei benannte Stores, class-ReadModel, OneOf-Antwort, Stores aller
+/// drei Klassen — und ALLE allgemeinen Primitive des Funktionsmodells (Plan „Commands und Funktionsgraphen“): Funktionen als Klassen (Technik als
+/// Schnittstelle und als Klasse, Konfig-Record, Zustand, Lese-Fähigkeit, Strom, Antwort auf den eigenen Command), Graphen mit jedem Muster aus
+/// Entscheidung 5 (Folge, Fork, Wahl, Join, Je + Sammeln, Rennen, Warten mit Frist), Graph im Graphen, eine generische Funktion mit Typargument als
+/// Knoten, Quellfunktionen (eigene und aus dem Katalog) am Kopf, Commands ohne Ziel aus einem Decide an einen Graph-Kopf und an einen Akteur
+/// (Arbeit), Kenntnis (IHoert eines Events/Hinweises), Clients als Records, Hinweise nur als Ausgaben.
 ///
 /// Dazu Bausteine, die im Editor GEZEICHNET werden (<c>Sonde/Gezeichnet.gesten.json</c>: neuer Store mit einer im Panel benannten
-/// und einer abgeleiteten Fähigkeit, Projektion, Reader, Query/Response/ReadModel, Akteur, Client, gerufene Funktion): ein
-/// Gesten-Skript — je Geste ein Karten-Delta wie aus dem Browser, geschrieben vom Gesten-Motor (<see cref="Gesten"/>) in den Fork, danach neu
-/// gelesen (Werkbank P7.3). Das Soll beschreibt, was der Extractor daraus wieder lesen MUSS.
+/// und einer abgeleiteten Fähigkeit, Projektion, Reader, Query/Response/ReadModel, Akteur mit darf und hoert, Client als Record, eine neue
+/// Funktion mit Technik, ein Knoten mehr an einem Graphen, ein neuer Graph mit generischem Knoten): ein Gesten-Skript — je Geste ein Karten-Delta
+/// wie aus dem Browser, geschrieben vom Gesten-Motor (<see cref="Gesten"/>) in den Fork, danach neu gelesen (Werkbank P7.3). Das Soll beschreibt,
+/// was der Extractor daraus wieder lesen MUSS. Die Sonde hält die Regeln des Builds ein (Analyzer, Lesarten der Generatoren) — sonst bewiese sie
+/// an Code, den der Build ablehnt.
 ///
 /// Ablauf: Sonde im SPEICHER in ein Aggregat-Projekt der Solution legen (Fork, nichts auf Platte), die ECHTE Pipeline
 /// fahren (Projektlage → Extraktion → Board-Modell), das Inventar der Sonde mit dem VON HAND geschriebenen Soll
@@ -81,6 +88,14 @@ public static class Sonde
                               + (bericht.Schreiber.Uebersprungen.Count > 0 ? $", übersprungen: {string.Join("; ", bericht.Schreiber.Uebersprungen)}" : "") + ".");
         }
 
+        // Der Stand nach den Gesten, frisch auf die Solution gelegt (jede Sonden-Datei als neues Dokument): ein Generator, der Symbole zwischenspeichert,
+        //   verlöre über die geänderten Dokumente der Gesten-Schleife sonst seine Ausgaben (inkrementell) — der Build übersetzt ja auch frisch.
+        var endstand = new List<(string Pfad, string Text)>();
+        foreach (var d in fork.Projects.SelectMany(x => x.Documents).Where(d => d.FilePath != null && (d.Folders.Contains("__sonde") || gezeichnet.Contains(Path.GetFullPath(d.FilePath)))))
+            endstand.Add((d.FilePath!, (await d.GetTextAsync()).ToString()));
+        fork = solution;
+        foreach (var (pfad, text) in endstand)
+            fork = fork.AddDocument(DocumentId.CreateNewId(ziel.Id), Path.GetFileName(pfad), text, folders: new[] { "__sonde" }, filePath: pfad);
         var lage2 = await Projektlage.ErmittleAsync(fork, Console.WriteLine);
         var fehler = 0;
 
@@ -93,6 +108,21 @@ public static class Sonde
                 Console.WriteLine($"   ✗ Sonde kompiliert nicht: {Path.GetFileName(d.Location.SourceTree!.FilePath)} {d.Id}: {d.GetMessage()}");
                 fehler++;
             }
+
+        // Ein Generator, der an der Sonde scheitert (CS8785), nimmt dem ganzen Projekt seine Generate — das zählt wie ein Kompilierfehler.
+        foreach (var (p, c) in lage2.Analyse.Where(a => lage2.DomänenAssemblies.Contains(a.Compilation.AssemblyName ?? "")))
+        {
+            var generatoren = p.AnalyzerReferences.SelectMany(r => r.GetGenerators(LanguageNames.CSharp)).ToList();
+            if (generatoren.Count == 0) continue;
+            var roh = c.RemoveSyntaxTrees(c.SyntaxTrees.Where(lage2.Quelltexte.IstGeneriert));
+            var lauf = CSharpGeneratorDriver.Create(generatoren, parseOptions: (CSharpParseOptions?)p.ParseOptions).RunGenerators(roh).GetRunResult();
+            foreach (var r in lauf.Results.Where(r => r.Exception != null))
+            {
+                Console.WriteLine($"   ✗ Ein Generator scheitert an der Sonde: [{p.Name}] {r.Generator.GetGeneratorType().Name}: {r.Exception!.Message}");
+                fehler++;
+            }
+        }
+        fehler += await BuildRegelnAsync(lage2, gezeichnet);
 
         var analyse = ParitaetsPruefung.Analysiere(lage2.Compilations, lage2.DomänenAssemblies, lage2.Quelltexte);
         analyse.Dom.Wurzel = solutionDir;
@@ -144,6 +174,57 @@ public static class Sonde
     private static string Kurz(string full) => full[(full.LastIndexOf('.') + 1)..];
 
     /// <summary>
+    /// Die Sonde hält auch die Regeln des BUILDS ein (W5: Prüfen = Bauen) — sonst bewiese sie an Code, den der Build ablehnt: die Analyzer der Projekte
+    /// (im Domänen-Projekt, dazu das Gesamtbild in der Laufzeit) und die Lesarten der Generatoren der Komposition (Funktionsform: CQRS100, Graphform:
+    /// CQRS115 — dieselbe Lesart, die der Generator meldet). Ausgenommen ist die Lage (CQRS098): die Sonde liegt absichtlich falsch, das prüft unten die
+    /// Lage-Prüfung. Gezählt wird, was eine Sonden-Datei trifft oder (ohne Quell-Ort, im Gesamtbild) einen Sonden-Typ nennt.
+    /// </summary>
+    private static async Task<int> BuildRegelnAsync(Projektlage lage, ISet<string> gezeichnet)
+    {
+        bool InSondeDatei(SyntaxTree? t) => t?.FilePath is { } pfad && (pfad.Contains("__sonde") || gezeichnet.Contains(Path.GetFullPath(pfad)));
+        var fehler = 0;
+        var gelaufen = 0;
+        var typen = new List<INamedTypeSymbol>();
+        foreach (var c in lage.DomänenCompilations)
+            foreach (var t in c.SyntaxTrees.Where(InSondeDatei))
+            {
+                var model = c.GetSemanticModel(t);
+                typen.AddRange(t.GetRoot().DescendantNodes().OfType<BaseTypeDeclarationSyntax>().Select(d => model.GetDeclaredSymbol(d)).OfType<INamedTypeSymbol>());
+            }
+        var namen = typen.Select(t => t.Name).ToHashSet(StringComparer.Ordinal);
+
+        foreach (var (projekt, comp) in lage.Analyse.Where(a => lage.DomänenAssemblies.Contains(a.Compilation.AssemblyName ?? "") || a.Projekt.Id == lage.Laufzeit.Id))
+        {
+            // Die Analyzer des Frameworks (die *.SourceGeneration-Projekte), nicht die der Plattform (CA…, IDE…).
+            var analyzer = projekt.AnalyzerReferences.Where(r => (r.FullPath ?? r.Display ?? "").Contains(".SourceGeneration", StringComparison.Ordinal))
+                .SelectMany(r => r.GetAnalyzers(LanguageNames.CSharp)).ToImmutableArray();
+            if (analyzer.IsEmpty) continue;
+            gelaufen += analyzer.Length;
+            var befunde = await comp.WithAnalyzers(analyzer).GetAnalyzerDiagnosticsAsync();
+            foreach (var d in befunde.Where(d => d.Severity == DiagnosticSeverity.Error && d.Id != "CQRS098"))
+            {
+                var treffer = d.Location.SourceTree != null ? InSondeDatei(d.Location.SourceTree) : namen.Any(n => d.GetMessage().StartsWith($"'{n}'", StringComparison.Ordinal));
+                if (!treffer) continue;
+                Console.WriteLine($"   ✗ Sonde verletzt eine Build-Regel: [{projekt.Name}] {d.Id} {Path.GetFileName(d.Location.SourceTree?.FilePath)}: {d.GetMessage()}");
+                fehler++;
+            }
+        }
+        foreach (var t in typen.Where(t => t.ContainingType == null))
+        {
+            var form = Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t) ? Infrastructure.SourceGeneration.Funktionsform.Lies(t).Fehler.Select(f => ("CQRS100", f.Text))
+                : Infrastructure.SourceGeneration.Graphform.IstGraph(t) ? Infrastructure.SourceGeneration.Graphform.Lies(t).Fehler.Select(f => ("CQRS115", f.Text))
+                : [];
+            foreach (var (id, text) in form)
+            {
+                Console.WriteLine($"   ✗ Sonde verletzt eine Build-Regel: {id} '{t.Name}': {text}");
+                fehler++;
+            }
+        }
+        if (fehler == 0) Console.WriteLine($"   ✓ Build-Regeln: die Sonde hält {gelaufen} Analyzer und die Lesarten der Generatoren ein (ohne die Lage, CQRS098).");
+        return fehler;
+    }
+
+    /// <summary>
     /// Das Inventar der Sonde als kanonische Zeilen — aus dem Board und seiner Sicht (der Kartenliste des Servers: dem, was der Editor sieht),
     /// gefiltert auf den Sonden-Namespace. Ein Fakt je Zeile, deterministisch sortiert.
     /// </summary>
@@ -180,19 +261,20 @@ public static class Sonde
             foreach (var f in A(a, "fragen"))
                 z.Add($"frage {S(a, "name")}.{S(f, "query")} -> {string.Join("|", A(f, "antworten").Select(x => (string?)x))}");
         string Konstruktor(JsonNode? n) => "(" + string.Join(", ", A(n, "konstruktor").Select(p => $"{S(p, "name")}:{S(p, "typ")}")) + ")";
-        // Funktionen: Klasse oder Schnittstelle (mit Zustand und einer Adresse, docs/04 §4.4), je Eingang Herkunft/Hinweis, Ausgaben (Strom; keine =
-        //   „lernt“), Lese-Fähigkeiten; Konstruktor, Umsetzungen.
-        bool Gerufen(JsonNode f) => A(f, "methoden").Any() && !A(f, "eingaenge").Any();
+        // Funktionen (Entscheidung 4): eine Klasse mit typisierten Ports — Konstruktor (Technik, Konfig, Zustand), je Auf die Ports (ein Command bzw.
+        //   wie geschrieben: Join, T?, OneOf, IReadOnlyList), Herkunft, Lese-Fähigkeiten und die Ausgaben (Strom); eine Quelle lauscht (Lausche).
+        bool Gerufen(JsonNode f) => A(f, "methoden").Any() && !A(f, "eingaenge").Any() && !A(f, "lauscht").Any();
+        string Ports(JsonNode e) => A(e, "ports").Any() ? string.Join(", ", A(e, "ports").Select(p => $"{S(p, "typ")} {S(p, "name")}")) : S(e, "eingang");
+        string Ausgaben(JsonNode e, string feld = "ausgaben") => A(e, feld).Any() ? string.Join("; ", A(e, feld).Select(x => (string?)x)) : "nichts";
         foreach (var f in A(b, "bausteinFunktionen").Where(Sonde).Where(f => !Gerufen(f)))
-            z.Add($"funktion-auf {S(f, "namespace")}.{S(f, "name")} {(f["klasse"]?.GetValue<bool>() == true ? "klasse" + Konstruktor(f) : "schnittstelle")}"
+            z.Add($"funktion {S(f, "namespace")}.{S(f, "name")}{(f["klasse"]?.GetValue<bool>() == true ? Konstruktor(f) : " schnittstelle")}"
                 + (f["zustand"] is { } zu ? $" zustand={zu}" : "")
                 + " | "
-                + string.Join(" || ", A(f, "eingaenge").Select(e => S(e, "eingang")
-                    + (e["hinweis"]?.GetValue<bool>() == true ? " hinweis" : "") + (e["herkunft"]?.GetValue<bool>() == true ? " herkunft" : "")
-                    + " -> " + (e["strom"]?.GetValue<bool>() == true ? "strom " : "")
-                    + (A(e, "ausgaben").Any() ? string.Join("; ", A(e, "ausgaben").Select(x => (string?)x)) : "lernt")
-                    + (A(e, "faehigkeiten").Any() ? " liest " + string.Join(", ", A(e, "faehigkeiten").Select(p => $"{S(p, "typ")} {S(p, "name")}")) : "")))
-                + (A(f, "umsetzungen").Any() ? " umsetzung " + string.Join(", ", A(f, "umsetzungen").Select(u => S(u, "name") + Konstruktor(u))) : ""));
+                + string.Join(" || ", A(f, "eingaenge").Select(e => $"Auf({Ports(e)})"
+                    + (e["herkunft"]?.GetValue<bool>() == true ? " herkunft" : "")
+                    + (A(e, "faehigkeiten").Any() ? " liest " + string.Join(", ", A(e, "faehigkeiten").Select(p => $"{S(p, "typ")} {S(p, "name")}")) : "")
+                    + " -> " + (e["strom"]?.GetValue<bool>() == true ? "strom " : "") + Ausgaben(e))
+                    .Concat(A(f, "lauscht").Any() ? [$"Lausche -> strom {Ausgaben(f, "lauscht")}"] : Array.Empty<string>())));
         // Technik (docs/06 §6.5, ohne Marker: was der Konstruktor einer Funktion nimmt): Klasse oder Schnittstelle, Signatur (Methoden) und Umsetzungen.
         foreach (var f in A(b, "bausteinFunktionen").Where(Sonde).Where(Gerufen))
             z.Add($"technik {S(f, "namespace")}.{S(f, "name")} {(f["klasse"]?.GetValue<bool>() == true ? "klasse" + Konstruktor(f) : "schnittstelle")} | "
@@ -224,12 +306,23 @@ public static class Sonde
         foreach (var r in A(b, "reader").Where(Sonde))
             z.Add($"reader {S(r, "namespace")}.{S(r, "name")} hinter={string.Join(",", A(r, "projektionen").Select(x => (string?)x))} | "
                   + string.Join("; ", A(r, "handles").Select(h => $"{S(h, "query")} -> {Fns(h)} => {string.Join("|", A(h, "responses").Select(x => (string?)x))}")));
+        string Namen(JsonNode n, string k) => A(n, k).Any() ? string.Join(", ", A(n, k).Select(x => (string?)x)) : "-";
+        // Akteure (Entscheidung 13): was einer hineingibt (IDarf) und was zu ihm kommt (IHoert: Arbeit oder Kenntnis) — die Basisliste in Reihenfolge.
         foreach (var ak in A(b, "akteure").Where(Sonde))
-            z.Add($"akteur {S(ak, "namespace")}.{S(ak, "name")}{(ak["art"]?.GetValue<string>() is { Length: > 0 } art ? " " + art : "")} | darf {string.Join(", ", A(ak, "darf").Select(x => (string?)x))}");
-        // Clients (docs/konzept-akteure.md §4): je Client sein Rand — wen er verkörpert, was er hört (was er hineingibt, sagen die Akteur-Zeilen).
+            z.Add($"akteur {S(ak, "namespace")}.{S(ak, "name")} | darf {Namen(ak, "darf")} | hoert {Namen(ak, "hoert")}");
+        // Clients (docs/konzept-akteure.md §4): ein Record, der nur nennt, wen er verkörpert (was über seine Leitung geht, sagen die Akteur-Zeilen).
         foreach (var c in A(b, "clients").Where(Sonde))
-            z.Add($"client {S(c, "namespace")}.{S(c, "name")} | verkoerpert {string.Join(", ", A(c, "verkoerpert").Select(x => (string?)x))}; "
-                  + $"hoert {string.Join(", ", A(c, "kenntnis").Select(x => (string?)x))}");
+            z.Add($"client {S(c, "namespace")}.{S(c, "name")} | verkoerpert {Namen(c, "verkoerpert")}");
+        // Graphen (Entscheidung 6): die Knoten (Parameter des Records, Typ wie geschrieben); abgeleitet aus den Typen: Köpfe, Ausgänge, Quelle und die
+        //   Kanten (aufgefaltete Pfade bei einem Graphen im Graphen).
+        foreach (var g in A(b, "graphen").Where(Sonde))
+        {
+            z.Add($"graph {S(g, "namespace")}.{S(g, "name")} | knoten {string.Join(", ", A(g, "knoten").Select(k => $"{S(k, "name")}:{S(k, "typ")}"))}"
+                  + $" | koepfe {Namen(g, "koepfe")} | aus {Namen(g, "ausgaenge")}"
+                  + (g["quelle"] is { } q ? $" | quelle {q}" : ""));
+            foreach (var k in A(g, "kanten"))
+                z.Add($"kante {S(g, "name")} | {S(k, "von")} -{S(k, "typ")}-> {S(k, "nach")}");
+        }
         // Regel Z: Zustandsfelder der zustandslosen Übersetzer (Symbol-Fakt, im Build CQRS083 GR-ZUSTAND).
         foreach (var o in A(b, "projektionen").Where(Sonde).Where(o => A(o["code"], "zustand").Any()))
             z.Add($"zustand projektion {S(o, "namespace")}.{S(o, "name")} | {string.Join(", ", A(o["code"], "zustand").Select(x => (string?)x))}");

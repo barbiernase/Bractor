@@ -45,14 +45,22 @@ public sealed partial class Sicht
         var name = n.Name;
         switch (n.Art)
         {
-            case "aggregate": case "bausteinfunktion": case "store": return Anwendung;
+            case "aggregate": case "bausteinfunktion": case "store": case "graph": return Anwendung;
             case "akteur": case "client": return Rand;
             case "state": case "decider": case "applier": return AggId(S(r, "aggregat")) ?? Begriffe;
             case "handle": return n.Besitzer?.Id ?? Begriffe;
             case "fn": return n.Besitzer?.Id ?? Begriffe;
             case "projektion": case "reader": return Einer(n, StoreScope(r).Select(StoreId));
             case "command":
-                return AggId(S(r, "aggregat")) ?? AggId(RecordAgg(name)) ?? (VonAussen(name) ? Rand : Begriffe);
+            {
+                if ((AggId(S(r, "aggregat")) ?? AggId(RecordAgg(name))) is { } agg) return agg;
+                // Ein Command, den nur Knoten einander geben: er gehört der Funktion, die ihn ausgibt (bzw. als Quelle meldet).
+                static string Basis(string t) => t.IndexOf('<') is > 0 and var i ? t[..i] : t;   // Geglaettet<TFenster> → Geglaettet
+                var erzeuger = _bausteinFunktionen.Where(f => Alle(f["eingaenge"]).Any(e => L(e, "ausgaben").Any(a => Basis(a) == name)) || L(f, "lauscht").Contains(name))
+                    .Select(f => (string?)("fb:" + S(f, "_id"))).ToList();
+                if (erzeuger.Count > 0) return Einer(n, erzeuger);
+                return VonAussen(name) ? Rand : Begriffe;
+            }
             case "event": case "rejection":
             {
                 if (GrNachrichtSorte(name) == "quelle") return Rand;

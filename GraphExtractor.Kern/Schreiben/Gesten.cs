@@ -37,7 +37,7 @@ public static class KartenSchluessel
     /// <summary>Die Sammlungen, die aus dem Code kommen und von Gesten geändert werden.</summary>
     public static readonly string[] Sammlungen =
     [
-        "records", "enums", "aggregate", "decider", "applier", "bausteinFunktionen", "akteure", "clients",
+        "records", "enums", "aggregate", "decider", "applier", "bausteinFunktionen", "akteure", "clients", "graphen",
         "readModels", "stores", "projektionen", "reader",
     ];
 
@@ -81,8 +81,11 @@ public static class Gesten
                 var schluessel = KartenSchluessel.Von(sammlung, karte);
                 var alt = liste.OfType<JsonObject>().FirstOrDefault(k => KartenSchluessel.Von(sammlung, k) == schluessel);
                 var kopie = (JsonObject)karte.DeepClone();
-                if (alt == null) liste.Add(kopie);
-                else liste[liste.IndexOf(alt)] = kopie;
+                if (alt == null) { liste.Add(kopie); continue; }
+                // Wo eine Karte im Code steht (Datei, Orte), weiß der Code-Stand, nicht die Geste: fehlt es in der Karte, bleibt es.
+                foreach (var (feld, wert) in alt.Where(x => (x.Key == "datei" || x.Key.StartsWith('_')) && !kopie.ContainsKey(x.Key)).ToList())
+                    kopie[feld] = wert?.DeepClone();
+                liste[liste.IndexOf(alt)] = kopie;
             }
         }
         return neu;
@@ -120,6 +123,7 @@ public static class Gesten
         var fkt = Nach(code.BausteinFunktionen, f => f.Namespace + "|" + f.Name);
         var akt = Nach(code.Akteure, a => a.Namespace + "|" + a.Name);
         var cli = Nach(code.Clients, c => c.Namespace + "|" + c.Name);
+        var gra = Nach(code.Graphen, g => g.Namespace + "|" + g.Name);
         var lesen = code.Lesen ?? new Leseseite();
         var sto = Nach(lesen.Stores, s => s.Name);
         var kon = Nach(lesen.Konsumenten, k => k.Name);
@@ -140,6 +144,7 @@ public static class Gesten
             BausteinFunktionen = soll.BausteinFunktionen.Select(f => f with { Herkunft = fkt.GetValueOrDefault(f.Namespace + "|" + f.Name)?.Herkunft }).ToList(),
             Akteure = soll.Akteure.Select(a => a with { Herkunft = akt.GetValueOrDefault(a.Namespace + "|" + a.Name)?.Herkunft }).ToList(),
             Clients = soll.Clients.Select(c => c with { Herkunft = cli.GetValueOrDefault(c.Namespace + "|" + c.Name)?.Herkunft }).ToList(),
+            Graphen = soll.Graphen.Select(g => g with { Herkunft = gra.GetValueOrDefault(g.Namespace + "|" + g.Name)?.Herkunft }).ToList(),
             Lesen = l == null ? null : l with
             {
                 Stores = l.Stores.Select(s =>

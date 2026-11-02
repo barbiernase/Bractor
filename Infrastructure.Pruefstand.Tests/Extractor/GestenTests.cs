@@ -150,14 +150,14 @@ public sealed class GestenTests : IDisposable
     [Fact]
     public async Task Record_loeschen_entfernt_die_Deklaration_samt_Kommentar()
     {
-        Text("Fluss.cs").Should().Contain("public sealed record AusweisAbgelegt(string Pfad) : ICommand;");
+        Text("Gebuehren.cs").Should().Contain("public record SchaetzeSchaden(Id<Schadensfall> Fall, Guid LeserId) : ICommand;");
 
-        var bericht = await GesteAsync(new KartenDelta { Entfernt = new() { ["records"] = ["Leihwesen.Pruefung|AusweisAbgelegt"] } });
+        var bericht = await GesteAsync(new KartenDelta { Entfernt = new() { ["records"] = ["Leihwesen.Gebuehren|SchaetzeSchaden"] } });
 
         bericht.Geloescht.Should().ContainSingle();
-        Text("Fluss.cs").Should().NotContain("AusweisAbgelegt").And.NotContain("Ein Command ohne Ziel von draußen",
+        Text("Gebuehren.cs").Should().NotContain("public record SchaetzeSchaden").And.NotContain("der Schaden ist zu schätzen (der Kopf der Schadensbewertung)",
             "der Kommentar über der Deklaration geht mit");
-        Text("Fluss.cs").Should().Contain("public sealed record RueckgabeGescannt(Guid LeserId, string Code, IReadOnlyList<string> Seiten) : ICommand;");
+        Text("Gebuehren.cs").Should().Contain("public record SchadenErfasst(Guid LeserId, decimal Neuwert, int AlterJahre) : ICommand;");
     }
 
     [Fact]
@@ -213,7 +213,7 @@ public sealed class GestenTests : IDisposable
         Text("Lesen.cs").Should().NotContain("Task Auf(Zurueckgegeben e").And.Contain("Task Auf(Ausgeliehen e");
     }
 
-    [Fact(Skip = "Sonde (GraphExtractor.Kern/Sonde/Lesen.cs.txt) noch mit IKi — wird mit Schritt 7 neu geschrieben")]
+    [Fact]
     public async Task Akteur_darf_einen_weiteren_Command()
     {
         var karte = Karte(await BoardAsync(), "akteure", a => (string?)a["name"] == "Gutachterin");
@@ -221,18 +221,31 @@ public sealed class GestenTests : IDisposable
 
         await GesteAsync(Geaendert("akteure", karte));
 
-        Text("Lesen.cs").Should().Contain("public sealed record Gutachterin : IAkteur, IDarf<EroeffneMahnung>, IDarf<MeldeSchaden>;");
+        Text("Lesen.cs").Should().Contain("public sealed record Gutachterin : IAkteur, IDarf<EroeffneMahnung>, IDarf<MeldeSchaden>, IHoert<MahnungEroeffnet>;",
+            "erst was er hineingibt, dann was er hört");
     }
 
-    [Fact(Skip = "Sonde (GraphExtractor.Kern/Sonde/Lesen.cs.txt) noch mit IClientVertrag als Interface — wird mit Schritt 7 neu geschrieben")]
+    [Fact]
+    public async Task Akteur_hoert_einen_weiteren_Hinweis_die_Zeilen_der_Basisliste_bleiben()
+    {
+        var karte = Karte(await BoardAsync(), "akteure", a => (string?)a["name"] == "Theke");
+        karte["hoert"]!.AsArray().Add("BereitsAusgeliehen");
+
+        await GesteAsync(Geaendert("akteure", karte));
+
+        Text("Lesen.cs").Should().Contain("public sealed record Theke : IAkteur, IDarf<LeiheAus>, IDarf<GibZurueck>, IDarf<OffeneAusleihen>, IDarf<RueckgabeGescannt>,\n"
+            + "    IHoert<NichtAusgeliehen>, IHoert<NichtSchaetzbar>, IHoert<LaufGescheitert>, IHoert<BereitsAusgeliehen>;", "der Umbruch der Basisliste bleibt");
+    }
+
+    [Fact]
     public async Task Client_verkoerpert_einen_weiteren_Akteur()
     {
-        var karte = Karte(await BoardAsync(), "clients", c => (string?)c["name"] == "ILesesaal");
+        var karte = Karte(await BoardAsync(), "clients", c => (string?)c["name"] == "Lesesaal");
         karte["verkoerpert"]!.AsArray().Add("Gutachterin");
 
         await GesteAsync(Geaendert("clients", karte));
 
-        Text("Lesen.cs").Should().Contain("IVerkoerpert<Theke>, IVerkoerpert<Archiv>, IVerkoerpert<Gutachterin>").And.NotContain("IHoert<MahnungEroeffnet>",
+        Text("Lesen.cs").Should().Contain("public sealed record Lesesaal : IClient, IVerkoerpert<Theke>, IVerkoerpert<Archiv>, IVerkoerpert<Gutachterin>;",
             "ein Client nennt nur, wen er verkörpert — gehört wird am Akteur");
     }
 
@@ -255,14 +268,32 @@ public sealed class GestenTests : IDisposable
         var neu = new JsonObject
         {
             ["name"] = "Mahnlauf", ["namespace"] = "Leihwesen.Gebuehren", ["klasse"] = true,
-            ["eingaenge"] = new JsonArray(new JsonObject { ["eingang"] = "MahnungEroeffnet", ["herkunft"] = true, ["ausgaben"] = Liste("MeldeSchaden") }),
+            ["eingaenge"] = new JsonArray(new JsonObject { ["eingang"] = "SchaetzeSchaden", ["herkunft"] = true, ["ausgaben"] = Liste("MeldeSchaden") }),
             ["konstruktor"] = new JsonArray(new JsonObject { ["typ"] = "WertTabellenKonfig", ["name"] = "konfig" }),
         };
 
         await GesteAsync(Geaendert("bausteinFunktionen", neu));
 
         Text("Mahnlauf.cs").Should().Contain("public sealed class Mahnlauf(WertTabellenKonfig konfig) : IFunktion")
-            .And.Contain("public MeldeSchaden? Auf(MahnungEroeffnet e, Herkunft h)").And.Contain("NotImplementedException");
+            .And.Contain("public MeldeSchaden Auf(SchaetzeSchaden e, Herkunft h)", "kein T? als Ausgabe (Entscheidung 4)").And.Contain("NotImplementedException");
+    }
+
+    [Fact]
+    public async Task Neue_Funktion_mit_Join_schreibt_ihre_Ports_wie_im_Modell()
+    {
+        var neu = new JsonObject
+        {
+            ["name"] = "Gutachtenvergleich", ["namespace"] = "Leihwesen.Gebuehren", ["klasse"] = true,
+            ["eingaenge"] = new JsonArray(new JsonObject
+            {
+                ["eingang"] = "SchadenGeschaetzt", ["ausgaben"] = Liste("EroeffneMahnung", "NichtSchaetzbar"),
+                ["ports"] = new JsonArray(Param("SchadenGeschaetzt", "schaetzung"), Param("GutachtenErhalten?", "gutachten")),
+            }),
+        };
+
+        await GesteAsync(Geaendert("bausteinFunktionen", neu));
+
+        Text("Gutachtenvergleich.cs").Should().Contain("public OneOf<EroeffneMahnung, NichtSchaetzbar> Auf(SchadenGeschaetzt schaetzung, GutachtenErhalten? gutachten)");
     }
 
     [Fact]
@@ -277,6 +308,78 @@ public sealed class GestenTests : IDisposable
         patch.Select(p => p.Datei).Should().Contain(["Leihwesen/Gebuehren.cs", "Leihwesen/Fluss.cs", "Leihwesen/Lesen.cs"]);
         patch.Should().OnlyContain(p => !p.Nachher!.Contains("EroeffneMahnung"));
         patch.Single(p => p.Datei == "Leihwesen/Fluss.cs").Nachher.Should().Contain("new OeffneMahnung(h.NeueId<Mahnvorgang>(), anzahl * 2m)");
+    }
+
+    // ══ Graphen (docs/04 §4.4): ein Knoten ist ein Parameter des Records — die Kanten folgen aus den Typen, geschrieben wird nur die Parameterliste ══
+
+    private static JsonObject Knoten(string typ, string name) => new() { ["typ"] = typ, ["name"] = name };
+
+    [Fact]
+    public async Task Knoten_hinzufuegen_ist_ein_Parameter_mehr_am_Graph_Record()
+    {
+        var vorher = Text("Fluss.cs");
+        var karte = Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Mahnbemessung");
+        karte["knoten"]!.AsArray().Add(Knoten("SchadenBeiRueckgabe", "Rueckgabe"));
+
+        var bericht = await GesteAsync(Geaendert("graphen", karte));
+
+        bericht.Patch.Select(p => p.Datei).Should().Equal("Leihwesen/Fluss.cs");
+        Text("Fluss.cs").Should().Contain("public sealed record Mahnbemessung(Offenzaehlung Zaehlung, SchadenBeiRueckgabe Rueckgabe) : IGraph;");
+        Text("Fluss.cs").Replace(", SchadenBeiRueckgabe Rueckgabe", "").Should().Be(vorher, "alles andere bleibt Wort für Wort");
+        // Neu gelesen: der Knoten ist da, seine Köpfe folgen aus den Typen.
+        var neu = Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Mahnbemessung");
+        neu["knoten"]!.AsArray().Select(k => (string?)k!["name"]).Should().Equal("Zaehlung", "Rueckgabe");
+        neu["koepfe"]!.AsArray().Select(x => (string?)x).Should().BeEquivalentTo(["BemesseMahnung", "PruefeRueckgabe"]);
+    }
+
+    [Fact]
+    public async Task Knoten_entfernen_nimmt_nur_seinen_Parameter()
+    {
+        var karte = Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Schadensbewertung");
+        var knoten = karte["knoten"]!.AsArray();
+        knoten.Remove(knoten.OfType<JsonObject>().Single(k => (string?)k["name"] == "Gutachten"));
+
+        await GesteAsync(Geaendert("graphen", karte));
+
+        Text("Gebuehren.cs").Should().Contain("public sealed record Schadensbewertung(Schadensaufnahme Aufnahme, Schadensschaetzer Schaetzung, MahnungNachSchaetzung Mahnung) : IGraph;")
+            .And.Contain("public sealed class Gutachtenanfrage(GutachtenKonfig konfig) : IFunktion", "die Funktion bleibt — nur der Knoten geht");
+    }
+
+    [Fact]
+    public async Task Neuer_Graph_kommt_in_die_Graph_Datei_seines_Namespace_und_liest_sich_zurueck()
+    {
+        var neu = new JsonObject
+        {
+            ["name"] = "Rueckgabelauf", ["namespace"] = "Leihwesen.Gebuehren",
+            ["knoten"] = new JsonArray(Knoten("Rueckgabepruefung", "Pruefung")),
+        };
+
+        var bericht = await GesteAsync(Geaendert("graphen", neu));
+
+        bericht.Patch.Select(p => p.Datei).Should().Equal("Leihwesen/Gebuehren.cs", "dort stehen die Graphen des Namespace");
+        Text("Gebuehren.cs").Should().Contain("public sealed record Rueckgabelauf(Rueckgabepruefung Pruefung) : IGraph;");
+        var karte = Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Rueckgabelauf");
+        karte["knoten"]!.AsArray().Select(k => $"{(string?)k!["name"]}:{(string?)k["typ"]}").Should().Equal("Pruefung:Rueckgabepruefung");
+        karte["koepfe"]!.AsArray().Select(x => (string?)x).Should().Equal(["PruefeRueckgabe"], "ein Graph im Graphen: die Signatur der Schachtel");
+        ((string?)karte["datei"]).Should().Be("Leihwesen/Gebuehren.cs");
+    }
+
+    [Fact]
+    public async Task Neuer_Graph_ohne_Graph_Datei_im_Namespace_wird_Graphen_cs_mit_den_usings_seiner_Knoten()
+    {
+        var neu = new JsonObject
+        {
+            ["name"] = "Ausleihlauf", ["namespace"] = "Leihwesen.Ausleihe",
+            ["knoten"] = new JsonArray(Knoten("Offenzaehlung", "Zaehlung"), Knoten("Glaettung<Kurzfenster>", "Glaettung")),
+        };
+
+        var bericht = await GesteAsync(Geaendert("graphen", neu));
+
+        bericht.Patch.Select(p => p.Datei).Should().Equal("Leihwesen/Graphen.cs");
+        Text("Graphen.cs").Should().Contain("using Leihwesen.Pruefung;").And.Contain("using Wetterdienst.Vorhersage;")
+            .And.Contain("namespace Leihwesen.Ausleihe;")
+            .And.Contain("public sealed record Ausleihlauf(Offenzaehlung Zaehlung, Glaettung<Kurzfenster> Glaettung) : IGraph;",
+                "der Typ einer generischen Funktion steht mit Typargument");
     }
 
     // ── Rumpf-Edit (Werkbank P7.4): ✎ am Rumpf-Port ersetzt genau den Bereich, den die Karte aus dem Code kennt ──
@@ -360,7 +463,7 @@ public sealed class GestenTests : IDisposable
             .And.Contain("throw new NotImplementedException(\"TODO: Leuchte.Hell\");");
     }
 
-    [Fact(Skip = "Sonde Leihwesen noch mit der Funktions-Schnittstelle ISchadensSchaetzung (seit Schritt 6 ein Formfehler) — wird mit Schritt 7 neu geschrieben")]
+    [Fact]
     public async Task Methode_an_der_Technik_kommt_an_die_Schnittstelle_und_als_Stub_an_jede_Umsetzung()
     {
         var f = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "IWertTabelle");
@@ -372,7 +475,7 @@ public sealed class GestenTests : IDisposable
             .And.Contain("    public decimal Runde(decimal betrag)\n    {\n        throw new NotImplementedException(\"TODO: LineareWertTabelle.Runde\");");
     }
 
-    [Fact(Skip = "Sonde Leihwesen noch mit der Funktions-Schnittstelle ISchadensSchaetzung (seit Schritt 6 ein Formfehler) — wird mit Schritt 7 neu geschrieben")]
+    [Fact]
     public async Task Zweite_Umsetzung_einer_Technik_ist_eine_neue_Klasse_mit_Stubs()
     {
         var f = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "IWertTabelle");
@@ -388,21 +491,33 @@ public sealed class GestenTests : IDisposable
     [Fact]
     public async Task Einen_Konfig_Record_in_den_Konstruktor_einer_Umsetzung_nehmen()
     {
-        var f = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "ISchadensSchaetzung");
-        f["umsetzungen"]![0]!["konstruktor"]!.AsArray().Add(Param("WertTabellenKonfig", "konfig"));
+        var f = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "IWertTabelle");
+        f["umsetzungen"]![0]!["konstruktor"]!.AsArray().Add(Param("GutachtenKonfig", "gutachten"));
 
         await GesteAsync(Geaendert("bausteinFunktionen", f));
 
-        Text("Gebuehren.cs").Should().Contain("public sealed class Schadensschaetzer(IWertTabelle tabelle, WertTabellenKonfig konfig) : ISchadensSchaetzung");
+        Text("Gebuehren.cs").Should().Contain("public sealed class LineareWertTabelle(WertTabellenKonfig konfig, GutachtenKonfig gutachten) : IWertTabelle");
     }
 
-    [Fact(Skip = "Sonde Leihwesen noch mit der Funktions-Schnittstelle ISchadensSchaetzung (seit Schritt 6 ein Formfehler) — wird mit Schritt 7 neu geschrieben")]
+    [Fact]
+    public async Task Technik_in_den_Konstruktor_einer_Funktion_nehmen()
+    {
+        var f = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "Gutachtenanfrage");
+        f["konstruktor"]!.AsArray().Add(Param("IWertTabelle", "tabelle"));
+
+        await GesteAsync(Geaendert("bausteinFunktionen", f));
+
+        Text("Gebuehren.cs").Should().Contain("public sealed class Gutachtenanfrage(GutachtenKonfig konfig, IWertTabelle tabelle) : IFunktion")
+            .And.Contain("await Task.Delay(konfig.Bedenkzeit);", "der Rumpf gehört dem Code");
+    }
+
+    [Fact]
     public async Task Umbenennen_eines_Typs_in_seiner_eigenen_Datei_zieht_die_Datei_mit()
     {
         await GesteAsync(new KartenDelta { Karten = new() { ["bausteinFunktionen"] = [Leuchte()] } });
-        // Technik ist, was der Konstruktor einer Funktion nimmt: erst im Konstruktor einer Umsetzung wird ILeuchte eine Karte.
-        var schaetzung = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "ISchadensSchaetzung");
-        schaetzung["umsetzungen"]![0]!["konstruktor"]!.AsArray().Add(Param("ILeuchte", "leuchte"));
+        // Technik ist, was der Konstruktor einer Funktion nimmt: erst im Konstruktor einer Funktion wird ILeuchte eine Karte.
+        var schaetzung = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "Schadensschaetzer");
+        schaetzung["konstruktor"]!.AsArray().Add(Param("ILeuchte", "leuchte"));
         await GesteAsync(Geaendert("bausteinFunktionen", schaetzung));
         var karte = Karte(await BoardAsync(), "bausteinFunktionen", d => (string?)d["name"] == "ILeuchte");
         var methode = karte["methoden"]![0]!["_ort"]!;

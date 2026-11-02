@@ -378,21 +378,34 @@ public static class Scaffolder
     private static readonly string OneOfName = typeof(Abstractions.OneOf<>).Name.Split('`')[0];
 
     /// <summary>
-    /// Die Rückgabe eines Auf aus seinen Ausgaben: keine → <c>void</c> (nur mit Zustand erlaubt); eine → <c>X?</c>; mehrere → <c>OneOf&lt;…&gt;?</c>
-    /// (<c>?</c> = der Eingang darf auch nichts ergeben); als Strom <c>IAsyncEnumerable&lt;…&gt;</c>.
+    /// Die Rückgabe eines Auf aus seinen Ausgaben (Entscheidung 4: kein <c>T?</c>, ein leerer Strom ist „nichts“): eine → <c>X</c>; mehrere → eine
+    /// Wahl <c>OneOf&lt;…&gt;</c>; als Strom <c>IAsyncEnumerable&lt;…&gt;</c>; keine → <c>void</c> (baut nicht — W1: Unfertiges ist Code, der nicht baut).
     /// </summary>
-    public static string FunktionsRueckgabe(BausteinEingang e)
+    public static string FunktionsRueckgabe(BausteinEingang e) => Rueckgabe(e.Ausgaben, e.Strom);
+
+    private static string Rueckgabe(IReadOnlyList<string> ausgaben, bool strom)
     {
-        var innen = e.Ausgaben.Count switch { 0 => null, 1 => e.Ausgaben[0], _ => $"{OneOfName}<{string.Join(", ", e.Ausgaben)}>" };
+        var innen = ausgaben.Count switch { 0 => null, 1 => ausgaben[0], _ => $"{OneOfName}<{string.Join(", ", ausgaben)}>" };
         if (innen == null) return "void";
-        return e.Strom ? $"IAsyncEnumerable<{innen}>" : innen + "?";
+        return strom ? $"IAsyncEnumerable<{innen}>" : innen;
     }
 
-    /// <summary>Die Parameter eines Auf: der Eingang, ohne Hinweis die Herkunft (Position im Log → Ids über <c>h.NeueId</c>), dann die Lese-Fähigkeiten.</summary>
+    /// <summary>
+    /// Die Parameter eines Auf: die Ports (bei einem Join bzw. einer Port-Form wie geschrieben, sonst der eine Eingang), die Herkunft (Ids über
+    /// <c>h.NeueId</c>), dann die Lese-Fähigkeiten.
+    /// </summary>
     public static IReadOnlyList<Parameter> FunktionsParameter(BausteinEingang e) =>
-        [new Parameter { Typ = e.Eingang, Name = e.Hinweis ? "hinweis" : "e" },
-         .. (e.Herkunft && !e.Hinweis ? [new Parameter { Typ = nameof(Abstractions.Herkunft), Name = "h" }] : Array.Empty<Parameter>()),
+        [.. (e.Ports.Count > 0 ? e.Ports : [new Parameter { Typ = e.Eingang, Name = "e" }]),
+         .. (e.Herkunft ? [new Parameter { Typ = nameof(Abstractions.Herkunft), Name = "h" }] : Array.Empty<Parameter>()),
          .. e.Faehigkeiten];
+
+    /// <summary>Eine Quellfunktion lauscht so (Entscheidung 8): ein asynchroner Strom dessen, was sie meldet, mit dem Abbruch als einzigem Parameter.</summary>
+    public static string LauscheKopf(BausteinFunktion f) =>
+        $"async {Rueckgabe(f.Lauscht, strom: true)} {Abstractions.Funktionsvertrag.Lausche}([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)";
+
+    private static string LauscheStub(BausteinFunktion f, string einzug) =>
+        $"{einzug}public {LauscheKopf(f)}\n{einzug}{{\n{einzug}    await Task.CompletedTask;\n{einzug}    throw new NotImplementedException(\"TODO: {f.Name}.Lausche\");\n"
+        + $"{einzug}    yield break;\n{einzug}}}\n";
 
     public static string FunktionsKopf(BausteinEingang e) =>
         $"{FunktionsRueckgabe(e)} {Abstractions.Funktionsvertrag.Auf}({ParameterListe(FunktionsParameter(e))})";
@@ -403,7 +416,7 @@ public static class Scaffolder
 
     /// <summary>Die Typen, die eine Funktion nennt (Eingänge, Ausgaben, Lese-Fähigkeiten, gerufene Methoden) — für ihre usings.</summary>
     private static IEnumerable<string> FunktionsTypen(BausteinFunktion f) =>
-        f.Eingaenge.SelectMany(e => FunktionsParameter(e).Select(p => p.Typ).Concat(e.Ausgaben))
+        f.Eingaenge.SelectMany(e => FunktionsParameter(e).Select(p => p.Typ).Concat(e.Ausgaben)).Concat(f.Lauscht)
             .Concat(f.Methoden.SelectMany(m => m.Parameter.Select(p => p.Typ).Append(m.Rueckgabe)));
 
     private static string FunktionsDatei(BausteinFunktion f, EditorModell modell)
@@ -411,7 +424,7 @@ public static class Scaffolder
         var b = Kopf(f.Namespace, Usings(f.Namespace, modell, [modell.Rahmen.VertragsNamespace], FunktionsTypen(f).Concat(f.Konstruktor.Select(p => p.Typ)), []));
         Doku(b, f.Doku, "");
         // Technik (Methoden, kein Eingang) trägt keinen Marker — sie ist, was der Konstruktor einer Funktion nimmt (docs/10 §10.3).
-        var basis = f.Methoden.Count > 0 && f.Eingaenge.Count == 0 ? "" : $" : {IFunktion}";
+        var basis = f.Methoden.Count > 0 && f.Eingaenge.Count == 0 && f.Lauscht.Count == 0 ? "" : $" : {IFunktion}";
         if (f.Klasse)
         {
             var ctor = f.Konstruktor.Count > 0 ? $"({ParameterListe(f.Konstruktor)})" : "";
@@ -438,7 +451,8 @@ public static class Scaffolder
     /// <summary>Die throw-Stubs einer Klasse: je Eingang ein Auf, je gerufene Methode die Methode.</summary>
     private static string Stubs(BausteinFunktion f, string klasse)
     {
-        var teile = f.Eingaenge.Select(e => FunktionsStub(klasse, e, "    ")).Concat(f.Methoden.Select(m => MethodenStub(klasse, m, "    ")));
+        var teile = f.Eingaenge.Select(e => FunktionsStub(klasse, e, "    ")).Concat(f.Methoden.Select(m => MethodenStub(klasse, m, "    ")))
+            .Concat(f.Lauscht.Count > 0 ? [LauscheStub(f, "    ")] : Array.Empty<string>());
         return string.Join("\n", teile);
     }
 

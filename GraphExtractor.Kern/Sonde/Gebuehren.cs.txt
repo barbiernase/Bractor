@@ -2,12 +2,14 @@ using Abstractions;
 using Leihwesen.Ausleihe;
 
 // SONDE — ZWEI Aggregate im SELBEN Namespace, Decider in eigener Datei (Mahnvorgang.Decider.cs.txt), dazu der Ablauf zwischen ihnen aus
-//         FUNKTIONEN (docs/10 §10.3; früher eine Saga mit expliziter Interface-Implementierung):
-//         · eine GLEICHBLEIBENDE Funktion im Host (Klasse, keine Technik, keine Lese-Fähigkeit), die aus der Herkunft eine neue Id ableitet (R13)
-//           und auf einem Teil der Fälle nichts ausgibt (ein leerer Strom) — Kopf eines Graphen, sein Eingang ein Command ohne Ziel aus dem Decide;
-//         · eine Funktion als SCHNITTSTELLE mit einer Umsetzung im Host, die TECHNIK (ohne Marker) im Konstruktor nimmt — ihre Ausgabe ist ein Command
-//           ohne Ziel (an den nächsten Knoten) oder ein Hinweis (flüchtig); der Laufort steht in der Instanz;
-//         · eine zweite gleichbleibende Funktion, die den Command der ersten nimmt (eine Kante aus den Typen) und den Command an das andere Aggregat gibt.
+//         GRAPHEN (Entscheidungen 4–6; früher eine Saga mit expliziter Interface-Implementierung):
+//         · FOLGE mit leerem Strom: die Rückgabeprüfung ist ein Graph mit EINEM Knoten; sein Kopf nimmt einen Command ohne Ziel aus dem Decide
+//           (PruefeRueckgabe) und gibt auf einem Teil der Fälle nichts aus (ein leerer Strom); die neue Id kommt aus der Herkunft (R13);
+//         · WAHL: die Schadensaufnahme gibt genau einen von drei Fällen aus — einen Command an den nächsten Knoten, Arbeit für einen Akteur draußen
+//           (ein Command ohne Ziel, den ein Akteur hört) oder einen Hinweis (flüchtig, an die Akteure, die ihn hören);
+//         · FORK: der erfasste Schaden geht an zwei Knoten (Schätzung mit TECHNIK im Konstruktor, Gutachten mit KONFIG-Record);
+//         · JOIN mit WARTEN MIT FRIST: die Mahnung nimmt die Schätzung (genau eine) und das Gutachten als T? — höchstens eins: sie feuert, wenn es kam
+//           oder das Zeitlimit ihres Knotens (Konfig der Instanz) abläuft; dann ist es null.
 
 namespace Leihwesen.Gebuehren;
 
@@ -28,19 +30,28 @@ public sealed class SchadenBeiRueckgabe : IFunktion
     }
 }
 
-// Ein Command ohne Ziel aus dem Decide des Schadensfalls: der Schaden ist zu schätzen.
-public record SchaetzeSchaden(Guid LeserId) : ICommand;
+// Ein Command ohne Ziel aus dem Decide des Schadensfalls: der Schaden ist zu schätzen (der Kopf der Schadensbewertung).
+public record SchaetzeSchaden(Id<Schadensfall> Fall, Guid LeserId) : ICommand;
 
-// Die Schätzung: ihr Ergebnis ist ein Command an den nächsten Knoten (kein Event — eine Funktion schreibt nie ins Log) oder ein Hinweis.
+// Was nur Knoten einander geben (Commands ohne Ziel, nie im Log) — und was draußen ankommt: Arbeit für einen Akteur, ein Hinweis.
+public record SchadenErfasst(Guid LeserId, decimal Neuwert, int AlterJahre) : ICommand;
 public record SchadenGeschaetzt(Guid LeserId, decimal Betrag) : ICommand;
+public record GutachtenErhalten(Guid LeserId, decimal Zuschlag) : ICommand;
+public record BegutachteVorOrt(Id<Schadensfall> Fall, Guid LeserId) : ICommand;
 public record NichtSchaetzbar(string Grund) : ITransientEvent;
 
-public interface ISchadensSchaetzung : IFunktion
+// WAHL: genau einer der drei Fälle je Lauf.
+public sealed class Schadensaufnahme : IFunktion
 {
-    Task<OneOf<SchadenGeschaetzt, NichtSchaetzbar>> Auf(SchaetzeSchaden s, Herkunft h);
+    public OneOf<SchadenErfasst, BegutachteVorOrt, NichtSchaetzbar> Auf(SchaetzeSchaden s)
+    {
+        if (s.LeserId == Guid.Empty) return new NichtSchaetzbar("unbekannter Leser");
+        if (s.Fall.Wert.ToByteArray()[0] % 2 == 0) return new BegutachteVorOrt(s.Fall, s.LeserId);
+        return new SchadenErfasst(s.LeserId, 25m, 2);
+    }
 }
 
-// Technik hinter der Funktion — eine Schnittstelle ohne Marker (der Schätzer nimmt sie im Konstruktor), eine Umsetzung mit Konfig-Record
+// Technik hinter der Schätzung — eine Schnittstelle ohne Marker (der Schätzer nimmt sie im Konstruktor), eine Umsetzung mit Konfig-Record
 // (Werte am Knoten der Instanz).
 public interface IWertTabelle
 {
@@ -61,24 +72,38 @@ public sealed class LineareWertTabelle(WertTabellenKonfig konfig) : IWertTabelle
     }
 }
 
-public sealed class Schadensschaetzer(IWertTabelle tabelle) : ISchadensSchaetzung
+// FORK, Zweig 1: die Schätzung mit Technik.
+public sealed class Schadensschaetzer(IWertTabelle tabelle) : IFunktion
 {
-    public async Task<OneOf<SchadenGeschaetzt, NichtSchaetzbar>> Auf(SchaetzeSchaden s, Herkunft h)
+    public async Task<SchadenGeschaetzt> Auf(SchadenErfasst e)
     {
-        if (!await tabelle.IstSchaetzbarAsync(s.LeserId)) return new NichtSchaetzbar("unbekannter Leser");
-        return new SchadenGeschaetzt(s.LeserId, tabelle.Restwert(25m, 2));
+        var faktor = await tabelle.IstSchaetzbarAsync(e.LeserId) ? 1m : 0m;
+        return new SchadenGeschaetzt(e.LeserId, faktor * tabelle.Restwert(e.Neuwert, e.AlterJahre));
     }
 }
 
-// Gleichbleibend: aus der Schätzung wird die Mahnung (ein Vorgang je Schätzung).
-public sealed class MahnungNachSchaetzung : IFunktion
+// FORK, Zweig 2: ein Gutachten, das dauern kann — sein Zuschlag aus dem Konfig-Record des Knotens.
+public record GutachtenKonfig(decimal Zuschlag, TimeSpan Bedenkzeit);
+
+public sealed class Gutachtenanfrage(GutachtenKonfig konfig) : IFunktion
 {
-    public EroeffneMahnung Auf(SchadenGeschaetzt g, Herkunft h) => new(h.NeueId<Mahnvorgang>(), g.Betrag);
+    public async Task<GutachtenErhalten> Auf(SchadenErfasst e)
+    {
+        await Task.Delay(konfig.Bedenkzeit);
+        return new GutachtenErhalten(e.LeserId, konfig.Zuschlag);
+    }
 }
 
-// Die Graphen: Knoten als Parameter, Kanten aus den Typen (SchadenGeschaetzt: Schätzung → Mahnung).
+// JOIN mit WARTEN MIT FRIST: die Schätzung kommt genau einmal, das Gutachten höchstens einmal (null nach dem Zeitlimit des Knotens).
+public sealed class MahnungNachSchaetzung : IFunktion
+{
+    public EroeffneMahnung Auf(SchadenGeschaetzt g, GutachtenErhalten? gutachten, Herkunft h) =>
+        new(h.NeueId<Mahnvorgang>(), g.Betrag + (gutachten?.Zuschlag ?? 0m));
+}
+
+// Die Graphen: Knoten als Parameter, Kanten aus den Typen (SchadenErfasst: Aufnahme → Schätzung und Gutachten; beide → Mahnung).
 public sealed record Rueckgabepruefung(SchadenBeiRueckgabe Pruefung) : IGraph;
-public sealed record Schadensbewertung(ISchadensSchaetzung Schaetzung, MahnungNachSchaetzung Mahnung) : IGraph;
+public sealed record Schadensbewertung(Schadensaufnahme Aufnahme, Schadensschaetzer Schaetzung, Gutachtenanfrage Gutachten, MahnungNachSchaetzung Mahnung) : IGraph;
 
 public partial class Schadensfall : IState
 {
@@ -90,7 +115,7 @@ public partial class Schadensfall : IState
         {
             if (this.State.Gemeldet) { yield return new SchadenExistiert(c.AggregateId); yield break; }
             yield return new SchadenGemeldet(c.LeserId);
-            yield return new SchaetzeSchaden(c.LeserId);
+            yield return new SchaetzeSchaden(c.AggregateId, c.LeserId);
         }
     }
 

@@ -115,6 +115,9 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
             Datei(a.Datei!, $"akteur {a.Namespace}.{a.Name}", t => AkteurBefugnisse(t, a));
         foreach (var c in modell.Clients.Where(c => c.Datei != null && Herkunft.Geaendert(c.Herkunft, Herkunft.Von(c))))
             Datei(c.Datei!, $"client {c.Namespace}.{c.Name}", t => ClientVertrag(t, c));
+        // Graph (docs/04 §4.4): die Knoten SIND die Parameterliste des Records — Knoten hinzu/weg/umbenannt; vorhandene Parameter bleiben Wort für Wort.
+        foreach (var g in modell.Graphen.Where(g => g.Datei != null && Herkunft.Geaendert(g.Herkunft, Herkunft.Von(g))))
+            Datei(g.Datei!, $"graph {g.Namespace}.{g.Name}", t => GraphKnoten(t, g));
 
         var l = modell.Lesen;
         if (l == null) return;
@@ -351,7 +354,7 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         foreach (var e in f.Eingaenge)
         {
             var typ = Typ(text)!;
-            if (Aufs(typ).FirstOrDefault(m => ErsterTyp(m) == e.Eingang) is { } m)
+            if (Aufs(typ).FirstOrDefault(m => Nimmt(m, e)) is { } m)
             {
                 var soll = FunktionsRueckgabe(m.ReturnType.ToString(), e);
                 if (N(m.ReturnType.ToString()) == N(soll)) continue;
@@ -368,7 +371,7 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         if (entfernen)
         {
             var typ = Typ(text)!;
-            foreach (var x in Aufs(typ).Where(x => f.Eingaenge.All(e => e.Eingang != ErsterTyp(x))).OrderByDescending(x => x.SpanStart).ToList())
+            foreach (var x in Aufs(typ).Where(x => f.Eingaenge.All(e => !Nimmt(x, e))).OrderByDescending(x => x.SpanStart).ToList())
             {
                 var von = x.GetLeadingTrivia().FirstOrDefault(t => t.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)) is { } doku && doku != default
                     ? doku.SpanStart : x.SpanStart;
@@ -536,26 +539,58 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         if (decl.BaseList is { } bl)
         {
             if (N(string.Join(",", bl.Types.Select(t => t.ToString()))) == N(neu)) return null;
-            return (MitNamespaces(Anwenden(text, [(bl.Types[0].SpanStart, bl.Types[^1].Span.End, neu)]), a.Darf), "Befugnisse");
+            return (MitNamespaces(Anwenden(text, [(bl.Types[0].SpanStart, bl.Types[^1].Span.End, BasisListe(bl, soll.Take(1).Concat(fremd).Concat(soll.Skip(1)).ToList()))]),
+                a.Darf.Concat(a.Hoert)), "Befugnisse");
         }
         var at = (decl as RecordDeclarationSyntax)?.ParameterList?.Span.End ?? decl.Identifier.Span.End;
-        return (MitNamespaces(Anwenden(text, [(at, at, " : " + neu)]), a.Darf), "Befugnisse");
+        return (MitNamespaces(Anwenden(text, [(at, at, " : " + neu)]), a.Darf.Concat(a.Hoert)), "Befugnisse");
     }
 
-    // ── Client-Vertrag (docs/konzept-akteure.md §4): die Basisliste (IVerkoerpert, IHoert) gehört dem Modell; fremde Basistypen
-    //    (z. B. ein geerbter Client-Vertrag) bleiben stehen. ──
+    /// <summary>
+    /// Eine Basisliste in der FORM der alten schreiben: steht sie über mehrere Zeilen, bleibt jeder Umbruch an seiner Stelle (gezählt in Einträgen) und
+    /// die neuen Einträge kommen in die letzte Zeile; sonst einzeilig.
+    /// </summary>
+    private static string BasisListe(BaseListSyntax alt, IReadOnlyList<string> teile)
+    {
+        var umbrueche = alt.Types.GetSeparators().Select((sep, i) => (sep, i)).Where(x => x.sep.TrailingTrivia.Any(t => t.IsKind(SyntaxKind.EndOfLineTrivia)))
+            .Select(x => x.i).ToHashSet();
+        if (umbrueche.Count == 0) return string.Join(", ", teile);
+        var einzug = new string(' ', alt.Types[umbrueche.Min() + 1].GetLocation().GetLineSpan().StartLinePosition.Character);
+        var b = new System.Text.StringBuilder(teile[0]);
+        for (var i = 1; i < teile.Count; i++) b.Append(umbrueche.Contains(i - 1) ? ",\n" + einzug : ", ").Append(teile[i]);
+        return b.ToString();
+    }
+
+    // ── Client (docs/konzept-akteure.md §4): ein Record, dessen Basisliste (IClient, IVerkoerpert) dem Modell gehört; fremde Basistypen bleiben stehen. ──
     private (string, string)? ClientVertrag(string text, Client c)
     {
-        var root = Parse(text);
-        if (root.DescendantNodes().OfType<InterfaceDeclarationSyntax>().FirstOrDefault(i => i.Identifier.Text == c.Name) is not { } decl)
-            return (text, $"Client {c.Name} nicht gefunden");
-        var edits = new List<(int, int, string)>();
+        if (Typ(Parse(text), c.Name, c.Namespace) is not TypeDeclarationSyntax decl) return (text, $"Client {c.Name} nicht gefunden");
         var soll = Scaffolder.ClientBasen(c);
         var fremd = decl.BaseList?.Types.Select(t => t.ToString().Trim()).Where(t => !Scaffolder.IstClientBasis(t)).ToList() ?? [];
         var neu = string.Join(", ", soll.Take(1).Concat(fremd).Concat(soll.Skip(1)));
-        if (decl.BaseList is { } bl && N(string.Join(",", bl.Types.Select(t => t.ToString()))) != N(neu))
-            edits.Add((bl.Types[0].SpanStart, bl.Types[^1].Span.End, neu));
-        return edits.Count == 0 ? null : (MitNamespaces(Anwenden(text, edits), c.Verkoerpert.Concat(c.Kenntnis).ToList()), "Client-Vertrag");
+        if (decl.BaseList is not { } bl)
+        {
+            var at = (decl as RecordDeclarationSyntax)?.ParameterList?.Span.End ?? decl.Identifier.Span.End;
+            return (MitNamespaces(Anwenden(text, [(at, at, " : " + neu)]), c.Verkoerpert), "Client");
+        }
+        if (N(string.Join(",", bl.Types.Select(t => t.ToString()))) == N(neu)) return null;
+        return (MitNamespaces(Anwenden(text, [(bl.Types[0].SpanStart, bl.Types[^1].Span.End, neu)]), c.Verkoerpert), "Client");
+    }
+
+    // ── Graph (docs/04 §4.4): die Knoten sind die Parameter des Records (Name = Konfig-Schlüssel, Typ = Funktion oder Graph) ──
+    private (string, string)? GraphKnoten(string text, Graph g)
+    {
+        if (Typ(Parse(text), g.Name, g.Namespace) is not RecordDeclarationSyntax decl) return (text, $"Graph {g.Name} nicht gefunden");
+        var ist = decl.ParameterList?.Parameters.ToList() ?? [];
+        bool Gleich(ParameterSyntax p, Parameter k) => p.Identifier.Text == k.Name && N(p.Type?.ToString()) == N(k.Typ);
+        if (ist.Count == g.Knoten.Count && ist.Zip(g.Knoten).All(z => Gleich(z.First, z.Second))) return null;
+        var teile = g.Knoten.Select(k => ist.FirstOrDefault(p => Gleich(p, k))?.ToString() ?? $"{k.Typ} {k.Name}").ToList();
+        var neu = decl.ParameterList is { } pl
+            ? Anwenden(text, [(pl.SpanStart, pl.Span.End, Liste(pl, teile))])
+            : Anwenden(text, [(decl.Identifier.Span.End, decl.Identifier.Span.End, "(" + string.Join(", ", teile) + ")")]);
+        var plus = g.Knoten.Where(k => !ist.Any(p => Gleich(p, k))).Select(k => "+" + k.Name);
+        var minus = ist.Where(p => !g.Knoten.Any(k => Gleich(p, k))).Select(p => "−" + p.Identifier.Text);
+        return (MitNamespaces(neu, g.Knoten.Select(k => k.Typ)), "Knoten " + string.Join(", ", plus.Concat(minus)));
     }
 
     // ── Bausteine ──────────────────────────────────────────────────────────────────────────────
@@ -564,6 +599,15 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
     private static BaseTypeDeclarationSyntax? Typ(SyntaxNode root, string name, string? ns) =>
         root.DescendantNodes().OfType<BaseTypeDeclarationSyntax>().FirstOrDefault(t => t.Identifier.Text == name
             && (t.Parent is BaseNamespaceDeclarationSyntax nsd ? ns == null || nsd.Name.ToString() == ns : t.Parent is CompilationUnitSyntax));
+
+    /// <summary>
+    /// Nimmt dieses Auf den Eingang? Mit Ports (Join, <c>T?</c>, <c>OneOf</c>, <c>IReadOnlyList</c>) der erste Port wie geschrieben, sonst der erste
+    /// Parametertyp (Schlüssel eines Auf: je Eingangstyp eines, R2).
+    /// </summary>
+    private static bool Nimmt(MethodDeclarationSyntax m, BausteinEingang e) =>
+        e.Ports.Count > 0
+            ? m.ParameterList.Parameters.Count > 0 && N(m.ParameterList.Parameters[0].Type?.ToString()) == N(e.Ports[0].Typ)
+            : ErsterTyp(m) == e.Eingang;
 
     private static string? ErsterTyp(MethodDeclarationSyntax m) =>
         m.ParameterList.Parameters.Count > 0 ? BoardLeseseite.Basisname(m.ParameterList.Parameters[0].Type?.ToString() ?? "") : null;
@@ -600,6 +644,8 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
             .Concat(modell.BausteinFunktionen.Select(f => (f.Name, f.Namespace)))
             // Akteure: ein Client, der einen verkörpert (IVerkoerpert<A>), braucht seinen Namespace.
             .Concat(modell.Akteure.Select(a => (a.Name, a.Namespace)))
+            // Graphen: ein Graph als Knoten eines anderen.
+            .Concat(modell.Graphen.Select(g => (g.Name, g.Namespace)))
             .GroupBy(x => x.Name).ToDictionary(g => g.Key, g => g.First().Item2, StringComparer.Ordinal);
         var root = Parse(text);
         var dateiNs = root.DescendantNodes().OfType<BaseNamespaceDeclarationSyntax>().FirstOrDefault()?.Name.ToString();

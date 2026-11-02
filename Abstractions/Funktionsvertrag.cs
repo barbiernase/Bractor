@@ -40,29 +40,4 @@ public static class Funktionsvertrag
 
     /// <summary>Ist der volle Typname ein bindbarer Feld-Typ (ohne Enum/Array — die prüft der Aufrufer am Symbol)?</summary>
     public static bool IstFeldtyp(string vollerName) => System.Array.IndexOf(Feldtypen, vollerName) >= 0;
-
-    // ── Python (Laufort Extern, docs/09 §9.5): die generierte Basis und wo die Implementierung liegt ──
-
-    /// <summary>Der Ordner der Python-Implementierungen im Worker-Projekt (ein Paket, je Funktion eine Datei).</summary>
-    public const string PythonOrdner = "funktionen";
-
-    /// <summary><c>IBildaufbereitung</c> → <c>Bildaufbereitung</c>: der Name ohne Schnittstellen-I (Basis = Name + „Basis“, Klasse = Name).</summary>
-    public static string OhneI(string funktion) =>
-        funktion.Length > 1 && funktion[0] == 'I' && char.IsUpper(funktion[1]) ? funktion.Substring(1) : funktion;
-
-    /// <summary>Der Klassenname der generierten Python-Basis.</summary>
-    public static string PythonBasis(string funktion) => OhneI(funktion) + "Basis";
-
-    /// <summary>Der Modulname der Implementierung: <c>IBildpaarBeurteilung</c> → <c>bildpaar_beurteilung</c> (Datei <c>funktionen/bildpaar_beurteilung.py</c>).</summary>
-    public static string PythonModul(string funktion)
-    {
-        var n = OhneI(funktion);
-        var b = new System.Text.StringBuilder();
-        for (var i = 0; i < n.Length; i++)
-        {
-            if (char.IsUpper(n[i]) && i > 0 && !char.IsUpper(n[i - 1])) b.Append('_');
-            b.Append(char.ToLowerInvariant(n[i]));
-        }
-        return b.ToString();
-    }
 }

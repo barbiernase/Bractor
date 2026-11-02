@@ -141,7 +141,7 @@ public class SichtTests
 
     // ── P7.4.5: die zwei Seiten einer Nachricht kommen vom Server ──
 
-    [Fact(Skip = "Sonde Leihwesen noch mit der Funktions-Schnittstelle ISchadensSchaetzung (seit Schritt 6 ein Formfehler) — wird mit Schritt 7 neu geschrieben")]
+    [Fact]
     public async Task Partner_einer_Nachricht_mit_Loesen_als_Beschreibung()
     {
         var board = await BoardAsync();
@@ -156,10 +156,60 @@ public class SichtTests
         theke["loesen"]!["feld"]!.GetValue<string>().Should().Be("darf");
         theke["loesen"]!["wert"]!.GetValue<string>().Should().Be("LeiheAus");
         Zeilen(p["Ausgeliehen"]!["ein"]).Should().Contain(z => (string?)z["id"] == dec);
-        // Funktionen nach ihrer Signatur: die Schätzung gibt SchadenGeschaetzt aus (◀), die Mahnung nimmt es als Eingang ihres Auf (▶).
-        var schaetzung = "fb:" + Id(board, "bausteinFunktionen", "name", "ISchadensSchaetzung");
+        // Funktionen nach ihrer Signatur: die Schätzung gibt SchadenGeschaetzt aus (◀), die Mahnung nimmt es als Port ihres Join-Auf (▶) — und das
+        //   Gutachten, ihren zweiten Port (T?), ebenso.
+        var schaetzung = "fb:" + Id(board, "bausteinFunktionen", "name", "Schadensschaetzer");
         var mahnung = "fb:" + Id(board, "bausteinFunktionen", "name", "MahnungNachSchaetzung");
         Zeilen(p["SchadenGeschaetzt"]!["ein"]).Should().Contain(z => (string?)z["id"] == schaetzung && (string?)z["mark"] == "Ausgabe");
         Zeilen(p["SchadenGeschaetzt"]!["aus"]).Should().Contain(z => (string?)z["id"] == mahnung && (string?)z["text"] == "ƒ MahnungNachSchaetzung.Auf(SchadenGeschaetzt)");
+        Zeilen(p["GutachtenErhalten"]!["aus"]).Should().Contain(z => (string?)z["id"] == mahnung && (string?)z["mark"] == "Auf");
+        // Arbeit und Kenntnis: wer einen Command ohne Ziel bzw. ein Event hört, steht auf der ▶-Seite — ✕ nimmt ihm das Hören.
+        var archiv = Zeilen(p["BegutachteVorOrt"]!["aus"]).Single(z => (string?)z["text"] == "Akteur Archiv");
+        archiv["mark"]!.GetValue<string>().Should().Be("Arbeit");
+        archiv["loesen"]!["feld"]!.GetValue<string>().Should().Be("hoert");
+        Zeilen(p["MahnungEroeffnet"]!["aus"]).Should().Contain(z => (string?)z["text"] == "Akteur Gutachterin" && (string?)z["mark"] == "Kenntnis");
+    }
+
+    // ── Graph-Karten (docs/04 §4.4): Knoten aus den Parametern, Köpfe/Ausgänge/Kanten aus den Typen ──
+
+    [Fact]
+    public async Task Ein_Graph_ist_eine_Karte_mit_Knoten_Koepfen_Ausgaengen_und_Kanten_aus_den_Typen()
+    {
+        var board = await BoardAsync();
+        var g = (board["graphen"] as JsonArray)!.OfType<JsonObject>().Single(x => (string?)x["name"] == "Schadensbewertung");
+        g["knoten"]!.AsArray().Select(k => $"{(string?)k!["name"]}:{(string?)k["typ"]}").Should()
+            .Equal("Aufnahme:Schadensaufnahme", "Schaetzung:Schadensschaetzer", "Gutachten:Gutachtenanfrage", "Mahnung:MahnungNachSchaetzung");
+        g["koepfe"]!.AsArray().Select(x => (string?)x).Should().Equal("SchaetzeSchaden");
+        g["ausgaenge"]!.AsArray().Select(x => (string?)x).Should().BeEquivalentTo(["BegutachteVorOrt", "NichtSchaetzbar", "EroeffneMahnung"]);
+        g["kanten"]!.AsArray().Select(k => $"{(string?)k!["von"]} -{(string?)k["typ"]}-> {(string?)k["nach"]}").Should().BeEquivalentTo([
+            "Aufnahme -SchadenErfasst-> Schaetzung", "Aufnahme -SchadenErfasst-> Gutachten",
+            "Schaetzung -SchadenGeschaetzt-> Mahnung", "Gutachten -GutachtenErhalten-> Mahnung"]);
+        // Die Karte der Sicht nennt ihre Knoten (Funktionen) als Kanten; ein Graph im Graphen ist ein Knoten wie eine Funktion.
+        var gr = "gr:" + (string)g["_id"]!;
+        Karte(board, gr)["art"]!.GetValue<string>().Should().Be("graph");
+        var kanten = board["sicht"]!["kanten"]!.AsArray().Select(k => (string)k![0]! + "→" + (string)k[1]!).ToList();
+        kanten.Should().Contain(gr + "→fb:" + Id(board, "bausteinFunktionen", "name", "Schadensaufnahme"));
+        var messkette = "gr:" + Id(board, "graphen", "name", "Messkette");
+        kanten.Should().Contain(messkette + "→gr:" + Id(board, "graphen", "name", "Messwertaufbereitung"));
+        // Eine Quelle ist der Kopf ihres Graphen (kein Eingang von außen); die Kanten des inneren Graphen sind aufgefaltet.
+        var mk = (board["graphen"] as JsonArray)!.OfType<JsonObject>().Single(x => (string?)x["name"] == "Messkette");
+        ((string?)mk["quelle"]).Should().Be("Abfrage");
+        mk["koepfe"]!.AsArray().Should().BeEmpty();
+        mk["kanten"]!.AsArray().Select(k => (string?)k!["nach"]).Should().Contain("Aufbereitung.Plausi");
+    }
+
+    [Fact]
+    public async Task Eine_Funktion_nennt_ihre_Ports_und_eine_Quelle_was_sie_meldet()
+    {
+        var board = await BoardAsync();
+        JsonObject F(string name) => (board["bausteinFunktionen"] as JsonArray)!.OfType<JsonObject>().Single(x => (string?)x["name"] == name);
+        static string Ports(JsonObject f) => string.Join(" || ", f["eingaenge"]!.AsArray().OfType<JsonObject>().Select(e =>
+            e["ports"] is JsonArray ps ? string.Join(", ", ps.Select(p => $"{(string?)p!["typ"]} {(string?)p["name"]}")) : (string?)e["eingang"]));
+        Ports(F("MahnungNachSchaetzung")).Should().Be("SchadenGeschaetzt g, GutachtenErhalten? gutachten", "Join mit Warten mit Frist");
+        Ports(F("Alarmquittung")).Should().Be("OneOf<PerAnrufErreicht, PerFunkErreicht> erster", "Rennen");
+        Ports(F("Seitenbilanz")).Should().Be("IReadOnlyList<SeiteGeprueft> alle", "Sammeln");
+        Ports(F("Pruefungsstart")).Should().Be("RueckgabeGescannt || PruefungGestartet", "ein Command und die Antwort auf den eigenen Command");
+        F("Sensorabfrage")["lauscht"]!.AsArray().Select(x => (string?)x).Should().Equal("Rohwert");
+        F("Sensorabfrage")["eingaenge"]!.AsArray().Should().BeEmpty("eine Quelle lauscht und nimmt nichts");
     }
 }

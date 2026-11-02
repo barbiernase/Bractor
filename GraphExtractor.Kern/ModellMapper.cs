@@ -133,7 +133,9 @@ public static class ModellMapper
                     Eingang = Kurz(e.EingangFull), Hinweis = e.Hinweis, Herkunft = e.Herkunft, Strom = e.Strom,
                     Faehigkeiten = e.Faehigkeiten.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
                     Ausgaben = e.AusgabenFull.Select(Kurz).ToList(),
+                    Ports = e.Ports.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
                 }).ToList(),
+                Lauscht = f.LauschtFull.Select(Kurz).ToList(),
                 Methoden = f.Methoden.Select(me => new FunktionsMethode
                 {
                     Name = me.Name, Rueckgabe = me.Rueckgabe, Doku = me.Doku,
@@ -550,7 +552,10 @@ public static class ModellMapper
         string S(JsonObject o, string k) => (string?)o[k] ?? "";
         Ort? TypOrt(string full, string? datei)
         {
-            if (!dom.TypOrte.TryGetValue(full, out var l) || l.Count == 0) return null;
+            // Eine generische Deklaration (Glaettung<TFenster>) steht auf der Karte ohne ihre Typparameter.
+            if (!dom.TypOrte.TryGetValue(full, out var l))
+                l = dom.TypOrte.Where(kv => kv.Key.StartsWith(full + "<", StringComparison.Ordinal)).Select(kv => kv.Value).FirstOrDefault();
+            if (l == null || l.Count == 0) return null;
             return l.FirstOrDefault(o => datei != null && Relativ(dom.Wurzel, o.Datei) == datei) ?? l[0];
         }
         // Die übrigen Deklarationen, die zur Karte gehören (weitere partial-Teile; Decider/Applier außerhalb des State; die Umsetzungen
@@ -566,7 +571,7 @@ public static class ModellMapper
         }
         var storeVon = dom.Stores.GroupBy(x => x.Namespace + "." + x.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var bausteinVon = dom.BausteinFunktionen.GroupBy(f => f.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-        foreach (var sammlung in new[] { "records", "enums", "bausteinFunktionen", "akteure", "clients", "readModels", "projektionen", "reader", "stores" })
+        foreach (var sammlung in new[] { "records", "enums", "bausteinFunktionen", "akteure", "clients", "graphen", "readModels", "projektionen", "reader", "stores" })
             foreach (var k in Alle(root[sammlung]))
             {
                 var full = S(k, "namespace") + "." + S(k, "name");
@@ -648,6 +653,7 @@ public static class ModellMapper
         foreach (var f in Alle(root["bausteinFunktionen"])) f["_id"] = Abstractions.WirkerId.FuerFunktion(S(f, "name"));
         foreach (var a in Alle(root["akteure"])) a["_id"] = Abstractions.WirkerId.FuerAkteur(S(a, "name"));
         foreach (var c in Alle(root["clients"])) c["_id"] = "client:" + S(c, "name");
+        foreach (var g in Alle(root["graphen"])) g["_id"] = "graph:" + S(g, "name");
     }
 
     /// <summary>Stabile Id einer Store-Funktion (natürlicher Schlüssel statt Position): <c>wf:IStore.Methode</c> bzw. <c>rf:…</c>.</summary>

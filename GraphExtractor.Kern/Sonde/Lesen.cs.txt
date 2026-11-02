@@ -4,6 +4,7 @@ using Marten;
 using Leihwesen.Ausleihe;
 using Leihwesen.Ausleihe.Befehle;
 using Leihwesen.Gebuehren;
+using Leihwesen.Pruefung;
 
 // SONDE — Leseseite mit FREIEN Namen (keine Namenskonvention), class-ReadModel, OneOf-Antwort, ein Store der Klasse 1 (atomar, Marten).
 // Verträge von Auf und Frage: WAS aus der Signatur (auch eine deklarierte, nie ausgegebene Variante), WELCHE Store-Fns aus den
@@ -89,25 +90,22 @@ public sealed class LeihAuskunftLeser : IReader
     }
 }
 
-// Akteure: frei benannt; die Befugnis steht NUR in der Basisliste (IDarf<T>) — Reihenfolge = Deklaration. Kein Name verrät
-// die Rolle (keine *Akteur-/*Rolle-Endung); eine Query zu dürfen ist dasselbe Wort wie ein Command.
-public sealed record Theke : IAkteur, IDarf<LeiheAus>, IDarf<GibZurueck>, IDarf<OffeneAusleihen>;
+// Akteure: frei benannt; was einer HINEINGIBT, steht als IDarf<T> in der Basisliste, was zu ihm KOMMT als IHoert<T> — Reihenfolge = Deklaration.
+// Kein Name verrät die Rolle (keine *Akteur-/*Rolle-Endung); eine Query zu dürfen ist dasselbe Wort wie ein Command; ein Command ohne Ziel
+// (die gescannte Rückgabe) geht an den Kopf eines Graphen. KENNTNIS: ein Hinweis aus einem Decide (NichtAusgeliehen), einer aus einem Knoten
+// (NichtSchaetzbar) und einer des Frameworks (LaufGescheitert).
+public sealed record Theke : IAkteur, IDarf<LeiheAus>, IDarf<GibZurueck>, IDarf<OffeneAusleihen>, IDarf<RueckgabeGescannt>,
+    IHoert<NichtAusgeliehen>, IHoert<NichtSchaetzbar>, IHoert<LaufGescheitert>;
 
-// Eine KI als Akteur (frei benannt, Art in der Basisliste).
-public sealed record Gutachterin : IKi, IDarf<EroeffneMahnung>;
+// Eine KI als Akteur (frei benannt, keine Art mehr): darf eine Mahnung eröffnen und hört, wenn eine eröffnet ist (ein Event: Kenntnis).
+public sealed record Gutachterin : IAkteur, IDarf<EroeffneMahnung>, IHoert<MahnungEroeffnet>;
 
-// Ein Akteur, der DRAUSSEN rechnet (docs/konzept-akteure.md, docs/konzept-akteure.md §5): frei benannt — die Funktion ist eine Schnittstelle (läuft draußen),
-// der Akteur darf sie rechnen (IDarf<IRegal>: ihre Ausgaben gibt er hinein). Zwei Eingänge: einer einzeln, einer als Strom.
-public sealed record Archiv : IMaschine, IDarf<IRegal>;
-public interface IRegal : IFunktion
-{
-    MeldeSchaden Auf(Zurueckgegeben e, Herkunft h);
-    IAsyncEnumerable<OneOf<EroeffneMahnung, MeldeSchaden>> Auf(SchadenGemeldet e, Herkunft h);
-}
+// ARBEIT (docs/konzept-akteure.md §5): das Archiv hört einen Command ohne Ziel aus einem Graphen (die Schadensaufnahme wählt die Begutachtung vor
+// Ort); seine Antwort ist ein gewöhnlicher Command über sein IDarf. Dazu Kenntnis eines Events.
+public sealed record Archiv : IAkteur, IHoert<BegutachteVorOrt>, IDarf<EroeffneMahnung>, IHoert<Ausgeliehen>;
 
-// Clients (docs/konzept-akteure.md §4): frei benannt — IClientVertrag ist der einzige Anker. EIN Client verkörpert ZWEI Akteure
-// (das Archiv, das die Funktion rechnet, und die Theke), und ein Akteur läuft über ZWEI Clients (das Archiv: Lesesaal + Depot). Was über die
-// Leitung geht, sind die IDarf der Akteure — getragen, gesendet, gefragt.
-// Kenntnis (IHoert) gehört dem Client, nicht einem Akteur.
-public interface ILesesaal : IClientVertrag, IVerkoerpert<Theke>, IVerkoerpert<Archiv>, IHoert<MahnungEroeffnet> { }
-public interface IDepot : IClientVertrag, IVerkoerpert<Archiv>, IHoert<Ausgeliehen> { }
+// Clients (docs/konzept-akteure.md §4): frei benannt — ein Record mit IClient, der nur nennt, wen er verkörpert. EIN Client verkörpert ZWEI Akteure
+// (die Theke und das Archiv, das Arbeit annimmt), und ein Akteur läuft über ZWEI Clients (das Archiv: Lesesaal + Depot). Was über die
+// Leitung geht, sind das IDarf und IHoert der Akteure.
+public sealed record Lesesaal : IClient, IVerkoerpert<Theke>, IVerkoerpert<Archiv>;
+public sealed record Depot : IClient, IVerkoerpert<Archiv>;

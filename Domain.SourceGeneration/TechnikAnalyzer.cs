@@ -74,8 +74,12 @@ public sealed class TechnikAnalyzer : DiagnosticAnalyzer
         var istImpl = t.TypeKind == TypeKind.Class && !t.IsAbstract
             && (Funktionsform.IstFunktion(t) || technik.IstUmsetzung(t) || technikVon != null);
 
-        // CQRS092: eine Umsetzung, die die generierte Bindung nicht bauen kann.
-        if (istImpl && !Ctorbindung.Baubar(t))
+        // CQRS092: eine Umsetzung, die die generierte Bindung nicht bauen kann. Eine generische Funktion ist eine Blaupause: gebaut wird sie je
+        //   Typargument eines Knotens (Entscheidung 4) — sie muss nur öffentlich sein.
+        var gebaut = t.IsGenericType && Funktionsform.IstFunktion(t)
+            ? t.DeclaredAccessibility == Accessibility.Public && (t.ContainingType == null || t.ContainingType.DeclaredAccessibility == Accessibility.Public)
+            : Ctorbindung.Baubar(t);
+        if (istImpl && !gebaut)
             ctx.ReportDiagnostic(Diagnostic.Create(Baubar, t.Locations.FirstOrDefault(), t.Name,
                 technikVon?.Name ?? "IFunktion", t.IsGenericType ? "generisch" : "nicht öffentlich"));
 

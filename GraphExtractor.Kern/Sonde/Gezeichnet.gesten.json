@@ -1,5 +1,5 @@
 {
-  "_zweck": "Im Editor GEZEICHNET, als Gesten-Skript (Werkbank P7.3): jede Geste ist ein Karten-Delta wie aus dem Browser; die Sonde schreibt sie über den Gesten-Motor (GraphExtractor.Kern/Schreiben/Gesten) in den Fork und liest nach jeder Geste neu — spätere Gesten verweisen auf die Ids, die der Code-Stand vergibt (wf:/rf: der Store-Funktionen). Leseseite: neuer Store mit einer im Panel benannten und einer abgeleiteten Fähigkeit, Projektion, Reader, Query/Response/ReadModel. Akteur, der eine Funktion draußen rechnen darf, und ein Client, der sie trägt (ITraegt) und Kenntnis hört (IHoert). Funktionen in Baustein-Form zeichnet der Editor noch nicht (docs/10 E4).",
+  "_zweck": "Im Editor GEZEICHNET, als Gesten-Skript (Werkbank P7.3): jede Geste ist ein Karten-Delta wie aus dem Browser; die Sonde schreibt sie über den Gesten-Motor (GraphExtractor.Kern/Schreiben/Gesten) in den Fork und liest nach jeder Geste neu — spätere Gesten verweisen auf die Ids, die der Code-Stand vergibt (wf:/rf: der Store-Funktionen). Leseseite: neuer Store mit einer im Panel benannten und einer abgeleiteten Fähigkeit, Projektion, Reader, Query/Response/ReadModel. Ein Akteur, der hineingibt (IDarf) und hört (IHoert), und ein Client als Record, der ihn verkörpert. Eine neue Funktion (Klasse mit Technik im Konstruktor) samt ihrem Command; ein Knoten kommt an einen geschriebenen Graphen (ein Parameter mehr am Record); ein neuer Graph mit einer generischen Funktion als Knoten (Typargument wie geschrieben).",
   "gesten": [
     {
       "titel": "Leseseite: Query, Antwort, Read Model, Store",
@@ -121,20 +121,102 @@
             "namespace": "Leihwesen.Gebuehren",
             "darf": [
               "EroeffneMahnung",
-              "Vormerkungen",
-              "ISchadensSchaetzung"
+              "Vormerkungen"
+            ],
+            "hoert": [
+              "MahnungEroeffnet",
+              "NichtSchaetzbar"
             ]
           }
         ],
         "clients": [
           {
-            "name": "IMahnportal",
+            "name": "Mahnportal",
             "namespace": "Leihwesen.Gebuehren",
             "verkoerpert": [
               "Mahnstelle"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "titel": "Funktion: neue Klasse mit Technik und ihrem Command",
+      "karten": {
+        "records": [
+          {
+            "name": "PruefeVormerkung",
+            "kind": "command",
+            "namespace": "Leihwesen.Gebuehren",
+            "felder": [
+              {
+                "name": "LeserId",
+                "typ": "Guid"
+              },
+              {
+                "name": "Neuwert",
+                "typ": "decimal"
+              }
+            ]
+          }
+        ],
+        "bausteinFunktionen": [
+          {
+            "name": "Vormerkpruefung",
+            "namespace": "Leihwesen.Gebuehren",
+            "klasse": true,
+            "konstruktor": [
+              {
+                "typ": "IWertTabelle",
+                "name": "tabelle"
+              }
             ],
-            "kenntnis": [
-              "Zurueckgegeben"
+            "eingaenge": [
+              {
+                "eingang": "PruefeVormerkung",
+                "herkunft": true,
+                "ausgaben": [
+                  "EroeffneMahnung"
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "titel": "Graph: Knoten hinzufügen",
+      "karten": {
+        "graphen": [
+          {
+            "name": "Mahnbemessung",
+            "namespace": "Leihwesen.Pruefung",
+            "knoten": [
+              {
+                "typ": "Offenzaehlung",
+                "name": "Zaehlung"
+              },
+              {
+                "typ": "Vormerkpruefung",
+                "name": "Vormerkung"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "titel": "Graph: neuer Graph mit generischem Knoten",
+      "karten": {
+        "graphen": [
+          {
+            "name": "Kurzglaettung",
+            "namespace": "Wetterdienst.Vorhersage",
+            "knoten": [
+              {
+                "typ": "Glaettung<Kurzfenster>",
+                "name": "Glaettung"
+              }
             ]
           }
         ]

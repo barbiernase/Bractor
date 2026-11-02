@@ -1,173 +1,270 @@
 # SOLL der Agnostik-Sonde — VON HAND aus dem Sonden-Quelltext abgeleitet, NICHT aus einer Extractor-Ausgabe.
 # Ein Fakt je Zeile. Was der Editor über die unbekannte Domäne wissen MUSS (Reihenfolge egal).
+#
+# Zeilen: record/enum/aggregat/decide/apply/frage (Schreibseite) · funktion (Klasse mit Konstruktor; je Auf die Ports — ein Command bzw. wie
+# geschrieben —, Herkunft, Lese-Fähigkeiten, Ausgaben, Strom; Lausche einer Quelle) · technik (ohne Marker) · graph (Knoten = Parameter; Köpfe,
+# Ausgänge, Quelle aus den Typen) und kante (aus den Typen, aufgefaltet) · akteur (darf | hoert) · client (verkoerpert) · Leseseite · sicht/besitz/code
+# (die Sicht des Editors) · lage (Projektstruktur, docs/07).
 
-# ── Ausleihe: Commands im Sub-Namespace, Property-Records, if/else; eine FRIST in der Entscheidung (docs/10 §10.2): die Uhr schickt die Mahnung
-#    an denselben Leihvorgang ──
-record Leihwesen.Ausleihe.Befehle.LeiheAus command erzeugung aggregat=Leihvorgang | AggregateId:Id<Leihvorgang>, Medium:Signatur, LeserId:Guid, Tage:int=14
-record Leihwesen.Ausleihe.Befehle.GibZurueck command aggregat=Leihvorgang | AggregateId:Id<Leihvorgang> { get; init; }, Zustand:Zustand { get; init; }
-record Leihwesen.Ausleihe.Befehle.MahneRueckgabe command aggregat=Leihvorgang | AggregateId:Id<Leihvorgang>
-record Leihwesen.Ausleihe.RueckgabeAngemahnt event aggregat=Leihvorgang | LeserId:Guid
-record Leihwesen.Ausleihe.Signatur valueobject | Regal:string, Nummer:int
-record Leihwesen.Ausleihe.Ausgeliehen event aggregat=Leihvorgang | Medium:Signatur, LeserId:Guid, Tage:int
-record Leihwesen.Ausleihe.Zurueckgegeben event aggregat=Leihvorgang | LeserId:Guid { get; init; }, Zustand:Zustand { get; init; }
-record Leihwesen.Ausleihe.BereitsAusgeliehen rejection aggregat=Leihvorgang | AusleiheId:Id<Leihvorgang>
-record Leihwesen.Ausleihe.NichtAusgeliehen rejection aggregat=Leihvorgang | AusleiheId:Id<Leihvorgang>
+# ══ LEIHWESEN ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
+
+# ── Ausleihe: Commands im Sub-Namespace, Property-Records, if/else; eine FRIST in der Entscheidung (docs/10 §10.2); zwei Decides geben je einen
+#    Command ohne Ziel aus (an den Kopf eines Graphen) — er gehört dem Aggregat, das ihn abgibt ──
 enum Leihwesen.Ausleihe.Zustand | Neu = 1, Gebraucht = 2, Beschaedigt = 3
 aggregat Leihwesen.Ausleihe.Leihvorgang | LeserId:Guid, Offen:bool
 decide Leihvorgang.LeiheAus -> Ausgeliehen; BereitsAusgeliehen; Frist<MahneRueckgabe>
-decide Leihvorgang.GibZurueck -> Zurueckgegeben; NichtAusgeliehen
-decide Leihvorgang.MahneRueckgabe -> RueckgabeAngemahnt
+decide Leihvorgang.GibZurueck -> Zurueckgegeben; PruefeRueckgabe; NichtAusgeliehen
+decide Leihvorgang.MahneRueckgabe -> RueckgabeAngemahnt; BemesseMahnung
 apply Leihvorgang.Ausgeliehen
 apply Leihvorgang.Zurueckgegeben
 apply Leihvorgang.RueckgabeAngemahnt
 # Direkte Abfrage (docs/03 §3.2): der Leihvorgang beantwortet HoleLeihstand selbst (Frage im Decider); Query und Antworten liegen bei der Schreibseite
+frage Leihvorgang.HoleLeihstand -> Leihstand|NichtVerliehen
+record Leihwesen.Ausleihe.Befehle.LeiheAus command erzeugung aggregat=Leihvorgang | AggregateId:Id<Leihvorgang>, Medium:Signatur, LeserId:Guid, Tage:int=14
+record Leihwesen.Ausleihe.Befehle.GibZurueck command aggregat=Leihvorgang | AggregateId:Id<Leihvorgang> { get; init; }, Zustand:Zustand { get; init; }
+record Leihwesen.Ausleihe.Befehle.MahneRueckgabe command aggregat=Leihvorgang | AggregateId:Id<Leihvorgang>
+record Leihwesen.Ausleihe.Signatur valueobject | Regal:string, Nummer:int
+record Leihwesen.Ausleihe.Ausgeliehen event aggregat=Leihvorgang | Medium:Signatur, LeserId:Guid, Tage:int
+record Leihwesen.Ausleihe.Zurueckgegeben event aggregat=Leihvorgang | LeserId:Guid { get; init; }, Zustand:Zustand { get; init; }
+record Leihwesen.Ausleihe.RueckgabeAngemahnt event aggregat=Leihvorgang | LeserId:Guid
+record Leihwesen.Ausleihe.PruefeRueckgabe command aggregat=Leihvorgang | LeserId:Guid, Zustand:Zustand
+record Leihwesen.Ausleihe.BemesseMahnung command aggregat=Leihvorgang | LeserId:Guid
+record Leihwesen.Ausleihe.BereitsAusgeliehen rejection aggregat=Leihvorgang | AusleiheId:Id<Leihvorgang>
+record Leihwesen.Ausleihe.NichtAusgeliehen rejection aggregat=Leihvorgang | AusleiheId:Id<Leihvorgang>
 record Leihwesen.Ausleihe.HoleLeihstand query aggregat=Leihvorgang | Vorgang:Id<Leihvorgang>
 record Leihwesen.Ausleihe.Leihstand queryresponse aggregat=Leihvorgang | Vorgang:Id<Leihvorgang>, LeserId:Guid
 record Leihwesen.Ausleihe.NichtVerliehen queryresponse aggregat=Leihvorgang | Vorgang:Id<Leihvorgang>
-frage Leihvorgang.HoleLeihstand -> Leihstand|NichtVerliehen
+# Code-Karte (Werkbank P7.4): Fristrechnung ist kein Baustein — roh gezeigt, beide partial-Teile an einer Karte, Domäne aus dem Namespace
+code Leihwesen.Ausleihe.Fristrechnung class teile=2 domaene=Leihwesen.Ausleihe block=§geteilt
 
-# ── Gebuehren: ZWEI Aggregate in einem Namespace, Decider in eigener Datei; der Ablauf zwischen ihnen aus FUNKTIONEN (früher eine Saga) ──
+# ── Gebuehren: ZWEI Aggregate in einem Namespace, Decider in eigener Datei; der Ablauf zwischen ihnen aus GRAPHEN ──
+aggregat Leihwesen.Gebuehren.Schadensfall | Gemeldet:bool
+aggregat Leihwesen.Gebuehren.Mahnvorgang | Betrag:decimal
+decide Schadensfall.MeldeSchaden -> SchadenGemeldet; SchaetzeSchaden; SchadenExistiert
+decide Mahnvorgang.EroeffneMahnung -> MahnungEroeffnet; MahnungExistiert
+apply Schadensfall.SchadenGemeldet
+apply Mahnvorgang.MahnungEroeffnet
 record Leihwesen.Gebuehren.MeldeSchaden command erzeugung aggregat=Schadensfall | AggregateId:Id<Schadensfall>, LeserId:Guid
 record Leihwesen.Gebuehren.SchadenGemeldet event aggregat=Schadensfall | LeserId:Guid
 record Leihwesen.Gebuehren.SchadenExistiert rejection aggregat=Schadensfall | Id:Id<Schadensfall>
 record Leihwesen.Gebuehren.EroeffneMahnung command erzeugung aggregat=Mahnvorgang | AggregateId:Id<Mahnvorgang>, Betrag:decimal
 record Leihwesen.Gebuehren.MahnungEroeffnet event aggregat=Mahnvorgang | Betrag:decimal
 record Leihwesen.Gebuehren.MahnungExistiert rejection aggregat=Mahnvorgang | Id:Id<Mahnvorgang>
-aggregat Leihwesen.Gebuehren.Schadensfall | Gemeldet:bool
-aggregat Leihwesen.Gebuehren.Mahnvorgang | Betrag:decimal
-decide Schadensfall.MeldeSchaden -> SchadenGemeldet; SchadenExistiert
-decide Mahnvorgang.EroeffneMahnung -> MahnungEroeffnet; MahnungExistiert
-apply Schadensfall.SchadenGemeldet
-apply Mahnvorgang.MahnungEroeffnet
-# Gleichbleibende Funktion (Klasse ohne Konstruktor, R12): Herkunft für die neue Id (R13), „nichts“ als Ausgang (T?)
-funktion-auf Leihwesen.Gebuehren.SchadenBeiRueckgabe klasse() | Zurueckgegeben herkunft -> MeldeSchaden
-# Funktion als Schnittstelle mit einer Umsetzung im Host, die eine Technik nimmt (Kante Funktion → Technik); Ausgaben: ein Event der
-#    Funktion (kein Aggregat) oder ein Hinweis
-record Leihwesen.Gebuehren.SchadenGeschaetzt event | LeserId:Guid, Betrag:decimal
+# Der Kopf der Schadensbewertung kommt aus dem Decide (gehört dem Schadensfall); was nur Knoten einander geben, gehört dem Knoten, der es ausgibt;
+#    Arbeit für einen Akteur ist ein Command ohne Ziel aus einem Knoten; der Hinweis aus einem Knoten gehört seiner Funktion
+record Leihwesen.Gebuehren.SchaetzeSchaden command aggregat=Schadensfall | Fall:Id<Schadensfall>, LeserId:Guid
+record Leihwesen.Gebuehren.SchadenErfasst command | LeserId:Guid, Neuwert:decimal, AlterJahre:int
+record Leihwesen.Gebuehren.SchadenGeschaetzt command | LeserId:Guid, Betrag:decimal
+record Leihwesen.Gebuehren.GutachtenErhalten command | LeserId:Guid, Zuschlag:decimal
+record Leihwesen.Gebuehren.BegutachteVorOrt command | Fall:Id<Schadensfall>, LeserId:Guid
 record Leihwesen.Gebuehren.NichtSchaetzbar rejection | Grund:string
-funktion-auf Leihwesen.Gebuehren.ISchadensSchaetzung schnittstelle | SchadenGemeldet herkunft -> SchadenGeschaetzt; NichtSchaetzbar umsetzung Schadensschaetzer(tabelle:IWertTabelle)
-funktion-auf Leihwesen.Gebuehren.MahnungNachSchaetzung klasse() | SchadenGeschaetzt herkunft -> EroeffneMahnung
-# Technik (docs/06 §6.5): Schnittstelle ohne Marker im Konstruktor einer Funktion (Methoden, Typen wie geschrieben) + Umsetzung mit Konstruktor; der Record im
-#    Konstruktor ist Konfig (Werte aus Konfig:<Record>), kein Value Object
-technik Leihwesen.Gebuehren.IWertTabelle schnittstelle | Restwert(neuwert:decimal, alterJahre:int):decimal; IstSchaetzbarAsync(leserId:Guid):Task<bool> | umsetzung LineareWertTabelle(konfig:WertTabellenKonfig)
+# Konfig-Records (Werte am Knoten der Instanz): einer im Konstruktor einer Technik-Umsetzung, einer im Konstruktor einer Funktion
 record Leihwesen.Gebuehren.WertTabellenKonfig konfig | Mindestwert:decimal, Abschreibungsjahre:int=5
+record Leihwesen.Gebuehren.GutachtenKonfig konfig | Zuschlag:decimal, Bedenkzeit:TimeSpan
+# FOLGE mit leerem Strom (0 oder 1 Schadensfall), Id aus der Herkunft (R13)
+funktion Leihwesen.Gebuehren.SchadenBeiRueckgabe() | Auf(PruefeRueckgabe) herkunft -> strom MeldeSchaden
+# WAHL: genau einer von drei Fällen — an den nächsten Knoten, Arbeit für einen Akteur, ein Hinweis
+funktion Leihwesen.Gebuehren.Schadensaufnahme() | Auf(SchaetzeSchaden) -> SchadenErfasst; BegutachteVorOrt; NichtSchaetzbar
+# FORK: zwei Knoten nehmen SchadenErfasst — einer mit Technik, einer mit Konfig
+funktion Leihwesen.Gebuehren.Schadensschaetzer(tabelle:IWertTabelle) | Auf(SchadenErfasst) -> SchadenGeschaetzt
+funktion Leihwesen.Gebuehren.Gutachtenanfrage(konfig:GutachtenKonfig) | Auf(SchadenErfasst) -> GutachtenErhalten
+# JOIN mit WARTEN MIT FRIST: genau eine Schätzung, höchstens ein Gutachten (T?; das Zeitlimit steht in der Instanz)
+funktion Leihwesen.Gebuehren.MahnungNachSchaetzung() | Auf(SchadenGeschaetzt g, GutachtenErhalten? gutachten) herkunft -> EroeffneMahnung
+# Technik (ohne Marker): Schnittstelle im Konstruktor einer Funktion (Methoden, Typen wie geschrieben) + Umsetzung mit Konfig-Record
+technik Leihwesen.Gebuehren.IWertTabelle schnittstelle | Restwert(neuwert:decimal, alterJahre:int):decimal; IstSchaetzbarAsync(leserId:Guid):Task<bool> | umsetzung LineareWertTabelle(konfig:WertTabellenKonfig)
+# Die Graphen: ein Knoten (Kopf aus dem Decide, Ausgang ein Aggregat-Command); Wahl + Fork + Join — Kanten nur aus den Typen
+graph Leihwesen.Gebuehren.Rueckgabepruefung | knoten Pruefung:SchadenBeiRueckgabe | koepfe PruefeRueckgabe | aus MeldeSchaden
+graph Leihwesen.Gebuehren.Schadensbewertung | knoten Aufnahme:Schadensaufnahme, Schaetzung:Schadensschaetzer, Gutachten:Gutachtenanfrage, Mahnung:MahnungNachSchaetzung | koepfe SchaetzeSchaden | aus BegutachteVorOrt, NichtSchaetzbar, EroeffneMahnung
+kante Schadensbewertung | Aufnahme -SchadenErfasst-> Schaetzung
+kante Schadensbewertung | Aufnahme -SchadenErfasst-> Gutachten
+kante Schadensbewertung | Schaetzung -SchadenGeschaetzt-> Mahnung
+kante Schadensbewertung | Gutachten -GutachtenErhalten-> Mahnung
 
-# ── Ablauf ohne Fluss-Sprache (Sonde/Fluss.cs.txt): eigene Quell-Nachricht (IQuellNachricht) und Quelle mit Treiber; Start als gleichbleibende
-#    Funktion; der Vorgang als ZÄHL-AGGREGAT (Zähler statt Collection) mit FRIST als Rennen gegen die Zeit; Fan-out als STROM einer Funktion draußen,
-#    Fan-in durch Zählen; eine Funktion mit LESE-Fähigkeit auf dem Event der Ausleih-Frist ──
-record Leihwesen.Pruefung.RueckgabeGescannt event typart=public sealed record | LeserId:Guid, Code:string, Seiten:IReadOnlyList<string>
-record Leihwesen.Pruefung.AusweisAbgelegt event typart=public sealed record treiber=Datei | Name:string { get; init; } required, Pfad:string { get; init; } required, RelativerPfad:string { get; init; } required, Groesse:long { get; init; } required, GeaendertAm:DateTimeOffset { get; init; } required, ErkanntAm:DateTimeOffset { get; init; } required, Kennung:string { get; init; } required
-record Leihwesen.Pruefung.StartePruefung command erzeugung aggregat=Seitenpruefung | AggregateId:Id<Seitenpruefung>, LeserId:Guid, Seiten:IReadOnlyList<string>
-record Leihwesen.Pruefung.PruefungGestartet event aggregat=Seitenpruefung | LeserId:Guid, Seiten:IReadOnlyList<string>
-record Leihwesen.Pruefung.PruefungLaeuftSchon rejection aggregat=Seitenpruefung | PruefungId:Id<Seitenpruefung>
-record Leihwesen.Pruefung.ZaehleSeite command aggregat=Seitenpruefung | AggregateId:Id<Seitenpruefung>, Nummer:int, Beschaedigt:bool
-record Leihwesen.Pruefung.SeiteGezaehlt event aggregat=Seitenpruefung | Nummer:int, Beschaedigt:bool
-record Leihwesen.Pruefung.PruefungAbgeschlossen event aggregat=Seitenpruefung | LeserId:Guid, Beschaedigte:int
-record Leihwesen.Pruefung.BrichPruefungAb command aggregat=Seitenpruefung | AggregateId:Id<Seitenpruefung>
-record Leihwesen.Pruefung.PruefungAbgebrochen event aggregat=Seitenpruefung | Gezaehlt:int
-aggregat Leihwesen.Pruefung.Seitenpruefung | LeserId:Guid, Seiten:int, Gezaehlt:int, Beschaedigte:int, Fertig:bool
+# ── Prüfung (Fluss.cs.txt): der Ablauf als Graph — ein Command von einem Akteur am Kopf; der Start gibt einen Aggregat-Command aus und hört
+#    dessen Event als ANTWORT; die Antwort öffnet JE Seite einen Unterlauf (Strom); der Prüfer mit Technik (zwei Umsetzungen); die Bilanz SAMMELT;
+#    die Frist bleibt beim Aggregat. Dazu eine Funktion mit LESE-Fähigkeit am Kopf eines eigenen Graphen (Kopf aus dem Decide der Ausleihe) ──
+aggregat Leihwesen.Pruefung.Seitenpruefung | LeserId:Guid, Fertig:bool
 decide Seitenpruefung.StartePruefung -> PruefungGestartet; PruefungLaeuftSchon; Frist<BrichPruefungAb>
-decide Seitenpruefung.ZaehleSeite -> SeiteGezaehlt; PruefungAbgeschlossen
+decide Seitenpruefung.SchliessePruefungAb -> PruefungAbgeschlossen
 decide Seitenpruefung.BrichPruefungAb -> PruefungAbgebrochen
 apply Seitenpruefung.PruefungGestartet
-apply Seitenpruefung.SeiteGezaehlt
 apply Seitenpruefung.PruefungAbgeschlossen
 apply Seitenpruefung.PruefungAbgebrochen
-funktion-auf Leihwesen.Pruefung.Pruefungsstart klasse() | RueckgabeGescannt herkunft -> StartePruefung
-funktion-auf Leihwesen.Pruefung.ISeitenPruefung schnittstelle | PruefungGestartet herkunft -> strom ZaehleSeite
-funktion-auf Leihwesen.Pruefung.SchadenAusPruefung klasse() | PruefungAbgeschlossen herkunft -> MeldeSchaden
-funktion-auf Leihwesen.Pruefung.Offenzaehlung klasse() | RueckgabeAngemahnt herkunft -> EroeffneMahnung liest IZaehleOffene offene
+record Leihwesen.Pruefung.RueckgabeGescannt command typart=public sealed record | LeserId:Guid, Code:string, Seiten:IReadOnlyList<string>
+record Leihwesen.Pruefung.StartePruefung command erzeugung aggregat=Seitenpruefung | AggregateId:Id<Seitenpruefung>, LeserId:Guid, Seiten:IReadOnlyList<string>
+record Leihwesen.Pruefung.PruefungGestartet event aggregat=Seitenpruefung | PruefungId:Id<Seitenpruefung>, LeserId:Guid, Seiten:IReadOnlyList<string>
+record Leihwesen.Pruefung.PruefungLaeuftSchon rejection aggregat=Seitenpruefung | PruefungId:Id<Seitenpruefung>
+record Leihwesen.Pruefung.SchliessePruefungAb command aggregat=Seitenpruefung | AggregateId:Id<Seitenpruefung>, Beschaedigte:int
+record Leihwesen.Pruefung.PruefungAbgeschlossen event aggregat=Seitenpruefung | LeserId:Guid, Beschaedigte:int
+record Leihwesen.Pruefung.BrichPruefungAb command aggregat=Seitenpruefung | AggregateId:Id<Seitenpruefung>
+record Leihwesen.Pruefung.PruefungAbgebrochen event aggregat=Seitenpruefung | LeserId:Guid
+record Leihwesen.Pruefung.SeiteZuPruefen command | PruefungId:Id<Seitenpruefung>, Nummer:int, Seite:string
+record Leihwesen.Pruefung.SeiteGeprueft command | PruefungId:Id<Seitenpruefung>, Nummer:int, Beschaedigt:bool
+funktion Leihwesen.Pruefung.Pruefungsstart() | Auf(RueckgabeGescannt) herkunft -> StartePruefung || Auf(PruefungGestartet) -> strom SeiteZuPruefen
+funktion Leihwesen.Pruefung.Seitenpruefer(leser:ISeitenleser) | Auf(SeiteZuPruefen) -> SeiteGeprueft
+funktion Leihwesen.Pruefung.Seitenbilanz() | Auf(IReadOnlyList<SeiteGeprueft> alle) -> strom SchliessePruefungAb
+funktion Leihwesen.Pruefung.Offenzaehlung() | Auf(BemesseMahnung) herkunft liest IZaehleOffene offene -> strom EroeffneMahnung
+technik Leihwesen.Pruefung.ISeitenleser schnittstelle | IstBeschaedigt(seite:string):bool | umsetzung Handpruefung(); umsetzung Lichtpruefung()
+graph Leihwesen.Pruefung.Seitenpruefungslauf | knoten Start:Pruefungsstart, Pruefer:Seitenpruefer, Bilanz:Seitenbilanz | koepfe RueckgabeGescannt | aus StartePruefung, SchliessePruefungAb
+kante Seitenpruefungslauf | Start -SeiteZuPruefen-> Pruefer
+kante Seitenpruefungslauf | Pruefer -SeiteGeprueft-> Bilanz
+# Die Mahnbemessung bekommt im Editor einen zweiten Knoten (Geste „Graph: Knoten hinzufügen“) — ein zweiter Kopf
+graph Leihwesen.Pruefung.Mahnbemessung | knoten Zaehlung:Offenzaehlung, Vormerkung:Vormerkpruefung | koepfe BemesseMahnung, PruefeVormerkung | aus EroeffneMahnung
 
 # ── Lesen: frei benannte Fähigkeiten + Bündel (Marker statt Namensregel), class-ReadModel, OneOf; Kennung = Typname; der Store hat Klasse 1
 #    (Basis MartenStore); jedes Auf nimmt die Herkunft; hinter dem Reader steht, wer in denselben Store schreibt (aus den Fähigkeiten) ──
-record Leihwesen.Lesen.OffeneAusleihen query | LeserId:Guid { get; init; }
-record Leihwesen.Lesen.OffeneAusleihenAntwort queryresponse | Anzahl:int
-record Leihwesen.Lesen.KeineAusleihen queryresponse |
 readmodel Leihwesen.Lesen.LeihEintrag store=ILeihBuch | Id:Guid { get; set; }, LeserId:Guid { get; set; }, Offen:bool { get; set; }
 readmodel Leihwesen.Lesen.Ausleihzaehler store= geteilt | Id:string="gesamt" { get; init; }, Offen:int { get; init; }
 store Leihwesen.Lesen.ILeihBuch klasse=1 | schreibt SchreibeAsync(eintrag:LeihEintrag), SchliesseAsync(id:Guid) | liest OffeneAsync(leserId:Guid):IReadOnlyList<LeihEintrag>
+faehigkeit Leihwesen.Lesen.INotiereAusleihe schreibt ILeihBuch.SchreibeAsync
+faehigkeit Leihwesen.Lesen.ISchliesseAusleihe schreibt ILeihBuch.SchliesseAsync
+faehigkeit Leihwesen.Lesen.IZaehleOffene liest ILeihBuch.OffeneAsync
 projektion Leihwesen.Lesen.Leihliste | Ausgeliehen herkunft -> ILeihBuch.SchreibeAsync; Zurueckgegeben herkunft -> ILeihBuch.SchliesseAsync
 reader Leihwesen.Lesen.LeihAuskunftLeser hinter=Leihliste | OffeneAusleihen -> ILeihBuch.OffeneAsync => OffeneAusleihenAntwort|KeineAusleihen
-
-# ── Verträge von Auf und Frage: WAS aus der Signatur (Form · Art:Typ), WELCHE Store-Fns aus den Fähigkeits-Parametern — kein Rumpf-Fakt ──
+record Leihwesen.Lesen.OffeneAusleihen query | LeserId:Guid { get; init; }
+record Leihwesen.Lesen.OffeneAusleihenAntwort queryresponse | Anzahl:int
+record Leihwesen.Lesen.KeineAusleihen queryresponse |
+# Verträge von Auf und Frage: WAS aus der Signatur (Form · Art:Typ), WELCHE Store-Fns aus den Fähigkeits-Parametern — kein Rumpf-Fakt
 ausgang Leihliste.Ausgeliehen nichts | storefn:ILeihBuch.SchreibeAsync
 ausgang Leihliste.Zurueckgegeben nichts | storefn:ILeihBuch.SchliesseAsync
 ausgang LeihAuskunftLeser.OffeneAusleihen einzeln | response:OffeneAusleihenAntwort; response:KeineAusleihen; storefn:ILeihBuch.OffeneAsync
 
-# ── Fähigkeits-Namen sind Code-Fakt (Interface je Funktion), nicht aus dem Fn-Namen geraten ──
-faehigkeit Leihwesen.Lesen.INotiereAusleihe schreibt ILeihBuch.SchreibeAsync
-faehigkeit Leihwesen.Lesen.ISchliesseAusleihe schreibt ILeihBuch.SchliesseAsync
-faehigkeit Leihwesen.Lesen.IZaehleOffene liest ILeihBuch.OffeneAsync
+# ── Akteure (Entscheidung 13): IAkteur + IDarf<T> (was er hineingibt) + IHoert<T> (was zu ihm kommt) in der Basisliste — frei benannt, keine Art.
+#    Die Theke gibt auch einen Command ohne Ziel an einen Graph-Kopf und hört Hinweise (aus einem Decide, aus einem Knoten, des Frameworks);
+#    die KI-Gutachterin hört ein Event; das Archiv nimmt ARBEIT an (BegutachteVorOrt aus einem Knoten) und antwortet über sein IDarf ──
+akteur Leihwesen.Lesen.Theke | darf LeiheAus, GibZurueck, OffeneAusleihen, RueckgabeGescannt | hoert NichtAusgeliehen, NichtSchaetzbar, LaufGescheitert
+akteur Leihwesen.Lesen.Gutachterin | darf EroeffneMahnung | hoert MahnungEroeffnet
+akteur Leihwesen.Lesen.Archiv | darf EroeffneMahnung | hoert BegutachteVorOrt, Ausgeliehen
+# ── Clients (Entscheidung 13): ein Record mit IClient, der nur nennt, wen er verkörpert. Lesesaal verkörpert zwei Akteure, das Archiv läuft über
+#    zwei Clients (Lesesaal + Depot) ──
+client Leihwesen.Lesen.Lesesaal | verkoerpert Theke, Archiv
+client Leihwesen.Lesen.Depot | verkoerpert Archiv
 
 # ── Im Editor GEZEICHNET (Sonde/Gezeichnet.gesten.json → Gesten-Motor → Fork → neu eingelesen) ──
-#    Store neu (Impl-Klasse ohne Basis, weil die Impls im Code keine gemeinsame haben — darum noch ohne Store-Klasse, „klasse=-“), Fähigkeit von
-#    MerkeVorAsync im Panel benannt, die von ZaehleAsync abgeleitet (I + Methode ohne Async). Kanten = Fähigkeits-Parameter, Ausgänge = Signatur;
-#    ein neues Auf nimmt die Herkunft.
-#    (Reaktionen gibt es nicht mehr — was eine Reaktion tat, ist eine Funktion.)
-record Leihwesen.Lesen.Vormerkungen query | LeserId:Guid
-record Leihwesen.Lesen.VormerkungenAntwort queryresponse | Anzahl:int
+#    Store neu (Impl-Klasse ohne Basis — darum noch ohne Store-Klasse, „klasse=-“), Fähigkeit von MerkeVorAsync im Panel benannt, die von
+#    ZaehleAsync abgeleitet (I + Methode ohne Async). Kanten = Fähigkeits-Parameter, Ausgänge = Signatur; ein neues Auf nimmt die Herkunft.
 readmodel Leihwesen.Lesen.Vormerkung store=IVormerkbuch | Id:Guid, LeserId:Guid
 store Leihwesen.Lesen.IVormerkbuch klasse=- | schreibt MerkeVorAsync(v:Vormerkung) | liest ZaehleAsync(leserId:Guid):int
 faehigkeit Leihwesen.Lesen.INotiereVormerkung schreibt IVormerkbuch.MerkeVorAsync
 faehigkeit Leihwesen.Lesen.IZaehle liest IVormerkbuch.ZaehleAsync
 projektion Leihwesen.Lesen.Vormerkliste | Ausgeliehen herkunft -> IVormerkbuch.MerkeVorAsync
 reader Leihwesen.Lesen.VormerkAuskunft hinter=Vormerkliste | Vormerkungen -> IVormerkbuch.ZaehleAsync => VormerkungenAntwort
+record Leihwesen.Lesen.Vormerkungen query | LeserId:Guid
+record Leihwesen.Lesen.VormerkungenAntwort queryresponse | Anzahl:int
 ausgang Vormerkliste.Ausgeliehen nichts | storefn:IVormerkbuch.MerkeVorAsync
 ausgang VormerkAuskunft.Vormerkungen einzeln | response:VormerkungenAntwort; storefn:IVormerkbuch.ZaehleAsync
-
-# ── Akteure: IAkteur/Art + IDarf<T> in der Basisliste (Code-Fakt), frei benannt; einer im Code, einer im Editor gezeichnet ──
-akteur Leihwesen.Lesen.Theke | darf LeiheAus, GibZurueck, OffeneAusleihen
-# ── Eine KI als Akteur ──
-akteur Leihwesen.Lesen.Gutachterin Ki | darf EroeffneMahnung
-# ── Funktionen draußen (docs/konzept-akteure.md §5): ein Akteur darf eine Funktion RECHNEN (IDarf<F>, F eine Schnittstelle) — ihre Ausgaben gibt er hinein.
-#    IRegal: zwei Eingänge, einer einzeln, einer als Strom; im Code. Die Mahnstelle ist gezeichnet und darf die Schadens-Schätzung rechnen,
-#    die zugleich eine Umsetzung im Host hat (der Laufort steht in der Umgebung). ──
-akteur Leihwesen.Lesen.Archiv Maschine | darf IRegal
-funktion-auf Leihwesen.Lesen.IRegal schnittstelle | Zurueckgegeben herkunft -> MeldeSchaden || SchadenGemeldet herkunft -> strom EroeffneMahnung; MeldeSchaden
-akteur Leihwesen.Gebuehren.Mahnstelle | darf EroeffneMahnung, Vormerkungen, ISchadensSchaetzung
-# ── Clients (docs/konzept-akteure.md §4): IClientVertrag ist der Anker; der Rand steht ganz in der Basisliste: IVerkoerpert<A>, IHoert<E>.
-#    Lesesaal verkörpert zwei Akteure (Archiv, das die Funktion rechnet, + Theke), das Archiv läuft über zwei Clients (Lesesaal + Depot);
-#    Mahnportal ist gezeichnet. ──
-client Leihwesen.Lesen.ILesesaal | verkoerpert Theke, Archiv; hoert MahnungEroeffnet
-client Leihwesen.Lesen.IDepot | verkoerpert Archiv; hoert Ausgeliehen
-client Leihwesen.Gebuehren.IMahnportal | verkoerpert Mahnstelle; hoert Zurueckgegeben
+#    Akteur mit darf und hoert, Client als Record (die Geste schreibt Akteure.cs und Clients.cs neu)
+akteur Leihwesen.Gebuehren.Mahnstelle | darf EroeffneMahnung, Vormerkungen | hoert MahnungEroeffnet, NichtSchaetzbar
+client Leihwesen.Gebuehren.Mahnportal | verkoerpert Mahnstelle
+#    Eine neue Funktion (Klasse mit Technik im Konstruktor) und ihr Command (ohne Ziel, nur ein Knoten nimmt ihn); danach ein Knoten an einem
+#    geschriebenen Graphen (Mahnbemessung, oben) und ein neuer Graph mit einer generischen Funktion als Knoten (Kurzglaettung, unten)
+record Leihwesen.Gebuehren.PruefeVormerkung command | LeserId:Guid, Neuwert:decimal
+funktion Leihwesen.Gebuehren.Vormerkpruefung(tabelle:IWertTabelle) | Auf(PruefeVormerkung) herkunft -> EroeffneMahnung
 
 # ── Sicht (Werkbank P7.3): Domäne und Block aus dem GRAPH, nie aus dem Namespace. Die Leseseite in Leihwesen.Lesen gehört zum Leihvorgang,
-#    dessen Events sie liest (Projektion → Reader/Store/ReadModel/Query/Response); Wert-Typen zum Aggregat ihrer Records; ein Akteur in der
-#    ersten Domäne, in der er wirkt (was er hineingibt: Befugnisse, bei einer Funktion, die er rechnen darf, deren Ausgaben — das Archiv
-#    wirkt mit MeldeSchaden/EroeffneMahnung in den Gebühren). Der geteilte Zähler hat keinen Store und keine Nachbarn: eine Insel in seinem Namespace. ──
-# Code-Karte (Werkbank P7.4): Fristrechnung ist kein Baustein — roh gezeigt, beide partial-Teile an einer Karte, Domäne aus dem Namespace
-code Leihwesen.Ausleihe.Fristrechnung class teile=2 domaene=Leihwesen.Ausleihe block=§geteilt
+#    dessen Events sie liest; Wert-Typen zum Aggregat ihrer Records; ein Akteur in der ersten Domäne, in der er wirkt (was er hineingibt: die
+#    Mahnstelle fragt die Vormerkungen des Leihvorgangs). Der geteilte Zähler hat keinen Store und keine Nachbarn: eine Insel in seinem Namespace. ──
 sicht Leihwesen.Ausleihe.Signatur valueobject domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Ausleihe.Zustand enum domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Ausleihe.HoleLeihstand query domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Ausleihe.Leihstand queryresponse domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Ausleihe.NichtVerliehen queryresponse domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.LeihEintrag readmodel domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.ILeihBuch store domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.Leihliste projektion domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.LeihAuskunftLeser reader domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Lesen.OffeneAusleihen query domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Lesen.OffeneAusleihenAntwort queryresponse domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Lesen.KeineAusleihen queryresponse domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.Vormerkung readmodel domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.IVormerkbuch store domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.Vormerkliste projektion domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.VormerkAuskunft reader domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Lesen.Vormerkungen query domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Lesen.VormerkungenAntwort queryresponse domaene=Leihwesen.Ausleihe block=Leihvorgang
-sicht Leihwesen.Lesen.LeihEintrag readmodel domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Lesen.Ausleihzaehler readmodel domaene=Leihwesen.Lesen block=§geteilt insel
-sicht Leihwesen.Lesen.Vormerkung readmodel domaene=Leihwesen.Ausleihe block=Leihvorgang
-sicht Leihwesen.Lesen.ILeihBuch store domaene=Leihwesen.Ausleihe block=Leihvorgang
-sicht Leihwesen.Lesen.IVormerkbuch store domaene=Leihwesen.Ausleihe block=Leihvorgang
-sicht Leihwesen.Lesen.Leihliste projektion domaene=Leihwesen.Ausleihe block=Leihvorgang
-sicht Leihwesen.Lesen.Vormerkliste projektion domaene=Leihwesen.Ausleihe block=Leihvorgang
-sicht Leihwesen.Lesen.LeihAuskunftLeser reader domaene=Leihwesen.Ausleihe block=Leihvorgang
-sicht Leihwesen.Lesen.VormerkAuskunft reader domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Lesen.Theke akteur domaene=Leihwesen.Ausleihe block=§akteure
-sicht Leihwesen.Gebuehren.Mahnstelle akteur domaene=Leihwesen.Ausleihe block=§akteure
 sicht Leihwesen.Lesen.Gutachterin akteur domaene=Leihwesen.Gebuehren block=§akteure
 sicht Leihwesen.Lesen.Archiv akteur domaene=Leihwesen.Gebuehren block=§akteure
+sicht Leihwesen.Gebuehren.Mahnstelle akteur domaene=Leihwesen.Ausleihe block=§akteure
 
-# ══ FREMDE SZENARIEN (docs/12 §12.6) — eigene Wurzeln neben „Leihwesen“, damit das Modell nicht auf eine
-#    Beispieldomäne passt. In der Grammatik des Plans (§3, seit Phase 4). ══
+# ── Besitz (Hierarchie Anwendung → Blöcke → Glieder), nur aus den Signaturen: ein Command gehört seinem Aggregat — auch ein Command ohne Ziel,
+#    den ein Decide abgibt —, was eine Methode zurückgibt dem Typ der Methode (Events dem Aggregat; was nur Knoten einander geben, der Funktion,
+#    die es ausgibt; ein Hinweis aus einem Knoten seiner Funktion), eine Query dem, dessen Frage sie nimmt; was nur als Feld/Parameter/Konstruktor
+#    vorkommt, seinem einzigen Nutzer (mehrere oder keiner → §begriffe); was von außen kommt (Befugnis eines Akteurs ohne Erzeuger) → §rand.
+#    Die Leseseite hängt an ihrem Store-Bündel (Sicht), Antworten eines Readers am Reader. ──
+besitz Leihwesen.Ausleihe.Befehle.LeiheAus command -> aggregate:Leihvorgang
+besitz Leihwesen.Ausleihe.Befehle.GibZurueck command -> aggregate:Leihvorgang
+besitz Leihwesen.Ausleihe.Befehle.MahneRueckgabe command -> aggregate:Leihvorgang
+besitz Leihwesen.Ausleihe.PruefeRueckgabe command -> aggregate:Leihvorgang
+besitz Leihwesen.Ausleihe.BemesseMahnung command -> aggregate:Leihvorgang
+besitz Leihwesen.Ausleihe.Ausgeliehen event -> aggregate:Leihvorgang
+besitz Leihwesen.Ausleihe.Zurueckgegeben event -> aggregate:Leihvorgang
+besitz Leihwesen.Ausleihe.RueckgabeAngemahnt event -> aggregate:Leihvorgang
+besitz Leihwesen.Ausleihe.BereitsAusgeliehen rejection -> aggregate:Leihvorgang
+besitz Leihwesen.Ausleihe.NichtAusgeliehen rejection -> aggregate:Leihvorgang
+besitz Leihwesen.Ausleihe.HoleLeihstand query -> aggregate:Leihvorgang
+besitz Leihwesen.Ausleihe.Leihstand queryresponse -> aggregate:Leihvorgang
+besitz Leihwesen.Ausleihe.NichtVerliehen queryresponse -> aggregate:Leihvorgang
+besitz Leihwesen.Ausleihe.Signatur valueobject -> aggregate:Leihvorgang
+besitz Leihwesen.Ausleihe.Zustand enum -> aggregate:Leihvorgang
+besitz Leihwesen.Ausleihe.Fristrechnung code -> §begriffe
+besitz Leihwesen.Gebuehren.MeldeSchaden command -> aggregate:Schadensfall
+besitz Leihwesen.Gebuehren.SchadenGemeldet event -> aggregate:Schadensfall
+besitz Leihwesen.Gebuehren.SchadenExistiert rejection -> aggregate:Schadensfall
+besitz Leihwesen.Gebuehren.SchaetzeSchaden command -> aggregate:Schadensfall
+besitz Leihwesen.Gebuehren.EroeffneMahnung command -> aggregate:Mahnvorgang
+besitz Leihwesen.Gebuehren.MahnungEroeffnet event -> aggregate:Mahnvorgang
+besitz Leihwesen.Gebuehren.MahnungExistiert rejection -> aggregate:Mahnvorgang
+besitz Leihwesen.Gebuehren.SchadenErfasst command -> bausteinfunktion:Schadensaufnahme
+besitz Leihwesen.Gebuehren.BegutachteVorOrt command -> bausteinfunktion:Schadensaufnahme
+besitz Leihwesen.Gebuehren.NichtSchaetzbar rejection -> bausteinfunktion:Schadensaufnahme
+besitz Leihwesen.Gebuehren.SchadenGeschaetzt command -> bausteinfunktion:Schadensschaetzer
+besitz Leihwesen.Gebuehren.GutachtenErhalten command -> bausteinfunktion:Gutachtenanfrage
+besitz Leihwesen.Gebuehren.GutachtenKonfig konfig -> bausteinfunktion:Gutachtenanfrage
+besitz Leihwesen.Gebuehren.WertTabellenKonfig konfig -> bausteinfunktion:IWertTabelle
+# der gezeichnete Command: kein Erzeuger, kein Akteur darf ihn — niemandes
+besitz Leihwesen.Gebuehren.PruefeVormerkung command -> §begriffe
+besitz Leihwesen.Pruefung.RueckgabeGescannt command -> §rand
+besitz Leihwesen.Pruefung.StartePruefung command -> aggregate:Seitenpruefung
+besitz Leihwesen.Pruefung.PruefungGestartet event -> aggregate:Seitenpruefung
+besitz Leihwesen.Pruefung.PruefungLaeuftSchon rejection -> aggregate:Seitenpruefung
+besitz Leihwesen.Pruefung.SchliessePruefungAb command -> aggregate:Seitenpruefung
+besitz Leihwesen.Pruefung.PruefungAbgeschlossen event -> aggregate:Seitenpruefung
+besitz Leihwesen.Pruefung.BrichPruefungAb command -> aggregate:Seitenpruefung
+besitz Leihwesen.Pruefung.PruefungAbgebrochen event -> aggregate:Seitenpruefung
+besitz Leihwesen.Pruefung.SeiteZuPruefen command -> bausteinfunktion:Pruefungsstart
+besitz Leihwesen.Pruefung.SeiteGeprueft command -> bausteinfunktion:Seitenpruefer
+besitz Leihwesen.Lesen.LeihEintrag readmodel -> store:ILeihBuch
+besitz Leihwesen.Lesen.Leihliste projektion -> store:ILeihBuch
+besitz Leihwesen.Lesen.LeihAuskunftLeser reader -> store:ILeihBuch
+besitz Leihwesen.Lesen.OffeneAusleihen query -> reader:LeihAuskunftLeser
+besitz Leihwesen.Lesen.OffeneAusleihenAntwort queryresponse -> reader:LeihAuskunftLeser
+besitz Leihwesen.Lesen.KeineAusleihen queryresponse -> reader:LeihAuskunftLeser
+besitz Leihwesen.Lesen.Ausleihzaehler readmodel -> §begriffe
+besitz Leihwesen.Lesen.Vormerkung readmodel -> store:IVormerkbuch
+besitz Leihwesen.Lesen.Vormerkliste projektion -> store:IVormerkbuch
+besitz Leihwesen.Lesen.VormerkAuskunft reader -> store:IVormerkbuch
+besitz Leihwesen.Lesen.Vormerkungen query -> reader:VormerkAuskunft
+besitz Leihwesen.Lesen.VormerkungenAntwort queryresponse -> reader:VormerkAuskunft
 
-# ── Kundenportal (Konten.cs.txt): Benutzer mit EINDEUTIGER E-Mail — die Adresse ist das Eindeutigkeits-Aggregat, die Absage ein Fakt,
-#    der Benutzer steht als fachliches Feld im Event (A2); eine gleichbleibende Funktion verbindet die beiden Aggregate (je Eingang ein Auf);
-#    Hilfscode leitet die Id ab. ──
+# ══ FREMDE SZENARIEN (docs/12 §12.6) — eigene Wurzeln neben „Leihwesen“, damit das Modell nicht auf eine Beispieldomäne passt ══════════════
+
+# ── Kundenportal (Konten.cs.txt): Benutzer mit EINDEUTIGER E-Mail — die Adresse ist das Eindeutigkeits-Aggregat; das Decide des Benutzers gibt die
+#    Prüfung als Command ohne Ziel an den Kopf eines Graphen; dessen einziger Knoten reserviert und hört die zwei ANTWORTEN des fremden Aggregats
+#    (je ein Auf, R2); Hilfscode leitet die Id ab ──
+enum Kundenportal.Konten.Kontostatus | Beantragt = 1, Aktiv = 2, Abgelehnt = 3
+aggregat Kundenportal.Konten.Benutzer | Email:string="", Status:Kontostatus
+aggregat Kundenportal.Konten.Adresse | Inhaber:Id<Benutzer>
+decide Benutzer.RegistriereBenutzer -> RegistrierungBeantragt; PruefeAdresse; BenutzerExistiert
+decide Benutzer.BestaetigeBenutzer -> BenutzerBestaetigt
+decide Benutzer.LehneRegistrierungAb -> RegistrierungAbgelehnt
+decide Adresse.ReserviereAdresse -> AdresseReserviert; AdresseVergeben
+apply Benutzer.RegistrierungBeantragt
+apply Benutzer.BenutzerBestaetigt
+apply Benutzer.RegistrierungAbgelehnt
+apply Adresse.AdresseReserviert
+apply Adresse.AdresseVergeben
 record Kundenportal.Konten.RegistriereBenutzer command erzeugung aggregat=Benutzer | AggregateId:Id<Benutzer>, Email:string, Name:string
 record Kundenportal.Konten.RegistrierungBeantragt event aggregat=Benutzer | BenutzerId:Id<Benutzer>, Email:string, Name:string
 record Kundenportal.Konten.BenutzerExistiert rejection aggregat=Benutzer | Id:Id<Benutzer>
@@ -178,81 +275,132 @@ record Kundenportal.Konten.RegistrierungAbgelehnt event aggregat=Benutzer | Grun
 record Kundenportal.Konten.ReserviereAdresse command aggregat=Adresse | AggregateId:Id<Adresse>, Email:string, BenutzerId:Id<Benutzer>
 record Kundenportal.Konten.AdresseReserviert event aggregat=Adresse | Email:string, BenutzerId:Id<Benutzer>
 record Kundenportal.Konten.AdresseVergeben event aggregat=Adresse | BenutzerId:Id<Benutzer>, Inhaber:Id<Benutzer>
-enum Kundenportal.Konten.Kontostatus | Beantragt = 1, Aktiv = 2, Abgelehnt = 3
-aggregat Kundenportal.Konten.Benutzer | Email:string="", Status:Kontostatus
-aggregat Kundenportal.Konten.Adresse | Inhaber:Id<Benutzer>
-decide Benutzer.RegistriereBenutzer -> RegistrierungBeantragt; BenutzerExistiert
-decide Benutzer.BestaetigeBenutzer -> BenutzerBestaetigt
-decide Benutzer.LehneRegistrierungAb -> RegistrierungAbgelehnt
-decide Adresse.ReserviereAdresse -> AdresseReserviert; AdresseVergeben
-apply Benutzer.RegistrierungBeantragt
-apply Benutzer.BenutzerBestaetigt
-apply Benutzer.RegistrierungAbgelehnt
-apply Adresse.AdresseReserviert
-apply Adresse.AdresseVergeben
-funktion-auf Kundenportal.Konten.Registrierung klasse() | RegistrierungBeantragt -> ReserviereAdresse || AdresseReserviert -> BestaetigeBenutzer || AdresseVergeben -> LehneRegistrierungAb
-akteur Kundenportal.Konten.Besucher Mensch | darf RegistriereBenutzer
-client Kundenportal.Konten.IRegistrierungsseite | verkoerpert Besucher; hoert BenutzerBestaetigt, RegistrierungAbgelehnt
+record Kundenportal.Konten.PruefeAdresse command aggregat=Benutzer | BenutzerId:Id<Benutzer>, Email:string
+funktion Kundenportal.Konten.Registrierung() | Auf(PruefeAdresse) -> ReserviereAdresse || Auf(AdresseReserviert) -> BestaetigeBenutzer || Auf(AdresseVergeben) -> LehneRegistrierungAb
+graph Kundenportal.Konten.Adresspruefung | knoten Reservierung:Registrierung | koepfe PruefeAdresse | aus ReserviereAdresse, BestaetigeBenutzer, LehneRegistrierungAb
+akteur Kundenportal.Konten.Besucher | darf RegistriereBenutzer | hoert BenutzerBestaetigt, RegistrierungAbgelehnt
+client Kundenportal.Konten.Registrierungsseite | verkoerpert Besucher
 code Kundenportal.Konten.Adressschluessel class teile=1 domaene=Kundenportal.Konten block=§geteilt
 sicht Kundenportal.Konten.Kontostatus enum domaene=Kundenportal.Konten block=Benutzer
 sicht Kundenportal.Konten.Besucher akteur domaene=Kundenportal.Konten block=§akteure
+besitz Kundenportal.Konten.RegistriereBenutzer command -> aggregate:Benutzer
+besitz Kundenportal.Konten.RegistrierungBeantragt event -> aggregate:Benutzer
+besitz Kundenportal.Konten.BenutzerExistiert rejection -> aggregate:Benutzer
+besitz Kundenportal.Konten.BestaetigeBenutzer command -> aggregate:Benutzer
+besitz Kundenportal.Konten.BenutzerBestaetigt event -> aggregate:Benutzer
+besitz Kundenportal.Konten.LehneRegistrierungAb command -> aggregate:Benutzer
+besitz Kundenportal.Konten.RegistrierungAbgelehnt event -> aggregate:Benutzer
+besitz Kundenportal.Konten.PruefeAdresse command -> aggregate:Benutzer
+besitz Kundenportal.Konten.ReserviereAdresse command -> aggregate:Adresse
+besitz Kundenportal.Konten.AdresseReserviert event -> aggregate:Adresse
+besitz Kundenportal.Konten.AdresseVergeben event -> aggregate:Adresse
+besitz Kundenportal.Konten.Kontostatus enum -> aggregate:Benutzer
+besitz Kundenportal.Konten.Adressschluessel code -> §begriffe
 
-# ── Anlagen (Messnetz.cs.txt): SENSOR-STROM MIT ALARM — der Sensor zählt Überschreitungen hintereinander (Zähl-Aggregat, zwei Fakten aus
-#    einem Messwert), ein Messwert im Rahmen ist ein Noop; eine gleichbleibende Funktion öffnet die Störung desselben Sensors (Id = Stream). ──
-record Anlagen.Messung.RichteSensorEin command erzeugung aggregat=Sensor | AggregateId:Id<Sensor>, Ort:string, Grenzwert:double, AlarmNach:int
-record Anlagen.Messung.SensorEingerichtet event aggregat=Sensor | Ort:string, Grenzwert:double, AlarmNach:int
-record Anlagen.Messung.SensorUnbekannt rejection aggregat=Sensor | SensorId:Id<Sensor>
-record Anlagen.Messung.MeldeMesswert command aggregat=Sensor | AggregateId:Id<Sensor>, Wert:double, GemessenAm:DateTimeOffset
-record Anlagen.Messung.MesswertGemessen rejection | SensorId:Id<Sensor>, Wert:double, GemessenAm:DateTimeOffset
-funktion-auf Anlagen.Messung.Messwertpruefung klasse() | MesswertGemessen hinweis -> MeldeMesswert
-record Anlagen.Messung.Messzyklus event typart=public sealed record treiber=Takt | Zeitpunkt:DateTimeOffset { get; init; } required, Kennung:string { get; init; } required
-record Anlagen.Messung.GrenzwertUeberschritten event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset, Hintereinander:int
-record Anlagen.Messung.AlarmAusgeloest event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset
-record Anlagen.Messung.WertWiederImRahmen event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset
-record Anlagen.Messung.OeffneStoerung command aggregat=Stoerungsfall | AggregateId:Id<Stoerungsfall>, Wert:double
-record Anlagen.Messung.StoerungGeoeffnet event aggregat=Stoerungsfall | Wert:double
-record Anlagen.Messung.StoerungLaeuftSchon rejection aggregat=Stoerungsfall | SensorId:Id<Stoerungsfall>
-record Anlagen.Messung.QuittiereStoerung command aggregat=Stoerungsfall | AggregateId:Id<Stoerungsfall>, Von:string
-record Anlagen.Messung.StoerungQuittiert event aggregat=Stoerungsfall | Von:string
-record Anlagen.Messung.KeineStoerung rejection aggregat=Stoerungsfall | SensorId:Id<Stoerungsfall>
+# ── Anlagen (Messnetz.cs.txt): SENSOR-STROM MIT ALARM — Zähl-Aggregat; eine EIGENE QUELLFUNKTION (Lausche) mit Konfig, gesichertem Zustand und
+#    Technik am Kopf der Messkette, dahinter ein GRAPH IM GRAPHEN (aufgefaltete Kanten Aufbereitung.Plausi …); der Alarm öffnet die Störung über einen
+#    Graphen; die Störung gibt ARBEIT aus dem Decide an die Schichtleitung und alarmiert über ein RENNEN zweier Wege ──
 aggregat Anlagen.Messung.Sensor | Grenzwert:double, AlarmNach:int, Hintereinander:int, Alarm:bool
 aggregat Anlagen.Messung.Stoerungsfall | Offen:bool
 decide Sensor.RichteSensorEin -> SensorEingerichtet
-decide Sensor.MeldeMesswert -> GrenzwertUeberschritten; AlarmAusgeloest; WertWiederImRahmen; SensorUnbekannt
-decide Stoerungsfall.OeffneStoerung -> StoerungGeoeffnet; StoerungLaeuftSchon
+decide Sensor.MeldeMesswert -> GrenzwertUeberschritten; AlarmAusgeloest; WertWiederImRahmen; OeffneStoerungFuer; SensorUnbekannt
+decide Stoerungsfall.OeffneStoerung -> StoerungGeoeffnet; PruefeStoerungVorOrt; AlarmiereBereitschaft; StoerungLaeuftSchon
 decide Stoerungsfall.QuittiereStoerung -> StoerungQuittiert; KeineStoerung
+decide Stoerungsfall.VermerkeAlarmierung -> AlarmierungVermerkt
 apply Sensor.SensorEingerichtet
 apply Sensor.GrenzwertUeberschritten
 apply Sensor.AlarmAusgeloest
 apply Sensor.WertWiederImRahmen
 apply Stoerungsfall.StoerungGeoeffnet
 apply Stoerungsfall.StoerungQuittiert
-funktion-auf Anlagen.Messung.StoerungBeiAlarm klasse() | AlarmAusgeloest herkunft -> OeffneStoerung
-akteur Anlagen.Messung.Sensornetz Maschine | darf MeldeMesswert, MesswertGemessen
-akteur Anlagen.Messung.Schichtleitung Mensch | darf RichteSensorEin, QuittiereStoerung
-client Anlagen.Messung.ISensorGateway | verkoerpert Sensornetz; hoert
-client Anlagen.Messung.ILeitstand | verkoerpert Schichtleitung; hoert AlarmAusgeloest, StoerungGeoeffnet
+apply Stoerungsfall.AlarmierungVermerkt
+record Anlagen.Messung.RichteSensorEin command erzeugung aggregat=Sensor | AggregateId:Id<Sensor>, Ort:string, Grenzwert:double, AlarmNach:int
+record Anlagen.Messung.SensorEingerichtet event aggregat=Sensor | Ort:string, Grenzwert:double, AlarmNach:int
+record Anlagen.Messung.SensorUnbekannt rejection aggregat=Sensor | SensorId:Id<Sensor>
+record Anlagen.Messung.MeldeMesswert command aggregat=Sensor | AggregateId:Id<Sensor>, Wert:double, GemessenAm:DateTimeOffset
+record Anlagen.Messung.GrenzwertUeberschritten event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset, Hintereinander:int
+record Anlagen.Messung.AlarmAusgeloest event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset
+record Anlagen.Messung.WertWiederImRahmen event aggregat=Sensor | Wert:double, GemessenAm:DateTimeOffset
+record Anlagen.Messung.OeffneStoerungFuer command aggregat=Sensor | Sensor:Id<Sensor>, Wert:double
+record Anlagen.Messung.OeffneStoerung command aggregat=Stoerungsfall | AggregateId:Id<Stoerungsfall>, Wert:double
+record Anlagen.Messung.StoerungGeoeffnet event aggregat=Stoerungsfall | Wert:double
+record Anlagen.Messung.StoerungLaeuftSchon rejection aggregat=Stoerungsfall | SensorId:Id<Stoerungsfall>
+record Anlagen.Messung.QuittiereStoerung command aggregat=Stoerungsfall | AggregateId:Id<Stoerungsfall>, Von:string
+record Anlagen.Messung.StoerungQuittiert event aggregat=Stoerungsfall | Von:string
+record Anlagen.Messung.KeineStoerung rejection aggregat=Stoerungsfall | SensorId:Id<Stoerungsfall>
+record Anlagen.Messung.VermerkeAlarmierung command aggregat=Stoerungsfall | AggregateId:Id<Stoerungsfall>, Weg:string
+record Anlagen.Messung.AlarmierungVermerkt event aggregat=Stoerungsfall | Weg:string
+record Anlagen.Messung.PruefeStoerungVorOrt command aggregat=Stoerungsfall | Fall:Id<Stoerungsfall>, Wert:double
+record Anlagen.Messung.AlarmiereBereitschaft command aggregat=Stoerungsfall | Fall:Id<Stoerungsfall>
+record Anlagen.Messung.Rohwert command | Sensor:Guid, Wert:double, GemessenAm:DateTimeOffset
+record Anlagen.Messung.Plausibel command | Sensor:Guid, Wert:double, GemessenAm:DateTimeOffset
+record Anlagen.Messung.SensorabfrageKonfig konfig | Sensoren:string[], Intervall:TimeSpan
+record Anlagen.Messung.AlarmVerteilt command | Fall:Id<Stoerungsfall>
+record Anlagen.Messung.PerAnrufErreicht command | Fall:Id<Stoerungsfall>, Nummer:string
+record Anlagen.Messung.PerFunkErreicht command | Fall:Id<Stoerungsfall>, Kanal:string
+# Die Quelle: Konstruktor mit Konfig, Zustand (gesichert mit dem Lauf; eine Code-Karte) und Technik; sie lauscht statt Auf
+funktion Anlagen.Messung.Sensorabfrage(konfig:SensorabfrageKonfig, stand:IZustand<Abfragestand>, bus:ISensorbus) zustand=Abfragestand | Lausche -> strom Rohwert
+code Anlagen.Messung.Abfragestand class teile=1 domaene=Anlagen.Messung block=§geteilt
+technik Anlagen.Messung.ISensorbus schnittstelle | LiesAsync(sensor:Guid, ct:CancellationToken):Task<double?> | umsetzung Feldbus()
+funktion Anlagen.Messung.Plausibilisierung() | Auf(Rohwert) -> strom Plausibel
+funktion Anlagen.Messung.Messwertpruefung() | Auf(Plausibel) -> MeldeMesswert
+funktion Anlagen.Messung.StoerungBeiAlarm() | Auf(OeffneStoerungFuer) -> OeffneStoerung
+# RENNEN: zwei Wege nehmen AlarmVerteilt; die Quittung nimmt den ersten (OneOf-Port)
+funktion Anlagen.Messung.Alarmverteilung() | Auf(AlarmiereBereitschaft) -> AlarmVerteilt
+funktion Anlagen.Messung.Anrufkette(telefonie:ITelefonie) | Auf(AlarmVerteilt) -> PerAnrufErreicht
+funktion Anlagen.Messung.Funkruf() | Auf(AlarmVerteilt) -> PerFunkErreicht
+funktion Anlagen.Messung.Alarmquittung() | Auf(OneOf<PerAnrufErreicht, PerFunkErreicht> erster) -> VermerkeAlarmierung
+technik Anlagen.Messung.ITelefonie schnittstelle | RufeAsync(fall:Guid):Task<string> | umsetzung Telefonanlage()
+# GRAPH IM GRAPHEN: die Aufbereitung ist eine Schachtel (Signatur Rohwert → MeldeMesswert); in der Messkette hinter der Quelle aufgefaltet
+graph Anlagen.Messung.Messwertaufbereitung | knoten Plausi:Plausibilisierung, Pruefung:Messwertpruefung | koepfe Rohwert | aus MeldeMesswert
+kante Messwertaufbereitung | Plausi -Plausibel-> Pruefung
+graph Anlagen.Messung.Messkette | knoten Abfrage:Sensorabfrage, Aufbereitung:Messwertaufbereitung | koepfe - | aus MeldeMesswert | quelle Abfrage
+kante Messkette | Abfrage -Rohwert-> Aufbereitung.Plausi
+kante Messkette | Aufbereitung.Plausi -Plausibel-> Aufbereitung.Pruefung
+graph Anlagen.Messung.Stoerungsoeffnung | knoten Oeffnung:StoerungBeiAlarm | koepfe OeffneStoerungFuer | aus OeffneStoerung
+graph Anlagen.Messung.Alarmierung | knoten Verteilung:Alarmverteilung, Anruf:Anrufkette, Funk:Funkruf, Quittung:Alarmquittung | koepfe AlarmiereBereitschaft | aus VermerkeAlarmierung
+kante Alarmierung | Verteilung -AlarmVerteilt-> Anruf
+kante Alarmierung | Verteilung -AlarmVerteilt-> Funk
+kante Alarmierung | Anruf -PerAnrufErreicht-> Quittung
+kante Alarmierung | Funk -PerFunkErreicht-> Quittung
+# Das Sensornetz ist der Akteur der Instanz der Messkette (es darf, was sie verlässt); die Schichtleitung nimmt ARBEIT an (aus dem Decide) und
+#    antwortet mit der Quittung, dazu Kenntnis zweier Events
+akteur Anlagen.Messung.Sensornetz | darf MeldeMesswert | hoert -
+akteur Anlagen.Messung.Schichtleitung | darf RichteSensorEin, QuittiereStoerung | hoert PruefeStoerungVorOrt, AlarmAusgeloest, StoerungGeoeffnet
+client Anlagen.Messung.SensorGateway | verkoerpert Sensornetz
+client Anlagen.Messung.Leitstand | verkoerpert Schichtleitung
 sicht Anlagen.Messung.Sensornetz akteur domaene=Anlagen.Messung block=§akteure
 sicht Anlagen.Messung.Schichtleitung akteur domaene=Anlagen.Messung block=§akteure
+besitz Anlagen.Messung.RichteSensorEin command -> aggregate:Sensor
+besitz Anlagen.Messung.SensorEingerichtet event -> aggregate:Sensor
+besitz Anlagen.Messung.SensorUnbekannt rejection -> aggregate:Sensor
+besitz Anlagen.Messung.MeldeMesswert command -> aggregate:Sensor
+besitz Anlagen.Messung.GrenzwertUeberschritten event -> aggregate:Sensor
+besitz Anlagen.Messung.AlarmAusgeloest event -> aggregate:Sensor
+besitz Anlagen.Messung.WertWiederImRahmen event -> aggregate:Sensor
+besitz Anlagen.Messung.OeffneStoerungFuer command -> aggregate:Sensor
+besitz Anlagen.Messung.OeffneStoerung command -> aggregate:Stoerungsfall
+besitz Anlagen.Messung.StoerungGeoeffnet event -> aggregate:Stoerungsfall
+besitz Anlagen.Messung.StoerungLaeuftSchon rejection -> aggregate:Stoerungsfall
+besitz Anlagen.Messung.QuittiereStoerung command -> aggregate:Stoerungsfall
+besitz Anlagen.Messung.StoerungQuittiert event -> aggregate:Stoerungsfall
+besitz Anlagen.Messung.KeineStoerung rejection -> aggregate:Stoerungsfall
+besitz Anlagen.Messung.VermerkeAlarmierung command -> aggregate:Stoerungsfall
+besitz Anlagen.Messung.AlarmierungVermerkt event -> aggregate:Stoerungsfall
+besitz Anlagen.Messung.PruefeStoerungVorOrt command -> aggregate:Stoerungsfall
+besitz Anlagen.Messung.AlarmiereBereitschaft command -> aggregate:Stoerungsfall
+besitz Anlagen.Messung.Rohwert command -> bausteinfunktion:Sensorabfrage
+besitz Anlagen.Messung.Plausibel command -> bausteinfunktion:Plausibilisierung
+besitz Anlagen.Messung.AlarmVerteilt command -> bausteinfunktion:Alarmverteilung
+besitz Anlagen.Messung.PerAnrufErreicht command -> bausteinfunktion:Anrufkette
+besitz Anlagen.Messung.PerFunkErreicht command -> bausteinfunktion:Funkruf
+besitz Anlagen.Messung.SensorabfrageKonfig konfig -> bausteinfunktion:Sensorabfrage
+besitz Anlagen.Messung.Abfragestand code -> bausteinfunktion:Sensorabfrage
 
-# ── Warenkatalog (Katalogimport.cs.txt): MASSEN-IMPORT MIT FORTSCHRITT — EINE Quell-Nachricht (Datei-Treiber) startet über eine gleichbleibende
-#    Funktion den Import-Vorgang (Id = Stream der Quelle), ein Import-Dienst draußen antwortet als STROM (Artikel je Zeile, Fortschritt, Abschluss),
-#    getragen von seinem Client (er verkörpert den Import-Dienst); die Leseseite zeigt den Stand in einem Store der Klasse 2 (Dateien, jede Schreib-Fähigkeit nimmt die
-#    Herkunft) und zählt angelegte Artikel in einem Store der Klasse 3 (nur mit [MindestensEinmal] an der Projektion; ohne Herkunft, mit Abbruch). ──
-record Warenkatalog.Import.KatalogDateiAbgelegt event typart=public sealed record treiber=Datei | Name:string { get; init; } required, Pfad:string { get; init; } required, RelativerPfad:string { get; init; } required, Groesse:long { get; init; } required, GeaendertAm:DateTimeOffset { get; init; } required, ErkanntAm:DateTimeOffset { get; init; } required, Kennung:string { get; init; } required
-record Warenkatalog.Import.StarteImport command erzeugung aggregat=Importlauf | AggregateId:Id<Importlauf>, Pfad:string
-record Warenkatalog.Import.ImportGestartet event aggregat=Importlauf | ImportId:Id<Importlauf>, Pfad:string
-record Warenkatalog.Import.ImportLaeuftSchon rejection aggregat=Importlauf | ImportId:Id<Importlauf>
-record Warenkatalog.Import.MeldeImportFortschritt command aggregat=Importlauf | AggregateId:Id<Importlauf>, Zeilen:int
-record Warenkatalog.Import.ImportFortgeschritten event aggregat=Importlauf | Zeilen:int
-record Warenkatalog.Import.SchliesseImportAb command aggregat=Importlauf | AggregateId:Id<Importlauf>, Zeilen:int, Fehler:int
-record Warenkatalog.Import.ImportAbgeschlossen event aggregat=Importlauf | Zeilen:int, Fehler:int
-record Warenkatalog.Import.LegeArtikelAn command erzeugung aggregat=Artikel | AggregateId:Id<Artikel>, Nummer:string, Bezeichnung:string, Preis:decimal
-record Warenkatalog.Import.ArtikelAngelegt event aggregat=Artikel | Nummer:string, Bezeichnung:string, Preis:decimal
-record Warenkatalog.Import.ArtikelExistiert rejection aggregat=Artikel | ArtikelId:Id<Artikel>
-record Warenkatalog.Import.HoleImportstand query | ImportId:Id<Importlauf>
-record Warenkatalog.Import.ImportstandAntwort queryresponse | Zeilen:int, Fertig:bool
-record Warenkatalog.Import.ImportUnbekannt queryresponse |
+# ── Warenkatalog (Katalogimport.cs.txt): MASSEN-IMPORT MIT FORTSCHRITT — am Kopf eine QUELLFUNKTION AUS DEM KATALOG (Dateiwächter, Core.Katalog);
+#    der Eingang startet den Vorgang und hört die Antwort; ein Zeilenleser mit Technik als KLASSE gibt JE Zeile einen Unterlauf und zwischendurch
+#    den Fortschritt (eine Wahl im Strom); die Bilanz SAMMELT und JOINT mit dem bereiten Katalog. Leseseite: Store der Klasse 2 (Dateien, jede
+#    Schreib-Fähigkeit nimmt die Herkunft) und der Klasse 3 (nur mit [MindestensEinmal]; ohne Herkunft, mit Abbruch) ──
 aggregat Warenkatalog.Import.Importlauf | Zeilen:int, Fertig:bool
 aggregat Warenkatalog.Import.Artikel | Nummer:string="", Preis:decimal
 decide Importlauf.StarteImport -> ImportGestartet; ImportLaeuftSchon
@@ -263,13 +411,34 @@ apply Importlauf.ImportGestartet
 apply Importlauf.ImportFortgeschritten
 apply Importlauf.ImportAbgeschlossen
 apply Artikel.ArtikelAngelegt
-funktion-auf Warenkatalog.Import.Katalogeingang klasse() | KatalogDateiAbgelegt herkunft -> StarteImport
-funktion-auf Warenkatalog.Import.IImportLauf schnittstelle | ImportGestartet herkunft -> strom LegeArtikelAn; MeldeImportFortschritt; SchliesseImportAb
-akteur Warenkatalog.Import.Ablage Maschine | darf KatalogDateiAbgelegt
-akteur Warenkatalog.Import.Katalogpflege Mensch | darf HoleImportstand
-client Warenkatalog.Import.IKatalogpflegeOberflaeche | verkoerpert Katalogpflege; hoert ImportFortgeschritten, ImportAbgeschlossen
-akteur Warenkatalog.Import.Importdienst Maschine | darf IImportLauf
-client Warenkatalog.Import.IImportWerk | verkoerpert Importdienst; hoert
+record Warenkatalog.Import.StarteImport command erzeugung aggregat=Importlauf | AggregateId:Id<Importlauf>, Pfad:string
+record Warenkatalog.Import.ImportGestartet event aggregat=Importlauf | ImportId:Id<Importlauf>, Pfad:string
+record Warenkatalog.Import.ImportLaeuftSchon rejection aggregat=Importlauf | ImportId:Id<Importlauf>
+record Warenkatalog.Import.MeldeImportFortschritt command aggregat=Importlauf | AggregateId:Id<Importlauf>, Zeilen:int
+record Warenkatalog.Import.ImportFortgeschritten event aggregat=Importlauf | Zeilen:int
+record Warenkatalog.Import.SchliesseImportAb command aggregat=Importlauf | AggregateId:Id<Importlauf>, Zeilen:int, Fehler:int
+record Warenkatalog.Import.ImportAbgeschlossen event aggregat=Importlauf | Zeilen:int, Fehler:int
+record Warenkatalog.Import.LegeArtikelAn command erzeugung aggregat=Artikel | AggregateId:Id<Artikel>, Nummer:string, Bezeichnung:string, Preis:decimal
+record Warenkatalog.Import.ArtikelAngelegt event aggregat=Artikel | Nummer:string, Bezeichnung:string, Preis:decimal
+record Warenkatalog.Import.ArtikelExistiert rejection aggregat=Artikel | ArtikelId:Id<Artikel>
+record Warenkatalog.Import.KatalogBereit command | Import:Id<Importlauf>, Pfad:string
+record Warenkatalog.Import.Zeile command | Import:Id<Importlauf>, Nummer:int, Felder:string[]
+record Warenkatalog.Import.CsvKonfig konfig | Trenner:string=";"
+funktion Warenkatalog.Import.Katalogeingang() | Auf(DateiGefunden) herkunft -> StarteImport || Auf(ImportGestartet) -> KatalogBereit
+funktion Warenkatalog.Import.Zeilenleser(zerleger:CsvZerleger) | Auf(KatalogBereit) -> strom Zeile; MeldeImportFortschritt
+funktion Warenkatalog.Import.Artikelanlage() | Auf(Zeile) herkunft -> LegeArtikelAn
+funktion Warenkatalog.Import.Importbilanz() | Auf(IReadOnlyList<Zeile> alle, KatalogBereit katalog) -> SchliesseImportAb
+# Technik als Klasse (ohne Schnittstelle): ihre Methoden, ihr Konstruktor mit Konfig-Record
+technik Warenkatalog.Import.CsvZerleger klasse(konfig:CsvKonfig) | Zerlege(zeile:string):string[]
+graph Warenkatalog.Import.Katalogimport | knoten Eingang:Dateiwaechter, Annahme:Katalogeingang, Lesen:Zeilenleser, Anlage:Artikelanlage, Bilanz:Importbilanz | koepfe - | aus StarteImport, MeldeImportFortschritt, LegeArtikelAn, SchliesseImportAb | quelle Eingang
+kante Katalogimport | Eingang -DateiGefunden-> Annahme
+kante Katalogimport | Annahme -KatalogBereit-> Lesen
+kante Katalogimport | Annahme -KatalogBereit-> Bilanz
+kante Katalogimport | Lesen -Zeile-> Anlage
+kante Katalogimport | Lesen -Zeile-> Bilanz
+akteur Warenkatalog.Import.Ablage | darf StarteImport, LegeArtikelAn, MeldeImportFortschritt, SchliesseImportAb | hoert -
+akteur Warenkatalog.Import.Katalogpflege | darf HoleImportstand | hoert ImportFortgeschritten, ImportAbgeschlossen
+client Warenkatalog.Import.KatalogpflegeOberflaeche | verkoerpert Katalogpflege
 readmodel Warenkatalog.Import.Importstand store=IImportUebersicht | Id:Guid { get; set; }, Pfad:string="" { get; set; }, Zeilen:int { get; set; }, Fertig:bool { get; set; }
 store Warenkatalog.Import.IImportUebersicht klasse=2 | schreibt BeginneAsync(importId:Guid, pfad:string, h:Herkunft), SetzeAsync(importId:Guid, zeilen:int, fertig:bool, h:Herkunft) | liest FindeAsync(importId:Guid):Importstand?
 faehigkeit Warenkatalog.Import.IBeginneImportstand schreibt IImportUebersicht.BeginneAsync
@@ -277,239 +446,238 @@ faehigkeit Warenkatalog.Import.ISetzeImportstand schreibt IImportUebersicht.Setz
 faehigkeit Warenkatalog.Import.IFindeImportstand liest IImportUebersicht.FindeAsync
 projektion Warenkatalog.Import.Importfortschritt | ImportGestartet herkunft -> IImportUebersicht.BeginneAsync; ImportFortgeschritten herkunft -> IImportUebersicht.SetzeAsync; ImportAbgeschlossen herkunft -> IImportUebersicht.SetzeAsync
 reader Warenkatalog.Import.Importauskunft hinter=Importfortschritt | HoleImportstand -> IImportUebersicht.FindeAsync => ImportstandAntwort|ImportUnbekannt
+record Warenkatalog.Import.HoleImportstand query | ImportId:Id<Importlauf>
+record Warenkatalog.Import.ImportstandAntwort queryresponse | Zeilen:int, Fertig:bool
+record Warenkatalog.Import.ImportUnbekannt queryresponse |
+store Warenkatalog.Import.IArtikelprotokoll klasse=3 | schreibt ProtokolliereAsync(nummer:string, preis:decimal) | liest
+faehigkeit Warenkatalog.Import.IProtokolliereArtikel schreibt IArtikelprotokoll.ProtokolliereAsync
+projektion Warenkatalog.Import.Artikelzaehlung mindestenseinmal | ArtikelAngelegt -> IArtikelprotokoll.ProtokolliereAsync
 ausgang Importfortschritt.ImportGestartet nichts | storefn:IImportUebersicht.BeginneAsync
 ausgang Importfortschritt.ImportFortgeschritten nichts | storefn:IImportUebersicht.SetzeAsync
 ausgang Importfortschritt.ImportAbgeschlossen nichts | storefn:IImportUebersicht.SetzeAsync
 ausgang Importauskunft.HoleImportstand einzeln | response:ImportstandAntwort; response:ImportUnbekannt; storefn:IImportUebersicht.FindeAsync
-store Warenkatalog.Import.IArtikelprotokoll klasse=3 | schreibt ProtokolliereAsync(nummer:string, preis:decimal) | liest
-faehigkeit Warenkatalog.Import.IProtokolliereArtikel schreibt IArtikelprotokoll.ProtokolliereAsync
-projektion Warenkatalog.Import.Artikelzaehlung mindestenseinmal | ArtikelAngelegt -> IArtikelprotokoll.ProtokolliereAsync
 ausgang Artikelzaehlung.ArtikelAngelegt nichts | storefn:IArtikelprotokoll.ProtokolliereAsync
-sicht Warenkatalog.Import.HoleImportstand query domaene=Warenkatalog.Import block=Importlauf
-sicht Warenkatalog.Import.ImportstandAntwort queryresponse domaene=Warenkatalog.Import block=Importlauf
-sicht Warenkatalog.Import.ImportUnbekannt queryresponse domaene=Warenkatalog.Import block=Importlauf
 sicht Warenkatalog.Import.Importstand readmodel domaene=Warenkatalog.Import block=Importlauf
 sicht Warenkatalog.Import.IImportUebersicht store domaene=Warenkatalog.Import block=Importlauf
 sicht Warenkatalog.Import.Importfortschritt projektion domaene=Warenkatalog.Import block=Importlauf
 sicht Warenkatalog.Import.Importauskunft reader domaene=Warenkatalog.Import block=Importlauf
+sicht Warenkatalog.Import.HoleImportstand query domaene=Warenkatalog.Import block=Importlauf
+sicht Warenkatalog.Import.ImportstandAntwort queryresponse domaene=Warenkatalog.Import block=Importlauf
+sicht Warenkatalog.Import.ImportUnbekannt queryresponse domaene=Warenkatalog.Import block=Importlauf
 sicht Warenkatalog.Import.IArtikelprotokoll store domaene=Warenkatalog.Import block=Artikel
 sicht Warenkatalog.Import.Artikelzaehlung projektion domaene=Warenkatalog.Import block=Artikel
 sicht Warenkatalog.Import.Ablage akteur domaene=Warenkatalog.Import block=§akteure
 sicht Warenkatalog.Import.Katalogpflege akteur domaene=Warenkatalog.Import block=§akteure
-sicht Warenkatalog.Import.Importdienst akteur domaene=Warenkatalog.Import block=§akteure
+besitz Warenkatalog.Import.StarteImport command -> aggregate:Importlauf
+besitz Warenkatalog.Import.ImportGestartet event -> aggregate:Importlauf
+besitz Warenkatalog.Import.ImportLaeuftSchon rejection -> aggregate:Importlauf
+besitz Warenkatalog.Import.MeldeImportFortschritt command -> aggregate:Importlauf
+besitz Warenkatalog.Import.ImportFortgeschritten event -> aggregate:Importlauf
+besitz Warenkatalog.Import.SchliesseImportAb command -> aggregate:Importlauf
+besitz Warenkatalog.Import.ImportAbgeschlossen event -> aggregate:Importlauf
+besitz Warenkatalog.Import.LegeArtikelAn command -> aggregate:Artikel
+besitz Warenkatalog.Import.ArtikelAngelegt event -> aggregate:Artikel
+besitz Warenkatalog.Import.ArtikelExistiert rejection -> aggregate:Artikel
+besitz Warenkatalog.Import.KatalogBereit command -> bausteinfunktion:Katalogeingang
+besitz Warenkatalog.Import.Zeile command -> bausteinfunktion:Zeilenleser
+besitz Warenkatalog.Import.CsvKonfig konfig -> bausteinfunktion:CsvZerleger
+besitz Warenkatalog.Import.Importstand readmodel -> store:IImportUebersicht
+besitz Warenkatalog.Import.Importfortschritt projektion -> store:IImportUebersicht
+besitz Warenkatalog.Import.Importauskunft reader -> store:IImportUebersicht
+besitz Warenkatalog.Import.HoleImportstand query -> reader:Importauskunft
+besitz Warenkatalog.Import.ImportstandAntwort queryresponse -> reader:Importauskunft
+besitz Warenkatalog.Import.ImportUnbekannt queryresponse -> reader:Importauskunft
+besitz Warenkatalog.Import.Artikelzaehlung projektion -> store:IArtikelprotokoll
 
-# ── Lage (docs/07): die Sonde liegt ABSICHTLICH in einem Projekt (der Schreibseite) — die Lage-Prüfung muss jede Primitive in ihr
-#    Rollen-Projekt weisen (Typ -> Zielprojekt). Wurzel der Tabelle ist die der Solution; Ordner/Namespace/Datei prüft LageAnalyzerTests. ──
-lage Archiv -> Domain.Akteure
-lage Ausleihzaehler -> Domain.Projections
-lage Gutachterin -> Domain.Akteure
-lage IDepot -> Domain.Akteure
-lage ILeihBuch -> Domain.Projections
-lage ILesesaal -> Domain.Akteure
-lage IMahnportal -> Domain.Akteure
-lage INotiereAusleihe -> Domain.Projections
-lage INotiereVormerkung -> Domain.Projections
-lage ISchadensSchaetzung -> Domain.Pipeline
-lage ISchliesseAusleihe -> Domain.Projections
-lage ISeitenPruefung -> Domain.Pipeline
-lage IVormerkbuch -> Domain.Projections
-lage IWertTabelle -> Domain.Pipeline
-lage IZaehle -> Domain.Projections
-lage IZaehleOffene -> Domain.Projections
-lage KeineAusleihen -> Domain.Projections
-lage LeihAuskunftLeser -> Domain.Projections
-lage LeihBuchSpeicher -> Domain.Infrastructure
-lage LeihEintrag -> Domain.Projections
-lage Leihliste -> Domain.Projections
-lage LineareWertTabelle -> Domain.Pipeline
-lage Mahnstelle -> Domain.Akteure
-lage NichtSchaetzbar -> Domain.Pipeline
-lage OffeneAusleihen -> Domain.Projections
-lage OffeneAusleihenAntwort -> Domain.Projections
-lage SchadenGeschaetzt -> Domain.Pipeline
-lage Schadensschaetzer -> Domain.Pipeline
-lage Theke -> Domain.Akteure
-lage VormerkAuskunft -> Domain.Projections
-lage Vormerkbuch -> Domain.Infrastructure
-lage Vormerkliste -> Domain.Projections
-lage Vormerkung -> Domain.Projections
-lage Vormerkungen -> Domain.Projections
-lage VormerkungenAntwort -> Domain.Projections
-lage WertTabellenKonfig -> Domain.Pipeline
-lage Ablage -> Domain.Akteure
-lage Besucher -> Domain.Akteure
-lage HoleImportstand -> Domain.Projections
-lage IBeginneImportstand -> Domain.Projections
-lage IFindeImportstand -> Domain.Projections
-lage IImportLauf -> Domain.Pipeline
-lage IImportUebersicht -> Domain.Projections
-lage IKatalogpflegeOberflaeche -> Domain.Akteure
-lage ILeitstand -> Domain.Akteure
-lage IRegistrierungsseite -> Domain.Akteure
-lage ISensorGateway -> Domain.Akteure
-lage ISetzeImportstand -> Domain.Projections
-lage ImportUnbekannt -> Domain.Projections
-lage Importauskunft -> Domain.Projections
-lage Importfortschritt -> Domain.Projections
-lage Importablage -> Domain.Infrastructure
-lage Artikelzaehlung -> Domain.Projections
-lage IArtikelprotokoll -> Domain.Projections
-lage IProtokolliereArtikel -> Domain.Projections
-lage Artikelprotokoll -> Domain.Infrastructure
-lage Importstand -> Domain.Projections
-lage ImportstandAntwort -> Domain.Projections
-lage Katalogeingang -> Domain.Pipeline
-lage Katalogpflege -> Domain.Akteure
-lage Schichtleitung -> Domain.Akteure
-lage Sensornetz -> Domain.Akteure
-lage Messwertpruefung -> Domain.Pipeline
-lage IImportWerk -> Domain.Akteure
-lage IRegal -> Domain.Pipeline
-lage Importdienst -> Domain.Akteure
-lage MahnungNachSchaetzung -> Domain.Pipeline
-lage Offenzaehlung -> Domain.Pipeline
-lage Pruefungsstart -> Domain.Pipeline
-lage Registrierung -> Domain.Pipeline
-lage SchadenAusPruefung -> Domain.Pipeline
-lage SchadenBeiRueckgabe -> Domain.Pipeline
-lage StoerungBeiAlarm -> Domain.Pipeline
-
-# ── Wetterdienst (Vorhersage.cs.txt): FUNKTIONEN ALS ACTORS (docs/04 §4.4) — ein Prognosemodell mit gekapseltem ZUSTAND (IZustand) lernt
-#    aus dem Log (Auf ohne Ausgabe) und aus einem Hinweis des Aggregats; eine gleichbleibende Funktion bildet einen HINWEIS (Tendenz), den eine
-#    Funktion im Host und eine draußen (Schnittstelle, getragen von einer App) hören — die eine gibt einen Command aus, die andere einen Hinweis. ──
+# ── Wetterdienst (Vorhersage.cs.txt): GENERISCHE FUNKTION, ZUSTAND, HINWEISE — das Decide gibt einen Command ohne Ziel an den Kopf der Prognose; die
+#    Tendenz GABELT an zwei Knoten derselben generischen Funktion (je Typargument ein Baustein; die Karte ist die offene Definition); das Modell JOINT
+#    beide, hält Zustand, nimmt Technik mit eigenem Zustand und WÄHLT zwischen Prognose (Command) und Warnung (Hinweis an den Warndienst) ──
+aggregat Wetterdienst.Vorhersage.Station | Stillgelegt:bool, Letzte:double
+decide Station.MeldeTemperatur -> TemperaturGemeldet; BildePrognose; StationStillgelegt
+decide Station.VermerkePrognose -> PrognoseVermerkt
+apply Station.TemperaturGemeldet
+apply Station.PrognoseVermerkt
 record Wetterdienst.Vorhersage.MeldeTemperatur command aggregat=Station | AggregateId:Id<Station>, Grad:double
 record Wetterdienst.Vorhersage.TemperaturGemeldet event aggregat=Station | Grad:double
 record Wetterdienst.Vorhersage.StationStillgelegt rejection aggregat=Station | StationId:Id<Station>
 record Wetterdienst.Vorhersage.VermerkePrognose command aggregat=Station | AggregateId:Id<Station>, Grad:double, Gelernt:int
 record Wetterdienst.Vorhersage.PrognoseVermerkt event aggregat=Station | Grad:double, Gelernt:int
-record Wetterdienst.Vorhersage.Tendenz rejection | Station:Id<Station>, Grad:double
+record Wetterdienst.Vorhersage.BildePrognose command aggregat=Station | Station:Id<Station>, Grad:double
+record Wetterdienst.Vorhersage.Tendenz command | Station:Id<Station>, Grad:double
+# Der generische Command heißt auf der Karte ohne Typparameter; die Typargumente sind leere Records (Wert-Typen ohne Nutzer im Feld: eine Insel)
+record Wetterdienst.Vorhersage.Geglaettet command | Station:Id<Station>, Grad:double
+record Wetterdienst.Vorhersage.Kurzfenster valueobject typart=public sealed record |
+record Wetterdienst.Vorhersage.Langfenster valueobject typart=public sealed record |
+record Wetterdienst.Vorhersage.GlaettungsKonfig konfig | Gewicht:double
 record Wetterdienst.Vorhersage.Unwetter rejection | Station:Id<Station>, Stufe:string
-aggregat Wetterdienst.Vorhersage.Station | Stillgelegt:bool, Letzte:double
-decide Station.MeldeTemperatur -> TemperaturGemeldet; StationStillgelegt
-decide Station.VermerkePrognose -> PrognoseVermerkt
-apply Station.TemperaturGemeldet
-apply Station.PrognoseVermerkt
-funktion-auf Wetterdienst.Vorhersage.Tendenzbildung klasse() | TemperaturGemeldet herkunft -> Tendenz
-funktion-auf Wetterdienst.Vorhersage.Prognosemodell klasse(gewichte:IZustand<Gewichte>, statistik:IStatistik) zustand=Gewichte | TemperaturGemeldet herkunft -> lernt || StationStillgelegt hinweis -> lernt || Tendenz hinweis -> VermerkePrognose
-funktion-auf Wetterdienst.Vorhersage.IUnwetterwarnung schnittstelle | Tendenz hinweis -> Unwetter
-akteur Wetterdienst.Vorhersage.Warndienst Maschine | darf IUnwetterwarnung
-client Wetterdienst.Vorhersage.IWetterApp | verkoerpert Warndienst; hoert Unwetter
-sicht Wetterdienst.Vorhersage.Warndienst akteur domaene=Wetterdienst.Vorhersage block=§akteure
-# Der Zustand ist eine eigene Klasse ohne Marker — eine Code-Karte (wo der Editor sie zeigt, ist mit der Oberfläche zurückgestellt, docs/10 E4).
-code Wetterdienst.Vorhersage.Gewichte class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
-# Technik mit eigenem Zustand (IZustand in der Umsetzung): gehört der Aktivierung des Prognosemodells, gesichert mit dessen Position
+funktion Wetterdienst.Vorhersage.Tendenzbildung() | Auf(BildePrognose) -> Tendenz
+funktion Wetterdienst.Vorhersage.Glaettung(konfig:GlaettungsKonfig) | Auf(Tendenz) -> Geglaettet<TFenster>
+funktion Wetterdienst.Vorhersage.Prognosemodell(gewichte:IZustand<Gewichte>, statistik:IStatistik) zustand=Gewichte | Auf(Geglaettet<Kurzfenster> kurz, Geglaettet<Langfenster> lang) -> VermerkePrognose; Unwetter
+# Technik mit eigenem Zustand (IZustand in der Umsetzung): gehört dem Knoten des Prognosemodells
 technik Wetterdienst.Vorhersage.IStatistik schnittstelle | Zaehle(station:Guid):void | umsetzung Statistik(zaehlung:IZustand<Zaehlung>)
+# Die Knoten nennen die generische Funktion mit Typargument; Kanten und Ausgänge tragen es
+graph Wetterdienst.Vorhersage.Prognose | knoten Tendenz:Tendenzbildung, Kurz:Glaettung<Kurzfenster>, Lang:Glaettung<Langfenster>, Modell:Prognosemodell | koepfe BildePrognose | aus VermerkePrognose, Unwetter
+kante Prognose | Tendenz -Tendenz-> Kurz
+kante Prognose | Tendenz -Tendenz-> Lang
+kante Prognose | Kurz -Geglaettet<Kurzfenster>-> Modell
+kante Prognose | Lang -Geglaettet<Langfenster>-> Modell
+# gezeichnet (Geste „Graph: neuer Graph mit generischem Knoten“)
+graph Wetterdienst.Vorhersage.Kurzglaettung | knoten Glaettung:Glaettung<Kurzfenster> | koepfe Tendenz | aus Geglaettet<Kurzfenster>
+akteur Wetterdienst.Vorhersage.Warndienst | darf MeldeTemperatur | hoert Unwetter, StationStillgelegt
+client Wetterdienst.Vorhersage.WetterApp | verkoerpert Warndienst
+# Zustand und Marker-Schnittstelle der Typargumente sind eigene Typen ohne Marker — Code-Karten
+code Wetterdienst.Vorhersage.Gewichte class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
 code Wetterdienst.Vorhersage.Zaehlung class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
-lage Tendenzbildung -> Domain.Pipeline
-lage Prognosemodell -> Domain.Pipeline
-lage IStatistik -> Domain.Pipeline
-lage Statistik -> Domain.Pipeline
-lage IUnwetterwarnung -> Domain.Pipeline
-lage Tendenz -> Domain.Pipeline
-lage Unwetter -> Domain.Pipeline
-lage IWetterApp -> Domain.Akteure
-lage Warndienst -> Domain.Akteure
-
-# ── Besitz (Hierarchie Anwendung → Blöcke → Glieder), nur aus den Signaturen: ein Command gehört seinem Aggregat, was eine Methode
-#    zurückgibt dem Typ der Methode, eine Query dem, dessen Frage sie nimmt; was nur als Feld/Parameter/Konstruktor vorkommt, seinem einzigen
-#    Nutzer (mehrere oder keiner → §begriffe); was von außen kommt (Quelle, Befugnis eines Akteurs ohne Erzeuger) → §rand. Die Leseseite hängt
-#    an ihrem Store-Bündel (Sicht), Antworten eines Readers am Reader. ──
-besitz Anlagen.Messung.AlarmAusgeloest event -> aggregate:Sensor
-besitz Anlagen.Messung.GrenzwertUeberschritten event -> aggregate:Sensor
-besitz Anlagen.Messung.KeineStoerung rejection -> aggregate:Stoerungsfall
-besitz Anlagen.Messung.MeldeMesswert command -> aggregate:Sensor
-besitz Anlagen.Messung.MesswertGemessen rejection -> §rand
-besitz Anlagen.Messung.Messzyklus event -> §rand
-besitz Anlagen.Messung.OeffneStoerung command -> aggregate:Stoerungsfall
-besitz Anlagen.Messung.QuittiereStoerung command -> aggregate:Stoerungsfall
-besitz Anlagen.Messung.RichteSensorEin command -> aggregate:Sensor
-besitz Anlagen.Messung.SensorEingerichtet event -> aggregate:Sensor
-besitz Anlagen.Messung.SensorUnbekannt rejection -> aggregate:Sensor
-besitz Anlagen.Messung.StoerungGeoeffnet event -> aggregate:Stoerungsfall
-besitz Anlagen.Messung.StoerungLaeuftSchon rejection -> aggregate:Stoerungsfall
-besitz Anlagen.Messung.StoerungQuittiert event -> aggregate:Stoerungsfall
-besitz Anlagen.Messung.WertWiederImRahmen event -> aggregate:Sensor
-besitz Kundenportal.Konten.AdresseReserviert event -> aggregate:Adresse
-besitz Kundenportal.Konten.AdresseVergeben event -> aggregate:Adresse
-besitz Kundenportal.Konten.Adressschluessel code -> §begriffe
-besitz Kundenportal.Konten.BenutzerBestaetigt event -> aggregate:Benutzer
-besitz Kundenportal.Konten.BenutzerExistiert rejection -> aggregate:Benutzer
-besitz Kundenportal.Konten.BestaetigeBenutzer command -> aggregate:Benutzer
-besitz Kundenportal.Konten.Kontostatus enum -> aggregate:Benutzer
-besitz Kundenportal.Konten.LehneRegistrierungAb command -> aggregate:Benutzer
-besitz Kundenportal.Konten.RegistriereBenutzer command -> aggregate:Benutzer
-besitz Kundenportal.Konten.RegistrierungAbgelehnt event -> aggregate:Benutzer
-besitz Kundenportal.Konten.RegistrierungBeantragt event -> aggregate:Benutzer
-besitz Kundenportal.Konten.ReserviereAdresse command -> aggregate:Adresse
-besitz Leihwesen.Ausleihe.Ausgeliehen event -> aggregate:Leihvorgang
-besitz Leihwesen.Ausleihe.Befehle.GibZurueck command -> aggregate:Leihvorgang
-besitz Leihwesen.Ausleihe.Befehle.LeiheAus command -> aggregate:Leihvorgang
-besitz Leihwesen.Ausleihe.Befehle.MahneRueckgabe command -> aggregate:Leihvorgang
-besitz Leihwesen.Ausleihe.BereitsAusgeliehen rejection -> aggregate:Leihvorgang
-besitz Leihwesen.Ausleihe.Fristrechnung code -> §begriffe
-besitz Leihwesen.Ausleihe.HoleLeihstand query -> aggregate:Leihvorgang
-besitz Leihwesen.Ausleihe.Leihstand queryresponse -> aggregate:Leihvorgang
-besitz Leihwesen.Ausleihe.NichtAusgeliehen rejection -> aggregate:Leihvorgang
-besitz Leihwesen.Ausleihe.NichtVerliehen queryresponse -> aggregate:Leihvorgang
-besitz Leihwesen.Ausleihe.RueckgabeAngemahnt event -> aggregate:Leihvorgang
-besitz Leihwesen.Ausleihe.Signatur valueobject -> aggregate:Leihvorgang
-besitz Leihwesen.Ausleihe.Zurueckgegeben event -> aggregate:Leihvorgang
-besitz Leihwesen.Ausleihe.Zustand enum -> aggregate:Leihvorgang
-besitz Leihwesen.Gebuehren.EroeffneMahnung command -> aggregate:Mahnvorgang
-besitz Leihwesen.Gebuehren.MahnungEroeffnet event -> aggregate:Mahnvorgang
-besitz Leihwesen.Gebuehren.MahnungExistiert rejection -> aggregate:Mahnvorgang
-besitz Leihwesen.Gebuehren.MeldeSchaden command -> aggregate:Schadensfall
-besitz Leihwesen.Gebuehren.NichtSchaetzbar rejection -> bausteinfunktion:ISchadensSchaetzung
-besitz Leihwesen.Gebuehren.SchadenExistiert rejection -> aggregate:Schadensfall
-besitz Leihwesen.Gebuehren.SchadenGemeldet event -> aggregate:Schadensfall
-besitz Leihwesen.Gebuehren.SchadenGeschaetzt event -> bausteinfunktion:ISchadensSchaetzung
-besitz Leihwesen.Gebuehren.WertTabellenKonfig konfig -> bausteinfunktion:IWertTabelle
-besitz Leihwesen.Lesen.Ausleihzaehler readmodel -> §begriffe
-besitz Leihwesen.Lesen.KeineAusleihen queryresponse -> reader:LeihAuskunftLeser
-besitz Leihwesen.Lesen.LeihAuskunftLeser reader -> store:ILeihBuch
-besitz Leihwesen.Lesen.LeihEintrag readmodel -> store:ILeihBuch
-besitz Leihwesen.Lesen.Leihliste projektion -> store:ILeihBuch
-besitz Leihwesen.Lesen.OffeneAusleihen query -> reader:LeihAuskunftLeser
-besitz Leihwesen.Lesen.OffeneAusleihenAntwort queryresponse -> reader:LeihAuskunftLeser
-besitz Leihwesen.Lesen.VormerkAuskunft reader -> store:IVormerkbuch
-besitz Leihwesen.Lesen.Vormerkliste projektion -> store:IVormerkbuch
-besitz Leihwesen.Lesen.Vormerkung readmodel -> store:IVormerkbuch
-besitz Leihwesen.Lesen.Vormerkungen query -> reader:VormerkAuskunft
-besitz Leihwesen.Lesen.VormerkungenAntwort queryresponse -> reader:VormerkAuskunft
-besitz Leihwesen.Pruefung.AusweisAbgelegt event -> §rand
-besitz Leihwesen.Pruefung.BrichPruefungAb command -> aggregate:Seitenpruefung
-besitz Leihwesen.Pruefung.PruefungAbgebrochen event -> aggregate:Seitenpruefung
-besitz Leihwesen.Pruefung.PruefungAbgeschlossen event -> aggregate:Seitenpruefung
-besitz Leihwesen.Pruefung.PruefungGestartet event -> aggregate:Seitenpruefung
-besitz Leihwesen.Pruefung.PruefungLaeuftSchon rejection -> aggregate:Seitenpruefung
-besitz Leihwesen.Pruefung.RueckgabeGescannt event -> §rand
-besitz Leihwesen.Pruefung.SeiteGezaehlt event -> aggregate:Seitenpruefung
-besitz Leihwesen.Pruefung.StartePruefung command -> aggregate:Seitenpruefung
-besitz Leihwesen.Pruefung.ZaehleSeite command -> aggregate:Seitenpruefung
-besitz Warenkatalog.Import.ArtikelAngelegt event -> aggregate:Artikel
-besitz Warenkatalog.Import.ArtikelExistiert rejection -> aggregate:Artikel
-besitz Warenkatalog.Import.Artikelzaehlung projektion -> store:IArtikelprotokoll
-besitz Warenkatalog.Import.HoleImportstand query -> reader:Importauskunft
-besitz Warenkatalog.Import.ImportAbgeschlossen event -> aggregate:Importlauf
-besitz Warenkatalog.Import.ImportFortgeschritten event -> aggregate:Importlauf
-besitz Warenkatalog.Import.ImportGestartet event -> aggregate:Importlauf
-besitz Warenkatalog.Import.ImportLaeuftSchon rejection -> aggregate:Importlauf
-besitz Warenkatalog.Import.ImportUnbekannt queryresponse -> reader:Importauskunft
-besitz Warenkatalog.Import.Importauskunft reader -> store:IImportUebersicht
-besitz Warenkatalog.Import.Importfortschritt projektion -> store:IImportUebersicht
-besitz Warenkatalog.Import.Importstand readmodel -> store:IImportUebersicht
-besitz Warenkatalog.Import.ImportstandAntwort queryresponse -> reader:Importauskunft
-besitz Warenkatalog.Import.KatalogDateiAbgelegt event -> §rand
-besitz Warenkatalog.Import.LegeArtikelAn command -> aggregate:Artikel
-besitz Warenkatalog.Import.MeldeImportFortschritt command -> aggregate:Importlauf
-besitz Warenkatalog.Import.SchliesseImportAb command -> aggregate:Importlauf
-besitz Warenkatalog.Import.StarteImport command -> aggregate:Importlauf
+code Wetterdienst.Vorhersage.IFenster interface teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
+sicht Wetterdienst.Vorhersage.Kurzfenster valueobject domaene=Wetterdienst.Vorhersage block=§geteilt insel
+sicht Wetterdienst.Vorhersage.Langfenster valueobject domaene=Wetterdienst.Vorhersage block=§geteilt insel
+sicht Wetterdienst.Vorhersage.Warndienst akteur domaene=Wetterdienst.Vorhersage block=§akteure
+besitz Wetterdienst.Vorhersage.MeldeTemperatur command -> aggregate:Station
+besitz Wetterdienst.Vorhersage.TemperaturGemeldet event -> aggregate:Station
+besitz Wetterdienst.Vorhersage.StationStillgelegt rejection -> aggregate:Station
+besitz Wetterdienst.Vorhersage.VermerkePrognose command -> aggregate:Station
+besitz Wetterdienst.Vorhersage.PrognoseVermerkt event -> aggregate:Station
+besitz Wetterdienst.Vorhersage.BildePrognose command -> aggregate:Station
+besitz Wetterdienst.Vorhersage.Tendenz command -> bausteinfunktion:Tendenzbildung
+besitz Wetterdienst.Vorhersage.Geglaettet command -> bausteinfunktion:Glaettung
+besitz Wetterdienst.Vorhersage.GlaettungsKonfig konfig -> bausteinfunktion:Glaettung
+besitz Wetterdienst.Vorhersage.Unwetter rejection -> bausteinfunktion:Prognosemodell
+besitz Wetterdienst.Vorhersage.Kurzfenster valueobject -> §begriffe
+besitz Wetterdienst.Vorhersage.Langfenster valueobject -> §begriffe
 besitz Wetterdienst.Vorhersage.Gewichte code -> bausteinfunktion:Prognosemodell
 besitz Wetterdienst.Vorhersage.Zaehlung code -> bausteinfunktion:IStatistik
-besitz Wetterdienst.Vorhersage.MeldeTemperatur command -> aggregate:Station
-besitz Wetterdienst.Vorhersage.PrognoseVermerkt event -> aggregate:Station
-besitz Wetterdienst.Vorhersage.StationStillgelegt rejection -> aggregate:Station
-besitz Wetterdienst.Vorhersage.TemperaturGemeldet event -> aggregate:Station
-besitz Wetterdienst.Vorhersage.Tendenz rejection -> bausteinfunktion:Tendenzbildung
-besitz Wetterdienst.Vorhersage.Unwetter rejection -> bausteinfunktion:IUnwetterwarnung
-besitz Wetterdienst.Vorhersage.VermerkePrognose command -> aggregate:Station
+besitz Wetterdienst.Vorhersage.IFenster code -> §begriffe
+
+# ══ LAGE (docs/07): die Sonde liegt ABSICHTLICH in einem Projekt (der Schreibseite) — die Lage-Prüfung muss jede Primitive in ihr Rollen-Projekt
+#    weisen (Typ -> Zielprojekt). Wurzel der Tabelle ist die der Solution; Ordner/Namespace/Datei prüft LageAnalyzerTests. Hinweise (auch aus
+#    Funktionen) und Commands, die ein Decide abgibt, bleiben bei der Schreibseite; Zustands-Klassen und Hilfscode haben keine Rolle. ══
+# Akteure und Clients → Akteure
+lage Theke -> Domain.Akteure
+lage Gutachterin -> Domain.Akteure
+lage Archiv -> Domain.Akteure
+lage Lesesaal -> Domain.Akteure
+lage Depot -> Domain.Akteure
+lage Mahnstelle -> Domain.Akteure
+lage Mahnportal -> Domain.Akteure
+lage Besucher -> Domain.Akteure
+lage Registrierungsseite -> Domain.Akteure
+lage Sensornetz -> Domain.Akteure
+lage Schichtleitung -> Domain.Akteure
+lage SensorGateway -> Domain.Akteure
+lage Leitstand -> Domain.Akteure
+lage Ablage -> Domain.Akteure
+lage Katalogpflege -> Domain.Akteure
+lage KatalogpflegeOberflaeche -> Domain.Akteure
+lage Warndienst -> Domain.Akteure
+lage WetterApp -> Domain.Akteure
+# Funktionen, Graphen, Technik (Schnittstellen und Umsetzungen), Konfig-Records und Commands, die nur Knoten einander geben (auch an einen
+#   Akteur oder von einem Akteur an einen Graph-Kopf) → Abläufe
+lage SchadenBeiRueckgabe -> Domain.Pipeline
+lage Schadensaufnahme -> Domain.Pipeline
+lage Schadensschaetzer -> Domain.Pipeline
+lage Gutachtenanfrage -> Domain.Pipeline
+lage MahnungNachSchaetzung -> Domain.Pipeline
+lage Vormerkpruefung -> Domain.Pipeline
+lage Rueckgabepruefung -> Domain.Pipeline
+lage Schadensbewertung -> Domain.Pipeline
+lage IWertTabelle -> Domain.Pipeline
+lage LineareWertTabelle -> Domain.Pipeline
+lage WertTabellenKonfig -> Domain.Pipeline
+lage GutachtenKonfig -> Domain.Pipeline
+lage SchadenErfasst -> Domain.Pipeline
+lage SchadenGeschaetzt -> Domain.Pipeline
+lage GutachtenErhalten -> Domain.Pipeline
+lage BegutachteVorOrt -> Domain.Pipeline
+lage PruefeVormerkung -> Domain.Pipeline
+lage Pruefungsstart -> Domain.Pipeline
+lage Seitenpruefer -> Domain.Pipeline
+lage Seitenbilanz -> Domain.Pipeline
+lage Offenzaehlung -> Domain.Pipeline
+lage Seitenpruefungslauf -> Domain.Pipeline
+lage Mahnbemessung -> Domain.Pipeline
+lage ISeitenleser -> Domain.Pipeline
+lage Lichtpruefung -> Domain.Pipeline
+lage Handpruefung -> Domain.Pipeline
+lage RueckgabeGescannt -> Domain.Pipeline
+lage SeiteZuPruefen -> Domain.Pipeline
+lage SeiteGeprueft -> Domain.Pipeline
+lage Registrierung -> Domain.Pipeline
+lage Adresspruefung -> Domain.Pipeline
+lage Sensorabfrage -> Domain.Pipeline
+lage Plausibilisierung -> Domain.Pipeline
+lage Messwertpruefung -> Domain.Pipeline
+lage StoerungBeiAlarm -> Domain.Pipeline
+lage Alarmverteilung -> Domain.Pipeline
+lage Anrufkette -> Domain.Pipeline
+lage Funkruf -> Domain.Pipeline
+lage Alarmquittung -> Domain.Pipeline
+lage Messwertaufbereitung -> Domain.Pipeline
+lage Messkette -> Domain.Pipeline
+lage Stoerungsoeffnung -> Domain.Pipeline
+lage Alarmierung -> Domain.Pipeline
+lage ISensorbus -> Domain.Pipeline
+lage Feldbus -> Domain.Pipeline
+lage ITelefonie -> Domain.Pipeline
+lage Telefonanlage -> Domain.Pipeline
+lage SensorabfrageKonfig -> Domain.Pipeline
+lage Rohwert -> Domain.Pipeline
+lage Plausibel -> Domain.Pipeline
+lage AlarmVerteilt -> Domain.Pipeline
+lage PerAnrufErreicht -> Domain.Pipeline
+lage PerFunkErreicht -> Domain.Pipeline
+lage Katalogeingang -> Domain.Pipeline
+lage Zeilenleser -> Domain.Pipeline
+lage Artikelanlage -> Domain.Pipeline
+lage Importbilanz -> Domain.Pipeline
+lage Katalogimport -> Domain.Pipeline
+lage CsvZerleger -> Domain.Pipeline
+lage CsvKonfig -> Domain.Pipeline
+lage KatalogBereit -> Domain.Pipeline
+lage Zeile -> Domain.Pipeline
+lage Tendenzbildung -> Domain.Pipeline
+lage Glaettung -> Domain.Pipeline
+lage Prognosemodell -> Domain.Pipeline
+lage Prognose -> Domain.Pipeline
+lage Kurzglaettung -> Domain.Pipeline
+lage IStatistik -> Domain.Pipeline
+lage Statistik -> Domain.Pipeline
+lage GlaettungsKonfig -> Domain.Pipeline
+lage Tendenz -> Domain.Pipeline
+lage Geglaettet -> Domain.Pipeline
+# Leseseite → Projektionen; Store-Implementierungen → Infrastruktur
+lage LeihEintrag -> Domain.Projections
+lage Ausleihzaehler -> Domain.Projections
+lage INotiereAusleihe -> Domain.Projections
+lage ISchliesseAusleihe -> Domain.Projections
+lage IZaehleOffene -> Domain.Projections
+lage ILeihBuch -> Domain.Projections
+lage Leihliste -> Domain.Projections
+lage LeihAuskunftLeser -> Domain.Projections
+lage OffeneAusleihen -> Domain.Projections
+lage OffeneAusleihenAntwort -> Domain.Projections
+lage KeineAusleihen -> Domain.Projections
+lage LeihBuchSpeicher -> Domain.Infrastructure
+lage Vormerkung -> Domain.Projections
+lage INotiereVormerkung -> Domain.Projections
+lage IZaehle -> Domain.Projections
+lage IVormerkbuch -> Domain.Projections
+lage Vormerkliste -> Domain.Projections
+lage VormerkAuskunft -> Domain.Projections
+lage Vormerkungen -> Domain.Projections
+lage VormerkungenAntwort -> Domain.Projections
+lage Vormerkbuch -> Domain.Infrastructure
+lage Importstand -> Domain.Projections
+lage IBeginneImportstand -> Domain.Projections
+lage ISetzeImportstand -> Domain.Projections
+lage IFindeImportstand -> Domain.Projections
+lage IImportUebersicht -> Domain.Projections
+lage Importfortschritt -> Domain.Projections
+lage Importauskunft -> Domain.Projections
+lage HoleImportstand -> Domain.Projections
+lage ImportstandAntwort -> Domain.Projections
+lage ImportUnbekannt -> Domain.Projections
+lage Importablage -> Domain.Infrastructure
+lage IProtokolliereArtikel -> Domain.Projections
+lage IArtikelprotokoll -> Domain.Projections
+lage Artikelzaehlung -> Domain.Projections
+lage Artikelprotokoll -> Domain.Infrastructure

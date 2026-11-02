@@ -8,7 +8,7 @@ namespace Infrastructure.Pruefstand.Tests;
 /// Akteure im Domänen-Editor (<c>docs/konzept-akteure.md</c>): ein Akteur ist ein Baustein mit EINER Kante — Akteur → was er darf
 /// (<c>IDarf&lt;T&gt;</c>). Er ersetzt für diese Nachrichten die anonyme Außenwelt, liegt wie sie außerhalb jedes Moduls und wird als
 /// <c>public sealed record X : IAkteur, IDarf&lt;…&gt;;</c> geschrieben; ein Client als <c>public sealed record X : IClient, IVerkoerpert&lt;A&gt;;</c>.
-/// (Arten, IHoert am Akteur und Arbeit liest der Editor erst mit Schritt 7 des Plans.)
+/// Was zu ihm kommt, steht als <c>IHoert&lt;T&gt;</c> hinter seinem <c>IDarf</c> (ein Command ohne Ziel ist Arbeit, ein Event oder Hinweis Kenntnis).
 /// </summary>
 public sealed class DomainEditorAkteurTests
 {
@@ -99,6 +99,16 @@ public sealed class DomainEditorAkteurTests
         Scaffolder.IstAkteurBasis("IKi").Should().BeFalse("die Arten (IMensch, IMaschine, IKi) sind entfallen");
         Scaffolder.IstAkteurBasis("IDarf<Shop.Bestellung.Bestelle>").Should().BeTrue();
         Scaffolder.IstAkteurBasis("IEquatable<Kunde>").Should().BeFalse("fremde Basen bleiben beim Abgleich stehen");
+    }
+
+    [Fact]
+    public void Ein_Akteur_hoert_hinter_dem_was_er_darf_und_eine_Aenderung_daran_ist_eine_Geste()
+    {
+        var hoerer = Kunde with { Hoert = ["Bestellt"] };
+        Scaffolder.AkteurBasen(hoerer).Should().Equal("IAkteur", "IDarf<Bestelle>", "IDarf<Bestellungen>", "IHoert<Bestellt>");
+        var gelesen = Herkunft.Stempeln(Shop(hoerer with { Datei = "Shop/Akteure/Akteure.cs" }));
+        Herkunft.Geaenderte(gelesen with { Akteure = [gelesen.Akteure[0] with { Hoert = [] }] }).Should().Equal("akteur Shop.Akteure.Kunde");
+        EditorModell.AusJson(Shop(hoerer).AlsJson()).Akteure.Single().Hoert.Should().Equal("Bestellt");
     }
 
     [Fact]

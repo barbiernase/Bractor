@@ -3,37 +3,32 @@ using Leihwesen.Ausleihe;
 using Leihwesen.Gebuehren;
 using Leihwesen.Lesen;
 
-// SONDE — ein ABLAUF ohne Fluss-Sprache (docs/10 §10.3; früher ein Fluss mit Je/Sammle, ∧/∨, ⏳ und ✕): Vorgangs-Aggregat + Funktionen + Frist.
-//         · ein Command ohne Ziel von draußen am Kopf des Prüf-Graphen (ein Akteur gibt ihn hinein) und ein zweiter, den niemand nimmt;
-//         · der Start als gleichbleibende Funktion (neue Id aus der Herkunft, R13);
-//         · der Vorgang als ZÄHL-AGGREGAT (keine Collection im Zustand): Fan-out über eine Funktion draußen, die als STROM je Seite einen
-//           Command liefert, Fan-in durch Zählen im Aggregat; das Rennen gegen die Zeit ist eine FRIST desselben Aggregats;
-//         · eine Funktion mit LESE-Fähigkeit (läuft im Host, hält ihre Ausgabe fest, R10/R12) auf dem Event einer Frist (Ausleihe).
+// SONDE — ein ABLAUF als Graph (docs/04 §4.4; früher ein Fluss mit Je/Sammle, ∧/∨, ⏳ und ✕, dann ein Zähl-Aggregat mit einer Funktion draußen):
+//         · ein Command ohne Ziel VON EINEM AKTEUR am Kopf des Graphen (die Theke gibt die gescannte Rückgabe hinein);
+//         · der Start gibt einen Command an ein Aggregat aus und hört dessen Event als ANTWORT auf seinen eigenen Command (eine Stufe tief);
+//         · JE: die Antwort öffnet als Strom je Seite einen Unterlauf; der Prüfer rechnet mit TECHNIK (zwei Umsetzungen, die Instanz wählt);
+//         · SAMMELN: die Bilanz nimmt alle Seiten der Unterläufe als Liste und schließt den Vorgang ab; das Rennen gegen die Zeit bleibt
+//           eine FRIST des Aggregats;
+//         · eine Funktion mit LESE-Fähigkeit am Kopf eines eigenen Graphen, ihr Eingang ein Command ohne Ziel aus dem Decide der Ausleihe,
+//           ihre Ausgabe ein Strom (0 oder 1 Mahnung).
 
 namespace Leihwesen.Pruefung;
 
 public sealed record RueckgabeGescannt(Guid LeserId, string Code, IReadOnlyList<string> Seiten) : ICommand;
 
-// Ein Command ohne Ziel von draußen (docs/04 §4.7): eine abgelegte Ausweis-Datei, gemeldet von einem Akteur.
-public sealed record AusweisAbgelegt(string Pfad) : ICommand;
-
 public record StartePruefung(Id<Seitenpruefung> AggregateId, Guid LeserId, IReadOnlyList<string> Seiten) : ICommand<Seitenpruefung>, ICreationCommand;
-public record PruefungGestartet(Guid LeserId, IReadOnlyList<string> Seiten) : IEvent;
+public record PruefungGestartet(Id<Seitenpruefung> PruefungId, Guid LeserId, IReadOnlyList<string> Seiten) : IEvent;
 public record PruefungLaeuftSchon(Id<Seitenpruefung> PruefungId) : ITransientEvent;
 
-public record ZaehleSeite(Id<Seitenpruefung> AggregateId, int Nummer, bool Beschaedigt) : ICommand<Seitenpruefung>;
-public record SeiteGezaehlt(int Nummer, bool Beschaedigt) : IEvent;
+public record SchliessePruefungAb(Id<Seitenpruefung> AggregateId, int Beschaedigte) : ICommand<Seitenpruefung>;
 public record PruefungAbgeschlossen(Guid LeserId, int Beschaedigte) : IEvent;
 
 public record BrichPruefungAb(Id<Seitenpruefung> AggregateId) : ICommand<Seitenpruefung>;
-public record PruefungAbgebrochen(int Gezaehlt) : IEvent;
+public record PruefungAbgebrochen(Guid LeserId) : IEvent;
 
 public partial class Seitenpruefung : IState
 {
     public Guid LeserId { get; set; }
-    public int Seiten { get; set; }
-    public int Gezaehlt { get; set; }
-    public int Beschaedigte { get; set; }
     public bool Fertig { get; set; }
 
     public partial class Decider : IDecider<Seitenpruefung>
@@ -41,59 +36,85 @@ public partial class Seitenpruefung : IState
         public IEnumerable<OneOf<PruefungGestartet, PruefungLaeuftSchon, Frist<BrichPruefungAb>>> Decide(StartePruefung c)
         {
             if (this.State.Version > 0) { yield return new PruefungLaeuftSchon(c.AggregateId); yield break; }
-            yield return new PruefungGestartet(c.LeserId, c.Seiten);
+            yield return new PruefungGestartet(c.AggregateId, c.LeserId, c.Seiten);
             yield return new Frist<BrichPruefungAb>(new BrichPruefungAb(c.AggregateId), TimeSpan.FromSeconds(30));
         }
 
-        public IEnumerable<OneOf<SeiteGezaehlt, PruefungAbgeschlossen>> Decide(ZaehleSeite c)
+        public IEnumerable<OneOf<PruefungAbgeschlossen>> Decide(SchliessePruefungAb c)
         {
             if (this.State.Fertig) yield break;
-            yield return new SeiteGezaehlt(c.Nummer, c.Beschaedigt);
-            if (this.State.Gezaehlt + 1 == this.State.Seiten)
-                yield return new PruefungAbgeschlossen(this.State.LeserId, this.State.Beschaedigte + (c.Beschaedigt ? 1 : 0));
+            yield return new PruefungAbgeschlossen(this.State.LeserId, c.Beschaedigte);
         }
 
         public IEnumerable<OneOf<PruefungAbgebrochen>> Decide(BrichPruefungAb c)
         {
             if (this.State.Fertig) yield break;
-            yield return new PruefungAbgebrochen(this.State.Gezaehlt);
+            yield return new PruefungAbgebrochen(this.State.LeserId);
         }
     }
 
     public partial class Applier : IApplier<Seitenpruefung>
     {
-        public void Apply(PruefungGestartet e) { this.State.LeserId = e.LeserId; this.State.Seiten = e.Seiten.Count; }
-        public void Apply(SeiteGezaehlt e) { this.State.Gezaehlt++; if (e.Beschaedigt) this.State.Beschaedigte++; }
+        public void Apply(PruefungGestartet e) { this.State.LeserId = e.LeserId; }
         public void Apply(PruefungAbgeschlossen e) { this.State.Fertig = true; }
         public void Apply(PruefungAbgebrochen e) { this.State.Fertig = true; }
     }
 }
 
-// Der Start: je gescannter Rückgabe ein Vorgang.
+// Was nur Knoten einander geben: je Seite ein Unterlauf, je Seite ein Befund.
+public record SeiteZuPruefen(Id<Seitenpruefung> PruefungId, int Nummer, string Seite) : ICommand;
+public record SeiteGeprueft(Id<Seitenpruefung> PruefungId, int Nummer, bool Beschaedigt) : ICommand;
+
+// Der Start: je gescannter Rückgabe ein Vorgang (Id aus der Herkunft); seine Antwort öffnet JE Seite einen Unterlauf.
 public sealed class Pruefungsstart : IFunktion
 {
     public StartePruefung Auf(RueckgabeGescannt e, Herkunft h) => new(h.NeueId<Seitenpruefung>(), e.LeserId, e.Seiten);
+
+    public IEnumerable<SeiteZuPruefen> Auf(PruefungGestartet g) =>
+        g.Seiten.Select((seite, i) => new SeiteZuPruefen(g.PruefungId, i + 1, seite));
 }
 
-// Fan-out draußen: je Seite ein Command an den Vorgang (Strom; nach einem Absturz geht es bei der nächsten Seite weiter).
-public interface ISeitenPruefung : IFunktion
+// Technik ohne Marker mit zwei Umsetzungen — welche, sagt die Instanz (Technik am Knoten).
+public interface ISeitenleser
 {
-    IAsyncEnumerable<ZaehleSeite> Auf(PruefungGestartet e, Herkunft h);
+    bool IstBeschaedigt(string seite);
 }
 
-// Fan-in: ist der Vorgang mit beschädigten Seiten abgeschlossen, wird ein Schadensfall gemeldet.
-public sealed class SchadenAusPruefung : IFunktion
+public sealed class Lichtpruefung : ISeitenleser
 {
-    public MeldeSchaden? Auf(PruefungAbgeschlossen e, Herkunft h) =>
-        e.Beschaedigte > 0 ? new MeldeSchaden(h.NeueId<Schadensfall>(), e.LeserId) : null;
+    public bool IstBeschaedigt(string seite) => seite.Contains('#');
 }
 
-// Lese-Fähigkeit: die Mahnung nach Ablauf der Leihfrist (Ausleihe) richtet sich nach der Zahl offener Ausleihen des Lesers.
-public sealed class Offenzaehlung : IFunktion
+public sealed class Handpruefung : ISeitenleser
 {
-    public async Task<EroeffneMahnung?> Auf(RueckgabeAngemahnt e, Herkunft h, IZaehleOffene offene)
+    public bool IstBeschaedigt(string seite) => seite.Length == 0;
+}
+
+// Im Unterlauf je Seite.
+public sealed class Seitenpruefer(ISeitenleser leser) : IFunktion
+{
+    public SeiteGeprueft Auf(SeiteZuPruefen s) => new(s.PruefungId, s.Nummer, leser.IstBeschaedigt(s.Seite));
+}
+
+// SAMMELN: sind alle Unterläufe fertig, kommen die Befunde als Liste.
+public sealed class Seitenbilanz : IFunktion
+{
+    public IEnumerable<SchliessePruefungAb> Auf(IReadOnlyList<SeiteGeprueft> alle)
     {
-        var anzahl = (await offene.OffeneAsync(e.LeserId)).Count;
-        return anzahl == 0 ? null : new EroeffneMahnung(h.NeueId<Mahnvorgang>(), anzahl * 2m);
+        if (alle.Count == 0) yield break;
+        yield return new SchliessePruefungAb(alle[0].PruefungId, alle.Count(s => s.Beschaedigt));
     }
 }
+
+// Lese-Fähigkeit: die Mahnung nach Ablauf der Leihfrist richtet sich nach der Zahl offener Ausleihen des Lesers.
+public sealed class Offenzaehlung : IFunktion
+{
+    public async IAsyncEnumerable<EroeffneMahnung> Auf(BemesseMahnung b, Herkunft h, IZaehleOffene offene)
+    {
+        var anzahl = (await offene.OffeneAsync(b.LeserId)).Count;
+        if (anzahl > 0) yield return new EroeffneMahnung(h.NeueId<Mahnvorgang>(), anzahl * 2m);
+    }
+}
+
+public sealed record Seitenpruefungslauf(Pruefungsstart Start, Seitenpruefer Pruefer, Seitenbilanz Bilanz) : IGraph;
+public sealed record Mahnbemessung(Offenzaehlung Zaehlung) : IGraph;

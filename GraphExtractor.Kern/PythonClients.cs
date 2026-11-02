@@ -16,7 +16,7 @@ public static class PythonClients
         : Dateien(wurzel, "vertraege.py", mitGeneriert: true).Where(p => Path.GetFileName(Path.GetDirectoryName(p)) == "generated")
             .Select(p => Path.GetRelativePath(wurzel, Path.GetDirectoryName(Path.GetDirectoryName(p)!)!).Replace('\\', '/')).OrderBy(x => x, StringComparer.Ordinal).FirstOrDefault();
 
-    /// <summary>Handshake-Name (Interface ohne führendes I) → Implementierungen.</summary>
+    /// <summary>Handshake-Name (der Name des Client-Records) → Implementierungen.</summary>
     public static Dictionary<string, List<ClientImpl>> Lies(string wurzel)
     {
         var erg = new Dictionary<string, List<ClientImpl>>(StringComparer.Ordinal);
@@ -40,7 +40,7 @@ public static class PythonClients
                             Rumpfe = b.Auf.Select(a => new ClientRumpf
                             {
                                 Event = a.Event, Methode = a.Methode, Rumpf = PythonQuelle.Rumpf(text, k.Name, a.Methode), Signatur = a.Def,
-                                Ausgaenge = a.Ausgaenge, Funktion = a.Funktion,
+                                Ausgaenge = a.Ausgaenge, Akteur = a.Akteur,
                             }).ToList(),
                         });
                     }

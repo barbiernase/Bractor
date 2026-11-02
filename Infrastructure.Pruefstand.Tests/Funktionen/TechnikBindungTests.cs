@@ -280,6 +280,16 @@ public class TechnikBindungTests
         => (await Befunde(Bild.Replace("bool Laut = false", "System.Uri? Laut = null"))).Should().Equal(TechnikAnalyzer.KonfigFeldId);
 
     [Fact]
+    public async Task Eine_oeffentliche_generische_Funktion_ist_baubar_eine_nicht_oeffentliche_ist_CQRS092()
+    {
+        // Eine generische Funktion ist eine Blaupause: der Generator baut sie je Typargument eines Knotens (Entscheidung 4).
+        string Mit(string sichtbar) => Bild.Replace("public enum Modus", "public sealed record Los() : ICommand; public sealed record Fertig() : ICommand; "
+            + sichtbar + " sealed class Glaettung<T>(ISkalierer s) : IFunktion { public Fertig Auf(Los l) => default!; } public enum Modus");
+        (await Befunde(Mit("public"))).Should().NotContain(TechnikAnalyzer.BaubarId);
+        (await Befunde(Mit("internal"))).Should().Contain(TechnikAnalyzer.BaubarId);
+    }
+
+    [Fact]
     public async Task Eine_nicht_oeffentliche_Implementierung_ist_CQRS092()
         => (await Befunde(Bild.Replace("public sealed class Skalierer", "internal sealed class Skalierer"))).Should().Equal(TechnikAnalyzer.BaubarId);
 }

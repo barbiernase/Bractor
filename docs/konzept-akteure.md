@@ -333,6 +333,6 @@ Steht in [13](13-reifegrad-schulden-bewertung.md) §13.0:
 - **FB-19** — Antworten eines Aggregats auf eine direkte Query werden nicht beobachtet (kein `Aktualisiert`).
 - **FB-7** — Arbeit ohne verbundenen Arbeiter staut ihre Aufträge still.
 - **P1-2** — kein TLS; Identitäten für Prod fehlen (in `prod`/`multinode` gibt es keinen Abschnitt `Identitaeten`, das Tor ist dort offen).
-- **WZ-1** — der Fixpunkt prüft Akteure und Clients nicht; die Sonde zeigt Akteure und Clients noch in der alten Form (GF-3).
+- **WZ-1** — der Fixpunkt prüft Akteure und Clients nicht (das Inventar von `--check` und die Sonde schon).
 
 Messungen und Testzahlen: [12](12-tests-und-vermessung.md).

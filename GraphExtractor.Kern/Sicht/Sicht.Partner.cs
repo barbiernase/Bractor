@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using System.Text.Json.Nodes;
 
 namespace GraphExtractor;
@@ -43,6 +44,8 @@ public sealed partial class Sicht
             AkteurePartner(ein, nm);
             if (ein.Count == 0) P(ein, null, "Außenwelt (Client)", "abgeleitet: kein interner Erzeuger · kein Akteur");
             foreach (var d in _decider) if (S(d, "command") == nm) P(aus, "dec:" + S(d, "_id"), "Decide @ " + Agg(d, "— kein Aggregat"));
+            // Arbeit: ein Command ohne Ziel, den ein Akteur hört (✕ nimmt ihm das Hören).
+            HoererPartner(aus, nm, "Arbeit");
         }
         else if (k is "event" or "rejection")
         {
@@ -55,9 +58,8 @@ public sealed partial class Sicht
                 if (S(hd, "event") == nm) P(aus, id, HText(o, hd));
             });
             foreach (var a in _applier) if (S(a, "event") == nm) P(aus, "app:" + S(a, "_id"), "Apply @ " + Agg(a, "—"));
-            foreach (var c in _clients)
-                if (L(c, "kenntnis").Contains(nm))
-                    P(aus, "cl:" + S(c, "_id"), "Client " + ClientAnzeige(c), "Kenntnis", AusListe("cl:" + S(c, "_id"), "kenntnis", nm));
+            // Kenntnis: die Akteure, die das Event bzw. den Hinweis hören (IHoert am Akteur; ✕ nimmt ihm das Hören).
+            HoererPartner(aus, nm, "Kenntnis");
         }
         else if (k == "query")
         {
@@ -87,8 +89,18 @@ public sealed partial class Sicht
                 {
                     var txt = "ƒ " + S(f, "name") + ".Auf(" + S(ein2, "eingang") + ")";
                     if (L(ein2, "ausgaben").Contains(n)) P(e, "fb:" + S(f, "_id"), txt, B(ein2, "strom") ? "Strom" : "Ausgabe");
-                    if (S(ein2, "eingang") == n) P(a, "fb:" + S(f, "_id"), txt, "Auf");
+                    // Ein Port nimmt die Nachricht: der Eingang oder — bei einem Join bzw. einer Port-Form — ein Typ in einem der Ports.
+                    if (S(ein2, "eingang") == n || Alle(ein2["ports"]).Any(pt => Regex.Matches(S(pt, "typ"), @"[A-Za-z_]\w*").Any(m => m.Value == n)))
+                        P(a, "fb:" + S(f, "_id"), txt, "Auf");
                 }
+            foreach (var f in _bausteinFunktionen.Where(f => L(f, "lauscht").Contains(n)))
+                P(e, "fb:" + S(f, "_id"), "ƒ " + S(f, "name") + ".Lausche()", "Strom");
+        }
+        // Akteure, die die Nachricht hören (◀ IHoert) — Arbeit bei einem Command ohne Ziel, sonst Kenntnis.
+        void HoererPartner(List<Partner> a, string n, string mark)
+        {
+            foreach (var ak in _akteure)
+                if (L(ak, "hoert").Contains(n)) P(a, "akt:" + S(ak, "_id"), "Akteur " + S(ak, "name"), mark, AusListe("akt:" + S(ak, "_id"), "hoert", n));
         }
         // Akteure, die diesen Typ hineingeben dürfen (◀ kommt aus; ✕ entzieht das Recht), und Clients, die einen davon verkörpern (sie senden
         //   bzw. fragen ihn in seinem Namen; lösen geht nur am Akteur).

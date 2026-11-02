@@ -127,7 +127,7 @@ public static class ParitaetsPruefung
             $"{soll.Funktionen.Count} Funktionen, {soll.Queries.Count} Queries, {soll.Responses.Count} Responses, " +
             $"{soll.ReadModels.Count} ReadModels, {soll.Projektionen.Count} Projektionen, {soll.Readers.Count} Reader, " +
             $"{soll.Akteure.Count} Akteure ({soll.AkteurRechte.Values.Sum(x => x.Count)} Befugnisse), "
-            + $"{soll.Clients.Count} Clients ({soll.Clients.Values.Sum(x => x.Count)} Rand-Ports)."));
+            + $"{soll.Clients.Count} Clients ({soll.Clients.Values.Sum(x => x.Count)} verkörperte Akteure), {soll.Graphen.Count} Graphen ({soll.Graphen.Values.Sum(x => x.Count)} Knoten)."));
 
         // Ist = die Karten der Server-Kartenliste (Sicht) — je Art „Namespace.Name" ihres Bausteins.
         static string Voll(SichtKarte k) => $"{(string?)k.Ref["namespace"]}.{(string?)k.Ref["name"]}";
@@ -158,17 +158,29 @@ public static class ParitaetsPruefung
             var istDarf = sicht.Kanten.Where(e => e.Von == a.Id && sicht.KarteVon.ContainsKey(e.Nach))
                 .Select(e => $"{full}|{sicht.KarteVon[e.Nach].Name}").ToHashSet(StringComparer.Ordinal);
             Vergleiche($"Befugnis ({a.Name})", sollDarf.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istDarf, befunde);
+            // Hören: Soll = IHoert<T> der Basisliste, Ist = die Kanten Nachricht → Akteur (Arbeit und Kenntnis).
+            var istHoert = sicht.Kanten.Where(e => e.Nach == a.Id && sicht.KarteVon.ContainsKey(e.Von))
+                .Select(e => $"{full}|{sicht.KarteVon[e.Von].Name}").ToHashSet(StringComparer.Ordinal);
+            Vergleiche($"Hören ({a.Name})", (soll.AkteurHoert.GetValueOrDefault(full) ?? []).Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istHoert, befunde);
         }
-        // Clients (docs/konzept-akteure.md §4): je Client sein Rand — Soll aus der Basisliste, Ist aus der Board-Karte.
+        // Clients (docs/konzept-akteure.md §4): je Client, wen er verkörpert — Soll aus der Basisliste, Ist aus der Board-Karte.
         Vergleiche("Client", soll.Clients.Keys.ToHashSet(StringComparer.Ordinal), BoardListe("client"), befunde);
         foreach (var k in Arten("client"))
         {
             var (c, full) = (k.Ref, Voll(k));
             if (!soll.Clients.TryGetValue(full, out var sollRand)) continue;
-            IEnumerable<string> L(string feld, string pre) => (c[feld]?.AsArray() ?? new JsonArray()).Select(x => pre + (string?)x);
-            var istRand = L("verkoerpert", "A:").Concat(L("kenntnis", "K:"))
-                .Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal);
-            Vergleiche($"Client-Vertrag ({k.Name})", sollRand.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istRand, befunde);
+            var istRand = (c["verkoerpert"]?.AsArray() ?? new JsonArray()).Select(x => $"{full}|A:{(string?)x}").ToHashSet(StringComparer.Ordinal);
+            Vergleiche($"Client ({k.Name})", sollRand.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istRand, befunde);
+        }
+        // Graphen (docs/04 §4.4): je Graph-Record eine Karte, ihre Knoten = die Parameter des Records.
+        Vergleiche("Graph", soll.Graphen.Keys.ToHashSet(StringComparer.Ordinal), BoardListe("graph"), befunde);
+        foreach (var k in Arten("graph"))
+        {
+            var full = Voll(k);
+            if (!soll.Graphen.TryGetValue(full, out var sollKnoten)) continue;
+            var istKnoten = (k.Ref["knoten"]?.AsArray() ?? new JsonArray()).OfType<JsonObject>()
+                .Select(x => $"{full}|{(string?)x["name"]}:{BoardLeseseite.Norm((string?)x["typ"] ?? "")}").ToHashSet(StringComparer.Ordinal);
+            Vergleiche($"Knoten ({k.Name})", sollKnoten.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istKnoten, befunde);
         }
         Vergleiche("Projektion", soll.Projektionen, BoardListe("projektion"), befunde);
 
@@ -224,8 +236,12 @@ public static class ParitaetsPruefung
             Projektionen = new(), Konfigs = new(), Stores = new(), Akteure = new(), Funktionen = new();
         /// <summary>Akteur → seine IDarf-Ziele (einfache Namen) — aus der Basisliste, unabhängig vom DomainExtractor.</summary>
         public Dictionary<string, HashSet<string>> AkteurRechte = new(StringComparer.Ordinal);
-        /// <summary>Client (IClientVertrag) → sein Rand „T:Funktion", „S:Typ", „F:Query", „K:Event" — aus der Basisliste.</summary>
+        /// <summary>Akteur → was er hört (IHoert-Ziele, einfache Namen) — aus der Basisliste.</summary>
+        public Dictionary<string, HashSet<string>> AkteurHoert = new(StringComparer.Ordinal);
+        /// <summary>Client (Record mit IClient) → wen er verkörpert („A:Akteur“) — aus der Basisliste.</summary>
         public Dictionary<string, HashSet<string>> Clients = new(StringComparer.Ordinal);
+        /// <summary>Graph (Record mit IGraph) → seine Knoten „Name:Typ“ (Parameter des Records, Typ wie geschrieben).</summary>
+        public Dictionary<string, HashSet<string>> Graphen = new(StringComparer.Ordinal);
         public List<string> AlleRecordNamen = new();
         /// <summary>Jede handgeschriebene Typ-Deklaration oberster Ebene (partial: je Teil) — das Soll der Vollständigkeit.</summary>
         public List<(string Full, string Datei, int Start, int Ende, int Zeile)> Deklarationen = new();
@@ -267,7 +283,8 @@ public static class ParitaetsPruefung
                     foreach (var decl in tree.GetRoot().DescendantNodes().OfType<BaseTypeDeclarationSyntax>())
                     {
                         if (model.GetDeclaredSymbol(decl) is not INamedTypeSymbol t) continue;
-                        var full = t.Fq();
+                        // Eine generische Deklaration heißt auf der Karte wie im Code ohne Typparameter (Glaettung, nicht Glaettung<TFenster>).
+                        var full = t.Fq() is var fq && t.IsGenericType && fq.IndexOf('<') is > 0 and var lt ? fq[..lt] : t.Fq();
                         if (t.ContainingType == null)
                             inv.Deklarationen.Add((full, tree.FilePath, decl.Span.Start, decl.Span.End, decl.GetLocation().GetLineSpan().StartLinePosition.Line + 1));
                         if (decl is EnumDeclarationSyntax) { inv.Enums.Add(full); continue; }
@@ -277,19 +294,22 @@ public static class ParitaetsPruefung
                             inv.Funktionen.Add(full);
                             if (t.TypeKind == TypeKind.Interface) continue;   // eine Klasse zählt unten weiter (Konfig im Konstruktor)
                         }
+                        // Client (Record mit IClient): wen er verkörpert, aus der Basisliste (direkt).
+                        if (iClient != null && t.ContainingType == null && Sym.Implements(t, iClient))
+                        {
+                            inv.Clients[full] = t.Interfaces.Where(b => iVerkoerpert != null && b.OriginalDefinition.Fq() == iVerkoerpert.Fq())
+                                .Select(b => "A:" + b.TypeArguments[0].Name).ToHashSet(StringComparer.Ordinal);
+                            continue;
+                        }
+                        // Graph (Record mit IGraph): seine Knoten = die Parameter des Records (Name und Typ wie geschrieben).
+                        if (t.ContainingType == null && Infrastructure.SourceGeneration.Graphform.IstGraph(t))
+                        {
+                            inv.Graphen[full] = ((decl as RecordDeclarationSyntax)?.ParameterList?.Parameters ?? default)
+                                .Select(p => $"{p.Identifier.Text}:{BoardLeseseite.Norm(p.Type?.ToString() ?? "")}").ToHashSet(StringComparer.Ordinal);
+                            continue;
+                        }
                         if (decl is InterfaceDeclarationSyntax)
                         {
-                            // Client-Vertrag (IClientVertrag): sein Rand aus der Basisliste (direkt): IVerkoerpert, IHoert.
-                            if (iClient != null && Sym.Implements(t, iClient))
-                            {
-                                bool G(INamedTypeSymbol i, INamedTypeSymbol? g) => g != null && i.OriginalDefinition.Fq() == g.Fq();
-                                var rand = new HashSet<string>(StringComparer.Ordinal);
-                                foreach (var b in t.Interfaces)
-                                    if (G(b, iVerkoerpert)) rand.Add("A:" + b.TypeArguments[0].Name);
-                                    else if (G(b, iHoert)) rand.Add("K:" + b.TypeArguments[0].Name);
-                                inv.Clients[full] = rand;
-                                continue;
-                            }
                             // Store = jedes Bündel (IStore), plus jede Fähigkeit OHNE Bündel (dann ihr eigener Store).
                             if (Sym.Implements(t, iStore)
                                 || (Sym.Implements(t, iWStore) || Sym.Implements(t, iRStore))
@@ -304,6 +324,9 @@ public static class ParitaetsPruefung
                         {
                             inv.Akteure.Add(full);
                             inv.AkteurRechte[full] = t.AllInterfaces.Where(i => iDarf != null && i.OriginalDefinition.Fq() == iDarf.Fq())
+                                .Select(i => i.TypeArguments[0].Name).ToHashSet(StringComparer.Ordinal);
+                            // Was er hört — soweit es eine Karte haben kann (ein Typ der Anwendung; LaufGescheitert u. a. liegen im Framework).
+                            inv.AkteurHoert[full] = t.AllInterfaces.Where(i => iHoert != null && i.OriginalDefinition.Fq() == iHoert.Fq() && Domäne(i.TypeArguments[0].ContainingAssembly))
                                 .Select(i => i.TypeArguments[0].Name).ToHashSet(StringComparer.Ordinal);
                         }
                         else if (Sym.Implements(t, iCmd)) inv.Commands.Add(full);

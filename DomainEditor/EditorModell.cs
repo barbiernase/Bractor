@@ -268,8 +268,9 @@ public sealed record ApplyRegel
 }
 
 /// <summary>
-/// Eine Funktion: Klasse (im Host) oder Schnittstelle (draußen bzw. mit Umsetzungen) — mit Eingängen (je Eingang die Signatur) oder gerufen
-/// (<see cref="Methoden"/>, kein Eingang); beides an einer Funktion ist ein Formfehler.
+/// Eine Funktion (eine Klasse mit typisierten Ports, Entscheidung 4) — mit Eingängen (je <c>Auf</c> die Signatur) oder als Quelle (<c>Lausche</c>,
+/// <see cref="Lauscht"/>); oder Technik (Schnittstelle oder Klasse im Konstruktor einer Funktion, ohne Marker): ihre <see cref="Methoden"/> und
+/// Umsetzungen.
 /// </summary>
 public sealed record BausteinFunktion
 {
@@ -286,6 +287,8 @@ public sealed record BausteinFunktion
     public IReadOnlyList<FunktionsUmsetzung> Umsetzungen { get; init; } = [];
     /// <summary>Der gekapselte Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4): der einfache Name von T, sonst null.</summary>
     public string? Zustand { get; init; }
+    /// <summary>Eine Quellfunktion (<c>Lausche(CancellationToken)</c>, Entscheidung 8): was sie meldet (einfache Namen); leer = keine Quelle.</summary>
+    public IReadOnlyList<string> Lauscht { get; init; } = [];
     public string? Doku { get; init; }
     public string? Datei { get; init; }
     /// <summary>Herkunfts-Stempel (<see cref="DomainEditor.Herkunft"/>): Abweichung = im Editor geändert; null = neu.</summary>
@@ -306,10 +309,15 @@ public sealed record FunktionsUmsetzung
     public IReadOnlyList<MethodenRumpf> Rumpfe { get; init; } = [];
 }
 
-/// <summary>Ein Eingang (ein <c>Auf</c>): Eingangstyp, ob Hinweis, ob mit Herkunft, ob Strom, Lese-Fähigkeiten, Ausgaben (einfache Namen).</summary>
+/// <summary>
+/// Ein Eingang (ein <c>Auf</c>): Eingangstyp (der erste Port), ob mit Herkunft, ob Strom, Lese-Fähigkeiten, Ausgaben (einfache Namen); bei einem Join
+/// oder einer anderen Port-Form (<c>T?</c>, <c>OneOf&lt;A, B&gt;</c>, <c>IReadOnlyList&lt;T&gt;</c>) die Ports wie geschrieben.
+/// </summary>
 public sealed record BausteinEingang
 {
     public required string Eingang { get; init; }
+    /// <summary>Die Eingangsports wie geschrieben (Typ, Name), wenn es mehr ist als ein Command <c>T</c>; leer = nur <see cref="Eingang"/>.</summary>
+    public IReadOnlyList<Parameter> Ports { get; init; } = [];
     public bool Hinweis { get; init; }
     public bool Herkunft { get; init; }
     public bool Strom { get; init; }
@@ -643,7 +651,7 @@ public sealed record ClientRumpf
     public string? Rumpf { get; init; }
     /// <summary>Die Signatur aus der generierten Basis (<c>async def …(self, e: …Dto, …, state) -&gt; …:</c>) — gilt auch für einen fehlenden Rumpf.</summary>
     public string? Signatur { get; init; }
-    /// <summary>Die Ausgaben des getragenen Eingangs (aus der Signatur der Funktion; leer = Kenntnis) und die getragene Funktion (null = Kenntnis).</summary>
+    /// <summary>Die Antwort-Commands einer Arbeit (das <c>IDarf</c> des Akteurs; leer = Kenntnis) und der Akteur, dessen Arbeit es ist (null = Kenntnis).</summary>
     public IReadOnlyList<string> Ausgaenge { get; init; } = [];
-    public string? Funktion { get; init; }
+    public string? Akteur { get; init; }
 }

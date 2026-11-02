@@ -1,21 +1,22 @@
+using System.IO;
 using System.Text;
 using Abstractions;
 using Core;
+using Core.Katalog;
 
 // SONDE — fremdes Szenario 3 (docs/12 §12.6): MASSEN-IMPORT MIT FORTSCHRITT.
 //
-// EINE Quell-Nachricht (eine abgelegte Katalog-Datei) wird zu vielen Fakten: der Import-Vorgang ist ein Aggregat, ein Import-Dienst draußen
-// liest die Datei und gibt als STROM je Zeile einen Artikel und zwischendurch den Fortschritt aus; die Leseseite zeigt den Stand. Der Strom ist
-// eine Funktion draußen (docs/10 §10.1): Position und Fortschritt hält das Framework — nach einem Absturz geht es bei der nächsten Zeile
-// weiter; die Artikel-Ids leitet sie aus der Herkunft ab (R13). Getragen wird sie vom Import-Werk, das den Import-Dienst verkörpert (der sie rechnen darf).
+// EINE abgelegte Katalog-Datei wird zu vielen Fakten. Am Kopf des Graphen steht eine QUELLFUNKTION AUS DEM KATALOG des Frameworks (der
+// Dateiwächter, Core.Katalog): je gefundene Datei ein Lauf. Der Eingang startet den Import-Vorgang (ein Aggregat) und hört dessen Event als Antwort;
+// ein Zeilenleser (Technik als KLASSE, ohne Schnittstelle, mit Konfig-Record) gibt als STROM je Zeile einen Unterlauf (JE) und zwischendurch den
+// Fortschritt an den Vorgang; je Zeile wird ein Artikel angelegt; die Bilanz SAMMELT alle Zeilen und JOINT sie mit dem bereiten Katalog derselben
+// Ebene. Die Ids leiten die Knoten aus der Herkunft ab (R13). Der Akteur der Instanz (die Ablage) darf, was den Graphen verlässt.
 //
 // Die Leseseite zeigt die beiden Store-Klassen ohne Transaktion (docs/04 §4.3, docs/10 R14): der Stand liegt in Dateien (Klasse 2, wiederholungsfest — jede
 // Schreib-Fähigkeit nimmt die Herkunft und schreibt bedingt), und eine Metrik zählt angelegte Artikel (Klasse 3, mindestens einmal — nur mit
 // ausdrücklicher Erlaubnis an der Projektion).
 
 namespace Warenkatalog.Import;
-
-// Die Quelle: der Dateiwächter des Katalogs meldet DateiGefunden (der Import nimmt es am Kopf seines Graphen).
 
 public record StarteImport(Id<Importlauf> AggregateId, string Pfad) : ICommand<Importlauf>, ICreationCommand;
 public record ImportGestartet(Id<Importlauf> ImportId, string Pfad) : IEvent;
@@ -86,17 +87,56 @@ public partial class Artikel : IState
     }
 }
 
-// Die Quell-Nachricht startet den Import-Vorgang; seine Id ist die des Streams der Quelle.
+// ── Der Graph: Dateiwächter (Katalog) → Eingang → Zeilen (Je) → Artikel; Bilanz (Sammeln + Join) ───────────────────────────────────────────────
+public record KatalogBereit(Id<Importlauf> Import, string Pfad) : ICommand;
+public record Zeile(Id<Importlauf> Import, int Nummer, string[] Felder) : ICommand;
+
+// Der Eingang: aus der gefundenen Datei der Import-Vorgang (Id aus der Herkunft); seine Antwort macht den Katalog bereit.
 public sealed class Katalogeingang : IFunktion
 {
-    public StarteImport Auf(DateiGefunden d, Herkunft h) => new(new Id<Importlauf>(h.Stream), d.Pfad);
+    public StarteImport Auf(DateiGefunden d, Herkunft h) => new(h.NeueId<Importlauf>(d.RelativerPfad), d.Pfad);
+
+    public KatalogBereit Auf(ImportGestartet e) => new(e.ImportId, e.Pfad);
 }
 
-// Der Strom: je Zeile ein Artikel, zwischendurch der Fortschritt, am Ende der Abschluss — eine Funktion draußen.
-public interface IImportLauf : IFunktion
+// Technik als Klasse (ohne Schnittstelle, ohne Marker) mit Konfig-Record.
+public record CsvKonfig(string Trenner = ";");
+
+public sealed class CsvZerleger(CsvKonfig konfig)
 {
-    IAsyncEnumerable<OneOf<LegeArtikelAn, MeldeImportFortschritt, SchliesseImportAb>> Auf(ImportGestartet e, Herkunft h);
+    public string[] Zerlege(string zeile) => zeile.Split(konfig.Trenner);
 }
+
+// JE: je Zeile ein Unterlauf; je hundert Zeilen der Fortschritt an den Vorgang (er verlässt den Graphen).
+public sealed class Zeilenleser(CsvZerleger zerleger) : IFunktion
+{
+    public async IAsyncEnumerable<OneOf<Zeile, MeldeImportFortschritt>> Auf(KatalogBereit k)
+    {
+        var nummer = 0;
+        await foreach (var text in File.ReadLinesAsync(k.Pfad))
+        {
+            nummer++;
+            yield return new Zeile(k.Import, nummer, zerleger.Zerlege(text));
+            if (nummer % 100 == 0) yield return new MeldeImportFortschritt(k.Import, nummer);
+        }
+    }
+}
+
+// Im Unterlauf je Zeile: der Artikel (Id aus der Herkunft und der Artikelnummer).
+public sealed class Artikelanlage : IFunktion
+{
+    public LegeArtikelAn Auf(Zeile z, Herkunft h) =>
+        new(h.NeueId<Artikel>(z.Felder[0]), z.Felder[0], z.Felder.ElementAtOrDefault(1) ?? "", decimal.Parse(z.Felder.ElementAtOrDefault(2) ?? "0"));
+}
+
+// SAMMELN + JOIN: alle Zeilen der Unterläufe und der bereite Katalog auf der Ebene des Kopfs.
+public sealed class Importbilanz : IFunktion
+{
+    public SchliesseImportAb Auf(IReadOnlyList<Zeile> alle, KatalogBereit katalog) =>
+        new(katalog.Import, alle.Count, alle.Count(z => z.Felder.Length < 3));
+}
+
+public sealed record Katalogimport(Dateiwaechter Eingang, Katalogeingang Annahme, Zeilenleser Lesen, Artikelanlage Anlage, Importbilanz Bilanz) : IGraph;
 
 // Leseseite: der Stand je Import.
 public class Importstand : IReadModel
@@ -175,12 +215,9 @@ public sealed class Importauskunft : IReader
     }
 }
 
-// Wer hineingibt: die Ablage (Maschine) meldet die Datei; die Katalogpflege fragt den Stand und sieht den Fortschritt.
-public sealed record Ablage : IMaschine, IDarf<StarteImport>;
-public sealed record Katalogpflege : IMensch, IDarf<HoleImportstand>;
+// Wer hineingibt: die Ablage — der Akteur der Instanz des Katalogimports (er darf, was den Graphen verlässt); die Katalogpflege fragt den Stand
+// und hört den Fortschritt (Kenntnis).
+public sealed record Ablage : IAkteur, IDarf<StarteImport>, IDarf<LegeArtikelAn>, IDarf<MeldeImportFortschritt>, IDarf<SchliesseImportAb>;
+public sealed record Katalogpflege : IAkteur, IDarf<HoleImportstand>, IHoert<ImportFortgeschritten>, IHoert<ImportAbgeschlossen>;
 
-public interface IKatalogpflegeOberflaeche : IClientVertrag, IVerkoerpert<Katalogpflege>, IHoert<ImportFortgeschritten>, IHoert<ImportAbgeschlossen> { }
-
-// Draußen: der Import-Dienst rechnet den Strom, sein Client trägt die Funktion.
-public sealed record Importdienst : IMaschine, IDarf<IImportLauf>;
-public interface IImportWerk : IClientVertrag, IVerkoerpert<Importdienst> { }
+public sealed record KatalogpflegeOberflaeche : IClient, IVerkoerpert<Katalogpflege>;

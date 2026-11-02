@@ -166,6 +166,8 @@ public sealed class BausteinFunktionRaw
     public Dictionary<string, List<(string Methode, string? Rumpf, Ort? Ort)>> UmsetzungsRumpfe = new(StringComparer.Ordinal);
     /// <summary>Der Zustand (<c>IZustand&lt;T&gt;</c>, voller Name von T) — null ohne (docs/04 §4.4).</summary>
     public string? ZustandFull;
+    /// <summary>Eine Quellfunktion (<c>Lausche</c>, Entscheidung 8): die vollen Namen dessen, was sie meldet — leer, wenn sie nicht lauscht.</summary>
+    public List<string> LauschtFull = new();
     public string? Doku, Datei;
 }
 
@@ -176,6 +178,11 @@ public sealed class BausteinEingangRaw
     public bool Hinweis, Herkunft, Strom;
     public List<(string Typ, string Name)> Faehigkeiten = new();
     public List<string> AusgabenFull = new();
+    /// <summary>
+    /// Die Eingangsports wie geschrieben (Typ, Name) — nur, wenn das Auf mehr nimmt als einen Command <c>T</c>: ein Join (mehrere Ports) oder eine
+    /// andere Form (<c>T?</c>, <c>OneOf&lt;A, B&gt;</c>, <c>IReadOnlyList&lt;T&gt;</c>, Entscheidung 5). Leer = genau der <see cref="EingangFull"/>.
+    /// </summary>
+    public List<(string Typ, string Name)> Ports = new();
 }
 
 /// <summary>Eine gerufene Methode einer Funktion: <c>{Rueckgabe} {Name}({Parameter})</c> — Typen wie geschrieben.</summary>
@@ -735,16 +742,22 @@ public sealed partial class DomainExtractor
             };
             for (var i = 0; i < a.Methode.Parameters.Length; i++)
                 if (a.Parameter[i].Art == "faehigkeit") e.Faehigkeiten.Add((Geschrieben(a.Methode, i, a.Methode.Parameters[i].Type), a.Methode.Parameters[i].Name));
+            // Die Ports wie geschrieben — nur, wenn es mehr ist als ein Command T (Join, T?, OneOf, IReadOnlyList).
+            if (a.Ports.Count > 1 || a.Ports.Any(p => p.Form != Infrastructure.SourceGeneration.Funktionsform.Portform.Eins))
+                for (var i = 0; i < a.Methode.Parameters.Length; i++)
+                    if (a.Parameter[i].Art == "p") e.Ports.Add((Geschrieben(a.Methode, i, a.Methode.Parameters[i].Type), a.Methode.Parameters[i].Name));
             f.Eingaenge.Add(e);
         }
+        if (form.Lausche is { } lausche) f.LauschtFull = lausche.Ausgaben.Select(x => x.Fq()).ToList();
         // Unfertig (W1: Unfertiges = Code, der nicht baut): ein Auf, das die Funktionsform (noch) nicht annimmt — z. B. ohne Ausgabe, frisch im
         //   Editor angelegt —, bleibt als Eingang ohne Ausgaben sichtbar; den Fehler meldet der Build an seiner Stelle.
         var gelesen = form.Aufs.Select(a => a.Eingang.Fq()).ToHashSet(StringComparer.Ordinal);
+        var gelesenM = form.Aufs.Select(a => a.Methode).ToHashSet<IMethodSymbol>(SymbolEqualityComparer.Default);
         foreach (var m in t.GetMembers(Abstractions.Funktionsvertrag.Auf).OfType<IMethodSymbol>()
                      .Where(m => m.DeclaredAccessibility == Accessibility.Public && m.Parameters.Length > 0 && m.Parameters[0].Type is INamedTypeSymbol))
         {
             var ein = (INamedTypeSymbol)m.Parameters[0].Type;
-            if (!gelesen.Add(ein.Fq())) continue;
+            if (gelesenM.Contains(m) || !gelesen.Add(ein.Fq())) continue;
             f.Eingaenge.Add(new BausteinEingangRaw
             {
                 EingangFull = ein.Fq(), Hinweis = ein.AllInterfaces.Any(i => i.Fq() == Vertrag.ITransientEvent),
@@ -892,8 +905,8 @@ public sealed partial class DomainExtractor
         {
             Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(), Datei = decl?.SyntaxTree.FilePath, Doku = decl == null ? null : Summary(decl),
             Knoten = (ctor?.Parameters ?? []).Select(p => (p.Name, geschrieben.GetValueOrDefault(p.Name) is { Length: > 0 } w ? w : p.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat))).ToList(),
-            Koepfe = g.Koepfe.Select(k => k.Typ.Name).Distinct(StringComparer.Ordinal).ToList(),
-            Ausgaenge = g.Ausgaenge.Select(a => a.Typ.Name).Distinct(StringComparer.Ordinal).ToList(),
+            Koepfe = g.Koepfe.Select(k => Infrastructure.SourceGeneration.Funktionsform.Anzeigename(k.Typ)).Distinct(StringComparer.Ordinal).ToList(),
+            Ausgaenge = g.Ausgaenge.Select(a => Infrastructure.SourceGeneration.Funktionsform.Anzeigename(a.Typ)).Distinct(StringComparer.Ordinal).ToList(),
             Quelle = g.Quelle?.Name,
             Fehler = g.Fehler.Select(f => f.Text).ToList(),
         };

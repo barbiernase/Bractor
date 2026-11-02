@@ -293,19 +293,19 @@ public sealed class KontextBauer
                     Kopf("AUFTRAG [L]");
                     b.AppendLine(auftrag ?? "— kein LLM-Knoten an diesem Code-Block (ohne Auftrag wird kein Aufruf ausgelöst)");
                     Kopf("ANKER [S]");
-                    var funktion = S(r, "funktion");
-                    b.AppendLine($"{klasse}.{methode}   {datei}:{(m == null ? "— (Methode fehlt, wird mit der Signatur der Basis angelegt)" : (m.DefZeile + 1).ToString())}   Implementierung des Clients {client}{(funktion is { } fn ? $", trägt die Funktion {fn}" : "")}");
+                    var akteur = S(r, "akteur");
+                    b.AppendLine($"{klasse}.{methode}   {datei}:{(m == null ? "— (Methode fehlt, wird mit der Signatur der Basis angelegt)" : (m.DefZeile + 1).ToString())}   Implementierung des Clients {client}{(akteur is { } ak ? $", nimmt die Arbeit des Akteurs {ak} an" : "")}");
                     Kopf("SIGNATUR [S]");
                     b.AppendLine(defImpl ?? $"async def {methode}(self, e, ctx, state):");
                     if (m != null && sig != null && defImpl != sig) b.AppendLine($"(Basis: {sig})");
                     Kopf("VERTRAG (nur Erzwungenes) [S]");
-                    b.AppendLine(funktion == null
+                    b.AppendLine(akteur == null
                         ? "Kenntnis: keine Ausgabe — Framework (die generierte Basis prüft jede Rückgabe gegen den Vertrag)"
-                        : $"Funktion {funktion}: liefert nur {string.Join(" | ", ausg.Select(x => x + "Dto"))} — Framework (Basis prüft jede Ausgabe gegen die Signatur der Funktion)");
-                    if (funktion != null) b.AppendLine("Festgehalten und gesendet wird beim Funktions-Actor des Servers; die erste Antwort gewinnt");
+                        : $"Arbeit des Akteurs {akteur}: antwortet nur mit {string.Join(" | ", ausg.Select(x => x + "Dto"))} (sein IDarf), gern in Stücken (yield) — Framework (die Basis prüft jede Antwort)");
+                    if (akteur != null) b.AppendLine("Die Werkstatt gibt die Arbeit einer Sitzung, die den Akteur verkörpert, und stellt sie erneut zu, bis eine Antwort kommt; die erste gewinnt");
                     Kopf("ERREICHBAR IM RUMPF [S]");
                     b.AppendLine($"Parameter  {P(0, "e")} : {ev}Dto   (der Eingang — Felder in snake_case, siehe TYPEN)");
-                    b.AppendLine(funktion == null
+                    b.AppendLine(akteur == null
                         ? $"Parameter  {P(1, "ctx")} : MessageContext   ({(ctxFelder.Count == 0 ? "Metadaten des Envelopes" : string.Join(", ", ctxFelder))})"
                         : $"Parameter  {P(1, "h")} : Herkunft   (Stream, Version, Zeit, Akteur des Eingangs)");
                     b.AppendLine($"Parameter  {P(2, "state")} : der Zustand der Implementierung (siehe NACHBAR-CODE)");

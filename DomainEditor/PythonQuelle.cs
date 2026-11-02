@@ -3,8 +3,8 @@ using System.Text.RegularExpressions;
 namespace DomainEditor;
 
 /// <summary>
-/// Python-Quelltext eines CLIENTS lesen und chirurgisch ändern (docs/konzept-akteure.md §4): die Implementierung eines Client-Vertrags
-/// ist eine Klasse, die die generierte Basis <c>&lt;Client&gt;Basis</c> erbt; je getragenem Funktions-Eingang und je Kenntnis eine Methode. Nur Code-Fakten:
+/// Python-Quelltext eines CLIENTS lesen und chirurgisch ändern (docs/konzept-akteure.md §4): die Implementierung eines Clients
+/// ist eine Klasse, die die generierte Basis <c>&lt;Client&gt;Basis</c> erbt; je Arbeit seiner Akteure und je Kenntnis eine Methode. Nur Code-Fakten:
 /// Klassen und ihre Basisliste, Methoden über ihren Namen aus der generierten Basis — kein Raten über Dateinamen. Reiner Text (kein I/O),
 /// eingerückt wie Python es verlangt: der Rumpf einer Methode sind die Zeilen unter dem <c>def</c>, die tiefer eingerückt sind.
 /// </summary>
@@ -13,10 +13,11 @@ public static class PythonQuelle
     public sealed record Klasse(string Name, IReadOnlyList<string> Basen, int Zeile);
     public sealed record Methode(string Name, int DefZeile, int RumpfStart, int RumpfEnde, string Einzug);
     /// <summary>
-    /// Eine Methode der generierten Client-Basis: Eingang (Event), Methodenname, die <c>def</c>-Zeile (Signatur), die getragene Funktion
-    /// (null = Kenntnis), Strom und die Ausgaben der Funktion für diesen Eingang.
+    /// Eine Methode der generierten Client-Basis: Eingang (ein Command ohne Ziel bei Arbeit, sonst Event oder Hinweis), Methodenname, die
+    /// <c>def</c>-Zeile (Signatur), der Akteur, dessen Arbeit es ist (null = Kenntnis), Strom (eine Antwort darf in Stücken kommen) und die
+    /// Antwort-Commands (das <c>IDarf</c> des Akteurs).
     /// </summary>
-    public sealed record BasisAuf(string Event, string Methode, string Def, string? Funktion, bool Strom, IReadOnlyList<string> Ausgaenge);
+    public sealed record BasisAuf(string Event, string Methode, string Def, string? Akteur, bool Strom, IReadOnlyList<string> Ausgaenge);
     public sealed record ClientBasis(string Client, string Basis, IReadOnlyList<BasisAuf> Auf);
 
     private static readonly Regex KlassenKopf = new(@"^class\s+(\w+)\s*(?:\((.*)\))?\s*:", RegexOptions.Compiled);
@@ -136,17 +137,18 @@ public static class PythonQuelle
         return string.Join("\n", zeilen.Select(z => z.Length >= min ? z[min..] : z.TrimStart())).Trim('\n');
     }
 
-    // ── Die GENERIERTE Basis (vertraege.py, Cqrs.Codegen): je Client-Basis CLIENT, TRAEGT (getragene Funktionen) und HOERT (Kenntnis) ──
+    // ── Die GENERIERTE Basis (vertraege.py, Cqrs.Codegen): je Client-Basis CLIENT, ARBEIT (je Akteur die gehörten Commands ohne Ziel mit Methode
+    //    und Antworten) und HOERT (Kenntnis) ──
     private static readonly Regex ClientWert = new(@"^\s+CLIENT\s*:\s*ClassVar\[str\]\s*=\s*""(\w+)""", RegexOptions.Compiled);
-    private static readonly Regex BlockKopf = new(@"^\s+(TRAEGT|HOERT)\s*:\s*ClassVar\[dict\]\s*=\s*\{(.*)$", RegexOptions.Compiled);
-    private static readonly Regex FunktionKopf = new(@"^\s+""(\w+)""\s*:\s*\{", RegexOptions.Compiled);
-    private static readonly Regex TraegtEintrag = new(@"^\s+(\w+)\s*:\s*Eingang\(\s*""(\w+)""\s*,\s*\{([^}]*)\}(.*)\)\s*,?\s*$", RegexOptions.Compiled);
+    private static readonly Regex BlockKopf = new(@"^\s+(ARBEIT|HOERT)\s*:\s*ClassVar\[dict\]\s*=\s*\{(.*)$", RegexOptions.Compiled);
+    private static readonly Regex AkteurKopf = new(@"^\s+""(\w+)""\s*:\s*\{", RegexOptions.Compiled);
+    private static readonly Regex ArbeitEintrag = new(@"^\s+(\w+)\s*:\s*Arbeit\(\s*""(\w+)""\s*,\s*\(([^)]*)\)\s*\)\s*,?\s*$", RegexOptions.Compiled);
     private static readonly Regex HoertEintrag = new(@"^\s+(\w+)\s*:\s*""(\w+)""\s*,?\s*$", RegexOptions.Compiled);
 
     /// <summary>
-    /// Die Client-Basen der generierten <c>vertraege.py</c>: je getragenem Funktions-Eingang (<c>TRAEGT</c>) und je Kenntnis (<c>HOERT</c>) die
-    /// Methode der Basis. <paramref name="dtoEndung"/> ist die Endung, mit der der Generator die Nachrichten-Typen benennt (Proto-DTO) — der
-    /// Event-Name ist der Typ ohne sie.
+    /// Die Client-Basen der generierten <c>vertraege.py</c>: je Arbeit eines verkörperten Akteurs (<c>ARBEIT</c>: <c>CmdDto: Arbeit("auf_cmd",
+    /// (Antwort…))</c>, die Antwort kommt als Strom) und je Kenntnis (<c>HOERT</c>) die Methode der Basis. <paramref name="dtoEndung"/> ist die
+    /// Endung, mit der der Generator die Nachrichten-Typen benennt (Proto-DTO) — der Name der Nachricht ist der Typ ohne sie.
     /// </summary>
     public static IReadOnlyList<ClientBasis> ClientBasen(string vertraege, string dtoEndung = "Dto")
     {
@@ -155,12 +157,12 @@ public static class PythonQuelle
         string Ohne(string t) => t.EndsWith(dtoEndung, StringComparison.Ordinal) ? t[..^dtoEndung.Length] : t;
         foreach (var k in Klassen(vertraege))
         {
-            string? client = null, block = null, funktion = null;
+            string? client = null, block = null, akteur = null;
             var auf = new List<BasisAuf>();
-            void Nimm(string eingang, string methode, string? fn, bool strom, IReadOnlyList<string> ausgaenge)
+            void Nimm(string eingang, string methode, string? ak, bool strom, IReadOnlyList<string> ausgaenge)
             {
                 var def = FindeMethode(vertraege, k.Name, methode) is { } m ? DefText(z, m) : $"async def {methode}(self, e, ctx, state):";
-                auf.Add(new(Ohne(eingang), methode, def, fn, strom, ausgaenge));
+                auf.Add(new(Ohne(eingang), methode, def, ak, strom, ausgaenge));
             }
             for (var i = k.Zeile + 1; i < z.Length; i++)
             {
@@ -170,21 +172,21 @@ public static class PythonQuelle
                 {
                     // Ein leerer Block steht in einer Zeile ({}), sonst bis zur schließenden Klammer auf der Einrückung des Kopfs.
                     block = b.Groups[2].Value.TrimStart().StartsWith('}') ? null : b.Groups[1].Value;
-                    funktion = null;
+                    akteur = null;
                     continue;
                 }
                 if (block == null) continue;
                 if (z[i].Trim().StartsWith('}'))
                 {
-                    if (block == "TRAEGT" && funktion != null) funktion = null;
+                    if (block == "ARBEIT" && akteur != null) akteur = null;
                     else block = null;
                     continue;
                 }
-                if (block == "TRAEGT" && FunktionKopf.Match(z[i]) is { Success: true } f) funktion = f.Groups[1].Value;
-                else if (block == "TRAEGT" && funktion != null && TraegtEintrag.Match(z[i]) is { Success: true } t)
+                if (block == "ARBEIT" && AkteurKopf.Match(z[i]) is { Success: true } a) akteur = a.Groups[1].Value;
+                else if (block == "ARBEIT" && akteur != null && ArbeitEintrag.Match(z[i]) is { Success: true } t)
                 {
-                    var ausg = Regex.Matches(t.Groups[3].Value, @"(\w+)\s*:").Select(x => Ohne(x.Groups[1].Value)).ToList();
-                    Nimm(t.Groups[1].Value, t.Groups[2].Value, funktion, t.Groups[4].Value.Contains("strom=True"), ausg);
+                    var antworten = Regex.Matches(t.Groups[3].Value, @"\w+").Select(x => Ohne(x.Value)).ToList();
+                    Nimm(t.Groups[1].Value, t.Groups[2].Value, akteur, true, antworten);
                 }
                 else if (block == "HOERT" && HoertEintrag.Match(z[i]) is { Success: true } h)
                     Nimm(h.Groups[1].Value, h.Groups[2].Value, null, false, []);
@@ -210,7 +212,7 @@ public static class PythonQuelle
         b.AppendLine("from dataclasses import dataclass");
         b.AppendLine("from typing import AsyncIterator  # noqa: F401");
         b.AppendLine();
-        b.AppendLine("from cqrs_client.funktion import Herkunft  # noqa: F401");
+        b.AppendLine("from cqrs_client.arbeit import Herkunft  # noqa: F401");
         b.AppendLine("from cqrs_client.router import MessageContext  # noqa: F401");
         if (dtos.Count > 0) b.AppendLine($"from {paket}.generated import {string.Join(", ", dtos)}  # noqa: F401");
         b.AppendLine($"from {paket}.generated.vertraege import {basis.Basis}");

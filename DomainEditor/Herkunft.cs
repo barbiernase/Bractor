@@ -24,7 +24,8 @@ public static class Herkunft
     public static string Von(BausteinFunktion f) => Hash(new
     {
         f.Name, f.Klasse,
-        Eingaenge = f.Eingaenge.Select(e => new { e.Eingang, e.Hinweis, e.Herkunft, e.Strom, e.Ausgaben }).ToList(),
+        Eingaenge = f.Eingaenge.Select(e => new { e.Eingang, e.Hinweis, e.Herkunft, e.Strom, e.Ausgaben, Ports = e.Ports.Select(p => p.Typ + " " + p.Name).ToList() }).ToList(),
+        f.Lauscht,
         Methoden = f.Methoden.Select(m => new { m.Name, m.Rueckgabe, m.Parameter }).ToList(),
         f.Konstruktor,
         Umsetzungen = f.Umsetzungen.Select(u => new { u.Name, u.Konstruktor }).ToList(),
