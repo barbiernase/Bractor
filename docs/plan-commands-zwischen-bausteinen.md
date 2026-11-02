@@ -202,6 +202,24 @@ Beim Umbau nachgezogen (Schritt 1–2), passend zu den Entscheidungen, ohne neue
 - **Ein Command ohne Ziel von einem Akteur** über Leitung bzw. JSON-Eingang an einen Graph-Kopf kommt mit Schritt 4 (dort werden die
   Quell-Nachrichten der Clients zu Commands).
 
+Aus Schritt 3:
+
+- **Graph-Actor als Koordinator** (Entscheidungen 5, 7, 11): die Buchführung eines Laufs (`Infrastructure/Funktionen/Lauf.cs`) kennt je Pfad und
+  Operation einen Aufruf; die Parents sind Warteschlange, Kinder, Wiederholungen und Abbruch, sie merken sich keine Kennungen mehr (das tut der
+  Graph-Actor für die Köpfe). Ausgaben an Knoten des Graphen werden mit dem Erfolg des Aufrufs sichtbar (eine Wiederholung liefert sie nicht doppelt);
+  Commands an Aggregate gehen sofort. Ids: `Kettenvertrag.Aufruf(Lauf, Ort, Pfad, Auf)`, darunter wie bisher Befehl/Antwort/Ausgabe aus Aufruf und
+  Stelle; die Stelle zählt über den ganzen Aufruf (auch Ausgaben aus Antworten). Eingänge (`EingangZustellen`) gibt es nur noch am Kopf.
+- **Feuern**: ein Aufruf, dessen Ports alle leer ausgehen (lauter `T?` = null), feuert nicht; eine leere Liste ist ein Wert (der Strom kam, ohne
+  Element). Das `Zeitlimit` des Knotens begrenzt eine Rechnung (danach Wiederholung) und das Warten eines Auf auf seine `T?`-Ports, sobald die übrigen
+  da sind. Wer nach einem Rennen oder einer Frist nicht mehr gebraucht wird und nichts nach draußen gibt, wird abgebrochen.
+- **Gescheiterter Lauf**: `LaufGescheitert` liegt in `Abstractions` (`Graph.cs`) und geht über den Hinweis-Weg; geparkt wird in `cqrs_eingaenge`
+  (Spalte `geparkt` mit dem Grund, nie mehr fällig).
+- **Generische Funktionen**: die offene Definition ist eine Blaupause, je Typargument eines Knotens ein Baustein (`Bildverkleinerung<Vorschau>`);
+  generische Commands fließen nur zwischen Knoten (nicht über die Leitung, nicht am Kopf).
+- **Domäne**: die Bildaufbereitung ist ein Fork-Join ohne Kacheln — `BildEingelesen` gabelt in die Vorschau-Kette und direkt zum Bildeingang, der
+  beide joint (die Python-Worker bleiben unverändert); Je + Sammeln zeigen die Prüfdomäne (`Zubuchung`) und die Laufzeit-Tests.
+- **Spur je Lauf mit Pfad** zieht mit den Graph-Karten in Schritt 7: der Wirker ist eine Karten-Id (W9), Karten für Knoten gibt es erst dort.
+
 ## Schritte
 
 Jeder Schritt baut den Bestand direkt um (keine Abwärtskompatibilität), endet mit grünem `dotnet build` und `scripts/server.sh lauf scripts/tests.sh
@@ -288,6 +306,7 @@ schnell` und ist ein eigener Commit. Grammatik, Analyzer und Test kommen je Rege
   Technik, Akteur (`IDarf`, `IHoert`), Client (verkörperte Akteure); Domänengraph und Graph-Ansicht per Klick; Kanten nur aus Signaturen und
   Basislisten; Gesten: Knoten hinzufügen = Parameter am Graph-Record, Adapter vorschlagen, Instanz anlegen = Konfigdatei.
 - `--graph <Typ>`: der Graph als Text (Knoten, Kanten, Vielfachheit, Signatur).
+- Spur je Lauf mit Pfad: der Wirker eines Knotens ist seine Karte (Instanz, Knoten), die Spur zeigt den Pfad des Laufs (aus Schritt 3 verschoben).
 - Sonde neu schreiben (heute noch das alte Funktionsmodell) und `soll.txt`: alle Muster aus Entscheidung 5, Graph im Graphen, generische Funktion,
   Quellfunktion; `--check`, `--sonde`, `--grammatik` grün.
 - `DomainEditor/Grammatik.cs`: Regeln je Entscheidung mit Build-Gegenstück.

@@ -214,6 +214,11 @@ public sealed class Lauf(GraphInstanz instanz, LaufKontext kontext)
                 if (pfad is not null) Pruefe(Hole(pfad, k, o), w);
             }
         }
+        // Ein Strom-Ursprung ist fertig: jeder Sammel-Port, der aus seinen Unterläufen sammelt, erfährt es — auch wenn er nicht unmittelbar an ihm
+        //   hängt (ein leerer Strom öffnet keinen Unterlauf, aus dem es ihn sonst erreichte).
+        if (a.Op.Stroeme.Length > 0)
+            foreach (var (k, o, _) in _graph.Sammler(a.Knoten.Name))
+                Pruefe(Hole(a.Pfad, k, o), w);
     }
 
     /// <summary>Prüft einen wartenden Aufruf: sind alle Ports aufgelöst, rechnet er; bleibt ein Port leer, kommt er nie.</summary>
@@ -286,8 +291,7 @@ public sealed class Lauf(GraphInstanz instanz, LaufKontext kontext)
     {
         liste = null;
         var p = a.Op.Ports[i];
-        var e0 = p.Erzeuger[0];
-        var ursprung = e0.Strom ? e0.Knoten : _graph.KnotenNamens(e0.Knoten)!.Operation(e0.Operation)!.Ebene[^1];
+        var ursprung = _graph.Ursprung(p);
         var quellen = _graph.KnotenNamens(ursprung)!.Operationen.Where(o => o.Stroeme.Length > 0).Select(o => Finde(a.Pfad, ursprung, o.Auf)).ToList();
         if (quellen.Any(Offen)) return Aufrufzustand.Wartet;
         if (quellen.All(q => q!.Zustand == Aufrufzustand.Nichts)) return Aufrufzustand.Nichts;

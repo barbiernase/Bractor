@@ -460,6 +460,20 @@ class CommandQuittungDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class LaufGescheitertDto(betterproto.Message):
+    instanz: str = betterproto.string_field(1)
+    lauf: str = betterproto.string_field(2)
+    knoten: str = betterproto.string_field(3)
+    grund: str = betterproto.string_field(4)
+
+
+@dataclass(eq=False, repr=False)
+class BildNichtLesbarDto(betterproto.Message):
+    pfad: str = betterproto.string_field(1)
+    grund: str = betterproto.string_field(2)
+
+
+@dataclass(eq=False, repr=False)
 class DatensatzBereitsEingefrorenDto(betterproto.Message):
     datensatz_id: str = betterproto.string_field(1)
 
@@ -492,6 +506,11 @@ class EinfrierenAngefordertDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class KeinMitgliedAuffindbarDto(betterproto.Message):
+    angefragt: int = betterproto.int32_field(1)
+
+
+@dataclass(eq=False, repr=False)
 class PaarAufgenommenDto(betterproto.Message):
     image_pair_id: str = betterproto.string_field(1)
 
@@ -515,6 +534,11 @@ class RangeAngefordertDto(betterproto.Message):
 @dataclass(eq=False, repr=False)
 class RangeLeerDto(betterproto.Message):
     datensatz_id: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class RangeOhneTrefferDto(betterproto.Message):
+    kriterien: "RangeKriterienDto" = betterproto.message_field(1)
 
 
 @dataclass(eq=False, repr=False)
@@ -576,6 +600,11 @@ class DateiErkanntDto(betterproto.Message):
     geaendert_am: int = betterproto.int64_field(5)
     erkannt_am: int = betterproto.int64_field(6)
     kennung: str = betterproto.string_field(7)
+
+
+@dataclass(eq=False, repr=False)
+class DateinameUnbekanntDto(betterproto.Message):
+    dateiname: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
@@ -675,27 +704,6 @@ class ModellRegistriertDto(betterproto.Message):
     name: str = betterproto.string_field(4)
     pfad: str = betterproto.string_field(5)
     metriken: "ModellMetrikenDto" = betterproto.message_field(6)
-
-
-@dataclass(eq=False, repr=False)
-class BildNichtLesbarDto(betterproto.Message):
-    pfad: str = betterproto.string_field(1)
-    grund: str = betterproto.string_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class KeinMitgliedAuffindbarDto(betterproto.Message):
-    angefragt: int = betterproto.int32_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class RangeOhneTrefferDto(betterproto.Message):
-    kriterien: "RangeKriterienDto" = betterproto.message_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class DateinameUnbekanntDto(betterproto.Message):
-    dateiname: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)

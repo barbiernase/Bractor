@@ -116,7 +116,7 @@ public sealed class Testumgebung
         if (Anwendung == Anwendung.Pruefdomaene)
         {
             foreach (var g in new[] { "Abrechnungsablauf", "Auftragsablauf", "Verteilungsablauf", "Importablauf", "Merkmalbildung", "Ausreisserkontrolle",
-                         "Schaetzung", "Nachschubablauf" })
+                         "Schaetzung", "Nachschubablauf", "Zubuchung" })
                 yield return (g.ToLowerInvariant(), new JsonObject { ["Graph"] = g });
             yield break;
         }

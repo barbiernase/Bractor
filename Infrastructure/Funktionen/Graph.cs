@@ -40,6 +40,7 @@ public sealed record GraphPlan(string Name, Type Typ, IReadOnlyList<KnotenPlan> 
 {
     private IReadOnlyDictionary<(string, int, Type), (string Knoten, int Operation, int Port)[]>? _abnehmer;
     private IReadOnlyDictionary<string, IReadOnlySet<Type>>? _imGraphen;
+    private IReadOnlyDictionary<string, (string Knoten, int Operation, int Port)[]>? _sammler;
 
     public KnotenPlan? KnotenNamens(string name) => Knoten.FirstOrDefault(k => k.Name == name);
 
@@ -53,6 +54,22 @@ public sealed record GraphPlan(string Name, Type Typ, IReadOnlyList<KnotenPlan> 
     /// <summary>Die Typen, die <paramref name="knoten"/> an Knoten dieses Graphen gibt (alles andere verlässt ihn).</summary>
     public IReadOnlySet<Type> ImGraphen(string knoten) =>
         (_imGraphen ??= BaueImGraphen()).TryGetValue(knoten, out var t) ? t : new HashSet<Type>();
+
+    /// <summary>Der Knoten, dessen Strom die Unterläufe öffnet, aus denen ein Sammel-Port (<c>IReadOnlyList&lt;T&gt;</c>) sammelt.</summary>
+    public string Ursprung(PortPlan sammel)
+    {
+        var e = sammel.Erzeuger[0];
+        return e.Strom ? e.Knoten : KnotenNamens(e.Knoten)!.Operation(e.Operation)!.Ebene[^1];
+    }
+
+    /// <summary>Die Sammel-Ports, die aus den Unterläufen von <paramref name="ursprung"/> sammeln (auch mittelbar: aus einem Knoten im Unterlauf).</summary>
+    public IReadOnlyList<(string Knoten, int Operation, int Port)> Sammler(string ursprung) =>
+        (_sammler ??= (from k in Knoten
+                       from o in k.Operationen
+                       from p in o.Ports.Select((p, i) => (p, i))
+                       where p.p.Form == Portform.Alle && p.p.Erzeuger.Length > 0
+                       group (k.Name, o.Auf, p.i) by Ursprung(p.p))
+            .ToDictionary(g => g.Key, g => g.ToArray())).TryGetValue(ursprung, out var s) ? s : Array.Empty<(string, int, int)>();
 
     private Dictionary<(string, int, Type), (string, int, int)[]> BaueAbnehmer() =>
         (from k in Knoten
