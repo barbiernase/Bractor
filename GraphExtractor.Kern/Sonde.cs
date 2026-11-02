@@ -313,11 +313,13 @@ public static class Sonde
         // Clients (docs/konzept-akteure.md §4): ein Record, der nur nennt, wen er verkörpert (was über seine Leitung geht, sagen die Akteur-Zeilen).
         foreach (var c in A(b, "clients").Where(Sonde))
             z.Add($"client {S(c, "namespace")}.{S(c, "name")} | verkoerpert {Namen(c, "verkoerpert")}");
-        // Graphen (Entscheidung 6): die Knoten (Parameter des Records, Typ wie geschrieben); abgeleitet aus den Typen: Köpfe, Ausgänge, Quelle und die
-        //   Kanten (aufgefaltete Pfade bei einem Graphen im Graphen).
+        // Graphen (docs/04 §4.4): die Knoten (Parameter des Records, Typ wie geschrieben, [Kopf], [Von …]); abgeleitet daraus: Köpfe, Ausgänge, Quelle und
+        //   die Kanten (aufgefaltete Pfade bei einem Graphen im Graphen).
+        string Knoten(JsonNode k) => $"{S(k, "name")}:{S(k, "typ")}{(k["kopf"]?.GetValue<bool>() == true ? " [Kopf]" : "")}"
+            + (A(k, "von").Any() ? $" [Von {string.Join("+", A(k, "von").Select(v => (string?)v))}]" : "");
         foreach (var g in A(b, "graphen").Where(Sonde))
         {
-            z.Add($"graph {S(g, "namespace")}.{S(g, "name")} | knoten {string.Join(", ", A(g, "knoten").Select(k => $"{S(k, "name")}:{S(k, "typ")}"))}"
+            z.Add($"graph {S(g, "namespace")}.{S(g, "name")} | knoten {string.Join(", ", A(g, "knoten").Select(Knoten))}"
                   + $" | koepfe {Namen(g, "koepfe")} | aus {Namen(g, "ausgaenge")}"
                   + (g["quelle"] is { } q ? $" | quelle {q}" : ""));
             foreach (var k in A(g, "kanten"))

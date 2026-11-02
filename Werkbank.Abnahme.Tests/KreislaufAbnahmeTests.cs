@@ -120,8 +120,11 @@ public class KreislaufAbnahmeTests
         (bild["schritte"] as JsonArray)!.SelectMany(s => s?["paare"] as JsonArray ?? []).Select(p => (string?)p?[0])
             .Should().Contain("knoten:linienimport/Aufbereitung.Eingang", "der Wirker eines Schritts ist sein Knoten");
         var board = JsonNode.Parse(await w.Http.GetStringAsync("/api/editor/model"))!.AsObject();
-        (board["graphen"] as JsonArray)!.OfType<JsonObject>().Single(g => (string?)g["name"] == "Linienimport")["quelle"]!.GetValue<string>()
-            .Should().Be("Eingang", "der Graph steht als Karte im Board, mit seiner Quelle am Kopf");
+        var linie = (board["graphen"] as JsonArray)!.OfType<JsonObject>().Single(g => (string?)g["name"] == "Linienimport");
+        linie["quelle"]!.GetValue<string>().Should().Be("Eingang", "der Graph steht als Karte im Board, mit seiner Quelle am Kopf");
+        linie["knoten"]!.AsArray().Select(k => $"{(string?)k!["name"]}:{(bool?)k["kopf"]}:{string.Join("+", k["von"]!.AsArray().Select(v => (string?)v))}")
+            .Should().Equal(["Eingang:False:", "Aufbereitung:False:Eingang"], "die Quelle trägt weder Kopf noch Von, sie speist die Aufbereitung über Von");
+        linie["koepfe"]!.AsArray().Should().BeEmpty("ein Graph mit Quelle hat sonst keinen Kopf");
 
         // ── 4. Durchspielen liest das warme Board; Tokens wie im Host ──
         var formular = await w.HoleAsync("/api/werkbank/formular?typ=ErstelleDatensatz");

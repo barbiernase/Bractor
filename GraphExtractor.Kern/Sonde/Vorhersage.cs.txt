@@ -7,6 +7,11 @@ using Abstractions;
 // jede mit eigenem Konfig-Record am Knoten); das Prognosemodell JOINT beide, hält gekapselten ZUSTAND (IZustand, gesichert mit dem Lauf), nimmt
 // eine Technik mit eigenem Zustand und gibt in einer WAHL entweder die Prognose als Command an die Station oder eine Unwetter-Warnung als HINWEIS
 // aus — Hinweise gehen nur an Akteure draußen (der Warndienst hört sie), keine Funktion hört einen.
+//
+// Dazu AUSDRÜCKLICHE KANTEN (docs/04 §4.4): die Kartenausgabe zeichnet eine Karte und filtert sie in einem Graphen im Graphen (Kantenglättung,
+// Schärfung, nochmals Kantenglättung — DIESELBE Funktion zweimal, eine Kette Karte → Karte → Karte, kein Kreis); den Ausgang des Filters nehmen
+// zwei Knoten DERSELBEN Skalierung (Vorschau und Daumenbild, je eigene Konfig); die Ablage trägt [Kopf] UND [Von]: sie nimmt die Vorschau von innen
+// und das Löschen von außen.
 
 namespace Wetterdienst.Vorhersage;
 
@@ -114,7 +119,65 @@ public sealed record Prognose(
     [Von(nameof(Tendenz))] Glaettung<Langfenster> Lang,
     [Von(nameof(Kurz), nameof(Lang))] Prognosemodell Modell) : IGraph;
 
-// Draußen: der Warndienst meldet Temperaturen und hört die Warnung und die Stilllegung (Hinweise: Kenntnis); die Wetter-App verkörpert ihn.
-public sealed record Warndienst : IAkteur, IDarf<MeldeTemperatur>, IHoert<Unwetter>, IHoert<StationStillgelegt>;
+// ── Kartenausgabe: jede Kante steht am nehmenden Knoten ──
+/// <summary>Ein Command ohne Ziel vom Warndienst an den Kopf der Kartenausgabe: die Karte einer Station ist zu zeichnen.</summary>
+public record ZeichneKarte(Id<Station> Station, double Grad) : ICommand;
+/// <summary>Ein Command ohne Ziel vom Warndienst an die Ablage (ein Kopf, der auch von innen nimmt): die Karte ist zu löschen.</summary>
+public record LoescheKarte(Id<Station> Station) : ICommand;
+public record KarteGezeichnet(Id<Station> Station, int Breite) : ICommand;
+public record KarteSkaliert(Id<Station> Station, int Breite) : ICommand;
+public record KarteBereit(Id<Station> Station, int Breite) : ITransientEvent;
+public record KarteGeloescht(Id<Station> Station) : ITransientEvent;
+
+public sealed class Kartenzeichnung : IFunktion
+{
+    public KarteGezeichnet Auf(ZeichneKarte z) => new(z.Station, 2048);
+}
+
+public sealed class Kantenglaettung : IFunktion
+{
+    public KarteGezeichnet Auf(KarteGezeichnet k) => k;
+}
+
+public sealed class Kartenschaerfung : IFunktion
+{
+    public KarteGezeichnet Auf(KarteGezeichnet k) => k;
+}
+
+public record SkalierungsKonfig(int Breite);
+
+public sealed class Kartenskalierung(SkalierungsKonfig konfig) : IFunktion
+{
+    public KarteSkaliert Auf(KarteGezeichnet k) => new(k.Station, konfig.Breite);
+}
+
+public sealed class Kartenablage : IFunktion
+{
+    public KarteBereit Auf(KarteSkaliert k) => new(k.Station, k.Breite);
+    public KarteGeloescht Auf(LoescheKarte l) => new(l.Station);
+}
+
+public sealed class Daumenmeldung : IFunktion
+{
+    public KarteBereit Auf(KarteSkaliert k) => new(k.Station, k.Breite);
+}
+
+public sealed record Kartenfilter(
+    [Kopf] Kantenglaettung Glaetten,
+    [Von(nameof(Glaetten))] Kartenschaerfung Schaerfen,
+    [Von(nameof(Schaerfen))] Kantenglaettung Nachglaetten) : IGraph;
+
+public sealed record Kartenausgabe(
+    [Kopf] Kartenzeichnung Zeichnung,
+    [Von(nameof(Zeichnung))] Kartenfilter Filter,
+    [Von(nameof(Filter))] Kartenskalierung Vorschau,
+    [Von(nameof(Filter))] Kartenskalierung Daumen,
+    [Kopf, Von(nameof(Vorschau))] Kartenablage Ablage,
+    [Von(nameof(Daumen))] Daumenmeldung Meldung) : IGraph;
+
+// Draußen: der Warndienst meldet Temperaturen, bestellt und löscht Karten und hört die Warnung, die Stilllegung und die Karten (Hinweise:
+// Kenntnis); die Wetter-App verkörpert ihn.
+public sealed record Warndienst : IAkteur, IDarf<MeldeTemperatur>, IDarf<ZeichneKarte>, IDarf<LoescheKarte>, IHoert<Unwetter>,
+    IHoert<StationStillgelegt>, IHoert<KarteBereit>, IHoert<KarteGeloescht>;
 
 public sealed record WetterApp : IClient, IVerkoerpert<Warndienst>;

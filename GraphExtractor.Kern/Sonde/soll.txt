@@ -2,8 +2,8 @@
 # Ein Fakt je Zeile. Was der Editor über die unbekannte Domäne wissen MUSS (Reihenfolge egal).
 #
 # Zeilen: record/enum/aggregat/decide/apply/frage (Schreibseite) · funktion (Klasse mit Konstruktor; je Auf die Ports — ein Command bzw. wie
-# geschrieben —, Herkunft, Lese-Fähigkeiten, Ausgaben, Strom; Lausche einer Quelle) · technik (ohne Marker) · graph (Knoten = Parameter; Köpfe,
-# Ausgänge, Quelle aus den Typen) und kante (aus den Typen, aufgefaltet) · akteur (darf | hoert) · client (verkoerpert) · Leseseite · sicht/besitz/code
+# geschrieben —, Herkunft, Lese-Fähigkeiten, Ausgaben, Strom; Lausche einer Quelle) · technik (ohne Marker) · graph (Knoten = Parameter mit [Kopf] und
+# [Von …]; Köpfe, Ausgänge, Quelle daraus) und kante (aus den Von, aufgefaltet) · akteur (darf | hoert) · client (verkoerpert) · Leseseite · sicht/besitz/code
 # (die Sicht des Editors) · lage (Projektstruktur, docs/07).
 
 # ══ LEIHWESEN ══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -72,9 +72,9 @@ funktion Leihwesen.Gebuehren.Gutachtenanfrage(konfig:GutachtenKonfig) | Auf(Scha
 funktion Leihwesen.Gebuehren.MahnungNachSchaetzung() | Auf(SchadenGeschaetzt g, GutachtenErhalten? gutachten) herkunft -> EroeffneMahnung
 # Technik (ohne Marker): Schnittstelle im Konstruktor einer Funktion (Methoden, Typen wie geschrieben) + Umsetzung mit Konfig-Record
 technik Leihwesen.Gebuehren.IWertTabelle schnittstelle | Restwert(neuwert:decimal, alterJahre:int):decimal; IstSchaetzbarAsync(leserId:Guid):Task<bool> | umsetzung LineareWertTabelle(konfig:WertTabellenKonfig)
-# Die Graphen: ein Knoten (Kopf aus dem Decide, Ausgang ein Aggregat-Command); Wahl + Fork + Join — Kanten nur aus den Typen
-graph Leihwesen.Gebuehren.Rueckgabepruefung | knoten Pruefung:SchadenBeiRueckgabe | koepfe PruefeRueckgabe | aus MeldeSchaden
-graph Leihwesen.Gebuehren.Schadensbewertung | knoten Aufnahme:Schadensaufnahme, Schaetzung:Schadensschaetzer, Gutachten:Gutachtenanfrage, Mahnung:MahnungNachSchaetzung | koepfe SchaetzeSchaden | aus BegutachteVorOrt, NichtSchaetzbar, EroeffneMahnung
+# Die Graphen: ein Knoten (Kopf aus dem Decide, Ausgang ein Aggregat-Command); Wahl + Fork + Join — jede Kante als Von am nehmenden Knoten
+graph Leihwesen.Gebuehren.Rueckgabepruefung | knoten Pruefung:SchadenBeiRueckgabe [Kopf] | koepfe PruefeRueckgabe | aus MeldeSchaden
+graph Leihwesen.Gebuehren.Schadensbewertung | knoten Aufnahme:Schadensaufnahme [Kopf], Schaetzung:Schadensschaetzer [Von Aufnahme], Gutachten:Gutachtenanfrage [Von Aufnahme], Mahnung:MahnungNachSchaetzung [Von Schaetzung+Gutachten] | koepfe SchaetzeSchaden | aus BegutachteVorOrt, NichtSchaetzbar, EroeffneMahnung
 kante Schadensbewertung | Aufnahme -SchadenErfasst-> Schaetzung
 kante Schadensbewertung | Aufnahme -SchadenErfasst-> Gutachten
 kante Schadensbewertung | Schaetzung -SchadenGeschaetzt-> Mahnung
@@ -105,11 +105,11 @@ funktion Leihwesen.Pruefung.Seitenpruefer(leser:ISeitenleser) | Auf(SeiteZuPruef
 funktion Leihwesen.Pruefung.Seitenbilanz() | Auf(IReadOnlyList<SeiteGeprueft> alle) -> strom SchliessePruefungAb
 funktion Leihwesen.Pruefung.Offenzaehlung() | Auf(BemesseMahnung) herkunft liest IZaehleOffene offene -> strom EroeffneMahnung
 technik Leihwesen.Pruefung.ISeitenleser schnittstelle | IstBeschaedigt(seite:string):bool | umsetzung Handpruefung(); umsetzung Lichtpruefung()
-graph Leihwesen.Pruefung.Seitenpruefungslauf | knoten Start:Pruefungsstart, Pruefer:Seitenpruefer, Bilanz:Seitenbilanz | koepfe RueckgabeGescannt | aus StartePruefung, SchliessePruefungAb
+graph Leihwesen.Pruefung.Seitenpruefungslauf | knoten Start:Pruefungsstart [Kopf], Pruefer:Seitenpruefer [Von Start], Bilanz:Seitenbilanz [Von Pruefer] | koepfe RueckgabeGescannt | aus StartePruefung, SchliessePruefungAb
 kante Seitenpruefungslauf | Start -SeiteZuPruefen-> Pruefer
 kante Seitenpruefungslauf | Pruefer -SeiteGeprueft-> Bilanz
 # Die Mahnbemessung bekommt im Editor einen zweiten Knoten (Geste „Graph: Knoten hinzufügen“) — ein zweiter Kopf
-graph Leihwesen.Pruefung.Mahnbemessung | knoten Zaehlung:Offenzaehlung, Vormerkung:Vormerkpruefung | koepfe BemesseMahnung, PruefeVormerkung | aus EroeffneMahnung
+graph Leihwesen.Pruefung.Mahnbemessung | knoten Zaehlung:Offenzaehlung [Kopf], Vormerkung:Vormerkpruefung [Kopf] | koepfe BemesseMahnung, PruefeVormerkung | aus EroeffneMahnung
 
 # ── Lesen: frei benannte Fähigkeiten + Bündel (Marker statt Namensregel), class-ReadModel, OneOf; Kennung = Typname; der Store hat Klasse 1
 #    (Basis MartenStore); jedes Auf nimmt die Herkunft; hinter dem Reader steht, wer in denselben Store schreibt (aus den Fähigkeiten) ──
@@ -277,7 +277,7 @@ record Kundenportal.Konten.AdresseReserviert event aggregat=Adresse | Email:stri
 record Kundenportal.Konten.AdresseVergeben event aggregat=Adresse | BenutzerId:Id<Benutzer>, Inhaber:Id<Benutzer>
 record Kundenportal.Konten.PruefeAdresse command aggregat=Benutzer | BenutzerId:Id<Benutzer>, Email:string
 funktion Kundenportal.Konten.Registrierung() | Auf(PruefeAdresse) -> ReserviereAdresse || Auf(AdresseReserviert) -> BestaetigeBenutzer || Auf(AdresseVergeben) -> LehneRegistrierungAb
-graph Kundenportal.Konten.Adresspruefung | knoten Reservierung:Registrierung | koepfe PruefeAdresse | aus ReserviereAdresse, BestaetigeBenutzer, LehneRegistrierungAb
+graph Kundenportal.Konten.Adresspruefung | knoten Reservierung:Registrierung [Kopf] | koepfe PruefeAdresse | aus ReserviereAdresse, BestaetigeBenutzer, LehneRegistrierungAb
 akteur Kundenportal.Konten.Besucher | darf RegistriereBenutzer | hoert BenutzerBestaetigt, RegistrierungAbgelehnt
 client Kundenportal.Konten.Registrierungsseite | verkoerpert Besucher
 code Kundenportal.Konten.Adressschluessel class teile=1 domaene=Kundenportal.Konten block=§geteilt
@@ -352,13 +352,13 @@ funktion Anlagen.Messung.Funkruf() | Auf(AlarmVerteilt) -> PerFunkErreicht
 funktion Anlagen.Messung.Alarmquittung() | Auf(OneOf<PerAnrufErreicht, PerFunkErreicht> erster) -> VermerkeAlarmierung
 technik Anlagen.Messung.ITelefonie schnittstelle | RufeAsync(fall:Guid):Task<string> | umsetzung Telefonanlage()
 # GRAPH IM GRAPHEN: die Aufbereitung ist eine Schachtel (Signatur Rohwert → MeldeMesswert); in der Messkette hinter der Quelle aufgefaltet
-graph Anlagen.Messung.Messwertaufbereitung | knoten Plausi:Plausibilisierung, Pruefung:Messwertpruefung | koepfe Rohwert | aus MeldeMesswert
+graph Anlagen.Messung.Messwertaufbereitung | knoten Plausi:Plausibilisierung [Kopf], Pruefung:Messwertpruefung [Von Plausi] | koepfe Rohwert | aus MeldeMesswert
 kante Messwertaufbereitung | Plausi -Plausibel-> Pruefung
-graph Anlagen.Messung.Messkette | knoten Abfrage:Sensorabfrage, Aufbereitung:Messwertaufbereitung | koepfe - | aus MeldeMesswert | quelle Abfrage
+graph Anlagen.Messung.Messkette | knoten Abfrage:Sensorabfrage, Aufbereitung:Messwertaufbereitung [Von Abfrage] | koepfe - | aus MeldeMesswert | quelle Abfrage
 kante Messkette | Abfrage -Rohwert-> Aufbereitung.Plausi
 kante Messkette | Aufbereitung.Plausi -Plausibel-> Aufbereitung.Pruefung
-graph Anlagen.Messung.Stoerungsoeffnung | knoten Oeffnung:StoerungBeiAlarm | koepfe OeffneStoerungFuer | aus OeffneStoerung
-graph Anlagen.Messung.Alarmierung | knoten Verteilung:Alarmverteilung, Anruf:Anrufkette, Funk:Funkruf, Quittung:Alarmquittung | koepfe AlarmiereBereitschaft | aus VermerkeAlarmierung
+graph Anlagen.Messung.Stoerungsoeffnung | knoten Oeffnung:StoerungBeiAlarm [Kopf] | koepfe OeffneStoerungFuer | aus OeffneStoerung
+graph Anlagen.Messung.Alarmierung | knoten Verteilung:Alarmverteilung [Kopf], Anruf:Anrufkette [Von Verteilung], Funk:Funkruf [Von Verteilung], Quittung:Alarmquittung [Von Anruf+Funk] | koepfe AlarmiereBereitschaft | aus VermerkeAlarmierung
 kante Alarmierung | Verteilung -AlarmVerteilt-> Anruf
 kante Alarmierung | Verteilung -AlarmVerteilt-> Funk
 kante Alarmierung | Anruf -PerAnrufErreicht-> Quittung
@@ -430,7 +430,7 @@ funktion Warenkatalog.Import.Artikelanlage() | Auf(Zeile) herkunft -> LegeArtike
 funktion Warenkatalog.Import.Importbilanz() | Auf(IReadOnlyList<Zeile> alle, KatalogBereit katalog) -> SchliesseImportAb
 # Technik als Klasse (ohne Schnittstelle): ihre Methoden, ihr Konstruktor mit Konfig-Record
 technik Warenkatalog.Import.CsvZerleger klasse(konfig:CsvKonfig) | Zerlege(zeile:string):string[]
-graph Warenkatalog.Import.Katalogimport | knoten Eingang:Dateiwaechter, Annahme:Katalogeingang, Lesen:Zeilenleser, Anlage:Artikelanlage, Bilanz:Importbilanz | koepfe - | aus StarteImport, MeldeImportFortschritt, LegeArtikelAn, SchliesseImportAb | quelle Eingang
+graph Warenkatalog.Import.Katalogimport | knoten Eingang:Dateiwaechter, Annahme:Katalogeingang [Von Eingang], Lesen:Zeilenleser [Von Annahme], Anlage:Artikelanlage [Von Lesen], Bilanz:Importbilanz [Von Lesen+Annahme] | koepfe - | aus StarteImport, MeldeImportFortschritt, LegeArtikelAn, SchliesseImportAb | quelle Eingang
 kante Katalogimport | Eingang -DateiGefunden-> Annahme
 kante Katalogimport | Annahme -KatalogBereit-> Lesen
 kante Katalogimport | Annahme -KatalogBereit-> Bilanz
@@ -516,14 +516,49 @@ funktion Wetterdienst.Vorhersage.Prognosemodell(gewichte:IZustand<Gewichte>, sta
 # Technik mit eigenem Zustand (IZustand in der Umsetzung): gehört dem Knoten des Prognosemodells
 technik Wetterdienst.Vorhersage.IStatistik schnittstelle | Zaehle(station:Guid):void | umsetzung Statistik(zaehlung:IZustand<Zaehlung>)
 # Die Knoten nennen die generische Funktion mit Typargument; Kanten und Ausgänge tragen es
-graph Wetterdienst.Vorhersage.Prognose | knoten Tendenz:Tendenzbildung, Kurz:Glaettung<Kurzfenster>, Lang:Glaettung<Langfenster>, Modell:Prognosemodell | koepfe BildePrognose | aus VermerkePrognose, Unwetter
+graph Wetterdienst.Vorhersage.Prognose | knoten Tendenz:Tendenzbildung [Kopf], Kurz:Glaettung<Kurzfenster> [Von Tendenz], Lang:Glaettung<Langfenster> [Von Tendenz], Modell:Prognosemodell [Von Kurz+Lang] | koepfe BildePrognose | aus VermerkePrognose, Unwetter
 kante Prognose | Tendenz -Tendenz-> Kurz
 kante Prognose | Tendenz -Tendenz-> Lang
 kante Prognose | Kurz -Geglaettet<Kurzfenster>-> Modell
 kante Prognose | Lang -Geglaettet<Langfenster>-> Modell
 # gezeichnet (Geste „Graph: neuer Graph mit generischem Knoten“)
-graph Wetterdienst.Vorhersage.Kurzglaettung | knoten Glaettung:Glaettung<Kurzfenster> | koepfe Tendenz | aus Geglaettet<Kurzfenster>
-akteur Wetterdienst.Vorhersage.Warndienst | darf MeldeTemperatur | hoert Unwetter, StationStillgelegt
+graph Wetterdienst.Vorhersage.Kurzglaettung | knoten Glaettung:Glaettung<Kurzfenster> [Kopf] | koepfe Tendenz | aus Geglaettet<Kurzfenster>
+
+# ── Kartenausgabe (Vorhersage.cs.txt): AUSDRÜCKLICHE KANTEN — dieselbe Funktion zweimal (Skalierung als Vorschau und Daumen, Kantenglättung vor
+#    und nach der Schärfung), eine Kette Karte → Karte → Karte (kein Kreis), ein Graph im Graphen mit Von hinein und Von(nameof(Filter)) heraus,
+#    die Ablage mit [Kopf] und [Von] (Vorschau von innen, Löschen von außen) ──
+record Wetterdienst.Vorhersage.KarteBereit rejection | Station:Id<Station>, Breite:int
+record Wetterdienst.Vorhersage.KarteGeloescht rejection | Station:Id<Station>
+record Wetterdienst.Vorhersage.KarteGezeichnet command | Station:Id<Station>, Breite:int
+record Wetterdienst.Vorhersage.KarteSkaliert command | Station:Id<Station>, Breite:int
+record Wetterdienst.Vorhersage.LoescheKarte command | Station:Id<Station>
+record Wetterdienst.Vorhersage.SkalierungsKonfig konfig | Breite:int
+record Wetterdienst.Vorhersage.ZeichneKarte command | Station:Id<Station>, Grad:double
+funktion Wetterdienst.Vorhersage.Daumenmeldung() | Auf(KarteSkaliert) -> KarteBereit
+funktion Wetterdienst.Vorhersage.Kantenglaettung() | Auf(KarteGezeichnet) -> KarteGezeichnet
+funktion Wetterdienst.Vorhersage.Kartenablage() | Auf(KarteSkaliert) -> KarteBereit || Auf(LoescheKarte) -> KarteGeloescht
+funktion Wetterdienst.Vorhersage.Kartenschaerfung() | Auf(KarteGezeichnet) -> KarteGezeichnet
+funktion Wetterdienst.Vorhersage.Kartenskalierung(konfig:SkalierungsKonfig) | Auf(KarteGezeichnet) -> KarteSkaliert
+funktion Wetterdienst.Vorhersage.Kartenzeichnung() | Auf(ZeichneKarte) -> KarteGezeichnet
+graph Wetterdienst.Vorhersage.Kartenfilter | knoten Glaetten:Kantenglaettung [Kopf], Schaerfen:Kartenschaerfung [Von Glaetten], Nachglaetten:Kantenglaettung [Von Schaerfen] | koepfe KarteGezeichnet | aus KarteGezeichnet
+kante Kartenfilter | Glaetten -KarteGezeichnet-> Schaerfen
+kante Kartenfilter | Schaerfen -KarteGezeichnet-> Nachglaetten
+graph Wetterdienst.Vorhersage.Kartenausgabe | knoten Zeichnung:Kartenzeichnung [Kopf], Filter:Kartenfilter [Von Zeichnung], Vorschau:Kartenskalierung [Von Filter], Daumen:Kartenskalierung [Von Filter], Ablage:Kartenablage [Kopf] [Von Vorschau], Meldung:Daumenmeldung [Von Daumen] | koepfe ZeichneKarte, LoescheKarte | aus KarteBereit, KarteGeloescht
+kante Kartenausgabe | Daumen -KarteSkaliert-> Meldung
+kante Kartenausgabe | Filter.Glaetten -KarteGezeichnet-> Filter.Schaerfen
+kante Kartenausgabe | Filter.Nachglaetten -KarteGezeichnet-> Daumen
+kante Kartenausgabe | Filter.Nachglaetten -KarteGezeichnet-> Vorschau
+kante Kartenausgabe | Filter.Schaerfen -KarteGezeichnet-> Filter.Nachglaetten
+kante Kartenausgabe | Vorschau -KarteSkaliert-> Ablage
+kante Kartenausgabe | Zeichnung -KarteGezeichnet-> Filter.Glaetten
+besitz Wetterdienst.Vorhersage.KarteBereit rejection -> §begriffe mehrdeutig
+besitz Wetterdienst.Vorhersage.KarteGeloescht rejection -> bausteinfunktion:Kartenablage
+besitz Wetterdienst.Vorhersage.KarteGezeichnet command -> §begriffe mehrdeutig
+besitz Wetterdienst.Vorhersage.KarteSkaliert command -> bausteinfunktion:Kartenskalierung
+besitz Wetterdienst.Vorhersage.LoescheKarte command -> §rand
+besitz Wetterdienst.Vorhersage.SkalierungsKonfig konfig -> bausteinfunktion:Kartenskalierung
+besitz Wetterdienst.Vorhersage.ZeichneKarte command -> §rand
+akteur Wetterdienst.Vorhersage.Warndienst | darf MeldeTemperatur, ZeichneKarte, LoescheKarte | hoert Unwetter, StationStillgelegt, KarteBereit, KarteGeloescht
 client Wetterdienst.Vorhersage.WetterApp | verkoerpert Warndienst
 # Zustand und Marker-Schnittstelle der Typargumente sind eigene Typen ohne Marker — Code-Karten
 code Wetterdienst.Vorhersage.Gewichte class teile=1 domaene=Wetterdienst.Vorhersage block=§geteilt
@@ -643,6 +678,19 @@ lage IStatistik -> Domain.Pipeline
 lage Statistik -> Domain.Pipeline
 lage GlaettungsKonfig -> Domain.Pipeline
 lage Tendenz -> Domain.Pipeline
+lage ZeichneKarte -> Domain.Pipeline
+lage LoescheKarte -> Domain.Pipeline
+lage KarteGezeichnet -> Domain.Pipeline
+lage KarteSkaliert -> Domain.Pipeline
+lage Kartenzeichnung -> Domain.Pipeline
+lage Kantenglaettung -> Domain.Pipeline
+lage Kartenschaerfung -> Domain.Pipeline
+lage SkalierungsKonfig -> Domain.Pipeline
+lage Kartenskalierung -> Domain.Pipeline
+lage Kartenablage -> Domain.Pipeline
+lage Daumenmeldung -> Domain.Pipeline
+lage Kartenfilter -> Domain.Pipeline
+lage Kartenausgabe -> Domain.Pipeline
 lage Geglaettet -> Domain.Pipeline
 # Leseseite → Projektionen; Store-Implementierungen → Infrastruktur
 lage LeihEintrag -> Domain.Projections
