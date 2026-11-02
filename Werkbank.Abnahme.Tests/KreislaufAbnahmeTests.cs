@@ -10,8 +10,8 @@ namespace Werkbank.Abnahme.Tests;
 /// <list type="number">
 /// <item>⟳: alle Schritte grün, Board-Stand = Lauf-Stand = Stand, den der Host an die Spur stempelt;</item>
 /// <item>als Akteur über den JSON-Eingang ein Command, die Projektion antwortet auf die Query; Vorgang und Spur über die Spur-API;</item>
-/// <item>„▶ Worker“: die Verkleinerung rechnet ein Python-Worker (Laufort Extern), eine Datei in der Quelle läuft durch bis zum Fakt; der erste Draht
-///   des Flusses kommt aus dem warmen Board;</item>
+/// <item>„▶ Worker“: ein Python-Client verkörpert den Klassifizierer; ein Bildpaar in der Quelle läuft durch den Linienimport bis zu seiner Beurteilung; die Spur
+///   nennt den Knoten, der NimmBildAuf gab, und der Graph steht als Karte im Board;</item>
 /// <item>Formular und Tokens aus Board bzw. Umgebung; Umgebungs-Werte und 🤖-Übernahmen sind Gesten mit ↶ (docs/13 W11-1, WB-1);</item>
 /// <item>Geste (Feld mit Standardwert an einem Event) → ⟳ grün (verträglich, der Host siegelt das neue Proto) → ↶ (Code byte-gleich) →
 ///   ⟳ „Daten prüfen“ meldet das entfernte Feld → ⟳ mit Zurücksetzen startet wieder.</item>
@@ -86,38 +86,42 @@ public class KreislaufAbnahmeTests
         ((bool?)schritt["alt"]).Should().BeFalse();
         (schritt["karten"] as JsonArray).Should().NotBeEmpty("der Schritt liegt auf Karten des Boards");
 
-        // ── 3. ▶ Worker: die Verkleinerung rechnet Python (Laufort Extern), eine Datei in der Quelle läuft bis zum Fakt ──
-        var (_, worker) = await w.SendeAsync("/api/werkbank/worker/IBildVerkleinerung/start");
+        // ── 3. ▶ Worker: der Klassifikations-Worker (ein Python-Client) verkörpert den Klassifizierer; ein Bildpaar läuft durch den Linienimport ──
+        var (_, worker) = await w.SendeAsync("/api/werkbank/worker/KlassifikationsWorker/start");
         ((bool?)worker["ok"]).Should().BeTrue(worker.ToJsonString());
-        async Task<string> WorkerLog() => string.Join("\n", (JsonNode.Parse(await w.Http.GetStringAsync("/api/werkbank/worker/IBildVerkleinerung/log")) as JsonArray ?? [])
+        async Task<string> WorkerLog() => string.Join("\n", (JsonNode.Parse(await w.Http.GetStringAsync("/api/werkbank/worker/KlassifikationsWorker/log")) as JsonArray ?? [])
             .Select(z => (string?)z));
-        await Werkbanklauf.Warte(async () => (await WorkerLog()).Contains("angeboten", StringComparison.Ordinal), TimeSpan.FromSeconds(60),
-            "Der Python-Worker hat sich nicht angemeldet.");
+        await Werkbanklauf.Warte(async () => (await WorkerLog()).Contains("Arbeit angenommen", StringComparison.Ordinal), TimeSpan.FromSeconds(60),
+            "Der Python-Worker hat die Arbeit des Klassifizierers nicht angenommen.");
 
         var t = new DateTimeOffset(2026, 10, 15, 8, 0, 0, Random.Shared.Next(0, 999), TimeSpan.Zero).AddMinutes(Random.Shared.Next(0, 100000));
-        var dateiname = $"{t:yyyy_MM_dd_HH_mm_ss_fff}_DC0.tiff";
-        var (_, abgelegt) = await w.SendeAsync($"/api/werkbank/quelle/linienimport/datei?name={dateiname}",
-            new ByteArrayContent(Werkbanklauf.Tiff(96, 64)));
-        ((bool?)abgelegt["ok"]).Should().BeTrue(abgelegt.ToJsonString());
+        foreach (var version in new[] { "DC0", "DC2" })
+        {
+            var (_, abgelegt) = await w.SendeAsync($"/api/werkbank/quelle/linienimport/datei?name={t:yyyy_MM_dd_HH_mm_ss_fff}_{version}.tiff",
+                new ByteArrayContent(Werkbanklauf.Tiff(96, 64)));
+            ((bool?)abgelegt["ok"]).Should().BeTrue(abgelegt.ToJsonString());
+        }
 
+        // Der Vorgang des Paars beginnt mit ImagePairErstellt (der Dateiwächter schreibt nicht ins Log); er endet mit der Beurteilung des Workers.
         JsonObject? bild = null;
         await Werkbanklauf.Warte(async () =>
         {
-            bild = ((await w.HoleAsync("/api/werkbank/spur/vorgaenge?quelle=DateiErkannt"))["vorgaenge"] as JsonArray ?? []).OfType<JsonObject>()
-                .FirstOrDefault(v => (string?)v["zustand"] is "fertig" or "gescheitert");
-            return bild != null;
-        }, TimeSpan.FromSeconds(120), "Der Bildeingang lief nicht zu Ende.\n── Worker ──\n" + await WorkerLog() + Log());
-        ((string?)bild!["zustand"]).Should().Be("fertig", bild.ToJsonString());
-        var bildweg = await w.HoleAsync($"/api/werkbank/spur/vorgang/{(string)bild["korrelation"]!}");
-        (bildweg["schritte"] as JsonArray)!.Select(s => (string?)s?["name"]).Should().Contain("BildVerfuegbar");
-        (await WorkerLog()).Should().Contain("[BildVerkleinerung]").And.Contain(dateiname, "genau diesen Auftrag hat der Python-Worker gerechnet");
+            foreach (var v in ((await w.HoleAsync("/api/werkbank/spur/vorgaenge?quelle=ImagePairErstellt"))["vorgaenge"] as JsonArray ?? []).OfType<JsonObject>())
+            {
+                var weg = await w.HoleAsync($"/api/werkbank/spur/vorgang/{(string)v["korrelation"]!}");
+                if ((weg["schritte"] as JsonArray ?? []).Any(s => (string?)s?["name"] == "BildPaarDurchKiKlassifiziert")) { bild = weg; return true; }
+            }
+            return false;
+        }, TimeSpan.FromSeconds(120), "Das Bildpaar lief nicht bis zur Beurteilung.\n── Worker ──\n" + await WorkerLog() + Log());
+        (bild!["schritte"] as JsonArray)!.Select(s => (string?)s?["name"]).Should().Contain("BildVerfuegbar").And.Contain("ImagePairKomplett");
+        (await WorkerLog()).Should().Contain("PaarZuBeurteilen", "genau diese Arbeit hat der Python-Worker beantwortet");
 
-        // Der erste Draht des Flusses (Quelle → erster Knoten) ist ein gegangener Weg — der Quell-Knoten kommt aus dem warmen Board, nicht aus einer Datei.
+        // Der Weg durch den Graphen: NimmBildAuf gab der Bildeingang der Instanz linienimport — ein gegangener Draht von seinem Knoten aus.
+        (bild["schritte"] as JsonArray)!.SelectMany(s => s?["paare"] as JsonArray ?? []).Select(p => (string?)p?[0])
+            .Should().Contain("knoten:linienimport/Aufbereitung.Eingang", "der Wirker eines Schritts ist sein Knoten");
         var board = JsonNode.Parse(await w.Http.GetStringAsync("/api/editor/model"))!.AsObject();
-        var quellKnoten = (board["fluesse"] as JsonArray)!.OfType<JsonObject>().Single(f => (string?)f["name"] == "Bildeingang")["knoten"]!.AsArray()
-            .OfType<JsonObject>().Single(k => (string?)k["art"] == "quelle")["_id"]!.GetValue<string>();
-        (bildweg["schritte"] as JsonArray)!.SelectMany(s => s?["paare"] as JsonArray ?? []).Select(p => (string?)p?[0])
-            .Should().Contain(quellKnoten, "der Spur-Spiegel liest den Quell-Knoten aus dem warmen Board");
+        (board["graphen"] as JsonArray)!.OfType<JsonObject>().Single(g => (string?)g["name"] == "Linienimport")["quelle"]!.GetValue<string>()
+            .Should().Be("Eingang", "der Graph steht als Karte im Board, mit seiner Quelle am Kopf");
 
         // ── 4. Durchspielen liest das warme Board; Tokens wie im Host ──
         var formular = await w.HoleAsync("/api/werkbank/formular?typ=ErstelleDatensatz");

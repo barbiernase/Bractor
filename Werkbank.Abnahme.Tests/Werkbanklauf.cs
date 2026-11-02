@@ -14,7 +14,7 @@ namespace Werkbank.Abnahme.Tests;
 /// <item>Kopie aller Quell-Dateien (<c>git ls-files -co --exclude-standard</c>: verfolgt + neu, ohne Ignoriertes) in ein Temp-Verzeichnis,
 ///   dort <c>git init -b abnahme-&lt;id&gt;</c> — der Branch benennt Sim-DB und Cluster; Gesten sind erlaubt (nicht <c>main</c>).</item>
 /// <item>Umgebung <c>abnahme</c> = Kopie von <c>sim-main</c> mit freien Ports, Pfaden im Temp-Verzeichnis und <c>IBildVerkleinerung</c> auf
-///   Laufort <c>Extern</c> (nur in der Kopie).</item>
+///   der Klassifikations-Worker als Client der Umgebung (nur in der Kopie).</item>
 /// <item>Die gebaute Werkbank als Prozess (<c>dotnet Werkbank.dll</c>, Arbeitsverzeichnis = Kopie, <c>PORT</c> frei); der Test spricht nur HTTP.</item>
 /// </list>
 /// Der Arbeitsbaum des Entwicklers, seine <c>.werkbank/</c> und seine Sim-DB bleiben unberührt. Aufräumen: SIGTERM an die Werkbank (sie hält
@@ -92,7 +92,7 @@ public sealed class Werkbanklauf : IAsyncDisposable
     }
 
     /// <summary>
-    /// <c>umgebung.abnahme.json</c> aus <c>sim-main</c>: eigene Ports, Daten-Pfade im Temp-Verzeichnis, die Verkleinerung extern (Python-Worker).
+    /// <c>umgebung.abnahme.json</c> aus <c>sim-main</c>: eigene Ports, Daten-Pfade im Temp-Verzeichnis (die Clients mit ihrem Worker wie dort).
     /// DB und Cluster folgen über <c>${branch}</c> dem Branch der Kopie.
     /// </summary>
     private async Task SchreibeUmgebungAsync()
@@ -109,7 +109,6 @@ public sealed class Werkbanklauf : IAsyncDisposable
         foreach (var datei in Directory.GetFiles(Path.Combine(verz, "sim-main", "graphen"), "*.json"))
         {
             var instanz = JsonNode.Parse(Lies(datei))!.AsObject();
-            if (instanz["Verkleinern"] is JsonObject verkleinern) verkleinern["Laufort"] = "Extern";
             await File.WriteAllTextAsync(Path.Combine(ziel, "graphen", Path.GetFileName(datei)), instanz.ToJsonString(new() { WriteIndented = true }));
         }
 

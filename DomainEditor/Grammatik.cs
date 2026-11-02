@@ -41,14 +41,13 @@ public static class Grammatik
 
     public static readonly IReadOnlyList<SorteInfo> Sorten =
     [
-        new(Command, "Command", "▶", "wirkt genau einmal (Command-Id, Inbox)", "Absicht an genau ein Aggregat"),
+        new(Command, "Command", "▶", "wirkt genau einmal (Command-Id, Inbox)", "Absicht an genau einen Empfänger: ein Aggregat (Ziel im Typ), einen Knoten desselben Graphen, den Kopf eines Graphen oder einen Akteur (Arbeit)"),
         new(Event, "Event", "◆", "durabel; wirkt bei jedem Hörer genau einmal", "Fakt im Log"),
         new(Transient, "Hinweis", "◇", "höchstens einmal (verlierbar)", "flüchtig: Ablehnung, Fortschritt, Live-Anzeige (ITransientEvent)"),
         new(Frist, "Frist", "⏳", "durabel; feuert mindestens einmal, wirkt genau einmal", "Zeit aus dem Decide eines Aggregats — die Uhr macht daraus den Command an dasselbe Aggregat"),
         new(Query, "Query", "?", "synchron, wirkt nicht", "Frage"),
         new(Response, "Antwort", "↩", "synchron; trägt den Stand der gezeigten Ids", "Rückgabe eines Readers oder eines Aggregats (dann mit seiner Version als OCC-Stand)"),
         new(Faehigkeit, "Fähigkeit", "⚙", "als Parameter von Auf bzw. Frage", "Store-Funktion (Lesen/Schreiben)"),
-        new(Quelle, "Quell-Nachricht", "⛲", "durabel (genau einmal je Kennung)", "Anstoß von außen (Datei, Webhook …) — ein Event, das Funktionen und Projektionen hören"),
         new(Gerufen, "Technik", "🧩", "im Konstruktor (gebunden nach der Umgebung)",
             "Technik hinter einer Funktion (ohne Marker: was ihr Konstruktor nimmt) — keine Nachricht, eine Abhängigkeit, läuft im Prozess ihres Halters"),
     ];
@@ -73,22 +72,24 @@ public static class Grammatik
         // Konsum: Sorte → Eingang
         new("GR-COMMAND", "Command → genau ein Empfänger", "Ein Command hat genau einen Empfänger, vom Absender aus: nennt er sein Ziel im Typ "
             + "(ICommand<TAggregat> mit Id<TAggregat> AggregateId), entscheidet ihn genau dieses Aggregat; ohne Typargument (ICommand) bekommt ihn der "
-            + "Knoten desselben Graphen, der ihn nimmt, sonst der Kopf genau eines Graphen (Plan „Commands und Funktionsgraphen“, Entscheidung 2).", "error",
+            + "Knoten desselben Graphen, der ihn nimmt, sonst der Kopf genau eines Graphen oder ein Akteur, der ihn hört (Arbeit). Kein Empfänger, mehrere, oder "
+            + "ein Typ, den ein Graph nimmt und ein Akteur hört, ist ein Fehler.", "error",
             [Comp("ICommand<TAggregat> liefert das Ziel aus Id<TAggregat> AggregateId (IAggregatCommand)"),
              An("CQRS013", "Domain.SourceGeneration/ModellAnalyzer.cs (Ziel nicht im Typ: IAggregatCommand von Hand, AggregateId ohne Typargument)"),
              Gen("CQRS010", "Infrastructure.SourceGeneration/CommandAggregateMapGenerator.cs (Decide außerhalb des Ziel-Aggregats)"),
              An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Command ohne Decider bzw. ohne Knoten, der ihn nimmt)"),
              An("CQRS116", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Command ohne Ziel ohne bzw. mit mehreren Empfängern)")]),
-        new("GR-EVENT", "Event → Projektionen, Clients, das eigene Aggregat", "Ein persistentes Event hören Projektionen (beliebig viele) und Clients zur "
-            + "Kenntnis (IHoert); gefaltet wird es im eigenen Aggregat. Eine Funktion liest nie das Log: sie hört ein Event nur als Antwort auf einen "
-            + "eigenen Command; eine Quell-Nachricht hört sie als durablen Eingang (docs/04 §4.4).", "error",
+        new("GR-EVENT", "Event → Projektionen, Akteure, das eigene Aggregat", "Ein persistentes Event hören Projektionen (beliebig viele) und Akteure zur "
+            + "Kenntnis (IHoert, gepusht an ihre Sitzungen); gefaltet wird es im eigenen Aggregat. Eine Funktion liest nie das Log: sie hört ein Event nur "
+            + "als Antwort auf einen eigenen Command (docs/04 §4.4).", "error",
             [Comp("Auf-Parameter : IEvent"), An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Auf einer Projektion)"),
              Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (eine Funktion, die nur Events hört, hat keinen Einstieg)")]),
-        new("GR-DECIDE-COMMAND", "Command ohne Ziel aus dem Decide → Kopf eines Graphen", "Ein Decide kann neben Events einen Command ohne Ziel ausgeben. "
-            + "Er geht nicht ins Log; für die Instanz, deren Graph ihn am Kopf nimmt, steht in derselben Transaktion ein offener Eingang (Kennung aus "
-            + "Command und Stelle), den die Laufzeit zustellt, bis der Lauf fertig ist — genau einmal wirksam (docs/03 §3.2, docs/04 §4.4).", "error",
+        new("GR-DECIDE-COMMAND", "Command ohne Ziel aus dem Decide → Graph-Kopf oder Akteur", "Ein Decide kann neben Events einen Command ohne Ziel "
+            + "ausgeben, nie einen an ein Aggregat. Er geht nicht ins Log; für seinen Empfänger (die Instanz, deren Graph ihn am Kopf nimmt, oder den Akteur, "
+            + "der ihn als Arbeit hört) steht in derselben Transaktion ein offener Eingang (Kennung aus Command und Stelle), den die Laufzeit zustellt, bis "
+            + "der Lauf bzw. die Arbeit fertig ist — genau einmal wirksam (docs/03 §3.2, docs/04 §4.4).", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag: Commands ohne Ziel stehen in der Signatur)"),
-             An("CQRS116", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (genau ein Graph nimmt ihn am Kopf)"),
+             An("CQRS116", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (genau ein Empfänger: Graph-Kopf oder Akteur)"),
              new("laufzeit", null, "Infrastructure/Eingaenge/Folgen.cs (offene Eingänge im Commit, schneller Weg danach)")]),
         new("GR-ANTWORT", "Antwort → die Funktion, die den Command schickte", "Ein Event hört eine Funktion nur als Antwort auf einen eigenen Command: "
             + "die Antwort trägt die Events, die das Ziel entschied, und das Kind rechnet sie gleich weiter. Ein Event-Eingang, den keiner ihrer Commands "
@@ -103,7 +104,7 @@ public static class Grammatik
         new("GR-GRAPH", "Graph: Knoten als Parameter, Kanten aus den Typen", "Ein Graph ist ein Record mit IGraph; jeder Parameter ist ein Knoten (eine "
             + "Funktion — eine generische mit Typargument — oder ein anderer Graph; Name = Konfig-Schlüssel, in einem inneren Graphen mit Punkt). Ein Graph "
             + "im Graphen ist eine Schachtel: hinein geht nur, was er nimmt und innen keiner erzeugt, heraus nur, was er erzeugt und innen keiner nimmt (seine "
-            + "Signatur). Eingänge, die kein Knoten erzeugt, sind die Köpfe — je Command bzw. Quell-Nachricht genau einer; der Graph ist kreisfrei. Kein "
+            + "Signatur). Eingänge, die kein Knoten erzeugt, sind die Köpfe — je Eingangstyp genau einer; der Graph ist kreisfrei. Kein "
             + "Builder, keine ausdrücklichen Kanten, keine Knotenarten (docs/04 §4.4).", "error",
             [An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Form des Graphen, Lesart Graphform)"),
              An("CQRS117", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (eine Funktion in keinem Graphen läuft nie)")]),
@@ -208,8 +209,8 @@ public static class Grammatik
              An("CQRS092", "Domain.SourceGeneration/TechnikAnalyzer.cs (öffentlich, nicht generisch)"),
              new("generator", null, "Infrastructure.SourceGeneration/TechnikGenerator.cs (GeneratedTechnik: Umsetzungen, Bedarf, Konfig-Bindung)")]),
         new("GR-TECHNIK-GEBUNDEN", "Gebrauchte Technik ist gebunden", "Was eine gebundene Funktion (transitiv) braucht, ist in der Umgebung "
-            + "eindeutig: je Technik genau eine Umsetzung (sonst Funktionen:<Name>:Implementierung), je Konfig-Record ein Abschnitt "
-            + "Konfig:<Record>, kein Kreis über Technik — sonst bricht der Start.", "error",
+            + "eindeutig: je Technik genau eine Umsetzung (sonst die Wahl am Knoten der Instanz, Technik:<Schnittstelle>), je Konfig-Record seine Felder "
+            + "am Knoten, kein Kreis über Technik — sonst bricht der Start.", "error",
             [new("boot", null, "Infrastructure/Funktionen/Technik.cs (BindeTechnik: fehlend, mehrdeutig, Kreis, Konfig)")]),
         new("GR-QUELLE", "Quelle = Funktion, die lauscht", "Eine Quelle ist eine Funktion mit Lausche(CancellationToken) statt Auf — aus dem Katalog des "
             + "Frameworks (Dateiwaechter, Taktgeber, Webhook) oder eigen. Sie steht am Kopf ihres Graphen (eine je Graph, dann kein anderer Kopf); jedes "
@@ -291,9 +292,10 @@ public static class Grammatik
         new(Faehigkeit, Projektion, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Reader, Beliebig, "GR-FAEHIGKEIT"),
         new(Faehigkeit, Funktion, Beliebig, "GR-FUNKTION-FORM"),
         new(Gerufen, Funktion, Beliebig, "GR-TECHNIK"),
-        new(Event, Client, Beliebig, "GR-EVENT"), new(Transient, Client, Beliebig, "GR-TRANSIENT"),
-        // Eine Quell-Nachricht ist ein Event aus dem Log (GR-QUELLE): Funktionen und Projektionen hören sie, ein Client kann sie hören.
-        new(Quelle, Funktion, Beliebig, "GR-QUELLE"), new(Quelle, Projektion, Beliebig, "GR-QUELLE"), new(Quelle, Client, Beliebig, "GR-QUELLE"),
+        // Was ein Akteur hört (IHoert): ein Event oder Hinweis zur Kenntnis, ein Command ohne Ziel als Arbeit (er ist dann sein einziger Empfänger).
+        new(Event, Akteur, Beliebig, "GR-EVENT"), new(Transient, Akteur, Beliebig, "GR-TRANSIENT"), new(Command, Akteur, GenauEins, "GR-ARBEIT"),
+        // Ein Command ohne Ziel zwischen Knoten: jeder Knoten desselben Graphen, der ihn nimmt, bzw. der Kopf genau eines Graphen.
+        new(Command, Funktion, GenauEins, "GR-KANTE"),
         new(Frist, Uhr, GenauEins, "GR-FRIST"),
     ];
 
@@ -301,27 +303,19 @@ public static class Grammatik
     public static readonly IReadOnlyList<Erzeugung> Erzeugungen =
     [
         new(Aggregat, Event, "GR-AUS-AGGREGAT"), new(Aggregat, Transient, "GR-AUS-AGGREGAT"), new(Aggregat, Frist, "GR-AUS-AGGREGAT"),
-        new(Funktion, Command, "GR-FUNKTION-FORM"), new(Funktion, Event, "GR-FUNKTION-FORM"), new(Funktion, Transient, "GR-FUNKTION-FORM"),
+        new(Funktion, Command, "GR-FUNKTION-FORM"), new(Funktion, Transient, "GR-FUNKTION-FORM"),
+        new(Aggregat, Command, "GR-DECIDE-COMMAND"),
         new(Reader, Response, "GR-AUS-READER"), new(Aggregat, Response, "GR-AUS-AGGREGAT"),
         new(Store, Faehigkeit, "GR-FAEHIGKEIT"),
         new(Funktion, Gerufen, "GR-TECHNIK"),
         new(Aussenwelt, Command, "GR-COMMAND"), new(Aussenwelt, Query, "GR-QUERY"),
         new(Akteur, Command, "GR-AKTEUR"), new(Akteur, Query, "GR-AKTEUR"), new(Akteur, Transient, "GR-AKTEUR"),
-        new(Akteur, Quelle, "GR-AKTEUR"), new(Aussenwelt, Quelle, "GR-QUELLE"),
         new(Client, Command, "GR-CLIENT-BEFUGT"), new(Client, Query, "GR-CLIENT-BEFUGT"), new(Client, Transient, "GR-CLIENT-BEFUGT"),
-        new(Client, Quelle, "GR-CLIENT-BEFUGT"),
         new(Uhr, Command, "GR-FRIST"),
     ];
 
-    /// <summary>
-    /// Nachrichtensorte eines Records: aus seiner Art — ein Event mit der Basis <c>IQuellNachricht</c> (Code-Fakt der Basisliste) oder einem
-    /// Treiber ist eine Quell-Nachricht.
-    /// </summary>
-    public static string? SorteVon(Record r) =>
-        r.Kind == RecordArt.Event && (r.Treiber != null || (r.Basen?.Contains(QuellBasis) ?? false)) ? Quelle : SorteVonRecordArt(r.Kind);
-
-    /// <summary>Die Vertrags-Basis einer Quell-Nachricht (aus dem Vertrag, kein Text-Raten).</summary>
-    public const string QuellBasis = "IQuellNachricht";   // die frühere Basis der Quell-Nachrichten; die Editor-Sorte zieht mit Schritt 7 nach
+    /// <summary>Nachrichtensorte eines Records: aus seiner Art (Quellen sind Funktionen, die lauschen — ihre Commands sind gewöhnliche Commands).</summary>
+    public static string? SorteVon(Record r) => SorteVonRecordArt(r.Kind);
 
     /// <summary>Record-Art → Nachrichtensorte (null = keine Nachricht: Value Object, Konfig, ReadModel).</summary>
     public static string? SorteVonRecordArt(string kind) => kind switch
@@ -380,7 +374,6 @@ public static class Grammatik
             gegenstuecke = r.Build.Select(g => new { art = g.Art, kennung = g.Kennung, ort = g.Ort }),
         }),
         recordSorte = RecordArt.Alle.Where(k => SorteVonRecordArt(k) != null).ToDictionary(k => k, k => SorteVonRecordArt(k)!),
-        quellBasis = QuellBasis,
         portSorte = EditorPortSorte,
         portBaustein = EditorPortBaustein.Select(x => new[] { x.Schluessel, x.Baustein }),
         portGebrauch = EditorPortGebrauch,
