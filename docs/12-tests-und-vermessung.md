@@ -432,6 +432,13 @@ Paar 9,7 → 4,0, Queries je Paar 90 → 69 (kein Append der Datei ins Log, kein
 entfällt (der Wächter schreibt nicht ins Log, Entscheidung 8). S2 ist nicht mehr messbar: der Treiber schaltete die Bildkette über
 `Funktionen:<F>:Laufort` nach draußen, den Abschnitt gibt es seit Schritt 2 nicht mehr; mit Schritt 6 entfallen Laufort Extern und der Bild-Worker.
 
+**Messung nach dem Umbau „Commands und Funktionsgraphen“ (2026-11-02, Messserver, je ein Lauf, Spalte „Funktionsgraphen“):** volle Messung auf
+`077070e` (`…_077070e_funktionsgraphen`, ohne S2) gegen `…_2172f4f_funktionen-nachher`, gültig, Exactly-once in allen Szenarien grün; der
+Störungslauf (`…_funktionsgraphen-stoerung`, zwei harte Abbrüche) ebenso. S1 135 → 142 Paare/s, Transaktionen je Paar 7,7 → 4,1, Queries je Paar
+89 → 72; S3, S4, S6 im Rauschen (S6-64 CPU 463 → 271 %); S5-1 415 → 480/s, S5-8 1 838 → 1 637/s und S5-64 unverändert (S5 im Band von PF-36).
+Auffällig: der Prüfdomänen-Host belegt in L5 und allen S5-Szenarien rund 45 % mehr Speicher (RSS 490–545 → 720–760 MB), unerklärt; der Nachlauf
+von L5 16 → 47 s liegt innerhalb einer Takt-Periode (30 s).
+
 **Ende zu Ende an den realen Domänen, unter Höchstlast (seit 2026-10-15, `scripts/vermessung-e2e.sh`, ≈ 5 min, Plan Garantien und Durchsatz
 §0.1).** Gemessen wird der echte Host im Release-Build (`Host.Grpc` in `umgebungen/vermessung/`, `Host.Pruefdomaene` in
 `umgebungen/vermessung-pruefdomaene/`, je eigene DB; bis Phase 5 dazu ein eigener Redis), Last nur über die echten Eingänge, gezählt bis zum
