@@ -10,15 +10,14 @@ namespace Infrastructure.Funktionen;
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 /// <summary>
-/// Ein <c>Auf</c> einer Funktion (Index in <see cref="FunktionsBaustein.Eingaenge"/> = seine Nummer): sein (erster) Eingangstyp, ob er ein Hinweis ist, ob
-/// die Ausgabe ein Strom ist, was herauskommen kann, seine Lese-Fähigkeiten und alle Typen seiner Ports.
+/// Ein <c>Auf</c> einer Funktion (Index in <see cref="FunktionsBaustein.Eingaenge"/> = seine Nummer): sein (erster) Eingangstyp, ob die Ausgabe ein
+/// Strom ist, was herauskommen kann, seine Lese-Fähigkeiten und alle Typen seiner Ports.
 /// </summary>
-/// <param name="Hinweis">Der Eingang ist ein Hinweis (verlierbar, nicht im Log): höchstens einmal.</param>
 /// <param name="Strom">Die Ausgabe ist ein Strom (viele Ausgaben je Eingang, jede gesendet, bevor die nächste kommt).</param>
 /// <param name="Ausgaben">Die konkreten Ausgabe-Typen (die Fälle der Signatur).</param>
 /// <param name="Faehigkeiten">Die Lese-Fähigkeiten des <c>Auf</c> (eine solche Funktion läuft nur im Host).</param>
 /// <param name="Typen">Alle Typen, die das <c>Auf</c> an seinen Ports nimmt (ein Join hat mehrere; leer = nur <paramref name="Typ"/>).</param>
-public sealed record FunktionsEingang(Type Typ, bool Hinweis, bool Strom, IReadOnlyList<Type> Ausgaben, IReadOnlyList<Type> Faehigkeiten,
+public sealed record FunktionsEingang(Type Typ, bool Strom, IReadOnlyList<Type> Ausgaben, IReadOnlyList<Type> Faehigkeiten,
     IReadOnlyList<Type>? Typen = null)
 {
     /// <summary>Alle Typen der Ports.</summary>
@@ -58,7 +57,7 @@ public sealed record FunktionsBaustein(
 
     /// <summary>Die Antwort-Events (ein Ziel entschied sie auf einen Command der Funktion hin) mit der Nummer ihres <c>Auf</c>.</summary>
     public IReadOnlyDictionary<Type, int> Antworten() =>
-        Eingaenge.Select((e, i) => (e, i)).Where(x => !x.e.Hinweis && typeof(IEvent).IsAssignableFrom(x.e.Typ))
+        Eingaenge.Select((e, i) => (e, i)).Where(x => typeof(IEvent).IsAssignableFrom(x.e.Typ))
             .ToDictionary(x => x.e.Typ, x => x.i);
 
     /// <summary>Hat irgendein Eingang Lese-Fähigkeiten? Dann läuft die Funktion nur im Host.</summary>

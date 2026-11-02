@@ -33,7 +33,6 @@ public sealed record SitzungsDienste(
     Verteilung? Verteilung,
     AkteurTor? Tor,
     Konsum Konsum,
-    HinweisNetz? HinweisNetz,
     IEventStoreRepository? Log,
     ILogger Logger,
     Werkstatt? Werkstatt = null);
@@ -469,12 +468,8 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
         else if (!ImAuftrag.IstAkteur(envelope.UserId) && AkteurHerkunft.EindeutigerHalter(envelope.Payload.GetType()) is { } halter)
             envelope = envelope with { UserId = halter };   // Tor aus: Herkunft laut Modell (der eine Akteur mit IDarf)
 
-        // An die Clients, die ihn hören (Verteiler), und an die Funktionen, die ihn hören (Hinweis-Netz): die Kennung vergibt der Client
-        //   (CausationId, sonst gewürfelt — Clients würfeln, R13), die Adresse folgt aus dem Stream, den er nennt (A6).
+        // Nur an die Akteure, die ihn hören (über die Verteiler an ihre Sitzungen); Funktionen hören keine Hinweise.
         _d.Verteilung?.Melde(envelope with { ZielSitzung = null });
-        _d.HinweisNetz?.Verteile(new HinweisZustellen(Guid.TryParse(envelope.CausationId, out var kennung) ? kennung : Guid.NewGuid(), envelope.Payload,
-            envelope.AggregateId, envelope.AggregateVersion, DateTimeOffset.UtcNow, envelope.CorrelationId,
-            ImAuftrag.IstAkteur(envelope.UserId) ? envelope.UserId : null));
         _logger.LogDebug("{Session} TransientEvent published: {Payload}", _id, envelope.Payload.GetType().Name);
     }
 

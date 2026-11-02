@@ -39,13 +39,12 @@ namespace Infrastructure.SourceGeneration
         internal sealed class Auf
         {
             public IMethodSymbol Methode = null!;
-            /// <summary>Die Eingangsports (Entscheidung 4): je Command-Parameter einer; ein Antwort-Event oder ein Hinweis nur allein.</summary>
+            /// <summary>Die Eingangsports (Entscheidung 4): je Command-Parameter einer; ein Antwort-Event nur allein.</summary>
             public List<Port> Ports = new List<Port>();
-            /// <summary>Der erste Typ des ersten Ports — bei einem einzelnen Eingang (Antwort, Hinweis, ein Command) der Eingang.</summary>
+            /// <summary>Der erste Typ des ersten Ports — bei einem einzelnen Eingang (Antwort, ein Command) der Eingang.</summary>
             public INamedTypeSymbol Eingang => Ports[0].Typen[0];
             /// <summary>Alle Typen, die das <c>Auf</c> nimmt (über alle Ports).</summary>
             public IEnumerable<INamedTypeSymbol> Eingaenge => Ports.SelectMany(p => p.Typen);
-            public bool Hinweis;
             /// <summary>Die Eingänge sind Commands ohne Ziel (Nachrichtenform): aus einem Decide, von einem anderen Knoten oder einem Akteur.</summary>
             public bool Command;
             /// <summary>Die Parameter in Reihenfolge: <c>p</c> (ein Port, Nummer in <see cref="Ports"/>), <c>h</c> (Herkunft), <c>ct</c> (Abbruch) oder eine Lese-Fähigkeit.</summary>
@@ -77,13 +76,13 @@ namespace Infrastructure.SourceGeneration
             public List<(INamedTypeSymbol Eingang, Location Ort)> Doppelt = new List<(INamedTypeSymbol, Location)>();
             /// <summary>Der Typ des Zustands (<c>IZustand&lt;T&gt;</c> im Konstruktor einer Klasse, docs/04 §4.4) — null = ohne Zustand.</summary>
             public INamedTypeSymbol? Zustand;
-            /// <summary>Hat die Funktion einen Einstieg — einen Command, einen Hinweis, oder lauscht sie? Wer nur Events hört, hätte keinen
+            /// <summary>Hat die Funktion einen Einstieg — einen Command, oder lauscht sie? Wer nur Events hört, hätte keinen
             /// (CQRS100): eine Funktion liest nie das Log.</summary>
-            public bool MitEinstieg => Lausche != null || Aufs.Any(a => a.Command || a.Hinweis);
+            public bool MitEinstieg => Lausche != null || Aufs.Any(a => a.Command);
 
             /// <summary>Ein Event-Eingang ist eine ANTWORT: ein Ziel entschied es auf einen ihrer Commands hin; sie hört es nur so, nie aus dem Log
             /// (dass einer ihrer Commands es entscheiden kann, prüft das Gesamtbild).</summary>
-            public bool IstAntwort(Auf a) => !a.Command && !a.Hinweis;
+            public bool IstAntwort(Auf a) => !a.Command;
 
             /// <summary>
             /// Die Methode <c>Lausche(CancellationToken)</c> einer QUELLFUNKTION (docs/04 §4.7, Entscheidung 8) — ohne Ports, ihr Strom startet je Element
@@ -256,8 +255,8 @@ namespace Infrastructure.SourceGeneration
                 f.Fehler.Add(("eine Quellfunktion ist eine Klasse im Host (sie lauscht auf dem Knoten, der ihre Instanz hält)", ort));
             // Eine Funktion liest nie das Log: wer nur Events hört, hätte keinen Einstieg — ein Event hört sie nur als Antwort auf einen eigenen Command.
             if (f.Aufs.Count > 0 && !f.MitEinstieg)
-                f.Fehler.Add(("sie hört nur Events — eine Funktion liest nie das Log: sie nimmt einen Command (ohne Ziel) oder einen "
-                    + "Hinweis; ein Event nur als Antwort auf einen eigenen Command", ort));
+                f.Fehler.Add(("sie hört nur Events — eine Funktion liest nie das Log: sie nimmt einen Command (ohne Ziel); ein Event nur als "
+                    + "Antwort auf einen eigenen Command", ort));
             if (gesehen.Count == 0 && f.Lausche == null && f.Doppelt.Count == 0 && f.Fehler.Count == 0)
                 f.Fehler.Add(($"'{t.Name}' hat kein {Abstractions.Funktionsvertrag.Auf} — eine Funktion hört mindestens einen Eingang; Technik hinter einer "
                     + "Funktion trägt keinen Marker (sie steht nur im Konstruktor ihres Halters)", ort));
@@ -338,15 +337,15 @@ namespace Infrastructure.SourceGeneration
             }
             if (auf.Ports.Count == 0)
             {
-                fehler.Add(("ein Auf nimmt mindestens einen Eingang (einen Command ohne Ziel als T, T?, OneOf<…> oder IReadOnlyList<T>; allein auch einen "
-                    + "Hinweis oder ein Event als Antwort)", ort));
+                fehler.Add(("ein Auf nimmt mindestens einen Eingang (einen Command ohne Ziel als T, T?, OneOf<…> oder IReadOnlyList<T>; allein auch ein "
+                    + "Event als Antwort)", ort));
                 return null;
             }
             var einzeln = auf.Ports.FirstOrDefault(x => !IstCommandOhneZiel(x.Typen[0]));
             if (einzeln != null && auf.Ports.Count > 1)
             {
                 fehler.Add(($"'{einzeln.Name}' ist kein Command ohne Ziel — mehrere Eingänge (ein Join) nimmt ein Auf nur als Commands ohne Ziel; eine "
-                    + "Hinweis oder eine Antwort steht allein", einzeln.Ort));
+                    + "Antwort steht allein", einzeln.Ort));
                 return null;
             }
             if (einzeln != null && einzeln.Form != Portform.Eins)
@@ -355,9 +354,7 @@ namespace Infrastructure.SourceGeneration
                     einzeln.Ort));
                 return null;
             }
-            var eingang = auf.Eingang;
             auf.Command = einzeln == null;
-            auf.Hinweis = !auf.Command && Hat(eingang, A + "ITransientEvent");
 
             // Rückgabe: T | OneOf<…> | IEnumerable<…> | IAsyncEnumerable<…>, T und OneOf auch in Task<…>. Kein void, kein T?, kein ValueTask: was
             //   „nichts“ sein kann, ist ein Strom (leer = nichts), was einer von mehreren ist, ein OneOf (Entscheidung 4).
@@ -420,7 +417,8 @@ namespace Infrastructure.SourceGeneration
 
         /// <summary>
         /// Ein Eingangsport aus einem Parameter: <c>T</c>, <c>T?</c>, <c>OneOf&lt;A, B&gt;</c> oder <c>IReadOnlyList&lt;T&gt;</c> mit Commands ohne Ziel;
-        /// <c>T</c> allein auch ein Hinweis oder ein konkretes Event (als Antwort). Sonst ein Formfehler.
+        /// <c>T</c> allein auch ein konkretes Event (als Antwort). Ein Hinweis ist kein Eingang: Hinweise gehen nur an Akteure draußen (Entscheidung 14).
+        /// Sonst ein Formfehler.
         /// </summary>
         private static Port? LiesPort(IParameterSymbol p, Location ort, List<(string, Location)> fehler)
         {
@@ -456,10 +454,16 @@ namespace Infrastructure.SourceGeneration
                 return null;
             }
             var command = IstCommandOhneZiel(n);
+            if (!command && Hat(n, A + "ITransientEvent"))
+            {
+                fehler.Add(($"der Parameter '{p.Name}' ist der Hinweis '{n.Name}' — eine Funktion hört keine Hinweise (sie gehen nur an Akteure draußen); "
+                    + "was ein Knoten braucht, ist ein Command ohne Ziel", ort));
+                return null;
+            }
             if (!command && (port.Form != Portform.Eins || n.TypeKind == TypeKind.Interface || n.IsAbstract || !Hat(n, A + "IEvent")))
             {
                 fehler.Add(($"der Parameter '{p.Name}' ('{p.Type.ToDisplayString()}') ist weder Eingang (ein Command ohne Ziel als T, T?, OneOf<…>, "
-                    + "IReadOnlyList<T>; allein auch ein Hinweis oder ein konkretes Event als Antwort) noch Herkunft, CancellationToken "
+                    + "IReadOnlyList<T>; allein auch ein konkretes Event als Antwort) noch Herkunft, CancellationToken "
                     + "oder Lese-Fähigkeit (Interface mit IReadStore)"
                     + (Hat(n, A + "IAggregatCommand") ? " — ein Command an ein Aggregat nimmt nur sein Aggregat" : ""), ort));
                 return null;

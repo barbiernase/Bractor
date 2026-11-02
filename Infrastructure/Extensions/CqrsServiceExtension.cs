@@ -113,7 +113,7 @@ public static class CqrsServiceExtensions
         // 9. Hosted Services
         services.AddCqrsHostedServices();
 
-        // 10. Funktionen: Wurzel, Parents, Kinder, Werkstatt, offene Eingänge, Hinweis-Netz.
+        // 10. Funktionen: Wurzel, Parents, Kinder, Werkstatt, offene Eingänge.
         Infrastructure.Funktionen.FunktionsBausteinWiring.AddFunktionsBausteine(services);
 
         // 11. Die Uhr: fällige Fristen der Aggregate als Commands.

@@ -85,13 +85,11 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
     {
         var logger = logs?.CreateLogger("Funktionen");
         var emitter = new CommandEmitter(new Bote(system.Cluster(), logger), logger);
-        var netz = dienste.GetService<HinweisNetz>();
         var verteilung = dienste.GetService<Infrastructure.Verteilen.Verteilung>();
-        Action<HinweisZustellen>? hinweise = netz is null && verteilung is null ? null : h =>
+        Action<HinweisZustellen>? hinweise = verteilung is null ? null : h =>
         {
-            // An die Instanzen, die ihn am Kopf nehmen (Hinweis-Netz); an die Clients, die ihn hören, über die Verteiler.
-            netz?.Verteile(h);
-            verteilung?.Melde(new EventEnvelope
+            // An die Akteure draußen, die ihn hören: über die Verteiler an ihre Sitzungen (Funktionen hören keine Hinweise).
+            verteilung.Melde(new EventEnvelope
             {
                 AggregateId = h.Stream, AggregateVersion = h.Version, CorrelationId = h.Korrelation, UserId = h.Akteur, Payload = h.Hinweis,
                 AggregateType = "Funktion",

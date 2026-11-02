@@ -122,8 +122,10 @@ public class FunktionsLaufzeitTests
     {
         public readonly ActorSystem System = new();
         public readonly ConcurrentQueue<(IAggregatCommand Befehl, Guid Id)> Gesendet = new();
-        public readonly ConcurrentQueue<EingangZustellen> Hinweise = new();
-        public readonly ConcurrentQueue<HinweisZustellen> Gescheitert = new();
+        /// <summary>Was verlierbar über die Wege ging (der schnelle Weg eines offenen Eingangs).</summary>
+        public readonly ConcurrentQueue<EingangZustellen> Gemeldet = new();
+        /// <summary>Die Hinweise an den Verteiler (an die Akteure, die sie hören): aus Knoten und gescheiterten Läufen.</summary>
+        public readonly ConcurrentQueue<HinweisZustellen> Hinweise = new();
         public readonly ConcurrentQueue<Guid> Ausgetragen = new();
         public readonly ConcurrentQueue<(Guid, string)> Geparkt = new();
         public readonly Ablage Zustaende = new();
@@ -143,7 +145,8 @@ public class FunktionsLaufzeitTests
                         knoten: new KnotenKontext(name, k.Name, k.Knoten), ablage: Zustaende, quelle: k.Lauscht is not null),
                     k.Rechne, Antworten: k.Antworten)
                 { Instanz = name, Knoten = k.Name, ImGraphen = plan.ImGraphen(k.Name), Zeitlimit = k.Knoten.Zeitlimit, Lausche = k.Lauscht };
-                return (Func<FunktionsParent>)(() => new FunktionsParent(traeger, k.Konfig, () => new FunktionsKindActor(traeger, _dienste, this, Koepfe, SendeAsync)));
+                return (Func<FunktionsParent>)(() => new FunktionsParent(traeger, k.Konfig, () => new FunktionsKindActor(traeger, _dienste, this, Koepfe, SendeAsync,
+                    hinweise: Hinweise.Enqueue)));
             });
             Starte(instanz, parents);
             _plaene[name] = (instanz, parents);
@@ -153,7 +156,7 @@ public class FunktionsLaufzeitTests
         private readonly Dictionary<string, (GraphInstanz, Dictionary<string, Func<FunktionsParent>>)> _plaene = new();
 
         private void Starte(GraphInstanz instanz, Dictionary<string, Func<FunktionsParent>> parents) =>
-            _instanzen[instanz.Name] = System.Root.SpawnNamed(Props.FromProducer(() => new GraphActor(instanz, parents, new Offene(this), Gescheitert.Enqueue,
+            _instanzen[instanz.Name] = System.Root.SpawnNamed(Props.FromProducer(() => new GraphActor(instanz, parents, new Offene(this), Hinweise.Enqueue,
                 ablage: Zustaende)), FunktionenWurzel.Name(instanz.Name) + "-" + Guid.NewGuid().ToString("N")[..6]);
 
         /// <summary>Dieser Cluster-Knoten hält die Instanz (bzw. nicht mehr): ihre Quelle lauscht.</summary>
@@ -181,10 +184,10 @@ public class FunktionsLaufzeitTests
             catch (TimeoutException) { return null; }
         }
 
-        public void Melde(EingangZustellen hinweis)
+        public void Melde(EingangZustellen eingang)
         {
-            Hinweise.Enqueue(hinweis);
-            if (_instanzen.TryGetValue(hinweis.Instanz, out var p)) System.Root.Send(p, hinweis);
+            Gemeldet.Enqueue(eingang);
+            if (_instanzen.TryGetValue(eingang.Instanz, out var p)) System.Root.Send(p, eingang);
         }
 
         /// <summary>Die gesicherten Zustände im Speicher (je Instanz und Knoten der neueste), mit jeder Sicherung in Reihenfolge.</summary>
@@ -343,19 +346,16 @@ public class FunktionsLaufzeitTests
     }
 
     [Fact]
-    public async Task Ein_Hinweis_geht_verlierbar_an_die_Koepfe_die_ihn_nehmen_ein_Event_als_Ausgabe_laesst_den_Lauf_scheitern()
+    public async Task Ein_Hinweis_geht_verlierbar_nur_an_die_Akteure_ein_Event_als_Ausgabe_laesst_den_Lauf_scheitern()
     {
         await using var w = new Welt();
-        var gehoert = new ConcurrentQueue<int>();
-        w.Koepfe = new Verkettung(new Dictionary<Type, string[]> { [typeof(Gemerkt)] = ["Hoerer"] });
         w.Instanz("G", new K("A", Einzeln(a => new Gemerkt(((Start)a[0]!).Wert))).Op([typeof(Gemerkt)], ports: Eins<Start>()));
-        w.Instanz("Hoerer", new K("H", Einzeln(a => { gehoert.Enqueue(((Gemerkt)a[0]!).Wert); return null; })).Op([typeof(Buche)], strom: true, ports: Eins<Gemerkt>()));
         var schreiber = new K("S", Einzeln(_ => new Falsch(1))) { Konfig = new FunktionsOrtKonfig(Wiederholungen: 0) }.Op([typeof(Buche)], ports: Eins<Start>());
         w.Instanz("Schreiber", schreiber);
 
         (await Fertig(w, Eingang("G", new Start(5)))).Should().Be(Quittungsart.Fertig, "auf einen Hinweis wird nicht gewartet");
-        await Warte(() => gehoert.Contains(5), "der Kopf, der ihn nimmt, bekommt den Hinweis");
-        w.Hinweise.Single().Art.Should().Be(Eingangsart.Hinweis);
+        w.Hinweise.Should().ContainSingle("über die Verteiler an die Akteure, die ihn hören").Which.Hinweis.Should().Be(new Gemerkt(5));
+        w.Gemeldet.Should().BeEmpty("keine Funktion hört einen Hinweis");
         (await Fertig(w, Eingang("Schreiber", new Start(1)))).Should().Be(Quittungsart.Gescheitert, "eine Funktion schreibt nie ins Log");
     }
 
@@ -504,7 +504,7 @@ public class FunktionsLaufzeitTests
         (await Fertig(w, Eingang("G", new Start(1)))).Should().Be(Quittungsart.Fertig, "der Lauf wartet nicht auf den Verlierer");
         sieger.Should().Equal(nameof(Links));
         await abgebrochen.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        w.Gescheitert.Should().BeEmpty("ein abgebrochener Verlierer ist kein Fehler");
+        w.Hinweise.Should().BeEmpty("ein abgebrochener Verlierer ist kein Fehler");
     }
 
     [Fact]
@@ -555,7 +555,7 @@ public class FunktionsLaufzeitTests
         (await Fertig(w, Eingang("G", new Start(1)))).Should().Be(Quittungsart.Gescheitert);
         versuche.Should().Be(3, "einmal und zwei Wiederholungen");
         await abgebrochen.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        var hinweis = w.Gescheitert.Should().ContainSingle().Which.Hinweis.Should().BeOfType<LaufGescheitert>().Which;
+        var hinweis = w.Hinweise.Should().ContainSingle().Which.Hinweis.Should().BeOfType<LaufGescheitert>().Which;
         hinweis.Knoten.Should().Be("Kaputt");
         hinweis.Grund.Should().Contain("kaputt");
 

@@ -18,8 +18,8 @@ public interface IFunktionsWege
     /// </summary>
     Task<EingangQuittung?> StelleZuAsync(EingangZustellen eingang, TimeSpan frist, CancellationToken ct);
 
-    /// <summary>Ein Hinweis: verlierbar, ohne Antwort, an einen Knoten, der die Instanz hält.</summary>
-    void Melde(EingangZustellen hinweis);
+    /// <summary>Verlierbar, ohne Antwort, an einen Knoten, der die Instanz hält (der schnelle Weg eines offenen Eingangs; der Zusteller ist das Netz).</summary>
+    void Melde(EingangZustellen eingang);
 }
 
 /// <summary>
@@ -89,9 +89,9 @@ public sealed class FunktionsWege(Bote bote, FunktionsOrte orte, ILogger? logger
         return q;
     }
 
-    public void Melde(EingangZustellen hinweis)
+    public void Melde(EingangZustellen eingang)
     {
-        if (orte.Waehle(hinweis.Instanz) is { } adresse) bote.MeldeAnKnoten(adresse, FunktionenWurzel.Name(hinweis.Instanz), hinweis);
+        if (orte.Waehle(eingang.Instanz) is { } adresse) bote.MeldeAnKnoten(adresse, FunktionenWurzel.Name(eingang.Instanz), eingang);
     }
 }
 

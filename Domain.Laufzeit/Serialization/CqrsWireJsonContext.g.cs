@@ -42,7 +42,6 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(EventEnvelope))]
 [JsonSerializable(typeof(Verteile))]
 [JsonSerializable(typeof(Verarbeitet))]
-[JsonSerializable(typeof(HinweisZustellen))]
 [JsonSerializable(typeof(EingangZustellen))]
 [JsonSerializable(typeof(EingangQuittung))]
 [JsonSerializable(typeof(Antwortereignis))]

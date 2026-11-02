@@ -708,7 +708,7 @@ public sealed partial class DomainExtractor
         {
             var e = new BausteinEingangRaw
             {
-                EingangFull = a.Eingang.Fq(), Hinweis = a.Hinweis, Herkunft = a.MitHerkunft, Strom = a.Strom,
+                EingangFull = a.Eingang.Fq(), Herkunft = a.MitHerkunft, Strom = a.Strom,
                 AusgabenFull = a.Ausgaben.Select(x => x.Fq()).ToList(),
             };
             for (var i = 0; i < a.Methode.Parameters.Length; i++)

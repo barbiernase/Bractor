@@ -4,8 +4,8 @@ namespace Infrastructure.Funktionen;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 // EINGÄNGE EINER INSTANZ (docs/04 §4.4): Funktionen sind Knoten von Graphen VOR dem Aggregat und lesen nie das Log. Ein Eingang kommt am Kopf einer
-// Instanz an — von einem durablen Rand (ein Command ohne Ziel aus einem Decide, eine Quell- oder Client-Nachricht — offen in cqrs_eingaenge, der
-// Zusteller bringt ihn), vom Knoten eines anderen Graphen (ein Command ohne Ziel) oder aus dem Hinweis-Netz — und startet einen Lauf. Er trägt eine
+// Instanz an — von einem durablen Rand (ein Command ohne Ziel aus einem Decide oder von einem Akteur — offen in cqrs_eingaenge, der Zusteller bringt
+// ihn), vom Knoten eines anderen Graphen (ein Command ohne Ziel) oder aus ihrer Quelle — und startet einen Lauf. Er trägt eine
 // abgeleitete Kennung: der Graph-Actor erkennt einen doppelten Eingang an ihr; die Ids im Lauf folgen aus ihr (Lauf, Pfad, Knoten, Stelle) — die Inbox
 // verwirft Wiederholungen. Zwischen Knoten desselben Graphen reist nichts als Eingang: das trägt der Lauf (Lauf.cs).
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -17,8 +17,6 @@ public enum Eingangsart
     Durabel = 0,
     /// <summary>Aus einer Kette: die Antwort kommt, wenn der Eingang fertig ist (seine Commands beantwortet, seine Nachfolger fertig) — oder sofort „später“.</summary>
     Kette = 1,
-    /// <summary>Ein Hinweis: höchstens einmal, keine Antwort.</summary>
-    Hinweis = 2,
     /// <summary>Ein Element einer Quelle der Instanz selbst (kein Absender wartet; gesichert ist es mit dem Zustand der Quelle).</summary>
     Quelle = 3,
 }

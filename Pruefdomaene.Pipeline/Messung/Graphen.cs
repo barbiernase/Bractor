@@ -2,11 +2,8 @@ using Abstractions;
 
 namespace Pruefdomaene.Pipeline.Messung;
 
-/// <summary>Aus einem neuen Wert wird ein Merkmal (ein Hinweis).</summary>
-public sealed record Merkmalbildung(Merkmalsbildung Bildung) : IGraph;
-
-/// <summary>Ein Merkmal über der Schwelle wird als Ausreißer gemeldet (im Host oder draußen).</summary>
-public sealed record Ausreisserkontrolle(IAusreisserpruefung Pruefung) : IGraph;
-
-/// <summary>Aus einem Merkmal wird eine Schätzung (mit Zustand: genau eine Aktivierung im Cluster).</summary>
-public sealed record Schaetzung(Schaetzer Schaetzer) : IGraph;
+/// <summary>
+/// Aus einem neuen Wert wird ein Merkmal, das gabelt (ein Fork): die Ausreißerprüfung meldet einen Wert über der Schwelle (im Host oder draußen), der
+/// Schätzer schätzt (mit Zustand: genau eine Aktivierung der Instanz im Cluster).
+/// </summary>
+public sealed record Merkmalbildung(Merkmalsbildung Bildung, IAusreisserpruefung Pruefung, Schaetzer Schaetzer) : IGraph;

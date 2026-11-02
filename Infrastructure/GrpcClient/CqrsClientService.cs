@@ -35,7 +35,6 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         AkteurTor? akteurTor = null,
         ILogger<CqrsClientServiceImpl>? logger = null,
         Konsum? konsum = null,
-        HinweisNetz? hinweisNetz = null,
         IEventStoreRepository? log = null,
         Werkstatt? werkstatt = null)
     {
@@ -44,7 +43,6 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         _logger = logger ?? NullLogger<CqrsClientServiceImpl>.Instance;
         _dienste = new SitzungsDienste(mapper, dispatcher, queryService, verteilung, akteurTor,
             konsum ?? Konsum.Standard,
-            hinweisNetz,   // null = keine Funktion hört Hinweise
             log,
             _logger,
             werkstatt);   // null = keine Funktion in dieser Anwendung → Anbieten wird abgewiesen

@@ -33,9 +33,9 @@ namespace Infrastructure.SourceGeneration
             public Location Ort = Location.None;
             /// <summary>Die Graphen, in denen der Knoten liegt (Pfade, außen zuerst; leer = im Graphen selbst).</summary>
             public List<string> Bereich = new List<string>();
-            /// <summary>Die Operationen (je <c>Auf</c> mit Command-, Quell- oder Hinweis-Eingang eine, in Reihenfolge der Funktion).</summary>
+            /// <summary>Die Operationen (je <c>Auf</c> mit Command-Eingang eine, in Reihenfolge der Funktion).</summary>
             public List<Operation> Operationen = new List<Operation>();
-            /// <summary>Die Commands ohne Ziel, Quell-Nachrichten und Hinweise, die der Knoten nimmt (ohne Antwort-Events).</summary>
+            /// <summary>Die Commands ohne Ziel, die der Knoten nimmt (ohne Antwort-Events).</summary>
             public IEnumerable<INamedTypeSymbol> Eingaenge => Operationen.SelectMany(o => o.Auf.Eingaenge);
             /// <summary>Alles, was der Knoten ausgeben kann (auch aus den Antworten auf seine Commands).</summary>
             public List<INamedTypeSymbol> Ausgaben = new List<INamedTypeSymbol>();
@@ -235,8 +235,8 @@ namespace Infrastructure.SourceGeneration
             foreach (var x in nimmt.Where(x => !erzeugt.ContainsKey(x.Key))) s.Ein[x.Key] = x.Value;
             foreach (var x in erzeugt.Where(x => !nimmt.ContainsKey(x.Key))) s.Aus[x.Key] = x.Value;
 
-            // Je Eingangstyp (Command, Quell-Nachricht) genau ein Glied, das ihn nimmt (Hinweise dürfen mehrere hören).
-            foreach (var e in s.Ein.Values.Where(e => !Funktionsform.Hat(e, A + "ITransientEvent")))
+            // Je Eingangstyp genau ein Glied, das ihn nimmt.
+            foreach (var e in s.Ein.Values)
             {
                 var glieder = s.Eigene.Where(k => k.Eingaenge.Any(x => V(x) == V(e))).Select(k => (k.Name, k.Ort))
                     .Concat(s.Innere.Where(i => i.Ein.ContainsKey(V(e))).Select(i => (i.Pfad, ort))).ToList();
@@ -248,7 +248,7 @@ namespace Infrastructure.SourceGeneration
             return s;
         }
 
-        /// <summary>Ein Funktions-Knoten mit seinen Operationen: je Auf mit Command-, Quell- oder Hinweis-Eingang eine.</summary>
+        /// <summary>Ein Funktions-Knoten mit seinen Operationen: je Auf mit Command-Eingang eine.</summary>
         private static Knoten LiesKnoten(INamedTypeSymbol f, string name, List<string> bereich, Location ort)
         {
             var form = Funktionsform.Lies(f);

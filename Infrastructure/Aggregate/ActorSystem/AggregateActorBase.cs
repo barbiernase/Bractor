@@ -34,9 +34,6 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     private readonly IAggregateHandlerFactory _handlerFactory;
     private readonly IEventStoreRepository _eventStore;
     private readonly Infrastructure.Verteilen.Verteilung? _verteilung;
-    // Das Hinweis-Netz (docs/04 §4.4): ein Hinweis aus dem Decide (eine Ablehnung), den eine Funktion hört, geht direkt an
-    //   ihre Adresse — ohne Log, ohne Broker, höchstens einmal. Null = keine Funktion hört Hinweise.
-    private readonly Infrastructure.Funktionen.HinweisNetz? _hinweisNetz;
     // Wer die Folgen einer Entscheidung hört (docs/03 §3.1): je Folge und Hörer ein offener Eingang in derselben Transaktion.
     private readonly Infrastructure.Funktionen.Verkettung _folgen;
     private readonly Infrastructure.Funktionen.IFunktionsWege? _wege;
@@ -95,13 +92,11 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         SnapshotOptions? snapshotOptions = null,
         IDeadLetterSink? deadLetters = null,
         Passivierung? passivierung = null,
-        Infrastructure.Funktionen.HinweisNetz? hinweisNetz = null,
         Infrastructure.Funktionen.Verkettung? folgen = null,
         Infrastructure.Funktionen.IFunktionsWege? wege = null)
         // PF-5: Leerlauf bis zur Passivierung (Snapshot beim Stoppen, die nächste Nachricht rehydriert).
         : base(logger, (passivierung ?? Passivierung.Standard).Aggregat)
     {
-        _hinweisNetz = hinweisNetz;
         _folgen = folgen ?? Infrastructure.Funktionen.Verkettung.Leer;
         _wege = wege;
         _handlerFactory = handlerFactory;
@@ -639,7 +634,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
         }
         else if (ablehnungen.Count == 1)
         {
-            // Ablehnung: nur die Quittung (abgelehnt), die Version bleibt; der Hinweis geht nach dem Commit an Sitzung und Hörer.
+            // Ablehnung: nur die Quittung (abgelehnt), die Version bleibt; der Hinweis geht nach dem Commit an die Sitzung des Aufrufers.
             e.Ausgang = KommandoAusgang.Abgelehnt;
             e.Ablehnung = ablehnungen[0];
         }
@@ -896,7 +891,7 @@ public abstract class AggregateActorBase<TState> : RahmenActor
                 // Spur: eine Ablehnung steht nicht im Log — als verlierbarer Hinweis an die Werkbank.
                 Infrastructure.Einblick.SpurHinweise.Melde(Infrastructure.Einblick.SpurHinweise.Ablehnung, Spur.Aktuell?.Wirker, cmdEnvelope.Ursache,
                     cmdEnvelope.CorrelationId, $"{cmdEnvelope.Payload.GetType().Name} abgelehnt: {rejection.GetType().Name}");
-                // Der Hinweis an die Sitzung des Aufrufers und an die Funktionen, die ihn hören (verlierbar).
+                // Der Hinweis an die Sitzung des Aufrufers (verlierbar).
                 MeldeAblehnung(cmdEnvelope, rejection);
 
                 Antworte(context, new CommandResult
@@ -1157,15 +1152,6 @@ public abstract class AggregateActorBase<TState> : RahmenActor
     /// </summary>
     private void MeldeAblehnung(CommandEnvelope cmdEnvelope, IEvent rejection)
     {
-        // An die Funktionen, die den Hinweis hören (Hinweis-Netz, docs/04 §4.4): Kennung aus der Command-Id (A7), Herkunft der eigene Stream.
-        if (_hinweisNetz is { } netz && netz.Hoert(rejection.GetType()))
-        {
-            var version = _state?.Version ?? 0;
-            netz.Verteile(new Infrastructure.Funktionen.HinweisZustellen(Eingangsvertrag.HinweisAusCommand(cmdEnvelope.CommandId),
-                rejection, _id, version, DateTimeOffset.UtcNow, cmdEnvelope.CorrelationId, ImAuftrag.IstAkteur(cmdEnvelope.UserId) ? cmdEnvelope.UserId : null,
-                Spur.Ursache(_id, version)));
-        }
-
         if (_verteilung == null || string.IsNullOrEmpty(cmdEnvelope.OriginSessionId))
         {
             _logger?.LogDebug("[Actor] Cannot publish rejection: keine Verteilung oder keine Sitzung");

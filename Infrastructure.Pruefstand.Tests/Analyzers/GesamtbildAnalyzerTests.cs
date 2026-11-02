@@ -140,28 +140,13 @@ public partial class Kasse : IState
             .Should().BeEmpty("sie hat eine Umsetzung im Host");
     }
 
-    [Fact]
-    public async Task R20_ein_gehoerter_Hinweis_ohne_Erzeuger_im_Netz_ist_CQRS106()
-    {
-        // Ein Hinweis, den ein Decide (SchonOffen) oder eine Funktion ausgibt, hat einen Erzeuger — einer, den nur ein Client sendet, nicht.
-        (await Ids("public sealed class Mahner : IFunktion { public IEnumerable<Eroeffne> Auf(SchonOffen h) => []; } public sealed record G(Mahner M) : IGraph;"))
-            .Should().BeEmpty();
-        var befunde = await Befunde("public record Merkmal(double Wert) : ITransientEvent; "
-                                    + "public sealed class Schaetzer : IFunktion { public IEnumerable<Eroeffne> Auf(Merkmal m) => []; } public sealed record G(Schaetzer S) : IGraph;");
-        befunde.Select(d => d.Id).Should().Contain(GesamtbildAnalyzer.HinweisOhneErzeugerId);
-        befunde.Single(d => d.Id == GesamtbildAnalyzer.HinweisOhneErzeugerId).GetMessage().Should().Contain("'Schaetzer'").And.Contain("'Merkmal'");
-        (await Ids("public record Merkmal(double Wert) : ITransientEvent; public record Messe() : ICommand; "
-                   + "public sealed class Merkmalsbildung : IFunktion { public Merkmal Auf(Messe e) => new(1); } "
-                   + "public sealed class Schaetzer : IFunktion { public IEnumerable<Eroeffne> Auf(Merkmal m) => []; } "
-                   + "public sealed record G(Merkmalsbildung M, Schaetzer S) : IGraph;")).Should().BeEmpty("eine Funktion erzeugt ihn");
-    }
-
     // GR-EMPFAENGER (Entscheidung 2): ein Command ohne Ziel, der seinen Erzeuger verlässt, nimmt genau ein Graph am Kopf.
     private const string Verteilt = @"
 public record Pruefe(Id<Konto> Konto) : ICommand;
+public record Los() : ICommand;
 public sealed class Pruefung : IFunktion { public Eroeffne Auf(Pruefe p) => default!; }
 public sealed record Pruefgraph(Pruefung P) : IGraph;
-public sealed class Anstoss : IFunktion { public Pruefe Auf(SchonOffen h) => default!; }
+public sealed class Anstoss : IFunktion { public Pruefe Auf(Los l) => default!; }
 public sealed record Anstossgraph(Anstoss A) : IGraph;
 ";
 
@@ -172,18 +157,18 @@ public sealed record Anstossgraph(Anstoss A) : IGraph;
         var zwei = await Befunde(Verteilt + "public sealed class Zweite : IFunktion { public Eroeffne Auf(Pruefe p) => default!; } public sealed record Zweitgraph(Zweite Z) : IGraph;");
         zwei.Should().ContainSingle(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Which.GetMessage().Should().StartWith("'Pruefe'").And.Contain("Anstossgraph.A")
             .And.Contain("mehrere Graphen").And.Contain("Pruefgraph").And.Contain("Zweitgraph");
-        var keiner = await Befunde("public record Weiter() : ICommand; public sealed class Los : IFunktion { public Weiter Auf(SchonOffen h) => default!; } "
-                                   + "public sealed record Losgraph(Los L) : IGraph;");
+        var keiner = await Befunde("public record Weiter() : ICommand; public record Los() : ICommand; "
+                                   + "public sealed class Start : IFunktion { public Weiter Auf(Los l) => default!; } public sealed record Losgraph(Start L) : IGraph;");
         keiner.Where(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Select(d => d.GetMessage()).Should().Contain(m => m.Contains("kein Graph nimmt ihn am Kopf"));
     }
 
     [Fact]
     public async Task Innerhalb_eines_Graphen_ist_die_Kante_der_Empfaenger_eine_Funktion_ohne_Graph_eine_Warnung_CQRS117()
     {
-        (await Ids("public record Weiter() : ICommand; public sealed class Los : IFunktion { public Weiter Auf(SchonOffen h) => default!; } "
-                   + "public sealed class Dann : IFunktion { public Eroeffne Auf(Weiter w) => default!; } public sealed record Kette(Los L, Dann D) : IGraph;"))
+        (await Ids("public record Weiter() : ICommand; public record Los() : ICommand; public sealed class Start : IFunktion { public Weiter Auf(Los l) => default!; } "
+                   + "public sealed class Dann : IFunktion { public Eroeffne Auf(Weiter w) => default!; } public sealed record Kette(Start L, Dann D) : IGraph;"))
             .Should().BeEmpty("Weiter nimmt ein Knoten desselben Graphen");
-        (await Befunde("public sealed class Allein : IFunktion { public Eroeffne Auf(SchonOffen h) => default!; }"))
+        (await Befunde("public record Los() : ICommand; public sealed class Allein : IFunktion { public Eroeffne Auf(Los l) => default!; }"))
             .Should().ContainSingle().Which.Id.Should().Be(GesamtbildAnalyzer.OhneGraphId);
     }
 }

@@ -13,10 +13,10 @@ using static Pruefdomaene.Integration.Tests.Pruefstand;
 namespace Pruefdomaene.Integration.Tests.Garantien;
 
 /// <summary>
-/// Funktionen als Actors und das Hinweis-Netz (docs/04 §4.4, docs/11) gegen echtes Marten, am allgemeinen Fall der Prüfdomäne (Messung): Messwerte im
-/// Log → Merkmalsbildung (gleichbleibend) → Merkmal (Hinweis, nie im Log) → Schätzer (liest die Messreihe, eine Projektion) bzw. Ausreißerprüfung
-/// (Schnittstelle, im Host oder draußen) → Command an die Messstelle. Geprüft wird am Log: Ressourcen schließen beim Stoppen, Commands aus einem
-/// Hinweis wirken einmal, die Schätzung beruht auf dem, was die Projektion gelernt hat.
+/// Funktionen eines Graphen mit Zustand und Ressourcen (docs/04 §4.4, docs/11) gegen echtes Marten, am allgemeinen Fall der Prüfdomäne (Messung): ein
+/// Messwert → Merkmalsbildung (gleichbleibend) → Merkmal (ein Command zwischen Knoten, nie im Log) gabelt an den Schätzer (liest die Messreihe, eine
+/// Projektion) und die Ausreißerprüfung (Schnittstelle, im Host oder draußen) → Command an die Messstelle. Geprüft wird am Log: Ressourcen schließen beim
+/// Stoppen, die Schätzung beruht auf dem, was die Projektion gelernt hat, ein Knoten mit Zustand rechnet auf genau einem Cluster-Knoten.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class FunktionsZustandGarantieTests
@@ -32,9 +32,9 @@ public class FunktionsZustandGarantieTests
     }
 
     [Fact]
-    public async Task Hinweis_Kette_bis_zum_Command_ohne_Log_Eintrag_des_Hinweises_und_ohne_Festhalten_der_gleichbleibenden_Funktion()
+    public async Task Fork_bis_zum_Command_ohne_Log_Eintrag_des_Merkmals_und_ohne_Festhalten_der_gleichbleibenden_Funktion()
     {
-        using var host = Cluster("garantie-hinweiskette");
+        using var host = Cluster("garantie-merkmalfork");
         await host.StartAsync();
         try
         {
@@ -45,7 +45,7 @@ public class FunktionsZustandGarantieTests
 
             await Warte(async () => (await Log(host, a.Wert)).Count(e => e.Payload is SchaetzungVermerkt) == 3
                                     && (await Log(host, b.Wert)).Count(e => e.Payload is SchaetzungVermerkt) == 2
-                                    && (await Log(host, b.Wert)).Any(e => e.Payload is AusreisserGemeldet), Frist, "die Hinweis-Kette kommt nicht beim Aggregat an");
+                                    && (await Log(host, b.Wert)).Any(e => e.Payload is AusreisserGemeldet), Frist, "der Fork kommt nicht beim Aggregat an");
             await Task.Delay(TimeSpan.FromSeconds(2));
 
             (await Log(host, a.Wert)).Select(e => e.Payload.GetType().Name).Should().BeEquivalentTo(
@@ -54,7 +54,7 @@ public class FunktionsZustandGarantieTests
             await using var conn = new Npgsql.NpgsqlConnection(Verbindung);
             await conn.OpenAsync();
             await using (var cmd = new Npgsql.NpgsqlCommand("select count(*) from pruef_e2e.mt_events where type = 'merkmal'", conn))
-                ((long)(await cmd.ExecuteScalarAsync())!).Should().Be(0, "ein Hinweis steht nie im Log");
+                ((long)(await cmd.ExecuteScalarAsync())!).Should().Be(0, "ein Command zwischen Knoten steht nie im Log");
         }
         finally { await host.StopAsync(); }
     }
@@ -117,34 +117,11 @@ public class FunktionsZustandGarantieTests
     }
 
     [Fact]
-    public async Task Commands_aus_einem_Hinweis_wirken_einmal_auch_wenn_er_doppelt_ankommt()
+    public async Task Ein_Knoten_draussen_nimmt_das_Merkmal_ueber_den_Weg_der_Leitung_nichts_wird_festgehalten()
     {
-        using var host = Cluster("garantie-hinweis-einmal");
-        await host.StartAsync();
-        try
-        {
-            var stelle = Id<Messstelle>.Neu();
-            await MissAsync(host, stelle, 1);   // die Messstelle gibt es
-            var netz = host.Services.GetRequiredService<HinweisNetz>();
-            var hinweis = new HinweisZustellen(Guid.NewGuid(), new Merkmal(stelle, 5_000), stelle.Wert, 1, DateTimeOffset.UtcNow, Guid.NewGuid().ToString(), null);
-            netz.Verteile(hinweis);
-            netz.Verteile(hinweis);   // derselbe Hinweis noch einmal (ein Absender, der wiederholt): dieselbe Kennung, dieselbe Command-Id
-            await Warte(async () => (await Log(host, stelle.Wert)).Any(e => e.Payload is AusreisserGemeldet), Frist, "der Hinweis wirkt nicht");
-            await Task.Delay(TimeSpan.FromSeconds(3));
-            (await Log(host, stelle.Wert)).Count(e => e.Payload is AusreisserGemeldet).Should().Be(1, "die Inbox verwirft die zweite Command-Id");
-
-            netz.Verteile(hinweis with { Kennung = Guid.NewGuid() });   // ein anderer Hinweis wirkt sehr wohl
-            await Warte(async () => (await Log(host, stelle.Wert)).Count(e => e.Payload is AusreisserGemeldet) == 2, Frist, "ein neuer Hinweis wirkt nicht");
-        }
-        finally { await host.StopAsync(); }
-    }
-
-    [Fact]
-    public async Task Eine_Funktion_draussen_hoert_einen_Hinweis_ueber_den_Weg_der_Leitung_nichts_wird_festgehalten()
-    {
-        // Derselbe Weg wie für einen Python-Worker: der Hand-Ausführer ist ein Arbeiter in der Werkstatt, ein Kind der Funktion gibt ihm den Hinweis
+        // Derselbe Weg wie für einen Python-Worker: der Hand-Ausführer ist ein Arbeiter in der Werkstatt, ein Kind des Knotens gibt ihm das Merkmal
         //   und sendet die Ausgaben seiner Antwort — nichts wird festgehalten.
-        using var host = Cluster("garantie-hinweis-draussen", dienste: s =>
+        using var host = Cluster("garantie-merkmal-draussen", dienste: s =>
         {
             s.AddSingleton(global::Infrastructure.Funktionen.GraphInstanzen.JeGraphEine(global::Infrastructure.Komposition.Anwendung.Funktionen.Graphen,
                 new Dictionary<string, KnotenKonfig> { [nameof(IAusreisserpruefung)] = new() { Laufort = FunktionsLaufort.Hand } }));
@@ -158,13 +135,13 @@ public class FunktionsZustandGarantieTests
             var hand = host.Services.GetRequiredService<HandAusfuehrer>();
             HandEingang? offen = null;
             await Warte(() => Task.FromResult((offen = hand.OffeneEingaenge.FirstOrDefault(e => e.Stream == stelle.Wert)) is not null), Frist,
-                "der Hinweis erreicht die Funktion draußen nicht");
+                "das Merkmal erreicht die Funktion draußen nicht");
             offen!.Eingang.Should().BeOfType<Merkmal>().Which.Wert.Should().Be(3_000);
 
             hand.Antworte(offen.Vorgang, new IAusgabe[] { new MeldeAusreisser(stelle, 3_000) }, null)
                 .Should().Be(Werkstattausgang.Angenommen);
             await Warte(async () => (await Log(host, stelle.Wert)).Any(e => e.Payload is AusreisserGemeldet), Frist, "die Antwort von draußen wirkt nicht");
-            (await Log(host, offen.Vorgang)).Should().BeEmpty("eine Antwort auf einen Hinweis wird nicht festgehalten");
+            (await Log(host, offen.Vorgang)).Should().BeEmpty("eine Antwort von draußen wird nicht festgehalten");
         }
         finally { await host.StopAsync(); }
     }
@@ -172,8 +149,8 @@ public class FunktionsZustandGarantieTests
     [Fact]
     public async Task Eine_Funktion_mit_Zustand_rechnet_auf_genau_einem_Knoten_der_ihre_Sperre_haelt()
     {
-        // Zwei Hosts auf derselben Datenbank: der Schätzer trägt über sein Zählwerk Zustand — nur einer hält seine Sperre (Advisory-Lock); endet er,
-        //   nimmt der andere sie.
+        // Zwei Hosts auf derselben Datenbank: der Schätzer trägt über sein Zählwerk Zustand — nur einer hält die Sperre seiner Instanz (Advisory-Lock);
+        //   endet er, nimmt der andere sie.
         var a = Cluster("garantie-sperre-a");
         var b = Cluster("garantie-sperre-b");
         await a.StartAsync();
@@ -181,18 +158,18 @@ public class FunktionsZustandGarantieTests
         var gestoppt = new HashSet<IHost>();
         try
         {
-            bool Haelt(IHost h) => h.Services.GetRequiredService<ZustandsSperre>().Gehalten.Contains(nameof(Schaetzung));
+            bool Haelt(IHost h) => h.Services.GetRequiredService<ZustandsSperre>().Gehalten.Contains(nameof(Merkmalbildung));
             await Warte(() => Task.FromResult(Haelt(a) || Haelt(b)), Frist, "niemand nimmt die Sperre des Schätzers");
             await Task.Delay(TimeSpan.FromSeconds(3));
             (Haelt(a) && Haelt(b)).Should().BeFalse("genau ein Knoten hält die Sperre");
             var (halter, anderer) = Haelt(a) ? (a, b) : (b, a);
-            halter.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Schaetzung)).Should().BeTrue("der Halter hält die Funktion im Gossip-Zustand");
-            anderer.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Schaetzung)).Should().BeFalse();
+            halter.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Merkmalbildung)).Should().BeTrue("der Halter hält die Funktion im Gossip-Zustand");
+            anderer.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Merkmalbildung)).Should().BeFalse();
 
             await halter.StopAsync();
             gestoppt.Add(halter);
             await Warte(() => Task.FromResult(Haelt(anderer)), Frist, "der andere Knoten übernimmt die Sperre nicht");
-            await Warte(() => Task.FromResult(anderer.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Schaetzung))), Frist,
+            await Warte(() => Task.FromResult(anderer.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Merkmalbildung))), Frist,
                 "der andere Knoten hält die Funktion nicht");
         }
         finally

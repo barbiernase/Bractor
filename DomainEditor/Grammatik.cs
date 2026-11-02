@@ -126,16 +126,11 @@ public static class Grammatik
              new("boot", null, "Infrastructure/Funktionen/Technik.cs (BindeTechnik: Werte der Konfig-Records, Technik-Wahl je Knoten)")]),
         new("GR-FALTUNG", "Event → genau ein Aggregat faltet", "Ein Event faltet genau ein Aggregat (Applier) — das, das es entscheidet.", "warning",
             [An("CQRS080", "Domain.SourceGeneration/ModellAnalyzer.cs (Apply ohne Decide)"), An("CQRS079", "Domain.SourceGeneration/ModellAnalyzer.cs (Decide ohne Apply)")]),
-        new("GR-TRANSIENT", "Hinweis → Funktion/Client", "Einen Hinweis (ITransientEvent: Ablehnung, Fortschritt) hören Funktionen (höchstens einmal) "
-            + "und Clients (IHoert) — nie eine Projektion, nie ein Aggregat. Ist eine Ablehnung für einen Ablauf wichtig, ist sie ein Event.", "error",
-            [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (aus einem Hinweis nur Commands und Hinweise)"),
-             new("laufzeit", null, "Infrastructure/Funktionen/HinweisNetz.cs (über die Wege an den Parent, ohne Log und Broker)")]),
-        new("GR-HINWEIS-NETZ", "Hinweis-Netz: hart verdrahtet, höchstens einmal", "Ein Hinweis aus einem Aggregat, einer Funktion oder einem Client "
-            + "geht an jede Instanz, deren Graph ihn am Kopf nimmt — im Speicher, ohne Log, ohne Broker, höchstens einmal. Jeder Hinweis, "
-            + "den eine Funktion hört, hat einen Erzeuger im Netz; Commands aus einem Hinweis tragen eine Id aus Eingangs-Kennung, Funktion und Stelle "
-            + "(R20, docs/04 §4.4).", "error",
-            [An("CQRS106", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (gehörter Hinweis ohne Erzeuger)"),
-             new("laufzeit", null, "Infrastructure/Funktionen/HinweisNetz.cs (je hörende Funktion ein Eingang über die Wege)")]),
+        new("GR-TRANSIENT", "Hinweis → Akteur draußen", "Einen Hinweis (ITransientEvent: Ablehnung, Fortschritt) geben Aggregate und Funktionen aus; "
+            + "hören tun ihn nur Akteure draußen (IHoert, über die Verteiler an ihre Sitzungen, höchstens einmal) — nie eine Funktion, nie eine Projektion, "
+            + "nie ein Aggregat. Was ein Knoten braucht, ist ein Command; ist eine Ablehnung für einen Ablauf wichtig, ist sie ein Event.", "error",
+            [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (ein Hinweis ist kein Port einer Funktion)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/Hinweise.cs (aus einem Graphen nur an die Verteiler, ohne Log und Broker)")]),
         new("GR-WECKPLAN", "Weckplan: jeder Hörer mit jedem gehörten Typ", "Nach jedem Commit weckt der Wecker gezielt, wen der generierte Weckplan "
             + "zum Typ eines geschriebenen Events nennt: die Partition jeder Projektion, die ihn hört, und die Uhr bei einer gesetzten Frist — "
             + "verlierbar, der Takt je Partition holt nach. Ein Hörer aus dem Log hört nur konkrete, "
@@ -171,8 +166,8 @@ public static class Grammatik
             + "zeigt, sagen ihre Id<T>-Felder (und die der Query).", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)"), An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Frage eines Readers)")]),
         // Funktion als Baustein und die Regeln der Wiederholbarkeit (docs/10 §10.6).
-        new("GR-FUNKTION-FORM", "Funktion: je Eingang ein Auf, freie Ausgabe", "Eine Funktion hat je Eingang (Command ohne Ziel, Quell-Nachricht, "
-            + "Hinweis oder ein Event als Antwort auf einen eigenen Command) ein Auf mit optional Herkunft, Lese-Fähigkeiten und Abbruch; ausgegeben werden "
+        new("GR-FUNKTION-FORM", "Funktion: je Eingang ein Auf, freie Ausgabe", "Eine Funktion hat je Eingang (Command ohne Ziel oder ein Event als "
+            + "Antwort auf einen eigenen Command) ein Auf mit optional Herkunft, Lese-Fähigkeiten und Abbruch; ausgegeben werden "
             + "Commands und Hinweise (konkret, OneOf, je auch als Task; IEnumerable bzw. IAsyncEnumerable — kein void, kein T?, kein ValueTask) — vollständig in der Signatur. Als Klasse läuft sie im Host, als Schnittstelle draußen (Laufort aus der Umgebung); eine Schnittstelle "
             + "ohne eindeutige Umsetzung braucht eine Bindung, eine Funktion mit Lese-Fähigkeit läuft nur im Host. Eine Funktion ohne Auf ist ein "
             + "Formfehler; eine Funktions-Schnittstelle hat nur Auf (was ihre Umsetzung ruft, ist Technik, GR-TECHNIK).", "error",
@@ -289,7 +284,6 @@ public static class Grammatik
         new(Command, Aggregat, GenauEins, "GR-COMMAND"),
         new(Event, Projektion, Beliebig, "GR-EVENT"), new(Event, Funktion, Beliebig, "GR-EVENT"),
         new(Event, Aggregat, GenauEins, "GR-FALTUNG"),
-        new(Transient, Funktion, Beliebig, "GR-TRANSIENT"),
         new(Query, Reader, GenauEins, "GR-QUERY"), new(Query, Aggregat, GenauEins, "GR-QUERY"),
         new(Faehigkeit, Projektion, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Reader, Beliebig, "GR-FAEHIGKEIT"),
         new(Faehigkeit, Funktion, Beliebig, "GR-FUNKTION-FORM"),

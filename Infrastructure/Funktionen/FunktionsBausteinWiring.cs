@@ -20,8 +20,7 @@ public sealed record BausteinBindung(string Funktion, FunktionsLaufort Laufort =
 /// <summary>
 /// Die Verdrahtung der Funktionen, für jede Anwendung gleich — aus den generierten Tabellen <c>Anwendung.Funktionen</c> (Bausteine, Graphen), ohne
 /// Domänen-Typ im Framework: die Instanzen (ohne Umgebung je Graph eine, <see cref="GraphInstanzen.JeGraphEine"/>), ihre Köpfe, die Laufzeit vor dem
-/// Aggregat (<see cref="FunktionsLaufzeitWiring"/>: Wurzel, Graph-Actors, Parents, Kinder, Werkstatt) und das Hinweis-Netz (<see cref="HinweisNetz"/>),
-/// wenn ein Graph einen Hinweis am Kopf nimmt.
+/// Aggregat (<see cref="FunktionsLaufzeitWiring"/>: Wurzel, Graph-Actors, Parents, Kinder, Werkstatt).
 /// </summary>
 public static class FunktionsBausteinWiring
 {
@@ -30,9 +29,6 @@ public static class FunktionsBausteinWiring
         services.TryAddSingleton(_ => GraphInstanzen.JeGraphEine(Anwendung.Funktionen.Graphen));
         services.TryAddSingleton(sp => sp.GetRequiredService<GraphInstanzen>().Koepfe());
         FunktionsLaufzeitWiring.AddFunktionsLaufzeit(services);
-        if (Anwendung.Funktionen.Graphen.Any(g => g.Koepfe.Keys.Any(t => typeof(ITransientEvent).IsAssignableFrom(t))))
-            services.TryAddSingleton(sp => new HinweisNetz(sp.GetRequiredService<Verkettung>(), sp.GetRequiredService<IFunktionsWege>,
-                sp.GetService<ILoggerFactory>()?.CreateLogger("Hinweisnetz")));
         return services;
     }
 

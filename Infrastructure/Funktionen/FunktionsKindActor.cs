@@ -165,13 +165,9 @@ public sealed class FunktionsKindActor(
                     }
                     break;
                 case ITransientEvent h:
-                    // Über das Hinweis-Netz, wenn es eins gibt (es erreicht auch Clients), sonst an die Köpfe, die ihn nehmen.
-                    if (hinweise is not null)
-                        hinweise(new HinweisZustellen(Kettenvertrag.Ausgabe(kennung, traeger.Ort, i), h, a.Kontext.Stream, a.Kontext.Version, a.Kontext.Zeit,
-                            a.Kontext.Korrelation, a.Kontext.Akteur, ursache));
-                    else
-                        foreach (var instanz in koepfe.Hoerer(h.GetType()))
-                            wege.Melde(Fremd(a, h, Kettenvertrag.Ausgabe(kennung, traeger.Ort, i), instanz, Eingangsart.Hinweis));
+                    // Nur an die Akteure draußen, die ihn hören (über die Verteiler); Funktionen hören keine Hinweise.
+                    hinweise?.Invoke(new HinweisZustellen(Kettenvertrag.Ausgabe(kennung, traeger.Ort, i), h, a.Kontext.Stream, a.Kontext.Version, a.Kontext.Zeit,
+                        a.Kontext.Korrelation, a.Kontext.Akteur, ursache));
                     break;
                 case ICommand weiter when traeger.ImGraphen.Contains(weiter.GetType()):
                     // An einen Knoten desselben Graphen: erst mit dem Erfolg sichtbar (der Graph-Actor gibt ihn längs der Kanten weiter).

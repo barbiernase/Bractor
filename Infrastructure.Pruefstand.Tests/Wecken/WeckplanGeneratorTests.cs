@@ -79,7 +79,7 @@ public interface ISchreibeKonto : IWriteStore { Task SetzeAsync(Guid konto); }
             public sealed class Sensorik : IFunktion { public Mahne? Auf(Messwert m) => null; } }");
 
         ids.Should().BeEmpty();
-        quelle.Should().NotContain("Messwert", "ein Hinweis steht nicht im Log, ihn stellt das Hinweis-Netz zu");
+        quelle.Should().NotContain("Messwert", "ein Hinweis steht nicht im Log, ihn stellen die Verteiler zu");
     }
 
     [Theory]

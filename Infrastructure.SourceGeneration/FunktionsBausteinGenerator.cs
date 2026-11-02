@@ -117,7 +117,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine("                new FunktionsEingang[]");
                 sb.AppendLine("                {");
                 foreach (var a in f.Aufs)
-                    sb.AppendLine($"                    new FunktionsEingang(typeof({T(a.Eingang)}), Hinweis: {(a.Hinweis ? "true" : "false")}, Strom: {(a.Strom ? "true" : "false")}, "
+                    sb.AppendLine($"                    new FunktionsEingang(typeof({T(a.Eingang)}), Strom: {(a.Strom ? "true" : "false")}, "
                         + $"new Type[] {{ {string.Join(", ", a.Ausgaben.Select(x => $"typeof({T(x)})"))} }}, "
                         + $"new Type[] {{ {string.Join(", ", a.Faehigkeiten.Select(x => $"typeof({T(x)})"))} }}, "
                         + $"new Type[] {{ {string.Join(", ", a.Eingaenge.Select(x => $"typeof({T(x)})"))} }}),");

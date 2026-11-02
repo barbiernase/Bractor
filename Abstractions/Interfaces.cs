@@ -258,8 +258,8 @@ public interface IAggregateRepository
     
 
     /// <summary>
-    /// Marker für Events, die nur verlierbar zugestellt (Hinweis-Netz, Verteiler an Clients),
-    /// aber nicht im EventStore persistiert werden.
+    /// Marker für Hinweise: Events, die nur verlierbar an die Akteure draußen zugestellt (Verteiler an ihre Sitzungen),
+    /// aber nicht im EventStore persistiert werden. Funktionen hören keine Hinweise.
     /// 
     /// Beispiel: CommandFailed wird an den auslösenden Client gesendet,
     /// aber nie in einen Event-Stream geschrieben.

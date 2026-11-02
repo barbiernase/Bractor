@@ -13,8 +13,8 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Funktionen;
 
 /// <summary>
-/// Funktion als Baustein (docs/04 §4.4, docs/10 §10.3): der <c>FunktionsBausteinGenerator</c> liest NUR Signaturen — je Eingang (Folge,
-/// Hinweis, Antwort) ein <c>Auf</c>, Herkunft, Lese-Fähigkeiten, freie Ausgabe (konkret, OneOf, T?, Strom, je auch als
+/// Funktion als Baustein (docs/04 §4.4, docs/10 §10.3): der <c>FunktionsBausteinGenerator</c> liest NUR Signaturen — je Eingang (Command ohne Ziel,
+/// Antwort) ein <c>Auf</c>, Herkunft, Lese-Fähigkeiten, freie Ausgabe (konkret, OneOf, T?, Strom, je auch als
 /// Task) — und erzeugt die Rechnung, die Verkettung und die Bausteine-Tabelle. Jede erlaubte Form muss als Generat kompilieren; was nicht passt, ist
 /// CQRS100/101.
 /// </summary>
@@ -72,7 +72,7 @@ public interface IPost { Task SendeAsync(string an); }
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty();
         quelle.Should().Contain("new FunktionsBaustein(typeof(global::Probe.Mahnwesen), \"Mahnwesen\", Draussen: false,");
-        quelle.Should().Contain("new FunktionsEingang(typeof(global::Probe.Ueberfaellig), Hinweis: false, Strom: false, "
+        quelle.Should().Contain("new FunktionsEingang(typeof(global::Probe.Ueberfaellig), Strom: false, "
             + "new Type[] { typeof(global::Probe.Mahne), typeof(global::Probe.Unnoetig) }, new Type[] {  }, new Type[] { typeof(global::Probe.Ueberfaellig) })");
         quelle.Should().Contain("case 0: return Ausgaben.Einzeln(f.Auf((global::Probe.Ueberfaellig)a[0]!, h), y => (object?)y.Value);");
         quelle.Should().Contain("new FunktionsUmsetzung(\"Mahnwesen\", typeof(global::Probe.Mahnwesen), (sp, z) => new global::Probe.Mahnwesen())");
@@ -155,7 +155,7 @@ public interface IPost { Task SendeAsync(string an); }
     }
 
     [Theory]
-    [InlineData("public Mahne Auf(Ueberfaellig u, Messwert m) => null!;", "ein Hinweis steht allein")]
+    [InlineData("public Mahne Auf(Ueberfaellig u, Messwert m) => null!;", "ein Hinweis ist kein Port")]
     [InlineData("public Mahne Auf(IReadOnlyList<Messwert> m) => null!;", "eine Liste nur von Commands ohne Ziel")]
     [InlineData("public Mahne Auf(OneOf<Ueberfaellig, Gebucht> m) => null!;", "ein Rennen nur unter Commands ohne Ziel")]
     [InlineData("public Mahne Auf(Ueberfaellig u, Gebucht g) => null!;", "eine Antwort steht allein")]
@@ -216,15 +216,18 @@ public interface IPost { Task SendeAsync(string an); }
     }
 
     [Fact]
-    public void Eine_Funktion_mit_Hinweis_als_Eingang_steht_vor_dem_Aggregat()
+    public void Eine_Funktion_hoert_keinen_Hinweis_aber_gibt_einen_aus()
     {
-        var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
+        // Hinweise gehen nur an Akteure draußen (Entscheidung 14): als Eingang ein Formfehler, als Ausgabe erlaubt.
+        var (quelle, ids, _) = Bausteine(@"namespace Probe {
             public sealed class Sensorik : IFunktion { public IEnumerable<Mahne> Auf(Messwert m) => []; } }");
-
-        ids.Should().BeEmpty();
+        ids.Should().Contain("CQRS100");
+        quelle.Should().NotContain("\"Sensorik\", Draussen");
+        var (aus, ausIds, fehler) = Bausteine(@"namespace Probe {
+            public sealed class Melder : IFunktion { public OneOf<Mahne, Messwert> Auf(Ueberfaellig u) => new Messwert(u.Tage); } }");
+        ausIds.Should().BeEmpty();
         fehler.Should().BeEmpty();
-        quelle.Should().Contain("new FunktionsEingang(typeof(global::Probe.Messwert), Hinweis: true,");
-        quelle.Should().Contain("Rechne0", "Wurzel, Parent und Kinder bringen ihr den Hinweis");
+        aus.Should().Contain("typeof(global::Probe.Mahne), typeof(global::Probe.Messwert)", "ein Hinweis ist ein Ausgang");
     }
 
     /// <summary>
@@ -249,7 +252,7 @@ public interface IPost { Task SendeAsync(string an); }
             public sealed class Schaetzer(IZustand<Mittelwerte> modell, IPost post) : IFunktion
             {
                 public IEnumerable<Mahne> Auf(Bezahlt e, Herkunft h) { modell.Wert.Anzahl++; yield break; }   // lernt aus einem Command, ohne Ausgabe
-                public IEnumerable<Mahne> Auf(Messwert m) { if (modell.Wert.Anzahl < 0) yield return null!; }    // Hinweis rein, Command raus
+                public IEnumerable<Mahne> Auf(Ueberfaellig u) { if (modell.Wert.Anzahl < 0) yield return null!; }    // Command rein, Command raus
             } }" + Kontext);
 
         ids.Should().BeEmpty();
@@ -279,7 +282,7 @@ public interface IPost { Task SendeAsync(string an); }
     [Theory]
     [InlineData("public sealed class Z(IZustand<Zahl> a, IZustand<Zahl> b) : IFunktion { public Mahne Auf(Ueberfaellig e) => null!; }", "zwei Zustände")]
     [InlineData("public sealed class Z(IZustand<List<int>> a) : IFunktion { public Mahne Auf(Ueberfaellig e) => null!; }", "generischer Zustand")]
-    [InlineData("public sealed class Z(IZustand<Zahl> a) : IFunktion { public Gebucht Auf(Messwert m) => null!; }", "Event aus einem Hinweis")]
+    [InlineData("public sealed class Z(IZustand<Zahl> a) : IFunktion { public Mahne Auf(Messwert m) => null!; }", "Hinweis als Eingang")]
     public void Zustand_und_Hinweis_ausser_Form_sind_CQRS100(string klasse, string worum)
     {
         var (quelle, ids, _) = Bausteine("namespace Probe { public sealed class Zahl { public int N { get; set; } } " + klasse + " }");

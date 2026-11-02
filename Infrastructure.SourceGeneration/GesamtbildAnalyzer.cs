@@ -14,8 +14,6 @@ namespace Infrastructure.SourceGeneration;
 /// <list type="bullet">
 /// <item>CQRS084 (GR-QUERY, R4) — eine Query hat genau ein Ziel: einen Reader oder ein Aggregat (<c>Frage</c> im Decider, docs/03 §3.2).</item>
 /// <item>CQRS085 (GR-MODUL-AUSGANG-OFFEN, UNUSED-EVENT; Warnung) — ein Event, eine Ablehnung oder eine Response, die niemand erzeugt.</item>
-/// <item>CQRS106 (R20, GR-HINWEIS-NETZ; Fehler) — eine Funktion hört einen Hinweis, den im Hinweis-Netz niemand erzeugt (kein Decide, keine Funktion
-///   nennt ihn in der Signatur, kein Client sendet ihn): ihre Adresse bekäme ihn nie (docs/04 §4.4).</item>
 /// <item>CQRS108 (GR-ANTWORT; Fehler) — eine Funktion hört ein Event, das keiner ihrer Commands entscheiden kann: eine Funktion liest nie das Log, ein
 ///   Event erreicht sie nur als Antwort auf einen eigenen Command (docs/04 §4.4) — dieses käme nie.</item>
 /// <item>CQRS086 (GR-MODUL-EINGANG-OFFEN; Warnung) — ein Command ohne Decider, eine Query ohne Reader und ohne Aggregat.</item>
@@ -32,7 +30,7 @@ namespace Infrastructure.SourceGeneration;
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
 {
-    public const string QueryId = "CQRS084", AusgangOffenId = "CQRS085", EingangOffenId = "CQRS086", GetragenId = "CQRS087", HinweisOhneErzeugerId = "CQRS106",
+    public const string QueryId = "CQRS084", AusgangOffenId = "CQRS085", EingangOffenId = "CQRS086", GetragenId = "CQRS087",
         AntwortOhneCommandId = "CQRS108", EmpfaengerId = "CQRS116", OhneGraphId = "CQRS117";
 
     private static DiagnosticDescriptor D(string id, string titel, string text, DiagnosticSeverity s) =>
@@ -48,10 +46,6 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         "'{0}': die Funktion hat keine Umsetzung im Host und kein Client trägt sie (kein verkörperter Akteur mit IDarf<{0}>) — sie läuft nur mit einer Bindung von Hand (GR-GETRAGEN)",
         DiagnosticSeverity.Warning);
 
-    private static readonly DiagnosticDescriptor HinweisOhneErzeuger = D(HinweisOhneErzeugerId, "Gehörter Hinweis ohne Erzeuger",
-        "Die Funktion '{0}' hört den Hinweis '{1}', aber im Hinweis-Netz erzeugt ihn niemand — kein Decide und keine Funktion nennt ihn in der Signatur, kein Client sendet ihn "
-        + "(R20, GR-HINWEIS-NETZ)", DiagnosticSeverity.Error);
-
     private static readonly DiagnosticDescriptor AntwortOhneCommand = D(AntwortOhneCommandId, "Antwort ohne eigenen Command",
         "Die Funktion '{0}' hört '{1}', aber keiner ihrer Commands kann es entscheiden ({2}) — eine Funktion liest nie das Log, ein Event erreicht sie nur "
         + "als Antwort auf einen eigenen Command; was sie aus einer Entscheidung braucht, sagt ihr das Aggregat als Folge (GR-ANTWORT)", DiagnosticSeverity.Error);
@@ -64,7 +58,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         "'{0}' ist in keinem Graphen ein Knoten — sie läuft nie (ein Graph läuft als Instanz, docs/04 §4.4) (GR-GRAPH-KNOTEN)", DiagnosticSeverity.Warning);
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
-        ImmutableArray.Create(Query, AusgangOffen, EingangOffen, Getragen, HinweisOhneErzeuger, AntwortOhneCommand, Empfaenger, OhneGraph);
+        ImmutableArray.Create(Query, AusgangOffen, EingangOffen, Getragen, AntwortOhneCommand, Empfaenger, OhneGraph);
 
     /// <summary>Die Rollen-Marker, deren Implementierung eine Assembly zur Domäne macht (wie die Projektlage des Extractors).</summary>
     private static readonly string[] DomaenenRollen =
@@ -109,7 +103,6 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         IEnumerable<IMethodSymbol> Methoden(INamedTypeSymbol t, string? name = null) => t.GetMembers().OfType<IMethodSymbol>()
             .Where(m => m.MethodKind == MethodKind.Ordinary && m.DeclaredAccessibility == Accessibility.Public && m.Parameters.Length > 0 && (name == null || m.Name == name));
         var erzeugt = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
-        var imNetz = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);   // was ins Hinweis-Netz gelangt: Ausgaben von Decide und Funktionen
         var entschieden = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
         var genommen = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);   // Commands ohne Ziel, die eine Funktion nimmt
         var entscheidet = new Dictionary<ITypeSymbol, HashSet<ITypeSymbol>>(SymbolEqualityComparer.Default);   // Command → was sein Decide ausgeben kann
@@ -131,7 +124,6 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                         entscheidet[m.Parameters[0].Type] = aus = new HashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
                     aus.UnionWith(Faelle(m.ReturnType));
                     erzeugt.UnionWith(Faelle(m.ReturnType));
-                    imNetz.UnionWith(Faelle(m.ReturnType));
                 }
                 // Die Fragen an das Aggregat (docs/03 §3.2, dieselbe Lesart wie Generator und Extractor): Ziel der Query, Erzeuger der Antworten.
                 if (Projektionsform.StateVonDecider(t) is { } state)
@@ -153,17 +145,12 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                 foreach (var a in Funktionsform.Lies(t).Aufs)
                 {
                     erzeugt.UnionWith(a.Ausgaben);
-                    imNetz.UnionWith(a.Ausgaben);
                     if (a.Command) genommen.UnionWith(a.Eingaenge);
                 }
             if (IstT(t, iAkteur))
                 erzeugt.UnionWith(t.AllInterfaces.Where(i => iDarf != null && SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iDarf)).Select(i => i.TypeArguments[0]));
         }
-        foreach (var v in clientVertraege)
-        {
-            erzeugt.UnionWith(v.Sendet);
-            imNetz.UnionWith(v.Sendet);   // ein Hinweis, den ein Client für seinen Akteur sendet, geht ins Hinweis-Netz
-        }
+        foreach (var v in clientVertraege) erzeugt.UnionWith(v.Sendet);
 
         // GR-QUERY und offene Eingänge.
         foreach (var t in typen.Where(t => !t.IsAbstract && t.TypeKind != TypeKind.Interface))
@@ -193,11 +180,6 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
             else if (IstT(t, iResponse) && !erzeugt.Contains(t) && !alsFeld.Contains(t))
                 ctx.ReportDiagnostic(Diagnostic.Create(AusgangOffen, Location.None, t.Name, "Response", "keine Frage eines Readers oder Aggregats nennt sie in ihrer Signatur"));
         }
-
-        // R20: jeder Hinweis, den eine Funktion hört, hat einen Erzeuger im Hinweis-Netz (sonst bekäme ihre Adresse ihn nie).
-        foreach (var f in typen.Where(t => (t.TypeKind == TypeKind.Interface || (t.TypeKind == TypeKind.Class && !t.IsAbstract)) && Funktionsform.IstFunktion(t)))
-            foreach (var a in Funktionsform.Lies(f).Aufs.Where(a => a.Hinweis && !imNetz.Contains(a.Eingang)))
-                ctx.ReportDiagnostic(Diagnostic.Create(HinweisOhneErzeuger, a.Methode.Locations.FirstOrDefault() ?? Location.None, f.Name, a.Eingang.Name));
 
         // GR-ANTWORT: ein Event-Eingang einer Funktion ist eine Antwort — einer ihrer Commands (aus irgendeinem Auf) muss es entscheiden können.
         foreach (var f in typen.Where(t => (t.TypeKind == TypeKind.Interface || (t.TypeKind == TypeKind.Class && !t.IsAbstract)) && Funktionsform.IstFunktion(t)))

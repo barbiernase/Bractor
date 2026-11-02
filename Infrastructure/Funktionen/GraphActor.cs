@@ -98,7 +98,7 @@ public sealed class GraphActor(
             Antworte(context, e, Quittungsart.Gescheitert);
             return;
         }
-        if (e.Art != Eingangsart.Hinweis && _laeufe.Count >= instanz.Laeufe(typ)) { Antworte(context, e, Quittungsart.Spaeter); return; }
+        if (_laeufe.Count >= instanz.Laeufe(typ)) { Antworte(context, e, Quittungsart.Spaeter); return; }
         var o = new Offen(new Lauf(instanz, new LaufKontext(e.Kennung, e.Stream, e.Version, e.Zeit, e.Akteur, e.Korrelation, e.Ursache)), e);
         if (e.Art == Eingangsart.Kette && context.Sender is { } absender) o.Warten.Add(absender);
         else Antworte(context, e, Quittungsart.Angenommen);
@@ -164,7 +164,7 @@ public sealed class GraphActor(
 
     private static void Antworte(IContext context, EingangZustellen e, Quittungsart ausgang)
     {
-        if (e.Art != Eingangsart.Hinweis && context.Sender is not null) context.Respond(new EingangQuittung(e.Kennung, ausgang));
+        if (context.Sender is not null) context.Respond(new EingangQuittung(e.Kennung, ausgang));
     }
 
     /// <summary>Ist der Lauf fertig oder gescheitert, antwortet er den Wartenden und verlässt die Buchführung; danach Sicherung und Rückstau der Quelle.</summary>
@@ -196,7 +196,6 @@ public sealed class GraphActor(
         if (!o.Lauf.Fertig) return;
         _laeufe.Remove(kopf.Kennung);
         foreach (var w in o.Warten) context.Send(w, new EingangQuittung(kopf.Kennung, Quittungsart.Fertig));
-        if (kopf.Art is Eingangsart.Hinweis) return;
         Merke(kopf.Kennung);
         if (kopf.Art == Eingangsart.Durabel && offene is not null)
         {
