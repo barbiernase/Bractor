@@ -117,11 +117,13 @@ public static class Grammatik
             + "einen je Lauf (warten), T? höchstens einen (null, wenn keiner kommt oder das Zeitlimit des Knotens um ist), OneOf<A, B> den ersten (die "
             + "übrigen Zweige brechen ab), IReadOnlyList<T> alle aus den Unterläufen eine Ebene tiefer (ein Strom öffnet je Element einen). Alle Ports eines "
             + "Auf liegen auf einer Ebene; vom nächsten gemeinsamen Vorfahren aus ist ein T-Port hinter einer Wahl T? oder Teil eines OneOf — der Befund nennt "
-            + "den passenden Typ. Ein Typ steht höchstens einmal je Auf (zwei Rollen sind zwei Typen, z. B. BildLinks und BildRechts), so hängt die "
+            + "den passenden Typ. Speisen mehrere genannte Quellen einen T- oder T?-Port, trennen sie verschiedene Fälle einer Wahl (Zusammenfließen); "
+            + "sonst kämen zwei Werte in einem Lauf — wer beide braucht, gibt ihnen eigene Typen und zwei Ports, wer den schnelleren will, ein OneOf. "
+            + "Ein Typ steht höchstens einmal je Auf (zwei Rollen sind zwei Typen, z. B. BildLinks und BildRechts), so hängt die "
             + "Zuordnung nie an der Reihenfolge. Ein Join paart nur Nachrichten desselben Laufs: seine Ports kommen alle von genannten Quellen, zwei Eingänge "
             + "von außen treffen sich nie (wer sie zusammenbringen muss, sammelt sie in einem Vorgangs-Aggregat) (docs/04 §4.4).", "error",
             [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Port-Formen, mehrere Ports nur mit Commands ohne Ziel)"),
-             An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Ebenen, Vielfachheit, ein Typ einmal je Auf, Join halb von außen; Lesart Graphform)")]),
+             An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Ebenen, Vielfachheit, zwei Werte an einem Port, ein Typ einmal je Auf, Join halb von außen; Lesart Graphform)")]),
         new("GR-KOPF", "Kopf: [Kopf] je Eingangstyp genau einer", "Ein Knoten, der von außerhalb des Graphen nimmt (aus einem Decide, von einem Akteur, "
             + "vom Ausgang eines anderen Graphen), trägt [Kopf]; er nimmt von außen, was keine genannte Quelle speist. Je Eingangstyp des Graphen genau ein "
             + "[Kopf], der ihn nimmt — was mehrere brauchen, nimmt einer, die übrigen nennen ihn in [Von]. Ein [Kopf], an dem nichts von außen ankommt, "

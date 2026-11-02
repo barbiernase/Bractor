@@ -185,7 +185,8 @@ public sealed record Schadensbewertung(
 - **Ports und Vielfachheit:** `T` genau einer je Lauf (warten), `T?` höchstens einer (`null`, wenn keiner kommt oder das `Zeitlimit` des Knotens
   abläuft), `OneOf<A, B>` der erste (die übrigen Zweige brechen ab), `IReadOnlyList<T>` alle aus den Unterläufen eine Ebene tiefer. Ein Ausgang `T`
   liefert genau einen, ein `OneOf`-Fall keinen oder einen, ein Strom keinen bis viele — je Element einen Unterlauf. Der Build prüft die Ports vom
-  nächsten gemeinsamen Vorfahren aus und nennt den passenden Typ (CQRS115). Folge, Fork, Wahl, Join, Je, Sammeln, Rennen und Warten mit Frist sind
+  nächsten gemeinsamen Vorfahren aus und nennt den passenden Typ (CQRS115); mehrere genannte Quellen an einem `T`- oder `T?`-Port trennt eine Wahl
+  (Zusammenfließen), sonst kämen zwei Werte in einem Lauf (CQRS115). Folge, Fork, Wahl, Join, Je, Sammeln, Rennen und Warten mit Frist sind
   so Typ-Formen; N von M ist `IReadOnlyList<T>` plus eine Mindestzahl in der Konfig.
 - **Ausgaben:** Commands und Hinweise — kein Event, kein `void`, kein `T?`, kein `ValueTask`; ein leerer Strom heißt „nichts“ (CQRS100). Ein Strom
   (`IAsyncEnumerable`): jede Ausgabe geht hinaus, bevor die nächste kommt.

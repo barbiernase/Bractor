@@ -238,6 +238,41 @@ public class GraphAnalyzerTests
             """)).Should().ContainSingle().Which.Should().Contain("nimmt 'Bild' zweimal in einem Auf ('links', 'rechts')").And.Contain("'BildLinks'");
 
     [Fact]
+    public async Task Zwei_Erzeuger_an_einem_T_Port_ohne_Wahl_dazwischen_sind_ein_Fehler()
+    {
+        const string zwei = """
+            public sealed record Doppelt([Kopf] Lies L, [Von(nameof(L))] Verkleinere Vorschau, [Von(nameof(L))] Verkleinere Daumen,
+                [Von(nameof(Vorschau), nameof(Daumen))] Nimm N) : IGraph;
+            """;
+        (await Befunde(zwei + "public sealed class Nimm : IFunktion { public Buche Auf(Klein k) => default!; }"))
+            .Should().ContainSingle().Which.Should().Contain("'Klein k' in N bekommt in einem Lauf zwei Werte (von Vorschau und Daumen")
+            .And.Contain("zwei Ports (Join)").And.Contain("OneOf<…> (Rennen)");
+        (await Befunde(zwei + "public sealed class Nimm : IFunktion { public Buche Auf(Klein? k) => default!; }"))
+            .Should().ContainSingle("auch T? nimmt höchstens einen").Which.Should().Contain("'Klein? k' in N bekommt in einem Lauf zwei Werte");
+    }
+
+    [Fact]
+    public async Task Zusammenfliessen_hinter_einer_Wahl_ist_still_ein_Join_ohne_Fall_trennt_nicht()
+    {
+        const string wahl = """
+            public record Links(int N) : ICommand;
+            public record Rechts(int N) : ICommand;
+            public sealed class Waehle : IFunktion { public OneOf<Links, Rechts> Auf(Bild b) => default!; }
+            public sealed class AusLinks : IFunktion { public Klein Auf(Links l) => default!; }
+            public sealed class AusRechts : IFunktion { public Klein Auf(Rechts r) => default!; }
+            public sealed class AusBeiden : IFunktion { public Klein Auf(Links? l, Rechts? r) => default!; }
+            """;
+        (await Befunde(wahl + """
+            public sealed record Zusammen([Kopf] Lies L, [Von(nameof(L))] Waehle W, [Von(nameof(W))] AusLinks A, [Von(nameof(W))] AusRechts R,
+                [Von(nameof(A), nameof(R))] Melde M) : IGraph;
+            """)).Should().BeEmpty("A braucht den Fall Links, R den Fall Rechts — im selben Lauf kommt nur einer an");
+        (await Befunde(wahl + """
+            public sealed record Zusammen([Kopf] Lies L, [Von(nameof(L))] Waehle W, [Von(nameof(W))] AusLinks A, [Von(nameof(W))] AusBeiden B,
+                [Von(nameof(A), nameof(B))] Melde M) : IGraph;
+            """)).Should().ContainSingle("B läuft in jedem Fall der Wahl, auch neben A").Which.Should().Contain("zwei Werte (von A und B");
+    }
+
+    [Fact]
     public async Task Zwei_Eingaenge_von_aussen_treffen_sich_nie()
         => (await Befunde("""
             public sealed class Beide : IFunktion { public Buche Auf(Klein k, Kachel x) => default!; }

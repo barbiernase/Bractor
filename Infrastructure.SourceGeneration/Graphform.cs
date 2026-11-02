@@ -19,7 +19,8 @@ namespace Infrastructure.SourceGeneration
     /// Eine Funktion darf mehrfach im Graphen stehen; die Reihenfolge der Parameter bedeutet nichts.
     /// <para>Jede Operation (ein <c>Auf</c>) hat eine EBENE: die Kette der Ströme vom Kopf bis zu ihr (ein Strom öffnet je Element einen Unterlauf). Die
     /// Ports eines Auf liegen auf derselben Ebene (<c>IReadOnlyList&lt;T&gt;</c> sammelt eine tiefer), und ein <c>T</c>-Port hinter einer Wahl (vom
-    /// nächsten gemeinsamen Vorfahren aus) ist <c>T?</c> oder Teil eines <c>OneOf</c> — die Vielfachheit aus den Typen (Entscheidung 5).</para>
+    /// nächsten gemeinsamen Vorfahren aus) ist <c>T?</c> oder Teil eines <c>OneOf</c> — die Vielfachheit aus den Typen (Entscheidung 5); mehrere Erzeuger
+    /// an einem <c>T</c>- oder <c>T?</c>-Port trennt eine Wahl.</para>
     /// </summary>
     internal static class Graphform
     {
@@ -503,7 +504,8 @@ namespace Infrastructure.SourceGeneration
         /// <summary>
         /// Die Vielfachheit eines Joins (Entscheidung 5): vom nächsten gemeinsamen Vorfahren der Ports (einer Nachricht, die oberhalb aller liegt) aus
         /// darf auf dem Weg zu einem <c>T</c>-Port keine Wahl liegen (ein Fall eines OneOf: 0 oder 1) — sonst ist er <c>T?</c> oder Teil eines
-        /// <c>OneOf</c>. Ports aus verschiedenen Köpfen paaren nie (Läufe verschiedener Köpfe kommen nicht zusammen).
+        /// <c>OneOf</c>. Ports aus verschiedenen Köpfen paaren nie (Läufe verschiedener Köpfe kommen nicht zusammen). Umgekehrt nimmt ein <c>T</c>- oder
+        /// <c>T?</c>-Port mehrere Erzeuger nur, wenn verschiedene Fälle einer Wahl sie trennen (Zusammenfließen) — sonst kämen zwei Werte in einem Lauf.
         /// </summary>
         private static void Vielfachheit(Form g)
         {
@@ -528,6 +530,49 @@ namespace Infrastructure.SourceGeneration
                 if (e.VonOperation.Wahlen.Contains(V(e.Typ))) return true;
                 return g.Kanten.Where(x => x.NachOperation == e.VonOperation).Any(u => WahlNach(u, m));
             }
+            // Was sicher gefallen sein muss, damit eine Kante feuert: die Fälle der Wahlen auf jedem Weg zu ihr (ein T- oder Rennen-Port braucht
+            // einen seiner Erzeuger, T? und IReadOnlyList<T> keinen).
+            var noetig = new Dictionary<Operation, HashSet<(Operation, string)>>();
+            HashSet<(Operation, string)> Noetig(Kante e)
+            {
+                var n = new HashSet<(Operation, string)>(NoetigOp(e.VonOperation));
+                if (e.VonOperation.Wahlen.Contains(V(e.Typ))) n.Add((e.VonOperation, V(e.Typ)));
+                return n;
+            }
+            HashSet<(Operation, string)> NoetigOp(Operation op)
+            {
+                if (noetig.TryGetValue(op, out var n)) return n;
+                n = new HashSet<(Operation, string)>();
+                foreach (var p in op.Auf.Ports.Where(p => p.Form is Funktionsform.Portform.Eins or Funktionsform.Portform.Erster))
+                {
+                    HashSet<(Operation, string)>? je = null;
+                    foreach (var e in g.Kanten.Where(x => x.NachOperation == op && x.Port == p))
+                        if (je == null) je = Noetig(e);
+                        else je.IntersectWith(Noetig(e));
+                    if (je != null) n.UnionWith(je);
+                }
+                noetig[op] = n;
+                return n;
+            }
+            // Zwei Kanten schließen sich aus, wenn sie verschiedene Fälle derselben Wahl brauchen.
+            bool Getrennt(Kante a, Kante b)
+            {
+                var nb = Noetig(b);
+                return Noetig(a).Any(m => nb.Any(x => x.Item1 == m.Item1 && x.Item2 != m.Item2));
+            }
+            // Ein T- oder T?-Port nimmt je Lauf höchstens einen Wert: speisen ihn mehrere Erzeuger, kommt im selben Lauf nur einer an (Zusammenfließen
+            // hinter einer Wahl). Sonst kämen zwei, und es gälte der erste — welcher, hinge an der Zeit.
+            foreach (var op in g.Knoten.SelectMany(k => k.Operationen))
+                foreach (var p in op.Auf.Ports.Where(p => p.Form is Funktionsform.Portform.Eins or Funktionsform.Portform.Hoechstens))
+                {
+                    var hinein = g.Kanten.Where(e => e.NachOperation == op && e.Port == p).ToList();
+                    var paar = hinein.SelectMany((a, i) => hinein.Skip(i + 1).Select(b => (a, b))).FirstOrDefault(x => !Getrennt(x.a, x.b));
+                    if (paar.a == null) continue;
+                    g.Fehler.Add(($"'{p.Typen[0].Name}{(p.Form == Funktionsform.Portform.Hoechstens ? "?" : "")} {p.Name}' in {op.Knoten.Name} bekommt in einem "
+                        + $"Lauf zwei Werte (von {paar.a.Von.Name} und {paar.b.Von.Name}, keine Wahl trennt sie) — es gälte der erste, welcher, hinge an der "
+                        + "Zeit; zusammenfließen dürfen nur Fälle einer Wahl. Brauchst du beide, gib ihnen eigene Typen und zwei Ports (Join); willst du den "
+                        + "schnelleren, eigene Typen und OneOf<…> (Rennen)", p.Ort));
+                }
             foreach (var op in g.Knoten.SelectMany(k => k.Operationen).Where(o => o.Auf.Ports.Count > 1))
             {
                 var ports = op.Auf.Ports.Where(p => g.Kanten.Any(e => e.NachOperation == op && e.Port == p)).ToList();
