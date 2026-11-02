@@ -143,7 +143,7 @@ public sealed class FunktionsKindActor(
         List<KnotenAusgabe> ausgaben, List<Task> warten, CancellationToken ct)
     {
         // Die Spur nennt den Schritt des Laufs (Instanz und Knoten) — seine Karte; Herkunft und Ids leiten weiter aus der Funktion ab.
-        using var spur = Spur.Von(ursache, traeger.Instanz is { Length: > 0 } i ? WirkerId.FuerKnoten(i, traeger.Knoten) : WirkerId.FuerFunktion(traeger.Name));
+        using var spur = Spur.Von(ursache, traeger.Instanz is { Length: > 0 } inst ? WirkerId.FuerKnoten(inst, traeger.Knoten) : WirkerId.FuerFunktion(traeger.Name));
         var stelle = 0;
         var strom = traeger.Draussen is { } draussen
             ? draussen(kennung, argumente.Length == 1 ? argumente[0]! : throw new InvalidOperationException($"{traeger.Ort}: draußen rechnet ein Auf mit genau einem Eingang"),
