@@ -7,7 +7,6 @@ using Infrastructure.Aggregate;
 using Infrastructure.Funktionen;
 using Infrastructure.Projections;
 using Infrastructure.Verteilen;
-using Infrastructure.Quellen;
 
 namespace Infrastructure.Serialization;
 
@@ -49,14 +48,15 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(EingangZustellen))]
 [JsonSerializable(typeof(EingangQuittung))]
 [JsonSerializable(typeof(Antwortereignis))]
-[JsonSerializable(typeof(HalteQuelle))]
-[JsonSerializable(typeof(QuelleGehalten))]
 // ── Framework: Ergebnis-Events, Frist (reisen im Wire) ──
 [JsonSerializable(typeof(CommandFailed))]
 [JsonSerializable(typeof(CommandQuittung))]
 [JsonSerializable(typeof(FristGesetzt))]
 [JsonSerializable(typeof(LaufGescheitert))]
 // ── Domänen-Commands/Events/Queries (Domain.*) (gescannt) ──
+[JsonSerializable(typeof(global::Abstractions.Aufruf))]
+[JsonSerializable(typeof(global::Abstractions.DateiGefunden))]
+[JsonSerializable(typeof(global::Abstractions.Takt))]
 [JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.BezahleRechnung))]
 [JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.BucheGutschrift))]
 [JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.Freizugeben))]
@@ -91,7 +91,6 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.VermerkeAbsage))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.VermerkeBelegung))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.VermerkeReservierung))]
-[JsonSerializable(typeof(global::Pruefdomaene.Import.ImportAngefordert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Import.ImportExistiert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Import.ImportGestartet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Import.ImportStandGemeldet))]
@@ -118,6 +117,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Messung.NeuerWert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Messung.SchaetzungVermerkt))]
 [JsonSerializable(typeof(global::Pruefdomaene.Messung.VermerkeSchaetzung))]
+[JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Import.ImportAngefordert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Verteilung.ZielGebucht))]
 [JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Verteilung.ZielZubuchen))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.BuchePostenZu))]

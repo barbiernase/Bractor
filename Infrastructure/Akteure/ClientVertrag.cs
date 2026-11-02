@@ -48,7 +48,7 @@ public sealed record ClientVertrag(
 
         static HashSet<Type> U(IEnumerable<IReadOnlySet<Type>> s) => s.SelectMany(x => x).ToHashSet();
         return new AkteurRechte(Name, Typ,
-            U(teile.Select(t => t.Commands)), U(teile.Select(t => t.Queries)), U(teile.Select(t => t.Quellen)),
+            U(teile.Select(t => t.Commands)), U(teile.Select(t => t.Queries)),
             U(teile.Select(t => t.TransientEvents)), Hoert,
             string.Join("+", teile.Select(t => t.Art).Where(x => x.Length > 0).Distinct()))
         {

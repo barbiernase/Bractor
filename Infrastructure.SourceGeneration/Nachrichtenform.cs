@@ -55,9 +55,14 @@ namespace Infrastructure.SourceGeneration
         /// </summary>
         public static List<INamedTypeSymbol> Alle(Compilation c)
         {
-            var aus = Vertragsassemblies.Typen(c).Where(IstOhneZiel).Distinct(SymbolEqualityComparer.Default).Cast<INamedTypeSymbol>().ToList();
+            var vertrag = c.SourceModule.ReferencedAssemblySymbols.FirstOrDefault(a => a.Name == Vertragsassemblies.Vertrag);
+            var katalog = vertrag == null ? Enumerable.Empty<INamedTypeSymbol>() : Alle(vertrag.GlobalNamespace);   // die Commands des Katalogs (DateiGefunden …)
+            var aus = Vertragsassemblies.Typen(c).Concat(katalog).Where(IstOhneZiel).Distinct(SymbolEqualityComparer.Default).Cast<INamedTypeSymbol>().ToList();
             aus.Sort((a, b) => string.Compare(a.Name, b.Name, System.StringComparison.Ordinal));
             return aus;
         }
+
+        private static IEnumerable<INamedTypeSymbol> Alle(INamespaceSymbol ns) =>
+            ns.GetTypeMembers().Concat(ns.GetNamespaceMembers().SelectMany(Alle));
     }
 }

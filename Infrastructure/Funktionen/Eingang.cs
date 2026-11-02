@@ -19,6 +19,8 @@ public enum Eingangsart
     Kette = 1,
     /// <summary>Ein Hinweis: höchstens einmal, keine Antwort.</summary>
     Hinweis = 2,
+    /// <summary>Ein Element einer Quelle der Instanz selbst (kein Absender wartet; gesichert ist es mit dem Zustand der Quelle).</summary>
+    Quelle = 3,
 }
 
 /// <summary>

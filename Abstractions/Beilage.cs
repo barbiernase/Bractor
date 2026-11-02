@@ -38,12 +38,6 @@ public sealed record FristFaellig(int Version, string Befehl, string Daten, Time
 public sealed record EingangOffen(Guid Kennung, string Instanz, string Typ, string Daten, int Version, string? Akteur, string? Korrelation) : Beilage;
 
 /// <summary>
-/// Die Kennung einer Quell-Nachricht in einem Stream je Schlüssel (docs/11): ihr Vorgang (abgeleitet aus Typ und Kennung)
-/// steht eindeutig im Kennungs-Verzeichnis — ein zweites Melden derselben Kennung scheitert am Schlüssel, nichts wird geschrieben.
-/// </summary>
-public sealed record QuellKennung(Guid Vorgang) : Beilage;
-
-/// <summary>
 /// Der Append trug eine Quittung, deren CommandId die Inbox schon kennt: nichts ist geschrieben. Den Ausgang des ersten Mals liefert
 /// <see cref="IEventStoreRepository.AusgangAsync"/>.
 /// </summary>

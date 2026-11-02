@@ -39,7 +39,6 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Domain.ImagePair.BildPaarGelabelt))]
 [JsonSerializable(typeof(global::Domain.ImagePair.BildRegionGelabelt))]
 [JsonSerializable(typeof(global::Domain.ImagePair.BildVerfuegbar))]
-[JsonSerializable(typeof(global::Domain.ImagePair.DateiErkannt))]
 [JsonSerializable(typeof(global::Domain.ImagePair.EinzelBildDurchKiKlassifiziert))]
 [JsonSerializable(typeof(global::Domain.ImagePair.EinzelBildGelabelt))]
 [JsonSerializable(typeof(global::Domain.ImagePair.ImagePairErstellt))]
@@ -61,6 +60,8 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Domain.Trainingslauf.TrainingFortschritt))]
 [JsonSerializable(typeof(global::Domain.Trainingslauf.TrainingGescheitert))]
 [JsonSerializable(typeof(global::Domain.Trainingslauf.TrainingHaengengeblieben))]
+[JsonSerializable(typeof(global::Core.Katalog.Gesehen))]
+[JsonSerializable(typeof(global::Core.Katalog.Taktstand))]
 public partial class EventJsonSerializerContext : JsonSerializerContext
 {
 }

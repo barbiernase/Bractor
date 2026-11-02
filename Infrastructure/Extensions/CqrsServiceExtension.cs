@@ -207,9 +207,9 @@ public static class CqrsServiceExtensions
             InboxTabelle.Registriere(options);
             // Das Fälligkeits-Verzeichnis der Uhr: je Frist eine Zeile, geschrieben mit ihrem Event.
             Infrastructure.Uhr.FristVerzeichnis.Registriere(options);
-            // Das Kennungs-Verzeichnis der Quellen mit einem Stream je Schlüssel (genau einmal je Kennung, ohne Horizont).
-            Infrastructure.Quellen.QuellKennungen.Registriere(options);
-            // Die offenen Eingänge der Funktionen: je Folge und hörende Funktion eine Zeile, geschrieben mit der Entscheidung (docs/04 §4.4).
+            // Die gesicherten Zustände der Knoten (je Instanz und Knoten eine Zeile, docs/04 §4.4).
+            Infrastructure.Funktionen.ZustandsAblage.Registriere(options);
+            // Die offenen Eingänge der Graphen: je Command ohne Ziel und Instanz, die ihn am Kopf nimmt, eine Zeile (docs/04 §4.4).
             Infrastructure.Eingaenge.OffeneEingaenge.Registriere(options);
             EventZeit.Registriere(options, builder.DbUhr);
 

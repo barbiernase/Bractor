@@ -19,19 +19,6 @@
     "GrpcPort": 5001,
     "EinblickPort": 5002
   },
-  "Quellen": {
-    "DateiErkannt": {
-      "Pfad": "/mnt/unlabeledgewebebilder/SNP/IO",
-      "Intervall": "00:00:01",
-      "Fertig": {
-        "Art": "Stabil",
-        "Fenster": "00:00:01"
-      },
-      "Kennung": "NameGroesse",
-      "Laufmodus": "EinmalImCluster",
-      "Webhook": "/webhook/datei"
-    }
-  },
   "Clients": {
     "Arbeitsplatz": {
       "Urls": "http://localhost:5010",

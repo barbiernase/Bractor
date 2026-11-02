@@ -31,6 +31,11 @@ public sealed class FunktionsParent(
     private readonly Stack<PID> _frei = new();
     private int _kinder;
     private readonly int _parallel = Math.Max(1, konfig.Parallel);
+    private PID? _lauscher;
+    private bool _lauschen;
+
+    /// <summary>So lange wartet der Parent, bevor eine Quelle, deren Lauschen endete, neu beginnt.</summary>
+    public static readonly TimeSpan LauschPause = TimeSpan.FromSeconds(1);
 
     /// <summary>Kein Passivieren mit offenen Aufrufen.</summary>
     protected override bool Beschaeftigt => base.Beschaeftigt || _offen.Count > 0;
@@ -49,6 +54,12 @@ public sealed class FunktionsParent(
             case KnotenAufruf a: Nimm(context, a); break;
             case KindFertig f: Fertig(context, f); break;
             case LaufAbbrechen b: Breche(context, b); break;
+            case Lausche l: Lauschen(context, l.An); break;
+            case LauschenEndete:
+                // Endete der Strom (oder warf die Quelle), beginnt sie nach einer Pause neu — mit dem Stand, den sie zuletzt gesichert fand.
+                if (_lauscher is { } alt) { context.Stop(alt); _lauscher = null; }
+                if (_lauschen) Neben(context, ct => Task.Delay(LauschPause, ct), t => { if (t.IsCompletedSuccessfully && _lauschen) Lauschen(context, true); return Task.CompletedTask; });
+                break;
         }
         return Task.CompletedTask;
     }
@@ -94,8 +105,24 @@ public sealed class FunktionsParent(
         }
         _offen.Remove(f.Kennung);
         if (context.Parent is { } graph)
-            context.Send(graph, new KnotenErgebnis(o.Aufruf, f.Ausgaben, o.Abgebrochen ? null : f.Fehler, o.Abgebrochen));
+            context.Send(graph, new KnotenErgebnis(o.Aufruf, f.Ausgaben, o.Abgebrochen ? null : f.Fehler, o.Abgebrochen, f.Zustand));
         Verteile(context);
+    }
+
+    /// <summary>Die Quelle lauscht in einem eigenen Kind (mit ihrer Aktivierung und ihrem gesicherten Zustand), solange die Instanz hier gehalten wird.</summary>
+    private void Lauschen(IContext context, bool an)
+    {
+        _lauschen = an;
+        if (an && _lauscher is null && context.Parent is { } graph)
+        {
+            _lauscher = context.SpawnNamed(Props.FromProducer(() => neuesKind()), "lauscher-" + Guid.NewGuid().ToString("N")[..6]);
+            context.Send(_lauscher, new KindLausche(graph));
+        }
+        else if (!an && _lauscher is { } l)
+        {
+            context.Stop(l);
+            _lauscher = null;
+        }
     }
 
     private void Breche(IContext context, LaufAbbrechen b)

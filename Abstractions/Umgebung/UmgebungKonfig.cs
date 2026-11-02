@@ -194,7 +194,7 @@ public sealed class StoreKonfig
     public string? Verzeichnis { get; set; }
 }
 
-/// <summary>Die gebundene Umgebung (ohne Quellen und Identitäten — die binden ihre eigenen Abschnitte) mit den Instanzen ihrer Graphen.</summary>
+/// <summary>Die gebundene Umgebung (ohne Identitäten — die binden ihren eigenen Abschnitt) mit den Instanzen ihrer Graphen.</summary>
 public sealed class UmgebungKonfig
 {
     public UmgebungKopf Umgebung { get; set; } = new();
@@ -227,14 +227,14 @@ public sealed class UmgebungKonfig
 public static class UmgebungsAbschnitte
 {
     public const string Umgebung = "Umgebung", EventStore = "EventStore", Cluster = "Cluster",
-        Schreibpfad = "Schreibpfad", Lebenszyklus = "Lebenszyklus", Konsum = "Konsum", Transport = "Transport", Identitaeten = "Identitaeten", Quellen = "Quellen",
+        Schreibpfad = "Schreibpfad", Lebenszyklus = "Lebenszyklus", Konsum = "Konsum", Transport = "Transport", Identitaeten = "Identitaeten",
         Clients = "Clients", Stores = "Stores", Logging = "Logging";
 
     /// <summary>Der Abschnitt, unter den der Lader die Instanz-Dateien hängt (<c>Graphen:&lt;instanz&gt;:…</c>) — er steht nie in <c>umgebung.json</c>.</summary>
     public const string Graphen = "Graphen";
 
     public static readonly IReadOnlyList<string> Alle =
-        [Umgebung, EventStore, Cluster, Schreibpfad, Lebenszyklus, Konsum, Transport, Identitaeten, Quellen, Clients, Stores, Logging];
+        [Umgebung, EventStore, Cluster, Schreibpfad, Lebenszyklus, Konsum, Transport, Identitaeten, Clients, Stores, Logging];
 }
 
 /// <summary>

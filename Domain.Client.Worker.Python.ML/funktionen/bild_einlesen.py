@@ -7,12 +7,12 @@ import asyncio
 import cv2
 
 from cqrs_client.funktion import Herkunft
-from domain_client.generated import BildEingelesenDto, BildNichtLesbarDto, DateiErkanntDto
+from domain_client.generated import BildEingelesenDto, BildNichtLesbarDto, DateiGefundenDto
 from domain_client.generated.funktionen import BildEinlesenBasis
 
 
 class BildEinlesen(BildEinlesenBasis):
-    async def auf_datei_erkannt(self, e: DateiErkanntDto, h: Herkunft) -> BildEingelesenDto | BildNichtLesbarDto:
+    async def auf_datei_gefunden(self, e: DateiGefundenDto, h: Herkunft) -> BildEingelesenDto | BildNichtLesbarDto:
         bild = await asyncio.to_thread(cv2.imread, e.pfad, cv2.IMREAD_COLOR)
         if bild is None:
             return BildNichtLesbarDto(pfad=e.pfad, grund="Datei nicht lesbar (Python)")

@@ -41,7 +41,6 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.AuftragGestartet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.BelegungVermerkt))]
 [JsonSerializable(typeof(global::Pruefdomaene.Auftrag.ReservierungVermerkt))]
-[JsonSerializable(typeof(global::Pruefdomaene.Import.ImportAngefordert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Import.ImportGestartet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Import.ImportStandGemeldet))]
 [JsonSerializable(typeof(global::Pruefdomaene.Kontingent.BelegungAbgelehnt))]
@@ -61,6 +60,8 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.VerteilungAbgeschlossen))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.VerteilungGescheitert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.VerteilungGestartet))]
+[JsonSerializable(typeof(global::Core.Katalog.Gesehen))]
+[JsonSerializable(typeof(global::Core.Katalog.Taktstand))]
 [JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Messung.Zaehlstand))]
 public partial class EventJsonSerializerContext : JsonSerializerContext
 {

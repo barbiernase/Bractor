@@ -23,7 +23,6 @@ internal sealed class BeilagenSchreiber
     private List<string>? _fristBefehle, _fristDaten;
     private List<string?>? _fristAkteure;
     // Kennungen der Quell-Nachrichten in einem Stream je Schlüssel.
-    private List<Guid>? _kennungen, _kennungStreams;
     // Offene Eingänge der Funktionen (Folgen).
     private List<Guid>? _eingaenge, _eingangStreams;
     private List<string>? _eingangFunktionen, _eingangTypen, _eingangDaten;
@@ -41,10 +40,6 @@ internal sealed class BeilagenSchreiber
                     (_commands ??= new()).Add(q.CommandId);
                     (_streams ??= new()).Add(streamId);
                     (_abgelehnt ??= new()).Add(q.Ausgang == KommandoAusgang.Abgelehnt);
-                    break;
-                case QuellKennung k:
-                    (_kennungen ??= new()).Add(k.Vorgang);
-                    (_kennungStreams ??= new()).Add(streamId);
                     break;
                 case EingangOffen e:
                     (_eingaenge ??= new()).Add(e.Kennung);
@@ -80,9 +75,6 @@ internal sealed class BeilagenSchreiber
     {
         if (_kopfStreams is not null) InboxTabelle.PruefeKoepfe(session, store, _kopfStreams, _kopfVersionen!);
         if (_commands is not null) InboxTabelle.Quittiere(session, InboxTabelle.Name(store), _commands, _streams!, _abgelehnt!);
-        if (_kennungen is not null)
-            session.QueueSqlCommand($"insert into {Infrastructure.Quellen.QuellKennungen.Name(store)} (vorgang, stream_id) select * from unnest(?::uuid[], ?::uuid[])",
-                _kennungen.ToArray(), _kennungStreams!.ToArray());
         if (_fristStreams is not null)
             Infrastructure.Uhr.FristVerzeichnis.Lege(session, store, _fristStreams, _fristVersionen!, _fristNach!, _fristBefehle!, _fristDaten!, _fristAkteure!);
         if (_eingaenge is not null)

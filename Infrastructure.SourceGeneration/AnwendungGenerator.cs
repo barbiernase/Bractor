@@ -57,7 +57,6 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine($"        public {K}ITechnikTabelle Technik {{ get; }} = new TechnikTabelle();");
             sb.AppendLine($"        public {K}IAggregatTabelle Aggregate {{ get; }} = new AggregatTabelle();");
             sb.AppendLine("        public IReadOnlyDictionary<Type, global::Infrastructure.Wecken.Weckziel[]> Weckplan => global::Infrastructure.Wecken.GeneratedWeckplan.Plan;");
-            sb.AppendLine("        public IReadOnlyList<global::Infrastructure.Quellen.QuellTyp> Quellen => global::Infrastructure.Quellen.GeneratedQuellen.Alle;");
             sb.AppendLine("        public IReadOnlyList<Type> QueryTypen => global::Infrastructure.Projections.Generated.GeneratedQueryDienst.SupportedQueryTypes;");
             sb.AppendLine("        public global::Cqrs.Leitung.INutzlastTabelle? Nutzlast => " + (nutzlast != null
                 ? $"global::{nutzlast.ToDisplayString()}.Instanz;"

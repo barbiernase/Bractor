@@ -81,6 +81,8 @@ namespace Infrastructure.SourceGeneration
             public List<(Knoten Von, INamedTypeSymbol Typ)> Ausgaenge = new List<(Knoten, INamedTypeSymbol)>();
             /// <summary>Die Signatur: was der Graph nimmt (seine Köpfe) und was er nach außen gibt (Commands ohne Ziel, die kein innerer Knoten nimmt).</summary>
             public List<INamedTypeSymbol> SignaturEin = new List<INamedTypeSymbol>(), SignaturAus = new List<INamedTypeSymbol>();
+            /// <summary>Der Quellknoten (eine Funktion, die lauscht): er ist der Kopf des Graphen, jedes seiner Elemente startet einen Lauf; null = keiner.</summary>
+            public Knoten? Quelle;
             public List<(string Text, Location Ort)> Fehler = new List<(string, Location)>();
 
             /// <summary>Der Kopf für einen Eingangstyp, oder null.</summary>
@@ -144,7 +146,15 @@ namespace Infrastructure.SourceGeneration
             }
             g.SignaturEin = wurzel.Ein.Values.ToList();
             g.SignaturAus = wurzel.Aus.Values.ToList();
-            if (g.Knoten.Count > 0 && g.Koepfe.Count == 0)
+            var quellen = g.Knoten.Where(k => k.Funktion.Lausche != null).ToList();
+            g.Quelle = quellen.FirstOrDefault();
+            if (quellen.Count > 1)
+                g.Fehler.Add(($"der Graph hat {quellen.Count} Quellknoten ({string.Join(", ", quellen.Select(k => k.Name))}) — eine Quelle je Graph: sie ist sein Kopf",
+                    quellen[1].Ort));
+            if (g.Quelle != null && g.Koepfe.Count > 0)
+                g.Fehler.Add(($"der Graph hat den Quellknoten {g.Quelle.Name} und dazu Eingänge ({string.Join(", ", g.Koepfe.Select(k => k.Typ.Name))}) — ein Graph "
+                    + "mit Quelle hat sonst keinen Kopf (was von draußen kommt, nimmt ein eigener Graph)", g.Quelle.Ort));
+            if (g.Knoten.Count > 0 && g.Koepfe.Count == 0 && g.Quelle == null)
                 g.Fehler.Add(("der Graph hat keinen Eingang — jeder Knoten nimmt nur, was ein anderer erzeugt (ein Kreis)", OrtVon(t)));
 
             var kreis = Kreis(g);
@@ -264,7 +274,18 @@ namespace Infrastructure.SourceGeneration
                     foreach (var an in antworten) Nimm(an);
                 k.Operationen.Add(op);
             }
-            foreach (var x in form.Aufs.SelectMany(a => a.Ausgaben))
+            if (form.Lausche is { } l)
+            {
+                // Die Quelle: eine Operation ohne Ports; jedes Element startet einen Lauf (kein Unterlauf — es ist der Kopf).
+                var op = new Operation { Knoten = k, Auf = l, Nummer = form.Aufs.Count };
+                foreach (var x in l.Ausgaben)
+                {
+                    op.Ausgaben.Add(x);
+                    if (l.Wahl) op.Wahlen.Add(V(x));
+                }
+                k.Operationen.Add(op);
+            }
+            foreach (var x in form.Aufs.Concat(form.Lausche != null ? new[] { form.Lausche } : new Funktionsform.Auf[0]).SelectMany(a => a.Ausgaben))
                 if (!k.Ausgaben.Any(y => V(y) == V(x))) k.Ausgaben.Add(x);
             return k;
         }

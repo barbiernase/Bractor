@@ -29,6 +29,10 @@ public sealed record TechnikUmsetzung(Type Technik, string Name, Type Typ, Func<
 public sealed class AktivierungsZustaende
 {
     private readonly Dictionary<string, (FunktionsZustandsform Form, object Zustand)> _je = new(StringComparer.Ordinal);
+    private IReadOnlyDictionary<string, byte[]>? _gesichert;
+
+    /// <summary>Die gesicherten Zustände (Name der Technik → Bytes), mit denen eine Technik beim Bau beginnt (statt frisch).</summary>
+    public void Vorgabe(IReadOnlyDictionary<string, byte[]> gesichert) => _gesichert = gesichert;
 
     /// <summary>Die Zustände des Bereichs — gebaut wird eine Technik mit Zustand nur in der Aktivierung einer Funktion.</summary>
     public static AktivierungsZustaende Von(IServiceProvider sp) => sp.GetService<AktivierungsZustaende>()
@@ -37,7 +41,11 @@ public sealed class AktivierungsZustaende
     /// <summary>Der Zustand der Technik <paramref name="funktion"/> in dieser Aktivierung (beim ersten Mal frisch).</summary>
     public object Hole(string funktion, FunktionsZustandsform form)
     {
-        if (!_je.TryGetValue(funktion, out var z)) _je[funktion] = z = (form, form.Neu());
+        if (!_je.TryGetValue(funktion, out var z))
+        {
+            _je[funktion] = z = (form, form.Neu());
+            if (_gesichert?.TryGetValue(funktion, out var daten) == true) form.Lies(z.Zustand, daten);
+        }
         return z.Zustand;
     }
 

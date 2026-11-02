@@ -7,7 +7,6 @@ using Infrastructure.Aggregate;
 using Infrastructure.Funktionen;
 using Infrastructure.Projections;
 using Infrastructure.Verteilen;
-using Infrastructure.Quellen;
 
 namespace Infrastructure.Serialization;
 
@@ -47,14 +46,15 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(EingangZustellen))]
 [JsonSerializable(typeof(EingangQuittung))]
 [JsonSerializable(typeof(Antwortereignis))]
-[JsonSerializable(typeof(HalteQuelle))]
-[JsonSerializable(typeof(QuelleGehalten))]
 // ── Framework: Ergebnis-Events, Frist (reisen im Wire) ──
 [JsonSerializable(typeof(CommandFailed))]
 [JsonSerializable(typeof(CommandQuittung))]
 [JsonSerializable(typeof(FristGesetzt))]
 [JsonSerializable(typeof(LaufGescheitert))]
 // ── Domänen-Commands/Events/Queries (Domain.*) (gescannt) ──
+[JsonSerializable(typeof(global::Abstractions.Aufruf))]
+[JsonSerializable(typeof(global::Abstractions.DateiGefunden))]
+[JsonSerializable(typeof(global::Abstractions.Takt))]
 [JsonSerializable(typeof(global::Domain.Bildaufbereitung.BildNichtLesbar))]
 [JsonSerializable(typeof(global::Domain.Datensatz.DatensatzBereitsEingefroren))]
 [JsonSerializable(typeof(global::Domain.Datensatz.DatensatzEingefroren))]
@@ -89,7 +89,6 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Domain.ImagePair.BildRegionGelabelt))]
 [JsonSerializable(typeof(global::Domain.ImagePair.BildVerfuegbar))]
 [JsonSerializable(typeof(global::Domain.ImagePair.BildVersionBereitsVerfuegbar))]
-[JsonSerializable(typeof(global::Domain.ImagePair.DateiErkannt))]
 [JsonSerializable(typeof(global::Domain.ImagePair.DateinameUnbekannt))]
 [JsonSerializable(typeof(global::Domain.ImagePair.EinzelBildDurchKiKlassifiziert))]
 [JsonSerializable(typeof(global::Domain.ImagePair.EinzelBildGelabelt))]

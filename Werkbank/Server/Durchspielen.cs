@@ -54,7 +54,7 @@ public sealed partial class Durchspielen(WerkbankServer werkbank)
 
     // ── Datei-Drop auf die Quellkarte ──
 
-    /// <summary>Der Pfad, den der Treiber der Quelle <paramref name="quelle"/> in der gewählten Umgebung beobachtet.</summary>
+    /// <summary>Der Pfad, den der Dateiwächter der Instanz <paramref name="quelle"/> in der gewählten Umgebung beobachtet.</summary>
     public string? QuellPfad(string quelle)
         => werkbank.Umgebungen.QuellPfade(werkbank.Aktiv).GetValueOrDefault(quelle);
 
@@ -64,7 +64,7 @@ public sealed partial class Durchspielen(WerkbankServer werkbank)
     /// </summary>
     public async Task<object> LegeAbAsync(string quelle, string dateiname, Stream inhalt, CancellationToken ct)
     {
-        var pfad = QuellPfad(quelle) ?? throw new InvalidOperationException($"Umgebung {werkbank.Aktiv}: kein Abschnitt Quellen:{quelle}:Pfad.");
+        var pfad = QuellPfad(quelle) ?? throw new InvalidOperationException($"Umgebung {werkbank.Aktiv}: die Instanz {quelle} hat keinen Dateiwächter mit Pfad.");
         var name = Path.GetFileName(dateiname);
         if (string.IsNullOrWhiteSpace(name)) throw new ArgumentException("Dateiname fehlt.");
         Directory.CreateDirectory(pfad);

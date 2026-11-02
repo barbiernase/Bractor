@@ -4,7 +4,7 @@ using Pruefdomaene.Import;
 namespace Pruefdomaene.Pipeline.Import;
 
 /// <summary>
-/// Eine gleichbleibende Funktion auf einer Quell-Nachricht: die Anforderung startet den Import — seine Id ist aus der Herkunft abgeleitet (R13), also beim
+/// Eine gleichbleibende Funktion am Kopf: die Anforderung (ein Command von draußen) startet den Import — seine Id ist aus der Herkunft abgeleitet (R13), also beim
 /// Wiederholen dieselbe, und die Inbox des Importauftrags verwirft das Zweite.
 /// </summary>
 public sealed class Importannahme : IFunktion

@@ -28,7 +28,6 @@
         <Compile Include="..\Infrastructure.SourceGeneration\Funktionsform.cs" Link="Vertrag\Funktionsform.cs" />
         <Compile Include="..\Infrastructure.SourceGeneration\Graphform.cs" Link="Vertrag\Graphform.cs" />
         <Compile Include="..\Infrastructure.SourceGeneration\Nachrichtenform.cs" Link="Vertrag\Nachrichtenform.cs" />
-        <Compile Include="..\Abstractions\Quellen\Treibervertrag.cs" Link="Vertrag\Treibervertrag.cs" />
         <Compile Include="..\Abstractions\Kodehash.cs" Link="Vertrag\Kodehash.cs" />
         <Compile Include="..\Abstractions\Spur\WirkerId.cs" Link="Vertrag\WirkerId.cs" />
         <!-- Die Projekt- und Ordnerstruktur (docs/07) und die Funktions-Methode: eine Quelle mit Codegen, Extractor, Werkbank. -->

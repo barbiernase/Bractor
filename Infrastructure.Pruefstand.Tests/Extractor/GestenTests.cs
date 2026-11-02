@@ -150,14 +150,14 @@ public sealed class GestenTests : IDisposable
     [Fact]
     public async Task Record_loeschen_entfernt_die_Deklaration_samt_Kommentar()
     {
-        Text("Fluss.cs").Should().Contain("public sealed record AusweisAbgelegt : DateiGemeldet;");
+        Text("Fluss.cs").Should().Contain("public sealed record AusweisAbgelegt(string Pfad) : ICommand;");
 
         var bericht = await GesteAsync(new KartenDelta { Entfernt = new() { ["records"] = ["Leihwesen.Pruefung|AusweisAbgelegt"] } });
 
         bericht.Geloescht.Should().ContainSingle();
-        Text("Fluss.cs").Should().NotContain("AusweisAbgelegt").And.NotContain("Eine Quelle mit fest codiertem Treiber",
+        Text("Fluss.cs").Should().NotContain("AusweisAbgelegt").And.NotContain("Ein Command ohne Ziel von draußen",
             "der Kommentar über der Deklaration geht mit");
-        Text("Fluss.cs").Should().Contain("public sealed record RueckgabeGescannt(Guid LeserId, string Code, IReadOnlyList<string> Seiten) : IQuellNachricht");
+        Text("Fluss.cs").Should().Contain("public sealed record RueckgabeGescannt(Guid LeserId, string Code, IReadOnlyList<string> Seiten) : ICommand;");
     }
 
     [Fact]

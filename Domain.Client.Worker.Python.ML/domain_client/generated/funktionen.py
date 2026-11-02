@@ -15,7 +15,7 @@ from . import (
     BildEingelesenDto,
     BildNichtLesbarDto,
     BildVerkleinertDto,
-    DateiErkanntDto,
+    DateiGefundenDto,
     KlassifiziereBildPaarDurchKiDto,
     MeldeFortschrittDto,
     MeldeTrainingAbgeschlossenDto,
@@ -28,16 +28,16 @@ from . import (
 
 
 class BildEinlesenBasis(FunktionsBasis):
-    """Funktion Domain.Pipeline.Bildaufbereitung.IBildEinlesen: DateiErkannt → BildEingelesen | BildNichtLesbar."""
+    """Funktion Domain.Pipeline.Bildaufbereitung.IBildEinlesen: DateiGefunden → BildEingelesen | BildNichtLesbar."""
 
     FUNKTION: ClassVar[str] = "IBildEinlesen"
     EINGAENGE: ClassVar[dict] = {
-        DateiErkanntDto: Eingang("auf_datei_erkannt", {BildEingelesenDto: Ausgabe.ZWISCHENERGEBNIS, BildNichtLesbarDto: Ausgabe.HINWEIS}),
+        DateiGefundenDto: Eingang("auf_datei_gefunden", {BildEingelesenDto: Ausgabe.ZWISCHENERGEBNIS, BildNichtLesbarDto: Ausgabe.HINWEIS}),
     }
 
     @abstractmethod
-    async def auf_datei_erkannt(self, e: DateiErkanntDto, h: Herkunft) -> BildEingelesenDto | BildNichtLesbarDto | None:
-        """OneOf<BildEingelesen, BildNichtLesbar> Auf(DateiErkannt e) — höchstens eine Ausgabe"""
+    async def auf_datei_gefunden(self, e: DateiGefundenDto, h: Herkunft) -> BildEingelesenDto | BildNichtLesbarDto | None:
+        """OneOf<BildEingelesen, BildNichtLesbar> Auf(DateiGefunden e) — höchstens eine Ausgabe"""
         ...
 
 

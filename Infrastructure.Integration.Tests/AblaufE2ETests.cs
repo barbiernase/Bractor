@@ -9,7 +9,6 @@ using Infrastructure.Extensions;
 using Infrastructure.Funktionen;
 using Infrastructure.GrpcClient;
 using Infrastructure.Projections.Generated;
-using Infrastructure.Quellen;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -23,20 +22,21 @@ namespace Infrastructure.Integration.Tests;
 
 /// <summary>
 /// Ebene 2 — die ABLÄUFE der Beispieldomäne gegen echtes Marten/Consul: Aggregate entscheiden,
-/// Funktionen tragen die Kanten Event → Command, Fristen tragen die Zeit — ohne Dirigent. Der Bildeingang läuft über die ganze Kette —
+/// Funktionen in Graphen tragen die Kanten, Fristen tragen die Zeit — ohne Dirigent. Der Bildeingang läuft über den ganzen Linienimport —
 ///
-///   Quell-Nachricht ──QuellEingang (StartStream je Kennung, offener Eingang, Commit gemeldet)──▶ ƒ IBildEinlesen ──BildEingelesen──▶ ƒ IBildVerkleinerung
-///     ──BildVerkleinert──▶ ƒ IKontrastausgleich (OpenCV im Host bzw. Python-Worker über gRPC; Zwischenergebnisse, nie im Log) ──VorschauErstellt──▶
-///     ƒ Bildeingang (gleichbleibend) ──NimmBildAuf──▶ ImagePair („anlegen oder ergänzen“).
+///   Datei im Verzeichnis ──ƒ Dateiwaechter (Katalog, Zustand gesichert)──DateiGefunden──▶ ƒ IBildEinlesen ──BildEingelesen──┬─▶ ƒ IBildVerkleinerung
+///     ──BildVerkleinert──▶ ƒ IKontrastausgleich (OpenCV im Host bzw. Python-Worker über gRPC) ──VorschauErstellt──┐                               │
+///     ƒ Bildeingang (Join, gleichbleibend) ◀───────────────────────────────────────────────────────────────────┴───────────────────────────────┘
+///     ──NimmBildAuf──▶ ImagePair („anlegen oder ergänzen“).
 ///
-/// Beweiskraft: das Paar bekommt BildVerfuegbar mit einer Vorschau, die NUR die Kette der Bildaufbereitung erzeugt; die Spur führt bis zur Quelle;
-/// dieselbe Datei zweimal steht genau einmal im Log. Im zweiten Test rechnet ein Python-Worker den letzten Schritt,
+/// Beweiskraft: das Paar bekommt BildVerfuegbar mit einer Vorschau, die NUR die Bildaufbereitung erzeugt; die Spur führt zum Lauf der Quelle; eine
+/// Datei ist nach einem Neustart nicht noch einmal ein Lauf. Im zweiten Test rechnet ein Python-Worker den letzten Schritt,
 /// den er über gRPC anbietet — sein Kennzeichen („_py") muss im Fakt landen.
 /// </summary>
 public class AblaufE2ETests
 {
     /// <summary>Die Host-Verdrahtung wie Host.Grpc: Framework (samt Graphen und Uhr), Projektionen, je Graph eine Instanz, Technik mit den Werten ihrer Knoten.</summary>
-    private static void Verdrahte(IServiceCollection s, string ausgabe, string cluster, bool grpc, FunktionsLaufort kontrastausgleich)
+    private static void Verdrahte(IServiceCollection s, string ausgabe, string cluster, bool grpc, FunktionsLaufort kontrastausgleich, string? eingang = null)
     {
         s.AddCqrsFramework(opts => { opts.EnableGrpc = grpc; opts.ClusterName = cluster; });
         s.AddGeneratedPullPaths();   // die Projektionen füllen die Read-Models, die die Datensatz-Funktionen lesen
@@ -51,81 +51,76 @@ public class AblaufE2ETests
             [nameof(IBildEinlesen)] = Bild(FunktionsLaufort.Host, false),
             [nameof(IBildVerkleinerung)] = Bild(FunktionsLaufort.Host, true),
             [nameof(IKontrastausgleich)] = Bild(kontrastausgleich, true),
-        });
+        }.Concat(eingang is null ? [] : [new KeyValuePair<string, KnotenKonfig>(nameof(Core.Katalog.Dateiwaechter), Waechter(eingang))])
+            .ToDictionary(x => x.Key, x => x.Value));
         s.AddSingleton(instanzen);
         TechnikExtensions.BindeTechnik(s, instanzen);
     }
 
-    /// <summary>Ein echtes, kleines TIFF (OpenCV liest es) im Eingangs-Verzeichnis.</summary>
-    private static DateiErkannt Datei(string verzeichnis, DateTimeOffset t, BildVersion v)
+    /// <summary>Der Dateiwächter des Linienimports auf <paramref name="eingang"/> (*.tiff, schnell: Scan alle 200 ms, fertig nach 300 ms Ruhe).</summary>
+    private static KnotenKonfig Waechter(string eingang)
+    {
+        var k = new KnotenKonfig();
+        k.Werte["Pfad"] = eingang;
+        k.Werte["Muster:0"] = "*.tiff";
+        k.Werte["Intervall"] = "00:00:00.200";
+        k.Werte["Fenster"] = "00:00:00.300";
+        return k;
+    }
+
+    /// <summary>Ein echtes, kleines TIFF (OpenCV liest es) — geschrieben in <paramref name="verzeichnis"/>; Name und Pfad.</summary>
+    private static (string Name, string Pfad) Datei(string verzeichnis, DateTimeOffset t, BildVersion v)
     {
         var name = $"{t:yyyy_MM_dd_HH_mm_ss_fff}_{v.ToString().ToUpperInvariant()}.tiff";
         var pfad = Path.Combine(verzeichnis, name);
+        Directory.CreateDirectory(verzeichnis);
         using (var bild = new Mat(48, 64, MatType.CV_8UC3, new Scalar(30, 120, 200))) Cv2.ImWrite(pfad, bild);
-        return new DateiErkannt
-        {
-            Name = name, Pfad = pfad, RelativerPfad = name, Groesse = new FileInfo(pfad).Length, GeaendertAm = t, ErkanntAm = t,
-            Kennung = $"{name}|{new FileInfo(pfad).Length}",
-        };
+        return (name, pfad);
     }
 
     private static DateTimeOffset Zufallszeit(int tag) =>
         new DateTimeOffset(2026, 10, tag, 8, 0, 0, Random.Shared.Next(0, 999), TimeSpan.Zero).AddMinutes(Random.Shared.Next(0, 100000));
 
     [Fact]
-    public async Task Bildeingang_Quelle_bis_Fakt_ueber_die_Kette_der_Bildaufbereitung_und_Bildeingang()
+    public async Task Bildeingang_vom_Dateiwaechter_bis_Fakt_ueber_den_Linienimport()
     {
         var verzeichnis = Path.Combine(Path.GetTempPath(), "ablauf-e2e-" + Guid.NewGuid().ToString("N"));
         var ausgabe = Path.Combine(verzeichnis, "vorschau");
-        Directory.CreateDirectory(verzeichnis);
+        var eingang = Path.Combine(verzeichnis, "ein");
+        Directory.CreateDirectory(eingang);
         var builder = Host.CreateApplicationBuilder();
-        Verdrahte(builder.Services, ausgabe, "ablauf-e2e-" + Guid.NewGuid().ToString("N")[..8], grpc: false, FunktionsLaufort.Host);
+        Verdrahte(builder.Services, ausgabe, "ablauf-e2e-" + Guid.NewGuid().ToString("N")[..8], grpc: false, FunktionsLaufort.Host, eingang);
 
         using var host = builder.Build();
         await host.StartAsync();
         try
         {
             var es = host.Services.GetRequiredService<IEventStoreRepository>();
-            var eingang = QuellEingang.Live(host.Services);
             var t = Zufallszeit(8);
-            var dc0 = Datei(verzeichnis, t, BildVersion.Dc0);
-            var dc2 = Datei(verzeichnis, t, BildVersion.Dc2);
+            var dc0 = Datei(eingang, t, BildVersion.Dc0);
+            Datei(eingang, t, BildVersion.Dc2);
             var paar = ImagePairFileName.Resolve(dc0.Name)!.AggregateId.Wert;
 
-            var vorgang = await eingang.NimmAufAsync(dc0, default);
-            (await eingang.NimmAufAsync(dc0 with { }, default)).Should().Be(vorgang, "dieselbe Datei steht genau einmal im Log");
-            await eingang.NimmAufAsync(dc2, default);
-
             await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is ImagePairKomplett), TimeSpan.FromSeconds(60),
-                "Das Paar wurde nicht komplett — die Kette Quelle → Einlesen → Verkleinern → Kontrastausgleich → Bildeingang → ImagePair lief nicht durch.");
+                "Das Paar wurde nicht komplett — Dateiwächter → Einlesen → (Verkleinern → Kontrast) ∥ Bildeingang → ImagePair lief nicht durch.");
             await Task.Delay(TimeSpan.FromSeconds(2));
 
             var stream = await es.ReadStreamAsync(paar, 0, default);
             stream.Should().ContainSingle(e => e.Payload is ImagePairErstellt);
             stream.Should().ContainSingle(e => e.Payload is ImagePairKomplett);
             var bilder = stream.Select(e => e.Payload).OfType<BildVerfuegbar>().ToList();
-            bilder.Select(b => b.Version).Should().BeEquivalentTo(new[] { BildVersion.Dc0, BildVersion.Dc2 });
+            bilder.Select(b => b.Version).Should().BeEquivalentTo(new[] { BildVersion.Dc0, BildVersion.Dc2 }, "je Datei genau ein Lauf");
             bilder.Single(b => b.Version == BildVersion.Dc0).Pfad.Should().Be(Path.Combine(ausgabe, Path.GetFileNameWithoutExtension(dc0.Name) + "_vorschau.png"),
-                "die Vorschau entsteht nur durch die Kette der Bildaufbereitung (OpenCV im Host)");
+                "die Vorschau entsteht nur durch die Bildaufbereitung (OpenCV im Host)");
             File.Exists(bilder[0].Pfad).Should().BeTrue();
             bilder.Single(b => b.Version == BildVersion.Dc0).Meta.HoehePixel.Should().Be(OpenCvBildVerkleinerung.VorschauHoehe);
 
-            // Spur: von BildVerfuegbar führt die Ursache direkt zur Quelle (die Kette reist mit den Eingängen); der Command trägt die letzte Funktion.
+            // Spur: der Command trägt den letzten Knoten; seine Ursache ist der Lauf der Quelle (Instanz und Nummer) — ein Quell-Command steht nie im Log.
             var bildEnv = stream.First(e => e.Payload is BildVerfuegbar);
             bildEnv.Wirker.Should().Be("decide:ImagePair/NimmBildAuf");
             bildEnv.Ueber.Should().Be("funktion:Bildeingang", "der Absender des Commands ist die Funktion, die ihn ausgab");
-            var kette = new List<EventEnvelope> { bildEnv };
-            var schritt = bildEnv;
-            while (schritt.Ursache is { } ursache && kette.Count < 20)
-            {
-                Spur.ZerlegeUrsache(ursache, out var s, out var v).Should().BeTrue($"'{ursache}' ist eine Ursache");
-                schritt = (await es.ReadStreamAsync(s, (int)v, default)).First(e => e.AggregateVersion == v);
-                kette.Add(schritt);
-            }
-            schritt.Payload.Should().BeOfType<DateiErkannt>("die Kette endet an der Quelle: " + string.Join(" ← ", kette.Select(e => e.Wirker)));
-            schritt.Wirker.Should().Be("quelle:DateiErkannt");
-            kette.Should().HaveCount(2, "die Schritte stehen vor dem Aggregat: ihre Zwischenergebnisse gehen nie ins Log, die Ursache des Commands ist die Quell-Nachricht");
-
+            Spur.ZerlegeUrsache(bildEnv.Ursache, out var quelle, out _).Should().BeTrue();
+            quelle.Should().Be(Herkunft.Ableite("quelle:Linienimport"), "die Ursache ist der Lauf der Quelle der Instanz");
         }
         finally
         {
@@ -152,8 +147,10 @@ public class AblaufE2ETests
         builder.Logging.ClearProviders();
         builder.WebHost.ConfigureKestrel(o => o.Listen(IPAddress.Loopback, port, l => l.Protocols = HttpProtocols.Http2));
         builder.Services.AddGrpc();
+        var eingangPy = Path.Combine(verzeichnis, "ein");
+        Directory.CreateDirectory(eingangPy);
         Verdrahte(builder.Services, Path.Combine(verzeichnis, "vorschau"), "ablauf-py-" + Guid.NewGuid().ToString("N")[..8], grpc: true,
-            FunktionsLaufort.Extern);
+            FunktionsLaufort.Extern, eingangPy);
         var app = builder.Build();
         app.MapCqrsGrpcService();
         await app.StartAsync();
@@ -179,9 +176,8 @@ public class AblaufE2ETests
                 "Der Python-Worker hat sich nicht angemeldet:\n" + string.Join("\n", ausgabe));
 
             var es = app.Services.GetRequiredService<IEventStoreRepository>();
-            var datei = Datei(verzeichnis, Zufallszeit(9), BildVersion.Dc2);
+            var datei = Datei(eingangPy, Zufallszeit(9), BildVersion.Dc2);
             var paar = ImagePairFileName.Resolve(datei.Name)!.AggregateId.Wert;
-            await QuellEingang.Live(app.Services).NimmAufAsync(datei, default);
 
             await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is BildVerfuegbar), TimeSpan.FromSeconds(90),
                 "Kein BildVerfuegbar — der Python-Worker hat den Eingang nicht geholt/beantwortet:\n" + string.Join("\n", ausgabe));
@@ -271,13 +267,13 @@ public class AblaufE2ETests
     }
 
     /// <summary>
-    /// P1 (docs/04 §4.7): der echte Datei-Treiber gegen ein Temp-Verzeichnis — eine Datei steht genau einmal im Log und führt bis
-    /// BildVerfuegbar; nach einem Neustart (neuer Host, derselbe Log) gleicht der Treiber gebündelt mit dem Log ab und meldet nichts erneut. Läuft im
-    /// Default-Laufmodus EinmalImCluster (Lease über die Cluster-Identität quelle/DateiErkannt).
+    /// P1 (docs/04 §4.7, Entscheidungen 8 und 9): der Dateiwächter des Katalogs gegen ein Temp-Verzeichnis — eine Datei führt in genau einem Lauf bis
+    /// BildVerfuegbar; nach einem Neustart (neuer Host, dieselbe Datenbank) hat der Wächter seinen gesicherten Zustand und meldet nichts erneut. Die
+    /// Quellinstanz läuft genau einmal im Cluster (mit der Sperre der Instanz).
     /// </summary>
     [Trait("Kategorie", "Garantie")]
     [Fact]
-    public async Task Datei_Treiber_meldet_eine_Datei_genau_einmal_auch_nach_Neustart()
+    public async Task Dateiwaechter_meldet_eine_Datei_genau_einmal_auch_nach_Neustart()
     {
         var verzeichnis = Path.Combine(Path.GetTempPath(), "quelle-e2e-" + Guid.NewGuid().ToString("N"));
         var eingangsOrdner = Path.Combine(verzeichnis, "ein");
@@ -285,23 +281,13 @@ public class AblaufE2ETests
         IHost Baue()
         {
             var builder = Host.CreateApplicationBuilder();
-            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Quellen:DateiErkannt:Pfad"] = eingangsOrdner,
-                ["Quellen:DateiErkannt:Muster:0"] = "*.tiff",
-                ["Quellen:DateiErkannt:Intervall"] = "00:00:00.200",
-                ["Quellen:DateiErkannt:Fertig:Fenster"] = "00:00:00.300",
-            });
             Verdrahte(builder.Services, Path.Combine(verzeichnis, "vorschau"), "quelle-e2e-" + Guid.NewGuid().ToString("N")[..8], grpc: false,
-                FunktionsLaufort.Host);
-            builder.Services.AddQuellen(builder.Configuration);
+                FunktionsLaufort.Host, eingangsOrdner);
             return builder.Build();
         }
 
         var t = Zufallszeit(12);
-        var vorlage = Path.Combine(verzeichnis, "vorlage");
-        Directory.CreateDirectory(vorlage);
-        var datei = Datei(vorlage, t, BildVersion.Dc0);
+        var datei = Datei(Path.Combine(verzeichnis, "vorlage"), t, BildVersion.Dc0);
         var paar = ImagePairFileName.Resolve(datei.Name)!.AggregateId.Wert;
         try
         {
@@ -313,8 +299,10 @@ public class AblaufE2ETests
                     var es = host.Services.GetRequiredService<IEventStoreRepository>();
                     File.Copy(datei.Pfad, Path.Combine(eingangsOrdner, datei.Name));
                     await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is BildVerfuegbar), TimeSpan.FromSeconds(60),
-                        "Die Datei führte nicht bis BildVerfuegbar — Treiber → QuellEingang → Funktionen lief nicht durch.");
-                    host.Services.GetRequiredService<QuellenZustand>().Meldungen("DateiErkannt").Should().Be(1);
+                        "Die Datei führte nicht bis BildVerfuegbar — Dateiwächter → Bildaufbereitung lief nicht durch.");
+                    var ablage = host.Services.GetRequiredService<IZustandsAblage>();
+                    await Warte(async () => await ablage.LadeAsync("Linienimport", "Eingang", default) is { Nummer: 1 }, TimeSpan.FromSeconds(30),
+                        "Der Zustand des Wächters wurde nach dem fertigen Lauf nicht gesichert.");
                 }
                 finally { await host.StopAsync(); }
             }
@@ -324,13 +312,12 @@ public class AblaufE2ETests
                 await host.StartAsync();
                 try
                 {
-                    var zustand = host.Services.GetRequiredService<QuellenZustand>();
-                    await Warte(() => Task.FromResult(zustand.Alle.ContainsKey("DateiErkannt")), TimeSpan.FromSeconds(30),
-                        "Der Treiber hat nach dem Neustart nicht gescannt (Lease nicht bekommen?).");
-                    await Task.Delay(1500);   // mehrere Scans über die Fertig-Fenster hinaus
-                    zustand.Meldungen("DateiErkannt").Should().Be(0, "der Start-Abgleich mit dem Log kennt die Datei schon");
+                    await Task.Delay(TimeSpan.FromSeconds(3));   // viele Scans über das Fertig-Fenster hinaus
                     var es = host.Services.GetRequiredService<IEventStoreRepository>();
                     (await es.ReadStreamAsync(paar, 0, default)).Count(e => e.Payload is ImagePairErstellt).Should().Be(1);
+                    (await es.ReadStreamAsync(paar, 0, default)).Count(e => e.Payload is BildVerfuegbar).Should().Be(1,
+                        "der gesicherte Zustand kennt die Datei — kein zweiter Lauf");
+                    (await host.Services.GetRequiredService<IZustandsAblage>().LadeAsync("Linienimport", "Eingang", default))!.Nummer.Should().Be(1);
                 }
                 finally { await host.StopAsync(); }
             }

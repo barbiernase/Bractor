@@ -14,7 +14,7 @@ namespace Infrastructure.Pruefstand.Funktionen;
 
 /// <summary>
 /// Funktion als Baustein (docs/04 §4.4, docs/10 §10.3): der <c>FunktionsBausteinGenerator</c> liest NUR Signaturen — je Eingang (Folge,
-/// Zwischenergebnis, Quell-Nachricht, Hinweis, Antwort) ein <c>Auf</c>, Herkunft, Lese-Fähigkeiten, freie Ausgabe (konkret, OneOf, T?, Strom, je auch als
+/// Hinweis, Antwort) ein <c>Auf</c>, Herkunft, Lese-Fähigkeiten, freie Ausgabe (konkret, OneOf, T?, Strom, je auch als
 /// Task) — und erzeugt die Rechnung, die Verkettung und die Bausteine-Tabelle. Jede erlaubte Form muss als Generat kompilieren; was nicht passt, ist
 /// CQRS100/101.
 /// </summary>
@@ -31,7 +31,6 @@ public sealed record Bezahlt(decimal Betrag) : ICommand;
 public sealed record Gebucht(int Stufe) : IEvent;
 public sealed record Unnoetig() : ITransientEvent;
 public sealed record Messwert(double Wert) : ITransientEvent;
-public sealed record Datei : DateiGemeldet;
 public interface ISucheKonto : IReadStore { Task<int> StufeAsync(Guid konto); }
 public interface ISchreibeKonto : IWriteStore { Task SetzeAsync(Guid konto); }
 public interface IPost { Task SendeAsync(string an); }
@@ -188,6 +187,35 @@ public interface IPost { Task SendeAsync(string an); }
     }
 
     [Fact]
+    public void Eine_Quellfunktion_lauscht_ihre_Rechnung_ruft_Lausche_unter_der_Nummer_hinter_den_Auf()
+    {
+        var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
+            public sealed class Wecker : IFunktion
+            {
+                public async IAsyncEnumerable<OneOf<Ueberfaellig, Unnoetig>> Lausche([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+                { await Task.CompletedTask; yield break; }
+            } }");
+
+        ids.Should().BeEmpty();
+        fehler.Should().BeEmpty();
+        quelle.Should().Contain("\"Wecker\", Draussen: false,").And.Contain("Lausche: 0)");
+        quelle.Should().Contain("case 0: return Ausgaben.StromAsync(f.Lausche(ct), y => (object?)y.Value, ct);");
+    }
+
+    [Theory]
+    [InlineData("public IEnumerable<Ueberfaellig> Lausche(CancellationToken ct) => [];", "kein asynchroner Strom")]
+    [InlineData("public async IAsyncEnumerable<Ueberfaellig> Lausche() { await Task.CompletedTask; yield break; }", "ohne Abbruch")]
+    [InlineData("public async IAsyncEnumerable<Mahne> Lausche(CancellationToken ct) { await Task.CompletedTask; yield break; }", "ein Command an ein Aggregat")]
+    [InlineData("public async IAsyncEnumerable<Ueberfaellig> Lausche(CancellationToken ct) { await Task.CompletedTask; yield break; } "
+        + "public Mahne Auf(Bezahlt b) => null!;", "Lausche und Auf")]
+    public void Eine_Quellfunktion_ausser_Form_ist_CQRS100(string methoden, string worum)
+    {
+        var (quelle, ids, _) = Bausteine("namespace Probe { public sealed class Falsch : IFunktion { " + methoden + " } }");
+        ids.Should().Contain("CQRS100", worum);
+        quelle.Should().NotContain("\"Falsch\", Draussen");
+    }
+
+    [Fact]
     public void Eine_Funktion_mit_Hinweis_als_Eingang_steht_vor_dem_Aggregat()
     {
         var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
@@ -258,7 +286,7 @@ public interface IPost { Task SendeAsync(string an); }
     [InlineData("public Mahne Auf(Mahne c) => null!;", "Eingang")]                                           // Command an ein Aggregat als Eingang
     [InlineData("public IEvent Auf(Ueberfaellig e) => null!;", "Ausgabe")]                                    // Schnittstelle als Ausgabe
     [InlineData("public Mahne Auf(Ueberfaellig e, ISchreibeKonto s) => null!;", "Parameter")]                 // Schreib-Fähigkeit
-    [InlineData("public Datei Auf(Ueberfaellig e) => null!;", "Quell-Nachricht")]                             // Quell-Nachricht als Ausgabe
+    [InlineData("public Gebucht Auf(Ueberfaellig e) => null!;", "Event")]                             // Quell-Nachricht als Ausgabe
     [InlineData("public void Auf(Ueberfaellig e) { }", "Ausgabe")]                                          // nichts
     [InlineData("public Task Auf(Ueberfaellig e) => Task.CompletedTask;", "Ausgabe")]                       // nichts, asynchron
     [InlineData("public Mahne? Auf(Ueberfaellig e) => null;", "nullable")]                                   // T? — „nichts“ ist ein leerer Strom

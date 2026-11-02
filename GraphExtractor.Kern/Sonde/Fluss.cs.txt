@@ -4,7 +4,7 @@ using Leihwesen.Gebuehren;
 using Leihwesen.Lesen;
 
 // SONDE — ein ABLAUF ohne Fluss-Sprache (docs/10 §10.3; früher ein Fluss mit Je/Sammle, ∧/∨, ⏳ und ✕): Vorgangs-Aggregat + Funktionen + Frist.
-//         · eine eigene Quell-Nachricht (IQuellNachricht, Kennung vom Client) und eine Quelle mit fest codiertem Treiber (DateiGemeldet);
+//         · ein Command ohne Ziel von draußen am Kopf des Prüf-Graphen (ein Akteur gibt ihn hinein) und ein zweiter, den niemand nimmt;
 //         · der Start als gleichbleibende Funktion (neue Id aus der Herkunft, R13);
 //         · der Vorgang als ZÄHL-AGGREGAT (keine Collection im Zustand): Fan-out über eine Funktion draußen, die als STROM je Seite einen
 //           Command liefert, Fan-in durch Zählen im Aggregat; das Rennen gegen die Zeit ist eine FRIST desselben Aggregats;
@@ -12,13 +12,10 @@ using Leihwesen.Lesen;
 
 namespace Leihwesen.Pruefung;
 
-public sealed record RueckgabeGescannt(Guid LeserId, string Code, IReadOnlyList<string> Seiten) : IQuellNachricht
-{
-    public string Kennung => Code;
-}
+public sealed record RueckgabeGescannt(Guid LeserId, string Code, IReadOnlyList<string> Seiten) : ICommand;
 
-// Eine Quelle mit fest codiertem Treiber (docs/04 §4.7): nur der Typ, der Datei-Treiber befüllt die geerbten Felder.
-public sealed record AusweisAbgelegt : DateiGemeldet;
+// Ein Command ohne Ziel von draußen (docs/04 §4.7): eine abgelegte Ausweis-Datei, gemeldet von einem Akteur.
+public sealed record AusweisAbgelegt(string Pfad) : ICommand;
 
 public record StartePruefung(Id<Seitenpruefung> AggregateId, Guid LeserId, IReadOnlyList<string> Seiten) : ICommand<Seitenpruefung>, ICreationCommand;
 public record PruefungGestartet(Guid LeserId, IReadOnlyList<string> Seiten) : IEvent;

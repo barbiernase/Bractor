@@ -497,8 +497,6 @@ public sealed partial class DomainExtractor
     public DomainModel Extract()
     {
         var m = new DomainModel();
-        if (_comps.Select(c => c.GetTypeByMetadataName(Abstractions.Treibervertrag.DateiBasis)).FirstOrDefault(x => x != null) is { } dateiBasis)
-            m.Treiber[Abstractions.Treibervertrag.Datei] = (dateiBasis.Name, GeerbteFelder(dateiBasis, mitSelbst: true));
 
         CatalogEventsAndCommands(m);
         // Stores ZUERST: Projektionen und Reader lösen ihre Fähigkeits-Parameter gegen die erkannten Fähigkeiten auf.
@@ -1260,13 +1258,8 @@ public sealed partial class DomainExtractor
             decl is TypeDeclarationSyntax { ParameterList: null }, TreiberVon(t));
     }
 
-    /// <summary>Quellen-Typ: der Treiber seiner Basis (Code-Fakt über den Basistyp, <see cref="Abstractions.Treibervertrag"/>), sonst null.</summary>
-    private static string? TreiberVon(INamedTypeSymbol t)
-    {
-        for (var b = t.BaseType; b != null; b = b.BaseType)
-            if (Abstractions.Treibervertrag.TreiberVon(b.Fq()) is { } treiber) return treiber;
-        return null;
-    }
+    /// <summary>Quellen-Typ mit Treiber-Basis gibt es nicht mehr (Quellen sind Katalogfunktionen, docs/04 §4.7); die Karten dafür zieht Schritt 7 nach.</summary>
+    private static string? TreiberVon(INamedTypeSymbol t) => null;
 
     /// <summary>Die Felder der Treiber-Basis eines Quellen-Typs (public init, Basis zuerst) — sichtbar, aber nie zurückgeschrieben.</summary>
     private static List<FieldInfo> GeerbteFelder(INamedTypeSymbol t, bool mitSelbst = false)

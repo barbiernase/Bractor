@@ -1,16 +1,20 @@
 {
-  "Graph": "Bildaufbereitung",
+  "Graph": "Linienimport",
   "Akteur": "KameraSystem",
-  "Einlesen": {
+  "Eingang": {
+    "Pfad": "/data/input",
+    "Kennung": "PfadGroesseZeit"
+  },
+  "Aufbereitung.Einlesen": {
     "Laufort": "Host",
     "Wiederholungen": 1
   },
-  "Verkleinern": {
+  "Aufbereitung.Verkleinern": {
     "Laufort": "Host",
     "Wiederholungen": 1,
     "AusgabePfad": "/data/preprocessed"
   },
-  "Kontrast": {
+  "Aufbereitung.Kontrast": {
     "Laufort": "Host",
     "Wiederholungen": 1,
     "AusgabePfad": "/data/preprocessed"

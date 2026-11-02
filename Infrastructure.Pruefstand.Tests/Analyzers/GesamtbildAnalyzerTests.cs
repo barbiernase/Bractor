@@ -121,8 +121,7 @@ public partial class Kasse : IState
     [Fact]
     public async Task Ein_Event_oder_eine_Response_ohne_Erzeuger_ist_ein_offener_Ausgang()
     {
-        var befunde = await Befunde("public record Tot() : IEvent; public record Lose() : IQueryResponse; "
-                                    + "public sealed record Quelle(string K) : IQuellNachricht { public string Kennung => K; }");
+        var befunde = await Befunde("public record Tot() : IEvent; public record Lose() : IQueryResponse;");
         befunde.Select(d => d.Id).Should().Equal(GesamtbildAnalyzer.AusgangOffenId, GesamtbildAnalyzer.AusgangOffenId);
         befunde.Select(d => d.GetMessage()).Should().Contain(m => m.StartsWith("'Tot' (Event)")).And.Contain(m => m.StartsWith("'Lose' (Response)"));
     }

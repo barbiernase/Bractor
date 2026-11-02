@@ -37,7 +37,8 @@ public sealed record FunktionsUmsetzung(string Name, Type Typ, Func<IServiceProv
 /// <param name="Draussen">Als Schnittstelle deklariert: sie rechnet draußen (Worker, Client, Hand) oder mit einer Implementierung im Host.</param>
 /// <param name="Dienste">Was der Konstruktor der Klasse braucht (Dienste, Konfig-Records) — für die Boot-Prüfung der Bindung.</param>
 /// <param name="Rechne">Die Rechnung: Eingang → Strom der Ausgaben (Commands, Hinweise), wie die Signatur sie zulässt.</param>
-/// <param name="Zustand">Der gekapselte Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4, ein Cache) — null = ohne Zustand.</param>
+/// <param name="Zustand">Der Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4), gesichert je Instanz und Knoten — null = ohne Zustand.</param>
+/// <param name="Lausche">Eine Quellfunktion: die Nummer, unter der die Rechnung ihr <c>Lausche</c> ruft (null = keine Quelle).</param>
 public sealed record FunktionsBaustein(
     Type Typ,
     string Name,
@@ -46,7 +47,8 @@ public sealed record FunktionsBaustein(
     IReadOnlyList<FunktionsUmsetzung> Umsetzungen,
     IReadOnlyList<Type> Dienste,
     FunktionsRechnung Rechne,
-    FunktionsZustandsform? Zustand = null)
+    FunktionsZustandsform? Zustand = null,
+    int? Lausche = null)
 {
     /// <summary>Der Wirker im Log (Spur): <c>funktion:&lt;Name&gt;</c>.</summary>
     public string Wirker => WirkerId.FuerFunktion(Name);
@@ -56,7 +58,7 @@ public sealed record FunktionsBaustein(
 
     /// <summary>Die Antwort-Events (ein Ziel entschied sie auf einen Command der Funktion hin) mit der Nummer ihres <c>Auf</c>.</summary>
     public IReadOnlyDictionary<Type, int> Antworten() =>
-        Eingaenge.Select((e, i) => (e, i)).Where(x => !x.e.Hinweis && typeof(IEvent).IsAssignableFrom(x.e.Typ) && !typeof(IQuellNachricht).IsAssignableFrom(x.e.Typ))
+        Eingaenge.Select((e, i) => (e, i)).Where(x => !x.e.Hinweis && typeof(IEvent).IsAssignableFrom(x.e.Typ))
             .ToDictionary(x => x.e.Typ, x => x.i);
 
     /// <summary>Hat irgendein Eingang Lese-Fähigkeiten? Dann läuft die Funktion nur im Host.</summary>

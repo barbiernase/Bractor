@@ -7,7 +7,6 @@ using Infrastructure.Funktionen;
 using Infrastructure.GrpcClient;
 using Infrastructure.Monitoring;
 using Infrastructure.Persistence;
-using Infrastructure.Quellen;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
@@ -18,7 +17,7 @@ namespace Infrastructure.Umgebung;
 
 /// <summary>
 /// Der Host in einer Zeile (docs/06 §6.5): WAS existiert, liefern die generierten Tabellen (Aggregate, Projektionen,
-/// Funktionen, Quellen, Uhr, Akteur-Rechte); WAS aktiv ist und mit welchen Werten, sagt die Umgebung. Alle
+/// Funktionen und ihre Graphen, Uhr, Akteur-Rechte); WAS aktiv ist und mit welchen Werten, sagt die Umgebung. Alle
 /// Implementierungen sind einkompiliert — ein Umgebungswechsel ist nie ein Code-Wechsel.
 /// </summary>
 public static class CqrsUmgebungExtensions
@@ -85,7 +84,7 @@ public static class CqrsUmgebungExtensions
             o.BuendelGroesse = u.Schreibpfad.BuendelGroesse;
             o.Passivierung = Infrastructure.Lebenszyklus.Passivierung.Aus(u.Lebenszyklus);
             o.Konsum = Infrastructure.Projections.Konsum.Aus(u.Konsum);
-            o.EnableGrpc = anwendung.Nutzlast != null;   // gRPC nur mit Leitung; ohne bleiben JSON-Eingang und Quellen
+            o.EnableGrpc = anwendung.Nutzlast != null;   // gRPC nur mit Leitung; ohne bleiben JSON-Eingang und Quellfunktionen
         });
         // Die Uhr der Umgebung (Versatz nur in Sim) ersetzt die nackte DB-Uhr — die letzte Registrierung gewinnt.
         s.AddSingleton<IDbClock>(_ => new UmgebungsDbClock(u));
@@ -95,7 +94,6 @@ public static class CqrsUmgebungExtensions
         Anwendung.Aktuell.RegistrierePullPfade(s);
         s.AddBackendMonitoring();
         s.AddAkteure(builder.Configuration.GetSection(UmgebungsAbschnitte.Identitaeten));
-        s.AddQuellen(builder.Configuration);
         var instanzen = s.BindeGraphen(u);
         s.BindeTechnik(instanzen);   // nach den Instanzen: gebunden wird, was die Umsetzungen ihrer Knoten brauchen
         s.AddEinblick(u);
@@ -104,7 +102,7 @@ public static class CqrsUmgebungExtensions
 
     /// <summary>
     /// Startet den Host: als Migrator nur das Schema anlegen und enden (Multi-Node-Kaltstart), sonst gRPC, Monitoring, Einblick, JSON-Eingang,
-    /// die Webhooks der Quellen (aus der Konfig) und Lauf.
+    /// und Lauf.
     /// </summary>
     public static async Task LaufeAsync(this WebApplication app, UmgebungKonfig u)
     {
@@ -121,7 +119,6 @@ public static class CqrsUmgebungExtensions
             app.MapBackendMonitoring();
             app.MapEinblick(u);
             app.MapEingang(u);
-            app.MapQuellWebhooks(u);   // Wege hinein aus der Konfig (Quellen:<Typ>:Webhook) — keine Zeile im Programm
         }
         catch (Exception e) { CqrsBoot.Melde(e); throw; }
         Console.WriteLine();

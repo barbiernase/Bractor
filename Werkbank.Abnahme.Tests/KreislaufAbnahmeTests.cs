@@ -96,7 +96,7 @@ public class KreislaufAbnahmeTests
 
         var t = new DateTimeOffset(2026, 10, 15, 8, 0, 0, Random.Shared.Next(0, 999), TimeSpan.Zero).AddMinutes(Random.Shared.Next(0, 100000));
         var dateiname = $"{t:yyyy_MM_dd_HH_mm_ss_fff}_DC0.tiff";
-        var (_, abgelegt) = await w.SendeAsync($"/api/werkbank/quelle/DateiErkannt/datei?name={dateiname}",
+        var (_, abgelegt) = await w.SendeAsync($"/api/werkbank/quelle/linienimport/datei?name={dateiname}",
             new ByteArrayContent(Werkbanklauf.Tiff(96, 64)));
         ((bool?)abgelegt["ok"]).Should().BeTrue(abgelegt.ToJsonString());
 

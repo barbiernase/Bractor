@@ -96,7 +96,6 @@ public class UmgebungE2ETests
         var builder = WebApplication.CreateBuilder();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["Quellen:DateiErkannt:Pfad"] = Path.Combine(verz, "quelle"),
         });
         u.Graphen = Graphinstanzen.Beispieldomaene(Path.Combine(verz, ".preprocessed"), parallel: 1);
         builder.AddCqrs(u);
@@ -140,7 +139,6 @@ public class UmgebungE2ETests
             var builder = WebApplication.CreateBuilder();
             builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["Quellen:DateiErkannt:Pfad"] = Path.Combine(verz, u.Umgebung.Name),
             });
             u.Graphen = Graphinstanzen.Beispieldomaene(Path.Combine(verz, u.Umgebung.Name, ".preprocessed"), parallel: 1);
             builder.AddCqrs(u);

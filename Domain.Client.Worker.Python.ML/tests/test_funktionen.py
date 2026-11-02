@@ -24,7 +24,7 @@ from domain_client.generated.funktionen import BildEinlesenBasis, TrainingBasis
 class Einlesen(BildEinlesenBasis):
     SLOTS = 3
 
-    async def auf_datei_erkannt(self, e: g.DateiErkanntDto, h: Herkunft):
+    async def auf_datei_gefunden(self, e: g.DateiGefundenDto, h: Herkunft):
         if e.pfad.endswith(".kaputt"):
             return g.BildNichtLesbarDto(pfad=e.pfad, grund="unlesbar")
         return g.BildEingelesenDto(dateiname=e.name, pfad=e.pfad, groesse=e.groesse, erkannt_am=e.erkannt_am, breite_pixel=640, hoehe_pixel=512)
@@ -55,7 +55,7 @@ def _eingang_vom_server(vorgang, pfad):
     msg = L.ServerMessage(arbeits_auftrag=L.ArbeitsAuftrag(
         vorgang=vorgang, korrelation="k-1", funktion="IBildEinlesen", akteur="KameraSystem", stream="s-1", version=1,
         zeit_utc=1_700_000_000_000,
-        eingang=L.Nutzlast(typ="DateiErkannt", daten=bytes(g.DateiErkanntDto(name="a.tiff", pfad=pfad, groesse=7)))))
+        eingang=L.Nutzlast(typ="DateiGefunden", daten=bytes(g.DateiGefundenDto(name="a.tiff", pfad=pfad, groesse=7)))))
     feld, eingang = betterproto.which_one_of(L.ServerMessage().parse(bytes(msg)), "message")
     assert feld == "arbeits_auftrag"
     return eingang
@@ -64,13 +64,13 @@ def _eingang_vom_server(vorgang, pfad):
 def test_generat_bindet_eingaenge_und_ausgaben_an_die_betterproto_typen():
     assert issubclass(BildEinlesenBasis, FunktionsBasis)
     assert BildEinlesenBasis.FUNKTION == "IBildEinlesen"
-    e = BildEinlesenBasis.EINGAENGE[g.DateiErkanntDto]
-    assert e.methode == "auf_datei_erkannt" and not e.strom
+    e = BildEinlesenBasis.EINGAENGE[g.DateiGefundenDto]
+    assert e.methode == "auf_datei_gefunden" and not e.strom
     assert e.ausgaben == {g.BildEingelesenDto: Ausgabe.ZWISCHENERGEBNIS, g.BildNichtLesbarDto: Ausgabe.HINWEIS}
     t = TrainingBasis.EINGAENGE[g.TrainingZuRechnenDto]
     assert t.strom and all(a == Ausgabe.COMMAND for a in t.ausgaben.values())
     with pytest.raises(TypeError):
-        BildEinlesenBasis()   # abstrakt: auf_datei_erkannt fehlt
+        BildEinlesenBasis()   # abstrakt: auf_datei_gefunden fehlt
 
 
 def test_anbieten_ueber_den_echten_draht():
@@ -110,7 +110,7 @@ def test_eingang_rein_antwort_raus_ueber_den_echten_draht():
 
 def test_falsche_ausgabe_wird_zum_fehler_und_lebenszeichen_reisen_ueber_den_draht():
     class Frech(BildEinlesenBasis):
-        async def auf_datei_erkannt(self, e, h):
+        async def auf_datei_gefunden(self, e, h):
             await asyncio.sleep(0.05)
             return g.MeldeFortschrittDto()   # Ausgabe einer ANDEREN Funktion
 

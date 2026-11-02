@@ -8,7 +8,7 @@ namespace Domain.Pipeline.Bildaufbereitung;
 // ═══════════════════════════════════════════════════
 // FUNKTIONEN der Bildaufbereitung (docs/10 §10.3) — ein FORK-JOIN, je Schritt eine Funktion:
 //
-//   DateiErkannt ─▶ ƒ IBildEinlesen ─▶ BildEingelesen ─┬─▶ ƒ IBildVerkleinerung ─▶ BildVerkleinert ─▶ ƒ IKontrastausgleich ─▶ VorschauErstellt ─┐
+//   DateiGefunden ─▶ ƒ IBildEinlesen ─▶ BildEingelesen ─┬─▶ ƒ IBildVerkleinerung ─▶ BildVerkleinert ─▶ ƒ IKontrastausgleich ─▶ VorschauErstellt ─┐
 //                                                     └──────────────────────────────────────────────────────────────────────────────────────┴─▶ ƒ Bildeingang
 //   (ƒ Bildeingang ─▶ NimmBildAuf an das Bildpaar)
 //
@@ -24,7 +24,7 @@ namespace Domain.Pipeline.Bildaufbereitung;
 /// </summary>
 public interface IBildEinlesen : IFunktion
 {
-    Task<OneOf<BildEingelesen, BildNichtLesbar>> Auf(DateiErkannt e);
+    Task<OneOf<BildEingelesen, BildNichtLesbar>> Auf(DateiGefunden e);
 }
 
 /// <summary>Schritt 2 — das eingelesene Bild auf die Vorschau-Höhe verkleinern und als Zwischenbild ablegen.</summary>

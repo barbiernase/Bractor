@@ -216,9 +216,13 @@ public static class Grammatik
             + "eindeutig: je Technik genau eine Umsetzung (sonst Funktionen:<Name>:Implementierung), je Konfig-Record ein Abschnitt "
             + "Konfig:<Record>, kein Kreis über Technik — sonst bricht der Start.", "error",
             [new("boot", null, "Infrastructure/Funktionen/Technik.cs (BindeTechnik: fehlend, mehrdeutig, Kreis, Konfig)")]),
-        new("GR-QUELLE", "Quell-Nachricht von außen", "Eine Quell-Nachricht (record … : IQuellNachricht) wird genau einmal je Kennung ins Log "
-            + "geschrieben; Funktionen und Projektionen hören sie wie jedes Event. Sie kommt von außen (die Maschine/der Akteur hinter der Quelle, IDarf).", "error",
-            [new("laufzeit", null, "Infrastructure/Quellen/Quellen.cs (QuellEingang: StartStream je Kennung)")]),
+        new("GR-QUELLE", "Quelle = Funktion, die lauscht", "Eine Quelle ist eine Funktion mit Lausche(CancellationToken) statt Auf — aus dem Katalog des "
+            + "Frameworks (Dateiwaechter, Taktgeber, Webhook) oder eigen. Sie steht am Kopf ihres Graphen (eine je Graph, dann kein anderer Kopf); jedes "
+            + "Element startet einen Lauf, nichts davon steht im Log. Was sie gesehen hat und ihre laufende Nummer stehen in ihrem gesicherten Zustand; ihre "
+            + "Instanz läuft genau einmal im Cluster (docs/04 §4.7).", "error",
+            [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Form von Lausche)"),
+             An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (eine Quelle je Graph, sonst kein Kopf)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/GraphActor.cs (je Element ein Lauf, Gegendruck, Zustand gesichert nach dem Lauf)")]),
         // Zusatzregeln
         new("GR-AUSGANG-GESCHLOSSEN", "Geschlossener Ausgang", "Ausgänge sind konkrete Typen im OneOf — zeichnen heißt Typ wählen.", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)")]),
@@ -320,7 +324,7 @@ public static class Grammatik
         r.Kind == RecordArt.Event && (r.Treiber != null || (r.Basen?.Contains(QuellBasis) ?? false)) ? Quelle : SorteVonRecordArt(r.Kind);
 
     /// <summary>Die Vertrags-Basis einer Quell-Nachricht (aus dem Vertrag, kein Text-Raten).</summary>
-    public static readonly string QuellBasis = nameof(Abstractions.IQuellNachricht);
+    public const string QuellBasis = "IQuellNachricht";   // die frühere Basis der Quell-Nachrichten; die Editor-Sorte zieht mit Schritt 7 nach
 
     /// <summary>Record-Art → Nachrichtensorte (null = keine Nachricht: Value Object, Konfig, ReadModel).</summary>
     public static string? SorteVonRecordArt(string kind) => kind switch

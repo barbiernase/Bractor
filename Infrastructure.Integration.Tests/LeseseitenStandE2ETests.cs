@@ -42,7 +42,7 @@ public class LeseseitenStandE2ETests
         WebApplication Baue()
         {
             var builder = WebApplication.CreateBuilder();
-            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["Quellen:DateiErkannt:Pfad"] = verz });
+            
             u.Graphen = Graphinstanzen.Beispieldomaene(Path.Combine(verz, ".preprocessed"), parallel: 1);
             builder.AddCqrs(u);
             return builder.Build();

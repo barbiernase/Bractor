@@ -58,6 +58,15 @@ public class FunktionsLaufzeitTests
         public KnotenKonfig Knoten { get; } = new();
         public Dictionary<Type, int> Antworten { get; } = new();
         public Action? BeimBau { get; set; }
+        /// <summary>Eine Quelle: die Nummer ihres Lausche (eine Operation ohne Ports).</summary>
+        public int? Lauscht { get; private set; }
+
+        public K Lausche(params Type[] aus)
+        {
+            Lauscht = Ops.Count + Antworten.Count;
+            Ops.Add((Lauscht.Value, [], aus, false));
+            return this;
+        }
 
         public K Op(Type[] aus, bool strom = false, params (Portform, Type[])[] ports)
         {
@@ -105,7 +114,7 @@ public class FunktionsLaufzeitTests
             o.Aus, o.Strom ? o.Aus.Where(t => !typeof(IAggregatCommand).IsAssignableFrom(t)).ToArray() : [], Ebene(k, o))).ToList())).ToList();
         var koepfe = plaene.SelectMany(k => k.Operationen.SelectMany(o => o.Ports.Where(p => p.Erzeuger.Length == 0).SelectMany(p => p.Typen.Select(t => (t, k.Name)))))
             .GroupBy(x => x.t).ToDictionary(g => g.Key, g => g.Select(x => x.Name).Distinct().ToArray());
-        return new GraphPlan(name, typeof(object), plaene, koepfe, Array.Empty<Type>());
+        return new GraphPlan(name, typeof(object), plaene, koepfe, Array.Empty<Type>(), knoten.FirstOrDefault(k => k.Lauscht is not null)?.Name);
     }
 
     /// <summary>Eine Welt: Graph-Actors im lokalen System, Wege dazwischen, ein Emitter, der mitschreibt.</summary>
@@ -117,6 +126,7 @@ public class FunktionsLaufzeitTests
         public readonly ConcurrentQueue<HinweisZustellen> Gescheitert = new();
         public readonly ConcurrentQueue<Guid> Ausgetragen = new();
         public readonly ConcurrentQueue<(Guid, string)> Geparkt = new();
+        public readonly Ablage Zustaende = new();
         public Func<IAggregatCommand, EmitAusgang> Ausgang = _ => EmitAusgang.Zugestellt;
         public Func<IAggregatCommand, IReadOnlyList<Antwortereignis>> Antwort = _ => Array.Empty<Antwortereignis>();
         public Verkettung Koepfe = Verkettung.Leer;
@@ -129,8 +139,10 @@ public class FunktionsLaufzeitTests
             var instanz = new GraphInstanz(name, plan, null, knoten.ToDictionary(k => k.Name, k => k.Knoten));
             var parents = knoten.ToDictionary(k => k.Name, k =>
             {
-                var traeger = new FunktionsTraeger(k.Name, sp => new FunktionsAktivierung(sp, (_, _) => { k.BeimBau?.Invoke(); return new object(); }, name: k.Name),
-                    k.Rechne, Antworten: k.Antworten) { Instanz = name, Knoten = k.Name, ImGraphen = plan.ImGraphen(k.Name), Zeitlimit = k.Knoten.Zeitlimit };
+                var traeger = new FunktionsTraeger(k.Name, sp => new FunktionsAktivierung(sp, (_, _) => { k.BeimBau?.Invoke(); return new object(); }, name: k.Name,
+                        knoten: new KnotenKontext(name, k.Name, k.Knoten), ablage: Zustaende, quelle: k.Lauscht is not null),
+                    k.Rechne, Antworten: k.Antworten)
+                { Instanz = name, Knoten = k.Name, ImGraphen = plan.ImGraphen(k.Name), Zeitlimit = k.Knoten.Zeitlimit, Lausche = k.Lauscht };
                 return (Func<FunktionsParent>)(() => new FunktionsParent(traeger, k.Konfig, () => new FunktionsKindActor(traeger, _dienste, this, Koepfe, SendeAsync)));
             });
             Starte(instanz, parents);
@@ -141,8 +153,11 @@ public class FunktionsLaufzeitTests
         private readonly Dictionary<string, (GraphInstanz, Dictionary<string, Func<FunktionsParent>>)> _plaene = new();
 
         private void Starte(GraphInstanz instanz, Dictionary<string, Func<FunktionsParent>> parents) =>
-            _instanzen[instanz.Name] = System.Root.SpawnNamed(Props.FromProducer(() => new GraphActor(instanz, parents, new Offene(this), Gescheitert.Enqueue)),
-                FunktionenWurzel.Name(instanz.Name) + "-" + Guid.NewGuid().ToString("N")[..6]);
+            _instanzen[instanz.Name] = System.Root.SpawnNamed(Props.FromProducer(() => new GraphActor(instanz, parents, new Offene(this), Gescheitert.Enqueue,
+                ablage: Zustaende)), FunktionenWurzel.Name(instanz.Name) + "-" + Guid.NewGuid().ToString("N")[..6]);
+
+        /// <summary>Dieser Cluster-Knoten hält die Instanz (bzw. nicht mehr): ihre Quelle lauscht.</summary>
+        public void Halte(string name, bool halten) => System.Root.Send(_instanzen[name], new QuelleHalten(halten));
 
         /// <summary>Der Cluster-Knoten fällt aus: der Graph-Actor samt Parents und Kindern ist fort, ein neuer beginnt leer.</summary>
         public async Task AbsturzAsync(string name)
@@ -172,6 +187,20 @@ public class FunktionsLaufzeitTests
             if (_instanzen.TryGetValue(hinweis.Instanz, out var p)) System.Root.Send(p, hinweis);
         }
 
+        /// <summary>Die gesicherten Zustände im Speicher (je Instanz und Knoten der neueste), mit jeder Sicherung in Reihenfolge.</summary>
+        public sealed class Ablage : IZustandsAblage
+        {
+            public readonly ConcurrentDictionary<(string, string), GesicherterZustand> Je = new();
+            public readonly ConcurrentQueue<long> Gesichert = new();
+            public Task<GesicherterZustand?> LadeAsync(string instanz, string knoten, CancellationToken ct) =>
+                Task.FromResult(Je.TryGetValue((instanz, knoten), out var z) ? z : null);
+            public Task SichereAsync(IReadOnlyCollection<(string Instanz, string Knoten, GesicherterZustand Zustand)> zustaende, CancellationToken ct)
+            {
+                foreach (var (i, k, z) in zustaende) { Je[(i, k)] = z; Gesichert.Enqueue(z.Nummer); }
+                return Task.CompletedTask;
+            }
+        }
+
         private sealed class Offene(Welt w) : IOffeneEingaenge
         {
             public Task<IReadOnlyList<OffenerEingang>> FaelligeAsync(int hoechstens, CancellationToken ct) => throw new NotSupportedException();
@@ -181,6 +210,7 @@ public class FunktionsLaufzeitTests
                 return Task.CompletedTask;
             }
             public Task VerschiebeAsync(IReadOnlyCollection<Guid> kennungen, TimeSpan nach, CancellationToken ct) => throw new NotSupportedException();
+            public Task LegeAsync(IReadOnlyList<EingangOffen> eingaenge, Guid stream, CancellationToken ct) => throw new NotSupportedException();
             public Task ParkeAsync(IReadOnlyCollection<(Guid Kennung, string Grund)> geparkt, CancellationToken ct)
             {
                 foreach (var g in geparkt) w.Geparkt.Enqueue(g);
@@ -561,5 +591,53 @@ public class FunktionsLaufzeitTests
         var ids = w.Gesendet.Select(x => x.Id).ToList();
         ids.Should().HaveCount(3);
         ids.Distinct().Should().HaveCount(2, "A rechnet nach dem Absturz neu — mit derselben Id, genau einmal wirksam");
+    }
+
+    // ── Quelle (Entscheidung 8) und gesicherter Zustand (Entscheidung 9) ─────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Eine_Quelle_startet_je_Element_einen_Lauf_sichert_ihre_Nummer_nach_dem_Lauf_und_zaehlt_nach_einem_Neustart_weiter()
+    {
+        await using var w = new Welt();
+        var freigabe = new TaskCompletionSource();
+        async IAsyncEnumerable<object> Lauschen([EnumeratorCancellation] CancellationToken ct)
+        {
+            for (var i = 1; i <= 3; i++) yield return new X(i);
+            await Task.Delay(Timeout.Infinite, ct);
+        }
+        async IAsyncEnumerable<object> Buchen(object?[] a, [EnumeratorCancellation] CancellationToken ct)
+        {
+            if (((X)a[0]!).Wert == 2) await freigabe.Task.WaitAsync(ct);   // der zweite Lauf hängt
+            yield return new Buche(Konto, ((X)a[0]!).Wert);
+        }
+        w.Instanz("G",
+            new K("Quelle", (_, _, _, _, _, ct) => Lauschen(ct)).Lausche(typeof(X)),
+            new K("B", (_, _, a, _, _, ct) => Buchen(a, ct)) { Konfig = new FunktionsOrtKonfig(Parallel: 4) }.Op([typeof(Buche)], ports: Eins<X>()));
+        w.Halte("G", true);
+
+        await Warte(() => w.Gesendet.Count == 2, "die Läufe 1 und 3 sind fertig, 2 hängt");
+        await Task.Delay(300);
+        w.Zustaende.Je.GetValueOrDefault(("G", "Quelle"))?.Nummer.Should().Be(1, "gesichert wird in der Reihenfolge der Läufe — 3 wartet auf 2");
+        freigabe.SetResult();
+        await Warte(() => w.Zustaende.Je.GetValueOrDefault(("G", "Quelle"))?.Nummer == 3, "nach dem zweiten Lauf ist der Stand 3");
+        w.Gesendet.Select(x => x.Id).Should().Contain(Kettenvertrag.Befehl(AufrufId(Herkunft.Ableite("quelle:G:2"), "G/B"), "G/B", 0, new Buche(Konto, 2)),
+            "die Kennung eines Quell-Laufs folgt aus Instanz und Nummer");
+
+        // Neustart: die Quelle beginnt mit ihrer gesicherten Nummer — das erste neue Element ist Nummer 4.
+        w.Halte("G", false);
+        await w.AbsturzAsync("G");
+        w.Halte("G", true);
+        await Warte(() => w.Gesendet.Count == 6, "nach dem Neustart meldet die Quelle wieder (hier dieselben drei Elemente)");
+        w.Gesendet.Select(x => x.Id).Should().Contain(Kettenvertrag.Befehl(AufrufId(Herkunft.Ableite("quelle:G:4"), "G/B"), "G/B", 0, new Buche(Konto, 1)));
+    }
+
+    [Fact]
+    public async Task Ein_Knoten_mit_Zustand_schickt_nach_jedem_Aufruf_seinen_Schnappschuss_der_nach_dem_Lauf_gesichert_wird()
+    {
+        await using var w = new Welt();
+        w.Instanz("G", new K("A", Einzeln(a => new Buche(Konto, ((Start)a[0]!).Wert))).Op([typeof(Buche)], ports: Eins<Start>()));
+        (await Fertig(w, Eingang("G", new Start(1)))).Should().Be(Quittungsart.Fertig);
+        await Task.Delay(300);
+        w.Zustaende.Je.Should().BeEmpty("ohne Zustand gibt es nichts zu sichern");
     }
 }

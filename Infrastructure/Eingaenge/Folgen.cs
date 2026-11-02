@@ -8,7 +8,7 @@ namespace Infrastructure.Eingaenge;
 
 /// <summary>
 /// Der Eingang eines offenen Eingangs als Diskriminator und Wire-JSON (die generierten Tabellen, <c>GeneratedWirePoly</c>) — und zurück: ein Command
-/// ohne Ziel oder eine Quell-Nachricht (ein Event, Diskriminator mit Vorsatz <see cref="EventVorsatz"/>).
+/// ohne Ziel (ein Event nur mit Diskriminator-Vorsatz <see cref="EventVorsatz"/>).
 /// </summary>
 public static class Nachrichtenform
 {
@@ -43,17 +43,17 @@ public static class Nachrichtenform
 public static class Folgenbeilagen
 {
     /// <summary>
-    /// Eine Quell-Nachricht (docs/04 §4.7) als offene Eingänge: je Instanz, die sie am Kopf nimmt, einer mit der Kennung aus dem Vorgang der Nachricht
-    /// (Typ und Kennung) und der Instanz — dieselbe Nachricht ergibt dieselben Kennungen, eine schon aufgenommene legt keine zweite Zeile.
+    /// Ein Command ohne Ziel von einem AKTEUR (über Leitung oder JSON-Eingang) als offener Eingang am Kopf der Instanz, die ihn nimmt: Kennung aus der
+    /// Command-Id und der Instanz — derselbe Command (dieselbe Id) legt keine zweite Zeile, genau einmal am Kopf.
     /// </summary>
-    public static IReadOnlyList<(EingangOffen Eingang, object Folge)> VonQuelle(IQuellNachricht nachricht, Infrastructure.Funktionen.Verkettung plan,
-        Guid vorgang, int version, string? akteur)
+    public static IReadOnlyList<(EingangOffen Eingang, object Folge)> VonAkteur(ICommand command, Infrastructure.Funktionen.Verkettung plan, Guid commandId,
+        string? akteur, string? korrelation)
     {
-        var hoerer = plan.Hoerer(nachricht.GetType());
+        var hoerer = plan.Hoerer(command.GetType());
         if (hoerer.Count == 0) return Array.Empty<(EingangOffen, object)>();
-        var (typ, daten) = Nachrichtenform.Schreibe(nachricht);
-        return hoerer.Select(f => (new EingangOffen(Eingangsvertrag.Eingang(vorgang, f), f, typ, daten, version, ImAuftrag.IstAkteur(akteur) ? akteur : null,
-            vorgang.ToString()), (object)nachricht)).ToList();
+        var (typ, daten) = Nachrichtenform.Schreibe(command);
+        return hoerer.Select(f => (new EingangOffen(Eingangsvertrag.Eingang(commandId, f), f, typ, daten, 0, ImAuftrag.IstAkteur(akteur) ? akteur : null,
+            korrelation), (object)command)).ToList();
     }
 
     public static IReadOnlyList<(EingangOffen Eingang, object Folge)> Von(IReadOnlyList<object> folgen, Infrastructure.Funktionen.Verkettung plan, Guid commandId,

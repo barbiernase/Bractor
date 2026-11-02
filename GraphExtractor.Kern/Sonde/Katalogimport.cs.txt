@@ -15,8 +15,7 @@ using Core;
 
 namespace Warenkatalog.Import;
 
-// Die Quelle: der Datei-Treiber befüllt die geerbten Felder, die Kennung sagt die Konfig.
-public sealed record KatalogDateiAbgelegt : DateiGemeldet;
+// Die Quelle: der Dateiwächter des Katalogs meldet DateiGefunden (der Import nimmt es am Kopf seines Graphen).
 
 public record StarteImport(Id<Importlauf> AggregateId, string Pfad) : ICommand<Importlauf>, ICreationCommand;
 public record ImportGestartet(Id<Importlauf> ImportId, string Pfad) : IEvent;
@@ -90,7 +89,7 @@ public partial class Artikel : IState
 // Die Quell-Nachricht startet den Import-Vorgang; seine Id ist die des Streams der Quelle.
 public sealed class Katalogeingang : IFunktion
 {
-    public StarteImport Auf(KatalogDateiAbgelegt d, Herkunft h) => new(new Id<Importlauf>(h.Stream), d.Pfad);
+    public StarteImport Auf(DateiGefunden d, Herkunft h) => new(new Id<Importlauf>(h.Stream), d.Pfad);
 }
 
 // Der Strom: je Zeile ein Artikel, zwischendurch der Fortschritt, am Ende der Abschluss — eine Funktion draußen.
@@ -177,7 +176,7 @@ public sealed class Importauskunft : IReader
 }
 
 // Wer hineingibt: die Ablage (Maschine) meldet die Datei; die Katalogpflege fragt den Stand und sieht den Fortschritt.
-public sealed record Ablage : IMaschine, IDarf<KatalogDateiAbgelegt>;
+public sealed record Ablage : IMaschine, IDarf<StarteImport>;
 public sealed record Katalogpflege : IMensch, IDarf<HoleImportstand>;
 
 public interface IKatalogpflegeOberflaeche : IClientVertrag, IVerkoerpert<Katalogpflege>, IHoert<ImportFortgeschritten>, IHoert<ImportAbgeschlossen> { }

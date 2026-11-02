@@ -6,7 +6,7 @@ Eine Funktion ist ein Vertrag in der Domäne (C#, eine Quelle) — als Schnittst
 
     public interface IBildaufbereitung : IFunktion
     {
-        Task<OneOf<BildAufbereitet, BildNichtLesbar>> Auf(DateiErkannt e);
+        Task<OneOf<BildAufbereitet, BildNichtLesbar>> Auf(DateiGefunden e);
     }
 
 `Cqrs.Codegen` erzeugt daraus `domain_client/generated/funktionen.py` mit einer Basis je Funktion (`BildaufbereitungBasis`) und je `Auf` einer
@@ -14,7 +14,7 @@ abstrakten Methode `auf_<eingang>(e, h)`. Der Worker erbt sie und füllt die Met
 
     class Bildaufbereitung(BildaufbereitungBasis):
         SLOTS = 4
-        async def auf_datei_erkannt(self, e: DateiErkanntDto, h: Herkunft):
+        async def auf_datei_gefunden(self, e: DateiGefundenDto, h: Herkunft):
             ...
             return BildAufbereitetDto(...)
 

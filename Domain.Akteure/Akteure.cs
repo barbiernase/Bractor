@@ -27,7 +27,7 @@ namespace Domain.Akteure;
 
 /// <summary>Nimmt die Bildpaare (dc0/dc2) an der Linie auf und legt sie auf dem Share ab.</summary>
 public sealed record KameraSystem : IMaschine,
-    IDarf<DateiErkannt>, IDarf<NimmBildAuf>;   // NimmBildAuf: was die Instanz der Bildaufbereitung für das Kamerasystem hineingibt
+    IDarf<NimmBildAuf>;   // NimmBildAuf: was die Instanz des Linienimports (Dateiwächter → Bildaufbereitung) für das Kamerasystem hineingibt
 
 /// <summary>Rechnet die Schritte der Bildaufbereitung außerhalb des Hosts (Python-Worker <c>funktions_worker.py</c>, Laufort <c>Extern</c>).</summary>
 public sealed record Bildrechner : IMaschine,

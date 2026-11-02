@@ -43,9 +43,10 @@ public sealed class Umgebungen(string slnRoot)
     /// <summary>Die Umgebung aufgelöst, wie der Host sie mit <c>CQRS_BRANCH</c> = Branch sieht.</summary>
     public UmgebungKonfig Aufgeloest(string name) => MitKonfig(name, (u, _) => u);
 
-    /// <summary>Der beobachtete Pfad je Quelle mit <c>Quellen:&lt;Typ&gt;:Pfad</c> (aufgelöst).</summary>
-    public IReadOnlyDictionary<string, string> QuellPfade(string name) => MitKonfig(name, (_, k) => k.GetSection(UmgebungsAbschnitte.Quellen).GetChildren()
-        .Where(q => !string.IsNullOrWhiteSpace(q["Pfad"])).ToDictionary(q => q.Key, q => q["Pfad"]!, StringComparer.Ordinal));
+    /// <summary>Der beobachtete Pfad je Instanz mit einem Quellknoten, der einen <c>Pfad</c> hat (ein Dateiwächter; aufgelöst) — Schlüssel ist die Instanz.</summary>
+    public IReadOnlyDictionary<string, string> QuellPfade(string name) => MitKonfig(name, (u, _) => u.Graphen
+        .SelectMany(i => i.Value.Knoten.Values.Where(k => k.Werte.TryGetValue("Pfad", out var p) && !string.IsNullOrWhiteSpace(p)).Select(k => (i.Key, k.Werte["Pfad"])))
+        .GroupBy(x => x.Key).ToDictionary(g => g.Key, g => g.First().Item2, StringComparer.Ordinal));
 
     /// <summary>
     /// <c>Identitaeten:Tokens</c>: Token → Akteur(e) — gelesen wie im Host (<c>AkteurOptionen</c>: Wert oder Liste, je Eintrag

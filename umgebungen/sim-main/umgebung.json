@@ -33,19 +33,6 @@
       "sim-trainingssystem": "TrainingsSystem"
     }
   },
-  "Quellen": {
-    "DateiErkannt": {
-      "Pfad": "${env:HOME}/cqrs-sim/${branch}/DateiErkannt",
-      "Intervall": "00:00:01",
-      "Fertig": {
-        "Art": "Stabil",
-        "Fenster": "00:00:01"
-      },
-      "Kennung": "PfadGroesseZeit",
-      "Laufmodus": "EinmalImCluster",
-      "Webhook": "/webhook/datei"
-    }
-  },
   "Clients": {
     "Arbeitsplatz": {
       "Token": "sim-arbeitsplatz",

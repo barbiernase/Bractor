@@ -9,7 +9,6 @@ using Domain.ImagePair;
 using FluentAssertions;
 using Infrastructure.Eingang;
 using Infrastructure.Einblick;
-using Infrastructure.Quellen;
 using Infrastructure.Umgebung;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
@@ -24,8 +23,8 @@ namespace Infrastructure.Integration.Tests;
 /// <list type="bullet">
 /// <item>Als Akteur handeln: ein Token → Akteur-Tor → Aggregat (Event im Log, Ablehnung als Ablehnungs-Event), Verweigerung ohne Befugnis
 ///   bzw. ohne gültiges Token, Query an den Reader;</item>
-/// <item>Laufort Hand: der Bildeingang wartet an der Dateinamen-Deutung auf einen Menschen; seine Antwort über <c>/eingang/ergebnis</c>
-///   lässt den Fluss weiterlaufen bis zum Paar.</item>
+/// <item>Laufort Hand: der Dateiwächter findet eine Datei, die Schritte der Bildaufbereitung warten auf einen Menschen; seine Antworten über
+///   <c>/eingang/ergebnis</c> lassen den Lauf weitergehen bis zum Paar.</item>
 /// </list>
 /// </summary>
 public class EingangE2ETests
@@ -43,16 +42,15 @@ public class EingangE2ETests
             EventStore = new EventStoreKonfig { Verbindung = Verbindung, Datenbank = "cqrs_it_eingang_" + Guid.NewGuid().ToString("N")[..8], Schema = "es" },
             Cluster = new ClusterKonfig { Art = ClusterArt.Einzelknoten, Name = "cqrs-" + name },
             Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = FreierPort(), JsonEingang = true },
-            // Die ganze Kette der Bildaufbereitung beantwortet ein Mensch — Schritt für Schritt.
-            Graphen = Graphinstanzen.Beispieldomaene(null, FunktionsLaufort.Hand),
         };
         var verz = Directory.CreateTempSubdirectory("eingang-it-").FullName;
+        var eingangsVerz = Path.Combine(verz, "eingang");
+        Directory.CreateDirectory(eingangsVerz);
+        // Die Bildaufbereitung unter einem Dateiwächter beantwortet ein Mensch — Schritt für Schritt.
+        u.Graphen = Graphinstanzen.Beispieldomaene(null, FunktionsLaufort.Hand, eingang: eingangsVerz);
         var builder = WebApplication.CreateBuilder();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["Quellen:DateiErkannt:Pfad"] = Path.Combine(verz, "eingang"),
-            // docs/06 §6.6: der Webhook der Quelle ist Konfig — kein MapQuellWebhook im Programm.
-            ["Quellen:DateiErkannt:Webhook"] = "/webhook/datei",
             ["Identitaeten:Tokens:t-ki"] = "KIOperator",
             ["Identitaeten:Tokens:t-inspekteur"] = "Inspekteur",
         });
@@ -60,7 +58,6 @@ public class EingangE2ETests
         await using var app = builder.Build();
         app.MapEinblick(u);
         app.MapEingang(u);
-        app.MapQuellWebhooks(u);
         using var http = new HttpClient { BaseAddress = new Uri($"http://localhost:{u.Transport.EinblickPort}") };
         Task<HttpResponseMessage> Sende(string pfad, object inhalt, string? token)
         {
@@ -121,11 +118,7 @@ public class EingangE2ETests
             // ── Laufort Hand: die Kette der Bildaufbereitung (Funktionen als Schnittstelle) beantwortet ein Mensch, Schritt für Schritt ──
             var t = new DateTimeOffset(2026, 10, 12, 9, 0, 0, Random.Shared.Next(0, 999), TimeSpan.Zero).AddMinutes(Random.Shared.Next(0, 100000));
             var dateiname = $"{t:yyyy_MM_dd_HH_mm_ss_fff}_DC0.tiff";
-            var vorgang = await QuellEingang.Live(app.Services).NimmAufAsync(new DateiErkannt
-            {
-                Name = dateiname, Pfad = Path.Combine(verz, dateiname), RelativerPfad = dateiname, Groesse = 1, GeaendertAm = t, ErkanntAm = t,
-                Kennung = dateiname + "|1",
-            }, default);
+            await File.WriteAllTextAsync(Path.Combine(eingangsVerz, dateiname), "x");   // der Dateiwächter findet sie
 
             // Wartet auf den einen offenen Eingang der Hand-Funktion.
             async Task<JsonElement> Eingang(string funktion)
@@ -145,11 +138,11 @@ public class EingangE2ETests
                     new { vorgang = eingang.GetProperty("vorgang").GetString(), ausgaben = new[] { new { typ, daten } } }, null));
                 antwort.GetProperty("ausgang").GetString().Should().Be("Angenommen", antwort.ToString());
             }
-            var pfad = Path.Combine(verz, dateiname);
+            var pfad = Path.Combine(eingangsVerz, dateiname);
 
             // Schritt 1: Einlesen.
             var einlesen = await Eingang("IBildEinlesen");
-            einlesen.GetProperty("eingang").GetProperty("typ").GetString().Should().Be("DateiErkannt");
+            einlesen.GetProperty("eingang").GetProperty("typ").GetString().Should().Be("DateiGefunden");
             einlesen.GetProperty("eingang").GetProperty("daten").GetProperty("Name").GetString().Should().Be(dateiname);
             einlesen.GetProperty("ausgaben").EnumerateArray().Select(x => x.GetString()).Should().BeEquivalentTo("BildEingelesen", "BildNichtLesbar");
             (await Sende("/eingang/ergebnis", new { vorgang = einlesen.GetProperty("vorgang").GetString(), ausgaben = new[] { new { typ = "NimmBildAuf", daten = new { } } } }, null))
@@ -163,7 +156,7 @@ public class EingangE2ETests
             await Beantworte(verkleinern, "BildVerkleinert",
                 new { Dateiname = dateiname, Pfad = pfad, Groesse = 1L, ErkanntAm = t, Verkleinert = Path.Combine(verz, "klein.png"), BreitePixel = 4, HoehePixel = 2 });
 
-            // Schritt 3: Kontrast ausgleichen — dann macht der Bildeingang daraus das Bild des Paars.
+            // Schritt 3: Kontrast ausgleichen — dann führt der Bildeingang Vorschau und eingelesenes Bild zusammen (Join) zum Bild des Paars.
             var ausgleichen = await Eingang("IKontrastausgleich");
             ausgleichen.GetProperty("eingang").GetProperty("typ").GetString().Should().Be("BildVerkleinert");
             await Beantworte(ausgleichen, "VorschauErstellt",
@@ -173,28 +166,6 @@ public class EingangE2ETests
             await Warte(async () => (await es.ReadStreamAsync(paar.Wert, 0, default)).Any(e => e.Payload is ImagePairErstellt), TimeSpan.FromSeconds(30),
                 "Nach der Antwort von Hand lief es nicht weiter (kein ImagePairErstellt über den Bildeingang).");
             (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").GetArrayLength().Should().Be(0);
-            vorgang.Should().NotBe(Guid.Empty);
-
-            // ── Webhook aus der Konfig (docs/06 §6.6): POST auf die Route startet genau einen Vorgang — zweimal gesendet, derselbe Vorgang ──
-            var t2 = t.AddMinutes(7);
-            var datei2 = $"{t2:yyyy_MM_dd_HH_mm_ss_fff}_DC0.tiff";
-            var body = new { Name = datei2, Pfad = Path.Combine(verz, datei2), RelativerPfad = datei2, Groesse = 1, GeaendertAm = t2, ErkanntAm = t2, Kennung = datei2 + "|1" };
-            var w1 = await http.PostAsJsonAsync("/webhook/datei", body);
-            var w2 = await http.PostAsJsonAsync("/webhook/datei", body);
-            w1.StatusCode.Should().Be(HttpStatusCode.Accepted, await w1.Content.ReadAsStringAsync());
-            w2.StatusCode.Should().Be(HttpStatusCode.Accepted);
-            var v1 = (await Lies(w1)).GetProperty("vorgang").GetGuid();
-            (await Lies(w2)).GetProperty("vorgang").GetGuid().Should().Be(v1, "dieselbe Nachricht ist derselbe Vorgang (Kennung)");
-            var wurzel = await es.ReadStreamAsync(v1, 0, default);
-            wurzel.Should().ContainSingle().Which.Payload.Should().BeOfType<DateiErkannt>().Which.Name.Should().Be(datei2);
-            wurzel.Single().Wirker.Should().Be("quelle:DateiErkannt");
-            await Warte(async () => (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").GetArrayLength() > 0,
-                TimeSpan.FromSeconds(30), "Der Webhook hat keinen Eingang an das Einlesen der Bildaufbereitung gegeben.");
-            await Task.Delay(1500);
-            (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").EnumerateArray()
-                .Should().ContainSingle("genau eine Nachricht im Log, also genau ein Eingang").Which.GetProperty("eingang").GetProperty("daten").GetProperty("Name").GetString()
-                .Should().Be(datei2);
-            (await http.PostAsJsonAsync("/webhook/datei", new { Unsinn = 1 })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
         }
         finally
         {
@@ -230,7 +201,6 @@ public class EingangE2ETests
         var builder = WebApplication.CreateBuilder();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["Quellen:DateiErkannt:Pfad"] = Path.Combine(verz, "eingang"),
             ["Identitaeten:Tokens:t-ki"] = "KIOperator",
         });
         u.Graphen = Graphinstanzen.Beispieldomaene(Path.Combine(verz, ".preprocessed"), parallel: 1);

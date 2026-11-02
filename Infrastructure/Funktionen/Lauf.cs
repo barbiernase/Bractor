@@ -28,7 +28,20 @@ public sealed record KnotenAusgabe(int Stelle, object Nachricht);
 /// Das Ergebnis eines Aufrufs (Parent → Graph-Actor): seine Ausgaben an Knoten des Graphen (erst mit dem Erfolg sichtbar), der Fehler nach allen
 /// Wiederholungen oder „abgebrochen“ (der Lauf brauchte ihn nicht mehr).
 /// </summary>
-public sealed record KnotenErgebnis(KnotenAufruf Aufruf, IReadOnlyList<KnotenAusgabe> Ausgaben, string? Fehler, bool Abgebrochen = false);
+/// <param name="Zustand">Der Schnappschuss der Zustände des Knotens nach dem Aufruf (null ohne Zustand) — gesichert, sobald der Lauf fertig ist.</param>
+public sealed record KnotenErgebnis(KnotenAufruf Aufruf, IReadOnlyList<KnotenAusgabe> Ausgaben, string? Fehler, bool Abgebrochen = false, byte[]? Zustand = null);
+
+/// <summary>An den Graph-Actor einer Quellinstanz: dieser Cluster-Knoten hält sie (die Quelle lauscht hier) bzw. nicht mehr.</summary>
+public sealed record QuelleHalten(bool Halten);
+
+/// <summary>An den Parent des Quellknotens: lauschen bzw. aufhören.</summary>
+public sealed record Lausche(bool An);
+
+/// <summary>
+/// Die Quelle meldet ein Element (Kind des Quellknotens → Graph-Actor): seine laufende Nummer, der Schnappschuss ihres Zustands danach und die Zusage,
+/// die der Graph-Actor erfüllt, sobald er den Lauf annimmt (Gegendruck: die Quelle meldet das nächste erst danach).
+/// </summary>
+public sealed record QuellMeldung(object Nachricht, long Nummer, byte[] Zustand, TaskCompletionSource Angenommen);
 
 /// <summary>An einen Parent: die Aufrufe dieses Laufs (null: alle) werden nicht mehr gebraucht — wartende fallen weg, laufende bekommen ihren Abbruch.</summary>
 public sealed record LaufAbbrechen(Guid Lauf, IReadOnlyCollection<Guid>? Aufrufe);
@@ -107,6 +120,21 @@ public sealed class Lauf(GraphInstanz instanz, LaufKontext kontext)
         foreach (var k in instanz.KopfFuer(typ).Select(_graph.KnotenNamens).OfType<KnotenPlan>())
             foreach (var op in k.Operationen.Where(o => o.Ports.Any(p => p.Erzeuger.Length == 0 && p.Typen.Contains(typ))))
                 Pruefe(Hole(_kopf, k, op), w);
+    }
+
+    /// <summary>
+    /// Startet den Lauf einer Quelle: der Quellknoten gilt am Kopf als fertiger Aufruf, der <paramref name="nachricht"/> ausgab — sie geht an seine Abnehmer.
+    /// </summary>
+    public void BeginneMitQuelle(string knoten, int operation, object nachricht, ILaufWirkung w)
+    {
+        _kopfNachricht = nachricht;
+        _pfade[""] = _kopf;
+        var a = Hole(_kopf, knoten, operation);
+        a.Zustand = Aufrufzustand.Laeuft;
+        var beruehrt = new List<Aufruf>();
+        Liefere(a, new KnotenAusgabe(0, nachricht), beruehrt, w);
+        Ende(a, Aufrufzustand.Fertig, w);
+        foreach (var b in beruehrt) Pruefe(b, w);
     }
 
     /// <summary>Das Ergebnis eines Aufrufs: seine Ausgaben gehen an die Abnehmer (ein Strom öffnet je Element einen Unterlauf), dann ist er fertig.</summary>

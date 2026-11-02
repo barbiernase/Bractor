@@ -20,7 +20,7 @@ public static class AkteurHerkunft
     {
         var d = new Dictionary<Type, string?>();
         foreach (var a in Anwendung.Akteure.Rechte.Values)
-            foreach (var t in a.Commands.Concat(a.Queries).Concat(a.Quellen).Concat(a.TransientEvents))
+            foreach (var t in a.Commands.Concat(a.Queries).Concat(a.TransientEvents))
                 d[t] = d.ContainsKey(t) ? null : a.Name;   // zweiter Halter → mehrdeutig
         return d;
     });

@@ -1,7 +1,14 @@
 {
-  "Graph": "Bildaufbereitung",
+  "Graph": "Linienimport",
   "Akteur": "KameraSystem",
-  "Einlesen": {
+  "Eingang": {
+    "Pfad": "${env:HOME}/cqrs-sim/${branch}/DateiErkannt",
+    "Intervall": "00:00:01",
+    "Fertig": "Stabil",
+    "Fenster": "00:00:01",
+    "Kennung": "PfadGroesseZeit"
+  },
+  "Aufbereitung.Einlesen": {
     "Laufort": "Host",
     "Wiederholungen": 1,
     "Worker": {
@@ -15,7 +22,7 @@
       "Token": "sim-bildrechner"
     }
   },
-  "Verkleinern": {
+  "Aufbereitung.Verkleinern": {
     "Laufort": "Host",
     "Wiederholungen": 1,
     "Worker": {
@@ -30,7 +37,7 @@
     },
     "AusgabePfad": "${env:HOME}/cqrs-sim/${branch}/preprocessed"
   },
-  "Kontrast": {
+  "Aufbereitung.Kontrast": {
     "Laufort": "Host",
     "Wiederholungen": 1,
     "Worker": {

@@ -19,7 +19,8 @@ public sealed class GraphActor(
     IReadOnlyDictionary<string, Func<FunktionsParent>> knoten,
     IOffeneEingaenge? offene = null,
     Action<HinweisZustellen>? hinweise = null,
-    ILogger? logger = null) : RahmenActor(logger)
+    ILogger? logger = null,
+    IZustandsAblage? ablage = null) : RahmenActor(logger)
 {
     /// <summary>So viele fertige Kennungen merkt sich ein Graph-Actor (ein doppelter Eingang danach rechnet neu — die Inbox verwirft seine Commands).</summary>
     public const int Gedaechtnis = 10_000;
@@ -37,6 +38,11 @@ public sealed class GraphActor(
     private readonly Queue<Guid> _fertigReihe = new();
     private readonly List<Guid> _auszutragen = new();
     private readonly List<(Guid Kennung, string Grund)> _zuParken = new();
+    // Gesicherter Zustand: je Knoten die Schnappschüsse in Reihenfolge, mit dem Lauf, der sie erzeugte; gesichert wird der letzte, dessen Lauf und alle
+    //   früheren fertig sind (Entscheidung 9).
+    private readonly Dictionary<string, Queue<(Guid Lauf, GesicherterZustand Zustand)>> _schnappschuesse = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, GesicherterZustand> _zuSichern = new(StringComparer.Ordinal);
+    private readonly Queue<QuellMeldung> _quellRueckstau = new();
 
     /// <summary>Kein Passivieren mit offenen Läufen.</summary>
     protected override bool Beschaeftigt => base.Beschaeftigt || _laeufe.Count > 0;
@@ -53,7 +59,15 @@ public sealed class GraphActor(
         switch (context.Message)
         {
             case EingangZustellen e: Kopf(context, e); break;
+            case QuelleHalten h:
+                if (instanz.Graph.Quelle is { } quelle && _parents.TryGetValue(quelle, out var lauscher)) context.Send(lauscher, new Lausche(h.Halten));
+                break;
+            case QuellMeldung m:
+                if (_laeufe.Count >= QuellGrenze) _quellRueckstau.Enqueue(m);
+                else Quelle(context, m);
+                break;
             case KnotenErgebnis r when _laeufe.TryGetValue(r.Aufruf.Kontext.Lauf, out var o):
+                if (r.Zustand is { } bild && r.Fehler is null) Schnappschuss(r.Aufruf.Knoten, r.Aufruf.Kontext.Lauf, new GesicherterZustand(bild, 0));
                 if (r.Fehler is not null)
                     logger?.LogWarning("[Funktionen] {Ort}: Aufruf {Kennung} ({Pfad}) gescheitert — {Fehler}", instanz.Ort(r.Aufruf.Knoten), r.Aufruf.Kennung,
                         r.Aufruf.Pfad.Length == 0 ? "Kopf" : r.Aufruf.Pfad, r.Fehler);
@@ -93,13 +107,76 @@ public sealed class GraphActor(
         Abschluss(context, o);
     }
 
+    /// <summary>So viele Läufe nimmt die Quelle zugleich (die Warteschlange ihres Knotens); darüber wartet sie (Gegendruck).</summary>
+    private int QuellGrenze => instanz.Graph.Quelle is { } q && instanz.Konfig(q).Warteschlange is > 0 and var w ? w : FunktionsOrtKonfig.StandardWarteschlange;
+
+    /// <summary>
+    /// Ein Element der Quelle startet einen Lauf — Kennung aus Instanz und Nummer (nach einem Neustart rechnet ein Lauf mit derselben Nummer dieselben Ids),
+    /// Herkunft aus Instanz, Nummer und Zeit, der Akteur der Instanz. Ein Hinweis der Quelle geht an die, die ihn hören. Ihr Schnappschuss wird gesichert,
+    /// sobald dieser Lauf und alle früheren fertig sind.
+    /// </summary>
+    private void Quelle(IContext context, QuellMeldung m)
+    {
+        var quelle = instanz.Graph.Quelle!;
+        var kennung = Herkunft.Ableite($"quelle:{instanz.Name}:{m.Nummer}");
+        var stream = Herkunft.Ableite($"quelle:{instanz.Name}");
+        if (m.Nachricht is ITransientEvent h)
+        {
+            hinweise?.Invoke(new HinweisZustellen(kennung, h, stream, (int)m.Nummer, DateTimeOffset.UtcNow, kennung.ToString(), instanz.Akteur, null));
+            Schnappschuss(quelle, Guid.Empty, new GesicherterZustand(m.Zustand, m.Nummer));
+            m.Angenommen.TrySetResult();
+            PruefeSicherung(context);
+            return;
+        }
+        if (_laeufe.ContainsKey(kennung) || _fertig.Contains(kennung)) { m.Angenommen.TrySetResult(); return; }   // nach einem Neustart der Quelle
+        var kopf = new EingangZustellen(kennung, instanz.Name, m.Nachricht, Eingangsart.Quelle, stream, (int)m.Nummer, DateTimeOffset.UtcNow, instanz.Akteur,
+            kennung.ToString(), null);
+        var o = new Offen(new Lauf(instanz, new LaufKontext(kennung, stream, (int)m.Nummer, kopf.Zeit, instanz.Akteur, kopf.Korrelation, null)), kopf);
+        _laeufe[kennung] = o;
+        Schnappschuss(quelle, kennung, new GesicherterZustand(m.Zustand, m.Nummer));
+        m.Angenommen.TrySetResult();
+        var op = instanz.Graph.KnotenNamens(quelle)!.Operationen.Single(x => x.Ports.Count == 0);
+        o.Lauf.BeginneMitQuelle(quelle, op.Auf, m.Nachricht, new Wirkung(this, context));
+        Abschluss(context, o);
+    }
+
+    private void Schnappschuss(string knoten, Guid lauf, GesicherterZustand zustand)
+    {
+        if (ablage is null) return;
+        if (!_schnappschuesse.TryGetValue(knoten, out var q)) _schnappschuesse[knoten] = q = new Queue<(Guid, GesicherterZustand)>();
+        q.Enqueue((lauf, zustand));
+    }
+
+    /// <summary>Je Knoten der letzte Schnappschuss, dessen Lauf und alle früheren fertig (oder gescheitert) sind — zum Sichern.</summary>
+    private void PruefeSicherung(IContext context)
+    {
+        var neu = false;
+        foreach (var (knoten, q) in _schnappschuesse)
+        {
+            GesicherterZustand? letzter = null;
+            while (q.Count > 0 && !_laeufe.ContainsKey(q.Peek().Lauf)) letzter = q.Dequeue().Zustand;
+            if (letzter is null) continue;
+            _zuSichern[knoten] = letzter;
+            neu = true;
+        }
+        if (neu) Wecke(context, SchreibeAsync);
+    }
+
     private static void Antworte(IContext context, EingangZustellen e, Quittungsart ausgang)
     {
         if (e.Art != Eingangsart.Hinweis && context.Sender is not null) context.Respond(new EingangQuittung(e.Kennung, ausgang));
     }
 
-    /// <summary>Ist der Lauf fertig oder gescheitert, antwortet er den Wartenden und verlässt die Buchführung.</summary>
+    /// <summary>Ist der Lauf fertig oder gescheitert, antwortet er den Wartenden und verlässt die Buchführung; danach Sicherung und Rückstau der Quelle.</summary>
     private void Abschluss(IContext context, Offen o)
+    {
+        Beende(context, o);
+        if (_laeufe.ContainsKey(o.Kopf.Kennung)) return;
+        PruefeSicherung(context);
+        while (_quellRueckstau.Count > 0 && _laeufe.Count < QuellGrenze) Quelle(context, _quellRueckstau.Dequeue());
+    }
+
+    private void Beende(IContext context, Offen o)
     {
         var kopf = o.Kopf;
         if (o.Lauf.Gescheitert is var (knotenName, grund))
@@ -119,7 +196,7 @@ public sealed class GraphActor(
         if (!o.Lauf.Fertig) return;
         _laeufe.Remove(kopf.Kennung);
         foreach (var w in o.Warten) context.Send(w, new EingangQuittung(kopf.Kennung, Quittungsart.Fertig));
-        if (kopf.Art == Eingangsart.Hinweis) return;
+        if (kopf.Art is Eingangsart.Hinweis) return;
         Merke(kopf.Kennung);
         if (kopf.Art == Eingangsart.Durabel && offene is not null)
         {
@@ -140,17 +217,20 @@ public sealed class GraphActor(
     {
         var aus = _auszutragen.ToArray();
         var parken = _zuParken.ToArray();
+        var sichern = _zuSichern.Select(x => (instanz.Name, x.Key, x.Value)).ToArray();
         _auszutragen.Clear();
         _zuParken.Clear();
+        _zuSichern.Clear();
         try
         {
+            if (sichern.Length > 0) await ablage!.SichereAsync(sichern, ct);
             if (aus.Length > 0) await offene!.ErledigtAsync(aus, ct);
             if (parken.Length > 0) await offene!.ParkeAsync(parken, ct);
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
-            logger?.LogWarning(ex, "[Funktionen] {Instanz}: {Aus} fertige bzw. {Parken} gescheiterte Köpfe nicht geschrieben — der Zusteller bringt sie erneut",
-                instanz.Name, aus.Length, parken.Length);
+            logger?.LogWarning(ex, "[Funktionen] {Instanz}: {Sichern} Zustände, {Aus} fertige bzw. {Parken} gescheiterte Köpfe nicht geschrieben — der Zusteller "
+                + "bringt die Köpfe erneut, die Zustände sichert der nächste fertige Lauf", instanz.Name, sichern.Length, aus.Length, parken.Length);
         }
     }
 

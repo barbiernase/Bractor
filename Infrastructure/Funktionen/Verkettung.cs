@@ -38,6 +38,9 @@ public sealed record FunktionsTraeger(string Name, Func<IServiceProvider, Funkti
     /// <summary>So lange darf eine Rechnung dauern (<see cref="TimeSpan.Zero"/> = ohne Grenze).</summary>
     public TimeSpan Zeitlimit { get; init; }
 
+    /// <summary>Eine Quellfunktion: die Nummer, unter der die Rechnung ihr <c>Lausche</c> ruft (null = keine Quelle).</summary>
+    public int? Lausche { get; init; }
+
     /// <summary>Der Ort des Knotens (<c>instanz/knoten</c>) — Schlüssel der Command-Ids; ohne Instanz der Name der Funktion.</summary>
     public string Ort => Instanz.Length == 0 ? Name : Instanz + "/" + Knoten;
 }

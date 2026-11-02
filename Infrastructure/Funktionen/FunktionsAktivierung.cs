@@ -12,7 +12,8 @@ namespace Infrastructure.Funktionen;
 ///   Instanz (<see cref="KnotenBereich"/>);</item>
 /// <item>die Umsetzung im Host, über die generierte Fabrik in diesem Bereich gebaut (nie einmal je Knoten neben den Actors);</item>
 /// <item>ihr Zustand (<c>IZustand&lt;T&gt;</c>, docs/04 §4.4) und der Zustand jeder Technik in ihrer Konstruktor-Kette
-///   (<see cref="AktivierungsZustaende"/>): frisch bei jeder Aktivierung, ein Cache, nie gesichert.</item>
+///   (<see cref="AktivierungsZustaende"/>): beim Beginn aus der <see cref="IZustandsAblage"/> geladen (je Instanz und Knoten), nach jedem Aufruf als
+///   <see cref="Schnappschuss"/> an den Graph-Actor, der ihn sichert, sobald der Lauf fertig ist.</item>
 /// </list>
 /// Freigegeben wird in umgekehrter Reihenfolge: zuerst die Umsetzung (<see cref="IAsyncDisposable"/> bzw. <see cref="IDisposable"/>), dann der
 /// Bereich mit seiner Technik. Die nächste Aktivierung — auf diesem oder einem anderen Knoten — baut alles neu.
@@ -25,6 +26,8 @@ public sealed class FunktionsAktivierung : IAsyncDisposable
     private readonly string _name;
     private readonly bool _technikZustand;
     private readonly KnotenKontext? _knoten;
+    private readonly IZustandsAblage? _ablage;
+    private readonly bool _quelle;
     private AsyncServiceScope? _bereich;
     private object? _umsetzung;
     private object? _zustand;
@@ -35,10 +38,14 @@ public sealed class FunktionsAktivierung : IAsyncDisposable
     /// <param name="name">Der Name der Funktion — ihr Schlüssel im gesicherten Dokument.</param>
     /// <param name="technikZustand">Trägt eine Technik in der Konstruktor-Kette Zustand (<see cref="TechnikWahl.MitZustand"/>)?</param>
     /// <param name="knoten">Der Knoten der Instanz, für den gebaut wird: seine Konfig-Records und seine Technik-Wahl (<see cref="KnotenBereich"/>).</param>
+    /// <param name="ablage">Wo der Zustand gesichert ist (null: ein Prüfstand — frisch bei jeder Aktivierung).</param>
+    /// <param name="quelle">Eine Quellfunktion: sie sichert ihre laufende Nummer auch ohne Zustand.</param>
     public FunktionsAktivierung(IServiceProvider wurzel, Func<IServiceProvider, object?, object> baue, FunktionsZustandsform? zustand = null,
-        string name = "", bool technikZustand = false, KnotenKontext? knoten = null)
+        string name = "", bool technikZustand = false, KnotenKontext? knoten = null, IZustandsAblage? ablage = null, bool quelle = false)
     {
+        _quelle = quelle;
         _knoten = knoten;
+        _ablage = ablage;
         _wurzel = wurzel;
         _baue = baue;
         _form = zustand;
@@ -52,6 +59,20 @@ public sealed class FunktionsAktivierung : IAsyncDisposable
     /// <summary>Die Umsetzung dieser Aktivierung (nach <see cref="BeginneAsync"/>).</summary>
     public object Umsetzung => _umsetzung ?? throw new InvalidOperationException("Die Aktivierung ist nicht begonnen oder schon freigegeben.");
 
+    /// <summary>Die Nummer des letzten Laufs, den diese Aktivierung gesichert vorfand bzw. zählte (eine Quelle zählt ihre Läufe hier).</summary>
+    public long Nummer { get; set; }
+
+    /// <summary>Das Bild der Zustände jetzt (der eigene und der jeder Technik), oder null ohne Zustand.</summary>
+    public byte[]? Schnappschuss()
+    {
+        if (!MitZustand && !_quelle || _umsetzung is null) return null;
+        var je = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+        if (_form is not null && _zustand is not null) je[""] = _form.Schreibe(_zustand);
+        if (_bereich?.ServiceProvider.GetService<AktivierungsZustaende>() is { } technik)
+            foreach (var (name, (form, wert)) in technik.Alle) je[name] = form.Schreibe(wert);
+        return Zustandsbild.Packe(je);
+    }
+
     /// <summary>Ist die Umsetzung gebaut und noch nicht freigegeben?</summary>
     public bool Aktiv => _umsetzung is not null;
 
@@ -64,6 +85,13 @@ public sealed class FunktionsAktivierung : IAsyncDisposable
         {
             _zustand = _form?.Neu();
             if (_knoten is not null && bereich.ServiceProvider.GetService<KnotenBereich>() is { } k) k.Kontext = _knoten;
+            if ((MitZustand || _quelle) && _ablage is not null && _knoten is not null && await _ablage.LadeAsync(_knoten.Instanz, _knoten.Knoten, default) is { } gesichert)
+            {
+                var je = Zustandsbild.Entpacke(gesichert.Bild);
+                if (_form is not null && _zustand is not null && je.TryGetValue("", out var eigen)) _form.Lies(_zustand, eigen);
+                bereich.ServiceProvider.GetService<AktivierungsZustaende>()?.Vorgabe(je);
+                Nummer = gesichert.Nummer;
+            }
             _umsetzung = _baue(bereich.ServiceProvider, _zustand);
             _bereich = bereich;
         }

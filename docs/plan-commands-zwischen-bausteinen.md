@@ -220,6 +220,23 @@ Aus Schritt 3:
   beide joint (die Python-Worker bleiben unverändert); Je + Sammeln zeigen die Prüfdomäne (`Zubuchung`) und die Laufzeit-Tests.
 - **Spur je Lauf mit Pfad** zieht mit den Graph-Karten in Schritt 7: der Wirker ist eine Karten-Id (W9), Karten für Knoten gibt es erst dort.
 
+Aus Schritt 4:
+
+- **Katalog in `Core/Katalog`** statt `Infrastructure/Funktionen/Katalog`: eine Domäne nennt die Quellfunktion als Knoten im Graph-Record
+  (`Linienimport(Dateiwaechter Eingang, Bildaufbereitung Aufbereitung)`) und sieht `Infrastructure` nicht; `Core` ist schon die Bibliothek der Treiber, die
+  die Domäne benennt (Stores). Die Katalog-Commands (`DateiGefunden`, `Takt`, `Aufruf`) liegen in `Abstractions`, Codegen und Lesart nehmen sie in Leitung
+  und Wire auf (ein Python-Worker kann sie bekommen). Katalogfunktionen nehmen keinen `ILogger` (der Codegen liest Konstruktoren ohne Logging-Assembly).
+- **Gesicherter Zustand**: Tabelle `cqrs_zustaende` je Instanz und Knoten (Bild aus eigenem und Technik-Zustand, ohne Reflection gepackt; bei einer Quelle
+  die laufende Nummer). Das Kind schickt nach jedem Aufruf einen Schnappschuss, der Graph-Actor sichert den letzten, dessen Lauf und alle früheren fertig
+  sind (auch gescheiterte zählen als fertig: ein gescheiterter Quell-Lauf meldet `LaufGescheitert`, die Quelle wiederholt ihn nicht). Die Sperre bleibt je
+  Instanz (gröber als je Knoten, aber genau ein Schreiber).
+- **Quelle**: das Kind des Quellknotens lauscht, solange der Cluster-Knoten die Instanz hält (Sperre); je Element Nummer + Schnappschuss an den Graph-Actor,
+  das nächste erst, wenn er den Lauf annahm (Gegendruck über die Warteschlange des Quellknotens). Lauf-Kennung `quelle:<instanz>:<nummer>`, Herkunft und
+  Ursache aus Instanz und Nummer (kein Log-Eintrag). Der Webhook hält nichts fest (Postfach je Pfad, `POST /eingang/webhook/<pfad>`).
+- **Ohne Umgebung** läuft ein Graph mit Quelle nur, wenn der Test die Konfig seiner Quelle nennt (eine Quelle braucht ihre Werte).
+- **Akteur → Graph-Kopf**: der JSON-Eingang nimmt an `/eingang/command` auch Commands ohne Ziel (`IDarf`), legt einen offenen Eingang (Kennung aus der
+  Command-Id) und nimmt den schnellen Weg; `/eingang/quelle` entfällt. Die Leitung folgt mit Schritt 6 (Client als Record).
+
 ## Schritte
 
 Jeder Schritt baut den Bestand direkt um (keine Abwärtskompatibilität), endet mit grünem `dotnet build` und `scripts/server.sh lauf scripts/tests.sh

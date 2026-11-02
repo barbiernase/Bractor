@@ -133,4 +133,25 @@ public class GraphAnalyzerTests
             """)).Should().Contain(b => b.Contains("bilden einen Kreis"));
         (await Befunde("public sealed record Selbst(Lies L, Selbst S) : IGraph;")).Should().Contain(b => b.Contains("enthält sich selbst"));
     }
+
+    [Fact]
+    public async Task Eine_Quelle_ist_der_Kopf_ihres_Graphen_und_einzige()
+    {
+        const string quelle = """
+            public sealed class Waechter : IFunktion
+            {
+                public async IAsyncEnumerable<Start> Lausche([System.Runtime.CompilerServices.EnumeratorCancellation] System.Threading.CancellationToken ct)
+                { await Task.CompletedTask; yield break; }
+            }
+            """;
+        (await Befunde(quelle + """
+            public sealed class Melde : IFunktion { public Buche Auf(Klein k) => default!; }
+            public sealed record Vorschau(Lies L, Verkleinere V) : IGraph;
+            public sealed record Linie(Waechter Eingang, Vorschau Vorschau, Melde M) : IGraph;
+            """)).Should().BeEmpty("der Wächter erzeugt Start, die Schachtel nimmt es; ein Graph mit Quelle braucht keinen Eingang");
+        (await Befunde(quelle + """
+            public sealed class Fremd : IFunktion { public Buche Auf(Kachel k) => default!; }
+            public sealed record Gemischt(Waechter Eingang, Lies L, Fremd F) : IGraph;
+            """)).Should().ContainSingle().Which.Should().Contain("Quellknoten Eingang").And.Contain("Kachel");
+    }
 }

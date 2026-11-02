@@ -11,8 +11,17 @@ public sealed record KindRechne(KnotenAufruf Aufruf);
 /// <summary>Der Parent bricht den Aufruf ab, den das Kind gerade rechnet (der Lauf braucht ihn nicht mehr).</summary>
 public sealed record KindAbbrechen(Guid Kennung);
 
-/// <summary>Das Kind meldet den Aufruf fertig — mit seinen Ausgaben an Knoten des Graphen — oder gescheitert (<paramref name="Fehler"/>) und ist wieder frei.</summary>
-public sealed record KindFertig(Guid Kennung, string? Fehler, PID Kind, IReadOnlyList<KnotenAusgabe> Ausgaben);
+/// <summary>
+/// Das Kind meldet den Aufruf fertig — mit seinen Ausgaben an Knoten des Graphen und dem Schnappschuss seiner Zustände — oder gescheitert
+/// (<paramref name="Fehler"/>) und ist wieder frei.
+/// </summary>
+public sealed record KindFertig(Guid Kennung, string? Fehler, PID Kind, IReadOnlyList<KnotenAusgabe> Ausgaben, byte[]? Zustand = null);
+
+/// <summary>Der Parent lässt das Kind des Quellknotens lauschen; was es meldet, geht an den Graph-Actor <paramref name="Graph"/>.</summary>
+public sealed record KindLausche(PID Graph);
+
+/// <summary>Das Lauschen endete (die Quelle warf oder ihr Strom endete) — der Parent beginnt es nach einer Pause neu, solange die Instanz hier gehalten wird.</summary>
+public sealed record LauschenEndete(string? Fehler);
 
 /// <summary>
 /// Ein KIND eines Knotens (docs/04 §4.4): eine Umsetzung seiner Funktion mit ihrer Aktivierung (Bereich, Technik, Zustand), ein Aufruf zugleich — oder,
@@ -73,7 +82,20 @@ public sealed class FunktionsKindActor(
                     var fehler = t.IsFaulted ? t.Exception!.GetBaseException().Message : t.IsCanceled ? "abgebrochen (Zeitlimit oder Lauf)" : null;
                     if (t.IsFaulted)
                         logger?.LogWarning(t.Exception?.GetBaseException(), "[Funktionen] {Ort}: Aufruf {Kennung} gescheitert", traeger.Ort, r.Aufruf.Kennung);
-                    if (parent is not null) context.Send(parent, new KindFertig(r.Aufruf.Kennung, fehler, selbst, fehler is null ? ausgaben : Array.Empty<KnotenAusgabe>()));
+                    if (parent is not null)
+                        context.Send(parent, fehler is null
+                            ? new KindFertig(r.Aufruf.Kennung, null, selbst, ausgaben, _aktivierung?.Schnappschuss())
+                            : new KindFertig(r.Aufruf.Kennung, fehler, selbst, Array.Empty<KnotenAusgabe>()));
+                    return Task.CompletedTask;
+                });
+                break;
+            case KindLausche l:
+                var oben = context.Parent;
+                Neben(context, ct => LauscheAsync(context.System, l.Graph, ct), t =>
+                {
+                    var fehler = t.IsFaulted ? t.Exception!.GetBaseException().Message : null;
+                    if (fehler is not null) logger?.LogWarning(t.Exception!.GetBaseException(), "[Funktionen] {Ort}: die Quelle warf", traeger.Ort);
+                    if (oben is not null && !t.IsCanceled) context.Send(oben, new LauschenEndete(fehler));
                     return Task.CompletedTask;
                 });
                 break;
@@ -82,6 +104,23 @@ public sealed class FunktionsKindActor(
                 break;
         }
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Die Quelle lauscht: je Element die nächste Nummer (weiter ab der gesicherten), der Schnappschuss ihres Zustands und die Meldung an den Graph-Actor;
+    /// das nächste Element erst, wenn er den Lauf angenommen hat (Gegendruck).
+    /// </summary>
+    private async Task LauscheAsync(ActorSystem system, PID graph, CancellationToken ct)
+    {
+        var a = _aktivierung ?? throw new InvalidOperationException($"{traeger.Ort}: eine Quelle lauscht im Host");
+        var herkunft = new Herkunft(Guid.Empty, 0, DateTimeOffset.UtcNow, null, WirkerId.FuerFunktion(traeger.Name));
+        await foreach (var x in traeger.Rechne!(a.Umsetzung, traeger.Lausche!.Value, [], herkunft, null, ct).WithCancellation(ct))
+        {
+            a.Nummer++;
+            var angenommen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            system.Root.Send(graph, new QuellMeldung(x, a.Nummer, a.Schnappschuss() ?? Zustandsbild.Packe(new Dictionary<string, byte[]>()), angenommen));
+            await angenommen.Task.WaitAsync(ct);
+        }
     }
 
     private async Task RechneAsync(KnotenAufruf a, List<KnotenAusgabe> ausgaben, CancellationToken ct)

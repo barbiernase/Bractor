@@ -4,7 +4,6 @@ using Abstractions;
 using Cqrs.Leitung;
 using Infrastructure.Akteure;
 using Infrastructure.Funktionen;
-using Infrastructure.Quellen;
 using Marten;
 using Microsoft.Extensions.DependencyInjection;
 using Proto;
@@ -34,12 +33,10 @@ public interface IAnwendung
     /// <summary>Der Weckplan (GeneratedWeckplan): Event-Typ → wen ein Commit weckt (docs/03 §3.5).</summary>
     IReadOnlyDictionary<Type, Infrastructure.Wecken.Weckziel[]> Weckplan { get; }
 
-    /// <summary>Die Quellen-Typen und ihre Treiber (GeneratedQuellen).</summary>
-    IReadOnlyList<QuellTyp> Quellen { get; }
     /// <summary>Die Query-Typen, die die Leseseite bedient (leer ohne Leseseite).</summary>
     IReadOnlyList<Type> QueryTypen { get; }
     /// <summary>Domänen-Nachricht ↔ Nutzlast der Leitung (aus dem Leitungs-Projekt der Anwendung); <c>null</c> = die Anwendung hat keine
-    /// Leitung und damit keinen gRPC-Dienst — hinein geht es dann nur über JSON-Eingang und Quellen (docs/07, Rolle Leitung).</summary>
+    /// Leitung und damit keinen gRPC-Dienst — hinein geht es dann nur über JSON-Eingang und Quellfunktionen (docs/07, Rolle Leitung).</summary>
     INutzlastTabelle? Nutzlast { get; }
     /// <summary>Der STJ-Kontext des Actor-Planes (Wire) und der Event-Speicherung (Marten).</summary>
     JsonSerializerContext WireJson { get; }
@@ -170,7 +167,6 @@ public static class Anwendung
     public static ITechnikTabelle Technik => Aktuell.Technik;
     public static IAggregatTabelle Aggregate => Aktuell.Aggregate;
     public static IReadOnlyDictionary<Type, Infrastructure.Wecken.Weckziel[]> Weckplan => Aktuell.Weckplan;
-    public static IReadOnlyList<QuellTyp> Quellen => Aktuell.Quellen;
     public static IReadOnlyList<Type> QueryTypen => Aktuell.QueryTypen;
     public static JsonSerializerContext WireJson => Aktuell.WireJson;
     public static JsonSerializerContext EventJson => Aktuell.EventJson;

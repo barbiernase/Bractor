@@ -25,6 +25,9 @@ public interface IOffeneEingaenge
     /// <summary>Die Eingänge sind zugestellt (angenommen oder später): wieder fällig erst nach <paramref name="nach"/>, ein Versuch mehr.</summary>
     Task VerschiebeAsync(IReadOnlyCollection<Guid> kennungen, TimeSpan nach, CancellationToken ct);
 
+    /// <summary>Legt offene Eingänge außerhalb einer Entscheidung (ein Command ohne Ziel von einem Akteur); eine schon bekannte Kennung schreibt nichts.</summary>
+    Task LegeAsync(IReadOnlyList<EingangOffen> eingaenge, Guid stream, CancellationToken ct);
+
     /// <summary>
     /// Der Lauf dieser Köpfe ist gescheitert (docs/04 §4.4, Entscheidung 11): sie bleiben in der Tabelle, werden aber nie mehr fällig — mit dem Grund
     /// (der Einblick zeigt sie; wer den Fehler behoben hat, gibt sie frei).
@@ -118,6 +121,16 @@ public sealed class OffeneEingaenge(IDocumentStore store) : IOffeneEingaenge
         await using var cmd = new NpgsqlCommand($"delete from {Name(store)} where kennung = any($1)", conn);
         cmd.Parameters.Add(new NpgsqlParameter { Value = kennungen.ToArray() });
         await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task LegeAsync(IReadOnlyList<EingangOffen> eingaenge, Guid stream, CancellationToken ct)
+    {
+        if (eingaenge.Count == 0) return;
+        await using var session = store.LightweightSession();
+        Lege(session, store, eingaenge.Select(e => e.Kennung).ToList(), eingaenge.Select(e => e.Instanz).ToList(), eingaenge.Select(e => e.Typ).ToList(),
+            eingaenge.Select(e => e.Daten).ToList(), eingaenge.Select(_ => stream).ToList(), eingaenge.Select(e => e.Version).ToList(),
+            eingaenge.Select(e => e.Akteur).ToList(), eingaenge.Select(e => e.Korrelation).ToList());
+        await session.SaveChangesAsync(ct);
     }
 
     public async Task ParkeAsync(IReadOnlyCollection<(Guid Kennung, string Grund)> geparkt, CancellationToken ct)

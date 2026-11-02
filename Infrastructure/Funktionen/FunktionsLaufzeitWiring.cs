@@ -33,13 +33,14 @@ public static class FunktionsLaufzeitWiring
             sp.GetRequiredService<GraphInstanzen>().Alle.Where(i => MitZustand(i, sp)).Select(i => i.Name).ToList(), sp.GetService<ILogger<ZustandsSperre>>()));
         services.AddHostedService(sp => sp.GetRequiredService<ZustandsSperre>());
         services.TryAddSingleton<IEingangsZustellung>(sp => new WegeZustellung(sp.GetRequiredService<IFunktionsWege>()));
+        services.TryAddSingleton<IZustandsAblage>(sp => new ZustandsAblage(sp.GetRequiredService<Marten.IDocumentStore>()));
         services.AddHostedService<FunktionsOrteTakt>();
         services.AddHostedService<FunktionenStart>();
         return services;
     }
 
     /// <summary>Rechnet ein Knoten der Instanz im Host mit Zustand — dem seiner Funktion oder dem einer Technik in der Konstruktor-Kette ihrer Umsetzung?</summary>
-    public static bool MitZustand(GraphInstanz instanz, IServiceProvider dienste) =>
+    public static bool MitZustand(GraphInstanz instanz, IServiceProvider dienste) => instanz.Graph.Quelle is not null ||
         FunktionsBausteinWiring.Knoten(new GraphInstanzen([instanz])).Any(x => MitZustand(x.Baustein, x.Konfig, instanz.Ort(x.Knoten.Name), dienste));
 
     /// <summary>Rechnet die Funktion mit dieser Konfig am Ort <paramref name="ort"/> (<c>instanz/knoten</c>) im Host mit Zustand?</summary>
@@ -133,8 +134,10 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
                     var umsetzung = FunktionsBausteinWiring.Umsetzung(b, bindung);
                     var technikZustand = dienste.GetService<TechnikWahl>()?.MitZustand(instanz.Ort(k.Name)) == true;
                     var bereich = new KnotenKontext(instanz.Name, k.Name, kk);
-                    traeger = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, umsetzung.Baue, b.Zustand, b.Name, technikZustand, bereich), b.Rechne,
-                        b.Liest, antworten) { Instanz = instanz.Name, Knoten = k.Name, ImGraphen = instanz.Graph.ImGraphen(k.Name), Zeitlimit = kk.Zeitlimit };
+                    var ablage = dienste.GetService<IZustandsAblage>();
+                    traeger = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, umsetzung.Baue, b.Zustand, b.Name, technikZustand, bereich, ablage,
+                        quelle: b.Lausche is not null), b.Rechne, b.Liest, antworten)
+                    { Instanz = instanz.Name, Knoten = k.Name, ImGraphen = instanz.Graph.ImGraphen(k.Name), Zeitlimit = kk.Zeitlimit, Lausche = b.Lausche };
                     // Mit Zustand: ein Kind — eine Aktivierung im Cluster, auf dem Knoten, der die Sperre hält (der Zustand ist ein Cache und soll alles sehen).
                     if (mitZustand && (b.Zustand is not null || technikZustand)) konfig = konfig with { Parallel = 1 };
                 }
@@ -144,8 +147,8 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
             }
             var i0 = instanz;
             var knoten0 = knoten;
-            plaene.Add(new InstanzPlan(instanz.Name, () => new GraphActor(i0, knoten0, dienste.GetService<IOffeneEingaenge>(), hinweise, logger),
-                draussen.Distinct().ToList(), mitZustand));
+            plaene.Add(new InstanzPlan(instanz.Name, () => new GraphActor(i0, knoten0, dienste.GetService<IOffeneEingaenge>(), hinweise, logger,
+                dienste.GetService<IZustandsAblage>()), draussen.Distinct().ToList(), mitZustand, Quelle: instanz.Graph.Quelle is not null));
         }
         _wurzel = system.Root.SpawnNamed(Props.FromProducer(() => new FunktionenWurzel(plaene, orte, logger)), FunktionenWurzel.Wurzelname);
         var wurzel = _wurzel;

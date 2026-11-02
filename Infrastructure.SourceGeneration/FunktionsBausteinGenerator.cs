@@ -65,7 +65,7 @@ namespace Infrastructure.SourceGeneration
                         "die Klasse ist nicht öffentlich — die generierte Fabrik kann sie nicht bauen"));
                     continue;
                 }
-                if (f.Fehler.Count == 0 && f.Doppelt.Count == 0 && f.Aufs.Count > 0) gut.Add(f);
+                if (f.Fehler.Count == 0 && f.Doppelt.Count == 0 && (f.Aufs.Count > 0 || f.Lausche != null)) gut.Add(f);
             }
             // Generische Funktionen: je Typargument, mit dem ein Graph sie als Knoten nennt, ein Baustein (Bildverkleinerung<Vorschau>).
             var konstruiert = typen.Where(Graphform.IstGraph).SelectMany(g => Graphform.Lies(g).Knoten).Select(k => k.Typ)
@@ -73,7 +73,7 @@ namespace Infrastructure.SourceGeneration
             foreach (var t in konstruiert)
             {
                 var f = Funktionsform.Lies(t);
-                if (f.Fehler.Count == 0 && f.Doppelt.Count == 0 && f.Aufs.Count > 0 && Ctorbindung.Baubar(t)) gut.Add(f);
+                if (f.Fehler.Count == 0 && f.Doppelt.Count == 0 && (f.Aufs.Count > 0 || f.Lausche != null) && Ctorbindung.Baubar(t)) gut.Add(f);
             }
 
             // Die Umsetzungen im Host: eine Klasse ist sich selbst die Umsetzung; eine Schnittstelle hat ihre öffentlichen, konkreten Implementierungen.
@@ -128,7 +128,8 @@ namespace Infrastructure.SourceGeneration
                     sb.AppendLine($"                    new FunktionsUmsetzung(\"{k.Name}\", typeof({T(k)}), (sp, z) => new {T(k)}({Ctorbindung.Argumente(Ctorbindung.Konstruktor(k), fq, "z")})),");
                 sb.AppendLine("                },");
                 sb.AppendLine($"                new Type[] {{ {string.Join(", ", dienste)} }},");
-                sb.AppendLine($"                Rechne{i}{(f.Zustand != null ? ", Zustand: " + Ctorbindung.Zustandsform(f.Zustand, fq) : "")}),");
+                sb.AppendLine($"                Rechne{i}{(f.Zustand != null ? ", Zustand: " + Ctorbindung.Zustandsform(f.Zustand, fq) : "")}"
+                    + $"{(f.Lausche != null ? $", Lausche: {f.Aufs.Count}" : "")}),");
             }
             sb.AppendLine("        };");
             sb.AppendLine();
@@ -172,6 +173,8 @@ namespace Infrastructure.SourceGeneration
                 var mitCt = x.Strom ? ", ct" : "";
                 sb.AppendLine($"                case {n}: return Ausgaben.{adapter}({aufruf}, {abbildung}{mitCt});");
             }
+            if (f.Lausche is { } l)
+                sb.AppendLine($"                case {f.Aufs.Count}: return Ausgaben.StromAsync(f.{Abstractions.Funktionsvertrag.Lausche}(ct), y => (object?)y{l.Abbildung}, ct);");
             sb.AppendLine($"                default: throw new NotSupportedException($\"{Funktionsform.Anzeigename(f.Typ)} hat kein Auf Nummer {{auf}}.\");");
             sb.AppendLine("            }");
             sb.AppendLine("        }");

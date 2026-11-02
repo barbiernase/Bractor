@@ -55,6 +55,7 @@ public static class JsonEingang
         g.MapPost("/command", async (HttpContext http, JsonElement body, ActorSystem system, IServiceProvider sp, CancellationToken ct) =>
         {
             if (!Erkenne(http, sp, out var akteur, out var abgewiesen)) return abgewiesen!;
+            if (LiesOhneZiel(body) is { } ohneZiel) return await AnKopfAsync(body, ohneZiel, akteur, sp, ct);
             if (!Lies(body, MessageCategory.Command, out var typ, out var nachricht, out var fehler)) return fehler!;
             var cmd = (IAggregatCommand)nachricht!;
             if (akteur != null && !akteur.DarfHinein(typ!))
@@ -101,20 +102,16 @@ public static class JsonEingang
             }, Json);
         });
 
-        // Eine Quell-Nachricht vom Client: ein Fakt von draußen (: ClientGemeldet), Kennung = die Command-Id,
-        //   die der Client vergibt und beim Wiederholen wieder schickt — genau einmal im Log je Kennung, derselbe Vorgang.
-        g.MapPost("/quelle", async (HttpContext http, JsonElement body, IServiceProvider sp, CancellationToken ct) =>
+        // Ein Aufruf an einen Webhook (Katalogfunktion am Kopf eines Graphen, docs/04 §4.7): der Inhalt geht in das Postfach seines Pfads, der Webhook
+        //   startet daraus einen Lauf. Die Kennung wählt der Absender (Kopf „kennung“), sonst eine neue; voll heißt „später“.
+        g.MapPost("/webhook/{**pfad}", async (HttpContext http, string pfad, CancellationToken ct) =>
         {
-            if (!Erkenne(http, sp, out var akteur, out var abgewiesen)) return abgewiesen!;
-            if (!Lies(body, MessageCategory.Event, out var typ, out var nachricht, out var fehler)) return fehler!;
-            if (nachricht is not ClientGemeldet gemeldet)
-                return Results.Json(new { ok = false, fehler = $"{typ!.Name} ist keine Quell-Nachricht vom Client (: ClientGemeldet)" }, Json, statusCode: 400);
-            if (akteur != null && !akteur.DarfHinein(typ!))
-                return Results.Json(new { ok = false, abgelehnt = $"Akteur '{akteur.Name}' darf {typ!.Name} nicht (kein IDarf<{typ.Name}>)" }, Json, statusCode: 403);
-            var kennung = body.TryGetProperty("kennung", out var kn) && Guid.TryParse(kn.GetString(), out var k) ? k : Guid.NewGuid();
-            var wer = akteur?.AkteurFuer(typ!) ?? AkteurHerkunft.EindeutigerHalter(typ!);
-            var vorgang = await Infrastructure.Quellen.QuellEingang.Live(sp).NimmAufAsync(gemeldet with { Kennung = kennung.ToString() }, ct, akteur: wer);
-            return Results.Json(new { ok = true, vorgang, kennung, akteur = wer }, Json, statusCode: StatusCodes.Status202Accepted);
+            using var leser = new StreamReader(http.Request.Body);
+            var inhalt = await leser.ReadToEndAsync(ct);
+            var kennung = http.Request.Headers.TryGetValue("kennung", out var k) && k.ToString() is { Length: > 0 } kn ? kn : Guid.NewGuid().ToString();
+            return Core.Katalog.Webhookpostfaecher.Lege(pfad, new Aufruf(kennung, inhalt))
+                ? Results.Json(new { ok = true, kennung }, Json, statusCode: StatusCodes.Status202Accepted)
+                : Results.Json(new { ok = false, fehler = "das Postfach ist voll — später" }, Json, statusCode: StatusCodes.Status503ServiceUnavailable);
         });
 
         g.MapPost("/query", async (HttpContext http, JsonElement body, IServiceProvider sp) =>
@@ -213,6 +210,42 @@ public static class JsonEingang
     }
 
     /// <summary>Liest <c>{ "typ": "Name", "daten": { … } }</c> als Nachricht der erwarteten Kategorie.</summary>
+    /// <summary>Ein Command ohne Ziel (über die generierte Wire-Form der Commands ohne Ziel); null = der Typ ist keiner.</summary>
+    private static object? LiesOhneZiel(JsonElement body)
+    {
+        var name = body.ValueKind == JsonValueKind.Object && body.TryGetProperty("typ", out var t) ? t.GetString() : null;
+        if (string.IsNullOrEmpty(name) || MessageTypeMapping.Resolve(name).Category != MessageCategory.Unknown) return null;
+        var daten = body.TryGetProperty("daten", out var d) ? System.Text.Encoding.UTF8.GetBytes(d.GetRawText()) : "{}"u8.ToArray();
+        try
+        {
+            var leser = new Utf8JsonReader(daten);
+            leser.Read();
+            return Anwendung.WirePoly.ReadNachricht(name, ref leser) as ICommand;
+        }
+        catch (Exception e) when (e is JsonException or InvalidOperationException or NotSupportedException or KeyNotFoundException) { return null; }
+    }
+
+    /// <summary>
+    /// Ein Command ohne Ziel von einem Akteur (docs/04 §4.4): ein offener Eingang am Kopf der Instanz, die ihn nimmt (Kennung aus der Command-Id — wer
+    /// wiederholt, schickt dieselbe), danach der schnelle Weg. Genau einmal am Kopf; „angenommen“, sobald die Zeile steht.
+    /// </summary>
+    private static async Task<IResult> AnKopfAsync(JsonElement body, object nachricht, AkteurRechte? akteur, IServiceProvider sp, CancellationToken ct)
+    {
+        var typ = nachricht.GetType();
+        if (akteur != null && !akteur.DarfHinein(typ))
+            return Results.Json(new { ok = false, abgelehnt = $"Akteur '{akteur.Name}' darf {typ.Name} nicht (kein IDarf<{typ.Name}>)" }, Json, statusCode: 403);
+        var kennung = body.TryGetProperty("commandId", out var id) && Guid.TryParse(id.GetString(), out var cid) ? cid : Guid.NewGuid();
+        var wer = akteur?.AkteurFuer(typ) ?? AkteurHerkunft.EindeutigerHalter(typ);
+        var korrelation = body.TryGetProperty("korrelation", out var k) && k.GetString() is { Length: > 0 } kor ? kor : kennung.ToString();
+        var eingaenge = Infrastructure.Eingaenge.Folgenbeilagen.VonAkteur((ICommand)nachricht, sp.GetRequiredService<Infrastructure.Funktionen.Verkettung>(),
+            kennung, wer, korrelation);
+        if (eingaenge.Count == 0)
+            return Results.Json(new { ok = false, fehler = $"{typ.Name}: kein Graph nimmt ihn am Kopf (fehlt eine Instanz in der Umgebung?)" }, Json, statusCode: 400);
+        await sp.GetRequiredService<Infrastructure.Eingaenge.IOffeneEingaenge>().LegeAsync(eingaenge.Select(e => e.Eingang).ToList(), kennung, ct);
+        if (sp.GetService<Infrastructure.Funktionen.IFunktionsWege>() is { } wege) Infrastructure.Eingaenge.Folgenbeilagen.StelleZu(eingaenge, wege, kennung);
+        return Results.Json(new { ok = true, kennung, akteur = wer, instanzen = eingaenge.Select(e => e.Eingang.Instanz) }, Json, statusCode: StatusCodes.Status202Accepted);
+    }
+
     private static bool Lies(JsonElement body, MessageCategory erwartet, out Type? typ, out object? nachricht, out IResult? fehler)
     {
         typ = null;

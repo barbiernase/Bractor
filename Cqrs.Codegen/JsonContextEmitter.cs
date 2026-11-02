@@ -66,7 +66,6 @@ public static class JsonContextEmitter
         using Infrastructure.Funktionen;
         using Infrastructure.Projections;
         using Infrastructure.Verteilen;
-        using Infrastructure.Quellen;
 
         namespace Infrastructure.Serialization;
 
@@ -101,8 +100,6 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(EingangZustellen))]
         [JsonSerializable(typeof(EingangQuittung))]
         [JsonSerializable(typeof(Antwortereignis))]
-        [JsonSerializable(typeof(HalteQuelle))]
-        [JsonSerializable(typeof(QuelleGehalten))]
         // ── Framework: Ergebnis-Events, Frist (reisen im Wire) ──
         [JsonSerializable(typeof(CommandFailed))]
         [JsonSerializable(typeof(CommandQuittung))]
@@ -110,8 +107,9 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(LaufGescheitert))]
         """;
 
+    /// <param name="huelle">Die Domain-Assemblies und ihre Vertrags-Hülle (Abstractions, Core): die Katalogfunktionen des Frameworks und ihre Commands.</param>
     public static (string EventContext, string WireContext, string Stats) Emit(
-        IReadOnlyList<Assembly> domainAssemblies)
+        IReadOnlyList<Assembly> domainAssemblies, IReadOnlyList<Assembly> huelle)
     {
         var persistableEvents = new SortedSet<string>(StringComparer.Ordinal);
         var wire = new SortedSet<string>(StringComparer.Ordinal);
@@ -161,9 +159,17 @@ public static class JsonContextEmitter
             }
         }
 
-        // Die Nachrichten ohne Marker (Folgen, Zwischenergebnisse, docs/03 §3.1, docs/04 §4.4): sie reisen als Eingang einer Funktion über denselben
-        //   Wire-Kontext (GeneratedWirePoly koppelt Default.{T} zur Compile-Zeit; die Lesart dort ist Nachrichtenform).
-        foreach (var n in Nachrichtenlesart.Alle(domainAssemblies)) wire.Add("global::" + FullyQualified(n));
+        // Die Zustände der Katalogfunktionen (Core/Katalog): eine Domäne nennt sie als Knoten, ihr Zustand wird wie jeder gesichert.
+        foreach (var asm in huelle.Except(domainAssemblies))
+            foreach (var t in ConcreteClasses(asm).Where(t => t.GetInterfaces().Any(i => i.FullName == "Abstractions.IFunktion")))
+                foreach (var c in t.GetConstructors(BindingFlags.Public | BindingFlags.Instance))
+                    foreach (var p in c.GetParameters())
+                        if (p.ParameterType.IsGenericType && p.ParameterType.GetGenericTypeDefinition().FullName == Abstractions.Funktionsvertrag.Zustand)
+                            zustaende.Add("global::" + FullyQualified(p.ParameterType.GetGenericArguments()[0]));
+
+        // Die Commands ohne Ziel (docs/04 §4.4), auch die des Katalogs (Abstractions): sie reisen als Eingang am Kopf eines Graphen und zu Funktionen draußen
+        //   über denselben Wire-Kontext (GeneratedWirePoly koppelt Default.{T} zur Compile-Zeit; die Lesart dort ist Nachrichtenform).
+        foreach (var n in Nachrichtenlesart.Alle(huelle)) wire.Add("global::" + FullyQualified(n));
 
         var konverter = string.Concat(ids.Select(z => $"        typeof({Abstractions.Idvertrag.Konverter(z)}),\n"));
         var eventCtx = Build(EventContextHeader.Replace("/*ID-KONVERTER*/\n", konverter), "EventJsonSerializerContext",

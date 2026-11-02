@@ -1,16 +1,23 @@
 {
-  "Graph": "Bildaufbereitung",
+  "Graph": "Linienimport",
   "Akteur": "KameraSystem",
-  "Einlesen": {
+  "Eingang": {
+    "Pfad": "/mnt/unlabeledgewebebilder/SNP/IO",
+    "Intervall": "00:00:01",
+    "Fertig": "Stabil",
+    "Fenster": "00:00:01",
+    "Kennung": "NameGroesse"
+  },
+  "Aufbereitung.Einlesen": {
     "Laufort": "Host",
     "Wiederholungen": 1
   },
-  "Verkleinern": {
+  "Aufbereitung.Verkleinern": {
     "Laufort": "Host",
     "Wiederholungen": 1,
     "AusgabePfad": "/home/wirksam/cqrs-data/preprocessed"
   },
-  "Kontrast": {
+  "Aufbereitung.Kontrast": {
     "Laufort": "Host",
     "Wiederholungen": 1,
     "AusgabePfad": "/home/wirksam/cqrs-data/preprocessed"

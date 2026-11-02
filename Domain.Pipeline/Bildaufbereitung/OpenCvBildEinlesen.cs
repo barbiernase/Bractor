@@ -8,7 +8,7 @@ namespace Domain.Pipeline.Bildaufbereitung;
 /// <summary>OpenCV-Umsetzung von <see cref="IBildEinlesen"/> (Laufort Host): die Datei als Farbbild lesen und ihre Maße nennen. Zustandslos.</summary>
 public sealed class OpenCvBildEinlesen : IBildEinlesen
 {
-    public async Task<OneOf<BildEingelesen, BildNichtLesbar>> Auf(DateiErkannt e)
+    public async Task<OneOf<BildEingelesen, BildNichtLesbar>> Auf(DateiGefunden e)
     {
         using var bild = await Task.Run(() => Cv2.ImRead(e.Pfad, ImreadModes.Color));
         if (bild.Empty()) return new BildNichtLesbar(e.Pfad, "Datei nicht lesbar");

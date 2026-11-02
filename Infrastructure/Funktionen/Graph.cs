@@ -35,8 +35,9 @@ public sealed record KnotenPlan(string Name, string Funktion, IReadOnlyList<Oper
 /// Ein Graph (generiert, <c>GeneratedGraphen</c>): Knoten, Köpfe (Eingangstyp → Knoten, die ihn nehmen) und was ihn verlässt. Die Abnehmer je
 /// Ausgabe leitet er einmal aus den Erzeugern der Ports ab (die Kanten stehen im Generat, nicht im Rumpf).
 /// </summary>
+/// <param name="Quelle">Der Quellknoten (eine Funktion, die lauscht): er ist der Kopf, jedes seiner Elemente startet einen Lauf; null = keiner.</param>
 public sealed record GraphPlan(string Name, Type Typ, IReadOnlyList<KnotenPlan> Knoten, IReadOnlyDictionary<Type, string[]> Koepfe,
-    IReadOnlyList<Type> Ausgaenge)
+    IReadOnlyList<Type> Ausgaenge, string? Quelle = null)
 {
     private IReadOnlyDictionary<(string, int, Type), (string Knoten, int Operation, int Port)[]>? _abnehmer;
     private IReadOnlyDictionary<string, IReadOnlySet<Type>>? _imGraphen;
@@ -119,12 +120,14 @@ public sealed class GraphInstanzen(IReadOnlyList<GraphInstanz> alle)
 
     /// <summary>
     /// Je Graph eine Instanz unter seinem Namen — für Prüfstände ohne Umgebung (Tests); jeder Knoten mit den Standards bzw. der Konfig, die
-    /// <paramref name="jeFunktion"/> für seine Funktion nennt.
+    /// <paramref name="jeFunktion"/> für seine Funktion nennt. Ein Graph mit Quelle läuft nur, wenn sie für seine Quelle eine Konfig nennt (eine Quelle
+    /// braucht ihre Werte — welches Verzeichnis, welcher Takt).
     /// </summary>
     public static GraphInstanzen JeGraphEine(IReadOnlyList<GraphPlan> graphen, IReadOnlyDictionary<string, KnotenKonfig>? jeFunktion = null) =>
-        new(graphen.Select(g => new GraphInstanz(g.Name, g, null, g.Knoten
-            .Where(k => jeFunktion?.ContainsKey(k.Funktion) == true)
-            .ToDictionary(k => k.Name, k => jeFunktion![k.Funktion]))).ToList());
+        new(graphen.Where(g => g.Quelle is not { } q || jeFunktion?.ContainsKey(g.KnotenNamens(q)!.Funktion) == true)
+            .Select(g => new GraphInstanz(g.Name, g, null, g.Knoten
+                .Where(k => jeFunktion?.ContainsKey(k.Funktion) == true)
+                .ToDictionary(k => k.Name, k => jeFunktion![k.Funktion]))).ToList());
 
     /// <summary>Die Instanzen aus der Umgebung, geprüft; ein Fehler ist ein Boot-Fehler mit der Datei als Karte.</summary>
     public static GraphInstanzen Aus(IReadOnlyDictionary<string, GraphInstanzKonfig> konfig, IReadOnlyList<GraphPlan> graphen,

@@ -188,7 +188,7 @@ int Erzeuge(string wurzel)
     Console.WriteLine("Analysiere Typen (Proto)...");
     var analyzer = new ReflectionTypeAnalyzer(protoScanAssemblies);
     // Die Nachrichten ohne Marker (Folgen, Zwischenergebnisse): Wertobjekte mit {Typ}Dto-Message, eine eigene Nutzlast-Kategorie (Nachrichtenform).
-    var nachrichten = Nachrichtenlesart.Alle(assemblies);
+    var nachrichten = Nachrichtenlesart.Alle(protoScanAssemblies);
     var allGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IMessagePayload")
         .Concat(analyzer.AnalyzeTypesImplementing("Abstractions.IQuery"))
         .Concat(analyzer.AnalyzeTypesImplementing("Abstractions.IQueryResponse"))
@@ -223,7 +223,7 @@ int Erzeuge(string wurzel)
     // ────────────────────────────────────────────────────────────────────────
     Console.WriteLine();
     Console.WriteLine("Scanne Marker (STJ-Kontexte)...");
-    var (eventContext, wireContext, stats) = JsonContextEmitter.Emit(assemblies);
+    var (eventContext, wireContext, stats) = JsonContextEmitter.Emit(assemblies, protoScanAssemblies);
 
     var serializationDir = Path.Combine(solutionDir, Struktur.SerialisierungsOrdner(wurzel));
     if (!Directory.Exists(serializationDir))

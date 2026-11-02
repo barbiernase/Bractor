@@ -62,9 +62,8 @@ public class AkteurRechteTests
         var p = R("Produktpruefer");
         p.Commands.Should().BeEquivalentTo(new[] { typeof(LabelPhysischesProdukt) });
         p.Queries.Should().BeEquivalentTo(new[] { typeof(SucheImagePairs), typeof(GetImagePair) });
-        p.Quellen.Should().BeEmpty();
         p.TransientEvents.Should().BeEmpty();
-        R("KameraSystem").Quellen.Should().BeEquivalentTo(new[] { typeof(Domain.ImagePair.DateiErkannt) });
+        R("KameraSystem").Commands.Should().BeEquivalentTo(new[] { typeof(Domain.ImagePair.NimmBildAuf) }, "was die Instanz des Linienimports hineingibt");
     }
 
     [Fact]

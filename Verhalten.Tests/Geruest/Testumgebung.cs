@@ -95,18 +95,6 @@ public sealed class Testumgebung
                 [TokenDisponent] = "Disponent",
             },
         };
-        json["Quellen"] = new JsonObject
-        {
-            ["DateiErkannt"] = new JsonObject
-            {
-                ["Pfad"] = Quellpfad,
-                ["Muster"] = new JsonArray("*.tiff"),
-                ["Intervall"] = "00:00:01",
-                ["Fertig"] = new JsonObject { ["Art"] = "Stabil", ["Fenster"] = "00:00:01" },
-                ["Kennung"] = "NameGroesse",
-                ["Laufmodus"] = "EinmalImCluster",
-            },
-        };
         return json;
     }
 
@@ -126,10 +114,16 @@ public sealed class Testumgebung
             if (mitPfad) k["AusgabePfad"] = Path.Combine(Verzeichnis, "aufbereitet");
             return k;
         }
-        yield return ("bildaufbereitung", new JsonObject
+        // Der Linienimport: ein Dateiwächter auf dem Quell-Verzeichnis, darunter die Bildaufbereitung (Graph im Graphen).
+        yield return ("linienimport", new JsonObject
         {
-            ["Graph"] = "Bildaufbereitung", ["Akteur"] = "KameraSystem",
-            ["Einlesen"] = ImHost(), ["Verkleinern"] = ImHost(mitPfad: true), ["Kontrast"] = ImHost(mitPfad: true),
+            ["Graph"] = "Linienimport", ["Akteur"] = "KameraSystem",
+            ["Eingang"] = new JsonObject
+            {
+                ["Pfad"] = Quellpfad, ["Muster"] = new JsonArray("*.tiff"), ["Intervall"] = "00:00:01", ["Fertig"] = "Stabil", ["Fenster"] = "00:00:01",
+                ["Kennung"] = "NameGroesse",
+            },
+            ["Aufbereitung.Einlesen"] = ImHost(), ["Aufbereitung.Verkleinern"] = ImHost(mitPfad: true), ["Aufbereitung.Kontrast"] = ImHost(mitPfad: true),
         });
         // Draußen getragen (IDarf<F> eines verkörperten Akteurs): wie viele Eingänge zugleich, sagen die Slots der Träger beim Anbieten.
         yield return ("paarbeurteilung", new JsonObject { ["Graph"] = "Paarbeurteilung", ["Beurteilung"] = new JsonObject { ["Laufort"] = "Extern" } });

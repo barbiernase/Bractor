@@ -52,12 +52,10 @@ public sealed class BeispielAblaufTests(BeispielAblaufHost h) : IClassFixture<Be
         // Dieselben Dateien noch einmal (gleicher Name, gleiche Größe = dieselbe Kennung): nichts darf ein zweites Mal geschehen.
         foreach (var p in paare)
             foreach (var d in p.Dateien) await h.Bilder.LegeDateiAbAsync(d);
-        await Warte.NachlaufAsync(8);   // Takt des Treibers 1 s, Stabilität 1 s — danach wäre eine zweite Meldung längst im Log
+        await Warte.NachlaufAsync(8);   // Scan des Wächters 1 s, Stabilität 1 s — danach wäre ein zweiter Lauf längst im Log
 
         foreach (var p in paare)
         {
-            foreach (var d in p.Dateien)
-                (await h.Log.ZahlMitFeldAsync<DateiErkannt>("Name", d)).Should().Be(1, $"{d} ist genau einmal als Quell-Nachricht im Log");
             (await h.Log.ZahlAsync<ImagePairErstellt>(p.Id)).Should().Be(1);
             var bilder = await h.Log.DatenAsync<BildVerfuegbar>(p.Id);
             bilder.Should().HaveCount(2);

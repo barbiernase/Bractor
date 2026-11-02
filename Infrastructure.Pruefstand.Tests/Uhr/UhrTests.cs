@@ -5,8 +5,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Abstractions;
 using FluentAssertions;
-using Infrastructure.Quellen;
-using Infrastructure.Quellen.Treiber.Takt;
 using Infrastructure.Uhr;
 using Xunit;
 
@@ -88,48 +86,4 @@ public class UhrTests
         (await werk.LaufAsync(default)).Should().Be(1);
         ids.Should().HaveCount(2).And.OnlyContain(i => i == Uhrwerk.BefehlsId(s, 3), "doppelt gefeuert, einmal gewirkt (Inbox des Ziels)");
     }
-
-    // ── Takt-Treiber ─────────────────────────────────────────────────────────────────────────────────────────────────
-
-    private sealed record Minutentakt : TaktGemeldet;
-
-    private static readonly QuellTyp Takt = new(typeof(Minutentakt), Treibervertrag.Takt, "Minutentakt", "quelle:Minutentakt", null,
-        t => new Minutentakt { Zeitpunkt = t.Zeitpunkt, Kennung = t.Kennung });
-
-    [Fact]
-    public void Der_Intervall_Beginn_und_die_Kennung_sind_auf_jedem_Knoten_gleich()
-    {
-        var zeit = new DateTimeOffset(2026, 10, 26, 14, 37, 12, TimeSpan.FromHours(2));
-        var beginn = TaktTreiber.IntervallBeginn(zeit, TimeSpan.FromMinutes(15));
-        beginn.Should().Be(new DateTimeOffset(2026, 10, 26, 12, 30, 0, TimeSpan.Zero));
-        TaktTreiber.Kennung(beginn).Should().Be("2026-10-26T12:30:00Z");
-        TaktTreiber.IntervallBeginn(zeit.AddMinutes(10), TimeSpan.FromMinutes(15)).Should().Be(beginn.AddMinutes(15), "12:47 liegt im nächsten Intervall");
-    }
-
-    [Fact]
-    public async Task Je_Intervall_genau_eine_Meldung_auch_nach_einem_Neustart_dieselbe_Kennung()
-    {
-        var jetzt = new DateTimeOffset(2026, 10, 26, 12, 0, 1, TimeSpan.Zero);
-        var gemeldet = new List<Minutentakt>();
-        TaktTreiber Neu() => new(Takt, new TaktQuellKonfig { Intervall = TimeSpan.FromMinutes(1) },
-            (n, _) => { gemeldet.Add((Minutentakt)n); return Task.CompletedTask; }, _ => Task.FromResult(jetzt), new QuellenZustand());
-
-        var t = Neu();
-        await t.ProbeAsync(default);
-        jetzt = jetzt.AddSeconds(30);
-        await t.ProbeAsync(default);
-        gemeldet.Should().ContainSingle("dasselbe Intervall meldet ein Treiber nur einmal");
-        jetzt = jetzt.AddSeconds(31);
-        (await t.ProbeAsync(default)).Should().BeLessThanOrEqualTo(TimeSpan.FromSeconds(1));
-        gemeldet.Select(m => m.Kennung).Should().Equal("2026-10-26T12:00:00Z", "2026-10-26T12:01:00Z");
-
-        await Neu().ProbeAsync(default);   // Neustart oder zweiter Knoten im selben Intervall
-        gemeldet.Last().Kennung.Should().Be("2026-10-26T12:01:00Z", "dieselbe Kennung — das Log nimmt sie genau einmal (Version 0 bzw. Verzeichnis)");
-    }
-
-    [Fact]
-    public void Ein_Intervall_unter_einer_Sekunde_ist_ein_Fehler()
-        => FluentActions.Invoking(() => new TaktTreiber(Takt, new TaktQuellKonfig { Intervall = TimeSpan.FromMilliseconds(200) },
-                (_, _) => Task.CompletedTask, _ => Task.FromResult(DateTimeOffset.UnixEpoch), new QuellenZustand()))
-            .Should().Throw<ArgumentOutOfRangeException>();
 }

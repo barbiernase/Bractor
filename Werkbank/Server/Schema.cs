@@ -19,7 +19,6 @@ public static class Schema
         foreach (var p in typeof(UmgebungKonfig).GetProperties().Where(p => p.PropertyType.IsClass && p.PropertyType != typeof(string)
                      && !p.PropertyType.IsGenericType))
             aus[p.Name] = Klasse(p.PropertyType);
-        aus[UmgebungsAbschnitte.Quellen] = new JsonObject { ["art"] = "je", ["schluessel"] = "Quelle", ["wert"] = Klasse(typeof(DateiQuellKonfig)) };
         aus[UmgebungsAbschnitte.Identitaeten] = new JsonObject
         {
             ["art"] = "klasse",

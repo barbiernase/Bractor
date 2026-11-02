@@ -40,7 +40,7 @@ public static class Vertrag
     public static readonly string IKi = typeof(IKi).FullName!;
     public static readonly string IWertobjekt = typeof(IWertobjekt).FullName!;
     public static readonly string IFunktion = typeof(IFunktion).FullName!;
-    public static readonly string IQuellNachricht = typeof(IQuellNachricht).FullName!;
+    public const string IQuellNachricht = "Abstractions.IQuellNachricht";   // entfallen (Quellen sind Katalogfunktionen); die Lesart zieht Schritt 7 nach
     public static readonly string IMessagePayload = typeof(IMessagePayload).FullName!;
     public static readonly string IAusgabe = typeof(IAusgabe).FullName!;
     public static readonly string IDecider = typeof(IDecider<>).FullName!;
