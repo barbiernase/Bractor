@@ -162,7 +162,7 @@ public class UmgebungLaderTests
             .Should().Throw<BootFehler>().WithMessage("*Teilmeldung hat einen Command-Kopf*genau einmal*a, b*");
         GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig>
             {
-                ["linie1"] = new() { Graph = "Bildaufbereitung" }, ["linie2"] = new() { Graph = "Bildaufbereitung" },
+                ["linie1"] = new() { Graph = "Linienimport" }, ["linie2"] = new() { Graph = "Linienimport" },
             }, Graphen).Alle.Select(i => i.Name).Should().Equal("linie1", "linie2");
     }
 
@@ -170,11 +170,11 @@ public class UmgebungLaderTests
     public void Der_Akteur_einer_Instanz_darf_was_sie_verlaesst()
     {
         var rechte = Infrastructure.Komposition.Anwendung.Akteure.Rechte;
-        GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig> { ["linie1"] = new() { Graph = "Bildaufbereitung", Akteur = "KameraSystem" } },
+        GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig> { ["linie1"] = new() { Graph = "Linienimport", Akteur = "KameraSystem" } },
             Graphen, rechte).Alle.Single().Akteur.Should().Be("KameraSystem");
         FluentActions.Invoking(() => GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig>
             {
-                ["linie1"] = new() { Graph = "Bildaufbereitung", Akteur = "Inspekteur" },
+                ["linie1"] = new() { Graph = "Linienimport", Akteur = "Inspekteur" },
             }, Graphen, rechte))
             .Should().Throw<BootFehler>().WithMessage("*Inspekteur darf NimmBildAuf nicht*");
     }
@@ -222,16 +222,17 @@ public class UmgebungLaderTests
         var u = UmgebungLader.Lade(new ConfigurationManager(), name, [], branch: "main");
         u.Umgebung.Name.Should().Be(name);
         GraphInstanzen.Aus(u.Graphen, Graphen, Infrastructure.Komposition.Anwendung.Akteure.Rechte).Alle.Select(i => i.Graph.Name)
-            .Should().BeEquivalentTo(["Bildaufbereitung", "Datensatzpflege", "Teilmeldung", "Paarbeurteilung", "Trainingsrechnung"], "je Graph eine Instanz");
+            .Should().BeEquivalentTo(["Linienimport", "Datensatzpflege", "Teilmeldung", "Paarbeurteilung", "Trainingsrechnung"], "je Graph eine Instanz");
         if (name == "sim-main")
         {
             u.Transport.JsonEingang.Should().BeTrue("Sim: die Werkbank handelt als Akteur");
             foreach (var k in new[] { "Einlesen", "Verkleinern", "Kontrast" })
             {
-                u.Graphen["bildaufbereitung"].Knoten[k].Worker!.Skript.Should().EndWith("funktions_worker.py");
-                u.Graphen["bildaufbereitung"].Knoten[k].Worker!.Argumente.Should().Contain(a => a.EndsWith("/cqrs-sim/main/preprocessed"));
+                u.Graphen["linienimport"].Knoten["Aufbereitung." + k].Worker!.Skript.Should().EndWith("funktions_worker.py");
+                u.Graphen["linienimport"].Knoten["Aufbereitung." + k].Worker!.Argumente.Should().Contain(a => a.EndsWith("/cqrs-sim/main/preprocessed"));
             }
-            u.Graphen["bildaufbereitung"].Knoten["Kontrast"].Werte["AusgabePfad"].Should().EndWith("/cqrs-sim/main/preprocessed");
+            u.Graphen["linienimport"].Knoten["Aufbereitung.Kontrast"].Werte["AusgabePfad"].Should().EndWith("/cqrs-sim/main/preprocessed");
+            u.Graphen["linienimport"].Knoten["Eingang"].Werte["Pfad"].Should().EndWith("/cqrs-sim/main/DateiErkannt", "der Wächter ist der Kopf");
         }
         else u.Transport.JsonEingang.Should().BeFalse("Prod: kein JSON-Eingang");
     }

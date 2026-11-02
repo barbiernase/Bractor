@@ -99,7 +99,7 @@ namespace Probe.B { public interface ILiesZahl : IReadStore { Task<int> LiesAsyn
 
         var rec = Alle(board, "records").Single(r => (string?)r["name"] == "DateiDa");
         var ort = rec["_ort"]!.AsObject();
-        Probe[(int)ort["start"]!..(int)ort["ende"]!].Should().StartWith("public sealed record DateiDa(string Pfad)").And.EndWith("}");
+        Probe[(int)ort["start"]!..(int)ort["ende"]!].Should().Be("public sealed record DateiDa(string Pfad) : ICommand;", "die ganze Deklaration, auch als Einzeiler");
         ((int?)ort["zeile"]).Should().Be(7);
         // Funktion: die Klasse mit ihrem Auf.
         var o = Alle(board, "bausteinFunktionen").Single()["_ort"]!.AsObject();

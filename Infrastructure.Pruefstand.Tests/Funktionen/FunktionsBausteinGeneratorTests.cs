@@ -227,13 +227,18 @@ public interface IPost { Task SendeAsync(string an); }
         quelle.Should().Contain("Rechne0", "Wurzel, Parent und Kinder bringen ihr den Hinweis");
     }
 
-    /// <summary>Der Serializer-Kontext der Komposition, wie ihn der Codegen-Prepass um die Zustände ergänzt (hier von Hand, für die Probe).</summary>
+    /// <summary>
+    /// Der Serializer-Kontext der Komposition, wie ihn der Codegen-Prepass um die Zustände ergänzt (hier von Hand, für die Probe) — auch um die der
+    /// Katalogfunktionen aus Core, die der Generator mit jeder Komposition sieht.
+    /// </summary>
     private const string Kontext = @"
         namespace Infrastructure.Serialization {
             public sealed class EventJsonSerializerContext
             {
                 public static EventJsonSerializerContext Default { get; } = new();
                 public System.Text.Json.Serialization.Metadata.JsonTypeInfo<Probe.Mittelwerte> Mittelwerte => null!;
+                public System.Text.Json.Serialization.Metadata.JsonTypeInfo<Core.Katalog.Gesehen> Gesehen => null!;
+                public System.Text.Json.Serialization.Metadata.JsonTypeInfo<Core.Katalog.Taktstand> Taktstand => null!;
             } }";
 
     [Fact]

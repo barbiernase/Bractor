@@ -240,11 +240,12 @@ public class TechnikBindungTests
     }
 
     [Fact]
-    public void Der_Bestand_hat_zwei_Bild_Techniken_und_den_Konfig_Record_BildaufbereitungKonfig()
+    public void Der_Bestand_hat_zwei_Bild_Techniken_und_die_Konfig_Records_der_Bildaufbereitung_und_des_Katalogs()
     {
+        // Die Katalogfunktionen (Core/Katalog) sind Bausteine wie die der Domäne: ihre Konfig-Records gehören dazu, ob eine Instanz sie nennt oder nicht.
         GeneratedTechnik.Namen.Keys.Should().BeEquivalentTo("IImageResizer", "IHistogramEqualizer");
         GeneratedTechnik.Umsetzungen.Select(i => i.Name).Should().BeEquivalentTo("ImageResizer", "HistogramEqualizer");
-        GeneratedTechnik.Konfigs.Select(k => k.Name).Should().Equal("BildaufbereitungKonfig");
+        GeneratedTechnik.Konfigs.Select(k => k.Name).Should().BeEquivalentTo("BildaufbereitungKonfig", "Dateiwaechterkonfig", "Taktkonfig", "Webhookkonfig");
     }
 
     // ── Analyzer CQRS089–CQRS092 ──────────────────────────────────────────────────────────────────────────────────────
