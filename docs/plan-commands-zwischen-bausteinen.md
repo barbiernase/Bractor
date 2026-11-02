@@ -185,6 +185,23 @@ haltbar ist allein der Kopf.
    kein Command ist). Vorschlag: Konfig.
 4. **Wie eine C#-Client-Assembly ihren Client nennt** (heute `[assembly: IstClient<…>]`, nur für den Client-Analyzer). Wird in Schritt 6 entschieden.
 
+## Präzisierungen aus der Umsetzung
+
+Beim Umbau nachgezogen (Schritt 1–2), passend zu den Entscheidungen, ohne neuen Begriff für den Entwickler:
+
+- **Framework-Sicht `IAggregatCommand`** (Entscheidung 1): `ICommand` hat kein Ziel mehr; `ICommand<T>` erbt die nicht-generische Sicht
+  `IAggregatCommand { Guid Ziel }`, über die Emitter, Aggregat-Actor, Leitung und Uhr das Ziel lesen. Der Fachcode schreibt sie nie (CQRS013:
+  von Hand implementiert oder `Id<T> AggregateId` ohne Typargument ist ein Fehler).
+- **Lage** (Entscheidung 16): neue Primitive `Technik` (eigene Datei bei den Abläufen), `Graph` (`Graphen.cs`) und `KnotenCommand` (ein Command ohne
+  Ziel, den kein Decide abgibt: `Commands.cs` der Abläufe). Hinweise, auch die aus Funktionen, liegen in `Events.cs` der Schreibseite.
+- **Instanz je Cluster-Knoten** (Entscheidung 10, Transport): jeder Cluster-Knoten hält von jeder Instanz einen Graph-Actor; ein Lauf bleibt in dem,
+  der seinen Kopf annahm. Genau einmal im Cluster läuft eine Instanz, deren Knoten Zustand haben (Sperre je Instanz), und — ab Schritt 4 — eine
+  Quellinstanz. Eine Instanz mit Knoten draußen hält ein Cluster-Knoten, sobald für jede ihrer Funktionen ein Arbeiter angemeldet ist.
+- **Ohne Umgebung** (Prüfstände, Tests) läuft je Graph eine Instanz unter seinem Namen; mit Umgebung nur, was ihr Ordner `graphen` nennt.
+- **Akteur einer Quell-Instanz** darf, was den Graphen verlässt (Beispiel: `KameraSystem : IDarf<NimmBildAuf>`).
+- **Ein Command ohne Ziel von einem Akteur** über Leitung bzw. JSON-Eingang an einen Graph-Kopf kommt mit Schritt 4 (dort werden die
+  Quell-Nachrichten der Clients zu Commands).
+
 ## Schritte
 
 Jeder Schritt baut den Bestand direkt um (keine Abwärtskompatibilität), endet mit grünem `dotnet build` und `scripts/server.sh lauf scripts/tests.sh
