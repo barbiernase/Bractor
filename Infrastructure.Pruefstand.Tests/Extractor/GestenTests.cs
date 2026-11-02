@@ -356,7 +356,7 @@ public sealed class GestenTests : IDisposable
 
         var bericht = await GesteAsync(Geaendert("graphen", neu));
 
-        bericht.Patch.Select(p => p.Datei).Should().Equal("Leihwesen/Gebuehren.cs", "dort stehen die Graphen des Namespace");
+        bericht.Patch.Select(p => p.Datei).Should().Equal(["Leihwesen/Gebuehren.cs"], "dort stehen die Graphen des Namespace");
         Text("Gebuehren.cs").Should().Contain("public sealed record Rueckgabelauf(Rueckgabepruefung Pruefung) : IGraph;");
         var karte = Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Rueckgabelauf");
         karte["knoten"]!.AsArray().Select(k => $"{(string?)k!["name"]}:{(string?)k["typ"]}").Should().Equal("Pruefung:Rueckgabepruefung");

@@ -204,7 +204,7 @@ public class SichtTests
         var board = await BoardAsync();
         JsonObject F(string name) => (board["bausteinFunktionen"] as JsonArray)!.OfType<JsonObject>().Single(x => (string?)x["name"] == name);
         static string Ports(JsonObject f) => string.Join(" || ", f["eingaenge"]!.AsArray().OfType<JsonObject>().Select(e =>
-            e["ports"] is JsonArray ps ? string.Join(", ", ps.Select(p => $"{(string?)p!["typ"]} {(string?)p["name"]}")) : (string?)e["eingang"]));
+            e["ports"] is JsonArray { Count: > 0 } ps ? string.Join(", ", ps.Select(p => $"{(string?)p!["typ"]} {(string?)p["name"]}")) : (string?)e["eingang"]));
         Ports(F("MahnungNachSchaetzung")).Should().Be("SchadenGeschaetzt g, GutachtenErhalten? gutachten", "Join mit Warten mit Frist");
         Ports(F("Alarmquittung")).Should().Be("OneOf<PerAnrufErreicht, PerFunkErreicht> erster", "Rennen");
         Ports(F("Seitenbilanz")).Should().Be("IReadOnlyList<SeiteGeprueft> alle", "Sammeln");

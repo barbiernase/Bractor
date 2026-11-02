@@ -203,7 +203,7 @@ public static class PythonQuelle
     /// </summary>
     public static string NeueImplementierung(string paket, ClientBasis basis, string klasse, string dtoEndung = "Dto")
     {
-        var dtos = basis.Auf.SelectMany(a => a.Ausgaenge.Append(a.Event)).Distinct().OrderBy(x => x, StringComparer.Ordinal).Select(x => x + dtoEndung).ToList();
+        var dtos = basis.Auf.SelectMany(a => a.Ausgaenge.Append(a.Event)).Distinct().Select(x => x + dtoEndung).OrderBy(x => x, StringComparer.Ordinal).ToList();
         var zustand = klasse + "State";
         var b = new System.Text.StringBuilder();
         b.AppendLine($"\"\"\"{basis.Client} — Implementierung des Client-Vertrags (Basis {basis.Basis}, generiert aus dem Vertrag).\"\"\"");
