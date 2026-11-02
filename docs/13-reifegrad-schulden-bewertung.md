@@ -101,7 +101,7 @@ Werkzeuge lesen teils per Reflection. Die alte Handle-/Trigger-Welt und der Diri
 1. **Invarianten-Disziplin über Sprachgrenzen.** Dieselben Invarianten tragen Backend, Blazor und Python.
 2. **Compile-Zeit statt Laufzeit.** Analyzer, Generator-Diagnosen und Boot-Guards verwandeln ganze Fehlerklassen (Fehlrouting,
    Dangling-Command, unbounded Token, Wire-Drift, offene Ausgänge, Commands ohne Empfänger, Graphen mit falschen Ports) in Build-Fehler.
-3. **Wenige Bausteine.** Ein Ablauf ist ein Aggregat plus Graphen plus Frist — kein eigener Ablauf-Interpreter, Kanten aus den Typen;
+3. **Wenige Bausteine.** Ein Ablauf ist ein Aggregat plus Graphen plus Frist — kein eigener Ablauf-Interpreter, die Kanten als `Von` an den Knoten;
    Exactly-once kommt aus der Inbox des Aggregats, den abgeleiteten Command-Ids und dem offenen Eingang am Kopf eines Laufs.
 4. **Ehrliche Nicht-Autoritativität.** Jeder Beschleuniger (Redis, Snapshot) hat einen Voll-Read-Fallback.
 5. **Selbstbeobachtung.** Die Werkbank zeigt das System als Karten aus dem Code; durchgespielt wird das echte System, sichtbar über die Spur.

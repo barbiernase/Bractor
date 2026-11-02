@@ -47,8 +47,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 ## Das tragende Bild
 
 - **Drei Arten von Nachrichten:** ein **Command** ist eine Absicht an genau einen Empfänger — mit Ziel im Typ (`ICommand<TAggregat>`) an das
-  Aggregat, ohne Ziel (`ICommand`) an den Knoten desselben Graphen, der ihn nimmt, sonst an den Kopf genau eines Graphen oder einen Akteur, der ihn
-  hört (CQRS116); ein **Event** ist ein Fakt im Log, nur aus einem Decide; ein **Hinweis** (`ITransientEvent`) ist flüchtig und geht nur an Akteure
+  Aggregat, ohne Ziel (`ICommand`) im Graphen an die Knoten, die seinen Erzeuger in `[Von]` nennen, sonst an den Kopf genau eines Graphen oder
+  einen Akteur, der ihn hört (CQRS116); ein **Event** ist ein Fakt im Log, nur aus einem Decide; ein **Hinweis** (`ITransientEvent`) ist flüchtig und geht nur an Akteure
   draußen. Dazu Query und `Frist<TCmd>`.
 - **Schreibseite:** Command → Aggregat-Actor (Single-Writer, Inbox-Tabelle) → `Decide` (`OneOf<Event, Hinweis, Frist<TCmd>, Command ohne Ziel>`,
   nie ein Command an ein Aggregat, CQRS114; ein Command ohne Ziel steht nicht im Log: je Empfänger — Instanz am Graph-Kopf oder Arbeit eines
@@ -65,9 +65,12 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   `Herkunft`, Lese-Fähigkeiten, `CancellationToken`; die Fälle der Rückgabe sind die Ausgangsports (`T`, `OneOf`, `IEnumerable`, `IAsyncEnumerable`:
   Commands und Hinweise). Ein Event hört sie nur als Antwort auf ihren eigenen Aggregat-Command (`CommandResult.Antwort`, CQRS108). Im Konstruktor:
   Konfig-Records, Technik (ohne Marker), `IZustand<T>`, `ILogger<T>`.
-- **Graph** (docs/04 §4.4): `record X(Knoten …) : IGraph` in `Graphen.cs`; jeder Parameter ein Knoten (Funktion oder Graph), die **Kanten folgen
-  aus den Typen** (`GeneratedGraphen`), Köpfe = Eingänge, die kein Knoten erzeugt; Folge, Fork, Wahl, Join, Je, Sammeln, Rennen, Warten mit
-  Frist sind Formen von Signaturen; Graph im Graphen über seine Signatur; kreisfrei (CQRS115). Er läuft als **Instanz** (Datei
+- **Graph** (docs/04 §4.4): `record X(Knoten …) : IGraph` in `Graphen.cs`; jeder Parameter ein Knoten (Funktion oder Graph, eine Funktion auch
+  mehrfach). **Jede innere Kante steht am nehmenden Knoten** als `[Von(nameof(A), nameof(B))]` (eine genannte Quelle speist die Ports ihres Typs),
+  jeder Kopf als `[Kopf]` (nimmt von außen, was keine Quelle speist; je Eingangstyp genau einer); nur eine Quelle trägt keins; was kein Knoten über
+  `Von` nimmt, verlässt den Graphen (`GeneratedGraphen`, eine Lesart `Graphform`). Zwischen den Bausteinen bleibt es beim Typ-Routing mit genau einem
+  Empfänger. Ein Typ höchstens einmal je `Auf`; Folge, Fork, Wahl, Join, Je, Sammeln, Rennen, Warten mit Frist sind Formen von Signaturen; Graph im
+  Graphen über seine Signatur (`Von` hinein speist seine Köpfe, `Von(nameof(G))` nimmt seine Ausgänge); kreisfrei über die Knoten (CQRS115). Er läuft als **Instanz** (Datei
   `graphen/<instanz>.json`: `Graph`, bei Quellkopf `Akteur`, je Knoten Konfig-Werte, `Parallel`, `Warteschlange`, `Wiederholungen`, `Zeitlimit`,
   `Technik`), beliebig oft; ein Graph mit Command-Kopf je Umgebung einmal. Jede Kopf-Nachricht startet einen **Lauf** (Buchführung im
   Graph-Actor der Instanz, haltbar ist nur der Kopf); Command-Ids aus Instanz, Lauf-Pfad, Knoten und Stelle; ein scheiternder Knoten wird
@@ -101,7 +104,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   `IZustand<T>` (CQRS105), eine Instanz mit Zustand rechnet im Cluster auf genau einer Aktivierung (`ZustandsSperre`).
 - **Abläufe** sind Graphen (eine Rechnung je Auslöser: Fork, Join, Je, Sammeln im Lauf) plus ein Vorgangs-Aggregat für alles, was über Läufe hinweg
   gilt (Zählung, Kompensation, Frist im Decide); die Zugehörigkeit ist ein fachliches Feld (A2). Aggregate reden nur über Graphen oder Akteure
-  miteinander. Kein Dirigent, keine Saga, kein Builder, keine ausdrücklichen Kanten.
+  miteinander; zwei Eingänge von außen bringt ein Vorgangs-Aggregat zusammen, nie ein Join. Kein Dirigent, keine Saga, kein Builder.
 - **Uhr:** `Frist<TCmd>` aus dem Decide → `FristGesetzt` (`IRahmenEvent`) + Beilage `cqrs_fristen` → die Uhr sendet fällig mit Id aus dem Frist-Event.
 - **Emit:** genau ein Weg (`CommandEmitter`, Id vom Aufrufer abgeleitet), erzwungen durch CQRS020/021.
 - **Akteure und Clients:** ein Akteur (`record X : IAkteur`) sagt, was er hineingibt (`IDarf<T>`: Commands, Queries, Hinweise) und was zu ihm
@@ -149,8 +152,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   was zu ihm kommt (Arbeit oder Kenntnis), in `Akteure.cs`; Client = Record in `Clients.cs`, der nur nennt, wen er verkörpert (`IVerkoerpert<A>`) —
   über seine Leitung gehen genau `IDarf` und `IHoert` seiner Akteure, kein eigenes Wort dafür; wirksam = verkörperte Akteure ∩ Token, C#-Client
   per `[assembly: IstClient<Arbeitsplatz>]`.
-- **Graph statt Klebecode:** Kanten nie schreiben (kein Builder, keine Liste), sie folgen aus den Typen; passt ein Typ nicht, ist der Adapter eine
-  eigene kleine Funktion. Technik ist, was der Konstruktor einer Funktion nimmt und weder Konfig-Record noch `ILogger<T>` noch `IZustand<T>` ist
+- **Graph statt Klebecode:** die Kanten stehen als `[Von(nameof(…))]` am nehmenden Knoten (kein Builder, keine Liste, keine Generics als
+  Verdrahtung); passt ein Typ nicht, ist der Adapter eine eigene kleine Funktion. Technik ist, was der Konstruktor einer Funktion nimmt und weder Konfig-Record noch `ILogger<T>` noch `IZustand<T>` ist
   (CQRS089–092), ohne Marker.
 - **Kein `InMemoryEventStore`:** Store-Semantik nur gegen echtes Marten (Integration); der Prüfstand testet nur store-freie Logik.
 - **Actors:** jeder Framework-Actor erbt `RahmenActor` (Bereich, Stopp, Passivierung, Fehlerantwort, Zusammenfassen); Cluster-Nachrichten nur

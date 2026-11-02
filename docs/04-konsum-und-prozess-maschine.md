@@ -4,8 +4,8 @@ Stand 2026-11-02, gegen den Code geprüft. Wie man Projektion, Reader, Funktion,
 
 Durabler Konsument des Logs ist nur die **Projektion**: sie schreibt ein Read-Model (replaybar); der Wecker am Commit weckt schnell, der Takt je
 Partition heilt verlorene Weckrufe, gelesen wird geordnet aus dem Event-Store (Invariante 1), der Fortschritt liegt durabel im Store. Gerechnet
-wird vor dem Aggregat in **Funktionsgraphen**: eine Funktion ist eine Klasse mit typisierten Ports, ein Graph nennt Funktionen als Knoten, die
-Kanten folgen aus den Typen; ein Graph läuft als Instanz, jede Kopf-Nachricht startet einen Lauf. Funktionen lesen nie das Log, zwischen ihnen
+wird vor dem Aggregat in **Funktionsgraphen**: eine Funktion ist eine Klasse mit typisierten Ports, ein Graph nennt Funktionen als Knoten, jede
+Kante steht als `[Von(nameof(…))]` am nehmenden Knoten, jeder Kopf als `[Kopf]`; ein Graph läuft als Instanz, jede Kopf-Nachricht startet einen Lauf. Funktionen lesen nie das Log, zwischen ihnen
 fließen Commands; genau einmal wirkt, was einen Graphen verlässt, über die offenen Eingänge am Kopf und die Inbox der Ziele (§4.4). Eine **Quelle**
 ist eine Funktion des Katalogs am Kopf eines Graphen (§4.7). Was ein Baustein ist, folgt aus seiner Code-Form (Marker-Interface,
 Fähigkeits-Parameter, Signatur); einen zweiten Marker gibt es nicht. Zeit kommt über die **Uhr**: ein Decide setzt eine Frist, die Uhr sendet sie fällig.
@@ -228,20 +228,35 @@ public sealed class Bildeingang : IFunktion
 ```
 
 **Graph.** Ein Graph ist ein Record `: IGraph` in `Graphen.cs` der Abläufe; jeder Parameter ist ein **Knoten** (Name = Konfig-Schlüssel, Typ = eine
-Funktion oder ein anderer Graph), die Reihenfolge bedeutet nichts. Kanten werden nie geschrieben: gibt ein Knoten `T` aus, bekommt es jeder Knoten
-desselben Graphen, der `T` nimmt; was kein Knoten nimmt, verlässt den Graphen — als Command an ein Aggregat, an den Kopf eines anderen Graphen
-oder an einen Akteur, als Hinweis an die Akteure, die ihn hören. Die **Köpfe** sind die Eingänge, die kein Knoten erzeugt, je Eingangstyp genau
-einer; eine Quelle ist der einzige Kopf ihres Graphen. Ein Graph ist kreisfrei (einen Command an den eigenen Kopf darf er geben — das ist ein neuer
-Lauf). Seine **Signatur** ergibt sich (Eingänge = Köpfe, Ausgänge = was ihn verlässt), deshalb ist ein Graph als Knoten in einem anderen eine
-Schachtel; seine Knoten heißen dann mit Pfad (`Aufbereitung.Verkleinern`). Zwischen Knoten steht nie Klebecode: passt ein Typ nicht, ist der
-Adapter eine eigene kleine Funktion. Der `GraphGenerator` erzeugt `GeneratedGraphen` (Knoten aufgefaltet, je Operation die Ports mit Form und
-Erzeugern, Köpfe, Ebenen); dieselbe Lesart (`Graphform`) liest der `GraphAnalyzer` (CQRS115), der Extractor und `--graph <Typ>`. Eine Funktion in
-keinem Graphen läuft nie (CQRS117, Warnung).
+Funktion oder ein anderer Graph), die Reihenfolge bedeutet nichts. Dieselbe Funktion darf mehrfach stehen — zwei Knoten mit je eigener Konfig
+(Vorschau und Daumenbild aus derselben Skalierung). Jede innere **Kante** steht am nehmenden Knoten: `[Von(nameof(A), nameof(B))]` nennt die Knoten
+desselben Graphen, von denen er bekommt; eine genannte Quelle speist die Ports, deren Typ sie ausgibt, und mindestens einen. Jedes Argument ist
+`nameof` eines anderen Parameters (kein String-Literal, nicht der Knoten selbst, kein Name doppelt), ein Umbenennen zieht der Compiler nach. Aus
+Typen allein entsteht innen keine Kante: ein neuer Knoten bekommt nichts, was er nicht nennt, und eine Kette gleichen Typs (`Bild → Bild → Bild`)
+ist kein Kreis. Ein **Kopf** trägt `[Kopf]` und nimmt von außen (aus einem Decide, von einem Akteur, vom Ausgang eines anderen Graphen), was keine
+genannte Quelle speist — je Eingangstyp genau einer; ein Knoten kann beides tragen (ein `Auf` von außen, eines von innen). Jeder Knoten trägt
+`[Kopf]`, `[Von]` oder beides; nur eine Quelle trägt keins, sie ist der einzige Kopf ihres Graphen. Was ein Knoten ausgibt und kein Knoten über `Von`
+von ihm nimmt, verlässt den Graphen — als Command an ein Aggregat, an den Kopf eines anderen Graphen oder an einen Akteur (zwischen den Bausteinen
+bleibt es beim Typ-Routing mit genau einem Empfänger, Invariante 3), als Hinweis an die Akteure, die ihn hören. Ein Typ steht höchstens einmal je
+`Auf` (zwei Rollen sind zwei Typen, `BildLinks` und `BildRechts`), so hängt die Zuordnung nie an der Reihenfolge; ein Join paart nur, was von
+genannten Quellen desselben Laufs kommt. Ein Graph ist kreisfrei über seine Knoten (einen Command an den eigenen Kopf darf er geben — das ist ein
+neuer Lauf). Seine **Signatur** ergibt sich (Eingänge = Köpfe, Ausgänge = was ihn verlässt), deshalb ist ein Graph als Knoten in einem anderen eine
+Schachtel: `Von` an ihm speist seine Köpfe, `[Kopf]` an ihm macht seine Köpfe zu Köpfen des äußeren, `Von(nameof(Schachtel))` an einem anderen
+Knoten meint seine Ausgänge; seine Knoten heißen mit Pfad (`Aufbereitung.Verkleinern`). Zwischen Knoten steht nie Klebecode: passt ein Typ nicht,
+ist der Adapter eine eigene kleine Funktion. Der `GraphGenerator` erzeugt `GeneratedGraphen` (Knoten aufgefaltet, je Operation die Ports mit Form
+und Erzeugern, Köpfe, Ebenen); dieselbe Lesart (`Graphform`) liest der `GraphAnalyzer` (CQRS115: GR-GRAPH, GR-KANTE, GR-KOPF, GR-JOIN), der
+Extractor und `--graph <Typ>`. Eine Funktion in keinem Graphen läuft nie (CQRS117, Warnung).
 ```csharp
-// Domain.Pipeline/Bildaufbereitung/Graphen.cs — BildEingelesen gabelt zum Verkleinern und zum Eingang, der beide joint
-public sealed record Bildaufbereitung(Bildeinlesen Einlesen, Bildverkleinerung Verkleinern, Kontrastausgleich Kontrast, Bildeingang Eingang) : IGraph;
-public sealed record Linienimport(Dateiwaechter Eingang, Bildaufbereitung Aufbereitung) : IGraph;     // Quelle am Kopf, Graph im Graphen
+// Domain.Pipeline/Bildaufbereitung/Graphen.cs — das eingelesene Bild gabelt zum Verkleinern und zum Eingang, der beide joint
+public sealed record Bildaufbereitung(
+    [Kopf] Bildeinlesen Einlesen,
+    [Von(nameof(Einlesen))] Bildverkleinerung Verkleinern,
+    [Von(nameof(Verkleinern))] Kontrastausgleich Kontrast,
+    [Von(nameof(Einlesen), nameof(Kontrast))] Bildeingang Eingang) : IGraph;
+public sealed record Linienimport(Dateiwaechter Eingang, [Von(nameof(Eingang))] Bildaufbereitung Aufbereitung) : IGraph;   // Quelle, Graph im Graphen
 ```
+Die übrigen Muster zeigt die Sonde (`GraphExtractor.Kern/Sonde/Vorhersage.cs.txt`, Kartenausgabe): dieselbe Funktion zweimal, eine Kette gleichen
+Typs, ein Knoten mit `[Kopf]` und `[Von]`, ein Graph im Graphen, dessen Ausgang ein anderer Knoten per `Von(nameof(Filter))` nimmt.
 
 **Instanz.** Ein Graph ist eine Blaupause und läuft erst als **Instanz**: eine Datei je Instanz, `umgebungen/<name>/graphen/<instanz>.json`, mit
 `Graph`, bei einem Quellkopf dem `Akteur` (er gibt hinein, was den Graphen verlässt) und je Knoten die Felder seiner Konfig-Records sowie

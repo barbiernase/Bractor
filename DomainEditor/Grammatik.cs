@@ -307,7 +307,7 @@ public static class Grammatik
         new(Gerufen, Funktion, Beliebig, "GR-TECHNIK"),
         // Was ein Akteur hört (IHoert): ein Event oder Hinweis zur Kenntnis, ein Command ohne Ziel als Arbeit (er ist dann sein einziger Empfänger).
         new(Event, Akteur, Beliebig, "GR-EVENT"), new(Transient, Akteur, Beliebig, "GR-TRANSIENT"), new(Command, Akteur, GenauEins, "GR-ARBEIT"),
-        // Ein Command ohne Ziel zwischen Knoten: jeder Knoten desselben Graphen, der ihn nimmt, bzw. der Kopf genau eines Graphen.
+        // Ein Command ohne Ziel zwischen Knoten: jeder Knoten desselben Graphen, der seinen Erzeuger in [Von] nennt, bzw. der Kopf genau eines Graphen.
         new(Command, Funktion, GenauEins, "GR-KANTE"),
         new(Frist, Uhr, GenauEins, "GR-FRIST"),
     ];

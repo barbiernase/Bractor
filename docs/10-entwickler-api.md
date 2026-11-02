@@ -11,15 +11,16 @@ allgemeine Primitive einmal benutzt; die Beispieldomäne (Bildpaare, Datensätze
 
 Das **Log in Postgres ist die einzige Wahrheit.** Geschrieben wird es nur von **Aggregaten** (was sie entschieden haben) — jedes Mal genau einmal.
 **Projektionen** lesen das Log ab ihrer eigenen Position, falten Events in ihren Store und geben nichts aus. Gerechnet wird vor dem Aggregat in
-**Graphen**: eine **Funktion** ist eine Klasse mit typisierten Ports, ein Graph nennt Funktionen als Knoten, die Kanten folgen aus den Typen; ein
-Graph läuft als **Instanz** mit eigener Konfig, jede Kopf-Nachricht startet einen **Lauf**. Eine **Quelle** ist eine Funktion am Kopf eines Graphen,
+**Graphen**: eine **Funktion** ist eine Klasse mit typisierten Ports, ein Graph nennt Funktionen als Knoten, jede Kante steht als
+`[Von(nameof(…))]` am nehmenden Knoten, jeder Kopf als `[Kopf]`; ein Graph läuft als **Instanz** mit eigener Konfig, jede Kopf-Nachricht startet einen **Lauf**. Eine **Quelle** ist eine Funktion am Kopf eines Graphen,
 die lauscht. Zwischen allen fließen **Commands**; was einen Graphen verlässt, wirkt genau einmal über die Inbox seines Ziels. **Akteure** stehen
 draußen: sie geben hinein, was sie dürfen, und bekommen, was sie hören — Arbeit oder Kenntnis; ein **Client** ist die Software, die Akteure
 verkörpert.
 
 Der Entwickler schreibt nur, *was* fachlich passiert — in der **Signatur** einer Methode und in der Basisliste eines Records. `Auf(BildEingelesen
 bild, VorschauErstellt vorschau)` heißt „dieser Knoten wartet im selben Lauf auf beides“, der Rückgabetyp sagt, was herauskommt; `record
-Bildaufbereitung(Bildeinlesen Einlesen, …) : IGraph` sagt, welche Knoten zusammen rechnen. *Wie* es läuft (Cursor, Weckruf, Ordnung,
+Bildaufbereitung([Kopf] Bildeinlesen Einlesen, [Von(nameof(Einlesen))] Bildverkleinerung Verkleinern, …) : IGraph` sagt, welche Knoten zusammen
+rechnen und wer von wem bekommt. *Wie* es läuft (Cursor, Weckruf, Ordnung,
 Exactly-once, Partition, offene Eingänge, Läufe, Orte), wählt der Generator aus diesen Code-Fakten; nichts davon taucht im Fachcode auf
 (Invariante 5).
 
@@ -29,7 +30,7 @@ Exactly-once, Partition, offene Eingänge, Läufe, Orte), wählt der Generator a
 | **Projektion** | hört Events, schreibt ihren Store über Fähigkeiten, gibt nichts aus | `BatchLeser` je (Projektion, Partition) — [04](04-konsum-und-prozess-maschine.md) §4.1, §4.3 |
 | **Reader** | beantwortet Queries über Lese-Fähigkeiten | im Query-Dienst des Hosts |
 | **Funktion** | ein Knoten: Commands an seinen Ports rein (ein Event nur als Antwort auf den eigenen Command), Commands und Hinweise raus; optional Zustand und Technik | Parent je Knoten und Instanz, Kinder bis `Parallel` — §4.4 |
-| **Graph** | nennt Knoten (Funktionen, Graphen); Kanten aus den Typen; läuft als Instanz, je Kopf-Nachricht ein Lauf | Graph-Actor je Instanz und Cluster-Knoten — §4.4 |
+| **Graph** | nennt Knoten (Funktionen, Graphen, eine Funktion auch mehrfach); jede Kante als `[Von(nameof(…))]` am nehmenden Knoten, jeder Kopf als `[Kopf]`; läuft als Instanz, je Kopf-Nachricht ein Lauf | Graph-Actor je Instanz und Cluster-Knoten — §4.4 |
 | **Quelle** | eine Funktion mit `Lausche` am Kopf eines Graphen (Katalog: `Dateiwaechter`, `Taktgeber`, `Webhook`) | eine Quellinstanz genau einmal im Cluster — §4.7 |
 | Store, Technik | Speicher hinter Projektion/Reader bzw. Technik im Konstruktor einer Funktion | – |
 | **Akteur**, **Client** | wer was hineingibt und was zu ihm kommt; welche Software für welche Akteure spricht | Sitzung als Actor je Verbindung, Werkstatt und Verteiler je Knoten — [konzept-akteure.md](konzept-akteure.md) |
@@ -37,14 +38,15 @@ Exactly-once, Partition, offene Eingänge, Läufe, Orte), wählt der Generator a
 
 **Warten** hat zwei Formen. Innerhalb eines Laufs ist es eine Typ-Form der Ports (Join, Sammeln, Rennen, Warten mit Frist). Über Läufe hinweg (auf
 fremde Rückmeldungen warten, zählen, zurücknehmen, eine Frist überwachen) ist es Zustand und gehört in ein **Aggregat**: ein Vorgang ist ein
-Aggregat mit der Vorgangs-Id, Zeit ist eine Frist. Einen Dirigenten, eine Saga, einen Builder oder ausdrückliche Kanten gibt es nicht (§10.3.7).
+Aggregat mit der Vorgangs-Id, Zeit ist eine Frist. Einen Dirigenten, eine Saga oder einen Builder gibt es nicht; die Kanten eines Graphen stehen als
+Attribute an seinen Knoten (§10.3.4, §10.3.7).
 
 ## 10.2 Nachrichten
 
 | Nachricht | Bedeutung | Garantie | Code |
 |---|---|---|---|
 | **Command an ein Aggregat** | Absicht an genau ein Aggregat | wirkt genau einmal (Command-Id, Inbox) | `record … : ICommand<TAggregat>` mit `Id<TAggregat> AggregateId`; ein anlegender Command zusätzlich `ICreationCommand` |
-| **Command ohne Ziel** | Absicht an genau einen Empfänger, den der Absender nicht nennt: den Knoten desselben Graphen, der ihn nimmt, sonst den Kopf genau eines Graphen oder einen Akteur, der ihn hört (Arbeit) | am Kopf und als Arbeit durabel bis zum Ende des Laufs bzw. bis zur Antwort; zwischen Knoten im Speicher des Laufs; nie im Log | `record … : ICommand` |
+| **Command ohne Ziel** | Absicht an genau einen Empfänger, den der Absender nicht nennt: im Graphen die Knoten, die seinen Erzeuger in `[Von]` nennen, sonst den Kopf genau eines Graphen oder einen Akteur, der ihn hört (Arbeit) | am Kopf und als Arbeit durabel bis zum Ende des Laufs bzw. bis zur Antwort; zwischen Knoten im Speicher des Laufs; nie im Log | `record … : ICommand` |
 | **Event** | Fakt im Log, nur aus einem Decide | durabel; wirkt bei jedem Hörer genau einmal | `record … : IEvent` |
 | **Hinweis** | flüchtig: Ablehnung, Fortschritt, „nicht lesbar“, Live-Anzeige — nur an Akteure draußen | höchstens einmal, nie im Log | `record … : ITransientEvent` |
 | **Query** | Frage, wirkt nicht | synchron | `record … : IQuery` |
@@ -168,9 +170,12 @@ public sealed class MahnungNachSchaetzung : IFunktion                           
     public EroeffneMahnung Auf(SchadenGeschaetzt g, GutachtenErhalten? gutachten, Herkunft h) => new(h.NeueId<Mahnvorgang>(), …);
 }
 
-// Graph: Knoten als Parameter, Kanten aus den Typen
-public sealed record Schadensbewertung(Schadensaufnahme Aufnahme, Schadensschaetzer Schaetzung, Gutachtenanfrage Gutachten,
-    MahnungNachSchaetzung Mahnung) : IGraph;
+// Graph: Knoten als Parameter, der Kopf als [Kopf], jede Kante als Von am nehmenden Knoten
+public sealed record Schadensbewertung(
+    [Kopf] Schadensaufnahme Aufnahme,
+    [Von(nameof(Aufnahme))] Schadensschaetzer Schaetzung,
+    [Von(nameof(Aufnahme))] Gutachtenanfrage Gutachten,
+    [Von(nameof(Schaetzung), nameof(Gutachten))] MahnungNachSchaetzung Mahnung) : IGraph;
 ```
 
 - **Funktion:** eine Klasse `: IFunktion` (eine Schnittstelle mit `IFunktion` ist CQRS100). Je `Auf` sind die Command-Parameter die
@@ -185,10 +190,15 @@ public sealed record Schadensbewertung(Schadensaufnahme Aufnahme, Schadensschaet
 - **Ausgaben:** Commands und Hinweise — kein Event, kein `void`, kein `T?`, kein `ValueTask`; ein leerer Strom heißt „nichts“ (CQRS100). Ein Strom
   (`IAsyncEnumerable`): jede Ausgabe geht hinaus, bevor die nächste kommt.
 - **Graph:** `record X(Knoten …) : IGraph` in `Graphen.cs`; jeder Parameter ist ein Knoten (Name = Konfig-Schlüssel, Typ = eine Funktion — eine
-  generische mit Typargument — oder ein Graph), die Reihenfolge bedeutet nichts. Gibt ein Knoten `T` aus, bekommt es jeder Knoten desselben Graphen,
-  der `T` nimmt; was keiner nimmt, verlässt den Graphen. Köpfe = Eingänge, die kein Knoten erzeugt, je Eingangstyp genau einer; kreisfrei; ein Graph
-  im Graphen ist eine Schachtel mit seiner Signatur (CQRS115). Eine Funktion in keinem Graphen läuft nie (CQRS117). Passt ein Typ nicht, ist der
-  Adapter eine eigene kleine Funktion — Klebecode zwischen Knoten gibt es nicht. Zeigen: `dotnet run --project GraphExtractor -- --graph <Typ>`.
+  generische mit Typargument — oder ein Graph), die Reihenfolge bedeutet nichts; dieselbe Funktion darf mehrfach stehen (je Knoten eigene Konfig).
+  **Kanten** stehen am nehmenden Knoten: `[Von(nameof(A), nameof(B))]` nennt die Knoten, von denen er bekommt, und jede genannte Quelle speist die
+  Ports, deren Typ sie ausgibt (mindestens einen; nur `nameof` eines anderen Parameters, kein Name doppelt). Ein **Kopf** trägt `[Kopf]` und nimmt
+  von außen, was keine genannte Quelle speist — je Eingangstyp genau einer; ein Knoten darf beides tragen. Jeder Knoten trägt eins davon, nur eine
+  Quelle keins. Was ein Knoten ausgibt und kein Knoten über `Von` von ihm nimmt, verlässt den Graphen. Ein Typ höchstens einmal je `Auf` (zwei Rollen
+  sind zwei Typen); kreisfrei über die Knoten (eine Kette `Bild → Bild → Bild` ist kein Kreis); ein Graph im Graphen ist eine Schachtel mit seiner
+  Signatur — `Von` an ihm speist seine Köpfe, `[Kopf]` an ihm macht sie zu Köpfen des äußeren, `Von(nameof(Schachtel))` nimmt seine Ausgänge
+  (CQRS115: GR-GRAPH, GR-KANTE, GR-KOPF, GR-JOIN). Eine Funktion in keinem Graphen läuft nie (CQRS117). Passt ein Typ nicht, ist der Adapter eine
+  eigene kleine Funktion — Klebecode zwischen Knoten gibt es nicht. Zeigen: `dotnet run --project GraphExtractor -- --graph <Typ>`.
 - **Genau einmal** ohne Festhalten: der Kopf eines Laufs ist ein offener Eingang, bis der Lauf fertig ist; rechnet ein Knoten erneut, wirkt von
   jedem Command der erste (Ids aus Instanz, Lauf-Pfad, Knoten und Stelle; die Inbox des Ziels verwirft das Zweite). Eine Funktion, die draußen
   etwas bewirkt (eine Datei schreibt), muss Wiederholung vertragen.
@@ -254,7 +264,9 @@ Ein Ablauf über mehrere Aggregate ist ein **Vorgangs-Aggregat** plus **Graphen*
 ohne Ziel an den Kopf des Graphen (`RueckgabeGescannt`); der Start legt den Vorgang an (`StartePruefung` mit `h.NeueId<Seitenpruefung>()`) und hört
 dessen Event als Antwort auf seinen Command; die Antwort öffnet als Strom je Seite einen Unterlauf (Je), die Bilanz nimmt alle Befunde als Liste
 (Sammeln) und schließt den Vorgang ab; eine Frist desselben Aggregats bricht nach Zeit ab. Was je Auslöser zusammengehört, hält der Lauf; was über
-Läufe hinweg gilt (fremde Rückmeldungen, Zählung, Kompensation), das Aggregat — es gibt dazu Commands ohne Ziel an Graphen aus. Die Zugehörigkeit fremder Events zum Vorgang ist ein
+Läufe hinweg gilt (fremde Rückmeldungen, Zählung, Kompensation), das Aggregat — es gibt dazu Commands ohne Ziel an Graphen aus. Zwei Eingänge von
+außen treffen sich in keinem Join (ein Join paart nur Nachrichten desselben Laufs): wer sie zusammenbringen muss, sammelt sie im Vorgangs-Aggregat,
+dessen Decide den zusammengeführten Command ohne Ziel an den Kopf eines Graphen gibt. Die Zugehörigkeit fremder Events zum Vorgang ist ein
 **fachliches Feld** im Event (A2). Kompensation ist ein Decide, das den Gegenzug als Command ohne Ziel ausgibt.
 
 ## 10.4 Typisierte Ids und Herkunft
@@ -303,7 +315,7 @@ Prüfen heißt Bauen (W5). Die Liste „Regel → Build-Gegenstück“ der Gramm
 
 | # | Regel | geprüft durch |
 |---|---|---|
-| R1 | Der Ausgang steht in der Signatur (`Decide`, `Auf`, `Lausche`, `Frage`), die Knoten eines Graphen in seinem Record; der Graph entsteht nur daraus, nie aus Rümpfen | CQRS050, CQRS100, CQRS057, CQRS115 |
+| R1 | Der Ausgang steht in der Signatur (`Decide`, `Auf`, `Lausche`, `Frage`), die Knoten eines Graphen mit `[Kopf]` und `[Von]` in seinem Record; der Graph entsteht nur daraus, nie aus Rümpfen | CQRS050, CQRS100, CQRS057, CQRS115 |
 | R2 | Je Baustein und Eingangstyp höchstens ein `Auf` bzw. eine `Frage` | CQRS101 |
 | R3 | Ein Command an ein Aggregat gehört genau einem Aggregat (`ICommand<TAggregat>`); jedes entschiedene Event hat ein `Apply` im selben Aggregat und umgekehrt; ein Decide gibt keinen Command an ein Aggregat aus | Compiler, CQRS010/011, CQRS079/080, CQRS114 |
 | R4 | Eine Query hat genau ein Ziel (Reader oder Aggregat) | CQRS084/086, CQRS057 |
@@ -322,7 +334,7 @@ Prüfen heißt Bauen (W5). Die Liste „Regel → Build-Gegenstück“ der Gramm
 | R17 | Ein Client sendet, fragt, hört und nimmt Arbeit nur für die Akteure an, die er verkörpert, geschnitten mit dem Token | CQRS063/064, CQRS093–097, Handshake |
 | R18 | Die Hausregel für Actors: ein Weg je Absicht (nur Framework-Code) | CQRS112/113 |
 | R19 | Zustand einer Funktion nur über `IZustand<T>` im Konstruktor | CQRS105, CQRS100 |
-| R20 | Ein Command ohne Ziel hat genau einen Empfänger (Knoten desselben Graphen, Graph-Kopf oder Akteur); ein Graph ist kreisfrei, hat je Eingangstyp einen Kopf und Ports in passender Vielfachheit; jede Instanz passt zu ihrem Graphen | CQRS116, CQRS115, CQRS117 (Warnung), Start-Prüfung (`GraphInstanzen.Aus`) |
+| R20 | Ein Command ohne Ziel hat genau einen Empfänger (im Graphen die Knoten, die seinen Erzeuger in `Von` nennen; sonst Graph-Kopf oder Akteur); ein Graph ist kreisfrei über seine Knoten, jeder Knoten trägt `[Kopf]` oder `[Von(nameof(…))]`, je Eingangstyp ein Kopf, ein Typ einmal je `Auf`, Ports in passender Vielfachheit; jede Instanz passt zu ihrem Graphen | CQRS116, CQRS115, CQRS117 (Warnung), Start-Prüfung (`GraphInstanzen.Aus`) |
 
 Dazu die Projektstruktur ([07](07-projektstruktur.md), CQRS098): wo eine Primitive liegt, sagt die Tabelle `Abstractions/Projektstruktur.cs`.
 
@@ -339,12 +351,12 @@ Entschieden von Tobi; Code-Kommentare zitieren sie mit ihrer Nummer.
 | E5 | Umsetzen | schrittweise, je Schritt auf Tobis Wort |
 | E6 | Darf eine Funktion Zustand haben? | ja, gekapselt, kein Domänen-Zustand (Gewichte, ein Zähler, eine Gesehen-Liste); `IZustand<T>` im Konstruktor, gesichert je Instanz und Knoten nach fertigem Lauf; Gelerntes gehört in Projektionen |
 | E7 | Was fließt zwischen Funktionen? | ein Command ohne Ziel, im Speicher des Laufs, nie im Log (Invariante 6); kein eigener Nachrichten-Marker |
-| E8 | Wie kommt er an? | die Kanten folgen aus den Typen (generierte Graph-Tabelle); an einen Kopf über einen offenen Eingang oder den Boten; kein Broker, keine Abos |
+| E8 | Wie kommt er an? | im Graphen über die Kanten, die als `[Von(nameof(…))]` am nehmenden Knoten stehen; zwischen den Bausteinen über den Typ mit genau einem Empfänger (generierte Graph-Tabelle); an einen Kopf über einen offenen Eingang oder den Boten; kein Broker, keine Abos |
 | E9 | C# und Python | eine Funktion läuft im Host; was draußen gerechnet wird, ist Arbeit eines Akteurs, die ein Client annimmt; denselben Schritt je Umgebung zwischen Host und draußen umzuschalten ist bewusst aufgegeben |
 | E10 | Lebenszyklus einer Funktion | kein eigener: Technik lädt beim ersten Aufruf, Freigabe über `IAsyncDisposable` |
 | E11 | Nachrichtenarten | drei: Command (mit oder ohne Ziel), Event, Hinweis; dazu Query und Frist |
 | E12 | Empfänger eines Commands | genau einer, vom Absender aus: Ziel im Typ → Aggregat; sonst der Knoten desselben Graphen; sonst der Kopf genau eines Graphen oder ein Akteur, der ihn hört |
-| E13 | Graph | ein eigener Typ (`IGraph`), Knoten als Parameter, Kanten aus den Typen, Ablaufformen als Typ-Formen der Ports; läuft als Instanz mit eigener Konfig, beliebig oft |
+| E13 | Graph | ein eigener Typ (`IGraph`), Knoten als Parameter mit `[Kopf]` und `[Von(nameof(…))]` (ausdrückliche Kanten, eine Funktion auch mehrfach; aus Typen allein entsteht innen keine Kante), Ablaufformen als Typ-Formen der Ports; läuft als Instanz mit eigener Konfig, beliebig oft |
 | E14 | Quellen | Katalogfunktionen am Kopf eines Graphen, nicht im Log; durabel über den gesicherten Zustand |
 | E15 | Umgebung | ein Ordner (`umgebung.json` + `graphen/<instanz>.json`); der Akteur einer Quellinstanz steht in ihrer Datei, geprüft gegen sein `IDarf` |
 | E16 | Akteur und Client | Akteur = `IDarf` + `IHoert` (ohne Art); Client = Record, der nur verkörpert; ein C#-Client nennt ihn mit `[assembly: IstClient<X>]`; Hinweise gehen nur an Akteure |
@@ -366,5 +378,5 @@ Annahmen (sicherer Default, gelten, solange Tobi nicht widerspricht):
 Kein Geltungsbereich und keine Daten-Rechte je Objekt (E1); der Platz bleibt frei: die `Herkunft` trägt den Akteur, `Decide` darf ihn sehen; ein
 Bereich wäre später eine weitere Kopfzeile plus Filter in Verteiler, Reader und Lesen ab Position. Kein Löschen- und Aufbewahren-Konzept (Option:
 verschlüsselbare Felder als Typ-Fakt). Keine Schema-Evolution im Editor; `IUpcast` bleibt Backend-Primitive. Kein Dirigent, keine Saga, kein
-Builder und keine ausdrücklichen Kanten, keine Knotenarten, keine Reaktion als eigene Art, keine Schleifen im Graphen. Offenes steht in
+Builder und keine Kantenliste (die Kanten stehen als `Von` an den Knoten), keine Generics als Verdrahtung, keine Knotenarten, keine Reaktion als eigene Art, keine Schleifen im Graphen. Offenes steht in
 [13](13-reifegrad-schulden-bewertung.md) §13.0.
