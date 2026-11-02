@@ -31,6 +31,7 @@ public class ZustellwerkTests
             Verschoben.AddRange(kennungen.Select(k => (k, nach)));
             return Task.CompletedTask;
         }
+        public Task ParkeAsync(IReadOnlyCollection<(Guid Kennung, string Grund)> geparkt, CancellationToken ct) => Task.CompletedTask;
     }
 
     private sealed class Zustellung(Func<OffenerEingang, Zustellausgang> ausgang) : IEingangsZustellung

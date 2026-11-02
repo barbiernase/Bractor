@@ -2,8 +2,12 @@ using Abstractions;
 
 namespace Infrastructure.Funktionen;
 
-/// <summary>Rechnet die Funktion zu einem Eingang: ihre Ausgaben in Reihenfolge (Commands, Zwischenergebnisse, Hinweise).</summary>
-public delegate IAsyncEnumerable<object> FunktionsRechnung(object umsetzung, object eingang, Herkunft herkunft, IFaehigkeiten? faehigkeiten, CancellationToken ct);
+/// <summary>
+/// Rechnet ein <c>Auf</c> der Funktion (Nummer <paramref name="auf"/>) mit seinen Ports als Objekten (<c>T?</c> als null, <c>IReadOnlyList&lt;T&gt;</c> als
+/// Liste, <c>OneOf</c> als der gekommene Fall): ihre Ausgaben in Reihenfolge (Commands, Hinweise).
+/// </summary>
+public delegate IAsyncEnumerable<object> FunktionsRechnung(object umsetzung, int auf, object?[] argumente, Herkunft herkunft, IFaehigkeiten? faehigkeiten,
+    CancellationToken ct);
 
 /// <summary>Rechnet die Funktion draußen (<see cref="Werkstatt"/>): Kennung des Eingangs, Nachricht, Herkunft, Korrelation, ob er ein Hinweis ist.</summary>
 public delegate IAsyncEnumerable<object> FunktionsRechnungDraussen(Guid kennung, object eingang, Herkunft herkunft, string? korrelation, bool hinweis,
@@ -14,12 +18,13 @@ public delegate IAsyncEnumerable<object> FunktionsRechnungDraussen(Guid kennung,
 /// wie sie rechnet und ob ihr <c>Auf</c> Lese-Fähigkeiten nimmt — oder, wenn sie draußen rechnet, nur der Weg dorthin (<see cref="Draussen"/>) —, dazu
 /// Instanz, Knoten und seine Kanten im Graphen.
 /// </summary>
-/// <param name="Antworten">Die Event-Typen, die die Funktion als Antwort auf ihre eigenen Commands hört (das Ziel entschied sie, docs/04 §4.4).</param>
+/// <param name="Antworten">Die Event-Typen, die die Funktion als Antwort auf ihre eigenen Commands hört (das Ziel entschied sie, docs/04 §4.4), je mit der
+/// Nummer ihres <c>Auf</c>.</param>
 /// <param name="Draussen">Draußen (Laufort Extern oder Hand): ein Arbeiter rechnet, das Kind hat keine Aktivierung.</param>
 public sealed record FunktionsTraeger(string Name, Func<IServiceProvider, FunktionsAktivierung>? Aktivierung, FunktionsRechnung? Rechne, bool Liest = false,
-    IReadOnlySet<Type>? Antworten = null, FunktionsRechnungDraussen? Draussen = null)
+    IReadOnlyDictionary<Type, int>? Antworten = null, FunktionsRechnungDraussen? Draussen = null)
 {
-    private static readonly IReadOnlyDictionary<Type, string[]> KeineKanten = new Dictionary<Type, string[]>();
+    private static readonly IReadOnlySet<Type> KeineKanten = new HashSet<Type>();
 
     /// <summary>Die Instanz, in deren Graph die Funktion ein Knoten ist (leer: ohne Graph, nur Prüfstände).</summary>
     public string Instanz { get; init; } = "";
@@ -27,8 +32,11 @@ public sealed record FunktionsTraeger(string Name, Func<IServiceProvider, Funkti
     /// <summary>Der Name des Knotens im Graphen.</summary>
     public string Knoten { get; init; } = "";
 
-    /// <summary>Die Kanten des Knotens: Command ohne Ziel → die Knoten desselben Graphen, die ihn nehmen.</summary>
-    public IReadOnlyDictionary<Type, string[]> Kanten { get; init; } = KeineKanten;
+    /// <summary>Die Commands ohne Ziel, die der Knoten an Knoten desselben Graphen gibt (der Graph-Actor bringt sie hin; alles andere verlässt den Graphen).</summary>
+    public IReadOnlySet<Type> ImGraphen { get; init; } = KeineKanten;
+
+    /// <summary>So lange darf eine Rechnung dauern (<see cref="TimeSpan.Zero"/> = ohne Grenze).</summary>
+    public TimeSpan Zeitlimit { get; init; }
 
     /// <summary>Der Ort des Knotens (<c>instanz/knoten</c>) — Schlüssel der Command-Ids; ohne Instanz der Name der Funktion.</summary>
     public string Ort => Instanz.Length == 0 ? Name : Instanz + "/" + Knoten;

@@ -54,6 +54,12 @@ public sealed record EingangQuittung(Guid Kennung, Quittungsart Ausgang) : IWire
 /// <summary>Die abgeleiteten Kennungen in einer Kette — eine Quelle für Kind, Tests und Werkzeuge.</summary>
 public static class Kettenvertrag
 {
+    /// <summary>
+    /// Die Kennung des Aufrufs einer Operation (<paramref name="auf"/>) des Knotens am <paramref name="ort"/> (<c>instanz/knoten</c>) im Lauf
+    /// <paramref name="lauf"/> auf dem Pfad <paramref name="pfad"/> (Entscheidung 15): ein neuer Lauf vom selben Kopf rechnet dieselben Ids.
+    /// </summary>
+    public static Guid Aufruf(Guid lauf, string ort, string pfad, int auf) => Herkunft.Ableite($"aufruf:{ort}:{lauf:N}:{pfad}:{auf}");
+
     /// <summary>Die Kennung der Ausgabe an <paramref name="stelle"/> des Knotens am <paramref name="ort"/> (<c>instanz/knoten</c>) zum Eingang <paramref name="eingang"/>.</summary>
     public static Guid Ausgabe(Guid eingang, string ort, int stelle) => Herkunft.Ableite($"ausgabe:{ort}:{eingang:N}:{stelle}");
 

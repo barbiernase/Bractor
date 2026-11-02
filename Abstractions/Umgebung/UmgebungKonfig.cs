@@ -117,7 +117,8 @@ public sealed class KnotenKonfig
 {
     /// <summary>Die Schlüssel eines Knotens, die keine Felder eines Konfig-Records sind.</summary>
     public static readonly IReadOnlyList<string> Rahmenfelder =
-        [nameof(Laufort), nameof(Implementierung), nameof(Wiederholungen), nameof(Parallel), nameof(Warteschlange), nameof(Vorwaermen), nameof(Worker), nameof(Technik)];
+        [nameof(Laufort), nameof(Implementierung), nameof(Wiederholungen), nameof(Parallel), nameof(Warteschlange), nameof(Vorwaermen), nameof(Zeitlimit), nameof(Worker),
+         nameof(Technik)];
 
     public FunktionsLaufort Laufort { get; set; } = FunktionsLaufort.Host;
     /// <summary>Nur Host: der Klassenname der Implementierung — nötig, wenn es mehrere gibt.</summary>
@@ -131,6 +132,11 @@ public sealed class KnotenKonfig
     public int Warteschlange { get; set; }
     /// <summary>Alle Kinder schon beim Start anlegen (eine Umsetzung, die lange lädt).</summary>
     public bool Vorwaermen { get; set; }
+    /// <summary>
+    /// So lange darf eine Rechnung des Knotens dauern (danach gilt sie als gescheitert und wird wiederholt), und so lange wartet ein Auf mit
+    /// <c>T?</c>-Eingängen auf sie, sobald alle übrigen da sind (danach feuert es mit null, docs/04 §4.4); <see cref="TimeSpan.Zero"/> = ohne.
+    /// </summary>
+    public TimeSpan Zeitlimit { get; set; }
     /// <summary>Nur Extern: wie die Werkbank den Worker startet (▶ Worker starten). Der Host liest es nie.</summary>
     public WorkerKonfig? Worker { get; set; }
     /// <summary>Je Technik im Konstruktor (einfacher Name der Schnittstelle) die gewählte Umsetzung (Klassenname) — nötig, wenn es mehrere gibt.</summary>

@@ -105,14 +105,13 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
             foreach (var (_, k, b, kk) in FunktionsBausteinWiring.Knoten(new GraphInstanzen([instanz])))
             {
                 var bindung = FunktionsBausteinWiring.BindungVon(b, kk, instanz.Ort(k.Name));
-                var antworten = b.Eingaenge.Where(e => !e.Hinweis && typeof(IEvent).IsAssignableFrom(e.Typ) && !typeof(IQuellNachricht).IsAssignableFrom(e.Typ))
-                    .Select(e => e.Typ).ToHashSet();
+                var antworten = b.Antworten();
                 var wiederholungen = bindung.Wiederholungen > 0 ? bindung.Wiederholungen : FunktionsOrtKonfig.StandardWiederholungen;
                 var kindLogger = logs?.CreateLogger("Funktion." + b.Name);
                 FunktionsParent Parent(FunktionsTraeger traeger, FunktionsOrtKonfig konfig) => new(traeger, konfig,
                     () => new FunktionsKindActor(traeger, dienste, wege, koepfe, async (cmd, id, korrelation, t) => await emitter.EmitMitAntwortAsync(cmd, id, korrelation, t),
                         dienste.GetService<IFaehigkeitsFabrik>(), kindLogger, hinweise: hinweise),
-                    dienste.GetService<IOffeneEingaenge>(), kindLogger);
+                    kindLogger);
                 var konfig = new FunktionsOrtKonfig(
                     Parallel: bindung.Parallel > 0 ? bindung.Parallel : FunktionsOrtKonfig.StandardParallel,
                     Warteschlange: bindung.Warteschlange > 0 ? bindung.Warteschlange : FunktionsOrtKonfig.StandardWarteschlange,
@@ -125,7 +124,7 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
                     var baustein = b;
                     traeger = new FunktionsTraeger(b.Name, null, null, false, antworten,
                         (kennung, nachricht, herkunft, korrelation, hinweis, t) => werkstatt.RechneAsync(baustein, kennung, nachricht, herkunft, korrelation, hinweis, t))
-                    { Instanz = instanz.Name, Knoten = k.Name, Kanten = k.Kanten };
+                    { Instanz = instanz.Name, Knoten = k.Name, ImGraphen = instanz.Graph.ImGraphen(k.Name), Zeitlimit = kk.Zeitlimit };
                     draussen.Add(b.Name);
                     konfig = konfig with { Vorwaermen = false };
                 }
@@ -135,7 +134,7 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
                     var technikZustand = dienste.GetService<TechnikWahl>()?.MitZustand(instanz.Ort(k.Name)) == true;
                     var bereich = new KnotenKontext(instanz.Name, k.Name, kk);
                     traeger = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, umsetzung.Baue, b.Zustand, b.Name, technikZustand, bereich), b.Rechne,
-                        b.Liest, antworten) { Instanz = instanz.Name, Knoten = k.Name, Kanten = k.Kanten };
+                        b.Liest, antworten) { Instanz = instanz.Name, Knoten = k.Name, ImGraphen = instanz.Graph.ImGraphen(k.Name), Zeitlimit = kk.Zeitlimit };
                     // Mit Zustand: ein Kind — eine Aktivierung im Cluster, auf dem Knoten, der die Sperre hält (der Zustand ist ein Cache und soll alles sehen).
                     if (mitZustand && (b.Zustand is not null || technikZustand)) konfig = konfig with { Parallel = 1 };
                 }
@@ -145,7 +144,8 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
             }
             var i0 = instanz;
             var knoten0 = knoten;
-            plaene.Add(new InstanzPlan(instanz.Name, () => new GraphActor(i0, knoten0, logger), draussen.Distinct().ToList(), mitZustand));
+            plaene.Add(new InstanzPlan(instanz.Name, () => new GraphActor(i0, knoten0, dienste.GetService<IOffeneEingaenge>(), hinweise, logger),
+                draussen.Distinct().ToList(), mitZustand));
         }
         _wurzel = system.Root.SpawnNamed(Props.FromProducer(() => new FunktionenWurzel(plaene, orte, logger)), FunktionenWurzel.Wurzelname);
         var wurzel = _wurzel;

@@ -8,3 +8,13 @@ namespace Abstractions;
 /// Instanz mit eigener Konfig (<c>umgebungen/&lt;name&gt;/graphen/&lt;instanz&gt;.json</c>), beliebig oft.
 /// </summary>
 public interface IGraph { }
+
+/// <summary>
+/// Ein Lauf eines Graphen ist gescheitert (docs/04 §4.4, Entscheidung 11): ein Knoten warf auch nach seinen Wiederholungen. Der Kopf ist geparkt, die
+/// offenen Zweige sind abgebrochen; der Hinweis geht an die Akteure, die ihn hören.
+/// </summary>
+/// <param name="Instanz">Die Instanz des Graphen.</param>
+/// <param name="Lauf">Die Kennung des Kopfs (des Eingangs, der den Lauf startete).</param>
+/// <param name="Knoten">Der Knoten, der scheiterte (Pfad im Graphen).</param>
+/// <param name="Grund">Die Meldung des letzten Fehlers.</param>
+public sealed record LaufGescheitert(string Instanz, Guid Lauf, string Knoten, string Grund) : ITransientEvent;

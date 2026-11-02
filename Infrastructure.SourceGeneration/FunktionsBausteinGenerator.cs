@@ -58,13 +58,22 @@ namespace Infrastructure.SourceGeneration
                 foreach (var (text, ort) in f.Fehler) context.ReportDiagnostic(Diagnostic.Create(FormFehler, ort, t.Name, text));
                 foreach (var (e, ort) in f.Doppelt)
                     context.ReportDiagnostic(Diagnostic.Create(Doppelt, ort, t.Name, e.Name, Abstractions.Funktionsvertrag.Auf));
+                if (t.IsGenericType) continue;   // eine Blaupause: ihre Knoten nennen sie mit Typargument (unten)
                 if (!f.Draussen && !Ctorbindung.Baubar(t))
                 {
                     context.ReportDiagnostic(Diagnostic.Create(FormFehler, t.Locations.FirstOrDefault() ?? Location.None, t.Name,
-                        "die Klasse ist nicht öffentlich oder generisch — die generierte Fabrik kann sie nicht bauen"));
+                        "die Klasse ist nicht öffentlich — die generierte Fabrik kann sie nicht bauen"));
                     continue;
                 }
                 if (f.Fehler.Count == 0 && f.Doppelt.Count == 0 && f.Aufs.Count > 0) gut.Add(f);
+            }
+            // Generische Funktionen: je Typargument, mit dem ein Graph sie als Knoten nennt, ein Baustein (Bildverkleinerung<Vorschau>).
+            var konstruiert = typen.Where(Graphform.IstGraph).SelectMany(g => Graphform.Lies(g).Knoten).Select(k => k.Typ)
+                .Where(k => k.IsGenericType).GroupBy(Funktionsform.Voll).Select(x => x.First()).OrderBy(Funktionsform.Voll, System.StringComparer.Ordinal);
+            foreach (var t in konstruiert)
+            {
+                var f = Funktionsform.Lies(t);
+                if (f.Fehler.Count == 0 && f.Doppelt.Count == 0 && f.Aufs.Count > 0 && Ctorbindung.Baubar(t)) gut.Add(f);
             }
 
             // Die Umsetzungen im Host: eine Klasse ist sich selbst die Umsetzung; eine Schnittstelle hat ihre öffentlichen, konkreten Implementierungen.
@@ -104,13 +113,14 @@ namespace Infrastructure.SourceGeneration
                 var f = fs[i];
                 var ctor = f.Draussen ? null : Ctorbindung.Konstruktor(f.Typ);
                 var dienste = Ctorbindung.Braucht(ctor).Select(d => $"typeof({T(d)})");
-                sb.AppendLine($"            new FunktionsBaustein(typeof({T(f.Typ)}), \"{f.Typ.Name}\", Draussen: {(f.Draussen ? "true" : "false")},");
+                sb.AppendLine($"            new FunktionsBaustein(typeof({T(f.Typ)}), \"{Funktionsform.Anzeigename(f.Typ)}\", Draussen: {(f.Draussen ? "true" : "false")},");
                 sb.AppendLine("                new FunktionsEingang[]");
                 sb.AppendLine("                {");
                 foreach (var a in f.Aufs)
                     sb.AppendLine($"                    new FunktionsEingang(typeof({T(a.Eingang)}), Hinweis: {(a.Hinweis ? "true" : "false")}, Strom: {(a.Strom ? "true" : "false")}, "
                         + $"new Type[] {{ {string.Join(", ", a.Ausgaben.Select(x => $"typeof({T(x)})"))} }}, "
-                        + $"new Type[] {{ {string.Join(", ", a.Faehigkeiten.Select(x => $"typeof({T(x)})"))} }}),");
+                        + $"new Type[] {{ {string.Join(", ", a.Faehigkeiten.Select(x => $"typeof({T(x)})"))} }}, "
+                        + $"new Type[] {{ {string.Join(", ", a.Eingaenge.Select(x => $"typeof({T(x)})"))} }}),");
                 sb.AppendLine("                },");
                 sb.AppendLine("                new FunktionsUmsetzung[]");
                 sb.AppendLine("                {");
@@ -134,36 +144,51 @@ namespace Infrastructure.SourceGeneration
         }
 
         /// <summary>
-        /// <c>Rechne{i}</c> nimmt den Eingang als Objekt und liefert die Ausgaben als Objekte (Commands, Hinweise) — reflexionsfrei,
-        /// je Eingangstyp ein Fall.
+        /// <c>Rechne{i}</c> nimmt die Nummer des <c>Auf</c> und seine Ports als Objekte (<c>T?</c> als null, <c>IReadOnlyList&lt;T&gt;</c> als Liste,
+        /// <c>OneOf</c> als der gekommene Fall) und liefert die Ausgaben als Objekte (Commands, Hinweise) — reflexionsfrei, je Auf ein Fall.
         /// </summary>
         private static void EmitRechne(StringBuilder sb, Funktionsform.Form f, int i, System.Func<ITypeSymbol, string> T)
         {
-            sb.AppendLine($"        private static IAsyncEnumerable<object> Rechne{i}(object o, object eingang, Herkunft h, IFaehigkeiten? b, CancellationToken ct)");
+            sb.AppendLine($"        private static IAsyncEnumerable<object> Rechne{i}(object o, int auf, object?[] a, Herkunft h, IFaehigkeiten? b, CancellationToken ct)");
             sb.AppendLine("        {");
             sb.AppendLine($"            var f = ({T(f.Typ)})o;");
-            sb.AppendLine("            switch (eingang)");
+            sb.AppendLine("            switch (auf)");
             sb.AppendLine("            {");
-            foreach (var a in f.Aufs)
+            for (var n = 0; n < f.Aufs.Count; n++)
             {
-                var args = string.Join(", ", a.Parameter.Select(p => p.Art switch
+                var x = f.Aufs[n];
+                var args = string.Join(", ", x.Parameter.Select(p => p.Art switch
                 {
-                    "e" => "e",
+                    "p" => Port(x.Ports[p.Port], $"a[{p.Port}]", T),
                     "h" => "h",
                     "ct" => "ct",
                     _ => $"b!.Hole<{T(p.Typ!)}>()",
                 }));
                 var aufruf = $"f.{Abstractions.Funktionsvertrag.Auf}({args})";
-                var abbildung = "y => (object?)y" + a.Abbildung;
+                var abbildung = "y => (object?)y" + x.Abbildung;
                 string adapter;
-                if (a.Strom) adapter = a.StromAsync ? "StromAsync" : "Strom";
-                else adapter = a.Huelle.Length > 0 ? "EinzelnAsync" : "Einzeln";
-                var mitCt = a.Strom ? ", ct" : "";
-                sb.AppendLine($"                case {T(a.Eingang)} e: return Ausgaben.{adapter}({aufruf}, {abbildung}{mitCt});");
+                if (x.Strom) adapter = x.StromAsync ? "StromAsync" : "Strom";
+                else adapter = x.Huelle.Length > 0 ? "EinzelnAsync" : "Einzeln";
+                var mitCt = x.Strom ? ", ct" : "";
+                sb.AppendLine($"                case {n}: return Ausgaben.{adapter}({aufruf}, {abbildung}{mitCt});");
             }
-            sb.AppendLine($"                default: throw new NotSupportedException($\"{f.Typ.Name} hört '{{eingang.GetType().Name}}' nicht.\");");
+            sb.AppendLine($"                default: throw new NotSupportedException($\"{Funktionsform.Anzeigename(f.Typ)} hat kein Auf Nummer {{auf}}.\");");
             sb.AppendLine("            }");
             sb.AppendLine("        }");
+        }
+
+        /// <summary>Der Ausdruck, der einen Port aus seinem Objekt baut.</summary>
+        private static string Port(Funktionsform.Port p, string o, System.Func<ITypeSymbol, string> T)
+        {
+            switch (p.Form)
+            {
+                case Funktionsform.Portform.Hoechstens: return $"({T(p.Typen[0])}?){o}";
+                case Funktionsform.Portform.Alle: return $"Ausgaben.Liste<{T(p.Typen[0])}>({o})";
+                case Funktionsform.Portform.Erster:
+                    var oneOf = $"global::Abstractions.OneOf<{string.Join(", ", p.Typen.Select(T))}>";
+                    return $"({o} switch {{ {string.Join(", ", p.Typen.Select(t => $"{T(t)} x => ({oneOf})x"))}, _ => throw new InvalidOperationException(\"{p.Name}: kein Fall\") }})";
+                default: return $"({T(p.Typen[0])}){o}!";
+            }
         }
     }
 }

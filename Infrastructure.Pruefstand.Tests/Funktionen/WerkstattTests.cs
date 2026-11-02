@@ -33,7 +33,7 @@ public class WerkstattTests
     private static FunktionsBaustein Funktion(bool strom = false) => new(typeof(object), "IProbe", Draussen: true,
         new[] { new FunktionsEingang(typeof(Eingang), false, strom, new[] { typeof(Weiter) }, Type.EmptyTypes) },
         Array.Empty<FunktionsUmsetzung>(), Array.Empty<Type>(),
-        (_, _, _, _, _) => throw new InvalidOperationException("draußen"));
+        (_, _, _, _, _, _) => throw new InvalidOperationException("draußen"));
 
     private static readonly Herkunft H = new(Guid.NewGuid(), 3, DateTimeOffset.UtcNow, null, "funktion:IProbe");
 

@@ -83,7 +83,8 @@ namespace Infrastructure.SourceGeneration
 
         /// <summary>Öffentlich, konkret, nicht generisch — nur so kann generierter Code sie bauen.</summary>
         public static bool Baubar(INamedTypeSymbol k) =>
-            k.TypeKind == TypeKind.Class && !k.IsAbstract && !k.IsGenericType && k.DeclaredAccessibility == Accessibility.Public
+            k.TypeKind == TypeKind.Class && !k.IsAbstract && k.TypeArguments.All(a => a.TypeKind != TypeKind.TypeParameter)
+            && k.DeclaredAccessibility == Accessibility.Public
             && (k.ContainingType == null || k.ContainingType.DeclaredAccessibility == Accessibility.Public);
     }
 }

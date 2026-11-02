@@ -55,6 +55,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(CommandFailed))]
 [JsonSerializable(typeof(CommandQuittung))]
 [JsonSerializable(typeof(FristGesetzt))]
+[JsonSerializable(typeof(LaufGescheitert))]
 // ── Domänen-Commands/Events/Queries (Domain.*) (gescannt) ──
 [JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.BezahleRechnung))]
 [JsonSerializable(typeof(global::Pruefdomaene.Abrechnung.BucheGutschrift))]

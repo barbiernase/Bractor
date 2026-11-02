@@ -24,6 +24,12 @@ public interface IOffeneEingaenge
 
     /// <summary>Die Eingänge sind zugestellt (angenommen oder später): wieder fällig erst nach <paramref name="nach"/>, ein Versuch mehr.</summary>
     Task VerschiebeAsync(IReadOnlyCollection<Guid> kennungen, TimeSpan nach, CancellationToken ct);
+
+    /// <summary>
+    /// Der Lauf dieser Köpfe ist gescheitert (docs/04 §4.4, Entscheidung 11): sie bleiben in der Tabelle, werden aber nie mehr fällig — mit dem Grund
+    /// (der Einblick zeigt sie; wer den Fehler behoben hat, gibt sie frei).
+    /// </summary>
+    Task ParkeAsync(IReadOnlyCollection<(Guid Kennung, string Grund)> geparkt, CancellationToken ct);
 }
 
 /// <summary>
@@ -53,6 +59,7 @@ public sealed class OffeneEingaenge(IDocumentStore store) : IOffeneEingaenge
         t.AddColumn<string>("korrelation");
         t.AddColumn("faellig", "timestamptz").NotNull();
         t.AddColumn<int>("versuche").NotNull().DefaultValue(0);
+        t.AddColumn<string>("geparkt");
         t.Indexes.Add(new IndexDefinition($"ix_{Tabelle}_faellig") { Columns = ["faellig"] });
         options.Storage.ExtendedSchemaObjects.Add(t);
     }
@@ -110,6 +117,19 @@ public sealed class OffeneEingaenge(IDocumentStore store) : IOffeneEingaenge
         await conn.OpenAsync(ct);
         await using var cmd = new NpgsqlCommand($"delete from {Name(store)} where kennung = any($1)", conn);
         cmd.Parameters.Add(new NpgsqlParameter { Value = kennungen.ToArray() });
+        await cmd.ExecuteNonQueryAsync(ct);
+    }
+
+    public async Task ParkeAsync(IReadOnlyCollection<(Guid Kennung, string Grund)> geparkt, CancellationToken ct)
+    {
+        if (geparkt.Count == 0) return;
+        await using var conn = store.Storage.Database.CreateConnection();
+        await conn.OpenAsync(ct);
+        await using var cmd = new NpgsqlCommand(
+            $"update {Name(store)} e set faellig = 'infinity', geparkt = g.grund from unnest($1::uuid[], $2::text[]) as g(kennung, grund) where e.kennung = g.kennung",
+            conn);
+        cmd.Parameters.Add(new NpgsqlParameter { Value = geparkt.Select(g => g.Kennung).ToArray() });
+        cmd.Parameters.Add(new NpgsqlParameter { Value = geparkt.Select(g => g.Grund).ToArray() });
         await cmd.ExecuteNonQueryAsync(ct);
     }
 

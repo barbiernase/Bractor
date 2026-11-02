@@ -9,12 +9,21 @@ namespace Infrastructure.Funktionen;
 // und Kinder (FunktionsLaufzeitWiring), nicht die Funktion.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
-/// <summary>Ein Eingang einer Funktion (ein <c>Auf</c>): sein Typ, ob er ein Hinweis ist, ob die Ausgabe ein Strom ist, was herauskommen kann.</summary>
+/// <summary>
+/// Ein <c>Auf</c> einer Funktion (Index in <see cref="FunktionsBaustein.Eingaenge"/> = seine Nummer): sein (erster) Eingangstyp, ob er ein Hinweis ist, ob
+/// die Ausgabe ein Strom ist, was herauskommen kann, seine Lese-Fähigkeiten und alle Typen seiner Ports.
+/// </summary>
 /// <param name="Hinweis">Der Eingang ist ein Hinweis (verlierbar, nicht im Log): höchstens einmal.</param>
 /// <param name="Strom">Die Ausgabe ist ein Strom (viele Ausgaben je Eingang, jede gesendet, bevor die nächste kommt).</param>
 /// <param name="Ausgaben">Die konkreten Ausgabe-Typen (die Fälle der Signatur).</param>
 /// <param name="Faehigkeiten">Die Lese-Fähigkeiten des <c>Auf</c> (eine solche Funktion läuft nur im Host).</param>
-public sealed record FunktionsEingang(Type Typ, bool Hinweis, bool Strom, IReadOnlyList<Type> Ausgaben, IReadOnlyList<Type> Faehigkeiten);
+/// <param name="Typen">Alle Typen, die das <c>Auf</c> an seinen Ports nimmt (ein Join hat mehrere; leer = nur <paramref name="Typ"/>).</param>
+public sealed record FunktionsEingang(Type Typ, bool Hinweis, bool Strom, IReadOnlyList<Type> Ausgaben, IReadOnlyList<Type> Faehigkeiten,
+    IReadOnlyList<Type>? Typen = null)
+{
+    /// <summary>Alle Typen der Ports.</summary>
+    public IReadOnlyList<Type> Ports => Typen is { Count: > 0 } t ? t : [Typ];
+}
 
 /// <summary>
 /// Eine Umsetzung, die im Host rechnen kann: die Klasse selbst bzw. eine Implementierung der Schnittstelle, gebaut per generierter Fabrik — im
@@ -43,7 +52,12 @@ public sealed record FunktionsBaustein(
     public string Wirker => WirkerId.FuerFunktion(Name);
 
     /// <summary>Der Eingang für einen Typ, oder null.</summary>
-    public FunktionsEingang? Eingang(Type typ) => Eingaenge.FirstOrDefault(e => e.Typ == typ);
+    public FunktionsEingang? Eingang(Type typ) => Eingaenge.FirstOrDefault(e => e.Ports.Contains(typ));
+
+    /// <summary>Die Antwort-Events (ein Ziel entschied sie auf einen Command der Funktion hin) mit der Nummer ihres <c>Auf</c>.</summary>
+    public IReadOnlyDictionary<Type, int> Antworten() =>
+        Eingaenge.Select((e, i) => (e, i)).Where(x => !x.e.Hinweis && typeof(IEvent).IsAssignableFrom(x.e.Typ) && !typeof(IQuellNachricht).IsAssignableFrom(x.e.Typ))
+            .ToDictionary(x => x.e.Typ, x => x.i);
 
     /// <summary>Hat irgendein Eingang Lese-Fähigkeiten? Dann läuft die Funktion nur im Host.</summary>
     public bool Liest => Eingaenge.Any(e => e.Faehigkeiten.Count > 0);
@@ -55,6 +69,9 @@ public sealed record FunktionsBaustein(
 /// </summary>
 public static class Ausgaben
 {
+    /// <summary>Ein Sammel-Port (<c>IReadOnlyList&lt;T&gt;</c>) aus der Liste, die der Lauf gesammelt hat.</summary>
+    public static IReadOnlyList<T> Liste<T>(object? liste) => liste is IEnumerable<object?> xs ? xs.Cast<T>().ToList() : Array.Empty<T>();
+
     public static async IAsyncEnumerable<TA> Einzeln<T, TA>(T wert, Func<T, TA?> abbildung) where TA : class
     {
         await Task.CompletedTask;

@@ -391,6 +391,13 @@ message CommandQuittungDto {
     bool abgelehnt = 5;
 }
 
+message LaufGescheitertDto {
+    string instanz = 1;
+    string lauf = 2;
+    string knoten = 3;
+    string grund = 4;
+}
+
 message BildNichtLesbarDto {
     string pfad = 1;
     string grund = 2;

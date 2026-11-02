@@ -19,18 +19,39 @@ namespace Infrastructure.SourceGeneration
         private const string A = "Abstractions.";
         public const string IFunktion = A + "IFunktion";
 
-        /// <summary>Was ein <c>Auf</c> nimmt und ausgibt: Eingang, Hülle (Task), Strom (sync/async) und die Abbildung eines Elements auf die Ausgabe.</summary>
+        /// <summary>
+        /// Wie ein Eingangsport eines <c>Auf</c> seine Nachrichten erwartet (Entscheidung 5 — das ist die ganze Synchronisation): <c>T</c> genau einer je
+        /// Lauf (warten), <c>T?</c> höchstens einer (feuern, wenn feststeht, dass keiner kommt, oder nach dem Zeitlimit des Knotens), <c>OneOf&lt;A, B&gt;</c>
+        /// der erste je Lauf (die übrigen Zweige werden abgebrochen), <c>IReadOnlyList&lt;T&gt;</c> alle <c>T</c> der Unterläufe eine Ebene tiefer.
+        /// </summary>
+        internal enum Portform { Eins, Hoechstens, Erster, Alle }
+
+        /// <summary>Ein Eingangsport: Parametername, Form und die Typen, die er nimmt (bei <c>OneOf</c> mehrere).</summary>
+        internal sealed class Port
+        {
+            public string Name = "";
+            public Portform Form;
+            public List<INamedTypeSymbol> Typen = new List<INamedTypeSymbol>();
+            public Location Ort = Location.None;
+        }
+
+        /// <summary>Was ein <c>Auf</c> nimmt und ausgibt: Eingangsports, Hülle (Task), Strom (sync/async) und die Abbildung eines Elements auf die Ausgabe.</summary>
         internal sealed class Auf
         {
             public IMethodSymbol Methode = null!;
-            public INamedTypeSymbol Eingang = null!;
+            /// <summary>Die Eingangsports (Entscheidung 4): je Command-Parameter einer; ein Antwort-Event, ein Hinweis oder eine Quell-Nachricht nur allein.</summary>
+            public List<Port> Ports = new List<Port>();
+            /// <summary>Der erste Typ des ersten Ports — bei einem einzelnen Eingang (Antwort, Hinweis, Quell-Nachricht, ein Command) der Eingang.</summary>
+            public INamedTypeSymbol Eingang => Ports[0].Typen[0];
+            /// <summary>Alle Typen, die das <c>Auf</c> nimmt (über alle Ports).</summary>
+            public IEnumerable<INamedTypeSymbol> Eingaenge => Ports.SelectMany(p => p.Typen);
             public bool Hinweis;
-            /// <summary>Der Eingang ist ein Command ohne Ziel (Nachrichtenform): aus einem Decide, von einer anderen Funktion oder einem Akteur.</summary>
+            /// <summary>Die Eingänge sind Commands ohne Ziel (Nachrichtenform): aus einem Decide, von einem anderen Knoten oder einem Akteur.</summary>
             public bool Command;
             /// <summary>Der Eingang ist eine Quell-Nachricht (<c>IQuellNachricht</c>): sie steht genau einmal im Log, ihr Eingang ist durabel.</summary>
             public bool Quelle;
-            /// <summary>Die Parameter in Reihenfolge: <c>e</c> (Eingang), <c>h</c> (Herkunft), <c>ct</c> (Abbruch) oder eine Lese-Fähigkeit.</summary>
-            public List<(string Art, INamedTypeSymbol? Typ, string Name)> Parameter = new List<(string, INamedTypeSymbol?, string)>();
+            /// <summary>Die Parameter in Reihenfolge: <c>p</c> (ein Port, Nummer in <see cref="Ports"/>), <c>h</c> (Herkunft), <c>ct</c> (Abbruch) oder eine Lese-Fähigkeit.</summary>
+            public List<(string Art, INamedTypeSymbol? Typ, string Name, int Port)> Parameter = new List<(string, INamedTypeSymbol?, string, int)>();
             public List<INamedTypeSymbol> Faehigkeiten = new List<INamedTypeSymbol>();
             public bool MitHerkunft;
             /// <summary><c>""</c> oder <c>"Task"</c>.</summary>
@@ -42,6 +63,8 @@ namespace Infrastructure.SourceGeneration
             /// <summary>Wie ein Element zur Ausgabe wird: <c>""</c> (es selbst) oder <c>".Value"</c> (OneOf).</summary>
             public string Abbildung = "";
             public List<INamedTypeSymbol> Ausgaben = new List<INamedTypeSymbol>();
+            /// <summary>Ist die Ausgabe eine Wahl (ein <c>OneOf</c> mit mehr als einem Fall: jeder Fall kommt 0- oder 1-mal)?</summary>
+            public bool Wahl => Abbildung.Length > 0 && Ausgaben.Count > 1;
         }
 
         /// <summary>Eine gelesene Funktion: die Methoden <c>Auf</c> und die Formfehler (Text, Ort).</summary>
@@ -64,6 +87,11 @@ namespace Infrastructure.SourceGeneration
             /// (dass einer ihrer Commands es entscheiden kann, prüft das Gesamtbild).</summary>
             public bool IstAntwort(Auf a) => !a.Command && !a.Hinweis && !a.Quelle;
         }
+
+        /// <summary>Der Name einer Funktion (Baustein, Wirker, Spur): der Klassenname, bei einer generischen mit ihren Typargumenten
+        /// (<c>Bildverkleinerung&lt;Vorschau&gt;</c>).</summary>
+        public static string Anzeigename(ITypeSymbol t) =>
+            t is INamedTypeSymbol { IsGenericType: true } g ? g.Name + "<" + string.Join(",", g.TypeArguments.Select(Anzeigename)) + ">" : t.Name;
 
         public static string Name(ITypeSymbol t) =>
             (t.OriginalDefinition.ContainingNamespace?.ToDisplayString() ?? "") + "." + t.OriginalDefinition.MetadataName;
@@ -188,8 +216,10 @@ namespace Infrastructure.SourceGeneration
                              && m.Name != Abstractions.Funktionsvertrag.Auf))
                     f.Fehler.Add(($"die Schnittstelle hat neben {Abstractions.Funktionsvertrag.Auf} die Methode '{m.Name}' — eine Funktion hat Eingänge (das "
                         + "Framework ruft sie); was ihre Umsetzung ruft, ist Technik: eine eigene Schnittstelle in ihrem Konstruktor", m.Locations.FirstOrDefault() ?? ort));
-            if (!f.Draussen && t.IsGenericType)
-                f.Fehler.Add(("eine Funktion ist nicht generisch", ort));
+            // Eine generische Funktion (Bildverkleinerung<TFormat>) ist erlaubt: die offene Definition ist eine Blaupause, ein Knoten nennt sie mit
+            //   Typargument — das unterscheidet gleiche Funktionen mit verschiedenem Ausgang (Entscheidung 4).
+            if (f.Draussen && t.IsGenericType)
+                f.Fehler.Add(("eine Funktions-Schnittstelle ist nicht generisch (nur eine Klasse im Host darf es sein)", ort));
 
             var gesehen = new Dictionary<string, Auf>();
             foreach (var m in t.GetMembers(Abstractions.Funktionsvertrag.Auf).OfType<IMethodSymbol>().Where(m => m.MethodKind == MethodKind.Ordinary))
@@ -203,9 +233,10 @@ namespace Infrastructure.SourceGeneration
                 if (m.IsGenericMethod) { f.Fehler.Add(("ein Auf ist nicht generisch", mOrt)); continue; }
                 var auf = LiesAuf(m, mOrt, f.Fehler);
                 if (auf == null) continue;
-                var schluessel = Name(auf.Eingang);
-                if (gesehen.ContainsKey(schluessel)) { f.Doppelt.Add((auf.Eingang, mOrt)); continue; }
-                gesehen[schluessel] = auf;
+                // R2: je Typ höchstens ein Port über alle Auf eines Knotens (sonst wäre unklar, was die Nachricht auslöst).
+                var doppelt = auf.Eingaenge.FirstOrDefault(e => gesehen.ContainsKey(Voll(e)));
+                if (doppelt != null) { f.Doppelt.Add((doppelt, mOrt)); continue; }
+                foreach (var e in auf.Eingaenge) gesehen[Voll(e)] = auf;
                 f.Aufs.Add(auf);
             }
             // Eine Funktion liest nie das Log: wer nur Events hört, hätte keinen Einstieg — ein Event hört sie nur als Antwort auf einen eigenen Command.
@@ -218,50 +249,70 @@ namespace Infrastructure.SourceGeneration
             return f;
         }
 
+        /// <summary>Der volle Name samt Typargumenten — unterscheidet <c>BildVerkleinert&lt;Vorschau&gt;</c> von <c>BildVerkleinert&lt;Gross&gt;</c>.</summary>
+        public static string Voll(ITypeSymbol t) => t.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+        /// <summary>
+        /// Ein Command ohne Ziel als Port oder Ausgabe im Graphen: wie <see cref="Nachrichtenform.IstOhneZiel"/>, dazu ein generischer Command
+        /// (<c>BildVerkleinert&lt;TFormat&gt;</c>) — er reist nur zwischen Knoten, nie über die Leitung.
+        /// </summary>
+        public static bool IstCommandOhneZiel(ITypeSymbol t) =>
+            Nachrichtenform.IstOhneZiel(t)
+            || t is INamedTypeSymbol { TypeKind: TypeKind.Class, IsAbstract: false, IsGenericType: true } g && Hat(g, A + "ICommand") && !Hat(g, A + "IAggregatCommand");
+
         private static Auf? LiesAuf(IMethodSymbol m, Location ort, List<(string, Location)> fehler)
         {
-            if (m.Parameters.Length == 0 || m.Parameters[0].Type is not INamedTypeSymbol eingang)
-            {
-                fehler.Add(("ein Auf nimmt als ersten Parameter seinen Eingang (einen Command ohne Ziel, eine Quell-Nachricht, einen Hinweis oder ein Event "
-                    + "als Antwort)", ort));
-                return null;
-            }
-            var command = Nachrichtenform.IstOhneZiel(eingang);
-            if (!command && (eingang.TypeKind == TypeKind.Interface || eingang.IsAbstract || !Hat(eingang, A + "IEvent")))
-            {
-                fehler.Add(($"der Eingang '{eingang.Name}' ist kein Command ohne Ziel, keine Quell-Nachricht, kein Hinweis und kein konkretes Event "
-                    + (Hat(eingang, A + "IAggregatCommand") ? "(ein Command an ein Aggregat nimmt nur sein Aggregat)" : ""), ort));
-                return null;
-            }
-            var auf = new Auf { Methode = m, Eingang = eingang, Hinweis = Hat(eingang, A + "ITransientEvent"), Command = command,
-                Quelle = Hat(eingang, A + "IQuellNachricht") };
-            auf.Parameter.Add(("e", eingang, m.Parameters[0].Name));
+            var auf = new Auf { Methode = m };
             var mitAbbruch = false;
-            foreach (var p in m.Parameters.Skip(1))
+            foreach (var p in m.Parameters)
             {
+                var pOrt = p.Locations.FirstOrDefault() ?? ort;
                 var typ = p.Type as INamedTypeSymbol;
                 if (typ != null && Name(typ) == Abstractions.Funktionsvertrag.Herkunft && !auf.MitHerkunft)
                 {
                     auf.MitHerkunft = true;
-                    auf.Parameter.Add(("h", typ, p.Name));
+                    auf.Parameter.Add(("h", typ, p.Name, -1));
                 }
                 else if (typ != null && Name(typ) == "System.Threading.CancellationToken" && !mitAbbruch)
                 {
                     mitAbbruch = true;
-                    auf.Parameter.Add(("ct", typ, p.Name));
+                    auf.Parameter.Add(("ct", typ, p.Name, -1));
                 }
                 else if (typ != null && typ.TypeKind == TypeKind.Interface && Hat(typ, A + "IReadStore") && !Hat(typ, A + "IWriteStore"))
                 {
                     auf.Faehigkeiten.Add(typ);
-                    auf.Parameter.Add(("faehigkeit", typ, p.Name));
+                    auf.Parameter.Add(("faehigkeit", typ, p.Name, -1));
                 }
-                else
+                else if (LiesPort(p, pOrt, fehler) is { } port)
                 {
-                    fehler.Add(($"der Parameter '{p.Name}' ist weder Herkunft noch CancellationToken noch eine Lese-Fähigkeit (Interface mit IReadStore) — "
-                        + "eine Funktion liest höchstens, sie schreibt nie selbst", p.Locations.FirstOrDefault() ?? ort));
-                    return null;
+                    auf.Parameter.Add(("p", null, p.Name, auf.Ports.Count));
+                    auf.Ports.Add(port);
                 }
+                else return null;
             }
+            if (auf.Ports.Count == 0)
+            {
+                fehler.Add(("ein Auf nimmt mindestens einen Eingang (einen Command ohne Ziel als T, T?, OneOf<…> oder IReadOnlyList<T>; allein auch eine "
+                    + "Quell-Nachricht, einen Hinweis oder ein Event als Antwort)", ort));
+                return null;
+            }
+            var einzeln = auf.Ports.FirstOrDefault(x => !IstCommandOhneZiel(x.Typen[0]));
+            if (einzeln != null && auf.Ports.Count > 1)
+            {
+                fehler.Add(($"'{einzeln.Name}' ist kein Command ohne Ziel — mehrere Eingänge (ein Join) nimmt ein Auf nur als Commands ohne Ziel; eine "
+                    + "Quell-Nachricht, ein Hinweis oder eine Antwort steht allein", einzeln.Ort));
+                return null;
+            }
+            if (einzeln != null && einzeln.Form != Portform.Eins)
+            {
+                fehler.Add(($"'{einzeln.Name}' ist kein Command ohne Ziel — nur Commands ohne Ziel nimmt ein Port als T?, OneOf<…> oder IReadOnlyList<T>",
+                    einzeln.Ort));
+                return null;
+            }
+            var eingang = auf.Eingang;
+            auf.Command = einzeln == null;
+            auf.Hinweis = !auf.Command && Hat(eingang, A + "ITransientEvent");
+            auf.Quelle = !auf.Command && Hat(eingang, A + "IQuellNachricht");
 
             // Rückgabe: T | OneOf<…> | IEnumerable<…> | IAsyncEnumerable<…>, T und OneOf auch in Task<…>. Kein void, kein T?, kein ValueTask: was
             //   „nichts“ sein kann, ist ein Strom (leer = nichts), was einer von mehreren ist, ein OneOf (Entscheidung 4).
@@ -310,7 +361,7 @@ namespace Infrastructure.SourceGeneration
             foreach (var x in faelle)
             {
                 if (x is not INamedTypeSymbol a || a.TypeKind == TypeKind.Interface || a.IsAbstract || a.TypeKind == TypeKind.TypeParameter
-                    || !(Hat(a, A + "ICommand") || Hat(a, A + "ITransientEvent")))
+                    || !(IstCommandOhneZiel(a) || Hat(a, A + "IAggregatCommand") || Hat(a, A + "ITransientEvent")))
                 {
                     fehler.Add(($"die Ausgabe '{x.ToDisplayString()}' ist kein konkreter Command und kein Hinweis — eine Funktion schreibt nie ins Log; was sie "
                         + "ausgibt, steht vollständig in der Signatur", ort));
@@ -320,6 +371,56 @@ namespace Infrastructure.SourceGeneration
             }
             if (auf.Ausgaben.Count == 0) { fehler.Add(("ein Auf gibt etwas aus", ort)); return null; }
             return auf;
+        }
+
+        /// <summary>
+        /// Ein Eingangsport aus einem Parameter: <c>T</c>, <c>T?</c>, <c>OneOf&lt;A, B&gt;</c> oder <c>IReadOnlyList&lt;T&gt;</c> mit Commands ohne Ziel;
+        /// <c>T</c> allein auch eine Quell-Nachricht, ein Hinweis oder ein konkretes Event (als Antwort). Sonst ein Formfehler.
+        /// </summary>
+        private static Port? LiesPort(IParameterSymbol p, Location ort, List<(string, Location)> fehler)
+        {
+            var port = new Port { Name = p.Name, Ort = ort };
+            var t = p.Type;
+            if (t is INamedTypeSymbol { IsGenericType: true } l && Name(l) == "System.Collections.Generic.IReadOnlyList`1")
+            {
+                port.Form = Portform.Alle;
+                t = l.TypeArguments[0];
+            }
+            else if (t is INamedTypeSymbol o && IstOneOf(o))
+            {
+                port.Form = Portform.Erster;
+                foreach (var x in o.TypeArguments)
+                {
+                    if (!IstCommandOhneZiel(x))
+                    {
+                        fehler.Add(($"'{p.Name}' nimmt '{x.ToDisplayString()}' im OneOf — ein Rennen (der erste von mehreren) gibt es nur unter Commands ohne Ziel", ort));
+                        return null;
+                    }
+                    port.Typen.Add((INamedTypeSymbol)x);
+                }
+                return port;
+            }
+            else if (t.NullableAnnotation == NullableAnnotation.Annotated && t.IsReferenceType)
+            {
+                port.Form = Portform.Hoechstens;
+                t = t.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+            }
+            if (t is not INamedTypeSymbol n)
+            {
+                fehler.Add(($"der Parameter '{p.Name}' ist kein Eingang", ort));
+                return null;
+            }
+            var command = IstCommandOhneZiel(n);
+            if (!command && (port.Form != Portform.Eins || n.TypeKind == TypeKind.Interface || n.IsAbstract || !Hat(n, A + "IEvent")))
+            {
+                fehler.Add(($"der Parameter '{p.Name}' ('{p.Type.ToDisplayString()}') ist weder Eingang (ein Command ohne Ziel als T, T?, OneOf<…>, "
+                    + "IReadOnlyList<T>; allein auch eine Quell-Nachricht, ein Hinweis oder ein konkretes Event als Antwort) noch Herkunft, CancellationToken "
+                    + "oder Lese-Fähigkeit (Interface mit IReadStore)"
+                    + (Hat(n, A + "IAggregatCommand") ? " — ein Command an ein Aggregat nimmt nur sein Aggregat" : ""), ort));
+                return null;
+            }
+            port.Typen.Add(n);
+            return port;
         }
 
         private static bool IstOneOf(INamedTypeSymbol t) => t.IsGenericType && Name(t).StartsWith(A + "OneOf`", System.StringComparison.Ordinal);

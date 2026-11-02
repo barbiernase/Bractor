@@ -107,6 +107,7 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(CommandFailed))]
         [JsonSerializable(typeof(CommandQuittung))]
         [JsonSerializable(typeof(FristGesetzt))]
+        [JsonSerializable(typeof(LaufGescheitert))]
         """;
 
     public static (string EventContext, string WireContext, string Stats) Emit(
