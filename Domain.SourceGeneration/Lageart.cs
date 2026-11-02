@@ -43,7 +43,7 @@ internal sealed class Lageart
             if (Infrastructure.SourceGeneration.Nachrichtenform.IstDecider(t))
                 foreach (var d in Infrastructure.SourceGeneration.Nachrichtenform.Decides(t))
                     foreach (var f in Infrastructure.SourceGeneration.Nachrichtenform.CommandsVon(d)) _ausDecide.Add(Name(f));
-            // Konfig-Records: was der Konstruktor einer Funktion, ihrer Umsetzung oder einer Technik-Umsetzung als Konfig bindet (Ctorbindung, CQRS090).
+            // Konfig-Records: was der Konstruktor einer Funktion oder einer Technik-Umsetzung als Konfig bindet (Ctorbindung, CQRS090).
             if (t.TypeKind == TypeKind.Class && !t.IsAbstract && (Hat(t, "IFunktion") || technik.IstUmsetzung(t)))
                 foreach (var p in Infrastructure.SourceGeneration.Ctorbindung.Konstruktor(t)?.Parameters ?? Enumerable.Empty<IParameterSymbol>())
                     if (Infrastructure.SourceGeneration.Ctorbindung.ArtVon(p.Type) == Infrastructure.SourceGeneration.Ctorbindung.Art.Konfig
@@ -64,10 +64,8 @@ internal sealed class Lageart
         if (t.TypeKind == TypeKind.Enum) return Projektstruktur.Primitive.Enum;
         if (t.TypeKind == TypeKind.Interface)
         {
-            if (IstFunktion(t)) return Projektstruktur.Primitive.Funktion;
             if (Hat(t, "IStore")) return Projektstruktur.Primitive.StoreBuendel;
             if (Hat(t, "IReadStore") || Hat(t, "IWriteStore")) return Projektstruktur.Primitive.StoreFaehigkeit;
-            if (Hat(t, "IClientVertrag")) return Projektstruktur.Primitive.ClientVertrag;
             if (_technik.IstTechnik(t)) return Projektstruktur.Primitive.Technik;
             return Projektstruktur.Primitive.Hilfscode;
         }
@@ -83,9 +81,9 @@ internal sealed class Lageart
         if (Hat(t, "IQueryResponse")) return _aggregatAntworten.Contains(Name(t)) ? Projektstruktur.Primitive.AggregatAntwort : Projektstruktur.Primitive.Antwort;
         if (Hat(t, "IProjektion")) return Projektstruktur.Primitive.Projektion;
         if (Hat(t, "IReader")) return Projektstruktur.Primitive.Reader;
-        if (Hat(t, "IFunktion"))
-            return Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t) ? Projektstruktur.Primitive.HostFunktion : Projektstruktur.Primitive.FunktionsImplementierung;
+        if (Hat(t, "IFunktion")) return Projektstruktur.Primitive.Funktion;
         if (Hat(t, "IAkteur")) return Projektstruktur.Primitive.Akteur;
+        if (Hat(t, "IClient")) return Projektstruktur.Primitive.Client;
         if (Hat(t, "IStore") || Hat(t, "IReadStore") || Hat(t, "IWriteStore")) return Projektstruktur.Primitive.StoreImplementierung;
         if (_konfigs.Contains(Name(t))) return Projektstruktur.Primitive.Konfig;
         if (_technik.IstTechnik(t) || _technik.IstUmsetzung(t)) return Projektstruktur.Primitive.Technik;
@@ -100,9 +98,6 @@ internal sealed class Lageart
     public static string? Aggregat(INamedTypeSymbol t) => t.ContainingType?.Name;
 
     private static string Name(INamedTypeSymbol t) => t.OriginalDefinition.ContainingNamespace.ToDisplayString() + "." + t.OriginalDefinition.MetadataName;
-
-    private static bool IstFunktion(INamedTypeSymbol t) =>
-        t.TypeKind == TypeKind.Interface && Name(t) != A + "IFunktion" && Hat(t, "IFunktion");
 
     /// <summary>Implementiert <paramref name="t"/> den Vertrags-Marker (Metadaten-Name ohne „Abstractions.“, generisch mit `n)?</summary>
     private static bool Hat(INamedTypeSymbol t, string marker) => t.AllInterfaces.Any(i => Name(i) == A + marker);

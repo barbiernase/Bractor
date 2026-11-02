@@ -1,8 +1,8 @@
 """
-Reconnect: nach einem Verbindungsabbruch verbindet der Client neu, bietet seine Funktionen wieder an UND verarbeitet weiter.
+Reconnect: nach einem Verbindungsabbruch verbindet der Client neu, nimmt seine Arbeit wieder an UND verarbeitet weiter.
 
 Regression: früher endeten Lese- und Verarbeitungsschleife mit der ersten Verbindung;
-der Monitor verband zwar neu und meldete die Funktionen erneut an, aber niemand las mehr — der Worker war taub, seine Aufträge
+der Monitor verband zwar neu und meldete die Arbeit erneut an, aber niemand las mehr — der Worker war taub, seine Aufträge
 liefen nur noch per Lease-Ablauf zu anderen. Ohne Server: der Proxy ist ein Fake, der je Verbindung genau einen Auftrag liefert
 und dann die Verbindung verliert.
 """
@@ -59,13 +59,13 @@ def test_nach_reconnect_wird_weiter_verarbeitet_und_neu_angeboten():
     client._connection._proxy = proxy
     client._connection._backoff_base = 0.01
 
-    angeboten, genommen = [], []
+    angenommen, genommen = [], []
 
-    async def biete_an(_antwort=None):
-        angeboten.append(proxy.session_id)
+    async def nimm_an(_antwort=None):
+        angenommen.append(proxy.session_id)
 
-    client._funktionen.biete_an = biete_an
-    client._funktionen.nimm = lambda msg: genommen.append(msg.vorgang)
+    client._arbeit.nimm_an = nimm_an
+    client._arbeit.nimm = lambda msg: genommen.append(msg.vorgang)
     client._build_capabilities_request = lambda: object()
 
     async def lauf():
@@ -83,5 +83,5 @@ def test_nach_reconnect_wird_weiter_verarbeitet_und_neu_angeboten():
     asyncio.run(lauf())
 
     assert proxy.verbindungen == 3, "nach jedem Abbruch neu verbunden"
-    assert angeboten == ["s1", "s2", "s3"], "nach jedem Handshake die Funktionen neu angeboten"
+    assert angenommen == ["s1", "s2", "s3"], "nach jedem Handshake die Arbeit neu angenommen"
     assert genommen == ["v1", "v2", "v3"], "auch nach dem Reconnect werden Aufträge verarbeitet"

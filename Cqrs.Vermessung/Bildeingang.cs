@@ -7,10 +7,9 @@ using Domain.ImagePair;
 namespace Cqrs.Vermessung;
 
 /// <summary>
-/// S1/S2 Bildeingang (Beispieldomäne): je Vorgang ein TIFF-Paar (<c>_DC0</c>, <c>_DC2</c>) ins Quell-Verzeichnis — erst in einen
+/// S1 Bildeingang (Beispieldomäne): je Vorgang ein TIFF-Paar (<c>_DC0</c>, <c>_DC2</c>) ins Quell-Verzeichnis — erst in einen
 /// Zwischenordner geschrieben, dann hineinverschoben, dann die Fertig-Marke (Quelle <c>Fertig:Marker</c>). Sichtbar ist der Vorgang, wenn die
-/// Query <c>GetImagePair</c> das Paar als komplett liefert — Funktionen (die Kette der Bildaufbereitung, Bildeingang), Aggregat und Projektion durchlaufen. S2 ist derselbe
-/// Eingang mit der Kette der Bildaufbereitung im Python-Worker (Laufort Extern).
+/// Query <c>GetImagePair</c> das Paar als komplett liefert — Funktionen (die Kette der Bildaufbereitung, Bildeingang), Aggregat und Projektion durchlaufen.
 /// </summary>
 internal sealed class Bildeingang : ILast, IAsyncDisposable
 {
@@ -27,7 +26,7 @@ internal sealed class Bildeingang : ILast, IAsyncDisposable
     private readonly Task _beobachter;
     private long _n;
 
-    /// <param name="jahr">Trennt die Paare der Szenarien im Log (S1: 2030, S2: 2031); <paramref name="wiederholung"/> den Tag.</param>
+    /// <param name="jahr">Trennt die Paare der Szenarien im Log (S1: 2030); <paramref name="wiederholung"/> den Tag.</param>
     public Bildeingang(Eingang eingang, string quelle, int jahr, int wiederholung)
     {
         _eingang = eingang;

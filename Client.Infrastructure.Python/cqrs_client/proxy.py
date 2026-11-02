@@ -217,32 +217,30 @@ class GrpcProxy:
         await self._send(msg)
 
     # ═══════════════════════════════════════════════════
-    # FUNKTIONEN DRAUSSEN (IDarf<F> eines verkörperten Akteurs, Laufort Extern)
+    # ARBEIT FÜR AKTEURE (IHoert eines Commands ohne Ziel, docs/konzept-akteure.md §5)
     # ═══════════════════════════════════════════════════
 
-    async def send_funktionen_anbieten(self, angebote: list[tuple[str, int]]) -> None:
-        """„Ich biete Funktion F mit n Slots“ — die Sitzung wird ein Arbeiter in der Werkstatt des Knotens, der Server gibt ihr Eingänge."""
+    async def send_arbeit_annehmen(self, angebote: list[tuple[str, int]]) -> None:
+        """„Ich nehme die Arbeit von Akteur A mit n Plätzen an“ — die Sitzung wird ein Arbeiter in der Werkstatt des Knotens, der Server gibt ihr Aufträge."""
         msg = L.ClientMessage(
-            funktionen_anbieten=L.FunktionenAnbieten(
-                angebote=[L.FunktionsAngebot(funktion=f, slots=s) for f, s in angebote]
+            arbeit_annehmen=L.ArbeitAnnehmen(
+                angebote=[L.ArbeitsAngebot(akteur=a, plaetze=p) for a, p in angebote]
             )
         )
         await self._send(msg)
 
-    async def send_arbeits_ergebnis(self, vorgang: str, ausgaben: list[tuple[str, object]] | None = None, ab: int = 0,
+    async def send_arbeits_ergebnis(self, vorgang: str, commands: list[L.Nutzlast] | None = None, ab: int = 0,
                                     fertig: bool = True, fehler: str = "") -> None:
         """
-        Die Antwort auf einen Eingang — ganz oder (Strom) als Stück: `ausgaben` = (Art, Nutzlast) in der Reihenfolge der Funktion, `ab` = Stelle der
-        ersten Ausgabe dieses Stücks, `fertig` = der Lauf ist vollständig; ein nicht leerer `fehler` = gescheitert.
+        Die Antwort auf einen Auftrag — ganz oder als Stück: `commands` = die Commands (Nutzlast) in der Reihenfolge der Arbeit, `ab` = Stelle des
+        ersten Commands dieses Stücks, `fertig` = die Antwort ist vollständig; ein nicht leerer `fehler` = gescheitert.
         """
         msg = L.ClientMessage(arbeits_ergebnis=L.ArbeitsErgebnis(
-            vorgang=vorgang,
-            ausgaben=[L.FunktionsAusgabe(**{art: nutzlast}) for art, nutzlast in (ausgaben or [])],
-            ab=ab, fertig=fertig, fehler=fehler))
+            vorgang=vorgang, commands=list(commands or []), ab=ab, fertig=fertig, fehler=fehler))
         await self._send(msg)
 
     async def send_arbeit_lebt(self, vorgang: str) -> None:
-        """Lebenszeichen eines laufenden Eingangs — ohne Regung scheitert der Lauf beim Server nach 60 s."""
+        """Lebenszeichen eines laufenden Auftrags — ohne Regung gibt der Server ihn nach 60 s weiter."""
         msg = L.ClientMessage(arbeit_lebt=L.ArbeitLebtMeldung(vorgang=vorgang))
         await self._send(msg)
 

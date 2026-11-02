@@ -7,7 +7,8 @@ namespace Infrastructure.Pruefstand.Tests;
 /// <summary>
 /// Akteure im Domänen-Editor (<c>docs/konzept-akteure.md</c>): ein Akteur ist ein Baustein mit EINER Kante — Akteur → was er darf
 /// (<c>IDarf&lt;T&gt;</c>). Er ersetzt für diese Nachrichten die anonyme Außenwelt, liegt wie sie außerhalb jedes Moduls und wird als
-/// <c>public sealed record X : IAkteur, IDarf&lt;…&gt;;</c> geschrieben.
+/// <c>public sealed record X : IAkteur, IDarf&lt;…&gt;;</c> geschrieben; ein Client als <c>public sealed record X : IClient, IVerkoerpert&lt;A&gt;;</c>.
+/// (Arten, IHoert am Akteur und Arbeit liest der Editor erst mit Schritt 7 des Plans.)
 /// </summary>
 public sealed class DomainEditorAkteurTests
 {
@@ -82,9 +83,6 @@ public sealed class DomainEditorAkteurTests
         datei.Inhalt.Should().Contain("namespace Shop.Akteure;")
             .And.Contain("using Shop.Bestellung;").And.Contain("using Shop.Lesen;")
             .And.Contain("public sealed record Kunde : IAkteur, IDarf<Bestelle>, IDarf<Bestellungen>;");
-
-        var mensch = Scaffolder.Generiere(Shop(Kunde with { Art = "Mensch" })).Single(d => d.Pfad.EndsWith("Akteure.cs"));
-        mensch.Inhalt.Should().Contain("public sealed record Kunde : IMensch, IDarf<Bestelle>, IDarf<Bestellungen>;");
     }
 
     [Fact]
@@ -97,8 +95,8 @@ public sealed class DomainEditorAkteurTests
         Herkunft.Geaenderte(entzogen).Should().Equal("akteur Shop.Akteure.Kunde");
 
         Scaffolder.IstAkteurBasis("IAkteur").Should().BeTrue();
-        Scaffolder.IstAkteurBasis("IKi").Should().BeTrue("die Art ist Teil der Akteur-Basisliste");
-        Herkunft.Geaenderte(gelesen with { Akteure = [gelesen.Akteure[0] with { Art = "Mensch" }] }).Should().Equal("akteur Shop.Akteure.Kunde");
+        Scaffolder.IstAkteurBasis("IHoert<Shop.Bestellung.Bestellt>").Should().BeTrue();
+        Scaffolder.IstAkteurBasis("IKi").Should().BeFalse("die Arten (IMensch, IMaschine, IKi) sind entfallen");
         Scaffolder.IstAkteurBasis("IDarf<Shop.Bestellung.Bestelle>").Should().BeTrue();
         Scaffolder.IstAkteurBasis("IEquatable<Kunde>").Should().BeFalse("fremde Basen bleiben beim Abgleich stehen");
     }
@@ -110,17 +108,17 @@ public sealed class DomainEditorAkteurTests
         EditorModell.AusJson(m.AlsJson()).Akteure.Should().BeEquivalentTo(m.Akteure);
     }
 
-    // ── Anteile: direkt (IDarf) und über die Kette; eine Funktion, die ein Akteur draußen rechnen darf ──
+    // ── Anteile: direkt (IDarf) und über die Kette ──
 
-    private static BausteinFunktion Folge(bool klasse) => new()
+    private static BausteinFunktion Folge => new()
     {
-        Name = klasse ? "Folge" : "IFolge", Namespace = "Shop.Bestellung", Klasse = klasse,
+        Name = "Folge", Namespace = "Shop.Bestellung", Klasse = true,
         Eingaenge = [new() { Eingang = "Bestellt", Ausgaben = ["Storniere"] }],
     };
 
-    private static EditorModell Kette(params Akteur[] weitere) => Shop([Kunde, .. weitere]) with { BausteinFunktionen = [Folge(klasse: weitere.Length == 0)] };
+    private static EditorModell Kette() => Shop(Kunde) with { BausteinFunktionen = [Folge] };
 
-    private static Akteur Gutachter => new() { Name = "Gutachter", Namespace = "Shop.Akteure", Art = "Ki", Darf = ["IFolge"] };
+    private static Akteur Gutachter => new() { Name = "Gutachter", Namespace = "Shop.Akteure", Darf = ["Storniere"] };
 
     [Fact]
     public void Ketten_Command_traegt_den_Akteur_des_ausloesenden_Events()
@@ -134,53 +132,34 @@ public sealed class DomainEditorAkteurTests
     }
 
     [Fact]
-    public void Ein_Akteur_der_eine_Funktion_draussen_rechnen_darf_gibt_ihre_Ausgaben_hinein()
-    {
-        var m = Kette(Gutachter);
-        var fluss = Nachrichtenfluss.Aus(m);
-        fluss.Aus("akt:Gutachter").Should().ContainSingle(k => k.Nachricht == "Storniere" && k.Handle == "Bestellt");
-        fluss.Aus(Nachrichtenfluss.AussenId).Should().BeEmpty("Storniere hat einen Erzeuger");
-
-        var anteile = AkteurAnteile.Aus(m);
-        anteile.Kette["Storniere"].Should().Contain("Gutachter");
-        anteile.Direkt.ContainsKey("Storniere").Should().BeFalse("die Ausgabe einer Funktion ist kein IDarf auf den Command");
-    }
-
-    [Fact]
     public void Ein_Command_kann_von_zwei_Akteuren_kommen()
     {
-        var m = Shop(Kunde, new Akteur { Name = "Haendler", Namespace = "Shop.Akteure", Art = "Mensch", Darf = ["Bestelle"] });
+        var m = Shop(Kunde, new Akteur { Name = "Haendler", Namespace = "Shop.Akteure", Darf = ["Bestelle"] });
         AkteurAnteile.Aus(m).AkteureVon("Bestellt").Should().Equal("Haendler", "Kunde");
     }
 
-    [Fact]
-    public void Ein_Akteur_der_eine_Funktion_darf_bekommt_IDarf_und_den_Namespace_der_Funktion()
-    {
-        var akteure = Scaffolder.Generiere(Kette(Gutachter)).Single(d => d.Pfad.EndsWith("Akteure.cs")).Inhalt;
-        akteure.Should().Contain("IDarf<IFolge>").And.Contain("using Shop.Bestellung;");
-    }
-
-    // ── Clients (docs/konzept-akteure.md §4): ein Vertrag je Client, n:m zu Akteuren ──
+    // ── Clients (docs/konzept-akteure.md §4): ein Record je Client, n:m zu Akteuren ──
 
     private static DomainEditor.Client Laden => new()
     {
-        Name = "ILaden", Namespace = "Shop.Clients", Verkoerpert = ["Gutachter"], Kenntnis = ["Bestellt"],
+        Name = "Laden", Namespace = "Shop.Clients", Verkoerpert = ["Gutachter"],
     };
 
     private static EditorModell MitClients(params DomainEditor.Client[] clients) =>
-        Kette(Gutachter) with { Clients = clients };
+        Shop(Kunde, Gutachter) with { Clients = clients };
 
     [Fact]
-    public void Scaffolder_schreibt_den_Client_als_Interface_mit_seinem_Rand()
+    public void Scaffolder_schreibt_den_Client_als_Record_der_nur_verkoerpert()
     {
         var text = Scaffolder.ClientInterface(Laden);
-        text.Should().Contain("public interface ILaden : IClientVertrag,")
-            .And.Contain("IVerkoerpert<Gutachter>").And.Contain("IHoert<Bestellt>").And.NotContain("void Auf");
+        text.Should().Contain("public sealed record Laden : IClient,")
+            .And.Contain("IVerkoerpert<Gutachter>;").And.NotContain("IHoert").And.NotContain("void Auf");
+        Scaffolder.IstClientBasis("IClient").Should().BeTrue();
         Scaffolder.IstClientBasis("IVerkoerpert<Gutachter>").Should().BeTrue();
-        Scaffolder.IstClientBasis("IHoert<Bestellt>").Should().BeTrue();
+        Scaffolder.IstClientBasis("IHoert<Bestellt>").Should().BeFalse("gehört wird am Akteur, nicht am Client");
         Scaffolder.IstClientBasis("IDisposable").Should().BeFalse("fremde Basistypen gehören dem Code");
         var dateien = Scaffolder.Generiere(MitClients(Laden));
-        dateien.Should().Contain(d => d.Inhalt.Contains("public interface ILaden : IClientVertrag") && d.Inhalt.Contains("using Shop.Akteure;"));
+        dateien.Should().Contain(d => d.Inhalt.Contains("public sealed record Laden : IClient") && d.Inhalt.Contains("using Shop.Akteure;"));
     }
 
     [Fact]
@@ -189,6 +168,6 @@ public sealed class DomainEditorAkteurTests
         var m = Herkunft.Stempeln(MitClients(Laden));
         Herkunft.Geaenderte(m).Should().BeEmpty();
         var geaendert = m with { Clients = [m.Clients[0] with { Verkoerpert = [] }] };
-        Herkunft.Geaenderte(geaendert).Should().Contain("client Shop.Clients.ILaden");
+        Herkunft.Geaenderte(geaendert).Should().Contain("client Shop.Clients.Laden");
     }
 }

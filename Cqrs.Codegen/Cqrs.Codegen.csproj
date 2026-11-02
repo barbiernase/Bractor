@@ -34,6 +34,7 @@
     <ProjectReference Include="..\Pruefdomaene\Pruefdomaene.csproj" />
     <ProjectReference Include="..\Pruefdomaene.Pipeline\Pruefdomaene.Pipeline.csproj" />
     <ProjectReference Include="..\Pruefdomaene.Projections\Pruefdomaene.Projections.csproj" />
+    <ProjectReference Include="..\Pruefdomaene.Akteure\Pruefdomaene.Akteure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

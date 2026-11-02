@@ -1,12 +1,13 @@
+using Abstractions;
 using OpenCvSharp;
 
 namespace Domain.Pipeline.Bildaufbereitung;
 
 /// <summary>
-/// OpenCV-Umsetzung von <see cref="IBildVerkleinerung"/> (Laufort Host): die Quelle auf <see cref="VorschauHoehe"/> verkleinern und als PNG
-/// ablegen. Der Zielname folgt nur aus der Quelle — eine Wiederholung überschreibt dieselbe Datei. Zustandslos.
+/// Schritt 2 der Bildaufbereitung — das eingelesene Bild auf <see cref="VorschauHoehe"/> verkleinern und als PNG ablegen (OpenCV über die Technik
+/// <see cref="IImageResizer"/>). Der Zielname folgt nur aus der Quelle — eine Wiederholung überschreibt dieselbe Datei. Zustandslos.
 /// </summary>
-public sealed class OpenCvBildVerkleinerung(IImageResizer resizer, BildaufbereitungKonfig konfig) : IBildVerkleinerung
+public sealed class Bildverkleinerung(IImageResizer resizer, BildaufbereitungKonfig konfig) : IFunktion
 {
     /// <summary>Die Höhe der Vorschau in Pixeln.</summary>
     public const int VorschauHoehe = 512;

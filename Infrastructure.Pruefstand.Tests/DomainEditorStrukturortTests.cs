@@ -33,8 +33,8 @@ public class DomainEditorStrukturortTests
             Rec("Gebucht", RecordArt.Event, ns),
             Rec("Zeige", RecordArt.Query, ns),
         ],
-        BausteinFunktionen = [new() { Name = "IPruefung", Namespace = ns, Eingaenge = [new() { Eingang = "Pruefe", Ausgaben = ["Geprueft"] }] }],
-        Akteure = [new() { Name = "Pruefer", Namespace = ns, Art = "Mensch", Darf = ["Zeige"] }],
+        BausteinFunktionen = [new() { Name = "Pruefung", Namespace = ns, Klasse = true, Eingaenge = [new() { Eingang = "Pruefe", Ausgaben = ["Geprueft"] }] }],
+        Akteure = [new() { Name = "Pruefer", Namespace = ns, Darf = ["Zeige"] }],
     };
 
     [Fact]

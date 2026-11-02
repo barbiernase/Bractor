@@ -24,12 +24,8 @@ public sealed class Verteilung
         _hoerbar = hoerbar;
     }
 
-    /// <summary>
-    /// Die Typen, die irgendein Client hören darf: das Gehörte jedes Akteurs (abgeleitet) und jedes Client-Vertrags (<c>IHoert</c>). Nur sie
-    /// gehen als Push hinaus.
-    /// </summary>
-    public static IReadOnlySet<Type> Hoerbar(IReadOnlyDictionary<string, AkteurRechte> akteure, IReadOnlyDictionary<string, ClientVertrag> clients) =>
-        akteure.Values.SelectMany(a => a.Hoert).Concat(clients.Values.SelectMany(c => c.Hoert)).ToHashSet();
+    /// <summary>Die Typen, die irgendein Akteur als Kenntnis hört (<c>IHoert</c>). Nur sie gehen als Push hinaus.</summary>
+    public static IReadOnlySet<Type> Hoerbar(IReadOnlyDictionary<string, AkteurRechte> akteure) => akteure.Values.SelectMany(a => a.Hoert).ToHashSet();
 
     /// <summary>Die Sitzungs-Id: der Knoten, auf dem sie lebt, und ihre Nummer dort — so findet eine gezielte Antwort ihren Knoten.</summary>
     public static string SitzungsId(string knoten, int nummer) => $"{knoten}#{nummer:D4}";

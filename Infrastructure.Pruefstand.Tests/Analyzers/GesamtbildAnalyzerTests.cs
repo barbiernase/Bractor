@@ -13,7 +13,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Analyzers;
 
 /// <summary>
-/// CQRS084–087 — Regeln über das Gesamtbild der Domänen-Projekte, geprüft in der Laufzeit-Compilation (Werkbank P7.4): die Domäne liegt
+/// CQRS084–086, CQRS108, CQRS116/117 — Regeln über das Gesamtbild der Domänen-Projekte, geprüft in der Laufzeit-Compilation (Werkbank P7.4): die Domäne liegt
 /// dort nur als Metadaten-Referenz vor — genau wie hier (die Probe wird übersetzt und als Referenz einer leeren „Laufzeit“ gelesen).
 /// </summary>
 public class GesamtbildAnalyzerTests
@@ -53,7 +53,7 @@ public record Hole() : IQuery;
 public record Teil(int Wert) : IQueryResponse;
 public record Antwort(IReadOnlyList<Teil> Teile) : IQueryResponse;
 public sealed class Leser : IReader { public OneOf<Antwort> Frage(Hole q) => default!; }
-public sealed record Kunde : IMensch, IDarf<Eroeffne>, IDarf<Hole>;
+public sealed record Kunde : IAkteur, IDarf<Eroeffne>, IDarf<Hole>;
 ";
 
     private static async Task<string[]> Ids(string domaene) => (await Befunde(domaene)).Select(d => d.Id).ToArray();
@@ -126,20 +126,6 @@ public partial class Kasse : IState
         befunde.Select(d => d.GetMessage()).Should().Contain(m => m.StartsWith("'Tot' (Event)")).And.Contain(m => m.StartsWith("'Lose' (Response)"));
     }
 
-    [Fact]
-    public async Task Eine_Funktion_ohne_Umsetzung_und_ohne_Traeger_ist_eine_Warnung()
-    {
-        const string funktion = "public record Rechne() : ICommand; public interface IRechnen : IFunktion { OneOf<Eroeffne> Auf(Rechne r); } "
-            + "public sealed record G(IRechnen R) : IGraph;";
-        var befunde = await Befunde(funktion);
-        befunde.Should().ContainSingle().Which.Id.Should().Be(GesamtbildAnalyzer.GetragenId);
-        befunde[0].GetMessage().Should().StartWith("'IRechnen'");
-        (await Ids(funktion + "public sealed record Rechner : IMaschine, IDarf<IRechnen>; public interface IKasse : IClientVertrag, IVerkoerpert<Rechner> { }"))
-            .Should().BeEmpty("ein Client trägt sie: er verkörpert einen Akteur, der sie rechnen darf");
-        (await Ids(funktion + "public sealed class Rechnen : IRechnen { public OneOf<Eroeffne> Auf(Rechne r) => default!; }"))
-            .Should().BeEmpty("sie hat eine Umsetzung im Host");
-    }
-
     // GR-EMPFAENGER (Entscheidung 2): ein Command ohne Ziel, der seinen Erzeuger verlässt, nimmt genau ein Graph am Kopf.
     private const string Verteilt = @"
 public record Pruefe(Id<Konto> Konto) : ICommand;
@@ -160,6 +146,33 @@ public sealed record Anstossgraph(Anstoss A) : IGraph;
         var keiner = await Befunde("public record Weiter() : ICommand; public record Los() : ICommand; "
                                    + "public sealed class Start : IFunktion { public Weiter Auf(Los l) => default!; } public sealed record Losgraph(Start L) : IGraph;");
         keiner.Where(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Select(d => d.GetMessage()).Should().Contain(m => m.Contains("kein Graph nimmt ihn am Kopf"));
+    }
+
+    // Arbeit (Entscheidung 13): ein Akteur, der einen Command ohne Ziel hört, ist sein Empfänger.
+    private const string Arbeit = @"
+public record Pruefe(Id<Konto> Konto) : ICommand;
+public sealed record Pruefer : IAkteur, IHoert<Pruefe>, IDarf<Eroeffne>;
+public sealed record Melder : IAkteur, IDarf<Pruefe>;
+";
+
+    [Fact]
+    public async Task Ein_Akteur_der_einen_Command_ohne_Ziel_hoert_ist_sein_Empfaenger_CQRS116()
+    {
+        (await Ids(Arbeit)).Should().NotContain(GesamtbildAnalyzer.EmpfaengerId, "Pruefe gibt der Melder hinein, und genau der Prüfer hört ihn (Arbeit)");
+        var ohne = await Befunde(Arbeit.Replace("IHoert<Pruefe>, ", ""));
+        ohne.Where(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Select(d => d.GetMessage())
+            .Should().ContainSingle().Which.Should().StartWith("'Pruefe'").And.Contain("Akteur Melder").And.Contain("kein Akteur hört ihn");
+    }
+
+    [Fact]
+    public async Task Ein_Command_den_ein_Graph_nimmt_und_ein_Akteur_hoert_ist_CQRS116()
+    {
+        var befunde = (await Befunde(Arbeit + "public sealed class Pruefung : IFunktion { public Eroeffne Auf(Pruefe p) => default!; } "
+                                             + "public sealed record Pruefgraph(Pruefung P) : IGraph;"))
+            .Where(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Select(d => d.GetMessage()).ToArray();
+        befunde.Should().Contain(m => m.StartsWith("'Pruefe'") && m.Contains("Akteur Pruefer") && m.Contains("der Akteur hört ihn"));
+        befunde.Should().Contain(m => m.StartsWith("'Pruefe'") && m.Contains("Akteur Melder") && m.Contains("mehrere nehmen ihn")
+                                      && m.Contains("Pruefgraph") && m.Contains("Akteur Pruefer"));
     }
 
     [Fact]

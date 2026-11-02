@@ -120,7 +120,7 @@ public static class Grammatik
             [new("laufzeit", null, "Infrastructure/Funktionen/GraphActor.cs (Koordinator der Läufe einer Instanz)"),
              new("laufzeit", null, "Infrastructure/Funktionen/Lauf.cs (Buchführung: Pfade, Ports, Sammeln, Rennen, Zeitlimit)")]),
         new("GR-INSTANZ", "Graph läuft als Instanz", "Ein Graph läuft erst als Instanz: eine Datei je Instanz (umgebungen/<name>/graphen/<instanz>.json) "
-            + "mit Graph, bei einem Quellkopf dem Akteur (er darf, was den Graphen verlässt) und je Knoten Laufort, Parallel, Warteschlange, Wiederholungen, "
+            + "mit Graph, bei einem Quellkopf dem Akteur (er darf, was den Graphen verlässt) und je Knoten Parallel, Warteschlange, Wiederholungen, Zeitlimit, "
             + "Technik und die Felder seiner Konfig-Records. Ein Graph mit Command-Kopf läuft je Umgebung genau einmal (docs/04 §4.4).", "error",
             [new("boot", null, "Infrastructure/Funktionen/Graph.cs (GraphInstanzen.Aus: Graph, Knoten, Akteur ∩ IDarf, Command-Kopf einmal)"),
              new("boot", null, "Infrastructure/Funktionen/Technik.cs (BindeTechnik: Werte der Konfig-Records, Technik-Wahl je Knoten)")]),
@@ -168,11 +168,11 @@ public static class Grammatik
         // Funktion als Baustein und die Regeln der Wiederholbarkeit (docs/10 §10.6).
         new("GR-FUNKTION-FORM", "Funktion: je Eingang ein Auf, freie Ausgabe", "Eine Funktion hat je Eingang (Command ohne Ziel oder ein Event als "
             + "Antwort auf einen eigenen Command) ein Auf mit optional Herkunft, Lese-Fähigkeiten und Abbruch; ausgegeben werden "
-            + "Commands und Hinweise (konkret, OneOf, je auch als Task; IEnumerable bzw. IAsyncEnumerable — kein void, kein T?, kein ValueTask) — vollständig in der Signatur. Als Klasse läuft sie im Host, als Schnittstelle draußen (Laufort aus der Umgebung); eine Schnittstelle "
-            + "ohne eindeutige Umsetzung braucht eine Bindung, eine Funktion mit Lese-Fähigkeit läuft nur im Host. Eine Funktion ohne Auf ist ein "
-            + "Formfehler; eine Funktions-Schnittstelle hat nur Auf (was ihre Umsetzung ruft, ist Technik, GR-TECHNIK).", "error",
+            + "Commands und Hinweise (konkret, OneOf, je auch als Task; IEnumerable bzw. IAsyncEnumerable — kein void, kein T?, kein ValueTask) — vollständig in der Signatur. Eine Funktion ist eine Klasse und läuft im Host; eine "
+            + "Schnittstelle mit IFunktion ist ein Formfehler — was draußen gerechnet wird, ist Arbeit eines Akteurs (GR-ARBEIT). Eine Funktion ohne Auf ist "
+            + "ein Formfehler; was sie ruft, ist Technik (GR-TECHNIK).", "error",
             [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Form der Funktion)"),
-             new("boot", null, "Infrastructure/Funktionen/FunktionsBausteinWiring.cs (BindungVon: Laufort, Umsetzung, Lese-Fähigkeit nur im Host)")]),
+             new("boot", null, "Infrastructure/Funktionen/FunktionsBausteinWiring.cs (BindungVon: Parallel, Warteschlange, Wiederholungen je Knoten)")]),
         new("GR-EIN-EINGANG", "Je Baustein und Eingangstyp eine Methode", "Ein Baustein nimmt jeden Eingangstyp mit höchstens einer Methode — ein Auf "
             + "einer Funktion oder Projektion, eine Frage eines Readers (R2).", "error",
             [An("CQRS101", "Domain.SourceGeneration/EinEingangAnalyzer.cs"), Gen("CQRS101", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs")]),
@@ -242,9 +242,9 @@ public static class Grammatik
             [Offen("docs/13 FB-5: aus Signaturen allein nicht von einem Ablauf zu unterscheiden")]),
         new("GR-ZUSTAND", "Regel Z: Zustand nur in Aggregaten und Lesemodellen", "Projektionen sind zustandslose Übersetzer; Gedächtnis gehört in ein Aggregat.", "warning",
             [An("CQRS083", "Domain.SourceGeneration/ModellAnalyzer.cs (Instanzfelder, die Zustand halten)")]),
-        new("GR-AKTEUR", "Akteur → nur, was er darf", "Ein Akteur gibt nur hinein, was er per IDarf<T> darf: Command, Query, Quell-Nachricht, "
-            + "Transient-Event oder die Ausgaben einer Funktion, die er draußen rechnet. Was er hören darf, wird abgeleitet (Aggregate seiner Commands, "
-            + "Projektionen hinter seinen Queries).", "error",
+        new("GR-AKTEUR", "Akteur: IDarf hinein, IHoert heraus", "Ein Akteur (record X : IAkteur) gibt nur hinein, was er per IDarf<T> darf: einen "
+            + "Command, eine Query, einen Hinweis. Zu ihm kommt, was er per IHoert<T> hört: ein Command ohne Ziel ist Arbeit, ein Event oder Hinweis "
+            + "Kenntnis; einen Command an ein Aggregat hört kein Akteur.", "error",
             [An("CQRS058", "Domain.SourceGeneration/AkteurAnalyzer.cs"), Gen("CQRS059", "Infrastructure.SourceGeneration/AkteurRechteGenerator.cs (Name eindeutig)"),
              new("laufzeit", null, "Infrastructure/Akteure/AkteurTor.cs (Handshake + jede hineingehende Nachricht)")]),
         new("GR-HERKUNFT", "Alles kommt von einem Akteur", "Sobald es Akteure gibt: jeder Command und jede Query kommt von einem Akteur — direkt "
@@ -252,26 +252,29 @@ public static class Grammatik
             + "Rahmen „ohne Akteur“.", "warning",
             [new("laufzeit", null, "Infrastructure/Akteure/AkteurTor.cs (ohne IDarf abgewiesen)"),
              Offen("Editor-Sicht: Rahmen „ohne Akteur“ (board.sicht); Fixpunkt im Generator (docs/konzept-akteure.md §2.3)")]),
-        new("GR-CLIENT", "Client-Vertrag: nur der Rand", "Ein Client (interface IX : IClientVertrag) nennt in seiner Basisliste, wen er verkörpert "
-            + "(IVerkoerpert<A>) und was er hört (IHoert<E>) — keine eigenen Member, keine client-internen Typen. Was über seine Leitung hineingeht, "
-            + "sind die IDarf seiner Akteure: Commands, Quell-Nachrichten und Hinweise sendet er, Queries fragt er, Funktionen trägt er.", "error",
+        new("GR-ARBEIT", "Arbeit für einen Akteur", "Hört ein Akteur einen Command ohne Ziel, ist er dessen einziger Empfänger: die Werkstatt gibt ihn "
+            + "einer Sitzung, die den Akteur verkörpert (verkörpert ∩ Token), und stellt ihn erneut zu, bis eine Antwort kommt — die erste gewinnt; die "
+            + "Antwort sind Commands seines IDarf, ihre Ids folgen aus dem Auftrag. Ein Command, den ein Graph nimmt und ein Akteur hört, ist ein Fehler.", "error",
+            [An("CQRS116", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (genau ein Empfänger: Graph-Kopf oder Akteur)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/Arbeit.cs (je Akteur mit Arbeit eine Instanz, ein Knoten draußen)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/Werkstatt.cs (Aufträge an Sitzungen, die erste Antwort gewinnt)")]),
+        new("GR-CLIENT", "Client: nennt nur, wen er verkörpert", "Ein Client (record X : IClient) nennt in seiner Basisliste nur, wen er verkörpert "
+            + "(IVerkoerpert<A>) — keine eigenen Member, keine client-internen Typen. Was über seine Leitung geht, sind die IDarf und IHoert seiner "
+            + "Akteure; Handshake-Name ist der Record-Name.", "error",
             [An("CQRS063", "Domain.SourceGeneration/AkteurAnalyzer.cs (Form)"),
              new("generator", null, "Infrastructure.SourceGeneration/AkteurRechteGenerator.cs (GeneratedClientVertraege, Client-Hash)"),
-             new("laufzeit", null, "Infrastructure/GrpcClient/CqrsClientService.cs (Handshake je Client, Vertrag ∩ Token)")]),
-        new("GR-CLIENT-BEFUGT", "Client verkörpert Akteure", "Ein Client verkörpert nur konkrete Akteure (IVerkoerpert<A>) und hört nur Events und "
-            + "Hinweise (IHoert<E>); befugt ist der Akteur, nicht die Software — der Vertrag nennt keine eigene Befugnis.", "error",
+             new("laufzeit", null, "Infrastructure/GrpcClient/CqrsClientService.cs (Handshake je Client, verkörpert ∩ Token)")]),
+        new("GR-CLIENT-BEFUGT", "Client verkörpert Akteure", "Ein Client verkörpert nur konkrete Akteure (IVerkoerpert<A>); befugt ist der Akteur, nicht "
+            + "die Software. Wirksam ist an jeder Sitzung verkörpert ∩ Token, für beide Richtungen (hinein wie gehört).", "error",
             [An("CQRS064", "Domain.SourceGeneration/AkteurAnalyzer.cs"), new("laufzeit", null, "Infrastructure/Akteure/ClientVertrag.cs (Rechte = verkörperte Akteure ∩ Token)")]),
-        new("GR-CLIENT-CODE", "Client-Code = Vertrag", "Eine Client-Assembly nennt ihren Vertrag ([assembly: IstClient<IX>]); was ihr Code an "
-            + "Commands erzeugt und an Queries stellt, muss ein verkörperter Akteur dürfen (IDarf), worauf ein Handler hört, kennt der Vertrag "
-            + "(IHoert) — abonniert wird nur, was er hört, gesendet und gefragt nur, was seine Akteure dürfen. Funktionen trägt draußen nur das Python-SDK.", "error",
-            [Gen("CQRS093", "Client.SourceGeneration/ClientVertrag.cs (Client ohne Vertrag)"),
-             Gen("CQRS094", "Client.SourceGeneration/ClientVertrag.cs (C#-Client trägt Funktionen)"),
+        new("GR-CLIENT-CODE", "Client-Code = seine Akteure", "Eine C#-Client-Assembly nennt ihren Client ([assembly: IstClient<X>]); was ihr Code an "
+            + "Commands erzeugt und an Queries stellt, muss ein verkörperter Akteur dürfen (IDarf), worauf ein Handler hört, muss einer hören (IHoert) — "
+            + "abonniert wird nur das. Arbeit nimmt heute nur das Python-SDK an (je gehörtem Command ein Handler in der generierten Basis).", "error",
+            [Gen("CQRS093", "Client.SourceGeneration/ClientVertrag.cs (Client-Assembly nennt ihren Client nicht)"),
+             Gen("CQRS094", "Client.SourceGeneration/ClientVertrag.cs (C#-Client verkörpert Akteure mit Arbeit)"),
              An("CQRS095", "Client.SourceGeneration/ClientVertrag.cs (Command darf kein verkörperter Akteur)"),
              An("CQRS096", "Client.SourceGeneration/ClientVertrag.cs (Query darf kein verkörperter Akteur)"),
              An("CQRS097", "Client.SourceGeneration/ClientVertrag.cs (Server-Event nicht Kenntnis)")]),
-        new("GR-GETRAGEN", "Jede Funktion draußen hat einen Träger", "Eine Funktion, die als Schnittstelle deklariert ist und keine Umsetzung im Host "
-            + "hat, wird von mindestens einem Client getragen (er verkörpert einen Akteur mit IDarf<F>) — sonst läuft sie nur mit einer Bindung von Hand.", "warning",
-            [An("CQRS087", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Warnung — Funktion ohne Träger)")]),
         new("GR-MODUL-EINGANG-OFFEN", "Eingang ohne Konsument", "Ein Command oder eine Query, die niemand konsumiert — offener Eingang des Moduls.", "warning",
             [An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Command ohne Decider, Query ohne Reader und ohne Aggregat)")]),
         new("GR-MODUL-AUSGANG-OFFEN", "Ausgang ohne Erzeuger", "Ein Event, eine Ablehnung oder eine Response, die niemand erzeugt — offener Ausgang des Moduls.", "warning",
@@ -306,7 +309,7 @@ public static class Grammatik
         new(Akteur, Command, "GR-AKTEUR"), new(Akteur, Query, "GR-AKTEUR"), new(Akteur, Transient, "GR-AKTEUR"),
         new(Akteur, Quelle, "GR-AKTEUR"), new(Aussenwelt, Quelle, "GR-QUELLE"),
         new(Client, Command, "GR-CLIENT-BEFUGT"), new(Client, Query, "GR-CLIENT-BEFUGT"), new(Client, Transient, "GR-CLIENT-BEFUGT"),
-        new(Client, Quelle, "GR-CLIENT-BEFUGT"), new(Client, Event, "GR-CLIENT-BEFUGT"),   // Quell-Nachricht (JSON-Eingang); Events als Ausgabe getragener Funktionen
+        new(Client, Quelle, "GR-CLIENT-BEFUGT"),
         new(Uhr, Command, "GR-FRIST"),
     ];
 

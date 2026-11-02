@@ -22,9 +22,6 @@ public enum ClusterArt { Einzelknoten, Consul }
 /// <summary>Rolle eines Knotens beim Schema (Multi-Node-Kaltstart): allein, der eine Migrator, oder Mitglied.</summary>
 public enum KnotenRolle { Allein, Migrator, Mitglied }
 
-/// <summary>Wo eine Funktion rechnet: im Host (C#-Implementierung), extern (z. B. Python-Worker) oder per Hand (Werkbank).</summary>
-public enum FunktionsLaufort { Host, Extern, Hand }
-
 /// <summary>Kopf der Umgebung.</summary>
 public sealed class UmgebungKopf
 {
@@ -35,6 +32,8 @@ public sealed class UmgebungKopf
     /// Leer = <c>CQRS_PYTHON</c> bzw. <c>python3</c> (<see cref="UmgebungKonfig.Python"/>).
     /// </summary>
     public string Python { get; set; } = "";
+    /// <summary>Die Akteure, deren Arbeit (gehörte Commands ohne Ziel) die Werkbank von Hand beantwortet — sie verkörpert sie (Sim).</summary>
+    public string[] Hand { get; set; } = [];
 }
 
 /// <summary>Der Event-Store (Postgres/Marten) — die Wahrheit.</summary>
@@ -103,30 +102,25 @@ public sealed class TransportKonfig
 {
     public int GrpcPort { get; set; } = 5001;
     public int EinblickPort { get; set; }
-    /// <summary>JSON-Eingang auf dem Einblick-Port (<c>/eingang/*</c>): Commands/Queries als Akteur (Token → Akteur-Tor) und Antworten von
-    /// Hand-Funktionen — der Weg der Werkbank ins echte System. Sim an, Prod aus.</summary>
+    /// <summary>JSON-Eingang auf dem Einblick-Port (<c>/eingang/*</c>): Commands/Queries als Akteur (Token → Akteur-Tor) und Antworten auf Arbeit
+    /// von Hand — der Weg der Werkbank ins echte System. Sim an, Prod aus.</summary>
     public bool JsonEingang { get; set; }
 }
 
 /// <summary>
 /// Ein Knoten einer Graph-Instanz (<c>umgebungen/&lt;name&gt;/graphen/&lt;instanz&gt;.json</c>, Schlüssel = Name des Knotens, docs/04 §4.4): wie seine
-/// Funktion läuft — Laufort, Implementierung, Parallel, Warteschlange, Vorwärmen, Wiederholungen, Worker —, welche Umsetzung jede Technik in ihrem
-/// Konstruktor hat (<see cref="Technik"/>, nötig bei mehreren) und die Felder ihrer Konfig-Records (<see cref="Werte"/>, flach, wie in der Datei).
+/// Funktion läuft — Parallel, Warteschlange, Vorwärmen, Wiederholungen, Zeitlimit —, welche Umsetzung jede Technik in ihrem Konstruktor hat (<see cref="Technik"/>, nötig bei mehreren) und die Felder ihrer Konfig-Records (<see cref="Werte"/>, flach, wie in der Datei).
 /// </summary>
 public sealed class KnotenKonfig
 {
     /// <summary>Die Schlüssel eines Knotens, die keine Felder eines Konfig-Records sind.</summary>
     public static readonly IReadOnlyList<string> Rahmenfelder =
-        [nameof(Laufort), nameof(Implementierung), nameof(Wiederholungen), nameof(Parallel), nameof(Warteschlange), nameof(Vorwaermen), nameof(Zeitlimit), nameof(Worker),
-         nameof(Technik)];
+        [nameof(Wiederholungen), nameof(Parallel), nameof(Warteschlange), nameof(Vorwaermen), nameof(Zeitlimit), nameof(Technik)];
 
-    public FunktionsLaufort Laufort { get; set; } = FunktionsLaufort.Host;
-    /// <summary>Nur Host: der Klassenname der Implementierung — nötig, wenn es mehrere gibt.</summary>
-    public string? Implementierung { get; set; }
     /// <summary>So oft rechnet ein Parent einen scheiternden Eingang erneut, bevor er „gescheitert“ meldet; 0 = der Standard.</summary>
     public int Wiederholungen { get; set; }
     /// <summary>So viele Eingänge rechnet ein Knoten zugleich (Kinder seines Parents, docs/04 §4.4); 0 = der Standard. Jedes Kind hat seine eigene
-    /// Aktivierung. Draußen bestimmen die Slots der Arbeiter.</summary>
+    /// Aktivierung.</summary>
     public int Parallel { get; set; }
     /// <summary>So viele Eingänge wartet ein Parent höchstens (voll → „später“, der Rückstau reicht bis zum durablen Rand); 0 = der Standard.</summary>
     public int Warteschlange { get; set; }
@@ -137,8 +131,6 @@ public sealed class KnotenKonfig
     /// <c>T?</c>-Eingängen auf sie, sobald alle übrigen da sind (danach feuert es mit null, docs/04 §4.4); <see cref="TimeSpan.Zero"/> = ohne.
     /// </summary>
     public TimeSpan Zeitlimit { get; set; }
-    /// <summary>Nur Extern: wie die Werkbank den Worker startet (▶ Worker starten). Der Host liest es nie.</summary>
-    public WorkerKonfig? Worker { get; set; }
     /// <summary>Je Technik im Konstruktor (einfacher Name der Schnittstelle) die gewählte Umsetzung (Klassenname) — nötig, wenn es mehrere gibt.</summary>
     public Dictionary<string, string> Technik { get; set; } = new(StringComparer.Ordinal);
     /// <summary>Die Felder der Konfig-Records des Knotens (Schlüssel relativ zum Knoten, eine Liste als <c>Feld:0</c>, <c>Feld:1</c> …).</summary>
@@ -158,8 +150,8 @@ public sealed class GraphInstanzKonfig
 }
 
 /// <summary>
-/// Ein externer Funktions-Worker als Prozess (Werkbank, docs/06 §6.5): <c>Python Skript Argumente…</c>. Die Werkbank setzt <c>CQRS_GRPC_HOST</c>,
-/// <c>CQRS_GRPC_PORT</c> und <c>CQRS_AKTEUR_TOKEN</c> (aus <see cref="Token"/>) — der Worker meldet sich damit am gRPC-Port an.
+/// Ein Client als Prozess (Werkbank, docs/06 §6.5): <c>Python Skript Argumente…</c>. Die Werkbank setzt <c>CQRS_GRPC_HOST</c>, <c>CQRS_GRPC_PORT</c>
+/// und <c>CQRS_AKTEUR_TOKEN</c> (aus <see cref="Token"/>) — der Client meldet sich damit am gRPC-Port an.
 /// </summary>
 public sealed class WorkerKonfig
 {
@@ -168,17 +160,20 @@ public sealed class WorkerKonfig
     /// <summary>Das Skript, relativ zur Solution.</summary>
     public string Skript { get; set; } = "";
     public string[] Argumente { get; set; } = [];
-    /// <summary>Das Akteur-Token (Abschnitt <c>Identitaeten</c>), mit dem sich der Worker anmeldet — sein Akteur braucht <c>IDarf&lt;F&gt;</c>.</summary>
+    /// <summary>Das Akteur-Token (Abschnitt <c>Identitaeten</c>), mit dem sich der Client anmeldet — es muss die Akteure verkörpern, deren Arbeit er tut.</summary>
     public string Token { get; set; } = "";
 }
 
 /// <summary>
-/// Wie sich ein Client (<c>IClientVertrag</c>, Handshake-Name) in dieser Umgebung verbindet (Abschnitt <c>Clients:&lt;Name&gt;</c>): das Akteur-Token
-/// (Abschnitt <c>Identitaeten</c>; sein Akteur-Satz muss die Akteure des Vertrags verkörpern), die Adresse des gRPC-Servers (leer =
-/// <c>http://localhost:&lt;Transport:GrpcPort&gt;</c>), die eigenen URLs (Blazor) und die Verzeichnisse, aus denen er Dateien zeigen darf.
+/// Wie sich ein Client (<c>IClient</c>, Handshake-Name = Record-Name) in dieser Umgebung verbindet (Abschnitt <c>Clients:&lt;Name&gt;</c>): das
+/// Akteur-Token (Abschnitt <c>Identitaeten</c>; sein Akteur-Satz muss Akteure des Clients verkörpern), die Adresse des gRPC-Servers (leer =
+/// <c>http://localhost:&lt;Transport:GrpcPort&gt;</c>), die eigenen URLs (Blazor), die Verzeichnisse, aus denen er Dateien zeigen darf, und wie die
+/// Werkbank ihn als Prozess startet (<see cref="Worker"/>, nur ein Python-Client).
 /// </summary>
 public sealed class ClientKonfig
 {
+    /// <summary>Wie die Werkbank den Client als Prozess startet (▶ Worker starten). Der Host liest es nie.</summary>
+    public WorkerKonfig? Worker { get; set; }
     public string Token { get; set; } = "";
     public string Adresse { get; set; } = "";
     public string Urls { get; set; } = "http://localhost:5010";

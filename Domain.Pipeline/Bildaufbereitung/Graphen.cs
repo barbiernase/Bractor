@@ -10,7 +10,7 @@ namespace Domain.Pipeline.Bildaufbereitung;
 /// meldet. Der Kopf nimmt <see cref="DateiGefunden"/> (aus dem Katalog); die Kanten folgen aus den Typen (BildEingelesen → Verkleinern und Eingang,
 /// BildVerkleinert → Kontrast, VorschauErstellt → Eingang); hinaus geht <c>NimmBildAuf</c> an das Paar und die Hinweise.
 /// </summary>
-public sealed record Bildaufbereitung(IBildEinlesen Einlesen, IBildVerkleinerung Verkleinern, IKontrastausgleich Kontrast, Bildeingang Eingang) : IGraph;
+public sealed record Bildaufbereitung(Bildeinlesen Einlesen, Bildverkleinerung Verkleinern, Kontrastausgleich Kontrast, Bildeingang Eingang) : IGraph;
 
 /// <summary>
 /// Der Linienimport (docs/04 §4.7): ein Dateiwächter am Kopf (eine Quellfunktion aus dem Katalog) und die Bildaufbereitung als Graph im Graphen — je

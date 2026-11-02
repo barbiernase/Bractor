@@ -24,35 +24,35 @@ namespace Infrastructure.Integration.Tests;
 /// Ebene 2 — die ABLÄUFE der Beispieldomäne gegen echtes Marten/Consul: Aggregate entscheiden,
 /// Funktionen in Graphen tragen die Kanten, Fristen tragen die Zeit — ohne Dirigent. Der Bildeingang läuft über den ganzen Linienimport —
 ///
-///   Datei im Verzeichnis ──ƒ Dateiwaechter (Katalog, Zustand gesichert)──DateiGefunden──▶ ƒ IBildEinlesen ──BildEingelesen──┬─▶ ƒ IBildVerkleinerung
-///     ──BildVerkleinert──▶ ƒ IKontrastausgleich (OpenCV im Host bzw. Python-Worker über gRPC) ──VorschauErstellt──┐                               │
-///     ƒ Bildeingang (Join, gleichbleibend) ◀───────────────────────────────────────────────────────────────────┴───────────────────────────────┘
-///     ──NimmBildAuf──▶ ImagePair („anlegen oder ergänzen“).
+///   Datei im Verzeichnis ──ƒ Dateiwaechter (Katalog, Zustand gesichert)──DateiGefunden──▶ ƒ Bildeinlesen ──BildEingelesen──┬─▶ ƒ Bildverkleinerung
+///     ──BildVerkleinert──▶ ƒ Kontrastausgleich (OpenCV im Host) ──VorschauErstellt──┐                                                       │
+///     ƒ Bildeingang (Join, gleichbleibend) ◀────────────────────────────────────────┴───────────────────────────────────────────────────────┘
+///     ──NimmBildAuf──▶ ImagePair („anlegen oder ergänzen“) ──PaarZuBeurteilen──▶ Arbeit des Klassifizierers (eine Sitzung, die ihn verkörpert).
 ///
 /// Beweiskraft: das Paar bekommt BildVerfuegbar mit einer Vorschau, die NUR die Bildaufbereitung erzeugt; die Spur führt zum Lauf der Quelle; eine
-/// Datei ist nach einem Neustart nicht noch einmal ein Lauf. Im zweiten Test rechnet ein Python-Worker den letzten Schritt,
-/// den er über gRPC anbietet — sein Kennzeichen („_py") muss im Fakt landen.
+/// Datei ist nach einem Neustart nicht noch einmal ein Lauf. Ein Python-Worker, der den Klassifizierer verkörpert, bekommt jedes komplette Paar als
+/// Arbeit und beurteilt es über gRPC — genau einmal im Log.
 /// </summary>
 public class AblaufE2ETests
 {
     /// <summary>Die Host-Verdrahtung wie Host.Grpc: Framework (samt Graphen und Uhr), Projektionen, je Graph eine Instanz, Technik mit den Werten ihrer Knoten.</summary>
-    private static void Verdrahte(IServiceCollection s, string ausgabe, string cluster, bool grpc, FunktionsLaufort kontrastausgleich, string? eingang = null)
+    private static void Verdrahte(IServiceCollection s, string ausgabe, string cluster, bool grpc, string? eingang = null)
     {
         s.AddCqrsFramework(opts => { opts.EnableGrpc = grpc; opts.ClusterName = cluster; });
         s.AddGeneratedPullPaths();   // die Projektionen füllen die Read-Models, die die Datensatz-Funktionen lesen
-        KnotenKonfig Bild(FunktionsLaufort laufort, bool mitPfad)
+        KnotenKonfig Bild(bool mitPfad)
         {
-            var k = new KnotenKonfig { Laufort = laufort, Wiederholungen = 1 };
-            if (mitPfad && laufort == FunktionsLaufort.Host) k.Werte[nameof(BildaufbereitungKonfig.AusgabePfad)] = ausgabe;
+            var k = new KnotenKonfig { Wiederholungen = 1 };
+            if (mitPfad) k.Werte[nameof(BildaufbereitungKonfig.AusgabePfad)] = ausgabe;
             return k;
         }
         var instanzen = GraphInstanzen.JeGraphEine(Infrastructure.Komposition.Anwendung.Funktionen.Graphen, new Dictionary<string, KnotenKonfig>
         {
-            [nameof(IBildEinlesen)] = Bild(FunktionsLaufort.Host, false),
-            [nameof(IBildVerkleinerung)] = Bild(FunktionsLaufort.Host, true),
-            [nameof(IKontrastausgleich)] = Bild(kontrastausgleich, true),
+            [nameof(Bildeinlesen)] = Bild(false),
+            [nameof(Bildverkleinerung)] = Bild(true),
+            [nameof(Kontrastausgleich)] = Bild(true),
         }.Concat(eingang is null ? [] : [new KeyValuePair<string, KnotenKonfig>(nameof(Core.Katalog.Dateiwaechter), Waechter(eingang))])
-            .ToDictionary(x => x.Key, x => x.Value));
+            .ToDictionary(x => x.Key, x => x.Value), akteure: Infrastructure.Komposition.Anwendung.Akteure.Rechte);
         s.AddSingleton(instanzen);
         TechnikExtensions.BindeTechnik(s, instanzen);
     }
@@ -89,7 +89,7 @@ public class AblaufE2ETests
         var eingang = Path.Combine(verzeichnis, "ein");
         Directory.CreateDirectory(eingang);
         var builder = Host.CreateApplicationBuilder();
-        Verdrahte(builder.Services, ausgabe, "ablauf-e2e-" + Guid.NewGuid().ToString("N")[..8], grpc: false, FunktionsLaufort.Host, eingang);
+        Verdrahte(builder.Services, ausgabe, "ablauf-e2e-" + Guid.NewGuid().ToString("N")[..8], grpc: false, eingang);
 
         using var host = builder.Build();
         await host.StartAsync();
@@ -113,7 +113,7 @@ public class AblaufE2ETests
             bilder.Single(b => b.Version == BildVersion.Dc0).Pfad.Should().Be(Path.Combine(ausgabe, Path.GetFileNameWithoutExtension(dc0.Name) + "_vorschau.png"),
                 "die Vorschau entsteht nur durch die Bildaufbereitung (OpenCV im Host)");
             File.Exists(bilder[0].Pfad).Should().BeTrue();
-            bilder.Single(b => b.Version == BildVersion.Dc0).Meta.HoehePixel.Should().Be(OpenCvBildVerkleinerung.VorschauHoehe);
+            bilder.Single(b => b.Version == BildVersion.Dc0).Meta.HoehePixel.Should().Be(Bildverkleinerung.VorschauHoehe);
 
             // Spur: der Command trägt den letzten Knoten; seine Ursache ist der Lauf der Quelle (Instanz und Nummer) — ein Quell-Command steht nie im Log.
             var bildEnv = stream.First(e => e.Payload is BildVerfuegbar);
@@ -130,15 +130,13 @@ public class AblaufE2ETests
     }
 
     [Fact]
-    public async Task Bildeingang_mit_Python_Worker_der_den_Kontrastausgleich_ueber_gRPC_traegt()
+    public async Task Ein_komplettes_Paar_ist_Arbeit_des_Klassifizierers_die_ein_Python_Worker_ueber_gRPC_beantwortet()
     {
         // Der Interpreter der Sim-Umgebung (Umgebung:Python, sonst CQRS_PYTHON/python3) — dieselbe Regel wie die Werkbank.
         var python = Infrastructure.Umgebung.UmgebungLader.Lade(new ConfigurationManager(), "sim-main", []).Python();
         (python == "python3" || File.Exists(python)).Should().BeTrue($"Python für den Worker fehlt ({python}) — Umgebung:Python oder CQRS_PYTHON setzen");
-        // Der GENERISCHE Worker (docs/09 §9.5) mit der Tabelle aus dem Codegen; die Test-Implementierung (funktionen/kontrastausgleich.py,
-        //   Vorschau „_py") liegt per --pfad vor der des Projekts. Einlesen und Verkleinern rechnet der Host (OpenCV).
-        var skript = Path.Combine(RepoWurzel(), Projektstruktur.PythonWorker(Projektstruktur.StandardWurzel), "funktions_worker.py");
-        var testImpls = Path.Combine(RepoWurzel(), "Infrastructure.Integration.Tests", "Python");
+        // Der Stub-Klassifizierer (KlassifikationsWorker, generierte Basis): er nimmt die Arbeit des Klassifizierers an und urteilt „KeineAnomalie“.
+        var skript = Path.Combine(RepoWurzel(), Projektstruktur.PythonWorker(Projektstruktur.StandardWurzel), "run_stub.py");
 
         var verzeichnis = Path.Combine(Path.GetTempPath(), "ablauf-py-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(verzeichnis);
@@ -149,8 +147,7 @@ public class AblaufE2ETests
         builder.Services.AddGrpc();
         var eingangPy = Path.Combine(verzeichnis, "ein");
         Directory.CreateDirectory(eingangPy);
-        Verdrahte(builder.Services, Path.Combine(verzeichnis, "vorschau"), "ablauf-py-" + Guid.NewGuid().ToString("N")[..8], grpc: true,
-            FunktionsLaufort.Extern, eingangPy);
+        Verdrahte(builder.Services, Path.Combine(verzeichnis, "vorschau"), "ablauf-py-" + Guid.NewGuid().ToString("N")[..8], grpc: true, eingangPy);
         var app = builder.Build();
         app.MapCqrsGrpcService();
         await app.StartAsync();
@@ -158,11 +155,11 @@ public class AblaufE2ETests
         var ausgabe = new System.Collections.Concurrent.ConcurrentQueue<string>();
         using var worker = new Process
         {
-            StartInfo = new ProcessStartInfo(python, $"\"{skript}\" --funktionen IKontrastausgleich --slots 2 --pfad \"{testImpls}\"")
+            StartInfo = new ProcessStartInfo(python, $"\"{skript}\"")
             {
                 RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false,
                 WorkingDirectory = Path.GetDirectoryName(skript)!,
-                Environment = { ["CQRS_GRPC_HOST"] = "127.0.0.1", ["CQRS_GRPC_PORT"] = port.ToString() },
+                Environment = { ["CQRS_GRPC_HOST"] = "127.0.0.1", ["CQRS_GRPC_PORT"] = port.ToString(), ["PYTHONUNBUFFERED"] = "1" },
             },
         };
         worker.OutputDataReceived += (_, e) => { if (e.Data != null) ausgabe.Enqueue(e.Data); };
@@ -172,19 +169,22 @@ public class AblaufE2ETests
             worker.Start();
             worker.BeginOutputReadLine();
             worker.BeginErrorReadLine();
-            await Warte(() => Task.FromResult(ausgabe.Any(z => z.Contains("Funktionen angeboten"))), TimeSpan.FromSeconds(60),
-                "Der Python-Worker hat sich nicht angemeldet:\n" + string.Join("\n", ausgabe));
+            await Warte(() => Task.FromResult(ausgabe.Any(z => z.Contains("Arbeit angenommen"))), TimeSpan.FromSeconds(60),
+                "Der Python-Worker hat die Arbeit des Klassifizierers nicht angenommen:\n" + string.Join("\n", ausgabe));
 
             var es = app.Services.GetRequiredService<IEventStoreRepository>();
-            var datei = Datei(eingangPy, Zufallszeit(9), BildVersion.Dc2);
-            var paar = ImagePairFileName.Resolve(datei.Name)!.AggregateId.Wert;
+            var t = Zufallszeit(9);
+            var dc0 = Datei(eingangPy, t, BildVersion.Dc0);
+            Datei(eingangPy, t, BildVersion.Dc2);
+            var paar = ImagePairFileName.Resolve(dc0.Name)!.AggregateId.Wert;
 
-            await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is BildVerfuegbar), TimeSpan.FromSeconds(90),
-                "Kein BildVerfuegbar — der Python-Worker hat den Eingang nicht geholt/beantwortet:\n" + string.Join("\n", ausgabe));
-
-            var bild = (await es.ReadStreamAsync(paar, 0, default)).Select(e => e.Payload).OfType<BildVerfuegbar>().Single();
-            bild.Pfad.Should().Be(datei.Pfad + "_py.png", "den Kontrastausgleich hat der Python-Worker gerechnet (gRPC: Angebot → Eingang → Antwort)");
-            ausgabe.Should().Contain(z => z.StartsWith("AUF " + datei.Pfad), "der Worker hat genau diesen Eingang beantwortet");
+            await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is BildPaarDurchKiKlassifiziert), TimeSpan.FromSeconds(90),
+                "Kein BildPaarDurchKiKlassifiziert — der Python-Worker hat die Arbeit nicht bekommen oder nicht beantwortet:\n" + string.Join("\n", ausgabe));
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            var stream = await es.ReadStreamAsync(paar, 0, default);
+            stream.Count(e => e.Payload is BildPaarDurchKiKlassifiziert).Should().Be(1, "die Antwort auf einen Auftrag wirkt genau einmal");
+            stream.Single(e => e.Payload is BildPaarDurchKiKlassifiziert).UserId.Should().Be("Klassifizierer", "die Antwort gibt der Akteur hinein");
+            ausgabe.Should().Contain(z => z.Contains("PaarZuBeurteilen"), "der Worker hat genau diese Arbeit beantwortet");
         }
         finally
         {
@@ -202,7 +202,7 @@ public class AblaufE2ETests
     public async Task Der_Beginn_eines_Trainings_setzt_die_Waechterfrist_im_Stream_des_Laufs()
     {
         var builder = Host.CreateApplicationBuilder();
-        Verdrahte(builder.Services, Path.GetTempPath(), "ablauf-frist-" + Guid.NewGuid().ToString("N")[..8], grpc: false, FunktionsLaufort.Host);
+        Verdrahte(builder.Services, Path.GetTempPath(), "ablauf-frist-" + Guid.NewGuid().ToString("N")[..8], grpc: false);
         using var host = builder.Build();
         await host.StartAsync();
         try
@@ -234,7 +234,7 @@ public class AblaufE2ETests
     public async Task Datensatz_Range_wird_mit_echter_Lese_Faehigkeit_aufgeloest()
     {
         var builder = Host.CreateApplicationBuilder();
-        Verdrahte(builder.Services, Path.GetTempPath(), "ablauf-ds-" + Guid.NewGuid().ToString("N")[..8], grpc: false, FunktionsLaufort.Host);
+        Verdrahte(builder.Services, Path.GetTempPath(), "ablauf-ds-" + Guid.NewGuid().ToString("N")[..8], grpc: false);
         using var host = builder.Build();
         await host.StartAsync();
         try
@@ -281,8 +281,7 @@ public class AblaufE2ETests
         IHost Baue()
         {
             var builder = Host.CreateApplicationBuilder();
-            Verdrahte(builder.Services, Path.Combine(verzeichnis, "vorschau"), "quelle-e2e-" + Guid.NewGuid().ToString("N")[..8], grpc: false,
-                FunktionsLaufort.Host, eingangsOrdner);
+            Verdrahte(builder.Services, Path.Combine(verzeichnis, "vorschau"), "quelle-e2e-" + Guid.NewGuid().ToString("N")[..8], grpc: false, eingangsOrdner);
             return builder.Build();
         }
 

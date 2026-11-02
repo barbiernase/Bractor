@@ -13,6 +13,7 @@ Konfiguration: appsettings.json (gleiche Konvention wie C#)
 
 import importlib
 import json
+import os
 import logging
 import sys
 from pathlib import Path
@@ -34,10 +35,12 @@ def load_config() -> dict:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     cfg = load_config()
     grpc = cfg.get("GrpcServer", {})
-    host = grpc.get("Host", "localhost")
-    port = grpc.get("Port", 5001)
+    # Wie jeder Worker, den die Werkbank oder ein Test startet: CQRS_GRPC_HOST/CQRS_GRPC_PORT vor appsettings.json.
+    host = os.environ.get("CQRS_GRPC_HOST") or grpc.get("Host", "localhost")
+    port = int(os.environ.get("CQRS_GRPC_PORT") or grpc.get("Port", 5001))
 
     nutzlast = importlib.import_module("domain_client.generated.nutzlast_tabelle").TABELLE
     registry = create_registry()

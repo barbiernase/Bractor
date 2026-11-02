@@ -65,16 +65,14 @@ public sealed class ZustandAnalyzer : DiagnosticAnalyzer
         var t = (INamedTypeSymbol)ctx.Symbol;
         if (t.TypeKind != TypeKind.Class) return;
         var baustein = !t.IsAbstract && Funktionsform.IstFunktion(t);
-        var umsetzung = !baustein && Funktionsform.Umsetzt(t).Any();
         var technikUmsetzung = !t.IsAbstract && technik.IstUmsetzung(t);
 
         // IZustand<T> außerhalb einer Funktions-Klasse bzw. Technik-Umsetzung.
         if (!baustein && !technikUmsetzung)
             foreach (var c in t.InstanceConstructors.Where(c => !c.IsImplicitlyDeclared))
                 foreach (var p in c.Parameters.Where(p => Funktionsform.IstZustand(p.Type)))
-                    ctx.ReportDiagnostic(Diagnostic.Create(Regel, p.Locations.FirstOrDefault() ?? t.Locations.FirstOrDefault(), t.Name, umsetzung
-                        ? $"die Umsetzung einer Funktion draußen nimmt '{p.Type.ToDisplayString()}' — Zustand hat nur eine Funktions-Klasse (draußen lebt er im Worker)"
-                        : $"'{p.Type.ToDisplayString()}' steht im Konstruktor von etwas, das keine Funktion ist"));
+                    ctx.ReportDiagnostic(Diagnostic.Create(Regel, p.Locations.FirstOrDefault() ?? t.Locations.FirstOrDefault(), t.Name,
+                        $"'{p.Type.ToDisplayString()}' steht im Konstruktor von etwas, das keine Funktion ist"));
         // Die Form des Zustands einer Technik-Umsetzung (bei einer Funktion prüft sie der Generator, CQRS100).
         if (technikUmsetzung)
         {
@@ -83,7 +81,7 @@ public sealed class ZustandAnalyzer : DiagnosticAnalyzer
             foreach (var (text, ort) in fehler) ctx.ReportDiagnostic(Diagnostic.Create(Regel, ort, t.Name, text));
         }
 
-        if (!baustein && !umsetzung) return;
+        if (!baustein) return;
         foreach (var m in t.GetMembers().Where(m => !m.IsImplicitlyDeclared))
         {
             switch (m)

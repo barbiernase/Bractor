@@ -59,7 +59,7 @@ namespace Infrastructure.SourceGeneration
                 foreach (var (e, ort) in f.Doppelt)
                     context.ReportDiagnostic(Diagnostic.Create(Doppelt, ort, t.Name, e.Name, Abstractions.Funktionsvertrag.Auf));
                 if (t.IsGenericType) continue;   // eine Blaupause: ihre Knoten nennen sie mit Typargument (unten)
-                if (!f.Draussen && !Ctorbindung.Baubar(t))
+                if (!Ctorbindung.Baubar(t))
                 {
                     context.ReportDiagnostic(Diagnostic.Create(FormFehler, t.Locations.FirstOrDefault() ?? Location.None, t.Name,
                         "die Klasse ist nicht öffentlich — die generierte Fabrik kann sie nicht bauen"));
@@ -76,18 +76,10 @@ namespace Infrastructure.SourceGeneration
                 if (f.Fehler.Count == 0 && f.Doppelt.Count == 0 && (f.Aufs.Count > 0 || f.Lausche != null) && Ctorbindung.Baubar(t)) gut.Add(f);
             }
 
-            // Die Umsetzungen im Host: eine Klasse ist sich selbst die Umsetzung; eine Schnittstelle hat ihre öffentlichen, konkreten Implementierungen.
-            var klassen = Ctorbindung.Klassen(c);
-            var umsetzungen = gut.ToDictionary(f => f.Typ, f => f.Draussen
-                ? klassen.Where(k => Ctorbindung.Baubar(k) && k.AllInterfaces.Contains(f.Typ, SymbolEqualityComparer.Default))
-                    .OrderBy(k => k.ToDisplayString(), System.StringComparer.Ordinal).ToList()
-                : new List<INamedTypeSymbol> { f.Typ }, (IEqualityComparer<INamedTypeSymbol>)SymbolEqualityComparer.Default);
-
-            context.AddSource("GeneratedFunktionsBausteine.g.cs", Emit(gut, umsetzungen, fq));
+            context.AddSource("GeneratedFunktionsBausteine.g.cs", Emit(gut, fq));
         }
 
-        private static string Emit(List<Funktionsform.Form> fs, Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>> umsetzungen,
-            SymbolDisplayFormat fq)
+        private static string Emit(List<Funktionsform.Form> fs, SymbolDisplayFormat fq)
         {
             string T(ITypeSymbol t) => t.ToDisplayString(fq);
             var sb = new StringBuilder();
@@ -111,9 +103,9 @@ namespace Infrastructure.SourceGeneration
             for (var i = 0; i < fs.Count; i++)
             {
                 var f = fs[i];
-                var ctor = f.Draussen ? null : Ctorbindung.Konstruktor(f.Typ);
+                var ctor = Ctorbindung.Konstruktor(f.Typ);
                 var dienste = Ctorbindung.Braucht(ctor).Select(d => $"typeof({T(d)})");
-                sb.AppendLine($"            new FunktionsBaustein(typeof({T(f.Typ)}), \"{Funktionsform.Anzeigename(f.Typ)}\", Draussen: {(f.Draussen ? "true" : "false")},");
+                sb.AppendLine($"            new FunktionsBaustein(typeof({T(f.Typ)}), \"{Funktionsform.Anzeigename(f.Typ)}\",");
                 sb.AppendLine("                new FunktionsEingang[]");
                 sb.AppendLine("                {");
                 foreach (var a in f.Aufs)
@@ -122,11 +114,7 @@ namespace Infrastructure.SourceGeneration
                         + $"new Type[] {{ {string.Join(", ", a.Faehigkeiten.Select(x => $"typeof({T(x)})"))} }}, "
                         + $"new Type[] {{ {string.Join(", ", a.Eingaenge.Select(x => $"typeof({T(x)})"))} }}),");
                 sb.AppendLine("                },");
-                sb.AppendLine("                new FunktionsUmsetzung[]");
-                sb.AppendLine("                {");
-                foreach (var k in umsetzungen[f.Typ])
-                    sb.AppendLine($"                    new FunktionsUmsetzung(\"{k.Name}\", typeof({T(k)}), (sp, z) => new {T(k)}({Ctorbindung.Argumente(Ctorbindung.Konstruktor(k), fq, "z")})),");
-                sb.AppendLine("                },");
+                sb.AppendLine($"                (sp, z) => new {T(f.Typ)}({Ctorbindung.Argumente(ctor, fq, "z")}),");
                 sb.AppendLine($"                new Type[] {{ {string.Join(", ", dienste)} }},");
                 sb.AppendLine($"                Rechne{i}{(f.Zustand != null ? ", Zustand: " + Ctorbindung.Zustandsform(f.Zustand, fq) : "")}"
                     + $"{(f.Lausche != null ? $", Lausche: {f.Aufs.Count}" : "")}),");

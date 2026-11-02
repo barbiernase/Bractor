@@ -150,21 +150,16 @@ public class FunktionsGarantieTests
     [Fact]
     public async Task Nur_die_erste_Antwort_des_Arbeiters_der_den_Eingang_haelt_wirkt()
     {
-        using var host = Cluster("garantie-funktion-worker", dienste: s =>
-        {
-            s.AddSingleton(global::Infrastructure.Funktionen.GraphInstanzen.JeGraphEine(global::Infrastructure.Komposition.Anwendung.Funktionen.Graphen,
-                new Dictionary<string, KnotenKonfig> { [nameof(IFreigabe)] = new() { Laufort = FunktionsLaufort.Hand } }));
-            s.AddHandAusfuehrer();
-        });
+        using var host = Cluster("garantie-arbeit-hand", dienste: s => s.AddHandAusfuehrer("Rechnungspruefer"));
         await host.StartAsync();
         try
         {
             var rechnung = Id<Rechnung>.Neu();
-            (await FrageAsync(host, new StelleRechnung(rechnung, Id<Kundenkonto>.Neu(), 500m), Guid.NewGuid()))!.Success.Should().BeTrue();
+            (await FrageAsync(host, new StelleRechnung(rechnung, Id<Kundenkonto>.Neu(), 50_000m), Guid.NewGuid()))!.Success.Should().BeTrue();
             var hand = host.Services.GetRequiredService<HandAusfuehrer>();
             HandEingang? offen = null;
             await Warte(() => Task.FromResult((offen = hand.OffeneEingaenge.FirstOrDefault(e => e.Stream == rechnung.Wert)) is not null),
-                Frist, "der Eingang wartet nicht von Hand");
+                Frist, "die Arbeit wartet nicht von Hand");
 
             // Ein fremder Arbeiter, der den Auftrag nie bekam, antwortet anders und schneller — es zählt nur die Antwort dessen, der ihn hält, und
             //   von ihm die erste.

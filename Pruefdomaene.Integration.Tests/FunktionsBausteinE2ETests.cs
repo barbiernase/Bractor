@@ -14,7 +14,7 @@ namespace Pruefdomaene.Integration.Tests;
 /// <summary>
 /// Funktionen in Baustein-Form im echten Cluster gegen echtes Marten: der Funktions-Actor je (Funktion,
 /// Partition) liest ab seiner Position, rechnet, hält fest (außer gleichbleibend), sendet aus dem Festgehaltenen mit abgeleiteten Command-Ids;
-/// eine Funktion draußen wartet auf die Antwort von Hand. Geprüft wird die Wirkung im Log — genau einmal je Eingang.
+/// eine große Rechnung ist Arbeit des Rechnungsprüfers, die die Hand beantwortet. Geprüft wird die Wirkung im Log — genau einmal je Eingang.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class FunktionsBausteinE2ETests
@@ -99,39 +99,35 @@ public class FunktionsBausteinE2ETests
     }
 
     [Fact]
-    public async Task Eine_Funktion_draussen_rechnet_ohne_Bindung_mit_ihrer_einen_Umsetzung_im_Host()
+    public async Task Der_Freigabeautomat_gibt_kleine_Rechnungen_im_Host_frei()
     {
         using var host = Cluster("pruef-funktion-freigabe");
         await host.StartAsync();
         try
         {
             var rechnung = Id<Rechnung>.Neu();
-            (await FrageAsync(host, new StelleRechnung(rechnung, Id<Kundenkonto>.Neu(), 20_000m), Guid.NewGuid()))!.Success.Should().BeTrue();
-            await Warte(async () => (await Zustand<Rechnung>(host.Services, rechnung.Wert)).Gesperrt, Frist, "die Freigabe entscheidet nicht");
+            (await FrageAsync(host, new StelleRechnung(rechnung, Id<Kundenkonto>.Neu(), 50m), Guid.NewGuid()))!.Success.Should().BeTrue();
+            await Warte(async () => (await Zustand<Rechnung>(host.Services, rechnung.Wert)).Freigegeben, Frist, "die Freigabe entscheidet nicht");
         }
         finally { await host.StopAsync(); }
     }
 
     [Fact]
-    public async Task Mit_Laufort_Hand_wartet_der_Eingang_auf_die_Antwort_und_die_erste_gewinnt()
+    public async Task Eine_grosse_Rechnung_ist_Arbeit_des_Rechnungspruefers_von_Hand_die_erste_Antwort_gewinnt()
     {
-        using var host = Cluster("pruef-funktion-hand", dienste: s =>
-        {
-            s.AddSingleton(global::Infrastructure.Funktionen.GraphInstanzen.JeGraphEine(global::Infrastructure.Komposition.Anwendung.Funktionen.Graphen,
-                new Dictionary<string, KnotenKonfig> { [nameof(IFreigabe)] = new() { Laufort = FunktionsLaufort.Hand } }));
-            s.AddHandAusfuehrer();
-        });
+        using var host = Cluster("pruef-arbeit-hand", dienste: s => s.AddHandAusfuehrer("Rechnungspruefer"));
         await host.StartAsync();
         try
         {
             var rechnung = Id<Rechnung>.Neu();
-            (await FrageAsync(host, new StelleRechnung(rechnung, Id<Kundenkonto>.Neu(), 50m), Guid.NewGuid()))!.Success.Should().BeTrue();
+            (await FrageAsync(host, new StelleRechnung(rechnung, Id<Kundenkonto>.Neu(), 20_000m), Guid.NewGuid()))!.Success.Should().BeTrue();
             var hand = host.Services.GetRequiredService<HandAusfuehrer>();
             HandEingang? offen = null;
             await Warte(() => Task.FromResult((offen = hand.OffeneEingaenge.FirstOrDefault(e => e.Stream == rechnung.Wert)) is not null),
-                Frist, "der Eingang wartet nicht von Hand");
+                Frist, "die Arbeit wartet nicht von Hand");
+            offen!.Eingang.Should().BeOfType<Pipeline.Abrechnung.RechnungZuPruefen>().Which.Betrag.Should().Be(20_000m);
 
-            hand.Antworte(offen!.Vorgang, new IAusgabe[] { new SperreRechnung(rechnung, "von Hand") }, null)
+            hand.Antworte(offen.Vorgang, new IAusgabe[] { new SperreRechnung(rechnung, "von Hand") }, null)
                 .Should().Be(Werkstattausgang.Angenommen);
             hand.Antworte(offen.Vorgang, new IAusgabe[] { new GibRechnungFrei(rechnung) }, null)
                 .Should().Be(Werkstattausgang.Unbekannt, "beantwortet ist er nicht mehr offen");

@@ -2,7 +2,8 @@
 Die Worker programmieren gegen ihre generierten Client-Verträge (docs/konzept-akteure.md §4) — offline, ohne Server, ohne Torch.
 
 Bewiesen wird gegen das ECHTE Generat (domain_client/generated/vertraege.py aus Cqrs.Codegen): die Worker erben die Client-Basis,
-tragen die Funktionen ihrer Akteure (IDarf<F>) und hören ihre Kenntnis (IHoert); der Handshake nennt Client + Hash, und eine Kenntnis gibt nichts aus.
+rechnen die Arbeit ihrer Akteure (IHoert eines Commands ohne Ziel, Antwort über ihr IDarf) und hören ihre Kenntnis (IHoert eines Events);
+der Handshake nennt Client + Hash, und eine Kenntnis gibt nichts aus.
 """
 
 import asyncio
@@ -15,7 +16,7 @@ import pytest
 
 import domain_client.generated as g
 from domain_client.generated.nutzlast_tabelle import TABELLE as NUTZLAST
-from cqrs_client import Ausgabe, Herkunft, VertragsVerletzung
+from cqrs_client import Herkunft, VertragsVerletzung
 from cqrs_client.router import MessageContext
 from domain_client.domain_registry import create_registry
 from domain_client.generated.vertraege import KlassifikationsWorkerBasis, TrainingsWorkerBasis
@@ -35,30 +36,31 @@ async def _hoere(worker, payload, ctx):
     return [x async for x in worker.handle.receive(worker, payload, ctx, worker.state)]
 
 
-def _getragen(worker, funktion):
-    return next(f for f in worker.funktionen._funktionen.values() if f.FUNKTION == funktion)
+def _akteur(worker, name):
+    return worker.arbeit._akteure[name]
 
 
-def test_generat_traegt_funktionen_und_hoert_kenntnis():
+def test_generat_nennt_arbeit_und_kenntnis():
     assert KlassifikationsWorkerBasis.CLIENT == "KlassifikationsWorker"
     assert KlassifikationsWorkerBasis.AKTEURE == ("Klassifizierer",)
     assert re.fullmatch(r"[0-9a-f]{16}", KlassifikationsWorkerBasis.VERTRAG_HASH)
-    e = KlassifikationsWorkerBasis.TRAEGT["IBildpaarBeurteilung"][g.PaarZuBeurteilenDto]
-    assert e.methode == "bildpaar_beurteilung" and not e.strom and e.ausgaben == {g.KlassifiziereBildPaarDurchKiDto: Ausgabe.COMMAND}
+    a = KlassifikationsWorkerBasis.ARBEIT["Klassifizierer"][g.PaarZuBeurteilenDto]
+    assert a.methode == "auf_paar_zu_beurteilen" and g.KlassifiziereBildPaarDurchKiDto in a.antworten
     assert set(KlassifikationsWorkerBasis.HOERT) == {g.BildVerfuegbarDto, g.ModellAktiviertDto}
-    t = TrainingsWorkerBasis.TRAEGT["ITraining"][g.TrainingZuRechnenDto]
-    assert t.methode == "training" and t.strom
+    t = TrainingsWorkerBasis.ARBEIT["TrainingsSystem"][g.TrainingZuRechnenDto]
+    assert t.methode == "auf_training_zu_rechnen"
+    assert set(t.antworten) == {g.MeldeTrainingBegonnenDto, g.MeldeFortschrittDto, g.MeldeTrainingAbgeschlossenDto, g.MeldeTrainingGescheitertDto}
     assert TrainingsWorkerBasis.HOERT == {g.TrainingAbgebrochenDto: "auf_training_abgebrochen"}
     assert TrainingsWorkerBasis.FRAGT == (g.HoleDatensatzSamplesDto,)
 
 
-def test_training_worker_meldet_sich_als_client_und_bietet_seine_funktion_an():
+def test_training_worker_meldet_sich_als_client_und_nimmt_die_arbeit_seines_akteurs_an():
     w = _training()
     req = w._build_capabilities_request()
     assert req.vertrag == "TrainingsWorker", "am Handshake steht der CLIENT (er leitet die Akteure ab)"
     assert req.vertrag_hash == TrainingsWorkerBasis.VERTRAG_HASH
     assert "TrainingAbgebrochen" in req.message_types
-    assert w.funktionen.angebote == [("ITraining", 1)]
+    assert w.arbeit.angebote == [("TrainingsSystem", 1)]
 
 
 def test_abbruch_kommt_ueber_die_kenntnis_an():
@@ -71,18 +73,18 @@ def test_abbruch_kommt_ueber_die_kenntnis_an():
     assert aus == [] and flag.is_set()
 
 
-def test_stub_classifier_beurteilt_das_paar_mit_genau_einer_ausgabe():
+def test_stub_classifier_beurteilt_das_paar_mit_genau_einer_antwort():
     s = _stub()
     agg = uuid4()
-    f = _getragen(s, "IBildpaarBeurteilung")
-    h = Herkunft(stream=str(agg), version=3, zeit=datetime.now(timezone.utc))
-    aus = asyncio.run(f.rufe(g.PaarZuBeurteilenDto(), h))
-    assert isinstance(aus, g.KlassifiziereBildPaarDurchKiDto) and aus.aggregate_id == str(agg)
-    assert f.pruefe(f.eingang(g.PaarZuBeurteilenDto), aus) == Ausgabe.COMMAND
+    a = _akteur(s, "Klassifizierer")
+    h = Herkunft(stream=str(uuid4()), version=3, zeit=datetime.now(timezone.utc))
+    aus = asyncio.run(a.rufe(g.PaarZuBeurteilenDto(paar=str(agg)), h))
+    assert isinstance(aus, g.KlassifiziereBildPaarDurchKiDto) and aus.aggregate_id == str(agg), "das Ziel der Antwort ist das Paar aus dem Command"
+    a.pruefe(a.arbeit_fuer(g.PaarZuBeurteilenDto), aus)
     assert asyncio.run(_hoere(s, g.ModellAktiviertDto(pfad="m.pt", name="m"), MessageContext())) == []
     req = s._build_capabilities_request()
     assert req.vertrag == "KlassifikationsWorker" and "ModellAktiviert" in req.message_types
-    assert s.funktionen.angebote == [("IBildpaarBeurteilung", 1)]
+    assert s.arbeit.angebote == [("Klassifizierer", 1)]
 
 
 def test_eine_kenntnis_gibt_nichts_aus():
@@ -99,7 +101,7 @@ def test_eine_kenntnis_gibt_nichts_aus():
 
 def test_ohne_jede_methode_des_vertrags_startet_kein_worker():
     class Unvollstaendig(KlassifikationsWorkerBasis[SimpleNamespace]):
-        async def bildpaar_beurteilung(self, e, h, state):
+        async def auf_paar_zu_beurteilen(self, c, h, state):
             return None
 
         async def auf_modell_aktiviert(self, e, ctx, state):
@@ -117,10 +119,10 @@ def test_fragen_nur_was_der_client_vertrag_nennt():
 
 def test_die_generierte_nutzlast_tabelle_traegt_jeden_vertragstyp():
     """
-    Die Nutzlast-Tabelle (generated/nutzlast_tabelle.py) ist ein Generat derselben Codegen-Lesart wie die Verträge und Funktions-Basen:
+    Die Nutzlast-Tabelle (generated/nutzlast_tabelle.py) ist ein Generat derselben Codegen-Lesart wie die Verträge:
     alles, was ein Worker empfängt oder sendet, steht darin — sonst ginge es nicht über die Leitung.
     """
-    from domain_client.generated import funktionen, vertraege
+    from domain_client.generated import vertraege
     import inspect
 
     klassen = set(NUTZLAST.values())
@@ -130,13 +132,10 @@ def test_die_generierte_nutzlast_tabelle_traegt_jeden_vertragstyp():
         return [k for _, k in inspect.getmembers(modul, inspect.isclass) if k.__module__ == modul.__name__]
 
     for basis in eigene(vertraege):
-        for eingaenge in basis.__dict__.get("TRAEGT", {}).values():
-            for eingang, e in eingaenge.items():
-                noetig |= {eingang, *e.ausgaben}
+        for gehoert in basis.__dict__.get("ARBEIT", {}).values():
+            for command, a in gehoert.items():
+                noetig |= {command, *a.antworten}
         noetig |= set(basis.__dict__.get("HOERT", {}))
         noetig |= set(basis.__dict__.get("SPONTAN", ())) | set(basis.__dict__.get("FRAGT", ()))
-    for basis in eigene(funktionen):
-        for eingang, e in basis.__dict__.get("EINGAENGE", {}).items():
-            noetig |= {eingang, *e.ausgaben}
-    assert noetig, "die Beispielanwendung hat Verträge und Funktionen"
+    assert noetig, "die Beispielanwendung hat Verträge"
     assert not {t.__name__ for t in noetig - klassen}

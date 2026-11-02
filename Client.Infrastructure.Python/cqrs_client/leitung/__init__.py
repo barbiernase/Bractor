@@ -33,9 +33,7 @@ class ClientMessage(betterproto.Message):
     transient_event: "TransientEventRequest" = betterproto.message_field(
         7, group="message"
     )
-    funktionen_anbieten: "FunktionenAnbieten" = betterproto.message_field(
-        10, group="message"
-    )
+    arbeit_annehmen: "ArbeitAnnehmen" = betterproto.message_field(10, group="message")
     arbeits_ergebnis: "ArbeitsErgebnis" = betterproto.message_field(11, group="message")
     arbeit_lebt: "ArbeitLebtMeldung" = betterproto.message_field(12, group="message")
     lies_log: "LiesLog" = betterproto.message_field(13, group="message")
@@ -183,71 +181,51 @@ class TransientEventRequest(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class FunktionenAnbieten(betterproto.Message):
+class ArbeitAnnehmen(betterproto.Message):
     """
-    Funktionen draußen ausführen (docs/10 §10.1, docs/konzept-akteure.md §5: IDarf<F> eines verkörperten Akteurs): ein Client bietet Funktionen an, die er trägt; der Server
-     holt für ihn Eingänge beim Vermittler (Pull, Slots = Gleichzeitigkeit, Lease), reicht sie weiter und hält die Antwort unter „Funktion, Eingang“
-     fest — die erste gewinnt. Gesendet wird beim Funktions-Actor; der Client ist nur die Hand.
+    Arbeit für Akteure (docs/konzept-akteure.md §5): hört ein Akteur einen Command ohne Ziel (IHoert), nimmt eine Sitzung, die ihn verkörpert
+     (verkörpert ∩ Token), seine Arbeit an — je Akteur mit so vielen Plätzen, wie sie zugleich rechnen kann. Die Werkstatt ihres Knotens gibt ihr Aufträge
+     und stellt sie erneut zu, bis eine Antwort kommt; die erste gewinnt. Nichts wird festgehalten: die Antwort sind Commands über das IDarf des Akteurs,
+     ihre Ids leitet der Server aus dem Auftrag ab.
     """
 
-    angebote: List["FunktionsAngebot"] = betterproto.message_field(1)
+    angebote: List["ArbeitsAngebot"] = betterproto.message_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class FunktionsAngebot(betterproto.Message):
-    funktion: str = betterproto.string_field(1)
-    """
-    Einfacher Name der Funktions-Schnittstelle, z. B. "IBildaufbereitung".
-    """
+class ArbeitsAngebot(betterproto.Message):
+    akteur: str = betterproto.string_field(1)
+    """Einfacher Name des Akteurs, z. B. "Klassifizierer"."""
 
-    slots: int = betterproto.int32_field(2)
+    plaetze: int = betterproto.int32_field(2)
 
 
 @dataclass(eq=False, repr=False)
 class ArbeitsAuftrag(betterproto.Message):
     """
-    Ein Eingang einer Funktion: der Schlüssel „Funktion, Eingang“ (vorgang), die Funktion, das Event und seine Herkunft. Eine Funktion vor dem Aggregat
-     (docs/04 §4.4) bekommt eine Nachricht ohne Marker (Folge, Zwischenergebnis), einen Hinweis oder die Antwort auf einen eigenen Command; vorgang ist die
-     Kennung des Eingangs (gleich bei jeder Wiederholung), ab ist dort immer 0 — es wird nichts festgehalten. Sonst (Funktion mit Log-Eingängen): ab = so viele Ausgaben
-     (Strom) sind schon festgehalten — ein neuer Träger lässt sie aus und macht beim nächsten Stück weiter. hinweis = der Eingang ist ein Hinweis aus
-     dem Hinweis-Netz (docs/04 §4.4): höchstens einmal, nichts wird festgehalten — die Antwort kommt als Ganzes (auch ein Strom),
-     ihre Commands und Hinweise sendet der Funktions-Actor; stream/version nennen den Eingang, aus dem der Hinweis hervorging.
+    Ein Auftrag: seine Kennung (vorgang, gleich bei jeder Wiederholung — draußen der Schlüssel zum Entdoppeln von Wirkungen), der Akteur, dessen Arbeit
+     es ist (fuer), der Command und seine Herkunft (der Akteur der Kette, Stream, Version, Zeit).
     """
 
     vorgang: str = betterproto.string_field(1)
     korrelation: str = betterproto.string_field(2)
-    funktion: str = betterproto.string_field(3)
+    fuer: str = betterproto.string_field(3)
     eingang: "Nutzlast" = betterproto.message_field(4)
     akteur: str = betterproto.string_field(5)
     stream: str = betterproto.string_field(6)
     version: int = betterproto.int32_field(7)
     zeit_utc: int = betterproto.int64_field(8)
-    ab: int = betterproto.int32_field(9)
-    hinweis: bool = betterproto.bool_field(10)
-
-
-@dataclass(eq=False, repr=False)
-class FunktionsAusgabe(betterproto.Message):
-    """
-    Eine Ausgabe in der Reihenfolge der Funktion: ein Command, ein Event, ein Hinweis oder ein Zwischenergebnis (eine Nachricht ohne Marker,
-     die an die Funktionen geht, die sie hören — nie ins Log).
-    """
-
-    command: "Nutzlast" = betterproto.message_field(1, group="art")
-    event: "Nutzlast" = betterproto.message_field(2, group="art")
-    hinweis: "Nutzlast" = betterproto.message_field(3, group="art")
-    zwischenergebnis: "Nutzlast" = betterproto.message_field(4, group="art")
 
 
 @dataclass(eq=False, repr=False)
 class ArbeitsErgebnis(betterproto.Message):
     """
-    Die Antwort auf einen Eingang — ganz oder (Strom) in Stücken: ab = Stelle der ersten Ausgabe dieses Stücks, fertig = der Lauf ist vollständig.
-     Nicht leeres fehler = die Funktion ist draußen gescheitert (zählt gegen die Wiederholungen des Eingangs).
+    Die Antwort auf einen Auftrag — ganz oder in Stücken (ein langer Lauf meldet Fortschritt): Commands über das IDarf des Akteurs, ab = Stelle des
+     ersten Commands dieses Stücks, fertig = die Antwort ist vollständig. Nicht leeres fehler = draußen gescheitert (der Auftrag wird erneut zugestellt).
     """
 
     vorgang: str = betterproto.string_field(1)
-    ausgaben: List["FunktionsAusgabe"] = betterproto.message_field(2)
+    commands: List["Nutzlast"] = betterproto.message_field(2)
     ab: int = betterproto.int32_field(3)
     fertig: bool = betterproto.bool_field(4)
     fehler: str = betterproto.string_field(5)

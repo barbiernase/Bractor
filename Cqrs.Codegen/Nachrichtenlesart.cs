@@ -10,7 +10,7 @@ public static class Nachrichtenlesart
 {
     /// <summary>Alle Commands ohne Ziel, nach vollem Namen sortiert, jeder einmal.</summary>
     public static List<Type> Alle(IEnumerable<Assembly> assemblies) =>
-        assemblies.SelectMany(PythonFunktionsform.TypenVon).Where(IstOhneZiel)
+        assemblies.SelectMany(PythonVertragsEmitter.TypenVon).Where(IstOhneZiel)
             .GroupBy(t => t.FullName!, StringComparer.Ordinal).Select(g => g.First()).OrderBy(t => t.FullName, StringComparer.Ordinal).ToList();
 
     /// <summary>Die Fälle einer Rückgabe: IEnumerable/Task/Nullable abgewickelt, bei OneOf seine Typargumente.</summary>

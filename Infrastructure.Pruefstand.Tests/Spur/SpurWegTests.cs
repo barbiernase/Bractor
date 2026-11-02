@@ -15,7 +15,7 @@ public class SpurWegTests
     private static readonly Dictionary<string, SpurWeg.Eintrag> Log = new()
     {
         ["q:1"] = new("DateiErkannt", "quelle:DateiErkannt", null),
-        ["a:1"] = new("VorschauErstellt", "funktion:IKontrastausgleich", null),
+        ["a:1"] = new("VorschauErstellt", "funktion:Kontrastausgleich", null),
     };
 
     private static SpurWeg.Eintrag? Nachschlagen(string u) => Log.GetValueOrDefault(u);
@@ -38,9 +38,9 @@ public class SpurWegTests
     [Fact]
     public void Ausgabe_einer_Funktion_haengt_an_ihrem_Eingang()
     {
-        var w = SpurWeg.Aus("BildEingelesen", "funktion:IBildEinlesen", null, "q:1", Nachschlagen);
+        var w = SpurWeg.Aus("BildEingelesen", "funktion:Bildeinlesen", null, "q:1", Nachschlagen);
 
-        Paare(w).Should().Equal("rec:DateiErkannt → funktion:IBildEinlesen", "funktion:IBildEinlesen → rec:BildEingelesen");
+        Paare(w).Should().Equal("rec:DateiErkannt → funktion:Bildeinlesen", "funktion:Bildeinlesen → rec:BildEingelesen");
     }
 
     [Fact]

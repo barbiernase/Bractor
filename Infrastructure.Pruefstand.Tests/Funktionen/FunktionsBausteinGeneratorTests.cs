@@ -71,11 +71,11 @@ public interface IPost { Task SendeAsync(string an); }
 
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty();
-        quelle.Should().Contain("new FunktionsBaustein(typeof(global::Probe.Mahnwesen), \"Mahnwesen\", Draussen: false,");
+        quelle.Should().Contain("new FunktionsBaustein(typeof(global::Probe.Mahnwesen), \"Mahnwesen\",");
         quelle.Should().Contain("new FunktionsEingang(typeof(global::Probe.Ueberfaellig), Strom: false, "
             + "new Type[] { typeof(global::Probe.Mahne), typeof(global::Probe.Unnoetig) }, new Type[] {  }, new Type[] { typeof(global::Probe.Ueberfaellig) })");
         quelle.Should().Contain("case 0: return Ausgaben.Einzeln(f.Auf((global::Probe.Ueberfaellig)a[0]!, h), y => (object?)y.Value);");
-        quelle.Should().Contain("new FunktionsUmsetzung(\"Mahnwesen\", typeof(global::Probe.Mahnwesen), (sp, z) => new global::Probe.Mahnwesen())");
+        quelle.Should().Contain("(sp, z) => new global::Probe.Mahnwesen(),", "die Fabrik der Klasse — eine Funktion rechnet im Host");
     }
 
     [Fact]
@@ -105,17 +105,13 @@ public interface IPost { Task SendeAsync(string an); }
     }
 
     [Fact]
-    public void Eine_Schnittstelle_laeuft_draussen_und_kennt_ihre_Umsetzungen()
+    public void Eine_Schnittstelle_mit_IFunktion_ist_CQRS100()
     {
-        var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
-            public interface IPruefung : IFunktion { OneOf<Gemahnt, Unnoetig> Auf(Ueberfaellig e); }
-            public sealed class Pruefung(IPost post) : IPruefung { public OneOf<Gemahnt, Unnoetig> Auf(Ueberfaellig e) => new Gemahnt(1); } }");
+        var (quelle, ids, _) = Bausteine(@"namespace Probe {
+            public interface IPruefung : IFunktion { OneOf<Gemahnt, Unnoetig> Auf(Ueberfaellig e); } }");
 
-        ids.Should().BeEmpty();
-        fehler.Should().BeEmpty();
-        quelle.Should().Contain("typeof(global::Probe.IPruefung), \"IPruefung\", Draussen: true,");
-        quelle.Should().Contain("new FunktionsUmsetzung(\"Pruefung\", typeof(global::Probe.Pruefung), (sp, z) => new global::Probe.Pruefung(");
-        quelle.Should().NotContain("\"Pruefung\", Draussen", "die Implementierung ist keine eigene Funktion");
+        ids.Should().Contain("CQRS100", "eine Funktion ist eine Klasse im Host — was draußen rechnet, ist Arbeit eines Akteurs");
+        quelle.Should().NotContain("\"IPruefung\",", "eine Schnittstelle ist kein Baustein");
     }
 
     [Fact]
@@ -127,9 +123,9 @@ public interface IPost { Task SendeAsync(string an); }
 
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty();
-        quelle.Should().Contain("\"MitPost\", Draussen: false,");
+        quelle.Should().Contain("\"MitPost\",");
         quelle.Should().Contain("new Type[] { typeof(global::Probe.IPost) }", "die Technik steht im Bedarf");
-        quelle.Should().Contain("\"MitLesen\", Draussen: false,");
+        quelle.Should().Contain("\"MitLesen\",");
         quelle.Should().Contain("f.Auf((global::Probe.Ueberfaellig)a[0]!, b!.Hole<global::Probe.ISucheKonto>())", "die Lese-Fähigkeit kommt je Aufruf aus dem Bereich");
     }
 
@@ -163,7 +159,7 @@ public interface IPost { Task SendeAsync(string an); }
     {
         var (quelle, ids, _) = Bausteine("namespace Probe { public sealed class Falsch : IFunktion { " + methode + " } }");
         ids.Should().Contain("CQRS100", worum);
-        quelle.Should().NotContain("\"Falsch\", Draussen");
+        quelle.Should().NotContain("\"Falsch\",");
     }
 
     [Fact]
@@ -181,8 +177,8 @@ public interface IPost { Task SendeAsync(string an); }
 
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty("die konstruierten Bausteine kompilieren");
-        quelle.Should().Contain("new FunktionsBaustein(typeof(global::Probe.Verkleinerung<global::Probe.Vorschau>), \"Verkleinerung<Vorschau>\", Draussen: false,");
-        quelle.Should().Contain("new FunktionsBaustein(typeof(global::Probe.Verkleinerung<global::Probe.Gross>), \"Verkleinerung<Gross>\", Draussen: false,");
+        quelle.Should().Contain("new FunktionsBaustein(typeof(global::Probe.Verkleinerung<global::Probe.Vorschau>), \"Verkleinerung<Vorschau>\",");
+        quelle.Should().Contain("new FunktionsBaustein(typeof(global::Probe.Verkleinerung<global::Probe.Gross>), \"Verkleinerung<Gross>\",");
         quelle.Should().NotContain("Verkleinerung<TFormat>", "die offene Definition ist eine Blaupause");
     }
 
@@ -198,7 +194,7 @@ public interface IPost { Task SendeAsync(string an); }
 
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty();
-        quelle.Should().Contain("\"Wecker\", Draussen: false,").And.Contain("Lausche: 0)");
+        quelle.Should().Contain("\"Wecker\",").And.Contain("Lausche: 0)");
         quelle.Should().Contain("case 0: return Ausgaben.StromAsync(f.Lausche(ct), y => (object?)y.Value, ct);");
     }
 
@@ -212,7 +208,7 @@ public interface IPost { Task SendeAsync(string an); }
     {
         var (quelle, ids, _) = Bausteine("namespace Probe { public sealed class Falsch : IFunktion { " + methoden + " } }");
         ids.Should().Contain("CQRS100", worum);
-        quelle.Should().NotContain("\"Falsch\", Draussen");
+        quelle.Should().NotContain("\"Falsch\",");
     }
 
     [Fact]
@@ -222,7 +218,7 @@ public interface IPost { Task SendeAsync(string an); }
         var (quelle, ids, _) = Bausteine(@"namespace Probe {
             public sealed class Sensorik : IFunktion { public IEnumerable<Mahne> Auf(Messwert m) => []; } }");
         ids.Should().Contain("CQRS100");
-        quelle.Should().NotContain("\"Sensorik\", Draussen");
+        quelle.Should().NotContain("\"Sensorik\",");
         var (aus, ausIds, fehler) = Bausteine(@"namespace Probe {
             public sealed class Melder : IFunktion { public OneOf<Mahne, Messwert> Auf(Ueberfaellig u) => new Messwert(u.Tage); } }");
         ausIds.Should().BeEmpty();
@@ -257,7 +253,7 @@ public interface IPost { Task SendeAsync(string an); }
 
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty("das Generat kompiliert gegen den Kontext");
-        quelle.Should().Contain("\"Schaetzer\", Draussen: false,");
+        quelle.Should().Contain("\"Schaetzer\",");
         quelle.Should().Contain("(sp, z) => new global::Probe.Schaetzer((global::Abstractions.IZustand<global::Probe.Mittelwerte>)z!, ",
             "der Zustand kommt aus der Aktivierung, nie aus dem Container");
         quelle.Should().Contain("Zustand: new global::Infrastructure.Funktionen.FunktionsZustandsform(typeof(global::Probe.Mittelwerte), () => new global::Infrastructure.Funktionen.Zustand<global::Probe.Mittelwerte>()");
@@ -287,7 +283,7 @@ public interface IPost { Task SendeAsync(string an); }
     {
         var (quelle, ids, _) = Bausteine("namespace Probe { public sealed class Zahl { public int N { get; set; } } " + klasse + " }");
         ids.Should().Contain("CQRS100", worum);
-        quelle.Should().NotContain("\"Z\", Draussen", "eine fehlerhafte Funktion fehlt im Dispatch");
+        quelle.Should().NotContain("\"Z\",", "eine fehlerhafte Funktion fehlt im Dispatch");
     }
 
     [Theory]
@@ -305,18 +301,16 @@ public interface IPost { Task SendeAsync(string an); }
     {
         var (quelle, ids, _) = Bausteine("namespace Probe { public sealed class Falsch : IFunktion { " + methode + " } }");
         ids.Should().Contain("CQRS100", worum);
-        quelle.Should().NotContain("\"Falsch\", Draussen", "eine fehlerhafte Funktion fehlt im Dispatch");
+        quelle.Should().NotContain("\"Falsch\",", "eine fehlerhafte Funktion fehlt im Dispatch");
     }
 
     [Fact]
-    public void Fremde_Methoden_oder_kein_Auf_an_einer_Schnittstelle_sind_CQRS100()
+    public void Eine_Funktion_ohne_Auf_ist_CQRS100()
     {
-        Bausteine(@"namespace Probe { public interface IFremd : IFunktion { Mahne Auf(Ueberfaellig e); int Zaehle(); } }")
-            .Ids.Should().Contain("CQRS100");
-        Bausteine(@"namespace Probe { public interface ILeer : IFunktion { } }")
-            .Ids.Should().Contain("CQRS100", "eine Funktion hört mindestens einen Eingang");
         Bausteine(@"namespace Probe { public sealed class Leer : IFunktion { } }")
-            .Ids.Should().Contain("CQRS100", "auch als Klasse");
+            .Ids.Should().Contain("CQRS100", "eine Funktion hört mindestens einen Eingang");
+        Bausteine(@"namespace Probe { public sealed class Mit : IFunktion { public Mahne Auf(Ueberfaellig e) => null!; public int Zaehle() => 0; } }")
+            .Ids.Should().BeEmpty("eine Klasse darf weitere Methoden haben — Funktion ist nur, was Auf heißt");
     }
 
     [Fact]
@@ -330,7 +324,7 @@ public interface IPost { Task SendeAsync(string an); }
             } }");
         ids.Should().Contain("CQRS101");
         fehler.Should().BeEmpty("das Generat bleibt baubar — die Funktion fehlt");
-        quelle.Should().NotContain("\"Doppelt\", Draussen");
+        quelle.Should().NotContain("\"Doppelt\",");
     }
 
     // ── Herkunft und Ausgaben (Laufzeit, store-frei) ─────────────────────────────────────────────────────────────────

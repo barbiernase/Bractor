@@ -6,7 +6,7 @@ namespace Verhalten.Tests;
 /// <summary>
 /// Der Trainings-Wächter als fachliches Soll: ein Training, das nach dem Beginn sechs Stunden nichts meldet, gilt genau einmal als hängen
 /// geblieben; eines, das vorher endet, nie; eine Meldung nach der Markierung ändert nichts mehr. Die Meldungen kommen, wie im Betrieb, als
-/// Ausgaben der Funktion ITraining von ihrem Träger draußen (docs/konzept-akteure.md §5). Die Zeit läuft über die Uhr der Sim
+/// Antwort des TrainingsSystems auf seine Arbeit (docs/konzept-akteure.md §5). Die Zeit läuft über die Uhr der Sim
 /// (Datenbank-Uhr samt Event-Zeitstempeln), nicht über Warten — mit eigenem Host, damit der Zeitsprung keinen anderen Ablauf trifft.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
@@ -25,9 +25,9 @@ public sealed class TrainingsWaechterTests
         await using var host = await Hostlauf.StarteAsync(u);
         using var eingang = new JsonEingang(host);
         var log = new Log(u);
-        // Das Training rechnet draußen (ITraining, getragen vom TrainingsWorker): der Test ist der Träger und meldet stückweise.
+        // Das Training ist Arbeit des TrainingsSystems (es hört TrainingZuRechnen): der Test verkörpert es und meldet stückweise.
         await using var worker = await RoheLeitung.VerbindeAsync(host, "TrainingsWorker", Testumgebung.TokenTrainingssystem);
-        await worker.BieteAnAsync("ITraining", slots: 4);
+        await worker.NimmArbeitAnAsync("TrainingsSystem", plaetze: 4);
 
         var beendet = Guid.NewGuid();
         var still = Guid.NewGuid();

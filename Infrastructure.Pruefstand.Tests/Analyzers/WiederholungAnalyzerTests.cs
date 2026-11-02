@@ -120,7 +120,7 @@ public class WiederholungAnalyzerTests
             }
             """)).Should().ContainSingle(b => b.Id == GleichbleibendAnalyzer.NeueIdId);
         (await Befunde("""
-            public sealed record Kunde : IMensch, IDarf<Mahne>;
+            public sealed record Kunde : IAkteur, IDarf<Mahne>;
             public static class Oberflaeche { public static Mahne Neu() => new(Id<Konto>.Neu(), DateTimeOffset.UnixEpoch); }
             """)).Should().BeEmpty("ein Client würfelt neue Ids (er hält die Command-Id fest)");
     }

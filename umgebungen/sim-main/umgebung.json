@@ -21,7 +21,6 @@
   },
   "Identitaeten": {
     "Tokens": {
-      "sim-bildrechner": "Bildrechner",
       "sim-disponent": "Disponent",
       "sim-inspekteur": "Inspekteur",
       "sim-kioperator": "KIOperator",
@@ -41,6 +40,18 @@
         "${env:HOME}/cqrs-sim/${branch}/DateiErkannt",
         "${env:HOME}/cqrs-sim/${branch}/preprocessed"
       ]
+    },
+    "KlassifikationsWorker": {
+      "Token": "sim-klassifizierer",
+      "Worker": {
+        "Skript": "Domain.Client.Worker.Python.ML/run_stub.py"
+      }
+    },
+    "TrainingsWorker": {
+      "Token": "sim-trainingssystem",
+      "Worker": {
+        "Skript": "Domain.Client.Worker.Python.ML/run_train_stub.py"
+      }
     }
   }
 }

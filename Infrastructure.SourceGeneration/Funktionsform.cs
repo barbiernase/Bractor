@@ -68,8 +68,6 @@ namespace Infrastructure.SourceGeneration
         internal sealed class Form
         {
             public INamedTypeSymbol Typ = null!;
-            /// <summary>Als Schnittstelle deklariert (läuft draußen oder mit einer Implementierung im Host).</summary>
-            public bool Draussen;
             public List<Auf> Aufs = new List<Auf>();
             public List<(string Text, Location Ort)> Fehler = new List<(string, Location)>();
             /// <summary>Eingangstypen mit mehr als einem <c>Auf</c> (R2).</summary>
@@ -103,14 +101,14 @@ namespace Infrastructure.SourceGeneration
             Name(t) == vollerName || t.AllInterfaces.Any(i => Name(i) == vollerName);
 
         /// <summary>
-        /// Ist <paramref name="t"/> eine Funktion (<c>IFunktion</c>)? Eine Schnittstelle <c>: IFunktion</c>, oder eine konkrete Klasse, die
-        /// <c>IFunktion</c> direkt trägt (keine abgeleitete Funktions-Schnittstelle — dann wäre sie deren Umsetzung).
+        /// Ist <paramref name="t"/> eine Funktion (<c>IFunktion</c>)? Eine konkrete Klasse, die <c>IFunktion</c> trägt — oder eine Schnittstelle
+        /// <c>: IFunktion</c>, die die Form als Fehler meldet (eine Funktion ist eine Klasse im Host; was draußen gerechnet wird, ist Arbeit eines Akteurs).
         /// </summary>
         public static bool IstFunktion(INamedTypeSymbol t)
         {
             if (Name(t) == IFunktion || !Hat(t, IFunktion)) return false;
-            if (t.TypeKind == TypeKind.Interface) return true;
-            return t.TypeKind == TypeKind.Class && !t.IsAbstract && !Umsetzt(t).Any();
+            if (t.TypeKind == TypeKind.Interface) return t.Interfaces.Any(i => Name(i) == IFunktion);
+            return t.TypeKind == TypeKind.Class && !t.IsAbstract && !t.AllInterfaces.Any(i => Name(i) != IFunktion && Hat(i, IFunktion));
         }
 
         /// <summary>Hat <paramref name="t"/> eine Methode <c>Auf</c> (einen Eingang)?</summary>
@@ -136,7 +134,7 @@ namespace Infrastructure.SourceGeneration
             var alle = typen.ToList();
             var klassen = alle.Where(k => k.TypeKind == TypeKind.Class && !k.IsAbstract).ToList();
             var m = new Technikmenge();
-            var offen = new Queue<INamedTypeSymbol>(klassen.Where(k => IstFunktion(k) || Umsetzt(k).Any()));
+            var offen = new Queue<INamedTypeSymbol>(klassen.Where(IstFunktion));
             var besucht = new HashSet<string>();
             while (offen.Count > 0)
             {
@@ -167,10 +165,6 @@ namespace Infrastructure.SourceGeneration
             public bool IstTechnik(ITypeSymbol t) => Typen.ContainsKey(Name(t));
             public bool IstUmsetzung(ITypeSymbol t) => Umsetzungen.ContainsKey(Name(t));
         }
-
-        /// <summary>Die Funktions-Schnittstellen, die eine Klasse implementiert (sie ist deren Umsetzung im Host).</summary>
-        public static IEnumerable<INamedTypeSymbol> Umsetzt(INamedTypeSymbol t) =>
-            t.AllInterfaces.Where(i => Name(i) != IFunktion && Hat(i, IFunktion));
 
         /// <summary>Ist <paramref name="t"/> der Zustand einer Funktion, <c>IZustand&lt;T&gt;</c>?</summary>
         public static bool IstZustand(ITypeSymbol t) => t is INamedTypeSymbol { IsGenericType: true } n && Name(n) == Abstractions.Funktionsvertrag.Zustand;
@@ -207,28 +201,24 @@ namespace Infrastructure.SourceGeneration
         /// <summary>Liest die Form einer Funktion (<see cref="IstFunktion"/> vorausgesetzt).</summary>
         public static Form Lies(INamedTypeSymbol t)
         {
-            var f = new Form
-            {
-                Typ = t, Draussen = t.TypeKind == TypeKind.Interface,
-            };
+            var f = new Form { Typ = t };
             var ort = t.Locations.FirstOrDefault() ?? Location.None;
-            if (!f.Draussen) f.Zustand = ZustandVon(t, f.Fehler);
-            // Eine Funktions-Schnittstelle hat nur Auf: das Framework ruft sie — eine weitere Methode riefe niemand (Technik ist eine eigene Schnittstelle).
-            if (f.Draussen)
-                foreach (var m in t.GetMembers().OfType<IMethodSymbol>().Where(m => m.MethodKind == MethodKind.Ordinary && !m.IsStatic
-                             && m.Name != Abstractions.Funktionsvertrag.Auf))
-                    f.Fehler.Add(($"die Schnittstelle hat neben {Abstractions.Funktionsvertrag.Auf} die Methode '{m.Name}' — eine Funktion hat Eingänge (das "
-                        + "Framework ruft sie); was ihre Umsetzung ruft, ist Technik: eine eigene Schnittstelle in ihrem Konstruktor", m.Locations.FirstOrDefault() ?? ort));
+            // Eine Funktion ist eine Klasse im Host: was draußen gerechnet wird, ist Arbeit eines Akteurs — ein Command, den er hört (IHoert).
+            if (t.TypeKind == TypeKind.Interface)
+            {
+                f.Fehler.Add(("eine Funktion ist eine Klasse im Host — eine Funktions-Schnittstelle gibt es nicht; was draußen gerechnet wird, ist Arbeit "
+                    + "eines Akteurs: ein Command ohne Ziel, den er hört (IHoert), seine Antwort sind Commands über sein IDarf", ort));
+                return f;
+            }
+            f.Zustand = ZustandVon(t, f.Fehler);
             // Eine generische Funktion (Bildverkleinerung<TFormat>) ist erlaubt: die offene Definition ist eine Blaupause, ein Knoten nennt sie mit
             //   Typargument — das unterscheidet gleiche Funktionen mit verschiedenem Ausgang (Entscheidung 4).
-            if (f.Draussen && t.IsGenericType)
-                f.Fehler.Add(("eine Funktions-Schnittstelle ist nicht generisch (nur eine Klasse im Host darf es sein)", ort));
 
             var gesehen = new Dictionary<string, Auf>();
             foreach (var m in t.GetMembers(Abstractions.Funktionsvertrag.Auf).OfType<IMethodSymbol>().Where(m => m.MethodKind == MethodKind.Ordinary))
             {
                 var mOrt = m.Locations.FirstOrDefault() ?? ort;
-                if (!f.Draussen && (m.DeclaredAccessibility != Accessibility.Public || m.IsStatic))
+                if (m.DeclaredAccessibility != Accessibility.Public || m.IsStatic)
                 {
                     f.Fehler.Add(($"'{m.Name}' ist {(m.IsStatic ? "statisch" : "nicht öffentlich")} — ein Auf ist eine öffentliche Instanz-Methode", mOrt));
                     continue;
@@ -251,8 +241,6 @@ namespace Infrastructure.SourceGeneration
             if (f.Lausche != null && f.Aufs.Count > 0)
                 f.Fehler.Add(("eine Quellfunktion lauscht nur (Lausche) und nimmt keine Eingänge — was sie meldet, rechnet der nächste Knoten ihres Graphen",
                     f.Aufs[0].Methode.Locations.FirstOrDefault() ?? ort));
-            if (f.Lausche != null && f.Draussen)
-                f.Fehler.Add(("eine Quellfunktion ist eine Klasse im Host (sie lauscht auf dem Knoten, der ihre Instanz hält)", ort));
             // Eine Funktion liest nie das Log: wer nur Events hört, hätte keinen Einstieg — ein Event hört sie nur als Antwort auf einen eigenen Command.
             if (f.Aufs.Count > 0 && !f.MitEinstieg)
                 f.Fehler.Add(("sie hört nur Events — eine Funktion liest nie das Log: sie nimmt einen Command (ohne Ziel); ein Event nur als "

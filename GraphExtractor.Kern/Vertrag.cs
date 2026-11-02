@@ -33,11 +33,8 @@ public static class Vertrag
     public static readonly string IAkteur = typeof(IAkteur).FullName!;
     public static readonly string IDarf = typeof(IDarf<>).FullName!;
     public static readonly string IHoert = typeof(IHoert<>).FullName!;
-    public static readonly string IClientVertrag = typeof(IClientVertrag).FullName!;
+    public static readonly string IClient = typeof(IClient).FullName!;
     public static readonly string IVerkoerpert = typeof(IVerkoerpert<>).FullName!;
-    public static readonly string IMensch = typeof(IMensch).FullName!;
-    public static readonly string IMaschine = typeof(IMaschine).FullName!;
-    public static readonly string IKi = typeof(IKi).FullName!;
     public static readonly string IWertobjekt = typeof(IWertobjekt).FullName!;
     public static readonly string IFunktion = typeof(IFunktion).FullName!;
     public const string IQuellNachricht = "Abstractions.IQuellNachricht";   // entfallen (Quellen sind Katalogfunktionen); die Lesart zieht Schritt 7 nach

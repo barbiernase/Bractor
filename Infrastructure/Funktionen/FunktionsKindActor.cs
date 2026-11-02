@@ -146,7 +146,7 @@ public sealed class FunktionsKindActor(
         var stelle = 0;
         var strom = traeger.Draussen is { } draussen
             ? draussen(kennung, argumente.Length == 1 ? argumente[0]! : throw new InvalidOperationException($"{traeger.Ort}: draußen rechnet ein Auf mit genau einem Eingang"),
-                herkunft, a.Kontext.Korrelation, false, ct)
+                herkunft, a.Kontext.Korrelation, ct)
             : traeger.Rechne!(_aktivierung!.Umsetzung, auf, argumente, herkunft, bereich, ct);
         await foreach (var x in strom.WithCancellation(ct))
         {

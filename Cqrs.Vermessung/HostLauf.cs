@@ -105,57 +105,6 @@ internal sealed class HostLauf : IAsyncDisposable
     }
 }
 
-/// <summary>Ein externer Funktions-Worker (Python), so gestartet wie von der Werkbank (<c>Werkbank/Server/Worker.cs</c>).</summary>
-internal sealed class WorkerLauf : IAsyncDisposable
-{
-    private readonly Process _prozess;
-    private readonly TaskCompletionSource _bereit = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-    public WorkerLauf(string python, string skript, IEnumerable<string> argumente, int grpcPort, string token, string logDatei)
-    {
-        var psi = new ProcessStartInfo(python)
-        {
-            WorkingDirectory = Path.GetDirectoryName(skript)!, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false,
-        };
-        psi.ArgumentList.Add(skript);
-        foreach (var a in argumente) psi.ArgumentList.Add(a);
-        psi.Environment["CQRS_GRPC_HOST"] = "127.0.0.1";
-        psi.Environment["CQRS_GRPC_PORT"] = grpcPort.ToString();
-        psi.Environment["CQRS_AKTEUR_TOKEN"] = token;
-        psi.Environment["PYTHONUNBUFFERED"] = "1";
-        var log = new StreamWriter(logDatei, append: true, Encoding.UTF8) { AutoFlush = true };
-        _prozess = Process.Start(psi)!;
-        HostLauf.Kinder.Add(_prozess);
-        void Zeile(string? z)
-        {
-            if (z == null) return;
-            lock (log) log.WriteLine(z);
-            if (z.Contains("angeboten")) _bereit.TrySetResult();
-        }
-        _prozess.OutputDataReceived += (_, e) => Zeile(e.Data);
-        _prozess.ErrorDataReceived += (_, e) => Zeile(e.Data);
-        _prozess.BeginOutputReadLine();
-        _prozess.BeginErrorReadLine();
-    }
-
-    public Process Prozess => _prozess;
-
-    public async Task BereitAsync(TimeSpan frist)
-    {
-        var t = await Task.WhenAny(_bereit.Task, Task.Delay(frist));
-        if (t != _bereit.Task) throw new TimeoutException("Python-Worker hat seine Funktionen nicht angeboten.");
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        if (!_prozess.HasExited)
-        {
-            Werkzeuge.Laufe("kill", $"-TERM {_prozess.Id}");
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-            try { await _prozess.WaitForExitAsync(cts.Token); } catch (OperationCanceledException) { _prozess.Kill(true); }
-        }
-    }
-}
 
 /// <summary>
 /// Schreibt RSS und CPU der beobachteten Prozesse jede Sekunde mit (<c>host.csv</c>) und behält die Proben für die Auswertung je Fenster.

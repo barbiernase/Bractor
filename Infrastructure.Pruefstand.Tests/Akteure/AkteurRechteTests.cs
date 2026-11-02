@@ -16,8 +16,8 @@ using Domain.Projections.Modell;
 namespace Infrastructure.Pruefstand.Akteure;
 
 /// <summary>
-/// Akteure (docs/konzept-akteure.md): die generierte Befugnis-Tabelle (deklariert aus <c>IDarf&lt;T&gt;</c>, Hören
-/// aus dem Graphen abgeleitet) und das Tor am Handshake — rein, ohne gRPC/Cluster.
+/// Akteure (docs/konzept-akteure.md): die generierte Befugnis-Tabelle (deklariert aus <c>IDarf&lt;T&gt;</c> und <c>IHoert&lt;T&gt;</c>)
+/// und das Tor am Handshake — rein, ohne gRPC/Cluster.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class AkteurRechteTests
@@ -30,14 +30,6 @@ public class AkteurRechteTests
         GeneratedAkteurRechte.Alle.Keys.Should().Contain(new[]
             { "KameraSystem", "TrainingsSystem", "Klassifizierer", "Inspekteur", "Produktpruefer", "KIOperator", "Modellfreigeber" });
         R("Inspekteur").Typ.Should().Be(typeof(Inspekteur));
-    }
-
-    [Fact]
-    public void Art_kommt_aus_der_Basisliste()
-    {
-        R("KameraSystem").Art.Should().Be("Maschine");
-        R("Klassifizierer").Art.Should().Be("Ki");
-        R("Inspekteur").Art.Should().Be("Mensch");
     }
 
     [Fact]
@@ -67,46 +59,60 @@ public class AkteurRechteTests
     }
 
     [Fact]
-    public void Hoeren_abgeleitet_aus_dem_Aggregat_der_eigenen_Commands()
+    public void Hoeren_ist_deklariert_nicht_abgeleitet()
     {
-        // Ohne Vertrag (rein spontan): wer auf ein Aggregat einwirkt, hört dessen Events.
+        // Wer auf ein Aggregat einwirkt, hört dessen Events nicht schon deshalb — nur, was am Akteur als IHoert steht.
         var p = R("Produktpruefer");
         p.VertragTyp.Should().BeNull();
-        p.DarfHoeren(typeof(ImagePairKomplett)).Should().BeTrue("LabelPhysischesProdukt wirkt auf ImagePair ein");
+        p.Hoert.Should().BeEquivalentTo(new[] { typeof(ImagePairErstellt), typeof(PhysischesProduktGelabelt) });
+        p.DarfHoeren(typeof(PhysischesProduktGelabelt)).Should().BeTrue();
+        p.DarfHoeren(typeof(ImagePairKomplett)).Should().BeFalse("LabelPhysischesProdukt wirkt auf ImagePair ein, gehört ist es nicht");
         p.DarfHoeren(typeof(TrainingAngefordert)).Should().BeFalse();
     }
 
-    // ── Funktionen draußen (docs/konzept-akteure.md §5): ein Akteur darf eine Funktion rechnen (IDarf<IFunktion-Typ>) — ein Client, der ihn verkörpert, darf sie tragen ──
-
     [Fact]
-    public void Ein_Akteur_darf_Funktionen_rechnen_ihre_Ausgaben_gibt_der_Funktions_Actor()
+    public void Hoeren_folgt_nicht_aus_den_eigenen_Queries()
     {
-        R("Klassifizierer").Funktionen.Should().BeEquivalentTo(new[] { typeof(Domain.Pipeline.ImagePair.IBildpaarBeurteilung) });
-        R("TrainingsSystem").Funktionen.Should().BeEquivalentTo(new[] { typeof(Domain.Pipeline.Trainingslauf.ITraining) });
-        R("Bildrechner").Funktionen.Should().BeEquivalentTo(new[] { typeof(Domain.Pipeline.Bildaufbereitung.IBildEinlesen),
-            typeof(Domain.Pipeline.Bildaufbereitung.IBildVerkleinerung), typeof(Domain.Pipeline.Bildaufbereitung.IKontrastausgleich) });
-        R("Klassifizierer").DarfRechnen(typeof(Domain.Pipeline.ImagePair.IBildpaarBeurteilung)).Should().BeTrue();
-        R("Inspekteur").DarfRechnen(typeof(Domain.Pipeline.ImagePair.IBildpaarBeurteilung)).Should().BeFalse();
-        // Die Ausgaben einer getragenen Funktion sendet der Funktions-Actor — von sich aus darf der Akteur sie nicht hineingeben.
-        R("Klassifizierer").Commands.Should().BeEquivalentTo(new[] { typeof(KlassifiziereEinzelBildDurchKi) });
-        R("TrainingsSystem").DarfHinein(typeof(MeldeFortschritt)).Should().BeFalse();
+        // Der KIOperator fragt HoleModelle (→ ModellProjektion), hört aber nur, was er deklariert: ModellRegistriert, nicht ModellAktiviert.
+        R("KIOperator").DarfHoeren(typeof(ModellRegistriert)).Should().BeTrue();
+        R("KIOperator").DarfHoeren(typeof(ModellAktiviert)).Should().BeFalse();
+        R("Modellfreigeber").DarfHoeren(typeof(ModellAktiviert)).Should().BeTrue();
+        R("Inspekteur").DarfHoeren(typeof(ModellAktiviert)).Should().BeFalse();
     }
 
+    // ── Arbeit (docs/konzept-akteure.md §5): ein gehörter Command ohne Ziel kommt zum Akteur, seine Antwort sind Commands über sein IDarf ──
+
     [Fact]
-    public void Ohne_Client_hoert_ein_Akteur_was_aus_dem_Graphen_folgt()
+    public void Ein_gehoerter_Command_ohne_Ziel_ist_Arbeit_kein_Hoeren()
     {
         var k = R("Klassifizierer");
-        k.VertragTyp.Should().BeNull("ein Akteur hat keinen Vertrag — nur ein Client");
-        k.DarfHoeren(typeof(ImagePairKomplett)).Should().BeTrue("KlassifiziereEinzelBildDurchKi wirkt auf ImagePair ein");
-        k.DarfHoeren(typeof(TrainingAngefordert)).Should().BeFalse();
+        k.Arbeit.Should().BeEquivalentTo(new[] { typeof(PaarZuBeurteilen) });
+        k.Hoert.Should().BeEquivalentTo(new[] { typeof(BildVerfuegbar), typeof(ModellAktiviert) }, "Kenntnis sind nur Events und Hinweise");
+        k.Commands.Should().BeEquivalentTo(new[] { typeof(KlassifiziereBildPaarDurchKi), typeof(KlassifiziereEinzelBildDurchKi) });
+        k.Queries.Should().BeEquivalentTo(new[] { typeof(HoleAktivesModell) });
+        k.DarfHinein(typeof(PaarZuBeurteilen)).Should().BeFalse("Arbeit gibt der Akteur nicht selbst hinein");
+
+        var t = R("TrainingsSystem");
+        t.Arbeit.Should().BeEquivalentTo(new[] { typeof(TrainingZuRechnen) });
+        t.DarfHinein(typeof(MeldeFortschritt)).Should().BeTrue("die Antwort auf seine Arbeit ist ein gewöhnlicher Command über sein IDarf");
+        t.DarfHoeren(typeof(TrainingAbgebrochen)).Should().BeTrue();
     }
 
     [Fact]
-    public void Hoeren_abgeleitet_aus_der_Projektion_hinter_den_eigenen_Queries()
+    public void Arbeit_haben_nur_die_Akteure_die_einen_Command_hoeren()
+        => GeneratedAkteurRechte.Alle.Values.Where(a => a.Arbeit.Count > 0).Select(a => a.Name)
+            .Should().BeEquivalentTo("Klassifizierer", "TrainingsSystem");
+
+    [Fact]
+    public void Vereinigung_vereinigt_auch_Arbeit_und_Hoeren()
     {
-        // Der KIOperator fragt HoleModelle → ModellReader → ModellProjektion → deren Events.
-        R("KIOperator").DarfHoeren(typeof(ModellAktiviert)).Should().BeTrue();
-        R("Inspekteur").DarfHoeren(typeof(ModellAktiviert)).Should().BeFalse();
+        var v = AkteurRechte.Vereinige([R("Klassifizierer"), R("Inspekteur")]);
+        v.Name.Should().Be("Klassifizierer+Inspekteur");
+        v.Arbeit.Should().Contain(typeof(PaarZuBeurteilen));
+        v.DarfHoeren(typeof(ModellAktiviert)).Should().BeTrue();
+        v.DarfHoeren(typeof(ImagePairInspiziert)).Should().BeTrue();
+        v.Einzelne.Select(e => e.Name).Should().Equal("Klassifizierer", "Inspekteur");
+        v.AkteurFuer(typeof(LabelBildPaar)).Should().Be("Inspekteur");
     }
 
     [Fact]
@@ -155,14 +161,14 @@ public class AkteurRechteTests
         var wunsch = new CapabilitiesResult
         {
             AllowedCommands = { "StarteTraining", "KlassifiziereBildPaarDurchKi" },  // Selbstauskunft
-            SubscribedEvents = { "ImagePairKomplett", "TrainingAngefordert" },
+            SubscribedEvents = { "BildVerfuegbar", "ImagePairKomplett", "TrainingAngefordert" },
         };
 
         var verweigert = AkteurTor.Wende(wunsch, R("Klassifizierer"), Loese);
 
-        wunsch.AllowedCommands.Should().BeEquivalentTo("KlassifiziereEinzelBildDurchKi");
-        wunsch.SubscribedEvents.Should().Equal("ImagePairKomplett");
-        verweigert.Should().Equal("hören: TrainingAngefordert");
+        wunsch.AllowedCommands.Should().BeEquivalentTo("KlassifiziereBildPaarDurchKi", "KlassifiziereEinzelBildDurchKi");
+        wunsch.SubscribedEvents.Should().Equal("BildVerfuegbar");
+        verweigert.Should().Equal("hören: ImagePairKomplett", "hören: TrainingAngefordert");
     }
 
     [Fact]
@@ -186,7 +192,7 @@ public class AkteurRechteTests
     private static readonly Dictionary<string, Type> Typen = new[]
     {
         typeof(StarteTraining), typeof(KlassifiziereBildPaarDurchKi), typeof(KlassifiziereEinzelBildDurchKi), typeof(ImagePairKomplett),
-        typeof(TrainingAngefordert), typeof(HoleModelle),
+        typeof(TrainingAngefordert), typeof(HoleModelle), typeof(BildVerfuegbar),
     }.ToDictionary(t => t.Name);
 
     private static Type? Loese(string name) => Typen.GetValueOrDefault(name);

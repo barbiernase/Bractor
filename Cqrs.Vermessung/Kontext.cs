@@ -103,16 +103,6 @@ internal sealed class Umgebungsdatei
         };
     }
 
-    /// <summary>Der Worker-Block des Knotens, der eine Funktion rechnet (Skript, Argumente, Token) mit ersetzten <c>${env:X}</c> — gefunden über das
-    /// Argument <c>--funktionen &lt;Funktion&gt;</c> seines Workers.</summary>
-    public (string Skript, List<string> Argumente, string Token) Worker(string wurzel, string funktion)
-    {
-        var w = Instanzen.Values.SelectMany(i => i.AsObject()).Select(k => k.Value?["Worker"])
-            .FirstOrDefault(x => x?["Argumente"]?.AsArray().Any(a => (string?)a == funktion) == true)
-            ?? throw new InvalidOperationException($"Umgebung {Name}: kein Knoten mit einem Worker für {funktion}.");
-        return (Path.Combine(wurzel, (string)w["Skript"]!), w["Argumente"]!.AsArray().Select(a => Ersetze((string)a!)).ToList(), (string)w["Token"]!);
-    }
-
     public static string Ersetze(string s) => System.Text.RegularExpressions.Regex.Replace(s, @"\$\{env:([A-Za-z0-9_]+)\}",
         m => Environment.GetEnvironmentVariable(m.Groups[1].Value) ?? throw new InvalidOperationException($"${{env:{m.Groups[1].Value}}} fehlt"));
 }

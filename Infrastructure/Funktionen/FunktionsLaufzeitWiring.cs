@@ -46,8 +46,7 @@ public static class FunktionsLaufzeitWiring
     /// <summary>Rechnet die Funktion mit dieser Konfig am Ort <paramref name="ort"/> (<c>instanz/knoten</c>) im Host mit Zustand?</summary>
     public static bool MitZustand(FunktionsBaustein b, KnotenKonfig k, string ort, IServiceProvider dienste)
     {
-        var bindung = FunktionsBausteinWiring.BindungVon(b, k, ort);
-        if (bindung.Laufort != FunktionsLaufort.Host) return false;
+        if (b.Draussen) return false;
         return b.Zustand is not null || dienste.GetService<TechnikWahl>()?.MitZustand(ort) == true;
     }
 }
@@ -116,24 +115,23 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
                     Warteschlange: bindung.Warteschlange > 0 ? bindung.Warteschlange : FunktionsOrtKonfig.StandardWarteschlange,
                     Vorwaermen: bindung.Vorwaermen, Wiederholungen: wiederholungen);
                 FunktionsTraeger traeger;
-                if (bindung.Laufort != FunktionsLaufort.Host)
+                if (b.Draussen)
                 {
-                    // Draußen: kein Bereich, keine Umsetzung — ein Arbeiter in der Werkstatt rechnet. Die Kinder warten dort auf einen freien Platz; ein
+                    // Draußen (die Arbeit eines Akteurs): kein Bereich, keine Umsetzung — eine Sitzung, die ihn verkörpert, rechnet in der Werkstatt. Die Kinder warten dort auf einen freien Platz; ein
                     //   Platz wird frei, sobald die Antwort vollständig ist, das Kind bringt sie danach hinaus (so wartet der Arbeiter nicht auf die Kette).
                     var baustein = b;
                     traeger = new FunktionsTraeger(b.Name, null, null, false, antworten,
-                        (kennung, nachricht, herkunft, korrelation, hinweis, t) => werkstatt.RechneAsync(baustein, kennung, nachricht, herkunft, korrelation, hinweis, t))
+                        (kennung, nachricht, herkunft, korrelation, t) => werkstatt.RechneAsync(baustein, kennung, nachricht, herkunft, korrelation, t))
                     { Instanz = instanz.Name, Knoten = k.Name, ImGraphen = instanz.Graph.ImGraphen(k.Name), Zeitlimit = kk.Zeitlimit };
                     draussen.Add(b.Name);
                     konfig = konfig with { Vorwaermen = false };
                 }
                 else
                 {
-                    var umsetzung = FunktionsBausteinWiring.Umsetzung(b, bindung);
                     var technikZustand = dienste.GetService<TechnikWahl>()?.MitZustand(instanz.Ort(k.Name)) == true;
                     var bereich = new KnotenKontext(instanz.Name, k.Name, kk);
                     var ablage = dienste.GetService<IZustandsAblage>();
-                    traeger = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, umsetzung.Baue, b.Zustand, b.Name, technikZustand, bereich, ablage,
+                    traeger = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, b.Baue!, b.Zustand, b.Name, technikZustand, bereich, ablage,
                         quelle: b.Lausche is not null), b.Rechne, b.Liest, antworten)
                     { Instanz = instanz.Name, Knoten = k.Name, ImGraphen = instanz.Graph.ImGraphen(k.Name), Zeitlimit = kk.Zeitlimit, Lausche = b.Lausche };
                     // Mit Zustand: ein Kind — eine Aktivierung im Cluster, auf dem Knoten, der die Sperre hält (der Zustand ist ein Cache und soll alles sehen).

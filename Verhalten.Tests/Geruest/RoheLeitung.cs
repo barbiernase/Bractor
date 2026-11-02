@@ -129,24 +129,20 @@ public sealed class RoheLeitung : IAsyncDisposable
         await SchreibeAsync(new ClientMessage { Command = new CommandRequest { Envelope = dto } });
     }
 
-    // ── Funktionen tragen (IDarf<F> der verkörperten Akteure): anbieten, Eingänge sehen, beantworten ──
+    // ── Arbeit der verkörperten Akteure (IHoert eines Commands ohne Ziel): annehmen, Aufträge sehen, beantworten ──
 
-    /// <summary>Bietet eine getragene Funktion an (der Server holt dann Eingänge für diese Sitzung beim Vermittler).</summary>
-    public Task BieteAnAsync(string funktion, int slots = 1) =>
-        SchreibeAsync(new ClientMessage { FunktionenAnbieten = new FunktionenAnbieten { Angebote = { new FunktionsAngebot { Funktion = funktion, Slots = slots } } } });
+    /// <summary>Nimmt die Arbeit eines Akteurs an, den die Sitzung verkörpert (die Werkstatt gibt ihr dann Aufträge).</summary>
+    public Task NimmArbeitAnAsync(string akteur, int plaetze = 1) =>
+        SchreibeAsync(new ClientMessage { ArbeitAnnehmen = new ArbeitAnnehmen { Angebote = { new ArbeitsAngebot { Akteur = akteur, Plaetze = plaetze } } } });
 
-    /// <summary>Die Eingänge, die diese Sitzung bekommen hat.</summary>
+    /// <summary>Die Aufträge, die diese Sitzung bekommen hat.</summary>
     public IEnumerable<ArbeitsAuftrag> Eingaenge => _empfangen.Where(m => m.ArbeitsAuftrag != null).Select(m => m.ArbeitsAuftrag);
 
     /// <summary>Die Fehler, die der Server dieser Sitzung meldete (Code).</summary>
     public IEnumerable<string> Fehler => _empfangen.Where(m => m.Error != null).Select(m => m.Error.Code);
 
-    /// <summary>Der Eingang eines Auftrags: ein Event (Antwort, Hinweis) oder eine Nachricht ohne Marker (Folge, Zwischenergebnis).</summary>
-    public static object Eingang(ArbeitsAuftrag a)
-    {
-        try { return Tabelle.Event(a.Eingang); }
-        catch (NotSupportedException) { return Tabelle.Nachricht(a.Eingang); }
-    }
+    /// <summary>Der Command eines Auftrags (ein Command ohne Ziel).</summary>
+    public static object Eingang(ArbeitsAuftrag a) => Tabelle.Nachricht(a.Eingang);
 
     public async Task<ArbeitsAuftrag> WarteAufEingangAsync(Func<ArbeitsAuftrag, bool> bedingung, TimeSpan frist, string meldung)
     {
@@ -157,17 +153,17 @@ public sealed class RoheLeitung : IAsyncDisposable
             await Task.Delay(50);
         }
         throw new TimeoutException($"{meldung} (nach {frist.TotalSeconds:0} s, Sitzung {SitzungsId}); Eingänge: "
-                                   + string.Join(", ", Eingaenge.Select(a => $"{a.Funktion}:{a.Eingang.Typ}@{a.Stream}")));
+                                   + string.Join(", ", Eingaenge.Select(a => $"{a.Fuer}:{a.Eingang.Typ}@{a.Stream}")));
     }
 
-    /// <summary>Beantwortet einen Eingang mit Commands (ganz, <c>fertig</c>).</summary>
+    /// <summary>Beantwortet einen Auftrag mit Commands (ganz, <c>fertig</c>).</summary>
     public Task AntworteAsync(ArbeitsAuftrag eingang, params IAggregatCommand[] ausgaben) => StueckAsync(eingang, 0, true, ausgaben);
 
-    /// <summary>Ein Stück eines Stroms: die Ausgaben ab Stelle <paramref name="ab"/>; <paramref name="fertig"/> beendet den Strom.</summary>
+    /// <summary>Ein Stück einer Antwort: die Commands ab Stelle <paramref name="ab"/>; <paramref name="fertig"/> beendet sie.</summary>
     public Task StueckAsync(ArbeitsAuftrag eingang, int ab, bool fertig, params IAggregatCommand[] ausgaben)
     {
         var e = new ArbeitsErgebnis { Vorgang = eingang.Vorgang, Ab = ab, Fertig = fertig };
-        foreach (var c in ausgaben) e.Ausgaben.Add(new FunktionsAusgabe { Command = Tabelle.PackeCommand(c) });
+        foreach (var c in ausgaben) e.Commands.Add(Tabelle.PackeCommand(c));
         return SchreibeAsync(new ClientMessage { ArbeitsErgebnis = e });
     }
 

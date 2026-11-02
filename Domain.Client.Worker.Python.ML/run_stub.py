@@ -11,6 +11,7 @@ Konfiguration: appsettings.json (gleiche Konvention wie C#)
 
 import importlib
 import json
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -19,7 +20,7 @@ from uuid import UUID
 sys.path.insert(0, str(Path(__file__).parent.parent / "Client.Infrastructure.Python"))
 
 import logging
-from cqrs_client.funktion import Herkunft
+from cqrs_client.arbeit import Herkunft
 from domain_client.domain_registry import create_registry
 from domain_client.generated import (
     BildVerfuegbarDto,
@@ -50,7 +51,7 @@ class StubState:
 
 
 class StubClassifier(KlassifikationsWorkerBasis[StubState]):
-    """Derselbe Client-Vertrag wie der echte Classifier (IKlassifikationsWorker) — nur ohne Modell."""
+    """Derselbe Client-Vertrag wie der echte Classifier (KlassifikationsWorker) — nur ohne Modell."""
 
     async def auf_bild_verfuegbar(self, event: BildVerfuegbarDto, ctx, state: StubState):
         state.events += 1
@@ -61,11 +62,11 @@ class StubClassifier(KlassifikationsWorkerBasis[StubState]):
         state.bilder[agg][event.version] = event.pfad
         log.info("📥 BildVerfuegbar #%d: %s %s → %s", state.events, str(agg)[:8], v, event.pfad)
 
-    async def bildpaar_beurteilung(self, event: PaarZuBeurteilenDto, h: Herkunft, state: StubState):
+    async def auf_paar_zu_beurteilen(self, c: PaarZuBeurteilenDto, h: Herkunft, state: StubState):
         state.events += 1
-        agg = UUID(h.stream)
+        agg = UUID(c.paar)
         pfade = state.bilder.get(agg, {})
-        log.info("📥 ImagePairKomplett #%d: %s", state.events, agg)
+        log.info("📥 PaarZuBeurteilen #%d: %s", state.events, agg)
         for v, pfad in pfade.items():
             log.info("   %s: %s", VERSION_NAMES.get(v, "?"), pfad)
         log.info("📤 → KlassifiziereBildPaarDurchKi(label=0=KeineAnomalie)")
@@ -77,10 +78,12 @@ class StubClassifier(KlassifikationsWorkerBasis[StubState]):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     cfg = load_config()
     grpc = cfg.get("GrpcServer", {})
-    host = grpc.get("Host", "localhost")
-    port = grpc.get("Port", 5001)
+    # Wie jeder Worker, den die Werkbank oder ein Test startet: CQRS_GRPC_HOST/CQRS_GRPC_PORT vor appsettings.json.
+    host = os.environ.get("CQRS_GRPC_HOST") or grpc.get("Host", "localhost")
+    port = int(os.environ.get("CQRS_GRPC_PORT") or grpc.get("Port", 5001))
 
     nutzlast = importlib.import_module("domain_client.generated.nutzlast_tabelle").TABELLE
     registry = create_registry()

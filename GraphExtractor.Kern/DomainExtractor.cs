@@ -462,7 +462,7 @@ public sealed partial class DomainExtractor
         _iStore = Get(Vertrag.IStore);
         _iAkteur = Get(Vertrag.IAkteur);
         _iHoert = Get(Vertrag.IHoert);
-        _iClient = Get(Vertrag.IClientVertrag);
+        _iClient = Get(Vertrag.IClient);
         _iVerkoerpert = Get(Vertrag.IVerkoerpert);
         _iDarf = Get(Vertrag.IDarf);
         _iWertobjekt = Get(Vertrag.IWertobjekt);
@@ -690,7 +690,7 @@ public sealed partial class DomainExtractor
         var form = technik
             ? new Infrastructure.SourceGeneration.Funktionsform.Form
             {
-                Typ = t, Draussen = t.TypeKind == TypeKind.Interface,
+                Typ = t,
                 Zustand = t.TypeKind == TypeKind.Interface ? null : Infrastructure.SourceGeneration.Funktionsform.ZustandVon(t, new()),
             }
             : Infrastructure.SourceGeneration.Funktionsform.Lies(t);
@@ -700,7 +700,7 @@ public sealed partial class DomainExtractor
                 ?.ParameterList.Parameters.ElementAtOrDefault(i)?.Type?.ToString() ?? typ.Name;
         var f = new BausteinFunktionRaw
         {
-            Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq(), Klasse = !form.Draussen,
+            Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq(), Klasse = t.TypeKind == TypeKind.Class,
             Doku = decl == null ? null : Summary(decl), Datei = decl?.SyntaxTree.FilePath,
             ZustandFull = form.Zustand?.Fq(),
         };
@@ -730,8 +730,8 @@ public sealed partial class DomainExtractor
             });
         }
         if (technik) f.Methoden = TechnikMethoden(t);
-        if (!form.Draussen) f.Konstruktor = KonstruktorWieGeschrieben(t);
-        if (form.Draussen)
+        if (t.TypeKind == TypeKind.Class) f.Konstruktor = KonstruktorWieGeschrieben(t);
+        if (t.TypeKind == TypeKind.Interface)
         {
             var umsetzungen = _types.Where(c => c.TypeKind == TypeKind.Class && !c.IsAbstract && c.AllInterfaces.Contains(t, SymbolEqualityComparer.Default))
                 .OrderBy(c => c.Fq(), StringComparer.Ordinal).ToList();
@@ -847,8 +847,7 @@ public sealed partial class DomainExtractor
         {
             Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(),
             Verkoerpert = akteure.Select(a => a.Name).ToList(),
-            Kenntnis = t.Interfaces.Where(i => Gen(i, _iHoert)).Select(i => i.TypeArguments[0].Name).ToList(),
-            Traegt = Je(Abstractions.Clientvertragsregeln.Befugnisart.Traegt),
+            Kenntnis = akteure.SelectMany(a => a.Interfaces.Where(i => Gen(i, _iHoert)).Select(i => i.TypeArguments[0].Name)).Distinct().ToList(),
             Sendet = Je(Abstractions.Clientvertragsregeln.Befugnisart.Sendet),
             Fragt = Je(Abstractions.Clientvertragsregeln.Befugnisart.Fragt),
             Datei = decl?.SyntaxTree.FilePath, Doku = decl == null ? null : Summary(decl),
@@ -862,10 +861,7 @@ public sealed partial class DomainExtractor
         bool IstDarf(INamedTypeSymbol i) => _iDarf != null && i.OriginalDefinition.Fq() == _iDarf.Fq() && i.TypeArguments.Length == 1;
         var darf = t.Interfaces.Where(IstDarf).Concat(t.AllInterfaces.Where(IstDarf))
             .Select(i => i.TypeArguments[0].Name).Distinct(StringComparer.Ordinal).ToList();
-        var art = t.AllInterfaces.Select(i => i.Fq()).ToList() is var basen
-            ? basen.Contains(Vertrag.IMensch) ? "Mensch" : basen.Contains(Vertrag.IMaschine) ? "Maschine" : basen.Contains(Vertrag.IKi) ? "Ki" : null
-            : null;
-        return new AkteurRaw { Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(), Darf = darf, Art = art,
+        return new AkteurRaw { Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(), Darf = darf,
             Datei = decl?.SyntaxTree.FilePath, Doku = decl == null ? null : Summary(decl) };
     }
 

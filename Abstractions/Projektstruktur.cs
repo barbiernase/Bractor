@@ -29,10 +29,10 @@ static class Projektstruktur
         Schreibseite,
         /// <summary><c>&lt;Wurzel&gt;.Projections</c>: ReadModels, Queries, Antworten, Store-Fähigkeiten, Projektionen, Reader.</summary>
         Leseseite,
-        /// <summary><c>&lt;Wurzel&gt;.Pipeline</c>: Funktionen (Klasse im Host, Schnittstelle mit Umsetzungen oder draußen), Graphen, die Commands, die nur
-        /// Knoten einander geben, Konfig-Records und Technik.</summary>
+        /// <summary><c>&lt;Wurzel&gt;.Pipeline</c>: Funktionen (Klassen im Host), Graphen, die Commands, die nur Knoten einander geben, Konfig-Records und
+        /// Technik.</summary>
         Ablaeufe,
-        /// <summary><c>&lt;Wurzel&gt;.Akteure</c>: Akteure und Client-Verträge — der äußerste Ring.</summary>
+        /// <summary><c>&lt;Wurzel&gt;.Akteure</c>: Akteure und Clients — der äußerste Ring.</summary>
         Akteure,
         /// <summary><c>&lt;Wurzel&gt;.Infrastructure</c>: Store-Implementierungen.</summary>
         Speicher,
@@ -52,17 +52,18 @@ static class Projektstruktur
         /// bei der Schreibseite, denn der Decider sieht die Leseseite nicht. Eine Query an einen Reader ist <see cref="Query"/>.</summary>
         AggregatQuery, AggregatAntwort,
         ReadModel, Query, Antwort, StoreBuendel, StoreFaehigkeit, Projektion, Reader,
-        Funktion, FunktionsImplementierung, Konfig,
+        /// <summary>Eine Funktion (Klasse mit <c>IFunktion</c>, Baustein-Form, <c>Auf</c>): sie läuft im Host — je Funktion eine eigene Datei.</summary>
+        Funktion,
+        Konfig,
         /// <summary>Ein Command ohne Ziel, den nur Knoten einander geben (kein <c>Decide</c> gibt ihn ab): bei den Abläufen, in deren <c>Commands.cs</c>.</summary>
         KnotenCommand,
         /// <summary>Ein Graph (<c>record … : IGraph</c>, Knoten als Parameter): bei den Abläufen, in <c>Graphen.cs</c>.</summary>
         Graph,
-        /// <summary>Eine Funktion als Klasse (Baustein-Form, <c>Auf</c>): sie läuft im Host; als Schnittstelle ist sie <see cref="Funktion"/> (draußen).</summary>
-        HostFunktion,
         /// <summary>Technik hinter einer Funktion (ohne Marker: was der Konstruktor einer Funktion nimmt, und ihre Umsetzungen) — bei den Abläufen,
         /// je Typ eine eigene Datei.</summary>
         Technik,
-        Akteur, ClientVertrag,
+        /// <summary>Ein Akteur (<c>record … : IAkteur</c>) bzw. ein Client (<c>record … : IClient</c>): beim Rand, in <c>Akteure.cs</c> bzw. <c>Clients.cs</c>.</summary>
+        Akteur, Client,
         StoreImplementierung,
         /// <summary>Kein Rollen-Marker: liegt im Bereichs-Ordner seines Projekts, in eigener Datei oder einer Sammeldatei des Projekts.</summary>
         Hilfscode,
@@ -183,10 +184,9 @@ static class Projektstruktur
             case Primitive.Projektion: case Primitive.Reader:
                 return new[] { Rolle.Leseseite };
             case Primitive.Funktion: case Primitive.KnotenCommand: case Primitive.Graph:
-            case Primitive.FunktionsImplementierung: case Primitive.Konfig:
-            case Primitive.HostFunktion: case Primitive.Technik:
+            case Primitive.Konfig: case Primitive.Technik:
                 return new[] { Rolle.Ablaeufe };
-            case Primitive.Akteur: case Primitive.ClientVertrag:
+            case Primitive.Akteur: case Primitive.Client:
                 return new[] { Rolle.Akteure };
             case Primitive.StoreImplementierung:
                 return new[] { Rolle.Speicher };
@@ -211,10 +211,9 @@ static class Projektstruktur
             case Primitive.ReadModel: return "ReadModels.cs";
             case Primitive.Query: case Primitive.AggregatQuery: return "Queries.cs";
             case Primitive.Antwort: case Primitive.AggregatAntwort: return "Responses.cs";
-            case Primitive.Funktion: return "Funktionen.cs";
             case Primitive.Konfig: return "Konfigs.cs";
             case Primitive.Akteur: return "Akteure.cs";
-            case Primitive.ClientVertrag: return "Clients.cs";
+            case Primitive.Client: return "Clients.cs";
             default: return null;
         }
     }
@@ -299,15 +298,13 @@ static class Projektstruktur
             case Primitive.StoreFaehigkeit: return "eine Store-Fähigkeit";
             case Primitive.Projektion: return "eine Projektion";
             case Primitive.Reader: return "ein Reader";
-            case Primitive.Funktion: return "eine Funktion (Schnittstelle)";
-            case Primitive.HostFunktion: return "eine Funktion im Host";
+            case Primitive.Funktion: return "eine Funktion";
             case Primitive.KnotenCommand: return "ein Command zwischen Knoten";
             case Primitive.Graph: return "ein Graph";
             case Primitive.Technik: return "Technik";
-            case Primitive.FunktionsImplementierung: return "eine Funktions-Implementierung";
             case Primitive.Konfig: return "ein Konfig-Record";
             case Primitive.Akteur: return "ein Akteur";
-            case Primitive.ClientVertrag: return "ein Client-Vertrag";
+            case Primitive.Client: return "ein Client";
             case Primitive.StoreImplementierung: return "eine Store-Implementierung";
             default: return "Hilfscode";
         }

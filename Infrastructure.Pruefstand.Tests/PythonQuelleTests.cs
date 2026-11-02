@@ -127,14 +127,15 @@ public class PythonQuelleTests
     }
 
     [Fact]
-    public void Der_Bestand_traegt_das_Training_draussen_als_Code_Fakt()
+    public void Der_Bestand_liest_den_Trainings_Worker_als_Code_Fakt()
     {
+        // Die Arbeit (ARBEIT in vertraege.py) liest das Werkzeug erst mit Schritt 7 — hier nur, was es heute liest: die Kenntnis und ihr Rumpf.
         var wurzel = System.IO.Path.GetFullPath(System.IO.Path.Combine(System.AppContext.BaseDirectory, "..", "..", "..", ".."));
         var impl = PythonClients.Lies(wurzel)["TrainingsWorker"].Single(i => i.Klasse == "TrainingWorker");
         impl.Datei.Should().Be("Domain.Client.Worker.Python.ML/domain_client/training_worker.py");
-        var r = impl.Rumpfe.Single(x => x.Funktion == "ITraining");
-        (r.Event, r.Methode).Should().Be(("TrainingZuRechnen", "training"));
-        r.Ausgaenge.Should().Contain("MeldeTrainingBegonnen");
+        var r = impl.Rumpfe.Single(x => x.Methode == "auf_training_abgebrochen");
+        r.Event.Should().Be("TrainingAbgebrochen");
+        r.Funktion.Should().BeNull("eine Kenntnis ist keine Arbeit");
         r.Rumpf.Should().NotBeNullOrWhiteSpace("der Rumpf ist die Logik draußen");
     }
 }

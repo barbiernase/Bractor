@@ -338,7 +338,7 @@ public static class CqrsServiceExtensions
         {
             var actorSystem = provider.GetRequiredService<ActorSystem>();
             return new Infrastructure.Verteilen.Verteilung(actorSystem.Cluster(),
-                Infrastructure.Verteilen.Verteilung.Hoerbar(Anwendung.Akteure.Rechte, Anwendung.Akteure.ClientVertraege),
+                Infrastructure.Verteilen.Verteilung.Hoerbar(Anwendung.Akteure.Rechte),
                 provider.GetService<ILogger<Infrastructure.Verteilen.Verteilung>>());
         });
         Console.WriteLine("  + Verteilung (lazy)");

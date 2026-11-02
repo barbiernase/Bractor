@@ -23,8 +23,8 @@ namespace Infrastructure.Integration.Tests;
 /// <list type="bullet">
 /// <item>Als Akteur handeln: ein Token → Akteur-Tor → Aggregat (Event im Log, Ablehnung als Ablehnungs-Event), Verweigerung ohne Befugnis
 ///   bzw. ohne gültiges Token, Query an den Reader;</item>
-/// <item>Laufort Hand: der Dateiwächter findet eine Datei, die Schritte der Bildaufbereitung warten auf einen Menschen; seine Antworten über
-///   <c>/eingang/ergebnis</c> lassen den Lauf weitergehen bis zum Paar.</item>
+/// <item>Hand: ein komplettes Paar ist Arbeit des Klassifizierers, den die Werkbank verkörpert (<c>Umgebung:Hand</c>); die Antwort über
+///   <c>/eingang/ergebnis</c> (ein Command seines IDarf) wirkt am Paar.</item>
 /// </list>
 /// </summary>
 public class EingangE2ETests
@@ -33,26 +33,24 @@ public class EingangE2ETests
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     [Fact]
-    public async Task Als_Akteur_handeln_und_eine_Hand_Funktion_beantworten()
+    public async Task Als_Akteur_handeln_und_Arbeit_von_Hand_beantworten()
     {
         var name = "sim-eingang-" + Guid.NewGuid().ToString("N")[..6];
         var u = new UmgebungKonfig
         {
-            Umgebung = new UmgebungKopf { Name = name, Art = UmgebungsArt.Sim },
+            Umgebung = new UmgebungKopf { Name = name, Art = UmgebungsArt.Sim, Hand = ["Klassifizierer"] },
             EventStore = new EventStoreKonfig { Verbindung = Verbindung, Datenbank = "cqrs_it_eingang_" + Guid.NewGuid().ToString("N")[..8], Schema = "es" },
             Cluster = new ClusterKonfig { Art = ClusterArt.Einzelknoten, Name = "cqrs-" + name },
             Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = FreierPort(), JsonEingang = true },
         };
         var verz = Directory.CreateTempSubdirectory("eingang-it-").FullName;
-        var eingangsVerz = Path.Combine(verz, "eingang");
-        Directory.CreateDirectory(eingangsVerz);
-        // Die Bildaufbereitung unter einem Dateiwächter beantwortet ein Mensch — Schritt für Schritt.
-        u.Graphen = Graphinstanzen.Beispieldomaene(null, FunktionsLaufort.Hand, eingang: eingangsVerz);
+        u.Graphen = Graphinstanzen.Beispieldomaene(Path.Combine(verz, ".preprocessed"));
         var builder = WebApplication.CreateBuilder();
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Identitaeten:Tokens:t-ki"] = "KIOperator",
             ["Identitaeten:Tokens:t-inspekteur"] = "Inspekteur",
+            ["Identitaeten:Tokens:t-kamera"] = "KameraSystem",
         });
         builder.AddCqrs(u);
         await using var app = builder.Build();
@@ -115,56 +113,44 @@ public class EingangE2ETests
             }, TimeSpan.FromSeconds(30), "Die Projektion hat den Datensatz nicht geliefert.");
             antwort.GetProperty("antwort").GetProperty("daten").GetProperty("Name").GetString().Should().Be("Werkbank");
 
-            // ── Laufort Hand: die Kette der Bildaufbereitung (Funktionen als Schnittstelle) beantwortet ein Mensch, Schritt für Schritt ──
-            var t = new DateTimeOffset(2026, 10, 12, 9, 0, 0, Random.Shared.Next(0, 999), TimeSpan.Zero).AddMinutes(Random.Shared.Next(0, 100000));
-            var dateiname = $"{t:yyyy_MM_dd_HH_mm_ss_fff}_DC0.tiff";
-            await File.WriteAllTextAsync(Path.Combine(eingangsVerz, dateiname), "x");   // der Dateiwächter findet sie
-
-            // Wartet auf den einen offenen Eingang der Hand-Funktion.
-            async Task<JsonElement> Eingang(string funktion)
+            // ── Hand: ein komplettes Paar ist Arbeit des Klassifizierers — die Werkbank verkörpert ihn und antwortet mit einem Command seines IDarf ──
+            var paar = Id<ImagePair>.Neu();
+            var t = new DateTimeOffset(2026, 10, 12, 9, 0, 0, TimeSpan.Zero);
+            foreach (var version in new[] { "Dc0", "Dc2" })
             {
-                JsonElement eingang = default;
-                await Warte(async () =>
+                var bild = await Lies(await Sende("/eingang/command", new
                 {
-                    var liste = (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").EnumerateArray().ToList();
-                    eingang = liste.FirstOrDefault(x => x.GetProperty("funktion").GetString() == funktion);
-                    return eingang.ValueKind == JsonValueKind.Object;
-                }, TimeSpan.FromSeconds(30), $"Der Eingang an die Hand-Funktion {funktion} kam nicht an.");
-                return eingang;
+                    typ = "NimmBildAuf",
+                    daten = new
+                    {
+                        AggregateId = paar.Wert, PairKey = "hand", ProduziertAm = t, AufgenommenAm = t, UrsprungsPfad = "/x/" + version, Version = version,
+                        Meta = new { OriginalDateiname = version + ".tiff", DateigroesseBytes = 1L, BreitePixel = 4, HoehePixel = 2, ErstelltAm = t },
+                        Pfad = "/x/" + version + ".png",
+                    },
+                }, "t-kamera"));
+                bild.GetProperty("ok").GetBoolean().Should().BeTrue(bild.ToString());
             }
-            async Task Beantworte(JsonElement eingang, string typ, object daten)
+            JsonElement auftrag = default;
+            await Warte(async () =>
             {
-                var antwort = await Lies(await Sende("/eingang/ergebnis",
-                    new { vorgang = eingang.GetProperty("vorgang").GetString(), ausgaben = new[] { new { typ, daten } } }, null));
-                antwort.GetProperty("ausgang").GetString().Should().Be("Angenommen", antwort.ToString());
-            }
-            var pfad = Path.Combine(eingangsVerz, dateiname);
-
-            // Schritt 1: Einlesen.
-            var einlesen = await Eingang("IBildEinlesen");
-            einlesen.GetProperty("eingang").GetProperty("typ").GetString().Should().Be("DateiGefunden");
-            einlesen.GetProperty("eingang").GetProperty("daten").GetProperty("Name").GetString().Should().Be(dateiname);
-            einlesen.GetProperty("ausgaben").EnumerateArray().Select(x => x.GetString()).Should().BeEquivalentTo("BildEingelesen", "BildNichtLesbar");
-            (await Sende("/eingang/ergebnis", new { vorgang = einlesen.GetProperty("vorgang").GetString(), ausgaben = new[] { new { typ = "NimmBildAuf", daten = new { } } } }, null))
-                .StatusCode.Should().Be(HttpStatusCode.BadRequest, "nur eine Ausgabe aus der Signatur der Funktion");
-            await Beantworte(einlesen, "BildEingelesen",
-                new { Dateiname = dateiname, Pfad = pfad, Groesse = 1L, ErkanntAm = t, BreitePixel = 8, HoehePixel = 4 });
-
-            // Schritt 2: Verkleinern — sein Eingang ist das Ergebnis von Schritt 1.
-            var verkleinern = await Eingang("IBildVerkleinerung");
-            verkleinern.GetProperty("eingang").GetProperty("typ").GetString().Should().Be("BildEingelesen");
-            await Beantworte(verkleinern, "BildVerkleinert",
-                new { Dateiname = dateiname, Pfad = pfad, Groesse = 1L, ErkanntAm = t, Verkleinert = Path.Combine(verz, "klein.png"), BreitePixel = 4, HoehePixel = 2 });
-
-            // Schritt 3: Kontrast ausgleichen — dann führt der Bildeingang Vorschau und eingelesenes Bild zusammen (Join) zum Bild des Paars.
-            var ausgleichen = await Eingang("IKontrastausgleich");
-            ausgleichen.GetProperty("eingang").GetProperty("typ").GetString().Should().Be("BildVerkleinert");
-            await Beantworte(ausgleichen, "VorschauErstellt",
-                new { Dateiname = dateiname, Pfad = pfad, Groesse = 1L, ErkanntAm = t, Vorschau = Path.Combine(verz, "hand.png"), BreitePixel = 4, HoehePixel = 2, ErstelltAm = t });
-
-            var paar = ImagePairFileName.Resolve(dateiname)!.AggregateId;
-            await Warte(async () => (await es.ReadStreamAsync(paar.Wert, 0, default)).Any(e => e.Payload is ImagePairErstellt), TimeSpan.FromSeconds(30),
-                "Nach der Antwort von Hand lief es nicht weiter (kein ImagePairErstellt über den Bildeingang).");
+                var liste = (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").EnumerateArray().ToList();
+                auftrag = liste.FirstOrDefault(x => x.GetProperty("funktion").GetString() == "Klassifizierer");
+                return auftrag.ValueKind == JsonValueKind.Object;
+            }, TimeSpan.FromSeconds(30), "Die Arbeit des Klassifizierers kam nicht bei der Hand an.");
+            auftrag.GetProperty("eingang").GetProperty("typ").GetString().Should().Be("PaarZuBeurteilen");
+            auftrag.GetProperty("ausgaben").EnumerateArray().Select(x => x.GetString()).Should().Contain("KlassifiziereBildPaarDurchKi");
+            var vorgang = auftrag.GetProperty("vorgang").GetString();
+            (await Sende("/eingang/ergebnis", new { vorgang, ausgaben = new[] { new { typ = "ErstelleDatensatz", daten = new { } } } }, null))
+                .StatusCode.Should().Be(HttpStatusCode.BadRequest, "antworten darf der Akteur nur mit seinem IDarf");
+            var angenommen = await Lies(await Sende("/eingang/ergebnis", new
+            {
+                vorgang, ausgaben = new[] { new { typ = "KlassifiziereBildPaarDurchKi", daten = new { AggregateId = paar.Wert, Label = "KeineAnomalie" } } },
+            }, null));
+            angenommen.GetProperty("ausgang").GetString().Should().Be("Angenommen", angenommen.ToString());
+            await Warte(async () => (await es.ReadStreamAsync(paar.Wert, 0, default)).Any(e => e.Payload is BildPaarDurchKiKlassifiziert), TimeSpan.FromSeconds(30),
+                "Die Antwort von Hand wirkte nicht am Paar.");
+            (await es.ReadStreamAsync(paar.Wert, 0, default)).Single(e => e.Payload is BildPaarDurchKiKlassifiziert).UserId
+                .Should().Be("Klassifizierer", "die Antwort gibt der Akteur hinein, dessen Arbeit es war");
             (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").GetArrayLength().Should().Be(0);
         }
         finally

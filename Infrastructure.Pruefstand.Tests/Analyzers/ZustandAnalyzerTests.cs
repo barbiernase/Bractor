@@ -71,16 +71,6 @@ public class ZustandAnalyzerTests
     }
 
     [Fact]
-    public async Task Auch_die_Umsetzung_einer_Funktion_draussen_haelt_keinen_Zustand_und_nimmt_kein_IZustand()
-    {
-        var befunde = await Befunde("""
-            public interface IPruefe : IFunktion { Auffaellig? Auf(Gemessen e); }
-            public sealed class Pruefe(IZustand<Modell> m) : IPruefe { private int _n; public Auffaellig? Auf(Gemessen e) => null; }
-            """);
-        befunde.Count(b => b.Id == ZustandAnalyzer.Id).Should().Be(2, "das Feld und der Zustand in der Umsetzung (draußen lebt er im Worker)");
-    }
-
-    [Fact]
     public async Task IZustand_in_einer_Technik_ist_erlaubt_hoechstens_einer()
     {
         const string halter = "public sealed class Nutzer(IVerbindung v) : IFunktion { public Auffaellig? Auf(Gemessen e) => null; }\n";

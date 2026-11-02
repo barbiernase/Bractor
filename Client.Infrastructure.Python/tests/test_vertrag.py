@@ -1,9 +1,10 @@
 """
 Client-Verträge (docs/konzept-akteure.md §4, docs/konzept-akteure.md §5) — die Basis, von der die generierten Client-Basen erben.
 
-Ohne Server: eine Client-Basis wird hier so deklariert, wie Cqrs.Codegen sie erzeugt (TRAEGT + HOERT + abstrakte Methoden), dagegen ein Client.
-Bewiesen wird: Kenntnis-Dispatch aus HOERT, eine Kenntnis gibt nichts aus, fehlende Methode = kein Start, getragene Funktionen werden mit dem
-Zustand des Clients gerufen und angeboten, Handshake mit Client + Hash, Queries nur aus dem Vertrag.
+Ohne Server: eine Client-Basis wird hier so deklariert, wie Cqrs.Codegen sie erzeugt (ARBEIT + HOERT + abstrakte Methoden), dagegen ein Client.
+Bewiesen wird: Kenntnis-Dispatch aus HOERT, eine Kenntnis gibt nichts aus, fehlende Methode = kein Start, die Arbeit der Akteure wird mit dem
+Zustand des Clients gerufen und angenommen (Plätze je Akteur), die Registry kennt die Typen des Vertrags, Handshake mit Client + Hash, Queries nur
+aus dem Vertrag.
 """
 
 import asyncio
@@ -15,7 +16,8 @@ from typing import ClassVar, TypeVar
 import betterproto
 import pytest
 
-from cqrs_client import Ausgabe, ClientVertragBasis, Eingang, Herkunft, VertragsVerletzung
+from cqrs_client import Arbeit, ArbeitsVerletzung, ClientVertragBasis, Herkunft, VertragsVerletzung
+from cqrs_client.registry import MessageCategory
 from cqrs_client.registry import CategoryRegistry
 from cqrs_client.router import MessageContext
 
@@ -23,8 +25,9 @@ from cqrs_client.router import MessageContext
 # ── Fake-Generat (wie betterproto es aus dem Domänen-Proto erzeugt: nur DTOs) ──
 
 @dataclass(eq=False, repr=False)
-class GebuchtDto(betterproto.Message):
-    betrag: int = betterproto.int32_field(1)
+class PruefeStornoDto(betterproto.Message):
+    buchung: str = betterproto.string_field(1)
+    betrag: int = betterproto.int32_field(2)
 
 
 @dataclass(eq=False, repr=False)
@@ -48,7 +51,7 @@ class KontoDto(betterproto.Message):
 
 
 # Die „generierte Nutzlast-Tabelle“. CapabilitiesRequest und Hüllen kommen aus der echten Leitung.
-GEN = {"Gebucht": GebuchtDto, "Hinweis": HinweisDto, "Buche": BucheDto, "Storniere": StorniereDto, "Konto": KontoDto}
+GEN = {"PruefeStorno": PruefeStornoDto, "Hinweis": HinweisDto, "Buche": BucheDto, "Storniere": StorniereDto, "Konto": KontoDto}
 
 S = TypeVar("S")
 
@@ -58,17 +61,16 @@ S = TypeVar("S")
 class KassenplatzBasis(ClientVertragBasis[S]):
     CLIENT: ClassVar[str] = "Kassenplatz"
     AKTEURE: ClassVar[tuple] = ("Kassierer", "Revisor")
-    VERTRAG: ClassVar[str] = "IKassenplatz"
     VERTRAG_HASH: ClassVar[str] = "def456"
-    TRAEGT: ClassVar[dict] = {
-        "IStornoPruefung": {GebuchtDto: Eingang("storno_pruefung", {StorniereDto: Ausgabe.COMMAND})},
+    ARBEIT: ClassVar[dict] = {
+        "Revisor": {PruefeStornoDto: Arbeit("auf_pruefe_storno", (StorniereDto,))},
     }
     HOERT: ClassVar[dict] = {HinweisDto: "auf_hinweis"}
     SPONTAN: ClassVar[tuple] = (BucheDto,)
     FRAGT: ClassVar[tuple] = (KontoDto,)
 
     @abstractmethod
-    async def storno_pruefung(self, e, h, state): ...
+    async def auf_pruefe_storno(self, c, h, state): ...
 
     @abstractmethod
     async def auf_hinweis(self, e, ctx, state): ...
@@ -83,9 +85,9 @@ class KassenState:
 class Kassenplatz(KassenplatzBasis[KassenState]):
     antwort = None   # pro Test: was auf_hinweis ausgibt (eine Kenntnis darf nichts)
 
-    async def storno_pruefung(self, e, h, state):
+    async def auf_pruefe_storno(self, c, h, state):
         state.gesehen += 1
-        return StorniereDto(aggregate_id=h.stream) if e.betrag > 100 else None
+        return StorniereDto(aggregate_id=c.buchung) if c.betrag > 100 else None
 
     async def auf_hinweis(self, e, ctx, state):
         state.hinweise += 1
@@ -122,19 +124,37 @@ def test_fehlende_methode_verhindert_den_start():
         async def auf_hinweis(self, e, ctx, state):
             return None
 
-    with pytest.raises(TypeError, match="storno_pruefung"):
+    with pytest.raises(TypeError, match="auf_pruefe_storno"):
         Halb(registry=CategoryRegistry(), nutzlast=GEN)
 
 
-def test_getragene_funktion_wird_angeboten_und_mit_dem_zustand_gerufen():
+def test_arbeit_wird_angenommen_und_mit_dem_zustand_gerufen():
     k = _platz()
-    assert k.funktionen.angebote == [("IStornoPruefung", 1)]
-    [f] = k.funktionen._funktionen.values()
+    assert k.arbeit.angebote == [("Revisor", 1)]
+    [a] = k.arbeit._akteure.values()
     h = Herkunft(stream="s-1", version=4, zeit=datetime.now(timezone.utc))
-    assert asyncio.run(f.rufe(GebuchtDto(betrag=500), h)) == StorniereDto(aggregate_id="s-1")
-    assert asyncio.run(f.rufe(GebuchtDto(betrag=5), h)) is None
+    assert asyncio.run(a.rufe(PruefeStornoDto(buchung="b-1", betrag=500), h)) == StorniereDto(aggregate_id="b-1")
+    assert asyncio.run(a.rufe(PruefeStornoDto(buchung="b-1", betrag=5), h)) is None
     assert k.state.gesehen == 2
-    assert f.pruefe(f.eingang(GebuchtDto), StorniereDto()) == Ausgabe.COMMAND
+    arbeit = a.arbeit_fuer(PruefeStornoDto)
+    a.pruefe(arbeit, StorniereDto())
+    with pytest.raises(ArbeitsVerletzung, match="darf: StorniereDto"):
+        a.pruefe(arbeit, BucheDto())
+
+
+def test_plaetze_je_akteur():
+    class Grosser(Kassenplatz):
+        PLAETZE = {"Revisor": 3}
+
+    assert Grosser(registry=CategoryRegistry(), nutzlast=GEN).arbeit.angebote == [("Revisor", 3)]
+
+
+def test_die_registry_kennt_die_typen_des_vertrags():
+    r = _platz()._registry
+    assert r.classify(HinweisDto) == MessageCategory.EVENT
+    assert {r.classify(t) for t in (BucheDto, PruefeStornoDto, StorniereDto)} == {MessageCategory.COMMAND}, \
+        "von sich aus, gehörte Arbeit und ihre Antworten"
+    assert r.classify(KontoDto) == MessageCategory.QUERY
 
 
 def test_handshake_nennt_client_und_hash():

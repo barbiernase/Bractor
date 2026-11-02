@@ -1,12 +1,13 @@
+using Abstractions;
 using OpenCvSharp;
 
 namespace Domain.Pipeline.Bildaufbereitung;
 
 /// <summary>
-/// OpenCV-Umsetzung von <see cref="IKontrastausgleich"/> (Laufort Host): das verkleinerte Bild im Histogramm ausgleichen und als Vorschau (PNG)
-/// ablegen. Der Zielname folgt nur aus der Quelle — eine Wiederholung überschreibt dieselbe Datei. Zustandslos.
+/// Schritt 3 der Bildaufbereitung — das verkleinerte Bild im Histogramm ausgleichen (Technik <see cref="IHistogramEqualizer"/>) und als Vorschau
+/// (PNG) ablegen; der Bildeingang macht daraus das Bild des Paars. Der Zielname folgt nur aus der Quelle — eine Wiederholung überschreibt dieselbe Datei. Zustandslos.
 /// </summary>
-public sealed class OpenCvKontrastausgleich(IHistogramEqualizer equalizer, BildaufbereitungKonfig konfig) : IKontrastausgleich
+public sealed class Kontrastausgleich(IHistogramEqualizer equalizer, BildaufbereitungKonfig konfig) : IFunktion
 {
     public async Task<VorschauErstellt> Auf(BildVerkleinert e)
     {

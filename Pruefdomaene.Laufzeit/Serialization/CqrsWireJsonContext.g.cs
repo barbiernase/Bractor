@@ -115,6 +115,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Messung.NeuerWert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Messung.SchaetzungVermerkt))]
 [JsonSerializable(typeof(global::Pruefdomaene.Messung.VermerkeSchaetzung))]
+[JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Abrechnung.RechnungZuPruefen))]
 [JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Import.ImportAngefordert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Messung.Merkmal))]
 [JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Verteilung.ZielGebucht))]

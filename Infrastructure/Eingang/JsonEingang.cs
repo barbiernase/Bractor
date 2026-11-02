@@ -132,7 +132,8 @@ public static class JsonEingang
             catch (Exception e) { return Results.Json(new { ok = false, fehler = e.Message }, Json, statusCode: 500); }
         });
 
-        // Laufort Hand: die wartenden Eingänge samt Inhalt, Herkunft und den möglichen Ausgaben (ihre Signatur).
+        // Hand (Umgebung:Hand): die wartende Arbeit der Akteure, die die Werkbank verkörpert, samt Command, Herkunft und den möglichen Antworten
+        //   (das IDarf des Akteurs); „funktion“ nennt den Akteur.
         g.MapGet("/auftraege", (IServiceProvider sp) =>
         {
             var hand = sp.GetService<HandAusfuehrer>();
@@ -153,15 +154,15 @@ public static class JsonEingang
             }, Json);
         });
 
-        // Die Antwort ist eine Liste von Ausgaben [{typ, daten}] (oder ein Fehler) — die erste Antwort gewinnt (sie beendet den Lauf).
+        // Die Antwort ist eine Liste von Commands [{typ, daten}] (oder ein Fehler) — die erste Antwort gewinnt (sie beendet den Lauf).
         g.MapPost("/ergebnis", (JsonElement body, IServiceProvider sp) =>
         {
             var hand = sp.GetService<HandAusfuehrer>();
-            if (hand is null) return Results.Json(new { ok = false, fehler = "keine Funktion mit Laufort Hand in dieser Umgebung" }, Json, statusCode: 404);
+            if (hand is null) return Results.Json(new { ok = false, fehler = "keine Arbeit von Hand in dieser Umgebung (Umgebung:Hand)" }, Json, statusCode: 404);
             if (!body.TryGetProperty("vorgang", out var vg) || !Guid.TryParse(vg.GetString(), out var vorgang))
                 return Results.Json(new { ok = false, fehler = "vorgang fehlt" }, Json, statusCode: 400);
             if (hand.OffeneEingaenge.FirstOrDefault(e => e.Vorgang == vorgang) is not { } offen)
-                return Results.Json(new { ok = false, fehler = $"Eingang {vorgang} wartet hier nicht (mehr)" }, Json, statusCode: 404);
+                return Results.Json(new { ok = false, fehler = $"Auftrag {vorgang} wartet hier nicht (mehr)" }, Json, statusCode: 404);
             var fehler = body.TryGetProperty("fehler", out var fb) && fb.GetString() is { Length: > 0 } feb ? feb : null;
             var moeglich = offen.Funktion.Eingang(offen.Eingang.GetType())?.Ausgaben ?? [];
             var ausgaben = new List<object>();
@@ -171,7 +172,7 @@ public static class JsonEingang
                     var name = a.TryGetProperty("typ", out var tn) ? tn.GetString() : null;
                     var typ = moeglich.FirstOrDefault(x => x.Name == name);
                     if (typ is null)
-                        return Results.Json(new { ok = false, fehler = $"{name} ist keine Ausgabe von {offen.Funktion.Name} ({string.Join(", ", moeglich.Select(x => x.Name))})" }, Json, statusCode: 400);
+                        return Results.Json(new { ok = false, fehler = $"{name} darf {offen.Funktion.Name} nicht antworten ({string.Join(", ", moeglich.Select(x => x.Name))})" }, Json, statusCode: 400);
                     try { ausgaben.Add(EingangJson.Lies(a.TryGetProperty("daten", out var dd) ? dd : default, typ)); }
                     catch (Exception e) when (e is JsonException or InvalidOperationException or NotSupportedException)
                     { return Results.Json(new { ok = false, fehler = $"{typ.Name} nicht lesbar: {e.Message}" }, Json, statusCode: 400); }

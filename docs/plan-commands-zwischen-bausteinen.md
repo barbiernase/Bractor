@@ -183,7 +183,8 @@ haltbar ist allein der Kopf.
    Instanzen als Abschnitt `Graphen` in der einen Datei. Vorschlag: Ordner.
 3. **Akteur je Instanz in der Konfig**, im Boot gegen sein `IDarf` geprüft. Alternative: ein Code-Fakt am Akteur (bräuchte ein `IDarf` auf etwas, das
    kein Command ist). Vorschlag: Konfig.
-4. **Wie eine C#-Client-Assembly ihren Client nennt** (heute `[assembly: IstClient<…>]`, nur für den Client-Analyzer). Wird in Schritt 6 entschieden.
+4. **Wie eine C#-Client-Assembly ihren Client nennt** — entschieden (Schritt 6): die eine Zeile bleibt und zeigt auf den Record,
+   `[assembly: IstClient<Arbeitsplatz>]` mit `Arbeitsplatz : IClient` (ein Code-Fakt, keine Namensregel).
 
 ## Präzisierungen aus der Umsetzung
 
@@ -236,6 +237,32 @@ Aus Schritt 4:
 - **Ohne Umgebung** läuft ein Graph mit Quelle nur, wenn der Test die Konfig seiner Quelle nennt (eine Quelle braucht ihre Werte).
 - **Akteur → Graph-Kopf**: der JSON-Eingang nimmt an `/eingang/command` auch Commands ohne Ziel (`IDarf`), legt einen offenen Eingang (Kennung aus der
   Command-Id) und nimmt den schnellen Weg; `/eingang/quelle` entfällt. Die Leitung folgt mit Schritt 6 (Client als Record).
+
+Aus Schritt 5:
+
+- **Hinweise** gehen aus Knoten, gescheiterten Läufen und Aggregaten nur an die Verteiler (`Infrastructure/Funktionen/Hinweise.cs`); ein Hinweis-Port
+  einer Funktion ist CQRS100. Die Prüfdomäne-Messung ist ein Graph `Merkmalbildung` (Merkmal ist ein Command ohne Ziel, Fork an Ausreißerprüfung und
+  Schätzer); der Garantie-Test „Commands aus einem Hinweis wirken einmal“ entfällt.
+
+Aus Schritt 6:
+
+- **Arbeit als Instanz** (Entscheidungen 2, 13; Transport „Graph oder Decide → Akteur draußen“): je Akteur mit Arbeit (`IHoert` eines Commands ohne
+  Ziel) legt die Laufzeit eine Instanz unter seinem Namen an — ein Graph mit einem Knoten draußen, Köpfe = die gehörten Commands, Ausgänge = die
+  Commands seines `IDarf` (`Infrastructure/Funktionen/Arbeit.cs`). So bekommt die Arbeit, was jeder Kopf hat: offene Eingänge aus einem Decide, den
+  Weg aus einem Graphen, Orte, Wiederholung; die Werkstatt gibt den Auftrag einer Sitzung mit „verkörpert ∩ Token“ (Platz = Akteur-Name), die
+  Antwort sind Commands, Ids aus dem Auftrag, der Akteur der Antwort ist der der Instanz.
+- **Leitung**: `ArbeitAnnehmen` (je Akteur Plätze) ersetzt `FunktionenAnbieten`; `ArbeitsAuftrag.fuer` nennt den Akteur; `ArbeitsErgebnis.commands`
+  (Commands statt Ausgaben verschiedener Art). Antworten dürfen in Stücken kommen (Fortschritt eines Trainings).
+- **Hand** = die Werkbank verkörpert Akteure: `Umgebung:Hand: [Akteur…]` statt `Laufort Hand` am Knoten; der Worker-Prozess eines Python-Clients
+  steht unter `Clients:<Name>:Worker`.
+- **Hören ist deklariert**: `AkteurRechte.Hoert` ist das `IHoert` des Akteurs (Kenntnis), nicht mehr aus Aggregaten und Projektionen abgeleitet;
+  gepusht wird nur, was ein Akteur hört.
+- **Funktion = eigene Datei** (Entscheidung 16 abweichend): eine Funktion ist eine Klasse mit Rumpf und liegt wie Technik in `{Typ}.cs`;
+  `Primitive.Funktion` = Klasse, `HostFunktion`/`FunktionsImplementierung` entfallen, `Primitive.Client` liegt in `Clients.cs`.
+- **Domäne**: die Bild-Schritte sind Klassen (`Bildeinlesen`, `Bildverkleinerung`, `Kontrastausgleich`); `Bildrechner`, der generische
+  `funktions_worker.py` und die Messung S2 entfallen. Paarbeurteilung und Training sind Arbeit (`Klassifizierer` hört `PaarZuBeurteilen`,
+  `TrainingsSystem` hört `TrainingZuRechnen`). Die Prüfdomäne bekommt `Pruefdomaene.Akteure` mit dem `Rechnungspruefer` (eine Rechnung über
+  10 000 prüft er von Hand), damit die Arbeit für Akteure auch dort allgemein geprüft ist.
 
 ## Schritte
 

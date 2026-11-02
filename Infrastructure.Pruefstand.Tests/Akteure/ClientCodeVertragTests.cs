@@ -14,7 +14,7 @@ namespace Infrastructure.Pruefstand.Akteure;
 
 /// <summary>
 /// Client-Code = Vertrag (docs/konzept-akteure.md §4, GR-CLIENT-CODE): der Client-Generator nimmt Handshake-Name, Hash, Abos, gesendete Commands
-/// und gestellte Queries aus <c>[assembly: IstClient&lt;IX&gt;]</c> — mit derselben Lesart wie der Server (gleicher Hash); der Analyzer hält den
+/// und gestellte Queries aus <c>[assembly: IstClient&lt;X&gt;]</c> (ein Record, seine Akteure tragen IDarf und IHoert) — mit derselben Lesart wie der Server (gleicher Hash); der Analyzer hält den
 /// Client-Code dagegen (CQRS093–097).
 /// </summary>
 public class ClientCodeVertragTests
@@ -22,7 +22,7 @@ public class ClientCodeVertragTests
     private static readonly ImmutableArray<MetadataReference> Refs = Referenzen();
     private static ImmutableArray<MetadataReference> Referenzen()
     {
-        var dazu = new[] { typeof(Abstractions.IClientVertrag).Assembly.Location, typeof(Client.Infrastructure.Abstractions.MessageContext).Assembly.Location };
+        var dazu = new[] { typeof(Abstractions.IClient).Assembly.Location, typeof(Client.Infrastructure.Abstractions.MessageContext).Assembly.Location };
         return AppDomain.CurrentDomain.GetAssemblies().Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location)).Select(a => a.Location)
             .Concat(dazu).Distinct().Select(l => (MetadataReference)MetadataReference.CreateFromFile(l)).ToImmutableArray();
     }
@@ -35,13 +35,13 @@ public partial class ProbeZiel : IState { public int Version { get; set; } publi
     public sealed record FragNicht : IQuery;
     public sealed record Passiert(Guid Id) : IEvent;
     public sealed record Anders(Guid Id) : IEvent;
-    public sealed record Gast : IMensch, IDarf<Mach>, IDarf<Frag>;
-    public interface IPult : IClientVertrag, IVerkoerpert<Gast>, IHoert<Passiert> { }
+    public sealed record Gast : IAkteur, IDarf<Mach>, IDarf<Frag>, IHoert<Passiert>;
+    public sealed record Pult : IClient, IVerkoerpert<Gast>;
     public sealed record Getippt : IClientEvent;
 }
 ";
 
-    private static CSharpCompilation Probe(string code, string? vertrag = "Probe.IPult")
+    private static CSharpCompilation Probe(string code, string? vertrag = "Probe.Pult")
     {
         var kopf = "using System; using System.Collections.Generic; using Abstractions; using Client.Infrastructure.Abstractions;\n";
         var text = kopf + (vertrag != null ? $"[assembly: IstClient<{vertrag}>]\n" : "") + Vertrag + code;
@@ -114,17 +114,17 @@ public partial class ProbeZiel : IState { public int Version { get; set; } publi
     }
 
     [Fact]
-    public void Ein_CSharp_Client_traegt_keine_Funktionen_CQRS094()
+    public void Ein_CSharp_Client_verkoerpert_keine_Akteure_mit_Arbeit_CQRS094()
     {
         var comp = Probe(Handler + @"
 namespace Probe {
-    public interface IGastPruefung : IFunktion { Mach Auf(Anders e); }
-    public sealed record Rechner : IMaschine, IDarf<IGastPruefung>;
-    public interface IPultMitTeil : IClientVertrag, IVerkoerpert<Rechner>, IHoert<Passiert> { }
-}", vertrag: "Probe.IPultMitTeil");
+    public sealed record ZuPruefen(Guid Id) : ICommand;
+    public sealed record Rechner : IAkteur, IHoert<ZuPruefen>, IDarf<Mach>;
+    public sealed record PultMitArbeit : IClient, IVerkoerpert<Gast>, IVerkoerpert<Rechner>;
+}", vertrag: "Probe.PultMitArbeit");
         var (_, diag) = Generiert(comp, new WiringGenerator().AsSourceGenerator());
         diag.Select(d => d.Id).Should().Equal("CQRS094");
-        diag[0].GetMessage().Should().Contain("PultMitTeil").And.Contain("IGastPruefung");
+        diag[0].GetMessage().Should().Contain("PultMitArbeit").And.Contain("Rechner");
     }
 
     private static string Abschnitt(string generat, string name)

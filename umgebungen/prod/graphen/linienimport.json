@@ -9,16 +9,13 @@
     "Kennung": "NameGroesse"
   },
   "Aufbereitung.Einlesen": {
-    "Laufort": "Host",
     "Wiederholungen": 1
   },
   "Aufbereitung.Verkleinern": {
-    "Laufort": "Host",
     "Wiederholungen": 1,
     "AusgabePfad": "/home/wirksam/cqrs-data/preprocessed"
   },
   "Aufbereitung.Kontrast": {
-    "Laufort": "Host",
     "Wiederholungen": 1,
     "AusgabePfad": "/home/wirksam/cqrs-data/preprocessed"
   }

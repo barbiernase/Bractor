@@ -3,7 +3,7 @@
 Nutzlast und Hüllen: packt Domänen-DTOs in die Leitung des Frameworks und wieder aus.
 
 Die Leitung (Cqrs.Leitung/cqrs.proto → cqrs_client.leitung) kennt keinen Domänen-Typ. Jede Domänen-Nachricht
-(Command, Event, Query, Antwort, Eingang und Ausgaben einer Funktion) reist als `Nutzlast`:
+(Command, Event, Query, Antwort, Auftrag und Antwort einer Arbeit) reist als `Nutzlast`:
 
     typ   = Proto-Name des DTO ohne „Dto“ (z. B. "ErstelleDatensatz")
     daten = die {typ}Dto-Message des Anwendungs-Protos, protobuf-kodiert (betterproto: bytes(dto))
@@ -80,9 +80,9 @@ class PayloadMapper:
     """
     Zwischen Domänen-DTOs und der Leitung.
 
-    Auspacken (Server → Client): Event-Hülle, ArbeitsAuftrag (Eingang), QueryResponse → DTO.
-    Verpacken (Client → Server): Command → CommandEnvelopeDto, Hinweis → EventEnvelopeDto, Query, Query-Antwort, Ausgaben einer
-    Funktion → Nutzlast.
+    Auspacken (Server → Client): Event-Hülle, ArbeitsAuftrag (der gehörte Command), QueryResponse → DTO.
+    Verpacken (Client → Server): Command → CommandEnvelopeDto, Hinweis → EventEnvelopeDto, Query, Query-Antwort, Commands der Antwort
+    auf eine Arbeit → Nutzlast.
     """
 
     def __init__(self, nutzlast: Mapping[str, type]):
@@ -142,7 +142,7 @@ class PayloadMapper:
         aggregate_id: UUID | None = None,
         correlation_id: str = "",
     ) -> EventEnvelopeDto:
-        """Ein TransientEvent in einer EventEnvelopeDto-Hülle (TransientEventRequest → Sitzung → Hinweis-Netz)."""
+        """Ein TransientEvent in einer EventEnvelopeDto-Hülle (TransientEventRequest → Sitzung → die Akteure, die ihn hören)."""
         return EventEnvelopeDto(
             event_id=str(uuid4()),
             aggregate_id=str(aggregate_id) if aggregate_id else "",

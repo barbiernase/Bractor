@@ -6,16 +6,13 @@
     "Kennung": "PfadGroesseZeit"
   },
   "Aufbereitung.Einlesen": {
-    "Laufort": "Host",
     "Wiederholungen": 1
   },
   "Aufbereitung.Verkleinern": {
-    "Laufort": "Host",
     "Wiederholungen": 1,
     "AusgabePfad": "/data/preprocessed"
   },
   "Aufbereitung.Kontrast": {
-    "Laufort": "Host",
     "Wiederholungen": 1,
     "AusgabePfad": "/data/preprocessed"
   }

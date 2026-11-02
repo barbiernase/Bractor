@@ -13,7 +13,6 @@ internal sealed class Anwendungslauf : IAsyncDisposable
     public required TimeSpan Uhrversatz { get; init; }
     public required string Rolle { get; init; }
     public required Kontext Kontext { get; init; }
-    public List<WorkerLauf> Worker { get; } = new();
 
     /// <summary>Höchste Zahl aktiver Actors an einem Fensterende dieses Laufs (Maßstab der Passivierung, PF-5).</summary>
     public double HoechstActors { get; private set; } = double.NaN;
@@ -58,25 +57,14 @@ internal sealed class Anwendungslauf : IAsyncDisposable
         };
     }
 
-    /// <summary>Startet einen externen Funktions-Worker nach dem Worker-Block der Umgebung (wie „▶ Worker“ der Werkbank).</summary>
-    public async Task StarteWorkerAsync(Umgebungsdatei u, string funktion, string logName)
-    {
-        var (skript, argumente, token) = u.Worker(Kontext.Wurzel, funktion);
-        var w = new WorkerLauf(u.Python, skript, argumente, u.GrpcPort, token, Kontext.LogDatei(logName));
-        Worker.Add(w);
-        Kontext.Ressourcen.Beobachte("worker-" + funktion, () => w.Prozess);
-        await w.BereitAsync(TimeSpan.FromSeconds(60));
-    }
-
     private bool _beendet;
 
-    /// <summary>Beendet Host, Worker und Lese-Strom; ein zweiter Aufruf tut nichts (die Diagnose startet den Host danach neu).</summary>
+    /// <summary>Beendet Host und Lese-Strom; ein zweiter Aufruf tut nichts (die Diagnose startet den Host danach neu).</summary>
     public async ValueTask DisposeAsync()
     {
         if (_beendet) return;
         _beendet = true;
         await Log.DisposeAsync();
-        foreach (var w in Worker) await w.DisposeAsync();
         await Host.DisposeAsync();
         Kontext.Ressourcen.Vergiss(Rolle);
         Eingang.Dispose();

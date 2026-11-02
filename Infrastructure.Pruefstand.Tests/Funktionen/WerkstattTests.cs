@@ -30,10 +30,10 @@ public class WerkstattTests
         public void Sende(AuftragDraussen auftrag) => Auftraege.Enqueue(auftrag);
     }
 
-    private static FunktionsBaustein Funktion(bool strom = false) => new(typeof(object), "IProbe", Draussen: true,
+    /// <summary>Die Arbeit eines Akteurs „IProbe“ als Baustein: draußen (ohne Fabrik und Rechnung).</summary>
+    private static FunktionsBaustein Funktion(bool strom = false) => new(typeof(object), "IProbe",
         new[] { new FunktionsEingang(typeof(Eingang), strom, new[] { typeof(Weiter) }, Type.EmptyTypes) },
-        Array.Empty<FunktionsUmsetzung>(), Array.Empty<Type>(),
-        (_, _, _, _, _, _) => throw new InvalidOperationException("draußen"));
+        Baue: null, Dienste: Array.Empty<Type>(), Rechne: null);
 
     private static readonly Herkunft H = new(Guid.NewGuid(), 3, DateTimeOffset.UtcNow, null, "funktion:IProbe");
 
@@ -62,7 +62,7 @@ public class WerkstattTests
         var a = new Arbeiter("w1");
         w.Anmelden(a, "IProbe", 2);
         var kennung = Guid.NewGuid();
-        var lauf = Sammle(w.RechneAsync(Funktion(), kennung, new Eingang(1), H, "k", false, default));
+        var lauf = Sammle(w.RechneAsync(Funktion(), kennung, new Eingang(1), H, "k", default));
 
         var auftrag = await Warte(a);
         auftrag.Vorgang.Should().Be(kennung, "die Kennung des Eingangs ist draußen der Schlüssel (gleich bei jeder Wiederholung)");
@@ -80,7 +80,7 @@ public class WerkstattTests
         var a = new Arbeiter("w1");
         w.Anmelden(a, "IProbe", 1);
         var kennung = Guid.NewGuid();
-        var lauf = Sammle(w.RechneAsync(Funktion(), kennung, new Eingang(1), H, null, false, default));
+        var lauf = Sammle(w.RechneAsync(Funktion(), kennung, new Eingang(1), H, null, default));
         await Warte(a);
 
         w.Ergebnis(new Arbeiter("fremd"), kennung, new object[] { new Weiter(7) }, 0, true, null).Should().Be(Werkstattausgang.Unbekannt,
@@ -97,7 +97,7 @@ public class WerkstattTests
         var a = new Arbeiter("w1");
         w.Anmelden(a, "IProbe", 1);
         var kennung = Guid.NewGuid();
-        var lauf = Sammle(w.RechneAsync(Funktion(), kennung, new Eingang(1), H, null, false, default));
+        var lauf = Sammle(w.RechneAsync(Funktion(), kennung, new Eingang(1), H, null, default));
         await Warte(a);
 
         w.Ergebnis(a, kennung, new object[] { new Fremd() }, 0, true, null).Should().Be(Werkstattausgang.Abgelehnt);
@@ -112,13 +112,13 @@ public class WerkstattTests
         w.Anmelden(a, "IProbe", 2);
 
         var einzeln = Guid.NewGuid();
-        var lauf1 = Sammle(w.RechneAsync(Funktion(), einzeln, new Eingang(1), H, null, false, default));
+        var lauf1 = Sammle(w.RechneAsync(Funktion(), einzeln, new Eingang(1), H, null, default));
         await Warte(a);
         w.Ergebnis(a, einzeln, new object[] { new Weiter(1), new Weiter(2) }, 0, true, null).Should().Be(Werkstattausgang.Abgelehnt);
         await FluentActions.Awaiting(() => lauf1).Should().ThrowAsync<InvalidOperationException>();
 
         var strom = Guid.NewGuid();
-        var lauf2 = Sammle(w.RechneAsync(Funktion(strom: true), strom, new Eingang(2), H, null, false, default));
+        var lauf2 = Sammle(w.RechneAsync(Funktion(strom: true), strom, new Eingang(2), H, null, default));
         await Task.Delay(50);
         w.Ergebnis(a, strom, new object[] { new Weiter(1) }, 0, false, null).Should().Be(Werkstattausgang.Angenommen);
         w.Ergebnis(a, strom, new object[] { new Weiter(1) }, 0, false, null).Should().Be(Werkstattausgang.Angenommen, "ein doppeltes Stück wird übersprungen");
@@ -135,13 +135,13 @@ public class WerkstattTests
         var gemeldet = new List<(string, int)>();
         w.Beobachte((f, n) => gemeldet.Add((f, n)));
         w.Anmelden(a, "IProbe", 3);
-        var lauf = Sammle(w.RechneAsync(Funktion(), Guid.NewGuid(), new Eingang(1), H, null, false, default));
+        var lauf = Sammle(w.RechneAsync(Funktion(), Guid.NewGuid(), new Eingang(1), H, null, default));
         await Warte(a);
 
         w.Abmelden(a);
         await FluentActions.Awaiting(() => lauf).Should().ThrowAsync<InvalidOperationException>().WithMessage("*fort*");
         gemeldet.Should().Equal(("IProbe", 3), ("IProbe", 0));
-        await FluentActions.Awaiting(() => Sammle(w.RechneAsync(Funktion(), Guid.NewGuid(), new Eingang(2), H, null, false, default)))
+        await FluentActions.Awaiting(() => Sammle(w.RechneAsync(Funktion(), Guid.NewGuid(), new Eingang(2), H, null, default)))
             .Should().ThrowAsync<InvalidOperationException>().WithMessage("*kein Arbeiter*");
     }
 
@@ -150,7 +150,7 @@ public class WerkstattTests
     {
         var w = new Werkstatt();
         w.Anmelden(new Arbeiter("w1", TimeSpan.FromMilliseconds(100)), "IProbe", 1);
-        await FluentActions.Awaiting(() => Sammle(w.RechneAsync(Funktion(), Guid.NewGuid(), new Eingang(1), H, null, false, default)))
+        await FluentActions.Awaiting(() => Sammle(w.RechneAsync(Funktion(), Guid.NewGuid(), new Eingang(1), H, null, default)))
             .Should().ThrowAsync<TimeoutException>();
     }
 
@@ -164,7 +164,7 @@ public class WerkstattTests
         w.Anmelden(gross, "IProbe", 4);
         w.Slots("IProbe").Should().Be(5);
         using var ende = new CancellationTokenSource();
-        var laeufe = Enumerable.Range(0, 5).Select(i => Sammle(w.RechneAsync(Funktion(), Guid.NewGuid(), new Eingang(i), H, null, false, ende.Token))).ToList();
+        var laeufe = Enumerable.Range(0, 5).Select(i => Sammle(w.RechneAsync(Funktion(), Guid.NewGuid(), new Eingang(i), H, null, ende.Token))).ToList();
         await Task.Delay(100);
 
         klein.Auftraege.Should().HaveCount(1);
@@ -180,9 +180,9 @@ public class WerkstattTests
         var a = new Arbeiter("w1");
         w.Anmelden(a, "IProbe", 1);
         var (k1, k2) = (Guid.NewGuid(), Guid.NewGuid());
-        var e1 = w.RechneAsync(Funktion(), k1, new Eingang(1), H, null, false, default).GetAsyncEnumerator();
+        var e1 = w.RechneAsync(Funktion(), k1, new Eingang(1), H, null, default).GetAsyncEnumerator();
         var erster = e1.MoveNextAsync().AsTask();
-        var lauf2 = Sammle(w.RechneAsync(Funktion(), k2, new Eingang(2), H, null, false, default));
+        var lauf2 = Sammle(w.RechneAsync(Funktion(), k2, new Eingang(2), H, null, default));
         await Task.Delay(100);
         a.Auftraege.Should().HaveCount(1, "ein Slot: der zweite Lauf wartet auf einen freien Platz");
 

@@ -311,9 +311,9 @@ public class WiringGenerator : IIncrementalGenerator
                 context.ReportDiagnostic(Diagnostic.Create(ClientVertragDiagnosen.OhneVertrag, Location.None, assemblyName));
             vertrag = ClientVertragInfo.Leer;
         }
-        else if (vertrag.Traegt.Count > 0)
+        else if (vertrag.Arbeit.Count > 0)
             context.ReportDiagnostic(Diagnostic.Create(ClientVertragDiagnosen.TeileImCSharpClient, Location.None, vertrag.Name,
-                string.Join(", ", vertrag.Traegt)));
+                string.Join(", ", vertrag.Arbeit)));
 
         var suffix = Sanitize(assemblyName);
         var className = $"GeneratedWiring_{suffix}";

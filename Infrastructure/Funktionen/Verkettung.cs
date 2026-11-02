@@ -9,9 +9,8 @@ namespace Infrastructure.Funktionen;
 public delegate IAsyncEnumerable<object> FunktionsRechnung(object umsetzung, int auf, object?[] argumente, Herkunft herkunft, IFaehigkeiten? faehigkeiten,
     CancellationToken ct);
 
-/// <summary>Rechnet die Funktion draußen (<see cref="Werkstatt"/>): Kennung des Eingangs, Nachricht, Herkunft, Korrelation, ob er ein Hinweis ist.</summary>
-public delegate IAsyncEnumerable<object> FunktionsRechnungDraussen(Guid kennung, object eingang, Herkunft herkunft, string? korrelation, bool hinweis,
-    CancellationToken ct);
+/// <summary>Rechnet die Arbeit eines Akteurs draußen (<see cref="Werkstatt"/>): Kennung des Auftrags, Command, Herkunft, Korrelation.</summary>
+public delegate IAsyncEnumerable<object> FunktionsRechnungDraussen(Guid kennung, object eingang, Herkunft herkunft, string? korrelation, CancellationToken ct);
 
 /// <summary>
 /// Was die Laufzeit von einem Knoten braucht (docs/04 §4.4): der Name seiner Funktion, wie eine Aktivierung entsteht (Bereich, Umsetzung, Zustand),

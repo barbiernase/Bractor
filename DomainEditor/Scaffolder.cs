@@ -204,28 +204,18 @@ public static class Scaffolder
         return v != null ? $"{v}/Akteure.cs" : $"{Unplatziert}Akteure.cs";
     }
 
-    /// <summary>Die Basisliste eines Akteurs: <c>IMensch, IDarf&lt;A&gt;, IDarf&lt;B&gt;</c> (Art bzw. <c>IAkteur</c>) — der ganze Akteur steht in ihr.</summary>
-    public static IReadOnlyList<string> AkteurBasen(Akteur a) => [ArtBasis(a.Art), .. a.Darf.Select(d => $"{IDarf}<{d}>")];
+    /// <summary>Die Basisliste eines Akteurs: <c>IAkteur, IDarf&lt;A&gt;, IDarf&lt;B&gt;</c> — der ganze Akteur steht in ihr.</summary>
+    public static IReadOnlyList<string> AkteurBasen(Akteur a) => [IAkteur, .. a.Darf.Select(d => $"{IDarf}<{d}>")];
 
-    /// <summary>Die Art als Basistyp: „Mensch" → <c>IMensch</c>, „Maschine" → <c>IMaschine</c>, „Ki" → <c>IKi</c>, sonst <c>IAkteur</c>.</summary>
-    public static string ArtBasis(string? art) => art switch
-    {
-        "Mensch" => nameof(Abstractions.IMensch),
-        "Maschine" => nameof(Abstractions.IMaschine),
-        "Ki" => nameof(Abstractions.IKi),
-        _ => IAkteur,
-    };
-
-    /// <summary>Gehört dieser Basistyp zum Akteur (<c>IAkteur</c>, seine Art bzw. <c>IDarf&lt;…&gt;</c>)? Alles andere bleibt beim Abgleich stehen.</summary>
+    /// <summary>Gehört dieser Basistyp zum Akteur (<c>IAkteur</c>, <c>IDarf&lt;…&gt;</c>, <c>IHoert&lt;…&gt;</c>)? Alles andere bleibt beim Abgleich stehen.</summary>
     public static bool IstAkteurBasis(string basis)
     {
         var name = basis.Split('<')[0].Split('.').Last().Trim();
-        return name == IAkteur || name == IDarf
-            || name == nameof(Abstractions.IMensch) || name == nameof(Abstractions.IMaschine) || name == nameof(Abstractions.IKi);
+        return name == IAkteur || name == IDarf || name == IHoert;
     }
 
     // ── Clients ─────────────────────────────────────────────────────────────────────────────────
-    private static readonly string IClientVertrag = nameof(Abstractions.IClientVertrag);
+    private static readonly string IClient = nameof(Abstractions.IClient);
     private static readonly string IVerkoerpert = typeof(IVerkoerpert<>).Name.Split('`')[0];
 
     private static string ClientZiel(EditorModell m, string ns)
@@ -238,25 +228,21 @@ public static class Scaffolder
 
     private static readonly string IHoert = typeof(IHoert<>).Name.Split('`')[0];
 
-    /// <summary>
-    /// Die Basisliste eines Client-Vertrags: <c>IClientVertrag, IVerkoerpert&lt;A&gt;…, IHoert&lt;E&gt;…</c> — der ganze Rand steht in ihr
-    /// (docs/konzept-akteure.md §5).
-    /// </summary>
-    public static IReadOnlyList<string> ClientBasen(Client c) =>
-        [IClientVertrag, .. c.Verkoerpert.Select(a => $"{IVerkoerpert}<{a}>"), .. c.Kenntnis.Select(e => $"{IHoert}<{e}>")];
+    /// <summary>Die Basisliste eines Clients: <c>IClient, IVerkoerpert&lt;A&gt;…</c> — der ganze Client steht in ihr (docs/konzept-akteure.md §4).</summary>
+    public static IReadOnlyList<string> ClientBasen(Client c) => [IClient, .. c.Verkoerpert.Select(a => $"{IVerkoerpert}<{a}>")];
 
-    /// <summary>Gehört dieser Basistyp zum Client-Vertrag (wird vom Abgleich verwaltet)?</summary>
+    /// <summary>Gehört dieser Basistyp zum Client (wird vom Abgleich verwaltet)?</summary>
     public static bool IstClientBasis(string basis)
     {
         var name = basis.Split('<')[0].Split('.').Last().Trim();
-        return name == IClientVertrag || name == IVerkoerpert || name == IHoert;
+        return name == IClient || name == IVerkoerpert;
     }
 
-    /// <summary>Ein Client-Vertrag: <c>public interface IX : IClientVertrag, IVerkoerpert&lt;A&gt;, …;</c> — ohne eigene Member.</summary>
+    /// <summary>Ein Client: <c>public sealed record X : IClient, IVerkoerpert&lt;A&gt;, …;</c> — ohne eigene Member.</summary>
     public static string ClientInterface(Client c)
     {
         var b = new StringBuilder();
-        b.AppendLine($"public interface {c.Name} : {string.Join(",\n    ", ClientBasen(c))};");
+        b.AppendLine($"public sealed record {c.Name} : {string.Join(",\n    ", ClientBasen(c))};");
         return b.ToString();
     }
 

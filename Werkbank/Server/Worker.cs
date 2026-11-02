@@ -5,10 +5,9 @@ using Abstractions;
 namespace Werkbank.Server;
 
 /// <summary>
-/// Externe Funktions-Worker als Prozesse der Werkbank (CLAUDE.md W6, docs/06 §6.5, Werkbank P5.5): „▶ Worker starten" an einem
-/// Knoten mit Laufort <c>Extern</c> startet dessen <c>Worker</c> (Instanz-Datei der Umgebung, Schlüssel <c>instanz/knoten</c>) — <c>Python Skript Argumente…</c> mit
-/// <c>CQRS_GRPC_HOST</c>/<c>CQRS_GRPC_PORT</c>/<c>CQRS_AKTEUR_TOKEN</c>. Der Worker meldet sich wie jeder externe Ausführer am gRPC-Port an und
-/// holt Aufträge beim Vermittler; die Werkbank sammelt nur seine Ausgabe.
+/// Python-Clients als Prozesse der Werkbank (CLAUDE.md W6, docs/06 §6.5): „▶ Worker starten" startet den <c>Worker</c> eines Clients der Umgebung
+/// (<c>Clients:&lt;Name&gt;:Worker</c>) — <c>Python Skript Argumente…</c> mit <c>CQRS_GRPC_HOST</c>/<c>CQRS_GRPC_PORT</c>/<c>CQRS_AKTEUR_TOKEN</c>. Er meldet
+/// sich wie jeder Client am gRPC-Port an und nimmt die Arbeit der Akteure an, die er verkörpert; die Werkbank sammelt nur seine Ausgabe.
 /// </summary>
 public sealed class Worker(string slnRoot)
 {
@@ -16,19 +15,18 @@ public sealed class Worker(string slnRoot)
 
     private readonly ConcurrentDictionary<string, Lauf> _laeufe = new(StringComparer.Ordinal);
 
-    /// <summary>Die Knoten der Instanzen einer Umgebung (Schlüssel <c>instanz/knoten</c>) mit ihrer Konfig.</summary>
-    public static IEnumerable<KeyValuePair<string, KnotenKonfig>> Knoten(UmgebungKonfig u) =>
-        u.Graphen.SelectMany(i => i.Value.Knoten.Select(k => new KeyValuePair<string, KnotenKonfig>(i.Key + "/" + k.Key, k.Value)));
+    /// <summary>Die Clients der Umgebung mit einem Worker-Prozess (Schlüssel = Client-Name).</summary>
+    public static IEnumerable<KeyValuePair<string, ClientKonfig>> Clients(UmgebungKonfig u) => u.Clients.Where(c => c.Value.Worker is not null);
 
-    /// <summary>Je Knoten der Umgebung: Laufort, ob ein Worker konfiguriert ist und ob er läuft.</summary>
-    public IReadOnlyList<object> Liste(UmgebungKonfig u) => Knoten(u).OrderBy(f => f.Key, StringComparer.Ordinal).Select(f =>
+    /// <summary>Je Client mit Worker: was gestartet würde und ob er läuft („funktion“ nennt den Client).</summary>
+    public IReadOnlyList<object> Liste(UmgebungKonfig u) => Clients(u).OrderBy(f => f.Key, StringComparer.Ordinal).Select(f =>
     {
         _laeufe.TryGetValue(f.Key, out var l);
         var laeuft = l is { Prozess.HasExited: false };
         return (object)new
         {
             funktion = f.Key,
-            laufort = f.Value.Laufort.ToString(),
+            laufort = "Client",
             worker = f.Value.Worker is { Skript.Length: > 0 } w ? $"{Path.GetFileName(w.Skript)} {string.Join(' ', w.Argumente)}".Trim() : null,
             laeuft,
             pid = laeuft ? l!.Prozess.Id : (int?)null,
@@ -41,20 +39,16 @@ public sealed class Worker(string slnRoot)
     public IReadOnlyList<string> Log(string funktion, int max = 200)
         => _laeufe.TryGetValue(funktion, out var l) ? l.Log.Reverse().Take(max).Reverse().ToList() : [];
 
-    /// <summary>Der generische Funktions-Worker (docs/09 §9.5) — der Standard, wenn die Umgebung keinen eigenen nennt.</summary>
-    public static readonly string GenerischesSkript = Abstractions.Projektstruktur.PythonWorker(Abstractions.Projektstruktur.StandardWurzel) + "/funktions_worker.py";
-
-    /// <param name="standardToken">Ohne Token in der Umgebung: ein Token, dessen Akteur die Funktion anbieten darf (IDarf&lt;F&gt;), oder null.</param>
+    /// <param name="funktion">Der Name des Clients.</param>
+    /// <param name="standardToken">Ohne Token in der Umgebung: ein Token, dessen Akteure der Client verkörpert, oder null.</param>
     public async Task<object> StarteAsync(string funktion, UmgebungKonfig u, bool hostLaeuft, Func<string, string?>? standardToken = null)
     {
-        if (Knoten(u).FirstOrDefault(x => x.Key == funktion).Value is not { } k)
-            throw new InvalidOperationException($"{funktion} ist in {u.Umgebung.Name} kein Knoten einer Instanz.");
-        if (k.Laufort != FunktionsLaufort.Extern)
-            throw new InvalidOperationException($"Laufort von {funktion} in {u.Umgebung.Name} ist {k.Laufort} — erst auf Extern stellen (Instanz-Datei) und ⟳.");
-        // Der Worker des Knotens (Instanz-Datei): Skript, Argumente (der generische Worker nennt die Funktion mit --funktionen), Token.
-        var w = k.Worker is { Skript.Length: > 0 } eigen ? eigen
-            : throw new InvalidOperationException($"{funktion} in {u.Umgebung.Name}: am Knoten fehlt Worker:Skript (der generische Worker: {GenerischesSkript} "
-                + "mit --funktionen <Funktion>).");
+        if (!u.Clients.TryGetValue(funktion, out var c))
+            throw new InvalidOperationException($"{funktion} ist in {u.Umgebung.Name} kein Client (Abschnitt Clients).");
+        // Der Worker des Clients: Skript, Argumente, Token (sonst das Token des Clients).
+        var w = c.Worker is { Skript.Length: > 0 } eigen ? eigen
+            : throw new InvalidOperationException($"{funktion} in {u.Umgebung.Name}: am Client fehlt Worker:Skript.");
+        if (w.Token.Length == 0 && c.Token.Length > 0) w = new WorkerKonfig { Skript = w.Skript, Argumente = w.Argumente, Python = w.Python, Token = c.Token };
         if (w.Token.Length == 0 && standardToken?.Invoke(funktion) is { } t) w = new WorkerKonfig { Skript = w.Skript, Argumente = w.Argumente, Python = w.Python, Token = t };
         if (!hostLaeuft) throw new InvalidOperationException("Der Host läuft nicht — ⟳ startet ihn; der Worker meldet sich an seinem gRPC-Port an.");
         await StoppeAsync(funktion);

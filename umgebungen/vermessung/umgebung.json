@@ -24,7 +24,6 @@
   "Identitaeten": {
     "Tokens": {
       "vermessung-kamerasystem": "KameraSystem",
-      "vermessung-bildrechner": "Bildrechner",
       "vermessung-disponent": "Disponent",
       "vermessung-kioperator": "KIOperator",
       "vermessung-inspekteur": "Inspekteur",

@@ -44,7 +44,7 @@ from typing import Any, ClassVar, Generic, TypeVar, get_args
 from . import leitung
 from .connection import ConnectionManager
 from .dispatch import HandlerBase, handle
-from .funktion import FunktionsBasis, FunktionsLaeufer
+from .arbeit import AkteursArbeit, ArbeitsLaeufer
 from .mapper import PayloadMapper
 from .proto_sync import ensure_types_current, verify_hash_at_connect
 from .proxy import GrpcProxy
@@ -65,7 +65,7 @@ class CqrsClient(HandlerBase, Generic[S]):
         run() → _build_capabilities_request() → connect() → je Verbindung eine Sitzung, parallel:
             - read_loop (GrpcProxy)
             - process_loop (MessageRouter)
-          endet die Sitzung (Verbindung weg) → connect_with_retry (Backoff, Funktionen neu anbieten) → nächste Sitzung
+          endet die Sitzung (Verbindung weg) → connect_with_retry (Backoff, Arbeit neu annehmen) → nächste Sitzung
     """
 
     # Subklassen überschreiben diese mit ihren Command-Typen
@@ -76,7 +76,7 @@ class CqrsClient(HandlerBase, Generic[S]):
         registry: CategoryRegistry,
         nutzlast,
         config: dict[str, Any] | None = None,
-        funktionen: list[FunktionsBasis] | None = None,
+        arbeit: list[AkteursArbeit] | None = None,
     ):
         """
         Args:
@@ -84,8 +84,8 @@ class CqrsClient(HandlerBase, Generic[S]):
             nutzlast: Die generierte Nutzlast-Tabelle typ → DTO-Klasse (domain_client.generated.nutzlast_tabelle.TABELLE);
                       die Leitung kommt aus cqrs_client.leitung
             config: Optionale Konfiguration für die Subklasse
-            funktionen: Funktionen, die dieser Client TRÄGT (generierte <Funktion>Basis-Unterklassen bzw. die getragenen Funktionen seines
-                        Client-Vertrags); nach jedem Handshake meldet er sie an, der Server holt für ihn Eingänge
+            arbeit: Die Arbeit der Akteure, die dieser Client verkörpert (je Akteur die gehörten Commands ohne Ziel — die Client-Basis
+                    baut sie aus ihrem Vertrag); nach jedem Handshake nimmt er sie an, der Server gibt ihm Aufträge
         """
         self._registry = registry
         self._config = config or {}
@@ -96,7 +96,7 @@ class CqrsClient(HandlerBase, Generic[S]):
         self._mapper = PayloadMapper(nutzlast)
         self._router = MessageRouter()
         self._connection = ConnectionManager(self._proxy)
-        self._funktionen = FunktionsLaeufer(funktionen or [], self._proxy, self._mapper)
+        self._arbeit = ArbeitsLaeufer(arbeit or [], self._proxy, self._mapper)
         self._version_tracker = VersionTracker()
         self._state: S = self._create_initial_state()
 
@@ -111,9 +111,9 @@ class CqrsClient(HandlerBase, Generic[S]):
         return self._proxy.session_id
 
     @property
-    def funktionen(self) -> FunktionsLaeufer:
-        """Die angebotenen Funktionen und ihre laufenden Eingänge."""
-        return self._funktionen
+    def arbeit(self) -> ArbeitsLaeufer:
+        """Die angenommene Arbeit der verkörperten Akteure und ihre laufenden Aufträge."""
+        return self._arbeit
 
     @property
     def is_connected(self) -> bool:
@@ -193,26 +193,23 @@ class CqrsClient(HandlerBase, Generic[S]):
             verify_hash_at_connect(file_base_url, generated_dir)
 
         capabilities = self._build_capabilities_request()
-        # Der Lebenszyklus der getragenen Funktionen (beim_start: ein Netz laden) — einmal, bevor sie angeboten werden.
-        await self._funktionen.starte()
-        # on_connected läuft nach JEDEM Handshake (auch nach Reconnect): angebotene Funktionen neu anmelden.
-        await self._connection.connect_with_retry(host, port, capabilities, on_connected=self._funktionen.biete_an)
+        # on_connected läuft nach JEDEM Handshake (auch nach Reconnect): die Arbeit der Akteure neu annehmen.
+        await self._connection.connect_with_retry(host, port, capabilities, on_connected=self._arbeit.nimm_an)
 
         try:
             # Je Verbindung EINE Sitzung (Lesen + Verarbeiten). Beide Schleifen enden, wenn die Verbindung abbricht —
             # dann neu verbinden und eine neue Sitzung starten. (Früher lief nur der Monitor weiter: er verband neu und bot
-            # die Funktionen wieder an, aber niemand las mehr — der Client war nach dem ersten Abbruch taub.)
+            # die Arbeit wieder an, aber niemand las mehr — der Client war nach dem ersten Abbruch taub.)
             while True:
                 log.info("Connected. Starting processing loops...")
                 await self._sitzung()
                 log.info("Connection lost, starting reconnect...")
                 await self._proxy.disconnect()
-                await self._connection.connect_with_retry(host, port, capabilities, on_connected=self._funktionen.biete_an)
+                await self._connection.connect_with_retry(host, port, capabilities, on_connected=self._arbeit.nimm_an)
         except asyncio.CancelledError:
             log.info("Client shutting down...")
         finally:
             await self._proxy.disconnect()
-            await self._funktionen.beende()
             log.info("Client stopped")
 
     async def _sitzung(self) -> None:
@@ -227,7 +224,7 @@ class CqrsClient(HandlerBase, Generic[S]):
                 self._mapper,
                 self._registry,
                 self._version_tracker,
-                on_arbeit=self._funktionen.nimm,
+                on_arbeit=self._arbeit.nimm,
             ),
         )
 

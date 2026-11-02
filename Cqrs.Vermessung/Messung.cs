@@ -12,8 +12,7 @@ internal sealed class SzenarioWert
 
 /// <summary>
 /// Die Messung (§0.1, Höchstlast) in wenigen Minuten. Je Durchgang frische DBs; Beispieldomäne: S1 (Stoß TIFF-Paare), S4 (Datensatz über die
-/// Paare aus S1), S3 (Teile an EINEN Sammelvorgang, 8 und 64 Sender), L1 (Leerlauf); dieselbe DB mit Bild-Funktionen im Python-Worker: S2
-/// (kleiner Stoß); S6 (Clients über gRPC, 8 und 64 Sitzungen); Prüfdomäne: S5 (Vorgänge an viele Aggregate, 1, 8 und 64 Sender), L5. Jeder Block sendet höchstens 15 s und baut danach
+/// Paare aus S1), S3 (Teile an EINEN Sammelvorgang, 8 und 64 Sender), L1 (Leerlauf); S6 (Clients über gRPC, 8 und 64 Sitzungen); Prüfdomäne: S5 (Vorgänge an viele Aggregate, 1, 8 und 64 Sender), L5. Jeder Block sendet höchstens 15 s und baut danach
 /// ab; nach jedem Szenario die Exactly-once-Prüfung, je Anwendung die globale.
 /// </summary>
 internal static class Messung
@@ -44,7 +43,7 @@ internal static class Messung
         for (var w = 1; w <= o.Wiederholungen; w++)
         {
             Console.WriteLine($"── Wiederholung {w}/{o.Wiederholungen} ──");
-            if (o.Szenarien.Overlaps(["S1", "S2", "S3", "S4", "S6"]))
+            if (o.Szenarien.Overlaps(["S1", "S3", "S4", "S6"]))
             {
                 await using (var lauf = await Anwendungslauf.StarteAsync(k, k.Beispiel, "Host.Grpc", "host", $"beispiel-w{w}", zuruecksetzen: true))
                 {
@@ -80,16 +79,6 @@ internal static class Messung
                     else Merke("L1", await LeerlaufAsync(k, lauf, "L1", w, nichtAbgebaut.Count == 0));
                 }
                 if (o.Diagnose) await NeustartZeitreiheAsync(k, k.Beispiel, "Host.Grpc", $"beispiel-neustart-w{w}", "L1-neustart");
-                if (o.Szenarien.Contains("S2"))
-                {
-                    // Die ganze Kette der Bildaufbereitung im Python-Worker: je Schritt ein Worker nach dem Worker-Block seiner Funktion.
-                    string[] kette = ["IBildEinlesen", "IBildVerkleinerung", "IKontrastausgleich"];
-                    var extern_ = kette.ToDictionary(f => $"Funktionen__{f}__Laufort", _ => "Extern");
-                    await using var lauf = await Anwendungslauf.StarteAsync(k, k.Beispiel, "Host.Grpc", "host", $"beispiel-s2-w{w}", zuruecksetzen: false,
-                        extern_);
-                    foreach (var f in kette) await lauf.StarteWorkerAsync(k.Beispiel, f, $"worker-{f}-w{w}");
-                    Merke("S2", await StossAsync(k, lauf, "S2", 2031, w, o.StossS2));
-                }
                 Global("Beispieldomäne", w, await GlobalePruefung.PruefeAsync(new Datenbank(k.Beispiel.Verbindung, k.Beispiel.Datenbank, k.Beispiel.Schema), "Beispieldomäne"));
             }
             if (o.Szenarien.Contains("S5"))
@@ -161,7 +150,7 @@ internal static class Messung
 
     public static string Titel(string s) => s switch
     {
-        "S1" => "Bildeingang Host, Stoß", "S2" => "Bildeingang mit Python-Worker, Stoß", "S4" => "Datensatz einfrieren",
+        "S1" => "Bildeingang Host, Stoß", "S4" => "Datensatz einfrieren",
         "L1" => "Leerlauf Beispieldomäne", "L5" => "Leerlauf Prüfdomäne",
         _ when s.StartsWith("S3-") => $"Sammelvorgang heiß, {s[3..]} Sender",
         _ when s.StartsWith("S5-") => $"Prüfdomäne verteilt, {s[3..]} Sender",
@@ -213,7 +202,7 @@ internal static class Messung
         if (!b.Abgebaut) throw new InvalidOperationException("Aufwärmen baut sich nicht ab — der Host ist nicht bereit.");
     }
 
-    // ── S1/S2: ein Stoß Dateien ────────────────────────────────────────────────────────────────────────────────────────────
+    // ── S1: ein Stoß Dateien ────────────────────────────────────────────────────────────────────────────────────────────
     private static async Task<SzenarioWert> StossAsync(Kontext k, Anwendungslauf lauf, string name, int jahr, int w, int paare)
     {
         await using var bild = new Bildeingang(lauf.Eingang, k.Beispiel.Quellpfad!, jahr, w);

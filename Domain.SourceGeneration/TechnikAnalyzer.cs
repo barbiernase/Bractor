@@ -67,18 +67,17 @@ public sealed class TechnikAnalyzer : DiagnosticAnalyzer
     private static void Pruefe(SymbolAnalysisContext ctx, Funktionsform.Technikmenge technik)
     {
         var t = (INamedTypeSymbol)ctx.Symbol;
-        var vertraege = Funktionsform.Umsetzt(t).ToList();
         var technikVon = t.TypeKind == TypeKind.Class
             ? t.AllInterfaces.Where(technik.IstTechnik).Cast<INamedTypeSymbol>().FirstOrDefault() ?? (technik.IstTechnik(t) ? t : null)
             : null;
         // Eine Funktion als Klasse ist ihre eigene Umsetzung; eine Technik-Umsetzung nimmt geschachtelt selbst Technik.
         var istImpl = t.TypeKind == TypeKind.Class && !t.IsAbstract
-            && (vertraege.Count > 0 || Funktionsform.IstFunktion(t) || technik.IstUmsetzung(t) || technikVon != null);
+            && (Funktionsform.IstFunktion(t) || technik.IstUmsetzung(t) || technikVon != null);
 
         // CQRS092: eine Umsetzung, die die generierte Bindung nicht bauen kann.
         if (istImpl && !Ctorbindung.Baubar(t))
             ctx.ReportDiagnostic(Diagnostic.Create(Baubar, t.Locations.FirstOrDefault(), t.Name,
-                vertraege.FirstOrDefault()?.Name ?? technikVon?.Name ?? "IFunktion", t.IsGenericType ? "generisch" : "nicht öffentlich"));
+                technikVon?.Name ?? "IFunktion", t.IsGenericType ? "generisch" : "nicht öffentlich"));
 
         // CQRS089: Technik an jeder anderen Stelle als im Konstruktor einer Umsetzung (Felder/Eigenschaften dort halten sie nur).
         foreach (var m in t.GetMembers().Where(m => !m.IsImplicitlyDeclared))

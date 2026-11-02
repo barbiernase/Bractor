@@ -3,17 +3,8 @@ using Pruefdomaene.Messung;
 
 namespace Pruefdomaene.Pipeline.Messung;
 
-/// <summary>
-/// Eine Funktion als Schnittstelle (docs/04 §4.4, docs/10 E9): als Knoten rechnet sie im Host (<see cref="Schwellenpruefung"/>) oder draußen bei einem
-/// Träger (Worker, Mensch) — der Knoten davor sieht nie, was dahinter rechnet.
-/// </summary>
-public interface IAusreisserpruefung : IFunktion
-{
-    IEnumerable<MeldeAusreisser> Auf(Merkmal m);
-}
-
-/// <summary>Die Umsetzung im Host: ein Wert über der Schwelle ist ein Ausreißer.</summary>
-public sealed class Schwellenpruefung : IAusreisserpruefung
+/// <summary>Ein Merkmal über der Schwelle ist ein Ausreißer — an die Messstelle gemeldet.</summary>
+public sealed class Ausreisserpruefung : IFunktion
 {
     public const double Schwelle = 1_000;
 

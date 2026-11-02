@@ -8,9 +8,9 @@ namespace Infrastructure.Funktionen;
 
 /// <summary>
 /// Ein Auftrag an einen Arbeiter draußen: die Kennung des Eingangs (gleich bei jeder Wiederholung — draußen der Schlüssel zum Entdoppeln von
-/// Wirkungen), die Funktion, die Nachricht (ein Zwischenergebnis, eine Folge, ein Hinweis oder eine Antwort auf einen eigenen Command) und ihre Herkunft.
+/// Wirkungen), die Arbeit (der Baustein des Akteurs), der Command und seine Herkunft.
 /// </summary>
-public sealed record AuftragDraussen(Guid Vorgang, FunktionsBaustein Funktion, object Eingang, Herkunft Herkunft, string? Korrelation, bool Hinweis);
+public sealed record AuftragDraussen(Guid Vorgang, FunktionsBaustein Funktion, object Eingang, Herkunft Herkunft, string? Korrelation);
 
 /// <summary>
 /// Ein ARBEITER draußen (docs/04 §4.4): eine Sitzung eines Workers oder Clients, der die Funktion trägt, oder der Mensch an der Werkbank (Laufort
@@ -123,7 +123,7 @@ public sealed class Werkstatt
     /// über die Geduld hinaus oder wenn der Arbeiter geht, wirft der Lauf — der Eingang wird wiederholt.
     /// </summary>
     public async IAsyncEnumerable<object> RechneAsync(FunktionsBaustein funktion, Guid vorgang, object nachricht, Herkunft herkunft, string? korrelation,
-        bool hinweis, [EnumeratorCancellation] CancellationToken ct)
+        [EnumeratorCancellation] CancellationToken ct)
     {
         var eingang = funktion.Eingang(nachricht.GetType())
             ?? throw new InvalidOperationException($"{funktion.Name} hört {nachricht.GetType().Name} nicht.");
@@ -144,7 +144,7 @@ public sealed class Werkstatt
         }
         try
         {
-            platz.Arbeiter.Sende(new AuftragDraussen(vorgang, funktion, nachricht, herkunft, korrelation, hinweis));
+            platz.Arbeiter.Sende(new AuftragDraussen(vorgang, funktion, nachricht, herkunft, korrelation));
             var erwartet = 0;
             while (true)
             {

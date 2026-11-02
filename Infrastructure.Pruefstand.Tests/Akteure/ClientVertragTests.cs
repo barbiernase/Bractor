@@ -18,8 +18,8 @@ using Domain.Projections.Modell;
 namespace Infrastructure.Pruefstand.Akteure;
 
 /// <summary>
-/// Client-Verträge (<c>docs/konzept-akteure.md</c> §4, docs/konzept-akteure.md §5: IVerkoerpert, IHoert): die generierte
-/// Tabelle, die Schnittmenge Vertrag ∩ Token, der Handshake je Client (Hört statt Selbstauskunft, getragene Funktionen nur mit Befugnis) und die
+/// Clients (<c>docs/konzept-akteure.md</c> §4/§5: ein Record mit IVerkoerpert, IDarf und IHoert stehen an den Akteuren): die generierte
+/// Tabelle, die Schnittmenge verkörpert ∩ Token für beide Richtungen, der Handshake je Client (Hört statt Selbstauskunft) und die
 /// Hash-Gleichheit mit dem Python-Generat — rein, ohne gRPC.
 /// </summary>
 public class ClientVertragTests
@@ -32,28 +32,32 @@ public class ClientVertragTests
     {
         GeneratedClientVertraege.Alle.Keys.Should().BeEquivalentTo("KlassifikationsWorker", "TrainingsWorker", "Arbeitsplatz");
         C("KlassifikationsWorker").Verkoerpert.Should().Equal("Klassifizierer");
-        C("KlassifikationsWorker").Traegt.Should().BeEquivalentTo(new[] { typeof(Domain.Pipeline.ImagePair.IBildpaarBeurteilung) });
-        C("KlassifikationsWorker").Hoert.Should().BeEquivalentTo(new[] { typeof(BildVerfuegbar), typeof(ModellAktiviert) });
+        C("KlassifikationsWorker").Typ.Should().Be(typeof(Domain.Akteure.KlassifikationsWorker), "der Client ist ein Record");
         C("TrainingsWorker").Verkoerpert.Should().Equal("TrainingsSystem");
-        C("TrainingsWorker").Traegt.Should().BeEquivalentTo(new[] { typeof(Domain.Pipeline.Trainingslauf.ITraining) });
     }
 
     [Fact]
-    public void Ein_Client_verkoerpert_mehrere_Akteure()
+    public void Ein_Client_verkoerpert_mehrere_Akteure_und_hoert_was_sie_hoeren()
     {
         var ap = C("Arbeitsplatz");
         ap.Verkoerpert.Should().BeEquivalentTo("Inspekteur", "KIOperator", "Modellfreigeber", "Produktpruefer");
-        ap.Traegt.Should().BeEmpty("der Arbeitsplatz handelt spontan, er trägt keine Funktion");
-        ap.Hoert.Should().Contain(typeof(ImagePairKomplett)).And.Contain(typeof(PhysischesProduktGelabelt));
+        var r = ap.Rechte(GeneratedAkteurRechte.Alle, token: null)!;
+        r.Arbeit.Should().BeEmpty("der Arbeitsplatz handelt spontan, seine Akteure haben keine Arbeit");
+        r.Hoert.Should().Contain(typeof(ImagePairKomplett)).And.Contain(typeof(PhysischesProduktGelabelt)).And.Contain(typeof(ModellAktiviert));
+        r.Hoert.Should().BeEquivalentTo(new[] { "Inspekteur", "KIOperator", "Modellfreigeber", "Produktpruefer" }.SelectMany(n => A(n).Hoert).Distinct(),
+            "ein Client hat keinen eigenen Kenntnis-Satz — er hört, was seine Akteure hören");
     }
 
     [Fact]
-    public void Traegt_sendet_und_fragt_sind_die_IDarf_der_verkoerperten_Akteure()
+    public void Arbeit_sendet_und_fragt_sind_die_IHoert_und_IDarf_der_verkoerperten_Akteure()
     {
-        var ml = C("KlassifikationsWorker");
-        ml.Sendet.Should().BeEquivalentTo(new[] { typeof(KlassifiziereEinzelBildDurchKi) });
-        ml.Fragt.Should().BeEquivalentTo(new[] { typeof(HoleAktivesModell) });
-        ml.Verkoerpert.Should().NotContain("Modellfreigeber", "HoleAktivesModell darf auch der Modellfreigeber — verkörpert ist nur, wen der Vertrag nennt");
+        var ml = C("KlassifikationsWorker").Rechte(GeneratedAkteurRechte.Alle, token: null)!;
+        ml.Arbeit.Should().BeEquivalentTo(new[] { typeof(PaarZuBeurteilen) });
+        ml.Hoert.Should().BeEquivalentTo(new[] { typeof(BildVerfuegbar), typeof(ModellAktiviert) });
+        ml.Commands.Should().BeEquivalentTo(new[] { typeof(KlassifiziereBildPaarDurchKi), typeof(KlassifiziereEinzelBildDurchKi) });
+        ml.Queries.Should().BeEquivalentTo(new[] { typeof(HoleAktivesModell) });
+        C("KlassifikationsWorker").Verkoerpert.Should().NotContain("Modellfreigeber",
+            "HoleAktivesModell darf auch der Modellfreigeber — verkörpert ist nur, wen der Client nennt");
     }
 
     [Fact]
@@ -94,10 +98,10 @@ public class ClientVertragTests
         var wunsch = new CapabilitiesResult { SubscribedEvents = { "TrainingAngefordert" } };
         var abweichung = ClientVertragsPruefung.Wende(wunsch, e.Vertrag!, Loese);
         wunsch.SubscribedEvents.Should().BeEquivalentTo("BildVerfuegbar", "ModellAktiviert");
-        wunsch.AllowedCommands.Should().BeEquivalentTo("KlassifiziereEinzelBildDurchKi");
+        wunsch.AllowedCommands.Should().BeEquivalentTo("KlassifiziereBildPaarDurchKi", "KlassifiziereEinzelBildDurchKi");
         abweichung.Should().Contain("hört laut Vertrag nicht: TrainingAngefordert");
-        e.Vertrag!.DarfRechnen(typeof(Domain.Pipeline.ImagePair.IBildpaarBeurteilung)).Should().BeTrue("die getragene Funktion darf er anbieten");
-        e.Vertrag!.DarfRechnen(typeof(Domain.Pipeline.Trainingslauf.ITraining)).Should().BeFalse("die trägt ein anderer Client");
+        e.Vertrag!.Arbeit.Should().BeEquivalentTo(new[] { typeof(PaarZuBeurteilen) }, "die Arbeit des verkörperten Akteurs kommt zu dieser Sitzung");
+        e.Vertrag!.Arbeit.Should().NotContain(typeof(TrainingZuRechnen), "die hört ein Akteur, den ein anderer Client verkörpert");
     }
 
     [Fact]
@@ -120,32 +124,37 @@ public class ClientVertragTests
             .Warnung.Should().Contain("anderen Domänen-Stand");
     }
 
-    /// <summary>Ein Client, der beide ML-Funktionen trägt (wie ein Worker auf einer GPU-Maschine): er verkörpert beide Akteure und darf beide rechnen.</summary>
+    /// <summary>Ein Client, der beide ML-Akteure verkörpert (wie ein Worker auf einer GPU-Maschine): wirksam ist verkörpert ∩ Token, für beide
+    /// Richtungen — die Arbeit und die Kenntnis eines Akteurs, den das Token nicht nennt, kommen nicht zu dieser Sitzung.</summary>
     [Fact]
-    public void Ein_Client_mit_zwei_getragenen_Funktionen_verkoerpert_beide_Akteure()
+    public void Ein_Client_mit_zwei_Akteuren_bekommt_ihre_Arbeit_nur_mit_dem_Token()
     {
-        var ml = new ClientVertrag("MlWorker", typeof(object), "h",
-            new HashSet<Type> { typeof(Domain.Pipeline.ImagePair.IBildpaarBeurteilung), typeof(Domain.Pipeline.Trainingslauf.ITraining) },
-            new HashSet<Type>(), new HashSet<Type> { typeof(HoleDatensatzSamples) }, new HashSet<Type> { typeof(TrainingAbgebrochen) },
-            ["Klassifizierer", "TrainingsSystem"]);
+        var ml = new ClientVertrag("MlWorker", typeof(object), "h", ["Klassifizierer", "TrainingsSystem"]);
         var r = ml.Rechte(GeneratedAkteurRechte.Alle, null)!;
 
-        r.DarfRechnen(typeof(Domain.Pipeline.ImagePair.IBildpaarBeurteilung)).Should().BeTrue();
-        r.DarfRechnen(typeof(Domain.Pipeline.Trainingslauf.ITraining)).Should().BeTrue();
-        r.Hoert.Should().BeEquivalentTo(new[] { typeof(TrainingAbgebrochen) });
+        r.Arbeit.Should().BeEquivalentTo(new[] { typeof(PaarZuBeurteilen), typeof(TrainingZuRechnen) });
+        r.DarfHoeren(typeof(TrainingAbgebrochen)).Should().BeTrue();
+        r.DarfHoeren(typeof(ModellAktiviert)).Should().BeTrue();
         r.DarfHinein(typeof(HoleDatensatzSamples)).Should().BeTrue();
-        ml.Rechte(GeneratedAkteurRechte.Alle, A("Klassifizierer"))!.DarfRechnen(typeof(Domain.Pipeline.Trainingslauf.ITraining))
-            .Should().BeFalse("Vertrag ∩ Token: das Token verkörpert nur den Klassifizierer");
+        r.VertragHash.Should().Be("h");
+
+        var nurK = ml.Rechte(GeneratedAkteurRechte.Alle, A("Klassifizierer"))!;
+        nurK.Teile.Select(t => t.Name).Should().Equal("Klassifizierer");
+        nurK.Arbeit.Should().BeEquivalentTo(new[] { typeof(PaarZuBeurteilen) }, "verkörpert ∩ Token: das Token nennt nur den Klassifizierer");
+        nurK.DarfHoeren(typeof(TrainingAbgebrochen)).Should().BeFalse("auch das Hören ist geschnitten");
+        nurK.DarfHinein(typeof(MeldeFortschritt)).Should().BeFalse();
     }
 
     [Fact]
     public void Der_Client_Hash_kommt_aus_der_kanonischen_Form()
     {
         var kanon = Abstractions.Clientvertragsregeln.ClientKanon("KlassifikationsWorker", ["Klassifizierer"],
-            [new("IBildpaarBeurteilung", [new Abstractions.Clientvertragsregeln.Eingang("PaarZuBeurteilen", ["KlassifiziereBildPaarDurchKi"], false)])],
-            ["KlassifiziereEinzelBildDurchKi"], ["HoleAktivesModell"], ["ModellAktiviert", "BildVerfuegbar"]);
-        kanon.Should().Be("KlassifikationsWorker|A:Klassifizierer|T:IBildpaarBeurteilung:PaarZuBeurteilen>KlassifiziereBildPaarDurchKi"
-            + "|S:KlassifiziereEinzelBildDurchKi|F:HoleAktivesModell|H:BildVerfuegbar,ModellAktiviert");
+            [new("Klassifizierer", [new Abstractions.Clientvertragsregeln.Eingang("PaarZuBeurteilen",
+                ["KlassifiziereEinzelBildDurchKi", "KlassifiziereBildPaarDurchKi"], true)])],
+            ["KlassifiziereEinzelBildDurchKi", "KlassifiziereBildPaarDurchKi"], ["HoleAktivesModell"], ["ModellAktiviert", "BildVerfuegbar"]);
+        kanon.Should().Be("KlassifikationsWorker|A:Klassifizierer"
+            + "|W:Klassifizierer:PaarZuBeurteilen>KlassifiziereBildPaarDurchKi,KlassifiziereEinzelBildDurchKi*"
+            + "|S:KlassifiziereBildPaarDurchKi,KlassifiziereEinzelBildDurchKi|F:HoleAktivesModell|H:BildVerfuegbar,ModellAktiviert");
         C("KlassifikationsWorker").Hash.Should().Be(Abstractions.Clientvertragsregeln.Hash(kanon)).And.HaveLength(16);
     }
 

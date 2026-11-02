@@ -99,7 +99,8 @@ public sealed class GraphActor(
             return;
         }
         if (_laeufe.Count >= instanz.Laeufe(typ)) { Antworte(context, e, Quittungsart.Spaeter); return; }
-        var o = new Offen(new Lauf(instanz, new LaufKontext(e.Kennung, e.Stream, e.Version, e.Zeit, e.Akteur, e.Korrelation, e.Ursache)), e);
+        // Der Akteur des Laufs: der der Instanz (die Arbeit eines Akteurs gibt er selbst hinein), sonst der des Auslösers.
+        var o = new Offen(new Lauf(instanz, new LaufKontext(e.Kennung, e.Stream, e.Version, e.Zeit, instanz.Akteur ?? e.Akteur, e.Korrelation, e.Ursache)), e);
         if (e.Art == Eingangsart.Kette && context.Sender is { } absender) o.Warten.Add(absender);
         else Antworte(context, e, Quittungsart.Angenommen);
         _laeufe[e.Kennung] = o;

@@ -1,7 +1,4 @@
 using Abstractions;
-using Domain.Pipeline.Bildaufbereitung;
-using Domain.Pipeline.ImagePair;
-using Domain.Pipeline.Trainingslauf;
 using Domain.Datensatz;
 using Domain.ImagePair;
 using Domain.Modell;
@@ -16,62 +13,74 @@ using Domain.Projections.Trainingslauf;
 
 namespace Domain.Akteure;
 
-// Die Akteure der Domäne — Domänen-Experten, von denen alles kommt, was hineingeht (docs/konzept-akteure.md §2).
-// Deklariert wird nur, was ein Akteur SELBST hineingibt (IDarf<T>) — ein Command, eine Query, eine Quell-Nachricht oder die Ausgaben einer
-// Funktion, deren Code er draußen rechnet (IDarf<IFunktion-Typ>). Was eine Funktion oder eine Frist daraus erzeugt (NimmRangeAuf, NimmBildAuf,
-// MarkiereAlsHaengengeblieben …), trägt den Akteur der Kette — es steht hier bewusst NICHT: am Tor käme es so nie durch („nie von der GUI" ist
-// ein Typ-Fakt). Ausnahme: ein Akteur, für den eine Instanz mit Quellkopf hineingibt (Akteur in ihrer Datei), darf, was sie verlässt — der Start
-// prüft es (docs/04 §4.4). Ein Command darf bei mehreren Akteuren stehen. Welche Software für welche Akteure an der Leitung spricht, steht in Clients.cs.
+// Die Akteure der Domäne — Domänen-Experten draußen (docs/konzept-akteure.md §2). Je Akteur steht, was er SELBST hineingibt (IDarf<T>: ein Command,
+// eine Query, ein Hinweis) und was zu ihm kommt (IHoert<T>): ein Command ohne Ziel ist Arbeit (die Werkstatt gibt ihn einer Sitzung, die ihn verkörpert,
+// bis eine Antwort kommt — Commands über sein IDarf), ein Event oder Hinweis ist Kenntnis (gepusht, verlierbar). Was eine Funktion oder eine Frist
+// erzeugt (NimmRangeAuf, MarkiereAlsHaengengeblieben …), trägt den Akteur der Kette — es steht hier bewusst NICHT: am Tor käme es so nie durch.
+// Ausnahme: ein Akteur, für den eine Instanz mit Quellkopf hineingibt (Akteur in ihrer Datei), darf, was sie verlässt — der Start prüft es
+// (docs/04 §4.4). Welche Software für welche Akteure an der Leitung spricht, steht in Clients.cs.
 
 // ── Maschinen ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /// <summary>Nimmt die Bildpaare (dc0/dc2) an der Linie auf und legt sie auf dem Share ab.</summary>
-public sealed record KameraSystem : IMaschine,
+public sealed record KameraSystem : IAkteur,
     IDarf<NimmBildAuf>;   // NimmBildAuf: was die Instanz des Linienimports (Dateiwächter → Bildaufbereitung) für das Kamerasystem hineingibt
 
-/// <summary>Rechnet die Schritte der Bildaufbereitung außerhalb des Hosts (Python-Worker <c>funktions_worker.py</c>, Laufort <c>Extern</c>).</summary>
-public sealed record Bildrechner : IMaschine,
-    IDarf<IBildEinlesen>, IDarf<IBildVerkleinerung>, IDarf<IKontrastausgleich>;
-
-/// <summary>GPU-Worker: trainiert auf einer eingefrorenen Datensatz-Version und meldet den Fortschritt (Funktion <see cref="ITraining"/>).</summary>
-public sealed record TrainingsSystem : IMaschine,
-    IDarf<ITraining>, IDarf<HoleDatensatzSamples>;
+/// <summary>GPU-Worker: trainiert auf einer eingefrorenen Datensatz-Version (Arbeit: <see cref="TrainingZuRechnen"/>) und meldet den Fortschritt.</summary>
+public sealed record TrainingsSystem : IAkteur,
+    IHoert<TrainingZuRechnen>,
+    IDarf<MeldeTrainingBegonnen>, IDarf<MeldeFortschritt>, IDarf<MeldeTrainingAbgeschlossen>, IDarf<MeldeTrainingGescheitert>,
+    IDarf<HoleDatensatzSamples>,
+    // Kenntnis: ein laufendes Training kooperativ abbrechen (der Lauf steht schon auf „abgebrochen“).
+    IHoert<TrainingAbgebrochen>;
 
 // ── KI ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/// <summary>Beurteilt Bildpaare (Funktion <see cref="IBildpaarBeurteilung"/>) und Einzelbilder mit dem aktiven Modell (Strang 1).</summary>
-public sealed record Klassifizierer : IKi,
-    IDarf<IBildpaarBeurteilung>,
-    IDarf<KlassifiziereEinzelBildDurchKi>,
-    IDarf<HoleAktivesModell>;
+/// <summary>Beurteilt Bildpaare (Arbeit: <see cref="PaarZuBeurteilen"/>) und Einzelbilder mit dem aktiven Modell (Strang 1).</summary>
+public sealed record Klassifizierer : IAkteur,
+    IHoert<PaarZuBeurteilen>,
+    IDarf<KlassifiziereBildPaarDurchKi>, IDarf<KlassifiziereEinzelBildDurchKi>, IDarf<HoleAktivesModell>,
+    // Kenntnis: den Pfad jedes Bildes merken (beurteilt wird das Paar), das neu freigegebene Modell laden.
+    IHoert<BildVerfuegbar>, IHoert<ModellAktiviert>;
 
 // ── Menschen ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /// <summary>Befundet Kamerabilder am Bildschirm (Strang 2) und markiert Paare als inspiziert.</summary>
-public sealed record Inspekteur : IMensch,
+public sealed record Inspekteur : IAkteur,
     IDarf<LabelBildPaar>, IDarf<LabelEinzelBild>, IDarf<LabelBildRegion>, IDarf<MarkiereAlsInspiziert>,
     IDarf<SucheImagePairs>, IDarf<GetImagePair>, IDarf<GetImagePairHistorie>, IDarf<GetImagePairStatistik>,
     IDarf<GetProduktionsTage>, IDarf<GetProduktionsStrip>, IDarf<GetProduktionsVerlauf>, IDarf<GetUnklassifizierteImagePairs>,
-    IDarf<HoleBildPaarStand>;
+    IDarf<HoleBildPaarStand>,
+    // Kenntnis: Live-Aktualisierung der Galerie und der Statistik.
+    IHoert<ImagePairErstellt>, IHoert<BildVerfuegbar>, IHoert<ImagePairKomplett>, IHoert<BildPaarGelabelt>, IHoert<EinzelBildGelabelt>,
+    IHoert<BildPaarDurchKiKlassifiziert>, IHoert<EinzelBildDurchKiKlassifiziert>, IHoert<PhysischesProduktGelabelt>, IHoert<ImagePairInspiziert>;
 
 /// <summary>Prüft das physische Teil und setzt damit die Ground Truth (Strang 3) — nicht am Bildschirm.</summary>
-public sealed record Produktpruefer : IMensch,
+public sealed record Produktpruefer : IAkteur,
     IDarf<LabelPhysischesProdukt>,
-    IDarf<GetImagePair>, IDarf<SucheImagePairs>;
+    IDarf<GetImagePair>, IDarf<SucheImagePairs>,
+    IHoert<ImagePairErstellt>, IHoert<PhysischesProduktGelabelt>;
 
 /// <summary>Stellt Datensätze zusammen, kuratiert, startet/bricht Trainings ab und registriert Modelle.</summary>
-public sealed record KIOperator : IMensch,
+public sealed record KIOperator : IAkteur,
     IDarf<ErstelleDatensatz>, IDarf<FuegeRangeHinzu>, IDarf<NimmPaarAuf>, IDarf<EntfernePaar>, IDarf<SetzeSplit>, IDarf<FriereEin>,
     IDarf<StarteTraining>, IDarf<BricheTrainingAb>, IDarf<RegistriereModell>,
     IDarf<HoleDatensaetze>, IDarf<HoleDatensatz>, IDarf<HoleDatensatzPaare>, IDarf<HoleDatensaetzeFuerPaar>,
     IDarf<HoleTrainingslaeufe>, IDarf<HoleTrainingslauf>, IDarf<HoleDatensatzSamples>,
-    IDarf<HoleModelle>, IDarf<SucheImagePairs>, IDarf<GetImagePair>;
+    IDarf<HoleModelle>, IDarf<SucheImagePairs>, IDarf<GetImagePair>,
+    // Kenntnis: Kuratieren, Datensätze (Liste, Komposition), Trainingsläufe (Liste, Dashboard mit Live-Kurve aus TrainingFortschritt), Modelle.
+    IHoert<PaarAufgenommen>, IHoert<PaareAufgenommen>, IHoert<PaarEntfernt>,
+    IHoert<DatensatzErstellt>, IHoert<SplitGesetzt>, IHoert<DatensatzEingefroren>,
+    IHoert<TrainingAngefordert>, IHoert<TrainingBegonnen>, IHoert<TrainingFortschritt>, IHoert<TrainingAbgeschlossen>, IHoert<TrainingGescheitert>,
+    IHoert<TrainingAbgebrochen>, IHoert<TrainingHaengengeblieben>,
+    IHoert<ModellRegistriert>;
 
 /// <summary>Schaltet ein Modell für die Produktions-Inferenz scharf oder zieht es zurück (Freigabe ≠ Training).</summary>
-public sealed record Modellfreigeber : IMensch,
+public sealed record Modellfreigeber : IAkteur,
     IDarf<SetzeModellAktiv>, IDarf<ArchiviereModell>,
-    IDarf<HoleModelle>, IDarf<HoleAktivesModell>;
+    IDarf<HoleModelle>, IDarf<HoleAktivesModell>,
+    IHoert<ModellRegistriert>, IHoert<ModellAktiviert>, IHoert<ModellArchiviert>;
 
 /// <summary>Beispiel-Domäne Sammelvorgang: startet Sammelvorgänge und ihre Teilaufträge und schließt Teilaufträge ab.</summary>
-public sealed record Disponent : IMensch,
+public sealed record Disponent : IAkteur,
     IDarf<StarteSammelvorgang>, IDarf<StarteTeilauftrag>, IDarf<SchließeTeilauftragAb>;

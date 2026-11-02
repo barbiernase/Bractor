@@ -93,10 +93,10 @@ public interface ISchreibeKonto : IWriteStore { Task SetzeAsync(Guid konto); }
             {
                 public Task Auf(" + typ + @" e, ISchreibeKonto s) => Task.CompletedTask;
             }
-            public interface IFalsch : IFunktion { Mahne? Auf(" + typ + @" e); } }");
+            public sealed class Falsche : IFunktion { public Mahne? Auf(" + typ + @" e) => null; } }");
 
         ids.Should().BeEmpty("die Form meldet es (CQRS057 bzw. CQRS100), nicht der Weckplan");
-        quelle.Should().NotContain("batch-Falsch").And.NotContain("funktion-IFalsch",
+        quelle.Should().NotContain("batch-Falsch").And.NotContain("funktion-Falsche",
             "ein Hörer aus dem Log hört nur konkrete, persistente Events — alles andere ist ein Formfehler");
     }
 }

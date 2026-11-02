@@ -54,12 +54,11 @@ public class TechnikBindungTests
     private const string Bild = @"namespace Probe {
         public sealed record Gemacht(string X) : IEvent;
         public sealed record Angefordert(string X) : IEvent;
-        public interface IMach : IFunktion { Gemacht Auf(Angefordert e); }
         public interface ISkalierer { int Skaliere(int x); }
         public sealed class Skalierer(ILogger<Skalierer> log) : ISkalierer { public int Skaliere(int x) => x; }
         public enum Modus { Schnell = 1, Gruendlich = 2 }
         public record BildKonfig(string Ausgabe, int Hoehe, Modus Modus, TimeSpan Frist, bool Laut = false, string[]? Endungen = null);
-        public sealed class Mach(ISkalierer s, BildKonfig k) : IMach { public Gemacht Auf(Angefordert e) => default!; }
+        public sealed class Mach(ISkalierer s, BildKonfig k) : IFunktion { public Gemacht Auf(Angefordert e) => default!; }
     }";
 
     [Fact]
@@ -80,7 +79,7 @@ public class TechnikBindungTests
 
     [Fact]
     public void Eine_Funktion_ist_keine_Technik()
-        => Generiert(Bild).Should().NotContain("[\"IMach\"]", "sie ruft das Framework — ihre Bindung steht in GeneratedFunktionsBausteine");
+        => Generiert(Bild).Should().NotContain("[\"Mach\"]", "sie ruft das Framework — ihre Bindung steht in GeneratedFunktionsBausteine");
 
     [Fact]
     public void Was_keine_Funktion_im_Konstruktor_nimmt_ist_keine_Technik()
@@ -273,7 +272,7 @@ public class TechnikBindungTests
 
     [Fact]
     public async Task Eine_Funktion_mit_Eingaengen_im_Konstruktor_ist_CQRS090()
-        => (await Befunde(Bild.Replace("Skalierer(ILogger<Skalierer> log)", "Skalierer(ILogger<Skalierer> log, IMach m)")))
+        => (await Befunde(Bild.Replace("Skalierer(ILogger<Skalierer> log)", "Skalierer(ILogger<Skalierer> log, Mach m)")))
             .Should().Equal(TechnikAnalyzer.CtorId);
 
     [Fact]

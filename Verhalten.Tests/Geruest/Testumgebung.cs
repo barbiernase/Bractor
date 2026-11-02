@@ -98,7 +98,8 @@ public sealed class Testumgebung
         return json;
     }
 
-    /// <summary>Die Instanzen der Graphen (je Graph eine): die Bildaufbereitung im Host mit ihrem Ausgabe-Pfad, die Beurteilung draußen getragen.</summary>
+    /// <summary>Die Instanzen der Graphen (je Graph eine): der Linienimport mit dem Ausgabe-Pfad der Bildaufbereitung; die Arbeit der Akteure kommt ohne
+    /// Datei dazu.</summary>
     private IEnumerable<(string Instanz, JsonObject Inhalt)> Instanzen()
     {
         if (Anwendung == Anwendung.Pruefdomaene)
@@ -110,7 +111,7 @@ public sealed class Testumgebung
         }
         JsonObject ImHost(bool mitPfad = false)
         {
-            var k = new JsonObject { ["Laufort"] = "Host", ["Wiederholungen"] = 1 };
+            var k = new JsonObject { ["Wiederholungen"] = 1 };
             if (mitPfad) k["AusgabePfad"] = Path.Combine(Verzeichnis, "aufbereitet");
             return k;
         }
@@ -125,9 +126,7 @@ public sealed class Testumgebung
             },
             ["Aufbereitung.Einlesen"] = ImHost(), ["Aufbereitung.Verkleinern"] = ImHost(mitPfad: true), ["Aufbereitung.Kontrast"] = ImHost(mitPfad: true),
         });
-        // Draußen getragen (IDarf<F> eines verkörperten Akteurs): wie viele Eingänge zugleich, sagen die Slots der Träger beim Anbieten.
-        yield return ("paarbeurteilung", new JsonObject { ["Graph"] = "Paarbeurteilung", ["Beurteilung"] = new JsonObject { ["Laufort"] = "Extern" } });
-        foreach (var g in new[] { "Datensatzpflege", "Teilmeldung", "Trainingsrechnung" })
+        foreach (var g in new[] { "Datensatzpflege", "Teilmeldung" })
             yield return (g.ToLowerInvariant(), new JsonObject { ["Graph"] = g });
     }
 

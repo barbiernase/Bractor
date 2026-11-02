@@ -5,8 +5,11 @@ using OpenCvSharp;
 
 namespace Domain.Pipeline.Bildaufbereitung;
 
-/// <summary>OpenCV-Umsetzung von <see cref="IBildEinlesen"/> (Laufort Host): die Datei als Farbbild lesen und ihre Maße nennen. Zustandslos.</summary>
-public sealed class OpenCvBildEinlesen : IBildEinlesen
+/// <summary>
+/// Schritt 1 der Bildaufbereitung — eine gefundene Datei als Farbbild lesen und ihre Maße nennen; ist sie nicht lesbar, endet der Lauf hier
+/// (<see cref="BildNichtLesbar"/>, ein Hinweis an die Akteure, die ihn hören). Zustandslos.
+/// </summary>
+public sealed class Bildeinlesen : IFunktion
 {
     public async Task<OneOf<BildEingelesen, BildNichtLesbar>> Auf(DateiGefunden e)
     {

@@ -4,17 +4,17 @@ namespace Infrastructure.Integration.Tests;
 
 /// <summary>
 /// Die Instanzen der Graphen der Beispieldomäne für die Hosts der Integrations-Tests (je Graph eine, wie <c>umgebungen/sim-main/graphen</c>): die
-/// Bildaufbereitung mit dem Laufort und Parallel ihrer drei Bild-Knoten und dem Ausgabe-Pfad — mit <paramref name="eingang"/> als Linienimport unter
-/// einem Dateiwächter auf diesem Verzeichnis, sonst für sich (Kopf DateiGefunden) —, die übrigen mit den Standards.
+/// Bildaufbereitung mit Parallel und Wiederholungen ihrer drei Bild-Knoten und dem Ausgabe-Pfad — mit <paramref name="eingang"/> als Linienimport unter
+/// einem Dateiwächter auf diesem Verzeichnis, sonst für sich (Kopf DateiGefunden) —, die übrigen mit den Standards. Die Arbeit der Akteure
+/// (Klassifizierer, TrainingsSystem) kommt ohne Datei dazu.
 /// </summary>
 internal static class Graphinstanzen
 {
-    public static Dictionary<string, GraphInstanzKonfig> Beispieldomaene(string? ausgabe, FunktionsLaufort laufort = FunktionsLaufort.Host, int parallel = 0,
-        int wiederholungen = 0, string? eingang = null)
+    public static Dictionary<string, GraphInstanzKonfig> Beispieldomaene(string? ausgabe, int parallel = 0, int wiederholungen = 0, string? eingang = null)
     {
         KnotenKonfig Bild(bool mitPfad)
         {
-            var k = new KnotenKonfig { Laufort = laufort, Parallel = parallel, Wiederholungen = wiederholungen };
+            var k = new KnotenKonfig { Parallel = parallel, Wiederholungen = wiederholungen };
             if (mitPfad && ausgabe is not null) k.Werte["AusgabePfad"] = ausgabe;
             return k;
         }
@@ -23,11 +23,7 @@ internal static class Graphinstanzen
         {
             Graph = eingang is null ? "Bildaufbereitung" : "Linienimport",
             Akteur = eingang is null ? null : "KameraSystem",
-            Knoten =
-            {
-                [vor + "Einlesen"] = Bild(false), [vor + "Verkleinern"] = Bild(laufort == FunktionsLaufort.Host),
-                [vor + "Kontrast"] = Bild(laufort == FunktionsLaufort.Host),
-            },
+            Knoten = { [vor + "Einlesen"] = Bild(false), [vor + "Verkleinern"] = Bild(true), [vor + "Kontrast"] = Bild(true) },
         };
         if (eingang is not null)
         {
@@ -37,12 +33,8 @@ internal static class Graphinstanzen
             w.Werte["Fenster"] = "00:00:00.300";
             bild.Knoten["Eingang"] = w;
         }
-        var aus = new Dictionary<string, GraphInstanzKonfig>(StringComparer.Ordinal)
-        {
-            [eingang is null ? "bildaufbereitung" : "linienimport"] = bild,
-            ["paarbeurteilung"] = new() { Graph = "Paarbeurteilung" },
-        };
-        foreach (var g in new[] { "Datensatzpflege", "Teilmeldung", "Trainingsrechnung" })
+        var aus = new Dictionary<string, GraphInstanzKonfig>(StringComparer.Ordinal) { [eingang is null ? "bildaufbereitung" : "linienimport"] = bild };
+        foreach (var g in new[] { "Datensatzpflege", "Teilmeldung" })
             aus[g.ToLowerInvariant()] = new GraphInstanzKonfig { Graph = g };
         return aus;
     }

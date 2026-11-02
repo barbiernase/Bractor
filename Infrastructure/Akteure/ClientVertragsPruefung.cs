@@ -38,7 +38,7 @@ public static class ClientVertragsPruefung
     {
         if (string.IsNullOrEmpty(vertrag)) return new(null, null, null);
         if (!clients.TryGetValue(vertrag, out var client))
-            return new(null, $"Client '{vertrag}' ist unbekannt — kein Client-Vertrag (IClientVertrag) dieses Namens", null);
+            return new(null, $"Client '{vertrag}' ist unbekannt — kein Client (record … : IClient) dieses Namens", null);
         if (client.Rechte(rechte, token) is not { } wirksam)
             return new(null, $"das Token verkörpert {token?.Name} — keinen der Akteure des Clients {vertrag} ({string.Join(", ", client.Verkoerpert)})", null);
         if (!string.Equals(hash ?? "", client.Hash, StringComparison.Ordinal))

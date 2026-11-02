@@ -1,7 +1,7 @@
 // ── Client.SourceGeneration/ClientVertrag.cs ──
 //
-// Der Client-Vertrag einer Client-Assembly ([assembly: IstClient<IVertrag>], docs/konzept-akteure.md §4) — gelesen mit derselben Lesart
-// wie am Server (Clientvertragslesart, per Link), dazu die Diagnosen CQRS093–097: der Client-Code wird gegen seinen Vertrag gehalten.
+// Der Client einer Client-Assembly ([assembly: IstClient<Arbeitsplatz>], docs/konzept-akteure.md §4) — gelesen mit derselben Lesart wie am
+// Server (Clientvertragslesart, per Link), dazu die Diagnosen CQRS093–097: der Client-Code wird gegen die Akteure seines Clients gehalten.
 
 using System.Collections.Generic;
 using System.Collections.Immutable;
@@ -21,18 +21,18 @@ internal sealed class ClientVertragInfo
     public string Hash { get; private set; } = "";
     public List<string> Sendet { get; private set; } = new List<string>();
     public List<string> Fragt { get; private set; } = new List<string>();
-    /// <summary>Was der Client hört (<c>IHoert&lt;T&gt;</c>) — genau das wird abonniert.</summary>
+    /// <summary>Was der Client als Kenntnis hört (<c>IHoert&lt;T&gt;</c> seiner Akteure) — genau das wird abonniert.</summary>
     public List<string> Hoert { get; private set; } = new List<string>();
-    /// <summary>Getragene Funktionen (<c>IDarf&lt;F&gt;</c> eines verkörperten Akteurs) — ein C#-Client trägt (noch) keine (CQRS094).</summary>
-    public List<string> Traegt { get; private set; } = new List<string>();
+    /// <summary>Die verkörperten Akteure, die Arbeit hören (<c>IHoert</c> eines Commands ohne Ziel) — ein C#-Client nimmt (noch) keine an (CQRS094).</summary>
+    public List<string> Arbeit { get; private set; } = new List<string>();
 
     public static readonly ClientVertragInfo Leer = new ClientVertragInfo();
 
-    /// <summary>Der Vertrags-Typ aus <c>[assembly: IstClient&lt;T&gt;]</c>, sonst null.</summary>
+    /// <summary>Der Client-Record aus <c>[assembly: IstClient&lt;T&gt;]</c>, sonst null.</summary>
     public static INamedTypeSymbol? VertragsTyp(Compilation c) =>
         c.Assembly.GetAttributes()
             .Where(a => a.AttributeClass is { IsGenericType: true } k
-                        && k.OriginalDefinition.ToDisplayString() == "Abstractions.IstClientAttribute<TVertrag>")
+                        && k.OriginalDefinition.ToDisplayString() == "Abstractions.IstClientAttribute<TClient>")
             .Select(a => a.AttributeClass!.TypeArguments[0]).OfType<INamedTypeSymbol>().FirstOrDefault();
 
     public static ClientVertragInfo? Aus(Compilation c)
@@ -48,7 +48,7 @@ internal sealed class ClientVertragInfo
             Sendet = v.Sendet.Select(t => t.ToDisplayString()).OrderBy(x => x, System.StringComparer.Ordinal).ToList(),
             Fragt = v.Fragt.Select(t => t.ToDisplayString()).OrderBy(x => x, System.StringComparer.Ordinal).ToList(),
             Hoert = v.Hoert.Select(t => t.ToDisplayString()).OrderBy(x => x, System.StringComparer.Ordinal).ToList(),
-            Traegt = v.Traegt.Select(t => t.Funktion.Name).ToList(),
+            Arbeit = v.Arbeit.Select(t => t.Akteur.Name).ToList(),
         };
     }
 }
@@ -59,31 +59,31 @@ internal static class ClientVertragDiagnosen
 
     public static readonly DiagnosticDescriptor OhneVertrag = new DiagnosticDescriptor(
         "CQRS093", "Client ohne Vertrag",
-        "Die Client-Assembly '{0}' nennt ihren Vertrag nicht — [assembly: IstClient<IMeinClient>] ergänzen (IMeinClient : IClientVertrag); "
-        + "ohne Vertrag wüsste niemand, für welche Akteure sie spricht und was sie hört (docs/konzept-akteure.md §4)",
+        "Die Client-Assembly '{0}' nennt ihren Client nicht — [assembly: IstClient<MeinClient>] ergänzen (record MeinClient : IClient, IVerkoerpert<A>); "
+        + "ohne Client wüsste niemand, für welche Akteure sie spricht und was sie hört (docs/konzept-akteure.md §4)",
         Kategorie, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor TeileImCSharpClient = new DiagnosticDescriptor(
-        "CQRS094", "C#-Client trägt Funktionen",
-        "Der Client-Vertrag '{0}' trägt Funktionen ({1}): ein verkörperter Akteur darf sie rechnen (IDarf<F>) — draußen trägt sie heute nur "
-        + "das Python-SDK (generierte Basen); ein C#-Client verkörpert Akteure, die keine Funktion rechnen",
+        "CQRS094", "C#-Client verkörpert Akteure mit Arbeit",
+        "Der Client '{0}' verkörpert Akteure, die Arbeit hören ({1}: IHoert eines Commands ohne Ziel) — Arbeit nimmt heute nur das Python-SDK an "
+        + "(generierte Basen mit einem Handler je Command); ein C#-Client verkörpert Akteure ohne Arbeit",
         Kategorie, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor CommandOhneSendet = new DiagnosticDescriptor(
         "CQRS095", "Command nicht im Client-Vertrag",
-        "Der Client erzeugt '{0}', aber kein Akteur, den sein Vertrag '{1}' verkörpert, darf ihn (IDarf<{0}>) — der Server würde den Command "
+        "Der Client erzeugt '{0}', aber kein Akteur, den sein Client '{1}' verkörpert, darf ihn (IDarf<{0}>) — der Server würde den Command "
         + "ablehnen; einen Akteur verkörpern, der ihn darf (IVerkoerpert<A>), oder im Client einen anderen Weg wählen",
         Kategorie, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor QueryOhneFragt = new DiagnosticDescriptor(
         "CQRS096", "Query nicht im Client-Vertrag",
-        "Der Client stellt '{0}', aber kein Akteur, den sein Vertrag '{1}' verkörpert, darf sie (IDarf<{0}>) — der Server würde die Query ablehnen",
+        "Der Client stellt '{0}', aber kein Akteur, den sein Client '{1}' verkörpert, darf sie (IDarf<{0}>) — der Server würde die Query ablehnen",
         Kategorie, DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public static readonly DiagnosticDescriptor EventOhneKenntnis = new DiagnosticDescriptor(
         "CQRS097", "Server-Event nicht im Client-Vertrag",
-        "'{2}.Handle({0})' hört ein Server-Event, das der Vertrag '{1}' nicht hört (IHoert<{0}>) — abonniert wird nur, was im "
-        + "Vertrag steht; der Handler liefe nie",
+        "'{2}.Handle({0})' hört ein Server-Event, das kein Akteur des Clients '{1}' hört (IHoert<{0}>) — abonniert wird nur, was seine "
+        + "Akteure hören; der Handler liefe nie",
         Kategorie, DiagnosticSeverity.Error, isEnabledByDefault: true);
 }
 

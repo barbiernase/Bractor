@@ -219,7 +219,7 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
     }
 
     /// <summary>
-    /// Ein Client, der eine Funktion trägt (IKlassifikationsWorker verkörpert den Klassifizierer: IDarf&lt;IBildpaarBeurteilung&gt;), beantwortet ihren Eingang — die Antwort
+    /// Ein Client, der den Klassifizierer verkörpert (KlassifikationsWorker; der Klassifizierer hört PaarZuBeurteilen — Arbeit), beantwortet seinen Auftrag — die Antwort
     /// wirkt genau einmal: noch einmal geschickt, nach dem Neuverbinden oder von einem zweiten Träger, der den Eingang nicht hält, ändert sie nichts.
     /// (Die Funktion steht vor dem Aggregat: das komplette Paar ist eine Folge; ein Kind gibt sie einem Arbeiter in der Werkstatt, die erste Antwort
     /// beendet den Lauf, jede weitere ist „unbekannt“. Das fachliche Soll — genau eine Klassifikation je Paar — ist dasselbe.)
@@ -230,8 +230,8 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
         var eins = await RoheLeitung.VerbindeAsync(b.Host, "KlassifikationsWorker", Testumgebung.TokenKlassifizierer);
         await using var zwei = await RoheLeitung.VerbindeAsync(b.Host, "KlassifikationsWorker", Testumgebung.TokenKlassifizierer);
         // Viele Slots: Paare früherer Tests dieser Klasse warten (ohne Träger) als offene Eingänge und kommen zuerst.
-        await eins.BieteAnAsync("IBildpaarBeurteilung", slots: 100);
-        await zwei.BieteAnAsync("IBildpaarBeurteilung", slots: 100);
+        await eins.NimmArbeitAnAsync("Klassifizierer", plaetze: 100);
+        await zwei.NimmArbeitAnAsync("Klassifizierer", plaetze: 100);
         var paar = await b.KomplettesPaarAsync();
         bool Fuer(Cqrs.Leitung.ArbeitsAuftrag a) => a.Stream == paar.Id.ToString() && a.Eingang.Typ == nameof(PaarZuBeurteilen);
         await Warte.BisAsync(() => Task.FromResult(eins.Eingaenge.Any(Fuer) || zwei.Eingaenge.Any(Fuer)), Kurz, "kein Träger bekam das komplette Paar", b.Host);

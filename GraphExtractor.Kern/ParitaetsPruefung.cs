@@ -243,7 +243,7 @@ public static class ParitaetsPruefung
             var iWStore = Get(Vertrag.IWriteStore); var iRStore = Get(Vertrag.IReadStore); var iStore = Get(Vertrag.IStore);
             var iWert = Get(Vertrag.IWertobjekt);
             var iAkteur = Get(Vertrag.IAkteur); var iDarf = Get(Vertrag.IDarf); var iHoert = Get(Vertrag.IHoert);
-            var iClient = Get(Vertrag.IClientVertrag); var iVerkoerpert = Get(Vertrag.IVerkoerpert);
+            var iClient = Get(Vertrag.IClient); var iVerkoerpert = Get(Vertrag.IVerkoerpert);
             var iFunktion = Get(Vertrag.IFunktion);
             bool Domäne(IAssemblySymbol? a) => a != null && domänen.Contains(a.Name);
 

@@ -25,30 +25,28 @@ public sealed record FunktionsEingang(Type Typ, bool Strom, IReadOnlyList<Type> 
 }
 
 /// <summary>
-/// Eine Umsetzung, die im Host rechnen kann: die Klasse selbst bzw. eine Implementierung der Schnittstelle, gebaut per generierter Fabrik — im
-/// Bereich der Aktivierung, mit ihrem Zustand (<see cref="Zustand{T}"/>, null ohne <c>IZustand&lt;T&gt;</c>).
+/// Eine Funktion in Baustein-Form: generiert (<c>GeneratedFunktionsBausteine</c>) für jede Funktions-Klasse — oder zur Laufzeit für die ARBEIT eines
+/// Akteurs (<see cref="Arbeit"/>): die Commands, die er hört, rechnet draußen eine Sitzung, die ihn verkörpert.
 /// </summary>
-public sealed record FunktionsUmsetzung(string Name, Type Typ, Func<IServiceProvider, object?, object> Baue);
-
-/// <summary>
-/// Eine Funktion in Baustein-Form (generiert, <c>GeneratedFunktionsBausteine</c>).
-/// </summary>
-/// <param name="Draussen">Als Schnittstelle deklariert: sie rechnet draußen (Worker, Client, Hand) oder mit einer Implementierung im Host.</param>
+/// <param name="Baue">Die generierte Fabrik der Klasse — im Bereich der Aktivierung, mit ihrem Zustand (<see cref="Zustand{T}"/>, null ohne
+/// <c>IZustand&lt;T&gt;</c>); null = draußen (die Arbeit eines Akteurs).</param>
 /// <param name="Dienste">Was der Konstruktor der Klasse braucht (Dienste, Konfig-Records) — für die Boot-Prüfung der Bindung.</param>
-/// <param name="Rechne">Die Rechnung: Eingang → Strom der Ausgaben (Commands, Hinweise), wie die Signatur sie zulässt.</param>
+/// <param name="Rechne">Die Rechnung: Eingang → Strom der Ausgaben (Commands, Hinweise), wie die Signatur sie zulässt (null = draußen).</param>
 /// <param name="Zustand">Der Zustand (<c>IZustand&lt;T&gt;</c> im Konstruktor, docs/04 §4.4), gesichert je Instanz und Knoten — null = ohne Zustand.</param>
 /// <param name="Lausche">Eine Quellfunktion: die Nummer, unter der die Rechnung ihr <c>Lausche</c> ruft (null = keine Quelle).</param>
 public sealed record FunktionsBaustein(
     Type Typ,
     string Name,
-    bool Draussen,
     IReadOnlyList<FunktionsEingang> Eingaenge,
-    IReadOnlyList<FunktionsUmsetzung> Umsetzungen,
+    Func<IServiceProvider, object?, object>? Baue,
     IReadOnlyList<Type> Dienste,
-    FunktionsRechnung Rechne,
+    FunktionsRechnung? Rechne,
     FunktionsZustandsform? Zustand = null,
     int? Lausche = null)
 {
+    /// <summary>Rechnet draußen: die Arbeit eines Akteurs, eine Sitzung, die ihn verkörpert, gibt die Antwort.</summary>
+    public bool Draussen => Baue is null;
+
     /// <summary>Der Wirker im Log (Spur): <c>funktion:&lt;Name&gt;</c>.</summary>
     public string Wirker => WirkerId.FuerFunktion(Name);
 

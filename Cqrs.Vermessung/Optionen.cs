@@ -14,7 +14,7 @@ internal sealed class Optionen
     public string Art { get; private set; } = "messung";
     public string Anlass { get; private set; } = "";
     public string? Spalte { get; private set; }
-    public HashSet<string> Szenarien { get; private set; } = new() { "S1", "S2", "S3", "S4", "S5", "S6" };
+    public HashSet<string> Szenarien { get; private set; } = new() { "S1", "S3", "S4", "S5", "S6" };
     public int Wiederholungen { get; private set; } = 1;
     public bool Probe { get; private set; }
     /// <summary><c>--art leerlauf</c>: die Messung mit Zeitreihen statt Leerlauf-Fenster (vor der Last, danach, nach einem Neustart) — eine
@@ -32,9 +32,8 @@ internal sealed class Optionen
     private TimeSpan? _fenster;
     /// <summary>Wie lange der Rückstand nach dem Fenster höchstens abgebaut wird, bevor der Block als „nicht abgebaut“ gilt.</summary>
     public TimeSpan AbbauFrist => TimeSpan.FromSeconds(120);
-    /// <summary>S1/S2: so viele TIFF-Paare auf einmal ins Quell-Verzeichnis (ein Stoß).</summary>
+    /// <summary>S1: so viele TIFF-Paare auf einmal ins Quell-Verzeichnis (ein Stoß).</summary>
     public int StossS1 => Probe ? 100 : 600;
-    public int StossS2 => Probe ? 50 : 200;
     /// <summary>Gleichzeitige Sender je Block.</summary>
     public int[] SenderS3 { get; private set; } = [8, 64];
     public int[] SenderS5 { get; private set; } = [1, 8, 64];
@@ -120,7 +119,6 @@ internal sealed class Optionen
         ["abbau_frist_s"] = AbbauFrist.TotalSeconds,
         ["warmlauf_s"] = Warmlauf.TotalSeconds,
         ["s1_stoss_paare"] = StossS1,
-        ["s2_stoss_paare"] = StossS2,
         ["s3_sender"] = new JsonArray(SenderS3.Select(n => (JsonNode)n).ToArray()),
         ["s3"] = "je Block ein Sammelvorgang (N = 1 000 000, die Barriere wird nicht erreicht); je Teil StarteTeilauftrag + SchließeTeilauftragAb",
         ["s5_sender"] = new JsonArray(SenderS5.Select(n => (JsonNode)n).ToArray()),
@@ -133,7 +131,7 @@ internal sealed class Optionen
         ["leerlauf_s"] = Leerlauf.TotalSeconds,
         ["leerlauf"] = "erst nach dem Nachlauf (alle Poll-Cursor und Projektions-Positionen am Kopf des Logs, höchstens nachlauf_frist_s), dann das Fenster",
         ["nachlauf_frist_s"] = NachlaufFrist.TotalSeconds,
-        ["sichtbar"] = "S1/S2: Query GetImagePair je offenem Paar (komplett), alle 100 ms; S3: TeilVerbucht im Log; S4: Query HoleDatensatz; S5: AuftragBestaetigt, PostenFreigegeben der Kompensation bzw. VerteilungAbgeschlossen im Log; S6: HoleDatensatz des Clients zeigt das Paar",
+        ["sichtbar"] = "S1: Query GetImagePair je offenem Paar (komplett), alle 100 ms; S3: TeilVerbucht im Log; S4: Query HoleDatensatz; S5: AuftragBestaetigt, PostenFreigegeben der Kompensation bzw. VerteilungAbgeschlossen im Log; S6: HoleDatensatz des Clients zeigt das Paar",
         ["transaktionen"] = "COMMITs aus pg_stat_statements (track = top); Queries = übrige Statements ohne BEGIN/COMMIT/ROLLBACK/DISCARD/SET/SHOW; ohne die Lese-Rolle des Treibers",
     };
 }

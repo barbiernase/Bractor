@@ -37,8 +37,8 @@ namespace Infrastructure.SourceGeneration
             var technikUm = technik.Select(g => (Technik: g, Umsetzungen: g.TypeKind == TypeKind.Interface
                 ? klassen.Where(k => Implementiert(k, g)).ToList()
                 : klassen.Where(k => SymbolEqualityComparer.Default.Equals(k, g)).ToList())).ToList();
-            // Umsetzungen der Funktionen: Klassen einer Funktions-Schnittstelle und Funktionen als Klasse (im Host).
-            var funktionUm = klassen.Where(k => Funktionsform.Umsetzt(k).Any() || Funktionsform.IstFunktion(k)).ToList();
+            // Die Funktionen (Klassen im Host).
+            var funktionUm = klassen.Where(Funktionsform.IstFunktion).ToList();
 
             // Was die Konstruktoren brauchen — und daraus die Konfig-Records (nur die, die eine Umsetzung wirklich nimmt).
             var nutzer = technikUm.SelectMany(x => x.Umsetzungen).Concat(funktionUm).Distinct(SymbolEqualityComparer.Default).Cast<INamedTypeSymbol>()

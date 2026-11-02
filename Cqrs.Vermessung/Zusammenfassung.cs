@@ -62,7 +62,7 @@ internal static class Zusammenfassung
 
     private static string Vorgaenge(string s) => s switch
     {
-        "S1" or "S2" or "S4" => "Paare", _ when s.StartsWith("S3") => "Teile", _ when s.StartsWith("S5") || s.StartsWith("S6") => "Vorgänge", _ => "",
+        "S1" or "S4" => "Paare", _ when s.StartsWith("S3") => "Teile", _ when s.StartsWith("S5") || s.StartsWith("S6") => "Vorgänge", _ => "",
     };
 
     public static string Markdown(JsonObject e)

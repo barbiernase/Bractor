@@ -109,8 +109,6 @@ public sealed class GleichbleibendAnalyzer : DiagnosticAnalyzer
         if (Funktionsform.Hat(t, "Abstractions.IProjektion")) return (BausteinArt.Projektion, "eine Projektion");
         if (Funktionsform.Hat(t, "Abstractions.IReader")) return (BausteinArt.Reader, "ein Reader");
         if (t.TypeKind == TypeKind.Class && Funktionsform.IstFunktion(t)) return (BausteinArt.Funktion, "eine Funktion");
-        // Die Umsetzung einer Funktion draußen (Schnittstelle mit Auf), wenn sie im Host rechnet.
-        if (t.TypeKind == TypeKind.Class && Funktionsform.Umsetzt(t).Any()) return (BausteinArt.Funktion, "eine Funktion");
         return null;
     }
 

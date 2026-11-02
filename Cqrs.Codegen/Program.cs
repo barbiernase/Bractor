@@ -239,24 +239,14 @@ int Erzeuge(string wurzel)
     if (Hat(Art.Vertraege))
     {
         // ────────────────────────────────────────────────────────────────────
-        // 4. Client-Verträge → Python (die Worker programmieren gegen die generierte Basis)
+        // 4. Clients → Python (je Client eine Basis aus der Arbeit und der Kenntnis seiner Akteure; die Worker programmieren gegen sie)
         // ────────────────────────────────────────────────────────────────────
         var (vertraegePy, vertragAnzahl) = PythonVertragsEmitter.Emit(assemblies);
         WriteIfChanged(Pfad(Art.Vertraege), vertraegePy);
-        Console.WriteLine($"✅ {Pfad(Art.Vertraege)} ({vertragAnzahl} Verträge)");
+        Console.WriteLine($"✅ {Pfad(Art.Vertraege)} ({vertragAnzahl} Clients)");
 
         // ────────────────────────────────────────────────────────────────────
-        // 5. Funktions-Schnittstellen → Python (ein Worker trägt sie: <Funktion>Basis mit der Eingangs-Methode) + die Tabelle des
-        //    generischen Workers (Funktion → Basis, Modul, Klasse der Implementierung, docs/09 §9.5)
-        // ────────────────────────────────────────────────────────────────────
-        var (funktionenPy, funktionAnzahl) = PythonFunktionsEmitter.Emit(assemblies);
-        WriteIfChanged(Pfad(Art.Funktionen), funktionenPy);
-        Console.WriteLine($"✅ {Pfad(Art.Funktionen)} ({funktionAnzahl} Funktionen)");
-        WriteIfChanged(Pfad(Art.FunktionsTabelle), PythonFunktionsEmitter.Tabelle(assemblies));
-        Console.WriteLine($"✅ {Pfad(Art.FunktionsTabelle)}");
-
-        // ────────────────────────────────────────────────────────────────────
-        // 6. Nutzlast-Tabelle → Python (typ → DTO-Klasse; dieselben Kategorien und dieselbe Namensregel wie GeneratedNutzlast in C#)
+        // 5. Nutzlast-Tabelle → Python (typ → DTO-Klasse; dieselben Kategorien und dieselbe Namensregel wie GeneratedNutzlast in C#)
         // ────────────────────────────────────────────────────────────────────
         var (nutzlastPy, nutzlastAnzahl) = PythonNutzlastEmitter.Emit(commandTypes, eventTypes, queryTypes, queryResponseTypes, nachrichtTypes);
         WriteIfChanged(Pfad(Art.NutzlastTabelle), nutzlastPy);
@@ -285,8 +275,6 @@ static List<(Art Art, string Pfad)> Artefakte(string solutionDir, string wurzel)
     {
         var py = Path.Combine(Struktur.PythonWorker(wurzel), Struktur.PythonGeneriert);
         liste.Add((Art.Vertraege, Path.Combine(py, "vertraege.py")));
-        liste.Add((Art.Funktionen, Path.Combine(py, "funktionen.py")));
-        liste.Add((Art.FunktionsTabelle, Path.Combine(py, "funktions_tabelle.py")));
         liste.Add((Art.NutzlastTabelle, Path.Combine(py, "nutzlast_tabelle.py")));
     }
     return liste;
@@ -338,4 +326,4 @@ static string? FindSolutionFile()
 }
 
 /// <summary>Die Artefakt-Arten des Codegens.</summary>
-enum Art { Proto, EventJson, WireJson, Vertraege, Funktionen, FunktionsTabelle, NutzlastTabelle }
+enum Art { Proto, EventJson, WireJson, Vertraege, NutzlastTabelle }

@@ -15,7 +15,7 @@ namespace Pruefdomaene.Integration.Tests.Garantien;
 /// <summary>
 /// Funktionen eines Graphen mit Zustand und Ressourcen (docs/04 §4.4, docs/11) gegen echtes Marten, am allgemeinen Fall der Prüfdomäne (Messung): ein
 /// Messwert → Merkmalsbildung (gleichbleibend) → Merkmal (ein Command zwischen Knoten, nie im Log) gabelt an den Schätzer (liest die Messreihe, eine
-/// Projektion) und die Ausreißerprüfung (Schnittstelle, im Host oder draußen) → Command an die Messstelle. Geprüft wird am Log: Ressourcen schließen beim
+/// Projektion) und die Ausreißerprüfung → Command an die Messstelle. Geprüft wird am Log: Ressourcen schließen beim
 /// Stoppen, die Schätzung beruht auf dem, was die Projektion gelernt hat, ein Knoten mit Zustand rechnet auf genau einem Cluster-Knoten.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
@@ -114,36 +114,6 @@ public class FunktionsZustandGarantieTests
         }
         finally { await host.StopAsync(); }
         Volatile.Read(ref v.Geschlossen).Should().Be(Volatile.Read(ref v.Offen), "jede Aktivierung schließt beim Stoppen ihre Verbindung");
-    }
-
-    [Fact]
-    public async Task Ein_Knoten_draussen_nimmt_das_Merkmal_ueber_den_Weg_der_Leitung_nichts_wird_festgehalten()
-    {
-        // Derselbe Weg wie für einen Python-Worker: der Hand-Ausführer ist ein Arbeiter in der Werkstatt, ein Kind des Knotens gibt ihm das Merkmal
-        //   und sendet die Ausgaben seiner Antwort — nichts wird festgehalten.
-        using var host = Cluster("garantie-merkmal-draussen", dienste: s =>
-        {
-            s.AddSingleton(global::Infrastructure.Funktionen.GraphInstanzen.JeGraphEine(global::Infrastructure.Komposition.Anwendung.Funktionen.Graphen,
-                new Dictionary<string, KnotenKonfig> { [nameof(IAusreisserpruefung)] = new() { Laufort = FunktionsLaufort.Hand } }));
-            s.AddHandAusfuehrer();
-        });
-        await host.StartAsync();
-        try
-        {
-            var stelle = Id<Messstelle>.Neu();
-            await MissAsync(host, stelle, 3_000);
-            var hand = host.Services.GetRequiredService<HandAusfuehrer>();
-            HandEingang? offen = null;
-            await Warte(() => Task.FromResult((offen = hand.OffeneEingaenge.FirstOrDefault(e => e.Stream == stelle.Wert)) is not null), Frist,
-                "das Merkmal erreicht die Funktion draußen nicht");
-            offen!.Eingang.Should().BeOfType<Merkmal>().Which.Wert.Should().Be(3_000);
-
-            hand.Antworte(offen.Vorgang, new IAusgabe[] { new MeldeAusreisser(stelle, 3_000) }, null)
-                .Should().Be(Werkstattausgang.Angenommen);
-            await Warte(async () => (await Log(host, stelle.Wert)).Any(e => e.Payload is AusreisserGemeldet), Frist, "die Antwort von draußen wirkt nicht");
-            (await Log(host, offen.Vorgang)).Should().BeEmpty("eine Antwort von draußen wird nicht festgehalten");
-        }
-        finally { await host.StopAsync(); }
     }
 
     [Fact]

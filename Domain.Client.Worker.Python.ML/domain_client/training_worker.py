@@ -2,9 +2,10 @@
 """
 TrainingWorker — der out-of-process Trainings-Job.
 
-Der Client TrainingsWorker (verkörpert den Akteur TrainingsSystem) — er TRÄGT die Funktion ITraining (docs/konzept-akteure.md §5): der Server bietet ihm jedes angeforderte Training an; er zieht die eingefrorene Sample-Liste über den typisierten Query-Kanal
-(`self.query(HoleDatensatzSamples…)`), fährt das Training in `asyncio.to_thread` (Event-Loop bleibt frei) und **yieldet über die Zeit
-mehrfach** Ausgaben — ein Strom: jedes Stück hält der Server fest und sendet es, bevor das nächste kommt:
+Der Client TrainingsWorker (verkörpert den Akteur TrainingsSystem) — sein Akteur hört TrainingZuRechnen, Arbeit (ein Command ohne Ziel,
+docs/konzept-akteure.md §5): der Server gibt ihm jedes angeforderte Training; er zieht die eingefrorene Sample-Liste über den typisierten
+Query-Kanal (`self.query(HoleDatensatzSamples…)`), fährt das Training in `asyncio.to_thread` (Event-Loop bleibt frei) und **yieldet über die
+Zeit mehrfach** Commands — Stücke: jedes sendet der Server, bevor das nächste kommt:
 
     MeldeTrainingBegonnen                         → TrainingBegonnen
     MeldeFortschritt(epoche, loss, genauigkeit) ×N → TrainingFortschritt   (Live-Kurve)
@@ -30,7 +31,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable
 
-from cqrs_client.funktion import Herkunft
+from cqrs_client.arbeit import Herkunft
 from domain_client.generated import (
     TrainingZuRechnenDto,
     TrainingAbgebrochenDto,
@@ -56,7 +57,7 @@ class TrainingState:
 
 
 class TrainingWorker(TrainingsWorkerBasis[TrainingState]):
-    """Der Client TrainingsWorker — programmiert gegen seinen Vertrag (Domain.Akteure.ITrainingsWorker: trägt ITraining, hört TrainingAbgebrochen)."""
+    """Der Client TrainingsWorker — programmiert gegen seinen Vertrag (Domain.Akteure.TrainingsWorker: Arbeit TrainingZuRechnen, hört TrainingAbgebrochen)."""
 
     # Seiten-Größe beim Ziehen der Samples (paginiert, wie SucheImagePairs).
     SEITEN_GROESSE = 500
@@ -72,21 +73,21 @@ class TrainingWorker(TrainingsWorkerBasis[TrainingState]):
     # HAUPT-HANDLER — der langlaufende Trainings-Job
     # ═══════════════════════════════════════════════════
 
-    async def training(
-        self, event: TrainingZuRechnenDto, h: Herkunft, state: TrainingState
+    async def auf_training_zu_rechnen(
+        self, c: TrainingZuRechnenDto, h: Herkunft, state: TrainingState
     ):
-        training_id = str(h.stream)
+        training_id = str(c.lauf)
         state.laeufe += 1
         log.info(
             "Training %s angefordert: Datensatz %s v%d, %d Epochen",
-            training_id[:8], str(event.datensatz_id)[:8],
-            event.datensatz_version, event.hyperparameter.epochen,
+            training_id[:8], str(c.datensatz_id)[:8],
+            c.datensatz_version, c.hyperparameter.epochen,
         )
 
         # ── 1. Samples über den Query-Kanal ziehen (paginiert) ──
         try:
             samples = await self._hole_alle_samples(
-                event.datensatz_id, event.datensatz_version
+                c.datensatz_id, c.datensatz_version
             )
         except Exception as e:                        # noqa: BLE001 — an den Lauf zurückmelden
             log.error("Samples laden fehlgeschlagen: %s", e)
@@ -115,7 +116,7 @@ class TrainingWorker(TrainingsWorkerBasis[TrainingState]):
 
         def train() -> None:
             try:
-                self._trainiere(training_id, event.hyperparameter, samples, abbruch, emit)
+                self._trainiere(training_id, c.hyperparameter, samples, abbruch, emit)
             except Exception as e:                    # noqa: BLE001 — Fehler an den Lauf melden
                 emit(("gescheitert", str(e)))
 
