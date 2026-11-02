@@ -599,8 +599,8 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         return (MitNamespaces(neu, g.Knoten.Select(k => k.Typ)), "Knoten " + string.Join(", ", plus.Concat(minus)));
     }
 
-    /// <summary><c>[Kopf]</c> und die Namen aus <c>[Von(nameof(A), …)]</c> eines Parameters, wie sie im Quelltext stehen.</summary>
-    private static (bool Kopf, List<string> Von) KopfUndVon(ParameterSyntax p)
+    /// <summary><c>[Kopf]</c> und die Namen aus <c>[Von(nameof(A), …)]</c> eines Parameters, wie sie im Quelltext stehen (auch für die Parität).</summary>
+    internal static (bool Kopf, List<string> Von) KopfUndVon(ParameterSyntax p)
     {
         var attribute = p.AttributeLists.SelectMany(l => l.Attributes).ToList();
         static string Name(AttributeSyntax a)

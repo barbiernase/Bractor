@@ -352,6 +352,47 @@ public sealed class GestenTests : IDisposable
     }
 
     [Fact]
+    public async Task Trennen_und_verbinden_entfernt_bzw_setzt_ein_Von_am_nehmenden_Knoten()
+    {
+        var vorher = Text("Gebuehren.cs");
+        async Task MahnungVon(params string[] von)
+        {
+            var karte = Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Schadensbewertung");
+            karte["knoten"]!.AsArray().OfType<JsonObject>().Single(k => (string?)k["name"] == "Mahnung")["von"] = Liste(von);
+            (await GesteAsync(Geaendert("graphen", karte))).Patch.Select(p => p.Datei).Should().Equal("Leihwesen/Gebuehren.cs");
+        }
+
+        await MahnungVon("Schaetzung");
+        Text("Gebuehren.cs").Should().Be(vorher.Replace("[Von(nameof(Schaetzung), nameof(Gutachten))] MahnungNachSchaetzung Mahnung",
+            "[Von(nameof(Schaetzung))] MahnungNachSchaetzung Mahnung"), "nur der Parameter des nehmenden Knotens ändert sich");
+        var getrennt = Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Schadensbewertung");
+        getrennt["kanten"]!.AsArray().Select(k => $"{(string?)k!["von"]}->{(string?)k["nach"]}").Should().NotContain("Gutachten->Mahnung");
+
+        await MahnungVon("Schaetzung", "Gutachten");
+        Text("Gebuehren.cs").Should().Be(vorher, "verbinden setzt das Von wieder, wie es stand");
+    }
+
+    [Fact]
+    public async Task Kopf_setzt_bzw_entfernt_das_Attribut_am_Knoten()
+    {
+        var vorher = Text("Gebuehren.cs");
+        async Task Kopf(bool kopf)
+        {
+            var karte = Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Rueckgabepruefung");
+            karte["knoten"]!.AsArray()[0]!["kopf"] = kopf;
+            await GesteAsync(Geaendert("graphen", karte));
+        }
+
+        await Kopf(false);
+        Text("Gebuehren.cs").Should().Contain("public sealed record Rueckgabepruefung(SchadenBeiRueckgabe Pruefung) : IGraph;");
+        Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Rueckgabepruefung")["koepfe"]!.AsArray()
+            .Should().BeEmpty("ohne [Kopf] nimmt der Graph nichts von außen");
+
+        await Kopf(true);
+        Text("Gebuehren.cs").Should().Be(vorher);
+    }
+
+    [Fact]
     public async Task Neuer_Graph_kommt_in_die_Graph_Datei_seines_Namespace_und_liest_sich_zurueck()
     {
         var neu = new JsonObject

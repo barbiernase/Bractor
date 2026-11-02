@@ -5,7 +5,7 @@ using Microsoft.CodeAnalysis;
 namespace GraphExtractor;
 
 /// <summary>
-/// Ein Graph als Text (<c>dotnet run --project GraphExtractor -- --graph &lt;Typ&gt;</c>, docs/04 §4.4): Knoten (aufgefaltet, mit Funktion), Köpfe,
+/// Ein Graph als Text (<c>dotnet run --project GraphExtractor -- --graph &lt;Typ&gt;</c>, docs/04 §4.4): der Record mit [Kopf] und [Von(…)], Knoten (aufgefaltet, mit Funktion), Köpfe,
 /// Kanten mit ihrer Vielfachheit (Erzeuger: 1, 0..1 einer Wahl, 0..n eines Stroms → Port: T, T?, OneOf, IReadOnlyList), was den Graphen verlässt,
 /// die Signatur und die Befunde der Graph-Lesart — dieselbe Lesart (<see cref="Graphform"/>) wie Generator und Analyzer. Schreibt nichts.
 /// </summary>
@@ -30,6 +30,10 @@ public static class GraphText
         var g = Graphform.Lies(t);
         var b = new StringBuilder();
         b.AppendLine($"Graph {t.Name} ({t.ContainingNamespace.ToDisplayString()})");
+        // Der Record, wie er dasteht: je Parameter [Kopf] und [Von(…)] — daraus folgen Köpfe und Kanten.
+        b.AppendLine("Record:");
+        foreach (var x in g.Glieder)
+            b.AppendLine($"  {(x.Kopf ? "[Kopf] " : "")}{(x.Von.Count > 0 ? "[Von(" + string.Join(", ", x.Von) + ")] " : "")}{N(x.Typ)} {x.Name}");
         b.AppendLine("Knoten:");
         var breite = g.Knoten.Select(k => k.Name.Length).DefaultIfEmpty(0).Max();
         foreach (var k in g.Knoten)

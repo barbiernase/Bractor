@@ -172,14 +172,15 @@ public static class ParitaetsPruefung
             var istRand = (c["verkoerpert"]?.AsArray() ?? new JsonArray()).Select(x => $"{full}|A:{(string?)x}").ToHashSet(StringComparer.Ordinal);
             Vergleiche($"Client ({k.Name})", sollRand.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istRand, befunde);
         }
-        // Graphen (docs/04 §4.4): je Graph-Record eine Karte, ihre Knoten = die Parameter des Records.
+        // Graphen (docs/04 §4.4): je Graph-Record eine Karte, ihre Knoten = die Parameter des Records, mit [Kopf] und [Von(…)].
         Vergleiche("Graph", soll.Graphen.Keys.ToHashSet(StringComparer.Ordinal), BoardListe("graph"), befunde);
         foreach (var k in Arten("graph"))
         {
             var full = Voll(k);
             if (!soll.Graphen.TryGetValue(full, out var sollKnoten)) continue;
             var istKnoten = (k.Ref["knoten"]?.AsArray() ?? new JsonArray()).OfType<JsonObject>()
-                .Select(x => $"{full}|{(string?)x["name"]}:{BoardLeseseite.Norm((string?)x["typ"] ?? "")}").ToHashSet(StringComparer.Ordinal);
+                .Select(x => $"{full}|{GraphKnotenSchluessel((string?)x["name"] ?? "", (string?)x["typ"] ?? "", (bool?)x["kopf"] == true,
+                    (x["von"]?.AsArray() ?? new JsonArray()).Select(v => (string?)v ?? "").ToList())}").ToHashSet(StringComparer.Ordinal);
             Vergleiche($"Knoten ({k.Name})", sollKnoten.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istKnoten, befunde);
         }
         Vergleiche("Projektion", soll.Projektionen, BoardListe("projektion"), befunde);
@@ -301,11 +302,15 @@ public static class ParitaetsPruefung
                                 .Select(b => "A:" + b.TypeArguments[0].Name).ToHashSet(StringComparer.Ordinal);
                             continue;
                         }
-                        // Graph (Record mit IGraph): seine Knoten = die Parameter des Records (Name und Typ wie geschrieben).
+                        // Graph (Record mit IGraph): seine Knoten = die Parameter des Records (Name und Typ wie geschrieben, [Kopf], [Von(…)]).
                         if (t.ContainingType == null && Infrastructure.SourceGeneration.Graphform.IstGraph(t))
                         {
                             inv.Graphen[full] = ((decl as RecordDeclarationSyntax)?.ParameterList?.Parameters ?? default)
-                                .Select(p => $"{p.Identifier.Text}:{BoardLeseseite.Norm(p.Type?.ToString() ?? "")}").ToHashSet(StringComparer.Ordinal);
+                                .Select(p =>
+                                {
+                                    var (kopf, von) = Abgleich.KopfUndVon(p);
+                                    return GraphKnotenSchluessel(p.Identifier.Text, p.Type?.ToString() ?? "", kopf, von);
+                                }).ToHashSet(StringComparer.Ordinal);
                             continue;
                         }
                         if (decl is InterfaceDeclarationSyntax)
@@ -558,6 +563,10 @@ public static class ParitaetsPruefung
     }
 
     private static string Json<T>(T x) => JsonSerializer.Serialize(x, EditorModell.JsonOptionen);
+
+    /// <summary>Ein Knoten eines Graphen als Vergleichsschlüssel: <c>Name:Typ</c>, dazu <c>|Kopf</c> und <c>|Von(A,B)</c>.</summary>
+    private static string GraphKnotenSchluessel(string name, string typ, bool kopf, IReadOnlyList<string> von) =>
+        $"{name}:{BoardLeseseite.Norm(typ)}{(kopf ? "|Kopf" : "")}{(von.Count > 0 ? "|Von(" + string.Join(",", von) + ")" : "")}";
 
     /// <summary>Kompakter Zeilen-Diff (erste abweichende Zeilen) für lesbare Befunde.</summary>
     private static string Diff(string a, string b)
