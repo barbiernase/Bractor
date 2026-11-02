@@ -27,7 +27,6 @@ Stand 2026-11-02. Die Kapitel beschreiben den **Ist-Zustand** des Codes; für Fa
 | [12-tests-und-vermessung.md](12-tests-und-vermessung.md) | Test-Ebenen, Messverfahren, Messwerte (Tabellen schreibt `scripts/vermessung-tabelle.sh`) |
 | [13-reifegrad-schulden-bewertung.md](13-reifegrad-schulden-bewertung.md) | offene Befunde (§13.0), Erledigtes; die eine Quelle für „offen“ |
 | [konzept-akteure.md](konzept-akteure.md) | Akteure (`IDarf`, `IHoert`), Clients, Arbeit, Sitzung, Werkstatt, Verteiler |
-| [plan-commands-zwischen-bausteinen.md](plan-commands-zwischen-bausteinen.md) | Plan des Umbaus „Commands und Funktionsgraphen“; nach der Abnahme im Git-Verlauf |
 | [../vermessung/README.md](../vermessung/README.md) | Ablage der Messläufe |
 
 Gelöschte Dokumente (`01-ueberblick.md`, `02-design-prinzipien.md`, `konzept-werkbank.md` — Leitsätze W1–W12 in Kurzform in `CLAUDE.md` —, die
