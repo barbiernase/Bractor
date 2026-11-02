@@ -126,7 +126,7 @@ public sealed class GestenTests : IDisposable
 
         await GesteAsync(Geaendert("decider", karte));
 
-        Text("Gebuehren.cs").Should().Contain("public IEnumerable<OneOf<SchadenGemeldet, SchadenExistiert, MahnungEroeffnet>> Decide(MeldeSchaden c)")
+        Text("Gebuehren.cs").Should().Contain("public IEnumerable<OneOf<SchadenGemeldet, SchaetzeSchaden, SchadenExistiert, MahnungEroeffnet>> Decide(MeldeSchaden c)")
             .And.Contain("if (this.State.Gemeldet) { yield return new SchadenExistiert(c.AggregateId); yield break; }", "der Rumpf gehört dem Code");
     }
 

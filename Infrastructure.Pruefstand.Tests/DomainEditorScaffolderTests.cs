@@ -215,7 +215,8 @@ public sealed class DomainEditorScaffolderTests
             Records = [ new() { Name = "MacheX", Kind = RecordArt.Command, Namespace = "Domain.X", Felder = [ new() { Name = "AggregateId", Typ = "Guid" } ] } ],
         };
         var datei = Scaffolder.Generiere(m).Single(d => d.Inhalt.Contains("public record MacheX("));
-        datei.Pfad.Should().EndWith("/X/Commands.cs").And.StartWith("Domain.Pipeline", "ein Command, den nur Knoten einander geben, liegt bei den Abläufen");
+        datei.Pfad.Should().Be("Domain/Pipeline/X/Commands.cs", "ein Command, den nur Knoten einander geben, liegt bei den Abläufen (Verzeichnis nach der Namespace-Abbildung)");
+        datei.Inhalt.Should().Contain("namespace Domain.Pipeline.X;");
         datei.Inhalt.Should().Contain("public record MacheX(Guid AggregateId) : ICommand;");
     }
 
@@ -286,7 +287,7 @@ public sealed class DomainEditorScaffolderTests
         {
             Records = [ .. KontoModell().Records,
                 new() { Name = "Waehrung", Kind = RecordArt.ValueObject, Namespace = "Domain.Geld", Felder = [ new() { Name = "Code", Typ = "string" } ] },
-                new() { Name = "SetzeWaehrung", Kind = RecordArt.Command, Namespace = "Domain.Konto",
+                new() { Name = "SetzeWaehrung", Kind = RecordArt.Command, Namespace = "Domain.Konto", Aggregat = "Konto",
                     Felder = [ new() { Name = "AggregateId", Typ = "Guid" }, new() { Name = "W", Typ = "List<Waehrung>" } ] } ],
         };
         Inhalt(Scaffolder.Generiere(m), "Domain/Konto/Commands.cs").Should().StartWith("using Abstractions;\nusing Domain.Geld;\n");
