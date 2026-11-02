@@ -27,13 +27,14 @@ public sealed class HandAusfuehrer : BackgroundService, IArbeiter
     private readonly Werkstatt? _werkstatt;
     private readonly ConcurrentDictionary<Guid, HandEingang> _eingaenge = new();
 
-    public HandAusfuehrer(Proto.ActorSystem system, ILogger<HandAusfuehrer>? logger = null, IEnumerable<BausteinBindung>? bausteinBindungen = null,
-        Werkstatt? werkstatt = null)
+    public HandAusfuehrer(Proto.ActorSystem system, ILogger<HandAusfuehrer>? logger = null, GraphInstanzen? instanzen = null, Werkstatt? werkstatt = null)
     {
         _name = $"{system.Address}/hand";
         _logger = logger;
-        var hand = (bausteinBindungen ?? []).Where(b => b.Laufort == FunktionsLaufort.Hand).Select(b => b.Funktion).ToHashSet(StringComparer.Ordinal);
-        _bausteine = Anwendung.Funktionen.Bausteine.Where(b => hand.Contains(b.Name)).ToList();
+        // Die Funktionen, die an einem Knoten einer Instanz mit Laufort Hand rechnen (je Funktion einmal angemeldet).
+        _bausteine = FunktionsBausteinWiring.Knoten(instanzen ?? GraphInstanzen.Keine)
+            .Where(x => FunktionsBausteinWiring.BindungVon(x.Baustein, x.Konfig, x.Instanz.Ort(x.Knoten.Name)).Laufort == FunktionsLaufort.Hand)
+            .Select(x => x.Baustein).DistinctBy(b => b.Name).ToList();
         _werkstatt = werkstatt;
     }
 

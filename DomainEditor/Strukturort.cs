@@ -65,8 +65,8 @@ public static class Strukturort
     /// </summary>
     public static ISet<string> Funktionsergebnisse(EditorModell m)
     {
-        var ausDecide = m.Decider.SelectMany(d => d.Ergibt).Select(a => a.Event).ToHashSet(StringComparer.Ordinal);
-        return m.Records.Where(r => r.Kind == RecordArt.Command && string.IsNullOrEmpty(r.Aggregat) && !ausDecide.Contains(r.Name))
+        var amAggregat = m.Decider.SelectMany(d => d.Ergibt).Select(a => a.Event).Concat(m.Decider.Select(d => d.Command)).ToHashSet(StringComparer.Ordinal);
+        return m.Records.Where(r => r.Kind == RecordArt.Command && string.IsNullOrEmpty(r.Aggregat) && !amAggregat.Contains(r.Name))
             .Select(r => r.Name).ToHashSet(StringComparer.Ordinal);
     }
 

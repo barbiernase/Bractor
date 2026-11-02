@@ -239,13 +239,13 @@ public sealed class GestenTests : IDisposable
     public async Task Funktion_bekommt_eine_weitere_Ausgabe()
     {
         var karte = Karte(await BoardAsync(), "bausteinFunktionen", f => (string?)f["name"] == "SchadenBeiRueckgabe");
-        var ein = karte["eingaenge"]!.AsArray().OfType<JsonObject>().Single(e => (string?)e["eingang"] == "Zurueckgegeben");
+        var ein = karte["eingaenge"]!.AsArray().OfType<JsonObject>().Single(e => (string?)e["eingang"] == "PruefeRueckgabe");
         ein["ausgaben"]!.AsArray().Add("EroeffneMahnung");
 
         await GesteAsync(Geaendert("bausteinFunktionen", karte));
 
-        Text("Gebuehren.cs").Should().Contain("OneOf<MeldeSchaden, EroeffneMahnung>? Auf(Zurueckgegeben e, Herkunft h)",
-            "die Ausgaben stehen in der Signatur (CQRS050); der Ausdrucks-Rumpf bleibt");
+        Text("Gebuehren.cs").Should().Contain("IEnumerable<OneOf<MeldeSchaden, EroeffneMahnung>> Auf(PruefeRueckgabe p, Herkunft h)",
+            "die Ausgaben stehen in der Signatur (CQRS050); der Strom bleibt ein Strom");
     }
 
     [Fact]

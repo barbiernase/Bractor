@@ -4,10 +4,10 @@ using Leihwesen.Ausleihe;
 // SONDE — ZWEI Aggregate im SELBEN Namespace, Decider in eigener Datei (Mahnvorgang.Decider.cs.txt), dazu der Ablauf zwischen ihnen aus
 //         FUNKTIONEN (docs/10 §10.3; früher eine Saga mit expliziter Interface-Implementierung):
 //         · eine GLEICHBLEIBENDE Funktion im Host (Klasse, keine Technik, keine Lese-Fähigkeit), die aus der Herkunft eine neue Id ableitet (R13)
-//           und auf einem Teil der Fälle nichts ausgibt (T?);
-//         · eine Funktion als SCHNITTSTELLE mit einer Umsetzung im Host, die eine GERUFENE FUNKTION (IFunktion ohne Auf) im Konstruktor nimmt — ihre Ausgabe
-//           ist ein Event (persistent, ohne Aggregat) oder ein Hinweis (flüchtig); der Laufort steht in der Umgebung;
-//         · eine zweite gleichbleibende Funktion, die das Event der ersten hört und den Command an das andere Aggregat gibt.
+//           und auf einem Teil der Fälle nichts ausgibt (ein leerer Strom) — Kopf eines Graphen, sein Eingang ein Command ohne Ziel aus dem Decide;
+//         · eine Funktion als SCHNITTSTELLE mit einer Umsetzung im Host, die TECHNIK (ohne Marker) im Konstruktor nimmt — ihre Ausgabe ist ein Command
+//           ohne Ziel (an den nächsten Knoten) oder ein Hinweis (flüchtig); der Laufort steht in der Instanz;
+//         · eine zweite gleichbleibende Funktion, die den Command der ersten nimmt (eine Kante aus den Typen) und den Command an das andere Aggregat gibt.
 
 namespace Leihwesen.Gebuehren;
 
@@ -22,21 +22,26 @@ public record MahnungExistiert(Id<Mahnvorgang> Id) : ITransientEvent;
 // Gleichbleibend: nur ein beschädigt zurückgegebenes Medium ist ein Schadensfall — je Rückgabe genau einer (Id aus der Herkunft).
 public sealed class SchadenBeiRueckgabe : IFunktion
 {
-    public MeldeSchaden? Auf(Zurueckgegeben e, Herkunft h) =>
-        e.Zustand == Zustand.Beschaedigt ? new MeldeSchaden(h.NeueId<Schadensfall>(), e.LeserId) : null;
+    public IEnumerable<MeldeSchaden> Auf(PruefeRueckgabe p, Herkunft h)
+    {
+        if (p.Zustand == Zustand.Beschaedigt) yield return new MeldeSchaden(h.NeueId<Schadensfall>(), p.LeserId);
+    }
 }
 
-// Die Schätzung: ihre Ergebnisse sind ein Event der Funktion (kein Aggregat, kein Apply) oder ein Hinweis.
-public record SchadenGeschaetzt(Guid LeserId, decimal Betrag) : IEvent;
+// Ein Command ohne Ziel aus dem Decide des Schadensfalls: der Schaden ist zu schätzen.
+public record SchaetzeSchaden(Guid LeserId) : ICommand;
+
+// Die Schätzung: ihr Ergebnis ist ein Command an den nächsten Knoten (kein Event — eine Funktion schreibt nie ins Log) oder ein Hinweis.
+public record SchadenGeschaetzt(Guid LeserId, decimal Betrag) : ICommand;
 public record NichtSchaetzbar(string Grund) : ITransientEvent;
 
 public interface ISchadensSchaetzung : IFunktion
 {
-    Task<OneOf<SchadenGeschaetzt, NichtSchaetzbar>> Auf(SchadenGemeldet e, Herkunft h);
+    Task<OneOf<SchadenGeschaetzt, NichtSchaetzbar>> Auf(SchaetzeSchaden s, Herkunft h);
 }
 
 // Technik hinter der Funktion — eine Schnittstelle ohne Marker (der Schätzer nimmt sie im Konstruktor), eine Umsetzung mit Konfig-Record
-// (Werte aus Konfig:<Record>).
+// (Werte am Knoten der Instanz).
 public interface IWertTabelle
 {
     /// <summary>Der Restwert nach linearer Abschreibung.</summary>
@@ -58,10 +63,10 @@ public sealed class LineareWertTabelle(WertTabellenKonfig konfig) : IWertTabelle
 
 public sealed class Schadensschaetzer(IWertTabelle tabelle) : ISchadensSchaetzung
 {
-    public async Task<OneOf<SchadenGeschaetzt, NichtSchaetzbar>> Auf(SchadenGemeldet e, Herkunft h)
+    public async Task<OneOf<SchadenGeschaetzt, NichtSchaetzbar>> Auf(SchaetzeSchaden s, Herkunft h)
     {
-        if (!await tabelle.IstSchaetzbarAsync(e.LeserId)) return new NichtSchaetzbar("unbekannter Leser");
-        return new SchadenGeschaetzt(e.LeserId, tabelle.Restwert(25m, 2));
+        if (!await tabelle.IstSchaetzbarAsync(s.LeserId)) return new NichtSchaetzbar("unbekannter Leser");
+        return new SchadenGeschaetzt(s.LeserId, tabelle.Restwert(25m, 2));
     }
 }
 
@@ -71,16 +76,21 @@ public sealed class MahnungNachSchaetzung : IFunktion
     public EroeffneMahnung Auf(SchadenGeschaetzt g, Herkunft h) => new(h.NeueId<Mahnvorgang>(), g.Betrag);
 }
 
+// Die Graphen: Knoten als Parameter, Kanten aus den Typen (SchadenGeschaetzt: Schätzung → Mahnung).
+public sealed record Rueckgabepruefung(SchadenBeiRueckgabe Pruefung) : IGraph;
+public sealed record Schadensbewertung(ISchadensSchaetzung Schaetzung, MahnungNachSchaetzung Mahnung) : IGraph;
+
 public partial class Schadensfall : IState
 {
     public bool Gemeldet { get; set; }
 
     public partial class Decider : IDecider<Schadensfall>
     {
-        public IEnumerable<OneOf<SchadenGemeldet, SchadenExistiert>> Decide(MeldeSchaden c)
+        public IEnumerable<OneOf<SchadenGemeldet, SchaetzeSchaden, SchadenExistiert>> Decide(MeldeSchaden c)
         {
             if (this.State.Gemeldet) { yield return new SchadenExistiert(c.AggregateId); yield break; }
             yield return new SchadenGemeldet(c.LeserId);
+            yield return new SchaetzeSchaden(c.LeserId);
         }
     }
 

@@ -35,6 +35,9 @@ namespace Leihwesen.Ausleihe
 
     public record RueckgabeAngemahnt(Guid LeserId) : IEvent;
 
+    /// <summary>Ein Command ohne Ziel aus dem Decide: die Rückgabe ist zu prüfen (der Graph der Rückgabeprüfung nimmt ihn am Kopf).</summary>
+    public record PruefeRueckgabe(Guid LeserId, Zustand Zustand) : ICommand;
+
     public record BereitsAusgeliehen(Id<Leihvorgang> AusleiheId) : ITransientEvent;
     public record NichtAusgeliehen(Id<Leihvorgang> AusleiheId) : ITransientEvent;
 
@@ -68,7 +71,7 @@ namespace Leihwesen.Ausleihe
                 yield return new RueckgabeAngemahnt(this.State.LeserId);
             }
 
-            public IEnumerable<OneOf<Zurueckgegeben, NichtAusgeliehen>> Decide(GibZurueck befehl)
+            public IEnumerable<OneOf<Zurueckgegeben, PruefeRueckgabe, NichtAusgeliehen>> Decide(GibZurueck befehl)
             {
                 if (!this.State.Offen)
                 {
@@ -76,6 +79,7 @@ namespace Leihwesen.Ausleihe
                     yield break;
                 }
                 yield return new Zurueckgegeben { LeserId = this.State.LeserId, Zustand = befehl.Zustand };
+                yield return new PruefeRueckgabe(this.State.LeserId, befehl.Zustand);
             }
 
             public OneOf<Leihstand, NichtVerliehen> Frage(HoleLeihstand frage) =>

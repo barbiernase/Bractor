@@ -25,9 +25,9 @@ using System; using System.Collections.Generic; using System.Threading; using Sy
 namespace Probe {
 public partial class Konto : IState { public int Version { get; set; } public Guid Id { get; set; } }
 public sealed record Mahne(Id<Konto> AggregateId, int Stufe) : ICommand<Konto>;
-public sealed record Gemahnt(int Stufe);
-public sealed record Ueberfaellig(int Tage);
-public sealed record Bezahlt(decimal Betrag);
+public sealed record Gemahnt(int Stufe) : ICommand;
+public sealed record Ueberfaellig(int Tage) : ICommand;
+public sealed record Bezahlt(decimal Betrag) : ICommand;
 public sealed record Gebucht(int Stufe) : IEvent;
 public sealed record Unnoetig() : ITransientEvent;
 public sealed record Messwert(double Wert) : ITransientEvent;
@@ -48,7 +48,7 @@ public interface IPost { Task SendeAsync(string an); }
             .ToImmutableArray();
         var comp = CSharpCompilation.Create("BausteinProbe",
             new[] { CSharpSyntaxTree.ParseText(Vorspann), CSharpSyntaxTree.ParseText("using System; using System.Collections.Generic; using System.Threading; using System.Threading.Tasks; using Abstractions;\n" + code) },
-            refs, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+            refs, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
         comp.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).Should().BeEmpty("die Probe selbst muss kompilieren");
 
         CSharpGeneratorDriver.Create(generator).RunGeneratorsAndUpdateCompilation(comp, out var neu, out var diags);
@@ -77,7 +77,6 @@ public interface IPost { Task SendeAsync(string an); }
             + "new Type[] { typeof(global::Probe.Mahne), typeof(global::Probe.Unnoetig) }, new Type[] {  })");
         quelle.Should().Contain("case global::Probe.Ueberfaellig e: return Ausgaben.Einzeln(f.Auf(e, h), y => (object?)y.Value);");
         quelle.Should().Contain("new FunktionsUmsetzung(\"Mahnwesen\", typeof(global::Probe.Mahnwesen), (sp, z) => new global::Probe.Mahnwesen())");
-        quelle.Should().Contain("[typeof(global::Probe.Ueberfaellig)] = new[] { \"Mahnwesen\" }", "die Verkettung: wer die Folge hört");
     }
 
     [Fact]
@@ -85,12 +84,10 @@ public interface IPost { Task SendeAsync(string an); }
     {
         var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
             public sealed class Konkret : IFunktion { public Mahne Auf(Ueberfaellig e) => null!; }
-            public sealed class Nichts : IFunktion { public Mahne? Auf(Ueberfaellig e) => null; }
-            public sealed class Fall : IFunktion { public OneOf<Mahne, Gemahnt>? Auf(Ueberfaellig e) => null; }
+            public sealed class Fall : IFunktion { public OneOf<Mahne, Gemahnt> Auf(Ueberfaellig e) => default!; }
             public sealed class Spaeter : IFunktion { public Task<OneOf<Mahne, Gemahnt>> Auf(Ueberfaellig e) => null!; }
-            public sealed class Wert : IFunktion { public ValueTask<Mahne?> Auf(Ueberfaellig e) => default; }
+            public sealed class SpaeterEiner : IFunktion { public Task<Mahne> Auf(Ueberfaellig e) => null!; }
             public sealed class Liste : IFunktion { public IEnumerable<OneOf<Mahne, Gemahnt>> Auf(Ueberfaellig e) { yield break; } }
-            public sealed class SpaeteListe : IFunktion { public Task<IEnumerable<Mahne>> Auf(Ueberfaellig e) => null!; }
             public sealed class Strom : IFunktion
             {
                 public async IAsyncEnumerable<OneOf<Mahne, Unnoetig>> Auf(Ueberfaellig e, Herkunft h, CancellationToken ct) { await Task.CompletedTask; yield break; }
@@ -100,11 +97,11 @@ public interface IPost { Task SendeAsync(string an); }
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty("jede Form der Signatur hat ihren Adapter im Generat");
         quelle.Should().Contain("return Ausgaben.Einzeln(f.Auf(e), y => (object?)y);");
-        quelle.Should().Contain("return Ausgaben.Einzeln(f.Auf(e), y => (object?)y?.Value);");
+        quelle.Should().Contain("return Ausgaben.Einzeln(f.Auf(e), y => (object?)y.Value);");
         quelle.Should().Contain("return Ausgaben.EinzelnAsync(f.Auf(e), y => (object?)y.Value);");
+        quelle.Should().Contain("return Ausgaben.EinzelnAsync(f.Auf(e), y => (object?)y);");
         quelle.Should().Contain("return Ausgaben.Strom(f.Auf(e), y => (object?)y.Value, ct);");
         quelle.Should().Contain("return Ausgaben.StromAsync(f.Auf(e, h, ct), y => (object?)y.Value, ct);");
-        quelle.Should().Contain("return Ausgaben.StromAsync(f.Auf(e), y => (object?)y, ct);", "ein Strom im Task ist ein Strom");
         quelle.Should().Contain("Strom: true", "ein Strom: jede Ausgabe geht hinaus, bevor die nächste kommt");
     }
 
@@ -126,8 +123,8 @@ public interface IPost { Task SendeAsync(string an); }
     public void Technik_und_Lese_Faehigkeit_stehen_im_Bedarf_bzw_im_Aufruf()
     {
         var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
-            public sealed class MitPost(IPost post) : IFunktion { public Mahne? Auf(Ueberfaellig e) => null; }
-            public sealed class MitLesen : IFunktion { public Mahne? Auf(Ueberfaellig e, ISucheKonto suche) => null; } }");
+            public sealed class MitPost(IPost post) : IFunktion { public Mahne Auf(Ueberfaellig e) => null!; }
+            public sealed class MitLesen : IFunktion { public Mahne Auf(Ueberfaellig e, ISucheKonto suche) => null!; } }");
 
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty();
@@ -138,15 +135,14 @@ public interface IPost { Task SendeAsync(string an); }
     }
 
     [Fact]
-    public void Eine_Funktion_mit_Hinweis_als_Eingang_steht_vor_dem_Aggregat_in_der_Verkettung()
+    public void Eine_Funktion_mit_Hinweis_als_Eingang_steht_vor_dem_Aggregat()
     {
         var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
-            public sealed class Sensorik : IFunktion { public Mahne? Auf(Messwert m) => null; } }");
+            public sealed class Sensorik : IFunktion { public IEnumerable<Mahne> Auf(Messwert m) => []; } }");
 
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty();
         quelle.Should().Contain("new FunktionsEingang(typeof(global::Probe.Messwert), Hinweis: true,");
-        quelle.Should().Contain("[typeof(global::Probe.Messwert)] = new[] { \"Sensorik\" }");
         quelle.Should().Contain("Rechne0", "Wurzel, Parent und Kinder bringen ihr den Hinweis");
     }
 
@@ -166,9 +162,8 @@ public interface IPost { Task SendeAsync(string an); }
             public sealed class Mittelwerte { public Dictionary<Guid, double> Je { get; set; } = new(); public int Anzahl { get; set; } }
             public sealed class Schaetzer(IZustand<Mittelwerte> modell, IPost post) : IFunktion
             {
-                public void Auf(Bezahlt e, Herkunft h) { modell.Wert.Anzahl++; }                    // lernt aus einer Folge, ohne Ausgabe
-                public Task Auf(Ueberfaellig e) => Task.CompletedTask;                                 // ebenso, asynchron
-                public Mahne? Auf(Messwert m) => modell.Wert.Anzahl > 0 ? null : null;                 // Hinweis rein, Command raus
+                public IEnumerable<Mahne> Auf(Bezahlt e, Herkunft h) { modell.Wert.Anzahl++; yield break; }   // lernt aus einem Command, ohne Ausgabe
+                public IEnumerable<Mahne> Auf(Messwert m) { if (modell.Wert.Anzahl < 0) yield return null!; }    // Hinweis rein, Command raus
             } }" + Kontext);
 
         ids.Should().BeEmpty();
@@ -178,28 +173,27 @@ public interface IPost { Task SendeAsync(string an); }
             "der Zustand kommt aus der Aktivierung, nie aus dem Container");
         quelle.Should().Contain("Zustand: new global::Infrastructure.Funktionen.FunktionsZustandsform(typeof(global::Probe.Mittelwerte), () => new global::Infrastructure.Funktionen.Zustand<global::Probe.Mittelwerte>()");
         quelle.Should().Contain("global::Infrastructure.Serialization.EventJsonSerializerContext.Default.Mittelwerte", "ohne Reflection: der generierte Kontext");
-        quelle.Should().Contain("case global::Probe.Bezahlt e: f.Auf(e, h); return Ausgaben.Leer;");
-        quelle.Should().Contain("case global::Probe.Ueberfaellig e: return Ausgaben.KeineAsync(f.Auf(e));");
+        quelle.Should().Contain("case global::Probe.Bezahlt e: return Ausgaben.Strom(f.Auf(e, h), y => (object?)y, ct);", "ein leerer Strom heißt nichts");
         quelle.Should().Contain("new Type[] { typeof(global::Probe.IPost) }", "der Zustand ist keine Technik im Bedarf");
     }
 
     [Fact]
     public void Eine_Funktion_die_nur_Events_hoert_hat_keinen_Einstieg_und_eine_gibt_nie_ein_Event_aus()
     {
-        Bausteine(@"namespace Probe { public sealed class Lauscher : IFunktion { public Mahne? Auf(Gebucht e) => null; } }")
+        Bausteine(@"namespace Probe { public sealed class Lauscher : IFunktion { public Mahne Auf(Gebucht e) => null!; } }")
             .Ids.Should().Contain("CQRS100", "eine Funktion liest nie das Log");
-        Bausteine(@"namespace Probe { public sealed class Schreiber : IFunktion { public Gebucht? Auf(Ueberfaellig e) => null; } }")
+        Bausteine(@"namespace Probe { public sealed class Schreiber : IFunktion { public Gebucht Auf(Ueberfaellig e) => null!; } }")
             .Ids.Should().Contain("CQRS100", "eine Funktion schreibt nie ins Log");
         var (_, ids, fehler) = Bausteine(@"namespace Probe {
-            public sealed class Kette : IFunktion { public Mahne Auf(Ueberfaellig e) => null!; public Gemahnt? Auf(Gebucht e) => null; } }");
-        ids.Should().BeEmpty("ein Event neben einer Folge ist die Antwort auf einen eigenen Command");
+            public sealed class Kette : IFunktion { public Mahne Auf(Ueberfaellig e) => null!; public IEnumerable<Gemahnt> Auf(Gebucht e) => []; } }");
+        ids.Should().BeEmpty("ein Event neben einem Command ist die Antwort auf einen eigenen Command");
         fehler.Should().BeEmpty();
     }
 
     [Theory]
-    [InlineData("public sealed class Z(IZustand<Zahl> a, IZustand<Zahl> b) : IFunktion { public Mahne? Auf(Ueberfaellig e) => null; }", "zwei Zustände")]
-    [InlineData("public sealed class Z(IZustand<List<int>> a) : IFunktion { public Mahne? Auf(Ueberfaellig e) => null; }", "generischer Zustand")]
-    [InlineData("public sealed class Z(IZustand<Zahl> a) : IFunktion { public Gebucht? Auf(Messwert m) => null; }", "Event aus einem Hinweis")]
+    [InlineData("public sealed class Z(IZustand<Zahl> a, IZustand<Zahl> b) : IFunktion { public Mahne Auf(Ueberfaellig e) => null!; }", "zwei Zustände")]
+    [InlineData("public sealed class Z(IZustand<List<int>> a) : IFunktion { public Mahne Auf(Ueberfaellig e) => null!; }", "generischer Zustand")]
+    [InlineData("public sealed class Z(IZustand<Zahl> a) : IFunktion { public Gebucht Auf(Messwert m) => null!; }", "Event aus einem Hinweis")]
     public void Zustand_und_Hinweis_ausser_Form_sind_CQRS100(string klasse, string worum)
     {
         var (quelle, ids, _) = Bausteine("namespace Probe { public sealed class Zahl { public int N { get; set; } } " + klasse + " }");
@@ -208,12 +202,16 @@ public interface IPost { Task SendeAsync(string an); }
     }
 
     [Theory]
-    [InlineData("public Mahne? Auf(Mahne c) => null;", "Eingang")]                                          // Command als Eingang
-    [InlineData("public IEvent? Auf(Ueberfaellig e) => null;", "Ausgabe")]                                   // Schnittstelle als Ausgabe
-    [InlineData("public Mahne? Auf(Ueberfaellig e, ISchreibeKonto s) => null;", "Parameter")]                // Schreib-Fähigkeit
-    [InlineData("public Datei? Auf(Ueberfaellig e) => null;", "Quell-Nachricht")]                            // Quell-Nachricht als Ausgabe
-    [InlineData("public void Auf(Ueberfaellig e) { }", "Ausgabe")]                                          // nichts (ohne Zustand)
-    [InlineData("public static Mahne? Auf(Ueberfaellig e) => null;", "statisch")]                            // statisch
+    [InlineData("public Mahne Auf(Mahne c) => null!;", "Eingang")]                                           // Command an ein Aggregat als Eingang
+    [InlineData("public IEvent Auf(Ueberfaellig e) => null!;", "Ausgabe")]                                    // Schnittstelle als Ausgabe
+    [InlineData("public Mahne Auf(Ueberfaellig e, ISchreibeKonto s) => null!;", "Parameter")]                 // Schreib-Fähigkeit
+    [InlineData("public Datei Auf(Ueberfaellig e) => null!;", "Quell-Nachricht")]                             // Quell-Nachricht als Ausgabe
+    [InlineData("public void Auf(Ueberfaellig e) { }", "Ausgabe")]                                          // nichts
+    [InlineData("public Task Auf(Ueberfaellig e) => Task.CompletedTask;", "Ausgabe")]                       // nichts, asynchron
+    [InlineData("public Mahne? Auf(Ueberfaellig e) => null;", "nullable")]                                   // T? — „nichts“ ist ein leerer Strom
+    [InlineData("public ValueTask<Mahne> Auf(Ueberfaellig e) => default;", "ValueTask")]                     // ValueTask
+    [InlineData("public Task<IEnumerable<Mahne>> Auf(Ueberfaellig e) => null!;", "Strom im Task")]           // ein Strom im Task ist ein IAsyncEnumerable
+    [InlineData("public static Mahne Auf(Ueberfaellig e) => null!;", "statisch")]                             // statisch
     public void Eine_Funktion_ausser_Form_ist_CQRS100(string methode, string worum)
     {
         var (quelle, ids, _) = Bausteine("namespace Probe { public sealed class Falsch : IFunktion { " + methode + " } }");
@@ -224,7 +222,7 @@ public interface IPost { Task SendeAsync(string an); }
     [Fact]
     public void Fremde_Methoden_oder_kein_Auf_an_einer_Schnittstelle_sind_CQRS100()
     {
-        Bausteine(@"namespace Probe { public interface IFremd : IFunktion { Mahne? Auf(Ueberfaellig e); int Zaehle(); } }")
+        Bausteine(@"namespace Probe { public interface IFremd : IFunktion { Mahne Auf(Ueberfaellig e); int Zaehle(); } }")
             .Ids.Should().Contain("CQRS100");
         Bausteine(@"namespace Probe { public interface ILeer : IFunktion { } }")
             .Ids.Should().Contain("CQRS100", "eine Funktion hört mindestens einen Eingang");
@@ -238,8 +236,8 @@ public interface IPost { Task SendeAsync(string an); }
         var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
             public sealed class Doppelt : IFunktion
             {
-                public Mahne? Auf(Ueberfaellig e) => null;
-                public Gemahnt? Auf(Ueberfaellig e, Herkunft h) => null;
+                public Mahne Auf(Ueberfaellig e) => null!;
+                public Gemahnt Auf(Ueberfaellig e, Herkunft h) => null!;
             } }");
         ids.Should().Contain("CQRS101");
         fehler.Should().BeEmpty("das Generat bleibt baubar — die Funktion fehlt");

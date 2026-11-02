@@ -56,7 +56,7 @@ public class SichtTests
         // Eine Funktion ist eine Karte zwischen Eingang und Ausgaben (nur aus der Signatur ihres Auf).
         var fb = "fb:" + Id(board, "bausteinFunktionen", "name", "SchadenBeiRueckgabe");
         s["karten"]!.AsObject().ContainsKey(fb).Should().BeTrue();
-        kanten.Should().Contain(["rec:Zurueckgegeben→" + fb, fb + "→rec:MeldeSchaden"]);
+        kanten.Should().Contain(["rec:PruefeRueckgabe→" + fb, fb + "→rec:MeldeSchaden"]);
     }
 
     [Fact]

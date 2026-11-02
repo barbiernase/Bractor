@@ -19,6 +19,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="..\umgebungen\*.json" Link="umgebungen\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="..\umgebungen\**\*.json" Link="umgebungen\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

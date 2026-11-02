@@ -68,10 +68,10 @@ public class TechnikBindungTests
         var q = Generiert(Bild);
         q.Should().Contain("[\"ISkalierer\"] = typeof(global::Probe.ISkalierer)");
         q.Should().Contain("new TechnikUmsetzung(typeof(global::Probe.ISkalierer), \"Skalierer\", typeof(global::Probe.Skalierer), "
-                           + "s => s.AddScoped<global::Probe.ISkalierer>(sp => new global::Probe.Skalierer(");
+                           + "sp => new global::Probe.Skalierer(");
         q.Should().Contain("GetRequiredService<global::Microsoft.Extensions.Logging.ILogger<global::Probe.Skalierer>>(sp)", "die Fabrik ruft den Konstruktor direkt");
         q.Should().Contain("[typeof(global::Probe.Mach)] = new Type[] { typeof(global::Probe.ISkalierer), typeof(global::Probe.BildKonfig) }");
-        q.Should().MatchRegex(@"new KonfigRecord\(typeof\(global::Probe\.BildKonfig\), ""BildKonfig"", Konfig\d+\)");
+        q.Should().MatchRegex(@"new KonfigRecord\(typeof\(global::Probe\.BildKonfig\), ""BildKonfig"", new\[\] \{ ""Ausgabe"", ""Hoehe"", ""Modus"", ""Frist"", ""Laut"", ""Endungen"" \}, Konfig\d+\)");
         q.Should().Contain("KonfigLeser.NurBekannte(s, \"Ausgabe\", \"Hoehe\", \"Modus\", \"Frist\", \"Laut\", \"Endungen\")");
         q.Should().Contain("KonfigLeser.Text(s, \"Ausgabe\"), KonfigLeser.Zahl(s, \"Hoehe\"), KonfigLeser.Wahl<global::Probe.Modus>(s, \"Modus\"), KonfigLeser.Dauer(s, \"Frist\")");
         q.Should().Contain("(KonfigLeser.Hat(s, \"Laut\") ? KonfigLeser.JaNein(s, \"Laut\") : false)", "ein Default gilt, wenn das Feld fehlt");
@@ -103,7 +103,7 @@ public class TechnikBindungTests
             + " namespace Probe { public sealed class Zaehler { public int Plus(int x) => x + 1; } }");
         q.Should().Contain("[\"Zaehler\"] = typeof(global::Probe.Zaehler)");
         q.Should().Contain("new TechnikUmsetzung(typeof(global::Probe.Zaehler), \"Zaehler\", typeof(global::Probe.Zaehler), "
-                           + "s => s.AddScoped<global::Probe.Zaehler>(sp => new global::Probe.Zaehler()))");
+                           + "sp => new global::Probe.Zaehler()),");
     }
 
     [Fact]
@@ -114,7 +114,7 @@ public class TechnikBindungTests
             public interface IZaehlwerk { void Zaehle(); }
             public sealed class Zaehlwerk(IZustand<Zaehlstand> stand) : IZaehlwerk { public void Zaehle() => stand.Wert.N++; } }");
         q.Should().MatchRegex(@"private static readonly FunktionsZustandsform Zustand0 = new global::Infrastructure\.Funktionen\.FunktionsZustandsform\(typeof\(global::Probe\.Zaehlstand\)");
-        q.Should().Contain("new global::Probe.Zaehlwerk((global::Abstractions.IZustand<global::Probe.Zaehlstand>)AktivierungsZustaende.Von(sp).Hole(\"IZaehlwerk\", Zustand0)!)),"
+        q.Should().Contain("new global::Probe.Zaehlwerk((global::Abstractions.IZustand<global::Probe.Zaehlstand>)AktivierungsZustaende.Von(sp).Hole(\"IZaehlwerk\", Zustand0)!),"
                            + " Zustand0),", "der Zustand gehört der Aktivierung des Halters, nie dem Container");
         q.IndexOf("Zustand0 =", StringComparison.Ordinal).Should().BeLessThan(q.IndexOf("Umsetzungen =", StringComparison.Ordinal),
             "die Form steht vor der Tabelle (statische Felder in Reihenfolge)");

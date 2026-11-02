@@ -45,7 +45,7 @@ done
 psql_c() { docker exec cqrs-postgres psql -U postgres -tAqc "$1"; }
 sync_zuruecksetzen() { psql_c "ALTER SYSTEM RESET synchronous_commit" >/dev/null; psql_c "SELECT pg_reload_conf()" >/dev/null; }
 umgebung_setzen() {   # $1 = Python-Ausdruck über u (das geladene JSON) — für beide Mess-Umgebungen
-  for f in umgebungen/umgebung.vermessung.json umgebungen/umgebung.vermessung-pruefdomaene.json; do
+  for f in umgebungen/vermessung/umgebung.json umgebungen/vermessung-pruefdomaene/umgebung.json; do
     python3 - "$f" "$1" <<'PY'
 import json, sys
 p, ausdruck = sys.argv[1], sys.argv[2]

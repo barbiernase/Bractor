@@ -56,9 +56,9 @@ public class WiederholungAnalyzerTests
         (await Befunde("""
             public sealed class Doppelt : IFunktion
             {
-                public Mahne? Auf(Ueberfaellig e) => null;
-                public Mahne? Auf(Ueberfaellig e, Herkunft h) => null;
-                public Mahne? Auf(Bezahlt e) => null;
+                public Mahne Auf(Ueberfaellig e) => default!;
+                public Mahne Auf(Ueberfaellig e, Herkunft h) => default!;
+                public Mahne Auf(Bezahlt e) => default!;
             }
             """)).Should().ContainSingle(b => b.Id == EinEingangAnalyzer.Id).Which.Text.Should().Contain("Ueberfaellig");
         (await Befunde("""

@@ -127,10 +127,10 @@ public class KreislaufAbnahmeTests
         tokens["sim-arbeitsplatz"].Should().Equal("Inspekteur", "KIOperator", "Modellfreigeber", "Produktpruefer");
 
         // ── 5. Umgebungs-Werte sind eine Geste: Verlauf und ↶ ──
-        var umgDatei = Path.Combine(w.Kopie, "umgebungen", $"umgebung.{Werkbanklauf.Umgebung}.json");
+        var umgDatei = Path.Combine(w.Kopie, "umgebungen", Werkbanklauf.Umgebung, "umgebung.json");
         var umgVorher = await File.ReadAllBytesAsync(umgDatei);
         var umg = await w.HoleAsync($"/api/werkbank/umgebung/{Werkbanklauf.Umgebung}");
-        umg["Funktionen"]!["IRangeSuche"]!["Slots"] = 3;
+        umg["Umgebung"]!["Python"] = "python3";
         var (_, umgGeste) = await w.SendeAsync($"/api/werkbank/umgebung/{Werkbanklauf.Umgebung}", umg);
         ((bool?)umgGeste["ok"]).Should().BeTrue(umgGeste.ToJsonString());
         (await File.ReadAllTextAsync(umgDatei)).Should().Contain("\"Slots\": 3");

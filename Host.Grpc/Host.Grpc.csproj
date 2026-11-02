@@ -17,8 +17,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Die Umgebungen reisen mit dem Host (umgebungen/umgebung.<name>.json neben dem Programm). -->
-    <Content Include="..\umgebungen\*.json" Link="umgebungen\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- Die Umgebungen reisen mit dem Host (umgebungen/<name>/umgebung.json und graphen/<instanz>.json neben dem Programm). -->
+    <Content Include="..\umgebungen\**\*.json" Link="umgebungen\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Spur (docs/04 §4.9): der Build-Stand. Die Werkbank baut mit -p:CqrsStand=<hash> (dieselbe Hash-Funktion wie ihr

@@ -98,13 +98,20 @@ public sealed class Werkbanklauf : IAsyncDisposable
     private async Task SchreibeUmgebungAsync()
     {
         var verz = Path.Combine(Kopie, "umgebungen");
-        var text = (await File.ReadAllTextAsync(Path.Combine(verz, "umgebung.sim-main.json"))).Replace("${env:HOME}/cqrs-sim/${branch}", Daten);
-        var u = JsonNode.Parse(text)!.AsObject();
+        string Lies(string datei) => File.ReadAllText(datei).Replace("${env:HOME}/cqrs-sim/${branch}", Daten);
+        var u = JsonNode.Parse(Lies(Path.Combine(verz, "sim-main", "umgebung.json")))!.AsObject();
         u["Umgebung"]!["Name"] = Umgebung;
         u["Transport"]!["GrpcPort"] = GrpcPort;
         u["Transport"]!["EinblickPort"] = EinblickPort;
-        u["Funktionen"]!["IBildVerkleinerung"]!["Laufort"] = "Extern";
-        await File.WriteAllTextAsync(Path.Combine(verz, $"umgebung.{Umgebung}.json"), u.ToJsonString(new() { WriteIndented = true }));
+        var ziel = Path.Combine(verz, Umgebung);
+        Directory.CreateDirectory(Path.Combine(ziel, "graphen"));
+        await File.WriteAllTextAsync(Path.Combine(ziel, "umgebung.json"), u.ToJsonString(new() { WriteIndented = true }));
+        foreach (var datei in Directory.GetFiles(Path.Combine(verz, "sim-main", "graphen"), "*.json"))
+        {
+            var instanz = JsonNode.Parse(Lies(datei))!.AsObject();
+            if (instanz["Verkleinern"] is JsonObject verkleinern) verkleinern["Laufort"] = "Extern";
+            await File.WriteAllTextAsync(Path.Combine(ziel, "graphen", Path.GetFileName(datei)), instanz.ToJsonString(new() { WriteIndented = true }));
+        }
 
         _verbindung = (string)u["EventStore"]!["Verbindung"]!;
     }

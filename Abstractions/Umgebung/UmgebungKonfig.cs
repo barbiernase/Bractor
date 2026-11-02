@@ -4,7 +4,8 @@ using System.Collections.Generic;
 namespace Abstractions;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// UMGEBUNGEN (docs/06 §6.5): je Umgebung EINE Datei `umgebungen/umgebung.<name>.json`. Struktur ist Code (was
+// UMGEBUNGEN (docs/06 §6.5): je Umgebung EIN Ordner `umgebungen/<name>/` — `umgebung.json` und je Instanz eines Graphen
+// `graphen/<instanz>.json`. Struktur ist Code (was
 // existiert), Auswahl und Werte sind Konfig (was aktiv ist). Sim und Prod unterscheiden sich nur hier — nie im Code. Die Typen
 // unten sind zugleich das Schema, aus dem die Werkbank ihr Formular zeichnet (generischer Formular-Renderer).
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════

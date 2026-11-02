@@ -36,21 +36,22 @@ public class LageAnalyzerTests
         """;
 
     private const string Bausteine = """
-        public record Ueberfaellig(int Tage) : IEvent;
-        public record Gemahnt(int Stufe) : IEvent;
-        public sealed class Mahnwesen : IFunktion { public Gemahnt? Auf(Ueberfaellig e) => null; }
+        public record Ueberfaellig(int Tage) : ICommand;
+        public record Gemahnt(int Stufe) : ICommand;
+        public sealed class Mahnwesen : IFunktion { public Gemahnt Auf(Ueberfaellig e) => default!; }
         public interface IPruefung : IFunktion { Gemahnt Auf(Ueberfaellig e); }
+        public sealed record Mahnablauf(Mahnwesen M) : IGraph;
         """;
 
     [Fact]
-    public async Task Eine_Funktion_als_Klasse_oder_Schnittstelle_gehoert_mit_ihren_Ausgaben_in_die_Ablaeufe()
+    public async Task Funktionen_Graphen_und_Commands_zwischen_Knoten_gehoeren_in_die_Ablaeufe()
     {
-        (await Befunde("Leihwesen", Bausteine)).Should().HaveCount(3, "Klasse, Schnittstelle und Ausgabe-Event gehören nach Leihwesen.Pipeline")
+        (await Befunde("Leihwesen", Bausteine)).Should().HaveCount(5, "Klasse, Schnittstelle, Graph und die Commands, die nur Knoten einander geben")
             .And.Contain(b => b.Contains("'Mahnwesen' ist eine Funktion im Host"))
             .And.Contain(b => b.Contains("'IPruefung' ist eine Funktion (Schnittstelle)"))
-            .And.Contain(b => b.Contains("'Gemahnt' ist ein Event einer Funktion"));
-        // Der Eingang ist ein Event der Schreibseite.
-        (await Befunde("Leihwesen.Pipeline", Bausteine)).Should().ContainSingle().Which.Should().Contain("'Ueberfaellig' ist ein Event");
+            .And.Contain(b => b.Contains("'Mahnablauf' ist ein Graph"))
+            .And.Contain(b => b.Contains("'Gemahnt' ist ein Command zwischen Knoten"));
+        (await Befunde("Leihwesen.Pipeline", Bausteine)).Should().BeEmpty();
     }
 
     [Fact]

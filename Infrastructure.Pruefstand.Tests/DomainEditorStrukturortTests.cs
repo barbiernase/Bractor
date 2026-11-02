@@ -28,11 +28,12 @@ public class DomainEditorStrukturortTests
         Records =
         [
             Rec("PruefKonfig", RecordArt.Konfig, ns),
-            Rec("Geprueft", RecordArt.Event, ns),
+            Rec("Pruefe", RecordArt.Command, ns),
+            Rec("Geprueft", RecordArt.Command, ns),
             Rec("Gebucht", RecordArt.Event, ns),
             Rec("Zeige", RecordArt.Query, ns),
         ],
-        BausteinFunktionen = [new() { Name = "IPruefung", Namespace = ns, Eingaenge = [new() { Eingang = "Gebucht", Ausgaben = ["Geprueft"] }] }],
+        BausteinFunktionen = [new() { Name = "IPruefung", Namespace = ns, Eingaenge = [new() { Eingang = "Pruefe", Ausgaben = ["Geprueft"] }] }],
         Akteure = [new() { Name = "Pruefer", Namespace = ns, Art = "Mensch", Darf = ["Zeige"] }],
     };
 
@@ -41,7 +42,7 @@ public class DomainEditorStrukturortTests
     {
         var pfade = Scaffolder.Generiere(Modell("Domain.Ausleihe")).Select(d => d.Pfad).ToList();
         pfade.Should().Contain("Domain.Pipeline/Ausleihe/Konfigs.cs", "ein Konfig-Record gehört in die Abläufe, Sammeldatei Konfigs.cs");
-        pfade.Should().Contain("Domain.Pipeline/Ausleihe/Events.cs", "ein Ergebnis-Event gehört zur Funktion");
+        pfade.Should().Contain("Domain.Pipeline/Ausleihe/Commands.cs", "ein Command ohne Ziel, den kein Decide abgibt, geben nur Knoten einander");
         pfade.Should().Contain("Domain/Ausleihe/Events.cs", "ein gewöhnliches Event bleibt auf der Schreibseite");
         pfade.Should().Contain("Domain.Projections/Ausleihe/Queries.cs");
         pfade.Should().Contain("Domain.Akteure/Akteure.cs", "Akteure haben keinen Bereichs-Ordner");

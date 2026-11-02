@@ -207,13 +207,16 @@ public sealed class DomainEditorScaffolderTests
     [Fact]
     public void Ein_Command_ohne_Aggregat_bleibt_unfertig()
     {
-        // Ohne Ziel-Aggregat (weder im Code noch über ein Decide) baut der Command nicht: ICommand allein verlangt ein Ziel (W1, R7).
+        // Ohne Ziel-Aggregat (weder im Code noch über ein Decide) ist er ein Command ohne Ziel, den nur Knoten einander geben (bei den Abläufen); mit
+        //   AggregateId baut er nicht (CQRS013: es fehlt das Typargument, W1, R7).
         var m = new EditorModell
         {
             Rahmen = TestRahmen,
             Records = [ new() { Name = "MacheX", Kind = RecordArt.Command, Namespace = "Domain.X", Felder = [ new() { Name = "AggregateId", Typ = "Guid" } ] } ],
         };
-        Inhalt(Scaffolder.Generiere(m), "Domain/X/Commands.cs").Should().Contain("public record MacheX(Guid AggregateId) : ICommand;");
+        var datei = Scaffolder.Generiere(m).Single(d => d.Inhalt.Contains("public record MacheX("));
+        datei.Pfad.Should().EndWith("/X/Commands.cs").And.StartWith("Domain.Pipeline", "ein Command, den nur Knoten einander geben, liegt bei den Abläufen");
+        datei.Inhalt.Should().Contain("public record MacheX(Guid AggregateId) : ICommand;");
     }
 
     [Fact]
