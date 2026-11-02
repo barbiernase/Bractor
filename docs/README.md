@@ -26,7 +26,6 @@ Stand 2026-11-02. Die Kapitel beschreiben den **Ist-Zustand** des Codes; für Fa
 | [11-garantien.md](11-garantien.md) | Garantien je Weg mit Nachweis-Tests |
 | [12-tests-und-vermessung.md](12-tests-und-vermessung.md) | Test-Ebenen, Messverfahren, Messwerte (Tabellen schreibt `scripts/vermessung-tabelle.sh`) |
 | [13-reifegrad-schulden-bewertung.md](13-reifegrad-schulden-bewertung.md) | offene Befunde (§13.0), Erledigtes; die eine Quelle für „offen“ |
-| [plan-explizite-kanten.md](plan-explizite-kanten.md) | Plan des Umbaus „Ausdrückliche Kanten in Graphen“ (`[Von(nameof(…))]`, `[Kopf]`); nach der Abnahme im Git-Verlauf |
 | [konzept-akteure.md](konzept-akteure.md) | Akteure (`IDarf`, `IHoert`), Clients, Arbeit, Sitzung, Werkstatt, Verteiler |
 | [../vermessung/README.md](../vermessung/README.md) | Ablage der Messläufe |
 
