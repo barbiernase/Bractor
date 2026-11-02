@@ -78,11 +78,11 @@ public sealed record Kunde : IAkteur, IDarf<Eroeffne>, IDarf<Hole>;
     public async Task Eine_Antwort_die_kein_eigener_Command_entscheiden_kann_ist_CQRS108()
     {
         (await Ids("public record Anstoss(Id<Konto> Konto) : ICommand; public sealed class Kette : IFunktion { public Eroeffne Auf(Anstoss a) => default!; "
-                   + "public IEnumerable<Eroeffne> Auf(Eroeffnet e) => []; } public sealed record G(Kette K) : IGraph;"))
+                   + "public IEnumerable<Eroeffne> Auf(Eroeffnet e) => []; } public sealed record G([Kopf] Kette K) : IGraph;"))
             .Should().NotContain(GesamtbildAnalyzer.AntwortOhneCommandId, "Eroeffne kann Eroeffnet entscheiden");
         var befunde = await Befunde("public record Anstoss(Id<Konto> Konto) : ICommand; public record Anderes() : IEvent; "
                                     + "public sealed class Lauscher : IFunktion { public Eroeffne Auf(Anstoss a) => default!; public IEnumerable<Eroeffne> Auf(Anderes e) => []; } "
-                                    + "public sealed record G(Lauscher L) : IGraph;");
+                                    + "public sealed record G([Kopf] Lauscher L) : IGraph;");
         befunde.Should().Contain(d => d.Id == GesamtbildAnalyzer.AntwortOhneCommandId)
             .Which.GetMessage().Should().StartWith("Die Funktion 'Lauscher' hört 'Anderes'").And.Contain("Eroeffne");
     }
@@ -131,20 +131,20 @@ public partial class Kasse : IState
 public record Pruefe(Id<Konto> Konto) : ICommand;
 public record Los() : ICommand;
 public sealed class Pruefung : IFunktion { public Eroeffne Auf(Pruefe p) => default!; }
-public sealed record Pruefgraph(Pruefung P) : IGraph;
+public sealed record Pruefgraph([Kopf] Pruefung P) : IGraph;
 public sealed class Anstoss : IFunktion { public Pruefe Auf(Los l) => default!; }
-public sealed record Anstossgraph(Anstoss A) : IGraph;
+public sealed record Anstossgraph([Kopf] Anstoss A) : IGraph;
 ";
 
     [Fact]
     public async Task Ein_Command_ohne_Ziel_hat_genau_einen_Empfaenger_den_Kopf_eines_Graphen_CQRS116()
     {
         (await Ids(Verteilt)).Should().BeEmpty("Pruefe verlässt den Anstoßgraphen und nimmt genau der Prüfgraph am Kopf");
-        var zwei = await Befunde(Verteilt + "public sealed class Zweite : IFunktion { public Eroeffne Auf(Pruefe p) => default!; } public sealed record Zweitgraph(Zweite Z) : IGraph;");
+        var zwei = await Befunde(Verteilt + "public sealed class Zweite : IFunktion { public Eroeffne Auf(Pruefe p) => default!; } public sealed record Zweitgraph([Kopf] Zweite Z) : IGraph;");
         zwei.Should().ContainSingle(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Which.GetMessage().Should().StartWith("'Pruefe'").And.Contain("Anstossgraph.A")
             .And.Contain("mehrere nehmen ihn").And.Contain("Pruefgraph").And.Contain("Zweitgraph");
         var keiner = await Befunde("public record Weiter() : ICommand; public record Los() : ICommand; "
-                                   + "public sealed class Start : IFunktion { public Weiter Auf(Los l) => default!; } public sealed record Losgraph(Start L) : IGraph;");
+                                   + "public sealed class Start : IFunktion { public Weiter Auf(Los l) => default!; } public sealed record Losgraph([Kopf] Start L) : IGraph;");
         keiner.Where(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Select(d => d.GetMessage()).Should().Contain(m => m.Contains("kein Graph nimmt ihn am Kopf"));
     }
 
@@ -168,7 +168,7 @@ public sealed record Melder : IAkteur, IDarf<Pruefe>;
     public async Task Ein_Command_den_ein_Graph_nimmt_und_ein_Akteur_hoert_ist_CQRS116()
     {
         var befunde = (await Befunde(Arbeit + "public sealed class Pruefung : IFunktion { public Eroeffne Auf(Pruefe p) => default!; } "
-                                             + "public sealed record Pruefgraph(Pruefung P) : IGraph;"))
+                                             + "public sealed record Pruefgraph([Kopf] Pruefung P) : IGraph;"))
             .Where(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Select(d => d.GetMessage()).ToArray();
         befunde.Should().Contain(m => m.StartsWith("'Pruefe'") && m.Contains("Akteur Pruefer") && m.Contains("der Akteur hört ihn"));
         befunde.Should().Contain(m => m.StartsWith("'Pruefe'") && m.Contains("Akteur Melder") && m.Contains("mehrere nehmen ihn")
@@ -179,7 +179,7 @@ public sealed record Melder : IAkteur, IDarf<Pruefe>;
     public async Task Innerhalb_eines_Graphen_ist_die_Kante_der_Empfaenger_eine_Funktion_ohne_Graph_eine_Warnung_CQRS117()
     {
         (await Ids("public record Weiter() : ICommand; public record Los() : ICommand; public sealed class Start : IFunktion { public Weiter Auf(Los l) => default!; } "
-                   + "public sealed class Dann : IFunktion { public Eroeffne Auf(Weiter w) => default!; } public sealed record Kette(Start L, Dann D) : IGraph;"))
+                   + "public sealed class Dann : IFunktion { public Eroeffne Auf(Weiter w) => default!; } public sealed record Kette([Kopf] Start L, [Von(nameof(L))] Dann D) : IGraph;"))
             .Should().BeEmpty("Weiter nimmt ein Knoten desselben Graphen");
         (await Befunde("public record Los() : ICommand; public sealed class Allein : IFunktion { public Eroeffne Auf(Los l) => default!; }"))
             .Should().ContainSingle().Which.Id.Should().Be(GesamtbildAnalyzer.OhneGraphId);

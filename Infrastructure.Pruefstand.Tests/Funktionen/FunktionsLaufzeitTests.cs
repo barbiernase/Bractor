@@ -18,7 +18,7 @@ namespace Infrastructure.Pruefstand.Funktionen;
 /// <summary>
 /// Die Laufzeit der Graphen vor dem Aggregat (docs/04 §4.4), store-frei in einem echten lokalen Actor-System: je Instanz ein Graph-Actor (der Koordinator
 /// ihrer Läufe), je Knoten ein Parent (Warteschlange, Kinder bis Parallel, Wiederholungen, Abbruch), je Umsetzung ein Kind (Commands mit Ids aus Aufruf,
-/// Ort und Stelle). Die Pläne baut der Test von Hand wie der Generator (Erzeuger und Ebenen aus den Typen); der Emitter ist eine Naht. Je Muster aus
+/// Ort und Stelle). Die Pläne baut der Test von Hand wie der Generator (Erzeuger aus den Kanten, Ebenen aus den Typen); der Emitter ist eine Naht. Je Muster aus
 /// Entscheidung 5 ein Test: Folge, Fork-Join, Wahl mit Zusammenführen, Je mit Sammeln, Fork-Join je Element, Rennen mit Abbruch, Warten mit Frist —
 /// dazu der gescheiterte Lauf und der Neustart vom Kopf.
 /// </summary>

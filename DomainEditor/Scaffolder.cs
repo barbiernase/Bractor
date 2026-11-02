@@ -275,9 +275,30 @@ public static class Scaffolder
         return v != null ? $"{v}/Graphen.cs" : $"{Unplatziert}Graphen.cs";
     }
 
-    /// <summary>Ein Graph: <c>public sealed record X(T1 A, T2 B) : IGraph;</c> — die Knoten als Parameter, Kanten aus den Typen.</summary>
-    public static string GraphRecord(Graph g) =>
-        $"public sealed record {g.Name}({string.Join(", ", g.Knoten.Select(k => $"{k.Typ} {k.Name}"))}) : {IGraph};";
+    /// <summary>
+    /// Ein Graph: <c>public sealed record X([Kopf] T1 A, [Von(nameof(A))] T2 B) : IGraph;</c> — die Knoten als Parameter, jede Kante als <c>Von</c> am
+    /// nehmenden Knoten. Passt er nicht in eine Zeile, steht je Knoten eine.
+    /// </summary>
+    public static string GraphRecord(Graph g)
+    {
+        var knoten = OhneLoseKanten(g).Knoten.Select(GraphKnotenText).ToList();
+        var zeile = $"public sealed record {g.Name}({string.Join(", ", knoten)}) : {IGraph};";
+        return zeile.Length <= 150 ? zeile : $"public sealed record {g.Name}(\n    {string.Join(",\n    ", knoten)}) : {IGraph};";
+    }
+
+    /// <summary>Der Graph ohne die <c>Von</c> auf Knoten, die er nicht (mehr) hat — ein entfernter Knoten nimmt seine Kanten mit.</summary>
+    public static Graph OhneLoseKanten(Graph g) => g with
+    {
+        Knoten = g.Knoten.Select(k => k.Von.All(v => g.Knoten.Any(x => x.Name == v)) ? k : k with { Von = k.Von.Where(v => g.Knoten.Any(x => x.Name == v)).ToList() }).ToList(),
+    };
+
+    /// <summary>Ein Knoten als Parameter: <c>[Kopf] [Von(nameof(A), nameof(B))] Typ Name</c>.</summary>
+    public static string GraphKnotenText(GraphKnoten k) =>
+        (k.Kopf ? $"[{KopfAttribut}] " : "") + (k.Von.Count > 0 ? $"[{VonAttribut}({string.Join(", ", k.Von.Select(v => $"nameof({v})"))})] " : "") + $"{k.Typ} {k.Name}";
+
+    /// <summary>Die Attribute eines Graph-Knotens, wie man sie schreibt (<c>[Kopf]</c>, <c>[Von(…)]</c>).</summary>
+    public static readonly string KopfAttribut = nameof(Abstractions.KopfAttribute)[..^"Attribute".Length];
+    public static readonly string VonAttribut = nameof(Abstractions.VonAttribute)[..^"Attribute".Length];
 
     private static string GraphDatei(string ns, List<Graph> graphen, EditorModell modell)
     {

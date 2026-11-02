@@ -169,8 +169,8 @@ public sealed class Messwertpruefung : IFunktion
 }
 
 // GRAPH IM GRAPHEN: die Aufbereitung ist eine Schachtel (Signatur Rohwert → MeldeMesswert), die Messkette setzt die Quelle davor.
-public sealed record Messwertaufbereitung(Plausibilisierung Plausi, Messwertpruefung Pruefung) : IGraph;
-public sealed record Messkette(Sensorabfrage Abfrage, Messwertaufbereitung Aufbereitung) : IGraph;
+public sealed record Messwertaufbereitung([Kopf] Plausibilisierung Plausi, [Von(nameof(Plausi))] Messwertpruefung Pruefung) : IGraph;
+public sealed record Messkette(Sensorabfrage Abfrage, [Von(nameof(Abfrage))] Messwertaufbereitung Aufbereitung) : IGraph;
 
 // Der Alarm öffnet die Störung desselben Sensors (dieselbe Id wie der Sensor).
 public sealed class StoerungBeiAlarm : IFunktion
@@ -178,7 +178,7 @@ public sealed class StoerungBeiAlarm : IFunktion
     public OeffneStoerung Auf(OeffneStoerungFuer a) => new(new Id<Stoerungsfall>(a.Sensor.Wert), a.Wert);
 }
 
-public sealed record Stoerungsoeffnung(StoerungBeiAlarm Oeffnung) : IGraph;
+public sealed record Stoerungsoeffnung([Kopf] StoerungBeiAlarm Oeffnung) : IGraph;
 
 // ── RENNEN: die Bereitschaft wird über zwei Wege gesucht; wer zuerst erreicht ist, gewinnt (der andere Zweig wird abgebrochen) ──────────────
 public record AlarmVerteilt(Id<Stoerungsfall> Fall) : ICommand;
@@ -224,7 +224,11 @@ public sealed class Alarmquittung : IFunktion
     };
 }
 
-public sealed record Alarmierung(Alarmverteilung Verteilung, Anrufkette Anruf, Funkruf Funk, Alarmquittung Quittung) : IGraph;
+public sealed record Alarmierung(
+    [Kopf] Alarmverteilung Verteilung,
+    [Von(nameof(Verteilung))] Anrufkette Anruf,
+    [Von(nameof(Verteilung))] Funkruf Funk,
+    [Von(nameof(Anruf), nameof(Funk))] Alarmquittung Quittung) : IGraph;
 
 // Wer hineingibt: das Sensornetz (Akteur der Instanz der Messkette — es darf, was sie verlässt); die Schichtleitung richtet ein, nimmt
 // ARBEIT an (die Prüfung vor Ort) und antwortet mit der Quittung; sie hört Alarm und Störung (Kenntnis).

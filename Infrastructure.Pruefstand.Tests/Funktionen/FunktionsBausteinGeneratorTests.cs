@@ -173,7 +173,8 @@ public interface IPost { Task SendeAsync(string an); }
             public sealed class Lies : IFunktion { public Gemahnt Auf(Ueberfaellig u) => new(1); }
             public sealed class Verkleinerung<TFormat> : IFunktion where TFormat : IFormat { public Verkleinert<TFormat> Auf(Gemahnt g) => new(1); }
             public sealed class Melde : IFunktion { public Mahne Auf(Verkleinert<Vorschau> v, Verkleinert<Gross> g) => null!; }
-            public sealed record Aufbereitung(Lies Lies, Verkleinerung<Vorschau> Klein, Verkleinerung<Gross> Gross, Melde Melde) : IGraph; }");
+            public sealed record Aufbereitung([Kopf] Lies Lies, [Von(nameof(Lies))] Verkleinerung<Vorschau> Klein, [Von(nameof(Lies))] Verkleinerung<Gross> Gross,
+                [Von(nameof(Klein), nameof(Gross))] Melde Melde) : IGraph; }");
 
         ids.Should().BeEmpty();
         fehler.Should().BeEmpty("die konstruierten Bausteine kompilieren");

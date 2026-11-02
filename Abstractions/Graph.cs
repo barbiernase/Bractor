@@ -2,12 +2,31 @@ namespace Abstractions;
 
 /// <summary>
 /// Marker eines GRAPHEN (docs/04 §4.4): <c>record X(Knoten…) : IGraph</c> — jeder Parameter ist ein Knoten (Name = Konfig-Schlüssel, Typ = eine
-/// Funktion oder ein anderer Graph), die Reihenfolge bedeutet nichts. Kanten gibt es nicht zum Schreiben: gibt ein Knoten einen Command aus, bekommt
-/// ihn jeder Knoten des Graphen, der ihn nimmt; was kein Knoten nimmt, verlässt den Graphen (an ein Aggregat, an den Kopf eines anderen Graphen, ein
-/// Hinweis). Die Eingänge, die kein Knoten erzeugt, sind seine Köpfe — je Eingangstyp genau einer. Ein Graph ist eine Blaupause: er läuft als
-/// Instanz mit eigener Konfig (<c>umgebungen/&lt;name&gt;/graphen/&lt;instanz&gt;.json</c>), beliebig oft.
+/// Funktion oder ein anderer Graph), die Reihenfolge bedeutet nichts. Jede innere Kante steht am nehmenden Knoten (<see cref="VonAttribute"/>), jeder
+/// Kopf als <see cref="KopfAttribute"/> — je Eingangstyp genau einer; eine Funktion darf mehrfach im Graphen stehen. Was ein Knoten ausgibt und kein
+/// Knoten über <c>Von</c> von ihm nimmt, verlässt den Graphen (an ein Aggregat, an den Kopf eines anderen Graphen, ein Hinweis). Ein Graph ist eine
+/// Blaupause: er läuft als Instanz mit eigener Konfig (<c>umgebungen/&lt;name&gt;/graphen/&lt;instanz&gt;.json</c>), beliebig oft.
 /// </summary>
 public interface IGraph { }
+
+/// <summary>
+/// Die Kanten in einen Knoten (docs/04 §4.4): <c>[Von(nameof(A), nameof(B))] F Knoten</c> an einem Parameter eines Graphen nennt die Knoten desselben
+/// Graphen, von denen er bekommt — je genannte Quelle die Ports, deren Typ sie ausgibt. Jedes Argument ist <c>nameof</c> eines anderen Parameters
+/// (nie ein String-Literal). An einem Graphen im Graphen speist es seine Köpfe; <c>Von(nameof(Innerer))</c> meint die Ausgänge des inneren Graphen.
+/// </summary>
+[AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false)]
+public sealed class VonAttribute(params string[] knoten) : Attribute
+{
+    /// <summary>Die Knoten, von denen dieser Knoten bekommt (Parameternamen desselben Graphen).</summary>
+    public string[] Knoten { get; } = knoten;
+}
+
+/// <summary>
+/// Ein KOPF (docs/04 §4.4): <c>[Kopf] F Knoten</c> nimmt von außerhalb des Graphen (aus einem Decide, von einem Akteur, vom Ausgang eines anderen
+/// Graphen) — die Ports, die keine genannte Quelle speist. An einem Graphen im Graphen macht es seine Köpfe zu Köpfen des äußeren.
+/// </summary>
+[AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false)]
+public sealed class KopfAttribute : Attribute { }
 
 /// <summary>
 /// Ein Lauf eines Graphen ist gescheitert (docs/04 §4.4, Entscheidung 11): ein Knoten warf auch nach seinen Wiederholungen. Der Kopf ist geparkt, die

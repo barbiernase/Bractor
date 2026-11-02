@@ -48,7 +48,7 @@ public sealed record EditorModell
     public IReadOnlyList<Client> Clients { get; init; } = [];
     /// <summary>
     /// Graphen (docs/04 §4.4): je Graph ein Record (<c>record X(Knoten…) : IGraph</c>) — seine Knoten (Parameter: Name und Typ, eine Funktion oder ein
-    /// Graph). Köpfe, Ausgänge und Kanten folgen aus den Typen — abgeleitet, nicht Modell.
+    /// Graph, dazu <c>[Kopf]</c> und <c>[Von(…)]</c>). Köpfe, Ausgänge und Kanten folgen aus den Attributen — abgeleitet, nicht Modell.
     /// </summary>
     public IReadOnlyList<Graph> Graphen { get; init; } = [];
     /// <summary>
@@ -595,20 +595,21 @@ public sealed record Client
 }
 
 /// <summary>
-/// Ein GRAPH (docs/04 §4.4): <c>public sealed record {Name}({Typ} {Knoten}, …) : IGraph;</c> — die Knoten in Reihenfolge der Parameter; ein Knoten ist
-/// eine Funktion oder ein Graph (Graph im Graphen). Köpfe, Ausgänge und Kanten folgen aus den Typen (abgeleitet, nicht editierbar).
+/// Ein GRAPH (docs/04 §4.4): <c>public sealed record {Name}([Kopf] {Typ} {Knoten}, [Von(nameof(…))] {Typ} {Knoten}, …) : IGraph;</c> — die Knoten in
+/// Reihenfolge der Parameter; ein Knoten ist eine Funktion oder ein Graph (Graph im Graphen). Jede innere Kante steht als <c>Von</c> am nehmenden
+/// Knoten, jeder Kopf als <c>[Kopf]</c>; Köpfe, Ausgänge und Kanten folgen daraus (abgeleitet, nicht editierbar).
 /// </summary>
 public sealed record Graph
 {
     public string Name { get; init; } = "";
     public string Namespace { get; init; } = "";
-    /// <summary>Die Knoten: Name (Konfig-Schlüssel der Instanz) und Typ wie geschrieben (<c>Bildverkleinerung&lt;Vorschau&gt;</c>).</summary>
-    public IReadOnlyList<Parameter> Knoten { get; init; } = [];
-    /// <summary>Abgeleitet: die Eingänge des Graphen (Typen, die kein innerer Knoten erzeugt).</summary>
+    /// <summary>Die Knoten: Name (Konfig-Schlüssel der Instanz), Typ wie geschrieben (<c>Bildverkleinerung&lt;Vorschau&gt;</c>), Kopf und Von.</summary>
+    public IReadOnlyList<GraphKnoten> Knoten { get; init; } = [];
+    /// <summary>Abgeleitet: die Eingänge des Graphen (die Typen, die seine Köpfe von außen nehmen).</summary>
     public IReadOnlyList<string> Koepfe { get; init; } = [];
     /// <summary>Abgeleitet: was den Graphen verlässt (Commands an Aggregate, Akteure, andere Graphen; Hinweise).</summary>
     public IReadOnlyList<string> Ausgaenge { get; init; } = [];
-    /// <summary>Abgeleitet: die Kanten aus den Typen (aufgefaltete Knoten-Pfade).</summary>
+    /// <summary>Abgeleitet: die Kanten aus den <c>Von</c> (aufgefaltete Knoten-Pfade, je Kante der Typ, den sie trägt).</summary>
     public IReadOnlyList<GraphKante> Kanten { get; init; } = [];
     /// <summary>Abgeleitet: der Quellknoten (eine Funktion, die lauscht), oder null.</summary>
     public string? Quelle { get; init; }
@@ -620,7 +621,19 @@ public sealed record Graph
     public string? Herkunft { get; init; }
 }
 
-/// <summary>Eine Kante eines Graphen: vom Knoten <see cref="Von"/> über den Typ <see cref="Typ"/> zum Knoten <see cref="Nach"/>.</summary>
+/// <summary>
+/// Ein Knoten eines Graphen — ein Parameter des Records: Name (Konfig-Schlüssel), Typ wie geschrieben, ob er <c>[Kopf]</c> trägt (nimmt von außen) und
+/// die Knoten aus seinem <c>[Von(nameof(…))]</c> (von denen er bekommt). Die Geste „verbinden“ setzt bzw. entfernt ein Von, „Kopf“ das Attribut.
+/// </summary>
+public sealed record GraphKnoten
+{
+    public required string Typ { get; init; }
+    public required string Name { get; init; }
+    public bool Kopf { get; init; }
+    public IReadOnlyList<string> Von { get; init; } = [];
+}
+
+/// <summary>Eine Kante eines Graphen (aus einem <c>Von</c>): vom Knoten <see cref="Von"/> über den Typ <see cref="Typ"/> zum Knoten <see cref="Nach"/>.</summary>
 public sealed record GraphKante(string Von, string Typ, string Nach);
 
 /// <summary>Eine Implementierung eines Clients: Sprache (heute <c>python</c>), Klasse, Datei und je Methode der Basis der Rumpf.</summary>

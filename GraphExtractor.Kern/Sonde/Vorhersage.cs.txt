@@ -108,7 +108,11 @@ public sealed class Prognosemodell(IZustand<Gewichte> gewichte, IStatistik stati
     }
 }
 
-public sealed record Prognose(Tendenzbildung Tendenz, Glaettung<Kurzfenster> Kurz, Glaettung<Langfenster> Lang, Prognosemodell Modell) : IGraph;
+public sealed record Prognose(
+    [Kopf] Tendenzbildung Tendenz,
+    [Von(nameof(Tendenz))] Glaettung<Kurzfenster> Kurz,
+    [Von(nameof(Tendenz))] Glaettung<Langfenster> Lang,
+    [Von(nameof(Kurz), nameof(Lang))] Prognosemodell Modell) : IGraph;
 
 // Draußen: der Warndienst meldet Temperaturen und hört die Warnung und die Stilllegung (Hinweise: Kenntnis); die Wetter-App verkörpert ihn.
 public sealed record Warndienst : IAkteur, IDarf<MeldeTemperatur>, IHoert<Unwetter>, IHoert<StationStillgelegt>;

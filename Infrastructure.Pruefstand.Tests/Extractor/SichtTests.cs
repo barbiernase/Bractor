@@ -170,15 +170,17 @@ public class SichtTests
         Zeilen(p["MahnungEroeffnet"]!["aus"]).Should().Contain(z => (string?)z["text"] == "Akteur Gutachterin" && (string?)z["mark"] == "Kenntnis");
     }
 
-    // ── Graph-Karten (docs/04 §4.4): Knoten aus den Parametern, Köpfe/Ausgänge/Kanten aus den Typen ──
+    // ── Graph-Karten (docs/04 §4.4): Knoten aus den Parametern, Köpfe aus [Kopf], Kanten aus [Von], Ausgänge daraus ──
 
     [Fact]
-    public async Task Ein_Graph_ist_eine_Karte_mit_Knoten_Koepfen_Ausgaengen_und_Kanten_aus_den_Typen()
+    public async Task Ein_Graph_ist_eine_Karte_mit_Knoten_Koepfen_Ausgaengen_und_Kanten_aus_Kopf_und_Von()
     {
         var board = await BoardAsync();
         var g = (board["graphen"] as JsonArray)!.OfType<JsonObject>().Single(x => (string?)x["name"] == "Schadensbewertung");
         g["knoten"]!.AsArray().Select(k => $"{(string?)k!["name"]}:{(string?)k["typ"]}").Should()
             .Equal("Aufnahme:Schadensaufnahme", "Schaetzung:Schadensschaetzer", "Gutachten:Gutachtenanfrage", "Mahnung:MahnungNachSchaetzung");
+        g["knoten"]!.AsArray().Select(k => $"{(string?)k!["name"]}:{(bool?)k["kopf"]}:{string.Join("+", k["von"]!.AsArray().Select(v => (string?)v))}").Should()
+            .Equal("Aufnahme:True:", "Schaetzung:False:Aufnahme", "Gutachten:False:Aufnahme", "Mahnung:False:Schaetzung+Gutachten");
         g["koepfe"]!.AsArray().Select(x => (string?)x).Should().Equal("SchaetzeSchaden");
         g["ausgaenge"]!.AsArray().Select(x => (string?)x).Should().BeEquivalentTo(["BegutachteVorOrt", "NichtSchaetzbar", "EroeffneMahnung"]);
         g["kanten"]!.AsArray().Select(k => $"{(string?)k!["von"]} -{(string?)k["typ"]}-> {(string?)k["nach"]}").Should().BeEquivalentTo([

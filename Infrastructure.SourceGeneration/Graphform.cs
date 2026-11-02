@@ -2,6 +2,7 @@
 // Dateiname: Graphform.cs
 
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -9,12 +10,13 @@ namespace Infrastructure.SourceGeneration
 {
     /// <summary>
     /// Die EINE Lesart eines Graphen (docs/04 §4.4) für Generator, Analyzer und Extractor — nur Code-Fakten: der Marker <c>IGraph</c>, die Parameter
-    /// des Records (je einer ein Knoten: Name = Konfig-Schlüssel, Typ = eine Funktion oder ein Graph) und die Signaturen der Funktionen
-    /// (<see cref="Funktionsform"/>). Kanten gibt es nicht zum Schreiben: gibt ein Knoten einen Command ohne Ziel aus, bekommt ihn jeder Knoten des Graphen,
-    /// der ihn nimmt. Ein Graph als Knoten wird aufgefaltet (seine Knoten heißen <c>Aufbereitung.Vorschau</c>) und bleibt nach außen eine Schachtel: von
-    /// außen bekommt er nur seine Eingänge (was er nimmt und innen keiner erzeugt), nach außen gibt er nur seine Ausgänge (was er erzeugt und innen keiner
-    /// nimmt) — das ist seine SIGNATUR. Ein Eingangstyp, den kein Knoten des Graphen erzeugt, ist ein KOPF — je Command- bzw. Quell-Typ genau einer. Was
-    /// kein Knoten nimmt, verlässt den Graphen. Die Reihenfolge der Parameter bedeutet nichts.
+    /// des Records (je einer ein Knoten: Name = Konfig-Schlüssel, Typ = eine Funktion oder ein Graph), ihre Attribute <c>[Von(nameof(…))]</c> und
+    /// <c>[Kopf]</c> und die Signaturen der Funktionen (<see cref="Funktionsform"/>). Jede innere Kante steht am nehmenden Knoten: eine genannte Quelle
+    /// speist die Ports, deren Typ sie ausgibt; aus Typen allein entsteht keine Kante. Ein <c>[Kopf]</c> nimmt von außen, was keine genannte Quelle
+    /// speist — je Eingangstyp genau einer. Was ein Knoten ausgibt und kein Knoten über <c>Von</c> von ihm nimmt, verlässt den Graphen. Ein Graph als
+    /// Knoten wird aufgefaltet (seine Knoten heißen <c>Aufbereitung.Vorschau</c>) und bleibt nach außen eine Schachtel: <c>Von</c> an ihm speist seine
+    /// Köpfe, <c>[Kopf]</c> an ihm macht seine Köpfe zu Köpfen des äußeren, <c>Von(nameof(Schachtel))</c> meint seine Ausgänge — das ist seine SIGNATUR.
+    /// Eine Funktion darf mehrfach im Graphen stehen; die Reihenfolge der Parameter bedeutet nichts.
     /// <para>Jede Operation (ein <c>Auf</c>) hat eine EBENE: die Kette der Ströme vom Kopf bis zu ihr (ein Strom öffnet je Element einen Unterlauf). Die
     /// Ports eines Auf liegen auf derselben Ebene (<c>IReadOnlyList&lt;T&gt;</c> sammelt eine tiefer), und ein <c>T</c>-Port hinter einer Wahl (vom
     /// nächsten gemeinsamen Vorfahren aus) ist <c>T?</c> oder Teil eines <c>OneOf</c> — die Vielfachheit aus den Typen (Entscheidung 5).</para>
@@ -23,6 +25,8 @@ namespace Infrastructure.SourceGeneration
     {
         private const string A = "Abstractions.";
         public const string IGraph = A + "IGraph";
+        public const string Von = A + "VonAttribute";
+        public const string Kopf = A + "KopfAttribute";
 
         /// <summary>Ein Knoten (aufgefaltet): sein Pfad (Konfig-Schlüssel, <c>Aufbereitung.Vorschau</c>), seine Funktion und seine Operationen.</summary>
         internal sealed class Knoten
@@ -69,15 +73,34 @@ namespace Infrastructure.SourceGeneration
             public bool Strom;
         }
 
+        /// <summary>
+        /// Ein Glied eines Graph-Records — ein Parameter, wie er dasteht: Name, Typ, <c>[Kopf]</c>, die Namen aus <c>[Von]</c> (Parameter desselben
+        /// Records) und was es ist: ein Funktions-Knoten oder ein Graph im Graphen.
+        /// </summary>
+        internal sealed class Glied
+        {
+            public string Name = "";
+            /// <summary>Der Pfad im aufgefalteten Graphen (<c>Aufbereitung.Vorschau</c>).</summary>
+            public string Pfad = "";
+            public ITypeSymbol Typ = null!;
+            public bool Kopf;
+            public List<string> Von = new List<string>();
+            public Location Ort = Location.None;
+            public Knoten? Knoten;
+            public Schachtel? Innen;
+        }
+
         /// <summary>Ein gelesener Graph: Knoten (aufgefaltet), Kanten, Köpfe (Eingangstyp → Knoten), Ausgänge, Signatur und Formfehler (Text, Ort).</summary>
         internal sealed class Form
         {
             public INamedTypeSymbol Typ = null!;
+            /// <summary>Die Parameter des Records, wie sie dastehen (mit <c>[Kopf]</c> und <c>[Von]</c>).</summary>
+            public List<Glied> Glieder = new List<Glied>();
             public List<Knoten> Knoten = new List<Knoten>();
             public List<Kante> Kanten = new List<Kante>();
-            /// <summary>Die Eingänge des Graphen: Typ → die Knoten, die ihn nehmen (bei Command und Quell-Nachricht genau einer).</summary>
+            /// <summary>Die Eingänge des Graphen: Typ → der Knoten mit <c>[Kopf]</c>, der ihn nimmt (eine Liste mit genau einem).</summary>
             public List<(INamedTypeSymbol Typ, List<Knoten> Knoten)> Koepfe = new List<(INamedTypeSymbol, List<Knoten>)>();
-            /// <summary>Was den Graphen verlässt: je Knoten die Ausgaben, die kein Knoten des Graphen nimmt.</summary>
+            /// <summary>Was den Graphen verlässt: je Knoten die Ausgaben, die kein Knoten über <c>Von</c> von ihm nimmt.</summary>
             public List<(Knoten Von, INamedTypeSymbol Typ)> Ausgaenge = new List<(Knoten, INamedTypeSymbol)>();
             /// <summary>Die Signatur: was der Graph nimmt (seine Köpfe) und was er nach außen gibt (Commands ohne Ziel, die kein innerer Knoten nimmt).</summary>
             public List<INamedTypeSymbol> SignaturEin = new List<INamedTypeSymbol>(), SignaturAus = new List<INamedTypeSymbol>();
@@ -95,13 +118,18 @@ namespace Infrastructure.SourceGeneration
 
         private static string V(ITypeSymbol t) => Funktionsform.Voll(t);
 
-        /// <summary>Ein Graph beim Auffalten: seine Funktions-Knoten, seine inneren Graphen und was er erzeugt bzw. nimmt (als Schachtel).</summary>
-        private sealed class Schachtel
+        /// <summary>
+        /// Ein Graph beim Auffalten: seine Glieder, seine Funktions-Knoten und inneren Graphen, die Ports, die von außen nehmen (seine Köpfe), und die
+        /// Ausgaben, die ihn verlassen (je Erzeuger) — als Schachtel gesehen seine Signatur.
+        /// </summary>
+        internal sealed class Schachtel
         {
             public string Pfad = "";
+            public List<Glied> Glieder = new List<Glied>();
             public List<Knoten> Eigene = new List<Knoten>();
             public List<Schachtel> Innere = new List<Schachtel>();
-            public Dictionary<string, INamedTypeSymbol> Ein = new Dictionary<string, INamedTypeSymbol>(), Aus = new Dictionary<string, INamedTypeSymbol>();
+            public List<(Knoten Knoten, Operation Op, Funktionsform.Port Port)> Offen = new List<(Knoten, Operation, Funktionsform.Port)>();
+            public List<(Knoten Knoten, Operation Op, INamedTypeSymbol Typ)> Aus = new List<(Knoten, Operation, INamedTypeSymbol)>();
             public IEnumerable<Knoten> Alle => Eigene.Concat(Innere.SelectMany(i => i.Alle));
         }
 
@@ -111,51 +139,48 @@ namespace Infrastructure.SourceGeneration
             var g = new Form { Typ = t };
             var wurzel = Falte(t, "", new List<string>(), new HashSet<string>(), g);
             if (wurzel == null) return g;
+            g.Glieder = wurzel.Glieder;
             g.Knoten = wurzel.Alle.ToList();
-            var schachteln = new Dictionary<string, Schachtel>();
-            void Merke(Schachtel s) { schachteln[s.Pfad] = s; foreach (var i in s.Innere) Merke(i); }
-            Merke(wurzel);
 
-            // Kanten: T fließt von P nach C, wenn T auf dem Weg von P hinauf bis zum gemeinsamen Graphen Ausgang jeder Schachtel ist und hinab bis C
-            //   Eingang jeder Schachtel (ein innerer Graph ist eine Schachtel mit Signatur).
+            // Ausgänge: was ein Knoten ausgibt und kein Knoten über Von von ihm nimmt (Commands an Aggregate und Hinweise immer).
             foreach (var von in g.Knoten)
-                foreach (var op in von.Operationen)
-                    foreach (var x in op.Ausgaben.Where(Funktionsform.IstCommandOhneZiel))
-                    {
-                        var gefunden = false;
-                        foreach (var nach in g.Knoten)
-                            foreach (var nop in nach.Operationen)
-                                foreach (var port in nop.Auf.Ports.Where(p => p.Typen.Any(y => V(y) == V(x))))
-                                {
-                                    if (!Sichtbar(von, nach, V(x), schachteln)) continue;
-                                    g.Kanten.Add(new Kante { Von = von, Nach = nach, VonOperation = op, NachOperation = nop, Port = port, Typ = x,
-                                        Strom = op.Stroeme.Contains(V(x)) });
-                                    gefunden = true;
-                                }
-                        if (!gefunden && !g.Ausgaenge.Any(a => a.Von == von && V(a.Typ) == V(x))) g.Ausgaenge.Add((von, x));
-                    }
-            foreach (var von in g.Knoten)
-                foreach (var x in von.Ausgaben.Where(x => !Funktionsform.IstCommandOhneZiel(x)))
-                    if (!g.Ausgaenge.Any(a => a.Von == von && V(a.Typ) == V(x))) g.Ausgaenge.Add((von, x));
+                foreach (var x in von.Ausgaben)
+                    if (!(Funktionsform.IstCommandOhneZiel(x) && g.Kanten.Any(e => e.Von == von && V(e.Typ) == V(x)))
+                        && !g.Ausgaenge.Any(a => a.Von == von && V(a.Typ) == V(x)))
+                        g.Ausgaenge.Add((von, x));
 
-            // Köpfe: Eingangstypen der Wurzel-Schachtel und die Knoten, die sie nehmen.
-            foreach (var typ in wurzel.Ein.Values)
-            {
-                var nehmen = g.Knoten.Where(k => k.Eingaenge.Any(e => V(e) == V(typ)) && k.Bereich.All(b => schachteln[b].Ein.ContainsKey(V(typ)))).ToList();
-                g.Koepfe.Add((typ, nehmen));
-            }
-            g.SignaturEin = wurzel.Ein.Values.ToList();
-            g.SignaturAus = wurzel.Aus.Values.ToList();
+            // Köpfe: die Ports der Wurzel, die von außen nehmen, je Typ.
+            foreach (var (k, _, port) in wurzel.Offen)
+                foreach (var typ in port.Typen)
+                {
+                    var da = g.KopfFuer(typ);
+                    if (da == null) g.Koepfe.Add((typ, new List<Knoten> { k }));
+                    else if (!da.Contains(k)) da.Add(k);
+                }
+            g.SignaturEin = g.Koepfe.Select(k => k.Typ).ToList();
+            g.SignaturAus = wurzel.Aus.Select(a => a.Typ).GroupBy(V).Select(x => x.First()).ToList();
             var quellen = g.Knoten.Where(k => k.Funktion.Lausche != null).ToList();
             g.Quelle = quellen.FirstOrDefault();
             if (quellen.Count > 1)
                 g.Fehler.Add(($"der Graph hat {quellen.Count} Quellknoten ({string.Join(", ", quellen.Select(k => k.Name))}) — eine Quelle je Graph: sie ist sein Kopf",
                     quellen[1].Ort));
             if (g.Quelle != null && g.Koepfe.Count > 0)
-                g.Fehler.Add(($"der Graph hat den Quellknoten {g.Quelle.Name} und dazu Eingänge ({string.Join(", ", g.Koepfe.Select(k => k.Typ.Name))}) — ein Graph "
+                g.Fehler.Add(($"der Graph hat den Quellknoten {g.Quelle.Name} und dazu Köpfe ({string.Join(", ", g.Koepfe.Select(k => k.Typ.Name))}) — ein Graph "
                     + "mit Quelle hat sonst keinen Kopf (was von draußen kommt, nimmt ein eigener Graph)", g.Quelle.Ort));
             if (g.Knoten.Count > 0 && g.Koepfe.Count == 0 && g.Quelle == null)
-                g.Fehler.Add(("der Graph hat keinen Eingang — jeder Knoten nimmt nur, was ein anderer erzeugt (ein Kreis)", OrtVon(t)));
+                g.Fehler.Add(("der Graph hat keinen Kopf und keine Quelle — von außen nimmt nur ein Knoten mit [Kopf]", OrtVon(t)));
+
+            // GR-JOIN: ein Typ höchstens einmal je Auf — sonst hinge die Zuordnung an der Reihenfolge der Parameter.
+            var gesehen = new HashSet<string>();
+            foreach (var k in g.Knoten.Where(k => gesehen.Add(V(k.Typ))))
+                foreach (var op in k.Operationen)
+                    foreach (var doppelt in op.Auf.Ports.SelectMany(p => p.Typen.Select(y => (Typ: y, Port: p))).GroupBy(x => V(x.Typ)).Where(x => x.Count() > 1))
+                    {
+                        var n = doppelt.First().Typ.Name;
+                        g.Fehler.Add(($"'{Funktionsform.Anzeigename(k.Typ)}' nimmt '{n}' zweimal in einem Auf ({string.Join(", ", doppelt.Select(x => "'" + x.Port.Name + "'"))})"
+                            + $" — ein Typ höchstens einmal je Auf (die Zuordnung hinge an der Reihenfolge); gib den Rollen eigene Typen, z. B. '{n}Links' und "
+                            + $"'{n}Rechts'", doppelt.Last().Port.Ort));
+                    }
 
             var kreis = Kreis(g);
             if (kreis != null)
@@ -176,7 +201,7 @@ namespace Infrastructure.SourceGeneration
 
         /// <summary>
         /// Faltet den Graphen <paramref name="t"/> unter dem Pfad <paramref name="pfad"/> auf: Funktions-Knoten mit ihren Operationen, innere Graphen
-        /// rekursiv; dazu die Signatur der Schachtel. Fehler gehen an <paramref name="g"/>.
+        /// rekursiv; dann die Kanten zwischen seinen Gliedern (<see cref="Verdrahte"/>). Fehler gehen an <paramref name="g"/>.
         /// </summary>
         private static Schachtel? Falte(INamedTypeSymbol t, string pfad, List<string> bereich, HashSet<string> offen, Form g)
         {
@@ -197,14 +222,20 @@ namespace Infrastructure.SourceGeneration
                 offen.Remove(V(t));
                 return s;
             }
+            var namen = new HashSet<string>(ctor.Parameters.Select(p => p.Name));
             foreach (var p in ctor.Parameters)
             {
                 var pOrt = p.Locations.FirstOrDefault() ?? ort;
                 var name = pfad.Length == 0 ? p.Name : pfad + "." + p.Name;
+                var glied = new Glied { Name = p.Name, Pfad = name, Typ = p.Type, Ort = pOrt };
+                LiesAttribute(p, glied, namen, t, g);
                 if (p.Type is INamedTypeSymbol gg && IstGraph(gg))
                 {
                     var innen = Falte(gg, name, bereich.Concat(new[] { name }).ToList(), offen, g);
-                    if (innen != null) s.Innere.Add(innen);
+                    if (innen == null) continue;
+                    glied.Innen = innen;
+                    s.Innere.Add(innen);
+                    s.Glieder.Add(glied);
                     continue;
                 }
                 if (p.Type is not INamedTypeSymbol f || !Funktionsform.IstFunktion(f) || f.TypeArguments.Any(a => a.TypeKind == TypeKind.TypeParameter))
@@ -213,39 +244,159 @@ namespace Infrastructure.SourceGeneration
                         + "(IFunktion, eine generische mit Typargument) oder ein anderer Graph", pOrt));
                     continue;
                 }
-                s.Eigene.Add(LiesKnoten(f, name, bereich, pOrt));
+                glied.Knoten = LiesKnoten(f, name, bereich, pOrt);
+                s.Eigene.Add(glied.Knoten);
+                s.Glieder.Add(glied);
             }
-            foreach (var doppelt in s.Eigene.GroupBy(k => V(k.Typ)).Where(x => x.Count() > 1))
-                g.Fehler.Add(($"die Funktion '{doppelt.First().Typ.ToDisplayString()}' steht mehrfach im Graphen ({string.Join(", ", doppelt.Select(k => k.Name))}) — "
-                    + "je Funktion ein Knoten (sie bekäme jeden Eingang doppelt); ein Typargument unterscheidet gleiche Funktionen", doppelt.Last().Ort));
-
-            // Signatur der Schachtel: was ihre Glieder erzeugen bzw. nehmen (ein innerer Graph mit seiner Signatur).
-            var erzeugt = new Dictionary<string, INamedTypeSymbol>();
-            var nimmt = new Dictionary<string, INamedTypeSymbol>();
-            foreach (var k in s.Eigene)
-            {
-                foreach (var x in k.Ausgaben.Where(Funktionsform.IstCommandOhneZiel)) erzeugt[V(x)] = x;
-                foreach (var x in k.Eingaenge) nimmt[V(x)] = x;
-            }
-            foreach (var i in s.Innere)
-            {
-                foreach (var x in i.Aus) erzeugt[x.Key] = x.Value;
-                foreach (var x in i.Ein) nimmt[x.Key] = x.Value;
-            }
-            foreach (var x in nimmt.Where(x => !erzeugt.ContainsKey(x.Key))) s.Ein[x.Key] = x.Value;
-            foreach (var x in erzeugt.Where(x => !nimmt.ContainsKey(x.Key))) s.Aus[x.Key] = x.Value;
-
-            // Je Eingangstyp genau ein Glied, das ihn nimmt.
-            foreach (var e in s.Ein.Values)
-            {
-                var glieder = s.Eigene.Where(k => k.Eingaenge.Any(x => V(x) == V(e))).Select(k => (k.Name, k.Ort))
-                    .Concat(s.Innere.Where(i => i.Ein.ContainsKey(V(e))).Select(i => (i.Pfad, ort))).ToList();
-                if (glieder.Count > 1)
-                    g.Fehler.Add(($"'{e.Name}' nehmen {glieder.Count} Knoten als Eingang des Graphen {t.Name} ({string.Join(", ", glieder.Select(x => x.Item1))}) — "
-                        + "je Eingangstyp genau ein Kopf; was mehrere brauchen, gibt ein Kopf weiter", glieder[1].Item2));
-            }
+            Verdrahte(s, t, g);
             offen.Remove(V(t));
             return s;
+        }
+
+        /// <summary>
+        /// <c>[Kopf]</c> und <c>[Von(…)]</c> eines Parameters (Entscheidung 8): jedes Argument ist <c>nameof</c> eines anderen Parameters desselben Records,
+        /// keiner doppelt. Das <c>nameof</c> sieht nur, wer den Quelltext hat (der Analyzer im Pipeline-Projekt); aus Metadaten zählen die Werte.
+        /// </summary>
+        private static void LiesAttribute(IParameterSymbol p, Glied glied, HashSet<string> namen, INamedTypeSymbol t, Form g)
+        {
+            foreach (var a in p.GetAttributes())
+            {
+                var n = a.AttributeClass == null ? "" : Funktionsform.Name(a.AttributeClass);
+                if (n == Kopf) { glied.Kopf = true; continue; }
+                if (n != Von) continue;
+                var werte = Werte(a);
+                var syntax = a.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
+                var aOrt = syntax?.GetLocation() ?? glied.Ort;
+                if (syntax?.ArgumentList != null)
+                    foreach (var arg in syntax.ArgumentList.Arguments)
+                        if (!(arg.NameEquals == null && arg.NameColon == null
+                              && arg.Expression is InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } } inv
+                              && inv.ArgumentList.Arguments.Count == 1 && inv.ArgumentList.Arguments[0].Expression is IdentifierNameSyntax))
+                            g.Fehler.Add(($"[Von] an '{p.Name}' nennt {arg} — jedes Argument ist nameof eines anderen Knotens desselben Graphen "
+                                + "(nameof(Einlesen)), nie ein String-Literal", arg.GetLocation()));
+                if (werte.Count == 0)
+                    g.Fehler.Add(($"[Von] an '{p.Name}' nennt keinen Knoten — ohne Quelle fällt es weg (ein Knoten, der von außen nimmt, trägt [Kopf])", aOrt));
+                foreach (var w in werte)
+                {
+                    if (w == null) continue;
+                    if (w == p.Name)
+                        g.Fehler.Add(($"[Von] an '{p.Name}' nennt den Knoten selbst — ein Knoten bekommt nie von sich (ein Kreis)", aOrt));
+                    else if (!namen.Contains(w))
+                        g.Fehler.Add(($"[Von] an '{p.Name}' nennt '{w}' — kein Knoten des Graphen {t.Name} (Von nennt Parameter desselben Records)", aOrt));
+                    else if (glied.Von.Contains(w))
+                        g.Fehler.Add(($"[Von] an '{p.Name}' nennt '{w}' doppelt", aOrt));
+                    else glied.Von.Add(w);
+                }
+            }
+        }
+
+        private static List<string?> Werte(AttributeData a) =>
+            a.ConstructorArguments.Length == 1 && a.ConstructorArguments[0].Kind == TypedConstantKind.Array
+                ? a.ConstructorArguments[0].Values.Select(v => v.Value as string).ToList()
+                : new List<string?>();
+
+        /// <summary><c>[Kopf]</c> und die Namen aus <c>[Von]</c> eines Parameters, wie sie dastehen (ohne Prüfung) — für Werkzeuge, die jeden Knoten zeigen.</summary>
+        public static (bool Kopf, List<string> Von) KopfUndVon(IParameterSymbol p)
+        {
+            var kopf = false;
+            var von = new List<string>();
+            foreach (var a in p.GetAttributes())
+            {
+                var n = a.AttributeClass == null ? "" : Funktionsform.Name(a.AttributeClass);
+                if (n == Kopf) kopf = true;
+                else if (n == Von) von.AddRange(Werte(a).OfType<string>());
+            }
+            return (kopf, von);
+        }
+
+        /// <summary>
+        /// Die Kanten einer Schachtel (Entscheidungen 1–3, 7): je Glied mit <c>[Von]</c> speist jede genannte Quelle die Ports, deren Typ sie ausgibt —
+        /// mindestens einen; ein Port ohne Quelle nimmt von außen, wenn das Glied <c>[Kopf]</c> trägt, sonst ist er ein Fehler. Danach die Köpfe der
+        /// Schachtel (je Eingangstyp genau einer) und was sie verlässt.
+        /// </summary>
+        private static void Verdrahte(Schachtel s, INamedTypeSymbol t, Form g)
+        {
+            var kanten = new List<Kante>();
+            foreach (var glied in s.Glieder)
+            {
+                var ports = Eingaenge(glied);
+                if (glied.Knoten is { Funktion.Lausche: not null })
+                {
+                    if (glied.Kopf || glied.Von.Count > 0)
+                        g.Fehler.Add(($"'{glied.Name}' ist eine Quelle (sie lauscht) und trägt {(glied.Kopf ? "[Kopf]" : "[Von]")} — eine Quelle nimmt nichts: "
+                            + "sie trägt weder [Kopf] noch [Von], die Knoten hinter ihr nennen sie mit [Von]", glied.Ort));
+                    continue;
+                }
+                if (!glied.Kopf && glied.Von.Count == 0)
+                {
+                    if (ports.Count > 0)
+                        g.Fehler.Add(($"der Knoten '{glied.Name}' trägt weder [Kopf] noch [Von] — ein Knoten nimmt von außen ([Kopf]) oder von Knoten "
+                            + "desselben Graphen ([Von(nameof(…))]); nur eine Quelle trägt keins von beiden", glied.Ort));
+                    continue;
+                }
+                var gespeist = new HashSet<Funktionsform.Port>();
+                foreach (var name in glied.Von)
+                {
+                    var quelle = s.Glieder.FirstOrDefault(x => x.Name == name);
+                    if (quelle == null) continue;   // kein Knoten (gemeldet) oder einer mit Formfehler
+                    var aus = Ausgaenge(quelle);
+                    var speist = false;
+                    foreach (var (vk, vop, x) in aus)
+                        foreach (var (nk, nop, port) in ports.Where(z => z.Port.Typen.Any(y => V(y) == V(x))))
+                        {
+                            kanten.Add(new Kante { Von = vk, Nach = nk, VonOperation = vop, NachOperation = nop, Port = port, Typ = x, Strom = vop.Stroeme.Contains(V(x)) });
+                            gespeist.Add(port);
+                            speist = true;
+                        }
+                    if (!speist)
+                        g.Fehler.Add(($"'{glied.Name}' nennt in [Von] '{name}', aber {name} gibt nichts aus, was {glied.Name} nimmt ({name}: "
+                            + $"{Liste(aus.Select(x => x.Typ))}; {glied.Name}: {Liste(ports.SelectMany(z => z.Port.Typen))}) — eine genannte Quelle speist mindestens "
+                            + "einen Port", glied.Ort));
+                }
+                var ungespeist = ports.Where(z => !gespeist.Contains(z.Port)).ToList();
+                if (glied.Kopf)
+                {
+                    if (ungespeist.Count == 0)
+                        g.Fehler.Add(($"'{glied.Name}' trägt [Kopf], aber an ihm kommt nichts von außen an — "
+                            + (ports.Count == 0 ? "er nimmt nichts" : "jeden Port speist eine genannte Quelle") + " (ein [Kopf] nimmt, was keine Quelle speist)", glied.Ort));
+                    s.Offen.AddRange(ungespeist);
+                }
+                else
+                    foreach (var (k, _, port) in ungespeist)
+                        g.Fehler.Add(($"'{port.Name}' in {k.Name} ({Liste(port.Typen)}) bekommt von keiner genannten Quelle ({string.Join(", ", glied.Von)}) etwas, und "
+                            + $"'{glied.Name}' ist kein [Kopf] — nenne den Erzeuger in [Von] oder setze [Kopf], wenn er von außen kommt", glied.Ort));
+            }
+            g.Kanten.AddRange(kanten);
+
+            // GR-KOPF: je Eingangstyp genau ein Kopf.
+            foreach (var typ in s.Offen.SelectMany(o => o.Port.Typen).GroupBy(V))
+            {
+                var nehmen = s.Offen.Where(o => o.Port.Typen.Any(y => V(y) == typ.Key)).Select(o => o.Knoten).Distinct().ToList();
+                if (nehmen.Count > 1)
+                    g.Fehler.Add(($"'{typ.First().Name}' nehmen {nehmen.Count} Köpfe des Graphen {t.Name} ({string.Join(", ", nehmen.Select(k => k.Name))}) — je "
+                        + "Eingangstyp genau ein [Kopf]; was mehrere brauchen, nimmt einer und die übrigen nennen ihn in [Von]", nehmen[1].Ort));
+            }
+
+            // Was die Schachtel verlässt: die Ausgaben ihrer Glieder, die keine Kante hier nimmt.
+            foreach (var glied in s.Glieder)
+                foreach (var (k, op, x) in Ausgaenge(glied))
+                    if (!kanten.Any(e => e.VonOperation == op && V(e.Typ) == V(x))) s.Aus.Add((k, op, x));
+        }
+
+        /// <summary>Die Ports, an denen ein Glied nimmt: die Ports der Operationen eines Knotens bzw. die Köpfe eines inneren Graphen.</summary>
+        private static List<(Knoten Knoten, Operation Op, Funktionsform.Port Port)> Eingaenge(Glied glied) =>
+            glied.Innen != null ? glied.Innen.Offen
+                : glied.Knoten!.Operationen.SelectMany(o => o.Auf.Ports.Select(p => (glied.Knoten, o, p))).ToList();
+
+        /// <summary>Was ein Glied an Commands ohne Ziel ausgibt (je Erzeuger): die eines Knotens bzw. die Ausgänge eines inneren Graphen.</summary>
+        private static List<(Knoten Knoten, Operation Op, INamedTypeSymbol Typ)> Ausgaenge(Glied glied) =>
+            glied.Innen != null ? glied.Innen.Aus
+                : glied.Knoten!.Operationen.SelectMany(o => o.Ausgaben.Where(Funktionsform.IstCommandOhneZiel).Select(x => (glied.Knoten, o, x))).ToList();
+
+        private static string Liste(IEnumerable<ITypeSymbol> typen)
+        {
+            var namen = typen.Select(x => x.Name).Distinct().ToList();
+            return namen.Count == 0 ? "nichts" : string.Join(", ", namen);
         }
 
         /// <summary>Ein Funktions-Knoten mit seinen Operationen: je Auf mit Command-Eingang eine.</summary>
@@ -288,18 +439,6 @@ namespace Infrastructure.SourceGeneration
             foreach (var x in form.Aufs.Concat(form.Lausche != null ? new[] { form.Lausche } : new Funktionsform.Auf[0]).SelectMany(a => a.Ausgaben))
                 if (!k.Ausgaben.Any(y => V(y) == V(x))) k.Ausgaben.Add(x);
             return k;
-        }
-
-        /// <summary>Darf <paramref name="typ"/> von <paramref name="von"/> zu <paramref name="nach"/> fließen (die Schachteln dazwischen lassen ihn durch)?</summary>
-        private static bool Sichtbar(Knoten von, Knoten nach, string typ, Dictionary<string, Schachtel> schachteln)
-        {
-            var gemeinsam = 0;
-            while (gemeinsam < von.Bereich.Count && gemeinsam < nach.Bereich.Count && von.Bereich[gemeinsam] == nach.Bereich[gemeinsam]) gemeinsam++;
-            for (var i = gemeinsam; i < von.Bereich.Count; i++)
-                if (!schachteln[von.Bereich[i]].Aus.ContainsKey(typ)) return false;
-            for (var i = gemeinsam; i < nach.Bereich.Count; i++)
-                if (!schachteln[nach.Bereich[i]].Ein.ContainsKey(typ)) return false;
-            return true;
         }
 
         private static string Ebenentext(List<string> e) => e.Count == 0 ? "die Ebene des Kopfs" : "die Unterläufe von " + string.Join(" → ", e);
@@ -395,8 +534,12 @@ namespace Infrastructure.SourceGeneration
                 if (ports.Count < op.Auf.Ports.Count)
                 {
                     var kopf = op.Auf.Ports.First(p => !ports.Contains(p));
-                    g.Fehler.Add(($"'{kopf.Name}' in {op.Knoten.Name} ist ein Eingang des Graphen, die übrigen nicht — ein Join paart nur Nachrichten desselben "
-                        + "Laufs; was über Läufe hinweg gilt, steht im Zustand eines Knotens oder in einem Aggregat", kopf.Ort));
+                    g.Fehler.Add((ports.Count == 0
+                        ? $"die Eingänge von {op.Knoten.Name} ({string.Join(", ", op.Auf.Ports.Select(p => "'" + p.Name + "'"))}) kommen alle von außen — zwei "
+                          + "Eingänge von außen treffen sich nie (jeder startet seinen Lauf); wer sie zusammenbringen muss, sammelt sie in einem Vorgangs-Aggregat, "
+                          + "dessen Decide den zusammengeführten Command an den Kopf gibt"
+                        : $"'{kopf.Name}' in {op.Knoten.Name} kommt von außen ([Kopf]), die übrigen Ports von Knoten des Graphen — ein Join paart nur "
+                          + "Nachrichten desselben Laufs; was über Läufe hinweg gilt, steht im Zustand eines Knotens oder in einem Aggregat", kopf.Ort));
                     continue;
                 }
                 var gemeinsam = new HashSet<(Operation, string)>(ObenPort(op, ports[0]));

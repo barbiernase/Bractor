@@ -39,7 +39,7 @@ public class LageAnalyzerTests
         public record Ueberfaellig(int Tage) : ICommand;
         public record Gemahnt(int Stufe) : ICommand;
         public sealed class Mahnwesen : IFunktion { public Gemahnt Auf(Ueberfaellig e) => default!; }
-        public sealed record Mahnablauf(Mahnwesen M) : IGraph;
+        public sealed record Mahnablauf([Kopf] Mahnwesen M) : IGraph;
         """;
 
     [Fact]

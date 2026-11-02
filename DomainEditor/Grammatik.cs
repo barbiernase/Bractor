@@ -72,7 +72,7 @@ public static class Grammatik
         // Konsum: Sorte → Eingang
         new("GR-COMMAND", "Command → genau ein Empfänger", "Ein Command hat genau einen Empfänger, vom Absender aus: nennt er sein Ziel im Typ "
             + "(ICommand<TAggregat> mit Id<TAggregat> AggregateId), entscheidet ihn genau dieses Aggregat; ohne Typargument (ICommand) bekommt ihn der "
-            + "Knoten desselben Graphen, der ihn nimmt, sonst der Kopf genau eines Graphen oder ein Akteur, der ihn hört (Arbeit). Kein Empfänger, mehrere, oder "
+            + "Knoten desselben Graphen, der seinen Erzeuger in [Von] nennt, sonst der Kopf genau eines Graphen oder ein Akteur, der ihn hört (Arbeit). Kein Empfänger, mehrere, oder "
             + "ein Typ, den ein Graph nimmt und ein Akteur hört, ist ein Fehler.", "error",
             [Comp("ICommand<TAggregat> liefert das Ziel aus Id<TAggregat> AggregateId (IAggregatCommand)"),
              An("CQRS013", "Domain.SourceGeneration/ModellAnalyzer.cs (Ziel nicht im Typ: IAggregatCommand von Hand, AggregateId ohne Typargument)"),
@@ -96,25 +96,38 @@ public static class Grammatik
             + "entscheiden kann, käme nie (docs/04 §4.4).", "error",
             [An("CQRS108", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Antwort ohne eigenen Command)"),
              new("laufzeit", null, "Infrastructure/Funktionen/FunktionsKindActor.cs (Antwort aus CommandResult.Antwort weitergerechnet)")]),
-        new("GR-KANTE", "Command ohne Ziel → Knoten desselben Graphen", "Eine Funktion gibt Commands und Hinweise aus, nie ein Event. Einen Command ohne "
-            + "Ziel bekommt jeder Knoten desselben Graphen, der ihn nimmt — die Kante folgt aus den Typen, geschrieben wird sie nie (docs/04 §4.4).", "error",
+        new("GR-KANTE", "Kante: [Von(nameof(Quelle))] am nehmenden Knoten", "Eine Funktion gibt Commands und Hinweise aus, nie ein Event. Innerhalb "
+            + "eines Graphen ist jede Kante ausdrücklich: [Von(nameof(A), nameof(B))] am nehmenden Knoten nennt die Knoten, von denen er bekommt; eine genannte "
+            + "Quelle speist die Ports, deren Typ sie ausgibt, und mindestens einen. Ein Port, den keine genannte Quelle speist, nimmt von außen — nur an einem "
+            + "[Kopf]. Was ein Knoten ausgibt und kein Knoten über Von von ihm nimmt, verlässt den Graphen; kreisfrei über die Knoten (eine Kette "
+            + "Bild → Bild → Bild ist kein Kreis) (docs/04 §4.4).", "error",
             [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Ausgabe einer Funktion)"),
-             new("generator", null, "Infrastructure.SourceGeneration/GraphGenerator.cs (GeneratedGraphen: Ports mit ihren Erzeugern aus den Typen)"),
+             An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Quelle ohne Port, Port ohne Quelle, Kreis; Lesart Graphform)"),
+             new("generator", null, "Infrastructure.SourceGeneration/GraphGenerator.cs (GeneratedGraphen: Ports mit ihren Erzeugern aus den Von)"),
              new("laufzeit", null, "Infrastructure/Funktionen/Lauf.cs (die Ausgaben eines Aufrufs gehen an die Ports seiner Abnehmer)")]),
-        new("GR-GRAPH", "Graph: Knoten als Parameter, Kanten aus den Typen", "Ein Graph ist ein Record mit IGraph; jeder Parameter ist ein Knoten (eine "
-            + "Funktion — eine generische mit Typargument — oder ein anderer Graph; Name = Konfig-Schlüssel, in einem inneren Graphen mit Punkt). Ein Graph "
-            + "im Graphen ist eine Schachtel: hinein geht nur, was er nimmt und innen keiner erzeugt, heraus nur, was er erzeugt und innen keiner nimmt (seine "
-            + "Signatur). Eingänge, die kein Knoten erzeugt, sind die Köpfe — je Eingangstyp genau einer; der Graph ist kreisfrei. Kein "
-            + "Builder, keine ausdrücklichen Kanten, keine Knotenarten (docs/04 §4.4).", "error",
+        new("GR-GRAPH", "Graph: Knoten als Parameter mit [Kopf] oder [Von]", "Ein Graph ist ein Record mit IGraph; jeder Parameter ist ein Knoten (eine "
+            + "Funktion — eine generische mit Typargument — oder ein anderer Graph; Name = Konfig-Schlüssel, in einem inneren Graphen mit Punkt). Eine "
+            + "Funktion darf mehrfach im Graphen stehen. Jeder Knoten trägt [Kopf], [Von(…)] oder beides; nur eine Quelle (eine Funktion, die lauscht) trägt "
+            + "keins. Jedes Argument von Von ist nameof eines anderen Parameters desselben Records — kein String-Literal, nicht der Knoten selbst, kein Name "
+            + "doppelt. Ein Graph im Graphen ist eine Schachtel: Von an ihm speist seine Köpfe, [Kopf] an ihm macht seine Köpfe zu Köpfen des äußeren, "
+            + "Von(nameof(Schachtel)) meint seine Ausgänge (seine Signatur). Kein Builder, keine Liste, keine Knotenarten (docs/04 §4.4).", "error",
             [An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Form des Graphen, Lesart Graphform)"),
              An("CQRS117", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (eine Funktion in keinem Graphen läuft nie)")]),
         new("GR-JOIN", "Ports: T, T?, OneOf, IReadOnlyList", "Die Command-Parameter eines Auf sind seine Ports, und ihr Typ sagt, was er erwartet: T genau "
             + "einen je Lauf (warten), T? höchstens einen (null, wenn keiner kommt oder das Zeitlimit des Knotens um ist), OneOf<A, B> den ersten (die "
             + "übrigen Zweige brechen ab), IReadOnlyList<T> alle aus den Unterläufen eine Ebene tiefer (ein Strom öffnet je Element einen). Alle Ports eines "
             + "Auf liegen auf einer Ebene; vom nächsten gemeinsamen Vorfahren aus ist ein T-Port hinter einer Wahl T? oder Teil eines OneOf — der Befund nennt "
-            + "den passenden Typ (docs/04 §4.4).", "error",
+            + "den passenden Typ. Ein Typ steht höchstens einmal je Auf (zwei Rollen sind zwei Typen, z. B. BildLinks und BildRechts), so hängt die "
+            + "Zuordnung nie an der Reihenfolge. Ein Join paart nur Nachrichten desselben Laufs: seine Ports kommen alle von genannten Quellen, zwei Eingänge "
+            + "von außen treffen sich nie (wer sie zusammenbringen muss, sammelt sie in einem Vorgangs-Aggregat) (docs/04 §4.4).", "error",
             [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Port-Formen, mehrere Ports nur mit Commands ohne Ziel)"),
-             An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Ebenen und Vielfachheit, Lesart Graphform)")]),
+             An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Ebenen, Vielfachheit, ein Typ einmal je Auf, Join halb von außen; Lesart Graphform)")]),
+        new("GR-KOPF", "Kopf: [Kopf] je Eingangstyp genau einer", "Ein Knoten, der von außerhalb des Graphen nimmt (aus einem Decide, von einem Akteur, "
+            + "vom Ausgang eines anderen Graphen), trägt [Kopf]; er nimmt von außen, was keine genannte Quelle speist. Je Eingangstyp des Graphen genau ein "
+            + "[Kopf], der ihn nimmt — was mehrere brauchen, nimmt einer, die übrigen nennen ihn in [Von]. Ein [Kopf], an dem nichts von außen ankommt, "
+            + "ist ein Fehler; ein Graph mit Quelle hat sonst keinen Kopf (docs/04 §4.4).", "error",
+            [An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Köpfe je Eingangstyp, Kopf ohne Eingang von außen; Lesart Graphform)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/Lauf.cs (ein Lauf beginnt an den Ports ohne Erzeuger des Kopfs)")]),
         new("GR-LAUF", "Ein Lauf je Kopf", "Jede Nachricht im Graphen gehört zu einem Lauf, den eine Kopf-Nachricht startet; Läufe verschiedener Köpfe "
             + "kommen nie zusammen. Fertig ist der Kopf, wenn jeder Aufruf fertig ist oder nie kommt; wirft ein Knoten auch nach seinen Wiederholungen, "
             + "scheitert der Lauf: offene Zweige brechen ab, der Kopf wird geparkt, LaufGescheitert geht an die Hörer (docs/04 §4.4).", "error",

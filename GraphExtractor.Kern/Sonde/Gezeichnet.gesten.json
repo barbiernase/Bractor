@@ -194,11 +194,13 @@
             "knoten": [
               {
                 "typ": "Offenzaehlung",
-                "name": "Zaehlung"
+                "name": "Zaehlung",
+                "kopf": true
               },
               {
                 "typ": "Vormerkpruefung",
-                "name": "Vormerkung"
+                "name": "Vormerkung",
+                "kopf": true
               }
             ]
           }
@@ -215,7 +217,8 @@
             "knoten": [
               {
                 "typ": "Glaettung<Kurzfenster>",
-                "name": "Glaettung"
+                "name": "Glaettung",
+                "kopf": true
               }
             ]
           }

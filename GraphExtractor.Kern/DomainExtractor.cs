@@ -369,15 +369,15 @@ public sealed class ClientRaw
 }
 
 /// <summary>
-/// Ein Graph (<c>record X(Knoten…) : IGraph</c>): die Knoten in Reihenfolge der Parameter (Name, Typ wie geschrieben); abgeleitet (nicht editierbar)
-/// die Köpfe, die Ausgänge und die Kanten aus den Typen (<c>Infrastructure.SourceGeneration.Graphform</c>).
+/// Ein Graph (<c>record X(Knoten…) : IGraph</c>): die Knoten in Reihenfolge der Parameter (Name, Typ wie geschrieben, <c>[Kopf]</c>, die Namen aus
+/// <c>[Von]</c>); abgeleitet (nicht editierbar) die Köpfe, die Ausgänge und die Kanten (<c>Infrastructure.SourceGeneration.Graphform</c>).
 /// </summary>
 public sealed class GraphRaw
 {
     public string Name = "", Namespace = "", Full = "";
-    public List<(string Name, string Typ)> Knoten = new();
+    public List<(string Name, string Typ, bool Kopf, List<string> Von)> Knoten = new();
     public List<string> Koepfe = new(), Ausgaenge = new();
-    /// <summary>Die Kanten aus den Typen: Erzeuger-Knoten, Typ, nehmender Knoten (aufgefaltete Pfade, <c>Aufbereitung.Vorschau</c>).</summary>
+    /// <summary>Die Kanten aus den <c>Von</c>: Erzeuger-Knoten, Typ, nehmender Knoten (aufgefaltete Pfade, <c>Aufbereitung.Vorschau</c>).</summary>
     public List<(string Von, string Typ, string Nach)> Kanten = new();
     public string? Quelle;
     public List<string> Fehler = new();
@@ -671,7 +671,7 @@ public sealed partial class DomainExtractor
             if (t.ContainingType == null && technik.IstTechnik(t)) { m.BausteinFunktionen.Add(ReadBausteinFunktion(t, technik: true)); continue; }
             // Client (record X : IClient): die Software an der Leitung.
             if (t.TypeKind != TypeKind.Interface && IstClient(t)) { m.Clients.Add(ReadClient(t)); continue; }
-            // Graph (record X(Knoten…) : IGraph): Knoten als Parameter, Kanten aus den Typen.
+            // Graph (record X(Knoten…) : IGraph): Knoten als Parameter, Kanten aus [Von], Köpfe aus [Kopf].
             if (Infrastructure.SourceGeneration.Graphform.IstGraph(t)) { m.Graphen.Add(ReadGraph(t)); continue; }
             // Geschachtelte Typen gehören zum Handcode ihres Containers (Zusatz), keine eigenen Bausteine.
             if (t.ContainingType != null || t.TypeKind is not (TypeKind.Class or TypeKind.Struct) || t.IsStatic || t.IsAbstract) continue;
@@ -889,7 +889,7 @@ public sealed partial class DomainExtractor
         };
     }
 
-    // ── Graphen: Knoten als Parameter des Records, Kanten aus den Typen (Graphform, eine Lesart mit Generator und Analyzer) ──────
+    // ── Graphen: Knoten als Parameter des Records, Kanten aus [Von], Köpfe aus [Kopf] (Graphform, eine Lesart mit Generator und Analyzer) ──────
     private GraphRaw ReadGraph(INamedTypeSymbol t)
     {
         var decl = QuellDeklarationen(t).FirstOrDefault();
@@ -902,7 +902,11 @@ public sealed partial class DomainExtractor
         var raw = new GraphRaw
         {
             Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(), Datei = decl?.SyntaxTree.FilePath, Doku = decl == null ? null : Summary(decl),
-            Knoten = (ctor?.Parameters ?? []).Select(p => (p.Name, geschrieben.GetValueOrDefault(p.Name) is { Length: > 0 } w ? w : p.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat))).ToList(),
+            Knoten = (ctor?.Parameters ?? []).Select(p =>
+            {
+                var (kopf, von) = Infrastructure.SourceGeneration.Graphform.KopfUndVon(p);
+                return (p.Name, geschrieben.GetValueOrDefault(p.Name) is { Length: > 0 } w ? w : p.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat), kopf, von);
+            }).ToList(),
             Koepfe = g.Koepfe.Select(k => Infrastructure.SourceGeneration.Funktionsform.Anzeigename(k.Typ)).Distinct(StringComparer.Ordinal).ToList(),
             Ausgaenge = g.Ausgaenge.Select(a => Infrastructure.SourceGeneration.Funktionsform.Anzeigename(a.Typ)).Distinct(StringComparer.Ordinal).ToList(),
             Quelle = g.Quelle?.Name,

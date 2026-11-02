@@ -112,7 +112,7 @@ public sealed class Registrierung : IFunktion
     public LehneRegistrierungAb Auf(AdresseVergeben v) => new(v.BenutzerId, "Adresse vergeben");
 }
 
-public sealed record Adresspruefung(Registrierung Reservierung) : IGraph;
+public sealed record Adresspruefung([Kopf] Registrierung Reservierung) : IGraph;
 
 // Wer hineingibt: ein Mensch am Registrierungs-Formular; er hört, wie es ausgeht (Kenntnis zweier Events). Der Client nennt nur ihn.
 public sealed record Besucher : IAkteur, IDarf<RegistriereBenutzer>, IHoert<BenutzerBestaetigt>, IHoert<RegistrierungAbgelehnt>;

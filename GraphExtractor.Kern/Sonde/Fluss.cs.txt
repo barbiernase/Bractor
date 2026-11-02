@@ -116,5 +116,5 @@ public sealed class Offenzaehlung : IFunktion
     }
 }
 
-public sealed record Seitenpruefungslauf(Pruefungsstart Start, Seitenpruefer Pruefer, Seitenbilanz Bilanz) : IGraph;
-public sealed record Mahnbemessung(Offenzaehlung Zaehlung) : IGraph;
+public sealed record Seitenpruefungslauf([Kopf] Pruefungsstart Start, [Von(nameof(Start))] Seitenpruefer Pruefer, [Von(nameof(Pruefer))] Seitenbilanz Bilanz) : IGraph;
+public sealed record Mahnbemessung([Kopf] Offenzaehlung Zaehlung) : IGraph;

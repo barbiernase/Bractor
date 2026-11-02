@@ -6,10 +6,12 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Domain.SourceGeneration;
 
 /// <summary>
-/// <b>CQRS115 (GR-GRAPH, GR-JOIN)</b> — ein Graph hat die Form, aus der Generator und Laufzeit ihn lesen (<see cref="Graphform"/>, docs/04 §4.4): ein
-/// Record mit <c>IGraph</c>, jeder Parameter ein Knoten (eine Funktion — je Funktion höchstens einer — oder ein Graph als Schachtel mit Signatur), je
-/// Command- bzw. Quell-Typ genau ein Kopf, kreisfrei; die Ports eines Auf auf einer Ebene und mit der Vielfachheit aus den Typen (ein falscher Port mit
-/// Vorschlag). Schon im Pipeline-Projekt mit Ort; die Regeln über alle Projekte (Empfänger, Funktion ohne Graph) prüft das Gesamtbild.
+/// <b>CQRS115 (GR-GRAPH, GR-KANTE, GR-KOPF, GR-JOIN)</b> — ein Graph hat die Form, aus der Generator und Laufzeit ihn lesen (<see cref="Graphform"/>,
+/// docs/04 §4.4): ein Record mit <c>IGraph</c>, jeder Parameter ein Knoten (eine Funktion — auch mehrfach — oder ein Graph als Schachtel mit Signatur)
+/// mit <c>[Kopf]</c> oder <c>[Von(nameof(…))]</c>; jede genannte Quelle speist einen Port, jeder Port hat eine Quelle oder kommt an einem Kopf von außen,
+/// je Eingangstyp genau ein Kopf, kreisfrei über die Knoten; die Ports eines Auf auf einer Ebene, mit der Vielfachheit aus den Typen und je Typ
+/// höchstens einer (ein falscher Port mit Vorschlag). Schon im Pipeline-Projekt mit Ort; die Regeln über alle Projekte (Empfänger, Funktion ohne
+/// Graph) prüft das Gesamtbild.
 /// </summary>
 [DiagnosticAnalyzer(LanguageNames.CSharp)]
 public sealed class GraphAnalyzer : DiagnosticAnalyzer
@@ -17,7 +19,7 @@ public sealed class GraphAnalyzer : DiagnosticAnalyzer
     public const string Id = "CQRS115";
 
     private static readonly DiagnosticDescriptor Form = new(Id, "Graph hat nicht die Form",
-        "Graph '{0}': {1} (GR-GRAPH, GR-JOIN)", "CQRS.Graph", DiagnosticSeverity.Error, isEnabledByDefault: true);
+        "Graph '{0}': {1} (GR-GRAPH, GR-KANTE, GR-KOPF, GR-JOIN)", "CQRS.Graph", DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Form);
 

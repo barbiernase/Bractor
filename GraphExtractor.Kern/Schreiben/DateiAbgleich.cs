@@ -577,20 +577,40 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         return (MitNamespaces(Anwenden(text, [(bl.Types[0].SpanStart, bl.Types[^1].Span.End, neu)]), c.Verkoerpert), "Client");
     }
 
-    // ── Graph (docs/04 §4.4): die Knoten sind die Parameter des Records (Name = Konfig-Schlüssel, Typ = Funktion oder Graph) ──
+    // ── Graph (docs/04 §4.4): die Knoten sind die Parameter des Records (Name = Konfig-Schlüssel, Typ = Funktion oder Graph, [Kopf], [Von(nameof(…))]) ──
     private (string, string)? GraphKnoten(string text, Graph g)
     {
         if (Typ(Parse(text), g.Name, g.Namespace) is not RecordDeclarationSyntax decl) return (text, $"Graph {g.Name} nicht gefunden");
+        g = Scaffolder.OhneLoseKanten(g);
         var ist = decl.ParameterList?.Parameters.ToList() ?? [];
-        bool Gleich(ParameterSyntax p, Parameter k) => p.Identifier.Text == k.Name && N(p.Type?.ToString()) == N(k.Typ);
+        bool Gleich(ParameterSyntax p, GraphKnoten k)
+        {
+            if (p.Identifier.Text != k.Name || N(p.Type?.ToString()) != N(k.Typ)) return false;
+            var (kopf, von) = KopfUndVon(p);
+            return kopf == k.Kopf && von.SequenceEqual(k.Von);
+        }
         if (ist.Count == g.Knoten.Count && ist.Zip(g.Knoten).All(z => Gleich(z.First, z.Second))) return null;
-        var teile = g.Knoten.Select(k => ist.FirstOrDefault(p => Gleich(p, k))?.ToString() ?? $"{k.Typ} {k.Name}").ToList();
+        var teile = g.Knoten.Select(k => ist.FirstOrDefault(p => Gleich(p, k))?.ToString() ?? Scaffolder.GraphKnotenText(k)).ToList();
         var neu = decl.ParameterList is { } pl
             ? Anwenden(text, [(pl.SpanStart, pl.Span.End, Liste(pl, teile))])
             : Anwenden(text, [(decl.Identifier.Span.End, decl.Identifier.Span.End, "(" + string.Join(", ", teile) + ")")]);
-        var plus = g.Knoten.Where(k => !ist.Any(p => Gleich(p, k))).Select(k => "+" + k.Name);
-        var minus = ist.Where(p => !g.Knoten.Any(k => Gleich(p, k))).Select(p => "−" + p.Identifier.Text);
+        var plus = g.Knoten.Where(k => !ist.Any(p => Gleich(p, k))).Select(k => (ist.Any(p => p.Identifier.Text == k.Name) ? "~" : "+") + k.Name);
+        var minus = ist.Where(p => !g.Knoten.Any(k => k.Name == p.Identifier.Text)).Select(p => "−" + p.Identifier.Text);
         return (MitNamespaces(neu, g.Knoten.Select(k => k.Typ)), "Knoten " + string.Join(", ", plus.Concat(minus)));
+    }
+
+    /// <summary><c>[Kopf]</c> und die Namen aus <c>[Von(nameof(A), …)]</c> eines Parameters, wie sie im Quelltext stehen.</summary>
+    private static (bool Kopf, List<string> Von) KopfUndVon(ParameterSyntax p)
+    {
+        var attribute = p.AttributeLists.SelectMany(l => l.Attributes).ToList();
+        static string Name(AttributeSyntax a)
+        {
+            var n = a.Name.ToString().Split('.')[^1];
+            return n.EndsWith("Attribute", StringComparison.Ordinal) ? n[..^"Attribute".Length] : n;
+        }
+        var von = attribute.Where(a => Name(a) == Scaffolder.VonAttribut).SelectMany(a => a.ArgumentList?.Arguments ?? default)
+            .Select(x => x.Expression is InvocationExpressionSyntax { ArgumentList.Arguments: [var e] } ? e.ToString() : x.Expression.ToString().Trim('"')).ToList();
+        return (attribute.Any(a => Name(a) == Scaffolder.KopfAttribut), von);
     }
 
     // ── Bausteine ──────────────────────────────────────────────────────────────────────────────

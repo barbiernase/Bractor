@@ -102,8 +102,12 @@ public sealed class MahnungNachSchaetzung : IFunktion
 }
 
 // Die Graphen: Knoten als Parameter, Kanten aus den Typen (SchadenErfasst: Aufnahme → Schätzung und Gutachten; beide → Mahnung).
-public sealed record Rueckgabepruefung(SchadenBeiRueckgabe Pruefung) : IGraph;
-public sealed record Schadensbewertung(Schadensaufnahme Aufnahme, Schadensschaetzer Schaetzung, Gutachtenanfrage Gutachten, MahnungNachSchaetzung Mahnung) : IGraph;
+public sealed record Rueckgabepruefung([Kopf] SchadenBeiRueckgabe Pruefung) : IGraph;
+public sealed record Schadensbewertung(
+    [Kopf] Schadensaufnahme Aufnahme,
+    [Von(nameof(Aufnahme))] Schadensschaetzer Schaetzung,
+    [Von(nameof(Aufnahme))] Gutachtenanfrage Gutachten,
+    [Von(nameof(Schaetzung), nameof(Gutachten))] MahnungNachSchaetzung Mahnung) : IGraph;
 
 public partial class Schadensfall : IState
 {

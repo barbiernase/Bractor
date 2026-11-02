@@ -136,7 +136,12 @@ public sealed class Importbilanz : IFunktion
         new(katalog.Import, alle.Count, alle.Count(z => z.Felder.Length < 3));
 }
 
-public sealed record Katalogimport(Dateiwaechter Eingang, Katalogeingang Annahme, Zeilenleser Lesen, Artikelanlage Anlage, Importbilanz Bilanz) : IGraph;
+public sealed record Katalogimport(
+    Dateiwaechter Eingang,
+    [Von(nameof(Eingang))] Katalogeingang Annahme,
+    [Von(nameof(Annahme))] Zeilenleser Lesen,
+    [Von(nameof(Lesen))] Artikelanlage Anlage,
+    [Von(nameof(Lesen), nameof(Annahme))] Importbilanz Bilanz) : IGraph;
 
 // Leseseite: der Stand je Import.
 public class Importstand : IReadModel
