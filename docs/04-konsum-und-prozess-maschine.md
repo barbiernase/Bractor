@@ -218,7 +218,8 @@ Was ein Port erwartet, sagt sein Typ — das ist die ganze Synchronisation:
 Ein Ausgang `T` liefert genau einen, ein `OneOf`-Fall keinen oder einen, ein Strom keinen bis viele — je Element einen **Unterlauf**. Der Build
 prüft die Ports vom nächsten gemeinsamen Vorfahren aus: ein `T`-Port hinter einer Wahl muss `T?` (oder Teil eines `OneOf`) sein, hinter einem
 Strom `IReadOnlyList<T>`; der Befund nennt den passenden Typ (CQRS115). Umgekehrt dürfen mehrere genannte Quellen einen `T`- oder `T?`-Port nur
-speisen, wenn verschiedene Fälle einer Wahl sie trennen (Zusammenfließen) — sonst kämen zwei Werte in einem Lauf, und es gälte der erste (CQRS115). Folge, Fork, exklusive Wahl, Join, Je, Sammeln, Fork-Join je Element,
+speisen, wenn verschiedene Fälle einer Wahl sie trennen (Zusammenfließen) — sonst kämen zwei Werte in einem Lauf, und es gälte der erste (CQRS115). Soll jeder für sich weiter, steht der nehmende Knoten je Quelle einmal
+im Graphen (dieselbe Funktion darf mehrfach stehen); gehören beide zusammen, bekommen sie eigene Typen und zwei Ports (Join). Folge, Fork, exklusive Wahl, Join, Je, Sammeln, Fork-Join je Element,
 Rennen und Warten mit Frist sind so Formen von Signaturen, keine Knotenarten. Der Join der Bildaufbereitung (Beispieldomäne,
 `Domain.Pipeline/ImagePair/Bildeingang.cs`) nimmt das eingelesene Bild und seine Vorschau aus dem anderen Zweig desselben Laufs:
 ```csharp

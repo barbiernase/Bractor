@@ -568,10 +568,13 @@ namespace Infrastructure.SourceGeneration
                     var hinein = g.Kanten.Where(e => e.NachOperation == op && e.Port == p).ToList();
                     var paar = hinein.SelectMany((a, i) => hinein.Skip(i + 1).Select(b => (a, b))).FirstOrDefault(x => !Getrennt(x.a, x.b));
                     if (paar.a == null) continue;
+                    string Kurz(string s) => s.Substring(s.LastIndexOf('.') + 1);
+                    string ZweiterKnoten(Kante e) => $"'{Kurz(op.Knoten.Name)}{Kurz(e.Von.Name)}' mit [Von(nameof({Kurz(e.Von.Name)}))]";
                     g.Fehler.Add(($"'{p.Typen[0].Name}{(p.Form == Funktionsform.Portform.Hoechstens ? "?" : "")} {p.Name}' in {op.Knoten.Name} bekommt in einem "
                         + $"Lauf zwei Werte (von {paar.a.Von.Name} und {paar.b.Von.Name}, keine Wahl trennt sie) — es gälte der erste, welcher, hinge an der "
-                        + "Zeit; zusammenfließen dürfen nur Fälle einer Wahl. Brauchst du beide, gib ihnen eigene Typen und zwei Ports (Join); willst du den "
-                        + "schnelleren, eigene Typen und OneOf<…> (Rennen)", p.Ort));
+                        + $"Zeit; zusammenfließen dürfen nur Fälle einer Wahl. Soll jeder für sich weiter, nimm einen Knoten je Quelle: {ZweiterKnoten(paar.a)} "
+                        + $"und {ZweiterKnoten(paar.b)} (dieselbe Funktion darf mehrfach stehen). Brauchst du beide zusammen, gib ihnen eigene Typen und zwei "
+                        + "Ports (Join); zählt nur der schnellere, eigene Typen und OneOf<…> (Rennen)", p.Ort));
                 }
             foreach (var op in g.Knoten.SelectMany(k => k.Operationen).Where(o => o.Auf.Ports.Count > 1))
             {

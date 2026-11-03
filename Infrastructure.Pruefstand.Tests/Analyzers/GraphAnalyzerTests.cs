@@ -246,7 +246,13 @@ public class GraphAnalyzerTests
             """;
         (await Befunde(zwei + "public sealed class Nimm : IFunktion { public Buche Auf(Klein k) => default!; }"))
             .Should().ContainSingle().Which.Should().Contain("'Klein k' in N bekommt in einem Lauf zwei Werte (von Vorschau und Daumen")
+            .And.Contain("nimm einen Knoten je Quelle: 'NVorschau' mit [Von(nameof(Vorschau))] und 'NDaumen' mit [Von(nameof(Daumen))]")
             .And.Contain("zwei Ports (Join)").And.Contain("OneOf<…> (Rennen)");
+        (await Befunde("""
+            public sealed class Nimm : IFunktion { public Buche Auf(Klein k) => default!; }
+            public sealed record Getrennt([Kopf] Lies L, [Von(nameof(L))] Verkleinere Vorschau, [Von(nameof(L))] Verkleinere Daumen,
+                [Von(nameof(Vorschau))] Nimm NVorschau, [Von(nameof(Daumen))] Nimm NDaumen) : IGraph;
+            """)).Should().BeEmpty("der Vorschlag aus dem Befund baut: je Quelle ein eigener Knoten derselben Funktion");
         (await Befunde(zwei + "public sealed class Nimm : IFunktion { public Buche Auf(Klein? k) => default!; }"))
             .Should().ContainSingle("auch T? nimmt höchstens einen").Which.Should().Contain("'Klein? k' in N bekommt in einem Lauf zwei Werte");
     }

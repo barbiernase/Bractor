@@ -118,7 +118,8 @@ public static class Grammatik
             + "übrigen Zweige brechen ab), IReadOnlyList<T> alle aus den Unterläufen eine Ebene tiefer (ein Strom öffnet je Element einen). Alle Ports eines "
             + "Auf liegen auf einer Ebene; vom nächsten gemeinsamen Vorfahren aus ist ein T-Port hinter einer Wahl T? oder Teil eines OneOf — der Befund nennt "
             + "den passenden Typ. Speisen mehrere genannte Quellen einen T- oder T?-Port, trennen sie verschiedene Fälle einer Wahl (Zusammenfließen); "
-            + "sonst kämen zwei Werte in einem Lauf — wer beide braucht, gibt ihnen eigene Typen und zwei Ports, wer den schnelleren will, ein OneOf. "
+            + "sonst kämen zwei Werte in einem Lauf — soll jeder für sich weiter, steht der nehmende Knoten je Quelle einmal im Graphen; wer beide zusammen "
+            + "braucht, gibt ihnen eigene Typen und zwei Ports, wer den schnelleren will, ein OneOf. "
             + "Ein Typ steht höchstens einmal je Auf (zwei Rollen sind zwei Typen, z. B. BildLinks und BildRechts), so hängt die "
             + "Zuordnung nie an der Reihenfolge. Ein Join paart nur Nachrichten desselben Laufs: seine Ports kommen alle von genannten Quellen, zwei Eingänge "
             + "von außen treffen sich nie (wer sie zusammenbringen muss, sammelt sie in einem Vorgangs-Aggregat) (docs/04 §4.4).", "error",
