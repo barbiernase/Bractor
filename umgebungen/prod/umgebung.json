@@ -13,7 +13,8 @@
     "Art": "Consul",
     "Name": "cqrs",
     "Consul": "localhost:8500",
-    "AdvertisedHost": "localhost"
+    "AdvertisedHost": "localhost",
+    "Rechner": "prod-1"
   },
   "Transport": {
     "GrpcPort": 5001,

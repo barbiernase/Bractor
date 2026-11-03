@@ -64,6 +64,7 @@ public static class CqrsUmgebungExtensions
             o.EventStoreSchema = u.EventStore.Schema;
             o.CommandTimeoutSeconds = u.EventStore.BefehlsTimeoutSekunden;
             o.Einzelknoten = u.Cluster.Art == ClusterArt.Einzelknoten;
+            o.Rechner = u.Cluster.Rechner;
             o.ClusterName = u.Cluster.Name;
             o.ConsulAddress = u.Cluster.Consul;
             o.AdvertisedHost = u.Cluster.AdvertisedHost;

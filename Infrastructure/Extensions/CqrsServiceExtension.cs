@@ -77,6 +77,7 @@ public static class CqrsServiceExtensions
     {
         var builder = new CqrsFrameworkBuilder(services);
         configure?.Invoke(builder);
+        services.AddSingleton(new Infrastructure.Funktionen.EigenerRechner(string.IsNullOrEmpty(builder.Rechner) ? null : builder.Rechner, builder.Einzelknoten));
         
         Console.WriteLine();
         Console.WriteLine("==========================================================");
@@ -483,6 +484,9 @@ public class CqrsFrameworkBuilder
 
     /// <summary>Einzelner Knoten ohne Consul (in-memory Mitgliedschaft). Default false = Consul.</summary>
     public bool Einzelknoten { get; set; }
+
+    /// <summary>Der Name dieser Maschine (<c>Cluster:Rechner</c>): Instanzen, die ihn als Rechner nennen, laufen nur hier.</summary>
+    public string? Rechner { get; set; }
     public string ConsulAddress { get; set; } = "localhost:8500";
     
     /// <summary>

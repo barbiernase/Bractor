@@ -20,7 +20,7 @@ public sealed class ZweiKnotenTests
     {
         var u = await Testumgebung.NeuAsync(Anwendung.Beispiel, "verhalten-zwei-knoten", consul: true);
         await using var a = await Hostlauf.StarteAsync(u, "knoten-a");
-        await using var b = await Hostlauf.StarteAsync(u, "knoten-b");
+        await using var b = await Hostlauf.StarteAsync(u, "knoten-b", rechner: "rechner-2");
         var log = new Log(u);
         var bilder = new Bildpaare(u);
 
@@ -69,7 +69,7 @@ public sealed class ZweiKnotenTests
         const int partitionen = 8;   // Konsum-Standard der Umgebung
         var u = await Testumgebung.NeuAsync(Anwendung.Pruefdomaene, "verhalten-wecker-knoten", consul: true);
         await using var a = await Hostlauf.StarteAsync(u, "knoten-a");
-        await using var b = await Hostlauf.StarteAsync(u, "knoten-b");
+        await using var b = await Hostlauf.StarteAsync(u, "knoten-b", rechner: "rechner-2");
         using var eingang = new JsonEingang(a);
         var log = new Log(u);
         var alle = new List<Guid>();

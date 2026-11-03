@@ -27,7 +27,11 @@ public sealed class Hostlauf : IAsyncDisposable
     public int EinblickPort { get; }
     public string GrpcAdresse => $"http://localhost:{GrpcPort}";
 
-    public static async Task<Hostlauf> StarteAsync(Testumgebung u, string rolle = "host")
+    /// <summary>Der Rechnername des ersten Hosts — die Instanzen mit Zustand oder Quelle laufen auf ihm (Testumgebung).</summary>
+    public const string Rechner1 = "rechner-1";
+
+    /// <summary>Startet einen Host; <paramref name="rechner"/> ist sein <c>Cluster:Rechner</c> (ein Neustart derselben Maschine trägt denselben).</summary>
+    public static async Task<Hostlauf> StarteAsync(Testumgebung u, string rolle = "host", string rechner = Rechner1)
     {
         var dll = HostDll(u.Anwendung == Anwendung.Beispiel ? "Host.Grpc" : "Host.Pruefdomaene");
         var grpc = Testumgebung.FreierPort();
@@ -39,6 +43,7 @@ public sealed class Hostlauf : IAsyncDisposable
         psi.Environment["CQRS_UMGEBUNGEN"] = u.Verzeichnis;
         psi.Environment["Transport__GrpcPort"] = grpc.ToString();
         psi.Environment["Transport__EinblickPort"] = einblick.ToString();
+        psi.Environment["Cluster__Rechner"] = rechner;
         psi.Environment["DOTNET_ENVIRONMENT"] = "Production";
         psi.Environment["ASPNETCORE_ENVIRONMENT"] = "Production";
         var logDatei = Path.Combine(u.Verzeichnis, rolle + ".log");

@@ -113,13 +113,16 @@ public static partial class UmgebungLader
     }
 
     /// <summary>
-    /// Bindet eine Instanz: <c>Graph</c>, <c>Akteur</c> und jeder andere Schlüssel ein Knoten — seine Rahmenfelder streng
+    /// Bindet eine Instanz: <c>Graph</c>, <c>Akteur</c>, <c>Rechner</c> und jeder andere Schlüssel ein Knoten — seine Rahmenfelder streng
     /// (<see cref="KnotenKonfig.Rahmenfelder"/>), alles andere als Werte seiner Konfig-Records (geprüft beim Start gegen den Graphen).
     /// </summary>
     public static GraphInstanzKonfig Instanz(IConfigurationSection g)
     {
-        var i = new GraphInstanzKonfig { Graph = g[nameof(GraphInstanzKonfig.Graph)] ?? "", Akteur = g[nameof(GraphInstanzKonfig.Akteur)] };
-        foreach (var k in g.GetChildren().Where(k => k.Key is not (nameof(GraphInstanzKonfig.Graph) or nameof(GraphInstanzKonfig.Akteur))))
+        var i = new GraphInstanzKonfig
+        {
+            Graph = g[nameof(GraphInstanzKonfig.Graph)] ?? "", Akteur = g[nameof(GraphInstanzKonfig.Akteur)], Rechner = g[nameof(GraphInstanzKonfig.Rechner)],
+        };
+        foreach (var k in g.GetChildren().Where(k => k.Key is not (nameof(GraphInstanzKonfig.Graph) or nameof(GraphInstanzKonfig.Akteur) or nameof(GraphInstanzKonfig.Rechner))))
         {
             var knoten = new KnotenKonfig();
             var rahmen = new ConfigurationBuilder().AddInMemoryCollection(k.AsEnumerable(makePathsRelative: true)

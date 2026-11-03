@@ -13,7 +13,8 @@
     "Art": "Consul",
     "Name": "cqrs-vermessung-pruefdomaene",
     "Consul": "localhost:8500",
-    "AdvertisedHost": "localhost"
+    "AdvertisedHost": "localhost",
+    "Rechner": "messrechner"
   },
   "Transport": {
     "GrpcPort": 5211,

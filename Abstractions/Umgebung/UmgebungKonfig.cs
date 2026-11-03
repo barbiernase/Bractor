@@ -57,6 +57,11 @@ public sealed class ClusterKonfig
     public string Consul { get; set; } = "localhost:8500";
     public string AdvertisedHost { get; set; } = "localhost";
     public KnotenRolle Rolle { get; set; } = KnotenRolle.Allein;
+    /// <summary>
+    /// Der Name dieser Maschine (docs/04 §4.4, z. B. <c>gpu-1</c>, gern <c>${env:CQRS_RECHNER}</c>): eine Instanz, die ihn als <c>Rechner</c> nennt,
+    /// läuft nur hier. Ohne Namen bedient der Host nur Instanzen, die keinen Rechner nennen.
+    /// </summary>
+    public string? Rechner { get; set; }
 }
 
 /// <summary>Der Schreibpfad (Tuning, nie Semantik).</summary>
@@ -146,6 +151,8 @@ public sealed class GraphInstanzKonfig
 {
     public string Graph { get; set; } = "";
     public string? Akteur { get; set; }
+    /// <summary>Der Rechner, auf dem die Instanz läuft (sein <c>Cluster:Rechner</c>); ohne Angabe auf jedem Host. Pflicht mit Zustand oder Quelle im Cluster.</summary>
+    public string? Rechner { get; set; }
     public Dictionary<string, KnotenKonfig> Knoten { get; set; } = new(StringComparer.Ordinal);
 }
 

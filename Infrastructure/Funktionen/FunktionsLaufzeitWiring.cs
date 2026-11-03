@@ -82,6 +82,7 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
 {
     public Task StartAsync(CancellationToken ct)
     {
+        (dienste.GetService<EigenerRechner>() ?? EigenerRechner.Keiner).Pruefe(instanzen, i => FunktionsLaufzeitWiring.MitZustand(i, dienste));
         var logger = logs?.CreateLogger("Funktionen");
         var emitter = new CommandEmitter(new Bote(system.Cluster(), logger), logger);
         var verteilung = dienste.GetService<Infrastructure.Verteilen.Verteilung>();

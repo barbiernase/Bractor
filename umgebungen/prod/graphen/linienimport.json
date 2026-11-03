@@ -1,5 +1,6 @@
 {
   "Graph": "Linienimport",
+  "Rechner": "prod-1",
   "Akteur": "KameraSystem",
   "Eingang": {
     "Pfad": "/mnt/unlabeledgewebebilder/SNP/IO",

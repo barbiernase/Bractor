@@ -79,6 +79,7 @@ services:
     environment:
       <<: *cluster-env
       Cluster__AdvertisedHost: grpc1
+      Cluster__Rechner: grpc1   # der Linienimport (Quelle) läuft hier (umgebungen/multinode/graphen/linienimport.json)
     ports:
       - "127.0.0.1:5001:5001"   # nur grpc1 nach außen (h2c) — für optionale externe Checks
       - "127.0.0.1:5002:5002"   # Einblick-Port (HTTP/1.1): /health und der Webhook der Datei-Quelle (Quellen:DateiErkannt:Webhook)
@@ -98,6 +99,7 @@ services:
     environment:
       <<: *cluster-env
       Cluster__AdvertisedHost: grpc2
+      Cluster__Rechner: grpc2
     depends_on:
       <<: *infra-deps
       migrate:
@@ -108,6 +110,7 @@ services:
     environment:
       <<: *cluster-env
       Cluster__AdvertisedHost: grpc3
+      Cluster__Rechner: grpc3
     depends_on:
       <<: *infra-deps
       migrate:

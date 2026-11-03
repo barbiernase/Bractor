@@ -243,6 +243,8 @@ public class UmgebungLaderTests
             u.Graphen["linienimport"].Knoten["Eingang"].Werte["Pfad"].Should().EndWith("/cqrs-sim/main/DateiErkannt", "der Wächter ist der Kopf");
         }
         else u.Transport.JsonEingang.Should().BeFalse("Prod: kein JSON-Eingang");
+        if (name != "sim-main")
+            u.Graphen["linienimport"].Rechner.Should().NotBeNullOrEmpty("eine Quelle läuft im Cluster auf ihrem Rechner (Cluster:Rechner des Hosts)");
     }
 
     [Fact]

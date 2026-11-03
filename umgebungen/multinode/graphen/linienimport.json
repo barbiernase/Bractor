@@ -1,5 +1,6 @@
 {
   "Graph": "Linienimport",
+  "Rechner": "grpc1",
   "Akteur": "KameraSystem",
   "Eingang": {
     "Pfad": "/data/input",

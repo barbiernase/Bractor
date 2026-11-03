@@ -104,9 +104,10 @@ public sealed class Testumgebung
     {
         if (Anwendung == Anwendung.Pruefdomaene)
         {
-            foreach (var g in new[] { "Abrechnungsablauf", "Auftragsablauf", "Verteilungsablauf", "Importablauf", "Merkmalbildung", "Nachschubablauf",
-                         "Zubuchung" })
+            foreach (var g in new[] { "Abrechnungsablauf", "Auftragsablauf", "Verteilungsablauf", "Importablauf", "Nachschubablauf", "Zubuchung" })
                 yield return (g.ToLowerInvariant(), new JsonObject { ["Graph"] = g });
+            // Mit Zustand: im Cluster auf ihrem Rechner (der erste Host, Hostlauf.Rechner1).
+            yield return ("merkmalbildung", new JsonObject { ["Graph"] = "Merkmalbildung", ["Rechner"] = Hostlauf.Rechner1 });
             yield break;
         }
         JsonObject ImHost(bool mitPfad = false)
@@ -118,7 +119,7 @@ public sealed class Testumgebung
         // Der Linienimport: ein Dateiwächter auf dem Quell-Verzeichnis, darunter die Bildaufbereitung (Graph im Graphen).
         yield return ("linienimport", new JsonObject
         {
-            ["Graph"] = "Linienimport", ["Akteur"] = "KameraSystem",
+            ["Graph"] = "Linienimport", ["Akteur"] = "KameraSystem", ["Rechner"] = Hostlauf.Rechner1,
             ["Eingang"] = new JsonObject
             {
                 ["Pfad"] = Quellpfad, ["Muster"] = new JsonArray("*.tiff"), ["Intervall"] = "00:00:01", ["Fertig"] = "Stabil", ["Fenster"] = "00:00:01",

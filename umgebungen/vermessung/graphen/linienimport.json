@@ -1,5 +1,6 @@
 {
   "Graph": "Linienimport",
+  "Rechner": "messrechner",
   "Akteur": "KameraSystem",
   "Eingang": {
     "Pfad": "${env:HOME}/cqrs-vermessung/DateiErkannt",
