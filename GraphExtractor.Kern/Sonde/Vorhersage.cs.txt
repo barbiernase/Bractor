@@ -4,7 +4,8 @@ using Abstractions;
 //
 // Wetterstationen melden Temperaturen (Fakten im Log); das Decide gibt je Meldung einen Command ohne Ziel an den Kopf der Prognose. Der Kopf bildet
 // eine Tendenz, die GABELT an zwei Knoten DERSELBEN GENERISCHEN Funktion (die Glättung, je Typargument ein Baustein: kurzes und langes Fenster,
-// jede mit eigenem Konfig-Record am Knoten); das Prognosemodell JOINT beide, hält gekapselten ZUSTAND (IZustand, gesichert mit dem Lauf), nimmt
+// jede mit eigenem Konfig-Record am Knoten); das Prognosemodell FÜHRT beide in seinem ZUSTAND ZUSAMMEN (IZustand: je Glättung ein Auf, die erste
+// wartet im Zustand auf die zweite, bis dahin ein leerer Strom), nimmt
 // eine Technik mit eigenem Zustand und gibt in einer WAHL entweder die Prognose als Command an die Station oder eine Unwetter-Warnung als HINWEIS
 // aus — Hinweise gehen nur an Akteure draußen (der Warndienst hört sie), keine Funktion hört einen.
 //
@@ -78,6 +79,8 @@ public sealed class Gewichte
 {
     public Dictionary<Guid, double> Mittel { get; set; } = new();
     public Dictionary<Guid, int> Anzahl { get; set; } = new();
+    public Dictionary<Guid, double> Kurz { get; set; } = new();
+    public Dictionary<Guid, double> Lang { get; set; } = new();
 }
 
 // Technik (ohne Marker, im Konstruktor des Modells) mit eigenem Zustand: zählt die Prognosen — ihr Zustand gehört dem Knoten des Modells.
@@ -98,18 +101,34 @@ public sealed class Statistik(IZustand<Zaehlung> zaehlung) : IStatistik
 
 public record Unwetter(Id<Station> Station, string Stufe) : ITransientEvent;
 
-// JOIN der beiden Glättungen, mit Zustand und Technik; WAHL zwischen Prognose (Command an die Station) und Warnung (Hinweis).
+// ZUSAMMENFÜHREN im Logik-Code: je Glättung ein Auf; der Zustand hält die erste, bis die zweite derselben Station da ist (bis dahin ein leerer
+// Strom); dann mit Technik eine WAHL zwischen Prognose (Command an die Station) und Warnung (Hinweis).
 public sealed class Prognosemodell(IZustand<Gewichte> gewichte, IStatistik statistik) : IFunktion
 {
-    public OneOf<VermerkePrognose, Unwetter> Auf(Geglaettet<Kurzfenster> kurz, Geglaettet<Langfenster> lang)
+    public IEnumerable<OneOf<VermerkePrognose, Unwetter>> Auf(Geglaettet<Kurzfenster> kurz)
     {
-        var s = kurz.Station.Wert;
+        gewichte.Wert.Kurz[kurz.Station.Wert] = kurz.Grad;
+        return Prognose(kurz.Station);
+    }
+
+    public IEnumerable<OneOf<VermerkePrognose, Unwetter>> Auf(Geglaettet<Langfenster> lang)
+    {
+        gewichte.Wert.Lang[lang.Station.Wert] = lang.Grad;
+        return Prognose(lang.Station);
+    }
+
+    private IEnumerable<OneOf<VermerkePrognose, Unwetter>> Prognose(Id<Station> station)
+    {
+        var s = station.Wert;
+        if (!gewichte.Wert.Kurz.TryGetValue(s, out var kurz) || !gewichte.Wert.Lang.TryGetValue(s, out var lang)) yield break;
+        gewichte.Wert.Kurz.Remove(s);
+        gewichte.Wert.Lang.Remove(s);
         statistik.Zaehle(s);
         var n = gewichte.Wert.Anzahl.GetValueOrDefault(s) + 1;
         gewichte.Wert.Anzahl[s] = n;
-        gewichte.Wert.Mittel[s] = gewichte.Wert.Mittel.GetValueOrDefault(s) + (kurz.Grad - gewichte.Wert.Mittel.GetValueOrDefault(s)) / n;
-        if (Math.Abs(kurz.Grad - lang.Grad) > 10) return new Unwetter(kurz.Station, "rot");
-        return new VermerkePrognose(kurz.Station, gewichte.Wert.Mittel[s], n);
+        gewichte.Wert.Mittel[s] = gewichte.Wert.Mittel.GetValueOrDefault(s) + (kurz - gewichte.Wert.Mittel.GetValueOrDefault(s)) / n;
+        if (Math.Abs(kurz - lang) > 10) yield return new Unwetter(station, "rot");
+        else yield return new VermerkePrognose(station, gewichte.Wert.Mittel[s], n);
     }
 }
 

@@ -9,8 +9,8 @@ using Core.Katalog;
 // EINE abgelegte Katalog-Datei wird zu vielen Fakten. Am Kopf des Graphen steht eine QUELLFUNKTION AUS DEM KATALOG des Frameworks (der
 // Dateiwächter, Core.Katalog): je gefundene Datei ein Lauf. Der Eingang startet den Import-Vorgang (ein Aggregat) und hört dessen Event als Antwort;
 // ein Zeilenleser (Technik als KLASSE, ohne Schnittstelle, mit Konfig-Record) gibt als STROM je Zeile einen Unterlauf (JE) und zwischendurch den
-// Fortschritt an den Vorgang; je Zeile wird ein Artikel angelegt; die Bilanz SAMMELT alle Zeilen und JOINT sie mit dem bereiten Katalog derselben
-// Ebene. Die Ids leiten die Knoten aus der Herkunft ab (R13). Der Akteur der Instanz (die Ablage) darf, was den Graphen verlässt.
+// Fortschritt an den Vorgang; je Zeile wird ein Artikel angelegt; am Ende des Stroms schließt der Zeilenleser den Vorgang mit seiner Bilanz ab (er
+// hat alle Zeilen gesehen — kein Einsammeln im Graphen). Die Ids leiten die Knoten aus der Herkunft ab (R13). Der Akteur der Instanz (die Ablage) darf, was den Graphen verlässt.
 //
 // Die Leseseite zeigt die beiden Store-Klassen ohne Transaktion (docs/04 §4.3, docs/10 R14): der Stand liegt in Dateien (Klasse 2, wiederholungsfest — jede
 // Schreib-Fähigkeit nimmt die Herkunft und schreibt bedingt), und eine Metrik zählt angelegte Artikel (Klasse 3, mindestens einmal — nur mit
@@ -107,18 +107,22 @@ public sealed class CsvZerleger(CsvKonfig konfig)
     public string[] Zerlege(string zeile) => zeile.Split(konfig.Trenner);
 }
 
-// JE: je Zeile ein Unterlauf; je hundert Zeilen der Fortschritt an den Vorgang (er verlässt den Graphen).
+// JE: je Zeile ein Unterlauf; je hundert Zeilen der Fortschritt an den Vorgang, am Ende die Bilanz (beide verlassen den Graphen).
 public sealed class Zeilenleser(CsvZerleger zerleger) : IFunktion
 {
-    public async IAsyncEnumerable<OneOf<Zeile, MeldeImportFortschritt>> Auf(KatalogBereit k)
+    public async IAsyncEnumerable<OneOf<Zeile, MeldeImportFortschritt, SchliesseImportAb>> Auf(KatalogBereit k)
     {
         var nummer = 0;
+        var fehler = 0;
         await foreach (var text in File.ReadLinesAsync(k.Pfad))
         {
             nummer++;
-            yield return new Zeile(k.Import, nummer, zerleger.Zerlege(text));
+            var felder = zerleger.Zerlege(text);
+            if (felder.Length < 3) fehler++;
+            yield return new Zeile(k.Import, nummer, felder);
             if (nummer % 100 == 0) yield return new MeldeImportFortschritt(k.Import, nummer);
         }
+        yield return new SchliesseImportAb(k.Import, nummer, fehler);
     }
 }
 
@@ -129,19 +133,12 @@ public sealed class Artikelanlage : IFunktion
         new(h.NeueId<Artikel>(z.Felder[0]), z.Felder[0], z.Felder.ElementAtOrDefault(1) ?? "", decimal.Parse(z.Felder.ElementAtOrDefault(2) ?? "0"));
 }
 
-// SAMMELN + JOIN: alle Zeilen der Unterläufe und der bereite Katalog auf der Ebene des Kopfs.
-public sealed class Importbilanz : IFunktion
-{
-    public SchliesseImportAb Auf(IReadOnlyList<Zeile> alle, KatalogBereit katalog) =>
-        new(katalog.Import, alle.Count, alle.Count(z => z.Felder.Length < 3));
-}
 
 public sealed record Katalogimport(
     Dateiwaechter Eingang,
     [Von(nameof(Eingang))] Katalogeingang Annahme,
     [Von(nameof(Annahme))] Zeilenleser Lesen,
-    [Von(nameof(Lesen))] Artikelanlage Anlage,
-    [Von(nameof(Lesen), nameof(Annahme))] Importbilanz Bilanz) : IGraph;
+    [Von(nameof(Lesen))] Artikelanlage Anlage) : IGraph;
 
 // Leseseite: der Stand je Import.
 public class Importstand : IReadModel

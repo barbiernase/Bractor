@@ -129,33 +129,14 @@ public interface IPost { Task SendeAsync(string an); }
         quelle.Should().Contain("f.Auf((global::Probe.Ueberfaellig)a[0]!, b!.Hole<global::Probe.ISucheKonto>())", "die Lese-Fähigkeit kommt je Aufruf aus dem Bereich");
     }
 
-    [Fact]
-    public void Ein_Join_nimmt_seine_Ports_als_T_T_nullable_OneOf_und_Liste()
-    {
-        var (quelle, ids, fehler) = Bausteine(@"namespace Probe {
-            public sealed class Zusammen : IFunktion
-            {
-                public Mahne Auf(Ueberfaellig u, Gemahnt? g, OneOf<Bezahlt, Gemahnt2> erster, IReadOnlyList<Teil> alle, Herkunft h) => null!;
-            }
-            public sealed record Gemahnt2(int Stufe) : ICommand;
-            public sealed record Teil(int Nr) : ICommand; }");
-
-        ids.Should().BeEmpty();
-        fehler.Should().BeEmpty("jede Port-Form hat ihren Ausdruck im Generat");
-        quelle.Should().Contain("f.Auf((global::Probe.Ueberfaellig)a[0]!, (global::Probe.Gemahnt?)a[1], (a[2] switch { global::Probe.Bezahlt x => "
-            + "(global::Abstractions.OneOf<global::Probe.Bezahlt, global::Probe.Gemahnt2>)x, global::Probe.Gemahnt2 x => "
-            + "(global::Abstractions.OneOf<global::Probe.Bezahlt, global::Probe.Gemahnt2>)x, _ => throw new InvalidOperationException(\"erster: kein Fall\") }), "
-            + "Ausgaben.Liste<global::Probe.Teil>(a[3]), h)");
-        quelle.Should().Contain("new Type[] { typeof(global::Probe.Ueberfaellig), typeof(global::Probe.Gemahnt), typeof(global::Probe.Bezahlt), "
-            + "typeof(global::Probe.Gemahnt2), typeof(global::Probe.Teil) })", "alle Typen der Ports");
-    }
-
     [Theory]
-    [InlineData("public Mahne Auf(Ueberfaellig u, Messwert m) => null!;", "ein Hinweis ist kein Port")]
-    [InlineData("public Mahne Auf(IReadOnlyList<Messwert> m) => null!;", "eine Liste nur von Commands ohne Ziel")]
-    [InlineData("public Mahne Auf(OneOf<Ueberfaellig, Gebucht> m) => null!;", "ein Rennen nur unter Commands ohne Ziel")]
-    [InlineData("public Mahne Auf(Ueberfaellig u, Gebucht g) => null!;", "eine Antwort steht allein")]
-    public void Ein_Join_ausser_Form_ist_CQRS100(string methode, string worum)
+    [InlineData("public Mahne Auf(Ueberfaellig u, Messwert m) => null!;", "ein Hinweis ist kein Eingang")]
+    [InlineData("public Mahne Auf(Ueberfaellig u, Gemahnt g) => null!;", "ein Auf nimmt genau eine Nachricht")]
+    [InlineData("public Mahne Auf(Ueberfaellig u, Gebucht g) => null!;", "auch eine Antwort steht allein")]
+    [InlineData("public Mahne Auf(Gemahnt? g) => null!;", "ein Eingang ist nie nullable")]
+    [InlineData("public Mahne Auf(IReadOnlyList<Gemahnt> alle) => null!;", "eine Liste ist kein Eingang")]
+    [InlineData("public Mahne Auf(OneOf<Ueberfaellig, Gemahnt> m) => null!;", "ein OneOf ist kein Eingang")]
+    public void Ein_Auf_nimmt_genau_eine_Nachricht_sonst_CQRS100(string methode, string worum)
     {
         var (quelle, ids, _) = Bausteine("namespace Probe { public sealed class Falsch : IFunktion { " + methode + " } }");
         ids.Should().Contain("CQRS100", worum);
@@ -172,7 +153,7 @@ public interface IPost { Task SendeAsync(string an); }
             public sealed record Verkleinert<TFormat>(int Breite) : ICommand where TFormat : IFormat;
             public sealed class Lies : IFunktion { public Gemahnt Auf(Ueberfaellig u) => new(1); }
             public sealed class Verkleinerung<TFormat> : IFunktion where TFormat : IFormat { public Verkleinert<TFormat> Auf(Gemahnt g) => new(1); }
-            public sealed class Melde : IFunktion { public Mahne Auf(Verkleinert<Vorschau> v, Verkleinert<Gross> g) => null!; }
+            public sealed class Melde : IFunktion { public Mahne Auf(Verkleinert<Vorschau> v) => null!; public Mahne Auf(Verkleinert<Gross> g) => null!; }
             public sealed record Aufbereitung([Kopf] Lies Lies, [Von(nameof(Lies))] Verkleinerung<Vorschau> Klein, [Von(nameof(Lies))] Verkleinerung<Gross> Gross,
                 [Von(nameof(Klein), nameof(Gross))] Melde Melde) : IGraph; }");
 

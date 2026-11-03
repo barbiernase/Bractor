@@ -60,16 +60,16 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - **Durabler Konsument des Logs ist die Projektion** (`IProjektion`, `Task Auf(Event[, Herkunft], Schreib-Fähigkeiten genau eines Stores)`,
   Kennung = Typname; `BatchLeser` je Projektion und Partition, replaybar; Wecker am Commit schnell — je Commit und Ziel ein `Wake`, Weckplan aus den
   Signaturen, beim Start geprüft: GR-WECKPLAN — + Takt 30 s je Partition).
-- **Funktion** (docs/04 §4.4): eine Klasse `: IFunktion` mit typisierten Ports, liest NIE das Log. Je `Auf` sind die Command-Parameter die
-  Eingangsports (`T` genau einer, `T?` höchstens einer, `OneOf<A, B>` der erste, `IReadOnlyList<T>` alle eine Ebene tiefer), dazu optional
-  `Herkunft`, Lese-Fähigkeiten, `CancellationToken`; die Fälle der Rückgabe sind die Ausgangsports (`T`, `OneOf`, `IEnumerable`, `IAsyncEnumerable`:
+- **Funktion** (docs/04 §4.4): eine Klasse `: IFunktion`, liest NIE das Log. Je `Auf` genau **eine Nachricht** (ein Command ohne Ziel; gerechnet
+  je Ankunft — kein `T?`, `OneOf`, `IReadOnlyList` als Eingang, GR-EINGANG), dazu optional `Herkunft`, Lese-Fähigkeiten, `CancellationToken`; die Fälle der Rückgabe sind die Ausgangsports (`T`, `OneOf`, `IEnumerable`, `IAsyncEnumerable`:
   Commands und Hinweise). Ein Event hört sie nur als Antwort auf ihren eigenen Aggregat-Command (`CommandResult.Antwort`, CQRS108). Im Konstruktor:
   Konfig-Records, Technik (ohne Marker), `IZustand<T>`, `ILogger<T>`.
 - **Graph** (docs/04 §4.4): `record X(Knoten …) : IGraph` in `Graphen.cs`; jeder Parameter ein Knoten (Funktion oder Graph, eine Funktion auch
   mehrfach). **Jede innere Kante steht am nehmenden Knoten** als `[Von(nameof(A), nameof(B))]` (eine genannte Quelle speist die Ports ihres Typs),
   jeder Kopf als `[Kopf]` (nimmt von außen, was keine Quelle speist; je Eingangstyp genau einer); nur eine Quelle trägt keins; was kein Knoten über
   `Von` nimmt, verlässt den Graphen (`GeneratedGraphen`, eine Lesart `Graphform`). Zwischen den Bausteinen bleibt es beim Typ-Routing mit genau einem
-  Empfänger. Ein Typ höchstens einmal je `Auf`; Folge, Fork, Wahl, Join, Je, Sammeln, Rennen, Warten mit Frist sind Formen von Signaturen; Graph im
+  Empfänger. Folge, Gabel, Wahl, Je sind Formen der Ausgaben; Zusammenführen, Sammeln, Warten stehen im Logik-Code (die Nachricht trägt mit, Zustand des
+  Knotens oder ein Aggregat); Graph im
   Graphen über seine Signatur (`Von` hinein speist seine Köpfe, `Von(nameof(G))` nimmt seine Ausgänge); kreisfrei über die Knoten (CQRS115). Er läuft als **Instanz** (Datei
   `graphen/<instanz>.json`: `Graph`, bei Quellkopf `Akteur`, je Knoten Konfig-Werte, `Parallel`, `Warteschlange`, `Wiederholungen`, `Zeitlimit`,
   `Technik`), beliebig oft; ein Graph mit Command-Kopf je Umgebung einmal. Jede Kopf-Nachricht startet einen **Lauf** (Buchführung im
@@ -102,9 +102,9 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - **Aktivierung eines Knotens** (docs/04 §4.4): Umsetzung und Technik je Kind (DI-Bereich, geschlossen beim Stoppen; Technik lädt beim ersten
   Aufruf, Freigabe über `IAsyncDisposable`); Konfig-Werte und Technik-Wahl aus dem Knoten der Instanz (`GeneratedTechnik`); Zustand nur über
   `IZustand<T>` (CQRS105), eine Instanz mit Zustand rechnet im Cluster auf genau einer Aktivierung (`ZustandsSperre`).
-- **Abläufe** sind Graphen (eine Rechnung je Auslöser: Fork, Join, Je, Sammeln im Lauf) plus ein Vorgangs-Aggregat für alles, was über Läufe hinweg
-  gilt (Zählung, Kompensation, Frist im Decide); die Zugehörigkeit ist ein fachliches Feld (A2). Aggregate reden nur über Graphen oder Akteure
-  miteinander; zwei Eingänge von außen bringt ein Vorgangs-Aggregat zusammen, nie ein Join. Kein Dirigent, keine Saga, kein Builder.
+- **Abläufe** sind Graphen (eine Rechnung je Auslöser: Folge, Gabel, Wahl, Je) plus ein Vorgangs-Aggregat für alles, was zusammengeführt oder
+  abgewartet wird (Zählung, Kompensation, Frist im Decide); die Zugehörigkeit ist ein fachliches Feld (A2). Aggregate reden nur über Graphen oder
+  Akteure miteinander. Kein Dirigent, keine Saga, kein Builder.
 - **Uhr:** `Frist<TCmd>` aus dem Decide → `FristGesetzt` (`IRahmenEvent`) + Beilage `cqrs_fristen` → die Uhr sendet fällig mit Id aus dem Frist-Event.
 - **Emit:** genau ein Weg (`CommandEmitter`, Id vom Aufrufer abgeleitet), erzwungen durch CQRS020/021.
 - **Akteure und Clients:** ein Akteur (`record X : IAkteur`) sagt, was er hineingibt (`IDarf<T>`: Commands, Queries, Hinweise) und was zu ihm

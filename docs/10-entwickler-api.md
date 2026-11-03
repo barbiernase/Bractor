@@ -29,16 +29,16 @@ Exactly-once, Partition, offene Eingänge, Läufe, Orte), wählt der Generator a
 | **Aggregat** | entscheidet: Command rein, Events, Hinweise, Fristen und Commands ohne Ziel raus; einziger Schreiber seines Streams; darf direkt gefragt werden | virtueller Actor je `Id<T>` (Bündel, Inbox-Tabelle, Passivierung, Snapshot) — [03](03-schreibseite.md) |
 | **Projektion** | hört Events, schreibt ihren Store über Fähigkeiten, gibt nichts aus | `BatchLeser` je (Projektion, Partition) — [04](04-konsum-und-prozess-maschine.md) §4.1, §4.3 |
 | **Reader** | beantwortet Queries über Lese-Fähigkeiten | im Query-Dienst des Hosts |
-| **Funktion** | ein Knoten: Commands an seinen Ports rein (ein Event nur als Antwort auf den eigenen Command), Commands und Hinweise raus; optional Zustand und Technik | Parent je Knoten und Instanz, Kinder bis `Parallel` — §4.4 |
+| **Funktion** | ein Knoten: je `Auf` eine Nachricht rein, gerechnet je Ankunft (ein Event nur als Antwort auf den eigenen Command), Commands und Hinweise raus; optional Zustand und Technik | Parent je Knoten und Instanz, Kinder bis `Parallel` — §4.4 |
 | **Graph** | nennt Knoten (Funktionen, Graphen, eine Funktion auch mehrfach); jede Kante als `[Von(nameof(…))]` am nehmenden Knoten, jeder Kopf als `[Kopf]`; läuft als Instanz, je Kopf-Nachricht ein Lauf | Graph-Actor je Instanz und Cluster-Knoten — §4.4 |
 | **Quelle** | eine Funktion mit `Lausche` am Kopf eines Graphen (Katalog: `Dateiwaechter`, `Taktgeber`, `Webhook`) | eine Quellinstanz genau einmal im Cluster — §4.7 |
 | Store, Technik | Speicher hinter Projektion/Reader bzw. Technik im Konstruktor einer Funktion | – |
 | **Akteur**, **Client** | wer was hineingibt und was zu ihm kommt; welche Software für welche Akteure spricht | Sitzung als Actor je Verbindung, Werkstatt und Verteiler je Knoten — [konzept-akteure.md](konzept-akteure.md) |
 | *eingebaut:* Uhr, Verteiler | macht aus fälligen Fristen Commands; stellt Pushes und Hinweise an Clients zu | – |
 
-**Warten** hat zwei Formen. Innerhalb eines Laufs ist es eine Typ-Form der Ports (Join, Sammeln, Rennen, Warten mit Frist). Über Läufe hinweg (auf
-fremde Rückmeldungen warten, zählen, zurücknehmen, eine Frist überwachen) ist es Zustand und gehört in ein **Aggregat**: ein Vorgang ist ein
-Aggregat mit der Vorgangs-Id, Zeit ist eine Frist. Einen Dirigenten, eine Saga oder einen Builder gibt es nicht; die Kanten eines Graphen stehen als
+**Warten und Zusammenführen** sind Zustand, keine Form der Eingänge: ein `Auf` nimmt eine Nachricht und rechnet, sobald sie ankommt. Was
+zusammengehört, trägt die Nachricht mit; sonst führt der Zustand eines Knotens (`IZustand<T>`) oder ein **Aggregat** zusammen — fremde
+Rückmeldungen, alle Elemente zählen, zurücknehmen, eine Frist überwachen: ein Vorgang ist ein Aggregat mit der Vorgangs-Id, Zeit ist eine Frist. Einen Dirigenten, eine Saga oder einen Builder gibt es nicht; die Kanten eines Graphen stehen als
 Attribute an seinen Knoten (§10.3.4, §10.3.7).
 
 ## 10.2 Nachrichten
@@ -178,16 +178,15 @@ public sealed record Schadensbewertung(
     [Von(nameof(Schaetzung), nameof(Gutachten))] MahnungNachSchaetzung Mahnung) : IGraph;
 ```
 
-- **Funktion:** eine Klasse `: IFunktion` (eine Schnittstelle mit `IFunktion` ist CQRS100). Je `Auf` sind die Command-Parameter die
-  **Eingangsports**, dazu optional `Herkunft`, Lese-Fähigkeiten und ein `CancellationToken`; mehrere `Auf` sind mehrere Operationen desselben
+- **Funktion:** eine Klasse `: IFunktion` (eine Schnittstelle mit `IFunktion` ist CQRS100). Je `Auf` genau **eine Nachricht** (ein Command
+  ohne Ziel), dazu optional `Herkunft`, Lese-Fähigkeiten und ein `CancellationToken`; mehrere `Auf` sind mehrere Operationen desselben
   Knotens, je Eingangstyp höchstens eines (R2). Ein Event hört eine Funktion nur als **Antwort** auf ihren eigenen Command an ein Aggregat (das Ziel
   entschied es, CQRS108), einen Hinweis nie.
-- **Ports und Vielfachheit:** `T` genau einer je Lauf (warten), `T?` höchstens einer (`null`, wenn keiner kommt oder das `Zeitlimit` des Knotens
-  abläuft), `OneOf<A, B>` der erste (die übrigen Zweige brechen ab), `IReadOnlyList<T>` alle aus den Unterläufen eine Ebene tiefer. Ein Ausgang `T`
-  liefert genau einen, ein `OneOf`-Fall keinen oder einen, ein Strom keinen bis viele — je Element einen Unterlauf. Der Build prüft die Ports vom
-  nächsten gemeinsamen Vorfahren aus und nennt den passenden Typ (CQRS115); mehrere genannte Quellen an einem `T`- oder `T?`-Port trennt eine Wahl
-  (Zusammenfließen), sonst kämen zwei Werte in einem Lauf — dann je Quelle ein eigener Knoten (CQRS115). Folge, Fork, Wahl, Join, Je, Sammeln, Rennen und Warten mit Frist sind
-  so Typ-Formen; N von M ist `IReadOnlyList<T>` plus eine Mindestzahl in der Konfig.
+- **Ein Eingang je Auf (GR-EINGANG):** ein `Auf` rechnet je ankommender Nachricht; mehrere Nachrichten, `T?`, `OneOf<…>` oder
+  `IReadOnlyList<T>` als Eingang sind CQRS100 mit Hinweis. Zusammenführen: die Nachricht trägt mit, was danach gebraucht wird; sonst je Nachricht
+  ein `Auf` und der Zustand des Knotens hält die erste bis zur zweiten; was fachlich zählt (alle Elemente, fremde Rückmeldungen), zählt ein
+  Aggregat. Ein Ausgang `T` liefert genau einen, ein `OneOf`-Fall keinen oder einen, ein Strom keinen bis viele — je Element einen Unterlauf.
+  Folge, Gabel, Wahl und Je sind so Formen der Ausgaben; Zusammenführen, Sammeln, Rennen und Warten stehen im Logik-Code.
 - **Ausgaben:** Commands und Hinweise — kein Event, kein `void`, kein `T?`, kein `ValueTask`; ein leerer Strom heißt „nichts“ (CQRS100). Ein Strom
   (`IAsyncEnumerable`): jede Ausgabe geht hinaus, bevor die nächste kommt.
 - **Graph:** `record X(Knoten …) : IGraph` in `Graphen.cs`; jeder Parameter ist ein Knoten (Name = Konfig-Schlüssel, Typ = eine Funktion — eine
@@ -195,10 +194,9 @@ public sealed record Schadensbewertung(
   **Kanten** stehen am nehmenden Knoten: `[Von(nameof(A), nameof(B))]` nennt die Knoten, von denen er bekommt, und jede genannte Quelle speist die
   Ports, deren Typ sie ausgibt (mindestens einen; nur `nameof` eines anderen Parameters, kein Name doppelt). Ein **Kopf** trägt `[Kopf]` und nimmt
   von außen, was keine genannte Quelle speist — je Eingangstyp genau einer; ein Knoten darf beides tragen. Jeder Knoten trägt eins davon, nur eine
-  Quelle keins. Was ein Knoten ausgibt und kein Knoten über `Von` von ihm nimmt, verlässt den Graphen. Ein Typ höchstens einmal je `Auf` (zwei Rollen
-  sind zwei Typen); kreisfrei über die Knoten (eine Kette `Bild → Bild → Bild` ist kein Kreis); ein Graph im Graphen ist eine Schachtel mit seiner
+  Quelle keins. Was ein Knoten ausgibt und kein Knoten über `Von` von ihm nimmt, verlässt den Graphen. Kreisfrei über die Knoten (eine Kette `Bild → Bild → Bild` ist kein Kreis); ein Graph im Graphen ist eine Schachtel mit seiner
   Signatur — `Von` an ihm speist seine Köpfe, `[Kopf]` an ihm macht sie zu Köpfen des äußeren, `Von(nameof(Schachtel))` nimmt seine Ausgänge
-  (CQRS115: GR-GRAPH, GR-KANTE, GR-KOPF, GR-JOIN). Eine Funktion in keinem Graphen läuft nie (CQRS117). Passt ein Typ nicht, ist der Adapter eine
+  (CQRS115: GR-GRAPH, GR-KANTE, GR-KOPF). Eine Funktion in keinem Graphen läuft nie (CQRS117). Passt ein Typ nicht, ist der Adapter eine
   eigene kleine Funktion — Klebecode zwischen Knoten gibt es nicht. Zeigen: `dotnet run --project GraphExtractor -- --graph <Typ>`.
 - **Genau einmal** ohne Festhalten: der Kopf eines Laufs ist ein offener Eingang, bis der Lauf fertig ist; rechnet ein Knoten erneut, wirkt von
   jedem Command der erste (Ids aus Instanz, Lauf-Pfad, Knoten und Stelle; die Inbox des Ziels verwirft das Zweite). Eine Funktion, die draußen
@@ -214,7 +212,8 @@ public sealed record Schadensbewertung(
   ```csharp
   public sealed class Prognosemodell(IZustand<Gewichte> gewichte, IStatistik statistik) : IFunktion      // Sonde Vorhersage.cs.txt
   {
-      public OneOf<VermerkePrognose, Unwetter> Auf(Geglaettet<Kurzfenster> kurz, Geglaettet<Langfenster> lang) => …;   // Join, Zustand, Wahl
+      public IEnumerable<OneOf<VermerkePrognose, Unwetter>> Auf(Geglaettet<Kurzfenster> kurz) => …;   // hält kurz im Zustand,
+      public IEnumerable<OneOf<VermerkePrognose, Unwetter>> Auf(Geglaettet<Langfenster> lang) => …;   // rechnet, wenn beide da sind (Wahl)
   }
   ```
 
@@ -263,11 +262,9 @@ Richtungen (R17); ein C#-Client erklärt sich mit `[assembly: IstClient<X>]`. Au
 
 Ein Ablauf über mehrere Aggregate ist ein **Vorgangs-Aggregat** plus **Graphen** als Kanten (Sonde `Fluss.cs.txt`): ein Akteur gibt einen Command
 ohne Ziel an den Kopf des Graphen (`RueckgabeGescannt`); der Start legt den Vorgang an (`StartePruefung` mit `h.NeueId<Seitenpruefung>()`) und hört
-dessen Event als Antwort auf seinen Command; die Antwort öffnet als Strom je Seite einen Unterlauf (Je), die Bilanz nimmt alle Befunde als Liste
-(Sammeln) und schließt den Vorgang ab; eine Frist desselben Aggregats bricht nach Zeit ab. Was je Auslöser zusammengehört, hält der Lauf; was über
-Läufe hinweg gilt (fremde Rückmeldungen, Zählung, Kompensation), das Aggregat — es gibt dazu Commands ohne Ziel an Graphen aus. Zwei Eingänge von
-außen treffen sich in keinem Join (ein Join paart nur Nachrichten desselben Laufs): wer sie zusammenbringen muss, sammelt sie im Vorgangs-Aggregat,
-dessen Decide den zusammengeführten Command ohne Ziel an den Kopf eines Graphen gibt. Die Zugehörigkeit fremder Events zum Vorgang ist ein
+dessen Event als Antwort auf seinen Command; die Antwort öffnet als Strom je Seite einen Unterlauf (Je), der Prüfer meldet jede Seite dem Vorgang
+(`VermerkeSeite`), der mitzählt und nach der letzten abschließt; eine Frist desselben Aggregats bricht nach Zeit ab. Was zusammengeführt, gezählt
+oder zurückgenommen wird (fremde Rückmeldungen, Zählung, Kompensation), entscheidet das Aggregat — es gibt dazu Commands ohne Ziel an Graphen aus. Die Zugehörigkeit fremder Events zum Vorgang ist ein
 **fachliches Feld** im Event (A2). Kompensation ist ein Decide, das den Gegenzug als Command ohne Ziel ausgibt.
 
 ## 10.4 Typisierte Ids und Herkunft
@@ -335,7 +332,7 @@ Prüfen heißt Bauen (W5). Die Liste „Regel → Build-Gegenstück“ der Gramm
 | R17 | Ein Client sendet, fragt, hört und nimmt Arbeit nur für die Akteure an, die er verkörpert, geschnitten mit dem Token | CQRS063/064, CQRS093–097, Handshake |
 | R18 | Die Hausregel für Actors: ein Weg je Absicht (nur Framework-Code) | CQRS112/113 |
 | R19 | Zustand einer Funktion nur über `IZustand<T>` im Konstruktor | CQRS105, CQRS100 |
-| R20 | Ein Command ohne Ziel hat genau einen Empfänger (im Graphen die Knoten, die seinen Erzeuger in `Von` nennen; sonst Graph-Kopf oder Akteur); ein Graph ist kreisfrei über seine Knoten, jeder Knoten trägt `[Kopf]` oder `[Von(nameof(…))]`, je Eingangstyp ein Kopf, ein Typ einmal je `Auf`, Ports in passender Vielfachheit; jede Instanz passt zu ihrem Graphen | CQRS116, CQRS115, CQRS117 (Warnung), Start-Prüfung (`GraphInstanzen.Aus`) |
+| R20 | Ein Command ohne Ziel hat genau einen Empfänger (im Graphen die Knoten, die seinen Erzeuger in `Von` nennen; sonst Graph-Kopf oder Akteur); ein Graph ist kreisfrei über seine Knoten, jeder Knoten trägt `[Kopf]` oder `[Von(nameof(…))]`, je Eingangstyp ein Kopf, ein `Auf` nimmt genau eine Nachricht (CQRS100); jede Instanz passt zu ihrem Graphen | CQRS116, CQRS115, CQRS117 (Warnung), Start-Prüfung (`GraphInstanzen.Aus`) |
 
 Dazu die Projektstruktur ([07](07-projektstruktur.md), CQRS098): wo eine Primitive liegt, sagt die Tabelle `Abstractions/Projektstruktur.cs`.
 
@@ -357,7 +354,7 @@ Entschieden von Tobi; Code-Kommentare zitieren sie mit ihrer Nummer.
 | E10 | Lebenszyklus einer Funktion | kein eigener: Technik lädt beim ersten Aufruf, Freigabe über `IAsyncDisposable` |
 | E11 | Nachrichtenarten | drei: Command (mit oder ohne Ziel), Event, Hinweis; dazu Query und Frist |
 | E12 | Empfänger eines Commands | genau einer, vom Absender aus: Ziel im Typ → Aggregat; sonst der Knoten desselben Graphen; sonst der Kopf genau eines Graphen oder ein Akteur, der ihn hört |
-| E13 | Graph | ein eigener Typ (`IGraph`), Knoten als Parameter mit `[Kopf]` und `[Von(nameof(…))]` (ausdrückliche Kanten, eine Funktion auch mehrfach; aus Typen allein entsteht innen keine Kante), Ablaufformen als Typ-Formen der Ports; läuft als Instanz mit eigener Konfig, beliebig oft |
+| E13 | Graph | ein eigener Typ (`IGraph`), Knoten als Parameter mit `[Kopf]` und `[Von(nameof(…))]` (ausdrückliche Kanten, eine Funktion auch mehrfach; aus Typen allein entsteht innen keine Kante), Ablaufformen als Formen der Ausgaben (Zusammenführen im Logik-Code); läuft als Instanz mit eigener Konfig, beliebig oft |
 | E14 | Quellen | Katalogfunktionen am Kopf eines Graphen, nicht im Log; durabel über den gesicherten Zustand |
 | E15 | Umgebung | ein Ordner (`umgebung.json` + `graphen/<instanz>.json`); der Akteur einer Quellinstanz steht in ihrer Datei, geprüft gegen sein `IDarf` |
 | E16 | Akteur und Client | Akteur = `IDarf` + `IHoert` (ohne Art); Client = Record, der nur verkörpert; ein C#-Client nennt ihn mit `[assembly: IstClient<X>]`; Hinweise gehen nur an Akteure |

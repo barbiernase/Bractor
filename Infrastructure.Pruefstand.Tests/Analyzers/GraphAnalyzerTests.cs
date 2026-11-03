@@ -13,10 +13,9 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Analyzers;
 
 /// <summary>
-/// CQRS115 (GR-GRAPH, GR-KANTE, GR-KOPF, GR-JOIN): die Form eines Graphen aus der einen Lesart (<c>Graphform</c>) — jede innere Kante als
+/// CQRS115 (GR-GRAPH, GR-KANTE, GR-KOPF): die Form eines Graphen aus der einen Lesart (<c>Graphform</c>) — jede innere Kante als
 /// <c>[Von(nameof(…))]</c> am nehmenden Knoten, jeder Kopf als <c>[Kopf]</c> (je Eingangstyp genau einer), eine Funktion darf mehrfach stehen,
-/// kreisfrei über Knoten; ein Graph im Graphen als Schachtel mit Signatur; die Ports eines Joins auf einer Ebene und mit der Vielfachheit aus den Typen
-/// (Entscheidung 5), ein Typ höchstens einmal je Auf; ein falscher Port mit Vorschlag im Befund.
+/// kreisfrei über Knoten; ein Graph im Graphen als Schachtel mit Signatur. Dass ein Auf genau eine Nachricht nimmt, prüft die Funktionsform (CQRS100).
 /// </summary>
 public class GraphAnalyzerTests
 {
@@ -61,55 +60,6 @@ public class GraphAnalyzerTests
         """;
 
     [Fact]
-    public async Task Fork_Join_hinter_derselben_Wahl_ist_still()
-        => (await Befunde("""
-            public sealed class Zusammen : IFunktion { public Buche Auf(Klein k, Kontrast c, Bild b) => default!; }
-            public sealed record Aufbereitung([Kopf] Lies L, [Von(nameof(L))] Verkleinere V, [Von(nameof(L))] Gleiche G,
-                [Von(nameof(V), nameof(G), nameof(L))] Zusammen M) : IGraph;
-            """)).Should().BeEmpty("Klein, Kontrast und Bild hängen alle am selben Fall BildGelesen — nach der Gabelung liegt keine Wahl");
-
-    [Fact]
-    public async Task Ein_T_Port_hinter_einer_Wahl_ist_ein_Fehler_mit_Vorschlag()
-    {
-        const string wahl = """
-            public record Links(int N) : ICommand;
-            public record Rechts(int N) : ICommand;
-            public sealed class Waehle : IFunktion { public OneOf<Links, Rechts> Auf(Bild b) => default!; }
-            public sealed class AusLinks : IFunktion { public Klein Auf(Links l) => default!; }
-            public sealed record Wahl([Kopf] Lies L, [Von(nameof(L))] Waehle W, [Von(nameof(W))] AusLinks A, [Von(nameof(L))] Gleiche G,
-                [Von(nameof(A), nameof(G))] Zusammen Z) : IGraph;
-            """;
-        var befunde = await Befunde(wahl + "public sealed class Zusammen : IFunktion { public Buche Auf(Klein k, Kontrast c) => default!; }");
-        befunde.Should().ContainSingle().Which.Should().Contain("'Klein k' in Z").And.Contain("hinter einer Wahl").And.Contain("nimm 'Klein? k'");
-        (await Befunde(wahl + "public sealed class Zusammen : IFunktion { public Buche Auf(Klein? k, Kontrast c) => default!; }"))
-            .Should().BeEmpty("T? wartet, bis feststeht, dass keiner kommt");
-    }
-
-    [Fact]
-    public async Task Je_und_Sammeln_auf_den_richtigen_Ebenen_ist_still_sonst_ein_Fehler_mit_Vorschlag()
-    {
-        const string kacheln = """
-            public sealed record Kacheln([Kopf] Lies L, [Von(nameof(L))] Verkleinere V, [Von(nameof(L))] Kachle K, [Von(nameof(K))] Pruefe P,
-                [Von(nameof(P), nameof(V))] Befunde B) : IGraph;
-            """;
-        (await Befunde(kacheln + "public sealed class Befunde : IFunktion { public Buche Auf(IReadOnlyList<Befund> alle, Klein k) => default!; }"))
-            .Should().BeEmpty("die Liste sammelt die Unterläufe der Kacheln eine Ebene hinauf — dort liegt auch Klein");
-        (await Befunde(kacheln + "public sealed class Befunde : IFunktion { public Buche Auf(Befund b, Klein k) => default!; }"))
-            .Should().ContainSingle().Which.Should().Contain("verschiedenen Ebenen").And.Contain("'IReadOnlyList<Befund> b'");
-        (await Befunde("""
-            public sealed class Befunde : IFunktion { public Buche Auf(IReadOnlyList<Klein> alle) => default!; }
-            public sealed record Kacheln([Kopf] Lies L, [Von(nameof(L))] Verkleinere V, [Von(nameof(V))] Befunde B) : IGraph;
-            """)).Should().ContainSingle().Which.Should().Contain("kommt aus keinem Strom").And.Contain("nimm 'Klein alle'");
-    }
-
-    [Fact]
-    public async Task Ein_Rennen_nimmt_den_ersten_von_mehreren_Faellen()
-        => (await Befunde("""
-            public sealed class Erster : IFunktion { public Buche Auf(OneOf<Klein, Kontrast> wer) => default!; }
-            public sealed record Rennen([Kopf] Lies L, [Von(nameof(L))] Verkleinere V, [Von(nameof(L))] Gleiche G, [Von(nameof(V), nameof(G))] Erster E) : IGraph;
-            """)).Should().BeEmpty();
-
-    [Fact]
     public async Task Dieselbe_Funktion_darf_zweimal_im_Graphen_stehen_Vorschau_und_Thumbnail()
         => (await Befunde("""
             public sealed record Bildpaar([Kopf] Lies L, [Von(nameof(L))] Verkleinere Vorschau, [Von(nameof(L))] Verkleinere Thumbnail,
@@ -131,11 +81,6 @@ public class GraphAnalyzerTests
         const string sammle = "public sealed class Sammle : IFunktion { public Buche Auf(Klein k) => default!; public Buche Auf(Kachel k) => default!; }";
         (await Befunde(sammle + "public sealed record Mix([Kopf] Lies L, [Von(nameof(L))] Verkleinere V, [Kopf, Von(nameof(V))] Sammle S) : IGraph;"))
             .Should().BeEmpty("Klein kommt von V, Kachel von außen — zwei Köpfe: Start an L, Kachel an S");
-        // Ein Join halb von außen paart nie.
-        (await Befunde("""
-            public sealed class Halb : IFunktion { public Buche Auf(Klein k, Kachel x) => default!; }
-            public sealed record Halbjoin([Kopf] Lies L, [Von(nameof(L))] Verkleinere V, [Kopf, Von(nameof(V))] Halb H) : IGraph;
-            """)).Should().ContainSingle().Which.Should().Contain("'x' in H kommt von außen ([Kopf])").And.Contain("ein Join paart nur");
     }
 
     [Fact]
@@ -212,7 +157,7 @@ public class GraphAnalyzerTests
     [Fact]
     public async Task Ein_Port_ohne_Quelle_an_einem_Knoten_ohne_Kopf_ist_ein_Fehler()
         => (await Befunde("""
-            public sealed class Zusammen : IFunktion { public Buche Auf(Klein k, Kontrast c) => default!; }
+            public sealed class Zusammen : IFunktion { public Buche Auf(Klein k) => default!; public Buche Auf(Kontrast c) => default!; }
             public sealed record Halb([Kopf] Lies L, [Von(nameof(L))] Verkleinere V, [Von(nameof(V))] Zusammen Z) : IGraph;
             """)).Should().ContainSingle().Which.Should().Contain("'c' in Z (Kontrast) bekommt von keiner genannten Quelle (V) etwas");
 
@@ -227,61 +172,4 @@ public class GraphAnalyzerTests
     public async Task Ein_Kopf_an_dem_nichts_von_aussen_ankommt_ist_ein_Fehler()
         => (await Befunde("public sealed record Innen([Kopf] Lies L, [Kopf, Von(nameof(L))] Verkleinere V) : IGraph;"))
             .Should().ContainSingle().Which.Should().Contain("'V' trägt [Kopf], aber an ihm kommt nichts von außen an");
-
-    // ── GR-JOIN: ein Typ höchstens einmal je Auf; zwei Eingänge von außen treffen sich nie ──
-
-    [Fact]
-    public async Task Ein_Typ_zweimal_in_einem_Auf_ist_ein_Fehler_mit_Vorschlag()
-        => (await Befunde("""
-            public sealed class Vergleiche : IFunktion { public Buche Auf(Bild links, Bild rechts) => default!; }
-            public sealed record Vergleich([Kopf] Lies L, [Von(nameof(L))] Vergleiche C) : IGraph;
-            """)).Should().ContainSingle().Which.Should().Contain("nimmt 'Bild' zweimal in einem Auf ('links', 'rechts')").And.Contain("'BildLinks'");
-
-    [Fact]
-    public async Task Zwei_Erzeuger_an_einem_T_Port_ohne_Wahl_dazwischen_sind_ein_Fehler()
-    {
-        const string zwei = """
-            public sealed record Doppelt([Kopf] Lies L, [Von(nameof(L))] Verkleinere Vorschau, [Von(nameof(L))] Verkleinere Daumen,
-                [Von(nameof(Vorschau), nameof(Daumen))] Nimm N) : IGraph;
-            """;
-        (await Befunde(zwei + "public sealed class Nimm : IFunktion { public Buche Auf(Klein k) => default!; }"))
-            .Should().ContainSingle().Which.Should().Contain("'Klein k' in N bekommt in einem Lauf zwei Werte (von Vorschau und Daumen")
-            .And.Contain("nimm einen Knoten je Quelle: 'NVorschau' mit [Von(nameof(Vorschau))] und 'NDaumen' mit [Von(nameof(Daumen))]")
-            .And.Contain("zwei Ports (Join)").And.Contain("OneOf<…> (Rennen)");
-        (await Befunde("""
-            public sealed class Nimm : IFunktion { public Buche Auf(Klein k) => default!; }
-            public sealed record Getrennt([Kopf] Lies L, [Von(nameof(L))] Verkleinere Vorschau, [Von(nameof(L))] Verkleinere Daumen,
-                [Von(nameof(Vorschau))] Nimm NVorschau, [Von(nameof(Daumen))] Nimm NDaumen) : IGraph;
-            """)).Should().BeEmpty("der Vorschlag aus dem Befund baut: je Quelle ein eigener Knoten derselben Funktion");
-        (await Befunde(zwei + "public sealed class Nimm : IFunktion { public Buche Auf(Klein? k) => default!; }"))
-            .Should().ContainSingle("auch T? nimmt höchstens einen").Which.Should().Contain("'Klein? k' in N bekommt in einem Lauf zwei Werte");
-    }
-
-    [Fact]
-    public async Task Zusammenfliessen_hinter_einer_Wahl_ist_still_ein_Join_ohne_Fall_trennt_nicht()
-    {
-        const string wahl = """
-            public record Links(int N) : ICommand;
-            public record Rechts(int N) : ICommand;
-            public sealed class Waehle : IFunktion { public OneOf<Links, Rechts> Auf(Bild b) => default!; }
-            public sealed class AusLinks : IFunktion { public Klein Auf(Links l) => default!; }
-            public sealed class AusRechts : IFunktion { public Klein Auf(Rechts r) => default!; }
-            public sealed class AusBeiden : IFunktion { public Klein Auf(Links? l, Rechts? r) => default!; }
-            """;
-        (await Befunde(wahl + """
-            public sealed record Zusammen([Kopf] Lies L, [Von(nameof(L))] Waehle W, [Von(nameof(W))] AusLinks A, [Von(nameof(W))] AusRechts R,
-                [Von(nameof(A), nameof(R))] Melde M) : IGraph;
-            """)).Should().BeEmpty("A braucht den Fall Links, R den Fall Rechts — im selben Lauf kommt nur einer an");
-        (await Befunde(wahl + """
-            public sealed record Zusammen([Kopf] Lies L, [Von(nameof(L))] Waehle W, [Von(nameof(W))] AusLinks A, [Von(nameof(W))] AusBeiden B,
-                [Von(nameof(A), nameof(B))] Melde M) : IGraph;
-            """)).Should().ContainSingle("B läuft in jedem Fall der Wahl, auch neben A").Which.Should().Contain("zwei Werte (von A und B");
-    }
-
-    [Fact]
-    public async Task Zwei_Eingaenge_von_aussen_treffen_sich_nie()
-        => (await Befunde("""
-            public sealed class Beide : IFunktion { public Buche Auf(Klein k, Kachel x) => default!; }
-            public sealed record Draussen([Kopf] Beide B) : IGraph;
-            """)).Should().ContainSingle().Which.Should().Contain("kommen alle von außen").And.Contain("Vorgangs-Aggregat");
 }

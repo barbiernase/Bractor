@@ -7,9 +7,8 @@ using Leihwesen.Ausleihe;
 //           (PruefeRueckgabe) und gibt auf einem Teil der Fälle nichts aus (ein leerer Strom); die neue Id kommt aus der Herkunft (R13);
 //         · WAHL: die Schadensaufnahme gibt genau einen von drei Fällen aus — einen Command an den nächsten Knoten, Arbeit für einen Akteur draußen
 //           (ein Command ohne Ziel, den ein Akteur hört) oder einen Hinweis (flüchtig, an die Akteure, die ihn hören);
-//         · FORK: der erfasste Schaden geht an zwei Knoten (Schätzung mit TECHNIK im Konstruktor, Gutachten mit KONFIG-Record);
-//         · JOIN mit WARTEN MIT FRIST: die Mahnung nimmt die Schätzung (genau eine) und das Gutachten als T? — höchstens eins: sie feuert, wenn es kam
-//           oder das Zeitlimit ihres Knotens (Konfig der Instanz) abläuft; dann ist es null.
+//         · KETTE, DIE MITTRÄGT: die Schätzung (TECHNIK im Konstruktor) gibt ihren Betrag an das Gutachten (KONFIG-Record), das Gutachten trägt
+//           Betrag und Zuschlag zur Mahnung — jedes Auf nimmt genau eine Nachricht, keiner muss zusammenführen.
 
 namespace Leihwesen.Gebuehren;
 
@@ -36,7 +35,7 @@ public record SchaetzeSchaden(Id<Schadensfall> Fall, Guid LeserId) : ICommand;
 // Was nur Knoten einander geben (Commands ohne Ziel, nie im Log) — und was draußen ankommt: Arbeit für einen Akteur, ein Hinweis.
 public record SchadenErfasst(Guid LeserId, decimal Neuwert, int AlterJahre) : ICommand;
 public record SchadenGeschaetzt(Guid LeserId, decimal Betrag) : ICommand;
-public record GutachtenErhalten(Guid LeserId, decimal Zuschlag) : ICommand;
+public record GutachtenErhalten(Guid LeserId, decimal Betrag, decimal Zuschlag) : ICommand;
 public record BegutachteVorOrt(Id<Schadensfall> Fall, Guid LeserId) : ICommand;
 public record NichtSchaetzbar(string Grund) : ITransientEvent;
 
@@ -72,7 +71,7 @@ public sealed class LineareWertTabelle(WertTabellenKonfig konfig) : IWertTabelle
     }
 }
 
-// FORK, Zweig 1: die Schätzung mit Technik.
+// KETTE, Schritt 1: die Schätzung mit Technik.
 public sealed class Schadensschaetzer(IWertTabelle tabelle) : IFunktion
 {
     public async Task<SchadenGeschaetzt> Auf(SchadenErfasst e)
@@ -82,32 +81,31 @@ public sealed class Schadensschaetzer(IWertTabelle tabelle) : IFunktion
     }
 }
 
-// FORK, Zweig 2: ein Gutachten, das dauern kann — sein Zuschlag aus dem Konfig-Record des Knotens.
+// KETTE, Schritt 2: ein Gutachten, das dauern kann — sein Zuschlag aus dem Konfig-Record des Knotens; den Betrag der Schätzung trägt es weiter.
 public record GutachtenKonfig(decimal Zuschlag, TimeSpan Bedenkzeit);
 
 public sealed class Gutachtenanfrage(GutachtenKonfig konfig) : IFunktion
 {
-    public async Task<GutachtenErhalten> Auf(SchadenErfasst e)
+    public async Task<GutachtenErhalten> Auf(SchadenGeschaetzt g)
     {
         await Task.Delay(konfig.Bedenkzeit);
-        return new GutachtenErhalten(e.LeserId, konfig.Zuschlag);
+        return new GutachtenErhalten(g.LeserId, g.Betrag, konfig.Zuschlag);
     }
 }
 
-// JOIN mit WARTEN MIT FRIST: die Schätzung kommt genau einmal, das Gutachten höchstens einmal (null nach dem Zeitlimit des Knotens).
+// KETTE, Schritt 3: die Mahnung aus dem, was das Gutachten mitträgt.
 public sealed class MahnungNachSchaetzung : IFunktion
 {
-    public EroeffneMahnung Auf(SchadenGeschaetzt g, GutachtenErhalten? gutachten, Herkunft h) =>
-        new(h.NeueId<Mahnvorgang>(), g.Betrag + (gutachten?.Zuschlag ?? 0m));
+    public EroeffneMahnung Auf(GutachtenErhalten g, Herkunft h) => new(h.NeueId<Mahnvorgang>(), g.Betrag + g.Zuschlag);
 }
 
-// Die Graphen: Knoten als Parameter, Kanten aus den Typen (SchadenErfasst: Aufnahme → Schätzung und Gutachten; beide → Mahnung).
+// Die Graphen: Knoten als Parameter, jede Kante als Von am nehmenden Knoten (Aufnahme → Schätzung → Gutachten → Mahnung).
 public sealed record Rueckgabepruefung([Kopf] SchadenBeiRueckgabe Pruefung) : IGraph;
 public sealed record Schadensbewertung(
     [Kopf] Schadensaufnahme Aufnahme,
     [Von(nameof(Aufnahme))] Schadensschaetzer Schaetzung,
-    [Von(nameof(Aufnahme))] Gutachtenanfrage Gutachten,
-    [Von(nameof(Schaetzung), nameof(Gutachten))] MahnungNachSchaetzung Mahnung) : IGraph;
+    [Von(nameof(Schaetzung))] Gutachtenanfrage Gutachten,
+    [Von(nameof(Gutachten))] MahnungNachSchaetzung Mahnung) : IGraph;
 
 public partial class Schadensfall : IState
 {

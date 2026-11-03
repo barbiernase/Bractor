@@ -28,12 +28,13 @@ public partial class Verteilung
             yield return new VerteilungGescheitert(cmd.Verfuegbar);
         }
 
-        /// <summary>Die gesammelten Zubuchungen schließen die Verteilung ab (einmal: danach ändert nichts mehr).</summary>
-        public IEnumerable<OneOf<VerteilungAbgeschlossen, VerteilungNichtGefunden>> Decide(SchliesseVerteilungAb cmd)
+        /// <summary>Je gebuchtes Ziel ein Vermerk; der letzte schließt die Verteilung ab (einmal: danach ändert nichts mehr).</summary>
+        public IEnumerable<OneOf<ZielZugebucht, VerteilungAbgeschlossen, VerteilungNichtGefunden>> Decide(VermerkeZubuchung cmd)
         {
             if (!this.State.Existiert) { yield return new VerteilungNichtGefunden(cmd.AggregateId); yield break; }
             if (this.State.Abgeschlossen) yield break;
-            yield return new VerteilungAbgeschlossen(cmd.Zugebucht);
+            yield return new ZielZugebucht(cmd.Menge);
+            if (this.State.ZieleGebucht + 1 == this.State.Ziele.Count) yield return new VerteilungAbgeschlossen(this.State.Zugebucht + cmd.Menge);
         }
     }
 }

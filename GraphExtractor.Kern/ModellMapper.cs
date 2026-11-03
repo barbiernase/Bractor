@@ -662,9 +662,6 @@ public static class ModellMapper
     private static string KurzEvt(DomainModel dom, string full) =>
         dom.Events.TryGetValue(full, out var e) ? e.Simple : Kurz(full);
 
-    private static string Kurz(string full)
-    {
-        var i = full.LastIndexOf('.');
-        return i >= 0 ? full[(i + 1)..] : full;
-    }
+    /// <summary>Der Name ohne Namespaces — auch in Typargumenten (<c>Geglaettet&lt;Kurzfenster&gt;</c>).</summary>
+    private static string Kurz(string full) => System.Text.RegularExpressions.Regex.Replace(full.Replace("global::", ""), @"(?:\w+\.)+(\w+)", "$1");
 }

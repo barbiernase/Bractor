@@ -20,9 +20,8 @@ namespace Infrastructure.SourceGeneration
         public const string IFunktion = A + "IFunktion";
 
         /// <summary>
-        /// Wie ein Eingangsport eines <c>Auf</c> seine Nachrichten erwartet (Entscheidung 5 — das ist die ganze Synchronisation): <c>T</c> genau einer je
-        /// Lauf (warten), <c>T?</c> höchstens einer (feuern, wenn feststeht, dass keiner kommt, oder nach dem Zeitlimit des Knotens), <c>OneOf&lt;A, B&gt;</c>
-        /// der erste je Lauf (die übrigen Zweige werden abgebrochen), <c>IReadOnlyList&lt;T&gt;</c> alle <c>T</c> der Unterläufe eine Ebene tiefer.
+        /// Die Form eines Eingangs. Ein <c>Auf</c> nimmt genau eine Nachricht (<see cref="Eins"/>); die übrigen Formen liest die Lesart nicht mehr und
+        /// fallen mit der Laufzeit ohne Lauf weg (docs/plan-graphen-ohne-lauf.md, Schritt 2).
         /// </summary>
         internal enum Portform { Eins, Hoechstens, Erster, Alle }
 
@@ -325,24 +324,17 @@ namespace Infrastructure.SourceGeneration
             }
             if (auf.Ports.Count == 0)
             {
-                fehler.Add(("ein Auf nimmt mindestens einen Eingang (einen Command ohne Ziel als T, T?, OneOf<…> oder IReadOnlyList<T>; allein auch ein "
-                    + "Event als Antwort)", ort));
+                fehler.Add(("ein Auf nimmt eine Nachricht (einen Command ohne Ziel; allein auch ein Event als Antwort)", ort));
                 return null;
             }
-            var einzeln = auf.Ports.FirstOrDefault(x => !IstCommandOhneZiel(x.Typen[0]));
-            if (einzeln != null && auf.Ports.Count > 1)
+            if (auf.Ports.Count > 1)
             {
-                fehler.Add(($"'{einzeln.Name}' ist kein Command ohne Ziel — mehrere Eingänge (ein Join) nimmt ein Auf nur als Commands ohne Ziel; eine "
-                    + "Antwort steht allein", einzeln.Ort));
+                fehler.Add(($"ein Auf nimmt genau eine Nachricht, nicht {auf.Ports.Count} ({string.Join(", ", auf.Ports.Select(x => "'" + x.Name + "'"))}) — "
+                    + "es rechnet, sobald sie ankommt. Was danach gebraucht wird, trägt die Nachricht mit; sonst nimmt je Nachricht ein eigenes Auf sie an, "
+                    + "und der Zustand des Knotens oder ein Aggregat führt sie zusammen", auf.Ports[1].Ort));
                 return null;
             }
-            if (einzeln != null && einzeln.Form != Portform.Eins)
-            {
-                fehler.Add(($"'{einzeln.Name}' ist kein Command ohne Ziel — nur Commands ohne Ziel nimmt ein Port als T?, OneOf<…> oder IReadOnlyList<T>",
-                    einzeln.Ort));
-                return null;
-            }
-            auf.Command = einzeln == null;
+            auf.Command = IstCommandOhneZiel(auf.Ports[0].Typen[0]);
 
             // Rückgabe: T | OneOf<…> | IEnumerable<…> | IAsyncEnumerable<…>, T und OneOf auch in Task<…>. Kein void, kein T?, kein ValueTask: was
             //   „nichts“ sein kann, ist ein Strom (leer = nichts), was einer von mehreren ist, ein OneOf (Entscheidung 4).
@@ -404,37 +396,31 @@ namespace Infrastructure.SourceGeneration
         }
 
         /// <summary>
-        /// Ein Eingangsport aus einem Parameter: <c>T</c>, <c>T?</c>, <c>OneOf&lt;A, B&gt;</c> oder <c>IReadOnlyList&lt;T&gt;</c> mit Commands ohne Ziel;
-        /// <c>T</c> allein auch ein konkretes Event (als Antwort). Ein Hinweis ist kein Eingang: Hinweise gehen nur an Akteure draußen (Entscheidung 14).
-        /// Sonst ein Formfehler.
+        /// Der Eingang aus einem Parameter: ein Command ohne Ziel als <c>T</c>, allein auch ein konkretes Event (als Antwort). Ein Auf rechnet, sobald
+        /// seine Nachricht ankommt — eine Liste, ein <c>OneOf</c> oder ein <c>T?</c> als Eingang ist ein Formfehler (warten, sammeln und zusammenführen
+        /// steht im Logik-Code: im Zustand des Knotens oder in einem Aggregat). Ein Hinweis ist kein Eingang: Hinweise gehen nur an Akteure draußen
+        /// (Entscheidung 14).
         /// </summary>
         private static Port? LiesPort(IParameterSymbol p, Location ort, List<(string, Location)> fehler)
         {
-            var port = new Port { Name = p.Name, Ort = ort };
+            var port = new Port { Name = p.Name, Ort = ort, Form = Portform.Eins };
             var t = p.Type;
             if (t is INamedTypeSymbol { IsGenericType: true } l && Name(l) == "System.Collections.Generic.IReadOnlyList`1")
             {
-                port.Form = Portform.Alle;
-                t = l.TypeArguments[0];
+                fehler.Add(($"'{p.Name}' nimmt eine Liste — ein Auf nimmt eine Nachricht und rechnet, sobald sie ankommt; wer Elemente zählt oder "
+                    + "einsammelt, tut es im Zustand des Knotens oder in einem Aggregat (Zähl-Aggregat)", ort));
+                return null;
             }
-            else if (t is INamedTypeSymbol o && IstOneOf(o))
+            if (t is INamedTypeSymbol o && IstOneOf(o))
             {
-                port.Form = Portform.Erster;
-                foreach (var x in o.TypeArguments)
-                {
-                    if (!IstCommandOhneZiel(x))
-                    {
-                        fehler.Add(($"'{p.Name}' nimmt '{x.ToDisplayString()}' im OneOf — ein Rennen (der erste von mehreren) gibt es nur unter Commands ohne Ziel", ort));
-                        return null;
-                    }
-                    port.Typen.Add((INamedTypeSymbol)x);
-                }
-                return port;
+                fehler.Add(($"'{p.Name}' nimmt ein OneOf — ein Auf nimmt genau einen Typ; nimm je Fall ein eigenes Auf", ort));
+                return null;
             }
-            else if (t.NullableAnnotation == NullableAnnotation.Annotated && t.IsReferenceType)
+            if (t.NullableAnnotation == NullableAnnotation.Annotated && t.IsReferenceType)
             {
-                port.Form = Portform.Hoechstens;
-                t = t.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
+                fehler.Add(($"'{p.Name}' ist nullable — ein Auf rechnet, wenn seine Nachricht ankommt, ob eine kommt, entscheidet der Erzeuger; nimm "
+                    + $"'{t.WithNullableAnnotation(NullableAnnotation.NotAnnotated).ToDisplayString()} {p.Name}'", ort));
+                return null;
             }
             if (t is not INamedTypeSymbol n)
             {
@@ -448,10 +434,10 @@ namespace Infrastructure.SourceGeneration
                     + "was ein Knoten braucht, ist ein Command ohne Ziel", ort));
                 return null;
             }
-            if (!command && (port.Form != Portform.Eins || n.TypeKind == TypeKind.Interface || n.IsAbstract || !Hat(n, A + "IEvent")))
+            if (!command && (n.TypeKind == TypeKind.Interface || n.IsAbstract || !Hat(n, A + "IEvent")))
             {
-                fehler.Add(($"der Parameter '{p.Name}' ('{p.Type.ToDisplayString()}') ist weder Eingang (ein Command ohne Ziel als T, T?, OneOf<…>, "
-                    + "IReadOnlyList<T>; allein auch ein konkretes Event als Antwort) noch Herkunft, CancellationToken "
+                fehler.Add(($"der Parameter '{p.Name}' ('{p.Type.ToDisplayString()}') ist weder Eingang (ein Command ohne Ziel; allein auch ein konkretes "
+                    + "Event als Antwort) noch Herkunft, CancellationToken "
                     + "oder Lese-Fähigkeit (Interface mit IReadStore)"
                     + (Hat(n, A + "IAggregatCommand") ? " — ein Command an ein Aggregat nimmt nur sein Aggregat" : ""), ort));
                 return null;

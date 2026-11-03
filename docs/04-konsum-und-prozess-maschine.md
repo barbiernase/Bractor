@@ -13,10 +13,10 @@ Fähigkeits-Parameter, Signatur); einen zweiten Marker gibt es nicht. Zeit kommt
 | Konsument | Code-Form | Schleife | Fortschritt | Neu abspielbar |
 |---|---|---|---|---|
 | Projektion | `IProjektion`; `Task Auf(Event[, Herkunft], Schreib-Fähigkeiten eines Stores)` | `BatchLeser` je (Projektion, Partition) | Fortschritt (Position, Revision, Generation) und Guard je Stream — beim Store der Klasse 1 in seiner Transaktion, sonst beim Framework (§4.3) | ja (Neuaufbau über Generationen) |
-| Graph | `record X(Knoten…) : IGraph`, Knoten = Funktionen mit `Auf(Ports[, Herkunft][, Lese-Fähigkeiten][, CancellationToken])` | Graph-Actor je Instanz und Cluster-Knoten, Parent je Knoten, Kinder bis `Parallel` | offene Eingänge am Kopf (`cqrs_eingaenge`) bis zum Ende des Laufs; gesicherter Zustand je Instanz und Knoten (`cqrs_zustaende`) | nein (nie aus dem Log) |
+| Graph | `record X(Knoten…) : IGraph`, Knoten = Funktionen mit `Auf(Nachricht[, Herkunft][, Lese-Fähigkeiten][, CancellationToken])` | Graph-Actor je Instanz und Cluster-Knoten, Parent je Knoten, Kinder bis `Parallel` | offene Eingänge am Kopf (`cqrs_eingaenge`) bis zum Ende des Laufs; gesicherter Zustand je Instanz und Knoten (`cqrs_zustaende`) | nein (nie aus dem Log) |
 
-**Abläufe sind kein eigener Baustein.** Eine Rechnung je Auslöser — gabeln, zusammenführen, je Element rechnen und sammeln — ist ein **Graph**;
-was über Läufe hinweg gilt (warten auf fremde Rückmeldungen, zählen, zurücknehmen, eine Frist überwachen), entscheidet ein **Aggregat**. §4.5 zeigt
+**Abläufe sind kein eigener Baustein.** Eine Rechnung je Auslöser — Folge, Gabel, Wahl, je Element rechnen — ist ein **Graph**;
+was zusammengeführt, gezählt oder abgewartet wird (fremde Rückmeldungen, alle Elemente, eine Frist, zurücknehmen), entscheidet ein **Aggregat**. §4.5 zeigt
 beides an der Prüfdomäne.
 
 ## 4.1 Batch-Konsum der Projektionen
@@ -196,38 +196,29 @@ Projektion eine neue Generation (Fortschritt auf Anfang, sofort umgeschaltet; de
 
 ## 4.4 Funktionen und Graphen
 
-**Funktion.** Eine Funktion ist eine Klasse `: IFunktion` (Name = Klassenname); jedes `Auf` ist eine Operation desselben Knotens. Die
-Command-Parameter eines `Auf` sind seine **Eingangsports**, dazu optional `Herkunft`, Lese-Fähigkeiten (`: IReadStore`) und ein
-`CancellationToken`. Die Fälle des Rückgabetyps sind die **Ausgangsports**: ein konkreter Typ, `OneOf<…>`, `IEnumerable<…>` oder
-`IAsyncEnumerable<…>` (auch in `Task<…>`), mit Commands und Hinweisen — kein `void`, kein `T?`, kein `ValueTask`, ein leerer Strom heißt
-„nichts“ (CQRS100). Ein Event hört eine Funktion nur als **Antwort** auf ihren eigenen Command an ein Aggregat (das Ziel entschied es, das Kind
-rechnet gleich weiter, CQRS108); einen Hinweis hört sie nie. Im Konstruktor stehen Konfig-Records (Werte je Instanz und Knoten), Technik (jede
-andere Schnittstelle oder Klasse, ohne Marker, CQRS089–092), `IZustand<T>` und `ILogger<T>`. Eine generische Funktion (`Glaettung<TFenster>` der Sonde, als
-Knoten `Glaettung<Kurzfenster>`) ist eine Blaupause, je Typargument eines Knotens ein Baustein; generische Commands fließen nur zwischen Knoten. Der `FunktionsBausteinGenerator`
-erzeugt je Funktion ihre Rechnung (`GeneratedFunktionsBausteine`: je `Auf` die Ports als Objekte, die Ausgaben in Reihenfolge, reflexionsfrei).
+**Funktion.** Eine Funktion ist eine Klasse `: IFunktion` (Name = Klassenname); jedes `Auf` ist eine Operation desselben Knotens. Ein `Auf`
+nimmt **genau eine Nachricht** (einen Command ohne Ziel), dazu optional `Herkunft`, Lese-Fähigkeiten (`: IReadStore`) und ein `CancellationToken`,
+und rechnet, sobald sie ankommt — kommen zwei, rechnet es zweimal. Die Fälle des Rückgabetyps sind die **Ausgangsports**: ein konkreter Typ,
+`OneOf<…>`, `IEnumerable<…>` oder `IAsyncEnumerable<…>` (auch in `Task<…>`), mit Commands und Hinweisen — kein `void`, kein `T?`, kein
+`ValueTask`, ein leerer Strom heißt „nichts“ (CQRS100). Ein Event hört eine Funktion nur als **Antwort** auf ihren eigenen Command an ein Aggregat
+(das Ziel entschied es, das Kind rechnet gleich weiter, CQRS108); einen Hinweis hört sie nie. Im Konstruktor stehen Konfig-Records (Werte je
+Instanz und Knoten), Technik (jede andere Schnittstelle oder Klasse, ohne Marker, CQRS089–092), `IZustand<T>` und `ILogger<T>`. Eine generische
+Funktion (`Glaettung<TFenster>` der Sonde, als Knoten `Glaettung<Kurzfenster>`) ist eine Blaupause, je Typargument eines Knotens ein Baustein;
+generische Commands fließen nur zwischen Knoten. Der `FunktionsBausteinGenerator` erzeugt je Funktion ihre Rechnung (`GeneratedFunktionsBausteine`:
+je `Auf` der Eingang als Objekt, die Ausgaben in Reihenfolge, reflexionsfrei).
 
-Was ein Port erwartet, sagt sein Typ — das ist die ganze Synchronisation:
+**Zusammenführen, Einsammeln, Warten** stehen im Logik-Code, nicht in der Signatur. Mehrere Nachrichten, `T?`, `OneOf<…>` oder
+`IReadOnlyList<T>` als Eingang sind ein Formfehler (CQRS100, GR-EINGANG). Drei Wege, in dieser Reihenfolge:
 
-| Parameter | erwartet je Lauf |
-|---|---|
-| `T t` | genau einen; das `Auf` wartet auf ihn |
-| `T? t` | höchstens einen; `null`, wenn feststeht, dass keiner kommt, oder wenn das `Zeitlimit` des Knotens abläuft |
-| `OneOf<A, B> erster` | den ersten von beiden; die übrigen Zweige brechen ab (Rennen) |
-| `IReadOnlyList<T> alle` | alle `T` aus den Unterläufen eine Ebene tiefer, sobald ihre Erzeuger fertig sind (Sammeln) |
-
-Ein Ausgang `T` liefert genau einen, ein `OneOf`-Fall keinen oder einen, ein Strom keinen bis viele — je Element einen **Unterlauf**. Der Build
-prüft die Ports vom nächsten gemeinsamen Vorfahren aus: ein `T`-Port hinter einer Wahl muss `T?` (oder Teil eines `OneOf`) sein, hinter einem
-Strom `IReadOnlyList<T>`; der Befund nennt den passenden Typ (CQRS115). Umgekehrt dürfen mehrere genannte Quellen einen `T`- oder `T?`-Port nur
-speisen, wenn verschiedene Fälle einer Wahl sie trennen (Zusammenfließen) — sonst kämen zwei Werte in einem Lauf, und es gälte der erste (CQRS115). Soll jeder für sich weiter, steht der nehmende Knoten je Quelle einmal
-im Graphen (dieselbe Funktion darf mehrfach stehen); gehören beide zusammen, bekommen sie eigene Typen und zwei Ports (Join). Folge, Fork, exklusive Wahl, Join, Je, Sammeln, Fork-Join je Element,
-Rennen und Warten mit Frist sind so Formen von Signaturen, keine Knotenarten. Der Join der Bildaufbereitung (Beispieldomäne,
-`Domain.Pipeline/ImagePair/Bildeingang.cs`) nimmt das eingelesene Bild und seine Vorschau aus dem anderen Zweig desselben Laufs:
-```csharp
-public sealed class Bildeingang : IFunktion
-{
-    public OneOf<NimmBildAuf, DateinameUnbekannt> Auf(BildEingelesen bild, VorschauErstellt vorschau) => …;
-}
-```
+- **Die Nachricht trägt mit, was danach gebraucht wird.** Die Vorschau der Bildaufbereitung trägt die Datei der Quelle, so meldet der Eingang
+  das Bild aus ihr allein (`Domain.Pipeline/ImagePair/Bildeingang.cs`):
+  ```csharp
+  public OneOf<NimmBildAuf, DateinameUnbekannt> Auf(VorschauErstellt vorschau) => …;
+  ```
+- **Ein Knoten mit Zustand** nimmt jede Nachricht in einem eigenen `Auf` und hält die erste in `IZustand<T>`, bis die zweite da ist (bis dahin ein
+  leerer Strom) — das Prognosemodell der Sonde (`Vorhersage.cs.txt`) führt so zwei Glättungen zusammen.
+- **Ein Aggregat** zählt oder führt zusammen, wenn das Ergebnis fachlich zählt: je Element meldet sich ein Command, das Decide zählt mit und
+  schließt nach dem letzten ab (Zähl-Aggregat, §4.5); Warten auf Zeit ist eine Frist im Decide.
 
 **Graph.** Ein Graph ist ein Record `: IGraph` in `Graphen.cs` der Abläufe; jeder Parameter ist ein **Knoten** (Name = Konfig-Schlüssel, Typ = eine
 Funktion oder ein anderer Graph), die Reihenfolge bedeutet nichts. Dieselbe Funktion darf mehrfach stehen — zwei Knoten mit je eigener Konfig
@@ -239,22 +230,20 @@ ist kein Kreis. Ein **Kopf** trägt `[Kopf]` und nimmt von außen (aus einem Dec
 genannte Quelle speist — je Eingangstyp genau einer; ein Knoten kann beides tragen (ein `Auf` von außen, eines von innen). Jeder Knoten trägt
 `[Kopf]`, `[Von]` oder beides; nur eine Quelle trägt keins, sie ist der einzige Kopf ihres Graphen. Was ein Knoten ausgibt und kein Knoten über `Von`
 von ihm nimmt, verlässt den Graphen — als Command an ein Aggregat, an den Kopf eines anderen Graphen oder an einen Akteur (zwischen den Bausteinen
-bleibt es beim Typ-Routing mit genau einem Empfänger, Invariante 3), als Hinweis an die Akteure, die ihn hören. Ein Typ steht höchstens einmal je
-`Auf` (zwei Rollen sind zwei Typen, `BildLinks` und `BildRechts`), so hängt die Zuordnung nie an der Reihenfolge; ein Join paart nur, was von
-genannten Quellen desselben Laufs kommt. Ein Graph ist kreisfrei über seine Knoten (einen Command an den eigenen Kopf darf er geben — das ist ein
+bleibt es beim Typ-Routing mit genau einem Empfänger, Invariante 3), als Hinweis an die Akteure, die ihn hören. Ein Graph ist kreisfrei über seine Knoten (einen Command an den eigenen Kopf darf er geben — das ist ein
 neuer Lauf). Seine **Signatur** ergibt sich (Eingänge = Köpfe, Ausgänge = was ihn verlässt), deshalb ist ein Graph als Knoten in einem anderen eine
 Schachtel: `Von` an ihm speist seine Köpfe, `[Kopf]` an ihm macht seine Köpfe zu Köpfen des äußeren, `Von(nameof(Schachtel))` an einem anderen
 Knoten meint seine Ausgänge; seine Knoten heißen mit Pfad (`Aufbereitung.Verkleinern`). Zwischen Knoten steht nie Klebecode: passt ein Typ nicht,
 ist der Adapter eine eigene kleine Funktion. Der `GraphGenerator` erzeugt `GeneratedGraphen` (Knoten aufgefaltet, je Operation die Ports mit Form
-und Erzeugern, Köpfe, Ebenen); dieselbe Lesart (`Graphform`) liest der `GraphAnalyzer` (CQRS115: GR-GRAPH, GR-KANTE, GR-KOPF, GR-JOIN), der
+und Erzeugern, Köpfe, Ebenen); dieselbe Lesart (`Graphform`) liest der `GraphAnalyzer` (CQRS115: GR-GRAPH, GR-KANTE, GR-KOPF), der
 Extractor und `--graph <Typ>`. Eine Funktion in keinem Graphen läuft nie (CQRS117, Warnung).
 ```csharp
-// Domain.Pipeline/Bildaufbereitung/Graphen.cs — das eingelesene Bild gabelt zum Verkleinern und zum Eingang, der beide joint
+// Domain.Pipeline/Bildaufbereitung/Graphen.cs — eine Kette; jede Nachricht trägt die Datei der Quelle mit
 public sealed record Bildaufbereitung(
     [Kopf] Bildeinlesen Einlesen,
     [Von(nameof(Einlesen))] Bildverkleinerung Verkleinern,
     [Von(nameof(Verkleinern))] Kontrastausgleich Kontrast,
-    [Von(nameof(Einlesen), nameof(Kontrast))] Bildeingang Eingang) : IGraph;
+    [Von(nameof(Kontrast))] Bildeingang Eingang) : IGraph;
 public sealed record Linienimport(Dateiwaechter Eingang, [Von(nameof(Eingang))] Bildaufbereitung Aufbereitung) : IGraph;   // Quelle, Graph im Graphen
 ```
 Die übrigen Muster zeigt die Sonde (`GraphExtractor.Kern/Sonde/Vorhersage.cs.txt`, Kartenausgabe): dieselbe Funktion zweimal, eine Kette gleichen
@@ -357,8 +346,8 @@ erneut, der durable Rand bringt den Eingang wieder. Kein Vermittler, keine Lease
 **Hinweise** (`Infrastructure/Funktionen/Hinweise.cs`). Ein Hinweis aus einem Knoten oder ein gescheiterter Lauf geht nur an die Verteiler und
 von dort an die Sitzungen der Akteure, die ihn hören — ohne Log, höchstens einmal. Was ein Knoten braucht, ist ein Command.
 
-**Bestand.** Beispieldomäne: der **Linienimport** (`Dateiwaechter` → **Bildaufbereitung**: `Bildeinlesen` → `BildEingelesen` gabelt zu
-`Bildverkleinerung` → `BildVerkleinert` → `Kontrastausgleich` → `VorschauErstellt` und direkt zum `Bildeingang`, der beide joint → `NimmBildAuf`;
+**Bestand.** Beispieldomäne: der **Linienimport** (`Dateiwaechter` → **Bildaufbereitung**: `Bildeinlesen` → `BildEingelesen` →
+`Bildverkleinerung` → `BildVerkleinert` → `Kontrastausgleich` → `VorschauErstellt` (trägt die Datei der Quelle mit) → `Bildeingang` → `NimmBildAuf`;
 `BildNichtLesbar` und `DateinameUnbekannt` sind Hinweise), die **Datensatzpflege** (`RangeAufloesung` mit Kopf `RangeAufzuloesen`,
 `MitgliederEinfrieren` mit Kopf `EinfrierenAbzuschliessen`, beide mit Lese-Fähigkeit) und die **Teilmeldung** (`TeilFertigMeldung`, Kopf `TeilFertig`);
 Arbeit haben der `Klassifizierer` (`PaarZuBeurteilen`) und das `TrainingsSystem` (`TrainingZuRechnen`, die Antwort in Stücken). Prüfdomäne: der
@@ -371,9 +360,9 @@ Fakt im Log für Projektionen und Clients.
 
 ## 4.5 Abläufe: Aggregat, Graph und Frist
 
-Ein Ablauf über mehrere Aggregate hat zwei Teile. Was **je Auslöser** gerechnet wird — gabeln, zusammenführen, je Element rechnen und sammeln —,
-ist ein Graph, sein Lauf hält es im Speicher. Was **über Läufe hinweg** gilt — auf fremde Rückmeldungen warten, zählen, zurücknehmen, eine Frist
-überwachen —, ist ein Aggregat: sein Decide entscheidet jeden Schritt aus seinem Zustand, sein Log ist der Ablauf. Aggregate reden nur über Graphen
+Ein Ablauf über mehrere Aggregate hat zwei Teile. Was **je Auslöser** gerechnet wird — Folge, Gabel, Wahl, je Element rechnen —
+ist ein Graph. Was zusammengeführt oder abgewartet wird — fremde Rückmeldungen, alle Elemente zählen, zurücknehmen, eine Frist überwachen —, ist
+ein Aggregat: sein Decide entscheidet jeden Schritt aus seinem Zustand, sein Log ist der Ablauf. Aggregate reden nur über Graphen
 oder Akteure miteinander (CQRS114). Die Zugehörigkeit eines fremden Events zu einem Ablauf ist ein **fachliches Feld** (A2), kein Korrelations-Header.
 
 **Beispiel: der Auftrag der Prüfdomäne** (`Pruefdomaene/Auftrag/`, `Pruefdomaene.Pipeline/Auftrag/`). Ein Auftrag reserviert einen Posten und belegt
@@ -388,11 +377,11 @@ ein Kontingent (zwei unabhängige Zweige); erst wenn beide gelungen sind, ist er
   `KontingentZuEntlasten`) — genau einmal, weil der Zustand es sich merkt; eine verspätete Rückmeldung nimmt sich selbst zurück. Die
   Auftragsabwicklung sendet den Gegenzug (`GibPostenFrei`, `EntlasteKontingent`).
 
-**Je und Sammeln im Graphen** (`Pruefdomaene.Pipeline/Verteilung/`): ist die Quelle einer Verteilung reserviert, gibt ihr Decide `Zubuchen` aus.
-Der Graph `Zubuchung` teilt auf (`Zielaufteilung`, ein Strom: je Ziel ein `ZielZubuchen`, je Element ein Unterlauf), bucht je Ziel
-(`Zielbuchung` → `BuchePostenZu`; die Antwort `PostenZugebucht` wird `ZielGebucht`) und sammelt (`Verteilabschluss` nimmt
-`IReadOnlyList<ZielGebucht>`, sobald alle Unterläufe fertig sind) → `SchliesseVerteilungAb`. Die Verteilung braucht keinen Zähler mehr: was je
-Auslöser zusammengehört, hält der Lauf.
+**Je im Graphen, Zählen im Aggregat** (`Pruefdomaene.Pipeline/Verteilung/`): ist die Quelle einer Verteilung reserviert, gibt ihr Decide
+`Zubuchen` aus. Der Graph `Zubuchung` teilt auf (`Zielaufteilung`, ein Strom: je Ziel ein `ZielZubuchen`, je Element ein Unterlauf) und bucht je
+Ziel (`Zielbuchung` → `BuchePostenZu`); die Antwort `PostenZugebucht` meldet er der Verteilung (`VermerkeZubuchung`). Die Verteilung zählt mit
+(`ZielZugebucht`) und schließt nach dem letzten Ziel ab (`VerteilungAbgeschlossen` mit der Summe) — das Einsammeln steht im Aggregat, nicht im
+Graphen.
 
 **Frist statt Zeitlimit.** Ein Decide gibt `Frist<TCmd>(Befehl, Nach)` aus; die Uhr (§4.7) sendet den Befehl fällig an dasselbe Aggregat, und
 dessen Decide entscheidet, ob er noch etwas bedeutet. Beispiel: der Trainings-Wächter der Beispieldomäne setzt beim Start eines Trainingslaufs

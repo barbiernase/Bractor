@@ -8,6 +8,9 @@ public record VerteilungGestartet(Id<Verteilung> VerteilungId, Id<Posten.Posten>
 /// <summary>Die Quelle ist reserviert: die Verteilung bucht ihre Ziele zu (der Command <see cref="Zubuchen"/> geht an die Verteilabwicklung).</summary>
 public record QuelleReserviert() : IEvent;
 
+/// <summary>Ein Ziel ist gebucht — mit seiner Menge (die Verteilung zählt mit).</summary>
+public record ZielZugebucht(int Menge) : IEvent;
+
 /// <summary>Alle Ziele sind gebucht — mit der Menge, die tatsächlich zugebucht wurde.</summary>
 public record VerteilungAbgeschlossen(int Zugebucht) : IEvent;
 

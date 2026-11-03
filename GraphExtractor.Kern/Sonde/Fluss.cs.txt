@@ -7,8 +7,8 @@ using Leihwesen.Lesen;
 //         · ein Command ohne Ziel VON EINEM AKTEUR am Kopf des Graphen (die Theke gibt die gescannte Rückgabe hinein);
 //         · der Start gibt einen Command an ein Aggregat aus und hört dessen Event als ANTWORT auf seinen eigenen Command (eine Stufe tief);
 //         · JE: die Antwort öffnet als Strom je Seite einen Unterlauf; der Prüfer rechnet mit TECHNIK (zwei Umsetzungen, die Instanz wählt);
-//         · SAMMELN: die Bilanz nimmt alle Seiten der Unterläufe als Liste und schließt den Vorgang ab; das Rennen gegen die Zeit bleibt
-//           eine FRIST des Aggregats;
+//         · ZÄHLEN im Aggregat: jeder Prüfer meldet seine Seite der Prüfung, die mitzählt und nach der letzten abschließt (kein Einsammeln
+//           im Graphen); das Rennen gegen die Zeit bleibt eine FRIST des Aggregats;
 //         · eine Funktion mit LESE-Fähigkeit am Kopf eines eigenen Graphen, ihr Eingang ein Command ohne Ziel aus dem Decide der Ausleihe,
 //           ihre Ausgabe ein Strom (0 oder 1 Mahnung).
 
@@ -20,7 +20,8 @@ public record StartePruefung(Id<Seitenpruefung> AggregateId, Guid LeserId, IRead
 public record PruefungGestartet(Id<Seitenpruefung> PruefungId, Guid LeserId, IReadOnlyList<string> Seiten) : IEvent;
 public record PruefungLaeuftSchon(Id<Seitenpruefung> PruefungId) : ITransientEvent;
 
-public record SchliessePruefungAb(Id<Seitenpruefung> AggregateId, int Beschaedigte) : ICommand<Seitenpruefung>;
+public record VermerkeSeite(Id<Seitenpruefung> AggregateId, int Nummer, bool Beschaedigt) : ICommand<Seitenpruefung>;
+public record SeiteVermerkt(int Nummer, bool Beschaedigt) : IEvent;
 public record PruefungAbgeschlossen(Guid LeserId, int Beschaedigte) : IEvent;
 
 public record BrichPruefungAb(Id<Seitenpruefung> AggregateId) : ICommand<Seitenpruefung>;
@@ -29,6 +30,9 @@ public record PruefungAbgebrochen(Guid LeserId) : IEvent;
 public partial class Seitenpruefung : IState
 {
     public Guid LeserId { get; set; }
+    public int Seiten { get; set; }
+    public int Geprueft { get; set; }
+    public int Beschaedigte { get; set; }
     public bool Fertig { get; set; }
 
     public partial class Decider : IDecider<Seitenpruefung>
@@ -40,10 +44,12 @@ public partial class Seitenpruefung : IState
             yield return new Frist<BrichPruefungAb>(new BrichPruefungAb(c.AggregateId), TimeSpan.FromSeconds(30));
         }
 
-        public IEnumerable<OneOf<PruefungAbgeschlossen>> Decide(SchliessePruefungAb c)
+        public IEnumerable<OneOf<SeiteVermerkt, PruefungAbgeschlossen>> Decide(VermerkeSeite c)
         {
             if (this.State.Fertig) yield break;
-            yield return new PruefungAbgeschlossen(this.State.LeserId, c.Beschaedigte);
+            yield return new SeiteVermerkt(c.Nummer, c.Beschaedigt);
+            if (this.State.Geprueft + 1 == this.State.Seiten)
+                yield return new PruefungAbgeschlossen(this.State.LeserId, this.State.Beschaedigte + (c.Beschaedigt ? 1 : 0));
         }
 
         public IEnumerable<OneOf<PruefungAbgebrochen>> Decide(BrichPruefungAb c)
@@ -55,15 +61,15 @@ public partial class Seitenpruefung : IState
 
     public partial class Applier : IApplier<Seitenpruefung>
     {
-        public void Apply(PruefungGestartet e) { this.State.LeserId = e.LeserId; }
+        public void Apply(PruefungGestartet e) { this.State.LeserId = e.LeserId; this.State.Seiten = e.Seiten.Count; }
+        public void Apply(SeiteVermerkt e) { this.State.Geprueft++; if (e.Beschaedigt) this.State.Beschaedigte++; }
         public void Apply(PruefungAbgeschlossen e) { this.State.Fertig = true; }
         public void Apply(PruefungAbgebrochen e) { this.State.Fertig = true; }
     }
 }
 
-// Was nur Knoten einander geben: je Seite ein Unterlauf, je Seite ein Befund.
+// Was nur Knoten einander geben: je Seite ein Unterlauf.
 public record SeiteZuPruefen(Id<Seitenpruefung> PruefungId, int Nummer, string Seite) : ICommand;
-public record SeiteGeprueft(Id<Seitenpruefung> PruefungId, int Nummer, bool Beschaedigt) : ICommand;
 
 // Der Start: je gescannter Rückgabe ein Vorgang (Id aus der Herkunft); seine Antwort öffnet JE Seite einen Unterlauf.
 public sealed class Pruefungsstart : IFunktion
@@ -93,17 +99,7 @@ public sealed class Handpruefung : ISeitenleser
 // Im Unterlauf je Seite.
 public sealed class Seitenpruefer(ISeitenleser leser) : IFunktion
 {
-    public SeiteGeprueft Auf(SeiteZuPruefen s) => new(s.PruefungId, s.Nummer, leser.IstBeschaedigt(s.Seite));
-}
-
-// SAMMELN: sind alle Unterläufe fertig, kommen die Befunde als Liste.
-public sealed class Seitenbilanz : IFunktion
-{
-    public IEnumerable<SchliessePruefungAb> Auf(IReadOnlyList<SeiteGeprueft> alle)
-    {
-        if (alle.Count == 0) yield break;
-        yield return new SchliessePruefungAb(alle[0].PruefungId, alle.Count(s => s.Beschaedigt));
-    }
+    public VermerkeSeite Auf(SeiteZuPruefen s) => new(s.PruefungId, s.Nummer, leser.IstBeschaedigt(s.Seite));
 }
 
 // Lese-Fähigkeit: die Mahnung nach Ablauf der Leihfrist richtet sich nach der Zahl offener Ausleihen des Lesers.
@@ -116,5 +112,5 @@ public sealed class Offenzaehlung : IFunktion
     }
 }
 
-public sealed record Seitenpruefungslauf([Kopf] Pruefungsstart Start, [Von(nameof(Start))] Seitenpruefer Pruefer, [Von(nameof(Pruefer))] Seitenbilanz Bilanz) : IGraph;
+public sealed record Seitenpruefungslauf([Kopf] Pruefungsstart Start, [Von(nameof(Start))] Seitenpruefer Pruefer) : IGraph;
 public sealed record Mahnbemessung([Kopf] Offenzaehlung Zaehlung) : IGraph;

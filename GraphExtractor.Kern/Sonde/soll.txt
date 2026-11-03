@@ -55,7 +55,7 @@ record Leihwesen.Gebuehren.MahnungExistiert rejection aggregat=Mahnvorgang | Id:
 record Leihwesen.Gebuehren.SchaetzeSchaden command aggregat=Schadensfall | Fall:Id<Schadensfall>, LeserId:Guid
 record Leihwesen.Gebuehren.SchadenErfasst command | LeserId:Guid, Neuwert:decimal, AlterJahre:int
 record Leihwesen.Gebuehren.SchadenGeschaetzt command | LeserId:Guid, Betrag:decimal
-record Leihwesen.Gebuehren.GutachtenErhalten command | LeserId:Guid, Zuschlag:decimal
+record Leihwesen.Gebuehren.GutachtenErhalten command | LeserId:Guid, Betrag:decimal, Zuschlag:decimal
 record Leihwesen.Gebuehren.BegutachteVorOrt command | Fall:Id<Schadensfall>, LeserId:Guid
 record Leihwesen.Gebuehren.NichtSchaetzbar rejection | Grund:string
 # Konfig-Records (Werte am Knoten der Instanz): einer im Konstruktor einer Technik-Umsetzung, einer im Konstruktor einer Funktion
@@ -65,49 +65,47 @@ record Leihwesen.Gebuehren.GutachtenKonfig konfig | Zuschlag:decimal, Bedenkzeit
 funktion Leihwesen.Gebuehren.SchadenBeiRueckgabe() | Auf(PruefeRueckgabe) herkunft -> strom MeldeSchaden
 # WAHL: genau einer von drei Fällen — an den nächsten Knoten, Arbeit für einen Akteur, ein Hinweis
 funktion Leihwesen.Gebuehren.Schadensaufnahme() | Auf(SchaetzeSchaden) -> SchadenErfasst; BegutachteVorOrt; NichtSchaetzbar
-# FORK: zwei Knoten nehmen SchadenErfasst — einer mit Technik, einer mit Konfig
+# KETTE: die Schätzung mit Technik, das Gutachten mit Konfig trägt den Betrag weiter
 funktion Leihwesen.Gebuehren.Schadensschaetzer(tabelle:IWertTabelle) | Auf(SchadenErfasst) -> SchadenGeschaetzt
-funktion Leihwesen.Gebuehren.Gutachtenanfrage(konfig:GutachtenKonfig) | Auf(SchadenErfasst) -> GutachtenErhalten
-# JOIN mit WARTEN MIT FRIST: genau eine Schätzung, höchstens ein Gutachten (T?; das Zeitlimit steht in der Instanz)
-funktion Leihwesen.Gebuehren.MahnungNachSchaetzung() | Auf(SchadenGeschaetzt g, GutachtenErhalten? gutachten) herkunft -> EroeffneMahnung
+funktion Leihwesen.Gebuehren.Gutachtenanfrage(konfig:GutachtenKonfig) | Auf(SchadenGeschaetzt) -> GutachtenErhalten
+# die Mahnung aus dem, was das Gutachten mitträgt (ein Auf, eine Nachricht)
+funktion Leihwesen.Gebuehren.MahnungNachSchaetzung() | Auf(GutachtenErhalten) herkunft -> EroeffneMahnung
 # Technik (ohne Marker): Schnittstelle im Konstruktor einer Funktion (Methoden, Typen wie geschrieben) + Umsetzung mit Konfig-Record
 technik Leihwesen.Gebuehren.IWertTabelle schnittstelle | Restwert(neuwert:decimal, alterJahre:int):decimal; IstSchaetzbarAsync(leserId:Guid):Task<bool> | umsetzung LineareWertTabelle(konfig:WertTabellenKonfig)
-# Die Graphen: ein Knoten (Kopf aus dem Decide, Ausgang ein Aggregat-Command); Wahl + Fork + Join — jede Kante als Von am nehmenden Knoten
+# Die Graphen: ein Knoten (Kopf aus dem Decide, Ausgang ein Aggregat-Command); Wahl + Kette — jede Kante als Von am nehmenden Knoten
 graph Leihwesen.Gebuehren.Rueckgabepruefung | knoten Pruefung:SchadenBeiRueckgabe [Kopf] | koepfe PruefeRueckgabe | aus MeldeSchaden
-graph Leihwesen.Gebuehren.Schadensbewertung | knoten Aufnahme:Schadensaufnahme [Kopf], Schaetzung:Schadensschaetzer [Von Aufnahme], Gutachten:Gutachtenanfrage [Von Aufnahme], Mahnung:MahnungNachSchaetzung [Von Schaetzung+Gutachten] | koepfe SchaetzeSchaden | aus BegutachteVorOrt, NichtSchaetzbar, EroeffneMahnung
+graph Leihwesen.Gebuehren.Schadensbewertung | knoten Aufnahme:Schadensaufnahme [Kopf], Schaetzung:Schadensschaetzer [Von Aufnahme], Gutachten:Gutachtenanfrage [Von Schaetzung], Mahnung:MahnungNachSchaetzung [Von Gutachten] | koepfe SchaetzeSchaden | aus BegutachteVorOrt, NichtSchaetzbar, EroeffneMahnung
 kante Schadensbewertung | Aufnahme -SchadenErfasst-> Schaetzung
-kante Schadensbewertung | Aufnahme -SchadenErfasst-> Gutachten
-kante Schadensbewertung | Schaetzung -SchadenGeschaetzt-> Mahnung
+kante Schadensbewertung | Schaetzung -SchadenGeschaetzt-> Gutachten
 kante Schadensbewertung | Gutachten -GutachtenErhalten-> Mahnung
 
 # ── Prüfung (Fluss.cs.txt): der Ablauf als Graph — ein Command von einem Akteur am Kopf; der Start gibt einen Aggregat-Command aus und hört
-#    dessen Event als ANTWORT; die Antwort öffnet JE Seite einen Unterlauf (Strom); der Prüfer mit Technik (zwei Umsetzungen); die Bilanz SAMMELT;
+#    dessen Event als ANTWORT; die Antwort öffnet JE Seite einen Unterlauf (Strom); der Prüfer mit Technik (zwei Umsetzungen) meldet seine Seite der Prüfung, die ZÄHLT;
 #    die Frist bleibt beim Aggregat. Dazu eine Funktion mit LESE-Fähigkeit am Kopf eines eigenen Graphen (Kopf aus dem Decide der Ausleihe) ──
-aggregat Leihwesen.Pruefung.Seitenpruefung | LeserId:Guid, Fertig:bool
+aggregat Leihwesen.Pruefung.Seitenpruefung | LeserId:Guid, Seiten:int, Geprueft:int, Beschaedigte:int, Fertig:bool
 decide Seitenpruefung.StartePruefung -> PruefungGestartet; PruefungLaeuftSchon; Frist<BrichPruefungAb>
-decide Seitenpruefung.SchliessePruefungAb -> PruefungAbgeschlossen
 decide Seitenpruefung.BrichPruefungAb -> PruefungAbgebrochen
+decide Seitenpruefung.VermerkeSeite -> SeiteVermerkt; PruefungAbgeschlossen
 apply Seitenpruefung.PruefungGestartet
 apply Seitenpruefung.PruefungAbgeschlossen
 apply Seitenpruefung.PruefungAbgebrochen
+apply Seitenpruefung.SeiteVermerkt
 record Leihwesen.Pruefung.RueckgabeGescannt command typart=public sealed record | LeserId:Guid, Code:string, Seiten:IReadOnlyList<string>
 record Leihwesen.Pruefung.StartePruefung command erzeugung aggregat=Seitenpruefung | AggregateId:Id<Seitenpruefung>, LeserId:Guid, Seiten:IReadOnlyList<string>
 record Leihwesen.Pruefung.PruefungGestartet event aggregat=Seitenpruefung | PruefungId:Id<Seitenpruefung>, LeserId:Guid, Seiten:IReadOnlyList<string>
 record Leihwesen.Pruefung.PruefungLaeuftSchon rejection aggregat=Seitenpruefung | PruefungId:Id<Seitenpruefung>
-record Leihwesen.Pruefung.SchliessePruefungAb command aggregat=Seitenpruefung | AggregateId:Id<Seitenpruefung>, Beschaedigte:int
 record Leihwesen.Pruefung.PruefungAbgeschlossen event aggregat=Seitenpruefung | LeserId:Guid, Beschaedigte:int
 record Leihwesen.Pruefung.BrichPruefungAb command aggregat=Seitenpruefung | AggregateId:Id<Seitenpruefung>
 record Leihwesen.Pruefung.PruefungAbgebrochen event aggregat=Seitenpruefung | LeserId:Guid
 record Leihwesen.Pruefung.SeiteZuPruefen command | PruefungId:Id<Seitenpruefung>, Nummer:int, Seite:string
-record Leihwesen.Pruefung.SeiteGeprueft command | PruefungId:Id<Seitenpruefung>, Nummer:int, Beschaedigt:bool
+record Leihwesen.Pruefung.SeiteVermerkt event aggregat=Seitenpruefung | Nummer:int, Beschaedigt:bool
+record Leihwesen.Pruefung.VermerkeSeite command aggregat=Seitenpruefung | AggregateId:Id<Seitenpruefung>, Nummer:int, Beschaedigt:bool
 funktion Leihwesen.Pruefung.Pruefungsstart() | Auf(RueckgabeGescannt) herkunft -> StartePruefung || Auf(PruefungGestartet) -> strom SeiteZuPruefen
-funktion Leihwesen.Pruefung.Seitenpruefer(leser:ISeitenleser) | Auf(SeiteZuPruefen) -> SeiteGeprueft
-funktion Leihwesen.Pruefung.Seitenbilanz() | Auf(IReadOnlyList<SeiteGeprueft> alle) -> strom SchliessePruefungAb
+funktion Leihwesen.Pruefung.Seitenpruefer(leser:ISeitenleser) | Auf(SeiteZuPruefen) -> VermerkeSeite
 funktion Leihwesen.Pruefung.Offenzaehlung() | Auf(BemesseMahnung) herkunft liest IZaehleOffene offene -> strom EroeffneMahnung
 technik Leihwesen.Pruefung.ISeitenleser schnittstelle | IstBeschaedigt(seite:string):bool | umsetzung Handpruefung(); umsetzung Lichtpruefung()
-graph Leihwesen.Pruefung.Seitenpruefungslauf | knoten Start:Pruefungsstart [Kopf], Pruefer:Seitenpruefer [Von Start], Bilanz:Seitenbilanz [Von Pruefer] | koepfe RueckgabeGescannt | aus StartePruefung, SchliessePruefungAb
+graph Leihwesen.Pruefung.Seitenpruefungslauf | knoten Start:Pruefungsstart [Kopf], Pruefer:Seitenpruefer [Von Start] | koepfe RueckgabeGescannt | aus StartePruefung, VermerkeSeite
 kante Seitenpruefungslauf | Start -SeiteZuPruefen-> Pruefer
-kante Seitenpruefungslauf | Pruefer -SeiteGeprueft-> Bilanz
 # Die Mahnbemessung bekommt im Editor einen zweiten Knoten (Geste „Graph: Knoten hinzufügen“) — ein zweiter Kopf
 graph Leihwesen.Pruefung.Mahnbemessung | knoten Zaehlung:Offenzaehlung [Kopf], Vormerkung:Vormerkpruefung [Kopf] | koepfe BemesseMahnung, PruefeVormerkung | aus EroeffneMahnung
 
@@ -229,12 +227,12 @@ besitz Leihwesen.Pruefung.RueckgabeGescannt command -> §rand
 besitz Leihwesen.Pruefung.StartePruefung command -> aggregate:Seitenpruefung
 besitz Leihwesen.Pruefung.PruefungGestartet event -> aggregate:Seitenpruefung
 besitz Leihwesen.Pruefung.PruefungLaeuftSchon rejection -> aggregate:Seitenpruefung
-besitz Leihwesen.Pruefung.SchliessePruefungAb command -> aggregate:Seitenpruefung
 besitz Leihwesen.Pruefung.PruefungAbgeschlossen event -> aggregate:Seitenpruefung
 besitz Leihwesen.Pruefung.BrichPruefungAb command -> aggregate:Seitenpruefung
 besitz Leihwesen.Pruefung.PruefungAbgebrochen event -> aggregate:Seitenpruefung
 besitz Leihwesen.Pruefung.SeiteZuPruefen command -> bausteinfunktion:Pruefungsstart
-besitz Leihwesen.Pruefung.SeiteGeprueft command -> bausteinfunktion:Seitenpruefer
+besitz Leihwesen.Pruefung.SeiteVermerkt event -> aggregate:Seitenpruefung
+besitz Leihwesen.Pruefung.VermerkeSeite command -> aggregate:Seitenpruefung
 besitz Leihwesen.Lesen.LeihEintrag readmodel -> store:ILeihBuch
 besitz Leihwesen.Lesen.Leihliste projektion -> store:ILeihBuch
 besitz Leihwesen.Lesen.LeihAuskunftLeser reader -> store:ILeihBuch
@@ -299,7 +297,7 @@ besitz Kundenportal.Konten.Adressschluessel code -> §begriffe
 
 # ── Anlagen (Messnetz.cs.txt): SENSOR-STROM MIT ALARM — Zähl-Aggregat; eine EIGENE QUELLFUNKTION (Lausche) mit Konfig, gesichertem Zustand und
 #    Technik am Kopf der Messkette, dahinter ein GRAPH IM GRAPHEN (aufgefaltete Kanten Aufbereitung.Plausi …); der Alarm öffnet die Störung über einen
-#    Graphen; die Störung gibt ARBEIT aus dem Decide an die Schichtleitung und alarmiert über ein RENNEN zweier Wege ──
+#    Graphen; die Störung gibt ARBEIT aus dem Decide an die Schichtleitung und alarmiert über zwei Wege nebeneinander ──
 aggregat Anlagen.Messung.Sensor | Grenzwert:double, AlarmNach:int, Hintereinander:int, Alarm:bool
 aggregat Anlagen.Messung.Stoerungsfall | Offen:bool
 decide Sensor.RichteSensorEin -> SensorEingerichtet
@@ -345,11 +343,11 @@ technik Anlagen.Messung.ISensorbus schnittstelle | LiesAsync(sensor:Guid, ct:Can
 funktion Anlagen.Messung.Plausibilisierung() | Auf(Rohwert) -> strom Plausibel
 funktion Anlagen.Messung.Messwertpruefung() | Auf(Plausibel) -> MeldeMesswert
 funktion Anlagen.Messung.StoerungBeiAlarm() | Auf(OeffneStoerungFuer) -> OeffneStoerung
-# RENNEN: zwei Wege nehmen AlarmVerteilt; die Quittung nimmt den ersten (OneOf-Port)
+# ZWEI WEGE: beide nehmen AlarmVerteilt; die Quittung nimmt jeden in einem eigenen Auf
 funktion Anlagen.Messung.Alarmverteilung() | Auf(AlarmiereBereitschaft) -> AlarmVerteilt
 funktion Anlagen.Messung.Anrufkette(telefonie:ITelefonie) | Auf(AlarmVerteilt) -> PerAnrufErreicht
 funktion Anlagen.Messung.Funkruf() | Auf(AlarmVerteilt) -> PerFunkErreicht
-funktion Anlagen.Messung.Alarmquittung() | Auf(OneOf<PerAnrufErreicht, PerFunkErreicht> erster) -> VermerkeAlarmierung
+funktion Anlagen.Messung.Alarmquittung() | Auf(PerAnrufErreicht) -> VermerkeAlarmierung || Auf(PerFunkErreicht) -> VermerkeAlarmierung
 technik Anlagen.Messung.ITelefonie schnittstelle | RufeAsync(fall:Guid):Task<string> | umsetzung Telefonanlage()
 # GRAPH IM GRAPHEN: die Aufbereitung ist eine Schachtel (Signatur Rohwert → MeldeMesswert); in der Messkette hinter der Quelle aufgefaltet
 graph Anlagen.Messung.Messwertaufbereitung | knoten Plausi:Plausibilisierung [Kopf], Pruefung:Messwertpruefung [Von Plausi] | koepfe Rohwert | aus MeldeMesswert
@@ -399,7 +397,7 @@ besitz Anlagen.Messung.Abfragestand code -> bausteinfunktion:Sensorabfrage
 
 # ── Warenkatalog (Katalogimport.cs.txt): MASSEN-IMPORT MIT FORTSCHRITT — am Kopf eine QUELLFUNKTION AUS DEM KATALOG (Dateiwächter, Core.Katalog);
 #    der Eingang startet den Vorgang und hört die Antwort; ein Zeilenleser mit Technik als KLASSE gibt JE Zeile einen Unterlauf und zwischendurch
-#    den Fortschritt (eine Wahl im Strom); die Bilanz SAMMELT und JOINT mit dem bereiten Katalog. Leseseite: Store der Klasse 2 (Dateien, jede
+#    den Fortschritt (eine Wahl im Strom); am Ende des Stroms schließt der Leser mit seiner Bilanz ab. Leseseite: Store der Klasse 2 (Dateien, jede
 #    Schreib-Fähigkeit nimmt die Herkunft) und der Klasse 3 (nur mit [MindestensEinmal]; ohne Herkunft, mit Abbruch) ──
 aggregat Warenkatalog.Import.Importlauf | Zeilen:int, Fertig:bool
 aggregat Warenkatalog.Import.Artikel | Nummer:string="", Preis:decimal
@@ -425,17 +423,14 @@ record Warenkatalog.Import.KatalogBereit command | Import:Id<Importlauf>, Pfad:s
 record Warenkatalog.Import.Zeile command | Import:Id<Importlauf>, Nummer:int, Felder:string[]
 record Warenkatalog.Import.CsvKonfig konfig | Trenner:string=";"
 funktion Warenkatalog.Import.Katalogeingang() | Auf(DateiGefunden) herkunft -> StarteImport || Auf(ImportGestartet) -> KatalogBereit
-funktion Warenkatalog.Import.Zeilenleser(zerleger:CsvZerleger) | Auf(KatalogBereit) -> strom Zeile; MeldeImportFortschritt
+funktion Warenkatalog.Import.Zeilenleser(zerleger:CsvZerleger) | Auf(KatalogBereit) -> strom Zeile; MeldeImportFortschritt; SchliesseImportAb
 funktion Warenkatalog.Import.Artikelanlage() | Auf(Zeile) herkunft -> LegeArtikelAn
-funktion Warenkatalog.Import.Importbilanz() | Auf(IReadOnlyList<Zeile> alle, KatalogBereit katalog) -> SchliesseImportAb
 # Technik als Klasse (ohne Schnittstelle): ihre Methoden, ihr Konstruktor mit Konfig-Record
 technik Warenkatalog.Import.CsvZerleger klasse(konfig:CsvKonfig) | Zerlege(zeile:string):string[]
-graph Warenkatalog.Import.Katalogimport | knoten Eingang:Dateiwaechter, Annahme:Katalogeingang [Von Eingang], Lesen:Zeilenleser [Von Annahme], Anlage:Artikelanlage [Von Lesen], Bilanz:Importbilanz [Von Lesen+Annahme] | koepfe - | aus StarteImport, MeldeImportFortschritt, LegeArtikelAn, SchliesseImportAb | quelle Eingang
+graph Warenkatalog.Import.Katalogimport | knoten Eingang:Dateiwaechter, Annahme:Katalogeingang [Von Eingang], Lesen:Zeilenleser [Von Annahme], Anlage:Artikelanlage [Von Lesen] | koepfe - | aus StarteImport, MeldeImportFortschritt, SchliesseImportAb, LegeArtikelAn | quelle Eingang
 kante Katalogimport | Eingang -DateiGefunden-> Annahme
 kante Katalogimport | Annahme -KatalogBereit-> Lesen
-kante Katalogimport | Annahme -KatalogBereit-> Bilanz
 kante Katalogimport | Lesen -Zeile-> Anlage
-kante Katalogimport | Lesen -Zeile-> Bilanz
 akteur Warenkatalog.Import.Ablage | darf StarteImport, LegeArtikelAn, MeldeImportFortschritt, SchliesseImportAb | hoert -
 akteur Warenkatalog.Import.Katalogpflege | darf HoleImportstand | hoert ImportFortgeschritten, ImportAbgeschlossen
 client Warenkatalog.Import.KatalogpflegeOberflaeche | verkoerpert Katalogpflege
@@ -490,8 +485,8 @@ besitz Warenkatalog.Import.ImportUnbekannt queryresponse -> reader:Importauskunf
 besitz Warenkatalog.Import.Artikelzaehlung projektion -> store:IArtikelprotokoll
 
 # ── Wetterdienst (Vorhersage.cs.txt): GENERISCHE FUNKTION, ZUSTAND, HINWEISE — das Decide gibt einen Command ohne Ziel an den Kopf der Prognose; die
-#    Tendenz GABELT an zwei Knoten derselben generischen Funktion (je Typargument ein Baustein; die Karte ist die offene Definition); das Modell JOINT
-#    beide, hält Zustand, nimmt Technik mit eigenem Zustand und WÄHLT zwischen Prognose (Command) und Warnung (Hinweis an den Warndienst) ──
+#    Tendenz GABELT an zwei Knoten derselben generischen Funktion (je Typargument ein Baustein; die Karte ist die offene Definition); das Modell FÜHRT
+#    beide im Zustand ZUSAMMEN (je Glättung ein Auf), nimmt Technik mit eigenem Zustand und WÄHLT zwischen Prognose (Command) und Warnung (Hinweis an den Warndienst) ──
 aggregat Wetterdienst.Vorhersage.Station | Stillgelegt:bool, Letzte:double
 decide Station.MeldeTemperatur -> TemperaturGemeldet; BildePrognose; StationStillgelegt
 decide Station.VermerkePrognose -> PrognoseVermerkt
@@ -512,7 +507,7 @@ record Wetterdienst.Vorhersage.GlaettungsKonfig konfig | Gewicht:double
 record Wetterdienst.Vorhersage.Unwetter rejection | Station:Id<Station>, Stufe:string
 funktion Wetterdienst.Vorhersage.Tendenzbildung() | Auf(BildePrognose) -> Tendenz
 funktion Wetterdienst.Vorhersage.Glaettung(konfig:GlaettungsKonfig) | Auf(Tendenz) -> Geglaettet<TFenster>
-funktion Wetterdienst.Vorhersage.Prognosemodell(gewichte:IZustand<Gewichte>, statistik:IStatistik) zustand=Gewichte | Auf(Geglaettet<Kurzfenster> kurz, Geglaettet<Langfenster> lang) -> VermerkePrognose; Unwetter
+funktion Wetterdienst.Vorhersage.Prognosemodell(gewichte:IZustand<Gewichte>, statistik:IStatistik) zustand=Gewichte | Auf(Geglaettet<Kurzfenster>) -> strom VermerkePrognose; Unwetter || Auf(Geglaettet<Langfenster>) -> strom VermerkePrognose; Unwetter
 # Technik mit eigenem Zustand (IZustand in der Umsetzung): gehört dem Knoten des Prognosemodells
 technik Wetterdienst.Vorhersage.IStatistik schnittstelle | Zaehle(station:Guid):void | umsetzung Statistik(zaehlung:IZustand<Zaehlung>)
 # Die Knoten nennen die generische Funktion mit Typargument; Kanten und Ausgänge tragen es
@@ -626,7 +621,6 @@ lage BegutachteVorOrt -> Domain.Pipeline
 lage PruefeVormerkung -> Domain.Pipeline
 lage Pruefungsstart -> Domain.Pipeline
 lage Seitenpruefer -> Domain.Pipeline
-lage Seitenbilanz -> Domain.Pipeline
 lage Offenzaehlung -> Domain.Pipeline
 lage Seitenpruefungslauf -> Domain.Pipeline
 lage Mahnbemessung -> Domain.Pipeline
@@ -635,7 +629,6 @@ lage Lichtpruefung -> Domain.Pipeline
 lage Handpruefung -> Domain.Pipeline
 lage RueckgabeGescannt -> Domain.Pipeline
 lage SeiteZuPruefen -> Domain.Pipeline
-lage SeiteGeprueft -> Domain.Pipeline
 lage Registrierung -> Domain.Pipeline
 lage Adresspruefung -> Domain.Pipeline
 lage Sensorabfrage -> Domain.Pipeline
@@ -663,7 +656,6 @@ lage PerFunkErreicht -> Domain.Pipeline
 lage Katalogeingang -> Domain.Pipeline
 lage Zeilenleser -> Domain.Pipeline
 lage Artikelanlage -> Domain.Pipeline
-lage Importbilanz -> Domain.Pipeline
 lage Katalogimport -> Domain.Pipeline
 lage CsvZerleger -> Domain.Pipeline
 lage CsvKonfig -> Domain.Pipeline

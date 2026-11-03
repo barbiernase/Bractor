@@ -8,7 +8,8 @@ public partial class Verteilung
     {
         public void Apply(VerteilungGestartet evt) { this.State.Ziele = evt.Ziele; this.State.MengeJeZiel = evt.MengeJeZiel; }
         public void Apply(QuelleReserviert evt) => this.State.QuelleReserviert = true;
-        public void Apply(VerteilungAbgeschlossen evt) { this.State.Abgeschlossen = true; this.State.Zugebucht = evt.Zugebucht; }
+        public void Apply(ZielZugebucht evt) { this.State.ZieleGebucht++; this.State.Zugebucht += evt.Menge; }
+        public void Apply(VerteilungAbgeschlossen evt) => this.State.Abgeschlossen = true;
         public void Apply(VerteilungGescheitert evt) => this.State.Gescheitert = true;
     }
 }

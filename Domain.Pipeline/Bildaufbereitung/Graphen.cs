@@ -5,16 +5,16 @@ using Domain.Pipeline.ImagePair;
 namespace Domain.Pipeline.Bildaufbereitung;
 
 /// <summary>
-/// Die Bildaufbereitung (docs/04 §4.4) als FORK-JOIN: eine erkannte Datei wird gelesen; das eingelesene Bild gabelt — ein Zweig verkleinert es und gleicht
-/// den Kontrast aus (die Vorschau), der andere geht mit der Datei direkt zum Eingang, der beide im selben Lauf zusammenführt und das Bild seines Paars
-/// meldet. Der Kopf nimmt <see cref="DateiGefunden"/> (aus dem Katalog); jede Kante steht am nehmenden Knoten (Einlesen → Verkleinern und Eingang,
-/// Verkleinern → Kontrast, Kontrast → Eingang); hinaus geht <c>NimmBildAuf</c> an das Paar und die Hinweise.
+/// Die Bildaufbereitung (docs/04 §4.4) als KETTE: eine erkannte Datei wird gelesen, verkleinert und im Kontrast ausgeglichen (die Vorschau); jede
+/// Nachricht trägt die Datei der Quelle mit, so meldet der Eingang aus der Vorschau allein das Bild seines Paars. Der Kopf nimmt
+/// <see cref="DateiGefunden"/> (aus dem Katalog); jede Kante steht am nehmenden Knoten (Einlesen → Verkleinern → Kontrast → Eingang); hinaus geht
+/// <c>NimmBildAuf</c> an das Paar und die Hinweise.
 /// </summary>
 public sealed record Bildaufbereitung(
     [Kopf] Bildeinlesen Einlesen,
     [Von(nameof(Einlesen))] Bildverkleinerung Verkleinern,
     [Von(nameof(Verkleinern))] Kontrastausgleich Kontrast,
-    [Von(nameof(Einlesen), nameof(Kontrast))] Bildeingang Eingang) : IGraph;
+    [Von(nameof(Kontrast))] Bildeingang Eingang) : IGraph;
 
 /// <summary>
 /// Der Linienimport (docs/04 §4.7): ein Dateiwächter am Kopf (eine Quellfunktion aus dem Katalog) und die Bildaufbereitung als Graph im Graphen — je

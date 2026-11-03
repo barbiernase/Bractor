@@ -8,7 +8,8 @@ using Abstractions;
 // Graphen — mit Konfig, gesichertem Zustand und Technik; dahinter liegt ein GRAPH IM GRAPHEN (die Aufbereitung, eine Schachtel mit Signatur).
 // Der Alarm öffnet die Störung desselben Sensors über einen Graphen am Kopf (Command ohne Ziel aus dem Decide). Die geöffnete Störung gibt ARBEIT
 // an die Schichtleitung (ein Akteur hört einen Command ohne Ziel aus dem Decide und antwortet mit seinem IDarf) und alarmiert die Bereitschaft:
-// ein RENNEN zweier Wege — der erste gewinnt, der andere wird abgebrochen.
+// zwei Wege nebeneinander (Anruf und Funk) — jeder meldet für sich, die Quittung nimmt beide in je einem Auf, und die Störung vermerkt jede
+// Alarmierung (wer nur die erste gelten lassen will, entscheidet es im Decide, nicht im Graphen).
 
 namespace Anlagen.Messung;
 
@@ -216,12 +217,9 @@ public sealed class Funkruf : IFunktion
 
 public sealed class Alarmquittung : IFunktion
 {
-    public VermerkeAlarmierung Auf(OneOf<PerAnrufErreicht, PerFunkErreicht> erster) => erster.Value switch
-    {
-        PerAnrufErreicht anruf => new VermerkeAlarmierung(anruf.Fall, "Anruf " + anruf.Nummer),
-        PerFunkErreicht funk => new VermerkeAlarmierung(funk.Fall, "Funk " + funk.Kanal),
-        _ => throw new InvalidOperationException("kein Fall"),
-    };
+    public VermerkeAlarmierung Auf(PerAnrufErreicht anruf) => new(anruf.Fall, "Anruf " + anruf.Nummer);
+
+    public VermerkeAlarmierung Auf(PerFunkErreicht funk) => new(funk.Fall, "Funk " + funk.Kanal);
 }
 
 public sealed record Alarmierung(

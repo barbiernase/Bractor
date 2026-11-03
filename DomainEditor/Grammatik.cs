@@ -113,18 +113,13 @@ public static class Grammatik
             + "Von(nameof(Schachtel)) meint seine Ausgänge (seine Signatur). Kein Builder, keine Liste, keine Knotenarten (docs/04 §4.4).", "error",
             [An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Form des Graphen, Lesart Graphform)"),
              An("CQRS117", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (eine Funktion in keinem Graphen läuft nie)")]),
-        new("GR-JOIN", "Ports: T, T?, OneOf, IReadOnlyList", "Die Command-Parameter eines Auf sind seine Ports, und ihr Typ sagt, was er erwartet: T genau "
-            + "einen je Lauf (warten), T? höchstens einen (null, wenn keiner kommt oder das Zeitlimit des Knotens um ist), OneOf<A, B> den ersten (die "
-            + "übrigen Zweige brechen ab), IReadOnlyList<T> alle aus den Unterläufen eine Ebene tiefer (ein Strom öffnet je Element einen). Alle Ports eines "
-            + "Auf liegen auf einer Ebene; vom nächsten gemeinsamen Vorfahren aus ist ein T-Port hinter einer Wahl T? oder Teil eines OneOf — der Befund nennt "
-            + "den passenden Typ. Speisen mehrere genannte Quellen einen T- oder T?-Port, trennen sie verschiedene Fälle einer Wahl (Zusammenfließen); "
-            + "sonst kämen zwei Werte in einem Lauf — soll jeder für sich weiter, steht der nehmende Knoten je Quelle einmal im Graphen; wer beide zusammen "
-            + "braucht, gibt ihnen eigene Typen und zwei Ports, wer den schnelleren will, ein OneOf. "
-            + "Ein Typ steht höchstens einmal je Auf (zwei Rollen sind zwei Typen, z. B. BildLinks und BildRechts), so hängt die "
-            + "Zuordnung nie an der Reihenfolge. Ein Join paart nur Nachrichten desselben Laufs: seine Ports kommen alle von genannten Quellen, zwei Eingänge "
-            + "von außen treffen sich nie (wer sie zusammenbringen muss, sammelt sie in einem Vorgangs-Aggregat) (docs/04 §4.4).", "error",
-            [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Port-Formen, mehrere Ports nur mit Commands ohne Ziel)"),
-             An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Ebenen, Vielfachheit, zwei Werte an einem Port, ein Typ einmal je Auf, Join halb von außen; Lesart Graphform)")]),
+        new("GR-EINGANG", "Eingang: ein Auf, eine Nachricht", "Ein Auf nimmt genau eine Nachricht (einen Command ohne Ziel; allein auch ein Event als "
+            + "Antwort auf den eigenen Command) und rechnet, sobald sie ankommt — kommen zwei, rechnet es zweimal. Mehrere Nachrichten, T?, OneOf<…> oder "
+            + "IReadOnlyList<T> als Eingang gibt es nicht: was danach gebraucht wird, trägt die Nachricht mit; sonst nimmt je Nachrichtentyp ein eigenes Auf "
+            + "sie an, und der Zustand des Knotens (IZustand) oder ein Aggregat führt zusammen, zählt oder wartet (Zähl-Aggregat, Frist im Decide). Bis die "
+            + "Laufzeit ohne Lauf auskommt, liegen alle Erzeuger eines Eingangs auf derselben Ebene der Unterläufe (docs/04 §4.4).", "error",
+            [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (ein Eingang je Auf, kein T?, OneOf oder IReadOnlyList; Lesart Funktionsform)"),
+             An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Ebenen der Unterläufe; Lesart Graphform)")]),
         new("GR-KOPF", "Kopf: [Kopf] je Eingangstyp genau einer", "Ein Knoten, der von außerhalb des Graphen nimmt (aus einem Decide, von einem Akteur, "
             + "vom Ausgang eines anderen Graphen), trägt [Kopf]; er nimmt von außen, was keine genannte Quelle speist. Je Eingangstyp des Graphen genau ein "
             + "[Kopf], der ihn nimmt — was mehrere brauchen, nimmt einer, die übrigen nennen ihn in [Von]. Ein [Kopf], an dem nichts von außen ankommt, "
