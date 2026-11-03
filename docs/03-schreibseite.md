@@ -232,7 +232,7 @@ Fehler. Welche Köpfe einen Typ nehmen, sagt die Tabelle der Köpfe aus den Grap
   sonst erst beim ersten Zugriff) und die Regel für den Event-Zeitstempel. Im Verkehr entsteht kein Schema mehr.
 - **Metadaten** in **derselben** Transaktion: `CorrelationId`, `CausationId` und die Header
   - `aggregate_type` — der Aggregat-Typ,
-  - `akteur` — der Akteur der Kette (`ImAuftrag.Header`; reist mit den Events zu Fristen und mit den offenen Eingängen in die Läufe der Graphen),
+  - `akteur` — der Akteur der Kette (`ImAuftrag.Header`; reist mit den Events zu Fristen und mit den offenen Eingängen in die Ketten der Graphen),
   - die Spur `ursache` (`Stream:Version` des auslösenden Log-Eintrags), `wirker` (Karten-Id des schreibenden Bausteins, z. B.
     `decide:Leihvorgang/LeiheAus`), `ueber` (der Absender des Commands), `stand` (Code-Stand des Hosts) — geschrieben an einer Stelle
     (`Infrastructure/Persistence/SpurHeader.cs`, Konstanten in `Abstractions/Spur/Spur.cs`), fehlende Werte werden weggelassen.

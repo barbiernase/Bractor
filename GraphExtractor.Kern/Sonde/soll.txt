@@ -521,7 +521,7 @@ graph Wetterdienst.Vorhersage.Kurzglaettung | knoten Glaettung:Glaettung<Kurzfen
 
 # ── Kartenausgabe (Vorhersage.cs.txt): AUSDRÜCKLICHE KANTEN — dieselbe Funktion zweimal (Skalierung als Vorschau und Daumen, Kantenglättung vor
 #    und nach der Schärfung), eine Kette Karte → Karte → Karte (kein Kreis), ein Graph im Graphen mit Von hinein und Von(nameof(Filter)) heraus,
-#    die Ablage mit [Kopf] und [Von] (Vorschau von innen, Löschen von außen) ──
+#    das Daumenbild verlierbar, die Ablage mit [Kopf] und [Von] (Vorschau von innen, Löschen von außen) ──
 record Wetterdienst.Vorhersage.KarteBereit rejection | Station:Id<Station>, Breite:int
 record Wetterdienst.Vorhersage.KarteGeloescht rejection | Station:Id<Station>
 record Wetterdienst.Vorhersage.KarteGezeichnet command | Station:Id<Station>, Breite:int
@@ -538,7 +538,7 @@ funktion Wetterdienst.Vorhersage.Kartenzeichnung() | Auf(ZeichneKarte) -> KarteG
 graph Wetterdienst.Vorhersage.Kartenfilter | knoten Glaetten:Kantenglaettung [Kopf], Schaerfen:Kartenschaerfung [Von Glaetten], Nachglaetten:Kantenglaettung [Von Schaerfen] | koepfe KarteGezeichnet | aus KarteGezeichnet
 kante Kartenfilter | Glaetten -KarteGezeichnet-> Schaerfen
 kante Kartenfilter | Schaerfen -KarteGezeichnet-> Nachglaetten
-graph Wetterdienst.Vorhersage.Kartenausgabe | knoten Zeichnung:Kartenzeichnung [Kopf], Filter:Kartenfilter [Von Zeichnung], Vorschau:Kartenskalierung [Von Filter], Daumen:Kartenskalierung [Von Filter], Ablage:Kartenablage [Kopf] [Von Vorschau], Meldung:Daumenmeldung [Von Daumen] | koepfe ZeichneKarte, LoescheKarte | aus KarteBereit, KarteGeloescht
+graph Wetterdienst.Vorhersage.Kartenausgabe | knoten Zeichnung:Kartenzeichnung [Kopf], Filter:Kartenfilter [Von Zeichnung], Vorschau:Kartenskalierung [Von Filter], Daumen:Kartenskalierung [Von Filter] [Verlierbar Filter], Ablage:Kartenablage [Kopf] [Von Vorschau], Meldung:Daumenmeldung [Von Daumen] | koepfe ZeichneKarte, LoescheKarte | aus KarteBereit, KarteGeloescht
 kante Kartenausgabe | Daumen -KarteSkaliert-> Meldung
 kante Kartenausgabe | Filter.Glaetten -KarteGezeichnet-> Filter.Schaerfen
 kante Kartenausgabe | Filter.Nachglaetten -KarteGezeichnet-> Daumen

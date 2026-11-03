@@ -23,7 +23,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 5. Der Fachcode bleibt rein: Cursor, Weckruf, Ordnung, Exactly-once, Sharding, Prozess-Maschinerie tauchen im Entwickler-Code nie auf.
 6. Persistent genau dann, wenn ein durabler Konsument abhängt. Verlierbares (Tick, Ablehnung, UI-Feedback, Kenntnis-Push an Clients) bleibt
    auf dem schnellen Kanal. Was eine Quelle meldet, steht nicht im Log: durabel ist sie über ihren gesicherten Zustand (was sie gesehen hat,
-   ihre laufende Nummer), gesichert, wenn der Lauf fertig ist.
+   ihre laufende Nummer), gesichert, wenn die Kette des Elements fertig ist.
 
 
 ## Werkbank-Leitsätze (Kurzform; das ausführliche Werkbank-Konzept liegt im Git-Verlauf, die Editor-Oberfläche ist im Umbau zurückgestellt)
@@ -72,13 +72,16 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   Knotens oder ein Aggregat); Graph im
   Graphen über seine Signatur (`Von` hinein speist seine Köpfe, `Von(nameof(G))` nimmt seine Ausgänge); kreisfrei über die Knoten (CQRS115). Er läuft als **Instanz** (Datei
   `graphen/<instanz>.json`: `Graph`, bei Quellkopf `Akteur`, je Knoten Konfig-Werte, `Parallel`, `Warteschlange`, `Wiederholungen`, `Zeitlimit`,
-  `Technik`), beliebig oft; ein Graph mit Command-Kopf je Umgebung einmal. Jede Kopf-Nachricht startet einen **Lauf** (Buchführung im
-  Graph-Actor der Instanz, haltbar ist nur der Kopf); Command-Ids aus Instanz, Lauf-Pfad, Knoten und Stelle; ein scheiternder Knoten wird
-  wiederholt, danach ist der Lauf gescheitert (Kopf geparkt, offene Zweige abgebrochen, `LaufGescheitert`). Laufzeit: Wurzel `funktionen` je
-  Cluster-Knoten, Graph-Actor je Instanz, Parent je Knoten, Kinder bis `Parallel`, Orte im Gossip-Zustand, Wege über den Bote.
+  `Technik`), beliebig oft; ein Graph mit Command-Kopf je Umgebung einmal. Jede Kopf-Nachricht startet eine **Kette** (`Kette.cs`, kein
+  Laufzettel): jeder Schritt (Parent) rechnet je ankommender Nachricht, schlägt jede Ausgabe in der generierten **Wegtabelle** nach und gibt sie
+  direkt an die Parents ihrer Knoten — **gesichert** (Standard: „fertig“ erst nach den gesicherten Ausgaben, so reicht die Rückmeldung bis zum Kopf)
+  oder **verlierbar** (`[Von(nameof(A), Verlierbar = true)]`: einmal, ohne Antwort); voll → „später“, der Absender schickt erneut. Haltbar ist nur
+  der Kopf; Ids aus der Nachricht, aus der sie entstand (`Kettenvertrag`), Knoten und Stelle; ein scheiternder Knoten wird wiederholt, danach
+  reicht „gescheitert“ zum Kopf (geparkt, `LaufGescheitert`). Laufzeit: Wurzel `funktionen` je Cluster-Knoten, Graph-Actor je Instanz (Halter und
+  Kopf), Parent je Knoten, Kinder bis `Parallel`, Orte im Gossip-Zustand, Wege über den Bote.
 - **Quellen** sind Katalogfunktionen mit `Lausche(CancellationToken)` am Kopf eines Graphen (`Dateiwaechter` → `DateiGefunden`, `Taktgeber` →
-  `Takt`, `Webhook` → `Aufruf`; Commands in `Abstractions/Katalog.cs`); je Element ein Lauf, nichts im Log; eine Quellinstanz läuft genau einmal
-  im Cluster. **Zustand** `IZustand<T>` ist gesichert je Instanz und Knoten (`cqrs_zustaende`), nach fertigem Lauf in Reihenfolge der Läufe.
+  `Takt`, `Webhook` → `Aufruf`; Commands in `Abstractions/Katalog.cs`); je Element eine Kette, nichts im Log; eine Quellinstanz läuft genau einmal
+  im Cluster. **Zustand** `IZustand<T>` ist gesichert je Instanz und Knoten (`cqrs_zustaende`), nach beendeten Aufrufen mit deren Kennungen (nach einem Absturz zählt nichts doppelt).
 - **Arbeit für Akteure** (docs/konzept-akteure.md §5): hört ein Akteur einen Command ohne Ziel (`IHoert<PaarZuBeurteilen>`), ist das seine Arbeit —
   eine eigene Instanz unter seinem Namen mit einem Knoten draußen; die `Werkstatt` des Knotens gibt den Auftrag einer Sitzung mit „verkörpert ∩
   Token“ und stellt ihn erneut zu, bis eine Antwort kommt (die erste gewinnt); die Antwort sind Commands seines `IDarf`, Ids aus dem Auftrag. Von
@@ -116,7 +119,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 | Bereich | Ort |
 |---|---|
 | Verträge, Marker, geteilte Regeln (eine Quelle) | `Abstractions/` (z. B. `Akteur.cs`, `Funktion.cs`, `Graph.cs`, `Katalog.cs`, `Zustand.cs`, `Funktionsvertrag.cs`, `Projektstruktur.cs`, `Spur/WirkerId.cs`, `Spur/SpurWeg.cs`, `StoreZugriff.cs`, `Umgebung/UmgebungKonfig.cs`) |
-| Laufzeit (Framework) | `Infrastructure/` (Projections, Wecken, Verteilen, Funktionen — Graph-Actor, Lauf, Werkstatt, Arbeit —, Eingaenge, Uhr, Umgebung, Einblick, Eingang, Akteure); referenziert keine Domäne, liest sie über `Komposition/Anwendung.cs` (`IAnwendung`) |
+| Laufzeit (Framework) | `Infrastructure/` (Projections, Wecken, Verteilen, Funktionen — Graph-Actor, Parent, Kette, Werkstatt, Arbeit —, Eingaenge, Uhr, Umgebung, Einblick, Eingang, Akteure); referenziert keine Domäne, liest sie über `Komposition/Anwendung.cs` (`IAnwendung`) |
 | Katalog der Quellfunktionen, Store-Treiber | `Core/Katalog/` (`Dateiwaechter`, `Taktgeber`, `Webhook`), `Core/` (`MartenStore`, `DateiZiel`) |
 | Leitung | `Cqrs.Leitung/cqrs.proto` (Framework: Dienst, Hüllen, `Nutzlast`); je Anwendung `<Wurzel>.Leitung` (Domänen-DTOs + `GeneratedNutzlast`) |
 | Komposition | `<Wurzel>.Laufzeit` (hier `Domain.Laufzeit`): Laufzeit-Generate, `GeneratedAnwendung`, `AddCqrs(args)` der Hosts |

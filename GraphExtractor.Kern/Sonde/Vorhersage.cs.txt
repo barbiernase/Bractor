@@ -11,8 +11,8 @@ using Abstractions;
 //
 // Dazu AUSDRÜCKLICHE KANTEN (docs/04 §4.4): die Kartenausgabe zeichnet eine Karte und filtert sie in einem Graphen im Graphen (Kantenglättung,
 // Schärfung, nochmals Kantenglättung — DIESELBE Funktion zweimal, eine Kette Karte → Karte → Karte, kein Kreis); den Ausgang des Filters nehmen
-// zwei Knoten DERSELBEN Skalierung (Vorschau und Daumenbild, je eigene Konfig); die Ablage trägt [Kopf] UND [Von]: sie nimmt die Vorschau von innen
-// und das Löschen von außen.
+// zwei Knoten DERSELBEN Skalierung (Vorschau und Daumenbild, je eigene Konfig) — das Daumenbild VERLIERBAR (es kommt beim nächsten Mal neu, die
+// Kette wartet nicht auf es); die Ablage trägt [Kopf] UND [Von]: sie nimmt die Vorschau von innen und das Löschen von außen.
 
 namespace Wetterdienst.Vorhersage;
 
@@ -190,7 +190,7 @@ public sealed record Kartenausgabe(
     [Kopf] Kartenzeichnung Zeichnung,
     [Von(nameof(Zeichnung))] Kartenfilter Filter,
     [Von(nameof(Filter))] Kartenskalierung Vorschau,
-    [Von(nameof(Filter))] Kartenskalierung Daumen,
+    [Von(nameof(Filter), Verlierbar = true)] Kartenskalierung Daumen,
     [Kopf, Von(nameof(Vorschau))] Kartenablage Ablage,
     [Von(nameof(Daumen))] Daumenmeldung Meldung) : IGraph;
 

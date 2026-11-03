@@ -188,8 +188,8 @@ Ein Ketten-Command wie `NimmRangeAuf` (nur aus einem Graphen) steht bei keinem A
 
 - Der Akteur reist als Event-Header **`akteur`** (`ImAuftrag.Header`): `MartenEventBatchWriter` schreibt ihn, `MartenEventStore` liest ihn in den
   Envelope (`UserId`).
-- Ein offener Eingang trägt den Akteur seines Auslösers; der Lauf eines Graphen nimmt ihn mit (bei einer Quellinstanz und bei Arbeit den Akteur der
-  Instanz), und der `CommandEmitter` stempelt ihn (`ImAuftrag.Akteur`) auf jeden Command des Laufs; die Uhr nimmt den Akteur, der in der Frist steht
+- Ein offener Eingang trägt den Akteur seines Auslösers; die Kette eines Graphen nimmt ihn mit (bei einer Quellinstanz und bei Arbeit den Akteur der
+  Instanz), und der `CommandEmitter` stempelt ihn (`ImAuftrag.Akteur`) auf jeden Command der Kette; die Uhr nimmt den Akteur, der in der Frist steht
   (`UhrActor`). Ist er leer, gilt Fall 3 (§2.3).
 - Ein `ArbeitsAuftrag` nennt den Akteur der Kette (`akteur`) und den, dessen Arbeit er ist (`fuer`).
 - Von draußen schreibt der Akteur auch die Spur: ein Command vom Client trägt den Wirker `akteur:<A>` (`WirkerId.FuerAkteur`).
@@ -245,7 +245,7 @@ Auftrag — doppelt geantwortet, von einem zweiten Arbeiter oder nach dem Neuver
   Envelopes (`ZielSitzung`) nur an den Knoten, den die Sitzungs-Id nennt. Der Verteiler fasst je Commit und Sitzung zu einer `Zustellung` zusammen.
   Kein Broker, keine Abos im Cluster.
 - **Kenntnis:** verlierbarer Push (Invariante 6) an jede Sitzung, deren wirksame Liste den Typ nennt — Events aus dem Log und Hinweise (aus Graphen,
-  gescheiterte Läufe, von Clients). **Gezielt**, gleich was die Sitzung hört: die Ablehnung eines Aggregats und `CommandFailed` an die Sitzung des
+  gescheiterte Ketten, von Clients). **Gezielt**, gleich was die Sitzung hört: die Ablehnung eines Aggregats und `CommandFailed` an die Sitzung des
   Commands (`OriginSessionId`); die Ablehnung dazu an jede Sitzung, deren Akteure sie hören — jede Sitzung einmal.
 - **Rückstau:** liest ein Client nicht nach, verwirft der Verteiler über 1000 offenen Zustellungen je Sitzung (`Rueckstau`).
 - **Arbeit:** durabel über den Kopf ihrer Instanz — ein Auftrag bleibt offen, bis eine Antwort kam; ein Client, der wegbricht, lässt seine Aufträge
