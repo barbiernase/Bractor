@@ -156,12 +156,13 @@ public class SichtTests
         theke["loesen"]!["feld"]!.GetValue<string>().Should().Be("darf");
         theke["loesen"]!["wert"]!.GetValue<string>().Should().Be("LeiheAus");
         Zeilen(p["Ausgeliehen"]!["ein"]).Should().Contain(z => (string?)z["id"] == dec);
-        // Funktionen nach ihrer Signatur: die Schätzung gibt SchadenGeschaetzt aus (◀), die Mahnung nimmt es als Port ihres Join-Auf (▶) — und das
-        //   Gutachten, ihren zweiten Port (T?), ebenso.
+        // Funktionen nach ihrer Signatur: die Schätzung gibt SchadenGeschaetzt aus (◀), das Gutachten nimmt es (▶); die Mahnung nimmt, was das
+        //   Gutachten ausgibt.
         var schaetzung = "fb:" + Id(board, "bausteinFunktionen", "name", "Schadensschaetzer");
+        var gutachten = "fb:" + Id(board, "bausteinFunktionen", "name", "Gutachtenanfrage");
         var mahnung = "fb:" + Id(board, "bausteinFunktionen", "name", "MahnungNachSchaetzung");
         Zeilen(p["SchadenGeschaetzt"]!["ein"]).Should().Contain(z => (string?)z["id"] == schaetzung && (string?)z["mark"] == "Ausgabe");
-        Zeilen(p["SchadenGeschaetzt"]!["aus"]).Should().Contain(z => (string?)z["id"] == mahnung && (string?)z["text"] == "ƒ MahnungNachSchaetzung.Auf(SchadenGeschaetzt)");
+        Zeilen(p["SchadenGeschaetzt"]!["aus"]).Should().Contain(z => (string?)z["id"] == gutachten && (string?)z["text"] == "ƒ Gutachtenanfrage.Auf(SchadenGeschaetzt)");
         Zeilen(p["GutachtenErhalten"]!["aus"]).Should().Contain(z => (string?)z["id"] == mahnung && (string?)z["mark"] == "Auf");
         // Arbeit und Kenntnis: wer einen Command ohne Ziel bzw. ein Event hört, steht auf der ▶-Seite — ✕ nimmt ihm das Hören.
         var archiv = Zeilen(p["BegutachteVorOrt"]!["aus"]).Single(z => (string?)z["text"] == "Akteur Archiv");
@@ -180,12 +181,11 @@ public class SichtTests
         g["knoten"]!.AsArray().Select(k => $"{(string?)k!["name"]}:{(string?)k["typ"]}").Should()
             .Equal("Aufnahme:Schadensaufnahme", "Schaetzung:Schadensschaetzer", "Gutachten:Gutachtenanfrage", "Mahnung:MahnungNachSchaetzung");
         g["knoten"]!.AsArray().Select(k => $"{(string?)k!["name"]}:{(bool?)k["kopf"]}:{string.Join("+", k["von"]!.AsArray().Select(v => (string?)v))}").Should()
-            .Equal("Aufnahme:True:", "Schaetzung:False:Aufnahme", "Gutachten:False:Aufnahme", "Mahnung:False:Schaetzung+Gutachten");
+            .Equal("Aufnahme:True:", "Schaetzung:False:Aufnahme", "Gutachten:False:Schaetzung", "Mahnung:False:Gutachten");
         g["koepfe"]!.AsArray().Select(x => (string?)x).Should().Equal("SchaetzeSchaden");
         g["ausgaenge"]!.AsArray().Select(x => (string?)x).Should().BeEquivalentTo(["BegutachteVorOrt", "NichtSchaetzbar", "EroeffneMahnung"]);
         g["kanten"]!.AsArray().Select(k => $"{(string?)k!["von"]} -{(string?)k["typ"]}-> {(string?)k["nach"]}").Should().BeEquivalentTo([
-            "Aufnahme -SchadenErfasst-> Schaetzung", "Aufnahme -SchadenErfasst-> Gutachten",
-            "Schaetzung -SchadenGeschaetzt-> Mahnung", "Gutachten -GutachtenErhalten-> Mahnung"]);
+            "Aufnahme -SchadenErfasst-> Schaetzung", "Schaetzung -SchadenGeschaetzt-> Gutachten", "Gutachten -GutachtenErhalten-> Mahnung"]);
         // Die Karte der Sicht nennt ihre Knoten (Funktionen) als Kanten; ein Graph im Graphen ist ein Knoten wie eine Funktion.
         var gr = "gr:" + (string)g["_id"]!;
         Karte(board, gr)["art"]!.GetValue<string>().Should().Be("graph");
@@ -201,15 +201,15 @@ public class SichtTests
     }
 
     [Fact]
-    public async Task Eine_Funktion_nennt_ihre_Ports_und_eine_Quelle_was_sie_meldet()
+    public async Task Eine_Funktion_nennt_ihre_Eingaenge_und_eine_Quelle_was_sie_meldet()
     {
         var board = await BoardAsync();
         JsonObject F(string name) => (board["bausteinFunktionen"] as JsonArray)!.OfType<JsonObject>().Single(x => (string?)x["name"] == name);
         static string Ports(JsonObject f) => string.Join(" || ", f["eingaenge"]!.AsArray().OfType<JsonObject>().Select(e =>
             e["ports"] is JsonArray { Count: > 0 } ps ? string.Join(", ", ps.Select(p => $"{(string?)p!["typ"]} {(string?)p["name"]}")) : (string?)e["eingang"]));
-        Ports(F("MahnungNachSchaetzung")).Should().Be("SchadenGeschaetzt g, GutachtenErhalten? gutachten", "Join mit Warten mit Frist");
-        Ports(F("Alarmquittung")).Should().Be("OneOf<PerAnrufErreicht, PerFunkErreicht> erster", "Rennen");
-        Ports(F("Seitenbilanz")).Should().Be("IReadOnlyList<SeiteGeprueft> alle", "Sammeln");
+        Ports(F("MahnungNachSchaetzung")).Should().Be("GutachtenErhalten", "ein Auf, eine Nachricht");
+        Ports(F("Alarmquittung")).Should().Be("PerAnrufErreicht || PerFunkErreicht", "zwei Wege, je einer ein Auf");
+        Ports(F("Prognosemodell")).Should().Be("Geglaettet<Kurzfenster> || Geglaettet<Langfenster>", "zusammengeführt im Zustand, je Glättung ein Auf");
         Ports(F("Pruefungsstart")).Should().Be("RueckgabeGescannt || PruefungGestartet", "ein Command und die Antwort auf den eigenen Command");
         F("Sensorabfrage")["lauscht"]!.AsArray().Select(x => (string?)x).Should().Equal("Rohwert");
         F("Sensorabfrage")["eingaenge"]!.AsArray().Should().BeEmpty("eine Quelle lauscht und nimmt nichts");

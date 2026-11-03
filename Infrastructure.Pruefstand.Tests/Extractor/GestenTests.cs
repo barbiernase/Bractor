@@ -346,8 +346,8 @@ public sealed class GestenTests : IDisposable
             public sealed record Schadensbewertung(
                 [Kopf] Schadensaufnahme Aufnahme,
                 [Von(nameof(Aufnahme))] Schadensschaetzer Schaetzung,
-                [Von(nameof(Schaetzung))] MahnungNachSchaetzung Mahnung) : IGraph;
-            """, "die Kante vom entfernten Knoten geht mit ihm")
+                MahnungNachSchaetzung Mahnung) : IGraph;
+            """, "die Kante vom entfernten Knoten geht mit ihm (die Mahnung ist danach lose — Unfertiges ist Code, der nicht baut)")
             .And.Contain("public sealed class Gutachtenanfrage(GutachtenKonfig konfig) : IFunktion", "die Funktion bleibt — nur der Knoten geht");
     }
 
@@ -362,13 +362,13 @@ public sealed class GestenTests : IDisposable
             (await GesteAsync(Geaendert("graphen", karte))).Patch.Select(p => p.Datei).Should().Equal("Leihwesen/Gebuehren.cs");
         }
 
-        await MahnungVon("Schaetzung");
-        Text("Gebuehren.cs").Should().Be(vorher.Replace("[Von(nameof(Schaetzung), nameof(Gutachten))] MahnungNachSchaetzung Mahnung",
-            "[Von(nameof(Schaetzung))] MahnungNachSchaetzung Mahnung"), "nur der Parameter des nehmenden Knotens ändert sich");
+        await MahnungVon();
+        Text("Gebuehren.cs").Should().Be(vorher.Replace("[Von(nameof(Gutachten))] MahnungNachSchaetzung Mahnung",
+            "MahnungNachSchaetzung Mahnung"), "nur der Parameter des nehmenden Knotens ändert sich");
         var getrennt = Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Schadensbewertung");
         getrennt["kanten"]!.AsArray().Select(k => $"{(string?)k!["von"]}->{(string?)k["nach"]}").Should().NotContain("Gutachten->Mahnung");
 
-        await MahnungVon("Schaetzung", "Gutachten");
+        await MahnungVon("Gutachten");
         Text("Gebuehren.cs").Should().Be(vorher, "verbinden setzt das Von wieder, wie es stand");
     }
 
