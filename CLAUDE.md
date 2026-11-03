@@ -71,7 +71,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   Empfänger. Folge, Gabel, Wahl, Je sind Formen der Ausgaben; Zusammenführen, Sammeln, Warten stehen im Logik-Code (die Nachricht trägt mit, Zustand des
   Knotens oder ein Aggregat); Graph im
   Graphen über seine Signatur (`Von` hinein speist seine Köpfe, `Von(nameof(G))` nimmt seine Ausgänge); kreisfrei über die Knoten (CQRS115). Er läuft als **Instanz** (Datei
-  `graphen/<instanz>.json`: `Graph`, bei Quellkopf `Akteur`, je Knoten Konfig-Werte, `Parallel`, `Warteschlange`, `Wiederholungen`, `Zeitlimit`,
+  `graphen/<instanz>.json`: `Graph`, bei Quellkopf `Akteur`, wahlweise `Rechner`, je Knoten Konfig-Werte, `Parallel`, `Warteschlange`, `Wiederholungen`, `Zeitlimit`,
   `Technik`), beliebig oft; ein Graph mit Command-Kopf je Umgebung einmal. Jede Kopf-Nachricht startet eine **Kette** (`Kette.cs`, kein
   Laufzettel): jeder Schritt (Parent) rechnet je ankommender Nachricht, schlägt jede Ausgabe in der generierten **Wegtabelle** nach und gibt sie
   direkt an die Parents ihrer Knoten — **gesichert** (Standard: „fertig“ erst nach den gesicherten Ausgaben, so reicht die Rückmeldung bis zum Kopf)
@@ -104,7 +104,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   Ausgangskorb im C#-Client. Kein Broker, keine Abos.
 - **Aktivierung eines Knotens** (docs/04 §4.4): Umsetzung und Technik je Kind (DI-Bereich, geschlossen beim Stoppen; Technik lädt beim ersten
   Aufruf, Freigabe über `IAsyncDisposable`); Konfig-Werte und Technik-Wahl aus dem Knoten der Instanz (`GeneratedTechnik`); Zustand nur über
-  `IZustand<T>` (CQRS105), eine Instanz mit Zustand rechnet im Cluster auf genau einer Aktivierung (`ZustandsSperre`).
+  `IZustand<T>` (CQRS105), eine Instanz mit Zustand oder Quelle läuft im Cluster auf ihrem **Rechner** (`Rechner` in der Instanz-Datei = `Cluster:Rechner` des Hosts;
+  Pflicht, keine Sperre, kein Umzug bei Ausfall; doppelte Rechnernamen erkennt der Gossip).
 - **Abläufe** sind Graphen (eine Rechnung je Auslöser: Folge, Gabel, Wahl, Je) plus ein Vorgangs-Aggregat für alles, was zusammengeführt oder
   abgewartet wird (Zählung, Kompensation, Frist im Decide); die Zugehörigkeit ist ein fachliches Feld (A2). Aggregate reden nur über Graphen oder
   Akteure miteinander. Kein Dirigent, keine Saga, kein Builder.

@@ -31,7 +31,7 @@ Exactly-once, Partition, offene Eingänge, Ketten, Orte), wählt der Generator a
 | **Reader** | beantwortet Queries über Lese-Fähigkeiten | im Query-Dienst des Hosts |
 | **Funktion** | ein Knoten: je `Auf` eine Nachricht rein, gerechnet je Ankunft (ein Event nur als Antwort auf den eigenen Command), Commands und Hinweise raus; optional Zustand und Technik | Parent je Knoten und Instanz, Kinder bis `Parallel` — §4.4 |
 | **Graph** | nennt Knoten (Funktionen, Graphen, eine Funktion auch mehrfach); jede Kante als `[Von(nameof(…))]` am nehmenden Knoten, jeder Kopf als `[Kopf]`; läuft als Instanz, je Kopf-Nachricht eine Kette; jede Kante gesichert oder verlierbar | Graph-Actor je Instanz und Cluster-Knoten — §4.4 |
-| **Quelle** | eine Funktion mit `Lausche` am Kopf eines Graphen (Katalog: `Dateiwaechter`, `Taktgeber`, `Webhook`) | eine Quellinstanz genau einmal im Cluster — §4.7 |
+| **Quelle** | eine Funktion mit `Lausche` am Kopf eines Graphen (Katalog: `Dateiwaechter`, `Taktgeber`, `Webhook`) | eine Quellinstanz genau einmal im Cluster, auf ihrem Rechner — §4.7 |
 | Store, Technik | Speicher hinter Projektion/Reader bzw. Technik im Konstruktor einer Funktion | – |
 | **Akteur**, **Client** | wer was hineingibt und was zu ihm kommt; welche Software für welche Akteure spricht | Sitzung als Actor je Verbindung, Werkstatt und Verteiler je Knoten — [konzept-akteure.md](konzept-akteure.md) |
 | *eingebaut:* Uhr, Verteiler | macht aus fälligen Fristen Commands; stellt Pushes und Hinweise an Clients zu | – |
@@ -224,7 +224,8 @@ public sealed record Schadensbewertung(
 Ein Graph läuft erst als **Instanz**: eine Datei je Instanz in der Umgebung, `umgebungen/<name>/graphen/<instanz>.json`, mit `Graph`, bei einem
 Quellkopf dem `Akteur` (er gibt hinein, was den Graphen verlässt, und muss es dürfen) und je Knoten (Pfad bei inneren Graphen) die Felder seiner
 Konfig-Records sowie `Parallel`, `Warteschlange`, `Wiederholungen`, `Vorwaermen`, `Zeitlimit`, `Technik`. Dieselbe Blaupause läuft beliebig oft;
-ein Graph mit Command-Kopf läuft je Umgebung genau einmal. Der Start prüft jede Instanz gegen ihren Graphen ([04](04-konsum-und-prozess-maschine.md)
+ein Graph mit Command-Kopf läuft je Umgebung genau einmal. `Rechner` legt die Instanz auf einen Host fest (seinen `Cluster:Rechner`), etwa eine
+Quelle an ihre Steuerung oder ein Modell auf seine GPU; mit Zustand oder Quelle ist er im Cluster Pflicht, ohne läuft die Instanz auf jedem Host. Der Start prüft jede Instanz gegen ihren Graphen ([04](04-konsum-und-prozess-maschine.md)
 §4.4).
 
 Eine **Quelle** ist eine Funktion mit `Lausche(CancellationToken)` statt `Auf`, am Kopf ihres Graphen (sie ist dann sein einziger Kopf, CQRS115).
@@ -367,7 +368,8 @@ Annahmen (sicherer Default, gelten, solange Tobi nicht widerspricht):
 - **A2** Die Zugehörigkeit zu einem Vorgang ist ein fachliches Feld im Event, keine versteckte Korrelation in den Metadaten.
 - **A3** Wiederholungsfeste Stores (Klasse 2) schreiben mit der Event-Identität im Schlüssel oder bedingt nach Position.
 - **A4** Der Neuaufbau einer Projektion geht über Generationen; Leeren ist der Sonderfall.
-- **A5** Eine Instanz mit Zustand oder Quelle rechnet im Cluster auf genau einer Aktivierung (Advisory-Lock je Instanz, `ZustandsSperre`).
+- **A5** Eine Instanz mit Zustand oder Quelle rechnet im Cluster auf genau einem Host: dem Rechner, den sie nennt (`Rechner` in ihrer Datei,
+  `Cluster:Rechner` des Hosts; Pflicht im Cluster). Fällt er aus, zieht nichts um, die durablen Eingänge warten.
 - **A6** Jeder Cluster-Knoten hat von jeder Instanz einen Graph-Actor `funktionen/<instanz>` mit je Knoten einem Parent; eine Kette bleibt auf dem Rechner, der ihren Kopf annahm; ein
   Eingang geht an den eigenen Knoten, sonst reihum (Gossip).
 - **A7** Ein Hinweis trägt eine Kennung, die der Absender vergibt.

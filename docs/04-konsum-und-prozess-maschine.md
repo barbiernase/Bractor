@@ -250,7 +250,8 @@ Die übrigen Muster zeigt die Sonde (`GraphExtractor.Kern/Sonde/Vorhersage.cs.tx
 Typs, ein Knoten mit `[Kopf]` und `[Von]`, ein Graph im Graphen, dessen Ausgang ein anderer Knoten per `Von(nameof(Filter))` nimmt.
 
 **Instanz.** Ein Graph ist eine Blaupause und läuft erst als **Instanz**: eine Datei je Instanz, `umgebungen/<name>/graphen/<instanz>.json`, mit
-`Graph`, bei einem Quellkopf dem `Akteur` (er gibt hinein, was den Graphen verlässt) und je Knoten die Felder seiner Konfig-Records sowie
+`Graph`, bei einem Quellkopf dem `Akteur` (er gibt hinein, was den Graphen verlässt), wahlweise dem `Rechner`, auf dem sie läuft, und je Knoten
+die Felder seiner Konfig-Records sowie
 `Parallel` (Standard 256), `Warteschlange` (10 000), `Wiederholungen` (3), `Vorwaermen`, `Zeitlimit` und `Technik` (die Umsetzung je Technik,
 nötig bei mehreren):
 ```json
@@ -295,8 +296,9 @@ Actor), darunter je Instanz einen **Graph-Actor** `funktionen/<instanz>` — den
 **Parent** `funktionen/<instanz>/<knoten>` mit Kindern bis `Parallel`. Die Adresse eines Schritts folgt aus Instanz, Knotenpfad und Rechner; die
 Aufrufe einer Kette bleiben auf dem Rechner, der ihren Kopf annahm (Parent an Parent, ohne Netz). Ob ein Cluster-Knoten eine Instanz **hält**
 (Eingänge an sie bekommt), meldet die Wurzel im Gossip-Zustand (`FunktionsOrte`): sofort — außer eine Funktion ihrer Knoten rechnet draußen (dann
-erst, wenn sich hier für jede ein Arbeiter gemeldet hat) oder die Instanz hat Zustand oder eine Quelle (dann nur, solange dieser Knoten ihre Sperre
-hält, `ZustandsSperre`, Postgres-Advisory-Lock je Instanz, alle 2 s versucht). Die **Wege** (`FunktionsWege`) schicken einen Eingang an den eigenen
+erst, wenn sich hier für jede ein Arbeiter gemeldet hat). Eine Instanz, die einen **Rechner** nennt, legt nur der Host mit diesem
+`Cluster:Rechner` an (`EigenerRechner`); jeder Host meldet seinen Namen im Gossip-Zustand, und tragen zwei denselben, hält nur das Mitglied mit
+der kleineren Id die festgelegten Instanzen (der andere meldet den Fehler). Die **Wege** (`FunktionsWege`) schicken einen Eingang an den eigenen
 Knoten, wenn er die Instanz hält, sonst reihum an einen, der sie hält (`Bote.FrageAnKnotenAsync`). Der Graph-Actor erkennt einen doppelten Kopf an der
 Kennung (in Arbeit: er hängt sich an; fertig: sofort „fertig“, Gedächtnis 10 000); sind schon so viele Ketten offen, wie die Warteschlange des Kopfs
 erlaubt, heißt die Antwort „später“. Der Parent erkennt einen doppelten Aufruf ebenso an seiner Kennung. Ein **Kind** rechnet einen Aufruf zugleich
@@ -315,9 +317,10 @@ beim Stoppen wird erst die Umsetzung, dann der Bereich mit seiner Technik freige
 gesicherten Zustand — je Instanz und Knoten eine Zeile in `cqrs_zustaende` (`ZustandsAblage`; das Bild aus eigenem und Technik-Zustand, ohne
 Reflection gepackt). Die Aktivierung lädt ihn beim Beginn; nach jedem Aufruf geht ein Schnappschuss an den Parent, der den letzten sichert, dessen
 Aufruf und alle früheren beendet sind — mit den Kennungen dieser Aufrufe (`§gesehen`). Kommt nach einem Absturz einer davon erneut, antwortet der
-Parent „fertig“, ohne neu zu rechnen: was der Stand enthält, zählt nicht doppelt. Ein Schreiber: eine Instanz mit Zustand
-hält im Cluster genau ein Knoten (die Sperre); reißt seine Verbindung, nimmt ein anderer sie, kurz (bis der Verlust bemerkt ist) können zwei
-rechnen. Was aus Fakten gelernt wird, gehört weiter in eine Projektion, die Funktion liest es per Lese-Fähigkeit:
+Parent „fertig“, ohne neu zu rechnen: was der Stand enthält, zählt nicht doppelt. Ein Schreiber: eine Instanz mit Zustand oder
+Quelle nennt im Cluster ihren **Rechner** (Pflicht, sonst Boot-Fehler) und läuft nur dort — eine Quelle an ihrer Steuerung, ein Modell auf seiner
+GPU. Fällt der Rechner aus, zieht nichts um: die durablen Eingänge warten in `cqrs_eingaenge`, die Quelle setzt nach dem Neustart ab ihrem
+gesicherten Stand fort. Im Einzelknoten-Betrieb ist der eine Host jeder Rechner. Was aus Fakten gelernt wird, gehört weiter in eine Projektion, die Funktion liest es per Lese-Fähigkeit:
 ```csharp
 public sealed class Schaetzer(IZaehlwerk zaehler) : IFunktion         // Prüfdomäne, Graph Merkmalbildung
 {
@@ -452,7 +455,7 @@ Command ohne Ziel (`Abstractions/Katalog.cs`), den der nächste Knoten nimmt; Co
 Der Dateiwächter **liest** nur (er legt nichts an, verschiebt und löscht nichts); ein Weckruf (Intervall, wahlweise ein Dateisystem-Ereignis, das
 nur weckt) löst einen Scan aus, der Scan entscheidet. Quell-Commands stehen **nicht im Log**: ob eine Quelle Doppeltes vermeidet oder nach einem
 Neustart weitermacht, regelt sie über ihren **gesicherten Zustand** (§4.4) — die Architektur liefert nur ihn. Das Kind des Quellknotens lauscht,
-solange der Cluster-Knoten die Instanz hält (eine Quellinstanz läuft genau einmal im Cluster, Sperre je Instanz); je Element gehen die nächste
+solange der Cluster-Knoten die Instanz hält (eine Quellinstanz läuft genau einmal im Cluster, auf ihrem Rechner); je Element gehen die nächste
 laufende Nummer und der Schnappschuss des Zustands an den Graph-Actor, das nächste Element erst, wenn er die Kette angenommen hat (Gegendruck über
 die Warteschlange des Kopfs). Kennung und Herkunft folgen aus Instanz und Nummer; gesichert werden Zustand und Nummer, sobald die Kette und alle
 früheren beendet sind — auch eine gescheiterte Kette zählt als beendet (er meldet `LaufGescheitert`, die Quelle wiederholt ihn nicht). Endet das

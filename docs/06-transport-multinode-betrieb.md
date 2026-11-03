@@ -33,7 +33,9 @@ Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses K
   eine Sim-DB legt der Host bei Bedarf an. **Uhr** (`<schema>.uhr`): Versatz nur in Sim wirksam.
   Details docs/06 §6.5.
 - **Cluster:** `Cluster:Art = Einzelknoten` (Mitgliedschaft in-memory über den `TestProvider` von Proto.Cluster, kein Consul — Standard in Sim)
-  oder `Consul` (`ConsulProvider` als Discovery, kein statischer Seed). In beiden Fällen `PartitionIdentityLookup`. Die Kinds werden beim
+  oder `Consul` (`ConsulProvider` als Discovery, kein statischer Seed). In beiden Fällen `PartitionIdentityLookup`. Jeder Host trägt im Cluster
+  seinen **Rechnernamen** (`Cluster:Rechner`, in `deploy-multinode` je Node `Cluster__Rechner`): eine Instanz, die ihn nennt, läuft nur dort (der
+  Linienimport mit seiner Quelle auf `grpc1`); Instanzen mit Zustand oder Quelle nennen ihn im Cluster immer. Die Kinds werden beim
   Start aggregiert: Aggregate und alle `IClusterKindContributor` (Batch-Leser, Uhr, Zusteller); dazu
   spawnt jeder Knoten seinen Verteiler (lokaler Actor mit festem Namen `verteiler`, `VerteilerStart`) und die Wurzel seiner Funktionen (`funktionen`,
   `FunktionenStart`: je Instanz ein Graph-Actor, Orte im Gossip-Zustand). Cluster-Start mit hartem 30-s-Timeout (`ClusterStartupService`), danach die **Start-Sperre** (`Bereitschaft`): 32 Proben-Identitäten, die über
