@@ -348,7 +348,7 @@ public class AblaufE2ETests
         }
         GraphInstanzKonfig Linie(string eingang) => new()
         {
-            Graph = "Linienimport",
+            Graph = "Linienimport", Rechner = "linien",   // eine Quelle läuft im Cluster auf ihrem Rechner
             Knoten = { ["Eingang"] = Waechter(eingang), ["Aufbereitung.Verkleinern"] = Bild(true), ["Aufbereitung.Kontrast"] = Bild(true) },
         };
         var linie1 = Path.Combine(verzeichnis, "linie1");
@@ -356,7 +356,12 @@ public class AblaufE2ETests
         Directory.CreateDirectory(linie1);
         Directory.CreateDirectory(linie2);
         var builder = Host.CreateApplicationBuilder();
-        builder.Services.AddCqrsFramework(opts => { opts.EnableGrpc = false; opts.ClusterName = "zwei-linien-" + Guid.NewGuid().ToString("N")[..8]; });
+        builder.Services.AddCqrsFramework(opts =>
+        {
+            opts.EnableGrpc = false;
+            opts.ClusterName = "zwei-linien-" + Guid.NewGuid().ToString("N")[..8];
+            opts.Rechner = "linien";
+        });
         // Eigene Instanz-Namen je Lauf: ihr Zustand bleibt in der geteilten DB über den Test hinaus.
         var (n1, n2) = ("linie1-" + Guid.NewGuid().ToString("N")[..6], "linie2-" + Guid.NewGuid().ToString("N")[..6]);
         var instanzen = GraphInstanzen.Aus(new Dictionary<string, GraphInstanzKonfig> { [n1] = Linie(linie1), [n2] = Linie(linie2) },
