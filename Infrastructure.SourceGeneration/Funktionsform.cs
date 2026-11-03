@@ -19,17 +19,10 @@ namespace Infrastructure.SourceGeneration
         private const string A = "Abstractions.";
         public const string IFunktion = A + "IFunktion";
 
-        /// <summary>
-        /// Die Form eines Eingangs. Ein <c>Auf</c> nimmt genau eine Nachricht (<see cref="Eins"/>); die übrigen Formen liest die Lesart nicht mehr und
-        /// fallen mit der Laufzeit ohne Lauf weg (docs/plan-graphen-ohne-lauf.md, Schritt 2).
-        /// </summary>
-        internal enum Portform { Eins, Hoechstens, Erster, Alle }
-
-        /// <summary>Ein Eingangsport: Parametername, Form und die Typen, die er nimmt (bei <c>OneOf</c> mehrere).</summary>
+        /// <summary>Der Eingang eines <c>Auf</c> (genau einer je Auf): Parametername und der Typ, den er nimmt.</summary>
         internal sealed class Port
         {
             public string Name = "";
-            public Portform Form;
             public List<INamedTypeSymbol> Typen = new List<INamedTypeSymbol>();
             public Location Ort = Location.None;
         }
@@ -403,7 +396,7 @@ namespace Infrastructure.SourceGeneration
         /// </summary>
         private static Port? LiesPort(IParameterSymbol p, Location ort, List<(string, Location)> fehler)
         {
-            var port = new Port { Name = p.Name, Ort = ort, Form = Portform.Eins };
+            var port = new Port { Name = p.Name, Ort = ort };
             var t = p.Type;
             if (t is INamedTypeSymbol { IsGenericType: true } l && Name(l) == "System.Collections.Generic.IReadOnlyList`1")
             {

@@ -5,9 +5,9 @@ namespace Infrastructure.Funktionen;
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 // EINGÄNGE EINER INSTANZ (docs/04 §4.4): Funktionen sind Knoten von Graphen VOR dem Aggregat und lesen nie das Log. Ein Eingang kommt am Kopf einer
 // Instanz an — von einem durablen Rand (ein Command ohne Ziel aus einem Decide oder von einem Akteur — offen in cqrs_eingaenge, der Zusteller bringt
-// ihn), vom Knoten eines anderen Graphen (ein Command ohne Ziel) oder aus ihrer Quelle — und startet einen Lauf. Er trägt eine
-// abgeleitete Kennung: der Graph-Actor erkennt einen doppelten Eingang an ihr; die Ids im Lauf folgen aus ihr (Lauf, Pfad, Knoten, Stelle) — die Inbox
-// verwirft Wiederholungen. Zwischen Knoten desselben Graphen reist nichts als Eingang: das trägt der Lauf (Lauf.cs).
+// ihn), vom Knoten eines anderen Graphen (ein Command ohne Ziel) oder aus ihrer Quelle — und startet eine Kette. Er trägt eine
+// abgeleitete Kennung: der Graph-Actor erkennt einen doppelten Eingang an ihr; jede Nachricht der Kette leitet ihre Kennung aus der ab, aus der sie
+// entstand (Knoten, Stelle) — die Inbox verwirft Wiederholungen. Zwischen Knoten desselben Graphen reist ein Aufruf von Parent zu Parent (Kette.cs).
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 /// <summary>Woher ein Eingang kommt und was der Absender zurück erwartet.</summary>
@@ -23,7 +23,7 @@ public enum Eingangsart
 
 /// <summary>
 /// Ein Eingang unterwegs zum Kopf einer Instanz eines Graphen (an ihren Graph-Actor auf einem Cluster-Knoten, der sie hält; der Kopf ist der Knoten, der
-/// seinen Typ nimmt): Kennung (sie wird die des Laufs), Instanz, die Nachricht und die Herkunft der Kette (Stream, Version, Zeit, Akteur, Korrelation, Ursache). Auf demselben
+/// seinen Typ nimmt): Kennung (aus ihr leitet die Kette ihre Kennungen ab), Instanz, die Nachricht und die Herkunft der Kette (Stream, Version, Zeit, Akteur, Korrelation, Ursache). Auf demselben
 /// Cluster-Knoten reist die Nachricht als Objekt; zwischen Knoten über ihre Wire-Form (<see cref="Infrastructure.Serialization.NachrichtJsonConverter"/>:
 /// ein Event bzw. Hinweis in der Event-Form, sonst die Form der Commands ohne Ziel).
 /// </summary>
@@ -53,10 +53,14 @@ public sealed record EingangQuittung(Guid Kennung, Quittungsart Ausgang) : IWire
 public static class Kettenvertrag
 {
     /// <summary>
-    /// Die Kennung des Aufrufs einer Operation (<paramref name="auf"/>) des Knotens am <paramref name="ort"/> (<c>instanz/knoten</c>) im Lauf
-    /// <paramref name="lauf"/> auf dem Pfad <paramref name="pfad"/> (Entscheidung 15): ein neuer Lauf vom selben Kopf rechnet dieselben Ids.
+    /// Die Kennung des Aufrufs einer Operation (<paramref name="auf"/>) des Knotens am <paramref name="ort"/> (<c>instanz/knoten</c>) mit der Nachricht
+    /// <paramref name="nachricht"/> (ihre Kennung): rechnet die Kette nach einem Absturz neu, entstehen dieselben Ids — gleich, in welcher Reihenfolge
+    /// die Nachrichten ankommen.
     /// </summary>
-    public static Guid Aufruf(Guid lauf, string ort, string pfad, int auf) => Herkunft.Ableite($"aufruf:{ort}:{lauf:N}:{pfad}:{auf}");
+    public static Guid Aufruf(Guid nachricht, string ort, int auf) => Herkunft.Ableite($"aufruf:{ort}:{nachricht:N}:{auf}");
+
+    /// <summary>Die Kennung der Nachricht an <paramref name="stelle"/>, die der Aufruf <paramref name="aufruf"/> am <paramref name="ort"/> an Knoten desselben Graphen gibt.</summary>
+    public static Guid Weiter(Guid aufruf, string ort, int stelle) => Herkunft.Ableite($"weiter:{ort}:{aufruf:N}:{stelle}");
 
     /// <summary>Die Kennung der Ausgabe an <paramref name="stelle"/> des Knotens am <paramref name="ort"/> (<c>instanz/knoten</c>) zum Eingang <paramref name="eingang"/>.</summary>
     public static Guid Ausgabe(Guid eingang, string ort, int stelle) => Herkunft.Ableite($"ausgabe:{ort}:{eingang:N}:{stelle}");

@@ -87,7 +87,7 @@ public static class Grammatik
         new("GR-DECIDE-COMMAND", "Command ohne Ziel aus dem Decide → Graph-Kopf oder Akteur", "Ein Decide kann neben Events einen Command ohne Ziel "
             + "ausgeben, nie einen an ein Aggregat. Er geht nicht ins Log; für seinen Empfänger (die Instanz, deren Graph ihn am Kopf nimmt, oder den Akteur, "
             + "der ihn als Arbeit hört) steht in derselben Transaktion ein offener Eingang (Kennung aus Command und Stelle), den die Laufzeit zustellt, bis "
-            + "der Lauf bzw. die Arbeit fertig ist — genau einmal wirksam (docs/03 §3.2, docs/04 §4.4).", "error",
+            + "seine Kette bzw. die Arbeit fertig ist — genau einmal wirksam (docs/03 §3.2, docs/04 §4.4).", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag: Commands ohne Ziel stehen in der Signatur)"),
              An("CQRS116", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (genau ein Empfänger: Graph-Kopf oder Akteur)"),
              new("laufzeit", null, "Infrastructure/Eingaenge/Folgen.cs (offene Eingänge im Commit, schneller Weg danach)")]),
@@ -98,13 +98,14 @@ public static class Grammatik
              new("laufzeit", null, "Infrastructure/Funktionen/FunktionsKindActor.cs (Antwort aus CommandResult.Antwort weitergerechnet)")]),
         new("GR-KANTE", "Kante: [Von(nameof(Quelle))] am nehmenden Knoten", "Eine Funktion gibt Commands und Hinweise aus, nie ein Event. Innerhalb "
             + "eines Graphen ist jede Kante ausdrücklich: [Von(nameof(A), nameof(B))] am nehmenden Knoten nennt die Knoten, von denen er bekommt; eine genannte "
-            + "Quelle speist die Ports, deren Typ sie ausgibt, und mindestens einen. Ein Port, den keine genannte Quelle speist, nimmt von außen — nur an einem "
-            + "[Kopf]. Was ein Knoten ausgibt und kein Knoten über Von von ihm nimmt, verlässt den Graphen; kreisfrei über die Knoten (eine Kette "
-            + "Bild → Bild → Bild ist kein Kreis) (docs/04 §4.4).", "error",
+            + "Quelle speist die Eingänge, deren Typ sie ausgibt, und mindestens einen. Ein Eingang, den keine genannte Quelle speist, nimmt von außen — nur "
+            + "an einem [Kopf]. Was ein Knoten ausgibt und kein Knoten über Von von ihm nimmt, verlässt den Graphen; kreisfrei über die Knoten (eine Kette "
+            + "Bild → Bild → Bild ist kein Kreis). Eine Kante ist gesichert (der Absender wartet auf „fertig“); [Von(nameof(A), Verlierbar = true)] macht "
+            + "sie verlierbar (einmal geschickt, ohne Antwort) (docs/04 §4.4).", "error",
             [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Ausgabe einer Funktion)"),
              An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Quelle ohne Port, Port ohne Quelle, Kreis; Lesart Graphform)"),
-             new("generator", null, "Infrastructure.SourceGeneration/GraphGenerator.cs (GeneratedGraphen: Ports mit ihren Erzeugern aus den Von)"),
-             new("laufzeit", null, "Infrastructure/Funktionen/Lauf.cs (die Ausgaben eines Aufrufs gehen an die Ports seiner Abnehmer)")]),
+             new("generator", null, "Infrastructure.SourceGeneration/GraphGenerator.cs (GeneratedGraphen: die Wegtabelle aus den Von)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsParent.cs (je Ausgabe die Wege nachgeschlagen, gesichert mit Antwort, verlierbar ohne)")]),
         new("GR-GRAPH", "Graph: Knoten als Parameter mit [Kopf] oder [Von]", "Ein Graph ist ein Record mit IGraph; jeder Parameter ist ein Knoten (eine "
             + "Funktion — eine generische mit Typargument — oder ein anderer Graph; Name = Konfig-Schlüssel, in einem inneren Graphen mit Punkt). Eine "
             + "Funktion darf mehrfach im Graphen stehen. Jeder Knoten trägt [Kopf], [Von(…)] oder beides; nur eine Quelle (eine Funktion, die lauscht) trägt "
@@ -116,21 +117,23 @@ public static class Grammatik
         new("GR-EINGANG", "Eingang: ein Auf, eine Nachricht", "Ein Auf nimmt genau eine Nachricht (einen Command ohne Ziel; allein auch ein Event als "
             + "Antwort auf den eigenen Command) und rechnet, sobald sie ankommt — kommen zwei, rechnet es zweimal. Mehrere Nachrichten, T?, OneOf<…> oder "
             + "IReadOnlyList<T> als Eingang gibt es nicht: was danach gebraucht wird, trägt die Nachricht mit; sonst nimmt je Nachrichtentyp ein eigenes Auf "
-            + "sie an, und der Zustand des Knotens (IZustand) oder ein Aggregat führt zusammen, zählt oder wartet (Zähl-Aggregat, Frist im Decide). Bis die "
-            + "Laufzeit ohne Lauf auskommt, liegen alle Erzeuger eines Eingangs auf derselben Ebene der Unterläufe (docs/04 §4.4).", "error",
+            + "sie an, und der Zustand des Knotens (IZustand) oder ein Aggregat führt zusammen, zählt oder wartet (Zähl-Aggregat, Frist im Decide) "
+            + "(docs/04 §4.4).", "error",
             [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (ein Eingang je Auf, kein T?, OneOf oder IReadOnlyList; Lesart Funktionsform)"),
-             An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Ebenen der Unterläufe; Lesart Graphform)")]),
+             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsParent.cs (ein Aufruf je ankommender Nachricht)")]),
         new("GR-KOPF", "Kopf: [Kopf] je Eingangstyp genau einer", "Ein Knoten, der von außerhalb des Graphen nimmt (aus einem Decide, von einem Akteur, "
             + "vom Ausgang eines anderen Graphen), trägt [Kopf]; er nimmt von außen, was keine genannte Quelle speist. Je Eingangstyp des Graphen genau ein "
             + "[Kopf], der ihn nimmt — was mehrere brauchen, nimmt einer, die übrigen nennen ihn in [Von]. Ein [Kopf], an dem nichts von außen ankommt, "
             + "ist ein Fehler; ein Graph mit Quelle hat sonst keinen Kopf (docs/04 §4.4).", "error",
             [An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Köpfe je Eingangstyp, Kopf ohne Eingang von außen; Lesart Graphform)"),
-             new("laufzeit", null, "Infrastructure/Funktionen/Lauf.cs (ein Lauf beginnt an den Ports ohne Erzeuger des Kopfs)")]),
-        new("GR-LAUF", "Ein Lauf je Kopf", "Jede Nachricht im Graphen gehört zu einem Lauf, den eine Kopf-Nachricht startet; Läufe verschiedener Köpfe "
-            + "kommen nie zusammen. Fertig ist der Kopf, wenn jeder Aufruf fertig ist oder nie kommt; wirft ein Knoten auch nach seinen Wiederholungen, "
-            + "scheitert der Lauf: offene Zweige brechen ab, der Kopf wird geparkt, LaufGescheitert geht an die Hörer (docs/04 §4.4).", "error",
-            [new("laufzeit", null, "Infrastructure/Funktionen/GraphActor.cs (Koordinator der Läufe einer Instanz)"),
-             new("laufzeit", null, "Infrastructure/Funktionen/Lauf.cs (Buchführung: Pfade, Ports, Sammeln, Rennen, Zeitlimit)")]),
+             new("laufzeit", null, "Infrastructure/Funktionen/GraphActor.cs (der Kopf gibt den Eingang an den Knoten, der seinen Typ nimmt)")]),
+        new("GR-KETTE", "Eine Kette je Kopf", "Eine Nachricht am Kopf startet eine Kette: jeder Schritt rechnet je ankommender Nachricht und gibt seine "
+            + "Ausgaben nach der Wegtabelle weiter; niemand führt Buch über die ganze Kette. Fertig ist der Kopf, wenn alle gesicherten Ausgaben fertig "
+            + "sind — die Rückmeldung reicht über die gesicherten Kanten zurück; wirft ein Knoten auch nach seinen Wiederholungen, reicht „gescheitert“ "
+            + "zurück, der Kopf wird geparkt, LaufGescheitert geht an die Hörer. Fehlt das „fertig“, kommt der Kopf erneut, die Kette rechnet mit denselben "
+            + "Kennungen neu (docs/04 §4.4).", "error",
+            [new("laufzeit", null, "Infrastructure/Funktionen/GraphActor.cs (Kopf einer Instanz: offen bis „fertig“, ausgetragen bzw. geparkt)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsParent.cs (ein Schritt: rechnen, Wege nachschlagen, „fertig“ nach den gesicherten Ausgaben)")]),
         new("GR-INSTANZ", "Graph läuft als Instanz", "Ein Graph läuft erst als Instanz: eine Datei je Instanz (umgebungen/<name>/graphen/<instanz>.json) "
             + "mit Graph, bei einem Quellkopf dem Akteur (er darf, was den Graphen verlässt) und je Knoten Parallel, Warteschlange, Wiederholungen, Zeitlimit, "
             + "Technik und die Felder seiner Konfig-Records. Ein Graph mit Command-Kopf läuft je Umgebung genau einmal (docs/04 §4.4).", "error",
@@ -193,7 +196,8 @@ public static class Grammatik
             [An("CQRS102", "Domain.SourceGeneration/GleichbleibendAnalyzer.cs")]),
         new("GR-FUNKTION-ZUSTAND", "Zustand einer Funktion nur über IZustand<T>", "Eine Funktion hält Zustand (ein Modell, das weiterlernt, ein Zähler) "
             + "nur über IZustand<T> im Konstruktor einer Funktions-Klasse oder einer Technik-Umsetzung (deren Zustand gehört dem Knoten ihres Halters): "
-            + "er ist je Instanz und Knoten gesichert, wenn der Lauf, der ihn änderte, fertig ist, in der Reihenfolge der Läufe; eine Instanz mit Zustand "
+            + "er ist je Instanz und Knoten gesichert, wenn der Aufruf, der ihn änderte, und alle früheren beendet sind, mit ihren Kennungen (nach einem "
+            + "Absturz zählt nichts doppelt); eine Instanz mit Zustand "
             + "rechnet im Cluster auf genau einem Knoten (Advisory-Lock). Was fachlich zählt, steht im Log. Felder mit Setter, "
             + "veränderliche Felder und Sammlungen hinter readonly sind verboten; eine Funktion mit Zustand darf aus einem Eingang allein lernen (Auf "
             + "ohne Ausgabe) (R19, docs/04 §4.4).", "error",
@@ -225,11 +229,11 @@ public static class Grammatik
             [new("boot", null, "Infrastructure/Funktionen/Technik.cs (BindeTechnik: fehlend, mehrdeutig, Kreis, Konfig)")]),
         new("GR-QUELLE", "Quelle = Funktion, die lauscht", "Eine Quelle ist eine Funktion mit Lausche(CancellationToken) statt Auf — aus dem Katalog des "
             + "Frameworks (Dateiwaechter, Taktgeber, Webhook) oder eigen. Sie steht am Kopf ihres Graphen (eine je Graph, dann kein anderer Kopf); jedes "
-            + "Element startet einen Lauf, nichts davon steht im Log. Was sie gesehen hat und ihre laufende Nummer stehen in ihrem gesicherten Zustand; ihre "
+            + "Element startet eine Kette, nichts davon steht im Log. Was sie gesehen hat und ihre laufende Nummer stehen in ihrem gesicherten Zustand; ihre "
             + "Instanz läuft genau einmal im Cluster (docs/04 §4.7).", "error",
             [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Form von Lausche)"),
              An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (eine Quelle je Graph, sonst kein Kopf)"),
-             new("laufzeit", null, "Infrastructure/Funktionen/GraphActor.cs (je Element ein Lauf, Gegendruck, Zustand gesichert nach dem Lauf)")]),
+             new("laufzeit", null, "Infrastructure/Funktionen/GraphActor.cs (je Element eine Kette, Gegendruck, Zustand gesichert nach der Kette)")]),
         // Zusatzregeln
         new("GR-AUSGANG-GESCHLOSSEN", "Geschlossener Ausgang", "Ausgänge sind konkrete Typen im OneOf — zeichnen heißt Typ wählen.", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)")]),

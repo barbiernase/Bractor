@@ -8,9 +8,6 @@ namespace Infrastructure.Funktionen;
 /// <summary>Der Parent gibt einem Kind einen Aufruf zu rechnen.</summary>
 public sealed record KindRechne(KnotenAufruf Aufruf);
 
-/// <summary>Der Parent bricht den Aufruf ab, den das Kind gerade rechnet (der Lauf braucht ihn nicht mehr).</summary>
-public sealed record KindAbbrechen(Guid Kennung);
-
 /// <summary>
 /// Das Kind meldet den Aufruf fertig — mit seinen Ausgaben an Knoten des Graphen und dem Schnappschuss seiner Zustände — oder gescheitert
 /// (<paramref name="Fehler"/>) und ist wieder frei.
@@ -27,8 +24,8 @@ public sealed record LauschenEndete(string? Fehler);
 /// Ein KIND eines Knotens (docs/04 §4.4): eine Umsetzung seiner Funktion mit ihrer Aktivierung (Bereich, Technik, Zustand), ein Aufruf zugleich — oder,
 /// draußen, der Platz eines Arbeiters in der <see cref="Werkstatt"/>. Es rechnet das <c>Auf</c> und bringt jede Ausgabe hinaus — einen Command an ein
 /// Aggregat sofort über den Emitter mit der Id aus Aufruf, Ort und Stelle (die Inbox verwirft eine Wiederholung; die Antwort rechnet die Funktion gleich
-/// weiter), einen Command ohne Ziel an einen Knoten desselben Graphen erst mit dem Erfolg (im Ergebnis an den Graph-Actor), einen anderen an den Kopf der
-/// Instanz, die ihn nimmt (gewartet wird, bis ihr Lauf fertig ist), einen Hinweis verlierbar. Das <see cref="KnotenKonfig.Zeitlimit"/> begrenzt eine
+/// weiter), einen Command ohne Ziel an einen Knoten desselben Graphen erst mit dem Erfolg (im Ergebnis an den Parent, der ihn nach der Wegtabelle
+/// weitergibt), einen anderen an den Kopf der Instanz, die ihn nimmt (gewartet wird, bis ihre Kette fertig ist), einen Hinweis verlierbar. Das <see cref="KnotenKonfig.Zeitlimit"/> begrenzt eine
 /// Rechnung; danach gilt sie als gescheitert.
 /// </summary>
 public sealed class FunktionsKindActor(
@@ -50,7 +47,6 @@ public sealed class FunktionsKindActor(
 
     private readonly TimeSpan _frist = frist ?? StandardFrist;
     private FunktionsAktivierung? _aktivierung;
-    private (Guid Kennung, CancellationTokenSource Abbruch)? _laufend;
 
     protected override async Task BeginneAsync(IContext context)
     {
@@ -73,13 +69,11 @@ public sealed class FunktionsKindActor(
                 var selbst = context.Self;
                 var abbruch = CancellationTokenSource.CreateLinkedTokenSource(Stopp);
                 if (traeger.Zeitlimit > TimeSpan.Zero) abbruch.CancelAfter(traeger.Zeitlimit);
-                _laufend = (r.Aufruf.Kennung, abbruch);
                 var ausgaben = new List<KnotenAusgabe>();
                 Neben(context, _ => RechneAsync(r.Aufruf, ausgaben, abbruch.Token), t =>
                 {
-                    _laufend = null;
                     abbruch.Dispose();
-                    var fehler = t.IsFaulted ? t.Exception!.GetBaseException().Message : t.IsCanceled ? "abgebrochen (Zeitlimit oder Lauf)" : null;
+                    var fehler = t.IsFaulted ? t.Exception!.GetBaseException().Message : t.IsCanceled ? "abgebrochen (Zeitlimit oder Stopp)" : null;
                     if (t.IsFaulted)
                         logger?.LogWarning(t.Exception?.GetBaseException(), "[Funktionen] {Ort}: Aufruf {Kennung} gescheitert", traeger.Ort, r.Aufruf.Kennung);
                     if (parent is not null)
@@ -99,16 +93,13 @@ public sealed class FunktionsKindActor(
                     return Task.CompletedTask;
                 });
                 break;
-            case KindAbbrechen b when _laufend is { } l && l.Kennung == b.Kennung:
-                l.Abbruch.Cancel();
-                break;
         }
         return Task.CompletedTask;
     }
 
     /// <summary>
     /// Die Quelle lauscht: je Element die nächste Nummer (weiter ab der gesicherten), der Schnappschuss ihres Zustands und die Meldung an den Graph-Actor;
-    /// das nächste Element erst, wenn er den Lauf angenommen hat (Gegendruck).
+    /// das nächste Element erst, wenn er die Kette angenommen hat (Gegendruck).
     /// </summary>
     private async Task LauscheAsync(ActorSystem system, PID graph, CancellationToken ct)
     {
@@ -130,7 +121,7 @@ public sealed class FunktionsKindActor(
             ? (faehigkeiten ?? throw new InvalidOperationException($"{traeger.Name} liest Fähigkeiten, aber es gibt keine Fähigkeits-Fabrik.")).Oeffne()
             : null;
         var warten = new List<Task>();
-        await RechneAsync(a, a.Operation, a.Argumente, a.Kontext.Herkunft(traeger.Name), a.Kennung, a.Kontext.Ursache ?? Spur.Ursache(a.Kontext.Stream, a.Kontext.Version),
+        await RechneAsync(a, a.Operation, [a.Nachricht], a.Kontext.Herkunft(traeger.Name), a.Kennung, a.Kontext.Ursache ?? Spur.Ursache(a.Kontext.Stream, a.Kontext.Version),
             bereich, ausgaben, warten, ct);
         await Task.WhenAll(warten);
     }
@@ -142,7 +133,7 @@ public sealed class FunktionsKindActor(
     private async Task RechneAsync(KnotenAufruf a, int auf, object?[] argumente, Herkunft herkunft, Guid kennung, string ursache, IFaehigkeiten? bereich,
         List<KnotenAusgabe> ausgaben, List<Task> warten, CancellationToken ct)
     {
-        // Die Spur nennt den Schritt des Laufs (Instanz und Knoten) — seine Karte; Herkunft und Ids leiten weiter aus der Funktion ab.
+        // Die Spur nennt den Schritt der Kette (Instanz und Knoten) — seine Karte; Herkunft und Ids leiten weiter aus der Funktion ab.
         using var spur = Spur.Von(ursache, traeger.Instanz is { Length: > 0 } inst ? WirkerId.FuerKnoten(inst, traeger.Knoten) : WirkerId.FuerFunktion(traeger.Name));
         var stelle = 0;
         var strom = traeger.Draussen is { } draussen
@@ -171,11 +162,11 @@ public sealed class FunktionsKindActor(
                         a.Kontext.Korrelation, a.Kontext.Akteur, ursache));
                     break;
                 case ICommand weiter when traeger.ImGraphen.Contains(weiter.GetType()):
-                    // An einen Knoten desselben Graphen: erst mit dem Erfolg sichtbar (der Graph-Actor gibt ihn längs der Kanten weiter).
+                    // An einen Knoten desselben Graphen: erst mit dem Erfolg sichtbar (der Parent gibt ihn nach der Wegtabelle weiter).
                     ausgaben.Add(new KnotenAusgabe(ausgaben.Count, weiter));   // Stelle über den ganzen Aufruf (auch aus Antworten): Unterläufe, Ids
                     break;
                 case ICommand weiter:
-                    // An den Kopf der Instanz, die ihn nimmt (Entscheidung 2: genau ein Empfänger); gewartet wird, bis ihr Lauf fertig ist.
+                    // An den Kopf der Instanz, die ihn nimmt (Entscheidung 2: genau ein Empfänger); gewartet wird, bis ihre Kette fertig ist.
                     var ausgabe = Kettenvertrag.Ausgabe(kennung, traeger.Ort, i);
                     if (koepfe.Hoerer(weiter.GetType()) is { Count: > 0 } instanzen)
                         foreach (var instanz in instanzen)
@@ -191,14 +182,14 @@ public sealed class FunktionsKindActor(
         }
     }
 
-    /// <summary>Der Eingang einer Ausgabe am Kopf einer Instanz: Kennung aus Ausgabe und Instanz, die Herkunft des Laufs reist mit.</summary>
+    /// <summary>Der Eingang einer Ausgabe am Kopf einer Instanz: Kennung aus Ausgabe und Instanz, die Herkunft der Kette reist mit.</summary>
     private static EingangZustellen Fremd(KnotenAufruf a, object nachricht, Guid ausgabe, string instanz, Eingangsart art) =>
         new(Eingangsvertrag.Eingang(ausgabe, instanz), instanz, nachricht, art, a.Kontext.Stream, a.Kontext.Version, a.Kontext.Zeit,
             a.Kontext.Akteur, a.Kontext.Korrelation, a.Kontext.Ursache);
 
     private async Task<Infrastructure.Emit.EmitAntwort> SendeAsync(IAggregatCommand c, Guid id, KnotenAufruf a, CancellationToken ct)
     {
-        var korrelation = Guid.TryParse(a.Kontext.Korrelation, out var k) ? k : a.Kontext.Lauf;
+        var korrelation = Guid.TryParse(a.Kontext.Korrelation, out var k) ? k : a.Kontext.Kopf;
         for (var versuch = 1; ; versuch++)
         {
             var antwort = await sende(c, id, korrelation, ct);

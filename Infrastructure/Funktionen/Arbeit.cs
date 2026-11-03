@@ -24,8 +24,7 @@ public static class Arbeit
     public static GraphPlan Plan(AkteurRechte a)
     {
         var b = Baustein(a);
-        var operationen = b.Eingaenge.Select((e, i) => new OperationPlan(i, [new PortPlan("auftrag", Portform.Eins, [e.Typ], [])], e.Ausgaben.ToArray(),
-            Type.EmptyTypes, [])).ToList();
+        var operationen = b.Eingaenge.Select((e, i) => new OperationPlan(i, e.Typ, e.Ausgaben.ToArray(), [])).ToList();
         return new GraphPlan(a.Name, a.Typ, [new KnotenPlan(a.Name, a.Name, operationen)], b.Eingaenge.ToDictionary(e => e.Typ, _ => new[] { a.Name }),
             b.Eingaenge.SelectMany(e => e.Ausgaben).Distinct().ToList());
     }

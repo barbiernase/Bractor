@@ -58,7 +58,7 @@ public class ArbeitTests
         k.Name.Should().Be("Pruefer");
         k.Funktion.Should().Be("Pruefer", "der Baustein heißt wie der Akteur");
         k.Operationen.Select(o => o.Auf).Should().Equal(0, 1);
-        k.Operationen.Select(o => o.Ports.Single().Typen.Single()).Should().Equal(typeof(Pruefe), typeof(Schaetze));
+        k.Operationen.Select(o => o.Eingang).Should().Equal(typeof(Pruefe), typeof(Schaetze));
         p.Koepfe.Keys.Should().BeEquivalentTo(new[] { typeof(Pruefe), typeof(Schaetze) });
         p.Koepfe.Values.Should().OnlyContain(v => v.SequenceEqual(new[] { "Pruefer" }));
         p.Ausgaenge.Should().BeEquivalentTo(new[] { typeof(Abgelehnt), typeof(Befund) });

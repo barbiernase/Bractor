@@ -150,6 +150,19 @@ public class GraphAnalyzerTests
     // ── GR-KANTE: jede genannte Quelle speist einen Port, jeder Port hat eine Quelle oder kommt von außen ──
 
     [Fact]
+    public async Task Eine_Kante_ist_gesichert_oder_mit_Verlierbar_im_eigenen_Von_verlierbar_eine_Quelle_nur_einmal()
+    {
+        (await Befunde("""
+            public sealed record Gemischt([Kopf] Lies L, [Von(nameof(L))] Verkleinere V, [Von(nameof(L))] Gleiche G,
+                [Von(nameof(V))] [Von(nameof(G), Verlierbar = true)] Sammle S) : IGraph;
+            public sealed class Sammle : IFunktion { public Buche Auf(Klein k) => default!; public Buche Auf(Kontrast c) => default!; }
+            """)).Should().BeEmpty("Verlierbar ist ein benannter Wert, kein Knoten — und je Zustellung ein eigenes [Von]");
+        (await Befunde("""
+            public sealed record Zweimal([Kopf] Lies L, [Von(nameof(L))] [Von(nameof(L), Verlierbar = true)] Verkleinere V) : IGraph;
+            """)).Should().ContainSingle().Which.Should().Contain("nennt 'L' doppelt");
+    }
+
+    [Fact]
     public async Task Eine_genannte_Quelle_die_keinen_Port_speist_ist_ein_Fehler()
         => (await Befunde("public sealed record Leer([Kopf] Lies L, [Von(nameof(L))] Verkleinere V, [Von(nameof(L), nameof(V))] Gleiche G) : IGraph;"))
             .Should().ContainSingle().Which.Should().Contain("'G' nennt in [Von] 'V', aber V gibt nichts aus, was G nimmt (V: Klein; G: Bild)");

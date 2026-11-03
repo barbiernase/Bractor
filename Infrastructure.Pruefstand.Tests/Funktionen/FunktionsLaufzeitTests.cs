@@ -16,11 +16,12 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Funktionen;
 
 /// <summary>
-/// Die Laufzeit der Graphen vor dem Aggregat (docs/04 §4.4), store-frei in einem echten lokalen Actor-System: je Instanz ein Graph-Actor (der Koordinator
-/// ihrer Läufe), je Knoten ein Parent (Warteschlange, Kinder bis Parallel, Wiederholungen, Abbruch), je Umsetzung ein Kind (Commands mit Ids aus Aufruf,
-/// Ort und Stelle). Die Pläne baut der Test von Hand wie der Generator (Erzeuger aus den Kanten, Ebenen aus den Typen); der Emitter ist eine Naht. Je Muster aus
-/// Entscheidung 5 ein Test: Folge, Fork-Join, Wahl mit Zusammenführen, Je mit Sammeln, Fork-Join je Element, Rennen mit Abbruch, Warten mit Frist —
-/// dazu der gescheiterte Lauf und der Neustart vom Kopf.
+/// Die Laufzeit der Graphen vor dem Aggregat (docs/04 §4.4), store-frei in einem echten lokalen Actor-System: je Instanz ein Graph-Actor (Halter und
+/// Kopf), je Knoten ein Parent (ein Schritt der Kette: Warteschlange, Kinder bis Parallel, Wiederholungen, Wegtabelle, „fertig“ erst nach den gesicherten
+/// Ausgaben), je Umsetzung ein Kind (Commands mit Ids aus Aufruf, Ort und Stelle). Die Pläne baut der Test von Hand wie der Generator (Wege aus den
+/// Typen, verlierbar je Quelle); der Emitter ist eine Naht. Bewiesen: die Folge mit ihren Ids, zwei Werte an einem Schritt (zweimal gerechnet), Wahl,
+/// Strom, eine verlierbare Kante (hält den Kopf nicht auf), Rückstau, der gescheiterte Kopf, der Neustart vom Kopf mit denselben Ids, die Quelle und ein
+/// Zustand, der nach einem Absturz nichts doppelt zählt.
 /// </summary>
 public class FunktionsLaufzeitTests
 {
@@ -28,49 +29,47 @@ public class FunktionsLaufzeitTests
     private sealed record Buche(Id<Ziel> AggregateId, int Wert) : ICommand<Ziel>;
     private sealed record Start(int Wert) : ICommand;
     private sealed record X(int Wert) : ICommand;
-    private sealed record Y(int Wert) : ICommand;
     private sealed record Z(int Wert) : ICommand;
     private sealed record Links(int Wert) : ICommand;
     private sealed record Rechts(int Wert) : ICommand;
     private sealed record Teil(int Wert) : ICommand;
-    private sealed record Befund(int Wert) : ICommand;
     private sealed record Gemerkt(int Wert) : ITransientEvent;
     private sealed record Falsch(int Wert) : IEvent;
     private sealed record Gebucht(int Wert) : IEvent;
     private sealed record Bestaetige(Id<Ziel> AggregateId) : ICommand<Ziel>;
+    private sealed class Zaehler { public int N { get; set; } }
 
     private static readonly Guid Stream = Guid.NewGuid();
     private static readonly Id<Ziel> Konto = Id<Ziel>.Neu();
 
-    // ── Pläne wie der Generator: Erzeuger je Port aus den Ausgaben, Ebenen aus den Strömen, Köpfe = Ports ohne Erzeuger ──
-
-    private static (Portform, Type[]) Eins<T>() => (Portform.Eins, [typeof(T)]);
-    private static (Portform, Type[]) Hoechstens<T>() => (Portform.Hoechstens, [typeof(T)]);
-    private static (Portform, Type[]) Erster<TA, TB>() => (Portform.Erster, [typeof(TA), typeof(TB)]);
-    private static (Portform, Type[]) Alle<T>() => (Portform.Alle, [typeof(T)]);
+    // ── Pläne wie der Generator: je Ausgabe die Wege zu den Knoten, die ihren Typ nehmen; Köpfe = Eingänge ohne Erzeuger ──
 
     private sealed class K(string name, FunktionsRechnung rechne)
     {
         public string Name { get; } = name;
         public FunktionsRechnung Rechne { get; } = rechne;
-        public List<(int Auf, (Portform Form, Type[] Typen)[] Ports, Type[] Aus, bool Strom)> Ops { get; } = new();
+        public List<(int Auf, Type? Eingang, Type[] Aus)> Ops { get; } = new();
         public FunktionsOrtKonfig Konfig { get; set; } = new();
         public KnotenKonfig Knoten { get; } = new();
         public Dictionary<Type, int> Antworten { get; } = new();
         public Action? BeimBau { get; set; }
-        /// <summary>Eine Quelle: die Nummer ihres Lausche (eine Operation ohne Ports).</summary>
+        /// <summary>Von welchen Knoten dieser verlierbar bekommt.</summary>
+        public HashSet<string> Verlierbar { get; } = new();
+        /// <summary>Mit Zustand: ein <see cref="Zaehler"/>, die Umsetzung ist er selbst.</summary>
+        public bool MitZustand { get; set; }
+        /// <summary>Eine Quelle: die Nummer ihres Lausche (eine Operation ohne Eingang).</summary>
         public int? Lauscht { get; private set; }
 
         public K Lausche(params Type[] aus)
         {
             Lauscht = Ops.Count + Antworten.Count;
-            Ops.Add((Lauscht.Value, [], aus, false));
+            Ops.Add((Lauscht.Value, null, aus));
             return this;
         }
 
-        public K Op(Type[] aus, bool strom = false, params (Portform, Type[])[] ports)
+        public K Op<TEingang>(params Type[] aus)
         {
-            Ops.Add((Ops.Count + Antworten.Count, ports, aus, strom));
+            Ops.Add((Ops.Count + Antworten.Count, typeof(TEingang), aus));
             return this;
         }
 
@@ -87,35 +86,18 @@ public class FunktionsLaufzeitTests
 
     private static GraphPlan Plan(string name, IReadOnlyList<K> knoten)
     {
-        var erzeuger = knoten.SelectMany(k => k.Ops.Select(o => (k, o))).ToList();
-        var ebenen = new Dictionary<(string, int), string[]>();
-        string[] Ebene(K k, (int Auf, (Portform Form, Type[] Typen)[] Ports, Type[] Aus, bool Strom) o)
-        {
-            if (ebenen.TryGetValue((k.Name, o.Auf), out var e)) return e;
-            e = [];
-            if (o.Ports.Length > 0)
-            {
-                var p = o.Ports[0];
-                var von = erzeuger.FirstOrDefault(x => x.o.Aus.Intersect(p.Typen).Any());
-                if (von.k is not null)
-                {
-                    var oben = Ebene(von.k, von.o).ToList();
-                    if (von.o.Strom) oben.Add(von.k.Name);
-                    if (p.Form == Portform.Alle) oben.RemoveAt(oben.Count - 1);
-                    e = oben.ToArray();
-                }
-            }
-            return ebenen[(k.Name, o.Auf)] = e;
-        }
-        var plaene = knoten.Select(k => new KnotenPlan(k.Name, k.Name, k.Ops.Select(o => new OperationPlan(o.Auf,
-            o.Ports.Select((p, i) => new PortPlan("p" + i, p.Form, p.Typen,
-                erzeuger.Where(x => x.k != k).SelectMany(x => x.o.Aus.Intersect(p.Typen).Select(t => new ErzeugerPlan(x.k.Name, x.o.Auf, t, x.o.Strom))).ToArray()))
-                .ToList(),
-            o.Aus, o.Strom ? o.Aus.Where(t => !typeof(IAggregatCommand).IsAssignableFrom(t)).ToArray() : [], Ebene(k, o))).ToList())).ToList();
-        var koepfe = plaene.SelectMany(k => k.Operationen.SelectMany(o => o.Ports.Where(p => p.Erzeuger.Length == 0).SelectMany(p => p.Typen.Select(t => (t, k.Name)))))
-            .GroupBy(x => x.t).ToDictionary(g => g.Key, g => g.Select(x => x.Name).Distinct().ToArray());
+        var plaene = knoten.Select(k => new KnotenPlan(k.Name, k.Name, k.Ops.Select(o => new OperationPlan(o.Auf, o.Eingang, o.Aus,
+            (from n in knoten where n != k
+             from o2 in n.Ops where o2.Eingang is not null && o.Aus.Contains(o2.Eingang)
+             select new WegPlan(o2.Eingang!, n.Name, o2.Auf, n.Verlierbar.Contains(k.Name))).ToArray())).ToList())).ToList();
+        var erzeugt = knoten.SelectMany(k => k.Ops.SelectMany(o => o.Aus)).ToHashSet();
+        var koepfe = knoten.SelectMany(k => k.Ops.Where(o => o.Eingang is not null && !erzeugt.Contains(o.Eingang)).Select(o => (o.Eingang!, k.Name)))
+            .GroupBy(x => x.Item1).ToDictionary(g => g.Key, g => g.Select(x => x.Name).Distinct().ToArray());
         return new GraphPlan(name, typeof(object), plaene, koepfe, Array.Empty<Type>(), knoten.FirstOrDefault(k => k.Lauscht is not null)?.Name);
     }
+
+    private static readonly FunktionsZustandsform ZaehlerForm = new(typeof(Zaehler), () => new Zaehler(), o => BitConverter.GetBytes(((Zaehler)o).N),
+        (o, b) => ((Zaehler)o).N = BitConverter.ToInt32(b), _ => { });
 
     /// <summary>Eine Welt: Graph-Actors im lokalen System, Wege dazwischen, ein Emitter, der mitschreibt.</summary>
     private sealed class Welt : IAsyncDisposable, IFunktionsWege
@@ -124,7 +106,7 @@ public class FunktionsLaufzeitTests
         public readonly ConcurrentQueue<(IAggregatCommand Befehl, Guid Id)> Gesendet = new();
         /// <summary>Was verlierbar über die Wege ging (der schnelle Weg eines offenen Eingangs).</summary>
         public readonly ConcurrentQueue<EingangZustellen> Gemeldet = new();
-        /// <summary>Die Hinweise an den Verteiler (an die Akteure, die sie hören): aus Knoten und gescheiterten Läufen.</summary>
+        /// <summary>Die Hinweise an den Verteiler (an die Akteure, die sie hören): aus Knoten und gescheiterten Ketten.</summary>
         public readonly ConcurrentQueue<HinweisZustellen> Hinweise = new();
         public readonly ConcurrentQueue<Guid> Ausgetragen = new();
         public readonly ConcurrentQueue<(Guid, string)> Geparkt = new();
@@ -141,12 +123,13 @@ public class FunktionsLaufzeitTests
             var instanz = new GraphInstanz(name, plan, null, knoten.ToDictionary(k => k.Name, k => k.Knoten));
             var parents = knoten.ToDictionary(k => k.Name, k =>
             {
-                var traeger = new FunktionsTraeger(k.Name, sp => new FunktionsAktivierung(sp, (_, _) => { k.BeimBau?.Invoke(); return new object(); }, name: k.Name,
-                        knoten: new KnotenKontext(name, k.Name, k.Knoten), ablage: Zustaende, quelle: k.Lauscht is not null),
+                var traeger = new FunktionsTraeger(k.Name, sp => new FunktionsAktivierung(sp, (_, z) => { k.BeimBau?.Invoke(); return z ?? new object(); },
+                        k.MitZustand ? ZaehlerForm : null, name: k.Name, knoten: new KnotenKontext(name, k.Name, k.Knoten), ablage: Zustaende,
+                        quelle: k.Lauscht is not null),
                     k.Rechne, Antworten: k.Antworten)
                 { Instanz = name, Knoten = k.Name, ImGraphen = plan.ImGraphen(k.Name), Zeitlimit = k.Knoten.Zeitlimit, Lausche = k.Lauscht };
                 return (Func<FunktionsParent>)(() => new FunktionsParent(traeger, k.Konfig, () => new FunktionsKindActor(traeger, _dienste, this, Koepfe, SendeAsync,
-                    hinweise: Hinweise.Enqueue)));
+                    hinweise: Hinweise.Enqueue), new KnotenWege(instanz, k.Name), k.MitZustand ? Zustaende : null));
             });
             Starte(instanz, parents);
             _plaene[name] = (instanz, parents);
@@ -248,23 +231,27 @@ public class FunktionsLaufzeitTests
     private static async Task<Quittungsart?> Fertig(Welt w, EingangZustellen e, int sekunden = 10) =>
         (await w.StelleZuAsync(e, TimeSpan.FromSeconds(sekunden), default))?.Ausgang;
 
-    private static Guid AufrufId(Guid lauf, string ort, string pfad = "", int auf = 0) => Kettenvertrag.Aufruf(lauf, ort, pfad, auf);
+    /// <summary>Die Kennung des Aufrufs am Kopf (aus der Kennung des Eingangs).</summary>
+    private static Guid AmKopf(Guid eingang, string ort, int auf = 0) => Kettenvertrag.Aufruf(eingang, ort, auf);
+
+    /// <summary>Die Kennung des Aufrufs, den <paramref name="von"/> mit seiner Ausgabe an <paramref name="stelle"/> bei <paramref name="ort"/> auslöst.</summary>
+    private static Guid Danach(Guid von, string vonOrt, string ort, int stelle = 0, int auf = 0) => Kettenvertrag.Aufruf(Kettenvertrag.Weiter(von, vonOrt, stelle), ort, auf);
 
     // ── Folge, Kennung, Rand ──────────────────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Eine_Folge_bis_zum_Command_mit_Ids_aus_Lauf_Pfad_Knoten_und_Stelle()
+    public async Task Eine_Folge_bis_zum_Command_mit_Ids_aus_der_Kette()
     {
         await using var w = new Welt();
         w.Instanz("G",
-            new K("A", Einzeln(a => new X(((Start)a[0]!).Wert * 2))).Op([typeof(X)], ports: Eins<Start>()),
+            new K("A", Einzeln(a => new X(((Start)a[0]!).Wert * 2))).Op<Start>(typeof(X)),
             new K("B", (_, _, a, _, _, _) => Strom(new Buche(Konto, ((X)a[0]!).Wert), new Buche(Konto, ((X)a[0]!).Wert + 1)))
-                .Op([typeof(Buche)], ports: Eins<X>()));
+                .Op<X>(typeof(Buche)));
 
         var eingang = Eingang("G", new Start(21));
-        (await Fertig(w, eingang)).Should().Be(Quittungsart.Fertig, "fertig ist der Lauf erst, wenn jeder Aufruf fertig ist — B erst, wenn seine Commands beantwortet sind");
+        (await Fertig(w, eingang)).Should().Be(Quittungsart.Fertig, "fertig ist die Kette erst, wenn B fertig ist — und B erst, wenn seine Commands beantwortet sind");
 
-        var b = AufrufId(eingang.Kennung, "G/B");
+        var b = Danach(AmKopf(eingang.Kennung, "G/A"), "G/A", "G/B");
         w.Gesendet.Select(x => x.Befehl).Should().Equal(new Buche(Konto, 42), new Buche(Konto, 43));
         w.Gesendet.Select(x => x.Id).Should().Equal(Kettenvertrag.Befehl(b, "G/B", 0, new Buche(Konto, 42)), Kettenvertrag.Befehl(b, "G/B", 1, new Buche(Konto, 43)));
     }
@@ -275,7 +262,7 @@ public class FunktionsLaufzeitTests
         await using var w = new Welt();
         var gerechnet = 0;
         w.Instanz("G", new K("A", Einzeln(a => { Interlocked.Increment(ref gerechnet); return new Buche(Konto, ((Start)a[0]!).Wert); }))
-            .Op([typeof(Buche)], ports: Eins<Start>()));
+            .Op<Start>(typeof(Buche)));
         var eingang = Eingang("G", new Start(1));
         (await Fertig(w, eingang)).Should().Be(Quittungsart.Fertig);
         (await Fertig(w, eingang)).Should().Be(Quittungsart.Fertig);
@@ -287,7 +274,7 @@ public class FunktionsLaufzeitTests
     public async Task Durabel_heisst_sofort_angenommen_den_fertigen_Kopf_traegt_der_Graph_Actor_aus()
     {
         await using var w = new Welt();
-        w.Instanz("G", new K("A", Einzeln(a => new Buche(Konto, ((Start)a[0]!).Wert))).Op([typeof(Buche)], ports: Eins<Start>()));
+        w.Instanz("G", new K("A", Einzeln(a => new Buche(Konto, ((Start)a[0]!).Wert))).Op<Start>(typeof(Buche)));
         var eingang = Eingang("G", new Start(1), Eingangsart.Durabel);
         (await Fertig(w, eingang)).Should().Be(Quittungsart.Angenommen);
         await Warte(() => w.Ausgetragen.Contains(eingang.Kennung), "der fertige durable Kopf wird nicht ausgetragen");
@@ -300,7 +287,7 @@ public class FunktionsLaufzeitTests
         var frei = new TaskCompletionSource();
         var laufen = 0;
         var hoechstens = 0;
-        var a = new K("A", (_, _, _, _, _, ct) => Blockiert(ct)) { Konfig = new FunktionsOrtKonfig(Parallel: 2) }.Op([typeof(Buche)], ports: Eins<Start>());
+        var a = new K("A", (_, _, _, _, _, ct) => Blockiert(ct)) { Konfig = new FunktionsOrtKonfig(Parallel: 2) }.Op<Start>(typeof(Buche));
         a.Knoten.Warteschlange = 3;
         w.Instanz("G", a);
 
@@ -316,7 +303,7 @@ public class FunktionsLaufzeitTests
         var quittungen = new List<Task<EingangQuittung?>>();
         for (var i = 0; i < 3; i++) quittungen.Add(w.StelleZuAsync(Eingang("G", new Start(i)), TimeSpan.FromSeconds(10), default));
         await Warte(() => Volatile.Read(ref laufen) == 2, "zwei Kinder rechnen");
-        (await Fertig(w, Eingang("G", new Start(9)), 5)).Should().Be(Quittungsart.Spaeter, "drei Läufe sind offen — die Warteschlange des Kopfs (3) ist voll");
+        (await Fertig(w, Eingang("G", new Start(9)), 5)).Should().Be(Quittungsart.Spaeter, "drei Ketten sind offen — die Warteschlange des Kopfs (3) ist voll");
         frei.SetResult();
         foreach (var q in quittungen) (await q)!.Ausgang.Should().Be(Quittungsart.Fertig);
         hoechstens.Should().Be(2, "nie mehr als Parallel Kinder zugleich");
@@ -334,11 +321,11 @@ public class FunktionsLaufzeitTests
         await using var w = new Welt();
         var gebaut = 0;
         w.Instanz("Warm", new K("A", Einzeln(_ => null)) { Konfig = new FunktionsOrtKonfig(Parallel: 3, Vorwaermen: true), BeimBau = () => Interlocked.Increment(ref gebaut) }
-            .Op([typeof(Buche)], strom: true, ports: Eins<Start>()));
+            .Op<Start>(typeof(Buche)));
         await Warte(() => Volatile.Read(ref gebaut) == 3, "vorgewärmt baut der Parent alle Kinder beim Start");
         var kalt = 0;
         w.Instanz("Kalt", new K("A", Einzeln(_ => null)) { Konfig = new FunktionsOrtKonfig(Parallel: 3), BeimBau = () => Interlocked.Increment(ref kalt) }
-            .Op([typeof(Buche)], strom: true, ports: Eins<Start>()));
+            .Op<Start>(typeof(Buche)));
         await Task.Delay(300);
         kalt.Should().Be(0);
         (await Fertig(w, Eingang("Kalt", new Start(1)))).Should().Be(Quittungsart.Fertig);
@@ -346,11 +333,11 @@ public class FunktionsLaufzeitTests
     }
 
     [Fact]
-    public async Task Ein_Hinweis_geht_verlierbar_nur_an_die_Akteure_ein_Event_als_Ausgabe_laesst_den_Lauf_scheitern()
+    public async Task Ein_Hinweis_geht_verlierbar_nur_an_die_Akteure_ein_Event_als_Ausgabe_laesst_die_Kette_scheitern()
     {
         await using var w = new Welt();
-        w.Instanz("G", new K("A", Einzeln(a => new Gemerkt(((Start)a[0]!).Wert))).Op([typeof(Gemerkt)], ports: Eins<Start>()));
-        var schreiber = new K("S", Einzeln(_ => new Falsch(1))) { Konfig = new FunktionsOrtKonfig(Wiederholungen: 0) }.Op([typeof(Buche)], ports: Eins<Start>());
+        w.Instanz("G", new K("A", Einzeln(a => new Gemerkt(((Start)a[0]!).Wert))).Op<Start>(typeof(Gemerkt)));
+        var schreiber = new K("S", Einzeln(_ => new Falsch(1))) { Konfig = new FunktionsOrtKonfig(Wiederholungen: 0) }.Op<Start>(typeof(Buche));
         w.Instanz("Schreiber", schreiber);
 
         (await Fertig(w, Eingang("G", new Start(5)))).Should().Be(Quittungsart.Fertig, "auf einen Hinweis wird nicht gewartet");
@@ -370,14 +357,14 @@ public class FunktionsLaufzeitTests
             0 => Strom(new Buche(Konto, ((Start)a[0]!).Wert)),
             1 => Strom(Merke(h, new Bestaetige(Konto))),
             _ => Strom(),
-        }).Op([typeof(Buche)], ports: Eins<Start>()).Antwort<Gebucht>(typeof(Bestaetige)));
+        }).Op<Start>(typeof(Buche)).Antwort<Gebucht>(typeof(Bestaetige)));
 
         object Merke(Herkunft h, object x) { gesehen = h; return x; }
 
         var eingang = Eingang("G", new Start(3));
         (await Fertig(w, eingang)).Should().Be(Quittungsart.Fertig);
         w.Gesendet.Select(x => x.Befehl).Should().Equal(new Buche(Konto, 3), new Bestaetige(Konto));
-        var antwort = Kettenvertrag.Antwort(AufrufId(eingang.Kennung, "G/A"), "G/A", 0, 0);
+        var antwort = Kettenvertrag.Antwort(AmKopf(eingang.Kennung, "G/A"), "G/A", 0, 0);
         w.Gesendet.Last().Id.Should().Be(Kettenvertrag.Befehl(antwort, "G/A", 0, new Bestaetige(Konto)), "die Kennung der Antwort folgt aus Aufruf, Stelle und Nummer");
         gesehen!.Stream.Should().Be(Konto.Wert, "die Herkunft einer Antwort ist das Ziel");
         gesehen.Version.Should().Be(5);
@@ -389,184 +376,129 @@ public class FunktionsLaufzeitTests
         await using var w = new Welt();
         var mal = 0;
         w.Ausgang = _ => Interlocked.Increment(ref mal) < 3 ? EmitAusgang.Unbekannt : EmitAusgang.Zugestellt;
-        w.Instanz("G", new K("A", Einzeln(_ => new Buche(Konto, 1))).Op([typeof(Buche)], ports: Eins<Start>()));
+        w.Instanz("G", new K("A", Einzeln(_ => new Buche(Konto, 1))).Op<Start>(typeof(Buche)));
         (await Fertig(w, Eingang("G", new Start(1)))).Should().Be(Quittungsart.Fertig);
         w.Gesendet.Select(x => x.Id).Distinct().Should().HaveCount(1, "dieselbe Id bei jedem Versuch — die Inbox verwirft Wiederholungen");
         w.Gesendet.Should().HaveCount(3);
     }
 
-    // ── Die Muster aus Entscheidung 5 ─────────────────────────────────────────────────────────────────────────────────────
+    // ── Mehrere Nachrichten, Wahl, Strom, verlierbar, Rückstau ───────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Fork_Join_zwei_Zweige_nebeneinander_der_Join_feuert_einmal_mit_beiden()
+    public async Task Zwei_Werte_an_einem_Schritt_werden_zweimal_gerechnet_jeder_mit_eigener_Kennung()
     {
         await using var w = new Welt();
-        var beideLaufen = new CountdownEvent(2);
-        var joins = new ConcurrentQueue<(int, int)>();
-        FunktionsRechnung Zweig(Func<int, object> aus) => (_, _, a, _, _, ct) => Gleichzeitig(ct, aus(((X)a[0]!).Wert));
-        async IAsyncEnumerable<object> Gleichzeitig([EnumeratorCancellation] CancellationToken ct, object aus)
+        w.Instanz("G",
+            new K("A", Einzeln(a => new X(((Start)a[0]!).Wert))).Op<Start>(typeof(X)),
+            new K("Vorschau", Einzeln(a => new Z(((X)a[0]!).Wert + 1))).Op<X>(typeof(Z)),
+            new K("Daumen", Einzeln(a => new Z(((X)a[0]!).Wert + 2))).Op<X>(typeof(Z)),
+            new K("Melde", Einzeln(a => new Buche(Konto, ((Z)a[0]!).Wert))).Op<Z>(typeof(Buche)));
+
+        var eingang = Eingang("G", new Start(10));
+        (await Fertig(w, eingang)).Should().Be(Quittungsart.Fertig, "fertig erst, wenn beide Rechnungen von Melde fertig sind");
+        w.Gesendet.Select(x => x.Befehl).Should().BeEquivalentTo([new Buche(Konto, 11), new Buche(Konto, 12)], "kein Wert wird verworfen");
+        var a = AmKopf(eingang.Kennung, "G/A");
+        w.Gesendet.Select(x => x.Id).Should().BeEquivalentTo([
+            Kettenvertrag.Befehl(Danach(Danach(a, "G/A", "G/Vorschau"), "G/Vorschau", "G/Melde"), "G/Melde", 0, new Buche(Konto, 11)),
+            Kettenvertrag.Befehl(Danach(Danach(a, "G/A", "G/Daumen"), "G/Daumen", "G/Melde"), "G/Melde", 0, new Buche(Konto, 12))],
+            "jede Rechnung trägt die Kennung der Nachricht, aus der sie entstand — unabhängig davon, welche zuerst ankam");
+    }
+
+    [Fact]
+    public async Task Eine_Wahl_gibt_nur_den_Fall_weiter_der_kam()
+    {
+        await using var w = new Welt();
+        w.Instanz("G",
+            new K("W", Einzeln(a => ((Start)a[0]!).Wert > 0 ? new Links(1) : new Rechts(2))).Op<Start>(typeof(Links), typeof(Rechts)),
+            new K("L", Einzeln(a => new Buche(Konto, ((Links)a[0]!).Wert))).Op<Links>(typeof(Buche)),
+            new K("R", Einzeln(a => new Buche(Konto, ((Rechts)a[0]!).Wert))).Op<Rechts>(typeof(Buche)));
+
+        (await Fertig(w, Eingang("G", new Start(5)))).Should().Be(Quittungsart.Fertig, "auf den Zweig, der nicht kam, wartet niemand");
+        w.Gesendet.Select(x => x.Befehl).Should().Equal(new Buche(Konto, 1));
+    }
+
+    [Fact]
+    public async Task Ein_Strom_gibt_je_Element_eine_Nachricht_ein_leerer_ist_sofort_fertig()
+    {
+        await using var w = new Welt();
+        w.Instanz("G",
+            new K("Teile", (_, _, a, _, _, _) => Strom(Enumerable.Range(1, ((Start)a[0]!).Wert).Select(i => (object?)new Teil(i)).ToArray()))
+                .Op<Start>(typeof(Teil)),
+            new K("P", Einzeln(a => new Buche(Konto, ((Teil)a[0]!).Wert * 10))).Op<Teil>(typeof(Buche)));
+
+        (await Fertig(w, Eingang("G", new Start(3)))).Should().Be(Quittungsart.Fertig);
+        w.Gesendet.Select(x => x.Befehl).Should().BeEquivalentTo([new Buche(Konto, 10), new Buche(Konto, 20), new Buche(Konto, 30)]);
+        w.Gesendet.Select(x => x.Id).Distinct().Should().HaveCount(3, "je Element eine eigene Kennung (Stelle im Strom)");
+        (await Fertig(w, Eingang("G", new Start(0)))).Should().Be(Quittungsart.Fertig, "ein leerer Strom heißt nichts");
+    }
+
+    [Fact]
+    public async Task Eine_verlierbare_Kante_haelt_den_Kopf_nicht_auf()
+    {
+        await using var w = new Welt();
+        var freigabe = new TaskCompletionSource();
+        async IAsyncEnumerable<object> Haengt(object?[] a, [EnumeratorCancellation] CancellationToken ct)
         {
-            beideLaufen.Signal();
-            beideLaufen.Wait(TimeSpan.FromSeconds(5), ct).Should().BeTrue("die Zweige eines Forks laufen nebeneinander");
-            yield return aus;
-            await Task.CompletedTask;
+            await freigabe.Task.WaitAsync(ct);
+            yield return new Buche(Konto, ((X)a[0]!).Wert);
+        }
+        var b = new K("B", (_, _, a, _, _, ct) => Haengt(a, ct)).Op<X>(typeof(Buche));
+        b.Verlierbar.Add("A");
+        w.Instanz("G", new K("A", Einzeln(a => new X(((Start)a[0]!).Wert))).Op<Start>(typeof(X)), b);
+
+        (await Fertig(w, Eingang("G", new Start(4)))).Should().Be(Quittungsart.Fertig, "auf eine verlierbare Kante wartet niemand");
+        w.Gesendet.Should().BeEmpty("B rechnet noch");
+        freigabe.SetResult();
+        await Warte(() => w.Gesendet.Count == 1, "B rechnet trotzdem zu Ende");
+    }
+
+    [Fact]
+    public async Task Ein_voller_Schritt_antwortet_spaeter_der_Absender_schickt_erneut_bis_alles_gerechnet_ist()
+    {
+        await using var w = new Welt();
+        var freigabe = new TaskCompletionSource();
+        async IAsyncEnumerable<object> Langsam(object?[] a, [EnumeratorCancellation] CancellationToken ct)
+        {
+            await freigabe.Task.WaitAsync(ct);
+            yield return new Buche(Konto, ((Teil)a[0]!).Wert);
         }
         w.Instanz("G",
-            new K("A", Einzeln(a => new X(((Start)a[0]!).Wert))).Op([typeof(X)], ports: Eins<Start>()),
-            new K("B", Zweig(v => new Y(v + 1))).Op([typeof(Y)], ports: Eins<X>()),
-            new K("C", Zweig(v => new Z(v + 2))).Op([typeof(Z)], ports: Eins<X>()),
-            new K("D", Einzeln(a => { joins.Enqueue((((Y)a[0]!).Wert, ((Z)a[1]!).Wert)); return new Buche(Konto, ((Y)a[0]!).Wert + ((Z)a[1]!).Wert); }))
-                .Op([typeof(Buche)], ports: [Eins<Y>(), Eins<Z>()]));
+            new K("Teile", (_, _, a, _, _, _) => Strom(new Teil(1), new Teil(2), new Teil(3))).Op<Start>(typeof(Teil)),
+            new K("P", (_, _, a, _, _, ct) => Langsam(a, ct)) { Konfig = new FunktionsOrtKonfig(Parallel: 1, Warteschlange: 1) }.Op<Teil>(typeof(Buche)));
 
-        (await Fertig(w, Eingang("G", new Start(10)))).Should().Be(Quittungsart.Fertig);
-        joins.Should().Equal((11, 12));
-        w.Gesendet.Select(x => x.Befehl).Should().Equal(new Buche(Konto, 23));
+        var quittung = w.StelleZuAsync(Eingang("G", new Start(0)), TimeSpan.FromSeconds(15), default);
+        await Task.Delay(500);
+        quittung.IsCompleted.Should().BeFalse("P nimmt nur einen zugleich, die anderen warten beim Absender");
+        freigabe.SetResult();
+        (await quittung)!.Ausgang.Should().Be(Quittungsart.Fertig);
+        w.Gesendet.Select(x => x.Befehl).Should().BeEquivalentTo([new Buche(Konto, 1), new Buche(Konto, 2), new Buche(Konto, 3)], "nichts geht verloren");
     }
 
-    [Fact]
-    public async Task Wahl_und_Zusammenfuehren_der_Join_feuert_mit_null_fuer_den_Zweig_der_nicht_kam()
-    {
-        await using var w = new Welt();
-        var gesehen = new ConcurrentQueue<string>();
-        w.Instanz("G",
-            new K("A", Einzeln(a => ((Start)a[0]!).Wert > 0 ? new Links(1) : new Rechts(2))).Op([typeof(Links), typeof(Rechts)], ports: Eins<Start>()),
-            new K("B", Einzeln(a => new X(((Links)a[0]!).Wert))).Op([typeof(X)], ports: Eins<Links>()),
-            new K("C", Einzeln(a => new Y(((Rechts)a[0]!).Wert))).Op([typeof(Y)], ports: Eins<Rechts>()),
-            new K("D", Einzeln(a => { gesehen.Enqueue($"{(a[0] as X)?.Wert}|{(a[1] as Y)?.Wert}"); return new Buche(Konto, 0); }))
-                .Op([typeof(Buche)], ports: [Hoechstens<X>(), Hoechstens<Y>()]));
-
-        (await Fertig(w, Eingang("G", new Start(1)))).Should().Be(Quittungsart.Fertig);
-        (await Fertig(w, Eingang("G", new Start(-1)))).Should().Be(Quittungsart.Fertig);
-        gesehen.Should().Equal("1|", "|2");
-    }
+    // ── Fehler und Neustart ───────────────────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Je_und_Sammeln_ein_Unterlauf_je_Element_die_Liste_in_ihrer_Reihenfolge_auch_leer()
-    {
-        await using var w = new Welt();
-        var listen = new ConcurrentQueue<string>();
-        w.Instanz("G",
-            new K("Teile", (_, _, a, _, _, _) => Strom(Enumerable.Range(1, ((Start)a[0]!).Wert).Select(i => (object)new Teil(i)).ToArray()))
-                .Op([typeof(Teil)], strom: true, ports: Eins<Start>()),
-            new K("Pruefe", (_, _, a, _, _, _) => ((Teil)a[0]!).Wert == 2 ? Strom(new Gemerkt(2)) : Strom(new Befund(((Teil)a[0]!).Wert * 10)))
-                .Op([typeof(Befund), typeof(Gemerkt)], ports: Eins<Teil>()),
-            new K("Sammle", Einzeln(a =>
-            {
-                var alle = (object?[])a[0]!;
-                listen.Enqueue(string.Join(",", alle.Cast<Befund>().Select(b => b.Wert)));
-                return new Buche(Konto, alle.Length);
-            })).Op([typeof(Buche)], ports: Alle<Befund>()));
-
-        var drei = Eingang("G", new Start(3));
-        (await Fertig(w, drei)).Should().Be(Quittungsart.Fertig);
-        (await Fertig(w, Eingang("G", new Start(0)))).Should().Be(Quittungsart.Fertig);
-        listen.Should().Equal("10,30", "");
-        var pruefe2 = AufrufId(drei.Kennung, "G/Pruefe", "Teile#0.1");
-        pruefe2.Should().NotBe(AufrufId(drei.Kennung, "G/Pruefe", "Teile#0.0"), "je Unterlauf (Pfad + Stelle) eine eigene Kennung");
-    }
-
-    [Fact]
-    public async Task Fork_Join_je_Element_der_Join_paart_nur_im_selben_Unterlauf()
-    {
-        await using var w = new Welt();
-        var summe = new ConcurrentQueue<int>();
-        w.Instanz("G",
-            new K("Teile", (_, _, a, _, _, _) => Strom(new Teil(1), new Teil(2), new Teil(3))).Op([typeof(Teil)], strom: true, ports: Eins<Start>()),
-            new K("Mal", Einzeln(a => new X(((Teil)a[0]!).Wert * 10))).Op([typeof(X)], ports: Eins<Teil>()),
-            new K("Plus", Einzeln(a => new Y(((Teil)a[0]!).Wert + 100))).Op([typeof(Y)], ports: Eins<Teil>()),
-            new K("Paar", Einzeln(a => new Z(((X)a[0]!).Wert + ((Y)a[1]!).Wert))).Op([typeof(Z)], ports: [Eins<X>(), Eins<Y>()]),
-            new K("Sammle", Einzeln(a => { var z = ((object?[])a[0]!).Cast<Z>().Select(x => x.Wert).ToList(); summe.Enqueue(z.Sum()); z.Should().Equal(111, 122, 133); return null; }))
-                .Op([typeof(Buche)], strom: true, ports: Alle<Z>()));
-
-        (await Fertig(w, Eingang("G", new Start(0)))).Should().Be(Quittungsart.Fertig);
-        summe.Should().Equal(366);
-    }
-
-    [Fact]
-    public async Task Rennen_der_erste_gewinnt_der_Verlierer_wird_abgebrochen()
-    {
-        await using var w = new Welt();
-        var abgebrochen = new TaskCompletionSource();
-        var sieger = new ConcurrentQueue<string>();
-        async IAsyncEnumerable<object> Langsam([EnumeratorCancellation] CancellationToken ct)
-        {
-            try { await Task.Delay(TimeSpan.FromSeconds(30), ct); }
-            catch (OperationCanceledException) { abgebrochen.TrySetResult(); throw; }
-            yield return new Y(0);
-        }
-        w.Instanz("G",
-            new K("A", Einzeln(a => new X(((Start)a[0]!).Wert))).Op([typeof(X)], ports: Eins<Start>()),
-            new K("Schnell", Einzeln(a => new Links(((X)a[0]!).Wert))).Op([typeof(Links)], ports: Eins<X>()),
-            new K("Bedaechtig", (_, _, _, _, _, ct) => Langsam(ct)) { Konfig = new FunktionsOrtKonfig(Wiederholungen: 0) }.Op([typeof(Rechts)], ports: Eins<X>()),
-            new K("Ziel", Einzeln(a => { sieger.Enqueue(a[0]!.GetType().Name); return new Buche(Konto, 1); }))
-                .Op([typeof(Buche)], ports: Erster<Links, Rechts>()));
-
-        (await Fertig(w, Eingang("G", new Start(1)))).Should().Be(Quittungsart.Fertig, "der Lauf wartet nicht auf den Verlierer");
-        sieger.Should().Equal(nameof(Links));
-        await abgebrochen.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        w.Hinweise.Should().BeEmpty("ein abgebrochener Verlierer ist kein Fehler");
-    }
-
-    [Fact]
-    public async Task Warten_mit_Frist_nach_dem_Zeitlimit_feuert_der_Join_mit_null_der_Saeumige_wird_abgebrochen()
-    {
-        await using var w = new Welt();
-        var gesehen = new ConcurrentQueue<string>();
-        async IAsyncEnumerable<object> Saeumig([EnumeratorCancellation] CancellationToken ct)
-        {
-            await Task.Delay(TimeSpan.FromSeconds(30), ct);
-            yield return new Y(0);
-        }
-        var join = new K("Join", Einzeln(a => { gesehen.Enqueue($"{((X)a[0]!).Wert}|{(a[1] as Y)?.Wert}"); return new Buche(Konto, 1); }))
-            .Op([typeof(Buche)], ports: [Eins<X>(), Hoechstens<Y>()]);
-        join.Knoten.Zeitlimit = TimeSpan.FromMilliseconds(300);
-        w.Instanz("G",
-            new K("A", Einzeln(a => new X(((Start)a[0]!).Wert))).Op([typeof(X)], ports: Eins<Start>()),
-            new K("Antwort", (_, _, _, _, _, ct) => Saeumig(ct)) { Konfig = new FunktionsOrtKonfig(Wiederholungen: 0) }.Op([typeof(Y)], ports: Eins<X>()),
-            join);
-
-        var dauer = System.Diagnostics.Stopwatch.StartNew();
-        (await Fertig(w, Eingang("G", new Start(4)))).Should().Be(Quittungsart.Fertig);
-        dauer.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(10), "nach dem Zeitlimit wartet der Lauf nicht auf den Säumigen");
-        gesehen.Should().Equal("4|");
-    }
-
-    // ── Fehler, Abbruch, Neustart ─────────────────────────────────────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task Ein_scheiternder_Knoten_wird_wiederholt_dann_scheitert_der_Lauf_offene_Zweige_brechen_ab_der_Kopf_wird_geparkt()
+    public async Task Ein_scheiternder_Knoten_wird_wiederholt_dann_meldet_die_Kette_gescheitert_der_Kopf_wird_geparkt()
     {
         await using var w = new Welt();
         var versuche = 0;
-        var abgebrochen = new TaskCompletionSource();
-        async IAsyncEnumerable<object> Wartend([EnumeratorCancellation] CancellationToken ct)
-        {
-            try { await Task.Delay(TimeSpan.FromSeconds(30), ct); }
-            catch (OperationCanceledException) { abgebrochen.TrySetResult(); throw; }
-            yield return new Buche(Konto, 0);
-        }
         var kaputt = new K("Kaputt", (_, _, _, _, _, _) => { Interlocked.Increment(ref versuche); throw new InvalidOperationException("kaputt"); })
-            { Konfig = new FunktionsOrtKonfig(Wiederholungen: 2) }.Op([typeof(Buche)], ports: Eins<X>());
-        w.Instanz("G",
-            new K("A", Einzeln(a => new X(((Start)a[0]!).Wert))).Op([typeof(X)], ports: Eins<Start>()),
-            kaputt,
-            new K("Wartet", (_, _, _, _, _, ct) => Wartend(ct)).Op([typeof(Buche)], ports: Eins<X>()));
+            { Konfig = new FunktionsOrtKonfig(Wiederholungen: 2) }.Op<X>(typeof(Buche));
+        w.Instanz("G", new K("A", Einzeln(a => new X(((Start)a[0]!).Wert))).Op<Start>(typeof(X)), kaputt);
 
-        (await Fertig(w, Eingang("G", new Start(1)))).Should().Be(Quittungsart.Gescheitert);
+        (await Fertig(w, Eingang("G", new Start(1)))).Should().Be(Quittungsart.Gescheitert, "das „gescheitert“ reicht über die gesicherte Kante bis zum Kopf");
         versuche.Should().Be(3, "einmal und zwei Wiederholungen");
-        await abgebrochen.Task.WaitAsync(TimeSpan.FromSeconds(5));
         var hinweis = w.Hinweise.Should().ContainSingle().Which.Hinweis.Should().BeOfType<LaufGescheitert>().Which;
         hinweis.Knoten.Should().Be("Kaputt");
         hinweis.Grund.Should().Contain("kaputt");
 
         var durabel = Eingang("G", new Start(2), Eingangsart.Durabel);
         (await Fertig(w, durabel)).Should().Be(Quittungsart.Angenommen);
-        await Warte(() => w.Geparkt.Any(g => g.Item1 == durabel.Kennung), "der durable Kopf eines gescheiterten Laufs wird geparkt");
+        await Warte(() => w.Geparkt.Any(g => g.Item1 == durabel.Kennung), "der durable Kopf einer gescheiterten Kette wird geparkt");
         w.Ausgetragen.Should().NotContain(durabel.Kennung);
     }
 
     [Fact]
-    public async Task Bricht_ein_Lauf_mitten_ab_rechnet_er_vom_Kopf_neu_mit_denselben_Ids()
+    public async Task Bricht_eine_Kette_mitten_ab_rechnet_sie_vom_Kopf_neu_mit_denselben_Ids()
     {
         await using var w = new Welt();
         var freigabe = new TaskCompletionSource();
@@ -576,8 +508,8 @@ public class FunktionsLaufzeitTests
             yield return new Buche(Konto, ((X)a[0]!).Wert + 1);
         }
         w.Instanz("G",
-            new K("A", (_, _, a, _, _, _) => Strom(new Buche(Konto, ((Start)a[0]!).Wert), new X(((Start)a[0]!).Wert))).Op([typeof(Buche), typeof(X)], ports: Eins<Start>()),
-            new K("B", (_, _, a, _, _, ct) => Haengt(a, ct)).Op([typeof(Buche)], ports: Eins<X>()));
+            new K("A", (_, _, a, _, _, _) => Strom(new Buche(Konto, ((Start)a[0]!).Wert), new X(((Start)a[0]!).Wert))).Op<Start>(typeof(Buche), typeof(X)),
+            new K("B", (_, _, a, _, _, ct) => Haengt(a, ct)).Op<X>(typeof(Buche)));
 
         var kopf = Eingang("G", new Start(5), Eingangsart.Durabel);
         (await Fertig(w, kopf)).Should().Be(Quittungsart.Angenommen);
@@ -585,18 +517,18 @@ public class FunktionsLaufzeitTests
         await w.AbsturzAsync("G");
         freigabe.SetResult();
 
-        // Der Zusteller bringt den offenen Kopf erneut: der Lauf beginnt von vorn, A gibt denselben Command mit derselben Id (die Inbox verwirft ihn).
+        // Der Zusteller bringt den offenen Kopf erneut: die Kette beginnt von vorn, A gibt denselben Command mit derselben Id (die Inbox verwirft ihn).
         (await Fertig(w, kopf)).Should().Be(Quittungsart.Angenommen);
-        await Warte(() => w.Ausgetragen.Contains(kopf.Kennung), "der neue Lauf wird fertig");
+        await Warte(() => w.Ausgetragen.Contains(kopf.Kennung), "die neue Kette wird fertig");
         var ids = w.Gesendet.Select(x => x.Id).ToList();
         ids.Should().HaveCount(3);
         ids.Distinct().Should().HaveCount(2, "A rechnet nach dem Absturz neu — mit derselben Id, genau einmal wirksam");
     }
 
-    // ── Quelle (Entscheidung 8) und gesicherter Zustand (Entscheidung 9) ─────────────────────────────────────────────────
+    // ── Quelle und gesicherter Zustand ───────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Eine_Quelle_startet_je_Element_einen_Lauf_sichert_ihre_Nummer_nach_dem_Lauf_und_zaehlt_nach_einem_Neustart_weiter()
+    public async Task Eine_Quelle_startet_je_Element_eine_Kette_sichert_ihre_Nummer_danach_und_zaehlt_nach_einem_Neustart_weiter()
     {
         await using var w = new Welt();
         var freigabe = new TaskCompletionSource();
@@ -607,35 +539,55 @@ public class FunktionsLaufzeitTests
         }
         async IAsyncEnumerable<object> Buchen(object?[] a, [EnumeratorCancellation] CancellationToken ct)
         {
-            if (((X)a[0]!).Wert == 2) await freigabe.Task.WaitAsync(ct);   // der zweite Lauf hängt
+            if (((X)a[0]!).Wert == 2) await freigabe.Task.WaitAsync(ct);   // die zweite Kette hängt
             yield return new Buche(Konto, ((X)a[0]!).Wert);
         }
         w.Instanz("G",
             new K("Quelle", (_, _, _, _, _, ct) => Lauschen(ct)).Lausche(typeof(X)),
-            new K("B", (_, _, a, _, _, ct) => Buchen(a, ct)) { Konfig = new FunktionsOrtKonfig(Parallel: 4) }.Op([typeof(Buche)], ports: Eins<X>()));
+            new K("B", (_, _, a, _, _, ct) => Buchen(a, ct)) { Konfig = new FunktionsOrtKonfig(Parallel: 4) }.Op<X>(typeof(Buche)));
         w.Halte("G", true);
 
-        await Warte(() => w.Gesendet.Count == 2, "die Läufe 1 und 3 sind fertig, 2 hängt");
+        await Warte(() => w.Gesendet.Count == 2, "die Ketten 1 und 3 sind fertig, 2 hängt");
         await Task.Delay(300);
-        w.Zustaende.Je.GetValueOrDefault(("G", "Quelle"))?.Nummer.Should().Be(1, "gesichert wird in der Reihenfolge der Läufe — 3 wartet auf 2");
+        w.Zustaende.Je.GetValueOrDefault(("G", "Quelle"))?.Nummer.Should().Be(1, "gesichert wird in der Reihenfolge der Elemente — 3 wartet auf 2");
         freigabe.SetResult();
-        await Warte(() => w.Zustaende.Je.GetValueOrDefault(("G", "Quelle"))?.Nummer == 3, "nach dem zweiten Lauf ist der Stand 3");
-        w.Gesendet.Select(x => x.Id).Should().Contain(Kettenvertrag.Befehl(AufrufId(Herkunft.Ableite("quelle:G:2"), "G/B"), "G/B", 0, new Buche(Konto, 2)),
-            "die Kennung eines Quell-Laufs folgt aus Instanz und Nummer");
+        await Warte(() => w.Zustaende.Je.GetValueOrDefault(("G", "Quelle"))?.Nummer == 3, "nach der zweiten Kette ist der Stand 3");
+        var zwei = Herkunft.Ableite("quelle:G:2");
+        w.Gesendet.Select(x => x.Id).Should().Contain(Kettenvertrag.Befehl(Danach(zwei, "G/Quelle", "G/B"), "G/B", 0, new Buche(Konto, 2)),
+            "die Kennung einer Quell-Kette folgt aus Instanz und Nummer");
 
         // Neustart: die Quelle beginnt mit ihrer gesicherten Nummer — das erste neue Element ist Nummer 4.
         w.Halte("G", false);
         await w.AbsturzAsync("G");
         w.Halte("G", true);
         await Warte(() => w.Gesendet.Count == 6, "nach dem Neustart meldet die Quelle wieder (hier dieselben drei Elemente)");
-        w.Gesendet.Select(x => x.Id).Should().Contain(Kettenvertrag.Befehl(AufrufId(Herkunft.Ableite("quelle:G:4"), "G/B"), "G/B", 0, new Buche(Konto, 1)));
+        w.Gesendet.Select(x => x.Id).Should().Contain(Kettenvertrag.Befehl(Danach(Herkunft.Ableite("quelle:G:4"), "G/Quelle", "G/B"), "G/B", 0, new Buche(Konto, 1)));
     }
 
     [Fact]
-    public async Task Ein_Knoten_mit_Zustand_schickt_nach_jedem_Aufruf_seinen_Schnappschuss_der_nach_dem_Lauf_gesichert_wird()
+    public async Task Ein_Knoten_mit_Zustand_sichert_ihn_mit_seinen_Kennungen_und_zaehlt_nach_einem_Absturz_nichts_doppelt()
     {
         await using var w = new Welt();
-        w.Instanz("G", new K("A", Einzeln(a => new Buche(Konto, ((Start)a[0]!).Wert))).Op([typeof(Buche)], ports: Eins<Start>()));
+        var zaehle = new K("Z", (u, _, a, _, _, _) => { var z = (Zaehler)u; z.N++; return Strom(new Buche(Konto, z.N)); })
+            { MitZustand = true, Konfig = new FunktionsOrtKonfig(Parallel: 1) }.Op<Start>(typeof(Buche));
+        w.Instanz("G", zaehle);
+        var erster = Eingang("G", new Start(1));
+        (await Fertig(w, erster)).Should().Be(Quittungsart.Fertig);
+        await Warte(() => w.Zustaende.Je.ContainsKey(("G", "Z")), "der Zustand wird nach dem fertigen Aufruf gesichert");
+
+        // Absturz: der Graph-Actor vergisst alles; der Kopf kommt erneut — der Zustand kennt die Kennung schon und rechnet nicht neu.
+        await w.AbsturzAsync("G");
+        (await Fertig(w, erster)).Should().Be(Quittungsart.Fertig);
+        w.Gesendet.Select(x => x.Befehl).Should().Equal([new Buche(Konto, 1)], "was der gesicherte Zustand enthält, zählt nicht doppelt");
+        (await Fertig(w, Eingang("G", new Start(2)))).Should().Be(Quittungsart.Fertig);
+        w.Gesendet.Select(x => x.Befehl).Should().Equal([new Buche(Konto, 1), new Buche(Konto, 2)], "der Zähler lief mit dem gesicherten Stand weiter");
+    }
+
+    [Fact]
+    public async Task Ein_Knoten_ohne_Zustand_sichert_nichts()
+    {
+        await using var w = new Welt();
+        w.Instanz("G", new K("A", Einzeln(a => new Buche(Konto, ((Start)a[0]!).Wert))).Op<Start>(typeof(Buche)));
         (await Fertig(w, Eingang("G", new Start(1)))).Should().Be(Quittungsart.Fertig);
         await Task.Delay(300);
         w.Zustaende.Je.Should().BeEmpty("ohne Zustand gibt es nichts zu sichern");

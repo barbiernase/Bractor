@@ -5,7 +5,7 @@ namespace Infrastructure.Funktionen;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 // FUNKTION ALS BAUSTEIN (docs/04 §4.4, docs/10 §10.3): je Funktion (Klasse = im Host, Schnittstelle = draußen oder mit Umsetzung im Host) ein
-// generierter Eintrag — Eingänge, Ausgaben, Lese-Fähigkeiten, wie sie gebaut wird und ihre reflexionsfreie Rechnung. Den Lauf tragen Wurzel, Parent
+// generierter Eintrag — Eingänge, Ausgaben, Lese-Fähigkeiten, wie sie gebaut wird und ihre reflexionsfreie Rechnung. Die Kette tragen Wurzel, Parent
 // und Kinder (FunktionsLaufzeitWiring), nicht die Funktion.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
@@ -68,9 +68,6 @@ public sealed record FunktionsBaustein(
 /// </summary>
 public static class Ausgaben
 {
-    /// <summary>Ein Sammel-Port (<c>IReadOnlyList&lt;T&gt;</c>) aus der Liste, die der Lauf gesammelt hat.</summary>
-    public static IReadOnlyList<T> Liste<T>(object? liste) => liste is IEnumerable<object?> xs ? xs.Cast<T>().ToList() : Array.Empty<T>();
-
     public static async IAsyncEnumerable<TA> Einzeln<T, TA>(T wert, Func<T, TA?> abbildung) where TA : class
     {
         await Task.CompletedTask;

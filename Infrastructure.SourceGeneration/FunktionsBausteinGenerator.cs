@@ -168,18 +168,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("        }");
         }
 
-        /// <summary>Der Ausdruck, der einen Port aus seinem Objekt baut.</summary>
-        private static string Port(Funktionsform.Port p, string o, System.Func<ITypeSymbol, string> T)
-        {
-            switch (p.Form)
-            {
-                case Funktionsform.Portform.Hoechstens: return $"({T(p.Typen[0])}?){o}";
-                case Funktionsform.Portform.Alle: return $"Ausgaben.Liste<{T(p.Typen[0])}>({o})";
-                case Funktionsform.Portform.Erster:
-                    var oneOf = $"global::Abstractions.OneOf<{string.Join(", ", p.Typen.Select(T))}>";
-                    return $"({o} switch {{ {string.Join(", ", p.Typen.Select(t => $"{T(t)} x => ({oneOf})x"))}, _ => throw new InvalidOperationException(\"{p.Name}: kein Fall\") }})";
-                default: return $"({T(p.Typen[0])}){o}!";
-            }
-        }
+        /// <summary>Der Ausdruck, der den Eingang aus seinem Objekt baut.</summary>
+        private static string Port(Funktionsform.Port p, string o, System.Func<ITypeSymbol, string> T) => $"({T(p.Typen[0])}){o}!";
     }
 }

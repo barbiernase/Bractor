@@ -13,7 +13,7 @@ namespace Infrastructure.Funktionen;
 /// <item>die Umsetzung im Host, über die generierte Fabrik in diesem Bereich gebaut (nie einmal je Knoten neben den Actors);</item>
 /// <item>ihr Zustand (<c>IZustand&lt;T&gt;</c>, docs/04 §4.4) und der Zustand jeder Technik in ihrer Konstruktor-Kette
 ///   (<see cref="AktivierungsZustaende"/>): beim Beginn aus der <see cref="IZustandsAblage"/> geladen (je Instanz und Knoten), nach jedem Aufruf als
-///   <see cref="Schnappschuss"/> an den Graph-Actor, der ihn sichert, sobald der Lauf fertig ist.</item>
+///   <see cref="Schnappschuss"/> an den Parent, der ihn sichert, sobald der Aufruf und alle früheren beendet sind.</item>
 /// </list>
 /// Freigegeben wird in umgekehrter Reihenfolge: zuerst die Umsetzung (<see cref="IAsyncDisposable"/> bzw. <see cref="IDisposable"/>), dann der
 /// Bereich mit seiner Technik. Die nächste Aktivierung — auf diesem oder einem anderen Knoten — baut alles neu.
@@ -59,7 +59,7 @@ public sealed class FunktionsAktivierung : IAsyncDisposable
     /// <summary>Die Umsetzung dieser Aktivierung (nach <see cref="BeginneAsync"/>).</summary>
     public object Umsetzung => _umsetzung ?? throw new InvalidOperationException("Die Aktivierung ist nicht begonnen oder schon freigegeben.");
 
-    /// <summary>Die Nummer des letzten Laufs, den diese Aktivierung gesichert vorfand bzw. zählte (eine Quelle zählt ihre Läufe hier).</summary>
+    /// <summary>Die Nummer des letzten Elements, die diese Aktivierung gesichert vorfand bzw. zählte (eine Quelle zählt ihre Elemente hier).</summary>
     public long Nummer { get; set; }
 
     /// <summary>Das Bild der Zustände jetzt (der eigene und der jeder Technik), oder null ohne Zustand.</summary>

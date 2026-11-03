@@ -6,7 +6,7 @@ namespace GraphExtractor;
 
 /// <summary>
 /// Ein Graph als Text (<c>dotnet run --project GraphExtractor -- --graph &lt;Typ&gt;</c>, docs/04 §4.4): der Record mit [Kopf] und [Von(…)], Knoten (aufgefaltet, mit Funktion), Köpfe,
-/// Kanten mit ihrer Vielfachheit (Erzeuger: 1, 0..1 einer Wahl, 0..n eines Stroms → Port: T, T?, OneOf, IReadOnlyList), was den Graphen verlässt,
+/// Kanten mit ihrer Vielfachheit (Erzeuger: 1, 0..1 einer Wahl, 0..n eines Stroms; verlierbar oder gesichert), was den Graphen verlässt,
 /// die Signatur und die Befunde der Graph-Lesart — dieselbe Lesart (<see cref="Graphform"/>) wie Generator und Analyzer. Schreibt nichts.
 /// </summary>
 public static class GraphText
@@ -45,14 +45,7 @@ public static class GraphText
         foreach (var k in g.Kanten)
         {
             var aus = k.Strom ? "0..n" : k.VonOperation.Wahlen.Contains(Funktionsform.Voll(k.Typ)) ? "0..1" : "1";
-            var port = k.Port.Form switch
-            {
-                Funktionsform.Portform.Hoechstens => N(k.Typ) + "?",
-                Funktionsform.Portform.Erster => "OneOf<" + string.Join(", ", k.Port.Typen.Select(N)) + ">",
-                Funktionsform.Portform.Alle => "IReadOnlyList<" + N(k.Typ) + ">",
-                _ => N(k.Typ),
-            };
-            b.AppendLine($"  {k.Von.Name} ─{N(k.Typ)} [{aus}]─▶ {k.Nach.Name}.{k.Port.Name} : {port}");
+            b.AppendLine($"  {k.Von.Name} ─{N(k.Typ)} [{aus}]─▶ {k.Nach.Name}.{k.Port.Name}{(k.Verlierbar ? "  (verlierbar)" : "")}");
         }
         b.AppendLine("Verlässt den Graphen:");
         foreach (var (von, typ) in g.Ausgaenge) b.AppendLine($"  {von.Name} ─{N(typ)}─▶");

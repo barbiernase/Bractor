@@ -5,84 +5,57 @@ using Infrastructure.Umgebung;
 namespace Infrastructure.Funktionen;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// GRAPHEN UND INSTANZEN (docs/04 §4.4): ein Graph ist eine Blaupause (generiert aus dem Record, GeneratedGraphen) — Knoten, Kanten aus [Von],
-// Köpfe. Er läuft erst als INSTANZ: eine Datei je Instanz in der Umgebung (umgebungen/<name>/graphen/<instanz>.json) mit dem Graphen, bei einem
+// GRAPHEN UND INSTANZEN (docs/04 §4.4): ein Graph ist eine Blaupause (generiert aus dem Record, GeneratedGraphen) — Knoten, ihre Wegtabelle aus
+// den [Von], Köpfe. Er läuft erst als INSTANZ: eine Datei je Instanz in der Umgebung (umgebungen/<name>/graphen/<instanz>.json) mit dem Graphen, bei einem
 // Quellkopf dem Akteur und je Knoten seinen Werten. Dieselbe Blaupause läuft beliebig oft; ein Graph mit Command-Kopf je Umgebung genau einmal.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
-/// <summary>Wie ein Eingangsport seine Nachrichten erwartet (Entscheidung 5): genau einer, höchstens einer, der erste von mehreren, alle eine Ebene tiefer.</summary>
-public enum Portform { Eins, Hoechstens, Erster, Alle }
-
-/// <summary>Ein Erzeuger eines Ports: Knoten und Operation (Nummer ihres <c>Auf</c>), der Typ und ob er als Strom kommt (je Element ein Unterlauf).</summary>
-public sealed record ErzeugerPlan(string Knoten, int Operation, Type Typ, bool Strom);
-
-/// <summary>Ein Eingangsport (generiert): Parametername, Form, die Typen (bei <c>OneOf</c> mehrere) und seine Erzeuger im Graphen (keiner: ein Kopf).</summary>
-public sealed record PortPlan(string Name, Portform Form, Type[] Typen, ErzeugerPlan[] Erzeuger);
+/// <summary>
+/// Ein Weg der WEGTABELLE (generiert aus den <c>[Von]</c>): eine Ausgabe dieses Typs geht an die Operation eines Knotens desselben Graphen —
+/// gesichert (der Absender wartet auf „fertig“) oder verlierbar (einmal geschickt, ohne Antwort).
+/// </summary>
+public sealed record WegPlan(Type Typ, string Knoten, int Operation, bool Verlierbar = false);
 
 /// <summary>
-/// Eine Operation eines Knotens (generiert): die Nummer ihres <c>Auf</c> (so ruft die Rechnung es), ihre Ports, was sie ausgeben kann (auch aus den
-/// Antworten auf ihre Commands), was davon als Strom kommt, und ihre Ebene (die Knoten, deren Ströme bis hierher Unterläufe öffnen).
+/// Eine Operation eines Knotens (generiert): die Nummer ihres <c>Auf</c> (so ruft die Rechnung es), die Nachricht, die sie nimmt (null: eine Quelle,
+/// die lauscht), was sie ausgeben kann (auch aus den Antworten auf ihre Commands) und ihre Wege an Knoten desselben Graphen.
 /// </summary>
-public sealed record OperationPlan(int Auf, IReadOnlyList<PortPlan> Ports, Type[] Ausgaben, Type[] Stroeme, string[] Ebene);
+public sealed record OperationPlan(int Auf, Type? Eingang, Type[] Ausgaben, WegPlan[] Wege);
 
 /// <summary>Ein Knoten eines Graphen (generiert, aufgefaltet): sein Pfad (Konfig-Schlüssel, <c>Aufbereitung.Vorschau</c>), seine Funktion, seine Operationen.</summary>
 public sealed record KnotenPlan(string Name, string Funktion, IReadOnlyList<OperationPlan> Operationen)
 {
     public OperationPlan? Operation(int auf) => Operationen.FirstOrDefault(o => o.Auf == auf);
+
+    /// <summary>Die Operation, die eine Nachricht dieses Typs nimmt (je Typ höchstens eine, R2).</summary>
+    public OperationPlan? Nimmt(Type typ) => Operationen.FirstOrDefault(o => o.Eingang == typ);
 }
 
 /// <summary>
-/// Ein Graph (generiert, <c>GeneratedGraphen</c>): Knoten, Köpfe (Eingangstyp → Knoten, die ihn nehmen) und was ihn verlässt. Die Abnehmer je
-/// Ausgabe leitet er einmal aus den Erzeugern der Ports ab (die Kanten stehen im Generat, nicht im Rumpf).
+/// Ein Graph (generiert, <c>GeneratedGraphen</c>): Knoten mit ihrer Wegtabelle, Köpfe (Eingangstyp → Knoten, die ihn von außen nehmen) und was ihn
+/// verlässt. Zur Laufzeit wird nur nachgeschlagen: wohin geht eine Ausgabe dieses Typs von diesem Knoten?
 /// </summary>
-/// <param name="Quelle">Der Quellknoten (eine Funktion, die lauscht): er ist der Kopf, jedes seiner Elemente startet einen Lauf; null = keiner.</param>
+/// <param name="Quelle">Der Quellknoten (eine Funktion, die lauscht): er ist der Kopf, jedes seiner Elemente startet eine Kette; null = keiner.</param>
 public sealed record GraphPlan(string Name, Type Typ, IReadOnlyList<KnotenPlan> Knoten, IReadOnlyDictionary<Type, string[]> Koepfe,
     IReadOnlyList<Type> Ausgaenge, string? Quelle = null)
 {
-    private IReadOnlyDictionary<(string, int, Type), (string Knoten, int Operation, int Port)[]>? _abnehmer;
+    private IReadOnlyDictionary<(string, int, Type), WegPlan[]>? _wege;
     private IReadOnlyDictionary<string, IReadOnlySet<Type>>? _imGraphen;
-    private IReadOnlyDictionary<string, (string Knoten, int Operation, int Port)[]>? _sammler;
 
     public KnotenPlan? KnotenNamens(string name) => Knoten.FirstOrDefault(k => k.Name == name);
 
     /// <summary>Hat der Graph einen Command-Kopf (einen Command ohne Ziel als Eingang)? Dann läuft er je Umgebung genau einmal.</summary>
     public bool MitCommandKopf => Koepfe.Keys.Any(t => typeof(ICommand).IsAssignableFrom(t));
 
-    /// <summary>Die Ports, die eine Ausgabe <paramref name="typ"/> der Operation <paramref name="auf"/> von <paramref name="knoten"/> bekommen.</summary>
-    public IReadOnlyList<(string Knoten, int Operation, int Port)> Abnehmer(string knoten, int auf, Type typ) =>
-        (_abnehmer ??= BaueAbnehmer()).TryGetValue((knoten, auf, typ), out var a) ? a : Array.Empty<(string, int, int)>();
+    /// <summary>Die Wege einer Ausgabe <paramref name="typ"/> der Operation <paramref name="auf"/> von <paramref name="knoten"/> (leer: sie verlässt den Graphen).</summary>
+    public IReadOnlyList<WegPlan> Wege(string knoten, int auf, Type typ) =>
+        (_wege ??= (from k in Knoten from o in k.Operationen from w in o.Wege group w by (k.Name, o.Auf, w.Typ))
+            .ToDictionary(g => g.Key, g => g.ToArray())).TryGetValue((knoten, auf, typ), out var wege) ? wege : Array.Empty<WegPlan>();
 
     /// <summary>Die Typen, die <paramref name="knoten"/> an Knoten dieses Graphen gibt (alles andere verlässt ihn).</summary>
     public IReadOnlySet<Type> ImGraphen(string knoten) =>
-        (_imGraphen ??= BaueImGraphen()).TryGetValue(knoten, out var t) ? t : new HashSet<Type>();
-
-    /// <summary>Der Knoten, dessen Strom die Unterläufe öffnet, aus denen ein Sammel-Port (<c>IReadOnlyList&lt;T&gt;</c>) sammelt.</summary>
-    public string Ursprung(PortPlan sammel)
-    {
-        var e = sammel.Erzeuger[0];
-        return e.Strom ? e.Knoten : KnotenNamens(e.Knoten)!.Operation(e.Operation)!.Ebene[^1];
-    }
-
-    /// <summary>Die Sammel-Ports, die aus den Unterläufen von <paramref name="ursprung"/> sammeln (auch mittelbar: aus einem Knoten im Unterlauf).</summary>
-    public IReadOnlyList<(string Knoten, int Operation, int Port)> Sammler(string ursprung) =>
-        (_sammler ??= (from k in Knoten
-                       from o in k.Operationen
-                       from p in o.Ports.Select((p, i) => (p, i))
-                       where p.p.Form == Portform.Alle && p.p.Erzeuger.Length > 0
-                       group (k.Name, o.Auf, p.i) by Ursprung(p.p))
-            .ToDictionary(g => g.Key, g => g.ToArray())).TryGetValue(ursprung, out var s) ? s : Array.Empty<(string, int, int)>();
-
-    private Dictionary<(string, int, Type), (string, int, int)[]> BaueAbnehmer() =>
-        (from k in Knoten
-         from o in k.Operationen
-         from p in o.Ports.Select((p, i) => (p, i))
-         from e in p.p.Erzeuger
-         group (k.Name, o.Auf, p.i) by (e.Knoten, e.Operation, e.Typ))
-        .ToDictionary(g => g.Key, g => g.ToArray());
-
-    private Dictionary<string, IReadOnlySet<Type>> BaueImGraphen() =>
-        Knoten.SelectMany(k => k.Operationen).SelectMany(o => o.Ports).SelectMany(p => p.Erzeuger)
-            .GroupBy(e => e.Knoten).ToDictionary(g => g.Key, g => (IReadOnlySet<Type>)g.Select(e => e.Typ).ToHashSet());
+        (_imGraphen ??= Knoten.ToDictionary(k => k.Name, k => (IReadOnlySet<Type>)k.Operationen.SelectMany(o => o.Wege).Select(w => w.Typ).ToHashSet()))
+        .TryGetValue(knoten, out var t) ? t : new HashSet<Type>();
 }
 
 /// <summary>Eine Instanz: Name (Datei), Graph, der Akteur ihrer Quellköpfe (null: er folgt dem Auslöser) und je Knoten seine Konfig.</summary>
@@ -97,8 +70,8 @@ public sealed record GraphInstanz(string Name, GraphPlan Graph, string? Akteur, 
     /// <summary>Die Knoten, die einen Eingang dieses Typs am Kopf nehmen (leer: keiner).</summary>
     public IReadOnlyList<string> KopfFuer(Type typ) => Graph.Koepfe.TryGetValue(typ, out var k) ? k : Array.Empty<string>();
 
-    /// <summary>So viele Läufe nimmt die Instanz auf diesem Cluster-Knoten zugleich an (die Warteschlange ihres Kopfs; voll → „später“).</summary>
-    public int Laeufe(Type kopf) =>
+    /// <summary>So viele Ketten nimmt die Instanz auf diesem Cluster-Knoten zugleich am Kopf an (die Warteschlange ihres Kopfs; voll → „später“).</summary>
+    public int Ketten(Type kopf) =>
         KopfFuer(kopf).Select(k => Konfig(k).Warteschlange).Where(w => w > 0).DefaultIfEmpty(FunktionsOrtKonfig.StandardWarteschlange).Min();
 }
 

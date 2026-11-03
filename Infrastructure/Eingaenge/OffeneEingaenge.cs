@@ -29,7 +29,7 @@ public interface IOffeneEingaenge
     Task LegeAsync(IReadOnlyList<EingangOffen> eingaenge, Guid stream, CancellationToken ct);
 
     /// <summary>
-    /// Der Lauf dieser Köpfe ist gescheitert (docs/04 §4.4, Entscheidung 11): sie bleiben in der Tabelle, werden aber nie mehr fällig — mit dem Grund
+    /// Die Kette dieser Köpfe ist gescheitert (docs/04 §4.4): sie bleiben in der Tabelle, werden aber nie mehr fällig — mit dem Grund
     /// (der Einblick zeigt sie; wer den Fehler behoben hat, gibt sie frei).
     /// </summary>
     Task ParkeAsync(IReadOnlyCollection<(Guid Kennung, string Grund)> geparkt, CancellationToken ct);

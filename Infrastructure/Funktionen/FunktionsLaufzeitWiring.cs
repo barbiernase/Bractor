@@ -106,15 +106,17 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
                 var antworten = b.Antworten();
                 var wiederholungen = bindung.Wiederholungen > 0 ? bindung.Wiederholungen : FunktionsOrtKonfig.StandardWiederholungen;
                 var kindLogger = logs?.CreateLogger("Funktion." + b.Name);
-                FunktionsParent Parent(FunktionsTraeger traeger, FunktionsOrtKonfig konfig) => new(traeger, konfig,
+                var knotenWege = new KnotenWege(instanz, k.Name);
+                FunktionsParent Parent(FunktionsTraeger traeger, FunktionsOrtKonfig konfig, IZustandsAblage? zustand) => new(traeger, konfig,
                     () => new FunktionsKindActor(traeger, dienste, wege, koepfe, async (cmd, id, korrelation, t) => await emitter.EmitMitAntwortAsync(cmd, id, korrelation, t),
                         dienste.GetService<IFaehigkeitsFabrik>(), kindLogger, hinweise: hinweise),
-                    kindLogger);
+                    knotenWege, zustand, kindLogger);
                 var konfig = new FunktionsOrtKonfig(
                     Parallel: bindung.Parallel > 0 ? bindung.Parallel : FunktionsOrtKonfig.StandardParallel,
                     Warteschlange: bindung.Warteschlange > 0 ? bindung.Warteschlange : FunktionsOrtKonfig.StandardWarteschlange,
                     Vorwaermen: bindung.Vorwaermen, Wiederholungen: wiederholungen);
                 FunktionsTraeger traeger;
+                IZustandsAblage? zustandsAblage = null;
                 if (b.Draussen)
                 {
                     // Draußen (die Arbeit eines Akteurs): kein Bereich, keine Umsetzung — eine Sitzung, die ihn verkörpert, rechnet in der Werkstatt. Die Kinder warten dort auf einen freien Platz; ein
@@ -135,11 +137,16 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
                         quelle: b.Lausche is not null), b.Rechne, b.Liest, antworten)
                     { Instanz = instanz.Name, Knoten = k.Name, ImGraphen = instanz.Graph.ImGraphen(k.Name), Zeitlimit = kk.Zeitlimit, Lausche = b.Lausche };
                     // Mit Zustand: ein Kind — eine Aktivierung im Cluster, auf dem Knoten, der die Sperre hält (der Zustand ist ein Cache und soll alles sehen).
-                    if (mitZustand && (b.Zustand is not null || technikZustand)) konfig = konfig with { Parallel = 1 };
+                    if (mitZustand && (b.Zustand is not null || technikZustand))
+                    {
+                        konfig = konfig with { Parallel = 1 };
+                        zustandsAblage = ablage;   // der Parent sichert seinen Schnappschuss mit den Kennungen, die er enthält
+                    }
                 }
                 var t0 = traeger;
                 var k0 = konfig;
-                knoten[k.Name] = () => Parent(t0, k0);
+                var z0 = zustandsAblage;
+                knoten[k.Name] = () => Parent(t0, k0, z0);
             }
             var i0 = instanz;
             var knoten0 = knoten;

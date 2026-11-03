@@ -18,8 +18,7 @@ namespace Infrastructure.SourceGeneration
     /// Köpfe, <c>[Kopf]</c> an ihm macht seine Köpfe zu Köpfen des äußeren, <c>Von(nameof(Schachtel))</c> meint seine Ausgänge — das ist seine SIGNATUR.
     /// Eine Funktion darf mehrfach im Graphen stehen; die Reihenfolge der Parameter bedeutet nichts.
     /// <para>Jedes <c>Auf</c> nimmt genau eine Nachricht (<see cref="Funktionsform"/>) und rechnet je Ankunft; Zusammenführen und Einsammeln stehen
-    /// im Logik-Code. Jede Operation hat noch eine EBENE (die Kette der Ströme vom Kopf bis zu ihr) für die heutige Laufzeit; sie fällt mit dem Lauf
-    /// (docs/plan-graphen-ohne-lauf.md, Schritt 2).</para>
+    /// im Logik-Code. Eine Kante ist gesichert, mit <c>Verlierbar = true</c> an ihrem <c>[Von]</c> verlierbar.</para>
     /// </summary>
     internal static class Graphform
     {
@@ -45,7 +44,7 @@ namespace Infrastructure.SourceGeneration
             public List<INamedTypeSymbol> Ausgaben = new List<INamedTypeSymbol>();
         }
 
-        /// <summary>Eine Operation eines Knotens: sein <c>Auf</c> (Nummer in der Funktion), was sie ausgibt (welche Typen als Strom) und ihre Ebene.</summary>
+        /// <summary>Eine Operation eines Knotens: sein <c>Auf</c> (Nummer in der Funktion) und was sie ausgibt (welche Typen als Strom).</summary>
         internal sealed class Operation
         {
             public Knoten Knoten = null!;
@@ -58,8 +57,6 @@ namespace Infrastructure.SourceGeneration
             public HashSet<string> Stroeme = new HashSet<string>();
             /// <summary>Die Ausgaben, die eine Wahl sind (ein Fall eines OneOf mit mehreren Fällen: 0 oder 1).</summary>
             public HashSet<string> Wahlen = new HashSet<string>();
-            /// <summary>Die Ebene: die Knoten, deren Ströme bis hierher Unterläufe öffnen (außen zuerst).</summary>
-            public List<string> Ebene = new List<string>();
         }
 
         /// <summary>Eine Kante: von einer Operation über einen Command ohne Ziel zu einem Port eines Knotens desselben Graphen.</summary>
@@ -69,8 +66,10 @@ namespace Infrastructure.SourceGeneration
             public Operation VonOperation = null!, NachOperation = null!;
             public Funktionsform.Port Port = null!;
             public INamedTypeSymbol Typ = null!;
-            /// <summary>Kommt der Typ beim Erzeuger als Strom (je Element ein Unterlauf)?</summary>
+            /// <summary>Kommt der Typ beim Erzeuger als Strom (je Element eine Nachricht)?</summary>
             public bool Strom;
+            /// <summary>Darf eine Nachricht auf dieser Kante verloren gehen (<c>[Von(…, Verlierbar = true)]</c>)? Sonst gesichert.</summary>
+            public bool Verlierbar;
         }
 
         /// <summary>
@@ -85,6 +84,8 @@ namespace Infrastructure.SourceGeneration
             public ITypeSymbol Typ = null!;
             public bool Kopf;
             public List<string> Von = new List<string>();
+            /// <summary>Die Namen aus <c>[Von]</c>, deren Kanten verlierbar sind (<c>Verlierbar = true</c>).</summary>
+            public HashSet<string> Verlierbar = new HashSet<string>();
             public Location Ort = Location.None;
             public Knoten? Knoten;
             public Schachtel? Innen;
@@ -177,7 +178,6 @@ namespace Infrastructure.SourceGeneration
                     + "gilt, steht im Zustand eines Knotens oder in einem Aggregat; ein neuer Lauf ist ein Command an den eigenen Kopf)", kreis[0].Ort));
                 return g;
             }
-            if (g.Fehler.Count == 0) Ebenen(g);
             return g;
         }
 
@@ -249,11 +249,13 @@ namespace Infrastructure.SourceGeneration
                 if (n == Kopf) { glied.Kopf = true; continue; }
                 if (n != Von) continue;
                 var werte = Werte(a);
+                var verlierbar = IstVerlierbar(a);
                 var syntax = a.ApplicationSyntaxReference?.GetSyntax() as AttributeSyntax;
                 var aOrt = syntax?.GetLocation() ?? glied.Ort;
                 if (syntax?.ArgumentList != null)
                     foreach (var arg in syntax.ArgumentList.Arguments)
-                        if (!(arg.NameEquals == null && arg.NameColon == null
+                        if (arg.NameEquals?.Name.Identifier.ValueText == "Verlierbar") continue;
+                        else if (!(arg.NameEquals == null && arg.NameColon == null
                               && arg.Expression is InvocationExpressionSyntax { Expression: IdentifierNameSyntax { Identifier.ValueText: "nameof" } } inv
                               && inv.ArgumentList.Arguments.Count == 1 && inv.ArgumentList.Arguments[0].Expression is IdentifierNameSyntax))
                             g.Fehler.Add(($"[Von] an '{p.Name}' nennt {arg} — jedes Argument ist nameof eines anderen Knotens desselben Graphen "
@@ -269,10 +271,17 @@ namespace Infrastructure.SourceGeneration
                         g.Fehler.Add(($"[Von] an '{p.Name}' nennt '{w}' — kein Knoten des Graphen {t.Name} (Von nennt Parameter desselben Records)", aOrt));
                     else if (glied.Von.Contains(w))
                         g.Fehler.Add(($"[Von] an '{p.Name}' nennt '{w}' doppelt", aOrt));
-                    else glied.Von.Add(w);
+                    else
+                    {
+                        glied.Von.Add(w);
+                        if (verlierbar) glied.Verlierbar.Add(w);
+                    }
                 }
             }
         }
+
+        private static bool IstVerlierbar(AttributeData a) =>
+            a.NamedArguments.Any(x => x.Key == "Verlierbar" && x.Value.Value is true);
 
         private static List<string?> Werte(AttributeData a) =>
             a.ConstructorArguments.Length == 1 && a.ConstructorArguments[0].Kind == TypedConstantKind.Array
@@ -328,7 +337,8 @@ namespace Infrastructure.SourceGeneration
                     foreach (var (vk, vop, x) in aus)
                         foreach (var (nk, nop, port) in ports.Where(z => z.Port.Typen.Any(y => V(y) == V(x))))
                         {
-                            kanten.Add(new Kante { Von = vk, Nach = nk, VonOperation = vop, NachOperation = nop, Port = port, Typ = x, Strom = vop.Stroeme.Contains(V(x)) });
+                            kanten.Add(new Kante { Von = vk, Nach = nk, VonOperation = vop, NachOperation = nop, Port = port, Typ = x, Strom = vop.Stroeme.Contains(V(x)),
+                                Verlierbar = glied.Verlierbar.Contains(name) });
                             gespeist.Add(port);
                             speist = true;
                         }
@@ -423,65 +433,6 @@ namespace Infrastructure.SourceGeneration
             foreach (var x in form.Aufs.Concat(form.Lausche != null ? new[] { form.Lausche } : new Funktionsform.Auf[0]).SelectMany(a => a.Ausgaben))
                 if (!k.Ausgaben.Any(y => V(y) == V(x))) k.Ausgaben.Add(x);
             return k;
-        }
-
-        private static string Ebenentext(List<string> e) => e.Count == 0 ? "die Ebene des Kopfs" : "die Unterläufe von " + string.Join(" → ", e);
-
-        /// <summary>
-        /// Die Ebene jeder Operation (in der Reihenfolge der Kanten): ein Port ohne Erzeuger ist ein Kopf (Ebene leer); sonst liegt er auf der Ebene seiner
-        /// Erzeuger, eine tiefer, wenn sie ihn als Strom ausgeben; <c>IReadOnlyList&lt;T&gt;</c> sammelt eine Ebene hinauf. Alle Ports eines Auf auf einer Ebene.
-        /// </summary>
-        private static void Ebenen(Form g)
-        {
-            var fertig = new HashSet<Operation>();
-            var ops = g.Knoten.SelectMany(k => k.Operationen).ToList();
-            while (fertig.Count < ops.Count)
-            {
-                var weiter = false;
-                foreach (var op in ops.Where(o => !fertig.Contains(o)).ToList())
-                {
-                    var hinein = g.Kanten.Where(e => e.NachOperation == op).ToList();
-                    if (hinein.Any(e => !fertig.Contains(e.VonOperation))) continue;
-                    weiter = true;
-                    fertig.Add(op);
-                    List<string>? ebene = null;
-                    Funktionsform.Port? erster = null;
-                    foreach (var port in op.Auf.Ports)
-                    {
-                        List<string>? portEbene = null;
-                        foreach (var e in hinein.Where(e => e.Port == port))
-                        {
-                            var x = e.VonOperation.Ebene.ToList();
-                            if (e.Strom) x.Add(e.Von.Name);
-                            if (portEbene == null) portEbene = x;
-                            else if (!portEbene.SequenceEqual(x))
-                                g.Fehler.Add(($"'{port.Name}' in {op.Knoten.Name} bekommt Nachrichten auf verschiedenen Ebenen ({Ebenentext(portEbene)} bzw. "
-                                    + $"{Ebenentext(x)}) — was zusammenfließt, kommt aus demselben Lauf", port.Ort));
-                        }
-                        portEbene ??= new List<string>();
-                        if (port.Form == Funktionsform.Portform.Alle)
-                        {
-                            if (portEbene.Count == 0)
-                            {
-                                g.Fehler.Add(($"'{port.Name}' in {op.Knoten.Name} sammelt IReadOnlyList<{port.Typen[0].Name}>, aber {port.Typen[0].Name} kommt aus keinem "
-                                    + $"Strom — nimm '{port.Typen[0].Name} {port.Name}' (genau einer je Lauf)", port.Ort));
-                                continue;
-                            }
-                            portEbene = portEbene.Take(portEbene.Count - 1).ToList();
-                        }
-                        if (ebene == null) { ebene = portEbene; erster = port; }
-                        else if (!ebene.SequenceEqual(portEbene))
-                        {
-                            var tiefer = portEbene.Count > ebene.Count ? port : erster!;
-                            g.Fehler.Add(($"die Eingänge von {op.Knoten.Name} liegen auf verschiedenen Ebenen ('{erster!.Name}': {Ebenentext(ebene)}, '{port.Name}': "
-                                + $"{Ebenentext(portEbene)}) — ein Join paart nur im selben Lauf; was aus einem Strom kommt, sammelt "
-                                + $"'IReadOnlyList<{tiefer.Typen[0].Name}> {tiefer.Name}'", port.Ort));
-                        }
-                    }
-                    op.Ebene = ebene ?? new List<string>();
-                }
-                if (!weiter) break;
-            }
         }
 
         private static List<Knoten>? Kreis(Form g)

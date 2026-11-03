@@ -11,14 +11,20 @@ public interface IGraph { }
 
 /// <summary>
 /// Die Kanten in einen Knoten (docs/04 §4.4): <c>[Von(nameof(A), nameof(B))] F Knoten</c> an einem Parameter eines Graphen nennt die Knoten desselben
-/// Graphen, von denen er bekommt — je genannte Quelle die Ports, deren Typ sie ausgibt. Jedes Argument ist <c>nameof</c> eines anderen Parameters
+/// Graphen, von denen er bekommt — je genannte Quelle die Eingänge, deren Typ sie ausgibt. Jedes Argument ist <c>nameof</c> eines anderen Parameters
 /// (nie ein String-Literal). An einem Graphen im Graphen speist es seine Köpfe; <c>Von(nameof(Innerer))</c> meint die Ausgänge des inneren Graphen.
+/// Eine Kante ist GESICHERT: der Absender wartet auf das „fertig“ des Empfängers, und erst wenn die ganze Kette fertig ist, ist der Kopf erledigt.
+/// <c>[Von(nameof(A), Verlierbar = true)]</c> macht die Kanten dieses Attributs VERLIERBAR: einmal geschickt, ohne Antwort, sie halten den Kopf nicht
+/// auf. Verschiedene Zustellungen an einem Knoten stehen in eigenen <c>[Von]</c>.
 /// </summary>
-[AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false)]
+[AttributeUsage(AttributeTargets.Parameter, AllowMultiple = true)]
 public sealed class VonAttribute(params string[] knoten) : Attribute
 {
     /// <summary>Die Knoten, von denen dieser Knoten bekommt (Parameternamen desselben Graphen).</summary>
     public string[] Knoten { get; } = knoten;
+
+    /// <summary>Darf eine Nachricht auf diesen Kanten verloren gehen (einmal geschickt, ohne „fertig“)? Ohne Angabe: gesichert.</summary>
+    public bool Verlierbar { get; set; }
 }
 
 /// <summary>
@@ -29,11 +35,11 @@ public sealed class VonAttribute(params string[] knoten) : Attribute
 public sealed class KopfAttribute : Attribute { }
 
 /// <summary>
-/// Ein Lauf eines Graphen ist gescheitert (docs/04 §4.4, Entscheidung 11): ein Knoten warf auch nach seinen Wiederholungen. Der Kopf ist geparkt, die
-/// offenen Zweige sind abgebrochen; der Hinweis geht an die Akteure, die ihn hören.
+/// Eine Kette eines Graphen ist gescheitert (docs/04 §4.4): ein Knoten warf auch nach seinen Wiederholungen, sein „gescheitert“ reichte über die
+/// gesicherten Kanten bis zum Kopf. Der Kopf ist geparkt; der Hinweis geht an die Akteure, die ihn hören.
 /// </summary>
 /// <param name="Instanz">Die Instanz des Graphen.</param>
-/// <param name="Lauf">Die Kennung des Kopfs (des Eingangs, der den Lauf startete).</param>
+/// <param name="Lauf">Die Kennung des Kopfs (des Eingangs, der die Kette startete).</param>
 /// <param name="Knoten">Der Knoten, der scheiterte (Pfad im Graphen).</param>
 /// <param name="Grund">Die Meldung des letzten Fehlers.</param>
 public sealed record LaufGescheitert(string Instanz, Guid Lauf, string Knoten, string Grund) : ITransientEvent;

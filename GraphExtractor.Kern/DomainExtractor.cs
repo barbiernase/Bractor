@@ -740,8 +740,8 @@ public sealed partial class DomainExtractor
             };
             for (var i = 0; i < a.Methode.Parameters.Length; i++)
                 if (a.Parameter[i].Art == "faehigkeit") e.Faehigkeiten.Add((Geschrieben(a.Methode, i, a.Methode.Parameters[i].Type), a.Methode.Parameters[i].Name));
-            // Die Ports wie geschrieben — nur, wenn es mehr ist als ein Command T (Join, T?, OneOf, IReadOnlyList).
-            if (a.Ports.Count > 1 || a.Ports.Any(p => p.Form != Infrastructure.SourceGeneration.Funktionsform.Portform.Eins))
+            // Die Parameter wie geschrieben — nur, wenn es mehr ist als eine Nachricht (unfertig: das baut nicht, CQRS100).
+            if (a.Ports.Count > 1)
                 for (var i = 0; i < a.Methode.Parameters.Length; i++)
                     if (a.Parameter[i].Art == "p") e.Ports.Add((Geschrieben(a.Methode, i, a.Methode.Parameters[i].Type), a.Methode.Parameters[i].Name));
             f.Eingaenge.Add(e);

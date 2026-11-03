@@ -7,11 +7,12 @@ namespace Infrastructure.Funktionen;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 // GESICHERTER ZUSTAND (docs/04 §4.4, Entscheidung 9): IZustand<T> je Instanz und Knoten, ein Schreiber (die Sperre der Instanz, ein Kind). Geladen beim
-// Aktivieren; gesichert, wenn der Lauf, der ihn geändert hat, fertig ist — in der Reihenfolge der Läufe (der Graph-Actor hält die Schnappschüsse, bis
-// ihre Läufe und alle früheren fertig sind). Bei einer Quelle zählt die laufende Nummer ihrer Läufe mit: nach einem Neustart rechnet sie dort weiter.
+// Aktivieren; gesichert, wenn der Aufruf, der ihn geändert hat, und alle früheren beendet sind — mit den Kennungen dieser Aufrufe (der Parent hält
+// die Schnappschüsse; was der Stand enthält, rechnet nach einem Absturz niemand neu). Bei einer Quelle zählt die laufende Nummer ihrer Elemente mit
+// (der Graph-Actor sichert sie, wenn die Kette des Elements und alle früheren beendet sind): nach einem Neustart rechnet sie dort weiter.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
-/// <summary>Was zu einem Knoten einer Instanz gesichert ist: das Bild seiner Zustände (<see cref="Zustandsbild"/>) und die Nummer seines letzten Laufs.</summary>
+/// <summary>Was zu einem Knoten einer Instanz gesichert ist: das Bild seiner Zustände (<see cref="Zustandsbild"/>) und die Nummer des letzten Elements einer Quelle.</summary>
 public sealed record GesicherterZustand(byte[] Bild, long Nummer);
 
 /// <summary>Wo die Zustände der Knoten liegen (Naht; live <see cref="ZustandsAblage"/>).</summary>
