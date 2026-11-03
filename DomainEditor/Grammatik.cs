@@ -136,8 +136,12 @@ public static class Grammatik
              new("laufzeit", null, "Infrastructure/Funktionen/FunktionsParent.cs (ein Schritt: rechnen, Wege nachschlagen, „fertig“ nach den gesicherten Ausgaben)")]),
         new("GR-INSTANZ", "Graph läuft als Instanz", "Ein Graph läuft erst als Instanz: eine Datei je Instanz (umgebungen/<name>/graphen/<instanz>.json) "
             + "mit Graph, bei einem Quellkopf dem Akteur (er darf, was den Graphen verlässt) und je Knoten Parallel, Warteschlange, Wiederholungen, Zeitlimit, "
-            + "Technik und die Felder seiner Konfig-Records. Ein Graph mit Command-Kopf läuft je Umgebung genau einmal (docs/04 §4.4).", "error",
-            [new("boot", null, "Infrastructure/Funktionen/Graph.cs (GraphInstanzen.Aus: Graph, Knoten, Akteur ∩ IDarf, Command-Kopf einmal)"),
+            + "Technik und die Felder seiner Konfig-Records. Ein Graph mit Command-Kopf läuft je Umgebung genau einmal. Nennt die Instanz einen Rechner, läuft "
+            + "sie nur auf dem Host mit diesem Cluster:Rechner (eine Quelle an ihrer Steuerung, ein Modell auf seiner GPU); mit Zustand oder Quelle ist der "
+            + "Rechner im Cluster Pflicht, fällt er aus, zieht nichts um (docs/04 §4.4).", "error",
+            [new("boot", null, "Infrastructure/Funktionen/Graph.cs (GraphInstanzen.Aus: Graph, Knoten, Akteur ∩ IDarf, Command-Kopf einmal, Rechner ein Name)"),
+             new("boot", null, "Infrastructure/Funktionen/Rechner.cs (Pflicht des Rechners bei Zustand oder Quelle im Cluster)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsWege.cs (Rechnernamen im Gossip, ein doppelter Name verdrängt den späteren)"),
              new("boot", null, "Infrastructure/Funktionen/Technik.cs (BindeTechnik: Werte der Konfig-Records, Technik-Wahl je Knoten)")]),
         new("GR-FALTUNG", "Event → genau ein Aggregat faltet", "Ein Event faltet genau ein Aggregat (Applier) — das, das es entscheidet.", "warning",
             [An("CQRS080", "Domain.SourceGeneration/ModellAnalyzer.cs (Apply ohne Decide)"), An("CQRS079", "Domain.SourceGeneration/ModellAnalyzer.cs (Decide ohne Apply)")]),
@@ -198,13 +202,13 @@ public static class Grammatik
             + "nur über IZustand<T> im Konstruktor einer Funktions-Klasse oder einer Technik-Umsetzung (deren Zustand gehört dem Knoten ihres Halters): "
             + "er ist je Instanz und Knoten gesichert, wenn der Aufruf, der ihn änderte, und alle früheren beendet sind, mit ihren Kennungen (nach einem "
             + "Absturz zählt nichts doppelt); eine Instanz mit Zustand "
-            + "rechnet im Cluster auf genau einem Knoten (Advisory-Lock). Was fachlich zählt, steht im Log. Felder mit Setter, "
+            + "rechnet im Cluster auf genau einem Knoten, ihrem Rechner (GR-INSTANZ). Was fachlich zählt, steht im Log. Felder mit Setter, "
             + "veränderliche Felder und Sammlungen hinter readonly sind verboten; eine Funktion mit Zustand darf aus einem Eingang allein lernen (Auf "
             + "ohne Ausgabe) (R19, docs/04 §4.4).", "error",
             [An("CQRS105", "Domain.SourceGeneration/ZustandAnalyzer.cs"),
              Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (höchstens ein Zustand, eigene Klasse; Auf ohne Ausgabe nur mit Zustand)"),
              new("laufzeit", null, "Infrastructure/Funktionen/FunktionsAktivierung.cs (je Aktivierung ihr Zustand, Technik über AktivierungsZustaende)"),
-             new("laufzeit", null, "Infrastructure/Funktionen/ZustandsSperre.cs (eine Aktivierung im Cluster, wer die Sperre hält)")]),
+             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsParent.cs (gesichert nach beendeten Aufrufen, mit ihren Kennungen)")]),
         new("GR-NEUE-ID", "Neue Ids nur abgeleitet", "Auf der Server-Seite (Aggregat, Projektion, Reader, Funktion im Host) entstehen neue Ids nur "
             + "abgeleitet (Herkunft.NeueId), nie mit Guid.NewGuid() oder Id<T>.Neu() — eine Wiederholung bekäme sonst ein anderes Ziel (R13). Clients "
             + "würfeln.", "error",
@@ -230,7 +234,7 @@ public static class Grammatik
         new("GR-QUELLE", "Quelle = Funktion, die lauscht", "Eine Quelle ist eine Funktion mit Lausche(CancellationToken) statt Auf — aus dem Katalog des "
             + "Frameworks (Dateiwaechter, Taktgeber, Webhook) oder eigen. Sie steht am Kopf ihres Graphen (eine je Graph, dann kein anderer Kopf); jedes "
             + "Element startet eine Kette, nichts davon steht im Log. Was sie gesehen hat und ihre laufende Nummer stehen in ihrem gesicherten Zustand; ihre "
-            + "Instanz läuft genau einmal im Cluster (docs/04 §4.7).", "error",
+            + "Instanz läuft genau einmal im Cluster, auf ihrem Rechner (docs/04 §4.7).", "error",
             [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Form von Lausche)"),
              An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (eine Quelle je Graph, sonst kein Kopf)"),
              new("laufzeit", null, "Infrastructure/Funktionen/GraphActor.cs (je Element eine Kette, Gegendruck, Zustand gesichert nach der Kette)")]),

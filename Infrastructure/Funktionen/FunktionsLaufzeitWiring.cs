@@ -20,7 +20,8 @@ public static class FunktionsLaufzeitWiring
 {
     public static IServiceCollection AddFunktionsLaufzeit(this IServiceCollection services)
     {
-        services.TryAddSingleton(sp => new FunktionsOrte(sp.GetRequiredService<ActorSystem>().Cluster()));
+        services.TryAddSingleton(sp => new FunktionsOrte(sp.GetRequiredService<ActorSystem>().Cluster(), sp.GetService<EigenerRechner>()?.Name,
+            sp.GetService<ILoggerFactory>()?.CreateLogger("Funktionen")));
         services.TryAddSingleton<IFunktionsWege>(sp =>
         {
             var logger = sp.GetService<ILoggerFactory>()?.CreateLogger("Funktionen");
@@ -28,10 +29,6 @@ public static class FunktionsLaufzeitWiring
         });
         if (Anwendung.Funktionen.Bausteine.Count == 0) return services;
         services.TryAddSingleton<Werkstatt>();
-        // Instanzen mit Zustand (ein Knoten im Host trägt ihn): genau eine Aktivierung im Cluster, wer die Sperre hält.
-        services.TryAddSingleton(sp => new ZustandsSperre(sp.GetRequiredService<Marten.IDocumentStore>(),
-            sp.GetRequiredService<GraphInstanzen>().Alle.Where(i => MitZustand(i, sp)).Select(i => i.Name).ToList(), sp.GetService<ILogger<ZustandsSperre>>()));
-        services.AddHostedService(sp => sp.GetRequiredService<ZustandsSperre>());
         services.TryAddSingleton<IEingangsZustellung>(sp => new WegeZustellung(sp.GetRequiredService<IFunktionsWege>()));
         services.TryAddSingleton<IZustandsAblage>(sp => new ZustandsAblage(sp.GetRequiredService<Marten.IDocumentStore>()));
         services.AddHostedService<FunktionsOrteTakt>();
@@ -75,14 +72,15 @@ public sealed class WegeZustellung(IFunktionsWege wege) : IEingangsZustellung
 /// Spawnt beim Start (nach dem Cluster-Beitritt) die Wurzel der Graphen dieses Knotens: je Instanz ein Graph-Actor mit je Knoten einem Parent — im
 /// Host mit seiner Funktion (eine Aktivierung je Kind, mit dem Knoten-Bereich für Konfig-Records und Technik); die Arbeit eines Akteurs (draußen) geben
 /// die Kinder an die Arbeiter der <see cref="Werkstatt"/>; ein Knoten mit Zustand rechnet mit genau einem Kind. Die Wurzel meldet eine Instanz als
-/// gehalten, sobald ihre Arbeiter da sind bzw. dieser Knoten ihre <see cref="ZustandsSperre"/> hält.
+/// gehalten, sobald ihre Arbeiter da sind; eine Instanz, die einen anderen Rechner nennt, legt er gar nicht an (<see cref="EigenerRechner"/>).
 /// </summary>
 public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system, FunktionsOrte orte, IFunktionsWege wege, Verkettung koepfe,
-    GraphInstanzen instanzen, Werkstatt werkstatt, ZustandsSperre sperre, ILoggerFactory? logs = null) : IHostedService
+    GraphInstanzen instanzen, Werkstatt werkstatt, ILoggerFactory? logs = null) : IHostedService
 {
     public Task StartAsync(CancellationToken ct)
     {
-        (dienste.GetService<EigenerRechner>() ?? EigenerRechner.Keiner).Pruefe(instanzen, i => FunktionsLaufzeitWiring.MitZustand(i, dienste));
+        var rechner = dienste.GetService<EigenerRechner>() ?? EigenerRechner.Keiner;
+        rechner.Pruefe(instanzen, i => FunktionsLaufzeitWiring.MitZustand(i, dienste));
         var logger = logs?.CreateLogger("Funktionen");
         var emitter = new CommandEmitter(new Bote(system.Cluster(), logger), logger);
         var verteilung = dienste.GetService<Infrastructure.Verteilen.Verteilung>();
@@ -96,11 +94,13 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
             });
         };
         var plaene = new List<InstanzPlan>();
-        foreach (var instanz in instanzen.Alle)
+        // Nur die Instanzen, die dieser Host bedient: ohne Rechner jede, sonst die, die seinen nennen (eine Quelle an ihrer Steuerung, ein Modell auf
+        //   seiner GPU) — so hat jede festgelegte Instanz genau einen Schreiber.
+        foreach (var instanz in instanzen.Alle.Where(rechner.Bedient))
         {
             var knoten = new Dictionary<string, Func<FunktionsParent>>(StringComparer.Ordinal);
             var draussen = new List<string>();
-            var mitZustand = sperre.Funktionen.Contains(instanz.Name);
+            var mitZustand = FunktionsLaufzeitWiring.MitZustand(instanz, dienste);
             foreach (var (_, k, b, kk) in FunktionsBausteinWiring.Knoten(new GraphInstanzen([instanz])))
             {
                 var bindung = FunktionsBausteinWiring.BindungVon(b, kk, instanz.Ort(k.Name));
@@ -137,7 +137,7 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
                     traeger = new FunktionsTraeger(b.Name, sp => new FunktionsAktivierung(sp, b.Baue!, b.Zustand, b.Name, technikZustand, bereich, ablage,
                         quelle: b.Lausche is not null), b.Rechne, b.Liest, antworten)
                     { Instanz = instanz.Name, Knoten = k.Name, ImGraphen = instanz.Graph.ImGraphen(k.Name), Zeitlimit = kk.Zeitlimit, Lausche = b.Lausche };
-                    // Mit Zustand: ein Kind — eine Aktivierung im Cluster, auf dem Knoten, der die Sperre hält (der Zustand ist ein Cache und soll alles sehen).
+                    // Mit Zustand: ein Kind — eine Aktivierung im Cluster, auf dem Rechner der Instanz (der Zustand ist ein Cache und soll alles sehen).
                     if (mitZustand && (b.Zustand is not null || technikZustand))
                     {
                         konfig = konfig with { Parallel = 1 };
@@ -152,12 +152,13 @@ public sealed class FunktionenStart(IServiceProvider dienste, ActorSystem system
             var i0 = instanz;
             var knoten0 = knoten;
             plaene.Add(new InstanzPlan(instanz.Name, () => new GraphActor(i0, knoten0, dienste.GetService<IOffeneEingaenge>(), hinweise, logger,
-                dienste.GetService<IZustandsAblage>()), draussen.Distinct().ToList(), mitZustand, Quelle: instanz.Graph.Quelle is not null));
+                dienste.GetService<IZustandsAblage>()), draussen.Distinct().ToList(), mitZustand, Quelle: instanz.Graph.Quelle is not null,
+                Festgelegt: instanz.Rechner is not null && !rechner.Einzelknoten));
         }
         _wurzel = system.Root.SpawnNamed(Props.FromProducer(() => new FunktionenWurzel(plaene, orte, logger)), FunktionenWurzel.Wurzelname);
         var wurzel = _wurzel;
         werkstatt.Beobachte((f, slots) => system.Root.Send(wurzel, new PlaetzeGeaendert(f, slots)));
-        sperre.Beobachte((i, gehalten) => system.Root.Send(wurzel, new SperreGeaendert(i, gehalten > 0)));
+        orte.Beobachte(doppelt => system.Root.Send(wurzel, new RechnerDoppelt(doppelt)));
         Console.WriteLine($"  ✓ Graphen {system.Address}/{FunktionenWurzel.Wurzelname}: " + string.Join(", ", plaene.Select(p => p.Instanz
             + (p.Draussen.Count > 0 ? $" (draußen: {string.Join(", ", p.Draussen)})" : "") + (p.MitZustand ? " (mit Zustand)" : ""))));
         return Task.CompletedTask;

@@ -26,13 +26,14 @@ internal static class Pruefstand
     /// auch ohne Wecker.
     /// </summary>
     public static IHost Cluster(string name, int snapshotSchwelle = 200, int inboxCache = SnapshotOptions.StandardInboxCache, Action<IServiceCollection>? dienste = null,
-        string schema = "pruef_e2e", TimeSpan? takt = null)
+        string schema = "pruef_e2e", TimeSpan? takt = null, string? rechner = null, string? clusterName = null)
     {
         var builder = Host.CreateApplicationBuilder();
         builder.Services.AddCqrsFramework(opts =>
         {
             opts.EnableGrpc = false;
-            opts.ClusterName = name + "-" + Guid.NewGuid().ToString("N")[..8];
+            opts.ClusterName = clusterName ?? name + "-" + Guid.NewGuid().ToString("N")[..8];
+            opts.Rechner = rechner;
             opts.EventStoreConnectionString = Verbindung;
             opts.EventStoreSchema = schema;
             opts.SnapshotThreshold = snapshotSchwelle;

@@ -3,6 +3,7 @@ using FluentAssertions;
 using Infrastructure.Funktionen;
 using Infrastructure.Lebenszyklus;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Proto;
 using Proto.Cluster;
@@ -16,7 +17,7 @@ namespace Pruefdomaene.Integration.Tests.Garantien;
 /// Funktionen eines Graphen mit Zustand und Ressourcen (docs/04 §4.4, docs/11) gegen echtes Marten, am allgemeinen Fall der Prüfdomäne (Messung): ein
 /// Messwert → Merkmalsbildung (gleichbleibend) → Merkmal (ein Command zwischen Knoten, nie im Log) gabelt an den Schätzer (liest die Messreihe, eine
 /// Projektion) und die Ausreißerprüfung → Command an die Messstelle. Geprüft wird am Log: Ressourcen schließen beim
-/// Stoppen, die Schätzung beruht auf dem, was die Projektion gelernt hat, ein Knoten mit Zustand rechnet auf genau einem Cluster-Knoten.
+/// Stoppen, die Schätzung beruht auf dem, was die Projektion gelernt hat, ein Knoten mit Zustand rechnet nur auf seinem Rechner.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class FunktionsZustandGarantieTests
@@ -116,31 +117,65 @@ public class FunktionsZustandGarantieTests
         Volatile.Read(ref v.Geschlossen).Should().Be(Volatile.Read(ref v.Offen), "jede Aktivierung schließt beim Stoppen ihre Verbindung");
     }
 
+    /// <summary>Je Graph eine Instanz, die Merkmalbildung (Zustand im Zählwerk) auf dem Rechner <paramref name="rechner"/> festgelegt.</summary>
+    private static void Festgelegt(IServiceCollection s, string rechner) =>
+        s.Replace(ServiceDescriptor.Singleton(new GraphInstanzen(GraphInstanzen.JeGraphEine(global::Infrastructure.Komposition.Anwendung.Funktionen.Graphen,
+                akteure: global::Infrastructure.Komposition.Anwendung.Akteure.Rechte).Alle
+            .Select(i => i.Graph.Name == nameof(Merkmalbildung) ? i with { Rechner = rechner } : i).ToList())));
+
+    private static bool Haelt(IHost h) => h.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Merkmalbildung));
+
     [Fact]
-    public async Task Eine_Funktion_mit_Zustand_rechnet_auf_genau_einem_Knoten_der_ihre_Sperre_haelt()
+    public async Task Eine_Funktion_mit_Zustand_rechnet_nur_auf_ihrem_Rechner_und_zieht_bei_Ausfall_nicht_um()
     {
-        // Zwei Hosts auf derselben Datenbank: der Schätzer trägt über sein Zählwerk Zustand — nur einer hält die Sperre seiner Instanz (Advisory-Lock);
-        //   endet er, nimmt der andere sie.
-        var a = Cluster("garantie-sperre-a");
-        var b = Cluster("garantie-sperre-b");
+        // Zwei Hosts auf derselben Datenbank: der Schätzer trägt über sein Zählwerk Zustand, seine Instanz nennt den Rechner „a“ — nur dieser Host
+        //   legt sie an; endet er, übernimmt der andere sie nicht (die Maschine hat, was die Instanz braucht).
+        var a = Cluster("garantie-rechner-a", rechner: "a", dienste: s => Festgelegt(s, "a"));
+        var b = Cluster("garantie-rechner-b", rechner: "b", dienste: s => Festgelegt(s, "a"));
         await a.StartAsync();
         await b.StartAsync();
         var gestoppt = new HashSet<IHost>();
         try
         {
-            bool Haelt(IHost h) => h.Services.GetRequiredService<ZustandsSperre>().Gehalten.Contains(nameof(Merkmalbildung));
-            await Warte(() => Task.FromResult(Haelt(a) || Haelt(b)), Frist, "niemand nimmt die Sperre des Schätzers");
-            await Task.Delay(TimeSpan.FromSeconds(3));
-            (Haelt(a) && Haelt(b)).Should().BeFalse("genau ein Knoten hält die Sperre");
+            await Warte(() => Task.FromResult(Haelt(a)), Frist, "der Rechner a hält die Merkmalbildung nicht");
+            Haelt(b).Should().BeFalse("die Instanz nennt den Rechner a");
+
+            await a.StopAsync();
+            gestoppt.Add(a);
+            await Task.Delay(TimeSpan.FromSeconds(5));
+            Haelt(b).Should().BeFalse("fällt der Rechner aus, zieht nichts um");
+        }
+        finally
+        {
+            foreach (var h in new[] { a, b }.Where(h => !gestoppt.Contains(h))) await h.StopAsync();
+            a.Dispose();
+            b.Dispose();
+        }
+    }
+
+    [Fact]
+    public async Task Tragen_zwei_Hosts_denselben_Rechnernamen_haelt_nur_einer_die_festgelegte_Instanz()
+    {
+        // Ein Konfigurationsfehler: zwei Hosts im selben Cluster nennen sich „r“. Vorrang hat der mit der kleineren Mitglieds-Id; der andere hält seine
+        //   festgelegten Instanzen nicht (und meldet den Fehler). Endet der erste, hält der zweite sie.
+        var cluster = "garantie-doppelt-" + Guid.NewGuid().ToString("N")[..8];
+        var a = Cluster("garantie-doppelt", rechner: "r", clusterName: cluster, dienste: s => Festgelegt(s, "r"));
+        var b = Cluster("garantie-doppelt", rechner: "r", clusterName: cluster, dienste: s => Festgelegt(s, "r"));
+        await a.StartAsync();
+        await b.StartAsync();
+        var gestoppt = new HashSet<IHost>();
+        try
+        {
+            bool Verdraengt(IHost h) => h.Services.GetRequiredService<FunktionsOrte>().Verdraengt;
+            await Warte(() => Task.FromResult(Verdraengt(a) || Verdraengt(b)), Frist, "keiner erkennt den doppelten Rechnernamen");
+            await Warte(() => Task.FromResult(Haelt(a) != Haelt(b)), Frist, "nicht genau einer hält die festgelegte Instanz");
             var (halter, anderer) = Haelt(a) ? (a, b) : (b, a);
-            halter.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Merkmalbildung)).Should().BeTrue("der Halter hält die Funktion im Gossip-Zustand");
-            anderer.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Merkmalbildung)).Should().BeFalse();
+            Verdraengt(halter).Should().BeFalse("der Halter hat Vorrang");
+            Verdraengt(anderer).Should().BeTrue();
 
             await halter.StopAsync();
             gestoppt.Add(halter);
-            await Warte(() => Task.FromResult(Haelt(anderer)), Frist, "der andere Knoten übernimmt die Sperre nicht");
-            await Warte(() => Task.FromResult(anderer.Services.GetRequiredService<FunktionsOrte>().HaeltSelbst(nameof(Merkmalbildung))), Frist,
-                "der andere Knoten hält die Funktion nicht");
+            await Warte(() => Task.FromResult(Haelt(anderer)), Frist, "ist der erste fort, hält der zweite die Instanz");
         }
         finally
         {

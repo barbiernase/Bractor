@@ -35,7 +35,7 @@ public sealed class FunktionsParent(
     public const int Gedaechtnis = 10_000;
 
     /// <summary>So viele Kennungen sichert ein Knoten mit Zustand mit seinem Schnappschuss.</summary>
-    public const int GesichertGesehen = 1_024;
+    public const int GesichertGesehen = 256;
 
     /// <summary>Der Schlüssel der gesicherten Kennungen im Bild des Zustands.</summary>
     public const string GesehenSchluessel = "§gesehen";
