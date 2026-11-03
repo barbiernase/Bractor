@@ -37,8 +37,8 @@ public sealed class FunktionsOrte(Cluster? cluster, string? rechner = null, ILog
     private volatile IReadOnlyDictionary<string, string[]> _adressen = ImmutableDictionary<string, string[]>.Empty;
     private readonly ConcurrentDictionary<string, int> _reihum = new();
     private volatile string[] _eigene = System.Array.Empty<string>();
-    private Action<bool>? _beobachter;
-    private bool _verdraengt;
+    private volatile Action<bool>? _beobachter;
+    private volatile bool _verdraengt;
 
     /// <summary>Die Adresse dieses Knotens.</summary>
     public string? Eigene => cluster?.System.Address;
@@ -46,8 +46,15 @@ public sealed class FunktionsOrte(Cluster? cluster, string? rechner = null, ILog
     /// <summary>Hat ein anderer Knoten mit demselben Rechnernamen Vorrang?</summary>
     public bool Verdraengt => _verdraengt;
 
-    /// <summary>Meldet jeden Wechsel von <see cref="Verdraengt"/>.</summary>
-    public void Beobachte(Action<bool> beobachter) => _beobachter = beobachter;
+    /// <summary>
+    /// Meldet jeden Wechsel von <see cref="Verdraengt"/> — und sofort den Stand, den der Takt vielleicht schon vor der Anmeldung las (sonst ginge ein
+    /// früher erkannter doppelter Name verloren; eine doppelte Meldung schadet nicht).
+    /// </summary>
+    public void Beobachte(Action<bool> beobachter)
+    {
+        _beobachter = beobachter;
+        beobachter(_verdraengt);
+    }
 
     /// <summary>Meldet die Funktionen, deren Parent auf diesem Knoten lebt (und den Rechnernamen dieses Knotens).</summary>
     public void Halte(IEnumerable<string> funktionen)
