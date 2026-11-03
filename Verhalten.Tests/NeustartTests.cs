@@ -182,11 +182,14 @@ public sealed class NeustartTests
         bericht.AppendLine($"Nachschub {nachschuebe} von {ausloeser}; Zubuchungen der Verteilung {zubuchungen} von {gestartet * 4}; "
                            + $"Verteilungen abgeschlossen {abgeschlossen} von {gestartet} (gesendet {verteilungen.Length}); Abbruch {getoetet:HH:mm:ss.fff}");
         if (!mitBericht) return new Befund(ausloeser, nachschuebe, zubuchungen, gestartet * 4, abgeschlossen, gestartet, zweimal, bericht.ToString());
+        // Fest gegen den Plan: NOT IN über eine Teilabfrage wird ein Hash (hashed SubPlan), auch wenn die Statistik direkt nach der Last noch nicht
+        //   aufgefrischt ist — ein Left-Join auf den berechneten Text wählte dann einen Nested Loop über alle Paare (Minuten statt Millisekunden).
         await using (var cmd = new NpgsqlCommand($"""
-            with zu as (select headers->>'ursache' u from {s}.mt_events where type = 'posten_zugebucht' and headers->>'ueber' like 'knoten:%/Nachschub')
             select r.stream_id, r.version, r.seq_id, get_byte(uuid_send(r.stream_id), 15) % 8, extract(epoch from r.timestamp - @t)::numeric(10, 3)
-            from {s}.mt_events r left join zu on zu.u = r.stream_id::text || ':' || r.version
-            where r.type = 'posten_reserviert' and (r.data->>'Fehlmenge')::int > 0 and zu.u is null
+            from {s}.mt_events r
+            where r.type = 'posten_reserviert' and (r.data->>'Fehlmenge')::int > 0
+              and r.stream_id::text || ':' || r.version not in (select headers->>'ursache' from {s}.mt_events
+                where type = 'posten_zugebucht' and headers->>'ueber' like 'knoten:%/Nachschub' and headers->>'ursache' is not null)
             order by r.seq_id limit 40
             """, conn, tx) { CommandTimeout = 120 })
         {
