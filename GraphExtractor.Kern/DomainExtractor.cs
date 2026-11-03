@@ -375,7 +375,7 @@ public sealed class ClientRaw
 public sealed class GraphRaw
 {
     public string Name = "", Namespace = "", Full = "";
-    public List<(string Name, string Typ, bool Kopf, List<string> Von)> Knoten = new();
+    public List<(string Name, string Typ, bool Kopf, List<string> Von, List<string> Verlierbar)> Knoten = new();
     public List<string> Koepfe = new(), Ausgaenge = new();
     /// <summary>Die Kanten aus den <c>Von</c>: Erzeuger-Knoten, Typ, nehmender Knoten (aufgefaltete Pfade, <c>Aufbereitung.Vorschau</c>).</summary>
     public List<(string Von, string Typ, string Nach)> Kanten = new();
@@ -904,8 +904,9 @@ public sealed partial class DomainExtractor
             Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(), Datei = decl?.SyntaxTree.FilePath, Doku = decl == null ? null : Summary(decl),
             Knoten = (ctor?.Parameters ?? []).Select(p =>
             {
-                var (kopf, von) = Infrastructure.SourceGeneration.Graphform.KopfUndVon(p);
-                return (p.Name, geschrieben.GetValueOrDefault(p.Name) is { Length: > 0 } w ? w : p.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat), kopf, von);
+                var (kopf, von, verlierbar) = Infrastructure.SourceGeneration.Graphform.KopfUndVon(p);
+                return (p.Name, geschrieben.GetValueOrDefault(p.Name) is { Length: > 0 } w ? w : p.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat), kopf, von,
+                    verlierbar);
             }).ToList(),
             Koepfe = g.Koepfe.Select(k => Infrastructure.SourceGeneration.Funktionsform.Anzeigename(k.Typ)).Distinct(StringComparer.Ordinal).ToList(),
             Ausgaenge = g.Ausgaenge.Select(a => Infrastructure.SourceGeneration.Funktionsform.Anzeigename(a.Typ)).Distinct(StringComparer.Ordinal).ToList(),

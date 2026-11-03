@@ -373,6 +373,28 @@ public sealed class GestenTests : IDisposable
     }
 
     [Fact]
+    public async Task Verlierbar_schreibt_ein_eigenes_Von_mit_Verlierbar_und_nimmt_es_wieder_weg()
+    {
+        var vorher = Text("Gebuehren.cs");
+        async Task<JsonObject> MahnungVerlierbar(params string[] verlierbar)
+        {
+            var karte = Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Schadensbewertung");
+            karte["knoten"]!.AsArray().OfType<JsonObject>().Single(k => (string?)k["name"] == "Mahnung")["verlierbar"] = Liste(verlierbar);
+            (await GesteAsync(Geaendert("graphen", karte))).Patch.Select(p => p.Datei).Should().Equal("Leihwesen/Gebuehren.cs");
+            return Karte(await BoardAsync(), "graphen", g => (string?)g["name"] == "Schadensbewertung");
+        }
+
+        var gelesen = await MahnungVerlierbar("Gutachten");
+        Text("Gebuehren.cs").Should().Be(vorher.Replace("[Von(nameof(Gutachten))] MahnungNachSchaetzung Mahnung",
+            "[Von(nameof(Gutachten), Verlierbar = true)] MahnungNachSchaetzung Mahnung"), "die Zustellung steht am Von des nehmenden Knotens");
+        gelesen["knoten"]!.AsArray().OfType<JsonObject>().Single(k => (string?)k["name"] == "Mahnung")["verlierbar"]!.AsArray()
+            .Select(v => (string?)v).Should().Equal(["Gutachten"], "gelesen, wie geschrieben");
+
+        await MahnungVerlierbar();
+        Text("Gebuehren.cs").Should().Be(vorher, "ohne Verlierbar ist die Kante wieder gesichert");
+    }
+
+    [Fact]
     public async Task Kopf_setzt_bzw_entfernt_das_Attribut_am_Knoten()
     {
         var vorher = Text("Gebuehren.cs");

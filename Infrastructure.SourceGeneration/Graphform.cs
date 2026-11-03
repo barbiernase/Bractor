@@ -288,18 +288,27 @@ namespace Infrastructure.SourceGeneration
                 ? a.ConstructorArguments[0].Values.Select(v => v.Value as string).ToList()
                 : new List<string?>();
 
-        /// <summary><c>[Kopf]</c> und die Namen aus <c>[Von]</c> eines Parameters, wie sie dastehen (ohne Prüfung) — für Werkzeuge, die jeden Knoten zeigen.</summary>
-        public static (bool Kopf, List<string> Von) KopfUndVon(IParameterSymbol p)
+        /// <summary>
+        /// <c>[Kopf]</c>, die Namen aus <c>[Von]</c> eines Parameters und welche davon verlierbar sind, wie sie dastehen (ohne Prüfung) — für Werkzeuge,
+        /// die jeden Knoten zeigen.
+        /// </summary>
+        public static (bool Kopf, List<string> Von, List<string> Verlierbar) KopfUndVon(IParameterSymbol p)
         {
             var kopf = false;
             var von = new List<string>();
+            var verlierbar = new List<string>();
             foreach (var a in p.GetAttributes())
             {
                 var n = a.AttributeClass == null ? "" : Funktionsform.Name(a.AttributeClass);
                 if (n == Kopf) kopf = true;
-                else if (n == Von) von.AddRange(Werte(a).OfType<string>());
+                else if (n == Von)
+                {
+                    var werte = Werte(a).OfType<string>().ToList();
+                    von.AddRange(werte);
+                    if (IstVerlierbar(a)) verlierbar.AddRange(werte);
+                }
             }
-            return (kopf, von);
+            return (kopf, von, verlierbar);
         }
 
         /// <summary>

@@ -623,7 +623,8 @@ public sealed record Graph
 
 /// <summary>
 /// Ein Knoten eines Graphen — ein Parameter des Records: Name (Konfig-Schlüssel), Typ wie geschrieben, ob er <c>[Kopf]</c> trägt (nimmt von außen) und
-/// die Knoten aus seinem <c>[Von(nameof(…))]</c> (von denen er bekommt). Die Geste „verbinden“ setzt bzw. entfernt ein Von, „Kopf“ das Attribut.
+/// die Knoten aus seinem <c>[Von(nameof(…))]</c> (von denen er bekommt), davon die verlierbaren (<c>[Von(nameof(…), Verlierbar = true)]</c>; die übrigen
+/// sind gesichert). Die Geste „verbinden“ setzt bzw. entfernt ein Von, „Kopf“ das Attribut, „verlierbar“ die Zustellung einer Kante.
 /// </summary>
 public sealed record GraphKnoten
 {
@@ -631,6 +632,8 @@ public sealed record GraphKnoten
     public required string Name { get; init; }
     public bool Kopf { get; init; }
     public IReadOnlyList<string> Von { get; init; } = [];
+    /// <summary>Die Namen aus <see cref="Von"/>, deren Kanten verlierbar sind.</summary>
+    public IReadOnlyList<string> Verlierbar { get; init; } = [];
 }
 
 /// <summary>Eine Kante eines Graphen (aus einem <c>Von</c>): vom Knoten <see cref="Von"/> über den Typ <see cref="Typ"/> zum Knoten <see cref="Nach"/>.</summary>

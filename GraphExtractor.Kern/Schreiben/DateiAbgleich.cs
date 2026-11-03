@@ -586,8 +586,8 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         bool Gleich(ParameterSyntax p, GraphKnoten k)
         {
             if (p.Identifier.Text != k.Name || N(p.Type?.ToString()) != N(k.Typ)) return false;
-            var (kopf, von) = KopfUndVon(p);
-            return kopf == k.Kopf && von.SequenceEqual(k.Von);
+            var (kopf, von, verlierbar) = KopfUndVon(p);
+            return kopf == k.Kopf && von.SequenceEqual(k.Von) && verlierbar.ToHashSet().SetEquals(k.Verlierbar);
         }
         if (ist.Count == g.Knoten.Count && ist.Zip(g.Knoten).All(z => Gleich(z.First, z.Second))) return null;
         var teile = g.Knoten.Select(k => ist.FirstOrDefault(p => Gleich(p, k))?.ToString() ?? Scaffolder.GraphKnotenText(k)).ToList();
@@ -599,8 +599,11 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         return (MitNamespaces(neu, g.Knoten.Select(k => k.Typ)), "Knoten " + string.Join(", ", plus.Concat(minus)));
     }
 
-    /// <summary><c>[Kopf]</c> und die Namen aus <c>[Von(nameof(A), …)]</c> eines Parameters, wie sie im Quelltext stehen (auch für die Parität).</summary>
-    internal static (bool Kopf, List<string> Von) KopfUndVon(ParameterSyntax p)
+    /// <summary>
+    /// <c>[Kopf]</c>, die Namen aus <c>[Von(nameof(A), …)]</c> eines Parameters und welche davon verlierbar sind (<c>Verlierbar = true</c>), wie sie im
+    /// Quelltext stehen (auch für die Parität).
+    /// </summary>
+    internal static (bool Kopf, List<string> Von, List<string> Verlierbar) KopfUndVon(ParameterSyntax p)
     {
         var attribute = p.AttributeLists.SelectMany(l => l.Attributes).ToList();
         static string Name(AttributeSyntax a)
@@ -608,9 +611,12 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
             var n = a.Name.ToString().Split('.')[^1];
             return n.EndsWith("Attribute", StringComparison.Ordinal) ? n[..^"Attribute".Length] : n;
         }
-        var von = attribute.Where(a => Name(a) == Scaffolder.VonAttribut).SelectMany(a => a.ArgumentList?.Arguments ?? default)
+        static List<string> Namen(AttributeSyntax a) => (a.ArgumentList?.Arguments ?? default).Where(x => x.NameEquals == null)
             .Select(x => x.Expression is InvocationExpressionSyntax { ArgumentList.Arguments: [var e] } ? e.ToString() : x.Expression.ToString().Trim('"')).ToList();
-        return (attribute.Any(a => Name(a) == Scaffolder.KopfAttribut), von);
+        static bool Verlierbar(AttributeSyntax a) => (a.ArgumentList?.Arguments ?? default)
+            .Any(x => x.NameEquals?.Name.Identifier.ValueText == "Verlierbar" && x.Expression.ToString() == "true");
+        var vons = attribute.Where(a => Name(a) == Scaffolder.VonAttribut).ToList();
+        return (attribute.Any(a => Name(a) == Scaffolder.KopfAttribut), vons.SelectMany(Namen).ToList(), vons.Where(Verlierbar).SelectMany(Namen).ToList());
     }
 
     // ── Bausteine ──────────────────────────────────────────────────────────────────────────────

@@ -163,7 +163,7 @@ public static class ModellMapper
             }).ToList(),
             Graphen = dom.Graphen.Select(x => new Graph
             {
-                Name = x.Name, Namespace = x.Namespace, Knoten = x.Knoten.Select(k => new GraphKnoten { Typ = k.Typ, Name = k.Name, Kopf = k.Kopf, Von = k.Von }).ToList(),
+                Name = x.Name, Namespace = x.Namespace, Knoten = x.Knoten.Select(k => new GraphKnoten { Typ = k.Typ, Name = k.Name, Kopf = k.Kopf, Von = k.Von, Verlierbar = k.Verlierbar }).ToList(),
                 Koepfe = x.Koepfe, Ausgaenge = x.Ausgaenge, Kanten = x.Kanten.Select(k => new GraphKante(k.Von, k.Typ, k.Nach)).ToList(), Quelle = x.Quelle, Usings = x.Usings,
                 Doku = x.Doku, Datei = Rel(x.Datei),
             }).ToList(),

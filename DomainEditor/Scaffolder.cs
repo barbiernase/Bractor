@@ -289,12 +289,26 @@ public static class Scaffolder
     /// <summary>Der Graph ohne die <c>Von</c> auf Knoten, die er nicht (mehr) hat — ein entfernter Knoten nimmt seine Kanten mit.</summary>
     public static Graph OhneLoseKanten(Graph g) => g with
     {
-        Knoten = g.Knoten.Select(k => k.Von.All(v => g.Knoten.Any(x => x.Name == v)) ? k : k with { Von = k.Von.Where(v => g.Knoten.Any(x => x.Name == v)).ToList() }).ToList(),
+        Knoten = g.Knoten.Select(k => k with
+        {
+            Von = k.Von.Where(v => g.Knoten.Any(x => x.Name == v)).ToList(),
+            Verlierbar = k.Verlierbar.Where(v => k.Von.Contains(v) && g.Knoten.Any(x => x.Name == v)).ToList(),
+        }).ToList(),
     };
 
-    /// <summary>Ein Knoten als Parameter: <c>[Kopf] [Von(nameof(A), nameof(B))] Typ Name</c>.</summary>
-    public static string GraphKnotenText(GraphKnoten k) =>
-        (k.Kopf ? $"[{KopfAttribut}] " : "") + (k.Von.Count > 0 ? $"[{VonAttribut}({string.Join(", ", k.Von.Select(v => $"nameof({v})"))})] " : "") + $"{k.Typ} {k.Name}";
+    /// <summary>
+    /// Ein Knoten als Parameter: <c>[Kopf] [Von(nameof(A), nameof(B))] [Von(nameof(C), Verlierbar = true)] Typ Name</c> — gesicherte Quellen in einem
+    /// <c>[Von]</c>, verlierbare in einem eigenen.
+    /// </summary>
+    public static string GraphKnotenText(GraphKnoten k)
+    {
+        string Von(IEnumerable<string> namen, bool verlierbar) =>
+            $"[{VonAttribut}({string.Join(", ", namen.Select(v => $"nameof({v})"))}{(verlierbar ? ", Verlierbar = true" : "")})] ";
+        var gesichert = k.Von.Where(v => !k.Verlierbar.Contains(v)).ToList();
+        var verlierbar = k.Von.Where(v => k.Verlierbar.Contains(v)).ToList();
+        return (k.Kopf ? $"[{KopfAttribut}] " : "") + (gesichert.Count > 0 ? Von(gesichert, false) : "") + (verlierbar.Count > 0 ? Von(verlierbar, true) : "")
+            + $"{k.Typ} {k.Name}";
+    }
 
     /// <summary>Die Attribute eines Graph-Knotens, wie man sie schreibt (<c>[Kopf]</c>, <c>[Von(…)]</c>).</summary>
     public static readonly string KopfAttribut = nameof(Abstractions.KopfAttribute)[..^"Attribute".Length];

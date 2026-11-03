@@ -316,7 +316,8 @@ public static class Sonde
         // Graphen (docs/04 §4.4): die Knoten (Parameter des Records, Typ wie geschrieben, [Kopf], [Von …]); abgeleitet daraus: Köpfe, Ausgänge, Quelle und
         //   die Kanten (aufgefaltete Pfade bei einem Graphen im Graphen).
         string Knoten(JsonNode k) => $"{S(k, "name")}:{S(k, "typ")}{(k["kopf"]?.GetValue<bool>() == true ? " [Kopf]" : "")}"
-            + (A(k, "von").Any() ? $" [Von {string.Join("+", A(k, "von").Select(v => (string?)v))}]" : "");
+            + (A(k, "von").Any() ? $" [Von {string.Join("+", A(k, "von").Select(v => (string?)v))}]" : "")
+            + (A(k, "verlierbar").Any() ? $" [Verlierbar {string.Join("+", A(k, "verlierbar").Select(v => (string?)v))}]" : "");
         foreach (var g in A(b, "graphen").Where(Sonde))
         {
             z.Add($"graph {S(g, "namespace")}.{S(g, "name")} | knoten {string.Join(", ", A(g, "knoten").Select(Knoten))}"
