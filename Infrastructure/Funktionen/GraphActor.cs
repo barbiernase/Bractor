@@ -29,6 +29,8 @@ public sealed class GraphActor(
     {
         public EingangZustellen Kopf { get; } = kopf;
         public List<PID> Warten { get; } = new();
+        /// <summary>Die gesicherten Aufrufe, die der Kopf gab (ihre Kennungen) — beim Ende fallen sie aus der Tabelle.</summary>
+        public List<Guid> Aufrufe { get; } = new();
         public int Ausstehend;
     }
 
@@ -149,6 +151,7 @@ public sealed class GraphActor(
         if (!verlierbar)
         {
             _aufrufe[kennung] = (o.Kopf.Kennung, pid, aufruf);
+            o.Aufrufe.Add(kennung);
             o.Ausstehend++;
         }
         context.Send(pid, aufruf);
@@ -181,7 +184,7 @@ public sealed class GraphActor(
     {
         var kopf = o.Kopf;
         if (!_ketten.Remove(kopf.Kennung)) return;
-        foreach (var x in _aufrufe.Where(x => x.Value.Kopf == kopf.Kennung).Select(x => x.Key).ToList()) _aufrufe.Remove(x);
+        foreach (var x in o.Aufrufe) _aufrufe.Remove(x);
         if (gescheitert is var (knotenName, grund))
         {
             foreach (var w in o.Warten) context.Send(w, new EingangQuittung(kopf.Kennung, Quittungsart.Gescheitert));
