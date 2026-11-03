@@ -220,4 +220,4 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 | Offen, Schulden | `docs/13-reifegrad-schulden-bewertung.md` §13.0 |
 | Tests, Zahlen, Messwerte | `docs/12-tests-und-vermessung.md` |
 
-Gelöschte Dokumente (Werkbank-Konzept, Editor- und LLM-Konzepte, die Pläne Pub/Sub-Neustrukturierung, Commands und Funktionsgraphen, Ausdrückliche Kanten in Graphen und Graphen ohne Lauf-Steuerung) liegen im Git-Verlauf.
+Gelöschte Dokumente (Werkbank-Konzept, Editor- und LLM-Konzepte, die Pläne Pub/Sub-Neustrukturierung, Commands und Funktionsgraphen, Ausdrückliche Kanten in Graphen, Graphen ohne Lauf-Steuerung und Eine Instanz läuft auf ihrem Rechner) liegen im Git-Verlauf.
