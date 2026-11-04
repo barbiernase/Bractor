@@ -2001,8 +2001,8 @@
   //   Fläche öffnet (Doppelklick) die Karte der Sicht dahinter im Modal, ein Port den Typ seiner Nachricht; ein Klick hebt die Kette hervor.
   const FL_SPALTE={ausgang:{t:"Client-Ausgang",u:"was Akteure hineingeben (darf)",neu:["akteur","client"]},quellen:{t:"Quellen",u:"lauschen am Kopf eines Graphen",neu:["quelle"]},
     graphen:{t:"Graphen",u:"rechnen vor dem Aggregat",neu:["graph"]},aggregate:{t:"Aggregate",u:"entscheiden, schreiben das Log",neu:["aggregate"]},
-    projektionen:{t:"Projektionen",u:"Sichten je Store",neu:["projektion"]},eingang:{t:"Client-Eingang",u:"was zu Akteuren kommt (hört)",neu:["akteur"]}};
-  const FL_SYM={akteur:"👤",quelle:"⚡",graph:"⬡",aggregate:"▣",projektion:"⇶",reader:"⌕"};
+    projektionen:{t:"Projektionen",u:"Sichten je Store",neu:["store"]},eingang:{t:"Client-Eingang",u:"was zu Akteuren kommt (hört)",neu:["akteur"]}};
+  const FL_SYM={akteur:"👤",quelle:"⚡",graph:"⬡",aggregate:"▣",projektion:"⇶",reader:"⌕",store:"🗄"};
   const FL_SORTE={command:"",event:"",hinweis:"✉ ",query:"? ",antwort:"↩ ",frist:"⏱ "};
   // Kantenarten: Farbe, Strich, leise (tritt zurück, bis eine ihrer Karten gewählt ist).
   const FL_KANTE={schreiben:{c:"#9aa6bb"},quelle:{c:"#9aa6bb"},lesen:{c:"#7aa2e0",d:"2 4",leise:1},kenntnis:{c:"#8a8f9c",d:"6 4",leise:1},
@@ -2133,7 +2133,7 @@
   // Rahmen der Fläche: Spaltenköpfe (mit ＋ und den Clients), Bänder der Domänen, Store-Gruppen.
   function flRahmen(ebene){const aus={x2:0,y2:0};
     FL().spalten.forEach(s=>{const g=FLGEO.spalten[s];if(!g)return;const d=FL_SPALTE[s];
-      const neu=e=>{e.stopPropagation();if(d.neu.length===1)neuerKnoten(d.neu[0]);else menue(e.clientX,e.clientY,d.t,d.neu.map(k=>({t:"＋ "+(NODELABEL[k]||k),fn:()=>neuerKnoten(k)})));};
+      const neu=e=>{e.stopPropagation();if(d.neu[0]==="store"){stoNeuAnlegen(e);return;}if(d.neu.length===1)neuerKnoten(d.neu[0]);else menue(e.clientX,e.clientY,d.t,d.neu.map(k=>({t:"＋ "+(NODELABEL[k]||k),fn:()=>neuerKnoten(k)})));};
       const k=h("div",{class:"fl-kopf"},h("div",{},h("b",{},d.t),h("button",{title:"Neu in dieser Spalte",onclick:neu},"＋")),h("div",{class:"fl-u"},d.u),
         s==="ausgang"&&MODEL.clients.length?h("div",{class:"fk-chips"},...MODEL.clients.map(c=>h("button",{class:"fk-chip",title:"Client "+c.name+" verkörpert "+(c.verkoerpert||[]).join(", ")+" — Klick: Panel",
           onclick:e=>{e.stopPropagation();komKarte("cl:"+c._id);}},"🔌 "+clientAnzeige(c)))):null);
@@ -2241,11 +2241,15 @@
     if(canvas&&document.getElementById("de").classList.contains("on")){e.preventDefault();zoomAuf(null0?1:Math.min(2,Math.max(0.08,PAN.s*(rein?1.2:1/1.2))));}},true);
   document.addEventListener("wheel",e=>{if(!KOM||!(e.ctrlKey||e.metaKey))return;if(!e.target.closest||!e.target.closest("#de .kom"))return;
     e.preventDefault();komZoom(e.deltaY<0?1.1:1/1.1);},{passive:false,capture:true});
+  // Neu gezeichnet wird bei jedem Klick; der Bildlauf der Fläche bleibt, solange es dieselbe Ansicht ist — sonst spränge sie nach links oben.
   function komZeige(){const de=document.getElementById("de");let m=de.querySelector(".kom");
-    const scroll=m&&m.querySelector(".kom-panel")?m.querySelector(".kom-panel").scrollTop:0;if(m)m.remove();if(!KOM)return;
+    const scroll=m&&m.querySelector(".kom-panel")?m.querySelector(".kom-panel").scrollTop:0,alt=m&&m.querySelector(".kom-lw");
+    const lauf=alt?{id:m.dataset.ansicht,x:alt.scrollLeft,y:alt.scrollTop}:null;if(m)m.remove();if(!KOM)return;
     const id=KOM.pfad[KOM.pfad.length-1];
     if(id.startsWith("form:"))formZeige(de,id.slice(5));else if(!id.startsWith("gr:"))blockZeige(de,id);else grZeige(de,id);
-    const neu=de.querySelector(".kom .kom-panel");if(neu&&scroll)neu.scrollTop=scroll;komZoomAnwenden();}
+    const neu=de.querySelector(".kom .kom-panel");if(neu&&scroll)neu.scrollTop=scroll;komZoomAnwenden();
+    const km=de.querySelector(".kom");if(km)km.dataset.ansicht=id;
+    const lw=km&&km.querySelector(".kom-lw");if(lw&&lauf&&lauf.id===id){lw.scrollLeft=lauf.x;lw.scrollTop=lauf.y;}}
   function komRahmen(unter){const m=h("div",{class:"kom"});
     ["pointerdown","wheel","dblclick","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
     m.append(h("div",{class:"kom-kopf"},komKrumen(),h("div",{class:"kom-u"},unter),
@@ -2409,103 +2413,47 @@
       rel.append(h("a",{title:(NODELABEL[k.kind]||k.kind)+" — öffnen",onclick:()=>komKarte(x,true)},
         h("i",{class:"kc-"+k.kind,style:"display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px"}),k.name||NODELABEL[k.kind]||k.kind));});};
     liste("◀ kommt von",ids(ADJ.inn.get(id)));liste("geht an ▶",ids(ADJ.out.get(id)));return rel;}
-  // ══ INNENANSICHT eines Aggregats bzw. Stores (docs/10 §10.9): dieselbe Form wie die Komposition — außen die Karte in
-  //   ihrer Spalte, innen ihre Glieder. Wer dazugehört, sagt der Besitz (board.sicht.besitz; beim Store auch die Reader seiner Gruppe), die Kanten
-  //   sind die der Sicht. Aggregat: Commands und Queries → Decide (und Fragen) → was entsteht → Apply → Zustand. Store: Events und Queries →
-  //   Auf bzw. Frage → Store-Funktionen → Read-Models, rechts die Antworten. Bearbeitet wird im Panel mit dem Formular des Glieds.
-  const INNEN_SPALTE={
-    agg:{decider:1,aggregate:1,applier:3,state:4},
-    sto:{handle:1,fn:2,readmodel:3}};
-  function blockInnen(id){const S=SICHT(),bes=S.besitz||{},art=x=>(NODEBY.get(x)||{}).kind,typ=id.startsWith("agg:")?"agg":"sto";
-    const wurzeln=new Set([id,...(typ==="sto"?FL().karten.filter(k=>k.gruppe===id).map(k=>k.karte):[])]);
-    const gehoert=x=>{let o=x;for(let i=0;i<6;i++){if(wurzeln.has(o)&&o!==x)return true;o=(bes[o]||"").replace(/!$/,"");if(!o||o.startsWith("§"))return false;}return false;};
-    const spalte=INNEN_SPALTE[typ],glieder=new Map();
-    NODEBY.forEach((n,x)=>{if(spalte[n.kind]!=null&&(gehoert(x)||(typ==="agg"&&x===id&&(n.ref.fragen||[]).length)))glieder.set(x,spalte[n.kind]);});
+  // ══ INNENANSICHT eines Aggregats bzw. Stores (docs/10 §10.9): eine Mechanik für beide (innenZeige) — Karten mit Ports, drei Detailstufen,
+  //   Paare auf gleicher Höhe, Sortierung, Anlegen ohne Zuordnung. Aggregat: Commands und Queries → Decide (und Fragen) → Ergebnisse → Apply →
+  //   Zustand; wer dazugehört, sagt der Besitz (board.sicht.besitz), die Kanten sind die der Sicht. Store: zwei Bänder (Schreiben, Lesen), je Band
+  //   Eingang → Auf bzw. Frage → Fähigkeit → Umsetzung, dazu die Read-Models und die Antworten; gerechnet aus dem Modell (stoInnen).
+  const INNEN_SPALTE={decider:1,aggregate:1,applier:3,state:4};
+  function blockInnen(id){const S=SICHT(),bes=S.besitz||{},art=x=>(NODEBY.get(x)||{}).kind;
+    const gehoert=x=>{let o=x;for(let i=0;i<6;i++){if(o===id&&o!==x)return true;o=(bes[o]||"").replace(/!$/,"");if(!o||o.startsWith("§"))return false;}return false;};
+    const glieder=new Map();
+    NODEBY.forEach((n,x)=>{if(INNEN_SPALTE[n.kind]!=null&&(gehoert(x)||(x===id&&(n.ref.fragen||[]).length)))glieder.set(x,INNEN_SPALTE[n.kind]);});
     // Kanten der Sicht zwischen Gliedern und den Nachrichten an ihnen; Strukturkanten (Glied → Besitzer) fallen weg, Apply faltet in den Zustand.
     const st=[...glieder.keys()].find(x=>art(x)==="state"),kanten=[],nachrichten=new Map(),erzeugt=new Set();
     (S.kanten||[]).forEach(([a,b])=>{
-      if(typ==="agg"){if(b===id&&art(a)==="applier"&&st)b=st;else if(b===id&&(art(a)==="decider"||art(a)==="state"))return;}
-      if(typ==="sto"&&(wurzeln.has(b)||art(b)==="store"||art(b)==="projektion"||art(b)==="reader"))return;
+      if(b===id&&art(a)==="applier"&&st)b=st;else if(b===id&&(art(a)==="decider"||art(a)==="state"))return;
       const ga=glieder.has(a),gb=glieder.has(b);if(!ga&&!gb)return;
       if(ga&&gb){kanten.push([a,b]);return;}
       // Nur Nachrichten stehen an den Rändern — ein Wertobjekt aus einem Parameter gehört ins Formular, nicht auf die Leinwand.
       const r=ga?b:a;if(!r.startsWith("rec:")||["valueobject","konfig"].includes(art(r)))return;
       nachrichten.set(r,0);if(ga)erzeugt.add(r);kanten.push([a,b]);});
-    // Was ein Glied erzeugt, steht hinter ihm (beim Aggregat in der Mitte vor dem Apply, beim Store rechts); was nur hineinkommt, links.
-    nachrichten.forEach((s,r)=>glieder.set(r,erzeugt.has(r)?(typ==="agg"?2:4):0));
-    return {typ,glieder,kanten};}
+    // Was ein Glied erzeugt, steht hinter ihm (in der Mitte vor dem Apply); was nur hineinkommt, links. Ein Event des Aggregats steht immer
+    //   bei den Ergebnissen — auch wenn bisher nur sein Apply es nimmt und noch kein Decide es ergibt.
+    nachrichten.forEach((s,r)=>glieder.set(r,erzeugt.has(r)||art(r)==="event"?2:0));
+    return {typ:"agg",glieder,kanten};}
   function innenTitel(n){const r=n.ref||{};
     switch(n.kind){case "decider":return ["Decide",r.command||n.name];case "applier":return ["Apply",r.event||n.name];case "state":return ["Zustand",n.name];
       case "aggregate":return ["Fragen",(r.fragen||[]).map(f=>f.query).join(", ")];
       case "handle":return [n.own&&n.own.kind==="reader"?"Frage":"Auf",(n.name||"")+" · "+((n.own&&(n.own.name||(n.own.ref||{}).name))||"")];
-      case "fn":return [r.faehigkeit||"Store-Funktion",n.name];case "readmodel":return ["Read-Model",n.name];
+      case "fn":return [r.faehigkeit||"Fähigkeit",n.name];case "readmodel":return ["Read-Model",n.name];
+      case "umsetzung":return ["Umsetzung",((n.st&&n.st.impl&&n.st.impl.name)||"neu")+"."+n.name];
       default:return [NODELABEL[n.kind]||n.kind,n.name];}}
   function blockZeige(de,id){const n0=NODEBY.get(id);if(!n0){KOM=null;return;}
-    const I=blockInnen(id),A=I.typ==="agg"?MODEL.aggregate.find(a=>"agg:"+a.name===id):null;
-    if(A){aggZeige(de,id,I,A);return;}
-    const P=KOM.port&&KOM.port.art==="fn"?KOM.port:null;
-    const m=komRahmen(P?"Anschließen: hervorgehobene Store-Funktion anklicken · Esc bricht ab"
-        :"Links Eingänge, rechts Ausgänge · ＋ am Auf bzw. an der Frage: eine Store-Funktion anschließen · Doppelklick: ganzes Formular");
-    const welt=h("div",{class:"kom-welt"}),svgK=document.createElementNS(SVGNS,"svg");svgK.setAttribute("class","kom-kanten");welt.append(svgK);
-    const wahl=KOM.wahl&&KOM.wahl.art==="glied"?KOM.wahl.id:null;
-    const kand=x=>!!P&&x.startsWith(P.lesen?"fn:rf:":"fn:wf:")&&!(P.hd.fns||[]).includes(x.slice(3));
-    I.glieder.forEach((s,x)=>{const n=NODEBY.get(x);if(!n)return;const [k,t]=innenTitel(n),rec=x.startsWith("rec:"),ja=kand(x);
-      const el=h("div",{class:"gnode2 fk kom-k n-"+(rec?n.kind:n.kind==="handle"?"handle":n.kind)+(wahl===x?" sel":"")+(ja?" kand":"")+(P&&!ja&&x!==P.karte?" leise":""),
-        title:ja?"Klick: anschließen":"Klick: Kanten hervorheben · Doppelklick: bearbeiten",
-        onclick:()=>{if(ja){const hd=P.hd;hd.fns=[...(hd.fns||[]),x.slice(3)];KOM.port=null;gTitel("🗄 "+n0.name+": "+(hd.event||hd.query)+" ruft "+n.name);render();return;}
-          if(P){KOM.port=null;komZeige();return;}komWaehle(wahl===x?null:{art:"glied",id:x});},
-        ondblclick:()=>{if(!P)komKarte(x,true,true);}},
-        h("div",{class:"ghead"},h("span",{class:"gtitle hatname",title:(NODELABEL[n.kind]||n.kind)+" · "+t},h("span",{class:"gk"},(rec?(FL_SORTE[komSorte(n.name)]||"")+n.name:k)+" "),h("span",{class:"gn"},rec?"":t))));
-      const PP=stoPorts(n,x,s),ports=h("div",{class:"fk-ports"});
-      PP.ein.forEach(p=>ports.append(stoPortZeile(p,"ein",x)));PP.aus.forEach(p=>ports.append(stoPortZeile(p,"aus",x)));
-      if(PP.ein.length||PP.aus.length)el.append(ports);
-      if(!rec&&diagFuer(x).length)el.append(h("div",{class:"ag-diag",title:diagFuer(x).map(d=>d.text).join("\n")},"⛔ "+diagFuer(x).map(d=>d.text).join(" · ")));
-      el.dataset.glied=x;el.dataset.spalte=s;welt.append(el);});
-    if(!I.glieder.size)welt.append(h("div",{class:"kom-leer"},"Noch nichts darin."));
-    const lw=h("div",{class:"kom-lw"},welt);m.append(h("div",{class:"kom-leib innen"},lw));de.append(m);
-    innenLegen(welt,I.kanten,30,[]);
-    const el=x=>welt.querySelector('.kom-k[data-glied="'+CSS.escape(x)+'"]');
-    const punkt=(e,ri,key)=>{const p=e.querySelector('[data-port="'+CSS.escape(ri+"|"+key)+'"]');return {x:e.offsetLeft+(ri==="aus"?e.offsetWidth:0),y:e.offsetTop+(p?p.offsetTop+p.offsetHeight/2:14)};};
-    I.kanten.forEach(([a,b])=>{const ea=el(a),eb=el(b);if(!ea||!eb)return;const na=NODEBY.get(a),nb=NODEBY.get(b);
-      const pk=nb&&nb.kind==="handle"?["aus","in"]:nb&&nb.kind==="fn"?["f:"+b.slice(3),"in"]:nb&&b.startsWith("rec:")?["r:"+nb.name,"in"]:["aus","in"];
-      innenKante(svgK,punkt(ea,"aus",pk[0]),punkt(eb,"ein",pk[1]),komSorte((a.startsWith("rec:")?na:nb||{}).name),wahl&&(a===wahl||b===wahl));});}
-  // Ports im Store: Auf bzw. Frage nimmt links ihr Event bzw. ihre Query und ruft rechts Store-Funktionen (＋ schließt eine an, ✕ löst), eine
-  //   Frage gibt dazu ihre Antworten aus; eine Store-Funktion wird links gerufen; Nachrichten stehen links (hinein) bzw. rechts (Antworten).
-  function stoPorts(n,x,spalte){const ein=[],aus=[];
-    if(n.kind==="handle"){const hd=n.ref,lesen=!!n.own&&n.own.kind==="reader",typ=hd.event||hd.query||"?";
-      ein.push({key:"in",label:typ,sorte:komSorte(typ)});
-      (hd.fns||[]).forEach(fid=>{const fn=NODEBY.get("fn:"+fid);aus.push({key:"f:"+fid,label:"▶ "+(fn?fn.name:fid),
-        loese:()=>{hd.fns=ohneX(hd.fns,fid);gTitel(typ+": ruft "+(fn?fn.name:fid)+" nicht mehr");render();}});});
-      if(lesen)(hd.responses||[]).forEach(r=>aus.push({key:"r:"+r,label:r,sorte:"antwort"}));
-      aus.push({key:"+",label:"＋ "+(lesen?"Lese":"Schreib")+"-Fähigkeit",plus:{art:"fn",hd,lesen,karte:x}});}
-    else if(n.kind==="fn")ein.push({key:"in",label:"◀ "+(n.ref.faehigkeit||"gerufen")});
-    else if(x.startsWith("rec:")){if(spalte===0)aus.push({key:"aus",label:"▶",sorte:komSorte(n.name)});else ein.push({key:"in",label:"◀",sorte:komSorte(n.name)});}
-    return {ein,aus};}
-  function stoPortZeile(p,richtung,x){const aktiv=KOM.port&&p.plus&&KOM.port.karte===x;
-    const r=h("div",{class:"fk-port "+richtung+" s-"+(p.sorte||"command")+(p.plus?" plus":"")+(aktiv?" aktiv":""),title:p.plus?"Klick: passende Store-Funktionen hervorheben":p.loese?"✕ löst":""},
-      h("span",{class:"fk-dot"}),h("span",{class:"fk-pl"},(p.plus?"":(FL_SORTE[p.sorte]||""))+p.label),
-      p.loese?h("button",{class:"ag-los",title:"Verbindung lösen",onclick:e=>{e.stopPropagation();p.loese();}},"✕"):null);
-    if(p.plus)r.onclick=e=>{e.stopPropagation();KOM.port=aktiv?null:p.plus;komZeige();};
-    r.dataset.port=richtung+"|"+p.key;return r;}
-  // Anordnen: je Spalte untereinander, im zweiten Durchgang zur mittleren Höhe der Nachbarn; feste Spalten bleiben auch leer stehen.
-  function innenLegen(welt,kanten,y0,feste){const els=[...welt.querySelectorAll(".kom-k")],nb=new Map(),xs=new Map();
-    kanten.forEach(([a,b])=>{[[a,b],[b,a]].forEach(([p,q])=>{if(!nb.has(p))nb.set(p,[]);nb.get(p).push(q);});});
-    const lege=reihe=>{const Y=new Map();let x=40,hmax=0;const sp=[...new Set([...els.map(e=>+e.dataset.spalte),...feste])].sort((a,b)=>a-b);
-      sp.forEach(s=>{let y=y0,w=feste.length?220:0;reihe(els.filter(e=>+e.dataset.spalte===s)).forEach(e=>{e.style.left=x+"px";e.style.top=y+"px";Y.set(e.dataset.glied,y+e.offsetHeight/2);y+=e.offsetHeight+16;w=Math.max(w,e.offsetWidth);});
-        xs.set(s,{x,w});hmax=Math.max(hmax,y);x+=w+120;});return {Y,w:x,h:hmax+30};};
-    let g=lege(l=>l);
-    g=lege(l=>l.map(e=>{const ys=(nb.get(e.dataset.glied)||[]).map(o=>g.Y.get(o)).filter(v=>v!=null);return [e,ys.length?ys.reduce((a,b)=>a+b,0)/ys.length:g.Y.get(e.dataset.glied)];})
-      .sort((a,b)=>a[1]-b[1]).map(p=>p[0]));
-    const svgK=welt.querySelector("svg");welt.style.width=g.w+"px";welt.style.height=g.h+"px";svgK.setAttribute("width",g.w);svgK.setAttribute("height",g.h);
-    return {xs};}
-  function innenKante(svgK,A,B,sorte,dick){const zurueck=B.x<A.x,c=Math.max(40,Math.abs(B.x-A.x)*0.45),p=document.createElementNS(SVGNS,"path");
+    if(id.startsWith("sto:")){stoZeige(de,id,n0.ref);return;}
+    const A=MODEL.aggregate.find(a=>"agg:"+a.name===id);if(!A){KOM=null;return;}
+    aggZeige(de,id,blockInnen(id),A);}
+  function innenKante(svgK,A,B,sorte,dick,blass){const zurueck=B.x<A.x,c=Math.max(40,Math.abs(B.x-A.x)*0.45),p=document.createElementNS(SVGNS,"path");
     p.setAttribute("d",zurueck?"M"+A.x+","+A.y+" C"+(A.x+80)+","+A.y+" "+(B.x-80)+","+B.y+" "+B.x+","+B.y:"M"+A.x+","+A.y+" C"+(A.x+c)+","+A.y+" "+(B.x-c)+","+B.y+" "+B.x+","+B.y);
     p.setAttribute("fill","none");p.setAttribute("stroke",sorte==="event"?"#57b673":sorte==="hinweis"?"#cf6f68":sorte==="query"||sorte==="antwort"?"#9678d6":"#8fa6c8");
-    p.setAttribute("stroke-width",dick?"3":"1.6");svgK.append(p);}
+    p.setAttribute("stroke-width",dick?"3":"1.6");if(blass)p.setAttribute("opacity",".15");svgK.append(p);}
 
   // ── Aggregat von innen: Karten mit Ports — links die Eingänge, rechts die Ausgänge. Verbunden wird nie von Hand: „＋“ an einem Port hebt die
-  //   Karten hervor, die dort angeschlossen werden können, ein Klick auf eine von ihnen verbindet (Esc bricht ab); ✕ an einem Port löst. Der Kopf
-  //   einer Karte schaltet ihr Bearbeiten an und aus. ──
+  //   Karten hervor, die dort angeschlossen werden können (alles andere tritt zurück), ein Klick auf eine von ihnen verbindet (Esc bricht ab); ✕ an
+  //   einem Port löst. Je Karte drei Stufen: nur Kopf · Kopf mit Ports (Standard) · Bearbeiten — Doppelklick schaltet Kopf ⇄ Ports, ✎ das Bearbeiten. ──
   // Die Ports einer Karte: {key, label, sorte, loese (✕), plus (＋, startet die Auswahl bzw. legt an)}.
   function aggPorts(A,n,x){const ein=[],aus=[],agg=A.name,decs=MODEL.decider.filter(d=>d.aggregat===agg);
     const s=t=>komSorte(t);
@@ -2518,9 +2466,12 @@
       (f.antworten||[]).forEach(a=>aus.push({key:"a:"+a,label:a,sorte:"antwort",loese:()=>{f.antworten=ohneX(f.antworten,a);gTitel("▣ "+agg+": "+f.query+" antwortet nicht mehr "+a);render();}}));
       aus.push({key:"+:"+f.query,label:"＋ Antwort zu "+f.query,plus:{art:"antwort",frage:f}});});
     else if(x.startsWith("rec:")){const r=n.ref||{},nm=n.name;
-      if(r.kind==="command"&&r.aggregat===agg)aus.push({key:"aus",label:"▶ Decide",sorte:"command"});
+      if(r.kind==="command"&&r.aggregat===agg)aus.push(decs.some(d=>d.command===nm)?{key:"aus",label:"▶ Decide",sorte:"command"}
+        :{key:"aus",label:"＋ Decide",plus:{art:"eigenesDecide",rec:nm}});
       else if(r.kind==="query")aus.push({key:"aus",label:"▶ Frage",sorte:"query"});
-      else if(r.kind==="queryresponse")ein.push({key:"von:Frage",label:"◀ Antwort einer Frage",sorte:"antwort"});
+      else if(r.kind==="queryresponse"){(A.fragen||[]).filter(f=>(f.antworten||[]).includes(nm)).forEach(f=>ein.push({key:"von:"+f.query,label:"◀ "+f.query,sorte:"antwort",
+          loese:()=>{f.antworten=ohneX(f.antworten,nm);gTitel("▣ "+agg+": "+f.query+" antwortet nicht mehr "+nm);render();}}));
+        ein.push({key:"+",label:"＋ Frage",plus:{art:"frage",rec:nm}});}
       else{decs.filter(d=>(d.ergibt||[]).some(o=>o.event===nm)).forEach(d=>ein.push({key:"von:"+d.command,label:"◀ "+d.command,sorte:s(nm),
           loese:()=>{d.ergibt=d.ergibt.filter(z=>z.event!==nm);gTitel("▣ "+agg+": "+d.command+" ergibt nicht mehr "+nm);render();}}));
         ein.push({key:"+",label:"＋ Decide",plus:{art:"decide",rec:nm},ein:true});
@@ -2528,75 +2479,163 @@
           aus.push(ap?{key:"apply",label:"▶ Apply",sorte:"event"}:{key:"apply",label:"＋ Apply",plus:{art:"apply",rec:nm}});}}}
     return {ein,aus};}
   // Welcher Port an welcher Kante hängt (Kanten der Sicht zwischen Gliedern).
-  function aggKantenPorts(a,b){const na=NODEBY.get(a),nb=NODEBY.get(b);if(!na||!nb)return null;
+  function aggKantenPorts(A,a,b){const na=NODEBY.get(a),nb=NODEBY.get(b);if(!na||!nb)return null;
     if(nb.kind==="decider")return ["aus","cmd"];
     if(nb.kind==="aggregate")return ["aus","q:"+na.name];
     if(na.kind==="decider")return ["r:"+nb.name,"von:"+na.ref.command];
-    if(na.kind==="aggregate")return ["a:"+nb.name,"von:Frage"];
+    if(na.kind==="aggregate"){const f=(A.fragen||[]).find(f=>(f.antworten||[]).includes(nb.name));return ["a:"+nb.name,"von:"+(f?f.query:"")];}
     if(nb.kind==="applier")return ["apply","evt"];
     if(na.kind==="applier")return ["st","in"];
     return null;}
-  // Wer an einen „＋“ angeschlossen werden kann.
+  // Wer an einen „＋“ angeschlossen werden kann (vorhandene Karten im Bild; Neues und Vorhandenes von außerhalb: aggGeister).
   function aggAuswahl(A,I,p){const k=new Set();if(!p)return k;
     I.glieder.forEach((s,x)=>{const n=NODEBY.get(x);if(!n)return;
       if(p.art==="ergebnis"&&x.startsWith("rec:")&&s===2&&["event","rejection","command"].includes(n.kind)&&!(p.dec.ergibt||[]).some(o=>o.event===n.name))k.add(x);
       if(p.art==="decide"&&n.kind==="decider"&&!(n.ref.ergibt||[]).some(o=>o.event===p.rec))k.add(x);
-      if(p.art==="antwort"&&n.kind==="queryresponse"&&!(p.frage.antworten||[]).includes(n.name))k.add(x);});
+      if(p.art==="antwort"&&n.kind==="queryresponse"&&!(p.frage.antworten||[]).includes(n.name))k.add(x);
+      if(p.art==="frage"&&x.startsWith("rec:")&&n.kind==="query"&&(A.fragen||[]).some(f=>f.query===n.name&&!(f.antworten||[]).includes(p.rec)))k.add(x);});
     return k;}
   function aggAnschliessen(A,p,x){const n=NODEBY.get(x);if(!n)return;
-    if(p.art==="ergebnis"){p.dec.ergibt=[...(p.dec.ergibt||[]),{event:n.name}];gTitel("▣ "+A.name+": "+p.dec.command+" ergibt "+n.name);}
-    else if(p.art==="decide"){n.ref.ergibt=[...(n.ref.ergibt||[]),{event:p.rec}];gTitel("▣ "+A.name+": "+n.ref.command+" ergibt "+p.rec);}
+    if(p.art==="ergebnis"){p.dec.ergibt=[...(p.dec.ergibt||[]),{event:n.name}];aggApplySichern(A,n.name);gTitel("▣ "+A.name+": "+p.dec.command+" ergibt "+n.name);}
+    else if(p.art==="decide"){n.ref.ergibt=[...(n.ref.ergibt||[]),{event:p.rec}];aggApplySichern(A,p.rec);gTitel("▣ "+A.name+": "+n.ref.command+" ergibt "+p.rec);}
     else if(p.art==="antwort"){p.frage.antworten=[...(p.frage.antworten||[]),n.name];gTitel("▣ "+A.name+": "+p.frage.query+" antwortet "+n.name);}
+    else if(p.art==="frage"){const f=(A.fragen||[]).find(f=>f.query===n.name);if(f){f.antworten=[...(f.antworten||[]),p.rec];gTitel("▣ "+A.name+": "+f.query+" antwortet "+p.rec);}}
     KOM.port=null;render();}
-  // „＋“ an einem Port: Apply legt direkt an; sonst heben sich die anschließbaren Karten hervor, dazu ein Menü für Neues.
-  function aggPlus(A,I,p,x,ev){if(p.art==="apply"){MODEL.applier.push({_id:"a"+(NID++),aggregat:A.name,event:p.rec});gTitel("▣ "+A.name+": Apply "+p.rec);render();return;}
-    KOM.port={...p,karte:x};komZeige();
-    const n=aggAuswahl(A,I,p).size,hinweis=n?n+" Karte(n) hervorgehoben — anklicken verbindet · Esc bricht ab":"Keine vorhandene Karte passt — etwas Neues anlegen";
-    if(p.art==="ergebnis")aggNeuesErgebnis(A,p.dec,ev,hinweis);
-    else if(p.art==="antwort")frageFix(ev.clientX,ev.clientY,"Neue Antwort zu "+p.frage.query,p.frage.query.replace(/^Hole/,"")+"Antwort",hinweis,nm=>{const f=nameFehler(nm);if(f)return f;
-      MODEL.records.push({name:nm,kind:"queryresponse",namespace:A.namespace,felder:[],istErzeugung:false});p.frage.antworten=[...(p.frage.antworten||[]),nm];KOM.port=null;
-      gTitel("▣ "+A.name+": "+p.frage.query+" antwortet "+nm);render();});
-    else deFlash("ℹ "+hinweis,true);}
-  function aggPortZeile(A,I,p,richtung,x){const r=h("div",{class:"fk-port "+richtung+" s-"+(p.sorte||"command")+(p.plus?" plus":"")+(KOM.port&&KOM.port.karte===x&&p.plus&&KOM.port.art===p.plus.art?" aktiv":""),
-      title:p.plus?"Klick: anschließen bzw. anlegen":p.loese?"✕ löst die Verbindung":""},h("span",{class:"fk-dot"}),h("span",{class:"fk-pl"},(p.plus?"":(FL_SORTE[p.sorte]||""))+p.label),
+  // Ein Event, das ein Decide des Aggregats ergibt, braucht sein Apply (CQRS079) — es entsteht mit dem Anschließen (Platzhalter-Rumpf).
+  function aggApplySichern(A,nm){const r=recNamens(nm);if(!r||r.kind!=="event"||MODEL.applier.some(a=>a.aggregat===A.name&&a.event===nm))return;
+    MODEL.applier.push({_id:"a"+(NID++),aggregat:A.name,event:nm});}
+  // Hat eine Nachricht schon einen Erzeuger (Decide, Funktion, Frage, Reader)? Ohne ihn kann ein Decide bzw. eine Frage sie übernehmen.
+  const aggHatErzeuger=nm=>MODEL.decider.some(d=>(d.ergibt||[]).some(o=>o.event===nm))
+    ||MODEL.bausteinFunktionen.some(f=>(f.eingaenge||[]).some(e=>(e.ausgaben||[]).includes(nm)))
+    ||MODEL.aggregate.some(a=>(a.fragen||[]).some(f=>(f.antworten||[]).includes(nm)))||MODEL.reader.some(r=>(r.handles||[]).some(x=>(x.responses||[]).includes(nm)));
+  // Beim Anschließen steht, was es noch nicht gibt bzw. was nicht im Bild ist, als gestrichelte Karte in seiner Spalte: Neues anlegen (Name
+  //   abfragen) oder ein Event bzw. einen Hinweis ohne Erzeuger von außerhalb übernehmen — die Auswahl bleibt nicht aufs Sichtbare beschränkt.
+  //   (Eine fremde Antwort nicht: sie liegt bei der Leseseite, die Antwort einer Frage an ein Aggregat bei der Schreibseite.)
+  function aggGeister(A,I,p){if(!p)return [];const g=[],t="▣ "+A.name,drin=nm=>I.glieder.has("rec:"+nm);
+    const neu=(spalte,titel,u,vorschlag,anlegen)=>g.push({spalte,t:titel,u,fn:e=>frageFix(e.clientX,e.clientY,titel,vorschlag,u,n=>{const f=nameFehler(n);if(f)return f;
+      KOM.port=null;anlegen(n);render();})});
+    const uebernimm=(spalte,nm,sorte,verbinde)=>g.push({spalte,t:(FL_SORTE[sorte]||"")+nm,u:"vorhanden, noch ohne Erzeuger — Klick übernimmt",fn:()=>{KOM.port=null;verbinde();render();}});
+    const rec=(n,kind)=>aggRecordNeu(A,n,kind);
+    if(p.art==="ergebnis"){const d=p.dec,ergibt=n=>{d.ergibt=[...(d.ergibt||[]),{event:n}];aggApplySichern(A,n);gTitel(t+": "+d.command+" ergibt "+n);};
+      neu(2,"＋ neues Event","Fakt im Log",A.name+"Geaendert",n=>{rec(n,"event");ergibt(n);});
+      neu(2,"＋ neuer Hinweis","flüchtig, an Akteure",d.command+"Abgelehnt",n=>{rec(n,"rejection");ergibt(n);});
+      neu(2,"＋ Command ohne Ziel","an den Kopf eines Graphen oder einen Akteur",A.name+"Weiter",n=>{rec(n,"command");ergibt(n);});
+      MODEL.decider.filter(x=>x.aggregat===A.name&&x.command).map(x=>"Frist<"+x.command+">").filter(f=>!(d.ergibt||[]).some(o=>o.event===f))
+        .forEach(f=>g.push({spalte:2,t:"⏱ "+f,u:"Frist auf einen eigenen Command",fn:()=>{KOM.port=null;ergibt(f);render();}}));
+      MODEL.records.filter(r=>(r.kind==="event"||r.kind==="rejection")&&!drin(r.name)&&!aggHatErzeuger(r.name)).slice(0,12)
+        .forEach(r=>uebernimm(2,r.name,komSorte(r.name),()=>ergibt(r.name)));}
+    else if(p.art==="decide")neu(1,"＋ neuer Command mit Decide","Command an "+A.name+" — sein Decide ergibt "+p.rec,"",n=>aggCommandAnlegen(A,n,[{event:p.rec}]));
+    else if(p.art==="antwort"){const f=p.frage,antw=n=>{f.antworten=[...(f.antworten||[]),n];gTitel(t+": "+f.query+" antwortet "+n);};
+      neu(2,"＋ neue Antwort","Antwort auf "+f.query,f.query.replace(/^Hole/,"")+"Antwort",n=>{rec(n,"queryresponse");antw(n);});}
+    else if(p.art==="frage")neu(0,"＋ neue Query","Frage an "+A.name+" — antwortet "+p.rec,"Hole"+A.name+"Stand",n=>aggQueryAnlegen(A,n,[p.rec]));
+    return g;}
+  // „＋“ an einem Port: Apply bzw. Decide eines eigenen Commands legt direkt an; sonst heben sich die anschließbaren Karten hervor (dazu die
+  //   gestrichelten für Neues), ein zweiter Klick auf denselben „＋“ bricht ab.
+  function aggPlus(A,I,p,x){
+    if(p.art==="apply"){MODEL.applier.push({_id:"a"+(NID++),aggregat:A.name,event:p.rec});gTitel("▣ "+A.name+": Apply "+p.rec);render();return;}
+    if(p.art==="eigenesDecide"){MODEL.decider.push({_id:"d"+(NID++),aggregat:A.name,command:p.rec,ergibt:[]});gTitel("▣ "+A.name+": Decide "+p.rec);render();return;}
+    innenPortWahl(p,x);}
+  // Ein Port einer Karte; „＋“ ruft die Geste des Blocks (C.plus).
+  const portZiel=p=>p&&(p.dec||p.frage||p.rec||p.hd||p.fn);
+  function innenPortZeile(C,p,richtung,x){const P=KOM.port,aktiv=!!p.plus&&!!P&&P.karte===x&&P.art===p.plus.art&&portZiel(P)===portZiel(p.plus);
+    const r=h("div",{class:"fk-port "+richtung+" s-"+(p.sorte||"command")+(p.plus?" plus":"")+(aktiv?" aktiv":""),
+      title:p.plus?(aktiv?"Klick: abbrechen":"Klick: anschließen bzw. anlegen"):p.loese?"✕ löst die Verbindung":""},h("span",{class:"fk-dot"}),h("span",{class:"fk-pl"},(p.plus?"":(FL_SORTE[p.sorte]||""))+p.label),
       p.loese?h("button",{class:"ag-los",title:"Verbindung lösen",onclick:e=>{e.stopPropagation();p.loese();}},"✕"):null);
-    if(p.plus)r.onclick=e=>{e.stopPropagation();aggPlus(A,I,p.plus,x,e);};
+    if(p.plus)r.onclick=e=>{e.stopPropagation();C.plus(p.plus,x);};
     r.dataset.port=richtung+"|"+p.key;return r;}
-  function aggZeige(de,id,I,A){const m=komRahmen(KOM.port?"Anschließen: hervorgehobene Karte anklicken · Esc bricht ab"
-        :"Links Eingänge, rechts Ausgänge · ＋ an einem Port: anschließen oder anlegen · Kopf: bearbeiten an/aus · Doppelklick: ganzes Formular");
+  // „＋“ an einem Port ohne eigene Geste: die anschließbaren Karten heben sich hervor (dazu die gestrichelten für Neues); ein zweiter Klick auf
+  //   denselben „＋“ bricht ab.
+  function innenPortWahl(p,x){const gleich=KOM.port&&KOM.port.karte===x&&KOM.port.art===p.art&&portZiel(KOM.port)===portZiel(p);
+    KOM.port=gleich?null:{...p,karte:x};komZeige();}
+  // Die Kette einer gewählten Karte: was vor ihr und was nach ihr kommt (je Richtung transitiv über die Kanten der Innenansicht).
+  function innenKette(kanten,start){const k=new Set([start]);
+    [[0,1],[1,0]].forEach(([a,b])=>{const offen=[start],da=new Set([start]);
+      while(offen.length){const x=offen.pop();kanten.forEach(e=>{if(e[a]===x&&!da.has(e[b])){da.add(e[b]);k.add(e[b]);offen.push(e[b]);}});}});
+    return k;}
+  // Die Innenansicht eines Blocks. C sagt, was der Block ist: I (glieder: Id → Spalte, kanten), knoten(x), ports, kantenPorts, auswahl,
+  //   anschliessen, geister, plus, kurz, bearbeiten, zeit/name/ein (Sortierung), band(x), fest(x) (kein ✎, dafür festKnopf), marke(x), fremd(x),
+  //   unverbunden (+ Text), koepfe() je Spalte [Titel, ＋, Hinweis, führt-Wert], legen (Spalten, Bänder, freie Spalten, folgende Spalten) und
+  //   ansicht (welche Seite führt, wonach sortiert, B = der führt-Wert der rechten Paare).
+  function innenZeige(de,id,C){KOM.edit=KOM.edit||new Set();KOM.zu=KOM.zu||new Set();const I=C.I,kn=x=>C.knoten(x),unverbunden=C.unverbunden||new Set();
+    const m=komRahmen(KOM.port?"Anschließen: eine hervorgehobene Karte anklicken — gestrichelt: neu anlegen bzw. übernehmen · Esc bricht ab"
+        :"Klick: Kette hervorheben · Doppelklick: nur Kopf ⇄ Ports · ✎: bearbeiten · ＋ am Port: anschließen · ＋ im Spaltenkopf: neu anlegen");
+    const alleZu=I.glieder.size>0&&[...I.glieder.keys()].every(x=>KOM.zu.has(x)),fuehrt=C.ansicht.fuehrt(),sortierung=C.ansicht.sortierung();
+    m.querySelector(".kom-reiter").prepend(
+      h("button",{title:"Alle Karten nur mit Kopf bzw. mit Ports",
+        onclick:()=>{if(alleZu)KOM.zu.clear();else{I.glieder.forEach((s,x)=>KOM.zu.add(x));KOM.edit.clear();}komZeige();}},alleZu?"☰ alle mit Ports":"▭ alle nur Kopf"));
     const welt=h("div",{class:"kom-welt"}),svgK=document.createElementNS(SVGNS,"svg");svgK.setAttribute("class","kom-kanten");welt.append(svgK);
-    const wahl=KOM.wahl&&KOM.wahl.art==="glied"?KOM.wahl.id:null;KOM.edit=KOM.edit||new Set();
-    const auswahl=aggAuswahl(A,I,KOM.port);
-    I.glieder.forEach((s,x)=>{const n=NODEBY.get(x);if(!n)return;const [k,t]=innenTitel(n),rec=x.startsWith("rec:"),offen=KOM.edit.has(x),kand=auswahl.has(x);
-      const el=h("div",{class:"gnode2 fk kom-k n-"+n.kind+(wahl===x?" sel":"")+(offen?" offen":"")+(kand?" kand":"")+(KOM.port&&!kand&&x!==KOM.port.karte?" leise":""),
-        title:kand?"Klick: anschließen":"Klick: Kanten hervorheben · Doppelklick: ganzes Formular",
-        onclick:()=>{if(kand){aggAnschliessen(A,KOM.port,x);return;}if(KOM.port){KOM.port=null;komZeige();return;}komWaehle(wahl===x?null:{art:"glied",id:x});},
-        ondblclick:()=>{if(!KOM.port)komKarte(x,true,true);}});
-      const kopf=h("div",{class:"ghead",title:"Klick auf den Kopf: bearbeiten an/aus"},h("span",{class:"gtitle hatname",title:(NODELABEL[n.kind]||n.kind)+" · "+t},
-        h("span",{class:"gk"},(rec?(FL_SORTE[komSorte(n.name)]||"")+n.name:k)+" "),h("span",{class:"gn"},rec?"":t)),h("span",{class:"ag-stift"},kand?"⊕":offen?"▾":"✎"));
-      kopf.onclick=e=>{e.stopPropagation();if(kand){aggAnschliessen(A,KOM.port,x);return;}if(KOM.edit.has(x))KOM.edit.delete(x);else KOM.edit.add(x);komZeige();};
-      el.append(kopf);
-      const P=aggPorts(A,n,x),ports=h("div",{class:"fk-ports"});
-      P.ein.forEach(p=>ports.append(aggPortZeile(A,I,p,"ein",x)));P.aus.forEach(p=>ports.append(aggPortZeile(A,I,p,"aus",x)));
-      if(P.ein.length||P.aus.length)el.append(ports);
-      el.append(aggKurz(A,n,x));
-      if(diagFuer(x).length)el.append(h("div",{class:"ag-diag",title:diagFuer(x).map(d=>d.text).join("\n")},"⛔ "+diagFuer(x).map(d=>d.text).join(" · ")));
-      if(offen)el.append(aggBearbeiten(A,n,x));
-      el.dataset.glied=x;el.dataset.spalte=s;welt.append(el);});
+    const wahl=KOM.wahl&&KOM.wahl.art==="glied"&&I.glieder.has(KOM.wahl.id)?KOM.wahl.id:null;
+    const auswahl=C.auswahl(KOM.port),kette=wahl&&!KOM.port?innenKette(I.kanten,wahl):null;
+    // Erst die gestrichelten Karten (oben in ihrer Spalte), dann die Glieder.
+    C.geister(KOM.port).forEach((g,i)=>{const el=h("div",{class:"gnode2 fk kom-k ag-neu kand",title:g.u||"",onclick:e=>{e.stopPropagation();g.fn(e);}},
+        h("div",{class:"ghead"},h("span",{class:"gtitle"},h("span",{class:"gk"},g.t))));
+      if(g.u)el.append(h("div",{class:"ag-kurz"},g.u));el.dataset.glied="neu:"+i;el.dataset.spalte=g.spalte;el.dataset.band=g.band||"";welt.append(el);});
+    I.glieder.forEach((s,x)=>{const n=kn(x);if(!n)return;const [k,t]=innenTitel(n),rec=x.startsWith("rec:"),fest=!!(C.fest&&C.fest(x)),
+        offen=!fest&&KOM.edit.has(x),zu=!offen&&KOM.zu.has(x),kand=auswahl.has(x);
+      const leise=KOM.port?!kand&&x!==KOM.port.karte:!!kette&&!kette.has(x);
+      const el=h("div",{class:"gnode2 fk kom-k n-"+n.kind+(wahl===x?" sel":"")+(offen?" offen":"")+(zu?" zu":"")+(kand?" kand":"")+(leise?" leise":"")+(C.fremd&&C.fremd(x)?" fremd":""),
+        title:kand?"Klick: anschließen":"Klick: Kette hervorheben · Doppelklick: "+(zu?"Ports zeigen":"nur Kopf")+(fest?"":" · ✎: bearbeiten"),
+        onclick:e=>{if(kand){C.anschliessen(KOM.port,x);return;}if(KOM.port){KOM.port=null;komZeige();return;}
+          if(e.detail<=1)KOM.klick={wahl:KOM.wahl};komWaehle(wahl===x?null:{art:"glied",id:x});},
+        // Dem Doppelklick gehen zwei Klicks voraus, die die Wahl umgeschaltet haben — er stellt sie wieder her, wie sie vor dem ersten war.
+        ondblclick:e=>{e.stopPropagation();if(KOM.port)return;if(KOM.zu.has(x))KOM.zu.delete(x);else{KOM.zu.add(x);KOM.edit.delete(x);}
+          if(KOM.klick)KOM.wahl=KOM.klick.wahl;KOM.klick=null;komZeige();}},
+        h("div",{class:"ghead"},h("span",{class:"gtitle hatname",title:(NODELABEL[n.kind]||n.kind)+" · "+t},
+          h("span",{class:"gk"},(rec?(FL_SORTE[komSorte(n.name)]||"")+n.name:k)+" "),h("span",{class:"gn"},rec?"":t)),
+          unverbunden.has(x)?h("span",{class:"kom-mark",title:C.unverbundenText||""},"unverbunden"):null,
+          C.marke?C.marke(x):null,
+          kand?h("span",{class:"ag-stift"},"⊕"):fest?(C.festKnopf?C.festKnopf(n,x):null):h("button",{class:"ag-stift"+(offen?" an":""),title:offen?"Bearbeiten schließen":"Bearbeiten",
+            onclick:e=>{e.stopPropagation();if(KOM.port){KOM.port=null;komZeige();return;}if(offen)KOM.edit.delete(x);else{KOM.edit.add(x);KOM.zu.delete(x);}komZeige();}},offen?"▾":"✎")));
+      if(!zu){const P=C.ports(n,x),ports=h("div",{class:"fk-ports"});
+        P.ein.forEach(p=>ports.append(innenPortZeile(C,p,"ein",x)));P.aus.forEach(p=>ports.append(innenPortZeile(C,p,"aus",x)));
+        if(P.ein.length||P.aus.length)el.append(ports);
+        el.append(C.kurz(n,x));}
+      if(diagFuer(x).length)el.append(h("div",{class:"ag-diag",title:diagFuer(x).map(d=>d.text).join("\n")},zu?"⛔":"⛔ "+diagFuer(x).map(d=>d.text).join(" · ")));
+      if(offen)el.append(C.bearbeiten(n,x));
+      el.dataset.glied=x;el.dataset.spalte=s;el.dataset.band=C.band?C.band(x):"";el.dataset.zeit=C.zeit(x);el.dataset.name=C.name(x);el.dataset.ein=C.ein(x);welt.append(el);});
     const lw=h("div",{class:"kom-lw"},welt);m.append(h("div",{class:"kom-leib innen"},lw));de.append(m);
-    const {xs}=innenLegen(welt,I.kanten,64,[0,1,2,3,4]);
-    [["Commands",ev=>menueFix(ev.clientX,ev.clientY,"Neu in "+A.name,[{t:"＋ Command …",fn:()=>aggNeuerCommand(A,ev)},{t:"＋ Query (Frage) …",fn:()=>aggNeueQuery(A,ev)}]),"＋ ▾"],
-      ["Decide",null,"je Command eines"],["Ergebnisse",null,"＋ am Decide"],["Apply",null,"je Event eines"],
-      ["Zustand",()=>{A.state=A.state||[];A.state.push({_id:"f"+(NID++),name:uniqFeldName(A.state,"Feld"),typ:"string"});const st=[...I.glieder.keys()].find(x=>x.startsWith("st:"));
-        if(st)KOM.edit.add(st);gTitel("▣ "+A.name+": Zustand ＋ Feld");render();},"＋ Feld"]].forEach(([titel,fn,u],s)=>{const p=xs.get(s);if(!p)return;
-      const kopf=h("div",{class:"ag-spkopf"},h("b",{},titel),fn?h("button",{class:"ag-plus",onclick:e=>{e.stopPropagation();fn(e);}},u):h("span",{class:"kom-u"}," "+u));
+    const {xs,baender}=innenLegenPaare(welt,I.kanten,64,C.legen,fuehrt===C.ansicht.B,sortierung);
+    baender.forEach(b=>{const l=h("div",{class:"kom-band"},b.titel);l.style.top=b.y+"px";welt.append(l);});
+    C.koepfe().forEach(([titel,fn,u,sortiert],s)=>{const p=xs.get(s);if(!p)return;
+      const kopf=h("div",{class:"ag-spkopf"},h("b",{},titel),
+        sortiert?h("button",{class:"ag-sort"+(fuehrt===sortiert?" an":""),
+          title:(fuehrt===sortiert?"Sortiert nach dieser Spalte: "+AGG_SORTIERUNG[sortierung][1]:"Nach dieser Spalte sortieren")+" — Klick: neu, A–Z oder Eingänge",
+          onclick:e=>{e.stopPropagation();menueFix(e.clientX,e.clientY,"Sortieren nach "+titel,Object.entries(AGG_SORTIERUNG).map(([k,[txt,tt]])=>({
+            t:(fuehrt===sortiert&&sortierung===k?"✓ ":"   ")+txt,title:tt,fn:()=>{C.ansicht.setze(sortiert,k);komZeige();}})));}},
+          "⇅"+(fuehrt===sortiert?" "+AGG_SORTIERUNG[sortierung][0]:"")):null,
+        fn?h("button",{class:"ag-plus",onclick:e=>{e.stopPropagation();fn(e);}},u):h("span",{class:"kom-u"}," "+u));
       kopf.style.left=p.x+"px";kopf.style.width=p.w+"px";welt.append(kopf);});
     const el=x=>welt.querySelector('.kom-k[data-glied="'+CSS.escape(x)+'"]');
     const punkt=(e,ri,key)=>{const p=e.querySelector('[data-port="'+CSS.escape(ri+"|"+key)+'"]');return {x:e.offsetLeft+(ri==="aus"?e.offsetWidth:0),y:e.offsetTop+(p?p.offsetTop+p.offsetHeight/2:14)};};
-    I.kanten.forEach(([a,b])=>{const ea=el(a),eb=el(b),pk=aggKantenPorts(a,b);if(!ea||!eb||!pk)return;
-      innenKante(svgK,punkt(ea,"aus",pk[0]),punkt(eb,"ein",pk[1]),komSorte((NODEBY.get(a.startsWith("rec:")?a:b)||{}).name),wahl&&(a===wahl||b===wahl));});}
-  // ── Aggregat von innen: anlegen und verbinden (docs/konzept-aggregat-modal.md) — nie Pfeile von Hand: ist eine Karte gewählt, zeigen die
-  //   verbindbaren ⊕ und die verbundenen ✓, ein Klick verbindet bzw. löst; der Kopf einer Karte schaltet ihr Bearbeiten an und aus. ──
+    I.kanten.forEach(([a,b])=>{const ea=el(a),eb=el(b),pk=C.kantenPorts(a,b);if(!ea||!eb||!pk)return;const an=!!kette&&kette.has(a)&&kette.has(b);
+      innenKante(svgK,punkt(ea,"aus",pk[0]),punkt(eb,"ein",pk[1]),komSorte((kn(a.startsWith("rec:")?a:b)||{}).name),an,!!KOM.port||(!!kette&&!an));});}
+  // Das Aggregat von innen: Commands und Queries · Decide und Fragen · Ergebnisse · Apply · Zustand; Command ↔ Decide und Event ↔ Apply als Paare.
+  function aggZeige(de,id,I,A){const unverbunden=aggUnverbunden(A,I);unverbunden.forEach(x=>I.glieder.set(x,2));
+    innenZeige(de,id,{I,knoten:x=>NODEBY.get(x),unverbunden,
+      unverbundenText:"Liegt beim Aggregat, noch von keinem Decide bzw. keiner Frage genommen — anschließen über ＋ am Port",
+      ports:(n,x)=>aggPorts(A,n,x),kantenPorts:(a,b)=>aggKantenPorts(A,a,b),auswahl:p=>aggAuswahl(A,I,p),anschliessen:(p,x)=>aggAnschliessen(A,p,x),
+      geister:p=>aggGeister(A,I,p),plus:(p,x)=>aggPlus(A,I,p,x),kurz:(n,x)=>aggKurz(A,n,x),bearbeiten:(n,x)=>aggBearbeiten(A,n,x),
+      zeit:aggGliedZeit,name:aggGliedName,ein:x=>aggEingaenge(A,I,x),koepfe:()=>aggSpaltenKoepfe(A,I,id),
+      legen:{spalten:[0,1,2,3,4],baender:[""],frei:[4],folgen:[]},
+      ansicht:{fuehrt:aggFuehrt,sortierung:aggSortierung,B:"event",
+        setze:(f,s)=>{ANSICHT.aggFuehrt=f;ANSICHT.aggSortierung=s;delete ANSICHT.aggOrdnung;ansichtSpeichern();}}});}
+  // Die Spaltenköpfe: „＋“ für alles, was frei entstehen kann — so lässt sich jedes Glied des Aggregats im Editor anlegen. Decide und Apply
+  //   kommen 1:1 mit ihrem Command bzw. Event; fehlt eines im Bestand, legt es „＋“ am Port der Karte an.
+  function aggSpaltenKoepfe(A,I,id){const t="▣ "+A.name,menue=(titel,items)=>ev=>menueFix(ev.clientX,ev.clientY,titel,items);
+    const neuCmd={t:"＋ Command mit Decide …",fn:e=>aggNeuerCommand(A,e)},neuQuery={t:"＋ Query mit Frage und Antwort …",fn:e=>aggNeueQuery(A,e)};
+    return [
+      ["Commands",menue("Neu in "+A.name,[neuCmd,neuQuery]),"＋ ▾","command"],
+      ["Decide",null,"je Command eines"],
+      ["Ergebnisse",menue("Neu in "+A.name,[
+        {t:"＋ Event (Fakt im Log) …",fn:e=>aggFreiAnlegen(A,"event","＋ Event",A.name+"Geaendert",e)},
+        {t:"＋ Hinweis (flüchtig, an Akteure) …",fn:e=>aggFreiAnlegen(A,"rejection","＋ Hinweis",A.name+"Abgelehnt",e)},
+        {t:"＋ Command ohne Ziel …",title:"Sein Empfänger ist der Kopf eines Graphen oder ein Akteur, der ihn hört",fn:e=>aggFreiAnlegen(A,"command","＋ Command ohne Ziel",A.name+"Weiter",e)},
+        {t:"＋ Antwort …",fn:e=>aggFreiAnlegen(A,"queryresponse","＋ Antwort",A.name+"Antwort",e)},
+        {trenn:1},{hinweis:"Steht unverbunden in der Spalte (ein Event gleich mit seinem Apply) — anschließen später über ＋ am Port (＋ Decide bzw. ＋ Frage)."}]),"＋ ▾","event"],
+      ["Apply",null,"je Event eines"],
+      ["Zustand",()=>{A.state=A.state||[];A.state.push({_id:"f"+(NID++),name:uniqFeldName(A.state,"Feld"),typ:"string"});const st=[...I.glieder.keys()].find(x=>x.startsWith("st:"));
+        if(st){KOM.edit.add(st);KOM.zu.delete(st);}gTitel(t+": Zustand ＋ Feld");render();},"＋ Feld"]];}
+  // ── Aggregat von innen: anlegen und verbinden (docs/10 §10.9) ──
   const aggIdFeld=()=>ID_FELD()||"AggregateId";
   const recNamens=n=>MODEL.records.find(r=>r.name===n);
   // Name abfragen (über dem Modal): Eingabe, Enter legt an; ok liefert einen Fehlertext oder nichts.
@@ -2610,26 +2649,84 @@
     ["pointerdown","dblclick","wheel","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
     document.getElementById("de").append(m);setTimeout(()=>{inp.focus();inp.select();},0);}
   const nameFehler=n=>!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*$/.test(n)?"Ein Typname: groß beginnen, nur Buchstaben und Ziffern":recNamens(n)?n+" gibt es schon":null;
+  // Ein Command an das Aggregat samt Decide (ergibt: die Glieder seines OneOf) bzw. eine Query samt Frage (antworten: ihre Antworten).
+  function aggCommandAnlegen(A,n,ergibt){
+    MODEL.records.push({name:n,kind:"command",namespace:A.namespace,felder:[{_id:"f"+(NID++),name:aggIdFeld(),typ:"Id<"+A.name+">"}],istErzeugung:false,aggregat:A.name});aggStempel(n);
+    MODEL.decider.push({_id:"d"+(NID++),aggregat:A.name,command:n,ergibt:ergibt||[]});gTitel("▣ "+A.name+": Command "+n);}
+  function aggQueryAnlegen(A,n,antworten){
+    MODEL.records.push({name:n,kind:"query",namespace:A.namespace,felder:[{_id:"f"+(NID++),name:A.name+"Id",typ:"Id<"+A.name+">"}],istErzeugung:false});aggStempel(n);
+    A.fragen=[...(A.fragen||[]),{query:n,antworten}];gTitel("▣ "+A.name+": Frage "+n);}
   function aggNeuerCommand(A,ev){frageFix(ev.clientX,ev.clientY,"＋ Command an "+A.name,"","Legt den Command und sein Decide an",n=>{const f=nameFehler(n);if(f)return f;
-    MODEL.records.push({name:n,kind:"command",namespace:A.namespace,felder:[{_id:"f"+(NID++),name:aggIdFeld(),typ:"Id<"+A.name+">"}],istErzeugung:false,aggregat:A.name});
-    MODEL.decider.push({_id:"d"+(NID++),aggregat:A.name,command:n,ergibt:[]});gTitel("▣ "+A.name+": Command "+n);render();});}
+    aggCommandAnlegen(A,n,[]);render();});}
   function aggNeueQuery(A,ev){frageFix(ev.clientX,ev.clientY,"＋ Query an "+A.name,"Hole"+A.name+"Stand","Legt Query, Frage und eine Antwort an",n=>{const f=nameFehler(n);if(f)return f;
     const ant=n.replace(/^Hole/,"")+"Antwort";if(recNamens(ant))return ant+" gibt es schon";
-    MODEL.records.push({name:n,kind:"query",namespace:A.namespace,felder:[{_id:"f"+(NID++),name:A.name+"Id",typ:"Id<"+A.name+">"}],istErzeugung:false});
-    MODEL.records.push({name:ant,kind:"queryresponse",namespace:A.namespace,felder:[],istErzeugung:false});
-    A.fragen=[...(A.fragen||[]),{query:n,antworten:[ant]}];gTitel("▣ "+A.name+": Frage "+n);render();});}
-  // ＋ Ergebnis am Decide: Neues anlegen — Event, Hinweis, Command an einen Graphen, Frist auf einen eigenen Command.
-  function aggNeuesErgebnis(A,d,ev,hinweis){const neu=(kind,titel,vorschlag)=>frageFix(ev.clientX,ev.clientY,titel,vorschlag,"Wird ein Glied im OneOf von Decide("+d.command+")",n=>{
-      const f=nameFehler(n);if(f)return f;MODEL.records.push({name:n,kind,namespace:A.namespace,felder:[],istErzeugung:false});
-      d.ergibt=[...(d.ergibt||[]),{event:n}];KOM.port=null;gTitel("▣ "+A.name+": "+d.command+" ergibt "+n);render();});
-    const eigene=MODEL.decider.filter(x=>x.aggregat===A.name).map(x=>x.command).filter(Boolean);
-    menueFix(ev.clientX,ev.clientY,"Decide "+d.command+" ergibt …",[
-      {t:"＋ neues Event (Fakt im Log) …",fn:()=>neu("event","＋ Event",A.name+"Geaendert")},
-      {t:"＋ neuer Hinweis (flüchtig, an Akteure) …",fn:()=>neu("rejection","＋ Hinweis",d.command+"Abgelehnt")},
-      {t:"＋ Command an einen Graphen …",title:"Ein Command ohne Ziel — sein Empfänger ist der Kopf eines Graphen (in dessen Komposition: „＋ Kopf“)",fn:()=>neu("command","＋ Command ohne Ziel",A.name+"Weiter")},
-      {trenn:1},{kopf:"⏱ Frist auf einen eigenen Command"},
-      ...eigene.map(c=>({t:"⏱ Frist<"+c+">",aus:(d.ergibt||[]).some(o=>o.event==="Frist<"+c+">"),fn:()=>{d.ergibt=[...(d.ergibt||[]),{event:"Frist<"+c+">"}];KOM.port=null;gTitel("▣ "+A.name+": "+d.command+" setzt Frist<"+c+">");render();}})),
-      {trenn:1},{hinweis:hinweis||"Vorhandene: hervorgehobene Karte anklicken."}]);}
+    MODEL.records.push({name:ant,kind:"queryresponse",namespace:A.namespace,felder:[],istErzeugung:false});aggStempel(ant);aggQueryAnlegen(A,n,[ant]);render();});}
+  // Eine neue Nachricht im Aggregat: sie liegt bei seiner Schreibseite (amAggregat), auch solange noch kein Decide bzw. keine Frage sie nimmt.
+  function aggRecordNeu(A,n,kind){MODEL.records.push({name:n,kind,namespace:A.namespace,felder:[],istErzeugung:false,amAggregat:A.name});aggStempel(n);}
+  // Im Spaltenkopf „Ergebnisse“ angelegt: steht unverbunden in der Spalte, angeschlossen wird später über ＋ am Port.
+  function aggFreiAnlegen(A,kind,titel,vorschlag,ev){frageFix(ev.clientX,ev.clientY,titel+" in "+A.name,vorschlag,"Steht danach unverbunden in „Ergebnisse“",n=>{
+    const f=nameFehler(n);if(f)return f;aggRecordNeu(A,n,kind);aggApplySichern(A,n);gTitel("▣ "+A.name+": "+n+" angelegt");render();});}
+  // Unverbunden, aber beim Aggregat: eine Nachricht in seinem Namespace (WO sie liegt, W2) bzw. im Bild, die kein Decide ergibt und keine Frage
+  //   beantwortet — so bleibt sie nach dem Anlegen in „Ergebnisse“, bis sie angeschlossen ist (ein Event hat sein Apply schon).
+  function aggUnverbunden(A,I){return new Set(MODEL.records.filter(r=>["event","rejection","command","queryresponse"].includes(r.kind)&&!(r.kind==="command"&&r.aggregat)
+      &&NODEBY.has("rec:"+r.name)&&(I.glieder.has("rec:"+r.name)?I.glieder.get("rec:"+r.name)===2:r.namespace===A.namespace)&&!aggHatErzeuger(r.name)).map(r=>"rec:"+r.name));}
+  // Zeitstempel beim Anlegen im Editor (in der Ansicht, nicht im Code); was keinen hat, zählt nach seiner Stelle im Modell — älter als alles Gestempelte.
+  function aggStempel(n){(ANSICHT.angelegt=ANSICHT.angelegt||{})[n]=Date.now();ansichtSpeichern();}
+  function aggStempelUmbenennen(alt,neu){const z=ANSICHT.angelegt;if(!z||z[alt]==null)return;z[neu]=z[alt];delete z[alt];ansichtSpeichern();}
+  const aggZeit=nm=>{const z=(ANSICHT.angelegt||{})[nm];return z!=null?z:Math.max(0,MODEL.records.findIndex(r=>r.name===nm));};
+  // Ein Decide zählt mit seinem Command, ein Apply mit seinem Event, die Fragen mit ihrer jüngsten Query.
+  function aggGliedZeit(x){const n=NODEBY.get(x)||{},r=n.ref||{};
+    switch(n.kind){case "decider":return aggZeit(r.command);case "applier":return aggZeit(r.event);
+      case "aggregate":return Math.max(0,...(r.fragen||[]).map(f=>aggZeit(f.query)));default:return x.startsWith("rec:")?aggZeit(n.name):0;}}
+  // Welche Spalte führt und wonach sie steht (⇅ im Spaltenkopf, gemerkt in der Ansicht): die Commands oder die Ergebnisse — nach Neuheit,
+  //   nach dem Namen oder nach der Zahl der Eingänge (wenige zuerst: Neues und Unverbundenes oben); bei Gleichstand das Neueste zuerst.
+  const aggFuehrt=()=>ANSICHT.aggFuehrt==="event"?"event":"command";
+  const AGG_SORTIERUNG={neu:["neu","das Neueste oben"],alphabet:["A–Z","nach dem Namen"],eingaenge:["Eingänge","wenige Eingänge zuerst"]};
+  const aggSortierung=()=>AGG_SORTIERUNG[ANSICHT.aggSortierung]?ANSICHT.aggSortierung:"neu";
+  function aggGliedName(x){const n=NODEBY.get(x)||{},r=n.ref||{};
+    switch(n.kind){case "decider":return r.command||"";case "applier":return r.event||"";case "aggregate":return ((r.fragen||[])[0]||{}).query||"";default:return n.name||"";}}
+  // Eingänge einer Karte: die Kanten, die in ihr enden; bei einem Command bzw. einer Query dazu, wer sie von außen hineingibt.
+  function aggEingaenge(A,I,x){const n=NODEBY.get(x)||{},rein=I.kanten.filter(([a,b])=>b===x).length;
+    if(!x.startsWith("rec:")||I.glieder.get(x)!==0)return rein;
+    return rein+new Set(FL().kanten.filter(k=>k.nach==="agg:"+A.name&&k.typ===n.name).map(k=>k.von)).size;}
+  // Legen im Aggregat: ein Decide steht neben seinem Command, ein Apply neben seinem Event (1:1, oben bündig — die nächste Zeile beginnt unter
+  //   beiden). Die führende Spalte steht nach dem gewählten Schlüssel; die andere Seite folgt ihren Kanten (oben bündig mit dem ersten,
+  //   der sie erzeugt bzw. den sie ergibt), Unverbundenes darunter. Gestrichelte Karten (Neues beim Anschließen) stehen oben in ihrer Spalte.
+  // Legen in der Innenansicht: je Band zwei Paare von Spalten (0·1 und 2·3), jede Karte oben bündig mit ihrem Partner (die nächste Zeile beginnt
+  //   unter beiden). Die führende Seite steht nach dem gewählten Schlüssel; die andere folgt ihren Kanten (oben bündig mit dem ersten, der sie
+  //   erzeugt bzw. den sie ergibt), Unverbundenes darunter. Folgende Spalten (L.folgen: [Spalte, Quelle]) folgen ihrer Quelle; freie Spalten
+  //   (L.frei) stehen über alle Bänder von oben. Gestrichelte Karten (Neues beim Anschließen) stehen oben in ihrer Spalte.
+  function innenLegenPaare(welt,kanten,y0,L,fuehrtB,sortierung){const els=[...welt.querySelectorAll(".kom-k")],G=16,Y=new Map(),xs=new Map(),c=new Map(L.spalten.map(s=>[s,y0]));
+    const id=e=>e.dataset.glied,sp=e=>+e.dataset.spalte,neu=e=>id(e).startsWith("neu:"),zeit=e=>+e.dataset.zeit||0,byId=new Map(els.map(e=>[id(e),e]));
+    const frei=new Set(L.frei||[]),gebunden=L.spalten.filter(s=>!frei.has(s)),band=e=>e.dataset.band||"";let B="";
+    const echt=s=>els.filter(e=>sp(e)===s&&!neu(e)&&(frei.has(s)||band(e)===B)),juenger=(a,b)=>zeit(b)-zeit(a),juengste=l=>[...l].sort(juenger);
+    const vor=sortierung==="alphabet"?(a,b)=>a.dataset.name.localeCompare(b.dataset.name,"de")||juenger(a,b)
+      :sortierung==="eingaenge"?(a,b)=>(+a.dataset.ein)-(+b.dataset.ein)||juenger(a,b):juenger,geordnet=l=>[...l].sort(vor);
+    const nach=(e,s)=>kanten.filter(k=>k[0]===id(e)).map(k=>byId.get(k[1])).filter(o=>o&&sp(o)===s);
+    const von=(e,s)=>kanten.filter(k=>k[1]===id(e)).map(k=>byId.get(k[0])).filter(o=>o&&sp(o)===s);
+    const setze=(e,y)=>{Y.set(id(e),y);const s=sp(e);c.set(s,Math.max(c.get(s),y+e.offsetHeight+G));};
+    const oben=l=>{const v=l.map(o=>Y.get(id(o))).filter(y=>y!=null);return v.length?Math.min(...v):null;};
+    // Spalte a in der Reihenfolge reihe, je Karte ihre noch freien Partner in Spalte b daneben.
+    const paare=(a,b,reihe,partner,wunsch)=>reihe.forEach(e=>{if(Y.has(id(e)))return;const ps=partner(e).filter(p=>!Y.has(id(p))),w=wunsch?wunsch(e):null;
+      const top=Math.max(c.get(a),w==null?-Infinity:w,ps.length?c.get(b):-Infinity);setze(e,top);let yb=top;ps.forEach(p=>{setze(p,yb);yb+=p.offsetHeight+G;});});
+    const folgt=(s,quelle)=>echt(s).map(e=>[e,oben(quelle(e))]).sort((p,q)=>((p[1]==null?1e12:p[1])-(q[1]==null?1e12:q[1]))||vor(p[0],q[0])).map(p=>p[0]);
+    const rest=s=>geordnet(echt(s).filter(e=>!Y.has(id(e)))).forEach(e=>setze(e,c.get(s)));
+    const baender=[];let start=y0;
+    (L.baender||[""]).forEach((b,i)=>{B=b;gebunden.forEach(s=>c.set(s,start));
+      if(i>0)baender.push({y:start-30,titel:(L.bandTitel||{})[b]||b});
+      els.filter(e=>neu(e)&&!frei.has(sp(e))&&band(e)===b).forEach(e=>setze(e,c.get(sp(e))));
+      if(fuehrtB){paare(2,3,geordnet(echt(2)),e=>nach(e,3));rest(3);
+        paare(1,0,folgt(1,e=>nach(e,2)),e=>juengste(von(e,0)),e=>oben(nach(e,2)));rest(0);}
+      else{paare(0,1,geordnet(echt(0)),e=>nach(e,1));rest(1);
+        paare(2,3,folgt(2,e=>von(e,1)),e=>nach(e,3),e=>oben(von(e,1)));rest(3);}
+      (L.folgen||[]).forEach(([s,q])=>folgt(s,e=>von(e,q)).forEach(e=>{if(Y.has(id(e)))return;const w=oben(von(e,q));setze(e,Math.max(c.get(s),w==null?-Infinity:w));}));
+      gebunden.forEach(rest);
+      if(L.baender&&L.baender.length>1&&i<L.baender.length-1)start=Math.max(start,...gebunden.map(s=>c.get(s)))+48;});
+    frei.forEach(s=>{c.set(s,y0);els.filter(e=>neu(e)&&sp(e)===s).forEach(e=>setze(e,c.get(s)));rest(s);});
+    let x=40,hoehe=0;L.spalten.forEach(s=>{const sp_=els.filter(e=>sp(e)===s),w=Math.max(220,...sp_.map(e=>e.offsetWidth));
+      sp_.forEach(e=>{e.style.left=x+"px";e.style.top=Y.get(id(e))+"px";});xs.set(s,{x,w});hoehe=Math.max(hoehe,c.get(s));x+=w+120;});
+    const svgK=welt.querySelector("svg");welt.style.width=x+"px";welt.style.height=(hoehe+30)+"px";svgK.setAttribute("width",x);svgK.setAttribute("height",hoehe+30);
+    return {xs,baender};}
   // Kurzfassung unter dem Kopf: woher ein Command kommt, wohin ein Ergebnis geht, die Felder.
   function aggKurz(A,n,x){const box=h("div",{class:"ag-kurz"}),agg="agg:"+A.name,FLK=FL().kanten,nm=id=>(FLKARTE.get(id)||{name:id}).name;
     if(n.kind==="decider"||n.kind==="applier")return box;
@@ -2659,7 +2756,13 @@
       ||MODEL.reader.some(r=>(r.handles||[]).some(x=>x.query===nm||(x.responses||[]).includes(nm)))||MODEL.akteure.some(a=>(a.darf||[]).includes(nm)||(a.hoert||[]).includes(nm))
       ||MODEL.bausteinFunktionen.some(f=>(f.eingaenge||[]).some(e=>e.eingang===nm||(e.ausgaben||[]).includes(nm))||(f.lauscht||[]).includes(nm));
     if(!genutzt){const r=recNamens(nm);if(r)MODEL.records.splice(MODEL.records.indexOf(r),1);}}
-  // Der Bearbeiten-Modus einer Karte (Kopf anklicken).
+  // Einen noch nicht geschriebenen Record umbenennen (ein geschriebener geht über den Renamer): alle Verweise im Modell ziehen mit.
+  function recUmbenennenLokal(r,neu){const alt=r.name;r.name=neu;
+    MODEL.decider.forEach(d=>{if(d.command===alt)d.command=neu;(d.ergibt||[]).forEach(o=>{if(o.event===alt)o.event=neu;});});MODEL.applier.forEach(a=>{if(a.event===alt)a.event=neu;});
+    MODEL.aggregate.forEach(a=>(a.fragen||[]).forEach(f=>{if(f.query===alt)f.query=neu;f.antworten=(f.antworten||[]).map(v=>v===alt?neu:v);}));
+    MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.event===alt)hd.event=neu;}));
+    MODEL.reader.forEach(o=>(o.handles||[]).forEach(hd=>{if(hd.query===alt)hd.query=neu;hd.responses=(hd.responses||[]).map(v=>v===alt?neu:v);}));}
+  // Der Bearbeiten-Modus einer Karte (✎ im Kopf) — er trägt alles, was früher das Formular der Karte hatte.
   function aggBearbeiten(A,n,x){const box=h("div",{class:"ag-edit"}),t="▣ "+A.name;
     // Eingaben im Bearbeiten-Modus wählen die Karte nicht ab (sonst zeichnete der Klick neu und nähme den Fokus).
     ["click","dblclick"].forEach(ev=>box.addEventListener(ev,e=>e.stopPropagation()));
@@ -2668,8 +2771,7 @@
     const weg=(text,fn)=>box.append(h("button",{class:"ag-weg",onclick:()=>{fn();render();}},text));
     if(x.startsWith("rec:")){const r=n.ref;
       box.append(h("div",{class:"ag-feld"},h("input",{value:r.name,spellcheck:"false",title:"Name",onchange:e=>{const neu=e.target.value.trim(),f=nameFehler(neu);if(neu===r.name)return;
-        if(f){deFlash("⚠ "+f,false);render();return;}if(r._ort)gUmbenennen(r,neu,r.name);else{const alt=r.name;r.name=neu;
-          MODEL.decider.forEach(d=>{if(d.command===alt)d.command=neu;(d.ergibt||[]).forEach(o=>{if(o.event===alt)o.event=neu;});});MODEL.applier.forEach(a=>{if(a.event===alt)a.event=neu;});render();}}})));
+        if(f){deFlash("⚠ "+f,false);render();return;}aggStempelUmbenennen(r.name,neu);if(r._ort)gUmbenennen(r,neu,r.name);else{recUmbenennenLokal(r,neu);render();}}})));
       box.append(aggFelder(r.felder=r.felder||[],f=>r.kind==="command"&&r.aggregat===A.name&&f.name===aggIdFeld(),t+": "+r.name));
       if(r.kind==="command"&&r.aggregat===A.name){const c=h("input",{type:"checkbox",onchange:e=>{r.istErzeugung=e.target.checked;gTitel(t+": "+r.name+(r.istErzeugung?" erzeugt":" erzeugt nicht mehr"));render();}});c.checked=!!r.istErzeugung;
         box.append(h("label",{class:"ag-flag"},c," erzeugt das Aggregat (ICreationCommand)"));
@@ -2678,15 +2780,269 @@
       else if(r.kind==="event"||r.kind==="rejection"){
         box.append(h("button",{class:"ag-plus",title:"Fakt im Log (Event) oder flüchtig an Akteure (Hinweis) — der Modellierer entscheidet",
           onclick:()=>{r.kind=r.kind==="event"?"rejection":"event";if(r.kind==="rejection")MODEL.applier.filter(a=>a.event===r.name).forEach(a=>MODEL.applier.splice(MODEL.applier.indexOf(a),1));
+            else aggApplySichern(A,r.name);
             gTitel(t+": "+r.name+(r.kind==="event"?" ist ein Event":" ist ein Hinweis"));render();}},r.kind==="event"?"⇄ zum Hinweis machen":"⇄ zum Event machen"));}
       if(I_ERGEBNIS(A,r.name))weg("✕ aus allen Decides nehmen",()=>{MODEL.decider.filter(d=>d.aggregat===A.name).forEach(d=>{d.ergibt=(d.ergibt||[]).filter(o=>o.event!==r.name);});
         gTitel(t+": "+r.name+" entfernt");KOM.edit.delete(x);aggRecordAufraeumen(r.name);});
+      if(r.kind==="queryresponse"&&(A.fragen||[]).some(f=>(f.antworten||[]).includes(r.name)))weg("✕ aus allen Fragen nehmen",()=>{(A.fragen||[]).forEach(f=>{f.antworten=ohneX(f.antworten,r.name);});
+        gTitel(t+": Antwort "+r.name+" entfernt");KOM.edit.delete(x);aggRecordAufraeumen(r.name);});
       if(r.kind==="query")weg("✕ Frage entfernen",()=>{A.fragen=(A.fragen||[]).filter(f=>f.query!==r.name);gTitel(t+": Frage "+r.name+" entfernt");KOM.edit.delete(x);aggRecordAufraeumen(r.name);});
       return box;}
     if(n.kind==="decider"){ruempfe();return box;}
     if(n.kind==="applier"){ruempfe();weg("✕ Apply entfernen",()=>{MODEL.applier.splice(MODEL.applier.indexOf(n.ref),1);gTitel(t+": Apply "+n.ref.event+" entfernt");KOM.edit.delete(x);});return box;}
     if(n.kind==="state"){box.append(aggFelder(A.state=A.state||[],null,t+": Zustand"));return box;}
+    if(n.kind==="aggregate"){ruempfe();return box;}
     return box;}
+  // ══ STORE VON INNEN (docs/konzept-projektionen-im-editor.md): zwei Bänder — Schreiben: Event · Auf, Schreib-Fähigkeit · Umsetzung; Lesen:
+  //   Query · Frage, Lese-Fähigkeit · Umsetzung, dazu die Antworten. Gebunden ist nur, was die Regeln binden (Event ↔ Auf, Query ↔ Frage,
+  //   Fähigkeit ↔ Umsetzung); die Fähigkeit wählt man am Port des Auf bzw. der Frage wie das Ergebnis am Decide. Die Read-Models stehen in der
+  //   Mitte beider Bänder, ihre Kanten nur aus der Signatur einer Fähigkeit. Events stammen aus dem Aggregat und sind hier fix.
+  const stoFns=st=>[...(st.writeFns||[]).map(f=>[f,false]),...(st.readFns||[]).map(f=>[f,true])];
+  const stoTypen=f=>[...(f.params||[]).map(p=>p.typ),f.rueckgabe,(f.sig||{}).rueckgabe].filter(Boolean).join(" ");
+  const nennt=(text,name)=>new RegExp("(^|[^A-Za-z0-9_])"+name+"($|[^A-Za-z0-9_])").test(text||"");
+  const stoNenntIrgendwer=nm=>MODEL.stores.some(s=>stoFns(s).some(([f])=>nennt(stoTypen(f),nm)));
+  const flGruppe=x=>{const k=FL().karten.find(f=>f.karte===x&&f.gruppe);return k?k.gruppe:null;};
+  const stoEvent=x=>x.startsWith("rec:")&&(NODEBY.get(x)||{}).kind==="event";
+  // Wer zum Store gehört: Projektionen und Reader seiner Gruppe (aus den Fähigkeiten), eben hier angelegte (amStore) und solche ohne jede
+  //   Fähigkeit in seinem Namespace (WO sie liegen, W2); dazu Reader anderer Stores, die hier mitlesen (nur deren Fragen, leise).
+  function stoMitglieder(id,st){const fnIds=new Set(stoFns(st).map(([f])=>f._id));
+    const ohneFns=o=>(o.handles||[]).every(hd=>!(hd.fns||[]).length);
+    const eigen=(o,pre)=>{const g=flGruppe(pre+":"+o._id);return g===id||o.amStore===st.name||(!g&&ohneFns(o)&&o.namespace===st.namespace);};
+    const prj=MODEL.projektionen.filter(p=>eigen(p,"prj")),rdr=MODEL.reader.filter(r=>eigen(r,"rdr"));
+    const fremd=MODEL.reader.filter(r=>!rdr.includes(r)&&(r.handles||[]).some(hd=>(hd.fns||[]).some(f=>fnIds.has(f))));
+    return {prj,rdr,fremd,fnIds};}
+  function stoInnen(id,st){const M=stoMitglieder(id,st),glieder=new Map(),kanten=[],band=new Map(),knoten=new Map(),fremd=new Set(),unverbunden=new Set();
+    const setze=(x,s,b)=>{glieder.set(x,s);band.set(x,b);};
+    M.prj.forEach(p=>{const ids=handleIds(p,"prj:"+p._id);(p.handles||[]).forEach((hd,i)=>{if(!hd.event)return;const hx=ids[i],e="rec:"+hd.event;setze(hx,1,"s");
+      if(NODEBY.has(e)){setze(e,0,"s");kanten.push([e,hx]);}
+      (hd.fns||[]).forEach(f=>{if(M.fnIds.has(f))kanten.push([hx,"fn:"+f]);});});});
+    [...M.rdr.map(r=>[r,false]),...M.fremd.map(r=>[r,true])].forEach(([r,fr])=>{const ids=handleIds(r,"rdr:"+r._id);(r.handles||[]).forEach((hd,i)=>{
+      if(!hd.query||(fr&&!(hd.fns||[]).some(f=>M.fnIds.has(f))))return;const hx=ids[i],q="rec:"+hd.query;setze(hx,1,"l");if(fr)fremd.add(hx);
+      if(NODEBY.has(q)){setze(q,0,"l");kanten.push([q,hx]);}
+      (hd.fns||[]).forEach(f=>{if(M.fnIds.has(f))kanten.push([hx,"fn:"+f]);});
+      if(!fr)(hd.responses||[]).forEach(a=>{const ax="rec:"+a;if(NODEBY.has(ax)){setze(ax,5,"l");kanten.push([hx,ax]);}});});});
+    stoFns(st).forEach(([f,lesen])=>{const fx="fn:"+f._id,ux="um:"+f._id,b=lesen?"l":"s";setze(fx,2,b);setze(ux,3,b);kanten.push([fx,ux]);
+      knoten.set(ux,{id:ux,kind:"umsetzung",name:f.name,ref:f,st,lesen,own:NODEBY.get(fx)});
+      if(!kanten.some(([,z])=>z===fx))unverbunden.add(fx);
+      const typen=stoTypen(f);MODEL.readModels.forEach(rm=>{if(nennt(typen,rm.name)){const rx="rm:"+rm._id;setze(rx,4,"");kanten.push([ux,rx]);}});});
+    // Unverbunden, aber beim Store: ein Read-Model, das keine Fähigkeit nennt, eine Antwort ohne Frage — hier angelegt bzw. im Namespace des Stores.
+    MODEL.readModels.forEach(rm=>{const rx="rm:"+rm._id;if(!glieder.has(rx)&&(rm.amStore===st.name||(rm.namespace===st.namespace&&!stoNenntIrgendwer(rm.name)))){setze(rx,4,"");unverbunden.add(rx);}});
+    MODEL.records.forEach(r=>{const ax="rec:"+r.name;if(r.kind==="queryresponse"&&!glieder.has(ax)&&NODEBY.has(ax)&&(r.amStore===st.name||r.namespace===st.namespace)&&!aggHatErzeuger(r.name)){
+      setze(ax,5,"l");unverbunden.add(ax);}});
+    return {glieder,kanten,band,knoten,fremd,unverbunden,M};}
+  function stoZeige(de,id,st){const I=stoInnen(id,st),kn=x=>I.knoten.get(x)||NODEBY.get(x);
+    innenZeige(de,id,{I,knoten:kn,unverbunden:I.unverbunden,
+      unverbundenText:"Liegt beim Store, noch von keinem Auf bzw. keiner Frage genommen bzw. von keiner Fähigkeit genannt — anschließen über ＋ am Port",
+      band:x=>I.band.get(x)||"",fest:x=>stoEvent(x)||I.fremd.has(x),fremd:x=>I.fremd.has(x),
+      marke:x=>I.fremd.has(x)?h("span",{class:"kom-mark",title:"Diese Frage liest hier mit, gehört aber zu einem anderen Store — bearbeitet wird sie dort"},
+        "gehört zu "+((NODEBY.get(flGruppe(kn(x).own.id))||{}).name||"einem anderen Store")):null,
+      festKnopf:(n,x)=>stoEvent(x)?h("button",{class:"ag-stift",title:"Events stammen aus dem Aggregat und sind hier fix — Klick: im Aggregat öffnen",
+        onclick:e=>{e.stopPropagation();const ag=(SICHT().karten[x]||{}).aggregat;if(ag)komKarte("agg:"+ag,true);}},"▣"):null,
+      ports:(n,x)=>stoPorts(st,I,n,x),kantenPorts:(a,b)=>stoKantenPorts(I,kn,a,b),auswahl:p=>stoAuswahl(I,kn,p),anschliessen:(p,x)=>stoAnschliessen(st,kn,p,x),
+      geister:p=>stoGeister(st,p),plus:(p,x)=>innenPortWahl(p,x),kurz:(n,x)=>stoKurz(st,n,x),bearbeiten:(n,x)=>stoBearbeiten(st,I,n,x),
+      // Ein Eingang ist im Store so neu wie seine Handhabung — das Event selbst ist älter (es stammt aus dem Aggregat).
+      zeit:x=>{const hs=I.glieder.get(x)===0?I.kanten.filter(([a])=>a===x).map(([,b])=>stoZeit(st,kn(b))):[];return hs.length?Math.max(...hs):stoZeit(st,kn(x));},
+      name:x=>stoName(kn(x)),ein:x=>I.kanten.filter(([,b])=>b===x).length,koepfe:()=>stoKoepfe(st),
+      legen:{spalten:[0,1,2,3,4,5],baender:["s","l"],bandTitel:{s:"Schreiben",l:"Lesen"},frei:[4],folgen:[[5,1]]},
+      ansicht:{fuehrt:()=>ANSICHT.stoFuehrt==="faehigkeit"?"faehigkeit":"eingang",sortierung:()=>AGG_SORTIERUNG[ANSICHT.stoSortierung]?ANSICHT.stoSortierung:"neu",
+        B:"faehigkeit",setze:(f,s)=>{ANSICHT.stoFuehrt=f;ANSICHT.stoSortierung=s;ansichtSpeichern();}}});}
+  // Ports im Store: Auf bzw. Frage nimmt links ihren Eingang und rechts ihre Fähigkeiten (＋ wählt bzw. legt an), eine Frage dazu ihre Antworten;
+  //   eine Fähigkeit wird links genommen (＋ Auf bzw. Frage) und hat rechts ihre Umsetzung; die Umsetzung zeigt rechts die Read-Models ihrer Signatur.
+  function stoPorts(st,I,n,x){const ein=[],aus=[],t="🗄 "+st.name,s=nm=>komSorte(nm);
+    const fnName=fid=>{const k=NODEBY.get("fn:"+fid);return k?k.name:fid.split(".").pop();};
+    if(n.kind==="handle"){const hd=n.ref,lesen=n.own.kind==="reader",typ=hd.event||hd.query,fr=I.fremd.has(x);
+      ein.push({key:"in",label:typ,sorte:s(typ)});
+      (hd.fns||[]).filter(f=>I.M.fnIds.has(f)).forEach(f=>aus.push({key:"f:"+f,label:"▶ "+fnName(f),
+        loese:fr?null:()=>{hd.fns=ohneX(hd.fns,f);gTitel(t+": "+typ+" nimmt "+fnName(f)+" nicht mehr");render();}}));
+      if(!fr)aus.push({key:"+f",label:"＋ "+(lesen?"Lese":"Schreib")+"-Fähigkeit",plus:{art:"fn",hd,lesen}});
+      if(lesen&&!fr){(hd.responses||[]).forEach(a=>aus.push({key:"r:"+a,label:a,sorte:"antwort",
+          loese:()=>{hd.responses=ohneX(hd.responses,a);gTitel(t+": "+typ+" antwortet nicht mehr "+a);render();}}));
+        aus.push({key:"+r",label:"＋ Antwort",plus:{art:"antwort",hd}});}}
+    else if(n.kind==="fn"){const f=n.ref,lesen=!!n.lesen;
+      I.kanten.filter(([,b])=>b===x).forEach(([a])=>{const hn=NODEBY.get(a);if(!hn)return;const typ=hn.ref.event||hn.ref.query;
+        ein.push({key:"von:"+a,label:"◀ "+typ,sorte:s(typ),loese:I.fremd.has(a)?null:()=>{hn.ref.fns=ohneX(hn.ref.fns,f._id);gTitel(t+": "+typ+" nimmt "+f.name+" nicht mehr");render();}});});
+      ein.push({key:"+",label:"＋ "+(lesen?"Frage":"Auf"),plus:{art:"handhabung",fn:f,lesen}});
+      aus.push({key:"um",label:"▶ Umsetzung"});}
+    else if(n.kind==="umsetzung"){ein.push({key:"in",label:"◀ "+(n.ref.faehigkeit||n.ref.name)});
+      I.kanten.filter(([a])=>a===x).forEach(([,b])=>{const rm=NODEBY.get(b);if(rm)aus.push({key:"rm:"+b,label:"▶ "+rm.name});});}
+    else if(n.kind==="readmodel")ein.push({key:"in",label:"◀ Umsetzung"});
+    else if(x.startsWith("rec:")){const nm=n.name;
+      if(n.kind==="event")aus.push({key:"aus",label:"▶ Auf",sorte:"event"});
+      else if(n.kind==="query")aus.push({key:"aus",label:"▶ Frage",sorte:"query"});
+      else if(n.kind==="queryresponse"){I.kanten.filter(([,b])=>b===x).forEach(([a])=>{const hn=NODEBY.get(a);if(!hn)return;
+          ein.push({key:"von:"+a,label:"◀ "+hn.ref.query,sorte:"antwort",loese:()=>{hn.ref.responses=ohneX(hn.ref.responses,nm);gTitel(t+": "+hn.ref.query+" antwortet nicht mehr "+nm);render();}});});
+        ein.push({key:"+",label:"＋ Frage",plus:{art:"frage",rec:nm}});}}
+    return {ein,aus};}
+  function stoKantenPorts(I,kn,a,b){const na=kn(a),nb=kn(b);if(!na||!nb)return null;
+    if(nb.kind==="handle")return ["aus","in"];
+    if(na.kind==="handle")return nb.kind==="fn"?["f:"+b.slice(3),"von:"+a]:["r:"+nb.name,"von:"+a];
+    if(na.kind==="fn")return ["um","in"];
+    if(na.kind==="umsetzung")return ["rm:"+b,"in"];
+    return null;}
+  // Wer an einen „＋“ angeschlossen werden kann: Fähigkeiten derselben Richtung, Antworten, Auf bzw. Frage (nie die Frage eines anderen Stores).
+  function stoAuswahl(I,kn,p){const k=new Set();if(!p)return k;
+    I.glieder.forEach((s,x)=>{const n=kn(x);if(!n||I.fremd.has(x))return;
+      if(p.art==="fn"&&n.kind==="fn"&&!!n.lesen===p.lesen&&!(p.hd.fns||[]).includes(n.ref._id))k.add(x);
+      if(p.art==="antwort"&&n.kind==="queryresponse"&&!(p.hd.responses||[]).includes(n.name))k.add(x);
+      if(p.art==="handhabung"&&n.kind==="handle"&&(n.own.kind==="reader")===p.lesen&&!(n.ref.fns||[]).includes(p.fn._id))k.add(x);
+      if(p.art==="frage"&&n.kind==="handle"&&n.own.kind==="reader"&&!(n.ref.responses||[]).includes(p.rec))k.add(x);});
+    return k;}
+  function stoAnschliessen(st,kn,p,x){const n=kn(x),t="🗄 "+st.name;if(!n)return;KOM.port=null;
+    if(p.art==="fn"){p.hd.fns=[...(p.hd.fns||[]),n.ref._id];gTitel(t+": "+(p.hd.event||p.hd.query)+" nimmt "+n.name);}
+    else if(p.art==="antwort"){p.hd.responses=[...(p.hd.responses||[]),n.name];gTitel(t+": "+p.hd.query+" antwortet "+n.name);}
+    else if(p.art==="handhabung"){n.ref.fns=[...(n.ref.fns||[]),p.fn._id];gTitel(t+": "+(n.ref.event||n.ref.query)+" nimmt "+p.fn.name);}
+    else if(p.art==="frage"){n.ref.responses=[...(n.ref.responses||[]),p.rec];gTitel(t+": "+n.ref.query+" antwortet "+p.rec);}
+    render();}
+  // Gestrichelt beim Anschließen: eine neue Fähigkeit (samt Umsetzung) am Auf bzw. an der Frage, eine neue Antwort an der Frage, eine neue Query
+  //   mit Frage an einer Antwort. Wohin eine neue Frage gehört, fragt der Store, wenn er mehrere Reader hat.
+  function stoGeister(st,p){if(!p)return [];const g=[],t="🗄 "+st.name;
+    const neu=(spalte,band,titel,u,vorschlag,anlegen,vorher)=>g.push({spalte,band,t:titel,u,fn:e=>{const frag=o=>frageFix(e.clientX,e.clientY,titel,vorschlag,u,n=>{
+      const f=anlegen(n,o);if(f)return f;KOM.port=null;render();});if(vorher)vorher(e,frag);else frag();}});
+    if(p.art==="fn")neu(2,p.lesen?"l":"s","＋ neue "+(p.lesen?"Lese":"Schreib")+"-Fähigkeit","Methode — die Schnittstelle heißt I + Methode ohne Async; die Umsetzung entsteht mit",
+      stoMethodenVorschlag(p.hd,p.lesen),n=>stoFaehigkeitAnlegen(st,n,p.lesen,p.hd));
+    else if(p.art==="antwort")neu(5,"l","＋ neue Antwort","Antwort auf "+p.hd.query,p.hd.query.replace(/^(Hole|Get)/,"")+"Antwort",n=>{const f=nameFehler(n);if(f)return f;
+      stoRecordNeu(st,n,"queryresponse");p.hd.responses=[...(p.hd.responses||[]),n];gTitel(t+": "+p.hd.query+" antwortet "+n);});
+    else if(p.art==="frage")neu(0,"l","＋ neue Query mit Frage","Frage an "+st.name+" — antwortet "+p.rec,"Hole"+p.rec.replace(/Antwort$/,""),
+      (n,o)=>stoQueryAnlegen(st,n,[p.rec],o),(e,frag)=>stoWaehleBesitzer(st,"reader",e,frag));
+    return g;}
+  const stoMethodenVorschlag=(hd,lesen)=>!hd?"":lesen?"Finde"+(hd.query||"").replace(/^(Hole|Get)/,"")+"Async":"Vermerke"+(hd.event||"")+"Async";
+  // Default-Parameter einer neuen Fähigkeit (danach im ✎): zum Auf die Id des Aggregats, aus dem das Event stammt (bei Klasse 2 dazu die
+  //   Herkunft, CQRS109); zur Frage die Id-Felder der Query.
+  function stoParameterVorschlag(st,hd,lesen){const p=[];if(!hd)return p;
+    if(!lesen){const ag=(SICHT().karten["rec:"+hd.event]||{}).aggregat,A=MODEL.aggregate.find(a=>a.name===ag);
+      if(A)p.push({_id:"f"+(NID++),name:"id",typ:"Id<"+A.namespace+"."+A.name+">"});
+      if((st.klassen||[])[0]===2)p.push({_id:"f"+(NID++),name:"h",typ:"Herkunft"});}
+    else((recNamens(hd.query)||{}).felder||[]).filter(f=>/^Id</.test(f.typ||"")).forEach(f=>p.push({_id:"f"+(NID++),name:f.name.charAt(0).toLowerCase()+f.name.slice(1),typ:f.typ}));
+    return p;}
+  function stoFaehigkeitAnlegen(st,m,lesen,hd){if(!/^[A-Z][A-Za-z0-9_]*$/.test(m||""))return "Ein Methodenname: groß beginnen, nur Buchstaben und Ziffern";
+    if(stoFns(st).some(([f])=>f.name===m))return m+" gibt es in "+st.name+" schon";
+    const fa="I"+m.replace(/Async$/,"");if(MODEL.stores.some(s=>stoFns(s).some(([f])=>f.faehigkeit===fa)))return fa+" gibt es schon";
+    const f={_id:(lesen?"rf:":"wf:")+st.name+"."+m,name:m,faehigkeit:fa,params:stoParameterVorschlag(st,hd,lesen),rueckgabe:""};
+    (lesen?(st.readFns=st.readFns||[]):(st.writeFns=st.writeFns||[])).push(f);aggStempel("fn:"+st.name+"."+m);
+    if(hd)hd.fns=[...(hd.fns||[]),f._id];gTitel("🗄 "+st.name+": "+(lesen?"Lese":"Schreib")+"-Fähigkeit "+fa+(hd?" für "+(hd.event||hd.query):""));}
+  function stoRecordNeu(st,n,kind){MODEL.records.push({name:n,kind,namespace:st.namespace,felder:[],istErzeugung:false,amStore:st.name});aggStempel(n);}
+  // Projektion bzw. Reader für Neues: hat der Store genau einen, diesen; keinen — er entsteht mit (Name nach dem Store); mehrere — Auswahl.
+  //   Neu angelegt wird erst mit der Geste selbst ({neu:art}), damit ein Abbruch nichts Leeres zurücklässt.
+  function stoWaehleBesitzer(st,art,ev,cb){const M=stoMitglieder("sto:"+st._id,st),liste=art==="reader"?M.rdr:M.prj;
+    if(liste.length===1){cb(liste[0]);return;}if(!liste.length){cb({neu:art});return;}
+    menueFix(ev.clientX,ev.clientY,art==="reader"?"In welchen Reader?":"In welche Projektion?",
+      [...liste.map(o=>({t:o.name,fn:()=>cb(o)})),{trenn:1},{t:"＋ "+(art==="reader"?"neuer Reader":"neue Projektion"),fn:()=>cb({neu:art})}]);}
+  function stoBesitzerName(st,art){const kern=st.name.replace(/^I(?=[A-Z])/,"").replace(/Store$/,"")||st.name,basis=kern+(art==="reader"?"Reader":"Projektion");
+    let n=basis,i=2;while(MODEL.projektionen.some(p=>p.name===n)||MODEL.reader.some(r=>r.name===n)||recNamens(n))n=basis+(i++);return n;}
+  function stoBesitzer(st,o){if(!o||!o.neu)return o;const n=stoBesitzerName(st,o.neu),neu={_id:(o.neu==="reader"?"reader:":"projektion:")+n,name:n,namespace:st.namespace,handles:[],amStore:st.name};
+    if(o.neu!=="reader"&&(st.klassen||[])[0]===3)neu.mindestensEinmal=true;
+    (o.neu==="reader"?MODEL.reader:MODEL.projektionen).push(neu);return neu;}
+  function stoQueryAnlegen(st,n,antworten,o){const f=nameFehler(n);if(f)return f;
+    MODEL.records.push({name:n,kind:"query",namespace:st.namespace,felder:[],istErzeugung:false,amStore:st.name});aggStempel(n);
+    const r=stoBesitzer(st,o);r.handles=[...(r.handles||[]),{query:n,fns:[],responses:antworten}];aggStempel("hd:"+r.name+"."+n);
+    gTitel("🗄 "+st.name+": Query "+n+" mit Frage in "+r.name);}
+  // Ein Auf für ein Event, das die Projektion noch nicht hört — Events stammen aus dem Aggregat und werden hier nie angelegt.
+  function stoNeuesAuf(st,ev){stoWaehleBesitzer(st,"projektion",ev,o=>{const hat=new Set(((o.neu?null:o)||{handles:[]}).handles.map(x=>x.event));
+    const ag=nm=>(SICHT().karten["rec:"+nm]||{}).aggregat||"ohne Aggregat",evs=MODEL.records.filter(r=>r.kind==="event"&&!hat.has(r.name));
+    const gruppen=[...new Set(evs.map(r=>ag(r.name)))].sort((a,b)=>a.localeCompare(b,"de"));
+    menueFix(ev.clientX,ev.clientY,"Auf in "+(o.neu?stoBesitzerName(st,"projektion")+" (neu)":o.name)+" für …",evs.length?gruppen.flatMap(g=>[{kopf:"▣ "+g},
+      ...evs.filter(r=>ag(r.name)===g).sort((a,b)=>a.name.localeCompare(b.name,"de")).map(r=>({t:r.name,fn:()=>{const p=stoBesitzer(st,o);
+        if((st.klassen||[])[0]===3)p.mindestensEinmal=true;p.handles=[...(p.handles||[]),{event:r.name,fns:[]}];aggStempel("hd:"+p.name+"."+r.name);gTitel("🗄 "+st.name+": Auf "+r.name+" in "+p.name);render();}}))])
+      :[{hinweis:"Die Projektion hört schon jedes Event — ein neues Event entsteht im Aggregat."}]);});}
+  function stoNeueQuery(st,ev){stoWaehleBesitzer(st,"reader",ev,o=>frageFix(ev.clientX,ev.clientY,"＋ Query an "+st.name,"Hole"+st.name.replace(/^I(?=[A-Z])/,"").replace(/Store$/,""),
+    "Legt Query, Frage und eine Antwort an — die Lese-Fähigkeit wählt man danach am Port der Frage",n=>{const ant=n.replace(/^(Hole|Get)/,"")+"Antwort";
+      if(recNamens(ant))return ant+" gibt es schon";const f=nameFehler(n);if(f)return f;stoRecordNeu(st,ant,"queryresponse");return stoQueryAnlegen(st,n,[ant],o)||(render(),null);}));}
+  // Ein Read-Model im Store: die Art entscheidet die Schreib-Regel je Dokument (docs/04 §4.3) — eigenes Dokument eines Aggregats (Id<T> Id,
+  //   partial), Zeile eines Streams (Id mit dem Besitzer) oder geteilt (IGeteiltesReadModel). Es gehört zu den Dokument-Typen des Stores (amStore).
+  function stoReadModelAnlegen(st,n,art){const f=nameFehler(n)||(MODEL.readModels.some(r=>r.name===n)?n+" gibt es schon":null);if(f)return f;
+    const idf=art.agg?{name:"Id",typ:"Id<"+art.agg.namespace+"."+art.agg.name+">"}:{name:"Id",typ:"string"};
+    MODEL.readModels.push({_id:"readmodel:"+n,name:n,namespace:st.namespace,felder:[{_id:"f"+(NID++),...idf}],geteilt:!!art.geteilt,amStore:st.name});aggStempel("rm:"+n);
+    gTitel("🗄 "+st.name+": Read-Model "+n);render();}
+  function stoKoepfe(st){const t="🗄 "+st.name,menue=(titel,items)=>ev=>menueFix(ev.clientX,ev.clientY,titel,items),klasse=(st.klassen||[])[0];
+    const rm=(titel,vorschlag,art)=>e=>frageFix(e.clientX,e.clientY,titel,vorschlag,"Read-Model in "+st.name,n=>stoReadModelAnlegen(st,n,art));
+    const kern=st.name.replace(/^I(?=[A-Z])/,"").replace(/Store$/,"");
+    return [
+      ["Eingänge",menue("Neu in "+st.name,[{t:"＋ Auf für ein Event …",title:"Events stammen aus dem Aggregat — hier wählt man, worauf die Projektion reagiert",fn:e=>stoNeuesAuf(st,e)},
+        {t:"＋ Query mit Frage und Antwort …",fn:e=>stoNeueQuery(st,e)}]),"＋ ▾","eingang"],
+      ["Auf · Frage",null,"je Eingang eines"],
+      ["Fähigkeiten",menue("Neu in "+st.name,[
+        {t:"＋ Schreib-Fähigkeit …",fn:e=>frageFix(e.clientX,e.clientY,"＋ Schreib-Fähigkeit in "+st.name,"Schreibe"+kern+"Async","Methode — die Umsetzung entsteht mit",n=>stoFaehigkeitAnlegen(st,n,false,null)||(render(),null))},
+        {t:"＋ Lese-Fähigkeit …",fn:e=>frageFix(e.clientX,e.clientY,"＋ Lese-Fähigkeit in "+st.name,"Finde"+kern+"Async","Methode — die Umsetzung entsteht mit",n=>stoFaehigkeitAnlegen(st,n,true,null)||(render(),null))},
+        {trenn:1},{hinweis:"Steht unverbunden in der Spalte — anschließen über ＋ am Port (＋ Auf bzw. ＋ Frage)."}]),"＋ ▾","faehigkeit"],
+      ["Umsetzung",null,"je Fähigkeit eine"+(klasse?" · Klasse "+klasse:"")],
+      ["Read-Models",menue("Read-Model in "+st.name,[{kopf:"Eigenes Dokument eines Aggregats"},
+        ...MODEL.aggregate.map(A=>({t:"＋ zu ▣ "+A.name+" …",fn:rm("＋ Read-Model zu "+A.name,A.name+"ReadModel",{agg:A})})),
+        {trenn:1},{t:"＋ Zeile eines Streams …",title:"Die Id enthält den Besitzer, z. B. {DatensatzId}:{ImagePairId}",fn:rm("＋ Zeile",kern+"Zeile",{})},
+        {t:"＋ geteiltes Read-Model …",title:"Mehrere Streams schreiben hinein (IGeteiltesReadModel, Versionsprüfung)",fn:rm("＋ geteiltes Read-Model",kern+"Uebersicht",{geteilt:true})}]),"＋ ▾"],
+      ["Antworten",e=>frageFix(e.clientX,e.clientY,"＋ Antwort in "+st.name,kern+"Antwort","Steht unverbunden in der Spalte — anschließen über ＋ am Port (＋ Frage)",
+        n=>{const f=nameFehler(n);if(f)return f;stoRecordNeu(st,n,"queryresponse");gTitel(t+": Antwort "+n);render();}),"＋"]];}
+  function stoKurz(st,n,x){const box=h("div",{class:"ag-kurz"});
+    if(n.kind==="fn"){const f=n.ref;box.append(h("div",{},"("+(f.params||[]).map(p=>p.typ+" "+p.name).join(", ")+")"+(n.lesen?" → "+(f.rueckgabe||(f.sig||{}).rueckgabe||"Task"):"")));}
+    else if(n.kind==="umsetzung"){const k=(st.klassen||[])[0];box.append(h("div",{class:"ag-tag"},(st.impl&&st.impl.name||"neue Umsetzung")+(k?" · Klasse "+k:"")));}
+    else if(n.kind==="readmodel"){const fs=(n.ref.felder||[]).map(f=>f.name).join(", ");if(fs)box.append(h("div",{},fs));if(n.ref.geteilt)box.append(h("div",{class:"ag-tag"},"geteilt"));}
+    else if(x.startsWith("rec:")){const fs=((n.ref||{}).felder||[]).map(f=>f.name).join(", ");if(fs)box.append(h("div",{},fs));
+      if(stoEvent(x)){const ag=(SICHT().karten[x]||{}).aggregat;if(ag)box.append(h("div",{class:"ag-tag"},"aus ▣ "+ag+" — hier fix"));}}
+    return box;}
+  function stoZeit(st,n){if(!n)return 0;const z=k=>(ANSICHT.angelegt||{})[k];
+    switch(n.kind){case "handle":{const k="hd:"+n.own.ref.name+"."+(n.ref.event||n.ref.query);return z(k)!=null?z(k):aggZeit(n.ref.event||n.ref.query);}
+      case "fn":case "umsetzung":{const k="fn:"+st.name+"."+n.ref.name;return z(k)!=null?z(k):stoFns(st).findIndex(([f])=>f===n.ref);}
+      case "readmodel":{const k="rm:"+n.name;return z(k)!=null?z(k):MODEL.readModels.indexOf(n.ref);}
+      default:return aggZeit(n.name);}}
+  const stoName=n=>!n?"":n.kind==="handle"?(n.ref.event||n.ref.query||""):n.name||"";
+  // Bearbeiten im Store (✎): Handhabung (Rumpf, entfernen), Fähigkeit (Methode, Parameter, Rückgabe), Umsetzung (Rumpf), Read-Model (Name,
+  //   Felder, geteilt), Query und Antwort (Name, Felder). Ein Event hat hier kein ✎ — es stammt aus dem Aggregat.
+  function stoBearbeiten(st,I,n,x){const box=h("div",{class:"ag-edit"}),t="🗄 "+st.name;
+    ["click","dblclick"].forEach(ev=>box.addEventListener(ev,e=>e.stopPropagation()));
+    const ruempfe=own=>{const rs=[...NODEBY.values()].filter(r=>r.kind==="rumpf"&&r.own&&r.own.id===own);
+      rs.forEach(r=>{const b=h("div",{class:"gbody"});INSP=true;try{fuelleKoerper(b,r);}finally{INSP=false;}box.append(b);});
+      if(!rs.length)box.append(h("div",{class:"ag-tag"},"Rumpf: Platzhalter — nach dem Schreiben hier ✎ bzw. 🤖"));};
+    const weg=(text,fn)=>box.append(h("button",{class:"ag-weg",onclick:()=>{KOM.edit.delete(x);fn();render();}},text));
+    const genutzt=fid=>[...MODEL.projektionen,...MODEL.reader].some(o=>(o.handles||[]).some(hd=>(hd.fns||[]).includes(fid)));
+    if(n.kind==="handle"){const hd=n.ref,o=n.own.ref,lesen=n.own.kind==="reader";
+      box.append(h("div",{class:"ag-tag"},(lesen?"Reader ":"Projektion ")+o.name));ruempfe(x);
+      weg(lesen?"✕ Frage samt Query entfernen":"✕ Auf entfernen",()=>{o.handles=(o.handles||[]).filter(z=>z!==hd);
+        gTitel(t+": "+(lesen?"Frage ":"Auf ")+(hd.event||hd.query)+" entfernt");
+        if(!o.handles.length){const on=NODEBY.get(n.own.id);if(on)delNode(on);}
+        if(lesen){aggRecordAufraeumen(hd.query);(hd.responses||[]).forEach(aggRecordAufraeumen);}});
+      return box;}
+    if(n.kind==="fn"){const f=n.ref,neu=!f.sig;
+      box.append(h("div",{class:"ag-feld"},h("input",{value:f.name,spellcheck:"false",disabled:!neu,title:neu?"Methode":"Methode — aus dem Code",
+        onchange:e=>{const m=e.target.value.trim();if(!/^[A-Z][A-Za-z0-9_]*$/.test(m)||stoFns(st).some(([g])=>g!==f&&g.name===m)){deFlash("⚠ "+m+": kein freier Methodenname",false);render();return;}
+          aggStempelUmbenennen("fn:"+st.name+"."+f.name,"fn:"+st.name+"."+m);f.name=m;f.faehigkeit="I"+m.replace(/Async$/,"");gTitel(t+": Fähigkeit "+f.faehigkeit);render();}})));
+      box.append(h("div",{class:"ag-tag"},"Parameter"),aggFelder(f.params=f.params||[],null,t+": "+f.name));
+      if(n.lesen)box.append(h("div",{class:"ag-feld"},h("input",{value:f.rueckgabe||((f.sig||{}).rueckgabe||"").replace(/^Task<(.*)>$/,"$1"),list:"de-typen",spellcheck:"false",
+        title:"Rückgabe (ohne Task) — nennt sie ein Read-Model, hängt die Kante zu ihm",onchange:e=>{f.rueckgabe=e.target.value.trim();gTitel(t+": "+f.name+" → "+f.rueckgabe);render();}})));
+      if(!genutzt(f._id))weg("✕ Fähigkeit samt Umsetzung entfernen",()=>{const a=n.lesen?st.readFns:st.writeFns;a.splice(a.indexOf(f),1);gTitel(t+": Fähigkeit "+(f.faehigkeit||f.name)+" entfernt");});
+      return box;}
+    if(n.kind==="umsetzung"){const k=(st.klassen||[])[0];box.append(h("div",{class:"ag-tag"},(st.impl&&st.impl.name||"neue Umsetzung")+(k?" · Store-Klasse "+k:"")));
+      ruempfe("fn:"+n.ref._id);return box;}
+    if(n.kind==="readmodel"){const r=n.ref;
+      box.append(h("div",{class:"ag-feld"},h("input",{value:r.name,spellcheck:"false",title:"Name",onchange:e=>{const neu=e.target.value.trim(),f=nameFehler(neu);if(neu===r.name)return;
+        if(f||MODEL.readModels.some(o=>o.name===neu)){deFlash("⚠ "+(f||neu+" gibt es schon"),false);render();return;}
+        aggStempelUmbenennen("rm:"+r.name,"rm:"+neu);if(r._ort)gUmbenennen(r,neu,r.name);else{r.name=neu;render();}}})));
+      box.append(aggFelder(r.felder=r.felder||[],null,t+": "+r.name));
+      const c=h("input",{type:"checkbox",onchange:e=>{r.geteilt=e.target.checked;gTitel(t+": "+r.name+(r.geteilt?" geteilt":" eigen"));render();}});c.checked=!!r.geteilt;
+      box.append(h("label",{class:"ag-flag"},c," geteilt (mehrere Streams schreiben hinein)"));
+      if(!stoNenntIrgendwer(r.name))weg("✕ Read-Model entfernen",()=>{const nn=NODEBY.get(x);if(nn)delNode(nn);});
+      return box;}
+    if(x.startsWith("rec:")){const r=n.ref;
+      box.append(h("div",{class:"ag-feld"},h("input",{value:r.name,spellcheck:"false",title:"Name",onchange:e=>{const neu=e.target.value.trim(),f=nameFehler(neu);if(neu===r.name)return;
+        if(f){deFlash("⚠ "+f,false);render();return;}aggStempelUmbenennen(r.name,neu);if(r._ort)gUmbenennen(r,neu,r.name);else{recUmbenennenLokal(r,neu);render();}}})));
+      box.append(aggFelder(r.felder=r.felder||[],null,t+": "+r.name));
+      if(r.kind==="queryresponse")weg("✕ aus allen Fragen nehmen",()=>{MODEL.reader.forEach(o=>(o.handles||[]).forEach(hd=>{hd.responses=ohneX(hd.responses,r.name);}));
+        gTitel(t+": Antwort "+r.name+" entfernt");aggRecordAufraeumen(r.name);});
+      if(r.kind==="query")weg("✕ Query samt Frage entfernen",()=>{MODEL.reader.forEach(o=>{const vor=(o.handles||[]).length;o.handles=(o.handles||[]).filter(hd=>hd.query!==r.name);
+          if(vor&&!o.handles.length){const on=NODEBY.get("rdr:"+o._id);if(on)delNode(on);}});
+        gTitel(t+": Query "+r.name+" entfernt");aggRecordAufraeumen(r.name);});
+      return box;}
+    return box;}
+  // Ein neuer Store (Fläche, Kopf der Spalte Projektionen): erst die Store-Klasse (sie wählt die Basis der Umsetzung, Storeklassen), dann der
+  //   Bereich und der Name; danach öffnet er sich von innen — Projektion und Reader entstehen dort mit dem ersten Auf bzw. der ersten Query.
+  const STORE_KLASSE={1:["atomar","Wirkung und Fortschritt in einer Transaktion (Marten)"],2:["wiederholungsfest","jede Wirkung ergibt wiederholt dasselbe (Datei-Ziel)"],
+    3:["mindestens einmal","ohne Zusage (Datei-Senke) — die Projektion trägt [MindestensEinmal]"]};
+  function stoNeuAnlegen(ev){const x=ev.clientX,y=ev.clientY;
+    menueFix(x,y,"Neuer Store — Klasse",Object.entries(STORE_KLASSE).map(([k,[t,u]])=>({t:k+" · "+t,title:u,fn:()=>{
+      const nss=[...new Set(MODEL.aggregate.map(a=>a.namespace))].sort();
+      const frei=ns=>{const b="I"+ns.split(".").pop();let n=b+"Store",i=2;while(MODEL.stores.some(s=>s.name===n))n=b+(i++)+"Store";return n;};
+      const weiter=ns=>frageFix(x,y,"＋ Store (Klasse "+k+")",frei(ns),"Bündel der Fähigkeiten; die Umsetzung entsteht mit",n=>{
+        if(!/^I[A-Z][A-Za-z0-9_]*$/.test(n))return "Ein Schnittstellenname: I und groß weiter";if(MODEL.stores.some(s=>s.name===n)||recNamens(n))return n+" gibt es schon";
+        MODEL.stores.push({_id:"store:"+n,name:n,namespace:ns,writeFns:[],readFns:[],klassen:[+k]});gTitel("🗄 Store "+n+" (Klasse "+k+")");render();komKarte("sto:store:"+n,true);});
+      if(nss.length<=1)weiter(nss[0]||defaultNsGlobal());else menueFix(x,y,"Bereich",nss.map(ns=>({t:ns,fn:()=>weiter(ns)})));}})));}
   const I_ERGEBNIS=(A,nm)=>MODEL.decider.some(d=>d.aggregat===A.name&&(d.ergibt||[]).some(o=>o.event===nm));
   // ══ GESTEN DER FLÄCHE UND DER KOMPOSITION (docs/10 §10.9): Ziehen von einem Port auf eine Karte bzw. einen Port,
   //   Klick auf eine Kante zum Lösen, Ziehen aus dem Baukasten. Jede Geste ändert das Modell; der Server schreibt den Code und schickt das neue Board.
@@ -2694,7 +3050,15 @@
   function menueFix(cx,cy,titel,items){document.querySelectorAll("#de .gmenue.fix").forEach(p=>p.remove());
     const m=h("div",{class:"gpick gmenue fix"});if(titel)m.append(h("div",{class:"gpick-t"},titel));
     items.filter(Boolean).forEach(it=>{if(it.trenn){m.append(h("div",{class:"gm-tr"}));return;}if(it.hinweis){m.append(h("div",{class:"gm-hint"},it.hinweis));return;}
-      const b=h("button",{class:it.gefahr?"gm-gefahr":"",title:it.title||"",onclick:e=>{e.stopPropagation();m.remove();if(!it.aus)it.fn();}},it.t);if(it.aus)b.disabled=true;m.append(b);});
+      if(it.kopf){m.append(h("div",{class:"gpick-t"},it.kopf));return;}
+      const b=h("button",{class:it.gefahr?"gm-gefahr":"",title:it.title||"",onclick:e=>{e.stopPropagation();m.remove();if(!it.aus)it.fn(e);}},it.t);if(it.aus)b.disabled=true;m.append(b);});
+    // Lange Listen (etwa alle Events für ein Auf): oben ein Filter.
+    const knoepfe=[...m.querySelectorAll("button")];
+    if(knoepfe.length>14){const f=h("input",{placeholder:"filtern …",spellcheck:"false"});
+      f.oninput=()=>{const q=f.value.trim().toLowerCase();knoepfe.forEach(b=>{b.style.display=!q||b.textContent.toLowerCase().includes(q)?"":"none";});
+        m.querySelectorAll(".gpick-t").forEach((k,i)=>{if(i>0||!titel)k.style.display=q?"none":"";});};
+      f.onkeydown=e=>{e.stopPropagation();if(e.key==="Escape")m.remove();if(e.key==="Enter"){const b=knoepfe.find(b=>b.style.display!=="none");if(b)b.click();}};
+      m.insertBefore(f,titel?m.children[1]:m.firstChild);setTimeout(()=>f.focus(),0);}
     m.style.left=Math.max(4,Math.min(cx,innerWidth-280))+"px";m.style.top=Math.max(4,Math.min(cy,innerHeight-240))+"px";
     ["pointerdown","dblclick","wheel","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
     document.getElementById("de").append(m);

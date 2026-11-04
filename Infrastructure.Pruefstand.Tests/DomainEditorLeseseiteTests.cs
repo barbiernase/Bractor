@@ -355,4 +355,42 @@ public sealed class DomainEditorLeseseiteTests
         Inhalt(d, "Probe/Zeilenliste.cs").Should().Contain("[MindestensEinmal]\npublic sealed class Zeilenliste : IProjektion");
         Inhalt(d, "Probe/ZeilenLeser.cs").Should().Contain("public ZeileAntwort Frage(HoleZeile query, IFindeZeile finde, CancellationToken ct)");
     }
+
+    [Fact]
+    public void Storeklassen_nennen_die_Basen_aus_Core()
+    {
+        Storeklassen.Von(1)!.Name.Should().Be(nameof(Core.MartenStore));
+        Storeklassen.Von(2)!.Name.Should().Be(nameof(Core.DateiZiel));
+        Storeklassen.Von(3)!.Name.Should().Be(nameof(Core.DateiSink));
+        Storeklassen.Alle.Select(b => b.Namespace).Should().AllBe(typeof(Core.MartenStore).Namespace);
+        typeof(Abstractions.IAtomaresZiel).IsAssignableFrom(typeof(Core.MartenStore)).Should().BeTrue();
+        typeof(Abstractions.IWiederholungsfestesZiel).IsAssignableFrom(typeof(Core.DateiZiel)).Should().BeTrue();
+        typeof(Abstractions.INurMindestensEinmal).IsAssignableFrom(typeof(Core.DateiSink)).Should().BeTrue();
+        Storeklassen.Von(2)!.Konstruktor.Single().Typ.Should().Be(nameof(Core.StoreOrte));
+    }
+
+    [Fact]
+    public void Neuer_Store_der_Klasse_1_nennt_seine_Read_Models_als_Dokument_Typen()
+    {
+        var m = Modell();
+        m = m with
+        {
+            Records = [.. m.Records, new() { Name = "Neben", Kind = RecordArt.ReadModel, Namespace = "Probe", AmStore = "IBuch" }],
+            Lesen = m.Lesen! with { Stores = [m.Lesen.Stores[0] with { Klassen = [1] }] },
+        };
+        Inhalt(Scaffolder.Generiere(m), "Probe/Buch.cs").Should()
+            .Contain("public sealed partial class Buch : MartenStore, IBuch")
+            .And.Contain("public Buch(IDocumentStore store) : base(store, typeof(Zeile), typeof(Neben)) { }")
+            .And.Contain("using Core;").And.Contain("using Marten;");
+    }
+
+    [Fact]
+    public void Neuer_Store_der_Klasse_2_liegt_im_Verzeichnis_aus_der_Umgebung()
+    {
+        var m = Modell();
+        m = m with { Lesen = m.Lesen! with { Stores = [m.Lesen.Stores[0] with { Klassen = [2] }] } };
+        Inhalt(Scaffolder.Generiere(m), "Probe/Buch.cs").Should()
+            .Contain("public sealed partial class Buch : DateiZiel, IBuch")
+            .And.Contain("public Buch(StoreOrte orte) : base(orte.Verzeichnis(nameof(Buch))) { }");
+    }
 }

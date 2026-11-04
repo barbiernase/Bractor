@@ -739,16 +739,22 @@ public static class Scaffolder
 
     private static string StoreImplDatei(EditorModell m, Store st, StoreImpl impl, IReadOnlyList<Faehigkeit> fns, bool neu)
     {
-        var basis = neu ? m.Rahmen.StoreBasis : null;
+        // Neu mit gewählter Store-Klasse: Basis aus dem Framework (Storeklassen); sonst die gemeinsame Basis des Bestands (StoreBasis).
+        var klasse = neu ? Storeklassen.Von(st.Klassen.FirstOrDefault()) : null;
+        var basis = neu && klasse == null ? m.Rahmen.StoreBasis : null;
+        var dokumente = klasse is { Dokumente: true } ? Storeklassen.Dokumente(m, st).ToList() : [];
         var usings = new List<string>();
         if (basis != null) usings.Add(basis.Namespace);
+        if (klasse != null) usings.AddRange(klasse.Usings);
         var b = Kopf(impl.Namespace, Usings(impl.Namespace, m, usings.Concat(basis?.Usings ?? []),
-            fns.SelectMany(f => f.Parameter.Select(p => p.Typ).Append(f.Rueckgabe)).Append(st.Name), []));
-        var basen = basis == null ? st.Name : $"{basis.Name}, {st.Name}";
+            fns.SelectMany(f => f.Parameter.Select(p => p.Typ).Append(f.Rueckgabe)).Append(st.Name).Concat(dokumente), []));
+        var basen = klasse != null ? $"{klasse.Name}, {st.Name}" : basis == null ? st.Name : $"{basis.Name}, {st.Name}";
         b.AppendLine($"public sealed partial class {impl.Name}" + (neu ? $" : {basen}" : ""));
         b.AppendLine("{");
         var zeilen = new List<string>();
-        if (basis != null)
+        if (klasse != null)
+            zeilen.Add($"    public {impl.Name}({ParameterListe(klasse.Konstruktor)}) : base({Storeklassen.Argumente(klasse, impl.Name, dokumente)}) {{ }}");
+        else if (basis != null)
             zeilen.Add($"    public {impl.Name}({ParameterListe(basis.KtorParameter)}) : base({string.Join(", ", basis.KtorParameter.Select(p => p.Name))}) {{ }}");
         foreach (var f in fns)
         {

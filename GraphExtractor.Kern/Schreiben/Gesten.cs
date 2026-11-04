@@ -200,6 +200,21 @@ public static class Gesten
                     if (Aus(h["_ort"], $"handle {(string?)alt["name"]}.{methode}({(string?)h[feld]})") is { } st) stellen.Add(st);
             }
 
+        // Fähigkeiten, die an einem weiter bestehenden Store wegfallen: ihre Schnittstelle, ihre Methode in der Umsetzung und ihr Platz im Bündel.
+        var buendelWeg = new List<(string Datei, string Store, string Faehigkeit)>();
+        foreach (var neu in Alle(soll["stores"]))
+        {
+            var alt = Alle(board["stores"]).FirstOrDefault(k => KartenSchluessel.Von("stores", k) == KartenSchluessel.Von("stores", neu));
+            if (alt == null) continue;
+            var bleibt = Alle(neu["writeFns"]).Concat(Alle(neu["readFns"])).Select(f => (string?)f["_id"]).ToHashSet(StringComparer.Ordinal);
+            foreach (var f in Alle(alt["writeFns"]).Concat(Alle(alt["readFns"])).Where(f => !bleibt.Contains((string?)f["_id"])))
+            {
+                var was = $"fähigkeit {(string?)alt["name"]}.{(string?)f["name"]}";
+                foreach (var o in new[] { f["_ort"], f["_rumpf"] }) if (Aus(o, was) is { } st) stellen.Add(st);
+                if ((string?)alt["datei"] is { } d && (string?)f["faehigkeit"] is { } fa) buendelWeg.Add((d, (string?)alt["name"] ?? "", fa));
+            }
+        }
+
         var geloescht = new List<string>();
         foreach (var datei in stellen.GroupBy(s => s.Datei))
         {
@@ -228,6 +243,18 @@ public static class Gesten
                 && !CSharpSyntaxTree.ParseText(neuText).GetRoot().DescendantNodes().OfType<DelegateDeclarationSyntax>().Any())
                 ws.Entferne(datei.Key);
             else ws.Setze(datei.Key, neuText);
+        }
+        foreach (var (datei, store, fa) in buendelWeg)
+        {
+            if (ws.Lies(datei) is not { } text) continue;
+            var wurzel = CSharpSyntaxTree.ParseText(text).GetRoot();
+            var basis = wurzel.DescendantNodes().OfType<InterfaceDeclarationSyntax>().FirstOrDefault(i => i.Identifier.Text == store)?.BaseList;
+            var typ = basis?.Types.FirstOrDefault(t => BoardLeseseite.Basisname(t.Type.ToString()) == fa);
+            if (basis == null || typ == null) continue;
+            var rest = basis.Types.Remove(typ);
+            // Der letzte Basistyp trägt den Abstand vor dem Rumpf — fällt er weg, übernimmt ihn der neue letzte.
+            if (rest.Count > 0 && typ == basis.Types.Last()) rest = rest.Replace(rest.Last(), rest.Last().WithTrailingTrivia(typ.GetTrailingTrivia()));
+            ws.Setze(datei, wurzel.ReplaceNode(basis, basis.WithTypes(rest)).ToFullString());
         }
         return (geloescht.Distinct().ToList(), nicht);
     }

@@ -12,9 +12,10 @@ namespace DomainEditor;
 /// </summary>
 public static class Herkunft
 {
-    public static string Von(Record r) => Hash(r with { Datei = null, Usings = [], Herkunft = null, Aggregat = null, Doku = null, Zusatz = null, Attribute = null });
+    public static string Von(Record r) => Hash(r with { Datei = null, Usings = [], Herkunft = null, Aggregat = null, AmAggregat = null, AmStore = null, Doku = null, Zusatz = null, Attribute = null });
     public static string Von(Enumeration e) => Hash(e with { Datei = null, Herkunft = null, Doku = null });
-    public static string Von(Aggregat a) => Hash(a.State.Select(f => f with { ElementTyp = null }).ToList());
+    // Ein Aggregat: sein Zustand und je Frage (docs/03 §3.2) Query und Antworten — der Rückgabetyp der Frage folgt den Antworten.
+    public static string Von(Aggregat a) => Hash(new { State = a.State.Select(f => f with { ElementTyp = null }).ToList(), a.Fragen });
     public static string Von(DecideRegel d) => Hash(new { d.Aggregat, d.Command, d.Ergibt });
     public static string Von(Akteur a) => Hash(new { a.Name, a.Darf, a.Hoert });
     public static string Von(Client c) => Hash(new { c.Name, c.Verkoerpert });

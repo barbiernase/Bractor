@@ -39,7 +39,7 @@ public static class BoardLeseseite
             Doku = N(rm, "doku"), Zusatz = N(rm, "zusatz"), Usings = Strings(rm, "usings"), Datei = N(rm, "datei"),
             Typart = N(rm, "typart") is { } ta && ta != "public record" ? ta : null,
             OhneParameterliste = B(rm, "ohneParameterliste") ?? false,
-            Geteilt = B(rm, "geteilt") ?? false,
+            Geteilt = B(rm, "geteilt") ?? false, AmStore = N(rm, "amStore"),
             Basen = rm["basen"] is JsonArray ? Strings(rm, "basen") : null, Attribute = N(rm, "attribute"), Herkunft = N(rm, "herkunft"),
         }).Where(r => r.Name.Length > 0 && r.Namespace.Length > 0).ToList();
 

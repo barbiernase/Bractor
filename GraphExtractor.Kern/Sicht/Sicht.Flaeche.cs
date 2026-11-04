@@ -201,8 +201,9 @@ public sealed partial class Sicht
         string? Gruppe(string kartenId, JsonObject o)
         {
             var b = KarteVon.TryGetValue(kartenId, out var k) ? Besitzer(k) : "";
+            // Ohne Fähigkeit (eben im Store angelegt) hält die Ansicht den Store fest (amStore, nur Editor) — sonst stünde sie lose.
             var sto = b.StartsWith("sto:", StringComparison.Ordinal) ? b
-                : StoreScope(o).Select(StoreId).FirstOrDefault(x => x != null);
+                : StoreScope(o).Select(StoreId).FirstOrDefault(x => x != null) ?? (S(o, "amStore") is { Length: > 0 } a ? StoreId(a) : null);
             if (sto == null) return null;
             if (!gruppen.Any(x => x.Id == sto) && KarteVon.TryGetValue(sto, out var st)) gruppen.Add(new(sto, st.Name, BandVon(sto)));
             return sto;
@@ -223,6 +224,15 @@ public sealed partial class Sicht
                 .Concat(Alle(r["handles"]).SelectMany(h => L(h, "responses")).Distinct().Select(t => new FlaechenPort(t, "aus", Sorte(t), false))).ToList();
             karten.Add(new(rid, rid, "reader", S(r, "name"), "projektionen", BandVon(rid), Gruppe(rid, r), ports));
             flaecheVon[rid] = rid;
+        }
+        // Ein Store ohne Projektion und Reader (eben angelegt) steht als eigene Karte in seiner Gruppe — sonst fände man ihn nicht wieder.
+        foreach (var st in _stores)
+        {
+            var sid = "sto:" + S(st, "_id");
+            if (gruppen.Any(g => g.Id == sid)) continue;
+            gruppen.Add(new(sid, S(st, "name"), BandVon(sid)));
+            karten.Add(new(sid, sid, "store", S(st, "name"), "projektionen", BandVon(sid), sid, []));
+            flaecheVon[sid] = sid;
         }
 
         // Besitz: je Typ die Karte der Fläche, die ihn deklariert (sein Besitzer, über Besitz-Ketten bis zu einer Karte der Fläche).

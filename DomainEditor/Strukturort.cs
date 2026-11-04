@@ -17,10 +17,14 @@ public static class Strukturort
         var ergebnisse = Funktionsergebnisse(m);
         var anAggregat = Aggregatfragen(m);
         string Ns(string ns, P.Rolle? rolle) => rolle is { } r ? Ziel(ns, r, wurzel) ?? ns : ns;
+        // Im Aggregat angelegt (noch ohne Erzeuger): bei seiner Schreibseite — so muss nichts umziehen, wenn später ein Decide bzw. eine Frage ihn nimmt.
+        string RecordNs(Record r) => r.AmAggregat is { } ag && m.Aggregate.FirstOrDefault(a => a.Name == ag) is { } agg
+            ? Ns(agg.Namespace, P.Rolle.Schreibseite)
+            : Ns(r.Namespace, Rolle(Primitive(r, ergebnisse, anAggregat)));
         var lesen = m.Lesen;
         return m with
         {
-            Records = m.Records.Select(r => r.Datei != null ? r : r with { Namespace = Ns(r.Namespace, Rolle(Primitive(r, ergebnisse, anAggregat))) }).ToList(),
+            Records = m.Records.Select(r => r.Datei != null ? r : r with { Namespace = RecordNs(r) }).ToList(),
             Aggregate = m.Aggregate.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Schreibseite) }).ToList(),
             BausteinFunktionen = m.BausteinFunktionen.Select(f => f.Datei != null ? f : f with { Namespace = Ns(f.Namespace, P.Rolle.Ablaeufe) }).ToList(),
             Akteure = m.Akteure.Select(a => a.Datei != null ? a : a with { Namespace = Ns(a.Namespace, P.Rolle.Akteure) }).ToList(),

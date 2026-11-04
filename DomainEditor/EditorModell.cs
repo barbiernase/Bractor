@@ -127,6 +127,19 @@ public sealed record Record
     /// das Aggregat, das es als einziges erzeugt/faltet. Null = keinem (Value Object, geteilt, oder im Editor noch nicht verdrahtet).
     /// </summary>
     public string? Aggregat { get; init; }
+    /// <summary>
+    /// Nur neu (ohne <see cref="Datei"/>): im Editor im Aggregat dieses Namens angelegt, noch ohne Erzeuger — der Record liegt bei dessen
+    /// Schreibseite (<see cref="Strukturort"/>), auch ein Command ohne Ziel oder eine Antwort, die erst später ein Decide bzw. eine Frage nimmt.
+    /// Bis dahin meldet ihn die Lage-Prüfung (Unfertiges baut nicht).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public string? AmAggregat { get; init; }
+    /// <summary>
+    /// Nur Editor (wird nicht geschrieben): ein Read-Model, das im Store <c>AmStore</c> neu angelegt wurde — es gehört zu dessen Dokument-Typen
+    /// (Klasse 1, <see cref="Storeklassen"/>), auch solange noch keine Fähigkeit es nennt.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public string? AmStore { get; init; }
     /// <summary>Die Deklarationsform verbatim ohne Namen, z. B. <c>public sealed record</c>, <c>public record struct</c>. Null = <c>public record</c>.</summary>
     public string? Typart { get; init; }
     /// <summary>Record ohne Parameterliste (<c>record X : I { … }</c> statt <c>record X(…) : I</c>).</summary>

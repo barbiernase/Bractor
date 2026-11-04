@@ -1059,6 +1059,10 @@ public sealed partial class DomainExtractor
             // Reihenfolge = Deklarations-Reihenfolge der Basisliste (Code-Fakt), nicht alphabetisch.
             foreach (var f in b.Interfaces.Where(IstFaehigkeit).Concat(b.AllInterfaces.Where(IstFaehigkeit)))
                 Nimm(store, f);
+            // Auch ein Bündel ohne Fähigkeit (eben angelegt) hat seine Umsetzung und Store-Klasse: die Klasse, die das Bündel selbst implementiert.
+            var bImpls = ImplsVon(b);
+            foreach (var impl in bImpls) if (!store.ImplsFull.Contains(impl.Fq())) store.ImplsFull.Add(impl.Fq());
+            store.Klassen = store.Klassen.Union(bImpls.SelectMany(Projektionsform.StoreKlassen)).Order().ToList();
             stores.Add(store);
         }
         foreach (var f in faehigkeiten.Where(f => !_faehigkeiten.ContainsKey(f.Fq())))

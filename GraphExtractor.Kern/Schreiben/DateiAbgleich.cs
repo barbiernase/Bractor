@@ -91,7 +91,10 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         foreach (var e in modell.Enums.Where(e => e.Datei != null && Herkunft.Geaendert(e.Herkunft, Herkunft.Von(e))))
             Datei(e.Datei!, $"enum {e.Namespace}.{e.Name}", t => EnumWerte(t, e));
         foreach (var a in modell.Aggregate.Where(a => a.Datei != null && Herkunft.Geaendert(a.Herkunft, Herkunft.Von(a))))
+        {
             Datei(a.Datei!, $"state {a.Namespace}.{a.Name}", t => StateFelder(t, a));
+            if (a.DeciderDatei != null && a.Fragen.Count > 0) Datei(a.DeciderDatei, $"fragen {a.Namespace}.{a.Name}", t => FrageRueckgaben(t, a));
+        }
         foreach (var d in modell.Decider.Where(d => d.Datei != null && Herkunft.Geaendert(d.Herkunft, Herkunft.Von(d))))
             Datei(d.Datei!, $"decide {d.Aggregat}.{d.Command}", t => DecideRueckgabe(t, d));
         // Funktion (IFunktion): je Eingang ein Auf bzw. je gerufene Methode ihre Signatur — an der Klasse bzw. Schnittstelle und an jeder Umsetzung
@@ -130,6 +133,10 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
                 foreach (var datei in new[] { st.Impl.Datei, st.Impl.SchreibDatei, st.Impl.LeseDatei }.Where(x => x != null).Distinct())
                     Datei(datei!, was, t => MethodenSignatur(t, st.Impl.Name, f.Methode, f, schnittstelle: false));
             }
+        // Klasse 1: die Read-Models, die der Store laut Code schreibt, gehören zu den Dokument-Typen seiner Umsetzung (base(store, typeof(…))).
+        foreach (var st in l.Stores.Where(s => s.Klassen.Contains(1) && s.Impl?.Datei != null))
+            if (Storeklassen.Dokumente(modell, st).ToList() is { Count: > 0 } soll)
+                Datei(st.Impl!.Datei!, $"store {st.Name}: Dokument-Typen", t => DokumentTypen(t, st.Impl.Name, soll));
         foreach (var k in l.Konsumenten.Where(k => k.Datei != null && Herkunft.Geaendert(k.Herkunft, Herkunft.Von(k))))
             Datei(k.Datei!, $"konsument {k.Name}", t => Klasse(t, k.Name, k.Basen, k.MindestensEinmal));
         foreach (var r in l.Reader.Where(r => r.Datei != null && Herkunft.Geaendert(r.Herkunft, Herkunft.Von(r))))
@@ -292,6 +299,23 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         if (N(alt) == N(soll)) return null;
         var neu = text[..m.ReturnType.SpanStart] + soll + text[m.ReturnType.Span.End..];
         return (MitNamespaces(neu, d.Ergibt.Select(a => a.Event)), "OneOf-Ausgänge");
+    }
+
+    // ── Frage an ein Aggregat: die Rückgabe folgt den Antworten (eine Antwort konkret, mehrere als OneOf); der Rumpf bleibt ──
+    private (string, string)? FrageRueckgaben(string text, Aggregat a)
+    {
+        var root = Parse(text);
+        var edits = new List<(int Start, int Ende, string Neu)>();
+        foreach (var f in a.Fragen.Where(f => f.Antworten.Count > 0))
+        {
+            var m = root.DescendantNodes().OfType<MethodDeclarationSyntax>()
+                .FirstOrDefault(x => x.Identifier.Text == Abstractions.Projektionsvertrag.Frage && ErsterTyp(x) == f.Query);
+            if (m == null) continue;   // fehlt sie, legt der Scaffolder sie mit Platzhalter an
+            var bisher = m.ReturnType.DescendantNodesAndSelf().OfType<SimpleNameSyntax>().Select(x => x.Identifier.Text).Where(x => x != OneOf).ToHashSet(StringComparer.Ordinal);
+            if (bisher.SetEquals(f.Antworten)) continue;
+            edits.Add((m.ReturnType.SpanStart, m.ReturnType.Span.End, f.Antworten.Count == 1 ? f.Antworten[0] : $"{OneOf}<{string.Join(", ", f.Antworten)}>"));
+        }
+        return edits.Count == 0 ? null : (MitNamespaces(Anwenden(text, edits), a.Fragen.SelectMany(f => f.Antworten)), "Frage-Antworten");
     }
 
     // ── Fähigkeit: Rückgabe + Parameter am Interface bzw. an der Impl-Methode ──
@@ -476,6 +500,22 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         }
         if (edits.Count == 0) return null;
         return (MitNamespaces(Anwenden(text, edits), h.Ausgaenge.Append(h.Eingang)), string.Join(", ", notiz));
+    }
+
+    // ── Dokument-Typen einer Umsetzung der Klasse 1: fehlende typeof(…) hinten an base(…) — nie entfernen, die Reihenfolge bleibt ──
+    private (string, string)? DokumentTypen(string text, string klasse, IReadOnlyList<string> soll)
+    {
+        var root = Parse(text);
+        var init = root.DescendantNodes().OfType<ClassDeclarationSyntax>().Where(c => c.Identifier.Text == klasse)
+            .SelectMany(c => c.Members.OfType<ConstructorDeclarationSyntax>()).Select(c => c.Initializer)
+            .FirstOrDefault(i => i != null && i.ThisOrBaseKeyword.IsKind(SyntaxKind.BaseKeyword));
+        if (init == null) return (text, "kein Konstruktor mit base(…) — Dokument-Typen nicht ergänzt");
+        var da = init.ArgumentList.Arguments.Select(a => a.Expression).OfType<TypeOfExpressionSyntax>().Select(t => N(t.Type.ToString())).ToHashSet(StringComparer.Ordinal);
+        var fehlt = soll.Where(d => !da.Contains(N(d))).ToList();
+        if (fehlt.Count == 0) return null;
+        var ende = init.ArgumentList.CloseParenToken.SpanStart;
+        var neu = Anwenden(text, [(ende, ende, string.Concat(fehlt.Select(d => $", typeof({d})")))]);
+        return (MitNamespaces(neu, fehlt), "Dokument-Typen " + string.Join(", ", fehlt));
     }
 
     // ── Klasse: Basisliste verbatim; bei einer Projektion das Attribut [MindestensEinmal] (R14) ──

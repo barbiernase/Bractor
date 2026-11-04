@@ -208,6 +208,7 @@
 #de .gnode2.n-graph{border-color:#4f9a62}#de .gnode2.n-graph .ghead{background:#81c995}
 #de .gnode2.n-handle{border-color:#4f7fa8}#de .gnode2.n-handle .ghead{background:#5d8fbf}
 #de .gnode2.n-fn{border-color:#2f8f88}#de .gnode2.n-fn .ghead{background:#2f9d95}
+#de .gnode2.n-umsetzung{border-color:#6b7280}#de .gnode2.n-umsetzung .ghead{background:#9aa0aa}
 #de .ghl{display:block;cursor:pointer;color:#9fb6d6;font-size:11.5px;padding:1px 0;text-decoration:none}#de .ghl:hover{color:#dbe6f5;text-decoration:underline}
 #de .gaus{font-size:10.5px;color:#8f9bb0;margin:-2px 0 4px 18px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #de .gaus.tot{color:#d08a6a}#de .gaus.offen{color:#d0b35a}
@@ -735,14 +736,26 @@
 /* ── Aggregat von innen: anlegen und verbinden — Spaltenköpfe, Bearbeiten-Modus, ⊕/✓ ── */
 #de .ag-spkopf{position:absolute;top:14px;display:flex;align-items:center;gap:8px;padding:6px 10px;box-sizing:border-box;border:1px solid #2c3547;border-radius:8px;background:#141925;color:#dfe5ef;font-size:12px}
 #de .ag-spkopf .ag-plus{margin-left:auto}
+#de .ag-spkopf .ag-sort{margin-left:auto;background:none;border:1px solid #2c3547;color:#8f9bb0;border-radius:6px;padding:0 6px;font-size:12px;cursor:pointer}
+#de .ag-spkopf .ag-sort:hover{border-color:#8fa6c8;color:#dfe5ef}
+#de .ag-spkopf .ag-sort.an{border-color:#8fa6c8;color:#dfe5ef;background:#1d2738}
+#de .ag-spkopf .ag-sort+.ag-plus{margin-left:0}
+#de .kom-band{position:absolute;left:24px;right:24px;border-top:1px dashed #2c3547;padding-top:4px;font-size:11px;color:#8f9bb0;letter-spacing:.04em;pointer-events:none}
+#de .kom-k.fremd{opacity:.55}
+#de .kom-k.fremd:hover{opacity:.85}
 #de .ag-plus{background:#2a2414;border:1px solid #a8843a;color:#ffd27a;border-radius:6px;padding:1px 8px;font-size:11px;cursor:pointer}
 #de .ag-plus:hover{border-color:#ffd27a}
 #de .ag-kurz{padding:4px 10px 6px;font-size:11px;color:#9aa6bb;display:flex;flex-direction:column;gap:2px}
 #de .ag-tag{font-size:10px;color:#8f9bb0}
-#de .ag-stift{margin-left:auto;font-size:11px;opacity:.75}
+#de .ag-stift{margin-left:auto;font-size:11px;opacity:.75;background:transparent;border:1px solid transparent;border-radius:5px;color:inherit;padding:0 5px;line-height:16px}
+#de button.ag-stift{cursor:pointer}
+#de button.ag-stift:hover,#de button.ag-stift.an{opacity:1;border-color:#a8843a;background:#2a2414;color:#ffd27a}
 #de .kom-k .ghead{cursor:pointer}
 #de .kom-k.offen{outline:1px solid #a8843a}
-#de .kom-k.leise{opacity:.4}
+#de .kom-k.leise{opacity:.18}
+#de .kom-k.leise:hover{opacity:.45}
+#de .kom-k.zu .ghead{border-bottom:none}
+#de .kom-k .ghead,#de .kom-k .fk-ports,#de .kom-k .ag-kurz{user-select:none}
 #de .kom-k.kand{outline:2px dashed #ffd27a;outline-offset:2px}
 #de .ag-kand{position:absolute;left:-13px;top:2px;width:22px;height:22px;border-radius:50%;background:#2a2414;border:1px solid #ffd27a;color:#ffd27a;font-weight:700;cursor:pointer;padding:0;line-height:18px}
 #de .ag-kand.ja{background:#14301f;border-color:#57b673;color:#57b673}

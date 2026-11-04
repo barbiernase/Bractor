@@ -401,24 +401,53 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   Decide an einen Graph-Kopf, die Event-Antwort an die Funktion, die den Command gab), liest (eine Lese-Fähigkeit am Store).
 - **Von innen** (Modal): ein Graph zeigt seine Komposition (`board.sicht.komposition`, `Sicht.Komposition.cs`: Knoten nach Tiefe, je `[Von]` eine
   Kante, Köpfe und Ausgänge, Technik und Konfig als Chips) mit dem Baukasten (`board.sicht.baukasten`) und seinen Instanzen; ein Aggregat
-  Commands → Decide → Ergebnisse → Apply → Zustand; ein Store Events und Queries → Auf bzw. Frage → Store-Funktionen → Read-Models. Auch im Modal
-  gibt es kein Panel: ein Klick wählt einen Knoten bzw. ein Glied und hebt seine Kanten hervor, ein Doppelklick öffnet ihn (ein Graph eine Ebene
-  tiefer, sonst sein Formular mit Rumpf); ein Klick im Baukasten öffnet den Baustein.
+  Commands → Decide → Ergebnisse → Apply → Zustand; ein Store in zwei Bändern Eingang → Auf bzw. Frage → Fähigkeit → Umsetzung, dazu Read-Models
+  und Antworten (s. u.). Auch im Modal gibt es kein Panel: ein Klick wählt einen Knoten bzw. ein Glied und hebt seine Kanten hervor, ein
+  Doppelklick öffnet ihn (ein Graph eine Ebene tiefer); in Aggregat und Store schaltet er stattdessen die Detailstufe. Ein Klick im Baukasten
+  öffnet den Baustein.
 - **Gesten** sind Änderungen am Board, die der Server als Patch in den Code schreibt (↶ nimmt ihn zurück). Pfeile zieht man nie von Hand —
   überall gilt dieselbe Port-Logik: links die Eingänge, rechts die Ausgänge; „＋“ an einem Port hebt die Ports bzw. Karten hervor, die dort
   angeschlossen werden können, ein Klick verbindet, Esc bricht ab; ✕ an einem Port löst. Auf der Fläche: Akteur links „＋ darf“ (Eingänge von
   Graphen, Aggregaten, Readern → `IDarf`), Akteur rechts „＋ hört“ (Events, Hinweise, Commands ohne Ziel → `IHoert`), Projektion „＋ Event“ (ein
-  `Auf`). In der Komposition: „＋“ an einem Eingang eines Knotens (die Knoten, die den Typ ausgeben → `[Von]`, „von außen“ → `[Kopf]`),
+  `Auf`), „＋ Store“ im Kopf der Spalte Projektionen (Store-Klasse, Bereich, Name). In der Komposition: „＋“ an einem Eingang eines Knotens (die Knoten, die den Typ ausgeben → `[Von]`, „von außen“ → `[Kopf]`),
   „＋ Technik/Konfig“ am Knoten (Konstruktor), Funktion, Graph oder Quelle aus dem Baukasten auf die Leinwand ziehen (neuer Knoten), Klick auf
-  eine Kante (verlierbar, lösen). Im Store: „＋ Schreib-“ bzw. „＋ Lese-Fähigkeit“ an Auf und Frage (die Store-Funktionen → Fähigkeit als
-  Parameter). Was aus Signaturen folgt, ändert man im Formular.
+  eine Kante (verlierbar, lösen). Was aus Signaturen folgt, ändert man im Bearbeiten der Karte.
 - **Zoom:** in jedem Modal mit ＋/−/0 (auch mit Strg/⌘), Strg/⌘ + Mausrad bzw. Zwei-Finger-Zoom und der Anzeige im Kopf; auf der Fläche ebenso
   mit ＋/−/0 und dem Mausrad.
-- **Im Aggregat anlegen und verbinden** (von innen): jede Karte hat links ihre Eingänge und rechts ihre Ausgänge als Ports, die Kanten laufen
-  von Port zu Port. Pfeile setzt man nie von Hand: „＋“ an einem Port (am Decide „＋ Ergebnis“, am Ergebnis „＋ Decide“, an der Frage
-  „＋ Antwort“) hebt die Karten hervor, die dort angeschlossen werden können — ein Klick auf eine verbindet, Esc bricht ab; dazu ein Menü für
-  Neues (Event, Hinweis, Command ohne Ziel, Frist, Antwort). „＋ Apply“ am Event legt das Apply an; ✕ an einem Port löst. Der Kopf einer Karte
-  schaltet ihr Bearbeiten an und aus (Name, Felder mit Typ, „erzeugt das Aggregat“, Event ⇄ Hinweis, Rumpf, ✕). Spaltenköpfe: „＋ ▾“ für Command
-  (mit seinem Decide) und Query (mit Frage und Antwort), „＋ Feld“ am Zustand. Neues Decide und Apply bekommen einen Platzhalter-Rumpf, eine neue
-  Frage ebenso (der Scaffolder schreibt sie in den Zusatz des Deciders und zieht den Rückgabetyp den Antworten nach).
+- **Im Aggregat** (von innen) hat jede Karte drei Detailstufen: nur Kopf · Kopf mit Ports (Standard) · Bearbeiten. Ein Doppelklick schaltet
+  Kopf ⇄ Ports (die Kanten hängen dann am Kopf; „▭ alle nur Kopf“ im Modalkopf für alle), ✎ im Kopf öffnet und schließt das Bearbeiten (Name,
+  Felder mit Typ, „erzeugt das Aggregat“, Event ⇄ Hinweis, Rumpf, ✕) — ein eigenes Formular gibt es hier nicht mehr. Ein Klick hebt die Kette der
+  Karte hervor (was vor ihr und nach ihr kommt), alles andere tritt zurück.
+  Ein Decide steht neben seinem Command, ein Apply neben seinem Event (1:1, oben bündig). „⇅“ im Kopf der Spalte Commands bzw. Ergebnisse
+  wählt, welche Seite führt und wonach sie steht (in der Ansicht gemerkt): neu (das Neueste oben), A–Z oder Eingänge (wenige zuerst, so steht
+  Unverbundenes oben; bei Gleichstand das Neueste zuerst); die andere Seite folgt ihren Kanten, Unverbundenes darunter. Der Zeitstempel entsteht beim Anlegen im Editor und steht nur in der Ansicht (`angelegt`); was keinen hat, zählt
+  nach seiner Stelle im Modell, älter als alles Gestempelte.
+- **Im Aggregat anlegen und verbinden:** jede Karte hat links ihre Eingänge und rechts ihre Ausgänge als Ports, die Kanten laufen von Port zu Port.
+  Pfeile setzt man nie von Hand: „＋“ an einem Port (am Decide „＋ Ergebnis“, am Ergebnis „＋ Decide“, an der Frage „＋ Antwort“, an der Antwort
+  „＋ Frage“) hebt nur die Karten hervor, die dort angeschlossen werden können; alles andere tritt zurück. Dazu stehen gestrichelt in ihrer
+  Spalte, was neu entstehen kann (Event, Hinweis, Command ohne Ziel, Frist auf einen eigenen Command, Antwort, Command mit Decide, Query) und
+  Events bzw. Hinweise ohne Erzeuger von außerhalb des Bilds. Ein Klick verbindet bzw. legt an, Esc oder ein zweiter Klick auf „＋“ bricht ab.
+  „＋ Apply“ am Event und „＋ Decide“ an einem eigenen Command ohne Decide legen direkt an; ✕ an einem Port löst. Wird ein Event Ergebnis eines
+  Decides oder entsteht es frei unter „Ergebnisse“, kommt sein Apply gleich mit (CQRS079); ein Command an das Aggregat
+  entsteht immer mit seinem Decide. Jedes Glied lässt sich
+  über die Spaltenköpfe anlegen: Commands (Command mit Decide, Query mit Frage und Antwort),
+  Ergebnisse (Event, Hinweis, Command ohne Ziel, Antwort — sofort Code, ohne Zuordnung; angeschlossen wird später über „＋ Decide“ bzw.
+  „＋ Frage“), Zustand (Feld); Decide und Apply haben keinen eigenen Knopf, sie kommen 1:1 mit Command bzw. Event. Was im Aggregat entsteht, liegt bei seiner Schreibseite (`Record.AmAggregat`,
+  `Strukturort`), auch ein Command ohne Ziel oder eine Antwort, die noch niemand nimmt — so muss beim Anschließen nichts umziehen; bis dahin meldet
+  die Lage-Prüfung sie (CQRS098, Unfertiges baut nicht). Im Modal steht eine Nachricht „unverbunden“, solange sie im Namespace des Aggregats
+  liegt und weder erzeugt wird noch eine Frage beantwortet. Neues Decide und Apply bekommen einen
+  Platzhalter-Rumpf, eine neue Frage ebenso; der Rückgabetyp einer Frage folgt ihren Antworten (Scaffolder bzw. Abgleich der Decider-Datei).
+- **Im Store** (von innen) gilt dieselbe Mechanik wie im Aggregat (`innenZeige`: Detailstufen, ✎, Ports mit ＋, gestrichelte Karten,
+  „unverbunden“, Zeitstempel, ⇅ in Eingänge und Fähigkeiten), in zwei Bändern: Schreiben (Event · Auf, Schreib-Fähigkeit · Umsetzung) und Lesen
+  (Query · Frage, Lese-Fähigkeit · Umsetzung, Antworten); die Read-Models stehen über beide Bänder. Gebunden ist nur, was die Regeln binden
+  (Event ↔ Auf, Query ↔ Frage, Fähigkeit ↔ Umsetzung); die Fähigkeit wählt man am Port des Auf bzw. der Frage — eine vorhandene oder gestrichelt
+  eine neue samt Umsetzung (Name I + Methode ohne Async, Parameter vorgeschlagen: die Id des Aggregats bzw. der Query, bei Klasse 2 die
+  `Herkunft`). Events stammen aus dem Aggregat und sind hier fix: kein ✎, „▣“ öffnet ihr Aggregat; „＋ Auf für ein Event“ bietet nur Events an,
+  die die Projektion noch nicht hört. Eine Query entsteht mit Frage und Antwort. Projektion bzw. Reader entstehen mit dem ersten Auf bzw. der
+  ersten Query (Name nach dem Store); hat der Store mehrere, fragt das Anlegen. Ein Read-Model entsteht als eigenes Dokument eines Aggregats
+  (`Id<T> Id`, `partial`), Zeile eines Streams oder geteilt; bei Klasse 1 trägt der Abgleich es in die Dokument-Typen der Umsetzung ein
+  (`base(store, typeof(…))`, `Storeklassen.Dokumente`). Kanten zu Read-Models gibt es nur aus der Signatur einer Fähigkeit. Eine Frage eines
+  Readers, der zu einem anderen Store gehört, steht leise mit „gehört zu …“. Ein neuer Store wählt seine Klasse; die Umsetzung erbt die Basis
+  aus `Storeklassen` (`MartenStore`, `DateiZiel`, `DateiSink`), bei Klasse 3 trägt die Projektion `[MindestensEinmal]`. Entfernen: ✕ Auf bzw.
+  Frage an seiner Methode (die letzte nimmt die Klasse mit), ✕ Fähigkeit samt Schnittstelle, Umsetzung und Platz im Bündel, wenn sie niemand nimmt.
 - `--check` prüft die Fläche mit (Kanten an vorhandenen Ports, je Typ höchstens ein deklarierender Port).
