@@ -726,3 +726,5 @@
 #de .kom-leer{position:absolute;left:260px;top:60px;color:#7f8aa0;font-size:13px}
 #de .fk-port.kom-neu{color:#7f8aa0;font-style:italic;cursor:crosshair}
 #de .kom-b[draggable=true]{cursor:grab}
+#de .kom-leib.innen{grid-template-columns:1fr minmax(300px,420px)}
+#de .kom-panel .gbody{display:block!important;padding:0;margin-top:8px}

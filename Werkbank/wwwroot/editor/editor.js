@@ -2057,13 +2057,14 @@
       h("span",{class:"gtitle hatname",title:(NODELABEL[n?n.kind:fk.art]||fk.art)+" · "+fk.name+(pid?" — Klick: Panel":"")},
         h("span",{class:"gk"},(FL_SYM[fk.art]||"")+" "),h("span",{class:"gn"},fk.name)),
       dg.length?h("span",{class:"gdiag"+(nurWarn?" warn":""),title:dg.map(d=>d.text).join("\n")},(nurWarn?"⚠ ":"⛔ ")+dg.length):null,
-      fk.art==="graph"?h("span",{class:"gx fk-kom",title:"Komposition öffnen (Doppelklick)",onclick:e=>{e.stopPropagation();komOeffne(fk.id);}},"⧉"):null,
+      fk.art==="graph"||fk.art==="aggregate"||fk.gruppe?h("span",{class:"gx fk-kom",title:fk.art==="graph"?"Komposition öffnen (Doppelklick)":"Von innen öffnen (Doppelklick)",
+        onclick:e=>{e.stopPropagation();flInnen(fk);}},"⧉"):null,
       loeschbar?h("span",{class:"gx",title:"Löschen",onclick:e=>{e.stopPropagation();delNode(n);}},"✕"):null);
     el.onclick=e=>{if(e.target.classList.contains("gx")||e.target.closest(".fk-port,.fk-chip"))return;e.stopPropagation();if(pid)waehle(pid);};
     // Vom Kopf eines Akteurs (links) ziehen: auf das, was er hineingeben darf.
     if(fk.art==="akteur"&&fk.spalte==="ausgang")head.onpointerdown=e=>{if(e.target.classList.contains("gx"))return;flZiehen(e,fk,null,head);};
     // Doppelklick: ein Graph öffnet seine Komposition, eine Quelle die ihres Graphen mit ihrem Knoten gewählt.
-    el.ondblclick=e=>{e.stopPropagation();if(fk.art==="graph")komOeffne(fk.id);
+    el.ondblclick=e=>{e.stopPropagation();if(fk.art!=="quelle"){flInnen(fk);return;}
       else if(fk.art==="quelle"&&fk.id.startsWith("q:graph:")){const r=fk.id.slice(2),i=r.lastIndexOf(":");komOeffne("gr:"+r.slice(0,i),r.slice(i+1));}};
     el.append(head);
     // Instanzen (graphen/<instanz>.json) an Graph und Quelle — Klick öffnet die Instanz im Panel.
@@ -2136,7 +2137,7 @@
       const fr=h("div",{class:"fl-band"},h("span",{class:"fl-band-t",title:b.id||""},name));fr.style.setProperty("--dc","hsl("+domHue(b.id||"§")+" 45% 55%)");
       Object.assign(fr.style,{left:x1+"px",top:b.y+"px",width:(x2-x1)+"px",height:b.h+"px"});ebene.append(fr);aus.y2=Math.max(aus.y2,b.y+b.h);});
     FLGEO.gruppen.forEach((r,id)=>{const g=FL().gruppen.find(x=>x.id===id)||{name:id};
-      const fr=h("div",{class:"fl-gruppe"},h("span",{class:"fl-gruppe-t",title:"Store "+g.name+" — Klick: Panel",onclick:e=>{e.stopPropagation();waehle(id);}},"Store "+g.name));
+      const fr=h("div",{class:"fl-gruppe"},h("span",{class:"fl-gruppe-t",title:"Store "+g.name+" — Klick: von innen öffnen",onclick:e=>{e.stopPropagation();komOeffne(id);}},"⧉ Store "+g.name));
       Object.assign(fr.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});ebene.append(fr);});
     return aus;}
   // Der Fokus auf der Fläche: bei gewählter Karte sie und ihre Nachbarn über die Kanten (bei einem gewählten Typ nur dessen Kanten); sonst
@@ -2191,6 +2192,9 @@
   function komOeffne(grId,knoten){const pfad=[grId];
     for(let i=0;i<8;i++){const d=komDaten(pfad[0]);if(!d||!d.eltern.length||FLKARTE.has(pfad[0]))break;pfad.unshift(d.eltern[0]);}
     KOM={pfad,reiter:"komposition",wahl:knoten?{art:"knoten",name:knoten}:null};komZeige();}
+  // Von innen öffnen: ein Graph seine Komposition, ein Aggregat sich selbst, Projektion und Reader ihren Store (mit ihnen gewählt).
+  function flInnen(fk){if(fk.art==="graph")komOeffne(fk.id);else if(fk.art==="aggregate")komOeffne(fk.karte);
+    else if(fk.gruppe){KOM={pfad:[fk.gruppe],reiter:"komposition",wahl:{art:"glied",id:fk.karte}};komZeige();}}
   function komSchliesse(){KOM=null;const m=document.querySelector("#de .kom");if(m)m.remove();}
   document.addEventListener("keydown",e=>{if(e.key==="Escape"&&KOM){e.stopImmediatePropagation();komSchliesse();}},true);
   // Woher ein Kopf kommt und wohin ein Ausgang geht: die Kanten der obersten Graph-Karte auf der Fläche.
@@ -2201,7 +2205,8 @@
   const komInstanzen=name=>Object.keys(WB.instanzen||{}).filter(i=>((WB.instanzen[i]||{}).Graph||"")===name).sort();
   function komWaehle(w){KOM.wahl=w;komZeige();}
   function komZeige(){const de=document.getElementById("de");let m=de.querySelector(".kom");if(m)m.remove();if(!KOM)return;
-    const id=KOM.pfad[KOM.pfad.length-1],d=komDaten(id);if(!d){KOM=null;return;}
+    const id=KOM.pfad[KOM.pfad.length-1];if(!id.startsWith("gr:")){blockZeige(de,id);return;}
+    const d=komDaten(id);if(!d){KOM=null;return;}
     m=h("div",{class:"kom"});
     ["pointerdown","wheel","dblclick","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
     const krumen=h("div",{class:"kom-krumen"},...KOM.pfad.flatMap((g,i)=>{const b=h("button",{class:"kom-krume"+(i===KOM.pfad.length-1?" an":""),
@@ -2347,6 +2352,82 @@
         h("button",{class:"kom-akt",onclick:()=>{komSchliesse();waehle("host:inst:"+i);}},"✎ im Panel")));});
     if(!d.eltern.length)box.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",onclick:()=>{komSchliesse();waehle("host:inst-neu");}},"＋ Instanz anlegen")));
     return box;}
+  // ══ INNENANSICHT eines Aggregats bzw. Stores (docs/konzept-editor-spalten.md, Schritt 5): dieselbe Form wie die Komposition — außen die Karte in
+  //   ihrer Spalte, innen ihre Glieder. Wer dazugehört, sagt der Besitz (board.sicht.besitz; beim Store auch die Reader seiner Gruppe), die Kanten
+  //   sind die der Sicht. Aggregat: Commands und Queries → Decide (und Fragen) → was entsteht → Apply → Zustand. Store: Events und Queries →
+  //   Auf bzw. Frage → Store-Funktionen → Read-Models, rechts die Antworten. Bearbeitet wird im Panel mit dem Formular des Glieds.
+  const INNEN_SPALTE={
+    agg:{decider:1,aggregate:1,applier:3,state:4},
+    sto:{handle:1,fn:2,readmodel:3}};
+  function blockInnen(id){const S=SICHT(),bes=S.besitz||{},art=x=>(NODEBY.get(x)||{}).kind,typ=id.startsWith("agg:")?"agg":"sto";
+    const wurzeln=new Set([id,...(typ==="sto"?FL().karten.filter(k=>k.gruppe===id).map(k=>k.karte):[])]);
+    const gehoert=x=>{let o=x;for(let i=0;i<6;i++){if(wurzeln.has(o)&&o!==x)return true;o=(bes[o]||"").replace(/!$/,"");if(!o||o.startsWith("§"))return false;}return false;};
+    const spalte=INNEN_SPALTE[typ],glieder=new Map();
+    NODEBY.forEach((n,x)=>{if(spalte[n.kind]!=null&&(gehoert(x)||(typ==="agg"&&x===id&&(n.ref.fragen||[]).length)))glieder.set(x,spalte[n.kind]);});
+    // Kanten der Sicht zwischen Gliedern und den Nachrichten an ihnen; Strukturkanten (Glied → Besitzer) fallen weg, Apply faltet in den Zustand.
+    const st=[...glieder.keys()].find(x=>art(x)==="state"),kanten=[],nachrichten=new Map(),erzeugt=new Set();
+    (S.kanten||[]).forEach(([a,b])=>{
+      if(typ==="agg"){if(b===id&&art(a)==="applier"&&st)b=st;else if(b===id&&(art(a)==="decider"||art(a)==="state"))return;}
+      if(typ==="sto"&&(wurzeln.has(b)||art(b)==="store"||art(b)==="projektion"||art(b)==="reader"))return;
+      const ga=glieder.has(a),gb=glieder.has(b);if(!ga&&!gb)return;
+      if(ga&&gb){kanten.push([a,b]);return;}
+      // Nur Nachrichten stehen an den Rändern — ein Wertobjekt aus einem Parameter gehört ins Formular, nicht auf die Leinwand.
+      const r=ga?b:a;if(!r.startsWith("rec:")||["valueobject","konfig"].includes(art(r)))return;
+      nachrichten.set(r,0);if(ga)erzeugt.add(r);kanten.push([a,b]);});
+    // Was ein Glied erzeugt, steht hinter ihm (beim Aggregat in der Mitte vor dem Apply, beim Store rechts); was nur hineinkommt, links.
+    nachrichten.forEach((s,r)=>glieder.set(r,erzeugt.has(r)?(typ==="agg"?2:4):0));
+    return {typ,glieder,kanten};}
+  function innenTitel(n){const r=n.ref||{};
+    switch(n.kind){case "decider":return ["Decide",r.command||n.name];case "applier":return ["Apply",r.event||n.name];case "state":return ["Zustand",n.name];
+      case "aggregate":return ["Fragen",(r.fragen||[]).map(f=>f.query).join(", ")];
+      case "handle":return [n.own&&n.own.kind==="reader"?"Frage":"Auf",(n.name||"")+" · "+((n.own&&(n.own.name||(n.own.ref||{}).name))||"")];
+      case "fn":return [r.faehigkeit||"Store-Funktion",n.name];case "readmodel":return ["Read-Model",n.name];
+      default:return [NODELABEL[n.kind]||n.kind,n.name];}}
+  function blockZeige(de,id){const n0=NODEBY.get(id);if(!n0){KOM=null;return;}
+    const I=blockInnen(id),m=h("div",{class:"kom"});
+    ["pointerdown","wheel","dblclick","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
+    const sym=I.typ==="agg"?"▣ ":"🗄 ";
+    m.append(h("div",{class:"kom-kopf"},h("div",{class:"kom-krumen"},h("span",{class:"kom-krume an"},sym+n0.name)),
+      h("div",{class:"kom-u"},I.typ==="agg"?"Aggregat von innen: Commands und Queries → Decide → was entsteht → Apply → Zustand"
+        :"Store von innen: Events und Queries → Auf bzw. Frage → Store-Funktionen → Read-Models · rechts die Antworten"),
+      h("div",{class:"kom-reiter"},h("button",{class:"kom-x",title:"Schließen (Esc)",onclick:komSchliesse},"✕"))));
+    const welt=h("div",{class:"kom-welt"}),svgK=document.createElementNS(SVGNS,"svg");svgK.setAttribute("class","kom-kanten");welt.append(svgK);
+    const wahl=KOM.wahl&&KOM.wahl.art==="glied"?KOM.wahl.id:null;
+    I.glieder.forEach((s,x)=>{const n=NODEBY.get(x);if(!n)return;const [k,t]=innenTitel(n),rec=x.startsWith("rec:");
+      const el=h("div",{class:"gnode2 fk kom-k n-"+(rec?n.kind:n.kind==="handle"?"handle":n.kind)+(wahl===x?" sel":""),onclick:()=>komWaehle({art:"glied",id:x})},
+        h("div",{class:"ghead"},h("span",{class:"gtitle hatname",title:(NODELABEL[n.kind]||n.kind)+" · "+t},h("span",{class:"gk"},(rec?(FL_SORTE[komSorte(n.name)]||""):"")+k+" "),h("span",{class:"gn"},rec?"":t))),
+        rec?null:h("div",{class:"kom-wo",style:"padding:4px 10px"},diagFuer(x).length?"⚠ "+diagFuer(x).length+" Befund(e)":""));
+      if(rec)el.querySelector(".gk").textContent=(FL_SORTE[komSorte(n.name)]||"")+n.name;
+      el.dataset.glied=x;el.dataset.spalte=s;welt.append(el);});
+    if(!I.glieder.size)welt.append(h("div",{class:"kom-leer"},"Noch nichts darin."));
+    const lw=h("div",{class:"kom-lw"},welt);
+    m.append(h("div",{class:"kom-leib innen"},lw,blockPanel(id,wahl)));de.append(m);
+    // Anordnen: je Spalte untereinander; Nachrichten zur Höhe ihrer Glieder sortiert (zweiter Durchgang).
+    const els=[...welt.querySelectorAll(".kom-k")],nb=new Map();
+    I.kanten.forEach(([a,b])=>{[[a,b],[b,a]].forEach(([p,q])=>{if(!nb.has(p))nb.set(p,[]);nb.get(p).push(q);});});
+    const lege=reihe=>{const Y=new Map();let x=40,hmax=0;const sp=[...new Set(els.map(e=>+e.dataset.spalte))].sort((a,b)=>a-b);
+      sp.forEach(s=>{let y=30,w=0;reihe(els.filter(e=>+e.dataset.spalte===s)).forEach(e=>{e.style.left=x+"px";e.style.top=y+"px";Y.set(e.dataset.glied,y+e.offsetHeight/2);y+=e.offsetHeight+14;w=Math.max(w,e.offsetWidth);});
+        hmax=Math.max(hmax,y);x+=w+110;});return {Y,w:x,h:hmax+30};};
+    let g=lege(l=>l);
+    g=lege(l=>l.map(e=>{const ys=(nb.get(e.dataset.glied)||[]).map(o=>g.Y.get(o)).filter(v=>v!=null);return [e,ys.length?ys.reduce((a,b)=>a+b,0)/ys.length:g.Y.get(e.dataset.glied)];})
+      .sort((a,b)=>a[1]-b[1]).map(p=>p[0]));
+    welt.style.width=g.w+"px";welt.style.height=g.h+"px";svgK.setAttribute("width",g.w);svgK.setAttribute("height",g.h);
+    const el=x=>welt.querySelector('.kom-k[data-glied="'+CSS.escape(x)+'"]');
+    I.kanten.forEach(([a,b])=>{const ea=el(a),eb=el(b);if(!ea||!eb)return;
+      const A={x:ea.offsetLeft+ea.offsetWidth,y:ea.offsetTop+14},B={x:eb.offsetLeft,y:eb.offsetTop+14};
+      const zurueck=B.x<A.x,c=Math.max(40,Math.abs(B.x-A.x)*0.45),p=document.createElementNS(SVGNS,"path");
+      p.setAttribute("d",zurueck?"M"+A.x+","+A.y+" C"+(A.x+80)+","+A.y+" "+(B.x-80)+","+B.y+" "+B.x+","+B.y:"M"+A.x+","+A.y+" C"+(A.x+c)+","+A.y+" "+(B.x-c)+","+B.y+" "+B.x+","+B.y);
+      const s=komSorte((NODEBY.get(a.startsWith("rec:")?a:b)||{}).name);
+      p.setAttribute("fill","none");p.setAttribute("stroke",s==="event"?"#57b673":s==="hinweis"?"#cf6f68":s==="query"||s==="antwort"?"#9678d6":"#8fa6c8");p.setAttribute("stroke-width","1.6");
+      if(wahl&&(a===wahl||b===wahl))p.setAttribute("stroke-width","3");svgK.append(p);});}
+  // Panel: das bestehende Formular des gewählten Glieds (wie im Panel der Fläche), sonst die Karte des Blocks.
+  function blockPanel(id,wahl){const p=h("div",{class:"kom-panel"}),x=wahl&&NODEBY.has(wahl)?wahl:id,n=NODEBY.get(x);
+    const [k,t]=x===id?[NODELABEL[n.kind]||n.kind,n.name]:innenTitel(n);p.append(h("div",{class:"kom-t"},k+(t?" · "+t:"")),h("div",{class:"kom-u"},NODELABEL[n.kind]||n.kind));
+    const dg=diagFuer(x);if(dg.length)p.append(h("div",{class:"gi-diag"},...dg.map(d=>h("div",{class:"find "+(d.art==="warnung"?"warning":"error")},d.text))));
+    const b=h("div",{class:"gbody"});INSP=true;try{fuelleKoerper(b,n);}finally{INSP=false;}p.append(b);
+    p.append(h("div",{class:"kom-akte"},wahl?h("button",{class:"kom-akt",onclick:()=>komWaehle(null)},"↩ "+(NODEBY.get(id)||{}).name):null,
+      h("button",{class:"kom-akt",title:"Modal schließen, die Karte im Panel der Fläche öffnen",onclick:()=>{komSchliesse();waehle(x);}},"↗ im Panel der Fläche")));
+    return p;}
   // ══ GESTEN DER FLÄCHE UND DER KOMPOSITION (docs/konzept-editor-spalten.md, Schritt 4): Ziehen von einem Port auf eine Karte bzw. einen Port,
   //   Klick auf eine Kante zum Lösen, Ziehen aus dem Baukasten. Jede Geste ändert das Modell; der Server schreibt den Code und schickt das neue Board.
   // Ein Menü an der Mausposition, über allem (auch über dem Kompositions-Modal).
