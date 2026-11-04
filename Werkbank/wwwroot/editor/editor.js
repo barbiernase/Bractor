@@ -1886,6 +1886,8 @@
       h("button",{title:"Fokus einpassen",onclick:()=>passeEin([...(flFokus()||{karten:new Set()}).karten],1)},"⤢"),
       h("button",{title:"Fokus lösen (Esc)",onclick:fokusLoesen},"✕"));}
   function waehle(id){
+    // Im offenen Modal führt eine Auswahl (ein Verweis in einem Formular) zur Ansicht dieser Karte, nicht auf die verdeckte Fläche.
+    if(KOM&&id&&!VB&&(NODEBY.has(id)||komDaten(id))){komKarte(id,true);return;}
     if(VB){if(id&&id!==SEL){vbKlick(id);return;}if(!id){vbEnde();return;}}
     if(AUF&&id!=="cl:"+AUF.client){AUF=null;if(world)drawEdges();}
     if(typeof SP!=="undefined"&&id)SP.schritt=null;
@@ -1897,39 +1899,11 @@
   document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if(VB){vbEnde();return;}if(SEL){waehle(null);return;}
     if(typeof SP!=="undefined"&&SP.schritt){SP.schritt=null;zeigeInspector();return;}if(FOKUS)fokusLoesen();});
 
-  // ── (1) INSPECTOR: die Detail-Sicht GENAU EINES Knotens (sein Formular) + Nachbarn zum Springen.
+  // Kein Panel neben der Fläche: ein Klick hebt die Kette hervor, bearbeitet wird im Modal (Doppelklick). Ruft eine Formular-Änderung nach
+  //   einer Auffrischung, folgt ihr das offene Modal; ohne Modal bleibt nur das Panel eines Spur-Schritts.
   function zeigeInspector(){if(!canvas)return;const alt=canvas.querySelector(".ginsp");if(alt)alt.remove();
-    if(!SEL){if(typeof SP!=="undefined"&&SP.schritt)spSchrittPanel();return;}
-    const n=NODEBY.get(SEL);if(!n){SEL=null;return;}
-    const p=h("div",{class:"ginsp"});p.dataset.sel=SEL;
-    ["pointerdown","dblclick","wheel","click"].forEach(ev=>p.addEventListener(ev,e=>e.stopPropagation()));
-    const nm=n.name||NODELABEL[n.kind]||n.kind;
-    p.append(h("div",{class:"gi-h"},h("span",{class:"gi-k kc-"+n.kind},NODELABEL[n.kind]||n.kind),h("span",{class:"gi-n",title:nm},nm),
-      h("button",{title:"Schließen (Esc)",onclick:()=>waehle(null)},"✕")));
-    const sektion=(m,titel)=>{const sec=h("div",{class:"gi-sec"});
-      if(titel)sec.append(h("div",{class:"gi-st kc-"+m.kind},titel));
-      const b=h("div",{class:"gbody"});INSP=true;try{fuelleKoerper(b,m);}finally{INSP=false;}sec.append(b);return sec;};
-    // NUR der gewählte Knoten — Decider, Ablehnung, Code, LLM … sind eigene Knoten auf dem Graphen mit eigener Detail-Sicht.
-    if(n.kind!=="host")p.append(h("div",{class:"gi-hint"},"⊕ anklicken → passende Knoten leuchten → anklicken = verbinden / lösen · Esc oder ⊕ nochmal = fertig"));
-    {const dg=diagFuer(n.id);if(dg.length)p.append(h("div",{class:"gi-diag"},...dg.map(d=>h("div",{class:"find "+(d.art==="warnung"?"warning":"error")},d.text))));}
-    p.append(sektion(n,null));
-    // Nachbarn zum Springen (Klick wählt den Nachbarn und zeigt DESSEN Detail-Sicht).
-    const eigen=new Set([n.id]),rein=new Set(),raus=new Set();
-    const sammle=(ids,ziel)=>(ids||[]).forEach(y=>(VERTRETER.get(y)||[y]).forEach(v=>{if(!eigen.has(v))ziel.add(v);}));
-    eigen.forEach(x=>{sammle(ADJ.inn.get(x),rein);sammle(ADJ.out.get(x),raus);});
-    const rel=h("div",{class:"gi-rel"});
-    const liste=(titel,set)=>{if(!set.size)return;rel.append(h("h5",{},titel));
-      // Nachbar in einer nicht geladenen Domäne: benannt („↗ außerhalb"), Klick lädt die Domäne dazu und springt hin.
-      [...set].map(id=>NODEBY.get(id)).filter(Boolean).forEach(m=>{const aussen=!geladen(m),ns=nsVon(m);
-        rel.append(h("a",{title:(NODELABEL[m.kind]||m.kind)+(aussen?" — Domäne "+(ns||"?")+" nicht geladen: Klick lädt sie dazu":""),
-          onclick:()=>{if(aussen&&ns&&LADEN){if(!LADEN.some(g=>drinNs(g,ns)))LADEN=LADEN.concat([ns]);VIEW.geladen=LADEN;speichereAnsicht();render();}
-            const n2=NODEBY.get(m.id);if(n2){waehle(n2.id);centerOn(n2);pulseNode(n2);}}},
-          h("i",{class:"kc-"+m.kind,style:"display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px"}),m.name||NODELABEL[m.kind],
-          aussen?h("span",{class:"gp-mark",style:"margin-left:6px"},"↗ außerhalb · "+letztesSeg(ns||"?")):null));});};
-    liste("◀ Eingang",rein);liste("Ausgang ▶",raus);if(rel.childNodes.length)p.append(rel);
-    canvas.append(p);
-    if(INSP_SCROLL&&INSP_SCROLL.id===SEL)p.scrollTop=INSP_SCROLL.top;INSP_SCROLL=null;}
-
+    if(KOM){komZeige();return;}
+    if(!SEL&&typeof SP!=="undefined"&&SP.schritt)spSchrittPanel();}
   // Kurzfassung auf der eingeklappten Karte: das Wesentliche in einer Zeile + Chips der eingeklappten Details.
   const kurz=xs=>{xs=[...new Set((xs||[]).filter(Boolean))];return xs.slice(0,2).join(", ")+(xs.length>2?" +"+(xs.length-2):"");};
   // ── (4) SEMANTISCHER ZOOM ──
@@ -1983,7 +1957,7 @@
   function zeigeLadend(id){const n=NODEBY.get(id),ns=n&&nsVon(n);
     if(n&&LADEN&&!geladen(n)&&ns){LADEN=LADEN.concat([ns]);VIEW.geladen=LADEN;speichereAnsicht();render();setTimeout(()=>zeigeKnoten(id),0);return;}
     zeigeKnoten(id);}
-  function zeigeKnoten(id){const g=GEO.get(id);if(g)einpassenRahmen({x1:g.x-260,y1:g.y-160,x2:g.x+g.w+260,y2:g.y+g.h+160});waehle(id);}
+  function zeigeKnoten(id){if(KOM){komKarte(id,true);return;}passeEin([id],1,0.4);waehle(id);}
   function einpassenRahmen(r){if(!CV.w)return;const w=r.x2-r.x1,hh=r.y2-r.y1,s=Math.max(0.08,Math.min(1,(CV.w-80)/w,(CV.h-80)/hh));
     PAN.s=s;PAN.x=CV.w/2-(r.x1+w/2)*s;PAN.y=CV.h/2-(r.y1+hh/2)*s;applyPan();}
 
@@ -2018,15 +1992,15 @@
       h("b",{style:"color:#cbd3e1"},"Ansicht"),
       h("button",{title:"Geladene Domänen ändern",onclick:()=>deLaden()},"📂 "+(LADEN===null?"alles geladen":!LADEN.length?"leer":LADEN.map(letztesSeg).join(", "))),
       btn("⤢ Alles zeigen",false,"Ganze Fläche einpassen",()=>passeEin(flKarten().map(k=>k.id),1)),
-      btn("🖥 Umgebung ▾",false,"Umgebung und Instanzen im Panel öffnen",e=>menue(e.clientX,e.clientY+20,"Umgebung "+(WB.umgName||""),
-        hostKnoten().map(n=>({t:n.name,fn:()=>waehle(n.id)})))),
+      btn("🖥 Umgebung ▾",false,"Umgebung und Instanzen öffnen",e=>menue(e.clientX,e.clientY+20,"Umgebung "+(WB.umgName||""),
+        hostKnoten().map(n=>({t:n.name,fn:()=>komKarte(n.id)})))),
       h("span",{id:"gfokus",class:"gfokus",style:"display:none"}),
       btn("👁 Ausblenden"+((VIEW.aus||[]).length?" ("+VIEW.aus.length+")":"")+" ▾",FILTER_OPEN,"Knotenarten und Domänen ein-/ausblenden",()=>{FILTER_OPEN=!FILTER_OPEN;render();}),
-      h("span",{style:"margin-left:8px"},"Karte antippen = Panel · Port antippen = Typ im Panel · Esc = fertig · Fläche ziehen = verschieben"));}
+      h("span",{style:"margin-left:8px"},"Klick = Kette hervorheben · Doppelklick = öffnen und bearbeiten · vom Port ziehen = verbinden · Esc = fertig"));}
 
   // ══ FLÄCHE IN SECHS SPALTEN (docs/10 §10.9): was Akteure hineingeben · Quellen · Graphen · Aggregate · Projektionen · was zu
   //   Akteuren kommt. Karten, Ports, Bänder und Kanten rechnet der Server (board.sicht.flaeche); hier nur Anordnung und Zeichnen. Eine Karte der
-  //   Fläche öffnet im Panel die Karte der Sicht dahinter, ein Port den Typ seiner Nachricht.
+  //   Fläche öffnet (Doppelklick) die Karte der Sicht dahinter im Modal, ein Port den Typ seiner Nachricht; ein Klick hebt die Kette hervor.
   const FL_SPALTE={ausgang:{t:"Client-Ausgang",u:"was Akteure hineingeben (darf)",neu:["akteur","client"]},quellen:{t:"Quellen",u:"lauschen am Kopf eines Graphen",neu:["quelle"]},
     graphen:{t:"Graphen",u:"rechnen vor dem Aggregat",neu:["graph"]},aggregate:{t:"Aggregate",u:"entscheiden, schreiben das Log",neu:["aggregate"]},
     projektionen:{t:"Projektionen",u:"Sichten je Store",neu:["projektion"]},eingang:{t:"Client-Eingang",u:"was zu Akteuren kommt (hört)",neu:["akteur"]}};
@@ -2054,7 +2028,7 @@
     el.dataset.id=fk.id;el.dataset.karte=pid||"";
     const loeschbar=n&&fk.art!=="quelle"&&fk.spalte!=="eingang";
     const head=h("div",{class:"ghead"},
-      h("span",{class:"gtitle hatname",title:(NODELABEL[n?n.kind:fk.art]||fk.art)+" · "+fk.name+(pid?" — Klick: Panel":"")},
+      h("span",{class:"gtitle hatname",title:(NODELABEL[n?n.kind:fk.art]||fk.art)+" · "+fk.name+(pid?" — Klick: Kette · Doppelklick: öffnen":"")},
         h("span",{class:"gk"},(FL_SYM[fk.art]||"")+" "),h("span",{class:"gn"},fk.name)),
       dg.length?h("span",{class:"gdiag"+(nurWarn?" warn":""),title:dg.map(d=>d.text).join("\n")},(nurWarn?"⚠ ":"⛔ ")+dg.length):null,
       fk.art==="graph"||fk.art==="aggregate"||fk.gruppe?h("span",{class:"gx fk-kom",title:fk.art==="graph"?"Komposition öffnen (Doppelklick)":"Von innen öffnen (Doppelklick)",
@@ -2071,12 +2045,12 @@
     const gname=flGraphName(fk);
     if(gname){const inst=Object.keys(WB.instanzen||{}).filter(i=>((WB.instanzen[i]||{}).Graph||"")===gname).sort();
       if(inst.length)el.append(h("div",{class:"fk-chips"},...inst.map(i=>h("button",{class:"fk-chip",title:"Instanz "+i+" — Klick: Panel",
-        onclick:e=>{e.stopPropagation();waehle("host:inst:"+i);}},"⬡ "+i))));}
+        onclick:e=>{e.stopPropagation();komKarte("host:inst:"+i);}},"⬡ "+i))));}
     const ports=h("div",{class:"fk-ports"});
     const zeile=p=>{const rid="rec:"+String(p.typ).split("<")[0],hat=NODEBY.has(rid);
       const r=h("div",{class:"fk-port "+p.richtung+" s-"+p.sorte+(p.eigen?" eigen":""),
-        title:(p.eigen?"deklariert hier · ":"")+p.sorte+" "+p.typ+(hat?" — Klick: Typ im Panel":""),
-        onclick:e=>{e.stopPropagation();if(hat)waehle(rid);}},
+        title:(p.eigen?"deklariert hier · ":"")+p.sorte+" "+p.typ+(hat?" — Klick: seine Kanten · Doppelklick: öffnen":""),
+        onclick:e=>{e.stopPropagation();if(hat)waehle(rid);},ondblclick:e=>{e.stopPropagation();if(hat)komKarte(rid);}},
         h("span",{class:"fk-dot"}),h("span",{class:"fk-pl"},(FL_SORTE[p.sorte]||"")+p.typ));
       r.dataset.port=p.richtung+"|"+p.typ;
       // Ziehen von einem Ausgang (bzw. vom Akteur links): verbinden — Klick ohne Bewegung öffnet weiter den Typ.
@@ -2130,7 +2104,7 @@
       const neu=e=>{e.stopPropagation();if(d.neu.length===1)neuerKnoten(d.neu[0]);else menue(e.clientX,e.clientY,d.t,d.neu.map(k=>({t:"＋ "+(NODELABEL[k]||k),fn:()=>neuerKnoten(k)})));};
       const k=h("div",{class:"fl-kopf"},h("div",{},h("b",{},d.t),h("button",{title:"Neu in dieser Spalte",onclick:neu},"＋")),h("div",{class:"fl-u"},d.u),
         s==="ausgang"&&MODEL.clients.length?h("div",{class:"fk-chips"},...MODEL.clients.map(c=>h("button",{class:"fk-chip",title:"Client "+c.name+" verkörpert "+(c.verkoerpert||[]).join(", ")+" — Klick: Panel",
-          onclick:e=>{e.stopPropagation();waehle("cl:"+c._id);}},"🔌 "+clientAnzeige(c)))):null);
+          onclick:e=>{e.stopPropagation();komKarte("cl:"+c._id);}},"🔌 "+clientAnzeige(c)))):null);
       Object.assign(k.style,{left:g.x+"px",top:"0px",width:g.w+"px"});ebene.append(k);aus.x2=Math.max(aus.x2,g.x+g.w);});
     const sq=FLGEO.spalten.quellen,sp=FLGEO.spalten.projektionen;
     if(sq&&sp)FLGEO.baender.forEach(b=>{const x1=sq.x-40,x2=sp.x+sp.w+40,name=b.id?(FL().baender.find(x=>x.id===b.id)||{}).name||b.id:"ohne Domäne";
@@ -2193,8 +2167,7 @@
     for(let i=0;i<8;i++){const d=komDaten(pfad[0]);if(!d||!d.eltern.length||FLKARTE.has(pfad[0]))break;pfad.unshift(d.eltern[0]);}
     KOM={pfad,reiter:"komposition",wahl:knoten?{art:"knoten",name:knoten}:null};komZeige();}
   // Von innen öffnen: ein Graph seine Komposition, ein Aggregat sich selbst, Projektion und Reader ihren Store (mit ihnen gewählt).
-  function flInnen(fk){if(fk.art==="graph")komOeffne(fk.id);else if(fk.art==="aggregate")komOeffne(fk.karte);
-    else if(fk.gruppe){KOM={pfad:[fk.gruppe],reiter:"komposition",wahl:{art:"glied",id:fk.karte}};komZeige();}}
+  function flInnen(fk){if(fk.art==="graph"){komOeffne(fk.id);return;}const pid=flPanelId(fk);if(pid)komKarte(pid);}
   function komSchliesse(){KOM=null;const m=document.querySelector("#de .kom");if(m)m.remove();}
   document.addEventListener("keydown",e=>{if(e.key==="Escape"&&KOM){e.stopImmediatePropagation();komSchliesse();}},true);
   // Woher ein Kopf kommt und wohin ein Ausgang geht: die Kanten der obersten Graph-Karte auf der Fläche.
@@ -2204,13 +2177,24 @@
   function komHerkunft(grId,typ){const o=komOben(grId);return o?[...new Set(FL().kanten.filter(k=>k.nach===o&&k.typ===typ).map(k=>komName(k.von)))]:[];}
   const komInstanzen=name=>Object.keys(WB.instanzen||{}).filter(i=>((WB.instanzen[i]||{}).Graph||"")===name).sort();
   function komWaehle(w){KOM.wahl=w;komZeige();}
-  function komZeige(){const de=document.getElementById("de");let m=de.querySelector(".kom");if(m)m.remove();if(!KOM)return;
-    const id=KOM.pfad[KOM.pfad.length-1];if(!id.startsWith("gr:")){blockZeige(de,id);return;}
-    const d=komDaten(id);if(!d){KOM=null;return;}
-    m=h("div",{class:"kom"});
+  // Brotkrumen über alle Ansichten des Pfads: Graph, Aggregat, Store, Formular einer Karte.
+  function komKrumenText(g){if(g.startsWith("form:")){const n=NODEBY.get(g.slice(5));return "✎ "+(n?(NODELABEL[n.kind]||n.kind)+" "+(n.name||""):g.slice(5));}
+    if(g.startsWith("gr:"))return "⬡ "+((komDaten(g)||{}).name||g);const n=NODEBY.get(g);return (g.startsWith("agg:")?"▣ ":"🗄 ")+(n?n.name:g);}
+  function komKrumen(){return h("div",{class:"kom-krumen"},...KOM.pfad.flatMap((g,i)=>{const b=h("button",{class:"kom-krume"+(i===KOM.pfad.length-1?" an":""),
+      onclick:()=>{KOM.pfad=KOM.pfad.slice(0,i+1);KOM.wahl=null;komZeige();}},komKrumenText(g));return i?[h("span",{class:"kom-sep"},"▸"),b]:[b];}));}
+  function komZeige(){const de=document.getElementById("de");let m=de.querySelector(".kom");
+    const scroll=m&&m.querySelector(".kom-panel")?m.querySelector(".kom-panel").scrollTop:0;if(m)m.remove();if(!KOM)return;
+    const id=KOM.pfad[KOM.pfad.length-1];
+    if(id.startsWith("form:"))formZeige(de,id.slice(5));else if(!id.startsWith("gr:"))blockZeige(de,id);else grZeige(de,id);
+    const neu=de.querySelector(".kom .kom-panel");if(neu&&scroll)neu.scrollTop=scroll;}
+  function komRahmen(unter){const m=h("div",{class:"kom"});
     ["pointerdown","wheel","dblclick","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
-    const krumen=h("div",{class:"kom-krumen"},...KOM.pfad.flatMap((g,i)=>{const b=h("button",{class:"kom-krume"+(i===KOM.pfad.length-1?" an":""),
-      onclick:()=>{KOM.pfad=KOM.pfad.slice(0,i+1);KOM.wahl=null;komZeige();}},"⬡ "+((komDaten(g)||{}).name||g));return i?[h("span",{class:"kom-sep"},"▸"),b]:[b];}));
+    m.append(h("div",{class:"kom-kopf"},komKrumen(),h("div",{class:"kom-u"},unter),
+      h("div",{class:"kom-reiter"},h("button",{class:"kom-x",title:"Schließen (Esc)",onclick:komSchliesse},"✕"))));return m;}
+  function grZeige(de,id){const d=komDaten(id);if(!d){KOM=null;return;}
+    const m=h("div",{class:"kom"});
+    ["pointerdown","wheel","dblclick","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
+    const krumen=komKrumen();
     const inst=komInstanzen(d.name);
     m.append(h("div",{class:"kom-kopf"},krumen,
       h("div",{class:"kom-u"},"Kopf nimmt "+(d.koepfe.map(k=>k.typ).join(", ")||"nichts von außen (Quelle)")+" · verlässt ihn: "+(d.ausgaenge.map(a=>a.typ).join(", ")||"nichts")),
@@ -2224,7 +2208,7 @@
   // ── Leinwand: Knoten wie auf der Fläche (Kopf + Ports), Technik und Konfig als Chips; Ränder für Köpfe und Ausgänge ──
   function komPort(ri,typ,sorte,titel,klick){const r=h("div",{class:"fk-port "+ri+" s-"+sorte,title:titel||(sorte+" "+typ),onclick:e=>{e.stopPropagation();if(klick)klick();}},
       h("span",{class:"fk-dot"}),h("span",{class:"fk-pl"},(FL_SORTE[sorte]||"")+typ));r.dataset.port=ri+"|"+typ;return r;}
-  const komTypKlick=t=>()=>{if(NODEBY.has("rec:"+komBasis(t))){komSchliesse();waehle("rec:"+komBasis(t));}};
+  const komTypKlick=t=>()=>{if(NODEBY.has("rec:"+komBasis(t)))komKarte("rec:"+komBasis(t),true,true);};
   function komKnotenEl(id,k){
     const gewaehlt=KOM.wahl&&KOM.wahl.art==="knoten"&&KOM.wahl.name===k.name;
     const el=h("div",{class:"gnode2 fk kom-k n-"+(k.art==="graph"?"graph":k.art==="katalog"||k.quelle?"funktion":"bausteinfunktion")+(gewaehlt?" sel":""),
@@ -2310,8 +2294,8 @@
   // ── Panel: der gewählte Knoten (Signatur, im Graphen, Konstruktor, Rumpf) bzw. Baustein ──
   function komPanel(id,d){const p=h("div",{class:"kom-panel"}),w=KOM.wahl;
     const sec=t=>p.append(h("div",{class:"kom-sec"},t)),zeile=(...k)=>p.append(h("div",{class:"kom-z"},...k));
-    const bearbeiten=karte=>karte&&NODEBY.has(karte)?h("button",{class:"kom-akt",title:"Modal schließen und die Karte im Panel bearbeiten",
-      onclick:()=>{komSchliesse();waehle(karte);}},"✎ im Panel bearbeiten"):null;
+    const bearbeiten=karte=>karte&&NODEBY.has(karte)?h("button",{class:"kom-akt",title:"Das Formular der Karte öffnen (Brotkrumen führen zurück)",
+      onclick:()=>komKarte(karte,true,true)},"✎ bearbeiten"):null;
     if(!w){p.append(h("div",{class:"kom-t"},"⬡ "+d.name),h("div",{class:"kom-u"},"Knoten oder Baustein wählen."),bearbeiten(id));
       sec("Knoten");d.knoten.forEach(k=>zeile(h("button",{class:"kom-b",onclick:()=>komWaehle({art:"knoten",name:k.name})},(KOM_SYM[k.art]||"")+" "+k.name+" : "+k.typ)));return p;}
     if(w.art==="knoten"){const k=d.knoten.find(x=>x.name===w.name);if(!k){KOM.wahl=null;return komPanel(id,d);}
@@ -2349,9 +2333,39 @@
     if(!inst.length)box.append(h("div",{class:"kom-wo"},d.eltern.length?"Läuft als Teil von "+d.eltern.map(g=>(komDaten(g)||{}).name||g).join(", ")+" — Instanzen dort.":"Noch keine Instanz."));
     inst.forEach(i=>{const v=(WB.instanzen||{})[i]||{};
       box.append(h("div",{class:"kom-inst-z"},h("b",{},"⬡ "+i),v.Akteur?" · 👤 "+v.Akteur:"",v.Rechner?" · auf "+v.Rechner:"",
-        h("button",{class:"kom-akt",onclick:()=>{komSchliesse();waehle("host:inst:"+i);}},"✎ im Panel")));});
-    if(!d.eltern.length)box.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",onclick:()=>{komSchliesse();waehle("host:inst-neu");}},"＋ Instanz anlegen")));
+        h("button",{class:"kom-akt",onclick:()=>komKarte("host:inst:"+i,true,true)},"✎ bearbeiten")));});
+    if(!d.eltern.length)box.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",onclick:()=>komKarte("host:inst-neu",true,true)},"＋ Instanz anlegen")));
     return box;}
+  // Eine Karte im Modal: Graph, Aggregat und Store von innen; ein Glied (Decide, Apply, Auf, Store-Funktion, Projektion, Reader, eine Nachricht
+  //   des Aggregats) in seinem Block gewählt; alles andere (Akteur, Client, Instanz, Umgebung, Funktion …) als Formular. push: an den Pfad hängen.
+  function komAnsicht(id,alsFormular){if(alsFormular)return {pfad:"form:"+id,wahl:null};
+    if(id.startsWith("gr:")||id.startsWith("agg:")||id.startsWith("sto:"))return {pfad:id,wahl:null};
+    const gruppe=x=>{const k=FL().karten.find(f=>f.karte===x&&f.gruppe);return k?k.gruppe:null;};
+    if(gruppe(id))return {pfad:gruppe(id),wahl:{art:"glied",id}};
+    const bes=SICHT().besitz||{};let o=id;
+    for(let i=0;i<6;i++){o=(bes[o]||"").replace(/!$/,"");if(!o||o.startsWith("§"))break;
+      if(o.startsWith("agg:")||o.startsWith("sto:"))return {pfad:o,wahl:{art:"glied",id}};
+      if(gruppe(o))return {pfad:gruppe(o),wahl:{art:"glied",id}};}
+    return {pfad:"form:"+id,wahl:null};}
+  function komKarte(id,push,alsFormular){if(!NODEBY.has(id)&&!komDaten(id))return;const a=komAnsicht(id,alsFormular);
+    if(push&&KOM)KOM.pfad.push(a.pfad);else KOM={pfad:[a.pfad],reiter:"komposition",wahl:null};KOM.wahl=a.wahl;komZeige();}
+  // Das Formular einer Karte im Modal (dasselbe wie früher im Panel neben der Fläche), dazu woher und wohin.
+  function formZeige(de,id){const n=NODEBY.get(id);if(!n){KOM.pfad.pop();if(KOM.pfad.length)komZeige();else KOM=null;return;}
+    const m=komRahmen((NODELABEL[n.kind]||n.kind)+" bearbeiten — jede Änderung ist eine Geste am Code (↶ nimmt sie zurück)");
+    const p=h("div",{class:"kom-panel kom-form"});
+    p.append(h("div",{class:"kom-t"},(NODELABEL[n.kind]||n.kind)+(n.name?" · "+n.name:"")));
+    const dg=diagFuer(id);if(dg.length)p.append(h("div",{class:"gi-diag"},...dg.map(d=>h("div",{class:"find "+(d.art==="warnung"?"warning":"error")},d.text))));
+    const b=h("div",{class:"gbody"});INSP=true;try{fuelleKoerper(b,n);}finally{INSP=false;}p.append(b);
+    const innen=komAnsicht(id,false);
+    if(innen.pfad!=="form:"+id)p.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",onclick:()=>komKarte(id,true)},"⧉ von innen: "+komKrumenText(innen.pfad))));
+    p.append(komNachbarn(id));
+    m.append(h("div",{class:"kom-leib form"},p));de.append(m);}
+  function komNachbarn(id){const rel=h("div",{class:"gi-rel"});
+    const ids=l=>[...new Set((l||[]).flatMap(y=>VERTRETER.get(y)||[y]))].filter(x=>x!==id&&NODEBY.has(x));
+    const liste=(t,l)=>{if(!l.length)return;rel.append(h("h5",{},t));l.forEach(x=>{const k=NODEBY.get(x);
+      rel.append(h("a",{title:(NODELABEL[k.kind]||k.kind)+" — öffnen",onclick:()=>komKarte(x,true)},
+        h("i",{class:"kc-"+k.kind,style:"display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px"}),k.name||NODELABEL[k.kind]||k.kind));});};
+    liste("◀ kommt von",ids(ADJ.inn.get(id)));liste("geht an ▶",ids(ADJ.out.get(id)));return rel;}
   // ══ INNENANSICHT eines Aggregats bzw. Stores (docs/10 §10.9): dieselbe Form wie die Komposition — außen die Karte in
   //   ihrer Spalte, innen ihre Glieder. Wer dazugehört, sagt der Besitz (board.sicht.besitz; beim Store auch die Reader seiner Gruppe), die Kanten
   //   sind die der Sicht. Aggregat: Commands und Queries → Decide (und Fragen) → was entsteht → Apply → Zustand. Store: Events und Queries →
@@ -2384,13 +2398,8 @@
       case "fn":return [r.faehigkeit||"Store-Funktion",n.name];case "readmodel":return ["Read-Model",n.name];
       default:return [NODELABEL[n.kind]||n.kind,n.name];}}
   function blockZeige(de,id){const n0=NODEBY.get(id);if(!n0){KOM=null;return;}
-    const I=blockInnen(id),m=h("div",{class:"kom"});
-    ["pointerdown","wheel","dblclick","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
-    const sym=I.typ==="agg"?"▣ ":"🗄 ";
-    m.append(h("div",{class:"kom-kopf"},h("div",{class:"kom-krumen"},h("span",{class:"kom-krume an"},sym+n0.name)),
-      h("div",{class:"kom-u"},I.typ==="agg"?"Aggregat von innen: Commands und Queries → Decide → was entsteht → Apply → Zustand"
-        :"Store von innen: Events und Queries → Auf bzw. Frage → Store-Funktionen → Read-Models · rechts die Antworten"),
-      h("div",{class:"kom-reiter"},h("button",{class:"kom-x",title:"Schließen (Esc)",onclick:komSchliesse},"✕"))));
+    const I=blockInnen(id),m=komRahmen(I.typ==="agg"?"Aggregat von innen: Commands und Queries → Decide → was entsteht → Apply → Zustand"
+        :"Store von innen: Events und Queries → Auf bzw. Frage → Store-Funktionen → Read-Models · rechts die Antworten");
     const welt=h("div",{class:"kom-welt"}),svgK=document.createElementNS(SVGNS,"svg");svgK.setAttribute("class","kom-kanten");welt.append(svgK);
     const wahl=KOM.wahl&&KOM.wahl.art==="glied"?KOM.wahl.id:null;
     I.glieder.forEach((s,x)=>{const n=NODEBY.get(x);if(!n)return;const [k,t]=innenTitel(n),rec=x.startsWith("rec:");
@@ -2425,8 +2434,8 @@
     const [k,t]=x===id?[NODELABEL[n.kind]||n.kind,n.name]:innenTitel(n);p.append(h("div",{class:"kom-t"},k+(t?" · "+t:"")),h("div",{class:"kom-u"},NODELABEL[n.kind]||n.kind));
     const dg=diagFuer(x);if(dg.length)p.append(h("div",{class:"gi-diag"},...dg.map(d=>h("div",{class:"find "+(d.art==="warnung"?"warning":"error")},d.text))));
     const b=h("div",{class:"gbody"});INSP=true;try{fuelleKoerper(b,n);}finally{INSP=false;}p.append(b);
-    p.append(h("div",{class:"kom-akte"},wahl?h("button",{class:"kom-akt",onclick:()=>komWaehle(null)},"↩ "+(NODEBY.get(id)||{}).name):null,
-      h("button",{class:"kom-akt",title:"Modal schließen, die Karte im Panel der Fläche öffnen",onclick:()=>{komSchliesse();waehle(x);}},"↗ im Panel der Fläche")));
+    p.append(h("div",{class:"kom-akte"},wahl?h("button",{class:"kom-akt",onclick:()=>komWaehle(null)},"↩ "+(NODEBY.get(id)||{}).name):null));
+    p.append(komNachbarn(x));
     return p;}
   // ══ GESTEN DER FLÄCHE UND DER KOMPOSITION (docs/10 §10.9): Ziehen von einem Port auf eine Karte bzw. einen Port,
   //   Klick auf eine Kante zum Lösen, Ziehen aus dem Baukasten. Jede Geste ändert das Modell; der Server schreibt den Code und schickt das neue Board.

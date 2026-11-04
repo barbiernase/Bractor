@@ -393,15 +393,18 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   gruppiert), Client-Eingang (je Akteur, was er hört, dazu die Antworten auf seine Queries). Ein Akteur steht also zweimal. Die Domänen sind Bänder
   über Quellen bis Projektionen; das Band eines Graphen sind die Aggregate, an die er schreibt.
 - **Nachrichten sind Ports** an den Karten, mit Sorte (Command, Event, Hinweis, Query, Antwort, Frist). Deklariert wird ein Typ am Port seines
-  Besitzers (`Sicht.Besitz`); Klick auf einen Port öffnet ihn im Panel.
+  Besitzers (`Sicht.Besitz`).
+- **Klick und Doppelklick:** ein Klick auf eine Karte oder einen Port hebt seine Kette bzw. seine Kanten hervor; ein Doppelklick öffnet ihn im
+  Modal — Graph, Aggregat und Store von innen, ein Glied (Decide, Auf, Projektion, Reader, eine Nachricht des Aggregats) in seinem Block gewählt,
+  alles andere (Akteur, Client, Instanz, Umgebung, Funktion) als Formular. Ein Panel neben der Fläche gibt es nicht; Brotkrumen führen zurück.
 - **Kanten** laufen von Port zu Port und haben eine Art: schreiben, Quelle, lesen, Kenntnis, Arbeit, Rücklauf (ein Command ohne Ziel aus dem
   Decide an einen Graph-Kopf, die Event-Antwort an die Funktion, die den Command gab), liest (eine Lese-Fähigkeit am Store).
 - **Von innen** (Modal): ein Graph zeigt seine Komposition (`board.sicht.komposition`, `Sicht.Komposition.cs`: Knoten nach Tiefe, je `[Von]` eine
   Kante, Köpfe und Ausgänge, Technik und Konfig als Chips) mit dem Baukasten (`board.sicht.baukasten`) und seinen Instanzen; ein Aggregat
   Commands → Decide → Ergebnisse → Apply → Zustand; ein Store Events und Queries → Auf bzw. Frage → Store-Funktionen → Read-Models. Bearbeitet wird
-  im Panel mit dem Formular des gewählten Glieds.
+  im Modal mit dem Formular des gewählten Glieds.
 - **Gesten** sind Änderungen am Board, die der Server als Patch in den Code schreibt (↶ nimmt ihn zurück): vom Akteur auf eine Karte ziehen
   (`IDarf`), einen Ausgang auf einen Akteur (`IHoert`), ein Event auf eine Projektion (ein `Auf`), Klick auf eine Kante zum Lösen; im Modal
   Funktion, Graph oder Quelle aus dem Baukasten auf die Leinwand (ein Knoten), Technik oder Konfig auf einen Knoten (Konstruktor), Ausgang auf
-  Knoten (`[Von]`), „＋ Kopf“ auf Knoten (`[Kopf]`), Klick auf eine Kante (verlierbar, lösen). Was aus Signaturen folgt, ändert man im Panel.
+  Knoten (`[Von]`), „＋ Kopf“ auf Knoten (`[Kopf]`), Klick auf eine Kante (verlierbar, lösen). Was aus Signaturen folgt, ändert man im Formular.
 - `--check` prüft die Fläche mit (Kanten an vorhandenen Ports, je Typ höchstens ein deklarierender Port).

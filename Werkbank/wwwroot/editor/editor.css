@@ -728,3 +728,6 @@
 #de .kom-b[draggable=true]{cursor:grab}
 #de .kom-leib.innen{grid-template-columns:1fr minmax(300px,420px)}
 #de .kom-panel .gbody{display:block!important;padding:0;margin-top:8px}
+#de .kom-leib.form{display:block;overflow:auto}
+#de .kom-panel.kom-form{max-width:760px;margin:0 auto;min-height:100%;border-left:1px solid #232a38;border-right:1px solid #232a38}
+#de .kom-panel .gi-rel{margin-top:14px}
