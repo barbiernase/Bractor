@@ -12,6 +12,8 @@ namespace Werkbank.Abnahme.Tests;
 /// <item>als Akteur über den JSON-Eingang ein Command, die Projektion antwortet auf die Query; Vorgang und Spur über die Spur-API;</item>
 /// <item>„▶ Worker“: ein Python-Client verkörpert den Klassifizierer; ein Bildpaar in der Quelle läuft durch den Linienimport bis zu seiner Beurteilung; die Spur
 ///   nennt den Knoten, der NimmBildAuf gab, und der Graph steht als Karte im Board;</item>
+/// <item>die Fläche in sechs Spalten und die Komposition stehen in der Sicht; Gesten der Fläche (ein Akteur darf) und der Komposition (eine
+///   Kante verlierbar) landen im Code, in der Sicht und bauen — ↶ stellt beide Dateien byte-gleich wieder her;</item>
 /// <item>Formular und Tokens aus Board bzw. Umgebung; Umgebungs-Werte und 🤖-Übernahmen sind Gesten mit ↶ (docs/13 W11-1, WB-1);</item>
 /// <item>Geste (Feld mit Standardwert an einem Event) → ⟳ grün (verträglich, der Host siegelt das neue Proto) → ↶ (Code byte-gleich) →
 ///   ⟳ „Daten prüfen“ meldet das entfernte Feld → ⟳ mit Zurücksetzen startet wieder.</item>
@@ -21,7 +23,7 @@ public class KreislaufAbnahmeTests
 {
     private static readonly string[] Schritte = ["Bauen", "Python-Basen", "Neu lesen", "Daten prüfen", "Infrastruktur", "Starten"];
 
-    [Fact(Skip = "Editor zurückgestellt (docs/10 E4)")]
+    [Fact]
     public async Task Kreislauf_Durchspielen_Worker_Geste_und_Daten_Pruefung()
     {
         await using var w = await Werkbanklauf.StarteAsync();
@@ -126,6 +128,41 @@ public class KreislaufAbnahmeTests
             .Should().Equal(["Eingang:False:", "Aufbereitung:False:Eingang"], "die Quelle trägt weder Kopf noch Von, sie speist die Aufbereitung über Von");
         linie["koepfe"]!.AsArray().Should().BeEmpty("ein Graph mit Quelle hat sonst keinen Kopf");
 
+        // ── 3b. Die Fläche in sechs Spalten und die Komposition (docs/konzept-editor-spalten.md): Karten, Ports, Kanten aus dem Code ──
+        var flaeche = board["sicht"]!["flaeche"]!.AsObject();
+        var flKarten = flaeche["karten"]!.AsArray().OfType<JsonObject>().ToList();
+        string Spalte(string id) => (string)flKarten.Single(k => (string?)k["id"] == id)["spalte"]!;
+        Spalte("gr:graph:Linienimport").Should().Be("graphen");
+        Spalte("agg:ImagePair").Should().Be("aggregate");
+        Spalte("akt:akteur:Klassifizierer|aus").Should().Be("ausgang");
+        Spalte("akt:akteur:Klassifizierer|ein").Should().Be("eingang");
+        flKarten.Should().Contain(k => (string?)k["spalte"] == "quellen" && (string?)k["name"] == "Dateiwaechter", "die Quelle des Linienimports");
+        FlaechenKanten(board).Should().Contain(["agg:ImagePair -PaarZuBeurteilen/arbeit-> akt:akteur:Klassifizierer|ein",
+            "agg:Datensatz -RangeAufzuloesen/ruecklauf-> gr:graph:Datensatzpflege"]);
+        KompositionsKanten(board, "Bildaufbereitung").Should().Contain("Verkleinern -BildVerkleinert-> Kontrast");
+
+        // ── 3c. Gesten der Fläche und der Komposition (derselbe Weg wie der Editor): darf und verlierbar — Code, Sicht, ⟳ grün, ↶ byte-gleich ──
+        var vorGesten = w.Abbild();
+        var freigeber = (JsonObject)board["akteure"]!.AsArray().OfType<JsonObject>().Single(a => (string?)a["name"] == "Modellfreigeber").DeepClone();
+        freigeber["darf"]!.AsArray().Add("RegistriereModell");
+        var (_, darf) = await w.SendeAsync("/api/werkbank/geste",
+            new JsonObject { ["titel"] = "Abnahme: Modellfreigeber darf RegistriereModell", ["karten"] = new JsonObject { ["akteure"] = new JsonArray(freigeber) } });
+        ((bool?)darf["ok"]).Should().BeTrue(darf.ToJsonString());
+        FlaechenKanten(darf["board"]!.AsObject()).Should().Contain("akt:akteur:Modellfreigeber|aus -RegistriereModell/schreiben-> agg:Modell");
+        var aufbereitung = (JsonObject)board["graphen"]!.AsArray().OfType<JsonObject>().Single(g => (string?)g["name"] == "Bildaufbereitung").DeepClone();
+        aufbereitung["knoten"]!.AsArray().OfType<JsonObject>().Single(k => (string?)k["name"] == "Kontrast")["verlierbar"]!.AsArray().Add("Verkleinern");
+        var (_, verlierbar) = await w.SendeAsync("/api/werkbank/geste",
+            new JsonObject { ["titel"] = "Abnahme: Verkleinern → Kontrast verlierbar", ["karten"] = new JsonObject { ["graphen"] = new JsonArray(aufbereitung) } });
+        ((bool?)verlierbar["ok"]).Should().BeTrue(verlierbar.ToJsonString());
+        var gestenDateien = darf["dateien"]!.AsArray().Concat(verlierbar["dateien"]!.AsArray()).Select(d => (string)d!).ToList();
+        (await File.ReadAllTextAsync(Path.Combine(w.Kopie, gestenDateien.Single(d => d.EndsWith("Graphen.cs", StringComparison.Ordinal)))))
+            .Should().Contain("[Von(nameof(Verkleinern), Verlierbar = true)]");
+        KompositionsKanten(verlierbar["board"]!.AsObject(), "Bildaufbereitung").Should().Contain("Verkleinern -BildVerkleinert~-> Kontrast");
+        SchritteGruen(await KreislaufAsync(w, zuruecksetzen: false), Log);
+        for (var i = 0; i < 2; i++) ((bool?)(await w.SendeAsync("/api/werkbank/rueckgaengig")).Antwort["ok"]).Should().BeTrue();
+        foreach (var d in gestenDateien.Distinct())
+            (await File.ReadAllBytesAsync(Path.Combine(w.Kopie, d))).Should().Equal(vorGesten[d], $"{d}: ↶ stellt die Datei byte-gleich wieder her");
+
         // ── 4. Durchspielen liest das warme Board; Tokens wie im Host ──
         var formular = await w.HoleAsync("/api/werkbank/formular?typ=ErstelleDatensatz");
         (formular["felder"] as JsonObject).Should().NotBeNull(formular.ToJsonString()).And.Subject.As<JsonObject>().ContainsKey("Name").Should().BeTrue();
@@ -201,6 +238,12 @@ public class KreislaufAbnahmeTests
         SchritteGruen(lauf, Log);
         Meldungen(lauf, "Daten prüfen").Should().Contain(m => m.StartsWith($"Sim-DB {w.Datenbank} zurückgesetzt", StringComparison.Ordinal));
     }
+
+    private static List<string> FlaechenKanten(JsonObject board) => board["sicht"]!["flaeche"]!["kanten"]!.AsArray().OfType<JsonObject>()
+        .Select(k => $"{(string?)k["von"]} -{(string?)k["typ"]}/{(string?)k["art"]}-> {(string?)k["nach"]}").ToList();
+
+    private static List<string> KompositionsKanten(JsonObject board, string graph) => board["sicht"]!["komposition"]!["gr:graph:" + graph]!["kanten"]!.AsArray()
+        .OfType<JsonObject>().Select(k => $"{(string?)k["von"]} -{(string?)k["typ"]}{((bool?)k["verlierbar"] == true ? "~" : "")}-> {(string?)k["nach"]}").ToList();
 
     private static async Task<JsonObject> KreislaufAsync(Werkbanklauf w, bool zuruecksetzen)
     {
