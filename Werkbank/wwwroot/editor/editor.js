@@ -106,15 +106,8 @@
   function render(){ if(TEIL){TEIL.gerufen=true;return;} ELEM=null; renderGraph(); autosave(); }
   // Teil-Neuaufbau: betroffene Karten ersetzen, Kurzfassungen/Kanten/Panel auffrischen — Fläche, Zoom und Layout bleiben stehen.
   function teilNeu(ids){if(!world||!canvas){render();return;}
-    ELEM=null;ISLE=inselMenge();berechneSicht();
-    // Knoten entstanden/entfallen (z. B. ein neuer Handle durch „+ Query andocken"): dann voll neu zeichnen (Raster packt neu).
-    const gezeichnet=new Set([...world.querySelectorAll(".gnode2")].map(e=>e.dataset.id));
-    if(gezeichnet.size!==VIS.size||[...VIS].some(id=>!gezeichnet.has(id))){render();return;}
-    ids.forEach(id=>{const alt=world.querySelector('[data-id="'+id+'"]'),n=NODEBY.get(id);if(!alt||!n)return;
-      for(const k in SLOTS)if(SLOTS[k]&&alt.contains(SLOTS[k]))delete SLOTS[k];
-      alt.replaceWith(nodeEditor(n));});
-    world.querySelectorAll(".gnode2").forEach(el=>{const n=NODEBY.get(el.dataset.id),alt=el.querySelector(".gsum");if(!n||!alt)return;
-      const neu=kurzfassung(n);if(neu.innerHTML!==alt.innerHTML)alt.replaceWith(neu);});   // nur wo sich wirklich etwas ändert
+    // Die Fläche kommt mit dem nächsten Board vom Server; hier nur Panel und Kanten auffrischen.
+    ELEM=null;berechneSicht();
     const altI=canvas.querySelector(".ginsp");INSP_SCROLL=altI?{id:altI.dataset.sel,top:altI.scrollTop}:null;
     fokusNeu();drawEdges();zeigeInspector();autosave();}
   // Eine Modell-Änderung aus dem Verbinden-Modus ausführen: ohne Voll-Render, danach nur die betroffenen Karten.
@@ -240,13 +233,6 @@
     if(by("kenntnis").length)t.push("hört "+L(by("kenntnis").map(p=>p.msg)));
     return t.join(" · ");}
   const rahmenLabel=k=>k.startsWith("§vertrag:")?"📜 Vertrag "+k.slice(9):(()=>{const [d,a]=k.split("|");return domLabel(d)+(a?" · "+(a===OHNE_AKT?"ohne Akteur":a):"");})();
-  // Welche Clients stecken an welchem Rahmen (Stecker-Zeile im Kopf): Rahmen-Schlüssel → Clients. Vertrags-Bündel zählen beim Akteur-Rahmen.
-  function clientStecker(){const m=new Map(),dazu=(k,c)=>{if(!m.has(k))m.set(k,[]);if(!m.get(k).includes(c))m.get(k).push(c);};
-    MODEL.clients.forEach(c=>{if(!VIS.has("cl:"+c._id))return;clientBuendel(c).forEach(b=>{
-      if(b.key.startsWith("§vertrag:")){const a=MODEL.akteure.find(x=>x.name===b.key.slice(9)),n=a&&NODEBY.get("akt:"+a._id);
-        if(n){const d=domKey(n);dazu(d+"|"+(akteurOrdnung(d).length?a.name:""),c);}}
-      else dazu(b.key,c);});});
-    return m;}
   // Auffächern (nur durch eine Handlung): {client, key?, msg?} — null = nur die Bündel.
   let AUF=null;
   const aufPasst=(was,p)=>(!was.keys||was.keys.includes(portRahmen(p)))&&(!was.msg||p.msg===was.msg);
@@ -307,10 +293,6 @@
     if(kard==="genau eins"&&pv.aus.length>1)sek.append(h("div",{class:"llmmeld err"},"⚠ "+pv.aus.length+" Konsumenten — die Grammatik erlaubt genau einen"));
     if(ausPort)sek.append(ausPort);
     body.append(sek);}
-  // Partner außerhalb der geladenen Domänen (für die Kurzzeile „↗ n außerhalb") — über die Board-Kanten, für jede Knotenart gleich.
-  function aussenAnzahl(n){if(LADEN===null)return 0;const ids=new Set([...(ADJ.inn.get(n.id)||[]),...(ADJ.out.get(n.id)||[])]);let z=0;
-    ids.forEach(id=>{const m=NODEBY.get(id);if(m&&!geladen(m))z++;});return z;}
-
   function recordCard(body,r){
     body.append(h("div",{class:"gsec"},"Name · Art"));
     body.append(nameInp(r,"name","RecordName","record"));
@@ -757,13 +739,6 @@
     while((g.knoten||[]).some(k=>k.name===nm))nm=stamm+(i++);
     const kat=(MODEL.katalog||[]).some(x=>x.name===typBasis(typ)),quelle=kat||((MODEL.bausteinFunktionen.find(x=>x.name===typBasis(typ))||{}).lauscht||[]).length>0;
     (g.knoten=g.knoten||[]).push({typ,name:nm,kopf:!g.knoten.length&&!quelle,von:[],verlierbar:[]});gTitel(g.name+": Knoten "+nm);render();}
-  // Tiefe eines Knotens in der Von-Kette seines Graphen (0 = Kopf bzw. Quelle) — für die Spalten auf der Fläche.
-  function graphTiefe(typ){let best=0;
-    (MODEL.graphen||[]).forEach(g=>{const kn=g.knoten||[],memo={};
-      const t=(k,weg)=>{if(memo[k.name]!=null)return memo[k.name];if(weg.has(k.name))return 0;weg.add(k.name);
-        const v=(k.von||[]).map(x=>kn.find(y=>y.name===x)).filter(Boolean);return memo[k.name]=v.length?1+Math.max(...v.map(y=>t(y,weg))):0;};
-      kn.forEach(k=>{if(typBasis(k.typ)===typ)best=Math.max(best,t(k,new Set()));});});
-    return best;}
   function graphKarte(body,g){
     body.append(h("div",{class:"gsec"},"Name · Namespace"));
     body.append(nameInp(g,"name","Graph",null));
@@ -941,8 +916,6 @@
     for(let i=0;b&&!b.startsWith("§")&&i<8;i++){id=b;b=besitzVon(b);}
     return b===ANW_KEY?id:b;}
   const istRegionKarte=ns=>typeof ns==="string"&&/^(agg|gr|fb|dn|sto):/.test(ns);
-  const regionArt=ns=>ns===RAND_KEY?"Rand":ns===BEGR_KEY?"Begriffe":ns.startsWith("agg:")?"Aggregat":ns.startsWith("gr:")?"Graph":ns.startsWith("fb:")?"Funktion":ns.startsWith("sto:")?"Sicht":"";
-  const regionRang=ns=>ns===RAND_KEY?0:ns.startsWith("agg:")?1:ns.startsWith("gr:")?2:ns.startsWith("fb:")?3:ns.startsWith("sto:")?4:ns===BEGR_KEY?5:6;
   // 👤 AKTEUR: Name, Namespace, und EINE Liste — was er darf (IDarf<T>). ⊕ „+ darf" → passende Commands/Queries
   //   leuchten → anklicken = erlauben, ✓-Karte = entziehen. Was er HÖREN darf, ist abgeleitet (Generator), keine Eingabe.
   function akteurCard(body,a){
@@ -1142,33 +1115,16 @@
   let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
   // Typ-Navigation: HLKIND = aktuell hervorgehobener Node-Typ (Board+Minimap); JUMPIX = Sprung-Cursor je Typ.
   let HLKIND=null; const JUMPIX={};
-  // Alle Knoten eines Typs im Board + Minimap hervorheben (Hover über den Palette-Button).
-  function highlightKind(kind,on){
-    HLKIND=on?kind:null;
-    if(world){const ids=new Set(graphNodes().filter(n=>n.kind===kind).flatMap(n=>VERTRETER.get(n.id)||[n.id]));
-      world.querySelectorAll(".gnode2").forEach(el=>el.classList.toggle("typehi",on&&ids.has(el.dataset.id)));}
-    if(MM&&MM.svg)MM.svg.querySelectorAll("rect[data-kind]").forEach(r=>r.classList.toggle("mmhi",on&&r.dataset.kind===kind));
-  }
   // Viewport auf einen Knoten zentrieren.
-  //   Eingeklappte Details (Decider/Code/…) → auf ihren sichtbaren Besitzer.
-  function centerOn(n){if(!canvas)return;n=NODEBY.get(vertreterId(n.id))||n;const el=world.querySelector('[data-id="'+n.id+'"]');
-    const w=el?el.offsetWidth:250,h=el?el.offsetHeight:120,cr=canvas.getBoundingClientRect(),p=P(n);
-    PAN.x=cr.width/2-((p.x||0)+w/2)*PAN.s;PAN.y=cr.height/2-((p.y||0)+h/2)*PAN.s;applyPan();}
+  //   Eine Karte der Sicht → die (erste) Karte der Fläche, die sie zeigt.
+  function centerOn(n){if(!canvas||!world)return;const el=world.querySelector('.gnode2[data-id="'+CSS.escape(n.id)+'"],.gnode2[data-karte="'+CSS.escape(n.id)+'"]');if(!el)return;
+    const cr=canvas.getBoundingClientRect();
+    PAN.x=cr.width/2-(el.offsetLeft+el.offsetWidth/2)*PAN.s;PAN.y=cr.height/2-(el.offsetTop+el.offsetHeight/2)*PAN.s;applyPan();}
   // Kurzer Puls-Ring auf einem Knoten (nach dem Sprung).
   function pulseNode(n){const el=world&&world.querySelector('[data-id="'+vertreterId(n.id)+'"]');if(!el)return;
     el.classList.add("pulse");setTimeout(()=>el.classList.remove("pulse"),900);}
-  // Ctrl/Cmd+Klick auf den Palette-Button: der Reihe nach zum nächsten Knoten dieses Typs springen.
-  function jumpNextOfKind(kind){const list=graphNodes().filter(n=>n.kind===kind);if(!list.length)return;
-    const i=(((JUMPIX[kind]??-1)+1))%list.length;JUMPIX[kind]=i;const n=list[i];
-    centerOn(n);pulseNode(n);highlightKind(kind,true);
-    deFlash("↪ "+(NODELABEL[kind]||kind)+" "+(i+1)+"/"+list.length+(n.name?" · "+n.name:""),true);}
   // Einsame Inseln (unverbundene Knoten aus der Graph-Analyse) — hervorheben + der Reihe nach anspringen.
   let ISLE=new Set();
-  function highlightIslands(on){if(world)world.querySelectorAll(".gnode2").forEach(el=>el.classList.toggle("typehi",on&&ISLE.has(el.dataset.id)));}
-  function jumpIslands(){const list=graphNodes().filter(n=>ISLE.has(n.id));if(!list.length){deFlash("✓ keine einsamen Inseln",true);return;}
-    const k="§insel";const i=(((JUMPIX[k]??-1)+1))%list.length;JUMPIX[k]=i;const n=list[i];
-    centerOn(n);pulseNode(n);deFlash("⚠ Insel "+(i+1)+"/"+list.length+" · "+(NODELABEL[n.kind]||n.kind)+(n.name?" "+n.name:""),true);}
-
   const dec=id=>MODEL.decider.find(d=>d._id===id);
   const app=id=>MODEL.applier.find(a=>a._id===id);
   // ZUGEHÖRIGKEIT = BEZIEHUNG, nie Namespace oder Name — abgeleitet auf dem Server (GraphExtractor/Sicht: Block, Aggregat je Karte).
@@ -1295,19 +1251,11 @@
   // 🖥 Host-Rahmen (docs/konzept-werkbank.md §8.1): die Umgebung als Karten rechts neben den Clients — kein Domänen-Modell.
   const HOST_KEY="§host";
   const istHostDom=d=>d===HOST_KEY;
-  const istAussenDom=d=>istClientDom(d)||istHostDom(d);
   // Kanten eines Flusses: je Draht Knoten → Knoten, beschriftet mit dem Typ des Ausgangs (∧ = mehrere Drähte in einen Eingang,
   //   ∨ = eigener Eingang, ⏳ amber, ✕ rot gestrichelt). Dazu die ZUWEISUNG je Knoten: ƒ ⇢ Funktions-Karte, ▶ → Command im Aggregat,
   //   ⛲ ⇢ Nachricht; ◆/⧗ ← Event. Klick auf eine Kante öffnet ihr Ziel.
   // ⬡ Graph-Kanten: je [Von] eine Kante zwischen den Karten der Knoten (Funktion bzw. Graph im Graphen) — grün, verlierbar gestrichelt; beschriftet
   //   mit den Typen, die sie trägt (vom Server, aus dem Code). Klick öffnet den Graphen.
-  function graphKanten(ELS,mkE){const domEl=id=>ELS.get(id)||((VERTRETER.get(id)||[]).map(v=>ELS.get(v)).find(Boolean));
-    (MODEL.graphen||[]).forEach(g=>{const kn=g.knoten||[],karte=nm=>{const k=kn.find(x=>x.name===nm);return k?graphKnotenKarte(k.typ):null;};
-      kn.forEach(k=>(k.von||[]).forEach(v=>{const a=karte(v),b=karte(k.name),ea=a&&domEl(a),eb=b&&domEl(b);if(!ea||!eb||ea===eb)return;
-        const verl=(k.verlierbar||[]).includes(v),typen=[...new Set((g.kanten||[]).filter(x=>x.von.split(".")[0]===v&&x.nach.split(".")[0]===k.name).map(x=>x.typ))];
-        const l=mkE({el:ea},{el:eb},"#81c995",verl,"graph");l.festA="r";l.festB="l";
-        l.label=typen.join(", ")+(verl?" ⇢":"");l.titel="⬡ "+g.name+": "+v+" → "+k.name+(verl?" (verlierbar)":" (gesichert)")+"\nKlick: Graph öffnen";
-        l.dataset.a=a;l.dataset.b=b;l.klick=()=>waehle("gr:"+g._id);}));});}
   function graphNodes(){
     const basis=[...MODEL.akteure.map(a=>({id:"akt:"+a._id,name:a.name,kind:"akteur",ref:a})),
             ...MODEL.clients.map(c=>({id:"cl:"+c._id,name:clientAnzeige(c),kind:"client",ref:c})),
@@ -1327,36 +1275,9 @@
             ...handleKnoten(),...fnKnoten(),...hostKnoten()];
     return [...basis,...rumpfKacheln(basis)];
   }
-  // ── AGGREGATSWEISE ANORDNUNG: jedes Aggregat ein gekachelter Block (eigenes Rollen-Mini-Layout),
-  //    aggregat-übergreifende Knoten (Sagas/Reaktionen/geteilte Typen) im „Geteilt"-Band.
   const SHARED_KEY="§geteilt";
-  // Das AKTEUR-BAND (docs/konzept-akteure.md §8): ein eigener Block je Domäne — ganz links, auf der Eingangsseite, vor den
-  //   Aggregat-Blöcken. Kommt DAZU, ersetzt keine Spalte. Domäne aus dem Graphen (alle IDarf-Ziele in einer Domäne → dort).
   const AKTEUR_KEY="§akteure";
-  const ROLE_AKTEUR={akteur:0,client:2,event:3,rejection:3,command:3,query:3,valueobject:4,enum:4};   // Spalte „Zusage" (Vertrag, Akteur-Konzept §3) neben dem Akteur
-  // Rollen-Spalten innerhalb eines Aggregat-Blocks (links→rechts = Schreibfluss, dann Leseseite).
-  //   Leseseite: Projektion (Hub) → ihre Handles → Store-Fns → Store/ReadModel; Query → Reader-Handle → Response, Reader (Hub).
-  //   Nach dem Event der Prozess (Regel → Auftrag → ƒ → Ergebnis),
-  //   der in die Command-Spalte zurück sendet — so liest sich ein Ablauf in EINEM Block.
-  const ROLE_AGG={command:3,decider:4,aggregate:5,state:5,event:6,rejection:6,applier:7,
-    saga:8,transition:9,auftrag:10,funktion:11,ergebnis:12,valueobject:13,enum:13,projektion:14,"handle:projektion":15,"handle:reaktion":15,
-    fn:16,store:17,readmodel:17,query:18,"handle:reader":19,queryresponse:20,reader:21,graph:10.5,bausteinfunktion:11,konfig:13,code:22};
-  // Rollen-Spalten im Geteilt-Band.
-  const ROLE_SHARED={konfig:7,valueobject:8,enum:8,command:9,event:9,rejection:9,
-    fn:10,store:11,readmodel:11,graph:2.5,bausteinfunktion:3,"handle:projektion":12,projektion:13,"handle:reader":14,reader:15,query:14,queryresponse:16,rumpf:17,code:17};
-  // Rolle eines Knotens (vom Server): Handles je Besitzer-Art (Projektions- vs. Reader-Handle liegen in verschiedenen Spalten), Ergebnis-Events
-  //   einer Funktion hinter ihr (Spalte „ergebnis“), sonst die Art. Funktionen einer Kette: je Tiefe eine eigene Spalte (11.01, 11.02 …).
-  const rolle=(n,map)=>{const sr=(SICHT().karten[n.id]||{}).rolle,k=sr||(n.kind==="handle"?"handle:"+n.own.kind:n.kind);
-    // Knoten eines Graphen: je Tiefe der Von-Kette eine eigene Spalte (links → rechts wie der Fluss).
-    if((k==="bausteinfunktion"||k==="graph")&&map[k]!==undefined)return map[k]+Math.min(graphTiefe(n.ref.name),90)/100;
-    return map[k]!==undefined?map[k]:99;};
-  // Ein Graph-Block (Region gr:…): links der Graph, dann seine Knoten in Ketten-Reihenfolge, dahinter was sie einander geben und Typen.
-  const ROLE_GRAPH={graph:0,bausteinfunktion:1,command:2,rejection:3,event:3,konfig:4,valueobject:4,enum:4,rumpf:5,code:5};
-  const rollenVon=blk=>blk===SHARED_KEY?ROLE_SHARED:blk===AKTEUR_KEY?ROLE_AKTEUR:typeof blk==="string"&&blk.startsWith("gr:")?ROLE_GRAPH:ROLE_AGG;
 
-  // Die Rumpf-Plätze eines Knotens (je Rumpf die Kachel-Id oder null) — was der Knoten unter sich an Zeilen reserviert (Rumpf + 🤖-Platz),
-  //   auch leer. null = der Knoten hat keinen Rumpf.
-  function codeEingaenge(n){const t=rumpfTeile(n);return t?t.map((x,i)=>x.kachel&&x.text&&x.text.trim()?kachelId(n.id,i):null):null;}
   // ══ GRAPH-BASIS: die Kanten auf Karten-Ebene (Karten-Id → Karten-Id) kommen vom Server (board.sicht.kanten — Layout, Inseln, Kette,
   //   Nachbarn im Panel); die Rumpf-Kacheln hängen über ihren Besitzer (own) am Graphen, nicht über Kanten.
   const kanten=()=>SICHT().kanten;
@@ -1364,205 +1285,12 @@
   window.deGraph=()=>({knoten:graphNodes().map(n=>({id:n.id,kind:n.kind,name:n.name})),kanten:kanten()});
   // Inseln = Karten in winzigen Komponenten (≤ 2) OHNE Aggregat — die „einsamen" / unverdrahteten (vom Server).
   const inselMenge=()=>new Set(Object.entries(SICHT().karten).filter(([,k])=>k.insel).map(([id])=>id));
-  // Aggregat-Untergruppe (oder null = Brücke: cross-cutting, gehört keinem Aggregat).
-  function subGroupOf(n){const g=groupKeyOf(n);return g===SHARED_KEY?null:g;}
-
   // Block einer Karte (Aggregat, SHARED_KEY = Brücke, AKTEUR_KEY = Akteur-Band) — vom Server (board.sicht).
   //   Seit der Hierarchie: je Region EIN Block — der Rand mit den Akteur-Spalten, die Begriffe mit den geteilten Spalten, ein Block mit den
   //   Aggregat-Spalten (Schreibfluss, dann Leseseite).
   function groupKeyOf(n){if(n.kind==="rumpf"&&n.own)return groupKeyOf(n.own);   // Code-Kachel + LLM-Platz: im Block ihres Besitzers
     const rg=regionVon(n);if(rg===RAND_KEY)return AKTEUR_KEY;if(rg===BEGR_KEY)return SHARED_KEY;if(rg)return rg;
     const k=sk(n);if(k)return k.block;return n.kind==="akteur"?AKTEUR_KEY:SHARED_KEY;}
-  // ── MESS-BASIERTES PACKING: nach dem Rendern die ECHTEN Knotengrößen messen und die Aggregat-
-  //    Blöcke ÜBERLAPPUNGSFREI per Shelf-Packing setzen. Nur frische/Seed-Boards (alle x/y leer);
-  //    vollständig arrangierte Boards (Handanordnung) bleiben unberührt. Zwei Ebenen:
-  //    (1) im Block: Rollen→Spalten, Spaltenbreite = max. gemessene Knotenbreite, Stapeln nach echter Höhe.
-  //    (2) Blöcke: Shelf-Packing mit echten Block-Maßen → keine Domäne überlappt eine andere.
-  function packLayout(force){
-    if(!world)return;
-    const all=graphNodes().filter(n=>VIS.has(n.id));   // nur was gezeichnet wird (eingeklappte Details liegen im Besitzer)
-    if(!all.length)return;
-    const setze=(n,x,y)=>{const p=P(n);p.x=Math.round(x);p.y=Math.round(y);
-      const el=world.querySelector('[data-id="'+n.id+'"]');if(el){el.style.left=p.x+"px";el.style.top=p.y+"px";}};
-    // Echte Knotengrößen EINMAL aus dem DOM messen (Position-unabhängig) → Karte id→{w,h}.
-    const dim=new Map();
-    world.querySelectorAll(".gnode2").forEach(el=>{dim.set(el.dataset.id,{w:el.offsetWidth||280,h:el.offsetHeight||120});});
-    const sz=n=>dim.get(n.id)||{w:280,h:120};
-    const positioned=n=>{const p=P(n);return typeof p.x==="number"&&typeof p.y==="number";};
-    // Knoten ohne Position (neu angelegt / neu sichtbar): im Raster hat jeder Knoten seine feste Zeile → neu packen.
-    if(all.some(n=>!positioned(n)))force=true;
-    // Raster-Signatur (sichtbare Knoten + Zahl ihrer Code-Eingänge): ändert sie sich (Handle/Fn dazu, Art aus-/eingeblendet),
-    //   stimmen die reservierten Zeilen nicht mehr → neu packen. Gleiche Signatur = Handanordnung bleibt.
-    const LAY=KPOS[VIEW.details?"d":"k"]||(KPOS[VIEW.details?"d":"k"]={});
-    // Der Akteur-Rahmen gehört zur Lage (Domäne × Akteur): wandert eine Karte in einen anderen Akteur-Rahmen, neu packen.
-    const sig=hash(all.filter(n=>n.kind!=="rumpf").map(n=>n.id+":"+((codeEingaenge(n)||[]).length)+":"+domKey(n)+":"+akteurVon(n)).join("|")+"#"+(VIEW.aus||[]).join(",")+"#"+(VIEW.domNeu||[]).join(",")
-      +"#"+JSON.stringify(VIEW.akteurOrdnung||{})
-      // Clients stapeln sich nach ihrer Höhe (die Anschlussleiste wächst mit dem Vertrag) → ändert sie sich, neu packen.
-      +"#"+all.filter(n=>n.kind==="client").map(n=>n.id+":"+Math.round(sz(n).h/20)).join(",")
-      // Graphen: ihre Von-Kanten bestimmen die Spalten — ändern sie sich, neu packen.
-      +"#"+(MODEL.graphen||[]).map(g=>(g.knoten||[]).map(k=>k.name+"<"+(k.von||[]).join("+")).join(",")).join("|"));
-    if(LAY.__sig!==sig)force=true;
-    // Wie viele Knotenpaare überlappen aktuell deutlich? (früher Abbruch, sobald „viele").
-    const overlaps=()=>{const b=all.map(n=>{const s=sz(n),p=P(n);return {x:p.x||0,y:p.y||0,w:s.w,h:s.h};});let c=0;
-      for(let i=0;i<b.length;i++)for(let j=i+1;j<b.length;j++){const A=b[i],B=b[j];
-        if(Math.min(A.x+A.w,B.x+B.w)-Math.max(A.x,B.x)>16 && Math.min(A.y+A.h,B.y+B.h)-Math.max(A.y,B.y)>16){if(++c>all.length)return c;}}
-      return c;};
-    // Ein arrangiertes Board (Handanordnung) NICHT neu würfeln — AUSSER es überlappt grob (alter/kaputter
-    // Stand aus der Ansichts-Datei → heilen). „▦ Neu anordnen" ruft mit force=true.
-    if(!force && all.some(positioned) && overlaps() < Math.max(3, Math.floor(all.length*0.12))) return;
-
-    const COLGAP=48,ROWGAP=26,SHELFGAP=150,COMPGAP=240,KGAP=90,LEER_W=640,LEER_H=110;   // RP/RK: Rahmen-Rand/-Kopf (zeichneRahmen)
-    const isCode=n=>n.kind==="rumpf";
-    // ── ZEILENRASTER: jede Karte belegt genau eine Rasterzeile (Höhe = höchste sichtbare Karte + Abstand), alles fluchtet.
-    //   Ein Knoten mit Rümpfen (Decider, Applier, Projektion, Reader, Reaktion, Store-Fn, Funktion, Client …) belegt 1 + je Rumpf GENAU
-    //   2 Zeilen: die Rumpf-Kachel (Ausschnitt aus der Datei, P7.4) und darunter den Platz, auf dem früher der 🤖-Knoten stand — er bleibt
-    //   reserviert, damit die Lage der Karten gleich bleibt (🤖 ist jetzt eine Aktion am Rumpf). Ein leerer Rumpf reserviert ebenso.
-    //   Command/Event/Ablehnung/Query … stehen in der Zeile ihres Partners. Ausgeblendete Rümpfe reservieren nichts.
-    const EINZUG=16, ZGAP=12;
-    const codeAn=!istAus("rumpf"), llmAn=codeAn;
-    const ZEILE=Math.max(28,...all.filter(n=>n.kind!=="client").map(n=>sz(n).h))+ZGAP;   // die (hohe) Anschlussleiste eines Clients taktet nicht mit
-    const layoutBlock=(nodes,roleMap)=>{
-      const rest=nodes.filter(n=>!isCode(n)), codes=nodes.filter(isCode);
-      const codeById=new Map(codes.map(c=>[c.id,c]));
-      // Rumpf-Plätze je Besitzer in Eingangs-Reihenfolge (Handle/Fn); null = leerer Rumpf (Platz bleibt reserviert).
-      const genutzt=new Set();
-      const plaetze=n=>{if(!codeAn)return [];
-        const src=codeEingaenge(n);if(!src)return [];
-        return src.map(id=>{const c=id&&codeById.get(id);if(c)genutzt.add(c.id);return c||null;});};
-      const PL=new Map();rest.forEach(n=>{const p=plaetze(n);if(p.length)PL.set(n.id,p);});
-      const hoehe=n=>1+(PL.get(n.id)||[]).reduce((s,c)=>s+(llmAn?2:1),0);
-      const rawOf=n=>rolle(n,roleMap);
-      const colRoles=[...new Set(rest.map(rawOf))].sort((a,b)=>a-b);
-      const byRole=new Map(colRoles.map(r=>[r,[]]));rest.forEach(n=>byRole.get(rawOf(n)).push(n));
-      // Belegung je Spalte (Zeilen-Set) + Zeile je Knoten.
-      const belegt=new Map(colRoles.map(r=>[r,new Set()])), zeile=new Map();
-      const frei=(role,z,len)=>{const b=belegt.get(role);for(let i=0;i<len;i++)if(b.has(z+i))return false;return true;};
-      const setzeZ=(role,n,z,len)=>{const b=belegt.get(role);for(let i=0;i<len;i++)b.add(z+i);zeile.set(n.id,z);};
-      const ab=(role,z,len)=>{while(!frei(role,z,len))z++;return z;};
-      const imBlock=new Set(rest.map(n=>n.id));
-      const nachbarZ=id=>[...(ADJ.inn.get(id)||[]),...(ADJ.out.get(id)||[])].filter(x=>imBlock.has(x)&&zeile.has(x)).map(x=>zeile.get(x));
-      // Wunschzeile: Event → sein Applier (sonst der erzeugende Decider); sonst die oberste Zeile eines platzierten Nachbarn.
-      const wunsch=n=>{if(n.kind==="event"){const ap=(ADJ.out.get(n.id)||[]).filter(x=>x.startsWith("app:")&&zeile.has(x)).map(x=>zeile.get(x));if(ap.length)return Math.min(...ap);}
-        const z=nachbarZ(n.id);return z.length?Math.min(...z):null;};
-      const zweiHop=n=>{let best=null;[n.id,...(ADJ.inn.get(n.id)||[]),...(ADJ.out.get(n.id)||[])].forEach(x=>nachbarZ(x).forEach(z=>{if(best===null||z<best)best=z;}));return best;};
-      // (1) Besitzer-Spalten zuerst, lückenlos gestapelt (Reihenfolge: nahe an bereits platzierten Nachbarn, sonst Modell-Reihenfolge).
-      //   Die Store-Fn-Spalte zuletzt: sie richtet sich an ihren Aufrufern aus (Projektions- UND Reader-Handles).
-      const fnRolle=roleMap.fn;
-      [...colRoles.filter(r=>r!==fnRolle),...colRoles.filter(r=>r===fnRolle)].forEach(role=>{const own=byRole.get(role).filter(n=>PL.has(n.id));if(!own.length)return;
-        const key=new Map(own.map((n,i)=>[n.id,[zweiHop(n)??1e9,i]]));
-        own.sort((a,b)=>{const A=key.get(a.id),B=key.get(b.id);return A[0]-B[0]||A[1]-B[1];});
-        // Store-Fns stehen auf der Höhe ihres ersten Aufrufers (freie Zeile ab dort); alle anderen Besitzer lückenlos.
-        let z=0;own.forEach(n=>{const len=hoehe(n),k=key.get(n.id)[0];
-          if(role===fnRolle&&k<1e9){setzeZ(role,n,ab(role,k,len),len);return;}
-          z=ab(role,z,len);setzeZ(role,n,z,len);z+=len;});});
-      // (2) übrige Knoten je Spalte in Rollen-Reihenfolge: in ihre Wunschzeile (erste freie ab dort), sonst ans Ende.
-      colRoles.forEach(role=>{const rest2=byRole.get(role).filter(n=>!zeile.has(n.id));
-        const w=new Map(rest2.map(n=>[n.id,wunsch(n)]));
-        const mit=rest2.filter(n=>w.get(n.id)!==null).sort((a,b)=>w.get(a.id)-w.get(b.id)), ohneW=rest2.filter(n=>w.get(n.id)===null);
-        mit.forEach(n=>setzeZ(role,n,ab(role,w.get(n.id),1),1));
-        let z=0;ohneW.forEach(n=>{z=ab(role,z,1);setzeZ(role,n,z,1);z++;});});
-      // Spalten → x; Rumpf-Kacheln eingerückt unter dem Besitzer.
-      let cx=0,maxZ=0;const placed=[];
-      colRoles.forEach(role=>{let w=120;
-        byRole.get(role).forEach(n=>{const z=zeile.get(n.id),s=sz(n);placed.push({n,rx:cx,ry:z*ZEILE});
-          // Besitzer: Breite für die Einrückung immer reservieren (wie zu Zeiten der 🤖-Knoten) — die Lage bleibt.
-          w=Math.max(w,s.w+(PL.has(n.id)?(llmAn?2:1)*EINZUG:0));
-          let zz=z+1;(PL.get(n.id)||[]).forEach(c=>{
-            if(c){placed.push({n:c,rx:cx+EINZUG,ry:zz*ZEILE});w=Math.max(w,sz(c).w+EINZUG);}
-            zz+=llmAn?2:1;});
-          maxZ=Math.max(maxZ,zz);});
-        cx+=w+COLGAP;});
-      // Rumpf-Kacheln ohne Besitzer in diesem Block (z. B. die Rümpfe einer Client-Implementierung: der Client hat seinen eigenen Rahmen,
-      //   seine Rümpfe stehen in der Domäne seines Namespaces): eigene Spalte, ebenfalls im Raster.
-      const orphan=codes.filter(c=>!genutzt.has(c.id));
-      if(orphan.length){let w=120,z=0;
-        orphan.forEach(c=>{placed.push({n:c,rx:cx,ry:z*ZEILE});w=Math.max(w,sz(c).w);z++;});
-        maxZ=Math.max(maxZ,z);cx+=w+COLGAP;}
-      // Über jeder Spalte Platz für ihren Spalten-Rahmen-Kopf (SPK, zeichneRahmen).
-      return {placed:placed.map(p=>({...p,ry:p.ry+SPK})),w:Math.max(0,cx-COLGAP),h:Math.max(0,maxZ*ZEILE-ZGAP)+SPK};
-    };
-    // Shelf-Packing über {w,h,…}-Boxen; setzt rx/ry; liefert Gesamtmaße.
-    const shelf=(boxes,gap,factor)=>{const area=boxes.reduce((s,b)=>s+b.w*b.h,0),maxW=Math.max(1,...boxes.map(b=>b.w));
-      const ROWW=Math.max(maxW,Math.sqrt(area)*(factor||1.2));let cx=0,ry=0,rh=0,tw=0;
-      boxes.forEach(b=>{if(cx>0&&cx+b.w>ROWW){ry+=rh+gap;cx=0;rh=0;}b.rx=cx;b.ry=ry;cx+=b.w+gap;rh=Math.max(rh,b.h);tw=Math.max(tw,cx-gap);});
-      return {w:tw,h:ry+rh};};
-    // Eine KOMPONENTE: Aggregat-Blöcke (ROLE_AGG) + EIN Brücken-Block (ROLE_SHARED, cross-cutting), intern gepackt.
-    const layoutComp=(nodes)=>{
-      const subs=new Map();nodes.forEach(n=>{const s=blockVon(n);if(!subs.has(s))subs.set(s,[]);subs.get(s).push(n);});
-      const aggKeys=[...subs.keys()].filter(k=>k!==SHARED_KEY&&k!==AKTEUR_KEY).sort();
-      // Akteur-Band zuerst → beim Shelf-Packing ganz links (Eingangsseite).
-      const blocks=(subs.has(AKTEUR_KEY)?[layoutBlock(subs.get(AKTEUR_KEY),ROLE_AKTEUR)]:[]).concat(aggKeys.map(k=>layoutBlock(subs.get(k),rollenVon(k))));
-      if(subs.has(SHARED_KEY))blocks.push(layoutBlock(subs.get(SHARED_KEY),ROLE_SHARED));
-      const d=shelf(blocks,SHELFGAP,1.35);
-      const placed=[];blocks.forEach(b=>b.placed.forEach(p=>placed.push({n:p.n,rx:b.rx+p.rx,ry:b.ry+p.ry})));
-      return {placed,w:d.w,h:d.h};
-    };
-    // ── HIERARCHISCH NACH DOMÄNEN (Namespace-Baum): je Domäne eine Region = ihre Aggregat-/Brücken-Blöcke wie gehabt
-    //   (layoutComp: Rollen-Spalten, Code/🤖 unter dem Besitzer), darunter ihre Inseln, darunter ihre Unterdomänen.
-    //   Jede Region reserviert Rand (RP) + Kopfzeile (RK) für den Rahmen (zeichneRahmen) → Rahmen überlappen nie.
-    const proDom=new Map();all.forEach(n=>{const d=domKey(n);if(!proDom.has(d))proDom.set(d,[]);proDom.get(d).push(n);});
-    const BAUM=domBaum([...proDom.keys(),...(VIEW.domNeu||[])]);
-    const region=ns=>{const kinder=(BAUM.kinder.get(ns)||[]).map(region);
-      const eigen=proDom.get(ns)||[];
-      const placed=[],leer=[],aktLeer=[];let y=RK+RP,w=0;
-      const insel=eigen.filter(istInselLage),haupt=eigen.filter(n=>!istInselLage(n));
-      // Domäne × Akteur (docs/konzept-akteure.md §8): je Akteur (Reihenfolge der Domäne) ein eigener Rahmen mit dem bewährten Block-Layout darin,
-      //   untereinander; „ohne Akteur" zuletzt. Eine Domäne ohne Akteure bleibt, wie sie war (ein Block-Layout).
-      const ord=akteurOrdnung(ns);
-      if(haupt.length&&!ord.length){const c=layoutComp(haupt);c.placed.forEach(p=>placed.push({n:p.n,rx:RP+p.rx,ry:y+p.ry}));y+=c.h;w=c.w;}
-      else if(ord.length){const gr=new Map();haupt.forEach(n=>{const a=akteurVon(n);if(!gr.has(a))gr.set(a,[]);gr.get(a).push(n);});
-        let erst=true;
-        [...ord,OHNE_AKT].forEach(a=>{const g=gr.get(a);if(!g&&a===OHNE_AKT)return;if(!erst)y+=AGAP;erst=false;
-          if(!g){aktLeer.push({ns,akt:a,rx:RP,ry:y});y+=AK;w=Math.max(w,AKLEER_W);return;}   // leer: nur Kopf + „↥ auch“
-          const c=layoutComp(g);c.placed.forEach(p=>placed.push({n:p.n,rx:RP+AP+p.rx,ry:y+AK+AP+p.ry}));
-          y+=AK+2*AP+c.h;w=Math.max(w,c.w+2*AP);});}
-      if(insel.length){if(haupt.length)y+=SHELFGAP/2;const IW=Math.max(700,w);let ix=0,iy=0,rh=0;
-        insel.forEach(n=>{const s=sz(n);if(ix>0&&ix+s.w>IW){iy+=rh+ROWGAP;ix=0;rh=0;}placed.push({n,rx:RP+ix,ry:y+iy});ix+=s.w+COLGAP;rh=Math.max(rh,s.h);w=Math.max(w,ix-COLGAP);});
-        y+=iy+rh;}
-      if(!eigen.length&&!kinder.length){leer.push({ns,rx:0,ry:0});w=LEER_W;y+=LEER_H;}
-      if(kinder.length){if(eigen.length||aktLeer.length)y+=KGAP;const d=shelf(kinder,KGAP,1.2);
-        kinder.forEach(k=>{k.placed.forEach(p=>placed.push({n:p.n,rx:RP+k.rx+p.rx,ry:y+k.ry+p.ry}));k.leer.forEach(l=>leer.push({ns:l.ns,rx:RP+k.rx+l.rx,ry:y+k.ry+l.ry}));
-          k.aktLeer.forEach(l=>aktLeer.push({ns:l.ns,akt:l.akt,rx:RP+k.rx+l.rx,ry:y+k.ry+l.ry}));});
-        y+=d.h;w=Math.max(w,d.w);}
-      return {placed,leer,aktLeer,w:w+2*RP,h:y+RP};};
-    const regions=BAUM.oben.filter(ns=>!istAussenDom(ns)).map(region);
-    shelf(regions,COMPGAP,1.05);
-    // Clients (docs/konzept-akteure.md §4): je Client ein Rahmen, untereinander RECHTS neben allen Domänen (Außenwelt).
-    {const CLGAP=520;let rechts=0,cy=0;regions.forEach(d=>rechts=Math.max(rechts,d.rx+d.w));
-      BAUM.oben.filter(istClientDom).forEach(ns=>{const d=region(ns);d.rx=rechts+(regions.length?CLGAP:0);d.ry=cy;
-        // Höhe aus der echten Karte (die Leiste ist höher als eine Rasterzeile).
-        const hh=Math.max(d.h,...(proDom.get(ns)||[]).map(n=>sz(n).h+RK+2*RP+SPK));cy+=hh+KGAP;regions.push(d);});}
-    // 🖥 Host (Werkbank §8.1): ein Rahmen RECHTS neben den Clients, die Umgebungs-Karten in drei Spalten.
-    {const hk=all.filter(n=>n.kind==="host");if(hk.length){let rechts=0;regions.forEach(d=>rechts=Math.max(rechts,d.rx+d.w));
-      const SP=3,bw=Math.max(...hk.map(n=>sz(n).w)),hs=new Array(SP).fill(RP+RK+SPK),placed=[];
-      hk.forEach((n,i)=>{const c=i%SP;placed.push({n,rx:RP+c*(bw+COLGAP),ry:hs[c]});hs[c]+=sz(n).h+ROWGAP;});
-      regions.push({placed,leer:[],aktLeer:[],rx:rechts+(regions.length?520:0),ry:0,w:2*RP+SP*bw+(SP-1)*COLGAP,h:Math.max(...hs)+RP});}}
-    regions.forEach(d=>{d.placed.forEach(p=>setze(p.n,d.rx+p.rx,d.ry+p.ry));
-      d.leer.forEach(l=>{LAY["§leer:"+l.ns]={x:d.rx+l.rx,y:d.ry+l.ry};});
-      d.aktLeer.forEach(l=>{LAY["§aktleer:"+l.ns+"|"+l.akt]={x:d.rx+l.rx,y:d.ry+l.ry};});});
-    LAY.__sig=sig;if(VIEW.kompakt)speichereKpos();
-  }
-  // Karten auf der Fläche sind immer kompakt (Kopf + Kurzfassung); das Formular lebt im Panel.
-  const istZu=()=>true;   // Karten sind immer kompakt — bearbeitet wird im Panel
-  function nodeEditor(n){
-    const zu=istZu(n);
-    const dg=diagFuer(n.id),nurWarn=dg.length>0&&dg.every(x=>x.art==="warnung");
-    const el=h("div",{class:"gnode2 n-"+n.kind+(zu?" collapsed":"")+(ISLE.has(n.id)?" island":"")+(dg.length?(nurWarn?" diagwarn":" diag"):"")
-      +(n.kind==="rumpf"&&n.ref.kid&&VOR[n.ref.kid]?" llmvor":"")+(n.kind==="code"&&(n.ref.unaufgeloest||[]).length?" unaufgeloest":"")});el.dataset.id=n.id;
-    const pos=P(n);el.style.left=(pos.x||0)+"px";el.style.top=(pos.y||0)+"px";
-    const title=(n.kind==="code"&&(n.ref.unaufgeloest||[]).length?"⚠ ":"")+(NODELABEL[n.kind]||n.kind);
-    const head=h("div",{class:"ghead"},
-      h("span",{class:"gtitle"+(n.name?" hatname":""),title:title+(n.name?" · "+n.name:"")},h("span",{class:"gk"},title+(n.name?" · ":"")),h("span",{class:"gn"},n.name||"")),
-      dg.length?h("span",{class:"gdiag"+(nurWarn?" warn":""),title:dg.map(d=>d.text).join("\n")},(nurWarn?"⚠ ":"⛔ ")+dg.length):null,
-      dsBadge(n),
-      n.kind==="host"||n.kind==="code"||n.kind==="rumpf"||n.kind==="bausteinfunktion"&&n.ref.datei?null:h("span",{class:"gx",title:"Löschen",onclick:()=>delNode(n)},"✕"));
-    head.onpointerdown=e=>{if(e.target.classList.contains("gx")||e.target.classList.contains("gcol"))return;startMove(e,el,P(n),()=>waehle(n.id));};
-    el.append(head);
-    el.append(kurzfassung(n));
-    const body=h("div",{class:"gbody"});
-    fuelleKoerper(body,n);
-    el.append(body);return el;
-  }
   // Der Formular-Körper eines Knotens — auf der Fläche (aufgeklappt) UND im Inspector derselbe.
   function fuelleKoerper(body,n){
     if(n.kind==="aggregate")aggStateCard(body,n.ref);
@@ -1720,9 +1448,7 @@
   function drawMinimap(){
     if(!MM||!MM.svg||!world)return;
     while(MM.svg.firstChild)MM.svg.removeChild(MM.svg.firstChild);
-    const vis=graphNodes().filter(n=>VIS.has(n.id));
-    const boxes=vis.map(n=>{const g=GEO.get(n.id),p=P(n);
-      return {x:p.x||0,y:p.y||0,w:(g&&g.w)||250,h:(g&&g.h)||120,key:groupKeyOf(n),kind:n.kind};});
+    const boxes=[...GEO.entries()].map(([id,g])=>{const k=FLKARTE.get(id)||{};return {x:g.x,y:g.y,w:g.w,h:g.h,key:k.band||k.spalte||"§",kind:k.art};});
     if(!boxes.length){MM.vp=null;return;}
     let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
     boxes.forEach(b=>{minx=Math.min(minx,b.x);miny=Math.min(miny,b.y);maxx=Math.max(maxx,b.x+b.w);maxy=Math.max(maxy,b.y+b.h);});
@@ -2063,135 +1789,7 @@
   function drawEdges(){
     if(!svg)return;messeWelt();KANTEN=[];[...svg.querySelectorAll(".glink:not(.tmp)")].forEach(p=>p.remove());
     if(svgTop)[...svgTop.querySelectorAll(".glink")].forEach(p=>p.remove());
-    // Pfade sammeln und erst am Ende einhängen: Lesen (Anker) und Schreiben (DOM) nicht verschränken → ein Layout statt Hunderte.
-    const fSvg=document.createDocumentFragment(),fTop=document.createDocumentFragment();
-    // DYNAMISCHE ANSCHLUSSSEITEN: Kanten werden erst GESAMMELT (KZ), dann gezeichnet. Ein Ende ist entweder eine eingeklappte
-    //   Karte ({el}) — dann wählt sie je Kante die dem Partner ZUGEWANDTE Seite (oben/unten/links/rechts; horizontaler vs.
-    //   vertikaler Abstand der Rechtecke) und mehrere Linien auf derselben Seite werden entlang der Seite verteilt (nach Lage des
-    //   Partners sortiert → keine Kreuzungen, kein Sammelpunkt) — oder ein sichtbarer Slot ({pt,dir}, fester Punkt).
-    const KZ=[];
-    const mkE=(EA,EB,color,dash,cls,ds,tgt)=>{const k={EA,EB,color,dash,cls,ds,tgt,dataset:{}};KZ.push(k);return k;};
-    const mk=(A,B,da,db,color,dash,cls,ds,tgt)=>mkE({pt:A,dir:{x:da,y:0}},{pt:B,dir:{x:db,y:0}},color,dash,cls,ds,tgt);
-    const ende=sl=>{if(sl.offsetParent!==null){const d=sdir(sl);return {pt:slotCenter(sl),dir:d?{x:d,y:0}:null};}
-      const nd=sl.closest(".gnode2");return nd?{el:nd}:{pt:slotCenter(sl),dir:null};};
-    const add=(k1,k2,color,dash)=>{const a=SLOTS[k1],b=SLOTS[k2];if(!a||!b)return;KANTEN.push([k1,k2]);
-      const p=mkE(ende(a),ende(b),color,dash);p.dataset.a=knotenIdVon(a);p.dataset.b=knotenIdVon(b);};
-    // Akteur → was er darf (rosa): vom Akteur-Band zur Nachricht.
-    MODEL.akteure.forEach(a=>(a.darf||[]).forEach(nm=>add("akt:darf:"+a._id+":"+nm,"darf:in:"+nm,"#e07ab4")));
-    // Funktion: Event → Auf(Event) · Auf → Ausgabe (Command bzw. Event/Hinweis) · Konstruktor (der Klasse bzw. einer Umsetzung) → gerufene Funktion.
-    (MODEL.bausteinFunktionen||[]).forEach(f=>{(f.eingaenge||[]).forEach((e,i)=>{add("evt:out:"+e.eingang,"fb:ein:"+f._id+":"+i,"#4fb06a");
-        (e.ausgaben||[]).forEach(x=>add("fb:aus:"+f._id+":"+i+":"+x,(recArt(x)==="command"?"cmd:in:":"evt:in:")+x,recArt(x)==="command"?"#4a86d6":"#4fb06a"));});
-      (f.konstruktor||[]).forEach((p,i)=>{const g=gerufenByName(p.typ);if(g&&g!==f)add("gr:out:fb:"+f._id+":"+i,"gr:in:"+g._id,"#b48ead");});
-      (f.umsetzungen||[]).forEach((u,ii)=>(u.konstruktor||[]).forEach((p,i)=>{const g=gerufenByName(p.typ);if(g&&g!==f)add("gr:out:fb:"+f._id+":u"+ii+":"+i,"gr:in:"+g._id,"#b48ead");}));});
-    // Client-Vertrag (docs/konzept-akteure.md §4): die bestehenden Verbindungen kennt der Verbinden-Modus (✓/lösen) über KANTEN —
-    //   gezeichnet werden sie als BÜNDEL (unten); Einzelkanten nur aufgefächert (AUF, durch eine Handlung).
-    MODEL.clients.forEach(c=>{
-      (c.kenntnis||[]).forEach(nm=>{if(SLOTS["cl:kenntnis:"+c._id+":"+nm]&&SLOTS["evt:out:"+nm])KANTEN.push(["evt:out:"+nm,"cl:kenntnis:"+c._id+":"+nm]);});
-      (c.verkoerpert||[]).forEach(n=>{const a=MODEL.akteure.find(x=>x.name===n);
-        if(a&&SLOTS["cl:verkoerpert:"+c._id+":"+n]&&SLOTS["akt:verkoerpert:"+a._id])KANTEN.push(["cl:verkoerpert:"+c._id+":"+n,"akt:verkoerpert:"+a._id]);});});
-    MODEL.decider.forEach(d=>{
-      if(d.command)add("cmd:out:"+d.command,"dec:cmdin:"+d._id,"#4a86d6");
-      if(d.aggregat)add("dec:aggout:"+d._id,"agg:left:"+d.aggregat+":"+d._id,"#33b1a6",true);
-      (d.ergibt||[]).forEach(o=>{if(o.event)add("dec:evtout:"+d._id+":"+o.event,"evt:in:"+o.event,"#4fb06a");});
-    });
-    MODEL.applier.forEach(p=>{
-      if(p.event)add("evt:out:"+p.event,"app:evtin:"+p._id,"#4fb06a");
-      if(p.aggregat)add("app:aggout:"+p._id,"agg:right:"+p.aggregat+":"+p._id,"#d1953f",true);
-    });
-    MODEL.states.forEach(s=>{if(s.aggregat)add("state:out:"+s._id,"agg:state:"+s.aggregat,"#e0b64d");});
-    // Interne Aggregat-Kanten: welcher Decider (links) erzeugt das Event welches Appliers (rechts) — Linie IM Aggregat.
-    MODEL.aggregate.forEach(a=>{
-      const dl=MODEL.decider.filter(d=>d.aggregat===a.name), al=MODEL.applier.filter(p=>p.aggregat===a.name);
-      dl.forEach(d=>(d.ergibt||[]).forEach(o=>al.filter(p=>p.event===o.event).forEach(p=>{
-        const x=SLOTS["agg:left:"+a.name+":"+d._id], y=SLOTS["agg:right:"+a.name+":"+p._id];if(!x||!y)return;
-        if(x.offsetParent===null||y.offsetParent===null)return;   // Aggregat eingeklappt: keine Linie im Kopf
-        const l=mk(anchor(x),anchor(y),1,-1,"#7f8aa0",false,"internal",[d._id,p._id],svgTop);l.dataset.a="dec:"+d._id;l.dataset.b="app:"+p._id;})));
-    });
-    // ── Leseseite: ReadModel→Store, Projektion/Reader→Store-Scope, Event→Projektion, Query→Reader,
-    //    Reader→Response, und CODE (📝/🤖) → Rumpf-Ports (gestrichelt). ──
-    const CODE="#8a8f9c";
-    MODEL.readModels.forEach(rm=>{if(rm.store)add("rm:out:"+rm._id,"sto:rm:"+rm.store,"#c9a24b");});
-    MODEL.stores.forEach(st=>{
-    });
-    MODEL.projektionen.forEach(p=>{
-      (p.handles||[]).forEach((hd,hi)=>{if(hd.event)add("evt:out:"+hd.event,"prj:in:"+p._id+":"+hi,"#4fb06a");
-        // Handle → aufgerufene Write-Fn (Store-Scope ist damit sichtbar-abgeleitet).
-        (hd.fns||[]).forEach(fid=>{const f=fnById(fid);if(f)add("wcall:out:"+p._id+":"+hi+":"+fid,"wcall:in:"+f.store._id+":"+fid,"#2f9d95");});});
-    });
-    MODEL.reader.forEach(r=>{
-      // IReader<TProjection>: Reader → Projektion (der gemeinsame Store ist der Treffpunkt).
-      if(r.projektion){const p=MODEL.projektionen.find(x=>x.name===r.projektion);if(p)add("rdr:proj:"+r._id,"prj:asproj:"+p._id,"#c08a3e",true);}
-      (r.handles||[]).forEach((hd,hi)=>{if(hd.query)add("qry:out:"+hd.query,"rdr:qin:"+r._id+":"+hi,"#9678d6");
-        // Handle → aufgerufene Read-Fn(s), auch über mehrere Stores.
-        (hd.fns||[]).forEach(fid=>{const f=fnById(fid);if(f)add("rcall:out:"+r._id+":"+hi+":"+fid,"rcall:in:"+f.store._id+":"+fid,"#c08a3e");});
-        (hd.responses||[]).forEach(resp=>{if(resp)add("rdr:rout:"+r._id+":"+hi+":"+resp,"qrsp:in:"+resp,"#9d78d6");});});
-    });
-    // ── Typ-Komposition: VO/Enum → Feld (welches Feld benutzt diesen Typ), gestrichelt. ──
-    const voNamen=new Set(MODEL.records.filter(r=>r.kind==="valueobject").map(r=>r.name));
-    const enNamen=new Set(MODEL.enums.map(e=>e.name));
-    alleFelder().forEach(({owner,f})=>{const bt=innerTyp(f.typ);
-      if(voNamen.has(bt))add("ftype:out:rec:"+bt,"ftype:in:"+owner+":"+f._id,"#49a996",true);
-      else if(enNamen.has(bt))add("ftype:out:enum:"+bt,"ftype:in:"+owner+":"+f._id,"#8a8aa0",true);});
-    // ── Zusammengezogene Kanten: Pfade DURCH eingeklappte Details (Command →[Decider]→ Event …) Kopf an Kopf. ──
-    const ELS=new Map([...world.querySelectorAll(".gnode2")].map(e=>[e.dataset.id,e]));
-    KONTRAKT.forEach(([u,v])=>{const eu=ELS.get(u),ev=ELS.get(v);if(!eu||!ev)return;
-      const kv=(NODEBY.get(v)||{}).kind,col=kv==="event"?"#4fb06a":(kv==="command"?"#4a86d6":"#8a8f9c");
-      const p=mkE({el:eu},{el:ev},col,false,"kontrakt");p.dataset.a=u;p.dataset.b=v;});
-    // ── Graphen: je [Von] eine Kante zwischen den Karten der Knoten, links → rechts. ──
-    graphKanten(ELS,mkE);
-    // ── Hub-Kanten: Handle → Besitzer (Projektion/Reader), Store-Fn → Store — gestrichelt, wie Decider → Aggregat. ──
-    NODEBY.forEach(n=>{if(n.kind!=="handle"&&n.kind!=="fn")return;const eu=ELS.get(n.id),eo=ELS.get(n.own.id);if(!eu||!eo)return;
-      const l=mkE({el:eu},{el:eo},"#6f7a91",true,"hub");l.dataset.a=n.id;l.dataset.b=n.own.id;});
-    // ── Zeichnen: Seiten wählen → je Karte+Seite verteilen → Kurve senkrecht zur Seite. ──
-    const DIR={r:{x:1,y:0},l:{x:-1,y:0},o:{x:0,y:-1},u:{x:0,y:1}};
-    const RC=new Map();
-    const rect=el=>{let r=RC.get(el);if(!r){const hd=el.querySelector(".ghead");
-      r={x1:el.offsetLeft,y1:el.offsetTop,x2:el.offsetLeft+el.offsetWidth,y2:el.offsetTop+el.offsetHeight,hy:el.offsetTop+(hd?hd.offsetHeight/2:12)};RC.set(el,r);}return r;};
-    const box=E=>E.el?rect(E.el):{x1:E.pt.x,y1:E.pt.y,x2:E.pt.x,y2:E.pt.y};
-    const seite=(R,Q)=>{const gx=Math.max(Q.x1-R.x2,R.x1-Q.x2),gy=Math.max(Q.y1-R.y2,R.y1-Q.y2);
-      if(gx>=gy)return (Q.x1+Q.x2)>=(R.x1+R.x2)?"r":"l";return (Q.y1+Q.y2)>=(R.y1+R.y2)?"u":"o";};
-    // ── Client-Leitungen: je Client × Ziel-Rahmen EIN Bündel (dick; durchgezogen = trägt eine Zusage/durabel, gestrichelt = nur
-    //   Kenntnis/Fragen/Senden), beschriftet in Worten. Aufgefächert (AUF) zusätzlich die Einzelkanten Karte → Karte. Zoom ändert nichts.
-    MODEL.clients.forEach(c=>{const ec=ELS.get("cl:"+c._id);if(!ec)return;const farbe="hsl("+domHue(CL_PRE+c.name)+" 60% 62%)";
-      clientBuendel(c).forEach(b=>{const R=FRGEO.get(b.key);if(!R)return;
-        const Q={x1:ec.offsetLeft,y1:ec.offsetTop,x2:ec.offsetLeft+ec.offsetWidth,y2:ec.offsetTop+ec.offsetHeight};
-        const s=seite(R,Q),cy=Math.max(R.y1+40,Math.min(R.y2-20,(Q.y1+Q.y2)/2)),cx=Math.max(R.x1+40,Math.min(R.x2-40,(Q.x1+Q.x2)/2));
-        const pt=s==="r"?{x:R.x2,y:cy}:s==="l"?{x:R.x1,y:cy}:s==="o"?{x:cx,y:R.y1}:{x:cx,y:R.y2};
-        const k=mkE({el:ec},{pt,dir:DIR[s]},farbe,!b.durabel,"gbuendel");k.festA="l";k.label=buendelText(b);k.titel="🔌 "+clientAnzeige(c)+" → "+rahmenLabel(b.key)+"\n"+k.label
-          +"\n"+(b.durabel?"durchgezogen: trägt Arbeit — die Kette wartet durabel auf die Antwort dieses Clients":"gestrichelt: nur Senden/Fragen/Kenntnis (verlierbar)")+"\nKlick: auffächern";
-        k.dataset.a="cl:"+c._id;k.dataset.b=(b.ports.find(p=>p.node)||{}).node||"";k.klick=()=>auffaechern(c,{keys:[b.key]});});
-      if(!AUF||AUF.client!==c._id)return;
-      const FARBE={zusage:"#e07ab4",sendet:"#4a86d6",fragt:"#9678d6",kenntnis:"#4fb06a"};
-      clientPorts(c).filter(p=>p.node&&aufPasst(AUF,p)).forEach(p=>{const ziel=ELS.get(vertreterId(p.node));if(!ziel)return;
-        const k=p.ri==="kenntnis"?mkE({el:ziel},{el:ec},FARBE[p.ri],true,"gauf"):mkE({el:ec},{el:ziel},FARBE[p.ri],p.ri!=="zusage","gauf");
-        if(p.ri==="kenntnis")k.festB="l";else k.festA="l";   // Clients stehen rechts: Leitungen treten links aus
-        k.dataset.a="cl:"+c._id;k.dataset.b=vertreterId(p.node);});});
-    const grp=new Map();
-    const reg=(E,s,other,k,end)=>{const key=E.el.dataset.id+"|"+s;let g=grp.get(key);if(!g)grp.set(key,g=[]);g.push({k,end,other,el:E.el});};
-    KZ.forEach(k=>{const RA=box(k.EA),RB=box(k.EB);
-      if(k.EA.el){k.sa=k.festA||seite(RA,RB);reg(k.EA,k.sa,RB,k,"a");}
-      if(k.EB.el){k.sb=k.festB||seite(RB,RA);reg(k.EB,k.sb,RA,k,"b");}});
-    grp.forEach((g,key)=>{const s=key.slice(key.lastIndexOf("|")+1),R=rect(g[0].el),quer=s==="o"||s==="u",n=g.length;
-      g.sort((p,q)=>quer?(p.other.x1+p.other.x2)-(q.other.x1+q.other.x2):(p.other.y1+p.other.y2)-(q.other.y1+q.other.y2));
-      g.forEach((e,i)=>{const t=(i+0.5)/n;
-        e.k["p"+e.end]=quer?{x:R.x1+(R.x2-R.x1)*(0.15+0.7*t),y:s==="o"?R.y1:R.y2}
-                           :{x:s==="l"?R.x1:R.x2,y:n===1?R.hy:R.y1+6+(R.y2-R.y1-12)*t};});});
-    KZ.forEach(k=>{const A=k.pa||k.EA.pt,B=k.pb||k.EB.pt;
-      const va=k.sa?DIR[k.sa]:(k.EA.dir||{x:B.x>=A.x?1:-1,y:0}),vb=k.sb?DIR[k.sb]:(k.EB.dir||{x:A.x>=B.x?1:-1,y:0});
-      const d=Math.min(400,Math.max(40,Math.hypot(B.x-A.x,B.y-A.y)*0.4));
-      const p=document.createElementNS(SVGNS,"path");p.setAttribute("class","glink"+(k.cls?" "+k.cls:""));p.setAttribute("fill","none");
-      p.setAttribute("stroke",k.color);p.setAttribute("stroke-width","2.2");if(k.dash)p.setAttribute("stroke-dasharray","5 4");
-      if(k.ds){p.dataset.dec=k.ds[0];p.dataset.app=k.ds[1];}Object.assign(p.dataset,k.dataset);
-      p.setAttribute("d","M"+A.x+","+A.y+" C"+(A.x+va.x*d)+","+(A.y+va.y*d)+" "+(B.x+vb.x*d)+","+(B.y+vb.y*d)+" "+B.x+","+B.y);
-      ((k.tgt||svg)===svg?fSvg:fTop).append(p);
-      // Client-Bündel: Titel (Hover), Klick = auffächern, Beschriftung in Worten an der Kurvenmitte (Bezier t=½).
-      if(k.klick){const tt=document.createElementNS(SVGNS,"title");tt.textContent=k.titel||"";p.append(tt);
-        p.addEventListener("pointerdown",e=>e.stopPropagation());p.addEventListener("click",e=>{e.stopPropagation();k.klick();});}
-      if(k.label){const c1={x:A.x+va.x*d,y:A.y+va.y*d},c2={x:B.x+vb.x*d,y:B.y+vb.y*d};
-        const mx=0.125*A.x+0.375*c1.x+0.375*c2.x+0.125*B.x,my=0.125*A.y+0.375*c1.y+0.375*c2.y+0.125*B.y;
-        const t=document.createElementNS(SVGNS,"text");t.setAttribute("class","glink gbuendel-t");t.setAttribute("x",mx);t.setAttribute("y",my-8);
-        t.setAttribute("text-anchor","middle");t.textContent=k.label;Object.assign(t.dataset,k.dataset);fSvg.append(t);}});
-    svg.append(fSvg);if(svgTop)svgTop.append(fTop);
+    const f=document.createDocumentFragment();flKanten(f);svg.append(f);
     wendeFokusAn();fokusChip();
     if(typeof SP!=="undefined")spurZeichne();
   }
@@ -2199,17 +1797,6 @@
   function hilite(decId,appId,on){document.querySelectorAll("#de .glink.internal").forEach(p=>{
     if((decId&&p.dataset.dec===decId)||(appId&&p.dataset.app===appId))p.classList.toggle("hot",on);});}
 
-  // Verschieben (Knoten) / Pannen (Fläche).
-  //   Kopf nur antippen (ohne Ziehen) = auswählen (onClick) → Inspector + Slice-Fokus.
-  function startMove(e,el,ref,onClick){e.preventDefault();el.classList.add("dragging");
-    const sx=e.clientX,sy=e.clientY,ox=ref.x||0,oy=ref.y||0;let moved=false;
-    const mv=ev=>{if(!moved&&Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<4)return;moved=true;
-      ref.x=Math.round((ox+(ev.clientX-sx)/PAN.s)/GRID)*GRID;
-      ref.y=Math.round((oy+(ev.clientY-sy)/PAN.s)/GRID)*GRID;
-      el.style.left=ref.x+"px";el.style.top=ref.y+"px";drawEdges();};
-    const up=()=>{el.classList.remove("dragging");window.removeEventListener("pointermove",mv);window.removeEventListener("pointerup",up);
-      if(!moved){if(onClick)onClick();}else{if(VIEW.kompakt)speichereKpos();autosave();drawMinimap();}};
-    window.addEventListener("pointermove",mv);window.addEventListener("pointerup",up);}
   let PANNED=false;
   function startPan(e){e.preventDefault();canvas.classList.add("panning");bewegtAn();const sx=e.clientX,sy=e.clientY,ox=PAN.x,oy=PAN.y;PANNED=false;
     const mv=ev=>{if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)>3)PANNED=true;PAN.x=ox+(ev.clientX-sx);PAN.y=oy+(ev.clientY-sy);applyPan();};
@@ -2295,8 +1882,8 @@
     if(!FOKUS||!FOCUS){el.style.display="none";return;}el.style.display="";
     const sym=FOKUS.art==="vorgang"?"⟿":FOKUS.art==="menge"?"▣":"◎";
     el.append(h("span",{class:"gf-t",title:FOKUS.art==="vorgang"?"Die echte Spur des gewählten Vorgangs":FOKUS.art==="kette"?"Die statische Kette der gewählten Karte":"Markierte Menge"},sym+" "+FOKUS.titel),
-      h("span",{class:"gf-z"},String([...FOCUS].filter(i=>VIS.has(vertreterId(i))).length)),
-      h("button",{title:"Fokus einpassen",onclick:()=>passeEin([...FOCUS].map(vertreterId).filter(i=>VIS.has(i)),1)},"⤢"),
+      h("span",{class:"gf-z"},String((flFokus()||{karten:new Set()}).karten.size)),
+      h("button",{title:"Fokus einpassen",onclick:()=>passeEin([...(flFokus()||{karten:new Set()}).karten],1)},"⤢"),
       h("button",{title:"Fokus lösen (Esc)",onclick:fokusLoesen},"✕"));}
   function waehle(id){
     if(VB){if(id&&id!==SEL){vbKlick(id);return;}if(!id){vbEnde();return;}}
@@ -2304,11 +1891,9 @@
     if(typeof SP!=="undefined"&&id)SP.schritt=null;
     SEL=id||null;if(FOKUS&&FOKUS.art==="menge")FOKUS=null;
     fokusNeu();wendeFokusAn();fokusChip();zeigeInspector();}
-  function wendeFokusAn(){if(!world)return;const an=!!FOCUS;world.classList.toggle("fokus",an);
-    const selV=SEL?(VERTRETER.get(SEL)||[SEL]):[];
-    world.querySelectorAll(".gnode2").forEach(el=>{const id=el.dataset.id;el.classList.toggle("inslice",an&&FOCUS.has(id));el.classList.toggle("sel",selV.includes(id));});
-    if(!an)return;
-    world.querySelectorAll(".glink").forEach(p=>p.classList.toggle("inslice",FOCUS.has(p.dataset.a)&&FOCUS.has(p.dataset.b)));}
+  function wendeFokusAn(){if(!world)return;const F=flFokus(),an=!!F;world.classList.toggle("fokus",an);
+    world.querySelectorAll(".gnode2").forEach(el=>{el.classList.toggle("inslice",an&&F.karten.has(el.dataset.id));el.classList.toggle("sel",!!SEL&&el.dataset.karte===SEL);});
+    world.querySelectorAll(".glink").forEach(p=>p.classList.toggle("inslice",an&&F.kanten.has(+p.dataset.i)));}
   document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if(VB){vbEnde();return;}if(SEL){waehle(null);return;}
     if(typeof SP!=="undefined"&&SP.schritt){SP.schritt=null;zeigeInspector();return;}if(FOKUS)fokusLoesen();});
 
@@ -2347,69 +1932,14 @@
 
   // Kurzfassung auf der eingeklappten Karte: das Wesentliche in einer Zeile + Chips der eingeklappten Details.
   const kurz=xs=>{xs=[...new Set((xs||[]).filter(Boolean))];return xs.slice(0,2).join(", ")+(xs.length>2?" +"+(xs.length-2):"");};
-  // 🔌 Die ANSCHLUSSLEISTE eines Clients (= sein Vertrag), immer lesbar auf der Karte: je Richtung, darin je Akteur, jede Nachricht beim
-  //   Namen. Klick auf eine Nachricht fächert genau diese Leitung auf (Einzelkante); der Rest bleibt gebündelt.
-  function anschlussleiste(n){const c=n.ref,P=clientPorts(c),box=h("div",{class:"gsum gleiste",onclick:()=>waehle(n.id)});
-    const name=(p,txt)=>{const b=h("span",{class:"lp"+(p.node?"":" lp-fehlt")+(AUF&&AUF.client===c._id&&AUF.msg===p.msg?" an":""),
-        title:p.node?"Klick: diese Leitung auffächern":"⚠ nicht im Modell"},txt||p.msg);
-      b.onclick=e=>{e.stopPropagation();if(p.node)auffaechern(c,{msg:p.msg});};return b;};
-    const zeile=(kopf,teile,kl)=>{const z=h("div",{class:"lz"+(kl?" "+kl:"")},h("span",{class:"lk"},kopf));
-      teile.forEach((t,i)=>{if(i)z.append(", ");z.append(t);});box.append(z);};
-    const sym=a=>"👤 "+a;
-    const grp=ri=>{const m=new Map();P.filter(p=>p.ri===ri).forEach(p=>{const k=(p.akteure||[]).join(" / ");if(!m.has(k))m.set(k,[]);m.get(k).push(p);});return m;};
-    if((c.verkoerpert||[]).length)zeile("👤 verkörpert "+c.verkoerpert.map(sym).join(", "),[],"lt");
-    [["traegt","↺ trägt"],["sendet","▶ sendet"],["fragt","? fragt"]].forEach(([ri,kopf])=>grp(ri).forEach((ps,k)=>
-      zeile(kopf+(k?" als "+k.split(" / ").map(sym).join(" / "):" · ⚠ kein Akteur darf es"),ps.map(p=>name(p)),k?"":"lwarn")));
-    if(P.some(p=>p.ri==="kenntnis"))zeile("◀ hört",P.filter(p=>p.ri==="kenntnis").map(p=>name(p)));
-    if(!P.length)box.append(h("div",{class:"lz lleer"},"— leerer Vertrag: im Panel ⊕ verkörpert / hört"));
-    return box;}
-  function kurzfassung(n){if(n.kind==="client")return anschlussleiste(n);if(n.kind==="host")return hostKurz(n);const r=n.ref,k=n.kind;let t="";
-    if(k==="code")t=(r.unaufgeloest||[]).length?"⚠ "+r.unaufgeloest.join(", ")+" nicht aufgelöst":(r.art||"Typ")+" · kein Baustein — roh";
-    if(k==="command"){const ev=MODEL.decider.filter(d=>d.command===r.name).flatMap(d=>(d.ergibt||[]).map(o=>o.event)).filter(e=>(recByName(e)||{}).kind!=="rejection");
-      t=ev.length?"→ "+kurz(ev):"→ (kein Decider)";}
-    else if(k==="event"){const c=MODEL.decider.filter(d=>(d.ergibt||[]).some(o=>o.event===r.name)).map(d=>d.command);t=c.length?"← "+kurz(c):"";}
-    else if(k==="aggregate")t=MODEL.decider.filter(d=>d.aggregat===r.name).length+" Commands · "+MODEL.applier.filter(a=>a.aggregat===r.name).length+" Events · "+(r.state||[]).length+" State-Felder";
-    else if(k==="projektion")t=(r.handles||[]).length+" Handles · ← "+kurz((r.handles||[]).map(x=>x.event));
-    else if(k==="reader")t=(r.handles||[]).length+" Handles · ? "+kurz((r.handles||[]).map(x=>x.query));
-    else if(k==="graph")t=((r.koepfe||[]).length?"▶ "+kurz(r.koepfe):r.quelle?"⚡ Quelle "+r.quelle:"kein Kopf")+" · "+(r.knoten||[]).length+" Knoten"
-      +((r.ausgaenge||[]).length?" · → "+kurz(r.ausgaenge):"");
-    else if(k==="bausteinfunktion"&&(r.lauscht||[]).length)t="⚡ meldet "+kurz(r.lauscht)+((r.eingaenge||[]).length?" · "+r.eingaenge.length+" Auf":"");
-    else if(k==="bausteinfunktion"&&istGerufen(r))t="⚙ "+kurz(r.methoden.map(m=>m.name))+" · "+((r.umsetzungen||[]).length?"⚙ "+kurz(r.umsetzungen.map(u=>u.name)):r.klasse?"Klasse":"⚠ keine Umsetzung");
-    else if(k==="bausteinfunktion")t=(r.eingaenge||[]).map(e=>"Auf("+(e.eingang||"?")+(e.hinweis?" ·Hinweis":"")+") → "+((e.ausgaben||[]).length?kurz(e.ausgaben):"—")+(e.strom?" (Strom)":"")).join(" · ")
-      +((r.umsetzungen||[]).length?" · Umsetzung "+kurz(r.umsetzungen.map(u=>u.name)):r.klasse?"":" · draußen");
-    else if(k==="store")t=(r.writeFns||[]).length+" schreibend · "+(r.readFns||[]).length+" lesend";
-    else if(k==="readmodel"&&r.geteilt)t="⇄ geteilt";
-    else if(k==="akteur")t=((r.darf||[]).length?"darf "+kurz(r.darf):"darf nichts")+((r.hoert||[]).length?" · hört "+kurz(r.hoert):"");
-    else if(k==="handle"){const aus=(r.ausgaenge||[]).length?(r.ausgaenge||[]).filter(a=>a.art!=="storefn").map(a=>a.typ)
-        :[...(r.responses||[]),...(r.sends||[]),...(r.publishes||[])];
-      const fns=(r.fns||[]).map(fid=>{const f=fnById(fid);return f?f.fn.name:null;}).filter(Boolean);
-      t=(aus.length?"→ "+[...new Set(aus)].join(" | "):(fns.length?"":"→ nichts"))+(fns.length?(aus.length?" · ":"")+"ruft "+kurz(fns):"")+(r.signaturOffen?" · ⚠ offen":"");}
-    else if(k==="fn")t="("+(r.params||[]).map(x=>x.typ).join(", ")+")"+(r.rueckgabe?" → "+r.rueckgabe:"");
-    else if(k==="rumpf"){const v=r.kid&&VOR[r.kid],m=r.kid&&MELD[r.kid];
-      t=r.kid&&LAUF[r.kid]?"● "+LAUF[r.kid].was+" …":v?"🤖 Vorschlag wartet auf ✓ Übernehmen":((r.text||"").trim().split("\n")[0]||"// leer");}
-    if(Array.isArray(r.felder)&&k!=="aggregate")t+=(t?" · ":"")+r.felder.length+" Felder";
-    // Partner in nicht geladenen Domänen: die Kante endet nicht im Leeren, sie ist benannt (Panel: „↗ außerhalb", Klick lädt).
-    {const za=aussenAnzahl(n);if(za)t+=(t?" · ":"")+"↗ "+za+" außerhalb";}
-    const box=h("div",{class:"gsum",title:"Klick: im Inspector bearbeiten",onclick:()=>waehle(n.id)});
-    if(t)box.append(h("div",{class:"gs-t",title:t},t));
-    const det=(DETAILS.get(n.id)||[]).map(id=>NODEBY.get(id)).filter(Boolean);
-    if(det.length){const chips=h("div",{class:"gchips"}),zahl={};det.forEach(m=>zahl[m.kind]=(zahl[m.kind]||0)+1);
-      const LBL={decider:"⚖ Decider",applier:"↻ Applier",state:"▤ State",rejection:"✕ Ablehnung",valueobject:"◇ VO",enum:"◇ Enum",queryresponse:"↩ Response"};
-      Object.keys(zahl).forEach(kk=>{let lbl=(LBL[kk]||kk)+(zahl[kk]>1?" ×"+zahl[kk]:"");
-        if(kk==="rumpf")lbl="{ } "+det.filter(m=>m.kind==="rumpf").reduce((s,m)=>s+((m.ref.text||"").split("\n").length),0)+" Zeilen";
-        chips.append(h("span",{class:"gchip"},lbl));});
-      if(det.some(m=>(m.kind==="decider"||m.kind==="applier")&&!(m.ref.rumpf||"").trim()&&!m.ref.leer))
-        chips.append(h("span",{class:"gchip warn",title:"Decide-/Apply-Rumpf fehlt"},"⚙ Logik fehlt"));
-      box.append(chips);}
-    return box;}
-
   // ── (4) SEMANTISCHER ZOOM ──
   function zoomAuf(s){if(!canvas)return;const cr=canvas.getBoundingClientRect(),wx=(cr.width/2-PAN.x)/PAN.s,wy=(cr.height/2-PAN.y)/PAN.s;
     PAN.s=s;PAN.x=cr.width/2-wx*s;PAN.y=cr.height/2-wy*s;applyPan();}
   // Knoten-Menge einpassen (minS: mindestens diese Zoomstufe).
   function passeEin(ids,maxS,minS){if(!canvas||!world||!ids||!ids.length)return;let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
-    ids.forEach(id=>{const n=NODEBY.get(id),el=world.querySelector('[data-id="'+id+'"]');if(!n||!el)return;const p=P(n);
-      x1=Math.min(x1,p.x||0);y1=Math.min(y1,p.y||0);x2=Math.max(x2,(p.x||0)+el.offsetWidth);y2=Math.max(y2,(p.y||0)+el.offsetHeight);});
+    // Karten der Fläche (ihre Id) oder Karten der Sicht (die Flächen-Karten, die sie zeigen).
+    ids.forEach(id=>{const els=world.querySelectorAll('.gnode2[data-id="'+CSS.escape(id)+'"],.gnode2[data-karte="'+CSS.escape(id)+'"]');
+      els.forEach(el=>{x1=Math.min(x1,el.offsetLeft);y1=Math.min(y1,el.offsetTop);x2=Math.max(x2,el.offsetLeft+el.offsetWidth);y2=Math.max(y2,el.offsetTop+el.offsetHeight);});});
     if(x1>x2)return;const cr=canvas.getBoundingClientRect(),pad=60;
     const s=Math.max(minS||0.08,Math.min(maxS||1,(cr.width-2*pad)/Math.max(1,x2-x1),(cr.height-2*pad)/Math.max(1,y2-y1)));
     PAN.s=s;PAN.x=cr.width/2-(x1+x2)/2*s;PAN.y=cr.height/2-(y1+y2)/2*s;applyPan();}
@@ -2444,188 +1974,16 @@
     return (!k&&nsVon(n))||(VIEW.heim||{})[n.id]||OHNE_DOM;}
   const domLabel=ns=>ns===RAND_KEY?"🚪 Rand":ns===BEGR_KEY?"📚 Begriffe":istRegionKarte(ns)?(({agg:"▣ ",gr:"⬡ ",fb:"ƒ ",sto:"👁 "})[ns.split(":")[0]])+((NODEBY.get(ns)||{}).name||ns.replace(/^\w+:(\w+:)?/,""))
     :ns===OHNE_DOM?"⋯ ohne Domäne":istHostDom(ns)?"🖥 Host · "+(WB.zustand&&WB.zustand.aktiv||"Umgebung"):istClientDom(ns)?"🔌 "+clientAnzeige({name:ns.slice(CL_PRE.length)}):letztesSeg(ns);
-  // Block (Aggregat bzw. Brücke) eines Knotens: aus dem Graphen; ein über eine Spalte angelegter, noch unverdrahteter Knoten
-  //   behält bis zur Verdrahtung den Block dieser Spalte (VIEW.heimBlk) — statt im Inselkasten zu landen.
-  const blockVon=n=>subGroupOf(n)||(VIEW.heimBlk||{})[n.id]||SHARED_KEY;
-  const istInselLage=n=>ISLE.has(n.id)&&!(VIEW.heimBlk||{})[n.id];
-  const domOrd=(a,b)=>istAussenDom(a)!==istAussenDom(b)?(istAussenDom(a)?1:-1):a===OHNE_DOM?1:b===OHNE_DOM?-1
-    :regionRang(a)-regionRang(b)||domLabel(a).localeCompare(domLabel(b));
   const bausteine=z=>z+(z===1?" Baustein":" Bausteine");
-  // Gemeinsame Wurzel (z. B. „Domain“) — darunter beginnen die Domänen (wie im Start-Dialog).
-  function domWurzel(){const alle=new Set();graphNodes().forEach(n=>{const x=domKey(n)===OHNE_DOM||istAussenDom(domKey(n))?null:domKey(n);if(x)for(let p=x;p;p=elternNs(p))alle.add(p);});
-    (VIEW.domNeu||[]).forEach(x=>{for(let p=x;p;p=elternNs(p))alle.add(p);});
-    let top="";for(;;){const k=[...alle].filter(x=>elternNs(x)===top);if(k.length!==1||![...alle].some(y=>elternNs(y)===k[0]))break;top=k[0];}
-    return top;}
-  // Baum über die gegebenen Domänen (+ ihre Eltern-Namespaces bis unter die Wurzel).
-  function domBaum(keys){const w=domWurzel(),alle=new Set();
-    const kette=ns=>{for(let p=ns;p&&p!==w;p=elternNs(p)){alle.add(p);if(!drinNs(w,p))break;}};
-    keys.forEach(ns=>{if(ns===OHNE_DOM||ns===w||istAussenDom(ns)){alle.add(ns);return;}kette(ns);});
-    const elternIn=ns=>{if(ns===OHNE_DOM||ns===w||istAussenDom(ns))return null;const e=elternNs(ns);return alle.has(e)&&e!==w?e:null;};
-    const kinder=new Map();alle.forEach(ns=>{const e=elternIn(ns);if(e){if(!kinder.has(e))kinder.set(e,[]);kinder.get(e).push(ns);}});
-    kinder.forEach(a=>a.sort(domOrd));
-    return {oben:[...alle].filter(ns=>!elternIn(ns)).sort(domOrd),kinder,elternIn};}
   // Rahmen aus GEO zeichnen (nach jeder Geometrie-Messung). Liefert die Ausdehnung für die Weltgröße.
-  function zeichneRahmen(){const aus={x2:0,y2:0};if(!world)return aus;
+  function zeichneRahmen(){if(!world)return {x2:0,y2:0};
     let ebene=world.querySelector(".grahmen-ebene");if(!ebene){ebene=h("div",{class:"grahmen-ebene"});world.insertBefore(ebene,world.firstChild);}
-    ebene.textContent="";
-    const box=new Map(),zahl=new Map(),ids=new Map();
-    const dazu=(ns,x1,y1,x2,y2)=>{const b=box.get(ns);if(!b)box.set(ns,{x1,y1,x2,y2});else{b.x1=Math.min(b.x1,x1);b.y1=Math.min(b.y1,y1);b.x2=Math.max(b.x2,x2);b.y2=Math.max(b.y2,y2);}};
-    GEO.forEach((g,id)=>{const n=NODEBY.get(id);if(!n)return;const d=domKey(n);dazu(d,g.x,g.y,g.x+g.w,g.y+g.h);
-      if(!ids.has(d))ids.set(d,[]);ids.get(d).push(id);});
-    // ── SPALTEN-RAHMEN: die senkrechten Rollen-Spalten je Block (Aggregat bzw. Brücke) einer Domäne — dieselbe Zuordnung
-    //   wie packLayout (subGroupOf + rolle). 📝/🤖 gehören zur Spalte ihres Besitzers (sie stehen eingerückt darunter);
-    //   Inseln bilden einen eigenen Kasten. Aus GEO gebildet → folgt gezogenen Karten.
-    const spalten=new Map(),codes=[];
-    const sp=(key,init)=>{let c=spalten.get(key);if(!c)spalten.set(key,c={...init,x1:1e9,y1:1e9,x2:-1e9,y2:-1e9,ids:[],kinds:new Set()});return c;};
-    const nimm=(c,id,g,k)=>{c.x1=Math.min(c.x1,g.x);c.y1=Math.min(c.y1,g.y);c.x2=Math.max(c.x2,g.x+g.w);c.y2=Math.max(c.y2,g.y+g.h);c.ids.push(id);if(k)c.kinds.add(k);};
-    // Akteur-Rahmen (Domäne × Akteur, docs/konzept-akteure.md §8): nur in Domänen mit Akteuren; sonst null (ein Block-Layout wie bisher).
-    const aktVon=n=>akteurOrdnung(domKey(n)).length?akteurVon(n):null;
-    GEO.forEach((g,id)=>{const n=NODEBY.get(id);if(!n)return;const d=domKey(n);
-      if(n.kind==="client"||istHostDom(d))return;   // Client = Anschlussleiste; Host-Karten liegen im Host-Rahmen, nicht in Spalten
-      if(istInselLage(n)){nimm(sp(d+"|§insel",{dom:d,blk:null,role:"insel",akt:null}),id,g,n.kind);return;}
-      if(n.kind==="rumpf"){codes.push([n,g,id]);return;}
-      const blk=blockVon(n),role=rolle(n,rollenVon(blk)),akt=aktVon(n);
-      nimm(sp(d+"|"+akt+"|"+blk+"|"+role,{dom:d,blk,role,akt}),id,g,n.kind==="handle"?"handle:"+n.own.kind:role===rollenVon(blk).ergebnis?"ergebnis":n.kind);});
-    const fest=[...spalten.values()].filter(c=>c.role!=="insel");
-    codes.forEach(([n,g,id])=>{const d=domKey(n),bk=blockVon(n),ak=aktVon(n);let best=null;
-      fest.forEach(c=>{if(c.dom!==d||c.blk!==bk||c.akt!==ak||g.x<c.x1-4||g.x>c.x1+80||g.y<c.y1)return;if(!best||c.x1>best.x1)best=c;});
-      if(best)nimm(best,id,g,null);else nimm(sp(d+"|"+ak+"|"+blockVon(n)+"|code",{dom:d,blk:blockVon(n),role:"code",akt:ak}),id,g,n.kind);});
-    spalten.forEach(c=>{c.r={x1:c.x1-SPAD,y1:c.y1-SPK,x2:c.x2+SPAD,y2:c.y2+SPAD};dazu(c.dom,c.r.x1,c.r.y1,c.r.x2,c.r.y2);});
-    // Akteur-Rahmen = Hülle seiner Spalten (+ Rand/Kopf); leere (alles schon weiter oben) = nur Kopf an der Packlage.
-    const LAYA=KPOS[VIEW.details?"d":"k"]||{};
-    const akt=new Map();
-    spalten.forEach(c=>{if(c.akt==null)return;const k=c.dom+"|"+c.akt,e=AP-SPAD;let a=akt.get(k);
-      const x1=c.r.x1-e,y1=c.r.y1-e-AK,x2=c.r.x2+e,y2=c.r.y2+e;
-      if(!a)akt.set(k,a={dom:c.dom,akt:c.akt,x1,y1,x2,y2,ids:[]});else{a.x1=Math.min(a.x1,x1);a.y1=Math.min(a.y1,y1);a.x2=Math.max(a.x2,x2);a.y2=Math.max(a.y2,y2);}
-      a.ids.push(...c.ids);});
-    new Set([...box.keys()]).forEach(d=>akteurOrdnung(d).forEach(a=>{const k=d+"|"+a;if(akt.has(k))return;const p=LAYA["§aktleer:"+k];
-      if(p)akt.set(k,{dom:d,akt:a,x1:p.x,y1:p.y,x2:p.x+AKLEER_W,y2:p.y+AK,ids:[],leer:true});}));
-    akt.forEach(a=>dazu(a.dom,a.x1,a.y1,a.x2,a.y2));
-    const B=domBaum([...box.keys(),...(VIEW.domNeu||[])]);
-    const LAY=KPOS[VIEW.details?"d":"k"]||{};
-    let unten=0;box.forEach(b=>unten=Math.max(unten,b.y2));
-    const rahmen=[];FRGEO=new Map();const STK=clientStecker();
-    // Bottom-up: Rahmen = eigene Karten + Kinder-Rahmen, um Rand und Kopf erweitert.
-    const rechne=(ns,tiefe)=>{const kinder=(B.kinder.get(ns)||[]).map(k=>rechne(k,tiefe+1)).filter(Boolean);
-      const b=box.get(ns);let r=b?{x1:b.x1-RP,y1:b.y1-RP-RK,x2:b.x2+RP,y2:b.y2+RP}:null;
-      kinder.forEach(k=>{if(!r)r={x1:k.x1-RP,y1:k.y1-RP-RK,x2:k.x2+RP,y2:k.y2+RP};else{r.x1=Math.min(r.x1,k.x1-RP);r.y1=Math.min(r.y1,k.y1-RP-RK);r.x2=Math.max(r.x2,k.x2+RP);r.y2=Math.max(r.y2,k.y2+RP);}});
-      if(!r){if(!(VIEW.domNeu||[]).includes(ns))return null;   // leere neue Domäne: Platzhalter (von packLayout reserviert)
-        const p=LAY["§leer:"+ns]||{x:0,y:unten+RP+RK+120};unten=Math.max(unten,p.y+RK+2*RP+110);
-        r={x1:p.x,y1:p.y,x2:p.x+640+2*RP,y2:p.y+RK+2*RP+110,leer:true};}
-      const z=(ids.get(ns)||[]).length+kinder.reduce((s,k)=>s+k.z,0);
-      const out={...r,ns,tiefe,z,eigen:ids.get(ns)||[],kinderIds:kinder.flatMap(k=>k.alleIds),alleIds:[...(ids.get(ns)||[]),...kinder.flatMap(k=>k.alleIds)]};
-      rahmen.push(out);return out;};
-    B.oben.forEach(ns=>rechne(ns,0));
-    rahmen.sort((a,b)=>a.tiefe-b.tiefe).forEach(r=>{FRGEO.set(r.ns+"|",r);
-      if(istClientDom(r.ns)){ebene.append(clientRahmen(r));aus.x2=Math.max(aus.x2,r.x2);aus.y2=Math.max(aus.y2,r.y2);return;}
-      if(istHostDom(r.ns)){ebene.append(hostRahmen(r));aus.x2=Math.max(aus.x2,r.x2);aus.y2=Math.max(aus.y2,r.y2);return;}
-      const hue=domHue(r.ns===OHNE_DOM?SHARED_KEY:r.ns);
-      const fr=h("div",{class:"grahmen"+(r.tiefe?" unter":"")+(akteurOrdnung(r.ns).length?" mitakt":"")});fr.dataset.ns=r.ns;
-      Object.assign(fr.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});fr.style.setProperty("--dc","hsl("+hue+" 45% 55%)");
-      const reg=regionArt(r.ns),karte=istRegionKarte(r.ns)?NODEBY.get(r.ns):null;
-      const k=h("div",{class:"grahmen-k",title:r.ns===OHNE_DOM?"Knoten ohne Namespace":reg?reg+(karte?" · "+(nsVon(karte)||""):""):r.ns},
-        h("span",{class:"gr-t",onclick:karte?e=>{e.stopPropagation();waehle(karte.id);}:null},domLabel(r.ns)),h("span",{class:"gr-p"},r.ns===OHNE_DOM?"":reg||r.ns),
-        akteurOrdnung(r.ns).length?h("span",{class:"gr-p",title:"Akteur-Rahmen dieser Domäne (Reihenfolge = wo Geteiltes steht)"},"👤 "+akteurOrdnung(r.ns).join(" › ")):null,
-        h("span",{class:"gr-z"},r.leer?"leer":bausteine(r.z)),
-        akteurOrdnung(r.ns).length?null:steckerZeile(STK.get(r.ns+"|"),[r.ns+"|"]),
-        h("button",{title:reg?"In diesem Block anlegen — was hier entsteht, gehört ihm":"Baustein anlegen",onclick:e=>{e.stopPropagation();bausteinMenue(e.clientX,e.clientY,r.ns);}},"＋"),
-        r.ns!==OHNE_DOM&&!reg?h("button",{title:"Unterdomäne anlegen",onclick:e=>{e.stopPropagation();neueDomaene(e.clientX,e.clientY,r.ns);}},"＋ ▤"):null,
-        h("button",{title:"Domäne einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"),
-        h("button",{title:"Mehr",onclick:e=>{e.stopPropagation();domMenue(e.clientX,e.clientY,r);}},"⋯"));
-      k.oncontextmenu=e=>{e.preventDefault();e.stopPropagation();domMenue(e.clientX,e.clientY,r);};
-      k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
-      fr.append(k);if(r.leer)fr.append(h("div",{class:"gr-leer"},"Leere Domäne — ＋ legt den ersten Baustein an"));
-      ebene.append(fr);aus.x2=Math.max(aus.x2,r.x2);aus.y2=Math.max(aus.y2,r.y2);});
-    akt.forEach(a=>{FRGEO.set(a.dom+"|"+a.akt,a);ebene.append(akteurRahmen(a,STK.get(a.dom+"|"+a.akt)));aus.x2=Math.max(aus.x2,a.x2);aus.y2=Math.max(aus.y2,a.y2);});
-    spalten.forEach(c=>{
-      const el=h("div",{class:"gspalte"+(c.role==="insel"?" insel":"")});const r=c.r;
-      Object.assign(el.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});
-      const ORD=Object.keys(NODELABEL),ix=k=>{const i=ORD.indexOf(k.replace(/^handle:.*/,"handle"));return i<0?99:i;};
-      const kinds=[...c.kinds].sort((x,y)=>ix(x)-ix(y)),haupt=kinds[0]||"rumpf";
-      const titel=c.role==="insel"?"⚠ Inseln":c.role==="code"?"📝 Code":[...new Set(kinds.map(spaltenName))].join(" · ");
-      const neu=spaltenNeu(c);
-      const k=h("div",{class:"gspalte-k",title:titel+" — "+(c.blk===AKTEUR_KEY?"👤 Akteur-Band · ":c.blk&&c.blk!==SHARED_KEY?"Aggregat "+c.blk+" · ":"")+domLabel(c.dom)},
-        h("i",{class:"kc-"+(haupt.startsWith("handle:")?"handle":haupt)}),h("span",{class:"gs-t"},titel),h("span",{class:"gs-z"},String(c.ids.length)),
-        neu.length?h("button",{title:"In dieser Spalte anlegen",onclick:e=>{e.stopPropagation();
-          if(neu.length===1)spalteAnlegen(c,neu[0]);else menue(e.clientX,e.clientY,titel,neu.map(kk=>({t:"＋ "+(NODELABEL[kk]||kk),fn:()=>spalteAnlegen(c,kk)})));}},"＋"):null,
-        h("button",{title:"Spalte markieren (Fokus)",onclick:e=>{e.stopPropagation();fokussiere("menge",new Set(c.ids),"Spalte "+titel);}},"◎"));
-      k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
-      el.append(k);ebene.append(el);});
-    return aus;}
-  // Ein Akteur-Rahmen (Domäne × Akteur, docs/konzept-akteure.md §8): Kopf = Akteur (Klick → sein Panel) · Domäne · Zahl · „↥ auch“ (Doppelungen,
-  //   die in einem früheren Akteur-Rahmen stehen) · ＋ (für diesen Akteur entwerfen) · ◎ · ⤢ · ⋯ (Reihenfolge).
-  function akteurRahmen(a,stecker){const ohne=a.akt===OHNE_AKT,ak=!ohne&&MODEL.akteure.find(x=>x.name===a.akt),
-    r={x1:a.x1,y1:a.y1,x2:a.x2,y2:a.y2};
-    const fr=h("div",{class:"grahmen akt"+(ohne?" ohne":"")+(a.leer?" leer":"")+(ak&&!akteurDirektIn(ak,a.dom)?" kette":"")});
-    fr.dataset.ns=a.dom;fr.dataset.akt=a.akt;
-    Object.assign(fr.style,{left:a.x1+"px",top:a.y1+"px",width:(a.x2-a.x1)+"px",height:(a.y2-a.y1)+"px"});
-    fr.style.setProperty("--dc",ohne?"#d0584f":"hsl("+domHue("akt:"+a.akt)+" 55% 64%)");
-    const auch=ohne?[]:auchWoanders(a.akt,a.dom);
-    const k=h("div",{class:"grahmen-k akt-k",title:(ohne?"Bausteine ohne Akteur — kein IDarf und keine Kette (GR-HERKUNFT)":
-        a.akt+" in "+a.dom+(ak&&!akteurDirektIn(ak,a.dom)?" — wirkt hier nur über die Kette":""))},
-      h("span",{class:"gr-t akt-n",onclick:e=>{e.stopPropagation();if(ak)waehle("akt:"+ak._id);}},ohne?"⚠ ohne Akteur":"👤 "+a.akt),
-      auch.length?h("span",{class:"akt-auch",title:"Gehört auch "+a.akt+", steht aber im Rahmen eines früheren Akteurs (Doppelungen dort, wo sie zuerst auftreten)"},
-        "↥ auch: ",...auch.slice(0,6).map(([n,wo])=>h("button",{class:"akt-ref",title:n.name+" — steht bei "+wo,onclick:e=>{e.stopPropagation();zeigeKnoten(n.id);}},n.name)),
-        auch.length>6?h("span",{class:"gr-z"}," +"+(auch.length-6)):null):null,
-      h("span",{class:"gr-z"},a.leer?"alles schon weiter oben":bausteine(a.ids.length)),
-      steckerZeile(stecker,[a.dom+"|"+a.akt,"§vertrag:"+a.akt]),
-      ak?h("button",{title:"Für "+a.akt+" entwerfen: neuer Command / neue Query / neuer Trigger — "+a.akt+" darf ihn sofort (IDarf)",
-        onclick:e=>{e.stopPropagation();menue(e.clientX,e.clientY,"＋ für "+a.akt,["command","query"].map(kk=>({t:"＋ "+(NODELABEL[kk]||kk),fn:()=>fuerAkteurAnlegen(a,kk)})));}},"＋"):null,
-      h("button",{title:"Rahmen markieren (Fokus)",onclick:e=>{e.stopPropagation();fokussiere("menge",new Set(a.ids),(ohne?"ohne Akteur":a.akt)+" in "+domLabel(a.dom));}},"◎"),
-      h("button",{title:"Rahmen einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"),
-      !ohne?h("button",{title:"Reihenfolge der Akteur-Rahmen",onclick:e=>{e.stopPropagation();akteurRahmenMenue(e.clientX,e.clientY,a);}},"⋯"):null);
-    k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
-    fr.append(k);return fr;}
-  // 🔌 Stecker-Zeile im Rahmen-Kopf: welche Clients an diesem Rahmen stecken (Klick = Client wählen, seine Leitung hierher auffächern).
-  function steckerZeile(cs,keys){if(!cs||!cs.length)return null;
-    return h("span",{class:"cl-stecker",title:"Clients, deren Leitung an diesem Rahmen steckt (docs/konzept-akteure.md §4)"},"🔌 ",
-      ...cs.map(c=>h("button",{class:"akt-ref",title:"Client "+clientAnzeige(c)+" — Klick: seine Leitung hierher auffächern",
-        onclick:e=>{e.stopPropagation();auffaechern(c,{keys});}},clientAnzeige(c))));}
-  // 🔌 Der Rahmen eines Clients (Außenwelt): Kopf = Name (Handshake) · verkörperte Akteure · generierte Basis · ◎ · ⤢. Innen die Karte
-  //   = die Anschlussleiste. Gestrichelt umrandet: der Client ist Software draußen, nicht Domäne.
-  function clientRahmen(r){const c=MODEL.clients.find(x=>CL_PRE+x.name===r.ns),fr=h("div",{class:"grahmen client"});fr.dataset.ns=r.ns;
-    Object.assign(fr.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});
-    fr.style.setProperty("--dc","hsl("+domHue(r.ns)+" 60% 62%)");
-    const akt=c?clientAkteure(c):[];
-    const k=h("div",{class:"grahmen-k",title:c?"public interface "+c.name+" : IClientVertrag, … — Handshake „"+clientAnzeige(c)+"“, Python-Basis "+clientAnzeige(c)+"Basis (domain_client/generated/vertraege.py)":""},
-      h("span",{class:"gr-t akt-n",onclick:e=>{e.stopPropagation();if(c)waehle("cl:"+c._id);}},domLabel(r.ns)),
-      h("span",{class:"gr-p"},akt.length?"verkörpert "+akt.map(n=>"👤 "+n).join(", "):"verkörpert noch keinen Akteur"),
-      c?h("button",{title:"Client markieren (Slice)",onclick:e=>{e.stopPropagation();waehle("cl:"+c._id);}},"◎"):null,
-      h("button",{title:"Client einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"));
-    k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};fr.append(k);return fr;}
-  // Gibt der Akteur in dieser Domäne direkt etwas hinein (IDarf) — oder wirkt er hier nur über eine Kette?
-  function akteurDirektIn(ak,dom){return (ak.darf||[]).some(nm=>{const n=NODEBY.get("rec:"+nm);return n&&domKey(n)===dom;});}
-  // Doppelungen: Bausteine dieser Domäne, die auch dem Akteur gehören, aber im Rahmen eines früheren Akteurs stehen.
-  function auchWoanders(name,dom){const r=[];const ART=["command","query","event","rejection","aggregate","reader","projektion","handle","store","readmodel","queryresponse"];
-    NODEBY.forEach(n=>{if(!VIS.has(n.id)||!ART.includes(n.kind)||domKey(n)!==dom||!akteurSet(n).has(name))return;const wo=akteurVon(n);if(wo!==name)r.push([n,wo]);});
-    return r.sort((x,y)=>ART.indexOf(x[0].kind)-ART.indexOf(y[0].kind)||x[0].name.localeCompare(y[0].name));}
+    ebene.textContent="";FRGEO=new Map();return flRahmen(ebene);}
   // Wie zeigeKnoten — liegt der Knoten in einer nicht geladenen Domäne, wird sie erst dazugeladen.
   function zeigeLadend(id){const n=NODEBY.get(id),ns=n&&nsVon(n);
     if(n&&LADEN&&!geladen(n)&&ns){LADEN=LADEN.concat([ns]);VIEW.geladen=LADEN;speichereAnsicht();render();setTimeout(()=>zeigeKnoten(id),0);return;}
     zeigeKnoten(id);}
   function zeigeKnoten(id){const g=GEO.get(id);if(g)einpassenRahmen({x1:g.x-260,y1:g.y-160,x2:g.x+g.w+260,y2:g.y+g.h+160});waehle(id);}
-  // ＋ im Akteur-Rahmen: der neue Eingang gehört sofort diesem Akteur (IDarf) — Entwerfen „für wen".
-  function fuerAkteurAnlegen(a,kind){const ag=MODEL.aggregate.find(x=>x.namespace===a.dom);
-    neuerKnoten(kind,undefined,undefined,{ns:a.dom===OHNE_DOM?null:a.dom,agg:ag&&ag.name,blk:ag?ag.name:SHARED_KEY,akt:a.akt});}
-  function akteurRahmenMenue(cx,cy,a){const ord=akteurOrdnung(a.dom),i=ord.indexOf(a.akt),ak=MODEL.akteure.find(x=>x.name===a.akt);
-    const setze=neu=>{VIEW.akteurOrdnung={...(VIEW.akteurOrdnung||{}),[a.dom]:neu};speichereAnsicht();render();};
-    menue(cx,cy,a.akt+" · "+domLabel(a.dom),[
-      {t:"↑ weiter nach oben",aus:i<=0,title:"Geteilte Bausteine wandern mit zum neuen Ersten",fn:()=>{const o=[...ord];o.splice(i-1,0,o.splice(i,1)[0]);setze(o);}},
-      {t:"↓ weiter nach unten",aus:i<0||i>=ord.length-1,fn:()=>{const o=[...ord];o.splice(i+1,0,o.splice(i,1)[0]);setze(o);}},
-      {t:"↺ abgeleitete Reihenfolge",aus:!((VIEW.akteurOrdnung||{})[a.dom]),title:"Ersteller → wer worauf reagiert → Art → Name",
-        fn:()=>{const v={...(VIEW.akteurOrdnung||{})};delete v[a.dom];VIEW.akteurOrdnung=v;speichereAnsicht();render();}},
-      {trenn:true},
-      {t:"👤 Akteur öffnen",aus:!ak,fn:()=>waehle("akt:"+ak._id)}]);}
-  // Spalten-Kopf: Name je Art; ＋ legt eine Art dieser Rolle an (Handles/Store-Fns entstehen am Besitzer, nicht frei).
-  const spaltenName=k=>k==="handle:projektion"?"Projektion-Handle":k==="handle:reader"?"Reader-Handle":k==="ergebnis"?"Ergebnis ƒ":NODELABEL[k]||k;
-  const NICHT_FREI=new Set(["fn","handle","auf","ergebnis"]);
-  function spaltenNeu(c){if(c.role==="insel"||c.role==="code")return [];
-    const map=rollenVon(c.blk);
-    return Object.keys(map).filter(k=>map[k]===c.role&&!k.includes(":")&&!NICHT_FREI.has(k));}
-  function spalteAnlegen(c,kind){if(regionArt(c.dom)){const k=regionKontext(c.dom);
-      neuerKnoten(kind,undefined,undefined,{ns:k.ns,agg:k.agg,reg:c.dom,blk:c.blk||SHARED_KEY});return;}
-    const agg=c.blk&&c.blk!==SHARED_KEY&&c.blk!==AKTEUR_KEY?c.blk:(MODEL.aggregate.find(a=>a.namespace===c.dom)||{}).name;
-    neuerKnoten(kind,undefined,undefined,{ns:c.dom===OHNE_DOM?null:c.dom,agg,blk:c.blk||SHARED_KEY});}
   function einpassenRahmen(r){if(!CV.w)return;const w=r.x2-r.x1,hh=r.y2-r.y1,s=Math.max(0.08,Math.min(1,(CV.w-80)/w,(CV.h-80)/hh));
     PAN.s=s;PAN.x=CV.w/2-(r.x1+w/2)*s;PAN.y=CV.h/2-(r.y1+hh/2)*s;applyPan();}
 
@@ -2653,70 +2011,159 @@
     ["pointerdown","dblclick","wheel","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
     canvas.append(m);m.style.left=Math.max(4,Math.min(cx-r.left,r.width-m.offsetWidth-8))+"px";m.style.top=Math.max(4,Math.min(cy-r.top,r.height-m.offsetHeight-8))+"px";
     inp.focus();inp.select();}
-  const NS_SEG=/^[\p{L}_][\p{L}\p{N}_]*$/u;
-  function neueDomaene(cx,cy,eltern){const wurzel=eltern||domWurzel();
-    frage(cx,cy,eltern?"＋ Unterdomäne in „"+letztesSeg(eltern)+"“":"＋ Neue Domäne","Bestellung",
-      "Namespace: "+(wurzel?wurzel+".":"")+"<Name> — Punkte = tiefer schachteln",name=>{
-        if(!name)return "Name fehlt";
-        if(!name.split(".").every(s=>NS_SEG.test(s)))return "Nur Buchstaben, Ziffern, _ (je Segment, nicht mit Ziffer beginnen)";
-        const ns=(wurzel?wurzel+".":"")+name;
-        if(graphNodes().some(n=>nsVon(n)===ns)||(VIEW.domNeu||[]).includes(ns))return "„"+name+"“ gibt es schon";
-        VIEW.domNeu=[...(VIEW.domNeu||[]),ns];
-        if(LADEN&&!LADEN.some(g=>drinNs(g,ns))){LADEN=LADEN.concat([ns]);VIEW.geladen=LADEN;}
-        speichereAnsicht();render();
-        requestAnimationFrame(()=>{const fr=world&&[...world.querySelectorAll(".grahmen")].find(d=>d.dataset.ns===ns);
-          if(fr)einpassenRahmen({x1:fr.offsetLeft,y1:fr.offsetTop,x2:fr.offsetLeft+fr.offsetWidth,y2:fr.offsetTop+fr.offsetHeight});});
-        deFlash("＋ Domäne "+ns,true);return null;});}
-  // ＋ in der Menüleiste: Baustein IN dieser Domäne (Namespace; Decider/Applier/State ans Aggregat, Regel an den Prozess der Domäne).
-  const BAU_GRUPPEN=[["Außen",["akteur","client"]],["Schreibseite",["command","event","rejection","aggregate","state","decider","applier"]],
-    ["Typen",["valueobject","enum","konfig"]],["Rechnen",["graph","funktion","quelle","gerufen"]],
-    ["Leseseite",["readmodel","store","projektion","query","queryresponse","reader"]]];
-  // ＋ IN EINER REGION (Hierarchie): was man hier anlegt, gehört dem Block — die Geste schreibt das Signatur-Fakt, aus dem der Besitz folgt.
-  //   Aggregat: Command (zielt auf es) und je Decide ein Event bzw. eine Ablehnung (das Decide gibt sie aus). Rand: Akteur, Client, Quelle.
-  //   Begriffe: Wertobjekt, Enum, Konfig. Sicht: Read Model, Projektion, Reader, Query. Funktion: Konfig (ihr Konstruktor nimmt sie), gerufene Funktion.
-  function regionKontext(ns){const karte=istRegionKarte(ns)?NODEBY.get(ns):null;
-    return {karte,ns:karte?nsVon(karte)||defaultNsGlobal():defaultNsGlobal(),agg:ns.startsWith("agg:")&&karte?karte.name:"",reg:ns};}
-  function regionMenue(cx,cy,ns){const c=regionKontext(ns),art=regionArt(ns);
-    const neu=(k,extra,t)=>({t:t||"＋ "+(NODELABEL[k]||k),fn:()=>neuerKnoten(k,undefined,undefined,{ns:c.ns,agg:c.agg,reg:ns,...(extra||{})})});
-    let it=[];
-    if(art==="Aggregat"){it.push({kopf:"Eingang"},neu("command",null,"＋ Command an "+c.agg));
-      const dec=MODEL.decider.filter(d=>d.aggregat===c.agg&&d.command);
-      it.push({kopf:"Ausgang eines Decide"});
-      if(!dec.length)it.push({t:"— erst ein Command mit Decide",aus:true});
-      dec.forEach(d=>{it.push(neu("event",{ausDecide:d._id},"＋ Event aus Decide("+d.command+")"),neu("rejection",{ausDecide:d._id},"＋ Ablehnung aus Decide("+d.command+")"));});}
-    else if(art==="Rand")it.push(neu("akteur"),neu("client"),neu("quelle"));
-    else if(art==="Begriffe")it.push(neu("valueobject"),neu("enum"),neu("konfig"));
-    else if(art==="Sicht")it.push(neu("readmodel"),neu("projektion"),neu("reader"),neu("query"));
-    else if(art==="Funktion")it.push(neu("konfig"),neu("gerufen"));
-    menue(cx,cy,"＋ in "+domLabel(ns),it);}
-  function bausteinMenue(cx,cy,ns){if(regionArt(ns))return regionMenue(cx,cy,ns);const agg=MODEL.aggregate.find(a=>a.namespace===ns);
-    const it=[];BAU_GRUPPEN.forEach(([g,ks])=>{it.push({kopf:g});ks.forEach(k=>it.push({t:"＋ "+(NODELABEL[k]||k),
-      fn:()=>neuerKnoten(k,undefined,undefined,{ns:ns===OHNE_DOM?null:ns,agg:agg&&agg.name})}));});
-    menue(cx,cy,"＋ in "+domLabel(ns),it);}
-  function domMenue(cx,cy,r){const neu=(VIEW.domNeu||[]).includes(r.ns);
-    menue(cx,cy,r.ns===OHNE_DOM?domLabel(r.ns):r.ns,[
-      {t:"＋ Baustein…",fn:()=>bausteinMenue(cx,cy,r.ns)},
-      r.ns!==OHNE_DOM?{t:"＋ Unterdomäne…",fn:()=>neueDomaene(cx,cy,r.ns)}:null,
-      {t:"⤢ Einpassen",fn:()=>einpassenRahmen(r)},
-      r.alleIds.length?{t:"◎ Fokus: alle Bausteine markieren",fn:()=>fokussiere("menge",new Set(r.alleIds),"Domäne "+domLabel(r.ns))}:null,
-      neu?{trenn:1}:null,
-      neu?{t:"✕ Leere Domäne entfernen",gefahr:1,aus:!r.leer,title:r.leer?"":"Erst die Bausteine löschen — eine Domäne mit Inhalt entsteht aus dem Code",
-        fn:()=>{VIEW.domNeu=(VIEW.domNeu||[]).filter(x=>x!==r.ns);speichereAnsicht();render();}}:null]);}
-  // Rechtsklick auf die leere Fläche: neue Domäne.
-  function flaechenMenue(e){e.preventDefault();menue(e.clientX,e.clientY,"Fläche",[{t:"＋ Neue Domäne…",fn:()=>neueDomaene(e.clientX,e.clientY,null)}]);}
-
   // Ansichts-Leiste über der Fläche.
   function ansichtLeiste(){
     const btn=(lbl,on,title,fn)=>h("button",{class:on?"on":"",title,onclick:fn},lbl);
     return h("div",{class:"gview"},
       h("b",{style:"color:#cbd3e1"},"Ansicht"),
-      btn("＋ Domäne",false,"Neue Domäne (Namespace) anlegen — Rechtsklick auf die Fläche geht auch",e=>neueDomaene(e.clientX,e.clientY+20,null)),
       h("button",{title:"Geladene Domänen ändern",onclick:()=>deLaden()},"📂 "+(LADEN===null?"alles geladen":!LADEN.length?"leer":LADEN.map(letztesSeg).join(", "))),
-      btn("⤢ Alles zeigen",false,"Ganzes Board einpassen",()=>passeEin([...VIS],1)),
+      btn("⤢ Alles zeigen",false,"Ganze Fläche einpassen",()=>passeEin(flKarten().map(k=>k.id),1)),
+      btn("🖥 Umgebung ▾",false,"Umgebung und Instanzen im Panel öffnen",e=>menue(e.clientX,e.clientY+20,"Umgebung "+(WB.umgName||""),
+        hostKnoten().map(n=>({t:n.name,fn:()=>waehle(n.id)})))),
       h("span",{id:"gfokus",class:"gfokus",style:"display:none"}),
       btn("👁 Ausblenden"+((VIEW.aus||[]).length?" ("+VIEW.aus.length+")":"")+" ▾",FILTER_OPEN,"Knotenarten und Domänen ein-/ausblenden",()=>{FILTER_OPEN=!FILTER_OPEN;render();}),
-      h("span",{style:"margin-left:8px"},"Karte antippen = Panel · ⊕ im Panel = passende Knoten leuchten, anklicken = verbinden/lösen · Esc = fertig · Kopf ziehen = verschieben"));}
+      h("span",{style:"margin-left:8px"},"Karte antippen = Panel · Port antippen = Typ im Panel · Esc = fertig · Fläche ziehen = verschieben"));}
 
+  // ══ FLÄCHE IN SECHS SPALTEN (docs/konzept-editor-spalten.md): was Akteure hineingeben · Quellen · Graphen · Aggregate · Projektionen · was zu
+  //   Akteuren kommt. Karten, Ports, Bänder und Kanten rechnet der Server (board.sicht.flaeche); hier nur Anordnung und Zeichnen. Eine Karte der
+  //   Fläche öffnet im Panel die Karte der Sicht dahinter, ein Port den Typ seiner Nachricht.
+  const FL_SPALTE={ausgang:{t:"Client-Ausgang",u:"was Akteure hineingeben (darf)",neu:["akteur","client"]},quellen:{t:"Quellen",u:"lauschen am Kopf eines Graphen",neu:["quelle"]},
+    graphen:{t:"Graphen",u:"rechnen vor dem Aggregat",neu:["graph"]},aggregate:{t:"Aggregate",u:"entscheiden, schreiben das Log",neu:["aggregate"]},
+    projektionen:{t:"Projektionen",u:"Sichten je Store",neu:["projektion"]},eingang:{t:"Client-Eingang",u:"was zu Akteuren kommt (hört)",neu:["akteur"]}};
+  const FL_SYM={akteur:"👤",quelle:"⚡",graph:"⬡",aggregate:"▣",projektion:"⇶",reader:"⌕"};
+  const FL_SORTE={command:"",event:"",hinweis:"✉ ",query:"? ",antwort:"↩ ",frist:"⏱ "};
+  // Kantenarten: Farbe, Strich, leise (tritt zurück, bis eine ihrer Karten gewählt ist).
+  const FL_KANTE={schreiben:{c:"#9aa6bb"},quelle:{c:"#9aa6bb"},lesen:{c:"#7aa2e0",d:"2 4",leise:1},kenntnis:{c:"#8a8f9c",d:"6 4",leise:1},
+    arbeit:{c:"#4fb06a"},ruecklauf:{c:"#e08a3c",d:"8 5"},liest:{c:"#a07ad6",d:"1 4",leise:1}};
+  const FL_LEER={spalten:["ausgang","quellen","graphen","aggregate","projektionen","eingang"],baender:[],gruppen:[],karten:[],kanten:[]};
+  const FL=()=>SICHT().flaeche||FL_LEER;
+  const FL_KOPF=96, FL_BAND_PAD=30, FL_GAP_Y=16, FL_GR_KOPF=22, FL_GR_PAD=10;
+  let FLGEO={spalten:{},baender:[],gruppen:new Map()}, FLKARTE=new Map();
+  // Die Panel-Karte einer Flächen-Karte: die Karte der Sicht dahinter; eine Katalog-Quelle öffnet ihren Graphen.
+  function flPanelId(fk){if(fk.karte)return fk.karte;const k=FL().kanten.find(x=>x.von===fk.id&&x.art==="quelle");return k?k.nach:null;}
+  // Der Graph einer Quelle bzw. ein Graph selbst (Name) — für seine Instanzen.
+  function flGraphName(fk){if(fk.art==="graph")return fk.name;if(fk.art!=="quelle")return null;
+    const k=FL().kanten.find(x=>x.von===fk.id&&x.art==="quelle"),g=k&&FLKARTE.get(k.nach);return g?g.name:null;}
+  // Was gezeigt wird: die geladenen Domänen (Start-Dialog) — Akteure immer, sonst nach der Panel-Karte.
+  function flSichtbar(fk){if(fk.art==="akteur"||LADEN===null)return true;const n=NODEBY.get(flPanelId(fk)||"");return !n||geladen(n);}
+  function flKarten(){return FL().karten.filter(flSichtbar);}
+  function flKarteEl(fk){
+    const pid=flPanelId(fk),n=pid?NODEBY.get(pid):null;
+    const dg=n?diagFuer(n.id):[],nurWarn=dg.length>0&&dg.every(x=>x.art==="warnung");
+    const el=h("div",{class:"gnode2 fk fk-"+fk.art+" n-"+(fk.art==="quelle"?"funktion":fk.art)+(dg.length?(nurWarn?" diagwarn":" diag"):"")});
+    el.dataset.id=fk.id;el.dataset.karte=pid||"";
+    const loeschbar=n&&fk.art!=="quelle"&&fk.spalte!=="eingang";
+    const head=h("div",{class:"ghead"},
+      h("span",{class:"gtitle hatname",title:(NODELABEL[n?n.kind:fk.art]||fk.art)+" · "+fk.name+(pid?" — Klick: Panel":"")},
+        h("span",{class:"gk"},(FL_SYM[fk.art]||"")+" "),h("span",{class:"gn"},fk.name)),
+      dg.length?h("span",{class:"gdiag"+(nurWarn?" warn":""),title:dg.map(d=>d.text).join("\n")},(nurWarn?"⚠ ":"⛔ ")+dg.length):null,
+      loeschbar?h("span",{class:"gx",title:"Löschen",onclick:e=>{e.stopPropagation();delNode(n);}},"✕"):null);
+    el.onclick=e=>{if(e.target.classList.contains("gx")||e.target.closest(".fk-port,.fk-chip"))return;e.stopPropagation();if(pid)waehle(pid);};
+    el.append(head);
+    // Instanzen (graphen/<instanz>.json) an Graph und Quelle — Klick öffnet die Instanz im Panel.
+    const gname=flGraphName(fk);
+    if(gname){const inst=Object.keys(WB.instanzen||{}).filter(i=>((WB.instanzen[i]||{}).Graph||"")===gname).sort();
+      if(inst.length)el.append(h("div",{class:"fk-chips"},...inst.map(i=>h("button",{class:"fk-chip",title:"Instanz "+i+" — Klick: Panel",
+        onclick:e=>{e.stopPropagation();waehle("host:inst:"+i);}},"⬡ "+i))));}
+    const ports=h("div",{class:"fk-ports"});
+    const zeile=p=>{const rid="rec:"+String(p.typ).split("<")[0],hat=NODEBY.has(rid);
+      const r=h("div",{class:"fk-port "+p.richtung+" s-"+p.sorte+(p.eigen?" eigen":""),
+        title:(p.eigen?"deklariert hier · ":"")+p.sorte+" "+p.typ+(hat?" — Klick: Typ im Panel":""),
+        onclick:e=>{e.stopPropagation();if(hat)waehle(rid);}},
+        h("span",{class:"fk-dot"}),h("span",{class:"fk-pl"},(FL_SORTE[p.sorte]||"")+p.typ));
+      r.dataset.port=p.richtung+"|"+p.typ;return r;};
+    fk.ports.filter(p=>p.richtung==="ein").forEach(p=>ports.append(zeile(p)));
+    fk.ports.filter(p=>p.richtung==="aus").forEach(p=>ports.append(zeile(p)));
+    if(fk.ports.length)el.append(ports);
+    return el;
+  }
+  // Anordnung: Spalten nebeneinander (Breite = breiteste Karte), Domänen als Bänder über Quellen bis Projektionen, die Akteure links und rechts
+  //   über die ganze Höhe, Projektionen und Reader je Store gruppiert. In jeder Zelle rücken Karten zur mittleren Höhe ihrer Nachbarn (zwei Durchgänge).
+  function packSpalten(){
+    if(!world)return;
+    const ks=flKarten(),els=new Map([...world.querySelectorAll(".gnode2.fk")].map(e=>[e.dataset.id,e]));
+    const sz=id=>{const e=els.get(id);return {w:e?e.offsetWidth:240,h:e?e.offsetHeight:80};};
+    const SP=FL().spalten,GAP_X=150;
+    FLGEO={spalten:{},baender:[],gruppen:new Map()};
+    let x=0;SP.forEach(s=>{const w=Math.max(230,...ks.filter(k=>k.spalte===s).map(k=>sz(k.id).w));FLGEO.spalten[s]={x,w};x+=w+GAP_X;});
+    const nb=new Map(),dazu=(a,b)=>{let l=nb.get(a);if(!l)nb.set(a,l=[]);l.push(b);};
+    FL().kanten.forEach(k=>{dazu(k.von,k.nach);dazu(k.nach,k.von);});
+    const baender=FL().baender.map(b=>b.id).filter(b=>ks.some(k=>k.band===b));
+    if(ks.some(k=>k.band==null&&k.art!=="akteur"))baender.push(null);
+    const zellen=new Map(),zk=(b,s)=>(s==="ausgang"||s==="eingang"?"§akt":String(b))+"|"+s;
+    ks.forEach(k=>{const key=zk(k.band,k.spalte);let l=zellen.get(key);if(!l)zellen.set(key,l=[]);l.push(k);});
+    const Y=new Map(),setze=(k,x,y)=>{const e=els.get(k.id);if(e){e.style.left=x+"px";e.style.top=y+"px";}Y.set(k.id,y+sz(k.id).h/2);};
+    const MITTE=["quellen","graphen","aggregate","projektionen"];
+    const lege=()=>{let y=FL_KOPF;FLGEO.baender=[];FLGEO.gruppen=new Map();
+      baender.forEach(b=>{const y0=y;let hmax=0;
+        MITTE.forEach(s=>{let cy=y0+FL_BAND_PAD;const zelle=zellen.get(zk(b,s))||[],sx=FLGEO.spalten[s].x;
+          if(s!=="projektionen")zelle.forEach(k=>{setze(k,sx,cy);cy+=sz(k.id).h+FL_GAP_Y;});
+          else{const gr=[];zelle.forEach(k=>{const g=k.gruppe||"§"+k.id;if(!gr.includes(g))gr.push(g);});
+            gr.forEach(g=>{const drin=zelle.filter(k=>(k.gruppe||"§"+k.id)===g),mit=!g.startsWith("§");const gy=cy;if(mit)cy+=FL_GR_KOPF;
+              drin.forEach(k=>{setze(k,sx+(mit?FL_GR_PAD:0),cy);cy+=sz(k.id).h+FL_GAP_Y;});
+              if(mit){FLGEO.gruppen.set(g,{x1:sx-FL_GR_PAD,y1:gy,x2:sx+FLGEO.spalten[s].w+3*FL_GR_PAD,y2:cy-FL_GAP_Y+FL_GR_PAD});cy+=FL_GR_PAD+FL_GAP_Y;}});}
+          hmax=Math.max(hmax,cy-y0);});
+        const hg=Math.max(hmax+FL_BAND_PAD-FL_GAP_Y,140);FLGEO.baender.push({id:b,y:y0,h:hg});y+=hg+44;});
+      ["ausgang","eingang"].forEach(s=>{let cy=FL_KOPF+FL_BAND_PAD;(zellen.get(zk(null,s))||[]).forEach(k=>{setze(k,FLGEO.spalten[s].x,cy);cy+=sz(k.id).h+FL_GAP_Y;});});};
+    lege();
+    // Reihenfolge je Zelle (bei Projektionen je Store-Gruppe): zur mittleren Höhe der Nachbarn in anderen Zellen.
+    for(let i=0;i<2;i++){
+      zellen.forEach(l=>{const w=new Map(l.map(k=>{const ys=(nb.get(k.id)||[]).filter(o=>Y.has(o)&&FLKARTE.get(o)&&FLKARTE.get(o).spalte!==k.spalte).map(o=>Y.get(o));
+          return [k.id,ys.length?ys.reduce((a,b)=>a+b,0)/ys.length:Y.get(k.id)];}));
+        const gw=new Map();l.forEach(k=>{const g=k.gruppe||"§"+k.id;gw.set(g,Math.min(gw.has(g)?gw.get(g):1e9,w.get(k.id)));});
+        l.sort((a,b)=>gw.get(a.gruppe||"§"+a.id)-gw.get(b.gruppe||"§"+b.id)||w.get(a.id)-w.get(b.id));});
+      lege();}
+  }
+  // Rahmen der Fläche: Spaltenköpfe (mit ＋ und den Clients), Bänder der Domänen, Store-Gruppen.
+  function flRahmen(ebene){const aus={x2:0,y2:0};
+    FL().spalten.forEach(s=>{const g=FLGEO.spalten[s];if(!g)return;const d=FL_SPALTE[s];
+      const neu=e=>{e.stopPropagation();if(d.neu.length===1)neuerKnoten(d.neu[0]);else menue(e.clientX,e.clientY,d.t,d.neu.map(k=>({t:"＋ "+(NODELABEL[k]||k),fn:()=>neuerKnoten(k)})));};
+      const k=h("div",{class:"fl-kopf"},h("div",{},h("b",{},d.t),h("button",{title:"Neu in dieser Spalte",onclick:neu},"＋")),h("div",{class:"fl-u"},d.u),
+        s==="ausgang"&&MODEL.clients.length?h("div",{class:"fk-chips"},...MODEL.clients.map(c=>h("button",{class:"fk-chip",title:"Client "+c.name+" verkörpert "+(c.verkoerpert||[]).join(", ")+" — Klick: Panel",
+          onclick:e=>{e.stopPropagation();waehle("cl:"+c._id);}},"🔌 "+clientAnzeige(c)))):null);
+      Object.assign(k.style,{left:g.x+"px",top:"0px",width:g.w+"px"});ebene.append(k);aus.x2=Math.max(aus.x2,g.x+g.w);});
+    const sq=FLGEO.spalten.quellen,sp=FLGEO.spalten.projektionen;
+    if(sq&&sp)FLGEO.baender.forEach(b=>{const x1=sq.x-40,x2=sp.x+sp.w+40,name=b.id?(FL().baender.find(x=>x.id===b.id)||{}).name||b.id:"ohne Domäne";
+      const fr=h("div",{class:"fl-band"},h("span",{class:"fl-band-t",title:b.id||""},name));fr.style.setProperty("--dc","hsl("+domHue(b.id||"§")+" 45% 55%)");
+      Object.assign(fr.style,{left:x1+"px",top:b.y+"px",width:(x2-x1)+"px",height:b.h+"px"});ebene.append(fr);aus.y2=Math.max(aus.y2,b.y+b.h);});
+    FLGEO.gruppen.forEach((r,id)=>{const g=FL().gruppen.find(x=>x.id===id)||{name:id};
+      const fr=h("div",{class:"fl-gruppe"},h("span",{class:"fl-gruppe-t",title:"Store "+g.name+" — Klick: Panel",onclick:e=>{e.stopPropagation();waehle(id);}},"Store "+g.name));
+      Object.assign(fr.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});ebene.append(fr);});
+    return aus;}
+  // Der Fokus auf der Fläche: bei gewählter Karte sie und ihre Nachbarn über die Kanten (bei einem gewählten Typ nur dessen Kanten); sonst
+  //   (markierte Menge, Spur) die Karten, deren Panel-Karte im Fokus liegt.
+  function flFokus(){if(!FOCUS)return null;const K=flKarten(),karten=new Set(),kanten=new Set();
+    if(FOKUS&&FOKUS.art==="kette"&&SEL){const typ=SEL.startsWith("rec:")?SEL.slice(4):null;
+      const sel=new Set(K.filter(k=>flPanelId(k)===SEL||(typ&&k.ports.some(p=>String(p.typ).split("<")[0]===typ))).map(k=>k.id));
+      sel.forEach(i=>karten.add(i));
+      FL().kanten.forEach((k,i)=>{if(!(sel.has(k.von)||sel.has(k.nach)))return;if(typ&&String(k.typ).split("<")[0]!==typ)return;karten.add(k.von);karten.add(k.nach);kanten.add(i);});
+      return {karten,kanten};}
+    K.forEach(k=>{if(FOCUS.has(flPanelId(k)||""))karten.add(k.id);});
+    FL().kanten.forEach((k,i)=>{if(karten.has(k.von)&&karten.has(k.nach))kanten.add(i);});
+    return {karten,kanten};}
+  // Kanten von Port zu Port. Vorwärts direkt (über mehr als eine Spalte durch die Gasse oben im Band), Rücklauf unten durch das Band zurück,
+  //   „liest“ vom Graphen zur Store-Gruppe.
+  function flKanten(frag){
+    const ELS=new Map([...world.querySelectorAll(".gnode2.fk")].map(e=>[e.dataset.id,e])),SP=FL().spalten;
+    const punkt=(id,ri,typ)=>{const e=ELS.get(id);if(!e)return null;const p=e.querySelector('[data-port="'+CSS.escape(ri+"|"+typ)+'"]');
+      return {x:e.offsetLeft+(ri==="aus"?e.offsetWidth:0),y:e.offsetTop+(p?p.offsetTop+p.offsetHeight/2:14)};};
+    const band=id=>{const k=FLKARTE.get(id);return k&&k.band!==undefined?FLGEO.baender.find(b=>b.id===(k.band||null)):null;};
+    const ix=id=>{const k=FLKARTE.get(id);return k?SP.indexOf(k.spalte):-1;};
+    FL().kanten.forEach((k,i)=>{const st=FL_KANTE[k.art]||FL_KANTE.schreiben;let d;
+      if(k.art==="liest"){const e=ELS.get(k.von),r=FLGEO.gruppen.get(k.nach);if(!e||!r)return;
+        const A={x:e.offsetLeft+e.offsetWidth/2,y:e.offsetTop+e.offsetHeight},B={x:(r.x1+r.x2)/2,y:r.y1};
+        d="M"+A.x+","+A.y+" C"+A.x+","+(A.y+120)+" "+B.x+","+(B.y-120)+" "+B.x+","+B.y;}
+      else{const A=punkt(k.von,"aus",k.typ),B=punkt(k.nach,"ein",k.typ);if(!A||!B)return;
+        const sa=ix(k.von),sb=ix(k.nach),bb=band(k.nach)||band(k.von);
+        if(sb>sa+1&&bb){const gy=bb.y+FL_BAND_PAD/2;
+          d="M"+A.x+","+A.y+" C"+(A.x+50)+","+A.y+" "+(A.x+10)+","+gy+" "+(A.x+60)+","+gy+" L"+(B.x-60)+","+gy+" C"+(B.x-10)+","+gy+" "+(B.x-50)+","+B.y+" "+B.x+","+B.y;}
+        else if(sb<sa&&bb){const gy=bb.y+bb.h-FL_BAND_PAD/2;
+          d="M"+A.x+","+A.y+" C"+(A.x+60)+","+A.y+" "+(A.x+30)+","+gy+" "+(A.x-10)+","+gy+" L"+(B.x+10)+","+gy+" C"+(B.x-30)+","+gy+" "+(B.x-60)+","+B.y+" "+B.x+","+B.y;}
+        else{const c=Math.min(160,Math.max(50,Math.abs(B.x-A.x)*0.45));
+          d="M"+A.x+","+A.y+" C"+(A.x+c)+","+A.y+" "+(B.x-c)+","+B.y+" "+B.x+","+B.y;}}
+      const p=document.createElementNS(SVGNS,"path");p.setAttribute("class","glink fl-"+k.art+(st.leise?" leise":""));p.setAttribute("fill","none");
+      p.setAttribute("stroke",st.c);p.setAttribute("stroke-width","1.8");if(st.d)p.setAttribute("stroke-dasharray",st.d);p.setAttribute("d",d);
+      p.dataset.i=i;p.dataset.a=k.von;p.dataset.b=k.nach;frag.append(p);});}
   function renderGraph(){
     const root=document.getElementById("de-form");
     const altI=root.querySelector(".ginsp");INSP_SCROLL=altI?{id:altI.dataset.sel,top:altI.scrollTop}:null;
@@ -2725,27 +2172,14 @@
     ISLE=inselMenge();       // einsame Inseln (unverbundene Knoten) — vom Server
     berechneSicht();         // sichtbar / eingeklappte Details / zusammengezogene Kanten
     if(SEL&&!NODEBY.has(SEL))SEL=null;fokusNeu();
-    const tb=(kind,label)=>h("button",{class:"add jumpable",
-      title:label.replace(/^\+\s*/,"")+" — Hover: alle hervorheben · Ctrl/Cmd+Klick: zum nächsten springen · Klick: neu",
-      onmouseenter:()=>highlightKind(kind,true),onmouseleave:()=>highlightKind(kind,false),
-      onclick:e=>{if(e.ctrlKey||e.metaKey){e.preventDefault();jumpNextOfKind(kind);}else neuerKnoten(kind);}},label);
-    root.append(h("div",{class:"gtoolbar"},
-      // Palette mit Ankern (docs/konzept-werkbank.md §8.5): etwas NEUES beginnen. Zugehöriges entsteht mit „＋" am Port bzw. im Domänen-Menü.
-      tb("aggregate","+ Aggregat"),tb("graph","+ ⬡ Graph"),tb("funktion","+ ƒ Funktion"),tb("quelle","+ 📥 Quelle"),tb("gerufen","+ ⚙ Technik"),
-      tb("akteur","+ 👤 Akteur"),tb("client","+ 🔌 Client"),tb("projektion","+ Projektion"),
-      h("button",{class:"add island-btn",style:"margin-left:auto",
-        title:"Einsame Inseln (unverbundene Knoten) — Hover: markieren · Klick: der Reihe nach anspringen",
-        onmouseenter:()=>highlightIslands(true),onmouseleave:()=>highlightIslands(false),onclick:()=>jumpIslands()},
-        (ISLE.size?"⚠ ":"✓ ")+ISLE.size+" Inseln")));
     root.append(ansichtLeiste());
     SLOTS={};SYNC={};   // Code-Sync-Registry je Render neu aufbauen (nur sichtbare Knoten pollen)
     canvas=h("div",{class:"gcanvas ablauf"});   // die Karten-Darstellung (Kopf ohne Körper; bearbeitet wird im Panel)
     world=h("div",{class:"gworld"+(VIEW.kompakt?" kompakt":"")});
     svg=document.createElementNS(SVGNS,"svg");svg.setAttribute("class","gedges");world.append(svg);
-    const nodes=graphNodes();
-    // Domänen-Filter + eingeklappte Details: nicht rendern (Kanten zu ihnen entfallen bzw. werden zusammengezogen).
-    const vis=nodes.filter(n=>VIS.has(n.id));
-    vis.forEach(n=>world.append(nodeEditor(n)));
+    // Die Fläche in sechs Spalten (board.sicht.flaeche) — neu angelegte Karten erscheinen, sobald der Code sie trägt (Board vom Server).
+    const vis=flKarten();FLKARTE=new Map(FL().karten.map(k=>[k.id,k]));
+    vis.forEach(k=>world.append(flKarteEl(k)));
     svgTop=document.createElementNS(SVGNS,"svg");svgTop.setAttribute("class","gedges top");world.append(svgTop);
     if(!vis.length)world.append(h("div",{class:"gempty"},LADEN&&!LADEN.length?"Leeres Board — über die Palette neu entwerfen oder „🗂 Domänen laden“."
       :"Nichts sichtbar — nichts geladen (🗂 Domänen laden), alles ausgeblendet (👁) oder leeres Modell."));
@@ -2753,14 +2187,13 @@
     beobachteCanvas();
     buildMinimap(canvas);
     renderFilterPanel();
-    packLayout();  // jetzt ist world im Dokument → echte Knotengrößen messbar → überlappungsfreies Packing
+    packSpalten();  // jetzt ist world im Dokument → echte Kartengrößen messbar
     messeWelt();   // Geometrie-Cache (Minimap, Culling) + Weltgröße = Inhalt
     applyPan();
     drawMinimap();
     canvas.onpointerdown=e=>{const t=e.target;
       if(t.closest&&(t.closest(".ghead")||t.closest("input,textarea,select,button,.slot")))return;
       startPan(e);};
-    canvas.oncontextmenu=e=>{const t=e.target;if(t.closest&&t.closest(".gnode2,.ginsp,.gfilter,.gminimap,.gpick,.gstart"))return;flaechenMenue(e);};
     canvas.ondblclick=e=>{if(e.target.closest&&e.target.closest(".gnode2"))return;
       const w=toWorld(e.clientX,e.clientY),r=canvas.getBoundingClientRect();
       showPicker(canvas,e.clientX-r.left,e.clientY-r.top,w.x,w.y);};
@@ -2803,8 +2236,6 @@
       catch(e){badge(false);}}
     const live=await loadLive();if(!live)return;
     MODEL=uebernimm(live,MODEL);GSTAND=schnappschuss();render();};
-  // ▦ Neu anordnen: alle Positionen verwerfen → aggregatsweises Kachel-Layout neu rechnen.
-  window.deReflow=function(){if(VIEW.kompakt){KPOS[VIEW.details?"d":"k"]={};speichereKpos();}else graphNodes().forEach(n=>{delete n.ref.x;delete n.ref.y;});render();};
 
   function deFlash(txt,ok){const b=document.getElementById("de-badge");if(!b)return;const alt=b.textContent,ac=b.className;
     b.textContent=txt;b.className="badge"+(ok?"":" off");setTimeout(()=>{b.textContent=alt;b.className=ac;},1600);}
@@ -2903,9 +2334,6 @@
     catch(e){badge(false);deFlash("⚠ Werkbank nicht erreichbar",false);}
     finally{G_LAEUFT=false;}};
 
-  // ── Board übernehmen (Code-Stand) ───────────────────────────────────────────────────────────
-  // Das Board kommt vollständig aus dem Code. Vom bisherigen Board bleibt nur, was der Code nicht kennt: Positionen (x/y).
-  function hash(t){let h=5381;for(let i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))>>>0;return h.toString(36);}
   function maxId(m){let mx=0;JSON.stringify(m||{}).replace(/"_id":"[a-z_]*?(\d+)"/g,(_,n)=>{mx=Math.max(mx,+n);return _;});return mx;}
   function uebernimm(code,alt){
     NID=Math.max(NID,maxId(alt)+1);
@@ -2948,27 +2376,6 @@
       ...Object.keys(WB.instanzen||{}).sort().map(i=>({id:"host:inst:"+i,name:"⬡ "+i,kind:"host",ref:WB.refs["inst:"+i]||(WB.refs["inst:"+i]={instanz:i})})),
       {id:"host:inst-neu",name:"＋ Instanz",kind:"host",ref:WB.refs["inst-neu"]||(WB.refs["inst-neu"]={instanzNeu:true})}];}
   const wbJson=async(url,opt)=>{const r=await fetch(url,opt);if(!r.ok)throw new Error("HTTP "+r.status);return r.json();};
-  const kurzWert=v=>v==null?"—":Array.isArray(v)?v.join(", "):typeof v==="object"?Object.keys(v).length+" Einträge":String(v);
-
-  // ── Karte + Rahmen ──
-  function hostKurz(n){const k=n.ref.abschnitt,box=h("div",{class:"gsum",onclick:()=>waehle(n.id)});
-    if(n.ref.instanzNeu){box.append("einen Graphen in „"+(WB.umgName||"?")+"“ laufen lassen");return box;}
-    if(n.ref.instanz){const v=(WB.instanzen||{})[n.ref.instanz]||{};box.append(h("b",{},v.Graph||"?"),v.Akteur?" · 👤 "+v.Akteur:"",v.Rechner?" · auf "+v.Rechner:"");return box;}
-    if(k==="Uhr"){box.append(WB.zustand&&WB.zustand.art!=="Sim"?"Prod: Versatz gesperrt (0)":WB.uhr&&WB.uhr.versatz?"Versatz "+WB.uhr.versatz:"Versatz 0 (DB noch nicht angelegt)");return box;}
-    const v=(WB.umg||{})[k],sch=(WB.schema||{})[k]||{};
-    if(v==null){box.append(h("span",{class:"gp-mark"},"Standardwerte"));return box;}
-    if(sch.art==="je"||sch.art==="frei"){const ks=Object.keys(v);box.append(ks.length?ks.join(", "):"—");return box;}
-    Object.entries(v).slice(0,3).forEach(([a,b],i)=>{if(i)box.append(" · ");box.append(h("b",{},a),": "+kurzWert(b));});
-    return box;}
-  function hostRahmen(r){const z=WB.zustand||{},fr=h("div",{class:"grahmen host"});fr.dataset.ns=r.ns;
-    Object.assign(fr.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});
-    fr.style.setProperty("--dc","hsl(200 35% 62%)");
-    const k=h("div",{class:"grahmen-k",title:"umgebungen/umgebung."+(z.aktiv||"?")+".json — bearbeitet wird im Panel, wirksam nach ⟳"},
-      h("span",{class:"gr-t"},domLabel(r.ns)),
-      h("span",{class:"gr-p"},[z.art,z.datenbank&&"DB "+z.datenbank,z.cluster&&"Cluster "+z.cluster,z.ports&&"gRPC :"+z.ports.grpc+(z.ports.einblick?" · Einblick :"+z.ports.einblick:"")].filter(Boolean).join(" · ")),
-      h("button",{title:"Host-Rahmen einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"));
-    k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};fr.append(k);return fr;}
-
   // ── Panel: EIN generischer Formular-Renderer (Schema-Knoten → Steuerelement) ──
   //   art klasse → Felder; art je → je Schlüssel eine Klasse (+ anlegen/entfernen); art frei → JSON; typ enum/bool/zahl/dauer/string/liste/map.
   //   Ein leeres Feld heißt „Standard" (der Schlüssel fällt aus der Datei); Platzhalter zeigen den Standardwert.

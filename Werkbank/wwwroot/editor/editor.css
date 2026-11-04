@@ -633,3 +633,36 @@
 #de .sp-punkt.an{outline:2px solid #fff}
 #de .sp-meld{display:flex;flex-direction:column;gap:3px;width:100%}
 #de .rumpfport{margin:2px 0 6px;padding:2px 0;border-left:2px solid #2a3446;padding-left:6px}
+
+/* ── Fläche in sechs Spalten (docs/konzept-editor-spalten.md): Karten mit Ports, Spaltenköpfe, Bänder der Domänen, Store-Gruppen ── */
+#de .gnode2.fk{width:auto;min-width:210px;max-width:340px;cursor:pointer}
+#de .gnode2.fk .ghead{cursor:pointer}
+#de .gnode2.fk-quelle{border-color:#9a7230}
+#de .fk-ports{padding:4px 0 6px}
+#de .fk-port{position:relative;display:flex;align-items:center;padding:1px 12px;font:11px ui-monospace,monospace;color:#9aa6bb;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#de .fk-port.aus{justify-content:flex-end}
+#de .fk-port:hover{background:#ffffff10;color:#eef2f8}
+#de .fk-port.eigen .fk-pl{color:#e6ebf3;font-weight:600}
+#de .fk-dot{position:absolute;top:50%;width:7px;height:7px;margin-top:-5px;border-radius:50%;background:#161b27;border:1.5px solid #7f8aa0}
+#de .fk-port.ein .fk-dot{left:-5px}
+#de .fk-port.aus .fk-dot{right:-5px}
+#de .fk-port.eigen .fk-dot{background:currentColor}
+#de .fk-port.s-command .fk-dot{border-color:#5b8fd0;color:#5b8fd0}
+#de .fk-port.s-event .fk-dot{border-color:#57b673;color:#57b673}
+#de .fk-port.s-hinweis .fk-dot{border-color:#cf6f68;color:#cf6f68}
+#de .fk-port.s-query .fk-dot,#de .fk-port.s-antwort .fk-dot{border-color:#9678d6;color:#9678d6}
+#de .fk-port.s-frist .fk-dot{border-color:#e0b64d;color:#e0b64d}
+#de .fk-chips{display:flex;flex-wrap:wrap;gap:3px;padding:4px 10px 2px}
+#de .fk-chip{font-size:10px;padding:0 7px;border-radius:9px;border:1px solid #3a4560;color:#b8c3d6;background:#1d2433;cursor:pointer}
+#de .fk-chip:hover{border-color:#7f8aa0;color:#eef2f8}
+#de .fl-kopf{position:absolute;box-sizing:border-box;padding:8px 10px;border:1px solid #2c3547;border-radius:10px;background:#141925;color:#dfe5ef;pointer-events:auto}
+#de .fl-kopf b{font-size:14px}
+#de .fl-kopf button{float:right;padding:0 8px}
+#de .fl-kopf .fl-u{font-size:11px;color:#8f9bb0;margin-top:2px}
+#de .fl-kopf .fk-chips{padding:6px 0 0}
+#de .fl-band{position:absolute;box-sizing:border-box;border:1.5px solid var(--dc);border-radius:14px;background:color-mix(in srgb,var(--dc) 6%,transparent);pointer-events:none}
+#de .fl-band-t{position:absolute;left:12px;top:-9px;padding:0 6px;background:#0f131b;font:700 11px system-ui;letter-spacing:.06em;text-transform:uppercase;color:var(--dc)}
+#de .fl-gruppe{position:absolute;box-sizing:border-box;border:1px dashed #4f8f68;border-radius:10px;pointer-events:none}
+#de .fl-gruppe-t{position:absolute;left:8px;top:3px;font:11px system-ui;color:#86c79c;pointer-events:auto;cursor:pointer}
+#de .glink.leise{opacity:.3}
+#de .gworld.fokus .fl-band,#de .gworld.fokus .fl-gruppe{opacity:.5}
