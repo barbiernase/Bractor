@@ -731,3 +731,30 @@
 #de .kom-leib.form{display:block;overflow:auto}
 #de .kom-panel.kom-form{max-width:760px;margin:0 auto;min-height:100%;border-left:1px solid #232a38;border-right:1px solid #232a38}
 #de .kom-panel .gi-rel{margin-top:14px}
+
+/* ── Aggregat von innen: anlegen und verbinden — Spaltenköpfe, Bearbeiten-Modus, ⊕/✓ ── */
+#de .ag-spkopf{position:absolute;top:14px;display:flex;align-items:center;gap:8px;padding:6px 10px;box-sizing:border-box;border:1px solid #2c3547;border-radius:8px;background:#141925;color:#dfe5ef;font-size:12px}
+#de .ag-spkopf .ag-plus{margin-left:auto}
+#de .ag-plus{background:#2a2414;border:1px solid #a8843a;color:#ffd27a;border-radius:6px;padding:1px 8px;font-size:11px;cursor:pointer}
+#de .ag-plus:hover{border-color:#ffd27a}
+#de .ag-kurz{padding:4px 10px 6px;font-size:11px;color:#9aa6bb;display:flex;flex-direction:column;gap:2px}
+#de .ag-tag{font-size:10px;color:#8f9bb0}
+#de .ag-stift{margin-left:auto;font-size:11px;opacity:.75}
+#de .kom-k .ghead{cursor:pointer}
+#de .kom-k.offen{outline:1px solid #a8843a}
+#de .kom-k.leise{opacity:.4}
+#de .kom-k.kand{outline:2px dashed #ffd27a;outline-offset:2px}
+#de .ag-kand{position:absolute;left:-13px;top:2px;width:22px;height:22px;border-radius:50%;background:#2a2414;border:1px solid #ffd27a;color:#ffd27a;font-weight:700;cursor:pointer;padding:0;line-height:18px}
+#de .ag-kand.ja{background:#14301f;border-color:#57b673;color:#57b673}
+#de .ag-edit{padding:6px 10px 10px;border-top:1px solid #2c3547;display:flex;flex-direction:column;gap:6px;cursor:default}
+#de .ag-felder{display:flex;flex-direction:column;gap:3px}
+#de .ag-feld{display:flex;gap:4px;align-items:center}
+#de .ag-feld input{flex:1;min-width:0;background:#0d1119;color:#e6ebf5;border:1px solid #35507a;border-radius:4px;padding:2px 5px;font:11px ui-monospace,monospace}
+#de .ag-feld input:disabled{opacity:.55}
+#de .ag-fest{font-size:10px;color:#8f9bb0;padding:0 4px}
+#de .ag-flag{font-size:11px;color:#c3cbd9;display:flex;gap:4px;align-items:center}
+#de .ag-weg{background:#2a1b20;border:1px solid #6b3540;color:#ffc9cf;border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;align-self:flex-start}
+#de .ag-diag{padding:2px 10px 6px;font-size:10px;color:#ff9aa5}
+#de .kom-k.ag-neu{background:transparent;border:1.5px dashed #ffd27a;cursor:pointer}
+#de .kom-k.ag-neu .ghead{background:transparent;color:#ffd27a}
+#de .kom-k.offen,#de .kom-k{max-width:360px}

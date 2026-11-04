@@ -614,11 +614,35 @@ public static class Scaffolder
             b.AppendLine("        }");
             if (i < decider.Count - 1) b.AppendLine();
         }
-        Zusatz(b, agg.DeciderZusatz);
+        Zusatz(b, FragenImZusatz(agg));
 
         b.AppendLine("    }");
         b.AppendLine("}");
         return b.ToString();
+    }
+
+    /// <summary>
+    /// Die Fragen eines Aggregats (docs/03 §3.2) stehen als Quelltext im Zusatz des Deciders. Eine Frage, die dort fehlt, bekommt eine Methode mit
+    /// Platzhalter; nennt eine vorhandene andere Antworten, als das Modell sagt, folgt ihr Rückgabetyp. Sonst bleibt der Zusatz byte-gleich (Fixpunkt).
+    /// </summary>
+    private static string? FragenImZusatz(Aggregat agg)
+    {
+        var z = agg.DeciderZusatz ?? "";
+        foreach (var f in agg.Fragen)
+        {
+            if (string.IsNullOrEmpty(f.Query) || f.Antworten.Count == 0) continue;
+            var rueckgabe = f.Antworten.Count == 1 ? f.Antworten[0] : $"{OneOf}<{string.Join(", ", f.Antworten)}>";
+            var m = System.Text.RegularExpressions.Regex.Match(z, $@"public\s+(?<r>[^\n;{{}}=]+?)\s+Frage\(\s*{System.Text.RegularExpressions.Regex.Escape(f.Query)}\s");
+            if (m.Success)
+            {
+                var r = m.Groups["r"];
+                var bisher = Bezeichner.Matches(r.Value).Select(x => x.Value).Where(x => x != OneOf && x != "Task").ToHashSet(StringComparer.Ordinal);
+                if (!bisher.SetEquals(f.Antworten)) z = z[..r.Index] + rueckgabe + z[(r.Index + r.Length)..];
+                continue;
+            }
+            z = (z.Length > 0 ? z.TrimEnd() + "\n\n" : "") + $"public {rueckgabe} Frage({f.Query} q) => throw new NotImplementedException(\"TODO: Frage-Logik.\");";
+        }
+        return z.Length > 0 ? z : agg.DeciderZusatz;
     }
 
     private static string ApplierDatei(Aggregat agg, IReadOnlyList<ApplyRegel> applier, EditorModell modell)

@@ -200,8 +200,8 @@ public sealed record Aggregat
     public string? Datei { get; init; }
     public string? DeciderDatei { get; init; }
     public string? ApplierDatei { get; init; }
-    /// <summary>Die Fragen an das Aggregat (docs/03 §3.2) — Signatur-Fakt der <c>Frage</c> im Decider, nur gelesen; ihr
-    /// Quelltext steht im <see cref="DeciderZusatz"/>.</summary>
+    /// <summary>Die Fragen an das Aggregat (docs/03 §3.2) — Signatur-Fakt der <c>Frage</c> im Decider; ihr Quelltext steht im
+    /// <see cref="DeciderZusatz"/>. Der Scaffolder legt eine fehlende Frage mit Platzhalter an und zieht den Rückgabetyp den Antworten nach.</summary>
     public IReadOnlyList<AggregatFrage> Fragen { get; init; } = [];
     /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
     public string? Herkunft { get; init; }
