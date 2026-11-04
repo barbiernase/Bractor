@@ -365,7 +365,8 @@ Knoten, G-13), `NeustartTests` (1, Kategorie Last).
   über die Karten).
 - **Ein Command ohne Ziel über gRPC an einen Graph-Kopf** — der Weg der Sitzung (`SitzungsActor.AnKopfAsync`) hat keinen eigenen Test; geprüft ist der gleiche Weg über den JSON-Eingang.
 - **Webhook im Cluster** — nur der Prüfstand (`KatalogTests`); ein Aufruf an einen Knoten, der die Instanz nicht hält, ist ungeprüft (docs/13 GF-2).
-- **Werkbank-Abnahme** — ihr einziger Test ist zurückgestellt (Editor, docs/10 E4).
+- **Werkbank-Abnahme** — wieder an (2026-11-04); grün bis einschließlich Fläche, Komposition und Gesten (darf, verlierbar, ⟳, ↶ byte-gleich), rot im
+  Worker-Schritt: ein Bildpaar im Linienimport erreicht die Beurteilung nicht (docs/13 ED-3).
 - **Paralleler Drain / Schreibpfad-Skalierung** — kein Assertion-Test (früher nur im LoadHarness beobachtet).
 - **Shard-Rebalance / Node-Ausfall** — nur simuliert.
 - **Blazor-Client** jenseits `VirtualCollection`/`PendingCommandTracker` (Bus, Store, Transport).
@@ -1151,8 +1152,8 @@ Uhr der Sim (`Testumgebung.StelleUhrVorAsync`), nicht über Warten. Läuft nur a
 **Werkbank-Abnahme (Ebene 2, `Werkbank.Abnahme.Tests`):** braucht vorher `dotnet build` (startet die gebaute Werkbank-DLL als Prozess, Black-Box über
 HTTP). `Werkbanklauf` kopiert alle Quell-Dateien (`git ls-files -co --exclude-standard`, also auch nicht committete Änderungen) in ein Temp-Verzeichnis,
 legt dort `git init -b abnahme-<id>` an (Branch → Sim-DB `cqrs_sim_abnahme_<id>`, Cluster) und schreibt den Umgebungs-Ordner `abnahme/` aus
-`sim-main` (samt Instanzen) mit freien Ports und Daten-Pfaden im Temp-Verzeichnis; der Klassifikations-Worker ist ein Client wie dort. Ihr einziger Test ist bis zur
-neuen Editor-Oberfläche zurückgestellt (docs/10 E4). Arbeitsbaum, `.werkbank/` und Sim-DB des
+`sim-main` (samt Instanzen) mit freien Ports und Daten-Pfaden im Temp-Verzeichnis; der Klassifikations-Worker ist ein Client wie dort. Ihr einziger Test geht ⟳, den
+JSON-Eingang, Fläche und Gesten des Editors, den Worker und die Daten-Prüfung nacheinander durch. Arbeitsbaum, `.werkbank/` und Sim-DB des
 Entwicklers bleiben unberührt; am Ende SIGTERM an die Werkbank (sie hält Host und Worker an), eigene DB löschen, Kopie löschen.
 
 ## 12.7 Fallstricke

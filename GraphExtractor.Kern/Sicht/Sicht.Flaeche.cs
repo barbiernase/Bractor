@@ -2,7 +2,7 @@ using System.Text.Json.Nodes;
 
 namespace GraphExtractor;
 
-// Die FLÄCHE der Werkbank (docs/konzept-editor-spalten.md): sechs Spalten in der Reihenfolge des Ablaufs — was Akteure hineingeben, Quellen,
+// Die FLÄCHE der Werkbank (docs/10 §10.9): sechs Spalten in der Reihenfolge des Ablaufs — was Akteure hineingeben, Quellen,
 //   Graphen, Aggregate, Projektionen, was zu Akteuren kommt —, die Domänen als Bänder über die Spalten ② bis ⑤, Nachrichten als Ports an den
 //   Karten und Kanten von Port zu Port mit ihrer Art. Gerechnet nur aus dem Board (Code-Fakten); der Editor ordnet innerhalb der Zellen an.
 public sealed partial class Sicht

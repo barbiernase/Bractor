@@ -12,7 +12,7 @@ Aggregat, ohne Ziel an genau einen Empfänger), Event, Hinweis. Gerechnet wird i
 den Typen, Instanzen mit eigener Konfig in `umgebungen/<name>/graphen/`), Quellen sind Katalogfunktionen mit gesichertem Zustand statt
 Quell-Nachrichten im Log, Hinweise gehen nur an Akteure, ein Akteur hört (`IHoert`: Arbeit oder Kenntnis), ein Client ist ein Record, der Akteure
 verkörpert ([04](04-konsum-und-prozess-maschine.md) §4.4, §4.7, [10](10-entwickler-api.md)). Damit erledigt: FV-1, FV-2, FB-6, FB-8, FB-21, PF-7
-(§13.6); offen: GF-2, GF-3, GF-6.
+(§13.6); offen: GF-2, GF-3, GF-6. Der Editor (Fläche in sechs Spalten, docs/10 §10.9): ED-1, ED-2, ED-3.
 
 **Frühere Umbauten:** Pub/Sub-Neustrukturierung (2026-10-26 bis 2026-10-29) und „Funktionen vor dem Aggregat“ (2026-11-01); was sie erledigt
 haben, steht in §13.6. Die Hausregel für Actors ist eine Build-Prüfung (CQRS112/113, docs/06 §6.7).
@@ -20,7 +20,10 @@ haben, steht in §13.6. Die Hausregel für Actors ist eine Build-Prüfung (CQRS1
 | ID | Kurz | Prio |
 |---|---|:--:|
 | GF-2 | Der `Webhook` nimmt Aufrufe nur am JSON-Eingang an (in Prod aus) und ohne Akteur-Tor; sein Postfach liegt je Prozess — ein Aufruf an einen Cluster-Knoten, der die Instanz nicht hält, bleibt dort liegen | P2 |
-| GF-3 | Die Editor-Oberfläche zeichnet keine Graph-Karten: Lesart, Sicht (`gr:`-Karten, Kanten), Gesten (Knoten hinzufügen, neuer Graph) und Sonde stehen im Server, `--graph <Typ>` gibt einen Graphen als Text; die Oberfläche (`editor.js`) ist zurückgestellt (docs/10 E4). Adapter vorschlagen und Instanz anlegen als Geste fehlen noch | P2 |
+| GF-3 | Editor: „Adapter vorschlagen“ (eine kleine Funktion, wenn ein Typ nicht passt) fehlt als Geste; ⊕ im Panel findet auf der Fläche keine Ziele mehr (verbunden wird durch Ziehen von Port zu Karte) | P2 |
+| ED-1 | Editor-Fläche: Karten lassen sich in ihrer Zelle nicht von Hand senkrecht umordnen (die Reihenfolge rechnet der Editor); eine neue, leere Domäne erscheint nicht als Band | P3 |
+| ED-3 | Werkbank-Abnahme rot im Worker-Schritt (2026-11-04, Server): zwei Bilddateien in der Quelle `linienimport` ergeben in 120 s kein `ImagePairErstellt`; ⟳, Akteur, Fläche und Gesten davor sind grün. Ungeklärt, ob Dateiwächter, Instanz (Rechner) oder Kette; der Test war seit E4 aus | P1 |
+| ED-2 | Gesten-Schreiber: schreibt er die Basisliste eines Akteurs neu (`IDarf`/`IHoert`), geht ein Kommentar in der Liste verloren | P2 |
 | GF-6 | Kein Messblock für Arbeit draußen (S2 ist entfallen) und keiner für einen Graphen unter Last außer der Zubuchung in S5 | P3 |
 | FV-3 | Arbeit von Hand mitten in einer Kette: gibt ein Knoten Arbeit an einen Akteur, den die Werkbank von Hand verkörpert (`Umgebung:Hand`), wartet sein Kind auf das Ende jenes Laufs (acht Mal 60 s, dann scheitert der Aufruf und wird wiederholt); ein Mensch, der länger überlegt, lässt den Lauf davor mehrfach neu rechnen (die Inbox verwirft die Commands, die Außenwelt dahinter ist mindestens einmal) | P3 |
 | FV-4 | Hält kein Cluster-Knoten eine Instanz (Arbeit ohne Arbeiter, Rechner einer festgelegten Instanz fort), bringt der Zusteller ihre offenen Eingänge alle 2 s erneut („später“) — sichtbar im Einblick (`/einblick/auftraege`), aber ohne eigene Meldung und ohne Rückstand in `/health` | P3 |

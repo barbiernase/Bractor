@@ -348,7 +348,7 @@ Entschieden von Tobi; Code-Kommentare zitieren sie mit ihrer Nummer.
 | E1 | Geltungsbereich (Mandant, Daten-Rechte je Objekt) | nicht jetzt: im Zielbetrieb (interne Produktionsfirma) darf jeder alles; Akteur-Rechte nach Typ bleiben. Der Platz ist frei (§10.8). |
 | E2 | Direkte Abfrage eines Aggregats | ja, als eigener Lesepfad neben dem Reader (§10.3.1) |
 | E3 | Typisierte Ids | ja, Pflicht für Command-Ziele; in Antworten die Grundlage für feine Updates an Clients (§10.4) |
-| E4 | Editor-Oberfläche | zurückgestellt; Werkbank und GraphExtractor bauen und `--check`/`--sonde` sind grün, `Werkbank/wwwroot/editor/` bleibt unberührt |
+| E4 | Editor-Oberfläche | eine Fläche in sechs Spalten in der Reihenfolge des Ablaufs, Domänen als Bänder, Nachrichten als Ports; Graph, Aggregat und Store von innen als Modal; gerechnet in der Sicht (§10.9) |
 | E5 | Umsetzen | schrittweise, je Schritt auf Tobis Wort |
 | E6 | Darf eine Funktion Zustand haben? | ja, gekapselt, kein Domänen-Zustand (Gewichte, ein Zähler, eine Gesehen-Liste); `IZustand<T>` im Konstruktor, gesichert je Instanz und Knoten nach fertigem Lauf; Gelerntes gehört in Projektionen |
 | E7 | Was fließt zwischen Funktionen? | ein Command ohne Ziel, als Aufruf von Schritt zu Schritt, nie im Log (Invariante 6); kein eigener Nachrichten-Marker |
@@ -382,3 +382,26 @@ Bereich wäre später eine weitere Kopfzeile plus Filter in Verteiler, Reader un
 verschlüsselbare Felder als Typ-Fakt). Keine Schema-Evolution im Editor; `IUpcast` bleibt Backend-Primitive. Kein Dirigent, keine Saga, kein
 Builder und keine Kantenliste (die Kanten stehen als `Von` an den Knoten), keine Generics als Verdrahtung, keine Knotenarten, keine Reaktion als eigene Art, keine Schleifen im Graphen. Offenes steht in
 [13](13-reifegrad-schulden-bewertung.md) §13.0.
+
+## 10.9 Der Editor
+
+Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was er zeigt, rechnet der Server in der Sicht
+(`GraphExtractor.Kern/Sicht/`, W3), er ordnet nur an und zeichnet.
+
+- **Die Fläche** (`board.sicht.flaeche`, `Sicht.Flaeche.cs`) ordnet nach dem Ablauf, von links nach rechts: Client-Ausgang (je Akteur, was er darf),
+  Quellen (die Quellknoten der Graphen), Graphen (nur die obersten, mit ihrer Signatur), Aggregate, Projektionen (Projektion und Reader je Store
+  gruppiert), Client-Eingang (je Akteur, was er hört, dazu die Antworten auf seine Queries). Ein Akteur steht also zweimal. Die Domänen sind Bänder
+  über Quellen bis Projektionen; das Band eines Graphen sind die Aggregate, an die er schreibt.
+- **Nachrichten sind Ports** an den Karten, mit Sorte (Command, Event, Hinweis, Query, Antwort, Frist). Deklariert wird ein Typ am Port seines
+  Besitzers (`Sicht.Besitz`); Klick auf einen Port öffnet ihn im Panel.
+- **Kanten** laufen von Port zu Port und haben eine Art: schreiben, Quelle, lesen, Kenntnis, Arbeit, Rücklauf (ein Command ohne Ziel aus dem
+  Decide an einen Graph-Kopf, die Event-Antwort an die Funktion, die den Command gab), liest (eine Lese-Fähigkeit am Store).
+- **Von innen** (Modal): ein Graph zeigt seine Komposition (`board.sicht.komposition`, `Sicht.Komposition.cs`: Knoten nach Tiefe, je `[Von]` eine
+  Kante, Köpfe und Ausgänge, Technik und Konfig als Chips) mit dem Baukasten (`board.sicht.baukasten`) und seinen Instanzen; ein Aggregat
+  Commands → Decide → Ergebnisse → Apply → Zustand; ein Store Events und Queries → Auf bzw. Frage → Store-Funktionen → Read-Models. Bearbeitet wird
+  im Panel mit dem Formular des gewählten Glieds.
+- **Gesten** sind Änderungen am Board, die der Server als Patch in den Code schreibt (↶ nimmt ihn zurück): vom Akteur auf eine Karte ziehen
+  (`IDarf`), einen Ausgang auf einen Akteur (`IHoert`), ein Event auf eine Projektion (ein `Auf`), Klick auf eine Kante zum Lösen; im Modal
+  Funktion, Graph oder Quelle aus dem Baukasten auf die Leinwand (ein Knoten), Technik oder Konfig auf einen Knoten (Konstruktor), Ausgang auf
+  Knoten (`[Von]`), „＋ Kopf“ auf Knoten (`[Kopf]`), Klick auf eine Kante (verlierbar, lösen). Was aus Signaturen folgt, ändert man im Panel.
+- `--check` prüft die Fläche mit (Kanten an vorhandenen Ports, je Typ höchstens ein deklarierender Port).

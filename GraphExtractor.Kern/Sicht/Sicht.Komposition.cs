@@ -2,7 +2,7 @@ using System.Text.Json.Nodes;
 
 namespace GraphExtractor;
 
-// Die KOMPOSITION eines Graphen (docs/konzept-editor-spalten.md, Kompositions-Modal): seine Knoten mit Tiefe in der Kette, Ports, Konstruktor
+// Die KOMPOSITION eines Graphen (docs/10 §10.9, von innen): seine Knoten mit Tiefe in der Kette, Ports, Konstruktor
 //   (Technik, Konfig, Zustand, Logger), die Kanten je [Von] mit ihrem Typ, Köpfe und Ausgänge — dazu der Baukasten der Anwendung, aus dem man
 //   komponiert. Alles aus dem Board (Code-Fakten); der Editor zeichnet.
 public sealed partial class Sicht

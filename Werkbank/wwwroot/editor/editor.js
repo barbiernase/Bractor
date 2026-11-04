@@ -2024,7 +2024,7 @@
       btn("👁 Ausblenden"+((VIEW.aus||[]).length?" ("+VIEW.aus.length+")":"")+" ▾",FILTER_OPEN,"Knotenarten und Domänen ein-/ausblenden",()=>{FILTER_OPEN=!FILTER_OPEN;render();}),
       h("span",{style:"margin-left:8px"},"Karte antippen = Panel · Port antippen = Typ im Panel · Esc = fertig · Fläche ziehen = verschieben"));}
 
-  // ══ FLÄCHE IN SECHS SPALTEN (docs/konzept-editor-spalten.md): was Akteure hineingeben · Quellen · Graphen · Aggregate · Projektionen · was zu
+  // ══ FLÄCHE IN SECHS SPALTEN (docs/10 §10.9): was Akteure hineingeben · Quellen · Graphen · Aggregate · Projektionen · was zu
   //   Akteuren kommt. Karten, Ports, Bänder und Kanten rechnet der Server (board.sicht.flaeche); hier nur Anordnung und Zeichnen. Eine Karte der
   //   Fläche öffnet im Panel die Karte der Sicht dahinter, ein Port den Typ seiner Nachricht.
   const FL_SPALTE={ausgang:{t:"Client-Ausgang",u:"was Akteure hineingeben (darf)",neu:["akteur","client"]},quellen:{t:"Quellen",u:"lauschen am Kopf eines Graphen",neu:["quelle"]},
@@ -2177,7 +2177,7 @@
       const hit=document.createElementNS(SVGNS,"path");hit.setAttribute("class","glink fl-hit");hit.setAttribute("d",d);hit.setAttribute("fill","none");hit.dataset.i=i;
       hit.addEventListener("pointerdown",e=>e.stopPropagation());hit.addEventListener("click",e=>{e.stopPropagation();flKanteMenue(k,e);});
       hit.append(Object.assign(document.createElementNS(SVGNS,"title"),{textContent:k.typ+" · "+k.art+" — Klick: lösen / öffnen"}));frag.append(hit);});}
-  // ══ KOMPOSITIONS-MODAL (docs/konzept-editor-spalten.md): ein Graph von innen — links der Baukasten, in der Mitte die Leinwand (Knoten nach ihrer
+  // ══ KOMPOSITIONS-MODAL (docs/10 §10.9): ein Graph von innen — links der Baukasten, in der Mitte die Leinwand (Knoten nach ihrer
   //   Tiefe in der Kette, je [Von] eine Kante, links die Köpfe, rechts was den Graphen verlässt), rechts das Panel des Gewählten; dazu der Reiter
   //   Instanzen. Alles aus board.sicht.komposition und board.sicht.baukasten; ein Graph im Graphen öffnet eine Ebene tiefer (Brotkrumen).
   let KOM=null;   // {pfad:[Graph-Karten-Id …], reiter:"komposition"|"instanzen", wahl:{art:"knoten",name}|{art:"baustein",gruppe,name}|null}
@@ -2352,7 +2352,7 @@
         h("button",{class:"kom-akt",onclick:()=>{komSchliesse();waehle("host:inst:"+i);}},"✎ im Panel")));});
     if(!d.eltern.length)box.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",onclick:()=>{komSchliesse();waehle("host:inst-neu");}},"＋ Instanz anlegen")));
     return box;}
-  // ══ INNENANSICHT eines Aggregats bzw. Stores (docs/konzept-editor-spalten.md, Schritt 5): dieselbe Form wie die Komposition — außen die Karte in
+  // ══ INNENANSICHT eines Aggregats bzw. Stores (docs/10 §10.9): dieselbe Form wie die Komposition — außen die Karte in
   //   ihrer Spalte, innen ihre Glieder. Wer dazugehört, sagt der Besitz (board.sicht.besitz; beim Store auch die Reader seiner Gruppe), die Kanten
   //   sind die der Sicht. Aggregat: Commands und Queries → Decide (und Fragen) → was entsteht → Apply → Zustand. Store: Events und Queries →
   //   Auf bzw. Frage → Store-Funktionen → Read-Models, rechts die Antworten. Bearbeitet wird im Panel mit dem Formular des Glieds.
@@ -2428,7 +2428,7 @@
     p.append(h("div",{class:"kom-akte"},wahl?h("button",{class:"kom-akt",onclick:()=>komWaehle(null)},"↩ "+(NODEBY.get(id)||{}).name):null,
       h("button",{class:"kom-akt",title:"Modal schließen, die Karte im Panel der Fläche öffnen",onclick:()=>{komSchliesse();waehle(x);}},"↗ im Panel der Fläche")));
     return p;}
-  // ══ GESTEN DER FLÄCHE UND DER KOMPOSITION (docs/konzept-editor-spalten.md, Schritt 4): Ziehen von einem Port auf eine Karte bzw. einen Port,
+  // ══ GESTEN DER FLÄCHE UND DER KOMPOSITION (docs/10 §10.9): Ziehen von einem Port auf eine Karte bzw. einen Port,
   //   Klick auf eine Kante zum Lösen, Ziehen aus dem Baukasten. Jede Geste ändert das Modell; der Server schreibt den Code und schickt das neue Board.
   // Ein Menü an der Mausposition, über allem (auch über dem Kompositions-Modal).
   function menueFix(cx,cy,titel,items){document.querySelectorAll("#de .gmenue.fix").forEach(p=>p.remove());

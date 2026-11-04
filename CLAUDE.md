@@ -26,7 +26,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
    ihre laufende Nummer), gesichert, wenn die Kette des Elements fertig ist.
 
 
-## Werkbank-Leitsätze (Kurzform; das ausführliche Werkbank-Konzept liegt im Git-Verlauf, die Editor-Oberfläche ist im Umbau zurückgestellt)
+## Werkbank-Leitsätze (Kurzform; das ausführliche Werkbank-Konzept liegt im Git-Verlauf, der Editor heute: docs/10 §10.9)
 
 - **W1** Code ist die einzige Wahrheit; gespeichert wird nur die Ansicht (`.werkbank/ansicht.json`). Unfertiges = Code, der nicht baut.
 - **W2** Der Graph kommt aus dem Code über Roslyn: WAS etwas ist, sagen nur Code-Fakten (Marker, Attribute, Symbole, Signaturen), keine Domänen-Namen
@@ -198,7 +198,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - Werkbank-Abnahme (echte Werkbank auf einer Kopie, eigene Sim-DB, sequentiell, nach `dotnet build`):
   `dotnet test Werkbank.Abnahme.Tests/Werkbank.Abnahme.Tests.csproj`
 - Werkbank: `dotnet run --project Werkbank` → http://localhost:5178/editor/ (in `.claude/launch.json` als „Werkbank“). ⟳ baut und startet den echten
-  Host in der gewählten Umgebung (Oberfläche im Umbau zurückgestellt, docs/10 E4).
+  Host in der gewählten Umgebung; die Fläche in sechs Spalten, Graph, Aggregat und Store von innen (docs/10 §10.9).
 - Hosts: `dotnet run --project Host.Grpc -- --umgebung sim-main` bzw. `Host.Blazor -- --umgebung sim-main` (Sim-DB `cqrs_sim_<branch>` über `CQRS_BRANCH`).
 - Multi-Node (3 Nodes + Consul): `docker compose -f deploy-multinode/docker-compose.yml up -d --build` (`docs/06-transport-multinode-betrieb.md`).
 - Gate „frischer Checkout baut“ (vor jedem Push): `./pruefe-checkout.sh` (Worktree des Commits: ignorierte Quellen, Build, Drift, Prüfstand)

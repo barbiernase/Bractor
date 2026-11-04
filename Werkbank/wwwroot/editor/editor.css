@@ -634,7 +634,7 @@
 #de .sp-meld{display:flex;flex-direction:column;gap:3px;width:100%}
 #de .rumpfport{margin:2px 0 6px;padding:2px 0;border-left:2px solid #2a3446;padding-left:6px}
 
-/* ── Fläche in sechs Spalten (docs/konzept-editor-spalten.md): Karten mit Ports, Spaltenköpfe, Bänder der Domänen, Store-Gruppen ── */
+/* ── Fläche in sechs Spalten (docs/10 §10.9): Karten mit Ports, Spaltenköpfe, Bänder der Domänen, Store-Gruppen ── */
 #de .gnode2.fk{width:auto;min-width:210px;max-width:340px;cursor:pointer}
 #de .gnode2.fk .ghead{cursor:pointer}
 #de .gnode2.fk-quelle{border-color:#9a7230}

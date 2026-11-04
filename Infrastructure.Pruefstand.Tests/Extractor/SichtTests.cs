@@ -215,7 +215,7 @@ public class SichtTests
         F("Sensorabfrage")["eingaenge"]!.AsArray().Should().BeEmpty("eine Quelle lauscht und nimmt nichts");
     }
 
-    // ── Die Fläche in sechs Spalten und die Komposition eines Graphen (docs/konzept-editor-spalten.md) ──
+    // ── Die Fläche in sechs Spalten und die Komposition eines Graphen (docs/10 §10.9) ──
 
     private static List<JsonObject> FlaechenKarten(JsonObject board) => board["sicht"]!["flaeche"]!["karten"]!.AsArray().OfType<JsonObject>().ToList();
     private static List<string> FlaechenKanten(JsonObject board) => board["sicht"]!["flaeche"]!["kanten"]!.AsArray().OfType<JsonObject>()

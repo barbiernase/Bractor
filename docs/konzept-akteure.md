@@ -308,7 +308,8 @@ Build-ID im Code vorkommt.
 
 ## 8. Editor
 
-Die Editor-Oberfläche ist zurückgestellt ([10](10-entwickler-api.md) E4). Was die Werkzeuge heute zu Akteuren und Clients ableiten (W3: gerechnet
+Auf der Fläche des Editors steht ein Akteur zweimal: links mit dem, was er darf, rechts mit dem, was er hört ([10](10-entwickler-api.md) §10.9).
+Was die Werkzeuge heute zu Akteuren und Clients ableiten (W3: gerechnet
 wird im Backend):
 
 - **Akteur-Mengen** (`DomainEditor/AkteurAnteile.cs`): je Nachricht die Akteure **direkt** (`IDarf<T>`) und **über die Kette** (aus dem Eingang
