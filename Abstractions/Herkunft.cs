@@ -17,12 +17,14 @@ public sealed class Herkunft
     /// <param name="zeit">Die Log-Zeit des Eingangs (die Datenbank-Uhr beim Schreiben), nie die Uhr des Hosts.</param>
     /// <param name="akteur">Der Akteur der Kette (Header <c>akteur</c>), oder null.</param>
     /// <param name="bereich">Wer ableitet (der Wirker, etwa <c>funktion:Mahnwesen</c>) — zwei Bausteine leiten aus demselben Eingang verschiedene Ids ab.</param>
-    public Herkunft(Guid stream, int version, DateTimeOffset zeit, string? akteur, string bereich)
+    /// <param name="sequenz">Die Position des Eingangs im ganzen Log (0 = unbekannt, außerhalb einer Projektion).</param>
+    public Herkunft(Guid stream, int version, DateTimeOffset zeit, string? akteur, string bereich, long sequenz = 0)
     {
         Stream = stream;
         Version = version;
         Zeit = zeit;
         Akteur = akteur;
+        Sequenz = sequenz;
         _bereich = bereich ?? throw new ArgumentNullException(nameof(bereich));
     }
 
@@ -30,6 +32,15 @@ public sealed class Herkunft
     public int Version { get; }
     public DateTimeOffset Zeit { get; }
     public string? Akteur { get; }
+
+    /// <summary>
+    /// Die Position des Eingangs im ganzen Log (in einer Projektion; sonst 0). Über Streams hinweg vergleichbar: ein Dokument, das Events
+    /// verschiedener Streams beschreiben — etwa das Ergebnis eines Bündels über ein Feld —, behält so den Stand des jüngsten Eingangs.
+    /// </summary>
+    public long Sequenz { get; }
+
+    /// <summary>Der Stand, an dem ein Store „ist der Eingang neuer?“ entscheidet: die <see cref="Sequenz"/>, ohne sie die <see cref="Version"/>.</summary>
+    public long Stand => Sequenz > 0 ? Sequenz : Version;
 
     /// <summary>Der Stream des Eingangs als Id des Aggregats <typeparamref name="T"/> — für ein Event, das <typeparamref name="T"/> entschieden hat
     /// (in einer Projektion: das Read-Model dieses Aggregats).</summary>

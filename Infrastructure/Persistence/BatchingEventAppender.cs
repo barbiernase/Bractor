@@ -121,6 +121,12 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
 
     public Task<int> KopfAsync(Guid streamId, CancellationToken ct) => _inner.KopfAsync(streamId, ct);
 
+    public Task<IReadOnlyList<EventEnvelope?>> RueckblickAsync(IReadOnlyList<Rueckblick> fragen, CancellationToken ct) => _inner.RueckblickAsync(fragen, ct);
+
+    public Task SichereRueckblickAsync(IReadOnlyList<Rueckblickfeld> felder, CancellationToken ct) => _inner.SichereRueckblickAsync(felder, ct);
+
+    public Task<IReadOnlyDictionary<int, long>> SequenzenAsync(Guid streamId, int abVersion, CancellationToken ct) => _inner.SequenzenAsync(streamId, abVersion, ct);
+
     public Task<TState?> LoadStateAsync<TState>(Guid aggregateId) where TState : class, IState, new()
         => _inner.LoadStateAsync<TState>(aggregateId);
 

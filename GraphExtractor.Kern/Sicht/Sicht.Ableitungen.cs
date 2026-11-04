@@ -68,7 +68,7 @@ public sealed partial class Sicht
             case "valueobject": case "enum": return Oder(TypAgg(name));
             case "projektion":
             {
-                var a = Alle(r["handles"]).Select(h => RecordAgg(S(h, "event"))).ToList();
+                var a = Alle(r["handles"]).SelectMany(HandleEvents).Select(RecordAgg).ToList();
                 return a.Count > 0 ? Oder(Eindeutig(a)) : Geteilt;
             }
             case "reader":
@@ -443,7 +443,7 @@ public sealed partial class Sicht
         var r = new List<(List<string>, List<string>, string?)>();
         static List<string> N(IEnumerable<string> xs) => xs.Where(x => x.Length > 0).ToList();
         foreach (var d in _decider) if (S(d, "command").Length > 0) r.Add(([S(d, "command")], N(Alle(d["ergibt"]).Select(o => S(o, "event"))), null));
-        foreach (var p in _projektionen) foreach (var hd in Alle(p["handles"])) r.Add((N([S(hd, "event")]), [], null));   // eine Projektion gibt nichts aus
+        foreach (var p in _projektionen) foreach (var hd in Alle(p["handles"])) r.Add((N(HandleEvents(hd)), [], null));   // eine Projektion gibt nichts aus
         foreach (var rd in _reader) foreach (var hd in Alle(rd["handles"])) r.Add((N([S(hd, "query")]), L(hd, "responses").ToList(), null));
         foreach (var f in _bausteinFunktionen) foreach (var e in Alle(f["eingaenge"])) r.Add((N([S(e, "eingang")]), L(e, "ausgaben").ToList(), null));
         foreach (var a in _akteure)

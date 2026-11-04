@@ -61,6 +61,10 @@ public sealed class DomainEditorKompositionTests
         Grammatik.KonsumVon(Grammatik.Frist, Grammatik.Uhr)!.Kardinalitaet.Should().Be(Grammatik.GenauEins);
         Grammatik.ErzeugungVon(Grammatik.Uhr, Grammatik.Command).Should().NotBeNull();
         Grammatik.ErzeugungVon(Grammatik.Aggregat, Grammatik.Command)!.Regel.Should().Be("GR-DECIDE-COMMAND", "ein Decide gibt nur Commands ohne Ziel aus");
+        // docs/04 §4.3.1: Events gehen gebündelt in eine Projektion — und nur dorthin.
+        Grammatik.KonsumVon(Grammatik.Event, Grammatik.Buendel)!.Kardinalitaet.Should().Be(Grammatik.Beliebig);
+        Grammatik.KonsumVon(Grammatik.Gebuendelt, Grammatik.Projektion)!.Regel.Should().Be("GR-BUENDEL");
+        Grammatik.Konsume.Where(k => k.Sorte == Grammatik.Gebuendelt).Select(k => k.Baustein).Should().Equal(Grammatik.Projektion);
         // Fürs Board: die Editor-Port-Abbildung reist mit (das JS kodiert nichts hart).
         var json = System.Text.Json.JsonSerializer.Serialize(Grammatik.AlsJson(), EditorModell.JsonOptionen);
         json.Should().Contain("\"portBaustein\"").And.Contain("\"recordSorte\"").And.Contain("CQRS010");

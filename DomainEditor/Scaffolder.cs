@@ -817,12 +817,12 @@ public static class Scaffolder
     /// </summary>
     private static IEnumerable<string> KlassenTypen(string? datei, IReadOnlyList<Handle> handles) =>
         handles.Where(h => datei == null || h.Datei == null)
-            .SelectMany(h => h.Faehigkeiten.Select(f => f.Typ).Concat(h.Ausgaenge).Append(h.Eingang));
+            .SelectMany(h => h.Faehigkeiten.Select(f => f.Typ).Concat(h.Ausgaenge).Append(h.Eingang).Concat(h.Ueber is { } u ? [u] : []));
 
     /// <summary>Ein Eingang: <c>Methode(Eingang e[, Herkunft h], Fähigkeit…[, CancellationToken ct])</c> mit Rumpf (verbatim) bzw. <c>throw</c>-Platzhalter.</summary>
     private static void HandleZeilen(StringBuilder b, Handle h, string methode, string rueckgabe)
     {
-        var ps = new List<string> { $"{h.Eingang} {h.Parameter}" };
+        var ps = new List<string> { (h.Ueber is { } u ? $"[Ueber<{u}>] " : "") + $"{h.Eingang} {h.Parameter}" };
         if (h.HerkunftParameter is { } hp) ps.Add($"{Herkunft} {hp}");
         ps.AddRange(h.Faehigkeiten.Select(f => $"{f.Typ} {f.Name}"));
         if (h.AbbruchParameter is { } ap) ps.Add($"{Abbruch} {ap}");
@@ -930,6 +930,7 @@ public static class Scaffolder
         foreach (var f in modell.BausteinFunktionen) nsVon.TryAdd(f.Name, f.Namespace);   // z. B. IDarf<IFunktion> am Akteur, Client über einen verkörperten Akteur
         foreach (var a in modell.Akteure) nsVon.TryAdd(a.Name, a.Namespace);      // IVerkoerpert<Akteur> am Client
         foreach (var g in modell.Graphen) nsVon.TryAdd(g.Name, g.Namespace);      // ein Graph als Knoten eines anderen
+        foreach (var a in modell.Aggregate) nsVon.TryAdd(a.Name, a.Namespace);    // der Schlüssel eines Bündels ([Ueber<Aggregat>])
 
         var menge = new SortedSet<string>(basis.Concat(explizit), StringComparer.Ordinal);
         foreach (var typ in typen)

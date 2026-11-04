@@ -299,6 +299,8 @@ public sealed class ProjectionRaw
     /// <summary><c>[MindestensEinmal]</c>: ausdrücklich erlaubt, in einen Store der Klasse 3 zu schreiben (R14).</summary>
     public bool MindestensEinmal;
     public List<string> ConsumesFull = new();
+    /// <summary>Die Events, die die Projektion hört — einzeln und aus Bündeln (volle Namen).</summary>
+    public List<string> HoertFull = new();
     /// <summary>Rumpf je gehörtem Event (Simple-Name → Body-Text).</summary>
     public Dictionary<string, string> HandleBodies = new();
     /// <summary>Fähigkeits-Parameter je Event (Simple-Name → [(Store, Funktion, Lesen?)]) — aus der SIGNATUR des Auf.</summary>
@@ -307,6 +309,21 @@ public sealed class ProjectionRaw
     public Dictionary<string, HandleVertragRaw> HandleVertraege = new();
     /// <summary>Wohin die Schreib-Fähigkeiten führen (Store-Implementierungen, sonst das Bündel) — für die Reader dahinter.</summary>
     internal HashSet<string> Ziele = new(StringComparer.Ordinal);
+    /// <summary>Je Bündel-Eingang (<c>Buendel&lt;A, B&gt;</c>, Schlüssel wie die übrigen Wörterbücher) seine Events und sein Schlüssel.</summary>
+    public Dictionary<string, BuendelRaw> Buendel = new();
+}
+
+/// <summary>
+/// Ein Bündel als Eingang eines <c>Auf</c> (docs/04 §4.3.1): seine Events (einfache Namen, Reihenfolge der Typargumente), der Schlüssel (das Aggregat
+/// von <c>Id&lt;T&gt;</c>; null = global) und je Event, woher er kommt (<c>stream</c>, <c>feld</c> mit Feldname, <c>global</c>) — oder, warum er sich
+/// nicht ableiten lässt (CQRS118). Dazu <c>[Ueber&lt;T&gt;]</c>, wenn der Code ihn wählt.
+/// </summary>
+public sealed class BuendelRaw
+{
+    public List<string> Events = new();
+    public List<string> EventsFull = new();
+    public string? Schluessel, Ueber, Fehler;
+    public List<(string Event, string Art, string? Feld)> Glieder = new();
 }
 
 public sealed class QueryRaw
@@ -1564,11 +1581,14 @@ public sealed partial class DomainExtractor
         {
             Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq(), MindestensEinmal = form.MindestensEinmal,
             ConsumesFull = form.Aufs.Select(a => a.Eingang.Fq()).ToList(),
+            HoertFull = form.Events().Select(e => e.Fq()).ToList(),
         };
         foreach (var auf in form.Aufs)
         {
             var mm = auf.Methode;
-            var evt = auf.Eingang.Name;
+            // Ein Bündel heißt nach seinen Events (Buendel<A, B>) — so, wie es im Code steht.
+            var evt = auf.IstBuendel ? auf.Eingang.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat) : auf.Eingang.Name;
+            if (auf.IstBuendel) raw.Buendel[evt] = LiesBuendel(auf);
             if (MethodBody(mm) is { } body) raw.HandleBodies[evt] = body;
             var fs = FaehigkeitenVon(mm);
             if (fs.Count > 0) raw.HandleFaehigkeiten[evt] = fs;
@@ -1578,6 +1598,22 @@ public sealed partial class DomainExtractor
         }
         raw.Quelle = LiesKlasse(t, form.Aufs.Select(a => a.Methode), Abstractions.Projektionsvertrag.MindestensEinmal);
         return raw;
+    }
+
+    private Dictionary<string, INamedTypeSymbol>? _faltung;
+
+    /// <summary>Ein Bündel: seine Events und sein Schlüssel in derselben Ableitung wie der Generator (<see cref="Buendelform"/>).</summary>
+    private BuendelRaw LiesBuendel(Projektionsform.Auf auf)
+    {
+        _faltung ??= Buendelform.Faltung(_types);
+        var s = Buendelform.Leite(auf, _faltung);
+        var b = new BuendelRaw
+        {
+            Events = auf.Glieder.Select(g => g.Name).ToList(), EventsFull = auf.Glieder.Select(g => g.Fq()).ToList(),
+            Schluessel = s.Aggregat?.Name, Ueber = auf.Ueber?.Name, Fehler = s.Fehler,
+        };
+        foreach (var g in s.Glieder) b.Glieder.Add((g.Typ.Name, g.Art, g.Feldname));
+        return b;
     }
 
     private QueryRaw ReadQuery(INamedTypeSymbol t) =>

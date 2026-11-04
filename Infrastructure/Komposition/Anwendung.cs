@@ -35,6 +35,11 @@ public interface IAnwendung
 
     /// <summary>Die Query-Typen, die die Leseseite bedient (leer ohne Leseseite).</summary>
     IReadOnlyList<Type> QueryTypen { get; }
+    /// <summary>
+    /// Das Verzeichnis der Schlüssel der Bündel (GeneratedProjektionen.Rueckblick, docs/04 §4.3.1): je Event-Typ, den ein Bündel über ein Feld oder
+    /// global hört, Feld und Zugriff auf den Schlüssel — der Append schreibt danach je Event eine Zeile.
+    /// </summary>
+    IReadOnlyDictionary<Type, Infrastructure.Projections.Rueckblickeintrag[]> Rueckblick { get; }
     /// <summary>Domänen-Nachricht ↔ Nutzlast der Leitung (aus dem Leitungs-Projekt der Anwendung); <c>null</c> = die Anwendung hat keine
     /// Leitung und damit keinen gRPC-Dienst — hinein geht es dann nur über JSON-Eingang und Quellfunktionen (docs/07, Rolle Leitung).</summary>
     INutzlastTabelle? Nutzlast { get; }
@@ -168,6 +173,9 @@ public static class Anwendung
     public static IAggregatTabelle Aggregate => Aktuell.Aggregate;
     public static IReadOnlyDictionary<Type, Infrastructure.Wecken.Weckziel[]> Weckplan => Aktuell.Weckplan;
     public static IReadOnlyList<Type> QueryTypen => Aktuell.QueryTypen;
+    /// <summary>Ohne angemeldete Anwendung (ein reiner Store-Test) leer — dann schreibt der Append kein Verzeichnis.</summary>
+    public static IReadOnlyDictionary<Type, Infrastructure.Projections.Rueckblickeintrag[]> Rueckblick =>
+        _aktuell?.Rueckblick ?? new Dictionary<Type, Infrastructure.Projections.Rueckblickeintrag[]>();
     public static JsonSerializerContext WireJson => Aktuell.WireJson;
     public static JsonSerializerContext EventJson => Aktuell.EventJson;
 }

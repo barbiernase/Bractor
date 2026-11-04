@@ -302,6 +302,16 @@ public static class Sonde
         foreach (var p in A(b, "projektionen").Where(Sonde))
             z.Add($"projektion {S(p, "namespace")}.{S(p, "name")}{(p["mindestensEinmal"]?.GetValue<bool>() == true ? " mindestenseinmal" : "")} | "
                   + string.Join("; ", A(p, "handles").Select(h => $"{S(h, "event")}{(h["sig"]?["herkunftParameter"] != null ? " herkunft" : "")} -> {Fns(h)}")));
+        // Bündel (docs/04 §4.3.1): der Schlüssel aus den Events — je Event, woher er kommt (Stream, Feld, global), und die Wahl am Parameter.
+        foreach (var p in A(b, "projektionen").Where(Sonde))
+            foreach (var h in A(p, "handles").Where(h => h["buendel"] is JsonObject))
+            {
+                var bu = h["buendel"]!;
+                z.Add($"buendel {S(p, "name")}.{S(h, "event")} schluessel={(S(bu, "schluessel") is { Length: > 0 } s ? s : "global")}"
+                      + (S(bu, "ueber") is { Length: > 0 } u ? $" ueber={u}" : "")
+                      + (S(bu, "fehler") is { Length: > 0 } f ? $" fehler={f}" : "")
+                      + $" | {string.Join(", ", A(bu, "glieder").Select(g => $"{S(g, "event")}:{S(g, "art")}{(S(g, "feld") is { Length: > 0 } fe ? "=" + fe : "")}"))}");
+            }
         // Reader: die Projektionen dahinter folgen aus den Lese-Fähigkeiten (wer in denselben Store schreibt).
         foreach (var r in A(b, "reader").Where(Sonde))
             z.Add($"reader {S(r, "namespace")}.{S(r, "name")} hinter={string.Join(",", A(r, "projektionen").Select(x => (string?)x))} | "

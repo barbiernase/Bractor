@@ -484,14 +484,27 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         var imCode = h.EingangImCode ?? h.Eingang;
         var root = Parse(text);
         var m = root.DescendantNodes().OfType<ClassDeclarationSyntax>().Where(c => c.Identifier.Text == klasse)
-            .SelectMany(c => c.Members.OfType<MethodDeclarationSyntax>()).FirstOrDefault(x => ErsterTyp(x) == imCode);
+            .SelectMany(c => c.Members.OfType<MethodDeclarationSyntax>()).FirstOrDefault(x => ErsterTyp(x) == BoardLeseseite.Eingangsname(imCode));
         if (m == null) return (text, "Eingang nicht gefunden");
         var edits = new List<(int, int, string)>();
         var notiz = new List<string>();
-        if (imCode != h.Eingang && m.ParameterList.Parameters[0].Type is { } eingangsTyp)
+        var erster = m.ParameterList.Parameters[0];
+        if (BoardLeseseite.Eingangsname(imCode) != BoardLeseseite.Eingangsname(h.Eingang) && erster.Type is { } eingangsTyp)
         {
             edits.Add((eingangsTyp.SpanStart, eingangsTyp.Span.End, h.Eingang));
             notiz.Add($"Eingang {imCode} → {h.Eingang}");
+        }
+        // Ein Bündel: die Wahl des Schlüssels am Parameter ([Ueber<T>], docs/04 §4.3.1) — gesetzt, geändert oder entfernt.
+        if (BoardLeseseite.Basisname(h.Eingang) == "Buendel" && erster.Type is { } typ)
+        {
+            var ist = erster.AttributeLists.SelectMany(l => l.Attributes).FirstOrDefault(a => BoardLeseseite.Basisname(a.Name.ToString()) is "Ueber" or "UeberAttribute");
+            var istTyp = ist?.Name is GenericNameSyntax g ? g.TypeArgumentList.Arguments.FirstOrDefault()?.ToString() : null;
+            if (N(istTyp) != N(h.Ueber))
+            {
+                var start = erster.AttributeLists.Count > 0 ? erster.AttributeLists[0].SpanStart : typ.SpanStart;
+                edits.Add((start, typ.SpanStart, h.Ueber is { } u ? $"[Ueber<{u}>] " : ""));
+                notiz.Add(h.Ueber is { } u2 ? $"Schlüssel über {u2}" : "Schlüssel abgeleitet");
+            }
         }
         if (h.Rueckgabe != null && N(m.ReturnType.ToString()) != N(h.Rueckgabe))
         {
@@ -499,7 +512,7 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
             notiz.Add("Ausgänge");
         }
         if (edits.Count == 0) return null;
-        return (MitNamespaces(Anwenden(text, edits), h.Ausgaenge.Append(h.Eingang)), string.Join(", ", notiz));
+        return (MitNamespaces(Anwenden(text, edits), h.Ausgaenge.Append(h.Eingang).Concat(h.Ueber is { } ueber ? [ueber] : [])), string.Join(", ", notiz));
     }
 
     // ── Dokument-Typen einer Umsetzung der Klasse 1: fehlende typeof(…) hinten an base(…) — nie entfernen, die Reihenfolge bleibt ──
@@ -678,7 +691,7 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
             : ErsterTyp(m) == e.Eingang;
 
     private static string? ErsterTyp(MethodDeclarationSyntax m) =>
-        m.ParameterList.Parameters.Count > 0 ? BoardLeseseite.Basisname(m.ParameterList.Parameters[0].Type?.ToString() ?? "") : null;
+        m.ParameterList.Parameters.Count > 0 ? BoardLeseseite.Eingangsname(m.ParameterList.Parameters[0].Type?.ToString() ?? "") : null;
 
     private static string N(string? typ) => BoardLeseseite.Norm(typ ?? "");
 

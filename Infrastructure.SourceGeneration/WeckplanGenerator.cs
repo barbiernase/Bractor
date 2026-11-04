@@ -39,8 +39,8 @@ namespace Infrastructure.SourceGeneration
                 if (Projektionsform.IstProjektion(t))
                 {
                     var p = Projektionsform.LiesProjektion(t);
-                    foreach (var a in p.Aufs)
-                        eintraege.Add((a.Eingang, Abstractions.Projektionsvertrag.Kind(t.Name), false));
+                    foreach (var e in p.Events())   // ein Bündel weckt mit jedem seiner Events
+                        eintraege.Add((e, Abstractions.Projektionsvertrag.Kind(t.Name), false));
                 }
             }
 

@@ -208,7 +208,10 @@ public static class ModellMapper
         {
             Name = p.Name, Namespace = p.Namespace, MindestensEinmal = p.MindestensEinmal,
             Handles = p.ConsumesFull.Select(full => Kurz(full))
-                .Select(ev => AlsHandle(ev, p.HandleSigs.GetValueOrDefault(ev), p.HandleVertraege.GetValueOrDefault(ev))).ToList(),
+                .Select(ev => AlsHandle(ev, p.HandleSigs.GetValueOrDefault(ev), p.HandleVertraege.GetValueOrDefault(ev)) with
+                {
+                    Ueber = p.Buendel.GetValueOrDefault(ev)?.Ueber,
+                }).ToList(),
             Doku = p.Quelle.Doku, Typart = p.Quelle.Typart, Basen = p.Quelle.Basen, Attribute = p.Quelle.Attribute,
             Zusatz = p.Quelle.Zusatz, Usings = p.Quelle.Usings, Datei = Rel(p.Quelle.Datei),
             Zustand = p.Quelle.Zustand.Count > 0 ? p.Quelle.Zustand : null,
@@ -373,6 +376,12 @@ public static class ModellMapper
                 {
                     @event = ev,
                     sig = Sig(konsumentVon.GetValueOrDefault(p.Name)?.Handles.FirstOrDefault(h => h.Eingang == Kurz(ev))),
+                    // Ein Bündel (docs/04 §4.3.1): seine Events, der Schlüssel (null = global) und je Event, woher er kommt — oder warum nicht (CQRS118).
+                    buendel = p.Buendel.GetValueOrDefault(ev) is { } b ? new
+                    {
+                        events = b.Events, schluessel = b.Schluessel, ueber = b.Ueber, fehler = b.Fehler,
+                        glieder = b.Glieder.Select(g => new { @event = g.Event, art = g.Art, feld = g.Feld }).ToArray(),
+                    } : null,
                     _ort = OrtJson(dom, p.HandleSigs.GetValueOrDefault(ev)?.Ort),
                     fns = StoreFns(p.HandleFaehigkeiten, ev),
                     rumpf = Rumpf(p.HandleBodies, ev),

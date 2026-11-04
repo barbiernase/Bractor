@@ -126,6 +126,7 @@ public sealed class MartenEventBatchWriter : IEventBatchWriter
                 if (!string.IsNullOrEmpty(item.AggregateType)) ev.SetHeader("aggregate_type", item.AggregateType);
                 if (ImAuftrag.IstAkteur(teil.Akteur)) ev.SetHeader(ImAuftrag.Header, teil.Akteur!);
                 SpurHeader.Setze(ev, teil.SpurKopf);
+                beilagen.Rueckblick(item.StreamId, item.ExpectedVersion + i + 1, teil.Events[k]);
             }
         }
     }

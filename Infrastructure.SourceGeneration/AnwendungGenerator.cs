@@ -58,6 +58,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine($"        public {K}IAggregatTabelle Aggregate {{ get; }} = new AggregatTabelle();");
             sb.AppendLine("        public IReadOnlyDictionary<Type, global::Infrastructure.Wecken.Weckziel[]> Weckplan => global::Infrastructure.Wecken.GeneratedWeckplan.Plan;");
             sb.AppendLine("        public IReadOnlyList<Type> QueryTypen => global::Infrastructure.Projections.Generated.GeneratedQueryDienst.SupportedQueryTypes;");
+            sb.AppendLine("        public IReadOnlyDictionary<Type, global::Infrastructure.Projections.Rueckblickeintrag[]> Rueckblick => global::Infrastructure.Projections.Generated.GeneratedProjektionen.Rueckblick;");
             sb.AppendLine("        public global::Cqrs.Leitung.INutzlastTabelle? Nutzlast => " + (nutzlast != null
                 ? $"global::{nutzlast.ToDisplayString()}.Instanz;"
                 : "null;   // ohne Leitungs-Projekt kein gRPC-Dienst (docs/07, Rolle Leitung)"));

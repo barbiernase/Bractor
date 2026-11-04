@@ -29,10 +29,16 @@ namespace Infrastructure.Projections;
 /// einmal), seine Events überspringt der Leser, und je Poll-Intervall versucht er ihn einzeln — läuft er durch, ist er nicht mehr geparkt. Ein
 /// Konflikt an einem geteilten Dokument wird einzeln bis zu fünfmal gestreut wiederholt, dann bleibt der Stream bis zum nächsten Durchlauf
 /// stehen (die Position hält vor ihm).
+/// <b>Bündel</b> (<see cref="Buendelblick"/>): hört die Projektion ein Bündel, wendet der Leser nur an, was bis zur gesetzten Sequenz reicht — der
+/// Blick ins Log vor einem Event ist erst dann vollständig. Steht der Horizont kurz, wartet er in kleinen Schritten, danach heilt der Takt.
 /// </summary>
 public sealed class BatchLeser
 {
     private const int KonfliktVersuche = 5;
+
+    /// <summary>So oft und so lange wartet ein Leser mit Bündeln, wenn nichts bis zur gesetzten Sequenz reicht (der Horizont rückt meist in Millisekunden nach).</summary>
+    private const int HorizontVersuche = 10;
+    private static readonly TimeSpan HorizontPause = TimeSpan.FromMilliseconds(20);
 
     /// <summary>
     /// So viele erledigte Sequenzen jenseits der Lese-Position merkt sich eine Aktivierung höchstens. Steht die Position — der Horizont steht
@@ -55,6 +61,7 @@ public sealed class BatchLeser
     private readonly Func<Task>? _absturzVorCommit;
     private readonly Func<DateTimeOffset> _jetzt;
     private readonly Action<IReadOnlyCollection<Guid>>? _verarbeitet;
+    private readonly Buendelblick? _buendel;
 
     private PartitionsCheckpoint? _stand;
     /// <summary>Die Lese-Position dieser Aktivierung (≥ der durablen): bis hierher ist jedes Event der Partition erledigt.</summary>
@@ -69,6 +76,7 @@ public sealed class BatchLeser
     /// <param name="absturzVorCommit">Prüf-Naht: läuft nach dem Dispatch eines Batches, vor seinem Commit (Absturz mitten im Batch, zweite Aktivierung).</param>
     /// <param name="verarbeitet">nach jedem Commit, der Events anwandte: die Streams dieser Events („P hat S weiterverarbeitet“ an die Verteiler,
     /// docs/konzept-akteure.md §5) — Mechanik nach dem Commit, die Projektion gibt dabei nichts aus.</param>
+    /// <param name="buendel">der Blick der Bündel dieser Projektion (derselbe, den ihr Dispatch fragt); null = sie hört keine.</param>
     public BatchLeser(
         IEventStoreRepository eventStore,
         Projektionsnaht naht,
@@ -81,7 +89,8 @@ public sealed class BatchLeser
         ILogger? logger = null,
         Func<Task>? absturzVorCommit = null,
         Action<IReadOnlyCollection<Guid>>? verarbeitet = null,
-        Func<DateTimeOffset>? jetzt = null)
+        Func<DateTimeOffset>? jetzt = null,
+        Buendelblick? buendel = null)
     {
         if (partition < 0 || partition >= konsum.Partitionen)
             throw new ArgumentOutOfRangeException(nameof(partition), $"{projektionsId}: Partition {partition} außerhalb 0..{konsum.Partitionen - 1}.");
@@ -97,6 +106,7 @@ public sealed class BatchLeser
         _absturzVorCommit = absturzVorCommit;
         _verarbeitet = verarbeitet;
         _jetzt = jetzt ?? (() => DateTimeOffset.UtcNow);
+        _buendel = buendel;
     }
 
     /// <summary>Die durable Position der Partition, wie diese Aktivierung sie kennt (0 vor dem ersten Durchlauf).</summary>
@@ -162,6 +172,7 @@ public sealed class BatchLeser
             _erledigt.Clear();
         }
         var angewandt = 0;
+        var horizontGewartet = 0;
 
         if (_stand.Geparkt.Count > 0 && _jetzt() >= _naechsterParkVersuch)
         {
@@ -192,14 +203,21 @@ public sealed class BatchLeser
                 return angewandt;
             }
 
-            // Die Liste der Erledigten ist voll: nur noch anwenden, was bis zur gesetzten Sequenz reicht — dorthin darf die Position, dann
-            //   schrumpft die Liste. Reicht nichts so weit, wartet die Partition, bis der Horizont nachrückt (eine Seite je Weckung, gedeckelt).
-            if (_erledigt.Count >= ErledigtHoechstens)
+            // Die Liste der Erledigten ist voll — oder die Projektion hört ein Bündel (sein Blick ins Log braucht jede frühere Sequenz endgültig):
+            //   nur noch anwenden, was bis zur gesetzten Sequenz reicht — dorthin darf die Position, dann schrumpft die Liste. Reicht nichts so
+            //   weit, wartet die Partition, bis der Horizont nachrückt (eine Seite je Weckung, gedeckelt; mit Bündeln kurz in kleinen Schritten).
+            if (_erledigt.Count >= ErledigtHoechstens || _buendel is not null)
             {
                 var bisGesetzt = events.Where(e => e.Sequenz <= seite.Gesetzt).ToList();
                 if (bisGesetzt.Count == 0)
                 {
                     Rueckevor(seite.Gesetzt);
+                    if (_buendel is not null)
+                    {
+                        if (++horizontGewartet > HorizontVersuche) return angewandt;   // der Takt bzw. die nächste Weckung holt nach
+                        await Task.Delay(HorizontPause, ct);
+                        continue;
+                    }
                     if (_erledigt.Count < ErledigtHoechstens) continue;
                     if (_jetzt() - _letzteVollWarnung >= _konsum.Takt)
                     {
@@ -233,6 +251,9 @@ public sealed class BatchLeser
 
     private async Task<int> VerarbeiteSeiteAsync(List<PartitionsEvent> events, long grenze, CancellationToken ct)
     {
+        // Bündel: der Blick ins Log vor jedem Bündel-Event der Seite in einer Runde (das Log bis zur gesetzten Sequenz ändert sich nicht mehr —
+        //   er gilt auch für die getrennten Versuche unten).
+        if (_buendel is not null) await _buendel.LadeAsync(events.Select(e => (e.Sequenz, e.Event)), ct);
         var streams = events.Select(e => e.Event.AggregateId).Distinct().ToList();
         var guards = new Dictionary<Guid, int>(await _naht.Ablage.LadeGuardsAsync(_projektionsId, streams, ct));
         var geparkt = _stand!.Geparkt.Select(g => g.StreamId).ToHashSet();
@@ -408,7 +429,17 @@ public sealed class BatchLeser
         foreach (var g in _stand!.Geparkt.ToList())
         {
             var guard = (await _naht.Ablage.LadeGuardsAsync(_projektionsId, new[] { g.StreamId }, ct))[g.StreamId];
-            var events = await _eventStore.ReadStreamAsync(g.StreamId, guard + 1, ct);
+            IReadOnlyList<EventEnvelope> events = await _eventStore.ReadStreamAsync(g.StreamId, guard + 1, ct);
+            // Bündel: nur bis zur Lese-Position (≤ gesetzte Sequenz) — was dahinter liegt, versucht der nächste Takt; bis dahin bleibt er geparkt.
+            var bleibt = false;
+            if (_buendel is not null && events.Count > 0)
+            {
+                var sequenzen = await _eventStore.SequenzenAsync(g.StreamId, guard + 1, ct);
+                var bis = events.Where(e => sequenzen.TryGetValue(e.AggregateVersion, out var s) && s <= _lese).ToList();
+                bleibt = bis.Count < events.Count;
+                events = bis;
+                await _buendel.LadeAsync(events.Select(e => (sequenzen[e.AggregateVersion], e)), ct);
+            }
             _naht.Beginne(_stand!.Generation);
             var letzte = guard;
             var n = 0;
@@ -423,11 +454,12 @@ public sealed class BatchLeser
                     n++;
                 }
                 var ohne = Neu(_lese);
-                ohne.Geparkt = _stand.Geparkt.Where(x => x.StreamId != g.StreamId).ToList();
+                if (!bleibt) ohne.Geparkt = _stand.Geparkt.Where(x => x.StreamId != g.StreamId).ToList();
                 await CommitAsync(ohne, letzte > guard ? new Dictionary<Guid, int> { [g.StreamId] = letzte } : new Dictionary<Guid, int>(), ct);
                 angewandt += n;
-                _logger?.LogInformation("[Konsum] {Projektion}/{Partition}: geparkter Stream {Stream} läuft wieder (bis v{Version})",
-                    _projektionsId, _partition, g.StreamId, letzte);
+                if (!bleibt)
+                    _logger?.LogInformation("[Konsum] {Projektion}/{Partition}: geparkter Stream {Stream} läuft wieder (bis v{Version})",
+                        _projektionsId, _partition, g.StreamId, letzte);
             }
             catch (PartitionsKonfliktException) { throw; }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { throw; }

@@ -212,6 +212,8 @@ public static class CqrsServiceExtensions
             Infrastructure.Funktionen.ZustandsAblage.Registriere(options);
             // Die offenen Eingänge der Graphen: je Command ohne Ziel und Instanz, die ihn am Kopf nimmt, eine Zeile (docs/04 §4.4).
             Infrastructure.Eingaenge.OffeneEingaenge.Registriere(options);
+            // Das Verzeichnis der Schlüssel der Bündel: je Event, das ein Bündel über ein Feld oder global hört, eine Zeile (docs/04 §4.3.1).
+            RueckblickTabelle.Registriere(options);
             EventZeit.Registriere(options, builder.DbUhr);
 
             // Die Dokumente des Frameworks (Dead-Letter u. a.) — eine Quelle, auch für die Plan-Tests.

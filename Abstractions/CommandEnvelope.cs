@@ -56,6 +56,9 @@ public record EventEnvelope : IEventEnvelope, IWireMessage
     public Guid AggregateId { get; init; }
     public int AggregateVersion { get; init; } = 0;
 
+    /// <summary>Die Position im ganzen Log (gesetzt, wenn aus dem Event-Store gelesen; sonst 0).</summary>
+    public long Sequenz { get; init; }
+
     /// <summary>
     /// Der Kopf des Streams NACH dem Commit dieses Events — dieselbe Version wie <see cref="AggregateVersion"/> (eine Version je Aggregat, Plan
     /// Pub/Sub-Neustrukturierung Phase 5), nur am Ende des Commits: schrieb er nach diesem Event weitere (die der Client vielleicht nicht hört,

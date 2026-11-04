@@ -62,7 +62,7 @@ public static partial class DateiSchreiber
         // Neue Eingänge (Auf/Frage) je Klasse (im Modell ohne Datei) — nur die werden in eine bestehende Klasse eingefügt.
         var lesen = modell.Lesen ?? new Leseseite();
         var neueHandles = lesen.Konsumenten.Select(k => (k.Name, k.Handles)).Concat(lesen.Reader.Select(r => (r.Name, r.Handles)))
-            .GroupBy(x => x.Name).ToDictionary(g => g.Key, g => g.SelectMany(x => x.Handles).Where(h => h.Datei == null).Select(h => h.Eingang).ToHashSet(StringComparer.Ordinal));
+            .GroupBy(x => x.Name).ToDictionary(g => g.Key, g => g.SelectMany(x => x.Handles).Where(h => h.Datei == null).Select(h => BoardLeseseite.Eingangsname(h.Eingang)).ToHashSet(StringComparer.Ordinal));
 
         // Das Modell enthält nur Domänen-Typen (der Extractor filtert Framework-Typen über die Projektlage). Wohin ein Typ
         //   gehört, sagt seine echte Datei bzw. das aus dem Code bekannte Verzeichnis seines Namespace — kennt der Code
@@ -123,7 +123,7 @@ public static partial class DateiSchreiber
 
     /// <summary>Schlüssel eines Eingangs: der Typ des ersten Parameters (Event/Query/Eingang).</summary>
     private static string? ErsterTyp(MethodDeclarationSyntax m) =>
-        m.ParameterList.Parameters.Count > 0 ? Basis(m.ParameterList.Parameters[0].Type?.ToString()) : null;
+        m.ParameterList.Parameters.Count > 0 ? BoardLeseseite.Eingangsname(m.ParameterList.Parameters[0].Type?.ToString() ?? "") : null;
 
     /// <summary>Store-Methoden-Schlüssel: Name + Parametertypen (eine Fähigkeit trägt genau eine Funktion).</summary>
     private static string ImplSchluessel(MethodDeclarationSyntax m) =>
@@ -219,7 +219,8 @@ public static partial class DateiSchreiber
                 var m = root.DescendantNodes().OfType<ClassDeclarationSyntax>().Where(c => c.Identifier.Text == o.Klasse)
                     .SelectMany(c => c.Members.OfType<MethodDeclarationSyntax>())
                     // Eingang: der bearbeitete — oder, falls der Abgleich ihn (noch) nicht umgeschrieben hat, der im Code.
-                    .FirstOrDefault(x => (ErsterTyp(x) == o.Handle.Eingang || ErsterTyp(x) == o.Handle.EingangImCode) && x.ParameterList.Parameters.Count > 0);
+                    .FirstOrDefault(x => (ErsterTyp(x) == BoardLeseseite.Eingangsname(o.Handle.Eingang)
+                                          || (o.Handle.EingangImCode is { } imCode && ErsterTyp(x) == BoardLeseseite.Eingangsname(imCode))) && x.ParameterList.Parameters.Count > 0);
                 if (m == null) { uebersprungen.Add($"{gruppe.Key} ({o.Klasse}.{o.Methode}({o.Handle.Eingang}) nicht gefunden)"); continue; }
                 var ps = m.ParameterList.Parameters;
                 var h = ps.Skip(1).FirstOrDefault(p => Basis(p.Type?.ToString()) == herkunft);

@@ -18,11 +18,21 @@ namespace Infrastructure.SourceGeneration
     {
         private const string A = "Abstractions.";
 
-        /// <summary>Ein <c>Auf</c> einer Projektion: <c>Task Auf(TEvent e[, Herkunft h], Schreib-Fähigkeiten…[, CancellationToken ct])</c>.</summary>
+        /// <summary>
+        /// Ein <c>Auf</c> einer Projektion: <c>Task Auf(TEvent e[, Herkunft h], Schreib-Fähigkeiten…[, CancellationToken ct])</c> — der Eingang ein
+        /// Event oder ein Bündel von Events (<c>Buendel&lt;A, B, …&gt;</c>, dann <see cref="Glieder"/>).
+        /// </summary>
         internal sealed class Auf
         {
             public IMethodSymbol Methode = null!;
             public INamedTypeSymbol Eingang = null!;
+            /// <summary>Bei einem Bündel seine Events in der Reihenfolge der Typargumente; sonst leer.</summary>
+            public List<INamedTypeSymbol> Glieder = new List<INamedTypeSymbol>();
+            /// <summary>Bei einem Bündel die Wahl des Schlüssels (<c>[Ueber&lt;T&gt;]</c> am Parameter), sonst null.</summary>
+            public INamedTypeSymbol? Ueber;
+            public bool IstBuendel => Glieder.Count > 0;
+            /// <summary>Die Events, die dieses Auf hört: das Event selbst bzw. die Glieder des Bündels.</summary>
+            public IEnumerable<INamedTypeSymbol> Events => IstBuendel ? Glieder : new[] { Eingang };
             /// <summary>Die Parameter in Reihenfolge: <c>e</c> (Eingang), <c>h</c> (Herkunft), <c>ct</c> (Abbruch) oder <c>faehigkeit</c>.</summary>
             public List<(string Art, INamedTypeSymbol? Typ)> Parameter = new List<(string, INamedTypeSymbol?)>();
             public List<INamedTypeSymbol> Faehigkeiten = new List<INamedTypeSymbol>();
@@ -42,7 +52,21 @@ namespace Infrastructure.SourceGeneration
             /// <summary>Die Schreib-Fähigkeiten aller <c>Auf</c>, ohne Doppelte, in Reihenfolge des ersten Auftretens.</summary>
             public List<INamedTypeSymbol> SchreibFaehigkeiten() => Aufs.SelectMany(a => a.Faehigkeiten)
                 .GroupBy(Name).Select(g => g.First()).ToList();
+
+            /// <summary>Die Events, die die Projektion hört (aus Events und Bündeln), ohne Doppelte, in Reihenfolge des ersten Auftretens.</summary>
+            public List<INamedTypeSymbol> Events() => Aufs.SelectMany(a => a.Events).GroupBy(Name).Select(g => g.First()).ToList();
         }
+
+        /// <summary>Ist <paramref name="t"/> ein Bündel (<c>Buendel&lt;…&gt;</c>)?</summary>
+        public static bool IstBuendel(ITypeSymbol t) =>
+            t is INamedTypeSymbol n && n.IsGenericType && Name(n).StartsWith(Abstractions.Projektionsvertrag.Buendel, System.StringComparison.Ordinal);
+
+        /// <summary>
+        /// Der Name eines Eingangs, der ein <c>Auf</c> identifiziert: der volle Name eines Events bzw. eines Bündels samt seiner Events (zwei Bündel
+        /// gleicher Stelligkeit sind verschiedene Eingänge).
+        /// </summary>
+        public static string EingangsName(INamedTypeSymbol t) =>
+            IstBuendel(t) ? Name(t) + "[" + string.Join(",", t.TypeArguments.Select(Name)) + "]" : Name(t);
 
         /// <summary>Eine <c>Frage</c> eines Readers: <c>Frage(TQuery q, Lese-Fähigkeiten…[, CancellationToken ct])</c> → Antwort, <c>OneOf&lt;…&gt;</c>,
         /// auch als <c>Task</c>/<c>ValueTask</c>.</summary>
@@ -132,7 +156,7 @@ namespace Infrastructure.SourceGeneration
                 }
                 var auf = LiesAuf(m, mOrt, p.Fehler);
                 if (auf == null) continue;
-                if (!gesehen.Add(Name(auf.Eingang))) { p.Doppelt.Add((auf.Eingang, mOrt)); continue; }
+                if (!gesehen.Add(EingangsName(auf.Eingang))) { p.Doppelt.Add((auf.Eingang, mOrt)); continue; }
                 p.Aufs.Add(auf);
             }
             if (p.Aufs.Count == 0 && p.Doppelt.Count == 0 && p.Fehler.Count == 0)
@@ -140,15 +164,41 @@ namespace Infrastructure.SourceGeneration
             return p;
         }
 
+        /// <summary>Ein konkretes, persistentes Event (kein Hinweis — die stehen nie im Log)?</summary>
+        private static bool IstLogEvent(ITypeSymbol t) =>
+            t is INamedTypeSymbol n && n.TypeKind != TypeKind.Interface && !n.IsAbstract && !n.IsUnboundGenericType && Hat(n, A + "IEvent")
+            && !Hat(n, A + "ITransientEvent");
+
         private static Auf? LiesAuf(IMethodSymbol m, Location ort, List<(string, Location)> fehler)
         {
-            if (m.Parameters.Length == 0 || m.Parameters[0].Type is not INamedTypeSymbol eingang
-                || eingang.TypeKind == TypeKind.Interface || eingang.IsAbstract || !Hat(eingang, A + "IEvent") || Hat(eingang, A + "ITransientEvent"))
+            var eingang = m.Parameters.Length == 0 ? null : m.Parameters[0].Type as INamedTypeSymbol;
+            if (eingang == null || !(IstLogEvent(eingang) || IstBuendel(eingang)))
             {
-                fehler.Add(("ein Auf einer Projektion nimmt als ersten Parameter ein konkretes, persistentes Event (kein Hinweis — die stehen nie im Log)", ort));
+                fehler.Add(("ein Auf einer Projektion nimmt als ersten Parameter ein konkretes, persistentes Event (kein Hinweis — die stehen nie im Log) "
+                    + "oder ein Bündel von Events (Buendel<A, B, …>)", ort));
                 return null;
             }
             var auf = new Auf { Methode = m, Eingang = eingang };
+            if (IstBuendel(eingang))
+            {
+                var namen = new HashSet<string>();
+                foreach (var g in eingang.TypeArguments)
+                {
+                    if (!IstLogEvent(g) || IstBuendel(g))
+                    {
+                        fehler.Add(($"'{g.ToDisplayString()}' im Bündel ist kein konkretes, persistentes Event — ein Bündel bündelt Events aus dem Log", ort));
+                        return null;
+                    }
+                    if (!namen.Add(Name(g)))
+                    {
+                        fehler.Add(($"'{g.Name}' steht zweimal im Bündel — je Event-Typ eine Stelle", ort));
+                        return null;
+                    }
+                    auf.Glieder.Add((INamedTypeSymbol)g);
+                }
+                var ueber = m.Parameters[0].GetAttributes().FirstOrDefault(a => a.AttributeClass != null && Name(a.AttributeClass) == Abstractions.Projektionsvertrag.Ueber);
+                auf.Ueber = ueber?.AttributeClass!.TypeArguments[0] as INamedTypeSymbol;
+            }
             auf.Parameter.Add(("e", eingang));
             var mitAbbruch = false;
             foreach (var par in m.Parameters.Skip(1))

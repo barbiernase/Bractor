@@ -250,7 +250,7 @@ public class MartenEventStore : IEventStoreRepository
         var sequenz = r.GetInt64(o + 14);
         foreach (var env in Materialisiere(daten, r.GetGuid(o + 2), r.GetGuid(o + 3), r.GetInt64(o + 4), r.GetFieldValue<DateTimeOffset>(o + 5),
                      T(6), T(7), T(8), T(9), T(10), T(11), T(12), T(13)))
-            ergebnis.Add(new PartitionsEvent(sequenz, env));
+            ergebnis.Add(new PartitionsEvent(sequenz, env with { Sequenz = sequenz }));
     }
 
     /// <summary>
@@ -475,4 +475,131 @@ public class MartenEventStore : IEventStoreRepository
             $"select id from {_store.Options.Events.DatabaseSchemaName}.mt_streams where id = any(?)", ct, streams.ToArray());
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // Bündel: der Blick ins Log (docs/04 §4.3.1)
+    // ─────────────────────────────────────────────────────────────
+
+    /// <summary>So viele Fragen gehen höchstens in einer Anweisung hinaus (je Frage eine Teilabfrage mit eigener Grenze).</summary>
+    private const int RueckblickJeAnweisung = 100;
+
+    /// <summary>
+    /// Je Frage das neueste Event vor ihrer Sequenz, als Teilabfragen mit „sortiert, nur das erste“ und <c>union all</c> in einer Anweisung (statt
+    /// <c>lateral</c>, docs/12 SQL-Plan-Fallen): mit Stream über den Index auf (Stream, Version) des Logs, sonst über den Primärschlüssel des
+    /// Verzeichnisses der Schlüssel (<see cref="RueckblickTabelle"/>) und die Sequenz des Logs.
+    /// </summary>
+    public async Task<IReadOnlyList<EventEnvelope?>> RueckblickAsync(IReadOnlyList<Rueckblick> fragen, CancellationToken ct)
+    {
+        var antworten = new EventEnvelope?[fragen.Count];
+        if (fragen.Count == 0) return antworten;
+        await EventTabellenAsync(_store, ct);
+        await InboxTabelle.SicherAsync(_store, ct);
+        var schema = _store.Options.Events.DatabaseSchemaName;
+        var meta = MetadatenSpalten(_store);
+        var serializer = _store.Options.Serializer();
+        await using var conn = _store.Storage.Database.CreateConnection();
+        await conn.OpenAsync(ct);
+        for (var start = 0; start < fragen.Count; start += RueckblickJeAnweisung)
+        {
+            var teile = new List<string>();
+            await using var cmd = new Npgsql.NpgsqlCommand { Connection = conn };
+            string P(object wert)
+            {
+                cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = wert });
+                return "$" + cmd.Parameters.Count;
+            }
+            for (var i = start; i < Math.Min(fragen.Count, start + RueckblickJeAnweisung); i++)
+            {
+                var f = fragen[i];
+                var abfrage = f.Stream is { } stream
+                    ? EventStoreAbfragen.Events(schema, meta, $"stream_id = {P(stream)} and type = any({P(f.Typen.ToArray())}) and seq_id < {P(f.Vor)}",
+                        "order by version desc limit 1")
+                    : EventStoreAbfragen.Events(schema, meta,
+                        $"seq_id = (select r.seq from {RueckblickTabelle.Name(_store)} r where r.typ = {P(f.Typ)} and r.feld = {P(f.Feld)} "
+                        + $"and r.schluessel = {P(f.Schluessel)} and r.seq < {P(f.Vor)} order by r.seq desc limit 1)", "");
+                teile.Add($"(select x.*, {i} as nr from ({abfrage}) x)");
+            }
+            cmd.CommandText = string.Join(" union all ", teile);
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            var zeile = new List<PartitionsEvent>();
+            while (await r.ReadAsync(ct))
+            {
+                zeile.Clear();
+                LeseZeile(r, 0, serializer, zeile);
+                var nr = r.GetInt32(15);
+                // Ein Split-Upcast liefert mehrere: das Bündel nimmt das, dessen Typ es fragte (der Blick prüft den Typ).
+                antworten[nr] = zeile.LastOrDefault()?.Event;
+            }
+        }
+        return antworten;
+    }
+
+    /// <summary>
+    /// Trägt das Verzeichnis der Schlüssel für (Typ, Feld) einmal aus dem Log nach: je Event der Typen (samt Vorgängern) mit dem Feld als UUID,
+    /// global mit der leeren — danach hält es der Append aktuell (<see cref="BeilagenSchreiber"/>). Gemerkt in <see cref="RueckblickTabelle.Nachgetragen"/>;
+    /// zwei Hosts zugleich schreiben nichts doppelt. Der Feldname im JSON folgt der Schreibweise des Serializers.
+    /// </summary>
+    public async Task SichereRueckblickAsync(IReadOnlyList<Rueckblickfeld> felder, CancellationToken ct)
+    {
+        if (felder.Count == 0) return;
+        await EventTabellenAsync(_store, ct);
+        await InboxTabelle.SicherAsync(_store, ct);
+        var schema = _store.Options.Events.DatabaseSchemaName;
+        var stand = $"{schema}.{RueckblickTabelle.Nachgetragen}";
+        await using var conn = _store.Storage.Database.CreateConnection();
+        await conn.OpenAsync(ct);
+        foreach (var f in felder)
+        {
+            await using (var frage = new Npgsql.NpgsqlCommand($"select 1 from {stand} where typ = $1 and feld = $2", conn))
+            {
+                frage.Parameters.Add(new Npgsql.NpgsqlParameter { Value = f.Typ });
+                frage.Parameters.Add(new Npgsql.NpgsqlParameter { Value = f.Feld });
+                if (await frage.ExecuteScalarAsync(ct) is not null) continue;
+            }
+            var json = JsonFeld(f.Feld);
+            var (schluessel, bedingung) = f.Feld.Length == 0
+                ? ("'00000000-0000-0000-0000-000000000000'::uuid", "")
+                : ($"(data ->> '{json}')::uuid", $" and data ->> '{json}' is not null");
+            await using (var nach = new Npgsql.NpgsqlCommand(
+                $"insert into {RueckblickTabelle.Name(_store)} (typ, feld, schluessel, seq) select $1, $2, {schluessel}, seq_id from {schema}.mt_events "
+                + $"where type = any($3){bedingung} on conflict do nothing", conn))
+            {
+                nach.Parameters.Add(new Npgsql.NpgsqlParameter { Value = f.Typ });
+                nach.Parameters.Add(new Npgsql.NpgsqlParameter { Value = f.Feld });
+                nach.Parameters.Add(new Npgsql.NpgsqlParameter { Value = f.Typen.ToArray() });
+                nach.CommandTimeout = 0;   // einmal je (Typ, Feld) über das ganze Log
+                await nach.ExecuteNonQueryAsync(ct);
+            }
+            await using var gemerkt = new Npgsql.NpgsqlCommand($"insert into {stand} (typ, feld) values ($1, $2) on conflict do nothing", conn);
+            gemerkt.Parameters.Add(new Npgsql.NpgsqlParameter { Value = f.Typ });
+            gemerkt.Parameters.Add(new Npgsql.NpgsqlParameter { Value = f.Feld });
+            await gemerkt.ExecuteNonQueryAsync(ct);
+        }
+    }
+
+    /// <summary>Der Name eines Feldes im gespeicherten JSON, nach der Schreibweise von Martens Serializer.</summary>
+    private string JsonFeld(string feld)
+    {
+        var name = _store.Options.Serializer().Casing switch
+        {
+            Casing.CamelCase => System.Text.Json.JsonNamingPolicy.CamelCase.ConvertName(feld),
+            Casing.SnakeCase => System.Text.Json.JsonNamingPolicy.SnakeCaseLower.ConvertName(feld),
+            _ => feld,
+        };
+        return name.Replace("'", "''");
+    }
+
+    public async Task<IReadOnlyDictionary<int, long>> SequenzenAsync(Guid streamId, int abVersion, CancellationToken ct)
+    {
+        await EventTabellenAsync(_store, ct);
+        await using var conn = _store.Storage.Database.CreateConnection();
+        await conn.OpenAsync(ct);
+        await using var cmd = new Npgsql.NpgsqlCommand(
+            $"select version, seq_id from {_store.Options.Events.DatabaseSchemaName}.mt_events where stream_id = $1 and version >= $2", conn);
+        cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = streamId });
+        cmd.Parameters.Add(new Npgsql.NpgsqlParameter { Value = (long)abVersion });
+        var aus = new Dictionary<int, long>();
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct)) aus[(int)r.GetInt64(0)] = r.GetInt64(1);
+        return aus;
+    }
 }

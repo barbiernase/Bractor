@@ -55,7 +55,7 @@ public sealed partial class Sicht
             FunktionsPartner(nm, ein, aus);
             HD("projektion", (o, hd, id) =>
             {
-                if (S(hd, "event") == nm) P(aus, id, HText(o, hd));
+                if (HandleEvents(hd).Contains(nm)) P(aus, id, HText(o, hd));
             });
             foreach (var a in _applier) if (S(a, "event") == nm) P(aus, "app:" + S(a, "_id"), "Apply @ " + Agg(a, "—"));
             // Kenntnis: die Akteure, die das Event bzw. den Hinweis hören (IHoert am Akteur; ✕ nimmt ihm das Hören).

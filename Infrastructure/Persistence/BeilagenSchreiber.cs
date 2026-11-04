@@ -1,4 +1,5 @@
 using Abstractions;
+using Infrastructure.Komposition;
 using Marten;
 
 namespace Infrastructure.Persistence;
@@ -28,6 +29,10 @@ internal sealed class BeilagenSchreiber
     private List<string>? _eingangFunktionen, _eingangTypen, _eingangDaten;
     private List<int>? _eingangVersionen;
     private List<string?>? _eingangAkteure, _eingangKorrelationen;
+    // Das Verzeichnis der Schlüssel der Bündel (Typ, Feld, Schlüssel je Event; die Sequenz liest die Anweisung aus mt_events).
+    private List<string>? _rueckTypen, _rueckFelder;
+    private List<Guid>? _rueckSchluessel, _rueckStreams;
+    private List<int>? _rueckVersionen;
 
     public void Lege(IDocumentSession session, Guid streamId, IReadOnlyList<Beilage>? beilagen)
     {
@@ -63,6 +68,24 @@ internal sealed class BeilagenSchreiber
         }
     }
 
+    /// <summary>
+    /// Ein Event an <paramref name="version"/> des Streams: hört ein Bündel seinen Typ über ein Feld oder global (<c>Anwendung.Rueckblick</c>), kommt
+    /// es ins Verzeichnis der Schlüssel (docs/04 §4.3.1) — je Eintrag eine Zeile.
+    /// </summary>
+    public void Rueckblick(Guid streamId, int version, object payload)
+    {
+        if (payload is not IEvent e || !Anwendung.Rueckblick.TryGetValue(e.GetType(), out var eintraege)) return;
+        var typ = Anwendung.Upcasting.Diskriminator(e);
+        foreach (var x in eintraege)
+        {
+            (_rueckTypen ??= new()).Add(typ);
+            (_rueckFelder ??= new()).Add(x.Feld);
+            (_rueckSchluessel ??= new()).Add(x.Schluessel(e));
+            (_rueckStreams ??= new()).Add(streamId);
+            (_rueckVersionen ??= new()).Add(version);
+        }
+    }
+
     /// <summary>Ein Append ohne Events an <paramref name="streamId"/>: er gilt nur, wenn der Stream noch auf <paramref name="version"/> steht.</summary>
     public void PruefeKopf(Guid streamId, int version)
     {
@@ -80,6 +103,8 @@ internal sealed class BeilagenSchreiber
         if (_eingaenge is not null)
             Infrastructure.Eingaenge.OffeneEingaenge.Lege(session, store, _eingaenge, _eingangFunktionen!, _eingangTypen!, _eingangDaten!, _eingangStreams!,
                 _eingangVersionen!, _eingangAkteure!, _eingangKorrelationen!);
+        if (_rueckTypen is not null)
+            RueckblickTabelle.Lege(session, store, _rueckTypen, _rueckFelder!, _rueckSchluessel!, _rueckStreams!, _rueckVersionen!);
     }
 
     /// <summary>Die CommandIds der Quittungen (für die Ausnahme einer Wiederholung).</summary>

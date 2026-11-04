@@ -120,7 +120,8 @@ Die Messung wartet diesen Nachlauf ab (alle Partitions-Stände am Kopf des Logs)
 ## 4.2 Woraus folgt, was ein Konsument ist
 
 Eine **Projektion** ist eine Klasse mit `IProjektion` und je gehörtem Event einem `Task Auf(TEvent e[, Herkunft h], Schreib-Fähigkeiten…[,
-CancellationToken ct])` (docs/10 §10.3); ihre Kennung ist der Typname (`Projektionsvertrag.Kennung`). Gelesen wird sie über
+CancellationToken ct])` (docs/10 §10.3) — der Eingang darf auch ein **Bündel** von Events sein (`Buendel<A, B, …>`, §4.3.1); ihre Kennung ist der
+Typname (`Projektionsvertrag.Kennung`). Gelesen wird sie über
 **eine** Lesart (`Infrastructure.SourceGeneration/Projektionsform.cs`) — dieselbe für Batch-Kinds, Weckplan, Akteur-Rechte, Analyzer und Extractor.
 Der `PullPathGenerator` erzeugt in der Komposition je Projektion den Dispatch (`switch` über den Event-Typ → ihr `Auf`, die `Herkunft` aus dem
 Event, die Fähigkeiten aus dem Bereich), die gehörten Typen, ein Batch-Kind `batch-<Projektion>` und einen `Projektionseintrag`
@@ -193,6 +194,41 @@ Ziel nicht. Für Klasse 1 ist die neue Generation das Leeren der eigenen Dokumen
 Fortschritt). Funktionen haben keinen Neuaufbau und liegen nie auf diesem Pfad. In Sim vergleicht `ProjektionsStandDienst` beim Start den Stand
 jeder Projektion (Code-Hash der Klasse + Stores + die Form des Konsums mit der Partitionszahl) mit `<schema>.stand` und gibt bei Abweichung jeder
 Projektion eine neue Generation (Fortschritt auf Anfang, sofort umgeschaltet; der erste Takt weckt jede Partition); in Prod meldet er nur.
+
+### 4.3.1 Bündel: Events eines Schlüssels
+
+Ein `Auf` kann statt eines Events ein **Bündel** nehmen: `Task Auf(Buendel<WareReserviert, ZahlungEingegangen> b, Herkunft h, ISchreibeLieferung s)`
+(`Abstractions/Buendel.cs`, 2 bis 16 verschiedene persistente Events, Eigenschaften `Erstes`, `Zweites` …). Es wird gerufen, sobald zum **Schlüssel**
+von jedem Typ ein Event im Log steht, und bei jedem weiteren Event eines dieser Typen erneut — je Typ mit dem neuesten; die `Herkunft` ist die des
+auslösenden Events. Ein Bündel hat keinen eigenen Namen: es heißt nach seinen Events (im Editor `WareReserviert ⋈ ZahlungEingegangen`).
+
+**Der Schlüssel** folgt nur aus Code-Fakten (`Infrastructure.SourceGeneration/Buendelform.cs`, dieselbe Lesart für Generator und Extractor): je Event
+die Ids, die es nennt — der Stream (das Aggregat, dessen Applier es faltet) und jedes Feld `Id<T>`. Der Schlüssel ist die eine Id, die alle gemeinsam
+haben; je Event kommt er aus dem **Stream**, wenn `T` es faltet, sonst aus seinem einzigen **Feld** `Id<T>`. Haben die Events keine gemeinsam, ist
+das Bündel **global** (je Typ das neueste Event); haben sie mehrere, wählt `[Ueber<T>]` am Parameter. Lässt er sich nicht ableiten (mehrdeutig, ein
+Event mit zwei Feldern `Id<T>`, `[Ueber<T>]` mit einem Event ohne diese Id), bricht der Build (**CQRS118**, `PullPathGenerator`); die Form selbst
+(nur persistente Events, je Typ eine Stelle) prüft CQRS057.
+
+**Ausgewertet wird gegen das Log, ohne Zustand** (`Infrastructure/Projections/Buendel.cs`, `Buendelblick`): zum Event an der Sequenz `s` fragt der
+Leser je übrigem Typ nach dem neuesten Event zum selben Schlüssel vor `s` — je Seite in einer Runde (`IEventStoreRepository.RueckblickAsync`,
+Teilabfragen mit „sortiert, nur das erste“ und `union all`). Die Antwort hängt nur am Log bis `s`: gleich bei jedem Neuaufbau, jeder Partitionierung
+und jeder Reihenfolge der Ankunft (Invariante 1). Das setzt voraus, dass jede Sequenz vor `s` endgültig ist — eine Projektion mit Bündel wendet darum
+nur an, was bis zur gesetzten Sequenz reicht (§4.1, sonst nur bei voller Liste der Erledigten); steht der Horizont, wartet sie in kleinen Schritten
+(10 × 20 ms), danach holt der Takt nach. Ein geparkter Stream wird ebenso nur bis zur Lese-Position versucht. Der Weckplan nennt jedes Event eines
+Bündels.
+
+**Woher die Partner kommen:** über den Stream liest der Rückblick den Index (Stream, Version) des Logs. Über ein Feld oder global liest er das
+**Verzeichnis der Schlüssel** (`cqrs_rueckblick`, `Infrastructure/Persistence/RueckblickTabelle.cs`): je Event eines solchen Typs eine Zeile (Typ, Feld,
+Schlüssel, Sequenz), geschrieben vom Append in derselben Transaktion (`BeilagenSchreiber`, die Sequenz aus `mt_events` nach dem Einfügen); was vor dem
+Bündel im Log stand, trägt der erste Leser einmal nach (`SichereRueckblickAsync`, gemerkt in `cqrs_rueckblick_stand`). Eine eigene Tabelle statt eines
+Index auf `mt_events`: den löschte Weasel beim Abgleich — Martens Event-Tabelle kennt keine fremden Indizes. Welche Typen hineingehören, sagt die
+generierte Tabelle `GeneratedProjektionen.Rueckblick` (über `IAnwendung.Rueckblick`).
+
+**Schreiben über Streams hinweg.** Ein Bündel über ein Feld oder global löst aus verschiedenen Streams aus, also in verschiedenen Partitionen und in
+beliebiger Reihenfolge. Was es je Schlüssel festhält, schreibt es darum bedingt nach der Position des Auslösers im Log: `Herkunft.Sequenz` (über Streams
+vergleichbar) bzw. `Herkunft.Stand` (die Sequenz, ohne sie die Version) — `DateiZiel.LegeAbWennNeuer` vergleicht so; ein geteiltes Read-Model der
+Klasse 1 behält den Stand mit dem größeren `h.Sequenz`. Beispiel: `Pruefdomaene.Projections/Abrechnung/RechnungsbildProjektion.cs` (je Schlüsselart
+ein Bündel), Garantie-Tests `BuendelGarantieTests`.
 
 ## 4.4 Funktionen und Graphen
 

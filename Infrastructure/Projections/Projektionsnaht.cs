@@ -103,9 +103,9 @@ public sealed class Projektionsnaht
 /// <summary>Was der generierte Dispatch einer Projektion braucht (PullPathGenerator).</summary>
 public static class Projektionslauf
 {
-    /// <summary>Die Herkunft eines Events für das <c>Auf</c> einer Projektion: Stream, Version, Log-Zeit, Akteur der Kette, Wirker.</summary>
+    /// <summary>Die Herkunft eines Events für das <c>Auf</c> einer Projektion: Stream, Version, Log-Zeit, Akteur der Kette, Wirker, Position im Log.</summary>
     public static Herkunft Herkunft(EventEnvelope e, string wirker)
-        => new(e.AggregateId, e.AggregateVersion, e.CreatedAtUtc, ImAuftrag.IstAkteur(e.UserId) ? e.UserId : null, wirker);
+        => new(e.AggregateId, e.AggregateVersion, e.CreatedAtUtc, ImAuftrag.IstAkteur(e.UserId) ? e.UserId : null, wirker, e.Sequenz);
 
     /// <summary>
     /// Der Store einer Projektion aus einem Fähigkeits-Bereich: alle ihre Schreib-Fähigkeiten müssen DIESELBE Instanz liefern (ein Store, R9), sie

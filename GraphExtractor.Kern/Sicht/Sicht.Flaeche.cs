@@ -211,7 +211,7 @@ public sealed partial class Sicht
         foreach (var p in _projektionen)
         {
             var pid = "prj:" + S(p, "_id");
-            var ports = Alle(p["handles"]).Select(h => S(h, "event")).Where(t => t.Length > 0).Distinct()
+            var ports = Alle(p["handles"]).SelectMany(HandleEvents).Where(t => t.Length > 0).Distinct()
                 .Select(t => new FlaechenPort(t, "ein", Sorte(t), false)).ToList();
             karten.Add(new(pid, pid, "projektion", S(p, "name"), "projektionen", BandVon(pid), Gruppe(pid, p), ports));
             flaecheVon[pid] = pid;

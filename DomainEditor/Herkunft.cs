@@ -32,7 +32,7 @@ public static class Herkunft
         Umsetzungen = f.Umsetzungen.Select(u => new { u.Name, u.Konstruktor }).ToList(),
     });
     public static string Von(Faehigkeit f) => Hash(new { f.Name, f.Methode, f.Lesen, f.Rueckgabe, f.Parameter });
-    public static string Von(Handle h) => Hash(new { h.Eingang, h.Faehigkeiten, h.Ausgaenge, h.Rueckgabe });
+    public static string Von(Handle h) => Hash(new { h.Eingang, h.Ueber, h.Faehigkeiten, h.Ausgaenge, h.Rueckgabe });
     public static string Von(Konsument k) => Hash(new { k.MindestensEinmal, k.Basen });
     public static string Von(Leser r) => Hash(new { r.Basen });
 

@@ -77,6 +77,10 @@ public sealed class Leihliste : IProjektion
     }
 
     private sealed class Schliesser(ISchliesseAusleihe f) { public Task Los(Guid id) => f.SchliesseAsync(id); }
+
+    // BÜNDEL (docs/04 §4.3.1): ausgeliehen und angemahnt — beide entscheidet der Leihvorgang, der Schlüssel ist sein Stream (aus den Events
+    // abgeleitet, kein Name); gerufen, sobald beide im Log stehen.
+    public Task Auf(Buendel<Ausgeliehen, RueckgabeAngemahnt> b, Herkunft h, INotiereAusleihe notiere) => Notiere(notiere, h.Stream, b.Erstes.LeserId);
 }
 
 // Der Reader nennt keine Projektion: dahinter steht, wer in denselben Store schreibt (Leihliste über ILeihBuch). Mit Abbruch-Parameter.

@@ -117,7 +117,9 @@ store Leihwesen.Lesen.ILeihBuch klasse=1 | schreibt SchreibeAsync(eintrag:LeihEi
 faehigkeit Leihwesen.Lesen.INotiereAusleihe schreibt ILeihBuch.SchreibeAsync
 faehigkeit Leihwesen.Lesen.ISchliesseAusleihe schreibt ILeihBuch.SchliesseAsync
 faehigkeit Leihwesen.Lesen.IZaehleOffene liest ILeihBuch.OffeneAsync
-projektion Leihwesen.Lesen.Leihliste | Ausgeliehen herkunft -> ILeihBuch.SchreibeAsync; Zurueckgegeben herkunft -> ILeihBuch.SchliesseAsync
+projektion Leihwesen.Lesen.Leihliste | Ausgeliehen herkunft -> ILeihBuch.SchreibeAsync; Zurueckgegeben herkunft -> ILeihBuch.SchliesseAsync; Buendel<Ausgeliehen, RueckgabeAngemahnt> herkunft -> ILeihBuch.SchreibeAsync
+# Ein Bündel (docs/04 §4.3.1): heißt nach seinen Events; der Schlüssel aus den Events — beide faltet der Leihvorgang, also sein Stream
+buendel Leihliste.Buendel<Ausgeliehen, RueckgabeAngemahnt> schluessel=Leihvorgang | Ausgeliehen:stream, RueckgabeAngemahnt:stream
 reader Leihwesen.Lesen.LeihAuskunftLeser hinter=Leihliste | OffeneAusleihen -> ILeihBuch.OffeneAsync => OffeneAusleihenAntwort|KeineAusleihen
 record Leihwesen.Lesen.OffeneAusleihen query | LeserId:Guid { get; init; }
 record Leihwesen.Lesen.OffeneAusleihenAntwort queryresponse | Anzahl:int
@@ -125,6 +127,7 @@ record Leihwesen.Lesen.KeineAusleihen queryresponse |
 # Verträge von Auf und Frage: WAS aus der Signatur (Form · Art:Typ), WELCHE Store-Fns aus den Fähigkeits-Parametern — kein Rumpf-Fakt
 ausgang Leihliste.Ausgeliehen nichts | storefn:ILeihBuch.SchreibeAsync
 ausgang Leihliste.Zurueckgegeben nichts | storefn:ILeihBuch.SchliesseAsync
+ausgang Leihliste.Buendel<Ausgeliehen, RueckgabeAngemahnt> nichts | storefn:ILeihBuch.SchreibeAsync
 ausgang LeihAuskunftLeser.OffeneAusleihen einzeln | response:OffeneAusleihenAntwort; response:KeineAusleihen; storefn:ILeihBuch.OffeneAsync
 
 # ── Akteure (Entscheidung 13): IAkteur + IDarf<T> (was er hineingibt) + IHoert<T> (was zu ihm kommt) in der Basisliste — frei benannt, keine Art.

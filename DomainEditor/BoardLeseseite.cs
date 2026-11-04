@@ -102,6 +102,8 @@ public static class BoardLeseseite
                 Eingang = eingang,
                 EingangImCode = imCode,
                 Parameter = N(sig, "parameter") ?? standardParameter,
+                // Ein Bündel: die Wahl des Schlüssels ([Ueber<T>]), wie das Board sie trägt.
+                Ueber = projektion ? N(hd?["buendel"], "ueber") : null,
                 HerkunftParameter = sig != null ? N(sig, "herkunftParameter") : projektion ? "h" : null,
                 AbbruchParameter = N(sig, "abbruchParameter"),
                 Faehigkeiten = Faehigkeiten(hd),
@@ -251,6 +253,12 @@ public static class BoardLeseseite
     private static string OhneI(string s) => HatIPraefix(s) ? s[1..] : s;
     /// <summary>Letztes Segment eines (evtl. qualifizierten/generischen) Typnamens.</summary>
     public static string Basisname(string typ) => typ.Split('<')[0].Split('.').Last().TrimEnd('?').Trim();
+
+    /// <summary>
+    /// Der Name, an dem „C# schreiben“ einen Eingang (Auf/Frage) im Code wiederfindet: der Basisname des Typs — bei einem Bündel (docs/04 §4.3.1)
+    /// samt seiner Events, denn <c>Buendel&lt;A, B&gt;</c> und <c>Buendel&lt;A, C&gt;</c> sind verschiedene Eingänge.
+    /// </summary>
+    public static string Eingangsname(string typ) => Basisname(typ) == "Buendel" && typ.Contains('<') ? Norm(typ).Replace("Abstractions.", "") : Basisname(typ);
 
     // ── JSON-Helfer ──
     private static IEnumerable<JsonNode> A(JsonNode? n, string k) => (n?[k] as JsonArray)?.Where(x => x != null).Select(x => x!) ?? [];

@@ -1196,7 +1196,7 @@
         // Reader-Handles: Query (Eingang) und OneOf-Responses (Ausgänge) mitziehen.
         MODEL.reader.forEach(r=>(r.handles||[]).forEach(hd=>{if(hd.query===old)hd.query=nv;hd.responses=(hd.responses||[]).map(x=>x===old?nv:x);}));
         // Projektion-Handles: das gehörte Event mitziehen.
-        MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.event===old)hd.event=nv;}));
+        MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.event===old)hd.event=nv;buendelUmbenennen(hd,old,nv);}));
       }
     }else if(kind==="projektion"){
       // IReader<TProjection>-Bindung (per Name) mitziehen.
@@ -2438,9 +2438,10 @@
   function innenTitel(n){const r=n.ref||{};
     switch(n.kind){case "decider":return ["Decide",r.command||n.name];case "applier":return ["Apply",r.event||n.name];case "state":return ["Zustand",n.name];
       case "aggregate":return ["Fragen",(r.fragen||[]).map(f=>f.query).join(", ")];
-      case "handle":return [n.own&&n.own.kind==="reader"?"Frage":"Auf",(n.name||"")+" · "+((n.own&&(n.own.name||(n.own.ref||{}).name))||"")];
+      case "handle":return [n.own&&n.own.kind==="reader"?"Frage":"Auf",(istBuendel(r)?buendelName(r):n.name||"")+" · "+((n.own&&(n.own.name||(n.own.ref||{}).name))||"")];
       case "fn":return [r.faehigkeit||"Fähigkeit",n.name];case "readmodel":return ["Read-Model",n.name];
       case "umsetzung":return ["Umsetzung",((n.st&&n.st.impl&&n.st.impl.name)||"neu")+"."+n.name];
+      case "buendel":return ["⋈ Bündel",n.name];
       default:return [NODELABEL[n.kind]||n.kind,n.name];}}
   function blockZeige(de,id){const n0=NODEBY.get(id);if(!n0){KOM=null;return;}
     if(id.startsWith("sto:")){stoZeige(de,id,n0.ref);return;}
@@ -2537,11 +2538,51 @@
     innenPortWahl(p,x);}
   // Ein Port einer Karte; „＋“ ruft die Geste des Blocks (C.plus).
   const portZiel=p=>p&&(p.dec||p.frage||p.rec||p.hd||p.fn);
+  // ══ LÖSCHEN im Modal (Aggregat und Store von innen): ✕ im Kopf jeder Karte, die man hier anlegen kann. Ein Löschplan sagt, was mitgeht
+  //   (folgen) oder warum es nicht geht (grund: wo es außerhalb noch verwendet wird); nach dem Schreiben meldet der Editor neue Build-Befunde. ══
+  // Wo ein Typ verwendet wird — je Stelle Art, Text und Besitzer (Aggregat bzw. Projektion/Reader/Store), damit ein Plan entscheidet, was mitgeht.
+  function verwendungen(nm){const v=[],P=(art,wo,o)=>v.push({art,wo,...(o||{})});
+    MODEL.decider.forEach(d=>{if(d.command===nm)P("decide","Decide("+nm+") in ▣ "+d.aggregat,{agg:d.aggregat,ref:d});
+      if((d.ergibt||[]).some(o=>o.event===nm))P("ergebnis","Ergebnis von Decide("+d.command+") in ▣ "+d.aggregat,{agg:d.aggregat,ref:d});});
+    MODEL.applier.forEach(a=>{if(a.event===nm)P("apply","Apply("+nm+") in ▣ "+a.aggregat,{agg:a.aggregat,ref:a});});
+    MODEL.aggregate.forEach(A=>(A.fragen||[]).forEach(f=>{if(f.query===nm)P("frage","Frage("+nm+") in ▣ "+A.name,{agg:A.name});
+      if((f.antworten||[]).includes(nm))P("antwort","Antwort der Frage("+f.query+") in ▣ "+A.name,{agg:A.name});}));
+    MODEL.projektionen.forEach(o=>(o.handles||[]).forEach(hd=>{if(hdEvents(hd).includes(nm))P("auf",(istBuendel(hd)?"Bündel "+buendelName(hd):"Auf("+nm+")")+" in Projektion "+o.name,{own:o,ref:hd});}));
+    MODEL.reader.forEach(o=>(o.handles||[]).forEach(hd=>{if(hd.query===nm)P("rfrage","Frage("+nm+") in Reader "+o.name,{own:o,ref:hd});
+      if((hd.responses||[]).includes(nm))P("rantwort","Antwort der Frage("+hd.query+") in Reader "+o.name,{own:o,ref:hd});}));
+    MODEL.bausteinFunktionen.forEach(f=>{(f.eingaenge||[]).forEach(e=>{if(e.eingang===nm)P("funktion","Auf("+nm+") in Funktion "+f.name);
+        if((e.ausgaben||[]).includes(nm))P("funktion","Ausgabe von "+f.name+".Auf("+e.eingang+")");});
+      if((f.lauscht||[]).includes(nm))P("funktion","Quelle "+f.name);});
+    MODEL.akteure.forEach(a=>{if((a.darf||[]).includes(nm))P("darf","IDarf<"+nm+"> am Akteur "+a.name);if((a.hoert||[]).includes(nm))P("hoert","IHoert<"+nm+"> am Akteur "+a.name);});
+    const typNennt=t=>new RegExp("(^|[^A-Za-z0-9_])"+nm+"($|[^A-Za-z0-9_])").test(t||"");
+    MODEL.records.forEach(r=>{if(r.name!==nm&&(r.felder||[]).some(f=>typNennt(f.typ)))P("feld","Feld in "+r.name);});
+    MODEL.readModels.forEach(r=>{if((r.felder||[]).some(f=>typNennt(f.typ)))P("feld","Feld in Read-Model "+r.name);});
+    return v;}
+  // Ein Löschplan für einen Record: was davon mitgeht (mit), darf mitgehen; alles andere sperrt mit seinen Stellen als Grund. IDarf/IHoert gehen immer mit.
+  function loeschPlanRecord(nm,was,mit,tu){const v=verwendungen(nm),geht=u=>u.art==="darf"||u.art==="hoert"||mit(u),fremd=v.filter(u=>!geht(u));
+    return {was,folgen:v.filter(geht).map(u=>u.wo),grund:fremd.length?"noch verwendet: "+fremd.map(u=>u.wo).join(" · ")+" — dort zuerst lösen":null,tu};}
+  // Den Record selbst aus dem Modell nehmen (delNode nimmt ihn auch aus IDarf/IHoert der Akteure und der Kenntnis der Clients).
+  function recordWeg(nm){const n=NODEBY.get("rec:"+nm),r=recNamens(nm);if(n)delNode(n);else if(r)MODEL.records.splice(MODEL.records.indexOf(r),1);}
+  let G_LOESCH=null;   // die laufende Lösch-Geste: was gelöscht wurde und welche Befunde vorher bestanden
+  const diagSchluessel=x=>(x.d&&x.d.code?x.d.code+"|"+x.d.text:x.text);
+  function loeschKnopf(plan,x){if(!plan)return null;
+    return h("button",{class:"ag-loesch"+(plan.grund?" gesperrt":""),
+      title:plan.grund?"Nicht löschbar — "+plan.grund:"Löschen: "+plan.was+(plan.folgen.length?" (dazu: "+plan.folgen.join(" · ")+")":""),
+      onclick:e=>{e.stopPropagation();if(KOM.port){KOM.port=null;komZeige();return;}
+        if(plan.grund){deFlash("⚠ "+plan.was+" nicht gelöscht — "+plan.grund,false);
+          menueFix(e.clientX,e.clientY,"✕ "+plan.was,[{hinweis:"Nicht löschbar — "+plan.grund}]);return;}
+        menueFix(e.clientX,e.clientY,"✕ "+plan.was+" löschen?",[...plan.folgen.map(f=>({hinweis:"dazu: "+f})),
+          {t:"✕ löschen",gefahr:1,fn:()=>{KOM.edit.delete(x);KOM.zu.delete(x);if(KOM.wahl&&KOM.wahl.id===x)KOM.wahl=null;
+            G_LOESCH={was:plan.was,vorher:new Set(wbDiagListe().map(diagSchluessel))};gTitel("✕ "+plan.was);plan.tu();render();}}]);}},"✕");}
+  // Nach dem Schreiben einer Lösch-Geste: neue Fehler im Build (ein Verweis, den der Editor nicht kannte) als Meldung — dazu stehen sie an ihrer Karte.
+  function loeschBefunde(){if(!G_LOESCH)return;const L=G_LOESCH;G_LOESCH=null;
+    const neu=wbDiagListe().filter(x=>x.art==="fehler"&&!L.vorher.has(diagSchluessel(x)));
+    if(neu.length)deFlash("⚠ Nach dem Löschen von "+L.was+": "+neu.length+(neu.length===1?" neuer Fehler":" neue Fehler")+" im Build — "+((neu[0].d&&neu[0].d.text)||neu[0].text),false);}
   function innenPortZeile(C,p,richtung,x){const P=KOM.port,aktiv=!!p.plus&&!!P&&P.karte===x&&P.art===p.plus.art&&portZiel(P)===portZiel(p.plus);
     const r=h("div",{class:"fk-port "+richtung+" s-"+(p.sorte||"command")+(p.plus?" plus":"")+(aktiv?" aktiv":""),
       title:p.plus?(aktiv?"Klick: abbrechen":"Klick: anschließen bzw. anlegen"):p.loese?"✕ löst die Verbindung":""},h("span",{class:"fk-dot"}),h("span",{class:"fk-pl"},(p.plus?"":(FL_SORTE[p.sorte]||""))+p.label),
       p.loese?h("button",{class:"ag-los",title:"Verbindung lösen",onclick:e=>{e.stopPropagation();p.loese();}},"✕"):null);
-    if(p.plus)r.onclick=e=>{e.stopPropagation();C.plus(p.plus,x);};
+    if(p.plus)r.onclick=e=>{e.stopPropagation();C.plus(p.plus,x,e);};
     r.dataset.port=richtung+"|"+p.key;return r;}
   // „＋“ an einem Port ohne eigene Geste: die anschließbaren Karten heben sich hervor (dazu die gestrichelten für Neues); ein zweiter Klick auf
   //   denselben „＋“ bricht ab.
@@ -2585,7 +2626,8 @@
           unverbunden.has(x)?h("span",{class:"kom-mark",title:C.unverbundenText||""},"unverbunden"):null,
           C.marke?C.marke(x):null,
           kand?h("span",{class:"ag-stift"},"⊕"):fest?(C.festKnopf?C.festKnopf(n,x):null):h("button",{class:"ag-stift"+(offen?" an":""),title:offen?"Bearbeiten schließen":"Bearbeiten",
-            onclick:e=>{e.stopPropagation();if(KOM.port){KOM.port=null;komZeige();return;}if(offen)KOM.edit.delete(x);else{KOM.edit.add(x);KOM.zu.delete(x);}komZeige();}},offen?"▾":"✎")));
+            onclick:e=>{e.stopPropagation();if(KOM.port){KOM.port=null;komZeige();return;}if(offen)KOM.edit.delete(x);else{KOM.edit.add(x);KOM.zu.delete(x);}komZeige();}},offen?"▾":"✎"),
+          !kand&&!fest&&C.loeschen?loeschKnopf(C.loeschen(n,x),x):null));
       if(!zu){const P=C.ports(n,x),ports=h("div",{class:"fk-ports"});
         P.ein.forEach(p=>ports.append(innenPortZeile(C,p,"ein",x)));P.aus.forEach(p=>ports.append(innenPortZeile(C,p,"aus",x)));
         if(P.ein.length||P.aus.length)el.append(ports);
@@ -2615,6 +2657,7 @@
       unverbundenText:"Liegt beim Aggregat, noch von keinem Decide bzw. keiner Frage genommen — anschließen über ＋ am Port",
       ports:(n,x)=>aggPorts(A,n,x),kantenPorts:(a,b)=>aggKantenPorts(A,a,b),auswahl:p=>aggAuswahl(A,I,p),anschliessen:(p,x)=>aggAnschliessen(A,p,x),
       geister:p=>aggGeister(A,I,p),plus:(p,x)=>aggPlus(A,I,p,x),kurz:(n,x)=>aggKurz(A,n,x),bearbeiten:(n,x)=>aggBearbeiten(A,n,x),
+      loeschen:(n,x)=>aggLoeschPlan(A,n,x),
       zeit:aggGliedZeit,name:aggGliedName,ein:x=>aggEingaenge(A,I,x),koepfe:()=>aggSpaltenKoepfe(A,I,id),
       legen:{spalten:[0,1,2,3,4],baender:[""],frei:[4],folgen:[]},
       ansicht:{fuehrt:aggFuehrt,sortierung:aggSortierung,B:"event",
@@ -2635,6 +2678,23 @@
       ["Apply",null,"je Event eines"],
       ["Zustand",()=>{A.state=A.state||[];A.state.push({_id:"f"+(NID++),name:uniqFeldName(A.state,"Feld"),typ:"string"});const st=[...I.glieder.keys()].find(x=>x.startsWith("st:"));
         if(st){KOM.edit.add(st);KOM.zu.delete(st);}gTitel(t+": Zustand ＋ Feld");render();},"＋ Feld"]];}
+  // Löschen im Aggregat: ein Record mit allem, was im Aggregat an ihm hängt (Decide, Ergebnis, Apply, Frage, Antwort); ein Decide mit seinem
+  //   Command (1:1); ein Apply allein. Zustand und Fragen-Karte gehören dem Aggregat (die Felder haben ihr ✕).
+  function aggLoeschPlan(A,n,x){const hier=u=>u.agg===A.name&&["decide","ergebnis","apply","frage","antwort"].includes(u.art);
+    const recPlan=(nm,was)=>loeschPlanRecord(nm,was,hier,()=>{
+      MODEL.decider.filter(d=>d.aggregat===A.name&&d.command===nm).forEach(d=>MODEL.decider.splice(MODEL.decider.indexOf(d),1));
+      MODEL.decider.filter(d=>d.aggregat===A.name).forEach(d=>{d.ergibt=(d.ergibt||[]).filter(o=>o.event!==nm);});
+      MODEL.applier.filter(a=>a.aggregat===A.name&&a.event===nm).forEach(a=>MODEL.applier.splice(MODEL.applier.indexOf(a),1));
+      A.fragen=(A.fragen||[]).filter(f=>f.query!==nm);(A.fragen||[]).forEach(f=>{f.antworten=ohneX(f.antworten,nm);});
+      recordWeg(nm);});
+    if(x.startsWith("rec:")){const r=n.ref||{},art={command:r.aggregat===A.name?"Command":"Command ohne Ziel",event:"Event",rejection:"Hinweis",query:"Query",queryresponse:"Antwort"}[r.kind]||"Typ";
+      return recPlan(r.name,art+" "+r.name);}
+    if(n.kind==="decider"){const d=n.ref;
+      return recNamens(d.command)?recPlan(d.command,"Command "+d.command+" samt Decide")
+        :{was:"Decide("+d.command+")",folgen:[],grund:null,tu:()=>{MODEL.decider.splice(MODEL.decider.indexOf(d),1);}};}
+    if(n.kind==="applier"){const a=n.ref;
+      return {was:"Apply("+a.event+")",folgen:["das Event bleibt — ohne Apply warnt der Build (CQRS079)"],grund:null,tu:()=>{MODEL.applier.splice(MODEL.applier.indexOf(a),1);}};}
+    return null;}
   // ── Aggregat von innen: anlegen und verbinden (docs/10 §10.9) ──
   const aggIdFeld=()=>ID_FELD()||"AggregateId";
   const recNamens=n=>MODEL.records.find(r=>r.name===n);
@@ -2752,7 +2812,7 @@
     return box;}
   // Ein Record entfernen, wenn ihn niemand mehr nennt (Decide, Apply, Frage, Projektion, Akteur, Funktion).
   function aggRecordAufraeumen(nm){const genutzt=MODEL.decider.some(d=>d.command===nm||(d.ergibt||[]).some(o=>o.event===nm))||MODEL.applier.some(a=>a.event===nm)
-      ||MODEL.aggregate.some(a=>(a.fragen||[]).some(f=>f.query===nm||(f.antworten||[]).includes(nm)))||MODEL.projektionen.some(p=>(p.handles||[]).some(x=>x.event===nm))
+      ||MODEL.aggregate.some(a=>(a.fragen||[]).some(f=>f.query===nm||(f.antworten||[]).includes(nm)))||MODEL.projektionen.some(p=>(p.handles||[]).some(x=>hdEvents(x).includes(nm)))
       ||MODEL.reader.some(r=>(r.handles||[]).some(x=>x.query===nm||(x.responses||[]).includes(nm)))||MODEL.akteure.some(a=>(a.darf||[]).includes(nm)||(a.hoert||[]).includes(nm))
       ||MODEL.bausteinFunktionen.some(f=>(f.eingaenge||[]).some(e=>e.eingang===nm||(e.ausgaben||[]).includes(nm))||(f.lauscht||[]).includes(nm));
     if(!genutzt){const r=recNamens(nm);if(r)MODEL.records.splice(MODEL.records.indexOf(r),1);}}
@@ -2760,7 +2820,7 @@
   function recUmbenennenLokal(r,neu){const alt=r.name;r.name=neu;
     MODEL.decider.forEach(d=>{if(d.command===alt)d.command=neu;(d.ergibt||[]).forEach(o=>{if(o.event===alt)o.event=neu;});});MODEL.applier.forEach(a=>{if(a.event===alt)a.event=neu;});
     MODEL.aggregate.forEach(a=>(a.fragen||[]).forEach(f=>{if(f.query===alt)f.query=neu;f.antworten=(f.antworten||[]).map(v=>v===alt?neu:v);}));
-    MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.event===alt)hd.event=neu;}));
+    MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.event===alt)hd.event=neu;buendelUmbenennen(hd,alt,neu);}));
     MODEL.reader.forEach(o=>(o.handles||[]).forEach(hd=>{if(hd.query===alt)hd.query=neu;hd.responses=(hd.responses||[]).map(v=>v===alt?neu:v);}));}
   // Der Bearbeiten-Modus einer Karte (✎ im Kopf) — er trägt alles, was früher das Formular der Karte hatte.
   function aggBearbeiten(A,n,x){const box=h("div",{class:"ag-edit"}),t="▣ "+A.name;
@@ -2774,9 +2834,7 @@
         if(f){deFlash("⚠ "+f,false);render();return;}aggStempelUmbenennen(r.name,neu);if(r._ort)gUmbenennen(r,neu,r.name);else{recUmbenennenLokal(r,neu);render();}}})));
       box.append(aggFelder(r.felder=r.felder||[],f=>r.kind==="command"&&r.aggregat===A.name&&f.name===aggIdFeld(),t+": "+r.name));
       if(r.kind==="command"&&r.aggregat===A.name){const c=h("input",{type:"checkbox",onchange:e=>{r.istErzeugung=e.target.checked;gTitel(t+": "+r.name+(r.istErzeugung?" erzeugt":" erzeugt nicht mehr"));render();}});c.checked=!!r.istErzeugung;
-        box.append(h("label",{class:"ag-flag"},c," erzeugt das Aggregat (ICreationCommand)"));
-        weg("✕ Command samt Decide entfernen",()=>{MODEL.decider.filter(d=>d.command===r.name).forEach(d=>MODEL.decider.splice(MODEL.decider.indexOf(d),1));
-          gTitel(t+": Command "+r.name+" entfernt");const nn=NODEBY.get(x);KOM.edit.delete(x);if(nn)delNode(nn);});}
+        box.append(h("label",{class:"ag-flag"},c," erzeugt das Aggregat (ICreationCommand)"));}
       else if(r.kind==="event"||r.kind==="rejection"){
         box.append(h("button",{class:"ag-plus",title:"Fakt im Log (Event) oder flüchtig an Akteure (Hinweis) — der Modellierer entscheidet",
           onclick:()=>{r.kind=r.kind==="event"?"rejection":"event";if(r.kind==="rejection")MODEL.applier.filter(a=>a.event===r.name).forEach(a=>MODEL.applier.splice(MODEL.applier.indexOf(a),1));
@@ -2786,10 +2844,9 @@
         gTitel(t+": "+r.name+" entfernt");KOM.edit.delete(x);aggRecordAufraeumen(r.name);});
       if(r.kind==="queryresponse"&&(A.fragen||[]).some(f=>(f.antworten||[]).includes(r.name)))weg("✕ aus allen Fragen nehmen",()=>{(A.fragen||[]).forEach(f=>{f.antworten=ohneX(f.antworten,r.name);});
         gTitel(t+": Antwort "+r.name+" entfernt");KOM.edit.delete(x);aggRecordAufraeumen(r.name);});
-      if(r.kind==="query")weg("✕ Frage entfernen",()=>{A.fragen=(A.fragen||[]).filter(f=>f.query!==r.name);gTitel(t+": Frage "+r.name+" entfernt");KOM.edit.delete(x);aggRecordAufraeumen(r.name);});
       return box;}
     if(n.kind==="decider"){ruempfe();return box;}
-    if(n.kind==="applier"){ruempfe();weg("✕ Apply entfernen",()=>{MODEL.applier.splice(MODEL.applier.indexOf(n.ref),1);gTitel(t+": Apply "+n.ref.event+" entfernt");KOM.edit.delete(x);});return box;}
+    if(n.kind==="applier"){ruempfe();return box;}
     if(n.kind==="state"){box.append(aggFelder(A.state=A.state||[],null,t+": Zustand"));return box;}
     if(n.kind==="aggregate"){ruempfe();return box;}
     return box;}
@@ -2798,6 +2855,18 @@
   //   Fähigkeit ↔ Umsetzung); die Fähigkeit wählt man am Port des Auf bzw. der Frage wie das Ergebnis am Decide. Die Read-Models stehen in der
   //   Mitte beider Bänder, ihre Kanten nur aus der Signatur einer Fähigkeit. Events stammen aus dem Aggregat und sind hier fix.
   const stoFns=st=>[...(st.writeFns||[]).map(f=>[f,false]),...(st.readFns||[]).map(f=>[f,true])];
+  // ── BÜNDEL (docs/04 §4.3.1): ein Auf über Buendel<A, B, …> — es heißt nach seinen Events, der Schlüssel folgt aus ihnen (Server, Buendelform). ──
+  const BUENDEL_HOECHSTENS=16;
+  const istBuendel=hd=>!!hd&&(!!hd.buendel||/^Buendel</.test(hd.event||""));
+  const buendelEvents=hd=>hd.buendel&&hd.buendel.events?hd.buendel.events:((hd.event||"").match(/^Buendel<(.*)>$/)||[,""])[1].split(",").map(x=>x.trim()).filter(Boolean);
+  const buendelName=hd=>buendelEvents(hd).join(" ⋈ ");
+  // Die Events, die ein Auf hört: das Event selbst bzw. die seines Bündels.
+  const hdEvents=hd=>istBuendel(hd)?buendelEvents(hd):hd&&hd.event?[hd.event]:[];
+  // Ein Bündel neu fassen: der Eingang heißt Buendel<…> nach seinen Events; steht es schon im Code, merkt input den alten Eingang (er wird umgeschrieben).
+  function buendelSetze(hd,events,ueber){if(hd.sig&&!hd.input)hd.input=hd.event;
+    hd.buendel={...(hd.buendel||{}),events:[...events],ueber:ueber===undefined?((hd.buendel||{}).ueber||null):ueber,glieder:null,schluessel:null,fehler:null,neu:true};
+    hd.event="Buendel<"+events.join(", ")+">";}
+  function buendelUmbenennen(hd,alt,neu){if(!istBuendel(hd))return;const ev=buendelEvents(hd);if(!ev.includes(alt))return;buendelSetze(hd,ev.map(e=>e===alt?neu:e));}
   const stoTypen=f=>[...(f.params||[]).map(p=>p.typ),f.rueckgabe,(f.sig||{}).rueckgabe].filter(Boolean).join(" ");
   const nennt=(text,name)=>new RegExp("(^|[^A-Za-z0-9_])"+name+"($|[^A-Za-z0-9_])").test(text||"");
   const stoNenntIrgendwer=nm=>MODEL.stores.some(s=>stoFns(s).some(([f])=>nennt(stoTypen(f),nm)));
@@ -2813,7 +2882,12 @@
     return {prj,rdr,fremd,fnIds};}
   function stoInnen(id,st){const M=stoMitglieder(id,st),glieder=new Map(),kanten=[],band=new Map(),knoten=new Map(),fremd=new Set(),unverbunden=new Set();
     const setze=(x,s,b)=>{glieder.set(x,s);band.set(x,b);};
-    M.prj.forEach(p=>{const ids=handleIds(p,"prj:"+p._id);(p.handles||[]).forEach((hd,i)=>{if(!hd.event)return;const hx=ids[i],e="rec:"+hd.event;setze(hx,1,"s");
+    M.prj.forEach(p=>{const ids=handleIds(p,"prj:"+p._id);(p.handles||[]).forEach((hd,i)=>{if(!hd.event)return;const hx=ids[i],e="rec:"+hd.event;
+      // Ein Bündel: im Band „Bündeln“ — links die Bündel-Karte (seine Events als Ports), dann das Auf wie gewohnt.
+      if(istBuendel(hd)){const bx="bu:"+hx;setze(hx,1,"b");setze(bx,0,"b");kanten.push([bx,hx]);
+        knoten.set(bx,{id:bx,kind:"buendel",name:buendelName(hd),ref:hd,own:NODEBY.get(hx),prj:p});
+        (hd.fns||[]).forEach(f=>{if(M.fnIds.has(f))kanten.push([hx,"fn:"+f]);});return;}
+      setze(hx,1,"s");
       if(NODEBY.has(e)){setze(e,0,"s");kanten.push([e,hx]);}
       (hd.fns||[]).forEach(f=>{if(M.fnIds.has(f))kanten.push([hx,"fn:"+f]);});});});
     [...M.rdr.map(r=>[r,false]),...M.fremd.map(r=>[r,true])].forEach(([r,fr])=>{const ids=handleIds(r,"rdr:"+r._id);(r.handles||[]).forEach((hd,i)=>{
@@ -2821,7 +2895,8 @@
       if(NODEBY.has(q)){setze(q,0,"l");kanten.push([q,hx]);}
       (hd.fns||[]).forEach(f=>{if(M.fnIds.has(f))kanten.push([hx,"fn:"+f]);});
       if(!fr)(hd.responses||[]).forEach(a=>{const ax="rec:"+a;if(NODEBY.has(ax)){setze(ax,5,"l");kanten.push([hx,ax]);}});});});
-    stoFns(st).forEach(([f,lesen])=>{const fx="fn:"+f._id,ux="um:"+f._id,b=lesen?"l":"s";setze(fx,2,b);setze(ux,3,b);kanten.push([fx,ux]);
+    const nurBuendel=fid=>{const nutzer=M.prj.flatMap(p=>(p.handles||[]).filter(hd=>(hd.fns||[]).includes(fid)));return nutzer.length>0&&nutzer.every(istBuendel);};
+    stoFns(st).forEach(([f,lesen])=>{const fx="fn:"+f._id,ux="um:"+f._id,b=lesen?"l":nurBuendel(f._id)?"b":"s";setze(fx,2,b);setze(ux,3,b);kanten.push([fx,ux]);
       knoten.set(ux,{id:ux,kind:"umsetzung",name:f.name,ref:f,st,lesen,own:NODEBY.get(fx)});
       if(!kanten.some(([,z])=>z===fx))unverbunden.add(fx);
       const typen=stoTypen(f);MODEL.readModels.forEach(rm=>{if(nennt(typen,rm.name)){const rx="rm:"+rm._id;setze(rx,4,"");kanten.push([ux,rx]);}});});
@@ -2839,19 +2914,26 @@
       festKnopf:(n,x)=>stoEvent(x)?h("button",{class:"ag-stift",title:"Events stammen aus dem Aggregat und sind hier fix — Klick: im Aggregat öffnen",
         onclick:e=>{e.stopPropagation();const ag=(SICHT().karten[x]||{}).aggregat;if(ag)komKarte("agg:"+ag,true);}},"▣"):null,
       ports:(n,x)=>stoPorts(st,I,n,x),kantenPorts:(a,b)=>stoKantenPorts(I,kn,a,b),auswahl:p=>stoAuswahl(I,kn,p),anschliessen:(p,x)=>stoAnschliessen(st,kn,p,x),
-      geister:p=>stoGeister(st,p),plus:(p,x)=>innenPortWahl(p,x),kurz:(n,x)=>stoKurz(st,n,x),bearbeiten:(n,x)=>stoBearbeiten(st,I,n,x),
+      geister:p=>stoGeister(st,p),plus:(p,x,e)=>p.art==="buendelEvent"?stoBuendelEvent(st,p.hd,e):innenPortWahl(p,x),kurz:(n,x)=>stoKurz(st,n,x),bearbeiten:(n,x)=>stoBearbeiten(st,I,n,x),
+      loeschen:(n,x)=>stoLoeschPlan(st,I,n,x),
       // Ein Eingang ist im Store so neu wie seine Handhabung — das Event selbst ist älter (es stammt aus dem Aggregat).
       zeit:x=>{const hs=I.glieder.get(x)===0?I.kanten.filter(([a])=>a===x).map(([,b])=>stoZeit(st,kn(b))):[];return hs.length?Math.max(...hs):stoZeit(st,kn(x));},
       name:x=>stoName(kn(x)),ein:x=>I.kanten.filter(([,b])=>b===x).length,koepfe:()=>stoKoepfe(st),
-      legen:{spalten:[0,1,2,3,4,5],baender:["s","l"],bandTitel:{s:"Schreiben",l:"Lesen"},frei:[4],folgen:[[5,1]]},
+      // Das Band „Bündeln“ steht nur, wenn der Store ein Bündel hat (das erste entsteht über den Kopf der Spalte Eingänge).
+      legen:{spalten:[0,1,2,3,4,5],baender:[...I.band.values()].includes("b")?["s","b","l"]:["s","l"],bandTitel:{s:"Schreiben",b:"Bündeln",l:"Lesen"},frei:[4],folgen:[[5,1]]},
       ansicht:{fuehrt:()=>ANSICHT.stoFuehrt==="faehigkeit"?"faehigkeit":"eingang",sortierung:()=>AGG_SORTIERUNG[ANSICHT.stoSortierung]?ANSICHT.stoSortierung:"neu",
         B:"faehigkeit",setze:(f,s)=>{ANSICHT.stoFuehrt=f;ANSICHT.stoSortierung=s;ansichtSpeichern();}}});}
   // Ports im Store: Auf bzw. Frage nimmt links ihren Eingang und rechts ihre Fähigkeiten (＋ wählt bzw. legt an), eine Frage dazu ihre Antworten;
   //   eine Fähigkeit wird links genommen (＋ Auf bzw. Frage) und hat rechts ihre Umsetzung; die Umsetzung zeigt rechts die Read-Models ihrer Signatur.
   function stoPorts(st,I,n,x){const ein=[],aus=[],t="🗄 "+st.name,s=nm=>komSorte(nm);
     const fnName=fid=>{const k=NODEBY.get("fn:"+fid);return k?k.name:fid.split(".").pop();};
-    if(n.kind==="handle"){const hd=n.ref,lesen=n.own.kind==="reader",typ=hd.event||hd.query,fr=I.fremd.has(x);
-      ein.push({key:"in",label:typ,sorte:s(typ)});
+    if(n.kind==="buendel"){const hd=n.ref,ev=buendelEvents(hd);
+      ev.forEach(e=>ein.push({key:"ev:"+e,label:e,sorte:"event",loese:ev.length>2?()=>{buendelSetze(hd,ev.filter(x=>x!==e));gTitel(t+": "+e+" nicht mehr im Bündel");render();}:null}));
+      if(ev.length<BUENDEL_HOECHSTENS)ein.push({key:"+e",label:"＋ Event",plus:{art:"buendelEvent",hd}});
+      aus.push({key:"aus",label:"▶ Auf",sorte:"event"});
+      return {ein,aus};}
+    if(n.kind==="handle"){const hd=n.ref,lesen=n.own.kind==="reader",typ=istBuendel(hd)?buendelName(hd):hd.event||hd.query,fr=I.fremd.has(x);
+      ein.push({key:"in",label:typ,sorte:istBuendel(hd)?"event":s(typ)});
       (hd.fns||[]).filter(f=>I.M.fnIds.has(f)).forEach(f=>aus.push({key:"f:"+f,label:"▶ "+fnName(f),
         loese:fr?null:()=>{hd.fns=ohneX(hd.fns,f);gTitel(t+": "+typ+" nimmt "+fnName(f)+" nicht mehr");render();}}));
       if(!fr)aus.push({key:"+f",label:"＋ "+(lesen?"Lese":"Schreib")+"-Fähigkeit",plus:{art:"fn",hd,lesen}});
@@ -2874,7 +2956,7 @@
         ein.push({key:"+",label:"＋ Frage",plus:{art:"frage",rec:nm}});}}
     return {ein,aus};}
   function stoKantenPorts(I,kn,a,b){const na=kn(a),nb=kn(b);if(!na||!nb)return null;
-    if(nb.kind==="handle")return ["aus","in"];
+    if(nb.kind==="handle")return ["aus","in"];   // auch Bündel → Auf
     if(na.kind==="handle")return nb.kind==="fn"?["f:"+b.slice(3),"von:"+a]:["r:"+nb.name,"von:"+a];
     if(na.kind==="fn")return ["um","in"];
     if(na.kind==="umsetzung")return ["rm:"+b,"in"];
@@ -2905,13 +2987,14 @@
     else if(p.art==="frage")neu(0,"l","＋ neue Query mit Frage","Frage an "+st.name+" — antwortet "+p.rec,"Hole"+p.rec.replace(/Antwort$/,""),
       (n,o)=>stoQueryAnlegen(st,n,[p.rec],o),(e,frag)=>stoWaehleBesitzer(st,"reader",e,frag));
     return g;}
-  const stoMethodenVorschlag=(hd,lesen)=>!hd?"":lesen?"Finde"+(hd.query||"").replace(/^(Hole|Get)/,"")+"Async":"Vermerke"+(hd.event||"")+"Async";
+  const stoMethodenVorschlag=(hd,lesen)=>!hd?"":lesen?"Finde"+(hd.query||"").replace(/^(Hole|Get)/,"")+"Async":"Vermerke"+(istBuendel(hd)?buendelEvents(hd).join("Und"):hd.event||"")+"Async";
   // Default-Parameter einer neuen Fähigkeit (danach im ✎): zum Auf die Id des Aggregats, aus dem das Event stammt (bei Klasse 2 dazu die
   //   Herkunft, CQRS109); zur Frage die Id-Felder der Query.
   function stoParameterVorschlag(st,hd,lesen){const p=[];if(!hd)return p;
-    if(!lesen){const ag=(SICHT().karten["rec:"+hd.event]||{}).aggregat,A=MODEL.aggregate.find(a=>a.name===ag);
+    if(!lesen){const b=istBuendel(hd)?hd.buendel||{}:null,ag=b?(b.ueber||b.schluessel):(SICHT().karten["rec:"+hd.event]||{}).aggregat,A=MODEL.aggregate.find(a=>a.name===ag);
       if(A)p.push({_id:"f"+(NID++),name:"id",typ:"Id<"+A.namespace+"."+A.name+">"});
-      if((st.klassen||[])[0]===2)p.push({_id:"f"+(NID++),name:"h",typ:"Herkunft"});}
+      // Ein Bündel löst aus verschiedenen Streams aus: der Store braucht die Herkunft, um den jüngsten Stand zu halten (Herkunft.Stand).
+      if((st.klassen||[])[0]===2||b)p.push({_id:"f"+(NID++),name:"h",typ:"Herkunft"});}
     else((recNamens(hd.query)||{}).felder||[]).filter(f=>/^Id</.test(f.typ||"")).forEach(f=>p.push({_id:"f"+(NID++),name:f.name.charAt(0).toLowerCase()+f.name.slice(1),typ:f.typ}));
     return p;}
   function stoFaehigkeitAnlegen(st,m,lesen,hd){if(!/^[A-Z][A-Za-z0-9_]*$/.test(m||""))return "Ein Methodenname: groß beginnen, nur Buchstaben und Ziffern";
@@ -2944,6 +3027,24 @@
       ...evs.filter(r=>ag(r.name)===g).sort((a,b)=>a.name.localeCompare(b.name,"de")).map(r=>({t:r.name,fn:()=>{const p=stoBesitzer(st,o);
         if((st.klassen||[])[0]===3)p.mindestensEinmal=true;p.handles=[...(p.handles||[]),{event:r.name,fns:[]}];aggStempel("hd:"+p.name+"."+r.name);gTitel("🗄 "+st.name+": Auf "+r.name+" in "+p.name);render();}}))])
       :[{hinweis:"Die Projektion hört schon jedes Event — ein neues Event entsteht im Aggregat."}]);});}
+  // Ein Event aus dem Log wählen (nach Aggregat gruppiert), ohne die schon gewählten.
+  function stoEventWahl(ev,titel,ohne,cb,vorne){const ag=nm=>(SICHT().karten["rec:"+nm]||{}).aggregat||"ohne Aggregat",evs=MODEL.records.filter(r=>r.kind==="event"&&!ohne.includes(r.name));
+    const gruppen=[...new Set(evs.map(r=>ag(r.name)))].sort((a,b)=>a.localeCompare(b,"de"));
+    menueFix(ev.clientX,ev.clientY,titel,[...(vorne||[]),...(evs.length?gruppen.flatMap(g=>[{kopf:"▣ "+g},
+      ...evs.filter(r=>ag(r.name)===g).sort((a,b)=>a.name.localeCompare(b.name,"de")).map(r=>({t:r.name,fn:()=>cb(r.name)}))]):[{hinweis:"Kein weiteres Event — ein neues entsteht im Aggregat."}])]);}
+  // Ein neues Bündel: Projektion wählen, dann Event um Event (bis BUENDEL_HOECHSTENS) — ab zwei steht oben „✓ anlegen“. Weitere kommen später über
+  //   „＋ Event“ an der Bündel-Karte.
+  function stoNeuesBuendel(st,ev){stoWaehleBesitzer(st,"projektion",ev,o=>{
+    const anlegen=evs=>{const p=stoBesitzer(st,o);if((st.klassen||[])[0]===3)p.mindestensEinmal=true;const hd={fns:[]};buendelSetze(hd,evs,null);
+      if((p.handles||[]).some(x=>x.event===hd.event)){deFlash("ℹ "+p.name+" hört "+buendelName(hd)+" schon",true);return;}
+      p.handles=[...(p.handles||[]),hd];aggStempel("hd:"+p.name+"."+hd.event);gTitel("🗄 "+st.name+": Bündel "+buendelName(hd)+" in "+p.name);render();};
+    const weiter=evs=>{if(evs.length>=BUENDEL_HOECHSTENS){anlegen(evs);return;}
+      stoEventWahl(ev,evs.length?"Bündel: "+evs.join(" ⋈ ")+" ⋈ …":"Bündel: erstes Event",evs,e=>weiter([...evs,e]),
+        evs.length>=2?[{t:"✓ Bündel anlegen ("+evs.length+" Events)",title:evs.join(" ⋈ "),fn:()=>anlegen(evs)},{trenn:1},{kopf:"oder ein weiteres Event:"}]
+        :evs.length===1?[{hinweis:"Mindestens zwei Events, höchstens "+BUENDEL_HOECHSTENS+"."}]:[]);};
+    weiter([]);});}
+  function stoBuendelEvent(st,hd,ev){const alt=buendelEvents(hd);
+    stoEventWahl(ev||{clientX:200,clientY:200},"＋ Event im Bündel "+buendelName(hd),alt,e=>{buendelSetze(hd,[...alt,e]);gTitel("🗄 "+st.name+": "+e+" ins Bündel "+buendelName(hd));render();});}
   function stoNeueQuery(st,ev){stoWaehleBesitzer(st,"reader",ev,o=>frageFix(ev.clientX,ev.clientY,"＋ Query an "+st.name,"Hole"+st.name.replace(/^I(?=[A-Z])/,"").replace(/Store$/,""),
     "Legt Query, Frage und eine Antwort an — die Lese-Fähigkeit wählt man danach am Port der Frage",n=>{const ant=n.replace(/^(Hole|Get)/,"")+"Antwort";
       if(recNamens(ant))return ant+" gibt es schon";const f=nameFehler(n);if(f)return f;stoRecordNeu(st,ant,"queryresponse");return stoQueryAnlegen(st,n,[ant],o)||(render(),null);}));}
@@ -2958,6 +3059,7 @@
     const kern=st.name.replace(/^I(?=[A-Z])/,"").replace(/Store$/,"");
     return [
       ["Eingänge",menue("Neu in "+st.name,[{t:"＋ Auf für ein Event …",title:"Events stammen aus dem Aggregat — hier wählt man, worauf die Projektion reagiert",fn:e=>stoNeuesAuf(st,e)},
+        {t:"＋ Bündel aus Events …",title:"Ein Auf, das gerufen wird, sobald zum selben Schlüssel von jedem Event eines im Log steht (docs/04 §4.3.1)",fn:e=>stoNeuesBuendel(st,e)},
         {t:"＋ Query mit Frage und Antwort …",fn:e=>stoNeueQuery(st,e)}]),"＋ ▾","eingang"],
       ["Auf · Frage",null,"je Eingang eines"],
       ["Fähigkeiten",menue("Neu in "+st.name,[
@@ -2972,6 +3074,12 @@
       ["Antworten",e=>frageFix(e.clientX,e.clientY,"＋ Antwort in "+st.name,kern+"Antwort","Steht unverbunden in der Spalte — anschließen über ＋ am Port (＋ Frage)",
         n=>{const f=nameFehler(n);if(f)return f;stoRecordNeu(st,n,"queryresponse");gTitel(t+": Antwort "+n);render();}),"＋"]];}
   function stoKurz(st,n,x){const box=h("div",{class:"ag-kurz"});
+    if(n.kind==="buendel"){const b=n.ref.buendel||{};
+      if(b.neu||!b.glieder)box.append(h("div",{class:"ag-tag"},"🔑 "+(b.ueber?"über "+String(b.ueber).split(".").pop():"wird aus den Events abgeleitet")+" — nach dem Schreiben"));
+      else if(b.fehler)box.append(h("div",{class:"ag-diag",title:b.fehler},"⛔ "+b.fehler));
+      else{box.append(h("div",{class:"ag-tag",title:"Der Schlüssel folgt aus den Events (docs/04 §4.3.1)"},"🔑 "+(b.schluessel?"Id<"+b.schluessel+">":"global — je Typ das neueste")+(b.ueber?" · [Ueber]":"")));
+        if(b.schluessel)box.append(h("div",{},(b.glieder||[]).map(g=>g.event+": "+(g.art==="stream"?"Stream":g.art==="feld"?"Feld "+g.feld:"—")).join(" · ")));}
+      return box;}
     if(n.kind==="fn"){const f=n.ref;box.append(h("div",{},"("+(f.params||[]).map(p=>p.typ+" "+p.name).join(", ")+")"+(n.lesen?" → "+(f.rueckgabe||(f.sig||{}).rueckgabe||"Task"):"")));}
     else if(n.kind==="umsetzung"){const k=(st.klassen||[])[0];box.append(h("div",{class:"ag-tag"},(st.impl&&st.impl.name||"neue Umsetzung")+(k?" · Klasse "+k:"")));}
     else if(n.kind==="readmodel"){const fs=(n.ref.felder||[]).map(f=>f.name).join(", ");if(fs)box.append(h("div",{},fs));if(n.ref.geteilt)box.append(h("div",{class:"ag-tag"},"geteilt"));}
@@ -2979,11 +3087,37 @@
       if(stoEvent(x)){const ag=(SICHT().karten[x]||{}).aggregat;if(ag)box.append(h("div",{class:"ag-tag"},"aus ▣ "+ag+" — hier fix"));}}
     return box;}
   function stoZeit(st,n){if(!n)return 0;const z=k=>(ANSICHT.angelegt||{})[k];
-    switch(n.kind){case "handle":{const k="hd:"+n.own.ref.name+"."+(n.ref.event||n.ref.query);return z(k)!=null?z(k):aggZeit(n.ref.event||n.ref.query);}
+    switch(n.kind){case "buendel":return stoZeit(st,n.own);
+      case "handle":{const k="hd:"+n.own.ref.name+"."+(n.ref.event||n.ref.query);return z(k)!=null?z(k):aggZeit(n.ref.event||n.ref.query);}
       case "fn":case "umsetzung":{const k="fn:"+st.name+"."+n.ref.name;return z(k)!=null?z(k):stoFns(st).findIndex(([f])=>f===n.ref);}
       case "readmodel":{const k="rm:"+n.name;return z(k)!=null?z(k):MODEL.readModels.indexOf(n.ref);}
       default:return aggZeit(n.name);}}
-  const stoName=n=>!n?"":n.kind==="handle"?(n.ref.event||n.ref.query||""):n.name||"";
+  const stoName=n=>!n?"":n.kind==="handle"?(istBuendel(n.ref)?buendelName(n.ref):n.ref.event||n.ref.query||""):n.name||"";
+  // Löschen im Store: ein Auf (samt Bündel-Karte; die Projektion fällt mit ihrem letzten Auf weg), eine Frage samt Query, eine Fähigkeit samt
+  //   Umsetzung (die Auf und Fragen, die sie nehmen, lassen sie los), ein Read-Model, eine Antwort (fällt aus allen Fragen). Events sind hier fix.
+  function stoLoeschPlan(st,I,n,x){const ownerWeg=(o,kind)=>{if(!(o.handles||[]).length){const on=NODEBY.get((kind==="reader"?"rdr:":"prj:")+o._id);if(on)delNode(on);}};
+    const handleName=hd=>istBuendel(hd)?"Bündel "+buendelName(hd):hd.event||hd.query;
+    const handlePlan=(hd,o,lesen)=>{const letzte=(o.handles||[]).length===1;
+      if(!lesen)return {was:"Auf("+handleName(hd)+") in "+o.name,folgen:letzte?["die Projektion "+o.name+" (ihr letztes Auf)"]:[],grund:null,
+        tu:()=>{o.handles=(o.handles||[]).filter(z=>z!==hd);ownerWeg(o,"projektion");}};
+      const q=hd.query,p=loeschPlanRecord(q,"Query "+q+" samt Frage in "+o.name,u=>u.art==="rfrage"&&u.ref===hd,()=>{
+        o.handles=(o.handles||[]).filter(z=>z!==hd);recordWeg(q);(hd.responses||[]).forEach(aggRecordAufraeumen);ownerWeg(o,"reader");});
+      if(letzte)p.folgen.push("der Reader "+o.name+" (seine letzte Frage)");return p;};
+    if(I.fremd.has(x))return null;
+    if(n.kind==="handle")return handlePlan(n.ref,n.own.ref,n.own.kind==="reader");
+    if(n.kind==="buendel")return handlePlan(n.ref,n.prj,false);
+    if(n.kind==="fn"||n.kind==="umsetzung"){const f=n.ref,fid=f._id,fn=NODEBY.get("fn:"+fid);
+      const nutzer=[...MODEL.projektionen,...MODEL.reader].flatMap(o=>(o.handles||[]).filter(hd=>(hd.fns||[]).includes(fid)).map(hd=>handleName(hd)+" in "+o.name+" lässt sie los"));
+      return {was:"Fähigkeit "+(f.faehigkeit||f.name)+" samt Umsetzung",folgen:nutzer,grund:fn?null:"die Fähigkeit ist im Modell nicht zu finden",tu:()=>{if(fn)delNode(fn);}};}
+    if(n.kind==="readmodel"){const r=n.ref,fns=MODEL.stores.flatMap(s=>stoFns(s).filter(([f])=>nennt(stoTypen(f),r.name)).map(([f])=>s.name+"."+f.name));
+      return {was:"Read-Model "+r.name,folgen:[],grund:fns.length?"eine Fähigkeit nennt es in ihrer Signatur: "+fns.join(" · ")+" — dort zuerst ändern":null,
+        tu:()=>{const nn=NODEBY.get(x);if(nn)delNode(nn);}};}
+    if(x.startsWith("rec:")){const r=n.ref||{};
+      if(r.kind==="query"){const hds=MODEL.reader.flatMap(o=>(o.handles||[]).filter(hd=>hd.query===r.name).map(hd=>({hd,o})));
+        return hds.length===1?handlePlan(hds[0].hd,hds[0].o,true):loeschPlanRecord(r.name,"Query "+r.name,()=>false,()=>recordWeg(r.name));}
+      if(r.kind==="queryresponse")return loeschPlanRecord(r.name,"Antwort "+r.name,u=>u.art==="rantwort",()=>{
+        MODEL.reader.forEach(o=>(o.handles||[]).forEach(hd=>{hd.responses=ohneX(hd.responses,r.name);}));recordWeg(r.name);});}
+    return null;}
   // Bearbeiten im Store (✎): Handhabung (Rumpf, entfernen), Fähigkeit (Methode, Parameter, Rückgabe), Umsetzung (Rumpf), Read-Model (Name,
   //   Felder, geteilt), Query und Antwort (Name, Felder). Ein Event hat hier kein ✎ — es stammt aus dem Aggregat.
   function stoBearbeiten(st,I,n,x){const box=h("div",{class:"ag-edit"}),t="🗄 "+st.name;
@@ -2991,14 +3125,17 @@
     const ruempfe=own=>{const rs=[...NODEBY.values()].filter(r=>r.kind==="rumpf"&&r.own&&r.own.id===own);
       rs.forEach(r=>{const b=h("div",{class:"gbody"});INSP=true;try{fuelleKoerper(b,r);}finally{INSP=false;}box.append(b);});
       if(!rs.length)box.append(h("div",{class:"ag-tag"},"Rumpf: Platzhalter — nach dem Schreiben hier ✎ bzw. 🤖"));};
-    const weg=(text,fn)=>box.append(h("button",{class:"ag-weg",onclick:()=>{KOM.edit.delete(x);fn();render();}},text));
-    const genutzt=fid=>[...MODEL.projektionen,...MODEL.reader].some(o=>(o.handles||[]).some(hd=>(hd.fns||[]).includes(fid)));
+    if(n.kind==="buendel"){const hd=n.ref,b=hd.buendel||{};
+      box.append(h("div",{class:"ag-tag"},"Projektion "+n.prj.name+" · gerufen, sobald zum Schlüssel von jedem Event eines im Log steht — je Typ das neueste"));
+      const sel=h("select",{title:"Schlüssel: abgeleitet aus den Events oder [Ueber<T>] am Parameter",onchange:e=>{const u=e.target.value||null;
+        buendelSetze(hd,buendelEvents(hd),u);gTitel(t+": Bündel "+buendelName(hd)+(u?" über "+u:" mit abgeleitetem Schlüssel"));render();}},
+        // Voll qualifiziert geschrieben: ein einfacher Name träfe in einem gleichnamigen Namespace den Namespace statt das Aggregat.
+        h("option",{value:""},"🔑 abgeleitet"),...MODEL.aggregate.map(A=>h("option",{value:A.namespace+"."+A.name},"🔑 über "+A.name)));
+      const kurz=x=>String(x||"").split(".").pop();sel.value=b.ueber?([...sel.options].find(o=>o.value&&kurz(o.value)===kurz(b.ueber))||{}).value||"":"";
+      box.append(h("div",{class:"ag-feld"},sel));
+      return box;}
     if(n.kind==="handle"){const hd=n.ref,o=n.own.ref,lesen=n.own.kind==="reader";
       box.append(h("div",{class:"ag-tag"},(lesen?"Reader ":"Projektion ")+o.name));ruempfe(x);
-      weg(lesen?"✕ Frage samt Query entfernen":"✕ Auf entfernen",()=>{o.handles=(o.handles||[]).filter(z=>z!==hd);
-        gTitel(t+": "+(lesen?"Frage ":"Auf ")+(hd.event||hd.query)+" entfernt");
-        if(!o.handles.length){const on=NODEBY.get(n.own.id);if(on)delNode(on);}
-        if(lesen){aggRecordAufraeumen(hd.query);(hd.responses||[]).forEach(aggRecordAufraeumen);}});
       return box;}
     if(n.kind==="fn"){const f=n.ref,neu=!f.sig;
       box.append(h("div",{class:"ag-feld"},h("input",{value:f.name,spellcheck:"false",disabled:!neu,title:neu?"Methode":"Methode — aus dem Code",
@@ -3007,7 +3144,6 @@
       box.append(h("div",{class:"ag-tag"},"Parameter"),aggFelder(f.params=f.params||[],null,t+": "+f.name));
       if(n.lesen)box.append(h("div",{class:"ag-feld"},h("input",{value:f.rueckgabe||((f.sig||{}).rueckgabe||"").replace(/^Task<(.*)>$/,"$1"),list:"de-typen",spellcheck:"false",
         title:"Rückgabe (ohne Task) — nennt sie ein Read-Model, hängt die Kante zu ihm",onchange:e=>{f.rueckgabe=e.target.value.trim();gTitel(t+": "+f.name+" → "+f.rueckgabe);render();}})));
-      if(!genutzt(f._id))weg("✕ Fähigkeit samt Umsetzung entfernen",()=>{const a=n.lesen?st.readFns:st.writeFns;a.splice(a.indexOf(f),1);gTitel(t+": Fähigkeit "+(f.faehigkeit||f.name)+" entfernt");});
       return box;}
     if(n.kind==="umsetzung"){const k=(st.klassen||[])[0];box.append(h("div",{class:"ag-tag"},(st.impl&&st.impl.name||"neue Umsetzung")+(k?" · Store-Klasse "+k:"")));
       ruempfe("fn:"+n.ref._id);return box;}
@@ -3018,17 +3154,11 @@
       box.append(aggFelder(r.felder=r.felder||[],null,t+": "+r.name));
       const c=h("input",{type:"checkbox",onchange:e=>{r.geteilt=e.target.checked;gTitel(t+": "+r.name+(r.geteilt?" geteilt":" eigen"));render();}});c.checked=!!r.geteilt;
       box.append(h("label",{class:"ag-flag"},c," geteilt (mehrere Streams schreiben hinein)"));
-      if(!stoNenntIrgendwer(r.name))weg("✕ Read-Model entfernen",()=>{const nn=NODEBY.get(x);if(nn)delNode(nn);});
       return box;}
     if(x.startsWith("rec:")){const r=n.ref;
       box.append(h("div",{class:"ag-feld"},h("input",{value:r.name,spellcheck:"false",title:"Name",onchange:e=>{const neu=e.target.value.trim(),f=nameFehler(neu);if(neu===r.name)return;
         if(f){deFlash("⚠ "+f,false);render();return;}aggStempelUmbenennen(r.name,neu);if(r._ort)gUmbenennen(r,neu,r.name);else{recUmbenennenLokal(r,neu);render();}}})));
       box.append(aggFelder(r.felder=r.felder||[],null,t+": "+r.name));
-      if(r.kind==="queryresponse")weg("✕ aus allen Fragen nehmen",()=>{MODEL.reader.forEach(o=>(o.handles||[]).forEach(hd=>{hd.responses=ohneX(hd.responses,r.name);}));
-        gTitel(t+": Antwort "+r.name+" entfernt");aggRecordAufraeumen(r.name);});
-      if(r.kind==="query")weg("✕ Query samt Frage entfernen",()=>{MODEL.reader.forEach(o=>{const vor=(o.handles||[]).length;o.handles=(o.handles||[]).filter(hd=>hd.query!==r.name);
-          if(vor&&!o.handles.length){const on=NODEBY.get("rdr:"+o._id);if(on)delNode(on);}});
-        gTitel(t+": Query "+r.name+" entfernt");aggRecordAufraeumen(r.name);});
       return box;}
     return box;}
   // Ein neuer Store (Fläche, Kopf der Spalte Projektionen): erst die Store-Klasse (sie wählt die Basis der Umsetzung, Storeklassen), dann der
@@ -3244,10 +3374,10 @@
     try{const r=await fetch("/api/werkbank/geste",{method:"POST",headers:{"content-type":"application/json"},
         body:JSON.stringify({titel,karten:delta.karten,entfernt:delta.entfernt})});
       const a=await r.json();badge(true);
-      if(!a.ok){deFlash("⚠ "+(a.fehler||"Geste nicht geschrieben"),false);G_BOARD=a.board;gBoardAnwenden();return;}
+      if(!a.ok){deFlash("⚠ "+(a.fehler||"Geste nicht geschrieben"),false);G_LOESCH=null;G_BOARD=a.board;gBoardAnwenden();return;}
       // Neu Angelegtes bleibt sichtbar: seine Domäne zählt ab jetzt als geladen.
       if(LADEN&&delta.neueNs.length)delta.neueNs.forEach(ns=>{if(!LADEN.some(g=>drinNs(g,ns)))LADEN.push(ns);});
-      gMeldung(a);GSTAND=jetzt;G_BOARD=a.board;await wbLadeDiagnosen();
+      gMeldung(a);GSTAND=jetzt;G_BOARD=a.board;await wbLadeDiagnosen();loeschBefunde();
       if(G_AENDERUNG===stand&&!gFokus())gBoardAnwenden();else autosave();}
     catch(e){badge(false);deFlash("⚠ Werkbank nicht erreichbar — Geste nicht geschrieben",false);}
     finally{G_LAEUFT=false;}}

@@ -107,6 +107,9 @@ public sealed partial class Sicht
     }
     internal static string HandleDisc(JsonObject hd) =>
         new[] { S(hd, "query"), S(hd, "event") }.FirstOrDefault(x => x.Length > 0) ?? "";
+    /// <summary>Die Events, die ein Auf einer Projektion hört: das Event selbst bzw. die Events seines Bündels (docs/04 §4.3.1).</summary>
+    internal static List<string> HandleEvents(JsonObject hd) =>
+        hd["buendel"] is JsonObject b ? L(b, "events").ToList() : S(hd, "event") is { Length: > 0 } e ? [e] : [];
     private static readonly (string Art, string Sammlung, string Praefix)[] HandleArten =
         [("projektion", "projektionen", "prj"), ("reader", "reader", "rdr")];
     internal static List<string> HandleIds(JsonObject o, string oid)
@@ -327,7 +330,7 @@ public sealed partial class Sicht
             {
                 var h = hid[hd];
                 P(h, "prj:" + S(p, "_id"));
-                if (IstRec(S(hd, "event"))) P(Rec(S(hd, "event")), h);
+                foreach (var ev in HandleEvents(hd)) if (IstRec(ev)) P(Rec(ev), h);
                 foreach (var fid in L(hd, "fns")) if (FnById(fid) != null) P(h, "fn:" + fid);
             }
         foreach (var r in _reader)

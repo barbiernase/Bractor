@@ -38,6 +38,8 @@
       <!-- Die EINE Lesart von Projektion und Reader (docs/10 §10.3) — dieselbe wie Generatoren und Analyzer. Ihre Namen (Projektionsvertrag) kommen aus
            der referenzierten Abstractions-Assembly; ein Link wäre derselbe Typ ein zweites Mal. -->
       <Compile Include="../Infrastructure.SourceGeneration/Projektionsform.cs" Link="Vertrag/Projektionsform.cs" />
+      <!-- Der Schlüssel eines Bündels (docs/04 §4.2): dieselbe Ableitung wie der Generator der Komposition (CQRS118). -->
+      <Compile Include="../Infrastructure.SourceGeneration/Buendelform.cs" Link="Vertrag/Buendelform.cs" />
     </ItemGroup>
 
     <ItemGroup>

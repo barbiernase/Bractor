@@ -131,7 +131,8 @@ public static class Gesten
         IReadOnlyList<Handle> Handles(IReadOnlyList<Handle> neu, IReadOnlyList<Handle>? alt)
         {
             var a = Nach(alt ?? [], h => h.Eingang);
-            return neu.Select(h => h with { Herkunft = a.GetValueOrDefault(h.Eingang)?.Herkunft }).ToList();
+            // Ein umverdrahteter Eingang (etwa ein Bündel mit einem Event mehr) trägt den Stempel seines Eingangs im Code — so gilt er als geändert.
+            return neu.Select(h => h with { Herkunft = a.GetValueOrDefault(h.EingangImCode ?? h.Eingang)?.Herkunft }).ToList();
         }
 
         var l = soll.Lesen;
@@ -195,7 +196,9 @@ public static class Gesten
             {
                 var alt = Alle(board[sammlung]).FirstOrDefault(k => KartenSchluessel.Von(sammlung, k) == KartenSchluessel.Von(sammlung, neu));
                 if (alt == null) continue;
-                var bleibt = Alle(neu["handles"]).Select(h => (string?)h[feld]).ToHashSet(StringComparer.Ordinal);
+                // Ein umverdrahteter Eingang (input = sein Eingang im Code, etwa ein Bündel mit einem Event mehr) bleibt: seine Methode schreibt der
+                //   Abgleich um, statt dass sie hier wegfällt.
+                var bleibt = Alle(neu["handles"]).SelectMany(h => new[] { (string?)h[feld], (string?)h["input"] }).Where(x => x != null).ToHashSet(StringComparer.Ordinal);
                 foreach (var h in Alle(alt["handles"]).Where(h => !bleibt.Contains((string?)h[feld])))
                     if (Aus(h["_ort"], $"handle {(string?)alt["name"]}.{methode}({(string?)h[feld]})") is { } st) stellen.Add(st);
             }

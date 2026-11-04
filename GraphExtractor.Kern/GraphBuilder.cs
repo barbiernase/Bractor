@@ -139,7 +139,7 @@ public sealed class GraphBuilder
             Add(new Node
             {
                 Id = $"proj:{pr.Name}", Kind = NodeKind.projection, Name = pr.Name, FullName = pr.Full, Namespace = pr.Namespace,
-                Projection = new ProjectionInfo { MindestensEinmal = pr.MindestensEinmal, Consumes = pr.ConsumesFull.Select(SimpleEvt).ToList() }
+                Projection = new ProjectionInfo { MindestensEinmal = pr.MindestensEinmal, Consumes = pr.HoertFull.Select(SimpleEvt).ToList() }
             });
     }
 
@@ -257,7 +257,7 @@ public sealed class GraphBuilder
         foreach (var pr in _dom.Projections)
         {
             var projNode = $"proj:{pr.Name}";
-            foreach (var evtFull in pr.ConsumesFull)
+            foreach (var evtFull in pr.HoertFull)
                 if (_evtId.TryGetValue(evtFull, out var evtNode))
                     Edge(evtNode, projNode, EdgeKind.consumedBy, "projektion");
         }

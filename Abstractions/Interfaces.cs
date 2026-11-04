@@ -238,7 +238,36 @@ public interface IAggregateRepository
         /// </summary>
         async Task<int> KopfAsync(Guid streamId, CancellationToken ct)
             => (await ReadStreamAsync(streamId, 0, ct)).Select(e => e.AggregateVersion).DefaultIfEmpty(0).Max();
+
+        /// <summary>
+        /// Leseprimitiv der Bündel (docs/04 §4.3.1): je Frage das neueste Event vor ihrer Sequenz — im Stream des Schlüssels oder über das
+        /// Verzeichnis der Schlüssel (<see cref="Rueckblick"/>), materialisiert wie in <see cref="ReadStreamAsync"/>; null, wenn es keins gibt.
+        /// Ohne eigene Ablage (Prüfstand): nicht unterstützt.
+        /// </summary>
+        Task<IReadOnlyList<EventEnvelope?>> RueckblickAsync(IReadOnlyList<Rueckblick> fragen, CancellationToken ct)
+            => throw new NotSupportedException("Bündel brauchen den Event-Store (Rückblick ins Log)");
+
+        /// <summary>
+        /// Trägt das Verzeichnis der Schlüssel für diese Typen und Felder einmal aus dem Log nach (ein Bündel, das neu dazukam, sieht so auch die
+        /// Events von vorher); danach hält es der Append aktuell. Ohne eigene Ablage (Prüfstand): nichts zu tun.
+        /// </summary>
+        Task SichereRueckblickAsync(IReadOnlyList<Rueckblickfeld> felder, CancellationToken ct) => Task.CompletedTask;
+
+        /// <summary>Die globalen Sequenzen der Events eines Streams ab <paramref name="abVersion"/> (Version → Sequenz). Ohne eigene Ablage: nicht unterstützt.</summary>
+        Task<IReadOnlyDictionary<int, long>> SequenzenAsync(Guid streamId, int abVersion, CancellationToken ct)
+            => throw new NotSupportedException("Sequenzen brauchen den Event-Store");
     }
+
+    /// <summary>
+    /// Eine Frage eines Bündels an das Log (<see cref="IEventStoreRepository.RueckblickAsync"/>): das neueste Event des Typs <paramref name="Typ"/>
+    /// (Speicher-Diskriminatoren samt Vorgängern: <paramref name="Typen"/>) vor der Sequenz <paramref name="Vor"/> — mit <paramref name="Stream"/> in
+    /// diesem Stream, sonst im Verzeichnis der Schlüssel unter <paramref name="Feld"/> und <paramref name="Schluessel"/> (global: Feld leer,
+    /// Schlüssel <see cref="Guid.Empty"/>).
+    /// </summary>
+    public sealed record Rueckblick(string Typ, IReadOnlyCollection<string> Typen, Guid? Stream, string Feld, Guid Schluessel, long Vor);
+
+    /// <summary>Ein Eintrag des Verzeichnisses der Schlüssel: Typ (aktueller Diskriminator samt Vorgängern) und Feld (leer = global).</summary>
+    public sealed record Rueckblickfeld(string Typ, IReadOnlyCollection<string> Typen, string Feld);
 
     /// <summary>Ein Event einer Partitions-Seite mit seiner globalen Sequenz.</summary>
     public sealed record PartitionsEvent(long Sequenz, EventEnvelope Event);

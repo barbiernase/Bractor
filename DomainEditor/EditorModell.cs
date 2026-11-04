@@ -490,6 +490,11 @@ public sealed record Handle
     public string? EingangImCode { get; init; }
     /// <summary>Parametername des Eingangs.</summary>
     public string Parameter { get; init; } = "e";
+    /// <summary>
+    /// Bei einem Bündel (<c>Buendel&lt;A, B&gt;</c>, docs/04 §4.3.1) die Wahl des Schlüssels am Parameter (<c>[Ueber&lt;T&gt;]</c>: der Name von <c>T</c>);
+    /// null = abgeleitet.
+    /// </summary>
+    public string? Ueber { get; init; }
     /// <summary>Name des <c>Herkunft</c>-Parameters (nur Projektion, direkt nach dem Eingang); null = keiner.</summary>
     public string? HerkunftParameter { get; init; }
     /// <summary>Name des <c>CancellationToken</c>-Parameters (am Ende); null = keiner.</summary>

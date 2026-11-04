@@ -17,11 +17,11 @@ public static class Grammatik
 {
     // ── Alphabet: Nachrichtensorten (die Kanten) ──────────────────────────────────────────────────────────────────────
     public const string Command = "command", Event = "event", Transient = "transient", Frist = "frist", Query = "query", Response = "response",
-        Faehigkeit = "faehigkeit", Quelle = "quelle", Gerufen = "gerufen";
+        Faehigkeit = "faehigkeit", Quelle = "quelle", Gerufen = "gerufen", Gebuendelt = "gebuendelt";
 
     // ── Alphabet: Bausteine (die Knoten) ─────────────────────────────────────────────────────────────────────────────
     public const string Aggregat = "aggregat", Projektion = "projektion", Reader = "reader", Store = "store", Aussenwelt = "aussenwelt",
-        Akteur = "akteur", Client = "client", Funktion = "funktion", Uhr = "uhr";
+        Akteur = "akteur", Client = "client", Funktion = "funktion", Uhr = "uhr", Buendel = "buendel";
 
     /// <summary>Kardinalität eines Konsum-Eingangs.</summary>
     public const string GenauEins = "eins", Beliebig = "beliebig";
@@ -50,6 +50,8 @@ public static class Grammatik
         new(Faehigkeit, "Fähigkeit", "⚙", "als Parameter von Auf bzw. Frage", "Store-Funktion (Lesen/Schreiben)"),
         new(Gerufen, "Technik", "🧩", "im Konstruktor (gebunden nach der Umgebung)",
             "Technik hinter einer Funktion (ohne Marker: was ihr Konstruktor nimmt) — keine Nachricht, eine Abhängigkeit, läuft im Prozess ihres Halters"),
+        new(Gebuendelt, "Bündel", "⋈", "aus dem Log abgeleitet; gleich bei jedem Neuaufbau",
+            "Events, die zu einem Schlüssel zusammen im Log stehen (Buendel<A, B, …>) — je Typ das neueste; nur eine Projektion nimmt es"),
     ];
 
     public static readonly IReadOnlyList<BausteinInfo> Bausteine =
@@ -59,6 +61,8 @@ public static class Grammatik
         new(Akteur, "Akteur", false), new(Client, "Client", false), new(Funktion, "Funktion", false),
         // Eingebaut: die Uhr sendet fällige Fristen als Command an das Aggregat, das sie setzte.
         new(Uhr, "Uhr", false),
+        // Ein Bündel von Events vor einer Projektion (docs/04 §4.3.1): ohne Zustand, ausgewertet gegen das Log.
+        new(Buendel, "Bündel", false),
     ];
 
     // ── Regeln (Id = der Name, unter dem Build-Diagnosen und Editor sie nennen) ──────────────────────────────────────────────
@@ -79,9 +83,9 @@ public static class Grammatik
              Gen("CQRS010", "Infrastructure.SourceGeneration/CommandAggregateMapGenerator.cs (Decide außerhalb des Ziel-Aggregats)"),
              An("CQRS086", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Command ohne Decider bzw. ohne Knoten, der ihn nimmt)"),
              An("CQRS116", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Command ohne Ziel ohne bzw. mit mehreren Empfängern)")]),
-        new("GR-EVENT", "Event → Projektionen, Akteure, das eigene Aggregat", "Ein persistentes Event hören Projektionen (beliebig viele) und Akteure zur "
-            + "Kenntnis (IHoert, gepusht an ihre Sitzungen); gefaltet wird es im eigenen Aggregat. Eine Funktion liest nie das Log: sie hört ein Event nur "
-            + "als Antwort auf einen eigenen Command (docs/04 §4.4).", "error",
+        new("GR-EVENT", "Event → Projektionen, Akteure, das eigene Aggregat", "Ein persistentes Event hören Projektionen (beliebig viele; einzeln oder "
+            + "in einem Bündel) und Akteure zur Kenntnis (IHoert, gepusht an ihre Sitzungen); gefaltet wird es im eigenen Aggregat. Eine Funktion liest nie "
+            + "das Log: sie hört ein Event nur als Antwort auf einen eigenen Command (docs/04 §4.4).", "error",
             [Comp("Auf-Parameter : IEvent"), An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Auf einer Projektion)"),
              Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (eine Funktion, die nur Events hört, hat keinen Einstieg)")]),
         new("GR-DECIDE-COMMAND", "Command ohne Ziel aus dem Decide → Graph-Kopf oder Akteur", "Ein Decide kann neben Events einen Command ohne Ziel "
@@ -238,11 +242,24 @@ public static class Grammatik
             [Gen("CQRS100", "Infrastructure.SourceGeneration/FunktionsBausteinGenerator.cs (Form von Lausche)"),
              An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (eine Quelle je Graph, sonst kein Kopf)"),
              new("laufzeit", null, "Infrastructure/Funktionen/GraphActor.cs (je Element eine Kette, Gegendruck, Zustand gesichert nach der Kette)")]),
+        // Bündel von Events vor einer Projektion (docs/04 §4.3.1).
+        new("GR-BUENDEL", "Bündel: Events eines Schlüssels → eine Projektion", "Ein Auf einer Projektion kann ein Bündel nehmen: Buendel<A, B, …> "
+            + "(2 bis 16 verschiedene, persistente Events). Es wird gerufen, sobald zum Schlüssel von jedem Typ ein Event im Log steht, und bei jedem weiteren "
+            + "Event eines dieser Typen erneut — je Typ mit dem neuesten; die Herkunft ist die des auslösenden Events. Der Schlüssel folgt aus den Events: "
+            + "die eine typisierte Id, die alle gemeinsam haben (bei einem Event, das ihr Aggregat entscheidet, sein Stream, sonst sein einziges Feld Id<T>); "
+            + "keine gemeinsame = global (je Typ das neueste); mehrere = [Ueber<T>] am Parameter wählt. Das Bündel heißt nach seinen Events, hat keinen "
+            + "Zustand und wird gegen das Log ausgewertet (bis zur gesetzten Sequenz) — gleich bei jedem Neuaufbau und jeder Partitionierung. Was "
+            + "Events verschiedener Streams beschreiben, hält den Stand des jüngsten Eingangs (Herkunft.Stand).", "error",
+            [Comp("Buendel<T1, …> where T : IEvent (Abstractions/Buendel.cs)"),
+             An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs (Bündel: persistente Events, je Typ eine Stelle; Lesart Projektionsform)"),
+             Gen("CQRS118", "Infrastructure.SourceGeneration/PullPathGenerator.cs (Schlüssel nicht ableitbar; Lesart Buendelform)"),
+             new("laufzeit", null, "Infrastructure/Projections/Buendel.cs (Buendelblick: der Blick ins Log je Seite)"),
+             new("laufzeit", null, "Infrastructure/Persistence/RueckblickTabelle.cs (Verzeichnis der Schlüssel, im Append geschrieben)")]),
         // Zusatzregeln
         new("GR-AUSGANG-GESCHLOSSEN", "Geschlossener Ausgang", "Ausgänge sind konkrete Typen im OneOf — zeichnen heißt Typ wählen.", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)")]),
-        new("GR-LESESEITE-FORM", "Form von Auf und Frage ist die, die die Laufzeit ruft", "Eine Projektion (IProjektion) hat je Event ein "
-            + "Task Auf(Event e[, Herkunft h], Schreib-Fähigkeiten…[, CancellationToken ct]), ein Reader (IReader) je Query eine Frage(Query q, "
+        new("GR-LESESEITE-FORM", "Form von Auf und Frage ist die, die die Laufzeit ruft", "Eine Projektion (IProjektion) hat je Event bzw. "
+            + "Bündel ein Task Auf(Event e | Buendel<A, B, …> b[, Herkunft h], Schreib-Fähigkeiten…[, CancellationToken ct]), ein Reader (IReader) je Query eine Frage(Query q, "
             + "Lese-Fähigkeiten…[, CancellationToken ct]) — sonst wäre die Methode im Editor sichtbar, zur Laufzeit tot. Die Kennung einer Projektion ist "
             + "ihr Typname; Position, Ordnung, Wiederholung und Store-Transaktion trägt das Framework.", "error",
             [An("CQRS057", "Domain.SourceGeneration/HandlerFormAnalyzer.cs"), An("CQRS101", "Domain.SourceGeneration/EinEingangAnalyzer.cs (doppeltes Auf/Frage)")]),
@@ -306,6 +323,7 @@ public static class Grammatik
     [
         new(Command, Aggregat, GenauEins, "GR-COMMAND"),
         new(Event, Projektion, Beliebig, "GR-EVENT"), new(Event, Funktion, Beliebig, "GR-EVENT"),
+        new(Event, Buendel, Beliebig, "GR-BUENDEL"), new(Gebuendelt, Projektion, Beliebig, "GR-BUENDEL"),
         new(Event, Aggregat, GenauEins, "GR-FALTUNG"),
         new(Query, Reader, GenauEins, "GR-QUERY"), new(Query, Aggregat, GenauEins, "GR-QUERY"),
         new(Faehigkeit, Projektion, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Reader, Beliebig, "GR-FAEHIGKEIT"),
@@ -325,6 +343,7 @@ public static class Grammatik
         new(Funktion, Command, "GR-FUNKTION-FORM"), new(Funktion, Transient, "GR-FUNKTION-FORM"),
         new(Aggregat, Command, "GR-DECIDE-COMMAND"),
         new(Reader, Response, "GR-AUS-READER"), new(Aggregat, Response, "GR-AUS-AGGREGAT"),
+        new(Buendel, Gebuendelt, "GR-BUENDEL"),
         new(Store, Faehigkeit, "GR-FAEHIGKEIT"),
         new(Funktion, Gerufen, "GR-TECHNIK"),
         new(Aussenwelt, Command, "GR-COMMAND"), new(Aussenwelt, Query, "GR-QUERY"),

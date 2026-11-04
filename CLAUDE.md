@@ -59,7 +59,9 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   (`cqrs_kopf`); eine Version je Aggregat (= Zahl seiner Events), beim Client aus Pushes und Antworten (`VersioningModule`).
 - **Durabler Konsument des Logs ist die Projektion** (`IProjektion`, `Task Auf(Event[, Herkunft], Schreib-Fähigkeiten genau eines Stores)`,
   Kennung = Typname; `BatchLeser` je Projektion und Partition, replaybar; Wecker am Commit schnell — je Commit und Ziel ein `Wake`, Weckplan aus den
-  Signaturen, beim Start geprüft: GR-WECKPLAN — + Takt 30 s je Partition).
+  Signaturen, beim Start geprüft: GR-WECKPLAN — + Takt 30 s je Partition). Ein `Auf` kann Events **bündeln** (`Buendel<A, B, …>`, docs/04 §4.3.1):
+  gerufen, sobald zum Schlüssel (die gemeinsame `Id<T>` der Events, sonst `[Ueber<T>]`, keine = global) von jedem Typ eines im Log steht — ohne
+  Zustand, gegen das Log bis zur gesetzten Sequenz.
 - **Funktion** (docs/04 §4.4): eine Klasse `: IFunktion`, liest NIE das Log. Je `Auf` genau **eine Nachricht** (ein Command ohne Ziel; gerechnet
   je Ankunft — kein `T?`, `OneOf`, `IReadOnlyList` als Eingang, GR-EINGANG), dazu optional `Herkunft`, Lese-Fähigkeiten, `CancellationToken`; die Fälle der Rückgabe sind die Ausgangsports (`T`, `OneOf`, `IEnumerable`, `IAsyncEnumerable`:
   Commands und Hinweise). Ein Event hört sie nur als Antwort auf ihren eigenen Aggregat-Command (`CommandResult.Antwort`, CQRS108). Im Konstruktor:

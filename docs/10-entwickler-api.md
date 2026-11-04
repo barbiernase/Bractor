@@ -36,7 +36,8 @@ Exactly-once, Partition, offene Eingänge, Ketten, Orte), wählt der Generator a
 | **Akteur**, **Client** | wer was hineingibt und was zu ihm kommt; welche Software für welche Akteure spricht | Sitzung als Actor je Verbindung, Werkstatt und Verteiler je Knoten — [konzept-akteure.md](konzept-akteure.md) |
 | *eingebaut:* Uhr, Verteiler | macht aus fälligen Fristen Commands; stellt Pushes und Hinweise an Clients zu | – |
 
-**Warten und Zusammenführen** sind Zustand, keine Form der Eingänge: ein `Auf` nimmt eine Nachricht und rechnet, sobald sie ankommt. Was
+**Warten und Zusammenführen** sind Zustand, keine Form der Eingänge: ein `Auf` nimmt eine Nachricht und rechnet, sobald sie ankommt. Die eine
+Ausnahme liegt auf der Leseseite: eine Projektion kann Events eines Schlüssels **bündeln** (`Buendel<A, B>`, §10.3.2) — ohne Zustand, gegen das Log. Was
 zusammengehört, trägt die Nachricht mit; sonst führt der Zustand eines Knotens (`IZustand<T>`) oder ein **Aggregat** zusammen — fremde
 Rückmeldungen, alle Elemente zählen, zurücknehmen, eine Frist überwachen: ein Vorgang ist ein Aggregat mit der Vorgangs-Id, Zeit ist eine Frist. Einen Dirigenten, eine Saga oder einen Builder gibt es nicht; die Kanten eines Graphen stehen als
 Attribute an seinen Knoten (§10.3.4, §10.3.7).
@@ -126,6 +127,14 @@ public sealed class Leihliste : IProjektion                                     
 
 - Form: `Task Auf(Event[, Herkunft], Schreib-Fähigkeiten genau eines Stores[, CancellationToken])`; je Event-Typ höchstens ein `Auf` (R2). Eine
   Projektion gibt nichts aus.
+- **Bündel** ([04](04-konsum-und-prozess-maschine.md) §4.3.1): `Task Auf(Buendel<A, B, …> b, Herkunft h, …)` wird gerufen, sobald zum Schlüssel von
+  jedem Event eines im Log steht, und bei jedem weiteren erneut (je Typ das neueste). Der Schlüssel folgt aus den Events — die eine gemeinsame `Id<T>`
+  (Stream, wenn `T` das Event faltet, sonst sein Feld `Id<T>`); keine = global, mehrere = `[Ueber<T>]` am Parameter (R21). Ein Bündel heißt nach seinen
+  Events. Was es über Streams hinweg je Schlüssel festhält, schreibt es bedingt nach `h.Sequenz`:
+  ```csharp
+  public Task Auf([Ueber<Rechnung>] Buendel<RechnungGestellt, GutschriftGebucht> b, Herkunft h, ISchreibeGutschrift s)
+      => s.GutgeschriebenAsync(b.Erstes.Rechnung, b.Erstes.Betrag, b.Zweites.Betrag, h);
+  ```
 - Fähigkeiten nur als Parameter, nie in Konstruktor oder Feld, nie `new …Store()` (R8). Eine Projektion schreibt in genau einen Store (R9); zwei
   Ziele sind zwei Projektionen.
 - **Store-Klasse** (R14): die Implementierung erbt bzw. implementiert genau eine — `IAtomaresZiel` (Klasse 1, Wirkung und Fortschritt in einer
@@ -336,6 +345,7 @@ Prüfen heißt Bauen (W5). Die Liste „Regel → Build-Gegenstück“ der Gramm
 | R18 | Die Hausregel für Actors: ein Weg je Absicht (nur Framework-Code) | CQRS112/113 |
 | R19 | Zustand einer Funktion nur über `IZustand<T>` im Konstruktor | CQRS105, CQRS100 |
 | R20 | Ein Command ohne Ziel hat genau einen Empfänger (im Graphen die Knoten, die seinen Erzeuger in `Von` nennen; sonst Graph-Kopf oder Akteur); ein Graph ist kreisfrei über seine Knoten, jeder Knoten trägt `[Kopf]` oder `[Von(nameof(…))]`, je Eingangstyp ein Kopf, ein `Auf` nimmt genau eine Nachricht (CQRS100); jede Instanz passt zu ihrem Graphen | CQRS116, CQRS115, CQRS117 (Warnung), Start-Prüfung (`GraphInstanzen.Aus`) |
+| R21 | Ein Bündel (`Buendel<A, B, …>` als Eingang eines `Auf`) bündelt verschiedene persistente Events mit ableitbarem Schlüssel: eine gemeinsame `Id<T>`, sonst `[Ueber<T>]`; keine = global | CQRS057, CQRS118 |
 
 Dazu die Projektstruktur ([07](07-projektstruktur.md), CQRS098): wo eine Primitive liegt, sagt die Tabelle `Abstractions/Projektstruktur.cs`.
 
@@ -416,8 +426,15 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   mit ＋/−/0 und dem Mausrad.
 - **Im Aggregat** (von innen) hat jede Karte drei Detailstufen: nur Kopf · Kopf mit Ports (Standard) · Bearbeiten. Ein Doppelklick schaltet
   Kopf ⇄ Ports (die Kanten hängen dann am Kopf; „▭ alle nur Kopf“ im Modalkopf für alle), ✎ im Kopf öffnet und schließt das Bearbeiten (Name,
-  Felder mit Typ, „erzeugt das Aggregat“, Event ⇄ Hinweis, Rumpf, ✕) — ein eigenes Formular gibt es hier nicht mehr. Ein Klick hebt die Kette der
+  Felder mit Typ, „erzeugt das Aggregat“, Event ⇄ Hinweis, Rumpf) — ein eigenes Formular gibt es hier nicht mehr. Ein Klick hebt die Kette der
   Karte hervor (was vor ihr und nach ihr kommt), alles andere tritt zurück.
+- **Löschen** (Aggregat und Store von innen): jede Karte, die man im Modal anlegen kann, hat im Kopf neben ✎ ein ✕. Ein Klick fragt nach und
+  nennt, was mitgeht — im Aggregat ein Record mit seinem Decide, seinem Platz in den Ergebnissen, seinem Apply bzw. seiner Frage (ein Decide löscht
+  seinen Command, ein Apply nur sich); im Store ein Auf samt Bündel-Karte (mit dem letzten Auf die Projektion), eine Frage samt Query, eine
+  Fähigkeit samt Umsetzung (wer sie nimmt, lässt sie los), ein Read-Model, eine Antwort; immer dazu `IDarf`/`IHoert` der Akteure. Wird es
+  außerhalb noch verwendet (Projektion, Reader, Funktion, ein anderes Aggregat, ein Feld; ein Read-Model in der Signatur einer Fähigkeit), ist ✕
+  gesperrt und nennt die Stellen. Was der Server nicht löschen konnte und welche Fehler der Build danach neu meldet, kommt als Meldung; die
+  Befunde stehen zudem an ihrer Karte. Zustand und Fragen-Karte gehören dem Aggregat (Felder haben ihr eigenes ✕), Events im Store dem Aggregat.
   Ein Decide steht neben seinem Command, ein Apply neben seinem Event (1:1, oben bündig). „⇅“ im Kopf der Spalte Commands bzw. Ergebnisse
   wählt, welche Seite führt und wonach sie steht (in der Ansicht gemerkt): neu (das Neueste oben), A–Z oder Eingänge (wenige zuerst, so steht
   Unverbundenes oben; bei Gleichstand das Neueste zuerst); die andere Seite folgt ihren Kanten, Unverbundenes darunter. Der Zeitstempel entsteht beim Anlegen im Editor und steht nur in der Ansicht (`angelegt`); was keinen hat, zählt
@@ -444,7 +461,11 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   eine neue samt Umsetzung (Name I + Methode ohne Async, Parameter vorgeschlagen: die Id des Aggregats bzw. der Query, bei Klasse 2 die
   `Herkunft`). Events stammen aus dem Aggregat und sind hier fix: kein ✎, „▣“ öffnet ihr Aggregat; „＋ Auf für ein Event“ bietet nur Events an,
   die die Projektion noch nicht hört. Eine Query entsteht mit Frage und Antwort. Projektion bzw. Reader entstehen mit dem ersten Auf bzw. der
-  ersten Query (Name nach dem Store); hat der Store mehrere, fragt das Anlegen. Ein Read-Model entsteht als eigenes Dokument eines Aggregats
+  ersten Query (Name nach dem Store); hat der Store mehrere, fragt das Anlegen. Hat der Store ein **Bündel** (§10.3.2), steht zwischen beiden das
+  Band **Bündeln**: links die Bündel-Karte (⋈, ihre Events als Ports, 🔑 der Schlüssel samt Herkunft je Event, ✎ wählt `[Ueber<T>]`), dahinter Auf,
+  Fähigkeit, Umsetzung wie beim Schreiben. „＋ Bündel aus Events“ im Kopf der Eingänge legt eins aus zwei Events an, „＋ Event“ an der Karte nimmt
+  weitere hinein, ✕ am Port eines nimmt es heraus (mindestens zwei bleiben); der Eingang heißt danach `Buendel<…>` und „C# schreiben“ schreibt die
+  bestehende Methode um. Ein Read-Model entsteht als eigenes Dokument eines Aggregats
   (`Id<T> Id`, `partial`), Zeile eines Streams oder geteilt; bei Klasse 1 trägt der Abgleich es in die Dokument-Typen der Umsetzung ein
   (`base(store, typeof(…))`, `Storeklassen.Dokumente`). Kanten zu Read-Models gibt es nur aus der Signatur einer Fähigkeit. Eine Frage eines
   Readers, der zu einem anderen Store gehört, steht leise mit „gehört zu …“. Ein neuer Store wählt seine Klasse; die Umsetzung erbt die Basis

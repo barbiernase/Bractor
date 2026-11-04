@@ -10,8 +10,9 @@ namespace Core;
 /// <list type="bullet">
 ///   <item><see cref="LegeAb"/>: eine Datei unter einem Pfad mit der Event-Identität (Stream und Version aus der <see cref="Herkunft"/>) — eine
 ///     Wiederholung schreibt dieselbe Datei mit demselben Inhalt.</item>
-///   <item><see cref="LegeAbWennNeuer"/>: eine Datei, die je Schlüssel den letzten Stand hält, BEDINGT: nur wenn die Version des Eingangs größer
-///     ist als die gespeicherte (unter einer Sperre geprüft und ersetzt). Sonst brächte eine zweite Aktivierung mit älterem Stand alte Werte zurück.</item>
+///   <item><see cref="LegeAbWennNeuer"/>: eine Datei, die je Schlüssel den letzten Stand hält, BEDINGT: nur wenn der Stand des Eingangs
+///     (<see cref="Herkunft.Stand"/>: seine Position im Log) größer ist als der gespeicherte (unter einer Sperre geprüft und ersetzt). Sonst brächte
+///     eine zweite Aktivierung mit älterem Stand alte Werte zurück — oder ein Eingang aus einem anderen Stream, der später ankam, aber früher im Log steht.</item>
 /// </list>
 /// Lesen-Ändern-Schreiben ohne Bedingung gibt es hier nicht — es zählte bei einer Wiederholung doppelt.
 ///
@@ -28,7 +29,7 @@ public abstract class DateiZiel : IWiederholungsfestesZiel
     private readonly List<Wirkung> _puffer = new();
     private string _generation = Generationen.Erste;
 
-    private sealed record Wirkung(string Pfad, byte[] Inhalt, int? Version);
+    private sealed record Wirkung(string Pfad, byte[] Inhalt, long? Stand);
 
     /// <param name="wurzel">Das Verzeichnis dieses Stores (aus der Umgebung, <see cref="StoreOrte"/>).</param>
     protected DateiZiel(string wurzel) => _wurzel = Path.GetFullPath(wurzel);
@@ -44,10 +45,10 @@ public abstract class DateiZiel : IWiederholungsfestesZiel
         return Task.CompletedTask;
     }
 
-    /// <summary>Puffert: die Datei <paramref name="pfad"/> mit <paramref name="inhalt"/>, nur wenn <c>h.Version</c> größer ist als der gespeicherte Stand.</summary>
+    /// <summary>Puffert: die Datei <paramref name="pfad"/> mit <paramref name="inhalt"/>, nur wenn <c>h.Stand</c> größer ist als der gespeicherte Stand.</summary>
     protected Task LegeAbWennNeuer(string pfad, byte[] inhalt, Herkunft h)
     {
-        _puffer.Add(new Wirkung(Pruefe(pfad), inhalt, h.Version));
+        _puffer.Add(new Wirkung(Pruefe(pfad), inhalt, h.Stand));
         return Task.CompletedTask;
     }
 
@@ -104,8 +105,8 @@ public abstract class DateiZiel : IWiederholungsfestesZiel
                 ct.ThrowIfCancellationRequested();
                 var ziel = Path.Combine(verz, w.Pfad);
                 Directory.CreateDirectory(Path.GetDirectoryName(ziel)!);
-                if (w.Version is not { } version) await ErsetzeAsync(ziel, w.Inhalt, ct);
-                else await ErsetzeWennNeuerAsync(ziel, w.Inhalt, version, ct);
+                if (w.Stand is not { } stand) await ErsetzeAsync(ziel, w.Inhalt, ct);
+                else await ErsetzeWennNeuerAsync(ziel, w.Inhalt, stand, ct);
             }
         }
         finally
@@ -143,8 +144,8 @@ public abstract class DateiZiel : IWiederholungsfestesZiel
         File.Move(tmp, ziel, overwrite: true);
     }
 
-    /// <summary>Bedingt ersetzen: unter einer exklusiven Sperre (<c>&lt;ziel&gt;.stand</c>, sie hält zugleich die Version) prüfen und ersetzen.</summary>
-    private static async Task ErsetzeWennNeuerAsync(string ziel, byte[] inhalt, int version, CancellationToken ct)
+    /// <summary>Bedingt ersetzen: unter einer exklusiven Sperre (<c>&lt;ziel&gt;.stand</c>, sie hält zugleich den Stand) prüfen und ersetzen.</summary>
+    private static async Task ErsetzeWennNeuerAsync(string ziel, byte[] inhalt, long version, CancellationToken ct)
     {
         for (var versuch = 0; ; versuch++)
         {
@@ -162,7 +163,7 @@ public abstract class DateiZiel : IWiederholungsfestesZiel
             {
                 using var leser = new StreamReader(sperre, leaveOpen: true);
                 var text = await leser.ReadToEndAsync(ct);
-                if (int.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var gespeichert) && gespeichert >= version) return;
+                if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var gespeichert) && gespeichert >= version) return;
                 await ErsetzeAsync(ziel, inhalt, ct);
                 sperre.SetLength(0);
                 var bytes = System.Text.Encoding.ASCII.GetBytes(version.ToString(CultureInfo.InvariantCulture));

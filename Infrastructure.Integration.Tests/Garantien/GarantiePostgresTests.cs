@@ -320,6 +320,7 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
             InboxTabelle.Registriere(opts);
             Infrastructure.Uhr.FristVerzeichnis.Registriere(opts);
             Infrastructure.Eingaenge.OffeneEingaenge.Registriere(opts);
+            RueckblickTabelle.Registriere(opts);
         });
 
         public void Dispose() { Store.Dispose(); Rich.Dispose(); }

@@ -209,6 +209,8 @@
 #de .gnode2.n-handle{border-color:#4f7fa8}#de .gnode2.n-handle .ghead{background:#5d8fbf}
 #de .gnode2.n-fn{border-color:#2f8f88}#de .gnode2.n-fn .ghead{background:#2f9d95}
 #de .gnode2.n-umsetzung{border-color:#6b7280}#de .gnode2.n-umsetzung .ghead{background:#9aa0aa}
+/* Ein Bündel von Events vor einem Auf (docs/04 §4.3.1): grün wie ein Event, ⋈ im Titel. */
+#de .gnode2.n-buendel{border-color:#3f8f58}#de .gnode2.n-buendel .ghead{background:#57b673}
 #de .ghl{display:block;cursor:pointer;color:#9fb6d6;font-size:11.5px;padding:1px 0;text-decoration:none}#de .ghl:hover{color:#dbe6f5;text-decoration:underline}
 #de .gaus{font-size:10.5px;color:#8f9bb0;margin:-2px 0 4px 18px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #de .gaus.tot{color:#d08a6a}#de .gaus.offen{color:#d0b35a}
@@ -750,6 +752,10 @@
 #de .ag-stift{margin-left:auto;font-size:11px;opacity:.75;background:transparent;border:1px solid transparent;border-radius:5px;color:inherit;padding:0 5px;line-height:16px}
 #de button.ag-stift{cursor:pointer}
 #de button.ag-stift:hover,#de button.ag-stift.an{opacity:1;border-color:#a8843a;background:#2a2414;color:#ffd27a}
+/* Löschen im Kopf einer Karte (Modal): rot beim Darüberfahren; gesperrt (noch verwendet) blass — ein Klick nennt den Grund. */
+#de .ag-loesch{font-size:11px;opacity:.6;background:transparent;border:1px solid transparent;border-radius:5px;color:inherit;padding:0 5px;line-height:16px;cursor:pointer;margin-left:2px}
+#de .ag-loesch:hover{opacity:1;border-color:#b0524c;background:#2a1514;color:#ff8f87}
+#de .ag-loesch.gesperrt{opacity:.3}#de .ag-loesch.gesperrt:hover{opacity:.8;border-color:#6b7280;background:transparent;color:inherit}
 #de .kom-k .ghead{cursor:pointer}
 #de .kom-k.offen{outline:1px solid #a8843a}
 #de .kom-k.leise{opacity:.18}

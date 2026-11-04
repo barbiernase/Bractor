@@ -28,6 +28,15 @@ public static class Projektionsvertrag
     /// <summary>Der volle Name der <c>Herkunft</c> (optionaler Parameter eines <see cref="Auf"/>).</summary>
     public const string Herkunft = A + "Herkunft";
 
+    /// <summary>Ein Bündel von Events als Eingang eines <see cref="Auf"/> (<c>Buendel&lt;T1, …&gt;</c>, Metadaten-Name ohne Stelligkeit).</summary>
+    public const string Buendel = A + "Buendel`";
+
+    /// <summary>Höchstens so viele Events trägt ein Bündel (die Stelligkeiten von <c>Buendel&lt;…&gt;</c>).</summary>
+    public const int BuendelHoechstens = 16;
+
+    /// <summary>Die Wahl des Schlüssels eines Bündels am Parameter (<c>[Ueber&lt;T&gt;]</c>).</summary>
+    public const string Ueber = A + "UeberAttribute`1";
+
     /// <summary>Die ausdrückliche Erlaubnis an einer Projektion, in einen Store der Klasse 3 zu schreiben (R14).</summary>
     public const string MindestensEinmal = A + "MindestensEinmalAttribute";
 
