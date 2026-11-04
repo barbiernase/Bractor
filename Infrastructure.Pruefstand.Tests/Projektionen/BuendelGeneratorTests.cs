@@ -59,11 +59,14 @@ public sealed class Ablage : IWiederholungsfestesZiel, ISchreibe
         return comp;
     }
 
-    /// <summary>Der PullPathGenerator über der Probe: seine Diagnosen und sein Quelltext.</summary>
+    /// <summary>
+    /// Der PullPathGenerator über der Probe: seine Diagnosen zur Probe und sein Quelltext. Die Probe sieht auch die Projektionen der Assemblies, die der
+    /// Testprozess geladen hat (ohne ihre Stores: CQRS052) — gezählt wird nur, was an der Probe selbst hängt.
+    /// </summary>
     private static (string[] Ids, string Quelle) Generiere(string projektion, ISourceGenerator? generator = null)
     {
         var lauf = CSharpGeneratorDriver.Create(generator ?? new Infrastructure.SourceGeneration.PullPathGenerator()).RunGenerators(Probe(projektion)).GetRunResult();
-        return (lauf.Diagnostics.Select(d => d.Id).ToArray(), string.Concat(lauf.GeneratedTrees.Select(t => t.ToString())));
+        return (lauf.Diagnostics.Where(d => d.Location.IsInSource).Select(d => d.Id).ToArray(), string.Concat(lauf.GeneratedTrees.Select(t => t.ToString())));
     }
 
     private static string Projektion(string auf) =>

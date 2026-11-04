@@ -35,7 +35,7 @@ public class EventReadGarantieTests : IClassFixture<EventReadGarantieTests.Fixtu
         return roh.Where(bedingung).Where(e => e.Data is not Tombstone)
             .SelectMany(e => Anwendung.Upcasting.Aufwerten(e.Data).Select((p, si) => new EventEnvelope
             {
-                EventId = e.Id, AggregateId = e.StreamId, AggregateVersion = (int)e.Version, SubIndex = si, CreatedAtUtc = e.Timestamp,
+                EventId = e.Id, AggregateId = e.StreamId, AggregateVersion = (int)e.Version, Sequenz = e.Sequence, SubIndex = si, CreatedAtUtc = e.Timestamp,
                 CorrelationId = e.CorrelationId ?? "", CausationId = e.CausationId ?? "", AggregateType = H(e, "aggregate_type") ?? "",
                 UserId = H(e, ImAuftrag.Header) ?? ImAuftrag.Ohne, Ursache = H(e, Spur.UrsacheHeader), Wirker = H(e, Spur.WirkerHeader),
                 Ueber = H(e, Spur.UeberHeader), Stand = H(e, Spur.StandHeader), Payload = p,
