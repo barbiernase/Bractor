@@ -710,3 +710,19 @@
 #de .kom-inst-z{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #1e2533;font-size:12px}
 #de .kom-inst-z .kom-akt{margin-left:auto}
 #de .gx.fk-kom{opacity:.85}
+
+/* ── Gesten: Ziehen von Ports, Kanten anklicken, Ablegen aus dem Baukasten ── */
+#de .gmenue.fix{position:fixed;z-index:90}
+#de .glink.fl-hit{stroke:transparent;stroke-width:12px;pointer-events:stroke;cursor:pointer;opacity:1}
+#de .glink.fl-hit:hover{stroke:#ffd27a33}
+#de .gworld.fokus .glink.fl-hit:not(.inslice){opacity:1}
+#de .fk-port.aus{cursor:crosshair}
+#de .fk-akteur.fk .ghead{cursor:crosshair}
+#de .glink.ziehen{pointer-events:none}
+#de .kom-hit{stroke:transparent;stroke-width:12px;pointer-events:stroke;cursor:pointer}
+#de .kom-hit:hover{stroke:#ffd27a33}
+#de .kom-kanten{pointer-events:none}
+#de .kom-lw.ziel{outline:2px dashed #ffd27a;outline-offset:-4px}
+#de .kom-leer{position:absolute;left:260px;top:60px;color:#7f8aa0;font-size:13px}
+#de .fk-port.kom-neu{color:#7f8aa0;font-style:italic;cursor:crosshair}
+#de .kom-b[draggable=true]{cursor:grab}
