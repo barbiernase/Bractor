@@ -677,7 +677,7 @@
 #de .kom-kopf>.kom-u{flex:1;min-width:200px}
 #de .kom-reiter{display:flex;gap:4px;margin-left:auto}
 #de .kom-reiter button.on{background:#2b4a7a;border-color:#4f78b0;color:#fff}
-#de .kom-leib{flex:1;min-height:0;display:grid;grid-template-columns:minmax(170px,240px) 1fr minmax(220px,320px)}
+#de .kom-leib{flex:1;min-height:0;display:grid;grid-template-columns:minmax(170px,240px) 1fr}
 #de .kom-bk,#de .kom-panel{overflow:auto;padding:10px 12px;font-size:12px;background:#121722}
 #de .kom-bk{border-right:1px solid #232a38}
 #de .kom-panel{border-left:1px solid #232a38}
@@ -726,7 +726,7 @@
 #de .kom-leer{position:absolute;left:260px;top:60px;color:#7f8aa0;font-size:13px}
 #de .fk-port.kom-neu{color:#7f8aa0;font-style:italic;cursor:crosshair}
 #de .kom-b[draggable=true]{cursor:grab}
-#de .kom-leib.innen{grid-template-columns:1fr minmax(300px,420px)}
+#de .kom-leib.innen{grid-template-columns:1fr}
 #de .kom-panel .gbody{display:block!important;padding:0;margin-top:8px}
 #de .kom-leib.form{display:block;overflow:auto}
 #de .kom-panel.kom-form{max-width:760px;margin:0 auto;min-height:100%;border-left:1px solid #232a38;border-right:1px solid #232a38}

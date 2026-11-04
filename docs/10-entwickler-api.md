@@ -401,8 +401,9 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   Decide an einen Graph-Kopf, die Event-Antwort an die Funktion, die den Command gab), liest (eine Lese-Fähigkeit am Store).
 - **Von innen** (Modal): ein Graph zeigt seine Komposition (`board.sicht.komposition`, `Sicht.Komposition.cs`: Knoten nach Tiefe, je `[Von]` eine
   Kante, Köpfe und Ausgänge, Technik und Konfig als Chips) mit dem Baukasten (`board.sicht.baukasten`) und seinen Instanzen; ein Aggregat
-  Commands → Decide → Ergebnisse → Apply → Zustand; ein Store Events und Queries → Auf bzw. Frage → Store-Funktionen → Read-Models. Bearbeitet wird
-  im Modal mit dem Formular des gewählten Glieds.
+  Commands → Decide → Ergebnisse → Apply → Zustand; ein Store Events und Queries → Auf bzw. Frage → Store-Funktionen → Read-Models. Auch im Modal
+  gibt es kein Panel: ein Klick wählt einen Knoten bzw. ein Glied und hebt seine Kanten hervor, ein Doppelklick öffnet ihn (ein Graph eine Ebene
+  tiefer, sonst sein Formular mit Rumpf); ein Klick im Baukasten öffnet den Baustein.
 - **Gesten** sind Änderungen am Board, die der Server als Patch in den Code schreibt (↶ nimmt ihn zurück): vom Akteur auf eine Karte ziehen
   (`IDarf`), einen Ausgang auf einen Akteur (`IHoert`), ein Event auf eine Projektion (ein `Auf`), Klick auf eine Kante zum Lösen; im Modal
   Funktion, Graph oder Quelle aus dem Baukasten auf die Leinwand (ein Knoten), Technik oder Konfig auf einen Knoten (Konstruktor), Ausgang auf
