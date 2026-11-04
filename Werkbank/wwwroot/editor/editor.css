@@ -766,3 +766,20 @@
 #de .fk-port .ag-los{display:none;margin-left:6px;background:transparent;border:none;color:#ff9aa5;cursor:pointer;font-size:10px;padding:0 2px}
 #de .fk-port:hover .ag-los{display:inline}
 #de .kom-k.kand{cursor:copy;box-shadow:0 0 0 2px #ffd27a,0 0 16px #ffd27a55}
+/* Zoom im Modal */
+#de .kom-zoom{display:inline-flex;align-items:center;gap:2px;margin-right:8px;border:1px solid #2c3547;border-radius:8px;padding:1px 3px}
+#de .kom-zoom button{padding:0 7px;background:transparent;border:none;color:#dfe5ef;font-weight:700;cursor:pointer}
+#de .kom-zoom .kom-zoom-wert{min-width:42px;text-align:center;font-size:11px;color:#9aa6bb;cursor:pointer}
+/* Fläche: „＋“ am Port und hervorgehobene passende Ports */
+#de .gnode2.fk .fk-port.plus{color:#ffd27a;cursor:pointer;font-style:italic}
+#de .gnode2.fk .fk-port.plus .fk-dot{border-color:#ffd27a;border-style:dashed;background:#161b27}
+#de .gnode2.fk .fk-port.plus:hover{background:#2a2414}
+#de .gnode2.fk .fk-port.kand{background:#2a2414;color:#ffd27a;cursor:copy;box-shadow:inset 3px 0 0 #ffd27a}
+#de .gworld.auswahl .gnode2.leise{opacity:.25}
+#de .gnode2.kand-karte{box-shadow:0 0 0 2px #ffd27a,0 0 18px #ffd27a44}
+/* Komposition: „＋“ am Eingang eines Knotens, „von außen“ als Kandidat */
+#de .kom-einplus{margin-left:auto;padding:0 6px;font-size:11px;line-height:14px;opacity:.55}
+#de .fk-port:hover .kom-einplus,#de .kom-einplus.aktiv{opacity:1}
+#de .kom-einplus.aktiv{background:#ffd27a;color:#0d0f14}
+#de .kom-rand.kand{cursor:copy;box-shadow:0 0 0 2px #ffd27a,0 0 16px #ffd27a55}
+#de .kom-rand.leise{opacity:.4}

@@ -404,10 +404,16 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   Commands → Decide → Ergebnisse → Apply → Zustand; ein Store Events und Queries → Auf bzw. Frage → Store-Funktionen → Read-Models. Auch im Modal
   gibt es kein Panel: ein Klick wählt einen Knoten bzw. ein Glied und hebt seine Kanten hervor, ein Doppelklick öffnet ihn (ein Graph eine Ebene
   tiefer, sonst sein Formular mit Rumpf); ein Klick im Baukasten öffnet den Baustein.
-- **Gesten** sind Änderungen am Board, die der Server als Patch in den Code schreibt (↶ nimmt ihn zurück): vom Akteur auf eine Karte ziehen
-  (`IDarf`), einen Ausgang auf einen Akteur (`IHoert`), ein Event auf eine Projektion (ein `Auf`), Klick auf eine Kante zum Lösen; im Modal
-  Funktion, Graph oder Quelle aus dem Baukasten auf die Leinwand (ein Knoten), Technik oder Konfig auf einen Knoten (Konstruktor), Ausgang auf
-  Knoten (`[Von]`), „＋ Kopf“ auf Knoten (`[Kopf]`), Klick auf eine Kante (verlierbar, lösen). Was aus Signaturen folgt, ändert man im Formular.
+- **Gesten** sind Änderungen am Board, die der Server als Patch in den Code schreibt (↶ nimmt ihn zurück). Pfeile zieht man nie von Hand —
+  überall gilt dieselbe Port-Logik: links die Eingänge, rechts die Ausgänge; „＋“ an einem Port hebt die Ports bzw. Karten hervor, die dort
+  angeschlossen werden können, ein Klick verbindet, Esc bricht ab; ✕ an einem Port löst. Auf der Fläche: Akteur links „＋ darf“ (Eingänge von
+  Graphen, Aggregaten, Readern → `IDarf`), Akteur rechts „＋ hört“ (Events, Hinweise, Commands ohne Ziel → `IHoert`), Projektion „＋ Event“ (ein
+  `Auf`). In der Komposition: „＋“ an einem Eingang eines Knotens (die Knoten, die den Typ ausgeben → `[Von]`, „von außen“ → `[Kopf]`),
+  „＋ Technik/Konfig“ am Knoten (Konstruktor), Funktion, Graph oder Quelle aus dem Baukasten auf die Leinwand ziehen (neuer Knoten), Klick auf
+  eine Kante (verlierbar, lösen). Im Store: „＋ Schreib-“ bzw. „＋ Lese-Fähigkeit“ an Auf und Frage (die Store-Funktionen → Fähigkeit als
+  Parameter). Was aus Signaturen folgt, ändert man im Formular.
+- **Zoom:** in jedem Modal mit ＋/−/0 (auch mit Strg/⌘), Strg/⌘ + Mausrad bzw. Zwei-Finger-Zoom und der Anzeige im Kopf; auf der Fläche ebenso
+  mit ＋/−/0 und dem Mausrad.
 - **Im Aggregat anlegen und verbinden** (von innen): jede Karte hat links ihre Eingänge und rechts ihre Ausgänge als Ports, die Kanten laufen
   von Port zu Port. Pfeile setzt man nie von Hand: „＋“ an einem Port (am Decide „＋ Ergebnis“, am Ergebnis „＋ Decide“, an der Frage
   „＋ Antwort“) hebt die Karten hervor, die dort angeschlossen werden können — ein Klick auf eine verbindet, Esc bricht ab; dazu ein Menü für
