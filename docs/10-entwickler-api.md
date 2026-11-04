@@ -408,10 +408,11 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   (`IDarf`), einen Ausgang auf einen Akteur (`IHoert`), ein Event auf eine Projektion (ein `Auf`), Klick auf eine Kante zum Lösen; im Modal
   Funktion, Graph oder Quelle aus dem Baukasten auf die Leinwand (ein Knoten), Technik oder Konfig auf einen Knoten (Konstruktor), Ausgang auf
   Knoten (`[Von]`), „＋ Kopf“ auf Knoten (`[Kopf]`), Klick auf eine Kante (verlierbar, lösen). Was aus Signaturen folgt, ändert man im Formular.
-- **Im Aggregat anlegen und verbinden** (von innen): nie Pfeile von Hand. Ist eine Karte gewählt, zeigen die verbindbaren ein ⊕ und die verbundenen
-  ein ✓, ein Klick verbindet bzw. löst (Decide ↔ Ergebnis im `OneOf`, Query → Antwort). Der Kopf einer Karte schaltet ihr Bearbeiten an und aus
-  (Name, Felder mit Typ, „erzeugt das Aggregat“, Event ⇄ Hinweis, Rumpf, ✕). Spaltenköpfe: „＋ ▾“ für Command (mit seinem Decide) und Query (mit
-  Frage und Antwort), „＋ Feld“ am Zustand; „＋ Ergebnis ▾“ am Decide für ein neues Event, einen Hinweis, einen Command ohne Ziel oder eine Frist;
-  ein Event ohne Apply zeigt „＋ Apply“. Neues Decide und Apply bekommen einen Platzhalter-Rumpf, eine neue Frage ebenso (der Scaffolder schreibt
-  sie in den Zusatz des Deciders und zieht den Rückgabetyp den Antworten nach).
+- **Im Aggregat anlegen und verbinden** (von innen): jede Karte hat links ihre Eingänge und rechts ihre Ausgänge als Ports, die Kanten laufen
+  von Port zu Port. Pfeile setzt man nie von Hand: „＋“ an einem Port (am Decide „＋ Ergebnis“, am Ergebnis „＋ Decide“, an der Frage
+  „＋ Antwort“) hebt die Karten hervor, die dort angeschlossen werden können — ein Klick auf eine verbindet, Esc bricht ab; dazu ein Menü für
+  Neues (Event, Hinweis, Command ohne Ziel, Frist, Antwort). „＋ Apply“ am Event legt das Apply an; ✕ an einem Port löst. Der Kopf einer Karte
+  schaltet ihr Bearbeiten an und aus (Name, Felder mit Typ, „erzeugt das Aggregat“, Event ⇄ Hinweis, Rumpf, ✕). Spaltenköpfe: „＋ ▾“ für Command
+  (mit seinem Decide) und Query (mit Frage und Antwort), „＋ Feld“ am Zustand. Neues Decide und Apply bekommen einen Platzhalter-Rumpf, eine neue
+  Frage ebenso (der Scaffolder schreibt sie in den Zusatz des Deciders und zieht den Rückgabetyp den Antworten nach).
 - `--check` prüft die Fläche mit (Kanten an vorhandenen Ports, je Typ höchstens ein deklarierender Port).

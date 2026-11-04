@@ -2169,7 +2169,7 @@
   // Von innen öffnen: ein Graph seine Komposition, ein Aggregat sich selbst, Projektion und Reader ihren Store (mit ihnen gewählt).
   function flInnen(fk){if(fk.art==="graph"){komOeffne(fk.id);return;}const pid=flPanelId(fk);if(pid)komKarte(pid);}
   function komSchliesse(){KOM=null;const m=document.querySelector("#de .kom");if(m)m.remove();}
-  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&KOM){e.stopImmediatePropagation();komSchliesse();}},true);
+  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&KOM){e.stopImmediatePropagation();if(KOM.port){KOM.port=null;komZeige();}else komSchliesse();}},true);
   // Woher ein Kopf kommt und wohin ein Ausgang geht: die Kanten der obersten Graph-Karte auf der Fläche.
   function komOben(grId){let id=grId;for(let i=0;i<8;i++){if(FLKARTE.has(id))return id;const d=komDaten(id);if(!d||!d.eltern.length)return null;id=d.eltern[0];}return null;}
   const komName=id=>(FLKARTE.get(id)||{name:id}).name;
@@ -2381,60 +2381,130 @@
       default:return [NODELABEL[n.kind]||n.kind,n.name];}}
   function blockZeige(de,id){const n0=NODEBY.get(id);if(!n0){KOM=null;return;}
     const I=blockInnen(id),A=I.typ==="agg"?MODEL.aggregate.find(a=>"agg:"+a.name===id):null;
-    const m=komRahmen(A?"Kopf einer Karte: bearbeiten an/aus · Klick auf die Karte: wählen — ⊕ verbindet, ✓ löst · Doppelklick: ganzes Formular"
-        :"Store von innen: Events und Queries → Auf bzw. Frage → Store-Funktionen → Read-Models · rechts die Antworten");
+    if(A){aggZeige(de,id,I,A);return;}
+    const m=komRahmen("Store von innen: Events und Queries → Auf bzw. Frage → Store-Funktionen → Read-Models · rechts die Antworten");
     const welt=h("div",{class:"kom-welt"}),svgK=document.createElementNS(SVGNS,"svg");svgK.setAttribute("class","kom-kanten");welt.append(svgK);
-    const wahl=KOM.wahl&&KOM.wahl.art==="glied"?KOM.wahl.id:null;KOM.edit=KOM.edit||new Set();
-    const kand=A&&wahl?aggKandidaten(A,I,wahl):new Map();
-    I.glieder.forEach((s,x)=>{const n=NODEBY.get(x);if(!n)return;const [k,t]=innenTitel(n),rec=x.startsWith("rec:"),offen=!!A&&KOM.edit.has(x);
-      const el=h("div",{class:"gnode2 fk kom-k n-"+(rec?n.kind:n.kind==="handle"?"handle":n.kind)+(wahl===x?" sel":"")+(offen?" offen":"")+(kand.has(x)?" kand":"")+(wahl&&A&&x!==wahl&&!kand.has(x)?" leise":""),
-        title:A?"Klick: wählen · Doppelklick: ganzes Formular":"Klick: Kanten hervorheben · Doppelklick: bearbeiten",
-        onclick:()=>komWaehle(wahl===x?null:{art:"glied",id:x}),ondblclick:()=>komKarte(x,true,true)});
-      const kopf=h("div",{class:"ghead",title:A?"Klick auf den Kopf: bearbeiten an/aus":""},h("span",{class:"gtitle hatname",title:(NODELABEL[n.kind]||n.kind)+" · "+t},
-        h("span",{class:"gk"},(rec?(FL_SORTE[komSorte(n.name)]||"")+n.name:k)+" "),h("span",{class:"gn"},rec?"":t)),A?h("span",{class:"ag-stift"},offen?"▾":"✎"):null);
-      if(A)kopf.onclick=e=>{e.stopPropagation();if(KOM.edit.has(x))KOM.edit.delete(x);else KOM.edit.add(x);komZeige();};
-      el.append(kopf);
-      if(A)el.append(aggKurz(A,n,x));else if(!rec&&diagFuer(x).length)el.append(h("div",{class:"kom-wo",style:"padding:4px 10px"},"⚠ "+diagFuer(x).length+" Befund(e)"));
-      if(A&&diagFuer(x).length)el.append(h("div",{class:"ag-diag",title:diagFuer(x).map(d=>d.text).join("\n")},"⛔ "+diagFuer(x).map(d=>d.text).join(" · ")));
-      if(offen)el.append(aggBearbeiten(A,n,x));
-      if(kand.has(x)){const ja=kand.get(x);el.append(h("button",{class:"ag-kand"+(ja?" ja":""),title:ja?"verbunden — Klick löst":"verbindbar — Klick verbindet",
-        onclick:e=>{e.stopPropagation();aggVerbinde(A,wahl,x,ja);}},ja?"✓":"⊕"));}
+    const wahl=KOM.wahl&&KOM.wahl.art==="glied"?KOM.wahl.id:null;
+    I.glieder.forEach((s,x)=>{const n=NODEBY.get(x);if(!n)return;const [k,t]=innenTitel(n),rec=x.startsWith("rec:");
+      const el=h("div",{class:"gnode2 fk kom-k n-"+(rec?n.kind:n.kind==="handle"?"handle":n.kind)+(wahl===x?" sel":""),title:"Klick: Kanten hervorheben · Doppelklick: bearbeiten",
+        onclick:()=>komWaehle(wahl===x?null:{art:"glied",id:x}),ondblclick:()=>komKarte(x,true,true)},
+        h("div",{class:"ghead"},h("span",{class:"gtitle hatname",title:(NODELABEL[n.kind]||n.kind)+" · "+t},h("span",{class:"gk"},(rec?(FL_SORTE[komSorte(n.name)]||"")+n.name:k)+" "),h("span",{class:"gn"},rec?"":t))),
+        !rec&&diagFuer(x).length?h("div",{class:"kom-wo",style:"padding:4px 10px"},"⚠ "+diagFuer(x).length+" Befund(e)"):null);
       el.dataset.glied=x;el.dataset.spalte=s;welt.append(el);});
-    // Ein Event ohne Apply: der Platz dafür, ein Klick legt es an.
-    if(A)I.glieder.forEach((s,x)=>{const n=NODEBY.get(x);if(!n||s!==2||n.kind!=="event"||MODEL.applier.some(a=>a.aggregat===A.name&&a.event===n.name))return;
-      const g=h("div",{class:"gnode2 fk kom-k ag-neu",title:"Apply für "+n.name+" anlegen",onclick:()=>{MODEL.applier.push({_id:"a"+(NID++),aggregat:A.name,event:n.name});
-        gTitel("▣ "+A.name+": Apply "+n.name);render();}},h("div",{class:"ghead"},h("span",{class:"gtitle"},"＋ Apply "+n.name)));
-      g.dataset.glied="neu:apply:"+n.name;g.dataset.spalte=3;g.dataset.zu=x;welt.append(g);});
-    if(!I.glieder.size&&!A)welt.append(h("div",{class:"kom-leer"},"Noch nichts darin."));
-    const lw=h("div",{class:"kom-lw"},welt);
-    m.append(h("div",{class:"kom-leib innen"},lw));de.append(m);
-    // Anordnen: je Spalte untereinander; Nachrichten zur Höhe ihrer Glieder sortiert (zweiter Durchgang). Beim Aggregat stehen alle fünf Spalten
-    //   mit ihrem Kopf (＋ Command, ＋ Query, ＋ Feld), auch leer.
-    const els=[...welt.querySelectorAll(".kom-k")],nb=new Map(),Y0=A?64:30,xs=new Map();
-    I.kanten.forEach(([a,b])=>{[[a,b],[b,a]].forEach(([p,q])=>{if(!nb.has(p))nb.set(p,[]);nb.get(p).push(q);});});
-    els.forEach(e=>{if(e.dataset.zu){nb.set(e.dataset.glied,[e.dataset.zu]);}});
-    const lege=reihe=>{const Y=new Map();let x=40,hmax=0;const sp=[...new Set([...els.map(e=>+e.dataset.spalte),...(A?[0,1,2,3,4]:[])])].sort((a,b)=>a-b);
-      sp.forEach(s=>{let y=Y0,w=A?200:0;reihe(els.filter(e=>+e.dataset.spalte===s)).forEach(e=>{e.style.left=x+"px";e.style.top=y+"px";Y.set(e.dataset.glied,y+e.offsetHeight/2);y+=e.offsetHeight+14;w=Math.max(w,e.offsetWidth);});
-        xs.set(s,{x,w});hmax=Math.max(hmax,y);x+=w+110;});return {Y,w:x,h:hmax+30};};
+    if(!I.glieder.size)welt.append(h("div",{class:"kom-leer"},"Noch nichts darin."));
+    const lw=h("div",{class:"kom-lw"},welt);m.append(h("div",{class:"kom-leib innen"},lw));de.append(m);
+    const g=innenLegen(welt,I.kanten,30,[]);
+    const el=x=>welt.querySelector('.kom-k[data-glied="'+CSS.escape(x)+'"]');
+    I.kanten.forEach(([a,b])=>{const ea=el(a),eb=el(b);if(!ea||!eb)return;const s=komSorte((NODEBY.get(a.startsWith("rec:")?a:b)||{}).name);
+      innenKante(svgK,{x:ea.offsetLeft+ea.offsetWidth,y:ea.offsetTop+14},{x:eb.offsetLeft,y:eb.offsetTop+14},s,wahl&&(a===wahl||b===wahl));});}
+  // Anordnen: je Spalte untereinander, im zweiten Durchgang zur mittleren Höhe der Nachbarn; feste Spalten bleiben auch leer stehen.
+  function innenLegen(welt,kanten,y0,feste){const els=[...welt.querySelectorAll(".kom-k")],nb=new Map(),xs=new Map();
+    kanten.forEach(([a,b])=>{[[a,b],[b,a]].forEach(([p,q])=>{if(!nb.has(p))nb.set(p,[]);nb.get(p).push(q);});});
+    const lege=reihe=>{const Y=new Map();let x=40,hmax=0;const sp=[...new Set([...els.map(e=>+e.dataset.spalte),...feste])].sort((a,b)=>a-b);
+      sp.forEach(s=>{let y=y0,w=feste.length?220:0;reihe(els.filter(e=>+e.dataset.spalte===s)).forEach(e=>{e.style.left=x+"px";e.style.top=y+"px";Y.set(e.dataset.glied,y+e.offsetHeight/2);y+=e.offsetHeight+16;w=Math.max(w,e.offsetWidth);});
+        xs.set(s,{x,w});hmax=Math.max(hmax,y);x+=w+120;});return {Y,w:x,h:hmax+30};};
     let g=lege(l=>l);
     g=lege(l=>l.map(e=>{const ys=(nb.get(e.dataset.glied)||[]).map(o=>g.Y.get(o)).filter(v=>v!=null);return [e,ys.length?ys.reduce((a,b)=>a+b,0)/ys.length:g.Y.get(e.dataset.glied)];})
       .sort((a,b)=>a[1]-b[1]).map(p=>p[0]));
-    if(A)[["Commands",ev=>menueFix(ev.clientX,ev.clientY,"Neu in "+A.name,[{t:"＋ Command …",fn:()=>aggNeuerCommand(A,ev)},{t:"＋ Query (Frage) …",fn:()=>aggNeueQuery(A,ev)}])],
-        ["Decide",null,"je Command eines"],["Ergebnisse",null,"＋ am Decide"],["Apply",null,"je Event eines"],
-        ["Zustand",()=>{A.state=A.state||[];A.state.push({_id:"f"+(NID++),name:uniqFeldName(A.state,"Feld"),typ:"string"});const st=[...I.glieder.keys()].find(x=>x.startsWith("st:"));
-          if(st)KOM.edit.add(st);gTitel("▣ "+A.name+": Zustand ＋ Feld");render();},"＋ Feld"]].forEach(([titel,fn,u],s)=>{const p=xs.get(s);if(!p)return;
-      const kopf=h("div",{class:"ag-spkopf"},h("b",{},titel),fn?h("button",{class:"ag-plus",onclick:e=>{e.stopPropagation();fn(e);}},u||"＋ ▾"):h("span",{class:"kom-u"}," "+(u||"")));
+    const svgK=welt.querySelector("svg");welt.style.width=g.w+"px";welt.style.height=g.h+"px";svgK.setAttribute("width",g.w);svgK.setAttribute("height",g.h);
+    return {xs};}
+  function innenKante(svgK,A,B,sorte,dick){const zurueck=B.x<A.x,c=Math.max(40,Math.abs(B.x-A.x)*0.45),p=document.createElementNS(SVGNS,"path");
+    p.setAttribute("d",zurueck?"M"+A.x+","+A.y+" C"+(A.x+80)+","+A.y+" "+(B.x-80)+","+B.y+" "+B.x+","+B.y:"M"+A.x+","+A.y+" C"+(A.x+c)+","+A.y+" "+(B.x-c)+","+B.y+" "+B.x+","+B.y);
+    p.setAttribute("fill","none");p.setAttribute("stroke",sorte==="event"?"#57b673":sorte==="hinweis"?"#cf6f68":sorte==="query"||sorte==="antwort"?"#9678d6":"#8fa6c8");
+    p.setAttribute("stroke-width",dick?"3":"1.6");svgK.append(p);}
+
+  // ── Aggregat von innen: Karten mit Ports — links die Eingänge, rechts die Ausgänge. Verbunden wird nie von Hand: „＋“ an einem Port hebt die
+  //   Karten hervor, die dort angeschlossen werden können, ein Klick auf eine von ihnen verbindet (Esc bricht ab); ✕ an einem Port löst. Der Kopf
+  //   einer Karte schaltet ihr Bearbeiten an und aus. ──
+  // Die Ports einer Karte: {key, label, sorte, loese (✕), plus (＋, startet die Auswahl bzw. legt an)}.
+  function aggPorts(A,n,x){const ein=[],aus=[],agg=A.name,decs=MODEL.decider.filter(d=>d.aggregat===agg);
+    const s=t=>komSorte(t);
+    if(n.kind==="decider"){const d=n.ref;ein.push({key:"cmd",label:d.command,sorte:"command"});
+      (d.ergibt||[]).forEach(o=>aus.push({key:"r:"+o.event,label:o.event,sorte:s(o.event),loese:()=>{d.ergibt=d.ergibt.filter(z=>z.event!==o.event);gTitel("▣ "+agg+": "+d.command+" ergibt nicht mehr "+o.event);render();}}));
+      aus.push({key:"+",label:"＋ Ergebnis",plus:{art:"ergebnis",dec:d}});}
+    else if(n.kind==="applier"){ein.push({key:"evt",label:n.ref.event,sorte:"event"});aus.push({key:"st",label:"▶ Zustand"});}
+    else if(n.kind==="state")ein.push({key:"in",label:"◀ von Apply"});
+    else if(n.kind==="aggregate")(A.fragen||[]).forEach(f=>{ein.push({key:"q:"+f.query,label:f.query,sorte:"query"});
+      (f.antworten||[]).forEach(a=>aus.push({key:"a:"+a,label:a,sorte:"antwort",loese:()=>{f.antworten=ohneX(f.antworten,a);gTitel("▣ "+agg+": "+f.query+" antwortet nicht mehr "+a);render();}}));
+      aus.push({key:"+:"+f.query,label:"＋ Antwort zu "+f.query,plus:{art:"antwort",frage:f}});});
+    else if(x.startsWith("rec:")){const r=n.ref||{},nm=n.name;
+      if(r.kind==="command"&&r.aggregat===agg)aus.push({key:"aus",label:"▶ Decide",sorte:"command"});
+      else if(r.kind==="query")aus.push({key:"aus",label:"▶ Frage",sorte:"query"});
+      else if(r.kind==="queryresponse")ein.push({key:"von:Frage",label:"◀ Antwort einer Frage",sorte:"antwort"});
+      else{decs.filter(d=>(d.ergibt||[]).some(o=>o.event===nm)).forEach(d=>ein.push({key:"von:"+d.command,label:"◀ "+d.command,sorte:s(nm),
+          loese:()=>{d.ergibt=d.ergibt.filter(z=>z.event!==nm);gTitel("▣ "+agg+": "+d.command+" ergibt nicht mehr "+nm);render();}}));
+        ein.push({key:"+",label:"＋ Decide",plus:{art:"decide",rec:nm},ein:true});
+        if(r.kind==="event"){const ap=MODEL.applier.some(a=>a.aggregat===agg&&a.event===nm);
+          aus.push(ap?{key:"apply",label:"▶ Apply",sorte:"event"}:{key:"apply",label:"＋ Apply",plus:{art:"apply",rec:nm}});}}}
+    return {ein,aus};}
+  // Welcher Port an welcher Kante hängt (Kanten der Sicht zwischen Gliedern).
+  function aggKantenPorts(a,b){const na=NODEBY.get(a),nb=NODEBY.get(b);if(!na||!nb)return null;
+    if(nb.kind==="decider")return ["aus","cmd"];
+    if(nb.kind==="aggregate")return ["aus","q:"+na.name];
+    if(na.kind==="decider")return ["r:"+nb.name,"von:"+na.ref.command];
+    if(na.kind==="aggregate")return ["a:"+nb.name,"von:Frage"];
+    if(nb.kind==="applier")return ["apply","evt"];
+    if(na.kind==="applier")return ["st","in"];
+    return null;}
+  // Wer an einen „＋“ angeschlossen werden kann.
+  function aggAuswahl(A,I,p){const k=new Set();if(!p)return k;
+    I.glieder.forEach((s,x)=>{const n=NODEBY.get(x);if(!n)return;
+      if(p.art==="ergebnis"&&x.startsWith("rec:")&&s===2&&["event","rejection","command"].includes(n.kind)&&!(p.dec.ergibt||[]).some(o=>o.event===n.name))k.add(x);
+      if(p.art==="decide"&&n.kind==="decider"&&!(n.ref.ergibt||[]).some(o=>o.event===p.rec))k.add(x);
+      if(p.art==="antwort"&&n.kind==="queryresponse"&&!(p.frage.antworten||[]).includes(n.name))k.add(x);});
+    return k;}
+  function aggAnschliessen(A,p,x){const n=NODEBY.get(x);if(!n)return;
+    if(p.art==="ergebnis"){p.dec.ergibt=[...(p.dec.ergibt||[]),{event:n.name}];gTitel("▣ "+A.name+": "+p.dec.command+" ergibt "+n.name);}
+    else if(p.art==="decide"){n.ref.ergibt=[...(n.ref.ergibt||[]),{event:p.rec}];gTitel("▣ "+A.name+": "+n.ref.command+" ergibt "+p.rec);}
+    else if(p.art==="antwort"){p.frage.antworten=[...(p.frage.antworten||[]),n.name];gTitel("▣ "+A.name+": "+p.frage.query+" antwortet "+n.name);}
+    KOM.port=null;render();}
+  // „＋“ an einem Port: Apply legt direkt an; sonst heben sich die anschließbaren Karten hervor, dazu ein Menü für Neues.
+  function aggPlus(A,I,p,x,ev){if(p.art==="apply"){MODEL.applier.push({_id:"a"+(NID++),aggregat:A.name,event:p.rec});gTitel("▣ "+A.name+": Apply "+p.rec);render();return;}
+    KOM.port={...p,karte:x};komZeige();
+    const n=aggAuswahl(A,I,p).size,hinweis=n?n+" Karte(n) hervorgehoben — anklicken verbindet · Esc bricht ab":"Keine vorhandene Karte passt — etwas Neues anlegen";
+    if(p.art==="ergebnis")aggNeuesErgebnis(A,p.dec,ev,hinweis);
+    else if(p.art==="antwort")frageFix(ev.clientX,ev.clientY,"Neue Antwort zu "+p.frage.query,p.frage.query.replace(/^Hole/,"")+"Antwort",hinweis,nm=>{const f=nameFehler(nm);if(f)return f;
+      MODEL.records.push({name:nm,kind:"queryresponse",namespace:A.namespace,felder:[],istErzeugung:false});p.frage.antworten=[...(p.frage.antworten||[]),nm];KOM.port=null;
+      gTitel("▣ "+A.name+": "+p.frage.query+" antwortet "+nm);render();});
+    else deFlash("ℹ "+hinweis,true);}
+  function aggPortZeile(A,I,p,richtung,x){const r=h("div",{class:"fk-port "+richtung+" s-"+(p.sorte||"command")+(p.plus?" plus":"")+(KOM.port&&KOM.port.karte===x&&p.plus&&KOM.port.art===p.plus.art?" aktiv":""),
+      title:p.plus?"Klick: anschließen bzw. anlegen":p.loese?"✕ löst die Verbindung":""},h("span",{class:"fk-dot"}),h("span",{class:"fk-pl"},(p.plus?"":(FL_SORTE[p.sorte]||""))+p.label),
+      p.loese?h("button",{class:"ag-los",title:"Verbindung lösen",onclick:e=>{e.stopPropagation();p.loese();}},"✕"):null);
+    if(p.plus)r.onclick=e=>{e.stopPropagation();aggPlus(A,I,p.plus,x,e);};
+    r.dataset.port=richtung+"|"+p.key;return r;}
+  function aggZeige(de,id,I,A){const m=komRahmen(KOM.port?"Anschließen: hervorgehobene Karte anklicken · Esc bricht ab"
+        :"Links Eingänge, rechts Ausgänge · ＋ an einem Port: anschließen oder anlegen · Kopf: bearbeiten an/aus · Doppelklick: ganzes Formular");
+    const welt=h("div",{class:"kom-welt"}),svgK=document.createElementNS(SVGNS,"svg");svgK.setAttribute("class","kom-kanten");welt.append(svgK);
+    const wahl=KOM.wahl&&KOM.wahl.art==="glied"?KOM.wahl.id:null;KOM.edit=KOM.edit||new Set();
+    const auswahl=aggAuswahl(A,I,KOM.port);
+    I.glieder.forEach((s,x)=>{const n=NODEBY.get(x);if(!n)return;const [k,t]=innenTitel(n),rec=x.startsWith("rec:"),offen=KOM.edit.has(x),kand=auswahl.has(x);
+      const el=h("div",{class:"gnode2 fk kom-k n-"+n.kind+(wahl===x?" sel":"")+(offen?" offen":"")+(kand?" kand":"")+(KOM.port&&!kand&&x!==KOM.port.karte?" leise":""),
+        title:kand?"Klick: anschließen":"Klick: Kanten hervorheben · Doppelklick: ganzes Formular",
+        onclick:()=>{if(kand){aggAnschliessen(A,KOM.port,x);return;}if(KOM.port){KOM.port=null;komZeige();return;}komWaehle(wahl===x?null:{art:"glied",id:x});},
+        ondblclick:()=>{if(!KOM.port)komKarte(x,true,true);}});
+      const kopf=h("div",{class:"ghead",title:"Klick auf den Kopf: bearbeiten an/aus"},h("span",{class:"gtitle hatname",title:(NODELABEL[n.kind]||n.kind)+" · "+t},
+        h("span",{class:"gk"},(rec?(FL_SORTE[komSorte(n.name)]||"")+n.name:k)+" "),h("span",{class:"gn"},rec?"":t)),h("span",{class:"ag-stift"},kand?"⊕":offen?"▾":"✎"));
+      kopf.onclick=e=>{e.stopPropagation();if(kand){aggAnschliessen(A,KOM.port,x);return;}if(KOM.edit.has(x))KOM.edit.delete(x);else KOM.edit.add(x);komZeige();};
+      el.append(kopf);
+      const P=aggPorts(A,n,x),ports=h("div",{class:"fk-ports"});
+      P.ein.forEach(p=>ports.append(aggPortZeile(A,I,p,"ein",x)));P.aus.forEach(p=>ports.append(aggPortZeile(A,I,p,"aus",x)));
+      if(P.ein.length||P.aus.length)el.append(ports);
+      el.append(aggKurz(A,n,x));
+      if(diagFuer(x).length)el.append(h("div",{class:"ag-diag",title:diagFuer(x).map(d=>d.text).join("\n")},"⛔ "+diagFuer(x).map(d=>d.text).join(" · ")));
+      if(offen)el.append(aggBearbeiten(A,n,x));
+      el.dataset.glied=x;el.dataset.spalte=s;welt.append(el);});
+    const lw=h("div",{class:"kom-lw"},welt);m.append(h("div",{class:"kom-leib innen"},lw));de.append(m);
+    const {xs}=innenLegen(welt,I.kanten,64,[0,1,2,3,4]);
+    [["Commands",ev=>menueFix(ev.clientX,ev.clientY,"Neu in "+A.name,[{t:"＋ Command …",fn:()=>aggNeuerCommand(A,ev)},{t:"＋ Query (Frage) …",fn:()=>aggNeueQuery(A,ev)}]),"＋ ▾"],
+      ["Decide",null,"je Command eines"],["Ergebnisse",null,"＋ am Decide"],["Apply",null,"je Event eines"],
+      ["Zustand",()=>{A.state=A.state||[];A.state.push({_id:"f"+(NID++),name:uniqFeldName(A.state,"Feld"),typ:"string"});const st=[...I.glieder.keys()].find(x=>x.startsWith("st:"));
+        if(st)KOM.edit.add(st);gTitel("▣ "+A.name+": Zustand ＋ Feld");render();},"＋ Feld"]].forEach(([titel,fn,u],s)=>{const p=xs.get(s);if(!p)return;
+      const kopf=h("div",{class:"ag-spkopf"},h("b",{},titel),fn?h("button",{class:"ag-plus",onclick:e=>{e.stopPropagation();fn(e);}},u):h("span",{class:"kom-u"}," "+u));
       kopf.style.left=p.x+"px";kopf.style.width=p.w+"px";welt.append(kopf);});
-    welt.style.width=g.w+"px";welt.style.height=g.h+"px";svgK.setAttribute("width",g.w);svgK.setAttribute("height",g.h);
     const el=x=>welt.querySelector('.kom-k[data-glied="'+CSS.escape(x)+'"]');
-    const zieh=(a,b,farbe,strich,dick)=>{const ea=el(a),eb=el(b);if(!ea||!eb)return;
-      const A2={x:ea.offsetLeft+ea.offsetWidth,y:ea.offsetTop+14},B={x:eb.offsetLeft,y:eb.offsetTop+14};
-      const zurueck=B.x<A2.x,c=Math.max(40,Math.abs(B.x-A2.x)*0.45),p=document.createElementNS(SVGNS,"path");
-      p.setAttribute("d",zurueck?"M"+A2.x+","+A2.y+" C"+(A2.x+80)+","+A2.y+" "+(B.x-80)+","+B.y+" "+B.x+","+B.y:"M"+A2.x+","+A2.y+" C"+(A2.x+c)+","+A2.y+" "+(B.x-c)+","+B.y+" "+B.x+","+B.y);
-      p.setAttribute("fill","none");p.setAttribute("stroke",farbe);p.setAttribute("stroke-width",dick?"3":"1.6");if(strich)p.setAttribute("stroke-dasharray",strich);svgK.append(p);};
-    I.kanten.forEach(([a,b])=>{const s=komSorte((NODEBY.get(a.startsWith("rec:")?a:b)||{}).name);
-      zieh(a,b,s==="event"?"#57b673":s==="hinweis"?"#cf6f68":s==="query"||s==="antwort"?"#9678d6":"#8fa6c8",null,wahl&&(a===wahl||b===wahl));});
-    els.forEach(e=>{if(e.dataset.zu)zieh(e.dataset.zu,e.dataset.glied,"#ffd27a","5 4");});}
+    const punkt=(e,ri,key)=>{const p=e.querySelector('[data-port="'+CSS.escape(ri+"|"+key)+'"]');return {x:e.offsetLeft+(ri==="aus"?e.offsetWidth:0),y:e.offsetTop+(p?p.offsetTop+p.offsetHeight/2:14)};};
+    I.kanten.forEach(([a,b])=>{const ea=el(a),eb=el(b),pk=aggKantenPorts(a,b);if(!ea||!eb||!pk)return;
+      innenKante(svgK,punkt(ea,"aus",pk[0]),punkt(eb,"ein",pk[1]),komSorte((NODEBY.get(a.startsWith("rec:")?a:b)||{}).name),wahl&&(a===wahl||b===wahl));});}
   // ── Aggregat von innen: anlegen und verbinden (docs/konzept-aggregat-modal.md) — nie Pfeile von Hand: ist eine Karte gewählt, zeigen die
   //   verbindbaren ⊕ und die verbundenen ✓, ein Klick verbindet bzw. löst; der Kopf einer Karte schaltet ihr Bearbeiten an und aus. ──
   const aggIdFeld=()=>ID_FELD()||"AggregateId";
@@ -2459,38 +2529,22 @@
     MODEL.records.push({name:ant,kind:"queryresponse",namespace:A.namespace,felder:[],istErzeugung:false});
     A.fragen=[...(A.fragen||[]),{query:n,antworten:[ant]}];gTitel("▣ "+A.name+": Frage "+n);render();});}
   // ＋ Ergebnis am Decide: Neues anlegen — Event, Hinweis, Command an einen Graphen, Frist auf einen eigenen Command.
-  function aggNeuesErgebnis(A,d,ev){const neu=(kind,titel,vorschlag)=>frageFix(ev.clientX,ev.clientY,titel,vorschlag,"Wird ein Glied im OneOf von Decide("+d.command+")",n=>{
+  function aggNeuesErgebnis(A,d,ev,hinweis){const neu=(kind,titel,vorschlag)=>frageFix(ev.clientX,ev.clientY,titel,vorschlag,"Wird ein Glied im OneOf von Decide("+d.command+")",n=>{
       const f=nameFehler(n);if(f)return f;MODEL.records.push({name:n,kind,namespace:A.namespace,felder:[],istErzeugung:false});
-      d.ergibt=[...(d.ergibt||[]),{event:n}];gTitel("▣ "+A.name+": "+d.command+" ergibt "+n);render();});
+      d.ergibt=[...(d.ergibt||[]),{event:n}];KOM.port=null;gTitel("▣ "+A.name+": "+d.command+" ergibt "+n);render();});
     const eigene=MODEL.decider.filter(x=>x.aggregat===A.name).map(x=>x.command).filter(Boolean);
     menueFix(ev.clientX,ev.clientY,"Decide "+d.command+" ergibt …",[
       {t:"＋ neues Event (Fakt im Log) …",fn:()=>neu("event","＋ Event",A.name+"Geaendert")},
       {t:"＋ neuer Hinweis (flüchtig, an Akteure) …",fn:()=>neu("rejection","＋ Hinweis",d.command+"Abgelehnt")},
       {t:"＋ Command an einen Graphen …",title:"Ein Command ohne Ziel — sein Empfänger ist der Kopf eines Graphen (in dessen Komposition: „＋ Kopf“)",fn:()=>neu("command","＋ Command ohne Ziel",A.name+"Weiter")},
       {trenn:1},{kopf:"⏱ Frist auf einen eigenen Command"},
-      ...eigene.map(c=>({t:"⏱ Frist<"+c+">",aus:(d.ergibt||[]).some(o=>o.event==="Frist<"+c+">"),fn:()=>{d.ergibt=[...(d.ergibt||[]),{event:"Frist<"+c+">"}];gTitel("▣ "+A.name+": "+d.command+" setzt Frist<"+c+">");render();}})),
-      {trenn:1},{hinweis:"Vorhandene verbinden: Decide wählen, dann ⊕ an der Karte."}]);}
-  // Was mit der gewählten Karte verbunden werden kann (true = schon verbunden): Decide ↔ Ergebnisse (OneOf), Query → Antworten (Frage).
-  function aggKandidaten(A,I,wahl){const k=new Map(),n=NODEBY.get(wahl);if(!n)return k;
-    const ergebnis=x=>{const m=NODEBY.get(x);return m&&x.startsWith("rec:")&&I.glieder.get(x)===2&&["event","rejection","command"].includes(m.kind);};
-    if(n.kind==="decider")I.glieder.forEach((s,x)=>{if(ergebnis(x))k.set(x,(n.ref.ergibt||[]).some(o=>o.event===NODEBY.get(x).name));});
-    else if(ergebnis(wahl))I.glieder.forEach((s,x)=>{const d=NODEBY.get(x);if(d&&d.kind==="decider")k.set(x,(d.ref.ergibt||[]).some(o=>o.event===n.name));});
-    else if(n.kind==="query"){const fr=(A.fragen||[]).find(f=>f.query===n.name);
-      MODEL.records.filter(r=>r.kind==="queryresponse"&&(r.namespace===A.namespace||(fr&&(fr.antworten||[]).includes(r.name)))).forEach(r=>{
-        const x="rec:"+r.name;if(I.glieder.has(x))k.set(x,!!fr&&(fr.antworten||[]).includes(r.name));});}
-    return k;}
-  function aggVerbinde(A,wahl,x,verbunden){const n=NODEBY.get(wahl),m=NODEBY.get(x);if(!n||!m)return;
-    const dec=n.kind==="decider"?n.ref:m.ref,erg=n.kind==="decider"?m.name:n.name;
-    if(n.kind==="query"){const fr=(A.fragen||[]).find(f=>f.query===n.name);if(!fr)return;
-      fr.antworten=verbunden?ohneX(fr.antworten,m.name):[...(fr.antworten||[]),m.name];gTitel("▣ "+A.name+": "+n.name+(verbunden?" antwortet nicht mehr ":" antwortet ")+m.name);render();return;}
-    dec.ergibt=verbunden?(dec.ergibt||[]).filter(o=>o.event!==erg):[...(dec.ergibt||[]),{event:erg}];
-    gTitel("▣ "+A.name+": "+dec.command+(verbunden?" ergibt nicht mehr ":" ergibt ")+erg);render();}
+      ...eigene.map(c=>({t:"⏱ Frist<"+c+">",aus:(d.ergibt||[]).some(o=>o.event==="Frist<"+c+">"),fn:()=>{d.ergibt=[...(d.ergibt||[]),{event:"Frist<"+c+">"}];KOM.port=null;gTitel("▣ "+A.name+": "+d.command+" setzt Frist<"+c+">");render();}})),
+      {trenn:1},{hinweis:hinweis||"Vorhandene: hervorgehobene Karte anklicken."}]);}
   // Kurzfassung unter dem Kopf: woher ein Command kommt, wohin ein Ergebnis geht, die Felder.
   function aggKurz(A,n,x){const box=h("div",{class:"ag-kurz"}),agg="agg:"+A.name,FLK=FL().kanten,nm=id=>(FLKARTE.get(id)||{name:id}).name;
-    if(n.kind==="decider"){box.append(h("button",{class:"ag-plus",onclick:e=>{e.stopPropagation();aggNeuesErgebnis(A,n.ref,e);}},"＋ Ergebnis ▾"));return box;}
-    if(n.kind==="applier"){box.append("faltet in den Zustand");return box;}
+    if(n.kind==="decider"||n.kind==="applier")return box;
     if(n.kind==="state"){box.append(A.state.map(f=>f.name).join(", ")||"— noch keine Felder");return box;}
-    if(n.kind==="aggregate"){box.append((A.fragen||[]).map(f=>f.query).join(", "));return box;}
+    if(n.kind==="aggregate")return box;
     const r=n.ref||{},von=[...new Set(FLK.filter(k=>k.nach===agg&&k.typ===n.name).map(k=>nm(k.von)))],
       nach=[...new Set(FLK.filter(k=>k.von===agg&&k.typ===n.name).map(k=>nm(k.nach)))];
     const felder=(r.felder||[]).map(f=>f.name).join(", ");
@@ -2539,7 +2593,7 @@
         gTitel(t+": "+r.name+" entfernt");KOM.edit.delete(x);aggRecordAufraeumen(r.name);});
       if(r.kind==="query")weg("✕ Frage entfernen",()=>{A.fragen=(A.fragen||[]).filter(f=>f.query!==r.name);gTitel(t+": Frage "+r.name+" entfernt");KOM.edit.delete(x);aggRecordAufraeumen(r.name);});
       return box;}
-    if(n.kind==="decider"){ruempfe();box.append(h("div",{class:"ag-tag"},"Ergebnisse verbinden: Decide wählen, ⊕ an der Karte"));return box;}
+    if(n.kind==="decider"){ruempfe();return box;}
     if(n.kind==="applier"){ruempfe();weg("✕ Apply entfernen",()=>{MODEL.applier.splice(MODEL.applier.indexOf(n.ref),1);gTitel(t+": Apply "+n.ref.event+" entfernt");KOM.edit.delete(x);});return box;}
     if(n.kind==="state"){box.append(aggFelder(A.state=A.state||[],null,t+": Zustand"));return box;}
     return box;}

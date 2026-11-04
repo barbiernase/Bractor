@@ -758,3 +758,11 @@
 #de .kom-k.ag-neu{background:transparent;border:1.5px dashed #ffd27a;cursor:pointer}
 #de .kom-k.ag-neu .ghead{background:transparent;color:#ffd27a}
 #de .kom-k.offen,#de .kom-k{max-width:360px}
+/* Ports der Aggregat-Karten: „＋“ schließt an bzw. legt an, ✕ löst (beim Überfahren) */
+#de .kom-k .fk-port{cursor:default}
+#de .kom-k .fk-port.plus{color:#ffd27a;cursor:pointer;font-style:italic}
+#de .kom-k .fk-port.plus .fk-dot{border-color:#ffd27a;border-style:dashed;background:#161b27}
+#de .kom-k .fk-port.plus:hover,#de .kom-k .fk-port.plus.aktiv{background:#2a2414}
+#de .fk-port .ag-los{display:none;margin-left:6px;background:transparent;border:none;color:#ff9aa5;cursor:pointer;font-size:10px;padding:0 2px}
+#de .fk-port:hover .ag-los{display:inline}
+#de .kom-k.kand{cursor:copy;box-shadow:0 0 0 2px #ffd27a,0 0 16px #ffd27a55}
