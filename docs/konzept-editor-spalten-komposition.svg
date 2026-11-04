@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1360 760" width="1360" height="760" font-family="system-ui, -apple-system, Segoe UI, sans-serif" font-size="11">
+  <defs>
+    <marker id="pf" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#444"/></marker>
+    <marker id="ph" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#999"/></marker>
+    <style>
+      .t{font-weight:600;font-size:12.5px;fill:#1a1a1a}
+      .s{fill:#555}
+      .k{stroke:#8a8a8a;stroke-width:1}
+      .p{fill:#fff;stroke:#555;stroke-width:1.2}
+      .sec{font-weight:700;font-size:10.5px;fill:#666;letter-spacing:.6px}
+      .chip{fill:#eef1f6;stroke:#b8c2d3}
+      .f{fill:none;stroke:#444;stroke-width:1.4}
+      .h{fill:none;stroke:#999;stroke-width:1.2;stroke-dasharray:5 4}
+      .code{font-family:ui-monospace, Menlo, monospace;font-size:10.5px;fill:#222}
+    </style>
+  </defs>
+  <!-- Hauptfläche dahinter, abgedunkelt -->
+  <rect width="1360" height="760" fill="#5c5f66"/>
+  <text x="20" y="16" fill="#cfd2d8" font-size="10">Hauptfläche (abgedunkelt) — Esc oder ✕ kehrt zurück</text>
+
+  <!-- Modal -->
+  <rect x="20" y="24" width="1320" height="720" rx="12" fill="#fbfbf8" stroke="#333"/>
+  <text x="40" y="52" class="t" font-size="14">⬡ Linienimport  ▸  ⬡ Bildaufbereitung</text>
+  <text x="40" y="70" class="s">Komposition des Graphen · Kopf nimmt DateiGefunden · verlässt ihn: NimmBildAuf, BildNichtLesbar, DateinameUnbekannt</text>
+  <rect x="1060" y="38" width="120" height="24" rx="12" fill="#2b6cb0"/><text x="1120" y="54" fill="#fff" text-anchor="middle" font-weight="600">Komposition</text>
+  <rect x="1186" y="38" width="110" height="24" rx="12" fill="#fff" class="k"/><text x="1241" y="54" text-anchor="middle">Instanzen (2)</text>
+  <text x="1318" y="55" font-size="15" text-anchor="middle">✕</text>
+  <line x1="20" y1="82" x2="1340" y2="82" stroke="#ddd"/>
+
+  <!-- Baukasten -->
+  <rect x="36" y="94" width="250" height="636" rx="8" fill="#fff" class="k"/>
+  <text x="48" y="114" class="t">Baukasten</text>
+  <text x="48" y="130" class="s">ziehen = Knoten · Klick = bearbeiten</text>
+
+  <text x="48" y="154" class="sec">FUNKTIONEN</text>
+  <text x="56" y="172">ƒ Bildeinlesen <tspan fill="#2f855a">· hier</tspan></text>
+  <text x="56" y="188">ƒ Bildverkleinerung <tspan fill="#2f855a">· hier</tspan></text>
+  <text x="56" y="204">ƒ Kontrastausgleich <tspan fill="#2f855a">· hier</tspan></text>
+  <text x="56" y="220">ƒ Bildeingang <tspan fill="#2f855a">· hier</tspan></text>
+  <text x="56" y="236" class="s">ƒ RangeAufloesung · in Datensatzpflege</text>
+  <text x="56" y="254" fill="#2b6cb0">＋ neue Funktion</text>
+
+  <text x="48" y="280" class="sec">GRAPHEN (schachteln)</text>
+  <text x="56" y="298" class="s">⬡ Datensatzpflege · ⬡ Teilmeldung</text>
+
+  <text x="48" y="324" class="sec">KATALOG (Quellen)</text>
+  <text x="56" y="342">⚡ Dateiwaechter · Taktgeber · Webhook</text>
+
+  <text x="48" y="368" class="sec">TECHNIK</text>
+  <text x="56" y="386">⚙ IImageResizer ← ImageResizer</text>
+  <text x="56" y="402">⚙ IHistogramEqualizer ← Histogram…</text>
+  <text x="56" y="420" fill="#2b6cb0">＋ Schnittstelle · ＋ Umsetzung</text>
+
+  <text x="48" y="446" class="sec">KONFIG</text>
+  <text x="56" y="464">▤ BildaufbereitungKonfig (AusgabePfad)</text>
+
+  <text x="48" y="490" class="sec">NACHRICHTEN IM GRAPHEN</text>
+  <text x="56" y="508">✦ BildEingelesen</text>
+  <text x="56" y="524">✦ BildVerkleinert</text>
+  <text x="56" y="540">✦ VorschauErstellt</text>
+  <text x="56" y="556" fill="#777">✉ BildNichtLesbar · ✉ DateinameUnbekannt</text>
+  <text x="56" y="574" fill="#2b6cb0">＋ Command ohne Ziel · ＋ Hinweis</text>
+
+  <text x="48" y="600" class="sec">TYP-MARKER (generisch)</text>
+  <text x="56" y="618" class="s">— in dieser Anwendung keiner —</text>
+  <text x="56" y="634" class="s">z. B. Glaettung‹Kurzfenster›, ‹Langfenster›</text>
+  <text x="56" y="650" class="s">über IFenster (Sonde Vorhersage)</text>
+
+  <!-- Leinwand -->
+  <rect x="300" y="94" width="720" height="636" rx="8" fill="#f4f6fa" stroke="#c9d1df"/>
+  <text x="312" y="114" class="s">Leinwand: Knoten in Ketten-Tiefe von links nach rechts, je [Von] eine Kante</text>
+
+  <!-- Eingangsrand -->
+  <rect x="300" y="170" width="16" height="110" fill="#e3ecff" stroke="#9fb5dd"/>
+  <text transform="translate(311,272) rotate(-90)" font-size="10" fill="#355">KOPF ◀ von außen</text>
+  <circle cx="316" cy="210" r="4" class="p"/>
+  <text x="322" y="296" class="s" font-size="10">(vom Dateiwaechter)</text>
+
+  <!-- Knoten -->
+  <rect x="340" y="160" width="150" height="110" rx="8" fill="#fff" class="k"/>
+  <text x="350" y="178" class="t">ƒ Bildeinlesen</text>
+  <text x="350" y="192" class="s" font-size="10">[Kopf] Einlesen</text>
+  <circle cx="340" cy="210" r="4" class="p"/><text x="350" y="214">DateiGefunden</text>
+  <text x="480" y="238" text-anchor="end">BildEingelesen</text><circle cx="490" cy="234" r="4" class="p"/>
+  <text x="480" y="258" text-anchor="end" fill="#777">✉ BildNichtLesbar</text><circle cx="490" cy="254" r="4" class="p"/>
+
+  <rect x="510" y="160" width="155" height="150" rx="8" fill="#fff" stroke="#2b6cb0" stroke-width="2.2"/>
+  <text x="520" y="178" class="t">ƒ Bildverkleinerung</text>
+  <text x="520" y="192" class="s" font-size="10">Verkleinern ← Einlesen</text>
+  <circle cx="510" cy="234" r="4" class="p"/><text x="520" y="238">BildEingelesen</text>
+  <text x="655" y="262" text-anchor="end">BildVerkleinert</text><circle cx="665" cy="258" r="4" class="p"/>
+  <rect x="518" y="272" width="104" height="16" rx="8" class="chip"/><text x="524" y="284" font-size="10">⚙ IImageResizer</text>
+  <rect x="518" y="290" width="140" height="16" rx="8" class="chip"/><text x="524" y="302" font-size="10">▤ BildaufbereitungKonfig</text>
+
+  <rect x="685" y="160" width="160" height="150" rx="8" fill="#fff" class="k"/>
+  <text x="695" y="178" class="t">ƒ Kontrastausgleich</text>
+  <text x="695" y="192" class="s" font-size="10">Kontrast ← Verkleinern</text>
+  <circle cx="685" cy="258" r="4" class="p"/><text x="695" y="262">BildVerkleinert</text>
+  <text x="835" y="252" text-anchor="end">VorschauErstellt</text><circle cx="845" cy="248" r="4" class="p"/>
+  <rect x="693" y="272" width="134" height="16" rx="8" class="chip"/><text x="699" y="284" font-size="10">⚙ IHistogramEqualizer</text>
+  <rect x="693" y="290" width="140" height="16" rx="8" class="chip"/><text x="699" y="302" font-size="10">▤ BildaufbereitungKonfig</text>
+
+  <rect x="862" y="160" width="134" height="110" rx="8" fill="#fff" class="k"/>
+  <text x="872" y="178" class="t">ƒ Bildeingang</text>
+  <text x="872" y="192" class="s" font-size="10">Eingang ← Kontrast</text>
+  <circle cx="862" cy="226" r="4" class="p"/><text x="872" y="230">VorschauErstellt</text>
+  <text x="986" y="248" text-anchor="end">NimmBildAuf</text><circle cx="996" cy="244" r="4" class="p"/>
+  <text x="986" y="264" text-anchor="end" fill="#777">✉ Dateiname…</text><circle cx="996" cy="260" r="4" class="p"/>
+
+  <!-- Ausgangsrand -->
+  <rect x="1004" y="170" width="16" height="140" fill="#ffe4d9" stroke="#dba892"/>
+  <text transform="translate(1015,300) rotate(-90)" font-size="10" fill="#533">VERLÄSST ▶ den Graphen</text>
+
+  <path class="f" d="M320,210 L336,210" marker-end="url(#pf)"/>
+  <path class="f" d="M494,234 L506,234" marker-end="url(#pf)"/>
+  <path class="f" d="M669,258 L681,258" marker-end="url(#pf)"/>
+  <path class="f" d="M849,248 C856,248 852,226 858,226" marker-end="url(#pf)"/>
+  <path class="f" d="M1000,244 L1004,244"/>
+  <path class="h" d="M494,254 C500,254 500,330 520,330 L990,330 C1000,330 1000,300 1004,300" marker-end="url(#ph)"/>
+  <path class="h" d="M1000,260 L1004,260"/>
+
+  <text x="312" y="380" class="t">Was die Leinwand zeigt (und was nicht)</text>
+  <text x="312" y="400">• Knoten = Funktionen oder Graphen; ein Graph im Graphen öffnet per Doppelklick eine Ebene tiefer.</text>
+  <text x="312" y="418">• Kanten = [Von], verlierbar gestrichelt; beschriftet ist der Ausgangsport — Nachrichten sind keine Karten.</text>
+  <text x="312" y="436">• Technik und Konfig sind Chips am Knoten (Konstruktor), keine Knoten.</text>
+  <text x="312" y="454">• Linker Rand = Köpfe (von außen), rechter Rand = was den Graphen verlässt — beides abgeleitet.</text>
+  <text x="312" y="472">• Eine Funktion mit Event-Antwort (CQRS108) zeigt den Rückweg als Port „⤺ Antwort“.</text>
+
+  <!-- Panel -->
+  <rect x="1034" y="94" width="290" height="636" rx="8" fill="#fff" class="k"/>
+  <text x="1046" y="114" class="t">ƒ Bildverkleinerung</text>
+  <text x="1046" y="130" class="s">Domain.Pipeline/Bildaufbereitung</text>
+  <text x="1046" y="156" class="sec">SIGNATUR</text>
+  <text x="1046" y="174" class="code">Auf(BildEingelesen e)</text>
+  <text x="1046" y="190" class="code">  → Task&lt;BildVerkleinert&gt;</text>
+  <text x="1046" y="206" class="s">Strom ☐ · Herkunft ☐ · Lese-Fähigkeit ＋</text>
+  <text x="1046" y="232" class="sec">IM GRAPHEN</text>
+  <text x="1046" y="250">Verkleinern ← Einlesen (gesichert ▾)</text>
+  <text x="1046" y="276" class="sec">KONSTRUKTOR</text>
+  <text x="1046" y="294">⚙ IImageResizer — Technik</text>
+  <text x="1058" y="310" class="s">Umsetzung ImageResizer (Wahl je Instanz)</text>
+  <text x="1046" y="328">▤ BildaufbereitungKonfig — Konfig</text>
+  <text x="1058" y="344" class="s">Wert je Instanz: AusgabePfad</text>
+  <text x="1046" y="362" class="s">＋ Technik · ＋ Konfig · ＋ Zustand · ＋ Logger</text>
+  <text x="1046" y="388" class="sec">RUMPF</text>
+  <rect x="1046" y="396" width="266" height="150" rx="6" fill="#f6f6f2" stroke="#ddd"/>
+  <text x="1054" y="414" class="code">using var bild = …ImRead(e.Pfad);</text>
+  <text x="1054" y="430" class="code">using var klein = resizer</text>
+  <text x="1054" y="446" class="code">  .Resize(bild, VorschauHoehe);</text>
+  <text x="1054" y="462" class="code">var ziel = Zielpfad.In(konfig, …);</text>
+  <text x="1054" y="478" class="code">await …ImWrite(ziel, klein);</text>
+  <text x="1054" y="494" class="code">return new BildVerkleinert(…);</text>
+  <text x="1046" y="566" fill="#2b6cb0">🤖 füllen   ·   ↗ in Datei öffnen</text>
+  <text x="1046" y="600" class="sec">AUCH VERWENDET IN</text>
+  <text x="1046" y="618" class="s">— nur hier —</text>
+</svg>

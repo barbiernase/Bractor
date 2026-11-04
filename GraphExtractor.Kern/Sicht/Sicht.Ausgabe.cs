@@ -9,7 +9,7 @@ public sealed partial class Sicht
     /// <c>board.sicht</c>: je Karte <c>{art, domaene?, block, rolle, akteure, akteurRahmen, insel?, vertreter?, besitzer?, storeScope?, aggregat?}</c>,
     /// dazu Kanten, zusammengezogene Kanten der kompakten Ansicht, die Akteur-Reihenfolge je Domäne, die Anschlussleisten der Clients und je
     /// Nachricht ihre zwei Seiten (<c>partner</c>: ◀ kommt aus · geht an ▶). <c>domaene</c> fehlt, wenn die Karte keine hat (die Ansicht setzt
-    /// dann ggf. ihre Heimat).
+    /// dann ggf. ihre Heimat). Dazu die Fläche in sechs Spalten (<c>flaeche</c>), je Graph seine Komposition und der Baukasten.
     /// </summary>
     public JsonObject AlsJson()
     {
@@ -60,6 +60,9 @@ public sealed partial class Sicht
             ["akteurDomaenen"] = wirkt,
             ["pfade"] = pfade,
             ["partner"] = PartnerJson(),
+            ["flaeche"] = FlaecheJson(),
+            ["komposition"] = KompositionJson(),
+            ["baukasten"] = Baukasten(),
         };
     }
     private static JsonArray Arr(IEnumerable<string> xs) => new(xs.Select(x => (JsonNode?)x).ToArray());

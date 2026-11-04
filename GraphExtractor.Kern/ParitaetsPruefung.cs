@@ -33,6 +33,8 @@ public static class ParitaetsPruefung
         // Die Server-Kartenliste (Werkbank P7.3): was der Editor zeigt — Karten, Kanten, Ableitungen. Gegen SIE prüft das Inventar.
         var sicht = Sicht.Aus(JsonNode.Parse(boardJson)!.AsObject());
         Inventar(ist, lage, sicht, befunde);
+        // Die Fläche (docs/konzept-editor-spalten.md): Kanten von Port zu Port, je Typ höchstens ein deklarierender Port.
+        foreach (var (grad, meldung) in sicht.FlaechenBefunde()) befunde.Add(new ParitaetsBefund("Fläche", grad, meldung));
         await BoardModell(solution, ist, boardJson, befunde);
         GrammatikUndModule(solution, ist, boardJson, befunde);
         Routing(ist, befunde);

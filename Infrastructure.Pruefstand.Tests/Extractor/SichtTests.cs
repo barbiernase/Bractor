@@ -214,4 +214,103 @@ public class SichtTests
         F("Sensorabfrage")["lauscht"]!.AsArray().Select(x => (string?)x).Should().Equal("Rohwert");
         F("Sensorabfrage")["eingaenge"]!.AsArray().Should().BeEmpty("eine Quelle lauscht und nimmt nichts");
     }
+
+    // ── Die Fläche in sechs Spalten und die Komposition eines Graphen (docs/konzept-editor-spalten.md) ──
+
+    private static List<JsonObject> FlaechenKarten(JsonObject board) => board["sicht"]!["flaeche"]!["karten"]!.AsArray().OfType<JsonObject>().ToList();
+    private static List<string> FlaechenKanten(JsonObject board) => board["sicht"]!["flaeche"]!["kanten"]!.AsArray().OfType<JsonObject>()
+        .Select(k => $"{(string?)k["von"]} -{(string?)k["typ"]}/{(string?)k["art"]}-> {(string?)k["nach"]}").ToList();
+    private static string Ports(JsonObject karte) => string.Join(" ", karte["ports"]!.AsArray().OfType<JsonObject>().Select(p =>
+        ((string?)p["richtung"] == "ein" ? "◀" : "▶") + (string?)p["typ"] + ((bool?)p["eigen"] == true ? "*" : "")));
+
+    [Fact]
+    public async Task Die_Flaeche_ordnet_Karten_in_sechs_Spalten_und_Nachrichten_als_Ports()
+    {
+        var board = await BoardAsync();
+        var karten = FlaechenKarten(board);
+        JsonObject K(string id) => karten.Single(k => (string?)k["id"] == id);
+        // Ein Akteur steht zweimal: links mit dem, was er darf, rechts mit dem, was zu ihm kommt — dazu die Antworten auf seine Queries.
+        var theke = "akt:" + Id(board, "akteure", "name", "Theke");
+        ((string?)K(theke + "|aus")["spalte"]).Should().Be("ausgang");
+        ((string?)K(theke + "|ein")["spalte"]).Should().Be("eingang");
+        Ports(K(theke + "|aus")).Should().Contain("▶LeiheAus").And.Contain("▶OffeneAusleihen");
+        Ports(K(theke + "|ein")).Should().Contain("◀OffeneAusleihenAntwort");
+        // Der Typ wird an seinem Besitzer deklariert: der Command am Aggregat, nicht beim Akteur.
+        Ports(K("agg:Leihvorgang")).Should().Contain("◀LeiheAus*").And.Contain("▶Ausgeliehen*");
+        // Nur oberste Graphen stehen auf der Fläche; ein Graph im Graphen steht in dessen Komposition.
+        var messkette = "gr:" + Id(board, "graphen", "name", "Messkette");
+        ((string?)K(messkette)["spalte"]).Should().Be("graphen");
+        karten.Should().NotContain(k => (string?)k["id"] == "gr:" + Id(board, "graphen", "name", "Messwertaufbereitung"));
+        // Quellen: der Dateiwächter am Kopf des Katalogimports (Katalog) und die eigene Quellfunktion der Messkette (Lausche) — sie meldet ihren
+        //   Command und deklariert ihn.
+        var katalogimport = "gr:" + Id(board, "graphen", "name", "Katalogimport");
+        var dateiwaechter = karten.Single(k => (string?)k["spalte"] == "quellen" && ((string?)k["id"])!.StartsWith("q:" + Id(board, "graphen", "name", "Katalogimport") + ":"));
+        ((string?)dateiwaechter["name"]).Should().Be("Dateiwaechter");
+        var abfrage = karten.Single(k => (string?)k["karte"] == "fb:" + Id(board, "bausteinFunktionen", "name", "Sensorabfrage"));
+        ((string?)abfrage["spalte"]).Should().Be("quellen");
+        Ports(abfrage).Should().Be("▶Rohwert*");
+        ((string?)K(messkette)["band"]).Should().NotBeNull();
+
+        var kanten = FlaechenKanten(board);
+        kanten.Should().Contain($"{(string?)dateiwaechter["id"]} -DateiGefunden/quelle-> {katalogimport}");
+        kanten.Should().Contain($"{(string?)abfrage["id"]} -Rohwert/quelle-> {messkette}");
+        kanten.Should().Contain($"{theke}|aus -LeiheAus/schreiben-> agg:Leihvorgang");
+        // Rücklauf: ein Command ohne Ziel aus dem Decide an den Kopf eines Graphen; ebenso die Antwort (Event) an die Funktion, die den Command gab.
+        kanten.Should().Contain($"agg:Leihvorgang -BemesseMahnung/ruecklauf-> gr:{Id(board, "graphen", "name", "Mahnbemessung")}");
+        Ports(K(katalogimport)).Should().Contain("◀ImportGestartet");
+        kanten.Should().Contain($"agg:Importlauf -ImportGestartet/ruecklauf-> {katalogimport}");
+        // Arbeit und Kenntnis gehen an die Eingangsseite der Akteure, Antworten als Lesefluss.
+        var archiv = "akt:" + Id(board, "akteure", "name", "Archiv");
+        kanten.Should().Contain($"gr:{Id(board, "graphen", "name", "Schadensbewertung")} -BegutachteVorOrt/arbeit-> {archiv}|ein");
+        kanten.Should().Contain($"agg:Leihvorgang -Ausgeliehen/kenntnis-> {archiv}|ein");
+        kanten.Should().Contain(k => k.StartsWith("rdr:") && k.EndsWith($"-OffeneAusleihenAntwort/lesen-> {theke}|ein"));
+        kanten.Should().Contain(k => k.StartsWith($"{theke}|aus -OffeneAusleihen/lesen-> rdr:"));
+        // liest: die Offenzählung der Mahnbemessung liest über eine Lese-Fähigkeit den Store dahinter.
+        kanten.Should().Contain(k => k.StartsWith($"gr:{Id(board, "graphen", "name", "Mahnbemessung")} -IZaehleOffene/liest-> sto:"));
+
+        Sicht.Aus(board).FlaechenBefunde().Where(b => b.Schweregrad == "error").Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Die_Komposition_eines_Graphen_hat_Knoten_mit_Tiefe_Kanten_je_Von_und_Chips_fuer_den_Konstruktor()
+    {
+        var board = await BoardAsync();
+        JsonObject Kompo(string graph) => board["sicht"]!["komposition"]!["gr:" + Id(board, "graphen", "name", graph)]!.AsObject();
+        static List<JsonObject> Knoten(JsonObject k) => k["knoten"]!.AsArray().OfType<JsonObject>().ToList();
+        static List<string> Kanten(JsonObject k) => k["kanten"]!.AsArray().OfType<JsonObject>()
+            .Select(x => $"{(string?)x["von"]} -{(string?)x["typ"]}{((bool?)x["verlierbar"] == true ? "~" : "")}-> {(string?)x["nach"]}").ToList();
+        // Generisch: je Glättung ihr Typargument, die Kante trägt den eingesetzten Typ; der Zusammenführer steht eine Stufe tiefer.
+        var prognose = Kompo("Prognose");
+        Knoten(prognose).Select(k => $"{(string?)k["name"]}:{(int?)k["tiefe"]}").Should().Equal("Tendenz:0", "Kurz:1", "Lang:1", "Modell:2");
+        Kanten(prognose).Should().Contain(["Kurz -Geglaettet<Kurzfenster>-> Modell", "Lang -Geglaettet<Langfenster>-> Modell"]);
+        Kanten(prognose).Should().NotContain("Kurz -Geglaettet<Langfenster>-> Modell");
+        var modell = Knoten(prognose).Single(k => (string?)k["name"] == "Modell");
+        modell["konstruktor"]!.AsArray().OfType<JsonObject>().Select(c => $"{(string?)c["art"]}:{(string?)c["typ"]}").Should()
+            .Contain(["zustand:IZustand<Gewichte>", "technik:IStatistik"]);
+        // Verlierbar steht an der Kante; ein Graph im Graphen ist ein Knoten mit seinen Köpfen und Ausgängen.
+        Kanten(Kompo("Kartenausgabe")).Should().Contain(x => x.StartsWith("Filter -") && x.EndsWith("~-> Daumen"))
+            .And.Contain(x => x.StartsWith("Filter -") && x.EndsWith("-> Vorschau") && !x.Contains('~'));
+        var messkette = Kompo("Messkette");
+        Knoten(messkette).Single(k => (string?)k["name"] == "Abfrage")["quelle"]!.GetValue<bool>().Should().BeTrue();
+        ((string?)Knoten(messkette).Single(k => (string?)k["name"] == "Aufbereitung")["art"]).Should().Be("graph");
+        Kanten(messkette).Should().Contain("Abfrage -Rohwert-> Aufbereitung");
+        Kompo("Messwertaufbereitung")["eltern"]!.AsArray().Select(x => (string?)x).Should().Equal("gr:" + Id(board, "graphen", "name", "Messkette"));
+        // Technik mit ihren Umsetzungen am Knoten, Lese-Fähigkeiten als „liest“.
+        var pruefer = Knoten(Kompo("Seitenpruefungslauf")).Single(k => (string?)k["name"] == "Pruefer");
+        var leser = pruefer["konstruktor"]!.AsArray().OfType<JsonObject>().Single(c => (string?)c["typ"] == "ISeitenleser");
+        ((string?)leser["art"]).Should().Be("technik");
+        leser["umsetzungen"]!.AsArray().Select(x => (string?)x).Should().BeEquivalentTo(["Lichtpruefung", "Handpruefung"]);
+        Knoten(Kompo("Mahnbemessung")).Single()["liest"]!.AsArray().Select(x => (string?)x).Should().Equal("IZaehleOffene");
+
+        // Der Baukasten: Funktionen mit Verwendung und Typargumenten, Technik, Konfig und die Nachrichten, die nur Funktionen ausgeben.
+        var bk = board["sicht"]!["baukasten"]!.AsObject();
+        var glaettung = bk["funktionen"]!.AsArray().OfType<JsonObject>().Single(f => (string?)f["name"] == "Glaettung");
+        glaettung["typargumente"]!.AsArray().Select(x => (string?)x).Should().BeEquivalentTo(["Kurzfenster", "Langfenster"]);
+        bk["funktionen"]!.AsArray().OfType<JsonObject>().Single(f => (string?)f["name"] == "Kantenglaettung")["verwendet"]!.AsArray()
+            .Select(x => (string?)x).Should().Equal("gr:" + Id(board, "graphen", "name", "Kartenfilter"));
+        bk["technik"]!.AsArray().OfType<JsonObject>().Should().Contain(t => (string?)t["name"] == "ISeitenleser");
+        bk["konfig"]!.AsArray().OfType<JsonObject>().Should().Contain(c => (string?)c["name"] == "GutachtenKonfig");
+        bk["nachrichten"]!.AsArray().OfType<JsonObject>().Should().Contain(n =>
+            (string?)n["typ"] == "SeiteZuPruefen" && (string?)n["besitzer"] == "fb:" + Id(board, "bausteinFunktionen", "name", "Pruefungsstart"));
+    }
 }
