@@ -666,3 +666,47 @@
 #de .fl-gruppe-t{position:absolute;left:8px;top:3px;font:11px system-ui;color:#86c79c;pointer-events:auto;cursor:pointer}
 #de .glink.leise{opacity:.3}
 #de .gworld.fokus .fl-band,#de .gworld.fokus .fl-gruppe{opacity:.5}
+
+/* ── Kompositions-Modal eines Graphen: Baukasten · Leinwand · Panel ── */
+#de .kom{position:fixed;inset:24px;z-index:60;display:flex;flex-direction:column;background:#0f131b;border:1px solid #3a4560;border-radius:12px;box-shadow:0 0 0 100vmax #000a,0 20px 60px #000c;overflow:hidden}
+#de .kom-kopf{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:10px 14px;border-bottom:1px solid #232a38}
+#de .kom-krumen{display:flex;align-items:center;gap:4px}
+#de .kom-krume{background:transparent;border:none;color:#9fb5dd;font:600 14px system-ui;padding:2px 4px;cursor:pointer}
+#de .kom-krume.an{color:#eef2f8}
+#de .kom-sep{color:#5c6780}
+#de .kom-kopf>.kom-u{flex:1;min-width:200px}
+#de .kom-reiter{display:flex;gap:4px;margin-left:auto}
+#de .kom-reiter button.on{background:#2b4a7a;border-color:#4f78b0;color:#fff}
+#de .kom-leib{flex:1;min-height:0;display:grid;grid-template-columns:minmax(170px,240px) 1fr minmax(220px,320px)}
+#de .kom-bk,#de .kom-panel{overflow:auto;padding:10px 12px;font-size:12px;background:#121722}
+#de .kom-bk{border-right:1px solid #232a38}
+#de .kom-panel{border-left:1px solid #232a38}
+#de .kom-t{font:700 13px system-ui;color:#eef2f8;margin-bottom:2px}
+#de .kom-u{font-size:11px;color:#8f9bb0}
+#de .kom-sec{margin:12px 0 4px;font:700 10px system-ui;letter-spacing:.07em;text-transform:uppercase;color:#7f8aa0}
+#de .kom-b{display:block;width:100%;text-align:left;background:transparent;border:1px solid transparent;border-radius:6px;padding:2px 6px;color:#c3cbd9;font:12px ui-monospace,monospace;cursor:pointer}
+#de .kom-b:hover{border-color:#3a4560}
+#de .kom-b.on{border-color:#4f78b0;background:#1b2840;color:#fff}
+#de .kom-b.hier{color:#eef2f8}
+#de .kom-hier{color:#57b673;font-family:system-ui;font-size:11px}
+#de .kom-wo{font-size:11px;color:#7f8aa0;padding:0 12px 3px}
+#de .kom-z{padding:1px 0;color:#c3cbd9;font:12px ui-monospace,monospace}
+#de .kom-code{margin:3px 0 8px;padding:6px 8px;background:#0b0e15;border:1px solid #232a38;border-radius:6px;font:11px/1.4 ui-monospace,monospace;color:#c9d3e3;white-space:pre-wrap;max-height:260px;overflow:auto}
+#de .kom-akte{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px}
+#de .kom-akt{font-size:12px}
+#de .kom-lw{overflow:auto;background:#0d1017;background-image:radial-gradient(#1e2533 1px,transparent 1px);background-size:20px 20px}
+#de .kom-welt{position:relative;min-width:100%;min-height:100%}
+#de .kom-kanten{position:absolute;left:0;top:0;pointer-events:none}
+#de .kom-k{cursor:pointer}
+#de .kom-k.sel{outline:2px solid #ffd27a;outline-offset:2px}
+#de .kom-rand{min-width:150px;border-style:dashed;background:#121722}
+#de .kom-rand .ghead{background:#2a3242;color:#cfd8e6;cursor:default}
+#de .kom-mark{font-size:9px;padding:0 5px;border-radius:3px;background:#0d0f14;color:#e6ebf3;font-weight:600}
+#de .fk-chip.kc-technik{border-color:#7a6aa8}
+#de .fk-chip.kc-konfig{border-color:#6f8aa3}
+#de .fk-chip.kc-zustand{border-color:#a8843a}
+#de .fk-chip.kc-liest{border-color:#7a5cc0}
+#de .kom-inst{padding:14px;overflow:auto}
+#de .kom-inst-z{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #1e2533;font-size:12px}
+#de .kom-inst-z .kom-akt{margin-left:auto}
+#de .gx.fk-kom{opacity:.85}

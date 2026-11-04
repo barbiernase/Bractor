@@ -2057,8 +2057,12 @@
       h("span",{class:"gtitle hatname",title:(NODELABEL[n?n.kind:fk.art]||fk.art)+" · "+fk.name+(pid?" — Klick: Panel":"")},
         h("span",{class:"gk"},(FL_SYM[fk.art]||"")+" "),h("span",{class:"gn"},fk.name)),
       dg.length?h("span",{class:"gdiag"+(nurWarn?" warn":""),title:dg.map(d=>d.text).join("\n")},(nurWarn?"⚠ ":"⛔ ")+dg.length):null,
+      fk.art==="graph"?h("span",{class:"gx fk-kom",title:"Komposition öffnen (Doppelklick)",onclick:e=>{e.stopPropagation();komOeffne(fk.id);}},"⧉"):null,
       loeschbar?h("span",{class:"gx",title:"Löschen",onclick:e=>{e.stopPropagation();delNode(n);}},"✕"):null);
     el.onclick=e=>{if(e.target.classList.contains("gx")||e.target.closest(".fk-port,.fk-chip"))return;e.stopPropagation();if(pid)waehle(pid);};
+    // Doppelklick: ein Graph öffnet seine Komposition, eine Quelle die ihres Graphen mit ihrem Knoten gewählt.
+    el.ondblclick=e=>{e.stopPropagation();if(fk.art==="graph")komOeffne(fk.id);
+      else if(fk.art==="quelle"&&fk.id.startsWith("q:graph:")){const r=fk.id.slice(2),i=r.lastIndexOf(":");komOeffne("gr:"+r.slice(0,i),r.slice(i+1));}};
     el.append(head);
     // Instanzen (graphen/<instanz>.json) an Graph und Quelle — Klick öffnet die Instanz im Panel.
     const gname=flGraphName(fk);
@@ -2164,6 +2168,165 @@
       const p=document.createElementNS(SVGNS,"path");p.setAttribute("class","glink fl-"+k.art+(st.leise?" leise":""));p.setAttribute("fill","none");
       p.setAttribute("stroke",st.c);p.setAttribute("stroke-width","1.8");if(st.d)p.setAttribute("stroke-dasharray",st.d);p.setAttribute("d",d);
       p.dataset.i=i;p.dataset.a=k.von;p.dataset.b=k.nach;frag.append(p);});}
+  // ══ KOMPOSITIONS-MODAL (docs/konzept-editor-spalten.md): ein Graph von innen — links der Baukasten, in der Mitte die Leinwand (Knoten nach ihrer
+  //   Tiefe in der Kette, je [Von] eine Kante, links die Köpfe, rechts was den Graphen verlässt), rechts das Panel des Gewählten; dazu der Reiter
+  //   Instanzen. Alles aus board.sicht.komposition und board.sicht.baukasten; ein Graph im Graphen öffnet eine Ebene tiefer (Brotkrumen).
+  let KOM=null;   // {pfad:[Graph-Karten-Id …], reiter:"komposition"|"instanzen", wahl:{art:"knoten",name}|{art:"baustein",gruppe,name}|null}
+  const komDaten=id=>(SICHT().komposition||{})[id];
+  const KOM_LEER={funktionen:[],graphen:[],katalog:[],technik:[],konfig:[],nachrichten:[]};
+  const komBaukasten=()=>SICHT().baukasten||KOM_LEER;
+  const komBasis=t=>String(t||"").split("<")[0];
+  function komSorte(t){const r=MODEL.records.find(x=>x.name===komBasis(t)),k=r&&r.kind;
+    return k==="event"?"event":k==="rejection"?"hinweis":k==="query"?"query":k==="queryresponse"?"antwort":"command";}
+  const KOM_SYM={funktion:"ƒ",graph:"⬡",katalog:"⚡",fehlt:"⚠"};
+  // Öffnen: der Pfad von der obersten Graph-Karte hinab (über die Eltern), optional ein Knoten gewählt.
+  function komOeffne(grId,knoten){const pfad=[grId];
+    for(let i=0;i<8;i++){const d=komDaten(pfad[0]);if(!d||!d.eltern.length||FLKARTE.has(pfad[0]))break;pfad.unshift(d.eltern[0]);}
+    KOM={pfad,reiter:"komposition",wahl:knoten?{art:"knoten",name:knoten}:null};komZeige();}
+  function komSchliesse(){KOM=null;const m=document.querySelector("#de .kom");if(m)m.remove();}
+  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&KOM){e.stopImmediatePropagation();komSchliesse();}},true);
+  // Woher ein Kopf kommt und wohin ein Ausgang geht: die Kanten der obersten Graph-Karte auf der Fläche.
+  function komOben(grId){let id=grId;for(let i=0;i<8;i++){if(FLKARTE.has(id))return id;const d=komDaten(id);if(!d||!d.eltern.length)return null;id=d.eltern[0];}return null;}
+  const komName=id=>(FLKARTE.get(id)||{name:id}).name;
+  function komZiele(grId,typ){const o=komOben(grId);return o?[...new Set(FL().kanten.filter(k=>k.von===o&&k.typ===typ).map(k=>komName(k.nach)))]:[];}
+  function komHerkunft(grId,typ){const o=komOben(grId);return o?[...new Set(FL().kanten.filter(k=>k.nach===o&&k.typ===typ).map(k=>komName(k.von)))]:[];}
+  const komInstanzen=name=>Object.keys(WB.instanzen||{}).filter(i=>((WB.instanzen[i]||{}).Graph||"")===name).sort();
+  function komWaehle(w){KOM.wahl=w;komZeige();}
+  function komZeige(){const de=document.getElementById("de");let m=de.querySelector(".kom");if(m)m.remove();if(!KOM)return;
+    const id=KOM.pfad[KOM.pfad.length-1],d=komDaten(id);if(!d){KOM=null;return;}
+    m=h("div",{class:"kom"});
+    ["pointerdown","wheel","dblclick","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
+    const krumen=h("div",{class:"kom-krumen"},...KOM.pfad.flatMap((g,i)=>{const b=h("button",{class:"kom-krume"+(i===KOM.pfad.length-1?" an":""),
+      onclick:()=>{KOM.pfad=KOM.pfad.slice(0,i+1);KOM.wahl=null;komZeige();}},"⬡ "+((komDaten(g)||{}).name||g));return i?[h("span",{class:"kom-sep"},"▸"),b]:[b];}));
+    const inst=komInstanzen(d.name);
+    m.append(h("div",{class:"kom-kopf"},krumen,
+      h("div",{class:"kom-u"},"Kopf nimmt "+(d.koepfe.map(k=>k.typ).join(", ")||"nichts von außen (Quelle)")+" · verlässt ihn: "+(d.ausgaenge.map(a=>a.typ).join(", ")||"nichts")),
+      h("div",{class:"kom-reiter"},...[["komposition","Komposition"],["instanzen","Instanzen ("+inst.length+")"]].map(([k,t])=>
+        h("button",{class:KOM.reiter===k?"on":"",onclick:()=>{KOM.reiter=k;komZeige();}},t)),
+        h("button",{class:"kom-x",title:"Schließen (Esc)",onclick:komSchliesse},"✕"))));
+    if(KOM.reiter==="instanzen"){m.append(komInstanzenAnsicht(d,inst));de.append(m);return;}
+    const lw=komLeinwand(id,d);
+    m.append(h("div",{class:"kom-leib"},komBaukastenEl(id,d),lw,komPanel(id,d)));de.append(m);komLege(lw,id,d);}
+
+  // ── Leinwand: Knoten wie auf der Fläche (Kopf + Ports), Technik und Konfig als Chips; Ränder für Köpfe und Ausgänge ──
+  function komPort(ri,typ,sorte,titel,klick){const r=h("div",{class:"fk-port "+ri+" s-"+sorte,title:titel||(sorte+" "+typ),onclick:e=>{e.stopPropagation();if(klick)klick();}},
+      h("span",{class:"fk-dot"}),h("span",{class:"fk-pl"},(FL_SORTE[sorte]||"")+typ));r.dataset.port=ri+"|"+typ;return r;}
+  const komTypKlick=t=>()=>{if(NODEBY.has("rec:"+komBasis(t))){komSchliesse();waehle("rec:"+komBasis(t));}};
+  function komKnotenEl(id,k){
+    const gewaehlt=KOM.wahl&&KOM.wahl.art==="knoten"&&KOM.wahl.name===k.name;
+    const el=h("div",{class:"gnode2 fk kom-k n-"+(k.art==="graph"?"graph":k.art==="katalog"||k.quelle?"funktion":"bausteinfunktion")+(gewaehlt?" sel":""),
+      title:k.art==="graph"?"Doppelklick: eine Ebene tiefer":"",onclick:()=>komWaehle({art:"knoten",name:k.name}),
+      ondblclick:()=>{if(k.art==="graph"&&k.karte){KOM.pfad.push(k.karte);KOM.wahl=null;komZeige();}}});
+    el.dataset.knoten=k.name;
+    el.append(h("div",{class:"ghead"},h("span",{class:"gtitle hatname",title:k.typ},h("span",{class:"gk"},(KOM_SYM[k.art]||"")+" "+k.name+" "),h("span",{class:"gn"},k.typ)),
+      k.kopf?h("span",{class:"kom-mark",title:"[Kopf] — nimmt von außen"},"Kopf"):null,k.quelle?h("span",{class:"kom-mark",title:"Quelle — lauscht"},"Quelle"):null));
+    const chips=(k.konstruktor||[]).filter(c=>c.art!=="logger");
+    if(chips.length||(k.liest||[]).length)el.append(h("div",{class:"fk-chips"},
+      ...chips.map(c=>h("span",{class:"fk-chip kc-"+c.art,title:c.art+(c.umsetzungen?" · Umsetzungen: "+c.umsetzungen.join(", "):"")},(c.art==="technik"?"⚙ ":c.art==="konfig"?"▤ ":"◉ ")+c.typ)),
+      ...(k.liest||[]).map(t=>h("span",{class:"fk-chip kc-liest",title:"Lese-Fähigkeit"},"⌕ "+t))));
+    const ports=h("div",{class:"fk-ports"});
+    k.ein.forEach(t=>ports.append(komPort("ein",t,komSorte(t),null,komTypKlick(t))));
+    k.aus.forEach(t=>ports.append(komPort("aus",t,komSorte(t),null,komTypKlick(t))));
+    if(k.ein.length||k.aus.length)el.append(ports);
+    return el;}
+  function komLeinwand(id,d){
+    const welt=h("div",{class:"kom-welt"}),svgK=document.createElementNS(SVGNS,"svg");svgK.setAttribute("class","kom-kanten");welt.append(svgK);
+    const links=h("div",{class:"gnode2 fk kom-rand links"},h("div",{class:"ghead"},h("span",{class:"gtitle"},"◀ von außen")));
+    const lp=h("div",{class:"fk-ports"});
+    d.koepfe.forEach(k=>{const her=komHerkunft(id,k.typ);lp.append(komPort("aus",k.typ,komSorte(k.typ),"Kopf "+k.typ+(her.length?" — von "+her.join(", "):""),komTypKlick(k.typ)));
+      if(her.length)lp.append(h("div",{class:"kom-wo"},"von "+her.join(", ")));});
+    if(!d.koepfe.length)lp.append(h("div",{class:"kom-wo"},"— eine Quelle lauscht"));
+    links.append(lp);welt.append(links);
+    const rechts=h("div",{class:"gnode2 fk kom-rand rechts"},h("div",{class:"ghead"},h("span",{class:"gtitle"},"verlässt ▶")));
+    const rp=h("div",{class:"fk-ports"});
+    d.ausgaenge.forEach(a=>{const zu=komZiele(id,a.typ);rp.append(komPort("ein",a.typ,a.sorte,a.typ+(zu.length?" → "+zu.join(", "):" — hört niemand"),komTypKlick(a.typ)));
+      rp.append(h("div",{class:"kom-wo"},zu.length?"→ "+zu.join(", "):"hört niemand"));});
+    if(!d.ausgaenge.length)rp.append(h("div",{class:"kom-wo"},"— nichts"));
+    rechts.append(rp);welt.append(rechts);
+    d.knoten.forEach(k=>welt.append(komKnotenEl(id,k)));
+    return h("div",{class:"kom-lw"},welt);}
+  // Anordnen nach Tiefe (Spalten), dann die Kanten: Kopf → Knoten, je [Von] Knoten → Knoten (verlierbar gestrichelt), Knoten → Ausgang.
+  function komLege(lw,id,d){const welt=lw.querySelector(".kom-welt"),svgK=welt.querySelector("svg");
+    const el=n=>welt.querySelector('.kom-k[data-knoten="'+CSS.escape(n)+'"]'),links=welt.querySelector(".kom-rand.links"),rechts=welt.querySelector(".kom-rand.rechts");
+    const GX=110,GY=26,X0=40,Y0=30;let x=X0;
+    links.style.left=x+"px";links.style.top=Y0+"px";x+=links.offsetWidth+GX;
+    const tiefen=[...new Set(d.knoten.map(k=>k.tiefe))].sort((a,b)=>a-b);let yMax=Y0+links.offsetHeight;
+    tiefen.forEach(t=>{const ks=d.knoten.filter(k=>k.tiefe===t).map(k=>el(k.name)).filter(Boolean);let y=Y0,w=0;
+      ks.forEach(e=>{e.style.left=x+"px";e.style.top=y+"px";y+=e.offsetHeight+GY;w=Math.max(w,e.offsetWidth);});yMax=Math.max(yMax,y);x+=w+GX;});
+    rechts.style.left=x+"px";rechts.style.top=Y0+"px";x+=rechts.offsetWidth+X0;yMax=Math.max(yMax,Y0+rechts.offsetHeight)+Y0;
+    welt.style.width=x+"px";welt.style.height=yMax+"px";svgK.setAttribute("width",x);svgK.setAttribute("height",yMax);
+    const punkt=(e,ri,typ)=>{if(!e)return null;const p=e.querySelector('[data-port="'+CSS.escape(ri+"|"+typ)+'"]');
+      return {x:e.offsetLeft+(ri==="aus"?e.offsetWidth:0),y:e.offsetTop+(p?p.offsetTop+p.offsetHeight/2:14)};};
+    const linie=(A,B,verl,sorte)=>{if(!A||!B)return;const c=Math.max(40,Math.abs(B.x-A.x)*0.45),p=document.createElementNS(SVGNS,"path");
+      p.setAttribute("d","M"+A.x+","+A.y+" C"+(A.x+c)+","+A.y+" "+(B.x-c)+","+B.y+" "+B.x+","+B.y);p.setAttribute("fill","none");
+      p.setAttribute("stroke",sorte==="hinweis"?"#cf6f68":sorte==="event"?"#57b673":"#8fa6c8");p.setAttribute("stroke-width","1.8");if(verl)p.setAttribute("stroke-dasharray","6 4");svgK.append(p);};
+    d.koepfe.forEach(k=>k.knoten.forEach(n=>linie(punkt(links,"aus",k.typ),punkt(el(n),"ein",k.typ),false,komSorte(k.typ))));
+    d.kanten.forEach(k=>{const a=el(k.von),b=el(k.nach),A=a&&a.querySelector('[data-port^="aus|"]')&&punkt(a,"aus",(d.knoten.find(x=>x.name===k.von)||{aus:[]}).aus.find(t=>komBasis(t)===komBasis(k.typ))||k.typ);
+      linie(A,punkt(b,"ein",k.typ),k.verlierbar,komSorte(k.typ));});
+    d.ausgaenge.forEach(a=>a.knoten.forEach(n=>{const k=d.knoten.find(x=>x.name===n)||{aus:[]};
+      linie(punkt(el(n),"aus",k.aus.find(t=>komBasis(t)===komBasis(a.typ))||a.typ),punkt(rechts,"ein",a.typ),false,a.sorte);}));}
+
+  // ── Baukasten: woraus man komponiert — „hier“ markiert, was dieser Graph schon nutzt ──
+  function komBaukastenEl(id,d){const bk=komBaukasten(),box=h("div",{class:"kom-bk"},h("div",{class:"kom-t"},"Baukasten"),
+      h("div",{class:"kom-u"},"Klick: im Panel ansehen — Ziehen auf die Leinwand kommt mit den Gesten"));
+    const hierFb=new Set(d.knoten.map(k=>k.karte).filter(Boolean)),hierTyp=new Set(d.kanten.map(k=>komBasis(k.typ)).concat(d.ausgaenge.map(a=>komBasis(a.typ))));
+    const gruppe=(titel,liste,name,hier,sym,gr)=>{box.append(h("div",{class:"kom-sec"},titel));
+      if(!liste.length){box.append(h("div",{class:"kom-wo"},"—"));return;}
+      liste.forEach(x=>{const w=KOM.wahl&&KOM.wahl.art==="baustein"&&KOM.wahl.gruppe===gr&&KOM.wahl.name===name(x);
+        box.append(h("button",{class:"kom-b"+(w?" on":"")+(hier(x)?" hier":""),onclick:()=>komWaehle({art:"baustein",gruppe:gr,name:name(x)})},
+          sym+" "+name(x),hier(x)?h("span",{class:"kom-hier"}," · hier"):null));});};
+    gruppe("Funktionen",bk.funktionen,x=>x.name+((x.typargumente||[]).length?"‹…›":""),x=>hierFb.has(x.karte),"ƒ","funktionen");
+    gruppe("Graphen (schachteln)",bk.graphen.filter(x=>x.karte!==id),x=>x.name,x=>hierFb.has(x.karte),"⬡","graphen");
+    gruppe("Katalog (Quellen)",bk.katalog,x=>x.name,x=>d.knoten.some(k=>komBasis(k.typ)===x.name),"⚡","katalog");
+    gruppe("Technik",bk.technik,x=>x.name,x=>d.knoten.some(k=>(k.konstruktor||[]).some(c=>c.karte===x.karte)),"⚙","technik");
+    gruppe("Konfig",bk.konfig,x=>x.name,x=>d.knoten.some(k=>(k.konstruktor||[]).some(c=>c.typ===x.name)),"▤","konfig");
+    gruppe("Nachrichten im Graphen",bk.nachrichten,x=>x.typ,x=>hierTyp.has(x.typ),"✦","nachrichten");
+    return box;}
+
+  // ── Panel: der gewählte Knoten (Signatur, im Graphen, Konstruktor, Rumpf) bzw. Baustein ──
+  function komPanel(id,d){const p=h("div",{class:"kom-panel"}),w=KOM.wahl;
+    const sec=t=>p.append(h("div",{class:"kom-sec"},t)),zeile=(...k)=>p.append(h("div",{class:"kom-z"},...k));
+    const bearbeiten=karte=>karte&&NODEBY.has(karte)?h("button",{class:"kom-akt",title:"Modal schließen und die Karte im Panel bearbeiten",
+      onclick:()=>{komSchliesse();waehle(karte);}},"✎ im Panel bearbeiten"):null;
+    if(!w){p.append(h("div",{class:"kom-t"},"⬡ "+d.name),h("div",{class:"kom-u"},"Knoten oder Baustein wählen."),bearbeiten(id));
+      sec("Knoten");d.knoten.forEach(k=>zeile(h("button",{class:"kom-b",onclick:()=>komWaehle({art:"knoten",name:k.name})},(KOM_SYM[k.art]||"")+" "+k.name+" : "+k.typ)));return p;}
+    if(w.art==="knoten"){const k=d.knoten.find(x=>x.name===w.name);if(!k){KOM.wahl=null;return komPanel(id,d);}
+      p.append(h("div",{class:"kom-t"},(KOM_SYM[k.art]||"")+" "+k.name),h("div",{class:"kom-u"},k.typ+" · "+(k.art==="graph"?"Graph im Graphen":k.art==="katalog"?"Katalogfunktion":"Funktion")));
+      sec("Nimmt");if(!k.ein.length)zeile("— "+(k.quelle?"lauscht":"nichts"));k.ein.forEach(t=>zeile((FL_SORTE[komSorte(t)]||"")+t));
+      sec("Gibt aus");if(!k.aus.length)zeile("—");k.aus.forEach(t=>zeile((FL_SORTE[komSorte(t)]||"")+t));
+      sec("Im Graphen");zeile(k.kopf?"[Kopf] — nimmt von außen":k.quelle?"Quelle am Kopf":"");
+      k.von.forEach(v=>zeile("← "+v.knoten+(v.verlierbar?" (verlierbar)":" (gesichert)")));
+      if((k.konstruktor||[]).length){sec("Konstruktor");k.konstruktor.forEach(c=>zeile(h("b",{},c.typ)," — "+c.art+(c.umsetzungen?" · Umsetzung: "+c.umsetzungen.join(" / ")+" (Wahl je Instanz)":"")));}
+      if((k.liest||[]).length){sec("Liest");k.liest.forEach(t=>zeile("⌕ "+t));}
+      const f=MODEL.bausteinFunktionen.find(x=>x.name===komBasis(k.typ));
+      if(f){const r=[...(f.eingaenge||[]).filter(e=>e.rumpf).map(e=>["Auf("+e.eingang+")",e.rumpf]),...(f.lauscheRumpf?[["Lausche()",f.lauscheRumpf]]:[])];
+        if(r.length){sec("Rumpf");r.forEach(([t,c])=>{p.append(h("div",{class:"kom-u"},t),h("pre",{class:"kom-code"},c));});}}
+      p.append(h("div",{class:"kom-akte"},k.art==="graph"&&k.karte?h("button",{class:"kom-akt",onclick:()=>{KOM.pfad.push(k.karte);KOM.wahl=null;komZeige();}},"⬡ eine Ebene tiefer"):null,bearbeiten(k.karte)));
+      return p;}
+    const bk=komBaukasten(),x=(bk[w.gruppe]||[]).find(e=>(e.name||e.typ)===w.name||(e.name+"‹…›")===w.name);if(!x){KOM.wahl=null;return komPanel(id,d);}
+    const titel={funktionen:"ƒ",graphen:"⬡",katalog:"⚡",technik:"⚙",konfig:"▤",nachrichten:"✦"}[w.gruppe]+" "+(x.name||x.typ);
+    p.append(h("div",{class:"kom-t"},titel));
+    const verw=l=>{if(!l||!l.length){zeile("— nirgends");return;}l.forEach(g=>zeile(h("button",{class:"kom-b",onclick:()=>{if(komDaten(g)){komOeffne(g);}}},"⬡ "+((komDaten(g)||{}).name||g))));};
+    if(w.gruppe==="funktionen"){p.append(h("div",{class:"kom-u"},x.quelle?"Quellfunktion (Lausche)":"Funktion"));
+      if((x.typargumente||[]).length){sec("Typargumente");x.typargumente.forEach(t=>zeile(t));}sec("Verwendet in");verw(x.verwendet);p.append(bearbeiten(x.karte));}
+    else if(w.gruppe==="graphen"){sec("Verwendet in");verw(x.verwendet);p.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",onclick:()=>komOeffne(x.karte)},"⧉ öffnen")));}
+    else if(w.gruppe==="katalog"){sec("Meldet");x.meldet.forEach(t=>zeile(t));sec("Konfig");x.konfig.forEach(t=>zeile("▤ "+t));}
+    else if(w.gruppe==="technik"){sec("Umsetzungen");if(!x.umsetzungen.length)zeile("— keine");x.umsetzungen.forEach(t=>zeile(t));
+      sec("Genutzt von");x.genutztVon.forEach(f=>zeile("ƒ "+((NODEBY.get(f)||{}).name||f)));p.append(bearbeiten(x.karte));}
+    else if(w.gruppe==="konfig"){sec("Felder");x.felder.forEach(t=>zeile(t));sec("Genutzt von");x.genutztVon.forEach(f=>zeile("ƒ "+((NODEBY.get(f)||{}).name||f)));}
+    else if(w.gruppe==="nachrichten"){p.append(h("div",{class:"kom-u"},x.sorte==="hinweis"?"Hinweis (verlierbar, an Akteure)":"Command ohne Ziel, nur zwischen Knoten"));
+      sec("Gibt aus");zeile("ƒ "+((NODEBY.get(x.besitzer)||{}).name||x.besitzer));p.append(bearbeiten("rec:"+x.typ));}
+    return p;}
+
+  // ── Reiter Instanzen: je graphen/<instanz>.json des Graphen eine Zeile; bearbeitet wird im Panel ──
+  function komInstanzenAnsicht(d,inst){const box=h("div",{class:"kom-inst"});
+    box.append(h("div",{class:"kom-u"},"Instanzen von ⬡ "+d.name+" in der Umgebung „"+(WB.umgName||"?")+"“ (graphen/<instanz>.json)."));
+    if(!inst.length)box.append(h("div",{class:"kom-wo"},d.eltern.length?"Läuft als Teil von "+d.eltern.map(g=>(komDaten(g)||{}).name||g).join(", ")+" — Instanzen dort.":"Noch keine Instanz."));
+    inst.forEach(i=>{const v=(WB.instanzen||{})[i]||{};
+      box.append(h("div",{class:"kom-inst-z"},h("b",{},"⬡ "+i),v.Akteur?" · 👤 "+v.Akteur:"",v.Rechner?" · auf "+v.Rechner:"",
+        h("button",{class:"kom-akt",onclick:()=>{komSchliesse();waehle("host:inst:"+i);}},"✎ im Panel")));});
+    if(!d.eltern.length)box.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",onclick:()=>{komSchliesse();waehle("host:inst-neu");}},"＋ Instanz anlegen")));
+    return box;}
   function renderGraph(){
     const root=document.getElementById("de-form");
     const altI=root.querySelector(".ginsp");INSP_SCROLL=altI?{id:altI.dataset.sel,top:altI.scrollTop}:null;
@@ -2207,6 +2370,7 @@
     zeigeInspector();
     zeigeStart();
     if(VB)vbZeige(false);
+    if(KOM)komZeige();   // ein offenes Kompositions-Modal folgt dem neuen Board
   }
   function showPicker(canvas,sx,sy,wx,wy){
     canvas.querySelectorAll(".gpick").forEach(p=>p.remove());
