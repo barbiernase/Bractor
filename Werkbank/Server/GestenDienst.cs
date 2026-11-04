@@ -109,6 +109,20 @@ public sealed class GestenDienst(string slnRoot, Arbeitsbereich arbeitsbereich, 
         return Task.FromResult((puffer.Patch(), new List<string>()));
     }, ct);
 
+    /// <summary>
+    /// Eine Konfig-Datei der Umgebung (etwa die Instanz eines Graphen) schreiben oder — <paramref name="text"/> = null — entfernen; als Geste mit
+    /// Verlauf, ↶ und Branch-Sperre.
+    /// </summary>
+    public Task<GestenAntwort> DateiAsync(string titel, string datei, string? text, CancellationToken ct) => AusfuehrenAsync("umgebung", titel, () =>
+    {
+        var puffer = new Dateipuffer(slnRoot);
+        if (!puffer.Innerhalb(datei)) throw new InvalidOperationException("Pfad liegt außerhalb der Solution.");
+        if (text == null) puffer.Entferne(datei);
+        else puffer.Setze(datei, text);
+        puffer.Speichern();
+        return Task.FromResult((puffer.Patch(), new List<string>()));
+    }, ct);
+
     /// <summary>↶ — den letzten Patch zurücknehmen (Geste, 🤖-Übernahme oder Umgebungs-Werte).</summary>
     public async Task<GestenAntwort> RueckgaengigAsync(CancellationToken ct)
     {

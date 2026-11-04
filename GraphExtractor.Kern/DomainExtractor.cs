@@ -35,6 +35,11 @@ public sealed class DomainModel
     /// <summary>Funktionen (<c>Auf</c>, docs/10 §10.3): je Eingang die Ausgaben aus der Signatur.</summary>
     public List<BausteinFunktionRaw> BausteinFunktionen { get; } = new();
     /// <summary>
+    /// Funktionen aus dem Katalog des Frameworks, die ein Graph der Domäne als Knoten nennt (<c>Core/Katalog</c>: Dateiwaechter, Taktgeber,
+    /// Webhook) — nur gelesen: was sie melden und welche Konfig ihr Knoten in der Instanz trägt.
+    /// </summary>
+    public List<BausteinFunktionRaw> Katalog { get; } = new();
+    /// <summary>
     /// Konfigurations-Records: Records ohne Nachrichten-Rolle, die per DI in den KONSTRUKTOR einer Funktion bzw. Funktions-Umsetzung,
     /// Projektion, eines Readers oder einer Store-Impl injiziert werden — keine Value Objects der Domäne.
     /// </summary>
@@ -166,6 +171,13 @@ public sealed class BausteinFunktionRaw
     public string? ZustandFull;
     /// <summary>Eine Quellfunktion (<c>Lausche</c>, Entscheidung 8): die vollen Namen dessen, was sie meldet — leer, wenn sie nicht lauscht.</summary>
     public List<string> LauschtFull = new();
+    /// <summary>Die Methode <c>Lausche</c> und ihr Rumpf (Rumpf-Edit) — null, wenn sie nicht lauscht.</summary>
+    public Ort? LauscheOrt;
+    public string? LauscheRumpf;
+    /// <summary>Die Konfig-Records im Konstruktor (die Werte am Knoten der Instanz) — je Record seine Felder.</summary>
+    public List<KonfigRaw> Konfigs = new();
+    /// <summary>Je Umsetzung die Konfig-Records in ihrem Konstruktor.</summary>
+    public Dictionary<string, List<KonfigRaw>> UmsetzungsKonfigs = new(StringComparer.Ordinal);
     public string? Doku, Datei;
 }
 
@@ -181,7 +193,16 @@ public sealed class BausteinEingangRaw
     /// andere Form (<c>T?</c>, <c>OneOf&lt;A, B&gt;</c>, <c>IReadOnlyList&lt;T&gt;</c>, Entscheidung 5). Leer = genau der <see cref="EingangFull"/>.
     /// </summary>
     public List<(string Typ, string Name)> Ports = new();
+    /// <summary>Die Methode dieses <c>Auf</c> und ihr Rumpf (Rumpf-Edit, wie bei Decide und Apply).</summary>
+    public Ort? Ort;
+    public string? Rumpf;
 }
+
+/// <summary>
+/// Ein Konfig-Record im Konstruktor einer Funktion bzw. Umsetzung: sein Name und je Feld der Schlüssel am Knoten (wie die generierte Bindung ihn
+/// liest: Parametername mit großem Anfang), der Typ wie geschrieben und ein Standard aus dem Record.
+/// </summary>
+public sealed record KonfigRaw(string Record, List<(string Feld, string Typ, string? Standard, List<string>? Werte)> Felder);
 
 /// <summary>Eine gerufene Methode einer Funktion: <c>{Rueckgabe} {Name}({Parameter})</c> — Typen wie geschrieben.</summary>
 public sealed class FunktionsMethodeRaw
@@ -654,6 +675,9 @@ public sealed partial class DomainExtractor
             foreach (var x in MitGeschachtelten(n)) yield return x;
     }
 
+    /// <summary>Die Funktions-Typen, die Graphen als Knoten nennen — was davon nicht in der Domäne liegt, ist Katalog.</summary>
+    private readonly HashSet<INamedTypeSymbol> _knotenTypen = new(SymbolEqualityComparer.Default);
+
     private void CatalogDomainTypes(DomainModel m)
     {
         var quell = DomainQuellTypen().ToList();
@@ -689,6 +713,9 @@ public sealed partial class DomainExtractor
                      && !Sym.Implements(t, _iWriteStore) && !Sym.Implements(t, _iReadStore))
                 m.ValueObjects.Add(raw);
         }
+        var inDomaene = m.BausteinFunktionen.Select(f => f.Full).ToHashSet(StringComparer.Ordinal);
+        foreach (var k in _knotenTypen.OrderBy(k => k.Fq(), StringComparer.Ordinal))
+            if (!inDomaene.Contains(k.Fq())) m.Katalog.Add(ReadBausteinFunktion(k, technik: false));
         m.Enums.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Akteure.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Clients.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
@@ -737,6 +764,7 @@ public sealed partial class DomainExtractor
             {
                 EingangFull = a.Eingang.Fq(), Herkunft = a.MitHerkunft, Strom = a.Strom,
                 AusgabenFull = a.Ausgaben.Select(x => x.Fq()).ToList(),
+                Ort = MethodenOrt(a.Methode), Rumpf = MethodBody(a.Methode),
             };
             for (var i = 0; i < a.Methode.Parameters.Length; i++)
                 if (a.Parameter[i].Art == "faehigkeit") e.Faehigkeiten.Add((Geschrieben(a.Methode, i, a.Methode.Parameters[i].Type), a.Methode.Parameters[i].Name));
@@ -746,7 +774,12 @@ public sealed partial class DomainExtractor
                     if (a.Parameter[i].Art == "p") e.Ports.Add((Geschrieben(a.Methode, i, a.Methode.Parameters[i].Type), a.Methode.Parameters[i].Name));
             f.Eingaenge.Add(e);
         }
-        if (form.Lausche is { } lausche) f.LauschtFull = lausche.Ausgaben.Select(x => x.Fq()).ToList();
+        if (form.Lausche is { } lausche)
+        {
+            f.LauschtFull = lausche.Ausgaben.Select(x => x.Fq()).ToList();
+            f.LauscheOrt = MethodenOrt(lausche.Methode);
+            f.LauscheRumpf = MethodBody(lausche.Methode);
+        }
         // Unfertig (W1: Unfertiges = Code, der nicht baut): ein Auf, das die Funktionsform (noch) nicht annimmt — z. B. ohne Ausgabe, frisch im
         //   Editor angelegt —, bleibt als Eingang ohne Ausgaben sichtbar; den Fehler meldet der Build an seiner Stelle.
         var gelesen = form.Aufs.Select(a => a.Eingang.Fq()).ToHashSet(StringComparer.Ordinal);
@@ -760,10 +793,12 @@ public sealed partial class DomainExtractor
             {
                 EingangFull = ein.Fq(), Hinweis = ein.AllInterfaces.Any(i => i.Fq() == Vertrag.ITransientEvent),
                 Herkunft = m.Parameters.Skip(1).Any(p => p.Type.Name == nameof(Abstractions.Herkunft)),
+                Ort = MethodenOrt(m), Rumpf = MethodBody(m),
             });
         }
         if (technik) f.Methoden = TechnikMethoden(t);
         if (t.TypeKind == TypeKind.Class) f.Konstruktor = KonstruktorWieGeschrieben(t);
+        if (t.TypeKind == TypeKind.Class) f.Konfigs = KonfigsVon(t);
         if (t.TypeKind == TypeKind.Interface)
         {
             var umsetzungen = _types.Where(c => c.TypeKind == TypeKind.Class && !c.IsAbstract && c.AllInterfaces.Contains(t, SymbolEqualityComparer.Default))
@@ -772,6 +807,7 @@ public sealed partial class DomainExtractor
             foreach (var c in umsetzungen)
             {
                 f.UmsetzungsKonstruktoren[c.Fq()] = KonstruktorWieGeschrieben(c);
+                f.UmsetzungsKonfigs[c.Fq()] = KonfigsVon(c);
                 f.UmsetzungsDateien[c.Fq()] = QuellDeklarationen(c).FirstOrDefault()?.SyntaxTree.FilePath;
                 f.UmsetzungsOrte[c.Fq()] = QuellDeklarationen(c).OfType<BaseTypeDeclarationSyntax>().FirstOrDefault() is { } idecl ? Ort.Von(idecl) : null;
                 if (!technik) continue;
@@ -898,7 +934,10 @@ public sealed partial class DomainExtractor
         var geschrieben = decl is RecordDeclarationSyntax r && r.ParameterList is { } pl
             ? pl.Parameters.ToDictionary(p => p.Identifier.Text, p => p.Type?.ToString() ?? "")
             : new Dictionary<string, string>();
-        var ctor = t.InstanceConstructors.Where(c => !c.IsImplicitlyDeclared || c.Parameters.Length > 0).OrderByDescending(c => c.Parameters.Length).FirstOrDefault();
+        // Dieselbe Wahl wie die Graphform: der öffentliche Konstruktor — nie der Kopier-Konstruktor des Records (ein leerer Graph hat keine Knoten).
+        var ctor = t.InstanceConstructors.Where(c => c.DeclaredAccessibility == Accessibility.Public).OrderByDescending(c => c.Parameters.Length).FirstOrDefault();
+        foreach (var p in ctor?.Parameters ?? [])
+            if (p.Type is INamedTypeSymbol k && Infrastructure.SourceGeneration.Funktionsform.IstFunktion(k)) _knotenTypen.Add(k.OriginalDefinition);
         var raw = new GraphRaw
         {
             Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(), Datei = decl?.SyntaxTree.FilePath, Doku = decl == null ? null : Summary(decl),
@@ -1365,6 +1404,43 @@ public sealed partial class DomainExtractor
     /// Den Methoden-Rumpf als dedenteten Text heben: ALLES zwischen den Klammern (inkl. Kommentare wie die
     /// <c>// 🤖 Prompt:</c>-Zeile). <c>""</c> = bewusst leerer Rumpf; null = kein Quelltext.
     /// </summary>
+    /// <summary>
+    /// Die Konfig-Records im Konstruktor (dieselbe Lesart wie die generierte Bindung, <c>Ctorbindung</c>): je Record seine Felder aus dem
+    /// Konstruktor des Records — Schlüssel = Parametername mit großem Anfang, Standard aus dem Default des Parameters.
+    /// </summary>
+    private static List<KonfigRaw> KonfigsVon(INamedTypeSymbol t)
+    {
+        var aus = new List<KonfigRaw>();
+        foreach (var p in Infrastructure.SourceGeneration.Ctorbindung.Konstruktor(t)?.Parameters ?? [])
+        {
+            if (Infrastructure.SourceGeneration.Ctorbindung.ArtVon(p.Type) != Infrastructure.SourceGeneration.Ctorbindung.Art.Konfig
+                || p.Type is not INamedTypeSymbol r || aus.Any(k => k.Record == r.Name)) continue;
+            var felder = (Infrastructure.SourceGeneration.Ctorbindung.Konstruktor(r)?.Parameters ?? []).Select(x => (
+                x.Name.Length == 0 ? x.Name : char.ToUpperInvariant(x.Name[0]) + x.Name[1..],
+                x.Type.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat),
+                x.HasExplicitDefaultValue ? StandardText(x.Type, x.ExplicitDefaultValue) : null,
+                x.Type.TypeKind == TypeKind.Enum ? x.Type.GetMembers().OfType<IFieldSymbol>().Where(m => m.HasConstantValue).Select(m => m.Name).ToList() : null)).ToList();
+            aus.Add(new KonfigRaw(r.Name, felder));
+        }
+        return aus;
+    }
+
+    private static string? StandardText(ITypeSymbol typ, object? wert) => typ.TypeKind == TypeKind.Enum
+        ? typ.GetMembers().OfType<IFieldSymbol>().FirstOrDefault(m => m.HasConstantValue && Equals(m.ConstantValue, wert))?.Name ?? StandardText(wert)
+        : StandardText(wert);
+
+    private static string? StandardText(object? wert) => wert switch
+    {
+        null => null,
+        bool b => b ? "true" : "false",
+        IFormattable f => f.ToString(null, System.Globalization.CultureInfo.InvariantCulture),
+        _ => wert.ToString(),
+    };
+
+    /// <summary>Der Ort der Deklaration einer Methode (für den Rumpf-Edit) — null ohne Quelltext.</summary>
+    private static Ort? MethodenOrt(IMethodSymbol m) =>
+        m.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is MethodDeclarationSyntax s ? Ort.Von(s) : null;
+
     private static string? MethodBody(IMethodSymbol m)
     {
         if (m.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is not MethodDeclarationSyntax s) return null;

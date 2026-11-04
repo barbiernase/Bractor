@@ -3,8 +3,8 @@
   const SCALARS=()=>((MODEL.rahmen&&MODEL.rahmen.skalare)||[]);
   // Vertrags-Fakten aus dem Rahmen (vom Extractor aus dem Code gelesen).
   const ID_FELD=()=>((MODEL.rahmen&&MODEL.rahmen.aggregatIdFeld)||"");
-  const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"],konfig:["Konfiguration","vo"],query:["Query","qry"],queryresponse:["Response","qrsp"],auftrag:["Auftrag","cmd"]};
-  let MODEL={schemaVersion:"2",akteure:[],clients:[],records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],fluesse:[],codeKarten:[]};
+  const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"],konfig:["Konfiguration","vo"],query:["Query","qry"],queryresponse:["Response","qrsp"],};
+  let MODEL={schemaVersion:"2",akteure:[],clients:[],records:[],enums:[],aggregate:[],decider:[],applier:[],states:[],readModels:[],stores:[],projektionen:[],reader:[],codeKarten:[],graphen:[],katalog:[],bausteinFunktionen:[]};
   let NID=1;
   // Die ANSICHT (Werkbank P7.2): Positionen, Domänen-Filter, Akteur-Reihenfolge und die 🤖-Knoten — eine Datei auf dem Server
   //   (.werkbank/ansicht.json, Schlüssel = Karten-Id). Sie gehört weder zum Code noch zum Board; der Code ist die einzige Wahrheit.
@@ -22,33 +22,31 @@
   const textZuListe=t=>(t||"").split(",").map(s=>s.trim()).filter(Boolean);
   const kindLabel=k=>(KINDINFO[k]||["?","vo"])[0];
   const kindKlasse=k=>(KINDINFO[k]||["?","vo"])[1];
-  function normalize(m){m=m||{};m.records=m.records||[];m.enums=m.enums||[];m.aggregate=m.aggregate||[];m.decider=m.decider||[];m.applier=m.applier||[];m.sagas=m.sagas||[];m.states=m.states||[];m.transitions=m.transitions||[];
-    m.readModels=m.readModels||[];m.stores=m.stores||[];m.projektionen=m.projektionen||[];m.reader=m.reader||[];m.reaktionen=m.reaktionen||[];
+  function normalize(m){m=m||{};m.records=m.records||[];m.enums=m.enums||[];m.aggregate=m.aggregate||[];m.decider=m.decider||[];m.applier=m.applier||[];m.states=m.states||[];
+    m.readModels=m.readModels||[];m.stores=m.stores||[];m.projektionen=m.projektionen||[];m.reader=m.reader||[];
     // Code-Karten (Werkbank P7.1): Typen, die das Lesen nicht als Baustein erkennt (z. B. unaufgelöster Basistyp) — kommen fertig vom Server.
     m.codeKarten=m.codeKarten||[];
-    // Akteur (docs/konzept-akteure.md): wer von außen hineingibt — darf[] = die Typen seiner IDarf<T> (Command/Query/Trigger).
-    m.akteure=m.akteure||[];m.akteure.forEach(a=>{if(!a._id)a._id="ak"+(NID++);a.darf=a.darf||[];});   /* art bewusst nicht vorbelegen (Herkunfts-Hash) */
+    // Akteur (docs/konzept-akteure.md): darf[] = seine IDarf<T> (Command, Query, Hinweis), hoert[] = seine IHoert<T> (Arbeit, Kenntnis).
+    m.akteure=m.akteure||[];m.akteure.forEach(a=>{if(!a._id)a._id="ak"+(NID++);a.darf=a.darf||[];a.hoert=a.hoert||[];});
     // Client (docs/konzept-akteure.md §4): die Software an der Leitung — verkoerpert[] = die Akteure (IVerkoerpert<A>), kenntnis = was er hört.
     // Was über seine Leitung hineingeht, sind die IDarf dieser Akteure (vom Server abgeleitet: board.sicht.clients).
-    // Katalog-Funktion (IFunktion): Auftrag → Ergebnis-Events; ein Prozess ruft sie mit Rufe<F> (Dann ƒ an der Regel).
     // Funktion (IFunktion, ein Block der Hierarchie): Eingänge (Auf) mit Ausgaben ODER gerufene Methoden, Konstruktor, Umsetzungen — vom Server gelesen.
     m.bausteinFunktionen=m.bausteinFunktionen||[];m.bausteinFunktionen.forEach(f=>{f.eingaenge=f.eingaenge||[];f.umsetzungen=f.umsetzungen||[];
       f.methoden=f.methoden||[];f.methoden.forEach(x=>{x.parameter=x.parameter||[];});f.umsetzungen.forEach(u=>{u.konstruktor=u.konstruktor||[];});});
-    m.funktionen=m.funktionen||[];m.funktionen.forEach(f=>{if(!f._id)f._id="fk"+(NID++);f.ergebnisse=f.ergebnisse||[];f.konstruktor=f.konstruktor||[];});
-    // Pipeline als Fluss (§14): Knoten (Name = Identität) mit Eingängen aus Drähten; _ids nur fürs Board.
-    m.fluesse=m.fluesse||[];m.fluesse.forEach(f=>{if(!f._id)f._id="fl"+(NID++);f.knoten=f.knoten||[];f.knoten.forEach(k=>{if(!k._id)k._id="fs"+(NID++);k.eingaenge=k.eingaenge||[];k.eingaenge.forEach(e=>{e.draehte=e.draehte||[];});});});
+    // Graph (docs/04 §4.4): record X(Knoten…) : IGraph — je Knoten Typ, Name, [Kopf], [Von(nameof(…))] (verlierbar je Quelle). Köpfe, Ausgänge und
+    //   Kanten liefert der Server (abgeleitet). Katalog: die Funktionen des Frameworks (Dateiwaechter …), die ein Graph als Knoten nennen kann.
+    m.graphen=m.graphen||[];m.graphen.forEach(g=>{if(!g._id)g._id="graph:"+g.name;g.knoten=g.knoten||[];g.knoten.forEach(k=>{k.von=k.von||[];k.verlierbar=k.verlierbar||[];});});
+    m.katalog=m.katalog||[];
     m.clients=m.clients||[];m.clients.forEach(c=>{if(!c._id)c._id="cl"+(NID++);c.verkoerpert=c.verkoerpert||[];c.kenntnis=c.kenntnis||[];});
-    // Reaktion = emittierender Konsument (ISubscriber → IAsyncEnumerable<OneOf<Cmd>>): Trigger-Event → Handle → OneOf-Commands.
-    m.reaktionen.forEach(r=>{if(!r._id)r._id="rk"+(NID++);r.handles=r.handles||[];r.handles.forEach(hd=>{hd.sends=hd.sends||[];hd.publishes=hd.publishes||[];});});
     // Jedes Objekt-Feld bekommt eine stabile _id → Feld-Ports eindeutig (auch bei gleichnamigen Feldern) und rename-fest.
     const stampFelder=arr=>(arr||[]).forEach(f=>{if(f&&!f._id)f._id="f"+(NID++);});
     m.records.forEach(r=>stampFelder(r.felder));m.aggregate.forEach(a=>stampFelder(a.state));m.states.forEach(s=>stampFelder(s.felder));m.readModels.forEach(rm=>stampFelder(rm.felder));
-    m.decider.forEach(d=>{if(!d._id)d._id="d"+(NID++);});m.applier.forEach(a=>{if(!a._id)a._id="a"+(NID++);});m.states.forEach(s=>{if(!s._id)s._id="s"+(NID++);});m.transitions.forEach(t=>{if(!t._id)t._id="t"+(NID++);if(!t.dann)t.dann=[{}];});
+    m.decider.forEach(d=>{if(!d._id)d._id="d"+(NID++);});m.applier.forEach(a=>{if(!a._id)a._id="a"+(NID++);});m.states.forEach(s=>{if(!s._id)s._id="s"+(NID++);});
     m.readModels.forEach(rm=>{if(!rm._id)rm._id="rm"+(NID++);});
     m.stores.forEach(st=>{if(!st._id)st._id="st"+(NID++);st.writeFns=st.writeFns||[];st.readFns=st.readFns||[];st.writeFns.forEach(f=>{if(!f._id)f._id="wf"+(NID++);f.params=f.params||[];});st.readFns.forEach(f=>{if(!f._id)f._id="rf"+(NID++);f.params=f.params||[];});});
     // Projektion-Handle nimmt je Event eine (oder mehrere) Schreib-FÄHIGKEIT als Parameter → fns[]. Der Store-Scope
     // wird daraus ABGELEITET (= die injizierten Stores), nicht mehr von Hand deklariert.
-    m.projektionen.forEach(p=>{if(!p._id)p._id="pj"+(NID++);p.handles=p.handles||[];p.handles.forEach(hd=>{hd.fns=hd.fns||[];hd.publishes=hd.publishes||[];});delete p.stores;});
+    m.projektionen.forEach(p=>{if(!p._id)p._id="pj"+(NID++);p.handles=p.handles||[];p.handles.forEach(hd=>{hd.fns=hd.fns||[];});delete p.stores;});
     m.reader.forEach(r=>{if(!r._id)r._id="rd"+(NID++);r.handles=r.handles||[];delete r.stores;
       // Reader liest genau eine Projektion (IReader<TProjection>) — expliziter Bindungs-Port.
       r.projektion=r.projektion||"";
@@ -60,12 +58,6 @@
     // Rümpfe bleiben, wie der Code sie liefert (Rumpf aus der Datei, P7.4); ein im Code bewusst leerer Rumpf heißt „leer“.
     [...m.decider,...m.applier].forEach(n=>{if(n.rumpf==="")n.leer=true;});
     m.aggregate.forEach(a=>{if((a.state||[]).length&&!m.states.some(s=>s.aggregat===a.name))m.states.push({_id:"state:"+a.name,aggregat:a.name});});
-    // Round-trip: geladene Saga.Schritte → Transition-Knoten (prozess = Saga-Name), Schritte werden vor Serveraufruf neu erzeugt.
-    m.sagas.forEach(s=>{(s.schritte||[]).forEach(st=>m.transitions.push({_id:st._id||"t"+(NID++),prozess:s.name,wenn:(st.wenn||[]).slice(),...(st._ort?{_ort:st._ort}:{}),
-        ...(st.sammelEvent?{sammelEvent:st.sammelEvent,sammelAusdruck:st.sammelAusdruck,sammelAnzahl:st.sammelAnzahl}:{}),
-        dann:[{sende:st.sende||"",sendeJe:!!st.sendeJe,sendeJeCollection:st.sendeJeCollection||"",kompensation:st.kompensation||"",
-          sendeAusdruck:st.sendeAusdruck,kompensationAusdruck:st.kompensationAusdruck,kompensationJe:!!st.kompensationJe,
-          ...(st.rufe?{rufe:st.rufe}:{}),...(st.zeitlimit?{zeitlimit:st.zeitlimit}:{})}]}));s.schritte=[];});
     return m;}
   // Standard-Namespace für neue Knoten: der eines vorhandenen Aggregats/Records; sonst eine Projekt-Wurzel aus dem Code (Rahmen).
   // Akteure und Clients stehen außerhalb der Domänen in IHREM Katalog (z. B. Domain.Akteure) — ein neuer gesellt sich dazu.
@@ -129,8 +121,8 @@
   function imModus(ids,aendern){TEIL={gerufen:false};try{aendern();}finally{const g=TEIL.gerufen;TEIL=null;if(g)teilNeu(ids.filter(Boolean));}}
 
   // Eindeutiger Name — Namen sind der Referenzschlüssel für Kanten/Decider/Applier.
-  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.akteure.map(x=>x.name),...MODEL.clients.map(x=>x.name),...MODEL.funktionen.map(x=>x.name),...MODEL.fluesse.map(x=>x.name),
-    ...MODEL.bausteinFunktionen.flatMap(x=>[x.name,...(x.umsetzungen||[]).map(u=>u.name)]),...MODEL.funktionen.map(x=>x.implementierung).filter(Boolean)]);
+  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...(MODEL.graphen||[]).map(g=>g.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.akteure.map(x=>x.name),...MODEL.clients.map(x=>x.name),...MODEL.funktionen.map(x=>x.name),...MODEL.fluesse.map(x=>x.name),
+    ...MODEL.bausteinFunktionen.flatMap(x=>[x.name,...(x.umsetzungen||[]).map(u=>u.name)])]);
     if(!all.has(base))return base;let i=2;while(all.has(base+i))i++;return base+i;}
 
   function enumCard(e,ei){const c=h("div",{class:"card"});
@@ -163,7 +155,7 @@
   function neuerKnoten(kind,x,y,opt){gTitel("neu: "+(NODELABEL[kind]||kind));
     const vorher=new Set(graphNodes().map(n=>n.id));
     // opt.ns (Band-Menü der Domänen-Ablage): Namespace der Domäne; opt.agg/opt.saga: naheliegender Besitzer in ihr.
-    const defaultNs=()=>(opt&&opt.ns)||defaultNsGlobal(), AGG=(opt&&opt.agg)||"", SAGA=(opt&&opt.saga)||"";
+    const defaultNs=()=>(opt&&opt.ns)||defaultNsGlobal(), AGG=(opt&&opt.agg)||"";
     // Ohne Klickposition keine Position: packLayout setzt den Knoten in die Spalte seiner Art (typreine Spalten).
     let pos=(typeof x==="number")?{x:Math.round(x/GRID)*GRID,y:Math.round(y/GRID)*GRID}:{};
     if(VIEW.kompakt&&pos.x!=null&&!pos._kpos)pos={...pos,_kpos:{x:pos.x,y:pos.y}};
@@ -172,16 +164,14 @@
     else if(kind==="applier")MODEL.applier.push({_id:"a"+(NID++),aggregat:AGG,event:"",...pos});
     else if(kind==="state")MODEL.states.push({_id:"s"+(NID++),aggregat:AGG,felder:[],...pos});
     else if(kind==="enum")MODEL.enums.push({name:uniq("NeuEnum"),namespace:defaultNs(),werte:["A","B"],...pos});
-    else if(kind==="saga")MODEL.sagas.push({name:uniq("NeuerProzess"),namespace:defaultNs(),triggerEvent:"",schritte:[],extraUsings:[],...pos});
-    else if(kind==="transition")MODEL.transitions.push({_id:"t"+(NID++),prozess:SAGA,wenn:[],dann:[{}],...pos});
+    else if(kind==="graph"){const nm=uniq("NeuerGraph");MODEL.graphen.push({_id:"graph:"+nm,name:nm,namespace:defaultNs(),knoten:[],...pos});}
     else if(kind==="readmodel")MODEL.readModels.push({_id:"rm"+(NID++),name:uniq("NeuReadModel"),namespace:defaultNs(),felder:[{_id:"f"+(NID++),name:"Id",typ:"Guid"}],store:"",...pos});
     else if(kind==="store")MODEL.stores.push({_id:"st"+(NID++),name:uniq("NeuStore"),namespace:defaultNs(),writeFns:[],readFns:[],...pos});
     else if(kind==="projektion")MODEL.projektionen.push({_id:"pj"+(NID++),name:uniq("NeueProjektion"),namespace:defaultNs(),stores:[],append:false,pull:true,handles:[],...pos});
     else if(kind==="reader")MODEL.reader.push({_id:"rd"+(NID++),name:uniq("NeuReader"),namespace:defaultNs(),stores:[],trackDeps:true,handles:[],...pos});
-    else if(kind==="reaktion")MODEL.reaktionen.push({_id:"rk"+(NID++),name:uniq("NeueReaktion"),namespace:defaultNs(),pull:true,handles:[],...pos});
     else if(kind==="funktion")neueFunktion(defaultNs(),pos);
     else if(kind==="gerufen")neueGerufene(defaultNs(),pos);
-    else if(kind==="quelle")neueQuelle(defaultNs(),"NeueQuelle",pos);
+    else if(kind==="quelle")neueQuellFunktion(defaultNs(),pos);
     else if(kind==="akteur")MODEL.akteure.push({_id:"ak"+(NID++),name:uniq("NeuerAkteur"),namespace:haeufigsterNs(MODEL.akteure)||defaultNs(),darf:[],...pos});
     else if(kind==="client")MODEL.clients.push({_id:"cl"+(NID++),name:uniq("INeuerClient"),namespace:haeufigsterNs(MODEL.clients)||defaultNs(),verkoerpert:[],kenntnis:[],...pos});
     else MODEL.records.push({name:uniq((opt&&opt.name)||"Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"&&ID_FELD()?[{_id:"f"+(NID++),name:ID_FELD(),typ:"Guid"}]:[],
@@ -204,7 +194,6 @@
   const addRecord=k=>neuerKnoten(k);
   const addAggregat=()=>neuerKnoten("aggregate");
   const addEnum=()=>neuerKnoten("enum");
-  const addSaga=()=>neuerKnoten("saga");
 
   // ══ NACHRICHT MIT ZWEI SEITEN (docs/konzept-editor-pipelines.md §12): „◀ kommt aus" = wer diesen Typ erzeugt, „geht an ▶" = wer
   //   ihn konsumiert — vom Server (board.sicht.partner, Werkbank P7.4.5): je Partner Karte (springen), Text, Markierung und, was ✕ löst.
@@ -215,12 +204,7 @@
   const ohneX=(arr,x)=>(arr||[]).filter(v=>v!==x);
   function loese(l){const nd=NODEBY.get(l.karte);if(!nd)return;
     if(l.feld)nd.ref[l.feld]=ohneX(nd.ref[l.feld],l.wert);
-    else if(l.zusage){const a=nd.own&&nd.own.ref;if(a)a.vertrag=(a.vertrag||[]).filter(x=>x!==nd.ref);}
-    else if(l.eingang!=null){const k=nd.ref,f=nd.own&&nd.own.ref,e=(k.eingaenge||[])[l.eingang],d=e&&(e.draehte||[])[l.draht];if(f&&d)flLoese(f,k,e,d);}}
-  // Alle Zusagen der Akteur-Verträge (Akteur-Konzept §3) mit ihrer Karten-Id — je Auf(Event) eine Karte „Zusage" im Akteur-Rahmen.
-  const aufId=(a,i)=>"auf:"+a._id+":"+i;
-  const vertragsTyp=a=>a.vertragName||("I"+(a.name||""));
-  function vertragsZusagen(){return MODEL.akteure.flatMap(a=>(a.vertrag||[]).map((r,i)=>({a,r,i,id:aufId(a,i)})));}
+    }
 
   // ══ CLIENTS (docs/konzept-akteure.md §4): die Software an der Leitung — je Client EIN Vertrag (IClientVertrag). Er steht als
   //   eigener Rahmen rechts neben den Domänen; seine Karte ist die ANSCHLUSSLEISTE (jede Zeile nennt ihre Nachricht); die Leitungen
@@ -230,8 +214,6 @@
   // Handshake-Name = Interface ohne führendes I (IArbeitsplatz → Arbeitsplatz), wie Abstractions.Akteurvertrag.ClientName.
   const clientAnzeige=c=>{const n=(c&&c.name)||"";return n.length>1&&n[0]==="I"&&n[1]!==n[1].toLowerCase()?n.slice(1):n;};
   const darfHalter=nm=>MODEL.akteure.filter(a=>(a.darf||[]).includes(nm)).map(a=>a.name);
-  // Clients, die einen Akteur verkörpern, der teil (eine Funktion) rechnen darf — sie tragen sie.
-  const clientTraeger=teil=>MODEL.clients.filter(c=>(c.verkoerpert||[]).some(n=>((MODEL.akteure.find(a=>a.name===n)||{}).darf||[]).includes(teil)));
   // Die Anschlussleiste eines Clients — vom Server (board.sicht.clients): die Ports (Richtung, Nachricht, in wessen Namen, Ziel-Karte), die
   //   verkörperten Akteure (wie der AkteurRechteGenerator: Akteure der getragenen Teile + IDarf-Halter von Sendet/Fragt) und je getragenem
   //   Vertrags-Teil sein Akteur. Ein Client, den es im Code noch nicht gibt, hat noch keine.
@@ -304,9 +286,9 @@
   // „Wer?" (docs/konzept-akteure.md §2.3): von welchem Akteur kommt die Nachricht — direkt (IDarf, oben unter „kommt aus") und über die Kette
   //   (abgeleitet, read-only, mit Pfad). Ein Eingang ohne beides ist eine Lücke (GR-HERKUNFT).
   function wer(sek,nm){if(!MODEL.akteure.length)return;const m=akteurMenge(nm),kette=[...m.kette].filter(a=>!m.direkt.has(a)).sort();
-    if(kette.length){sek.append(h("div",{class:"gsec",title:"abgeleitet: ein Fluss, ein Prozess, ein Reader oder Decide erzeugt sie aus einer Nachricht dieses Akteurs — kein IDarf nötig"},"👤 über die Kette"));
+    if(kette.length){sek.append(h("div",{class:"gsec",title:"abgeleitet: ein Graph oder eine Frist erzeugt sie aus einer Nachricht dieses Akteurs — kein IDarf nötig"},"👤 über die Kette"));
       kette.forEach(a=>{const ak=MODEL.akteure.find(x=>x.name===a),pfad=kettenPfad(nm,a);
-        const row=h("div",{class:"gp-row",title:pfad.join(" → ")},h("span",{class:"gp-t"},(ART_SYM[ak&&ak.art]||"👤 ")+a),h("span",{class:"gp-mark"},pfad.join(" → ")));
+        const row=h("div",{class:"gp-row",title:pfad.join(" → ")},h("span",{class:"gp-t"},"👤 "+a),h("span",{class:"gp-mark"},pfad.join(" → ")));
         if(ak)row.onclick=()=>waehle("akt:"+ak._id);sek.append(row);});}
     else if(istEingangName(nm)&&!m.direkt.size)sek.append(h("div",{class:"llmmeld err",title:"GR-HERKUNFT"},"⚠ kommt von keinem Akteur — ⊕ darf oder über eine Kette erzeugen"));}
   // Ein Pfad, auf dem nm im Namen von akt entsteht (rückwärts bis zu dessen direktem Eingang bzw. Wechsel) — vom Server.
@@ -340,46 +322,27 @@
     body.append(h("div",{class:"gsec"},"Namespace"));
     body.append(h("input",{value:r.namespace??"",oninput:e=>r.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
     if(r.kind==="command"||r.kind==="event"||r.kind==="rejection"){const ag=(SICHT().karten["rec:"+r.name]||{}).aggregat;
-      body.append(h("div",{class:"gsec",title:"abgeleitet aus Decider/Applier"},"Aggregat: "+(ag||"— keinem (Decider/Applier verdrahten)")));}
+      body.append(h("div",{class:"gsec",title:r.kind==="command"?"Ziel im Typ (ICommand<TAggregat>), abgeleitet aus dem Decider":"abgeleitet aus Decider/Applier"},
+        r.kind==="command"?(ag?"Ziel: Aggregat "+ag:"ohne Ziel — Empfänger aus Graph (Von, Kopf) oder Akteur (Arbeit)"):"Aggregat: "+(ag||"— keinem (Decider/Applier verdrahten)")));}
     if(r.kind==="command")body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>r.istErzeugung=e.target.checked||undefined,...(r.istErzeugung?{checked:"checked"}:{})}),"Erzeugung (ICreationCommand)"));
     // Zwei Seiten je Nachricht (konzept-editor-pipelines §12): ◀ kommt aus (⊕ Erzeuger) · geht an ▶ (⊕ Konsument). Auf der Fläche nur die Ports (Kanten),
     //   im Panel dazu die Partner-Listen. Ein transientes Event (Ablehnung) hat jetzt auch einen Ausgang (→ Projektion/Reaktion/Pipeline).
     {let ein=null,aus=null;
-     if(r.kind==="command"){ein=slotRow("sagacmd","+ Erzeuger ⊕ (Prozess · Reaktion · Pipeline)","l",{type:"sagaCmd",dir:"in",rec:r.name},"cmd:in:"+r.name);
-       aus=slotRow("command","+ Konsument ⊕ (Decider) ▶","r",{type:"cmd",dir:"out",rec:r.name},"cmd:out:"+r.name);}
+     if(r.kind==="command"){ein=h("div",{},slotRow("sagacmd","+ Erzeuger ⊕ (Funktion · Quelle)","l",{type:"sagaCmd",dir:"in",rec:r.name},"cmd:in:"+r.name),
+         r.aggregat?null:slotRow("command","+ Erzeuger ⊕ (Decide — ohne Ziel)","l",{type:"evtOut",dir:"in",rec:r.name},"evt:in:"+r.name));
+       aus=slotRow("command","+ Konsument ⊕ ("+(r.aggregat?"Decider":"Funktion · Akteur als Arbeit")+") ▶","r",{type:"cmd",dir:"out",rec:r.name},"cmd:out:"+r.name);}
      else if(r.kind==="event"||r.kind==="rejection"){const c=r.kind==="event"?"event":"rejection";
-       ein=slotRow(c,"+ Erzeuger ⊕ (Decider · veröffentlicht)","l",{type:"evtOut",dir:"in",rec:r.name},"evt:in:"+r.name);
-       aus=slotRow(c,"+ Konsument ⊕"+(r.kind==="event"?"":" (Projektion · Reaktion · Pipeline)")+" ▶","r",{type:"evtUse",dir:"out",rec:r.name},"evt:out:"+r.name);}
+       ein=slotRow(c,"+ Erzeuger ⊕ ("+(r.kind==="event"?"Decide":"Decide · Funktion")+")","l",{type:"evtOut",dir:"in",rec:r.name},"evt:in:"+r.name);
+       aus=slotRow(c,"+ Konsument ⊕ ("+(r.kind==="event"?"Projektion · Akteur · Antwort an Funktion":"Akteur")+") ▶","r",{type:"evtUse",dir:"out",rec:r.name},"evt:out:"+r.name);}
      else if(r.kind==="query")aus=slotRow("query","+ Konsument ⊕ (Reader) ▶","r",{type:"query",dir:"out",rec:r.name},"qry:out:"+r.name);
      else if(r.kind==="queryresponse")ein=slotRow("qrsp","+ Erzeuger ⊕ (Reader)","l",{type:"qrsp",dir:"in",rec:r.name},"qrsp:in:"+r.name);
      // Akteur-Eingang: Command und Query (was ein Akteur hineingeben darf).
      if(akteurSorten().includes(grNachrichtSorte(r.name))){const dp=darfPort(r.name);ein=ein?h("div",{},ein,dp):dp;}
      if(ein||aus){if(INSP)zweiSeiten(body,r.name,ein,aus);else{if(ein)body.append(ein);if(aus)body.append(aus);}}}
     if(r.kind==="valueobject")body.append(slotRow("ftype","als Feldtyp ▶","r",{type:"ftype",dir:"out",typeName:r.name},"ftype:out:rec:"+r.name));
-    if(r.kind==="auftrag")body.append(slotRow("auftrag","Eingang von ƒ "+(r.funktion||"— ⊕ Funktion wählen")+" ▶","r",{type:"auftragFn",dir:"out",rec:r.name},"auf:out:"+r.name));
-    if(r.treiber){quellTreiber(body,r);return;}
     body.append(h("div",{class:"gsec"},"Felder"));
     (r.felder||[]).forEach((f,fi)=>body.append(feldRow(f,()=>{r.felder.splice(fi,1);render();},undefined,r.name)));
     body.append(h("button",{class:"add",onclick:()=>{(r.felder=r.felder||[]).push({_id:"f"+(NID++),name:uniqFeldName(r.felder,"feld"),typ:"string"});render();}},"+ Feld"));
-  }
-  // Quellen-Typ (docs/konzept-werkbank.md §3): der Treiber ist ein Code-Fakt (Basistyp), die Felder befüllt er (geerbt, nur lesbar),
-  //   die Werte (Pfad, Muster, Fertig-Erkennung …) stehen in der Umgebung — hier je Umgebung gezeigt, wie der Server sie gelesen hat.
-  function quellTreiber(body,r){
-    body.append(h("div",{class:"gsec",title:"public sealed record "+r.name+" : "+((r.basen||[])[0]||"DateiGemeldet")+";"},"📁 "+r.treiber+"-Treiber"));
-    if(INSP)dsQuelle(body,r);
-    const umg=Object.entries((MODEL.rahmen||{}).umgebungen||{}),werte=umg.filter(([,u])=>u&&u.Quellen&&u.Quellen[r.name]).map(([n,u])=>[n,u.Quellen]);
-    // Der Webhook ist Konfig (konzept-werkbank §12.3 E12): je Umgebung die Route, bearbeitet im 🖥 Host-Rahmen (Quellen).
-    {const wh=werte.filter(([,q])=>q[r.name]&&q[r.name].Webhook).map(([n,q])=>[n,q[r.name].Webhook]);
-      body.append(h("div",{class:"gsec",title:"Quellen:"+r.name+":Webhook — POST mit der Nachricht als JSON auf dem Einblick-Port; bearbeitet im 🖥 Host-Rahmen"},
-        wh.length?wh.map(([n,w])=>"⇥ Webhook "+w+" ("+n+")").join(" · "):"⇥ kein Webhook (Quellen:"+r.name+":Webhook im 🖥 Host-Rahmen)"));}
-    umg.filter(([,u])=>!(u&&u.Quellen&&u.Quellen[r.name])).forEach(([n])=>body.append(h("div",{class:"llmmeld err",title:"Start-Prüfung: jede Quelle braucht einen Abschnitt"},"⚠ Umgebung "+n+": kein Abschnitt Quellen:"+r.name+" — der Host startet dort nicht")));
-    werte.forEach(([host,q])=>{body.append(h("div",{class:"gsec"},"Werte in Umgebung "+host));
-      const zeile=(k,v)=>body.append(h("div",{class:"frow"},h("span",{class:"slotlbl",style:"min-width:110px"},k),h("span",{style:"flex:1;font-family:ui-monospace,monospace;font-size:11.5px;overflow-wrap:anywhere"},v)));
-      const flach=(o,pre)=>Object.entries(o||{}).forEach(([k,v])=>v&&typeof v==="object"&&!Array.isArray(v)?flach(v,pre+k+"."):zeile(pre+k,Array.isArray(v)?v.join(", "):String(v)));
-      flach(q[r.name],"");});
-    body.append(h("div",{class:"gsec"},"Felder (vom Treiber befüllt)"));
-    (r.felder||[]).forEach(f=>{const row=h("div",{class:"frow",title:"geerbt von "+((r.basen||[])[0]||"der Treiber-Basis")},
-      h("span",{class:"slotlbl",style:"flex:1"},f.name),h("span",{style:"opacity:.75"},f.typ));if(f.name)row.append(feldPort(r.name,f.name,f.typ,f._id));body.append(row);});
   }
 
   // Aggregat = HUB: State-Knoten oben zuweisen, Decider links, Applier rechts. Keine Feld-Slots.
@@ -462,28 +425,18 @@
     switch(n.kind){
       case "decider":return [T("Decide-Logik",r.rumpf,r._ort,"decide|"+r.aggregat+"|"+r.command,true,{leer:!!r.leer})];
       case "applier":return [T("Apply-Logik",r.rumpf,r._ort,"apply|"+r.aggregat+"|"+r.event,true,{leer:!!r.leer})];
-      case "handle":{const o=n.own,k=o.kind==="reader"?"reader|"+o.ref.name+"|"+r.query:(o.kind==="reaktion"?"reaktion|":"projektion|")+o.ref.name+"|"+r.event;
+      case "handle":{const o=n.own,k=o.kind==="reader"?"reader|"+o.ref.name+"|"+r.query:"projektion|"+o.ref.name+"|"+r.event;
         return [T(o.kind==="reader"?"Reader-Logik":"Handle-Logik",r.rumpf,r._ort,k,true,{kachel:"Handle "+(r.query||r.event||"")})];}
       case "fn":return [T("Impl-Logik",r.rumpf,r._rumpf,"store|"+n.own.ref.name+"|"+r.name,true,{kachel:r.name||"Store-Fn"})];
-      case "funktion":{const t=[T("RufeAsync",r.rumpf,r._rumpf,r.auftrag?"funktion|"+r.name+"|"+r.auftrag:null,true,{kachel:(r.implementierung||r.name||"Funktion")+".RufeAsync"})];
-        // Die Python-Implementierung (Laufort Extern, konzept-werkbank §12.3 E13): `rufe` in funktionen/<modul>.py — ✎ über PythonSync, 🤖 als Slot funktionpy.
-        if(r.python)t.push(T("rufe · Python",r.python.rumpf,null,"funktionpy|"+r.name+"@"+r.python.klasse,true,
-          {kachel:r.python.klasse+".rufe (Python)",python:{datei:r.python.datei,klasse:r.python.klasse,methode:r.python.methode||"rufe",signatur:r.python.signatur||null}}));
-        return t;}
       // Gerufene Funktion: je Umsetzung je Methode ihr Rumpf (aus der Datei); ✎ als Geste an der Methode.
       case "bausteinfunktion":return istGerufen(r)?(r.umsetzungen||[]).flatMap((u,ii)=>(u.rumpfe||[]).map(x=>T(u.name+"."+x.methode,x.rumpf,x._rumpf,null,true,
-        {kachel:u.name+"."+x.methode,impl:ii,methode:x.methode}))):null;
+        {kachel:u.name+"."+x.methode,impl:ii,methode:x.methode})))
+        // Funktion: je Auf sein Rumpf, bei einer Quelle der von Lausche (Ort aus dem Code, ✎ als Geste an der Methode).
+        :[...(r.eingaenge||[]).map((e,ei)=>T("Auf("+e.eingang+")",e.rumpf,e._ort,null,true,{kachel:r.name+".Auf("+e.eingang+")",ein:ei})),
+          ...((r.lauscht||[]).length?[T("Lausche",r.lauscheRumpf,r._lausche,null,true,{kachel:r.name+".Lausche",lausche:true})]:[])];
       case "client":return (r.implementierungen||[]).length?(r.implementierungen||[]).flatMap(im=>(im.rumpfe||[]).map(x=>T(im.klasse+"."+x.methode,x.rumpf,null,
         "zusage|"+clientAnzeige(r)+"|"+x.event+"@"+im.klasse,im.klasse+"."+x.methode,{python:{datei:im.datei,klasse:im.klasse,methode:x.methode,signatur:x.signatur||null},event:x.event,impl:im}))):null;
-      case "transition":{const sg=MODEL.sagas.find(x=>x.name===r.prozess),folge=sg?regelFolge(sg,MODEL.transitions):[];
-        // Lambda-Index in der Regel-Anweisung (Code-Reihenfolge): erst das Zählen (UndAlle), dann Sende/Rufe, dann die Kompensation.
-        return (r.dann||[]).filter(d=>d.sende||d.rufe).flatMap(d=>{const i=folge.findIndex(x=>x.t===r&&x.d===d),basis=r.sammelEvent?1:0;
-          const kid=teil=>sg&&i>=0?"saga|"+sg.name+"|"+i+"#"+regelVerb(d,teil):null,ort=k=>r._ort?{...r._ort,lambda:k}:null;
-          return [T(d.rufe!==undefined?"λ Auftrag":"λ Command",d.sendeAusdruck,ort(basis),kid("sende"),false,{dann:d})]
-            .concat(d.kompensation?[T("λ Kompensation",d.kompensationAusdruck,ort(basis+1),kid("komp"),false,{dann:d,teil:"komp"})]:[]);});}
-      case "flussknoten":{const f=n.own.ref,name=r.ohneVariable?"#"+(f.knoten||[]).indexOf(r):r.name,ort=k=>r._ort?{...r._ort,lambda:k}:null;
-        if(r.art==="je")return [T("λ Liste",r.liste,ort(0),"fluss|"+f.name+"|"+name+"#0",false)];
-        return flMitLambda(r)?(r.eingaenge||[]).map((e,ei)=>T("λ Zuordnung",e.ausdruck,ort(ei),"fluss|"+f.name+"|"+name+"#"+ei,false)):null;}}
+    }
     return null;}
   // Die Rumpf-Kachel unter dem Besitzer (wo früher der 📝-Block stand): nur für Rümpfe, die im Code Text haben. Ihr Name ist der des früheren
   //   📝-Blocks — die Kartenhöhe taktet das Zeilenraster, so bleibt die Lage aller Karten gleich.
@@ -492,17 +445,13 @@
     out.push({id:kachelId(n.id,i),name:typeof t.kachel==="string"?t.kachel:t.label,kind:"rumpf",ref:t,own:n,idx:i});}));return out;}
   // Ein Rumpf-Port im Panel des Besitzers (früher: 📝/🤖 andocken): der Ausschnitt aus der Datei + ✎ + 🤖 — Ziel wie bisher als target.
   function teilVonZiel(t){if(!t)return null;let id=null,i=0;
-    if(t.k==="decider")id="dec:"+t.dec;else if(t.k==="applier")id="app:"+t.app;else if(t.k==="funktion")id="fk:"+t.fk;
+    if(t.k==="decider")id="dec:"+t.dec;else if(t.k==="applier")id="app:"+t.app;
     else if(t.k==="writeFn"||t.k==="readFn")id="fn:"+t.fn;
-    else if(t.k==="pjHandle"||t.k==="rdHandle"||t.k==="reakHandle"){const [coll,pre]=t.k==="pjHandle"?["projektionen","prj"]:t.k==="rdHandle"?["reader","rdr"]:["reaktionen","rk"];
+    else if(t.k==="pjHandle"||t.k==="rdHandle"){const [coll,pre]=t.k==="pjHandle"?["projektionen","prj"]:["reader","rdr"];
       const o=MODEL[coll].find(x=>x._id===(t.proj||t.reader||t.reaktion));if(o)id=handleIds(o,pre+":"+o._id)[t.hi];}
     else if(t.k==="clientAuf"){id="cl:"+t.client;const c=MODEL.clients.find(x=>x._id===t.client);
       i=c?(c.implementierungen||[]).flatMap((im,ii)=>(im.rumpfe||[]).map(x=>[ii,x.event])).findIndex(([ii,e])=>ii===t.impl&&e===t.event):-1;}
-    else if(t.k==="regelLambda"){id="tr:"+t.trans;const tr=MODEL.transitions.find(x=>x._id===t.trans),d=tr&&(tr.dann||[])[t.dannIdx];
-      i=(rumpfTeile(NODEBY.get(id))||[]).findIndex(x=>x.dann===d&&(x.teil||"sende")===(t.teil||"sende"));}
-    else if(t.k==="funktionPy"){id="fk:"+t.fk;i=(rumpfTeile(NODEBY.get(id))||[]).findIndex(x=>!!x.python);}
     else if(t.k==="gerufen"){id="fb:"+t.fb;i=(rumpfTeile(NODEBY.get(id))||[]).findIndex(x=>x.impl===t.impl&&x.methode===t.methode);}
-    else if(t.k==="flussLambda"){const f=MODEL.fluesse.find(x=>x._id===t.fluss),k=f&&(f.knoten||[]).find(z=>z._id===t.knoten);if(k)id="fs:"+k._id;i=t.ei==null?0:t.ei;}
     const n=id&&NODEBY.get(id),teile=n&&rumpfTeile(n);return teile&&i>=0&&teile[i]?{n,i,teil:teile[i]}:null;}
   function codePort(key,target,_alt,label){const s=port("code");s.classList.add("i");reg(key,s,{type:"code",dir:"in",target});
     const tv=teilVonZiel(target);
@@ -590,7 +539,7 @@
     body.append(h("div",{class:"gsep"},"Schreib-Fähigkeiten — je Fn ein Interface, ◀ Parameter eines Projektion-Handles"));
     body.append(fnListe(st,st.writeFns||[]));
     body.append(h("button",{class:"add",onclick:()=>{st.writeFns.push({_id:"wf"+(NID++),name:"NeuFunktion",params:[]});render();}},"+ Write-Funktion"));
-    body.append(h("div",{class:"gsep"},"Lese-Fähigkeiten — je Fn ein Interface, ◀ Parameter eines Reader-/Pipeline-Handles"));
+    body.append(h("div",{class:"gsep"},"Lese-Fähigkeiten — je Fn ein Interface, ◀ Parameter eines Reader-Handles bzw. einer Funktion"));
     body.append(fnListe(st,st.readFns||[]));
     body.append(h("button",{class:"add",onclick:()=>{st.readFns.push({_id:"rf"+(NID++),name:"HoleX",params:[],rueckgabe:""});render();}},"+ Read-Funktion"));
   }
@@ -637,21 +586,8 @@
     body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Event andocken")));
   }
 
-  // Reaktion = EMITTIERENDER Konsument (ISubscriber → IAsyncEnumerable<OneOf<Cmd>>): kein Store, keine
-  //   Reset — Trigger-Event(s) ◀ → Handle → OneOf-Command-Ausgänge ▶ (das WAS ausgelöst wird ist verdrahtet,
-  //   das WIE/mit-welchen-Werten macht die 📝 Controller-Logik). Der idiomatische Fan-in-Baustein.
-  function reaktionCard(body,r){
-    body.append(nameInp(r,"name","Reaktion","reaktion"));
-    body.append(h("input",{value:r.namespace??"",oninput:e=>r.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
-    body.append(h("div",{class:"frow",title:"ISubscriber.SubscriberId — Kennung des Cursors (Umbenennen = neuer Cursor!)"},h("span",{class:"slotlbl"},"SubscriberId"),inp(r.subscriberId,v=>r.subscriberId=v||undefined,r.name||"")));
-    body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>r.pull=e.target.checked,...((r.pull!==false)?{checked:"checked"}:{})}),"Geordneter Pull (IPullSubscriber)"));
-    body.append(h("div",{class:"gsec"},"Trigger-Event → Handle → OneOf-Command(s) (emittiert). Das WANN/mit-WELCHEN-Werten macht der Rumpf."));
-    body.append(handleListe(r,"rk:"+r._id,"je Handle eine eigene Karte"));
-    const oi=port("open");oi.classList.add("i");reg("rk:in:"+r._id+":open",oi,{type:"evtUse",dir:"in",reaktion:r._id,handleIdx:"open"});
-    body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Event andocken")));
-  }
 
-  // Ein Projektions-HANDLE (eigene Karte): Eingang-Event, Schreib-Fähigkeiten (Parameter), veröffentlichte Events, Controller-Rumpf.
+  // Ein Projektions-HANDLE (eigene Karte): Eingang-Event, Schreib-Fähigkeiten (Parameter), Rumpf — eine Projektion gibt nichts aus.
   function prjHandleBody(body,p,hd,hi){
       const sl=port("event");sl.classList.add("i");reg("prj:in:"+p._id+":"+hi,sl,{type:"evtUse",dir:"in",proj:p._id,handleIdx:hi});
       body.append(h("div",{class:"slotrow"},sl,h("span",{class:"slotlbl",style:"flex:1"},"◀ Auf "+(hd.event||"?")),h("button",{class:"rm",onclick:()=>{p.handles.splice(hi,1);render();}},"✕")));
@@ -661,31 +597,7 @@
           h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"darf "+(r?r.store.name+"."+r.fn.name:"?")+" ▶"),s));});
       const wo=port("store");wo.classList.add("o");reg("wcall:out:"+p._id+":"+hi+":open",wo,{type:"wcall",dir:"out",proj:p._id,handleIdx:hi});
       body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Write-Fn ▶"),wo));
-      // Reaktives Event veröffentlichen (nach dem Schreiben): yield IEvent → Broker-Re-Publish (verlierbar, kein Log).
-      (hd.publishes||[]).forEach((ev,ei)=>{const s=port("event");s.classList.add("o");reg("prj:pub:"+p._id+":"+hi+":"+ev,s,{type:"evtOut",dir:"out",proj:p._id,handleIdx:hi});
-        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.publishes.splice(ei,1);render();}},"✕"),
-          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"veröffentlicht "+(ev||"?")+" ▶"),s));});
-      const po=port("event");po.classList.add("o");reg("prj:pub:"+p._id+":"+hi+":open",po,{type:"evtOut",dir:"out",proj:p._id,handleIdx:hi});
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.7"},"+ veröffentlicht Event ▶ (reaktiv)"),po));
       body.append(codePort("ctrl:in:"+p._id+":"+hi,{k:"pjHandle",proj:p._id,hi:hi},null,"Controller-Logik"));
-  }
-  function rkHandleBody(body,r,hd,hi){
-
-      const sl=port("event");sl.classList.add("i");reg("rk:in:"+r._id+":"+hi,sl,{type:"evtUse",dir:"in",reaktion:r._id,handleIdx:hi});
-      body.append(h("div",{class:"slotrow"},sl,h("span",{class:"slotlbl",style:"flex:1"},"◀ Auf "+(hd.event||"?")),h("button",{class:"rm",onclick:()=>{r.handles.splice(hi,1);render();}},"✕")));
-      // Ausgelöste Commands (je Command ein Punkt → an „◀ ausgelöst von" eines Command-Knotens ziehen).
-      (hd.sends||[]).forEach((c,ci)=>{const so=port("command");so.classList.add("o");reg("rk:send:"+r._id+":"+hi+":"+c,so,{type:"sagaCmd",dir:"out",reaktion:r._id,handleIdx:hi});
-        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.sends.splice(ci,1);render();}},"✕"),
-          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"sendet "+(c||"?")+" ▶"),so));});
-      const so=port("command");so.classList.add("o");reg("rk:send:"+r._id+":"+hi+":open",so,{type:"sagaCmd",dir:"out",reaktion:r._id,handleIdx:hi});
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Command ▶"),so));
-      // Reaktives Event veröffentlichen: yield IEvent → Broker-Re-Publish (verlierbar, kein Log).
-      (hd.publishes||[]).forEach((ev,ei)=>{const s=port("event");s.classList.add("o");reg("rk:pub:"+r._id+":"+hi+":"+ev,s,{type:"evtOut",dir:"out",reaktion:r._id,handleIdx:hi});
-        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.publishes.splice(ei,1);render();}},"✕"),
-          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"veröffentlicht "+(ev||"?")+" ▶"),s));});
-      const po=port("event");po.classList.add("o");reg("rk:pub:"+r._id+":"+hi+":open",po,{type:"evtOut",dir:"out",reaktion:r._id,handleIdx:hi});
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.7"},"+ veröffentlicht Event ▶ (reaktiv)"),po));
-      body.append(codePort("ctrl:in:"+r._id+":"+hi,{k:"reakHandle",reaktion:r._id,hi:hi},null,"Controller-Logik"));
   }
   function rdHandleBody(body,r,hd,hi){
 
@@ -713,7 +625,7 @@
   // ══ HANDLE- und FN-KNOTEN: jeder Handle einer Projektion/Reader/Reaktion und jede Store-Funktion ist eine
   //   EIGENE Karte (wie der Decider je Command) — mit ihren Ports, ihrem Rumpf und dem Vertrag aus dem Code (was sie
   //   erzeugen KANN und welche Store-Fns sie rufen DARF — nur Signatur). Kein neues Modell-Objekt: die Karte zeigt owner.handles[i] bzw. die Fn.
-  const HANDLE_ART={projektion:["projektionen","prj"],reader:["reader","rdr"],reaktion:["reaktionen","rk"]};
+  const HANDLE_ART={projektion:["projektionen","prj"],reader:["reader","rdr"]};
   const handleDisc=hd=>hd.query||hd.event||hd.selfName||hd.input||"";
   // Knoten-Ids der Handles eines Besitzers — über den Eingangstyp (rename-fest je Eingang), Index nur bei Kollision/leer.
   function handleIds(o,oid){const seen=new Set();return (o.handles||[]).map((hd,hi)=>{let id="hd:"+oid+":"+(handleDisc(hd)||"#"+hi);
@@ -742,8 +654,7 @@
     body.append(h("a",{class:"ghl",onclick:()=>{const m=NODEBY.get(n.own.id);if(m){waehle(m.id);centerOn(m);}}},"▲ "+(NODELABEL[n.own.kind]||n.own.kind)+": "+(o.name||"?")));
     body.append(vertragKopf(hd));
     if(n.own.kind==="projektion")prjHandleBody(body,o,hd,hi);
-    else if(n.own.kind==="reader")rdHandleBody(body,o,hd,hi);
-    else if(n.own.kind==="reaktion")rkHandleBody(body,o,hd,hi);}
+    else if(n.own.kind==="reader")rdHandleBody(body,o,hd,hi);}
   function fnCard(body,n){const st=n.own.ref;
     body.append(h("a",{class:"ghl",onclick:()=>{const m=NODEBY.get(n.own.id);if(m){waehle(m.id);centerOn(m);}}},"▲ Store: "+(st.name||"?")));
     body.append(h("div",{class:"gsec"},n.lesen?"Lese-Fähigkeit — ◀ Parameter von Reader-Handles":"Schreib-Fähigkeit — ◀ Parameter von Projektions-Handles"));
@@ -774,105 +685,13 @@
   //    Deklariert (Name, Felder) wird ein Typ nur an seiner Karte — nie im Knoten, der ihn benutzt (auch nicht am rufenden Fluss-Knoten).
   // Eine neue Funktion — EIN Weg (Palette, Fluss, Prozess): I<Stamm> mit Auftrag <Stamm>Auftrag und einem Ergebnis <Stamm>Erledigt.
   // Eine neue Funktion (IFunktion): als Klasse im Host, noch ohne Eingang — Eingänge und Ausgaben verbindet man an ihrer Karte (⊕).
+  // Eine Quelle ist eine Funktion mit Lausche statt Auf (docs/10 §10.3.5): was sie meldet, ist ein Command ohne Ziel — als eigene Karte angelegt.
+  function neueQuellFunktion(ns,pos){const nm=uniq("NeueQuelle"),cmd=uniq(nm+"Gemeldet");
+    MODEL.records.push({name:cmd,kind:"command",namespace:ns,felder:[]});
+    MODEL.bausteinFunktionen.push({_id:"fb"+(NID++),name:nm,namespace:ns,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[],lauscht:[cmd],...(pos||{})});return nm;}
   function neueFunktion(ns,pos){const nm=uniq("NeueFunktion");
     MODEL.bausteinFunktionen.push({_id:"fb"+(NID++),name:nm,namespace:ns,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[],...(pos||{})});return nm;}
-  // Ein Typ an einem Element = VERWEIS auf seine Karte: Name und Felder nur zum Lesen, Klick öffnet die Karte, ✕ löst nur die Verbindung.
-  function typVerweis(name,o){o=o||{};const r=name?recByName(name):null,rechts=o.seite==="o";
-    const row=h("div",{class:"slotrow"+(rechts?" o":"")});
-    if(o.port&&!rechts)row.append(o.port);
-    if(o.titel)row.append(h("span",{class:"slotlbl",style:"opacity:.7"},o.titel));
-    const txt=!name?(o.leer||"— ⊕ verbinden"):r?r.name+"("+(r.felder||[]).map(f=>f.name+": "+f.typ).join(", ")+")":"⚠ "+name+" — Typ fehlt";
-    row.append(h("span",{class:"slotlbl",style:"flex:1"+(rechts?";text-align:right":"")+(r?";cursor:pointer":"")+(name&&!r?";color:#cf6f68":""),
-      title:r?(r.namespace||"")+"."+r.name+" — Klick: Karte öffnen (Name und Felder werden dort bearbeitet)":"",onclick:r?()=>zeigeLadend("rec:"+r.name):null},txt));
-    (o.extra||[]).forEach(x=>row.append(x));
-    if(o.onRemove&&name)row.append(h("button",{class:"rm",title:o.removeTitel||"Verbindung lösen (der Typ bleibt)",onclick:o.onRemove},"✕"));
-    if(o.port&&rechts)row.append(o.port);
-    return row;}
-  // Eine Verbindung zwischen zwei Port-Beschreibungen herstellen — derselbe Weg wie ⊕ (applyLink), ohne Karte auf dem Board.
-  const verbindeInfo=(O,I)=>applyLink({__slot:O},{__slot:I});
-  // „＋" an einer Verbindungs-Zeile: einen neuen Typ als EIGENE Karte anlegen und sofort verbinden (Name/Felder dann an seiner Karte).
-  function neuerTypFuer(kind,basis,ns,verbinde){const r={name:uniq(basis),kind,namespace:ns||defaultNsGlobal(),
-      felder:kind==="command"&&ID_FELD()?[{_id:"f"+(NID++),name:ID_FELD(),typ:"Guid"}]:[]};
-    MODEL.records.push(r);verbinde(r);deFlash("＋ "+r.name+" als eigene Karte angelegt und verbunden — Name und Felder an seiner Karte",true);return r;}
   const neuKnopf=(titel,on,txt)=>h("button",{class:"rm",title:titel,onclick:on},txt||"＋");
-  // Der Signatur-Baustein einer Funktion: Eingang · Ausgänge (OneOf) · Fähigkeiten · Rumpf — nur auf IHRER Karte.
-  function funktionSignatur(body,f){const stamm=(f.name||"Funktion").replace(/^I(?=[A-ZÄÖÜ])/,"");
-    body.append(h("div",{class:"gsec",title:"record "+(f.auftrag||"X")+"(…) : IAuftrag<"+(f.name||"F")+">"},"◀ Eingang (Auftrag)"));
-    const ap=port("auftrag");ap.classList.add("i");reg("fk:auftrag:"+f._id,ap,{type:"auftragFn",dir:"in",fk:f._id});
-    body.append(typVerweis(f.auftrag,{port:ap,leer:"— ⊕ Auftrag verbinden",removeTitel:"Auftrag lösen (der Typ bleibt)",
-      onRemove:()=>{const r=recByName(f.auftrag);if(r&&r.funktion===f.name)delete r.funktion;f.auftrag="";render();},
-      extra:f.auftrag?[]:[neuKnopf("Neuen Auftrag als eigene Karte anlegen und verbinden",()=>neuerTypFuer("auftrag",stamm+"Auftrag",f.namespace,
-        r=>verbindeInfo({type:"auftragFn",dir:"out",rec:r.name},{type:"auftragFn",dir:"in",fk:f._id})))]}));
-    body.append(h("div",{class:"gsec",title:"Task<OneOf<…>> RufeAsync(…) — je Fall ein Ausgang, persistente Events"},"Ausgänge ▶ (OneOf)"));
-    (f.ergebnisse||[]).forEach(e=>{const o=port("event");o.classList.add("o");reg("fk:out:"+f._id+":"+e,o,{type:"evtOut",dir:"out",fk:f._id});
-      body.append(typVerweis(e,{port:o,seite:"o",removeTitel:"kein Ergebnis dieser Funktion mehr (der Typ bleibt)",
-        onRemove:()=>{f.ergebnisse=(f.ergebnisse||[]).filter(x=>x!==e);render();}}));});
-    {const op=port("open");op.classList.add("o");reg("fk:out:"+f._id+":open",op,{type:"evtOut",dir:"out",fk:f._id});
-      body.append(h("div",{class:"slotrow o"},neuKnopf("Neues Ergebnis-Event als eigene Karte anlegen und verbinden",()=>neuerTypFuer("event",
-          stamm+((f.ergebnisse||[]).length?"Fall":"Erledigt"),f.namespace,r=>verbindeInfo({type:"evtOut",dir:"out",fk:f._id},{type:"evtOut",dir:"in",rec:r.name}))),
-        h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"+ Ergebnis ⊕ (Event) ▶"),op));}
-    funktionFaehigkeiten(body,f);
-    funktionDienste(body,f);
-    // Rumpf = RufeAsync der Implementierung: Code-Eingang wie am Decider (📝 Code-Block, 🤖 LLM füllt ihn). Ohne Block läuft die
-    //   Funktion extern (Python-Worker über gRPC) — der Laufort steht in der Umgebung (Funktionen:<F>:Laufort = Extern).
-    body.append(h("div",{class:"gsec",title:f.implementierung?"public sealed class "+f.implementierung+" : "+f.name:"noch keine C#-Implementierung im Code"},
-      "Rumpf · RufeAsync"+(f.implementierung?" · "+f.implementierung:" (neu)")));
-    body.append(codePort("fk:impl:"+f._id,{k:"funktion",fk:f._id},null,"RufeAsync"));
-    // Python (Laufort Extern, konzept-werkbank §12.3 E13): die Implementierung in funktionen/<modul>.py — ⟳ legt sie an, sobald eine Umgebung die Funktion extern rechnet.
-    {const ext=Object.entries((MODEL.rahmen||{}).umgebungen||{}).filter(([,u])=>(((u||{}).Funktionen||{})[f.name]||{}).Laufort==="Extern").map(([n])=>n);
-      if(f.python){body.append(h("div",{class:"gsec",title:f.python.datei+" — class "+f.python.klasse+"("+(f.python.basis||"…Basis")+")"},
-          "Rumpf · rufe (Python) · "+f.python.klasse+(ext.length?" · Laufort Extern in "+ext.join(", "):" · (Laufort Host — läuft nur mit Extern)")));
-        body.append(codePort("fk:py:"+f._id,{k:"funktionPy",fk:f._id},null,"rufe"));}
-      else if(ext.length)body.append(h("div",{class:"gsec",style:"opacity:.7"},"Python: Laufort Extern in "+ext.join(", ")+" — ⟳ legt die Implementierung (funktionen/…py, Basis aus der Signatur) an, dann ✎/🤖 am Rumpf."));}
-    // Noch keine C#-Implementierung: eine Geste legt sie an (Klasse mit RufeAsync als throw-Stub, Konstruktor wie oben) — danach ✎/🤖.
-    if(!f.implementierung&&f.entwurf==null)body.append(h("div",{class:"slotrow"},h("button",{class:"add",title:"public sealed class "+f.name.replace(/^I(?=[A-ZÄÖÜ])/,"")+" : "+f.name+" — als Geste in den Code",
-      onclick:()=>{f.entwurf="";gTitel("ƒ "+f.name+": C#-Implementierung anlegen");render();}},"＋ C#-Implementierung anlegen")));}
-  function funktionCard(body,f){
-    // Wer ruft (Prozess-Regel „Dann rufe", Pipeline-Knoten ƒ, Ablauf „dann …") — ⊕ verbindet von hier aus.
-    body.append(topSlot("auftrag","◀ gerufen von ⊕ (Prozess-Regel · Pipeline-Knoten)",{type:"rufe",dir:"in",fk:f._id},"fk:in:"+f.name));
-    body.append(h("div",{class:"gsec"},"Name · Namespace"));
-    if(f.datei)body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default"},f.name+" — aus dem Code (Umbenennen ist ein Refactoring)"));
-    else body.append(nameInp(f,"name","Funktion","funktion"));
-    body.append(h("input",{value:f.namespace??"",oninput:e=>f.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
-    funktionSignatur(body,f);
-    if(INSP)dsFunktion(body,f);
-    // Ablauf als Kette (Prozess): was NACH dieser Funktion kommt — nur, wo ein Prozess sie ruft. In einer Pipeline verdrahtet der Fluss.
-    const sgs=[...new Set(MODEL.transitions.filter(t=>(t.dann||[]).some(d=>d.rufe===f.name)).map(t=>t.prozess))].map(n=>MODEL.sagas.find(x=>x.name===n)).filter(Boolean);
-    const fl=MODEL.fluesse.filter(x=>(x.knoten||[]).some(k=>k.art==="funktion"&&k.typ===f.name));
-    if(fl.length)body.append(h("div",{class:"gsec",style:"opacity:.7"},"gerufen in ⛓ "+fl.map(x=>x.name).join(", ")));
-    if(!sgs.length&&fl.length)return;
-    body.append(h("div",{class:"gsec"},"Ablauf ▶ dann …"));
-    kettenZeilen(body,"fk:"+f._id);
-    if(!sgs.length){body.append(h("div",{class:"gsec",style:"opacity:.6"},"Noch in keinem Ablauf — am Prozess unter „erst …“ oder an einer anderen Funktion unter „dann …“ einhängen."));return;}
-    const erg=(f.ergebnisse||[]);if(!erg.length){body.append(h("div",{class:"gsec",style:"opacity:.6"},"Erst ein Ergebnis festlegen — es löst den nächsten Schritt aus."));return;}
-    // Je Ergebnis (und Prozess) ein Ausgang: ⊕ → eine Funktion oder einen Command anklicken = nächster Schritt.
-    sgs.forEach(sg=>erg.forEach(e=>body.append(slotRow("command",(sgs.length>1?sg.name+" · ":"")+"bei "+e+" ▶ dann ⊕ (ƒ · Command)","r",
-      {type:"kette",dir:"out",saga:sg.name,bei:e},"kette:fk:"+f._id+":"+sg.name+":"+e))));
-  }
-  // Die Read-Fn eines Stores, deren Fähigkeits-Interface typ ist (neu angelegte Fns ohne festen Namen: ihr Vorschlag).
-  function leseFnZu(typ){for(const st of MODEL.stores)for(const fn of st.readFns||[])
-    if((fn.faehigkeit||(fn.sig?null:faehigkeitVorschlag(st,fn)))===typ)return {store:st,fn};return null;}
-  // Lese-Fähigkeiten: Parameter nach IAusfuehrung (je Aufruf aus einem Bereich). Nur lesen — schreiben bleibt dem Aggregat.
-  //   Verbunden wird wie am Handle: ⊕ → eine Read-Fn eines Stores anklicken (ihr Fähigkeits-Interface wird der Parameter).
-  function funktionFaehigkeiten(body,f){
-    body.append(h("div",{class:"gsec"},"⚙ liest (Lese-Fähigkeiten)"));
-    (f.faehigkeiten||[]).forEach((p,i)=>{const s=port("store");s.classList.add("o");reg("rcall:out:fk:"+f._id+":"+i,s,{type:"rcall",dir:"out",fk:f._id});
-      const z=leseFnZu(p.typ);
-      body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",title:"Fähigkeit entfernen",onclick:()=>{f.faehigkeiten.splice(i,1);render();}},"✕"),
-        h("span",{class:"slotlbl",style:"flex:1;text-align:right"+(z?";cursor:pointer":""),title:z?"Klick: "+z.store.name+"."+z.fn.name+" öffnen":"",onclick:z?()=>zeigeLadend("fn:"+z.fn._id):null},
-          "⚙ "+p.typ+" "+p.name+(z?" → "+z.store.name+"."+z.fn.name:"")),s));});
-    body.append(slotRow("store","+ Lese-Fähigkeit ⊕ (Read-Fn eines Stores) ▶","r",{type:"rcall",dir:"out",fk:f._id},"rcall:out:fk:"+f._id+":open"));
-    // Angeboten von (IDarf<IFunktion>, Akteur-Tor): ⊕ → einen Akteur anklicken.
-    {const anb=MODEL.akteure.filter(a=>(a.darf||[]).includes(f.name));
-      body.append(slotRow("darf","◀ angeboten von ⊕ (Akteur, IDarf)"+(anb.length?": ":""),"l",{type:"darf",dir:"in",rec:f.name,funktion:true},"darf:in:"+f.name));
-      if(anb.length)body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px;cursor:default"},
-        ...anb.map(a=>h("button",{class:"akt-dom",onclick:()=>waehle("akt:"+a._id)},(ART_SYM[a.art]||"👤 ")+a.name))));}
-    body.append(h("div",{class:"gsec",style:"opacity:.6"},(f.faehigkeiten||[]).length
-      ? "Mit Fähigkeiten läuft die Funktion nur im Host (Laufort Host) — nicht in Python/extern."
-      : "Laufort = Konfig der Umgebung (Funktionen:"+(f.name||"F")+":Laufort): Host (C#-Rumpf unten als Code-Block) oder Extern (Python-Worker, dann kein Code-Block)."));
-    {const lo=Object.entries((MODEL.rahmen||{}).umgebungen||{}).map(([n,u])=>[n,((u||{}).Funktionen||{})[f.name]]);
-      if(lo.length)body.append(h("div",{class:"gsec",style:"opacity:.8"},"Laufort je Umgebung: "+lo.map(([n,k])=>n+" = "+(k?(k.Laufort||"Host")+(k.Slots?" ×"+k.Slots:""):"⚠ nicht gebunden")).join(" · ")));}
-  }
 
   // ══ GERUFENE FUNKTION (IFunktion ohne Auf, docs/06 §6.5): Signatur (Methoden) · Umsetzungen (je ihr Konstruktor, ⊕ weitere gerufene) · Rümpfe aus
   //   der Datei. Sie steht nur im Konstruktor einer Funktion bzw. Umsetzung (CQRS089) — ⊕ „🧩 braucht". Welche Umsetzung läuft, sagt die Umgebung
@@ -905,9 +724,9 @@
   function ctorAbschnitt(body,f,impl){const liste=ctorVon(f,impl)||[],sfx=impl==null?"":":u"+impl,info={type:"gerufen",dir:"out",fb:f._id,fk:f._id,...(impl==null?{}:{impl})};
     liste.forEach((p,i)=>body.append(konstruktorZeile(p,"gr:out:fb:"+f._id+sfx+":"+i,info,()=>{liste.splice(i,1);gTitel("🧩 "+p.typ+" lösen");render();})));
     const op=port("gerufen");op.classList.add("o");reg("gr:out:fb:"+f._id+sfx+":open",op,info);
-    body.append(h("div",{class:"slotrow o"},neuKnopf("Neue gerufene Funktion als eigene Karte anlegen und in den Konstruktor nehmen",()=>{const g=neueGerufene(f.namespace);
+    body.append(h("div",{class:"slotrow o"},neuKnopf("Neue Technik als eigene Karte anlegen und in den Konstruktor nehmen",()=>{const g=neueGerufene(f.namespace);
         nimmGerufene(ctorVon(f,impl),g,f);render();deFlash("＋ "+g.name+" angelegt und verbunden — Methoden und Umsetzung an ihrer Karte",true);}),
-      h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"+ gerufene Funktion ⊕ (🧩) ▶"),op));
+      h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"+ Technik ⊕ (⚙) ▶"),op));
     body.append(h("div",{class:"slotrow o"},neuKnopf("Neuen Konfig-Record anlegen und in den Konstruktor nehmen",()=>{const vorher=new Set(MODEL.records.map(x=>x.name));
         neuerKnoten("konfig",undefined,undefined,{ns:f.namespace,reg:"fb:"+f._id,name:(f.name||"").replace(/^I(?=[A-ZÄÖÜ])/,"")+"Konfig"});
         const neu=MODEL.records.find(x=>!vorher.has(x.name));if(neu){ctorVon(f,impl).push({typ:neu.name,name:"konfig"});render();}}),
@@ -916,6 +735,90 @@
   //   Event/Hinweis) oder ＋ ein neues Ergebnis-Event, das ihr gehört. Die Ausgaben stehen in der Signatur (CQRS050). Ohne Auf ist sie gerufen:
   //   frei benannte Methoden, ihr Halter nimmt sie im Konstruktor (◀ genutzt von). Eine Klasse läuft im Host und nimmt im Konstruktor gerufene
   //   Funktionen und Konfig; eine Schnittstelle läuft draußen bzw. mit ihren Umsetzungen (Laufort bzw. Wahl: Umgebung).
+  // ⬡ GRAPH (docs/04 §4.4, docs/10 §10.3.4): record X(Knoten…) : IGraph. Je Knoten eine Zeile — Name (Konfig-Schlüssel der Instanz), Typ (Funktion,
+  //   Graph im Graphen oder Katalogfunktion), [Kopf] und von wem er bekommt ([Von(nameof(…))], je Quelle gesichert oder verlierbar). Köpfe, Ausgänge
+  //   und die Typen auf den Kanten leitet der Server aus dem Code ab; die Kanten stehen auf der Fläche zwischen den Karten der Knoten.
+  const typBasis=t=>String(t||"").split("<")[0].trim();
+  function graphKnotenKarte(t){const b=typBasis(t),f=MODEL.bausteinFunktionen.find(x=>x.name===b);if(f)return "fb:"+f._id;
+    const g=(MODEL.graphen||[]).find(x=>x.name===b);return g?"gr:"+g._id:null;}
+  // Wohin ein Typ geht, der den Graphen verlässt (wie die Laufzeit zustellt: Ziel im Typ, sonst Kopf genau eines Graphen oder Arbeit eines Akteurs).
+  function graphZiel(t,g){const r=recByName(t);if(!r)return "?";
+    if(r.kind==="command"&&r.aggregat)return "■ "+r.aggregat;
+    const z=[];if(r.kind==="command")(MODEL.graphen||[]).forEach(x=>{if(x!==g&&(x.koepfe||[]).includes(t))z.push("⬡ "+x.name);});
+    MODEL.akteure.forEach(a=>{if((a.hoert||[]).includes(t))z.push((r.kind==="command"?"Arbeit für ":"")+"👤 "+a.name);});
+    return z.length?z.join(", "):r.kind==="rejection"?"hört niemand":"⚠ kein Empfänger";}
+  function graphHerkunft(t,g){const z=[];
+    MODEL.decider.forEach(d=>{if((d.ergibt||[]).some(o=>o.event===t))z.push("Decide "+d.aggregat);});
+    MODEL.akteure.forEach(a=>{if((a.darf||[]).includes(t))z.push("👤 "+a.name);});
+    (MODEL.graphen||[]).forEach(x=>{if(x!==g&&(x.ausgaenge||[]).includes(t))z.push("⬡ "+x.name);});
+    (MODEL.graphen||[]).forEach(x=>(x.knoten||[]).forEach(k=>{if(typBasis(k.typ)===g.name&&(k.von||[]).length)z.push("innen in ⬡ "+x.name);}));
+    return z.length?[...new Set(z)].join(", "):"⚠ niemand gibt es hinein";}
+  function neuerGraphKnoten(g,typ){const stamm=typBasis(typ).replace(/^I(?=[A-ZÄÖÜ])/,"");let nm=stamm,i=2;
+    while((g.knoten||[]).some(k=>k.name===nm))nm=stamm+(i++);
+    const kat=(MODEL.katalog||[]).some(x=>x.name===typBasis(typ)),quelle=kat||((MODEL.bausteinFunktionen.find(x=>x.name===typBasis(typ))||{}).lauscht||[]).length>0;
+    (g.knoten=g.knoten||[]).push({typ,name:nm,kopf:!g.knoten.length&&!quelle,von:[],verlierbar:[]});gTitel(g.name+": Knoten "+nm);render();}
+  // Tiefe eines Knotens in der Von-Kette seines Graphen (0 = Kopf bzw. Quelle) — für die Spalten auf der Fläche.
+  function graphTiefe(typ){let best=0;
+    (MODEL.graphen||[]).forEach(g=>{const kn=g.knoten||[],memo={};
+      const t=(k,weg)=>{if(memo[k.name]!=null)return memo[k.name];if(weg.has(k.name))return 0;weg.add(k.name);
+        const v=(k.von||[]).map(x=>kn.find(y=>y.name===x)).filter(Boolean);return memo[k.name]=v.length?1+Math.max(...v.map(y=>t(y,weg))):0;};
+      kn.forEach(k=>{if(typBasis(k.typ)===typ)best=Math.max(best,t(k,new Set()));});});
+    return best;}
+  function graphKarte(body,g){
+    body.append(h("div",{class:"gsec"},"Name · Namespace"));
+    body.append(nameInp(g,"name","Graph",null));
+    if(!g.datei)body.append(h("input",{value:g.namespace??"",oninput:e=>g.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
+    body.append(h("div",{class:"gsec",title:"von außen: was keine Quelle im Graphen speist — aus einem Decide, von einem Akteur, vom Ausgang eines anderen Graphen"},"▶ Köpfe (von außen, abgeleitet)"));
+    if((g.koepfe||[]).length)g.koepfe.forEach(t=>body.append(h("div",{class:"gp-row",style:"cursor:pointer",title:"Klick: "+t+" öffnen",onclick:()=>zeigeLadend("rec:"+t)},"▶ "+t+"  ← "+graphHerkunft(t,g))));
+    else body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default"},g.quelle?"keine — ⚡ Quelle "+g.quelle+" am Kopf":"— (ein Knoten mit [Kopf] fehlt)"));
+    body.append(h("div",{class:"gsec",title:"was ein Knoten ausgibt und kein Knoten über Von nimmt"},"Ausgänge ▶ (abgeleitet)"));
+    if((g.ausgaenge||[]).length)g.ausgaenge.forEach(t=>body.append(h("div",{class:"gp-row",style:"cursor:pointer",title:"Klick: "+t+" öffnen",onclick:()=>zeigeLadend("rec:"+t)},t+"  → "+graphZiel(t,g))));
+    else body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default"},"—"));
+    body.append(h("div",{class:"gsec",title:"jeder Parameter des Records ist ein Knoten; die Reihenfolge bedeutet nichts"},"Knoten · [Kopf] · bekommt von [Von]"));
+    (g.knoten||[]).forEach((k,i)=>{const id=graphKnotenKarte(k.typ),kat=!id&&(MODEL.katalog||[]).some(x=>x.name===typBasis(k.typ));
+      body.append(h("div",{class:"frow"},
+        h("input",{value:k.name??"",placeholder:"Knoten",style:"max-width:130px",title:"Name des Knotens = Konfig-Schlüssel in der Instanz",
+          onchange:e=>{const v=e.target.value.trim(),alt=k.name;if(!v||v===alt)return;k.name=v;
+            (g.knoten||[]).forEach(x=>{x.von=(x.von||[]).map(z=>z===alt?v:z);x.verlierbar=(x.verlierbar||[]).map(z=>z===alt?v:z);});gTitel(g.name+": Knoten "+alt+" → "+v);render();}}),
+        h("span",{class:"slotlbl",style:"flex:1"+(id?";cursor:pointer":""),title:id?"Klick: Karte öffnen":kat?"Katalogfunktion des Frameworks":"⚠ Typ fehlt",
+          onclick:()=>{if(id)zeigeLadend(id);}},(kat?"⚡ ":id&&id.startsWith("gr:")?"⬡ ":id?"ƒ ":"⚠ ")+k.typ),
+        h("label",{class:"cbx",title:"[Kopf]: nimmt von außen, was keine Quelle im Graphen speist — je Eingangstyp genau einer"},
+          h("input",{type:"checkbox",onchange:e=>{k.kopf=e.target.checked;gTitel(g.name+": "+k.name+(k.kopf?" ist Kopf":" kein Kopf"));render();},...(k.kopf?{checked:"checked"}:{})}),"Kopf"),
+        h("button",{class:"rm",title:"Knoten entfernen (seine Kanten gehen mit)",onclick:()=>{g.knoten.splice(i,1);
+          g.knoten.forEach(x=>{x.von=ohneX(x.von,k.name);x.verlierbar=ohneX(x.verlierbar,k.name);});gTitel(g.name+": Knoten "+k.name+" entfernt");render();}},"✕")));
+      const andere=(g.knoten||[]).filter(x=>x!==k);
+      if(andere.length)body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px;cursor:default;padding-left:16px;white-space:normal"},
+        h("span",{class:"slotlbl",style:"opacity:.7"},"bekommt von"),...andere.map(x=>{const an=(k.von||[]).includes(x.name),vl=(k.verlierbar||[]).includes(x.name);
+          return h("span",{style:"display:inline-flex;gap:2px"},
+            h("button",{class:"akt-dom"+(an?" an":""),title:an?"[Von(nameof("+x.name+"))] entfernen":"[Von(nameof("+x.name+"))] setzen — die Ports, deren Typ "+x.name+" ausgibt",
+              onclick:()=>{k.von=an?ohneX(k.von,x.name):[...(k.von||[]),x.name];if(an)k.verlierbar=ohneX(k.verlierbar,x.name);gTitel(g.name+": "+k.name+(an?" nicht mehr":"")+" von "+x.name);render();}},(an?"✓ ":"")+x.name),
+            an?h("button",{class:"akt-dom"+(vl?" an":""),title:"gesichert: der Absender wartet auf „fertig“ · verlierbar: einmal geschickt, hält den Kopf nicht auf",
+              onclick:()=>{k.verlierbar=vl?ohneX(k.verlierbar,x.name):[...(k.verlierbar||[]),x.name];gTitel(g.name+": "+x.name+" → "+k.name+(vl?" gesichert":" verlierbar"));render();}},vl?"⇢ verlierbar":"gesichert"):null);})));});
+    // ＋ Knoten: Funktion, Quelle, Graph im Graphen oder Katalogfunktion — oder eine neue Funktion mit dem getippten Namen.
+    const such=h("input",{placeholder:"＋ Knoten: Funktion, Graph oder Katalog suchen — oder neuen Namen tippen"}),liste=h("div",{style:"display:flex;flex-wrap:wrap;gap:4px;margin:4px 0"});
+    const kandidaten=()=>[...MODEL.bausteinFunktionen.filter(f=>!istGerufen(f)).map(f=>({n:f.name,a:(f.lauscht||[]).length?"⚡":"ƒ"})),
+      ...(MODEL.graphen||[]).filter(x=>x!==g).map(x=>({n:x.name,a:"⬡"})),...(MODEL.katalog||[]).map(x=>({n:x.name,a:"⚡ Katalog ·"}))];
+    const zeige=()=>{liste.innerHTML="";const q=such.value.trim(),ql=q.toLowerCase();
+      kandidaten().filter(c=>!ql||c.n.toLowerCase().includes(ql)).slice(0,30).forEach(c=>liste.append(h("button",{class:"akt-dom",onclick:()=>neuerGraphKnoten(g,c.n)},c.a+" "+c.n)));
+      if(q&&/^[A-Za-zÄÖÜäöüß_][\wÄÖÜäöüß]*$/.test(q)&&!kandidaten().some(c=>c.n===q))liste.append(h("button",{class:"akt-dom",title:"Neue Funktion (Klasse im Host) anlegen und als Knoten einsetzen",
+        onclick:()=>{const nm=uniq(q);MODEL.bausteinFunktionen.push({_id:"fb"+(NID++),name:nm,namespace:g.namespace,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[]});neuerGraphKnoten(g,nm);}},"＋ neue Funktion „"+q+"“"));};
+    such.oninput=zeige;body.append(such,liste);zeige();
+    // Instanzen (docs/10 §10.3.5): ein Graph läuft erst als Instanz — je Umgebung eine Datei graphen/<instanz>.json.
+    body.append(h("div",{class:"gsec",title:"umgebungen/"+(WB.umgName||"?")+"/graphen/<instanz>.json"},"Instanzen in „"+(WB.umgName||"?")+"“"));
+    const inst=Object.entries(WB.instanzen||{}).filter(([,v])=>v&&v.Graph===g.name);
+    inst.forEach(([n])=>body.append(h("div",{class:"gp-row",style:"cursor:pointer",onclick:()=>waehle("host:inst:"+n)},"⬡ "+n)));
+    const innen=(MODEL.graphen||[]).filter(x=>(x.knoten||[]).some(k=>typBasis(k.typ)===g.name));
+    if(!inst.length)body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},innen.length?"keine eigene — läuft als Knoten in "+innen.map(x=>x.name).join(", "):"⚠ keine — er läuft erst als Instanz"));
+    if(g.datei)body.append(h("button",{class:"add",onclick:()=>instanzAnlegen(g.name)},"＋ Instanz in „"+(WB.umgName||"?")+"“"));}
+  // Eine Quelle (Lausche statt Auf): was sie je Element meldet — Commands ohne Ziel; nichts davon steht im Log, was sie gesehen hat, hält ihr Zustand.
+  function quellAbschnitt(body,f){if(!(f.lauscht||[]).length&&(f.eingaenge||[]).length)return;
+    body.append(h("div",{class:"gsec",title:"IAsyncEnumerable<…> Lausche(CancellationToken) — eine Quelle steht am Kopf ihres Graphen"},"⚡ Quelle: meldet (Lausche) ▶"));
+    (f.lauscht||[]).forEach(a=>{const s=anchorDot("sagacmd");s.classList.add("o");
+      body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",title:"nicht mehr melden",onclick:()=>{f.lauscht=ohneX(f.lauscht,a);render();}},"✕"),
+        h("span",{class:"slotlbl",style:"flex:1;text-align:right;cursor:pointer",onclick:()=>zeigeLadend("rec:"+a)},"→ "+a),s));});
+    body.append(slotRow("sagacmd","+ meldet ⊕ (Command ohne Ziel) ▶","r",{type:"sagaCmd",dir:"out",fb:f._id,ein:"lauscht"},"fb:lauscht:"+f._id));
+    {const z=(f.konstruktor||[]).find(p=>/^IZustand</.test(p.typ||""));
+      body.append(h("div",{class:"gsec",style:"opacity:.8"},z?"Zustand: "+z.typ+" — gesichert je Instanz und Knoten":"ohne Zustand — was sie gesehen hat, wüsste sie nach einem Neustart nicht"));}}
   function funktionsKarte(body,f){
     const gerufen=istGerufen(f);
     if(gerufen){body.append(topSlot("gerufen","◀ genutzt von ⊕ (Funktion · Umsetzung)",{type:"gerufen",dir:"in",fb:f._id,fk:f._id},"gr:in:"+f._id));
@@ -936,28 +839,31 @@
       const ip=anchorDot(recArt(e.eingang)==="rejection"?"rejection":"event");ip.classList.add("i");
       reg("fb:ein:"+f._id+":"+i,ip,{type:"evtUse",dir:"in",fb:f._id,fk:f._id,ein:i,anker:true});
       body.append(h("div",{class:"slotrow"},ip,h("span",{class:"slotlbl",style:"flex:1;cursor:pointer",title:"Klick: "+e.eingang+" öffnen",onclick:()=>zeigeLadend("rec:"+e.eingang)},
-          "Auf("+e.eingang+")"+(e.hinweis?" · Hinweis":"")),
-        h("label",{class:"cbx",title:"Strom: beliebig viele Ausgaben über die Zeit (IAsyncEnumerable)"},h("input",{type:"checkbox",onchange:ev=>{e.strom=ev.target.checked;render();},...(e.strom?{checked:"checked"}:{})}),"Strom"),
+          "Auf("+e.eingang+")"+(recArt(e.eingang)==="event"?" · Antwort auf den eigenen Command":"")),
+        h("label",{class:"cbx",title:"Herkunft h: Stream, Version, Log-Zeit, Akteur, NeueId — für abgeleitete Ids"},h("input",{type:"checkbox",onchange:ev=>{e.herkunft=ev.target.checked;render();},...(e.herkunft?{checked:"checked"}:{})}),"Herkunft"),
+        h("label",{class:"cbx",title:"Strom: keine bis viele Ausgaben je Ankunft (IEnumerable bzw. IAsyncEnumerable) — sonst genau eine (T) bzw. einer der Fälle (OneOf)"},h("input",{type:"checkbox",onchange:ev=>{e.strom=ev.target.checked;render();},...(e.strom?{checked:"checked"}:{})}),"Strom"),
         h("button",{class:"rm",title:"Eingang entfernen (das Auf fällt weg)",onclick:()=>{f.eingaenge.splice(i,1);gTitel("Eingang "+e.eingang+" entfernen");render();}},"✕")));
       (e.ausgaben||[]).forEach(a=>{const cmd=recArt(a)==="command",s=anchorDot(cmd?"sagacmd":recArt(a)==="rejection"?"rejection":"event");s.classList.add("o");
         reg("fb:aus:"+f._id+":"+i+":"+a,s,{type:cmd?"sagaCmd":"evtOut",dir:"out",fb:f._id,fk:f._id,ein:i,anker:true});
         body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",title:"Ausgabe lösen (der Typ bleibt)",onclick:()=>{e.ausgaben=ohneX(e.ausgaben,a);render();}},"✕"),
           h("span",{class:"slotlbl",style:"flex:1;text-align:right;cursor:pointer",title:"Klick: "+a+" öffnen",onclick:()=>zeigeLadend("rec:"+a)},"→ "+a+(cmd?" (Command)":"")),s));});
-      body.append(slotRow("event","+ Ausgabe ⊕ (Event · Hinweis) ▶","r",{type:"evtOut",dir:"out",fb:f._id,fk:f._id,ein:i},"fb:ausE:"+f._id+":"+i));
       body.append(slotRow("sagacmd","+ Ausgabe ⊕ (Command) ▶","r",{type:"sagaCmd",dir:"out",fb:f._id,fk:f._id,ein:i},"fb:ausC:"+f._id+":"+i));
-      body.append(h("div",{class:"slotrow o"},neuKnopf("Neues Ergebnis-Event anlegen — es gehört dieser Funktion (sie gibt es aus)",()=>{
+      body.append(slotRow("rejection","+ Ausgabe ⊕ (Hinweis) ▶","r",{type:"evtOut",dir:"out",fb:f._id,fk:f._id,ein:i},"fb:ausE:"+f._id+":"+i));
+      body.append(h("div",{class:"slotrow o"},neuKnopf("Neuen Command ohne Ziel anlegen — der nächste Knoten im Graphen nimmt ihn (Von)",()=>{
           const stamm=(f.name||"Funktion").replace(/^I(?=[A-ZÄÖÜ])/,""),vorher=new Set(MODEL.records.map(x=>x.name));
-          neuerKnoten("event",undefined,undefined,{ns:f.namespace,reg:"fb:"+f._id,name:stamm+"Ergebnis"});
+          neuerKnoten("command",undefined,undefined,{ns:f.namespace,reg:"fb:"+f._id,name:stamm+"Ergebnis",still:true});
           const neu=MODEL.records.find(x=>!vorher.has(x.name));if(neu){(e.ausgaben=e.ausgaben||[]).push(neu.name);render();}}),
-        h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"＋ neues Ergebnis-Event")));});
-    body.append(slotRow("event","+ Eingang ⊕ (Event · Hinweis · Quelle)","l",{type:"evtUse",dir:"in",fb:f._id,fk:f._id,ein:"open"},"fb:ein:"+f._id+":open"));}
-    if(f.klasse){body.append(h("div",{class:"gsec",title:"Konstruktor der Klasse: gerufene Funktionen, Konfig-Records (Konfig:<Record>), ILogger<T>"},"🧩 braucht (Konstruktor)"));
+        h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"＋ neuer Command ohne Ziel")));});
+    body.append(slotRow("command","+ Eingang ⊕ (Command ohne Ziel)","l",{type:"cmd",dir:"in",fb:f._id,ein:"open"},"fb:einC:"+f._id+":open"));
+    body.append(slotRow("event","+ Antwort ⊕ (Event, das ein eigener Command entschied)","l",{type:"evtUse",dir:"in",fb:f._id,fk:f._id,ein:"open"},"fb:ein:"+f._id+":open"));
+    quellAbschnitt(body,f);}
+    if(f.klasse){body.append(h("div",{class:"gsec",title:"Konstruktor der Klasse: Konfig-Records (Werte am Knoten der Instanz), Technik, IZustand<T>, ILogger<T>"},"⚙ braucht (Konstruktor)"));
       ctorAbschnitt(body,f,null);}
     else umsetzungsAbschnitt(body,f,gerufen);}
   // Signatur einer gerufenen Funktion: je Methode Rückgabe, Name, Parameter (an der Schnittstelle bzw. Klasse; eine Umsetzung bekommt einen Stub).
   function methodenAbschnitt(body,f){
     body.append(h("div",{class:"gsec",title:(f.klasse?"public sealed class ":"public interface ")+f.name+" : IFunktion { Rückgabe Methode(Typ name, …); … } — ohne Auf: ihr Halter ruft sie"},
-      "🧩 gerufene Methoden"+((f.methoden||[]).length?"":" (keine — mit ＋ wird die Funktion gerufen statt Eingänge zu hören)")));
+      "⚙ Methoden (Technik)"+((f.methoden||[]).length?"":" (keine — mit ＋ wird sie Technik: ihr Halter ruft sie, statt dass sie Eingänge hört)")));
     (f.methoden||[]).forEach((m,mi)=>body.append(h("div",{class:"frow"},
       h("input",{value:m.rueckgabe??"",list:"de-typen",placeholder:"Rückgabe",style:"max-width:90px",onchange:e=>{m.rueckgabe=e.target.value.trim()||"void";render();}}),
       // Eine Methode aus dem Code: Umbenennen ist ein Refactoring (Renamer — Schnittstelle UND Umsetzungen); neu: einfach der Name.
@@ -988,21 +894,9 @@
       if(lo.length)body.append(h("div",{class:"gsec",style:"opacity:.8"},"Umsetzung je Umgebung: "+lo.map(([n,k])=>n+" = "+(k&&k.Implementierung?k.Implementierung
         :einzig?einzig+" (die einzige)":"⚠ wählen")).join(" · ")+" — eingestellt im 🖥 Host-Rahmen (Funktionen)"));}}
   const recArt=nm=>(recByName(nm)||{}).kind||"";
-  function funktionDienste(body,f){
-    body.append(h("div",{class:"gsec",title:"Konstruktor der C#-Implementierung: gerufene Funktionen, Konfig-Records (Konfig:<Record>), ILogger<T>"},"🧩 braucht (Konstruktor)"));
-    (f.konstruktor||[]).forEach((p,i)=>body.append(konstruktorZeile(p,"gr:out:fk:"+f._id+":"+i,{type:"gerufen",dir:"out",fk:f._id},
-      ()=>{f.konstruktor.splice(i,1);gTitel("🧩 "+p.typ+" lösen");render();})));
-    const op=port("gerufen");op.classList.add("o");reg("gr:out:fk:"+f._id+":open",op,{type:"gerufen",dir:"out",fk:f._id});
-    body.append(h("div",{class:"slotrow o"},neuKnopf("Neue gerufene Funktion als eigene Karte anlegen und verbinden",()=>{const g=neueGerufene(f.namespace);
-        verbindeInfo({type:"gerufen",dir:"out",fk:f._id},{type:"gerufen",dir:"in",fb:g._id});
-        deFlash("＋ "+g.name+" angelegt und verbunden — Methoden und Umsetzung an ihrer Karte",true);}),
-      h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"+ gerufene Funktion ⊕ (🧩) ▶"),op));}
-
   // ══ AKTEURE: von wem kommt was? (docs/konzept-akteure.md §2 und §8) ══
   //   Deklariert ist nur IDarf (direkt); alles Abgeleitete (Kette, Akteur-Menge je Karte, Akteur-Rahmen, Reihenfolge, Pfade) rechnet der Server
   //   (DomainEditor/AkteurAnteile.cs → rahmen.akteurMengen, GraphExtractor/Sicht → board.sicht). Hier wird nur nachgeschlagen.
-  const ART_SYM={Mensch:"👤 ",Maschine:"⚙ ",Ki:"🤖 "};
-  const artBasis=a=>a==="Mensch"?"IMensch":a==="Maschine"?"IMaschine":a==="Ki"?"IKi":"IAkteur";
   const OHNE_AKT="§ohneAkteur";
   function istEingangName(nm){const r=recByName(nm);return !!r&&(r.kind==="command"||r.kind==="query");}
   // Von welchem Akteur kommt eine Nachricht: direkt (IDarf) bzw. über die Kette.
@@ -1046,56 +940,43 @@
     let id=n.id,b=besitzVon(id);
     for(let i=0;b&&!b.startsWith("§")&&i<8;i++){id=b;b=besitzVon(b);}
     return b===ANW_KEY?id:b;}
-  const istRegionKarte=ns=>typeof ns==="string"&&/^(agg|fb|dn|sto):/.test(ns);
-  const regionArt=ns=>ns===RAND_KEY?"Rand":ns===BEGR_KEY?"Begriffe":ns.startsWith("agg:")?"Aggregat":ns.startsWith("fb:")?"Funktion":ns.startsWith("sto:")?"Sicht":"";
-  const regionRang=ns=>ns===RAND_KEY?0:ns.startsWith("agg:")?1:ns.startsWith("fb:")?2:ns.startsWith("sto:")?4:ns===BEGR_KEY?5:6;
+  const istRegionKarte=ns=>typeof ns==="string"&&/^(agg|gr|fb|dn|sto):/.test(ns);
+  const regionArt=ns=>ns===RAND_KEY?"Rand":ns===BEGR_KEY?"Begriffe":ns.startsWith("agg:")?"Aggregat":ns.startsWith("gr:")?"Graph":ns.startsWith("fb:")?"Funktion":ns.startsWith("sto:")?"Sicht":"";
+  const regionRang=ns=>ns===RAND_KEY?0:ns.startsWith("agg:")?1:ns.startsWith("gr:")?2:ns.startsWith("fb:")?3:ns.startsWith("sto:")?4:ns===BEGR_KEY?5:6;
   // 👤 AKTEUR: Name, Namespace, und EINE Liste — was er darf (IDarf<T>). ⊕ „+ darf" → passende Commands/Queries
   //   leuchten → anklicken = erlauben, ✓-Karte = entziehen. Was er HÖREN darf, ist abgeleitet (Generator), keine Eingabe.
   function akteurCard(body,a){
     body.append(h("div",{class:"gsec"},"Name · Namespace"));
     body.append(nameInp(a,"name","AkteurName","akteur"));
     body.append(h("input",{value:a.namespace??"",oninput:e=>a.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
-    // Art = Basistyp (IMensch / IMaschine / IKi) — ein Akteur ist immer ein Record, nie ein Dienst.
-    body.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Art"),
-      h("select",{onchange:e=>{a.art=e.target.value||undefined;render();}},
-        ...[["","— (nur IAkteur)"],["Mensch","👤 Mensch (IMensch)"],["Maschine","⚙ Maschine (IMaschine)"],["Ki","🤖 KI (IKi)"]]
-          .map(([v,t])=>h("option",{value:v,...((a.art||"")===v?{selected:"selected"}:{})},t)))));
-    body.append(h("div",{class:"gsec",title:"public sealed record "+a.name+" : "+artBasis(a.art)+", IDarf<…>"},"darf ▶ — was er SELBST hineingibt"));
+    body.append(h("div",{class:"gsec",title:"public sealed record "+a.name+" : IAkteur, IDarf<…>, IHoert<…>"},"darf ▶ — was er SELBST hineingibt (Command, Query, Hinweis)"));
     if(!(a.darf||[]).length)body.append(h("div",{class:"gp-row gp-leer"},"— noch nichts (am Tor käme er nirgends durch)"));
-    (a.darf||[]).filter(nm=>!MODEL.funktionen.some(f=>f.name===nm)).forEach(nm=>{const r=recByName(nm);
+    (a.darf||[]).forEach(nm=>{const r=recByName(nm);
       const art=r?kindLabel(r.kind):"⚠ unbekannt";
       const s=anchorDot("darf");s.classList.add("o");reg("akt:darf:"+a._id+":"+nm,s,{type:"darf",dir:"out",akt:a._id,anker:true});
       body.append(h("div",{class:"slotrow o"},
         h("span",{class:"slotlbl",style:"flex:1;text-align:right"},nm+" · "+art),
         h("button",{class:"rm",title:"Recht entziehen",onclick:()=>{a.darf=a.darf.filter(x=>x!==nm);render();}},"✕"),s));});
     body.append(slotRow("darf","+ darf ⊕ ("+akteurDarfLabel()+") ▶","r",{type:"darf",dir:"out",akt:a._id},"akt:darf:"+a._id+":open"));
-    // Angebotene Katalog-Funktionen (IDarf<IFunktion>, Akteur-Tor): er führt sie DRAUSSEN aus (z. B. ein Python-Worker am Vermittler).
-    {const fs=(a.darf||[]).filter(nm=>MODEL.funktionen.some(f=>f.name===nm));
-      body.append(h("div",{class:"gsec",title:"public sealed record "+a.name+" : …, IDarf<IFunktion> — am Vermittler darf er diese Funktion anbieten (Laufort extern)"},"ƒ bietet an (führt aus)"));
-      fs.forEach(nm=>{const f=MODEL.funktionen.find(x=>x.name===nm);const s=anchorDot("darf");s.classList.add("o");reg("akt:darf:"+a._id+":"+nm,s,{type:"darf",dir:"out",akt:a._id,anker:true});
-        body.append(h("div",{class:"slotrow o"},
-        h("span",{class:"slotlbl",style:"flex:1;text-align:right;cursor:pointer",onclick:()=>waehle("fk:"+f._id)},"ƒ "+nm),
-        h("button",{class:"rm",title:"nicht mehr anbieten",onclick:()=>{a.darf=a.darf.filter(x=>x!==nm);render();}},"✕"),s));});
-      // ⊕ → eine Funktions-Karte anklicken (IDarf<IFunktion>).
-      body.append(slotRow("darf","+ bietet an ⊕ (Funktion) ▶","r",{type:"darf",dir:"out",akt:a._id,nurFunktion:true},"akt:darffk:"+a._id+":open"));}
+    // Was zu ihm kommt (IHoert<T>): ein Command ohne Ziel ist ARBEIT (die Werkstatt gibt ihn einer Sitzung, die ihn verkörpert, bis eine Antwort
+    //   kommt), ein Event oder Hinweis KENNTNIS (gepusht, verlierbar).
+    body.append(h("div",{class:"gsec",title:"IHoert<T> — Command ohne Ziel = Arbeit, Event/Hinweis = Kenntnis"},"hört ◀ — Arbeit und Kenntnis"));
+    if(!(a.hoert||[]).length)body.append(h("div",{class:"gp-row gp-leer"},"— nichts"));
+    (a.hoert||[]).forEach(nm=>{const r=recByName(nm),arbeit=r&&r.kind==="command";
+      body.append(h("div",{class:"slotrow"},anchorDot(arbeit?"command":r&&r.kind==="rejection"?"rejection":"event"),
+        h("span",{class:"slotlbl",style:"flex:1;cursor:pointer",onclick:()=>zeigeLadend("rec:"+nm)},nm+" · "+(arbeit?"Arbeit":"Kenntnis")),
+        h("button",{class:"rm",title:"hört es nicht mehr",onclick:()=>{a.hoert=ohneX(a.hoert,nm);render();}},"✕")));});
+    body.append(slotRow("command","+ Arbeit ⊕ (Command ohne Ziel)","l",{type:"cmd",dir:"in",akt:a._id,hoert:true},"akt:arbeit:"+a._id));
+    body.append(slotRow("event","+ Kenntnis ⊕ (Event · Hinweis)","l",{type:"evtUse",dir:"in",akt:a._id,hoert:true},"akt:kenntnis:"+a._id));
     // Was in seinem Namen über eine Kette entsteht (abgeleitet, nicht deklariert): Fluss/Prozess aus seinen Events.
     {const bew=Object.entries((MODEL.rahmen||{}).akteurMengen||{}).filter(([nm,m])=>(m.kette||[]).includes(a.name)&&!(m.direkt||[]).includes(a.name)&&istEingangName(nm)).map(([nm])=>nm).sort();
-      body.append(h("div",{class:"gsec",title:"abgeleitet: Commands, die ein Fluss oder ein Prozess aus Events dieses Akteurs erzeugt — kein IDarf nötig, am Tor nicht erlaubt"},"bewirkt über die Kette (abgeleitet)"));
+      body.append(h("div",{class:"gsec",title:"abgeleitet: Commands, die ein Graph oder eine Frist in seinem Namen erzeugt — kein IDarf nötig, am Tor nicht erlaubt"},"bewirkt über die Kette (abgeleitet)"));
       body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},bew.length?bew.join(", "):"— nichts"));}
     const wirkt=akteurDomaenen(a.name);
     if(wirkt.length){body.append(h("div",{class:"gsec"},"wirkt in"));
       body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px"},...wirkt.map(d=>h("button",{class:"akt-dom",title:"Rahmen "+domLabel(d)+" · "+a.name+" einpassen",
         onclick:()=>{const fr=world&&[...world.querySelectorAll(".grahmen.akt")].find(x=>x.dataset.ns===d&&x.dataset.akt===a.name);
           if(fr)einpassenRahmen({x1:fr.offsetLeft,y1:fr.offsetTop,x2:fr.offsetLeft+fr.offsetWidth,y2:fr.offsetTop+fr.offsetHeight});}},domLabel(d)))));}
-    // Vertrag (Akteur-Konzept §3): worauf er DRAUSSEN reagiert — je Auf(Event) eine Karte „Zusage" (Spalte neben dem Akteur). ⊕ → Events leuchten.
-    body.append(h("div",{class:"gsec",title:"public interface "+vertragsTyp(a)+" : IAkteurVertrag<"+a.name+"> { … Auf(Event e); } — der Client (Python, Blazor) implementiert ihn; was er so hineingibt, darf er"},
-      "Zusagen ◀ (Vertrag "+vertragsTyp(a)+")"));
-    (a.vertrag||[]).forEach((r,i)=>{const s=anchorDot("event");s.classList.add("i");reg("akt:auf:"+a._id+":"+i,s,{type:"evtUse",dir:"in",akt:a._id,aufIdx:i,anker:true});
-      const row=h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"flex:1"},(r.eingang||"?")+((r.ausgaenge||[]).length?" → "+r.ausgaenge.join(", ")+(r.strom?" (Strom)":""):" · zur Kenntnis")),
-        h("button",{class:"rm",title:"Zusage entfernen",onclick:e=>{e.stopPropagation();a.vertrag.splice(i,1);render();}},"✕"));
-      row.onclick=()=>waehle(aufId(a,i));body.append(row);});
-    {const oi=port("event");oi.classList.add("i");reg("akt:auf:"+a._id+":open",oi,{type:"evtUse",dir:"in",akt:a._id,aufIdx:"open"});
-      body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Zusage ⊕ (Event)")));}
     // 🔌 Clients (docs/konzept-akteure.md §4): wer diesen Vertrag trägt (Port für „trägt ⊕") und wo der Akteur sonst ankommt.
     // 🔌 verkörpert von: Port für „verkörpert ⊕" am Client (IVerkoerpert<A>).
     {const tp=port("traegt");tp.classList.add("i");reg("akt:verkoerpert:"+a._id,tp,{type:"verkoerpert",dir:"in",akt:a._id});
@@ -1104,15 +985,11 @@
     {const cs=MODEL.clients.filter(c=>clientAkteure(c).includes(a.name));
       if(cs.length)body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px;cursor:default"},h("span",{class:"slotlbl"},"🔌 Clients:"),
         ...cs.map(c=>h("button",{class:"akt-dom",onclick:()=>waehle("cl:"+c._id)},clientAnzeige(c)))));}
-    const hoert=akteurHoert(a);
-    body.append(h("div",{class:"gsec",title:(a.vertrag||[]).length?"abgeleitet: genau die Events seines Vertrags + Events der Projektionen hinter seinen Queries"
-      :"abgeleitet: Events der Aggregate seiner Commands + Events der Projektionen hinter seinen Queries"},"hört (abgeleitet)"));
-    body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},hoert.length?hoert.join(", "):"— nichts"));
   }
-  // 🔌 CLIENT-Panel (docs/konzept-akteure.md §4): der eine Vertrag dieses Clients — verkörpert (Akteure) · hört (Kenntnis). Je Abschnitt
-  //   ⊕ → passende Karten leuchten → anklicken = verbinden / ✓ = lösen. Was er trägt, sendet und fragt, folgt aus den IDarf der Akteure.
+  // 🔌 CLIENT-Panel (docs/konzept-akteure.md §4): ein Record, der nur nennt, wen er verkörpert (IVerkoerpert<A>, ⊕ → Akteure leuchten).
+  //   Was über seine Leitung geht — was er sendet, fragt, als Arbeit annimmt und zur Kenntnis hört —, folgt aus IDarf und IHoert der Akteure.
   function clientCard(body,c){
-    body.append(h("div",{class:"gsec",title:"public interface "+c.name+" : IClientVertrag, …"},"Name (Interface) · Namespace"));
+    body.append(h("div",{class:"gsec",title:"public sealed record "+c.name+" : IClient, IVerkoerpert<…>"},"Name · Namespace"));
     if(!c.datei)body.append(nameInp(c,"name","IClient","client"));
     else body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default"},c.name+" — aus dem Code (Umbenennen ist ein Refactoring)"));
     body.append(h("input",{value:c.namespace??"",oninput:e=>c.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
@@ -1122,21 +999,17 @@
     body.append(h("div",{class:"gsec",title:"IVerkoerpert<A> — befugt ist der Akteur: was über die Leitung geht, sind seine IDarf. Am Handshake gilt: ∩ Akteure des Tokens"},"👤 verkörpert"));
     (c.verkoerpert||[]).forEach(n=>{const a=MODEL.akteure.find(x=>x.name===n),s=anchorDot("traegt");s.classList.add("o");
       reg("cl:verkoerpert:"+c._id+":"+n,s,{type:"verkoerpert",dir:"out",client:c._id,anker:true});
-      body.append(h("div",{class:"slotrow o"},h("button",{class:"akt-dom",style:"flex:1;text-align:right",onclick:()=>a&&waehle("akt:"+a._id)},(ART_SYM[a&&a.art]||"👤 ")+n+(a?"":" · ⚠ kein Akteur")),
+      body.append(h("div",{class:"slotrow o"},h("button",{class:"akt-dom",style:"flex:1;text-align:right",onclick:()=>a&&waehle("akt:"+a._id)},"👤 "+n+(a?"":" · ⚠ kein Akteur")),
         h("button",{class:"rm",title:"nicht mehr verkörpern",onclick:()=>{c.verkoerpert=ohneX(c.verkoerpert,n);render();}},"✕"),s));});
     body.append(slotRow("traegt","+ verkörpert ⊕ (Akteur) ▶","r",{type:"verkoerpert",dir:"out",client:c._id},"cl:verkoerpert:"+c._id+":open"));
     // ↺ trägt · ▶ sendet · ? fragt: abgeleitet aus den IDarf der verkörperten Akteure (nur lesend; ändern am Akteur).
     {const ps=clientPorts(c).filter(p=>p.ri!=="kenntnis");
-      body.append(h("div",{class:"gsec",title:"die IDarf der verkörperten Akteure — getragen (Funktion), gesendet (Command, Quell-Nachricht, Hinweis), gefragt (Query)"},"über die Leitung (abgeleitet)"));
+      body.append(h("div",{class:"gsec",title:"aus IDarf und IHoert der verkörperten Akteure — Arbeit (Command ohne Ziel), gesendet (Command, Hinweis), gefragt (Query)"},"über die Leitung (abgeleitet)"));
       body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},ps.length
         ?ps.map(p=>(p.ri==="traegt"?"↺ ":p.ri==="fragt"?"? ":"▶ ")+p.msg+" · als "+(p.akteure||[]).join("/")).join("\n"):"— nichts"));}
-    // ◀ hört: eigene Kenntnis (void Auf(E)) — ohne Ausgabe.
-    body.append(h("div",{class:"gsec",title:"void Auf(E e) im Client-Vertrag — nur zur Kenntnis (UI-Aktualisierung), verlierbar zugestellt"},"◀ hört (Kenntnis)"));
-    (c.kenntnis||[]).forEach(nm=>{const s=anchorDot("event");s.classList.add("i");reg("cl:kenntnis:"+c._id+":"+nm,s,{type:"evtUse",dir:"in",client:c._id,anker:true});
-      body.append(h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"flex:1"},"◀ "+nm),
-        h("button",{class:"rm",title:"nicht mehr hören",onclick:()=>{c.kenntnis=ohneX(c.kenntnis,nm);render();}},"✕")));});
-    {const oi=port("event");oi.classList.add("i");reg("cl:kenntnis:"+c._id+":open",oi,{type:"evtUse",dir:"in",client:c._id});
-      body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ hört ⊕ (Event)")));}
+    // ◀ hört (Kenntnis): abgeleitet aus dem IHoert seiner Akteure — geändert wird am Akteur.
+    body.append(h("div",{class:"gsec",title:"Events und Hinweise, die seine Akteure hören (IHoert) — verlierbar gepusht"},"◀ hört (abgeleitet)"));
+    body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},(c.kenntnis||[]).length?c.kenntnis.join(", "):"— nichts"));
     clientImplementierung(body,c,null);
     // Die Leitungen dieses Clients (je Ziel-Rahmen ein Bündel) — Klick fächert auf.
     const bs=clientBuendel(c);
@@ -1144,7 +1017,7 @@
       bs.forEach(b=>{const row=h("div",{class:"gp-row",title:buendelText(b)},h("span",{class:"gp-t"},rahmenLabel(b.key)),
         h("span",{class:"gp-mark"},(b.durabel?"durabel · ":"")+buendelText(b)));row.onclick=()=>auffaechern(c,{keys:[b.key]});body.append(row);});}
   }
-  // ⚙ IMPLEMENTIERUNG eines Clients — das Verhalten des Akteurs DRAUSSEN: je Zusage/Kenntnis ein Logik-Element (◀ Event, Ausgänge ▶ =
+  // ⚙ IMPLEMENTIERUNG eines Clients — das Verhalten des Akteurs DRAUSSEN: je Arbeit/Kenntnis ein Logik-Element (◀ Event, Ausgänge ▶ =
   //   Ausgabe-Vertrag, 📝 Rumpf + optional 🤖). Code-Fakt: eine Python-Klasse, die die aus dem Vertrag generierte Basis erbt.
   //   nurEvent: nur diese eine Zusage (Ansicht an der Zusage-Karte).
   function clientImplementierung(body,c,nurEvent){const ims=c.implementierungen||[];
@@ -1153,56 +1026,19 @@
       body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},
         "— noch keine: eine Python-Klasse, die "+clientAnzeige(c)+"Basis erbt (die Basis entsteht beim Bauen aus dem Vertrag)."));
       const pk=(MODEL.rahmen||{}).pythonPaket;
-      if(pk)body.append(h("button",{class:"add",title:"⟳ legt nach dem Bauen der Basis "+pk+"/… an: die Klasse mit je Zusage/Kenntnis der Methode der generierten Basis (Platzhalter-Rumpf) — danach je Methode 📝/🤖",
+      if(pk)body.append(h("button",{class:"add",title:"⟳ legt nach dem Bauen der Basis "+pk+"/… an: die Klasse mit je Arbeit/Kenntnis der Methode der generierten Basis (Platzhalter-Rumpf) — danach je Methode 📝/🤖",
         onclick:()=>{const kl=clientAnzeige(c)||"Client";(c.implementierungen=c.implementierungen||[]).push({sprache:"python",klasse:kl,
           datei:pk+"/"+kl.replace(/(?<=[a-z0-9])([A-Z])|(?<=[A-Z])([A-Z][a-z])/g,"_$1$2").toLowerCase()+".py",rumpfe:[],neu:true});render();}},"+ 🐍 Python-Implementierung"));
       return;}
     ims.forEach((im,ii)=>{const rs=(im.rumpfe||[]).filter(x=>!nurEvent||x.event===nurEvent);if(!rs.length&&!(im.neu&&!nurEvent))return;
       if(im.neu&&!rs.length&&!nurEvent){body.append(h("div",{class:"gsec",style:"opacity:.85",title:im.datei},"🐍 "+im.klasse+" · "+im.datei+" (neu)"),
-        h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},"Entsteht beim nächsten ⟳ (nach dem Bauen der Basis) — je Zusage/Kenntnis eine Methode, dann hier je Methode 📝/🤖."),
+        h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},"Entsteht beim nächsten ⟳ (nach dem Bauen der Basis) — je Arbeit/Kenntnis eine Methode, dann hier je Methode 📝/🤖."),
         h("button",{class:"rm",title:"doch nicht anlegen",onclick:()=>{c.implementierungen.splice(ii,1);render();}},"✕"));return;}
       body.append(h("div",{class:"gsec",style:"opacity:.85",title:im.datei},"🐍 "+im.klasse+" · "+(im.datei||"").split("/").pop()+(nurEvent?" · 🔌 "+clientAnzeige(c):"")));
       rs.forEach(x=>{if(!nurEvent)body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl",style:"flex:1"},
           "◀ "+x.event+((x.ausgaenge||[]).length?"  → "+x.ausgaenge.join(" | ")+" ▶":"  · Kenntnis"))));
         body.append(codePort("cla:"+c._id+":"+ii+":"+x.event+(nurEvent?":z":""),{k:"clientAuf",client:c._id,impl:ii,event:x.event},null,
           x.methode+(x.rumpf==null?" (fehlt)":"")));});});}
-  // Abgeleitet wie im Generator (AkteurRechteGenerator): Aggregat der erlaubten Commands → dessen Events; erlaubte Query →
-  //   Reader → Projektion → deren Handle-Events. Nur Anzeige — die Laufzeit-Tabelle erzeugt der Generator.
-  function akteurHoert(a){const evs=new Set(),vertrag=(a.vertrag||[]).length>0;
-    (a.vertrag||[]).forEach(r=>r.eingang&&evs.add(r.eingang));   // mit Vertrag: exakt seine Eingänge
-    (a.darf||[]).forEach(nm=>{const r=recByName(nm);if(!r)return;
-      if(r.kind==="command"&&!vertrag){const agg=(MODEL.decider.find(d=>d.command===nm)||{}).aggregat;
-        if(agg)MODEL.decider.filter(d=>d.aggregat===agg).forEach(d=>(d.ergibt||[]).forEach(o=>o.event&&evs.add(o.event)));}
-      if(r.kind==="query")MODEL.reader.forEach(rd=>{if(!(rd.handles||[]).some(hd=>hd.query===nm))return;
-        const p=MODEL.projektionen.find(x=>x.name===rd.projektion);(p&&p.handles||[]).forEach(hd=>hd.event&&evs.add(hd.event));});});
-    return [...evs].sort();}
-  // ◀ ZUSAGE (Vertrag, Akteur-Konzept §3): eine Methode Auf(Event) im Vertrag des Akteurs — Eingang, Ausgänge (konkrete Commands), Strom.
-  //   Implementiert wird sie draußen (Python-Worker gegen die generierte Basis); hier steht nur die Signatur.
-  function aufCard(body,n){const a=n.own.ref,r=n.ref,i=n.idx;
-    body.append(h("div",{class:"gsec",title:"public interface "+vertragsTyp(a)+" : IAkteurVertrag<"+a.name+">"},"Vertrag "+vertragsTyp(a)+" · 👤 "+a.name));
-    // Der Name ist nur im Entwurf frei — ein Vertrag aus dem Code behält seinen (Umbenennen ist ein Refactoring, kein Zeichnen).
-    if(!a.datei)body.append(h("div",{class:"frow",title:"Name des Vertrags-Interfaces (leer = I + Akteur)"},h("span",{class:"slotlbl"},"Vertrag"),
-      inp(a.vertragName,v=>{const alt=vertragsTyp(a);a.vertragName=v||undefined;const neu=vertragsTyp(a);
-        },"I"+a.name)));
-    const sl=port("event");sl.classList.add("i");reg("auf:in:"+a._id+":"+i,sl,{type:"evtUse",dir:"in",akt:a._id,aufIdx:i});
-    body.append(h("div",{class:"slotrow"},sl,h("span",{class:"slotlbl",style:"flex:1"},"◀ Auf "+(r.eingang||"?")),
-      h("button",{class:"rm",title:"Zusage entfernen",onclick:()=>{a.vertrag.splice(i,1);render();}},"✕")));
-    (r.ausgaenge||[]).forEach((c,ci)=>{const s=port("command");s.classList.add("o");reg("auf:send:"+a._id+":"+i+":"+c,s,{type:"sagaCmd",dir:"out",akt:a._id,aufIdx:i});
-      body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{r.ausgaenge.splice(ci,1);render();}},"✕"),
-        h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"gibt hinein "+c+" ▶"),s));});
-    const so=port("command");so.classList.add("o");reg("auf:send:"+a._id+":"+i+":open",so,{type:"sagaCmd",dir:"out",akt:a._id,aufIdx:i});
-    body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},(r.ausgaenge||[]).length?"+ Ausgang ▶ (Command)":"+ Ausgang ▶ (Command) — ohne: nur zur Kenntnis"),so));
-    body.append(h("label",{class:"cbx",title:"IAsyncEnumerable<OneOf<…>>: mehrere Commands je Zusage (z. B. Fortschritt)"},
-      h("input",{type:"checkbox",onchange:e=>{if(e.target.checked)r.strom=true;else delete r.strom;render();},...(r.strom?{checked:"checked"}:{})}),"Strom (mehrere Commands je Zusage)"));
-    body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal;font-family:monospace"},
-      ((r.ausgaenge||[]).length?(r.strom?"IAsyncEnumerable<OneOf<"+r.ausgaenge.join(", ")+">>":"OneOf<"+r.ausgaenge.join(", ")+">"):"void")+" Auf("+(r.eingang||"?")+" e);"));
-    // Das VERHALTEN: je Client, der diesen Vertrags-Teil trägt, der Rumpf seiner Implementierung (📝 + optional 🤖).
-    const tr=clientTraeger(r.teil||vertragsTyp(a));
-    body.append(h("div",{class:"gsec",title:"Die Zusage setzt die Software um, die den Vertrag trägt (Client) — dort steht ihr Rumpf"},"Rumpf · umgesetzt in"));
-    if(!tr.length)body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},"— kein Client trägt "+(r.teil||vertragsTyp(a))+" (⊕ am Client: trägt)"));
-    tr.forEach(c=>{if((c.implementierungen||[]).length)clientImplementierung(body,c,r.eingang);
-      else body.append(h("div",{class:"gp-row gp-leer",style:"cursor:pointer;white-space:normal",onclick:()=>waehle("cl:"+c._id)},"🔌 "+clientAnzeige(c)+": noch keine Implementierung"));});
-  }
 
   // Code-Karte (Werkbank P7.1/P7.4, Zielbild §9): ein Typ, den das Lesen nicht als Baustein erkennt — roh aus der Datei; ⚠ mit Grund, wenn
   //   ein Basistyp nicht aufgelöst ist (die Karte verschwindet, sobald er es wieder ist), sonst Hilfscode ohne Baustein-Rolle.
@@ -1302,7 +1138,7 @@
   //    Applier→Aggregat(rechts) · Applier→State-Feld(oben, optionale Zuweisungs-Markierung).
   const SVGNS="http://www.w3.org/2000/svg";
   const GRID=20;
-  const NODELABEL={host:"Host",bausteinfunktion:"Funktion",akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",quelle:"Quelle",fluss:"Fluss",rumpf:"Code",code:"Code",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",funktion:"Funktion",gerufen:"gerufene Funktion",auftrag:"Auftrag",flussknoten:"Pipeline"};
+  const NODELABEL={host:"Host",graph:"Graph",bausteinfunktion:"Funktion",akteur:"Akteur",client:"Client",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",rumpf:"Code",code:"Code",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",gerufen:"Technik"};
   let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
   // Typ-Navigation: HLKIND = aktuell hervorgehobener Node-Typ (Board+Minimap); JUMPIX = Sprung-Cursor je Typ.
   let HLKIND=null; const JUMPIX={};
@@ -1337,18 +1173,6 @@
   const app=id=>MODEL.applier.find(a=>a._id===id);
   // ZUGEHÖRIGKEIT = BEZIEHUNG, nie Namespace oder Name — abgeleitet auf dem Server (GraphExtractor/Sicht: Block, Aggregat je Karte).
   const recByName=n=>MODEL.records.find(r=>r.name===n);
-  const baseTyp=x=>(x||"").replace(/\s/g,"").replace(/\?$/,"");
-  // Positionsweise vollständige Argumentliste (fehlende Parameter → "default", damit es kompiliert).
-  function argListe(cmdName,args){const cmd=recByName(cmdName);
-    if(!cmd)return (args||[]).filter(Boolean);
-    return (cmd.felder||[]).map((_,i)=>((args||[])[i])||"default");}
-  // Transitionen eines Prozesses (explizit angesteckt via t.prozess).
-  const transOf=s=>MODEL.transitions.filter(t=>t.prozess===s.name);
-  // Die Regeln eines Prozesses in CODE-Reihenfolge (je Join × Dann eine Regel = eine Anweisung im Definiere-Lambda) — wie prepareSaga.
-  function regelFolge(s,trans){return (trans||MODEL.transitions).filter(t=>t.prozess===s.name&&(t.wenn||[]).length)
-    .flatMap(t=>(t.dann||[]).filter(d=>d.sende||d.rufe).map(d=>({t,d})));}
-  // Das Regel-Verb eines Lambda-Teils (wie SlotInventar es als Disc führt): Sende/SendeJe/Rufe bzw. RückgängigDurch(Je).
-  const regelVerb=(d,teil)=>teil==="komp"?(d.kompensationJe?"RückgängigDurchJe":"RückgängigDurch"):d.rufe?"Rufe":d.sendeJe?"SendeJe":"Sende";
   // Collection-Felder der Join-Events (für UndAlle-Anzahl / SendeJe-Collection), als "role.field".
   function collFelder(t){const out=[];(t.wenn||[]).forEach((e,i)=>{const r=recByName(e);if(!r)return;const role=["t","r","g"][i]||("e"+(i+1));
     (r.felder||[]).forEach(f=>{if(elementVon(f))out.push(role+"."+f.name);});});return out;}
@@ -1381,87 +1205,15 @@
   // Ein Feld-Typ-Eingang (◀): eine VO/Enum-Quelle andocken → setzt den Feldtyp. Klein, links.
   function typeInPort(owner,f){if(!f._id)f._id="f"+(NID++);const s=port("ftype");s.classList.add("i","sm");s.title="Typ verdrahten (VO/Enum an dieses Feld)";
     reg("ftype:in:"+owner+":"+f._id,s,{type:"ftype",dir:"in",fobj:f});return s;}
-  // ── ABLAUF ALS KETTE (Node-RED-Bild): jede Prozess-Regel wird KANTEN statt einer Karte — Quelle → Ziel. Quelle = die Funktion,
-  //   die das auslösende Ergebnis liefert; der Prozess selbst, wenn es sein Start ist; sonst das Event. Ziel = ƒ oder Command.
-  //   Verzweigung: je Ergebnis eine eigene Kante („bei X“). Zusammenführung: mehrere Drähte in einen Knoten („und“; UndAlle „alle“).
-  //   Fan-out „×N“, Kompensation gestrichelt „↩ rückgängig“ (vom Schritt zum Gegen-Command), Zeitlimit „⏳“. Das Start-Event als
-  //   zusätzliches Join-Event ist nur Kontext (seine Daten), kein Draht. Nur eine noch leere Regel (ohne Wenn/Ziel) bleibt eine Karte.
-  //   Die Kanten rechnet der Server (board.sicht.kette); t/sg/d sind die Board-Objekte der Regel.
-  function ketteAusSicht(){return (SICHT().kette||[]).map(k=>{const t=MODEL.transitions.find(x=>"tr:"+x._id===k.tr),d=t&&(t.dann||[])[k.dannIdx];
-    if(!d)return null;return {t,sg:MODEL.sagas.find(x=>x.name===t.prozess),von:k.von,nach:k.nach,bei:k.bei,d,label:k.label,art:k.art};}).filter(Boolean);}
-  // ── ARGUMENTE AUTOMATISCH ZUORDNEN (wie msg in Node-RED, nur typisiert): je Feld des Ziels (Command bzw. Auftrag) die passende
-  //   Quelle aus den Join-Events (Lambda-Parameter t, r, g …): gleicher Name → Name endet gleich (QuellPfad ← Pfad) → einziger
-  //   gleicher Typ. Ein Wert-Objekt wird aus seinen Feldern gebaut. Das jüngste Ergebnis geht vor dem Start. Unpassendes bleibt
-  //   "default" — im Panel als Tabelle „Feld ← Quelle“ änderbar. Ergebnis ist sichtbarer Code, keine Laufzeit-Magie.
-  function quellFelder(wenn){const out=[];(wenn||[]).forEach((e,i)=>{const r=recByName(e),p=["t","r","g"][i]||("e"+(i+1));
-    ((r&&r.felder)||[]).forEach(f=>out.push({ausdruck:p+"."+f.name,name:f.name,typ:baseTyp(f.typ),i}));});return out.sort((a,b)=>b.i-a.i);}
-  function ordneZu(feld,quellen,tiefe){const typ=baseTyp(feld.typ),nm=(feld.name||"").toLowerCase(),gl=quellen.filter(q=>q.typ===typ);
-    const genau=gl.find(q=>q.name.toLowerCase()===nm);if(genau)return genau.ausdruck;
-    const endet=gl.filter(q=>{const qn=q.name.toLowerCase();return qn.length>2&&(nm.endsWith(qn)||qn.endsWith(nm));});if(endet.length)return endet[0].ausdruck;
-    if(gl.length===1)return gl[0].ausdruck;
-    const vo=recByName(typ);if(vo&&vo.kind==="valueobject"&&tiefe<2&&(vo.felder||[]).length){const a=vo.felder.map(f=>ordneZu(f,quellen,tiefe+1));
-      if(a.some(x=>x!=="default"))return "new "+typ+"("+a.join(", ")+")";}
-    return "default";}
-  const auftragVon=fn=>(MODEL.funktionen.find(f=>f.name===fn)||{}).auftrag;
-  const zielRecord=d=>d.rufe?auftragVon(d.rufe):d.sende;
-  function autoArgs(zielName,wenn){const z=recByName(zielName);if(!z)return [];const q=quellFelder(wenn);return (z.felder||[]).map(f=>ordneZu(f,q,0));}
-  // Nächsten Schritt anhängen — die Argumente werden gleich zugeordnet. Der Start kommt als Kontext in den Join, wenn das mehr
-  //   Felder füllt (z. B. die Paar-Id für einen Command am Ende der Kette).
-  function kettenAnhaengen(sg,bei,ziel){const zr=ziel.rufe?auftragVon(ziel.rufe):ziel.sende,voll=xs=>xs.filter(x=>x!=="default").length;
-    let wenn=[bei],args=autoArgs(zr,wenn);
-    if(sg.triggerEvent&&bei!==sg.triggerEvent){const mit=[sg.triggerEvent,bei],a2=autoArgs(zr,mit);if(voll(a2)>voll(args)){wenn=mit;args=a2;}}
-    MODEL.transitions.push({_id:"t"+(NID++),prozess:sg.name,wenn,dann:[{...(ziel.rufe?{rufe:ziel.rufe}:{sende:ziel.sende}),sendeArgs:args}]});}
-  // Einen Schritt der Kette wieder lösen: die Regel(n) des Prozesses, die bei „bei" genau dieses Ziel rufen/senden.
-  function kettenLoesen(sgName,bei,ziel){KETTE.filter(k=>k.t.prozess===sgName&&k.art==="dann"&&k.bei===bei&&(k.d.rufe||k.d.sende)===ziel).forEach(k=>{const t=k.t;
-    if((t.dann||[]).length>1)t.dann=t.dann.filter(x=>x!==k.d);else MODEL.transitions=MODEL.transitions.filter(x=>x!==t);});}
-  // ARGUMENT-TABELLE eines Schritts: Feld ← Quelle (Vorschläge aus den Join-Events), „↻ automatisch“ füllt neu.
-  //   Ein aus dem Code gelesener Ausdruck (λ) bleibt, bis man ihn bewusst durch die Tabelle ersetzt.
-  function argTabelle(body,t,d){const zr=zielRecord(d),z=recByName(zr);if(!z||!(z.felder||[]).length)return;
-    const sg=MODEL.sagas.find(x=>x.name===t.prozess);
-    const ps=(t.wenn||[]).map((e,i)=>{const r=recByName(e);return {p:["t","r","g"][i]||("e"+(i+1)),typ:e,felder:(r&&r.felder)||[]};});
-    if(t.sammelEvent)ps.push({p:["t","r","g"][ps.length]||("e"+(ps.length+1)),typ:"IReadOnlyList<"+t.sammelEvent+">",felder:[]});
-    zoKurz(body,()=>({titel:"Prozess "+(sg?sg.name:t.prozess||"?")+" · WENN "+(t.wenn||[]).join(" ∧ ")+" → "+(d.rufe?"ƒ "+d.rufe:d.sende),ziel:z.name,
-      params:ps,args:d.sendeArgs,ausdruck:d.sendeAusdruck,
-      block:null,
-      schreibe:a=>{d.sendeArgs=a;delete d.sendeAusdruck;},auto:()=>autoArgs(zr,t.wenn)}));}
-  // Die Schritte, die von einem Knoten (Prozess-Start oder Funktion) aus „dann“ folgen — mit ✕ zum Lösen.
-  function kettenZeilen(body,vonId){KETTE.filter(k=>k.art==="dann"&&k.von===vonId).forEach(k=>{
-    const d=k.d,ziel=d.rufe?"ƒ "+d.rufe:"▶ "+d.sende;
-    body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",title:"Schritt lösen",onclick:()=>{MODEL.transitions=MODEL.transitions.filter(x=>x!==k.t);render();}},"✕"),
-      h("span",{class:"slotlbl",style:"flex:1;text-align:right"},k.label+" ▶ "+ziel),
-      h("button",{class:"rm",title:"Schritt öffnen (Argumente, Zeitlimit)",onclick:()=>waehle("tr:"+k.t._id)},"⚙")));});}
-  // Vor Serveraufruf: Transitionen → Saga.Schritte (inkl. UndAlle/SendeJe) + ExtraUsings; Argumente positionsvoll.
-  function prepareSaga(){MODEL.sagas.forEach(s=>{const ts=transOf(s);
-    // Ein Join, mehrere Dann → je Dann EINE Regel (gleiche Bedingung). flatMap fächert die Dann auf.
-    s.schritte=ts.filter(t=>(t.wenn||[]).length).flatMap(t=>(t.dann||[]).filter(d=>d.sende||d.rufe).map(d=>{
-      // Ein Aufruf je Dann: ein Command an ein Aggregat (Sende) ODER eine Katalog-Funktion (Rufe) — beide mit optionalem Zeitlimit.
-      const st=d.rufe?{wenn:(t.wenn||[]).slice(),rufe:d.rufe}:{wenn:(t.wenn||[]).slice(),sende:d.sende};
-      if(d.zeitlimit)st.zeitlimit=d.zeitlimit;
-      // Aus dem Code gelesene Ausdrücke (verbatim) reisen unverändert zurück — Vorrang vor Stub-Argumenten.
-      if(t.sammelEvent){st.sammelEvent=t.sammelEvent;if(t.sammelAusdruck)st.sammelAusdruck=t.sammelAusdruck;if(t.sammelAnzahl)st.sammelAnzahl=t.sammelAnzahl;}
-      if(d.sendeAusdruck)st.sendeAusdruck=d.sendeAusdruck;
-      if(d.kompensationAusdruck)st.kompensationAusdruck=d.kompensationAusdruck;
-      if(d.kompensationJe)st.kompensationJe=true;
-      // Count-Anzahl: Feld-Auswahl (D/S); ein 📝-Ausdruck (H-Fallback) hat Vorrang.
-      if(d.sendeJe&&!d.rufe){st.sendeJe=true;if(d.sendeJeCollection)st.sendeJeCollection=d.sendeJeCollection;}
-      {const sa=argListe(zielRecord(d),d.sendeArgs);if(sa.length)st.sendeArgumente=sa;}   // Command ODER Auftrag einer Funktion
-      if(d.kompensation){st.kompensation=d.kompensation;const ka=argListe(d.kompensation,d.kompArgs);if(ka.length)st.kompensationArgumente=ka;}
-      return st;}));
-    // usings: der Scaffolder leitet sie aus den referenzierten Records ab (inkl. Auslöser-Namespace);
-    // s.extraUsings hält nur die aus dem Code gelesenen expliziten — hier NICHT überschreiben.
-    s.extraUsings=s.extraUsings||[];});}
   // Read-only-Anker (nicht ziehbar) — nur Ankerpunkt für abgeleitete Kanten.
   function anchorDot(color){return h("div",{class:"slot s-"+color+" ro"});}
   function topAnchor(color,label,key){const s=anchorDot(color);s.classList.add("t");reg(key,s,null);return h("div",{class:"gtopfield"},s,h("span",{class:"slotlbl"},label));}
   // Namens-Eingabe: benennt um UND zieht alle Verbindungen mit (Namen sind der Referenzschlüssel).
   function renameRefs(kind,obj,old,nv){
-    flTypUmbenannt(old,nv);   // Pipelines (Fluss): Funktions-, Command- und Fall-Typen ziehen mit
-    if(kind==="funktion"){MODEL.transitions.forEach(t=>(t.dann||[]).forEach(d=>{if(d.rufe===old)d.rufe=nv;}));
-      MODEL.akteure.forEach(a=>{a.darf=(a.darf||[]).map(x=>x===old?nv:x);});
-      MODEL.records.forEach(r=>{if(r.kind==="auftrag"&&r.funktion===old)r.funktion=nv;});}
+    // Graph-Knoten, deren Typ der umbenannte ist, ziehen mit (Funktion, Graph im Graphen).
+    (MODEL.graphen||[]).forEach(g=>(g.knoten||[]).forEach(k=>{if(typBasis(k.typ)===old)k.typ=k.typ.replace(old,nv);}));
     // Eine noch nicht geschriebene Funktion: die Konstruktoren, die sie nehmen, ziehen mit (aus dem Code: Roslyn-Renamer).
     if(kind==="bausteinfunktion"){const um=p=>{if(String(p.typ||"").replace(/\?$/,"").trim()===old)p.typ=nv;};
-      MODEL.funktionen.forEach(f=>(f.konstruktor||[]).forEach(um));
       MODEL.bausteinFunktionen.forEach(q=>{(q.konstruktor||[]).forEach(um);(q.umsetzungen||[]).forEach(u=>(u.konstruktor||[]).forEach(um));});
       MODEL.akteure.forEach(a=>{a.darf=(a.darf||[]).map(x=>x===old?nv:x);});}
     if(kind==="akteur"){
@@ -1472,33 +1224,23 @@
       MODEL.applier.forEach(a=>{if(a.aggregat===old)a.aggregat=nv;});
       MODEL.states.forEach(s=>{if(s.aggregat===old)s.aggregat=nv;});
     }else if(kind==="record"){
-      // Katalog-Funktionen: ihr Auftrag und ihre Ergebnisse sind Record-Namen.
-      MODEL.funktionen.forEach(f=>{if(f.auftrag===old)f.auftrag=nv;f.ergebnisse=(f.ergebnisse||[]).map(x=>x===old?nv:x);});
-      // Akteure dürfen den Typ unter seinem neuen Namen (IDarf<T> folgt dem Typ).
-      MODEL.akteure.forEach(a=>{a.darf=(a.darf||[]).map(x=>x===old?nv:x);
-        (a.vertrag||[]).forEach(r=>{if(r.eingang===old)r.eingang=nv;r.ausgaenge=(r.ausgaenge||[]).map(x=>x===old?nv:x);});});
+      // Akteure dürfen bzw. hören den Typ unter seinem neuen Namen (IDarf<T>, IHoert<T> folgen dem Typ).
+      MODEL.akteure.forEach(a=>{a.darf=(a.darf||[]).map(x=>x===old?nv:x);a.hoert=(a.hoert||[]).map(x=>x===old?nv:x);});
+      // Funktionen: Eingänge, Ausgaben und was eine Quelle meldet.
+      MODEL.bausteinFunktionen.forEach(f=>{(f.eingaenge||[]).forEach(e=>{if(e.eingang===old)e.eingang=nv;e.ausgaben=(e.ausgaben||[]).map(x=>x===old?nv:x);});
+        f.lauscht=(f.lauscht||[]).map(x=>x===old?nv:x);});
       // … und die Kenntnis der Clients (IHoert folgt dem Typ).
       MODEL.clients.forEach(c=>{c.kenntnis=(c.kenntnis||[]).map(x=>x===old?nv:x);});
       if(obj.kind==="valueobject")retypeFelder(old,nv);   // Typ-Komposition: Feldtypen mitziehen
       if(obj.kind==="command"){
-        MODEL.decider.forEach(d=>{if(d.command===old)d.command=nv;});
-        const rx=new RegExp("\\b"+old.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\b","g");
-        MODEL.transitions.forEach(t=>(t.dann||[]).forEach(d=>{if(d.sende===old)d.sende=nv;if(d.kompensation===old)d.kompensation=nv;
-          if(d.sendeAusdruck)d.sendeAusdruck=d.sendeAusdruck.replace(rx,nv);if(d.kompensationAusdruck)d.kompensationAusdruck=d.kompensationAusdruck.replace(rx,nv);}));
-        // Reaktion-Handles: ausgelöste Commands mitziehen.
-        MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{hd.sends=(hd.sends||[]).map(x=>x===old?nv:x);}));
+        MODEL.decider.forEach(d=>{if(d.command===old)d.command=nv;(d.ergibt||[]).forEach(o=>{if(o.event===old)o.event=nv;});});
       }else{
         MODEL.decider.forEach(d=>(d.ergibt||[]).forEach(o=>{if(o.event===old)o.event=nv;}));
         MODEL.applier.forEach(a=>{if(a.event===old)a.event=nv;});
-        MODEL.sagas.forEach(s=>{if(s.triggerEvent===old)s.triggerEvent=nv;});
-        MODEL.transitions.forEach(t=>{t.wenn=(t.wenn||[]).map(w=>w===old?nv:w);if(t.sammelEvent===old)t.sammelEvent=nv;if(t.sammelAnzahlFeld&&t.sammelAnzahlFeld.rec===old)t.sammelAnzahlFeld.rec=nv;});
         // Reader-Handles: Query (Eingang) und OneOf-Responses (Ausgänge) mitziehen.
         MODEL.reader.forEach(r=>(r.handles||[]).forEach(hd=>{if(hd.query===old)hd.query=nv;hd.responses=(hd.responses||[]).map(x=>x===old?nv:x);}));
-        // Reaktion-Handles: Trigger-Event mitziehen.
-        MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{if(hd.event===old)hd.event=nv;}));
-        // Projektion-Handles: Trigger-Event (Abo) UND veröffentlichte reaktive Events mitziehen.
-        MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.event===old)hd.event=nv;hd.publishes=(hd.publishes||[]).map(x=>x===old?nv:x);}));
-        MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{hd.publishes=(hd.publishes||[]).map(x=>x===old?nv:x);}));
+        // Projektion-Handles: das gehörte Event mitziehen.
+        MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.event===old)hd.event=nv;}));
       }
     }else if(kind==="projektion"){
       // IReader<TProjection>-Bindung (per Name) mitziehen.
@@ -1550,477 +1292,39 @@
   function topSlot(color,label,info,key){const s=port(color);s.classList.add("t");reg(key,s,info);
     return h("div",{class:"gtopfield"},s,h("span",{class:"slotlbl"},label));}
 
-  // ══ PIPELINE ALS FLUSS (docs/konzept-editor-pipelines.md §14) ══════════════════════════════════════════════════════════
-  //   Eine Pipeline ist eine Fläche aus Knoten (Quelle · ƒ Funktion · ▶ Command · ⧉ Je), verbunden mit Drähten. Jeder Knoten hat
-  //   EINE Form: ein Eingang, je Fall ein Ausgangs-Port (dazu ⏳/✕). Jede Geste hier ist genau ein Code-Fakt
-  //   (var x = draht.Rufe<F>(λ) …), geschrieben vom Scaffolder, 1:1 zurückgelesen vom Extractor. Die Pipeline steht in einem
-  //   eigenen Rahmen (wie ein Client), innen nach FLUSSTIEFE angeordnet (Quelle links, jeder Draht nach rechts).
-  const FL_PRE="§fluss:";
-  const istFlussDom=d=>typeof d==="string"&&d.startsWith(FL_PRE);
   // 🖥 Host-Rahmen (docs/konzept-werkbank.md §8.1): die Umgebung als Karten rechts neben den Clients — kein Domänen-Modell.
   const HOST_KEY="§host";
   const istHostDom=d=>d===HOST_KEY;
-  const istAussenDom=d=>istClientDom(d)||istFlussDom(d)||istHostDom(d);
-  const flussVonDom=d=>MODEL.fluesse.find(f=>FL_PRE+f._id===d);
-  const FL_SYM={quelle:"⛲",auf:"◆",funktion:"ƒ",command:"▶",je:"⧉",warte:"⧗"};
-  const FL_ART={quelle:"Quelle",auf:"Event-Quelle",funktion:"Funktion",command:"Command",je:"Je-Rahmen",warte:"Warten (Event im Strom)"};
-  const flWarteAuf=k=>(k.warteAuf&&k.warteAuf.length?k.warteAuf:[k.typ]).filter(Boolean);
-  // ══ PIPELINE: ein Knoten = eine ZUGEWIESENE Funktion — Eingang und Ausgänge ergeben sich aus ihrem Interface, nichts wird im
-  //   Knoten definiert: ƒ = Auftrag → Ergebnisse (IFunktion) · ▶ = Command → Decide-Events (Aggregat) · ⛲ = → Quell-Nachricht ·
-  //   ◆/⧗ = ← Event. Drähte verbinden Knoten direkt (beschriftet mit dem Typ des Ausgangs). Die Verbindung zur Domäne ist die
-  //   Zuweisung: ƒ ⇢ Funktions-Karte (Katalog), ▶ → Command im Aggregat, ⛲ ⇢ Nachricht; ◆/⧗ ← Event aus dem Log.
-  //   Der Rahmen steht IN der Domäne, auf die der Fluss wirkt (die Aggregate seiner Commands, eindeutig — sonst sein Namespace; vom Server).
-  //   Was der Server je Knoten ableitet (board.sicht.fluesse, Werkbank P7.4.5): Ports (Fälle + ⏳/✕, je mit der Nachricht des Ports),
-  //   Vorgänger, Tiefe, gehörte Events, Zuweisung. Ein Knoten, den es im Code noch nicht gibt (die Geste läuft), hat bis zum nächsten Board keine.
-  var FL_SICHT=null,FL_SICHT_VON=null;   // var: vor dem ersten Board abgefragt (TDZ)
-  function flSicht(k){const S=SICHT();if(FL_SICHT_VON!==S){FL_SICHT_VON=S;FL_SICHT=new Map();
-      Object.values(S.fluesse||{}).forEach(f=>Object.entries(f.knoten||{}).forEach(([id,x])=>FL_SICHT.set(id,x)));}
-    return (k&&FL_SICHT.get("fs:"+k._id))||{};}
-  const flZuweisung=k=>flSicht(k).zuweisung||null;
-  const flHoert=k=>flSicht(k).hoert||[];
-  // Das Interface eines Knotens als eine Zeile: Eingang → Ausgänge.
-  function flSignatur(k){if(k.art==="funktion"){const fk=MODEL.funktionen.find(x=>x.name===k.typ);return fk?(fk.auftrag||"?")+" → "+((fk.ergebnisse||[]).join(" | ")||"?"):"";}
-    if(k.art==="command")return (k.typ||"?")+" → "+(flDecideEvents(k).join(" | ")||"?");
-    if(k.art==="quelle")return "→ "+(k.typ||"?");return "";}
-  function flussKnotenNodes(){return MODEL.fluesse.flatMap(f=>(f.knoten||[]).map(k=>({id:"fs:"+k._id,name:(FL_SYM[k.art]||"")+" "+k.name,
-    kind:"flussknoten",ref:k,own:{id:"fl:"+f._id,name:f.name,kind:"fluss",ref:f}})));}
-  const flKnoten=(f,name)=>(f.knoten||[]).find(k=>k.name===name);
-  const flFluss=k=>MODEL.fluesse.find(f=>(f.knoten||[]).includes(k));
-  const flQuelleArt=k=>k&&(k.art==="quelle"||k.art==="auf");
-  // Die Vorgänger (Knoten-Namen), aus denen ein Knoten Drähte bekommt — auch der Je-Rahmen eines Elements/Sammelns.
-  const flVor=k=>flSicht(k).vor||[];
-  const flDecideEvents=k=>[...new Set(MODEL.decider.filter(d=>d.command===k.typ).flatMap(d=>(d.ergibt||[]).map(o=>o.event)))];
-  // Die Ports eines Knotens: die Fälle (Ergebnisse der Funktion, Events aus dem Decide, die Quell-Nachricht und ihr Strom) und ⏳/✕.
-  const flPorts=k=>flSicht(k).ports||[];
-  const flPortGleich=(d,p)=>(d.port||"fall")===p.port&&(p.port!=="fall"||(d.fall||null)===(p.fall||null));
-  // Wer an einem Port hängt (Knoten + Eingang).
-  function flAbnehmer(f,k,p){const r=[];(f.knoten||[]).forEach(z=>(z.eingaenge||[]).forEach((e,ei)=>{
-    if((e.draehte||[]).some(d=>d.von===k.name&&flPortGleich(d,p)))r.push({z,e,ei});}));return r;}
-  // Das Ziel eines Aufrufs: der Auftrag der Funktion bzw. der Command-Record — seine Felder werden zugeordnet.
-  function flZiel(k){if(k.art==="funktion"){const f=MODEL.funktionen.find(x=>x.name===k.typ);return f?recByName(f.auftrag):null;}
-    return k.art==="command"?recByName(k.typ):null;}
-  // Welche Nachricht ein Draht trägt (für die Zuordnung): die seines Quell-Ports.
-  function flDrahtTyp(f,d){const v=flKnoten(f,d.von),p=v&&flPorts(v).find(p=>flPortGleich(d,p));return p?p.typ:null;}
-  function flFelderVon(typ){if(typ==="ZeitlimitAbgelaufen"||typ==="SchrittAbgelehnt")return [{name:"Grund",typ:"string"}];
-    if(typ==="QuellStrom")return [{name:"Id",typ:"Guid"},{name:"Version",typ:"int"}];
-    const r=recByName(typ);return r?(r.felder||[]):[];}
-  // Lambda-Parameter wie der Scaffolder (Scaffolder.FlussParameter): benannt nach den Knoten, von denen die Drähte kommen.
-  function flParameter(f,e){if(e.je&&!e.sammle)return [e.je];let roh;
-    if(e.je){const je=flKnoten(f,e.je),q=((je&&(je.eingaenge||[])[0])||{}).draehte||[];roh=[(q[0]||{}).von||"quelle",((e.draehte||[])[0]||{}).von||"liste"];}
-    else roh=(e.draehte||[]).map(d=>(d.port||"fall")==="fall"?d.von:d.von+(d.port==="zeitlimit"?"Zeit":d.port==="strom"?"Strom":"Abgelehnt"));
-    const n=[];roh.forEach(x=>{let y=x,i=2;while(n.includes(y))y=x+(i++);n.push(y);});return n;}
-  // Die Quellen der Zuordnung: je Lambda-Parameter seine Felder (Ausdruck „param.Feld").
-  function flQuellen(f,e){const ps=flParameter(f,e);
-    if(e.je&&!e.sammle){const je=flKnoten(f,e.je);return [{p:ps[0],typ:(je&&je.typ)||"",felder:flFelderVon(je&&je.typ)}];}
-    if(e.je){const je=flKnoten(f,e.je),q=((je&&(je.eingaenge||[])[0])||{}).draehte||[],t=q[0]?flDrahtTyp(f,q[0]):null;
-      return [{p:ps[0],typ:t,felder:flFelderVon(t)},{p:ps[1],typ:"IReadOnlyList<"+(((e.draehte||[])[0]||{}).fall||"?")+">",felder:[]}];}
-    return (e.draehte||[]).map((d,i)=>{const t=flDrahtTyp(f,d);return {p:ps[i],typ:t,felder:flFelderVon(t)};});}
-  function flKandidaten(f,e){return flQuellen(f,e).flatMap(s=>[{ausdruck:s.p,name:s.p,typ:s.typ},...(s.felder||[]).map(x=>({ausdruck:s.p+"."+x.name,name:x.name,typ:baseTyp(x.typ)}))]);}
-  // Automatische Zuordnung je Zielfeld: gleicher Name → gleiches Namensende + Typ → einziger gleicher Typ → sonst default.
-  function flAutoArgs(f,k,e){const z=flZiel(k);if(!z)return [];const kand=flKandidaten(f,e);
-    return (z.felder||[]).map(fe=>flAutoWert(kand,fe,0));}
-  //   Ein Wertobjekt ohne passende Quelle wird aus seinen Feldern gebaut (new BildMeta(quelle.Dateiname, …)).
-  function flAutoWert(kand,fe,tiefe){const t=baseTyp(fe.typ);
-    const gleich=kand.find(x=>x.name===fe.name&&x.ausdruck.includes("."));if(gleich)return gleich.ausdruck;
-    const ende=kand.find(x=>x.ausdruck.includes(".")&&x.typ===t&&(x.name.endsWith(fe.name)||fe.name.endsWith(x.name)));if(ende)return ende.ausdruck;
-    const typ=kand.filter(x=>x.typ===t);if(typ.length===1)return typ[0].ausdruck;
-    const vo=recByName(t);if(vo&&vo.kind==="valueobject"&&tiefe<2&&(vo.felder||[]).length){const subs=vo.felder.map(sf=>flAutoWert(kand,sf,tiefe+1));
-      if(subs.some(x=>x!=="default"))return "new "+t+"("+subs.join(", ")+")";}
-    return "default";}
-  // Deklarations-Reihenfolge = Code-Reihenfolge: ordnet der Schreiber (FlussPipeline.Geordnet) — eine Geste schickt die Knoten, wie sie sind.
-  // Liegt „von" (transitiv) hinter „ziel"? Dann ergäbe ein Draht von → ziel einen Kreis.
-  function flErreicht(f,ziel,von){const seen=new Set(),q=[von];while(q.length){const x=q.pop();if(x===ziel)return true;if(seen.has(x))continue;seen.add(x);
-    const k=flKnoten(f,x);if(k)flVor(k).forEach(v=>q.push(v));}return false;}
-  const flTiefen=f=>new Map((f.knoten||[]).map(k=>[k.name,flSicht(k).tiefe||0]));
-  // Die Bedingung eines Knotens: über welche Fälle (Weichen) seine Drähte kommen — zwei Drähte schließen sich aus, wenn sie an
-  //   derselben Weiche verschiedene Fälle nehmen. Daraus folgt der Vorschlag ∨ (schließen sich aus) bzw. ∧ (laufen parallel).
-  function flBedingung(f,name,memo){memo=memo||new Map();if(memo.has(name))return memo.get(name);memo.set(name,{});
-    const k=flKnoten(f,name);let c={};
-    if(k){const pro=(k.eingaenge||[]).map(e=>{const m={};[...(e.draehte||[]),...(e.je?[{von:e.je}]:[])].forEach(d=>{
-        Object.assign(m,flBedingung(f,d.von,memo));if(d.fall||(d.port&&d.port!=="fall"))m[d.von]=d.fall||d.port;});return m;});
-      if(pro.length===1)c=pro[0];else if(pro.length>1)Object.keys(pro[0]).forEach(x=>{if(pro.every(m=>m[x]===pro[0][x]))c[x]=pro[0][x];});}
-    memo.set(name,c);return c;}
-  function flExklusiv(f,a,b){const ca={...flBedingung(f,a.von)},cb={...flBedingung(f,b.von)};
-    if(a.fall||(a.port&&a.port!=="fall"))ca[a.von]=a.fall||a.port;if(b.fall||(b.port&&b.port!=="fall"))cb[b.von]=b.fall||b.port;
-    return Object.keys(ca).some(x=>x in cb&&ca[x]!==cb[x]);}
-  function flName(f,basis){let b=(basis||"knoten").replace(/[^A-Za-zÄÖÜäöüß0-9_]/g,"");b=b.charAt(0).toLowerCase()+b.slice(1);if(!b)b="knoten";
-    let n=b,i=2;while(flKnoten(f,n))n=b+(i++);return n;}
-  // Neuer Knoten (optional mit Eingang aus einem Port) — die Zuordnung wird sofort automatisch vorgeschlagen.
-  function flNeu(f,art,typ,ein){const basis=art==="funktion"?(typ||"schritt").replace(/^I(?=[A-ZÄÖÜ])/,""):art==="je"?"je":art==="command"?(typ||"command"):(typ||art);
-    const k={_id:"fs"+(NID++),name:flName(f,basis),art,typ:typ||"",eingaenge:ein?[ein]:[]};if(art==="je")k.liste="";
-    (f.knoten=f.knoten||[]).push(k);if(ein&&art!=="je")ein.argumente=flAutoArgs(f,k,ein);return k;}
-  const flDraht=(von,p)=>({von,...(p.fall?{fall:p.fall}:{}),...(p.port&&p.port!=="fall"?{port:p.port}:{})});
-  // Ein Draht vom Port p des Knotens „von" in einen bestehenden Knoten: ∨ (eigener Eingang), wenn er sich mit den Drähten des
-  //   ersten Eingangs ausschließt, sonst ∧ (in den ersten Eingang). Der Modus ist danach im Panel umschaltbar.
-  function flVerbinde(f,von,p,ziel){if(von===ziel.name||flErreicht(f,ziel.name,von)){deFlash("Kreis: „"+ziel.name+"“ liegt vor „"+von+"“ — ein Draht läuft nur vorwärts.",true);return false;}
-    const d=flDraht(von,p),es=ziel.eingaenge||(ziel.eingaenge=[]),e0=es.find(e=>!e.je);
-    if(!e0||(e0.draehte||[]).every(x=>flExklusiv(f,x,d))){const e={draehte:[d]};es.push(e);e.argumente=flAutoArgs(f,ziel,e);}
-    else{e0.draehte.push(d);delete e0.ausdruck;e0.argumente=flAutoArgs(f,ziel,e0);}
-    return true;}
-  function flLoese(f,z,e,d){e.draehte=(e.draehte||[]).filter(x=>x!==d);
-    if(!(e.draehte||[]).length&&!e.je)z.eingaenge=z.eingaenge.filter(x=>x!==e);else{delete e.ausdruck;e.argumente=flAutoArgs(f,z,e);}}
-  // ∧ ⇄ ∨: einen Draht in einen eigenen Eingang lösen bzw. zum ersten Eingang hinzunehmen.
-  function flUmschalten(f,z,e,d){if((e.draehte||[]).length>1){e.draehte=e.draehte.filter(x=>x!==d);delete e.ausdruck;e.argumente=flAutoArgs(f,z,e);
-      const n={draehte:[d]};z.eingaenge.push(n);n.argumente=flAutoArgs(f,z,n);}
-    else{const e0=z.eingaenge.find(x=>x!==e&&!x.je);if(!e0)return;z.eingaenge=z.eingaenge.filter(x=>x!==e);e0.draehte.push(d);delete e0.ausdruck;e0.argumente=flAutoArgs(f,z,e0);}}
-  // Umbenennen: der Name ist die Identität — Drähte, Je-Bezüge und Ausdrücke („name.Feld") ziehen mit.
-  function flUmbenennen(f,k,nv){const alt=k.name;nv=(nv||"").replace(/[^A-Za-zÄÖÜäöüß0-9_]/g,"");if(!nv||nv===alt)return;if(flKnoten(f,nv)){deFlash("„"+nv+"“ gibt es in dieser Pipeline schon.",true);return;}
-    // Ein Knoten aus dem Code ist eine Variable im Definiere-Lambda — der Server benennt sie samt Verwendungen um (Renamer).
-    if(k._ort&&!k.ohneVariable&&f.ausCode){gUmbenennen(k,nv,alt);return;}
-    const re=new RegExp("\\b"+alt+"\\b","g");
-    (f.knoten||[]).forEach(z=>(z.eingaenge||[]).forEach(e=>{(e.draehte||[]).forEach(d=>{if(d.von===alt)d.von=nv;});if(e.je===alt)e.je=nv;
-      if(e.argumente)e.argumente=e.argumente.map(a=>a.replace(re,nv));if(e.ausdruck)e.ausdruck=e.ausdruck.replace(re,nv);}));
-    k.name=nv;}
-  // Typ-Umbenennungen (Funktion/Record) ziehen in die Flüsse.
-  function flTypUmbenannt(alt,nv){MODEL.fluesse.forEach(f=>(f.knoten||[]).forEach(k=>{if(k.typ===alt)k.typ=nv;
-    (k.eingaenge||[]).forEach(e=>(e.draehte||[]).forEach(d=>{if(d.fall===alt)d.fall=nv;}));}));}
-  // Hat der Knoten einen Bau-Lambda je Eingang? (Funktion ruft mit Auftrag, Command baut den Command; Warten/Quellen nicht.)
-  function flMitLambda(k){return k.art==="funktion"||k.art==="command";}
-  function flLoeschen(f,k){f.knoten=(f.knoten||[]).filter(x=>x!==k);
-    (f.knoten||[]).forEach(z=>{(z.eingaenge||[]).forEach(e=>{e.draehte=(e.draehte||[]).filter(d=>d.von!==k.name);if(e.je===k.name)delete e.je;});
-      z.eingaenge=(z.eingaenge||[]).filter(e=>(e.draehte||[]).length||e.je);});}
-  // Neue Pipeline: Namespace aus der Domäne (oder der ersten im Board), eine Quelle als Start.
-  function neuePipeline(ns){ns=ns||((MODEL.aggregate[0]||{}).namespace)||((MODEL.records[0]||{}).namespace)||"Domain";
-    const f={_id:"fl"+(NID++),name:uniq("NeuePipeline"),namespace:ns,bauer:"p",knoten:[]};
-    const q={_id:"fs"+(NID++),name:"quelle",art:"quelle",typ:"",eingaenge:[]};f.knoten.push(q);
-    MODEL.fluesse.push(f);render();setTimeout(()=>zeigeKnoten("fs:"+q._id),0);}
-  // Neue Funktion aus dem Fluss heraus: Auftrag + ein Ergebnis-Event als EIGENE Karten, im Namespace der Pipeline.
-  function flNeueFunktion(f){const nm=neueFunktion(f.namespace);deFlash("ƒ "+nm+" angelegt — Auftrag, Ergebnisse und Felder an ihrer Karte (Klick auf „ruft ƒ …“).",true);return nm;}
-  function flNeueQuellNachricht(f){return neueQuelle(f.namespace,"QuelleGemeldet");}
-  // Ein neuer Quellen-Typ (docs/konzept-werkbank.md §3): nur der Typ — `public sealed record X : DateiGemeldet;`. Basis und Felder des
-  //   fest codierten Treibers kommen vom Server (rahmen.treiber); die Felder sind geerbt, also nur zum Lesen und Zuordnen da.
-  function neueQuelle(ns,stamm,pos){const tr=((MODEL.rahmen||{}).treiber||{}).Datei||{basis:"DateiGemeldet",felder:[]},n=uniq(stamm);
-    MODEL.records.push({name:n,kind:"event",namespace:ns,treiber:"Datei",basen:[tr.basis],typart:"public sealed record",ohneParameterliste:true,
-      felder:(tr.felder||[]).map(f=>({...f,_id:"f"+(NID++),geerbt:true})),...(pos||{})});return n;}
-  const flKnotenById=id=>{for(const f of MODEL.fluesse)for(const k of f.knoten||[])if(k._id===id)return k;return null;};
-  // Port-Schlüssel eines Ausgangs (Fall je Ergebnis, ⏳, ✕, Strom) — derselbe für das Panel und den Kanten-Abgleich (KANTEN).
-  const flAusKey=(k,p)=>"fs:aus:"+k._id+":"+(p.port||"fall")+":"+(p.fall||"");
-  // Ziel geändert (andere Funktion/anderer Command) → Zuordnung neu vorschlagen; ein aus dem Code gelesener Lambda bleibt.
-  function flNeuZuordnen(k){const f=flFluss(k);if(f)(k.eingaenge||[]).forEach(e=>{if(!e.ausdruck)e.argumente=flAutoArgs(f,k,e);});}
-  // „＋" an einem Ausgang: einen NEUEN Knoten anlegen, vom Port verdrahtet. Was er ruft/sendet, verbindet man danach an ihm (⊕).
-  function flNeuAmPort(f,k,p,art){const neu=flNeu(f,art,"",{draehte:[flDraht(k.name,p)]});
-    if(art==="warte"){neu.warteAuf=[];neu.zeitlimit="TimeSpan.FromHours(1)";}
-    render();setTimeout(()=>zeigeKnoten("fs:"+neu._id),0);}
-  // Die Karte eines Fluss-Knotens (Panel): Pipeline · Knoten · was er ist (Verbindung zu einer EIGENEN Karte: Nachricht, Funktion,
-  //   Command — per ⊕, nie per Dropdown, nie im Knoten deklariert) · Eingänge (Drähte, ∧/∨, Zuordnung) · Ausgänge (je Port ⊕ / ＋).
-  function flussKnotenCard(body,n){const k=n.ref,f=n.own.ref;
-    body.append(h("div",{class:"gsec"},"⛓ Pipeline"));
-    body.append(h("div",{class:"slotrow"},h("input",{value:f.name||"",placeholder:"Pipeline-Name",onchange:e=>{const nv=e.target.value.trim();if(nv&&nv!==f.name){f.name=nv;render();}}}),
-      h("input",{value:f.namespace||"",placeholder:"Namespace",onchange:e=>{f.namespace=e.target.value.trim();render();}})));
-    body.append(h("div",{class:"gsec"},(FL_SYM[k.art]||"")+" "+(FL_ART[k.art]||k.art)));
-    body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"Name"),h("input",{value:k.name,title:"Der Name ist die Identität im Fluss (var "+k.name+" = …) — Drähte und Ausdrücke ziehen mit",
-      onchange:e=>{flUmbenennen(f,k,e.target.value.trim());render();}})));
-    if(flQuelleArt(k)){
-      const an=(a,t,ti)=>h("button",{class:"rm",title:ti,style:k.art===a?"background:#2f5d46;color:#c8f0d8;border-color:#2f5d46":"",onclick:()=>{if(k.art!==a){k.art=a;render();}}},t);
-      body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"Art"),an("quelle","⛲ Katalog-Quelle","Datei, Timer, Webhook … — jede Nachricht startet einen Vorgang"),
-        an("auf","◆ Event aus dem Log","Jedes Vorkommen eines Events im Log startet einen Vorgang")));
-      const ep=port("event");ep.classList.add("i");reg("fs:ein:"+k._id,ep,{type:"evtUse",dir:"in",flk:k._id,role:"quelle"});
-      body.append(typVerweis(k.typ,{port:ep,titel:k.art==="quelle"?"meldet":"Event",leer:"— ⊕ "+(k.art==="quelle"?"Quell-Nachricht":"Event")+" verbinden",
-        removeTitel:"Nachricht lösen (der Typ bleibt)",onRemove:()=>{k.typ="";render();},
-        extra:k.art==="quelle"&&!k.typ?[neuKnopf("Neue Quelle (Datei-Treiber) als eigene Karte anlegen und verbinden",()=>{const q=flNeueQuellNachricht(f);
-          verbindeInfo({type:"evtUse",dir:"out",rec:q},{type:"evtUse",dir:"in",flk:k._id,role:"quelle"});deFlash("＋ "+q+" als eigene Karte angelegt und verbunden — Felder an seiner Karte",true);})]:[]}));
-      // Webhooks der Quelle (konzept-werkbank §12.3 E12) — Konfig je Umgebung (Quellen:<Typ>:Webhook), hier nur angezeigt; bearbeitet im 🖥 Host-Rahmen.
-      (k.bindungen||[]).forEach(b=>body.append(h("div",{class:"gsec",style:"opacity:.8",title:"Konfig der Umgebung"+(b.datei?" · "+b.datei:"")},
-        (b.modus==="webhook"?"⇥ Webhook POST ":b.modus==="timer"?"⏱ Timer ":"📁 Datei ")+(b.ort||"")+(b.umgebung?" ("+b.umgebung+")":"")+"  →  "+(k.typ||"Nachricht"))));
-      body.append(h("div",{class:"gsec",style:"opacity:.6"},k.art==="quelle"?"Jede Nachricht startet einen Vorgang (genau einmal, Kennung). Der Treiber folgt aus dem Basistyp der Quelle, seine Werte aus der Konfig (Quellen:"+(k.typ||"Typ")+").":"Jedes Vorkommen dieses Events im Log startet einen Vorgang."));}
-    else if(k.art==="funktion"){const fk=MODEL.funktionen.find(x=>x.name===k.typ);
-      // Die Funktion ist eine eigene Karte (Auftrag, Ergebnisse, Fähigkeiten, Rumpf) — hier nur die Verbindung „ruft".
-      const rp=port("auftrag");rp.classList.add("o");rp.title=k.typ||"(Funktion)";reg("fs:rufe:"+k._id,rp,{type:"rufe",dir:"out",flk:k._id});
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.7"},"ruft"),
-        h("span",{class:"slotlbl",style:"flex:1;text-align:right"+(fk?";cursor:pointer":k.typ?";color:#cf6f68":""),title:fk?"Klick: Funktions-Karte öffnen (Auftrag, Ergebnisse, Fähigkeiten, Rumpf)":"",
-          onclick:fk?()=>zeigeLadend("fk:"+fk._id):null},fk?"ƒ "+fk.name:k.typ?"⚠ "+k.typ+" — Funktion fehlt":"— ⊕ Funktion verbinden"),
-        k.typ?h("button",{class:"rm",title:"Funktion lösen",onclick:()=>{k.typ="";render();}},"✕")
-          :neuKnopf("Neue Funktion anlegen und hier rufen (Auftrag und Ergebnisse an ihrer Karte)",()=>{const nm=flNeueFunktion(f);
-            verbindeInfo({type:"rufe",dir:"out",flk:k._id},{type:"rufe",dir:"in",fk:MODEL.funktionen.find(x=>x.name===nm)._id});}),rp));
-      if(fk)body.append(h("div",{class:"gsec",style:"opacity:.7",title:"Das Interface der Funktion — bearbeitet an ihrer Karte"},"Interface: "+flSignatur(k)));}
-    else if(k.art==="command"){
-      const sp=port("command");sp.classList.add("o");reg("fs:send:"+k._id,sp,{type:"sagaCmd",dir:"out",flk:k._id});
-      body.append(typVerweis(k.typ,{port:sp,seite:"o",titel:"sendet",leer:"— ⊕ Command verbinden",removeTitel:"Command lösen (der Typ bleibt)",onRemove:()=>{k.typ="";render();},
-        extra:k.typ?[]:[neuKnopf("Neuen Command als eigene Karte anlegen und verbinden",()=>neuerTypFuer("command","NeuerCommand",f.namespace,
-          r=>verbindeInfo({type:"sagaCmd",dir:"out",flk:k._id},{type:"sagaCmd",dir:"in",rec:r.name})))]}));
-      const dc=MODEL.decider.find(d=>d.command===k.typ);if(dc)body.append(h("div",{class:"gsec",style:"opacity:.7;cursor:pointer",title:"Decider öffnen",onclick:()=>waehle("dec:"+dc._id)},"→ Aggregat "+(dc.aggregat||"?")));}
-    else if(k.art==="warte"){
-      body.append(h("div",{class:"gsec",style:"opacity:.7"},"Wartet im Strom der Quelle auf das ERSTE dieser Events danach — jedes ist ein Ausgang; kommt keines binnen Zeitlimit, feuert ⏳. Ein Event nach dem Zeitlimit zählt nicht."));
-      flWarteAuf(k).forEach((t,i)=>body.append(typVerweis(t,{titel:"⧗",removeTitel:"nicht mehr darauf warten",
-        onRemove:()=>{k.warteAuf=flWarteAuf(k).filter((_,j)=>j!==i);k.typ=k.warteAuf[0]||"";render();}})));
-      const wp=port("open");wp.classList.add("i");reg("fs:ein:"+k._id,wp,{type:"evtUse",dir:"in",flk:k._id,role:"warte"});
-      body.append(h("div",{class:"slotrow"},wp,h("span",{class:"slotlbl"},"+ warte auf ⊕ (Event)")));}
-    else if(k.art==="je"){body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"Liste"),h("input",{value:k.liste||"",placeholder:"x => x.Bilder",onchange:e=>{k.liste=e.target.value;render();}})));
-      body.append(codePort("fle:"+k._id+":je",{k:"flussLambda",fluss:f._id,knoten:k._id,ei:null},null,"λ Liste",!!(f.datei&&k.liste)));
-      body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"Element-Typ"),h("input",{value:k.typ||"",placeholder:"string",onchange:e=>{k.typ=e.target.value.trim();render();}})));
-      body.append(h("div",{class:"gsec",style:"opacity:.6"},"Die folgenden Knoten laufen einmal je Element, parallel; „Sammle“ wartet auf alle (in Element-Reihenfolge)."));}
-    if(k.art==="funktion"||k.art==="command"||k.art==="warte")body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"⏳ Zeitlimit"),
-      h("input",{value:k.zeitlimit||"",placeholder:"z. B. TimeSpan.FromMinutes(5)",onchange:e=>{const v=e.target.value.trim();if(v)k.zeitlimit=v;else delete k.zeitlimit;render();}})));
-    // ── Eingänge: Drähte von früheren Knoten (⊕ = einen Ausgang anklicken), dazu „je Element"/„sammle" aus einem Je-Rahmen ──
-    if(!flQuelleArt(k)){body.append(h("div",{class:"gsec"},"◀ Eingang"+((k.eingaenge||[]).length>1?"  ·  ∨ jeder Weg einzeln":"")));
-      if(!(k.eingaenge||[]).length)body.append(h("div",{class:"gsec",style:"opacity:.6"},"Kein Draht — ⊕ hier und einen Ausgang eines früheren Knotens anklicken."));
-      (k.eingaenge||[]).forEach((e,ei)=>flEingangZeilen(body,f,k,e,ei));
-      body.append(slotRow("open","+ Draht ◀ ⊕ (Ausgang eines früheren Knotens)","l",{type:"draht",dir:"in",flk:k._id},"fs:in:"+k._id));
-      if(k.art!=="je"&&(f.knoten||[]).some(x=>x.art==="je"&&x!==k)){
-        body.append(slotRow("open","+ je Element von ⊕ (Je-Rahmen)","l",{type:"jeEl",dir:"in",flk:k._id},"fs:jeein:"+k._id));
-        body.append(slotRow("open","+ sammle ⊕ (Je-Rahmen)","l",{type:"jeSa",dir:"in",flk:k._id},"fs:jesain:"+k._id));}}
-    // ── Ausgänge: je Port ⊕ (in einen bestehenden späteren Knoten, ∧/∨ automatisch) oder ＋ (neuer Knoten), darunter die Abnehmer ──
-    body.append(h("div",{class:"gsec"},"Ausgänge ▶"));
-    if(k.art==="je"){
-      body.append(slotRow("open","je Element ▶ ⊕ (Knoten, die einmal je Element laufen)","r",{type:"jeEl",dir:"out",flk:k._id},"fs:jeel:"+k._id));
-      body.append(slotRow("open","sammle ▶ ⊕ (Knoten, die auf alle Elemente warten)","r",{type:"jeSa",dir:"out",flk:k._id},"fs:jesa:"+k._id));
-      (f.knoten||[]).forEach(z=>(z.eingaenge||[]).forEach(e=>{if(e.je!==k.name)return;
-        body.append(h("div",{class:"slotrow o fl-ab"},h("span",{class:"fl-ziel",onclick:()=>zeigeKnoten("fs:"+z._id)},"→ "+(FL_SYM[z.art]||"")+" "+z.name+(e.sammle?"  (sammle)":"  (je Element)")),
-          h("button",{class:"rm",title:"lösen",onclick:()=>{z.eingaenge=z.eingaenge.filter(x=>x!==e);render();}},"✕")));}));}
-    else{const ports=flPorts(k);
-      if(!ports.length)body.append(h("div",{class:"gsec",style:"opacity:.6"},k.art==="funktion"?(k.typ?"Die Funktion hat noch kein Ergebnis — an ihrer Karte „+ Ergebnis“.":"Erst ⊕ eine Funktion verbinden — ihre Ergebnisse sind die Ausgänge."):"Erst ⊕ verbinden — die Ausgänge folgen daraus."));
-      ports.forEach(p=>{const ab=flAbnehmer(f,k,p),op=port("open");op.classList.add("o");reg(flAusKey(k,p),op,{type:"draht",dir:"out",flk:k._id,port:p.port,fall:p.fall||null});
-        const neu=[["funktion","＋ƒ","Neuer Funktions-Knoten an diesem Ausgang (was er ruft: an ihm ⊕)"],["command","＋▶","Neuer Command-Knoten an diesem Ausgang (was er sendet: an ihm ⊕)"]];
-        if(p.port==="fall")neu.push(["je","＋⧉","Neuer Je-Rahmen: die folgenden Knoten laufen je Element einer Liste"]);
-        if(p.port==="strom")neu.push(["warte","＋⧗","Auf ein späteres Event in diesem Strom warten — mit Zeitlimit (Frist als Rennen)"]);
-        body.append(h("div",{class:"slotrow o fl-port"+(p.port!=="fall"?" fl-fehler":"")},h("span",{class:"slotlbl",style:"flex:1"},p.label+" ▶"),
-          ...neu.map(([a,t,ti])=>neuKnopf(ti,()=>flNeuAmPort(f,k,p,a),t)),op));
-        ab.forEach(({z,e})=>body.append(h("div",{class:"slotrow o fl-ab"},h("span",{class:"fl-ziel",onclick:()=>zeigeKnoten("fs:"+z._id)},"→ "+(FL_SYM[z.art]||"")+" "+z.name+((e.draehte||[]).length>1?"  (∧)":"")),
-          h("button",{class:"rm",title:"Draht lösen",onclick:()=>{const d=e.draehte.find(x=>x.von===k.name&&flPortGleich(x,p));if(d)flLoese(f,z,e,d);render();}},"✕"))));});}
-    body.append(h("button",{class:"add",style:"margin-top:8px",onclick:()=>{flLoeschen(f,k);SEL=null;render();}},"🗑 Knoten löschen"));
-    body.append(h("button",{class:"add",onclick:()=>{MODEL.fluesse.splice(MODEL.fluesse.indexOf(f),1);SEL=null;render();}},"🗑 Pipeline löschen"));}
-  // Ein Eingang im Panel: seine Drähte (∧/∨ umschaltbar, ✕ lösen) und die Zuordnung „Feld ← Ausdruck".
-  function flEingangZeilen(body,f,k,e,ei){
-    const kopf=e.je?(e.sammle?"⧉ sammelt „"+e.je+"“":"⧉ je Element von „"+e.je+"“"):((e.draehte||[]).length>1?"∧ wartet auf alle":"");
-    if(ei>0)body.append(h("div",{class:"gsec fl-oder"},"∨ oder"));
-    if(kopf)body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl fl-modus"},kopf),h("button",{class:"rm",title:"Eingang entfernen",onclick:()=>{k.eingaenge.splice(ei,1);render();}},"✕")));
-    (e.draehte||[]).forEach(d=>{const v=flKnoten(f,d.von),txt=d.von+((d.port||"fall")==="fall"?(d.fall?"."+d.fall:""):d.port==="zeitlimit"?".⏳":d.port==="strom"?".Strom":".✕");
-      const ex=(e.draehte||[]).length>1||(k.eingaenge||[]).filter(x=>!x.je).length>1;
-      body.append(h("div",{class:"slotrow fl-draht"},h("span",{class:"fl-ziel",onclick:()=>v&&zeigeKnoten("fs:"+v._id)},"← "+(v?FL_SYM[v.art]+" ":"? ")+txt),
-        !e.je&&ex?h("button",{class:"rm",title:(e.draehte||[]).length>1?"Als eigenen Weg (∨) lösen":"Zum ersten Eingang nehmen (∧)",onclick:()=>{flUmschalten(f,k,e,d);render();}},(e.draehte||[]).length>1?"∨":"∧"):null,
-        h("button",{class:"rm",title:"Draht lösen",onclick:()=>{flLoese(f,k,e,d);render();}},"✕")));});
-    // Der Lambda dieses Eingangs ist Logik: Ausschnitt aus der Datei, ✎ ersetzt genau diesen Lambda, 🤖 füllt/ändert ihn.
-    if(flMitLambda(k))body.append(codePort("fle:"+k._id+":"+ei,{k:"flussLambda",fluss:f._id,knoten:k._id,ei},null,"λ Zuordnung",!!(f.datei&&e.ausdruck)));
-    // Zuordnung „Zielfeld ← Eingang": visuell im Zuordnungs-Editor (Knoten + Drähte); im Panel nur die Kurzfassung.
-    const z=flZiel(k);if(!z||k.art==="je")return;
-    zoKurz(body,()=>({titel:"⛓ "+f.name+" · "+k.name+" (Eingang "+(ei+1)+")",ziel:z.name,
-      params:flQuellen(f,e).map(q=>({p:q.p,typ:q.typ,felder:q.felder})),args:e.argumente,ausdruck:e.ausdruck,
-      block:null,
-      schreibe:a=>{e.argumente=a;delete e.ausdruck;},auto:()=>flAutoArgs(f,k,e)}));}
-  // ══ ZUORDNUNGS-EDITOR (visuell, Knoten + Drähte): baut den Eingang eines Aufrufs — links die Eingänge (Lambda-Parameter mit ihren
-  //   Feldern, Wert-Objekte aufgeklappt), rechts das Ziel (Auftrag/Command) mit seinen Feldern, dazwischen Bau-Knoten: „new V(…)" für
-  //   ein Wert-Objekt (seine Felder sind wieder Eingänge) und „ƒx" für einen freien Ausdruck. Ein Draht = ein Argument. Gespeichert wird
-  //   wie bisher die Argument-Liste je Zielfeld (der Scaffolder schreibt daraus p => new Ziel(…)); ein aus dem Code gelesener Lambda
-  //   wird beim Öffnen in Knoten zerlegt (Parameter-Namen angeglichen) und erst bei einer Änderung durch die Zuordnung ersetzt.
-  let ZO=null;
-  // Argumente auf oberster Ebene trennen (Klammern und Zeichenketten zählen, „=>" ist kein Schließen).
-  function zoSplit(s){const out=[];let d=0,q=null,cur="";for(let i=0;i<s.length;i++){const c=s[i];
-      if(q){cur+=c;if(c==="\\"){cur+=s[++i]||"";continue;}if(c===q)q=null;continue;}
-      if(c==='"'||c==="'"){q=c;cur+=c;continue;}
-      if("([{".includes(c))d++;else if(")]}".includes(c))d--;
-      if(c===","&&d===0){out.push(cur.trim());cur="";continue;}cur+=c;}
-    if(cur.trim())out.push(cur.trim());return out;}
-  // „new X(a, b)" → {typ, args} — nur, wenn die schließende Klammer das Ende ist.
-  function zoKonstruktor(s){const m=/^new\s+([A-Za-z_][\w.]*)\s*\(/.exec(s||"");if(!m)return null;let d=0,q=null,start=m[0].length-1;
-    for(let i=start;i<s.length;i++){const c=s[i];if(q){if(c==="\\"){i++;continue;}if(c===q)q=null;continue;}
-      if(c==='"'||c==="'"){q=c;continue;}if(c==="(")d++;else if(c===")"){d--;if(d===0)return i===s.length-1?{typ:m[1].split(".").pop(),args:zoSplit(s.slice(start+1,i))}:null;}}
-    return null;}
-  // Ein gelesener Lambda „(a, b) => new Ziel(…)" → Argument-Liste mit den Parameter-Namen des Editors; sonst null.
-  function zoLambda(aus,namen,ziel,anzahl){const m=/^\s*(?:\(([^)]*)\)|([A-Za-z_]\w*))\s*=>\s*([\s\S]*?)\s*;?\s*$/.exec(aus||"");if(!m)return null;
-    const ps=(m[1]!=null?m[1].split(","):[m[2]]).map(x=>x.trim().split(/\s+/).pop()).filter(Boolean);
-    const k=zoKonstruktor(m[3].trim());if(!k||k.typ!==ziel||k.args.length!==anzahl)return null;
-    return k.args.map(a=>{ps.forEach((p,i)=>{if(namen[i]&&p!==namen[i])a=a.replace(new RegExp("\\b"+p+"\\b","g"),"§"+i+"§");});return a.replace(/§(\d+)§/g,(_,i)=>namen[+i]);});}
-  // Alle Quell-Ausdrücke mit Typ: der Parameter selbst, seine Felder und (eine Ebene) die Felder seiner Wert-Objekte.
-  function zoQuellTypen(params){const m=new Map();params.forEach(pa=>{m.set(pa.p,pa.typ||"");(pa.felder||[]).forEach(f=>{const t=baseTyp(f.typ),x=pa.p+"."+f.name;m.set(x,t);
-      const vo=recByName(t);if(vo&&vo.kind==="valueobject")(vo.felder||[]).forEach(g=>m.set(x+"."+g.name,baseTyp(g.typ)));});});return m;}
-  function zoWert(s,qt){s=(s||"").trim();if(!s||s==="default"||s==="default!")return {a:"leer"};
-    if(qt.has(s))return {a:"q",x:s};
-    const k=zoKonstruktor(s);if(k){const r=recByName(k.typ);if(r&&(r.felder||[]).length===k.args.length)return {a:"neu",typ:r.name,args:k.args.map(x=>zoWert(x,qt))};}
-    return {a:"text",x:s};}
-  const zoText=w=>w.a==="q"?w.x:w.a==="text"?((w.x||"").trim()||"default"):w.a==="neu"?"new "+w.typ+"("+w.args.map(zoText).join(", ")+")":"default";
-  function zoHol(p){let w=ZO.baum[p[0]];for(let i=1;i<p.length;i++)w=w&&w.args?w.args[p[i]]:null;return w;}
-  function zoSetze(p,w){if(p.length===1)ZO.baum[p[0]]=w;else{const e=zoHol(p.slice(0,-1));if(e&&e.args)e.args[p[p.length-1]]=w;}zoSchreib();zoRender();}
-  function zoSchreib(){ZO.ctx.schreibe(ZO.baum.map(zoText));ZO.roh=null;autosave();}
-  const zoPasst=(a,b)=>!a||!b||baseTyp(a)===baseTyp(b);
-  function zoOeffne(ctx){const z=recByName(ctx.ziel);if(!z){deFlash("Kein Ziel-Typ — erst ⊕ eine Funktion bzw. einen Command verbinden.",false);return;}
-    const n=(z.felder||[]).length,qt=zoQuellTypen(ctx.params);ctx.qt=qt;let args=null,roh=null;
-    if(ctx.ausdruck){args=zoLambda(ctx.ausdruck,ctx.params.map(p=>p.p),z.name,n);if(!args)roh=ctx.ausdruck;}
-    if(!args)args=ctx.args&&ctx.args.length===n?ctx.args:ctx.auto();
-    ZO={ctx,z,baum:(z.felder||[]).map((_,i)=>zoWert(args[i],qt)),roh,arm:null};
-    document.addEventListener("keydown",zoTaste,true);zoRender();}
-  function zoTaste(e){if(e.key!=="Escape")return;e.stopPropagation();e.preventDefault();if(ZO&&ZO.arm){ZO.arm=null;zoRender();}else zoZu();}
-  function zoZu(){ZO=null;document.removeEventListener("keydown",zoTaste,true);const o=document.getElementById("gzo");if(o)o.remove();render();}
-  // Ausgangs-Punkt (Quelle oder Bau-Knoten) und Eingangs-Punkt (Zielfeld bzw. Feld eines Bau-Knotens).
-  function zoAus(src){const s=h("span",{class:"zo-p zo-o"+(ZO.arm&&JSON.stringify(ZO.arm)===JSON.stringify(src)?" zo-arm":""),title:"Ziehen (oder anklicken, dann ein Feld anklicken) = verbinden"});
-    s.dataset.src=JSON.stringify(src);s.onpointerdown=e=>zoZiehe(e,src,s);return s;}
-  function zoEin(pfad,typ){const s=h("span",{class:"zo-p zo-i",title:"Eingang "+(typ||"")+" — hier ablegen"});s.dataset.pfad=JSON.stringify(pfad);s.dataset.t=typ||"";
-    s.onclick=()=>{if(ZO.arm)zoVerbinde(ZO.arm,pfad,typ);};return s;}
-  function zoVerbinde(src,pfad,typ){
-    if(!zoPasst(src.t,typ)){deFlash("Typ passt nicht: "+(src.t||"?")+" → "+(typ||"?"),false);return;}
-    ZO.arm=null;
-    if(src.x!=null){zoSetze(pfad,{a:"q",x:src.x});return;}
-    const k=JSON.stringify(src.n),z=JSON.stringify(pfad);if(z===k||z.startsWith(k.slice(0,-1)+","))return;   // nicht in sich selbst
-    const w=zoHol(src.n);ZO.arm=null;if(src.n.length===1)ZO.baum[src.n[0]]={a:"leer"};else{const e=zoHol(src.n.slice(0,-1));e.args[src.n[src.n.length-1]]={a:"leer"};}
-    zoSetze(pfad,w);}
-  // Ziehen per Pointer-Capture am Anschluss (Bewegung/Loslassen kommen sicher an); ohne Bewegung = Quelle wählen (Klick-Klick).
-  function zoZiehe(e,src,el){e.preventDefault();e.stopPropagation();const box=ZO.flaeche,svg=ZO.svg,br=()=>box.getBoundingClientRect();
-    const p0=zoPunkt(el),tmp=document.createElementNS("http://www.w3.org/2000/svg","path");tmp.setAttribute("class","zo-tmp");svg.append(tmp);
-    box.querySelectorAll(".zo-i").forEach(i=>i.classList.add(zoPasst(src.t,i.dataset.t)?"zo-ok":"zo-nein"));
-    let bewegt=false,fertig=false;const sx=e.clientX,sy=e.clientY;try{el.setPointerCapture(e.pointerId);}catch(_){}
-    const mv=ev=>{if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)>4)bewegt=true;const r=br();
-      tmp.setAttribute("d",zoBez(p0.x,p0.y,ev.clientX-r.left+box.scrollLeft,ev.clientY-r.top+box.scrollTop));};
-    const ende=ev=>{if(fertig)return;fertig=true;el.removeEventListener("pointermove",mv);el.removeEventListener("pointerup",ende);
-      el.removeEventListener("lostpointercapture",ende);tmp.remove();box.querySelectorAll(".zo-i").forEach(i=>i.classList.remove("zo-ok","zo-nein"));
-      if(!bewegt){ZO.arm=ZO.arm&&JSON.stringify(ZO.arm)===JSON.stringify(src)?null:src;zoRender();return;}
-      const t=document.elementFromPoint(ev.clientX,ev.clientY),ziel=t&&t.closest&&t.closest(".zo-i");
-      if(ziel)zoVerbinde(src,JSON.parse(ziel.dataset.pfad),ziel.dataset.t);};
-    el.addEventListener("pointermove",mv);el.addEventListener("pointerup",ende);el.addEventListener("lostpointercapture",ende);}
-  const zoBez=(x1,y1,x2,y2)=>{const dx=Math.max(40,Math.abs(x2-x1)*0.5);return "M"+x1+","+y1+" C"+(x1+dx)+","+y1+" "+(x2-dx)+","+y2+" "+x2+","+y2;};
-  function zoPunkt(el){const r=el.getBoundingClientRect(),b=ZO.flaeche.getBoundingClientRect();
-    return {x:r.left+r.width/2-b.left+ZO.flaeche.scrollLeft,y:r.top+r.height/2-b.top+ZO.flaeche.scrollTop};}
-  // Eine Feld-Zeile mit Eingang: Name : Typ, woher der Wert kommt, ＋ new V / ƒx / ✕.
-  function zoFeld(f,w,pfad){const t=baseTyp(f.typ),vo=recByName(t),row=h("div",{class:"zo-r"+(w.a==="leer"?" zo-leer":"")});
-    row.append(zoEin(pfad,t),h("span",{class:"zo-l"},f.name),h("span",{class:"zo-t"},f.typ));
-    row.append(h("span",{class:"zo-v"},w.a==="q"?"← "+w.x:w.a==="neu"?"← new "+w.typ:w.a==="text"?"← ƒx":"default"));
-    if(vo&&vo.kind==="valueobject"&&w.a!=="neu")row.append(h("button",{class:"zo-b",title:"Wert-Objekt "+vo.name+" aus seinen Feldern bauen (Bau-Knoten)",
-      onclick:()=>zoSetze(pfad,{a:"neu",typ:vo.name,args:(vo.felder||[]).map(()=>({a:"leer"}))})},"＋ new "+vo.name));
-    if(w.a!=="text")row.append(h("button",{class:"zo-b",title:"Freier C#-Ausdruck als Wert (Bau-Knoten ƒx)",onclick:()=>zoSetze(pfad,{a:"text",x:w.a==="q"?w.x:""})},"ƒx"));
-    if(w.a!=="leer")row.append(h("button",{class:"zo-b zo-x",title:"Verbindung lösen (default)",onclick:()=>zoSetze(pfad,{a:"leer"})},"✕"));
-    return row;}
-  function zoRender(){let o=document.getElementById("gzo");if(!ZO){if(o)o.remove();return;}
-    const alt=o&&o.querySelector(".zo-f"),sl=alt?alt.scrollLeft:0,st=alt?alt.scrollTop:0;
-    if(!o){o=h("div",{id:"gzo"});["pointerdown","wheel","click","dblclick"].forEach(ev=>o.addEventListener(ev,e=>e.stopPropagation()));document.body.append(o);}
-    o.textContent="";const {ctx,z}=ZO;
-    const kopfP=ctx.params.map(p=>p.p),kopf=kopfP.length===1?kopfP[0]:"("+kopfP.join(", ")+")";
-    o.append(h("div",{class:"zo-k"},h("b",{},"🔀 Zuordnung"),h("span",{class:"zo-sub2"},ctx.titel),h("span",{style:"flex:1"}),
-      h("button",{title:"Jedes Zielfeld aus den Eingängen vorschlagen (gleicher Name → Namensende + Typ → einziger gleicher Typ)",
-        onclick:()=>{ZO.baum=ctx.auto().map(x=>zoWert(x,ctx.qt));zoSchreib();zoRender();}},"↻ automatisch"),
-      h("button",{class:"go",onclick:zoZu},"Fertig (Esc)")));
-    if(ctx.block&&ctx.block.text)o.append(h("div",{class:"zo-hin"},"⚠ Der Lambda kommt aus dem 📝-Block „"+ctx.block.name+"“ — er hat beim Schreiben Vorrang. ",
-      h("button",{onclick:()=>{ctx.block.loesen();ctx.block=null;zoRender();}},"Block lösen, Zuordnung gilt")));
-    if(ZO.roh)o.append(h("div",{class:"zo-hin"},"Der Lambda aus dem Code ist kein einfacher Konstruktor — die erste Änderung ersetzt ihn durch die Zuordnung:",h("pre",{},ZO.roh)));
-    if(ZO.arm)o.append(h("div",{class:"zo-hin"},"Quelle gewählt — jetzt ein passendes Feld (grün) anklicken · Esc = abbrechen"));
-    const fl=h("div",{class:"zo-f"}),spalten=h("div",{class:"zo-sp"}),svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("class","zo-svg");
-    ZO.flaeche=fl;ZO.svg=svg;fl.append(svg,spalten);o.append(fl);
-    // Links: Eingänge.
-    const links=h("div",{class:"zo-col"},h("div",{class:"zo-ct"},"◀ Eingänge (Drähte)"));
-    ctx.params.forEach(pa=>{const fehlt=pa.typ&&!(pa.felder||[]).length&&!recByName(baseTyp(pa.typ))&&!/^IReadOnlyList</.test(pa.typ);
-      const card=h("div",{class:"zo-n zo-q"},h("div",{class:"zo-nh"},h("span",{style:"flex:1"},pa.p+" : "+(pa.typ||"?")),
-        fehlt?h("span",{class:"zo-x",title:"Diesen Typ gibt es (noch) nicht — als Karte anlegen, dann erscheinen seine Felder"},"⚠ Typ fehlt"):null,zoAus({x:pa.p,t:pa.typ||""})));
-      (pa.felder||[]).forEach(f=>{const x=pa.p+"."+f.name,t=baseTyp(f.typ);card.append(h("div",{class:"zo-r"},h("span",{class:"zo-l"},f.name),h("span",{class:"zo-t"},f.typ),zoAus({x,t})));
-        const vo=recByName(t);if(vo&&vo.kind==="valueobject")(vo.felder||[]).forEach(g=>card.append(h("div",{class:"zo-r zo-tief"},h("span",{class:"zo-l"},"· "+g.name),h("span",{class:"zo-t"},g.typ),zoAus({x:x+"."+g.name,t:baseTyp(g.typ)}))));});
-      links.append(card);});
-    if(!ctx.params.length)links.append(h("div",{class:"zo-leer2"},"Kein Draht im Eingang — erst einen Draht verbinden."));
-    // Mitte: Bau-Knoten (Wert-Objekt, Ausdruck) — rekursiv aus dem Baum.
-    const mitte=h("div",{class:"zo-col"},h("div",{class:"zo-ct"},"Bau-Knoten"));
-    const baue=(w,pfad)=>{if(w.a==="neu"){const v=recByName(w.typ);
-        const card=h("div",{class:"zo-n zo-bau"},h("div",{class:"zo-nh"},h("span",{style:"flex:1"},"new "+w.typ+"(…)"),zoAus({n:pfad,t:w.typ})));
-        ((v&&v.felder)||[]).forEach((g,j)=>card.append(zoFeld(g,w.args[j]||{a:"leer"},pfad.concat(j))));mitte.append(card);
-        w.args.forEach((a,j)=>baue(a,pfad.concat(j)));}
-      else if(w.a==="text"){const dl="zodl"+pfad.join("_");
-        mitte.append(h("div",{class:"zo-n zo-bau"},h("div",{class:"zo-nh"},h("span",{style:"flex:1"},"ƒx Ausdruck"),zoAus({n:pfad,t:""})),
-          h("input",{value:w.x||"",list:dl,placeholder:"C#, z. B. "+(kopfP[0]||"p")+".Feld ?? \"\"",onchange:e=>{w.x=e.target.value;zoSchreib();zoRender();}}),
-          h("datalist",{id:dl},...[...ctx.qt.keys()].map(x=>h("option",{value:x})))));}};
-    ZO.baum.forEach((w,i)=>baue(w,[i]));
-    if(mitte.childNodes.length===1)mitte.append(h("div",{class:"zo-leer2"},"Keine — an einem Zielfeld „＋ new …“ oder „ƒx“."));
-    // Rechts: das Ziel.
-    const rechts=h("div",{class:"zo-col"},h("div",{class:"zo-ct"},"Ziel ▶"));
-    const zc=h("div",{class:"zo-n zo-z"},h("div",{class:"zo-nh"},h("span",{style:"flex:1;cursor:pointer",title:"Karte öffnen",onclick:()=>{const id="rec:"+z.name;zoZu();zeigeLadend(id);}},"new "+z.name+"(…)")));
-    (z.felder||[]).forEach((f,i)=>zc.append(zoFeld(f,ZO.baum[i]||{a:"leer"},[i])));
-    if(!(z.felder||[]).length)zc.append(h("div",{class:"zo-leer2"},z.name+" hat keine Felder — an seiner Karte „+ Feld“."));
-    rechts.append(zc);spalten.append(links,mitte,rechts);
-    o.append(h("div",{class:"zo-fuss"},h("span",{class:"zo-ct"},"Lambda"),h("pre",{},kopf+" => new "+z.name+"("+ZO.baum.map(zoText).join(", ")+")")));
-    fl.scrollLeft=sl;fl.scrollTop=st;
-    requestAnimationFrame(()=>{if(!ZO||ZO.svg!==svg)return;svg.setAttribute("width",fl.scrollWidth);svg.setAttribute("height",fl.scrollHeight);
-      if(ZO.arm)fl.querySelectorAll(".zo-i").forEach(i=>i.classList.add(zoPasst(ZO.arm.t,i.dataset.t)?"zo-ok":"zo-nein"));
-      const aus=new Map([...fl.querySelectorAll(".zo-o")].map(e=>[e.dataset.src,e]));
-      fl.querySelectorAll(".zo-i").forEach(ein=>{const pfad=JSON.parse(ein.dataset.pfad),w=zoHol(pfad);if(!w||w.a==="leer")return;
-        const t=fl.querySelector('.zo-o[data-src="'+CSS.escape(JSON.stringify(w.a==="q"?{x:w.x,t:ctx.qt.get(w.x)||""}:{n:pfad,t:w.a==="neu"?w.typ:""}))+'"]')
-          ||[...aus.values()].find(e=>{const s=JSON.parse(e.dataset.src);return w.a==="q"?s.x===w.x:JSON.stringify(s.n)===JSON.stringify(pfad);});
-        if(!t)return;const a=zoPunkt(t),b=zoPunkt(ein),p=document.createElementNS("http://www.w3.org/2000/svg","path");
-        p.setAttribute("d",zoBez(a.x,a.y,b.x,b.y));p.setAttribute("class","zo-draht"+(w.a==="q"?"":" zo-draht-bau"));
-        const ti=document.createElementNS("http://www.w3.org/2000/svg","title");ti.textContent="Klick: lösen";p.append(ti);
-        p.onclick=()=>zoSetze(pfad,{a:"leer"});svg.append(p);});});}
-  // Kurzfassung im Panel: je Zielfeld seine Quelle — bearbeitet wird im Zuordnungs-Editor.
-  function zoKurz(body,mk){const ctx=mk(),z=recByName(ctx.ziel);if(!z)return;
-    const n=(z.felder||[]).length,args=ctx.ausdruck?zoLambda(ctx.ausdruck,ctx.params.map(p=>p.p),z.name,n):(ctx.args&&ctx.args.length===n?ctx.args:null);
-    const box=h("div",{class:"zo-kurz",title:"Klick: Zuordnung im Knoten-Editor bearbeiten",onclick:()=>zoOeffne(mk())});
-    box.append(h("div",{class:"zo-kurz-k"},"🔀 "+z.name+"(…) ← "+ctx.params.map(p=>p.p).join(", ")));
-    if(ctx.ausdruck&&!args)box.append(h("pre",{class:"fl-lambda"},ctx.ausdruck));
-    else (z.felder||[]).forEach((f,i)=>{const a=(args||[])[i]||"default";box.append(h("div",{class:"zo-kurz-r"+(a==="default"?" zo-leer":"")},f.name+" ← "+a));});
-    box.append(h("button",{class:"add",onclick:e=>{e.stopPropagation();zoOeffne(mk());}},"🔀 Zuordnung im Knoten-Editor"));
-    body.append(box);}
-  function flussKurz(n){const k=n.ref,f=n.own.ref;
-    if(flQuelleArt(k))return (k.art==="quelle"?"Quelle · meldet ":"Auf ")+(k.typ||"?")+[...new Set((k.bindungen||[]).map(b=>(b.modus==="webhook"?" · ⇥ ":" · ")+(b.ort||"")))].join("");
-    if(k.art==="je")return "je Element · "+(k.liste||"Liste?");
-    if(k.art==="warte")return "wartet auf "+(flWarteAuf(k).join(" | ")||"?")+(k.zeitlimit?" · ⏳ "+k.zeitlimit:" · ⏳ fehlt");
-    const ein=(k.eingaenge||[]).map(e=>e.je?(e.sammle?"sammle "+e.je:"je "+e.je):(e.draehte||[]).map(d=>d.von).join(" ∧ ")).join(" ∨ ");
-    return (k.art==="funktion"?"ƒ ":"▶ ")+(k.typ||"?")+": "+flSignatur(k)+(k.zeitlimit?" · ⏳":"")+(ein?" · ← "+ein:"");}
-  // Layout eines Pipeline-Rahmens: Spalte = Flusstiefe, Zeile = Reihenfolge innerhalb der Tiefe (Vorgänger-Zeile bevorzugt).
-  //   Im Rahmen stehen nur die Knoten (dazu höchstens der Akteur der Quelle, vor ihr) — Typen und Interfaces leben im Katalog.
-  function flussLayout(f,nodes,sz,RP,RK,SPK){const t=flTiefen(f),spalten=new Map(),vor=new Map();
-    const schl=n=>n.kind==="flussknoten"?n.ref.name:n.id;
-    nodes.forEach(n=>{const fl=n.kind==="flussknoten",c=fl?(t.get(n.ref.name)||0):-1;if(!spalten.has(c))spalten.set(c,[]);spalten.get(c).push(n);vor.set(schl(n),fl?flVor(n.ref):[]);});
-    const GAPX=110,GAPY=26,placed=[];let x=RP,maxY=0;const zeile=new Map();
-    [...spalten.keys()].sort((a,b)=>a-b).forEach(d=>{const col=spalten.get(d);let w=200;
-      // Zeile: wo der erste Vorgänger steht (Kette auf einer Linie), sonst unten anschließend.
-      const belegt=new Set();col.forEach(n=>{const v=(vor.get(schl(n))||[]).map(x=>zeile.get(x)).filter(z=>z!=null);let z=v.length?Math.min(...v):0;while(belegt.has(z))z++;belegt.add(z);zeile.set(schl(n),z);w=Math.max(w,sz(n).w);});
-      col.forEach(n=>{placed.push({n,rx:x,ry:0,z:zeile.get(schl(n))});});x+=w+GAPX;});
-    const ZH=Math.max(60,...nodes.map(n=>sz(n).h))+GAPY;
-    placed.forEach(p=>{p.ry=RK+RP+SPK+p.z*ZH;maxY=Math.max(maxY,p.ry+sz(p.n).h);});
-    return {placed,leer:[],aktLeer:[],w:Math.max(420,x-GAPX+RP),h:maxY+RP};}
-  // Slice einer Pipeline: ihre Knoten + was ihnen zugewiesen ist (Funktion, Command, Nachricht) + die Events, die sie hören.
-  // ◎ am Fluss-Rahmen: seine Knoten, ihre Zuweisungen und die Events, auf die sie hören — vom Server.
-  const flussSlice=f=>new Set(((SICHT().fluesse||{})["fl:"+f._id]||{}).slice||[]);
-  // 🔗 Rahmen einer Pipeline: Kopf = Name · Namespace · Knoten-Zahl · ＋ Quelle-Knoten wählen · ◎ · ⤢.
-  function flussRahmen(r){const f=flussVonDom(r.ns),fr=h("div",{class:"grahmen fluss"});fr.dataset.ns=r.ns;
-    Object.assign(fr.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});
-    fr.style.setProperty("--dc","hsl("+domHue(r.ns)+" 55% 60%)");
-    const q=f&&(f.knoten||[]).find(flQuelleArt);
-    const k=h("div",{class:"grahmen-k",title:f?"public sealed class "+f.name+" : IPipeline — "+(f.namespace||"")+"\nJede Quell-Nachricht startet einen Vorgang; die Knoten laufen als Dirigent (ein Actor je Vorgang), Funktionen holen sich Ausführer per Pull.":""},
-      h("span",{class:"gr-t akt-n",onclick:e=>{e.stopPropagation();if(q)waehle("fs:"+q._id);}},"⛓ "+(f?f.name:"?")),
-      h("span",{class:"gr-p"},f?(f.namespace||""):""),h("span",{class:"gr-z"},f?(f.knoten||[]).length+" Knoten":""),
-      f?h("button",{title:"Pipeline markieren (Slice) — mit den Nachrichten, über die sie an der Domäne hängt",onclick:e=>{e.stopPropagation();fokussiere("menge",flussSlice(f),"⛓ "+f.name);}},"◎"):null,
-      h("button",{title:"Pipeline einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"));
-    k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};fr.append(k);return fr;}
+  const istAussenDom=d=>istClientDom(d)||istHostDom(d);
   // Kanten eines Flusses: je Draht Knoten → Knoten, beschriftet mit dem Typ des Ausgangs (∧ = mehrere Drähte in einen Eingang,
   //   ∨ = eigener Eingang, ⏳ amber, ✕ rot gestrichelt). Dazu die ZUWEISUNG je Knoten: ƒ ⇢ Funktions-Karte, ▶ → Command im Aggregat,
   //   ⛲ ⇢ Nachricht; ◆/⧗ ← Event. Klick auf eine Kante öffnet ihr Ziel.
-  function flussKanten(ELS,mkE){const domEl=id=>ELS.get(id)||((VERTRETER.get(id)||[]).map(v=>ELS.get(v)).find(Boolean));
-    MODEL.fluesse.forEach(f=>(f.knoten||[]).forEach(z=>{const ez=ELS.get("fs:"+z._id);if(!ez)return;
-      const zw=flZuweisung(z),ew=zw&&domEl(zw);
-      if(ew){const cmd=z.art==="command",col=cmd?"#4a86d6":z.art==="quelle"?"#4fb06a":"#c08a2e",nm=(NODEBY.get(zw)||{}).name||"";
-        const l=mkE({el:ez},{el:ew},col,!cmd,"fluss zuweisung");l.dataset.a="fs:"+z._id;l.dataset.b=zw;
-        l.titel=z.name+(cmd?" sendet "+nm+" ins Aggregat":z.art==="quelle"?" meldet "+nm:" ruft ƒ "+nm+" ("+flSignatur(z)+")")+"\nKlick: "+nm+" öffnen";l.klick=()=>waehle(zw);}
-      flHoert(z).forEach(nm=>{const ek=domEl("rec:"+nm);if(!ek)return;const l=mkE({el:ek},{el:ez},"#4fb06a",false,"fluss");l.festB="l";
-        l.titel=nm+" aus dem Log → "+z.name+"\nKlick: "+z.name+" öffnen";l.dataset.a="rec:"+nm;l.dataset.b="fs:"+z._id;l.klick=()=>waehle("fs:"+z._id);});
-      const es=z.eingaenge||[],gesehen=new Map();
-      // Je Draht EINE Kante (kommt er in mehreren ∨-Eingängen vor, wird er nicht doppelt gezeichnet). KONTEXT = ein Draht im ∧ von
-      //   einem Vorgänger eines anderen Drahts desselben Eingangs (er ist ohnehin schon da) — dünn, ohne Beschriftung.
-      const istKontext=(e,d)=>!d.je&&(e.draehte||[]).length>1&&(e.draehte||[]).some(d2=>d2!==d&&d2.von!==d.von&&flErreicht(f,d.von,d2.von));
-      es.forEach((e,ei)=>{const ds=e.je?[{von:e.je,je:true},...(e.sammle?(e.draehte||[]):[])]:(e.draehte||[]);
-        ds.forEach(d=>{const kontext=istKontext(e,d);
-          const key=d.von+"|"+(d.port||"fall")+"|"+(d.fall||"")+"|"+(d.je?"je":"");const g=gesehen.get(key);
-          if(g){g.ei.add(ei);g.kontext=g.kontext&&kontext;return;}gesehen.set(key,{d,e,ei:new Set([ei]),kontext});});});
-      gesehen.forEach(({d,e,ei,kontext})=>{const v=flKnoten(f,d.von),ev=v&&ELS.get("fs:"+v._id);if(!ev)return;
-        const port=d.port||"fall",oder=es.length>1&&ei.size<es.length,und=!e.je&&(e.draehte||[]).filter(x=>!istKontext(e,x)).length>1;
-        const farbe=kontext?"#6f7a91":d.je?"#7fa6d9":port==="zeitlimit"?"#d7a23c":port==="abgelehnt"?"#cf6f68":port==="strom"?"#8fb3d9":"#c08a2e";
-        const l=mkE({el:ev},{el:ez},farbe,kontext||port!=="fall"||!!d.je,"fluss"+(kontext?" kontext":""));l.festA="r";l.festB="l";
-        l.label=kontext?"":(d.je?(e.sammle?"⧉ je":"⧉ je Element"):(port==="zeitlimit"?"⏳":port==="abgelehnt"?"✕":port==="strom"?"⇢ Strom":(d.fall||(flQuelleArt(v)?v.typ:"")||"")))
-          +(kontext?"":(und&&!e.je?" ∧":"")+(oder?" ∨":"")+(e.sammle&&!d.je?" ⧉ sammle":""));
-        l.titel=(kontext?"Kontext: ":"")+d.von+" → "+z.name+(oder?" (∨ eigener Weg)":und?" (∧ wartet auf alle)":"")+"\nKlick: "+z.name+" öffnen";
-        l.dataset.a="fs:"+v._id;l.dataset.b="fs:"+z._id;l.klick=()=>waehle("fs:"+z._id);});}));}
+  // ⬡ Graph-Kanten: je [Von] eine Kante zwischen den Karten der Knoten (Funktion bzw. Graph im Graphen) — grün, verlierbar gestrichelt; beschriftet
+  //   mit den Typen, die sie trägt (vom Server, aus dem Code). Klick öffnet den Graphen.
+  function graphKanten(ELS,mkE){const domEl=id=>ELS.get(id)||((VERTRETER.get(id)||[]).map(v=>ELS.get(v)).find(Boolean));
+    (MODEL.graphen||[]).forEach(g=>{const kn=g.knoten||[],karte=nm=>{const k=kn.find(x=>x.name===nm);return k?graphKnotenKarte(k.typ):null;};
+      kn.forEach(k=>(k.von||[]).forEach(v=>{const a=karte(v),b=karte(k.name),ea=a&&domEl(a),eb=b&&domEl(b);if(!ea||!eb||ea===eb)return;
+        const verl=(k.verlierbar||[]).includes(v),typen=[...new Set((g.kanten||[]).filter(x=>x.von.split(".")[0]===v&&x.nach.split(".")[0]===k.name).map(x=>x.typ))];
+        const l=mkE({el:ea},{el:eb},"#81c995",verl,"graph");l.festA="r";l.festB="l";
+        l.label=typen.join(", ")+(verl?" ⇢":"");l.titel="⬡ "+g.name+": "+v+" → "+k.name+(verl?" (verlierbar)":" (gesichert)")+"\nKlick: Graph öffnen";
+        l.dataset.a=a;l.dataset.b=b;l.klick=()=>waehle("gr:"+g._id);}));});}
   function graphNodes(){
     const basis=[...MODEL.akteure.map(a=>({id:"akt:"+a._id,name:a.name,kind:"akteur",ref:a})),
             ...MODEL.clients.map(c=>({id:"cl:"+c._id,name:clientAnzeige(c),kind:"client",ref:c})),
-            ...vertragsZusagen().map(({a,r,i,id})=>({id,name:r.eingang||"?",kind:"auf",ref:r,idx:i,own:{id:"akt:"+a._id,name:a.name,kind:"akteur",ref:a}})),
             ...MODEL.records.map(r=>({id:"rec:"+r.name,name:r.name,kind:r.kind,ref:r})),
             ...MODEL.aggregate.map(a=>({id:"agg:"+a.name,name:a.name,kind:"aggregate",ref:a})),
             ...MODEL.states.map(s=>({id:"st:"+s._id,name:s.aggregat||"frei",kind:"state",ref:s})),
             ...MODEL.decider.map(d=>({id:"dec:"+d._id,name:d.command||"",kind:"decider",ref:d})),
             ...MODEL.applier.map(a=>({id:"app:"+a._id,name:a.event||"",kind:"applier",ref:a})),
             ...MODEL.enums.map(e=>({id:"enum:"+e.name,name:e.name,kind:"enum",ref:e})),
-            ...MODEL.sagas.map(s=>({id:"saga:"+s.name,name:s.name,kind:"saga",ref:s})),
-            ...MODEL.transitions.map(t=>({id:"tr:"+t._id,name:((t.dann||[]).map(d=>d.rufe||d.sende).filter(Boolean).join(", ")),kind:"transition",ref:t})),
-            ...MODEL.funktionen.map(f=>({id:"fk:"+f._id,name:f.name,kind:"funktion",ref:f})),
+            ...(MODEL.graphen||[]).map(g=>({id:"gr:"+g._id,name:g.name,kind:"graph",ref:g})),
             ...(MODEL.bausteinFunktionen||[]).map(f=>({id:"fb:"+f._id,name:f.name,kind:"bausteinfunktion",ref:f})),
             ...MODEL.readModels.map(rm=>({id:"rm:"+rm._id,name:rm.name,kind:"readmodel",ref:rm})),
             ...MODEL.stores.map(s=>({id:"sto:"+s._id,name:s.name,kind:"store",ref:s})),
             ...MODEL.projektionen.map(p=>({id:"prj:"+p._id,name:p.name,kind:"projektion",ref:p})),
             ...MODEL.reader.map(r=>({id:"rdr:"+r._id,name:r.name,kind:"reader",ref:r})),
-            ...MODEL.reaktionen.map(r=>({id:"rk:"+r._id,name:r.name,kind:"reaktion",ref:r})),
             ...MODEL.codeKarten.map(c=>({id:c._id,name:c.name,kind:"code",ref:c})),
-            ...flussKnotenNodes(),...handleKnoten(),...fnKnoten(),...hostKnoten()];
+            ...handleKnoten(),...fnKnoten(),...hostKnoten()];
     return [...basis,...rumpfKacheln(basis)];
   }
   // ── AGGREGATSWEISE ANORDNUNG: jedes Aggregat ein gekachelter Block (eigenes Rollen-Mini-Layout),
@@ -2029,23 +1333,26 @@
   // Das AKTEUR-BAND (docs/konzept-akteure.md §8): ein eigener Block je Domäne — ganz links, auf der Eingangsseite, vor den
   //   Aggregat-Blöcken. Kommt DAZU, ersetzt keine Spalte. Domäne aus dem Graphen (alle IDarf-Ziele in einer Domäne → dort).
   const AKTEUR_KEY="§akteure";
-  const ROLE_AKTEUR={akteur:0,auf:1,client:2,event:3,rejection:3,command:3,query:3,valueobject:4,enum:4};   // Spalte „Zusage" (Vertrag, Akteur-Konzept §3) neben dem Akteur
+  const ROLE_AKTEUR={akteur:0,client:2,event:3,rejection:3,command:3,query:3,valueobject:4,enum:4};   // Spalte „Zusage" (Vertrag, Akteur-Konzept §3) neben dem Akteur
   // Rollen-Spalten innerhalb eines Aggregat-Blocks (links→rechts = Schreibfluss, dann Leseseite).
   //   Leseseite: Projektion (Hub) → ihre Handles → Store-Fns → Store/ReadModel; Query → Reader-Handle → Response, Reader (Hub).
   //   Nach dem Event der Prozess (Regel → Auftrag → ƒ → Ergebnis),
   //   der in die Command-Spalte zurück sendet — so liest sich ein Ablauf in EINEM Block.
   const ROLE_AGG={command:3,decider:4,aggregate:5,state:5,event:6,rejection:6,applier:7,
     saga:8,transition:9,auftrag:10,funktion:11,ergebnis:12,valueobject:13,enum:13,projektion:14,"handle:projektion":15,"handle:reaktion":15,
-    fn:16,store:17,readmodel:17,query:18,"handle:reader":19,queryresponse:20,reader:21,bausteinfunktion:11,konfig:13,code:22};
+    fn:16,store:17,readmodel:17,query:18,"handle:reader":19,queryresponse:20,reader:21,graph:10.5,bausteinfunktion:11,konfig:13,code:22};
   // Rollen-Spalten im Geteilt-Band.
-  const ROLE_SHARED={saga:0,transition:1,auftrag:2,funktion:3,ergebnis:3.5,reaktion:2,"handle:reaktion":3,konfig:7,valueobject:8,enum:8,command:9,event:9,rejection:9,
-    fn:10,store:11,readmodel:11,bausteinfunktion:3,"handle:projektion":12,projektion:13,"handle:reader":14,reader:15,query:14,queryresponse:16,rumpf:17,code:17};
+  const ROLE_SHARED={konfig:7,valueobject:8,enum:8,command:9,event:9,rejection:9,
+    fn:10,store:11,readmodel:11,graph:2.5,bausteinfunktion:3,"handle:projektion":12,projektion:13,"handle:reader":14,reader:15,query:14,queryresponse:16,rumpf:17,code:17};
   // Rolle eines Knotens (vom Server): Handles je Besitzer-Art (Projektions- vs. Reader-Handle liegen in verschiedenen Spalten), Ergebnis-Events
   //   einer Funktion hinter ihr (Spalte „ergebnis“), sonst die Art. Funktionen einer Kette: je Tiefe eine eigene Spalte (11.01, 11.02 …).
   const rolle=(n,map)=>{const sr=(SICHT().karten[n.id]||{}).rolle,k=sr||(n.kind==="handle"?"handle:"+n.own.kind:n.kind);
-    if(k==="funktion"&&map.funktion!==undefined)return map.funktion+Math.min(TIEFE.get(n.id)||0,90)/100;
+    // Knoten eines Graphen: je Tiefe der Von-Kette eine eigene Spalte (links → rechts wie der Fluss).
+    if((k==="bausteinfunktion"||k==="graph")&&map[k]!==undefined)return map[k]+Math.min(graphTiefe(n.ref.name),90)/100;
     return map[k]!==undefined?map[k]:99;};
-  const rollenVon=blk=>blk===SHARED_KEY?ROLE_SHARED:blk===AKTEUR_KEY?ROLE_AKTEUR:ROLE_AGG;
+  // Ein Graph-Block (Region gr:…): links der Graph, dann seine Knoten in Ketten-Reihenfolge, dahinter was sie einander geben und Typen.
+  const ROLE_GRAPH={graph:0,bausteinfunktion:1,command:2,rejection:3,event:3,konfig:4,valueobject:4,enum:4,rumpf:5,code:5};
+  const rollenVon=blk=>blk===SHARED_KEY?ROLE_SHARED:blk===AKTEUR_KEY?ROLE_AKTEUR:typeof blk==="string"&&blk.startsWith("gr:")?ROLE_GRAPH:ROLE_AGG;
 
   // Die Rumpf-Plätze eines Knotens (je Rumpf die Kachel-Id oder null) — was der Knoten unter sich an Zeilen reserviert (Rumpf + 🤖-Platz),
   //   auch leer. null = der Knoten hat keinen Rumpf.
@@ -2065,7 +1372,7 @@
   //   Aggregat-Spalten (Schreibfluss, dann Leseseite).
   function groupKeyOf(n){if(n.kind==="rumpf"&&n.own)return groupKeyOf(n.own);   // Code-Kachel + LLM-Platz: im Block ihres Besitzers
     const rg=regionVon(n);if(rg===RAND_KEY)return AKTEUR_KEY;if(rg===BEGR_KEY)return SHARED_KEY;if(rg)return rg;
-    const k=sk(n);if(k)return k.block;return n.kind==="akteur"||n.kind==="auf"?AKTEUR_KEY:SHARED_KEY;}
+    const k=sk(n);if(k)return k.block;return n.kind==="akteur"?AKTEUR_KEY:SHARED_KEY;}
   // ── MESS-BASIERTES PACKING: nach dem Rendern die ECHTEN Knotengrößen messen und die Aggregat-
   //    Blöcke ÜBERLAPPUNGSFREI per Shelf-Packing setzen. Nur frische/Seed-Boards (alle x/y leer);
   //    vollständig arrangierte Boards (Handanordnung) bleiben unberührt. Zwei Ebenen:
@@ -2092,8 +1399,8 @@
       +"#"+JSON.stringify(VIEW.akteurOrdnung||{})
       // Clients stapeln sich nach ihrer Höhe (die Anschlussleiste wächst mit dem Vertrag) → ändert sie sich, neu packen.
       +"#"+all.filter(n=>n.kind==="client").map(n=>n.id+":"+Math.round(sz(n).h/20)).join(",")
-      // Pipelines: ihre Verdrahtung bestimmt die Tiefe (Spalte) — ändert sie sich, neu packen.
-      +"#"+MODEL.fluesse.map(f=>(f.knoten||[]).map(k=>k.name+"<"+flVor(k).join("+")).join(",")+"@"+FLHEIM.get(FL_PRE+f._id)).join("|"));
+      // Graphen: ihre Von-Kanten bestimmen die Spalten — ändern sie sich, neu packen.
+      +"#"+(MODEL.graphen||[]).map(g=>(g.knoten||[]).map(k=>k.name+"<"+(k.von||[]).join("+")).join(",")).join("|"));
     if(LAY.__sig!==sig)force=true;
     // Wie viele Knotenpaare überlappen aktuell deutlich? (früher Abbruch, sobald „viele").
     const overlaps=()=>{const b=all.map(n=>{const s=sz(n),p=P(n);return {x:p.x||0,y:p.y||0,w:s.w,h:s.h};});let c=0;
@@ -2133,13 +1440,9 @@
       const setzeZ=(role,n,z,len)=>{const b=belegt.get(role);for(let i=0;i<len;i++)b.add(z+i);zeile.set(n.id,z);};
       const ab=(role,z,len)=>{while(!frei(role,z,len))z++;return z;};
       const imBlock=new Set(rest.map(n=>n.id));
-      // Nachbarn = Board-Kanten UND Ablauf-Kette (Prozess → ƒ → ƒ): so liegt eine Kette auf einer Zeile.
-      const kettenNb=id=>KETTE.filter(k=>k.von===id||k.nach===id).map(k=>k.von===id?k.nach:k.von);
-      const nachbarZ=id=>[...(ADJ.inn.get(id)||[]),...(ADJ.out.get(id)||[]),...kettenNb(id)].filter(x=>imBlock.has(x)&&zeile.has(x)).map(x=>zeile.get(x));
+      const nachbarZ=id=>[...(ADJ.inn.get(id)||[]),...(ADJ.out.get(id)||[])].filter(x=>imBlock.has(x)&&zeile.has(x)).map(x=>zeile.get(x));
       // Wunschzeile: Event → sein Applier (sonst der erzeugende Decider); sonst die oberste Zeile eines platzierten Nachbarn.
-      const wunsch=n=>{const vor=KETTE.filter(k=>k.art==="dann"&&k.nach===n.id&&imBlock.has(k.von)&&zeile.has(k.von)).map(k=>zeile.get(k.von));
-        if(vor.length)return Math.min(...vor);   // Kettenschritt: auf der Zeile seines Vorgängers (erst … dann … auf einer Linie)
-        if(n.kind==="event"){const ap=(ADJ.out.get(n.id)||[]).filter(x=>x.startsWith("app:")&&zeile.has(x)).map(x=>zeile.get(x));if(ap.length)return Math.min(...ap);}
+      const wunsch=n=>{if(n.kind==="event"){const ap=(ADJ.out.get(n.id)||[]).filter(x=>x.startsWith("app:")&&zeile.has(x)).map(x=>zeile.get(x));if(ap.length)return Math.min(...ap);}
         const z=nachbarZ(n.id);return z.length?Math.min(...z):null;};
       const zweiHop=n=>{let best=null;[n.id,...(ADJ.inn.get(n.id)||[]),...(ADJ.out.get(n.id)||[])].forEach(x=>nachbarZ(x).forEach(z=>{if(best===null||z<best)best=z;}));return best;};
       // (1) Besitzer-Spalten zuerst, lückenlos gestapelt (Reihenfolge: nahe an bereits platzierten Nachbarn, sonst Modell-Reihenfolge).
@@ -2188,7 +1491,7 @@
       const subs=new Map();nodes.forEach(n=>{const s=blockVon(n);if(!subs.has(s))subs.set(s,[]);subs.get(s).push(n);});
       const aggKeys=[...subs.keys()].filter(k=>k!==SHARED_KEY&&k!==AKTEUR_KEY).sort();
       // Akteur-Band zuerst → beim Shelf-Packing ganz links (Eingangsseite).
-      const blocks=(subs.has(AKTEUR_KEY)?[layoutBlock(subs.get(AKTEUR_KEY),ROLE_AKTEUR)]:[]).concat(aggKeys.map(k=>layoutBlock(subs.get(k),ROLE_AGG)));
+      const blocks=(subs.has(AKTEUR_KEY)?[layoutBlock(subs.get(AKTEUR_KEY),ROLE_AKTEUR)]:[]).concat(aggKeys.map(k=>layoutBlock(subs.get(k),rollenVon(k))));
       if(subs.has(SHARED_KEY))blocks.push(layoutBlock(subs.get(SHARED_KEY),ROLE_SHARED));
       const d=shelf(blocks,SHELFGAP,1.35);
       const placed=[];blocks.forEach(b=>b.placed.forEach(p=>placed.push({n:p.n,rx:b.rx+p.rx,ry:b.ry+p.ry})));
@@ -2199,19 +1502,9 @@
     //   Jede Region reserviert Rand (RP) + Kopfzeile (RK) für den Rahmen (zeichneRahmen) → Rahmen überlappen nie.
     const proDom=new Map();all.forEach(n=>{const d=domKey(n);if(!proDom.has(d))proDom.set(d,[]);proDom.get(d).push(n);});
     const BAUM=domBaum([...proDom.keys(),...(VIEW.domNeu||[])]);
-    const region=ns=>{if(istFlussDom(ns))return flussLayout(flussVonDom(ns),proDom.get(ns)||[],sz,RP,RK,SPK);
-      const alleK=BAUM.kinder.get(ns)||[],kinder=alleK.filter(k=>!istFlussDom(k)).map(region);
+    const region=ns=>{const kinder=(BAUM.kinder.get(ns)||[]).map(region);
       const eigen=proDom.get(ns)||[];
       const placed=[],leer=[],aktLeer=[];let y=RK+RP,w=0;
-      // Pipelines der Domäne stehen UNMITTELBAR ÜBER dem Akteur-Rahmen, in dem ihre Commands liegen (Eingangsseite) — die Drähte
-      //   ▶ → Command und Event → nächster Knoten bleiben kurz. Ohne Commands hier: zuoberst.
-      const flZiel=fns=>{const f=flussVonDom(fns),a=((f&&f.knoten)||[]).filter(k=>k.art==="command"&&k.typ).map(k=>NODEBY.get("rec:"+k.typ))
-        .filter(n=>n&&VIS.has(n.id)&&domKey(n)===ns).map(akteurVon);return a.length?a[0]:null;};
-      const flk=alleK.filter(istFlussDom).map(k=>({d:region(k),ziel:flZiel(k)})),flGesetzt=new Set();
-      const setzeFl=ziel=>flk.forEach(x=>{if(flGesetzt.has(x)||(ziel!==undefined&&x.ziel!==ziel))return;flGesetzt.add(x);
-        x.d.placed.forEach(p=>placed.push({n:p.n,rx:RP+p.rx,ry:y+p.ry}));y+=x.d.h+KGAP;w=Math.max(w,x.d.w);});
-      const ord0=akteurOrdnung(ns);
-      flk.forEach(x=>{if(x.ziel==null||!ord0.length)setzeFl(x.ziel);});
       const insel=eigen.filter(istInselLage),haupt=eigen.filter(n=>!istInselLage(n));
       // Domäne × Akteur (docs/konzept-akteure.md §8): je Akteur (Reihenfolge der Domäne) ein eigener Rahmen mit dem bewährten Block-Layout darin,
       //   untereinander; „ohne Akteur" zuletzt. Eine Domäne ohne Akteure bleibt, wie sie war (ein Block-Layout).
@@ -2219,15 +1512,14 @@
       if(haupt.length&&!ord.length){const c=layoutComp(haupt);c.placed.forEach(p=>placed.push({n:p.n,rx:RP+p.rx,ry:y+p.ry}));y+=c.h;w=c.w;}
       else if(ord.length){const gr=new Map();haupt.forEach(n=>{const a=akteurVon(n);if(!gr.has(a))gr.set(a,[]);gr.get(a).push(n);});
         let erst=true;
-        [...ord,OHNE_AKT].forEach(a=>{const g=gr.get(a);if(!g&&a===OHNE_AKT)return;if(!erst)y+=AGAP;erst=false;setzeFl(a);
+        [...ord,OHNE_AKT].forEach(a=>{const g=gr.get(a);if(!g&&a===OHNE_AKT)return;if(!erst)y+=AGAP;erst=false;
           if(!g){aktLeer.push({ns,akt:a,rx:RP,ry:y});y+=AK;w=Math.max(w,AKLEER_W);return;}   // leer: nur Kopf + „↥ auch“
           const c=layoutComp(g);c.placed.forEach(p=>placed.push({n:p.n,rx:RP+AP+p.rx,ry:y+AK+AP+p.ry}));
           y+=AK+2*AP+c.h;w=Math.max(w,c.w+2*AP);});}
-      setzeFl();   // übrige (Ziel-Akteur-Rahmen leer)
       if(insel.length){if(haupt.length)y+=SHELFGAP/2;const IW=Math.max(700,w);let ix=0,iy=0,rh=0;
         insel.forEach(n=>{const s=sz(n);if(ix>0&&ix+s.w>IW){iy+=rh+ROWGAP;ix=0;rh=0;}placed.push({n,rx:RP+ix,ry:y+iy});ix+=s.w+COLGAP;rh=Math.max(rh,s.h);w=Math.max(w,ix-COLGAP);});
         y+=iy+rh;}
-      if(!eigen.length&&!kinder.length&&!flk.length){leer.push({ns,rx:0,ry:0});w=LEER_W;y+=LEER_H;}
+      if(!eigen.length&&!kinder.length){leer.push({ns,rx:0,ry:0});w=LEER_W;y+=LEER_H;}
       if(kinder.length){if(eigen.length||aktLeer.length)y+=KGAP;const d=shelf(kinder,KGAP,1.2);
         kinder.forEach(k=>{k.placed.forEach(p=>placed.push({n:p.n,rx:RP+k.rx+p.rx,ry:y+k.ry+p.ry}));k.leer.forEach(l=>leer.push({ns:l.ns,rx:RP+k.rx+l.rx,ry:y+k.ry+l.ry}));
           k.aktLeer.forEach(l=>aktLeer.push({ns:l.ns,akt:l.akt,rx:RP+k.rx+l.rx,ry:y+k.ry+l.ry}));});
@@ -2235,10 +1527,6 @@
       return {placed,leer,aktLeer,w:w+2*RP,h:y+RP};};
     const regions=BAUM.oben.filter(ns=>!istAussenDom(ns)).map(region);
     shelf(regions,COMPGAP,1.05);
-    // Pipelines (Fluss, §14): je Pipeline ein Rahmen RECHTS neben den Domänen (untereinander), innen nach Flusstiefe.
-    {const FLGAP=420;let rechts=0,fy=0;regions.forEach(d=>rechts=Math.max(rechts,d.rx+d.w));
-      BAUM.oben.filter(istFlussDom).forEach(ns=>{const f=flussVonDom(ns);if(!f)return;const d=flussLayout(f,proDom.get(ns)||[],sz,RP,RK,SPK);
-        d.rx=rechts+(regions.length?FLGAP:0);d.ry=fy;fy+=d.h+KGAP;regions.push(d);});}
     // Clients (docs/konzept-akteure.md §4): je Client ein Rahmen, untereinander RECHTS neben allen Domänen (Außenwelt).
     {const CLGAP=520;let rechts=0,cy=0;regions.forEach(d=>rechts=Math.max(rechts,d.rx+d.w));
       BAUM.oben.filter(istClientDom).forEach(ns=>{const d=region(ns);d.rx=rechts+(regions.length?CLGAP:0);d.ry=cy;
@@ -2273,7 +1561,7 @@
     el.append(kurzfassung(n));
     const body=h("div",{class:"gbody"});
     fuelleKoerper(body,n);
-    el.append(body);dsDropZiel(el,n);return el;
+    el.append(body);return el;
   }
   // Der Formular-Körper eines Knotens — auf der Fläche (aufgeklappt) UND im Inspector derselbe.
   function fuelleKoerper(body,n){
@@ -2282,22 +1570,17 @@
     else if(n.kind==="decider")deciderCard(body,n.ref);
     else if(n.kind==="applier")applierCard(body,n.ref);
     else if(n.kind==="enum")body.append(enumCard(n.ref,MODEL.enums.indexOf(n.ref)));
-    else if(n.kind==="saga")prozessHubCard(body,n.ref);
-    else if(n.kind==="transition")transitionCard(body,n.ref);
     else if(n.kind==="readmodel")readModelCard(body,n.ref);
     else if(n.kind==="store")storeCard(body,n.ref);
     else if(n.kind==="projektion")projektionCard(body,n.ref);
     else if(n.kind==="reader")readerCard(body,n.ref);
-    else if(n.kind==="reaktion")reaktionCard(body,n.ref);
-    else if(n.kind==="funktion")funktionCard(body,n.ref);
     else if(n.kind==="akteur")akteurCard(body,n.ref);
     else if(n.kind==="bausteinfunktion")funktionsKarte(body,n.ref);
+    else if(n.kind==="graph")graphKarte(body,n.ref);
     else if(n.kind==="client")clientCard(body,n.ref);
-    else if(n.kind==="auf")aufCard(body,n);
     else if(n.kind==="rumpf")rumpfKachelCard(body,n);
     else if(n.kind==="handle")handleCard(body,n);
     else if(n.kind==="fn")fnCard(body,n);
-    else if(n.kind==="flussknoten")flussKnotenCard(body,n);
     else if(n.kind==="host")hostCard(body,n);
     else if(n.kind==="code")codeKarteCard(body,n.ref);
     else recordCard(body,n.ref);
@@ -2306,13 +1589,14 @@
     // Ein gelöschter Eingang (Command/Query) verschwindet auch aus den Befugnissen (IDarf) der Akteure.
     {const nm=MODEL.records.includes(ref)?ref.name:null;if(nm)MODEL.akteure.forEach(a=>{if((a.darf||[]).includes(nm))a.darf=ohneX(a.darf,nm);
       // … und aus den Verträgen: als Eingang fällt die ganze Zusage weg, als Ausgang nur der Ausgang.
-      if((a.vertrag||[]).length)a.vertrag=a.vertrag.filter(r=>r.eingang!==nm).map(r=>(r.ausgaenge||[]).includes(nm)?{...r,ausgaenge:ohneX(r.ausgaenge,nm)}:r);});
+});
       // … und aus der Kenntnis der Clients.
       MODEL.clients.forEach(c=>{if((c.kenntnis||[]).includes(nm))c.kenntnis=ohneX(c.kenntnis,nm);});}
     {const nm=MODEL.records.includes(ref)&&(ref.kind==="event"||ref.kind==="rejection")?ref.name:null;
       if(nm)MODEL.clients.forEach(c=>{if((c.kenntnis||[]).includes(nm))c.kenntnis=ohneX(c.kenntnis,nm);});}
     // … und aus den Funktionen: ein gelöschtes Ergebnis fällt aus dem OneOf, ein gelöschter Auftrag lässt den Eingang offen.
-    if(MODEL.records.includes(ref))MODEL.funktionen.forEach(f=>{f.ergebnisse=ohneX(f.ergebnisse,ref.name);if(f.auftrag===ref.name)f.auftrag="";});
+    if(MODEL.records.includes(ref)){MODEL.bausteinFunktionen.forEach(f=>{f.lauscht=ohneX(f.lauscht,ref.name);(f.eingaenge||[]).forEach(e=>{e.ausgaben=ohneX(e.ausgaben,ref.name);});
+      f.eingaenge=(f.eingaenge||[]).filter(e=>e.eingang!==ref.name);});MODEL.akteure.forEach(a=>{a.hoert=ohneX(a.hoert,ref.name);});}
     if(VIEW.heim&&VIEW.heim[n.id]){delete VIEW.heim[n.id];speichereAnsicht();}
     if(VIEW.heimBlk&&VIEW.heimBlk[n.id]){delete VIEW.heimBlk[n.id];speichereAnsicht();}
     if(VIEW.heimAkteur&&VIEW.heimAkteur[n.id]){delete VIEW.heimAkteur[n.id];speichereAnsicht();}
@@ -2321,26 +1605,21 @@
     else if(k==="decider")MODEL.decider.splice(MODEL.decider.indexOf(ref),1);
     else if(k==="applier")MODEL.applier.splice(MODEL.applier.indexOf(ref),1);
     else if(k==="enum")MODEL.enums.splice(MODEL.enums.indexOf(ref),1);
-    else if(k==="saga")MODEL.sagas.splice(MODEL.sagas.indexOf(ref),1);
-    else if(k==="transition")MODEL.transitions.splice(MODEL.transitions.indexOf(ref),1);
     else if(k==="readmodel")MODEL.readModels.splice(MODEL.readModels.indexOf(ref),1);
     else if(k==="store")MODEL.stores.splice(MODEL.stores.indexOf(ref),1);
     else if(k==="projektion")MODEL.projektionen.splice(MODEL.projektionen.indexOf(ref),1);
     else if(k==="reader")MODEL.reader.splice(MODEL.reader.indexOf(ref),1);
-    else if(k==="reaktion")MODEL.reaktionen.splice(MODEL.reaktionen.indexOf(ref),1);
-    else if(k==="funktion"){MODEL.funktionen.splice(MODEL.funktionen.indexOf(ref),1);MODEL.akteure.forEach(a=>{a.darf=ohneX(a.darf,ref.name);});}
     // Eine gelöschte (noch nicht geschriebene) Funktion fällt aus jedem Konstruktor und jedem IDarf — dieselbe Geste.
+    else if(k==="graph"){MODEL.graphen.splice(MODEL.graphen.indexOf(ref),1);
+      MODEL.graphen.forEach(g=>{g.knoten=(g.knoten||[]).filter(x=>String(x.typ||"").split("<")[0].trim()!==ref.name);});}
     else if(k==="bausteinfunktion"){MODEL.bausteinFunktionen.splice(MODEL.bausteinFunktionen.indexOf(ref),1);
       const ohneSie=l=>(l||[]).filter(p=>String(p.typ||"").replace(/\?$/,"").trim()!==ref.name);
-      MODEL.funktionen.forEach(f=>{f.konstruktor=ohneSie(f.konstruktor);});
       MODEL.bausteinFunktionen.forEach(q=>{q.konstruktor=ohneSie(q.konstruktor);(q.umsetzungen||[]).forEach(u=>{u.konstruktor=ohneSie(u.konstruktor);});});
       MODEL.akteure.forEach(a=>{a.darf=ohneX(a.darf,ref.name);});}
     else if(k==="akteur"){MODEL.akteure.splice(MODEL.akteure.indexOf(ref),1);
       MODEL.clients.forEach(c=>{if((c.verkoerpert||[]).includes(ref.name))c.verkoerpert=ohneX(c.verkoerpert,ref.name);});}
     else if(k==="client"){MODEL.clients.splice(MODEL.clients.indexOf(ref),1);AUF=null;}
-    else if(k==="auf"){const v=n.own.ref.vertrag||[];v.splice(v.indexOf(ref),1);}
     else if(k==="handle"){const hs=n.own.ref.handles||[];hs.splice(hs.indexOf(ref),1);}
-    else if(k==="flussknoten")flLoeschen(n.own.ref,ref);
     else if(k==="fn"){const st=n.own.ref;["writeFns","readFns"].forEach(a=>{const i=(st[a]||[]).indexOf(ref);if(i>=0)st[a].splice(i,1);});
       MODEL.projektionen.concat(MODEL.reader).forEach(o=>(o.handles||[]).forEach(hd=>{hd.fns=(hd.fns||[]).filter(x=>x!==ref._id);}));}
     else MODEL.records.splice(MODEL.records.indexOf(ref),1);
@@ -2479,66 +1758,28 @@
     if(O.type==="verkoerpert"){const c=MODEL.clients.find(x=>x._id===O.client),a=MODEL.akteure.find(x=>x._id===I.akt);
       if(c&&a&&!(c.verkoerpert=c.verkoerpert||[]).includes(a.name))c.verkoerpert.push(a.name);}
     else if(O.type==="darf"){const ak=MODEL.akteure.find(x=>x._id===O.akt);if(ak&&I.rec&&!(ak.darf=ak.darf||[]).includes(I.rec))ak.darf.push(I.rec);}
+    else if((O.type==="cmd"||O.type==="evtUse")&&I.akt&&I.hoert){const ak=MODEL.akteure.find(x=>x._id===I.akt);if(ak&&O.rec&&!(ak.hoert=ak.hoert||[]).includes(O.rec))ak.hoert.push(O.rec);}
+    else if(O.type==="cmd"&&I.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===I.fb);
+      if(f&&!(f.eingaenge=f.eingaenge||[]).some(e=>e.eingang===O.rec))f.eingaenge.push({eingang:O.rec,hinweis:false,herkunft:false,strom:false,faehigkeiten:[],ausgaben:[],ports:[]});}
     else if(O.type==="cmd"){const d=dec(I.dec);if(d)d.command=O.rec;}
-    // Rufe<F>: eine Prozess-Regel („Dann rufe") bzw. ein Pipeline-Knoten ƒ ruft die Funktion; die Zuordnung wird neu vorgeschlagen.
-    else if(O.type==="rufe"){const fk=MODEL.funktionen.find(x=>x._id===I.fk);if(fk){
-      if(O.flk){const k=flKnotenById(O.flk);if(k){k.typ=fk.name;flNeuZuordnen(k);}}
-      else{const t=MODEL.transitions.find(x=>x._id===O.trans),d=t&&(t.dann||[])[O.dannIdx];if(d){if(d.rufe!==fk.name){delete d.sendeAusdruck;delete d.sendeArgs;}d.rufe=fk.name;}}}}
-    // Ablauf „dann …": ein neuer Schritt im Prozess (Regel bei diesem Ergebnis → Funktion bzw. Command).
-    else if(O.type==="kette"){const sg=MODEL.sagas.find(x=>x.name===O.saga);
-      const z=I.type==="rufe"?{rufe:(MODEL.funktionen.find(x=>x._id===I.fk)||{}).name}:{sende:I.rec};if(sg&&(z.rufe||z.sende))kettenAnhaengen(sg,O.bei,z);}
-    // Fluss: Draht von einem Ausgang in einen späteren Knoten (∧/∨ automatisch); Je-Rahmen → „je Element"/„sammle".
-    else if(O.type==="draht"){const v=flKnotenById(O.flk),z=flKnotenById(I.flk),f=v&&flFluss(v);if(v&&z&&f)flVerbinde(f,v.name,{port:O.port,fall:O.fall},z);}
-    else if(O.type==="jeEl"||O.type==="jeSa"){const v=flKnotenById(O.flk),z=flKnotenById(I.flk),f=v&&flFluss(v),sa=O.type==="jeSa";
-      if(v&&z&&f&&!(z.eingaenge||[]).some(e=>e.je===v.name&&!!e.sammle===sa)){const e2=sa?{je:v.name,sammle:true,draehte:[]}:{je:v.name,draehte:[]};
-        (z.eingaenge=z.eingaenge||[]).push(e2);if(!sa)e2.argumente=flAutoArgs(f,z,e2);}}
-    // Auftrag → Funktion: der eine Eingang (IAuftrag<F>); ein Auftrag gehört genau einer Funktion.
-    else if(O.type==="auftragFn"){const f=MODEL.funktionen.find(x=>x._id===I.fk),r=recByName(O.rec);if(f&&r){
-      MODEL.funktionen.forEach(x=>{if(x!==f&&x.auftrag===r.name)x.auftrag="";});const alt=recByName(f.auftrag);if(alt&&alt.funktion===f.name)delete alt.funktion;
-      f.auftrag=r.name;r.funktion=f.name;}}
-    else if(O.type==="evtOut"){
-      if(O.fk){const f=MODEL.funktionen.find(x=>x._id===O.fk);if(f&&!(f.ergebnisse=f.ergebnisse||[]).includes(I.rec))f.ergebnisse.push(I.rec);}
-      else if(O.dec){const d=dec(O.dec);if(d&&!(d.ergibt||[]).some(x=>x.event===I.rec))(d.ergibt=d.ergibt||[]).push({event:I.rec});}
-      // Konsument veröffentlicht ein reaktives Event (HandlerOutputRouter: yield IEvent → Broker-Re-Publish).
-      else if(O.proj){const p=MODEL.projektionen.find(x=>x._id===O.proj);const hd=p&&p.handles[O.handleIdx];if(hd){hd.publishes=hd.publishes||[];if(!hd.publishes.includes(I.rec))hd.publishes.push(I.rec);}}
-      else if(O.reaktion){const r=MODEL.reaktionen.find(x=>x._id===O.reaktion);const hd=r&&r.handles[O.handleIdx];if(hd){hd.publishes=hd.publishes||[];if(!hd.publishes.includes(I.rec))hd.publishes.push(I.rec);}}}
-    else if(O.type==="prozess"){const t=MODEL.transitions.find(x=>x._id===O.trans);if(t)t.prozess=I.saga;}
+    else if(O.type==="evtOut"&&O.dec){const d=dec(O.dec);if(d&&!(d.ergibt||[]).some(x=>x.event===I.rec))(d.ergibt=d.ergibt||[]).push({event:I.rec});}
     else if(O.type==="evtUse"&&I.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===I.fb);if(f){f.eingaenge=f.eingaenge||[];
         const hin=recArt(O.rec)==="rejection",neu={eingang:O.rec,hinweis:hin,herkunft:!hin,strom:false,faehigkeiten:[],ausgaben:[]};
         if(I.ein==="open"){if(!f.eingaenge.some(e=>e.eingang===O.rec))f.eingaenge.push(neu);}
         else if(f.eingaenge[I.ein])Object.assign(f.eingaenge[I.ein],{eingang:O.rec,hinweis:hin,herkunft:!hin});}}
+    else if(O.type==="sagaCmd"&&O.fb&&O.ein==="lauscht"){const f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb);
+      if(f&&I.rec&&!(f.lauscht=f.lauscht||[]).includes(I.rec))f.lauscht.push(I.rec);}
     else if((O.type==="evtOut"||O.type==="sagaCmd")&&O.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb),e=f&&(f.eingaenge||[])[O.ein];
       if(e&&I.rec&&!(e.ausgaben=e.ausgaben||[]).includes(I.rec))e.ausgaben.push(I.rec);}
     // 🧩 Eine gerufene Funktion in den Konstruktor einer Funktions-Klasse bzw. einer Umsetzung (O.impl).
     else if(O.type==="gerufen"&&O.fb){const g=MODEL.bausteinFunktionen.find(x=>x._id===I.fb),f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb),l=f&&ctorVon(f,O.impl);
       if(istGerufen(g)&&l)nimmGerufene(l,g,f);}
     else if(O.type==="evtUse"){
-      // Event → Pipeline-Knoten: Quelle (meldet / Event aus dem Log) bzw. Warten (eines von mehreren Events im Strom).
-      if(I.flk){const k=flKnotenById(I.flk);if(k){if(I.role==="warte"){const l=flWarteAuf(k);if(!l.includes(O.rec))l.push(O.rec);k.warteAuf=l;k.typ=l[0];}else k.typ=O.rec;}}
-      else if(I.client){const c=MODEL.clients.find(x=>x._id===I.client);if(c&&!(c.kenntnis=c.kenntnis||[]).includes(O.rec))c.kenntnis.push(O.rec);}
-      else if(I.app){const p=app(I.app);if(p)p.event=O.rec;}
+      if(I.app){const p=app(I.app);if(p)p.event=O.rec;}
       else if(I.proj){const p=MODEL.projektionen.find(x=>x._id===I.proj);if(p){p.handles=p.handles||[];
         if(I.handleIdx==="open"){if(!p.handles.some(x=>x.event===O.rec))p.handles.push({event:O.rec,effekt:""});}
         else p.handles[I.handleIdx].event=O.rec;}}
-      else if(I.trigger){const sg=MODEL.sagas.find(x=>x.name===I.saga);if(sg)sg.triggerEvent=O.rec;}
-      // Event → Zusage im Vertrag eines Akteurs (Akteur-Konzept §3): neue Zusage bzw. Eingang einer bestehenden umhängen.
-      else if(I.akt&&I.aufIdx!=null){const ak=MODEL.akteure.find(x=>x._id===I.akt);if(ak){ak.vertrag=ak.vertrag||[];
-        if(I.aufIdx==="open"){if(!ak.vertrag.some(r=>r.eingang===O.rec))ak.vertrag.push({eingang:O.rec,ausgaenge:[]});}
-        else if(ak.vertrag[I.aufIdx])ak.vertrag[I.aufIdx].eingang=O.rec;}}
-      else if(I.trans){const t=MODEL.transitions.find(x=>x._id===I.trans);if(t){
-        t.wenn=t.wenn||[];if(I.wennIdx==="open"){if(!t.wenn.includes(O.rec))t.wenn.push(O.rec);}else t.wenn[I.wennIdx]=O.rec;}}
-      else if(I.reaktion){const r=MODEL.reaktionen.find(x=>x._id===I.reaktion);if(r){r.handles=r.handles||[];
-        if(I.handleIdx==="open"){if(!r.handles.some(x=>x.event===O.rec))r.handles.push({event:O.rec,sends:[]});}
-        else r.handles[I.handleIdx].event=O.rec;}}}
-    else if(O.type==="sagaCmd"){
-      if(O.akt&&typeof O.aufIdx==="number"){const ak=MODEL.akteure.find(x=>x._id===O.akt),r=ak&&(ak.vertrag||[])[O.aufIdx];
-        if(r){r.ausgaenge=r.ausgaenge||[];if(!r.ausgaenge.includes(I.rec))r.ausgaenge.push(I.rec);}}
-      else if(O.reaktion){const r=MODEL.reaktionen.find(x=>x._id===O.reaktion);const hd=r&&r.handles[O.handleIdx];if(hd){hd.sends=hd.sends||[];if(!hd.sends.includes(I.rec))hd.sends.push(I.rec);}}
-      // Pipeline-Knoten ▶ sendet genau diesen Command ins Aggregat.
-      else if(O.flk){const k=flKnotenById(O.flk);if(k){k.typ=I.rec;flNeuZuordnen(k);}}
-      else{const t=MODEL.transitions.find(x=>x._id===O.trans);const d=t&&(t.dann||[])[O.dannIdx];if(d){
-        if(O.role==="komp"){if(d.kompensation!==I.rec)delete d.kompensationAusdruck;d.kompensation=I.rec;}
-        else{if(d.sende!==I.rec)delete d.sendeAusdruck;d.sende=I.rec;}}}}
+    }
     else if(O.type==="decAgg"){const d=dec(O.dec);if(d)d.aggregat=I.agg;}
     else if(O.type==="appAgg"){const p=app(O.app);if(p)p.aggregat=I.agg;}
     // ── Leseseite: ReadModel→Store, Projektion-Handle→Write-Fn, Reader-Handle→Read-Fn, Reader→Projektion,
@@ -2547,16 +1788,6 @@
     // Projektion-Handle ruft eine Write-Fn (Store-Scope fällt daraus ab) — anhängen, dedup.
     else if(O.type==="wcall"){const p=MODEL.projektionen.find(x=>x._id===O.proj);const hd=p&&p.handles[O.handleIdx];if(hd){hd.fns=hd.fns||[];if(!hd.fns.includes(I.fn))hd.fns.push(I.fn);}}
     // Reader-Handle ruft eine Read-Fn (auch über mehrere Stores) — anhängen, dedup.
-    // Funktion liest über eine Store-Fähigkeit: ihr Interface wird ein Parameter (nur Read-Fns mit Fähigkeits-Interface).
-    // 🧩 Gerufene Funktion in den Konstruktor einer Katalog-Funktion (fehlt deren C#-Implementierung: sie entsteht mit).
-    else if(O.type==="gerufen"&&O.fk){const g=MODEL.bausteinFunktionen.find(x=>x._id===I.fb),f=MODEL.funktionen.find(x=>x._id===O.fk);
-      if(istGerufen(g)&&f){const n=(f.konstruktor=f.konstruktor||[]).length;nimmGerufene(f.konstruktor,g,null);
-        if(f.konstruktor.length>n&&!f.implementierung&&f.entwurf==null)f.entwurf="";}}
-    else if(O.type==="rcall"&&O.fk){const f=MODEL.funktionen.find(x=>x._id===O.fk),z=fnById(I.fn);if(f&&z){
-      const t=z.fn.faehigkeit||(z.fn.sig?null:faehigkeitVorschlag(z.store,z.fn));
-      if(!t)deFlash("⚠ "+z.store.name+"."+z.fn.name+" hat kein Fähigkeits-Interface (CQRS051) — als Parameter nicht nutzbar",false);
-      else if(!(f.faehigkeiten=f.faehigkeiten||[]).some(p=>p.typ===t)){if(!z.fn.faehigkeit)z.fn.faehigkeit=t;
-        let nm=t.replace(/^I(?=[A-ZÄÖÜ])/,"");nm=nm.charAt(0).toLowerCase()+nm.slice(1);f.faehigkeiten.push({typ:t,name:nm});}}}
     else if(O.type==="rcall"){const r=MODEL.reader.find(x=>x._id===O.reader);const hd=r&&r.handles[O.handleIdx];if(hd){hd.fns=hd.fns||[];if(!hd.fns.includes(I.fn))hd.fns.push(I.fn);}}
     // IReader<TProjection>: Reader → genau eine Projektion binden.
     else if(O.type==="projref"){const r=MODEL.reader.find(x=>x._id===O.reader);const p=MODEL.projektionen.find(x=>x._id===I.proj);if(r&&p)r.projektion=p.name;}
@@ -2567,9 +1798,6 @@
     else if(O.type==="qrsp"){const r=MODEL.reader.find(x=>x._id===O.reader);const hd=r&&r.handles[O.handleIdx];if(hd){hd.responses=hd.responses||[];if(!hd.responses.includes(I.rec))hd.responses.push(I.rec);}}
     // Typ-Komposition: VO/Enum-Quelle → Feld-Typ-Eingang → setzt den Feldtyp (Wrapper bleibt erhalten).
     else if(O.type==="ftype"){if(I.fobj)setFeldTyp(I.fobj,O.typeName);}
-    // Feld-Port → Konsument (verdrahtet statt Dropdown): Fan-out-Collection (want=collection). (Σ/Count-Join entfernt.)
-    else if(O.type==="field"){if(I.trans){const t=MODEL.transitions.find(x=>x._id===I.trans);if(t){
-      if(I.want==="collection"){const d=(t.dann||[])[I.dannIdx];if(d)d.sendeJeCollectionFeld={rec:O.rec,field:O.field,fid:O.fid};}}}}
     else if(O.type==="state"){const s=MODEL.states.find(x=>x._id===O.state);const A=I.agg;
       if(s){s.aggregat=A;const agg=MODEL.aggregate.find(a=>a.name===A);
         if(agg){if((!agg.state||!agg.state.length)&&s.felder&&s.felder.length)agg.state=s.felder;s.felder=undefined;
@@ -2584,47 +1812,22 @@
     const handle=(liste,id,idx)=>{const o=liste.find(x=>x._id===id);return o&&typeof idx==="number"?(o.handles||[])[idx]:null;};
     if(O.type==="verkoerpert"){const c=MODEL.clients.find(x=>x._id===O.client),a=MODEL.akteure.find(x=>x._id===I.akt);if(c&&a)c.verkoerpert=ohne(c.verkoerpert,a.name);}
     else if(O.type==="darf"){const ak=MODEL.akteure.find(x=>x._id===O.akt);if(ak)ak.darf=ohne(ak.darf,I.rec);}
+    else if((O.type==="cmd"||O.type==="evtUse")&&I.akt&&I.hoert){const ak=MODEL.akteure.find(x=>x._id===I.akt);if(ak)ak.hoert=ohne(ak.hoert,O.rec);}
+    else if(O.type==="cmd"&&I.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===I.fb);if(f)f.eingaenge=(f.eingaenge||[]).filter(e=>e.eingang!==O.rec);}
     else if(O.type==="cmd"){const d=dec(I.dec);if(d&&d.command===O.rec)d.command="";}
-    else if(O.type==="rufe"){if(O.flk){const k=flKnotenById(O.flk);if(k)k.typ="";}
-      else{const t=MODEL.transitions.find(x=>x._id===O.trans),d=t&&(t.dann||[])[O.dannIdx];if(d){d.rufe="";delete d.sendeAusdruck;delete d.sendeArgs;}}}
-    else if(O.type==="kette")kettenLoesen(O.saga,O.bei,I.type==="rufe"?(MODEL.funktionen.find(x=>x._id===I.fk)||{}).name:I.rec);
-    else if(O.type==="draht"){const v=flKnotenById(O.flk),z=flKnotenById(I.flk),f=v&&flFluss(v);if(v&&z&&f)(z.eingaenge||[]).slice().forEach(e=>{
-      const d=(e.draehte||[]).find(x=>x.von===v.name&&flPortGleich(x,{port:O.port,fall:O.fall}));if(d)flLoese(f,z,e,d);});}
-    else if(O.type==="jeEl"||O.type==="jeSa"){const v=flKnotenById(O.flk),z=flKnotenById(I.flk);
-      if(v&&z)z.eingaenge=(z.eingaenge||[]).filter(e=>!(e.je===v.name&&!!e.sammle===(O.type==="jeSa")));}
-    else if(O.type==="auftragFn"){const f=MODEL.funktionen.find(x=>x._id===I.fk),r=recByName(O.rec);if(f&&f.auftrag===O.rec){f.auftrag="";if(r)delete r.funktion;}}
-    else if(O.type==="evtOut"){
-      if(O.fk){const f=MODEL.funktionen.find(x=>x._id===O.fk);if(f)f.ergebnisse=ohne(f.ergebnisse,I.rec);}
-      else if(O.dec){const d=dec(O.dec);if(d)d.ergibt=(d.ergibt||[]).filter(x=>x.event!==I.rec);}
-      else{const hd=handle(O.proj?MODEL.projektionen:MODEL.reaktionen,O.proj||O.reaktion,O.handleIdx);if(hd)hd.publishes=ohne(hd.publishes,I.rec);}}
-    else if(O.type==="prozess"){const t=MODEL.transitions.find(x=>x._id===O.trans);if(t)t.prozess="";}
+    else if(O.type==="evtOut"&&O.dec){const d=dec(O.dec);if(d)d.ergibt=(d.ergibt||[]).filter(x=>x.event!==I.rec);}
     else if(O.type==="evtUse"&&I.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===I.fb);if(f)f.eingaenge=(f.eingaenge||[]).filter(e=>e.eingang!==O.rec);}
+    else if(O.type==="sagaCmd"&&O.fb&&O.ein==="lauscht"){const f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb);if(f)f.lauscht=ohne(f.lauscht,I.rec);}
     else if((O.type==="evtOut"||O.type==="sagaCmd")&&O.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb),e=f&&(f.eingaenge||[])[O.ein];if(e)e.ausgaben=ohne(e.ausgaben,I.rec);}
     else if(O.type==="gerufen"&&O.fb){const g=MODEL.bausteinFunktionen.find(x=>x._id===I.fb),f=MODEL.bausteinFunktionen.find(x=>x._id===O.fb),l=f&&ctorVon(f,O.impl);
       if(g&&l)l.splice(0,l.length,...l.filter(p=>gerufenByName(p.typ)!==g));}
     else if(O.type==="evtUse"){
-      if(I.flk){const k=flKnotenById(I.flk);if(k){if(I.role==="warte"){k.warteAuf=flWarteAuf(k).filter(x=>x!==O.rec);k.typ=k.warteAuf[0]||"";}else k.typ="";}}
-      else if(I.client){const c=MODEL.clients.find(x=>x._id===I.client);if(c)c.kenntnis=ohne(c.kenntnis,O.rec);}
-      else if(I.app){const p=app(I.app);if(p)p.event="";}
-      else if(I.trigger){const sg=MODEL.sagas.find(x=>x.name===I.saga);if(sg)sg.triggerEvent="";}
-      else if(I.akt&&I.aufIdx!=null){const ak=MODEL.akteure.find(x=>x._id===I.akt);if(ak)ak.vertrag=(ak.vertrag||[]).filter(r=>r.eingang!==O.rec);}
-      else if(I.trans){const t=MODEL.transitions.find(x=>x._id===I.trans);if(t)t.wenn=ohne(t.wenn,O.rec);}
-      else if(I.proj){const p=MODEL.projektionen.find(x=>x._id===I.proj);if(p)p.handles=(p.handles||[]).filter(h=>h.event!==O.rec);}
-      else if(I.reaktion){const r=MODEL.reaktionen.find(x=>x._id===I.reaktion);if(r)r.handles=(r.handles||[]).filter(h=>h.event!==O.rec);}}
-    else if(O.type==="sagaCmd"){
-      if(O.akt&&typeof O.aufIdx==="number"){const ak=MODEL.akteure.find(x=>x._id===O.akt),r=ak&&(ak.vertrag||[])[O.aufIdx];if(r)r.ausgaenge=ohne(r.ausgaenge,I.rec);}
-      else if(O.reaktion){const hd=handle(MODEL.reaktionen,O.reaktion,O.handleIdx);if(hd)hd.sends=ohne(hd.sends,I.rec);}
-      else if(O.flk){const k=flKnotenById(O.flk);if(k)k.typ="";}
-      else{const t=MODEL.transitions.find(x=>x._id===O.trans);const d=t&&(t.dann||[])[O.dannIdx];
-        if(d){if(O.role==="komp"){delete d.kompensation;delete d.kompensationAusdruck;}else{d.sende="";delete d.sendeAusdruck;}}}}
+      if(I.app){const p=app(I.app);if(p)p.event="";}
+      else if(I.proj){const p=MODEL.projektionen.find(x=>x._id===I.proj);if(p)p.handles=(p.handles||[]).filter(h=>h.event!==O.rec);}}
     else if(O.type==="decAgg"){const d=dec(O.dec);if(d)d.aggregat="";}
     else if(O.type==="appAgg"){const p=app(O.app);if(p)p.aggregat="";}
     else if(O.type==="readmodel"){const rm=MODEL.readModels.find(x=>x._id===O.rm);if(rm)rm.store="";}
     else if(O.type==="wcall"){const hd=handle(MODEL.projektionen,O.proj,O.handleIdx);if(hd)hd.fns=ohne(hd.fns,I.fn);}
-    else if(O.type==="rcall"&&O.fk){const f=MODEL.funktionen.find(x=>x._id===O.fk),z=fnById(I.fn);
-      if(f&&z)f.faehigkeiten=(f.faehigkeiten||[]).filter(p=>p.typ!==z.fn.faehigkeit);}
-    else if(O.type==="gerufen"&&O.fk){const g=MODEL.bausteinFunktionen.find(x=>x._id===I.fb),f=MODEL.funktionen.find(x=>x._id===O.fk);
-      if(g&&f)f.konstruktor=(f.konstruktor||[]).filter(p=>gerufenByName(p.typ)!==g);}
     else if(O.type==="rcall"){const hd=handle(MODEL.reader,O.reader,O.handleIdx);if(hd)hd.fns=ohne(hd.fns,I.fn);}
     else if(O.type==="projref"){const r=MODEL.reader.find(x=>x._id===O.reader);if(r)r.projektion="";}
     else if(O.type==="query"){const r=MODEL.reader.find(x=>x._id===I.reader);if(r)r.handles=(r.handles||[]).filter(h=>h.query!==O.rec);}
@@ -2641,8 +1844,8 @@
   const GR=()=>(MODEL.rahmen&&MODEL.rahmen.grammatik)||null;
   const grName=(liste,id)=>{const g=GR();const x=g&&(g[liste]||[]).find(y=>y.id===id);return x?x.name:id;};
   const grSymbol=s=>{const g=GR();const x=g&&(g.sorten||[]).find(y=>y.id===s);return x?x.symbol:"•";};
-  // Nachricht (Name) → Sorte: Record-Art (Quell-Nachricht über ihre Treiber-Basis).
-  function grNachrichtSorte(name){const g=GR(),r=recByName(name);if(r)return (r.kind==="event"&&(r.treiber||(g.quellBasis&&(r.basen||[]).includes(g.quellBasis))))?"quelle":(g.recordSorte||{})[r.kind]||null;
+  // Nachricht (Name) → Sorte: aus der Record-Art (Grammatik, recordSorte).
+  function grNachrichtSorte(name){const g=GR(),r=recByName(name);if(r)return (g.recordSorte||{})[r.kind]||null;
     return null;}
   // 📐 Grammatik: die Tabelle und „Regel → Build-Gegenstück" ins Ausgabe-Panel.
   window.deGrammatik=function(){const g=GR(),out=document.getElementById("de-out");if(!out)return;out.innerHTML="";
@@ -2665,28 +1868,24 @@
   // Namespace eines Knotens — aus dem Code (Namespace-Feld) bzw. über die Verdrahtung zu seinem Besitzer; null = keiner.
   function nsVon(n){const r=n.ref,k=n.kind;
     if(k==="handle"||k==="fn")return nsVon(n.own);
-    if(k==="auf"){const e=recByName(r.eingang);return e?e.namespace:nsVon(n.own);}
     if(k==="decider"||k==="applier"||k==="state"){const a=MODEL.aggregate.find(x=>x.name===r.aggregat);return a?a.namespace:null;}
-    if(k==="transition"){const s=MODEL.sagas.find(x=>x.name===r.prozess);return s?s.namespace:null;}
     if(k==="rumpf")return nsVon(n.own);
     return r.namespace||null;}
   // Stammt der Knoten aus dem Code (sonst: Entwurf, immer sichtbar)? Abgeleitete Knoten folgen ihrem Besitzer.
   function ausCodeVon(n){const k=n.kind,r=n.ref;
-    if(k==="handle"||k==="fn"||k==="auf")return ausCodeVon(n.own);
+    if(k==="handle"||k==="fn")return ausCodeVon(n.own);
     if(k==="state"){const a=MODEL.aggregate.find(x=>x.name===r.aggregat);return !!(a&&a.ausCode);}
-    if(k==="transition"){const sg=MODEL.sagas.find(x=>x.name===r.prozess);return sg?!!sg.ausCode:r.ausCode===true;}
     if(k==="rumpf")return ausCodeVon(n.own);
     return r.ausCode===true;}
   // Geladen, wenn seine DOMÄNE (Graph-Zuordnung, domKey — z. B. ImagePairProjektion → ImagePair) ODER sein eigener Namespace
   //   (z. B. „Projections“ ausdrücklich gewählt) in der Auswahl liegt. Die Domänen-Gehörigkeit steht über dem Namespace.
   function geladen(n){if(n.kind==="client")return LADEN===null||clientPorts(n.ref).some(p=>{const m=p.node&&NODEBY.get(p.node);return m&&m.kind!=="client"&&geladen(m);});
     if(LADEN===null||!ausCodeVon(n))return true;const x=nsVon(n),d=domNs(n);
-    if(istFlussDom(d)){const f=flussVonDom(d),hm=FLHEIM.get(d);return LADEN.some(g=>(f&&f.namespace&&drinNs(g,f.namespace))||(hm&&drinNs(g,hm)));}
     return LADEN.some(g=>(x&&drinNs(g,x))||(d!==OHNE_DOM&&drinNs(g,d)));}
   window.deLaden=function(){START_OFFEN=true;render();};
   // Start-Dialog: leer starten, Domänen wählen (Häkchen am Eltern-Namespace lädt alles darunter) oder alles laden.
   function zeigeStart(){if(!canvas)return;const alt=canvas.querySelector(".gstart");if(alt)alt.remove();if(!START_OFFEN)return;
-    const nsAlle=new Set();["records","enums","aggregate","sagas","readModels","stores","projektionen","reader","reaktionen"]
+    const nsAlle=new Set();["records","enums","aggregate","graphen","bausteinFunktionen","readModels","stores","projektionen","reader"]
       .forEach(c=>(MODEL[c]||[]).forEach(x=>{if(x&&x.namespace&&x.ausCode)for(let p=x.namespace;p;p=elternNs(p))nsAlle.add(p);}));
     // Wurzel ohne Ein-Kind-Kette (z. B. „Domain“) nicht als Wahl zeigen — darunter beginnen die Domänen.
     let top="";for(;;){const k=[...nsAlle].filter(x=>elternNs(x)===top);if(k.length!==1)break;top=k[0];}
@@ -2710,7 +1909,7 @@
     canvas.append(box);}
   let START_ERST=false;
   // Code-Elemente je Namespace (rekursiv) für die Anzeige im Dialog.
-  function basisZaehl(alle,zahl){graphNodes().forEach(n=>{if(["handle","fn","rumpf","state","decider","applier","transition"].includes(n.kind)||!ausCodeVon(n))return;
+  function basisZaehl(alle,zahl){graphNodes().forEach(n=>{if(["handle","fn","rumpf","state","decider","applier"].includes(n.kind)||!ausCodeVon(n))return;
       const x=nsVon(n),d=domNs(n);alle.forEach(m=>{if((x&&drinNs(m,x))||(d!==OHNE_DOM&&drinNs(m,d)))zahl.set(m,(zahl.get(m)||0)+1);});});}
 
   // ══ VERBINDEN-MODUS (Hybrid, docs/konzept-werkbank.md §8.5 + A.3 „⊕-Modus“): Port im Panel anklicken → alle PASSENDEN
@@ -2790,7 +1989,7 @@
   //   (Decider-Ausgang, Funktions-Auftrag/-Ergebnis, Prozess-Regel, Handle …) — welcher Port welche Sorte nimmt: wie die Karten-Ports.
   // Welche Record-Arten an einen Port passen KÖNNEN (Port-Typ|Richtung der Gegenseite) — aus der Grammatik (Grammatik.EditorKatalogSorte).
   const vbSorte=key=>((GR()||{}).katalogSorte||{})[key];
-  const VB_NEU={event:"NeuesEvent",rejection:"NeueAblehnung",command:"NeuerCommand",query:"NeueQuery",queryresponse:"NeueAntwort",auftrag:"NeuerAuftrag",valueobject:"NeuerWert"};
+  const VB_NEU={event:"NeuesEvent",rejection:"NeueAblehnung",command:"NeuerCommand",query:"NeueQuery",queryresponse:"NeueAntwort",valueobject:"NeuerWert"};
   // Die Nachrichten, die zum Port passen KÖNNTEN (Sorte des Ports) — ob sie passen, sagt der Server mit den übrigen Kandidaten.
   function vbKatalogKandidaten(q){const S=q.__slot,gegen=S.dir==="out"?"in":"out",kinds=vbSorte(S.type+"|"+gegen);if(!kinds)return [];
     return MODEL.records.filter(r=>kinds.includes(r.kind)).map(r=>({__key:"kat:"+r.name,__kat:r,__slot:{type:S.type,dir:gegen,rec:r.name}}));}
@@ -2806,7 +2005,7 @@
       if(neu){vbEnde();render();setTimeout(()=>zeigeKnoten("rec:"+r.name),0);deFlash("＋ "+r.name+" angelegt und verbunden — Name und Felder an seiner Karte",true);return;}
       if(VB&&VB.einzel)vbEnde();render();if(VB)vbZeige(false);};
     const neu=()=>{const k=kinds[0],sel=SEL&&NODEBY.get(SEL),ns=(sel&&nsVon(sel))||defaultNsGlobal();
-      let basis=VB_NEU[k]||"Neu";if(S.fk){const f=MODEL.funktionen.find(x=>x._id===S.fk);const st=((f&&f.name)||"").replace(/^I(?=[A-ZÄÖÜ])/,"");if(st)basis=st+(k==="auftrag"?"Auftrag":"Erledigt");}
+      let basis=VB_NEU[k]||"Neu";if(S.fb){const f=MODEL.bausteinFunktionen.find(x=>x._id===S.fb);const st=((f&&f.name)||"").replace(/^I(?=[A-ZÄÖÜ])/,"");if(st)basis=st+"Ergebnis";}
       const r={name:uniq(basis),kind:k,namespace:ns,felder:k==="command"&&ID_FELD()?[{_id:"f"+(NID++),name:ID_FELD(),typ:"Guid"}]:[]};
       MODEL.records.push(r);verbinde(r,true);};
     const liste2=h("div",{class:"gvbliste"});
@@ -2884,9 +2083,6 @@
         (e.ausgaben||[]).forEach(x=>add("fb:aus:"+f._id+":"+i+":"+x,(recArt(x)==="command"?"cmd:in:":"evt:in:")+x,recArt(x)==="command"?"#4a86d6":"#4fb06a"));});
       (f.konstruktor||[]).forEach((p,i)=>{const g=gerufenByName(p.typ);if(g&&g!==f)add("gr:out:fb:"+f._id+":"+i,"gr:in:"+g._id,"#b48ead");});
       (f.umsetzungen||[]).forEach((u,ii)=>(u.konstruktor||[]).forEach((p,i)=>{const g=gerufenByName(p.typ);if(g&&g!==f)add("gr:out:fb:"+f._id+":u"+ii+":"+i,"gr:in:"+g._id,"#b48ead");}));});
-    // Vertrag (Akteur-Konzept §3): Event → Zusage → Commands (rosa) — die Kette läuft durch den Akteur draußen.
-    vertragsZusagen().forEach(({a,r,i})=>{if(r.eingang)add("evt:out:"+r.eingang,"auf:in:"+a._id+":"+i,"#e07ab4");
-      (r.ausgaenge||[]).forEach(c=>{if(c)add("auf:send:"+a._id+":"+i+":"+c,"cmd:in:"+c,"#e07ab4");});});
     // Client-Vertrag (docs/konzept-akteure.md §4): die bestehenden Verbindungen kennt der Verbinden-Modus (✓/lösen) über KANTEN —
     //   gezeichnet werden sie als BÜNDEL (unten); Einzelkanten nur aufgefächert (AUF, durch eine Handlung).
     MODEL.clients.forEach(c=>{
@@ -2911,38 +2107,6 @@
         if(x.offsetParent===null||y.offsetParent===null)return;   // Aggregat eingeklappt: keine Linie im Kopf
         const l=mk(anchor(x),anchor(y),1,-1,"#7f8aa0",false,"internal",[d._id,p._id],svgTop);l.dataset.a="dec:"+d._id;l.dataset.b="app:"+p._id;})));
     });
-    // Prozess-Hub: Auslöser-Event → Prozess.
-    MODEL.sagas.forEach(s=>{if(s.triggerEvent)add("evt:out:"+s.triggerEvent,"saga:trigger:"+s.name,"#9d78d6");});
-    // Transitionen: an Hub angesteckt (gestrichelt), Join/UndAlle rein, Sende/Kompensation raus, Konstruktor-Args intern.
-    MODEL.transitions.forEach(t=>{
-      if(t.prozess)add("tr:prozess:"+t._id,"hub:in:"+t.prozess+":"+t._id,"#9d78d6",true);
-      (t.wenn||[]).forEach((e,j)=>{if(e)add("evt:out:"+e,"tr:in:"+t._id+":"+j,"#4fb06a");});
-      (t.dann||[]).forEach((d,di)=>{
-        if(d.rufe)add("tr:rufe:"+t._id+":"+di,"fk:in:"+d.rufe,"#c08a2e");
-        if(d.sende)add("tr:sende:"+t._id+":"+di,"cmd:in:"+d.sende,"#4a86d6");
-        if(d.kompensation)add("tr:komp:"+t._id+":"+di,"cmd:in:"+d.kompensation,"#cf6f68",true);
-      });
-    });
-    // Katalog-Funktion: Auftrag (Record) → Funktion (gestrichelt), Funktion → ihre Ergebnis-Events.
-    MODEL.funktionen.forEach(f=>{if(f.auftrag)add("auf:out:"+f.auftrag,"fk:auftrag:"+f._id,"#c08a2e",true);
-      (f.ergebnisse||[]).forEach(e=>{if(e)add("fk:out:"+f._id+":"+e,"evt:in:"+e,"#4fb06a");});
-      // ⚙ Lese-Fähigkeit (Parameter) → die Read-Fn, deren Interface sie ist.
-      (f.faehigkeiten||[]).forEach((p,i)=>{const z=leseFnZu(p.typ);if(z)add("rcall:out:fk:"+f._id+":"+i,"rcall:in:"+z.store._id+":"+z.fn._id,"#c08a3e");});
-      // 🧩 Gerufene Funktion im Konstruktor → ihre Karte.
-      (f.konstruktor||[]).forEach((p,i)=>{const g=gerufenByName(p.typ);if(g)add("gr:out:fk:"+f._id+":"+i,"gr:in:"+g._id,"#7d9b55",true);});});
-    // Verbindungen, die schon anders gezeichnet werden (Fluss-Kanten, Ablauf-Kette) — hier nur als Port-Paar für ✓/Lösen im Verbinden-Modus.
-    const nurPaar=(k1,k2)=>{if(SLOTS[k1]&&SLOTS[k2])KANTEN.push([k1,k2]);};
-    MODEL.fluesse.forEach(f=>(f.knoten||[]).forEach(z=>{
-      if(z.typ&&z.art==="funktion")nurPaar("fs:rufe:"+z._id,"fk:in:"+z.typ);
-      if(z.typ&&z.art==="command")nurPaar("fs:send:"+z._id,"cmd:in:"+z.typ);
-      if(z.typ&&flQuelleArt(z))nurPaar("evt:out:"+z.typ,"fs:ein:"+z._id);
-      if(z.art==="warte")flWarteAuf(z).forEach(e=>nurPaar("evt:out:"+e,"fs:ein:"+z._id));
-      (z.eingaenge||[]).forEach(e=>{
-        if(e.je){const j=flKnoten(f,e.je);if(j)nurPaar((e.sammle?"fs:jesa:":"fs:jeel:")+j._id,(e.sammle?"fs:jesain:":"fs:jeein:")+z._id);}
-        (e.draehte||[]).forEach(d=>{const v=flKnoten(f,d.von);if(v)nurPaar(flAusKey(v,d),"fs:in:"+z._id);});});}));
-    KETTE.filter(k=>k.art==="dann").forEach(k=>{
-      const von=k.von.startsWith("fk:")?"kette:fk:"+k.von.slice(3)+":"+k.sg.name+":"+k.bei:k.von.startsWith("saga:")?"kette:saga:"+k.sg.name:null;
-      if(von)nurPaar(von,k.d.rufe?"fk:in:"+k.d.rufe:"cmd:in:"+k.d.sende);});
     // ── Leseseite: ReadModel→Store, Projektion/Reader→Store-Scope, Event→Projektion, Query→Reader,
     //    Reader→Response, und CODE (📝/🤖) → Rumpf-Ports (gestrichelt). ──
     const CODE="#8a8f9c";
@@ -2952,9 +2116,7 @@
     MODEL.projektionen.forEach(p=>{
       (p.handles||[]).forEach((hd,hi)=>{if(hd.event)add("evt:out:"+hd.event,"prj:in:"+p._id+":"+hi,"#4fb06a");
         // Handle → aufgerufene Write-Fn (Store-Scope ist damit sichtbar-abgeleitet).
-        (hd.fns||[]).forEach(fid=>{const f=fnById(fid);if(f)add("wcall:out:"+p._id+":"+hi+":"+fid,"wcall:in:"+f.store._id+":"+fid,"#2f9d95");});
-        // veröffentlichtes reaktives Event (gestrichelt/teal = Broker, verlierbar).
-        (hd.publishes||[]).forEach(ev=>{if(ev)add("prj:pub:"+p._id+":"+hi+":"+ev,"evt:in:"+ev,"#2fd6b0",true);});});
+        (hd.fns||[]).forEach(fid=>{const f=fnById(fid);if(f)add("wcall:out:"+p._id+":"+hi+":"+fid,"wcall:in:"+f.store._id+":"+fid,"#2f9d95");});});
     });
     MODEL.reader.forEach(r=>{
       // IReader<TProjection>: Reader → Projektion (der gemeinsame Store ist der Treffpunkt).
@@ -2963,13 +2125,6 @@
         // Handle → aufgerufene Read-Fn(s), auch über mehrere Stores.
         (hd.fns||[]).forEach(fid=>{const f=fnById(fid);if(f)add("rcall:out:"+r._id+":"+hi+":"+fid,"rcall:in:"+f.store._id+":"+fid,"#c08a3e");});
         (hd.responses||[]).forEach(resp=>{if(resp)add("rdr:rout:"+r._id+":"+hi+":"+resp,"qrsp:in:"+resp,"#9d78d6");});});
-    });
-    // Reaktion (emittierend): Event → Handle, Handle → OneOf-Command(s), 📝 → Controller-Rumpf.
-    MODEL.reaktionen.forEach(r=>{
-      (r.handles||[]).forEach((hd,hi)=>{
-        if(hd.event)add("evt:out:"+hd.event,"rk:in:"+r._id+":"+hi,"#4fb06a");
-        (hd.sends||[]).forEach(c=>{if(c)add("rk:send:"+r._id+":"+hi+":"+c,"cmd:in:"+c,"#4a86d6");});
-        (hd.publishes||[]).forEach(ev=>{if(ev)add("rk:pub:"+r._id+":"+hi+":"+ev,"evt:in:"+ev,"#2fd6b0",true);});});
     });
     // ── Typ-Komposition: VO/Enum → Feld (welches Feld benutzt diesen Typ), gestrichelt. ──
     const voNamen=new Set(MODEL.records.filter(r=>r.kind==="valueobject").map(r=>r.name));
@@ -2982,13 +2137,9 @@
     KONTRAKT.forEach(([u,v])=>{const eu=ELS.get(u),ev=ELS.get(v);if(!eu||!ev)return;
       const kv=(NODEBY.get(v)||{}).kind,col=kv==="event"?"#4fb06a":(kv==="command"?"#4a86d6":"#8a8f9c");
       const p=mkE({el:eu},{el:ev},col,false,"kontrakt");p.dataset.a=u;p.dataset.b=v;});
-    // ── Ablauf-Kette: Start/ƒ → nächster Schritt (ƒ oder Command), beschriftet mit dem auslösenden Ergebnis; Klick öffnet den Schritt. ──
-    KETTE.forEach(k=>{const eu=ELS.get(k.von),ev=ELS.get(k.nach);if(!eu||!ev)return;const komp=k.art==="komp";
-      const l=mkE({el:eu},{el:ev},komp?"#cf6f68":"#c08a2e",komp,"kette");l.dataset.a=k.von;l.dataset.b=k.nach;
-      l.label=k.label;l.titel=(k.bei?"bei "+k.bei+" — ":"")+"Klick: Schritt öffnen (Argumente, Zeitlimit)";l.klick=()=>waehle("tr:"+k.t._id);});
-    // ── Pipelines (Fluss): je Draht Port → Knoten, links → rechts. ──
-    flussKanten(ELS,mkE);
-    // ── Hub-Kanten: Handle → Besitzer (Projektion/Reader/Reaktion/Pipeline), Store-Fn → Store — gestrichelt, wie Decider → Aggregat. ──
+    // ── Graphen: je [Von] eine Kante zwischen den Karten der Knoten, links → rechts. ──
+    graphKanten(ELS,mkE);
+    // ── Hub-Kanten: Handle → Besitzer (Projektion/Reader), Store-Fn → Store — gestrichelt, wie Decider → Aggregat. ──
     NODEBY.forEach(n=>{if(n.kind!=="handle"&&n.kind!=="fn")return;const eu=ELS.get(n.id),eo=ELS.get(n.own.id);if(!eu||!eo)return;
       const l=mkE({el:eu},{el:eo},"#6f7a91",true,"hub");l.dataset.a=n.id;l.dataset.b=n.own.id;});
     // ── Zeichnen: Seiten wählen → je Karte+Seite verteilen → Kurve senkrecht zur Seite. ──
@@ -3007,7 +2158,7 @@
         const s=seite(R,Q),cy=Math.max(R.y1+40,Math.min(R.y2-20,(Q.y1+Q.y2)/2)),cx=Math.max(R.x1+40,Math.min(R.x2-40,(Q.x1+Q.x2)/2));
         const pt=s==="r"?{x:R.x2,y:cy}:s==="l"?{x:R.x1,y:cy}:s==="o"?{x:cx,y:R.y1}:{x:cx,y:R.y2};
         const k=mkE({el:ec},{pt,dir:DIR[s]},farbe,!b.durabel,"gbuendel");k.festA="l";k.label=buendelText(b);k.titel="🔌 "+clientAnzeige(c)+" → "+rahmenLabel(b.key)+"\n"+k.label
-          +"\n"+(b.durabel?"durchgezogen: trägt eine Zusage — die Kette hängt durabel an diesem Client":"gestrichelt: nur Senden/Fragen/Kenntnis (verlierbar)")+"\nKlick: auffächern";
+          +"\n"+(b.durabel?"durchgezogen: trägt Arbeit — die Kette wartet durabel auf die Antwort dieses Clients":"gestrichelt: nur Senden/Fragen/Kenntnis (verlierbar)")+"\nKlick: auffächern";
         k.dataset.a="cl:"+c._id;k.dataset.b=(b.ports.find(p=>p.node)||{}).node||"";k.klick=()=>auffaechern(c,{keys:[b.key]});});
       if(!AUF||AUF.client!==c._id)return;
       const FARBE={zusage:"#e07ab4",sendet:"#4a86d6",fragt:"#9678d6",kenntnis:"#4fb06a"};
@@ -3091,9 +2242,7 @@
     if(n.ref._kpos)delete n.ref._kpos;return p;}
   let INSP=false, INSP_SCROLL=null;   // INSP: gerade wird eine Inspector-Kopie gebaut (keine Slot-Registrierung)
 
-  let VIS=new Set(), VERTRETER=new Map(), DETAILS=new Map(), EINGEKLAPPT=new Set(), NODEBY=new Map(), KONTRAKT=[], KETTE=[], TIEFE=new Map();
-  // Pipeline IN der Domäne: FLHEIM = Rahmen-Schlüssel (§fluss:id) → Domäne, in der der Fluss steht.
-  let FLHEIM=new Map();
+  let VIS=new Set(), VERTRETER=new Map(), DETAILS=new Map(), EINGEKLAPPT=new Set(), NODEBY=new Map(), KONTRAKT=[];
   let ADJ={out:new Map(),inn:new Map()};
   const vertreterId=id=>(VERTRETER.get(id)||[id])[0];
   function berechneSicht(){
@@ -3101,7 +2250,6 @@
     const push=(m,k,v)=>{let a=m.get(k);if(!a)m.set(k,a=[]);if(!a.includes(v))a.push(v);};
     ADJ={out:new Map(),inn:new Map()};
     kanten().forEach(([a,b])=>{if(a===b||!NODEBY.has(a)||!NODEBY.has(b))return;push(ADJ.out,a,b);push(ADJ.inn,b,a);});
-    FLHEIM=new Map(MODEL.fluesse.map(f=>[FL_PRE+f._id,((SICHT().fluesse||{})["fl:"+f._id]||{}).heim||f.namespace||null]));
     // Vertreter (kompakt) = sichtbarer Besitzer, transitiv durch eingeklappte Besitzer (Decider → Command) — vom Server; ein Code-Block hat
     //   den Vertreter seiner Karte. Ohne Besitzer bleibt ein Detail selbst sichtbar (neu angelegt / unverdrahtet → nichts verschwindet).
     const vert=n=>{if(VIEW.details)return [n.id];if(n.kind==="rumpf")return vert(n.own);
@@ -3110,12 +2258,6 @@
     alle.forEach(n=>{const v=vert(n);VERTRETER.set(n.id,v);
       if(v.length===1&&v[0]===n.id){if(!HIDDEN.has(groupKeyOf(n))&&!istAus(n.kind)&&geladen(n))VIS.add(n.id);}
       else{EINGEKLAPPT.add(n.id);v.forEach(o=>push(DETAILS,o,n.id));}});
-    // Ablauf als Kette: Kettenschritt-Regeln werden Kanten. Auftrag und Ergebnis-Events einer Funktion bleiben IMMER eigene Karten —
-    //   die Funktion ist definiert wie ein Decider: ◀ Auftrag-Karte · ƒ (📝 + 🤖 darunter) · Ergebnis-Karten ▶, auf einer Zeile.
-    KETTE=ketteAusSicht();const weg=new Set(KETTE.map(k=>"tr:"+k.t._id));
-    weg.forEach(id=>{if(VIS.delete(id))EINGEKLAPPT.add(id);});
-    // Tiefe in der Kette (Start = 0): Funktionen stehen danach in eigenen Spalten nebeneinander — erst … dann … von links nach rechts.
-    TIEFE=new Map(Object.entries(SICHT().karten).filter(([,k])=>k.tiefe!=null).map(([id,k])=>[id,k.tiefe]));
     // Zusammengezogene Kanten (kompakt): sichtbar →(eingeklappt)*→ sichtbar, nicht ins Aggregat — vom Server, hier nur die sichtbaren.
     KONTRAKT=VIEW.details?[]:(SICHT().kontrakt||[]).filter(([u,v])=>VIS.has(u)&&VIS.has(v));
   }
@@ -3128,7 +2270,7 @@
   //   Code-Blöcke (📝/🤖) kennt nur der Editor: ihre Kette ist die ihrer Karte, die Rümpfe der beteiligten Logik-Elemente hängen mit dran.
   let SEL=null, FOCUS=null, FOKUS=null;
   var KETTEN=new Map(),KETTEN_STAND=null;
-  const RUMPF_ARTEN=new Set(["handle","decider","applier","fn","funktion","flussknoten","transition","client"]);
+  const RUMPF_ARTEN=new Set(["handle","decider","applier","fn","bausteinfunktion","client"]);
   // Die Rumpf-Kacheln der Logik-Elemente in der Kette gehören mit in den Fokus.
   function mitRuempfen(ids,id){const res=new Set(ids);res.add(id);
     NODEBY.forEach(n=>{if(n.kind==="rumpf"&&ids.has(n.own.id)&&RUMPF_ARTEN.has(n.own.kind))res.add(n.id);});
@@ -3213,7 +2355,7 @@
       b.onclick=e=>{e.stopPropagation();if(p.node)auffaechern(c,{msg:p.msg});};return b;};
     const zeile=(kopf,teile,kl)=>{const z=h("div",{class:"lz"+(kl?" "+kl:"")},h("span",{class:"lk"},kopf));
       teile.forEach((t,i)=>{if(i)z.append(", ");z.append(t);});box.append(z);};
-    const sym=a=>(ART_SYM[(MODEL.akteure.find(x=>x.name===a)||{}).art]||"👤 ")+a;
+    const sym=a=>"👤 "+a;
     const grp=ri=>{const m=new Map();P.filter(p=>p.ri===ri).forEach(p=>{const k=(p.akteure||[]).join(" / ");if(!m.has(k))m.set(k,[]);m.get(k).push(p);});return m;};
     if((c.verkoerpert||[]).length)zeile("👤 verkörpert "+c.verkoerpert.map(sym).join(", "),[],"lt");
     [["traegt","↺ trägt"],["sendet","▶ sendet"],["fragt","? fragt"]].forEach(([ri,kopf])=>grp(ri).forEach((ps,k)=>
@@ -3227,22 +2369,17 @@
       t=ev.length?"→ "+kurz(ev):"→ (kein Decider)";}
     else if(k==="event"){const c=MODEL.decider.filter(d=>(d.ergibt||[]).some(o=>o.event===r.name)).map(d=>d.command);t=c.length?"← "+kurz(c):"";}
     else if(k==="aggregate")t=MODEL.decider.filter(d=>d.aggregat===r.name).length+" Commands · "+MODEL.applier.filter(a=>a.aggregat===r.name).length+" Events · "+(r.state||[]).length+" State-Felder";
-    else if(k==="projektion"||k==="reaktion")t=(r.handles||[]).length+" Handles · ← "+kurz((r.handles||[]).map(x=>x.event));
+    else if(k==="projektion")t=(r.handles||[]).length+" Handles · ← "+kurz((r.handles||[]).map(x=>x.event));
     else if(k==="reader")t=(r.handles||[]).length+" Handles · ? "+kurz((r.handles||[]).map(x=>x.query));
-    else if(k==="flussknoten")t=flussKurz(n);
-    else if(k==="saga")t="Auslöser: "+(r.triggerEvent||"—")+" · "+transOf(r).length+" Regeln";
-    else if(k==="transition")t="WENN "+kurz(r.wenn)+" → "+kurz((r.dann||[]).map(d=>d.rufe?"ƒ "+d.rufe+(d.zeitlimit?" ⏳":""):d.sende+(d.zeitlimit?" ⏳":"")));
-    else if(k==="bausteinfunktion"&&istGerufen(r))t="🧩 "+kurz(r.methoden.map(m=>m.name))+" · "+((r.umsetzungen||[]).length?"⚙ "+kurz(r.umsetzungen.map(u=>u.name)):r.klasse?"Klasse":"⚠ keine Umsetzung");
+    else if(k==="graph")t=((r.koepfe||[]).length?"▶ "+kurz(r.koepfe):r.quelle?"⚡ Quelle "+r.quelle:"kein Kopf")+" · "+(r.knoten||[]).length+" Knoten"
+      +((r.ausgaenge||[]).length?" · → "+kurz(r.ausgaenge):"");
+    else if(k==="bausteinfunktion"&&(r.lauscht||[]).length)t="⚡ meldet "+kurz(r.lauscht)+((r.eingaenge||[]).length?" · "+r.eingaenge.length+" Auf":"");
+    else if(k==="bausteinfunktion"&&istGerufen(r))t="⚙ "+kurz(r.methoden.map(m=>m.name))+" · "+((r.umsetzungen||[]).length?"⚙ "+kurz(r.umsetzungen.map(u=>u.name)):r.klasse?"Klasse":"⚠ keine Umsetzung");
     else if(k==="bausteinfunktion")t=(r.eingaenge||[]).map(e=>"Auf("+(e.eingang||"?")+(e.hinweis?" ·Hinweis":"")+") → "+((e.ausgaben||[]).length?kurz(e.ausgaben):"—")+(e.strom?" (Strom)":"")).join(" · ")
       +((r.umsetzungen||[]).length?" · Umsetzung "+kurz(r.umsetzungen.map(u=>u.name)):r.klasse?"":" · draußen");
-    else if(k==="funktion"){const dn=KETTE.filter(x=>x.art==="dann"&&x.von==="fk:"+r._id).map(x=>x.d.rufe?"ƒ "+x.d.rufe:x.d.sende);
-      t=(r.auftrag||"?")+" → "+((r.ergebnisse||[]).length?kurz(r.ergebnisse):"(kein Ergebnis)")+(dn.length?" · dann "+kurz(dn):"");}
-    else if(k==="auftrag")t="Eingang von ƒ "+(r.funktion||"—");
     else if(k==="store")t=(r.writeFns||[]).length+" schreibend · "+(r.readFns||[]).length+" lesend";
     else if(k==="readmodel"&&r.geteilt)t="⇄ geteilt";
-    else if(k==="auf")t="◀ "+(r.eingang||"?")+" → "+((r.ausgaenge||[]).length?kurz(r.ausgaenge)+(r.strom?" (Strom)":""):"zur Kenntnis");
-    else if(k==="akteur")t=(ART_SYM[r.art]||"")+((r.darf||[]).length?"darf "+kurz(r.darf):"darf nichts")
-      +((r.vertrag||[]).length?" · Zusagen auf "+kurz(r.vertrag.map(x=>x.eingang)):"");
+    else if(k==="akteur")t=((r.darf||[]).length?"darf "+kurz(r.darf):"darf nichts")+((r.hoert||[]).length?" · hört "+kurz(r.hoert):"");
     else if(k==="handle"){const aus=(r.ausgaenge||[]).length?(r.ausgaenge||[]).filter(a=>a.art!=="storefn").map(a=>a.typ)
         :[...(r.responses||[]),...(r.sends||[]),...(r.publishes||[])];
       const fns=(r.fns||[]).map(fid=>{const f=fnById(fid);return f?f.fn.name:null;}).filter(Boolean);
@@ -3302,11 +2439,11 @@
     // Der Rumpf einer Client-Implementierung steht in der Domäne des Client-Namespaces (der Client-Rahmen ist nur die Anschlussleiste).
     if(n.kind==="rumpf"&&n.own.kind==="client")return nsVon(n.own)||OHNE_DOM;
     const k=sk(n);if(k&&k.domaene)return k.domaene;
-    if(!k){if(n.kind==="client")return CL_PRE+n.ref.name;if(n.kind==="flussknoten")return FL_PRE+n.own.ref._id;
+    if(!k){if(n.kind==="client")return CL_PRE+n.ref.name;
       if(n.kind==="rumpf")return domNs(n.own);}
     return (!k&&nsVon(n))||(VIEW.heim||{})[n.id]||OHNE_DOM;}
-  const domLabel=ns=>ns===RAND_KEY?"🚪 Rand":ns===BEGR_KEY?"📚 Begriffe":istRegionKarte(ns)?(({agg:"▣ ",fb:"ƒ ",sto:"👁 "})[ns.split(":")[0]])+((NODEBY.get(ns)||{}).name||ns.replace(/^\w+:(\w+:)?/,""))
-    :ns===OHNE_DOM?"⋯ ohne Domäne":istHostDom(ns)?"🖥 Host · "+(WB.zustand&&WB.zustand.aktiv||"Umgebung"):istClientDom(ns)?"🔌 "+clientAnzeige({name:ns.slice(CL_PRE.length)}):istFlussDom(ns)?"⛓ "+((flussVonDom(ns)||{}).name||"Pipeline"):letztesSeg(ns);
+  const domLabel=ns=>ns===RAND_KEY?"🚪 Rand":ns===BEGR_KEY?"📚 Begriffe":istRegionKarte(ns)?(({agg:"▣ ",gr:"⬡ ",fb:"ƒ ",sto:"👁 "})[ns.split(":")[0]])+((NODEBY.get(ns)||{}).name||ns.replace(/^\w+:(\w+:)?/,""))
+    :ns===OHNE_DOM?"⋯ ohne Domäne":istHostDom(ns)?"🖥 Host · "+(WB.zustand&&WB.zustand.aktiv||"Umgebung"):istClientDom(ns)?"🔌 "+clientAnzeige({name:ns.slice(CL_PRE.length)}):letztesSeg(ns);
   // Block (Aggregat bzw. Brücke) eines Knotens: aus dem Graphen; ein über eine Spalte angelegter, noch unverdrahteter Knoten
   //   behält bis zur Verdrahtung den Block dieser Spalte (VIEW.heimBlk) — statt im Inselkasten zu landen.
   const blockVon=n=>subGroupOf(n)||(VIEW.heimBlk||{})[n.id]||SHARED_KEY;
@@ -3317,16 +2454,13 @@
   // Gemeinsame Wurzel (z. B. „Domain“) — darunter beginnen die Domänen (wie im Start-Dialog).
   function domWurzel(){const alle=new Set();graphNodes().forEach(n=>{const x=domKey(n)===OHNE_DOM||istAussenDom(domKey(n))?null:domKey(n);if(x)for(let p=x;p;p=elternNs(p))alle.add(p);});
     (VIEW.domNeu||[]).forEach(x=>{for(let p=x;p;p=elternNs(p))alle.add(p);});
-    FLHEIM.forEach(x=>{if(x)for(let p=x;p;p=elternNs(p))alle.add(p);});
     let top="";for(;;){const k=[...alle].filter(x=>elternNs(x)===top);if(k.length!==1||![...alle].some(y=>elternNs(y)===k[0]))break;top=k[0];}
     return top;}
   // Baum über die gegebenen Domänen (+ ihre Eltern-Namespaces bis unter die Wurzel).
   function domBaum(keys){const w=domWurzel(),alle=new Set();
     const kette=ns=>{for(let p=ns;p&&p!==w;p=elternNs(p)){alle.add(p);if(!drinNs(w,p))break;}};
-    keys.forEach(ns=>{if(istFlussDom(ns)){alle.add(ns);const hm=FLHEIM.get(ns);if(hm&&hm!==w)kette(hm);return;}
-      if(ns===OHNE_DOM||ns===w||istAussenDom(ns)){alle.add(ns);return;}kette(ns);});
-    const elternIn=ns=>{if(istFlussDom(ns)){const hm=FLHEIM.get(ns);return hm&&hm!==w&&alle.has(hm)?hm:null;}
-      if(ns===OHNE_DOM||ns===w||istAussenDom(ns))return null;const e=elternNs(ns);return alle.has(e)&&e!==w?e:null;};
+    keys.forEach(ns=>{if(ns===OHNE_DOM||ns===w||istAussenDom(ns)){alle.add(ns);return;}kette(ns);});
+    const elternIn=ns=>{if(ns===OHNE_DOM||ns===w||istAussenDom(ns))return null;const e=elternNs(ns);return alle.has(e)&&e!==w?e:null;};
     const kinder=new Map();alle.forEach(ns=>{const e=elternIn(ns);if(e){if(!kinder.has(e))kinder.set(e,[]);kinder.get(e).push(ns);}});
     kinder.forEach(a=>a.sort(domOrd));
     return {oben:[...alle].filter(ns=>!elternIn(ns)).sort(domOrd),kinder,elternIn};}
@@ -3347,7 +2481,7 @@
     // Akteur-Rahmen (Domäne × Akteur, docs/konzept-akteure.md §8): nur in Domänen mit Akteuren; sonst null (ein Block-Layout wie bisher).
     const aktVon=n=>akteurOrdnung(domKey(n)).length?akteurVon(n):null;
     GEO.forEach((g,id)=>{const n=NODEBY.get(id);if(!n)return;const d=domKey(n);
-      if(n.kind==="client"||istFlussDom(d)||istHostDom(d))return;   // Client = Anschlussleiste; Pipeline-Knoten + ihre Karten liegen im Pipeline-Rahmen, nicht in Spalten
+      if(n.kind==="client"||istHostDom(d))return;   // Client = Anschlussleiste; Host-Karten liegen im Host-Rahmen, nicht in Spalten
       if(istInselLage(n)){nimm(sp(d+"|§insel",{dom:d,blk:null,role:"insel",akt:null}),id,g,n.kind);return;}
       if(n.kind==="rumpf"){codes.push([n,g,id]);return;}
       const blk=blockVon(n),role=rolle(n,rollenVon(blk)),akt=aktVon(n);
@@ -3384,7 +2518,6 @@
     B.oben.forEach(ns=>rechne(ns,0));
     rahmen.sort((a,b)=>a.tiefe-b.tiefe).forEach(r=>{FRGEO.set(r.ns+"|",r);
       if(istClientDom(r.ns)){ebene.append(clientRahmen(r));aus.x2=Math.max(aus.x2,r.x2);aus.y2=Math.max(aus.y2,r.y2);return;}
-      if(istFlussDom(r.ns)){ebene.append(flussRahmen(r));aus.x2=Math.max(aus.x2,r.x2);aus.y2=Math.max(aus.y2,r.y2);return;}
       if(istHostDom(r.ns)){ebene.append(hostRahmen(r));aus.x2=Math.max(aus.x2,r.x2);aus.y2=Math.max(aus.y2,r.y2);return;}
       const hue=domHue(r.ns===OHNE_DOM?SHARED_KEY:r.ns);
       const fr=h("div",{class:"grahmen"+(r.tiefe?" unter":"")+(akteurOrdnung(r.ns).length?" mitakt":"")});fr.dataset.ns=r.ns;
@@ -3404,7 +2537,7 @@
       fr.append(k);if(r.leer)fr.append(h("div",{class:"gr-leer"},"Leere Domäne — ＋ legt den ersten Baustein an"));
       ebene.append(fr);aus.x2=Math.max(aus.x2,r.x2);aus.y2=Math.max(aus.y2,r.y2);});
     akt.forEach(a=>{FRGEO.set(a.dom+"|"+a.akt,a);ebene.append(akteurRahmen(a,STK.get(a.dom+"|"+a.akt)));aus.x2=Math.max(aus.x2,a.x2);aus.y2=Math.max(aus.y2,a.y2);});
-    spalten.forEach(c=>{if(c.blk===AKTEUR_KEY&&c.role===ROLE_AKTEUR.auf){FRGEO.set("§vertrag:"+c.akt,c.r);ebene.append(vertragsRahmen(c));return;}
+    spalten.forEach(c=>{
       const el=h("div",{class:"gspalte"+(c.role==="insel"?" insel":"")});const r=c.r;
       Object.assign(el.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});
       const ORD=Object.keys(NODELABEL),ix=k=>{const i=ORD.indexOf(k.replace(/^handle:.*/,"handle"));return i<0?99:i;};
@@ -3419,25 +2552,6 @@
       k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
       el.append(k);ebene.append(el);});
     return aus;}
-  // 📜 Der VERTRAG eines Akteurs als Rahmen (docs/konzept-akteure.md §3): die Schnittstelle, gegen die der Client programmiert —
-  //   innen je Auf(Event) eine Zusage-Karte, die Kanten laufen zu den Events (◀) und Commands (▶). Kopf: Name · Ein/Aus ·
-  //   ＋ Zusage (Events leuchten) · ◎ · ⤢. Klick auf den Namen = Akteur-Panel.
-  function vertragsRahmen(c){const r=c.r,ak=MODEL.akteure.find(x=>x.name===c.akt),v=(ak&&ak.vertrag)||[];
-    const el=h("div",{class:"gspalte vertrag"});
-    Object.assign(el.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});
-    const ein=v.map(x=>x.eingang).filter(Boolean),aus=[...new Set(v.flatMap(x=>x.ausgaenge||[]))];
-    const typ=ak?vertragsTyp(ak):"?";
-    const k=h("div",{class:"gspalte-k",title:"public interface "+typ+" : IAkteurVertrag<"+c.akt+"> — der Client (Python-Worker …) implementiert ihn; "
-        +"generiert: domain_client/generated/vertraege.py ("+c.akt+"Basis)\n◀ hört: "+(ein.join(", ")||"—")+"\n▶ gibt hinein: "+(aus.join(", ")||"—"),
-        onclick:e=>{e.stopPropagation();if(ak)waehle("akt:"+ak._id);}},
-      h("i",{class:"kc-auf"}),h("span",{class:"gs-t"},"📜 Vertrag "+typ),
-      h("span",{class:"gs-z"},"◀ "+ein.length+" · "+aus.length+" ▶"),
-      ak?h("button",{title:"Neue Zusage: Event wählen (passende Events leuchten)",onclick:e=>{e.stopPropagation();waehle("akt:"+ak._id);
-        setTimeout(()=>{const p=SLOTS["akt:auf:"+ak._id+":open"];if(p)vbStart(p);},0);}},"＋"):null,
-      h("button",{title:"Vertrag markieren (Fokus)",onclick:e=>{e.stopPropagation();fokussiere("menge",new Set(c.ids),"📜 Vertrag "+typ);}},"◎"),
-      h("button",{title:"Vertrag einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"));
-    k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
-    el.append(k);return el;}
   // Ein Akteur-Rahmen (Domäne × Akteur, docs/konzept-akteure.md §8): Kopf = Akteur (Klick → sein Panel) · Domäne · Zahl · „↥ auch“ (Doppelungen,
   //   die in einem früheren Akteur-Rahmen stehen) · ＋ (für diesen Akteur entwerfen) · ◎ · ⤢ · ⋯ (Reihenfolge).
   function akteurRahmen(a,stecker){const ohne=a.akt===OHNE_AKT,ak=!ohne&&MODEL.akteure.find(x=>x.name===a.akt),
@@ -3449,7 +2563,7 @@
     const auch=ohne?[]:auchWoanders(a.akt,a.dom);
     const k=h("div",{class:"grahmen-k akt-k",title:(ohne?"Bausteine ohne Akteur — kein IDarf und keine Kette (GR-HERKUNFT)":
         a.akt+" in "+a.dom+(ak&&!akteurDirektIn(ak,a.dom)?" — wirkt hier nur über die Kette":""))},
-      h("span",{class:"gr-t akt-n",onclick:e=>{e.stopPropagation();if(ak)waehle("akt:"+ak._id);}},ohne?"⚠ ohne Akteur":(ART_SYM[ak&&ak.art]||"👤 ")+a.akt),
+      h("span",{class:"gr-t akt-n",onclick:e=>{e.stopPropagation();if(ak)waehle("akt:"+ak._id);}},ohne?"⚠ ohne Akteur":"👤 "+a.akt),
       auch.length?h("span",{class:"akt-auch",title:"Gehört auch "+a.akt+", steht aber im Rahmen eines früheren Akteurs (Doppelungen dort, wo sie zuerst auftreten)"},
         "↥ auch: ",...auch.slice(0,6).map(([n,wo])=>h("button",{class:"akt-ref",title:n.name+" — steht bei "+wo,onclick:e=>{e.stopPropagation();zeigeKnoten(n.id);}},n.name)),
         auch.length>6?h("span",{class:"gr-z"}," +"+(auch.length-6)):null):null,
@@ -3475,14 +2589,14 @@
     const akt=c?clientAkteure(c):[];
     const k=h("div",{class:"grahmen-k",title:c?"public interface "+c.name+" : IClientVertrag, … — Handshake „"+clientAnzeige(c)+"“, Python-Basis "+clientAnzeige(c)+"Basis (domain_client/generated/vertraege.py)":""},
       h("span",{class:"gr-t akt-n",onclick:e=>{e.stopPropagation();if(c)waehle("cl:"+c._id);}},domLabel(r.ns)),
-      h("span",{class:"gr-p"},akt.length?"verkörpert "+akt.map(n=>(ART_SYM[(MODEL.akteure.find(a=>a.name===n)||{}).art]||"👤 ")+n).join(", "):"verkörpert noch keinen Akteur"),
+      h("span",{class:"gr-p"},akt.length?"verkörpert "+akt.map(n=>"👤 "+n).join(", "):"verkörpert noch keinen Akteur"),
       c?h("button",{title:"Client markieren (Slice)",onclick:e=>{e.stopPropagation();waehle("cl:"+c._id);}},"◎"):null,
       h("button",{title:"Client einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"));
     k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};fr.append(k);return fr;}
   // Gibt der Akteur in dieser Domäne direkt etwas hinein (IDarf) — oder wirkt er hier nur über eine Kette?
   function akteurDirektIn(ak,dom){return (ak.darf||[]).some(nm=>{const n=NODEBY.get("rec:"+nm);return n&&domKey(n)===dom;});}
   // Doppelungen: Bausteine dieser Domäne, die auch dem Akteur gehören, aber im Rahmen eines früheren Akteurs stehen.
-  function auchWoanders(name,dom){const r=[];const ART=["command","query","event","rejection","aggregate","reader","projektion","reaktion","saga","handle","store","readmodel","queryresponse"];
+  function auchWoanders(name,dom){const r=[];const ART=["command","query","event","rejection","aggregate","reader","projektion","handle","store","readmodel","queryresponse"];
     NODEBY.forEach(n=>{if(!VIS.has(n.id)||!ART.includes(n.kind)||domKey(n)!==dom||!akteurSet(n).has(name))return;const wo=akteurVon(n);if(wo!==name)r.push([n,wo]);});
     return r.sort((x,y)=>ART.indexOf(x[0].kind)-ART.indexOf(y[0].kind)||x[0].name.localeCompare(y[0].name));}
   // Wie zeigeKnoten — liegt der Knoten in einer nicht geladenen Domäne, wird sie erst dazugeladen.
@@ -3503,16 +2617,15 @@
       {trenn:true},
       {t:"👤 Akteur öffnen",aus:!ak,fn:()=>waehle("akt:"+ak._id)}]);}
   // Spalten-Kopf: Name je Art; ＋ legt eine Art dieser Rolle an (Handles/Store-Fns entstehen am Besitzer, nicht frei).
-  const spaltenName=k=>k==="handle:projektion"?"Projektion-Handle":k==="handle:reader"?"Reader-Handle":k==="handle:pipeline"?"Pipeline-Handle":k==="handle:reaktion"?"Reaktion-Handle":k==="ergebnis"?"Ergebnis ƒ":NODELABEL[k]||k;
+  const spaltenName=k=>k==="handle:projektion"?"Projektion-Handle":k==="handle:reader"?"Reader-Handle":k==="ergebnis"?"Ergebnis ƒ":NODELABEL[k]||k;
   const NICHT_FREI=new Set(["fn","handle","auf","ergebnis"]);
   function spaltenNeu(c){if(c.role==="insel"||c.role==="code")return [];
     const map=rollenVon(c.blk);
     return Object.keys(map).filter(k=>map[k]===c.role&&!k.includes(":")&&!NICHT_FREI.has(k));}
   function spalteAnlegen(c,kind){if(regionArt(c.dom)){const k=regionKontext(c.dom);
       neuerKnoten(kind,undefined,undefined,{ns:k.ns,agg:k.agg,reg:c.dom,blk:c.blk||SHARED_KEY});return;}
-    const agg=c.blk&&c.blk!==SHARED_KEY&&c.blk!==AKTEUR_KEY?c.blk:(MODEL.aggregate.find(a=>a.namespace===c.dom)||{}).name,
-    sg=MODEL.sagas.find(s=>s.namespace===c.dom);
-    neuerKnoten(kind,undefined,undefined,{ns:c.dom===OHNE_DOM?null:c.dom,agg,saga:sg&&sg.name,blk:c.blk||SHARED_KEY});}
+    const agg=c.blk&&c.blk!==SHARED_KEY&&c.blk!==AKTEUR_KEY?c.blk:(MODEL.aggregate.find(a=>a.namespace===c.dom)||{}).name;
+    neuerKnoten(kind,undefined,undefined,{ns:c.dom===OHNE_DOM?null:c.dom,agg,blk:c.blk||SHARED_KEY});}
   function einpassenRahmen(r){if(!CV.w)return;const w=r.x2-r.x1,hh=r.y2-r.y1,s=Math.max(0.08,Math.min(1,(CV.w-80)/w,(CV.h-80)/hh));
     PAN.s=s;PAN.x=CV.w/2-(r.x1+w/2)*s;PAN.y=CV.h/2-(r.y1+hh/2)*s;applyPan();}
 
@@ -3556,7 +2669,7 @@
         deFlash("＋ Domäne "+ns,true);return null;});}
   // ＋ in der Menüleiste: Baustein IN dieser Domäne (Namespace; Decider/Applier/State ans Aggregat, Regel an den Prozess der Domäne).
   const BAU_GRUPPEN=[["Außen",["akteur","client"]],["Schreibseite",["command","event","rejection","aggregate","state","decider","applier"]],
-    ["Typen",["valueobject","enum","konfig"]],["Abläufe",["saga","transition","funktion","gerufen","reaktion","quelle"]],
+    ["Typen",["valueobject","enum","konfig"]],["Rechnen",["graph","funktion","quelle","gerufen"]],
     ["Leseseite",["readmodel","store","projektion","query","queryresponse","reader"]]];
   // ＋ IN EINER REGION (Hierarchie): was man hier anlegt, gehört dem Block — die Geste schreibt das Signatur-Fakt, aus dem der Besitz folgt.
   //   Aggregat: Command (zielt auf es) und je Decide ein Event bzw. eine Ablehnung (das Decide gibt sie aus). Rand: Akteur, Client, Quelle.
@@ -3576,9 +2689,9 @@
     else if(art==="Sicht")it.push(neu("readmodel"),neu("projektion"),neu("reader"),neu("query"));
     else if(art==="Funktion")it.push(neu("konfig"),neu("gerufen"));
     menue(cx,cy,"＋ in "+domLabel(ns),it);}
-  function bausteinMenue(cx,cy,ns){if(regionArt(ns))return regionMenue(cx,cy,ns);const agg=MODEL.aggregate.find(a=>a.namespace===ns),sg=MODEL.sagas.find(s=>s.namespace===ns);
+  function bausteinMenue(cx,cy,ns){if(regionArt(ns))return regionMenue(cx,cy,ns);const agg=MODEL.aggregate.find(a=>a.namespace===ns);
     const it=[];BAU_GRUPPEN.forEach(([g,ks])=>{it.push({kopf:g});ks.forEach(k=>it.push({t:"＋ "+(NODELABEL[k]||k),
-      fn:()=>neuerKnoten(k,undefined,undefined,{ns:ns===OHNE_DOM?null:ns,agg:agg&&agg.name,saga:sg&&sg.name})}));});
+      fn:()=>neuerKnoten(k,undefined,undefined,{ns:ns===OHNE_DOM?null:ns,agg:agg&&agg.name})}));});
     menue(cx,cy,"＋ in "+domLabel(ns),it);}
   function domMenue(cx,cy,r){const neu=(VIEW.domNeu||[]).includes(r.ns);
     menue(cx,cy,r.ns===OHNE_DOM?domLabel(r.ns):r.ns,[
@@ -3618,9 +2731,8 @@
       onclick:e=>{if(e.ctrlKey||e.metaKey){e.preventDefault();jumpNextOfKind(kind);}else neuerKnoten(kind);}},label);
     root.append(h("div",{class:"gtoolbar"},
       // Palette mit Ankern (docs/konzept-werkbank.md §8.5): etwas NEUES beginnen. Zugehöriges entsteht mit „＋" am Port bzw. im Domänen-Menü.
-      tb("aggregate","+ Aggregat"),
-      h("button",{class:"add",title:"Neuer Fluss: Quelle → Katalog-Funktionen → Commands, frei verdrahtet",onclick:()=>neuePipeline()},"+ ⛓ Fluss"),
-      tb("funktion","+ ƒ Funktion"),tb("quelle","+ 📥 Quelle"),tb("akteur","+ 👤 Akteur"),tb("client","+ 🔌 Client"),tb("projektion","+ Projektion"),
+      tb("aggregate","+ Aggregat"),tb("graph","+ ⬡ Graph"),tb("funktion","+ ƒ Funktion"),tb("quelle","+ 📥 Quelle"),tb("gerufen","+ ⚙ Technik"),
+      tb("akteur","+ 👤 Akteur"),tb("client","+ 🔌 Client"),tb("projektion","+ Projektion"),
       h("button",{class:"add island-btn",style:"margin-left:auto",
         title:"Einsame Inseln (unverbundene Knoten) — Hover: markieren · Klick: der Reihe nach anspringen",
         onmouseenter:()=>highlightIslands(true),onmouseleave:()=>highlightIslands(false),onclick:()=>jumpIslands()},
@@ -3668,96 +2780,11 @@
     const pick=h("div",{class:"gpick"});pick.style.left=sx+"px";pick.style.top=sy+"px";
     const opt=(kind,label)=>h("button",{onclick:()=>{pick.remove();neuerKnoten(kind,wx,wy);}},label);
     pick.append(h("div",{class:"gpick-t"},"Was soll hier entstehen?"),
-      opt("aggregate","Aggregat"),h("button",{onclick:()=>{pick.remove();neuePipeline();}},"⛓ Fluss"),opt("funktion","ƒ Funktion"),opt("quelle","📥 Quelle"),
+      opt("aggregate","Aggregat"),opt("graph","⬡ Graph"),opt("funktion","ƒ Funktion"),opt("quelle","📥 Quelle"),opt("gerufen","⚙ Technik"),
       opt("akteur","👤 Akteur"),opt("client","🔌 Client"),opt("projektion","Projektion"));
     canvas.append(pick);
     setTimeout(()=>{const off=ev=>{if(!pick.contains(ev.target)){pick.remove();document.removeEventListener("pointerdown",off);}};document.addEventListener("pointerdown",off);},0);
   }
-
-  // Prozess-HUB: Prozess<Auslöser>. Transitionen stecken sich HIER an (sichtbare Kante, keine Ableitung).
-  function prozessHubCard(body,s){
-    body.append(topSlot("event","Auslöser (startet): "+(s.triggerEvent||"— ⊕ Event wählen"),{type:"evtUse",dir:"in",saga:s.name,trigger:true},"saga:trigger:"+s.name));
-    body.append(nameInp(s,"name","Prozess","saga"));
-    body.append(h("input",{value:s.namespace??"",oninput:e=>s.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
-    const aggs=(SICHT().karten["saga:"+s.name]||{}).beruehrt||[];
-    body.append(h("div",{class:"gsec"},"berührt (abgeleitet): "+(aggs.length?aggs.join(" · "):"—")));
-    body.append(h("div",{class:"gsec"},"Regeln ◀ (anstecken)"));
-    // Je Regel eine Zeile — Klick öffnet die Regel (Wenn/Dann, Bau-Lambda mit 📝/🤖, Zeitlimit, Kompensation), wie die Zusagen am Akteur.
-    transOf(s).forEach(t=>{const p=anchorDot("prozess");p.classList.add("i");reg("hub:in:"+s.name+":"+t._id,p,null);
-      const row=h("div",{class:"slotrow",style:"cursor:pointer",title:"Regel öffnen"},p,h("span",{class:"slotlbl"},"WENN "+((t.wenn||[])[0]||"?")+((t.wenn||[]).length>1?" +"+((t.wenn.length-1)+(t.sammelEvent?1:0))+"":(t.sammelEvent?" +alle":""))+" → "+((t.dann||[]).map(d=>d.rufe?"ƒ "+d.rufe:(d.sende||"?")).join(", ")||"?")));
-      row.onclick=()=>waehle("tr:"+t._id);body.append(row);});
-    const oi=port("prozess");oi.classList.add("i");reg("hub:in:"+s.name+":open",oi,{type:"prozess",dir:"in",saga:s.name});
-    body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Regel anstecken")));
-    // Ablauf als Kette: was beim Start ZUERST passiert (weitere Schritte hängen an den Funktions-Knoten: „dann ▶“).
-    body.append(h("div",{class:"gsec"},"Ablauf ▶ erst …"));
-    kettenZeilen(body,"saga:"+s.name);
-    if(s.triggerEvent)body.append(slotRow("command","bei "+s.triggerEvent+" ▶ erst ⊕ (ƒ · Command)","r",{type:"kette",dir:"out",saga:s.name,bei:s.triggerEvent},"kette:saga:"+s.name));
-    else body.append(h("div",{class:"gsec",style:"opacity:.6"},"Erst einen Auslöser wählen."));
-  }
-  // Elementtyp der SendeJe-Collection (z. B. List<Guid> → Guid) — für den Typ des z-Pins.
-  function collElemTyp(t){if(!t.sendeJeCollection)return "";const dot=t.sendeJeCollection.indexOf(".");if(dot<0)return "";
-    const role=t.sendeJeCollection.slice(0,dot),field=t.sendeJeCollection.slice(dot+1);const j=["t","r","g"].indexOf(role);
-    const r=recByName((t.wenn||[])[j]);const f=r&&(r.felder||[]).find(x=>x.name===field);const e=elementVon(f);return e?baseTyp(e):"";}
-  // REGEL-KNOTEN: liest sich als Satz WENN … DANN SENDE … SONST ↩ … (eine DSL-Regel = ein SagaSchritt).
-  //   Logik (Argument-Bau, Count-Ausdruck) ist Fülle-Zeit → Stub, KEINE Argument-Pins mehr.
-  // REGEL = kleine KREUZUNG im Event/Command-Fluss (Petri-Transition): Event-Eingänge (Join) → Command-Ausgang.
-  //   KEINE wiederholten Namen, KEINE Sektionen — der Inhalt lebt in den verdrahteten Event/Command-Nodes
-  //   (Name nur als Hover-Titel + über die Kante sichtbar). Der Join = mehrere zusammenlaufende Kanten.
-  function transitionCard(body,t){
-    const mk=(txt,title,on,onclick)=>h("span",{title:title||"",...(onclick?{onclick}:{}),
-      style:"font-size:9px;padding:0 3px;border-radius:3px;border:1px solid #3a4453;opacity:"+(on?"1":".55")+";"+(onclick?"cursor:pointer;":"")+(on?"background:#2f5d46;color:#c8f0d8;border-color:#2f5d46":"")},txt);
-    body.append(topSlot("prozess","→ Prozess"+(t.prozess?": "+t.prozess:" (andocken)"),{type:"prozess",dir:"out",trans:t._id},"tr:prozess:"+t._id));
-    // ── WENN (Join): Event-Eingänge UNTEREINANDER, beliebig viele (keine 3er-Grenze) ──
-    body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl",style:"opacity:.55"},"Wenn ◀ (Join)")));
-    (t.wenn||[]).forEach((e,j)=>{const p=port("event");p.classList.add("i");p.title=e||"(Event)";reg("tr:in:"+t._id+":"+j,p,{type:"evtUse",dir:"in",trans:t._id,wennIdx:j});
-      body.append(h("div",{class:"slotrow"},p,h("span",{class:"slotlbl",style:"flex:1;opacity:.75"},e||"(Event)"),h("button",{class:"rm",onclick:()=>{t.wenn.splice(j,1);render();}},"✕")));});
-    // Offener „+ und"-Eingang (unbegrenzt).
-    const oi=port("open");oi.classList.add("i");oi.title="+ und (Event)";reg("tr:in:"+t._id+":open",oi,{type:"evtUse",dir:"in",trans:t._id,wennIdx:"open"});
-    body.append(h("div",{class:"slotrow"},oi,mk("+ und","weiteres Bedingungs-Event")));
-    // ── DANN (mehrere): ein Join, N Commands — je Dann ein Command-Ausgang + eigene Kompensation ──
-    (t.dann||[]).forEach((d,di)=>{
-      if(d.rufe!==undefined){
-        // Aufruf-Knoten: die Funktion steht ausdrücklich da (Rufe<F>), ihre Ergebnisse sind die nächsten Events im Graph.
-        // ⊕ → eine Funktions-Karte anklicken; „＋" legt eine neue Funktion an (Auftrag/Ergebnis an IHRER Karte).
-        const fa=port("auftrag");fa.classList.add("o");fa.title=d.rufe||"(Funktion)";reg("tr:rufe:"+t._id+":"+di,fa,{type:"rufe",dir:"out",trans:t._id,dannIdx:di});
-        const fk=MODEL.funktionen.find(f=>f.name===d.rufe);
-        body.append(h("div",{class:"slotrow o"},
-          h("button",{class:"rm",onclick:()=>{t.dann.splice(di,1);if(!t.dann.length)t.dann.push({});render();}},"✕"),
-          h("span",{class:"slotlbl",style:"flex:1;text-align:right;opacity:.75"+(fk?";cursor:pointer":""),title:fk?"Klick: Funktions-Karte öffnen":"",onclick:fk?()=>zeigeLadend("fk:"+fk._id):null},
-            "Dann rufe "+(fk?"ƒ "+fk.name:d.rufe?"⚠ "+d.rufe:"— ⊕ Funktion")),
-          d.rufe?null:neuKnopf("Neue Funktion anlegen und hier rufen",()=>{const nm=neueFunktion((MODEL.sagas.find(x=>x.name===t.prozess)||{}).namespace||defaultNsGlobal());
-            verbindeInfo({type:"rufe",dir:"out",trans:t._id,dannIdx:di},{type:"rufe",dir:"in",fk:MODEL.funktionen.find(x=>x.name===nm)._id});}),fa));
-        if(fk)body.append(h("div",{class:"gsec",style:"opacity:.7"},"Auftrag "+(fk.auftrag||"?")+" → "+((fk.ergebnisse||[]).join(" | ")||"(kein Ergebnis)")));
-        if(d.sendeAusdruck)body.append(h("div",{class:"gsec",title:"aus dem Code gelesen — wird verbatim zurückgeschrieben",style:"font-family:monospace;opacity:.7;white-space:pre-wrap"},"λ "+d.sendeAusdruck));
-        body.append(regelCodePort(t,d,di,"sende"));
-        argTabelle(body,t,d);
-        body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"⏳"),inp(d.zeitlimit,v=>{if(v)d.zeitlimit=v;else delete d.zeitlimit;},"Zeitlimit, z. B. TimeSpan.FromSeconds(30)")));
-        const ko2=port("rejection");ko2.classList.add("o");ko2.title=d.kompensation||"(Kompensation)";reg("tr:komp:"+t._id+":"+di,ko2,{type:"sagaCmd",dir:"out",trans:t._id,dannIdx:di,role:"komp"});
-        body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right;opacity:.55"},"↩ "+(d.kompensation||"")),ko2));
-        if(d.kompensation)body.append(regelCodePort(t,d,di,"komp"));
-        return;}
-      const so=port("command");so.classList.add("o");so.title=d.sende||"(Command)";reg("tr:sende:"+t._id+":"+di,so,{type:"sagaCmd",dir:"out",trans:t._id,dannIdx:di,role:"sende"});
-      body.append(h("div",{class:"slotrow o"},
-        h("button",{class:"rm",onclick:()=>{t.dann.splice(di,1);if(!t.dann.length)t.dann.push({});render();}},"✕"),
-        h("span",{class:"slotlbl",style:"flex:1;text-align:right;opacity:.75"},"Dann "+(d.sende||"")),
-        mk("×N","Fan-out (SendeJe) — N Commands je Element",!!d.sendeJe,()=>{d.sendeJe=d.sendeJe?undefined:true;render();}),so));
-      if(d.sendeAusdruck)body.append(h("div",{class:"gsec",title:"aus dem Code gelesen — wird verbatim zurückgeschrieben",style:"font-family:monospace;opacity:.7;white-space:pre-wrap"},"λ "+d.sendeAusdruck));
-      if(d.sende)body.append(regelCodePort(t,d,di,"sende"));
-      argTabelle(body,t,d);
-      if(d.sende||d.zeitlimit)body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"⏳"),inp(d.zeitlimit,v=>{if(v)d.zeitlimit=v;else delete d.zeitlimit;},"Zeitlimit (optional), z. B. TimeSpan.FromMinutes(5)")));
-      const ko=port("rejection");ko.classList.add("o");ko.title=d.kompensation||"(Kompensation)";reg("tr:komp:"+t._id+":"+di,ko,{type:"sagaCmd",dir:"out",trans:t._id,dannIdx:di,role:"komp"});
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right;opacity:.55"},"↩ "+(d.kompensation||"")),ko));
-      if(d.kompensation)body.append(regelCodePort(t,d,di,"komp"));
-    });
-    body.append(h("button",{class:"add",onclick:()=>{(t.dann=t.dann||[]).push({});render();}},"+ Dann (weiterer Command am selben Join)"));
-    body.append(h("button",{class:"add",onclick:()=>{(t.dann=t.dann||[]).push({rufe:""});render();}},"+ Dann ƒ (Katalog-Funktion rufen)"));
-    // Je Dann → eine Regel (gleiche Bedingung). Argument-Bau = Feld-Mapping (D/S) → default-Stub; der Bau-Lambda ist Logik und hat
-    //   deshalb wie jedes Logik-Element 📝 + optional 🤖 (regelCodePort) — ein gefüllter Block ist der Lambda verbatim.
-  }
-  function regelCodePort(t,d,di,teil){const sg=MODEL.sagas.find(x=>x.name===t.prozess);
-    const imCode=!!(sg&&sg.datei&&(teil==="komp"?d.kompensationAusdruck:d.sendeAusdruck));
-    return codePort("trl:"+t._id+":"+di+":"+teil,{k:"regelLambda",trans:t._id,dannIdx:di,teil},null,
-      teil==="komp"?"λ Kompensation":d.rufe!==undefined?"λ Auftrag":"λ Command",imCode);}
 
   // ── Aktionen ──
   window.deOpen=function(){document.getElementById("de").classList.add("on");if(!MODEL.records.length&&!MODEL.aggregate.length)deBoot();else render();};
@@ -3797,10 +2824,10 @@
   //   geänderte/neue Karten ganz, entfernte als Schlüssel — und schickt ihn als Geste. Der Server schreibt den Patch (Schreiber, Löschen am
   //   Ort), liest warm neu und schickt das Board zurück: das ist der neue Stand. Umbenennen ist eine eigene Geste (Roslyn-Renamer), ↶ nimmt
   //   den letzten Patch zurück. Solange ein Eingabefeld den Fokus hat, wartet die Geste (sonst ein Patch je Tastendruck).
-  const GSAMMLUNGEN=["records","enums","aggregate","decider","applier","sagas","fluesse","funktionen","bausteinFunktionen","akteure","clients","readModels","stores","projektionen","reaktionen","reader"];
+  const GSAMMLUNGEN=["records","enums","aggregate","decider","applier","graphen","bausteinFunktionen","akteure","clients","readModels","stores","projektionen","reader"];
   // Natürliche Schlüssel — dieselbe Regel wie der Server (GraphExtractor.KartenSchluessel).
   const GKEY=c=>c==="decider"?(d=>(d.aggregat||"")+"|"+(d.command||"")):c==="applier"?(a=>(a.aggregat||"")+"|"+(a.event||""))
-    :["readModels","stores","projektionen","reaktionen","reader"].includes(c)?(x=>x.name||""):(x=>(x.namespace||"")+"|"+(x.name||""));
+    :["readModels","stores","projektionen","reader"].includes(c)?(x=>x.name||""):(x=>(x.namespace||"")+"|"+(x.name||""));
   // Verglichen wird nur, was der Code besitzen kann: keine Ansicht (x/y), keine Board-Fakten (_…), keine Code-Knoten-Bindungen und
   //   keine Rümpfe — die spiegelt der Code-Sync aus der Datei (sie gehören dem Code; eine NEUE Karte geht ohnehin ganz hinaus).
   const GOHNE=new Set(["x","y","ausCode","rumpf","leer"]);
@@ -3884,25 +2911,18 @@
     NID=Math.max(NID,maxId(alt)+1);
     const neu=normalize(code?JSON.parse(JSON.stringify(code)):null);
     GSAMMLUNGEN.forEach(col=>(neu[col]||[]).forEach(x=>{x.ausCode=true;}));
-    neu.transitions.forEach(t=>{t.ausCode=true;});
     if(!alt)return neu;
     alt=normalize(alt);
     GSAMMLUNGEN.forEach(col=>{const key=GKEY(col),altBy=new Map((alt[col]||[]).map(x=>[key(x),x]));
       (neu[col]||[]).forEach(l=>{const s=altBy.get(key(l));if(!s)return;if(s.x!=null){l.x=s.x;l.y=s.y;}});});
-    // Transitionen (Saga-Regeln): Lage über die Regel-Signatur.
-    const altTr=(alt.transitions||[]);
-    neu.sagas.forEach(sg=>{const at=altTr.filter(t=>t.prozess===sg.name);if(!at.length)return;
-      const sig=t=>JSON.stringify([t.wenn||[],t.sammelEvent||"",(t.dann||[]).map(d=>[d.sende||"",d.rufe||"",d.kompensation||""])]);
-      const altBySig=new Map(at.map(t=>[sig(t),t]));
-      neu.transitions.filter(t=>t.prozess===sg.name).forEach(t=>{const a=altBySig.get(sig(t));if(a&&a.x!=null){t.x=a.x;t.y=a.y;}});});
     // Abgeleitete Knoten: State-Knoten (Lage); die Rumpf-Kacheln sind abgeleitet (Lage über ihre Id in der Ansicht).
     const altStates=new Map((alt.states||[]).map(x=>[x.aggregat,x]));
     neu.states.forEach(x=>{const a=altStates.get(x.aggregat);if(a&&a.x!=null){x.x=a.x;x.y=a.y;}});
     return neu;}
-  window.deDownload=function(){prepareSaga();const blob=new Blob([JSON.stringify(MODEL,null,2)],{type:"application/json"});
+  window.deDownload=function(){const blob=new Blob([JSON.stringify(MODEL,null,2)],{type:"application/json"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="domain-model.json";a.click();};
   // Das MODEL als Gesten-Stand (Schnappschuss): Rümpfe aus dem Code, ein leerer Rumpf bleibt leer.
-  function payload(){prepareSaga();const m=JSON.parse(JSON.stringify(MODEL));
+  function payload(){const m=JSON.parse(JSON.stringify(MODEL));
     [...m.decider,...m.applier].forEach(n=>{if(n.leer)n.rumpf="";});
     return m;}
   // Ausgabe-Panel: sobald Prüfen/Grammatik/Meldungen hineinschreiben, einblenden (mit ✕ zum Schließen).
@@ -3923,12 +2943,17 @@
   const HOST_SYM={Umgebung:"🏷",EventStore:"🗄",VersionIndex:"⚡",Cluster:"🕸",Schreibpfad:"✍",Lebenszyklus:"⏳",Konsum:"📥",Transport:"🔗",Identitaeten:"🪪",Quellen:"📁",Funktionen:"ƒ",Konfig:"⚙",Uhr:"🕰"};
   function hostKnoten(){if(!WB.schema)return [];
     const ab=[...HOST_ORDNUNG.filter(k=>WB.schema[k]),...Object.keys(WB.schema).filter(k=>!HOST_ORDNUNG.includes(k)),"Uhr"];
-    return ab.map(k=>({id:"host:"+k,name:(HOST_SYM[k]||"")+" "+k,kind:"host",ref:WB.refs[k]||(WB.refs[k]={abschnitt:k})}));}
+    return [...ab.map(k=>({id:"host:"+k,name:(HOST_SYM[k]||"")+" "+k,kind:"host",ref:WB.refs[k]||(WB.refs[k]={abschnitt:k})})),
+      // Instanzen der Graphen (docs/10 §10.3.5): je Datei graphen/<instanz>.json eine Karte, dazu eine zum Anlegen.
+      ...Object.keys(WB.instanzen||{}).sort().map(i=>({id:"host:inst:"+i,name:"⬡ "+i,kind:"host",ref:WB.refs["inst:"+i]||(WB.refs["inst:"+i]={instanz:i})})),
+      {id:"host:inst-neu",name:"＋ Instanz",kind:"host",ref:WB.refs["inst-neu"]||(WB.refs["inst-neu"]={instanzNeu:true})}];}
   const wbJson=async(url,opt)=>{const r=await fetch(url,opt);if(!r.ok)throw new Error("HTTP "+r.status);return r.json();};
   const kurzWert=v=>v==null?"—":Array.isArray(v)?v.join(", "):typeof v==="object"?Object.keys(v).length+" Einträge":String(v);
 
   // ── Karte + Rahmen ──
   function hostKurz(n){const k=n.ref.abschnitt,box=h("div",{class:"gsum",onclick:()=>waehle(n.id)});
+    if(n.ref.instanzNeu){box.append("einen Graphen in „"+(WB.umgName||"?")+"“ laufen lassen");return box;}
+    if(n.ref.instanz){const v=(WB.instanzen||{})[n.ref.instanz]||{};box.append(h("b",{},v.Graph||"?"),v.Akteur?" · 👤 "+v.Akteur:"",v.Rechner?" · auf "+v.Rechner:"");return box;}
     if(k==="Uhr"){box.append(WB.zustand&&WB.zustand.art!=="Sim"?"Prod: Versatz gesperrt (0)":WB.uhr&&WB.uhr.versatz?"Versatz "+WB.uhr.versatz:"Versatz 0 (DB noch nicht angelegt)");return box;}
     const v=(WB.umg||{})[k],sch=(WB.schema||{})[k]||{};
     if(v==null){box.append(h("span",{class:"gp-mark"},"Standardwerte"));return box;}
@@ -4001,6 +3026,8 @@
     t.oninput=()=>{try{const v=JSON.parse(t.value||leer);f.textContent="";setze(Object.keys(v).length?v:undefined);}catch(e){f.textContent="kein gültiges JSON: "+e.message;}};
     return h("div",{},sch.hilfe?h("div",{class:"gi-hint"},sch.hilfe):null,t,f);}
   function hostCard(body,n){if(!INSP)return;const k=n.ref.abschnitt,z=WB.zustand||{};
+    if(n.ref.instanzNeu){instanzNeuPanel(body);return;}
+    if(n.ref.instanz){instanzPanel(body,n.ref.instanz);return;}
     if(k==="Uhr"){wbUhrPanel(body,z);return;}
     const sch=(WB.schema||{})[k];if(!sch||!WB.umg){body.append(h("div",{class:"gi-hint"},"Umgebung nicht geladen."));return;}
     const knopf=h("button",{class:"act go",onclick:wbSpeichern},"💾 In umgebung."+WB.umgName+".json schreiben");knopf.disabled=!WB.dirty;
@@ -4022,13 +3049,61 @@
       WB.dirty=false;deFlash("💾 umgebung."+WB.umgName+".json geschrieben (↶ nimmt es zurück) — wirksam nach ⟳",true);await wbZustand();render();}
     catch(e){deFlash("⚠ nicht geschrieben: "+e.message,false);}}
 
+  // ── Instanzen (docs/10 §10.3.5): eine Datei je Instanz — Graph, bei einer Quelle der Akteur, Rechner, je Knoten Rahmenfelder, Konfig-Werte und die
+  //    Wahl der Technik. Das Formular leitet der Server aus dem Graphen ab (/api/werkbank/instanzschema); geschrieben wird als Geste (↶). ──
+  async function instanzGeste(pfad,methode,inhalt,titel){
+    try{const r=await fetch(pfad,{method:methode,headers:{"content-type":"application/json"},body:inhalt===undefined?undefined:JSON.stringify(inhalt)});const a=await r.json();
+      if(!a.ok){deFlash("⚠ "+(a.fehler||"nicht geschrieben"),false);return false;}
+      deFlash(titel+" · "+(a.dateien||[]).join(", ")+" (↶ nimmt es zurück)",true);await wbLadeUmgebung();await wbLadeDiagnosen();G_BOARD=a.board;gBoardAnwenden();return true;}
+    catch(e){deFlash("⚠ nicht geschrieben: "+e.message,false);return false;}}
+  const instanzPfad=n=>"/api/werkbank/instanz/"+encodeURIComponent(WB.umgName||"")+"/"+encodeURIComponent(n);
+  async function instanzAnlegen(graph,name){name=name||prompt("Name der Instanz (Dateiname in umgebungen/"+(WB.umgName||"?")+"/graphen/):",graph.replace(/^./,c=>c.toLowerCase()));
+    if(!name||!/^[A-Za-z0-9_-]+$/.test(name))return;
+    if(await instanzGeste(instanzPfad(name),"POST",{Graph:graph},"⬡ Instanz "+name+" angelegt"))waehle("host:inst:"+name);}
+  function instanzNeuPanel(body){
+    body.append(h("div",{class:"gi-hint"},"Welcher Graph soll in „"+(WB.umgName||"?")+"“ laufen? Ein Graph mit Quelle beliebig oft (je Linie, je Verzeichnis …), einer mit Command-Kopf genau einmal."));
+    const box=h("div",{style:"display:flex;flex-wrap:wrap;gap:4px"});
+    (MODEL.graphen||[]).filter(g=>g.datei).forEach(g=>box.append(h("button",{class:"akt-dom",onclick:()=>instanzAnlegen(g.name)},"⬡ "+g.name)));
+    body.append(box);}
+  function instanzPanel(body,name){const wert=JSON.parse(JSON.stringify((WB.instanzen||{})[name]||{}));
+    body.append(h("div",{class:"gi-hint"},"umgebungen/"+(WB.umgName||"?")+"/graphen/"+name+".json — leer = Standard; ${branch} und ${env:NAME} werden beim Start ersetzt. Wirksam nach ⟳."));
+    const box=h("div",{},h("div",{class:"gi-hint"},"lädt …"));body.append(box);
+    (async()=>{let sch;try{sch=await wbJson("/api/werkbank/instanzschema?graph="+encodeURIComponent(wert.Graph||""));}catch(e){sch={fehler:e.message};}
+      box.innerHTML="";
+      const g=(MODEL.graphen||[]).find(x=>x.name===wert.Graph);
+      box.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Graph"),h("button",{class:"akt-dom",onclick:()=>g&&waehle("gr:"+g._id)},"⬡ "+(wert.Graph||"?")),
+        sch.commandKopf?h("span",{class:"slotlbl",style:"opacity:.7"},"Command-Kopf: je Umgebung genau eine Instanz"):null));
+      if(sch.fehler){box.append(h("div",{class:"gi-hint",style:"color:#cf6f68"},sch.fehler));return;}
+      if(sch.quelle||wert.Akteur){const r=h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px;cursor:default;white-space:normal"},
+          h("span",{class:"slotlbl"},"Akteur"+(wert.Akteur?"":" ⚠ fehlt — eine Quelle gibt für einen Akteur hinein")));
+        MODEL.akteure.forEach(a=>r.append(h("button",{class:"akt-dom"+(wert.Akteur===a.name?" an":""),onclick:()=>{if(wert.Akteur===a.name)delete wert.Akteur;else wert.Akteur=a.name;
+          [...r.querySelectorAll("button")].forEach(b=>b.classList.toggle("an",b.textContent==="👤 "+wert.Akteur));}},"👤 "+a.name)));box.append(r);}
+      box.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Rechner"),h("input",{value:wert.Rechner||"",placeholder:sch.rechnerPflicht?"Pflicht im Cluster (Zustand oder Quelle)":"ohne = auf jedem Host",
+        oninput:e=>{const v=e.target.value.trim();if(v)wert.Rechner=v;else delete wert.Rechner;}})));
+      const setze=(w,f,v)=>{if(v===""||v==null)delete w[f];else w[f]=v;};
+      const feld=(w,f,typ,d)=>{d=d||{};
+        if(d.werte||typ==="bool"){const werte=d.werte||["true","false"],s=h("select",{onchange:e=>setze(w,f,e.target.value===""?null:typ==="bool"?e.target.value==="true":e.target.value)},
+            h("option",{value:""},"— Standard"+(d.standard!=null?" ("+d.standard+")":"")));werte.forEach(x=>{const o=h("option",{value:x},x);if(String(w[f])===x)o.selected=true;s.append(o);});return s;}
+        return h("input",{value:w[f]??"",placeholder:(typ==="TimeSpan"?"hh:mm:ss":typ)+(d.standard!=null?" · Standard "+d.standard:""),
+          oninput:e=>{const v=e.target.value;setze(w,f,v===""?null:/^(int|long)$/.test(typ)&&/^-?\d+$/.test(v)?Number(v):v);}});};
+      (sch.knoten||[]).forEach(kn=>{const w=wert[kn.pfad]=wert[kn.pfad]||{};
+        box.append(h("div",{class:"gsec",title:kn.typ},(kn.quelle?"⚡ ":"ƒ ")+kn.pfad+" · "+kn.funktion+(kn.zustand?" · Zustand "+kn.zustand:"")+(kn.bekannt?"":" ⚠ unbekannt")));
+        (sch.rahmenfelder||[]).forEach(r=>box.append(h("div",{class:"frow"},h("span",{class:"slotlbl",style:"min-width:110px"},r.feld),feld(w,r.feld,r.typ,{standard:r.typ==="bool"?"false":r.typ==="TimeSpan"?"ohne":"Standard"}))));
+        (kn.technik||[]).forEach(t=>{w.Technik=w.Technik||{};const s=h("select",{onchange:e=>setze(w.Technik,t.schnittstelle,e.target.value||null)},h("option",{value:""},"— wählen"));
+          t.umsetzungen.forEach(u=>{const o=h("option",{value:u},u);if(w.Technik[t.schnittstelle]===u)o.selected=true;s.append(o);});
+          box.append(h("div",{class:"frow"},h("span",{class:"slotlbl",style:"min-width:110px"},"⚙ "+t.schnittstelle),s));});
+        (kn.konfigs||[]).forEach(c=>(c.felder||[]).forEach(f=>box.append(h("div",{class:"frow",title:c.record+(c.umsetzung?" ("+c.umsetzung+")":"")+" · "+f.typ},
+          h("span",{class:"slotlbl",style:"min-width:110px"},f.feld),feld(w,f.feld,f.typ.replace(/\?$/,""),{standard:f.standard,werte:f.werte})))));});
+      const sauber=o=>{if(Array.isArray(o))return o;if(o&&typeof o==="object"){const a={};for(const [k,v] of Object.entries(o)){const b=sauber(v);
+        if(b==null||(typeof b==="object"&&!Array.isArray(b)&&!Object.keys(b).length))continue;a[k]=b;}return a;}return o;};
+      box.append(h("div",{class:"frow"},h("button",{class:"act go",onclick:()=>instanzGeste(instanzPfad(name),"POST",sauber(wert),"⬡ Instanz "+name)},"💾 In "+name+".json schreiben"),
+        h("button",{class:"act",onclick:async()=>{if(!confirm("Instanz "+name+" entfernen?"))return;if(await instanzGeste(instanzPfad(name),"DELETE",undefined,"⬡ Instanz "+name+" entfernt"))waehle(null);}},"Entfernen")));})();}
   // ── Befunde an der Karte: Compiler/Analyzer (Typ + Member aus dem Syntaxbaum) und Boot-Fehler (Karte im Wirker-Format) ──
   // Die Karte zu einer stabilen Id (Werkbank P4.8): Wirker-Ids und natürliche Schlüssel liefert der Server als _id (decide:A/C, fluss:P#k,
   //   prozess:P#A→C, funktion:F, projektion:P …); Karten mit Namens-Id (rec:/agg:/enum:/saga:/host:) sind schon die Karten-Id.
-  //   Eine Quelle ist ihr Nachrichten-Record, eine Pipeline ihr erster Knoten.
+  //   Eine Quelle ist ihr Nachrichten-Record.
   function karteVonId(id){if(!id)return null;if(NODEBY.has(id))return id;
     if(id.startsWith("quelle:"))return recByName(id.slice(7))?"rec:"+id.slice(7):null;
-    if(id.startsWith("pipeline:")){const f=MODEL.fluesse.find(x=>x._id===id),k=f&&(f.knoten||[])[0];return k?"fs:"+k._id:null;}
     const n=graphNodes().find(x=>x.ref&&x.ref._id===id&&x.kind!=="host");return n?n.id:null;}
   function wbZiel(d){
     if(d.karte)return d.karte.startsWith("host:")?d.karte:karteVonId(d.karte);
@@ -4074,7 +3149,8 @@
     run.disabled=lauf;foto.disabled=lauf||z.art!=="Sim";vor.disabled=lauf||z.art!=="Sim";k.append(run,foto,vor);}
   async function wbZustand(){try{WB.zustand=await wbJson("/api/werkbank/zustand");}catch(e){WB.zustand=null;}wbKopf();}
   async function wbLadeUmgebung(){const n=WB.zustand&&WB.zustand.aktiv;if(!n)return;
-    try{WB.umg=await wbJson("/api/werkbank/umgebung/"+encodeURIComponent(n));WB.umgName=n;WB.dirty=false;}catch(e){WB.umg=null;}}
+    try{WB.umg=await wbJson("/api/werkbank/umgebung/"+encodeURIComponent(n));WB.umgName=n;WB.dirty=false;}catch(e){WB.umg=null;}
+    try{WB.instanzen=await wbJson("/api/werkbank/instanzen/"+encodeURIComponent(n));}catch(e){WB.instanzen={};}}
   async function wbLadeUhr(){try{WB.uhr=await wbJson("/api/werkbank/uhr");}catch(e){WB.uhr=null;}}
   async function wbLadeDiagnosen(){try{const d=await wbJson("/api/werkbank/diagnosen");WB.diag=d.diagnosen||[];WB.boot=d.boot||[];WB.ver++;}catch(e){}}
   async function wbAktiv(name){if(WB.dirty&&!confirm("Ungespeicherte Änderungen an umgebung."+WB.umgName+".json verwerfen?")){wbKopf();return;}
@@ -4284,26 +3360,6 @@
     return h("span",{class:"gwait"+(a?"":" ruhig"),title:a?a+" Auftrag/Aufträge warten auf eine Antwort von Hand — Klick auf die Karte":"externer Worker läuft"},a?"⧗ "+a:"▶");}
   function dsBadges(){if(!world)return;world.querySelectorAll(".gnode2.n-funktion").forEach(el=>{const n=NODEBY.get(el.dataset.id),head=el.querySelector(".ghead");if(!n||!head)return;
     const alt=head.querySelector(".gwait"),neu=dsBadge(n);if(alt)alt.remove();if(neu)head.insertBefore(neu,head.querySelector(".gx"));});}
-  function dsFunktion(body,f){const w=DS.worker.find(x=>x.funktion===f.name),a=DS.auftraege.filter(x=>x.funktion===f.name),u=aktivName();
-    body.append(h("div",{class:"gsec"},"▶ Durchspielen in "+u));
-    if(!w){body.append(h("div",{class:"gi-hint"},"In „"+u+"“ nicht gebunden (Funktionen:"+f.name+")."));return;}
-    if(w.laufort==="Hand"){if(!a.length)body.append(h("div",{class:"gi-hint"},hostLaeuft()?"Laufort Hand — keine offenen Aufträge.":"Laufort Hand — der Host steht (⟳)."));
-      a.forEach(x=>body.append(dsAuftragBox(x)));}
-    else if(w.laufort==="Extern")body.append(dsWorkerZeile(w));
-    else body.append(h("div",{class:"gi-hint"},"Laufort Host — die C#-Implementierung rechnet im Host. Für eine Antwort von Hand oder einen Python-Worker den Laufort im 🖥 Host-Rahmen (Funktionen) umstellen und ⟳."));}
-  function dsQuelle(body,r){const u=aktivName();body.append(h("div",{class:"gsec"},"▶ Durchspielen in "+u));
-    const pfad=h("div",{class:"ds-zeit",style:"overflow-wrap:anywhere"},"…");body.append(pfad);
-    wbJson("/api/werkbank/quelle/"+encodeURIComponent(r.name)).then(j=>{pfad.textContent=j.pfad?"Der Treiber beobachtet "+j.pfad:"⚠ kein Pfad in "+u;}).catch(()=>{});
-    body.append(h("div",{class:"frow"},h("input",{type:"file",multiple:"",onchange:e=>{dsLegeAb(r.name,[...e.target.files]);e.target.value="";}})),
-      h("div",{class:"gi-hint"},"Oder Dateien auf die Quellkarte ziehen. Die Werkbank legt sie in den Pfad, melden tut sie der echte Treiber"+(hostLaeuft()?".":" — sobald der Host läuft (⟳).")));}
-  async function dsLegeAb(quelle,files){for(const f of files){let r;
-      try{r=await (await fetch("/api/werkbank/quelle/"+encodeURIComponent(quelle)+"/datei?name="+encodeURIComponent(f.name),{method:"POST",body:f})).json();}catch(e){r={ok:false,fehler:e.message};}
-      deFlash(r.ok?"📁 "+f.name+" → "+quelle+(r.hostLaeuft?" — der Treiber meldet sie":" — Host steht, gemeldet wird beim Start"):"⚠ "+f.name+": "+r.fehler,!!r.ok);}}
-  function dsDropZiel(el,n){const r=n.ref;if(!r||!r.treiber||n.kind==="host")return;
-    const hatDateien=e=>[...((e.dataTransfer&&e.dataTransfer.types)||[])].includes("Files");
-    el.addEventListener("dragover",e=>{if(!hatDateien(e))return;e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect="copy";el.classList.add("ds-drop");});
-    el.addEventListener("dragleave",()=>el.classList.remove("ds-drop"));
-    el.addEventListener("drop",e=>{if(!hatDateien(e))return;e.preventDefault();e.stopPropagation();el.classList.remove("ds-drop");dsLegeAb(r.name,[...e.dataTransfer.files]);});}
   // Eine Datei neben die Karte fallen gelassen: der Browser würde sie öffnen und den Editor verlassen.
   ["dragover","drop"].forEach(ev=>window.addEventListener(ev,e=>{if([...((e.dataTransfer&&e.dataTransfer.types)||[])].includes("Files"))e.preventDefault();}));
 
@@ -4368,7 +3424,6 @@
     if(SPKN.c.has(id))return SPKN.c.get(id);
     let k=NODEBY.has(id)?id:SPKN.m.get(id)||null;
     if(!k&&id.startsWith("quelle:"))k=recByName(id.slice(7))?"rec:"+id.slice(7):null;
-    if(!k&&id.startsWith("pipeline:")){const f=MODEL.fluesse.find(x=>x._id===id),z=f&&(f.knoten||[])[0];k=z?"fs:"+z._id:null;}
     const v=k?vertreterId(k):null;SPKN.c.set(id,v);return v;}
   const spSchritte=()=>{const bis=SP.bis??Infinity;return ((SP.vorgang||{}).schritte||[]).filter(s=>s.nr<=bis);};
   // Die Karten des Vorgangs bis zum Schieber — der Fokus „mit Vorgang".

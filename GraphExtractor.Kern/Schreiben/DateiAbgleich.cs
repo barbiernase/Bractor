@@ -399,12 +399,14 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         foreach (var w in new[] { "IAsyncEnumerable", "IEnumerable" })
             if (t.StartsWith(w + "<", StringComparison.Ordinal) && t.EndsWith('>')) { strom = w; t = t[(w.Length + 1)..^1].Trim(); break; }
         if (t is "Task" or "ValueTask") huelle = t;
-        var frage = strom == null && (t.EndsWith('?') || t is "void" or "Task" or "ValueTask");
+        // Ein Ausgang ist T, OneOf<…> oder ein Strom — nie T? (GR-FUNKTION-FORM, CQRS100).
         var innen = e.Ausgaben.Count switch { 0 => null, 1 => e.Ausgaben[0], _ => $"{OneOf}<{string.Join(", ", e.Ausgaben)}>" };
-        if (innen == null) return huelle ?? "void";
-        if (strom == null && e.Strom) strom = huelle == null ? "IAsyncEnumerable" : "IEnumerable";
-        var kern = strom != null ? $"{strom}<{innen}>" : innen + (frage ? "?" : "");
-        return huelle != null ? $"{huelle}<{kern}>" : kern;
+        if (innen == null) return huelle ?? (strom == "IAsyncEnumerable" ? "Task" : "void");
+        // Strom ein: eine asynchrone Methode wird IAsyncEnumerable (die Hülle fällt), eine synchrone IEnumerable.
+        if (e.Strom) return $"{strom ?? (huelle != null ? "IAsyncEnumerable" : "IEnumerable")}<{innen}>";
+        // Strom aus: aus IAsyncEnumerable wird Task<T>, aus IEnumerable T.
+        if (strom == "IAsyncEnumerable") huelle ??= "Task";
+        return huelle != null ? $"{huelle}<{innen}>" : innen;
     }
 
     // ── Konstruktor einer Funktions-Klasse bzw. Umsetzung: nur die Parameterliste — Primär-Konstruktor bzw. der öffentliche Konstruktor ──

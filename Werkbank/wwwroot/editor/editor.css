@@ -204,6 +204,8 @@
 #de .gnode2.n-enum .ghead{background:#8a8aa0}
 #de .gnode2.n-aggregate .ghead{background:#3fb0a6}
 #de .gnode2.n-decider .ghead{background:#9678d6}
+#de .gnode2.n-bausteinfunktion{border-color:#4f78b0}#de .gnode2.n-bausteinfunktion .ghead{background:#8ab4f8}
+#de .gnode2.n-graph{border-color:#4f9a62}#de .gnode2.n-graph .ghead{background:#81c995}
 #de .gnode2.n-handle{border-color:#4f7fa8}#de .gnode2.n-handle .ghead{background:#5d8fbf}
 #de .gnode2.n-fn{border-color:#2f8f88}#de .gnode2.n-fn .ghead{background:#2f9d95}
 #de .ghl{display:block;cursor:pointer;color:#9fb6d6;font-size:11.5px;padding:1px 0;text-decoration:none}#de .ghl:hover{color:#dbe6f5;text-decoration:underline}
@@ -313,6 +315,7 @@
 #de .grahmen-k.akt-k .akt-n:hover{text-decoration:underline}
 #de .grahmen-k .akt-auch{display:flex;align-items:center;gap:4px;font-size:11px;color:#9aa3b7;white-space:nowrap;overflow:hidden;min-width:0}
 #de .grahmen-k .akt-auch .akt-ref{padding:0 6px;font-size:11px;background:transparent;border-style:dashed}
+#de button.akt-dom.an{border-color:#81c995;color:#b9f0c3;background:#1d3326}
 #de button.akt-dom{background:#1d2638;color:#d6e4ff;border:1px solid #35507a;border-radius:6px;padding:1px 8px;cursor:pointer;font:12px system-ui}
 #de .grahmen-k{position:absolute;left:0;right:0;top:0;height:calc(38px * var(--rz));transform-origin:0 0;display:flex;align-items:center;gap:8px;padding:0 10px 0 14px;pointer-events:auto;cursor:default;
   background:linear-gradient(90deg,color-mix(in srgb,var(--dc) 24%,transparent),transparent 75%);border-radius:12px 12px 0 0;border-bottom:1px solid color-mix(in srgb,var(--dc) 30%,transparent)}

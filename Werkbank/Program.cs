@@ -193,6 +193,22 @@ app.MapPost("/api/werkbank/umgebung/{name}", async (string name, System.Text.Jso
     if (a.Ok) werkbank.Fortschritt.Melde("umgebung", new { name });
     return GestenErgebnis(a);
 });
+// ── INSTANZEN (docs/04 §4.4): je Umgebung die Instanzen der Graphen — lesen, schreiben und entfernen als Geste; ihr Formular leitet der Server aus dem
+//    Board ab (je Knoten Rahmenfelder, Konfig-Felder, Wahl der Technik). Dazu die Projektstruktur, nach der der Editor neue Elemente ablegt.
+var instanzen = new Werkbank.Server.Instanzen(slnRoot, werkbank.Umgebungen);
+app.MapGet("/api/werkbank/instanzen/{umgebung}", (string umgebung) => Results.Content(instanzen.Liste(umgebung).ToJsonString(), "application/json"));
+app.MapPost("/api/werkbank/instanz/{umgebung}/{instanz}", async (string umgebung, string instanz, System.Text.Json.Nodes.JsonObject inhalt, CancellationToken ct) =>
+    GestenErgebnis(await werkbank.Gesten.DateiAsync($"Instanz {umgebung}/{instanz}", instanzen.RelativeDatei(umgebung, instanz),
+        Werkbank.Server.Instanzen.Text(inhalt), ct)));
+app.MapDelete("/api/werkbank/instanz/{umgebung}/{instanz}", async (string umgebung, string instanz, CancellationToken ct) =>
+    GestenErgebnis(await werkbank.Gesten.DateiAsync($"Instanz {umgebung}/{instanz} entfernt", instanzen.RelativeDatei(umgebung, instanz), null, ct)));
+app.MapGet("/api/werkbank/instanzschema", async (string graph, CancellationToken ct) =>
+{
+    await werkbank.Arbeitsbereich.LiesAsync(ct);
+    try { return Results.Content(Werkbank.Server.Instanzen.Schema(werkbank.Arbeitsbereich.Board!, graph).ToJsonString(), "application/json"); }
+    catch (ArgumentException e) { return Results.Json(new { fehler = e.Message }); }
+});
+app.MapGet("/api/werkbank/struktur", () => Results.Content(Werkbank.Server.Instanzen.Struktur().ToJsonString(), "application/json"));
 app.MapPost("/api/werkbank/aktiv/{name}", (string name) => { werkbank.Aktiv = name; return Results.Json(werkbank.Zustand(), werkbankJson); });
 app.MapPost("/api/werkbank/kreislauf", async (bool? zuruecksetzen, CancellationToken ct) =>
 {

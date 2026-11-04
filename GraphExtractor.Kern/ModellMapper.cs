@@ -533,6 +533,17 @@ public static class ModellMapper
         return aus;
     }
 
+    /// <summary>Konfig-Records als Board-Feld: je Record seine Felder (Schlüssel am Knoten, Typ, Standard).</summary>
+    private static JsonArray KonfigsJson(IEnumerable<KonfigRaw> konfigs) => new(konfigs.Select(k => (JsonNode)new JsonObject
+    {
+        ["record"] = k.Record,
+        ["felder"] = new JsonArray(k.Felder.Select(x => (JsonNode)new JsonObject
+        {
+            ["feld"] = x.Feld, ["typ"] = x.Typ, ["standard"] = x.Standard,
+            ["werte"] = x.Werte == null ? null : new JsonArray(x.Werte.Select(w => (JsonNode)w).ToArray()),
+        }).ToArray()),
+    }).ToArray());
+
     /// <summary>Ein Ort als Board-Feld: Datei relativ zur Solution, Spanne der Deklaration, Zeile.</summary>
     private static JsonObject? OrtJson(DomainModel dom, Ort? o) =>
         o == null || Relativ(dom.Wurzel, o.Datei) is not { } rel ? null
@@ -545,6 +556,18 @@ public static class ModellMapper
     /// </summary>
     private static void Orte(JsonObject root, DomainModel dom)
     {
+        // Der Katalog (Funktionen des Frameworks, die ein Graph nennt): nur gelesen — was er meldet bzw. nimmt und welche Konfig sein Knoten trägt.
+        root["katalog"] = new JsonArray(dom.Katalog.Select(f => (JsonNode)new JsonObject
+        {
+            ["name"] = f.Name, ["namespace"] = f.Namespace,
+            ["lauscht"] = new JsonArray(f.LauschtFull.Select(x => (JsonNode)Kurz(x)).ToArray()),
+            ["eingaenge"] = new JsonArray(f.Eingaenge.Select(e => (JsonNode)new JsonObject
+            {
+                ["eingang"] = Kurz(e.EingangFull), ["ausgaben"] = new JsonArray(e.AusgabenFull.Select(x => (JsonNode)Kurz(x)).ToArray()),
+            }).ToArray()),
+            ["zustand"] = f.ZustandFull is { } z ? Kurz(z) : null,
+            ["konfigs"] = KonfigsJson(f.Konfigs),
+        }).ToArray());
         IEnumerable<JsonObject> Alle(JsonNode? n) => (n as JsonArray ?? new JsonArray()).OfType<JsonObject>();
         string S(JsonObject o, string k) => (string?)o[k] ?? "";
         Ort? TypOrt(string full, string? datei)
@@ -579,6 +602,17 @@ public static class ModellMapper
                 if (sammlung == "bausteinFunktionen" && bausteinVon.TryGetValue(full, out var bf))
                 {
                     weitere.AddRange(bf.UmsetzungenFull);
+                    // Je Auf (und Lausche) der Ort der Methode und ihr Rumpf — der Rumpf-Edit wie bei Decide und Apply.
+                    foreach (var (e, eraw) in Alle(k["eingaenge"]).Zip(bf.Eingaenge))
+                    {
+                        if (OrtJson(dom, eraw.Ort) is { } eo) e["_ort"] = eo;
+                        if (eraw.Rumpf != null) e["rumpf"] = eraw.Rumpf;
+                    }
+                    k["konfigs"] = KonfigsJson(bf.Konfigs);
+                    foreach (var (u, ufull) in Alle(k["umsetzungen"]).Zip(bf.UmsetzungenFull))
+                        u["konfigs"] = KonfigsJson(bf.UmsetzungsKonfigs.GetValueOrDefault(ufull) ?? []);
+                    if (OrtJson(dom, bf.LauscheOrt) is { } lo) k["_lausche"] = lo;
+                    if (bf.LauscheRumpf != null) k["lauscheRumpf"] = bf.LauscheRumpf;
                     foreach (var (m, mraw) in Alle(k["methoden"]).Zip(bf.Methoden)) if (OrtJson(dom, mraw.Ort) is { } mo) m["_ort"] = mo;
                     foreach (var (u, ufull) in Alle(k["umsetzungen"]).Zip(bf.UmsetzungenFull))
                     {

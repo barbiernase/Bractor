@@ -14,7 +14,12 @@ public sealed partial class Sicht
     public const string Begriffe = "§begriffe";
     public const string Rand = "§rand";
 
-    private static readonly HashSet<string> BlockArten = ["aggregate", "bausteinfunktion", "store"];
+    private static readonly HashSet<string> BlockArten = ["aggregate", "bausteinfunktion", "store", "graph"];
+
+    /// <summary>Die Graphen (Karten-Ids), die einen Knoten vom Typ <paramref name="typ"/> nennen (generische mit ihrem Typargument).</summary>
+    private IEnumerable<string?> GraphenMitKnoten(string typ) => _graphen
+        .Where(g => Alle(g["knoten"]).Any(k => (S(k, "typ").IndexOf('<') is > 0 and var i ? S(k, "typ")[..i] : S(k, "typ")) == typ))
+        .Select(g => (string?)("gr:" + S(g, "_id"))).Distinct();
     private static readonly Regex Bezeichner = new(@"[A-Za-z_]\w*", RegexOptions.Compiled);
 
     private readonly Dictionary<string, string> _besitz = new(StringComparer.Ordinal);
@@ -45,7 +50,11 @@ public sealed partial class Sicht
         var name = n.Name;
         switch (n.Art)
         {
-            case "aggregate": case "bausteinfunktion": case "store": case "graph": return Anwendung;
+            case "aggregate": case "store": return Anwendung;
+            // Eine Funktion bzw. ein Graph, der als Knoten in genau einem Graphen steht, gehört diesem Graphen — so steht der Graph als Block mit
+            //   seinen Knoten beisammen. Technik (gerufen) und Knoten mehrerer Graphen bleiben eigene Blöcke der Anwendung.
+            case "bausteinfunktion": return IstGerufen(r) ? Anwendung : Einer(n, GraphenMitKnoten(name), leer: Anwendung, mehrdeutig: false);
+            case "graph": return Einer(n, GraphenMitKnoten(name).Where(g => g != n.Id), leer: Anwendung, mehrdeutig: false);
             case "akteur": case "client": return Rand;
             case "state": case "decider": case "applier": return AggId(S(r, "aggregat")) ?? Begriffe;
             case "handle": return n.Besitzer?.Id ?? Begriffe;
