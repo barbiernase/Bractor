@@ -365,6 +365,8 @@ public sealed record Rahmen
     public string ApplyMethode { get; init; } = Abstractions.Aggregatvertrag.Apply;
     /// <summary>Namespace → Verzeichnis (relativ zur Solution, „/"-getrennt). Enthält auch die Wurzel-Namespaces der Projekte.</summary>
     public IReadOnlyDictionary<string, string> Verzeichnisse { get; init; } = new Dictionary<string, string>();
+    /// <summary>Das Suffix der Abläufe zur Wurzel (Projektstruktur, docs/07): dort liegen Graphen, Funktionen der Anwendung und Client-Nachrichten.</summary>
+    public string AblaeufeSuffix { get; init; } = Abstractions.Projektstruktur.Von(Abstractions.Projektstruktur.Rolle.Ablaeufe).Suffix;
     /// <summary>
     /// Das Python-Paket der Clients (relativ zur Solution, z. B. <c>Domain.Client.Worker.Python.ML/domain_client</c>) — Code-Fakt: dort liegt
     /// die generierte <c>generated/vertraege.py</c>. Hier legt „C# schreiben" eine neue Client-Implementierung an. Null = keins.
@@ -633,11 +635,34 @@ public sealed record Graph
     public string? Quelle { get; init; }
     /// <summary>Die Namespaces der Knoten-Typen außerhalb der Domäne (z. B. <c>Core.Katalog</c> für eine Quellfunktion) — wie geschrieben.</summary>
     public IReadOnlyList<string> Usings { get; init; } = [];
+    /// <summary>Abgeleitet: je Übersetzung (<c>Uebersetze&lt;TEin, TAus&gt;</c>) ihre Zuordnung — was die ↦-Karte zeigt (Lesart Uebersetzungsform).</summary>
+    public IReadOnlyList<GraphUebersetzung> Uebersetzungen { get; init; } = [];
     public string? Doku { get; init; }
     /// <summary>Datei der Deklaration (relativ zur Solution); null = neu im Editor.</summary>
     public string? Datei { get; init; }
     public string? Herkunft { get; init; }
 }
+
+/// <summary>
+/// Eine Übersetzung eines Graphen, abgeleitet (docs/04 §4.4): ihr Knoten, was sie nimmt (<see cref="Ein"/>) und erzeugt (<see cref="Aus"/>), die Felder
+/// von <c>TEin</c> und je Parameter von <c>TAus</c> seine Quelle mit Regel (<c>feld</c>, <c>name</c>, <c>standard</c>, leer = offen) und den Feldern von
+/// <c>TEin</c>, die ausdrücklich passen (für „＋“ an einem Ziel); dazu die Fehler (CQRS119/CQRS121).
+/// </summary>
+public sealed record GraphUebersetzung
+{
+    public string Knoten { get; init; } = "";
+    public string Ein { get; init; } = "";
+    public string Aus { get; init; } = "";
+    public IReadOnlyList<UebersetzungsFeld> Quellen { get; init; } = [];
+    public IReadOnlyList<UebersetzungsZiel> Ziele { get; init; } = [];
+    public IReadOnlyList<string> Fehler { get; init; } = [];
+}
+
+/// <summary>Ein Feld von <c>TEin</c>: Name und Typ.</summary>
+public sealed record UebersetzungsFeld(string Name, string Typ);
+
+/// <summary>Ein Parameter von <c>TAus</c>: Name, Typ, seine Quelle (oder null) mit Regel, und die Felder von <c>TEin</c>, die ausdrücklich passen.</summary>
+public sealed record UebersetzungsZiel(string Name, string Typ, string? Quelle, string Regel, IReadOnlyList<string> Passend);
 
 /// <summary>
 /// Ein Knoten eines Graphen — ein Parameter des Records: Name (Konfig-Schlüssel), Typ wie geschrieben, ob er <c>[Kopf]</c> trägt (nimmt von außen) und
@@ -652,7 +677,12 @@ public sealed record GraphKnoten
     public IReadOnlyList<string> Von { get; init; } = [];
     /// <summary>Die Namen aus <see cref="Von"/>, deren Kanten verlierbar sind.</summary>
     public IReadOnlyList<string> Verlierbar { get; init; } = [];
+    /// <summary>An einer Übersetzung: die Abweichungen der Feldzuordnung (<c>[Feld(nameof(TAus.Ziel), nameof(TEin.Quelle))]</c>).</summary>
+    public IReadOnlyList<GraphFeld> Felder { get; init; } = [];
 }
+
+/// <summary>Ein <c>[Feld]</c> an einer Übersetzung: der Parameter <see cref="Ziel"/> von <c>TAus</c> bekommt die Eigenschaft <see cref="Quelle"/> von <c>TEin</c>.</summary>
+public sealed record GraphFeld(string Ziel, string Quelle);
 
 /// <summary>Eine Kante eines Graphen (aus einem <c>Von</c>): vom Knoten <see cref="Von"/> über den Typ <see cref="Typ"/> zum Knoten <see cref="Nach"/>.</summary>
 public sealed record GraphKante(string Von, string Typ, string Nach);

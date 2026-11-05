@@ -1,0 +1,39 @@
+using Abstractions;
+using Sondenkatalog.Katalog.Peilung;
+
+// SONDE — ÜBERSETZUNG IN BEIDE RICHTUNGEN (docs/04 §4.4): ein Funker fordert eine Ortung an (ein Client-Eingang); am Kopf wird sie in den Eingang des
+// fremden Katalogs übersetzt (Frequenz nach Namen, die Stelle als Auftrag und die Messdauer als DauerMs ausdrücklich), die Peilung des Katalogs rechnet,
+// und ihr Ergebnis wird ein Command an die Peilstelle — der Auftrag wird wieder ihre Id (Guid → Id ausdrücklich), die Güte kommt nach Namen, die Quelle
+// aus dem Standardwert. Den Ausgang setzt eine Geste (Gezeichnet.gesten.json), samt [Feld]. Was der Katalog sonst meldet (ein Hinweis), darf hinaus.
+
+namespace Funkortung.Ortung;
+
+public record OrtungAngefordert(Id<Peilstelle> Stelle, double FrequenzMhz, int Messdauer) : ICommand;
+
+public record VermerkePeilung(Id<Peilstelle> AggregateId, double RichtungGrad, double Guete, string Quelle = "Katalog") : ICommand<Peilstelle>;
+public record PeilungVermerkt(double RichtungGrad, double Guete, string Quelle) : IEvent;
+
+public partial class Peilstelle : IState
+{
+    public double Richtung { get; set; }
+
+    public partial class Decider : IDecider<Peilstelle>
+    {
+        public IEnumerable<OneOf<PeilungVermerkt>> Decide(VermerkePeilung c)
+        {
+            yield return new PeilungVermerkt(c.RichtungGrad, c.Guete, c.Quelle);
+        }
+    }
+
+    public partial class Applier : IApplier<Peilstelle>
+    {
+        public void Apply(PeilungVermerkt e) { this.State.Richtung = e.RichtungGrad; }
+    }
+}
+
+public sealed record Ortung(
+    [Kopf, Feld(nameof(Peile.Auftrag), nameof(OrtungAngefordert.Stelle)), Feld(nameof(Peile.DauerMs), nameof(OrtungAngefordert.Messdauer))]
+        Uebersetze<OrtungAngefordert, Peile> Hinein,
+    [Von(nameof(Hinein))] Peilung Peilen) : IGraph;
+
+public sealed record Funker : IAkteur, IDarf<OrtungAngefordert>, IHoert<PeilungVermerkt>;

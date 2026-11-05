@@ -6,8 +6,8 @@ using Abstractions;
 
 namespace Sondenkatalog.Katalog.Peilung;
 
-/// <summary>Eine Peilung ist anzufordern: Frequenz und Dauer.</summary>
-public record Peile(double FrequenzMhz, int DauerMs) : ICommand;
+/// <summary>Eine Peilung ist anzufordern: der Auftrag (ein Guid — der Katalog kennt keine Id einer Anwendung), Frequenz und Dauer.</summary>
+public record Peile(Guid Auftrag, double FrequenzMhz, int DauerMs) : ICommand;
 
-/// <summary>Die Peilung ist gelungen: Richtung in Grad und Güte.</summary>
-public record Gepeilt(double FrequenzMhz, double RichtungGrad, double Guete) : ICommand;
+/// <summary>Die Peilung ist gelungen: der Auftrag, aus dem sie kam, Richtung in Grad und Güte.</summary>
+public record Gepeilt(Guid Auftrag, double FrequenzMhz, double RichtungGrad, double Guete) : ICommand;

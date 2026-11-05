@@ -634,7 +634,7 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
         {
             if (p.Identifier.Text != k.Name || N(p.Type?.ToString()) != N(k.Typ)) return false;
             var (kopf, von, verlierbar) = KopfUndVon(p);
-            return kopf == k.Kopf && von.SequenceEqual(k.Von) && verlierbar.ToHashSet().SetEquals(k.Verlierbar);
+            return kopf == k.Kopf && von.SequenceEqual(k.Von) && verlierbar.ToHashSet().SetEquals(k.Verlierbar) && Felder(p).SequenceEqual(k.Felder);
         }
         if (ist.Count == g.Knoten.Count && ist.Zip(g.Knoten).All(z => Gleich(z.First, z.Second))) return null;
         var teile = g.Knoten.Select(k => ist.FirstOrDefault(p => Gleich(p, k))?.ToString() ?? Scaffolder.GraphKnotenText(k)).ToList();
@@ -664,6 +664,23 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
             .Any(x => x.NameEquals?.Name.Identifier.ValueText == "Verlierbar" && x.Expression.ToString() == "true");
         var vons = attribute.Where(a => Name(a) == Scaffolder.VonAttribut).ToList();
         return (attribute.Any(a => Name(a) == Scaffolder.KopfAttribut), vons.SelectMany(Namen).ToList(), vons.Where(Verlierbar).SelectMany(Namen).ToList());
+    }
+
+    /// <summary>
+    /// Die <c>[Feld(nameof(TAus.Ziel), nameof(TEin.Quelle))]</c> eines Parameters, wie sie im Quelltext stehen: je <c>nameof</c> der letzte Name (auch für
+    /// die Parität).
+    /// </summary>
+    internal static List<GraphFeld> Felder(ParameterSyntax p)
+    {
+        static string Wert(ExpressionSyntax e) => e switch
+        {
+            InvocationExpressionSyntax { ArgumentList.Arguments: [var a] } => a.Expression.ToString().Split('.')[^1].Trim(),
+            _ => e.ToString().Trim('"'),
+        };
+        return p.AttributeLists.SelectMany(l => l.Attributes)
+            .Where(a => a.Name.ToString().Split('.')[^1] is var n && (n == Scaffolder.FeldAttribut || n == Scaffolder.FeldAttribut + "Attribute"))
+            .Where(a => a.ArgumentList?.Arguments.Count == 2)
+            .Select(a => new GraphFeld(Wert(a.ArgumentList!.Arguments[0].Expression), Wert(a.ArgumentList.Arguments[1].Expression))).ToList();
     }
 
     // ── Bausteine ──────────────────────────────────────────────────────────────────────────────

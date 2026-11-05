@@ -306,13 +306,34 @@ public static class Scaffolder
             $"[{VonAttribut}({string.Join(", ", namen.Select(v => $"nameof({v})"))}{(verlierbar ? ", Verlierbar = true" : "")})] ";
         var gesichert = k.Von.Where(v => !k.Verlierbar.Contains(v)).ToList();
         var verlierbar = k.Von.Where(v => k.Verlierbar.Contains(v)).ToList();
+        var u = UebersetzungTypen(k.Typ);
+        var felder = string.Concat(k.Felder.Select(f => u is var (ein, aus)
+            ? $"[{FeldAttribut}(nameof({aus}.{f.Ziel}), nameof({ein}.{f.Quelle}))] " : $"[{FeldAttribut}(\"{f.Ziel}\", \"{f.Quelle}\")] "));
         return (k.Kopf ? $"[{KopfAttribut}] " : "") + (gesichert.Count > 0 ? Von(gesichert, false) : "") + (verlierbar.Count > 0 ? Von(verlierbar, true) : "")
-            + $"{k.Typ} {k.Name}";
+            + felder + $"{k.Typ} {k.Name}";
+    }
+
+    /// <summary>Die Typargumente einer Übersetzung, wie geschrieben (<c>Uebersetze&lt;A, B&gt;</c> → (A, B)); sonst null.</summary>
+    public static (string Ein, string Aus)? UebersetzungTypen(string typ)
+    {
+        var t = typ.Trim();
+        const string kopf = nameof(Abstractions.Uebersetze<object, object>);
+        if (!t.StartsWith(kopf + "<", StringComparison.Ordinal) || !t.EndsWith('>')) return null;
+        var innen = t[(kopf.Length + 1)..^1];
+        var tiefe = 0;
+        for (var i = 0; i < innen.Length; i++)
+        {
+            if (innen[i] == '<') tiefe++;
+            else if (innen[i] == '>') tiefe--;
+            else if (innen[i] == ',' && tiefe == 0) return (innen[..i].Trim(), innen[(i + 1)..].Trim());
+        }
+        return null;
     }
 
     /// <summary>Die Attribute eines Graph-Knotens, wie man sie schreibt (<c>[Kopf]</c>, <c>[Von(…)]</c>).</summary>
     public static readonly string KopfAttribut = nameof(Abstractions.KopfAttribute)[..^"Attribute".Length];
     public static readonly string VonAttribut = nameof(Abstractions.VonAttribute)[..^"Attribute".Length];
+    public static readonly string FeldAttribut = nameof(Abstractions.FeldAttribute)[..^"Attribute".Length];
 
     private static string GraphDatei(string ns, List<Graph> graphen, EditorModell modell)
     {

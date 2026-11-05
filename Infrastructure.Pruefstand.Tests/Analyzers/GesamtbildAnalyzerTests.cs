@@ -73,8 +73,8 @@ public sealed record Kunde : IAkteur, IDarf<Eroeffne>, IDarf<Hole>;
         var befunde = await Befunde("""
             public record Vermerke(int N) : ICommand;
             public sealed record Roh([Kopf] Rechen.Katalog.Rechner R) : IGraph;
-            public sealed record Teil([Kopf] Rechen.Katalog.Rechner R) : IGraph;
-            public sealed record Aussen([Kopf] Teil Innen, [Von(nameof(Innen))] Uebersetze<Rechen.Katalog.Gerechnet, Vermerke> U) : IGraph;
+            public sealed record Rechnung([Kopf] Rechen.Katalog.Rechner R) : IGraph;
+            public sealed record Aussen([Kopf] Rechnung Innen, [Von(nameof(Innen))] Uebersetze<Rechen.Katalog.Gerechnet, Vermerke> U) : IGraph;
             """, katalog: """
             namespace Rechen.Katalog {
             public record Rechne(int N) : ICommand;
@@ -83,7 +83,7 @@ public sealed record Kunde : IAkteur, IDarf<Eroeffne>, IDarf<Hole>;
             }
             """);
         befunde.Where(d => d.Id == GesamtbildAnalyzer.VerlaesstId).Select(d => d.GetMessage()).Should().ContainSingle()
-            .Which.Should().StartWith("'Roh'", "nur Roh lässt Gerechnet hinaus — Teil steht als Schachtel in Aussen, und dort wird übersetzt");
+            .Which.Should().StartWith("'Roh'", "nur Roh lässt Gerechnet hinaus — Rechnung steht als Schachtel in Aussen, und dort wird übersetzt");
     }
 
     [Fact]

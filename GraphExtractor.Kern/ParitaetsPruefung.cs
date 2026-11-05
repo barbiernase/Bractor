@@ -183,7 +183,9 @@ public static class ParitaetsPruefung
             var istKnoten = (k.Ref["knoten"]?.AsArray() ?? new JsonArray()).OfType<JsonObject>()
                 .Select(x => $"{full}|{GraphKnotenSchluessel((string?)x["name"] ?? "", (string?)x["typ"] ?? "", (bool?)x["kopf"] == true,
                     (x["von"]?.AsArray() ?? new JsonArray()).Select(v => (string?)v ?? "").ToList(),
-                    (x["verlierbar"]?.AsArray() ?? new JsonArray()).Select(v => (string?)v ?? "").ToList())}").ToHashSet(StringComparer.Ordinal);
+                    (x["verlierbar"]?.AsArray() ?? new JsonArray()).Select(v => (string?)v ?? "").ToList(),
+                    (x["felder"]?.AsArray() ?? new JsonArray()).OfType<JsonObject>().Select(f => new GraphFeld((string?)f["ziel"] ?? "", (string?)f["quelle"] ?? "")).ToList())}")
+                .ToHashSet(StringComparer.Ordinal);
             Vergleiche($"Knoten ({k.Name})", sollKnoten.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istKnoten, befunde);
         }
         Vergleiche("Projektion", soll.Projektionen, BoardListe("projektion"), befunde);
@@ -312,7 +314,7 @@ public static class ParitaetsPruefung
                                 .Select(p =>
                                 {
                                     var (kopf, von, verlierbar) = Abgleich.KopfUndVon(p);
-                                    return GraphKnotenSchluessel(p.Identifier.Text, p.Type?.ToString() ?? "", kopf, von, verlierbar);
+                                    return GraphKnotenSchluessel(p.Identifier.Text, p.Type?.ToString() ?? "", kopf, von, verlierbar, Abgleich.Felder(p));
                                 }).ToHashSet(StringComparer.Ordinal);
                             continue;
                         }
@@ -568,9 +570,11 @@ public static class ParitaetsPruefung
     private static string Json<T>(T x) => JsonSerializer.Serialize(x, EditorModell.JsonOptionen);
 
     /// <summary>Ein Knoten eines Graphen als Vergleichsschlüssel: <c>Name:Typ</c>, dazu <c>|Kopf</c> und <c>|Von(A,B)</c>.</summary>
-    private static string GraphKnotenSchluessel(string name, string typ, bool kopf, IReadOnlyList<string> von, IReadOnlyList<string> verlierbar) =>
+    private static string GraphKnotenSchluessel(string name, string typ, bool kopf, IReadOnlyList<string> von, IReadOnlyList<string> verlierbar,
+        IReadOnlyList<GraphFeld> felder) =>
         $"{name}:{BoardLeseseite.Norm(typ)}{(kopf ? "|Kopf" : "")}{(von.Count > 0 ? "|Von(" + string.Join(",", von) + ")" : "")}"
-        + (verlierbar.Count > 0 ? "|Verlierbar(" + string.Join(",", verlierbar.OrderBy(v => v, StringComparer.Ordinal)) + ")" : "");
+        + (verlierbar.Count > 0 ? "|Verlierbar(" + string.Join(",", verlierbar.OrderBy(v => v, StringComparer.Ordinal)) + ")" : "")
+        + (felder.Count > 0 ? "|Feld(" + string.Join(",", felder.Select(f => f.Ziel + "=" + f.Quelle)) + ")" : "");
 
     /// <summary>Kompakter Zeilen-Diff (erste abweichende Zeilen) für lesbare Befunde.</summary>
     private static string Diff(string a, string b)

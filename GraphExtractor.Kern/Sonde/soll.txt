@@ -727,8 +727,8 @@ lage Artikelprotokoll -> Domain.Infrastructure
 
 # ── Der fremde Katalog (Sondenkatalog.Katalog, eigenes Projekt, nur Abstractions; docs/plan-katalog-und-graphen.md): Funktionen mit Konfig und Technik,
 #    Commands ohne Ziel, Hinweise, ein Graph, aus dem nur Hinweise hinausgehen — und ein Fakt, der nicht in einen Katalog gehört.
-record Sondenkatalog.Katalog.Peilung.Peile command | FrequenzMhz:double, DauerMs:int
-record Sondenkatalog.Katalog.Peilung.Gepeilt command | FrequenzMhz:double, RichtungGrad:double, Guete:double
+record Sondenkatalog.Katalog.Peilung.Peile command | Auftrag:Guid, FrequenzMhz:double, DauerMs:int
+record Sondenkatalog.Katalog.Peilung.Gepeilt command | Auftrag:Guid, FrequenzMhz:double, RichtungGrad:double, Guete:double
 record Sondenkatalog.Katalog.Peilung.PeilungUnmoeglich rejection | FrequenzMhz:double, Grund:string
 record Sondenkatalog.Katalog.Peilung.Peilbericht rejection | FrequenzMhz:double, RichtungGrad:double
 record Sondenkatalog.Katalog.Peilung.Peilprotokoll event | FrequenzMhz:double
@@ -745,3 +745,12 @@ besitz Sondenkatalog.Katalog.Peilung.PeilKonfig konfig -> bausteinfunktion:Peilu
 besitz Sondenkatalog.Katalog.Peilung.Peile command -> §begriffe
 besitz Sondenkatalog.Katalog.Peilung.Peilprotokoll event -> §begriffe
 lage Peilprotokoll -> nicht Sondenkatalog.Katalog
+
+# ── Funkortung (Funkortung.cs.txt): ÜBERSETZUNG IN BEIDE RICHTUNGEN — ein Client-Eingang ↦ Katalog-Eingang (Feld nach Namen, zwei ausdrücklich),
+#    die Peilung des fremden Katalogs, ihr Ergebnis ↦ Command an die Peilstelle (der Ausgang samt [Feld] kommt aus einer Geste).
+graph Funkortung.Ortung.Ortung | knoten Hinein:Uebersetze<OrtungAngefordert, Peile> [Kopf] [Feld Auftrag=Stelle+DauerMs=Messdauer], Peilen:Peilung [Von Hinein], Vermerken:Uebersetze<Gepeilt, VermerkePeilung> [Von Peilen] [Feld AggregateId=Auftrag] | koepfe OrtungAngefordert | aus PeilungUnmoeglich, VermerkePeilung
+kante Ortung | Hinein -Peile-> Peilen
+kante Ortung | Peilen -Gepeilt-> Vermerken
+uebersetzung Ortung.Hinein | OrtungAngefordert -> Peile | Auftrag=Stelle(feld), FrequenzMhz=FrequenzMhz(name), DauerMs=Messdauer(feld)
+uebersetzung Ortung.Vermerken | Gepeilt -> VermerkePeilung | AggregateId=Auftrag(feld), RichtungGrad=RichtungGrad(name), Guete=Guete(name), Quelle=(standard)
+akteur Funkortung.Ortung.Funker | darf OrtungAngefordert | hoert PeilungVermerkt

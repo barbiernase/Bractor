@@ -3,8 +3,8 @@ using System.Text.Json.Nodes;
 namespace GraphExtractor;
 
 // Die KOMPOSITION eines Graphen (docs/10 §10.9, von innen): seine Knoten mit Tiefe in der Kette, Ports, Konstruktor
-//   (Technik, Konfig, Zustand, Logger), die Kanten je [Von] mit ihrem Typ, Köpfe und Ausgänge — dazu der Baukasten der Anwendung, aus dem man
-//   komponiert. Alles aus dem Board (Code-Fakten); der Editor zeichnet.
+//   (Technik, Konfig, Zustand, Logger), die Kanten je [Von] mit ihrem Typ, Köpfe und Ausgänge, an einer Übersetzung ihre Zuordnung (die ↦-Karte) —
+//   dazu der Baukasten der Anwendung, aus dem man komponiert. Alles aus dem Board (Code-Fakten); der Editor zeichnet.
 public sealed partial class Sicht
 {
     /// <summary>Die Ports eines Knotens: was er nimmt und was er ausgibt (Funktion: Auf/Lausche; Graph: Köpfe/Ausgänge; Katalog: was er meldet).</summary>
@@ -48,7 +48,11 @@ public sealed partial class Sicht
     {
         var gid = "gr:" + S(g, "_id");
         var knoten = Alle(g["knoten"]).ToList();
-        var ports = knoten.ToDictionary(k => S(k, "name"), k => KnotenPorts(S(k, "typ")), StringComparer.Ordinal);
+        // Eine Übersetzung nimmt TEin und gibt TAus (aus ihrer Zuordnung, die der Server rechnet); sonst die Ports der Funktion bzw. des Graphen.
+        var uebersetzungen = Alle(g["uebersetzungen"]).ToDictionary(u => S(u, "knoten"), u => u, StringComparer.Ordinal);
+        var ports = knoten.ToDictionary(k => S(k, "name"), k => uebersetzungen.TryGetValue(S(k, "name"), out var u)
+            ? (Ein: new List<string> { S(u, "ein") }, Aus: new List<string> { S(u, "aus") }, Art: "uebersetzung", Karte: (string?)null)
+            : KnotenPorts(S(k, "typ")), StringComparer.Ordinal);
         // Tiefe in der Kette: 0 für Köpfe und Quellen, sonst eins mehr als die tiefste Quelle in [Von] (kreisfrei, CQRS115; begrenzt zur Sicherheit).
         var tiefe = new Dictionary<string, int>(StringComparer.Ordinal);
         int Tiefe(string n, int rest)
@@ -104,6 +108,11 @@ public sealed partial class Sicht
                 ["ein"] = Arr(ein), ["aus"] = Arr(aus),
             };
             if (karte != null) o["karte"] = karte;
+            if (uebersetzungen.TryGetValue(n, out var ue))
+            {
+                o["uebersetzung"] = ue.DeepClone();
+                o["felder"] = (kn["felder"] as JsonArray ?? new JsonArray()).DeepClone();
+            }
             if (BausteinFunktion(Basis(S(kn, "typ"))) is { } f)
             {
                 o["konstruktor"] = new JsonArray(BausteinKonstruktor(f).GroupBy(p => S(p, "typ")).Select(x => (JsonNode)KonstruktorChip(f, x.First())).ToArray());

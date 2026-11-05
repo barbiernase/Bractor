@@ -803,3 +803,18 @@
 #de .kom-einplus.aktiv{background:#ffd27a;color:#0d0f14}
 #de .kom-rand.kand{cursor:copy;box-shadow:0 0 0 2px #ffd27a,0 0 16px #ffd27a55}
 #de .kom-rand.leise{opacity:.4}
+/* Übersetzung im Graph-Modal (docs/04 §4.4): ein schmaler Knoten mit der ↦-Karte — links die Felder von TEin, rechts die Parameter von TAus mit Regel */
+#de .gnode2.n-uebersetzung{border-color:#5f8f8a;border-style:dashed}#de .gnode2.n-uebersetzung .ghead{background:#8fc9c1}
+#de .kom-ue{display:flex;gap:6px;align-items:stretch;padding:4px 6px 6px;font-size:10px}
+#de .kom-ue-sp{display:flex;flex-direction:column;gap:2px;min-width:0}
+#de .kom-ue-t{font-weight:600;color:#9fb0c8;margin-bottom:1px}
+#de .kom-ue-f{display:flex;gap:4px;align-items:center;padding:1px 5px;border-radius:4px;background:#1d2433;color:#d4dbe6;white-space:nowrap}
+#de .kom-ue-f .gn{opacity:.6}
+#de .kom-ue-f.kand{outline:1px solid #8fc9c1;cursor:pointer;background:#24343a}
+#de .kom-ue-f.leise{opacity:.45}
+#de .kom-ue-f.aktiv{outline:1px solid #e0c060}
+#de .kom-ue-f.r-offen{background:#3a2a22;color:#f0c8a8}
+#de .kom-ue-r{display:inline-block;width:12px;text-align:center;color:#8fc9c1}
+#de .kom-ue-f.r-offen .kom-ue-r{color:#f08a5d}
+#de .kom-ue-pfeil{align-self:center;color:#8fc9c1;font-size:14px}
+#de .kom-ue-fehler{padding:0 6px 6px;font-size:10px;color:#f08a5d;white-space:normal;max-width:360px}

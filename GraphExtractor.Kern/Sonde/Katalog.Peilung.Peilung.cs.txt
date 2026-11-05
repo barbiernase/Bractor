@@ -10,6 +10,6 @@ public sealed class Peilung(PeilKonfig konfig, IPeilempfaenger empfaenger) : IFu
     {
         var messung = await empfaenger.PeileAsync(p.FrequenzMhz, p.DauerMs);
         if (messung[1] < konfig.MindestGuete) return new PeilungUnmoeglich(p.FrequenzMhz, "Güte zu gering");
-        return new Gepeilt(p.FrequenzMhz, messung[0], messung[1]);
+        return new Gepeilt(p.Auftrag, p.FrequenzMhz, messung[0], messung[1]);
     }
 }
