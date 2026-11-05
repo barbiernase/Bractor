@@ -140,6 +140,12 @@ Reconnect und Prüfungen liegen im SDK (Invariante 5).
 `Infrastructure/Akteure/AkteurTor.cs`). Seine Handler dürfen Commands und Hinweise ausgeben. Queries beantwortet ein Client nie: eine Query hat genau
 ein Ziel, einen Reader oder ein Aggregat ([10](10-entwickler-api.md) §10.5) — ein Handler auf einer Query bricht den Start ab.
 
+**Dauerhafte Reaktionen** (Schritt 6): nennt die Konfig des Clients `reaktion_stand` (ein Verzeichnis, auch `CQRS_REAKTION_STAND`), reagieren
+seine Handler nicht nur auf Pushes, sondern über das Log: der `ReaktionsLaeufer` (`cqrs_client/reaktionen.py`) liest ab dem gesicherten Stand
+(`proxy.lies_log`), ruft je Event den Handler, sendet seine Commands mit abgeleiteten Ids (dieselbe Formel wie in C#: MD5, Guid-Bytes
+little-endian; ohne `aggregate_id` an den Kopf eines Graphen) und sichert den Stand nach den Antworten. `reaktion_name` (Standard: der
+Klassenname) ist der Schlüssel von Stand und Ids — über Neustarts gleich halten.
+
 ## 9.5 Arbeit
 
 Hört ein Akteur einen Command ohne Ziel, ist das seine Arbeit ([04](04-konsum-und-prozess-maschine.md) §4.4): die Werkstatt eines Cluster-Knotens

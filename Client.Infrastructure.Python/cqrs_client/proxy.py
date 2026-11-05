@@ -57,6 +57,9 @@ class GrpcProxy:
 
         # Response-Korrelation
         self._pending_queries: dict[str, asyncio.Future] = {}
+        self._pending_logs: dict[str, asyncio.Future] = {}
+        # Wer Fehler zu Commands hören will (die Reaktionen: ein Fehler beendet das Warten auf die Antwort); None = nur geloggt.
+        self.fehler_hoerer = None
 
         # Concurrency: nur ein send_message() gleichzeitig
         self._send_lock = asyncio.Lock()
@@ -209,6 +212,17 @@ class GrpcProxy:
         finally:
             self._pending_queries.pop(cid, None)
 
+    async def lies_log(self, ab: int, hoechstens: int = 500):
+        """Liest das Log ab einer Position — nur, was die Sitzung hören darf, bis zum Horizont (eine LogSeite: eintraege, bis, voll)."""
+        korrelation = str(uuid4())
+        future: asyncio.Future = asyncio.get_event_loop().create_future()
+        self._pending_logs[korrelation] = future
+        try:
+            await self._send(L.ClientMessage(lies_log=L.LiesLog(korrelation=korrelation, ab=ab, hoechstens=hoechstens)))
+            return await asyncio.wait_for(future, timeout=30.0)
+        finally:
+            self._pending_logs.pop(korrelation, None)
+
     async def publish_transient(self, envelope_dto) -> None:
         """TransientEvent publishen."""
         msg = L.ClientMessage(
@@ -280,6 +294,9 @@ class GrpcProxy:
                         "QueryResponse",
                     )
 
+                elif field_name == "log_seite":
+                    self._complete_future(self._pending_logs, payload.korrelation, payload, "LogSeite")
+
                 elif field_name == "error":
                     self._handle_error(payload)
 
@@ -313,12 +330,14 @@ class GrpcProxy:
     def _handle_error(self, payload):
         cid = payload.correlation_id
         if cid:
-            future = self._pending_queries.get(cid)
+            future = self._pending_queries.get(cid) or self._pending_logs.get(cid)
             if future and not future.done():
                 future.set_exception(
                     ServerError(payload.code, payload.message)
                 )
                 return
+        if self.fehler_hoerer is not None:
+            self.fehler_hoerer(payload)
         log.error("Server error: [%s] %s", payload.code, payload.message)
 
     def _ensure_connected(self) -> None:

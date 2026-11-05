@@ -45,6 +45,13 @@ public interface IGrpcProxy
     Task SendCommandAsync(CommandEnvelope envelope, CancellationToken ct = default);
 
     /// <summary>
+    /// Sendet einen Command ohne Ziel an den Kopf eines Graphen (docs/04 §4.4). Die Command-Id ist die Kennung des offenen Eingangs: wer mit
+    /// derselben wiederholt, legt keinen zweiten. Der Server quittiert den gelegten Eingang (<see cref="CommandQuittung"/> mit dieser Korrelation)
+    /// oder meldet einen Fehler.
+    /// </summary>
+    Task SendeNachrichtAsync(ICommand nachricht, Guid commandId, string correlationId, CancellationToken ct = default);
+
+    /// <summary>
     /// Sendet eine Query und wartet auf die Antwort. <paramref name="mindestens"/>: „mindestens S auf v“ je Stream, den der Client zuletzt
     /// beschrieben hat — die Leseseite wartet begrenzt, bis ihre Projektion so weit ist (sonst <c>NochNicht</c>).
     /// </summary>

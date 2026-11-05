@@ -164,6 +164,15 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
         Console.WriteLine($"[GrpcProxy] Sent command: {envelope.Payload.GetType().Name}, CorrelationId: {envelope.CorrelationId}");
     }
 
+    public async Task SendeNachrichtAsync(ICommand nachricht, Guid commandId, string correlationId, CancellationToken ct = default)
+    {
+        EnsureConnected();
+        await SchreibeAsync(new ClientMessage
+        {
+            Command = new CommandRequest { Envelope = _mapper.NachrichtAlsDto(nachricht, commandId, correlationId, SessionId) },
+        }, ct);
+    }
+
     /// <summary>
     /// Sendet eine Query und wartet auf Response.
     /// Thread-safe: Mehrere Queries können parallel laufen (Writes serialisiert).

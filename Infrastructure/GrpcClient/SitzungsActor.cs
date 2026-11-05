@@ -346,7 +346,8 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
 
     /// <summary>
     /// Ein Command ohne Ziel von einem Akteur (docs/04 §4.4): ein offener Eingang je Empfänger (der Kopf eines Graphen bzw. ein Akteur, der ihn als
-    /// Arbeit hört; Kennung aus der Command-Id — wer wiederholt, schickt dieselbe), danach der schnelle Weg. Genau einmal am Empfänger.
+    /// Arbeit hört; Kennung aus der Command-Id — wer wiederholt, schickt dieselbe), danach der schnelle Weg und die Quittung an den Client. Genau
+    /// einmal am Empfänger.
     /// </summary>
     private async Task AnKopfAsync(IContext context, Leitung.CommandEnvelopeDto dto, ICommand command)
     {
@@ -379,6 +380,13 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
                 return;
             }
             if (_d.Wege is { } wege) Infrastructure.Eingaenge.Folgenbeilagen.StelleZu(eingaenge, wege, kennung);
+            // Gelegt heißt angenommen: von jetzt an bringt der Zusteller ihn hin. Die Quittung mit seiner Korrelation sagt es dem Client — wer
+            //   ohne sie wiederholt (dieselbe Command-Id), legt keinen zweiten.
+            await SchreibeAsync(new Leitung.ServerMessage { Event = new Leitung.EventNotification { Envelope = _d.Mapper.MapToDto(new EventEnvelope
+            {
+                AggregateId = kennung, AggregateType = "Eingang", CorrelationId = korrelation, CausationId = kennung.ToString(), UserId = wer,
+                Payload = new CommandQuittung(typ.Name, kennung, 0, Geschrieben: true),
+            }) } });
         });
     }
 

@@ -267,6 +267,13 @@ Auftrag — doppelt geantwortet, von einem zweiten Arbeiter oder nach dem Neuver
 - **Lesen ab Position** (`LiesLog` → `LogSeite`): das Log ab einer Position, nur die Typen der Hör-Liste der Sitzung, die im Log stehen (Hinweise
   nie), höchstens 1000 Einträge je Seite und nur bis zum Horizont der Vollständigkeit — wer ab `bis` weiterliest, verpasst nichts. So führt ein
   Client eine Projektion bei sich oder liest nach dem Wiederverbinden nach.
+- **Reaktionen** (Schritt 6, docs/plan-katalog-und-graphen.md §1): was nach einem Fakt weitergehen soll, stößt ein Client an. Er hört das Event
+  (`IHoert`), liest, was er braucht (Queries), und gibt Commands hinein (`IDarf`) — an ein Aggregat oder ohne Ziel an den Kopf eines Graphen.
+  Genau einmal ohne Festhalten beim Framework: der Läufer (`Client.Infrastructure/Reaktionen`, `cqrs_client.reaktionen`) liest das Log ab seinem
+  gesicherten Stand (`LiesLog`; ein Push weckt ihn nur), leitet jede Command-Id aus Reaktion, Position und Stelle ab (in C# und Python dieselbe
+  Formel) und sichert den Stand erst, wenn jeder Command der Seite beantwortet ist. Nach einem Neustart rechnet er dieselben Ids; die Inbox des
+  Ziels bzw. der offene Eingang am Kopf verwirft die Wiederholung. Den gelegten Eingang eines Commands ohne Ziel quittiert der Server
+  (`CommandQuittung` mit seiner Korrelation). Ein Client, der reagiert, ist ein eigener Client (ein Worker), keine Oberfläche.
 - **Keine Queries an einen Client:** ein Client fragt, er beantwortet nie — eine Query hat genau ein Ziel, einen Reader oder ein Aggregat (R4).
 
 ---

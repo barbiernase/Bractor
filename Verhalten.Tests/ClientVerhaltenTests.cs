@@ -396,4 +396,55 @@ public sealed class ClientVerhaltenTests(BeispielHost b) : IClassFixture<Beispie
                 .Should().BeOfType<DatensatzAntwort>($"Query {i + 1} gleich nach der Quittung kennt den neuen Datensatz");
         }
     }
+
+    [Fact]
+    public async Task Eine_Reaktion_wirkt_genau_einmal_auch_nach_einem_Neustart_des_Clients_mit_und_ohne_gesicherten_Stand()
+    {
+        // Schritt 6 (docs/plan-katalog-und-graphen.md): ein Client reagiert auf ein Event, das sein Akteur hört — er liest ab seinem Stand, die
+        //   Command-Id leitet der Läufer aus Reaktion, Position und Stelle ab. Neustart mit Stand: nichts noch einmal; ohne Stand (verloren): dieselbe
+        //   Id noch einmal, die Inbox des Aggregats verwirft sie.
+        var paar = await b.KomplettesPaarAsync();
+        var verzeichnis = Path.Combine(Path.GetTempPath(), "verhalten-reaktion-" + Guid.NewGuid().ToString("N"));
+        var name = "verhalten-reaktion-" + paar.Id.ToString("N")[..8];
+        long ereignis = -1;   // die Position von ImagePairKomplett des Paars (aus dem ersten Lauf)
+        async Task<int> LaufeAsync(Client.Infrastructure.Reaktionen.IReaktionsStand stand)
+        {
+            var proxy = new GrpcProxy(Domain.Leitung.GeneratedNutzlast.Instanz) { AkteurToken = Testumgebung.TokenArbeitsplatz };
+            await proxy.ConnectAsync(b.Host.GrpcAdresse, GeneratedWiring_Domain_Client_Modules_Blazor.Vertrag, GeneratedWiring_Domain_Client_Modules_Blazor.VertragHash);
+            var aufrufe = 0;
+            long position = -1;
+            var r = new Client.Infrastructure.Reaktionen.Reaktionen(proxy, stand, name, takt: TimeSpan.FromMilliseconds(200))
+                .Auf<ImagePairKomplett>((e, k) =>
+                {
+                    if (k.Ereignis.AggregateId != paar.Id) return Task.CompletedTask;
+                    aufrufe++;
+                    position = ereignis = k.Position;
+                    k.Sende(new LabelBildPaar(new(paar.Id), Klassifikation.Questionable));
+                    return Task.CompletedTask;
+                });
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(90));
+            var lauf = r.LaufeAsync(cts.Token);
+            // Fertig, wenn der Stand hinter dem Event steht (ein Neustart mit Stand ruft die Reaktion gar nicht erst).
+            await Warte.BisAsync(async () => lauf.IsFaulted || (await stand.LadeAsync(name, default) is var s && (ereignis < 0 ? position >= 0 && s >= position : s >= ereignis)),
+                TimeSpan.FromSeconds(60), "die Reaktion kommt nicht über das Event hinaus", b.Host);
+            await cts.CancelAsync();
+            await lauf;
+            await proxy.DisconnectAsync();
+            return aufrufe;
+        }
+
+        try
+        {
+            var datei = new Client.Infrastructure.Reaktionen.DateiReaktionsStand(verzeichnis);
+            (await LaufeAsync(datei)).Should().Be(1, "die Reaktion sieht das Event einmal");
+            await Warte.BisAsync(async () => await b.Log.ZahlAsync<BildPaarGelabelt>(paar.Id) == 1, Kurz, "das Label wirkt nicht", b.Host);
+            (await LaufeAsync(new Client.Infrastructure.Reaktionen.DateiReaktionsStand(verzeichnis))).Should().Be(0,
+                "nach dem Neustart liest der Client ab seinem gesicherten Stand");
+            (await LaufeAsync(new Client.Infrastructure.Reaktionen.ReaktionsStandImSpeicher())).Should().Be(1,
+                "ohne Stand liest er von vorn und reagiert noch einmal — mit derselben Command-Id");
+            await Task.Delay(TimeSpan.FromSeconds(2));
+            (await b.Log.ZahlAsync<BildPaarGelabelt>(paar.Id)).Should().Be(1, "die Inbox des Aggregats verwirft die Wiederholung");
+        }
+        finally { if (Directory.Exists(verzeichnis)) Directory.Delete(verzeichnis, true); }
+    }
 }

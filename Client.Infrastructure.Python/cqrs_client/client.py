@@ -49,6 +49,7 @@ from .mapper import PayloadMapper
 from .proto_sync import ensure_types_current, verify_hash_at_connect
 from .proxy import GrpcProxy
 from .registry import CategoryRegistry, MessageCategory
+from .reaktionen import DateiReaktionsStand, ReaktionsLaeufer, ReaktionUnterbrochen
 from .router import MessageRouter
 from .versioning import VersionTracker
 
@@ -86,6 +87,9 @@ class CqrsClient(HandlerBase, Generic[S]):
             config: Optionale Konfiguration für die Subklasse
             arbeit: Die Arbeit der Akteure, die dieser Client verkörpert (je Akteur die gehörten Commands ohne Ziel — die Client-Basis
                     baut sie aus ihrem Vertrag); nach jedem Handshake nimmt er sie an, der Server gibt ihm Aufträge
+        Reaktionen (Schritt 6): nennt die Konfig `reaktion_stand` (ein Verzeichnis, auch `CQRS_REAKTION_STAND`), reagieren die Handler dauerhaft —
+        der Client liest das Log ab seinem gesicherten Stand, die Command-Ids leitet er ab (cqrs_client.reaktionen); `reaktion_name` (Standard:
+        der Klassenname) ist der Schlüssel von Stand und Ids. Ohne sie reagieren die Handler nur auf Pushes, solange sie verbunden sind.
         """
         self._registry = registry
         self._config = config or {}
@@ -99,6 +103,10 @@ class CqrsClient(HandlerBase, Generic[S]):
         self._arbeit = ArbeitsLaeufer(arbeit or [], self._proxy, self._mapper)
         self._version_tracker = VersionTracker()
         self._state: S = self._create_initial_state()
+        stand = self._config.get("reaktion_stand") or os.environ.get("CQRS_REAKTION_STAND")
+        self._reaktionen: ReaktionsLaeufer | None = None if not stand else ReaktionsLaeufer(
+            self._proxy, self._mapper, self._registry, self.handle, self, self._state, self._version_tracker, DateiReaktionsStand(stand),
+            self._config.get("reaktion_name") or type(self).__name__)
 
     @property
     def state(self) -> S:
@@ -214,6 +222,9 @@ class CqrsClient(HandlerBase, Generic[S]):
 
     async def _sitzung(self) -> None:
         """Eine Verbindung lang: Server-Nachrichten lesen und verarbeiten — endet, wenn die Verbindung abbricht."""
+        if self._reaktionen is not None:
+            await self._sitzung_mit_reaktionen()
+            return
         await asyncio.gather(
             self._proxy.read_loop(),
             self._router.process_loop(
@@ -227,6 +238,27 @@ class CqrsClient(HandlerBase, Generic[S]):
                 on_arbeit=self._arbeit.nimm,
             ),
         )
+
+    async def _sitzung_mit_reaktionen(self) -> None:
+        """Eine Verbindung lang mit dauerhaften Reaktionen: der Läufer liest das Log, die Pushes wecken ihn und bringen die Antworten."""
+        laeufer = self._reaktionen
+        self._proxy.fehler_hoerer = laeufer.fehler
+
+        async def verteile() -> None:
+            while self._proxy.is_connected:
+                try:
+                    art, nachricht = await asyncio.wait_for(self._proxy.event_queue.get(), timeout=1.0)
+                except asyncio.TimeoutError:
+                    continue
+                if art == "event":
+                    laeufer.angekommen(nachricht)
+                elif art == "arbeits_auftrag":
+                    self._arbeit.nimm(nachricht)
+
+        ergebnisse = await asyncio.gather(self._proxy.read_loop(), laeufer.lauf(), verteile(), return_exceptions=True)
+        for e in ergebnisse:
+            if isinstance(e, Exception) and not isinstance(e, ReaktionUnterbrochen):
+                log.error("Reaktionen: %s", e, exc_info=e)
 
     # ═══════════════════════════════════════════════════
     # CAPABILITIES

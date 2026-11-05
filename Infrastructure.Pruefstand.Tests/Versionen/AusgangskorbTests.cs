@@ -66,6 +66,8 @@ public class AusgangskorbTests
         public Task<QueryResponse<TResponse>> QueryAsync<TResponse>(IQuery query, string correlationId, IReadOnlyList<StreamStand>? mindestens = null,
             CancellationToken ct = default) where TResponse : IQueryResponse => throw new NotSupportedException();
 
+        public Task SendeNachrichtAsync(ICommand nachricht, Guid commandId, string correlationId, CancellationToken ct = default) => throw new NotSupportedException();
+
         public Task<LogLesung> LiesLogAsync(long ab, int hoechstens = 500, CancellationToken ct = default) => throw new NotSupportedException();
 
         public Task DisconnectAsync()

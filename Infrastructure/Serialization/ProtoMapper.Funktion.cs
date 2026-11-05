@@ -11,6 +11,22 @@ public partial class ProtoMessageMapper
     /// <summary>Der Auftrag als Nutzlast: ein Command ohne Ziel.</summary>
     public Nutzlast Nachricht(object eingang) => eingang is IEvent e ? _tabelle.PackeEvent(e) : _tabelle.PackeNachricht(eingang);
 
+    /// <summary>
+    /// Die Hülle eines Commands ohne Ziel vom Client (an den Kopf eines Graphen): die Command-Id ist die Kennung des offenen Eingangs — wer
+    /// wiederholt, schickt dieselbe; ohne Aggregat und ohne erwartete Version.
+    /// </summary>
+    public CommandEnvelopeDto NachrichtAlsDto(ICommand nachricht, Guid commandId, string korrelation, string? sitzung) => new()
+    {
+        CommandId = commandId.ToString(),
+        AggregateId = Guid.Empty.ToString(),
+        AggregateType = string.Empty,
+        ExpectedVersion = -1,
+        CreatedAtUtc = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+        CorrelationId = korrelation,
+        OriginSessionId = sitzung ?? string.Empty,
+        Payload = _tabelle.PackeNachricht(nachricht),
+    };
+
     /// <summary>Ein Command ohne Ziel in einer Nutzlast (an einen Graph-Kopf oder einen Akteur); null = ein Command an ein Aggregat.</summary>
     public ICommand? CommandOhneZiel(Nutzlast n)
     {
