@@ -27,6 +27,7 @@ Stand 2026-11-03. Die Kapitel beschreiben den **Ist-Zustand** des Codes; für Fa
 | [12-tests-und-vermessung.md](12-tests-und-vermessung.md) | Test-Ebenen, Messverfahren, Messwerte (Tabellen schreibt `scripts/vermessung-tabelle.sh`) |
 | [13-reifegrad-schulden-bewertung.md](13-reifegrad-schulden-bewertung.md) | offene Befunde (§13.0), Erledigtes; die eine Quelle für „offen“ |
 | [konzept-akteure.md](konzept-akteure.md) | Akteure (`IDarf`, `IHoert`), Clients, Arbeit, Sitzung, Werkstatt, Verteiler |
+| [praesentation/](praesentation/) | Präsentation des Zielbilds als Geschichte (reveal.js; Leertaste weiter, ↓ genauer hinsehen, Esc Übersicht): kurz [zielbild.html](praesentation/zielbild.html) aus `geschichte.html`, vollständig [zielbild_full.html](praesentation/zielbild_full.html) aus `geschichte_full.html` (dazu Konsistenz und Garantien, Arbeitsplatz, Werkbank, LLM). Karten, Graphen, Diagramme aus `zielbild-seite.html`; `baue_deck.py` setzt zusammen — nach Änderungen `python3 docs/praesentation/baue_deck.py` bzw. mit `VORLAGE=geschichte_full.html … zielbild_full.html` |
 | [../vermessung/README.md](../vermessung/README.md) | Ablage der Messläufe |
 
 Gelöschte Dokumente (`01-ueberblick.md`, `02-design-prinzipien.md`, `konzept-werkbank.md` — Leitsätze W1–W12 in Kurzform in `CLAUDE.md` —, die

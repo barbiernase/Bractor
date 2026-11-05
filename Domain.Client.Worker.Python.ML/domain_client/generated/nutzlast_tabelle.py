@@ -63,6 +63,9 @@ from . import (
     ImagePairArbeitslisteDto,
     ImagePairEingabeUngueltigDto,
     ImagePairErstelltDto,
+    ImagePairGeaendertDto,
+    ImagePairGegengechecktDto,
+    ImagePairHatSichGeaendertDto,
     ImagePairHistorieAntwortDto,
     ImagePairHistorieNichtGefundenDto,
     ImagePairInspiziertDto,
@@ -152,6 +155,8 @@ from . import (
     TrainingslaufNichtGefundenAntwortDto,
     TrainingslaufNichtGefundenDto,
     VorschauErstelltDto,
+    ZufallsEventDto,
+    ZufallsEventNeuDto,
 )
 
 TABELLE: dict[str, type] = {
@@ -213,6 +218,9 @@ TABELLE: dict[str, type] = {
     "ImagePairArbeitsliste": ImagePairArbeitslisteDto,
     "ImagePairEingabeUngueltig": ImagePairEingabeUngueltigDto,
     "ImagePairErstellt": ImagePairErstelltDto,
+    "ImagePairGeaendert": ImagePairGeaendertDto,
+    "ImagePairGegengecheckt": ImagePairGegengechecktDto,
+    "ImagePairHatSichGeaendert": ImagePairHatSichGeaendertDto,
     "ImagePairHistorieAntwort": ImagePairHistorieAntwortDto,
     "ImagePairHistorieNichtGefunden": ImagePairHistorieNichtGefundenDto,
     "ImagePairInspiziert": ImagePairInspiziertDto,
@@ -302,4 +310,6 @@ TABELLE: dict[str, type] = {
     "TrainingslaufNichtGefunden": TrainingslaufNichtGefundenDto,
     "TrainingslaufNichtGefundenAntwort": TrainingslaufNichtGefundenAntwortDto,
     "VorschauErstellt": VorschauErstelltDto,
+    "ZufallsEvent": ZufallsEventDto,
+    "ZufallsEventNeu": ZufallsEventNeuDto,
 }

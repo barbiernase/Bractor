@@ -12,6 +12,7 @@
       <ProjectReference Include="..\Core\Core.csproj" />
       <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
       <ProjectReference Include="..\Domain\Domain.csproj" />
+      <ProjectReference Include="..\Bildverarbeitung.Katalog\Bildverarbeitung.Katalog.csproj" />
       
     </ItemGroup>
 

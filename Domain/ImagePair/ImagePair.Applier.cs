@@ -117,5 +117,30 @@ public partial class ImagePair
                 case BildVersion.Dc2: this.State.Dc2 = bild; break;
             }
         }
+
+        public void Apply(ImagePairHatSichGeaendert evt)
+        {
+            throw new NotImplementedException("TODO: Apply-Logik.");
+        }
+
+        public void Apply(ImagePairGeaendert evt)
+        {
+            throw new NotImplementedException("TODO: Apply-Logik.");
+        }
+
+        public void Apply(ImagePairGegengecheckt evt)
+        {
+            throw new NotImplementedException("TODO: Apply-Logik.");
+        }
+
+        public void Apply(ZufallsEvent evt)
+        {
+
+        }
+
+        public void Apply(ZufallsEventNeu evt)
+        {
+
+        }
     }
 }

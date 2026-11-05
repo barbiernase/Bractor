@@ -76,3 +76,13 @@ public record ImagePairEingabeUngueltig(string Feld, string Grund) : ITransientE
 
 /// <summary>Hinweis des Bildeingangs: der Name passt nicht zur Aufnahme-Konvention — die Datei gehört zu keinem Paar.</summary>
 public record DateinameUnbekannt(string Dateiname) : ITransientEvent;
+
+public record ImagePairGeaendert() : IEvent;
+
+public record ImagePairHatSichGeaendert() : IEvent;
+
+public record ImagePairGegengecheckt() : IEvent;
+
+public record ZufallsEvent() : IEvent;
+
+public record ZufallsEventNeu() : IEvent;

@@ -1,0 +1,1420 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Präsentation des Zielbilds (Plan Pub/Sub-Neustrukturierung): Grammatik, Bausteine, Graph, ImagePair. Öffnen im Browser; Schriften kommen von Google Fonts, sonst ohne Abhängigkeiten. -->
+<title>Die Signatur ist der Graph</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,500..800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Eine Welt, angelehnt an den Werkbank-Editor: dunkle Fläche, Karten mit farbigem Kopf, Ports als Punkte */
+:root{
+  color-scheme:dark;
+  --bg:#0d1017; --panel:#141926; --node:#161b27; --line:#2c3547; --line2:#232a38;
+  --canvas:#0b0e15; --dot:#1a2436;
+  --ink:#dfe4ee; --ink2:#cfd6e4; --muted:#9aa3b7; --faint:#6f7a90;
+  --code:#0f131c;
+  /* Nachrichten und Kanten (Port-Farben) */
+  --c-cmd:#4a86d6; --c-evt:#4fb06a; --c-qn:#a6cf4f; --c-hin:#e07a70; --c-qry:#9678d6; --c-ant:#c4a3f0;
+  --c-ce:#4cc9d6; --c-chg:#cfd6e4;
+  --s-head:#5aa0c8; --s-side:#57b673; --s-stage:#d0843a; --s-foot:#9678d6; --s-hl:#8fa3b8;
+  --c-fr:#e6d36a; --c-fae:#e2b45c; --c-dn:#8fae62; --c-darf:#e07ab4; --c-tr:#d0843a; --c-ken:#4fb06a;
+  /* Bausteine (Kartenköpfe) */
+  --h-agg:#3fb0a6; --h-fn:#d0843a; --h-prj:#57b673; --h-rdr:#9678d6; --h-src:#a6cf4f; --h-store:#e2b45c;
+  --h-dn:#8fae62; --h-akt:#e07ab4; --h-cli:#5aa0c8; --h-bi:#8fa3b8;
+  --kw:#c792ea; --ty:#82b1ff; --str:#c3e88d;
+  --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+  --disp:"Archivo","IBM Plex Sans",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html{background:var(--bg)}
+body{background:var(--bg);color:var(--ink);font:16px/1.6 var(--sans);-webkit-font-smoothing:antialiased}
+code,pre{font-family:var(--mono)}
+:not(pre)>code{font-size:.86em;background:var(--panel);border:1px solid var(--line2);padding:.05em .35em;border-radius:4px;color:var(--ink2)}
+
+.wrap{max-width:1180px;margin:0 auto;padding-inline:clamp(16px,4vw,40px)}
+.wide{max-width:1520px;margin:0 auto;padding-inline:clamp(16px,3vw,32px)}
+
+nav.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:#0d1017e6;backdrop-filter:blur(8px);border-bottom:1px solid var(--line2)}
+nav.top .wrap{display:flex;gap:4px 18px;align-items:center;flex-wrap:wrap;padding-block:10px}
+nav.top b{font:700 14px/1 var(--disp);font-stretch:112%;margin-right:8px}
+nav.top a{font-size:13.5px;color:var(--muted);text-decoration:none;border-bottom:1.5px solid transparent;padding:2px 0}
+nav.top a:hover,nav.top a:focus-visible{color:var(--ink);border-color:var(--ink);outline:none}
+nav.top .keys{margin-left:auto;font-size:12px;color:var(--faint)}
+@media (max-width:720px){nav.top .keys{display:none}}
+
+section{padding-block:clamp(56px,8vw,100px);border-bottom:1px solid var(--line2);scroll-margin-top:50px}
+.kicker{font:600 12px/1 var(--sans);letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 14px}
+h1,h2,h3{font-family:var(--disp);text-wrap:balance;margin:0}
+h1{font-weight:800;font-stretch:118%;font-size:clamp(40px,7vw,82px);line-height:.98;letter-spacing:-.02em}
+h2{font-weight:750;font-stretch:115%;font-size:clamp(28px,4vw,44px);line-height:1.05}
+h3{font-weight:700;font-stretch:108%;font-size:21px;line-height:1.2}
+.lead{font-size:clamp(17px,1.8vw,20px);line-height:1.5;max-width:64ch;margin:20px 0 0;color:var(--ink2)}
+.head{margin-bottom:clamp(28px,4vw,44px)}
+p{max-width:68ch}
+
+/* Code */
+pre.code{margin:0;background:var(--code);border:1px solid var(--line2);border-radius:8px;padding:14px 16px;overflow-x:auto;font-size:12.6px;line-height:1.6;color:var(--ink2);tab-size:4}
+pre.code .k{color:var(--kw)} pre.code .y{color:var(--ty)} pre.code .s{color:var(--str)} pre.code .c{color:var(--faint);font-style:italic}
+.form{font-size:12.5px;color:var(--faint);font-style:italic;margin:0}
+
+/* Karten wie im Editor */
+.node{position:relative;width:var(--w,220px);background:var(--node);border:1px solid var(--line);border-radius:9px;box-shadow:0 4px 14px #0008;flex:none;text-align:left}
+.node .nh{display:flex;align-items:center;gap:7px;padding:5px 10px;border-radius:8px 8px 0 0;background:var(--hc);color:#0d0f14;height:30px}
+.node .nk{font:700 9.5px/1 var(--sans);letter-spacing:.07em;text-transform:uppercase;background:#0d0f1426;padding:3px 5px;border-radius:3px;white-space:nowrap}
+.node .nt{font:600 12.5px/1 var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.node .nb{padding:5px 0 7px;display:flex;flex-direction:column;min-height:calc(var(--h,0px) - 30px)}
+.row{display:flex;align-items:center;gap:7px;height:26px;padding:0 12px;font:12px/1 var(--mono);color:var(--ink2);white-space:nowrap}
+.row.o{justify-content:flex-end}
+.row .lbl{overflow:hidden;text-overflow:ellipsis}
+.row small{font:10.5px/1 var(--sans);color:var(--faint)}
+.row.n{font:italic 11px/1 var(--sans);color:var(--muted)}
+.row.s{font:600 10.5px/1 var(--sans);color:var(--muted);letter-spacing:.04em;border-top:1px solid var(--line2);margin-top:4px;height:24px}
+.row.s:first-child{border-top:none;margin-top:0}
+.row.end{margin-top:auto}
+.slot{width:13px;height:13px;border-radius:50%;border:2px solid var(--canvas);box-shadow:0 0 0 1px #000a;flex:none;background:var(--sc)}
+.row.i .slot{margin-left:-19px}
+.row.o .slot{margin-right:-19px}
+.slot.hollow{background:var(--canvas);border:2.5px solid var(--sc)}
+.t-cmd{--sc:var(--c-cmd)} .t-evt{--sc:var(--c-evt)} .t-qn{--sc:var(--c-qn)} .t-hin{--sc:var(--c-hin)} .t-qry{--sc:var(--c-qry)}
+.t-ant{--sc:var(--c-ant)} .t-fr{--sc:var(--c-fr)} .t-fae{--sc:var(--c-fae)} .t-dn{--sc:var(--c-dn)} .t-darf{--sc:var(--c-darf)}
+.t-tr{--sc:var(--c-tr)} .t-ce{--sc:var(--c-ce)} .t-chg{--sc:var(--c-chg)} .t-ken{--sc:var(--c-ken)}
+.k-agg{--hc:var(--h-agg)} .k-fn{--hc:var(--h-fn)} .k-prj{--hc:var(--h-prj)} .k-rdr{--hc:var(--h-rdr)} .k-src{--hc:var(--h-src)}
+.k-store{--hc:var(--h-store)} .k-dn{--hc:var(--h-dn)} .k-akt{--hc:var(--h-akt)} .k-cli{--hc:var(--h-cli)} .k-bi{--hc:var(--h-bi)}
+
+/* Fläche mit Punktraster */
+.stage{background-color:var(--canvas);background-image:radial-gradient(var(--dot) 1.1px,transparent 1.1px);background-size:22px 22px;border:1px solid var(--line2);border-radius:10px;padding:30px 34px;display:flex;flex-wrap:wrap;gap:30px 40px;justify-content:center;align-items:flex-start;overflow-x:auto}
+.canvas{position:relative;background-color:var(--canvas);background-image:radial-gradient(var(--dot) 1.1px,transparent 1.1px);background-size:22px 22px;border:1px solid var(--line2);border-radius:10px;overflow:hidden}
+.canvas .world{position:absolute;left:0;top:0;transform-origin:0 0}
+.canvas .world .node{position:absolute}
+.canvas svg.wires{position:absolute;left:0;top:0;overflow:visible;pointer-events:none}
+.canvas svg path{fill:none;stroke-width:2;opacity:.85}
+.scroller{overflow-x:auto}
+@media (max-width:760px){.scroller .canvas{min-width:760px}}
+figcaption{font-size:14.5px;color:var(--muted);margin-top:12px;max-width:90ch}
+
+/* Hero */
+.hero{padding-top:clamp(56px,8vw,100px)}
+.sig{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:clamp(20px,3vw,36px);margin-top:clamp(36px,5vw,56px);align-items:stretch}
+@media (max-width:900px){.sig{grid-template-columns:1fr}}
+.sig pre.code{font-size:14px;line-height:1.75;padding:20px 22px;display:flex;align-items:center}
+.sig .stage{align-items:center}
+mark{background:none;color:inherit;border-bottom:2.5px solid var(--mc);padding-bottom:1px}
+mark.m-fn{--mc:var(--h-fn)} mark.m-in{--mc:var(--c-evt)} mark.m-cmd{--mc:var(--c-cmd)} mark.m-hin{--mc:var(--c-hin)}
+.maplist{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;margin-top:22px;padding:0;list-style:none}
+.maplist li{border-top:2.5px solid var(--mc);padding-top:10px;font-size:15px;color:var(--ink2)}
+.maplist b{display:block;font-family:var(--mono);font-size:13px;color:var(--ink);font-weight:600;margin-bottom:2px}
+@media (max-width:700px){.maplist{grid-template-columns:1fr}}
+
+
+/* Konzeptueller Gesamtgraph */
+.flowpanel{background-color:var(--canvas);background-image:radial-gradient(var(--dot) 1.1px,transparent 1.1px);background-size:22px 22px;border:1px solid var(--line2);border-radius:10px;padding:clamp(10px,2vw,24px);overflow-x:auto}
+svg.flow{display:block;width:100%;max-width:1440px;margin:0 auto;min-width:860px;height:auto}
+svg.flow .blk{fill:color-mix(in srgb,var(--b) 16%,var(--node));stroke:var(--b);stroke-width:1.6}
+svg.flow .fn{fill:var(--ink);font:600 15px var(--sans)}
+svg.flow .fs{fill:var(--muted);font:400 11.5px var(--sans)}
+svg.flow .fm{fill:var(--ink2);font:500 12px var(--mono)}
+svg.flow .fl{fill:var(--ink2);font:500 11.5px var(--sans)}
+svg.flow .ed{fill:none;stroke-width:2}
+svg.flow .logband{fill:#1b2231;stroke:var(--line)}
+svg.flow .logt{fill:var(--ink);font:700 17px var(--disp)}
+svg.flow .logs{fill:var(--muted);font:400 11.5px var(--sans)}
+svg.flow .halo{stroke:#1b2231;stroke-width:10}
+#ueberblick .logbox{margin-top:clamp(24px,3vw,36px)}
+
+
+
+/* Oberfläche: Shell-Wireframe */
+.s-head{--sc:var(--s-head)} .s-side{--sc:var(--s-side)} .s-stage{--sc:var(--s-stage)} .s-foot{--sc:var(--s-foot)} .s-hl{--sc:var(--s-hl)}
+#oberflaeche figure{overflow-x:auto}
+.wf{min-width:900px;max-width:1240px;margin:0 auto;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#11151d;font:13px/1.3 var(--sans);color:var(--ink2);box-shadow:0 12px 40px #0008}
+.wf i{font:700 9.5px/1 var(--sans);letter-spacing:.07em;text-transform:uppercase;color:#0d0f14;background:var(--sc);padding:4px 6px;border-radius:3px;margin-left:auto;font-style:normal;white-space:nowrap}
+.wf-h{display:flex;align-items:center;gap:14px;padding:7px 14px;border-bottom:1px solid var(--line2);background:color-mix(in srgb,var(--sc) 9%,#11151d)}
+.wf-h b{color:var(--ink);font-weight:600;min-width:96px}
+.wf-h span{color:var(--muted)}
+.wf-b{display:grid;grid-template-columns:230px minmax(0,1fr) 210px 34px;min-height:360px;border-bottom:1px solid var(--line2)}
+.wf-side{background:color-mix(in srgb,var(--sc) 6%,#11151d);border-right:1px solid var(--line2);display:flex;flex-direction:column}
+.wf-side.r{border-left:1px solid var(--line2)}
+.wf-ph{display:flex;align-items:center;gap:8px;padding:9px 10px;border-bottom:1px solid var(--line2)}
+.wf-ph b{color:var(--ink)}
+.wf-list div{padding:7px 12px;font:12px var(--mono);border-bottom:1px solid #1b2130;display:flex;gap:9px;align-items:center}
+.wf-list div.on,.wf-tree .on{background:#1f2a3d;color:var(--ink)}
+.wf-list em{width:8px;height:8px;border-radius:50%;display:inline-block}
+.wf-list em.g{background:#4ade80} .wf-list em.y{background:#f0c040} .wf-list em.r{background:#f87171}
+.wf-note{margin-top:auto;padding:9px 12px;font-size:11px;color:var(--faint);font-style:italic}
+.wf-stage{display:flex;flex-direction:column;min-width:0;background:color-mix(in srgb,var(--sc) 4%,#11151d)}
+.wf-tabs{display:flex;gap:2px;align-items:center;padding:0 10px;border-bottom:1px solid var(--line2)}
+.wf-tabs span{padding:10px 12px;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap}
+.wf-tabs span.on{color:var(--ink);border-color:var(--sc)}
+.wf-tabs span.x{opacity:.45}
+.wf-imgs{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:16px}
+.wf-imgs div{position:relative;min-height:220px;border-radius:6px;border:1px solid var(--line2);background:repeating-linear-gradient(90deg,transparent 0 calc(12.5% - 1px),#ffffff12 calc(12.5% - 1px) 12.5%),linear-gradient(135deg,#2a3242,#1a1f2b 60%,#252c3a)}
+.wf-imgs span{position:absolute;left:10px;top:8px;font:600 11px var(--mono);color:var(--ink2);background:#0d0f14b0;padding:2px 6px;border-radius:3px}
+.wf-tree div{padding:6px 12px;font-size:12.5px}
+.wf-tree .i1{padding-left:26px} .wf-tree .i2{padding-left:40px}
+.wf-bar{display:flex;justify-content:center;padding-top:12px;background:color-mix(in srgb,var(--sc) 10%,#11151d);color:var(--muted);font-size:12px}
+.wf-bar span{writing-mode:vertical-rl}
+.wf-f{display:flex;align-items:center;gap:22px;padding:9px 14px;background:color-mix(in srgb,var(--sc) 10%,#11151d);flex-wrap:wrap}
+.wf-f .grp b{color:var(--ink);margin-right:6px}
+kbd{font:600 11px var(--mono);background:#232a38;border:1px solid var(--line);border-radius:3px;padding:1px 5px;color:var(--ink)}
+.wf-hl{min-width:900px;max-width:1240px;margin:12px auto 0;border:1.5px dashed var(--s-hl);border-radius:8px;padding:8px 14px;font-size:13px;color:var(--muted)}
+.wf-hl b{color:var(--ink);margin-right:8px}
+.slots{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:18px;margin:clamp(28px,4vw,40px) 0 24px}
+.slots div{display:flex;flex-direction:column;gap:5px}
+.slots i{height:4px;border-radius:2px;background:var(--sc)}
+.slots b{font:700 17px var(--disp);margin-top:4px}
+.slots code{align-self:flex-start}
+.slots span{font-size:13.5px;color:var(--muted)}
+@media (max-width:900px){.slots{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:560px){.slots{grid-template-columns:repeat(2,minmax(0,1fr))}}
+svg.flow .band{fill:#ffffff06;stroke:var(--line2)}
+svg.flow .bandt{fill:var(--faint);font:600 11px var(--sans);letter-spacing:.12em}
+svg.flow .life{stroke:var(--line);stroke-dasharray:3 4}
+svg.flow .step{fill:var(--ink);font:700 17px var(--disp)}
+.points.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+@media (max-width:760px){.points.three{grid-template-columns:1fr}}
+
+
+/* Oberfläche: Konzept */
+.ideen{margin-top:clamp(20px,3vw,32px)}
+h3.sub{font-size:19px;margin:clamp(40px,5vw,56px) 0 12px}
+.subl{font-size:15px;color:var(--muted);margin:8px 0 0}
+.treppe{display:flex;flex-direction:column;gap:6px;margin-top:18px;align-items:center}
+.treppe div{width:var(--w);display:grid;grid-template-columns:150px minmax(0,1fr) auto;gap:16px;align-items:center;padding:11px 16px;border:1px solid var(--line);border-radius:8px;background:var(--panel)}
+.treppe b{font:700 15px var(--disp)}
+.treppe span{font-size:14.5px;color:var(--ink2)}
+.treppe code{font-size:11.5px;white-space:nowrap}
+@media (max-width:900px){.treppe div{width:100%;grid-template-columns:1fr}.treppe code{white-space:normal}}
+.ui3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(18px,3vw,36px)}
+@media (max-width:900px){.ui3{grid-template-columns:1fr}}
+.pf{display:flex;gap:16px;height:170px;padding:14px;background:var(--canvas);border:1px solid var(--line2);border-radius:8px}
+.pf>div{display:flex;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:color-mix(in srgb,var(--sc) 7%,#11151d)}
+.pf-bar{width:26px;display:flex;justify-content:center;padding-top:8px;background:color-mix(in srgb,var(--sc) 18%,#11151d);font-size:11px;color:var(--ink2)}
+.pf-bar span{writing-mode:vertical-rl}
+.pf-body{width:150px;padding:8px 10px;display:flex;flex-direction:column;gap:7px;font-size:12px}
+.pf-body em{height:9px;border-radius:3px;background:#ffffff14}
+.bt{height:170px;padding:14px;background:var(--canvas);border:1px solid var(--line2);border-radius:8px;display:flex;flex-direction:column;gap:14px}
+.bt-tabs{display:flex;border-bottom:1px solid var(--line)}
+.bt-tabs span{padding:8px 12px;font-size:13px;color:var(--muted);border-bottom:2px solid transparent}
+.bt-tabs span.on{color:var(--ink);border-color:var(--s-stage)}
+.bt-hint{font-size:13px;color:var(--ink2);margin-top:auto}
+.einst{height:170px;overflow:hidden;padding:12px 14px;background:#1a1f2b;border:1px solid var(--line);border-radius:8px;font-size:12.5px;display:grid;grid-template-columns:1fr 1fr;align-content:start;gap:4px 10px}
+.einst .eh{grid-column:1/-1;font-weight:600;color:var(--ink);margin-bottom:4px}
+.einst .eg{grid-column:1/-1;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-top:4px}
+.einst label{display:flex;align-items:center;gap:7px;color:var(--ink2)}
+.einst i{width:12px;height:12px;border:1.5px solid var(--muted);border-radius:3px}
+.einst i.on{background:var(--c-cmd);border-color:var(--c-cmd)}
+.keys{display:flex;flex-direction:column;border:1px solid var(--line2);border-radius:8px;overflow:hidden;margin-top:16px}
+.keys div{display:grid;grid-template-columns:170px minmax(0,1fr);gap:14px;padding:10px 16px;border-top:1px solid var(--line2);align-items:center;font-size:14px;color:var(--ink2)}
+.keys div:first-child{border-top:none;background:#ffffff08}
+.keys .lv{font:600 13px var(--sans);color:var(--ink)}
+.keys .mut{color:var(--faint);font-style:italic}
+.keys kbd{margin:0 2px}
+@media (max-width:640px){.keys div{grid-template-columns:1fr}}
+.modi{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.modi div{padding:12px 14px;border-radius:8px;border:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;gap:4px}
+.modi b{font:700 16px var(--disp)}
+.modi span{font-size:14px;color:var(--ink2)}
+.m-live b{color:#4ade80} .m-insp b{color:var(--c-cmd)} .m-tag b{color:#f0c040}
+@media (max-width:700px){.modi{grid-template-columns:1fr}}
+
+/* LLM */
+.points{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:clamp(16px,2.5vw,32px);margin-top:clamp(28px,4vw,40px)}
+.points h3{font-size:17px}
+.points p{margin:6px 0 0;font-size:15px;color:var(--muted)}
+@media (max-width:960px){.points{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.points{grid-template-columns:1fr}}
+.pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:clamp(16px,2.5vw,28px);margin-top:clamp(28px,4vw,40px)}
+@media (max-width:960px){.pair{grid-template-columns:1fr}}
+.cli{margin-top:16px;font-size:14px;color:var(--muted)}
+.cli code{display:inline-block}
+
+/* Nachrichten */
+.msgs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line2);border:1px solid var(--line2);border-radius:10px;overflow:hidden}
+.msg{background:var(--bg);padding:18px 20px 20px;display:flex;flex-direction:column;gap:8px}
+.msg h3{font-size:18px;display:flex;align-items:center;gap:10px}
+.msg h3 .slot{width:15px;height:15px}
+.msg p{margin:0;font-size:15px;color:var(--ink2)}
+.msg .g{font-size:13.5px;color:var(--muted)}
+.msg .g b{color:var(--ink);font-weight:600}
+.msg code{align-self:flex-start;font-size:12px}
+@media (max-width:900px){.msgs{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.msgs{grid-template-columns:1fr}}
+.deps{display:flex;flex-wrap:wrap;gap:10px 26px;margin-top:22px;font-size:14.5px;color:var(--muted);align-items:center}
+.deps span{display:inline-flex;align-items:center;gap:8px}
+.deps b{color:var(--ink);font-weight:600}
+
+/* Bausteine */
+.group{margin-top:clamp(40px,5vw,60px)}
+.group:first-of-type{margin-top:0}
+.ghead{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:8px;margin-bottom:24px}
+.ghead h3{font-size:14px;font-stretch:120%;text-transform:uppercase;letter-spacing:.08em}
+.ghead span{font-size:14px;color:var(--muted)}
+.protos{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:22px}
+.proto{display:flex;flex-direction:column;gap:12px;background:var(--panel);border:1px solid var(--line2);border-radius:10px;padding:0 0 18px;overflow:hidden}
+.proto .stage{border:none;border-radius:0;border-bottom:1px solid var(--line2);padding:22px 30px;min-height:0}
+.proto .tx{padding:0 18px;display:flex;flex-direction:column;gap:8px}
+.proto p{margin:0;font-size:14.5px;color:var(--ink2)}
+.proto .meta{font-size:13px;color:var(--muted)}
+.proto .meta b{color:var(--ink);font-weight:600}
+
+/* Graph-Regeln */
+.edges{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 40px;margin:clamp(32px,4vw,48px) 0 0;padding:0;list-style:none}
+.edges li{display:flex;gap:12px;align-items:baseline;padding:12px 0;border-top:1px solid var(--line2);font-size:15px;color:var(--ink2)}
+.edges li .slot{transform:translateY(2px)}
+.edges li b{color:var(--ink);font-weight:600}
+@media (max-width:760px){.edges{grid-template-columns:1fr}}
+.logbox{margin-top:clamp(28px,4vw,40px);display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(16px,3vw,36px)}
+.logbox h3{font-size:17px}
+.logbox p{margin:6px 0 0;font-size:15px;color:var(--muted)}
+@media (max-width:760px){.logbox{grid-template-columns:1fr}}
+
+/* ImagePair-Elemente */
+.el{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:clamp(20px,3vw,40px);padding-block:clamp(36px,5vw,56px);border-top:1px solid var(--line2);align-items:start}
+.el:first-of-type{border-top:none;padding-top:0}
+@media (max-width:960px){.el{grid-template-columns:1fr}}
+.el .tx{display:flex;flex-direction:column;gap:12px;min-width:0}
+.el .art{display:flex;align-items:center;gap:10px;font:600 12px/1 var(--sans);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.el .art i{width:12px;height:12px;border-radius:3px;background:var(--hc)}
+.el h3{font-family:var(--mono);font-weight:600;font-size:22px;letter-spacing:-.01em}
+.el p{margin:0;font-size:15.5px;color:var(--ink2)}
+.el ul{margin:0;padding-left:18px;font-size:15px;color:var(--ink2)}
+.el li{margin:3px 0}
+.el .stage{min-height:100%}
+
+footer{padding-block:36px 56px;font-size:13.5px;color:var(--muted)}
+footer p{margin:0 0 6px;max-width:100ch}
+:focus-visible{outline:2px solid var(--c-cmd);outline-offset:2px}
+@media (prefers-reduced-motion:no-preference){html{scroll-behavior:smooth}}
+</style>
+</head>
+<body>
+<nav class="top" aria-label="Abschnitte">
+  <div class="wrap">
+    <b>Signatur&nbsp;=&nbsp;Graph</b>
+    <a href="#signatur">Signatur</a>
+    <a href="#ueberblick">Überblick</a>
+    <a href="#nachrichten">Nachrichten</a>
+    <a href="#bausteine">Bausteine</a>
+    <a href="#graph">Graph</a>
+    <a href="#imagepair">ImagePair</a>
+    <a href="#gesamt">Gesamtbild</a>
+    <a href="#oberflaeche">Oberfläche</a>
+    <a href="#llm">LLM</a>
+    <span class="keys">← → blättert</span>
+  </div>
+</nav>
+
+<main>
+
+<section class="hero" id="signatur">
+  <div class="wrap">
+    <p class="kicker">CQRS-Framework · Zielbild der Grammatik</p>
+    <h1>Die Signatur<br>ist der Graph.</h1>
+    <p class="lead">Man schreibt nur, <em>was</em> fachlich passiert: in der Signatur. Daraus werden Karte, Graph und Laufzeit.</p>
+
+    <div class="sig">
+<pre class="code nohl"><code><span class="k">public sealed class</span> <mark class="m-fn">Bildeingang : IFunktion</mark>
+{
+    <span class="k">public</span> OneOf&lt;<mark class="m-cmd">NimmBildAuf</mark>, <mark class="m-hin">DateinameUnbekannt</mark>&gt;
+        Auf(<mark class="m-in">BildAufbereitet</mark> e)
+    {
+        …
+    }
+}</code></pre>
+      <div class="stage"><div data-node="be"></div></div>
+    </div>
+    <ul class="maplist">
+      <li style="--mc:var(--h-fn)"><b>: IFunktion</b>was für ein Teil</li>
+      <li style="--mc:var(--c-evt)"><b>Auf(BildAufbereitet e)</b>was hineinkommt</li>
+      <li style="--mc:var(--c-cmd)"><b>OneOf&lt;NimmBildAuf, …&gt;</b>was herauskommen kann</li>
+    </ul>
+  </div>
+</section>
+
+<section id="ueberblick">
+  <div class="wrap">
+    <div class="head">
+      <p class="kicker">Konzeptueller Gesamtgraph</p>
+      <h2>Der Fluss im Überblick</h2>
+      <p class="lead">In der Mitte das Log. Oben, wer schreibt, unten, wer liest, rechts der Client.</p>
+    </div>
+  </div>
+  <div class="wide">
+    <figure>
+      <div class="flowpanel"><svg class="flow" viewBox="0 0 1200 500" role="img" aria-label="Konzeptueller Gesamtgraph: Quelle, Aggregat und Funktion schreiben ins Log. Projektion, Funktion, Uhr und Verteiler lesen es. Commands kommen vom Client, von einer Funktion oder der Uhr und gehen an genau ein Aggregat. Die Projektion schreibt den Store, der Reader liest ihn und antwortet dem Client.">
+  <defs>
+    <marker id="mk-cmd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-cmd)"/></marker>
+    <marker id="mk-evt" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-evt)"/></marker>
+    <marker id="mk-qn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-qn)"/></marker>
+    <marker id="mk-fr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-fr)"/></marker>
+    <marker id="mk-qry" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-qry)"/></marker>
+    <marker id="mk-ant" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-ant)"/></marker>
+    <marker id="mk-fae" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-fae)"/></marker>
+    <marker id="mk-dn" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-dn)"/></marker>
+    <marker id="mk-tr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-tr)"/></marker>
+  </defs>
+
+  <!-- Log -->
+  <rect x="40" y="205" width="920" height="50" rx="6" class="logband"/>
+  <text x="58" y="237" class="logt">Log</text>
+  <text x="100" y="236" class="logs">Postgres · einzige Wahrheit</text>
+  <rect x="420" y="217" width="22" height="26" rx="2" fill="var(--h-src)" opacity=".9"/><rect x="446" y="217" width="22" height="26" rx="2" fill="var(--h-agg)" opacity=".9"/><rect x="472" y="217" width="22" height="26" rx="2" fill="var(--h-agg)" opacity=".9"/><rect x="498" y="217" width="22" height="26" rx="2" fill="var(--h-fn)" opacity=".9"/><rect x="524" y="217" width="22" height="26" rx="2" fill="var(--h-agg)" opacity=".9"/><rect x="550" y="217" width="22" height="26" rx="2" fill="var(--h-src)" opacity=".9"/><rect x="576" y="217" width="22" height="26" rx="2" fill="var(--h-agg)" opacity=".9"/><rect x="602" y="217" width="22" height="26" rx="2" fill="var(--h-fn)" opacity=".9"/><rect x="628" y="217" width="22" height="26" rx="2" fill="var(--h-agg)" opacity=".9"/><rect x="654" y="217" width="22" height="26" rx="2" fill="var(--h-agg)" opacity=".9"/><rect x="680" y="217" width="22" height="26" rx="2" fill="var(--h-src)" opacity=".9"/><rect x="706" y="217" width="22" height="26" rx="2" fill="var(--h-agg)" opacity=".9"/><rect x="732" y="217" width="22" height="26" rx="2" fill="var(--h-fn)" opacity=".9"/><rect x="758" y="217" width="22" height="26" rx="2" fill="var(--h-agg)" opacity=".9"/><rect x="784" y="217" width="22" height="26" rx="2" fill="var(--h-agg)" opacity=".9"/><rect x="810" y="217" width="22" height="26" rx="2" fill="var(--h-agg)" opacity=".9"/><rect x="836" y="217" width="22" height="26" rx="2" fill="var(--h-src)" opacity=".9"/><rect x="862" y="217" width="22" height="26" rx="2" fill="var(--h-fn)" opacity=".9"/><rect x="888" y="217" width="22" height="26" rx="2" fill="var(--h-agg)" opacity=".9"/><rect x="914" y="217" width="22" height="26" rx="2" fill="var(--h-agg)" opacity=".9"/>
+
+  <!-- oben: schreibt -->
+  <text x="120" y="62" class="fs" text-anchor="middle">Datei · Webhook · Takt</text>
+  <rect x="40" y="75" width="160" height="65" rx="7" class="blk" style="--b:var(--h-src)"/>
+  <text x="120" y="104" class="fn" text-anchor="middle">Quelle</text><text x="120" y="123" class="fs" text-anchor="middle">Treiber + Konfig</text>
+
+  <rect x="280" y="75" width="190" height="65" rx="7" class="blk" style="--b:var(--h-agg)"/>
+  <text x="375" y="104" class="fn" text-anchor="middle">Aggregat</text><text x="375" y="123" class="fs" text-anchor="middle">entscheidet · wartet</text>
+
+  <rect x="545" y="75" width="120" height="65" rx="7" class="blk" style="--b:var(--h-bi)"/>
+  <text x="605" y="104" class="fn" text-anchor="middle">Uhr</text><text x="605" y="123" class="fs" text-anchor="middle">eingebaut</text>
+
+  <rect x="735" y="75" width="160" height="65" rx="7" class="blk" style="--b:var(--h-bi)"/>
+  <text x="815" y="104" class="fn" text-anchor="middle">Verteiler</text><text x="815" y="123" class="fs" text-anchor="middle">eingebaut · je Knoten</text>
+
+  <!-- Rand: Client mit Akteuren -->
+  <rect x="1010" y="75" width="160" height="365" rx="7" class="blk" style="--b:var(--h-cli)"/>
+  <text x="1090" y="104" class="fn" text-anchor="middle">Client</text><text x="1090" y="123" class="fs" text-anchor="middle">Software an der Leitung</text>
+  <rect x="1028" y="148" width="124" height="52" rx="6" class="blk" style="--b:var(--h-akt)"/>
+  <text x="1090" y="170" class="fn" text-anchor="middle" style="font-size:13.5px">Akteur</text><text x="1090" y="188" class="fm" text-anchor="middle">IDarf&lt;T&gt;</text>
+  <text x="1090" y="236" class="fm" text-anchor="middle">ISendet</text>
+  <text x="1090" y="256" class="fm" text-anchor="middle">IFragt</text>
+  <text x="1090" y="276" class="fm" text-anchor="middle">IHoert</text>
+  <text x="1090" y="296" class="fm" text-anchor="middle">ITraegt</text>
+
+  <!-- unten: liest -->
+  <rect x="40" y="330" width="140" height="50" rx="7" class="blk" style="--b:var(--h-dn)"/>
+  <text x="110" y="352" class="fn" text-anchor="middle" style="font-size:13.5px">Dienst</text><text x="110" y="369" class="fs" text-anchor="middle">Mail · API · OpenCV</text>
+
+  <rect x="220" y="320" width="200" height="70" rx="7" class="blk" style="--b:var(--h-fn)"/>
+  <text x="320" y="350" class="fn" text-anchor="middle">Funktion</text><text x="320" y="369" class="fs" text-anchor="middle">Host · Worker · Client</text>
+
+  <rect x="480" y="320" width="140" height="70" rx="7" class="blk" style="--b:var(--h-prj)"/>
+  <text x="550" y="350" class="fn" text-anchor="middle">Projektion</text><text x="550" y="369" class="fs" text-anchor="middle">faltet</text>
+
+  <rect x="670" y="320" width="120" height="70" rx="7" class="blk" style="--b:var(--h-store)"/>
+  <text x="730" y="350" class="fn" text-anchor="middle">Store</text><text x="730" y="369" class="fs" text-anchor="middle">Klasse 1 · 2 · 3</text>
+
+  <rect x="840" y="320" width="120" height="70" rx="7" class="blk" style="--b:var(--h-rdr)"/>
+  <text x="900" y="350" class="fn" text-anchor="middle">Reader</text><text x="900" y="369" class="fs" text-anchor="middle">beantwortet</text>
+
+  <!-- Kanten oben -->
+  <line x1="120" y1="140" x2="120" y2="202" class="ed" style="stroke:var(--c-qn)" marker-end="url(#mk-qn)"/>
+  <text x="128" y="178" class="fl">Quell-Nachricht</text>
+  <line x1="430" y1="140" x2="430" y2="202" class="ed" style="stroke:var(--c-evt)" marker-end="url(#mk-evt)"/>
+  <text x="438" y="178" class="fl">Events · Fristen</text>
+  <line x1="605" y1="205" x2="605" y2="143" class="ed" style="stroke:var(--c-fr)" marker-end="url(#mk-fr)"/>
+  <text x="611" y="178" class="fl">Frist fällig</text>
+  <line x1="545" y1="107" x2="473" y2="107" class="ed" style="stroke:var(--c-cmd)" marker-end="url(#mk-cmd)"/>
+  <text x="509" y="98" class="fl" text-anchor="middle">Command</text>
+  <line x1="815" y1="205" x2="815" y2="143" class="ed" style="stroke:var(--c-evt)" marker-end="url(#mk-evt)"/>
+  <text x="821" y="178" class="fl">nach Commit</text>
+  <line x1="895" y1="107" x2="1007" y2="107" class="ed" style="stroke:var(--c-evt);stroke-dasharray:7 5" marker-end="url(#mk-evt)"/>
+  <text x="952" y="98" class="fl" text-anchor="middle">Kenntnis</text>
+  <text x="952" y="125" class="fs" text-anchor="middle">verlierbar</text>
+  <path d="M1090 75 V40 H375 V72" class="ed" style="stroke:var(--c-cmd)" marker-end="url(#mk-cmd)"/>
+  <text x="730" y="32" class="fl" text-anchor="middle">Command · ISendet</text>
+
+  <!-- Kanten unten -->
+  <line x1="240" y1="320" x2="240" y2="258" class="ed" style="stroke:var(--c-evt)" marker-end="url(#mk-evt)"/>
+  <text x="234" y="292" class="fl" text-anchor="end">hält fest</text>
+  <line x1="290" y1="255" x2="290" y2="317" class="ed" style="stroke:var(--c-evt)" marker-end="url(#mk-evt)"/>
+  <text x="296" y="292" class="fl">Event</text>
+  <line x1="360" y1="205" x2="360" y2="255" class="halo"/>
+  <line x1="360" y1="320" x2="360" y2="143" class="ed" style="stroke:var(--c-cmd)" marker-end="url(#mk-cmd)"/>
+  <text x="366" y="292" class="fl">Command</text>
+  <line x1="220" y1="355" x2="183" y2="355" class="ed" style="stroke:var(--c-dn)" marker-end="url(#mk-dn)"/>
+  <line x1="550" y1="255" x2="550" y2="317" class="ed" style="stroke:var(--c-evt)" marker-end="url(#mk-evt)"/>
+  <text x="556" y="292" class="fl">Event</text>
+  <line x1="620" y1="355" x2="667" y2="355" class="ed" style="stroke:var(--c-fae)" marker-end="url(#mk-fae)"/>
+  <text x="645" y="346" class="fl" text-anchor="middle">schreibt</text>
+  <line x1="790" y1="355" x2="837" y2="355" class="ed" style="stroke:var(--c-fae)" marker-end="url(#mk-fae)"/>
+  <text x="815" y="346" class="fl" text-anchor="middle">liest</text>
+  <line x1="1010" y1="340" x2="963" y2="340" class="ed" style="stroke:var(--c-qry)" marker-end="url(#mk-qry)"/>
+  <text x="985" y="332" class="fl" text-anchor="middle">Query</text>
+  <line x1="960" y1="372" x2="1007" y2="372" class="ed" style="stroke:var(--c-ant)" marker-end="url(#mk-ant)"/>
+  <text x="985" y="389" class="fl" text-anchor="middle">Antwort</text>
+  <path d="M1090 440 V470 H320 V393" class="ed" style="stroke:var(--c-tr);stroke-dasharray:2 4" marker-end="url(#mk-tr)"/>
+  <text x="700" y="462" class="fl" text-anchor="middle">trägt: die Funktion läuft beim Client</text>
+</svg></div>
+      <figcaption>Pfeilfarbe = Nachrichtentyp · gestrichelt = verlierbar · gepunktet = trägt</figcaption>
+    </figure>
+  </div>
+  <div class="wrap">
+    <div class="logbox">
+      <div><h3>Drei schreiben</h3><p>Aggregat, Quelle, Funktion. Genau einmal.</p></div>
+      <div><h3>Alle anderen lesen</h3><p>Jeder ab seiner eigenen Position im Log.</p></div>
+      <div><h3>Commands an ein Aggregat</h3><p>Erst dessen Entscheidung wird Fakt.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="nachrichten">
+  <div class="wrap">
+    <div class="head">
+      <p class="kicker">Semantische Blöcke · 1</p>
+      <h2>Nachrichten sind die Ports</h2>
+      <p class="lead">Farbe = Typ = Garantie. Hohl heißt verlierbar.</p>
+    </div>
+    <div class="msgs">
+      <div class="msg"><h3><i class="slot t-cmd"></i>Command</h3><p>Absicht an genau ein Aggregat</p><p class="g"><b>genau einmal</b></p></div>
+      <div class="msg"><h3><i class="slot t-evt"></i>Event</h3><p>Fakt im Log</p><p class="g"><b>genau einmal je Hörer</b></p></div>
+      <div class="msg"><h3><i class="slot t-qn"></i>Quell-Nachricht</h3><p>Event von draußen</p><p class="g"><b>genau einmal je Kennung</b></p></div>
+      <div class="msg"><h3><i class="slot hollow t-hin"></i>Hinweis</h3><p>Ablehnung, Fortschritt, Live-Anzeige</p><p class="g"><b>höchstens einmal</b></p></div>
+      <div class="msg"><h3><i class="slot t-qry"></i>Query</h3><p>Frage, wirkt nicht</p><p class="g"><b>genau ein Ziel</b></p></div>
+      <div class="msg"><h3><i class="slot t-ant"></i>Antwort</h3><p>vom Reader oder Aggregat</p><p class="g"><b>trägt den Stand</b></p></div>
+    </div>
+    <div class="deps">
+      <span><i class="slot t-fr"></i><b>Frist</b> Uhr → Command</span>
+      <span><i class="slot t-fae"></i><b>Fähigkeit</b> Store-Funktion</span>
+      <span><i class="slot t-dn"></i><b>Dienst</b> Technik</span>
+      <span><i class="slot t-darf"></i><b>darf</b> Akteur-Recht</span>
+      <span><i class="slot t-tr"></i><b>trägt</b> Client rechnet</span>
+    </div>
+  </div>
+</section>
+
+<section id="bausteine">
+  <div class="wrap">
+    <div class="head">
+      <p class="kicker">Semantische Blöcke · 2</p>
+      <h2>Die Bausteine</h2>
+      <p class="lead">Jede Karte zeigt, was hineindarf und was herauskommt. Sonst nichts.</p>
+    </div>
+
+    <div class="group">
+      <div class="ghead"><h3>Fachlich</h3><span>Aggregat, Projektion, Reader, Funktion, Quelle</span></div>
+      <div class="protos">
+        <div class="proto"><div class="stage"><div data-node="P_agg"></div></div><div class="tx">
+          <p>Entscheidet für genau ein Ding. Auch das Warten auf etwas gehört hierher.</p>
+          <p class="meta"><b>schreibt Fakten, gibt keine Aufträge</b></p></div></div>
+        <div class="proto"><div class="stage"><div data-node="P_prj"></div></div><div class="tx">
+          <p>Stellt aus den Fakten eine Ansicht zusammen.</p>
+          <p class="meta"><b>schickt nichts weiter</b></p></div></div>
+        <div class="proto"><div class="stage"><div data-node="P_rdr"></div></div><div class="tx">
+          <p>Beantwortet Fragen.</p>
+          <p class="meta"><b>ändert nichts</b></p></div></div>
+        <div class="proto"><div class="stage"><div data-node="P_fn"></div></div><div class="tx">
+          <p>Ein Arbeitsschritt: bekommt etwas, liefert etwas.</p>
+          <p class="meta"><b>läuft im System oder auf einem anderen Rechner</b></p></div></div>
+        <div class="proto"><div class="stage"><div data-node="P_src"></div></div><div class="tx">
+          <p>Bringt, was draußen passiert, genau einmal herein.</p>
+          <p class="meta"><b>Datei, Webhook, Zeittakt</b></p></div></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="ghead"><h3>Technik</h3><span>was hinter einem Baustein steht</span></div>
+      <div class="protos">
+        <div class="proto"><div class="stage"><div data-node="P_store"></div></div><div class="tx">
+          <p>Der Speicher hinter einer Ansicht – Datenbank, Dateien, Suchindex.</p>
+          <p class="meta"><code>: IStore</code></p></div></div>
+        <div class="proto"><div class="stage"><div data-node="P_dn"></div></div><div class="tx">
+          <p>Die Technik hinter einem Arbeitsschritt, austauschbar.</p>
+          <p class="meta"><code>: IDienst</code></p></div></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="ghead"><h3>Rand</h3><span>wer hineindarf, mit welcher Software</span></div>
+      <div class="protos">
+        <div class="proto"><div class="stage"><div data-node="P_akt"></div></div><div class="tx">
+          <p>Eine Rolle und was sie darf.</p>
+          <p class="meta"><code>IDarf&lt;T&gt;</code></p></div></div>
+        <div class="proto"><div class="stage"><div data-node="P_cli"></div></div><div class="tx">
+          <p>Ein Programm, das mit dem System spricht – nach fester Absprache.</p>
+          <p class="meta"><code>ISendet</code> · <code>IFragt</code> · <code>IHoert</code> · <code>ITraegt</code></p></div></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="ghead"><h3>Eingebaut</h3><span>bringt das Framework mit</span></div>
+      <div class="protos">
+        <div class="proto"><div class="stage"><div data-node="P_uhr"></div></div><div class="tx">
+          <p>Erinnert zur rechten Zeit.</p></div></div>
+        <div class="proto"><div class="stage"><div data-node="P_vt"></div></div><div class="tx">
+          <p>Sagt allen Bescheid, wenn sich etwas geändert hat.</p></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="graph">
+  <div class="wide">
+    <div class="wrap" style="padding-inline:0">
+      <div class="head">
+        <p class="kicker">Semantische Blöcke · 3</p>
+        <h2>Der allgemeine Graph</h2>
+        <p class="lead">Ein Ausgang passt nur an einen Eingang derselben Farbe.</p>
+      </div>
+    </div>
+    <figure>
+      <div class="scroller"><div class="canvas" data-graph="allg" role="img" aria-label="Allgemeiner Graph: Quelle und Client liefern an Funktion und Aggregat; das Aggregat erzeugt Events für Projektion, Funktion und Verteiler, Fristen für die Uhr; Projektion und Reader nutzen den Store über Fähigkeiten; der Reader antwortet dem Client."></div></div>
+      <figcaption>Voll = durabel · hohl und gestrichelt = verlierbar · gepunktet = trägt</figcaption>
+    </figure>
+    <div class="wrap" style="padding-inline:0">
+      <ul class="edges">
+        <li><i class="slot t-cmd"></i><span><b>Command</b> geht an genau ein Aggregat.</span></li>
+        <li><i class="slot t-evt"></i><span><b>Event</b> geht an beliebig viele Projektionen und Funktionen.</span></li>
+        <li><i class="slot hollow t-hin"></i><span><b>Hinweis</b> geht an Funktionen oder Clients.</span></li>
+        <li><i class="slot t-qry"></i><span><b>Query</b> geht an genau einen Reader oder ein Aggregat.</span></li>
+        <li><i class="slot t-fr"></i><span><b>Frist</b> geht an die Uhr und wird zum Command an dasselbe Aggregat.</span></li>
+        <li><i class="slot t-ant"></i><span><b>Antwort</b> geht an den fragenden Client.</span></li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="imagepair">
+  <div class="wrap">
+    <div class="head">
+      <p class="kicker">Am Beispiel</p>
+      <h2>ImagePair, Element für Element</h2>
+      <p class="lead">Zwei Bilder je Produkt (<code>dc0</code>, <code>dc2</code>): aufbereiten, zum Paar fügen, KI urteilt, Mensch labelt.</p>
+    </div>
+
+    <article class="el">
+      <div class="tx">
+        <span class="art k-src"><i></i>Quelle</span>
+        <h3>DateiErkannt</h3>
+        <p>Eine fertige Datei auf dem Share. Genau einmal je Kennung im Log.</p>
+<pre class="code"><code>public sealed record DateiErkannt : DateiGemeldet;
+
+// umgebung.sim-main.json
+// "Quellen": {
+//   "DateiErkannt": { "Pfad": "…/DateiErkannt", "Kennung": "PfadGroesseZeit" }
+// }</code></pre>
+      </div>
+      <div class="stage"><div data-node="E_q"></div></div>
+    </article>
+
+    <article class="el">
+      <div class="tx">
+        <span class="art k-fn"><i></i>Funktion · Schnittstelle</span>
+        <h3>IBildaufbereitung</h3>
+        <p>Verkleinert und gleicht den Kontrast aus. Läuft im Host oder draußen; die Ausgabe wird festgehalten.</p>
+<pre class="code"><code>public interface IBildaufbereitung : IFunktion
+{
+    Task&lt;OneOf&lt;BildAufbereitet, BildNichtLesbar&gt;&gt; Auf(DateiErkannt e);
+}
+
+// Laufort Host
+public sealed class OpenCvBildaufbereitung(
+    IImageResizer resizer,
+    IHistogramEqualizer equalizer,
+    BildaufbereitungKonfig konfig) : IBildaufbereitung</code></pre>
+      </div>
+      <div class="stage"><div data-node="E_ba"></div></div>
+    </article>
+
+    <article class="el">
+      <div class="tx">
+        <span class="art k-dn"><i></i>Dienst</span>
+        <h3>IImageResizer · IHistogramEqualizer</h3>
+        <p>OpenCV hinter der Bildaufbereitung.</p>
+<pre class="code"><code>public interface IImageResizer : IDienst
+{
+    Mat Resize(Mat input, int targetHeight);
+}
+
+public interface IHistogramEqualizer : IDienst
+{
+    Mat Equalize(Mat input);
+}</code></pre>
+      </div>
+      <div class="stage"><div data-node="E_d1"></div><div data-node="E_d2"></div></div>
+    </article>
+
+    <article class="el">
+      <div class="tx">
+        <span class="art k-fn"><i></i>Funktion · Klasse</span>
+        <h3>Bildeingang</h3>
+        <p>Deutet den Dateinamen und übergibt das Bild dem Paar. Unbekannter Name: nur ein Hinweis.</p>
+<pre class="code"><code>public sealed class Bildeingang : IFunktion
+{
+    public OneOf&lt;NimmBildAuf, DateinameUnbekannt&gt; Auf(BildAufbereitet e)
+    {
+        if (ImagePairFileName.Resolve(e.Dateiname) is not { } paar)
+            return new DateinameUnbekannt(e.Dateiname);
+        return new NimmBildAuf(paar.AggregateId, paar.PairKey, …,
+            paar.Version, …);
+    }
+}</code></pre>
+      </div>
+      <div class="stage"><div data-node="be"></div></div>
+    </article>
+
+    <article class="el">
+      <div class="tx">
+        <span class="art k-agg"><i></i>Aggregat</span>
+        <h3>ImagePair</h3>
+        <p>Anlegen oder ergänzen. Mit dem zweiten Bild ist das Paar komplett: ein <code>if</code>, kein Prozess.</p>
+<pre class="code"><code>public IEnumerable&lt;OneOf&lt;ImagePairErstellt, BildVerfuegbar,
+    ImagePairKomplett, BildVersionBereitsVerfuegbar&gt;&gt; Decide(NimmBildAuf cmd)
+{
+    var neu = State.Version == 0;
+    if (neu)
+        yield return new ImagePairErstellt(cmd.AggregateId, cmd.PairKey, …);
+    else if (State.GetBild(cmd.Version) != null)
+    {
+        yield return new BildVersionBereitsVerfuegbar(cmd.Version);
+        yield break;
+    }
+
+    yield return new BildVerfuegbar(cmd.Version, cmd.Meta, cmd.Pfad, regionen);
+
+    var andere = cmd.Version == BildVersion.Dc0 ? BildVersion.Dc2 : BildVersion.Dc0;
+    if (!neu &amp;&amp; State.GetBild(andere) != null)
+        yield return new ImagePairKomplett();
+}</code></pre>
+      </div>
+      <div class="stage"><div data-node="E_a"></div></div>
+    </article>
+
+    <article class="el">
+      <div class="tx">
+        <span class="art k-fn"><i></i>Funktion · draußen</span>
+        <h3>IBildpaarBeurteilung</h3>
+        <p>Beurteilt ein komplettes Paar. Läuft beim Python-Worker, der sie trägt; die Garantie bleibt beim Framework.</p>
+<pre class="code"><code>public interface IBildpaarBeurteilung : IFunktion
+{
+    KlassifiziereBildPaarDurchKi Auf(ImagePairKomplett e);
+}</code></pre>
+      </div>
+      <div class="stage"><div data-node="E_bb"></div></div>
+    </article>
+
+    <article class="el">
+      <div class="tx">
+        <span class="art k-prj"><i></i>Projektion</span>
+        <h3>ImagePairProjektion</h3>
+        <p>Faltet die Events des Paars in seinen Store. Zeit und Stream aus der Herkunft.</p>
+<pre class="code"><code>public sealed class ImagePairProjektion : IProjektion
+{
+    public Task Auf(ImagePairErstellt e, Herkunft h,
+        IUpsertImagePair upsert) =&gt; …;
+
+    public Task Auf(BildVerfuegbar e, Herkunft h,
+        ISetBildVerfuegbar setze)
+        =&gt; setze.SetBildVerfuegbarAsync(h.Stream, e.Version, e.Meta,
+            e.Pfad, h.Zeit);
+
+    public Task Auf(ImagePairKomplett e, Herkunft h,
+        ISetKomplett setze)
+        =&gt; setze.SetKomplettAsync(h.Stream, h.Zeit);
+}</code></pre>
+        <p class="form">Projektionsform nach Plan §3.3.</p>
+      </div>
+      <div class="stage"><div data-node="E_p"></div></div>
+    </article>
+
+    <article class="el">
+      <div class="tx">
+        <span class="art k-store"><i></i>Store</span>
+        <h3>IImagePairStore</h3>
+        <p>Schreib-Fähigkeiten für die Projektion, Lese-Fähigkeiten für den Reader. Klasse 1, atomar.</p>
+<pre class="code"><code>public interface ISetBildVerfuegbar : IWriteStore
+{
+    Task SetBildVerfuegbarAsync(Guid id, BildVersion version,
+        BildMeta meta, string pfad, DateTimeOffset aktualisierung);
+}
+
+public interface IFindImagePair : IReadStore
+{
+    Task&lt;ImagePairReadModel?&gt; FindByIdAsync(Guid id);
+}
+
+public interface IImagePairStore : IStore,
+    IUpsertImagePair, ISetBildVerfuegbar, ISetKomplett, …,
+    IFindImagePair, ISearchImagePairs, IGetImagePairStatistik, … { }</code></pre>
+      </div>
+      <div class="stage"><div data-node="E_s"></div></div>
+    </article>
+
+    <article class="el">
+      <div class="tx">
+        <span class="art k-rdr"><i></i>Reader</span>
+        <h3>ImagePairReader</h3>
+        <p>Beantwortet den Arbeitsplatz. Die Antwort trägt den Stand jeder gezeigten <code>Id&lt;ImagePair&gt;</code>.</p>
+<pre class="code"><code>public sealed class ImagePairReader : IReader
+{
+    public Task&lt;ImagePairSuchergebnis&gt;
+        Frage(SucheImagePairs q, ISearchImagePairs suche) =&gt; …;
+
+    public Task&lt;OneOf&lt;ImagePairAntwort, ImagePairNichtGefundenAntwort&gt;&gt;
+        Frage(GetImagePair q, IFindImagePair finde) =&gt; …;
+}</code></pre>
+        <p class="form">Reader-Form nach Plan §3.3.</p>
+      </div>
+      <div class="stage"><div data-node="E_r"></div></div>
+    </article>
+
+    <article class="el">
+      <div class="tx">
+        <span class="art k-akt"><i></i>Akteur</span>
+        <h3>KameraSystem · Klassifizierer · Inspekteur</h3>
+        <p>Wer welchen Typ hineingeben darf.</p>
+<pre class="code"><code>public sealed record KameraSystem : IMaschine, IDarf&lt;DateiErkannt&gt;;
+
+public sealed record Klassifizierer : IKi,
+    IDarf&lt;IBildpaarBeurteilung&gt;,
+    IDarf&lt;KlassifiziereEinzelBildDurchKi&gt;, …;
+
+public sealed record Inspekteur : IMensch,
+    IDarf&lt;LabelBildPaar&gt;, IDarf&lt;MarkiereAlsInspiziert&gt;,
+    IDarf&lt;SucheImagePairs&gt;, IDarf&lt;GetImagePair&gt;, …;</code></pre>
+      </div>
+      <div class="stage"><div data-node="E_ak1"></div><div data-node="E_ak2"></div><div data-node="E_ak3"></div></div>
+    </article>
+
+    <article class="el">
+      <div class="tx">
+        <span class="art k-cli"><i></i>Client</span>
+        <h3>Arbeitsplatz · KlassifikationsWorker</h3>
+        <p>Ein Blazor-Arbeitsplatz und ein Python-Worker: je Client ein Vertrag.</p>
+<pre class="code"><code>public interface IArbeitsplatz : IClientVertrag,
+    ISendet&lt;LabelBildPaar&gt;, ISendet&lt;MarkiereAlsInspiziert&gt;,
+    IFragt&lt;SucheImagePairs&gt;, IFragt&lt;GetImagePairStatistik&gt;, …,
+    IHoert&lt;ImagePairErstellt&gt;, IHoert&lt;BildVerfuegbar&gt;,
+    IHoert&lt;ImagePairKomplett&gt;, …;
+
+public interface IKlassifikationsWorker : IClientVertrag,
+    ITraegt&lt;IBildpaarBeurteilung&gt;,
+    ISendet&lt;KlassifiziereEinzelBildDurchKi&gt;,
+    IHoert&lt;BildVerfuegbar&gt;, …;</code></pre>
+      </div>
+      <div class="stage"><div data-node="E_ap"></div><div data-node="E_w"></div></div>
+    </article>
+
+    <article class="el">
+      <div class="tx">
+        <span class="art k-bi"><i></i>Eingebaut</span>
+        <h3>Verteiler</h3>
+        <p>Pusht <code>BildVerfuegbar</code> an Arbeitsplatz und Worker. Verlierbar, ohne eigenen Code.</p>
+      </div>
+      <div class="stage"><div data-node="E_v"></div></div>
+    </article>
+  </div>
+</section>
+
+<section id="gesamt">
+  <div class="wide">
+    <div class="wrap" style="padding-inline:0">
+      <div class="head">
+        <p class="kicker">Zusammengesteckt</p>
+        <h2>ImagePair als Graph</h2>
+        <p class="lead">Dieselben Karten, zusammengesteckt.</p>
+      </div>
+    </div>
+    <figure>
+      <div class="scroller"><div class="canvas" data-graph="ip" role="img" aria-label="ImagePair als Graph: DateiErkannt geht an IBildaufbereitung, BildAufbereitet an Bildeingang, NimmBildAuf an ImagePair. ImagePair erzeugt Events für die Projektion, den Verteiler und IBildpaarBeurteilung, die KlassifiziereBildPaarDurchKi zurückschickt. Der Arbeitsplatz sendet LabelBildPaar und fragt den Reader."></div></div>
+      <figcaption>Nur verbundene Ports. Weitere Commands und Queries hängen genauso an.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="oberflaeche">
+  <div class="wrap">
+    <div class="head">
+      <p class="kicker">Client · Blazor</p>
+      <h2>Die Oberfläche</h2>
+      <p class="lead">Eine leere Shell mit festen Slots. Die Module füllen sie.</p>
+    </div>
+    <div class="points three ideen">
+      <div><h3>Der Rahmen ist leer</h3><p>Er kennt nichts Fachliches, nur fünf Plätze.</p></div>
+      <div><h3>Ein Modul, ein Ordner</h3><p>Alles, was zu einer Ansicht gehört, liegt beisammen.</p></div>
+      <div><h3>Module kennen sich nicht</h3><p>Sie senden Nachrichten. So lässt sich jedes einzeln tauschen.</p></div>
+    </div>
+  </div>
+  <div class="wide">
+    <figure>
+      <div class="wf" role="img" aria-label="Die Shell des Arbeitsplatzes: oben drei Kopfleisten, links die Paarliste, in der Mitte die Bühne mit Tabs, rechts Suche und eingeklappte Historie, unten Navigation und Labeling, dazu unsichtbare Module.">
+        <div class="wf-h s-head"><b>Status</b><span>verbunden · bereit</span><i>Kopf</i></div>
+        <div class="wf-h s-head"><b>Sammel-Ziel</b><span>Datensatz „Linie 3 · Oktober“</span><i>Kopf</i></div>
+        <div class="wf-h s-head"><b>Live</b><span>neue Paare erscheinen sofort</span><i>Kopf</i></div>
+        <div class="wf-b">
+          <div class="wf-side s-side">
+            <div class="wf-ph"><b>Paarliste</b><i>Seite links</i></div>
+            <div class="wf-list">
+              <div class="on"><em class="g"></em>14:02:11 · dc0 + dc2</div>
+              <div><em class="g"></em>14:02:07 · dc0 + dc2</div>
+              <div><em class="y"></em>14:02:03 · dc0</div>
+              <div><em class="g"></em>14:01:59 · dc0 + dc2</div>
+              <div><em class="r"></em>14:01:55 · dc0 + dc2</div>
+              <div><em class="g"></em>14:01:51 · dc0 + dc2</div>
+              <div><em class="g"></em>14:01:47 · dc0 + dc2</div>
+            </div>
+            <div class="wf-note">virtuelle Liste, Seiten auf Abruf</div>
+          </div>
+          <div class="wf-stage s-stage">
+            <div class="wf-tabs"><span class="on">Bilder</span><span>Galerie</span><span>Chart</span><span>Heatmap</span><span class="x">Verwalten</span><span class="x">Modelle</span><span class="x">Training</span><i>Hauptfläche</i></div>
+            <div class="wf-imgs">
+              <div><span>dc0</span></div>
+              <div><span>dc2</span></div>
+            </div>
+          </div>
+          <div class="wf-side s-side r">
+            <div class="wf-ph"><b>Suche</b><i>Seite rechts</i></div>
+            <div class="wf-tree">
+              <div>▾ 2026</div><div class="i1">▾ Oktober</div><div class="i2 on">26. · 1 284</div><div class="i2">25. · 1 102</div><div class="i1">▸ September</div>
+            </div>
+            <div class="wf-note">Filter: offen · Anomalie</div>
+          </div>
+          <div class="wf-bar s-side"><span>Historie</span></div>
+        </div>
+        <div class="wf-f s-foot">
+          <span class="grp"><b>Navigation</b> ◀ ▶</span>
+          <span class="grp"><b>Labeling</b> <kbd>R</kbd> OK <kbd>Q</kbd> Fraglich <kbd>F</kbd> Anomalie · <kbd>E</kbd> <kbd>N</kbd></span>
+          <span class="grp"><b>Datensatz-Tag</b></span>
+          <i>Fuß</i>
+        </div>
+      </div>
+      <div class="wf-hl"><b>unsichtbar</b> Data · Feedback · Statistik: nur Daten und Effekte, ohne eigene Fläche</div>
+    </figure>
+    <div class="wrap" style="padding-inline:0">
+      <div class="slots">
+        <div class="s-head"><i></i><b>Kopf</b><code>IHeaderModule</code><span>Leisten oben am Rand</span></div>
+        <div class="s-side"><i></i><b>Seite</b><code>ISidebarModule</code><span>Spalte links oder rechts, einklappbar</span></div>
+        <div class="s-stage"><i></i><b>Hauptfläche</b><code>IStageModule</code><span>die große Fläche in der Mitte, mit Reitern</span></div>
+        <div class="s-foot"><i></i><b>Fuß</b><code>IFooterModule</code><span>Knöpfe und Tasten unten</span></div>
+        <div class="s-hl"><i></i><b>Unsichtbar</b><code>IHeadlessModule</code><span>arbeitet im Hintergrund</span></div>
+      </div>
+      <h3 class="sub">Ein Modul beschreibt sich selbst</h3>
+<pre class="code"><code>public interface IUiModule
+{
+    string Id { get; }
+    string Title { get; }
+    Type   ComponentType { get; }                    // die Blazor-Komponente
+    bool   DefaultVisible =&gt; true;                   // startet sichtbar?
+    int    Order          =&gt; 0;                      // Reihenfolge im Slot
+    IReadOnlyList&lt;KeyBinding&gt; KeyBindings =&gt; [];     // Tasten, solange sichtbar
+}
+
+public interface ISidebarModule : IUiModule
+{
+    SidebarSide Side { get; }                        // links oder rechts
+    int    ExpandedWidth =&gt; 180;                     // Breite aufgeklappt
+    string BarTitle      =&gt; Title;                   // Text der Leiste, eingeklappt
+}</code></pre>
+
+      <h3 class="sub">Wer schaltet was ein</h3>
+      <p class="subl">Fünf Stufen, von fest nach beweglich. Jede Stufe kann nur einschränken, was die darüber erlaubt.</p>
+      <div class="treppe">
+        <div style="--w:100%"><b>Gebaut</b><span>Was als Modul im Code liegt, ist dabei – ganz ohne Verdrahten.</span><code>XModule : IStageModule</code></div>
+        <div style="--w:94%"><b>Absprache</b><span>Was der Arbeitsplatz senden, fragen und hören darf. Abweichungen bauen nicht.</span><code>IArbeitsplatz : ISendet&lt;…&gt;, IFragt&lt;…&gt;, IHoert&lt;…&gt;</code></div>
+        <div style="--w:88%"><b>Anmeldung</b><span>Wer sich anmeldet, bekommt nur, was Absprache und Rolle gemeinsam erlauben.</span><code>umgebung.&lt;name&gt;.json → Clients:Arbeitsplatz</code></div>
+        <div style="--w:82%"><b>Voreinstellung</b><span>Wie ein Modul startet: sichtbar oder nicht, wo, wie breit, welche Tasten.</span><code>Heatmap: DefaultVisible =&gt; false</code></div>
+        <div style="--w:76%"><b>Die Inspekteurin</b><span>Blendet ein und aus, klappt auf und zu, wählt die Ansicht. Gilt, bis sie sich abmeldet.</span><code>⚙ Einstellungen · Tab · L</code></div>
+      </div>
+
+      <div class="ui3">
+        <div>
+          <h3 class="sub">Panels</h3>
+          <div class="pf">
+            <div class="pf-open s-side"><div class="pf-bar"><span>Paarliste</span></div><div class="pf-body"><b>Paarliste</b><em></em><em></em><em></em><em></em></div></div>
+            <div class="pf-zu s-side"><div class="pf-bar"><span>Historie</span></div></div>
+          </div>
+          <p class="subl">Eine Seitenspalte bleibt als schmale Leiste sichtbar. Ein Klick (links auch <kbd>Tab</kbd>) klappt sie auf oder zu.</p>
+        </div>
+        <div>
+          <h3 class="sub">Hauptfläche</h3>
+          <div class="bt">
+            <div class="bt-tabs"><span>Galerie</span><span class="on">Bilder</span><span>Chart</span></div>
+            <div class="bt-hint"><kbd>Enter</kbd> in der Galerie → Ansicht „Bilder“</div>
+          </div>
+          <p class="subl">Immer genau eine große Ansicht. Ein Modul darf um einen Wechsel bitten.</p>
+        </div>
+        <div>
+          <h3 class="sub">Einstellungen</h3>
+          <div class="einst">
+            <div class="eh">Einstellungen</div>
+            <div class="eg">Stages</div>
+            <label><i class="on"></i>Bilder</label><label><i class="on"></i>Galerie</label><label><i class="on"></i>Chart</label><label><i></i>Heatmap</label>
+            <div class="eg">Sidebars</div>
+            <label><i class="on"></i>Paarliste</label><label><i class="on"></i>Suche</label><label><i class="on"></i>Historie</label>
+          </div>
+          <p class="subl">Jedes Modul lässt sich ausblenden. Dann nimmt es keinen Platz und keine Tasten.</p>
+        </div>
+      </div>
+
+      <h3 class="sub">Tastatur in Ebenen</h3>
+      <p class="subl">Jedes sichtbare Modul bringt seine Tasten mit. Bei gleicher Taste gewinnt die höhere Ebene.</p>
+      <div class="keys">
+        <div><span class="lv">5 · Shell</span><span><kbd>Tab</kbd> linke Seite auf/zu</span></div>
+        <div><span class="lv">4 · Hauptfläche</span><span class="mut">nur die Tasten der gerade gewählten Ansicht</span></div>
+        <div><span class="lv">3 · Seiten</span><span class="mut">Tasten der sichtbaren Panels</span></div>
+        <div><span class="lv">2 · Kopf</span><span><kbd>L</kbd> Modus <kbd>I</kbd> Inspektionsfilter <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> Filter <kbd>Esc</kbd> Tag beenden</span></div>
+        <div><span class="lv">1 · Fuß</span><span><kbd>↑</kbd><kbd>↓</kbd> blättern <kbd>Leertaste</kbd> nächstes offenes <kbd>R</kbd><kbd>Q</kbd><kbd>F</kbd><kbd>E</kbd><kbd>N</kbd> labeln <kbd>A</kbd> Datensatz-Tag</span></div>
+      </div>
+
+      <h3 class="sub">Arbeitsmodi</h3>
+      <div class="modi">
+        <div class="m-live"><b>Live</b><span>Neue Paare erscheinen oben, der Cursor folgt dem neuesten.</span></div>
+        <div class="m-insp"><b>Inspekt</b><span>Die Liste steht still; in Ruhe durchgehen und labeln.</span></div>
+        <div class="m-tag"><b>Tag</b><span>Ein Produktionstag von 0 bis 24 Uhr, Paar für Paar.</span></div>
+      </div>
+      <p class="subl"><kbd>L</kbd> wechselt Live ↔ Inspekt. Der Modus bestimmt nur, welche Query die Liste speist; es bleibt dieselbe Oberfläche.</p>
+    </div>
+  </div>
+</section>
+
+<section id="modul">
+  <div class="wrap">
+    <div class="head">
+      <p class="kicker">Client · Blazor</p>
+      <h2>Ein Modul von innen</h2>
+      <p class="lead">Dieselbe Grammatik im Kleinen: der Store faltet wie eine Projektion, die Handler übersetzen wie Funktionen.</p>
+    </div>
+    <div class="stage parts">
+      <div data-node="U_view"></div><div data-node="U_intent"></div><div data-node="U_refresh"></div><div data-node="U_store"></div><div data-node="U_mod"></div>
+    </div>
+  </div>
+  <div class="wide">
+    <figure style="margin-top:clamp(24px,3vw,36px)">
+      <div class="flowpanel">
+<svg class="flow" viewBox="0 0 1200 440" role="img" aria-label="Ein Kreis in eine Richtung: Die View dispatcht ein Client-Event. Der IntentHandler macht daraus den Command LabelBildPaar, der RefreshHandler die Query SucheImagePairs. Beide gehen über die Leitung an den Server. Antwort und Kenntnis landen im Store, der Store meldet Changed, die View zeichnet neu.">
+  <defs>
+    <marker id="u-ce" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-ce)"/></marker>
+    <marker id="u-cmd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-cmd)"/></marker>
+    <marker id="u-qry" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-qry)"/></marker>
+    <marker id="u-ant" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-ant)"/></marker>
+    <marker id="u-evt" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-evt)"/></marker>
+    <marker id="u-chg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-chg)"/></marker>
+  </defs>
+
+  <rect x="20" y="16" width="1160" height="252" rx="10" class="band"/>
+  <text x="36" y="258" class="bandt">CLIENT · BLAZOR-CIRCUIT</text>
+  <rect x="20" y="290" width="1160" height="134" rx="10" class="band"/>
+  <text x="36" y="414" class="bandt">SERVER</text>
+
+  <rect x="40" y="62" width="190" height="60" rx="7" class="blk" style="--b:var(--h-cli)"/>
+  <text x="135" y="88" class="fn" text-anchor="middle">View</text><text x="135" y="106" class="fm" text-anchor="middle" style="font-size:11px">LabelingFooter</text>
+  <rect x="40" y="172" width="190" height="60" rx="7" class="blk" style="--b:var(--h-cli)"/>
+  <text x="135" y="198" class="fn" text-anchor="middle">View</text><text x="135" y="216" class="fm" text-anchor="middle" style="font-size:11px">SuchPanel</text>
+
+  <rect x="325" y="62" width="190" height="60" rx="7" class="blk" style="--b:var(--h-fn)"/>
+  <text x="420" y="88" class="fn" text-anchor="middle">IntentHandler</text><text x="420" y="106" class="fm" text-anchor="middle" style="font-size:11px">LabelingIntentHandler</text>
+  <rect x="325" y="172" width="190" height="60" rx="7" class="blk" style="--b:var(--h-fn)"/>
+  <text x="420" y="198" class="fn" text-anchor="middle">RefreshHandler</text><text x="420" y="216" class="fm" text-anchor="middle" style="font-size:11px">PaarlisteRefreshHandler</text>
+
+  <rect x="590" y="62" width="130" height="170" rx="7" class="blk" style="--b:var(--h-bi)"/>
+  <text x="655" y="140" class="fn" text-anchor="middle">Leitung</text><text x="655" y="158" class="fs" text-anchor="middle">gRPC · Vertrag</text>
+
+  <rect x="900" y="112" width="190" height="64" rx="7" class="blk" style="--b:var(--h-prj)"/>
+  <text x="995" y="139" class="fn" text-anchor="middle">Store</text><text x="995" y="158" class="fs" text-anchor="middle">Handle = Reducer</text>
+
+  <rect x="480" y="318" width="170" height="56" rx="7" class="blk" style="--b:var(--h-agg)"/>
+  <text x="565" y="342" class="fn" text-anchor="middle" style="font-size:14px">ImagePair</text><text x="565" y="360" class="fs" text-anchor="middle">Aggregat</text>
+  <rect x="720" y="318" width="170" height="56" rx="7" class="blk" style="--b:var(--h-rdr)"/>
+  <text x="805" y="342" class="fn" text-anchor="middle" style="font-size:14px">ImagePairReader</text><text x="805" y="360" class="fs" text-anchor="middle">Reader</text>
+  <rect x="960" y="318" width="170" height="56" rx="7" class="blk" style="--b:var(--h-bi)"/>
+  <text x="1045" y="342" class="fn" text-anchor="middle" style="font-size:14px">Verteiler</text><text x="1045" y="360" class="fs" text-anchor="middle">eingebaut</text>
+
+  <line x1="230" y1="92" x2="322" y2="92" class="ed" style="stroke:var(--c-ce)" marker-end="url(#u-ce)"/>
+  <text x="277" y="84" class="fl" text-anchor="middle">Fx.Dispatch</text>
+  <text x="277" y="112" class="fm" text-anchor="middle" style="font-size:10px">LabelKamera…</text>
+  <line x1="230" y1="202" x2="322" y2="202" class="ed" style="stroke:var(--c-ce)" marker-end="url(#u-ce)"/>
+  <text x="277" y="194" class="fm" text-anchor="middle" style="font-size:10px">SucheGeaendert</text>
+
+  <line x1="515" y1="92" x2="587" y2="92" class="ed" style="stroke:var(--c-cmd)" marker-end="url(#u-cmd)"/>
+  <text x="551" y="84" class="fm" text-anchor="middle" style="font-size:10px">LabelBildPaar</text>
+  <line x1="515" y1="202" x2="587" y2="202" class="ed" style="stroke:var(--c-qry)" marker-end="url(#u-qry)"/>
+  <text x="551" y="194" class="fm" text-anchor="middle" style="font-size:10px">SucheImagePairs</text>
+
+  <path d="M615 232 V280 H565 V315" class="ed" style="stroke:var(--c-cmd)" marker-end="url(#u-cmd)"/>
+  <path d="M695 232 V280 H805 V315" class="ed" style="stroke:var(--c-qry)" marker-end="url(#u-qry)"/>
+  <path d="M650 374 V398 H1045 V377" class="ed" style="stroke:var(--c-evt)" marker-end="url(#u-evt)"/>
+  <text x="848" y="392" class="fm" text-anchor="middle" style="font-size:10px">BildPaarGelabelt</text>
+  <path d="M860 318 V250 H960 V179" class="ed" style="stroke:var(--c-ant)" marker-end="url(#u-ant)"/>
+  <text x="868" y="274" class="fl">Antwort</text>
+  <path d="M1045 318 V250 H1040 V179" class="ed" style="stroke:var(--c-evt);stroke-dasharray:7 5" marker-end="url(#u-evt)"/>
+  <text x="1052" y="274" class="fl">Kenntnis</text>
+  <path d="M995 112 V36 H135 V59" class="ed" style="stroke:var(--c-chg)" marker-end="url(#u-chg)"/>
+  <text x="565" y="30" class="fl" text-anchor="middle">Changed: einmal je Dispatch-Zyklus, die Views zeichnen neu</text>
+</svg>
+      </div>
+      <figcaption>Ein Kreis, eine Richtung. Antwort und Kenntnis kommen über dieselbe Leitung zurück.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="zusammenspiel">
+  <div class="wrap">
+    <div class="head">
+      <p class="kicker">Client · Server</p>
+      <h2>Das Zusammenspiel</h2>
+      <p class="lead">Schreiben, sofort lesen, auf dem Laufenden bleiben.</p>
+    </div>
+  </div>
+  <div class="wide">
+    <figure>
+      <div class="flowpanel">
+<svg class="flow" viewBox="0 0 1200 470" role="img" aria-label="Ablauf zwischen Arbeitsplatz und Server: verbinden mit Vertrag und Token; Command LabelBildPaar mit Command-Id, Quittung mit Stream und Version; Query mit mindestens dieser Version, Antwort mit Stand; danach Kenntnis und Hinweis, dass die Projektion weiter ist.">
+  <defs>
+    <marker id="z-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--ink2)"/></marker>
+    <marker id="z-cmd" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-cmd)"/></marker>
+    <marker id="z-qry" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-qry)"/></marker>
+    <marker id="z-ant" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-ant)"/></marker>
+    <marker id="z-evt" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-evt)"/></marker>
+  </defs>
+
+  <rect x="40" y="24" width="160" height="50" rx="7" class="blk" style="--b:var(--h-cli)"/>
+  <text x="120" y="45" class="fn" text-anchor="middle" style="font-size:14px">Arbeitsplatz</text><text x="120" y="63" class="fs" text-anchor="middle">Client</text>
+  <rect x="320" y="24" width="160" height="50" rx="7" class="blk" style="--b:var(--h-bi)"/>
+  <text x="400" y="45" class="fn" text-anchor="middle" style="font-size:14px">Sitzung</text><text x="400" y="63" class="fs" text-anchor="middle">Actor je Verbindung</text>
+  <rect x="570" y="24" width="160" height="50" rx="7" class="blk" style="--b:var(--h-agg)"/>
+  <text x="650" y="45" class="fn" text-anchor="middle" style="font-size:14px">ImagePair</text><text x="650" y="63" class="fs" text-anchor="middle">Aggregat</text>
+  <rect x="800" y="24" width="160" height="50" rx="7" class="blk" style="--b:var(--h-rdr)"/>
+  <text x="880" y="45" class="fn" text-anchor="middle" style="font-size:14px">ImagePairReader</text><text x="880" y="63" class="fs" text-anchor="middle">wartet auf Projektion</text>
+  <rect x="1010" y="24" width="160" height="50" rx="7" class="blk" style="--b:var(--h-bi)"/>
+  <text x="1090" y="45" class="fn" text-anchor="middle" style="font-size:14px">Verteiler</text><text x="1090" y="63" class="fs" text-anchor="middle">je Knoten</text>
+
+  <line x1="120" y1="74" x2="120" y2="455" class="life"/>
+  <line x1="400" y1="74" x2="400" y2="455" class="life"/>
+  <line x1="650" y1="74" x2="650" y2="455" class="life"/>
+  <line x1="880" y1="74" x2="880" y2="455" class="life"/>
+  <line x1="1090" y1="74" x2="1090" y2="455" class="life"/>
+
+  <text x="24" y="114" class="step">1</text>
+  <line x1="120" y1="110" x2="397" y2="110" class="ed" style="stroke:var(--ink2)" marker-end="url(#z-ink)"/>
+  <text x="258" y="102" class="fl" text-anchor="middle">Vertrag IArbeitsplatz + Token</text>
+  <line x1="400" y1="134" x2="1087" y2="134" class="ed" style="stroke:var(--ink2)" marker-end="url(#z-ink)"/>
+  <text x="745" y="126" class="fl" text-anchor="middle">meldet an: was diese Sitzung hören darf (Vertrag ∩ Token)</text>
+
+  <text x="24" y="190" class="step">2</text>
+  <line x1="120" y1="186" x2="647" y2="186" class="ed" style="stroke:var(--c-cmd)" marker-end="url(#z-cmd)"/>
+  <text x="385" y="178" class="fm" text-anchor="middle" style="font-size:11px">LabelBildPaar · Command-Id vor dem Senden gemerkt</text>
+  <line x1="650" y1="212" x2="123" y2="212" class="ed" style="stroke:var(--c-ant)" marker-end="url(#z-ant)"/>
+  <text x="385" y="230" class="fl" text-anchor="middle">Quittung: Stream S, Version v</text>
+
+  <text x="24" y="282" class="step">3</text>
+  <line x1="120" y1="278" x2="877" y2="278" class="ed" style="stroke:var(--c-qry)" marker-end="url(#z-qry)"/>
+  <text x="500" y="270" class="fm" text-anchor="middle" style="font-size:11px">SucheImagePairs · mindestens S auf v</text>
+  <line x1="880" y1="304" x2="123" y2="304" class="ed" style="stroke:var(--c-ant)" marker-end="url(#z-ant)"/>
+  <text x="500" y="322" class="fl" text-anchor="middle">ImagePairSuchergebnis · Stand je gezeigter Id</text>
+
+  <text x="24" y="374" class="step">4</text>
+  <line x1="1090" y1="370" x2="123" y2="370" class="ed" style="stroke:var(--c-evt);stroke-dasharray:7 5" marker-end="url(#z-evt)"/>
+  <text x="605" y="362" class="fm" text-anchor="middle" style="font-size:11px">Kenntnis: BildPaarGelabelt (eines anderen)</text>
+  <line x1="1090" y1="410" x2="123" y2="410" class="ed" style="stroke:var(--ink2);stroke-dasharray:7 5" marker-end="url(#z-ink)"/>
+  <text x="605" y="402" class="fl" text-anchor="middle">„Projektion ist weiter bei S“ → der Client fragt neu</text>
+  <text x="605" y="438" class="fs" text-anchor="middle">verlierbar · verlässlich nur über „lies das Log ab Position“</text>
+</svg>
+      </div>
+      <figcaption>Gestrichelt = verlierbar. Ein Command wirkt genau einmal, auch wenn der Client ihn wiederholt.</figcaption>
+    </figure>
+  </div>
+  <div class="wrap">
+    <div class="points three">
+      <div><h3>Start</h3><p>Verbinden → Daten laden → bereit. Die Shell zeigt erst dann die Module.</p></div>
+      <div><h3>Schreiben</h3><p>Command-Id zuerst merken, dann senden. Wiederholen ist sicher.</p></div>
+      <div><h3>Lesen</h3><p>Die Antwort sagt, welchen Stand sie zeigt. Read-your-writes ohne Raten.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="llm">
+  <div class="wrap">
+    <div class="head">
+      <p class="kicker">Mit LLMs</p>
+      <h2>Das LLM füllt nur den Rumpf</h2>
+      <p class="lead">Die Grammatik legt Ein- und Ausgänge fest. Das LLM schreibt, was dazwischen passiert.</p>
+    </div>
+  </div>
+  <div class="wide">
+    <figure>
+      <div class="flowpanel">
+<svg class="flow" viewBox="0 0 1200 400" role="img" aria-label="Je Code-Block baut das Framework ein Kontextfenster aus Graph-Skelett, Signatur, Nachbarschaft und Prompt, nie aus dem eigenen Rumpf. Das LLM schreibt den Rumpf. Build, Test und Spur prüfen ihn; Prompt und Rumpf liegen zusammen in Git.">
+  <defs>
+    <marker id="mk-ink" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--ink2)"/></marker>
+    <marker id="mk-rot" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-hin)"/></marker>
+  </defs>
+
+  <rect x="40" y="60" width="330" height="290" rx="9" class="blk" style="--b:var(--line)"/>
+  <text x="58" y="88" class="fn">Was die KI zu sehen bekommt</text>
+  <rect x="58" y="104" width="294" height="46" rx="6" class="blk" style="--b:var(--h-bi)"/>
+  <text x="74" y="124" class="fn" style="font-size:13.5px">Übersicht</text><text x="74" y="141" class="fs">der ganzen Anwendung, für jedes Stück gleich</text>
+  <rect x="58" y="158" width="294" height="46" rx="6" class="blk" style="--b:var(--c-cmd)"/>
+  <text x="74" y="178" class="fn" style="font-size:13.5px">Vorgabe</text><text x="74" y="195" class="fs">was hinein- und herauskommt</text>
+  <rect x="58" y="212" width="294" height="46" rx="6" class="blk" style="--b:var(--h-prj)"/>
+  <text x="74" y="232" class="fn" style="font-size:13.5px">Nachbarn</text><text x="74" y="249" class="fs">was direkt angeschlossen ist</text>
+  <rect x="58" y="266" width="294" height="46" rx="6" class="blk" style="--b:var(--h-fn)"/>
+  <text x="74" y="286" class="fn" style="font-size:13.5px">Auftrag</text><text x="74" y="303" class="fm" style="font-size:11px">// 🤖 Prompt: … im Rumpf</text>
+  <text x="58" y="336" class="fs">nie dabei: der bisherige Code</text>
+
+  <line x1="370" y1="205" x2="447" y2="205" class="ed" style="stroke:var(--ink2)" marker-end="url(#mk-ink)"/>
+  <rect x="450" y="165" width="140" height="80" rx="9" class="blk" style="--b:var(--h-rdr)"/>
+  <text x="520" y="200" class="fn" text-anchor="middle">KI</text><text x="520" y="220" class="fm" text-anchor="middle" style="font-size:11px">claude -p</text>
+
+  <line x1="590" y1="205" x2="657" y2="205" class="ed" style="stroke:var(--ink2)" marker-end="url(#mk-ink)"/>
+  <text x="624" y="196" class="fl" text-anchor="middle">schreibt</text>
+  <rect x="660" y="150" width="190" height="110" rx="9" class="blk" style="--b:var(--h-agg)"/>
+  <text x="755" y="180" class="fn" text-anchor="middle">Code</text>
+  <text x="755" y="204" class="fm" text-anchor="middle" style="font-size:11px">Decide(NimmBildAuf)</text>
+  <text x="755" y="222" class="fm" text-anchor="middle" style="font-size:11px">{ … }</text>
+  <text x="755" y="244" class="fs" text-anchor="middle">nur für dieses Stück</text>
+
+  <rect x="660" y="30" width="190" height="56" rx="9" class="blk" style="--b:var(--h-bi)"/>
+  <text x="755" y="55" class="fn" text-anchor="middle" style="font-size:13.5px">Git</text><text x="755" y="73" class="fs" text-anchor="middle">Auftrag und Code zusammen</text>
+  <line x1="755" y1="150" x2="755" y2="89" class="ed" style="stroke:var(--ink2)" marker-end="url(#mk-ink)"/>
+  <text x="762" y="124" class="fl">nachvollziehbar</text>
+
+  <line x1="850" y1="205" x2="917" y2="205" class="ed" style="stroke:var(--ink2)" marker-end="url(#mk-ink)"/>
+  <rect x="920" y="60" width="240" height="290" rx="9" class="blk" style="--b:var(--line)"/>
+  <text x="938" y="88" class="fn">Prüfen</text>
+  <rect x="938" y="104" width="204" height="62" rx="6" class="blk" style="--b:var(--c-cmd)"/>
+  <text x="954" y="128" class="fn" style="font-size:13.5px">Bauen</text><text x="954" y="148" class="fs">alle Regeln automatisch</text>
+  <rect x="938" y="176" width="204" height="62" rx="6" class="blk" style="--b:var(--h-prj)"/>
+  <text x="954" y="200" class="fn" style="font-size:13.5px">Test</text><text x="954" y="220" class="fs">Gegeben → Wenn → Dann</text>
+  <rect x="938" y="248" width="204" height="62" rx="6" class="blk" style="--b:var(--h-agg)"/>
+  <text x="954" y="272" class="fn" style="font-size:13.5px">Protokoll</text><text x="954" y="292" class="fs">was im Betrieb passiert</text>
+
+  <path d="M1040 350 V378 H520 V248" class="ed" style="stroke:var(--c-hin);stroke-dasharray:7 5" marker-end="url(#mk-rot)"/>
+  <text x="780" y="372" class="fl" text-anchor="middle">rot: Fehlermeldung zurück an die KI</text>
+</svg>
+      </div>
+    </figure>
+  </div>
+  <div class="wrap">
+    <div class="points">
+      <div><h3>Gezielter Kontext</h3><p>Je Code-Block genau das, was der Graph als Nachbarschaft liefert. Aus Code-Fakten, nicht aus Suche.</p></div>
+      <div><h3>Logik in festen Grenzen</h3><p>Was entstehen darf, steht im Rückgabetyp. Alles andere baut nicht.</p></div>
+      <div><h3>Prompt im Code</h3><p><code>// 🤖 Prompt:</code> steht im Rumpf. Versioniert, reviewbar, wiederholbar.</p></div>
+      <div><h3>Testbar</h3><p>Jeder Block hat Ein- und Ausgänge: Gegeben → Wenn → Dann, ohne Datenbank.</p></div>
+    </div>
+    <div class="pair">
+<pre class="code"><code>public IEnumerable&lt;OneOf&lt;ImagePairErstellt, BildVerfuegbar,
+        ImagePairKomplett, BildVersionBereitsVerfuegbar&gt;&gt;
+    Decide(NimmBildAuf cmd)
+{
+    // 🤖 Prompt: anlegen oder ergänzen;
+    //            mit dem zweiten Bild ist das Paar komplett
+    …   // Rumpf vom LLM
+}</code></pre>
+<pre class="code"><code>Szenario.Für&lt;ImagePair&gt;(Fabrik, paar)
+    .Gegeben(new ImagePairErstellt(paar, …),
+             new BildVerfuegbar(BildVersion.Dc0, …))
+    .Wenn(new NimmBildAuf(paar, …, BildVersion.Dc2, …))
+    .Dann&lt;ImagePairKomplett&gt;();</code></pre>
+    </div>
+    <p class="cli">Kontext eines Blocks ansehen: <code>dotnet run --project GraphExtractor -- --kontext NimmBildAuf</code></p>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Grundlage: <code>docs/plan-pubsub-neustrukturierung.md</code> (Zielbild §2, Grammatik §3) und der ImagePair-Code im Zweig <code>pubsub_neustrukturierung</code>. Darstellung der Karten angelehnt an den Werkbank-Editor.</p>
+  </div>
+</footer>
+
+<script>
+(function(){
+  // ── Karten-Spezifikationen: [Richtung, Typ, Beschriftung, Port-Id, Zusatz]
+  //    Richtung: i = Eingang, o = Ausgang, n = Notiz, s = Abschnitt, e = Eingang am Kartenende
+  var HOLLOW={hin:1,ken:1};
+  var NODES={
+    // Prototypen
+    P_agg:{k:"agg",kl:"Aggregat",t:"Aggregat",w:230,r:[["i","cmd","Command"],["i","qry","Query","","direkt"],["o","evt","Event"],["o","hin","Hinweis"],["o","fr","Frist"],["o","ant","Antwort"]]},
+    P_prj:{k:"prj",kl:"Projektion",t:"Projektion",w:230,r:[["i","evt","Event · Quell-N."],["o","fae","Schreib-Fähigkeit"]]},
+    P_rdr:{k:"rdr",kl:"Reader",t:"Reader",w:230,r:[["i","qry","Query"],["o","ant","Antwort"],["o","fae","Lese-Fähigkeit"]]},
+    P_fn:{k:"fn",kl:"Funktion",t:"Funktion",w:230,r:[["i","evt","Event · Quell-N."],["i","hin","Hinweis"],["o","cmd","Command"],["o","evt","Event"],["o","qn","Quell-Nachricht"],["o","hin","Hinweis"],["o","dn","Dienst"]]},
+    P_src:{k:"src",kl:"Quelle",t:"Quelle",w:230,r:[["n","","Treiber + Konfig"],["o","qn","Quell-Nachricht"]]},
+    P_store:{k:"store",kl:"Store",t:"Store",w:230,r:[["i","fae","Schreib-Fähigkeit"],["i","fae","Lese-Fähigkeit"],["n","","Klasse 1 · 2 · 3"]]},
+    P_dn:{k:"dn",kl:"Dienst",t:"Dienst",w:230,r:[["i","dn","Dienst"],["n","","Mail · API · OpenCV …"]]},
+    P_akt:{k:"akt",kl:"Akteur",t:"Akteur",w:230,r:[["o","cmd","Command","","darf"],["o","qry","Query","","darf"],["o","qn","Quell-Nachricht","","darf"],["o","tr","Funktion","","darf"]]},
+    P_cli:{k:"cli",kl:"Client",t:"Client",w:230,r:[["i","darf","Akteure"],["o","cmd","Command","","ISendet"],["o","qry","Query","","IFragt"],["i","ant","Antwort"],["i","ken","Event","","IHoert"],["o","tr","Funktion","","ITraegt"]]},
+    P_uhr:{k:"bi",kl:"Eingebaut",t:"Uhr",w:230,r:[["i","fr","Frist"],["o","cmd","Command"]]},
+    P_vt:{k:"bi",kl:"Eingebaut",t:"Verteiler",w:230,r:[["i","evt","Event"],["i","hin","Hinweis"],["o","ken","Kenntnis an Sitzungen"]]},
+
+    // Client: Teile eines Moduls
+    U_view:{k:"cli",kl:"View",t:"*.razor",w:230,r:[["i","chg","Changed","","OnChanged"],["o","ce","Client-Event","","Dispatch"]]},
+    U_intent:{k:"fn",kl:"Handler",t:"IntentHandler",w:230,r:[["i","ce","Client-Event"],["o","cmd","Command"]]},
+    U_refresh:{k:"fn",kl:"Handler",t:"RefreshHandler",w:230,r:[["i","ce","Kontextwechsel"],["o","qry","Query"]]},
+    U_store:{k:"prj",kl:"Store",t:"StoreBase",w:230,r:[["i","ken","Event","","IHoert"],["i","ant","Antwort"],["i","ce","Client-Event"],["o","chg","Changed"]]},
+    U_mod:{k:"bi",kl:"Modul",t:"IUiModule",w:230,r:[["n","","Slot · Titel · Komponente"],["n","","per DI gefunden"]]},
+
+    // ImagePair, einzeln
+    be:{k:"fn",kl:"Funktion",t:"Bildeingang",w:250,r:[["i","evt","BildAufbereitet"],["o","cmd","NimmBildAuf"],["o","hin","DateinameUnbekannt"]]},
+    E_q:{k:"src",kl:"Quelle",t:"DateiErkannt",w:240,r:[["n","","Datei-Treiber · Share"],["n","","Kennung: Pfad, Größe, Zeit"],["o","qn","DateiErkannt"]]},
+    E_ba:{k:"fn",kl:"Funktion",t:"IBildaufbereitung",w:270,r:[["i","qn","DateiErkannt"],["o","evt","BildAufbereitet"],["o","evt","BildNichtLesbar"],["s","","Laufort Host: OpenCvBildaufbereitung"],["o","dn","IImageResizer"],["o","dn","IHistogramEqualizer"]]},
+    E_d1:{k:"dn",kl:"Dienst",t:"IImageResizer",w:240,r:[["i","dn","Resize(Mat, int)"],["n","","ImageResizer · OpenCV"]]},
+    E_d2:{k:"dn",kl:"Dienst",t:"IHistogramEqualizer",w:240,r:[["i","dn","Equalize(Mat)"],["n","","HistogramEqualizer · OpenCV"]]},
+    E_a:{k:"agg",kl:"Aggregat",t:"ImagePair",w:320,r:[
+      ["s","","Decide(NimmBildAuf)"],["i","cmd","NimmBildAuf"],["o","evt","ImagePairErstellt"],["o","evt","BildVerfuegbar"],["o","evt","ImagePairKomplett"],["o","hin","BildVersionBereitsVerfuegbar"],
+      ["s","","Decide(KlassifiziereBildPaarDurchKi)"],["i","cmd","KlassifiziereBildPaarDurchKi"],["o","evt","BildPaarDurchKiKlassifiziert"],["o","hin","PaarNichtKomplett"],
+      ["s","","Decide(LabelBildPaar)"],["i","cmd","LabelBildPaar"],["o","evt","BildPaarGelabelt"],["o","hin","PaarNichtKomplett"],
+      ["n","","+ 5 weitere: Einzelbild, Region, Produkt, Inspektion"]]},
+    E_bb:{k:"fn",kl:"Funktion",t:"IBildpaarBeurteilung",w:290,r:[["i","tr","KlassifikationsWorker","","Träger"],["i","evt","ImagePairKomplett"],["o","cmd","KlassifiziereBildPaarDurchKi"]]},
+    E_p:{k:"prj",kl:"Projektion",t:"ImagePairProjektion",w:300,r:[
+      ["s","","Auf"],["i","evt","ImagePairErstellt"],["i","evt","BildVerfuegbar"],["i","evt","ImagePairKomplett"],["i","evt","BildPaarDurchKiKlassifiziert"],["i","evt","BildPaarGelabelt"],["n","","+ 4 weitere Events"],
+      ["s","","Schreib-Fähigkeiten"],["o","fae","IUpsertImagePair"],["o","fae","ISetBildVerfuegbar"],["o","fae","ISetKomplett"],["o","fae","ISetKiBildpaarKlassifikation"],["o","fae","ISetMenschBildpaarLabel"]]},
+    E_s:{k:"store",kl:"Store",t:"IImagePairStore",w:290,r:[
+      ["s","","schreiben"],["i","fae","IUpsertImagePair"],["i","fae","ISetBildVerfuegbar"],["i","fae","ISetKomplett"],["n","","…"],
+      ["s","","lesen"],["i","fae","ISearchImagePairs"],["i","fae","IFindImagePair"],["i","fae","IGetImagePairStatistik"],["n","","…"],
+      ["s","","Zusage"],["n","","Klasse 1 · atomar (Marten)"]]},
+    E_r:{k:"rdr",kl:"Reader",t:"ImagePairReader",w:310,r:[
+      ["s","","Frage(SucheImagePairs)"],["i","qry","SucheImagePairs"],["o","ant","ImagePairSuchergebnis"],["o","fae","ISearchImagePairs"],
+      ["s","","Frage(GetImagePair)"],["i","qry","GetImagePair"],["o","ant","ImagePairAntwort"],["o","ant","ImagePairNichtGefundenAntwort"],["o","fae","IFindImagePair"],
+      ["n","","+ Statistik, Produktionstage, Strip …"]]},
+    E_ak1:{k:"akt",kl:"Akteur",t:"KameraSystem",w:250,r:[["n","","IMaschine"],["o","qn","DateiErkannt","","darf"]]},
+    E_ak2:{k:"akt",kl:"Akteur",t:"Klassifizierer",w:290,r:[["n","","IKi"],["o","tr","IBildpaarBeurteilung","","darf"],["o","cmd","KlassifiziereEinzelBildDurchKi","","darf"]]},
+    E_ak3:{k:"akt",kl:"Akteur",t:"Inspekteur",w:250,r:[["n","","IMensch"],["o","cmd","LabelBildPaar","","darf"],["o","cmd","MarkiereAlsInspiziert","","darf"],["o","qry","SucheImagePairs","","darf"],["o","qry","GetImagePair","","darf"],["n","","+ Einzelbild, Region, Statistik …"]]},
+    E_ap:{k:"cli",kl:"Client",t:"Arbeitsplatz",w:290,r:[["i","darf","Inspekteur, Produktprüfer …","","verkörpert"],["o","cmd","LabelBildPaar","","ISendet"],["o","cmd","MarkiereAlsInspiziert","","ISendet"],["o","qry","SucheImagePairs","","IFragt"],["i","ant","ImagePairSuchergebnis"],["i","ken","BildVerfuegbar","","IHoert"],["i","ken","ImagePairKomplett","","IHoert"]]},
+    E_w:{k:"cli",kl:"Client",t:"KlassifikationsWorker",w:300,r:[["i","darf","Klassifizierer","","verkörpert"],["o","tr","IBildpaarBeurteilung","","ITraegt"],["o","cmd","KlassifiziereEinzelBildDurchKi","","ISendet"],["i","ken","BildVerfuegbar","","IHoert"]]},
+    E_v:{k:"bi",kl:"Eingebaut",t:"Verteiler",w:280,r:[["i","evt","BildVerfuegbar"],["i","evt","ImagePairKomplett"],["i","hin","PaarNichtKomplett"],["o","ken","Arbeitsplatz"],["o","ken","KlassifikationsWorker"]]}
+  };
+
+  // ── Graphen: Karten mit Lage (x, y), Kanten von Ausgang zu Eingang
+  var GRAPHS={
+    allg:{w:1290,h:585,n:[
+      {x:20,y:30,k:"src",kl:"Quelle",t:"Quelle",w:200,r:[["n","","Treiber + Konfig"],["o","qn","Quell-Nachricht","q"]]},
+      {x:20,y:380,k:"akt",kl:"Akteur",t:"Akteur",w:200,r:[["o","darf","IDarf","ak"]]},
+      {x:270,y:20,k:"fn",kl:"Funktion",t:"Funktion",w:220,r:[["i","tr","Träger","f_tr"],["i","evt","Event · Quell-N.","f_in"],["o","cmd","Command","f_cmd"],["o","evt","Event","f_evt"],["o","dn","Dienst","f_dn"]]},
+      {x:270,y:300,k:"cli",kl:"Client",t:"Client",w:220,r:[["i","darf","Akteure","c_ak"],["o","cmd","Command","c_cmd"],["o","qry","Query","c_q"],["i","ant","Antwort","c_ant"],["i","ken","Kenntnis","c_ken"],["o","tr","trägt Funktion","c_tr"]]},
+      {x:550,y:20,k:"dn",kl:"Dienst",t:"Dienst",w:210,r:[["i","dn","Dienst","dn"],["n","","Mail · API · OpenCV"]]},
+      {x:550,y:150,k:"agg",kl:"Aggregat",t:"Aggregat",w:220,r:[["i","cmd","Command","a_cmd"],["i","qry","Query (direkt)","a_q"],["o","evt","Event","a_evt"],["o","hin","Hinweis","a_h"],["o","fr","Frist","a_fr"],["o","ant","Antwort","a_ant"]]},
+      {x:830,y:20,k:"prj",kl:"Projektion",t:"Projektion",w:200,r:[["i","evt","Event","p_in"],["o","fae","Schreib-Fähigkeit","p_f"]]},
+      {x:830,y:150,k:"bi",kl:"Eingebaut",t:"Uhr",w:200,r:[["i","fr","Frist","u_in"],["o","cmd","Command","u_cmd"]]},
+      {x:830,y:280,k:"bi",kl:"Eingebaut",t:"Verteiler",w:200,r:[["i","evt","Event","v_in"],["i","hin","Hinweis","v_h"],["o","ken","Kenntnis","v_out"]]},
+      {x:830,y:420,k:"rdr",kl:"Reader",t:"Reader",w:200,r:[["i","qry","Query","r_q"],["o","ant","Antwort","r_ant"],["o","fae","Lese-Fähigkeit","r_f"]]},
+      {x:1090,y:20,h:520,k:"store",kl:"Store",t:"Store",w:180,r:[["i","fae","Schreib-Fähigkeit","s_w"],["n","","Klasse 1 · atomar"],["n","","Klasse 2 · wiederholungsfest"],["n","","Klasse 3 · mind. einmal"],["e","fae","Lese-Fähigkeit","s_r"]]}
+    ],e:[["q","f_in"],["ak","c_ak"],["f_dn","dn"],["f_cmd","a_cmd"],["c_cmd","a_cmd"],["c_q","a_q"],["c_q","r_q"],
+         ["a_evt","p_in"],["a_evt","v_in"],["f_evt","p_in"],["a_h","v_h"],["a_fr","u_in"],["p_f","s_w"],["r_f","s_r"],
+         ["a_evt","f_in",{ly:8}],
+         ["u_cmd","a_cmd",{ly:132}],
+         ["c_tr","f_tr",{ly:245,nx:26}],
+         ["v_out","c_ken",{ly:556}],
+         ["a_ant","c_ant",{ly:564,nx:26}],
+         ["r_ant","c_ant",{ly:572,ex:26,nx:34}]]},
+
+    ip:{w:1625,h:640,n:[
+      {x:20,y:40,k:"src",kl:"Quelle",t:"DateiErkannt",w:190,r:[["n","","Datei-Treiber · Share"],["o","qn","DateiErkannt","q"]]},
+      {x:250,y:20,k:"fn",kl:"Funktion",t:"IBildaufbereitung",w:240,r:[["i","qn","DateiErkannt","ba_in"],["o","evt","BildAufbereitet","ba_ok"],["o","evt","BildNichtLesbar","ba_err"],["s","","Host: OpenCvBildaufbereitung"],["o","dn","IImageResizer","ba_d1"],["o","dn","IHistogramEqualizer","ba_d2"]]},
+      {x:530,y:20,k:"fn",kl:"Funktion",t:"Bildeingang",w:210,r:[["i","evt","BildAufbereitet","be_in"],["o","cmd","NimmBildAuf","be_cmd"],["o","hin","DateinameUnbekannt","be_h"]]},
+      {x:530,y:160,k:"dn",kl:"Dienst",t:"IImageResizer",w:235,r:[["i","dn","Resize","d1"]]},
+      {x:530,y:240,k:"dn",kl:"Dienst",t:"IHistogramEqualizer",w:235,r:[["i","dn","Equalize","d2"]]},
+      {x:790,y:20,k:"agg",kl:"Aggregat",t:"ImagePair",w:280,r:[["i","cmd","NimmBildAuf","a_nimm"],["i","cmd","KlassifiziereBildPaarDurchKi","a_ki"],["i","cmd","LabelBildPaar","a_lab"],
+        ["o","evt","ImagePairErstellt","a1"],["o","evt","BildVerfuegbar","a2"],["o","evt","ImagePairKomplett","a3"],["o","evt","BildPaarDurchKiKlassifiziert","a4"],["o","evt","BildPaarGelabelt","a5"],["o","hin","PaarNichtKomplett …","a_h"]]},
+      {x:1115,y:20,k:"prj",kl:"Projektion",t:"ImagePairProjektion",w:250,r:[["i","evt","ImagePairErstellt","p1"],["i","evt","BildVerfuegbar","p2"],["i","evt","ImagePairKomplett","p3"],["i","evt","BildPaarDurchKiKlassifiziert","p4"],["i","evt","BildPaarGelabelt","p5"],
+        ["o","fae","IUpsertImagePair","pf1"],["o","fae","ISetBildVerfuegbar","pf2"],["o","fae","ISetKomplett","pf3"],["o","fae","ISetKiBildpaarKlassifikation","pf4"],["o","fae","ISetMenschBildpaarLabel","pf5"]]},
+      {x:1405,y:20,h:500,k:"store",kl:"Store",t:"IImagePairStore",w:200,r:[["n","",""],["n","",""],["n","",""],["n","",""],["n","",""],["n","",""],["n","",""],["i","fae","schreiben","s_w"],["n","","Klasse 1 · atomar"],["e","fae","lesen","s_r"]]},
+      {x:20,y:390,k:"cli",kl:"Client",t:"KlassifikationsWorker",w:240,r:[["o","tr","trägt","w_tr"],["i","ken","BildVerfuegbar","w_h"]]},
+      {x:295,y:390,k:"fn",kl:"Funktion",t:"IBildpaarBeurteilung",w:255,r:[["i","tr","Träger","bb_tr"],["i","evt","ImagePairKomplett","bb_in"],["o","cmd","KlassifiziereBildPaarDurchKi","bb_cmd"]]},
+      {x:590,y:450,k:"cli",kl:"Client",t:"Arbeitsplatz",w:215,r:[["o","cmd","LabelBildPaar","ap_lab"],["o","qry","SucheImagePairs","ap_q"],["i","ant","ImagePairSuchergebnis","ap_ant"],["i","ken","BildVerfuegbar …","ap_h"]]},
+      {x:840,y:345,k:"bi",kl:"Eingebaut",t:"Verteiler",w:200,r:[["i","evt","Event","v_in"],["o","ken","Kenntnis","v_out"]]},
+      {x:1115,y:390,k:"rdr",kl:"Reader",t:"ImagePairReader",w:250,r:[["i","qry","SucheImagePairs","r_q"],["o","ant","ImagePairSuchergebnis","r_ant"],["o","fae","ISearchImagePairs","r_f"]]}
+    ],e:[["q","ba_in"],["ba_ok","be_in"],["ba_d1","d1"],["ba_d2","d2"],["be_cmd","a_nimm"],["bb_cmd","a_ki"],["ap_lab","a_lab"],
+         ["a1","p1"],["a2","p2"],["a3","p3"],["a4","p4"],["a5","p5"],["pf1","s_w"],["pf2","s_w"],["pf3","s_w"],["pf4","s_w"],["pf5","s_w"],
+         ["r_f","s_r"],["ap_q","r_q"],["w_tr","bb_tr"],
+         ["a3","bb_in",{ly:325,ex:22}],
+         ["a2","v_in",{ly:333,ex:30}],
+         ["r_ant","ap_ant",{ly:612}],
+         ["v_out","ap_h",{ly:620,nx:26}],
+         ["v_out","w_h",{ly:628,nx:12}]]}
+  };
+
+  function el(tag,cls,txt){var e=document.createElement(tag);if(cls)e.className=cls;if(txt!=null)e.textContent=txt;return e;}
+  function slot(typ,id){var s=el("i","slot t-"+typ+(HOLLOW[typ]?" hollow":""));if(id)s.dataset.p=id;s.dataset.typ=typ;return s;}
+  function node(sp,pre){
+    var n=el("div","node k-"+sp.k);n.style.setProperty("--w",(sp.w||220)+"px");if(sp.h)n.style.setProperty("--h",sp.h+"px");
+    var h=el("div","nh");h.append(el("span","nk",sp.kl),el("span","nt",sp.t));n.append(h);
+    var b=el("div","nb");
+    sp.r.forEach(function(r){
+      var d=r[0],typ=r[1],lbl=r[2],id=r[3]?(pre||"")+r[3]:"",sm=r[4];
+      if(d==="n"||d==="s"){b.append(el("div","row "+d,lbl));return;}
+      var row=el("div","row "+(d==="e"?"i end":d));
+      var l=el("span","lbl",lbl);
+      if(d==="o"){if(sm)row.append(el("small","",sm));row.append(l,slot(typ,id));}
+      else{row.append(slot(typ,id),l);if(sm)row.append(el("small","",sm));}
+      b.append(row);
+    });
+    n.append(b);return n;
+  }
+  document.querySelectorAll("[data-node]").forEach(function(ph){var sp=NODES[ph.dataset.node];if(sp)ph.replaceWith(node(sp));});
+
+  // ── Graphen aufbauen und Kanten zeichnen
+  var SVGNS="http://www.w3.org/2000/svg";
+  var canvases=[].slice.call(document.querySelectorAll("[data-graph]"));
+  canvases.forEach(function(c){
+    var g=GRAPHS[c.dataset.graph],pre=c.dataset.graph+":";
+    var w=el("div","world");w.style.width=g.w+"px";w.style.height=g.h+"px";
+    var svg=document.createElementNS(SVGNS,"svg");svg.setAttribute("class","wires");svg.setAttribute("width",g.w);svg.setAttribute("height",g.h);
+    w.append(svg);
+    g.n.forEach(function(sp){var n=node(sp,pre);n.style.left=sp.x+"px";n.style.top=sp.y+"px";w.append(n);});
+    c.append(w);c._g=g;c._w=w;c._svg=svg;c._pre=pre;
+  });
+  function pos(s,w){var x=0,y=0,e=s;while(e&&e!==w){x+=e.offsetLeft;y+=e.offsetTop;e=e.offsetParent;}return{x:x+s.offsetWidth/2,y:y+s.offsetHeight/2};}
+  // Polylinie mit runden Ecken: rückläufige Kanten laufen in freien Gassen um die Karten herum
+  function rund(pts,r){
+    var d="M"+pts[0].x+" "+pts[0].y;
+    for(var i=1;i<pts.length-1;i++){
+      var a=pts[i-1],c=pts[i],n=pts[i+1];
+      var l1=Math.hypot(c.x-a.x,c.y-a.y),l2=Math.hypot(n.x-c.x,n.y-c.y),k=Math.min(r,l1/2,l2/2);
+      if(!k){d+=" L"+c.x+" "+c.y;continue;}
+      var b={x:c.x-(c.x-a.x)/l1*k,y:c.y-(c.y-a.y)/l1*k},e={x:c.x+(n.x-c.x)/l2*k,y:c.y+(n.y-c.y)/l2*k};
+      d+=" L"+b.x+" "+b.y+" Q"+c.x+" "+c.y+" "+e.x+" "+e.y;
+    }
+    var z=pts[pts.length-1];return d+" L"+z.x+" "+z.y;
+  }
+  function layout(){
+    canvases.forEach(function(c){
+      var g=c._g,w=c._w,svg=c._svg;
+      var avail=c.parentElement.clientWidth,minW=parseFloat(getComputedStyle(c).minWidth)||0;
+      var s=Math.min(1,Math.max(avail,minW)/g.w);
+      w.style.transform="scale("+s+")";c.style.height=(g.h*s)+"px";
+      while(svg.firstChild)svg.removeChild(svg.firstChild);
+      g.e.forEach(function(ed){
+        var a=w.querySelector('[data-p="'+c._pre+ed[0]+'"]'),b=w.querySelector('[data-p="'+c._pre+ed[1]+'"]');
+        if(!a||!b)return;
+        var p=pos(a,w),q=pos(b,w),o=ed[2],d;
+        if(o){
+          var ex=p.x+(o.ex||18),nx=q.x-(o.nx||18);
+          d=rund([p,{x:ex,y:p.y},{x:ex,y:o.ly},{x:nx,y:o.ly},{x:nx,y:q.y},q],10);
+        }else{
+          var dx=Math.max(70,Math.abs(q.x-p.x)*0.45);
+          d="M"+p.x+" "+p.y+" C"+(p.x+dx)+" "+p.y+" "+(q.x-dx)+" "+q.y+" "+q.x+" "+q.y;
+        }
+        var path=document.createElementNS(SVGNS,"path");
+        path.setAttribute("d",d);
+        var typ=a.dataset.typ;
+        path.setAttribute("stroke",getComputedStyle(a).getPropertyValue("--sc").trim());
+        if(HOLLOW[typ])path.setAttribute("stroke-dasharray","7 5");
+        if(typ==="tr"||typ==="darf")path.setAttribute("stroke-dasharray","2 4");
+        svg.append(path);
+      });
+    });
+  }
+  layout();
+  if(document.fonts&&document.fonts.ready)document.fonts.ready.then(layout);
+  var t;window.addEventListener("resize",function(){clearTimeout(t);t=setTimeout(layout,80);});
+
+  // ── C#-Hervorhebung
+  var re=/(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|(\$?"(?:[^"\\\n]|\\.)*")|\b(public|sealed|partial|class|interface|record|void|async|await|return|yield|break|if|else|new|var|out|null|is|not|this)\b|\b([A-Z][A-Za-z0-9_]*)\b/g;
+  function esc(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");}
+  document.querySelectorAll("pre.code:not(.nohl) code").forEach(function(c){
+    var src=c.textContent,out="",last=0,m;re.lastIndex=0;
+    while((m=re.exec(src))){out+=esc(src.slice(last,m.index));out+='<span class="'+(m[1]?"c":m[2]?"s":m[3]?"k":"y")+'">'+esc(m[0])+"</span>";last=re.lastIndex;}
+    c.innerHTML=out+esc(src.slice(last));
+  });
+
+  // ── Blättern mit ← → (Vortrag)
+  var secs=[].slice.call(document.querySelectorAll("main section"));
+  document.addEventListener("keydown",function(e){
+    if(e.altKey||e.ctrlKey||e.metaKey)return;
+    if(e.key!=="ArrowRight"&&e.key!=="ArrowLeft")return;
+    var y=window.scrollY+80,i=0;secs.forEach(function(s,k){if(s.offsetTop<=y)i=k;});
+    e.preventDefault();
+    secs[e.key==="ArrowRight"?Math.min(i+1,secs.length-1):Math.max(i-1,0)].scrollIntoView();
+  });
+})();
+</script>
+</body>
+</html>

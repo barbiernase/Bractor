@@ -546,6 +546,18 @@ message ImagePairErstelltDto {
     string ursprungs_pfad = 5;
 }
 
+message ImagePairGeaendertDto {
+    // Keine Parameter
+}
+
+message ImagePairGegengechecktDto {
+    // Keine Parameter
+}
+
+message ImagePairHatSichGeaendertDto {
+    // Keine Parameter
+}
+
 message ImagePairInspiziertDto {
     // Keine Parameter
 }
@@ -572,6 +584,14 @@ message RegionIndexUngueltigDto {
 
 message RegionLabelsUngueltigDto {
     int32 anzahl = 1;
+}
+
+message ZufallsEventDto {
+    // Keine Parameter
+}
+
+message ZufallsEventNeuDto {
+    // Keine Parameter
 }
 
 message ModellAktiviertDto {

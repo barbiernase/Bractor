@@ -1,0 +1,1259 @@
+<!-- Die vollständige Geschichte: geschichte.html plus Konsistenz und Garantien, der Tag am Arbeitsplatz, Werkbank und LLM.
+     Die Präsentation als eine Geschichte. baue_deck.py ersetzt {{name}} durch Bausteine aus zielbild-seite.html und rendert
+     Karten (data-node) und Graphen (data-graph) mit deren Skript. Horizontal = die Geschichte, vertikal (↓) = genauer hinsehen. -->
+
+<!-- ═══ Titel ═══ -->
+<section class="sl titel"><div class="in">
+  <p class="kicker">Wie wir Software bauen – erzählt an einem Bildpaar</p>
+  <h1>Software, die<br>nichts vergisst.</h1>
+  <p class="lead">Und die eine KI sicher mitschreiben kann – weil jedes Teil klar sagt, was hineinkommt und was herauskommt.</p>
+  <p class="nav-hint"><kbd>Leertaste</kbd> weiter &nbsp; <kbd>↓</kbd> genauer hinsehen &nbsp; <kbd>Esc</kbd> Übersicht</p>
+</div></section>
+
+<!-- ═══ Was wir lösen ═══ -->
+<section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Worum es geht</p>
+    <h2>Was wir lösen.</h2>
+    <div class="loesen">
+      <div class="l-llm"><span class="l-n">1</span><b>Die KI schreibt mit – sicher</b><span>Sie sieht nur ein kleines Stück und darf nur dieses Stück ändern.</span></div>
+      <div class="l-typ"><span class="l-n">2</span><b>Fehler fallen vor dem Start auf</b><span>Was nicht zusammenpasst, lässt sich gar nicht erst bauen.</span></div>
+      <div class="l-ddd"><span class="l-n">3</span><b>Fachsprache wird zu Code</b><span>Die Begriffe der Fachleute stehen eins zu eins im Programm.</span></div>
+      <div class="l-tok fragment"><span class="l-n">4</span><b>Die KI liest viel weniger</b><span>Rund 11 000 Token je Auftrag statt des ganzen Codes. Das spart Zeit und Geld.</span></div>
+      <div class="l-gov fragment"><span class="l-n">5</span><b>Regeln, die sich selbst prüfen</b><span>Wer was darf und wer was getan hat, steht fest – nicht in einem Wiki.</span></div>
+    </div>
+    <div class="ausserdem fragment">
+      <b>und außerdem</b>
+      <span>Nichts geht verloren</span>
+      <span>Nichts passiert doppelt</span>
+      <span>Fachliches und Technik getrennt</span>
+      <span>Neue Auswertungen jederzeit</span>
+      <span>Technik austauschbar</span>
+      <span>Schnell testbar</span>
+      <span>Das Bild ist immer aktuell</span>
+      <span>Eine Absprache für alle Programme</span>
+    </div>
+  </div></section>
+
+  <section class="sl"><div class="in">
+    <p class="kicker">1 · Die KI schreibt mit – sicher</p>
+    <h2>Die KI sieht nur das Stück, an dem sie arbeitet.</h2>
+    <div class="iso">
+      <div class="iso-graph">
+        <span class="iso-nein">Quelle</span><span class="iso-nein">IBildaufbereitung</span><span class="iso-nach">Bildeingang</span>
+        <span class="iso-ja">ImagePair · Decide</span>
+        <span class="iso-nach">IBildpaarBeurteilung</span><span class="iso-nein">Projektion</span><span class="iso-nein">Reader</span><span class="iso-nein">Arbeitsplatz</span>
+      </div>
+      <div class="iso-legende">
+        <div><i class="iso-ja"></i><b>das Stück</b><span>was hineinkommt, was herauskommt</span></div>
+        <div><i class="iso-nach"></i><b>die Nachbarn</b><span>nur, was direkt angeschlossen ist</span></div>
+        <div><i class="iso-nein"></i><b>alles andere</b><span>nur als Übersicht</span></div>
+        <div><i class="iso-nie"></i><b>nie dabei</b><span>der Rest des Codes, fremde Dateien</span></div>
+      </div>
+    </div>
+    <p class="pointe fragment">Wenig, aber genau das Richtige. Was dazugehört, ergibt sich aus dem Plan der Anwendung.</p>
+  </div></section>
+
+  <section class="sl"><div class="in">
+    <p class="kicker">2 · Fehler fallen vor dem Start auf</p>
+    <h2>Was nicht zusammenpasst, lässt sich nicht bauen.</h2>
+    <div class="meldungen">
+      <div class="rot"><b>✗</b><code>new LabelBildPaar(datensatzId, …)</code><span>ein Datensatz ist kein Bildpaar</span><em>Compiler</em></div>
+      <div class="rot fragment"><b>✗</b><code>yield return new PaarGelabelt();</code><span>dieses Ergebnis ist hier nicht vorgesehen</span><em>Compiler</em></div>
+      <div class="rot fragment"><b>✗</b><code>Guid.NewGuid()</code> im Aggregat<span>Zufall hat in einer Entscheidung nichts zu suchen</span><em>CQRS102</em></div>
+      <div class="rot fragment"><b>✗</b>Store im Konstruktor<span>Speicherzugriff nur dort, wo er erlaubt ist</span><em>CQRS054</em></div>
+    </div>
+    <p class="pointe fragment">Baut es, passt alles zusammen. Ob es fachlich richtig ist, zeigt der Test.</p>
+  </div></section>
+
+  <section class="sl"><div class="in">
+    <p class="kicker">3 · Fachsprache wird zu Code</p>
+    <h2>Die Begriffe der Fachleute – als Bausteine im Code.</h2>
+    <div class="ddd">
+      <div><span>Aggregate</span><b><i class="dot sq" style="--d:var(--h-agg)"></i>Aggregat</b><em>ein Entscheider, eine Konsistenzgrenze</em></div>
+      <div><span>Command</span><b><i class="dot" style="--d:var(--c-cmd)"></i>Command</b><em>an genau ein Aggregat</em></div>
+      <div><span>Domain Event</span><b><i class="dot" style="--d:var(--c-evt)"></i>Event</b><em>ein Fakt im Log</em></div>
+      <div><span>Event Sourcing</span><b><i class="dot sq" style="--d:var(--h-bi)"></i>Log</b><em>die einzige Wahrheit</em></div>
+      <div><span>Read Model</span><b><i class="dot sq" style="--d:var(--h-prj)"></i>Projektion + Reader</b><em>beliebig viele Ansichten</em></div>
+      <div><span>Domain Service</span><b><i class="dot sq" style="--d:var(--h-dn)"></i>Dienst</b><em>Technik hinter einer Funktion</em></div>
+      <div><span>Saga, Prozess</span><b><i class="dot sq" style="--d:var(--h-fn)"></i>Aggregat + Funktion + Frist</b><em>Warten ist Zustand</em></div>
+      <div><span>Ubiquitous Language</span><b><i class="dot sq" style="--d:var(--h-src)"></i>Typnamen</b><em>die Fachwörter stehen im Code</em></div>
+    </div>
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">4 · Die KI liest viel weniger</p>
+    <h2>Ein Auftrag an die KI kostet einen Bruchteil.</h2>
+    <div class="balken">
+      <div><span class="b-l">der ganze Code</span><span class="b-bar"><i style="width:100%"></i></span><span class="b-w">≈ 1 270 000</span></div>
+      <div class="fragment"><span class="b-l">nur der fachliche Code</span><span class="b-bar"><i style="width:5.5%"></i></span><span class="b-w">≈ 70 000</span></div>
+      <div class="fragment b-wir"><span class="b-l">ein Auftrag bei uns</span><span class="b-bar"><i class="skel" style="width:0.66%"></i><i class="slot" style="width:0.21%"></i></span><span class="b-w">≈ 11 000</span></div>
+    </div>
+    <div class="spar fragment">
+      <div><b>≈ 8 400</b><span>Übersicht der Anwendung, für alle 282 Stücke gleich – wird wiederverwendet</span></div>
+      <div><b>≈ 2 600</b><span>das Stück selbst (typisch)</span></div>
+      <div><b>0</b><span>kein Gesprächsverlauf, der immer länger wird</span></div>
+      <div><b>0</b><span>kein Herumsuchen im Code</span></div>
+    </div>
+    <p class="quelle">Token geschätzt als Zeichen ÷ 3,3 (wie die Werkbank). Werte aus <code>.llm-kontext/</code> und dem Protokoll von 20 echten Runden.</p>
+  </div></section>
+
+  <section class="sl"><div class="in">
+    <p class="kicker">5 · Regeln, die sich selbst prüfen</p>
+    <h2>Regeln, die nicht nur auf Papier stehen.</h2>
+    <div class="gov">
+      <div><b>Wer darf was</b><span>jede Rolle hat feste Rechte, geprüft bei jeder Anmeldung</span></div>
+      <div><b>Wer hat was bewirkt</b><span>zu jedem Eintrag: wer, warum und welches Teil</span></div>
+      <div><b>Nichts verschwindet</b><span>es wird nur dazugeschrieben, nie überschrieben</span></div>
+      <div><b>Regeln als Build</b><span>der Computer prüft die Regeln beim Bauen, nicht ein Mensch beim Lesen</span></div>
+      <div class="fragment"><b>Jede Änderung ist Code</b><span>jede Änderung wird geprüft, bevor sie gilt</span></div>
+      <div class="fragment"><b>LLM unter Aufsicht</b><span>jeder KI-Auftrag wird protokolliert, nur Geprüftes wird übernommen</span></div>
+      <div class="fragment"><b>Kosten im Griff</b><span>die KI läuft über ein festes Abo, keine Überraschungsrechnung</span></div>
+      <div class="fragment"><b>Umgebung als Datei</b><span>was wo läuft, steht in einer Datei – für alle sichtbar</span></div>
+    </div>
+  </div></section>
+
+</section>
+
+<!-- ═══ Prolog ═══ -->
+<section class="sl erz"><div class="in">
+  <h2>Was tun wir eigentlich den ganzen Tag am Computer?</h2>
+  <div class="tri">
+    <div class="fragment"><div class="mock m-btn">Als Anomalie markieren</div><span>jemand klickt</span></div>
+    <div class="fragment"><div class="mock m-file">14-02-11_dc2.tiff</div><span>eine Datei kommt an</span></div>
+    <div class="fragment"><div class="mock m-ki">Anomalie · 0,93</div><span>ein Programm rechnet</span></div>
+  </div>
+  <p class="pointe fragment">Immer passiert etwas.</p>
+</div></section>
+
+<section class="sl erz"><div class="in">
+  <h2>Und Software macht daraus: Daten ändern sich.</h2>
+  <div class="vn">
+    <div class="rec"><b>Bildpaar 4711</b>
+      <div><span>Bilder</span><em>dc0</em></div>
+      <div><span>Label</span><em>—</em></div>
+    </div>
+    <div class="pfeil fragment">→</div>
+    <div class="rec fragment"><b>Bildpaar 4711</b>
+      <div class="neu"><span>Bilder</span><em>dc0 · dc2</em></div>
+      <div class="neu"><span>Label</span><em>Anomalie</em></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="sl erz"><div class="in">
+  <h2>Nur: Überschreiben vergisst.</h2>
+  <div class="vn">
+    <div class="rec"><b>Bildpaar 4711</b>
+      <div><span>Bilder</span><em><s>dc0</s> dc0 · dc2</em></div>
+      <div><span>Label</span><em><s>—</s> Anomalie</em></div>
+    </div>
+    <div class="fragen">
+      <span class="fragment">Wer war das?</span>
+      <span class="fragment">Wann?</span>
+      <span class="fragment">Warum?</span>
+      <span class="fragment">Was stand vorher da?</span>
+    </div>
+  </div>
+</div></section>
+
+<section class="sl erz"><div class="in">
+  <h2>Also schreiben wir auf, was passiert ist.</h2>
+  <div class="log">
+    <div class="fragment"><time>14:02:11</time>Bild dc0 von Paar 4711 ist da</div>
+    <div class="fragment"><time>14:02:15</time>Bild dc2 ist da, das Paar ist komplett</div>
+    <div class="fragment"><time>14:03:40</time>Die KI meint: Anomalie</div>
+    <div class="fragment"><time>14:05:02</time>Die Inspekteurin bestätigt: Anomalie</div>
+  </div>
+  <p class="pointe fragment">Nur dazuschreiben, nie überschreiben. Das ist das <b>Log</b>.</p>
+</div></section>
+
+<section class="sl erz"><div class="in">
+  <h2>Was gerade gilt, liest man daraus ab.</h2>
+  <div class="falten">
+    <div class="log klein">
+      <div><time>14:02:11</time>Bild dc0 ist da</div>
+      <div><time>14:02:15</time>Paar komplett</div>
+      <div><time>14:03:40</time>KI: Anomalie</div>
+      <div><time>14:05:02</time>Mensch: Anomalie</div>
+    </div>
+    <div class="pfeil">→</div>
+    <div class="ansichten">
+      <div class="rec fragment"><b>Bildpaar 4711</b><div><span>Bilder</span><em>dc0 · dc2</em></div><div><span>Label</span><em>Anomalie</em></div></div>
+      <div class="rec fragment"><b>Heute</b><div><span>Paare</span><em>1 284</em></div><div><span>Anomalien</span><em>37</em></div></div>
+      <div class="rec fragment"><b>Noch offen</b><div><span>4712</span><em>dc0</em></div><div><span>4715</span><em>ohne Label</em></div></div>
+    </div>
+  </div>
+  <p class="pointe fragment">Ein Log, viele Ansichten.</p>
+</div></section>
+
+<!-- ═══ Die Geschichte von Paar 4711 ═══ -->
+<section class="sl kapitel"><div class="in">
+  <p class="kicker">Ein Tag an der Linie</p>
+  <h2>Begleiten wir ein Bildpaar.</h2>
+  <div class="figuren">
+    <div><span class="fig-k">▣</span><b>Die Kamera</b><span>macht je Produkt zwei Bilder: dc0 und dc2</span></div>
+    <div><span class="fig-k">◆</span><b>Die KI</b><span>sagt, ob etwas nicht stimmt</span></div>
+    <div><span class="fig-k">●</span><b>Die Inspekteurin</b><span>schaut hin und entscheidet</span></div>
+  </div>
+</div></section>
+
+<section>
+  <section class="sl station"><div class="in">
+    <p class="zeit">14:02:11</p>
+    <h2>Die Kamera legt ein Bild ab.</h2>
+    <div class="szene">
+      <div class="mensch">
+        <div class="ordner"><b>Share · Linie 3</b><span class="datei">14-02-11_dc0.tiff</span></div>
+        <p class="pointe">Was draußen geschehen ist, muss niemand mehr entscheiden.</p>
+      </div>
+      <div class="karte fragment"><div class="stage"><div data-node="E_q"></div></div></div>
+    </div>
+    <p class="fachwort fragment"><span class="dot sq" style="--d:var(--h-src)"></span>Fachwort: <b>Quelle</b>. Sie trägt jede Datei genau einmal ins Log ein.</p>
+  </div></section>
+  <section class="sl code"><div class="in">
+    <p class="kicker">Im Code · Quelle</p><h2>Im Code ist das eine Zeile. Wo der Ordner liegt, steht in den Einstellungen.</h2>
+    {{el_code:0}}
+  </div></section>
+</section>
+
+<section>
+  <section class="sl station"><div class="in">
+    <p class="zeit">14:02:12</p>
+    <h2>Das Bild muss erst lesbar werden.</h2>
+    <div class="szene">
+      <div class="mensch">
+        <div class="bilder"><div class="bild roh"><span>roh · 4096 px</span></div><span class="pfeil">→</span><div class="bild vor fragment"><span>Vorschau · 512 px</span></div></div>
+        <p class="pointe">Verkleinern, Kontrast ausgleichen. Technik, die man austauschen kann.</p>
+      </div>
+      <div class="karte fragment"><div class="stage"><div data-node="E_ba"></div></div></div>
+    </div>
+    <p class="fachwort fragment"><span class="dot sq" style="--d:var(--h-fn)"></span>Fachwort: <b>Funktion</b> – ein Arbeitsschritt. Die Technik dahinter (OpenCV) heißt <b>Dienst</b>.</p>
+  </div></section>
+  <section class="sl code"><div class="in">
+    <p class="kicker">Im Code · Funktion und Dienst</p><h2>Ein Arbeitsschritt: ein Eingang, mögliche Ergebnisse.</h2>
+    <div class="zwei-code">{{el_code:1}}{{el_code:2}}</div>
+  </div></section>
+</section>
+
+<section>
+  <section class="sl station"><div class="in">
+    <p class="zeit">14:02:12</p>
+    <h2>Zu welchem Paar gehört es?</h2>
+    <div class="szene">
+      <div class="mensch">
+        <div class="dateiname"><span class="t">14-02-11</span><span class="sep">_</span><span class="v">dc0</span><span class="e">.tiff</span></div>
+        <div class="kette fragment"><span class="c-wunsch">Nimm Bild dc0 auf · Paar 4711</span></div>
+        <p class="pointe fragment">Das ist ein Wunsch. Noch kein Fakt.</p>
+      </div>
+      <div class="karte fragment"><div class="stage"><div data-node="be"></div></div></div>
+    </div>
+    <p class="fachwort fragment"><span class="dot" style="--d:var(--c-cmd)"></span>Fachwort: <b>Command</b> – ein Wunsch an genau einen, der entscheidet.</p>
+  </div></section>
+  <section class="sl code"><div class="in">
+    <p class="kicker">Im Code · Funktion</p><h2>Nur aus dem Dateinamen gerechnet – darum kann man es gefahrlos wiederholen.</h2>
+    {{el_code:3}}
+  </div></section>
+</section>
+
+<section>
+  <section class="sl station"><div class="in">
+    <p class="zeit">14:02:15</p>
+    <h2>Das Paar entscheidet selbst.</h2>
+    <div class="szene">
+      <div class="mensch">
+        <div class="vn klein">
+          <div class="rec"><b>Bildpaar 4711</b><div><span>dc0</span><em>✓</em></div><div><span>dc2</span><em>—</em></div></div>
+          <div class="pfeil fragment">→</div>
+          <div class="rec fragment"><b>Bildpaar 4711</b><div class="neu"><span>dc0</span><em>✓</em></div><div class="neu"><span>dc2</span><em>✓</em></div><div class="neu"><span>komplett</span><em>✓</em></div></div>
+        </div>
+        <p class="pointe fragment">Je Paar ein Entscheider. Eins nach dem anderen, nie gleichzeitig.</p>
+      </div>
+      <div class="karte z1 fragment"><div class="stage"><div data-node="E_a"></div></div></div>
+    </div>
+    <p class="fachwort fragment"><span class="dot sq" style="--d:var(--h-agg)"></span>Fachwort: <b>Aggregat</b> – der, der entscheidet. Seine Entscheidung heißt <b>Event</b>.</p>
+  </div></section>
+  <section class="sl code"><div class="in">
+    <p class="kicker">Im Code · Aggregat</p><h2>„Anlegen oder ergänzen“ – und „beide Bilder da“ ist eine einfache Abfrage.</h2>
+    {{el_code:4}}
+  </div></section>
+</section>
+
+<section>
+  <section class="sl station"><div class="in">
+    <p class="zeit">14:03:40</p>
+    <h2>Komplett. Jetzt schaut die KI.</h2>
+    <div class="szene">
+      <div class="mensch">
+        <div class="kette"><span class="c-fakt">Paar 4711 komplett</span><span class="pfeil">→</span><span class="mock m-ki">Anomalie · 0,93</span></div>
+        <p class="pointe fragment">Aus einem Fakt wird ein neuer Wunsch.</p>
+        <p class="neben fragment">Die KI läuft als Python-Prozess. Das Framework bietet ihr jedes komplette Paar an und hält ihre Antwort fest.</p>
+      </div>
+      <div class="karte fragment"><div class="stage"><div data-node="E_bb"></div></div></div>
+    </div>
+    <p class="fachwort fragment"><span class="dot sq" style="--d:var(--h-fn)"></span>Fachwort: wieder eine <b>Funktion</b> – nur läuft sie auf einem anderen Rechner.</p>
+  </div></section>
+  <section class="sl code"><div class="in">
+    <p class="kicker">Im Code · Funktion draußen</p><h2>Im Code steht nur, was hinein- und herauskommt. Welcher Rechner es ausführt, wird festgelegt.</h2>
+    <div class="zwei-code">{{el_code:5}}<div class="stage"><div data-node="E_w"></div></div></div>
+  </div></section>
+</section>
+
+<section>
+  <section class="sl station"><div class="in">
+    <p class="zeit">14:03:41</p>
+    <h2>Die Liste der Inspekteurin füllt sich.</h2>
+    <div class="szene">
+      <div class="mensch">
+        <div class="miniliste">
+          <div class="neuz"><em class="g"></em>14:02:11 · dc0 + dc2 · KI: Anomalie</div>
+          <div><em class="g"></em>14:02:07 · dc0 + dc2</div>
+          <div><em class="y"></em>14:02:03 · dc0</div>
+          <div><em class="g"></em>14:01:59 · dc0 + dc2</div>
+        </div>
+        <p class="pointe fragment">Eine Ansicht – zusammengestellt aus dem Log.</p>
+      </div>
+      <div class="karte z1 fragment"><div class="stage"><div data-node="E_p"></div></div></div>
+    </div>
+    <p class="fachwort fragment"><span class="dot sq" style="--d:var(--h-prj)"></span>Fachwort: <b>Projektion</b> – sie stellt die Ansicht zusammen und legt sie in ihrem <b>Store</b> ab.</p>
+  </div></section>
+  <section class="sl code"><div class="in">
+    <p class="kicker">Im Code · Projektion und Store</p><h2>Zu jedem Ereignis eine kleine Regel, wie sich die Liste ändert.</h2>
+    <div class="zwei-code">{{el_code:6}}{{el_code:7}}</div>
+  </div></section>
+</section>
+
+<section>
+  <section class="sl station"><div class="in">
+    <p class="zeit">14:04:58</p>
+    <h2>Sie fragt: was ist noch offen?</h2>
+    <div class="szene">
+      <div class="mensch">
+        <div class="kette"><span class="c-frage">Was ist noch offen?</span><span class="pfeil">→</span><span class="rec antwort"><b>Antwort</b><span class="z">4711 · KI: Anomalie</span><span class="z">4712 · nur dc0</span></span></div>
+        <p class="pointe fragment">Fragen ändern nichts.</p>
+      </div>
+      <div class="karte z1 fragment"><div class="stage"><div data-node="E_r"></div></div></div>
+    </div>
+    <p class="fachwort fragment"><span class="dot" style="--d:var(--c-qry)"></span>Fachwort: die Frage heißt <b>Query</b>, wer antwortet, <b>Reader</b>.</p>
+  </div></section>
+  <section class="sl code"><div class="in">
+    <p class="kicker">Im Code · Reader</p><h2>Die Antwort sagt, wie aktuell sie ist.</h2>
+    {{el_code:8}}
+  </div></section>
+</section>
+
+<section>
+  <section class="sl station"><div class="in">
+    <p class="zeit">14:05:02</p>
+    <h2>Sie drückt F.</h2>
+    <div class="szene">
+      <div class="mensch">
+        <div class="taste">F</div>
+        <div class="kette fragment"><span class="c-wunsch">Labele 4711: Anomalie</span><span class="pfeil">→</span><span class="c-ent">Bildpaar 4711</span><span class="pfeil">→</span><span class="c-fakt">als Anomalie gelabelt</span></div>
+        <p class="pointe fragment">Ein Tastendruck ist ein Wunsch. Das Paar entscheidet.</p>
+      </div>
+      <div class="karte fragment"><div class="stage"><div data-node="E_ap"></div></div></div>
+    </div>
+    <p class="fachwort fragment"><span class="dot sq" style="--d:var(--h-cli)"></span>Fachwort: ihr Arbeitsplatz ist ein <b>Client</b>. Was er darf, ist vorher abgesprochen.</p>
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Genauer · was dabei passiert</p><h2>Im Arbeitsplatz läuft alles in eine Richtung.</h2>
+    <div class="flowpanel">{{modul_svg}}</div>
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Genauer · Client und Server</p><h2>Schreiben, sofort lesen, auf dem Laufenden bleiben.</h2>
+    <div class="flowpanel">{{zs_svg}}</div>
+  </div></section>
+</section>
+
+<section>
+  <section class="sl station"><div class="in">
+    <p class="zeit">14:05:02</p>
+    <h2>Darf sie das überhaupt?</h2>
+    <div class="szene">
+      <div class="mensch">
+        <div class="kette"><span class="c-akt">Inspekteurin</span><span class="pfeil">darf</span><span class="c-wunsch">Labele</span><span class="c-frage">Was ist offen?</span></div>
+        <p class="pointe fragment">Was hineinkommt, kommt von jemandem, der es darf.</p>
+      </div>
+      <div class="karte fragment"><div class="stage"><div data-node="E_ak3"></div></div></div>
+    </div>
+    <p class="fachwort fragment"><span class="dot sq" style="--d:var(--h-akt)"></span>Fachwort: <b>Akteur</b> – eine Rolle mit festen Rechten.</p>
+  </div></section>
+  <section class="sl code"><div class="in">
+    <p class="kicker">Im Code · Akteure und Clients</p><h2>Rechte hängen an Rollen. Jedes Programm hat eine feste Absprache.</h2>
+    <div class="zwei-code">{{el_code:9}}{{el_code:10}}</div>
+  </div></section>
+</section>
+
+<section class="sl station"><div class="in">
+  <p class="zeit">14:05:02</p>
+  <h2>Und alle anderen sehen es sofort.</h2>
+  <div class="szene">
+    <div class="mensch">
+      <div class="kette"><span class="c-fakt">als Anomalie gelabelt</span><span class="pfeil">→</span><span class="c-bi">Verteiler</span><span class="pfeil">→</span><span class="c-akt">andere Arbeitsplätze</span></div>
+      <p class="pointe fragment">Ein Hinweis, kein Versprechen. Wer es genau wissen will, fragt nach.</p>
+    </div>
+    <div class="karte fragment"><div class="stage"><div data-node="E_v"></div></div></div>
+  </div>
+  <p class="fachwort fragment"><span class="dot sq" style="--d:var(--h-bi)"></span>Fachwort: <b>Verteiler</b> – bringt das System schon mit, niemand muss ihn bauen.</p>
+</div></section>
+
+<!-- ═══ Rückblick ═══ -->
+<section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Rückblick</p>
+    <h2>Das war Paar 4711. Im Log steht alles.</h2>
+    <div class="log rueck">
+      <div><time>14:02:11</time><i class="w-src"></i>Datei dc0 erkannt</div>
+      <div><time>14:02:12</time><i class="w-fn"></i>Bild aufbereitet</div>
+      <div><time>14:02:12</time><i class="w-agg"></i>Paar 4711 angelegt, Bild dc0 da</div>
+      <div><time>14:02:15</time><i class="w-agg"></i>Bild dc2 da, Paar komplett</div>
+      <div><time>14:03:40</time><i class="w-fn"></i>KI-Antwort festgehalten</div>
+      <div><time>14:03:40</time><i class="w-agg"></i>durch KI klassifiziert: Anomalie</div>
+      <div><time>14:05:02</time><i class="w-agg"></i>von der Inspekteurin gelabelt: Anomalie</div>
+    </div>
+    <p class="legende"><i class="w-src"></i>Quelle &nbsp; <i class="w-fn"></i>Funktion &nbsp; <i class="w-agg"></i>Aggregat &nbsp;– nur diese drei schreiben ins Log.</p>
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Rückblick</p>
+    <h2>Und das ist die ganze Anwendung.</h2>
+    {{ip}}
+  </div></section>
+</section>
+
+<!-- ═══ Die Regeln dahinter ═══ -->
+<section>
+  <section class="sl erz"><div class="in">
+    <p class="kicker">Die Regeln dahinter</p>
+    <h2>Mehr ist es nicht.</h2>
+    <div class="flowpanel"><svg class="flow erzflow" viewBox="0 0 1200 460" role="img" aria-label="Die Welt und der Entscheider schreiben Fakten ins Log. Eine Reaktion liest Fakten und äußert Wünsche an den Entscheider. Eine Ansicht faltet das Log und beantwortet Fragen des Menschen, der seine Wünsche an den Entscheider schickt.">
+    <defs>
+      <marker id="e-fakt" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-evt)"/></marker>
+      <marker id="e-wunsch" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-cmd)"/></marker>
+      <marker id="e-frage" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-qry)"/></marker>
+      <marker id="e-antw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" style="fill:var(--c-ant)"/></marker>
+    </defs>
+    <g>
+      <rect x="40" y="200" width="920" height="54" rx="6" class="logband"/>
+      <text x="62" y="234" class="logt">Log</text><text x="112" y="233" class="logs">was passiert ist</text>
+      <rect x="40" y="70" width="180" height="70" rx="8" class="blk" style="--b:var(--h-src)"/>
+      <text x="130" y="101" class="fn" text-anchor="middle">Welt</text><text x="130" y="121" class="fs" text-anchor="middle">Datei · Sensor · Takt</text>
+      <line x1="130" y1="140" x2="130" y2="197" class="ed" style="stroke:var(--c-evt)" marker-end="url(#e-fakt)"/>
+      <text x="138" y="174" class="fl">Fakt</text>
+    </g>
+    <g class="fragment">
+      <rect x="320" y="70" width="220" height="70" rx="8" class="blk" style="--b:var(--h-agg)"/>
+      <text x="430" y="101" class="fn" text-anchor="middle">Entscheider</text><text x="430" y="121" class="fs" text-anchor="middle">je Ding genau einer</text>
+      <line x1="490" y1="140" x2="490" y2="197" class="ed" style="stroke:var(--c-evt)" marker-end="url(#e-fakt)"/>
+      <text x="498" y="174" class="fl">Fakt</text>
+      <rect x="1010" y="70" width="160" height="350" rx="8" class="blk" style="--b:var(--h-cli)"/>
+      <text x="1090" y="101" class="fn" text-anchor="middle">Mensch</text><text x="1090" y="121" class="fs" text-anchor="middle">am Arbeitsplatz</text>
+      <path d="M1090 70 V40 H430 V67" class="ed" style="stroke:var(--c-cmd)" marker-end="url(#e-wunsch)"/>
+      <text x="760" y="32" class="fl" text-anchor="middle">Wunsch</text>
+    </g>
+    <g class="fragment">
+      <rect x="300" y="320" width="220" height="70" rx="8" class="blk" style="--b:var(--h-fn)"/>
+      <text x="410" y="351" class="fn" text-anchor="middle">Reaktion</text><text x="410" y="371" class="fs" text-anchor="middle">wenn …, dann …</text>
+      <line x1="340" y1="254" x2="340" y2="317" class="ed" style="stroke:var(--c-evt)" marker-end="url(#e-fakt)"/>
+      <text x="346" y="290" class="fl">Fakt</text>
+      <line x1="420" y1="200" x2="420" y2="254" class="halo"/>
+      <line x1="420" y1="320" x2="420" y2="143" class="ed" style="stroke:var(--c-cmd)" marker-end="url(#e-wunsch)"/>
+      <text x="426" y="290" class="fl">Wunsch</text>
+    </g>
+    <g class="fragment">
+      <rect x="640" y="320" width="200" height="70" rx="8" class="blk" style="--b:var(--h-prj)"/>
+      <text x="740" y="351" class="fn" text-anchor="middle">Ansicht</text><text x="740" y="371" class="fs" text-anchor="middle">aus dem Log</text>
+      <line x1="740" y1="254" x2="740" y2="317" class="ed" style="stroke:var(--c-evt)" marker-end="url(#e-fakt)"/>
+      <text x="746" y="290" class="fl">Fakt</text>
+      <line x1="1010" y1="342" x2="843" y2="342" class="ed" style="stroke:var(--c-qry)" marker-end="url(#e-frage)"/>
+      <text x="925" y="334" class="fl" text-anchor="middle">Frage</text>
+      <line x1="840" y1="372" x2="1007" y2="372" class="ed" style="stroke:var(--c-ant)" marker-end="url(#e-antw)"/>
+      <text x="925" y="390" class="fl" text-anchor="middle">Antwort</text>
+    </g>
+  </svg></div>
+  </div></section>
+  <section class="sl erz"><div class="in">
+    <h2>Die Wörter dafür.</h2>
+    <div class="woerter">
+    <div><span class="dot" style="--d:var(--c-cmd)"></span><b>Wunsch</b><span class="fragment" data-fragment-index="1">Command</span></div>
+    <div><span class="dot sq" style="--d:var(--h-agg)"></span><b>Entscheider</b><span class="fragment" data-fragment-index="1">Aggregat</span></div>
+    <div><span class="dot" style="--d:var(--c-evt)"></span><b>Fakt</b><span class="fragment" data-fragment-index="1">Event</span></div>
+    <div><span class="dot sq" style="--d:var(--h-src)"></span><b>Welt</b><span class="fragment" data-fragment-index="1">Quelle</span></div>
+    <div><span class="dot sq" style="--d:var(--h-fn)"></span><b>Reaktion</b><span class="fragment" data-fragment-index="1">Funktion</span></div>
+    <div><span class="dot sq" style="--d:var(--h-prj)"></span><b>Ansicht</b><span class="fragment" data-fragment-index="1">Projektion + Reader</span></div>
+    <div><span class="dot" style="--d:var(--c-qry)"></span><b>Frage</b><span class="fragment" data-fragment-index="1">Query</span></div>
+    <div><span class="dot hohl" style="--d:var(--c-hin)"></span><b>Hinweis</b><span class="fragment" data-fragment-index="1">Hinweis (verlierbar)</span></div>
+    <div><span class="dot sq" style="--d:var(--h-cli)"></span><b>Mensch, Programm</b><span class="fragment" data-fragment-index="1">Akteur am Client</span></div>
+  </div>
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Die Regeln dahinter</p><h2>Dasselbe Bild, mit den Fachwörtern.</h2>
+    <div class="flowpanel">{{ueberblick_svg}}</div>
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Die Regeln dahinter</p><h2>Was sicher ankommt – und was nicht.</h2>
+    {{msgs}}{{deps}}
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Die Regeln dahinter</p><h2>Jeder Baustein: was hinein darf, was herauskommt.</h2>
+    <div class="protos n3">{{proto:agg}}{{proto:fn}}{{proto:src}}</div>
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Die Regeln dahinter</p><h2>Weitere Bausteine: Ansichten, Speicher, Programme.</h2>
+    <div class="protos n4">{{proto:prj}}{{proto:rdr}}{{proto:store}}{{proto:cli}}</div>
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Die Regeln dahinter</p><h2>Ein Ausgang passt nur an einen Eingang derselben Farbe.</h2>
+    {{allg}}
+  </div></section>
+</section>
+
+<!-- ═══ Der Arbeitsplatz ═══ -->
+<section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Der Arbeitsplatz</p><h2>So sieht die Inspekteurin ihren Tag.</h2>
+    {{wf}}{{wf_hl}}
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Der Arbeitsplatz</p><h2>Ein leerer Rahmen, den Module füllen.</h2>
+    {{ideen}}{{slots}}
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Der Arbeitsplatz</p><h2>Wer schaltet was ein?</h2>
+    {{treppe}}
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Der Arbeitsplatz</p><h2>Auf- und zuklappen, umschalten, ausblenden.</h2>
+    {{ui3}}
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Der Arbeitsplatz</p><h2>Die Hände bleiben auf der Tastatur.</h2>
+    {{keys}}
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Der Arbeitsplatz</p><h2>Drei Arten zu arbeiten.</h2>
+    {{modi}}
+  </div></section>
+</section>
+
+<!-- ═══ Und die Entwickler ═══ -->
+<section>
+  <section class="sl erz"><div class="in">
+    <p class="kicker">Und wer baut das?</p>
+    <h2>Man schreibt nur zwei Dinge.</h2>
+    <div class="zwei">
+      <div class="fragment"><b>Was darf hinein?</b><span>der Parameter</span></div>
+      <div class="fragment"><b>Was kann herauskommen?</b><span>der Rückgabetyp</span></div>
+    </div>
+    <p class="pointe fragment">Reihenfolge, Wiederholen bei Fehlern, Verteilen auf viele Rechner – das erledigt das System.</p>
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Und wer baut das?</p><h2>Aus der ersten Zeile im Code wird ein Baustein im Bild.</h2>
+    {{sig}}{{maplist}}
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Und wer baut das?</p><h2>Den Inhalt darf eine KI schreiben – in festen Grenzen.</h2>
+    <div class="flowpanel">{{llm_svg}}</div>
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Und wer baut das?</p><h2>Der Auftrag an die KI steht im Code, der Test daneben.</h2>
+    {{llm_pair}}{{llm_cli}}
+  </div></section>
+</section>
+
+<!-- ═══ Fortsetzung 1: Nach dem Tastendruck – wann sieht wer was? ═══ -->
+<section class="sl kapitel"><div class="in">
+  <p class="zeit">14:05:02</p>
+  <h2>Sie hat F gedrückt. Wann sieht wer was?</h2>
+  <p class="lead">Nicht alles passiert im selben Augenblick. Und das ist Absicht.</p>
+</div></section>
+
+<section>
+  <section class="sl station"><div class="in">
+    <p class="kicker">Nach dem Tastendruck</p>
+    <h2>Die Wahrheit ist sofort da. Die Ansichten folgen.</h2>
+    <div class="zs-grid">
+      <div class="zh"></div><div class="zh"><kbd>F</kbd></div><div class="zh">sofort</div><div class="zh">kurz danach</div><div class="zh">bald, ohne Garantie</div>
+      <div class="zl">Paar 4711</div><div></div><div class="fragment"><span class="c-ent">entscheidet: gelabelt</span></div><div></div><div></div>
+      <div class="zl">Log</div><div></div><div class="fragment" data-fragment-index="0"><span class="c-fakt">Fakt angehängt</span></div><div></div><div></div>
+      <div class="zl">ihre Liste</div><div></div><div></div><div class="fragment"><span class="c-ansicht">zeigt „Anomalie“</span></div><div></div>
+      <div class="zl">andere Plätze</div><div></div><div></div><div></div><div class="fragment"><span class="c-hin">Hinweis: neu laden</span></div>
+    </div>
+    <p class="pointe fragment">Die Ansichten holen kurz danach auf. Fachwort: <b>eventual consistency</b>.</p>
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Genauer</p><h2>Zwei Arten von Wahrheit.</h2>
+    <div class="wahrheit">
+      <div class="zellen"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i class="offen"></i><i class="offen"></i><i class="offen"></i><i class="offen"></i><i class="offen"></i><i class="offen"></i><i class="kopf"></i></div>
+      <div class="marken">
+        <span class="m-proj">Ansicht ist hier <em>(liest nach)</em></span>
+        <span class="m-kopf">hier hat Paar 4711 entschieden</span>
+      </div>
+    </div>
+    <div class="zwei">
+      <div><b>exakt</b><span>der Entscheider und das Log. Wer es genau wissen muss, fragt das Paar direkt.</span></div>
+      <div><b>folgt nach</b><span>jede Ansicht. Je Paar immer in der richtigen Reihenfolge.</span></div>
+    </div>
+  </div></section>
+</section>
+
+<section class="sl station"><div class="in">
+  <p class="zeit">14:05:03</p>
+  <h2>Und wenn sie sofort nachfragt?</h2>
+  <div class="kette gross-kette">
+    <span class="c-fakt">Quittung: Paar 4711 · Stand 7</span>
+    <span class="pfeil fragment">→</span>
+    <span class="c-frage fragment">Was ist offen? <small>mindestens Stand 7</small></span>
+    <span class="pfeil fragment">→</span>
+    <span class="c-ansicht fragment">Ansicht wartet kurz<small>bis sie Stand 7 kennt</small></span>
+    <span class="pfeil fragment">→</span>
+    <span class="ergebnis fragment"><span class="c-fakt">Antwort · Stand 7</span><small>oder</small><span class="c-ab">„noch nicht so weit“</span></span>
+  </div>
+  <p class="pointe fragment">Sie sieht immer, was sie selbst getan hat. Ohne Raten.</p>
+</div></section>
+
+<section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Was sicher ist</p>
+    <h2>Worauf man sich verlassen kann – und worauf bewusst nicht.</h2>
+    <div class="garantie">
+      <div class="g-gut"><b>genau einmal wirksam</b>
+        <span>ein Wunsch, auch doppelt gesendet</span><span>jeder Fakt, bei jedem Hörer</span><span>jede Ansicht, je Paar in Reihenfolge</span><span>die Ausgabe einer Reaktion</span><span>eine Frist</span>
+      </div>
+      <div class="g-mittel fragment"><b>mindestens einmal</b>
+        <span>Wirkung nach draußen: Mail, fremde API</span><span>der Lauf einer Reaktion selbst</span>
+      </div>
+      <div class="g-los fragment"><b>darf verloren gehen</b>
+        <span>Hinweise und Ablehnungen</span><span>Push an andere Arbeitsplätze</span><span>der interne Anstoß zum Weiterlesen</span>
+      </div>
+    </div>
+    <p class="pointe fragment">Verlierbares darf verloren gehen – weil das Log nichts verliert.</p>
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Was sicher ist</p>
+    <h2>Und wenn mitten drin etwas abstürzt?</h2>
+    <div class="figuren">
+      <div><span class="fig-k">1</span><b>Nichts geht verloren</b><span>Jeder Leser rückt erst weiter, wenn seine Wirkung geschrieben ist.</span></div>
+      <div class="fragment"><span class="fig-k">2</span><b>Wiederholen schadet nicht</b><span>Dieselbe Id ergibt dieselbe Wirkung, nicht eine zweite.</span></div>
+      <div class="fragment"><span class="fig-k">3</span><b>Nur einer gewinnt</b><span>Laufen kurz zwei Kopien, scheitert die zweite sauber.</span></div>
+    </div>
+  </div></section>
+</section>
+
+<!-- ═══ Fortsetzung 2: Der Rest des Tages am Arbeitsplatz ═══ -->
+<section class="sl station"><div class="in">
+  <p class="zeit">15:30:44</p>
+  <h2>Ein Label wird abgelehnt.</h2>
+  <div class="szene">
+    <div class="mensch">
+      <div class="kette"><span class="c-wunsch">Labele 4713</span><span class="pfeil">→</span><span class="c-ent">Bildpaar 4713</span><span class="pfeil fragment">→</span><span class="c-ab fragment">Paar noch nicht komplett</span></div>
+      <p class="pointe fragment">Kein Fakt, nur ein Hinweis. Und nur sie bekommt ihn.</p>
+    </div>
+    <div class="fragment"><div class="snack"><b>!</b>PaarNichtKomplett</div><p class="neben">unten am Bildschirm, für ein paar Sekunden</p></div>
+  </div>
+</div></section>
+
+<section class="sl station"><div class="in">
+  <p class="zeit">16:10:05</p>
+  <h2>Das WLAN ist kurz weg.</h2>
+  <div class="offline">
+    <div class="ol-spur">
+      <span class="ol-on">verbunden</span><span class="ol-off">weg</span><span class="ol-on">wieder da</span>
+    </div>
+    <div class="ol-ereignisse">
+      <span class="c-wunsch fragment">Labele 4714 · Id gemerkt</span>
+      <span class="c-wunsch fragment">noch einmal gesendet · gleiche Id</span>
+      <span class="c-fakt fragment">genau einmal gewirkt</span>
+      <span class="c-ansicht fragment">Verpasstes nachgelesen</span>
+    </div>
+  </div>
+  <p class="pointe fragment">Doppelt senden ist sicher. Verpasstes holt sie aus dem Log.</p>
+</div></section>
+
+<section class="sl station"><div class="in">
+  <p class="zeit">Am nächsten Morgen · 07:58</p>
+  <h2>Sie meldet sich an.</h2>
+  <div class="schritte">
+    <div><span class="sp"></span><b>Verbinde …</b><span>mit Vertrag und Anmeldung</span></div>
+    <div class="fragment"><span class="sp"></span><b>Daten werden geladen …</b><span>jede Liste holt ihren Anfang</span></div>
+    <div class="fragment"><span class="sp ok"></span><b>bereit</b><span>erst jetzt erscheinen die Module</span></div>
+  </div>
+  <p class="pointe fragment">Keine leere Liste beim Start. Und sie sieht nur, was sie darf.</p>
+</div></section>
+
+<!-- ═══ Fortsetzung 3: Eine neue Anforderung – Werkbank und LLM ═══ -->
+<section class="sl kapitel"><div class="in">
+  <p class="zeit">08:15</p>
+  <h2>Eine neue Anforderung.</h2>
+  <div class="zettel">
+    „Wenn ein Paar nach zehn Minuten noch unvollständig ist, will ich das in der Liste sehen.“
+    <span>– die Teamleitung</span>
+  </div>
+</div></section>
+
+<section>
+  <section class="sl"><div class="in">
+    <p class="kicker">In der Werkbank</p>
+    <h2>Die Werkbank zeigt die Anwendung als Bild – direkt aus dem Code.</h2>
+    <div class="werkbank">
+      <div class="wb-kopf"><b>Werkbank</b><span class="wb-zweig">werkbank/unvollstaendig</span><span class="wb-k">↶</span><span class="wb-k">🤖</span><span class="wb-k gruen">⟳ durchspielen</span></div>
+      {{ip}}
+    </div>
+    <p class="neben" style="margin-top:14px">Das Bild entsteht aus dem Code. Gespeichert wird nur, wo die Bausteine liegen.</p>
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">In der Werkbank</p>
+    <h2>Jeder Handgriff im Bild ändert sofort den Code.</h2>
+    <div class="szene">
+      <div class="mensch">
+        <div class="geste"><span class="c-ent">ImagePair</span><span class="plus">⊕</span><span class="c-frist">Frist&lt;PruefeVollstaendigkeit&gt;</span></div>
+        <p class="pointe">↶ macht ihn rückgängig. Es gibt nur den Code – kein zweites Modell daneben.</p>
+      </div>
+<pre class="code nohl diff"><code><span class="add">+ public record PruefeVollstaendigkeit(Id&lt;ImagePair&gt; AggregateId)</span>
+<span class="add">+     : ICommand&lt;ImagePair&gt;;</span>
+<span class="add">+ public record PaarUnvollstaendig() : IEvent;</span>
+
+  public IEnumerable&lt;OneOf&lt;ImagePairErstellt, BildVerfuegbar,
+<span class="del">-     ImagePairKomplett, BildVersionBereitsVerfuegbar&gt;&gt;</span>
+<span class="add">+     ImagePairKomplett, BildVersionBereitsVerfuegbar,</span>
+<span class="add">+     Frist&lt;PruefeVollstaendigkeit&gt;&gt;&gt;</span>
+      Decide(NimmBildAuf cmd)</code></pre>
+    </div>
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">In der Werkbank</p>
+    <h2>Solange etwas fehlt, zeigt die Werkbank es rot.</h2>
+    <div class="meldungen">
+      <div class="rot"><b>✗</b>PaarUnvollstaendig wird entschieden, hat aber kein Apply <em>R3</em></div>
+      <div class="rot"><b>✗</b>Zu PruefeVollstaendigkeit fehlt ein Decide <em>R3</em></div>
+      <div class="gruen"><b>✓</b>Die Frist zielt auf einen Command des eigenen Aggregats <em>R5</em></div>
+    </div>
+    <p class="pointe fragment">Geprüft wird beim Bauen. Erst wenn alles passt, wird es grün.</p>
+  </div></section>
+</section>
+
+<section>
+  <section class="sl station"><div class="in">
+    <p class="kicker">Die KI</p>
+    <h2>Der Auftrag an die KI hängt direkt am Baustein.</h2>
+    <div class="llmknoten">
+      <div class="node k-llm" style="--w:380px">
+        <div class="nh"><span class="nk">🤖 LLM</span><span class="nt">Unvollständig melden</span></div>
+        <div class="nb">
+          <div class="auftrag">„Ist das Paar nicht komplett, melde es als unvollständig.“</div>
+          <div class="knoepfe"><span class="kn-go">▶ ausführen</span><span>↻ anpassen</span><span>✓ übernehmen</span><span>↶</span></div>
+          <div class="lauf fragment">LLM schreibt · prüft · baut … <b>✓ geschrieben · Build grün</b></div>
+        </div>
+      </div>
+      <div class="llm-kante"><span>Auftrag → Rumpf</span></div>
+      <div class="node k-agg" style="--w:390px">
+        <div class="nh"><span class="nk">Decide</span><span class="nt">ImagePair · PruefeVollstaendigkeit</span></div>
+        <div class="nb">
+          <div class="row i"><i class="slot t-cmd"></i><span class="lbl">PruefeVollstaendigkeit</span></div>
+          <div class="row o"><span class="lbl">PaarUnvollstaendig</span><i class="slot t-evt"></i></div>
+          <div class="row s">Rumpf</div>
+          <div class="row i rumpfport"><i class="slot t-code"></i><span class="lbl">noch leer</span></div>
+        </div>
+      </div>
+    </div>
+    <p class="pointe fragment">Ein Auftrag, ein Stück Code. Nicht mehr.</p>
+  </div></section>
+
+  <section class="sl"><div class="in">
+    <p class="kicker">Die KI</p>
+    <h2>Was beim Klick auf ▶ passiert.</h2>
+    <div class="ablauf">
+      <div><span class="ab-n">1</span><b>Zusammenstellen</b><span>die Übersicht und das eine Stück, sonst nichts</span></div>
+      <div class="fragment"><span class="ab-n">2</span><b>Fragen</b><span>Die KI bekommt nur das – keinen Zugriff auf den Rest.</span></div>
+      <div class="fragment"><span class="ab-n">3</span><b>Zur Probe bauen</b><span>Der Vorschlag wird mit allen Regeln gebaut, bevor er zählt.</span></div>
+      <div class="fragment ab-rot"><span class="ab-n">↺</span><b>Rot?</b><span>Die Fehlermeldung geht an die KI zurück, höchstens dreimal.</span></div>
+      <div class="fragment ab-gruen"><span class="ab-n">4</span><b>Grün?</b><span>Der Code wird übernommen. ↶ macht es rückgängig.</span></div>
+    </div>
+    <div class="ausserhalb fragment"><code>AUSSERHALB: braucht Event PaarUnvollstaendig</code><span>Fehlt ein Baustein, schreibt die KI keinen Code – sie sagt, was fehlt.</span></div>
+  </div></section>
+
+  <section class="sl"><div class="in">
+    <p class="kicker">Die KI</p>
+    <h2>Jeder KI-Auftrag ist nachvollziehbar.</h2>
+    <div class="protokoll">
+      <div class="pk-k"><span>Runde</span><span>Auftrag</span><span>Ergebnis</span><span>Dauer</span></div>
+      <div><span>1</span><span>Ist das Paar nicht komplett, melde es …</span><span class="rot">Befund: Apply fehlt</span><span>8,2 s</span></div>
+      <div class="fragment"><span>2</span><span>… + Befund</span><span class="gruen">geprüft, geschrieben</span><span>6,9 s</span></div>
+    </div>
+    <div class="zwei">
+      <div><b>Auftrag im Code</b><span><code>// 🤖 Prompt:</code> steht direkt beim Code und wird mit ihm aufbewahrt</span></div>
+      <div><b>Protokoll je Stück</b><span>Runden, Fehlermeldungen, Token, Dauer</span></div>
+    </div>
+  </div></section>
+
+  <section class="sl station"><div class="in">
+    <p class="kicker">Genauer</p>
+    <h2>Was die KI zu sehen bekommt – und was zurückkommt.</h2>
+    <div class="szene">
+      <div class="kontext">
+        <b>Kontextfenster für Decide(PruefeVollstaendigkeit)</b>
+        <div class="k-skel">Übersicht der ganzen Anwendung</div>
+        <div class="k-sig">Signatur: <code>OneOf&lt;PaarUnvollstaendig&gt; Decide(PruefeVollstaendigkeit)</code></div>
+        <div class="k-nach">Nachbarn: Zustand des Paars, <code>GetBild</code>, <code>IstKomplett</code></div>
+        <div class="k-prompt">Prompt: <code>// 🤖 Prompt: ist das Paar nicht komplett, melde es</code></div>
+        <span class="k-nie">nie dabei: der bisherige Code dieses Stücks</span>
+      </div>
+<pre class="code fragment"><code>public IEnumerable&lt;OneOf&lt;PaarUnvollstaendig&gt;&gt;
+    Decide(PruefeVollstaendigkeit cmd)
+{
+    // 🤖 Prompt: ist das Paar nicht komplett, melde es
+    if (!State.IstKomplett)
+        yield return new PaarUnvollstaendig();
+}</code></pre>
+    </div>
+    <p class="pointe fragment">Sie kann nur liefern, was vorgesehen ist.</p>
+  </div></section>
+  <section class="sl"><div class="in">
+    <p class="kicker">Genauer</p><h2>Der ganze Weg im Überblick.</h2>
+    <div class="flowpanel">{{llm_svg}}</div>
+  </div></section>
+</section>
+
+<section class="sl station"><div class="in">
+  <p class="kicker">Die KI</p>
+  <h2>Ob es stimmt, entscheidet der Test – nicht die KI.</h2>
+  <div class="szene">
+<pre class="code"><code>Szenario.Für&lt;ImagePair&gt;(Fabrik, paar)
+    .Gegeben(new ImagePairErstellt(paar, …),
+             new BildVerfuegbar(BildVersion.Dc0, …))
+    .Wenn(new PruefeVollstaendigkeit(paar))
+    .Dann&lt;PaarUnvollstaendig&gt;();</code></pre>
+    <div class="mensch">
+      <div class="kette"><span class="c-ab">rot</span><span class="pfeil">→</span><span class="c-reakt">Fehlermeldung zurück an die KI</span></div>
+      <div class="kette fragment"><span class="c-fakt">grün</span><span class="pfeil">→</span><span class="c-ent">weiter</span></div>
+      <p class="neben">Gegeben, Wenn, Dann: gegen den echten Decider, ohne Datenbank.</p>
+    </div>
+  </div>
+</div></section>
+
+<section class="sl"><div class="in">
+  <p class="kicker">Die KI</p>
+  <h2>Vier Prüfungen, an denen nichts vorbeikommt.</h2>
+  <div class="leitplanken">
+    <div><b>Vorgabe</b><span>was überhaupt herauskommen darf</span></div>
+    <div class="fragment"><b>Bauen</b><span>die Regeln, automatisch geprüft</span></div>
+    <div class="fragment"><b>Test</b><span>ob das Verhalten stimmt</span></div>
+    <div class="fragment"><b>Protokoll</b><span>was im Betrieb wirklich passiert</span></div>
+  </div>
+  <p class="pointe fragment">Die KI schreibt frei. Übernommen wird nur, was alle vier besteht.</p>
+</div></section>
+
+<section class="sl station"><div class="in">
+  <p class="kicker">Ausprobieren</p>
+  <h2>Ausprobieren: mit dem echten Programm, in einer eigenen Testumgebung.</h2>
+  <div class="kette">
+    <span class="mock m-file">nur dc0 abgelegt</span><span class="pfeil">→</span>
+    <span class="c-ent fragment">Paar angelegt · Frist gesetzt</span><span class="pfeil fragment">→</span>
+    <span class="c-bi fragment">Uhr: Frist fällig</span><span class="pfeil fragment">→</span>
+    <span class="c-fakt fragment">PaarUnvollstaendig</span><span class="pfeil fragment">→</span>
+    <span class="c-ansicht fragment">steht in der Liste</span>
+  </div>
+  <p class="pointe fragment">Keine Attrappe: das echte Programm, mit eigener Datenbank nur zum Ausprobieren.</p>
+</div></section>
+
+<section class="sl"><div class="in">
+  <p class="kicker">Ausprobieren</p>
+  <h2>Im Protokoll steht, wer was ausgelöst hat.</h2>
+  <div class="spur">
+    <div class="sp-k"><span>was</span><span>wer hat es bewirkt</span><span>weil</span></div>
+    <div><span>DateiErkannt</span><code>quelle:DateiErkannt</code><span class="mut">–</span></div>
+    <div class="fragment"><span>BildAufbereitet</span><code>funktion:IBildaufbereitung</code><span>DateiErkannt</span></div>
+    <div class="fragment"><span>ImagePairErstellt · Frist</span><code>decide:ImagePair/NimmBildAuf</code><span>BildAufbereitet</span></div>
+    <div class="fragment"><span>PaarUnvollstaendig</span><code>decide:ImagePair/PruefeVollstaendigkeit</code><span>Frist · uhr</span></div>
+  </div>
+  <p class="pointe fragment">Jede Zeile führt zu dem Baustein, der es bewirkt hat.</p>
+</div></section>
+
+<section class="sl station"><div class="in">
+  <p class="zeit">09:40</p>
+  <h2>Fertig. Zur Prüfung eingereicht.</h2>
+  <div class="gitmock">
+    <div class="gm-kopf"><b>werkbank/unvollstaendig</b><span>nicht auf main</span></div>
+    <div class="gm-msg">Unvollständige Paare nach zehn Minuten melden</div>
+    <div class="gm-f">Domain/ImagePair/Commands.cs</div>
+    <div class="gm-f">Domain/ImagePair/Events.cs</div>
+    <div class="gm-f">Domain/ImagePair/ImagePair.Decider.cs <em>mit 🤖 Prompt</em></div>
+    <div class="gm-f">Domain/ImagePair/ImagePair.Applier.cs</div>
+    <div class="gm-f">Tests/ImagePairVollstaendigkeitTests.cs</div>
+  </div>
+  <p class="pointe fragment">Auftrag, Code und Test landen zusammen – und werden geprüft wie jede andere Änderung.</p>
+</div></section>
+
+<!-- ═══ Alles auf einen Blick ═══ -->
+<section class="sl"><div class="in">
+  <p class="kicker">Alles auf einen Blick</p>
+  <h2>Was wir an einem Tag gesehen haben.</h2>
+  <div class="blick">
+    <div><b>Log</b><span>vergisst nichts, nur anhängen</span></div>
+    <div><b>Entscheider</b><span>je Ding einer, exakt</span></div>
+    <div><b>Reaktionen</b><span>aus Fakten werden Wünsche</span></div>
+    <div><b>Ansichten</b><span>folgen nach, beliebig viele</span></div>
+    <div><b>Garantien</b><span>genau einmal, wo es zählt</span></div>
+    <div><b>Arbeitsplatz</b><span>Module in Slots, Vertrag ∩ Anmeldung</span></div>
+    <div><b>Werkbank</b><span>Handgriff im Bild = Änderung im Code</span></div>
+    <div><b>KI</b><span>schreibt Code, vierfach geprüft</span></div>
+    <div><b>Tokens</b><span>≈ 11 000 je Auftrag statt des ganzen Codes</span></div>
+    <div><b>Regeln</b><span>Rechte, Protokoll und Prüfung eingebaut</span></div>
+  </div>
+</div></section>
+
+<!-- ═══ Was aus unseren Zeilen entsteht (echter generierter Code, Arbeitsstand der Beispielanwendung, gekürzt um Namensräume) ═══ -->
+<section>
+  <section class="sl kapitel"><div class="in">
+    <p class="kicker">Zum Schluss</p>
+    <h2>Was aus unseren Zeilen entsteht.</h2>
+    <div class="auswas">
+      <div><span>ein Aggregat</span><i>→</i><b>ein Actor im Cluster</b></div>
+      <div><span>ein Entscheider</span><i>→</i><b>seine fertige Verdrahtung</b></div>
+      <div><span>drei Arbeitsschritte</span><i>→</i><b>der Weckplan</b></div>
+      <div><span>ein Arbeitsschritt</span><i>→</i><b>sein Bauplan</b></div>
+      <div><span>eine Ansicht</span><i>→</i><b>ihre Verteilung</b></div>
+      <div><span>eine Quelle</span><i>→</i><b>Treiber und Fabrik</b></div>
+      <div><span>Technik und Einstellungen</span><i>→</i><b>die Bindung</b></div>
+      <div><span>eine Rolle</span><i>→</i><b>ihre Rechte</b></div>
+      <div><span>eine Absprache</span><i>→</i><b>Prüfung am Server, Verdrahtung im Client</b></div>
+      <div><span>eine C#-Schnittstelle</span><i>→</i><b>Python und Protobuf</b></div>
+      <div><span>ein Modul-Ordner</span><i>→</i><b>eingehängt in die Oberfläche</b></div>
+    </div>
+    <p class="pointe fragment">Nichts davon schreibt oder pflegt jemand. Es entsteht bei jedem Bauen neu. <kbd>↓</kbd></p>
+  </div></section>
+
+  <section class="sl"><div class="in">
+    <p class="kicker">Aus einem Aggregat wird …</p>
+    <h2>… ein Actor, der im Cluster lebt.</h2>
+    <div class="gen-zwei">
+      <div><span class="gen-tag hand">von uns geschrieben</span>
+<pre class="code"><code>public partial class ImagePair : IState
+{
+    public partial class Decider : IDecider&lt;ImagePair&gt;
+    { … }
+
+    public partial class Applier
+    { … }
+}</code></pre>
+      </div>
+      <div class="fragment"><span class="gen-tag gen">generiert</span>
+<pre class="code"><code>public class ImagePairActor : AggregateActorBase&lt;ImagePair&gt;
+{
+    public ImagePairActor(
+        IAggregateHandlerFactory handlerFactory,
+        IEventStoreRepository eventStore, …,
+        ISnapshotStore? snapshots = null, …,
+        Passivierung? passivierung = null)
+        : base(…, GeneratedSnapshotSchema.VersionOf&lt;ImagePair&gt;(), …) { }
+}
+
+var imagePairKind = new ClusterKind("ImagePair",
+    actorSystem.DI().PropsFor&lt;ImagePairActor&gt;() …);</code></pre>
+      </div>
+    </div>
+    <div class="notizen fragment">
+      <div class="notiz"><b>je Bildpaar ein eigener Actor</b><span>irgendwo im Cluster, Wünsche einer nach dem anderen</span></div>
+      <div class="notiz"><b>lädt sich aus dem Log</b><span>und merkt sich Zwischenstände, damit das schnell geht</span></div>
+      <div class="notiz"><b>schläft ein, wenn nichts los ist</b><span>und wacht beim nächsten Wunsch wieder auf</span></div>
+    </div>
+  </div></section>
+
+  <section class="sl"><div class="in">
+    <p class="kicker">Aus einem Entscheider wird …</p>
+    <h2>… die fertige Verdrahtung: jeder Wunsch findet ihn von selbst.</h2>
+    <div class="gen-zwei">
+      <div><span class="gen-tag gen">generiert · wohin geht welcher Wunsch</span>
+<pre class="code"><code>[typeof(NimmBildAuf)]                  = "ImagePair",
+[typeof(KlassifiziereBildPaarDurchKi)] = "ImagePair",
+[typeof(LabelBildPaar)]                = "ImagePair",
+[typeof(MarkiereAlsInspiziert)]        = "ImagePair",
+…</code></pre>
+      </div>
+      <div class="fragment"><span class="gen-tag gen">generiert · der Entscheider, fertig verdrahtet</span>
+<pre class="code"><code>switch (command)
+{
+    case NimmBildAuf cmd:   return _decider.Decide(cmd)…;
+    case LabelBildPaar cmd: return _decider.Decide(cmd)…;
+    …
+}
+switch (@event)
+{
+    case ImagePairErstellt e: _applier.Apply(e); break;
+    case BildVerfuegbar e:    _applier.Apply(e); break;
+    …
+}</code></pre>
+      </div>
+    </div>
+    <p class="pointe fragment">Kommt ein neuer Wunsch dazu, wachsen diese Tabellen beim nächsten Bauen mit.</p>
+  </div></section>
+
+  <section class="sl"><div class="in">
+    <p class="kicker">Aus drei Arbeitsschritten wird …</p>
+    <h2>… der Weckplan: wer welchen Fakt hören muss.</h2>
+    <div class="gen-zwei">
+      <div><span class="gen-tag hand">von uns geschrieben</span>
+<pre class="code"><code>// IBildaufbereitung
+Task&lt;OneOf&lt;BildAufbereitet, BildNichtLesbar&gt;&gt; Auf(DateiErkannt e);
+
+// Bildeingang
+OneOf&lt;NimmBildAuf, DateinameUnbekannt&gt; Auf(BildAufbereitet e)
+
+// IBildpaarBeurteilung
+KlassifiziereBildPaarDurchKi Auf(ImagePairKomplett e);</code></pre>
+      </div>
+      <div class="fragment"><span class="gen-tag gen">generiert</span>
+<pre class="code"><code>/// Weckplan: Fakt aus dem Log → wer ihn hört
+Weckplan = new Dictionary&lt;Type, string[]&gt;
+{
+    [typeof(DateiErkannt)]      = { "funktion-IBildaufbereitung" },
+    [typeof(BildAufbereitet)]   = { "funktion-Bildeingang" },
+    [typeof(ImagePairKomplett)] = { "funktion-IBildpaarBeurteilung" },
+    …
+};</code></pre>
+      </div>
+    </div>
+    <div class="kette klein-kette fragment">
+      <span class="c-fakt">DateiErkannt</span><span class="pfeil">→</span><span class="c-reakt">Bildaufbereitung</span><span class="pfeil">→</span>
+      <span class="c-fakt">BildAufbereitet</span><span class="pfeil">→</span><span class="c-reakt">Bildeingang</span><span class="pfeil">→</span>
+      <span class="c-wunsch">NimmBildAuf</span><span class="pfeil">→</span><span class="c-ent">ImagePair</span><span class="pfeil">→</span>
+      <span class="c-fakt">ImagePairKomplett</span><span class="pfeil">→</span><span class="c-reakt">KI</span>
+    </div>
+    <p class="pointe fragment">Niemand hat diese Kette verdrahtet. Sie steht in den drei Zeilen links.</p>
+  </div></section>
+
+  <section class="sl"><div class="in">
+    <p class="kicker">Aus einem Arbeitsschritt wird …</p>
+    <h2>… sein Bauplan: wo er läuft und wie sicher.</h2>
+    <div class="annot">
+<pre class="code"><code>new FunktionsBaustein(typeof(IBildaufbereitung), "IBildaufbereitung",
+    Draussen: true, Gleichbleibend: false, …)</code></pre>
+      <div class="notiz fragment"><b>darf auf einem anderen Rechner laufen</b><span>Ergebnis wird festgehalten, bevor es wirkt</span></div>
+<pre class="code"><code>new FunktionsUmsetzung("OpenCvBildaufbereitung", sp =&gt; new OpenCvBildaufbereitung(
+    GetRequiredService&lt;IImageResizer&gt;(sp),
+    GetRequiredService&lt;IHistogramEqualizer&gt;(sp),
+    GetRequiredService&lt;BildaufbereitungKonfig&gt;(sp)))</code></pre>
+      <div class="notiz fragment"><b>die Technik wird eingesteckt</b><span>aus dem Konstruktor abgelesen, ohne Reflection</span></div>
+<pre class="code"><code>new FunktionsBaustein(typeof(Bildeingang), "Bildeingang",
+    Draussen: false, Gleichbleibend: true, …)</code></pre>
+      <div class="notiz fragment"><b>rechnet immer gleich</b><span>darf gefahrlos wiederholen, nichts muss festgehalten werden</span></div>
+    </div>
+  </div></section>
+
+  <section class="sl"><div class="in">
+    <p class="kicker">Aus einer Ansicht wird …</p>
+    <h2>… ihre Verteilung: welche Fakten, welcher Speicher.</h2>
+    <div class="gen-zwei">
+      <div><span class="gen-tag hand">von uns geschrieben</span>
+<pre class="code"><code>public partial class ImagePairProjektion
+{
+    public Task Handle(ImagePairErstellt evt, …,
+        IUpsertImagePair upsert) { … }
+
+    public Task Handle(BildVerfuegbar evt, …,
+        ISetBildVerfuegbar setze) { … }
+    …
+}</code></pre>
+      </div>
+      <div class="fragment"><span class="gen-tag gen">generiert</span>
+<pre class="code"><code>public const string CodeHash = "3879394e…";
+
+SubscribedTypes = { ImagePairErstellt, BildVerfuegbar,
+                    ImagePairKomplett, BildPaarGelabelt, … };
+
+switch (envelope.Payload)
+{
+    case BildVerfuegbar e:
+        await Handle(e, …, faehigkeiten.Hole&lt;ISetBildVerfuegbar&gt;());
+        break;
+    …
+}</code></pre>
+      </div>
+    </div>
+    <div class="notizen fragment">
+      <div class="notiz"><b>welche Fakten sie liest</b><span>aus den Parametern abgelesen</span></div>
+      <div class="notiz"><b>genau ihr Speicherzugriff</b><span>jede Regel bekommt nur, was sie braucht</span></div>
+      <div class="notiz"><b>ändert sich der Code …</b><span>baut die Testumgebung die Ansicht von selbst neu auf</span></div>
+    </div>
+  </div></section>
+
+  <section class="sl"><div class="in">
+    <p class="kicker">Aus einer Quelle wird …</p>
+    <h2>… Treiber, Name und Fabrik.</h2>
+    <div class="gen-zwei">
+      <div><span class="gen-tag hand">von uns geschrieben</span>
+<pre class="code"><code>public sealed record DateiErkannt : DateiGemeldet;</code></pre>
+      </div>
+      <div class="fragment"><span class="gen-tag gen">generiert</span>
+<pre class="code"><code>new QuellTyp(typeof(DateiErkannt),
+    "Datei",                  // der Treiber
+    "DateiErkannt",           // Abschnitt in den Einstellungen
+    "quelle:DateiErkannt",    // Name im Protokoll
+    d =&gt; new DateiErkannt {
+        Name = d.Name, Pfad = d.Pfad, Groesse = d.Groesse,
+        ErkanntAm = d.ErkanntAm, Kennung = d.Kennung, … })</code></pre>
+      </div>
+    </div>
+    <p class="pointe fragment">Eine Zeile Fachcode. Der Rest steht fest – und kommt ohne Reflection aus.</p>
+  </div></section>
+
+  <section class="sl"><div class="in">
+    <p class="kicker">Aus Technik und Einstellungen wird …</p>
+    <h2>… die Bindung – streng geprüft.</h2>
+    <div class="gen-zwei">
+      <div><span class="gen-tag hand">von uns geschrieben</span>
+<pre class="code"><code>public interface IImageResizer : IDienst
+{
+    Mat Resize(Mat input, int targetHeight);
+}
+
+public record BildaufbereitungKonfig(string AusgabePfad);</code></pre>
+      </div>
+      <div class="fragment"><span class="gen-tag gen">generiert</span>
+<pre class="code"><code>Namen = { ["IImageResizer"] = typeof(IImageResizer), … };
+
+new DienstImplementierung(typeof(IImageResizer), "ImageResizer",
+    typeof(ImageResizer),
+    s =&gt; s.AddSingleton&lt;IImageResizer&gt;(sp =&gt; new ImageResizer()));
+
+private static object Konfig0(IConfigurationSection s)
+{
+    KonfigLeser.NurBekannte(s, "AusgabePfad");
+    return new BildaufbereitungKonfig(KonfigLeser.Text(s, "AusgabePfad"));
+}</code></pre>
+      </div>
+    </div>
+    <p class="pointe fragment">Welche Umsetzung läuft, steht in den Einstellungen. Ein Tippfehler dort fällt beim Start auf.</p>
+  </div></section>
+
+  <section class="sl"><div class="in">
+    <p class="kicker">Aus einer Rolle wird …</p>
+    <h2>… die Liste ihrer Rechte, geprüft bei jedem Wunsch.</h2>
+    <div class="gen-zwei">
+      <div><span class="gen-tag hand">von uns geschrieben</span>
+<pre class="code"><code>public sealed record Inspekteur : IMensch,
+    IDarf&lt;LabelBildPaar&gt;, IDarf&lt;LabelEinzelBild&gt;,
+    IDarf&lt;LabelBildRegion&gt;, IDarf&lt;MarkiereAlsInspiziert&gt;,
+    IDarf&lt;SucheImagePairs&gt;, IDarf&lt;GetImagePair&gt;, …;</code></pre>
+      </div>
+      <div class="fragment"><span class="gen-tag gen">generiert</span>
+<pre class="code"><code>["Inspekteur"] = new AkteurRechte("Inspekteur", typeof(Inspekteur),
+    Commands: { LabelBildPaar, LabelBildRegion, LabelEinzelBild,
+                MarkiereAlsInspiziert },
+    Queries:  { GetImagePair, GetImagePairHistorie, SucheImagePairs, … },
+    Hoert:    { BildVerfuegbar, ImagePairKomplett, BildPaarGelabelt,
+                PaarNichtKomplett, … },
+    Art: "Mensch")</code></pre>
+      </div>
+    </div>
+    <p class="pointe fragment">Was sie hören darf, hat niemand aufgeschrieben – es folgt aus dem, was sie tun und fragen darf.</p>
+  </div></section>
+
+  <section class="sl"><div class="in">
+    <p class="kicker">Aus einer Absprache wird …</p>
+    <h2>… die Prüfung am Server und die Verdrahtung im Client.</h2>
+    <div class="gen-drei">
+      <div><span class="gen-tag hand">von uns geschrieben</span>
+<pre class="code"><code>public interface
+  IKlassifikationsWorker
+  : IClientVertrag,
+    ITraegt&lt;IBildpaarBeurteilung&gt;,
+    ISendet&lt;KlassifiziereEinzel…&gt;,
+    IFragt&lt;HoleAktivesModell&gt;,
+    IHoert&lt;BildVerfuegbar&gt;, …;</code></pre>
+      </div>
+      <div class="fragment"><span class="gen-tag gen">am Server · generiert</span>
+<pre class="code"><code>["KlassifikationsWorker"] = new ClientVertrag(
+    "KlassifikationsWorker",
+    typeof(IKlassifikationsWorker),
+    "5fb28972…",
+    Traegt: { IBildpaarBeurteilung },
+    Sendet: { KlassifiziereEinzelBildDurchKi },
+    Fragt:  { HoleAktivesModell },
+    Hoert:  { BildVerfuegbar, ModellAktiviert },
+    Verkoerpert: { "Klassifizierer" })</code></pre>
+      </div>
+      <div class="fragment"><span class="gen-tag gen">im Arbeitsplatz-Client · generiert</span>
+<pre class="code"><code>public const string Vertrag     = "Arbeitsplatz";
+public const string VertragHash = "9a5f70d6…";
+
+bus.Subscribe&lt;LabelKameraAngefordert&gt;((evt, ctx) =&gt;
+    labelingIntentHandler.Dispatch(evt, ctx,
+        msg =&gt; bus.Publish(msg, …)));</code></pre>
+      </div>
+    </div>
+    <p class="pointe fragment">Beide Seiten tragen denselben Fingerabdruck. Passt ein Client nicht, merkt es der Server beim Verbinden.</p>
+  </div></section>
+
+  <section class="sl"><div class="in">
+    <p class="kicker">Aus einer C#-Schnittstelle wird …</p>
+    <h2>… dieselbe Sprache in Python und Protobuf.</h2>
+    <div class="gen-drei">
+      <div><span class="gen-tag hand">C# · von uns</span>
+<pre class="code"><code>public interface
+    IBildpaarBeurteilung : IFunktion
+{
+    KlassifiziereBildPaarDurchKi
+        Auf(ImagePairKomplett e);
+}</code></pre>
+      </div>
+      <div class="fragment"><span class="gen-tag gen">Python · generiert</span>
+<pre class="code nohl"><code><span class="k">class</span> <span class="y">BildpaarBeurteilungBasis</span>(FunktionsBasis):
+    FUNKTION = "IBildpaarBeurteilung"
+
+    @abstractmethod
+    <span class="k">async def</span> auf_image_pair_komplett(
+        self, e: ImagePairKomplettDto, h: Herkunft
+    ) -&gt; KlassifiziereBildPaarDurchKiDto | None: ...</code></pre>
+      </div>
+      <div class="fragment"><span class="gen-tag gen">Protobuf · generiert</span>
+<pre class="code nohl"><code><span class="k">message</span> <span class="y">NimmBildAufDto</span> {
+    string aggregate_id   = 1;
+    string pair_key       = 2;
+    int64  produziert_am  = 3;
+    int64  aufgenommen_am = 4;
+    string ursprungs_pfad = 5;
+    int32  version        = 6;
+    BildMetaDto meta      = 7;
+    string pfad           = 8;
+}</code></pre>
+      </div>
+    </div>
+    <p class="pointe fragment">Der Python-Worker der KI und die Leitung sprechen automatisch dieselbe Sprache.</p>
+  </div></section>
+
+  <section class="sl"><div class="in">
+    <p class="kicker">Aus einem Modul-Ordner wird …</p>
+    <h2>… ein Platz in der Oberfläche.</h2>
+    <div class="gen-zwei">
+      <div><span class="gen-tag hand">von uns geschrieben</span>
+<pre class="code"><code>public class LabelingModule : IFooterModule
+{
+    public string Title         =&gt; "Labeling";
+    public Type   ComponentType =&gt; typeof(LabelingFooter);
+    public IReadOnlyList&lt;KeyBinding&gt; KeyBindings =&gt; [
+        new("f", "Anomalie", () =&gt; new LabelProduktAngefordert(…)), … ];
+}</code></pre>
+      </div>
+      <div class="fragment"><span class="gen-tag gen">generiert</span>
+<pre class="code"><code>services.AddScoped&lt;IUiModule, BilderModule&gt;();
+services.AddScoped&lt;IUiModule, GalerieModule&gt;();
+services.AddScoped&lt;IUiModule, LabelingModule&gt;();
+services.AddScoped&lt;IUiModule, PaarlisteModule&gt;();
+…
+
+services.AddScoped&lt;LabelingIntentHandler&gt;();</code></pre>
+      </div>
+    </div>
+    <p class="pointe fragment">Neuer Ordner, neues Modul – beim nächsten Bauen ist es da, samt Tasten.</p>
+  </div></section>
+</section>
+
+<!-- ═══ Schluss ═══ -->
+<section class="sl titel schluss"><div class="in">
+  <h1>Software, die<br>nichts vergisst.</h1>
+  <div class="drei">
+    <p>Alles, was passiert, wird aufgeschrieben.</p>
+    <p>Jedes Ding entscheidet für sich.</p>
+    <p>Wir beschreiben, was hineinkommt und was herauskommt. Den Rest erledigt das System – auch mit KI.</p>
+  </div>
+</div></section>

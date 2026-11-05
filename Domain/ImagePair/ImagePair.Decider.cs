@@ -61,7 +61,7 @@ public partial class ImagePair
         // STRANG 1 — KI klassifiziert Kamerabilder
         // ═══════════════════════════════════════════════════
 
-        public IEnumerable<OneOf<EinzelBildDurchKiKlassifiziert, BildNichtVerfuegbar, RegionLabelsUngueltig>> Decide(
+        public IEnumerable<OneOf<EinzelBildDurchKiKlassifiziert, BildNichtVerfuegbar, RegionLabelsUngueltig, ImagePairErstellt, ImagePairHatSichGeaendert>> Decide(
             KlassifiziereEinzelBildDurchKi cmd)
         {
             if (this.State.GetBild(cmd.Version) == null)
@@ -80,7 +80,7 @@ public partial class ImagePair
                 cmd.Version, cmd.BildLabel, cmd.RegionLabels);
         }
 
-        public IEnumerable<OneOf<BildPaarDurchKiKlassifiziert, PaarNichtKomplett>> Decide(
+        public IEnumerable<OneOf<BildPaarDurchKiKlassifiziert, PaarNichtKomplett, ImagePairGeaendert, ImagePairGegengecheckt>> Decide(
             KlassifiziereBildPaarDurchKi cmd)
         {
             if (!this.State.IstKomplett)
@@ -96,7 +96,7 @@ public partial class ImagePair
         // STRANG 2 — Mensch labelt Kamerabilder
         // ═══════════════════════════════════════════════════
 
-        public IEnumerable<OneOf<BildRegionGelabelt, BildNichtVerfuegbar, RegionIndexUngueltig>> Decide(
+        public IEnumerable<OneOf<BildRegionGelabelt, BildNichtVerfuegbar, RegionIndexUngueltig, ZufallsEvent>> Decide(
             LabelBildRegion cmd)
         {
             if (this.State.GetBild(cmd.Version) == null)
@@ -126,7 +126,7 @@ public partial class ImagePair
             yield return new EinzelBildGelabelt(cmd.Version, cmd.Label);
         }
 
-        public IEnumerable<OneOf<BildPaarGelabelt, PaarNichtKomplett>> Decide(
+        public IEnumerable<OneOf<BildPaarGelabelt, PaarNichtKomplett, ImagePairEingabeUngueltig>> Decide(
             LabelBildPaar cmd)
         {
             if (!this.State.IstKomplett)
@@ -142,7 +142,7 @@ public partial class ImagePair
         // STRANG 3 — Mensch labelt physisches Produkt
         // ═══════════════════════════════════════════════════
 
-        public IEnumerable<OneOf<PhysischesProduktGelabelt, ImagePairNichtGefunden>> Decide(
+        public IEnumerable<OneOf<PhysischesProduktGelabelt, ImagePairNichtGefunden, ZufallsEventNeu>> Decide(
             LabelPhysischesProdukt cmd)
         {
             if (this.State.Version == 0)

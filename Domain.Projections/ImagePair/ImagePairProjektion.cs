@@ -73,4 +73,9 @@ public sealed class ImagePairProjektion : IProjektion
     public Task Auf(ImagePairInspiziert e, Herkunft h, ISetInspiziert setInspiziert)
         => setInspiziert.SetInspiziertAsync(
             h.Id<Domain.ImagePair.ImagePair>(), h.Zeit);
+
+    public Task Auf(Buendel<ImagePairErstellt, EinzelBildDurchKiKlassifiziert> e, Herkunft h)
+    {
+        throw new NotImplementedException("TODO: Auf(Buendel<ImagePairErstellt, EinzelBildDurchKiKlassifiziert>)");
+    }
 }
