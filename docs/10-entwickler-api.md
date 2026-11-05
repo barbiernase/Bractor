@@ -419,9 +419,15 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   überall gilt dieselbe Port-Logik: links die Eingänge, rechts die Ausgänge; „＋“ an einem Port hebt die Ports bzw. Karten hervor, die dort
   angeschlossen werden können, ein Klick verbindet, Esc bricht ab; ✕ an einem Port löst. Auf der Fläche: Akteur links „＋ darf“ (Eingänge von
   Graphen, Aggregaten, Readern → `IDarf`), Akteur rechts „＋ hört“ (Events, Hinweise, Commands ohne Ziel → `IHoert`), Projektion „＋ Event“ (ein
-  `Auf`), „＋ Store“ im Kopf der Spalte Projektionen (Store-Klasse, Bereich, Name). In der Komposition: „＋“ an einem Eingang eines Knotens (die Knoten, die den Typ ausgeben → `[Von]`, „von außen“ → `[Kopf]`),
-  „＋ Technik/Konfig“ am Knoten (Konstruktor), Funktion, Graph oder Quelle aus dem Baukasten auf die Leinwand ziehen (neuer Knoten), Klick auf
-  eine Kante (verlierbar, lösen). Was aus Signaturen folgt, ändert man im Bearbeiten der Karte.
+  `Auf`), „＋ Store“ im Kopf der Spalte Projektionen (Store-Klasse, Bereich, Name). In der Komposition (docs/plan-katalog-und-graphen.md, Schritt 4) stehen die Ports eines Funktionsknotens je Auf — sein Eingang, darunter seine
+  Ausgänge mit Vielfachheit (1 · 0..1 · 0..n); eine Antwort vom Aggregat hat kein „＋“. „＋“ an einem Eingang hebt die Knoten hervor, die den Typ
+  ausgeben (→ `[Von]`), dazu „von außen“ (→ `[Kopf]`), gestrichelt „neue Funktion davor“ (gibt den Typ aus, nimmt eine neue Nachricht von außen);
+  „＋“ an einem Ausgang die Knoten, die ihn nehmen (→ `[Von]` am Nehmer), gestrichelt „neue Funktion dahinter“ (nimmt den Typ und öffnet sich von
+  innen) — eine neue Funktion liegt in der Anwendung oder in einem Katalog, der den Typ kennt. Am linken Rand „＋ Quelle“ (nur ohne Kopf), am rechten
+  je Command ohne Ziel sein Empfänger bzw. „⚠ kein Empfänger“ und „＋“: ein Knoten eines anderen Graphen wird Kopf, oder ein neuer Graph entsteht mit
+  einem Kopf dafür (Verbindung). Der Baukasten öffnet per Klick und setzt per „＋“ als Knoten ein (Funktion, Graph als Schachtel, Quelle) — gezogen
+  wird nicht mehr. „＋ Technik/Konfig“ am Knoten (Konstruktor), Klick auf eine Kante (verlierbar, lösen), ✕ am Knoten: aus dem Graphen bzw. samt
+  Funktion, wenn sie sonst in keinem Knoten steht. Ein Doppelklick öffnet eine Funktion von innen, einen Graphen eine Ebene tiefer.
 - **Zoom:** in jedem Modal mit ＋/−/0 (auch mit Strg/⌘), Strg/⌘ + Mausrad bzw. Zwei-Finger-Zoom und der Anzeige im Kopf; auf der Fläche ebenso
   mit ＋/−/0 und dem Mausrad.
 - **Im Aggregat** (von innen) hat jede Karte drei Detailstufen: nur Kopf · Kopf mit Ports (Standard) · Bearbeiten. Ein Doppelklick schaltet

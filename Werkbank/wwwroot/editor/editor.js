@@ -2281,25 +2281,42 @@
     m.append(h("div",{class:"kom-leib"},komBaukastenEl(id,d),lw));de.append(m);komLege(lw,id,d);}
 
   // ── Leinwand: Knoten wie auf der Fläche (Kopf + Ports), Technik und Konfig als Chips; Ränder für Köpfe und Ausgänge ──
-  function komPort(ri,typ,sorte,titel,klick){const r=h("div",{class:"fk-port "+ri+" s-"+sorte,title:titel||(sorte+" "+typ),onclick:e=>{e.stopPropagation();if(klick)klick();}},
-      h("span",{class:"fk-dot"}),h("span",{class:"fk-pl"},(FL_SORTE[sorte]||"")+typ));r.dataset.port=ri+"|"+typ;return r;}
+  //   (docs/plan-katalog-und-graphen.md, Schritt 4) Die Ports eines Funktionsknotens stehen je Auf: sein Eingang, darunter seine Ausgänge mit
+  //   Vielfachheit (1 · 0..1 · 0..n). „＋“ an einem Eingang hebt die Knoten hervor, die den Typ ausgeben (dazu „von außen“ = [Kopf]), „＋“ an einem
+  //   Ausgang die Knoten, die ihn nehmen ([Von] am Nehmer); gestrichelt steht, was neu entstehen kann: eine Funktion davor bzw. dahinter. Eine Antwort
+  //   (Event auf einen eigenen Command an ein Aggregat) kommt vom Aggregat — sie hat kein ＋.
+  function komPort(ri,typ,sorte,titel,klick,anzeige){const r=h("div",{class:"fk-port "+ri+" s-"+sorte,title:titel||(sorte+" "+typ),onclick:e=>{e.stopPropagation();if(klick)klick();}},
+      h("span",{class:"fk-dot"}),h("span",{class:"fk-pl"},(FL_SORTE[sorte]||"")+(anzeige||typ)));r.dataset.port=ri+"|"+typ;return r;}
   const komTypKlick=t=>()=>{if(NODEBY.has("rec:"+komBasis(t)))komKarte("rec:"+komBasis(t),true,true);};
   // Kann Knoten m an den Eingang t von Ziel z anschließen ([Von])? Gleicher Typ, eine generische Ausgabe mit dem Typargument von m.
   function komPasst(m,z,t){if(m.name===z.name||(z.von||[]).some(v=>v.knoten===m.name))return null;
     const args=x=>{const i=String(x).indexOf("<");return i>0&&String(x).endsWith(">")?String(x).slice(i+1,-1):"";};
     return m.aus.find(a=>a===t||(komBasis(a)===komBasis(t)&&args(a)&&args(t)===args(m.typ)))||null;}
+  // Nimmt Knoten z, was Knoten q als t ausgibt? (der Eingang von z, an dem es ankäme)
+  const komNimmt=(q,z,t)=>z.ein.find(e=>komPasst(q,z,e)===t)||null;
+  const komIstAntwort=t=>(recByName(komBasis(t))||{}).kind==="event";
+  // Die Ports eines Knotens je Auf: [{ein, aus:[{typ, mult}]}] — bei einer Funktion aus ihrer Signatur (Typen wie im Knoten, auch generisch), sonst flach.
+  function komGruppen(k){const f=k.karte&&k.karte.startsWith("fb:")?funModell(k.karte):null,b=x=>komBasis(x);
+    const imKnoten=(liste,t)=>liste.find(x=>x===t)||liste.find(x=>b(x)===b(t))||t;
+    if(!f)return [{ein:null,aus:k.aus.map(t=>({typ:t,mult:""}))},...k.ein.map(t=>({ein:t,aus:[]}))];
+    const g=(f.eingaenge||[]).map(e=>({ein:imKnoten(k.ein,e.eingang),aus:(e.ausgaben||[]).map(o=>({typ:imKnoten(k.aus,o),mult:funMult(e)}))}));
+    if((f.lauscht||[]).length)g.unshift({ein:null,aus:f.lauscht.map(o=>({typ:imKnoten(k.aus,o),mult:"0..n"}))});
+    return g;}
   function komKnotenEl(id,k){
-    const gewaehlt=KOM.wahl&&KOM.wahl.art==="knoten"&&KOM.wahl.name===k.name,P=KOM.port&&KOM.port.art==="von"?KOM.port:null;
-    const d=komDaten(id),ziel=P&&d?d.knoten.find(x=>x.name===P.knoten):null,passt=ziel?komPasst(k,ziel,P.typ):null;
+    const gewaehlt=KOM.wahl&&KOM.wahl.art==="knoten"&&KOM.wahl.name===k.name,P=KOM.port;
+    const d=komDaten(id),bezug=P&&d?d.knoten.find(x=>x.name===P.knoten):null;
+    const passt=!bezug?null:P.art==="von"?komPasst(k,bezug,P.typ):komNimmt(bezug,k,P.typ);
     const el=h("div",{class:"gnode2 fk kom-k n-"+(k.art==="graph"?"graph":k.art==="katalog"||k.quelle?"funktion":"bausteinfunktion")+(gewaehlt?" sel":"")+(passt?" kand":"")+(P&&!passt&&k.name!==P.knoten?" leise":""),
-      title:passt?"Klick: "+P.knoten+" bekommt von "+k.name+" ("+passt+")":"Klick: Kanten hervorheben · Doppelklick: "+(k.art==="graph"?"eine Ebene tiefer":k.karte?"bearbeiten":"—")+" · Rechtsklick: Menü",
-      onclick:()=>{if(passt){KOM.port=null;komVerbinde(id,k.name,P.knoten);return;}if(P){KOM.port=null;komZeige();return;}komWaehle(gewaehlt?null:{art:"knoten",name:k.name});},
+      title:passt?(P.art==="von"?"Klick: "+P.knoten+" bekommt von "+k.name+" ("+passt+")":"Klick: "+k.name+" bekommt "+P.typ+" von "+P.knoten)
+        :"Klick: Kanten hervorheben · Doppelklick: "+(k.art==="graph"?"eine Ebene tiefer":k.karte?"von innen":"—")+" · Rechtsklick: Menü",
+      onclick:()=>{if(passt){KOM.port=null;if(P.art==="von")komVerbinde(id,k.name,P.knoten);else komVerbinde(id,P.knoten,k.name);return;}
+        if(P){KOM.port=null;komZeige();return;}komWaehle(gewaehlt?null:{art:"knoten",name:k.name});},
       ondblclick:()=>{if(!P)komKnotenOeffnen(k);},
       oncontextmenu:e=>{e.preventDefault();komKnotenMenue(id,k,e);}});
     el.dataset.knoten=k.name;
     el.append(h("div",{class:"ghead"},h("span",{class:"gtitle hatname",title:k.typ},h("span",{class:"gk"},(KOM_SYM[k.art]||"")+" "+k.name+" "),h("span",{class:"gn"},k.typ)),
       k.kopf?h("span",{class:"kom-mark",title:"[Kopf] — nimmt von außen"},"Kopf"):null,k.quelle?h("span",{class:"kom-mark",title:"Quelle — lauscht"},"Quelle"):null,
-      h("span",{class:"gx",title:"Aus dem Graphen nehmen (die Funktion bleibt)",onclick:e=>{e.stopPropagation();komKnotenEntfernen(id,k.name);}},"✕")));
+      h("span",{class:"gx",title:"Löschen: aus dem Graphen bzw. samt Funktion",onclick:e=>{e.stopPropagation();komKnotenLoeschen(id,k,e);}},"✕")));
     const chips=(k.konstruktor||[]).filter(c=>c.art!=="logger");
     const funktion=k.art==="funktion"&&k.karte;
     if(chips.length||(k.liest||[]).length||funktion)el.append(h("div",{class:"fk-chips"},
@@ -2307,47 +2324,88 @@
       ...(k.liest||[]).map(t=>h("span",{class:"fk-chip kc-liest",title:"Lese-Fähigkeit"},"⌕ "+t)),
       funktion?h("button",{class:"fk-chip ag-plus",title:"Technik oder Konfig in den Konstruktor nehmen",onclick:e=>{e.stopPropagation();komKonstruktorPlus(id,k,e);}},"＋ Technik/Konfig"):null));
     const ports=h("div",{class:"fk-ports"});
-    k.ein.forEach(t=>{const pe=komPort("ein",t,komSorte(t),null,komTypKlick(t));
-      // „＋“ am Eingang: die Knoten, die diesen Typ ausgeben, leuchten (dazu „von außen“ für [Kopf]); ein Klick verbindet.
-      const aktiv=P&&P.knoten===k.name&&P.typ===t;
-      pe.append(h("button",{class:"ag-plus kom-einplus"+(aktiv?" aktiv":""),title:"Anschließen: wer gibt "+t+"?",onclick:e=>{e.stopPropagation();
-        KOM.port=aktiv?null:{art:"von",knoten:k.name,typ:t,karte:id};komZeige();}},"＋"));
-      ports.append(pe);});
-    k.aus.forEach(t=>ports.append(komPort("aus",t,komSorte(t),null,komTypKlick(t))));
-    if(k.ein.length||k.aus.length)el.append(ports);
+    const plus=(art,t,titel)=>{const aktiv=P&&P.art===art&&P.knoten===k.name&&P.typ===t;
+      return h("button",{class:"ag-plus kom-einplus"+(aktiv?" aktiv":""),title:titel,onclick:e=>{e.stopPropagation();KOM.port=aktiv?null:{art,knoten:k.name,typ:t,karte:id};komZeige();}},"＋");};
+    komGruppen(k).forEach(gr=>{
+      if(gr.ein){const antwort=komIstAntwort(gr.ein),pe=komPort("ein",gr.ein,komSorte(gr.ein),antwort?"Antwort vom Aggregat auf einen eigenen Command — kommt von dort, nicht über eine Kante":null,
+          komTypKlick(gr.ein),antwort?"◀ "+gr.ein:null);
+        if(!antwort)pe.append(plus("von",gr.ein,"Anschließen: wer gibt "+gr.ein+"?"));ports.append(pe);}
+      gr.aus.forEach(o=>{const pa=komPort("aus",o.typ,komSorte(o.typ),o.mult?o.typ+" — "+(o.mult==="1"?"genau eine je Aufruf":o.mult==="0..1"?"keine oder eine (Wahl)":"keine bis viele (Strom)"):null,
+          komTypKlick(o.typ),o.typ+(o.mult?"  "+o.mult:""));
+        if(komSorte(o.typ)==="command"&&!(recByName(komBasis(o.typ))||{}).aggregat)pa.append(plus("nach",o.typ,"Anschließen: wer nimmt "+o.typ+"?"));ports.append(pa);});});
+    if(ports.childNodes.length)el.append(ports);
     return el;}
+  // Gestrichelt beim Anschließen: was neu entstehen kann — eine Funktion davor (gibt den Typ aus) bzw. dahinter (nimmt ihn).
+  function komGeister(id,d){const P=KOM.port;if(!P)return [];const q=d.knoten.find(x=>x.name===P.knoten);if(!q)return [];
+    return P.art==="von"?[{tiefe:Math.max(0,q.tiefe-1),t:"＋ neue Funktion davor",u:"gibt "+P.typ+" aus — und nimmt eine neue Nachricht von außen",fn:e=>komFunktionNeu(id,"davor",q,P.typ,e)}]
+      :[{tiefe:q.tiefe+1,t:"＋ neue Funktion dahinter",u:"nimmt "+P.typ+" — sie öffnet sich danach von innen",fn:e=>komFunktionNeu(id,"dahinter",q,P.typ,e)}];}
+  // Wo eine neue Funktion liegen darf: in der Anwendung (wenn der Graph dort liegt) und in jedem Katalog, der den Typ kennt (Typ aus dem Katalog
+  //   oder vom Framework) — ein Katalog kennt keine Domäne.
+  function komOrte(g,typ){const gk=funKatalog(g),r=recByName(komBasis(typ)),rk=r?funKatalog(r):null,bk=komBaukasten();
+    if(gk)return [{katalog:gk}];
+    return [{katalog:null},...(bk.kataloge||[]).filter(k=>!r||rk===k).map(k=>({katalog:k}))];}
+  function komFunktionNeu(id,art,q,typ,ev){const g=komModell(id);if(!g)return;KOM.port=null;
+    const anlegen=ort=>{const stamm=komBasis(typ).replace(/(Gefunden|Erstellt|Eingelesen|Verkleinert)$/,"");
+      const weiter=bereich=>frageFix(ev.clientX,ev.clientY,"ƒ Neue Funktion "+art+" "+q.name,art==="dahinter"?"Verarbeite"+komBasis(typ):komBasis(typ)+"Bildung",
+        art==="dahinter"?"Nimmt "+typ+"; Ausgänge danach im Modal":"Gibt "+typ+" aus; nimmt eine neue Nachricht von außen",n=>{
+        const fe=nameFehler(n);if(fe&&!/gibt es schon/.test(fe))return fe;if(MODEL.bausteinFunktionen.some(x=>x.name===n))return n+" gibt es schon";
+        const ns=ort.katalog?ort.katalog+"."+bereich:g.namespace;
+        const f={_id:"funktion:"+n,name:n,namespace:ns,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[]};
+        if(art==="dahinter")f.eingaenge.push({eingang:typ,ausgaben:[]});
+        else{const auftrag=uniq(n+"Auftrag");funRecordNeu(f,auftrag,"command");f.eingaenge.push({eingang:auftrag,ausgaben:[typ]});}
+        MODEL.bausteinFunktionen.push(f);
+        let kn=n,i=2;while((g.knoten||[]).some(x=>x.name===kn))kn=n+(i++);
+        const knoten={typ:n,name:kn,kopf:art==="davor",von:art==="dahinter"?[q.name]:[],verlierbar:[]};
+        (g.knoten=g.knoten||[]).push(knoten);
+        if(art==="davor"){const z=g.knoten.find(x=>x.name===q.name);if(z)z.von=[...(z.von||[]),kn];}
+        gTitel(g.name+": ƒ "+n+" "+art+" "+q.name);render();
+        if(art==="dahinter")setTimeout(()=>komKarte("fb:"+f._id,true),0);});
+      if(!ort.katalog){weiter(null);return;}
+      frageFix(ev.clientX,ev.clientY,"ƒ Neue Funktion in "+ort.katalog+" — Bereich","Allgemein","Der Ordner im Katalog",b=>{
+        if(!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*$/.test(b))return "Ein Bereich: groß beginnen, nur Buchstaben und Ziffern";setTimeout(()=>weiter(b),0);});};
+    const orte=komOrte(g,typ);
+    if(orte.length===1){anlegen(orte[0]);return;}
+    menueFix(ev.clientX,ev.clientY,"Wo liegt die neue Funktion?",orte.map(o=>({t:o.katalog?"📚 "+o.katalog:"ƒ in der Anwendung ("+g.namespace+")",fn:()=>anlegen(o)})));}
   function komLeinwand(id,d){
     const welt=h("div",{class:"kom-welt"}),svgK=document.createElementNS(SVGNS,"svg");svgK.setAttribute("class","kom-kanten");welt.append(svgK);
     const P=KOM.port&&KOM.port.art==="von"?KOM.port:null,zk=P?d.knoten.find(x=>x.name===P.knoten):null,kopfMoeglich=!!zk&&!zk.kopf;
-    const links=h("div",{class:"gnode2 fk kom-rand links"+(kopfMoeglich?" kand":"")+(P&&!kopfMoeglich?" leise":""),title:kopfMoeglich?"Klick: "+P.knoten+" nimmt "+P.typ+" von außen ([Kopf])":"",
+    const g=komModell(id),hatQuelle=d.knoten.some(k=>k.quelle);
+    const links=h("div",{class:"gnode2 fk kom-rand links"+(kopfMoeglich?" kand":"")+(KOM.port&&!kopfMoeglich?" leise":""),title:kopfMoeglich?"Klick: "+P.knoten+" nimmt "+P.typ+" von außen ([Kopf])":"",
       onclick:()=>{if(kopfMoeglich){KOM.port=null;komVerbinde(id,null,P.knoten);}}},h("div",{class:"ghead"},h("span",{class:"gtitle"},"◀ von außen")));
     const lp=h("div",{class:"fk-ports"});
     d.koepfe.forEach(k=>{const her=komHerkunft(id,k.typ),pe=komPort("aus",k.typ,komSorte(k.typ),"Kopf "+k.typ+(her.length?" — von "+her.join(", "):""),komTypKlick(k.typ));
       lp.append(pe);
-      if(her.length)lp.append(h("div",{class:"kom-wo"},"von "+her.join(", ")));});
-    if(!d.koepfe.length)lp.append(h("div",{class:"kom-wo"},d.knoten.some(k=>k.quelle)?"— eine Quelle lauscht":"— noch kein Kopf"));
+      lp.append(h("div",{class:"kom-wo"},her.length?"von "+her.join(", "):"⚠ niemand gibt es hinein"));});
+    if(!d.koepfe.length)lp.append(h("div",{class:"kom-wo"},hatQuelle?"— eine Quelle lauscht":"— noch kein Kopf"));
+    // Eine Quelle steht nur in einem Graphen ohne Kopf (sie ist dann sein einziger Kopf).
+    if(!d.koepfe.length&&!hatQuelle&&g)lp.append(h("button",{class:"ag-plus",title:"Eine Quelle an den Kopf: aus dem Katalog des Frameworks oder eine eigene",
+      onclick:e=>{e.stopPropagation();komQuellePlus(id,g,e);}},"＋ Quelle"));
     links.append(lp);welt.append(links);
     const rechts=h("div",{class:"gnode2 fk kom-rand rechts"},h("div",{class:"ghead"},h("span",{class:"gtitle"},"verlässt ▶")));
     const rp=h("div",{class:"fk-ports"});
-    d.ausgaenge.forEach(a=>{const zu=komZiele(id,a.typ);rp.append(komPort("ein",a.typ,a.sorte,a.typ+(zu.length?" → "+zu.join(", "):" — hört niemand"),komTypKlick(a.typ)));
-      rp.append(h("div",{class:"kom-wo"},zu.length?"→ "+zu.join(", "):"hört niemand"));});
+    d.ausgaenge.forEach(a=>{const zu=komZiele(id,a.typ),r=recByName(komBasis(a.typ)),ohneZiel=a.sorte==="command"&&!(r&&r.aggregat);
+      const pe=komPort("ein",a.typ,a.sorte,a.typ+(zu.length?" → "+zu.join(", "):" — hört niemand"),komTypKlick(a.typ));
+      if(ohneZiel&&g)pe.append(h("button",{class:"ag-plus kom-einplus",title:"Wer nimmt "+a.typ+"? — der Kopf eines anderen Graphen (Verbindung)",
+        onclick:e=>{e.stopPropagation();komEmpfaengerPlus(id,g,a.typ,e);}},"＋"));
+      rp.append(pe);
+      rp.append(h("div",{class:"kom-wo"},zu.length?"→ "+zu.join(", "):ohneZiel?"⚠ kein Empfänger":"hört niemand"));});
     if(!d.ausgaenge.length)rp.append(h("div",{class:"kom-wo"},"— nichts"));
     rechts.append(rp);welt.append(rechts);
     d.knoten.forEach(k=>welt.append(komKnotenEl(id,k)));
-    if(!d.knoten.length)welt.append(h("div",{class:"kom-leer"},"Leerer Graph — eine Funktion, einen Graphen oder eine Quelle aus dem Baukasten hierher ziehen."));
-    const lw=h("div",{class:"kom-lw"},welt);
-    lw.addEventListener("dragover",e=>{if([...e.dataTransfer.types].includes("text/kom")){e.preventDefault();lw.classList.add("ziel");}});
-    lw.addEventListener("dragleave",()=>lw.classList.remove("ziel"));
-    lw.addEventListener("drop",e=>{lw.classList.remove("ziel");const t=e.dataTransfer.getData("text/kom");if(!t)return;e.preventDefault();
-      const kz=e.target.closest&&e.target.closest(".kom-k");komAblegen(id,JSON.parse(t),kz?kz.dataset.knoten:null,e);});
-    return lw;}
+    komGeister(id,d).forEach((gs,i)=>{const el=h("div",{class:"gnode2 fk kom-k ag-neu kand",title:gs.u,onclick:e=>{e.stopPropagation();gs.fn(e);}},
+        h("div",{class:"ghead"},h("span",{class:"gtitle"},h("span",{class:"gk"},gs.t))),h("div",{class:"ag-kurz"},gs.u));
+      el.dataset.geist=i;el.dataset.tiefe=gs.tiefe;welt.append(el);});
+    if(!d.knoten.length)welt.append(h("div",{class:"kom-leer"},"Leerer Graph — „＋“ an einem Baustein im Baukasten setzt ihn als Knoten ein."));
+    return h("div",{class:"kom-lw"},welt);}
   // Anordnen nach Tiefe (Spalten), dann die Kanten: Kopf → Knoten, je [Von] Knoten → Knoten (verlierbar gestrichelt), Knoten → Ausgang.
+  //   Gestrichelte Karten stehen unten in der Spalte ihrer Tiefe.
   function komLege(lw,id,d){const welt=lw.querySelector(".kom-welt"),svgK=welt.querySelector("svg");
     const el=n=>welt.querySelector('.kom-k[data-knoten="'+CSS.escape(n)+'"]'),links=welt.querySelector(".kom-rand.links"),rechts=welt.querySelector(".kom-rand.rechts");
+    const geister=[...welt.querySelectorAll(".kom-k[data-geist]")];
     const GX=110,GY=26,X0=40,Y0=30;let x=X0;
     links.style.left=x+"px";links.style.top=Y0+"px";x+=links.offsetWidth+GX;
-    const tiefen=[...new Set(d.knoten.map(k=>k.tiefe))].sort((a,b)=>a-b);let yMax=Y0+links.offsetHeight;
-    tiefen.forEach(t=>{const ks=d.knoten.filter(k=>k.tiefe===t).map(k=>el(k.name)).filter(Boolean);let y=Y0,w=0;
+    const tiefen=[...new Set(d.knoten.map(k=>k.tiefe).concat(geister.map(e=>+e.dataset.tiefe)))].sort((a,b)=>a-b);let yMax=Y0+links.offsetHeight;
+    tiefen.forEach(t=>{const ks=d.knoten.filter(k=>k.tiefe===t).map(k=>el(k.name)).filter(Boolean).concat(geister.filter(e=>+e.dataset.tiefe===t));let y=Y0,w=0;
       ks.forEach(e=>{e.style.left=x+"px";e.style.top=y+"px";y+=e.offsetHeight+GY;w=Math.max(w,e.offsetWidth);});yMax=Math.max(yMax,y);x+=w+GX;});
     rechts.style.left=x+"px";rechts.style.top=Y0+"px";x+=rechts.offsetWidth+X0;yMax=Math.max(yMax,Y0+rechts.offsetHeight)+Y0;
     welt.style.width=x+"px";welt.style.height=yMax+"px";svgK.setAttribute("width",x);svgK.setAttribute("height",yMax);
@@ -2356,36 +2414,68 @@
     const wahl=KOM.wahl&&KOM.wahl.art==="knoten"?KOM.wahl.name:null;
     const linie=(A,B,verl,sorte,klick,an)=>{if(!A||!B)return;const hell=wahl&&(an||[]).includes(wahl);const c=Math.max(40,Math.abs(B.x-A.x)*0.45),d2="M"+A.x+","+A.y+" C"+(A.x+c)+","+A.y+" "+(B.x-c)+","+B.y+" "+B.x+","+B.y;
       const p=document.createElementNS(SVGNS,"path");p.setAttribute("d",d2);p.setAttribute("fill","none");
-      p.setAttribute("stroke",sorte==="hinweis"?"#cf6f68":sorte==="event"?"#57b673":"#8fa6c8");p.setAttribute("stroke-width",hell?"3.2":"1.8");if(wahl&&!hell)p.setAttribute("opacity",".35");if(verl)p.setAttribute("stroke-dasharray","6 4");svgK.append(p);
+      p.setAttribute("stroke",sorte==="hinweis"?"#cf6f68":sorte==="event"?"#57b673":"#8fa6c8");p.setAttribute("stroke-width",hell?"3.2":"1.8");if((wahl&&!hell)||KOM.port)p.setAttribute("opacity",".35");if(verl)p.setAttribute("stroke-dasharray","6 4");svgK.append(p);
       if(klick){const hit=document.createElementNS(SVGNS,"path");hit.setAttribute("d",d2);hit.setAttribute("fill","none");hit.setAttribute("class","kom-hit");hit.addEventListener("click",klick);svgK.append(hit);}};
     d.koepfe.forEach(k=>k.knoten.forEach(n=>linie(punkt(links,"aus",k.typ),punkt(el(n),"ein",k.typ),false,komSorte(k.typ),e=>komKanteMenue(id,"kopf",null,n,e),[n])));
-    d.kanten.forEach(k=>{const a=el(k.von),b=el(k.nach),A=a&&a.querySelector('[data-port^="aus|"]')&&punkt(a,"aus",(d.knoten.find(x=>x.name===k.von)||{aus:[]}).aus.find(t=>komBasis(t)===komBasis(k.typ))||k.typ);
+    d.kanten.forEach(k=>{const a=el(k.von),b=el(k.nach),A=a&&punkt(a,"aus",(d.knoten.find(x=>x.name===k.von)||{aus:[]}).aus.find(t=>komBasis(t)===komBasis(k.typ))||k.typ);
       linie(A,punkt(b,"ein",k.typ),k.verlierbar,komSorte(k.typ),e=>komKanteMenue(id,"von",k.von,k.nach,e),[k.von,k.nach]);});
     d.ausgaenge.forEach(a=>a.knoten.forEach(n=>{const k=d.knoten.find(x=>x.name===n)||{aus:[]};
       linie(punkt(el(n),"aus",k.aus.find(t=>komBasis(t)===komBasis(a.typ))||a.typ),punkt(rechts,"ein",a.typ),false,a.sorte,null,[n]);}));}
+  // „＋ Quelle“: eine Quelle aus dem Katalog des Frameworks (Dateiwächter, Taktgeber, Webhook) oder eine eigene Funktion, die lauscht.
+  function komQuellePlus(id,g,ev){const bk=komBaukasten();
+    menueFix(ev.clientX,ev.clientY,"Quelle an den Kopf von "+g.name,[{kopf:"Katalog des Frameworks"},...bk.katalog.map(k=>({t:"⚡ "+k.name+" → "+(k.meldet||[]).join(", "),fn:()=>neuerGraphKnoten(g,k.name)})),
+      ...(bk.funktionen.some(f=>f.quelle)?[{kopf:"eigene"},...bk.funktionen.filter(f=>f.quelle).map(f=>({t:"⚡ "+f.name,fn:()=>neuerGraphKnoten(g,f.name)}))]:[])]);}
+  // „＋“ an einem Ausgang am rechten Rand: der Kopf eines anderen Graphen nimmt ihn (Verbindung, eigene Instanz) — ein vorhandener Knoten wird Kopf,
+  //   oder ein neuer Graph entsteht mit einer Funktion, die ihn nimmt.
+  function komEmpfaengerPlus(id,g,typ,ev){const items=[],t=komBasis(typ);
+    (MODEL.graphen||[]).filter(x=>x!==g).forEach(x=>(x.knoten||[]).forEach(k=>{const f=MODEL.bausteinFunktionen.find(y=>y.name===komBasis(k.typ));
+      if(f&&(f.eingaenge||[]).some(e=>komBasis(e.eingang)===t))items.push({t:"⬡ "+x.name+" · "+k.name+(k.kopf?" (schon Kopf)":" → [Kopf]"),
+        fn:()=>{if(k.kopf)return;k.kopf=true;gTitel(x.name+": "+k.name+" ist Kopf für "+t);render();}});}));
+    const nimmt=MODEL.bausteinFunktionen.filter(f=>(f.eingaenge||[]).some(e=>komBasis(e.eingang)===t));
+    items.push({trenn:1},{t:"＋ neuer Graph mit Kopf für "+t+" …",fn:()=>frageFix(ev.clientX,ev.clientY,"⬡ Neuer Graph",t.replace(/(Zu|Abzu)\w+$/,"")+"Ablauf",
+      "Ein Graph, dessen Kopf "+t+" nimmt — mit einer vorhandenen oder neuen Funktion",n=>{const fe=nameFehler(n);if(fe)return fe;
+        if((MODEL.graphen||[]).some(x=>x.name===n))return n+" gibt es schon";
+        const mit=fn=>{(MODEL.graphen=MODEL.graphen||[]).push({_id:"graph:"+n,name:n,namespace:g.namespace,knoten:[{typ:fn,name:fn,kopf:true,von:[],verlierbar:[]}]});
+          gTitel("⬡ "+n+" mit Kopf "+fn);render();};
+        setTimeout(()=>menueFix(ev.clientX,ev.clientY,"Kopf von "+n,[...nimmt.map(f=>({t:"ƒ "+f.name,fn:()=>mit(f.name)})),
+          {t:"＋ neue Funktion …",fn:()=>frageFix(ev.clientX,ev.clientY,"ƒ Kopf von "+n,"Verarbeite"+t,"Nimmt "+t,fn=>{const fe2=nameFehler(fn);if(fe2&&!/gibt es schon/.test(fe2))return fe2;
+            if(MODEL.bausteinFunktionen.some(x=>x.name===fn))return fn+" gibt es schon";
+            MODEL.bausteinFunktionen.push({_id:"funktion:"+fn,name:fn,namespace:g.namespace,klasse:true,eingaenge:[{eingang:typ,ausgaben:[]}],konstruktor:[],umsetzungen:[]});mit(fn);})}]),0);})});
+    menueFix(ev.clientX,ev.clientY,"Wer nimmt "+t+"?",items);}
+  // ✕ an einem Knoten: aus dem Graphen — und, steht die Funktion in keinem anderen Knoten, auf Wunsch samt Funktion.
+  function komKnotenLoeschen(id,k,ev){const g=komModell(id),b=komBasis(k.typ);
+    const knoten=(MODEL.graphen||[]).flatMap(x=>(x.knoten||[]).filter(n=>komBasis(n.typ)===b)),f=k.karte&&NODEBY.get(k.karte);
+    const items=[{t:"✕ "+k.name+" aus dem Graphen (die Funktion bleibt)",gefahr:1,fn:()=>komKnotenEntfernen(id,k.name)}];
+    if(f&&k.art==="funktion"&&knoten.length===1)items.push({t:"✕ samt Funktion "+b+" (steht in keinem anderen Knoten)",gefahr:1,
+      fn:()=>{komKnotenEntfernen(id,k.name);delNode(f);gTitel(g.name+": "+b+" gelöscht");render();}});
+    else if(knoten.length>1)items.push({hinweis:b+" steht noch in "+(knoten.length-1)+" anderem Knoten — die Funktion bleibt."});
+    menueFix(ev.clientX,ev.clientY,"✕ "+k.name,items);}
 
-  // ── Baukasten: woraus man komponiert — „hier“ markiert, was dieser Graph schon nutzt ──
+  // ── Baukasten: woraus man komponiert — „hier“ markiert, was dieser Graph schon nutzt; „＋“ setzt einen Baustein als Knoten ein ──
   function komBaukastenEl(id,d){const bk=komBaukasten(),box=h("div",{class:"kom-bk"},h("div",{class:"kom-t"},"Baukasten"),
-      h("div",{class:"kom-u"},"Klick: öffnen · Ziehen: Funktion, Graph oder Quelle auf die Leinwand (neuer Knoten)"));
+      h("div",{class:"kom-u"},"Klick: öffnen · ＋: als Knoten einsetzen"));
     const hierFb=new Set(d.knoten.map(k=>k.karte).filter(Boolean)),hierTyp=new Set(d.kanten.map(k=>komBasis(k.typ)).concat(d.ausgaenge.map(a=>komBasis(a.typ))));
-    const gruppe=(titel,liste,name,hier,sym,gr)=>{box.append(h("div",{class:"kom-sec"},titel));
+    const g=komModell(id);
+    const einsetzen=(gr,x,e)=>{if(!g)return;const name=x.name||x.typ;
+      if((x.typargumente||[]).length){menueFix(e.clientX,e.clientY,name+"‹…› — mit welchem Typargument?",x.typargumente.map(t=>({t:name+"<"+t+">",fn:()=>neuerGraphKnoten(g,name+"<"+t+">")})));return;}
+      neuerGraphKnoten(g,name);};
+    const gruppe=(titel,liste,name,hier,sym,gr,einsetzbar)=>{box.append(h("div",{class:"kom-sec"},titel));
       if(!liste.length){box.append(h("div",{class:"kom-wo"},"—"));return;}
       liste.forEach(x=>{const w=KOM.wahl&&KOM.wahl.art==="baustein"&&KOM.wahl.gruppe===gr&&KOM.wahl.name===name(x);
-        const b=h("button",{class:"kom-b"+(w?" on":"")+(hier(x)?" hier":""),draggable:"true",title:"Klick: öffnen · Ziehen: auf die Leinwand bzw. auf einen Knoten",
+        const b=h("button",{class:"kom-b"+(w?" on":"")+(hier(x)?" hier":""),title:"Klick: öffnen",
           onclick:()=>komBausteinOeffnen(gr,x)},sym+" "+name(x),hier(x)?h("span",{class:"kom-hier"}," · hier"):null);
-        b.addEventListener("dragstart",e=>{e.dataTransfer.setData("text/kom",JSON.stringify({gruppe:gr,name:x.name||x.typ}));e.dataTransfer.effectAllowed="copy";});
-        box.append(b);});};
+        box.append(einsetzbar&&g?h("div",{class:"kom-bz"},b,h("button",{class:"ag-plus",title:"Als Knoten in "+g.name+" einsetzen",onclick:e=>{e.stopPropagation();einsetzen(gr,x,e);}},"＋")):b);});};
     box.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",title:"Einen Funktionskatalog anlegen: ein eigenes Projekt <Name>.Katalog, domänenneutral",
       onclick:e=>katalogNeu(e)},"＋ 📚 Katalog")));
     const fname=x=>x.name+((x.typargumente||[]).length?"‹…›":"");
-    gruppe("Funktionen der Anwendung",bk.funktionen.filter(x=>!x.katalog),fname,x=>hierFb.has(x.karte),"ƒ","funktionen");
-    (bk.kataloge||[]).forEach(k=>{gruppe("📚 "+k,bk.funktionen.filter(x=>x.katalog===k),fname,x=>hierFb.has(x.karte),"ƒ","funktionen");
+    gruppe("Funktionen der Anwendung",bk.funktionen.filter(x=>!x.katalog),fname,x=>hierFb.has(x.karte),"ƒ","funktionen",true);
+    (bk.kataloge||[]).forEach(k=>{gruppe("📚 "+k,bk.funktionen.filter(x=>x.katalog===k),fname,x=>hierFb.has(x.karte),"ƒ","funktionen",true);
       box.append(h("button",{class:"kom-b",title:"Eine neue Funktion in "+k+" (Bereich und Name)",onclick:e=>katalogFunktion(k,e,fb=>komKarte("fb:"+fb._id,true))},"＋ Funktion"));});
-    gruppe("Graphen (schachteln)",bk.graphen.filter(x=>x.karte!==id),x=>x.name,x=>hierFb.has(x.karte),"⬡","graphen");
-    gruppe("Katalog (Quellen)",bk.katalog,x=>x.name,x=>d.knoten.some(k=>komBasis(k.typ)===x.name),"⚡","katalog");
-    gruppe("Technik",bk.technik,x=>x.name,x=>d.knoten.some(k=>(k.konstruktor||[]).some(c=>c.karte===x.karte)),"⚙","technik");
-    gruppe("Konfig",bk.konfig,x=>x.name,x=>d.knoten.some(k=>(k.konstruktor||[]).some(c=>c.typ===x.name)),"▤","konfig");
-    gruppe("Nachrichten im Graphen",bk.nachrichten,x=>x.typ,x=>hierTyp.has(x.typ),"✦","nachrichten");
+    gruppe("Graphen (schachteln)",bk.graphen.filter(x=>x.karte!==id&&!(d.eltern||[]).includes(x.karte)),x=>x.name,x=>hierFb.has(x.karte),"⬡","graphen",true);
+    gruppe("Katalog (Quellen)",bk.katalog,x=>x.name,x=>d.knoten.some(k=>komBasis(k.typ)===x.name),"⚡","katalog",!d.koepfe.length&&!d.knoten.some(k=>k.quelle));
+    gruppe("Technik",bk.technik,x=>x.name,x=>d.knoten.some(k=>(k.konstruktor||[]).some(c=>c.karte===x.karte)),"⚙","technik",false);
+    gruppe("Konfig",bk.konfig,x=>x.name,x=>d.knoten.some(k=>(k.konstruktor||[]).some(c=>c.typ===x.name)),"▤","konfig",false);
+    gruppe("Nachrichten im Graphen",bk.nachrichten,x=>x.typ,x=>hierTyp.has(x.typ),"✦","nachrichten",false);
     return box;}
 
   // ── Reiter Instanzen: je graphen/<instanz>.json des Graphen eine Zeile; bearbeitet wird im Panel ──
@@ -3622,6 +3712,7 @@
       if(!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*(\.[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*)*$/.test(n.replace(/\.Katalog$/,"")))
         return "Ein Namespace: groß beginnen, nur Buchstaben und Ziffern, Teile durch Punkte";
       gKatalog({name:n},"Katalog "+n);});}
+  // (Die Id einer neuen Funktion ist die, die der Server ihr gibt — „funktion:<Name>“ —, so bleibt ein offenes Modal nach dem Schreiben offen.)
   // Eine neue Funktion im Katalog: erst der Bereich (Ordner im Katalog), dann der Name — sie entsteht als Klasse ohne Auf (unfertig, baut nicht: W1);
   //   die Eingänge und Ausgaben bekommt sie im Formular.
   function katalogFunktion(katalog,ev,danach){const bereiche=[...new Set(MODEL.bausteinFunktionen.map(f=>f.namespace||"")
@@ -3630,7 +3721,7 @@
       if(!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*$/.test(b))return "Ein Bereich: groß beginnen, nur Buchstaben und Ziffern";
       setTimeout(()=>frageFix(ev.clientX,ev.clientY,"ƒ Neue Funktion in "+katalog+"."+b,"","Eine Klasse : IFunktion — Eingänge und Ausgaben danach im Formular.",n=>{
         const f=nameFehler(n);if(f&&!/gibt es schon/.test(f))return f;if(MODEL.bausteinFunktionen.some(x=>x.name===n))return n+" gibt es schon";
-        const fb={_id:"fb"+(NID++),name:n,namespace:katalog+"."+b,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[]};
+        const fb={_id:"funktion:"+n,name:n,namespace:katalog+"."+b,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[]};
         MODEL.bausteinFunktionen.push(fb);gTitel("ƒ "+n+" in "+katalog);render();if(danach)danach(fb);}),0);});}
   // Umbenennen: das Symbol am Ort der Karte samt aller Verweise (auch in Lambdas) — Roslyn-Renamer auf dem Server.
   async function gUmbenennen(o,neu,alt){await gesteFlush();G_LAEUFT=true;

@@ -165,7 +165,12 @@ gestrichelten Karten, ✎, ✕ mit Löschplan, „unverbunden“). Offen: neue Z
 **Fertig, wenn** sich eine Katalogfunktion samt Nachrichten, Konfig, Technik und Zustand vollständig im Modal anlegen und ändern lässt, baut und
 die Werkbank-Abnahme grün ist.
 
-### Schritt 4 — Das Graph-Modal
+### Schritt 4 — Das Graph-Modal (umgesetzt, Abnahme im Editor offen)
+
+Umgesetzt im Editor (die Ports je Auf und ihre Vielfachheit folgen aus der Signatur im Modell; die Sicht blieb unverändert): Ports je Auf, Antworten
+ohne ＋, ＋ an Ein- und Ausgängen mit gestrichelter „neue Funktion davor/dahinter“ (Ort: Anwendung oder ein Katalog, der den Typ kennt), „＋ Quelle“,
+Empfänger am rechten Rand (Knoten eines anderen Graphen wird Kopf, neuer Graph mit Kopf), Baukasten mit „＋ einsetzen“ statt Ziehen, ✕ samt Funktion.
+Neue Funktionen tragen die Id, die der Server ihnen gibt (`funktion:<Name>`), damit ein offenes Modal nach dem Schreiben offen bleibt.
 
 - **Editor:** dieselbe Mechanik, Anordnung nach Tiefe, Rand links „von außen“, rechts „verlässt“. Knotenkarten mit Ports je `Auf` und
   Vielfachheit; Antwort-Eingänge ohne ＋; Doppelklick öffnet das Funktions-Modal bzw. eine Ebene tiefer. ＋ am Ausgang: nehmende Knoten,
