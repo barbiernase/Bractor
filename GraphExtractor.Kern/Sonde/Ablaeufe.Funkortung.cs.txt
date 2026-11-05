@@ -1,0 +1,19 @@
+using Abstractions;
+using Sondenkatalog.Katalog.Peilung;
+
+// SONDE — ÜBERSETZUNG IN BEIDE RICHTUNGEN (docs/04 §4.4), die Abläufe: ein Funker fordert eine Ortung an (ein Client-Eingang); am Kopf wird sie in
+// den Eingang des fremden Katalogs übersetzt (Frequenz nach Namen, die Stelle als Auftrag und die Messdauer als DauerMs ausdrücklich), die Peilung des
+// Katalogs rechnet, und ihr Ergebnis wird ein Command an die Peilstelle — der Auftrag wird wieder ihre Id (Guid → Id ausdrücklich), die Güte kommt
+// nach Namen, die Quelle aus dem Standardwert. Den Ausgang setzt eine Geste (Gezeichnet.gesten.json), samt [Feld]. Was der Katalog sonst meldet (ein
+// Hinweis), darf hinaus. Der Funker liegt absichtlich hier statt bei den Akteuren.
+
+namespace Funkortung.Ortung;
+
+public record OrtungAngefordert(Id<Peilstelle> Stelle, double FrequenzMhz, int Messdauer) : ICommand;
+
+public sealed record Ortung(
+    [Kopf, Feld(nameof(Peile.Auftrag), nameof(OrtungAngefordert.Stelle)), Feld(nameof(Peile.DauerMs), nameof(OrtungAngefordert.Messdauer))]
+        Uebersetze<OrtungAngefordert, Peile> Hinein,
+    [Von(nameof(Hinein))] Peilung Peilen) : IGraph;
+
+public sealed record Funker : IAkteur, IDarf<OrtungAngefordert>, IHoert<PeilungVermerkt>;

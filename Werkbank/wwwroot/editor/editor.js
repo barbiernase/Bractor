@@ -3647,9 +3647,22 @@
   function graphNeuMitKnoten(ev,pos){const bk=komBaukasten();
     frageFix(ev.clientX,ev.clientY,"⬡ Neuer Graph",uniq("NeuerGraph"),"Danach: sein erster Knoten",n=>{const f=nameFehler(n);if(f)return f;
       if((MODEL.graphen||[]).some(x=>x.name===n))return n+" gibt es schon";
-      const mit=(typ,quelle)=>{(MODEL.graphen=MODEL.graphen||[]).push({_id:"graph:"+n,name:n,namespace:ablaufNs(defaultNs()),
-        knoten:[{typ,name:typBasis(typ).replace(/^I(?=[A-ZÄÖÜ])/,""),kopf:!quelle,von:[],verlierbar:[]}],...pos});gTitel("⬡ "+n+" mit "+typ);render();};
+      const ns=ablaufNs(defaultNs());
+      const mit=(typ,quelle)=>{(MODEL.graphen=MODEL.graphen||[]).push({_id:"graph:"+n,name:n,namespace:ns,
+        knoten:[{typ,name:typBasis(typ).replace(/^I(?=[A-ZÄÖÜ])/,""),kopf:!quelle,von:[],verlierbar:[]}],...pos});KOM_NACH="gr:graph:"+n;gTitel("⬡ "+n+" mit "+typ);render();};
+      // Eine neue Funktion als erster Knoten: in der Anwendung oder in einem Katalog (dort in einem Bereich), mit Auftrag und Ergebnis.
+      const neueFn=katalog=>{const weiter=fns=>frageFix(ev.clientX,ev.clientY,"ƒ Erste Funktion von "+n,n.replace(/(Graph|Ablauf)$/,"")+"Rechnung",
+          "Nimmt einen neuen Auftrag und gibt ein Ergebnis — beides danach im Modal der Funktion",fn=>{
+          const fe=nameFehler(fn);if(fe&&!/gibt es schon/.test(fe))return fe;if(MODEL.bausteinFunktionen.some(x=>x.name===fn))return fn+" gibt es schon";
+          const f={_id:"funktion:"+fn,name:fn,namespace:fns,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[]};
+          const auftrag=uniq(fn+"Auftrag"),ergebnis=uniq(fn+"Ergebnis");funRecordNeu(f,auftrag,"command");funRecordNeu(f,ergebnis,"command");
+          f.eingaenge.push({eingang:auftrag,ausgaben:[ergebnis]});MODEL.bausteinFunktionen.push(f);mit(fn,false);});
+        if(!katalog){setTimeout(()=>weiter(ns),0);return;}
+        setTimeout(()=>frageFix(ev.clientX,ev.clientY,"ƒ Neue Funktion in "+katalog+" — Bereich","Allgemein","Der Ordner im Katalog",b=>{
+          if(!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*$/.test(b))return "Ein Bereich: groß beginnen, nur Buchstaben und Ziffern";setTimeout(()=>weiter(katalog+"."+b),0);}),0);};
       setTimeout(()=>menueFix(ev.clientX,ev.clientY,"Erster Knoten von "+n,[
+        {t:"＋ ƒ neue Funktion in der Anwendung …",fn:()=>neueFn(null)},...(bk.kataloge||[]).map(k=>({t:"＋ ƒ neue Funktion in 📚 "+k+" …",fn:()=>neueFn(k)})),
+        ...(bk.funktionen.length?[{kopf:"vorhanden"}]:[]),
         ...bk.funktionen.filter(x=>!x.quelle).map(x=>({t:(x.katalog?"📚 "+x.katalog+" · ":"ƒ ")+x.name,fn:()=>mit(x.name,false)})),
         ...(bk.katalog.length||bk.funktionen.some(x=>x.quelle)?[{kopf:"Quelle"}]:[]),
         ...bk.katalog.map(k=>({t:"⚡ "+k.name,fn:()=>mit(k.name,true)})),...bk.funktionen.filter(x=>x.quelle).map(x=>({t:"⚡ "+x.name,fn:()=>mit(x.name,true)})),
@@ -3713,7 +3726,7 @@
     zeigeInspector();
     zeigeStart();
     if(VB)vbZeige(false);
-    if(KOM&&KOM_NACH&&komDaten(KOM_NACH)){KOM.pfad.push(KOM_NACH);KOM.wahl=null;KOM.port=null;KOM_NACH=null;}
+    if(KOM_NACH&&komDaten(KOM_NACH)){if(KOM){KOM.pfad.push(KOM_NACH);KOM.wahl=null;KOM.port=null;}else KOM={pfad:[KOM_NACH],reiter:"komposition",wahl:null};KOM_NACH=null;}
     if(KOM)komZeige();   // ein offenes Kompositions-Modal folgt dem neuen Board
   }
   function showPicker(canvas,sx,sy,wx,wy){

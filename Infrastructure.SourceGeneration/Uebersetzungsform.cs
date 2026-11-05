@@ -132,7 +132,10 @@ namespace Infrastructure.SourceGeneration
 
         /// <summary>Der Kopier-Konstruktor eines Records (<c>X(X original)</c>) zählt nicht.</summary>
         private static bool IstKopie(IMethodSymbol c, INamedTypeSymbol t) =>
-            c.Parameters.Length == 1 && SymbolEqualityComparer.Default.Equals(c.Parameters[0].Type, t);
+            c.Parameters.Length == 1 && Gleich(c.Parameters[0].Type, t);
+
+        /// <summary>Gleiche Typen — über den vollen Namen (im Extractor kommt derselbe Vertragstyp mal aus Quelle, mal aus Metadaten).</summary>
+        private static bool Gleich(ITypeSymbol a, ITypeSymbol b) => Funktionsform.Voll(a) == Funktionsform.Voll(b);
 
         private static string Namen(IEnumerable<string> namen)
         {
@@ -148,14 +151,14 @@ namespace Infrastructure.SourceGeneration
         /// </summary>
         public static string? Ausdruck(ITypeSymbol von, ITypeSymbol nach, string quelle, bool ausdruecklich)
         {
-            if (SymbolEqualityComparer.Default.Equals(von, nach)) return quelle;
-            if (nach is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nn && SymbolEqualityComparer.Default.Equals(nn.TypeArguments[0], von))
+            if (Gleich(von, nach)) return quelle;
+            if (nach is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } nn && Gleich(nn.TypeArguments[0], von))
                 return quelle;
             if (von.IsReferenceType && nach.IsReferenceType)
             {
                 for (var b = von.BaseType; b != null; b = b.BaseType)
-                    if (SymbolEqualityComparer.Default.Equals(b, nach)) return quelle;
-                if (von.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i, nach))) return quelle;
+                    if (Gleich(b, nach)) return quelle;
+                if (von.AllInterfaces.Any(i => Gleich(i, nach))) return quelle;
             }
             if (Erweitert(von.SpecialType, nach is INamedTypeSymbol { OriginalDefinition.SpecialType: SpecialType.System_Nullable_T } n2 ? n2.TypeArguments[0].SpecialType : nach.SpecialType))
                 return quelle;

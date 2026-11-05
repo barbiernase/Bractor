@@ -56,6 +56,12 @@ public static class Sonde
         foreach (var (name, text) in Quelltexte())
             fork = fork.AddDocument(DocumentId.CreateNewId(ziel.Id), name, text, folders: new[] { "__sonde" },
                 filePath: Path.Combine(Path.GetDirectoryName(ziel.FilePath)!, "__sonde", name));
+        // Was den fremden Katalog nennt (Graphen mit Übersetzungen), liegt bei den Abläufen — nur sie kennen einen Katalog (docs/07).
+        var ablaeufe = fork.Projects.First(p => p.AssemblyName == Abstractions.Projektstruktur.Projekt(Abstractions.Projektstruktur.StandardWurzel,
+            Abstractions.Projektstruktur.Rolle.Ablaeufe));
+        foreach (var (name, text) in Ablaeufetexte())
+            fork = fork.AddDocument(DocumentId.CreateNewId(ablaeufe.Id), name, text, folders: new[] { "__sonde" },
+                filePath: Path.Combine(Path.GetDirectoryName(ablaeufe.FilePath)!, "__sonde", name));
         // Der fremde Katalog als eigenes Projekt: jede Datei im Bereichs-Ordner, wie die Projektstruktur ihn will (docs/07 §7.3).
         var gezeichnet = new HashSet<string>(StringComparer.Ordinal);
         foreach (var (name, text) in Katalogtexte())
@@ -395,8 +401,15 @@ public static class Sonde
         return z.Select(x => x.TrimEnd()).OrderBy(x => x, StringComparer.Ordinal).ToList();
     }
 
-    /// <summary>Die Quelltexte der Sonden-Domäne (Dateiname, Text) — auch die Fixture der Gesten-Tests im Prüfstand; ohne den Katalog.</summary>
-    public static IEnumerable<(string Name, string Text)> Quelltexte() => Quellen().Where(q => !q.Name.StartsWith(KatalogPraefix, StringComparison.Ordinal));
+    /// <summary>Die Quelltexte der Sonden-Domäne (Dateiname, Text) — auch die Fixture der Gesten-Tests im Prüfstand; ohne den Katalog und ohne das,
+    /// was ihn nennt.</summary>
+    public static IEnumerable<(string Name, string Text)> Quelltexte() => Quellen()
+        .Where(q => !q.Name.StartsWith(KatalogPraefix, StringComparison.Ordinal) && !q.Name.StartsWith(AblaeufePraefix, StringComparison.Ordinal));
+
+    /// <summary>Die Quelltexte der Sonde, die den fremden Katalog nennen (Dateien „Ablaeufe.&lt;Name&gt;.cs.txt“) — sie liegen bei den Abläufen.</summary>
+    public static IEnumerable<(string Name, string Text)> Ablaeufetexte() => Quellen().Where(q => q.Name.StartsWith(AblaeufePraefix, StringComparison.Ordinal));
+
+    private const string AblaeufePraefix = "Ablaeufe.";
 
     /// <summary>Die Quelltexte des fremden Katalogs der Sonde (Dateien „Katalog.&lt;Bereich&gt;.&lt;Datei&gt;.cs.txt“).</summary>
     public static IEnumerable<(string Name, string Text)> Katalogtexte() => Quellen().Where(q => q.Name.StartsWith(KatalogPraefix, StringComparison.Ordinal));
