@@ -724,3 +724,24 @@ lage IProtokolliereArtikel -> Domain.Projections
 lage IArtikelprotokoll -> Domain.Projections
 lage Artikelzaehlung -> Domain.Projections
 lage Artikelprotokoll -> Domain.Infrastructure
+
+# ── Der fremde Katalog (Sondenkatalog.Katalog, eigenes Projekt, nur Abstractions; docs/plan-katalog-und-graphen.md): Funktionen mit Konfig und Technik,
+#    Commands ohne Ziel, Hinweise, ein Graph, aus dem nur Hinweise hinausgehen — und ein Fakt, der nicht in einen Katalog gehört.
+record Sondenkatalog.Katalog.Peilung.Peile command | FrequenzMhz:double, DauerMs:int
+record Sondenkatalog.Katalog.Peilung.Gepeilt command | FrequenzMhz:double, RichtungGrad:double, Guete:double
+record Sondenkatalog.Katalog.Peilung.PeilungUnmoeglich rejection | FrequenzMhz:double, Grund:string
+record Sondenkatalog.Katalog.Peilung.Peilbericht rejection | FrequenzMhz:double, RichtungGrad:double
+record Sondenkatalog.Katalog.Peilung.Peilprotokoll event | FrequenzMhz:double
+record Sondenkatalog.Katalog.Peilung.PeilKonfig konfig | MindestGuete:double
+funktion Sondenkatalog.Katalog.Peilung.Peilung(konfig:PeilKonfig, empfaenger:IPeilempfaenger) | Auf(Peile) -> Gepeilt; PeilungUnmoeglich
+funktion Sondenkatalog.Katalog.Peilung.Peilmeldung() | Auf(Gepeilt) -> Peilbericht
+technik Sondenkatalog.Katalog.Peilung.IPeilempfaenger schnittstelle | PeileAsync(frequenzMhz:double, dauerMs:int):Task<double[]> | umsetzung Peilempfaenger()
+graph Sondenkatalog.Katalog.Peilung.Peilkette | knoten Peilen:Peilung [Kopf], Melden:Peilmeldung [Von Peilen] | koepfe Peile | aus PeilungUnmoeglich, Peilbericht
+kante Peilkette | Peilen -Gepeilt-> Melden
+besitz Sondenkatalog.Katalog.Peilung.Gepeilt command -> bausteinfunktion:Peilung
+besitz Sondenkatalog.Katalog.Peilung.PeilungUnmoeglich rejection -> bausteinfunktion:Peilung
+besitz Sondenkatalog.Katalog.Peilung.Peilbericht rejection -> bausteinfunktion:Peilmeldung
+besitz Sondenkatalog.Katalog.Peilung.PeilKonfig konfig -> bausteinfunktion:Peilung
+besitz Sondenkatalog.Katalog.Peilung.Peile command -> §begriffe
+besitz Sondenkatalog.Katalog.Peilung.Peilprotokoll event -> §begriffe
+lage Peilprotokoll -> nicht Sondenkatalog.Katalog

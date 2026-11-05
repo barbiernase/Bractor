@@ -301,7 +301,8 @@ static class Projektstruktur
         if (rolle == Rolle.Katalog)
             return $"'{typ}' ist {Text(p)} und gehört nicht in einen Katalog ({projekt}) — ein Katalog kennt keine Domäne; {Text(p)} liegt in einer "
                 + $"Anwendung ({string.Join(" oder ", erlaubt.Select(r => "<Wurzel>" + Von(r).Suffix))}, docs/07 §7.2)";
-        return $"'{typ}' ist {Text(p)} und gehört nach {string.Join(" oder ", erlaubt.Select(r => r == Rolle.Katalog ? "einen Katalog (<Name>.Katalog)" : Projekt(wurzel, r)))}, "
+        // In einem Projekt der Anwendung: das Rollen-Projekt der Anwendung (ein Katalog ist eine eigene Entscheidung, keine Korrektur der Lage).
+        return $"'{typ}' ist {Text(p)} und gehört nach {string.Join(" oder ", erlaubt.Where(r => r != Rolle.Katalog).Select(r => Projekt(wurzel, r)))}, "
             + $"nicht nach {projekt} (docs/07 §7.2)";
     }
 
