@@ -682,13 +682,9 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
             && (t.Parent is BaseNamespaceDeclarationSyntax nsd ? ns == null || nsd.Name.ToString() == ns : t.Parent is CompilationUnitSyntax));
 
     /// <summary>
-    /// Nimmt dieses Auf den Eingang? Mit Ports (Join, <c>T?</c>, <c>OneOf</c>, <c>IReadOnlyList</c>) der erste Port wie geschrieben, sonst der erste
-    /// Parametertyp (Schlüssel eines Auf: je Eingangstyp eines, R2).
+    /// Nimmt dieses Auf den Eingang? Der erste Parametertyp ist seine eine Nachricht (Schlüssel eines Auf: je Eingangstyp eines, R2).
     /// </summary>
-    private static bool Nimmt(MethodDeclarationSyntax m, BausteinEingang e) =>
-        e.Ports.Count > 0
-            ? m.ParameterList.Parameters.Count > 0 && N(m.ParameterList.Parameters[0].Type?.ToString()) == N(e.Ports[0].Typ)
-            : ErsterTyp(m) == e.Eingang;
+    private static bool Nimmt(MethodDeclarationSyntax m, BausteinEingang e) => ErsterTyp(m) == e.Eingang;
 
     private static string? ErsterTyp(MethodDeclarationSyntax m) =>
         m.ParameterList.Parameters.Count > 0 ? BoardLeseseite.Eingangsname(m.ParameterList.Parameters[0].Type?.ToString() ?? "") : null;

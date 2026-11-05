@@ -716,7 +716,7 @@
   // ƒ FUNKTION (IFunktion, ein Block der Hierarchie): je Eingang ein Auf — ◀ Eingang ⊕ (Event · Hinweis · Quelle), Ausgaben ▶ ⊕ (Command bzw.
   //   Event/Hinweis) oder ＋ ein neues Ergebnis-Event, das ihr gehört. Die Ausgaben stehen in der Signatur (CQRS050). Ohne Auf ist sie gerufen:
   //   frei benannte Methoden, ihr Halter nimmt sie im Konstruktor (◀ genutzt von). Eine Klasse läuft im Host und nimmt im Konstruktor gerufene
-  //   Funktionen und Konfig; eine Schnittstelle läuft draußen bzw. mit ihren Umsetzungen (Laufort bzw. Wahl: Umgebung).
+  //   Funktionen und Konfig. Eine Funktion ist immer eine Klasse; eine Schnittstelle gibt es nur als Technik, mit Umsetzungen (Wahl: Instanz).
   // ⬡ GRAPH (docs/04 §4.4, docs/10 §10.3.4): record X(Knoten…) : IGraph. Je Knoten eine Zeile — Name (Konfig-Schlüssel der Instanz), Typ (Funktion,
   //   Graph im Graphen oder Katalogfunktion), [Kopf] und von wem er bekommt ([Von(nameof(…))], je Quelle gesichert oder verlierbar). Köpfe, Ausgänge
   //   und die Typen auf den Kanten leitet der Server aus dem Code ab; die Kanten stehen auf der Fläche zwischen den Karten der Knoten.
@@ -803,10 +803,12 @@
     body.append(h("div",{class:"gsec"},"Name · Namespace · Form"));
     if(!f.datei){body.append(nameInp(f,"name","Funktion","bausteinfunktion"));
       body.append(h("input",{value:f.namespace??"",oninput:e=>f.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
-      body.append(h("label",{class:"cbx",title:"Klasse: läuft im Host. Schnittstelle: läuft draußen oder mit einer Umsetzung (Laufort in der Umgebung)"},
-        h("input",{type:"checkbox",onchange:e=>{f.klasse=e.target.checked;render();},...(f.klasse?{checked:"checked"}:{})}),"Klasse (läuft im Host)"));}
+      // Eine Funktion ist immer eine Klasse (CQRS100; draußen rechnet die Arbeit eines Akteurs, E9) — wählen lässt sich die Form nur für Technik:
+      //   eine Klasse oder eine Schnittstelle, deren Umsetzung die Instanz wählt.
+      if(gerufen)body.append(h("label",{class:"cbx",title:"Technik als Klasse — oder als Schnittstelle mit Umsetzungen (welche läuft, wählt der Knoten der Instanz)"},
+        h("input",{type:"checkbox",onchange:e=>{f.klasse=e.target.checked;render();},...(f.klasse?{checked:"checked"}:{})}),"Klasse (ohne Schnittstelle)"));}
     else body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},f.name+" — "+(gerufen?"gerufen · ":"")+(f.klasse?"Klasse im Host"
-      :"Schnittstelle"+((f.umsetzungen||[]).length?" · Umsetzung "+f.umsetzungen.map(u=>u.name).join(", "):gerufen?" · ⚠ ohne Umsetzung":" · läuft draußen"))));
+      :"Schnittstelle"+((f.umsetzungen||[]).length?" · Umsetzung "+f.umsetzungen.map(u=>u.name).join(", "):gerufen?" · ⚠ ohne Umsetzung":" · ⚠ eine Funktion ist eine Klasse (CQRS100)"))));
     if(!(f.eingaenge||[]).length)methodenAbschnitt(body,f);
     if(!gerufen){
     body.append(h("div",{class:"gsec",title:"je Eingang ein Auf(Eingang[, Herkunft]) — was entstehen kann, steht in seiner Rückgabe"},"◀ Eingänge · Ausgaben ▶"));
@@ -853,7 +855,7 @@
   function umsetzungsAbschnitt(body,f,gerufen){
     body.append(h("div",{class:"gsec",title:"Klassen, die "+f.name+" implementieren — welche läuft, wählt die Umgebung (Funktionen:"+f.name+":Implementierung)"},"Umsetzungen"));
     if(!(f.umsetzungen||[]).length)body.append(h("div",{class:"gsec",style:"opacity:.7"},gerufen
-      ?"⚠ keine — ohne Umsetzung bricht der Start, sobald eine Funktion sie braucht.":"keine — sie läuft draußen (Worker, Client, Hand)."));
+      ?"⚠ keine — ohne Umsetzung bricht der Start, sobald eine Funktion sie braucht.":"⚠ eine Funktion ist eine Klasse (CQRS100) — draußen rechnet die Arbeit eines Akteurs."));
     (f.umsetzungen||[]).forEach((u,ii)=>{
       body.append(h("div",{class:"frow",title:"public sealed class "+u.name+"(…) : "+f.name},h("span",{class:"slotlbl"},"▸"),
         h("input",{value:u.name,placeholder:"Klasse",onchange:e=>{const v=e.target.value.trim(),alt=u.name;if(!v||v===alt)return;

@@ -2,10 +2,11 @@ namespace Abstractions;
 
 /// <summary>
 /// Marker einer FUNKTION (docs/04 §4.4, docs/10 §10.3; Code-Fakt über <see cref="Funktionsvertrag"/>): eine Klasse, je Operation eine Methode
-/// <c>Auf(Ports…[, Herkunft h][, Lese-Fähigkeiten…][, CancellationToken])</c>. Die Ports sind Commands ohne Ziel (<c>T</c>, <c>T?</c>, <c>OneOf&lt;…&gt;</c>,
-/// <c>IReadOnlyList&lt;T&gt;</c>), allein auch ein Event als Antwort auf einen eigenen Command; die Fälle der Rückgabe sind die Ausgänge — ein konkreter
-/// Typ, <c>OneOf&lt;…&gt;</c>, ein Strom (<c>IEnumerable</c>/<c>IAsyncEnumerable</c>), <c>T</c> und <c>OneOf</c> auch als <c>Task&lt;…&gt;</c> —, mit
-/// Commands und Hinweisen. Eine Funktion ist ein Knoten eines Graphen (<see cref="IGraph"/>), steht vor dem Aggregat, liest nie das Log und hört keine
+/// <c>Auf(Nachricht[, Herkunft h][, Lese-Fähigkeiten…][, CancellationToken])</c>. Ein <c>Auf</c> nimmt genau eine Nachricht und rechnet je Ankunft:
+/// einen Command ohne Ziel oder ein Event als Antwort auf einen eigenen Command an ein Aggregat — kein <c>T?</c>, <c>OneOf</c> oder
+/// <c>IReadOnlyList</c> als Eingang (GR-EINGANG, CQRS100); zusammengeführt wird im Logik-Code. Die Fälle der Rückgabe sind die Ausgänge — ein
+/// konkreter Typ, <c>OneOf&lt;…&gt;</c>, ein Strom (<c>IEnumerable</c>/<c>IAsyncEnumerable</c>), <c>T</c> und <c>OneOf</c> auch als <c>Task&lt;…&gt;</c> —,
+/// mit Commands und Hinweisen. Eine Funktion ist ein Knoten eines Graphen (<see cref="IGraph"/>), steht vor dem Aggregat, liest nie das Log und hört keine
 /// Hinweise; Gleichzeitigkeit und Wiederholung tragen Parent und Kinder. Eine Quellfunktion hat <c>Lausche(CancellationToken)</c> statt <c>Auf</c>.
 /// Was draußen gerechnet wird, ist keine Funktion, sondern Arbeit eines Akteurs (<c>IHoert</c> eines Commands ohne Ziel).
 /// <para>Ihr Konstruktor nimmt Konfig-Records (die Werte am Knoten der Instanz), <c>ILogger&lt;T&gt;</c>, ihren Zustand (<c>IZustand&lt;T&gt;</c>) und

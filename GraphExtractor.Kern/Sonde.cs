@@ -261,16 +261,15 @@ public static class Sonde
             foreach (var f in A(a, "fragen"))
                 z.Add($"frage {S(a, "name")}.{S(f, "query")} -> {string.Join("|", A(f, "antworten").Select(x => (string?)x))}");
         string Konstruktor(JsonNode? n) => "(" + string.Join(", ", A(n, "konstruktor").Select(p => $"{S(p, "name")}:{S(p, "typ")}")) + ")";
-        // Funktionen (Entscheidung 4): eine Klasse mit typisierten Ports — Konstruktor (Technik, Konfig, Zustand), je Auf die Ports (ein Command bzw.
-        //   wie geschrieben: Join, T?, OneOf, IReadOnlyList), Herkunft, Lese-Fähigkeiten und die Ausgaben (Strom); eine Quelle lauscht (Lausche).
+        // Funktionen (Entscheidung 4): eine Klasse mit typisierten Ports — Konstruktor (Technik, Konfig, Zustand), je Auf seine eine Nachricht
+        //   (GR-EINGANG), Herkunft, Lese-Fähigkeiten und die Ausgaben (Strom); eine Quelle lauscht (Lausche).
         bool Gerufen(JsonNode f) => A(f, "methoden").Any() && !A(f, "eingaenge").Any() && !A(f, "lauscht").Any();
-        string Ports(JsonNode e) => A(e, "ports").Any() ? string.Join(", ", A(e, "ports").Select(p => $"{S(p, "typ")} {S(p, "name")}")) : S(e, "eingang");
         string Ausgaben(JsonNode e, string feld = "ausgaben") => A(e, feld).Any() ? string.Join("; ", A(e, feld).Select(x => (string?)x)) : "nichts";
         foreach (var f in A(b, "bausteinFunktionen").Where(Sonde).Where(f => !Gerufen(f)))
             z.Add($"funktion {S(f, "namespace")}.{S(f, "name")}{(f["klasse"]?.GetValue<bool>() == true ? Konstruktor(f) : " schnittstelle")}"
                 + (f["zustand"] is { } zu ? $" zustand={zu}" : "")
                 + " | "
-                + string.Join(" || ", A(f, "eingaenge").Select(e => $"Auf({Ports(e)})"
+                + string.Join(" || ", A(f, "eingaenge").Select(e => $"Auf({S(e, "eingang")})"
                     + (e["herkunft"]?.GetValue<bool>() == true ? " herkunft" : "")
                     + (A(e, "faehigkeiten").Any() ? " liest " + string.Join(", ", A(e, "faehigkeiten").Select(p => $"{S(p, "typ")} {S(p, "name")}")) : "")
                     + " -> " + (e["strom"]?.GetValue<bool>() == true ? "strom " : "") + Ausgaben(e))

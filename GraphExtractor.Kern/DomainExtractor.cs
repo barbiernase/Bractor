@@ -188,11 +188,6 @@ public sealed class BausteinEingangRaw
     public bool Hinweis, Herkunft, Strom;
     public List<(string Typ, string Name)> Faehigkeiten = new();
     public List<string> AusgabenFull = new();
-    /// <summary>
-    /// Die Eingangsports wie geschrieben (Typ, Name) — nur, wenn das Auf mehr nimmt als einen Command <c>T</c>: ein Join (mehrere Ports) oder eine
-    /// andere Form (<c>T?</c>, <c>OneOf&lt;A, B&gt;</c>, <c>IReadOnlyList&lt;T&gt;</c>, Entscheidung 5). Leer = genau der <see cref="EingangFull"/>.
-    /// </summary>
-    public List<(string Typ, string Name)> Ports = new();
     /// <summary>Die Methode dieses <c>Auf</c> und ihr Rumpf (Rumpf-Edit, wie bei Decide und Apply).</summary>
     public Ort? Ort;
     public string? Rumpf;
@@ -785,10 +780,6 @@ public sealed partial class DomainExtractor
             };
             for (var i = 0; i < a.Methode.Parameters.Length; i++)
                 if (a.Parameter[i].Art == "faehigkeit") e.Faehigkeiten.Add((Geschrieben(a.Methode, i, a.Methode.Parameters[i].Type), a.Methode.Parameters[i].Name));
-            // Die Parameter wie geschrieben — nur, wenn es mehr ist als eine Nachricht (unfertig: das baut nicht, CQRS100).
-            if (a.Ports.Count > 1)
-                for (var i = 0; i < a.Methode.Parameters.Length; i++)
-                    if (a.Parameter[i].Art == "p") e.Ports.Add((Geschrieben(a.Methode, i, a.Methode.Parameters[i].Type), a.Methode.Parameters[i].Name));
             f.Eingaenge.Add(e);
         }
         if (form.Lausche is { } lausche)

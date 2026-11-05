@@ -89,8 +89,8 @@ public sealed partial class Sicht
                 {
                     var txt = "ƒ " + S(f, "name") + ".Auf(" + S(ein2, "eingang") + ")";
                     if (L(ein2, "ausgaben").Contains(n)) P(e, "fb:" + S(f, "_id"), txt, B(ein2, "strom") ? "Strom" : "Ausgabe");
-                    // Ein Port nimmt die Nachricht: der Eingang oder — bei einem Join bzw. einer Port-Form — ein Typ in einem der Ports.
-                    if (S(ein2, "eingang") == n || Alle(ein2["ports"]).Any(pt => Regex.Matches(S(pt, "typ"), @"[A-Za-z_]\w*").Any(m => m.Value == n)))
+                    // Das Auf nimmt die Nachricht: sein Eingang (GR-EINGANG: genau eine).
+                    if (S(ein2, "eingang") == n)
                         P(a, "fb:" + S(f, "_id"), txt, "Auf");
                 }
             foreach (var f in _bausteinFunktionen.Where(f => L(f, "lauscht").Contains(n)))

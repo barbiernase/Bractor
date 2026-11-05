@@ -133,7 +133,6 @@ public static class ModellMapper
                     Eingang = Kurz(e.EingangFull), Hinweis = e.Hinweis, Herkunft = e.Herkunft, Strom = e.Strom,
                     Faehigkeiten = e.Faehigkeiten.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
                     Ausgaben = e.AusgabenFull.Select(Kurz).ToList(),
-                    Ports = e.Ports.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
                 }).ToList(),
                 Lauscht = f.LauschtFull.Select(Kurz).ToList(),
                 Methoden = f.Methoden.Select(me => new FunktionsMethode

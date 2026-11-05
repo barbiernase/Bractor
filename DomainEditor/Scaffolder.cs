@@ -426,11 +426,10 @@ public static class Scaffolder
     }
 
     /// <summary>
-    /// Die Parameter eines Auf: die Ports (bei einem Join bzw. einer Port-Form wie geschrieben, sonst der eine Eingang), die Herkunft (Ids über
-    /// <c>h.NeueId</c>), dann die Lese-Fähigkeiten.
+    /// Die Parameter eines Auf: die eine Nachricht (GR-EINGANG), die Herkunft (Ids über <c>h.NeueId</c>), dann die Lese-Fähigkeiten.
     /// </summary>
     public static IReadOnlyList<Parameter> FunktionsParameter(BausteinEingang e) =>
-        [.. (e.Ports.Count > 0 ? e.Ports : [new Parameter { Typ = e.Eingang, Name = "e" }]),
+        [new Parameter { Typ = e.Eingang, Name = "e" },
          .. (e.Herkunft ? [new Parameter { Typ = nameof(Abstractions.Herkunft), Name = "h" }] : Array.Empty<Parameter>()),
          .. e.Faehigkeiten];
 

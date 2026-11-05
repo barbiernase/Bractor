@@ -315,14 +315,11 @@ public sealed record FunktionsUmsetzung
 }
 
 /// <summary>
-/// Ein Eingang (ein <c>Auf</c>): Eingangstyp (der erste Port), ob mit Herkunft, ob Strom, Lese-Fähigkeiten, Ausgaben (einfache Namen); bei einem Join
-/// oder einer anderen Port-Form (<c>T?</c>, <c>OneOf&lt;A, B&gt;</c>, <c>IReadOnlyList&lt;T&gt;</c>) die Ports wie geschrieben.
+/// Ein Eingang (ein <c>Auf</c>): die eine Nachricht, die es nimmt (GR-EINGANG), ob mit Herkunft, ob Strom, Lese-Fähigkeiten, Ausgaben (einfache Namen).
 /// </summary>
 public sealed record BausteinEingang
 {
     public required string Eingang { get; init; }
-    /// <summary>Die Eingangsports wie geschrieben (Typ, Name), wenn es mehr ist als ein Command <c>T</c>; leer = nur <see cref="Eingang"/>.</summary>
-    public IReadOnlyList<Parameter> Ports { get; init; } = [];
     public bool Hinweis { get; init; }
     public bool Herkunft { get; init; }
     public bool Strom { get; init; }

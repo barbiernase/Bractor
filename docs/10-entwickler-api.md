@@ -166,25 +166,25 @@ public sealed class Schadensaufnahme : IFunktion                                
 {
     public OneOf<SchadenErfasst, BegutachteVorOrt, NichtSchaetzbar> Auf(SchaetzeSchaden s) => …;
 }
-public sealed class Schadensschaetzer(IWertTabelle tabelle) : IFunktion                 // FORK, Zweig 1: Technik im Konstruktor
+public sealed class Schadensschaetzer(IWertTabelle tabelle) : IFunktion                 // KETTE, Schritt 1: Technik im Konstruktor
 {
     public async Task<SchadenGeschaetzt> Auf(SchadenErfasst e) => …;
 }
-public sealed class Gutachtenanfrage(GutachtenKonfig konfig) : IFunktion                // FORK, Zweig 2: Konfig-Record (Werte am Knoten)
+public sealed class Gutachtenanfrage(GutachtenKonfig konfig) : IFunktion                // Schritt 2: Konfig-Record (Werte am Knoten), trägt den Betrag mit
 {
-    public async Task<GutachtenErhalten> Auf(SchadenErfasst e) => …;
+    public async Task<GutachtenErhalten> Auf(SchadenGeschaetzt g) => …;
 }
-public sealed class MahnungNachSchaetzung : IFunktion                                  // JOIN mit Warten mit Frist
+public sealed class MahnungNachSchaetzung : IFunktion                                  // Schritt 3: rechnet aus dem, was die Nachricht mitträgt
 {
-    public EroeffneMahnung Auf(SchadenGeschaetzt g, GutachtenErhalten? gutachten, Herkunft h) => new(h.NeueId<Mahnvorgang>(), …);
+    public EroeffneMahnung Auf(GutachtenErhalten g, Herkunft h) => new(h.NeueId<Mahnvorgang>(), g.Betrag + g.Zuschlag);
 }
 
 // Graph: Knoten als Parameter, der Kopf als [Kopf], jede Kante als Von am nehmenden Knoten
 public sealed record Schadensbewertung(
     [Kopf] Schadensaufnahme Aufnahme,
     [Von(nameof(Aufnahme))] Schadensschaetzer Schaetzung,
-    [Von(nameof(Aufnahme))] Gutachtenanfrage Gutachten,
-    [Von(nameof(Schaetzung), nameof(Gutachten))] MahnungNachSchaetzung Mahnung) : IGraph;
+    [Von(nameof(Schaetzung))] Gutachtenanfrage Gutachten,
+    [Von(nameof(Gutachten))] MahnungNachSchaetzung Mahnung) : IGraph;
 ```
 
 - **Funktion:** eine Klasse `: IFunktion` (eine Schnittstelle mit `IFunktion` ist CQRS100). Je `Auf` genau **eine Nachricht** (ein Command
