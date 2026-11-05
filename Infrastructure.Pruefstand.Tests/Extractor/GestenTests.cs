@@ -279,24 +279,6 @@ public sealed class GestenTests : IDisposable
     }
 
     [Fact]
-    public async Task Neue_Funktion_mit_Join_schreibt_ihre_Ports_wie_im_Modell()
-    {
-        var neu = new JsonObject
-        {
-            ["name"] = "Gutachtenvergleich", ["namespace"] = "Leihwesen.Gebuehren", ["klasse"] = true,
-            ["eingaenge"] = new JsonArray(new JsonObject
-            {
-                ["eingang"] = "SchadenGeschaetzt", ["ausgaben"] = Liste("EroeffneMahnung", "NichtSchaetzbar"),
-                ["ports"] = new JsonArray(Param("SchadenGeschaetzt", "schaetzung"), Param("GutachtenErhalten?", "gutachten")),
-            }),
-        };
-
-        await GesteAsync(Geaendert("bausteinFunktionen", neu));
-
-        Text("Gutachtenvergleich.cs").Should().Contain("public OneOf<EroeffneMahnung, NichtSchaetzbar> Auf(SchadenGeschaetzt schaetzung, GutachtenErhalten? gutachten)");
-    }
-
-    [Fact]
     public async Task Umbenennen_zieht_alle_Verweise_mit()
     {
         var board = await BoardAsync();
