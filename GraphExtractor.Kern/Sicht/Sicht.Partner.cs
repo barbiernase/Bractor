@@ -42,6 +42,13 @@ public sealed partial class Sicht
         {
             FunktionsPartner(nm, ein, aus);
             AkteurePartner(ein, nm);
+            // Übersetzungen (Uebersetze<TEin, TAus>): sie nehmen TEin und erzeugen TAus — ihr Graph ist der Partner.
+            foreach (var g in _graphen)
+                foreach (var u in Alle(g["uebersetzungen"]))
+                {
+                    if (S(u, "aus") == nm) P(ein, "gr:" + S(g, "_id"), "↦ " + S(g, "name") + "." + S(u, "knoten") + " (aus " + S(u, "ein") + ")");
+                    if (S(u, "ein") == nm) P(aus, "gr:" + S(g, "_id"), "↦ " + S(g, "name") + "." + S(u, "knoten") + " (nach " + S(u, "aus") + ")");
+                }
             if (ein.Count == 0) P(ein, null, "Außenwelt (Client)", "abgeleitet: kein interner Erzeuger · kein Akteur");
             foreach (var d in _decider) if (S(d, "command") == nm) P(aus, "dec:" + S(d, "_id"), "Decide @ " + Agg(d, "— kein Aggregat"));
             // Arbeit: ein Command ohne Ziel, den ein Akteur hört (✕ nimmt ihm das Hören).

@@ -1,6 +1,6 @@
 # Plan: Funktionskatalog, Übersetzung und die Modale für Funktion und Graph
 
-Stand 2026-11-05, **Schritte 1–4 umgesetzt und abgenommen**, der Rest ist Plan; §1 „Wer Funktionen anstößt“ geht allem Folgenden vor. Er fasst die Diskussion vom 2026-11-04/05 zusammen. Umgesetzt wird schrittweise,
+Stand 2026-11-05, **Schritte 1–5 umgesetzt** (5 im Editor abgenommen bis zum Bauen, siehe dort), der Rest ist Plan; §1 „Wer Funktionen anstößt“ geht allem Folgenden vor. Er fasst die Diskussion vom 2026-11-04/05 zusammen. Umgesetzt wird schrittweise,
 je Schritt auf Tobis Wort (E5). Jeder Schritt baut für sich, lässt alle Suiten grün und liefert seinen Teil im Editor gleich mit (§1.1).
 
 ## 1. Was entschieden ist
@@ -194,7 +194,20 @@ Neue Funktionen tragen die Id, die der Server ihnen gibt (`funktion:<Name>`), da
 
 **Fertig, wenn** sich ein Graph aus Katalogfunktionen vollständig im Editor anlegen, verbinden und als Instanz durchspielen lässt.
 
-### Schritt 5 — Die Übersetzung und die Eingänge (nächster Schritt)
+### Schritt 5 — Die Übersetzung und die Eingänge ✓ (5ff77b6e bis zum Abschluss-Commit, im Editor abgenommen)
+
+Umgesetzt: `Uebersetze<TEin, TAus>` und `FeldAttribute` (`Abstractions/Uebersetzung.cs`), Lesart `Uebersetzungsform` (Vergleich über volle Namen,
+weil der Extractor Vertragstypen mal aus Quelle, mal aus Metadaten sieht); `Graphform` kennt Übersetzungen als Knoten mit einer Operation (nie zwei
+hintereinander, am Kopf an Knoten oder ein Aggregat); CQRS119/CQRS121 im `GraphAnalyzer`, CQRS120 im Gesamtbild, GR-UEBERSETZUNG in der Grammatik;
+`GraphGenerator` erzeugt je Übersetzung einen `UebersetzungPlan`; das Kind rechnet sie inline vor dem Emitter (`KnotenAusgabe.Ueber` für die Wege
+der Übersetzung), der Graph-Actor am Kopf (mit Emitter). Wirker ist der Knoten (`knoten:<instanz>/<knoten>`) — keine eigene Wirker-Art. Prüfdomäne:
+Katalog `Rechenwerk.Katalog` (Skalierer), Graph `Hochrechnung`, Garantie-Test `UebersetzungE2ETests` (genau einmal, derselbe Kopf nach Neustart).
+Sonde: `Funkortung` (Schreibseite) und `Ablaeufe.Funkortung` (bei den Abläufen, nur sie kennen den Katalog), eine Geste setzt den Ausgang samt `[Feld]`.
+Editor: ↦-Karte, „＋ Eingang“ (Quelle oder Client samt Akteur), „↦ ▣ Command an …“ (vorhanden oder neu samt Decide, Event und Apply), im Aggregat
+„＋ Graph, der ihn schickt“ und wer ihn schickt, kein „Command ohne Ziel“ unter den Ergebnissen, Picker „⬡ Graph“ nur mit erstem Knoten (auch eine
+neue Funktion in Anwendung oder Katalog), ein neuer Graph öffnet sich. Abgenommen in einer Probe-Werkbank: Katalog → Graph mit neuer Katalogfunktion →
+Client-Eingang mit Akteur → ↦ Command an ein Aggregat (auch als Gabel) → „＋ Graph, der ihn schickt“ → `[Feld]` lösen und neu setzen; jeder Stand baut
+bis zum Host. Nicht im Editor durchgespielt (lokal kein Postgres); „genau einmal“ belegt der Garantie-Test auf dem Server.
 
 - **Code:** `Abstractions`: `Uebersetze<TEin, TAus>` (versiegelt, nur als Knotentyp) und `FeldAttribute`. Eine Lesart `Uebersetzungsform.cs`
   (per Link in Generator, Analyzer, Extractor): Ports aus den Typargumenten, Zuordnung nach A1. `Graphform`: ein Knoten ist Funktion, Graph

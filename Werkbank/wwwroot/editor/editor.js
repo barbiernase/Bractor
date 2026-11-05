@@ -2352,12 +2352,12 @@
   //   „⇐“ ausdrücklich ([Feld]), „∅“ Standardwert, „⚠“ offen. ＋ an einem Ziel hebt die Felder hervor, die passen (der Server rechnet sie), ein Klick
   //   schreibt [Feld]; ✕ nimmt es zurück.
   function komUebersetzungEl(id,k){const u=k.uebersetzung,F=KOM.feld&&KOM.feld.knoten===k.name?KOM.feld:null,ziel=F&&(u.ziele||[]).find(z=>z.name===F.ziel);
-    const links=h("div",{class:"kom-ue-sp"},h("div",{class:"kom-ue-t"},u.ein));
+    const links=h("div",{class:"kom-ue-sp"},h("div",{class:"kom-ue-t",title:u.ein},u.ein));
     (u.quellen||[]).forEach(q=>{const passt=!!ziel&&(ziel.passend||[]).includes(q.name);
       links.append(h("div",{class:"kom-ue-f"+(passt?" kand":"")+(F&&!passt?" leise":""),title:q.typ+(passt?" — Klick: "+F.ziel+" ← "+q.name:""),
         onclick:e=>{e.stopPropagation();if(passt)komFeldSetze(id,k.name,F.ziel,q.name);}},q.name+" ",h("span",{class:"gn"},q.typ)));});
     if(!(u.quellen||[]).length)links.append(h("div",{class:"kom-ue-f leise"},"— keine Felder"));
-    const rechts=h("div",{class:"kom-ue-sp"},h("div",{class:"kom-ue-t"},u.aus));
+    const rechts=h("div",{class:"kom-ue-sp"},h("div",{class:"kom-ue-t",title:u.aus},u.aus));
     const R={feld:["⇐","ausdrücklich ([Feld])"],name:["=","nach Namen"],standard:["∅","Standardwert des Parameters"]};
     (u.ziele||[]).forEach(z=>{const [sym,txt]=R[z.regel]||["⚠","offen — ＋ nennt die Quelle"],an=!!F&&F.ziel===z.name;
       rechts.append(h("div",{class:"kom-ue-f r-"+(z.regel||"offen")+(an?" aktiv":"")},h("span",{class:"kom-ue-r",title:txt},sym),
@@ -3576,7 +3576,11 @@
   const komUeTyp=(ein,aus)=>"Uebersetze<"+ein+", "+aus+">";
   const komKnotenName=(g,stamm)=>{let n=stamm,i=2;while((g.knoten||[]).some(x=>x.name===n))n=stamm+(i++);return n;};
   // Die Felder einer Nachricht als neue Felder (eine Kopie: gleiche Namen und Typen — so passt die Übersetzung nach Namen).
-  const komFelderVon=(t,ohne)=>((recByName(komBasis(t))||{}).felder||[]).filter(f=>!(ohne&&ohne(f))).map(f=>({_id:"f"+(NID++),name:f.name,typ:f.typ}));
+  // ns: wohin die Kopie kommt — heißt dort ein Namespace-Teil wie ein Aggregat im Typ (Domain.Pipeline.Modell und Id<Modell>), meinte der einfache
+  //   Name den Namespace; dann steht das Aggregat mit vollem Namen.
+  const komFelderVon=(t,ohne,ns)=>((recByName(komBasis(t))||{}).felder||[]).filter(f=>!(ohne&&ohne(f))).map(f=>({_id:"f"+(NID++),name:f.name,
+    typ:String(f.typ).replace(/\b([A-ZÄÖÜ]\w*)\b/g,(x,n)=>{const A=MODEL.aggregate.find(a=>a.name===n);
+      return A&&ns&&ns.split(".").includes(n)&&!String(f.typ).includes(A.namespace+"."+n)?A.namespace+"."+n:x;})}));
   // „＋ Eingang“ am linken Rand: eine QUELLE (nur ohne Kopf — sie ist dann der einzige) oder ein CLIENT: eine Nachricht der Anwendung, die ein Akteur
   //   hineingibt (IDarf). Vorhanden ist, was im Bereich des Graphen liegt, keine Funktion ausgibt und noch kein Graph am Kopf nimmt.
   function komEingangPlus(id,g,d,ev){const items=[],bk=komBaukasten();
@@ -3593,10 +3597,10 @@
     const ziele=d.knoten.filter(k=>k.art!=="uebersetzung").flatMap(k=>k.ein.filter(t=>!komIstAntwort(t)).map(t=>({k,t})));
     const nachricht=(vorschlag,felder,weiter)=>{if(m){weiter(m);return;}
       frageFix(ev.clientX,ev.clientY,"▶ Neue Nachricht eines Clients",vorschlag,"Ein Command ohne Ziel in "+g.namespace+" — ein Akteur gibt ihn hinein",n=>{const f=nameFehler(n);if(f)return f;
-        MODEL.records.push({name:n,kind:"command",namespace:g.namespace,felder:felder(),istErzeugung:false});aggStempel(n);setTimeout(()=>weiter(n),0);});};
+        MODEL.records.push({name:n,kind:"command",namespace:g.namespace,felder:felder(g.namespace),istErzeugung:false});aggStempel(n);setTimeout(()=>weiter(n),0);});};
     menueFix(ev.clientX,ev.clientY,"Kopf für "+(m||"die neue Nachricht"),[
       ...(ziele.length?[{kopf:"↦ übersetzen in den Eingang von …"}]:[]),
-      ...ziele.map(({k,t})=>({t:"↦ "+t+" ("+k.name+")",fn:()=>nachricht(komBasis(t).replace(/(Auftrag)?$/,"")+"Angefordert",()=>komFelderVon(t),n=>{
+      ...ziele.map(({k,t})=>({t:"↦ "+t+" ("+k.name+")",fn:()=>nachricht(komBasis(t).replace(/(Auftrag)?$/,"")+"Angefordert",ns=>komFelderVon(t,null,ns),n=>{
         const gm=komModell(id),z=(gm.knoten||[]).find(x=>x.name===k.name);if(!z)return;
         const un=komKnotenName(gm,"Hinein");gm.knoten.push({typ:komUeTyp(n,t),name:un,kopf:true,von:[],verlierbar:[],felder:[]});
         z.von=[...(z.von||[]),un];if(z.kopf&&k.ein.filter(e=>!komIstAntwort(e)).length<=1)z.kopf=false;
@@ -3620,9 +3624,13 @@
     const cmds=MODEL.records.filter(r=>r.kind==="command"&&r.aggregat).sort((a,b)=>(a.aggregat+a.name).localeCompare(b.aggregat+b.name));
     menueFix(ev.clientX,ev.clientY,typ+" ↦ Command an …",[
       {t:"＋ neuer Command an ein Aggregat …",fn:()=>menueFix(ev.clientX,ev.clientY,"An welches Aggregat?",MODEL.aggregate.map(A=>({t:"▣ "+A.name,
-        fn:()=>frageFix(ev.clientX,ev.clientY,"＋ Command an "+A.name,"Vermerke"+komBasis(typ),"Mit Decide; seine Felder: die Id von "+A.name+" und die von "+komBasis(typ),n=>{
-          const f=nameFehler(n);if(f)return f;aggCommandAnlegen(A,n,[]);
-          const r=recNamens(n);r.felder=[...r.felder,...komFelderVon(typ,x=>/^(System\.)?Guid$/.test(x.typ)||x.name===aggIdFeld())];
+        fn:()=>frageFix(ev.clientX,ev.clientY,"＋ Command an "+A.name,"Vermerke"+komBasis(typ),"Mit Decide und einem Event; Felder: die Id von "+A.name+" und die von "+komBasis(typ),n=>{
+          const f=nameFehler(n);if(f)return f;
+          // Ein Decide ergibt sein Event (ein leeres baute nicht): dieselben Felder ohne die Id, mit seinem Apply.
+          let e=komBasis(typ)+"Vermerkt",i=2;while(recNamens(e))e=komBasis(typ)+"Vermerkt"+(i++);
+          const ohne=x=>/^(System\.)?Guid$/.test(x.typ)||x.name===aggIdFeld();
+          aggRecordNeu(A,e,"event");recNamens(e).felder=komFelderVon(typ,ohne);aggCommandAnlegen(A,n,[{event:e}]);aggApplySichern(A,e);
+          const r=recNamens(n);r.felder=[...r.felder,...komFelderVon(typ,ohne)];
           komUebersetzungAn(id,q,typ,n);})})))},
       ...(cmds.length?[{kopf:"vorhanden"}]:[]),...cmds.map(r=>({t:"▣ "+r.aggregat+" · "+r.name,fn:()=>komUebersetzungAn(id,q,typ,r.name)}))]);}
   // Die Übersetzung typ ↦ cmd hinter dem Knoten q; die Id des Ziels nennt sie ausdrücklich, wenn genau ein Feld dafür in Frage kommt
@@ -3640,8 +3648,12 @@
     frageFix(ZEIGER.x,ZEIGER.y,"⬡ Graph, der "+cmd+" schickt",cmd+"Ablauf","Neu in "+ns+": Kopf ist eine Übersetzung aus "+cmd+"Auftrag (ein Client gibt ihn hinein)",n=>{
       const f=nameFehler(n);if(f)return f;if((MODEL.graphen||[]).some(x=>x.name===n))return n+" gibt es schon";
       let m=cmd+"Auftrag",i=2;while(recNamens(m))m=cmd+"Auftrag"+(i++);
-      MODEL.records.push({name:m,kind:"command",namespace:ns,felder:komFelderVon(cmd),istErzeugung:false});aggStempel(m);
-      (MODEL.graphen=MODEL.graphen||[]).push({_id:"graph:"+n,name:n,namespace:ns,knoten:[{typ:komUeTyp(m,cmd),name:"Senden",kopf:true,von:[],verlierbar:[],felder:[]}]});
+      // Die Felder des Commands; seine Ziel-Id heißt hier <Aggregat>Id (AggregateId trägt nur ein Command an ein Aggregat, CQRS013) — die Übersetzung
+      //   nennt sie ausdrücklich.
+      const felder=komFelderVon(cmd,null,ns),idFeld=felder.find(f=>f.name===aggIdFeld()),feld=[];
+      if(idFeld){idFeld.name=A.name+"Id";feld.push({ziel:aggIdFeld(),quelle:idFeld.name});}
+      MODEL.records.push({name:m,kind:"command",namespace:ns,felder,istErzeugung:false});aggStempel(m);
+      (MODEL.graphen=MODEL.graphen||[]).push({_id:"graph:"+n,name:n,namespace:ns,knoten:[{typ:komUeTyp(m,cmd),name:"Senden",kopf:true,von:[],verlierbar:[],felder:feld}]});
       KOM_NACH="gr:graph:"+n;gTitel("⬡ "+n+" schickt "+cmd);render();});}
   // Ein Graph entsteht mit seinem ersten Knoten (ein leerer baut nicht, CQRS115): eine Funktion (Anwendung oder Katalog), eine Quelle oder ein Graph.
   function graphNeuMitKnoten(ev,pos){const bk=komBaukasten();

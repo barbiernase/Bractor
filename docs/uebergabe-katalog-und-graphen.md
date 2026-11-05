@@ -6,7 +6,7 @@ dieser Arbeit. Antworte auf Deutsch, in Prosa, ohne Kürzel-Salat. Umgesetzt wir
 
 ## Stand
 
-Schritte 1–4 des Plans sind umgesetzt, auf dem Server geprüft (schnelle Stufe, `--check`, `--sonde` grün) und im Editor abgenommen:
+Schritte 1–5 des Plans sind umgesetzt, auf dem Server geprüft (schnelle Stufe, `--check`, `--sonde` grün) und im Editor abgenommen:
 
 1. **Drift aufgeräumt** — ein `Auf` nimmt genau eine Nachricht (GR-EINGANG); `BausteinEingang.Ports` und Join-Reste sind weg.
 2. **Kataloge** — Rolle `Katalog` (`<Name>.Katalog`, referenziert nur `Abstractions`/`Core`/andere Kataloge) in `Abstractions/Projektstruktur.cs`,
@@ -18,6 +18,10 @@ Schritte 1–4 des Plans sind umgesetzt, auf dem Server geprüft (schnelle Stufe
    Ausgabe folgt aus Strom und Zahl der Ausgänge, dazu `BausteinEingang.Asynchron`; Scaffolder und Abgleich schreiben die Rückgabe daraus.
 4. **Graph-Modal** (Komposition): Ports je Auf mit Vielfachheit, ＋ an Ein- und Ausgängen mit gestrichelter „neue Funktion davor/dahinter“,
    „＋ Quelle“, Empfänger am rechten Rand, Baukasten mit „＋ einsetzen“ statt Ziehen, ✕ samt Funktion.
+5. **Übersetzung und Eingänge** — `Uebersetze<TEin, TAus>` mit `[Feld]` (Lesart `Uebersetzungsform`, CQRS119–121, inline im Kind bzw. am Kopf im
+   Graph-Actor, Wirker = Knoten); Prüfdomäne mit Katalog `Rechenwerk` und Garantie-Test; Sonde `Funkortung`; im Editor ↦-Karte, „＋ Eingang“
+   (Quelle oder Client), „↦ ▣ Command an …“, im Aggregat „＋ Graph, der ihn schickt“, kein „Command ohne Ziel“ unter den Ergebnissen, Picker nur mit
+   erstem Knoten. Abgenommen bis zum Bauen; durchgespielt nicht im Editor (lokal kein Postgres), „genau einmal“ belegt der Garantie-Test.
 
 ## Was entschieden ist (Kurzfassung — Einzelheiten im Plan §1)
 
@@ -33,7 +37,13 @@ Schritte 1–4 des Plans sind umgesetzt, auf dem Server geprüft (schnelle Stufe
 - **Funktionen sind keine virtuellen Actors** (Ort per Konfiguration, `Rechner` in der Instanz; Kette bleibt auf dem Rechner ihres Kopfs).
 - **Alles im Editor**, bei kleiner Code-API: neu im Code sind nur `Uebersetze<TEin, TAus>` und `[Feld]`.
 
-## Nächster Schritt: Schritt 5 (Übersetzung und Eingänge)
+## Nächster Schritt: Schritt 6 (Bestand umziehen und Abbau)
+
+Steht im Plan: jeder Auftrag aus einem `Decide` wird ein Event, auf das ein Client reagiert; danach Abbau der Arbeit für Akteure und des offenen
+Eingangs aus dem `Decide`, eine Build-Regel „ein `Decide` gibt nur Events, Hinweise und Fristen aus“. Vorher mit Tobi klären: A4 (Anwendungsfunktionen)
+und ob `Bildeingang` Katalogfunktion plus Übersetzung wird.
+
+## Schritt 5 (erledigt, zur Einordnung)
 
 Steht vollständig im Plan. Kern: `Uebersetze`/`FeldAttribute` in `Abstractions`, eine Lesart `Uebersetzungsform.cs` (per Link in Generator,
 Analyzer, Extractor wie `Infrastructure.SourceGeneration/Graphform.cs`), `Graphform` kennt den neuen Knotentyp, Generator und Laufzeit rechnen ihn
@@ -62,6 +72,19 @@ an seinen Experimenten etwas änderst.
 - Commits **ohne** `Co-Authored-By`, nur die eigenen Dateien stagen; Tobis offene Änderungen nie mitnehmen, ohne zu fragen.
 - Handeln statt fragen: sicherer Standard, Annahmen benennen, höchstens eine Rückfrage. Nicht Fähigkeiten des Bestands stillschweigend zur
   Anforderung machen — eine Primitive bleibt, weil sie allgemein gebraucht wird (W11).
+
+## Gelernt in Schritt 5
+
+- Eine Übersetzung ist ein `Graphform.Knoten` mit `Uebersetzung` gesetzt und einer Hülle als `Funktion` (Auf ohne Methode) — so gelten Kanten,
+  Köpfe, Ausgänge und Kreise unverändert; Generator (`KnotenPlan`), Bausteine und Laufzeit-Parents überspringen sie.
+- Im Roslyn-Fork der Sonde gibt es keine transitiven Projektreferenzen: wer über den Abläufen liegt (Laufzeit, Akteure), braucht die
+  Katalog-Referenz ausdrücklich. Ein Namespace, der in zwei Verzeichnissen liegt, hat kein Verzeichnis (Fixpunkt bricht) — Sonden-Teile bei den
+  Abläufen bekommen einen eigenen Namespace.
+- `Id<Modell>` in `Domain.Pipeline.Modell` meint den Namespace, nicht das Aggregat: kopierte Feldtypen bekommen dort den vollen Namen.
+- Ein Command ohne Ziel darf kein Feld `AggregateId` tragen (CQRS013): eine Client-Nachricht nennt die Ziel-Id `<Aggregat>Id`, die Übersetzung
+  ordnet sie mit `[Feld]` zu.
+- Die Instanz-Geste fragt den Namen mit `prompt()` — das Browser-Pane bedient ihn nicht; in einer Probe die Instanzdatei von Hand schreiben.
+- Ein Menü, das nach einer Geste aufgehen soll, erst nach `render()` öffnen (`setTimeout`); Abfragen im Browser kurz danach sehen es sonst noch nicht.
 
 ## Gelernt in den Schritten 1–4
 

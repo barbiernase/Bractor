@@ -67,7 +67,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   Commands und Hinweise). Ein Event hört sie nur als Antwort auf ihren eigenen Aggregat-Command (`CommandResult.Antwort`, CQRS108). Im Konstruktor:
   Konfig-Records, Technik (ohne Marker), `IZustand<T>`, `ILogger<T>`.
 - **Graph** (docs/04 §4.4): `record X(Knoten …) : IGraph` in `Graphen.cs`; jeder Parameter ein Knoten (Funktion oder Graph, eine Funktion auch
-  mehrfach). **Jede innere Kante steht am nehmenden Knoten** als `[Von(nameof(A), nameof(B))]` (eine genannte Quelle speist die Ports ihres Typs),
+  mehrfach, oder eine **Übersetzung** `Uebersetze<TEin, TAus>` mit `[Feld(nameof(Ziel), nameof(Quelle))]`: zwischen Katalog und Domäne, Feld für
+  Feld ohne Logik, inline gerechnet, CQRS119–121). **Jede innere Kante steht am nehmenden Knoten** als `[Von(nameof(A), nameof(B))]` (eine genannte Quelle speist die Ports ihres Typs),
   jeder Kopf als `[Kopf]` (nimmt von außen, was keine Quelle speist; je Eingangstyp genau einer); nur eine Quelle trägt keins; was kein Knoten über
   `Von` nimmt, verlässt den Graphen (`GeneratedGraphen`, eine Lesart `Graphform`). Zwischen den Bausteinen bleibt es beim Typ-Routing mit genau einem
   Empfänger. Folge, Gabel, Wahl, Je sind Formen der Ausgaben; Zusammenführen, Sammeln, Warten stehen im Logik-Code (die Nachricht trägt mit, Zustand des

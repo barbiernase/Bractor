@@ -211,6 +211,19 @@ public sealed record Schadensbewertung(
   ein Knoten erneut, wirkt von jedem Command der erste (Ids aus der Nachricht, dem Knoten und der Stelle; die Inbox des Ziels verwirft das Zweite).
   Eine verlierbare Kante (`[Von(nameof(A), Verlierbar = true)]`) hält den Kopf nicht auf; was auf ihr verloren geht, kommt nicht wieder. Eine Funktion, die draußen
   etwas bewirkt (eine Datei schreibt), muss Wiederholung vertragen.
+- **Übersetzung** zwischen Katalog und Domäne (R22): ein Knoten `Uebersetze<TEin, TAus>` macht aus einem Command ohne Ziel genau einen Command —
+  Feld für Feld, ohne Logik. Je Parameter von `TAus` eine Quelle: `[Feld(nameof(Ziel), nameof(Quelle))]` am Knoten (ausdrücklich auch `Guid` ⇄
+  `Id<T>`), sonst ein Feld von `TEin` mit gleichem Namen und implizit zuweisbarem Typ, sonst der Standardwert. Am Kopf übersetzt sie die Nachricht
+  eines Clients in den Eingang eines Katalogs, hinten die Ausgabe einer Funktion in einen Command an ein Aggregat; die Id des Ziels kommt aus der
+  Nachricht. Sie rechnet inline (im Kind des Knotens davor, am Kopf im Graph-Actor), nie zwei hintereinander. Kein Command eines Katalogs verlässt
+  einen Graphen der Anwendung (CQRS120).
+
+  ```csharp
+  public sealed record Hochrechnung(                                                     // Prüfdomäne, Pipeline/Skalierung
+      [Kopf, Feld(nameof(Skalieren.Bezug), nameof(HochrechnungAngefordert.Stelle))] Uebersetze<HochrechnungAngefordert, Skalieren> Hinein,
+      [Von(nameof(Hinein))] Skalierer Rechnen,                                          // Katalog Rechenwerk
+      [Von(nameof(Rechnen)), Feld(nameof(MeldeAusreisser.AggregateId), nameof(Skaliert.Bezug))] Uebersetze<Skaliert, MeldeAusreisser> Melden) : IGraph;
+  ```
 - **Neue Ids** nur abgeleitet: `h.NeueId<T>()` bzw. `h.NeueId<T>(zweck)` (R13).
 - **Technik** (R10): jede Schnittstelle oder Klasse im Konstruktor einer Funktion, die weder Konfig-Record noch `ILogger<T>` noch `IZustand<T>` ist —
   ohne Marker, nur im Konstruktor (CQRS089), bindbar (CQRS090–092). Sie läuft im Prozess ihres Halters, lädt beim ersten Aufruf und wird über
@@ -345,6 +358,7 @@ Prüfen heißt Bauen (W5). Die Liste „Regel → Build-Gegenstück“ der Gramm
 | R18 | Die Hausregel für Actors: ein Weg je Absicht (nur Framework-Code) | CQRS112/113 |
 | R19 | Zustand einer Funktion nur über `IZustand<T>` im Konstruktor | CQRS105, CQRS100 |
 | R20 | Ein Command ohne Ziel hat genau einen Empfänger (im Graphen die Knoten, die seinen Erzeuger in `Von` nennen; sonst Graph-Kopf oder Akteur); ein Graph ist kreisfrei über seine Knoten, jeder Knoten trägt `[Kopf]` oder `[Von(nameof(…))]`, je Eingangstyp ein Kopf, ein `Auf` nimmt genau eine Nachricht (CQRS100); jede Instanz passt zu ihrem Graphen | CQRS116, CQRS115, CQRS117 (Warnung), Start-Prüfung (`GraphInstanzen.Aus`) |
+| R22 | Eine Übersetzung (`Uebersetze<TEin, TAus>`) nimmt einen Command ohne Ziel und erzeugt einen Command; jeder Parameter von `TAus` hat eine Quelle (`[Feld]`, gleicher Name mit implizit zuweisbarem Typ, Standardwert); nie zwei hintereinander, am Kopf an Knoten oder ein Aggregat; kein Katalog-Command verlässt einen Graphen der Anwendung | CQRS119, CQRS121, CQRS115, CQRS120 |
 | R21 | Ein Bündel (`Buendel<A, B, …>` als Eingang eines `Auf`) bündelt verschiedene persistente Events mit ableitbarem Schlüssel: eine gemeinsame `Id<T>`, sonst `[Ueber<T>]`; keine = global | CQRS057, CQRS118 |
 
 Dazu die Projektstruktur ([07](07-projektstruktur.md), CQRS098): wo eine Primitive liegt, sagt die Tabelle `Abstractions/Projektstruktur.cs`.
@@ -370,6 +384,7 @@ Entschieden von Tobi; Code-Kommentare zitieren sie mit ihrer Nummer.
 | E13 | Graph | ein eigener Typ (`IGraph`), Knoten als Parameter mit `[Kopf]` und `[Von(nameof(…))]` (ausdrückliche Kanten, eine Funktion auch mehrfach; aus Typen allein entsteht innen keine Kante), Ablaufformen als Formen der Ausgaben (Zusammenführen im Logik-Code); läuft als Instanz mit eigener Konfig, beliebig oft |
 | E14 | Quellen | Katalogfunktionen am Kopf eines Graphen, nicht im Log; durabel über den gesicherten Zustand |
 | E15 | Umgebung | ein Ordner (`umgebung.json` + `graphen/<instanz>.json`); der Akteur einer Quellinstanz steht in ihrer Datei, geprüft gegen sein `IDarf` |
+| E17 | Funktionen und Aggregate | voneinander isoliert: Katalog und Domäne kennen einander nicht; nur der Graph der Anwendung kennt beide, an den Grenzen steht eine Übersetzung (`Uebersetze<TEin, TAus>`, `[Feld]`) — ein Framework-Knoten ohne Logik. Nur Clients und Quellen stoßen Funktionen an (docs/plan-katalog-und-graphen.md §1) |
 | E16 | Akteur und Client | Akteur = `IDarf` + `IHoert` (ohne Art); Client = Record, der nur verkörpert; ein C#-Client nennt ihn mit `[assembly: IstClient<X>]`; Hinweise gehen nur an Akteure |
 
 Annahmen (sicherer Default, gelten, solange Tobi nicht widerspricht):
@@ -428,6 +443,16 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   einem Kopf dafür (Verbindung). Der Baukasten öffnet per Klick und setzt per „＋“ als Knoten ein (Funktion, Graph als Schachtel, Quelle) — gezogen
   wird nicht mehr. „＋ Technik/Konfig“ am Knoten (Konstruktor), Klick auf eine Kante (verlierbar, lösen), ✕ am Knoten: aus dem Graphen bzw. samt
   Funktion, wenn sie sonst in keinem Knoten steht. Ein Doppelklick öffnet eine Funktion von innen, einen Graphen eine Ebene tiefer.
+- **Übersetzungen und Eingänge** (Schritt 5): eine Übersetzung steht als ↦-Knoten im Graphen, auf ihrer Karte links die Felder von `TEin`, rechts
+  die Parameter von `TAus` mit ihrer Regel („=“ nach Namen, „⇐“ ausdrücklich, „∅“ Standardwert, „⚠“ offen samt Meldung); „＋“ an einem Ziel hebt die
+  passenden Felder hervor (der Server rechnet sie), ein Klick schreibt `[Feld]`, ✕ löst es. Am linken Rand „＋ Eingang“: eine Quelle (nur ohne
+  Kopf) oder ein Client — eine neue oder vorhandene Nachricht der Anwendung, ihr Kopf eine Übersetzung in den Eingang eines Knotens (die neue
+  Nachricht bekommt dessen Felder) oder eine neue Funktion der Anwendung, danach der Akteur, der sie hineingibt (`IDarf`). „＋“ an einem Ausgang
+  bietet gestrichelt „↦ ▣ Command an …“: ein vorhandener Command oder ein neuer samt Decide, Event und Apply; die Übersetzung dazwischen nennt die Id
+  des Ziels ausdrücklich, wenn genau ein Feld in Frage kommt. Im Aggregat zeigt jeder Command, wer ihn schickt (Graph, Akteur), und „＋ Graph, der
+  ihn schickt“ legt einen Graphen bei den Abläufen an — Kopf ist eine Übersetzung aus einer neuen Nachricht mit den Feldern des Commands — und öffnet
+  ihn. Unter den Ergebnissen eines Decide steht kein „Command ohne Ziel“ mehr. Der Picker der Fläche legt einen Graphen nur mit erstem Knoten an
+  (eine vorhandene oder neue Funktion in der Anwendung bzw. einem Katalog, eine Quelle, ein Graph); er öffnet sich danach.
 - **Zoom:** in jedem Modal mit ＋/−/0 (auch mit Strg/⌘), Strg/⌘ + Mausrad bzw. Zwei-Finger-Zoom und der Anzeige im Kopf; auf der Fläche ebenso
   mit ＋/−/0 und dem Mausrad.
 - **Im Aggregat** (von innen) hat jede Karte drei Detailstufen: nur Kopf · Kopf mit Ports (Standard) · Bearbeiten. Ein Doppelklick schaltet

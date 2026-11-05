@@ -285,6 +285,29 @@ public sealed record Linienimport(Dateiwaechter Eingang, [Von(nameof(Eingang))] 
 Die übrigen Muster zeigt die Sonde (`GraphExtractor.Kern/Sonde/Vorhersage.cs.txt`, Kartenausgabe): dieselbe Funktion zweimal, eine Kette gleichen
 Typs, ein Knoten mit `[Kopf]` und `[Von]`, ein Graph im Graphen, dessen Ausgang ein anderer Knoten per `Von(nameof(Filter))` nimmt.
 
+**Übersetzung.** Funktionen eines Katalogs und Aggregate kennen einander nicht; nur der Graph der Anwendung kennt beide, und an den Grenzen steht
+ein Knoten `Uebersetze<TEin, TAus>` (`Abstractions/Uebersetzung.cs`). Er macht aus einem Command ohne Ziel genau einen Command — ohne Ziel an einen
+Knoten, mit Ziel an ein Aggregat —, Feld für Feld und ohne Logik: je Parameter von `TAus` (sein Konstruktor) eine Quelle, in dieser Reihenfolge
+`[Feld(nameof(Ziel), nameof(Quelle))]` am Knoten (ausdrücklich darf ein `Guid` ein `Id<T>` füllen und umgekehrt), eine Eigenschaft von `TEin` mit
+gleichem Namen und implizit zuweisbarem Typ (gleich, Basis bzw. Schnittstelle, `T` → `T?`, erweiternde Zahlen), der Standardwert des Parameters —
+sonst CQRS119. Fremde Enums, Wertobjekte und Ids anderer Aggregate werden nie still zugeordnet; die Id des Ziel-Aggregats kommt aus der Nachricht.
+`TEin` ist ein Command ohne Ziel, `TAus` ein Command (CQRS121). Für Kanten, Köpfe und Ausgänge gilt sie als Knoten mit einer Operation; nie zwei
+hintereinander, und am Kopf gibt sie an Knoten des Graphen oder an ein Aggregat (CQRS115). Kein Command eines Katalogs verlässt einen Graphen der
+Anwendung — jeder Fall wird übersetzt oder von einem Knoten genommen (CQRS120; ein Graph, der als Schachtel steht, gibt dem äußeren). Die Lesart
+ist `Uebersetzungsform` (per Link in Generator, Analyzer und Extractor). Sie läuft **inline**, wo die Nachricht gerade ist, ohne Parent, Zustand,
+Konfig oder Rechner: hinter einer Funktion rechnet das Kind sie vor dem Emitter (ein Command an ein Aggregat sofort, Id aus Aufruf, Ort der
+Übersetzung und Stelle; einer an Knoten mit dem Erfolg an den Parent, der die Wege der Übersetzung nimmt), am Kopf der Graph-Actor beim Annehmen
+(ihr Ergebnis an die Knoten, die sie nennen, oder als Command an sein Aggregat; die Kette ist fertig, wenn das Ziel entschied). Der Wirker in der
+Spur ist ihr Knoten (`knoten:<instanz>/<knoten>`). Der `GraphGenerator` erzeugt je Übersetzung einen `UebersetzungPlan` mit der Rechnung und ihren
+Wegen.
+```csharp
+// Pruefdomaene.Pipeline/Skalierung/Graphen.cs — Client ↦ Katalog Rechenwerk ↦ Aggregat
+public sealed record Hochrechnung(
+    [Kopf, Feld(nameof(Skalieren.Bezug), nameof(HochrechnungAngefordert.Stelle))] Uebersetze<HochrechnungAngefordert, Skalieren> Hinein,
+    [Von(nameof(Hinein))] Skalierer Rechnen,
+    [Von(nameof(Rechnen)), Feld(nameof(MeldeAusreisser.AggregateId), nameof(Skaliert.Bezug))] Uebersetze<Skaliert, MeldeAusreisser> Melden) : IGraph;
+```
+
 **Instanz.** Ein Graph ist eine Blaupause und läuft erst als **Instanz**: eine Datei je Instanz, `umgebungen/<name>/graphen/<instanz>.json`, mit
 `Graph`, bei einem Quellkopf dem `Akteur` (er gibt hinein, was den Graphen verlässt), wahlweise dem `Rechner`, auf dem sie läuft, und je Knoten
 die Felder seiner Konfig-Records sowie
