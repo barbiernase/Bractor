@@ -760,7 +760,7 @@ apply Peilstelle.PeilungVermerkt
 record Funkortung.Ablauf.OrtungAngefordert command | Stelle:Id<Peilstelle>, FrequenzMhz:double, Messdauer:int
 record Funkortung.Ortung.VermerkePeilung command aggregat=Peilstelle | AggregateId:Id<Peilstelle>, RichtungGrad:double, Guete:double, Quelle:string="Katalog"
 record Funkortung.Ortung.PeilungVermerkt event aggregat=Peilstelle | RichtungGrad:double, Guete:double, Quelle:string
-sicht Funkortung.Ablauf.Funker akteur domaene=Funkortung.Ablauf block=§akteure
+sicht Funkortung.Ablauf.Funker akteur domaene=Funkortung.Ortung block=§akteure
 besitz Funkortung.Ablauf.OrtungAngefordert command -> §rand
 besitz Funkortung.Ortung.VermerkePeilung command -> aggregate:Peilstelle
 besitz Funkortung.Ortung.PeilungVermerkt event -> aggregate:Peilstelle

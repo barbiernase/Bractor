@@ -446,6 +446,9 @@ public static class Sonde
                 analyzerReferences: ablaeufe.AnalyzerReferences)
             .WithDefaultNamespace(SondenKatalog);
         var fork = solution.AddProject(info).AddProjectReference(ablaeufe.Id, new ProjectReference(id));
+        // MSBuild reicht die Referenz transitiv weiter (Komposition, Akteure, Leitung sehen den Katalog über die Abläufe), ein Roslyn-Fork nicht.
+        foreach (var p in solution.Projects.Where(p => p.ProjectReferences.Any(r => r.ProjectId == ablaeufe.Id)))
+            fork = fork.AddProjectReference(p.Id, new ProjectReference(id));
         // Globale usings (ImplicitUsings) wie in den Abläufen — Task & Co. ohne using.
         foreach (var d in ablaeufe.Documents.Where(d => d.FilePath?.EndsWith(".GlobalUsings.g.cs", StringComparison.Ordinal) == true))
             fork = fork.AddDocument(DocumentId.CreateNewId(id), Path.GetFileName(d.FilePath!), d.GetTextAsync().Result,

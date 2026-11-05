@@ -3613,7 +3613,7 @@
       ...MODEL.akteure.map(a=>({t:"👤 "+a.name+((a.darf||[]).includes(m)?" (darf schon)":""),fn:()=>{if((a.darf||[]).includes(m))return;
         a.darf=[...(a.darf||[]),m];gTitel("👤 "+a.name+" darf "+m);render();}})),
       {trenn:1},{t:"＋ neuer Akteur …",fn:()=>frageFix(ev.clientX,ev.clientY,"👤 Neuer Akteur","","Er gibt "+m+" hinein (IDarf)",n=>{const f=nameFehler(n);if(f)return f;
-        MODEL.akteure.push({_id:"ak"+(NID++),name:n,namespace:haeufigsterNs(MODEL.akteure)||defaultNs(),darf:[m],hoert:[]});gTitel("👤 "+n+" darf "+m);render();})},
+        MODEL.akteure.push({_id:"ak"+(NID++),name:n,namespace:haeufigsterNs(MODEL.akteure)||defaultNsGlobal(),darf:[m],hoert:[]});gTitel("👤 "+n+" darf "+m);render();})},
       {hinweis:"Ohne Akteur gibt niemand "+m+" hinein — der Rand zeigt es an."}]);}
   // „↦ ▣ Command an …“ am Ausgang eines Knotens: ein vorhandener Command an ein Aggregat oder ein neuer samt Decide; dazwischen die Übersetzung.
   function komCommandAn(id,q,typ,ev){KOM.port=null;
@@ -3647,7 +3647,7 @@
   function graphNeuMitKnoten(ev,pos){const bk=komBaukasten();
     frageFix(ev.clientX,ev.clientY,"⬡ Neuer Graph",uniq("NeuerGraph"),"Danach: sein erster Knoten",n=>{const f=nameFehler(n);if(f)return f;
       if((MODEL.graphen||[]).some(x=>x.name===n))return n+" gibt es schon";
-      const ns=ablaufNs(defaultNs());
+      const ns=ablaufNs(defaultNsGlobal());
       const mit=(typ,quelle)=>{(MODEL.graphen=MODEL.graphen||[]).push({_id:"graph:"+n,name:n,namespace:ns,
         knoten:[{typ,name:typBasis(typ).replace(/^I(?=[A-ZÄÖÜ])/,""),kopf:!quelle,von:[],verlierbar:[]}],...pos});KOM_NACH="gr:graph:"+n;gTitel("⬡ "+n+" mit "+typ);render();};
       // Eine neue Funktion als erster Knoten: in der Anwendung oder in einem Katalog (dort in einem Bereich), mit Auftrag und Ergebnis.
