@@ -169,6 +169,14 @@ message TaktDto {
     int64 zeitpunkt = 1;
 }
 
+message ResizeFastAuftragDto {
+    // Keine Parameter
+}
+
+message ResizeFastErgebnisDto {
+    // Keine Parameter
+}
+
 message EinfrierenAbzuschliessenDto {
     string datensatz = 1;
     repeated string mitglieder = 2;

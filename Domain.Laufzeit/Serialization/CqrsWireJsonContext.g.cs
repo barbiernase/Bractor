@@ -54,6 +54,8 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Abstractions.Aufruf))]
 [JsonSerializable(typeof(global::Abstractions.DateiGefunden))]
 [JsonSerializable(typeof(global::Abstractions.Takt))]
+[JsonSerializable(typeof(global::Bildverarbeitung.Katalog.Resize.ResizeFastAuftrag))]
+[JsonSerializable(typeof(global::Bildverarbeitung.Katalog.Resize.ResizeFastErgebnis))]
 [JsonSerializable(typeof(global::Domain.Bildaufbereitung.BildNichtLesbar))]
 [JsonSerializable(typeof(global::Domain.Datensatz.DatensatzBereitsEingefroren))]
 [JsonSerializable(typeof(global::Domain.Datensatz.DatensatzEingefroren))]
