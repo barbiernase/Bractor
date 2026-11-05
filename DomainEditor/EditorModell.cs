@@ -315,7 +315,9 @@ public sealed record FunktionsUmsetzung
 }
 
 /// <summary>
-/// Ein Eingang (ein <c>Auf</c>): die eine Nachricht, die es nimmt (GR-EINGANG), ob mit Herkunft, ob Strom, Lese-Fähigkeiten, Ausgaben (einfache Namen).
+/// Ein Eingang (ein <c>Auf</c>): die eine Nachricht, die es nimmt (GR-EINGANG), ob mit Herkunft, Lese-Fähigkeiten, Ausgaben (einfache Namen) und
+/// die FORM der Ausgabe: <see cref="Strom"/> (keine bis viele je Aufruf), sonst bei einer Ausgabe genau eine, bei mehreren eine Wahl
+/// (<c>OneOf</c>, keine oder eine) — dazu <see cref="Asynchron"/> (<c>Task&lt;…&gt;</c> bzw. <c>IAsyncEnumerable&lt;…&gt;</c>).
 /// </summary>
 public sealed record BausteinEingang
 {
@@ -323,6 +325,7 @@ public sealed record BausteinEingang
     public bool Hinweis { get; init; }
     public bool Herkunft { get; init; }
     public bool Strom { get; init; }
+    public bool Asynchron { get; init; }
     public IReadOnlyList<Parameter> Faehigkeiten { get; init; } = [];
     public IReadOnlyList<string> Ausgaben { get; init; } = [];
 }

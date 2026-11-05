@@ -130,7 +130,7 @@ public static class ModellMapper
                 Zustand = f.ZustandFull is { } z ? Kurz(z) : null,
                 Eingaenge = f.Eingaenge.Select(e => new BausteinEingang
                 {
-                    Eingang = Kurz(e.EingangFull), Hinweis = e.Hinweis, Herkunft = e.Herkunft, Strom = e.Strom,
+                    Eingang = Kurz(e.EingangFull), Hinweis = e.Hinweis, Herkunft = e.Herkunft, Strom = e.Strom, Asynchron = e.Asynchron,
                     Faehigkeiten = e.Faehigkeiten.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
                     Ausgaben = e.AusgabenFull.Select(Kurz).ToList(),
                 }).ToList(),

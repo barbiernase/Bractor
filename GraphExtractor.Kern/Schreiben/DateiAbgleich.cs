@@ -420,27 +420,10 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, List<string>
     }
 
     /// <summary>
-    /// Die Rückgabe eines bestehenden Auf auf neue Ausgaben bringen und dabei seine Form behalten: Hülle (<c>Task</c>/<c>ValueTask</c>), Strom
-    /// (<c>IEnumerable</c>/<c>IAsyncEnumerable</c>), <c>?</c>. Ohne Ausgaben: <c>void</c> bzw. die bloße Hülle.
+    /// Die Rückgabe eines bestehenden Auf auf seine Ausgaben und seine Form bringen (Strom, asynchron — beides im Modell, aus der Signatur gelesen):
+    /// dieselbe Regel wie für ein neues Auf. Was die Form schon hat, bleibt Wort für Wort (der Vergleich normalisiert).
     /// </summary>
-    private static string FunktionsRueckgabe(string alt, BausteinEingang e)
-    {
-        var t = alt.Trim();
-        string? huelle = null, strom = null;
-        foreach (var w in new[] { "Task", "ValueTask" })
-            if (t.StartsWith(w + "<", StringComparison.Ordinal) && t.EndsWith('>')) { huelle = w; t = t[(w.Length + 1)..^1].Trim(); break; }
-        foreach (var w in new[] { "IAsyncEnumerable", "IEnumerable" })
-            if (t.StartsWith(w + "<", StringComparison.Ordinal) && t.EndsWith('>')) { strom = w; t = t[(w.Length + 1)..^1].Trim(); break; }
-        if (t is "Task" or "ValueTask") huelle = t;
-        // Ein Ausgang ist T, OneOf<…> oder ein Strom — nie T? (GR-FUNKTION-FORM, CQRS100).
-        var innen = e.Ausgaben.Count switch { 0 => null, 1 => e.Ausgaben[0], _ => $"{OneOf}<{string.Join(", ", e.Ausgaben)}>" };
-        if (innen == null) return huelle ?? (strom == "IAsyncEnumerable" ? "Task" : "void");
-        // Strom ein: eine asynchrone Methode wird IAsyncEnumerable (die Hülle fällt), eine synchrone IEnumerable.
-        if (e.Strom) return $"{strom ?? (huelle != null ? "IAsyncEnumerable" : "IEnumerable")}<{innen}>";
-        // Strom aus: aus IAsyncEnumerable wird Task<T>, aus IEnumerable T.
-        if (strom == "IAsyncEnumerable") huelle ??= "Task";
-        return huelle != null ? $"{huelle}<{innen}>" : innen;
-    }
+    private static string FunktionsRueckgabe(string alt, BausteinEingang e) => Scaffolder.FunktionsRueckgabe(e);
 
     // ── Konstruktor einer Funktions-Klasse bzw. Umsetzung: nur die Parameterliste — Primär-Konstruktor bzw. der öffentliche Konstruktor ──
     private (string, string)? Konstruktor(string text, string klasse, IReadOnlyList<Parameter> soll)

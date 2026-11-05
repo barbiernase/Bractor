@@ -471,4 +471,12 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   Readers, der zu einem anderen Store gehört, steht leise mit „gehört zu …“. Ein neuer Store wählt seine Klasse; die Umsetzung erbt die Basis
   aus `Storeklassen` (`MartenStore`, `DateiZiel`, `DateiSink`), bei Klasse 3 trägt die Projektion `[MindestensEinmal]`. Entfernen: ✕ Auf bzw.
   Frage an seiner Methode (die letzte nimmt die Klasse mit), ✕ Fähigkeit samt Schnittstelle, Umsetzung und Platz im Bündel, wenn sie niemand nimmt.
+- **Funktion von innen** (docs/plan-katalog-und-graphen.md, Schritt 3): dieselbe Mechanik in vier Spalten — Eingänge · Auf · Ausgänge · Rahmen
+  (Konstruktor). Eingang ↔ Auf ist 1:1 (R2), Auf → Ausgänge frei; jeder Ausgang trägt seine Vielfachheit (1 Folge, 0..1 Wahl, 0..n Strom), im ✎ des
+  Auf stehen Strom, asynchron (`Task`/`IAsyncEnumerable`), Herkunft und — nur in der Anwendung — die Lese-Fähigkeiten, dazu der Rumpf. „＋ Ausgang“
+  bietet gestrichelt eine neue Nachricht, einen neuen Hinweis und (in der Anwendung) „→ Command an ▣ …“ (vorhanden oder neu samt Decide beim
+  Aggregat); der Spaltenkopf Eingänge eine neue Nachricht mit Auf, eine vorhandene Nachricht und die Antworten auf eigene Commands; der Rahmen Konfig
+  (neu oder vorhanden), Technik (neu als Schnittstelle mit Umsetzung oder vorhanden) und den Logger. Eine Funktion im Katalog kennt keine Domäne: kein
+  Command an ein Aggregat, keine Antwort, keine Lese-Fähigkeit. Ein Doppelklick auf eine Funktion (Komposition, Baukasten) öffnet dieses Modal; Technik
+  und alles Übrige („✎ Formular“) das bisherige Formular. Neue Zustandsklassen legt das Modal noch nicht an.
 - `--check` prüft die Fläche mit (Kanten an vorhandenen Ports, je Typ höchstens ein deklarierender Port).

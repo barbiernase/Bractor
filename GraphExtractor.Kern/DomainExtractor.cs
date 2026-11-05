@@ -185,7 +185,7 @@ public sealed class BausteinFunktionRaw
 public sealed class BausteinEingangRaw
 {
     public string EingangFull = "";
-    public bool Hinweis, Herkunft, Strom;
+    public bool Hinweis, Herkunft, Strom, Asynchron;
     public List<(string Typ, string Name)> Faehigkeiten = new();
     public List<string> AusgabenFull = new();
     /// <summary>Die Methode dieses <c>Auf</c> und ihr Rumpf (Rumpf-Edit, wie bei Decide und Apply).</summary>
@@ -774,7 +774,7 @@ public sealed partial class DomainExtractor
         {
             var e = new BausteinEingangRaw
             {
-                EingangFull = a.Eingang.Fq(), Herkunft = a.MitHerkunft, Strom = a.Strom,
+                EingangFull = a.Eingang.Fq(), Herkunft = a.MitHerkunft, Strom = a.Strom, Asynchron = a.Huelle == "Task" || a.StromAsync,
                 AusgabenFull = a.Ausgaben.Select(x => x.Fq()).ToList(),
                 Ort = MethodenOrt(a.Methode), Rumpf = MethodBody(a.Methode),
             };

@@ -413,16 +413,18 @@ public static class Scaffolder
     private static readonly string OneOfName = typeof(Abstractions.OneOf<>).Name.Split('`')[0];
 
     /// <summary>
-    /// Die Rückgabe eines Auf aus seinen Ausgaben (Entscheidung 4: kein <c>T?</c>, ein leerer Strom ist „nichts“): eine → <c>X</c>; mehrere → eine
-    /// Wahl <c>OneOf&lt;…&gt;</c>; als Strom <c>IAsyncEnumerable&lt;…&gt;</c>; keine → <c>void</c> (baut nicht — W1: Unfertiges ist Code, der nicht baut).
+    /// Die Rückgabe eines Auf aus seinen Ausgaben und seiner Form (Entscheidung 4: kein <c>T?</c>, ein leerer Strom ist „nichts“): eine → <c>X</c>;
+    /// mehrere → eine Wahl <c>OneOf&lt;…&gt;</c>; als Strom <c>IEnumerable&lt;…&gt;</c>; asynchron in <c>Task&lt;…&gt;</c> bzw. als
+    /// <c>IAsyncEnumerable&lt;…&gt;</c>; keine → <c>void</c> bzw. <c>Task</c> (baut nicht — W1: Unfertiges ist Code, der nicht baut).
     /// </summary>
-    public static string FunktionsRueckgabe(BausteinEingang e) => Rueckgabe(e.Ausgaben, e.Strom);
+    public static string FunktionsRueckgabe(BausteinEingang e) => Rueckgabe(e.Ausgaben, e.Strom, e.Asynchron);
 
-    private static string Rueckgabe(IReadOnlyList<string> ausgaben, bool strom)
+    private static string Rueckgabe(IReadOnlyList<string> ausgaben, bool strom, bool asynchron)
     {
         var innen = ausgaben.Count switch { 0 => null, 1 => ausgaben[0], _ => $"{OneOfName}<{string.Join(", ", ausgaben)}>" };
-        if (innen == null) return "void";
-        return strom ? $"IAsyncEnumerable<{innen}>" : innen;
+        if (innen == null) return asynchron ? "Task" : "void";
+        if (strom) return asynchron ? $"IAsyncEnumerable<{innen}>" : $"IEnumerable<{innen}>";
+        return asynchron ? $"Task<{innen}>" : innen;
     }
 
     /// <summary>
@@ -435,7 +437,7 @@ public static class Scaffolder
 
     /// <summary>Eine Quellfunktion lauscht so (Entscheidung 8): ein asynchroner Strom dessen, was sie meldet, mit dem Abbruch als einzigem Parameter.</summary>
     public static string LauscheKopf(BausteinFunktion f) =>
-        $"async {Rueckgabe(f.Lauscht, strom: true)} {Abstractions.Funktionsvertrag.Lausche}([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)";
+        $"async {Rueckgabe(f.Lauscht, strom: true, asynchron: true)} {Abstractions.Funktionsvertrag.Lausche}([System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)";
 
     private static string LauscheStub(BausteinFunktion f, string einzug) =>
         $"{einzug}public {LauscheKopf(f)}\n{einzug}{{\n{einzug}    await Task.CompletedTask;\n{einzug}    throw new NotImplementedException(\"TODO: {f.Name}.Lausche\");\n"

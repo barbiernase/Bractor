@@ -144,7 +144,12 @@ bekommt aus dem alten Formular noch ein `Guid AggregateId`-Feld.
 **Fertig, wenn** sich in der Werkbank ein Katalog anlegen, mit einer Funktion samt Nachrichten füllen und von der Anwendung nutzen lässt, alles
 baut, `--check` und `--sonde` grün sind und die schnelle Stufe grün ist.
 
-### Schritt 3 — Das Funktions-Modal
+### Schritt 3 — Das Funktions-Modal (umgesetzt, Abnahme im Editor offen)
+
+Umgesetzt: `BausteinEingang.Asynchron` (die Form folgt aus Strom und Zahl der Ausgänge, eine eigene `Form` braucht es nicht), Scaffolder und Abgleich
+schreiben `T`/`OneOf`/`IEnumerable` bzw. `Task`/`IAsyncEnumerable`; das Modal `funZeige` auf `innenZeige` (Spalten, Ports mit Vielfachheit, ＋ mit
+gestrichelten Karten, ✎, ✕ mit Löschplan, „unverbunden“). Offen: neue Zustandsklasse (`IZustand<T>`) im Modal, Schalter „lauscht“ für eine neue Quelle,
+`CancellationToken` als Schalter; die Technik heißt im Code noch „gerufen“.
 
 - **Modell und Sicht:** `BausteinEingang` bekommt `Form` (eins, Wahl, Strom) und `Asynchron` statt `Strom`; Extractor liest, Scaffolder
   schreibt sie. Technik heißt im Modell Technik statt „gerufen“. Die Sicht rechnet je Funktion Operationen, Form und Vielfachheit der Ausgänge,

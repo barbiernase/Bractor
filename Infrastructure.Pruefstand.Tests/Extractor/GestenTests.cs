@@ -263,6 +263,30 @@ public sealed class GestenTests : IDisposable
     }
 
     [Fact]
+    public async Task Die_Form_der_Ausgabe_steht_in_der_Signatur_Strom_und_asynchron()
+    {
+        // Lesen: SchadenBeiRueckgabe gibt einen Strom aus (synchron), Schadensschaetzer ein Task<…> — beides aus der Signatur.
+        var board = await BoardAsync();
+        var strom = Karte(board, "bausteinFunktionen", f => (string?)f["name"] == "SchadenBeiRueckgabe")["eingaenge"]!.AsArray().OfType<JsonObject>().Single();
+        ((bool?)strom["strom"]).Should().BeTrue();
+        ((bool?)strom["asynchron"]).Should().BeFalse();
+        var task = Karte(board, "bausteinFunktionen", f => (string?)f["name"] == "Schadensschaetzer")["eingaenge"]!.AsArray().OfType<JsonObject>().Single();
+        ((bool?)task["asynchron"]).Should().BeTrue();
+
+        // Schreiben: asynchron macht aus dem Strom einen IAsyncEnumerable, ohne Strom wird aus dem Task die bloße Ausgabe.
+        var karte = Karte(board, "bausteinFunktionen", f => (string?)f["name"] == "SchadenBeiRueckgabe");
+        karte["eingaenge"]!.AsArray().OfType<JsonObject>().Single()["asynchron"] = true;
+        await GesteAsync(Geaendert("bausteinFunktionen", karte));
+        Text("Gebuehren.cs").Should().Contain("IAsyncEnumerable<MeldeSchaden> Auf(PruefeRueckgabe p, Herkunft h)");
+
+        var schaetzer = Karte(await BoardAsync(), "bausteinFunktionen", f => (string?)f["name"] == "Schadensschaetzer");
+        schaetzer["eingaenge"]!.AsArray().OfType<JsonObject>().Single()["asynchron"] = false;
+        await GesteAsync(Geaendert("bausteinFunktionen", schaetzer));
+        Text("Gebuehren.cs").Should().Contain(" SchadenGeschaetzt Auf(SchadenErfasst e)").And.NotContain("Task<SchadenGeschaetzt> Auf(SchadenErfasst e)",
+            "nur die Rückgabe folgt der Form — der Rumpf gehört dem Code (sein await baut danach nicht mehr: unfertig, W1)");
+    }
+
+    [Fact]
     public async Task Neue_Funktion_wird_eine_Klasse_mit_einem_Auf_je_Eingang()
     {
         var neu = new JsonObject
