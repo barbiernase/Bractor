@@ -165,7 +165,7 @@ gestrichelten Karten, ✎, ✕ mit Löschplan, „unverbunden“). Offen: neue Z
 **Fertig, wenn** sich eine Katalogfunktion samt Nachrichten, Konfig, Technik und Zustand vollständig im Modal anlegen und ändern lässt, baut und
 die Werkbank-Abnahme grün ist.
 
-### Schritt 4 — Das Graph-Modal (umgesetzt, Abnahme im Editor offen)
+### Schritt 4 — Das Graph-Modal ✓ (889602d8, im Editor abgenommen)
 
 Umgesetzt im Editor (die Ports je Auf und ihre Vielfachheit folgen aus der Signatur im Modell; die Sicht blieb unverändert): Ports je Auf, Antworten
 ohne ＋, ＋ an Ein- und Ausgängen mit gestrichelter „neue Funktion davor/dahinter“ (Ort: Anwendung oder ein Katalog, der den Typ kennt), „＋ Quelle“,
