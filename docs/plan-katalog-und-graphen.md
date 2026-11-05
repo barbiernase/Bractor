@@ -144,7 +144,7 @@ bekommt aus dem alten Formular noch ein `Guid AggregateId`-Feld.
 **Fertig, wenn** sich in der Werkbank ein Katalog anlegen, mit einer Funktion samt Nachrichten füllen und von der Anwendung nutzen lässt, alles
 baut, `--check` und `--sonde` grün sind und die schnelle Stufe grün ist.
 
-### Schritt 3 — Das Funktions-Modal (umgesetzt, Abnahme im Editor offen)
+### Schritt 3 — Das Funktions-Modal ✓ (ad3199e8, im Editor abgenommen)
 
 Umgesetzt: `BausteinEingang.Asynchron` (die Form folgt aus Strom und Zahl der Ausgänge, eine eigene `Form` braucht es nicht), Scaffolder und Abgleich
 schreiben `T`/`OneOf`/`IEnumerable` bzw. `Task`/`IAsyncEnumerable`; das Modal `funZeige` auf `innenZeige` (Spalten, Ports mit Vielfachheit, ＋ mit
