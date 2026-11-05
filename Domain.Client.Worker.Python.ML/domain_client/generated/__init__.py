@@ -195,6 +195,16 @@ class TaktDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class ResizeFastAuftragDto(betterproto.Message):
+    pass
+
+
+@dataclass(eq=False, repr=False)
+class ResizeFastErgebnisDto(betterproto.Message):
+    pass
+
+
+@dataclass(eq=False, repr=False)
 class EinfrierenAbzuschliessenDto(betterproto.Message):
     datensatz: str = betterproto.string_field(1)
     mitglieder: List[str] = betterproto.string_field(2)
@@ -646,6 +656,21 @@ class ImagePairErstelltDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class ImagePairGeaendertDto(betterproto.Message):
+    pass
+
+
+@dataclass(eq=False, repr=False)
+class ImagePairGegengechecktDto(betterproto.Message):
+    pass
+
+
+@dataclass(eq=False, repr=False)
+class ImagePairHatSichGeaendertDto(betterproto.Message):
+    pass
+
+
+@dataclass(eq=False, repr=False)
 class ImagePairInspiziertDto(betterproto.Message):
     pass
 
@@ -678,6 +703,16 @@ class RegionIndexUngueltigDto(betterproto.Message):
 @dataclass(eq=False, repr=False)
 class RegionLabelsUngueltigDto(betterproto.Message):
     anzahl: int = betterproto.int32_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class ZufallsEventDto(betterproto.Message):
+    pass
+
+
+@dataclass(eq=False, repr=False)
+class ZufallsEventNeuDto(betterproto.Message):
+    pass
 
 
 @dataclass(eq=False, repr=False)

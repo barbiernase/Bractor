@@ -70,6 +70,10 @@ an seinen Experimenten etwas änderst.
 - Neue Funktionen im Editor tragen die Server-Id `funktion:<Name>` (`WirkerId.FuerFunktion`), sonst schließt ein offenes Modal, wenn das Board
   vom Server zurückkommt; Graphen `graph:<Name>`.
 - Eine Projektdatei in einer Geste lädt den Arbeitsbereich kalt neu (`Arbeitsbereich.UebernimmAsync`).
+- Ändert sich `domain.proto` (auch durch einen genutzten Katalog — der Codegen nimmt seine Nachrichten mit), müssen die Python-DTOs neu:
+  `PATH=/opt/miniconda3/envs/gpu_env/bin:$PATH Domain.Client.Worker.Python.ML/build_python.sh` und `domain_client/generated/__init__.py` samt
+  `.proto_hash` committen — sonst scheitert der Python-Worker am Import (Integrationstest „Der Python-Worker hat die Arbeit … nicht angenommen“).
+  Der Build erzeugt sie nicht von selbst.
 - Die Ports je Auf im Graph-Modal rechnet der Editor aus der Signatur im Modell (`komGruppen`); die Sicht (`Sicht.Komposition.cs`) blieb flach.
 - Offen aus Schritt 3: neue Zustandsklasse (`IZustand<T>`) im Funktions-Modal, Schalter „lauscht“, `CancellationToken` als Schalter; Technik heißt im
   Editor-Code noch „gerufen“.
