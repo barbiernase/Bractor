@@ -10,7 +10,7 @@ namespace Infrastructure.SourceGeneration
 {
     /// <summary>
     /// Die EINE Lesart eines Graphen (docs/04 §4.4) für Generator, Analyzer und Extractor — nur Code-Fakten: der Marker <c>IGraph</c>, die Parameter
-    /// des Records (je einer ein Knoten: Name = Konfig-Schlüssel, Typ = eine Funktion oder ein Graph), ihre Attribute <c>[Von(nameof(…))]</c> und
+    /// des Records (je einer ein Knoten: Name = Konfig-Schlüssel, Typ = eine Funktion, ein Graph oder eine Übersetzung), ihre Attribute <c>[Von(nameof(…))]</c> und
     /// <c>[Kopf]</c> und die Signaturen der Funktionen (<see cref="Funktionsform"/>). Jede innere Kante steht am nehmenden Knoten: eine genannte Quelle
     /// speist die Ports, deren Typ sie ausgibt; aus Typen allein entsteht keine Kante. Ein <c>[Kopf]</c> nimmt von außen, was keine genannte Quelle
     /// speist — je Eingangstyp genau einer. Was ein Knoten ausgibt und kein Knoten über <c>Von</c> von ihm nimmt, verlässt den Graphen. Ein Graph als
@@ -19,6 +19,9 @@ namespace Infrastructure.SourceGeneration
     /// Eine Funktion darf mehrfach im Graphen stehen; die Reihenfolge der Parameter bedeutet nichts.
     /// <para>Jedes <c>Auf</c> nimmt genau eine Nachricht (<see cref="Funktionsform"/>) und rechnet je Ankunft; Zusammenführen und Einsammeln stehen
     /// im Logik-Code. Eine Kante ist gesichert, mit <c>Verlierbar = true</c> an ihrem <c>[Von]</c> verlierbar.</para>
+    /// <para>Ein Knoten kann auch eine ÜBERSETZUNG sein (<c>Uebersetze&lt;TEin, TAus&gt;</c>, <see cref="Uebersetzungsform"/>): eine Operation, die
+    /// <c>TEin</c> nimmt und genau ein <c>TAus</c> gibt; für Kanten, Köpfe und Ausgänge gelten dieselben Regeln. Ihre Zuordnung prüfen eigene Regeln
+    /// (<see cref="Form.Regelfehler"/>).</para>
     /// </summary>
     internal static class Graphform
     {
@@ -33,6 +36,9 @@ namespace Infrastructure.SourceGeneration
             public string Name = "";
             public INamedTypeSymbol Typ = null!;
             public Funktionsform.Form Funktion = null!;
+            /// <summary>Eine Übersetzung (<c>Uebersetze&lt;TEin, TAus&gt;</c>): ihre Zuordnung; ihre eine Operation nimmt <c>TEin</c> und gibt <c>TAus</c>.
+            /// Sie hat keine Funktion (<see cref="Funktion"/> ist eine Hülle ohne Methode) und läuft inline (docs/04 §4.4).</summary>
+            public Uebersetzungsform.Form? Uebersetzung;
             public Location Ort = Location.None;
             /// <summary>Die Graphen, in denen der Knoten liegt (Pfade, außen zuerst; leer = im Graphen selbst).</summary>
             public List<string> Bereich = new List<string>();
@@ -108,6 +114,10 @@ namespace Infrastructure.SourceGeneration
             /// <summary>Der Quellknoten (eine Funktion, die lauscht): er ist der Kopf des Graphen, jedes seiner Elemente startet einen Lauf; null = keiner.</summary>
             public Knoten? Quelle;
             public List<(string Text, Location Ort)> Fehler = new List<(string, Location)>();
+            /// <summary>Die Fehler der Übersetzungen (Kennung CQRS119/CQRS121, Text, Ort) — eigene Regeln neben der Form (CQRS115).</summary>
+            public List<(string Id, string Text, Location Ort)> Regelfehler = new List<(string, string, Location)>();
+            /// <summary>Ohne Formfehler und ohne Fehler einer Übersetzung — nur so erzeugt der Generator den Graphen.</summary>
+            public bool Gueltig => Fehler.Count == 0 && Regelfehler.Count == 0;
 
             /// <summary>Der Kopf für einen Eingangstyp, oder null.</summary>
             public List<Knoten>? KopfFuer(ITypeSymbol t) => Koepfe.Where(k => Funktionsform.Voll(k.Typ) == Funktionsform.Voll(t)).Select(k => k.Knoten).FirstOrDefault();
@@ -158,6 +168,14 @@ namespace Infrastructure.SourceGeneration
                     if (da == null) g.Koepfe.Add((typ, new List<Knoten> { k }));
                     else if (!da.Contains(k)) da.Add(k);
                 }
+            // Übersetzungen: nie zwei hintereinander (eine genügt — sie hat keine Logik); am Kopf gibt sie an Knoten des Graphen oder an ein Aggregat.
+            foreach (var e in g.Kanten.Where(e => e.Von.Uebersetzung != null && e.Nach.Uebersetzung != null).GroupBy(e => e.Nach).Select(x => x.First()))
+                g.Fehler.Add(($"die Übersetzung '{e.Nach.Name}' nimmt von der Übersetzung '{e.Von.Name}' — zwei Übersetzungen hintereinander sind eine "
+                    + "(übersetze direkt)", e.Nach.Ort));
+            foreach (var (von, typ) in g.Ausgaenge.Where(a => a.Von.Uebersetzung != null && Funktionsform.IstCommandOhneZiel(a.Typ)
+                && g.Koepfe.Any(k => k.Knoten.Contains(a.Von))))
+                g.Fehler.Add(($"die Übersetzung '{von.Name}' ist Kopf und gibt {typ.Name} hinaus — eine Übersetzung am Kopf gibt an Knoten dieses Graphen "
+                    + "oder einen Command an ein Aggregat (was einen anderen Graphen anstößt, schickt der Client bzw. die Quelle dorthin)", von.Ort));
             g.SignaturEin = g.Koepfe.Select(k => k.Typ).ToList();
             g.SignaturAus = wurzel.Aus.Select(a => a.Typ).GroupBy(V).Select(x => x.First()).ToList();
             var quellen = g.Knoten.Where(k => k.Funktion.Lausche != null).ToList();
@@ -213,6 +231,15 @@ namespace Infrastructure.SourceGeneration
                 var name = pfad.Length == 0 ? p.Name : pfad + "." + p.Name;
                 var glied = new Glied { Name = p.Name, Pfad = name, Typ = p.Type, Ort = pOrt };
                 LiesAttribute(p, glied, namen, t, g);
+                if (p.Type is INamedTypeSymbol u && Uebersetzungsform.Ist(u))
+                {
+                    glied.Knoten = LiesUebersetzung(u, p, name, bereich, pOrt, g);
+                    s.Eigene.Add(glied.Knoten);
+                    s.Glieder.Add(glied);
+                    continue;
+                }
+                foreach (var (_, _, fOrt) in Uebersetzungsform.Felder(p))
+                    g.Regelfehler.Add((Uebersetzungsform.Zuordnung, $"[Feld] an '{p.Name}' — [Feld] steht nur an einer Übersetzung (Uebersetze<TEin, TAus>)", fOrt));
                 if (p.Type is INamedTypeSymbol gg && IstGraph(gg))
                 {
                     var innen = Falte(gg, name, bereich.Concat(new[] { name }).ToList(), offen, g);
@@ -224,8 +251,8 @@ namespace Infrastructure.SourceGeneration
                 }
                 if (p.Type is not INamedTypeSymbol f || !Funktionsform.IstFunktion(f) || f.TypeArguments.Any(a => a.TypeKind == TypeKind.TypeParameter))
                 {
-                    g.Fehler.Add(($"der Knoten '{p.Name}' ist keine Funktion und kein Graph ('{p.Type.ToDisplayString()}') — ein Knoten ist eine Funktion "
-                        + "(IFunktion, eine generische mit Typargument) oder ein anderer Graph", pOrt));
+                    g.Fehler.Add(($"der Knoten '{p.Name}' ist keine Funktion, kein Graph und keine Übersetzung ('{p.Type.ToDisplayString()}') — ein Knoten "
+                        + "ist eine Funktion (IFunktion, eine generische mit Typargument), ein anderer Graph oder Uebersetze<TEin, TAus>", pOrt));
                     continue;
                 }
                 glied.Knoten = LiesKnoten(f, name, bereich, pOrt);
@@ -441,6 +468,25 @@ namespace Infrastructure.SourceGeneration
             }
             foreach (var x in form.Aufs.Concat(form.Lausche != null ? new[] { form.Lausche } : new Funktionsform.Auf[0]).SelectMany(a => a.Ausgaben))
                 if (!k.Ausgaben.Any(y => V(y) == V(x))) k.Ausgaben.Add(x);
+            return k;
+        }
+
+        /// <summary>
+        /// Ein Übersetzungs-Knoten: eine Operation, die <c>TEin</c> nimmt und <c>TAus</c> gibt (genau eins), die Zuordnung nach
+        /// <see cref="Uebersetzungsform"/>; ihre Fehler gehen als eigene Regeln an <paramref name="g"/>.
+        /// </summary>
+        private static Knoten LiesUebersetzung(INamedTypeSymbol u, IParameterSymbol p, string name, List<string> bereich, Location ort, Form g)
+        {
+            var form = Uebersetzungsform.Lies(u, p, ort);
+            g.Regelfehler.AddRange(form.Fehler);
+            var auf = new Funktionsform.Auf { Methode = null!, Command = true, Element = form.Aus };
+            if (form.Ein is INamedTypeSymbol ein) auf.Ports.Add(new Funktionsform.Port { Name = "ein", Typen = { ein }, Ort = ort });
+            if (form.Aus is INamedTypeSymbol aus) auf.Ausgaben.Add(aus);
+            var k = new Knoten { Name = name, Typ = u, Funktion = new Funktionsform.Form { Typ = u, Aufs = { auf } }, Uebersetzung = form, Ort = ort, Bereich = bereich };
+            var op = new Operation { Knoten = k, Auf = auf, Nummer = 0 };
+            op.Ausgaben.AddRange(auf.Ausgaben);
+            k.Operationen.Add(op);
+            k.Ausgaben.AddRange(auf.Ausgaben);
             return k;
         }
 

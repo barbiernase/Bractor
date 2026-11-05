@@ -12,7 +12,9 @@ namespace Infrastructure.Funktionen;
 /// koordiniert nichts: ein Eingang am Kopf (Kennung = die des Eingangs; ein doppelter hängt sich an bzw. hört „fertig“) geht als gesicherter Aufruf an
 /// den Knoten, der ihn nimmt, ein Element der Quelle an die Knoten, die sie nennen. Kommt dessen „fertig“, antwortet er dem wartenden Absender bzw.
 /// trägt den durablen Eingang aus; kommt „gescheitert“, parkt er den durablen Kopf und meldet <see cref="LaufGescheitert"/>. Sind schon so viele Ketten
-/// offen, wie die Warteschlange des Kopfs erlaubt, heißt die Antwort „später“ — der Rückstau reicht bis zum durablen Rand.
+/// offen, wie die Warteschlange des Kopfs erlaubt, heißt die Antwort „später“ — der Rückstau reicht bis zum durablen Rand. Ist der Kopf eine
+/// ÜBERSETZUNG, rechnet er sie beim Annehmen inline: ihr Ergebnis geht an die Knoten, die sie nennen, oder als Command an ein Aggregat
+/// (Id aus Kopf und Übersetzung; die Kette ist fertig, wenn das Ziel entschieden hat).
 /// </summary>
 public sealed class GraphActor(
     GraphInstanz instanz,
@@ -20,7 +22,8 @@ public sealed class GraphActor(
     IOffeneEingaenge? offene = null,
     Action<HinweisZustellen>? hinweise = null,
     ILogger? logger = null,
-    IZustandsAblage? ablage = null) : RahmenActor(logger)
+    IZustandsAblage? ablage = null,
+    Func<IAggregatCommand, Guid, Guid, CancellationToken, Task<Infrastructure.Emit.EmitAntwort>>? sende = null) : RahmenActor(logger)
 {
     /// <summary>So viele fertige Kennungen merkt sich ein Graph-Actor (ein doppelter Eingang danach rechnet neu — die Inbox verwirft seine Commands).</summary>
     public const int Gedaechtnis = 10_000;
@@ -84,8 +87,10 @@ public sealed class GraphActor(
             return;
         }
         var typ = e.Nachricht.GetType();
-        var ziele = instanz.KopfFuer(typ).Select(k => (Knoten: k, Op: instanz.Graph.KnotenNamens(k)?.Nimmt(typ))).Where(x => x.Op is not null).ToList();
-        if (ziele.Count == 0)
+        var koepfe = instanz.KopfFuer(typ);
+        var ziele = koepfe.Select(k => (Knoten: k, Op: instanz.Graph.KnotenNamens(k)?.Nimmt(typ))).Where(x => x.Op is not null).ToList();
+        var uebersetzungen = koepfe.Select(instanz.Graph.Uebersetzung).OfType<UebersetzungPlan>().Where(u => u.Ein == typ).ToList();
+        if (ziele.Count == 0 && uebersetzungen.Count == 0)
         {
             logger?.LogWarning("[Funktionen] {Instanz}: kein Knoten nimmt {Typ} am Kopf — gescheitert", instanz.Name, typ.Name);
             Antworte(context, e, Quittungsart.Gescheitert);
@@ -99,6 +104,51 @@ public sealed class GraphActor(
         // Der Akteur der Kette: der der Instanz (die Arbeit eines Akteurs gibt er selbst hinein), sonst der des Auslösers.
         var kontext = new KettenKontext(e.Kennung, e.Stream, e.Version, e.Zeit, instanz.Akteur ?? e.Akteur, e.Korrelation, e.Ursache);
         foreach (var (k, op) in ziele) Rufe(context, o, k, op!.Auf, e.Nachricht, e.Kennung, kontext, verlierbar: false);
+        foreach (var u in uebersetzungen) Uebersetze(context, o, u, kontext);
+        if (_ketten.ContainsKey(e.Kennung) && o.Ausstehend == 0) Beende(context, o, null);
+    }
+
+    /// <summary>
+    /// Die Übersetzung am Kopf, inline: ihr Ergebnis an die Knoten, die sie nennen (Kennung aus Kopf und Übersetzung), oder — verlässt es den Graphen —
+    /// als Command an sein Aggregat; die Kette wartet, bis das Ziel entschieden hat (eine Wiederholung verwirft seine Inbox).
+    /// </summary>
+    private void Uebersetze(IContext context, Offen o, UebersetzungPlan u, KettenKontext kontext)
+    {
+        var ort = instanz.Ort(u.Name);
+        object y;
+        try { y = u.Rechne(o.Kopf.Nachricht); }
+        catch (Exception ex) { Beende(context, o, (ort, ex.Message)); return; }
+        var wege = instanz.Graph.Wege(u.Name, 0, y.GetType());
+        foreach (var w in wege) Rufe(context, o, w.Knoten, w.Operation, y, Kettenvertrag.Weiter(o.Kopf.Kennung, ort, 0), kontext, w.Verlierbar);
+        if (wege.Count > 0) return;
+        if (y is not IAggregatCommand c || sende is null)
+        {
+            Beende(context, o, (ort, $"die Übersetzung am Kopf gab {y.GetType().Name} aus, und kein Knoten nimmt es"
+                + (y is IAggregatCommand ? " (kein Emitter)" : "")));
+            return;
+        }
+        o.Ausstehend++;
+        var kopf = o.Kopf.Kennung;
+        var id = Kettenvertrag.Befehl(kopf, ort, 0, c);
+        var korrelation = Guid.TryParse(kontext.Korrelation, out var k) ? k : kopf;
+        Neben(context, async ct =>
+        {
+            using var akteur = Akteure.AkteurHerkunft.Aus(kontext.Akteur);
+            using var spur = Spur.Von(kontext.Ursache ?? Spur.Ursache(kontext.Stream, kontext.Version), WirkerId.FuerKnoten(instanz.Name, u.Name));
+            for (var versuch = 1; ; versuch++)
+            {
+                if ((await sende(c, id, korrelation, ct)).Ausgang.IstEntschieden()) return;
+                if (versuch >= FunktionsKindActor.Versuche)
+                    throw new InvalidOperationException($"{ort}: Command {c.GetType().Name} an {c.Ziel} bleibt nach {versuch} Versuchen unbekannt.");
+                await Task.Delay(FunktionsKindActor.Pause(versuch), ct);
+            }
+        }, t =>
+        {
+            if (!_ketten.TryGetValue(kopf, out var offen)) return Task.CompletedTask;
+            if (!t.IsCompletedSuccessfully) Beende(context, offen, (ort, t.Exception?.GetBaseException().Message ?? "abgebrochen"));
+            else if (--offen.Ausstehend == 0) Beende(context, offen, null);
+            return Task.CompletedTask;
+        });
     }
 
     /// <summary>So viele Ketten nimmt die Quelle zugleich (die Warteschlange ihres Knotens); darüber wartet sie (Gegendruck).</summary>

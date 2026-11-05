@@ -958,7 +958,7 @@ public sealed partial class DomainExtractor
             Koepfe = g.Koepfe.Select(k => Infrastructure.SourceGeneration.Funktionsform.Anzeigename(k.Typ)).Distinct(StringComparer.Ordinal).ToList(),
             Ausgaenge = g.Ausgaenge.Select(a => Infrastructure.SourceGeneration.Funktionsform.Anzeigename(a.Typ)).Distinct(StringComparer.Ordinal).ToList(),
             Quelle = g.Quelle?.Name,
-            Fehler = g.Fehler.Select(f => f.Text).ToList(),
+            Fehler = g.Fehler.Select(f => f.Text).Concat(g.Regelfehler.Select(f => f.Text)).ToList(),
         };
         IEnumerable<ITypeSymbol> MitArgumenten(ITypeSymbol x) => x is INamedTypeSymbol n ? new[] { x }.Concat(n.TypeArguments.SelectMany(MitArgumenten)) : [x];
         raw.Usings = (ctor?.Parameters ?? []).SelectMany(p => MitArgumenten(p.Type)).Select(x => x.ContainingNamespace?.Fq() ?? "")

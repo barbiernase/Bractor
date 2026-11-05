@@ -131,6 +131,18 @@ public static class Grammatik
             + "ist ein Fehler; ein Graph mit Quelle hat sonst keinen Kopf (docs/04 §4.4).", "error",
             [An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (Köpfe je Eingangstyp, Kopf ohne Eingang von außen; Lesart Graphform)"),
              new("laufzeit", null, "Infrastructure/Funktionen/GraphActor.cs (der Kopf gibt den Eingang an den Knoten, der seinen Typ nimmt)")]),
+        new("GR-UEBERSETZUNG", "Übersetzung: Uebersetze<TEin, TAus> mit [Feld]", "Zwischen Katalog und Domäne steht eine Übersetzung: ein Knoten "
+            + "Uebersetze<TEin, TAus> im Graph-Record macht aus einem Command ohne Ziel genau einen Command (ohne Ziel an einen Knoten, mit Ziel an ein "
+            + "Aggregat) — Feld für Feld, ohne Logik. Je Parameter von TAus eine Quelle: [Feld(nameof(Ziel), nameof(Quelle))] am Knoten (ausdrücklich auch "
+            + "Guid ⇄ Id<T>), sonst ein Feld von TEin mit gleichem Namen und implizit zuweisbarem Typ, sonst der Standardwert. Sie läuft inline (hinter einer "
+            + "Funktion in deren Kind, am Kopf beim Annehmen), nie zwei hintereinander; am Kopf gibt sie an Knoten des Graphen oder an ein Aggregat. Kein "
+            + "Command eines Katalogs verlässt einen Graphen der Anwendung (docs/04 §4.4).", "error",
+            [An("CQRS119", "Domain.SourceGeneration/GraphAnalyzer.cs (Zuordnung unvollständig, Typ nicht zuweisbar, [Feld] ohne Ziel bzw. Quelle; Lesart Uebersetzungsform)"),
+             An("CQRS120", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Katalog-Command verlässt einen Graphen der Anwendung)"),
+             An("CQRS121", "Domain.SourceGeneration/GraphAnalyzer.cs (TEin kein Command ohne Ziel, TAus kein Command)"),
+             An("CQRS115", "Domain.SourceGeneration/GraphAnalyzer.cs (zwei Übersetzungen hintereinander, Kopf-Übersetzung gibt hinaus)"),
+             new("generator", null, "Infrastructure.SourceGeneration/GraphGenerator.cs (GeneratedGraphen: je Übersetzung eine Methode, ihre Wege)"),
+             new("laufzeit", null, "Infrastructure/Funktionen/FunktionsKindActor.cs (hinter einer Funktion inline gerechnet), GraphActor.cs (am Kopf)")]),
         new("GR-KETTE", "Eine Kette je Kopf", "Eine Nachricht am Kopf startet eine Kette: jeder Schritt rechnet je ankommender Nachricht und gibt seine "
             + "Ausgaben nach der Wegtabelle weiter; niemand führt Buch über die ganze Kette. Fertig ist der Kopf, wenn alle gesicherten Ausgaben fertig "
             + "sind — die Rückmeldung reicht über die gesicherten Kanten zurück; wirft ein Knoten auch nach seinen Wiederholungen, reicht „gescheitert“ "

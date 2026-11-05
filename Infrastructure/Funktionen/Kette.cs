@@ -39,8 +39,11 @@ public enum Rueckmeldeart
 /// <summary>Die Antwort eines Parents auf einen gesicherten <see cref="KnotenAufruf"/>.</summary>
 public sealed record KnotenRueckmeldung(Guid Kennung, Rueckmeldeart Art, string? Knoten = null, string? Grund = null);
 
-/// <summary>Eine Ausgabe eines Aufrufs an Knoten desselben Graphen: ihre Stelle (Kennung der Nachricht) und die Nachricht.</summary>
-public sealed record KnotenAusgabe(int Stelle, object Nachricht);
+/// <summary>
+/// Eine Ausgabe eines Aufrufs an Knoten desselben Graphen: ihre Stelle (Kennung der Nachricht), die Nachricht und — kommt sie aus einer Übersetzung,
+/// die das Kind inline rechnete — deren Knoten (seine Wege gelten).
+/// </summary>
+public sealed record KnotenAusgabe(int Stelle, object Nachricht, string? Ueber = null);
 
 /// <summary>An den Graph-Actor einer Quellinstanz: dieser Cluster-Knoten hält sie (die Quelle lauscht hier) bzw. nicht mehr.</summary>
 public sealed record QuelleHalten(bool Halten);

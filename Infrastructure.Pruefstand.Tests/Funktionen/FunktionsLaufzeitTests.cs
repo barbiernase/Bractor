@@ -84,17 +84,26 @@ public class FunktionsLaufzeitTests
         }
     }
 
-    private static GraphPlan Plan(string name, IReadOnlyList<K> knoten)
+    private static GraphPlan Plan(string name, IReadOnlyList<K> knoten, IReadOnlyList<UebersetzungPlan>? uebersetzungen = null)
     {
+        var u = uebersetzungen ?? [];
+        WegPlan[] An(Type typ, string von) =>
+            (from n in knoten where n.Name != von
+             from o2 in n.Ops where o2.Eingang == typ
+             select new WegPlan(typ, n.Name, o2.Auf, n.Verlierbar.Contains(von))).ToArray();
         var plaene = knoten.Select(k => new KnotenPlan(k.Name, k.Name, k.Ops.Select(o => new OperationPlan(o.Auf, o.Eingang, o.Aus,
-            (from n in knoten where n != k
-             from o2 in n.Ops where o2.Eingang is not null && o.Aus.Contains(o2.Eingang)
-             select new WegPlan(o2.Eingang!, n.Name, o2.Auf, n.Verlierbar.Contains(k.Name))).ToArray())).ToList())).ToList();
-        var erzeugt = knoten.SelectMany(k => k.Ops.SelectMany(o => o.Aus)).ToHashSet();
+            o.Aus.SelectMany(t => An(t, k.Name).Concat(u.Where(x => x.Ein == t).Select(x => new WegPlan(t, x.Name, 0)))).ToArray())).ToList())).ToList();
+        var erzeugt = knoten.SelectMany(k => k.Ops.SelectMany(o => o.Aus)).Concat(u.Select(x => x.Aus)).ToHashSet();
         var koepfe = knoten.SelectMany(k => k.Ops.Where(o => o.Eingang is not null && !erzeugt.Contains(o.Eingang)).Select(o => (o.Eingang!, k.Name)))
+            .Concat(u.Where(x => !erzeugt.Contains(x.Ein)).Select(x => (x.Ein, x.Name)))
             .GroupBy(x => x.Item1).ToDictionary(g => g.Key, g => g.Select(x => x.Name).Distinct().ToArray());
-        return new GraphPlan(name, typeof(object), plaene, koepfe, Array.Empty<Type>(), knoten.FirstOrDefault(k => k.Lauscht is not null)?.Name);
+        return new GraphPlan(name, typeof(object), plaene, koepfe, Array.Empty<Type>(), knoten.FirstOrDefault(k => k.Lauscht is not null)?.Name,
+            u.Select(x => x with { Wege = An(x.Aus, x.Name) }).ToList());
     }
+
+    /// <summary>Eine Übersetzung wie der Generator sie erzeugt: <typeparamref name="TEin"/> → genau eine Nachricht (ihre Wege rechnet der Plan).</summary>
+    private static UebersetzungPlan U<TEin, TAus>(string name, Func<TEin, TAus> rechne) where TEin : notnull where TAus : notnull =>
+        new(name, typeof(TEin), typeof(TAus), x => rechne((TEin)x), []);
 
     private static readonly FunktionsZustandsform ZaehlerForm = new(typeof(Zaehler), () => new Zaehler(), o => BitConverter.GetBytes(((Zaehler)o).N),
         (o, b) => ((Zaehler)o).N = BitConverter.ToInt32(b), _ => { });
@@ -117,9 +126,11 @@ public class FunktionsLaufzeitTests
         private readonly Dictionary<string, PID> _instanzen = new();
         private readonly ServiceProvider _dienste = new ServiceCollection().BuildServiceProvider();
 
-        public GraphInstanz Instanz(string name, params K[] knoten)
+        public GraphInstanz Instanz(string name, params K[] knoten) => Instanz(name, [], knoten);
+
+        public GraphInstanz Instanz(string name, UebersetzungPlan[] uebersetzungen, params K[] knoten)
         {
-            var plan = Plan(name, knoten);
+            var plan = Plan(name, knoten, uebersetzungen);
             var instanz = new GraphInstanz(name, plan, null, knoten.ToDictionary(k => k.Name, k => k.Knoten));
             var parents = knoten.ToDictionary(k => k.Name, k =>
             {
@@ -127,7 +138,8 @@ public class FunktionsLaufzeitTests
                         k.MitZustand ? ZaehlerForm : null, name: k.Name, knoten: new KnotenKontext(name, k.Name, k.Knoten), ablage: Zustaende,
                         quelle: k.Lauscht is not null),
                     k.Rechne, Antworten: k.Antworten)
-                { Instanz = name, Knoten = k.Name, ImGraphen = plan.ImGraphen(k.Name), Zeitlimit = k.Knoten.Zeitlimit, Lausche = k.Lauscht };
+                { Instanz = name, Knoten = k.Name, ImGraphen = plan.ImGraphen(k.Name), Uebersetzungen = plan.UebersetzungenVon(k.Name),
+                    Zeitlimit = k.Knoten.Zeitlimit, Lausche = k.Lauscht };
                 return (Func<FunktionsParent>)(() => new FunktionsParent(traeger, k.Konfig, () => new FunktionsKindActor(traeger, _dienste, this, Koepfe, SendeAsync,
                     hinweise: Hinweise.Enqueue), new KnotenWege(instanz, k.Name), k.MitZustand ? Zustaende : null));
             });
@@ -140,7 +152,7 @@ public class FunktionsLaufzeitTests
 
         private void Starte(GraphInstanz instanz, Dictionary<string, Func<FunktionsParent>> parents) =>
             _instanzen[instanz.Name] = System.Root.SpawnNamed(Props.FromProducer(() => new GraphActor(instanz, parents, new Offene(this), Hinweise.Enqueue,
-                ablage: Zustaende)), FunktionenWurzel.Name(instanz.Name) + "-" + Guid.NewGuid().ToString("N")[..6]);
+                ablage: Zustaende, sende: SendeAsync)), FunktionenWurzel.Name(instanz.Name) + "-" + Guid.NewGuid().ToString("N")[..6]);
 
         /// <summary>Dieser Cluster-Knoten hält die Instanz (bzw. nicht mehr): ihre Quelle lauscht.</summary>
         public void Halte(string name, bool halten) => System.Root.Send(_instanzen[name], new QuelleHalten(halten));
@@ -236,6 +248,67 @@ public class FunktionsLaufzeitTests
 
     /// <summary>Die Kennung des Aufrufs, den <paramref name="von"/> mit seiner Ausgabe an <paramref name="stelle"/> bei <paramref name="ort"/> auslöst.</summary>
     private static Guid Danach(Guid von, string vonOrt, string ort, int stelle = 0, int auf = 0) => Kettenvertrag.Aufruf(Kettenvertrag.Weiter(von, vonOrt, stelle), ort, auf);
+
+    // ── Übersetzungen (docs/04 §4.4): inline, wo die Nachricht gerade ist — hinter einer Funktion in ihrem Kind, am Kopf im Graph-Actor ──────────
+
+    [Fact]
+    public async Task Eine_Uebersetzung_hinter_einer_Funktion_rechnet_im_Kind_und_schickt_mit_ihrem_Ort()
+    {
+        await using var w = new Welt();
+        w.Instanz("G", [U<X, Buche>("Ergebnis", x => new Buche(Konto, x.Wert + 1))],
+            new K("A", Einzeln(a => new X(((Start)a[0]!).Wert * 2))).Op<Start>(typeof(X)));
+
+        var eingang = Eingang("G", new Start(21));
+        (await Fertig(w, eingang)).Should().Be(Quittungsart.Fertig, "fertig erst, wenn der übersetzte Command beantwortet ist");
+        var a = AmKopf(eingang.Kennung, "G/A");
+        w.Gesendet.Should().Equal((new Buche(Konto, 43), Kettenvertrag.Befehl(a, "G/Ergebnis", 0, new Buche(Konto, 43))));
+    }
+
+    [Fact]
+    public async Task Eine_Uebersetzung_am_Kopf_gibt_an_den_Knoten_der_sie_nennt()
+    {
+        await using var w = new Welt();
+        w.Instanz("G", [U<Start, X>("Hinein", s => new X(s.Wert * 10))],
+            new K("B", Einzeln(a => new Buche(Konto, ((X)a[0]!).Wert))).Op<X>(typeof(Buche)));
+
+        var eingang = Eingang("G", new Start(4));
+        (await Fertig(w, eingang)).Should().Be(Quittungsart.Fertig);
+        var b = Kettenvertrag.Aufruf(Kettenvertrag.Weiter(eingang.Kennung, "G/Hinein", 0), "G/B", 0);
+        w.Gesendet.Should().Equal((new Buche(Konto, 40), Kettenvertrag.Befehl(b, "G/B", 0, new Buche(Konto, 40))));
+    }
+
+    [Fact]
+    public async Task Eine_Uebersetzung_am_Kopf_direkt_an_ein_Aggregat_rechnet_nach_einem_Absturz_mit_derselben_Id()
+    {
+        await using var w = new Welt();
+        w.Instanz("G", [U<Start, Buche>("Hinein", s => new Buche(Konto, s.Wert))]);
+
+        var eingang = Eingang("G", new Start(7));
+        (await Fertig(w, eingang)).Should().Be(Quittungsart.Fertig, "der Graph-Actor wartet auf die Antwort des Ziels");
+        await w.AbsturzAsync("G");
+        (await Fertig(w, eingang)).Should().Be(Quittungsart.Fertig);
+        var id = Kettenvertrag.Befehl(eingang.Kennung, "G/Hinein", 0, new Buche(Konto, 7));
+        w.Gesendet.Should().Equal((new Buche(Konto, 7), id), (new Buche(Konto, 7), id));
+    }
+
+    [Fact]
+    public async Task Eine_Uebersetzung_zwischen_zwei_Knoten_und_eine_Gabel_daneben()
+    {
+        await using var w = new Welt();
+        w.Instanz("G", [U<X, Z>("Mitte", x => new Z(x.Wert + 100))],
+            new K("A", Einzeln(a => new X(((Start)a[0]!).Wert))).Op<Start>(typeof(X)),
+            new K("B", Einzeln(a => new Buche(Konto, ((Z)a[0]!).Wert))).Op<Z>(typeof(Buche)),
+            new K("C", Einzeln(a => new Buche(Konto, -((X)a[0]!).Wert))).Op<X>(typeof(Buche)));
+
+        var eingang = Eingang("G", new Start(5));
+        (await Fertig(w, eingang)).Should().Be(Quittungsart.Fertig, "fertig erst, wenn beide Zweige fertig sind");
+        w.Gesendet.Select(x => x.Befehl).Should().BeEquivalentTo([new Buche(Konto, 105), new Buche(Konto, -5)],
+            "X geht übersetzt an B und unübersetzt an C");
+        var a = AmKopf(eingang.Kennung, "G/A");
+        w.Gesendet.Should().Contain((new Buche(Konto, 105),
+            Kettenvertrag.Befehl(Kettenvertrag.Aufruf(Kettenvertrag.Weiter(a, "G/A", 0), "G/B", 0), "G/B", 0, new Buche(Konto, 105))),
+            "die Übersetzung im Kind gibt Z mit der Stelle des Aufrufs an den Parent, der den Weg der Übersetzung nimmt");
+    }
 
     // ── Folge, Kennung, Rand ──────────────────────────────────────────────────────────────────────────────────────────────
 

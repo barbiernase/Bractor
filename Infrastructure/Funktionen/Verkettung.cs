@@ -34,6 +34,9 @@ public sealed record FunktionsTraeger(string Name, Func<IServiceProvider, Funkti
     /// <summary>Die Commands ohne Ziel, die der Knoten an Knoten desselben Graphen gibt (der Graph-Actor bringt sie hin; alles andere verlässt den Graphen).</summary>
     public IReadOnlySet<Type> ImGraphen { get; init; } = KeineKanten;
 
+    /// <summary>Je Ausgabetyp die Übersetzungen, an die der Knoten ihn gibt — das Kind rechnet sie inline, bevor es ihr Ergebnis hinausbringt.</summary>
+    public IReadOnlyDictionary<Type, UebersetzungPlan[]> Uebersetzungen { get; init; } = new Dictionary<Type, UebersetzungPlan[]>();
+
     /// <summary>So lange darf eine Rechnung dauern (<see cref="TimeSpan.Zero"/> = ohne Grenze).</summary>
     public TimeSpan Zeitlimit { get; init; }
 

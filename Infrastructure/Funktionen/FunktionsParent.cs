@@ -155,7 +155,8 @@ public sealed class FunktionsParent(
             foreach (var x in f.Ausgaben)
             {
                 var nachricht = Kettenvertrag.Weiter(f.Kennung, wege.Ort, x.Stelle);
-                foreach (var w in wege.Instanz.Graph.Wege(wege.Knoten, o.Aufruf.Operation, x.Nachricht.GetType()))
+                foreach (var w in x.Ueber is { } ueber ? wege.Instanz.Graph.Wege(ueber, 0, x.Nachricht.GetType())
+                             : wege.Instanz.Graph.Wege(wege.Knoten, o.Aufruf.Operation, x.Nachricht.GetType()))
                 {
                     var kennung = Kettenvertrag.Aufruf(nachricht, wege.Instanz.Ort(w.Knoten), w.Operation);
                     var ziel = KnotenWege.Adresse(context, w.Knoten);

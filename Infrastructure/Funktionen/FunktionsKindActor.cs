@@ -25,8 +25,9 @@ public sealed record LauschenEndete(string? Fehler);
 /// draußen, der Platz eines Arbeiters in der <see cref="Werkstatt"/>. Es rechnet das <c>Auf</c> und bringt jede Ausgabe hinaus — einen Command an ein
 /// Aggregat sofort über den Emitter mit der Id aus Aufruf, Ort und Stelle (die Inbox verwirft eine Wiederholung; die Antwort rechnet die Funktion gleich
 /// weiter), einen Command ohne Ziel an einen Knoten desselben Graphen erst mit dem Erfolg (im Ergebnis an den Parent, der ihn nach der Wegtabelle
-/// weitergibt), einen anderen an den Kopf der Instanz, die ihn nimmt (gewartet wird, bis ihre Kette fertig ist), einen Hinweis verlierbar. Das <see cref="KnotenKonfig.Zeitlimit"/> begrenzt eine
-/// Rechnung; danach gilt sie als gescheitert.
+/// weitergibt), einen anderen an den Kopf der Instanz, die ihn nimmt (gewartet wird, bis ihre Kette fertig ist), einen Hinweis verlierbar. Geht eine
+/// Ausgabe in eine ÜBERSETZUNG, rechnet das Kind sie inline und bringt ihr Ergebnis ebenso hinaus — mit Ort und Wirker der Übersetzung (docs/04 §4.4).
+/// Das <see cref="KnotenKonfig.Zeitlimit"/> begrenzt eine Rechnung; danach gilt sie als gescheitert.
 /// </summary>
 public sealed class FunktionsKindActor(
     FunktionsTraeger traeger,
@@ -143,6 +144,11 @@ public sealed class FunktionsKindActor(
         await foreach (var x in strom.WithCancellation(ct))
         {
             var i = stelle++;
+            if (traeger.Uebersetzungen.TryGetValue(x.GetType(), out var uebersetzungen))
+            {
+                foreach (var u in uebersetzungen) await UebersetzeAsync(a, u, x, i, kennung, ursache, ausgaben, warten, ct);
+                if (!traeger.ImGraphen.Contains(x.GetType())) continue;   // sonst nimmt ihn auch eine Funktion des Graphen
+            }
             switch (x)
             {
                 case IAggregatCommand c:
@@ -166,20 +172,50 @@ public sealed class FunktionsKindActor(
                     ausgaben.Add(new KnotenAusgabe(ausgaben.Count, weiter));   // Stelle über den ganzen Aufruf (auch aus Antworten): Unterläufe, Ids
                     break;
                 case ICommand weiter:
-                    // An den Kopf der Instanz, die ihn nimmt (Entscheidung 2: genau ein Empfänger); gewartet wird, bis ihre Kette fertig ist.
-                    var ausgabe = Kettenvertrag.Ausgabe(kennung, traeger.Ort, i);
-                    if (koepfe.Hoerer(weiter.GetType()) is { Count: > 0 } instanzen)
-                        foreach (var instanz in instanzen)
-                            warten.Add(ReicheWeiterAsync(Fremd(a, weiter, ausgabe, instanz, Eingangsart.Kette), ct));
-                    else
-                        throw new InvalidOperationException($"{traeger.Ort}: {weiter.GetType().Name} nimmt kein Knoten des Graphen und keine Instanz am Kopf "
-                            + "(fehlt eine Instanz in der Umgebung?)");
+                    ZuFremdemKopf(a, weiter, Kettenvertrag.Ausgabe(kennung, traeger.Ort, i), warten, ct);
                     break;
                 default:
                     throw new InvalidOperationException($"{traeger.Name} gab {x.GetType().Name} aus — eine Funktion gibt Commands und Hinweise aus, "
                         + "nie ein Event (docs/04 §4.4).");
             }
         }
+    }
+
+    /// <summary>
+    /// Eine Übersetzung inline (docs/04 §4.4): aus der Ausgabe <paramref name="x"/> genau eine Nachricht, Feld für Feld. Ein Command an ein Aggregat geht
+    /// sofort über den Emitter (Id aus Aufruf, Ort der Übersetzung und Stelle; ihre Antwort hört niemand), einer an Knoten des Graphen mit dem Erfolg an
+    /// den Parent (die Wege der Übersetzung gelten), ein anderer an den Kopf der Instanz, die ihn nimmt. Die Spur nennt die Übersetzung als Wirker.
+    /// </summary>
+    private async Task UebersetzeAsync(KnotenAufruf a, UebersetzungPlan u, object x, int i, Guid kennung, string ursache, List<KnotenAusgabe> ausgaben,
+        List<Task> warten, CancellationToken ct)
+    {
+        var ort = traeger.Instanz + "/" + u.Name;
+        using var spur = Spur.Von(ursache, WirkerId.FuerKnoten(traeger.Instanz, u.Name));
+        switch (u.Rechne(x))
+        {
+            case IAggregatCommand c:
+                await SendeAsync(c, Kettenvertrag.Befehl(kennung, ort, i, c), a, ct);
+                break;
+            case ICommand weiter when u.Wege.Any(w => w.Typ == weiter.GetType()):
+                ausgaben.Add(new KnotenAusgabe(ausgaben.Count, weiter, u.Name));
+                break;
+            case ICommand weiter:
+                ZuFremdemKopf(a, weiter, Kettenvertrag.Ausgabe(kennung, ort, i), warten, ct);
+                break;
+            case var y:
+                throw new InvalidOperationException($"{ort}: die Übersetzung gab {y.GetType().Name} aus — sie erzeugt einen Command.");
+        }
+    }
+
+    /// <summary>An den Kopf der Instanz, die ihn nimmt (Entscheidung 2: genau ein Empfänger); gewartet wird, bis ihre Kette fertig ist.</summary>
+    private void ZuFremdemKopf(KnotenAufruf a, ICommand weiter, Guid ausgabe, List<Task> warten, CancellationToken ct)
+    {
+        if (koepfe.Hoerer(weiter.GetType()) is { Count: > 0 } instanzen)
+            foreach (var instanz in instanzen)
+                warten.Add(ReicheWeiterAsync(Fremd(a, weiter, ausgabe, instanz, Eingangsart.Kette), ct));
+        else
+            throw new InvalidOperationException($"{traeger.Ort}: {weiter.GetType().Name} nimmt kein Knoten des Graphen und keine Instanz am Kopf "
+                + "(fehlt eine Instanz in der Umgebung?)");
     }
 
     /// <summary>Der Eingang einer Ausgabe am Kopf einer Instanz: Kennung aus Ausgabe und Instanz, die Herkunft der Kette reist mit.</summary>
@@ -216,5 +252,5 @@ public sealed class FunktionsKindActor(
         }
     }
 
-    private static TimeSpan Pause(int versuch) => TimeSpan.FromMilliseconds(Math.Min(5_000, 100 * (1 << Math.Min(versuch, 6))));
+    internal static TimeSpan Pause(int versuch) => TimeSpan.FromMilliseconds(Math.Min(5_000, 100 * (1 << Math.Min(versuch, 6))));
 }

@@ -93,6 +93,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pruefdomaene.Akteure", "Pru
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Bildverarbeitung.Katalog", "Bildverarbeitung.Katalog\Bildverarbeitung.Katalog.csproj", "{0631334B-4859-1B9D-1676-D4FF21CCFEB0}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Rechenwerk.Katalog", "Rechenwerk.Katalog\Rechenwerk.Katalog.csproj", "{0DE7FF3D-0852-466B-B208-99F25FE0B958}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -643,6 +645,18 @@ Global
 		{0631334B-4859-1B9D-1676-D4FF21CCFEB0}.Release|x64.Build.0 = Release|Any CPU
 		{0631334B-4859-1B9D-1676-D4FF21CCFEB0}.Release|x86.ActiveCfg = Release|Any CPU
 		{0631334B-4859-1B9D-1676-D4FF21CCFEB0}.Release|x86.Build.0 = Release|Any CPU
+		{0DE7FF3D-0852-466B-B208-99F25FE0B958}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{0DE7FF3D-0852-466B-B208-99F25FE0B958}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{0DE7FF3D-0852-466B-B208-99F25FE0B958}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{0DE7FF3D-0852-466B-B208-99F25FE0B958}.Debug|x64.Build.0 = Debug|Any CPU
+		{0DE7FF3D-0852-466B-B208-99F25FE0B958}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{0DE7FF3D-0852-466B-B208-99F25FE0B958}.Debug|x86.Build.0 = Debug|Any CPU
+		{0DE7FF3D-0852-466B-B208-99F25FE0B958}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{0DE7FF3D-0852-466B-B208-99F25FE0B958}.Release|Any CPU.Build.0 = Release|Any CPU
+		{0DE7FF3D-0852-466B-B208-99F25FE0B958}.Release|x64.ActiveCfg = Release|Any CPU
+		{0DE7FF3D-0852-466B-B208-99F25FE0B958}.Release|x64.Build.0 = Release|Any CPU
+		{0DE7FF3D-0852-466B-B208-99F25FE0B958}.Release|x86.ActiveCfg = Release|Any CPU
+		{0DE7FF3D-0852-466B-B208-99F25FE0B958}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

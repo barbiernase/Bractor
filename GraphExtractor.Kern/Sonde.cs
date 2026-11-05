@@ -235,7 +235,8 @@ public static class Sonde
         foreach (var t in typen.Where(t => t.ContainingType == null))
         {
             var form = Infrastructure.SourceGeneration.Funktionsform.IstFunktion(t) ? Infrastructure.SourceGeneration.Funktionsform.Lies(t).Fehler.Select(f => ("CQRS100", f.Text))
-                : Infrastructure.SourceGeneration.Graphform.IstGraph(t) ? Infrastructure.SourceGeneration.Graphform.Lies(t).Fehler.Select(f => ("CQRS115", f.Text))
+                : Infrastructure.SourceGeneration.Graphform.IstGraph(t) && Infrastructure.SourceGeneration.Graphform.Lies(t) is var g
+                    ? g.Fehler.Select(f => ("CQRS115", f.Text)).Concat(g.Regelfehler.Select(f => (f.Id, f.Text)))
                 : [];
             foreach (var (id, text) in form)
             {

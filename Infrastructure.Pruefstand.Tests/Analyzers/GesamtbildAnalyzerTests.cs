@@ -18,7 +18,7 @@ namespace Infrastructure.Pruefstand.Analyzers;
 /// </summary>
 public class GesamtbildAnalyzerTests
 {
-    private static async Task<Diagnostic[]> Befunde(string domaene)
+    private static async Task<Diagnostic[]> Befunde(string domaene, string? katalog = null)
     {
         _ = typeof(Abstractions.IReader);
         // Nur BCL + Vertrag: die echten Domänen-Assemblies im Test-Prozess gehören nicht ins Bild der Probe.
@@ -26,6 +26,15 @@ public class GesamtbildAnalyzerTests
             .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
             .Where(a => a.GetName().Name is { } n && (n == "Abstractions" || n == "netstandard" || n == "mscorlib" || n.StartsWith("System")))
             .Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location)).ToImmutableArray();
+        if (katalog is not null)
+        {
+            // Ein Funktionskatalog als eigene Assembly (<Name>.Katalog): die Domänen-Probe nutzt ihn wie die Abläufe.
+            var kat = CSharpCompilation.Create("Rechen.Katalog", new[] { CSharpSyntaxTree.ParseText("using System; using Abstractions;\n" + katalog) }, refs,
+                new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+            using var katBild = new MemoryStream();
+            kat.Emit(katBild).Diagnostics.Where(d => d.Severity == DiagnosticSeverity.Error).Should().BeEmpty("der Katalog muss kompilieren");
+            refs = refs.Add(MetadataReference.CreateFromImage(katBild.ToArray()));
+        }
         var dom = CSharpCompilation.Create("Probe.Domain", new[] { CSharpSyntaxTree.ParseText(Vorspann + domaene + "\n}") }, refs,
             new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         using var bild = new MemoryStream();
@@ -57,6 +66,25 @@ public sealed record Kunde : IAkteur, IDarf<Eroeffne>, IDarf<Hole>;
 ";
 
     private static async Task<string[]> Ids(string domaene) => (await Befunde(domaene)).Select(d => d.Id).ToArray();
+
+    [Fact]
+    public async Task Ein_Katalog_Command_der_einen_Graphen_der_Anwendung_verlaesst_ist_CQRS120()
+    {
+        var befunde = await Befunde("""
+            public record Vermerke(int N) : ICommand;
+            public sealed record Roh([Kopf] Rechen.Katalog.Rechner R) : IGraph;
+            public sealed record Teil([Kopf] Rechen.Katalog.Rechner R) : IGraph;
+            public sealed record Aussen([Kopf] Teil Innen, [Von(nameof(Innen))] Uebersetze<Rechen.Katalog.Gerechnet, Vermerke> U) : IGraph;
+            """, katalog: """
+            namespace Rechen.Katalog {
+            public record Rechne(int N) : ICommand;
+            public record Gerechnet(int N) : ICommand;
+            public sealed class Rechner : IFunktion { public Gerechnet Auf(Rechne r) => default!; }
+            }
+            """);
+        befunde.Where(d => d.Id == GesamtbildAnalyzer.VerlaesstId).Select(d => d.GetMessage()).Should().ContainSingle()
+            .Which.Should().StartWith("'Roh'", "nur Roh lässt Gerechnet hinaus — Teil steht als Schachtel in Aussen, und dort wird übersetzt");
+    }
 
     [Fact]
     public async Task Eine_geschlossene_Domaene_ist_still()

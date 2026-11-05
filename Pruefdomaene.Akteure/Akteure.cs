@@ -10,3 +10,7 @@ namespace Pruefdomaene.Akteure;
 public sealed record Rechnungspruefer : IAkteur,
     IHoert<RechnungZuPruefen>,
     IDarf<GibRechnungFrei>, IDarf<SperreRechnung>;
+
+/// <summary>Fordert Hochrechnungen für Messstellen an (ein Client-Eingang: über den Katalog Rechenwerk an die Messstelle, docs/04 §4.4).</summary>
+public sealed record Messwart : IAkteur,
+    IDarf<Pruefdomaene.Pipeline.Skalierung.HochrechnungAngefordert>;

@@ -21,6 +21,9 @@ namespace Infrastructure.SourceGeneration;
 ///   den kein Knoten desselben Graphen nimmt), hat genau einen Empfänger: den Kopf genau eines Graphen oder einen Akteur, der ihn hört (Arbeit,
 ///   <c>IHoert&lt;TCmd&gt;</c>). Kein Empfänger, mehrere, oder ein Typ, den ein Graph nimmt und zugleich ein Akteur hört, sind ein Fehler.</item>
 /// <item>CQRS117 (GR-GRAPH-KNOTEN; Warnung) — eine Funktion, die in keinem Graphen ein Knoten ist, läuft nie (ein Graph läuft als Instanz).</item>
+/// <item>CQRS120 (GR-UEBERSETZUNG; Fehler) — ein Command eines Katalogs verlässt einen Graphen der Anwendung: jeder Fall wird übersetzt
+///   (<c>Uebersetze&lt;TEin, TAus&gt;</c>) oder von einem Knoten genommen, so kennt die Domäne keine Funktionsnachricht (A3). Ein Graph, der als Schachtel
+///   in einem anderen steht, gibt seine Ausgänge dem äußeren — dort wird geprüft.</item>
 /// </list>
 /// Die Befunde haben keinen Quell-Ort in dieser Compilation (die Typen liegen in den Domänen-Projekten); jede Meldung beginnt deshalb mit dem
 /// einfachen Namen des Typs in Anführungszeichen — daran hängt die Werkbank sie an die Karte.
@@ -29,7 +32,7 @@ namespace Infrastructure.SourceGeneration;
 public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
 {
     public const string QueryId = "CQRS084", AusgangOffenId = "CQRS085", EingangOffenId = "CQRS086",
-        AntwortOhneCommandId = "CQRS108", EmpfaengerId = "CQRS116", OhneGraphId = "CQRS117";
+        AntwortOhneCommandId = "CQRS108", EmpfaengerId = "CQRS116", OhneGraphId = "CQRS117", VerlaesstId = Uebersetzungsform.Verlassen;
 
     private static DiagnosticDescriptor D(string id, string titel, string text, DiagnosticSeverity s) =>
         new(id, titel, text, "CQRS.Gesamtbild", s, isEnabledByDefault: true);
@@ -52,8 +55,12 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
     private static readonly DiagnosticDescriptor OhneGraph = D(OhneGraphId, "Funktion in keinem Graphen",
         "'{0}' ist in keinem Graphen ein Knoten — sie läuft nie (ein Graph läuft als Instanz, docs/04 §4.4) (GR-GRAPH-KNOTEN)", DiagnosticSeverity.Warning);
 
+    private static readonly DiagnosticDescriptor Verlaesst = D(VerlaesstId, "Katalog-Command verlässt den Graphen",
+        "'{0}': {1} aus dem Katalog {2} verlässt den Graphen (von {3}) — übersetze ihn (Uebersetze<{1}, …>) oder lass ihn einen Knoten nehmen; die Domäne "
+        + "kennt keine Funktionsnachricht (GR-UEBERSETZUNG)", DiagnosticSeverity.Error);
+
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics =>
-        ImmutableArray.Create(Query, AusgangOffen, EingangOffen, AntwortOhneCommand, Empfaenger, OhneGraph);
+        ImmutableArray.Create(Query, AusgangOffen, EingangOffen, AntwortOhneCommand, Empfaenger, OhneGraph, Verlaesst);
 
     /// <summary>Die Rollen-Marker, deren Implementierung eine Assembly zur Domäne macht (wie die Projektlage des Extractors).</summary>
     private static readonly string[] DomaenenRollen =
@@ -142,6 +149,13 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
                     erzeugt.UnionWith(a.Ausgaben);
                     if (a.Command) genommen.UnionWith(a.Eingaenge);
                 }
+            // Ein Graph: seine Übersetzungen nehmen TEin und erzeugen TAus.
+            if (Graphform.IstGraph(t))
+                foreach (var u in Graphform.Lies(t).Knoten.Select(k => k.Uebersetzung).Where(u => u != null))
+                {
+                    genommen.Add(u!.Ein);
+                    erzeugt.Add(u.Aus);
+                }
             // Ein Akteur: was er hineingibt, erzeugt er; die Commands ohne Ziel, die er hört (Arbeit), nimmt er.
             if (IstT(t, iAkteur) && t.TypeKind != TypeKind.Interface)
                 genommen.UnionWith(Clientvertragslesart.LiesAkteur(t).Arbeit.Select(x => x.Ein));
@@ -192,7 +206,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
         }
 
         // GR-EMPFAENGER (Entscheidung 2): ein Command ohne Ziel, der seinen Erzeuger verlässt, nimmt genau ein Graph am Kopf oder hört genau ein Akteur.
-        var graphen = typen.Where(Graphform.IstGraph).Select(Graphform.Lies).Where(g => g.Fehler.Count == 0).ToList();
+        var graphen = typen.Where(Graphform.IstGraph).Select(Graphform.Lies).Where(g => g.Gueltig).ToList();
         string N(ITypeSymbol t) => Funktionsform.Name(t);
         var koepfe = new Dictionary<string, List<string>>();
         void Empfaengt(ITypeSymbol typ, string wer) => (koepfe.TryGetValue(N(typ), out var l) ? l : koepfe[N(typ)] = new List<string>()).Add(wer);
@@ -225,6 +239,13 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
             ctx.ReportDiagnostic(Diagnostic.Create(Empfaenger, Location.None, typ.Name, von,
                 hier.Count == 0 ? "kein Graph nimmt ihn am Kopf, kein Akteur hört ihn" : "mehrere nehmen ihn (" + string.Join(", ", hier) + ")"));
         }
+
+        // GR-UEBERSETZUNG (A3): kein Katalog-Command verlässt einen Graphen der Anwendung (ein Graph, der als Schachtel steht, gibt dem äußeren).
+        var schachteln = new HashSet<string>(graphen.SelectMany(g => g.Glieder).Where(x => x.Innen != null).Select(x => Funktionsform.Voll(x.Typ)));
+        foreach (var g in graphen.Where(g => !Abstractions.Projektstruktur.IstKatalog(g.Typ.ContainingAssembly?.Name ?? "") && !schachteln.Contains(Funktionsform.Voll(g.Typ))))
+            foreach (var (von, typ) in g.Ausgaenge.Where(a => Funktionsform.IstCommandOhneZiel(a.Typ)
+                && Abstractions.Projektstruktur.IstKatalog(a.Typ.ContainingAssembly?.Name ?? "")).GroupBy(a => Funktionsform.Voll(a.Typ)).Select(x => x.First()))
+                ctx.ReportDiagnostic(Diagnostic.Create(Verlaesst, Location.None, g.Typ.Name, typ.Name, typ.ContainingAssembly!.Name, von.Name));
 
         // GR-GRAPH-KNOTEN: eine Funktion ohne Graph läuft nie.
         var knoten = new HashSet<string>(graphen.SelectMany(g => g.Knoten).Select(k => N(k.Typ)));

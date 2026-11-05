@@ -118,6 +118,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Abrechnung.RechnungZuPruefen))]
 [JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Import.ImportAngefordert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Messung.Merkmal))]
+[JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Skalierung.HochrechnungAngefordert))]
 [JsonSerializable(typeof(global::Pruefdomaene.Pipeline.Verteilung.ZielZubuchen))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.BuchePostenZu))]
 [JsonSerializable(typeof(global::Pruefdomaene.Posten.EroeffnePosten))]
@@ -152,6 +153,8 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.VerteilungNichtGefunden))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.ZielZugebucht))]
 [JsonSerializable(typeof(global::Pruefdomaene.Verteilung.Zubuchen))]
+[JsonSerializable(typeof(global::Rechenwerk.Katalog.Skalierung.Skalieren))]
+[JsonSerializable(typeof(global::Rechenwerk.Katalog.Skalierung.Skaliert))]
 public partial class CqrsWireJsonContext : JsonSerializerContext
 {
 }
