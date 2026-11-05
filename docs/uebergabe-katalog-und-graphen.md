@@ -42,12 +42,12 @@ inline (`Infrastructure/Funktionen/Kette.cs`, Kind, Graph-Actor), Analyzer ab CQ
 Graph-Modals, „→ ▣ Command an …“ am Ausgang, „＋ Graph, der ihn schickt“ im Aggregat-Modal, kein „Command ohne Ziel“ mehr unter den Ergebnissen eines
 `Decide`, die ↦-Karte; der Picker der Fläche legt keinen leeren Graphen mehr an.
 
-## Achtung im Arbeitsbaum
+## Tobis Experimente im Bestand
 
-Der Commit „Werkbank-Stand von Tobi“ enthält Tobis Experimente aus der Werkbank: einen Katalog `Bildverarbeitung.Katalog` (mit `Resize` ohne `Auf`
-und `ResizeFast`), Änderungen an `Domain/ImagePair` (zusätzliche Events, erweiterte Decides) und **drei leere Graphen** `NeuerGraph`,
-`NeuerGraph2`, `NeuerGraph3` in `Domain.Pipeline/Datensatz/Graphen.cs`. **Mit ihnen baut die Lösung nicht** (CQRS115: ein Graph nennt seine Knoten als
-Parameter). Frag Tobi, bevor du daran etwas löschst oder änderst; Server-Läufe auf diesem Stand scheitern am Build.
+Der Commit „Werkbank-Stand von Tobi“ enthält Experimente aus der Werkbank: den Katalog `Bildverarbeitung.Katalog` (Funktion `ResizeFast` mit
+`ResizeFastAuftrag` → `ResizeFastErgebnis`, von den Abläufen genutzt, Codegen nimmt ihre Nachrichten mit) und Änderungen an `Domain/ImagePair`
+(zusätzliche Events, erweiterte Decides). Drei leere Graphen und eine leere Funktion `Resize` sind wieder entfernt — `HEAD` baut. Frag Tobi, bevor du
+an seinen Experimenten etwas änderst.
 
 ## Arbeitsweise (aus dem Gedächtnis, hier zur Sicherheit)
 
