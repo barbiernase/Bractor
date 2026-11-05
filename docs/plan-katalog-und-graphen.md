@@ -117,13 +117,16 @@ Gesten-Skript der Sonde, eine neue Regel die Grammatik; die Doku zieht im selben
 IFunktion-Doku und docs/10-Beispiel ohne Port-Formen, `BausteinEingang.Ports` samt Join-Resten entfernt, Schalter „Schnittstelle (läuft
 draußen)“ nur noch für Technik. Schnelle Stufe grün.
 
-### Schritt 2 — Kataloge anlegen und füllen (umgesetzt, Abnahme im Editor offen)
+### Schritt 2 — Kataloge anlegen und füllen ✓ (7001b54f, 7a088472, im Editor abgenommen)
 
 Umgesetzt: Rolle `Katalog` und Primitive `Hinweis` in `Projektstruktur`/`Lageart` (CQRS098 im Katalog: Fakt, Aggregat-Command, Aggregat
 gehören nicht hinein), `Projektlage` zählt genutzte Kataloge zur Anwendung (auch leere), `--check` prüft die Referenzrichtung, Codegen und
 Werkbank-Stand nehmen die Kataloge der Abläufe mit, Geste `/api/werkbank/katalog` (anlegen, nutzen; kaltes Neuladen danach), Baukasten je
 Katalog mit „＋ 📚 Katalog“ und „＋ Funktion“, Picker der Fläche „📚 Katalog“, im Funktionsformular „＋ neuer Eingang“; Sonde mit fremdem
 Katalog `Sondenkatalog.Katalog` als eigenem Projekt. Hinweise liegen im Katalog in `Events.cs` (wie bei der Schreibseite), nicht in `Hinweise.cs`.
+Abgenommen in einer Probe-Werkbank: Katalog `Probe` angelegt (Projekt, Solution, Referenz), darin `Funk/Peilen` mit neuem Eingang und Ausgang,
+ganze Kette bis zum Host gebaut (Codegen nimmt die Katalognachrichten in Leitung und Wire-Kontext). Offen für Schritt 3: ein neuer Command ohne Ziel
+bekommt aus dem alten Formular noch ein `Guid AggregateId`-Feld.
 
 - **Code:** `Projektstruktur.cs` bekommt die Rolle `Katalog` (Suffix `.Katalog`, referenziert nur `Abstractions`, Sammeldateien `Commands.cs`,
   `Events.cs` (Hinweise), `Konfigs.cs`, `Enums.cs`, `Graphen.cs`; Funktion und Technik je eigene Datei). Die Anwendung (`.Pipeline`) darf Kataloge

@@ -114,8 +114,10 @@
   function imModus(ids,aendern){TEIL={gerufen:false};try{aendern();}finally{const g=TEIL.gerufen;TEIL=null;if(g)teilNeu(ids.filter(Boolean));}}
 
   // Eindeutiger Name — Namen sind der Referenzschlüssel für Kanten/Decider/Applier.
-  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...(MODEL.graphen||[]).map(g=>g.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.akteure.map(x=>x.name),...MODEL.clients.map(x=>x.name),...MODEL.funktionen.map(x=>x.name),...MODEL.fluesse.map(x=>x.name),
-    ...MODEL.bausteinFunktionen.flatMap(x=>[x.name,...(x.umsetzungen||[]).map(u=>u.name)])]);
+  // Alle vergebenen Typnamen — jede Sammlung darf fehlen (das Modell kennt nicht jede in jedem Stand).
+  function uniq(base){const namen=k=>(MODEL[k]||[]).map(x=>x.name);
+    const all=new Set([...["records","aggregate","enums","graphen","readModels","stores","projektionen","reader","akteure","clients"].flatMap(namen),
+    ...(MODEL.bausteinFunktionen||[]).flatMap(x=>[x.name,...(x.umsetzungen||[]).map(u=>u.name)])]);
     if(!all.has(base))return base;let i=2;while(all.has(base+i))i++;return base+i;}
 
   function enumCard(e,ei){const c=h("div",{class:"card"});

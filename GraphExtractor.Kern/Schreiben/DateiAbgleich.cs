@@ -63,8 +63,17 @@ public sealed class Dateipuffer(string root, Func<string, string?>? quelle = nul
             var voll = Voll(p.Datei);
             if (p.Nachher == null) { if (File.Exists(voll)) File.Delete(voll); continue; }
             Directory.CreateDirectory(Path.GetDirectoryName(voll)!);
-            File.WriteAllText(voll, p.Nachher);
+            // Ein BOM bleibt, wie es war (Solution- und Projektdateien tragen eins) — sonst änderte jede Geste die erste Zeile mit.
+            File.WriteAllText(voll, p.Nachher, new System.Text.UTF8Encoding(HatBom(voll)));
         }
+    }
+
+    private static bool HatBom(string voll)
+    {
+        if (!File.Exists(voll)) return false;
+        using var f = File.OpenRead(voll);
+        Span<byte> kopf = stackalloc byte[3];
+        return f.Read(kopf) == 3 && kopf[0] == 0xEF && kopf[1] == 0xBB && kopf[2] == 0xBF;
     }
 }
 
