@@ -231,7 +231,7 @@
         "graphen": [
           {
             "name": "Ortung",
-            "namespace": "Funkortung.Ortung",
+            "namespace": "Funkortung.Ablauf",
             "knoten": [
               {
                 "typ": "Uebersetze<OrtungAngefordert, Peile>",

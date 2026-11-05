@@ -748,20 +748,20 @@ lage Peilprotokoll -> nicht Sondenkatalog.Katalog
 
 # ── Funkortung (Funkortung.cs.txt): ÜBERSETZUNG IN BEIDE RICHTUNGEN — ein Client-Eingang ↦ Katalog-Eingang (Feld nach Namen, zwei ausdrücklich),
 #    die Peilung des fremden Katalogs, ihr Ergebnis ↦ Command an die Peilstelle (der Ausgang samt [Feld] kommt aus einer Geste).
-graph Funkortung.Ortung.Ortung | knoten Hinein:Uebersetze<OrtungAngefordert, Peile> [Kopf] [Feld Auftrag=Stelle+DauerMs=Messdauer], Peilen:Peilung [Von Hinein], Vermerken:Uebersetze<Gepeilt, VermerkePeilung> [Von Peilen] [Feld AggregateId=Auftrag] | koepfe OrtungAngefordert | aus PeilungUnmoeglich, VermerkePeilung
+graph Funkortung.Ablauf.Ortung | knoten Hinein:Uebersetze<OrtungAngefordert, Peile> [Kopf] [Feld Auftrag=Stelle+DauerMs=Messdauer], Peilen:Peilung [Von Hinein], Vermerken:Uebersetze<Gepeilt, VermerkePeilung> [Von Peilen] [Feld AggregateId=Auftrag] | koepfe OrtungAngefordert | aus PeilungUnmoeglich, VermerkePeilung
 kante Ortung | Hinein -Peile-> Peilen
 kante Ortung | Peilen -Gepeilt-> Vermerken
 uebersetzung Ortung.Hinein | OrtungAngefordert -> Peile | Auftrag=Stelle(feld), FrequenzMhz=FrequenzMhz(name), DauerMs=Messdauer(feld)
 uebersetzung Ortung.Vermerken | Gepeilt -> VermerkePeilung | AggregateId=Auftrag(feld), RichtungGrad=RichtungGrad(name), Guete=Guete(name), Quelle=(standard)
-akteur Funkortung.Ortung.Funker | darf OrtungAngefordert | hoert PeilungVermerkt
+akteur Funkortung.Ablauf.Funker | darf OrtungAngefordert | hoert PeilungVermerkt
 aggregat Funkortung.Ortung.Peilstelle | Richtung:double
 decide Peilstelle.VermerkePeilung -> PeilungVermerkt
 apply Peilstelle.PeilungVermerkt
-record Funkortung.Ortung.OrtungAngefordert command | Stelle:Id<Peilstelle>, FrequenzMhz:double, Messdauer:int
+record Funkortung.Ablauf.OrtungAngefordert command | Stelle:Id<Peilstelle>, FrequenzMhz:double, Messdauer:int
 record Funkortung.Ortung.VermerkePeilung command aggregat=Peilstelle | AggregateId:Id<Peilstelle>, RichtungGrad:double, Guete:double, Quelle:string="Katalog"
 record Funkortung.Ortung.PeilungVermerkt event aggregat=Peilstelle | RichtungGrad:double, Guete:double, Quelle:string
-sicht Funkortung.Ortung.Funker akteur domaene=Funkortung.Ortung block=§akteure
-besitz Funkortung.Ortung.OrtungAngefordert command -> §rand
+sicht Funkortung.Ablauf.Funker akteur domaene=Funkortung.Ablauf block=§akteure
+besitz Funkortung.Ablauf.OrtungAngefordert command -> §rand
 besitz Funkortung.Ortung.VermerkePeilung command -> aggregate:Peilstelle
 besitz Funkortung.Ortung.PeilungVermerkt event -> aggregate:Peilstelle
 lage Funker -> Domain.Akteure

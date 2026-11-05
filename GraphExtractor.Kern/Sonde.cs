@@ -109,18 +109,20 @@ public static class Sonde
 
         // Der Stand nach den Gesten, frisch auf die Solution gelegt (jede Sonden-Datei als neues Dokument): ein Generator, der Symbole zwischenspeichert,
         //   verlöre über die geänderten Dokumente der Gesten-Schleife sonst seine Ausgaben (inkrementell) — der Build übersetzt ja auch frisch.
-        var endstand = new List<(string Pfad, string Text, bool ImKatalog)>();
+        var endstand = new List<(string Pfad, string Text, bool ImKatalog, string? Projekt)>();
         foreach (var d in fork.Projects.SelectMany(x => x.Documents).Where(d => d.FilePath != null && (d.Folders.Contains("__sonde") || gezeichnet.Contains(Path.GetFullPath(d.FilePath))
                                                                                                     || d.Project.Id == katalog)))
         {
-            endstand.Add((d.FilePath!, (await d.GetTextAsync()).ToString(), d.Project.Id == katalog));
+            endstand.Add((d.FilePath!, (await d.GetTextAsync()).ToString(), d.Project.Id == katalog, d.Project.AssemblyName));
             gezeichnet.Add(Path.GetFullPath(d.FilePath!));
         }
         (fork, katalog) = MitKatalog(solution, solutionDir);
-        foreach (var (pfad, text, imKatalog) in endstand)
+        // Jede Datei wieder in ihr Projekt (die Sonde im Ziel, was den Katalog nennt bei den Abläufen, der Katalog für sich).
+        foreach (var (pfad, text, imKatalog, projekt) in endstand)
             fork = imKatalog
                 ? fork.AddDocument(DocumentId.CreateNewId(katalog), Path.GetFileName(pfad), text, filePath: pfad)
-                : fork.AddDocument(DocumentId.CreateNewId(ziel.Id), Path.GetFileName(pfad), text, folders: new[] { "__sonde" }, filePath: pfad);
+                : fork.AddDocument(DocumentId.CreateNewId((fork.Projects.FirstOrDefault(x => x.AssemblyName == projekt) ?? fork.GetProject(ziel.Id)!).Id),
+                    Path.GetFileName(pfad), text, folders: new[] { "__sonde" }, filePath: pfad);
         var lage2 = await Projektlage.ErmittleAsync(fork, Console.WriteLine);
         var fehler = 0;
 
