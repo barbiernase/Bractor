@@ -112,7 +112,8 @@ public sealed class Reaktionen(IGrpcProxy proxy, IReaktionsStand stand, string n
 
     /// <summary>
     /// Läuft, bis <paramref name="ct"/> endet: liest ab dem gesicherten Stand, reagiert, sendet, sichert den Stand je Seite; ist nichts mehr da,
-    /// wartet er auf ein neues Event (Push) oder den Takt. Fehlt die Verbindung, endet er mit <see cref="ReaktionUnterbrochen"/>.
+    /// wartet er auf ein neues Event (Push) oder den Takt. Fehlt die Verbindung, endet er mit <see cref="ReaktionUnterbrochen"/>; endet
+    /// <paramref name="ct"/>, endet er still.
     /// </summary>
     public async Task LaufeAsync(CancellationToken ct)
     {
@@ -147,6 +148,10 @@ public sealed class Reaktionen(IGrpcProxy proxy, IReaktionsStand stand, string n
                 if (seite.Voll) continue;
                 await Task.WhenAny(weckruf, Task.Delay(_takt, ct));
             }
+        }
+        catch (Exception) when (ct.IsCancellationRequested)
+        {
+            // Beendet: die Leitung meldet einen Abbruch auf ihre Art (RpcException „Cancelled“) — der Stand bleibt, wie er gesichert ist.
         }
         finally
         {
