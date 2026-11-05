@@ -832,6 +832,12 @@
           const neu=MODEL.records.find(x=>!vorher.has(x.name));if(neu){(e.ausgaben=e.ausgaben||[]).push(neu.name);render();}}),
         h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"＋ neuer Command ohne Ziel")));});
     body.append(slotRow("command","+ Eingang ⊕ (Command ohne Ziel)","l",{type:"cmd",dir:"in",fb:f._id,ein:"open"},"fb:einC:"+f._id+":open"));
+    // Ein neuer Eingang: eine neue Nachricht (Command ohne Ziel) im Namespace der Funktion — im Katalog bleibt sie im Katalog — samt ihrem Auf.
+    body.append(h("div",{class:"slotrow"},neuKnopf("Neue Nachricht (Command ohne Ziel) anlegen und ein Auf dafür",()=>{
+        const stamm=(f.name||"Funktion").replace(/^I(?=[A-ZÄÖÜ])/,""),vorher=new Set(MODEL.records.map(x=>x.name));
+        neuerKnoten("command",undefined,undefined,{ns:f.namespace,reg:"fb:"+f._id,name:stamm+"Auftrag",still:true});
+        const neu=MODEL.records.find(x=>!vorher.has(x.name));if(neu){(f.eingaenge=f.eingaenge||[]).push({eingang:neu.name,ausgaben:[]});gTitel("ƒ "+f.name+": Auf("+neu.name+")");render();}}),
+      h("span",{class:"slotlbl",style:"flex:1"},"＋ neuer Eingang (Nachricht und Auf)")));
     body.append(slotRow("event","+ Antwort ⊕ (Event, das ein eigener Command entschied)","l",{type:"evtUse",dir:"in",fb:f._id,fk:f._id,ein:"open"},"fb:ein:"+f._id+":open"));
     quellAbschnitt(body,f);}
     if(f.klasse){body.append(h("div",{class:"gsec",title:"Konstruktor der Klasse: Konfig-Records (Werte am Knoten der Instanz), Technik, IZustand<T>, ILogger<T>"},"⚙ braucht (Konstruktor)"));
@@ -2365,7 +2371,12 @@
           onclick:()=>komBausteinOeffnen(gr,x)},sym+" "+name(x),hier(x)?h("span",{class:"kom-hier"}," · hier"):null);
         b.addEventListener("dragstart",e=>{e.dataTransfer.setData("text/kom",JSON.stringify({gruppe:gr,name:x.name||x.typ}));e.dataTransfer.effectAllowed="copy";});
         box.append(b);});};
-    gruppe("Funktionen",bk.funktionen,x=>x.name+((x.typargumente||[]).length?"‹…›":""),x=>hierFb.has(x.karte),"ƒ","funktionen");
+    box.append(h("div",{class:"kom-akte"},h("button",{class:"kom-akt",title:"Einen Funktionskatalog anlegen: ein eigenes Projekt <Name>.Katalog, domänenneutral",
+      onclick:e=>katalogNeu(e)},"＋ 📚 Katalog")));
+    const fname=x=>x.name+((x.typargumente||[]).length?"‹…›":"");
+    gruppe("Funktionen der Anwendung",bk.funktionen.filter(x=>!x.katalog),fname,x=>hierFb.has(x.karte),"ƒ","funktionen");
+    (bk.kataloge||[]).forEach(k=>{gruppe("📚 "+k,bk.funktionen.filter(x=>x.katalog===k),fname,x=>hierFb.has(x.karte),"ƒ","funktionen");
+      box.append(h("button",{class:"kom-b",title:"Eine neue Funktion in "+k+" (Bereich und Name)",onclick:e=>katalogFunktion(k,e,fb=>komKarte("fb:"+fb._id,true,true))},"＋ Funktion"));});
     gruppe("Graphen (schachteln)",bk.graphen.filter(x=>x.karte!==id),x=>x.name,x=>hierFb.has(x.karte),"⬡","graphen");
     gruppe("Katalog (Quellen)",bk.katalog,x=>x.name,x=>d.knoten.some(k=>komBasis(k.typ)===x.name),"⚡","katalog");
     gruppe("Technik",bk.technik,x=>x.name,x=>d.knoten.some(k=>(k.konstruktor||[]).some(c=>c.karte===x.karte)),"⚙","technik");
@@ -3297,7 +3308,8 @@
     const opt=(kind,label)=>h("button",{onclick:()=>{pick.remove();neuerKnoten(kind,wx,wy);}},label);
     pick.append(h("div",{class:"gpick-t"},"Was soll hier entstehen?"),
       opt("aggregate","Aggregat"),opt("graph","⬡ Graph"),opt("funktion","ƒ Funktion"),opt("quelle","📥 Quelle"),opt("gerufen","⚙ Technik"),
-      opt("akteur","👤 Akteur"),opt("client","🔌 Client"),opt("projektion","Projektion"));
+      opt("akteur","👤 Akteur"),opt("client","🔌 Client"),opt("projektion","Projektion"),
+      h("button",{onclick:e=>{pick.remove();katalogNeu(e);}},"📚 Katalog"));
     canvas.append(pick);
     setTimeout(()=>{const off=ev=>{if(!pick.contains(ev.target)){pick.remove();document.removeEventListener("pointerdown",off);}};document.addEventListener("pointerdown",off);},0);
   }
@@ -3399,6 +3411,30 @@
     for(let i=0;i<200&&G_LAEUFT;i++)await new Promise(r=>setTimeout(r,50));
     if(document.activeElement&&gFokus())document.activeElement.blur();await gesteSenden();
     for(let i=0;i<200&&G_LAEUFT;i++)await new Promise(r=>setTimeout(r,50));}
+  // Kataloge (docs/plan-katalog-und-graphen.md, Schritt 2): anlegen (Projekt, Solution, Referenz der Abläufe) bzw. nutzen — eine Geste am Server, der
+  //   danach kalt neu lädt; das neue Board kommt mit der Antwort.
+  async function gKatalog(body,titel){await gesteFlush();G_LAEUFT=true;
+    try{const r=await fetch("/api/werkbank/katalog",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(body)});
+      const a=await r.json();
+      if(!a.ok){deFlash("⚠ "+(a.fehler||titel+" nicht geschrieben"),false);return false;}
+      gMeldung(a);await wbLadeDiagnosen();G_BOARD=a.board;gBoardAnwenden();return true;}
+    catch(e){badge(false);deFlash("⚠ Werkbank nicht erreichbar — "+titel+" nicht geschrieben",false);return false;}
+    finally{G_LAEUFT=false;}}
+  function katalogNeu(ev){frageFix(ev.clientX,ev.clientY,"📚 Neuer Katalog","Bildverarbeitung",
+    "Ein eigenes Projekt <Name>.Katalog: Funktionen und ihre Nachrichten, ohne Domäne — die Abläufe der Anwendung nutzen es.",n=>{
+      if(!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*(\.[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*)*$/.test(n.replace(/\.Katalog$/,"")))
+        return "Ein Namespace: groß beginnen, nur Buchstaben und Ziffern, Teile durch Punkte";
+      gKatalog({name:n},"Katalog "+n);});}
+  // Eine neue Funktion im Katalog: erst der Bereich (Ordner im Katalog), dann der Name — sie entsteht als Klasse ohne Auf (unfertig, baut nicht: W1);
+  //   die Eingänge und Ausgaben bekommt sie im Formular.
+  function katalogFunktion(katalog,ev,danach){const bereiche=[...new Set(MODEL.bausteinFunktionen.map(f=>f.namespace||"")
+      .filter(ns=>ns.startsWith(katalog+".")).map(ns=>ns.slice(katalog.length+1).split(".")[0]))];
+    frageFix(ev.clientX,ev.clientY,"ƒ Neue Funktion in "+katalog+" — Bereich",bereiche[0]||"Allgemein","Der Ordner im Katalog (Namespace "+katalog+".<Bereich>).",b=>{
+      if(!/^[A-ZÄÖÜ][A-Za-zÄÖÜäöüß0-9_]*$/.test(b))return "Ein Bereich: groß beginnen, nur Buchstaben und Ziffern";
+      setTimeout(()=>frageFix(ev.clientX,ev.clientY,"ƒ Neue Funktion in "+katalog+"."+b,"","Eine Klasse : IFunktion — Eingänge und Ausgaben danach im Formular.",n=>{
+        const f=nameFehler(n);if(f&&!/gibt es schon/.test(f))return f;if(MODEL.bausteinFunktionen.some(x=>x.name===n))return n+" gibt es schon";
+        const fb={_id:"fb"+(NID++),name:n,namespace:katalog+"."+b,klasse:true,eingaenge:[],konstruktor:[],umsetzungen:[]};
+        MODEL.bausteinFunktionen.push(fb);gTitel("ƒ "+n+" in "+katalog);render();if(danach)danach(fb);}),0);});}
   // Umbenennen: das Symbol am Ort der Karte samt aller Verweise (auch in Lambdas) — Roslyn-Renamer auf dem Server.
   async function gUmbenennen(o,neu,alt){await gesteFlush();G_LAEUFT=true;
     try{const r=await fetch("/api/werkbank/umbenennen",{method:"POST",headers:{"content-type":"application/json"},

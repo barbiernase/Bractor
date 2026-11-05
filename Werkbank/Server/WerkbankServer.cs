@@ -78,12 +78,12 @@ public sealed class WerkbankServer
 
     /// <summary>
     /// Der Stand: Hash über den handgeschriebenen Code der Rollen-Projekte (ohne Leitung und Komposition, deren Generate der Build selbst
-    /// schreibt) — Board, Build und Lauf tragen denselben (Spur, P4).
+    /// schreibt) und der Kataloge, die die Anwendung nutzt — Board, Build und Lauf tragen denselben (Spur, P4).
     /// </summary>
     public string Stand()
     {
         using var sha = SHA256.Create();
-        foreach (var projekt in Abstractions.Projektstruktur.HandgeschriebeneProjekte(Abstractions.Projektstruktur.StandardWurzel))   // docs/07 §7.2
+        foreach (var projekt in Abstractions.Projektstruktur.HandgeschriebeneProjekte(Abstractions.Projektstruktur.StandardWurzel).Concat(Kataloge()))   // docs/07 §7.2
         {
             var verz = Path.Combine(_root, projekt);
             if (!Directory.Exists(verz)) continue;
@@ -99,6 +99,14 @@ public sealed class WerkbankServer
         }
         sha.TransformFinalBlock([], 0, 0);
         return Convert.ToHexString(sha.Hash!)[..8].ToLowerInvariant();
+    }
+
+    /// <summary>Die Kataloge, die die Abläufe der Anwendung nutzen (ihre Projektdatei nennt sie).</summary>
+    private IEnumerable<string> Kataloge()
+    {
+        var ablaeufe = Abstractions.Projektstruktur.Projekt(Abstractions.Projektstruktur.StandardWurzel, Abstractions.Projektstruktur.Rolle.Ablaeufe);
+        var datei = Path.Combine(_root, ablaeufe, ablaeufe + ".csproj");
+        return File.Exists(datei) ? Abstractions.Projektstruktur.KatalogeIn(File.ReadAllText(datei)).ToList() : [];
     }
 
     private string NeuesProto => Path.Combine(_root, Abstractions.Projektstruktur.Projekt(Abstractions.Projektstruktur.StandardWurzel, Abstractions.Projektstruktur.Rolle.Leitung), Abstractions.Projektstruktur.ProtoDatei);

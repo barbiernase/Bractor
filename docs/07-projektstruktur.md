@@ -22,13 +22,14 @@
 |---|---|---|
 | `Domain` | Aggregate (State, Decider, Applier), Commands an Aggregate und die Commands ohne Ziel, die ein Decide abgibt, Events, Hinweise (auch die aus Funktionen), Wertobjekte, Enums; Queries an ein Aggregat und ihre Antworten (`Frage` im Decider — er sieht die Leseseite nicht) | Abstractions, Core |
 | `Domain.Projections` | ReadModels, Queries an Reader, Antworten, Store-Fähigkeiten und -Bündel, Projektionen, Reader | Domain |
-| `Domain.Pipeline` | Funktionen (Klassen), Graphen, die Commands, die nur Knoten einander geben, Konfig-Records, Technik und ihre Umsetzungen | Domain, Domain.Projections |
+| `Domain.Pipeline` | Funktionen (Klassen), Graphen, die Commands, die nur Knoten einander geben, Konfig-Records, Technik und ihre Umsetzungen, Hinweise aus Funktionen | Domain, Domain.Projections, die Kataloge, die die Anwendung nutzt |
 | `Domain.Akteure` | Akteure, Clients | Domain, Domain.Projections, Domain.Pipeline |
 | `Domain.Infrastructure` | Store-Implementierungen | Domain, Domain.Projections |
 | `Domain.Leitung` | die Domänen-DTOs der Leitung (`domain.proto`, vom Codegen) und ihr Nutzlast-Mapper (`GeneratedNutzlast`) — nichts Handgeschriebenes | Domain, Domain.Projections, Domain.Pipeline |
 | `Domain.Laufzeit` | die Komposition: alle Laufzeit-Generate, `GeneratedAnwendung`, `AddCqrs` der Hosts, die STJ-Kontexte — nichts Handgeschriebenes | alle Rollen-Projekte + Infrastructure |
 | `Domain.Client.Worker.Python.*` | Python-Clients: Implementierungen der generierten Client-Basen (`domain_client/`), Generate unter `domain_client/generated/` | — |
 | `Domain.Client.Modules.*` | GUI-Clients (außerhalb des Editors, W12) | Client.Infrastructure |
+| `<Name>.Katalog` | ein **Funktionskatalog** (keine Rolle *einer* Anwendung, eigene Wurzel): Funktionen, ihre Nachrichten (Commands ohne Ziel, Hinweise), Konfig-Records, Technik, Graphen, Wertobjekte, Enums — domänenneutral; die Werkbank legt ihn an („＋ 📚 Katalog“) | Abstractions, Core, andere Kataloge |
 | `umgebungen/` | je Umgebung ein Ordner `<name>/` mit `umgebung.json` und `graphen/<instanz>.json` je Instanz (`Projektstruktur.UmgebungsOrdner`, `UmgebungsDatei`, `GraphenOrdner`) | — |
 
 **Rollen als Suffix zur Wurzel.** Die Projektnamen sind Suffixe zu einer Anwendungs-Wurzel (`""`, `.Projections`, `.Pipeline`, `.Akteure`,
@@ -38,6 +39,10 @@ existieren. Die Rolle eines Projekts folgt aus seinem Namen (`Projektstruktur.Ze
 Die Referenzrichtung ist fest: `Domain` ← `Domain.Projections` ← `Domain.Pipeline` ← `Domain.Akteure`; `Domain.Projections` ← `Domain.Infrastructure`;
 alle ← `Domain.Laufzeit` (die Komposition, die die Hosts referenzieren). Das Framework (`Infrastructure`, `Core`, `Cqrs.Leitung`) referenziert kein
 Rollen-Projekt; es liest die Anwendung über `IAnwendung`, die die Komposition generiert und anmeldet.
+**Kataloge** (`Projektstruktur.Katalog`, `IstKatalog`, `KatalogVon`): ein Katalog kennt keine Anwendung, und die Domäne kennt keinen Katalog — nur
+die Abläufe, Akteure, Leitung und Komposition einer Anwendung dürfen ihn referenzieren (`NutzenKataloge`); welche eine Anwendung nutzt, steht in der
+Projektdatei ihrer Abläufe (`KatalogeIn`). Ein Fakt im Log, ein Command an ein Aggregat oder ein Aggregat im Katalog ist CQRS098, eine falsche Referenz
+meldet `--check`. Codegen und Werkbank-Stand nehmen die genutzten Kataloge mit (docs/plan-katalog-und-graphen.md).
 Deshalb gehören Funktionen mit Lese-Fähigkeit (brauchen Leseseiten-Typen) und Akteure mit `IDarf<Query>` nicht nach `Domain`. Die Akteure sind der
 äußerste Ring: ein Akteur darf Commands, Queries und Hinweise aus allen Rollen nennen (`IDarf`) und hören (`IHoert`), auch die Commands, die ein
 Graph verlässt; ein Client nennt nur Akteure.
@@ -68,6 +73,9 @@ Graph verlässt; ein Client nennt nur Akteure.
 | | `Konfigs.cs` | Konfig-Records |
 | | `<Technik>.cs` | je Technik (Schnittstelle oder Klasse im Konstruktor einer Funktion) und je Umsetzung eine Datei (Primitive `Technik`) |
 | `Domain.Infrastructure/<Bereich>/` | `<Store>.cs`, `<Store>.Lesen.cs` | Store-Implementierung (Schreib- und Leseteil) |
+| `<Name>.Katalog/<Bereich>/` | `<Funktion>.cs`, `<Technik>.cs` | je Funktion bzw. Technik eine Datei |
+| | `Commands.cs`, `Events.cs` | Commands ohne Ziel; Hinweise (Primitive `Hinweis`) |
+| | `Graphen.cs`, `Konfigs.cs`, `ValueObjects.cs`, `Enums.cs` | Graphen, Konfig-Records, Wertobjekte, Enums |
 
 Typnamen sind frei; Klassen tragen ihren Namen als Dateinamen, Sammeldateien (`Commands.cs` …) bündeln Records einer Art. Hilfscode, der keine
 Primitive ist, liegt im Bereichs-Ordner seines Projekts und erscheint im Editor als Code-Karte.

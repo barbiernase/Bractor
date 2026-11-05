@@ -40,6 +40,12 @@ static class Projektstruktur
         Leitung,
         /// <summary><c>&lt;Wurzel&gt;.Laufzeit</c>: die Komposition — Framework + Rollen-Projekte, die generierten Laufzeit-Tabellen.</summary>
         Komposition,
+        /// <summary>
+        /// <c>&lt;Name&gt;.Katalog</c>: ein FUNKTIONSKATALOG (docs/plan-katalog-und-graphen.md) — Funktionen, ihre Nachrichten (Commands ohne Ziel,
+        /// Hinweise), Konfig-Records, Technik und Graphen, domänenneutral: er referenziert nur Abstractions (und andere Kataloge), keine Anwendung.
+        /// Keine Rolle EINER Anwendung: seine Wurzel ist sein eigener Name, die Abläufe einer Anwendung nutzen ihn per Referenz.
+        /// </summary>
+        Katalog,
     }
 
     /// <summary>Was ein Typ ist — bestimmt aus Code-Fakten (Lageart), nie aus Name oder Ordner.</summary>
@@ -55,8 +61,12 @@ static class Projektstruktur
         /// <summary>Eine Funktion (Klasse mit <c>IFunktion</c>, Baustein-Form, <c>Auf</c>): sie läuft im Host — je Funktion eine eigene Datei.</summary>
         Funktion,
         Konfig,
-        /// <summary>Ein Command ohne Ziel, den nur Knoten einander geben (kein <c>Decide</c> gibt ihn ab): bei den Abläufen, in deren <c>Commands.cs</c>.</summary>
+        /// <summary>Ein Command ohne Ziel, den nur Knoten einander geben (kein <c>Decide</c> gibt ihn ab): bei den Abläufen bzw. im Katalog, in
+        /// <c>Commands.cs</c>.</summary>
         KnotenCommand,
+        /// <summary>Ein Hinweis (<c>ITransientEvent</c>, flüchtig, an Akteure): bei der Schreibseite, den Abläufen oder im Katalog — wer ihn
+        /// ausgibt, entscheidet; in <c>Events.cs</c>.</summary>
+        Hinweis,
         /// <summary>Ein Graph (<c>record … : IGraph</c>, Knoten als Parameter): bei den Abläufen, in <c>Graphen.cs</c>.</summary>
         Graph,
         /// <summary>Technik hinter einer Funktion (ohne Marker: was der Konstruktor einer Funktion nimmt, und ihre Umsetzungen) — bei den Abläufen,
@@ -136,7 +146,47 @@ static class Projektstruktur
             new string[0], nurGeneriert: true),
     };
 
-    public static Eintrag Von(Rolle r) => Rollen.First(e => e.Rolle == r);
+    /// <summary>
+    /// Ein Funktionskatalog (<see cref="Rolle.Katalog"/>): <c>&lt;Name&gt;.Katalog</c> mit Bereichs-Ordnern; er referenziert keine Rolle einer
+    /// Anwendung. Nicht in <see cref="Rollen"/> — die Rollen-Projekte EINER Anwendung (<see cref="Projekte"/>) kennen ihn nicht, eine Anwendung
+    /// nutzt beliebig viele Kataloge.
+    /// </summary>
+    public static readonly Eintrag Katalog = new Eintrag(Rolle.Katalog, ".Katalog", true, new Rolle[0],
+        new[] { "Commands.cs", "Events.cs", "ValueObjects.cs", "Enums.cs", "Graphen.cs", "Konfigs.cs" });
+
+    /// <summary>Was ein Projekt außer Abstractions (und anderen Katalogen) referenzieren darf, wenn es ein Katalog ist: das Framework (<c>Core</c>
+    /// mit den Quellen des Framework-Katalogs).</summary>
+    public static readonly IReadOnlyList<string> KatalogDarfReferenzieren = new[] { "Abstractions", "Core" };
+
+    /// <summary>Die Rollen einer Anwendung, die Kataloge nutzen dürfen (alle über den Abläufen); Schreib- und Leseseite kennen keine Funktionsnachricht.</summary>
+    public static readonly IReadOnlyList<Rolle> NutzenKataloge = new[] { Rolle.Ablaeufe, Rolle.Akteure, Rolle.Leitung, Rolle.Komposition };
+
+    public static Eintrag Von(Rolle r) => r == Rolle.Katalog ? Katalog : Rollen.First(e => e.Rolle == r);
+
+    /// <summary>
+    /// Die Kataloge, die eine Projektdatei referenziert (<c>&lt;ProjectReference Include="..\X.Katalog\X.Katalog.csproj" /&gt;</c> → <c>X.Katalog</c>) —
+    /// gelesen aus dem Text, wie MSBuild ihn hat: so wissen Codegen und Werkbank, welche Kataloge eine Anwendung nutzt, ohne sie zu bauen.
+    /// </summary>
+    public static IEnumerable<string> KatalogeIn(string projektdatei) =>
+        System.Text.RegularExpressions.Regex.Matches(projektdatei, @"<ProjectReference\s+Include=""([^""]+)""")
+            .Cast<System.Text.RegularExpressions.Match>()
+            .Select(m => System.IO.Path.GetFileNameWithoutExtension(m.Groups[1].Value.Replace('\\', '/').Split('/').Last()))
+            .Where(IstKatalog).Distinct(StringComparer.Ordinal);
+
+    /// <summary>Ist <paramref name="projekt"/> ein Funktionskatalog (<c>&lt;Name&gt;.Katalog</c>)?</summary>
+    public static bool IstKatalog(string projekt) =>
+        projekt.EndsWith(Katalog.Suffix, StringComparison.Ordinal) && projekt.Length > Katalog.Suffix.Length;
+
+    /// <summary>Der Katalog, in dessen Projekt der Namespace <paramref name="ns"/> liegt (<c>Bild.Katalog.Skalierung</c> → <c>Bild.Katalog</c>), sonst <c>null</c>.</summary>
+    public static string? KatalogVon(string ns)
+    {
+        for (var i = ns.IndexOf(Katalog.Suffix, StringComparison.Ordinal); i > 0; i = ns.IndexOf(Katalog.Suffix, i + 1, StringComparison.Ordinal))
+        {
+            var ende = i + Katalog.Suffix.Length;
+            if (ende == ns.Length || ns[ende] == '.') return ns.Substring(0, ende);
+        }
+        return null;
+    }
 
     /// <summary>Der Projektname einer Rolle: Wurzel + Suffix.</summary>
     public static string Projekt(string wurzel, Rolle r) => wurzel + Von(r).Suffix;
@@ -161,7 +211,7 @@ static class Projektstruktur
     /// </summary>
     public static (string Wurzel, Rolle Rolle) Zerlege(string name)
     {
-        foreach (var e in Rollen.Where(e => e.Suffix.Length > 0).OrderByDescending(e => e.Suffix.Length))
+        foreach (var e in Rollen.Append(Katalog).Where(e => e.Suffix.Length > 0).OrderByDescending(e => e.Suffix.Length))
             if (name.EndsWith(e.Suffix, StringComparison.Ordinal) && name.Length > e.Suffix.Length)
                 return (name.Substring(0, name.Length - e.Suffix.Length), e.Rolle);
         return (name, Rolle.Schreibseite);
@@ -178,22 +228,26 @@ static class Projektstruktur
         switch (p)
         {
             case Primitive.Aggregat: case Primitive.Decider: case Primitive.Applier: case Primitive.Command: case Primitive.Event:
-            case Primitive.Wertobjekt: case Primitive.AggregatQuery: case Primitive.AggregatAntwort:
+            case Primitive.AggregatQuery: case Primitive.AggregatAntwort:
                 return new[] { Rolle.Schreibseite };
+            case Primitive.Wertobjekt:
+                return new[] { Rolle.Schreibseite, Rolle.Katalog };
+            case Primitive.Hinweis:
+                return new[] { Rolle.Schreibseite, Rolle.Ablaeufe, Rolle.Katalog };
             case Primitive.ReadModel: case Primitive.Query: case Primitive.Antwort: case Primitive.StoreBuendel: case Primitive.StoreFaehigkeit:
             case Primitive.Projektion: case Primitive.Reader:
                 return new[] { Rolle.Leseseite };
             case Primitive.Funktion: case Primitive.KnotenCommand: case Primitive.Graph:
             case Primitive.Konfig: case Primitive.Technik:
-                return new[] { Rolle.Ablaeufe };
+                return new[] { Rolle.Ablaeufe, Rolle.Katalog };
             case Primitive.Akteur: case Primitive.Client:
                 return new[] { Rolle.Akteure };
             case Primitive.StoreImplementierung:
                 return new[] { Rolle.Speicher };
             case Primitive.Enum:
-                return new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Ablaeufe };
+                return new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Ablaeufe, Rolle.Katalog };
             default:
-                return Rollen.Select(e => e.Rolle).ToArray();
+                return Rollen.Select(e => e.Rolle).Append(Rolle.Katalog).ToArray();
         }
     }
 
@@ -203,7 +257,7 @@ static class Projektstruktur
         switch (p)
         {
             case Primitive.Command: case Primitive.KnotenCommand: return "Commands.cs";
-            case Primitive.Event: return "Events.cs";
+            case Primitive.Event: case Primitive.Hinweis: return "Events.cs";
             case Primitive.Graph: return "Graphen.cs";
             case Primitive.Wertobjekt: return "ValueObjects.cs";
             case Primitive.Enum: return "Enums.cs";
@@ -244,7 +298,11 @@ static class Projektstruktur
         var rolle = Zerlege(projekt).Rolle;
         var erlaubt = RollenVon(p);
         if (erlaubt.Contains(rolle)) return null;
-        return $"'{typ}' ist {Text(p)} und gehört nach {string.Join(" oder ", erlaubt.Select(r => Projekt(wurzel, r)))}, nicht nach {projekt} (docs/07 §7.2)";
+        if (rolle == Rolle.Katalog)
+            return $"'{typ}' ist {Text(p)} und gehört nicht in einen Katalog ({projekt}) — ein Katalog kennt keine Domäne; {Text(p)} liegt in einer "
+                + $"Anwendung ({string.Join(" oder ", erlaubt.Select(r => "<Wurzel>" + Von(r).Suffix))}, docs/07 §7.2)";
+        return $"'{typ}' ist {Text(p)} und gehört nach {string.Join(" oder ", erlaubt.Select(r => r == Rolle.Katalog ? "einen Katalog (<Name>.Katalog)" : Projekt(wurzel, r)))}, "
+            + $"nicht nach {projekt} (docs/07 §7.2)";
     }
 
     /// <summary>
@@ -298,6 +356,7 @@ static class Projektstruktur
             case Primitive.Reader: return "ein Reader";
             case Primitive.Funktion: return "eine Funktion";
             case Primitive.KnotenCommand: return "ein Command zwischen Knoten";
+            case Primitive.Hinweis: return "ein Hinweis";
             case Primitive.Graph: return "ein Graph";
             case Primitive.Technik: return "Technik";
             case Primitive.Konfig: return "ein Konfig-Record";

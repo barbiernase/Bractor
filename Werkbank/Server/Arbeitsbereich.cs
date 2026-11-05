@@ -111,12 +111,19 @@ public sealed class Arbeitsbereich : IDisposable
         finally { _sperre.Release(); }
     }
 
-    /// <summary>Selbst geschriebene Dateien sofort übernehmen (der Wächter meldet sie erst später) und warm neu lesen.</summary>
+    /// <summary>Selbst geschriebene Dateien sofort übernehmen (der Wächter meldet sie erst später) und warm neu lesen — eine geänderte Projekt- oder
+    /// Solution-Datei (ein neuer Katalog, eine neue Referenz) lädt kalt neu, denn Projekte kennt nur das kalte Laden.</summary>
     public Task<Lesung> UebernimmAsync(IEnumerable<string> relativePfade, CancellationToken ct = default)
     {
-        foreach (var rel in relativePfade) _geaendert[Path.GetFullPath(Path.Combine(_root, rel))] = 0;
+        foreach (var rel in relativePfade)
+            if (IstProjektdatei(rel)) _kaltNeu = true;
+            else _geaendert[Path.GetFullPath(Path.Combine(_root, rel))] = 0;
         return LiesAsync(ct);
     }
+
+    private static bool IstProjektdatei(string pfad) =>
+        pfad.EndsWith(".csproj", StringComparison.Ordinal) || pfad.EndsWith(".props", StringComparison.Ordinal)
+        || pfad.EndsWith(".targets", StringComparison.Ordinal) || pfad.EndsWith(".sln", StringComparison.Ordinal);
 
     /// <summary>Der aktuelle Solution-Stand (geänderte Dateien übernommen) — für Roslyn-Refactorings wie den Renamer.</summary>
     public async Task<Solution> StandAsync(CancellationToken ct = default)
@@ -328,8 +335,7 @@ public sealed class Arbeitsbereich : IDisposable
         {
             if (pfad == null || Ignoriert(pfad)) return;
             if (pfad.EndsWith(".cs", StringComparison.Ordinal) || pfad.EndsWith(".py", StringComparison.Ordinal) || IstUmgebung(pfad)) _geaendert[pfad] = 0;
-            else if (pfad.EndsWith(".csproj", StringComparison.Ordinal) || pfad.EndsWith(".props", StringComparison.Ordinal)
-                     || pfad.EndsWith(".targets", StringComparison.Ordinal) || pfad.EndsWith(".sln", StringComparison.Ordinal)) _kaltNeu = true;
+            else if (IstProjektdatei(pfad)) _kaltNeu = true;
         }
         _waechter.Changed += (_, e) => Melde(e.FullPath);
         _waechter.Created += (_, e) => Melde(e.FullPath);

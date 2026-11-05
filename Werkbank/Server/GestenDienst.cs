@@ -123,6 +123,28 @@ public sealed class GestenDienst(string slnRoot, Arbeitsbereich arbeitsbereich, 
         return Task.FromResult((puffer.Patch(), new List<string>()));
     }, ct);
 
+    /// <summary>
+    /// Einen Funktionskatalog anlegen (docs/plan-katalog-und-graphen.md, Schritt 2): Projektdatei, Eintrag in der Solution, Referenz der Abläufe —
+    /// danach lädt der Arbeitsbereich kalt neu (neue Projekte kennt nur das kalte Laden).
+    /// </summary>
+    public Task<GestenAntwort> KatalogAsync(string name, CancellationToken ct) => AusfuehrenAsync("katalog", "📚 Katalog " + name, () =>
+    {
+        var puffer = new Dateipuffer(slnRoot);
+        var projekt = Kataloge.Neu(puffer, name);
+        puffer.Speichern();
+        return Task.FromResult((puffer.Patch(), new List<string> { $"{projekt} angelegt und von den Abläufen genutzt" }));
+    }, ct);
+
+    /// <summary>Die Abläufe der Anwendung nutzen einen vorhandenen Katalog bzw. nicht mehr (Referenz in ihrer Projektdatei).</summary>
+    public Task<GestenAntwort> KatalogNutzenAsync(string katalog, bool nutzen, CancellationToken ct) =>
+        AusfuehrenAsync("katalog", (nutzen ? "📚 nutzt " : "📚 nutzt nicht mehr ") + katalog, () =>
+        {
+            var puffer = new Dateipuffer(slnRoot);
+            Kataloge.Nutzen(puffer, katalog, nutzen);
+            puffer.Speichern();
+            return Task.FromResult((puffer.Patch(), new List<string>()));
+        }, ct);
+
     /// <summary>↶ — den letzten Patch zurücknehmen (Geste, 🤖-Übernahme oder Umgebungs-Werte).</summary>
     public async Task<GestenAntwort> RueckgaengigAsync(CancellationToken ct)
     {

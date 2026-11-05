@@ -52,16 +52,25 @@ public static class Sonde
         // Ziel: ein Projekt, das Aggregate trägt (dort laufen die Domänen-Generatoren, der Vertrag ist referenziert).
         var ziel = lage.Analyse.Where(a => lage.AggregatAssemblies.Contains(a.Compilation.AssemblyName ?? ""))
             .OrderBy(a => a.Projekt.Name, StringComparer.Ordinal).First().Projekt;
-        var fork = solution;
-        foreach (var (name, text) in Quellen())
+        var (fork, katalog) = MitKatalog(solution, solutionDir);
+        foreach (var (name, text) in Quelltexte())
             fork = fork.AddDocument(DocumentId.CreateNewId(ziel.Id), name, text, folders: new[] { "__sonde" },
                 filePath: Path.Combine(Path.GetDirectoryName(ziel.FilePath)!, "__sonde", name));
-        Console.WriteLine($"   Sonde „{string.Join("“, „", Wurzeln.Order(StringComparer.Ordinal))}\" ({Quellen().Count()} Dateien) im Speicher in {ziel.Name} gelegt.");
+        // Der fremde Katalog als eigenes Projekt: jede Datei im Bereichs-Ordner, wie die Projektstruktur ihn will (docs/07 §7.3).
+        var gezeichnet = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (name, text) in Katalogtexte())
+        {
+            var (bereich, datei) = KatalogDatei(name);
+            var pfad = Path.Combine(solutionDir, SondenKatalog, bereich, datei);
+            fork = fork.AddDocument(DocumentId.CreateNewId(katalog), datei, text, folders: new[] { bereich }, filePath: pfad);
+            gezeichnet.Add(Path.GetFullPath(pfad));
+        }
+        Console.WriteLine($"   Sonde „{string.Join("“, „", Wurzeln.Order(StringComparer.Ordinal))}\" ({Quellen().Count()} Dateien) im Speicher in {ziel.Name} "
+                          + $"und im Katalog {SondenKatalog} gelegt.");
 
         // ── GEZEICHNET = Gesten (Werkbank P7.3): je Geste ein Karten-Delta wie aus dem Browser, geschrieben vom Gesten-Motor in den Fork
         //    (Scaffolder für Neues, Abgleich für Geändertes), danach neu gelesen — die nächste Geste sieht den neuen Code-Stand wie in der Werkbank. ──
         CompositionRoot? cr1 = null;
-        var gezeichnet = new HashSet<string>(StringComparer.Ordinal);
         foreach (var geste in (JsonNode.Parse(Ressource("Gezeichnet.gesten.json"))!["gesten"] as JsonArray ?? []).OfType<JsonObject>())
         {
             var lageG = await Projektlage.ErmittleAsync(fork, _ => { });
@@ -79,9 +88,13 @@ public static class Sonde
                 var voll = puffer.Voll(patch.Datei);
                 gezeichnet.Add(voll);
                 var doc = fork.Projects.SelectMany(x => x.Documents).FirstOrDefault(d => d.FilePath != null && Path.GetFullPath(d.FilePath) == voll);
+                // Eine neue Datei im Katalog gehört zum Katalog-Projekt, jede andere neue Datei zur Sonde im Ziel.
+                var imKatalog = voll.StartsWith(Path.GetFullPath(Path.Combine(solutionDir, SondenKatalog)) + Path.DirectorySeparatorChar, StringComparison.Ordinal);
                 fork = doc != null
                     ? patch.Nachher == null ? fork.RemoveDocument(doc.Id) : fork.WithDocumentText(doc.Id, Microsoft.CodeAnalysis.Text.SourceText.From(patch.Nachher))
-                    : fork.AddDocument(DocumentId.CreateNewId(ziel.Id), Path.GetFileName(voll), patch.Nachher ?? "", folders: new[] { "__sonde" }, filePath: voll);
+                    : imKatalog
+                        ? fork.AddDocument(DocumentId.CreateNewId(katalog), Path.GetFileName(voll), patch.Nachher ?? "", filePath: voll)
+                        : fork.AddDocument(DocumentId.CreateNewId(ziel.Id), Path.GetFileName(voll), patch.Nachher ?? "", folders: new[] { "__sonde" }, filePath: voll);
                 if (zeigeIst) Console.WriteLine($"\n── {patch.Datei} ({(patch.Vorher == null ? "neu" : "geändert")}) ──\n{patch.Nachher}");
             }
             Console.WriteLine($"   Geste „{(string?)geste["titel"]}“: {bericht.Patch.Count} Datei(en) geschrieben"
@@ -90,12 +103,18 @@ public static class Sonde
 
         // Der Stand nach den Gesten, frisch auf die Solution gelegt (jede Sonden-Datei als neues Dokument): ein Generator, der Symbole zwischenspeichert,
         //   verlöre über die geänderten Dokumente der Gesten-Schleife sonst seine Ausgaben (inkrementell) — der Build übersetzt ja auch frisch.
-        var endstand = new List<(string Pfad, string Text)>();
-        foreach (var d in fork.Projects.SelectMany(x => x.Documents).Where(d => d.FilePath != null && (d.Folders.Contains("__sonde") || gezeichnet.Contains(Path.GetFullPath(d.FilePath)))))
-            endstand.Add((d.FilePath!, (await d.GetTextAsync()).ToString()));
-        fork = solution;
-        foreach (var (pfad, text) in endstand)
-            fork = fork.AddDocument(DocumentId.CreateNewId(ziel.Id), Path.GetFileName(pfad), text, folders: new[] { "__sonde" }, filePath: pfad);
+        var endstand = new List<(string Pfad, string Text, bool ImKatalog)>();
+        foreach (var d in fork.Projects.SelectMany(x => x.Documents).Where(d => d.FilePath != null && (d.Folders.Contains("__sonde") || gezeichnet.Contains(Path.GetFullPath(d.FilePath))
+                                                                                                    || d.Project.Id == katalog)))
+        {
+            endstand.Add((d.FilePath!, (await d.GetTextAsync()).ToString(), d.Project.Id == katalog));
+            gezeichnet.Add(Path.GetFullPath(d.FilePath!));
+        }
+        (fork, katalog) = MitKatalog(solution, solutionDir);
+        foreach (var (pfad, text, imKatalog) in endstand)
+            fork = imKatalog
+                ? fork.AddDocument(DocumentId.CreateNewId(katalog), Path.GetFileName(pfad), text, filePath: pfad)
+                : fork.AddDocument(DocumentId.CreateNewId(ziel.Id), Path.GetFileName(pfad), text, folders: new[] { "__sonde" }, filePath: pfad);
         var lage2 = await Projektlage.ErmittleAsync(fork, Console.WriteLine);
         var fehler = 0;
 
@@ -157,7 +176,11 @@ public static class Sonde
         //    (Soll-Zeilen „lage Typ -> Projekt“) und darf nichts außerhalb der Sonde melden. So beweist sie, dass sie anschlägt. ──
         var lageBefunde = befunde.Where(b => b.Bereich == "Lage" && b.Schweregrad == "error").Select(b => b.Meldung).ToList();
         var rolle = new System.Text.RegularExpressions.Regex(@"^'(?<typ>[^']+)' ist .+ und gehört nach (?<ziel>\S+), nicht nach");
-        var lageIst = lageBefunde.Select(m => rolle.Match(m)).Where(m => m.Success).Select(m => $"lage {m.Groups["typ"].Value} -> {m.Groups["ziel"].Value}").ToList();
+        // Im Katalog: was dort nicht hingehört, weist die Prüfung hinaus („lage Typ -> nicht Katalog“).
+        var hinaus = new System.Text.RegularExpressions.Regex(@"^'(?<typ>[^']+)' ist .+ und gehört nicht in einen Katalog \((?<katalog>[^)]+)\)");
+        var lageIst = lageBefunde.Select(m => rolle.Match(m)).Where(m => m.Success).Select(m => $"lage {m.Groups["typ"].Value} -> {m.Groups["ziel"].Value}")
+            .Concat(lageBefunde.Select(m => hinaus.Match(m)).Where(m => m.Success).Select(m => $"lage {m.Groups["typ"].Value} -> nicht {m.Groups["katalog"].Value}"))
+            .ToList();
         var lageSoll = soll.Where(z => z.StartsWith("lage ", StringComparison.Ordinal)).ToList();
         foreach (var z in lageSoll.Except(lageIst)) { Console.WriteLine($"   ✗ Lage fehlt:      {z}"); fehler++; }
         foreach (var z in lageIst.Except(lageSoll)) { Console.WriteLine($"   ✗ Lage unerwartet: {z}"); fehler++; }
@@ -366,8 +389,48 @@ public static class Sonde
         return z.Select(x => x.TrimEnd()).OrderBy(x => x, StringComparer.Ordinal).ToList();
     }
 
-    /// <summary>Die Quelltexte der Sonden-Domäne (Dateiname, Text) — auch die Fixture der Gesten-Tests im Prüfstand.</summary>
-    public static IEnumerable<(string Name, string Text)> Quelltexte() => Quellen();
+    /// <summary>Die Quelltexte der Sonden-Domäne (Dateiname, Text) — auch die Fixture der Gesten-Tests im Prüfstand; ohne den Katalog.</summary>
+    public static IEnumerable<(string Name, string Text)> Quelltexte() => Quellen().Where(q => !q.Name.StartsWith(KatalogPraefix, StringComparison.Ordinal));
+
+    /// <summary>Die Quelltexte des fremden Katalogs der Sonde (Dateien „Katalog.&lt;Bereich&gt;.&lt;Datei&gt;.cs.txt“).</summary>
+    public static IEnumerable<(string Name, string Text)> Katalogtexte() => Quellen().Where(q => q.Name.StartsWith(KatalogPraefix, StringComparison.Ordinal));
+
+    private const string KatalogPraefix = "Katalog.";
+
+    /// <summary>Das Projekt des fremden Katalogs der Sonde (docs/plan-katalog-und-graphen.md): nur Abstractions, genutzt von den Abläufen der Anwendung.</summary>
+    public const string SondenKatalog = "Sondenkatalog.Katalog";
+
+    /// <summary>„Katalog.Peilung.Commands.cs“ → Bereich „Peilung“, Datei „Commands.cs“.</summary>
+    private static (string Bereich, string Datei) KatalogDatei(string name)
+    {
+        var rest = name[KatalogPraefix.Length..];
+        var punkt = rest.IndexOf('.');
+        return (rest[..punkt], rest[(punkt + 1)..]);
+    }
+
+    /// <summary>
+    /// Der Fork mit dem Katalog-Projekt der Sonde: Optionen, Referenzen und Analyzer wie der Vertrag bzw. die Abläufe, eine Projekt-Referenz nur auf
+    /// Abstractions — und die Abläufe der Anwendung nutzen ihn (wie nach der Geste „neuer Katalog“), so liegt er in der Hülle der Laufzeit.
+    /// </summary>
+    private static (Solution, ProjectId) MitKatalog(Solution solution, string solutionDir)
+    {
+        var vertrag = solution.Projects.First(p => p.AssemblyName == "Abstractions");
+        var ablaeufe = solution.Projects.First(p => p.AssemblyName == Abstractions.Projektstruktur.Projekt(Abstractions.Projektstruktur.StandardWurzel,
+            Abstractions.Projektstruktur.Rolle.Ablaeufe));
+        var id = ProjectId.CreateNewId(SondenKatalog);
+        var info = ProjectInfo.Create(id, VersionStamp.Create(), SondenKatalog, SondenKatalog, LanguageNames.CSharp,
+                filePath: Path.Combine(solutionDir, SondenKatalog, SondenKatalog + ".csproj"),
+                compilationOptions: ablaeufe.CompilationOptions, parseOptions: ablaeufe.ParseOptions,
+                projectReferences: new[] { new ProjectReference(vertrag.Id) }, metadataReferences: ablaeufe.MetadataReferences,
+                analyzerReferences: ablaeufe.AnalyzerReferences)
+            .WithDefaultNamespace(SondenKatalog);
+        var fork = solution.AddProject(info).AddProjectReference(ablaeufe.Id, new ProjectReference(id));
+        // Globale usings (ImplicitUsings) wie in den Abläufen — Task & Co. ohne using.
+        foreach (var d in ablaeufe.Documents.Where(d => d.FilePath?.EndsWith(".GlobalUsings.g.cs", StringComparison.Ordinal) == true))
+            fork = fork.AddDocument(DocumentId.CreateNewId(id), Path.GetFileName(d.FilePath!), d.GetTextAsync().Result,
+                filePath: Path.Combine(solutionDir, SondenKatalog, "obj", Path.GetFileName(d.FilePath!)));
+        return (fork, id);
+    }
 
     private static IEnumerable<(string Name, string Text)> Quellen() =>
         typeof(Sonde).Assembly.GetManifestResourceNames()

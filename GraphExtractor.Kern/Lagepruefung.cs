@@ -18,9 +18,9 @@ public static class Lagepruefung
         var befunde = new List<string>();
         var domaene = lage.Analyse.Where(a => lage.DomänenAssemblies.Contains(a.Compilation.AssemblyName ?? "")).ToList();
 
-        // ── Projekte: jedes Domänen-Projekt ist ein Rollen-Projekt der Wurzel; Referenzen nur in Richtung der Tabelle ──
+        // ── Projekte: jedes Domänen-Projekt ist ein Rollen-Projekt der Wurzel oder ein Katalog; Referenzen nur in Richtung der Tabelle ──
         foreach (var (projekt, _) in domaene)
-            if (!P.IstProjekt(wurzel, projekt.AssemblyName))
+            if (!P.IstProjekt(wurzel, projekt.AssemblyName) && !P.IstKatalog(projekt.AssemblyName))
                 befunde.Add($"Projekt {projekt.AssemblyName} deklariert Domänen-Typen, ist aber kein Rollen-Projekt von {wurzel} ({string.Join(", ", P.Projekte(wurzel))}; docs/07 §7.2)");
         foreach (var projekt in solution.Projects.Where(p => P.IstProjekt(wurzel, p.AssemblyName)))
         {
@@ -28,7 +28,16 @@ public static class Lagepruefung
             foreach (var r in projekt.ProjectReferences.Select(r => solution.GetProject(r.ProjectId)?.AssemblyName).OfType<string>())
                 if (P.IstProjekt(wurzel, r) && !erlaubt.Contains(r))
                     befunde.Add($"{projekt.AssemblyName} referenziert {r} — erlaubt sind nur {(erlaubt.Count == 0 ? "keine Rollen-Projekte" : string.Join(", ", erlaubt))} (docs/07 §7.2)");
+                else if (P.IstKatalog(r) && !P.NutzenKataloge.Contains(P.Zerlege(projekt.AssemblyName).Rolle))
+                    befunde.Add($"{projekt.AssemblyName} referenziert den Katalog {r} — die Domäne kennt keine Funktionsnachricht; Kataloge nutzen nur "
+                        + $"{string.Join(", ", P.NutzenKataloge.Select(x => P.Projekt(wurzel, x)))} (docs/07 §7.2)");
         }
+        // ── Kataloge: sie referenzieren nur Abstractions, das Framework und andere Kataloge, nie eine Anwendung ──
+        foreach (var katalog in solution.Projects.Where(p => P.IstKatalog(p.AssemblyName)))
+            foreach (var r in katalog.ProjectReferences.Select(r => solution.GetProject(r.ProjectId)).OfType<Project>())
+                if (!P.IstKatalog(r.AssemblyName) && !P.KatalogDarfReferenzieren.Contains(r.AssemblyName) && !IstGenerator(r))
+                    befunde.Add($"Der Katalog {katalog.AssemblyName} referenziert {r.AssemblyName} — ein Katalog kennt nur {string.Join(", ", P.KatalogDarfReferenzieren)} "
+                        + "und andere Kataloge, nie eine Anwendung (docs/07 §7.2)");
         if (solution.Projects.FirstOrDefault(p => p.AssemblyName == P.CodegenWerkzeug) is { } codegen)
         {
             var refs = codegen.ProjectReferences.Select(r => solution.GetProject(r.ProjectId)?.AssemblyName).OfType<string>().ToHashSet(StringComparer.Ordinal);
@@ -42,7 +51,7 @@ public static class Lagepruefung
         var lageart = new Lageart(domaene.First().Compilation, typen);
         foreach (var (projekt, typ, datei) in deklarationen)
         {
-            if (lageart.Von(typ) is not { } p || !P.IstProjekt(wurzel, projekt.AssemblyName)) continue;
+            if (lageart.Von(typ) is not { } p || !(P.IstProjekt(wurzel, projekt.AssemblyName) || P.IstKatalog(projekt.AssemblyName))) continue;
             if (P.PruefeProjekt(wurzel, projekt.AssemblyName, p, typ.Name) is { } b) befunde.Add(b);
             var verzeichnis = Path.GetDirectoryName(projekt.FilePath!)!;
             var rel = Path.GetRelativePath(verzeichnis, datei).Replace('\\', '/');
@@ -52,6 +61,9 @@ public static class Lagepruefung
         }
         return befunde.Distinct(StringComparer.Ordinal).ToList();
     }
+
+    /// <summary>Ein Generator- bzw. Analyzer-Projekt des Frameworks (als <c>OutputItemType="Analyzer"</c> eingebunden): sein Code ist im Katalog nicht sichtbar.</summary>
+    private static bool IstGenerator(Project p) => p.AssemblyName.EndsWith(".SourceGeneration", StringComparison.Ordinal);
 
     /// <summary>Jede handgeschriebene Typ-Deklaration (auch jedes partial-Teil) mit ihrer Datei.</summary>
     private static IEnumerable<(Project Projekt, INamedTypeSymbol Typ, string Datei)> Deklarationen(Project projekt, Compilation c, Quelltexte quelltexte)

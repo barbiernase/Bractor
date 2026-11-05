@@ -1,0 +1,6 @@
+using Abstractions;
+
+namespace Sondenkatalog.Katalog.Peilung;
+
+/// <summary>Ein Graph im Katalog: peilen, dann melden — hinaus gehen nur Hinweise.</summary>
+public sealed record Peilkette([Kopf] Peilung Peilen, [Von(nameof(Peilen))] Peilmeldung Melden) : IGraph;

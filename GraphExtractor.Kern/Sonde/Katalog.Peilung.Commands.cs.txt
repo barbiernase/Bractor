@@ -1,0 +1,13 @@
+using Abstractions;
+
+// SONDE — ein fremder FUNKTIONSKATALOG (docs/plan-katalog-und-graphen.md): ein eigenes Projekt Sondenkatalog.Katalog, das nur Abstractions kennt,
+// mit Funktionen, ihren Nachrichten (Commands ohne Ziel, Hinweise), Konfig, Technik und einem Graphen — domänenneutral. Die Abläufe der Anwendung
+// nutzen ihn per Referenz; keine Anwendung liegt darunter.
+
+namespace Sondenkatalog.Katalog.Peilung;
+
+/// <summary>Eine Peilung ist anzufordern: Frequenz und Dauer.</summary>
+public record Peile(double FrequenzMhz, int DauerMs) : ICommand;
+
+/// <summary>Die Peilung ist gelungen: Richtung in Grad und Güte.</summary>
+public record Gepeilt(double FrequenzMhz, double RichtungGrad, double Guete) : ICommand;

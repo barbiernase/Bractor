@@ -53,6 +53,18 @@ public class LageAnalyzerTests
     }
 
     [Fact]
+    public async Task Ein_Katalog_traegt_Funktionen_Nachrichten_und_Hinweise_aber_keine_Domaene()
+    {
+        // Funktion, Graph, Commands zwischen Knoten, Konfig und Hinweis gehören in einen Katalog (docs/plan-katalog-und-graphen.md) …
+        (await Befunde("Bild.Katalog", Bausteine + "public record Unlesbar(string Pfad) : ITransientEvent;")).Should().BeEmpty();
+        // … ein Fakt im Log und ein Aggregat nicht: ein Katalog kennt keine Domäne.
+        var befunde = await Befunde("Bild.Katalog", "public record Gelesen(int N) : IEvent; public record Zaehle(Id<Zaehler> AggregateId) : ICommand<Zaehler>; "
+            + "public partial class Zaehler : IState { public int Version { get; set; } public Guid Id { get; set; } }");
+        befunde.Should().HaveCount(3).And.OnlyContain(b => b.Contains("gehört nicht in einen Katalog (Bild.Katalog)"));
+        befunde.Should().Contain(b => b.Contains("'Gelesen' ist ein Event"));
+    }
+
+    [Fact]
     public async Task Leseseite_und_Akteure_haben_ihre_Projekte()
     {
         const string code = """
@@ -85,6 +97,18 @@ public class LageAnalyzerTests
         Projektstruktur.Datei(Projektstruktur.Primitive.Client, "Theke").Should().Be("Clients.cs");
         Projektstruktur.BereichAus("Domain.Pipeline", "Domain.Pipeline.ImagePair").Should().Be("ImagePair");
         Projektstruktur.BereichAus("Domain.Pipeline", "Domain.ImagePair").Should().BeNull();
+        // Kataloge: eigene Wurzel, keine Rolle EINER Anwendung (Projekte kennt sie nicht), ihr Projekt aus dem Namespace.
+        Projektstruktur.Zerlege("Bild.Verarbeitung.Katalog").Should().Be(("Bild.Verarbeitung", Projektstruktur.Rolle.Katalog));
+        Projektstruktur.IstKatalog("Bild.Katalog").Should().BeTrue();
+        Projektstruktur.IstKatalog(".Katalog").Should().BeFalse();
+        Projektstruktur.KatalogVon("Bild.Katalog.Skalierung").Should().Be("Bild.Katalog");
+        Projektstruktur.KatalogVon("Bild.Katalog").Should().Be("Bild.Katalog");
+        Projektstruktur.KatalogVon("Bild.Katalogisierung").Should().BeNull();
+        Projektstruktur.KatalogeIn("""<ProjectReference Include="..\Domain\Domain.csproj" /><ProjectReference Include="..\Bild.Katalog\Bild.Katalog.csproj" />""")
+            .Should().Equal("Bild.Katalog");
+        Projektstruktur.Datei(Projektstruktur.Primitive.Hinweis, "Unlesbar").Should().Be("Events.cs");
+        Projektstruktur.PruefeOrt("Bild.Katalog", "Skalierung/Verkleinern.cs", "Bild.Katalog.Skalierung", Projektstruktur.Primitive.Funktion, "Verkleinern", null)
+            .Should().BeEmpty();
     }
 
     [Fact]

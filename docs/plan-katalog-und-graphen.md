@@ -117,10 +117,16 @@ Gesten-Skript der Sonde, eine neue Regel die Grammatik; die Doku zieht im selben
 IFunktion-Doku und docs/10-Beispiel ohne Port-Formen, `BausteinEingang.Ports` samt Join-Resten entfernt, Schalter „Schnittstelle (läuft
 draußen)“ nur noch für Technik. Schnelle Stufe grün.
 
-### Schritt 2 — Kataloge anlegen und füllen
+### Schritt 2 — Kataloge anlegen und füllen (umgesetzt, Abnahme im Editor offen)
+
+Umgesetzt: Rolle `Katalog` und Primitive `Hinweis` in `Projektstruktur`/`Lageart` (CQRS098 im Katalog: Fakt, Aggregat-Command, Aggregat
+gehören nicht hinein), `Projektlage` zählt genutzte Kataloge zur Anwendung (auch leere), `--check` prüft die Referenzrichtung, Codegen und
+Werkbank-Stand nehmen die Kataloge der Abläufe mit, Geste `/api/werkbank/katalog` (anlegen, nutzen; kaltes Neuladen danach), Baukasten je
+Katalog mit „＋ 📚 Katalog“ und „＋ Funktion“, Picker der Fläche „📚 Katalog“, im Funktionsformular „＋ neuer Eingang“; Sonde mit fremdem
+Katalog `Sondenkatalog.Katalog` als eigenem Projekt. Hinweise liegen im Katalog in `Events.cs` (wie bei der Schreibseite), nicht in `Hinweise.cs`.
 
 - **Code:** `Projektstruktur.cs` bekommt die Rolle `Katalog` (Suffix `.Katalog`, referenziert nur `Abstractions`, Sammeldateien `Commands.cs`,
-  `Hinweise.cs`, `Konfigs.cs`, `Enums.cs`, `Graphen.cs`; Funktion und Technik je eigene Datei). Die Anwendung (`.Pipeline`) darf Kataloge
+  `Events.cs` (Hinweise), `Konfigs.cs`, `Enums.cs`, `Graphen.cs`; Funktion und Technik je eigene Datei). Die Anwendung (`.Pipeline`) darf Kataloge
   referenzieren, Schreib- und Leseseite nicht (Lage-Prüfung CQRS098).
 - **Codegen:** Nachrichten eines Katalogs kommen in Leitung und Proto der Anwendung, sobald ein Akteur sie hört oder hineingibt.
 - **Werkbank-Server:** die Geste „neuer Katalog“ schreibt die Projektdatei aus der Tabelle (Analyzer-Referenz, `Abstractions`), trägt sie in die

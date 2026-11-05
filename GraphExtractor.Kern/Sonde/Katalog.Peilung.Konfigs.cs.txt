@@ -1,0 +1,4 @@
+namespace Sondenkatalog.Katalog.Peilung;
+
+/// <summary>Die Konfig einer Peilung (Werte am Knoten der Instanz): ab welcher Güte sie gilt.</summary>
+public record PeilKonfig(double MindestGuete);

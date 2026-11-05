@@ -122,9 +122,10 @@ public sealed partial class Sicht
     }
 
     /// <summary>
-    /// Der Baukasten der Anwendung (<c>board.sicht.baukasten</c>): Funktionen (mit Verwendung in Graphen und den Typargumenten generischer),
-    /// Graphen, Katalog, Technik (mit Umsetzungen und Nutzern), Konfig-Records und die Nachrichten, die Funktionen ausgeben (Commands ohne Ziel und
-    /// Hinweise, deren Besitzer eine Funktion ist).
+    /// Der Baukasten der Anwendung (<c>board.sicht.baukasten</c>): Funktionen (mit Verwendung in Graphen, den Typargumenten generischer und ihrem
+    /// Katalog — <c>null</c> = in der Anwendung), die Kataloge, die die Anwendung nutzt, Graphen, der Katalog des Frameworks (Quellen), Technik (mit
+    /// Umsetzungen und Nutzern), Konfig-Records und die Nachrichten, die Funktionen ausgeben (Commands ohne Ziel und Hinweise, deren Besitzer eine
+    /// Funktion ist).
     /// </summary>
     public JsonObject Baukasten()
     {
@@ -136,7 +137,7 @@ public sealed partial class Sicht
             var o = new JsonObject
             {
                 ["karte"] = "fb:" + S(f, "_id"), ["name"] = S(f, "name"), ["quelle"] = L(f, "lauscht").Any(),
-                ["verwendet"] = Arr(Verwendet(S(f, "name"))),
+                ["verwendet"] = Arr(Verwendet(S(f, "name"))), ["katalog"] = Abstractions.Projektstruktur.KatalogVon(S(f, "namespace")),
             };
             if (Typargumente(S(f, "name")).ToList() is { Count: > 0 } ta) o["typargumente"] = Arr(ta);
             return (JsonNode)o;
@@ -165,9 +166,13 @@ public sealed partial class Sicht
         foreach (var r in _records.Where(r => S(r, "kind") is "command" or "rejection"))
             if (KarteVon.TryGetValue("rec:" + S(r, "name"), out var k) && Besitzer(k) is var b && b.StartsWith("fb:", StringComparison.Ordinal))
                 nachrichten.Add(new JsonObject { ["typ"] = S(r, "name"), ["sorte"] = Sorte(S(r, "name")), ["besitzer"] = b });
+        // Die Kataloge der Anwendung: die Projekt-Wurzeln (Verzeichnisse), die ein Katalog sind — auch ein leerer, eben angelegter.
+        var kataloge = Arr(Eintraege(_board["rahmen"]?["verzeichnisse"] as JsonObject).Select(e => e.Key)
+            .Where(ns => Abstractions.Projektstruktur.KatalogVon(ns) == ns).OrderBy(x => x, StringComparer.Ordinal));
         return new JsonObject
         {
-            ["funktionen"] = funktionen, ["graphen"] = graphen, ["katalog"] = katalog, ["technik"] = technik, ["konfig"] = konfig, ["nachrichten"] = nachrichten,
+            ["funktionen"] = funktionen, ["kataloge"] = kataloge, ["graphen"] = graphen, ["katalog"] = katalog, ["technik"] = technik, ["konfig"] = konfig,
+            ["nachrichten"] = nachrichten,
         };
     }
 

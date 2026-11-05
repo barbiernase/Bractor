@@ -6,8 +6,8 @@ namespace DomainEditor;
 /// Wohin eine NEUE Karte gehört (<c>docs/07-projektstruktur.md</c>, Tabelle <see cref="P"/>): das Projekt folgt aus der Rolle ihrer Primitive,
 /// der Bereich aus dem Namespace, den die Karte mitbringt, der Dateiname aus der Tabelle. Ein neuer Konfig-Record in <c>Domain.ImagePair</c> landet
 /// so in <c>Domain.Pipeline/ImagePair/Konfigs.cs</c> mit dem Namespace <c>Domain.Pipeline.ImagePair</c> — der Server entscheidet (W3), nicht
-/// der Editor. Bestehendes (mit Datei) bleibt, wo es ist; Namespaces außerhalb der Rollen-Projekte der Wurzel bleiben unverändert (die
-/// Lage-Prüfung meldet sie).
+/// der Editor. Bestehendes (mit Datei) bleibt, wo es ist; Namespaces außerhalb der Rollen-Projekte der Wurzel bleiben unverändert — auch die
+/// eines Katalogs: was dort angelegt wird, bleibt im Katalog (die Lage-Prüfung meldet, was dort nicht hingehört).
 /// </summary>
 public static class Strukturort
 {
@@ -60,9 +60,9 @@ public static class Strukturort
         return null;
     }
 
-    /// <summary>Liegt der Namespace in einem Rollen-Projekt der Wurzel (dann gelten die Dateiregeln der Tabelle)?</summary>
+    /// <summary>Liegt der Namespace in einem Rollen-Projekt der Wurzel oder in einem Katalog (dann gelten die Dateiregeln der Tabelle)?</summary>
     public static bool InStruktur(string ns, string wurzel = P.StandardWurzel) =>
-        P.Projekte(wurzel).Any(p => ns == p || ns.StartsWith(p + ".", StringComparison.Ordinal));
+        P.KatalogVon(ns) != null || P.Projekte(wurzel).Any(p => ns == p || ns.StartsWith(p + ".", StringComparison.Ordinal));
 
     /// <summary>
     /// Die Commands ohne Ziel, die kein Decide abgibt (Signatur-Fakt je <c>Decide</c>) — nur Knoten geben sie einander, sie liegen bei den Abläufen
@@ -88,7 +88,8 @@ public static class Strukturort
     {
         RecordArt.Command when funktionsErgebnisse.Contains(r.Name) => P.Primitive.KnotenCommand,
         RecordArt.Command => P.Primitive.Command,
-        RecordArt.Event or RecordArt.Rejection => P.Primitive.Event,
+        RecordArt.Event => P.Primitive.Event,
+        RecordArt.Rejection => P.Primitive.Hinweis,
         RecordArt.ValueObject => P.Primitive.Wertobjekt,
         RecordArt.Query when aggregatfragen.Contains(r.Name) => P.Primitive.AggregatQuery,
         RecordArt.Antwort when aggregatfragen.Contains(r.Name) => P.Primitive.AggregatAntwort,

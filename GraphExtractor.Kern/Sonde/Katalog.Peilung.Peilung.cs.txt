@@ -1,0 +1,15 @@
+using System.Threading.Tasks;
+using Abstractions;
+
+namespace Sondenkatalog.Katalog.Peilung;
+
+/// <summary>Peilt eine Frequenz mit Technik und Konfig — eine WAHL: gepeilt oder ein Hinweis.</summary>
+public sealed class Peilung(PeilKonfig konfig, IPeilempfaenger empfaenger) : IFunktion
+{
+    public async Task<OneOf<Gepeilt, PeilungUnmoeglich>> Auf(Peile p)
+    {
+        var messung = await empfaenger.PeileAsync(p.FrequenzMhz, p.DauerMs);
+        if (messung[1] < konfig.MindestGuete) return new PeilungUnmoeglich(p.FrequenzMhz, "Güte zu gering");
+        return new Gepeilt(p.FrequenzMhz, messung[0], messung[1]);
+    }
+}
