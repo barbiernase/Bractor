@@ -1,9 +1,19 @@
 # Plan: Funktionskatalog, Übersetzung und die Modale für Funktion und Graph
 
-Stand 2026-11-05, **Schritt 1 umgesetzt**, der Rest ist Plan. Er fasst die Diskussion vom 2026-11-04/05 zusammen. Umgesetzt wird schrittweise,
+Stand 2026-11-05, **Schritte 1–4 umgesetzt und abgenommen**, der Rest ist Plan; §1 „Wer Funktionen anstößt“ geht allem Folgenden vor. Er fasst die Diskussion vom 2026-11-04/05 zusammen. Umgesetzt wird schrittweise,
 je Schritt auf Tobis Wort (E5). Jeder Schritt baut für sich, lässt alle Suiten grün und liefert seinen Teil im Editor gleich mit (§1.1).
 
 ## 1. Was entschieden ist
+
+**Wer Funktionen anstößt (2026-11-05, nach Schritt 4 — geht allem Folgenden vor).** Nur **Clients** (ein Akteur mit `IDarf<T>`) und **Quellen**
+(Dateiwächter, Taktgeber, Webhook, eigene, die lauschen) stoßen Funktionen an. Ein `Decide` übersetzt einen Command in Events (dazu Hinweise und
+Fristen) — sonst nichts; dass seine Signatur auch einen Command ohne Ziel ausgeben könnte, bildet der Editor nicht ab. Es gibt **keine Arbeit für
+Akteure** aus einem `Decide`, **keine Ereignisquelle**, keinen neuen Knotentyp dafür. Wir haben Eventual Consistency: der Client sieht den Stand über
+die Projektionen (Push „aktualisiert“, er fragt neu); was nach einem Fakt weitergehen soll, stößt der Client an. Der Weg ist immer:
+
+```
+Client / Quelle ─▶ Funktion / Übersetzer ─▶ Command ─▶ Decide ─▶ Events ─▶ Projektionen ─▶ Client
+```
 
 **Ein `Auf` nimmt eine Nachricht.** Es gibt kein Bündel für Funktionen. Was später zusammen gebraucht wird, trägt die Nachricht mit.
 
@@ -49,8 +59,8 @@ Hardware ist (`Rechner` in der Instanz), ohne Umzug. Eine Funktion hat keine fac
 ein Aggregat. Der Plan führt keinen neuen Actor ein.
 
 **Zwischenergebnisse.** Ein Kompositionsgraph darf an jeder Stelle übersetzen (Gabel über Kanten). Der Command geht hinaus, sobald die Übersetzung
-läuft. Was lang, teuer oder auf anderer Hardware ist oder worüber die Domäne entscheiden soll, wird eine eigene Stufe über das Aggregat: Graph →
-Aggregat → Auftrag → Graph.
+läuft. Was lang, teuer oder auf anderer Hardware ist oder worüber die Domäne entscheiden soll, wird eine eigene Stufe: Graph → Aggregat → Events →
+**Client** → nächster Graph (der Client sieht das Ergebnis über die Projektion und stößt die nächste Stufe an).
 
 **Zwei Wege, Graphen zu komponieren.** Als Schachtel (Graph als Knoten: eine Instanz, gleicher Rechner) oder über eine Nachricht an den Kopf eines
 anderen Graphen (eigene Instanz, eigener Rechner). Katalogbausteine sind fein, damit ein Setting Zwischenstände abgreifen kann.
@@ -83,10 +93,11 @@ Neu im Code sind also genau ein generischer Knotentyp und ein Attribut. Alles an
 - **A1 Feldzuordnung automatisch.** Für jeden Konstruktor-Parameter von `TAus` sucht der Generator eine Quelle, in dieser Reihenfolge:
   1. `[Feld]` am Knoten;
   2. eine Eigenschaft von `TEin` mit gleichem Namen, deren Typ in C# **implizit zuweisbar** ist;
-  3. ein `Id<T>` eines Aggregats aus der Herkunft der Kette (`h.Id<T>()`), nur wenn jeder Kopf, von dem der Knoten erreichbar ist, aus einem
-     `Decide` von `T` kommt;
-  4. der Standardwert des Parameters;
-  5. sonst ein Build-Fehler.
+  3. der Standardwert des Parameters;
+  4. sonst ein Build-Fehler.
+
+  Die Id des Ziel-Aggregats kommt also aus der Nachricht (ein Feld `Id<T>` gleichen Namens, oder ausdrücklich `[Feld]`, auch von einem `Guid`).
+  Der frühere Rückgriff auf die Herkunft der Kette entfällt: keine Kette beginnt mehr in einem `Decide`.
 
   `Guid` → `Id<T>`, fremde Enums und fremde Wertobjekte werden nie stillschweigend zugeordnet.
 - **A2 Die Zuordnung steht im Graph-Record**, als Typargumente und `[Feld]` am Knoten. Eine Übersetzung wiederverwenden heißt, den Knoten
@@ -183,38 +194,50 @@ Neue Funktionen tragen die Id, die der Server ihnen gibt (`funktion:<Name>`), da
 
 **Fertig, wenn** sich ein Graph aus Katalogfunktionen vollständig im Editor anlegen, verbinden und als Instanz durchspielen lässt.
 
-### Schritt 5 — Die Übersetzung
+### Schritt 5 — Die Übersetzung und die Eingänge (nächster Schritt)
 
 - **Code:** `Abstractions`: `Uebersetze<TEin, TAus>` (versiegelt, nur als Knotentyp) und `FeldAttribute`. Eine Lesart `Uebersetzungsform.cs`
-  (per Link in Generator, Analyzer, Extractor): Ports aus den Typargumenten, Zuordnung nach A1, Herkunfts-Prüfung über die Köpfe und die
-  `Decide`-Signaturen. `Graphform`: ein Knoten ist Funktion, Graph **oder Übersetzung**, Regeln unverändert.
+  (per Link in Generator, Analyzer, Extractor): Ports aus den Typargumenten, Zuordnung nach A1. `Graphform`: ein Knoten ist Funktion, Graph
+  **oder Übersetzung**, Regeln unverändert. Eine Übersetzung kann Kopf sein (Eingang: Client-Nachricht ↦ Katalog-Eingang) oder hinten stehen
+  (Ausgang: Funktionsnachricht ↦ Command an ein Aggregat).
 - **Generator und Laufzeit:** je Übersetzungsknoten eine erzeugte Methode; Wegtabelle (Knoten, Typ) → Übersetzung; inline gerechnet (heraus im
   Kind vor dem Emitter, am Kopf beim Annehmen); Command-Id aus Aufruf und Stelle; Wirker `uebersetzung:<graph>/<knoten>`.
-- **Analyzer** ab CQRS119: Zuordnung unvollständig oder Typ nicht zuweisbar; `Id<T>` nicht aus der Herkunft ableitbar; Katalog-Command verlässt
-  den Kompositionsgraphen (A3); `TEin`/`TAus` keine Nachricht. Gegenstücke in `Grammatik.cs`.
-- **Editor:** „＋“ an einem Ausgangsport bietet „→ ▣ Aggregat“ (Command vorhanden oder neu samt `Decide`) und legt den Übersetzungsknoten an;
-  am linken Rand „＋ Kopf aus einem Auftrag der Domäne“. Die **↦-Karte** zeigt links die Felder von `TEin`, rechts die Parameter von `TAus`, je
-  Verbindung ihre Regel; ＋ an einem offenen Ziel hebt passende Quellen hervor, ein Klick schreibt `[Feld]`. Die Zuordnung rechnet der Server.
-- **Tests:** Prüfstand (Zuordnung, Wegtabelle, Inline-Rechnung), Analyzer-Tests, Prüfdomäne: genau einmal an ein Aggregat, auch nach einem
-  Neustart mitten in der Kette (Kategorie `Garantie`).
-- **Doku:** docs/04 §4.4, 05, 10 (Grammatik, Regel, Entscheidung), 11.
+- **Analyzer** ab CQRS119: Zuordnung unvollständig oder Typ nicht zuweisbar; Katalog-Command verlässt den Kompositionsgraphen (A3);
+  `TEin`/`TAus` keine Nachricht. Gegenstücke in `Grammatik.cs`.
+- **Editor:**
+  - Graph-Modal, linker Rand „＋ Eingang“: **Quelle** (Katalog oder eigene) oder **Client** (vorhandene oder neue Nachricht in der Anwendung, dazu
+    der Akteur, der sie darf → `IDarf<T>`; Kopf ist eine Funktion der Anwendung, die sie nimmt, oder die Eingangs-Übersetzung in einen Katalog).
+  - „＋“ an einem Ausgang bietet „→ ▣ Command an …“ (vorhanden oder neu samt `Decide`) und legt die Ausgangs-Übersetzung an.
+  - Aggregat-Modal: an jedem Command „＋ Graph, der ihn schickt“ (neuer Graph im Bereich des Aggregats mit der Ausgangs-Übersetzung als letztem
+    Knoten, öffnet ihn); unter den Ergebnissen eines `Decide` **kein „Command ohne Ziel“** mehr (weder Spaltenkopf noch gestrichelt).
+  - Die **↦-Karte** zeigt links die Felder von `TEin`, rechts die Parameter von `TAus`, je Verbindung ihre Regel; ＋ an einem offenen Ziel hebt
+    passende Quellen hervor, ein Klick schreibt `[Feld]`. Die Zuordnung rechnet der Server.
+  - Der Picker der Fläche legt keinen leeren Graphen mehr an (der baut nicht, CQRS115): ein Graph entsteht mit seinem ersten Knoten (aus dem
+    Aggregat, über „＋ Eingang“ oder mit einer Funktion).
+- **Tests:** Prüfstand (Zuordnung, Wegtabelle, Inline-Rechnung), Analyzer-Tests, Prüfdomäne: eine Client-Nachricht über einen Katalog genau einmal
+  an ein Aggregat, auch nach einem Neustart mitten in der Kette (Kategorie `Garantie`).
+- **Doku:** docs/04 §4.4, 05, 10 (Grammatik, Regel, Entscheidung, Editor §10.9), 11.
 
-**Fertig, wenn** der Trainingslauf aus §1 vollständig im Editor entsteht (Katalog, Funktionen, Graph, Übersetzungen, neuer Command samt
-`Decide`), baut, durchgespielt genau einmal schreibt und Garantie-Suite und schnelle Stufe grün sind.
+**Fertig, wenn** im Editor ein Client-Eingang → Katalogfunktion → Ausgangs-Übersetzung → Command an ein Aggregat vollständig entsteht, baut, durchgespielt
+(Konsole „als Akteur“) genau einmal schreibt und Garantie-Suite und schnelle Stufe grün sind.
 
-### Schritt 6 — Bestand umziehen, im Editor
+### Schritt 6 — Bestand umziehen und Abbau
 
-- Die Bildaufbereitung wird ein Katalog, angelegt und befüllt über den Editor bzw. per Verschieben (Lage-Geste); der Linienimport komponiert ihn
-  mit Übersetzungen. `Bildeingang` bleibt Anwendungsfunktion oder wird Katalogfunktion plus Übersetzung (hier entscheiden).
-- `TeilFertigMeldung` wird `Uebersetze<TeilFertig, MeldeTeilFertig>`; die reinen Abbildungen der Prüfdomäne ebenso.
+- Jeder Auftrag aus einem `Decide` wird ein Event, auf das ein Client reagiert: `PaarZuBeurteilen`, `TrainingZuRechnen`, `RangeAufzuloesen`,
+  `EinfrierenAbzuschliessen`, `TeilFertig`, `AuftragAbzuwickeln` samt Gegenzügen, `Zubuchen` (Beispiel- und Prüfdomäne, Sonde).
+- Abbau: Arbeit für Akteure (`IHoert<Command ohne Ziel>`, Werkstatt, `ArbeitsAuftrag`/`ArbeitsErgebnis`, `Umgebung:Hand`, Reiter „Aufträge“), der
+  offene Eingang aus dem `Decide` (`cqrs_eingaenge` im selben Commit), die Kante „Arbeit“ der Fläche; danach eine Build-Regel: ein `Decide` gibt
+  nur Events, Hinweise und Fristen aus. Die Garantie-Tests der Abläufe laufen danach über Clients.
+- Die Bildaufbereitung wird ein Katalog (über den Editor bzw. per Verschieben); der Linienimport komponiert ihn mit Übersetzungen. `Bildeingang`
+  bleibt Anwendungsfunktion oder wird Katalogfunktion plus Übersetzung (hier entscheiden). `TeilFertigMeldung` wird eine Übersetzung.
 - A4 am Bestand neu entscheiden. Umgebungen ziehen mit, das Verhaltens-Netz bleibt grün.
 
-**Fertig, wenn** die volle Stufe grün ist und die Fläche die Graphen wie vorher zeigt.
+**Fertig, wenn** die volle Stufe grün ist und kein `Decide` mehr einen Command ohne Ziel ausgibt.
 
 ### Schritt 7 — Fläche und Abnahme
 
-- Picker der Fläche nach A7; die Fläche zeigt die obersten Graphen und ihre Verbindungen, Kataloge stehen im Baukasten; ein Auftrag der Domäne
-  ohne Graph ist an seinem Aggregat sichtbar.
+- Picker der Fläche nach A7; die Fläche zeigt die obersten Graphen und ihre Verbindungen, Kataloge stehen im Baukasten; ein Command, den kein Graph und kein
+  Akteur schickt, ist an seinem Aggregat sichtbar.
 - Volle Stufe mit `--check`, `--sonde`, `--grammatik`, Codegen-Drift und `./pruefe-checkout.sh`; Werkbank-Abnahme.
 - Doku: docs/04, 05, 07 (neue Rolle), 10 (Grammatik, Regeln, Entscheidungen, Editor §10.9), 11, 13, README, CLAUDE.md.
 
