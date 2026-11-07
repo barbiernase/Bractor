@@ -166,8 +166,8 @@ public class AkteurRechteTests
         var verweigert = AkteurTor.Wende(wunsch, R("Klassifizierer"), Loese);
 
         wunsch.AllowedCommands.Should().BeEquivalentTo("KlassifiziereBildPaarDurchKi", "KlassifiziereEinzelBildDurchKi");
-        wunsch.SubscribedEvents.Should().Equal("BildVerfuegbar");
-        verweigert.Should().Equal("hören: ImagePairKomplett", "hören: TrainingAngefordert");
+        wunsch.SubscribedEvents.Should().Equal("BildVerfuegbar", "ImagePairKomplett");
+        verweigert.Should().Equal("hören: TrainingAngefordert");
     }
 
     [Fact]

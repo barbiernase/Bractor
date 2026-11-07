@@ -236,6 +236,13 @@ bis zum Host. Nicht im Editor durchgespielt (lokal kein Postgres); „genau einm
 
 ### Schritt 6 — Bestand umziehen und Abbau
 
+**Stand 2026-11-07:** die Beispieldomäne ist umgezogen — kein `Decide` gibt dort einen Auftrag aus. Die Bildaufbereitung ist ein Katalog
+(`Bildvorschau.Katalog`), der Linienimport übersetzt sein Ergebnis (`BildGedeutet` ↦ `NimmBildAuf`). Auf die Fakten reagieren Clients: der
+`ReaktionsWorker` (.NET, `Domain.Client.Worker`: Range, Einfrieren, Teilmeldung) und die Python-Worker (Klassifizieren auf `ImagePairKomplett`,
+Training auf `TrainingAngefordert`, Abbruch über den Stand des Laufs). Dazu: die Command-Hülle trägt die Ursache (die Spur bleibt über eine
+Reaktion lückenlos, ein Vorgang folgt ihr), die Log-Seite den Horizont (ein Client liest nach einer neuen Datenbank von vorn). Offen: die
+Prüfdomäne (ihre Aufträge an Graph-Köpfe und die Arbeit des Rechnungsprüfers) und der Abbau mit der Build-Regel.
+
 - Jeder Auftrag aus einem `Decide` wird ein Event, auf das ein Client reagiert: `PaarZuBeurteilen`, `TrainingZuRechnen`, `RangeAufzuloesen`,
   `EinfrierenAbzuschliessen`, `TeilFertig`, `AuftragAbzuwickeln` samt Gegenzügen, `Zubuchen` (Beispiel- und Prüfdomäne, Sonde).
 - Abbau: Arbeit für Akteure (`IHoert<Command ohne Ziel>`, Werkstatt, `ArbeitsAuftrag`/`ArbeitsErgebnis`, `Umgebung:Hand`, Reiter „Aufträge“), der
