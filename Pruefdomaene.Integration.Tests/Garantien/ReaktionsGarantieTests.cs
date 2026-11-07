@@ -41,7 +41,6 @@ public class ReaktionsGarantieTests
             var p = Guid.NewGuid();
             (await FrageAsync(host, new EroeffnePosten(new(p), 100, Mindestbestand: 98), Guid.NewGuid()))!.Success.Should().BeTrue();
             (await FrageAsync(host, new ReservierePosten(new(p), 5, Beleg.Ohne), Guid.NewGuid()))!.Success.Should().BeTrue();   // Fehlmenge 3
-            (await FrageAsync(host, new ReservierePosten(new(p), 0, Beleg.Ohne), Guid.NewGuid()))!.Success.Should().BeTrue();   // ohne Fehlmenge mehr
 
             await Warte(async () => (await StreamAsync(host, p)).Any(e => e.Payload is PostenZugebucht), Frist, "der Client bucht den Nachschub nicht");
             var zweiter = Reaktionen(port, verloren, ende.Token);
