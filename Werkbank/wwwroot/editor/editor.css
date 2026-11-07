@@ -850,3 +850,18 @@
 /* ＋ Graph an einer Domäne (Stufe 3): über der Spalte Graphen auf der Linie des Bands */
 #de .fl-band-plus{position:absolute;top:-11px;pointer-events:auto;background:#0f131b;border:1px solid var(--dc);color:var(--dc);border-radius:6px;padding:1px 8px;font:700 11px system-ui;cursor:pointer}
 #de .fl-band-plus:hover{background:color-mix(in srgb,var(--dc) 18%,#0f131b)}
+/* Ablauf auf der Fläche, aufgeklappt (Stufe 3): Eingang, Funktionen des Katalog-Graphen, je Output wohin er geht */
+#de .gnode2.fk-ablauf{width:330px}
+#de .fl-ablauf{margin:4px 8px 6px;padding:6px 8px;border:1px dashed #4b3f7a;border-radius:8px;background:#151225;font-size:11px;display:flex;flex-direction:column;gap:2px}
+#de .fl-ab-kopf{display:flex;align-items:center;gap:6px;margin-bottom:2px}
+#de .fl-ab-zu{background:transparent;border:none;color:#9a8fc0;cursor:pointer;padding:0 2px;font-size:12px}
+#de .fl-ab-graph{font:700 12px ui-monospace,monospace;color:#e6defc;cursor:pointer}
+#de .fl-ab-kat{margin-left:auto;color:#9a8fc0;font-size:10px}
+#de .fl-ab-ein{display:flex;flex-wrap:wrap;gap:3px 6px;align-items:center;padding-bottom:4px;border-bottom:1px solid #2a2346;margin-bottom:3px}
+#de .fl-ab-z{color:#b9c7e0;font:11px ui-monospace,monospace}
+#de .fl-ab-fn{font:700 11px ui-monospace,monospace;color:#d6cdf5;margin-top:3px;cursor:default}
+#de .fl-ab-out{display:flex;flex-wrap:wrap;align-items:center;gap:4px;padding-left:8px;font:11px ui-monospace,monospace;color:#8fa3c4}
+#de .fl-ab-w{color:#6f7d96}
+#de .fl-ab-ue{color:#7fd39a;background:#14261b;border:1px solid #2f6b44;border-radius:5px;padding:0 5px;cursor:pointer}
+#de .fl-ab-plus{background:transparent;border:1px solid #4b3f7a;color:#b9a9f0;border-radius:5px;padding:0 6px;font-size:10px;cursor:pointer}
+#de .fl-ab-plus.offen{border-color:#d9822b;color:#ffb35c;background:#2a1c0e}

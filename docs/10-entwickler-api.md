@@ -521,13 +521,19 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   die Projektreferenz mit. Ein Graph im Katalog hat keinen Eingang (Client, Quelle), kein „↦ ▣ Command an …“, keinen Empfänger am rechten Rand
   und keinen Reiter Instanzen; rechts stehen seine **Outputs** (die Signatur), der Baukasten zeigt nur Katalog-Inhalte. Er ist eine Blaupause:
   CQRS116 zählt seine Köpfe und Ausgänge erst dort, wo er als Knoten eines Graphen der Anwendung steht.
-- **Graph an eine Domäne binden** (Stufe 3, erster Teil): im Kopf jedes Domänen-Bands der Fläche steht „＋ Graph“ (über der Spalte Graphen). Er
-  bietet die Graphen der Kataloge an (läuft einer schon in einem Ablauf, steht es dabei: ein zweiter Lauf) und legt einen **Ablauf** im Bereich der
-  Domäne bei den Abläufen an (`<Wurzel>.Pipeline.<Bereich>`, der Katalog-Graph als `[Kopf]`-Knoten), der sich öffnet. Dort übersetzt „＋“ an einem
-  Output über „↦ ▣ Command an …“ nur in Commands der Aggregate dieser Domäne; neue Funktionen bietet ein Ablauf nicht an (sie gehören in den
-  Katalog). Das Band eines Graphen ist die Domäne seines Orts (`Projektstruktur.DomaeneDerAblaeufe`), wenn sie Aggregate hat, sonst wie bisher die
-  der Aggregate, an die er schreibt. Graphen eines Katalogs stehen nie auf der Fläche (Blaupausen). Offen: der Graph aufgeklappt auf der Fläche,
-  „＋ ↦“ dort, der Eingang links, „wer schickt ihn“ am Command.
+- **Graph an eine Domäne binden** (Stufe 3): im Kopf jedes Domänen-Bands der Fläche steht „＋ Graph“ (über der Spalte Graphen). Er bietet die
+  Graphen der Kataloge an (läuft einer schon in einem Ablauf, steht es dabei: ein zweiter Lauf) und legt einen **Ablauf** im Bereich der Domäne bei
+  den Abläufen an (`<Wurzel>.Pipeline.<Bereich>`, der Katalog-Graph als `[Kopf]`-Knoten). Das Band eines Graphen ist die Domäne seines Orts
+  (`Projektstruktur.DomaeneDerAblaeufe`), wenn sie Aggregate hat, sonst wie bisher die der Aggregate, an die er schreibt; Graphen eines Katalogs
+  stehen nie auf der Fläche (Blaupausen). Auf der Fläche steht ein Ablauf **aufgeklappt** (▾/▸ klappt ihn zu, gemerkt in der Ansicht): oben sein
+  Eingang (die Nachricht eines Clients ↦ Input samt den Akteuren, die sie dürfen, bzw. „⚠ kein Akteur“; eine Quelle; sonst „offen“) mit
+  „＋ Eingang“ (Client: neue Nachricht der Anwendung, Übersetzung in den Input, dann der Akteur; Quelle, deren Meldung der Input ist), darunter
+  die Funktionen des Katalog-Graphen nach Tiefe und je Output, wohin er geht — ein Knoten des Graphen, die ↦-Chips seiner Übersetzungen
+  (`↦ Command ▣ Aggregat`, Klick öffnet den Ablauf mit ihr gewählt), ein Hinweis an die Akteure — und „＋ ↦“ (orange, solange er offen ist und der
+  Ablauf deshalb nicht baut): ein Command eines Aggregats dieser Domäne oder ein neuer samt Decide, Event und Apply. Doppelklick auf eine Funktion
+  öffnet sie im Katalog-Modal, ein Klick auf den Graphen sein Graph-Modal. Im Aggregat-Modal steht an jedem Command „＋ wer schickt ihn“: die
+  offenen Outputs der Abläufe dieser Domäne (ein Klick übersetzt in den Command) und „＋ Graph an … binden“. Ein Ablauf bietet keine neuen
+  Funktionen an (sie gehören in den Katalog).
 - **Funktion von innen** (docs/plan-katalog-und-graphen.md, Schritt 3): dieselbe Mechanik in vier Spalten — Eingänge · Auf · Ausgänge · Rahmen
   (Konstruktor). Eingang ↔ Auf ist 1:1 (R2), Auf → Ausgänge frei; jeder Ausgang trägt seine Vielfachheit (1 Folge, 0..1 Wahl, 0..n Strom), im ✎ des
   Auf stehen Strom, asynchron (`Task`/`IAsyncEnumerable`), Herkunft und — nur in der Anwendung — die Lese-Fähigkeiten, dazu der Rumpf. „＋ Ausgang“
