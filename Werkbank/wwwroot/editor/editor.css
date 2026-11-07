@@ -847,3 +847,6 @@
 #de .kat-neu:hover{border-color:#ffd27a}
 #de .kat-neu.gross{padding:12px 10px}
 #de .kat-form{display:flex;gap:10px;flex-wrap:wrap;font-size:11px;color:#8f9bb0}
+/* ＋ Graph an einer Domäne (Stufe 3): über der Spalte Graphen auf der Linie des Bands */
+#de .fl-band-plus{position:absolute;top:-11px;pointer-events:auto;background:#0f131b;border:1px solid var(--dc);color:var(--dc);border-radius:6px;padding:1px 8px;font:700 11px system-ui;cursor:pointer}
+#de .fl-band-plus:hover{background:color-mix(in srgb,var(--dc) 18%,#0f131b)}

@@ -2151,6 +2151,9 @@
     const sq=FLGEO.spalten.quellen,sp=FLGEO.spalten.projektionen;
     if(sq&&sp)FLGEO.baender.forEach(b=>{const x1=sq.x-40,x2=sp.x+sp.w+40,name=b.id?(FL().baender.find(x=>x.id===b.id)||{}).name||b.id:"ohne Domäne";
       const fr=h("div",{class:"fl-band"},h("span",{class:"fl-band-t",title:b.id||""},name));fr.style.setProperty("--dc","hsl("+domHue(b.id||"§")+" 45% 55%)");
+      const sg=FLGEO.spalten.graphen;
+      if(b.id&&sg){const plus=h("button",{class:"fl-band-plus",title:"Einen Graphen aus einem Katalog an "+name+" binden — der Ablauf liegt im Bereich dieser Domäne und gehört ihr",
+        onclick:e=>{e.stopPropagation();flBandGraph(b.id,name,e);}},"＋ Graph");plus.style.left=(sg.x-x1)+"px";fr.append(plus);}
       Object.assign(fr.style,{left:x1+"px",top:b.y+"px",width:(x2-x1)+"px",height:b.h+"px"});ebene.append(fr);aus.y2=Math.max(aus.y2,b.y+b.h);});
     FLGEO.gruppen.forEach((r,id)=>{const g=FL().gruppen.find(x=>x.id===id)||{name:id};
       const fr=h("div",{class:"fl-gruppe"},h("span",{class:"fl-gruppe-t",title:"Store "+g.name+" — Klick: von innen öffnen",onclick:e=>{e.stopPropagation();komOeffne(id);}},"⧉ Store "+g.name));
@@ -2379,6 +2382,10 @@
         fn:()=>katEinsetzen(id,f.name,q.name,P.art==="von"?"davor":"dahinter")}));
       return [...kand,P.art==="von"?{tiefe:Math.max(0,q.tiefe-1),t:"＋ neue Funktion davor",u:"gibt "+P.typ+" aus — und nimmt eine neue Nachricht von außen",fn:e=>komFunktionNeu(id,"davor",q,P.typ,e)}
         :{tiefe:q.tiefe+1,t:"＋ neue Funktion mit diesem Input",u:"nimmt "+P.typ+" — sie öffnet sich danach im Katalog-Modal",fn:e=>komFunktionNeu(id,"dahinter",q,P.typ,e)}];}
+    // Ein Ablauf (ein Graph der Anwendung um einen Katalog-Graphen) hat keine eigenen Funktionen — die gehören in den Katalog; er übersetzt nur.
+    const ablauf=g&&(g.knoten||[]).some(k=>{const x=(MODEL.graphen||[]).find(y=>y.name===komBasis(k.typ));return !!x&&!!funKatalog(x);});
+    if(ablauf)return P.art==="von"||q.art==="uebersetzung"?[]:[{tiefe:q.tiefe+1,t:"↦ ▣ Command an …",u:"übersetzt "+P.typ+" in einen Command an ein Aggregat dieser Domäne (vorhanden oder neu samt Decide)",
+      fn:e=>komCommandAn(id,q,P.typ,e)}];
     return P.art==="von"?[{tiefe:Math.max(0,q.tiefe-1),t:"＋ neue Funktion davor",u:"gibt "+P.typ+" aus — und nimmt eine neue Nachricht von außen",fn:e=>komFunktionNeu(id,"davor",q,P.typ,e)}]
       :[{tiefe:q.tiefe+1,t:"＋ neue Funktion dahinter",u:"nimmt "+P.typ+" — sie öffnet sich danach von innen",fn:e=>komFunktionNeu(id,"dahinter",q,P.typ,e)},
         ...(q.art==="uebersetzung"?[]:[{tiefe:q.tiefe+1,t:"↦ ▣ Command an …",u:"übersetzt "+P.typ+" in einen Command an ein Aggregat (vorhanden oder neu samt Decide)",
@@ -3841,9 +3848,11 @@
       {hinweis:"Ohne Akteur gibt niemand "+m+" hinein — der Rand zeigt es an."}]);}
   // „↦ ▣ Command an …“ am Ausgang eines Knotens: ein vorhandener Command an ein Aggregat oder ein neuer samt Decide; dazwischen die Übersetzung.
   function komCommandAn(id,q,typ,ev){KOM.port=null;
-    const cmds=MODEL.records.filter(r=>r.kind==="command"&&r.aggregat).sort((a,b)=>(a.aggregat+a.name).localeCompare(b.aggregat+b.name));
-    menueFix(ev.clientX,ev.clientY,typ+" ↦ Command an …",[
-      {t:"＋ neuer Command an ein Aggregat …",fn:()=>menueFix(ev.clientX,ev.clientY,"An welches Aggregat?",MODEL.aggregate.map(A=>({t:"▣ "+A.name,
+    // Ein Ablauf im Bereich einer Domäne übersetzt nur in Commands ihrer Aggregate (die Zuordnung bleibt eindeutig, Konzept §7.5).
+    const g0=komModell(id),dom=g0&&ablaufDomaene(g0.namespace),eigene=MODEL.aggregate.filter(A=>!dom||A.namespace===dom),aggs=eigene.length?eigene:MODEL.aggregate;
+    const cmds=MODEL.records.filter(r=>r.kind==="command"&&r.aggregat&&aggs.some(A=>A.name===r.aggregat)).sort((a,b)=>(a.aggregat+a.name).localeCompare(b.aggregat+b.name));
+    menueFix(ev.clientX,ev.clientY,typ+" ↦ Command an …"+(dom&&eigene.length?" ("+dom.split(".").pop()+")":""),[
+      {t:"＋ neuer Command an ein Aggregat …",fn:()=>menueFix(ev.clientX,ev.clientY,"An welches Aggregat?",aggs.map(A=>({t:"▣ "+A.name,
         fn:()=>frageFix(ev.clientX,ev.clientY,"＋ Command an "+A.name,"Vermerke"+komBasis(typ),"Mit Decide und einem Event; Felder: die Id von "+A.name+" und die von "+komBasis(typ),n=>{
           const f=nameFehler(n);if(f)return f;
           // Ein Decide ergibt sein Event (ein leeres baute nicht): dieselben Felder ohne die Id, mit seinem Apply.
@@ -3961,6 +3970,23 @@
     if(KOM_NACH&&komDaten(KOM_NACH)){if(KOM){KOM.pfad.push(KOM_NACH);KOM.wahl=null;KOM.port=null;}else KOM={pfad:[KOM_NACH],reiter:"komposition",wahl:null};KOM_NACH=null;}
     if(KOM)komZeige();   // ein offenes Kompositions-Modal folgt dem neuen Board
   }
+  // ══ STUFE 3 (docs/konzept-funktionen-im-editor.md §4): „＋ Graph“ an einer Domäne bindet einen Graphen aus einem Katalog an sie. Es entsteht ein
+  //   Ablauf im Bereich der Domäne bei den Abläufen (ablaufNs) mit dem Katalog-Graphen als Knoten ([Kopf]); er gehört damit dieser Domäne (das Band
+  //   rechnet der Server aus dem Ort) und öffnet sich — Eingang und Übersetzungen der Outputs folgen dort. Bis jeder Output übersetzt ist, baut er nicht.
+  function ablaufDomaene(ns){const suf=(MODEL.rahmen||{}).ablaeufeSuffix||"",i=String(ns||"").indexOf(suf+".");return suf&&i>0?ns.slice(0,i)+"."+ns.slice(i+suf.length+1):null;}
+  function flBandGraph(dom,name,ev){const kurz=String(dom).split(".").pop(),ns=ablaufNs(dom);
+    const katGraphen=(MODEL.graphen||[]).filter(g=>funKatalog(g));
+    const laeuft=gn=>(MODEL.graphen||[]).filter(a=>!funKatalog(a)&&(a.knoten||[]).some(k=>komBasis(k.typ)===gn)).map(a=>a.name+(ablaufDomaene(a.namespace)?" ("+ablaufDomaene(a.namespace).split(".").pop()+")":""));
+    if(!katGraphen.length){menueFix(ev.clientX,ev.clientY,"＋ Graph an "+name,[{hinweis:"Noch kein Graph in einem Katalog — erst dort anlegen: Funktionen verketten im Graph-Modal."},
+      {t:"📚 Kataloge öffnen",fn:()=>katOeffne(null,null)}]);return;}
+    const binden=g=>setTimeout(()=>frageFix(ev.clientX,ev.clientY,"⬡ "+g.name+" an "+name,uniq(kurz+g.name.replace(/(Kette|Graph)$/,"")),
+      "Der Ablauf in "+ns+" — danach: Eingang links, Übersetzung jedes Outputs in einen Command eines Aggregats von "+name,n=>{const fe=nameFehler(n);if(fe)return fe;
+        if((MODEL.graphen||[]).some(x=>x.name===n))return n+" gibt es schon";
+        (MODEL.graphen=MODEL.graphen||[]).push({_id:"graph:"+n,name:n,namespace:ns,knoten:[{typ:g.name,name:komKnotenName({knoten:[]},g.name),kopf:true,von:[],verlierbar:[]}]});
+        KOM_NACH="gr:graph:"+n;gTitel("⬡ "+n+": "+g.name+" an "+name);render();}),0);
+    menueFix(ev.clientX,ev.clientY,"＋ Graph an "+name+" — welcher Graph?",[
+      ...katGraphen.map(g=>{const l=laeuft(g.name);return {t:"⬡ "+g.name+" · 📚 "+funKatalog(g).replace(/\.Katalog$/,"")+(l.length?" — läuft schon in "+l.join(", ")+" (ein zweiter Lauf)":""),fn:()=>binden(g)};}),
+      {trenn:1},{t:"📚 Kataloge öffnen (einen neuen Graphen anlegen)",fn:()=>katOeffne(null,null)}]);}
   function showPicker(canvas,sx,sy,wx,wy){
     canvas.querySelectorAll(".gpick").forEach(p=>p.remove());
     const pick=h("div",{class:"gpick"});pick.style.left=sx+"px";pick.style.top=sy+"px";

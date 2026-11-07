@@ -1,6 +1,6 @@
 # Konzept: Funktionen und Graphen im Editor, losgelöst von der Domäne
 
-Stand 2026-11-07, zweite Fassung nach Tobis Rückmeldung. **Stufe 1 (Katalog-Modal) und Stufe 2 (Graph-Modal im Katalog) sind umgesetzt** (docs/10 §10.9 „Kataloge“, „Graphen im Katalog“); offen aus ihr: Zustand (`IZustand<T>`) und „lauscht“ im Modal. Baut auf [plan-katalog-und-graphen.md](plan-katalog-und-graphen.md) auf (Schritte 1–5
+Stand 2026-11-07, zweite Fassung nach Tobis Rückmeldung. **Stufe 1 (Katalog-Modal) und Stufe 2 (Graph-Modal im Katalog) sind umgesetzt, von Stufe 3 „＋ Graph“ an jeder Domäne samt Band aus dem Ort** (docs/10 §10.9 „Kataloge“, „Graphen im Katalog“, „Graph an eine Domäne binden“); offen aus ihr: Zustand (`IZustand<T>`) und „lauscht“ im Modal. Baut auf [plan-katalog-und-graphen.md](plan-katalog-und-graphen.md) auf (Schritte 1–5
 umgesetzt) und ersetzt dessen Schritte 6 und 7, soweit sie den Editor betreffen. Keine Abwärtskompatibilität.
 
 ## 1. Der Weg in drei Stufen

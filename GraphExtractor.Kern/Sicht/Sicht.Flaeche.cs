@@ -85,18 +85,25 @@ public sealed partial class Sicht
             else if (GraphNamens(Basis(typ)) is { } inner) foreach (var x in Quellknoten(inner, gesehen)) yield return x;
         }
     }
-    /// <summary>Steht der Graph auf der Fläche — er gehört keinem anderen Graphen (sonst steht er in dessen Komposition)?</summary>
-    private bool AufFlaeche(JsonObject g) => KarteVon.TryGetValue("gr:" + S(g, "_id"), out var k) && !Besitzer(k).StartsWith("gr:", StringComparison.Ordinal);
+    /// <summary>
+    /// Steht der Graph auf der Fläche — er gehört keinem anderen Graphen (sonst steht er in dessen Komposition) und liegt nicht in einem Katalog
+    /// (eine Blaupause: sie steht im Katalog-Modal und kommt erst als Knoten eines Ablaufs auf die Fläche)?
+    /// </summary>
+    private bool AufFlaeche(JsonObject g) => KarteVon.TryGetValue("gr:" + S(g, "_id"), out var k) && !Besitzer(k).StartsWith("gr:", StringComparison.Ordinal)
+        && Abstractions.Projektstruktur.KatalogVon(S(g, "namespace")) == null;
 
     // ── Band (Domäne) ──
     private string? AggDomaene(string aggregat) =>
         KarteVon.TryGetValue("agg:" + aggregat, out var a) && Domaene(a) is var d && d != OhneDomaene ? d : null;
     /// <summary>
-    /// Das Band eines Graphen: die Domäne der Aggregate, an die er schreibt (seine Ausgänge mit Ziel), sonst derer, deren Decide seine Köpfe
-    /// speist — eindeutig; sonst die Domäne seiner Karte. Lese-Fähigkeiten zählen nicht (ein Graph liest oft fremde Stores).
+    /// Das Band eines Graphen: die Domäne, in deren Bereich er bei den Abläufen liegt (<c>Projektstruktur.DomaeneDerAblaeufe</c>), wenn es sie gibt —
+    /// so ordnet „＋ Graph“ an einer Domäne ihn ihr eindeutig zu. Sonst die Domäne der Aggregate, an die er schreibt (seine Ausgänge mit Ziel),
+    /// sonst derer, deren Decide seine Köpfe speist — eindeutig; sonst die Domäne seiner Karte. Lese-Fähigkeiten zählen nicht.
     /// </summary>
     private string? GraphBand(JsonObject g)
     {
+        if (Abstractions.Projektstruktur.DomaeneDerAblaeufe(S(g, "namespace")) is { } ort
+            && _aggregate.Any(a => AggDomaene(S(a, "name")) == ort)) return ort;
         string? Eine(IEnumerable<string> aggs)
         {
             var ds = aggs.Where(a => a.Length > 0).Select(AggDomaene).Where(d => d != null).Distinct().ToList();

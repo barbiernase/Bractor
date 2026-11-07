@@ -223,6 +223,19 @@ static class Projektstruktur
         return (name, Rolle.Schreibseite);
     }
 
+    /// <summary>
+    /// Die Domäne eines Namespace bei den Abläufen (docs/konzept-funktionen-im-editor.md §4): <c>&lt;Wurzel&gt;.Pipeline.&lt;Bereich&gt;</c> →
+    /// <c>&lt;Wurzel&gt;.&lt;Bereich&gt;</c> (der Bereich der Schreibseite derselben Wurzel) — ein Ablauf gehört der Domäne, in deren Bereich er liegt.
+    /// Ohne Bereich oder außerhalb der Abläufe <c>null</c>.
+    /// </summary>
+    public static string? DomaeneDerAblaeufe(string ns)
+    {
+        var suffix = Von(Rolle.Ablaeufe).Suffix + ".";
+        var i = (ns ?? "").IndexOf(suffix, StringComparison.Ordinal);
+        if (i <= 0 || KatalogVon(ns!) != null) return null;
+        return ns!.Substring(0, i) + "." + ns.Substring(i + suffix.Length);
+    }
+
     /// <summary>Ist <paramref name="projekt"/> ein Rollen-Projekt der Anwendung <paramref name="wurzel"/>?</summary>
     public static bool IstProjekt(string wurzel, string projekt) => Projekte(wurzel).Contains(projekt, StringComparer.Ordinal);
 

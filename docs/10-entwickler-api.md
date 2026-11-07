@@ -521,6 +521,13 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   die Projektreferenz mit. Ein Graph im Katalog hat keinen Eingang (Client, Quelle), kein „↦ ▣ Command an …“, keinen Empfänger am rechten Rand
   und keinen Reiter Instanzen; rechts stehen seine **Outputs** (die Signatur), der Baukasten zeigt nur Katalog-Inhalte. Er ist eine Blaupause:
   CQRS116 zählt seine Köpfe und Ausgänge erst dort, wo er als Knoten eines Graphen der Anwendung steht.
+- **Graph an eine Domäne binden** (Stufe 3, erster Teil): im Kopf jedes Domänen-Bands der Fläche steht „＋ Graph“ (über der Spalte Graphen). Er
+  bietet die Graphen der Kataloge an (läuft einer schon in einem Ablauf, steht es dabei: ein zweiter Lauf) und legt einen **Ablauf** im Bereich der
+  Domäne bei den Abläufen an (`<Wurzel>.Pipeline.<Bereich>`, der Katalog-Graph als `[Kopf]`-Knoten), der sich öffnet. Dort übersetzt „＋“ an einem
+  Output über „↦ ▣ Command an …“ nur in Commands der Aggregate dieser Domäne; neue Funktionen bietet ein Ablauf nicht an (sie gehören in den
+  Katalog). Das Band eines Graphen ist die Domäne seines Orts (`Projektstruktur.DomaeneDerAblaeufe`), wenn sie Aggregate hat, sonst wie bisher die
+  der Aggregate, an die er schreibt. Graphen eines Katalogs stehen nie auf der Fläche (Blaupausen). Offen: der Graph aufgeklappt auf der Fläche,
+  „＋ ↦“ dort, der Eingang links, „wer schickt ihn“ am Command.
 - **Funktion von innen** (docs/plan-katalog-und-graphen.md, Schritt 3): dieselbe Mechanik in vier Spalten — Eingänge · Auf · Ausgänge · Rahmen
   (Konstruktor). Eingang ↔ Auf ist 1:1 (R2), Auf → Ausgänge frei; jeder Ausgang trägt seine Vielfachheit (1 Folge, 0..1 Wahl, 0..n Strom), im ✎ des
   Auf stehen Strom, asynchron (`Task`/`IAsyncEnumerable`), Herkunft und — nur in der Anwendung — die Lese-Fähigkeiten, dazu der Rumpf. „＋ Ausgang“
