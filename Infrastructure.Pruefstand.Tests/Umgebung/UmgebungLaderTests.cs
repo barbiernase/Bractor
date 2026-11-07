@@ -107,7 +107,7 @@ public class UmgebungLaderTests
     }
 
     // ── Knoten einer Instanz: ihre Rahmenwerte; draußen läuft nur die Arbeit eines Akteurs ────────────────────────────────
-    // Die Bausteine der Beispieldomäne: Bildverkleinerung (Klasse mit Technik im Host), RangeAufloesung (Klasse mit Lese-Fähigkeit).
+    // Die Bausteine der Beispieldomäne: Bildverkleinerung (Klasse mit Technik im Host).
 
     private static FunktionsBaustein Baustein(string name) => Infrastructure.Komposition.Anwendung.Funktionen.Bausteine.Single(b => b.Name == name);
 
@@ -126,7 +126,6 @@ public class UmgebungLaderTests
     public void Die_Arbeit_eines_Akteurs_laeuft_draussen_eine_Funktion_im_Host()
     {
         FunktionsBausteinWiring.Baustein("Bildverkleinerung")!.Draussen.Should().BeFalse("eine Funktion ist eine Klasse im Host");
-        FunktionsBausteinWiring.Baustein("RangeAufloesung")!.Draussen.Should().BeFalse();
         var k = FunktionsBausteinWiring.Baustein("Klassifizierer")!;
         k.Draussen.Should().BeTrue("die Arbeit des Klassifizierers rechnet eine Sitzung, die ihn verkörpert");
         k.Eingaenge.Select(e => e.Typ).Should().Equal(typeof(Domain.ImagePair.PaarZuBeurteilen));
@@ -231,7 +230,7 @@ public class UmgebungLaderTests
         var u = UmgebungLader.Lade(new ConfigurationManager(), name, [], branch: "main");
         u.Umgebung.Name.Should().Be(name);
         GraphInstanzen.Aus(u.Graphen, Graphen, Infrastructure.Komposition.Anwendung.Akteure.Rechte).Alle.Select(i => i.Graph.Name)
-            .Should().BeEquivalentTo(["Linienimport", "Datensatzpflege", "Teilmeldung", "Klassifizierer", "TrainingsSystem"],
+            .Should().BeEquivalentTo(["Linienimport", "Teilmeldung", "Klassifizierer", "TrainingsSystem"],
                 "je Graph eine Instanz, dazu je Akteur mit Arbeit eine");
         if (name == "sim-main")
         {
@@ -251,9 +250,9 @@ public class UmgebungLaderTests
     public void Die_generierte_Tabelle_kennt_die_Funktionen_des_Bestands_alle_im_Host()
     {
         var b = GeneratedFunktionsBausteine.Alle.ToDictionary(x => x.Name);
-        b.Keys.Should().Contain(["Bildeinlesen", "Bildverkleinerung", "Kontrastausgleich", "Dateinamendeutung", "RangeAufloesung", "MitgliederEinfrieren"]);
+        b.Keys.Should().Contain(["Bildeinlesen", "Bildverkleinerung", "Kontrastausgleich", "Dateinamendeutung"]);
+        b.Keys.Should().NotContain(["RangeAufloesung", "MitgliederEinfrieren"], "die Datensatz-Reaktionen rechnet ein Client (Schritt 6)");
         b.Keys.Should().NotContain(["Klassifizierer", "TrainingsSystem"], "die Arbeit eines Akteurs ist keine generierte Funktion");
         b.Values.Should().OnlyContain(x => !x.Draussen, "eine Funktion ist eine Klasse im Host");
-        b["RangeAufloesung"].Liest.Should().BeTrue("mit Lese-Fähigkeit");
     }
 }

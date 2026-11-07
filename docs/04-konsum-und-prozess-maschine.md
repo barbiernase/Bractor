@@ -419,8 +419,8 @@ von dort an die Sitzungen der Akteure, die ihn hören — ohne Log, höchstens e
 **Bestand.** Beispieldomäne: der **Linienimport** bei ImagePair (`Dateiwaechter` → **Bildaufbereitung** aus `Bildvorschau.Katalog`:
 `Bildeinlesen` → `BildEingelesen` → `Bildverkleinerung` → `BildVerkleinert` → `Kontrastausgleich` → `VorschauErstellt` (trägt die Datei der Quelle
 mit) → `Dateinamendeutung` → `BildGedeutet`, im Ablauf übersetzt ↦ `NimmBildAuf` (flache Felder, das Decide baut `BildMeta` und `BildVersion`);
-`BildNichtLesbar` und `DateinameUnbekannt` sind Hinweise des Katalogs; die **Bildaufnahme** ist dasselbe ohne Dateiwächter, Kopf `DateiGefunden`), die **Datensatzpflege** (`RangeAufloesung` mit Kopf `RangeAufzuloesen`,
-`MitgliederEinfrieren` mit Kopf `EinfrierenAbzuschliessen`, beide mit Lese-Fähigkeit) und die **Teilmeldung** (`TeilFertigMeldung`, Kopf `TeilFertig`);
+`BildNichtLesbar` und `DateinameUnbekannt` sind Hinweise des Katalogs; die **Bildaufnahme** ist dasselbe ohne Dateiwächter, Kopf `DateiGefunden`), die Pflege eines Datensatzes als **Reaktion eines Clients** (Schritt 6: der `DatensatzWorker`, Akteur `Datensatzpfleger`, hört
+`RangeAngefordert` bzw. `EinfrierenAngefordert`, liest per Query und gibt `NimmRangeAuf` bzw. `SchliesseEinfrierenAb`; kein Graph mehr) und die **Teilmeldung** (`TeilFertigMeldung`, Kopf `TeilFertig`);
 Arbeit haben der `Klassifizierer` (`PaarZuBeurteilen`) und das `TrainingsSystem` (`TrainingZuRechnen`, die Antwort in Stücken). Prüfdomäne: der
 **Abrechnungsablauf** (`Freigabeautomat` gibt eine Rechnung bis 10 000 frei, darüber `RechnungZuPruefen` — Arbeit des `Rechnungspruefer`;
 `Gutschrift`, `Mahnwesen` mit Technik `IMahnversand`), der **Auftragsablauf** (§4.5), der **Importablauf** (`Importannahme` mit Kopf

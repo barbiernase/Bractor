@@ -227,18 +227,28 @@ public class AblaufE2ETests
     }
 
     /// <summary>
-    /// Der Datensatz-Resolver live: FuegeRangeHinzu → RangeAngefordert → ƒ RangeAufloesung mit der ECHTEN Lese-Fähigkeit (ISearchImagePairs über
-    /// einen Fähigkeits-Bereich) → NimmRangeAuf an DENSELBEN Datensatz (der Stream des Eingangs). Die Ausgabe ist festgehalten (die Funktion liest).
+    /// Die Range als Reaktion eines Clients (Schritt 6): FuegeRangeHinzu → RangeAngefordert (ein Fakt, kein Auftrag) → der DatensatzWorker hört es
+    /// über gRPC, sucht die Paare über die echte Query (SucheImagePairs gegen das Read-Model) → NimmRangeAuf an DENSELBEN Datensatz (der Stream des
+    /// Events).
     /// </summary>
     [Fact]
-    public async Task Datensatz_Range_wird_mit_echter_Lese_Faehigkeit_aufgeloest()
+    public async Task Datensatz_Range_loest_ein_reagierender_Client_ueber_eine_Query_auf()
     {
-        var builder = Host.CreateApplicationBuilder();
-        Verdrahte(builder.Services, Path.GetTempPath(), "ablauf-ds-" + Guid.NewGuid().ToString("N")[..8], grpc: false);
-        using var host = builder.Build();
+        var port = FreierPort();
+        var builder = WebApplication.CreateBuilder();
+        builder.Logging.ClearProviders();
+        builder.WebHost.ConfigureKestrel(o => o.Listen(IPAddress.Loopback, port, l => l.Protocols = HttpProtocols.Http2));
+        builder.Services.AddGrpc();
+        Verdrahte(builder.Services, Path.GetTempPath(), "ablauf-ds-" + Guid.NewGuid().ToString("N")[..8], grpc: true);
+        var host = builder.Build();
+        host.MapCqrsGrpcService();
         await host.StartAsync();
+        using var ende = new CancellationTokenSource();
+        Task? reaktionen = null;
         try
         {
+            reaktionen = Domain.Client.Worker.DatensatzReaktionen.LaufeAsync($"http://127.0.0.1:{port}", null,
+                new global::Client.Infrastructure.Reaktionen.ReaktionsStandImSpeicher(), "ablauf-ds", ende.Token, takt: TimeSpan.FromMilliseconds(200));
             var es = host.Services.GetRequiredService<IEventStoreRepository>();
             var dispatcher = host.Services.GetRequiredService<IAggregateDispatcher>();
             void Sende(string typ, IAggregatCommand c) => dispatcher.Dispatch(new CommandEnvelope
@@ -259,11 +269,16 @@ public class AblaufE2ETests
             Sende("Datensatz", new Domain.Datensatz.FuegeRangeHinzu(new(ds), new Domain.Datensatz.RangeKriterien()));
 
             await Warte(async () => (await es.ReadStreamAsync(ds, 0, default)).Any(e => e.Payload is Domain.Datensatz.PaareAufgenommen),
-                TimeSpan.FromSeconds(60), "Die Range wurde nicht aufgelöst (Funktion RangeAufloesung).");
+                TimeSpan.FromSeconds(60), "Die Range wurde nicht aufgelöst (Reaktion des DatensatzWorkers)" + (reaktionen.IsFaulted ? ": " + reaktionen.Exception : "."));
             var aufgenommen = (await es.ReadStreamAsync(ds, 0, default)).Select(e => e.Payload).OfType<Domain.Datensatz.PaareAufgenommen>().Single();
             aufgenommen.ImagePairIds.Should().Contain(new Id<Domain.ImagePair.ImagePair>(paar), "die Suche lief gegen das echte Read-Model");
         }
-        finally { await host.StopAsync(); }
+        finally
+        {
+            await ende.CancelAsync();
+            if (reaktionen != null) try { await reaktionen; } catch { /* beendet */ }
+            await host.StopAsync();
+        }
     }
 
     /// <summary>

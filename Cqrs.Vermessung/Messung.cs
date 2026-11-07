@@ -225,8 +225,8 @@ internal static class Messung
         var paare = (int)await lauf.Db.ZahlAsync($"select count(*) from {lauf.Db.Schema}.mt_events where type = 'image_pair_erstellt'");
         // Aufwärmen (nicht gewertet, PF-19): ein eigener Datensatz läuft einmal ganz durch — die erste Nutzung der Datensatz-Typen (Marten erzeugt
         //   ihren Code zur Laufzeit), JIT; sonst misst S4 den Kaltstart. Fenster, Kennzahlen und Prüfungen gelten nur dem zweiten.
-        await new Datensatz(lauf.Eingang).LaufeAsync(paare, TimeSpan.FromMinutes(5));
-        var ds = new Datensatz(lauf.Eingang);
+        await new Datensatz(lauf.Eingang, k.Beispiel.GrpcPort).LaufeAsync(paare, TimeSpan.FromMinutes(5));
+        var ds = new Datensatz(lauf.Eingang, k.Beispiel.GrpcPort);
         var fenster = new Messfenster(lauf.Db, k.Ressourcen, lauf.Rolle, lauf);
         await fenster.StarteAsync();
         var z = await ds.LaufeAsync(paare, TimeSpan.FromMinutes(5));

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Der Worker der Reaktionen der Beispieldomäne (docs/konzept-akteure.md §5.5): ein Client, der auf Fakten reagiert — er hört Events, liest über
+       Queries und gibt Commands hinein, genau einmal über seinen gesicherten Stand. Kein Teil des Hosts. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
+    <ProjectReference Include="..\Client.Infrastructure\Client.Infrastructure.csproj" />
+    <ProjectReference Include="..\Domain\Domain.csproj" />
+    <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
+    <ProjectReference Include="..\Domain.Akteure\Domain.Akteure.csproj" />
+    <ProjectReference Include="..\Domain.Leitung\Domain.Leitung.csproj" />
+    <ProjectReference Include="..\Client.SourceGeneration\Client.SourceGeneration.csproj"
+                      OutputItemType="Analyzer"
+                      ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

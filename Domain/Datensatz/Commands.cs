@@ -79,9 +79,3 @@ public record SchliesseEinfrierenAb(
     Id<Datensatz> AggregateId,
     IReadOnlyList<DatensatzMitglied> Mitglieder
 ) : ICommand<Datensatz>;
-
-/// <summary>Eine Range ist angefordert: die Kriterien sind gegen die Bildpaare aufzulösen.</summary>
-public record RangeAufzuloesen(Id<Datensatz> Datensatz, RangeKriterien Kriterien) : ICommand;
-
-/// <summary>Das Einfrieren ist angefordert: je (autoritativem) Mitglied der Label-Stand, dazu der Split.</summary>
-public record EinfrierenAbzuschliessen(Id<Datensatz> Datensatz, IReadOnlyList<Id<ImagePair.ImagePair>> Mitglieder, SplitKonfig Split) : ICommand;

@@ -34,6 +34,15 @@ public sealed record TrainingsSystem : IAkteur,
     // Kenntnis: ein laufendes Training kooperativ abbrechen (der Lauf steht schon auf „abgebrochen“).
     IHoert<TrainingAbgebrochen>;
 
+/// <summary>
+/// Pflegt Datensätze im Hintergrund (ein Worker, der reagiert): hört das Anfordern einer Range bzw. des Einfrierens, liest die Bildpaare (Queries)
+/// und gibt dem Datensatz das Ergebnis — die gefundenen Paare bzw. die Mitglieder mit Label-Stand und Split.
+/// </summary>
+public sealed record Datensatzpfleger : IAkteur,
+    IHoert<RangeAngefordert>, IHoert<EinfrierenAngefordert>,
+    IDarf<SucheImagePairs>, IDarf<GetImagePair>,
+    IDarf<NimmRangeAuf>, IDarf<SchliesseEinfrierenAb>;
+
 // ── KI ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /// <summary>Beurteilt Bildpaare (Arbeit: <see cref="PaarZuBeurteilen"/>) und Einzelbilder mit dem aktiven Modell (Strang 1).</summary>

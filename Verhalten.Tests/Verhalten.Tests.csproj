@@ -41,6 +41,7 @@
     <ProjectReference Include="..\Domain.Client.Modules.Blazor\Domain.Client.Modules.Blazor.csproj" />
     <!-- Die Leitung der Anwendung (Nutzlast-Tabelle) und damit die Nachrichten-Typen der Beispieldomäne. -->
     <ProjectReference Include="..\Domain.Leitung\Domain.Leitung.csproj" />
+    <ProjectReference Include="..\Domain.Client.Worker\Domain.Client.Worker.csproj" />
     <!-- Die Fakten der Prüfdomäne (nur ihre Typnamen zählen im Log; gesprochen wird über den JSON-Eingang). -->
     <ProjectReference Include="..\Pruefdomaene\Pruefdomaene.csproj" />
     <!-- Nur die Build-Reihenfolge: die Hosts laufen als eigene Prozesse (Black-Box), sie werden nicht geladen. -->

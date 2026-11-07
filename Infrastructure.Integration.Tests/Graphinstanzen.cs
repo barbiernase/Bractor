@@ -34,7 +34,7 @@ internal static class Graphinstanzen
             bild.Knoten["Eingang"] = w;
         }
         var aus = new Dictionary<string, GraphInstanzKonfig>(StringComparer.Ordinal) { [eingang is null ? "bildaufnahme" : "linienimport"] = bild };
-        foreach (var g in new[] { "Datensatzpflege", "Teilmeldung" })
+        foreach (var g in new[] { "Teilmeldung" })
             aus[g.ToLowerInvariant()] = new GraphInstanzKonfig { Graph = g };
         return aus;
     }

@@ -17,6 +17,9 @@ public sealed record KlassifikationsWorker : IClient, IVerkoerpert<Klassifiziere
 /// </summary>
 public sealed record TrainingsWorker : IClient, IVerkoerpert<TrainingsSystem>;
 
+/// <summary>Der Worker der Reaktionen auf Datensätze (Domain.Client.Worker): er verkörpert den Datensatzpfleger.</summary>
+public sealed record DatensatzWorker : IClient, IVerkoerpert<Datensatzpfleger>;
+
 /// <summary>
 /// Blazor-Arbeitsplatz (<c>Host.Blazor</c> + <c>Domain.Client.Modules.Blazor</c>, <c>[assembly: IstClient&lt;Arbeitsplatz&gt;]</c>): ein Client, vier
 /// Akteure. Der Client-Code wird im Build dagegen gehalten (CQRS095–097): was er erzeugt, muss einer dieser Akteure dürfen, worauf ein Handler hört,

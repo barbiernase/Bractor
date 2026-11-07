@@ -222,17 +222,6 @@ message VorschauErstelltDto {
     int64 erstellt_am = 8;
 }
 
-message EinfrierenAbzuschliessenDto {
-    string datensatz = 1;
-    repeated string mitglieder = 2;
-    SplitKonfigDto split = 3;
-}
-
-message RangeAufzuloesenDto {
-    string datensatz = 1;
-    RangeKriterienDto kriterien = 2;
-}
-
 message PaarZuBeurteilenDto {
     string paar = 1;
 }
@@ -478,10 +467,6 @@ message EinfrierenAngefordertDto {
     SplitKonfigDto split = 2;
 }
 
-message KeinMitgliedAuffindbarDto {
-    int32 angefragt = 1;
-}
-
 message PaarAufgenommenDto {
     string image_pair_id = 1;
 }
@@ -501,10 +486,6 @@ message RangeAngefordertDto {
 
 message RangeLeerDto {
     string datensatz_id = 1;
-}
-
-message RangeOhneTrefferDto {
-    RangeKriterienDto kriterien = 1;
 }
 
 message SplitGesetztDto {

@@ -157,7 +157,8 @@ public sealed class GraphInstanzKonfig
 }
 
 /// <summary>
-/// Ein Client als Prozess (Werkbank, docs/06 §6.5): <c>Python Skript Argumente…</c>. Die Werkbank setzt <c>CQRS_GRPC_HOST</c>, <c>CQRS_GRPC_PORT</c>
+/// Ein Client als Prozess (Werkbank, docs/06 §6.5): <c>Python Skript Argumente…</c> oder ein .NET-Projekt (<see cref="Projekt"/>, <c>dotnet run</c>). Die
+/// Werkbank setzt <c>CQRS_GRPC_HOST</c>, <c>CQRS_GRPC_PORT</c>
 /// und <c>CQRS_AKTEUR_TOKEN</c> (aus <see cref="Token"/>) — der Client meldet sich damit am gRPC-Port an.
 /// </summary>
 public sealed class WorkerKonfig
@@ -166,6 +167,8 @@ public sealed class WorkerKonfig
     public string Python { get; set; } = "";
     /// <summary>Das Skript, relativ zur Solution.</summary>
     public string Skript { get; set; } = "";
+    /// <summary>Statt eines Skripts: ein .NET-Projekt, relativ zur Solution (<c>Domain.Client.Worker</c>) — die Werkbank startet es mit <c>dotnet run --project</c>.</summary>
+    public string Projekt { get; set; } = "";
     public string[] Argumente { get; set; } = [];
     /// <summary>Das Akteur-Token (Abschnitt <c>Identitaeten</c>), mit dem sich der Client anmeldet — es muss die Akteure verkörpern, deren Arbeit er tut.</summary>
     public string Token { get; set; } = "";

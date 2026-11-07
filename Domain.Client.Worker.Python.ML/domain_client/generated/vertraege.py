@@ -21,6 +21,7 @@ from . import (
     BricheTrainingAbDto,
     DatensatzEingefrorenDto,
     DatensatzErstelltDto,
+    EinfrierenAngefordertDto,
     EinzelBildDurchKiKlassifiziertDto,
     EinzelBildGelabeltDto,
     EntfernePaarDto,
@@ -62,12 +63,15 @@ from . import (
     ModellArchiviertDto,
     ModellRegistriertDto,
     NimmPaarAufDto,
+    NimmRangeAufDto,
     PaarAufgenommenDto,
     PaarEntferntDto,
     PaarZuBeurteilenDto,
     PaareAufgenommenDto,
     PhysischesProduktGelabeltDto,
+    RangeAngefordertDto,
     RegistriereModellDto,
+    SchliesseEinfrierenAbDto,
     SetzeModellAktivDto,
     SetzeSplitDto,
     SplitGesetztDto,
@@ -249,6 +253,31 @@ class ArbeitsplatzBasis(ClientVertragBasis[S]):
         ...
 
 
+class DatensatzWorkerBasis(ClientVertragBasis[S]):
+    """Client Domain.Akteure.DatensatzWorker — verkörpert Datensatzpfleger."""
+
+    CLIENT: ClassVar[str] = "DatensatzWorker"
+    AKTEURE: ClassVar[tuple] = ("Datensatzpfleger",)
+    VERTRAG_HASH: ClassVar[str] = "3ea75bd61cbb3886"
+    ARBEIT: ClassVar[dict] = {}
+    HOERT: ClassVar[dict] = {   # IHoert eines Events oder Hinweises: Kenntnis, verlierbar
+        EinfrierenAngefordertDto: "auf_einfrieren_angefordert",
+        RangeAngefordertDto: "auf_range_angefordert",
+    }
+    SPONTAN: ClassVar[tuple] = (NimmRangeAufDto, SchliesseEinfrierenAbDto,)   # IDarf der Akteure: Commands und Hinweise
+    FRAGT: ClassVar[tuple] = (SucheImagePairsDto, GetImagePairDto,)   # IDarf der Akteure: ihre Queries
+
+    @abstractmethod
+    async def auf_einfrieren_angefordert(self, e: EinfrierenAngefordertDto, ctx: MessageContext, state: S) -> None:
+        """IHoert<EinfrierenAngefordert> — nur zur Kenntnis"""
+        ...
+
+    @abstractmethod
+    async def auf_range_angefordert(self, e: RangeAngefordertDto, ctx: MessageContext, state: S) -> None:
+        """IHoert<RangeAngefordert> — nur zur Kenntnis"""
+        ...
+
+
 class KlassifikationsWorkerBasis(ClientVertragBasis[S]):
     """Client Domain.Akteure.KlassifikationsWorker — verkörpert Klassifizierer."""
 
@@ -313,6 +342,7 @@ class TrainingsWorkerBasis(ClientVertragBasis[S]):
 
 __all__ = [
     "ArbeitsplatzBasis",
+    "DatensatzWorkerBasis",
     "KlassifikationsWorkerBasis",
     "TrainingsWorkerBasis",
 ]

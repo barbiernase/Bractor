@@ -28,7 +28,7 @@ public partial class Datensatz
         // RANGE — Variante A (zweiphasig)
         // ═══════════════════════════════════════════════════
 
-        public IEnumerable<OneOf<RangeAngefordert, DatensatzBereitsEingefroren, RangeAufzuloesen>> Decide(
+        public IEnumerable<OneOf<RangeAngefordert, DatensatzBereitsEingefroren>> Decide(
             FuegeRangeHinzu cmd)
         {
             if (this.State.IstEingefroren)
@@ -37,10 +37,9 @@ public partial class Datensatz
                 yield break;
             }
 
-            // Rein: keine Suche im Decider. Nur die Kriterien als Provenienz festhalten;
-            // der server-seitige Resolver löst sie auf.
+            // Rein: keine Suche im Decider. Nur die Kriterien als Fakt festhalten; ein Client reagiert darauf (der Datensatzpfleger), sucht die
+            //   Paare und gibt sie mit NimmRangeAuf zurück.
             yield return new RangeAngefordert(cmd.Kriterien);
-            yield return new RangeAufzuloesen(cmd.AggregateId, cmd.Kriterien);
         }
 
         public IEnumerable<OneOf<PaareAufgenommen, RangeLeer, DatensatzBereitsEingefroren>> Decide(
@@ -124,7 +123,7 @@ public partial class Datensatz
         // EINFRIEREN — zweiphasig
         // ═══════════════════════════════════════════════════
 
-        public IEnumerable<OneOf<EinfrierenAngefordert, DatensatzBereitsEingefroren, DatensatzLeer, EinfrierenAbzuschliessen>> Decide(
+        public IEnumerable<OneOf<EinfrierenAngefordert, DatensatzBereitsEingefroren, DatensatzLeer>> Decide(
             FriereEin cmd)
         {
             if (this.State.IstEingefroren)
@@ -139,10 +138,10 @@ public partial class Datensatz
                 yield break;
             }
 
-            // Autoritative Mitgliedschaft + Split aus dem State mitgeben (Invariante 1).
+            // Autoritative Mitgliedschaft + Split als Fakt (Invariante 1); ein Client reagiert darauf (der Datensatzpfleger), liest den Label-Stand
+            //   je Mitglied und schließt mit SchliesseEinfrierenAb ab.
             var mitglieder = this.State.DraftMitglieder.ToList();
             yield return new EinfrierenAngefordert(mitglieder, this.State.Split);
-            yield return new EinfrierenAbzuschliessen(cmd.AggregateId, mitglieder, this.State.Split);
         }
 
         public IEnumerable<OneOf<DatensatzEingefroren, DatensatzBereitsEingefroren, DatensatzLeer>> Decide(

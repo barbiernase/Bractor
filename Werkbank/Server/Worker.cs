@@ -27,7 +27,8 @@ public sealed class Worker(string slnRoot)
         {
             funktion = f.Key,
             laufort = "Client",
-            worker = f.Value.Worker is { Skript.Length: > 0 } w ? $"{Path.GetFileName(w.Skript)} {string.Join(' ', w.Argumente)}".Trim() : null,
+            worker = f.Value.Worker is { Skript.Length: > 0 } w ? $"{Path.GetFileName(w.Skript)} {string.Join(' ', w.Argumente)}".Trim()
+                : f.Value.Worker is { Projekt.Length: > 0 } p ? $"dotnet {p.Projekt} {string.Join(' ', p.Argumente)}".Trim() : null,
             laeuft,
             pid = laeuft ? l!.Prozess.Id : (int?)null,
             seit = l?.Seit,
@@ -46,19 +47,32 @@ public sealed class Worker(string slnRoot)
         if (!u.Clients.TryGetValue(funktion, out var c))
             throw new InvalidOperationException($"{funktion} ist in {u.Umgebung.Name} kein Client (Abschnitt Clients).");
         // Der Worker des Clients: Skript, Argumente, Token (sonst das Token des Clients).
-        var w = c.Worker is { Skript.Length: > 0 } eigen ? eigen
-            : throw new InvalidOperationException($"{funktion} in {u.Umgebung.Name}: am Client fehlt Worker:Skript.");
-        if (w.Token.Length == 0 && c.Token.Length > 0) w = new WorkerKonfig { Skript = w.Skript, Argumente = w.Argumente, Python = w.Python, Token = c.Token };
-        if (w.Token.Length == 0 && standardToken?.Invoke(funktion) is { } t) w = new WorkerKonfig { Skript = w.Skript, Argumente = w.Argumente, Python = w.Python, Token = t };
+        var w = c.Worker is { Skript.Length: > 0 } or { Projekt.Length: > 0 } ? c.Worker
+            : throw new InvalidOperationException($"{funktion} in {u.Umgebung.Name}: am Client fehlt Worker:Skript bzw. Worker:Projekt.");
+        if (w.Token.Length == 0 && c.Token.Length > 0) w = new WorkerKonfig { Skript = w.Skript, Projekt = w.Projekt, Argumente = w.Argumente, Python = w.Python, Token = c.Token };
+        if (w.Token.Length == 0 && standardToken?.Invoke(funktion) is { } t) w = new WorkerKonfig { Skript = w.Skript, Projekt = w.Projekt, Argumente = w.Argumente, Python = w.Python, Token = t };
         if (!hostLaeuft) throw new InvalidOperationException("Der Host läuft nicht — ⟳ startet ihn; der Worker meldet sich an seinem gRPC-Port an.");
         await StoppeAsync(funktion);
 
-        var python = u.Python(w);
-        var skript = Path.IsPathRooted(w.Skript) ? w.Skript : Path.Combine(slnRoot, w.Skript);
-        if (!File.Exists(skript)) throw new FileNotFoundException($"Worker-Skript fehlt: {skript}");
-        var psi = new ProcessStartInfo(python) { WorkingDirectory = Path.GetDirectoryName(skript)!, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
-        psi.ArgumentList.Add(skript);
-        foreach (var a in w.Argumente) psi.ArgumentList.Add(a);
+        ProcessStartInfo psi;
+        if (w.Projekt.Length > 0)
+        {
+            // Ein .NET-Worker: dotnet run --project <Projekt> -- <Argumente> (gebaut wird mit, wie ⟳ den Host baut).
+            var projekt = Path.IsPathRooted(w.Projekt) ? w.Projekt : Path.Combine(slnRoot, w.Projekt);
+            if (!Directory.Exists(projekt) && !File.Exists(projekt)) throw new FileNotFoundException($"Worker-Projekt fehlt: {projekt}");
+            psi = new ProcessStartInfo("dotnet") { WorkingDirectory = slnRoot, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+            foreach (var a in new[] { "run", "--project", projekt, "--" }.Concat(w.Argumente)) psi.ArgumentList.Add(a);
+            psi.Environment["CQRS_REAKTION_STAND"] = Path.Combine(Path.GetTempPath(), "cqrs-reaktionen", u.Umgebung.Name, funktion);
+        }
+        else
+        {
+            var python = u.Python(w);
+            var skript = Path.IsPathRooted(w.Skript) ? w.Skript : Path.Combine(slnRoot, w.Skript);
+            if (!File.Exists(skript)) throw new FileNotFoundException($"Worker-Skript fehlt: {skript}");
+            psi = new ProcessStartInfo(python) { WorkingDirectory = Path.GetDirectoryName(skript)!, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+            psi.ArgumentList.Add(skript);
+            foreach (var a in w.Argumente) psi.ArgumentList.Add(a);
+        }
         psi.Environment["CQRS_GRPC_HOST"] = "127.0.0.1";
         psi.Environment["CQRS_GRPC_PORT"] = u.Transport.GrpcPort.ToString();
         psi.Environment["PYTHONUNBUFFERED"] = "1";
@@ -78,7 +92,7 @@ public sealed class Worker(string slnRoot)
         prozess.BeginOutputReadLine();
         prozess.BeginErrorReadLine();
         _laeufe[funktion] = new Lauf(prozess, log, DateTimeOffset.UtcNow, u.Umgebung.Name);
-        Nimm($"$ {python} {skript} {string.Join(' ', w.Argumente)}  (gRPC 127.0.0.1:{u.Transport.GrpcPort}{(w.Token.Length > 0 ? ", Token " + w.Token : "")})");
+        Nimm($"$ {psi.FileName} {string.Join(' ', psi.ArgumentList)}  (gRPC 127.0.0.1:{u.Transport.GrpcPort}{(w.Token.Length > 0 ? ", Token " + w.Token : "")})");
 
         // Kurz warten: ein Skript, das sofort scheitert (Import, Argumente), soll als Fehler zurückkommen, nicht als „läuft".
         await Task.Delay(1500);

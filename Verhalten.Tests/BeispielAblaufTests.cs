@@ -15,6 +15,10 @@ public sealed class BeispielAblaufHost : IAsyncLifetime
     public Log Log { get; private set; } = null!;
     public Bildpaare Bilder { get; private set; } = null!;
 
+    // Der DatensatzWorker läuft neben dem Host wie in Betrieb (Schritt 6): er reagiert auf RangeAngefordert und EinfrierenAngefordert.
+    private readonly CancellationTokenSource _ende = new();
+    private Task? _worker;
+
     public async Task InitializeAsync()
     {
         Umgebung = await Testumgebung.NeuAsync(Anwendung.Beispiel, "verhalten-ablauf");
@@ -22,10 +26,14 @@ public sealed class BeispielAblaufHost : IAsyncLifetime
         Eingang = new JsonEingang(Host);
         Log = new Log(Umgebung);
         Bilder = new Bildpaare(Umgebung);
+        _worker = Domain.Client.Worker.DatensatzReaktionen.LaufeAsync(Host.GrpcAdresse, Testumgebung.TokenDatensatzpfleger,
+            new global::Client.Infrastructure.Reaktionen.ReaktionsStandImSpeicher(), "verhalten-datensatzworker", _ende.Token, TimeSpan.FromMilliseconds(200));
     }
 
     public async Task DisposeAsync()
     {
+        await _ende.CancelAsync();
+        if (_worker != null) try { await _worker; } catch { /* beendet */ }
         Eingang.Dispose();
         await Host.DisposeAsync();
     }

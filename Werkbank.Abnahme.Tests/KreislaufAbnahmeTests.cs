@@ -98,8 +98,7 @@ public class KreislaufAbnahmeTests
         Spalte("akt:akteur:Klassifizierer|aus").Should().Be("ausgang");
         Spalte("akt:akteur:Klassifizierer|ein").Should().Be("eingang");
         flKarten.Should().Contain(k => (string?)k["spalte"] == "quellen" && (string?)k["name"] == "Dateiwaechter", "die Quelle des Linienimports");
-        FlaechenKanten(board).Should().Contain(["agg:ImagePair -PaarZuBeurteilen/arbeit-> akt:akteur:Klassifizierer|ein",
-            "agg:Datensatz -RangeAufzuloesen/ruecklauf-> gr:graph:Datensatzpflege"]);
+        FlaechenKanten(board).Should().Contain(["agg:ImagePair -PaarZuBeurteilen/arbeit-> akt:akteur:Klassifizierer|ein"]);
         KompositionsKanten(board, "Bildaufbereitung").Should().Contain("Verkleinern -BildVerkleinert-> Kontrast");
 
         // ── 2c. Gesten der Fläche und der Komposition (derselbe Weg wie der Editor): darf und verlierbar — Code, Sicht, ⟳ grün, ↶ byte-gleich ──

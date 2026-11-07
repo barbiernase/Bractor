@@ -21,6 +21,7 @@
   },
   "Identitaeten": {
     "Tokens": {
+      "sim-datensatzpfleger": "Datensatzpfleger",
       "sim-disponent": "Disponent",
       "sim-inspekteur": "Inspekteur",
       "sim-kioperator": "KIOperator",
@@ -45,6 +46,12 @@
       "Token": "sim-klassifizierer",
       "Worker": {
         "Skript": "Domain.Client.Worker.Python.ML/run_stub.py"
+      }
+    },
+    "DatensatzWorker": {
+      "Token": "sim-datensatzpfleger",
+      "Worker": {
+        "Projekt": "Domain.Client.Worker"
       }
     },
     "TrainingsWorker": {

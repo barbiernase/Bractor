@@ -254,19 +254,6 @@ class VorschauErstelltDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class EinfrierenAbzuschliessenDto(betterproto.Message):
-    datensatz: str = betterproto.string_field(1)
-    mitglieder: List[str] = betterproto.string_field(2)
-    split: "SplitKonfigDto" = betterproto.message_field(3)
-
-
-@dataclass(eq=False, repr=False)
-class RangeAufzuloesenDto(betterproto.Message):
-    datensatz: str = betterproto.string_field(1)
-    kriterien: "RangeKriterienDto" = betterproto.message_field(2)
-
-
-@dataclass(eq=False, repr=False)
 class PaarZuBeurteilenDto(betterproto.Message):
     paar: str = betterproto.string_field(1)
 
@@ -562,11 +549,6 @@ class EinfrierenAngefordertDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class KeinMitgliedAuffindbarDto(betterproto.Message):
-    angefragt: int = betterproto.int32_field(1)
-
-
-@dataclass(eq=False, repr=False)
 class PaarAufgenommenDto(betterproto.Message):
     image_pair_id: str = betterproto.string_field(1)
 
@@ -590,11 +572,6 @@ class RangeAngefordertDto(betterproto.Message):
 @dataclass(eq=False, repr=False)
 class RangeLeerDto(betterproto.Message):
     datensatz_id: str = betterproto.string_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class RangeOhneTrefferDto(betterproto.Message):
-    kriterien: "RangeKriterienDto" = betterproto.message_field(1)
 
 
 @dataclass(eq=False, repr=False)

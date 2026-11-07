@@ -4,21 +4,38 @@ using System.Text.Json.Nodes;
 namespace Cqrs.Vermessung;
 
 /// <summary>
-/// S4 Datensatz (Beispieldomäne): als KI-Operator einen Datensatz anlegen, die Range über alle Bildpaare aufnehmen (Funktion mit
-/// Lese-Fähigkeit) und einfrieren (Funktion, großes Event). Sichtbar über
+/// S4 Datensatz (Beispieldomäne): als KI-Operator einen Datensatz anlegen, die Range über alle Bildpaare aufnehmen und einfrieren (großes Event) —
+/// beides über die Reaktionen des DatensatzWorkers (Schritt 6: ein Client hört das Anfordern, liest per Query und gibt das Ergebnis). Sichtbar über
 /// <c>HoleDatensatz</c>: erst alle Paare als Mitglieder, dann Status <c>Eingefroren</c>. Kennzahl ist die Dauer bzw. Paare je Sekunde.
 /// </summary>
 internal sealed class Datensatz
 {
     public const string TokenKiOperator = "vermessung-kioperator";
+    public const string TokenDatensatzpfleger = "vermessung-datensatzpfleger";
+    // Der Stand der Reaktionen über alle Läufe dieser Messung — der zweite Lauf reagiert nicht noch einmal auf das Aufwärmen.
+    private static readonly global::Client.Infrastructure.Reaktionen.ReaktionsStandImSpeicher Stand = new();
     private readonly Eingang _eingang;
+    private readonly int _grpcPort;
     public Guid Id { get; } = Guid.NewGuid();
 
-    public Datensatz(Eingang eingang) => _eingang = eingang;
+    public Datensatz(Eingang eingang, int grpcPort) { _eingang = eingang; _grpcPort = grpcPort; }
 
     public sealed record Zeiten(double AufnahmeS, double EinfrierenS, int Mitglieder);
 
     public async Task<Zeiten> LaufeAsync(int erwartetePaare, TimeSpan frist)
+    {
+        using var ende = new CancellationTokenSource();
+        var worker = Domain.Client.Worker.DatensatzReaktionen.LaufeAsync($"http://localhost:{_grpcPort}", TokenDatensatzpfleger, Stand,
+            "vermessung-datensatzworker", ende.Token, TimeSpan.FromMilliseconds(200));
+        try { return await LaufeMitWorkerAsync(erwartetePaare, frist); }
+        finally
+        {
+            await ende.CancelAsync();
+            try { await worker; } catch { /* beendet */ }
+        }
+    }
+
+    private async Task<Zeiten> LaufeMitWorkerAsync(int erwartetePaare, TimeSpan frist)
     {
         Pruefe(await _eingang.CommandAsync("ErstelleDatensatz", new JsonObject { ["AggregateId"] = Id.ToString(), ["Name"] = "Vermessung S4" }, TokenKiOperator));
         var sw = Stopwatch.StartNew();
