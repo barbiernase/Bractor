@@ -12,8 +12,8 @@ using Xunit;
 
 namespace Infrastructure.Pruefstand.Analyzers;
 
-/// <summary>CQRS058: <c>IDarf&lt;T&gt;</c> nur für Hineingehendes, <c>IHoert&lt;T&gt;</c> nur für Arbeit (Command ohne Ziel) und Kenntnis (Event,
-/// Hinweis), beide nur an einem <c>IAkteur</c>; CQRS063/064: Form eines Clients (ein Record, der nur nennt, wen er verkörpert).</summary>
+/// <summary>CQRS058: <c>IDarf&lt;T&gt;</c> nur für Hineingehendes, <c>IHoert&lt;T&gt;</c> nur für Fakten (Event, Hinweis), beide nur an einem
+/// <c>IAkteur</c>; CQRS063/064: Form eines Clients (ein Record, der nur nennt, wen er verkörpert).</summary>
 public class AkteurAnalyzerTests
 {
     private static async Task<string[]> Ids(string code)
@@ -42,7 +42,7 @@ public record Antwort() : IQueryResponse;
 public record Storniere(Id<ProbeZiel> AggregateId) : ICommand<ProbeZiel>;
 public record Pruefe(Id<ProbeZiel> Ziel) : ICommand;
 public sealed record Kassierer : IAkteur, IDarf<Buche>;
-public sealed record Revisor : IAkteur, IHoert<Pruefe>, IDarf<Storniere>;
+public sealed record Revisor : IAkteur, IHoert<Gebucht>, IDarf<Storniere>;
 public record Sperre(Id<ProbeZiel> AggregateId) : ICommand<ProbeZiel>;
 public sealed record Leser : IAkteur, IDarf<Zeige>, IHoert<Gebucht>, IHoert<Hinweis>;
 ";
@@ -57,7 +57,7 @@ public sealed record Leser : IAkteur, IDarf<Zeige>, IHoert<Gebucht>, IHoert<Hinw
     {
         (await Ids("public interface IIrgendwas { } public sealed record Rechner : IAkteur, IDarf<IIrgendwas>;")).Should().Equal("CQRS058");
         (await Ids("public sealed class Rechnung : IFunktion { public Storniere Auf(Pruefe p) => default!; } public sealed record Rechner : IAkteur, IDarf<Rechnung>;"))
-            .Should().Equal(["CQRS058"], "IDarf<IFunktion> ist entfallen — die Arbeit eines Akteurs ist ein gehörter Command");
+            .Should().Equal(["CQRS058"], "IDarf<IFunktion> ist entfallen — draußen rechnet ein Client, der auf ein Fakt reagiert");
     }
 
     [Fact]
@@ -80,15 +80,18 @@ public sealed record Leser : IAkteur, IDarf<Zeige>, IHoert<Gebucht>, IHoert<Hinw
     public async Task Ein_Interface_ist_kein_Akteur()
         => (await Ids("public interface IRobo : IAkteur, IDarf<Buche> { }")).Should().Equal("CQRS058");
 
-    // ── IHoert am Akteur: Arbeit (Command ohne Ziel) und Kenntnis (Event, Hinweis) ──
+    // ── IHoert am Akteur: Fakten (Event, Hinweis) — sein Client reagiert darauf oder nimmt sie zur Kenntnis ──
 
     [Fact]
-    public async Task Ein_Akteur_hoert_Arbeit_Events_und_Hinweise()
-        => (await Ids("public sealed record Pruefer : IAkteur, IHoert<Pruefe>, IHoert<Gebucht>, IHoert<Hinweis>, IDarf<Storniere>;")).Should().BeEmpty();
+    public async Task Ein_Akteur_hoert_Events_und_Hinweise()
+        => (await Ids("public sealed record Pruefer : IAkteur, IHoert<Gebucht>, IHoert<Hinweis>, IDarf<Storniere>;")).Should().BeEmpty();
 
     [Fact]
-    public async Task Einen_Command_an_ein_Aggregat_hoert_kein_Akteur()
-        => (await Ids("public sealed record Pruefer : IAkteur, IHoert<Buche>;")).Should().Equal(["CQRS058"], "sein Empfänger ist das Aggregat");
+    public async Task Einen_Command_hoert_kein_Akteur_weder_an_ein_Aggregat_noch_ohne_Ziel()
+    {
+        (await Ids("public sealed record Pruefer : IAkteur, IHoert<Buche>;")).Should().Equal(["CQRS058"], "sein Empfänger ist das Aggregat");
+        (await Ids("public sealed record Pruefer : IAkteur, IHoert<Pruefe>;")).Should().Equal(["CQRS058"], "sein Empfänger ist der Kopf eines Graphen");
+    }
 
     [Fact]
     public async Task Eine_Query_oder_eine_Response_hoert_kein_Akteur()

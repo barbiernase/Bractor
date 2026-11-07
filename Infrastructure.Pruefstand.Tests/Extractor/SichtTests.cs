@@ -164,9 +164,9 @@ public class SichtTests
         Zeilen(p["SchadenGeschaetzt"]!["ein"]).Should().Contain(z => (string?)z["id"] == schaetzung && (string?)z["mark"] == "Ausgabe");
         Zeilen(p["SchadenGeschaetzt"]!["aus"]).Should().Contain(z => (string?)z["id"] == gutachten && (string?)z["text"] == "ƒ Gutachtenanfrage.Auf(SchadenGeschaetzt)");
         Zeilen(p["GutachtenErhalten"]!["aus"]).Should().Contain(z => (string?)z["id"] == mahnung && (string?)z["mark"] == "Auf");
-        // Arbeit und Kenntnis: wer einen Command ohne Ziel bzw. ein Event hört, steht auf der ▶-Seite — ✕ nimmt ihm das Hören.
-        var archiv = Zeilen(p["BegutachteVorOrt"]!["aus"]).Single(z => (string?)z["text"] == "Akteur Archiv");
-        archiv["mark"]!.GetValue<string>().Should().Be("Arbeit");
+        // Wer ein Fakt hört (sein Client reagiert darauf), steht auf der ▶-Seite — ✕ nimmt ihm das Hören.
+        var archiv = Zeilen(p["BegutachtungAngefordert"]!["aus"]).Single(z => (string?)z["text"] == "Akteur Archiv");
+        archiv["mark"]!.GetValue<string>().Should().Be("Kenntnis");
         archiv["loesen"]!["feld"]!.GetValue<string>().Should().Be("hoert");
         Zeilen(p["MahnungEroeffnet"]!["aus"]).Should().Contain(z => (string?)z["text"] == "Akteur Gutachterin" && (string?)z["mark"] == "Kenntnis");
     }
@@ -254,13 +254,17 @@ public class SichtTests
         kanten.Should().Contain($"{(string?)dateiwaechter["id"]} -DateiGefunden/quelle-> {katalogimport}");
         kanten.Should().Contain($"{(string?)abfrage["id"]} -Rohwert/quelle-> {messkette}");
         kanten.Should().Contain($"{theke}|aus -LeiheAus/schreiben-> agg:Leihvorgang");
-        // Rücklauf: ein Command ohne Ziel aus dem Decide an den Kopf eines Graphen; ebenso die Antwort (Event) an die Funktion, die den Command gab.
-        kanten.Should().Contain($"agg:Leihvorgang -BemesseMahnung/ruecklauf-> gr:{Id(board, "graphen", "name", "Mahnbemessung")}");
+        // Rücklauf: die Antwort (Event) an die Funktion, die den Command gab. Ein Decide gibt keinen Command aus: den Kopf der Mahnbemessung
+        //   gibt das Archiv hinein, es reagiert auf die Mahnung.
+        var archiv = "akt:" + Id(board, "akteure", "name", "Archiv");
+        kanten.Should().Contain($"{archiv}|aus -BemesseMahnung/schreiben-> gr:{Id(board, "graphen", "name", "Mahnbemessung")}");
+        kanten.Should().NotContain(k => k.StartsWith("agg:Leihvorgang -BemesseMahnung"));
         Ports(K(katalogimport)).Should().Contain("◀ImportGestartet");
         kanten.Should().Contain($"agg:Importlauf -ImportGestartet/ruecklauf-> {katalogimport}");
-        // Arbeit und Kenntnis gehen an die Eingangsseite der Akteure, Antworten als Lesefluss.
-        var archiv = "akt:" + Id(board, "akteure", "name", "Archiv");
-        kanten.Should().Contain($"gr:{Id(board, "graphen", "name", "Schadensbewertung")} -BegutachteVorOrt/arbeit-> {archiv}|ein");
+        // Fakten gehen an die Eingangsseite der Akteure, Antworten als Lesefluss; die Begutachtung vor Ort geht an den Schadensfall, sein Fakt an
+        //   das Archiv.
+        kanten.Should().Contain($"gr:{Id(board, "graphen", "name", "Schadensbewertung")} -BegutachteVorOrt/schreiben-> agg:Schadensfall");
+        kanten.Should().Contain($"agg:Schadensfall -BegutachtungAngefordert/kenntnis-> {archiv}|ein");
         kanten.Should().Contain($"agg:Leihvorgang -Ausgeliehen/kenntnis-> {archiv}|ein");
         kanten.Should().Contain(k => k.StartsWith("rdr:") && k.EndsWith($"-OffeneAusleihenAntwort/lesen-> {theke}|ein"));
         kanten.Should().Contain(k => k.StartsWith($"{theke}|aus -OffeneAusleihen/lesen-> rdr:"));

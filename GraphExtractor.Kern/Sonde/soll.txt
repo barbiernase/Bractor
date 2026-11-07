@@ -169,7 +169,7 @@ funktion Leihwesen.Gebuehren.Vormerkpruefung(tabelle:IWertTabelle) | Auf(PruefeV
 #    dessen Events sie liest; Wert-Typen zum Aggregat ihrer Records; ein Akteur in der ersten Domäne, in der er wirkt (was er hineingibt: die
 #    Mahnstelle fragt die Vormerkungen des Leihvorgangs). Der geteilte Zähler hat keinen Store und keine Nachbarn: eine Insel in seinem Namespace. ──
 sicht Leihwesen.Ausleihe.Signatur valueobject domaene=Leihwesen.Ausleihe block=Leihvorgang
-sicht Leihwesen.Ausleihe.Zustand enum domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Ausleihe.Zustand enum domaene=Leihwesen.Ausleihe block=§geteilt
 sicht Leihwesen.Ausleihe.HoleLeihstand query domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Ausleihe.Leihstand queryresponse domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Ausleihe.NichtVerliehen queryresponse domaene=Leihwesen.Ausleihe block=Leihvorgang
@@ -189,7 +189,7 @@ sicht Leihwesen.Lesen.VormerkungenAntwort queryresponse domaene=Leihwesen.Auslei
 sicht Leihwesen.Lesen.Ausleihzaehler readmodel domaene=Leihwesen.Lesen block=§geteilt insel
 sicht Leihwesen.Lesen.Theke akteur domaene=Leihwesen.Ausleihe block=§akteure
 sicht Leihwesen.Lesen.Gutachterin akteur domaene=Leihwesen.Gebuehren block=§akteure
-sicht Leihwesen.Lesen.Archiv akteur domaene=Leihwesen.Gebuehren block=§akteure
+sicht Leihwesen.Lesen.Archiv akteur domaene=Leihwesen.Ausleihe block=§akteure
 sicht Leihwesen.Gebuehren.Mahnstelle akteur domaene=Leihwesen.Ausleihe block=§akteure
 
 # ── Besitz (Hierarchie Anwendung → Blöcke → Glieder), nur aus den Signaturen: ein Command gehört seinem Aggregat — auch ein Command ohne Ziel,
@@ -211,7 +211,7 @@ besitz Leihwesen.Ausleihe.HoleLeihstand query -> aggregate:Leihvorgang
 besitz Leihwesen.Ausleihe.Leihstand queryresponse -> aggregate:Leihvorgang
 besitz Leihwesen.Ausleihe.NichtVerliehen queryresponse -> aggregate:Leihvorgang
 besitz Leihwesen.Ausleihe.Signatur valueobject -> aggregate:Leihvorgang
-besitz Leihwesen.Ausleihe.Zustand enum -> aggregate:Leihvorgang
+besitz Leihwesen.Ausleihe.Zustand enum -> §begriffe
 besitz Leihwesen.Ausleihe.Fristrechnung code -> §begriffe
 besitz Leihwesen.Gebuehren.MeldeSchaden command -> aggregate:Schadensfall
 besitz Leihwesen.Gebuehren.SchadenGemeldet event -> aggregate:Schadensfall
@@ -289,6 +289,7 @@ client Kundenportal.Konten.Registrierungsseite | verkoerpert Besucher
 code Kundenportal.Konten.Adressschluessel class teile=1 domaene=Kundenportal.Konten block=§geteilt
 sicht Kundenportal.Konten.Kontostatus enum domaene=Kundenportal.Konten block=Benutzer
 sicht Kundenportal.Konten.Besucher akteur domaene=Kundenportal.Konten block=§akteure
+sicht Kundenportal.Konten.Adresspruefer akteur domaene=Kundenportal.Konten block=§akteure
 besitz Kundenportal.Konten.RegistriereBenutzer command -> aggregate:Benutzer
 besitz Kundenportal.Konten.RegistrierungBeantragt event -> aggregate:Benutzer
 besitz Kundenportal.Konten.BenutzerExistiert rejection -> aggregate:Benutzer

@@ -225,7 +225,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
             var hier = koepfe.TryGetValue(N(typ), out var l) ? l.Distinct().ToList() : new List<string>();
             if (hier.Count == 1) continue;
             ctx.ReportDiagnostic(Diagnostic.Create(Empfaenger, Location.None, typ.Name, von,
-                hier.Count == 0 ? "kein Graph nimmt ihn am Kopf, kein Akteur hört ihn" : "mehrere nehmen ihn (" + string.Join(", ", hier) + ")"));
+                hier.Count == 0 ? "kein Graph nimmt ihn am Kopf" : "mehrere nehmen ihn (" + string.Join(", ", hier) + ")"));
         }
 
         // GR-UEBERSETZUNG (A3): kein Katalog-Command verlässt einen Graphen der Anwendung (ein Graph, der als Schachtel steht, gibt dem äußeren).

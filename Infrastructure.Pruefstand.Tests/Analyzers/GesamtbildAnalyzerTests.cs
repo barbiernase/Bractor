@@ -198,30 +198,20 @@ public sealed record Anstossgraph([Kopf] Anstoss A) : IGraph;
     }
 
     // Arbeit (Entscheidung 13): ein Akteur, der einen Command ohne Ziel hört, ist sein Empfänger.
-    private const string Arbeit = @"
+    private const string Melder = @"
 public record Pruefe(Id<Konto> Konto) : ICommand;
-public sealed record Pruefer : IAkteur, IHoert<Pruefe>, IDarf<Eroeffne>;
 public sealed record Melder : IAkteur, IDarf<Pruefe>;
 ";
 
     [Fact]
-    public async Task Ein_Akteur_der_einen_Command_ohne_Ziel_hoert_ist_sein_Empfaenger_CQRS116()
+    public async Task Ein_Command_ohne_Ziel_eines_Akteurs_nimmt_genau_ein_Graph_am_Kopf_CQRS116()
     {
-        (await Ids(Arbeit)).Should().NotContain(GesamtbildAnalyzer.EmpfaengerId, "Pruefe gibt der Melder hinein, und genau der Prüfer hört ihn (Arbeit)");
-        var ohne = await Befunde(Arbeit.Replace("IHoert<Pruefe>, ", ""));
+        var ohne = await Befunde(Melder);
         ohne.Where(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Select(d => d.GetMessage())
-            .Should().ContainSingle().Which.Should().StartWith("'Pruefe'").And.Contain("Akteur Melder").And.Contain("kein Akteur hört ihn");
-    }
-
-    [Fact]
-    public async Task Ein_Command_den_ein_Graph_nimmt_und_ein_Akteur_hoert_ist_CQRS116()
-    {
-        var befunde = (await Befunde(Arbeit + "public sealed class Pruefung : IFunktion { public Eroeffne Auf(Pruefe p) => default!; } "
-                                             + "public sealed record Pruefgraph([Kopf] Pruefung P) : IGraph;"))
-            .Where(d => d.Id == GesamtbildAnalyzer.EmpfaengerId).Select(d => d.GetMessage()).ToArray();
-        befunde.Should().Contain(m => m.StartsWith("'Pruefe'") && m.Contains("Akteur Pruefer") && m.Contains("der Akteur hört ihn"));
-        befunde.Should().Contain(m => m.StartsWith("'Pruefe'") && m.Contains("Akteur Melder") && m.Contains("mehrere nehmen ihn")
-                                      && m.Contains("Pruefgraph") && m.Contains("Akteur Pruefer"));
+            .Should().ContainSingle().Which.Should().StartWith("'Pruefe'").And.Contain("Akteur Melder").And.Contain("kein Graph nimmt ihn am Kopf");
+        (await Ids(Melder + "public sealed class Pruefung : IFunktion { public Eroeffne Auf(Pruefe p) => default!; } "
+                          + "public sealed record Pruefgraph([Kopf] Pruefung P) : IGraph;"))
+            .Should().NotContain(GesamtbildAnalyzer.EmpfaengerId, "der Kopf des Pruefgraphs ist sein Empfänger");
     }
 
     [Fact]
