@@ -124,7 +124,7 @@ public class EingangE2ETests
                     daten = new
                     {
                         AggregateId = paar.Wert, PairKey = "hand", ProduziertAm = t, AufgenommenAm = t, UrsprungsPfad = "/x/" + version, Version = version,
-                        Meta = new { OriginalDateiname = version + ".tiff", DateigroesseBytes = 1L, BreitePixel = 4, HoehePixel = 2, ErstelltAm = t },
+                        OriginalDateiname = version + ".tiff", DateigroesseBytes = 1L, BreitePixel = 4, HoehePixel = 2, ErstelltAm = t,
                         Pfad = "/x/" + version + ".png",
                     },
                 }, "t-kamera"));

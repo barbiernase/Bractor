@@ -215,6 +215,22 @@ class BildEingelesenDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class BildGedeutetDto(betterproto.Message):
+    paar: str = betterproto.string_field(1)
+    pair_key: str = betterproto.string_field(2)
+    produziert_am: int = betterproto.int64_field(3)
+    aufgenommen_am: int = betterproto.int64_field(4)
+    ursprungs_pfad: str = betterproto.string_field(5)
+    version: str = betterproto.string_field(6)
+    original_dateiname: str = betterproto.string_field(7)
+    dateigroesse_bytes: int = betterproto.int64_field(8)
+    breite_pixel: int = betterproto.int32_field(9)
+    hoehe_pixel: int = betterproto.int32_field(10)
+    erstellt_am: int = betterproto.int64_field(11)
+    pfad: str = betterproto.string_field(12)
+
+
+@dataclass(eq=False, repr=False)
 class BildVerkleinertDto(betterproto.Message):
     dateiname: str = betterproto.string_field(1)
     pfad: str = betterproto.string_field(2)
@@ -378,9 +394,13 @@ class NimmBildAufDto(betterproto.Message):
     produziert_am: int = betterproto.int64_field(3)
     aufgenommen_am: int = betterproto.int64_field(4)
     ursprungs_pfad: str = betterproto.string_field(5)
-    version: int = betterproto.int32_field(6)
-    meta: "BildMetaDto" = betterproto.message_field(7)
-    pfad: str = betterproto.string_field(8)
+    version: str = betterproto.string_field(6)
+    original_dateiname: str = betterproto.string_field(7)
+    dateigroesse_bytes: int = betterproto.int64_field(8)
+    breite_pixel: int = betterproto.int32_field(9)
+    hoehe_pixel: int = betterproto.int32_field(10)
+    erstellt_am: int = betterproto.int64_field(11)
+    pfad: str = betterproto.string_field(12)
 
 
 @dataclass(eq=False, repr=False)
@@ -505,6 +525,11 @@ class BildNichtLesbarDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class DateinameUnbekanntDto(betterproto.Message):
+    dateiname: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
 class DatensatzBereitsEingefrorenDto(betterproto.Message):
     datensatz_id: str = betterproto.string_field(1)
 
@@ -620,11 +645,6 @@ class BildVerfuegbarDto(betterproto.Message):
 @dataclass(eq=False, repr=False)
 class BildVersionBereitsVerfuegbarDto(betterproto.Message):
     version: int = betterproto.int32_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class DateinameUnbekanntDto(betterproto.Message):
-    dateiname: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)

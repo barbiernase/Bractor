@@ -1,9 +1,8 @@
-using Abstractions;
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Domain.ImagePair;
+namespace Bildvorschau.Katalog.Aufbereitung;
 
 /// <summary>
 /// Parst Dateinamen nach der Aufnahme-Convention und erzeugt
@@ -16,19 +15,18 @@ namespace Domain.ImagePair;
 ///   Version     = DC2
 ///   ProduziertAm = 2025-06-16T17:46:20.293 (aus dem PairKey abgeleitet)
 ///
-/// Der PairKey ist die fachliche Identität eines Bildpaares.
-/// Zwei Dateien mit gleichem PairKey (aber unterschiedlicher Version)
-/// gehören zum selben ImagePair-Aggregate.
+/// Der PairKey ist die Identität eines Bildpaares: zwei Dateien mit gleichem PairKey (aber unterschiedlicher Version) gehören zusammen — in einer
+/// Domäne zum selben Paar (die Übersetzung macht aus der Guid dessen Id).
 ///
 /// Die deterministische Guid wird per MD5 aus dem PairKey erzeugt —
 /// identischer Input → identische Guid, immer.
 /// </summary>
-public static class ImagePairFileName
+public static class Aufnahmename
 {
     private const int PairKeySegments = 7;
 
     /// <summary>
-    /// Parst einen Dateinamen und extrahiert PairKey, BildVersion und ProduziertAm.
+    /// Parst einen Dateinamen und extrahiert PairKey, Version und ProduziertAm.
     /// Gibt null zurück wenn der Dateiname nicht der Convention entspricht.
     /// </summary>
     public static ParseResult? Parse(string fileName)
@@ -42,7 +40,9 @@ public static class ImagePairFileName
 
         // Letzte Segment = Version (DC0, DC2)
         var versionSegment = segments[PairKeySegments];
-        if (!Enum.TryParse<BildVersion>(versionSegment, ignoreCase: true, out var version))
+        // Die Version: DC0 oder DC2 (die zwei Aufnahmen eines Paars), groß geschrieben weitergegeben.
+        var version = versionSegment.ToUpperInvariant();
+        if (version is not ("DC0" or "DC2"))
             return null;
 
         // Erste 7 Segmente = PairKey
@@ -105,15 +105,13 @@ public static class ImagePairFileName
         var parsed = Parse(fileName);
         if (parsed == null) return null;
 
-        var aggregateId = new Id<ImagePair>(ToDeterministicGuid(parsed.PairKey));
-        return new ResolvedPair(
-            parsed.PairKey, parsed.Version, aggregateId, parsed.ProduziertAm);
+        return new ResolvedPair(parsed.PairKey, parsed.Version, ToDeterministicGuid(parsed.PairKey), parsed.ProduziertAm);
     }
 
     // ─── Result-Typen ───
 
-    public record ParseResult(string PairKey, BildVersion Version, DateTimeOffset ProduziertAm);
+    public record ParseResult(string PairKey, string Version, DateTimeOffset ProduziertAm);
 
-    public record ResolvedPair(
-        string PairKey, BildVersion Version, Id<ImagePair> AggregateId, DateTimeOffset ProduziertAm);
+    /// <summary>Der gedeutete Name: Schlüssel des Paars, Version (wie geschrieben, groß), die Id des Paars aus dem Schlüssel, Aufnahmezeit.</summary>
+    public record ResolvedPair(string PairKey, string Version, Guid Paar, DateTimeOffset ProduziertAm);
 }

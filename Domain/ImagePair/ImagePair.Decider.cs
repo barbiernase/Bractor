@@ -26,12 +26,14 @@ public partial class ImagePair
         /// </summary>
         public IEnumerable<OneOf<ImagePairErstellt, BildVerfuegbar, ImagePairKomplett, BildVersionBereitsVerfuegbar, PaarZuBeurteilen>> Decide(NimmBildAuf cmd)
         {
+            // Die Version kommt als Name („DC0“, die Aufnahme-Konvention kennt nur DC0 und DC2); ein anderer Name lässt den Command scheitern.
+            var version = Enum.Parse<BildVersion>(cmd.Version, ignoreCase: true);
             var neu = this.State.Version == 0;
             if (neu)
                 yield return new ImagePairErstellt(cmd.AggregateId, cmd.PairKey, cmd.ProduziertAm, cmd.AufgenommenAm, cmd.UrsprungsPfad);
-            else if (this.State.GetBild(cmd.Version) != null)
+            else if (this.State.GetBild(version) != null)
             {
-                yield return new BildVersionBereitsVerfuegbar(cmd.Version);
+                yield return new BildVersionBereitsVerfuegbar(version);
                 yield break;
             }
 
@@ -47,9 +49,10 @@ public partial class ImagePair
                     MenschLabel: null));
             }
 
-            yield return new BildVerfuegbar(cmd.Version, cmd.Meta, cmd.Pfad, regionen);
+            yield return new BildVerfuegbar(version, new BildMeta(cmd.OriginalDateiname, cmd.DateigroesseBytes, cmd.BreitePixel, cmd.HoehePixel, cmd.ErstelltAm),
+                cmd.Pfad, regionen);
 
-            var andereVersion = cmd.Version == BildVersion.Dc0 ? BildVersion.Dc2 : BildVersion.Dc0;
+            var andereVersion = version == BildVersion.Dc0 ? BildVersion.Dc2 : BildVersion.Dc0;
             if (!neu && this.State.GetBild(andereVersion) != null)
             {
                 yield return new ImagePairKomplett();

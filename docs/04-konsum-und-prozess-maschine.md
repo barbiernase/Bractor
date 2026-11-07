@@ -278,10 +278,11 @@ Extractor und `--graph <Typ>`. Eine Funktion in keinem Graphen läuft nie (CQRS1
 public sealed record Bildaufbereitung(
     [Kopf] Bildeinlesen Einlesen,
     [Von(nameof(Einlesen))] Bildverkleinerung Verkleinern,
-    [Von(nameof(Verkleinern))] Kontrastausgleich Kontrast) : IGraph;
-// Domain.Pipeline/ImagePair/Graphen.cs — der Ablauf der Domäne: Quelle, Graph aus dem Katalog als Schachtel, der Bildeingang des Paars
+    [Von(nameof(Verkleinern))] Kontrastausgleich Kontrast,
+    [Von(nameof(Kontrast))] Dateinamendeutung Deuten) : IGraph;
+// Domain.Pipeline/ImagePair/Graphen.cs — der Ablauf der Domäne: Quelle, Graph aus dem Katalog als Schachtel, die Übersetzung in den Command an das Paar
 public sealed record Linienimport(Dateiwaechter Eingang, [Von(nameof(Eingang))] Bildaufbereitung Aufbereitung,
-    [Von(nameof(Aufbereitung))] Bildeingang Deuten) : IGraph;
+    [Von(nameof(Aufbereitung)), Feld(nameof(NimmBildAuf.AggregateId), nameof(BildGedeutet.Paar))] Uebersetze<BildGedeutet, NimmBildAuf> Aufnehmen) : IGraph;
 ```
 Die übrigen Muster zeigt die Sonde (`GraphExtractor.Kern/Sonde/Vorhersage.cs.txt`, Kartenausgabe): dieselbe Funktion zweimal, eine Kette gleichen
 Typs, ein Knoten mit `[Kopf]` und `[Von]`, ein Graph im Graphen, dessen Ausgang ein anderer Knoten per `Von(nameof(Filter))` nimmt.
@@ -417,8 +418,8 @@ von dort an die Sitzungen der Akteure, die ihn hören — ohne Log, höchstens e
 
 **Bestand.** Beispieldomäne: der **Linienimport** bei ImagePair (`Dateiwaechter` → **Bildaufbereitung** aus `Bildvorschau.Katalog`:
 `Bildeinlesen` → `BildEingelesen` → `Bildverkleinerung` → `BildVerkleinert` → `Kontrastausgleich` → `VorschauErstellt` (trägt die Datei der Quelle
-mit) → `Bildeingang` → `NimmBildAuf`; `BildNichtLesbar` und `DateinameUnbekannt` sind Hinweise; die **Bildaufnahme** ist dasselbe ohne Dateiwächter,
-Kopf `DateiGefunden`), die **Datensatzpflege** (`RangeAufloesung` mit Kopf `RangeAufzuloesen`,
+mit) → `Dateinamendeutung` → `BildGedeutet`, im Ablauf übersetzt ↦ `NimmBildAuf` (flache Felder, das Decide baut `BildMeta` und `BildVersion`);
+`BildNichtLesbar` und `DateinameUnbekannt` sind Hinweise des Katalogs; die **Bildaufnahme** ist dasselbe ohne Dateiwächter, Kopf `DateiGefunden`), die **Datensatzpflege** (`RangeAufloesung` mit Kopf `RangeAufzuloesen`,
 `MitgliederEinfrieren` mit Kopf `EinfrierenAbzuschliessen`, beide mit Lese-Fähigkeit) und die **Teilmeldung** (`TeilFertigMeldung`, Kopf `TeilFertig`);
 Arbeit haben der `Klassifizierer` (`PaarZuBeurteilen`) und das `TrainingsSystem` (`TrainingZuRechnen`, die Antwort in Stücken). Prüfdomäne: der
 **Abrechnungsablauf** (`Freigabeautomat` gibt eine Rechnung bis 10 000 frei, darüber `RechnungZuPruefen` — Arbeit des `Rechnungspruefer`;
@@ -504,7 +505,7 @@ Inbox des Ziels einmal. In Sim verschiebt ein Uhr-Versatz die Datenbank-Uhr (Dur
 
 **Quellen** sind Funktionen aus dem Katalog des Frameworks (`Core/Katalog/`). Eine Quellfunktion hat `Lausche(CancellationToken)` statt `Auf` —
 ein `IAsyncEnumerable` ihrer Commands — und steht am Kopf eines Graphen, als dessen einziger Kopf (CQRS115); die Domäne nennt sie als Knoten
-(`Linienimport(Dateiwaechter Eingang, Bildaufbereitung Aufbereitung, Bildeingang Deuten)`), ihre Werte stehen in der Instanz. Was sie meldet, ist ein gewöhnlicher
+(`Linienimport(Dateiwaechter Eingang, Bildaufbereitung Aufbereitung, Uebersetze<BildGedeutet, NimmBildAuf> Aufnehmen)`), ihre Werte stehen in der Instanz. Was sie meldet, ist ein gewöhnlicher
 Command ohne Ziel (`Abstractions/Katalog.cs`), den der nächste Knoten nimmt; Codegen und Leitung kennen die Katalog-Commands wie die der Domäne.
 
 | Katalogfunktion | meldet | Konfig (am Knoten) | Zustand |

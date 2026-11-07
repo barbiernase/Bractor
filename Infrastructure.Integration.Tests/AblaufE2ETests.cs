@@ -99,7 +99,7 @@ public class AblaufE2ETests
             var t = Zufallszeit(8);
             var dc0 = Datei(eingang, t, BildVersion.Dc0);
             Datei(eingang, t, BildVersion.Dc2);
-            var paar = ImagePairFileName.Resolve(dc0.Name)!.AggregateId.Wert;
+            var paar = Aufnahmename.Resolve(dc0.Name)!.Paar;
 
             await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is ImagePairKomplett), TimeSpan.FromSeconds(60),
                 "Das Paar wurde nicht komplett — Dateiwächter → Einlesen → (Verkleinern → Kontrast) ∥ Bildeingang → ImagePair lief nicht durch.");
@@ -118,7 +118,7 @@ public class AblaufE2ETests
             // Spur: der Command trägt den letzten Knoten; seine Ursache ist der Lauf der Quelle (Instanz und Nummer) — ein Quell-Command steht nie im Log.
             var bildEnv = stream.First(e => e.Payload is BildVerfuegbar);
             bildEnv.Wirker.Should().Be("decide:ImagePair/NimmBildAuf");
-            bildEnv.Ueber.Should().Be("knoten:Linienimport/Deuten", "der Absender des Commands ist der Knoten, der ihn ausgab (W9)");
+            bildEnv.Ueber.Should().Be("knoten:Linienimport/Aufnehmen", "der Absender des Commands ist der Knoten, der ihn ausgab (W9)");
             Spur.ZerlegeUrsache(bildEnv.Ursache, out var quelle, out _).Should().BeTrue();
             quelle.Should().Be(Herkunft.Ableite("quelle:Linienimport"), "die Ursache ist der Lauf der Quelle der Instanz");
         }
@@ -176,7 +176,7 @@ public class AblaufE2ETests
             var t = Zufallszeit(9);
             var dc0 = Datei(eingangPy, t, BildVersion.Dc0);
             Datei(eingangPy, t, BildVersion.Dc2);
-            var paar = ImagePairFileName.Resolve(dc0.Name)!.AggregateId.Wert;
+            var paar = Aufnahmename.Resolve(dc0.Name)!.Paar;
 
             await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is BildPaarDurchKiKlassifiziert), TimeSpan.FromSeconds(90),
                 "Kein BildPaarDurchKiKlassifiziert — der Python-Worker hat die Arbeit nicht bekommen oder nicht beantwortet:\n" + string.Join("\n", ausgabe));
@@ -246,7 +246,7 @@ public class AblaufE2ETests
 
             var paar = Guid.NewGuid();
             Sende("ImagePair", new NimmBildAuf(new(paar), "PAIR-RANGE-" + paar.ToString("N")[..6], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "/range",
-                BildVersion.Dc0, new BildMeta("range.tiff", 1, 1, 1, DateTimeOffset.UtcNow), "/range.png"));
+                "DC0", "range.tiff", 1, 1, 1, DateTimeOffset.UtcNow, "/range.png"));
             using (var bereich = host.Services.CreateScope())
             {
                 var finde = bereich.ServiceProvider.GetRequiredService<Domain.Projections.ImagePair.IFindImagePair>();
@@ -287,7 +287,7 @@ public class AblaufE2ETests
 
         var t = Zufallszeit(12);
         var datei = Datei(Path.Combine(verzeichnis, "vorlage"), t, BildVersion.Dc0);
-        var paar = ImagePairFileName.Resolve(datei.Name)!.AggregateId.Wert;
+        var paar = Aufnahmename.Resolve(datei.Name)!.Paar;
         // Der Zustand gilt je Instanz über Neustarts — auch über die Tests dieser Klasse hinweg (geteilte DB, dieselbe Instanz „Linienimport“):
         //   erwartet wird darum der Stand vor dem Test plus ein Lauf.
         long vorher = 0;
@@ -375,7 +375,7 @@ public class AblaufE2ETests
             var t = Zufallszeit(14);
             var dc0 = Datei(linie1, t, BildVersion.Dc0);
             Datei(linie2, t, BildVersion.Dc2);
-            var paar = ImagePairFileName.Resolve(dc0.Name)!.AggregateId.Wert;
+            var paar = Aufnahmename.Resolve(dc0.Name)!.Paar;
             var es = host.Services.GetRequiredService<IEventStoreRepository>();
             await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is ImagePairKomplett), TimeSpan.FromSeconds(60),
                 "Das Paar wurde nicht komplett — je Linie ein Wächter, je Datei ein Lauf.");

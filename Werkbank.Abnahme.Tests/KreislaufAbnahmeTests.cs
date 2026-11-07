@@ -154,9 +154,9 @@ public class KreislaufAbnahmeTests
         (bild!["schritte"] as JsonArray)!.Select(s => (string?)s?["name"]).Should().Contain("BildVerfuegbar").And.Contain("ImagePairKomplett");
         (await WorkerLog()).Should().Contain("PaarZuBeurteilen", "genau diese Arbeit hat der Python-Worker beantwortet");
 
-        // Der Weg durch den Graphen: NimmBildAuf gab der Bildeingang der Instanz linienimport — ein gegangener Draht von seinem Knoten aus.
+        // Der Weg durch den Graphen: NimmBildAuf gab die Übersetzung „Aufnehmen“ der Instanz linienimport — ein gegangener Draht von seinem Knoten aus.
         (bild["schritte"] as JsonArray)!.SelectMany(s => s?["paare"] as JsonArray ?? []).Select(p => (string?)p?[0])
-            .Should().Contain("knoten:linienimport/Deuten", "der Wirker eines Schritts ist sein Knoten");
+            .Should().Contain("knoten:linienimport/Aufnehmen", "der Wirker eines Schritts ist sein Knoten");
         board = JsonNode.Parse(await w.Http.GetStringAsync("/api/editor/model"))!.AsObject();
         var linie = (board["graphen"] as JsonArray)!.OfType<JsonObject>().Single(g => (string?)g["name"] == "Linienimport");
         linie["quelle"]!.GetValue<string>().Should().Be("Eingang", "der Graph steht als Karte im Board, mit seiner Quelle am Kopf");
@@ -186,7 +186,7 @@ public class KreislaufAbnahmeTests
 
         // ── 6. 🤖-Übernahme = Rumpf-Geste (derselbe Weg wie ✎): Methode und Fluss-Lambda, je mit ↶ ──
         var slots = JsonNode.Parse(await w.Http.GetStringAsync("/api/llm/slots"))!.AsArray().OfType<JsonObject>().ToList();
-        foreach (var (art, teil) in new[] { ("decide", "ErstelleDatensatz"), ("fluss", "Bildeingang") })
+        foreach (var (art, teil) in new[] { ("decide", "ErstelleDatensatz"), ("fluss", "Dateinamendeutung") })
         {
             var id = (string)slots.First(x => (string?)x["art"] == art && ((string?)x["id"])!.Contains(teil, StringComparison.Ordinal))["id"]!;
             var aktuell = (await w.HoleAsync($"/api/llm/slot?id={Uri.EscapeDataString(id)}"))["aktuell"]!;

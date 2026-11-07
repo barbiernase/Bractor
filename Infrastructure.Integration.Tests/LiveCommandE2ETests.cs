@@ -57,8 +57,8 @@ public class LiveCommandE2ETests
                 dispatcher.Dispatch(new CommandEnvelope
                 {
                     AggregateType = "ImagePair", Modus = new CommandModus.Client(0),
-                    Payload = new NimmBildAuf(new(paar), "PAIR-WECKER", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "/wecker/e2e", BildVersion.Dc0,
-                        new BildMeta("dc0.tiff", 1, 1, 1, DateTimeOffset.UtcNow), "/wecker/e2e.png"),
+                    Payload = new NimmBildAuf(new(paar), "PAIR-WECKER", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "/wecker/e2e", "DC0",
+                        "dc0.tiff", 1, 1, 1, DateTimeOffset.UtcNow, "/wecker/e2e.png"),
                 });
                 return paar;
             }
@@ -111,7 +111,7 @@ public class LiveCommandE2ETests
             {
                 AggregateType = "ImagePair",   // MUSS mit dem ClusterKind übereinstimmen
                 Modus = new CommandModus.Client(0),
-                Payload = new NimmBildAuf(new(pairId), "PAIR-LIVE", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "/live/e2e", BildVersion.Dc0, new BildMeta("dc0.tiff", 1, 1, 1, DateTimeOffset.UtcNow), "/live/e2e" + ".png")
+                Payload = new NimmBildAuf(new(pairId), "PAIR-LIVE", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "/live/e2e", "DC0", "dc0.tiff", 1, 1, 1, DateTimeOffset.UtcNow, "/live/e2e" + ".png")
             });
 
             // Command → Event → Wecker → Batch-Leser → Co-Commit ist asynchron.

@@ -186,6 +186,21 @@ message BildEingelesenDto {
     int32 hoehe_pixel = 6;
 }
 
+message BildGedeutetDto {
+    string paar = 1;
+    string pair_key = 2;
+    int64 produziert_am = 3;
+    int64 aufgenommen_am = 4;
+    string ursprungs_pfad = 5;
+    string version = 6;
+    string original_dateiname = 7;
+    int64 dateigroesse_bytes = 8;
+    int32 breite_pixel = 9;
+    int32 hoehe_pixel = 10;
+    int64 erstellt_am = 11;
+    string pfad = 12;
+}
+
 message BildVerkleinertDto {
     string dateiname = 1;
     string pfad = 2;
@@ -324,9 +339,13 @@ message NimmBildAufDto {
     int64 produziert_am = 3;
     int64 aufgenommen_am = 4;
     string ursprungs_pfad = 5;
-    int32 version = 6;
-    BildMetaDto meta = 7;
-    string pfad = 8;
+    string version = 6;
+    string original_dateiname = 7;
+    int64 dateigroesse_bytes = 8;
+    int32 breite_pixel = 9;
+    int32 hoehe_pixel = 10;
+    int64 erstellt_am = 11;
+    string pfad = 12;
 }
 
 message ArchiviereModellDto {
@@ -429,6 +448,10 @@ message BildNichtLesbarDto {
     string grund = 2;
 }
 
+message DateinameUnbekanntDto {
+    string dateiname = 1;
+}
+
 message DatensatzBereitsEingefrorenDto {
     string datensatz_id = 1;
 }
@@ -524,10 +547,6 @@ message BildVerfuegbarDto {
 
 message BildVersionBereitsVerfuegbarDto {
     int32 version = 1;
-}
-
-message DateinameUnbekanntDto {
-    string dateiname = 1;
 }
 
 message EinzelBildDurchKiKlassifiziertDto {

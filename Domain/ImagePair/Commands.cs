@@ -7,9 +7,10 @@ namespace Domain.ImagePair;
 // ═══════════════════════════════════════════════════
 
 /// <summary>
-/// Ein Bild eines Paars ist da (vom Bildeingang): legt das Paar an, wenn es noch nicht existiert, und ergänzt das Bild — „anlegen oder ergänzen“
-/// in EINEM Command, damit die zweite Datei eines Paars keine Ablehnung braucht, um weiterzukommen. Die Paar-Id ist aus dem PairKey abgeleitet
-/// (<see cref="ImagePairFileName"/>), beide Dateien treffen dasselbe Aggregat.
+/// Ein Bild eines Paars ist da: legt das Paar an, wenn es noch nicht existiert, und ergänzt das Bild — „anlegen oder ergänzen“ in EINEM Command,
+/// damit die zweite Datei eines Paars keine Ablehnung braucht, um weiterzukommen. Die Felder sind flach (Version als Name wie „DC0“, die Metadaten
+/// einzeln): so übersetzt ein Ablauf die Nachricht eines Katalogs Feld für Feld hierher; das Decide macht daraus <see cref="BildVersion"/> und
+/// <see cref="BildMeta"/>. Die Paar-Id kommt aus der Nachricht (aus dem Schlüssel abgeleitet), beide Dateien treffen dasselbe Aggregat.
 /// </summary>
 public record NimmBildAuf(
     Id<ImagePair> AggregateId,
@@ -17,8 +18,12 @@ public record NimmBildAuf(
     DateTimeOffset ProduziertAm,
     DateTimeOffset AufgenommenAm,
     string UrsprungsPfad,
-    BildVersion Version,
-    BildMeta Meta,
+    string Version,
+    string OriginalDateiname,
+    long DateigroesseBytes,
+    int BreitePixel,
+    int HoehePixel,
+    DateTimeOffset ErstelltAm,
     string Pfad
 ) : ICommand<ImagePair>;
 

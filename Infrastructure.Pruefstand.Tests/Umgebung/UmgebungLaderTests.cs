@@ -251,7 +251,7 @@ public class UmgebungLaderTests
     public void Die_generierte_Tabelle_kennt_die_Funktionen_des_Bestands_alle_im_Host()
     {
         var b = GeneratedFunktionsBausteine.Alle.ToDictionary(x => x.Name);
-        b.Keys.Should().Contain(["Bildeinlesen", "Bildverkleinerung", "Kontrastausgleich", "Bildeingang", "RangeAufloesung", "MitgliederEinfrieren"]);
+        b.Keys.Should().Contain(["Bildeinlesen", "Bildverkleinerung", "Kontrastausgleich", "Dateinamendeutung", "RangeAufloesung", "MitgliederEinfrieren"]);
         b.Keys.Should().NotContain(["Klassifizierer", "TrainingsSystem"], "die Arbeit eines Akteurs ist keine generierte Funktion");
         b.Values.Should().OnlyContain(x => !x.Draussen, "eine Funktion ist eine Klasse im Host");
         b["RangeAufloesung"].Liest.Should().BeTrue("mit Lese-Fähigkeit");

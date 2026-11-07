@@ -24,17 +24,16 @@ public class EingangJsonTests
     private static JsonElement J(string json) => JsonDocument.Parse(json).RootElement;
 
     [Fact]
-    public void Command_mit_Enum_als_Name_und_Werte_Objekt()
+    public void Command_mit_Enum_als_Name_und_Liste_von_Enums()
     {
-        MessageTypeMapping.Resolve("NimmBildAuf").Should().Be((typeof(NimmBildAuf), MessageCategory.Command));
+        MessageTypeMapping.Resolve("KlassifiziereEinzelBildDurchKi").Should().Be((typeof(KlassifiziereEinzelBildDurchKi), MessageCategory.Command));
         var id = Guid.NewGuid();
-        var cmd = (NimmBildAuf)EingangJson.Lies(J($$"""
-            { "AggregateId": "{{id}}", "PairKey": "P", "Version": "Dc2", "Pfad": "/x.png",
-              "Meta": { "OriginalDateiname": "a.tiff", "DateigroesseBytes": 7, "BreitePixel": 3, "HoehePixel": 2, "ErstelltAm": "2026-10-12T10:00:00+00:00" } }
-            """), typeof(NimmBildAuf));
+        var cmd = (KlassifiziereEinzelBildDurchKi)EingangJson.Lies(J($$"""
+            { "AggregateId": "{{id}}", "Version": "Dc2", "BildLabel": "Anomalie", "RegionLabels": [ "KeineAnomalie", "Questionable" ] }
+            """), typeof(KlassifiziereEinzelBildDurchKi));
         cmd.AggregateId.Wert.Should().Be(id);
         cmd.Version.Should().Be(BildVersion.Dc2);
-        cmd.Meta.BreitePixel.Should().Be(3);
+        cmd.RegionLabels.Should().Equal(Klassifikation.KeineAnomalie, Klassifikation.Questionable);
         EingangJson.Schreibe(cmd).GetProperty("Version").GetString().Should().Be("Dc2", "die Werkbank zeigt Enums als Namen");
     }
 

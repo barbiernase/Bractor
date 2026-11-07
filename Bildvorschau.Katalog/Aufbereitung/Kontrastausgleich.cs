@@ -5,7 +5,7 @@ namespace Bildvorschau.Katalog.Aufbereitung;
 
 /// <summary>
 /// Schritt 3 der Bildaufbereitung — das verkleinerte Bild im Histogramm ausgleichen (Technik <see cref="IHistogramEqualizer"/>) und als Vorschau
-/// (PNG) ablegen; der Bildeingang macht daraus das Bild des Paars. Der Zielname folgt nur aus der Quelle — eine Wiederholung überschreibt dieselbe Datei. Zustandslos.
+/// (PNG) ablegen; die Dateinamendeutung deutet danach den Namen der Quelle. Der Zielname folgt nur aus der Quelle — eine Wiederholung überschreibt dieselbe Datei. Zustandslos.
 /// </summary>
 public sealed class Kontrastausgleich(IHistogramEqualizer equalizer, BildaufbereitungKonfig konfig) : IFunktion
 {

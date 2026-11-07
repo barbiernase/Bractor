@@ -46,7 +46,7 @@ internal sealed class Bildeingang : ILast, IAsyncDisposable
     {
         var t = _basis.AddMilliseconds(Interlocked.Increment(ref _n));
         var schluessel = t.ToString("yyyy_MM_dd_HH_mm_ss_fff", CultureInfo.InvariantCulture);
-        var id = ImagePairFileName.ToDeterministicGuid(schluessel);
+        var id = Bildvorschau.Katalog.Aufbereitung.Aufnahmename.ToDeterministicGuid(schluessel);
         foreach (var version in new[] { "DC0", "DC2" })
         {
             var name = $"{schluessel}_{version}.tiff";
