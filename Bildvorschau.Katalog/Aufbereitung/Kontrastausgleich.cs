@@ -1,7 +1,7 @@
 using Abstractions;
 using OpenCvSharp;
 
-namespace Domain.Pipeline.Bildaufbereitung;
+namespace Bildvorschau.Katalog.Aufbereitung;
 
 /// <summary>
 /// Schritt 3 der Bildaufbereitung — das verkleinerte Bild im Histogramm ausgleichen (Technik <see cref="IHistogramEqualizer"/>) und als Vorschau

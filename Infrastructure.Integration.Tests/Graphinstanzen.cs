@@ -4,8 +4,8 @@ namespace Infrastructure.Integration.Tests;
 
 /// <summary>
 /// Die Instanzen der Graphen der Beispieldomäne für die Hosts der Integrations-Tests (je Graph eine, wie <c>umgebungen/sim-main/graphen</c>): die
-/// Bildaufbereitung mit Parallel und Wiederholungen ihrer drei Bild-Knoten und dem Ausgabe-Pfad — mit <paramref name="eingang"/> als Linienimport unter
-/// einem Dateiwächter auf diesem Verzeichnis, sonst für sich (Kopf DateiGefunden) —, die übrigen mit den Standards. Die Arbeit der Akteure
+/// Bildaufbereitung (aus dem Katalog) mit Parallel und Wiederholungen ihrer drei Bild-Knoten und dem Ausgabe-Pfad — mit <paramref name="eingang"/> im
+/// Linienimport unter einem Dateiwächter auf diesem Verzeichnis, sonst in der Bildaufnahme (Kopf DateiGefunden) —, die übrigen mit den Standards. Die Arbeit der Akteure
 /// (Klassifizierer, TrainingsSystem) kommt ohne Datei dazu.
 /// </summary>
 internal static class Graphinstanzen
@@ -18,10 +18,10 @@ internal static class Graphinstanzen
             if (mitPfad && ausgabe is not null) k.Werte["AusgabePfad"] = ausgabe;
             return k;
         }
-        var vor = eingang is null ? "" : "Aufbereitung.";
+        const string vor = "Aufbereitung.";
         var bild = new GraphInstanzKonfig
         {
-            Graph = eingang is null ? "Bildaufbereitung" : "Linienimport",
+            Graph = eingang is null ? "Bildaufnahme" : "Linienimport",
             Akteur = eingang is null ? null : "KameraSystem",
             Knoten = { [vor + "Einlesen"] = Bild(false), [vor + "Verkleinern"] = Bild(true), [vor + "Kontrast"] = Bild(true) },
         };
@@ -33,7 +33,7 @@ internal static class Graphinstanzen
             w.Werte["Fenster"] = "00:00:00.300";
             bild.Knoten["Eingang"] = w;
         }
-        var aus = new Dictionary<string, GraphInstanzKonfig>(StringComparer.Ordinal) { [eingang is null ? "bildaufbereitung" : "linienimport"] = bild };
+        var aus = new Dictionary<string, GraphInstanzKonfig>(StringComparer.Ordinal) { [eingang is null ? "bildaufnahme" : "linienimport"] = bild };
         foreach (var g in new[] { "Datensatzpflege", "Teilmeldung" })
             aus[g.ToLowerInvariant()] = new GraphInstanzKonfig { Graph = g };
         return aus;

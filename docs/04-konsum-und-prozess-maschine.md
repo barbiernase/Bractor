@@ -274,13 +274,14 @@ ist der Adapter eine eigene kleine Funktion. Der `GraphGenerator` erzeugt `Gener
 und Erzeugern, Köpfe, Ebenen); dieselbe Lesart (`Graphform`) liest der `GraphAnalyzer` (CQRS115: GR-GRAPH, GR-KANTE, GR-KOPF), der
 Extractor und `--graph <Typ>`. Eine Funktion in keinem Graphen läuft nie (CQRS117, Warnung).
 ```csharp
-// Domain.Pipeline/Bildaufbereitung/Graphen.cs — eine Kette; jede Nachricht trägt die Datei der Quelle mit
+// Bildvorschau.Katalog/Aufbereitung/Graphen.cs — eine Kette im Katalog; jede Nachricht trägt die Datei der Quelle mit
 public sealed record Bildaufbereitung(
     [Kopf] Bildeinlesen Einlesen,
     [Von(nameof(Einlesen))] Bildverkleinerung Verkleinern,
-    [Von(nameof(Verkleinern))] Kontrastausgleich Kontrast,
-    [Von(nameof(Kontrast))] Bildeingang Eingang) : IGraph;
-public sealed record Linienimport(Dateiwaechter Eingang, [Von(nameof(Eingang))] Bildaufbereitung Aufbereitung) : IGraph;   // Quelle, Graph im Graphen
+    [Von(nameof(Verkleinern))] Kontrastausgleich Kontrast) : IGraph;
+// Domain.Pipeline/ImagePair/Graphen.cs — der Ablauf der Domäne: Quelle, Graph aus dem Katalog als Schachtel, der Bildeingang des Paars
+public sealed record Linienimport(Dateiwaechter Eingang, [Von(nameof(Eingang))] Bildaufbereitung Aufbereitung,
+    [Von(nameof(Aufbereitung))] Bildeingang Deuten) : IGraph;
 ```
 Die übrigen Muster zeigt die Sonde (`GraphExtractor.Kern/Sonde/Vorhersage.cs.txt`, Kartenausgabe): dieselbe Funktion zweimal, eine Kette gleichen
 Typs, ein Knoten mit `[Kopf]` und `[Von]`, ein Graph im Graphen, dessen Ausgang ein anderer Knoten per `Von(nameof(Filter))` nimmt.
@@ -414,9 +415,10 @@ erneut, der durable Rand bringt den Eingang wieder. Kein Vermittler, keine Lease
 **Hinweise** (`Infrastructure/Funktionen/Hinweise.cs`). Ein Hinweis aus einem Knoten oder eine gescheiterte Kette geht nur an die Verteiler und
 von dort an die Sitzungen der Akteure, die ihn hören — ohne Log, höchstens einmal. Was ein Knoten braucht, ist ein Command.
 
-**Bestand.** Beispieldomäne: der **Linienimport** (`Dateiwaechter` → **Bildaufbereitung**: `Bildeinlesen` → `BildEingelesen` →
-`Bildverkleinerung` → `BildVerkleinert` → `Kontrastausgleich` → `VorschauErstellt` (trägt die Datei der Quelle mit) → `Bildeingang` → `NimmBildAuf`;
-`BildNichtLesbar` und `DateinameUnbekannt` sind Hinweise), die **Datensatzpflege** (`RangeAufloesung` mit Kopf `RangeAufzuloesen`,
+**Bestand.** Beispieldomäne: der **Linienimport** bei ImagePair (`Dateiwaechter` → **Bildaufbereitung** aus `Bildvorschau.Katalog`:
+`Bildeinlesen` → `BildEingelesen` → `Bildverkleinerung` → `BildVerkleinert` → `Kontrastausgleich` → `VorschauErstellt` (trägt die Datei der Quelle
+mit) → `Bildeingang` → `NimmBildAuf`; `BildNichtLesbar` und `DateinameUnbekannt` sind Hinweise; die **Bildaufnahme** ist dasselbe ohne Dateiwächter,
+Kopf `DateiGefunden`), die **Datensatzpflege** (`RangeAufloesung` mit Kopf `RangeAufzuloesen`,
 `MitgliederEinfrieren` mit Kopf `EinfrierenAbzuschliessen`, beide mit Lese-Fähigkeit) und die **Teilmeldung** (`TeilFertigMeldung`, Kopf `TeilFertig`);
 Arbeit haben der `Klassifizierer` (`PaarZuBeurteilen`) und das `TrainingsSystem` (`TrainingZuRechnen`, die Antwort in Stücken). Prüfdomäne: der
 **Abrechnungsablauf** (`Freigabeautomat` gibt eine Rechnung bis 10 000 frei, darüber `RechnungZuPruefen` — Arbeit des `Rechnungspruefer`;
@@ -502,7 +504,7 @@ Inbox des Ziels einmal. In Sim verschiebt ein Uhr-Versatz die Datenbank-Uhr (Dur
 
 **Quellen** sind Funktionen aus dem Katalog des Frameworks (`Core/Katalog/`). Eine Quellfunktion hat `Lausche(CancellationToken)` statt `Auf` —
 ein `IAsyncEnumerable` ihrer Commands — und steht am Kopf eines Graphen, als dessen einziger Kopf (CQRS115); die Domäne nennt sie als Knoten
-(`Linienimport(Dateiwaechter Eingang, Bildaufbereitung Aufbereitung)`), ihre Werte stehen in der Instanz. Was sie meldet, ist ein gewöhnlicher
+(`Linienimport(Dateiwaechter Eingang, Bildaufbereitung Aufbereitung, Bildeingang Deuten)`), ihre Werte stehen in der Instanz. Was sie meldet, ist ein gewöhnlicher
 Command ohne Ziel (`Abstractions/Katalog.cs`), den der nächste Knoten nimmt; Codegen und Leitung kennen die Katalog-Commands wie die der Domäne.
 
 | Katalogfunktion | meldet | Konfig (am Knoten) | Zustand |

@@ -156,7 +156,7 @@ public class KreislaufAbnahmeTests
 
         // Der Weg durch den Graphen: NimmBildAuf gab der Bildeingang der Instanz linienimport — ein gegangener Draht von seinem Knoten aus.
         (bild["schritte"] as JsonArray)!.SelectMany(s => s?["paare"] as JsonArray ?? []).Select(p => (string?)p?[0])
-            .Should().Contain("knoten:linienimport/Aufbereitung.Eingang", "der Wirker eines Schritts ist sein Knoten");
+            .Should().Contain("knoten:linienimport/Deuten", "der Wirker eines Schritts ist sein Knoten");
         board = JsonNode.Parse(await w.Http.GetStringAsync("/api/editor/model"))!.AsObject();
         var linie = (board["graphen"] as JsonArray)!.OfType<JsonObject>().Single(g => (string?)g["name"] == "Linienimport");
         linie["quelle"]!.GetValue<string>().Should().Be("Eingang", "der Graph steht als Karte im Board, mit seiner Quelle am Kopf");

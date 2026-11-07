@@ -13,23 +13,7 @@
       <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
       <ProjectReference Include="..\Domain\Domain.csproj" />
       <ProjectReference Include="..\Bildverarbeitung.Katalog\Bildverarbeitung.Katalog.csproj" />
-      
-    </ItemGroup>
-
-    <!-- OpenCvSharp: Linux, wenn für linux-x64 veröffentlicht wird (auch vom Mac aus) oder ohne Runtime-Angabe unter Linux gebaut wird
-         (Messserver, Docker-Build); sonst der Mac. -->
-    <PropertyGroup>
-        <OpenCvLinux Condition="'$(RuntimeIdentifier)' == 'linux-x64' Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('Linux')))">true</OpenCvLinux>
-    </PropertyGroup>
-
-    <ItemGroup>
-        <!-- Mac: 4.8.x (hat ARM-Support) -->
-        <PackageReference Include="OpenCvSharp4" Version="4.8.*" Condition="'$(OpenCvLinux)' != 'true'" />
-        <PackageReference Include="OpenCvSharp4.runtime.osx_arm64" Version="4.8.1-rc" Condition="'$(OpenCvLinux)' != 'true'" />
-
-        <!-- Linux: die offizielle portable Runtime (braucht GTK3 und libatomic, scripts/server-einrichten.sh); publish legt die .so selbst ab -->
-        <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260627" Condition="'$(OpenCvLinux)' == 'true'" />
-        <PackageReference Include="OpenCvSharp4.official.runtime.linux-x64" Version="4.13.0.20260627" Condition="'$(OpenCvLinux)' == 'true'" />
+      <ProjectReference Include="..\Bildvorschau.Katalog\Bildvorschau.Katalog.csproj" />
     </ItemGroup>
 
 </Project>

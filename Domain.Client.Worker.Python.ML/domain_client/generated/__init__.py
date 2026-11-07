@@ -205,24 +205,6 @@ class ResizeFastErgebnisDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class EinfrierenAbzuschliessenDto(betterproto.Message):
-    datensatz: str = betterproto.string_field(1)
-    mitglieder: List[str] = betterproto.string_field(2)
-    split: "SplitKonfigDto" = betterproto.message_field(3)
-
-
-@dataclass(eq=False, repr=False)
-class RangeAufzuloesenDto(betterproto.Message):
-    datensatz: str = betterproto.string_field(1)
-    kriterien: "RangeKriterienDto" = betterproto.message_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class PaarZuBeurteilenDto(betterproto.Message):
-    paar: str = betterproto.string_field(1)
-
-
-@dataclass(eq=False, repr=False)
 class BildEingelesenDto(betterproto.Message):
     dateiname: str = betterproto.string_field(1)
     pfad: str = betterproto.string_field(2)
@@ -253,6 +235,24 @@ class VorschauErstelltDto(betterproto.Message):
     breite_pixel: int = betterproto.int32_field(6)
     hoehe_pixel: int = betterproto.int32_field(7)
     erstellt_am: int = betterproto.int64_field(8)
+
+
+@dataclass(eq=False, repr=False)
+class EinfrierenAbzuschliessenDto(betterproto.Message):
+    datensatz: str = betterproto.string_field(1)
+    mitglieder: List[str] = betterproto.string_field(2)
+    split: "SplitKonfigDto" = betterproto.message_field(3)
+
+
+@dataclass(eq=False, repr=False)
+class RangeAufzuloesenDto(betterproto.Message):
+    datensatz: str = betterproto.string_field(1)
+    kriterien: "RangeKriterienDto" = betterproto.message_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class PaarZuBeurteilenDto(betterproto.Message):
+    paar: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)

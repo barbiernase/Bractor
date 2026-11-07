@@ -3,7 +3,7 @@ using System.Net;
 using System.Net.Sockets;
 using Abstractions;
 using Domain.ImagePair;
-using Domain.Pipeline.Bildaufbereitung;
+using Bildvorschau.Katalog.Aufbereitung;
 using FluentAssertions;
 using Infrastructure.Extensions;
 using Infrastructure.Funktionen;
@@ -118,7 +118,7 @@ public class AblaufE2ETests
             // Spur: der Command trägt den letzten Knoten; seine Ursache ist der Lauf der Quelle (Instanz und Nummer) — ein Quell-Command steht nie im Log.
             var bildEnv = stream.First(e => e.Payload is BildVerfuegbar);
             bildEnv.Wirker.Should().Be("decide:ImagePair/NimmBildAuf");
-            bildEnv.Ueber.Should().Be("knoten:Linienimport/Aufbereitung.Eingang", "der Absender des Commands ist der Knoten, der ihn ausgab (W9)");
+            bildEnv.Ueber.Should().Be("knoten:Linienimport/Deuten", "der Absender des Commands ist der Knoten, der ihn ausgab (W9)");
             Spur.ZerlegeUrsache(bildEnv.Ursache, out var quelle, out _).Should().BeTrue();
             quelle.Should().Be(Herkunft.Ableite("quelle:Linienimport"), "die Ursache ist der Lauf der Quelle der Instanz");
         }

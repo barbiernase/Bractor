@@ -1,6 +1,6 @@
 using Abstractions;
 
-namespace Domain.Pipeline.Bildaufbereitung;
+namespace Bildvorschau.Katalog.Aufbereitung;
 
 // COMMANDS, die nur Knoten einander geben (docs/04 §4.4): Commands ohne Ziel, nie im Log.
 

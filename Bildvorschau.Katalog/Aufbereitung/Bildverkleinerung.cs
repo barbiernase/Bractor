@@ -1,7 +1,7 @@
 using Abstractions;
 using OpenCvSharp;
 
-namespace Domain.Pipeline.Bildaufbereitung;
+namespace Bildvorschau.Katalog.Aufbereitung;
 
 /// <summary>
 /// Schritt 2 der Bildaufbereitung — das eingelesene Bild auf <see cref="VorschauHoehe"/> verkleinern und als PNG ablegen (OpenCV über die Technik

@@ -1,9 +1,8 @@
-using Domain.Bildaufbereitung;
 using System;
 using System.Linq;
 using System.Text.Json;
 using Abstractions;
-using Domain.Pipeline.Bildaufbereitung;
+using Bildvorschau.Katalog.Aufbereitung;
 using Domain.Datensatz;
 using Domain.ImagePair;
 using Domain.Projections;

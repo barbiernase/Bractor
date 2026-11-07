@@ -1,6 +1,6 @@
 using OpenCvSharp;
 
-namespace Domain.Pipeline.Bildaufbereitung;
+namespace Bildvorschau.Katalog.Aufbereitung;
 
 /// <summary>
 /// Histogrammausgleich via OpenCV.

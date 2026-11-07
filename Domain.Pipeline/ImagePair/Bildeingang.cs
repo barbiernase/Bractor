@@ -1,6 +1,6 @@
 using Abstractions;
 using Domain.ImagePair;
-using Domain.Pipeline.Bildaufbereitung;
+using Bildvorschau.Katalog.Aufbereitung;
 
 namespace Domain.Pipeline.ImagePair;
 

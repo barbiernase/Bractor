@@ -1,0 +1,32 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- Ein Funktionskatalog (docs/konzept-funktionen-im-editor.md): die Bildaufbereitung — einlesen, verkleinern, Kontrast ausgleichen —, ihre
+         Nachrichten, Konfig und Technik (OpenCV), domänenneutral: er referenziert nur Abstractions, nie eine Anwendung. -->
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Domain.SourceGeneration\Domain.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
+    </ItemGroup>
+
+    <!-- OpenCvSharp: Linux, wenn für linux-x64 veröffentlicht wird (auch vom Mac aus) oder ohne Runtime-Angabe unter Linux gebaut wird
+         (Messserver, Docker-Build); sonst der Mac. -->
+    <PropertyGroup>
+        <OpenCvLinux Condition="'$(RuntimeIdentifier)' == 'linux-x64' Or ('$(RuntimeIdentifier)' == '' And $([MSBuild]::IsOSPlatform('Linux')))">true</OpenCvLinux>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Mac: 4.8.x (hat ARM-Support) -->
+        <PackageReference Include="OpenCvSharp4" Version="4.8.*" Condition="'$(OpenCvLinux)' != 'true'" />
+        <PackageReference Include="OpenCvSharp4.runtime.osx_arm64" Version="4.8.1-rc" Condition="'$(OpenCvLinux)' != 'true'" />
+
+        <!-- Linux: die offizielle portable Runtime (braucht GTK3 und libatomic, scripts/server-einrichten.sh); publish legt die .so selbst ab -->
+        <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260627" Condition="'$(OpenCvLinux)' == 'true'" />
+        <PackageReference Include="OpenCvSharp4.official.runtime.linux-x64" Version="4.13.0.20260627" Condition="'$(OpenCvLinux)' == 'true'" />
+    </ItemGroup>
+
+</Project>

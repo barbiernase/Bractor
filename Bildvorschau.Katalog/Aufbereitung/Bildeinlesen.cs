@@ -1,9 +1,7 @@
-using Domain.Bildaufbereitung;
 using Abstractions;
-using Domain.ImagePair;
 using OpenCvSharp;
 
-namespace Domain.Pipeline.Bildaufbereitung;
+namespace Bildvorschau.Katalog.Aufbereitung;
 
 /// <summary>
 /// Schritt 1 der Bildaufbereitung — eine gefundene Datei als Farbbild lesen und ihre Maße nennen; ist sie nicht lesbar, endet der Lauf hier

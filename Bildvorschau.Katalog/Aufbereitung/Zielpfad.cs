@@ -1,4 +1,4 @@
-namespace Domain.Pipeline.Bildaufbereitung;
+namespace Bildvorschau.Katalog.Aufbereitung;
 
 /// <summary>Wohin eine Bildfunktion ihr Ergebnis schreibt.</summary>
 internal static class Zielpfad

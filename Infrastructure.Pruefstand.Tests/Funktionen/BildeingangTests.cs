@@ -2,7 +2,7 @@ using System;
 using Abstractions;
 using Cqrs.Testing;
 using Domain.ImagePair;
-using Domain.Pipeline.Bildaufbereitung;
+using Bildvorschau.Katalog.Aufbereitung;
 using Domain.Pipeline.ImagePair;
 using FluentAssertions;
 using Xunit;
