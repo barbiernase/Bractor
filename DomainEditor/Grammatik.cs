@@ -77,7 +77,8 @@ public static class Grammatik
         new("GR-COMMAND", "Command → genau ein Empfänger", "Ein Command hat genau einen Empfänger, vom Absender aus: nennt er sein Ziel im Typ "
             + "(ICommand<TAggregat> mit Id<TAggregat> AggregateId), entscheidet ihn genau dieses Aggregat; ohne Typargument (ICommand) bekommt ihn der "
             + "Knoten desselben Graphen, der seinen Erzeuger in [Von] nennt, sonst der Kopf genau eines Graphen oder ein Akteur, der ihn hört (Arbeit). Kein Empfänger, mehrere, oder "
-            + "ein Typ, den ein Graph nimmt und ein Akteur hört, ist ein Fehler.", "error",
+            + "ein Typ, den ein Graph nimmt und ein Akteur hört, ist ein Fehler. Ein Graph in einem Katalog ist eine Blaupause: sein Kopf empfängt und sein "
+            + "Ausgang verlässt erst dort etwas, wo er als Knoten eines Graphen der Anwendung steht.", "error",
             [Comp("ICommand<TAggregat> liefert das Ziel aus Id<TAggregat> AggregateId (IAggregatCommand)"),
              An("CQRS013", "Domain.SourceGeneration/ModellAnalyzer.cs (Ziel nicht im Typ: IAggregatCommand von Hand, AggregateId ohne Typargument)"),
              Gen("CQRS010", "Infrastructure.SourceGeneration/CommandAggregateMapGenerator.cs (Decide außerhalb des Ziel-Aggregats)"),

@@ -513,6 +513,14 @@ Der Editor der Werkbank (`Werkbank/wwwroot/editor/`) ist ein Knoten-Editor; was 
   `nutzer`; der allgemeine Katalog entsteht beim ersten Gebrauch, `Kataloge.KatalogNutzt`, kein Kreis). ✎ an einem Command: Name, Felder,
   Command ⇄ Hinweis; ✕ an Input bzw. Output löst ihn aus der Funktion (der Command bleibt in der Liste), ✕ in der Liste löscht ihn, solange ihn
   keine Funktion mehr nimmt oder gibt. Welche Kataloge ein Katalog nutzt, steht im Rahmen (`Rahmen.KatalogNutzt`, aus seiner Projektdatei).
+- **Graphen im Katalog** (Stufe 2): „＋ ⬡ Graph“ im Katalog-Modal fragt Name und erste Funktion (neu, aus diesem oder einem anderen Katalog, oder ein
+  Graph als Schachtel); der Graph entsteht im Bereich seiner ersten Funktion mit ihr als `[Kopf]`, baut sofort und öffnet sich im Graph-Modal über
+  dem Katalog. Dort bietet „＋“ an einem Output gestrichelt jede Funktion aller Kataloge, deren Input genau dieser Command ist („ƒ X einsetzen“ →
+  `[Von]` am neuen Knoten), und „neue Funktion mit diesem Input“ (sie öffnet sich im Katalog-Modal); „＋“ an einem Input spiegelbildlich die
+  Funktionen, die ihn ausgeben (der neue Knoten nimmt von außen: `[Kopf]`), und „neue Funktion davor“. Eine Funktion aus einem anderen Katalog setzt
+  die Projektreferenz mit. Ein Graph im Katalog hat keinen Eingang (Client, Quelle), kein „↦ ▣ Command an …“, keinen Empfänger am rechten Rand
+  und keinen Reiter Instanzen; rechts stehen seine **Outputs** (die Signatur), der Baukasten zeigt nur Katalog-Inhalte. Er ist eine Blaupause:
+  CQRS116 zählt seine Köpfe und Ausgänge erst dort, wo er als Knoten eines Graphen der Anwendung steht.
 - **Funktion von innen** (docs/plan-katalog-und-graphen.md, Schritt 3): dieselbe Mechanik in vier Spalten — Eingänge · Auf · Ausgänge · Rahmen
   (Konstruktor). Eingang ↔ Auf ist 1:1 (R2), Auf → Ausgänge frei; jeder Ausgang trägt seine Vielfachheit (1 Folge, 0..1 Wahl, 0..n Strom), im ✎ des
   Auf stehen Strom, asynchron (`Task`/`IAsyncEnumerable`), Herkunft und — nur in der Anwendung — die Lese-Fähigkeiten, dazu der Rumpf. „＋ Ausgang“

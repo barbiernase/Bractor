@@ -19,7 +19,9 @@ namespace Infrastructure.SourceGeneration;
 /// <item>CQRS086 (GR-MODUL-EINGANG-OFFEN; Warnung) — ein Command ohne Decider, eine Query ohne Reader und ohne Aggregat.</item>
 /// <item>CQRS116 (GR-EMPFAENGER; Fehler) — ein Command ohne Ziel, der seinen Erzeuger verlässt (aus einem Decide, von einem Akteur, aus einem Knoten,
 ///   den kein Knoten desselben Graphen nimmt), hat genau einen Empfänger: den Kopf genau eines Graphen oder einen Akteur, der ihn hört (Arbeit,
-///   <c>IHoert&lt;TCmd&gt;</c>). Kein Empfänger, mehrere, oder ein Typ, den ein Graph nimmt und zugleich ein Akteur hört, sind ein Fehler.</item>
+///   <c>IHoert&lt;TCmd&gt;</c>). Kein Empfänger, mehrere, oder ein Typ, den ein Graph nimmt und zugleich ein Akteur hört, sind ein Fehler. Ein Graph
+///   in einem Katalog ist eine Blaupause (docs/konzept-funktionen-im-editor.md §3): er läuft erst als Knoten eines Graphen der Anwendung — seine Köpfe
+///   empfangen nichts, seine Ausgänge verlassen nichts, geprüft wird dort, wo er steht.</item>
 /// <item>CQRS117 (GR-GRAPH-KNOTEN; Warnung) — eine Funktion, die in keinem Graphen ein Knoten ist, läuft nie (ein Graph läuft als Instanz).</item>
 /// <item>CQRS120 (GR-UEBERSETZUNG; Fehler) — ein Command eines Katalogs verlässt einen Graphen der Anwendung: jeder Fall wird übersetzt
 ///   (<c>Uebersetze&lt;TEin, TAus&gt;</c>) oder von einem Knoten genommen, so kennt die Domäne keine Funktionsnachricht (A3). Ein Graph, der als Schachtel
@@ -207,10 +209,12 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
 
         // GR-EMPFAENGER (Entscheidung 2): ein Command ohne Ziel, der seinen Erzeuger verlässt, nimmt genau ein Graph am Kopf oder hört genau ein Akteur.
         var graphen = typen.Where(Graphform.IstGraph).Select(Graphform.Lies).Where(g => g.Gueltig).ToList();
+        // Was läuft: die Graphen der Anwendung; ein Graph im Katalog ist eine Blaupause und zählt erst als Knoten eines von ihnen.
+        var laufen = graphen.Where(g => !Abstractions.Projektstruktur.IstKatalog(g.Typ.ContainingAssembly?.Name ?? "")).ToList();
         string N(ITypeSymbol t) => Funktionsform.Name(t);
         var koepfe = new Dictionary<string, List<string>>();
         void Empfaengt(ITypeSymbol typ, string wer) => (koepfe.TryGetValue(N(typ), out var l) ? l : koepfe[N(typ)] = new List<string>()).Add(wer);
-        foreach (var g in graphen)
+        foreach (var g in laufen)
             foreach (var (typ, _) in g.Koepfe) Empfaengt(typ, g.Typ.Name);
         var imGraphen = new HashSet<string>(graphen.SelectMany(g => g.Knoten).SelectMany(k => k.Eingaenge).Select(N));
         foreach (var a in typen.Where(t => IstT(t, iAkteur) && t.TypeKind != TypeKind.Interface))
@@ -226,7 +230,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
             foreach (var m in Methoden(t, Abstractions.Aggregatvertrag.Decide))
                 foreach (var x in Faelle(m.ReturnType).Where(Nachrichtenform.IstOhneZiel))
                     verlassen.Add((x, "Decide " + m.Parameters[0].Type.Name));
-        foreach (var g in graphen)
+        foreach (var g in laufen)
             foreach (var (von, typ) in g.Ausgaenge.Where(a => Nachrichtenform.IstOhneZiel(a.Typ)))
                 verlassen.Add((typ, $"{g.Typ.Name}.{von.Name}"));
         foreach (var a in typen.Where(t => IstT(t, iAkteur)))

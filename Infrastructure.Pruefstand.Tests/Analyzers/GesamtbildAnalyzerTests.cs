@@ -86,6 +86,27 @@ public sealed record Kunde : IAkteur, IDarf<Eroeffne>, IDarf<Hole>;
             .Which.Should().StartWith("'Roh'", "nur Roh lässt Gerechnet hinaus — Rechnung steht als Schachtel in Aussen, und dort wird übersetzt");
     }
 
+    // Ein Graph im Katalog ist eine Blaupause (docs/konzept-funktionen-im-editor.md §3): seine offenen Outputs sind seine Signatur, übersetzt wird erst
+    //   dort, wo er als Knoten eines Graphen der Anwendung steht; seine Köpfe empfangen nichts, solange er nicht dort steht.
+    [Fact]
+    public async Task Ein_Graph_im_Katalog_ist_eine_Blaupause_Outputs_und_Koepfe_zaehlen_erst_in_der_Anwendung()
+    {
+        var befunde = await Befunde("""
+            public sealed record Nutzer : IAkteur, IDarf<Rechen.Katalog.Rechne>;
+            public sealed record Roh([Kopf] Rechen.Katalog.Rechner R) : IGraph;
+            """, katalog: """
+            namespace Rechen.Katalog {
+            public record Rechne(int N) : ICommand;
+            public record Gerechnet(int N) : ICommand;
+            public sealed class Rechner : IFunktion { public Gerechnet Auf(Rechne r) => default!; }
+            public sealed record Kette([Kopf] Rechner R) : IGraph;
+            }
+            """);
+        befunde.Where(d => d.Id is GesamtbildAnalyzer.EmpfaengerId or GesamtbildAnalyzer.VerlaesstId).Select(d => d.GetMessage())
+            .Should().NotContain(m => m.Contains("Kette"), "der Katalog-Graph läuft nicht für sich — weder sein Output noch sein Kopf zählt")
+            .And.Contain(m => m.StartsWith("'Gerechnet'") && m.Contains("Roh.R"), "der Graph der Anwendung lässt Gerechnet weiter unübersetzt hinaus");
+    }
+
     [Fact]
     public async Task Eine_geschlossene_Domaene_ist_still()
         => (await Ids("")).Should().BeEmpty("jede Nachricht hat Erzeuger und Konsument; Teil lebt als Feld der Antwort");
