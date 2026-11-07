@@ -27,11 +27,11 @@ namespace Infrastructure.Integration.Tests;
 ///   Datei im Verzeichnis ──ƒ Dateiwaechter (Katalog, Zustand gesichert)──DateiGefunden──▶ ƒ Bildeinlesen ──BildEingelesen──┬─▶ ƒ Bildverkleinerung
 ///     ──BildVerkleinert──▶ ƒ Kontrastausgleich (OpenCV im Host) ──VorschauErstellt──┐                                                       │
 ///     ƒ Bildeingang (Join, gleichbleibend) ◀────────────────────────────────────────┴───────────────────────────────────────────────────────┘
-///     ──NimmBildAuf──▶ ImagePair („anlegen oder ergänzen“) ──PaarZuBeurteilen──▶ Arbeit des Klassifizierers (eine Sitzung, die ihn verkörpert).
+///     ──NimmBildAuf──▶ ImagePair („anlegen oder ergänzen“) ──ImagePairKomplett──▶ der Klassifizierer reagiert (ein Client, der ihn verkörpert).
 ///
 /// Beweiskraft: das Paar bekommt BildVerfuegbar mit einer Vorschau, die NUR die Bildaufbereitung erzeugt; die Spur führt zum Lauf der Quelle; eine
-/// Datei ist nach einem Neustart nicht noch einmal ein Lauf. Ein Python-Worker, der den Klassifizierer verkörpert, bekommt jedes komplette Paar als
-/// Arbeit und beurteilt es über gRPC — genau einmal im Log.
+/// Datei ist nach einem Neustart nicht noch einmal ein Lauf. Ein Python-Worker, der den Klassifizierer verkörpert, reagiert auf jedes komplette Paar
+/// und beurteilt es über gRPC — genau einmal im Log, mit dem Fakt als Ursache.
 /// </summary>
 public class AblaufE2ETests
 {
@@ -130,12 +130,12 @@ public class AblaufE2ETests
     }
 
     [Fact]
-    public async Task Ein_komplettes_Paar_ist_Arbeit_des_Klassifizierers_die_ein_Python_Worker_ueber_gRPC_beantwortet()
+    public async Task Auf_ein_komplettes_Paar_reagiert_ein_Python_Worker_ueber_gRPC_genau_einmal()
     {
         // Der Interpreter der Sim-Umgebung (Umgebung:Python, sonst CQRS_PYTHON/python3) — dieselbe Regel wie die Werkbank.
         var python = Infrastructure.Umgebung.UmgebungLader.Lade(new ConfigurationManager(), "sim-main", []).Python();
         (python == "python3" || File.Exists(python)).Should().BeTrue($"Python für den Worker fehlt ({python}) — Umgebung:Python oder CQRS_PYTHON setzen");
-        // Der Stub-Klassifizierer (KlassifikationsWorker, generierte Basis): er nimmt die Arbeit des Klassifizierers an und urteilt „KeineAnomalie“.
+        // Der Stub-Klassifizierer (KlassifikationsWorker, generierte Basis): er reagiert auf ImagePairKomplett und urteilt „KeineAnomalie“.
         var skript = Path.Combine(RepoWurzel(), Projektstruktur.PythonWorker(Projektstruktur.StandardWurzel), "run_stub.py");
 
         var verzeichnis = Path.Combine(Path.GetTempPath(), "ablauf-py-" + Guid.NewGuid().ToString("N"));
@@ -159,7 +159,11 @@ public class AblaufE2ETests
             {
                 RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false,
                 WorkingDirectory = Path.GetDirectoryName(skript)!,
-                Environment = { ["CQRS_GRPC_HOST"] = "127.0.0.1", ["CQRS_GRPC_PORT"] = port.ToString(), ["PYTHONUNBUFFERED"] = "1" },
+                Environment =
+                {
+                    ["CQRS_GRPC_HOST"] = "127.0.0.1", ["CQRS_GRPC_PORT"] = port.ToString(), ["PYTHONUNBUFFERED"] = "1",
+                    ["CQRS_REAKTION_STAND"] = Path.Combine(verzeichnis, "reaktionen"),   // genau einmal: der Worker liest das Log ab seinem Stand
+                },
             },
         };
         worker.OutputDataReceived += (_, e) => { if (e.Data != null) ausgabe.Enqueue(e.Data); };
@@ -169,8 +173,8 @@ public class AblaufE2ETests
             worker.Start();
             worker.BeginOutputReadLine();
             worker.BeginErrorReadLine();
-            await Warte(() => Task.FromResult(ausgabe.Any(z => z.Contains("Arbeit angenommen"))), TimeSpan.FromSeconds(60),
-                "Der Python-Worker hat die Arbeit des Klassifizierers nicht angenommen:\n" + string.Join("\n", ausgabe));
+            await Warte(() => Task.FromResult(ausgabe.Any(z => z.Contains("laufen ab Position"))), TimeSpan.FromSeconds(60),
+                "Die Reaktionen des Python-Workers laufen nicht:\n" + string.Join("\n", ausgabe));
 
             var es = app.Services.GetRequiredService<IEventStoreRepository>();
             var t = Zufallszeit(9);
@@ -179,12 +183,14 @@ public class AblaufE2ETests
             var paar = Aufnahmename.Resolve(dc0.Name)!.Paar;
 
             await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is BildPaarDurchKiKlassifiziert), TimeSpan.FromSeconds(90),
-                "Kein BildPaarDurchKiKlassifiziert — der Python-Worker hat die Arbeit nicht bekommen oder nicht beantwortet:\n" + string.Join("\n", ausgabe));
+                "Kein BildPaarDurchKiKlassifiziert — der Python-Worker hat auf das komplette Paar nicht reagiert:\n" + string.Join("\n", ausgabe));
             await Task.Delay(TimeSpan.FromSeconds(2));
             var stream = await es.ReadStreamAsync(paar, 0, default);
-            stream.Count(e => e.Payload is BildPaarDurchKiKlassifiziert).Should().Be(1, "die Antwort auf einen Auftrag wirkt genau einmal");
-            stream.Single(e => e.Payload is BildPaarDurchKiKlassifiziert).UserId.Should().Be("Klassifizierer", "die Antwort gibt der Akteur hinein");
-            ausgabe.Should().Contain(z => z.Contains("PaarZuBeurteilen"), "der Worker hat genau diese Arbeit beantwortet");
+            stream.Count(e => e.Payload is BildPaarDurchKiKlassifiziert).Should().Be(1, "die Reaktion auf ein Fakt wirkt genau einmal");
+            var urteil = stream.Single(e => e.Payload is BildPaarDurchKiKlassifiziert);
+            urteil.UserId.Should().Be("Klassifizierer", "die Reaktion gibt der Akteur hinein");
+            var komplett = stream.Single(e => e.Payload is ImagePairKomplett);
+            urteil.Ursache.Should().Be(Spur.Ursache(paar, komplett.AggregateVersion), "die Ursache des Urteils ist das Fakt, auf das der Worker reagierte");
         }
         finally
         {

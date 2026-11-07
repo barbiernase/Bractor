@@ -24,7 +24,8 @@ public sealed record Vorgang(
 /// <summary>
 /// Liest die Spur aus dem Log (docs/04 §4.9, Werkbank P4.4/P4.6) — nur lesend, direkt über die globale Sequenz
 /// (<c>mt_events.seq_id</c>) samt Headern. Die „Spur-Projektion“ ist bewusst keine zweite gespeicherte Wahrheit: Knoten sind die Log-Einträge,
-/// Kanten ihre <c>ursache</c>; ein Vorgang ist die Menge einer <c>CorrelationId</c>, sein Zustand folgt aus der letzten Aktivität. Ob ein Vorgang FACHLICH fertig ist, sagt sein Aggregat (ein Fakt), nicht der Einblick. So gilt dasselbe in Sim und Prod; die
+/// Kanten ihre <c>ursache</c>; ein Vorgang ist die Menge einer <c>CorrelationId</c> samt ihren Folgen über die Ursache, sein Zustand folgt aus der
+/// letzten Aktivität. Ob ein Vorgang FACHLICH fertig ist, sagt sein Aggregat (ein Fakt), nicht der Einblick. So gilt dasselbe in Sim und Prod; die
 /// Werkbank holt ab ihrem Cursor nach (§7.2).
 /// </summary>
 public sealed class SpurLeser(string verbindung, string schema)
@@ -63,9 +64,23 @@ public sealed class SpurLeser(string verbindung, string schema)
     public async Task<IReadOnlyList<SpurEintrag>> LeseAbSeqAsync(long ab, int n, CancellationToken ct)
         => await LiesAsync("seq_id > @ab order by seq_id limit @n", c => { c.Parameters.AddWithValue("ab", ab); c.Parameters.AddWithValue("n", Math.Clamp(n, 1, 5000)); }, ct);
 
-    /// <summary>Alle Einträge eines Vorgangs (einer <c>CorrelationId</c>), aufsteigend.</summary>
+    /// <summary>
+    /// Alle Einträge eines Vorgangs, aufsteigend: die seiner <c>CorrelationId</c> und, was über die <c>ursache</c> daraus folgt — auch über eine
+    /// Reaktion eines Clients hinweg (sein Command beginnt eine eigene Korrelation, trägt aber das Fakt, auf das er reagiert, als Ursache). Eine
+    /// Folge steht im Log nach ihrer Ursache; die Suche beginnt deshalb erst beim ersten Eintrag des Vorgangs.
+    /// </summary>
     public async Task<IReadOnlyList<SpurEintrag>> VorgangAsync(string korrelation, CancellationToken ct)
-        => await LiesAsync($"{Korrelation} = @k order by seq_id limit 5000", c => c.Parameters.AddWithValue("k", korrelation), ct);
+        => await LiesAsync($"""
+            seq_id in (
+              with recursive v as (
+                select seq_id, stream_id, version from "{Schema}".mt_events where {Korrelation} = @k and type <> 'tombstone'
+                union
+                select e.seq_id, e.stream_id, e.version from "{Schema}".mt_events e join v on e.seq_id > v.seq_id
+                  and e.headers->>'{Abstractions.Spur.UrsacheHeader}' = v.stream_id::text || ':' || v.version
+                where e.type <> 'tombstone')
+              select seq_id from v)
+            order by seq_id limit 5000
+            """, c => c.Parameters.AddWithValue("k", korrelation), ct);
 
     /// <param name="wo">Bedingung samt <c>order by</c>/<c>limit</c>; ein <c>or</c> auf oberster Ebene klammert der Aufrufer (davor steht ein
     /// <c>and</c>: Tombstones eines gescheiterten Appends sind keine Log-Einträge, G-7).</param>

@@ -85,7 +85,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - **Quellen** sind Katalogfunktionen mit `Lausche(CancellationToken)` am Kopf eines Graphen (`Dateiwaechter` → `DateiGefunden`, `Taktgeber` →
   `Takt`, `Webhook` → `Aufruf`; Commands in `Abstractions/Katalog.cs`); je Element eine Kette, nichts im Log; eine Quellinstanz läuft genau einmal
   im Cluster. **Zustand** `IZustand<T>` ist gesichert je Instanz und Knoten (`cqrs_zustaende`), nach beendeten Aufrufen mit deren Kennungen (nach einem Absturz zählt nichts doppelt).
-- **Arbeit für Akteure** (docs/konzept-akteure.md §5): hört ein Akteur einen Command ohne Ziel (`IHoert<PaarZuBeurteilen>`), ist das seine Arbeit —
+- **Arbeit für Akteure** (docs/konzept-akteure.md §5): hört ein Akteur einen Command ohne Ziel (`IHoert<RechnungZuPruefen>`), ist das seine Arbeit —
   eine eigene Instanz unter seinem Namen mit einem Knoten draußen; die `Werkstatt` des Knotens gibt den Auftrag einer Sitzung mit „verkörpert ∩
   Token“ und stellt ihn erneut zu, bis eine Antwort kommt (die erste gewinnt); die Antwort sind Commands seines `IDarf`, Ids aus dem Auftrag. Von
   Hand antwortet die Werkbank (`Umgebung:Hand`).

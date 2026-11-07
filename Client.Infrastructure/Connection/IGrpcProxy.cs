@@ -72,4 +72,5 @@ public interface IGrpcProxy
 public sealed record LogEintragLesung(long Position, EventEnvelope Event);
 
 /// <summary>Eine Seite des Logs: die Einträge, die Position zum Weiterlesen, und ob sofort mehr folgt.</summary>
-public sealed record LogLesung(IReadOnlyList<LogEintragLesung> Eintraege, long Bis, bool Voll);
+/// <summary>Eine Seite des Logs; <paramref name="Horizont"/> unter dem eigenen Stand heißt: das Log ist neu (-1 = unbekannt).</summary>
+public sealed record LogLesung(IReadOnlyList<LogEintragLesung> Eintraege, long Bis, bool Voll, long Horizont = -1);

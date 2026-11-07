@@ -254,24 +254,6 @@ class VorschauErstelltDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class PaarZuBeurteilenDto(betterproto.Message):
-    paar: str = betterproto.string_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class TeilFertigDto(betterproto.Message):
-    sammelvorgang: str = betterproto.string_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class TrainingZuRechnenDto(betterproto.Message):
-    lauf: str = betterproto.string_field(1)
-    datensatz_id: str = betterproto.string_field(2)
-    datensatz_version: int = betterproto.int32_field(3)
-    hyperparameter: "HyperparameterDto" = betterproto.message_field(4)
-
-
-@dataclass(eq=False, repr=False)
 class EntfernePaarDto(betterproto.Message):
     """
     ============================================================================

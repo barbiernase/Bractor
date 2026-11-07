@@ -111,7 +111,6 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Domain.ImagePair.MarkiereAlsInspiziert))]
 [JsonSerializable(typeof(global::Domain.ImagePair.NimmBildAuf))]
 [JsonSerializable(typeof(global::Domain.ImagePair.PaarNichtKomplett))]
-[JsonSerializable(typeof(global::Domain.ImagePair.PaarZuBeurteilen))]
 [JsonSerializable(typeof(global::Domain.ImagePair.PhysischesProduktGelabelt))]
 [JsonSerializable(typeof(global::Domain.ImagePair.RegionIndexUngueltig))]
 [JsonSerializable(typeof(global::Domain.ImagePair.RegionLabelsUngueltig))]
@@ -195,7 +194,6 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Domain.Trainingslauf.TrainingGescheitert))]
 [JsonSerializable(typeof(global::Domain.Trainingslauf.TrainingHaengengeblieben))]
 [JsonSerializable(typeof(global::Domain.Trainingslauf.TrainingNichtAktiv))]
-[JsonSerializable(typeof(global::Domain.Trainingslauf.TrainingZuRechnen))]
 [JsonSerializable(typeof(global::Domain.Trainingslauf.TrainingslaufExistiertBereits))]
 [JsonSerializable(typeof(global::Domain.Trainingslauf.TrainingslaufNichtGefunden))]
 public partial class CqrsWireJsonContext : JsonSerializerContext

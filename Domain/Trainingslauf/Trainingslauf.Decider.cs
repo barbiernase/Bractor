@@ -10,7 +10,7 @@ public partial class Trainingslauf
         // START
         // ═══════════════════════════════════════════════════
 
-        public IEnumerable<OneOf<TrainingAngefordert, TrainingslaufExistiertBereits, TrainingZuRechnen>> Decide(
+        public IEnumerable<OneOf<TrainingAngefordert, TrainingslaufExistiertBereits>> Decide(
             StarteTraining cmd)
         {
             if (this.State.Existiert)
@@ -19,9 +19,9 @@ public partial class Trainingslauf
                 yield break;
             }
 
+            // Ein Fakt, kein Auftrag: rechnen wird ihn das TrainingsSystem (ein Client, der TrainingAngefordert hört).
             yield return new TrainingAngefordert(
                 cmd.DatensatzId, cmd.DatensatzVersion, cmd.Hyperparameter);
-            yield return new TrainingZuRechnen(cmd.AggregateId, cmd.DatensatzId, cmd.DatensatzVersion, cmd.Hyperparameter);
         }
 
         // ═══════════════════════════════════════════════════

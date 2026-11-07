@@ -117,6 +117,10 @@ class LogSeite(betterproto.Message):
     eintraege: List["LogEintrag"] = betterproto.message_field(2)
     bis: int = betterproto.int64_field(3)
     voll: bool = betterproto.bool_field(4)
+    horizont: int = betterproto.int64_field(5)
+    """
+    Der Horizont des Logs: liegt er unter dem eigenen Stand eines Clients, ist das Log neu (eine zurückgesetzte Datenbank) — er liest von vorn.
+    """
 
 
 @dataclass(eq=False, repr=False)

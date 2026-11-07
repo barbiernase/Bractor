@@ -26,13 +26,14 @@ namespace Domain.Akteure;
 public sealed record KameraSystem : IAkteur,
     IDarf<NimmBildAuf>;   // NimmBildAuf: was die Instanz des Linienimports (Dateiwächter → Bildaufbereitung) für das Kamerasystem hineingibt
 
-/// <summary>GPU-Worker: trainiert auf einer eingefrorenen Datensatz-Version (Arbeit: <see cref="TrainingZuRechnen"/>) und meldet den Fortschritt.</summary>
+/// <summary>
+/// GPU-Worker: reagiert auf <see cref="TrainingAngefordert"/> — trainiert auf der eingefrorenen Datensatz-Version und meldet den Fortschritt; ob der
+/// Lauf inzwischen abgebrochen ist, liest er zwischen den Epochen (<see cref="HoleTrainingslauf"/>).
+/// </summary>
 public sealed record TrainingsSystem : IAkteur,
-    IHoert<TrainingZuRechnen>,
+    IHoert<TrainingAngefordert>,
     IDarf<MeldeTrainingBegonnen>, IDarf<MeldeFortschritt>, IDarf<MeldeTrainingAbgeschlossen>, IDarf<MeldeTrainingGescheitert>,
-    IDarf<HoleDatensatzSamples>,
-    // Kenntnis: ein laufendes Training kooperativ abbrechen (der Lauf steht schon auf „abgebrochen“).
-    IHoert<TrainingAbgebrochen>;
+    IDarf<HoleDatensatzSamples>, IDarf<HoleTrainingslauf>;
 
 /// <summary>
 /// Pflegt Datensätze im Hintergrund (ein Worker, der reagiert): hört das Anfordern einer Range bzw. des Einfrierens, liest die Bildpaare (Queries)
@@ -45,12 +46,13 @@ public sealed record Datensatzpfleger : IAkteur,
 
 // ── KI ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/// <summary>Beurteilt Bildpaare (Arbeit: <see cref="PaarZuBeurteilen"/>) und Einzelbilder mit dem aktiven Modell (Strang 1).</summary>
+/// <summary>
+/// Beurteilt Bildpaare und Einzelbilder mit dem aktiven Modell (Strang 1): reagiert auf <see cref="ImagePairKomplett"/> mit seinem Urteil; davor
+/// merkt er sich den Pfad jedes Bildes (<see cref="BildVerfuegbar"/>, im Log davor) und lädt das neu freigegebene Modell.
+/// </summary>
 public sealed record Klassifizierer : IAkteur,
-    IHoert<PaarZuBeurteilen>,
-    IDarf<KlassifiziereBildPaarDurchKi>, IDarf<KlassifiziereEinzelBildDurchKi>, IDarf<HoleAktivesModell>,
-    // Kenntnis: den Pfad jedes Bildes merken (beurteilt wird das Paar), das neu freigegebene Modell laden.
-    IHoert<BildVerfuegbar>, IHoert<ModellAktiviert>;
+    IHoert<BildVerfuegbar>, IHoert<ImagePairKomplett>, IHoert<ModellAktiviert>,
+    IDarf<KlassifiziereBildPaarDurchKi>, IDarf<KlassifiziereEinzelBildDurchKi>, IDarf<HoleAktivesModell>;
 
 // ── Menschen ───────────────────────────────────────────────────────────────────────────────────────────────────────
 

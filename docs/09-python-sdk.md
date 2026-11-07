@@ -78,25 +78,23 @@ der Server sendet ihn im Modus `Emittiert` ohne Versionsprüfung, die Inbox des 
 EVENT geht als Hinweis (`TransientEventRequest`) an den Server, der ihn an die Verteiler gibt (an die Akteure, die ihn hören); die Kennung würfelt
 der Server, weil das SDK keine `causation_id` setzt.
 
-## 9.4 Client-Basis: Arbeit, Kenntnis, Fragen
+## 9.4 Client-Basis: Reaktion, Arbeit, Fragen
 
 Akteur und Client stehen in C# (eine Quelle, `Domain.Akteure/Akteure.cs` und `Clients.cs`):
 
 ```csharp
 public sealed record Klassifizierer : IAkteur,
-    IHoert<PaarZuBeurteilen>,                                   // Arbeit: ein Command ohne Ziel
-    IDarf<KlassifiziereBildPaarDurchKi>, IDarf<KlassifiziereEinzelBildDurchKi>, IDarf<HoleAktivesModell>,
-    IHoert<BildVerfuegbar>, IHoert<ModellAktiviert>;            // Kenntnis, verlierbar
+    IHoert<BildVerfuegbar>, IHoert<ImagePairKomplett>, IHoert<ModellAktiviert>,   // Fakten: er reagiert bzw. nimmt sie zur Kenntnis
+    IDarf<KlassifiziereBildPaarDurchKi>, IDarf<KlassifiziereEinzelBildDurchKi>, IDarf<HoleAktivesModell>;
 
 public sealed record KlassifikationsWorker : IClient, IVerkoerpert<Klassifizierer>;
 ```
 
-Python erbt die generierte Basis und füllt je gehörtem Command `auf_<command>` und je Kenntnis `auf_<event>` (nach
-`Domain.Client.Worker.Python.ML/run_stub.py`):
+Python erbt die generierte Basis und füllt je gehörtem Event `auf_<event>` — die Reaktion (Commands des `IDarf`, ein Wert oder Stücke) oder
+nichts (Kenntnis) — und je gehörtem Command ohne Ziel `auf_<command>` (Arbeit; nach `Domain.Client.Worker.Python.ML/run_stub.py`):
 
 ```python
-from cqrs_client.arbeit import Herkunft
-from domain_client.generated import BildVerfuegbarDto, KlassifiziereBildPaarDurchKiDto, ModellAktiviertDto, PaarZuBeurteilenDto
+from domain_client.generated import BildVerfuegbarDto, ImagePairKomplettDto, KlassifiziereBildPaarDurchKiDto, ModellAktiviertDto
 from domain_client.generated.vertraege import KlassifikationsWorkerBasis
 
 @dataclass
@@ -107,20 +105,23 @@ class StubClassifier(KlassifikationsWorkerBasis[StubState]):
     async def auf_bild_verfuegbar(self, e: BildVerfuegbarDto, ctx, state: StubState):        # Kenntnis: gibt nichts aus
         state.bilder.setdefault(ctx.aggregate_id, {})[e.version] = e.pfad
 
-    async def auf_paar_zu_beurteilen(self, c: PaarZuBeurteilenDto, h: Herkunft, state: StubState):   # Arbeit des Klassifizierers
-        return KlassifiziereBildPaarDurchKiDto(aggregate_id=c.paar, label=0)
+    async def auf_image_pair_komplett(self, e: ImagePairKomplettDto, ctx, state: StubState):  # Reaktion: das Urteil
+        return KlassifiziereBildPaarDurchKiDto(aggregate_id=str(ctx.aggregate_id), label=0)
 
     async def auf_modell_aktiviert(self, e: ModellAktiviertDto, ctx, state: StubState): ...
 
 from domain_client.generated.nutzlast_tabelle import TABELLE   # generiert: Nutzlast.typ → DTO-Klasse
-StubClassifier(registry=create_registry(), nutzlast=TABELLE).run(host, port)
+StubClassifier(registry=create_registry(), nutzlast=TABELLE, config={"reaktion_stand": "…"}).run(host, port)
 ```
 
 Was die Basis übernimmt (`cqrs_client/vertrag.py`):
 - **Arbeit:** je Akteur in `ARBEIT` eine `AkteursArbeit` mit Zugriff auf `state`; angenommen wird sie nach jedem Handshake, je Akteur mit
   `PLAETZE` (Standard 1); Ablauf §9.5.
-- **Kenntnis:** Dispatch gehörter Typ → `auf_<event>`; gibt die Methode etwas aus, ist das eine `VertragsVerletzung` — eine Antwort gibt es nur
-  auf Arbeit.
+- **Reaktion:** Dispatch gehörter Typ → `auf_<event>`; was sie ausgibt, muss ein Command des `IDarf` sein (`SPONTAN`, sonst
+  `VertragsVerletzung`). Genau einmal wirkt sie mit einem Stand (`reaktion_stand` bzw. `CQRS_REAKTION_STAND`, die Werkbank setzt ihn): der
+  Läufer (`cqrs_client/reaktionen.py`) liest das Log ab dort, leitet die Command-Ids aus Position und Stelle ab, sendet jedes Stück, sobald es
+  entsteht, mit dem Event als Ursache; endet das Log unter seinem Stand (eine neue Datenbank), liest er von vorn. Ohne Stand reagiert er nur auf
+  Pushes, verlierbar.
 - **Vollständigkeit:** fehlt eine Methode, lässt sich die Klasse nicht instanziieren (ABC) — wer einen Akteur verkörpert, muss seine Arbeit
   annehmen können; der Bruch fällt beim Start auf.
 - **Registry:** die Typen aus `ARBEIT` (Commands und ihre Antworten), `HOERT`, `SPONTAN` und `FRAGT` ergänzt die Basis in der übergebenen
@@ -180,14 +181,14 @@ Argumente, Interpreter, Token) oder von Hand; Adresse und Akteur kommen aus `CQR
 Knapp, weil Prüfling, nicht Architektur:
 
 - **Klassifikation** (`domain_client/classifier.py`, Start `run.py`; Rauchtest ohne Modell `run_stub.py`): erbt `KlassifikationsWorkerBasis`
-  (Client `KlassifikationsWorker`, Akteur `Klassifizierer`), merkt sich auf `BildVerfuegbar` die Bildpfade je Aggregat und beantwortet die Arbeit
-  `PaarZuBeurteilen`: lädt beide Bilder über `/api/files/` des Blazor-Hosts (`image_loader.py`), führt TorchScript-Inferenz in `asyncio.to_thread`
-  aus und gibt `KlassifiziereBildPaarDurchKi` zurück; ohne Bilder wirft sie (der Server stellt erneut zu). Auf `ModellAktiviert` lädt er das neue
-  Modell.
+  (Client `KlassifikationsWorker`, Akteur `Klassifizierer`), merkt sich auf `BildVerfuegbar` die Bildpfade je Aggregat und reagiert auf
+  `ImagePairKomplett`: lädt beide Bilder über `/api/files/` des Blazor-Hosts (`image_loader.py`), führt TorchScript-Inferenz in `asyncio.to_thread`
+  aus und gibt `KlassifiziereBildPaarDurchKi` zurück; ohne Bilder bleibt das Paar unbeurteilt (ein Fehler hielte jede spätere Reaktion an). Auf
+  `ModellAktiviert` lädt er das neue Modell.
 - **Training** (`domain_client/training_worker.py`, Rauchtest `run_train_stub.py`): erbt `TrainingsWorkerBasis` (Client `TrainingsWorker`, Akteur
-  `TrainingsSystem`), beantwortet `TrainingZuRechnen` in Stücken (`MeldeTrainingBegonnen`, `MeldeFortschritt` je Epoche,
-  `MeldeTrainingAbgeschlossen` bzw. `MeldeTrainingGescheitert`), zieht die Samples per Query (`HoleDatensatzSamples`) und bricht auf
-  `TrainingAbgebrochen` kooperativ ab; der Trainer ist ein Stub.
+  `TrainingsSystem`), reagiert auf `TrainingAngefordert` in Stücken (`MeldeTrainingBegonnen`, `MeldeFortschritt` je Epoche,
+  `MeldeTrainingAbgeschlossen` bzw. `MeldeTrainingGescheitert`), zieht die Samples per Query (`HoleDatensatzSamples`) und liest nach jeder Epoche
+  den Lauf (`HoleTrainingslauf`): steht er auf „abgebrochen“, hört er kooperativ auf; der Trainer ist ein Stub.
 - `run.py`/`run_stub.py`/`run_train_stub.py` lesen Host/Port aus der eigenen `appsettings.json`, Umgebungsvariablen gehen vor;
   `domain_client/domain_registry.py` (die `CategoryRegistry` der Domäne) ist handgepflegt (docs/13 P2-11).
 

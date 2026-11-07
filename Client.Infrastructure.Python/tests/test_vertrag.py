@@ -2,7 +2,7 @@
 Client-Verträge (docs/konzept-akteure.md §4, docs/konzept-akteure.md §5) — die Basis, von der die generierten Client-Basen erben.
 
 Ohne Server: eine Client-Basis wird hier so deklariert, wie Cqrs.Codegen sie erzeugt (ARBEIT + HOERT + abstrakte Methoden), dagegen ein Client.
-Bewiesen wird: Kenntnis-Dispatch aus HOERT, eine Kenntnis gibt nichts aus, fehlende Methode = kein Start, die Arbeit der Akteure wird mit dem
+Bewiesen wird: Dispatch aus HOERT, eine Reaktion gibt nur Commands des IDarf aus, fehlende Methode = kein Start, die Arbeit der Akteure wird mit dem
 Zustand des Clients gerufen und angenommen (Plätze je Akteur), die Registry kennt die Typen des Vertrags, Handshake mit Client + Hash, Queries nur
 aus dem Vertrag.
 """
@@ -83,7 +83,7 @@ class KassenState:
 
 
 class Kassenplatz(KassenplatzBasis[KassenState]):
-    antwort = None   # pro Test: was auf_hinweis ausgibt (eine Kenntnis darf nichts)
+    antwort = None   # pro Test: was auf_hinweis ausgibt (seine Reaktion: nur Commands aus SPONTAN)
 
     async def auf_pruefe_storno(self, c, h, state):
         state.gesehen += 1
@@ -112,10 +112,16 @@ def test_kenntnis_dispatch_kommt_aus_dem_vertrag():
     assert k.state.hinweise == 1, "der State-Typ wird auch über die Vertragsbasis gefunden"
 
 
-def test_eine_kenntnis_gibt_nichts_aus():
+def test_eine_reaktion_gibt_commands_des_idarf_aus():
     k = _platz()
-    k.antwort = [BucheDto(aggregate_id="1")]
-    with pytest.raises(VertragsVerletzung, match="nur Kenntnis"):
+    k.antwort = [BucheDto(aggregate_id="1"), BucheDto(aggregate_id="2")]
+    assert asyncio.run(_sammle(k, HinweisDto())) == [BucheDto(aggregate_id="1"), BucheDto(aggregate_id="2")]
+
+
+def test_eine_reaktion_gibt_nichts_ausserhalb_des_idarf_aus():
+    k = _platz()
+    k.antwort = [StorniereDto(aggregate_id="1")]
+    with pytest.raises(VertragsVerletzung, match="nur mit Commands seiner Akteure"):
         asyncio.run(_sammle(k, HinweisDto()))
 
 

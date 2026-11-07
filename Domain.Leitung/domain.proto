@@ -222,17 +222,6 @@ message VorschauErstelltDto {
     int64 erstellt_am = 8;
 }
 
-message PaarZuBeurteilenDto {
-    string paar = 1;
-}
-
-message TrainingZuRechnenDto {
-    string lauf = 1;
-    string datensatz_id = 2;
-    int32 datensatz_version = 3;
-    HyperparameterDto hyperparameter = 4;
-}
-
 // ============================================================================
 // COMMAND PAYLOADS
 // ============================================================================

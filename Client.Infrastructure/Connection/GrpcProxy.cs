@@ -240,7 +240,7 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
             using var registration = ct.Register(() => tcs.TrySetCanceled(ct));
             var seite = await tcs.Task;
             return new LogLesung(seite.Eintraege.Select(e => new LogEintragLesung(e.Position, _mapper.MapToDomain(e.Envelope))).ToList(), seite.Bis,
-                seite.Voll);
+                seite.Voll, seite.Horizont);
         }
         finally
         {

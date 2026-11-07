@@ -22,9 +22,7 @@ namespace Infrastructure.Integration.Tests;
 /// Ebene 2 — DURCHSPIELEN gegen echtes Postgres (CLAUDE.md W6, Werkbank P5): der JSON-Eingang des Hosts.
 /// <list type="bullet">
 /// <item>Als Akteur handeln: ein Token → Akteur-Tor → Aggregat (Event im Log, Ablehnung als Ablehnungs-Event), Verweigerung ohne Befugnis
-///   bzw. ohne gültiges Token, Query an den Reader;</item>
-/// <item>Hand: ein komplettes Paar ist Arbeit des Klassifizierers, den die Werkbank verkörpert (<c>Umgebung:Hand</c>); die Antwort über
-///   <c>/eingang/ergebnis</c> (ein Command seines IDarf) wirkt am Paar.</item>
+///   bzw. ohne gültiges Token, Query an den Reader.</item>
 /// </list>
 /// </summary>
 public class EingangE2ETests
@@ -33,12 +31,12 @@ public class EingangE2ETests
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
     [Fact]
-    public async Task Als_Akteur_handeln_und_Arbeit_von_Hand_beantworten()
+    public async Task Als_Akteur_handeln()
     {
         var name = "sim-eingang-" + Guid.NewGuid().ToString("N")[..6];
         var u = new UmgebungKonfig
         {
-            Umgebung = new UmgebungKopf { Name = name, Art = UmgebungsArt.Sim, Hand = ["Klassifizierer"] },
+            Umgebung = new UmgebungKopf { Name = name, Art = UmgebungsArt.Sim },
             EventStore = new EventStoreKonfig { Verbindung = Verbindung, Datenbank = "cqrs_it_eingang_" + Guid.NewGuid().ToString("N")[..8], Schema = "es" },
             Cluster = new ClusterKonfig { Art = ClusterArt.Einzelknoten, Name = "cqrs-" + name },
             Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = FreierPort(), JsonEingang = true },
@@ -50,7 +48,6 @@ public class EingangE2ETests
         {
             ["Identitaeten:Tokens:t-ki"] = "KIOperator",
             ["Identitaeten:Tokens:t-inspekteur"] = "Inspekteur",
-            ["Identitaeten:Tokens:t-kamera"] = "KameraSystem",
         });
         builder.AddCqrs(u);
         await using var app = builder.Build();
@@ -112,46 +109,6 @@ public class EingangE2ETests
                 return antwort.GetProperty("ok").GetBoolean() && antwort.GetProperty("antwort").GetProperty("typ").GetString() == "DatensatzAntwort";
             }, TimeSpan.FromSeconds(30), "Die Projektion hat den Datensatz nicht geliefert.");
             antwort.GetProperty("antwort").GetProperty("daten").GetProperty("Name").GetString().Should().Be("Werkbank");
-
-            // ── Hand: ein komplettes Paar ist Arbeit des Klassifizierers — die Werkbank verkörpert ihn und antwortet mit einem Command seines IDarf ──
-            var paar = Id<ImagePair>.Neu();
-            var t = new DateTimeOffset(2026, 10, 12, 9, 0, 0, TimeSpan.Zero);
-            foreach (var version in new[] { "Dc0", "Dc2" })
-            {
-                var bild = await Lies(await Sende("/eingang/command", new
-                {
-                    typ = "NimmBildAuf",
-                    daten = new
-                    {
-                        AggregateId = paar.Wert, PairKey = "hand", ProduziertAm = t, AufgenommenAm = t, UrsprungsPfad = "/x/" + version, Version = version,
-                        OriginalDateiname = version + ".tiff", DateigroesseBytes = 1L, BreitePixel = 4, HoehePixel = 2, ErstelltAm = t,
-                        Pfad = "/x/" + version + ".png",
-                    },
-                }, "t-kamera"));
-                bild.GetProperty("ok").GetBoolean().Should().BeTrue(bild.ToString());
-            }
-            JsonElement auftrag = default;
-            await Warte(async () =>
-            {
-                var liste = (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").EnumerateArray().ToList();
-                auftrag = liste.FirstOrDefault(x => x.GetProperty("funktion").GetString() == "Klassifizierer");
-                return auftrag.ValueKind == JsonValueKind.Object;
-            }, TimeSpan.FromSeconds(30), "Die Arbeit des Klassifizierers kam nicht bei der Hand an.");
-            auftrag.GetProperty("eingang").GetProperty("typ").GetString().Should().Be("PaarZuBeurteilen");
-            auftrag.GetProperty("ausgaben").EnumerateArray().Select(x => x.GetString()).Should().Contain("KlassifiziereBildPaarDurchKi");
-            var vorgang = auftrag.GetProperty("vorgang").GetString();
-            (await Sende("/eingang/ergebnis", new { vorgang, ausgaben = new[] { new { typ = "ErstelleDatensatz", daten = new { } } } }, null))
-                .StatusCode.Should().Be(HttpStatusCode.BadRequest, "antworten darf der Akteur nur mit seinem IDarf");
-            var angenommen = await Lies(await Sende("/eingang/ergebnis", new
-            {
-                vorgang, ausgaben = new[] { new { typ = "KlassifiziereBildPaarDurchKi", daten = new { AggregateId = paar.Wert, Label = "KeineAnomalie" } } },
-            }, null));
-            angenommen.GetProperty("ausgang").GetString().Should().Be("Angenommen", angenommen.ToString());
-            await Warte(async () => (await es.ReadStreamAsync(paar.Wert, 0, default)).Any(e => e.Payload is BildPaarDurchKiKlassifiziert), TimeSpan.FromSeconds(30),
-                "Die Antwort von Hand wirkte nicht am Paar.");
-            (await es.ReadStreamAsync(paar.Wert, 0, default)).Single(e => e.Payload is BildPaarDurchKiKlassifiziert).UserId
-                .Should().Be("Klassifizierer", "die Antwort gibt der Akteur hinein, dessen Arbeit es war");
-            (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("eingaenge").GetArrayLength().Should().Be(0);
         }
         finally
         {

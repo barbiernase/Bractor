@@ -401,7 +401,7 @@ liest die fälligen Zeilen und bringt jede über die Wege hin: „fertig“ trä
 Zwischen Knoten desselben Graphen reist nichts als Eingang — das tragen die Aufrufe der Kette.
 
 **Arbeit für Akteure** (`Arbeit.cs`, `Werkstatt.cs`, [konzept-akteure.md](konzept-akteure.md) §5). Hört ein Akteur einen Command ohne Ziel
-(`IHoert<PaarZuBeurteilen>` am Klassifizierer), ist das seine Arbeit: die Laufzeit legt eine Instanz unter seinem Namen an — ein Graph mit einem
+(`IHoert<RechnungZuPruefen>` am Rechnungspruefer der Prüfdomäne), ist das seine Arbeit: die Laufzeit legt eine Instanz unter seinem Namen an — ein Graph mit einem
 Knoten **draußen**, Köpfe = die gehörten Commands, Ausgänge = die Commands seines `IDarf`. So hat die Arbeit, was jeder Kopf hat: offene Eingänge
 aus einem Decide, den Weg aus einem Graphen, Orte, Wiederholung. Das Kind dieses Knotens hat keine Aktivierung: es gibt den Auftrag der
 **Werkstatt** seines Cluster-Knotens, die ihn einem **Arbeiter** mit freiem Platz gibt — einer Sitzung, deren Client den Akteur verkörpert und deren
@@ -422,7 +422,8 @@ mit) → `Dateinamendeutung` → `BildGedeutet`, im Ablauf übersetzt ↦ `NimmB
 `BildNichtLesbar` und `DateinameUnbekannt` sind Hinweise des Katalogs; die **Bildaufnahme** ist dasselbe ohne Dateiwächter, Kopf `DateiGefunden`), die Pflege eines Datensatzes und die Meldung eines fertigen Teils als **Reaktionen eines Clients** (Schritt 6, kein Graph mehr: der
 `ReaktionsWorker` hört als `Datensatzpfleger` `RangeAngefordert` bzw. `EinfrierenAngefordert`, liest per Query und gibt `NimmRangeAuf` bzw.
 `SchliesseEinfrierenAb`, als `Teilmelder` `TeilauftragAbgeschlossen` und gibt `MeldeTeilFertig` an den Sammelvorgang, den das Event nennt);
-Arbeit haben der `Klassifizierer` (`PaarZuBeurteilen`) und das `TrainingsSystem` (`TrainingZuRechnen`, die Antwort in Stücken). Prüfdomäne: der
+ebenso reagieren die Python-Worker: der `Klassifizierer` auf `ImagePairKomplett` mit seinem Urteil, das `TrainingsSystem` auf
+`TrainingAngefordert` in Stücken (Arbeit hat in der Beispieldomäne kein Akteur mehr). Prüfdomäne: der
 **Abrechnungsablauf** (`Freigabeautomat` gibt eine Rechnung bis 10 000 frei, darüber `RechnungZuPruefen` — Arbeit des `Rechnungspruefer`;
 `Gutschrift`, `Mahnwesen` mit Technik `IMahnversand`), der **Auftragsablauf** (§4.5), der **Importablauf** (`Importannahme` mit Kopf
 `ImportAngefordert` von einem Akteur, `Importlauf` als Strom), die **Merkmalbildung** (`Merkmalsbildung` → `Merkmal` gabelt zu `Ausreisserpruefung`

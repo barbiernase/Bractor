@@ -8,7 +8,9 @@ Event, das sein Akteur hört) reagieren und geben Commands aus (yield). Genau ei
   - der Läufer liest das Log ab dem gesicherten Stand (LiesLog: nur Hörbares, bis zum Horizont) — ein Push weckt ihn nur;
   - jede Command-Id leitet er aus Reaktion, Position und Stelle ab (dieselbe Formel wie in C#: MD5, Guid-Bytes little-endian) — nach einem
     Neustart rechnet er dieselben Ids, die Inbox des Ziels bzw. der offene Eingang am Kopf verwirft die Wiederholung;
-  - weiter rückt der Stand erst, wenn jeder Command der Seite beantwortet ist (Quittung, Event, Ablehnung oder Fehler mit seiner Korrelation).
+  - weiter rückt der Stand erst, wenn jeder Command der Seite beantwortet ist (Quittung, Event, Ablehnung oder Fehler mit seiner Korrelation);
+  - jedes Stück geht hinaus, sobald die Reaktion es ausgibt (ein Training meldet so Beginn und Fortschritt, während es rechnet), und trägt das
+    Event, auf das reagiert wird, als Ursache (Spur: Stream:Version).
 """
 
 from __future__ import annotations
@@ -111,11 +113,19 @@ class ReaktionsLaeufer:
     async def lauf(self) -> None:
         """Liest ab dem Stand, reagiert, sendet, sichert je Seite; ohne Neues wartet er auf einen Push oder den Takt."""
         ab = self._stand.lade(self._name)
+        log.info("Reaktionen %s laufen ab Position %d", self._name, ab)
         while True:
             if not self._proxy.is_connected:
                 raise ReaktionUnterbrochen("keine Verbindung")
             self._weckruf.clear()
             seite = await self._proxy.lies_log(ab)
+            horizont = getattr(seite, "horizont", None)
+            if horizont is not None and horizont < ab:
+                # Das Log ist kürzer als der eigene Stand: eine neue Datenbank. Von vorn — dieselben Positionen ergäben dieselben Ids.
+                log.warning("Reaktionen %s: das Log endet bei %d, der Stand steht bei %d — neu, von vorn", self._name, horizont, ab)
+                ab = 0
+                self._stand.sichere(self._name, ab)
+                continue
             nummer, vorige = 0, -1
             for eintrag in seite.eintraege:
                 # Mehrere Events an einer Position (ein Split-Upcast) zählen der Reihe nach — eine volle Seite trennt eine Position nie.
@@ -125,9 +135,11 @@ class ReaktionsLaeufer:
                 if self._handle.get_handler(type(payload)) is None:
                     continue
                 ctx = _kontext(eintrag.envelope, self._proxy, self._mapper, self._versionen)
-                ausgaben = [o async for o in self._handle.receive(self._instance, payload, ctx, self._state)]
-                for stelle, ausgabe in enumerate(ausgaben):
-                    await self._sende(ausgabe, command_id(self._name, eintrag.position, nummer, stelle))
+                ursache = f"{eintrag.envelope.aggregate_id}:{eintrag.envelope.aggregate_version}"
+                stelle = 0
+                async for ausgabe in self._handle.receive(self._instance, payload, ctx, self._state):
+                    await self._sende(ausgabe, command_id(self._name, eintrag.position, nummer, stelle), ursache)
+                    stelle += 1
             if seite.bis > ab:
                 ab = seite.bis
                 self._stand.sichere(self._name, ab)
@@ -138,7 +150,7 @@ class ReaktionsLaeufer:
             except asyncio.TimeoutError:
                 pass
 
-    async def _sende(self, ausgabe: Any, cid: str) -> None:
+    async def _sende(self, ausgabe: Any, cid: str, ursache: str) -> None:
         """Sendet mit der abgeleiteten Id und wartet auf die Antwort; bleibt sie aus, mit derselben Id noch einmal."""
         if self._registry.classify(type(ausgabe)) != MessageCategory.COMMAND:
             raise TypeError(f"Eine Reaktion gibt Commands aus, nicht {type(ausgabe).__name__}")
@@ -147,6 +159,7 @@ class ReaktionsLaeufer:
         envelope = self._mapper.wrap_command(ausgabe, aggregate_id=ziel, expected_version=-1, correlation_id=cid,
                                              session_id=self._proxy.session_id)
         envelope.command_id = cid
+        envelope.ursache = ursache
         antwort: asyncio.Future = asyncio.get_event_loop().create_future()
         self._offen[cid] = antwort
         try:

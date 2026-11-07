@@ -120,17 +120,14 @@ public class PythonQuelleTests
     [Fact]
     public void Der_Bestand_liest_den_Trainings_Worker_als_Code_Fakt()
     {
-        // Die Arbeit (ARBEIT in vertraege.py) und die Kenntnis (HOERT) mit ihrem Rumpf.
+        // Die Reaktion auf ein Event (HOERT in vertraege.py) mit ihrem Rumpf.
         var wurzel = System.IO.Path.GetFullPath(System.IO.Path.Combine(System.AppContext.BaseDirectory, "..", "..", "..", ".."));
         var impl = PythonClients.Lies(wurzel)["TrainingsWorker"].Single(i => i.Klasse == "TrainingWorker");
         impl.Datei.Should().Be("Domain.Client.Worker.Python.ML/domain_client/training_worker.py");
-        var r = impl.Rumpfe.Single(x => x.Methode == "auf_training_abgebrochen");
-        r.Event.Should().Be("TrainingAbgebrochen");
-        r.Akteur.Should().BeNull("eine Kenntnis ist keine Arbeit");
+        var r = impl.Rumpfe.Single(x => x.Methode == "auf_training_angefordert");
+        r.Event.Should().Be("TrainingAngefordert");
+        r.Akteur.Should().BeNull("eine Reaktion auf ein Fakt ist keine Arbeit");
         r.Rumpf.Should().NotBeNullOrWhiteSpace("der Rumpf ist die Logik draußen");
-        var arbeit = impl.Rumpfe.Single(x => x.Methode == "auf_training_zu_rechnen");
-        arbeit.Event.Should().Be("TrainingZuRechnen");
-        arbeit.Akteur.Should().Be("TrainingsSystem", "die Arbeit seines Akteurs");
-        arbeit.Ausgaenge.Should().Contain(["MeldeFortschritt", "MeldeTrainingAbgeschlossen"], "die Antwort sind Commands seines IDarf");
+        r.Signatur.Should().Contain("MeldeFortschrittDto", "die Reaktion gibt Commands seines IDarf aus");
     }
 }

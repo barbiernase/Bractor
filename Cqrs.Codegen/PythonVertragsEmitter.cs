@@ -9,8 +9,9 @@ namespace Cqrs.Codegen;
 /// Clients → Python (<c>docs/konzept-akteure.md</c> §4, §5): je <c>record X : IClient</c> eine abstrakte Klasse <c>XBasis</c> in
 /// <c>domain_client/generated/vertraege.py</c>, gegen die der Client programmiert — aus den Akteuren, die er verkörpert: je Command, den einer von ihnen
 /// hört (Arbeit), eine Methode <c>auf_&lt;command&gt;</c>, die seine Antwort liefert (Commands über das <c>IDarf</c> des Akteurs, gern in Stücken); je
-/// Event oder Hinweis, den einer hört (Kenntnis), eine Methode <c>auf_&lt;event&gt;</c> ohne Ausgabe. Wer einen Akteur verkörpert, muss seine Arbeit
-/// annehmen können: fehlt eine Methode, lässt sich der Client nicht bauen (ABC). Gelesen wird nur die Signatur (Metadaten der gebauten Domain-DLLs).
+/// Event oder Hinweis, den einer hört, eine Methode <c>auf_&lt;event&gt;</c>. Wer einen Akteur verkörpert, muss seine Arbeit
+/// annehmen können: fehlt eine Methode, lässt sich der Client nicht bauen (ABC). Auf ein Event reagiert die Methode mit Commands des <c>IDarf</c>
+/// (Schritt 6: ein Decide gibt nur Fakten aus, die Folgen stößt ein Client an) oder gibt nichts aus (Kenntnis). Gelesen wird nur die Signatur (Metadaten der gebauten Domain-DLLs).
 /// Der Hash kommt aus derselben Quelle wie auf dem Server (<see cref="Clientvertragsregeln"/>) — so erkennt der Handshake einen Client, der gegen einen
 /// anderen Stand gebaut wurde.
 /// </summary>
@@ -24,7 +25,7 @@ public static class PythonVertragsEmitter
 
     private sealed record Arbeit(string Akteur, List<(string Command, List<string> Antworten)> Eingaenge);
     private sealed record ClientInfo(Type Typ, string Name, List<string> Akteure, List<Arbeit> Arbeit, List<string> Hoert,
-        List<string> Sendet, List<string> Fragt, string Hash);
+        List<string> Sendet, List<string> Reagiert, List<string> Fragt, string Hash);
 
     public static IEnumerable<Type> TypenVon(Assembly a)
     {
@@ -65,7 +66,8 @@ public static class PythonVertragsEmitter
                 sendet.Select(t => t.Name), fragt.Select(t => t.Name), hoert.Select(t => t.Name));
             clients.Add(new ClientInfo(c, name, akteure.Select(a => a.Name).ToList(), arbeit,
                 hoert.Select(t => t.Name).OrderBy(n => n, StringComparer.Ordinal).ToList(), sendet.Select(t => t.Name).ToList(),
-                fragt.Select(t => t.Name).ToList(), Clientvertragsregeln.Hash(kanon)));
+                sendet.Where(t => Hat(t, Clientvertragsregeln.ICommand)).Select(t => t.Name).ToList(), fragt.Select(t => t.Name).ToList(),
+                Clientvertragsregeln.Hash(kanon)));
         }
         return (Python(clients), clients.Count);
     }
@@ -80,8 +82,8 @@ public static class PythonVertragsEmitter
         b.AppendLine("# Nicht von Hand ändern — ./codegen.sh --force erzeugt die Datei neu, ./codegen.sh --check prüft auf Drift.");
         b.AppendLine("#");
         b.AppendLine("# Je Client eine abstrakte Basis aus den Akteuren, die er verkörpert: je gehörtem Command (Arbeit) eine Methode `auf_<command>`, die die");
-        b.AppendLine("# Antwort liefert — Commands über das IDarf des Akteurs, gern in Stücken (yield) —, und je gehörtem Event oder Hinweis (Kenntnis) eine");
-        b.AppendLine("# Methode `auf_<event>` ohne Ausgabe. Die Basis nimmt die Arbeit an, verdrahtet den Dispatch und meldet Client + Hash am Handshake.");
+        b.AppendLine("# Antwort liefert — Commands über das IDarf des Akteurs, gern in Stücken (yield) —, und je gehörtem Event oder Hinweis eine Methode");
+        b.AppendLine("# `auf_<event>`: die Reaktion (Commands des IDarf) oder nichts (Kenntnis). Die Basis verdrahtet den Dispatch und meldet Client + Hash am Handshake.");
         b.AppendLine("from __future__ import annotations");
         b.AppendLine();
         b.AppendLine("from abc import abstractmethod");
@@ -129,7 +131,7 @@ public static class PythonVertragsEmitter
             if (c.Hoert.Count == 0) b.AppendLine("    HOERT: ClassVar[dict] = {}");
             else
             {
-                b.AppendLine("    HOERT: ClassVar[dict] = {   # IHoert eines Events oder Hinweises: Kenntnis, verlierbar");
+                b.AppendLine("    HOERT: ClassVar[dict] = {   # IHoert eines Events oder Hinweises: Reaktion oder Kenntnis");
                 foreach (var h in c.Hoert) b.AppendLine($"        {h}{Dto}: \"auf_{Snake(h)}\",");
                 b.AppendLine("    }");
             }
@@ -148,8 +150,9 @@ public static class PythonVertragsEmitter
             {
                 b.AppendLine();
                 b.AppendLine("    @abstractmethod");
-                b.AppendLine($"    async def auf_{Snake(h)}(self, e: {h}{Dto}, ctx: MessageContext, state: S) -> None:");
-                b.AppendLine($"        \"\"\"IHoert<{h}> — nur zur Kenntnis\"\"\"");
+                var reaktion = string.Join(" | ", c.Reagiert.Select(a => a + Dto));
+                b.AppendLine($"    async def auf_{Snake(h)}(self, e: {h}{Dto}, ctx: MessageContext, state: S) -> {(reaktion.Length == 0 ? "None" : $"AsyncIterator[{reaktion}] | None")}:");
+                b.AppendLine($"        \"\"\"IHoert<{h}> — die Reaktion: {string.Join(", ", c.Reagiert.DefaultIfEmpty("nichts"))} (ein Wert oder Stücke, yield); oder nichts (Kenntnis)\"\"\"");
                 b.AppendLine("        ...");
             }
         }

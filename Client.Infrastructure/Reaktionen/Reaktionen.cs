@@ -127,6 +127,14 @@ public sealed class Reaktionen(IGrpcProxy proxy, IReaktionsStand stand, string n
                 if (!proxy.IsConnected) throw new ReaktionUnterbrochen("keine Verbindung");
                 var weckruf = _weckruf.Task;
                 var seite = await proxy.LiesLogAsync(ab, ct: ct);
+                if (seite.Horizont >= 0 && seite.Horizont < ab)
+                {
+                    // Das Log ist kürzer als der eigene Stand: eine neue Datenbank. Von vorn — dieselben Positionen ergäben dieselben Ids.
+                    logger?.LogWarning("[Reaktionen] {Name}: das Log endet bei {Horizont}, der Stand steht bei {Ab} — neu, von vorn", name, seite.Horizont, ab);
+                    ab = 0;
+                    await stand.SichereAsync(name, ab, ct);
+                    continue;
+                }
                 // Mehrere Events an einer Position (ein Split-Upcast) zählen der Reihe nach — eine volle Seite trennt eine Position nie.
                 var nummer = 0;
                 long vorige = -1;

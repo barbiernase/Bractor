@@ -2,10 +2,10 @@
 """
 TrainingWorker — der out-of-process Trainings-Job.
 
-Der Client TrainingsWorker (verkörpert den Akteur TrainingsSystem) — sein Akteur hört TrainingZuRechnen, Arbeit (ein Command ohne Ziel,
-docs/konzept-akteure.md §5): der Server gibt ihm jedes angeforderte Training; er zieht die eingefrorene Sample-Liste über den typisierten
-Query-Kanal (`self.query(HoleDatensatzSamples…)`), fährt das Training in `asyncio.to_thread` (Event-Loop bleibt frei) und **yieldet über die
-Zeit mehrfach** Commands — Stücke: jedes sendet der Server, bevor das nächste kommt:
+Der Client TrainingsWorker (verkörpert den Akteur TrainingsSystem) reagiert auf TrainingAngefordert (ein Fakt, Schritt 6): er zieht die
+eingefrorene Sample-Liste über den typisierten Query-Kanal (`self.query(HoleDatensatzSamples…)`), fährt das Training in `asyncio.to_thread`
+(Event-Loop bleibt frei) und **yieldet über die Zeit mehrfach** Commands — Stücke: jedes geht hinaus, bevor das nächste kommt (genau einmal über
+den Stand der Reaktionen, die Ids leitet der Läufer aus Position und Stelle ab):
 
     MeldeTrainingBegonnen                         → TrainingBegonnen
     MeldeFortschritt(epoche, loss, genauigkeit) ×N → TrainingFortschritt   (Live-Kurve)
@@ -14,8 +14,9 @@ Zeit mehrfach** Commands — Stücke: jedes sendet der Server, bevor das nächst
     MeldeTrainingGescheitert(grund)               → TrainingGescheitert
 
 Der Trainings-Thread schiebt Fortschritt über eine `asyncio.Queue` (thread-sicher via
-`call_soon_threadsafe`); der Handler drainiert sie und yieldet. Kooperativer Abbruch:
-`TrainingAbgebrochen` setzt ein `threading.Event`, das der Thread zwischen Epochen prüft.
+`call_soon_threadsafe`); der Handler drainiert sie und yieldet. Kooperativer Abbruch: nach jeder
+Epoche liest der Handler den Lauf (`HoleTrainingslauf`); steht er auf „abgebrochen“, setzt er ein
+`threading.Event`, das der Thread zwischen Epochen prüft.
 
 Diese Klasse enthält einen **Stub-Trainer** (`_trainiere`) — fake, aber realitätsnah
 (sinkender Loss, steigende Genauigkeit). Für echtes Torch die Methode überschreiben; der
@@ -31,11 +32,11 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable
 
-from cqrs_client.arbeit import Herkunft
 from domain_client.generated import (
-    TrainingZuRechnenDto,
-    TrainingAbgebrochenDto,
+    TrainingAngefordertDto,
     HoleDatensatzSamplesDto,
+    HoleTrainingslaufDto,
+    TrainingslaufAntwortDto,
     DatensatzSampleDto,
     EpochenMetrikDto,
     EndmetrikenDto,
@@ -48,16 +49,19 @@ from domain_client.generated.vertraege import TrainingsWorkerBasis
 
 log = logging.getLogger(__name__)
 
+# TrainingsStatus (Domain/Trainingslauf/Enums.cs) auf der Leitung: die Stelle im Enum.
+STATUS_ABGEBROCHEN = 4
+
 
 @dataclass
 class TrainingState:
     laeufe: int = 0
-    # Abbruch-Flag je laufendem Training (gesetzt vom TrainingAbgebrochen-Handler).
+    # Abbruch-Flag je laufendem Training (gesetzt, wenn der Lauf auf „abgebrochen“ steht).
     abbruch: dict[str, threading.Event] = field(default_factory=dict)
 
 
 class TrainingWorker(TrainingsWorkerBasis[TrainingState]):
-    """Der Client TrainingsWorker — programmiert gegen seinen Vertrag (Domain.Akteure.TrainingsWorker: Arbeit TrainingZuRechnen, hört TrainingAbgebrochen)."""
+    """Der Client TrainingsWorker — programmiert gegen seinen Vertrag (Domain.Akteure.TrainingsWorker: reagiert auf TrainingAngefordert)."""
 
     # Seiten-Größe beim Ziehen der Samples (paginiert, wie SucheImagePairs).
     SEITEN_GROESSE = 500
@@ -73,10 +77,10 @@ class TrainingWorker(TrainingsWorkerBasis[TrainingState]):
     # HAUPT-HANDLER — der langlaufende Trainings-Job
     # ═══════════════════════════════════════════════════
 
-    async def auf_training_zu_rechnen(
-        self, c: TrainingZuRechnenDto, h: Herkunft, state: TrainingState
+    async def auf_training_angefordert(
+        self, c: TrainingAngefordertDto, ctx, state: TrainingState
     ):
-        training_id = str(c.lauf)
+        training_id = str(ctx.aggregate_id)
         state.laeufe += 1
         log.info(
             "Training %s angefordert: Datensatz %s v%d, %d Epochen",
@@ -128,6 +132,12 @@ class TrainingWorker(TrainingsWorkerBasis[TrainingState]):
                 art, *rest = await queue.get()
                 if art == "fortschritt":
                     yield MeldeFortschrittDto(aggregate_id=training_id, metrik=rest[0])
+                    if await self._abgebrochen(training_id):
+                        # Der Lauf steht schon auf „abgebrochen“ (per GUI): kooperativ aufhören, nichts mehr melden — der Thread prüft
+                        # das Flag zwischen Epochen, `finally` wartet auf ihn.
+                        log.info("Training %s abgebrochen", training_id[:8])
+                        abbruch.set()
+                        break
                 elif art == "fertig":
                     modell_pfad, endmetriken = rest
                     yield MeldeTrainingAbgeschlossenDto(
@@ -150,15 +160,17 @@ class TrainingWorker(TrainingsWorkerBasis[TrainingState]):
             await train_task
 
     # ═══════════════════════════════════════════════════
-    # ABBRUCH — kooperativ
+    # ABBRUCH — kooperativ, über den Stand des Laufs
     # ═══════════════════════════════════════════════════
 
-    async def auf_training_abgebrochen(
-        self, event: TrainingAbgebrochenDto, ctx, state: TrainingState
-    ):
-        ev = state.abbruch.get(str(ctx.aggregate_id))
-        if ev is not None:
-            ev.set()   # der Trainings-Thread prüft das zwischen Epochen
+    async def _abgebrochen(self, training_id: str) -> bool:
+        """Steht der Lauf auf „abgebrochen“ (per GUI)? Ein Fehler beim Lesen bricht nicht ab — die nächste Epoche fragt wieder."""
+        try:
+            antwort = await self.query(HoleTrainingslaufDto(trainingslauf_id=training_id))
+        except Exception as e:                        # noqa: BLE001 — weiterrechnen
+            log.warning("Training %s: Stand nicht gelesen: %s", training_id[:8], e)
+            return False
+        return isinstance(antwort, TrainingslaufAntwortDto) and antwort.status == STATUS_ABGEBROCHEN
 
     # ═══════════════════════════════════════════════════
     # SAMPLES ZIEHEN — der Query-Kanal, paginiert

@@ -3,7 +3,7 @@ namespace Abstractions;
 /// <summary>
 /// Ein AKTEUR — ein Domänen-Experte draußen (<c>docs/konzept-akteure.md</c> §2): was er hineingibt, steht als <see cref="IDarf{T}"/>, was zu ihm
 /// hinkommt, als <see cref="IHoert{T}"/> — Code-Fakten, die Generator, Extractor und Editor aus der Basisliste lesen:
-/// <code>public sealed record Klassifizierer : IAkteur, IDarf&lt;KlassifiziereBildPaarDurchKi&gt;, IHoert&lt;PaarZuBeurteilen&gt;, IHoert&lt;ModellAktiviert&gt;;</code>
+/// <code>public sealed record Klassifizierer : IAkteur, IDarf&lt;KlassifiziereBildPaarDurchKi&gt;, IHoert&lt;ImagePairKomplett&gt;, IHoert&lt;ModellAktiviert&gt;;</code>
 /// Ein Command darf bei mehreren Akteuren stehen. Was eine Funktion oder eine Frist daraus erzeugt, trägt den Akteur der Kette — dafür gibt es kein
 /// weiteres Wort. Ein Akteur ist immer ein Record, nie ein Dienst.
 /// </summary>

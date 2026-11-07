@@ -81,6 +81,3 @@ public record LabelPhysischesProdukt(
 public record MarkiereAlsInspiziert(
     Id<ImagePair> AggregateId
 ) : ICommand<ImagePair>;
-
-/// <summary>Das Paar ist komplett: es ist mit dem aktiven Modell zu beurteilen.</summary>
-public record PaarZuBeurteilen(Id<ImagePair> Paar) : ICommand;

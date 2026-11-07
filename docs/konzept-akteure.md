@@ -16,7 +16,7 @@
 |---|---|---|---|
 | **Akteur** | *Wer* handelt fachlich? | `record X : IAkteur` (`Abstractions/Akteur.cs`) | `Inspekteur`, `Klassifizierer` |
 | **darf** | Was gibt er selbst hinein? | `IDarf<T>`: ein Command, eine Query, ein Hinweis | der Inspekteur darf `LabelBildPaar` |
-| **hört** | Was kommt zu ihm? | `IHoert<T>`: ein Command ohne Ziel ist **Arbeit**, ein Event oder Hinweis **Kenntnis** | der Klassifizierer hört `PaarZuBeurteilen` (Arbeit) und `ModellAktiviert` (Kenntnis) |
+| **hört** | Was kommt zu ihm? | `IHoert<T>`: ein Command ohne Ziel ist **Arbeit**, ein Event oder Hinweis **Kenntnis** | der Klassifizierer hört `ImagePairKomplett` (er reagiert mit seinem Urteil) und `ModellAktiviert`; der Rechnungspruefer der Prüfdomäne hört `RechnungZuPruefen` (Arbeit) |
 | **Client** | *Welche Software* hängt an der Leitung, für wen spricht sie? | `record X : IClient, IVerkoerpert<A>…` | `KlassifikationsWorker` (Python), `Arbeitsplatz` (Blazor) |
 | **verkörpert** | Für welche Akteure spricht der Client? | `IVerkoerpert<A>` am Client | der KlassifikationsWorker verkörpert den Klassifizierer |
 | **Identität** | Wer meldet sich an? | Token → Akteur-Menge (Umgebung, `Identitaeten:Tokens`) | Token `sim-arbeitsplatz` → {Inspekteur, KIOperator, Modellfreigeber, Produktpruefer} |
@@ -44,9 +44,9 @@ wird nicht deklariert.
 
 ```csharp
 public sealed record KameraSystem   : IAkteur, IDarf<NimmBildAuf>;
-public sealed record Klassifizierer : IAkteur, IHoert<PaarZuBeurteilen>,
-    IDarf<KlassifiziereBildPaarDurchKi>, IDarf<KlassifiziereEinzelBildDurchKi>, IDarf<HoleAktivesModell>,
-    IHoert<BildVerfuegbar>, IHoert<ModellAktiviert>;
+public sealed record Klassifizierer : IAkteur,
+    IHoert<BildVerfuegbar>, IHoert<ImagePairKomplett>, IHoert<ModellAktiviert>,
+    IDarf<KlassifiziereBildPaarDurchKi>, IDarf<KlassifiziereEinzelBildDurchKi>, IDarf<HoleAktivesModell>;
 public sealed record Inspekteur     : IAkteur, IDarf<LabelBildPaar>, IDarf<MarkiereAlsInspiziert>, IDarf<SucheImagePairs> /* … */,
     IHoert<ImagePairErstellt>, IHoert<ImagePairKomplett> /* … */;
 ```
@@ -63,11 +63,11 @@ public sealed record Inspekteur     : IAkteur, IDarf<LabelBildPaar>, IDarf<Marki
 
 ### 2.2 Katalog der Beispieldomäne (`Domain.Akteure/Akteure.cs`)
 
-| Akteur | gibt selbst hinein (`IDarf`) | Arbeit (`IHoert` eines Commands) | Kenntnis (`IHoert` eines Events) |
+| Akteur | gibt selbst hinein (`IDarf`) | Arbeit (`IHoert` eines Commands) | hört (`IHoert` eines Events: Reaktion oder Kenntnis) |
 |---|---|---|---|
 | KameraSystem | `NimmBildAuf` (über die Instanz des Linienimports) | – | – |
-| TrainingsSystem | `MeldeTrainingBegonnen`, `MeldeFortschritt`, `MeldeTrainingAbgeschlossen`, `MeldeTrainingGescheitert`, `HoleDatensatzSamples` | `TrainingZuRechnen` | `TrainingAbgebrochen` |
-| Klassifizierer | `KlassifiziereBildPaarDurchKi`, `KlassifiziereEinzelBildDurchKi`, `HoleAktivesModell` | `PaarZuBeurteilen` | `BildVerfuegbar`, `ModellAktiviert` |
+| TrainingsSystem | `MeldeTrainingBegonnen`, `MeldeFortschritt`, `MeldeTrainingAbgeschlossen`, `MeldeTrainingGescheitert`, `HoleDatensatzSamples`, `HoleTrainingslauf` | – | `TrainingAngefordert` (Reaktion: das Training) |
+| Klassifizierer | `KlassifiziereBildPaarDurchKi`, `KlassifiziereEinzelBildDurchKi`, `HoleAktivesModell` | – | `ImagePairKomplett` (Reaktion: das Urteil), `BildVerfuegbar`, `ModellAktiviert` |
 | Inspekteur | Labeln (Paar, Einzelbild, Region), `MarkiereAlsInspiziert`, Lese-Queries der Bildpaare | – | Galerie und Statistik (`ImagePairErstellt`, `ImagePairKomplett`, Labels …) |
 | Produktpruefer | `LabelPhysischesProdukt`, `GetImagePair`, `SucheImagePairs` | – | `ImagePairErstellt`, `PhysischesProduktGelabelt` |
 | KIOperator | Datensätze, Training, `RegistriereModell`, deren Queries | – | Datensätze, Trainingsläufe, Modelle |
@@ -103,8 +103,8 @@ den Graphen, `DomainEditor/AkteurAnteile.cs`, §8), zur Laufzeit genau einen (§
 ## 3. Arbeit
 
 Hört ein Akteur einen Command ohne Ziel, ist das seine **Arbeit**: der Command hat ihn als einzigen Empfänger, gleich, ob ein Decide ihn ausgibt
-(`PaarZuBeurteilen` aus dem Bildpaar, `TrainingZuRechnen` aus dem Trainingslauf) oder ein Graph (`RechnungZuPruefen` aus dem Freigabeautomaten der
-Prüfdomäne). Die Antwort sind Commands aus dem `IDarf` des Akteurs — ein gewöhnlicher Command, der wieder einen Empfänger hat.
+oder ein Graph (`RechnungZuPruefen` aus dem Freigabeautomaten der Prüfdomäne). In der Beispieldomäne gibt es keine Arbeit mehr (Schritt 6): ein
+Decide gibt nur Fakten aus, die Worker reagieren darauf (§5.5). Die Antwort sind Commands aus dem `IDarf` des Akteurs — ein gewöhnlicher Command, der wieder einen Empfänger hat.
 
 - Die Laufzeit legt je Akteur mit Arbeit eine **Instanz** unter seinem Namen an: ein Graph mit einem Knoten draußen, Köpfe = die gehörten Commands,
   Ausgänge = die Commands seines `IDarf` (`Infrastructure/Funktionen/Arbeit.cs`). Damit hat die Arbeit, was jeder Kopf hat: einen offenen Eingang
@@ -159,10 +159,11 @@ geht über die Leitung; client-interne Typen stehen nie bei einem Akteur.
 
 ### 4.5 Clients der Beispieldomäne (`Domain.Akteure/Clients.cs`)
 
-| Client | verkörpert | nimmt an (Arbeit) | sendet / fragt | hört |
+| Client | verkörpert | reagiert auf | sendet / fragt | hört außerdem |
 |---|---|---|---|---|
-| `KlassifikationsWorker` (`classifier.py`, `run_stub.py`) | Klassifizierer | `PaarZuBeurteilen` | `KlassifiziereBildPaarDurchKi`, `KlassifiziereEinzelBildDurchKi` / `HoleAktivesModell` | `BildVerfuegbar`, `ModellAktiviert` |
-| `TrainingsWorker` (`training_worker.py`, `run_train_stub.py`) | TrainingsSystem | `TrainingZuRechnen` | die `Melde…`-Commands / `HoleDatensatzSamples` | `TrainingAbgebrochen` |
+| `KlassifikationsWorker` (`classifier.py`, `run_stub.py`) | Klassifizierer | `ImagePairKomplett` | `KlassifiziereBildPaarDurchKi`, `KlassifiziereEinzelBildDurchKi` / `HoleAktivesModell` | `BildVerfuegbar`, `ModellAktiviert` |
+| `TrainingsWorker` (`training_worker.py`, `run_train_stub.py`) | TrainingsSystem | `TrainingAngefordert` | die `Melde…`-Commands / `HoleDatensatzSamples`, `HoleTrainingslauf` | – |
+| `ReaktionsWorker` (`Domain.Client.Worker`, .NET) | Datensatzpfleger, Teilmelder | `RangeAngefordert`, `EinfrierenAngefordert`, `TeilauftragAbgeschlossen` | `NimmRangeAuf`, `SchliesseEinfrierenAb`, `MeldeTeilFertig` / `SucheImagePairs`, `GetImagePair` | – |
 | `Arbeitsplatz` (Blazor) | Inspekteur, KIOperator, Modellfreigeber, Produktpruefer | – | alle Commands und Queries der vier Akteure | was die vier hören |
 
 Ein Ketten-Command wie `NimmRangeAuf` (nur aus einem Graphen) steht bei keinem Akteur; die Mehrfach-Auswahl beim Kuratieren schickt je Paar

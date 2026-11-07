@@ -452,7 +452,7 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
         var ab = Math.Max(0, request.Ab);
         if (diskriminatoren is null)
         {
-            await SchreibeAsync(new Leitung.ServerMessage { LogSeite = new Leitung.LogSeite { Korrelation = request.Korrelation, Bis = ab } });
+            await SchreibeAsync(new Leitung.ServerMessage { LogSeite = new Leitung.LogSeite { Korrelation = request.Korrelation, Bis = ab, Horizont = ab } });
             return;
         }
         var hoechstens = request.Hoechstens is > 0 and <= LogSeiteHoechstens ? request.Hoechstens : LogSeiteHoechstens;
@@ -484,7 +484,7 @@ public sealed class SitzungsActor : RahmenActor, IArbeiter
             bis = bisHorizont[^1].Sequenz;
         }
         else bis = voll ? bisHorizont[^1].Sequenz : Math.Max(ab, seite.Gesetzt);
-        var antwort = new Leitung.LogSeite { Korrelation = korrelation, Bis = bis, Voll = voll };
+        var antwort = new Leitung.LogSeite { Korrelation = korrelation, Bis = bis, Voll = voll, Horizont = seite.Gesetzt };
         antwort.Eintraege.AddRange(bisHorizont.Select(e => new Leitung.LogEintrag { Position = e.Sequenz, Envelope = _d.Mapper.MapToDto(e.Event) }));
         return antwort;
     }

@@ -80,35 +80,34 @@ public class AkteurRechteTests
         R("Inspekteur").DarfHoeren(typeof(ModellAktiviert)).Should().BeFalse();
     }
 
-    // ── Arbeit (docs/konzept-akteure.md §5): ein gehörter Command ohne Ziel kommt zum Akteur, seine Antwort sind Commands über sein IDarf ──
+    // ── Reaktionen (Schritt 6): ein Decide gibt nur Fakten aus; ein Worker hört sie und gibt seine Folgen über sein IDarf hinein ──
 
     [Fact]
-    public void Ein_gehoerter_Command_ohne_Ziel_ist_Arbeit_kein_Hoeren()
+    public void Die_Worker_hoeren_Fakten_und_reagieren_ueber_ihr_IDarf()
     {
         var k = R("Klassifizierer");
-        k.Arbeit.Should().BeEquivalentTo(new[] { typeof(PaarZuBeurteilen) });
-        k.Hoert.Should().BeEquivalentTo(new[] { typeof(BildVerfuegbar), typeof(ModellAktiviert) }, "Kenntnis sind nur Events und Hinweise");
+        k.Arbeit.Should().BeEmpty();
+        k.Hoert.Should().BeEquivalentTo(new[] { typeof(BildVerfuegbar), typeof(ImagePairKomplett), typeof(ModellAktiviert) });
         k.Commands.Should().BeEquivalentTo(new[] { typeof(KlassifiziereBildPaarDurchKi), typeof(KlassifiziereEinzelBildDurchKi) });
         k.Queries.Should().BeEquivalentTo(new[] { typeof(HoleAktivesModell) });
-        k.DarfHinein(typeof(PaarZuBeurteilen)).Should().BeFalse("Arbeit gibt der Akteur nicht selbst hinein");
 
         var t = R("TrainingsSystem");
-        t.Arbeit.Should().BeEquivalentTo(new[] { typeof(TrainingZuRechnen) });
-        t.DarfHinein(typeof(MeldeFortschritt)).Should().BeTrue("die Antwort auf seine Arbeit ist ein gewöhnlicher Command über sein IDarf");
-        t.DarfHoeren(typeof(TrainingAbgebrochen)).Should().BeTrue();
+        t.Hoert.Should().BeEquivalentTo(new[] { typeof(TrainingAngefordert) });
+        t.DarfHinein(typeof(MeldeFortschritt)).Should().BeTrue("seine Reaktion ist ein gewöhnlicher Command über sein IDarf");
+        t.Queries.Should().Contain(typeof(Domain.Projections.Trainingslauf.HoleTrainingslauf), "ob der Lauf abgebrochen ist, liest er zwischen den Epochen");
     }
 
     [Fact]
-    public void Arbeit_haben_nur_die_Akteure_die_einen_Command_hoeren()
+    public void Arbeit_hat_in_der_Beispieldomaene_kein_Akteur()
         => GeneratedAkteurRechte.Alle.Values.Where(a => a.Arbeit.Count > 0).Select(a => a.Name)
-            .Should().BeEquivalentTo("Klassifizierer", "TrainingsSystem");
+            .Should().BeEmpty("Schritt 6: kein Decide gibt einen Auftrag aus, die Worker reagieren auf Fakten");
 
     [Fact]
     public void Vereinigung_vereinigt_auch_Arbeit_und_Hoeren()
     {
         var v = AkteurRechte.Vereinige([R("Klassifizierer"), R("Inspekteur")]);
         v.Name.Should().Be("Klassifizierer+Inspekteur");
-        v.Arbeit.Should().Contain(typeof(PaarZuBeurteilen));
+        v.DarfHoeren(typeof(ImagePairKomplett)).Should().BeTrue();
         v.DarfHoeren(typeof(ModellAktiviert)).Should().BeTrue();
         v.DarfHoeren(typeof(ImagePairInspiziert)).Should().BeTrue();
         v.Einzelne.Select(e => e.Name).Should().Equal("Klassifizierer", "Inspekteur");

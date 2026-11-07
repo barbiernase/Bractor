@@ -24,7 +24,7 @@ public partial class ImagePair
         /// Anlegen oder ergänzen: beim ersten Bild entsteht das Paar, jedes Bild einer Version kommt genau einmal hinzu, mit dem zweiten ist das
         /// Paar komplett. Ein Bild derselben Version noch einmal ist nur ein Hinweis.
         /// </summary>
-        public IEnumerable<OneOf<ImagePairErstellt, BildVerfuegbar, ImagePairKomplett, BildVersionBereitsVerfuegbar, PaarZuBeurteilen>> Decide(NimmBildAuf cmd)
+        public IEnumerable<OneOf<ImagePairErstellt, BildVerfuegbar, ImagePairKomplett, BildVersionBereitsVerfuegbar>> Decide(NimmBildAuf cmd)
         {
             // Die Version kommt als Name („DC0“, die Aufnahme-Konvention kennt nur DC0 und DC2); ein anderer Name lässt den Command scheitern.
             var version = Enum.Parse<BildVersion>(cmd.Version, ignoreCase: true);
@@ -53,11 +53,9 @@ public partial class ImagePair
                 cmd.Pfad, regionen);
 
             var andereVersion = version == BildVersion.Dc0 ? BildVersion.Dc2 : BildVersion.Dc0;
+            // Ein Fakt, kein Auftrag: das komplette Paar beurteilt der Klassifizierer (ein Client, der ImagePairKomplett hört).
             if (!neu && this.State.GetBild(andereVersion) != null)
-            {
                 yield return new ImagePairKomplett();
-                yield return new PaarZuBeurteilen(cmd.AggregateId);
-            }
         }
 
         // ═══════════════════════════════════════════════════

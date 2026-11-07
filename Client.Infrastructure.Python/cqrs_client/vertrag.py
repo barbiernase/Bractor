@@ -5,26 +5,27 @@ Client-Verträge (docs/konzept-akteure.md §4, docs/konzept-akteure.md §5) — 
 Akteur und Client stehen in der Domäne (C#, eine Quelle):
 
     public sealed record Klassifizierer : IAkteur,
-        IHoert<PaarZuBeurteilen>,                   // Arbeit: ein Command ohne Ziel
-        IDarf<KlassifiziereBildPaarDurchKi>,        // die Antwort (und was er von sich aus sendet)
-        IHoert<ModellAktiviert>;                    // Kenntnis, verlierbar
+        IHoert<ImagePairKomplett>,                  // ein Fakt, auf den er reagiert
+        IDarf<KlassifiziereBildPaarDurchKi>,        // seine Reaktion (und was er von sich aus sendet)
+        IHoert<ModellAktiviert>;                    // Kenntnis
 
     public sealed record KlassifikationsWorker : IClient,
         IVerkoerpert<Klassifizierer>;               // was über die Leitung geht: IDarf und IHoert seiner Akteure
 
 `Cqrs.Codegen` erzeugt daraus `domain_client/generated/vertraege.py` mit einer Basis je Client (`KlassifikationsWorkerBasis`). Der Worker erbt
-sie und füllt je gehörtem Command eine Methode `auf_<command>(c, h, state)` (die Antwort: Commands aus dem IDarf des Akteurs) und je Kenntnis
-eine Methode `auf_<event>(e, ctx, state)` (gibt nichts aus):
+sie und füllt je gehörtem Event eine Methode `auf_<event>(e, ctx, state)`: ihre Reaktion — Commands aus dem IDarf der Akteure (ein Wert oder
+Stücke, yield) — oder nichts (Kenntnis):
 
     class ImageClassifier(KlassifikationsWorkerBasis[ClassifierState]):
-        async def auf_paar_zu_beurteilen(self, c, h, state):
-            return KlassifiziereBildPaarDurchKiDto(aggregate_id=c.paar, label=0)
+        async def auf_image_pair_komplett(self, e, ctx, state):
+            return KlassifiziereBildPaarDurchKiDto(aggregate_id=str(ctx.aggregate_id), label=0)
         async def auf_modell_aktiviert(self, e, ctx, state): ...
 
 Was die Basis übernimmt — der Worker schreibt nichts davon von Hand:
   - Arbeit: sie wird nach jedem Handshake angenommen (je Akteur mit `PLAETZE`, Standard 1); der Server gibt Aufträge, nimmt die erste Antwort an
     und sendet ihre Commands selbst — der Client ist nur die Hand, die Garantie bleibt beim Server (`arbeit.py`);
-  - Kenntnis: Dispatch Event-Typ → `auf_<event>`; eine Kenntnis gibt nichts aus (`VertragsVerletzung`);
+  - Reaktion: Dispatch Event-Typ → `auf_<event>`; was sie ausgibt, muss ein Command aus `SPONTAN` sein (sonst `VertragsVerletzung`). Genau einmal
+    wirkt sie mit einem Stand (`reaktion_stand`, cqrs_client.reaktionen): der Client liest das Log ab dort und leitet die Command-Ids ab;
   - Vollständigkeit: fehlt eine Methode, lässt sich der Worker nicht instanziieren (ABC) — der Bruch fällt beim Start auf;
   - Handshake: der CapabilitiesRequest nennt Client + Hash (der Server nimmt die Fähigkeiten aus SEINER Tabelle); `FRAGT` sind die Queries der
     Akteure — `query()` mit einem anderen Typ ist eine `VertragsVerletzung`.
@@ -59,18 +60,19 @@ class VertragsMeta(HandlerMeta, ABCMeta):
         cls = super().__new__(mcs, name, bases, namespace, **kwargs)
         if "HOERT" in namespace:
             for eingang, methode in namespace["HOERT"].items():
-                cls.handle._register_method(eingang, _kenntnis(eingang, methode))
+                cls.handle._register_method(eingang, _reaktion(eingang, methode))
         return cls
 
 
-def _kenntnis(eingang: type, methode: str):
+def _reaktion(eingang: type, methode: str):
     async def reagiere(self, payload, ctx, state):
         async for stueck in _stuecke(getattr(self, methode)(payload, ctx, state)):
-            raise VertragsVerletzung(
-                f"{type(self).__name__}.{methode}: gibt {type(stueck[0]).__name__} aus — {eingang.__name__} ist nur Kenntnis (IHoert); "
-                f"eine Antwort gibt es nur auf Arbeit (IHoert eines Commands ohne Ziel bei einem verkörperten Akteur)")
-        if False:   # macht reagiere zum Generator (der Dispatch erwartet einen Strom)
-            yield None
+            for ausgabe in stueck:
+                if not isinstance(ausgabe, self.SPONTAN):
+                    raise VertragsVerletzung(
+                        f"{type(self).__name__}.{methode}: gibt {type(ausgabe).__name__} aus — auf {eingang.__name__} reagiert der Client nur mit "
+                        f"Commands seiner Akteure (IDarf): {', '.join(t.__name__ for t in self.SPONTAN) or 'keinen'}")
+                yield ausgabe
 
     reagiere.__name__ = methode
     return reagiere
@@ -81,7 +83,7 @@ class ClientVertragBasis(CqrsClient[S], metaclass=VertragsMeta):
     Basis der generierten Client-Basen. Die generierte Unterklasse setzt:
         CLIENT, AKTEURE, VERTRAG_HASH — Handshake-Name, verkörperte Akteure, Stand;
         ARBEIT  — Akteur → {Command-DTO: Arbeit(Methode, Antworten)}: die gehörten Commands ohne Ziel;
-        HOERT   — Event-DTO → Methode `auf_<event>`: die Kenntnis;
+        HOERT   — Event-DTO → Methode `auf_<event>`: die Reaktion bzw. Kenntnis;
         SPONTAN — Commands, die von sich aus hineingehen (IDarf der verkörperten Akteure);
         FRAGT   — die Queries (IDarf der verkörperten Akteure; leer = nicht geprüft).
     Wie viele Aufträge eines Akteurs gleichzeitig laufen, sagt `PLAETZE` (Akteur → Zahl, Standard 1).

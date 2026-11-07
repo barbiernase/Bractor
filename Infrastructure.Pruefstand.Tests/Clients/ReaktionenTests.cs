@@ -35,6 +35,9 @@ public class ReaktionenTests
         public readonly ConcurrentQueue<(Guid Id, ICommand Command)> Gesendet = new();
         /// <summary>So oft schweigt sie noch (keine Quittung), bevor sie wieder antwortet.</summary>
         public int Schweigt;
+        /// <summary>Der Horizont, den die Seite meldet (null = unbekannt).</summary>
+        public long? Horizont;
+        public readonly ConcurrentQueue<string?> Ursachen = new();
 
         public ConnectionState CurrentState => ConnectionState.Connected;
         public string? SessionId => "knoten#0001";
@@ -49,6 +52,7 @@ public class ReaktionenTests
         public Task SendCommandAsync(CommandEnvelope envelope, CancellationToken ct = default)
         {
             envelope.Modus.Should().BeOfType<CommandModus.Client>().Which.ExpectedVersion.Should().Be(-1, "eine Reaktion schickt ohne OCC");
+            Ursachen.Enqueue(envelope.Ursache);
             return Gesendet_(envelope.CommandId, envelope.Payload, envelope.CorrelationId);
         }
 
@@ -68,14 +72,17 @@ public class ReaktionenTests
 
         public Task<LogLesung> LiesLogAsync(long ab, int hoechstens = 500, CancellationToken ct = default)
         {
-            var neu = Log.Where(e => e.Position > ab).Select(e => new LogEintragLesung(e.Position, new EventEnvelope { Payload = e.Event })).ToList();
-            return Task.FromResult(new LogLesung(neu, Log.Count == 0 ? ab : Math.Max(ab, Log.Max(e => e.Position)), false));
+            var neu = Log.Where(e => e.Position > ab)
+                .Select(e => new LogEintragLesung(e.Position, new EventEnvelope { AggregateId = Strom, AggregateVersion = (int)e.Position, Payload = e.Event }))
+                .ToList();
+            return Task.FromResult(new LogLesung(neu, Log.Count == 0 ? ab : Math.Max(ab, Log.Max(e => e.Position)), false, Horizont ?? -1));
         }
 
         public Task DisconnectAsync() => Task.CompletedTask;
     }
 
     private static readonly Guid Kunde = Guid.NewGuid();
+    private static readonly Guid Strom = Guid.NewGuid();
 
     private static Reaktionen Laeufer(Leitung l, IReaktionsStand stand) => new Reaktionen(l, stand, "buchhaltung", takt: TimeSpan.FromMilliseconds(50),
             antwortfrist: TimeSpan.FromMilliseconds(200))
@@ -105,6 +112,35 @@ public class ReaktionenTests
             Reaktionen.CommandId("buchhaltung", 5, 0, 0), Reaktionen.CommandId("buchhaltung", 5, 0, 1));
         l.Gesendet.Select(x => x.Command).Should().Equal(new Buche(new Id<Konto>(Kunde), 10), new Benachrichtige(Kunde),
             new Buche(new Id<Konto>(Kunde), 20), new Benachrichtige(Kunde));
+    }
+
+    [Fact]
+    public async Task Ein_Command_an_ein_Aggregat_traegt_das_Event_als_Ursache()
+    {
+        var l = new Leitung();
+        l.Log.Add((3, new Bestellt(Kunde, 10)));
+        var stand = new ReaktionsStandImSpeicher();
+        await LaufeBisAsync(Laeufer(l, stand), stand, 3);
+
+        l.Ursachen.Should().Equal(Spur.Ursache(Strom, 3));
+    }
+
+    [Fact]
+    public async Task Ein_Log_unter_dem_eigenen_Stand_ist_neu_der_Laeufer_liest_von_vorn()
+    {
+        var l = new Leitung { Horizont = 3 };
+        l.Log.Add((3, new Bestellt(Kunde, 10)));
+        var stand = new ReaktionsStandImSpeicher();
+        await stand.SichereAsync("buchhaltung", 50, default);   // der Stand einer früheren Datenbank
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var lauf = Laeufer(l, stand).LaufeAsync(cts.Token);
+        while (l.Gesendet.Count < 2 && !cts.IsCancellationRequested) await Task.Delay(20);
+        while (await stand.LadeAsync("buchhaltung", default) != 3 && !cts.IsCancellationRequested) await Task.Delay(20);
+        await cts.CancelAsync();
+        await lauf;
+
+        l.Gesendet.Select(x => x.Id).Should().Equal(Reaktionen.CommandId("buchhaltung", 3, 0, 0), Reaktionen.CommandId("buchhaltung", 3, 0, 1));
+        (await stand.LadeAsync("buchhaltung", default)).Should().Be(3);
     }
 
     [Fact]

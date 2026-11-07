@@ -100,6 +100,8 @@ message LogSeite {
     repeated LogEintrag eintraege = 2;
     int64 bis = 3;
     bool voll = 4;
+    // Der Horizont des Logs: liegt er unter dem eigenen Stand eines Clients, ist das Log neu (eine zurückgesetzte Datenbank) — er liest von vorn.
+    int64 horizont = 5;
 }
 
 message LogEintrag {

@@ -62,7 +62,6 @@ public sealed class Worker(string slnRoot)
             if (!Directory.Exists(projekt) && !File.Exists(projekt)) throw new FileNotFoundException($"Worker-Projekt fehlt: {projekt}");
             psi = new ProcessStartInfo("dotnet") { WorkingDirectory = slnRoot, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
             foreach (var a in new[] { "run", "--project", projekt, "--" }.Concat(w.Argumente)) psi.ArgumentList.Add(a);
-            psi.Environment["CQRS_REAKTION_STAND"] = Path.Combine(Path.GetTempPath(), "cqrs-reaktionen", u.Umgebung.Name, funktion);
         }
         else
         {
@@ -73,6 +72,8 @@ public sealed class Worker(string slnRoot)
             psi.ArgumentList.Add(skript);
             foreach (var a in w.Argumente) psi.ArgumentList.Add(a);
         }
+        // Der Stand der Reaktionen (Schritt 6: ein Worker reagiert auf Fakten, genau einmal ab seinem Stand) — je Umgebung und Client.
+        psi.Environment["CQRS_REAKTION_STAND"] = Path.Combine(Path.GetTempPath(), "cqrs-reaktionen", u.Umgebung.Name, funktion);
         psi.Environment["CQRS_GRPC_HOST"] = "127.0.0.1";
         psi.Environment["CQRS_GRPC_PORT"] = u.Transport.GrpcPort.ToString();
         psi.Environment["PYTHONUNBUFFERED"] = "1";

@@ -2,10 +2,11 @@
 """
 KI-Classifier für industrielle Bildinspektion — der Client KlassifikationsWorker (verkörpert den Akteur Klassifizierer).
 
-Programmiert gegen seinen Client-Vertrag (Domain.Akteure.KlassifikationsWorker, docs/konzept-akteure.md §4): sein Akteur Klassifizierer hört
-PaarZuBeurteilen — Arbeit (ein Command ohne Ziel: der Server gibt ihm jedes komplette Paar, nimmt die erste Antwort an und sendet sie) — und
-hört BildVerfuegbar und ModellAktiviert zur Kenntnis. Die generierte Basis `KlassifikationsWorkerBasis` nimmt die Arbeit an, verdrahtet den
-Dispatch, prüft jede Antwort gegen das IDarf des Akteurs und meldet Client + Hash am Handshake. Fehlt eine Methode, startet der Worker nicht.
+Programmiert gegen seinen Client-Vertrag (Domain.Akteure.KlassifikationsWorker, docs/konzept-akteure.md §4): sein Akteur Klassifizierer
+reagiert auf ImagePairKomplett (ein Fakt, Schritt 6) mit seinem Urteil; davor merkt er sich den Pfad jedes Bildes (BildVerfuegbar, im Log
+davor) und lädt ein neu freigegebenes Modell (ModellAktiviert). Die generierte Basis `KlassifikationsWorkerBasis` verdrahtet den Dispatch, prüft
+jede Reaktion gegen das IDarf des Akteurs und meldet Client + Hash am Handshake; genau einmal wirkt sie mit einem Stand (`reaktion_stand`).
+Fehlt eine Methode, startet der Worker nicht.
 """
 
 from __future__ import annotations
@@ -17,10 +18,9 @@ from uuid import UUID
 
 import torch
 
-from cqrs_client.arbeit import Herkunft
 from domain_client.generated import (
     BildVerfuegbarDto,
-    PaarZuBeurteilenDto,
+    ImagePairKomplettDto,
     KlassifiziereBildPaarDurchKiDto,
     ModellAktiviertDto,
 )
@@ -82,12 +82,12 @@ class ImageClassifier(KlassifikationsWorkerBasis[ClassifierState]):
         )
         log.info("BildVerfuegbar: %s %s", str(agg_id)[:8], version_name)
 
-    async def auf_paar_zu_beurteilen(
-        self, c: PaarZuBeurteilenDto, h: Herkunft, state: ClassifierState
-    ) -> KlassifiziereBildPaarDurchKiDto:
-        agg_id = UUID(c.paar)
-        pair_bilder = state.bilder.get(agg_id, {})
-        log.info("PaarZuBeurteilen: %s", agg_id)
+    async def auf_image_pair_komplett(
+        self, event: ImagePairKomplettDto, ctx, state: ClassifierState
+    ) -> KlassifiziereBildPaarDurchKiDto | None:
+        agg_id = ctx.aggregate_id
+        pair_bilder = state.bilder.pop(agg_id, {})
+        log.info("ImagePairKomplett: %s", agg_id)
 
         tensors: dict[str, torch.Tensor] = {}
         for version_int in [0, 1]:
@@ -112,8 +112,9 @@ class ImageClassifier(KlassifikationsWorkerBasis[ClassifierState]):
         elif tensors:
             label = KEINE_ANOMALIE
         else:
-            # Ohne Bilder lässt sich nicht urteilen: ein Fehler — der Server stellt den Auftrag später erneut zu.
-            raise RuntimeError(f"Paar {agg_id}: keine Bilder geladen")
+            # Ohne Bilder lässt sich nicht urteilen: das Paar bleibt unbeurteilt (ein Fehler hielte jede spätere Reaktion an).
+            log.error("Paar %s: keine Bilder geladen — nicht beurteilt", agg_id)
+            return None
 
         state.pairs_klassifiziert += 1
         log.info("  → Klassifikation: %d [#%d]", label, state.pairs_klassifiziert)

@@ -123,12 +123,10 @@ public class UmgebungLaderTests
         => Bindung("Bildverkleinerung", null).Should().Be(new BausteinBindung("Bildverkleinerung"));
 
     [Fact]
-    public void Die_Arbeit_eines_Akteurs_laeuft_draussen_eine_Funktion_im_Host()
+    public void Eine_Funktion_laeuft_im_Host_ein_Akteur_ohne_Arbeit_ist_kein_Baustein()
     {
         FunktionsBausteinWiring.Baustein("Bildverkleinerung")!.Draussen.Should().BeFalse("eine Funktion ist eine Klasse im Host");
-        var k = FunktionsBausteinWiring.Baustein("Klassifizierer")!;
-        k.Draussen.Should().BeTrue("die Arbeit des Klassifizierers rechnet eine Sitzung, die ihn verkörpert");
-        k.Eingaenge.Select(e => e.Typ).Should().Equal(typeof(Domain.ImagePair.PaarZuBeurteilen));
+        FunktionsBausteinWiring.Baustein("Klassifizierer").Should().BeNull("der Klassifizierer reagiert auf ein Fakt, er hat keine Arbeit");
         FunktionsBausteinWiring.Baustein("Inspekteur").Should().BeNull("ein Akteur ohne Arbeit ist kein Baustein");
     }
 
@@ -176,22 +174,6 @@ public class UmgebungLaderTests
     }
 
     [Fact]
-    public void Hand_nennt_Akteure_mit_Arbeit_und_bindet_den_Hand_Ausfuehrer_einmal()
-    {
-        var s = new ServiceCollection();
-        s.BindeGraphen(new UmgebungKonfig
-        {
-            Umgebung = { Hand = ["Klassifizierer", "TrainingsSystem"] },
-            Graphen = { ["teile"] = new() { Graph = "Bildaufnahme" } },
-        });
-        s.Count(d => d.ServiceType == typeof(HandAusfuehrer)).Should().Be(1);
-        s.Single(d => d.ServiceType == typeof(HandAkteure)).ImplementationInstance.Should().BeOfType<HandAkteure>()
-            .Which.Namen.Should().BeEquivalentTo("Klassifizierer", "TrainingsSystem");
-        s.Single(d => d.ServiceType == typeof(GraphInstanzen)).ImplementationInstance.Should().BeOfType<GraphInstanzen>()
-            .Which.Alle.Select(i => i.Name).Should().Equal("teile", "Klassifizierer", "TrainingsSystem");
-    }
-
-    [Fact]
     public void Hand_mit_einem_Akteur_ohne_Arbeit_ist_ein_Boot_Fehler()
         => FluentActions.Invoking(() => new ServiceCollection().BindeGraphen(new UmgebungKonfig { Umgebung = { Hand = ["Inspekteur"] } }))
             .Should().Throw<BootFehler>().WithMessage("*'Inspekteur'*kein Akteur, der Arbeit hört*");
@@ -230,8 +212,7 @@ public class UmgebungLaderTests
         var u = UmgebungLader.Lade(new ConfigurationManager(), name, [], branch: "main");
         u.Umgebung.Name.Should().Be(name);
         GraphInstanzen.Aus(u.Graphen, Graphen, Infrastructure.Komposition.Anwendung.Akteure.Rechte).Alle.Select(i => i.Graph.Name)
-            .Should().BeEquivalentTo(["Linienimport", "Klassifizierer", "TrainingsSystem"],
-                "je Graph eine Instanz, dazu je Akteur mit Arbeit eine");
+            .Should().BeEquivalentTo(["Linienimport"], "je Graph eine Instanz; Arbeit hat kein Akteur, die Worker reagieren");
         if (name == "sim-main")
         {
             u.Transport.JsonEingang.Should().BeTrue("Sim: die Werkbank handelt als Akteur");

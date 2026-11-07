@@ -5,8 +5,8 @@ namespace Verhalten.Tests;
 
 /// <summary>
 /// Der Trainings-Wächter als fachliches Soll: ein Training, das nach dem Beginn sechs Stunden nichts meldet, gilt genau einmal als hängen
-/// geblieben; eines, das vorher endet, nie; eine Meldung nach der Markierung ändert nichts mehr. Die Meldungen kommen, wie im Betrieb, als
-/// Antwort des TrainingsSystems auf seine Arbeit (docs/konzept-akteure.md §5). Die Zeit läuft über die Uhr der Sim
+/// geblieben; eines, das vorher endet, nie; eine Meldung nach der Markierung ändert nichts mehr. Die Meldungen gibt, wie im Betrieb, das
+/// TrainingsSystem hinein (seine Reaktion auf TrainingAngefordert; hier spielt der Test es über den JSON-Eingang). Die Zeit läuft über die Uhr der Sim
 /// (Datenbank-Uhr samt Event-Zeitstempeln), nicht über Warten — mit eigenem Host, damit der Zeitsprung keinen anderen Ablauf trifft.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
@@ -25,20 +25,16 @@ public sealed class TrainingsWaechterTests
         await using var host = await Hostlauf.StarteAsync(u);
         using var eingang = new JsonEingang(host);
         var log = new Log(u);
-        // Das Training ist Arbeit des TrainingsSystems (es hört TrainingZuRechnen): der Test verkörpert es und meldet stückweise.
-        await using var worker = await RoheLeitung.VerbindeAsync(host, "TrainingsWorker", Testumgebung.TokenTrainingssystem);
-        await worker.NimmArbeitAnAsync("TrainingsSystem", plaetze: 4);
-
+        // Das Training rechnet das TrainingsSystem (es reagiert auf TrainingAngefordert): der Test spielt es und meldet stückweise.
         var beendet = Guid.NewGuid();
         var still = Guid.NewGuid();
-        var laeufe = new Dictionary<Guid, Cqrs.Leitung.ArbeitsAuftrag>();
         foreach (var lauf in new[] { beendet, still })
         {
             await eingang.MussAsync("StarteTraining", Start(lauf), Testumgebung.TokenKiOperator);
-            laeufe[lauf] = await worker.WarteAufEingangAsync(a => a.Stream == lauf.ToString(), TimeSpan.FromSeconds(30), "kein Eingang an das Training");
-            await worker.StueckAsync(laeufe[lauf], 0, fertig: false, new MeldeTrainingBegonnen(new(lauf)));
+            await eingang.MussAsync("MeldeTrainingBegonnen", new() { ["AggregateId"] = lauf.ToString() }, Testumgebung.TokenTrainingssystem);
         }
-        await worker.StueckAsync(laeufe[beendet], 1, fertig: true, new MeldeTrainingGescheitert(new(beendet), "vorher zu Ende"));
+        await eingang.MussAsync("MeldeTrainingGescheitert", new() { ["AggregateId"] = beendet.ToString(), ["Grund"] = "vorher zu Ende" },
+            Testumgebung.TokenTrainingssystem);
         await Warte.BisAsync(async () => await log.ZahlAsync<TrainingGescheitert>(beendet) == 1 && await log.ZahlAsync<TrainingBegonnen>(still) == 1,
             TimeSpan.FromSeconds(30), "die Meldungen des Trägers wirkten nicht", host);
         await Warte.NachlaufAsync();
@@ -48,8 +44,10 @@ public sealed class TrainingsWaechterTests
             "das stille Training wird nach der Frist nicht als hängengeblieben markiert", host);
 
         // Zu spät: die Meldung nach der Markierung ändert nichts mehr.
-        await worker.StueckAsync(laeufe[still], 1, fertig: true,
-            new MeldeTrainingAbgeschlossen(new(still), "/zu/spaet", new Endmetriken(0.1, 0.9)));
+        await eingang.CommandAsync("MeldeTrainingAbgeschlossen", new()
+        {
+            ["AggregateId"] = still.ToString(), ["ModellPfad"] = "/zu/spaet", ["Endmetriken"] = new JsonObject { ["Loss"] = 0.1, ["Genauigkeit"] = 0.9 },
+        }, Testumgebung.TokenTrainingssystem);
         await Warte.NachlaufAsync(5);
 
         (await log.ZahlAsync<TrainingHaengengeblieben>(still)).Should().Be(1, "genau einmal hängengeblieben");

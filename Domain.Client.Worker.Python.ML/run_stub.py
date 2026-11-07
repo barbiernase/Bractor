@@ -20,11 +20,10 @@ from uuid import UUID
 sys.path.insert(0, str(Path(__file__).parent.parent / "Client.Infrastructure.Python"))
 
 import logging
-from cqrs_client.arbeit import Herkunft
 from domain_client.domain_registry import create_registry
 from domain_client.generated import (
     BildVerfuegbarDto,
-    PaarZuBeurteilenDto,
+    ImagePairKomplettDto,
     KlassifiziereBildPaarDurchKiDto,
     ModellAktiviertDto,
 )
@@ -62,11 +61,11 @@ class StubClassifier(KlassifikationsWorkerBasis[StubState]):
         state.bilder[agg][event.version] = event.pfad
         log.info("📥 BildVerfuegbar #%d: %s %s → %s", state.events, str(agg)[:8], v, event.pfad)
 
-    async def auf_paar_zu_beurteilen(self, c: PaarZuBeurteilenDto, h: Herkunft, state: StubState):
+    async def auf_image_pair_komplett(self, event: ImagePairKomplettDto, ctx, state: StubState):
         state.events += 1
-        agg = UUID(c.paar)
-        pfade = state.bilder.get(agg, {})
-        log.info("📥 PaarZuBeurteilen #%d: %s", state.events, agg)
+        agg = ctx.aggregate_id
+        pfade = state.bilder.pop(agg, {})
+        log.info("📥 ImagePairKomplett #%d: %s", state.events, agg)
         for v, pfad in pfade.items():
             log.info("   %s: %s", VERSION_NAMES.get(v, "?"), pfad)
         log.info("📤 → KlassifiziereBildPaarDurchKi(label=0=KeineAnomalie)")

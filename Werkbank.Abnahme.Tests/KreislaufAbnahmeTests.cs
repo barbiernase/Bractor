@@ -98,7 +98,7 @@ public class KreislaufAbnahmeTests
         Spalte("akt:akteur:Klassifizierer|aus").Should().Be("ausgang");
         Spalte("akt:akteur:Klassifizierer|ein").Should().Be("eingang");
         flKarten.Should().Contain(k => (string?)k["spalte"] == "quellen" && (string?)k["name"] == "Dateiwaechter", "die Quelle des Linienimports");
-        FlaechenKanten(board).Should().Contain(["agg:ImagePair -PaarZuBeurteilen/arbeit-> akt:akteur:Klassifizierer|ein"]);
+        FlaechenKanten(board).Should().Contain(["agg:ImagePair -ImagePairKomplett/kenntnis-> akt:akteur:Klassifizierer|ein"]);
         KompositionsKanten(board, "Bildaufbereitung").Should().Contain("Verkleinern -BildVerkleinert-> Kontrast");
 
         // ── 2c. Gesten der Fläche und der Komposition (derselbe Weg wie der Editor): darf und verlierbar — Code, Sicht, ⟳ grün, ↶ byte-gleich ──
@@ -151,7 +151,7 @@ public class KreislaufAbnahmeTests
             return false;
         }, TimeSpan.FromSeconds(120), "Das Bildpaar lief nicht bis zur Beurteilung.\n── Worker ──\n" + await WorkerLog() + Log());
         (bild!["schritte"] as JsonArray)!.Select(s => (string?)s?["name"]).Should().Contain("BildVerfuegbar").And.Contain("ImagePairKomplett");
-        (await WorkerLog()).Should().Contain("PaarZuBeurteilen", "genau diese Arbeit hat der Python-Worker beantwortet");
+        (await WorkerLog()).Should().Contain("ImagePairKomplett", "auf genau dieses Fakt hat der Python-Worker reagiert");
 
         // Der Weg durch den Graphen: NimmBildAuf gab die Übersetzung „Aufnehmen“ der Instanz linienimport — ein gegangener Draht von seinem Knoten aus.
         (bild["schritte"] as JsonArray)!.SelectMany(s => s?["paare"] as JsonArray ?? []).Select(p => (string?)p?[0])
