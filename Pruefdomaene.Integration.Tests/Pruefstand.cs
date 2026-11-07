@@ -96,7 +96,10 @@ internal static class Pruefstand
 
     public const string Reaktionsname = "pruefstand";
 
-    /// <summary>Der reagierende Client neben dem Host: verbindet sich, sobald der Host läuft, und endet mit ihm.</summary>
+    /// <summary>
+    /// Der reagierende Client neben dem Host: verbindet sich, sobald der Host läuft, und endet, sobald er zu stoppen beginnt — vor dem Server, der
+    /// sonst auf den offenen Stream des Clients wartete (bis zu 30 s).
+    /// </summary>
     private sealed class Reaktionsdienst(IHostApplicationLifetime leben, string adresse, IReaktionsStand stand) : BackgroundService
     {
         protected override async Task ExecuteAsync(CancellationToken ct)
@@ -107,7 +110,8 @@ internal static class Pruefstand
             {
                 try { await gestartet.Task; } catch (OperationCanceledException) { return; }
             }
-            await Pruefdomaene.Client.Worker.Reaktionslauf.LaufeAsync(adresse, null, stand, Reaktionsname, ct, TimeSpan.FromMilliseconds(200));
+            using var ende = CancellationTokenSource.CreateLinkedTokenSource(ct, leben.ApplicationStopping);
+            await Pruefdomaene.Client.Worker.Reaktionslauf.LaufeAsync(adresse, null, stand, Reaktionsname, ende.Token, TimeSpan.FromMilliseconds(200));
         }
     }
 
